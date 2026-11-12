@@ -1,41 +1,12 @@
 (* Fresh constructor buffer allocation: identical concrete and ghost endpoints. *)
 Theory ctorDeployMemoryRunPtrPrefixRegisterAlloc
 Ancestors
-  loweringHalt
+  loweringHalt allocationPtr
   ctorRegisterArgs moduleLowering context compileEnv emitHelper
   ctorDeployMemoryRunPtrPrefixSteps
   ctorDeployMemoryRunPtrPrefixAllocationFloor
   ptrSafeRun ptrDiscipline venomState venomExecSemantics venomInst
   finite_map words arithmetic pred_set list rich_list fragExec memLocDefs codegenRel contextCodegenRel
-
-Theorem prefix_register_alloc_taint:
-  FLOOKUP s.vs_allocas aid = NONE /\ n < dimword (:256) ==>
-  let i = mk_inst aid ALLOCA [Lit (n2w n)] [x];
-      a = update_var x (n2w s.vs_alloca_next)
-        (s with <|vs_allocas := s.vs_allocas |+
-          (aid,(s.vs_alloca_next,n)); vs_alloca_next := s.vs_alloca_next+n|>)
-  in step_taint i s a tn =
-    tn with <|t_var := tn.t_var |+ (x,{});
-      t_mem := tn.t_mem UNION {j | s.vs_alloca_next <= j /\ j < s.vs_alloca_next+n}|>
-Proof
-  strip_tac >>
-  simp[step_taint_def, mk_inst_def, set_var_taint_def, out_taint_def,
-    mem_taint_def, store_taint_def, imm_taint_def, adopt_reset_def,
-    new_site_bytes_def, step_writes_def, written_taint_def,
-    source_memory_write_ranges_def, range_bytes_def, update_var_def,
-    eval_operand_def, EXTENSION, taint_component_equality, FLOOKUP_UPDATE] >>
-  fs[FLOOKUP_DEF] >> simp[AllCaseEqs()] >> metis_tac[ADD_COMM]
-QED
-
-Theorem prefix_register_alloc_window:
-  q.t_mem = tn.t_mem UNION {j | p <= j /\ j < p+n} ==>
-  (!j. j < p /\ j IN q.t_mem ==> j IN tn.t_mem) /\
-  (!B. DISJOINT B tn.t_mem /\ DISJOINT B {j | p <= j /\ j < p+n} ==>
-       DISJOINT B q.t_mem)
-Proof
-  strip_tac >> conj_tac >- (simp[] >> rpt strip_tac >> gvs[] ) >>
-  simp[DISJOINT_UNION] >> metis_tac[DISJOINT_SYM]
-QED
 
 Theorem prefix_register_alloc_pair:
   FLOOKUP s.vs_allocas aid = NONE /\ n < dimword (:256) /\
@@ -62,7 +33,14 @@ Proof
           vs_alloca_next := n+s.vs_alloca_next|>)) tn =
     tn with <|t_var := tn.t_var |+ (x,{});
       t_mem := tn.t_mem UNION {j | s.vs_alloca_next <= j /\ j < n+s.vs_alloca_next}|>` by
-    (drule_all prefix_register_alloc_taint >> simp[ADD_COMM]) >>
+    (mp_tac (Q.SPECL [`aid`,`n`,`x`,`s`,
+       `update_var x (n2w s.vs_alloca_next)
+         (s with <|vs_allocas := s.vs_allocas |+ (aid,(s.vs_alloca_next,n));
+           vs_alloca_next := n+s.vs_alloca_next|>)`,`PG`,`G`,`tn`]
+       fresh_alloca_ghost) >>
+     simp[SRULE [wordsTheory.w2n_lt, wordsTheory.n2w_w2n]
+       (Q.INST [`n` |-> `w2n (alloc_size_word:bytes32)`]
+         (SPEC_ALL loweringHaltTheory.step_alloca_fresh)), ADD_COMM]) >>
   simp[(SRULE [wordsTheory.w2n_lt, wordsTheory.n2w_w2n] (Q.INST [`n` |-> `w2n (alloc_size_word:bytes32)`] (SPEC_ALL loweringHaltTheory.step_alloca_fresh))), SRULE [LET_THM] prefix_alloca_ghost_step,
     prefix_alloca_ptr_step] >>
   conj_tac >-

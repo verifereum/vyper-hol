@@ -434,9 +434,6 @@ Proof
   strip_tac >> gvs[abi_decode_source_def, Excl "enc_def"]
 QED
 
-
-
-
 Theorem prefix_register_canonical_address_paired:
   !ptr. i < LENGTH atys /\ LENGTH avs = LENGTH atys /\
   EL i atys = vyper_to_abi_type env ty /\ has_types atys avs /\

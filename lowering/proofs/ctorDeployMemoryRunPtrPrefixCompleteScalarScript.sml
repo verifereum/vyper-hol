@@ -188,8 +188,8 @@ Proof
   gvs[EVERY_MEM] >> metis_tac[]
 QED
 
-Theorem prefix_scalar_low_frame:
-  abi_decode_frame d 32 initial final /\ lo <= d ==>
+Theorem prefix_copy_low_frame:
+  abi_decode_frame d cap initial final /\ lo <= d ==>
   !a. a < lo ==> read_byte a final.vs_memory = read_byte a initial.vs_memory
 Proof
   simp[abi_decode_frame_def] >> strip_tac >> rpt strip_tac >>
@@ -285,7 +285,7 @@ Proof
     (qpat_x_assum `ctor_actual_scratch func ids scratch_base N initial` mp_tac >>
      simp[ctor_actual_scratch_def]) >>
   conj_tac >-
-    (drule prefix_scalar_low_frame >> simp[] >> metis_tac[]) >>
+    (drule prefix_copy_low_frame >> simp[] >> metis_tac[]) >>
   conj_tac >-
     (rpt strip_tac >> simp[lookup_var_def] >>
      irule (SRULE [lookup_var_def] prefix_scalar_var_frame) >>

@@ -17,7 +17,6 @@ Proof
   pure_rewrite_tac[step_inst_base_def, mk_inst_def] >> simp[]
 QED
 
-
 Theorem prefix_shr_ptr_step:
   op_taint tn a = {} /\ allocas_from lo s /\
   (ctx_has_dalloca ctx ==> allocas_below_fmp s) ==>
@@ -81,7 +80,6 @@ Proof
        comp_return_def, fresh_var_def, fresh_id_def, emit_def] >>
   pure_rewrite_tac[GSYM listTheory.APPEND_ASSOC, listTheory.APPEND] >> REFL_TAC
 QED
-
 
 Theorem prefix_boolword_clamp_execution:
   eval_operand (Var v) s = SOME w /\ y <> z ==>
@@ -372,32 +370,6 @@ Proof
   simp[emitted_insts_def, listTheory.DROP_APPEND]
 QED
 
-Theorem prefix_boolword_clamp_frames:
-  let s1 = update_var y (word_lsr w 1) s;
-      s2 = update_var z (bool_to_word (word_lsr w 1 = 0w)) s1;
-      i = mk_inst iid SHR [Lit 1w;Var v] [y];
-      j = mk_inst (iid+1) ISZERO [Var y] [z];
-      tn1 = step_taint i s s1 tn;
-      tn2 = step_taint j s1 s2 tn1;
-      G2 = DRESTRICT (DRESTRICT G (COMPL {y})) (COMPL {z})
-  in
-    s2.vs_memory = s.vs_memory /\ s2.vs_data_section = s.vs_data_section /\
-    s2.vs_allocas = s.vs_allocas /\ s2.vs_alloca_next = s.vs_alloca_next /\
-    (!a. a <> y /\ a <> z ==>
-      eval_operand (Var a) s2 = eval_operand (Var a) s /\
-      op_taint tn2 (Var a) = op_taint tn (Var a) /\
-      FLOOKUP G2 a = FLOOKUP G a)
-Proof
-  simp[] >> conj_tac
-  >- simp[update_var_def] >>
-  conj_tac >- simp[update_var_def] >>
-  conj_tac >- simp[update_var_def] >>
-  conj_tac >- simp[update_var_def] >>
-  rpt strip_tac >>
-  simp[eval_operand_def, lookup_var_def, update_var_def, FLOOKUP_UPDATE,
-       prefix_guard_taint_other, FLOOKUP_DRESTRICT]
-QED
-
 Theorem prefix_boolword_pure_taint_frame:
   opc IN {MLOAD; DLOAD; LT; SHR; ISZERO} /\
   t.vs_allocas = s.vs_allocas /\ t.vs_fmp = s.vs_fmp ==>
@@ -531,7 +503,6 @@ Proof
   qspecl_then [`n`,`k`,`bb.bb_instructions`] mp_tac listTheory.EL_DROP >>
   simp[rich_listTheory.EL_APPEND1, arithmeticTheory.ADD_COMM]
 QED
-
 
 Theorem prefix_boolword_ptr:
   eval_operand src s = SOME a /\ eval_operand (Var dst) s = SOME p /\

@@ -7,46 +7,6 @@ Ancestors
   ctorDeployMemoryRunPtrPrefixBlocks
   ptrDiscipline ptrSafeRun venomState venomExecSemantics venomInst abiDecoderExecution abiDecoderContract list
 
-Theorem prefix_no_phi_entry:
-  !s fn bb G tn.
-    lookup_block s.vs_current_bb fn.fn_blocks = SOME bb /\
-    (bb.bb_instructions = [] \/
-     ?inst rest. bb.bb_instructions = inst::rest /\ inst.inst_opcode <> PHI) ==>
-    entry_prov fn s G = G /\ entry_taint_vars fn s tn = tn /\
-    eval_phis s bb.bb_instructions = OK s /\
-    phi_prefix_length bb.bb_instructions = 0
-Proof
-  rpt strip_tac >>
-  gvs[entry_prov_def, phis_prov_def, entry_taint_vars_def,
-      phis_taint_def, eval_phis_def, phi_prefix_length_def]
-QED
-
-Theorem prefix_bool_mload_entry:
-  !s fn bb iid ops outs rest G tn.
-    lookup_block s.vs_current_bb fn.fn_blocks = SOME bb /\
-    bb.bb_instructions = mk_inst iid MLOAD ops outs :: rest ==>
-    entry_prov fn s G = G /\ entry_taint_vars fn s tn = tn /\
-    eval_phis s bb.bb_instructions = OK s /\
-    phi_prefix_length bb.bb_instructions = 0
-Proof
-  rpt gen_tac >> strip_tac >> irule prefix_no_phi_entry >>
-  simp[mk_inst_def]
-QED
-
-Theorem prefix_bool_header_entry:
-  !s fn bb hid ip src hiv cv cmp done body_lbl exit_lbl G tn.
-    lookup_block s.vs_current_bb fn.fn_blocks = SOME bb /\
-    bb.bb_instructions =
-      abi_decode_header_insts hid (Var ip) (Var src) DLOAD
-        hiv cv cmp done body_lbl exit_lbl ==>
-    entry_prov fn s G = G /\ entry_taint_vars fn s tn = tn /\
-    eval_phis s bb.bb_instructions = OK s /\
-    phi_prefix_length bb.bb_instructions = 0
-Proof
-  rpt gen_tac >> strip_tac >> irule prefix_no_phi_entry >>
-  simp[abi_decode_header_insts_def, mk_inst_def]
-QED
-
 (* The body's checked indexed trace is also an actual basic-block edge.
    No semantic instruction is re-executed in this adapter. *)
 Theorem prefix_bool_body_exec_block:

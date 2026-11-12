@@ -107,7 +107,6 @@ Proof
   rpt strip_tac >> asm_rewrite_tac[] >> metis_tac[]
 QED
 
-
 Theorem prefix_register_address_decode_paired:
   !ptr. i < LENGTH atys /\ LENGTH avs = LENGTH atys /\
   EL i atys = vyper_to_abi_type env ty /\ has_types atys avs /\
@@ -213,7 +212,6 @@ Resume prefix_register_address_decode_paired[scratch]:
 QED
 
 Finalise prefix_register_address_decode_paired
-
 
 Theorem prefix_register_one_slot_paired:
   i < LENGTH atys /\ LENGTH avs = LENGTH atys /\
@@ -420,71 +418,3 @@ Resume prefix_register_one_slot_paired[slot]:
 QED
 
 Finalise prefix_register_one_slot_paired
-
-Theorem prefix_register_one_paired:
-  i < LENGTH atys /\ LENGTH avs = LENGTH atys /\
-  EL i atys = vyper_to_abi_type env ty /\ has_types atys avs /\
-  encoded = enc (Tuple atys) (ListV avs) /\
-  off = SUM (MAP abi_member_head_size (TAKE i atys)) /\
-  LENGTH encoded < dimword (:256) /\
-  mem_bytes_at 0 (LENGTH encoded) initial.vs_data_section = encoded /\
-  FLOOKUP ce.ce_vars name = SOME (MemLoc old (type_memory_bytes ce ty)) /\
-  lookup_scopes name [scope] = SOME entry /\ val_wf entry.type entry.value /\
-  type_memory_size entry.type <= type_memory_bytes ce ty /\
-  abi_decoder_coherent ce env ce.ce_struct_fields ty entry.type /\
-  abi_decoder_metadata ce env ty entry.type
-    (type_to_abi_dec_info ce.ce_struct_fields ce ty) (EL i avs) entry.value /\
-  type_memory_bytes ce ty < dimword (:256) /\
-  compile_alloc_buffer (type_memory_bytes ce ty) st = (buf,sa) /\
-  ce' = (ce with ce_vars := ce.ce_vars |+
-    (name,PtrVar buf.buf_operand (type_memory_bytes ce ty))) /\
-  compile_decode_args ce' [build_positional_arg ce (name,ty)] off
-    DLOAD (Lit 0w) 0 sa = ((),last) /\
-  local_ptrs_rel func ce [scope] initial /\ fresh_vars_wrt st initial /\
-  fn_has_code st sa func /\ fn_has_code sa last func /\ fn_inst_ids_distinct func /\
-  (sa.cs_blocks = last.cs_blocks \/ !bb.
-    lookup_block last.cs_current_bb func.fn_blocks = SOME bb ==>
-      phi_prefix_length bb.bb_instructions = 0) /\
-  alloca_inv initial /\ alloca_frontier_inv ctx func site initial /\
-  unit_alloca_budget ctx < dimword (:256) /\
-  (!aid. st.cs_next_id <= aid ==> FLOOKUP initial.vs_allocas aid = NONE) /\
-  ~initial.vs_halted /\ initial.vs_current_bb = st.cs_current_bb /\
-  initial.vs_inst_idx = LENGTH st.cs_current_insts /\
-  allocas_from lo initial /\ lo <= initial.vs_alloca_next /\ ~ctx_has_dalloca ctx ==>
-  ?actual H qt B.
-    local_ptrs_rel func ce' [scope] actual /\
-    abi_encoder_registered_effect (frag_ids st last) [] initial actual /\
-    allocas_from lo actual /\ lo <= actual.vs_alloca_next /\
-    alloca_inv actual /\ alloca_frontier_inv ctx func site actual /\
-    fresh_vars_wrt last actual /\
-    (!aid. last.cs_next_id <= aid ==> FLOOKUP actual.vs_allocas aid = NONE) /\
-    actual.vs_data_section = initial.vs_data_section /\
-    actual.vs_call_ctx = initial.vs_call_ctx /\ actual.vs_labels = initial.vs_labels /\
-    (!x w. not_fresh_at st x /\ lookup_var x initial = SOME w ==> lookup_var x actual = SOME w) /\
-    ~actual.vs_halted /\ actual.vs_current_bb = last.cs_current_bb /\
-    actual.vs_inst_idx = LENGTH last.cs_current_insts /\
-    abi_decode_sim ctx func initial actual /\
-    initial.vs_alloca_next <= actual.vs_alloca_next /\
-    FINITE B /\ B SUBSET range_bytes [(initial.vs_alloca_next,type_memory_bytes ce ty)] /\
-    DISJOINT B qt.t_mem /\
-    (!mem. (!a. a IN B ==> mem_bytes_at a 1 mem = mem_bytes_at a 1 actual.vs_memory) ==>
-      val_in_memory entry.type entry.value initial.vs_alloca_next mem) /\
-    (!j. j IN B ==> j < actual.vs_alloca_next) /\
-    qt.t_mem SUBSET (tn.t_mem UNION
-      {j | initial.vs_alloca_next <= j /\ j < actual.vs_alloca_next}) /\
-    (!j. j < initial.vs_alloca_next /\ j IN qt.t_mem ==> j IN tn.t_mem) /\
-    (!C. (!j. j IN C ==> j < initial.vs_alloca_next) /\ DISJOINT C tn.t_mem ==>
-      DISJOINT C qt.t_mem) /\
-    qt.t_stor = tn.t_stor /\ qt.t_trans = tn.t_trans /\ qt.t_imm = tn.t_imm /\
-    (!x. not_fresh_at st x ==> FLOOKUP H x = FLOOKUP G x /\
-      op_taint qt (Var x) = op_taint tn (Var x)) /\
-    ((!fuel. ptr_safe_run D lo fuel ctx func PG H qt actual) ==>
-      !fuel. ptr_safe_run D lo fuel ctx func PG G tn initial)
-Proof
-  disch_then (map_every assume_tac o CONJUNCTS) >>
-  drule_all prefix_register_one_slot_paired >>
-  disch_then (qspecl_then [`tn`,`PG`,`G`,`D`] mp_tac) >>
-  disch_then (qx_choose_then `actual` (qx_choose_then `H` (qx_choose_then `qt`
-    (qx_choose_then `B` strip_assume_tac)))) >>
-  qexistsl [`actual`,`H`,`qt`,`B`] >> asm_rewrite_tac[]
-QED

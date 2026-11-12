@@ -11,20 +11,6 @@ Ancestors
   ptrSafeRun ptrDiscipline venomState venomExecSemantics venomInst
   finite_map words arithmetic pred_set list memLocDefs codegenRel
 
-Theorem prefix_loop_slot_reuse_ghost:
-  FLOOKUP s.vs_allocas aid = SOME (p,32) ==>
-  let i = mk_inst aid ALLOCA [Lit 32w] [ip];
-      a = update_var ip (n2w p) s
-  in step_inst_base i s = OK a /\
-     ghost_step fuel ctx PG G tn i s =
-       (G |+ (ip,(p,32)),step_taint i s a tn)
-Proof
-  strip_tac >>
-  simp[step_inst_base_opcode_eqs, mk_inst_def, exec_alloca_def, eval_operand_def,
-    ghost_step_def, step_inst_non_invoke, step_prov_def, set_prov_def,
-    out_prov_def, update_var_def, FLOOKUP_UPDATE]
-QED
-
 Theorem prefix_loop_slot_reuse_taint:
   let i = mk_inst aid ALLOCA [Lit 32w] [ip];
       a = update_var ip (n2w p) s
@@ -143,7 +129,6 @@ Proof
     op_taint_def, SUBSET_DEF, allocas_from_def] >>
   fs[allocas_from_def] >> metis_tac[]
 QED
-
 
 Theorem prefix_loop_slot_zero_block:
   eval_operand (Var ip) a = SOME (n2w p) /\ p < dimword (:256) /\
@@ -281,7 +266,6 @@ Resume prefix_loop_index_slot_pair[continuation]:
 QED
 
 Finalise prefix_loop_index_slot_pair
-
 
 Theorem prefix_loop_index_slot_run:
   allocas_from lo s /\ lo <= s.vs_alloca_next /\ ~ctx_has_dalloca ctx /\

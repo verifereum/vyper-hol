@@ -44,42 +44,6 @@ Proof
   REFL_TAC
 QED
 
-Theorem prefix_member_add_pair:
-  eval_operand a s = SOME u /\ eval_operand c s = SOME v /\
-  op_taint tn a = {} /\ op_taint tn c = {} /\
-  allocas_from lo s /\ ~ctx_has_dalloca ctx ==>
-  let i = mk_inst iid ADD [a;c] [x];
-      t = update_var x (u+v) s;
-      H = set_prov G [x] (first_prov G [a;c]);
-      qt = step_taint i s t tn
-  in
-    step_inst_base i s = OK t /\
-    ghost_step fuel ctx PG G tn i s = (H,qt) /\
-    ptr_safe_step D lo fuel ctx fn PG G tn i s /\
-    op_taint qt (Var x) = {} /\
-    qt.t_mem = tn.t_mem /\ qt.t_stor = tn.t_stor /\
-    qt.t_trans = tn.t_trans /\ qt.t_imm = tn.t_imm /\
-    (!y. y <> x ==> FLOOKUP H y = FLOOKUP G y /\
-                       op_taint qt (Var y) = op_taint tn (Var y))
-Proof
-  strip_tac >> pure_rewrite_tac[LET_THM] >> BETA_TAC >>
-  `((update_var x (u+v) s).vs_allocas = s.vs_allocas) /\
-   ((update_var x (u+v) s).vs_fmp = s.vs_fmp)` by simp[update_var_def] >>
-  conj_tac >- (irule slotCopyExecutionTheory.slot_copy_step_add >> simp[]) >>
-  conj_tac >-
-    (irule (SRULE [LET_THM] prefix_bool_body_add_ghost) >> simp[]) >>
-  conj_tac >- (irule prefix_bool_body_arith_ptr_step >> simp[]) >>
-  `let q = step_taint (mk_inst iid ADD [a;c] [x]) s (update_var x (u+v) s) tn in
-     q.t_mem = tn.t_mem /\ q.t_stor = tn.t_stor /\
-     q.t_trans = tn.t_trans /\ q.t_imm = tn.t_imm /\
-     (!y. y <> x ==> op_taint q (Var y) = op_taint tn (Var y)) /\
-     (op_taint tn a = {} /\ op_taint tn c = {} ==> op_taint q (Var x) = {})` by
-    (match_mp_tac prefix_bool_body_arith_taint_frame >> simp[]) >>
-  fs[] >>
-  Cases_on `first_prov G [a;c]` >>
-  simp[set_prov_def, FLOOKUP_UPDATE, FLOOKUP_DRESTRICT]
-QED
-
 Theorem prefix_member_add_taint:
   op_taint tn a = {} /\ op_taint tn c = {} ==>
   step_taint (mk_inst iid ADD [a;c] [x]) s (update_var x w s) tn =

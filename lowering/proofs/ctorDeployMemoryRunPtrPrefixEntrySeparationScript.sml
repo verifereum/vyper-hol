@@ -31,17 +31,3 @@ Proof
   first_x_assum drule >> strip_tac >>
   metis_tac[prefix_entry_local_region_unique]
 QED
-
-Theorem prefix_entry_immutable_interval:
-  immutable_section_layout ce tops /\ ce.ce_module = NONE /\
-  immutables_section_rel tops imms section /\
-  FLOOKUP ce.ce_module_vars (ce.ce_module,name) = SOME (ImmutableLoc off) /\
-  FLOOKUP (get_source_immutables ce.ce_module imms) name = SOME (tv,v) ==>
-  off + type_memory_size tv <= LENGTH section
-Proof
-  strip_tac >> gvs[] >>
-  qpat_x_assum `immutable_section_layout _ _`
-    (mp_tac o REWRITE_RULE [immutable_section_layout_def]) >>
-  disch_then drule >> strip_tac >>
-  drule_all immutables_section_rel_lookup >> simp[]
-QED

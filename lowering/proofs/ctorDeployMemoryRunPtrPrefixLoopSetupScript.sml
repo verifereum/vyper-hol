@@ -434,115 +434,6 @@ Proof
 QED
 
 (* Original base-address interfaces remain available as specializations. *)
-Theorem prefix_loop_count_header_steps:
-  eval_operand src s = SOME a /\ op_taint tn src = {} /\
-  eval_operand (Var dst) s = SOME (n2w d) /\ op_taint tn (Var dst) = {} /\
-  FLOOKUP G dst = SOME (d,sz) /\ 32 <= sz /\ d < dimword (:256) /\ dst <> x /\
-  allocas_from lo s /\ ~ctx_has_dalloca ctx ==>
-  let i = mk_inst iid DLOAD [src] [x];
-      j = mk_inst (iid+1) MSTORE [Var dst;Var x] [];
-      w = abi_decode_load DLOAD a s;
-      u = update_var x w s;
-      t = mstore d w u;
-      H = DRESTRICT G (COMPL {x});
-      q = step_taint i s u tn;
-      qt = step_taint j u t q
-  in step_inst_base i s = OK u /\ step_inst_base j u = OK t /\
-     ghost_step fuel ctx PG G tn i s = (H,q) /\
-     ghost_step fuel ctx PG H q j u = (H,qt) /\
-     ptr_safe_step D lo fuel ctx fn PG G tn i s /\
-     ptr_safe_step D lo fuel ctx fn PG H q j u /\
-     mload d t = w /\ DISJOINT qt.t_mem {b | d <= b /\ b < d+32} /\
-     qt.t_mem SUBSET tn.t_mem /\
-     op_taint qt (Var dst) = {} /\ op_taint qt (Var x) = {} /\
-     FLOOKUP H dst = SOME (d,sz)
-Proof
-  strip_tac >> irule prefix_loop_count_header_steps_interior >> simp[]
-QED
-
-Theorem prefix_loop_count_header_block:
-  eval_operand src s = SOME a /\ op_taint tn src = {} /\
-  eval_operand (Var dst) s = SOME (n2w d) /\ op_taint tn (Var dst) = {} /\
-  FLOOKUP G dst = SOME (d,sz) /\ 32 <= sz /\ d < dimword (:256) /\ dst <> x /\
-  allocas_from lo s /\ ~ctx_has_dalloca ctx ==>
-  let i = mk_inst iid DLOAD [src] [x];
-      j = mk_inst (iid+1) MSTORE [Var dst;Var x] [];
-      w = abi_decode_load DLOAD a s;
-      u = update_var x w s;
-      t = mstore d w u;
-      H = DRESTRICT G (COMPL {x});
-      q = tn with t_var := tn.t_var |+ (x,{});
-      qt = step_taint j u t q
-  in isPREFIX [i;j] (DROP s.vs_inst_idx bb.bb_instructions) ==>
-     run_inst_seq [i;j] s = OK t /\
-     (ptr_safe_block D lo fuel ctx fn PG H qt bb
-        (t with vs_inst_idx := s.vs_inst_idx+2) ==>
-      ptr_safe_block D lo fuel ctx fn PG G tn bb s)
-Proof
-  strip_tac >> irule prefix_loop_count_header_block_interior >> simp[]
-QED
-
-Theorem prefix_loop_count_header_run:
-  eval_operand src s = SOME a /\ op_taint tn src = {} /\
-  eval_operand (Var dst) s = SOME (n2w d) /\ op_taint tn (Var dst) = {} /\
-  FLOOKUP G dst = SOME (d,sz) /\ 32 <= sz /\ d < dimword (:256) /\ dst <> x /\
-  allocas_from lo s /\ ~ctx_has_dalloca ctx /\
-  lookup_block s.vs_current_bb fn.fn_blocks = SOME bb /\
-  isPREFIX [mk_inst iid DLOAD [src] [x];
-    mk_inst (iid+1) MSTORE [Var dst;Var x] []]
-    (DROP s.vs_inst_idx bb.bb_instructions) ==>
-  let u = update_var x (abi_decode_load DLOAD a s) s;
-      t = mstore d (abi_decode_load DLOAD a s) u;
-      H = DRESTRICT G (COMPL {x});
-      q = tn with t_var := tn.t_var |+ (x,{});
-      qt = step_taint (mk_inst (iid+1) MSTORE [Var dst;Var x] []) u t q
-  in run_inst_seq [mk_inst iid DLOAD [src] [x];
-       mk_inst (iid+1) MSTORE [Var dst;Var x] []] s = OK t /\
-     ((!fuel. ptr_safe_run D lo fuel ctx fn PG H qt
-        (t with vs_inst_idx := s.vs_inst_idx+2)) ==>
-      !fuel. ptr_safe_run D lo fuel ctx fn PG G tn s)
-Proof
-  strip_tac >> irule prefix_loop_count_header_run_interior >> fs[]
-QED
-
-Theorem prefix_loop_count_header_pair:
-  abi_decode_array_header (Var dst) src DLOAD st = (cnt,st') /\
-  emitted_insts st st' = [mk_inst iid DLOAD [src] [x];
-    mk_inst (iid+1) MSTORE [Var dst;Var x] []] /\
-  eval_operand src s = SOME a /\ op_taint tn src = {} /\
-  eval_operand (Var dst) s = SOME (n2w d) /\ op_taint tn (Var dst) = {} /\
-  FLOOKUP G dst = SOME (d,sz) /\ 32 <= sz /\ d < dimword (:256) /\ dst <> x /\
-  allocas_from lo s /\ lo <= s.vs_alloca_next /\ ~ctx_has_dalloca ctx /\
-  abi_decoder_operand_live st.cs_next_var src /\
-  abi_decoder_operand_live st.cs_next_var (Var dst) /\
-  st'.cs_next_var <= limit_st.cs_next_var /\ fresh_vars_wrt limit_st s /\
-  lookup_block s.vs_current_bb fn.fn_blocks = SOME bb /\
-  isPREFIX (emitted_insts st st') (DROP s.vs_inst_idx bb.bb_instructions) ==>
-  ?t H qt.
-    run_inst_seq (emitted_insts st st') s = OK t /\
-    eval_operand cnt t = SOME (abi_decode_load DLOAD a s) /\
-    mem_word_at d t.vs_memory = abi_decode_load DLOAD a s /\
-    fresh_vars_wrt limit_st t /\ abi_decode_frame d 32 s t /\
-    (!op w. abi_decoder_operand_live st.cs_next_var op /\ eval_operand op s = SOME w ==>
-      eval_operand op t = SOME w) /\
-    t.vs_labels = s.vs_labels /\
-    abi_encoder_registered_effect {} [(d,32)] s t /\
-    allocas_from lo t /\ lo <= t.vs_alloca_next /\
-    FLOOKUP H dst = SOME (d,sz) /\
-    op_taint qt (Var dst) = {} /\ op_taint qt cnt = {} /\
-    DISJOINT qt.t_mem {b | d <= b /\ b < d+32} /\ qt.t_mem SUBSET tn.t_mem /\
-    qt.t_stor = tn.t_stor /\ qt.t_trans = tn.t_trans /\ qt.t_imm = tn.t_imm /\
-    (!v. v <> x ==> FLOOKUP H v = FLOOKUP G v /\
-      eval_operand (Var v) t = eval_operand (Var v) s /\
-      op_taint qt (Var v) = op_taint tn (Var v)) /\
-    ((!fuel. ptr_safe_run D lo fuel ctx fn PG H qt
-       (t with vs_inst_idx := s.vs_inst_idx+2)) ==>
-     !fuel. ptr_safe_run D lo fuel ctx fn PG G tn s)
-Proof
-  strip_tac >> irule prefix_loop_count_header_pair_interior >>
-  simp[] >> conj_tac >- (qexistsl_tac [`iid`,`src`] >> simp[]) >>
-  qpat_x_assum `isPREFIX _ _` mp_tac >> simp[]
-QED
 
 Theorem prefix_loop_guard_outputs:
   abi_decode_dynarray_prefix src DLOAD (Lit 0w) maxn asz st = ((),st') /\
@@ -561,7 +452,7 @@ Proof
   simp[abi_decoder_older_vars_def] >> metis_tac[LESS_EQ_REFL,DECIDE ``n <= n+1``,DECIDE ``n <= n+2``]
 QED
 
-Theorem prefix_loop_raw_indexed[local]:
+Theorem prefix_loop_raw_indexed:
   inst_extends st st' /\ st'.cs_blocks = st.cs_blocks /\
   st'.cs_current_bb = st.cs_current_bb /\
   EVERY (\i. i.inst_opcode <> INVOKE /\ ~is_terminator i.inst_opcode)
@@ -593,7 +484,6 @@ Proof
     lookup_var_def,mload_def,abi_encoder_registered_effect_def] >>
   rewrite_tac[venom_state_accfupds]
 QED
-
 
 Theorem prefix_loop_setup_pair:
   abi_decode_dynarray_prefix src DLOAD (Lit 0w) maxn asz st = ((),guard_st) /\
