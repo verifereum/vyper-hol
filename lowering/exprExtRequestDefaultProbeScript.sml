@@ -94,7 +94,8 @@ Proof
           type_alloc_ok_def] >>
       drule abiEncodeEndpointMetadataTheory.abi_encode_endpoint_output_size >>
       Cases_on `o'` >>
-      gvs[type_memory_bytes_def, vfmConstantsTheory.word_size_def]) >>
+      gvs[type_memory_bytes_def, vfmConstantsTheory.word_size_def] >>
+      CONV_TAC (DEPTH_CONV ETA_CONV) >> simp[]) >>
   metis_tac[extrequest_effect_free_not_call]
 QED
 
