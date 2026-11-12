@@ -3,6 +3,7 @@ Theory stmtForRangeMemoryRound
 Ancestors
   stmtSimForRounds stmtSimDeclGas stmtSimDefs exprSimDefs gasContext gasSummary vyperInterpreter vyperState
   vyperEvalPreservesScopes gasExemptCert gasOutcome fragGasMode fragGasPathMem list finite_map
+  gasStorage vyperStorageFootprint vyperStorageTrace
 Libs
   monadsyntax
 
@@ -119,14 +120,84 @@ Proof
   first_assum ACCEPT_TAC
 QED
 
+(* The body's cleanup only extends the body's storage trace (S1's local
+   finally_try_trace in stmtSimForLoop). *)
+Theorem for_finally_try_trace[local]:
+  (!e. storage_trace_frame (h e)) /\ storage_trace_frame g ==>
+  ?xs. (SND (finally (try (ignore_bind f (return b)) h) g st)).storage_trace =
+       (SND (f st)).storage_trace ++ xs
+Proof
+  strip_tac >> Cases_on `f st` >> rename1 `_ = (r0,t)` >>
+  `?r1 u xs. try (ignore_bind f (return b)) h st = (r1,u) /\
+             u.storage_trace = t.storage_trace ++ xs` by
+    (Cases_on `r0` >> simp[try_def, ignore_bind_def, bind_def, return_def] >>
+     rename1 `h e t` >> Cases_on `h e t` >>
+     metis_tac[vyperStorageTraceTheory.storage_trace_frame_prefix]) >>
+  `!k. storage_trace_frame k ==>
+       ?ys. (SND (k u)).storage_trace = u.storage_trace ++ ys` by
+    (rpt strip_tac >> Cases_on `k u` >>
+     metis_tac[vyperStorageTraceTheory.storage_trace_frame_prefix, pairTheory.SND]) >>
+  Cases_on `r1` >> simp[finally_def] >>
+  qmatch_goalsub_abbrev_tac `SND (k u)` >>
+  `storage_trace_frame k` by
+    simp[Abbr `k`, vyperStorageTraceTheory.storage_trace_frame_ignore_bind,
+         vyperStorageTraceTheory.storage_trace_frame_return,
+         vyperStorageTraceTheory.storage_trace_frame_raise] >>
+  qpat_x_assum `!k. _` drule >> strip_tac >> simp[] >>
+  qexists_tac `xs ++ ys` >> simp[]
+QED
+
+(* A body run that left the storage domain makes the whole round one. *)
+Theorem for_round_bad_mem[local]:
+  gas_bad_storage_at cx st0 (eval_stmts cx stmts)
+    (esk with scopes :=
+      (FEMPTY |+ (id, <|assignable := F; type := tyv;
+                        value := v; popped := []|>)) :: esk.scopes) s marks /\
+  ~s.vs_halted ==>
+  gas_bad_storage_at cx st0
+    (do push_scope_with_var id tyv v;
+        finally (try (do eval_stmts cx stmts; return F od)
+                     handle_loop_exception) pop_scope od) esk s marks
+Proof
+  strip_tac >>
+  `gas_marked_exec T (ctx,func) (push_scope_with_var id tyv v)
+    (esk,s) [] (INL ())
+    (esk with scopes :=
+      (FEMPTY |+ (id, <|assignable := F; type := tyv;
+                        value := v; popped := []|>)) :: esk.scopes) (OK s)` by
+    (simp[gas_marked_exec_def, push_scope_with_var_def, return_def,
+          evaluation_state_component_equality] >>
+     irule gas_marked_path_from_mem >> simp[gas_path_mem_rules]) >>
+  PURE_ONCE_REWRITE_TAC[ignore_bind_def] >>
+  irule (SRULE [] (Q.INST [`left` |-> `[]`]
+    gasStorageTheory.gas_bad_storage_at_bind_right)) >>
+  qpat_assum `gas_marked_exec _ _ (push_scope_with_var _ _ _) _ _ _ _ _`
+    (irule_at Any) >>
+  simp[gasStorageTheory.gas_bad_storage_at_def] >> gen_tac >>
+  qmatch_goalsub_abbrev_tac `finally _ _ st` >>
+  `?xs. (SND (finally (try (ignore_bind (eval_stmts cx stmts) (return F))
+            handle_loop_exception) pop_scope st)).storage_trace =
+         (SND (eval_stmts cx stmts st)).storage_trace ++ xs` by
+    (irule for_finally_try_trace >>
+     simp[vyperStorageTraceTheory.storage_trace_frame_loop_handler,
+          vyperStorageTraceTheory.storage_trace_frame_pop_scope]) >>
+  qpat_x_assum `gas_bad_storage_at _ _ _ _ _ _` mp_tac >>
+  simp[gasStorageTheory.gas_bad_storage_at_def] >>
+  disch_then (qspec_then `tail` mp_tac) >>
+  simp[Abbr `st`] >>
+  metis_tac[vyperStorageFootprintTheory.storage_trace_domain_prefix]
+QED
+
 Theorem for_round_outcome_mem:
-  gas_outcome T tops (ctx,func) (eval_stmts cx stmts)
+  gas_outcome T tops (ctx,func) cx st0 (eval_stmts cx stmts)
     (esk with scopes :=
       (FEMPTY |+ (id, <|assignable := F; type := tyv;
                         value := v; popped := []|>)) :: esk.scopes,s)
-    B (\res ee r. !tail. stmt_exit RetQ (ee with gas_obs := tail) res r) /\
+    B (\H res ee r. !tail. stmt_exit (RetQ H) (ee with gas_obs := tail) res r) /\
   ~s.vs_halted /\
-  (!res ee t gs. B res ee t /\
+  (!res ee t gs.
+     (?H. valid_horizon cx st0 H ee.storage_trace) /\
+     (!H. valid_horizon cx st0 H ee.storage_trace ==> B H res ee t) /\
      eval_stmts cx stmts
        ((esk with scopes :=
          (FEMPTY |+ (id, <|assignable := F; type := tyv;
@@ -135,33 +206,47 @@ Theorem for_round_outcome_mem:
      (res = INL () \/ res = INR BreakException \/ res = INR ContinueException) /\
      ee.scopes <> [] /\
      ?u. gas_path_mem ctx func t 0 (OK u) /\
-         H (INL (res = INR BreakException)) (ee with scopes := TL ee.scopes) u) ==>
-  gas_outcome T tops (ctx,func)
+         !H. valid_horizon cx st0 H ee.storage_trace ==>
+           Q H (INL (res = INR BreakException)) (ee with scopes := TL ee.scopes) u) ==>
+  gas_outcome T tops (ctx,func) cx st0
     (do push_scope_with_var id tyv v;
         finally (try (do eval_stmts cx stmts; return F od)
                      handle_loop_exception) pop_scope od)
-    (esk,s) H
-    (\res ee r. ?ex. res = INR ex /\
-                 !tail. stmt_exit RetQ (ee with gas_obs := tail) (INR ex) r)
+    (esk,s) Q
+    (\H res ee r. ?ex. res = INR ex /\
+                 !tail. stmt_exit (RetQ H) (ee with gas_obs := tail) (INR ex) r)
 Proof
   strip_tac >>
-  qpat_x_assum `gas_outcome _ _ _ _ _ _ _` mp_tac >>
-  rewrite_tac[gas_outcome_def, gas_summary_at_def] >> strip_tac
+  qpat_x_assum `gas_outcome _ _ _ _ _ _ _ _ _` mp_tac >>
+  rewrite_tac[gas_outcome_def, gas_summary_at_def] >> BETA_TAC >> strip_tac
+  >- suspend "bad"
   >- suspend "normal"
   >- suspend "exit" >>
   suspend "exempt"
 QED
 
+Resume for_round_outcome_mem[bad]:
+  qexists_tac `marks` >> disj1_tac >> irule for_round_bad_mem >> simp[]
+QED
+
 Resume for_round_outcome_mem[normal]:
+  reverse (Cases_on `storage_trace_domain cx st0 es_end.storage_trace`)
+  >- (qexists_tac `marks` >> disj1_tac >> irule for_round_bad_mem >> simp[] >>
+      irule gasStorageTheory.gas_bad_storage_at_counted_prefix >>
+      qpat_assum `gas_marked_exec _ _ _ _ _ _ _ _` (irule_at Any) >> simp[]) >>
+  `?He. valid_horizon cx st0 He es_end.storage_trace` by
+    metis_tac[vyperStorageFootprintTheory.storage_trace_domain_def] >>
   qpat_assum `gas_marked_exec _ _ _ _ _ _ _ _` mp_tac >>
   rewrite_tac[gas_marked_exec_def] >> strip_tac >>
   first_x_assum (qspec_then `[]` assume_tac) >>
-  qpat_x_assum `!res ee t gs. _` drule >>
-  disch_then drule >> strip_tac >>
+  qpat_x_assum `!res ee t gs. _`
+    (qspecl_then [`res`, `es_end with gas_obs := []`, `t`,
+                  `gas_explicit marks s.vs_gas_readings`] mp_tac) >>
+  impl_tac >- (fs[] >> metis_tac[]) >> strip_tac >>
   Cases_on `es_end.scopes` >> gvs[] >>
   drule_all for_round_marked >> simp[] >> strip_tac >>
-  qmatch_asmsub_abbrev_tac `H (INL broke) _ u` >>
-  qexists_tac `marks` >> disj1_tac >>
+  qmatch_asmsub_abbrev_tac `Q _ (INL broke) _ u` >>
+  qexists_tac `marks` >> disj2_tac >> disj1_tac >>
   qexistsl_tac [`INL broke`,
                 `es_end with scopes := t'`, `OK u`] >>
   simp[Abbr `broke`] >>
@@ -170,9 +255,16 @@ Resume for_round_outcome_mem[normal]:
 QED
 
 Resume for_round_outcome_mem[exit]:
-  gvs[] >>
+  reverse (Cases_on `storage_trace_domain cx st0 es_end.storage_trace`)
+  >- (qexists_tac `marks` >> disj1_tac >> irule for_round_bad_mem >> simp[] >>
+      irule gasStorageTheory.gas_bad_storage_at_counted_prefix >>
+      qpat_assum `gas_marked_exec _ _ _ _ _ _ _ _` (irule_at Any) >> simp[]) >>
+  `?He. valid_horizon cx st0 He es_end.storage_trace` by
+    metis_tac[vyperStorageFootprintTheory.storage_trace_domain_def] >>
+  `!tail. stmt_exit (RetQ He) (es_end with gas_obs := tail) res r` by
+    (fs[] >> metis_tac[]) >>
   Cases_on `res` >- gvs[stmt_exit_def, expr_exit_def] >>
-  rename1 `stmt_exit RetQ _ (INR err) r` >>
+  rename1 `stmt_exit (RetQ He) _ (INR err) r` >>
   Cases_on `err = BreakException`
   >- (Cases_on `r` >> gvs[stmt_exit_def, expr_exit_def]) >>
   Cases_on `err = ContinueException`
@@ -185,13 +277,14 @@ Resume for_round_outcome_mem[exit]:
      Cases_on `es_end.scopes` >> gvs[]) >>
   Cases_on `es_end.scopes` >> gvs[] >>
   drule_all for_round_marked >> simp[] >> strip_tac >>
-  qexists_tac `marks` >> disj1_tac >>
+  qexists_tac `marks` >> disj2_tac >> disj1_tac >>
   qexistsl_tac [`INR err`, `es_end with scopes := t`, `r`] >>
   simp[] >> disj2_tac >>
-  gvs[stmt_exit_def]
+  gvs[stmt_exit_def] >> metis_tac[]
 QED
 
 Resume for_round_outcome_mem[exempt]:
+  rename1 `gas_exempt_cert _ _ _ _ _ _ (err,ee) (leaf,target)` >>
   `ee.scopes <> []` by
     (drule gas_exempt_cert_execution >> strip_tac >>
      first_x_assum (qspec_then `[]` mp_tac) >>
@@ -207,8 +300,8 @@ Resume for_round_outcome_mem[exempt]:
   Cases_on `ee.scopes` >> gvs[] >>
   drule gas_exempt_cert_start_gas_obs >>
   disch_then (qspec_then `[]` mp_tac) >> simp[] >> strip_tac >>
-  qexists_tac `marks` >> disj2_tac >>
-  qexistsl_tac [`err`, `ee with scopes := t`, `leaf`, `finish'`] >>
+  qexists_tac `marks` >> disj2_tac >> disj2_tac >>
+  qexistsl_tac [`err`, `ee with scopes := t`, `leaf`, `target`] >>
   irule for_round_cert >> simp[] >>
   `!st gs scs. st with <|gas_obs := gs; scopes := scs|> =
                 st with <|scopes := scs; gas_obs := gs|>`
@@ -251,14 +344,20 @@ QED
 
 Theorem for_outcome_zero_prefix_mem:
   gas_path_mem ctx func s0 0 (OK s1) /\
-  gas_outcome T tops (ctx,func) source (es,s1) Q R ==>
-  gas_outcome T tops (ctx,func) source (es,s0) Q R
+  gas_outcome T tops (ctx,func) cx st0 source (es,s1) Q R ==>
+  gas_outcome T tops (ctx,func) cx st0 source (es,s0) Q R
 Proof
-  simp[gas_outcome_def] >> strip_tac >> qexists_tac `marks`
-  >- (disj1_tac >> fs[gas_summary_at_def] >>
+  rewrite_tac[gas_outcome_def] >> strip_tac >> qexists_tac `marks`
+  >- (disj1_tac >>
+      `s1.vs_gas_readings = s0.vs_gas_readings` by
+        (drule gas_path_mem_ok_suffix >> simp[]) >>
+      fs[gasStorageTheory.gas_bad_storage_at_def])
+  >- (disj2_tac >> disj1_tac >> fs[gas_summary_at_def] >>
       qexistsl_tac [`res`, `es_end`, `r`] >> simp[] >>
       metis_tac[for_marked_zero_prefix_mem]) >>
-  disj2_tac >> qexistsl_tac [`err`, `ee`, `leaf`, `finish'`] >>
+  disj2_tac >> disj2_tac >>
+  rename1 `gas_exempt_cert _ _ _ _ _ _ (err,ee) (leaf,target)` >>
+  qexistsl_tac [`err`, `ee`, `leaf`, `target`] >>
   irule for_cert_zero_prefix_mem >> qexists_tac `s1` >> simp[]
 QED
 
@@ -311,10 +410,10 @@ QED
 Finalise for_round_false_source_mem
 
 Theorem for_outcome_consequence_mem:
-  gas_outcome memory tops (ctx,func) source (es,s) Q R /\
-  (!res ee t. Q res ee t ==> Q' res ee t) /\
-  (!res ee r. R res ee r ==> R' res ee r) ==>
-  gas_outcome memory tops (ctx,func) source (es,s) Q' R'
+  gas_outcome memory tops (ctx,func) cx st0 source (es,s) Q R /\
+  (!H res ee t. Q H res ee t ==> Q' H res ee t) /\
+  (!H res ee r. R H res ee r ==> R' H res ee r) ==>
+  gas_outcome memory tops (ctx,func) cx st0 source (es,s) Q' R'
 Proof
   rw[gas_outcome_def, gas_summary_at_def] >>
   qexists_tac `marks` >> metis_tac[]
