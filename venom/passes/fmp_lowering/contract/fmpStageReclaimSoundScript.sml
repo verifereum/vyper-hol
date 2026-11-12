@@ -20,7 +20,9 @@ Theory fmpStageReclaimSound
 Ancestors
   fmpStageRel ptrStaticDiscipline cfgWf venomWf livenessProofs
   fnBlockPlanStaticOffsetLive fnPlanLineageLiveness fnBlockPlanStatic
-  fmpReclaimDefs basePtrProofs venomInst list
+  fmpLowerReclaimPlan venomWfProps venomExecProofs removeUnusedProofs
+  fnFrameSinglePred fmpReclaimDefs basePtrProofs venomInst list arithmetic
+  fmpStageReclaimFresh
 
 Theorem fmp_stage_frame_sites:
   fmp_stage_ctx rpolicy D C C' vs vs' fmp eom /\
@@ -157,6 +159,46 @@ Theorem fmp_stage_live_edge:
    EVERY (\q. ~MEM v q.inst_outputs) (collect_phis sbb.bb_instructions))
 Proof
   cheat
+QED
+
+Theorem fresh_transfer[local]:
+  ~MEM v inst.inst_outputs /\ ~MEM v st.frs_stack /\
+  fmp_transfer infos fn live env p inst (SOME st) = SOME st' ==>
+  ~MEM v st'.frs_stack
+Proof
+  strip_tac >>
+  Cases_on `fmp_pop_at infos fn live env p inst st` >>
+  rename1 `fmp_pop_at infos fn live env p inst st = (popped,kept)` >>
+  drule fmp_pop_at_kept >> strip_tac >>
+  gvs[fmp_transfer_def, fmp_reclaim_step_def] >>
+  Cases_on `fmp_clears_marks infos inst` >>
+  gvs[fmp_apply_effect_def, fmp_empty_reclaim_state_def] >>
+  Cases_on `inst.inst_opcode = DALLOCA` >> gvs[] >>
+  Cases_on `inst.inst_outputs` >>
+  gvs[fmpAliasDefsTheory.fmp_single_output_def] >>
+  rename1 `inst.inst_outputs = h::tail` >>
+  Cases_on `tail` >> gvs[fmpAliasDefsTheory.fmp_single_output_def]
+QED
+
+Theorem fresh_block_prefix[local]:
+  !n st. fmp_reclaim_states infos fn = SOME states /\
+  fmp_base_analyze (fn_insts fn) = SOME env /\
+  ALL_DISTINCT (MAP (\b. b.bb_label) fn.fn_blocks) /\ MEM bb fn.fn_blocks /\
+  n <= LENGTH bb.bb_instructions /\
+  (!j. j < n ==> ~MEM v (EL j bb.bb_instructions).inst_outputs) /\
+  df_at NONE states bb.bb_label 0 = SOME start /\ ~MEM v start.frs_stack /\
+  df_at NONE states bb.bb_label n = SOME st ==> ~MEM v st.frs_stack
+Proof
+  Induct >> rpt gen_tac >> strip_tac >- gvs[] >>
+  `n < LENGTH bb.bb_instructions` by simp[] >>
+  drule_all fmp_reclaim_states_df_at_suc >> strip_tac >>
+  Cases_on `df_at NONE states bb.bb_label n`
+  >- gvs[fmp_transfer_def, fmp_reclaim_step_def] >>
+  rename1 `df_at NONE states bb.bb_label n = SOME prev` >>
+  `~MEM v prev.frs_stack` by
+    (first_x_assum irule >> simp[] >> rpt strip_tac >> first_x_assum irule >> simp[]) >>
+  `~MEM v (EL n bb.bb_instructions).inst_outputs` by simp[] >>
+  metis_tac[fresh_transfer]
 QED
 
 Theorem fmp_stage_out_not_kept:
