@@ -23,11 +23,11 @@ Ancestors
   entryStateRel entryArgPtrs entryLocals
   entryDecodePlanProps entryDecodeProps bodySimEntry actualRegistrationCode
   vyperCompiler moduleLoweringProps exprLoweringProps vyperInterpreter
-  vyperContext venomExecSemantics venomState compileEnv supportedProgram
+  vyperContext venomExecSemantics venomState compileEnv loweringStateRelDefs supportedProgram
   fragExec venomInst ptrDiscipline ptrSafeRun vyperLoweringCorrect
   loweringRuntimeCorrect bodyPtrDefs moduleLowering venomWf
   list rich_list selectorDispatch byte contractABI vyperABIRoundtrip
-  valueEncoding entryDispatchProps ctorDeployInitcode abiCallerBuiltinInput compileVyper
+  valueEncoding valueEncodingDefs entryDispatchProps ctorDeployInitcode abiCallerBuiltinInput compileVyper
   ctorDeployMemoryFrontier registrationSizeAdmissibility argumentRegistrationOpen
 
 (* Supported checked source excludes all runtime DALLOCA producers.  This
@@ -163,7 +163,8 @@ Theorem registration_stmt_initial_fmp:
   stmt_state_rel ctx func cenv cx es s
 Proof
   simp[stmt_state_rel_def, state_rel_def, immutable_base_zero_alt,
-       immutable_alloca_sep_def, local_ptrs_rel_def, local_region_def,
+       immutable_alloca_sep_def, immutable_decl_sep_def,
+       local_ptrs_rel_def, local_region_def,
        local_backed_def, lookup_var_def, storage_rel_def, transient_rel_def,
        immutables_rel_def, logs_rel_def, call_ctx_rel_def, accounts_rel_def,
        contract_storage_def, contract_transient_def,
@@ -212,29 +213,6 @@ Proof
        ptr_inst_ok_def]
 QED
 
-(* Existence of an entry ghost is separate from transporting an actual
-   ghost along execution.  Empty taint makes ordinary local values robust. *)
-Theorem local_ptrs_entry_ghost:
-  local_ptrs_rel fn ce es.scopes s ==>
-  ghost_inv NONE ce cx es
-    (FUN_FMAP (\p. (0,s.vs_alloca_next)) (FDOM s.vs_vars)) entry_taint s
-Proof
-  strip_tac >>
-  simp[ghost_inv_def, return_buf_ptr_def, stor_taint_ok_def,
-       entry_taint_def, op_taint_def] >>
-  rpt gen_tac >> strip_tac >>
-  fs[local_ptrs_rel_def] >>
-  first_x_assum drule_all >> strip_tac >>
-  conj_tac
-  >- (simp[ptr_covers_def, op_taint_def, entry_taint_def,
-           finite_mapTheory.FLOOKUP_FUN_FMAP, lookup_var_def] >>
-      gvs[lookup_var_def, finite_mapTheory.FLOOKUP_DEF]) >>
-  gvs[lookup_var_def] >>
-  drule calldataTypedRobustPtrTheory.clean_footprint_val_in_memory_robust >>
-  disch_then drule >>
-  disch_then (qspec_then `{}` mp_tac) >> simp[]
-QED
-
 Theorem registration_empty_frontier:
   lowering_context_ok ctx /\ ctx.ctx_entry = SOME name /\
   lookup_function name ctx.ctx_functions = SOME fn /\ s.vs_alloca_next = 0 ==>
@@ -271,9 +249,7 @@ Theorem registration_runtime_acceptance:
   lower_vyper_runtime_unit tops policy = SOME unit ==>
   lowering_context_ok unit.cu_context /\ unit.cu_context.ctx_entry = SOME "__entry"
 Proof
-  simp[lower_vyper_runtime_unit_def] >>
-  pairarg_tac >> simp[AllCaseEqs()] >>
-  metis_tac[run_lowering_context_ok, run_lowering_entry]
+  metis_tac[vyperLoweringCorrectTheory.lower_vyper_runtime_unit_context_entry]
 QED
 
 Theorem registration_initial_ptr_resources:
@@ -1466,6 +1442,13 @@ Proof
   drule_all sourceRecursiveComplexPtrTheory.robust_value_footprint_frame >> simp[]
 QED
 
+Theorem registration_fn_insts_blocks_inst_ids[local]:
+  !bbs. MAP (\i. i.inst_id) (fn_insts_blocks bbs) =
+        FLAT (MAP (\bb. MAP (\i. i.inst_id) bb.bb_instructions) bbs)
+Proof
+  Induct >> simp[venomInstTheory.fn_insts_blocks_def]
+QED
+
 Theorem registration_aggregate_singleton_ptr_resources:
   compile_register_positional_args ce
     [(name,F,dyn,sz,type_to_abi_dec_info sf ce ty)] (4+h) st = (ce',last) /\
@@ -1550,7 +1533,7 @@ Proof
     (rpt strip_tac >> first_x_assum drule >> simp[]) >>
   `ALL_DISTINCT (MAP (\i. i.inst_id) (fn_insts fn))` by
     gvs[fn_inst_ids_distinct_def, venomInstTheory.fn_insts_def,
-        allocaFrontierBoundTheory.fn_insts_blocks_inst_ids] >>
+        registration_fn_insts_blocks_inst_ids] >>
   drule_all registration_argument_prepare_forward_robust_resources >>
   disch_then (qspecl_then [`tn`, `PG`, `G`] strip_assume_tac) >>
   rename1 `lookup_var q ready = SOME (n2w p)` >>
@@ -2725,6 +2708,10 @@ Resume registration_owned_locals_endpoint_resources[endpoint_locals]:
        simp[allocaFrontierBoundTheory.alloca_frontier_inv_def] >> decide_tac) >>
     `p' < dimword (:256)` by decide_tac >>
     simp[] >> conj_tac >- metis_tac[local_backed_def] >>
+    irule memoryValueEncodingTheory.val_in_memory_memory_value_rel >>
+    conj_tac
+    >- (qpat_x_assum `LIST_REL value_has_type tvs tx.args`
+          (mp_tac o SRULE [LIST_REL_EL_EQN]) >> simp[]) >>
     first_x_assum irule >> simp[mem_agree_outside_def]) >>
   `cenv0.ce_vars = (build_compile_env tops External mut tx.function_name args ret fbody ut).ce_vars /\
    cenv0.ce_imm_alloca = NONE` by
@@ -2913,7 +2900,7 @@ Theorem registration_actual_endpoint_relations:
     (INL (),es0) /\
   lookup_function "__entry" unit.cu_context.ctx_functions = SOME efn /\
   set_external_package_target rpolicy.rpol_target
-    (package_external_fn tops F (assign_nkeys tops 0)
+    (package_external_fn tops T (K global_nonreentrant_slot)
       (mut,F,lookup_raw_return_or_F (NONE:num option) tx.function_name External tops,
        tx.function_name,args,[],ret,fbody)) =
     (lbl,cenv0,pos_args,mincd,pay,F,key,ut',iv,fbody,rt) /\
@@ -3005,7 +2992,8 @@ Resume registration_actual_endpoint_relations[actual_stmt]:
   `fmp_room unit.cu_context efn s0` by
     (irule registration_no_dalloca_fmp_room >> simp[] >>
      drule vyperCompilerTheory.lookup_function_result_name >> simp[]) >>
-  simp[stmt_state_rel_def, immutable_alloca_sep_def, immutable_base_zero_def] >>
+  simp[stmt_state_rel_def, immutable_alloca_sep_def, immutable_decl_sep_def,
+       immutable_base_zero_def] >>
   conj_tac >- suspend "actual_state" >> first_assum ACCEPT_TAC
 QED
 
@@ -3109,7 +3097,7 @@ Theorem registration_positional_args_ptr_no_dalloca:
     lookup_function "__entry" unit.cu_context.ctx_functions = SOME efn /\
     fn_entry_label efn = SOME elbl /\
     set_external_package_target rpolicy.rpol_target
-      (package_external_fn tops F (assign_nkeys tops 0)
+      (package_external_fn tops T (K global_nonreentrant_slot)
          (mut, F, lookup_raw_return_or_F (NONE : num option)
                      tx.function_name External tops,
           tx.function_name, args, [], ret, fbody)) =
