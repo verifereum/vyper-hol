@@ -13,7 +13,53 @@ Theory codegenEntryBounded
 Ancestors
   codegenEntrySim asmRunBounded codegenEntryRel contextCodegenRel unitMemInv
   codegen asmSem venomExecSemantics venomState unitShapeDefs
-  passSimulationDefs
+  passSimulationDefs frameRel venomInst codegenRel venomRunBounded
+  contextCodegenRelProps
+
+(* The assembly state as starts codegen's program prog for the Venom
+   state vs at the context's entry: at PC 0 with an empty stack, memory
+   and shared state related, and vs a fresh, non-static entry state whose
+   labels are prog's offsets. *)
+Definition codegen_asm_entry_rel_def:
+  codegen_asm_entry_rel cp prog vs as <=>
+    as.as_pc = 0 /\ as.as_stack = [] /\
+    ~vs.vs_halted /\ ~vs.vs_call_ctx.cc_static /\
+    vs.vs_vars = FEMPTY /\ vs.vs_params = [] /\
+    n2w cp.cp_initial_fmp = vs.vs_initial_fmp /\
+    (!l. FLOOKUP vs.vs_labels l =
+         OPTION_MAP n2w (FLOOKUP (SND (compute_label_offsets prog)) l)) /\
+    context_memory_rel cp vs.vs_memory as.as_memory /\
+    shared_state_rel vs as
+End
+
+Theorem codegen_asm_entry_fn_state_rel:
+  !cp prog vs as fe lbl ra.
+    codegen_asm_entry_rel cp prog vs as /\
+    get_params (HD fe.fn_blocks).bb_instructions = [] /\
+    fn_entry_label fe = SOME lbl ==>
+    fn_entry_state_rel cp fe
+      (vs with <|vs_prev_bb := NONE; vs_current_bb := lbl; vs_inst_idx := 0|>)
+      as ra []
+Proof
+  rw[codegen_asm_entry_rel_def] >>
+  gvs[fn_entry_label_def, entry_block_def] >>
+  gvs[fn_entry_state_rel_def, fn_has_retpc_def,
+      shared_state_rel_def, venom_asm_terminal_rel_def]
+QED
+
+Theorem initial_ctx_codegen_asm_entry_rel:
+  !cp prog ctx vs es.
+    initial_ctx_rel cp prog ctx vs es ==>
+    codegen_asm_entry_rel cp prog vs (entry_asm_state vs es)
+Proof
+  rw[initial_ctx_rel_def] >>
+  gvs[initial_state_rel_def, initial_codegen_state_rel_def,
+      stack_params_rel_def, msg_ctx_rel_def] >>
+  simp[codegen_asm_entry_rel_def, entry_asm_state_def,
+       shared_state_rel_def, venom_asm_terminal_rel_def] >>
+  Cases_on `ctxt.stack` >> gvs[] >>
+  first_x_assum (qspec_then `0` mp_tac) >> simp[]
+QED
 
 (* Why it should hold.  codegen_entry_asm_sim is proved by
    gen_fn_simulation (venomToAsmProps), an induction over fuel through
@@ -45,6 +91,27 @@ Ancestors
    forwarding (in_revert_forward), whose first memory access is its
    RETURNDATACOPY; H also covers the spill slots and the other static
    offsets the generated code adds. *)
+Theorem codegen_entry_asm_bounded_state:
+  !rpolicy unit cp prog fuel M.
+    generate_context_plan unit.cu_context = SOME cp /\
+    codegen_assembly rpolicy unit = SOME prog /\
+    unit_shape_ok unit
+    ==>
+    ?N H. !Inv vs as.
+      codegen_context_obligations Inv unit.cu_context cp /\
+      codegen_reachability_package Inv unit.cu_context vs /\
+      codegen_asm_entry_rel cp prog vs as /\
+      terminates (run_context fuel unit.cu_context vs) /\
+      (!fn inst s. Inv unit.cu_context fn inst s /\ ~in_revert_forward fn s ==>
+         EVERY (\(off,len). len = 0 \/ off + len <= M) (inst_mem_ranges inst s))
+      ==>
+      asm_run_bounded (SND (compute_label_offsets prog)) (build_offset_to_pc prog)
+        prog H N as
+Proof
+  cheat
+QED
+
+(* The bound from the codegen frame's initial context. *)
 Theorem codegen_entry_asm_bounded:
   !rpolicy unit cp prog fuel M.
     generate_context_plan unit.cu_context = SOME cp /\
@@ -62,5 +129,42 @@ Theorem codegen_entry_asm_bounded:
       asm_run_bounded (SND (compute_label_offsets prog)) (build_offset_to_pc prog)
         prog H N (entry_asm_state vs es)
 Proof
-  cheat
+  rpt gen_tac >> strip_tac >>
+  drule_all codegen_entry_asm_bounded_state >>
+  disch_then (qspecl_then [`fuel`, `M`] strip_assume_tac) >>
+  qexistsl_tac [`N`, `H`] >> rpt strip_tac >>
+  drule initial_ctx_codegen_asm_entry_rel >> strip_tac >>
+  first_x_assum irule >> qexistsl_tac [`Inv`, `vs`] >>
+  rpt conj_tac >> first_assum ACCEPT_TAC
+QED
+
+(* The bound from the Venom run's resource bound: venom_run_bounded's
+   memory invariant has its own reachability witness, and the conjunction
+   of it with Inv carries both the obligations and the memory bound. *)
+Theorem codegen_entry_asm_bounded_run:
+  !rpolicy unit cp prog fuel M.
+    generate_context_plan unit.cu_context = SOME cp /\
+    codegen_assembly rpolicy unit = SOME prog /\
+    unit_shape_ok unit
+    ==>
+    ?N H. !Inv vs as.
+      codegen_context_obligations Inv unit.cu_context cp /\
+      codegen_reachability_package Inv unit.cu_context vs /\
+      codegen_asm_entry_rel cp prog vs as /\
+      venom_run_bounded fuel M unit.cu_context vs
+      ==>
+      asm_run_bounded (SND (compute_label_offsets prog)) (build_offset_to_pc prog)
+        prog H N as
+Proof
+  rpt gen_tac >> strip_tac >>
+  drule_all codegen_entry_asm_bounded_state >>
+  disch_then (qspecl_then [`fuel`, `M`] strip_assume_tac) >>
+  qexistsl_tac [`N`, `H`] >> rpt gen_tac >> strip_tac >>
+  gvs[venom_run_bounded_def, mem_inv_def] >>
+  rename1 `codegen_reachability_package MemInv unit.cu_context vs` >>
+  qpat_x_assum `!Inv vs as. _` (qspecl_then
+    [`\c f i s. Inv c f i s /\ MemInv c f i s`, `vs`, `as`] mp_tac) >>
+  simp[] >> disch_then irule >>
+  gvs[codegen_context_obligations_conj, codegen_reachability_package_conj] >>
+  metis_tac[]
 QED

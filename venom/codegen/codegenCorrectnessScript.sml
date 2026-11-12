@@ -70,7 +70,8 @@ Ancestors
   stackOpSim fnPlanDecomp list rich_list finite_map arithmetic
   frameOutcome callTrace unitShapeDefs vfmExecutionProp unitMemInv
   frameGas venomRunBounded frameStep codegenEntryBounded asmFrameNext
-  asmFrameGas
+  codegenAsmProgOk asmFrameRel
+  asmFrameGas asmFrameSurplus
 Libs
   BasicProvers
 
@@ -312,12 +313,11 @@ QED
    RETURNDATACOPY of it (whose size the callee sets) comes at or before
    doesn't run out of gas at our depth and leaves at least D.  The generated code runs
    RETURNDATACOPY only to forward a failed callee's revert data, followed
-   by the REVERT's operands and the REVERT.  Proof idea: each Venom block
-   runs a bounded number of assembly steps (codegen_entry_asm_bounded),
-   each with a bounded cost under the memory bound (asm_frame_gas_step)
-   along our frame's own states (asm_frame_step_next), and each call
-   forwards at most all but 1/64 of the remaining gas, so g grows by a
-   factor of 64 per call the steps allow. *)
+   by the REVERT's operands and the REVERT.  Proof idea: an instance of
+   the program-generic asm_frame_gas_surplus (asmFrameSurplus) at the N
+   and H of codegen_entry_asm_bounded (whose memory premise comes from
+   venom_run_bounded's mem_inv, conjoined with Inv), from the entry
+   relation asm_frame_rel_entry as codegen_asm_run_call sets it up. *)
 Theorem codegen_gas_surplus:
   !rpolicy unit cp prog fuel M D.
     generate_context_plan unit.cu_context = SOME cp /\
@@ -339,7 +339,26 @@ Theorem codegen_gas_surplus:
       ==>
       r <> INR (SOME OutOfGas) /\ D <= frame_gas_left s'
 Proof
-  cheat
+  rpt gen_tac >> strip_tac >>
+  drule_all codegen_entry_asm_bounded_run >>
+  disch_then (qspecl_then [`fuel`, `M`] strip_assume_tac) >>
+  qspecl_then [`H`, `N`, `D`] strip_assume_tac asm_frame_gas_surplus >>
+  qexists_tac `g` >> rpt gen_tac >> strip_tac >>
+  qabbrev_tac `e = add_frame_gas g' es` >>
+  drule initial_ctx_codegen_asm_entry_rel >> strip_tac >>
+  `asm_run_bounded (SND (compute_label_offsets prog))
+     (build_offset_to_pc prog) prog H N (entry_asm_state vs e)` by
+    metis_tac[] >>
+  drule_all codegen_assembly_frame_prog_ok >> strip_tac >>
+  `assemble prog <> []` by metis_tac[codegen_assembly_nonempty] >>
+  `vs.vs_call_ctx.cc_created_in_tx \/ account_already_created
+     (lookup_account (FST (HD e.contexts)).msgParams.callee
+       e.rollback.accounts)` by
+    (gvs[initial_ctx_rel_def] >> metis_tac[]) >>
+  `asm_frame_rel prog vs.vs_data_section e (entry_asm_state vs e) e` by
+    (irule asm_frame_rel_entry >> simp[] >> metis_tac[]) >>
+  `g <= frame_gas_left e` by decide_tac >>
+  metis_tac[]
 QED
 
 (* Lockstep corollary: our frame runs only instructions of prog (or STOP
@@ -358,7 +377,22 @@ Theorem codegen_no_returndatacopy:
     ==>
     ~frame_inst_at es t ReturnDataCopy
 Proof
-  cheat
+  rpt strip_tac >>
+  drule_all codegen_entry_asm_bounded_run >>
+  disch_then (qspecl_then [`fuel`, `M`] strip_assume_tac) >>
+  drule initial_ctx_codegen_asm_entry_rel >> strip_tac >>
+  `asm_run_bounded (SND (compute_label_offsets prog))
+     (build_offset_to_pc prog) prog H N (entry_asm_state vs es)` by
+    metis_tac[] >>
+  drule_all codegen_assembly_frame_prog_ok >> strip_tac >>
+  `assemble prog <> []` by metis_tac[codegen_assembly_nonempty] >>
+  `vs.vs_call_ctx.cc_created_in_tx \/ account_already_created
+     (lookup_account (FST (HD es.contexts)).msgParams.callee
+       es.rollback.accounts)` by
+    (gvs[initial_ctx_rel_def] >> metis_tac[]) >>
+  `asm_frame_rel prog vs.vs_data_section es (entry_asm_state vs es) es` by
+    (irule asm_frame_rel_entry >> simp[] >> metis_tac[]) >>
+  drule_all asm_frame_no_returndatacopy >> metis_tac[]
 QED
 
 (* S7g (sufficient gas), next to S7: codegen_gas_surplus with D = 0.  With
