@@ -1238,8 +1238,7 @@ Proof
        t.vs_current_bb = sm.cs_current_bb /\
        t.vs_inst_idx = LENGTH sm.cs_current_insts /\ ~t.vs_halted` by
     metis_tac[] >>
-  gvs[] >>
-  disj1_tac >> qexists_tac `v` >> simp[] >>
+  qpat_x_assum `res = INL v` SUBST_ALL_TAC >> simp[] >>
   `eval_operand shadow_op t = SOME (typed_val_to_w256 tv v)` by
     metis_tac[return_word_operand] >>
   `lookup_var rpc t = SOME pc` by metis_tac[expr_post_def] >>
