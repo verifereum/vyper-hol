@@ -1,6 +1,7 @@
 (* Concrete checks of the compiler: allocation limits, bytestring
    conversions, the checker's conversion domain, concat buffers, shared callee memory, and a deployed
-   immutable read through the source semantics. *)
+   immutable read through the source semantics, and a memory struct field
+   named msg.data sliced by MCOPY. *)
 Theory compilerLoweringTest
 Ancestors
   evalCompilerSubsetState compileVyper vyperCompiler exprLowering context
@@ -469,3 +470,34 @@ val () = List.app (check_conversion_in "typecheck-rejected" false)
    "b4_to_bys", "b4_to_str", "u256_to_bys"]
 val () = List.app (check_conversion_in "typecheck-rejected" true)
   ["i8_to_addr", "i256_to_addr"]
+
+(* The HOL typed AST permits a struct variable named msg.  Its data field
+   is memory, even though its syntax also satisfies is_msg_data.  Real
+   transaction calldata uses the separate CalldataSlice constructor. *)
+Definition slice_struct_field_expr_def:
+  slice_struct_field_expr =
+    Builtin (BaseT (BytesT (Dynamic 40))) (Slice 40)
+      [Attribute (BaseT (BytesT (Dynamic 40)))
+         (Name (StructT (NONE, "S")) "msg") "data";
+       Literal (BaseT (UintT 256)) (IntL 0);
+       Literal (BaseT (UintT 256)) (IntL 1)]
+End
+
+Definition slice_struct_field_insts_def:
+  slice_struct_field_insts =
+    let cenv = build_compile_env
+      [StructDecl "S" [("data", BaseT (BytesT (Dynamic 40)))]]
+      External Pure "entry" [("msg", StructT (NONE, "S"))]
+      (BaseT (BytesT (Dynamic 40)))
+      [Return (SOME slice_struct_field_expr)] F in
+    (SND (compile_expr cenv (BaseT (BytesT (Dynamic 40)))
+      slice_struct_field_expr
+      (vyperCompiler$initial_compile_state "entry"))).cs_current_insts
+End
+
+Theorem slice_struct_field_copies_memory:
+  EXISTS (\i. i.inst_opcode = MCOPY) slice_struct_field_insts /\
+  ~EXISTS (\i. i.inst_opcode = CALLDATACOPY) slice_struct_field_insts
+Proof
+  EVAL_TAC
+QED

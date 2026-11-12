@@ -28,7 +28,7 @@ Proof
            raise_def] >> irule emit_jump_zero_path_mem >> simp[] >>
       qexistsl_tac [`sa`, `sj`] >> simp[]) >>
   simp[fragExecTheory.exit_result_def] >>
-  `stmt_post ctx func cx (InLoop ex inc) cenv cenv sa sj s0
+  `stmt_post ctx func cx (InLoop ex inc) cenv cenv sa sj es s0
      (INR BreakException) (es with gas_obs := []) (jump_to ex s0)` by
     (irule stmt_post_break >> simp[]) >>
   gvs[stmt_post_def] >>
@@ -62,7 +62,7 @@ Proof
            raise_def] >> irule emit_jump_zero_path_mem >> simp[] >>
       qexistsl_tac [`sa`, `sj`] >> simp[]) >>
   simp[fragExecTheory.exit_result_def] >>
-  `stmt_post ctx func cx (InLoop ex inc) cenv cenv sa sj s0
+  `stmt_post ctx func cx (InLoop ex inc) cenv cenv sa sj es s0
      (INR ContinueException) (es with gas_obs := []) (jump_to inc s0)` by
     (irule continue_jump_post >> simp[]) >>
   gvs[stmt_post_def] >>
