@@ -554,10 +554,13 @@ QED
 Theorem body_eval_subscript_storage:
   (!r s'. eval_expr cx e1 st = (r,s') ==>
           contract_storage_well_formed cx s') /\
-  (!tv s r s'. eval_expr cx e1 st = (INL tv,s) /\
-    runtime_storage_consistent env cx s /\
-    IS_SOME s.outcomes /\ oracle_storage_ok cx s /\
-    eval_expr cx idx s = (r,s') ==> contract_storage_well_formed cx s') /\
+  (!tv s tv' s0 r s'. eval_expr cx e1 st = (INL tv,s) /\
+    (if subscript_reads_base cx e1 idx then
+       do v <- read_result cx tv; return (Value v) od
+     else return tv) s = (INL tv',s0) /\
+    runtime_storage_consistent env cx s0 /\
+    IS_SOME s0.outcomes /\ oracle_storage_ok cx s0 /\
+    eval_expr cx idx s0 = (r,s') ==> contract_storage_well_formed cx s') /\
   (well_typed_expr env e1 \/ ?vt. type_place_expr env e1 = SOME vt) /\
   runtime_storage_consistent env cx st /\ functions_well_typed cx /\
   call_evaluation_safe cx (int_calls_expr e1) /\
@@ -580,7 +583,18 @@ Proof
     (drule (cj 5 eval_outcome_suffix_mutual) >> simp[]) >>
   drule_all body_oracle_storage_entry_transfer >> strip_tac >>
   Cases_on `base_res` >> gvs[return_def, raise_def]
-  >- (Cases_on `eval_expr cx idx base_st` >>
+  >- (rename1 `eval_expr cx e1 st = (INL base_tv,base_st)` >>
+      Cases_on `(if subscript_reads_base cx e1 idx then
+        bind (read_result cx base_tv) (\v. return (Value v))
+        else return base_tv) base_st` >>
+      rename1 `(if subscript_reads_base cx e1 idx then _ else _) base_st = (early_res,early_st)` >>
+      `early_st = base_st` by
+        (Cases_on `subscript_reads_base cx e1 idx` >>
+         gvs[bind_def, return_def, AllCaseEqs()] >>
+         metis_tac[read_result_state]) >> gvs[] >>
+      reverse (Cases_on `early_res`) >> gvs[return_def, raise_def]
+      >- (strip_tac >> gvs[]) >>
+      Cases_on `eval_expr cx idx base_st` >>
       rename1 `eval_expr cx idx base_st = (idx_res,idx_st)` >>
       `contract_storage_well_formed cx idx_st` by metis_tac[] >>
       Cases_on `idx_res` >> gvs[return_def, raise_def]
@@ -626,7 +640,13 @@ Theorem body_eval_builtin_storage:
   (!r s. builtin_args_length_ok bt (LENGTH es) /\ bt = Len /\
     eval_expr cx (HD es) st = (r,s) ==> contract_storage_well_formed cx s) /\
   (!r s. builtin_args_length_ok bt (LENGTH es) /\ bt <> Len /\
+    code_slice_source bt es = NONE /\
     eval_exprs cx es st = (r,s) ==> contract_storage_well_formed cx s) /\
+  (!ct ca r s. code_slice_source bt es = SOME (ct,ca) /\
+    eval_exprs cx (TL es) st = (r,s) ==> contract_storage_well_formed cx s) /\
+  (!ct ca tvs s1 r s. code_slice_source bt es = SOME (ct,ca) /\
+    eval_exprs cx (TL es) st = (INL tvs,s1) /\
+    eval_exprs cx [ca] s1 = (r,s) ==> contract_storage_well_formed cx s) /\
   eval_expr cx (Builtin ty bt es) st = (res,st') ==>
   contract_storage_well_formed cx st'
 Proof
@@ -656,6 +676,8 @@ Proof
       qexists_tac `st` >> simp[]) >>
   Cases_on `bt = Bop In \/ bt = Bop NotIn`
   >- (simp[] >>
+      `code_slice_source bt es = NONE` by
+        (qpat_x_assum `bt = Bop In \/ bt = Bop NotIn` strip_assume_tac >> gvs[]) >>
       qpat_x_assum `bt = Bop In \/ bt = Bop NotIn` kall_tac >>
       Cases_on `eval_exprs cx es st` >>
       rename1 `eval_exprs cx es st = (args_res,args_st)` >>
@@ -673,12 +695,39 @@ Proof
           gvs[lift_sum_def, return_def, raise_def] >>
           rpt strip_tac >> gvs[]) >>
       rpt strip_tac >> gvs[]) >>
-  gvs[] >> Cases_on `eval_exprs cx es st` >>
-  rename1 `eval_exprs cx es st = (args_res,args_st)` >>
-  `contract_storage_well_formed cx args_st` by metis_tac[] >>
+  gvs[] >>
+  `?args_res args_st.
+     (case code_slice_source bt es of
+        NONE => eval_exprs cx es
+      | SOME (code_ty,addr) =>
+          do tail_vs <- eval_exprs cx (TL es);
+             addr_vs <- eval_exprs cx [addr];
+             code_acc <- get_accounts;
+             code_v <- lift_sum (evaluate_code_source cx code_acc
+                                   (is_self_addr addr) code_ty
+                                   (expr_type addr) addr_vs);
+             return (code_v::tail_vs)
+          od) st = (args_res,args_st) /\
+     contract_storage_well_formed cx args_st` by (
+    Cases_on `code_slice_source bt es` >> simp[]
+    >- (Cases_on `eval_exprs cx es st` >> metis_tac[]) >>
+    rename1 `_ = SOME p` >> PairCases_on `p` >>
+    simp[bind_def, return_def, raise_def, get_accounts_def, lift_sum_def] >>
+    Cases_on `eval_exprs cx (TL es) st` >>
+    rename1 `eval_exprs cx (TL es) st = (tail_res,tail_st)` >>
+    Cases_on `tail_res` >> gvs[] >>
+    rename1 `eval_exprs cx (TL es) st = (INL tvs,tail_st)` >>
+    Cases_on `eval_exprs cx [p1] tail_st` >>
+    rename1 `eval_exprs cx [p1] tail_st = (addr_res,addr_st)` >>
+    `contract_storage_well_formed cx addr_st` by metis_tac[] >>
+    Cases_on `addr_res` >> gvs[return_def, raise_def] >>
+    CASE_TAC >> gvs[return_def, raise_def]) >>
+  qpat_x_assum `option_CASE _ _ _ st = _` (fn th =>
+    simp_tac (srw_ss()) [bind_def, return_def, raise_def, get_accounts_def,
+                         lift_sum_def, th]) >>
   Cases_on `args_res` >>
   gvs[bind_def, return_def, raise_def, get_accounts_def, lift_sum_def]
-  >- (rename1 `eval_exprs cx es st = (INL vs,args_st)` >>
+  >- (rename1 `evaluate_builtin cx args_st.accounts ty bt (MAP expr_type es) vs` >>
       Cases_on `evaluate_builtin cx args_st.accounts ty bt (MAP expr_type es) vs` >>
       gvs[return_def, raise_def] >>
       Cases_on `precompile_call_success bt args_st` >>
@@ -887,41 +936,44 @@ Proof
 QED
 
 Theorem body_ext_call_capture_storage:
-  (!r s. eval_expr_results cx es st = (r,s) ==>
+  (!r s. eval_exprs cx es st = (r,s) ==>
     contract_storage_well_formed cx s) /\
-  (!rs s r s'. eval_expr_results cx es st = (INL rs,s) /\
+  (!rs s r s'. eval_exprs cx es st = (INL rs,s) /\
     runtime_storage_consistent env cx s /\ IS_SOME s.outcomes /\
     oracle_storage_ok cx s /\ eval_exprs cx kws s = (r,s') ==>
     contract_storage_well_formed cx s') /\
   well_typed_exprs env es /\ runtime_storage_consistent env cx st /\
   functions_well_typed cx /\ call_evaluation_safe cx (int_calls_exprs es) /\
   IS_SOME st.outcomes /\ oracle_storage_ok cx st /\
-  bind (eval_expr_results cx es) (\results.
+  bind (eval_exprs cx es) (\vs.
     bind (eval_exprs cx kws) (\kwargs.
-      bind (read_results cx results) (\vs.
-        eval_ext_call cx static skip_check sig opts (target ++ vs ++ kwargs)))) st =
+      eval_ext_call cx static skip_check sig opts (target ++ vs ++ kwargs))) st =
     (res,st') ==> contract_storage_well_formed cx st'
 Proof
   strip_tac >>
   qpat_x_assum `bind _ _ st = _` mp_tac >>
   simp_tac (srw_ss()) [Once bind_apply] >>
-  Cases_on `eval_expr_results cx es st` >>
-  rename1 `eval_expr_results cx es st = (cap_res,cap_st)` >>
+  Cases_on `eval_exprs cx es st` >>
+  rename1 `eval_exprs cx es st = (cap_res,cap_st)` >>
   `contract_storage_well_formed cx cap_st` by metis_tac[] >>
   `runtime_consistent env cx cap_st` by
-    (`runtime_consistent env cx st` by
-       metis_tac[runtime_storage_consistent_runtime] >>
-     qpat_x_assum `runtime_consistent env cx st` mp_tac >>
-     simp[runtime_consistent_def] >> strip_tac >>
-     drule_all (cj 1 (SPEC_ALL (cj 11
-       vyperTypeEvalSoundnessTheory.eval_scc_type_sound_results_mutual))) >>
-     simp[runtime_consistent_def]) >>
+    metis_tac[eval_exprs_preserves_runtime_consistent,
+              runtime_storage_consistent_runtime] >>
   `outcome_suffix st.outcomes cap_st.outcomes` by
-    (drule eval_expr_results_outcome_suffix >> simp[]) >>
+    (drule (cj 6 eval_outcome_suffix_mutual) >> simp[]) >>
   drule_all body_oracle_storage_entry_transfer >> strip_tac >>
   Cases_on `cap_res` >> gvs[]
-  >- (rpt strip_tac >> irule body_ext_call_kwargs_storage >>
-      goal_assum (drule_at Any) >> simp[] >> metis_tac[]) >>
+  >- (simp_tac (srw_ss()) [bind_apply] >>
+      Cases_on `eval_exprs cx kws cap_st` >>
+      rename1 `eval_exprs cx kws cap_st = (kw_res,kw_st)` >>
+      `contract_storage_well_formed cx kw_st` by metis_tac[] >>
+      `IS_SOME kw_st.outcomes /\ oracle_storage_ok cx kw_st` by
+        (irule exprOracleStorageInterfacesTheory.oracle_storage_entry_suffix >>
+         qexists_tac `cap_st` >> simp[] >>
+         drule (cj 6 eval_outcome_suffix_mutual) >> simp[]) >>
+      Cases_on `kw_res` >> gvs[]
+      >- metis_tac[vyperOracleCallStorageTheory.eval_ext_call_oracle_storage_preserved] >>
+      rpt strip_tac >> gvs[]) >>
   rpt strip_tac >> gvs[]
 QED
 
@@ -931,10 +983,10 @@ Theorem body_eval_ext_call_storage:
   (!target s r s'. eval_exprs cx (TAKE 1 es) st = (INL target,s) /\
     runtime_storage_consistent env cx s /\ IS_SOME s.outcomes /\
     oracle_storage_ok cx s /\
-    eval_expr_results cx (TAKE (LENGTH argtys) (DROP 1 es)) s = (r,s') ==>
+    eval_exprs cx (TAKE (LENGTH argtys) (DROP 1 es)) s = (r,s') ==>
     contract_storage_well_formed cx s') /\
   (!target s rs s1 r s'. eval_exprs cx (TAKE 1 es) st = (INL target,s) /\
-    eval_expr_results cx (TAKE (LENGTH argtys) (DROP 1 es)) s = (INL rs,s1) /\
+    eval_exprs cx (TAKE (LENGTH argtys) (DROP 1 es)) s = (INL rs,s1) /\
     runtime_storage_consistent env cx s1 /\ IS_SOME s1.outcomes /\
     oracle_storage_ok cx s1 /\
     eval_exprs cx (DROP (1 + LENGTH argtys) es) s1 = (r,s') ==>
@@ -3109,12 +3161,11 @@ Proof
 QED
 
 Theorem body_intcall_guard_apply:
-  (!s0 results t0 prev s1 dflt_vs t1 s2 vs t2 s3 call_env t3
+  (!s0 vs t0 prev s1 dflt_vs t1 s3 call_env t3
       s4 rtv t4 s5 t5 s6 cxf t6.
-    eval_expr_results cx es s0 = (INL results,t0) /\
+    eval_exprs cx es s0 = (INL vs,t0) /\
     finally (do set_scopes [FEMPTY]; eval_exprs (cx with stk updated_by CONS (NONE,fn)) [] od)
       (set_scopes prev.scopes) s1 = (INL dflt_vs,t1) /\
-    read_results cx results s2 = (INL vs,t2) /\
     lift_option_type (bind_arguments (get_tenv cx) args (vs ++ dflt_vs))
       "IntCall bind_arguments" s3 = (INL call_env,t3) /\
     lift_option_type (evaluate_type (get_tenv cx) ret)
@@ -3129,8 +3180,7 @@ Theorem body_intcall_guard_apply:
       call_evaluation_safe cxf (int_calls_stmts ss) /\
       IS_SOME st.outcomes /\ oracle_storage_ok cxf st /\
       eval_stmts cxf ss st = (res,st') ==> contract_storage_well_formed cxf st')) /\
-  eval_expr_results cx es st = (INL results,args_st) /\
-  read_results cx results args_st = (INL vs,args_st) /\
+  eval_exprs cx es st = (INL vs,args_st) /\
   bind_arguments (get_tenv cx) args vs = SOME call_env /\
   evaluate_type (get_tenv cx) ret = SOME rtv /\
   lock_if_nr cx nr (is_view_mut mut) args_st = (INL (),lock_st) /\
@@ -3145,7 +3195,6 @@ Theorem body_intcall_guard_apply:
       eval_stmts cxf ss st = (res,st') ==> contract_storage_well_formed cxf st')
 Proof
   strip_tac >> first_x_assum match_mp_tac >>
-  goal_assum $ drule_at Any >>
   goal_assum $ drule_at Any >>
   goal_assum $ drule_at Any >>
   goal_assum $ drule_at Any >>

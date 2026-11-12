@@ -28,7 +28,7 @@ Proof
  gvs[is_empty_value_expr_def] >>
  rename1 `MakeArray et bd` >> Cases_on `et` >> gvs[is_empty_value_expr_def] >>
  Cases_on `args` >> gvs[is_empty_value_expr_def] >>
- simp[Ntimes evaluate_def 12, builtin_args_length_ok_def,
+ simp[Ntimes evaluate_def 24, builtin_args_length_ok_def,
       type_check_def, assert_def, ignore_bind_def, bind_def, return_def,
       get_accounts_def, evaluate_builtin_def] >>
  Cases_on `compatible_bound bd 0` >>

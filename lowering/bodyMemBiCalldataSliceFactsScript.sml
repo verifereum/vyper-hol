@@ -58,17 +58,21 @@ Proof
 QED
 
 Theorem calldata_slice_allocation_split:
-  compile_slice_calldata op num sz sa = (buf_op,sb) /\
-  compile_alloc_buffer sz sa = (buf,sm) ==>
-  emitted_insts sa sb = emitted_insts sa sm ++ emitted_insts sm sb
+  emit_op CALLDATASIZE [] sa = (len,s1) /\
+  compile_assert_slice_bounds start num len s1 = ((),s2) /\
+  compile_alloc_buffer sz s2 = (buf,s3) /\
+  emit_op ADD [buf.buf_operand; Lit 32w] s3 = (data,s4) /\
+  emit_void CALLDATACOPY [data; start; num] s4 = ((),s5) /\
+  emit_void MSTORE [buf.buf_operand; num] s5 = ((),sb) ==>
+  emitted_insts sa sb = emitted_insts sa s1 ++ emitted_insts s1 s2 ++
+    emitted_insts s2 s3 ++ emitted_insts s3 sb /\
+  s1.cs_next_var = sa.cs_next_var + 1 /\
+  s2.cs_next_id = sa.cs_next_id + 7 /\ s2.cs_next_var = sa.cs_next_var + 6 /\
+  s3.cs_next_var = sa.cs_next_var + 7
 Proof
-  strip_tac >> drule slice_calldata_parts >> strip_tac >> gvs[] >>
-  `inst_extends sm sb` by
-    (irule calldata_slice_after_alloc_extends >> metis_tac[]) >>
-  `inst_extends sa sm` by
-    (qpat_x_assum `compile_alloc_buffer _ _ = _` mp_tac >>
-     simp[compile_alloc_buffer_def, comp_bind_def, comp_return_def] >>
-     pairarg_tac >> simp[] >> strip_tac >> gvs[] >>
-     drule inst_extends_emit_op >> simp[]) >>
-  irule emitted_insts_append >> gvs[inst_extends_def]
+  simp[emit_op_def, emit_void_def, compile_assert_slice_bounds_def,
+       compile_alloc_buffer_def, comp_bind_def, comp_ignore_bind_def,
+       fresh_id_def, fresh_var_def, emit_def, comp_return_def] >>
+  strip_tac >> gvs[] >>
+  simp[emitted_insts_def, DROP_APPEND, DROP_LENGTH_TOO_LONG]
 QED

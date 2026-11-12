@@ -99,25 +99,49 @@ QED
    compile_subscript_mismatch_case for a dispatch type other than the
    base's, exprSimTuple's compile_subscript_tuple_sim for a tuple and
    compile_subscript_array_case for an array; no other base types. *)
+(* A mapping-typed base has expr_type NoneT, so the subscript never reads it
+   before the index. *)
+Theorem subscript_map_base_not_read[local]:
+  expr_body_pre cenv cx env (Subscript ann obj idx) es /\
+  place_type cenv obj = MapPT kt vt ==>
+  ~subscript_reads_base cx obj idx
+Proof
+  strip_tac >> drule_all expr_body_pre_map_subscript_base >> strip_tac >>
+  drule_all expr_map_pre_checked_type >> strip_tac >>
+  drule type_place_expr_vtype_annotation >>
+  simp[vtype_annotation_ok_def, vyperInterpreterTheory.subscript_reads_base_def,
+       vyperSubscriptOverlapTheory.subscript_overlap_def]
+QED
+
 Theorem compile_subscript_case:
   !nocalls ctx func cenv cx ann obj idx.
     expr_vv_case nocalls ctx func cenv cx obj /\
     (!kt vt. place_type cenv obj = MapPT kt vt ==>
              expr_map_case nocalls ctx func cenv cx obj) /\
-    (!s tv t. eval_expr cx obj s = (INL tv, t) ==>
-              expr_sim_case nocalls ctx func cenv cx idx) /\
+    (!s tv t s' tv' t'. eval_expr cx obj s = (INL tv, t) /\
+       (if subscript_reads_base cx obj idx
+        then do v <- read_result cx tv; return (Value v) od
+        else return tv) s' = (INL tv', t') ==>
+       expr_sim_case nocalls ctx func cenv cx idx) /\
     (~nocalls ==> post_value_type cenv obj = expr_type obj) ==>
     expr_vv_case nocalls ctx func cenv cx (Subscript ann obj idx)
 Proof
   rpt strip_tac >> Cases_on `place_type cenv obj`
-  >- metis_tac[compile_subscript_map_case] >>
+  >- (simp[expr_vv_case_def] >> rpt gen_tac >> strip_tac >>
+      drule_all subscript_map_base_not_read >> strip_tac >>
+      `expr_vv_case nocalls ctx func cenv cx (Subscript ann obj idx)` by
+        (irule compile_subscript_map_case >> fs[vyperStateTheory.return_def] >>
+         first_assum ACCEPT_TAC) >>
+      qpat_x_assum `expr_vv_case _ _ _ _ _ (Subscript _ _ _)` mp_tac >>
+      simp[expr_vv_case_def] >>
+      disch_then (qspecl_then [`env`, `ty`, `es`] mp_tac) >> fs[]) >>
   rename1 `ValPT bt` >>
   Cases_on `bt <> expr_type obj`
   >- (irule compile_subscript_mismatch_case >> qexists_tac `bt` >> simp[]) >>
   gvs[] >> simp[expr_vv_case_def] >> rpt gen_tac >> strip_tac >>
   drule_all subscript_base_array_or_tuple >> strip_tac
   >- (`expr_vv_case nocalls ctx func cenv cx (Subscript ann obj idx)` by
-        metis_tac[compile_subscript_array_case] >>
+        (irule compile_subscript_array_case >> fs[] >> first_assum ACCEPT_TAC) >>
       qpat_x_assum `expr_vv_case _ _ _ _ _ (Subscript _ _ _)` mp_tac >>
       simp[expr_vv_case_def] >>
       disch_then (qspecl_then [`env`, `ty`, `es`] mp_tac) >> fs[]) >>
@@ -228,9 +252,7 @@ QED
 
 (* pop on a nested target (x.a.pop(), x[i].pop(), self.s.a.pop()):
    exprSimPopNested's pop_nested_sim, by the target's root, with the
-   target's fragment judgment from pop_nested_expr_target_frag and, for an
-   immutable root in the constructor, the compile-env premises from
-   pop_nested_immutable_root_ctor. *)
+   target's fragment judgment from pop_nested_expr_target_frag. *)
 Theorem compile_pop_nested_sim:
   !cenv ann tgt.
     (!id. tgt <> NameTarget id) /\ (!nid. tgt <> TopLevelNameTarget nid) /\
@@ -238,20 +260,8 @@ Theorem compile_pop_nested_sim:
     expr_vv_ok cenv (Pop ann tgt)
 Proof
   rewrite_tac[expr_vv_ok_def] >> rpt strip_tac >>
-  irule pop_nested_sim >> conj_tac
-  >- (strip_tac >> qexists_tac `T` >>
-      `int_calls_target tgt = []` by
-        gvs[expr_sim_pre_def, int_calls_expr_def] >>
-      simp[] >> irule target_idx_case_ok >> rw[] >>
-      fs[expr_sim_below_def] >> first_x_assum irule >>
-      drule nested_pop_index_size >> simp[expr_size_def]) >>
-  qexists_tac `env` >> rpt conj_tac
-  >~ [`pop_target_frag`] >- metis_tac[pop_nested_expr_target_frag]
-  >~ [`cenv.ce_is_ctor`]
-  >- (strip_tac >> gvs[immutable_root_def, expr_sim_pre_body, expr_body_pre_def] >>
-      `!ts. get_module_code cx src = SOME ts ==>
-            find_var_decl_by_name id ts = NONE` by (rpt strip_tac >> gvs[]) >>
-      drule_all pop_nested_immutable_root_ctor >> simp[]) >>
+  irule pop_nested_sim >> qexists_tac `env` >> conj_tac
+  >~ [`pop_target_frag`] >- metis_tac[pop_nested_expr_target_frag] >>
   gvs[expr_sim_pre_body]
 QED
 

@@ -43,7 +43,10 @@ Theorem external_selected_body_typing:
 Proof
   strip_tac >> drule lookup_function_External_cases >> strip_tac
   >- (
-  gvs[source_typing_ok_def, source_deployment_rel_def] >>
+  `ALOOKUP am.sources tx.target = SOME [(NONE,tops)] /\
+   layouts_agree tops am tx` by fs[source_deployment_rel_def] >>
+  qpat_x_assum `source_deployment_rel _ _ _` kall_tac >>
+  gvs[source_typing_ok_def] >>
   `module_allocated am.layouts tx.target NONE tops` by
     (drule check_contract_main_module_allocated >> simp[]) >>
   `External <> Deploy` by simp[] >>
@@ -62,7 +65,10 @@ Proof
   drule checked_explicit_external_body_call_evaluation_safe >>
   simp[] >> disch_then drule >> simp[]
   ) >>
-  gvs[source_typing_ok_def, source_deployment_rel_def] >>
+  `ALOOKUP am.sources tx.target = SOME [(NONE,tops)] /\
+   layouts_agree tops am tx` by fs[source_deployment_rel_def] >>
+  qpat_x_assum `source_deployment_rel _ _ _` kall_tac >>
+  gvs[source_typing_ok_def] >>
   `module_allocated am.layouts tx.target NONE tops` by
     (drule check_contract_main_module_allocated >> simp[]) >>
   `ALOOKUP [(NONE,tops)] (NONE:num option) = SOME tops` by simp[] >>

@@ -530,13 +530,13 @@ QED
 
 (* ===== Counted source action ===== *)
 
-Theorem get_storage_gas_obs[local]:
+Theorem get_storage_gas_obs:
   get_storage cx (st with gas_obs := g) b = get_storage cx st b
 Proof
   Cases_on `b` >> simp[get_storage_def]
 QED
 
-Theorem set_storage_gas_obs[local]:
+Theorem set_storage_gas_obs:
   set_storage cx (st with gas_obs := g) b x =
   set_storage cx st b x with gas_obs := g
 Proof

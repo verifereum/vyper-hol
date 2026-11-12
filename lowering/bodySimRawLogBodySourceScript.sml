@@ -6,7 +6,7 @@ Ancestors
   exprSimWordArgs exprLowering compileEnv emitHelper venomExecSemantics
   exprLoweringProps venomState venomMemDefs exprSimDefs exprSimStack loweringPosts exprSimHypsDefs exprSimSource vyperEvent fragExec venomInst
   exprSimHash exprSimBuffer exprSimPrecompiles emitHelperProps ASCIInumbers exprSimRawLog
-  bodySimRawLogSource
+  bodySimRawLogSource vyperTypeArgFits
 Libs
   pairLib
 
@@ -50,7 +50,9 @@ Proof
   simp[well_typed_expr_def, well_typed_builtin_app_def,
        vyperValueTheory.compatible_bound_def,
        vyperContextTheory.builtin_args_length_ok_def] >>
-  rpt strip_tac >> gvs[vyperValueTheory.compatible_bound_def]
+  rpt strip_tac >> gvs[vyperValueTheory.compatible_bound_def] >>
+  irule listTheory.EVERY_MONOTONIC >> first_x_assum (irule_at Any) >>
+  rw[] >> imp_res_tac arg_type_fits_prim_word >> gvs[is_prim_word_type_def]
 QED
 
 Theorem expr_body_pre_raw_log_arg:

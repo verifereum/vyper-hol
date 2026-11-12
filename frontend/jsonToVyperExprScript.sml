@@ -325,9 +325,13 @@ Definition make_builtin_call_def:
                     | JT_Bytes n => Builtin ty (Concat n) args
                     | _ => Builtin ty (Concat 0) args)
     else if name = "slice" then
-      (case ret_ty of JT_String n => Builtin ty (Slice n) args
-                    | JT_Bytes n => Builtin ty (Slice n) args
-                    | _ => Builtin ty (Slice 0) args)
+      (* The length is a compile-time value when it can be: the checker
+         bounds the result by a literal length. *)
+      (let slice_args = (case args of [src; start; len] => [src; start; fold_constant len]
+                                    | _ => args) in
+       case ret_ty of JT_String n => Builtin ty (Slice n) slice_args
+                    | JT_Bytes n => Builtin ty (Slice n) slice_args
+                    | _ => Builtin ty (Slice 0) slice_args)
     else if name = "keccak256" then Builtin ty Keccak256 args
     else if name = "sha256" then Builtin ty Sha256 args
     else if name = "floor" then Builtin ty Floor args

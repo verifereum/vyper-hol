@@ -628,9 +628,20 @@ Proof
     drule_all constant_subscript_selected_typed >> strip_tac >>
     `(artifact_env artifact mods current_src).type_defs = get_tenv cx` by
       simp[artifact_env_def] >>
+    Cases_on `subscript_reads_base cx e e'`
+    >- (`constant_result_shape (Value v1)` by simp[constant_result_shape_def] >>
+        `eval_result_typed (artifact_env artifact mods current_src,cx,initial_state am sc)
+           (Value v1) (Type (expr_type e))` by simp[eval_result_typed_def] >>
+        `read_result cx (Value v1) (initial_state am sc) =
+           (INL v1,initial_state am sc)` by simp[read_result_def, return_def] >>
+        qpat_x_assum `constant_result_shape pv'` kall_tac >>
+        drule_all constant_result_selection >> strip_tac >>
+        qexists `out` >>
+        simp[Once evaluate_def, bind_def, return_def, expr_type_def, value_runtime_typed_def] >>
+        metis_tac[]) >>
     drule_all constant_result_selection >> strip_tac >>
     qexists `out` >>
-    simp[Once evaluate_def, bind_def, expr_type_def, value_runtime_typed_def] >>
+    simp[Once evaluate_def, bind_def, return_def, expr_type_def, value_runtime_typed_def] >>
     metis_tac[])
   >~ [`Attribute`] >- (
     gvs[constant_value_def, constant_expr_def, AllCaseEqs()] >>
@@ -703,6 +714,10 @@ Proof
        simp[artifact_env_def, MAP_MAP_o] >> impl_tac
        >- (gvs[LIST_REL_EL_EQN, LIST_EQ_REWRITE, EL_MAP, artifact_env_def] >> metis_tac[]) >>
        simp[]) >>
+    `code_slice_source bt es = NONE` by
+      (Cases_on `code_slice_source bt es` >> simp[] >>
+       rename1 `_ = SOME p` >> PairCases_on `p` >>
+       gvs[code_slice_source_SOME, constant_builtin_def]) >>
     qexists `Value v` >>
     simp[Once evaluate_def, bind_def, ignore_bind_def, type_check_def, assert_def,
          lift_sum_def, get_accounts_def, return_def, expr_type_def, eval_result_typed_def,
@@ -1004,6 +1019,28 @@ Resume constant_eval_expr_fold_agreement[subscript]:
     simp[Once evaluate_def, bind_def] >> strip_tac >>
     gvs[sum_CASE_rator, AllCaseEqs()] >>
     first_x_assum drule_all >> strip_tac >> gvs[] >>
+    Cases_on `subscript_reads_base cx e1 e2`
+    >- (gvs[bind_def, return_def, AllCaseEqs()] >>
+        rev_drule read_result_state >> disch_then SUBST_ALL_TAC >> gvs[] >>
+        first_x_assum drule_all >> strip_tac >> gvs[] >>
+        drule read_result_state >> disch_then SUBST_ALL_TAC >> gvs[] >>
+        rename1 `read_result cx idx _ = (INL idx_value,_)` >>
+        `constant_result_shape (Value v')` by simp[constant_result_shape_def] >>
+        drule_all constant_result_selection_base >> strip_tac >> gvs[] >>
+        rpt strip_tac >>
+        Cases_on `evaluate_type (get_tenv cx) (expr_type e1)`
+        >- gvs[select_result_def, bind_def, lift_option_type_def, raise_def] >>
+        rename1 `evaluate_type _ _ = SOME base_ty` >>
+        Cases_on `evaluate_subscripts base_ty v' [ValueSubscript idx_value]` >>
+        qpat_x_assum `select_result _ _ (Value _) _ _ = _` mp_tac >>
+        simp[select_result_def, bind_def, lift_option_type_def,
+             lift_sum_def, return_def, raise_def] >> strip_tac >> gvs[] >>
+        qpat_x_assum `read_result cx (Value _) _ = _` mp_tac >>
+        simp[read_result_def, return_def] >> strip_tac >> gvs[] >>
+        qpat_x_assum `read_result cx (Value _) _ = _` mp_tac >>
+        simp[read_result_def, return_def] >> strip_tac >> gvs[] >>
+        gvs[constant_value_def, evaluate_subscripts_def, get_tenv_def, AllCaseEqs()]) >>
+    gvs[return_def] >>
     first_x_assum drule_all >> strip_tac >> gvs[] >>
     drule read_result_state >> disch_then SUBST_ALL_TAC >>
     drule_all constant_result_selection_base >> strip_tac >> gvs[] >>
@@ -1041,6 +1078,10 @@ Resume constant_eval_expr_fold_agreement[builtin]:
          constant_value mods (constant_machine_immutables am cx.txn.target) e = SOME v` by
       (fs[EVERY_MEM] >> metis_tac[constant_exprs_MEM_typed]) >>
     `bt <> Env MsgGas` by (strip_tac >> gvs[constant_builtin_def]) >>
+    `code_slice_source bt es = NONE` by
+      (Cases_on `code_slice_source bt es` >> simp[] >>
+       rename1 `_ = SOME p` >> PairCases_on `p` >>
+       gvs[code_slice_source_SOME, constant_builtin_def]) >>
     Cases_on `bt = Bop In \/ bt = Bop NotIn`
     >- (qpat_x_assum `eval_expr _ (Builtin _ _ _) _ = _` mp_tac >>
         simp[Once evaluate_def, bind_def, ignore_bind_def, type_check_def,

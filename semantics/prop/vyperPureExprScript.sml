@@ -140,8 +140,11 @@ QED
 
 Theorem case_Subscript[local]:
   ∀cx ty e1 e2.
-    (∀s'' tv1 t.
-       eval_expr cx e1 s'' = (INL tv1, t) ⇒
+    (∀s'' tv1 t s''' tv1' t'.
+       eval_expr cx e1 s'' = (INL tv1, t) ∧
+       (if subscript_reads_base cx e1 e2 then
+          do v <- read_result cx tv1; return (Value v) od
+        else return tv1) s''' = (INL tv1', t') ⇒
        ∀st res st'.
          eval_expr cx e2 st = (res, st') ⇒ pure_expr e2 ⇒ st = st') ∧
     (∀st res st'.
@@ -152,6 +155,9 @@ Theorem case_Subscript[local]:
 Proof
   rpt strip_tac >>
   gvs[evaluate_def, bind_def, AllCaseEqs(), pure_expr_def] >>
+  rpt (qpat_x_assum `!s res t s' res' t'. _` drule_all >> strip_tac) >>
+  Cases_on `subscript_reads_base cx e1 e2` >>
+  gvs[bind_def, return_def, AllCaseEqs()] >>
   imp_res_tac read_result_state >>
   imp_res_tac select_result_state >> gvs[] >> metis_tac[]
 QED
@@ -168,50 +174,78 @@ Proof
   imp_res_tac select_result_state >> gvs[] >> metis_tac[]
 QED
 
+(* The Builtin hypothesis of expr_state_ind_principle, selected by its
+   conclusion so it tracks the evaluator's induction hypotheses. *)
+val builtin_state_case = let
+  fun spine tm =
+    if is_forall tm then spine (snd (dest_forall tm))
+    else if is_imp tm then
+      let val (a,b) = dest_imp tm in
+        if is_comb a andalso same_const (fst (strip_comb a)) ``pure_expr``
+        then SOME a else spine b
+      end
+    else NONE
+  fun is_builtin tm =
+    case spine tm of
+      NONE => false
+    | SOME p => same_const (fst (strip_comb (rand p))) ``Builtin``
+  val cases = strip_conj (fst (dest_imp (concl expr_state_ind_principle)))
+in
+  case List.filter is_builtin cases of [tm] => tm
+  | _ => raise Fail "expected unique Builtin preservation case"
+end;
+
 Theorem case_Builtin[local]:
-  ∀cx ty bt es.
-    (∀s'' x t.
-       type_check (builtin_args_length_ok bt (LENGTH es)) "Builtin args" s'' = (INL x, t) ∧
-       bt ≠ Len ∧ bt ≠ Env MsgGas ⇒
-       ∀st res st'.
-         eval_exprs cx es st = (res, st') ⇒ EVERY pure_expr es ⇒ st = st') ∧
-    (∀s'' x t.
-       type_check (builtin_args_length_ok bt (LENGTH es)) "Builtin args" s'' = (INL x, t) ∧
-       bt = Len ⇒
-       ∀st res st'.
-         eval_expr cx (HD es) st = (res, st') ⇒ pure_expr (HD es) ⇒ st = st') ⇒
-    (∀st res st'.
-       eval_expr cx (Builtin ty bt es) st = (res, st') ⇒
-       pure_expr (Builtin ty bt es) ⇒ st = st')
+  ^builtin_state_case
 Proof
   rpt gen_tac >> strip_tac >>
   Cases_on `bt = Len`
-  >- (rpt strip_tac >>
-      gvs[evaluate_def, pure_expr_def, bind_def, ignore_bind_def,
-          type_check_def, assert_def, return_def, raise_def,
-          precompile_call_success_def, precompile_builtin_def, AllCaseEqs()] >>
-      gvs[bind_def, return_def, raise_def, AllCaseEqs()] >>
+  >- (rpt strip_tac >> gvs[pure_expr_def] >>
+      qpat_x_assum `eval_expr _ _ _ = _` mp_tac >>
+      simp[Once evaluate_def, bind_def, ignore_bind_def,
+           type_check_def, assert_def, return_def, raise_def, AllCaseEqs()] >>
+      strip_tac >> gvs[return_def] >>
       imp_res_tac result_array_length_state >> gvs[] >>
       `pure_expr (HD es)` by
         (Cases_on `es` >> gvs[builtin_args_length_ok_def]) >>
-      metis_tac[type_check_def, assert_def, return_def]) >>
-  rpt strip_tac >>
-  gvs[evaluate_def, pure_expr_def, bind_def, ignore_bind_def,
-      type_check_def, assert_def, return_def, raise_def,
-      get_accounts_def, lift_sum_def, precompile_call_success_def,
-      AllCaseEqs()] >>
-  gvs[get_accounts_def, ETA_THM, return_def, raise_def,
-      sum_CASE_rator, AllCaseEqs()] >>
-  Cases_on `bt = Bop In \/ bt = Bop NotIn` >>
-  gvs[bind_def, ignore_bind_def, assert_def, return_def, raise_def,
-      lift_option_type_def, lift_option_def, get_accounts_def,
-      AllCaseEqs()] >>
-  gvs[sum_CASE_rator, AllCaseEqs(), return_def, raise_def] >>
-  Cases_on `evaluate_type (get_tenv cx) (expr_type (EL 1 es))` >>
-  gvs[return_def, raise_def, sum_CASE_rator, AllCaseEqs()] >>
-  qpat_x_assum `sum_CASE _ _ _ _ = _` mp_tac >>
-  qmatch_goalsub_abbrev_tac `sum_CASE ans` >>
-  Cases_on `ans` >> gvs[return_def, raise_def] >> metis_tac[]
+      fs[type_check_def, assert_def, return_def] >> metis_tac[]) >>
+  Cases_on `bt = Bop In \/ bt = Bop NotIn`
+  >- (
+      rpt strip_tac >>
+      (* the code-slice and ordinary IHs don't apply to membership *)
+      rpt (qpat_x_assum `!s'' x t v. _` kall_tac) >>
+      qpat_x_assum `!s'' x t. _ /\ _ /\ ~(_ \/ _) /\ _ ==> _` kall_tac >>
+      gvs[evaluate_def, pure_expr_def, bind_def, ignore_bind_def,
+          type_check_def, assert_def, return_def, raise_def,
+          get_accounts_def, lift_sum_def, precompile_call_success_def,
+          AllCaseEqs()] >>
+      gvs[get_accounts_def, ETA_THM, return_def, raise_def,
+          sum_CASE_rator, AllCaseEqs()] >>
+      gvs[bind_def, ignore_bind_def, assert_def, return_def, raise_def,
+          lift_option_type_def, lift_option_def, get_accounts_def,
+          AllCaseEqs()] >>
+      gvs[sum_CASE_rator, AllCaseEqs(), return_def, raise_def] >>
+      Cases_on `evaluate_type (get_tenv cx) (expr_type (EL 1 es))` >>
+      gvs[return_def, raise_def, sum_CASE_rator, AllCaseEqs()] >>
+      qpat_x_assum `sum_CASE _ _ _ _ = _` mp_tac >>
+      qmatch_goalsub_abbrev_tac `sum_CASE ans` >>
+      Cases_on `ans` >> gvs[return_def, raise_def] >> metis_tac[])
+  >> rpt strip_tac >> fs[pure_expr_def] >>
+  qpat_x_assum `eval_expr _ _ _ = _` mp_tac >>
+  simp[Once evaluate_def] >>
+  Cases_on `builtin_args_length_ok bt (LENGTH es)` >>
+  fs[type_check_def, assert_def, return_def, raise_def, ignore_bind_def,
+     bind_def] >>
+  simp[AllCaseEqs(), return_def] >> strip_tac >> gvs[return_def] >>
+  imp_res_tac get_accounts_state >> imp_res_tac lift_sum_state >> gvs[]
+  >>~- ([`option_CASE (code_slice_source _ _) _ _ _ = _`],
+        drule_at (Pos last) builtin_operands_preserve >>
+        disch_then (qspec_then `$=` mp_tac) >> simp[] >>
+        impl_tac
+        >- (rw[] >>
+            gvs[code_slice_source_SOME, pure_expr_def, precompile_builtin_def] >>
+            metis_tac[]) >>
+        gvs[])
 QED
 
 Theorem case_Pop[local]:

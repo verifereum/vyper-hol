@@ -6,7 +6,10 @@ Ancestors
 Theorem fmp_escape_store_occurrences:
   fmp_escaping_operands (mk_inst 0 MSTORE [Var "p"; Var "p"] []) = ["p";"p"] /\
   fmp_escaping_operands (mk_inst 0 MSTORE [Var "p"; Lit 0w] []) = [] /\
-  fmp_escaping_operands (mk_inst 0 MLOAD [Var "p"] ["x"]) = []
+  fmp_escaping_operands (mk_inst 0 MLOAD [Var "p"] ["x"]) = [] /\
+  fmp_escaping_operands (mk_inst 0 LT [Var "p"; Var "n"] ["c"]) = [] /\
+  fmp_escaping_operands (mk_inst 0 ISZERO [Var "p"] ["c"]) = [] /\
+  fmp_escaping_operands (mk_inst 0 XOR [Var "p"; Var "n"] ["c"]) = ["p";"n"]
 Proof
   EVAL_TAC
 QED

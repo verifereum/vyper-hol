@@ -65,15 +65,14 @@ Proof
       simp[]) >>
   Cases_on `h2` >> simp[compile_decode_args_def] >>
   Cases_on `FLOOKUP cenv.ce_vars h0` >> simp[] >>
-  Cases_on `var_location_decode_operand x` >> simp[]
-  >- (ntac 3 (ho_match_mp_tac abi_decoder_vars_mono_bind >> conj_tac
-              >- simp[abi_decoder_vars_mono_prims] >> gen_tac) >>
-      ho_match_mp_tac abi_decoder_vars_mono_ignore_bind >>
-      simp[abi_decoder_vars_mono_mutual]) >>
-  ho_match_mp_tac abi_decoder_vars_mono_bind >> conj_tac
-  >- simp[abi_decoder_vars_mono_prims] >>
-  gen_tac >> ho_match_mp_tac abi_decoder_vars_mono_ignore_bind >>
-  simp[abi_decoder_vars_mono_mutual]
+  Cases_on `var_location_decode_operand x` >> simp[] >>
+  rpt (FIRST [first_assum MATCH_ACCEPT_TAC,
+    CHANGED_TAC (simp[abi_decoder_vars_mono_prims,
+      cj 1 abi_decoder_vars_mono_mutual, compile_abi_arg_ptr_guard_def,
+      abi_decoder_vars_mono_return]), gen_tac,
+    ho_match_mp_tac abi_decoder_vars_mono_bind,
+    ho_match_mp_tac abi_decoder_vars_mono_ignore_bind, conj_tac,
+    IF_CASES_TAC])
 QED
 
 Theorem compile_register_positional_args_vars_mono:

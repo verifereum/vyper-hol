@@ -142,12 +142,14 @@ QED
 
 Resume supported_pure_scopes_mutual[subscript1]:
   gvs[Once evaluate_def, bind_def, AllCaseEqs(), return_def, raise_def] >>
+  gvs[COND_RATOR, AllCaseEqs(), bind_def, return_def] >>
   imp_res_tac read_result_state >> imp_res_tac select_result_state >>
   gvs[] >> metis_tac[]
 QED
 
 Resume supported_pure_scopes_mutual[subscript2]:
   gvs[Once evaluate_def, bind_def, AllCaseEqs(), return_def, raise_def] >>
+  gvs[COND_RATOR, AllCaseEqs(), bind_def, return_def] >>
   imp_res_tac read_result_state >> imp_res_tac select_result_state >>
   gvs[] >> metis_tac[]
 QED
@@ -165,6 +167,10 @@ QED
 Resume supported_pure_scopes_mutual[builtin]:
   `blt <> Len` by
     (Cases_on `blt = Len` >> gvs[supported_builtin_form_def, AllCaseEqs()]) >>
+  `code_slice_source blt exprs = NONE` by
+    (Cases_on `code_slice_source blt exprs` >> simp[] >>
+     rename1 `SOME p` >> PairCases_on `p` >>
+     gvs[code_slice_source_SOME, supported_builtin_form_def]) >>
   Cases_on `blt = Env MsgGas` >>
   Cases_on `blt = Bop In \/ blt = Bop NotIn` >>
   gvs[Once evaluate_def, type_check_def, assert_def, bind_def,
@@ -227,6 +233,7 @@ Proof
        expr_internal_call_root_def] >> rpt strip_tac
   >>~- ([`eval_expr _ (Subscript _ _ _) _ = _`],
     gvs[Once evaluate_def, bind_def, AllCaseEqs(), return_def, raise_def] >>
+    gvs[COND_RATOR, AllCaseEqs(), bind_def, return_def] >>
     imp_res_tac read_result_state >> imp_res_tac select_result_state >>
     imp_res_tac supported_pure_scopes_mutual >> gvs[] >> metis_tac[])
   >>~- ([`eval_expr _ (Attribute _ _ _) _ = _`],
@@ -244,7 +251,7 @@ Resume supported_effect_scopes_mutual[external]:
     (gvs[supported_pure_exprs_every] >> metis_tac[EVERY_TAKE]) >>
   `!n. supported_pure_exprs tops (DROP n args)` by
     (gvs[supported_pure_exprs_every] >> metis_tac[EVERY_DROP]) >>
-  `!n m. EVERY (supported_pure_expr tops) (TAKE n (DROP m args))` by
+  `!n m. supported_pure_exprs tops (TAKE n (DROP m args))` by
     (gvs[supported_pure_exprs_every] >> metis_tac[EVERY_TAKE, EVERY_DROP]) >>
   gvs[Once evaluate_def, bind_def, AllCaseEqs(), return_def, raise_def] >>
   imp_res_tac eval_ext_call_preserves_non_accounts >>

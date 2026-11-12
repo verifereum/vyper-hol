@@ -7,6 +7,7 @@
  * load_contract_pending_deletions, valid_vyper_call, compiled_event_info,
  * return_bytes, tx_return_bytes,
  * unspecified_behaviour_exempt, source_exempt, call_result_rel, logs_correspond.
+ * Transaction boundary (Milestone 7 lifecycle): next_source_machine.
  * TASK056: all compiler/call consumers use this exact boundary; the obsolete
  * compatibility owner is deleted. No old/new equivalence is claimed.
  * DAG: source/typing/storage + supported syntax + frame/trace -> e2eDefs;
@@ -64,10 +65,14 @@ Proof
   metis_tac[layouts_agree_nonreentrant_slot]
 QED
 
+(* The target has no exports, or an empty export entry: load_contract
+   installs SOME [] for a contract without exported module functions, and
+   both make call_external use the main module. *)
 Definition source_deployment_rel_def:
   source_deployment_rel tops am tx <=>
     ALOOKUP am.sources tx.target = SOME [(NONE, tops)] /\
-    ALOOKUP am.exports tx.target = NONE /\
+    (ALOOKUP am.exports tx.target = NONE \/
+     ALOOKUP am.exports tx.target = SOME []) /\
     layouts_agree tops am tx
 End
 
@@ -193,6 +198,7 @@ Definition call_state_rel_def:
       ctxt.msgParams.caller = tx.sender /\ ctxt.msgParams.callee = tx.target /\
       ctxt.msgParams.value = tx.value /\
       buffer_to_list ctxt.msgParams.data = tx.calldata /\
+      ctxt.msgParams.code = tx.code /\
       tx_block_fields_rel tx es.txParams /\
       source_deployment_rel tops am tx
 End
@@ -288,6 +294,23 @@ Proof
   simp[call_outcomes_ok_def, call_outcomes_storage_ok_def, listTheory.EVERY_MEM] >>
   rpt strip_tac >> res_tac
 QED
+
+(* The source machine the next transaction starts from, after a transaction
+   or deployment whose frame succeeded (r = INR NONE) in EVM state es' with
+   source machine am': it adopts the EVM's committed accounts (pending
+   deletions processed, the target's installed code included), and starts the
+   transaction with empty transient storage, no logs and no pending deletions.
+   After a failed top-level frame es'.rollback still holds the frame's writes
+   (the transaction's accounting discards them), so the next transaction
+   starts from the pre-transaction machine instead. *)
+Definition next_source_machine_def:
+  next_source_machine (am' : abstract_machine) es' =
+    am' with <| accounts := process_deletions es'.rollback.toDelete
+                              es'.rollback.accounts;
+                tStorage := empty_transient_storage;
+                logs := [];
+                pending_deletions := [] |>
+End
 
 (* call_state_rel's am.pending_deletions = [] holds of every machine that
    deployments and transactions reach from one with none: a successful
