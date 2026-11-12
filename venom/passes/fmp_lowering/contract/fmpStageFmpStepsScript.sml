@@ -17,6 +17,9 @@ Theory fmpStageFmpSteps
 Ancestors
   fmpStageOpBase fmpStageControl fmpStageReclaimSound fmpStageRel
   fmpStageCallArity fmpStageRetStep
+  fmpStageFmpStepsRestoreControl fmpStageFmpStepsRestoreCut
+  fmpStageFmpStepsRestoreIdle fmpStageFmpStepsRestoreFrame
+  fmpStageFmpStepsLedgerSaved fmpRestoreProps
   fmpStageFmpStepsEntryLayout fmpStageFmpStepsEntryInitialization
   ptrStaticDiscipline o1PassContract
   ptrDiscipline venomExecSemantics venomState venomInst finite_map words
@@ -39,8 +42,45 @@ Theorem fmp_stage_restore:
       (DRESTRICT sm {key | key IN FDOM sm /\ FST (sm ' key) < lo'})
       fmp0 raw0 eom T stk PG G tn fn s lo' t1 ts
 Proof
+  strip_tac >> drule_all fmp_stage_frame_facts >> strip_tac >>
+  `ALL_DISTINCT (MAP (\b. b.bb_label) fn.fn_blocks)` by
+    gvs[o1_fn_shape_def, venomWfTheory.wf_function_def,
+        venomInstTheory.fn_labels_def] >>
+  `?bb. lookup_block s.vs_current_bb fn.fn_blocks = SOME bb /\
+        s.vs_inst_idx < LENGTH bb.bb_instructions /\
+        inst = EL s.vs_inst_idx bb.bb_instructions` by
+    (gvs[contextCodegenRelTheory.active_inst_def] >>
+     metis_tac[venomExecPropsTheory.MEM_lookup_block]) >>
+  qpat_assum `fmp_stage_rel _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _`
+    (strip_assume_tac o REWRITE_RULE [fmp_stage_rel_def]) >>
+  qpat_x_assum `fmp_frame_rel _ _ _ _ _ _ _ _ _ _ _ _ _ _`
+    mp_tac >> simp[fmp_frame_rel_def] >> strip_tac >>
+  Cases_on `(s.vs_current_bb,s.vs_inst_idx) IN
+    FDOM (fmp_stage_plan infos ctx fn)`
+  >- suspend "planned" >>
+  suspend "idle"
+QED
+
+Resume fmp_stage_restore[planned]:
   cheat
 QED
+
+Resume fmp_stage_restore[idle]:
+  `fmp_frame_rel sm (w2n vs'.vs_initial_fmp) (w2n fmp)
+     (fmp_frame_base (w2n fmp) stk)
+     (fmp_frame_lo (w2n vs'.vs_initial_fmp) ts) lo T
+     fn fn' PG G tn.t_var s t` by
+    (irule fmp_restore_idle_frame >> simp[] >>
+     (conj_tac >- metis_tac[]) >>
+     qexistsl [`ctx`, `infos`, `runner`] >> gvs[]) >>
+  `DRESTRICT sm {key | key IN FDOM sm /\ FST (sm ' key) < lo} = sm` by
+    metis_tac[fmpStageFmpStepsLedgerRestrictTheory.fmp_restrict_identity] >>
+  qexistsl [`0`, `t`, `lo`] >> simp[fmp_stage_rel_def] >>
+  reverse conj_tac >- metis_tac[] >>
+  FAIL_TAC "idle execution"
+QED
+
+Finalise fmp_stage_restore
 
 Theorem fmp_stage_dalloca_step:
   fmp_stage_ctx rpolicy D C C' vs vs' fmp eom /\
