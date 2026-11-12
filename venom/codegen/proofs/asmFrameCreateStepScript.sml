@@ -191,7 +191,7 @@ Theorem asm_create_code_pop_selectors:
   handle_exception ex s = (INL (),t) ==>
   ?p. t.contexts = (p,prb)::rest /\
     p.msgParams = parent.msgParams /\ p.jumpDest = parent.jumpDest /\
-    p.memory = parent.memory /\
+    p.memory = parent.memory /\ p.gasUsed <= parent.gasUsed /\
     p.pc = SUC parent.pc /\
     p.stack = (if ex = NONE then w2w address else 0w)::parent.stack /\
     p.returnData = (if ex = SOME Reverted then child.returnData else []) /\
@@ -251,7 +251,7 @@ Theorem asm_create_run_code_continuation:
     c.msgParams = child.msgParams /\ handle_exception ex u = (INL (),t) /\
     t.contexts = (p,prb)::rest /\
     p.msgParams = parent.msgParams /\ p.jumpDest = parent.jumpDest /\
-    p.memory = parent.memory /\
+    p.memory = parent.memory /\ p.gasUsed <= parent.gasUsed /\
     p.pc = SUC parent.pc /\
     p.stack = (if ex = NONE then w2w address else 0w)::parent.stack /\
     p.returnData = (if ex = SOME Reverted then c.returnData else []) /\
