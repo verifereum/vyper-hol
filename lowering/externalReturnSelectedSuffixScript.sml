@@ -142,7 +142,7 @@ Theorem return_prim_suffix_path:
   s.vs_current_bb = st.cs_current_bb /\
   s.vs_inst_idx = LENGTH st.cs_current_insts ==>
   ?n r. gas_path ctx fn s n r /\ exit_result r /\
-    external_call_result_rel tops ret tx
+    external_call_result_rel H tops ret tx
       (INL v, finalize_pending_deletions
         (abstract_machine_from_state srcs exps layouts es), es.requests) r
 Proof
@@ -150,7 +150,7 @@ Proof
   `frag_exec ctx st st'
     (\s. state_rel H func cenv cx es s /\
          eval_operand op s = SOME (typed_val_to_w256 tv v0)) (\s. F)
-    (external_call_result_rel tops ret tx
+    (external_call_result_rel H tops ret tx
       (INL v, finalize_pending_deletions
         (abstract_machine_from_state srcs exps layouts es), es.requests))` by
     (irule external_return_prim_result_rel >> simp[] >> metis_tac[]) >>
@@ -178,7 +178,7 @@ Theorem return_site_nonraw_word_path:
   ?n r. gas_path ctx func s n r /\ exit_result r /\
     (?tv v'. evaluate_type (type_env tops) ret = SOME tv /\
       safe_cast tv v = SOME v' /\
-      external_call_result_rel tops ret tx
+      external_call_result_rel H tops ret tx
         (INL v', finalize_pending_deletions
           (abstract_machine_from_state am.sources am.exports am.layouts ee),
          ee.requests) r)
@@ -321,7 +321,7 @@ Theorem return_abi_suffix_path:
   ~lookup_raw_return_or_F (NONE:num option) tx.function_name External tops /\
   return_bytes tops ret v (enc ct rv) ==>
   ?n r. gas_path ctx func s n r /\ exit_result r /\
-    external_call_result_rel tops ret tx
+    external_call_result_rel H tops ret tx
       (INL v, finalize_pending_deletions
         (abstract_machine_from_state am.sources am.exports am.layouts ee),
        ee.requests) r
@@ -340,7 +340,7 @@ Proof
    fn_has_code cs'' sf func` by
     metis_tac[fn_has_code_split, cs_extends_trans] >>
   `eval_operand src s = SOME (n2w (w2n w))` by simp[] >>
-  `?fuel. external_call_result_rel tops ret tx
+  `?fuel. external_call_result_rel H tops ret tx
     (INL v, finalize_pending_deletions
       (abstract_machine_from_state am.sources am.exports am.layouts ee),
      ee.requests) (run_from fuel ctx func s)` by
@@ -387,7 +387,7 @@ Theorem return_selected_nocopy_path:
   ?n r. gas_path ctx func s n r /\ exit_result r /\
     (?tv v'. evaluate_type (type_env tops) ret = SOME tv /\
       safe_cast tv v = SOME v' /\
-      external_call_result_rel tops ret tx
+      external_call_result_rel H tops ret tx
         (INL v', finalize_pending_deletions
           (abstract_machine_from_state am.sources am.exports am.layouts ee),
          ee.requests) r)
@@ -406,7 +406,7 @@ Proof
     (qpat_x_assum `return_consumer_suffix _ _ _ _ _ = _` mp_tac >>
      gvs[return_consumer_suffix_def, comp_bind_def, comp_return_def]) >>
   `?n r. gas_path ctx func s n r /\ exit_result r /\
-    external_call_result_rel tops ret tx
+    external_call_result_rel H tops ret tx
       (INL v, finalize_pending_deletions
         (abstract_machine_from_state am.sources am.exports am.layouts ee),
        ee.requests) r` by
@@ -457,7 +457,7 @@ Theorem return_selected_allocated_path:
   ?n r. gas_path ctx func s n r /\ exit_result r /\
     (?tv v'. evaluate_type (type_env tops) ret = SOME tv /\
       safe_cast tv v = SOME v' /\
-      external_call_result_rel tops ret tx
+      external_call_result_rel H tops ret tx
         (INL v', finalize_pending_deletions
           (abstract_machine_from_state am.sources am.exports am.layouts ee),
          ee.requests) r)
@@ -475,7 +475,7 @@ Proof
   `val_footprint dtv v <= type_memory_size dtv` by
     (irule externalReturnCopyTransportTheory.return_footprint_le_layout >> gvs[]) >>
   `?n r. gas_path ctx func s n r /\ exit_result r /\
-    external_call_result_rel tops ret tx
+    external_call_result_rel H tops ret tx
       (INL v, finalize_pending_deletions
         (abstract_machine_from_state am.sources am.exports am.layouts ee),
        ee.requests) r` by
@@ -568,7 +568,7 @@ Theorem return_selected_located_normalize_path:
   ?n r. gas_path ctx func s n r /\ exit_result r /\
     (?tv v'. evaluate_type (type_env tops) ret = SOME tv /\
       safe_cast tv v = SOME v' /\
-      external_call_result_rel tops ret tx
+      external_call_result_rel H tops ret tx
         (INL v', finalize_pending_deletions
           (abstract_machine_from_state am.sources am.exports am.layouts ee),
          ee.requests) r)
@@ -622,7 +622,7 @@ Theorem return_selected_raw_copy_path:
   ?n r. gas_path ctx func s n r /\ exit_result r /\
     (?tv v'. evaluate_type (type_env tops) ret = SOME tv /\
       safe_cast tv v = SOME v' /\
-      external_call_result_rel tops ret tx
+      external_call_result_rel H tops ret tx
         (INL v', finalize_pending_deletions
           (abstract_machine_from_state am.sources am.exports am.layouts ee),
          ee.requests) r)
@@ -691,7 +691,7 @@ Theorem return_selected_bufferless_normalize_path:
   ?n r. gas_path ctx func s n r /\ exit_result r /\
     (?tv v'. evaluate_type (type_env tops) ret = SOME tv /\
       safe_cast tv v = SOME v' /\
-      external_call_result_rel tops ret tx
+      external_call_result_rel H tops ret tx
         (INL v', finalize_pending_deletions
           (abstract_machine_from_state am.sources am.exports am.layouts ee),
          ee.requests) r)
@@ -750,7 +750,7 @@ Theorem return_selected_bufferless_nocopy_path:
   ?n r. gas_path ctx func s n r /\ exit_result r /\
     (?tv v'. evaluate_type (type_env tops) ret = SOME tv /\
       safe_cast tv v = SOME v' /\
-      external_call_result_rel tops ret tx
+      external_call_result_rel H tops ret tx
         (INL v', finalize_pending_deletions
           (abstract_machine_from_state am.sources am.exports am.layouts ee),
          ee.requests) r)
@@ -777,7 +777,7 @@ Proof
     (irule externalReturnCopyTransportTheory.return_footprint_le_layout >> simp[]) >>
   `val_footprint dtv v = 0` by decide_tac >>
   `?n r. gas_path ctx func s n r /\ exit_result r /\
-    external_call_result_rel tops ret tx
+    external_call_result_rel H tops ret tx
       (INL v, finalize_pending_deletions
         (abstract_machine_from_state am.sources am.exports am.layouts ee),
        ee.requests) r` by
@@ -890,7 +890,7 @@ Theorem return_selected_located_suffix:
   ?n r. gas_path ctx func s n r /\ exit_result r /\
     (?tv v'. evaluate_type (type_env tops) ret = SOME tv /\
       safe_cast tv v = SOME v' /\
-      external_call_result_rel tops ret tx
+      external_call_result_rel H tops ret tx
         (INL v', finalize_pending_deletions
           (abstract_machine_from_state am.sources am.exports am.layouts ee),
          ee.requests) r)
@@ -977,7 +977,7 @@ Theorem return_selected_bufferless_suffix:
   ?n r. gas_path ctx func s n r /\ exit_result r /\
     (?tv v'. evaluate_type (type_env tops) ret = SOME tv /\
       safe_cast tv v = SOME v' /\
-      external_call_result_rel tops ret tx
+      external_call_result_rel H tops ret tx
         (INL v', finalize_pending_deletions
           (abstract_machine_from_state am.sources am.exports am.layouts ee),
          ee.requests) r)

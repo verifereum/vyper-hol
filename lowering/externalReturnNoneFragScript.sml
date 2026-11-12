@@ -23,7 +23,7 @@ Theorem return_selected_none_frag:
   stmt_frag ctx func cx lctx
     (\v ee r. ?tv v'. evaluate_type (type_env tops) ret = SOME tv /\
       safe_cast tv v = SOME v' /\
-      external_call_result_rel tops ret tx
+      external_call_result_rel H tops ret tx
         (INL v', finalize_pending_deletions
           (abstract_machine_from_state am.sources am.exports am.layouts ee),
          ee.requests) r)

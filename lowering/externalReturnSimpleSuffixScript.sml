@@ -27,13 +27,13 @@ Theorem return_none_suffix_path:
   s.vs_current_bb = st.cs_current_bb /\
   s.vs_inst_idx = LENGTH st.cs_current_insts ==>
   ?n r. gas_path ctx fn s n r /\ exit_result r /\
-    external_call_result_rel tops NoneT tx
+    external_call_result_rel H tops NoneT tx
       (INL NoneV, finalize_pending_deletions
         (abstract_machine_from_state srcs exps layouts es), es.requests) r
 Proof
   Cases_on `x` >> strip_tac >>
   `frag_exec ctx st st' (\s. state_rel H func cenv cx es s) (\s. F)
-    (external_call_result_rel tops NoneT tx
+    (external_call_result_rel H tops NoneT tx
       (INL NoneV, finalize_pending_deletions
         (abstract_machine_from_state srcs exps layouts es), es.requests))` by
     (irule external_return_none_result_rel >> simp[] >> metis_tac[]) >>
@@ -53,7 +53,7 @@ Theorem return_word_suffix_path:
   s.vs_current_bb = st.cs_current_bb /\
   s.vs_inst_idx = LENGTH st.cs_current_insts ==>
   ?n r. gas_path ctx fn s n r /\ exit_result r /\
-    external_call_result_rel tops ret tx
+    external_call_result_rel H tops ret tx
       (INL v, finalize_pending_deletions
         (abstract_machine_from_state srcs exps layouts es), es.requests) r
 Proof
@@ -61,7 +61,7 @@ Proof
   `frag_exec ctx st st'
     (\s. state_rel H func cenv cx es s /\
          eval_operand op s = SOME (val_to_w256 v0)) (\s. F)
-    (external_call_result_rel tops ret tx
+    (external_call_result_rel H tops ret tx
       (INL v, finalize_pending_deletions
         (abstract_machine_from_state srcs exps layouts es), es.requests))` by
     (irule external_return_word_result_rel >> simp[] >> metis_tac[]) >>
@@ -82,7 +82,7 @@ Theorem return_raw_suffix_path:
   s.vs_current_bb = st.cs_current_bb /\
   s.vs_inst_idx = LENGTH st.cs_current_insts ==>
   ?n r. gas_path ctx fn s n r /\ exit_result r /\
-    external_call_result_rel tops ret tx
+    external_call_result_rel H tops ret tx
       (INL v, finalize_pending_deletions
         (abstract_machine_from_state srcs exps layouts es), es.requests) r
 Proof
@@ -92,7 +92,7 @@ Proof
       (?p. eval_operand op s = SOME p /\
            val_in_memory tv v0 (w2n p) s.vs_memory /\
            w2n p + val_footprint tv v0 <= dimword (:256))) (\s. F)
-    (external_call_result_rel tops ret tx
+    (external_call_result_rel H tops ret tx
       (INL v, finalize_pending_deletions
         (abstract_machine_from_state srcs exps layouts es), es.requests))` by
     (irule external_return_raw_unlock_result_rel >>

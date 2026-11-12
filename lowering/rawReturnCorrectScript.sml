@@ -15,7 +15,7 @@ Theorem external_raw_halt_unlock_result[local]:
     ss.vs_transient = (if nr /\ ~iv then tstore (n2w nkey) 0w s else s).vs_transient /\
     ss.vs_logs = s.vs_logs /\ ss.vs_requests = s.vs_requests /\
     ss.vs_pending_deletions = s.vs_pending_deletions ==>
-    external_call_result_rel tops ret tx
+    external_call_result_rel H tops ret tx
       (INL v, finalize_pending_deletions
         (abstract_machine_from_state srcs exps layouts es'), es'.requests)
       (Halt ss)
@@ -62,7 +62,7 @@ Theorem external_return_raw_unlock_result_rel:
                 val_in_memory tv v0 (w2n p) s.vs_memory /\
                 w2n p + val_footprint tv v0 <= dimword (:256)))
       Q
-      (external_call_result_rel tops ret tx
+      (external_call_result_rel H tops ret tx
          (INL v, finalize_pending_deletions
                    (abstract_machine_from_state srcs exps layouts es'),
           es'.requests))

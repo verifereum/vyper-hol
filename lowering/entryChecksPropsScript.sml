@@ -470,7 +470,7 @@ Theorem entry_checks_nonpayable_value:
     mut <> Payable /\ tx.value <> 0 ==>
     frag_exec ctx st st' (\s. s = s0) (\t. F)
       (\r. ?t. r = Abort Revert_abort t /\
-               external_call_result_rel tops ret tx
+               external_call_result_rel H tops ret tx
                  (call_external orc gobs am tx) r)
 Proof
   rpt gen_tac >> strip_tac >>
@@ -509,7 +509,7 @@ Theorem fallback_checks_nonpayable_value:
     ?sm. compile_guarded_body cenv F nkey ut' iv fbody rt sm = ((), st') /\
          frag_exec ctx st sm (\s. s = s0) (\t. F)
            (\r. ?t. r = Abort Revert_abort t /\
-                    !ret. external_call_result_rel tops ret tx
+                    !ret. external_call_result_rel H tops ret tx
                             (call_external orc gobs am tx) r)
 Proof
   rpt gen_tac >> strip_tac >>

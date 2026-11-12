@@ -6,11 +6,11 @@ Ancestors externalReturnSelectedSuffix stmtSimReturn stmtSimProps stmtSimDefs
   gasExemptCert vyperInterpreter vyperState venomState
 
 Theorem return_result_gas_obs:
-  external_call_result_rel tops ret tx
+  external_call_result_rel H tops ret tx
     (INL v, finalize_pending_deletions
       (abstract_machine_from_state am.sources am.exports am.layouts
         (ee with gas_obs := gs)), (ee with gas_obs := gs).requests) r <=>
-  external_call_result_rel tops ret tx
+  external_call_result_rel H tops ret tx
     (INL v, finalize_pending_deletions
       (abstract_machine_from_state am.sources am.exports am.layouts ee), ee.requests) r
 Proof
@@ -18,11 +18,11 @@ Proof
 QED
 
 Theorem return_result_scopes:
-  external_call_result_rel tops ret tx
+  external_call_result_rel H tops ret tx
     (INL v, finalize_pending_deletions
       (abstract_machine_from_state am.sources am.exports am.layouts
         (ee with scopes := sc)), (ee with scopes := sc).requests) r <=>
-  external_call_result_rel tops ret tx
+  external_call_result_rel H tops ret tx
     (INL v, finalize_pending_deletions
       (abstract_machine_from_state am.sources am.exports am.layouts ee), ee.requests) r
 Proof

@@ -26,7 +26,7 @@ Theorem return_output_alloc_encoder_result_rel:
   cx.sources = srcs /\ cx.layouts = layouts /\ cx.txn.target = tx.target /\
   ~lookup_raw_return_or_F (NONE:num option) tx.function_name External tops /\
   return_bytes tops ret v (enc at av) ==>
-  ?fuel. external_call_result_rel tops ret tx
+  ?fuel. external_call_result_rel H tops ret tx
     (INL v, finalize_pending_deletions
        (abstract_machine_from_state srcs exps layouts es), es.requests)
     (run_from fuel ctx func s)
