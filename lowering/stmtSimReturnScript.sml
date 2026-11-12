@@ -1252,11 +1252,10 @@ Proof
             `explicit` |-> `gas_explicit_sites ctx shadow_ctx`] o SPEC_ALL) >>
   irule (Q.INST [`res` |-> `INR (ReturnException v)`, `ee` |-> `mid`]
            gas_outcome_full_exit) >>
-  conj_tac >- simp[raise_def] >>
-  qexistsl_tac [`G'`,
+  qexistsl_tac [`G'`, `mid`,
     `IntRet <|iret_values := [typed_val_to_w256 tv v];
               iret_adopt_fmp := NONE|> (return_unlock_state cenv t)`,
-    `tn'`] >>
+    `tn'`, `v`] >>
   simp[exit_result_def, raise_def] >>
   rpt strip_tac >> simp[stmt_exit_ptr_def] >>
   simp[intret_q_def, result_rel_def] >>
