@@ -6,3 +6,4 @@ n06_struct_lit_wider_str
 n07_intcall_str_arg_wider
 n08_annassign_tuple_lit_wider_str
 n09_intcall_two_str_args_wider
+n10_intcall_dynarr_lit_wider_str_len

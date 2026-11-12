@@ -234,20 +234,6 @@ Proof
   fs[expr_vv_sim_mem_def]
 QED
 
-Theorem aggregate_mem_tuple_cons_compile:
-  compile_make_tuple compile_expr ce (e::args) (expr_type e::MAP expr_type args)
-    buf off sa = (out,sb) ==>
-  ?vv sm dst sn op su st.
-    compile_expr ce (expr_type e) e sa = (vv,sm) /\
-    emit_op ADD [buf; Lit (n2w off)] sm = (dst,sn) /\
-    unwrap_value ce vv sn = (op,su) /\
-    compile_store_memory ce op dst (expr_type e) (lowered_value_type ce e) su = ((),st) /\
-    compile_make_tuple compile_expr ce args (MAP expr_type args) buf
-      (off + type_memory_bytes ce (expr_type e)) st = (out,sb)
-Proof
-  simp[exprSimAggregateLoopsTheory.compile_make_tuple_cons]
-QED
-
 Theorem aggregate_mem_tuple_local_region_backward:
   MAP FDOM es.scopes = MAP FDOM es1.scopes /\
   stmt_state_rel ctx func ce cx es s0 /\ local_ptrs_reserved ce sa /\

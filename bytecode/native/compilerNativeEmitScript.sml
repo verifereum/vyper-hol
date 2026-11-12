@@ -231,7 +231,8 @@ val suite_fixtures = [
     "n03_struct_lit_narrow_str", "n04_intcall_tuple_wider_str",
     "n05_intcall_dynarr_lit_wider_str", "n06_struct_lit_wider_str",
     "n07_intcall_str_arg_wider", "n08_annassign_tuple_lit_wider_str",
-    "n09_intcall_two_str_args_wider"]),
+    "n09_intcall_two_str_args_wider", "n10_intcall_dynarr_lit_wider_str_len",
+    "n11_intcall_dynarr_lit_same_str"]),
   ("name-collisions", [
     "ctl_local_internal", "nm_arg_return_pc", "nm_arg_storage",
     "nm_ext_arg_return_pc", "nm_local_return_buf", "nm_local_storage_types",
