@@ -810,7 +810,7 @@ Proof
   >- (`new_site_bytes s u = {}` by
         (simp[new_site_bytes_def, pred_setTheory.EXTENSION,
               finite_mapTheory.FLOOKUP_DEF] >>
-         rw[] >> CCONTR_TAC >> fs[] >> decide_tac) >>
+         rw[] >> CCONTR_TAC >> fs[] >> TRY decide_tac >> metis_tac[]) >>
       `range_bytes (step_writes i s u) = {}` by
         simp[Abbr `i`, step_writes_def, mk_inst_def, range_bytes_def,
              codegenRelTheory.source_memory_write_ranges_def,
