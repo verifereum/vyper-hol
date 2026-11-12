@@ -39,7 +39,10 @@ Theorem for_body_entry_mem:
     ainst.inst_outputs = [p] /\ fn_inst_ids_distinct func /\
     32 <= sz /\ type_memory_size tyv = 32 /\ word_memory_type tyv /\
     alloca_history func cc ==>
-    ?s2. s2.vs_current_bb = body_lbl /\ s2.vs_inst_idx = 1 /\
+    ?s2. s2 = mstore (w2n w) (i2w (n1 + &k))
+                (jump_to body_lbl (update_var dv (bool_to_word F) cc))
+              with vs_inst_idx := 1 /\
+         s2.vs_current_bb = body_lbl /\ s2.vs_inst_idx = 1 /\
          ~s2.vs_halted /\
          stmt_state_rel H ctx func bc cx
            (esk with scopes :=
@@ -97,7 +100,7 @@ Proof
        (FEMPTY |+ (id, <| assignable := F; type := tyv;
                           value := IntV (n1 + &k); popped := [] |>)) :: esk.scopes)
      (mstore (w2n w) (i2w (n1 + &k)) s1)` by
-    (irule (SRULE [] (Q.SPECL [`func`, `bc`, `cx`,
+    (irule (SRULE [] (Q.SPECL [`H`, `func`, `bc`, `cx`,
        `esk with scopes := FEMPTY :: esk.scopes`] stmt_state_rel_declare_memory)) >>
      simp[lookup_scopes_def] >>
      conj_tac >- metis_tac[word_value_wf, word_value_def] >>
@@ -116,6 +119,7 @@ Proof
     (simp[alloca_history_def, Abbr `s2`, mstore_def] >>
      fs[alloca_history_def]) >>
   qexists_tac `s2` >>
+  conj_tac >- simp[Abbr `s2`, Abbr `s1`] >>
   simp[Abbr `s2`, mstore_def, stmt_state_rel_inst_idx] >>
   conj_tac >- (fs[lookup_var_def] >> metis_tac[]) >>
   irule (SRULE [] (Q.INST [`n` |-> `0`, `m` |-> `0`] gas_path_mem_then)) >>
