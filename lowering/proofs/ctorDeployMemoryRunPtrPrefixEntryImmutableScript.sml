@@ -2,7 +2,7 @@
 Theory ctorDeployMemoryRunPtrPrefixEntryImmutable
 Ancestors
   loweringStateRelDefs valueEncodingDefs
-  ctorDeployLoweringDefs ctorDeployDefs e2eDeployDefs
+  ctorDeployLoweringDefs ctorDeployDefs immSectionDead e2eDeployDefs
   ctorDeployLoweringEntryTransport ctorDeployLoweringEntrySourceFrame
   compileVyper vyperInterpreter moduleLowering
   immutableEncoding immutableEncodingProofs immutableSectionRel immutableValue
