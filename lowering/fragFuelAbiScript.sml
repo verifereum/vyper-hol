@@ -327,17 +327,17 @@ fun dec_auto firsts ths =
 
 Theorem fuel_ok_abi_decode_family:
   (!dst src_op load_opc base_op hi_op info Wv E.
-     ~is_terminator load_opc /\ load_opc <> PHI ==>
+     ~is_terminator load_opc /\ load_opc <> PHI /\ load_opc <> INVOKE ==>
      fuel_ok Wv {} E
        (compile_abi_decode_to_buf dst src_op load_opc base_op hi_op info)) /\
   (!dst src_op load_opc base_op hi_op elems abi_offset vyper_offset Wv E.
-     ~is_terminator load_opc /\ load_opc <> PHI ==>
+     ~is_terminator load_opc /\ load_opc <> PHI /\ load_opc <> INVOKE ==>
      fuel_ok Wv {} E
        (compile_abi_decode_complex_elems dst src_op load_opc base_op hi_op
           elems abi_offset vyper_offset)) /\
   (!dst src_op load_opc base_op hi_op elem_info elem_abi_sz elem_mem_sz i_ptr
     cnt Wv E.
-     ~is_terminator load_opc /\ load_opc <> PHI ==>
+     ~is_terminator load_opc /\ load_opc <> PHI /\ load_opc <> INVOKE ==>
      fuel_okS (\st. !x. i_ptr = Var x ==> var_below st.cs_next_var x) Wv {} E
        (compile_abi_decode_dyn_loop dst src_op load_opc base_op hi_op
           elem_info elem_abi_sz elem_mem_sz i_ptr cnt))
