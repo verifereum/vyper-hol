@@ -51,8 +51,8 @@ Proof
   impl_tac >- (rpt conj_tac >> first_assum MATCH_ACCEPT_TAC) >>
   disch_then (qx_choose_then `out` (qx_choose_then `topics` strip_assume_tac)) >>
   qabbrev_tac `ev = <|logger := w2w ss.vs_call_ctx.cc_address; topics := n2w sig_hash::topics; data := []|>` >>
-  qspecl_then [`func`, `cenv`, `cx`, `es`, `ss`, `out`, `[ev]`, `eval_cut.cs_next_var`]
-    mp_tac source_relations_log_memory_frame >>
+  qspecl_then [`H`, `func`, `cenv`, `cx`, `es`, `ss`, `out`, `[ev]`, `eval_cut.cs_next_var`]
+    mp_tac (Q.GEN `H` source_relations_log_memory_frame) >>
   impl_tac >- (rpt conj_tac >> FIRST [first_assum MATCH_ACCEPT_TAC, simp[Abbr`ev`]]) >> strip_tac >>
   `env.type_defs = get_tenv cx /\ ss.vs_call_ctx.cc_address = cx.txn.target` by
     (drule_all source_log_context >> simp[]) >>
