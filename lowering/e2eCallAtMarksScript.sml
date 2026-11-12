@@ -16,6 +16,46 @@ Ancestors
   loweringShapeProps supportedProgram callTrace frameOutcome vyperInterpreter
   venomExecSemantics unitTransformDefs ptrDiscipline unitMemInv lowerDloadDefs
   e2eProducers e2eEntry o1PipelineCorrect o1PassContract codegenCorrectness
+  vyperStorageFootprint loweredUnitMemoryFrontier fragGasPathMem fragExecMem
+
+Theorem guarded_storage_horizon[local]:
+  source_storage_ok am tx os gs /\ call_outcomes_storage_ok am tx os gs ==>
+  valid_horizon (initial_evaluation_context am.sources am.layouts tx NONE)
+    (initial_state am [])
+    (storage_trace_horizon (source_storage_trace am tx os gs))
+    (source_storage_trace am tx os gs)
+Proof
+  simp[source_storage_ok_def, call_outcomes_storage_ok_def,
+       valid_horizon_def, storage_observations_ok_def, storage_trace_horizon_def,
+       listTheory.EVERY_MEM] >>
+  rpt strip_tac >> simp[]
+QED
+
+Theorem call_at_horizon_composition[local]:
+  run_call es = SOME (r, es') /\ ~frame_resource_starved es r es' /\
+  external_call_result_rel
+    (storage_trace_horizon (source_storage_trace am tx (MAP SND (call_trace es)) gs))
+    tops ret tx (call_external (SOME (MAP SND (call_trace es))) gs am tx)
+    (run_context fuel ctx vs) /\
+  ctx_sim
+    (external_call_dead
+      (storage_trace_horizon (source_storage_trace am tx (MAP SND (call_trace es)) gs))
+      tx (call_external (SOME (MAP SND (call_trace es))) gs am tx))
+    ctx ctx' vs vs' /\
+  (!n. ?r' es''. run_call es = SOME (r', es'') /\
+    (frame_resource_starved es r' es'' \/
+     venom_frame_rel es r' es'' (run_context n ctx' vs'))) ==>
+  call_result_rel_at gs tops ret am tx es r es'
+Proof
+  rpt strip_tac >>
+  drule_all external_call_result_rel_terminates >> strip_tac >>
+  qpat_x_assum `ctx_sim _ _ _ _ _` mp_tac >>
+  simp[ctx_sim_def] >> disch_then drule >> strip_tac >>
+  qpat_x_assum `!n. ?r' es''. _` (qspec_then `fuel'` strip_assume_tac) >>
+  gvs[] >>
+  drule_all external_call_result_rel_dead_transport >> strip_tac >>
+  drule_all external_call_result_rel_frame >> simp[]
+QED
 
 Theorem vyper_call_correct_at_marks:
   !policy tops deploy_bc runtime_bc am tx ret es rpolicy unit out prog cp vs marks.
