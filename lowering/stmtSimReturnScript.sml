@@ -16,7 +16,7 @@ Ancestors
   exprSimProps
   stmtSimDefs
   exprSimDefs
-  loweringPosts exprSimTypedAlloc exprSimPrecompiles
+  loweringPosts exprSimTypedAlloc
   gasContext gasExemptCert
   bodySimFull bodySim bodyPtrDefs gasOutcomeFullCompose gasOutcomeFull
   fragGasOriginPtr fragGasOriginPtrExec fragGasSeqPtr gasShadowState
@@ -1101,7 +1101,9 @@ Proof
   `expr_type e = ty` by
     (gvs[type_stmt_def, AllCaseEqs()] >>
      metis_tac[compileEnvTheory.type_widens_to_word]) >>
-  metis_tac[expr_post_typed_stack_operand]
+  `post_value_type cenv e = expr_type e` by
+    metis_tac[post_value_type_word] >>
+  gvs[expr_post_def, expr_val_rel_def] >> metis_tac[]
 QED
 
 (* The release and RET after a word operand; one ghost endpoint for every
