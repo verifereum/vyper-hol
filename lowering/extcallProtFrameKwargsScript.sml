@@ -7,7 +7,7 @@ Ancestors
   exprExtRequestShape exprExtRequestUnreadCps exprExtRequestSourceFrame exprExtRequestReadProbe
   exprExtRequestStrongCapture exprExtRequestHistory exprExtRequestRetained
   exprLoweringProps exprSimProps exprSimDefs exprSimHyps loweringPosts compileEnv gasSummary
-  loweringHalt pair fragExec exprOperandVar exprSafeOperand context typedMemoryCopy exprSimAggregateSource
+  gasOutcome stmtSimDeclGas stmtSimForRounds loweringHalt pair fragExec exprOperandVar exprSafeOperand context typedMemoryCopy exprSimAggregateSource
   fragGasPath fragGasMode exprLowering vyperInterpreter vyperState vyperTypeSystem allocLimits
 Libs
   monadsyntax
@@ -359,3 +359,163 @@ Resume extcall_protframe_kwarg_retained_cps[materialize_post]:
 QED
 
 Finalise extcall_protframe_kwarg_retained_cps
+
+Theorem extcall_protframe_kwargs_cps:
+  !ks xs es sa sb value_op gas_op default_op s0 kont old_es old_rs old_vvs.
+  LENGTH xs = LENGTH ks /\ exprs_case nocalls ctx func cenv cx xs /\
+  EVERY2 (\kw e. expr_type e = ext_call_kw_type ret kw /\
+    (kw = EKDefault ==> ret <> NoneT)) ks xs /\
+  EVERY (\e. ~expr_has_effect e) xs /\
+  EVERY (\e. nocalls ==> int_calls_expr e = []) xs /\
+  (!i ee. i < LENGTH xs /\ extrequest_kwargs_reach cx xs es i ee ==>
+    expr_body_pre cenv cx env (EL i xs) ee) /\
+  compile_ext_call_kwargs compile_expr cenv ret ks xs sa =
+    ((value_op,gas_op,default_op),sb) /\
+  fn_has_code sa sb func /\ fn_inst_ids_distinct func /\
+  local_ptrs_reserved cenv sa /\ stmt_state_rel ctx func cenv cx es s0 /\
+  ~s0.vs_halted /\ s0.vs_current_bb = sa.cs_current_bb /\
+  s0.vs_inst_idx = LENGTH sa.cs_current_insts /\
+  gas_admissible (bind (eval_exprs cx xs) kont) expr_vv_res_ok es /\
+  extrequest_strong_captures ctx func cenv cx old_es old_rs old_vvs
+    (es with gas_obs := []) sa s0 /\
+  (!e ee sm sn t ef r vv u ty p w tv.
+    vv_post ctx func cenv cx e ee sm sn t ef r vv u /\
+    ~expr_has_effect e /\ vv = LocatedValue ty p /\
+    eval_operand p.ptr_operand u = SOME w /\
+    evaluate_type (get_tenv cx) ty = SOME tv ==>
+    (p.ptr_location = LocStorage ==>
+      storage_read_live cx F (get_storage cx ef F) w tv) /\
+    (p.ptr_location = LocTransient ==>
+      storage_read_live cx T (get_storage cx ef T) w tv)) /\
+  (!e ee sm sn t ef r vv u.
+    vv_post ctx func cenv cx e ee sm sn t ef r vv u /\
+    ~expr_has_effect e ==>
+    (!n b sz. local_region cenv ee.scopes t n b sz ==>
+      mem_bytes_at b sz u.vs_memory = mem_bytes_at b sz t.vs_memory) /\
+    (!off len.
+      (!inst b sz. MEM inst (fn_insts func) /\ inst.inst_opcode = ALLOCA /\
+        sm.cs_next_id <= inst.inst_id /\
+        FLOOKUP u.vs_allocas inst.inst_id = SOME (b,sz) ==>
+        compileEnv$regions_disjoint off len b sz) ==>
+      mem_bytes_at off len u.vs_memory = mem_bytes_at off len t.vs_memory)) /\
+  (!e ee sm sn t ef r vv u n.
+    vv_post ctx func cenv cx e ee sm sn t ef r vv u /\ ~expr_has_effect e /\
+    gas_marked_path F ctx func t n (OK u) /\
+    (!pa pk. prot pa pk ==> pa + pk <= t.vs_alloca_next /\
+      mem_bytes_at pa pk t.vs_memory = mem_bytes_at pa pk M /\
+      !i b len. FLOOKUP t.vs_allocas i = SOME (b,len) ==>
+        compileEnv$regions_disjoint pa pk b len) ==>
+    !pa pk. prot pa pk ==> pa + pk <= u.vs_alloca_next /\
+      mem_bytes_at pa pk u.vs_memory = mem_bytes_at pa pk M /\
+      !i b len. FLOOKUP u.vs_allocas i = SOME (b,len) ==>
+        compileEnv$regions_disjoint pa pk b len) /\
+  (!pa pk. prot pa pk ==> pa + pk <= s0.vs_alloca_next /\
+    mem_bytes_at pa pk s0.vs_memory = mem_bytes_at pa pk M /\
+    !i b len. FLOOKUP s0.vs_allocas i = SOME (b,len) ==>
+      compileEnv$regions_disjoint pa pk b len) /\
+  (!vs ee t.
+    extrequest_kwargs_post ctx func cenv cx ret ks xs es sa s0 sb
+      value_op gas_op default_op old_es old_rs old_vvs vs ee t /\
+    (!pa pk. prot pa pk ==> pa + pk <= t.vs_alloca_next /\
+      mem_bytes_at pa pk t.vs_memory = mem_bytes_at pa pk M /\
+      !i b len. FLOOKUP t.vs_allocas i = SOME (b,len) ==>
+        compileEnv$regions_disjoint pa pk b len) ==>
+    gas_outcome F (cx_tops cx) (ctx,func) (kont vs) (ee,t) Q
+      (\res ee r. expr_exit res r)) ==>
+  gas_outcome F (cx_tops cx) (ctx,func) (bind (eval_exprs cx xs) kont)
+    (es,s0) Q (\res ee r. expr_exit res r)
+Proof
+  Induct_on `ks` >> rpt gen_tac
+  >- (Cases_on `xs` >> simp[compile_ext_call_kwargs_def, comp_return_def] >>
+      rpt strip_tac >>
+      qpat_x_assum `!e ee sm sn t ef r vv u n. _` kall_tac >>
+      qpat_x_assum `!vs ee t. _` (mk_asm "nil_continuation") >> gvs[] >>
+      `gas_outcome F (cx_tops cx) (ctx,func) (kont [])
+        (es with gas_obs := [],s0) Q (\res ee r. expr_exit res r)` by
+        (asm "nil_continuation" irule >> simp[] >>
+         metis_tac[extrequest_kwargs_post_nil]) >>
+      simp[Once evaluate_def, bind_return] >>
+      qpat_x_assum `gas_outcome _ _ _ _ _ _ _` mp_tac >>
+      rewrite_tac[gas_outcome_def] >> strip_tac
+      >- (qexists `marks` >> disj1_tac >>
+          gvs[gas_summary_at_def, gas_marked_exec_def] >> metis_tac[]) >>
+      drule gas_exempt_cert_start_gas_obs >>
+      disch_then (qspec_then `es.gas_obs` mp_tac) >> simp[] >> metis_tac[]) >>
+  qpat_x_assum `!xs es sa sb value_op gas_op default_op s0 kont old_es old_rs old_vvs. _`
+    (mk_asm "tail_ih") >>
+  Cases_on `xs` >- simp[NoAsms] >>
+  simp[NoAsms, Once compile_ext_call_kwargs_def, comp_bind_def, comp_return_def] >>
+  rpt (pairarg_tac >> gvs[]) >> rpt strip_tac >>
+  qpat_x_assum `!e ee sm sn t ef r vv u n. _` (mk_asm "raw_frame") >>
+  qpat_x_assum `!vs ee t. _` (mk_asm "continuation") >>
+  rename1 `compile_ext_call_kwarg compile_expr cenv ret kw e sa = ((op,dty),sm)` >>
+  rename1 `EVERY (\e. ~expr_has_effect e) xs` >>
+  qpat_x_assum `comp_bind _ _ sm = _` mp_tac >>
+  simp[comp_bind_def, comp_return_def] >>
+  rpt (pairarg_tac >> gvs[]) >> strip_tac >> gvs[comp_return_def] >>
+  rename1 `compile_ext_call_kwargs compile_expr cenv ret ks xs sm = ((vo,go,dopt),sb)` >>
+  `ci_mono sa sm` by
+    (mp_tac (Q.SPECL [`compile_expr`, `cenv`, `ret`, `kw`, `e`, `sa`]
+      ci_mono_compile_ext_call_kwarg) >> simp[cj 1 compile_expr_ci_mono]) >>
+  `ci_mono sm sb` by
+    (mp_tac (Q.SPECL [`ks`, `xs`, `cenv`, `ret`, `sm`] extrequest_kwargs_mono) >> simp[]) >>
+  `fn_has_code sa sm func /\ fn_has_code sm sb func` by
+    (irule fn_has_code_split >> fs[ci_mono_def]) >>
+  `expr_body_pre cenv cx env e es` by
+    (qpat_x_assum `!i ee. _` (qspecl_then [`0`, `es with gas_obs := []`] mp_tac) >> simp[]) >>
+  `expr_vv_case nocalls ctx func cenv cx e` by fs[exprs_case_def] >>
+  rewrite_tac[extrequest_kwargs_bind_cons] >>
+  irule extcall_protframe_kwarg_retained_cps >>
+  qpat_assum `compile_ext_call_kwarg _ _ _ _ _ _ = _` (irule_at Any) >> simp[] >>
+  qpat_assum `extrequest_strong_captures _ _ _ _ _ _ _ _ _ _` (irule_at Any) >>
+  qexistsl_tac [`prot`, `nocalls`, `env`, `M`] >>
+  simp[GSYM extrequest_kwargs_bind_cons] >>
+  suspend "head_continuation"
+QED
+
+Resume extcall_protframe_kwargs_cps[head_continuation]:
+  conj_tac >- (asm "raw_frame" ACCEPT_TAC) >>
+  conj_tac >- first_assum ACCEPT_TAC >>
+  conj_tac >- first_assum ACCEPT_TAC >>
+  conj_tac >- metis_tac[] >>
+  rpt gen_tac >> strip_tac >>
+  rename1 `extrequest_kwarg_post _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ v mid tm` >>
+  `mid.gas_obs = [] /\ stmt_state_rel ctx func cenv cx mid tm /\
+   ~tm.vs_halted /\ tm.vs_current_bb = sm.cs_current_bb /\
+   tm.vs_inst_idx = LENGTH sm.cs_current_insts /\ local_ptrs_reserved cenv sm /\
+   extrequest_strong_captures ctx func cenv cx old_es old_rs old_vvs mid sm tm` by
+    fs[extrequest_kwarg_post_def] >>
+  `mid with gas_obs := [] = mid` by simp[evaluation_state_component_equality] >>
+  `gas_admissible (bind (eval_exprs cx xs) (\vs. kont (v::vs))) expr_vv_res_ok mid` by
+    (qpat_assum `gas_admissible _ _ es` mp_tac >>
+     rewrite_tac[extrequest_kwargs_bind_cons] >> strip_tac >>
+     drule_all gas_admissible_bind_tail >> simp[]) >>
+  `!i ee. i < LENGTH xs /\ extrequest_kwargs_reach cx xs mid i ee ==>
+    expr_body_pre cenv cx env (EL i xs) ee` by
+    (rpt strip_tac >>
+     `extrequest_kwargs_reach cx (e::xs) es (SUC i) ee` by
+       (irule extrequest_kwargs_reach_cons >> goal_assum (drule_at Any) >> simp[]) >>
+     qpat_x_assum `!i ee. i < SUC _ /\ _ ==> _`
+       (qspecl_then [`SUC i`, `ee`] mp_tac) >> simp[]) >>
+  `exprs_case nocalls ctx func cenv cx xs` by
+    (qpat_assum `exprs_case _ _ _ _ _ (e::xs)` mp_tac >>
+     simp[NoAsms, exprs_case_def] >> strip_tac >> first_x_assum irule >>
+     qpat_assum `!tail. bind (eval_expr cx e) _ _ = _` (qspec_then `[]` mp_tac) >>
+     simp[NoAsms, bind_def, AllCaseEqs()] >> strip_tac >>
+     goal_assum (drule_at Any) >> gvs[] >> goal_assum (drule_at Any)) >>
+  asm "tail_ih" irule >>
+  qpat_assum `compile_ext_call_kwargs _ _ _ _ _ _ = _` (irule_at Any) >>
+  qexistsl_tac [`old_vvs`, `old_rs`, `old_es`] >> simp[] >>
+  suspend "tail_continuation"
+QED
+Resume extcall_protframe_kwargs_cps[tail_continuation]:
+  conj_tac >- (asm "raw_frame" ACCEPT_TAC) >>
+  conj_tac >- first_assum ACCEPT_TAC >>
+  conj_tac >- first_assum ACCEPT_TAC >>
+  conj_tac >- metis_tac[] >>
+  rpt gen_tac >> strip_tac >>
+  asm "continuation" irule >> simp[] >>
+  drule_all extrequest_kwargs_post_cons >>
+  Cases_on `kw` >> gvs[] >> metis_tac[]
+QED
+Finalise extcall_protframe_kwargs_cps
