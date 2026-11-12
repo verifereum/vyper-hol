@@ -33,7 +33,7 @@ Proof
 QED
 
 Theorem immutable_array_len_ok:
-  stmt_state_rel ctx func cenv cx es s /\ ~cenv.ce_is_ctor /\
+  stmt_state_rel H ctx func cenv cx es s /\ ~cenv.ce_is_ctor /\
   immutable_holds cenv cx (ArrayT et (Dynamic bound)) r w es s /\
   env.type_defs = get_tenv cx /\
   eval_result_typed (env,cx,es) r (Type (ArrayT et (Dynamic bound))) /\
@@ -244,8 +244,8 @@ QED
 
 Theorem compile_imm_load_word_runtime_frame:
   compile_imm_load_word F imm base_op sa = (Var p,sb) /\
-  local_ptrs_reserved cenv sa /\ stmt_state_rel ctx func cenv cx es s ==>
-  stmt_state_rel ctx func cenv cx es
+  local_ptrs_reserved cenv sa /\ stmt_state_rel H ctx func cenv cx es s ==>
+  stmt_state_rel H ctx func cenv cx es
     ((update_var p w s) with vs_inst_idx := LENGTH sb.cs_current_insts) /\
   (!z. not_fresh_at sa z ==>
     lookup_var z ((update_var p w s) with vs_inst_idx := LENGTH sb.cs_current_insts) =
@@ -343,7 +343,7 @@ QED
 Theorem fixed_array_subscript_counted_ok:
   compile_array_subscript base_op idx_op F cnt ws esz sgn loader sa = (op,sb) /\
   fn_has_code sa sb func /\ local_ptrs_reserved cenv sa /\
-  stmt_state_rel ctx func cenv cx es s /\
+  stmt_state_rel H ctx func cenv cx es s /\
   ~s.vs_halted /\ s.vs_current_bb = sa.cs_current_bb /\
   s.vs_inst_idx = LENGTH sa.cs_current_insts /\
   (!z. base_op = Var z ==> not_fresh_at sa z) /\
@@ -351,7 +351,7 @@ Theorem fixed_array_subscript_counted_ok:
   eval_operand base_op s = SOME b /\ eval_operand idx_op s = SOME i /\
   idx_in_range sgn i (n2w cnt) ==>
   ?t. gas_marked_path F ctx func s 0 (OK t) /\
-    stmt_state_rel ctx func cenv cx es t /\
+    stmt_state_rel H ctx func cenv cx es t /\
     eval_operand op t = SOME (b + i * n2w esz) /\
     (!z v. not_fresh_at sa z /\ lookup_var z s = SOME v ==> lookup_var z t = SOME v) /\
     (!aid a. FLOOKUP s.vs_allocas aid = SOME a ==> FLOOKUP t.vs_allocas aid = SOME a) /\
@@ -512,7 +512,7 @@ Theorem runtime_array_subscript_counted_ok:
   compile_array_subscript base_op idx_op T cnt ws esz sgn
     (compile_imm_load_word F imm) sa = (op,sb) /\
   fn_has_code sa sb func /\ local_ptrs_reserved cenv sa /\
-  stmt_state_rel ctx func cenv cx es s /\
+  stmt_state_rel H ctx func cenv cx es s /\
   ~s.vs_halted /\ s.vs_current_bb = sa.cs_current_bb /\
   s.vs_inst_idx = LENGTH sa.cs_current_insts /\
   (!z. base_op = Var z ==> not_fresh_at sa z) /\
@@ -521,7 +521,7 @@ Theorem runtime_array_subscript_counted_ok:
   idx_in_range sgn i (word_of_bytes T (0w:bytes32)
     (TAKE 32 (DROP (w2n b) s.vs_data_section ++ REPLICATE 32 0w))) ==>
   ?t. gas_marked_path F ctx func s 0 (OK t) /\
-    stmt_state_rel ctx func cenv cx es t /\
+    stmt_state_rel H ctx func cenv cx es t /\
     eval_operand op t = SOME ((b + n2w ws) + i * n2w esz) /\
     (!z v. not_fresh_at sa z /\ lookup_var z s = SOME v ==> lookup_var z t = SOME v) /\
     (!aid a. FLOOKUP s.vs_allocas aid = SOME a ==> FLOOKUP t.vs_allocas aid = SOME a) /\
@@ -551,7 +551,7 @@ Proof
    (!z. idx_op = Var z ==> not_fresh_at sm z) /\
    (!z. lop = Var z ==> not_fresh_at sm z) /\
    (!z. not_fresh_at sa z ==> lookup_var z t = lookup_var z s) /\
-   stmt_state_rel ctx func cenv cx es (t with vs_inst_idx := LENGTH sm.cs_current_insts)` by
+   stmt_state_rel H ctx func cenv cx es (t with vs_inst_idx := LENGTH sm.cs_current_insts)` by
     (drule_all compile_imm_load_word_runtime_run >> strip_tac >> gvs[] >>
      drule_all compile_imm_load_word_runtime_frame >>
      disch_then (qspec_then `len` strip_assume_tac) >>
@@ -584,7 +584,7 @@ Proof
   drule_all straight_fresh_clean_success_path >>
   disch_then (qspec_then `ctx` strip_assume_tac) >>
   `local_ptrs_reserved cenv sm` by metis_tac[local_ptrs_reserved_next_var] >>
-  `stmt_state_rel ctx func cenv cx es u` by simp[Abbr `u`] >>
+  `stmt_state_rel H ctx func cenv cx es u` by simp[Abbr `u`] >>
   drule_all straight_fresh_run_post >> strip_tac >>
   `gas_marked_path F ctx func s 0 (OK (t'' with vs_inst_idx := LENGTH sb.cs_current_insts))` by
     (drule_all gas_marked_path_then >> simp[]) >>
@@ -649,7 +649,7 @@ Proof
 QED
 
 Theorem vv_post_array_element:
-  vv_post ctx func cenv cx (Subscript (ArrayT et bd) obj idx) es sa sb s0 es' r
+  vv_post H ctx func cenv cx (Subscript (ArrayT et bd) obj idx) es sa sb s0 es' r
     (LocatedValue ann p) s /\
   expr_type obj = ArrayT et bd /\
   (p.ptr_location = LocMemory \/ p.ptr_location = LocCode) /\
@@ -667,7 +667,7 @@ Theorem vv_post_array_element:
   (!id path'. child = PlaceR (MemoryPlace id path') <=>
      ?path. path' = path ++ [ValueSubscript (IntV i)] /\ r = PlaceR (MemoryPlace id path)) /\
   (p.ptr_location = LocMemory ==> w2n (w + n2w j) = w2n w + j) ==>
-  vv_post ctx func cenv cx (Subscript et obj idx) es sa sb s0 es' child
+  vv_post H ctx func cenv cx (Subscript et obj idx) es sa sb s0 es' child
     (LocatedValue et (mk_ptr dst p.ptr_location)) s
 Proof
   disch_then (map_every assume_tac o CONJUNCTS) >>
