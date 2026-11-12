@@ -162,9 +162,10 @@ Theorem vyper_call_gas_sufficient_identity:
       ==>
       ?r es'.
         run_call (add_frame_gas g' es) = SOME (r, es') /\
-        ((?op. frame_inst_raises (add_frame_gas g' es) OutOfGas op) ==>
+        (frame_raises (add_frame_gas g' es) OutOfGas ==>
          ?s. frame_inst_at (add_frame_gas g' es) s ReturnDataCopy)
 Proof
+  PURE_REWRITE_TAC [frame_raises_inst_raises] >>
   rpt strip_tac >>
   drule compile_vyper_runtime_phases >> strip_tac >>
   rename1 `generate_context_plan out.po_unit.cu_context = SOME cplan` >>
