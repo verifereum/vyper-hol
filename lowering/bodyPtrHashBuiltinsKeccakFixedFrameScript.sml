@@ -13,11 +13,11 @@ Theorem hash_fixed_keccak_ptr_frame:
     (!x. value = Var x ==> not_fresh_at sa x) /\
     eval_operand value s = SOME w /\ op_taint tn value = {} /\
     LENGTH bs <= 32 /\ TAKE (LENGTH bs) (word_to_bytes_be w) = bs /\
-    stmt_state_rel ctx fn cenv cx es s /\ fn_inst_ids_distinct fn /\
+    stmt_state_rel H ctx fn cenv cx es s /\ fn_inst_ids_distinct fn /\
     local_ptrs_reserved cenv sa /\
     MEM (mk_inst sa.cs_next_id ALLOCA [Lit 32w]
       [STRING #"%" (toString sa.cs_next_var)]) (fn_insts fn) /\
-    ghost_inv d cenv cx es G tn s /\
+    ghost_inv H d cenv cx es G tn s /\
     (!x k. cenv.ce_return_buf = SOME (PtrVar (Var x) k) ==> not_fresh_at sa x) /\
     (!x k. cenv.ce_return_pc = SOME (PtrVar (Var x) k) ==> not_fresh_at sa x) /\
     ~ctx_has_dalloca ctx /\ ~s.vs_halted /\
@@ -29,11 +29,11 @@ Theorem hash_fixed_keccak_ptr_frame:
       gas_path_ptr D 0 ctx fn PG G tn s 0 G3 tn3
         (OK (u with vs_inst_idx := s.vs_inst_idx+3)) /\
       eval_operand op u = SOME (word_of_bytes T (0w:bytes32) (Keccak_256_w64 bs)) /\
-      stmt_state_rel ctx fn cenv cx es u /\
+      stmt_state_rel H ctx fn cenv cx es u /\
       (!x. not_fresh_at sa x ==> lookup_var x u = lookup_var x s) /\
-      ghost_inv d cenv cx es G3 tn3 u /\ ghost_kept cenv es sa G tn s G3 tn3 /\
+      ghost_inv H d cenv cx es G3 tn3 u /\ ghost_kept cenv es sa G tn s G3 tn3 /\
       op_taint tn3 op = {} /\ op_prov G3 op = NONE /\
-      ghost_inv d cenv cx es G3 tn3 (u with vs_inst_idx := s.vs_inst_idx+3) /\
+      ghost_inv H d cenv cx es G3 tn3 (u with vs_inst_idx := s.vs_inst_idx+3) /\
       eval_operand op (u with vs_inst_idx := s.vs_inst_idx+3) =
         SOME (word_of_bytes T (0w:bytes32) (Keccak_256_w64 bs))
 Proof
@@ -97,7 +97,7 @@ Resume hash_fixed_keccak_ptr_frame[finish]:
   `~not_fresh_at sa (STRING #"%" (toString (sa.cs_next_var+1)))` by
     simp[not_fresh_at_def, ASCIInumbersTheory.toString_inj] >>
   `G' = step_prov PG G2 i3 u /\ tn' = step_taint i3 s2 u tn2` by metis_tac[] >>
-  `ghost_inv d cenv cx es G' tn' u /\
+  `ghost_inv H d cenv cx es G' tn' u /\
    ghost_kept cenv es sa G tn s G' tn' /\ op_taint tn' op = {} /\
    op_prov G' op = NONE` by
     (qpat_assum `G' = step_prov PG G2 i3 u` (fn th => pure_rewrite_tac[th]) >>

@@ -10,15 +10,15 @@ Theorem expr_stack_outcome_ptr:
   gas_outcome_ptr D (cx_tops cx) (ctx,func) PG
     (bind (eval_expr cx e) (read_result cx)) (es,s0,G0,tn0)
     (\res ee G tn u. ?v. res = INL v /\
-      expr_post ctx func cenv cx e es sa sb s0 ee v op u /\
+      expr_post H ctx func cenv cx e es sa sb s0 ee v op u /\
       u.vs_current_bb = sb.cs_current_bb /\
-      u.vs_inst_idx = LENGTH sb.cs_current_insts /\ H v ee G tn u)
+      u.vs_inst_idx = LENGTH sb.cs_current_insts /\ HG v ee G tn u)
     (\res ee gt r. expr_exit res r) ==>
   gas_outcome_ptr D (cx_tops cx) (ctx,func) PG (eval_expr cx e) (es,s0,G0,tn0)
     (\res ee G tn u. ?v. res = INL (Value v) /\
-      vv_post ctx func cenv cx e es sa sb s0 ee (Value v) (StackValue t op) u /\
+      vv_post H ctx func cenv cx e es sa sb s0 ee (Value v) (StackValue t op) u /\
       u.vs_current_bb = sb.cs_current_bb /\
-      u.vs_inst_idx = LENGTH sb.cs_current_insts /\ H v ee G tn u)
+      u.vs_inst_idx = LENGTH sb.cs_current_insts /\ HG v ee G tn u)
     (\res ee gt r. expr_exit res r)
 Proof
   rw[gas_outcome_ptr_def] >> qexists_tac `marks`
@@ -53,8 +53,8 @@ Proof
     metis_tac[eval_expr_force_admissible] >>
   qpat_x_assum `expr_sim_ptr _ _ _ _ _ _ _ _ _` mp_tac >>
   simp[expr_sim_ptr_def] >> disch_then drule_all >> disch_tac >>
-  drule_all (BETA_RULE (Q.INST [`H` |-> `\v ee G tn u.
-    ghost_inv d cenv cx ee G tn u /\
+  drule_all (BETA_RULE (Q.INST [`HG` |-> `\v ee G tn u.
+    ghost_inv H d cenv cx ee G tn u /\
     ptr_val_ok cx (expr_type e) v op G tn u /\
     (~is_word_type (expr_type e) ==> ptr_buf_ok cenv e op G u) /\
     ghost_kept cenv es sa G0 tn0 s0 G tn`] expr_stack_outcome_ptr)) >>
