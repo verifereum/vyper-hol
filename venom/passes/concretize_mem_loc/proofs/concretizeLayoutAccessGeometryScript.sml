@@ -79,8 +79,7 @@ Theorem concretize_memory_access_geometry:
    (MEM (w2n off,len) (source_memory_read_ranges inst s) /\
     mem_read_ops inst = SOME ops)) ==>
   ?offT. eval_operand opd t = SOME offT /\
-    (((w2n off+len <= lo \/
-       (w2n s.vs_initial_fmp <= w2n off /\ w2n off+len <= w2n s.vs_fmp)) /\
+    (((w2n off+len <= lo \/ w2n s.vs_initial_fmp <= w2n off) /\
       w2n offT = w2n off) \/
      (?d owner aid b sz.
        activation_cache (JointConfig stk PG G tn fn inst s oms om hs h)
@@ -105,13 +104,12 @@ Proof
     (drule resolved_config_current >> simp[] >> strip_tac >>
      drule resolved_frame_erasure >> simp[]) >>
   `~in_revert_forward fn s` by fs[joint_read_exempt_def] >>
-  `(((w2n off+len <= lo \/
-      (w2n s.vs_initial_fmp <= w2n off /\ w2n off+len <= w2n s.vs_fmp)) /\
+  `(((w2n off+len <= lo \/ w2n s.vs_initial_fmp <= w2n off) /\
      (!u. ops.iao_ofst = Var u ==> FLOOKUP rv u = NONE)) \/
     (?u tok b sz. ops.iao_ofst = Var u /\ FLOOKUP rv u = SOME (tok,(b,sz)) /\
       b <= w2n off /\ w2n off+len <= b+sz))` by
     (irule resolved_memory_access >> metis_tac[]) >>
-  pop_assum strip_assume_tac
+  pop_assum (DISJ_CASES_THEN2 (CONJUNCTS_THEN assume_tac) strip_assume_tac)
   >- (`op_taint tn ops.iao_ofst = {}` by
         (irule memory_offset_taint_empty >> metis_tac[]) >>
       `!v. ops.iao_ofst = Var v ==> ~retpc_var fn v /\ FLOOKUP rv v = NONE` by
