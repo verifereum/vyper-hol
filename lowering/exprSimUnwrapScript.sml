@@ -2544,9 +2544,11 @@ Proof
              strip_tac >> first_x_assum (qspec_then `[]` assume_tac) >>
              drule vyperEvalExprPreservesScopesDomTheory.eval_expr_preserves_scopes_dom >>
              simp[]) >>
-          drule_at (Pat `unwrap_value _ _ _ = _`) unwrap_value_marked_read_fields >>
-          disch_then (drule_at (Pat `vv_post _ _ _ _ _ _ _ _ _ _ _ _ _ _`)) >>
-          impl_tac >- simp[] >> strip_tac >>
+          qspecl_then [`storage_trace_horizon es_end.storage_trace`, `ctx`, `func`,
+                       `cenv`, `cx`, `e`, `es`, `sa`, `sm`, `sb`, `s0`,
+                       `es_end with gas_obs := []`, `tv`, `vv`, `op`, `t1`] mp_tac
+            (Q.GEN `H` unwrap_value_marked_read_fields) >>
+          impl_tac >- (asm_rewrite_tac[] >> simp[]) >> strip_tac >>
           rename1 `gas_marked_exec F _ (read_result _ _) _ [] _ _ (OK u2)` >>
           `!H. valid_horizon cx st0 H es_end.storage_trace ==>
              expr_post H ctx func cenv cx e es sa sb s0
