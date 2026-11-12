@@ -1714,7 +1714,7 @@ Proof
       fs[array_elements_def, LET_THM, EVERY_GENLIST] >>
       rpt strip_tac >>
       Cases_on `ALOOKUP l i` >> simp[]
-      >- (match_mp_tac default_value_well_typed >> fs[well_formed_type_value_def]) >>
+      >- (simp[default_value_well_typed]) >>
       metis_tac[ALOOKUP_sparse_has_type])
 QED
 
@@ -1985,7 +1985,7 @@ Proof
   drule_all immutable_metadata_frame_lookup >> strip_tac >> metis_tac[]
 QED
 
-Theorem eval_result_typed_transport[local]:
+Theorem eval_result_typed_transport:
   typed_scope_transition st st' /\ vyperImmutableMetadataFrame$immutable_metadata_frame st st' /\
   eval_result_typed (env,cx,st) pv vt ==> eval_result_typed (env,cx,st') pv vt
 Proof
@@ -2387,7 +2387,8 @@ Proof
        ignore_bind_def, check_def, assert_def, return_def, raise_def,
        AllCaseEqs(), get_storage_backend_def, get_accounts_def,
        get_transient_storage_def] >>
-  rpt strip_tac >> gvs[no_type_error_result_def, well_formed_type_value_def] >>
+  rpt strip_tac >> gvs[] >>
+  fs[no_type_error_result_def, Once well_formed_type_value_def] >>
   Cases_on `etv` >>
   gvs[resolve_array_element_def, return_def, runtime_place_typed_storage,
       vyperMiscTheory.prod_CASE_rator, AllCaseEqs()] >>
@@ -8584,7 +8585,7 @@ QED
 
 
 
-Theorem typed_result_read_sound[local]:
+Theorem typed_result_read_sound:
   state_well_typed st /\
   eval_result_typed (env,cx,st) pv (Type ty) /\ live_memory_result st pv /\
   read_result cx pv st = (res,st') ==>
