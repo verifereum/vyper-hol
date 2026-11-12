@@ -92,7 +92,7 @@ Theorem immutable_code_loop_outcome_mem:
   0 < type_memory_size tv /\ type_memory_bytes cenv et + 64 < dimword (:256) /\
   LENGTH vs < dimword (:256) /\ copy_old_operand st1 lvo /\
   eval_operand lvo u = SOME (n2w (LENGTH vs)) /\
-  (!ei t k. P ei /\ stmt_state_rel ctx func cenv cx ei t /\ k < LENGTH vs ==>
+  (!H ei t k. P ei /\ stmt_state_rel H ctx func cenv cx ei t /\ k < LENGTH vs ==>
     immutable_holds cenv cx et (Value (EL k vs))
       (n2w off + n2w ((if dyn then 32 else 0) + k * type_memory_size tv)) ei t) /\
   (!st0 bc sd ex inc ei k.
@@ -111,11 +111,11 @@ Theorem immutable_code_loop_outcome_mem:
       (!x. x IN FDOM sc ==> lookup_scopes x rest = NONE) /\
       ((r = INL () \/ r = INR ContinueException) ==>
         P (es2 with scopes := rest) /\ lookup_scopes id rest = NONE)) /\
-  (!ce srcop dstop bytes ety cs ct tyv cxx cxxctx fn ee ss vv aa bb dd.
+  (!H ce srcop dstop bytes ety cs ct tyv cxx cxxctx fn ee ss vv aa bb dd.
     compile_iter_elem_copy ce srcop dstop bytes LocCode F ety ety cs = ((),ct) /\
     bytes = type_memory_size tyv /\ 0 < bytes /\
     evaluate_type (get_tenv cxx) ety = SOME tyv /\
-    stmt_state_rel cxxctx fn ce cxx ee ss /\
+    stmt_state_rel H cxxctx fn ce cxx ee ss /\
     immutable_holds ce cxx ety (Value vv) aa ee ss /\
     copy_old_operand cs srcop /\ copy_old_operand cs dstop /\
     eval_operand srcop ss = SOME aa /\ eval_operand dstop ss = SOME bb /\
@@ -135,16 +135,16 @@ Theorem immutable_code_loop_outcome_mem:
       z.vs_alloca_next = ss.vs_alloca_next /\ z.vs_allocas = ss.vs_allocas /\
       alloca_history fn z /\ return_buf_frame dd ce ct z) ==>
   !k es s dst. k <= LENGTH vs /\
-    array_round_inv d ctx func cenv cx P vs id idx (Lit (n2w off)) (n2w off)
+    array_round_inv d ctx func cenv cx st0 P vs id idx (Lit (n2w off)) (n2w off)
       p dst (type_memory_bytes cenv et)
       (mk_inst st1.cs_next_id ALLOCA [Lit (n2w (type_memory_bytes cenv et))] [p])
       cond st1 u k es s /\
-    gas_admissible (eval_for cx tv id stmts (DROP k vs)) ok es ==>
-    gas_outcome T (cx_tops cx) (ctx,func)
-      (eval_for cx tv id stmts (DROP k vs)) (es,s)
-      (\res ee t. res = INL () /\ array_round_done d ctx func cenv cx st1 u exit ee t)
-      (\res ee rr. ?ex. res = INR ex /\
-        !tail. stmt_exit RetQ (ee with gas_obs := tail) (INR ex) rr)
+    gas_admissible (eval_for cx tv id stmts (MAP Value (DROP k vs))) ok es ==>
+    gas_outcome T (cx_tops cx) (ctx,func) cx st0
+      (eval_for cx tv id stmts (MAP Value (DROP k vs))) (es,s)
+      (\H res ee t. res = INL () /\ array_round_done H d ctx func cenv cx st1 u exit ee t)
+      (\H res ee rr. ?ex. res = INR ex /\
+        !tail. stmt_exit (RetQ H) (ee with gas_obs := tail) (INR ex) rr)
 Proof
   strip_tac >>
   `sb0.cs_next_var <= sb1.cs_next_var` by
@@ -176,7 +176,7 @@ Proof
      rpt strip_tac >> gvs[]) >>
   rpt gen_tac >> strip_tac >>
   `!k ei t. k <= LENGTH vs /\
-    array_round_inv d ctx func cenv cx P vs id idx (Lit (n2w off)) (n2w off)
+    array_round_inv d ctx func cenv cx st0 P vs id idx (Lit (n2w off)) (n2w off)
       p dst (type_memory_bytes cenv et)
       (mk_inst st1.cs_next_id ALLOCA [Lit (n2w (type_memory_bytes cenv et))] [p])
       cond st1 u k ei t ==>
@@ -194,15 +194,21 @@ Proof
 QED
 Resume immutable_code_loop_outcome_mem[join]:
   `!k ei live. k < LENGTH vs /\
-    array_round_inv d ctx func cenv cx P vs id idx (Lit (n2w off)) (n2w off)
+    array_round_inv d ctx func cenv cx st0 P vs id idx (Lit (n2w off)) (n2w off)
       p dst (type_memory_bytes cenv et)
       (mk_inst st1.cs_next_id ALLOCA [Lit (n2w (type_memory_bytes cenv et))] [p])
       bod st1 u k ei live ==>
     ?s_body. s_body.vs_current_bb = sb0.cs_current_bb /\
       s_body.vs_inst_idx = LENGTH sb0.cs_current_insts /\ ~s_body.vs_halted /\
-      stmt_state_rel ctx func bc cx
-        (ei with scopes := (FEMPTY |+ (id,
-          <|assignable := F; type := tv; value := EL k vs; popped := []|>)) :: ei.scopes) s_body /\
+      (!H. valid_horizon cx st0 H ei.storage_trace ==>
+        stmt_state_rel H ctx func bc cx
+          (ei with scopes := (FEMPTY |+ (id,
+            <|assignable := F; type := tv; value := EL k vs; popped := []|>)) :: ei.scopes)
+          s_body /\
+        storage_well_formed_on cx
+          (ei with scopes := (FEMPTY |+ (id,
+            <|assignable := F; type := tv; value := EL k vs; popped := []|>)) :: ei.scopes)
+          (FST H)) /\
       ret_pc_ok bc sb0 s_body /\ gas_marked_path T ctx func live 0 (OK s_body) /\
       s_body.vs_allocas = live.vs_allocas /\ s_body.vs_alloca_next = live.vs_alloca_next /\
       alloca_history func s_body /\ return_buf_frame d bc sb0 s_body /\
@@ -242,11 +248,11 @@ Resume immutable_code_loop_outcome_mem[join]:
 QED
 Resume immutable_code_loop_outcome_mem[entry]:
   map_every qx_gen_tac [`j`, `ei`, `live`] >> strip_tac >>
-  `array_loop_inv ctx func cenv cx P vs id idx (Lit (n2w off)) (n2w off)
+  `array_loop_inv ctx func cenv cx st0 P vs id idx (Lit (n2w off)) (n2w off)
     p dst (type_memory_bytes cenv et)
     (mk_inst st1.cs_next_id ALLOCA [Lit (n2w (type_memory_bytes cenv et))] [p])
     bod st1 j ei live /\ array_round_frame d func cenv st1 u live` by
-    (qpat_x_assum `array_round_inv _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ live` mp_tac >>
+    (qpat_x_assum `array_round_inv _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ live` mp_tac >>
      simp[array_round_inv_def]) >>
   `MEM (mk_inst st1.cs_next_id ALLOCA [Lit (n2w (type_memory_bytes cenv et))] [p])
      (fn_insts func)` by
@@ -257,6 +263,9 @@ Resume immutable_code_loop_outcome_mem[entry]:
     (metis_tac[immutable_entry_allocation_bound]) >>
   qhdtm_assum `array_loop_inv` mp_tac >>
   pure_rewrite_tac[array_loop_inv_def] >> strip_tac >>
+  rename1 `valid_horizon cx st0 Hv ei.storage_trace` >>
+  `stmt_state_rel Hv ctx func cenv cx ei live /\
+   storage_well_formed_on cx ei (FST Hv)` by metis_tac[] >>
   qpat_assum `array_round_frame _ _ _ _ _ live` mp_tac >>
   pure_rewrite_tac[array_round_frame_def] >> strip_tac >>
   `cenv_top_ext cenv bc (FEMPTY :: ei.scopes)` by
@@ -269,7 +278,7 @@ Resume immutable_code_loop_outcome_mem[entry]:
    not_local_ptr cenv ei.scopes ep` by metis_tac[] >>
   `immutable_holds cenv cx et (Value (EL j vs))
     (n2w off + n2w ((if dyn then 32 else 0) + j * type_memory_size tv)) ei live` by
-    (qpat_assum `!ei t k. _ ==> immutable_holds _ _ _ _ _ _ _` drule_all >> simp[]) >>
+    (qpat_assum `!H ei t k. _ ==> immutable_holds _ _ _ _ _ _ _` drule_all >> simp[]) >>
   `!x. not_fresh_at st1 x ==> not_fresh_at sa x /\ x <> ov /\ x <> tot /\ x <> ep` by
     (qpat_x_assum `!x. not_fresh_at st1 x ==> not_fresh_at sa x /\ ~MEM x _` mp_tac >>
      rpt (pop_assum kall_tac) >> simp[MEM] >> metis_tac[]) >>
@@ -296,14 +305,14 @@ Resume immutable_code_loop_outcome_mem[entry]:
   `!region. cenv.ce_is_ctor /\ cenv.ce_imm_alloca = SOME region ==>
     eval_operand region live = SOME 0w /\ copy_old_operand sa region /\
     (!x. region = Var x ==> x <> ov /\ x <> tot /\ x <> ep)` by
-    (qpat_x_assum `stmt_state_rel ctx func cenv cx ei live` mp_tac >>
+    (qpat_x_assum `stmt_state_rel Hv ctx func cenv cx ei live` mp_tac >>
      qpat_x_assum `local_ptrs_reserved cenv st1` mp_tac >>
      qpat_x_assum `!x. not_fresh_at st1 x ==> not_fresh_at sa x /\ x <> ov /\ x <> tot /\ x <> ep` mp_tac >>
      rpt (pop_assum kall_tac) >>
      simp[stmt_state_rel_def, immutable_base_zero_def, local_ptrs_reserved_def,
        copy_old_operand_def] >> metis_tac[]) >>
   `w2n dst + type_memory_bytes cenv et <= live.vs_alloca_next` by
-    (qpat_x_assum `stmt_state_rel ctx func cenv cx ei live` mp_tac >>
+    (qpat_x_assum `stmt_state_rel Hv ctx func cenv cx ei live` mp_tac >>
      qpat_x_assum `FLOOKUP live.vs_allocas _ = SOME _` mp_tac >>
      rpt (pop_assum kall_tac) >>
      simp[stmt_state_rel_def, alloca_inv_def, alloca_next_valid_def] >> metis_tac[]) >>
@@ -332,8 +341,8 @@ Resume immutable_code_loop_outcome_mem[entry]:
   `p <> ov /\ p <> ep /\ idx <> ov /\ idx <> ep` by
     (qpat_x_assum `ALL_DISTINCT [p;idx;dv;ov;ep;nv]` mp_tac >>
      rpt (pop_assum kall_tac) >> simp[ALL_DISTINCT] >> metis_tac[]) >>
-  drule immutable_array_entry_run_mem >>
-  disch_then (drule_at (Pat `stmt_state_rel _ _ _ _ _ _`)) >>
+  drule (SRULE [PULL_EXISTS] immutable_array_entry_run_mem) >>
+  disch_then (drule_at (Pat `valid_horizon _ _ _ _`)) >>
   disch_then (drule_at (Pat `sa.cs_current_insts = _`)) >>
   disch_then (drule_at (Pat `FLOOKUP live.vs_allocas _ = _`)) >>
   disch_then (drule_at (Pat `ret_pc_ok bc sb0 live`)) >>
