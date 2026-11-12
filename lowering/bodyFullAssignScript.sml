@@ -106,6 +106,8 @@ Theorem body_assign_local_widened_full:
     FLOOKUP env.var_types id = SOME ty /\
     ~is_word_type ty /\
     0 < type_memory_bytes cenv ty /\
+    (expr_type e = ty \/ lowered_value_type cenv e = ty \/ is_bytestring_type ty \/
+     has_length_word (expr_type e) /\ is_empty_value_expr e) /\
     ~(lowered_value_type cenv e = expr_type e \/
      is_bytestring_type (expr_type e) /\
      is_bytestring_type (lowered_value_type cenv e) /\
@@ -274,7 +276,8 @@ Theorem body_assign_other_full:
               is_word_type ty) /\
     ~(?id ty. t = NameTarget id /\ FLOOKUP env.var_types id = SOME ty /\
               ~is_word_type ty /\
-              (expr_type e = ty \/ is_bytestring_type ty \/
+              (expr_type e = ty \/ lowered_value_type cenv e = ty \/
+               is_bytestring_type ty \/
                has_length_word (expr_type e) /\ is_empty_value_expr e)) /\
     ~(?nsid. t = TopLevelNameTarget nsid /\ supported_scalar_target tops nsid) /\
     ~(?nsid mut ty slot.
