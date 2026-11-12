@@ -23,10 +23,10 @@ Definition deploy_unit_execution_correct_at_def:
       gas_shadow_function func shadow_func /\
       MEM func unit.cu_context.ctx_functions /\
       MEM shadow_func shadow_ctx.ctx_functions /\
-      ((!tail. ~deploy_storage_ok tops am tx
+      ((!tail. ~deploy_storage_ok tops am tx vs.vs_outcomes
                   (gas_explicit marks vs.vs_gas_readings ++ tail)) \/
        ?src obs.
-         (!tail. load_contract_trace NONE
+         (!tail. load_contract_trace (SOME vs.vs_outcomes)
             (gas_explicit marks vs.vs_gas_readings ++ tail) am tx
             [(NONE, tops)] [] = (src, obs)) /\
          ((deploy_source_exempt tops src /\
