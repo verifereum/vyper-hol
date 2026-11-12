@@ -179,7 +179,7 @@ Proof
    32 + (j * stride + stride) <= total' /\ w2n (n2w d : 256 word) + 32 < dimword (:256)` by
     (simp[eval_operand_def, op_taint_def, op_prov_def, w2n_n2w] >> decide_tac) >>
   drule_all emit_ptr_offset_endpoint_ptr_core >>
-  disch_then (qspecl_then [`cx`,`ctx`,`PG`,`R`] strip_assume_tac) >>
+  disch_then (qspecl_then [`H`,`cx`,`ctx`,`PG`,`R`] strip_assume_tac) >>
   rename1 `frag_exec_ptr H cx ctx PG st c1 _ (\g z v. g = H1 /\ z = u1 /\ v = _) R` >>
   gvs[] >>
   `d < dimword (:256)` by decide_tac >>
@@ -208,7 +208,7 @@ Proof
   `eval_operand idx ss1 = SOME (n2w j) /\
    eval_operand (Lit (n2w stride)) ss1 = SOME (n2w stride)` by simp[Abbr `ss1`] >>
   drule_all (SRULE [] (Q.SPEC `MUL` emit_scalar_binop_endpoint_ptr_core)) >>
-  disch_then (qspecl_then [`cx`,`ctx`,`PG`,`R`] strip_assume_tac) >>
+  disch_then (qspecl_then [`H`,`cx`,`ctx`,`PG`,`R`] strip_assume_tac) >>
   rename1 `op_prov H2 offset_op = NONE` >> rename1 `op_taint u2 offset_op = {}` >>
   fs[Abbr `ss1`, cj 4 moduleLoweringPropsTheory.control_moves_keep_vars] >>
   `not_fresh_at c1 q` by
@@ -240,7 +240,7 @@ Proof
     (simp[Abbr `ss2`, w2n_n2w,
        cj 4 moduleLoweringPropsTheory.control_moves_keep_vars] >> decide_tac) >>
   drule_all emit_ptr_offset_endpoint_ptr_core >>
-  disch_then (qspecl_then [`cx`,`ctx`,`PG`,`R`] strip_assume_tac) >>
+  disch_then (qspecl_then [`H`,`cx`,`ctx`,`PG`,`R`] strip_assume_tac) >>
   fs[Abbr `ss2`, ADD1] >>
   `same_blocks st c1 /\ same_blocks c1 c2 /\ same_blocks c2 ready` by
     metis_tac[emit_op_same_blocks] >>
@@ -308,7 +308,7 @@ Theorem indexed_destination_endpoint_ptr:
         FLOOKUP HG x = FLOOKUP G x /\ op_taint u (Var x) = op_taint tn (Var x))
 Proof
   rpt strip_tac >> drule_all indexed_destination_endpoint_ptr_core >>
-  disch_then (qspecl_then [`cx`,`ctx`,`PG`,`R`] strip_assume_tac) >>
+  disch_then (qspecl_then [`H`,`cx`,`ctx`,`PG`,`R`] strip_assume_tac) >>
   qexistsl_tac [`HG`,`u`,`child`] >> simp[]
 QED
 
@@ -378,7 +378,7 @@ Proof
      simp[Abbr `sm`, is_terminator_def, exec_result_map_def]) >>
   `eval_operand data sm = SOME b /\ eval_operand off sm = SOME c` by simp[Abbr `sm`] >>
   drule_all (SRULE [] (Q.SPEC `ADD` emit_scalar_binop_endpoint_ptr_core)) >>
-  disch_then (qspecl_then [`cx`,`ctx`,`PG`,`R`] strip_assume_tac) >>
+  disch_then (qspecl_then [`H`,`cx`,`ctx`,`PG`,`R`] strip_assume_tac) >>
   `LENGTH (emitted_insts st mid) = 1 /\ LENGTH (emitted_insts mid ready) = 1` by
     metis_tac[emit_op_length] >>
   `same_blocks st mid /\ same_blocks mid ready` by metis_tac[emit_op_same_blocks] >>
@@ -455,7 +455,7 @@ Theorem calldata_dynamic_element_source_endpoint_ptr:
       FLOOKUP HG x = FLOOKUP G x /\ op_taint u (Var x) = op_taint tn (Var x))
 Proof
   rpt strip_tac >> drule_all calldata_dynamic_element_source_endpoint_ptr_core >>
-  disch_then (qspecl_then [`cx`,`ctx`,`PG`,`R`] strip_assume_tac) >>
+  disch_then (qspecl_then [`H`,`cx`,`ctx`,`PG`,`R`] strip_assume_tac) >>
   qexistsl_tac [`HG`,`u`] >> simp[]
 QED
 
@@ -509,7 +509,7 @@ Proof
    op_taint tn (Lit 32w) = {} /\ op_prov G (Lit 32w) = NONE` by
     simp[eval_operand_def, op_taint_def, op_prov_def] >>
   drule_all (SRULE [] (Q.SPEC `ADD` emit_scalar_binop_endpoint_ptr_core)) >>
-  disch_then (qspecl_then [`cx`,`ctx`,`PG`,`R`] strip_assume_tac) >>
+  disch_then (qspecl_then [`H`,`cx`,`ctx`,`PG`,`R`] strip_assume_tac) >>
   rename1 `op_taint u1 data = {}` >> rename1 `op_prov H1 data = NONE` >>
   `s1.vs_labels = s.vs_labels` by
     (irule emit_op_run_labels >> goal_assum (drule_at Any) >> simp[] >> metis_tac[]) >>
@@ -526,7 +526,7 @@ Proof
   `eval_operand idx ss1 = SOME b /\
    eval_operand (Lit (n2w stride)) ss1 = SOME (n2w stride)` by simp[Abbr `ss1`] >>
   drule_all (SRULE [] (Q.SPEC `MUL` emit_scalar_binop_endpoint_ptr_core)) >>
-  disch_then (qspecl_then [`cx`,`ctx`,`PG`,`R`] strip_assume_tac) >>
+  disch_then (qspecl_then [`H`,`cx`,`ctx`,`PG`,`R`] strip_assume_tac) >>
   rename1 `op_taint u2 off = {}` >> rename1 `op_prov H2 off = NONE` >>
   fs[Abbr `ss1`, cj 4 moduleLoweringPropsTheory.control_moves_keep_vars] >>
   `st.cs_next_var <= c1.cs_next_var /\ c1.cs_next_var <= c2.cs_next_var /\
@@ -556,7 +556,7 @@ Proof
      simp[is_terminator_def, exec_result_map_def, Abbr `ss2`]) >>
   `eval_operand data ss2 = SOME v /\ eval_operand off ss2 = SOME w` by simp[Abbr `ss2`] >>
   drule_all (SRULE [] (Q.SPEC `ADD` emit_scalar_binop_endpoint_ptr_core)) >>
-  disch_then (qspecl_then [`cx`,`ctx`,`PG`,`R`] strip_assume_tac) >>
+  disch_then (qspecl_then [`H`,`cx`,`ctx`,`PG`,`R`] strip_assume_tac) >>
   `t.vs_labels = s2.vs_labels /\ t.vs_current_bb = s2.vs_current_bb` by
     (irule emit_op_run_control_frame >> goal_assum (drule_at Any) >> simp[] >> metis_tac[]) >>
   `op_taint u data = {} /\ op_prov HG data = NONE` by
@@ -674,7 +674,7 @@ Theorem clean_scaled_source_prefix_endpoint_ptr:
       FLOOKUP HG x = FLOOKUP G x /\ op_taint u (Var x) = op_taint tn (Var x))
 Proof
   rpt strip_tac >> drule_all clean_scaled_source_prefix_endpoint_ptr_core >>
-  disch_then (qspecl_then [`cx`,`ctx`,`PG`,`R`] strip_assume_tac) >>
+  disch_then (qspecl_then [`H`,`cx`,`ctx`,`PG`,`R`] strip_assume_tac) >>
   qexistsl_tac [`HG`,`u`] >> simp[]
 QED
 
@@ -765,7 +765,7 @@ Resume calldata_array_element_setup_endpoint_ptr_core[load_and_source]:
   `slot < dimword (:256)` by decide_tac >>
   `!i. w2n (n2w slot :256 word) <= i /\ i < w2n (n2w slot :256 word) + 32 ==> i NOTIN tn.t_mem` by simp[] >>
   drule_all emit_mload_clean_endpoint_ptr_core >>
-  disch_then (qspecl_then [`cx`,`ctx`,`PG`,`R`] strip_assume_tac) >>
+  disch_then (qspecl_then [`H`,`cx`,`ctx`,`PG`,`R`] strip_assume_tac) >>
   rename1 `op_taint u0 idx = {}` >> rename1 `op_prov H0 idx = NONE` >>
   `r0.vs_labels = initial.vs_labels /\ r0.vs_current_bb = initial.vs_current_bb` by
     (irule emit_op_run_control_frame >> goal_assum (drule_at Any) >> simp[] >> metis_tac[]) >>
@@ -786,7 +786,7 @@ Resume calldata_array_element_setup_endpoint_ptr_core[load_and_source]:
     simp[Abbr `s0`, run_inst_seq_inst_idx, exec_result_map_def] >>
   `eval_operand src s0 = SOME (n2w sb) /\ eval_operand idx s0 = SOME (n2w j)` by simp[Abbr `s0`] >>
   drule_all clean_scaled_source_prefix_endpoint_ptr_core >>
-  disch_then (qspecl_then [`cx`,`ctx`,`PG`,`R`] strip_assume_tac) >>
+  disch_then (qspecl_then [`H`,`cx`,`ctx`,`PG`,`R`] strip_assume_tac) >>
   rename1 `op_taint u3 head = {}` >> rename1 `op_prov H3 head = NONE` >>
   fs[Abbr `s0`, ADD1, cj 4 moduleLoweringPropsTheory.control_moves_keep_vars] >>
   `!x. not_fresh_at st x ==> not_fresh_at c0 x /\ not_fresh_at c3 x /\ not_fresh_at c4 x` by
@@ -864,7 +864,7 @@ Resume calldata_array_element_setup_endpoint_ptr_core[optional_and_destination]:
    32 + j * mem_sz + mem_sz <= total' /\ d + 32 + j * mem_sz < dimword (:256)` by
     (simp[Abbr `s4`, cj 4 moduleLoweringPropsTheory.control_moves_keep_vars] >> metis_tac[]) >>
   drule_all indexed_destination_endpoint_ptr_core >>
-  disch_then (qspecl_then [`cx`,`ctx`,`PG`,`R`] strip_assume_tac) >>
+  disch_then (qspecl_then [`H`,`cx`,`ctx`,`PG`,`R`] strip_assume_tac) >>
   fs[Abbr `s4`, Abbr `s3`, cj 4 moduleLoweringPropsTheory.control_moves_keep_vars] >>
   suspend "compose"
 
@@ -876,7 +876,7 @@ Resume calldata_array_element_setup_endpoint_ptr_core[dynamic_source]:
   `eval_operand head s3 = SOME (n2w sb + 32w + n2w j * n2w abi_sz) /\
    eval_operand data s3 = SOME (n2w sb + 32w)` by simp[Abbr `s3`] >>
   drule_all calldata_dynamic_element_source_endpoint_ptr_core >>
-  disch_then (qspecl_then [`cx`,`ctx`,`PG`,`R`] strip_assume_tac) >>
+  disch_then (qspecl_then [`H`,`cx`,`ctx`,`PG`,`R`] strip_assume_tac) >>
   fs[Abbr `s3`, cj 4 moduleLoweringPropsTheory.control_moves_keep_vars] >>
   qexistsl_tac [`HG`,`u`] >> simp[]
 QED
@@ -970,7 +970,7 @@ Theorem calldata_array_element_setup_endpoint_ptr:
       FLOOKUP HG x = FLOOKUP G x /\ op_taint u (Var x) = op_taint tn (Var x))
 Proof
   rpt strip_tac >> drule_all calldata_array_element_setup_endpoint_ptr_core >>
-  disch_then (qspecl_then [`cx`,`ctx`,`PG`,`R`] strip_assume_tac) >>
+  disch_then (qspecl_then [`H`,`cx`,`ctx`,`PG`,`R`] strip_assume_tac) >>
   qexistsl_tac [`HG`,`u`,`child`] >> simp[]
 QED
 
@@ -1011,6 +1011,6 @@ Theorem calldata_array_element_setup_original_pc_ptr:
       !fuel. ptr_safe_run D lower fuel ctx' func PG G tn initial)
 Proof
   rpt strip_tac >> drule_all calldata_array_element_setup_endpoint_ptr_core >>
-  disch_then (qspecl_then [`cx`,`ctx`,`PG`,`R`] strip_assume_tac) >>
+  disch_then (qspecl_then [`H`,`cx`,`ctx`,`PG`,`R`] strip_assume_tac) >>
   qexistsl_tac [`HG`,`u`,`child`] >> simp[]
 QED

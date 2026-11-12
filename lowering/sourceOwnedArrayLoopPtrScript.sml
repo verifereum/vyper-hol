@@ -485,7 +485,7 @@ Proof
   `abi_decode_sim ctx fn t r /\ ~r.vs_halted /\
     r.vs_current_bb = middle.cs_current_bb /\
     r.vs_inst_idx = LENGTH middle.cs_current_insts` by
-    (qpat_assum `frag_exec_ptr _ _ _ body_st middle _ _ _` mp_tac >>
+    (qpat_assum `frag_exec_ptr _ _ _ _ body_st middle _ _ _` mp_tac >>
      map_every (fn pat => qpat_assum pat mp_tac)
        [`fn_has_code body_st middle fn`,`~ctx_has_dalloca ctx`,
         `~t.vs_halted`,`t.vs_current_bb = body_lbl`,
