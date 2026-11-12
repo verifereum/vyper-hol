@@ -7,7 +7,7 @@ Ancestors
   tuplePlaceOwnedNormalize
 
 Theorem tuple_place_owned_storage_run_frame:
-  !ctx func cenv cx env ee ff s p w loc dst_op op src_loc dty sty stv v sa sb.
+  !H ctx func cenv cx env ee ff s p w loc dst_op op src_loc dty sty stv v sa sb.
     (loc = LocStorage \/ loc = LocTransient) /\
     (!et n. dty <> ArrayT et (Dynamic n)) /\
     compile_assign_value cenv dst_op loc op (is_word_type dty) src_loc dty sty
@@ -47,12 +47,12 @@ Theorem tuple_place_owned_storage_run_frame:
     (!dtv. evaluate_type (get_tenv cx) dty = SOME dtv ==> 0 < type_slot_size dtv) /\
     (dty <> sty /\ ~(is_bytestring_type dty /\ is_bytestring_type sty) ==>
        type_alloc_ok cenv dty) /\
-    stmt_state_rel ctx func cenv cx ee s /\ write_place cx p v ee = (INL (),ff) /\
+    stmt_state_rel H ctx func cenv cx ee s /\ write_place cx p v ee = (INL (),ff) /\
     fn_has_code sa sb func /\ fn_inst_ids_distinct func /\
     ~s.vs_halted /\ s.vs_current_bb = sa.cs_current_bb /\
     s.vs_inst_idx = LENGTH sa.cs_current_insts ==>
     ?t. gas_marked_path F ctx func s 0 (OK t) /\
-      stmt_state_rel ctx func cenv cx ff t /\
+      stmt_state_rel H ctx func cenv cx ff t /\
       (!x. not_fresh_at sa x ==> lookup_var x t = lookup_var x s) /\
       (!aid b. FLOOKUP s.vs_allocas aid = SOME b ==> FLOOKUP t.vs_allocas aid = SOME b) /\
       ~t.vs_halted /\ t.vs_current_bb = sb.cs_current_bb /\
@@ -84,7 +84,7 @@ Resume tuple_place_owned_storage_run_frame[word]:
   disch_then (qspec_then `ctx` strip_assume_tac) >>
   `n2w (w2n root+delta) = root+n2w delta` by
     simp[GSYM wordsTheory.word_add_n2w, wordsTheory.n2w_w2n] >>
-  `stmt_state_rel ctx func cenv cx
+  `stmt_state_rel H ctx func cenv cx
     (set_storage cx ee tr (apply_writes (n2w (w2n root+delta)) writes
       (get_storage cx ee tr)))
     (FOLDL (\u i. (if tr then tstore else sstore)
@@ -102,7 +102,7 @@ Resume tuple_place_owned_storage_run_frame[word]:
     (unabbrev_all_tac >> Cases_on `tr` >> simp[tstore_def, sstore_def]) >>
   qexists_tac `t` >> simp[] >> reverse conj_tac
   >- (unabbrev_all_tac >> Cases_on `tr` >> simp[tstore_def, sstore_def, lookup_var_def]) >>
-  qpat_x_assum `stmt_state_rel _ _ _ _ _ (FOLDL _ _ _)` mp_tac >>
+  qpat_x_assum `stmt_state_rel _ _ _ _ _ _ (FOLDL _ _ _)` mp_tac >>
   `COUNT_LIST 1 = [0]` by EVAL_TAC >> simp[] >> unabbrev_all_tac >>
   simp[stmt_state_rel_inst_idx, GSYM wordsTheory.word_add_n2w,
        wordsTheory.n2w_w2n, wordsTheory.WORD_ADD_COMM]
@@ -122,7 +122,7 @@ Resume tuple_place_owned_storage_run_frame[equal]:
   `n2w (w2n root+delta) = root+n2w delta` by
     simp[GSYM wordsTheory.word_add_n2w, wordsTheory.n2w_w2n] >>
   qsuff_tac `?t. gas_marked_path F ctx func s 0 (OK t) /\
-    stmt_state_rel ctx func cenv cx
+    stmt_state_rel H ctx func cenv cx
       (set_storage cx ee tr (apply_writes (n2w (w2n root+delta)) writes
         (get_storage cx ee tr))) t /\
     (!x. not_fresh_at sa x ==> lookup_var x t = lookup_var x s) /\
@@ -181,7 +181,7 @@ Resume tuple_place_owned_storage_run_frame[bytes_loop]:
   `1 + word_size src_cap < dimword (:256)` by (fs[] >> decide_tac) >>
   `!x. op = Var x \/ dst_op = Var x ==> not_fresh_at sa x` by metis_tac[] >>
   qsuff_tac `?t. gas_marked_path F ctx func s 0 (OK t) /\
-    stmt_state_rel ctx func cenv cx
+    stmt_state_rel H ctx func cenv cx
       (set_storage cx ee tr (apply_writes (n2w (w2n root+delta)) writes
         (get_storage cx ee tr))) t /\
     (!x. not_fresh_at sa x ==> lookup_var x t = lookup_var x s) /\
@@ -219,7 +219,7 @@ Resume tuple_place_owned_storage_run_frame[bytes_load]:
     (qpat_assum `store_copy_normalize _ _ = _` (mp_tac o Q.AP_TERM `\z. z.vs_memory`) >>
      simp_tac (srw_ss()) [store_copy_normalize_def] >>
      Cases_on `tr` >> simp[sstore_def, tstore_def]) >>
-  `stmt_state_rel ctx func cenv cx
+  `stmt_state_rel H ctx func cenv cx
     (set_storage cx ee tr (apply_writes (n2w (w2n root+delta)) writes
       (get_storage cx ee tr)))
     (FOLDL (\u i. (if tr then tstore else sstore)
@@ -240,7 +240,7 @@ Resume tuple_place_owned_storage_run_frame[bytes_load]:
   qexists_tac `t` >> simp[] >> irule place_store_normalized_stmt_state >>
   goal_assum (drule_at Any) >> simp[] >>
   `COUNT_LIST 1 = [0]` by EVAL_TAC >>
-  qpat_x_assum `stmt_state_rel _ _ _ _ _ (FOLDL _ _ _)` mp_tac >> simp[] >>
+  qpat_x_assum `stmt_state_rel _ _ _ _ _ _ (FOLDL _ _ _)` mp_tac >> simp[] >>
   qpat_assum `n2w (w2n root+delta) = _` (fn th =>
     simp_tac bool_ss [SRULE [AC ADD_ASSOC ADD_COMM] th])
 QED
@@ -301,7 +301,7 @@ Resume tuple_place_owned_storage_run_frame[normalize]:
     metis_tac[exprSimHypsTheory.expr_sim_inv_memory_size] >>
   drule_at (Pat `compile_alloc_buffer _ _ = _`) tuple_place_owned_normalize_frame >>
   disch_then (drule_at (Pat `compile_store_memory_typed _ _ _ _ _ _ = _`)) >>
-  disch_then (drule_at (Pat `stmt_state_rel _ _ _ _ _ _`)) >>
+  disch_then (drule_at (Pat `stmt_state_rel _ _ _ _ _ _ _`)) >>
   disch_then (drule_at (Pat `val_in_memory _ _ _ _`)) >>
   (impl_tac >- (simp[ADD_COMM] >> metis_tac[])) >>
   disch_then (qx_choose_then `u` (qx_choose_then `dw`
@@ -331,7 +331,7 @@ Resume tuple_place_owned_storage_run_frame[normalize_suffix]:
   `eval_operand dst_op u = SOME (root+n2w delta)` by
     (Cases_on `dst_op` >> gvs[eval_operand_def] >> metis_tac[]) >>
   `~u.vs_call_ctx.cc_static` by
-    (drule_at (Pat `stmt_state_rel _ _ _ _ _ u`) place_store_storage_write_inv >>
+    (drule_at (Pat `stmt_state_rel _ _ _ _ _ _ u`) place_store_storage_write_inv >>
      disch_then drule >> simp[]) >>
   `type_memory_size dtv = 32 * type_slot_size dtv` by
     simp[valueEncodingPropsTheory.type_memory_size_slots] >>
@@ -340,7 +340,7 @@ Resume tuple_place_owned_storage_run_frame[normalize_suffix]:
   `n2w (w2n root+delta) = root+n2w delta` by
     simp[GSYM wordsTheory.word_add_n2w, wordsTheory.n2w_w2n] >>
   `?t. gas_marked_path F ctx func u 0 (OK t) /\
-    stmt_state_rel ctx func cenv cx
+    stmt_state_rel H ctx func cenv cx
       (set_storage cx ee tr (apply_writes (n2w (w2n root+delta)) writes
         (get_storage cx ee tr))) t /\
     (!x. not_fresh_at sc x ==> lookup_var x t = lookup_var x u) /\
