@@ -191,7 +191,7 @@ Resume compile_bop_typed_sim[left_exit]:
   conj_tac
   >- (pure_once_rewrite_tac[REWRITE_RULE [ETA_AX] eval_expr_bop_bind] >>
       irule gas_marked_exec_bind_exception >> first_assum ACCEPT_TAC) >>
-  disj2_tac >> gnvs[]
+  disj2_tac >> gnvs[] >> first_assum ACCEPT_TAC
 QED
 Resume compile_bop_typed_sim[left_exempt]:
   qexists_tac `marks` >> disj2_tac >> disj2_tac >>

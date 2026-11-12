@@ -54,7 +54,8 @@ Proof
     (drule read_result_gas_obs >> disch_then (qspec_then `[]` assume_tac) >>
      qspecl_then [`cx`, `PlaceR (StoragePlace tr (n2w slot) tvt)`,
                   `es with gas_obs := []`, `obs`] mp_tac
-       vyperEvalPureExprTheory.read_result_trace >>
+       (Q.GENL [`cx`, `r`, `st`, `p`]
+          vyperEvalPureExprTheory.read_result_trace) >>
      simp[]) >>
   `stmt_state_rel H ctx func cenv cx
      (es with <|storage_trace := obs; gas_obs := []|>) s0` by

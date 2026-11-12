@@ -1054,11 +1054,16 @@ Resume compile_literal_other_vv_sim[string]:
      fs[vyperStorageFootprintTheory.storage_trace_domain_def]) >>
   qpat_assum `!H. _ ==> stmt_state_rel H _ _ _ _ (es with gas_obs := []) _ /\ _`
     (qspec_then `H0` mp_tac) >> (impl_tac >- simp[]) >> strip_tac >>
+  `32 + 32 * word_size (STRLEN str) < dimword (:256) /\
+   MEM (mk_inst sa.cs_next_id ALLOCA
+          [Lit (n2w (32 + 32 * word_size (STRLEN str)))]
+          [STRING #"%" (toString sa.cs_next_var)]) (fn_insts func)` by
+    (once_rewrite_tac[ADD_COMM] >> conj_tac >> first_assum ACCEPT_TAC) >>
   mp_tac (SRULE [] (Q.INST [`H` |-> `H0`]
     (Q.SPECL [`func`, `cenv`, `cx`, `es with gas_obs := []`,
               `MAP (n2w o ORD) str : word8 list`, `sa`, `cs'`, `buf`, `s0`,
               `ctx`] literal_bytelike_run))) >>
-  (impl_tac >- (rpt conj_tac >> metis_tac[ADD_COMM])) >> strip_tac >>
+  (impl_tac >- fs[]) >> strip_tac >>
   drule_all literal_bytelike_gas_path >> strip_tac >>
   rpt (qpat_x_assum `stmt_state_rel H0 _ _ _ _ _ _` kall_tac) >>
   qpat_x_assum `storage_well_formed_on _ _ (FST H0)` kall_tac >>
@@ -1080,7 +1085,7 @@ Resume compile_literal_other_vv_sim[string]:
        (Q.SPECL [`func`, `cenv`, `cx`, `es with gas_obs := []`,
                  `MAP (n2w o ORD) str : word8 list`, `sa`, `cs'`, `buf`, `s0`,
                  `ctx`] literal_bytelike_run)) >>
-     (impl_tac >- (rpt conj_tac >> metis_tac[ADD_COMM])) >> strip_tac >> gvs[]) >>
+     (impl_tac >- fs[]) >> strip_tac >> gvs[]) >>
   once_rewrite_tac[GSYM (Q.INST [`gs` |-> `[]`] vv_post_initial_gas)] >>
   irule (SRULE [vyperASTTheory.expr_type_def]
     (Q.INST [`e` |-> `Literal (BaseT (StringT n)) (StringL str)`]

@@ -22,8 +22,8 @@ Theorem aggregate_body_cons_outcome:
 Proof
   strip_tac >> once_rewrite_tac[evaluate_def] >>
   `!tv. storage_trace_frame
-          (\tv. bind (read_result cx tv)
-             (\v. bind (eval_exprs cx args) (\vs. return (v::vs)))) tv` by
+          (bind (read_result cx tv)
+             (\v. bind (eval_exprs cx args) (\vs. return (v::vs))))` by
     (rw[] >> irule storage_trace_frame_bind_all >>
      simp[storage_trace_frame_read_result] >> rw[] >>
      irule storage_trace_frame_bind_all >>
