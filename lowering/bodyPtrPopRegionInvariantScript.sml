@@ -28,7 +28,7 @@ Theorem pop_region_taint_storage_entry:
     (w2n w) tv tn.t_stor
 Proof
   strip_tac >> irule pop_region_taint_entry >>
-  qexistsl [`cx`,`F`] >>
+  qexistsl [`H`,`F`] >>
   gvs[stor_taint_ok_def, cx_dead_def, SUBSET_DEF] >> metis_tac[pairTheory.PAIR_EQ]
 QED
 
@@ -39,7 +39,7 @@ Theorem pop_region_taint_transient_entry:
     (w2n w) tv tn.t_trans
 Proof
   strip_tac >> irule pop_region_taint_entry >>
-  qexistsl [`cx`,`T`] >>
+  qexistsl [`H`,`T`] >>
   gvs[stor_taint_ok_def, cx_dead_def, SUBSET_DEF] >> metis_tac[pairTheory.PAIR_EQ]
 QED
 

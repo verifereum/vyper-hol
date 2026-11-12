@@ -20,10 +20,11 @@ Ancestors
   exprSimMapDefs bodyPtrDefs vyperStoragePlaceProvenance exprSimDefs loweringPosts
   fragGasPathPtr gasContext compileEnv valueEncoding exprLowering
   exprLoweringProps context venomState vyperInterpreter vyperState
+  vyperStorageFootprint
 
 Definition expr_map_sim_ptr_def:
   expr_map_sim_ptr d ctx PG func cenv cx ty e es <=>
-    !sa sb vv s0 G0 tn0.
+    !st0 sa sb vv s0 G0 tn0.
       compile_expr cenv ty e sa = (vv, sb) /\
       fn_has_code sa sb func /\ fn_inst_ids_distinct func /\
       local_ptrs_reserved cenv sa /\ ~ctx_has_dalloca ctx /\
@@ -33,13 +34,15 @@ Definition expr_map_sim_ptr_def:
       (!x sz. cenv.ce_return_pc = SOME (PtrVar (Var x) sz) ==>
               not_fresh_at sa x) /\
       gas_admissible (eval_expr cx e) expr_map_res_ok es /\
-      stmt_state_rel H ctx func cenv cx es s0 /\
-      ghost_inv H d cenv cx es G0 tn0 s0 /\ ~s0.vs_halted /\
+      (!H. valid_horizon cx st0 H es.storage_trace ==>
+        stmt_state_rel H ctx func cenv cx es s0 /\
+        storage_well_formed_on cx es (FST H) /\
+        ghost_inv H d cenv cx es G0 tn0 s0) /\ ~s0.vs_halted /\
       s0.vs_current_bb = sa.cs_current_bb /\
       s0.vs_inst_idx = LENGTH sa.cs_current_insts ==>
-      gas_outcome_ptr (cx_dead H cx) (cx_tops cx) (ctx, func) PG
+      gas_outcome_ptr (\H. cx_dead H cx) (cx_tops cx) (ctx, func) PG cx st0
         (eval_expr cx e) (es, s0, G0, tn0)
-        (\res ee G tn t. ?tr slot kt vt tp p.
+        (\H res ee G tn t. ?tr slot kt vt tp p.
           res = INL (HashMapRef tr slot kt vt) /\
           storage_mapping_region cx tr slot (HashMapT kt vt) /\
           vv = LocatedValue tp p /\ p.ptr_location = slot_loc tr /\
@@ -63,5 +66,5 @@ Definition expr_map_sim_ptr_def:
           ghost_inv H d cenv cx ee G tn t /\
           op_taint tn p.ptr_operand = {} /\
           ghost_kept cenv es sa G0 tn0 s0 G tn)
-        (\res ee gt r. expr_exit res r)
+        (\H res ee gt r. expr_exit res r)
 End

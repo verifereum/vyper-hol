@@ -89,10 +89,8 @@ Theorem assign_base_store_selected_dead:
   assign_base_store_frame (if tr then LocTransient else LocStorage)
     b k s0 tn0 (type_slot_size tv) s tn /\
   declared_storage_region cx mid id subs = SOME (tr,k,tv) /\
-  (!mid' id' subs' k' tv'.
-     declared_storage_region cx mid' id' subs' = SOME (tr,k',tv') /\
-     (k',tv') <> (k,tv) ==>
-     ranges_disjoint (w2n k) (type_slot_size tv) (w2n k') (type_slot_size tv')) /\
+  MEM (tr,k,tv) (FST H) /\ regions_consistent (FST H) /\
+  storage_locks_separated (FST H) (SND H) /\
   well_formed_type_value tv /\ value_has_type tv v /\
   encode_value tv v = SOME writes /\
   w2n k+type_slot_size tv <= dimword (:256) /\
@@ -177,10 +175,8 @@ Theorem assign_base_store_stor_taint_ok:
     b k s0 tn0 (type_slot_size tv) s tn /\
   stor_taint_ok H cx tn0 s0 /\ s0.vs_call_ctx.cc_address = cx.txn.target /\
   declared_storage_region cx mid id subs = SOME (tr,k,tv) /\
-  (!mid' id' subs' k' tv'.
-     declared_storage_region cx mid' id' subs' = SOME (tr,k',tv') /\
-     (k',tv') <> (k,tv) ==>
-     ranges_disjoint (w2n k) (type_slot_size tv) (w2n k') (type_slot_size tv')) /\
+  MEM (tr,k,tv) (FST H) /\ regions_consistent (FST H) /\
+  storage_locks_separated (FST H) (SND H) /\
   well_formed_type_value tv /\ value_has_type tv v /\
   encode_value tv v = SOME writes /\
   w2n k+type_slot_size tv <= dimword (:256) /\
