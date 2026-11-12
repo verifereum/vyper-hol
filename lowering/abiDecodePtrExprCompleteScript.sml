@@ -247,7 +247,7 @@ QED
 Finalise abi_decode_normal_callback
 
 Theorem abi_decode_unary_vv_sim_ptr:
-  body_inv decls ctx cenv cx /\
+  body_inv decls ctx cenv cx /\ supported_program_deploy decls /\
   expr_body_pre cenv cx env (TypeBuiltin ann (AbiDecode b) typ [e]) es /\
   expr_sim_ptr d ctx PG func cenv cx (expr_type e) e es ==>
   expr_vv_sim_ptr d ctx PG func cenv cx ty (TypeBuiltin ann (AbiDecode b) typ [e]) es
@@ -286,7 +286,7 @@ Proof
 QED
 
 Theorem abi_decode_unary_sim_ptr:
-  body_inv decls ctx cenv cx /\
+  body_inv decls ctx cenv cx /\ supported_program_deploy decls /\
   expr_body_pre cenv cx env (TypeBuiltin ann (AbiDecode b) typ [e]) es /\
   expr_sim_ptr d ctx PG func cenv cx (expr_type e) e es ==>
   expr_sim_ptr d ctx PG func cenv cx ty (TypeBuiltin ann (AbiDecode b) typ [e]) es

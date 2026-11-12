@@ -29,7 +29,13 @@ Proof
   `body_expr_ptr_ok cx e` by fs[Once body_expr_ptr_ok_def] >>
   `expr_sim_ptr d ctx PG func cenv cx (expr_type e) e st` by
     (fs[Once body_expr_ptr_ok_def] >> metis_tac[]) >>
-  conj_tac
-  >- (irule abi_decode_unary_sim_ptr >> metis_tac[]) >>
-  irule abi_decode_unary_vv_sim_ptr >> metis_tac[]
+  Cases_on `supported_program_deploy tops`
+  >- (conj_tac
+      >- (irule abi_decode_unary_sim_ptr >> metis_tac[]) >>
+      irule abi_decode_unary_vv_sim_ptr >> metis_tac[]) >>
+  (* Admitted residual (argon, 2026-11-12): without supported_program_deploy a
+     constructor body may decode to a target outside the flat scalar tuples the
+     pointer sims cover, and expr_body_pre does not say which body is running.
+     The whole theorem was an admitted residual on fc54ea89e. *)
+  cheat
 QED

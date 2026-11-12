@@ -29,7 +29,8 @@ Proof
 QED
 
 Theorem supported_occurring_abi_decode_target:
-  supported_program tops /\ occurs_abi_decode_target target tops ==>
+  supported_program tops /\ supported_program_deploy tops /\
+  occurs_abi_decode_target target tops ==>
   ?tys. target = TupleT tys /\ EVERY supported_scalar_type tys /\ 2 <= LENGTH tys
 Proof
   strip_tac >> spose_not_then assume_tac >>
@@ -42,14 +43,22 @@ Proof
   drule supported_stmts_type_builtin_exclusion >>
   strip_tac >>
   gvs[occurs_abi_decode_target_def, EXISTS_MEM] >>
-  drule_all supported_program_declaration >> strip_tac >>
   rename1 `declaration_abi_decode_target target decl` >> Cases_on `decl` >>
-  gvs[declaration_abi_decode_target_def, supported_declaration_body_def,
-      supported_function_body_def, supported_declaration_header_def] >> metis_tac[]
+  gvs[declaration_abi_decode_target_def]
+  >~ [`FunctionDecl`]
+  >- (rename1 `MEM (FunctionDecl fvis _ _ _ _ fargs _ _ fbody) tops` >>
+      `supported_function_body tops fvis fargs fbody` by
+        (Cases_on `fvis = Deploy`
+         >- (gvs[] >> drule_all supported_program_deploy_function >> simp[]) >>
+         drule_all supported_program_function >> simp[]) >>
+      gvs[supported_function_body_def] >> metis_tac[]) >>
+  drule_all supported_program_declaration >> strip_tac >>
+  gvs[supported_declaration_body_def, supported_declaration_header_def] >>
+  metis_tac[]
 QED
 
 Theorem abi_decode_body_target_metadata:
-  body_inv tops ctx cenv cx /\
+  body_inv tops ctx cenv cx /\ supported_program_deploy tops /\
   expr_body_pre cenv cx env (TypeBuiltin ann (AbiDecode unwrap) target args) es ==>
   ?tys. target = TupleT tys /\ EVERY supported_scalar_type tys /\ 2 <= LENGTH tys
 Proof
