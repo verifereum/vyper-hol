@@ -148,7 +148,19 @@ Theorem fuel_ok_lower_value:
     !cenv ty e Wv E. fuel_ok Wv {} E (lower_value cfn cenv ty e)
 Proof
   rpt strip_tac >> simp_tac std_ss [lower_value_def] >>
-  fa (base @ helpers) >> simp[is_terminator_def]
+  FIRST [fa1 (base @ helpers)] >>
+  FIRST [fa1 (base @ helpers)] >>
+  FIRST [fa1 (base @ helpers)] >>
+  FIRST [fa1 (base @ helpers)] >>
+  FIRST [fa1 (base @ helpers)] >>
+  FIRST [fa1 (base @ helpers)] >>
+  FIRST [fa1 (base @ helpers)] >>
+  FIRST [fa1 (base @ helpers)] >>
+  FIRST [fa1 (base @ helpers)] >>
+  FIRST [fa1 (base @ helpers)] >>
+  FIRST [fa1 (base @ helpers)] >>
+  FIRST [fa1 (base @ helpers)] >>
+  FIRST [fa (base @ helpers)] >> simp[is_terminator_def]
 QED
 
 val lv = fuel_ok_lower_value;
@@ -158,7 +170,19 @@ Theorem fuel_ok_lower_value_with_loc:
     !cenv ty e Wv E. fuel_ok Wv {} E (lower_value_with_loc cfn cenv ty e)
 Proof
   rpt strip_tac >> simp_tac std_ss [lower_value_with_loc_def] >>
-  fa (base @ helpers) >> simp[is_terminator_def]
+  FIRST [fa1 (base @ helpers)] >>
+  FIRST [fa1 (base @ helpers)] >>
+  FIRST [fa1 (base @ helpers)] >>
+  FIRST [fa1 (base @ helpers)] >>
+  FIRST [fa1 (base @ helpers)] >>
+  FIRST [fa1 (base @ helpers)] >>
+  FIRST [fa1 (base @ helpers)] >>
+  FIRST [fa1 (base @ helpers)] >>
+  FIRST [fa1 (base @ helpers)] >>
+  FIRST [fa1 (base @ helpers)] >>
+  FIRST [fa1 (base @ helpers)] >>
+  FIRST [fa1 (base @ helpers)] >>
+  FIRST [fa (base @ helpers)] >> simp[is_terminator_def]
 QED
 
 Theorem fuel_ok_compile_get_target_ptr:
@@ -167,18 +191,68 @@ Theorem fuel_ok_compile_get_target_ptr:
 Proof
   gen_tac >> strip_tac >> gen_tac >> measureInduct_on `base_assignment_target_size tgt` >>
   Cases_on `tgt` >> rpt gen_tac
-  >- (simp_tac std_ss [compile_get_target_ptr_def] >> fa (lv :: base @ helpers))
-  >- (simp_tac std_ss [compile_get_target_ptr_def] >> fa (lv :: base @ helpers))
+  >- (simp_tac std_ss [compile_get_target_ptr_def] >> 
+      FIRST [fa1 (lv :: base @ helpers)] >>
+      FIRST [fa1 (lv :: base @ helpers)] >>
+      FIRST [fa1 (lv :: base @ helpers)] >>
+      FIRST [fa1 (lv :: base @ helpers)] >>
+      FIRST [fa1 (lv :: base @ helpers)] >>
+      FIRST [fa1 (lv :: base @ helpers)] >>
+      FIRST [fa1 (lv :: base @ helpers)] >>
+      FIRST [fa1 (lv :: base @ helpers)] >>
+      FIRST [fa1 (lv :: base @ helpers)] >>
+      FIRST [fa1 (lv :: base @ helpers)] >>
+      FIRST [fa1 (lv :: base @ helpers)] >>
+      FIRST [fa1 (lv :: base @ helpers)] >>
+      FIRST [fa (lv :: base @ helpers)])
+  >- (simp_tac std_ss [compile_get_target_ptr_def] >> 
+      FIRST [fa1 (lv :: base @ helpers)] >>
+      FIRST [fa1 (lv :: base @ helpers)] >>
+      FIRST [fa1 (lv :: base @ helpers)] >>
+      FIRST [fa1 (lv :: base @ helpers)] >>
+      FIRST [fa1 (lv :: base @ helpers)] >>
+      FIRST [fa1 (lv :: base @ helpers)] >>
+      FIRST [fa1 (lv :: base @ helpers)] >>
+      FIRST [fa1 (lv :: base @ helpers)] >>
+      FIRST [fa1 (lv :: base @ helpers)] >>
+      FIRST [fa1 (lv :: base @ helpers)] >>
+      FIRST [fa1 (lv :: base @ helpers)] >>
+      FIRST [fa1 (lv :: base @ helpers)] >>
+      FIRST [fa (lv :: base @ helpers)])
   >- (rename1 `SubscriptTarget bt idx_e` >>
       first_x_assum (qspec_then `bt` mp_tac) >>
       impl_tac >- simp[expr_size_def] >> strip_tac >>
       simp_tac std_ss [compile_get_target_ptr_def] >>
-      fa (lv :: base @ helpers) >> simp[is_terminator_def]) >>
+      FIRST [fa1 (lv :: base @ helpers)] >>
+      FIRST [fa1 (lv :: base @ helpers)] >>
+      FIRST [fa1 (lv :: base @ helpers)] >>
+      FIRST [fa1 (lv :: base @ helpers)] >>
+      FIRST [fa1 (lv :: base @ helpers)] >>
+      FIRST [fa1 (lv :: base @ helpers)] >>
+      FIRST [fa1 (lv :: base @ helpers)] >>
+      FIRST [fa1 (lv :: base @ helpers)] >>
+      FIRST [fa1 (lv :: base @ helpers)] >>
+      FIRST [fa1 (lv :: base @ helpers)] >>
+      FIRST [fa1 (lv :: base @ helpers)] >>
+      FIRST [fa1 (lv :: base @ helpers)] >>
+      FIRST [fa (lv :: base @ helpers)] >> simp[is_terminator_def]) >>
   rename1 `AttributeTarget bt fld` >>
   first_x_assum (qspec_then `bt` mp_tac) >>
   impl_tac >- simp[expr_size_def] >> strip_tac >>
   simp_tac std_ss [compile_get_target_ptr_def] >>
-  fa (lv :: base @ helpers) >> simp[is_terminator_def]
+  FIRST [fa1 (lv :: base @ helpers)] >>
+  FIRST [fa1 (lv :: base @ helpers)] >>
+  FIRST [fa1 (lv :: base @ helpers)] >>
+  FIRST [fa1 (lv :: base @ helpers)] >>
+  FIRST [fa1 (lv :: base @ helpers)] >>
+  FIRST [fa1 (lv :: base @ helpers)] >>
+  FIRST [fa1 (lv :: base @ helpers)] >>
+  FIRST [fa1 (lv :: base @ helpers)] >>
+  FIRST [fa1 (lv :: base @ helpers)] >>
+  FIRST [fa1 (lv :: base @ helpers)] >>
+  FIRST [fa1 (lv :: base @ helpers)] >>
+  FIRST [fa1 (lv :: base @ helpers)] >>
+  FIRST [fa (lv :: base @ helpers)] >> simp[is_terminator_def]
 QED
 
 (* ===== Materialising ===== *)
@@ -187,7 +261,19 @@ Theorem fuel_ok_compile_materialize_vv:
   !cenv ty vv Wv E. fuel_ok Wv {} E (compile_materialize_vv cenv ty vv)
 Proof
   rpt gen_tac >> simp_tac std_ss [compile_materialize_vv_def] >>
-  fa (base @ helpers) >> simp[is_terminator_def]
+  FIRST [fa1 (base @ helpers)] >>
+  FIRST [fa1 (base @ helpers)] >>
+  FIRST [fa1 (base @ helpers)] >>
+  FIRST [fa1 (base @ helpers)] >>
+  FIRST [fa1 (base @ helpers)] >>
+  FIRST [fa1 (base @ helpers)] >>
+  FIRST [fa1 (base @ helpers)] >>
+  FIRST [fa1 (base @ helpers)] >>
+  FIRST [fa1 (base @ helpers)] >>
+  FIRST [fa1 (base @ helpers)] >>
+  FIRST [fa1 (base @ helpers)] >>
+  FIRST [fa1 (base @ helpers)] >>
+  FIRST [fa (base @ helpers)] >> simp[is_terminator_def]
 QED
 
 (* ===== Expression lists ===== *)
@@ -202,7 +288,19 @@ Proof
   Cases_on `infos` >> simp[compile_concat_def, fuel_ok_return] >>
   qmatch_goalsub_rename_tac `compile_concat _ _ _ _ (p::_) _` >> PairCases_on `p` >>
   simp_tac std_ss [compile_concat_def] >>
-  fa (lv :: base @ helpers) >> simp[is_terminator_def]
+  FIRST [fa1 (lv :: base @ helpers)] >>
+  FIRST [fa1 (lv :: base @ helpers)] >>
+  FIRST [fa1 (lv :: base @ helpers)] >>
+  FIRST [fa1 (lv :: base @ helpers)] >>
+  FIRST [fa1 (lv :: base @ helpers)] >>
+  FIRST [fa1 (lv :: base @ helpers)] >>
+  FIRST [fa1 (lv :: base @ helpers)] >>
+  FIRST [fa1 (lv :: base @ helpers)] >>
+  FIRST [fa1 (lv :: base @ helpers)] >>
+  FIRST [fa1 (lv :: base @ helpers)] >>
+  FIRST [fa1 (lv :: base @ helpers)] >>
+  FIRST [fa1 (lv :: base @ helpers)] >>
+  FIRST [fa (lv :: base @ helpers)] >> simp[is_terminator_def]
 QED
 
 Theorem fuel_ok_compile_make_tuple:
@@ -212,7 +310,19 @@ Theorem fuel_ok_compile_make_tuple:
 Proof
   gen_tac >> strip_tac >> Induct >> rpt gen_tac >>
   simp_tac std_ss [compile_make_tuple_def] >>
-  fa (base @ helpers) >> simp[is_terminator_def]
+  FIRST [fa1 (base @ helpers)] >>
+  FIRST [fa1 (base @ helpers)] >>
+  FIRST [fa1 (base @ helpers)] >>
+  FIRST [fa1 (base @ helpers)] >>
+  FIRST [fa1 (base @ helpers)] >>
+  FIRST [fa1 (base @ helpers)] >>
+  FIRST [fa1 (base @ helpers)] >>
+  FIRST [fa1 (base @ helpers)] >>
+  FIRST [fa1 (base @ helpers)] >>
+  FIRST [fa1 (base @ helpers)] >>
+  FIRST [fa1 (base @ helpers)] >>
+  FIRST [fa1 (base @ helpers)] >>
+  FIRST [fa (base @ helpers)] >> simp[is_terminator_def]
 QED
 
 Theorem fuel_ok_compile_make_array_elems:
@@ -223,7 +333,19 @@ Theorem fuel_ok_compile_make_array_elems:
 Proof
   gen_tac >> strip_tac >> Induct >> rpt gen_tac >>
   simp_tac std_ss [compile_make_array_elems_def] >>
-  fa (base @ helpers) >> simp[is_terminator_def]
+  FIRST [fa1 (base @ helpers)] >>
+  FIRST [fa1 (base @ helpers)] >>
+  FIRST [fa1 (base @ helpers)] >>
+  FIRST [fa1 (base @ helpers)] >>
+  FIRST [fa1 (base @ helpers)] >>
+  FIRST [fa1 (base @ helpers)] >>
+  FIRST [fa1 (base @ helpers)] >>
+  FIRST [fa1 (base @ helpers)] >>
+  FIRST [fa1 (base @ helpers)] >>
+  FIRST [fa1 (base @ helpers)] >>
+  FIRST [fa1 (base @ helpers)] >>
+  FIRST [fa1 (base @ helpers)] >>
+  FIRST [fa (base @ helpers)] >> simp[is_terminator_def]
 QED
 
 Theorem fuel_ok_compile_make_array:
@@ -233,7 +355,19 @@ Theorem fuel_ok_compile_make_array:
         (compile_make_array cfn cenv es elem_ty elem_size hlw buf)
 Proof
   rpt strip_tac >> simp_tac std_ss [compile_make_array_def] >>
-  fa (fuel_ok_compile_make_array_elems :: base @ helpers) >>
+  FIRST [fa1 (fuel_ok_compile_make_array_elems :: base @ helpers)] >>
+  FIRST [fa1 (fuel_ok_compile_make_array_elems :: base @ helpers)] >>
+  FIRST [fa1 (fuel_ok_compile_make_array_elems :: base @ helpers)] >>
+  FIRST [fa1 (fuel_ok_compile_make_array_elems :: base @ helpers)] >>
+  FIRST [fa1 (fuel_ok_compile_make_array_elems :: base @ helpers)] >>
+  FIRST [fa1 (fuel_ok_compile_make_array_elems :: base @ helpers)] >>
+  FIRST [fa1 (fuel_ok_compile_make_array_elems :: base @ helpers)] >>
+  FIRST [fa1 (fuel_ok_compile_make_array_elems :: base @ helpers)] >>
+  FIRST [fa1 (fuel_ok_compile_make_array_elems :: base @ helpers)] >>
+  FIRST [fa1 (fuel_ok_compile_make_array_elems :: base @ helpers)] >>
+  FIRST [fa1 (fuel_ok_compile_make_array_elems :: base @ helpers)] >>
+  FIRST [fa1 (fuel_ok_compile_make_array_elems :: base @ helpers)] >>
+  FIRST [fa (fuel_ok_compile_make_array_elems :: base @ helpers)] >>
   simp[is_terminator_def]
 QED
 
@@ -243,7 +377,19 @@ Theorem fuel_ok_compile_multi_exprs:
 Proof
   gen_tac >> strip_tac >> Induct >> rpt gen_tac >>
   simp_tac std_ss [compile_multi_exprs_def] >>
-  fa (lv :: base @ helpers) >> simp[is_terminator_def]
+  FIRST [fa1 (lv :: base @ helpers)] >>
+  FIRST [fa1 (lv :: base @ helpers)] >>
+  FIRST [fa1 (lv :: base @ helpers)] >>
+  FIRST [fa1 (lv :: base @ helpers)] >>
+  FIRST [fa1 (lv :: base @ helpers)] >>
+  FIRST [fa1 (lv :: base @ helpers)] >>
+  FIRST [fa1 (lv :: base @ helpers)] >>
+  FIRST [fa1 (lv :: base @ helpers)] >>
+  FIRST [fa1 (lv :: base @ helpers)] >>
+  FIRST [fa1 (lv :: base @ helpers)] >>
+  FIRST [fa1 (lv :: base @ helpers)] >>
+  FIRST [fa1 (lv :: base @ helpers)] >>
+  FIRST [fa (lv :: base @ helpers)] >> simp[is_terminator_def]
 QED
 
 Theorem fuel_ok_compile_store_abi_tuple:
@@ -253,7 +399,19 @@ Proof
   Induct >> rpt gen_tac
   >- simp[compile_store_abi_tuple_def, fuel_ok_return] >>
   PairCases_on `h` >> simp_tac std_ss [compile_store_abi_tuple_def] >>
-  fa (base @ helpers) >> simp[is_terminator_def]
+  FIRST [fa1 (base @ helpers)] >>
+  FIRST [fa1 (base @ helpers)] >>
+  FIRST [fa1 (base @ helpers)] >>
+  FIRST [fa1 (base @ helpers)] >>
+  FIRST [fa1 (base @ helpers)] >>
+  FIRST [fa1 (base @ helpers)] >>
+  FIRST [fa1 (base @ helpers)] >>
+  FIRST [fa1 (base @ helpers)] >>
+  FIRST [fa1 (base @ helpers)] >>
+  FIRST [fa1 (base @ helpers)] >>
+  FIRST [fa1 (base @ helpers)] >>
+  FIRST [fa1 (base @ helpers)] >>
+  FIRST [fa (base @ helpers)] >> simp[is_terminator_def]
 QED
 
 Theorem fuel_ok_compile_extcall_store_args:
@@ -264,7 +422,19 @@ Proof
   gen_tac >> strip_tac >> Induct >> rpt gen_tac
   >- simp[compile_extcall_store_args_def, fuel_ok_return] >>
   Cases_on `tys` >> simp_tac std_ss [compile_extcall_store_args_def] >>
-  fa (lv :: base @ helpers) >> simp[is_terminator_def]
+  FIRST [fa1 (lv :: base @ helpers)] >>
+  FIRST [fa1 (lv :: base @ helpers)] >>
+  FIRST [fa1 (lv :: base @ helpers)] >>
+  FIRST [fa1 (lv :: base @ helpers)] >>
+  FIRST [fa1 (lv :: base @ helpers)] >>
+  FIRST [fa1 (lv :: base @ helpers)] >>
+  FIRST [fa1 (lv :: base @ helpers)] >>
+  FIRST [fa1 (lv :: base @ helpers)] >>
+  FIRST [fa1 (lv :: base @ helpers)] >>
+  FIRST [fa1 (lv :: base @ helpers)] >>
+  FIRST [fa1 (lv :: base @ helpers)] >>
+  FIRST [fa1 (lv :: base @ helpers)] >>
+  FIRST [fa (lv :: base @ helpers)] >> simp[is_terminator_def]
 QED
 
 Theorem fuel_ok_compile_abi_encode_args:
@@ -273,7 +443,19 @@ Theorem fuel_ok_compile_abi_encode_args:
 Proof
   gen_tac >> strip_tac >> Induct >> rpt gen_tac >>
   simp_tac std_ss [compile_abi_encode_args_def] >>
-  fa (fuel_ok_compile_materialize_vv :: base @ helpers) >>
+  FIRST [fa1 (fuel_ok_compile_materialize_vv :: base @ helpers)] >>
+  FIRST [fa1 (fuel_ok_compile_materialize_vv :: base @ helpers)] >>
+  FIRST [fa1 (fuel_ok_compile_materialize_vv :: base @ helpers)] >>
+  FIRST [fa1 (fuel_ok_compile_materialize_vv :: base @ helpers)] >>
+  FIRST [fa1 (fuel_ok_compile_materialize_vv :: base @ helpers)] >>
+  FIRST [fa1 (fuel_ok_compile_materialize_vv :: base @ helpers)] >>
+  FIRST [fa1 (fuel_ok_compile_materialize_vv :: base @ helpers)] >>
+  FIRST [fa1 (fuel_ok_compile_materialize_vv :: base @ helpers)] >>
+  FIRST [fa1 (fuel_ok_compile_materialize_vv :: base @ helpers)] >>
+  FIRST [fa1 (fuel_ok_compile_materialize_vv :: base @ helpers)] >>
+  FIRST [fa1 (fuel_ok_compile_materialize_vv :: base @ helpers)] >>
+  FIRST [fa1 (fuel_ok_compile_materialize_vv :: base @ helpers)] >>
+  FIRST [fa (fuel_ok_compile_materialize_vv :: base @ helpers)] >>
   simp[is_terminator_def]
 QED
 
@@ -285,7 +467,19 @@ Theorem fuel_ok_compile_subscript:
       fuel_ok Wv {} E (compile_subscript cfn cenv ret_ty ty base_e idx_e)
 Proof
   rpt strip_tac >> simp_tac std_ss [compile_subscript_def] >>
-  fa (lv :: base @ helpers) >> simp[is_terminator_def]
+  FIRST [fa1 (lv :: base @ helpers)] >>
+  FIRST [fa1 (lv :: base @ helpers)] >>
+  FIRST [fa1 (lv :: base @ helpers)] >>
+  FIRST [fa1 (lv :: base @ helpers)] >>
+  FIRST [fa1 (lv :: base @ helpers)] >>
+  FIRST [fa1 (lv :: base @ helpers)] >>
+  FIRST [fa1 (lv :: base @ helpers)] >>
+  FIRST [fa1 (lv :: base @ helpers)] >>
+  FIRST [fa1 (lv :: base @ helpers)] >>
+  FIRST [fa1 (lv :: base @ helpers)] >>
+  FIRST [fa1 (lv :: base @ helpers)] >>
+  FIRST [fa1 (lv :: base @ helpers)] >>
+  FIRST [fa (lv :: base @ helpers)] >> simp[is_terminator_def]
 QED
 
 Theorem fuel_ok_compile_attribute:
@@ -294,7 +488,19 @@ Theorem fuel_ok_compile_attribute:
       fuel_ok Wv {} E (compile_attribute cfn cenv ret_ty ty base_e field)
 Proof
   rpt strip_tac >> simp_tac std_ss [compile_attribute_def] >>
-  fa (base @ helpers) >> simp[is_terminator_def]
+  FIRST [fa1 (base @ helpers)] >>
+  FIRST [fa1 (base @ helpers)] >>
+  FIRST [fa1 (base @ helpers)] >>
+  FIRST [fa1 (base @ helpers)] >>
+  FIRST [fa1 (base @ helpers)] >>
+  FIRST [fa1 (base @ helpers)] >>
+  FIRST [fa1 (base @ helpers)] >>
+  FIRST [fa1 (base @ helpers)] >>
+  FIRST [fa1 (base @ helpers)] >>
+  FIRST [fa1 (base @ helpers)] >>
+  FIRST [fa1 (base @ helpers)] >>
+  FIRST [fa1 (base @ helpers)] >>
+  FIRST [fa (base @ helpers)] >> simp[is_terminator_def]
 QED
 
 Theorem fuel_ok_compile_struct_lit:
@@ -305,7 +511,19 @@ Proof
   gen_tac >> strip_tac >> Induct >> rpt gen_tac
   >- simp[compile_struct_lit_def, fuel_ok_return] >>
   PairCases_on `h` >> simp_tac std_ss [compile_struct_lit_def] >>
-  fa (base @ helpers) >> simp[is_terminator_def]
+  FIRST [fa1 (base @ helpers)] >>
+  FIRST [fa1 (base @ helpers)] >>
+  FIRST [fa1 (base @ helpers)] >>
+  FIRST [fa1 (base @ helpers)] >>
+  FIRST [fa1 (base @ helpers)] >>
+  FIRST [fa1 (base @ helpers)] >>
+  FIRST [fa1 (base @ helpers)] >>
+  FIRST [fa1 (base @ helpers)] >>
+  FIRST [fa1 (base @ helpers)] >>
+  FIRST [fa1 (base @ helpers)] >>
+  FIRST [fa1 (base @ helpers)] >>
+  FIRST [fa1 (base @ helpers)] >>
+  FIRST [fa (base @ helpers)] >> simp[is_terminator_def]
 QED
 
 (* ===== Materialising values ===== *)
@@ -315,7 +533,19 @@ Theorem fuel_ok_compile_ifexp_arm:
     fuel_ok Wv {} E (compile_ifexp_arm cenv res_ty arm_ty vv)
 Proof
   rpt gen_tac >> simp_tac std_ss [compile_ifexp_arm_def] >>
-  fa (fuel_ok_compile_materialize_vv :: base @ helpers) >>
+  FIRST [fa1 (fuel_ok_compile_materialize_vv :: base @ helpers)] >>
+  FIRST [fa1 (fuel_ok_compile_materialize_vv :: base @ helpers)] >>
+  FIRST [fa1 (fuel_ok_compile_materialize_vv :: base @ helpers)] >>
+  FIRST [fa1 (fuel_ok_compile_materialize_vv :: base @ helpers)] >>
+  FIRST [fa1 (fuel_ok_compile_materialize_vv :: base @ helpers)] >>
+  FIRST [fa1 (fuel_ok_compile_materialize_vv :: base @ helpers)] >>
+  FIRST [fa1 (fuel_ok_compile_materialize_vv :: base @ helpers)] >>
+  FIRST [fa1 (fuel_ok_compile_materialize_vv :: base @ helpers)] >>
+  FIRST [fa1 (fuel_ok_compile_materialize_vv :: base @ helpers)] >>
+  FIRST [fa1 (fuel_ok_compile_materialize_vv :: base @ helpers)] >>
+  FIRST [fa1 (fuel_ok_compile_materialize_vv :: base @ helpers)] >>
+  FIRST [fa1 (fuel_ok_compile_materialize_vv :: base @ helpers)] >>
+  FIRST [fa (fuel_ok_compile_materialize_vv :: base @ helpers)] >>
   simp[is_terminator_def]
 QED
 
@@ -323,7 +553,19 @@ Theorem fuel_ok_compile_snapshot_vv:
   !cenv copy vv Wv E. fuel_ok Wv {} E (compile_snapshot_vv cenv copy vv)
 Proof
   rpt gen_tac >> simp_tac std_ss [compile_snapshot_vv_def] >>
-  fa (fuel_ok_compile_materialize_vv :: base @ helpers) >>
+  FIRST [fa1 (fuel_ok_compile_materialize_vv :: base @ helpers)] >>
+  FIRST [fa1 (fuel_ok_compile_materialize_vv :: base @ helpers)] >>
+  FIRST [fa1 (fuel_ok_compile_materialize_vv :: base @ helpers)] >>
+  FIRST [fa1 (fuel_ok_compile_materialize_vv :: base @ helpers)] >>
+  FIRST [fa1 (fuel_ok_compile_materialize_vv :: base @ helpers)] >>
+  FIRST [fa1 (fuel_ok_compile_materialize_vv :: base @ helpers)] >>
+  FIRST [fa1 (fuel_ok_compile_materialize_vv :: base @ helpers)] >>
+  FIRST [fa1 (fuel_ok_compile_materialize_vv :: base @ helpers)] >>
+  FIRST [fa1 (fuel_ok_compile_materialize_vv :: base @ helpers)] >>
+  FIRST [fa1 (fuel_ok_compile_materialize_vv :: base @ helpers)] >>
+  FIRST [fa1 (fuel_ok_compile_materialize_vv :: base @ helpers)] >>
+  FIRST [fa1 (fuel_ok_compile_materialize_vv :: base @ helpers)] >>
+  FIRST [fa (fuel_ok_compile_materialize_vv :: base @ helpers)] >>
   simp[is_terminator_def]
 QED
 
@@ -335,7 +577,19 @@ Theorem fuel_ok_compile_ext_call_kwarg:
       fuel_ok Wv {} E (compile_ext_call_kwarg cfn cenv rt k e)
 Proof
   rpt strip_tac >> simp_tac std_ss [compile_ext_call_kwarg_def] >>
-  fa (lv :: fuel_ok_compile_materialize_vv :: base @ helpers) >>
+  FIRST [fa1 (lv :: fuel_ok_compile_materialize_vv :: base @ helpers)] >>
+  FIRST [fa1 (lv :: fuel_ok_compile_materialize_vv :: base @ helpers)] >>
+  FIRST [fa1 (lv :: fuel_ok_compile_materialize_vv :: base @ helpers)] >>
+  FIRST [fa1 (lv :: fuel_ok_compile_materialize_vv :: base @ helpers)] >>
+  FIRST [fa1 (lv :: fuel_ok_compile_materialize_vv :: base @ helpers)] >>
+  FIRST [fa1 (lv :: fuel_ok_compile_materialize_vv :: base @ helpers)] >>
+  FIRST [fa1 (lv :: fuel_ok_compile_materialize_vv :: base @ helpers)] >>
+  FIRST [fa1 (lv :: fuel_ok_compile_materialize_vv :: base @ helpers)] >>
+  FIRST [fa1 (lv :: fuel_ok_compile_materialize_vv :: base @ helpers)] >>
+  FIRST [fa1 (lv :: fuel_ok_compile_materialize_vv :: base @ helpers)] >>
+  FIRST [fa1 (lv :: fuel_ok_compile_materialize_vv :: base @ helpers)] >>
+  FIRST [fa1 (lv :: fuel_ok_compile_materialize_vv :: base @ helpers)] >>
+  FIRST [fa (lv :: fuel_ok_compile_materialize_vv :: base @ helpers)] >>
   simp[is_terminator_def]
 QED
 
@@ -348,7 +602,19 @@ Proof
   >- simp[compile_ext_call_kwargs_def, fuel_ok_return] >>
   Cases_on `es` >> simp_tac std_ss [compile_ext_call_kwargs_def]
   >- simp[fuel_ok_return] >>
-  fa (fuel_ok_compile_ext_call_kwarg :: base @ helpers) >>
+  FIRST [fa1 (fuel_ok_compile_ext_call_kwarg :: base @ helpers)] >>
+  FIRST [fa1 (fuel_ok_compile_ext_call_kwarg :: base @ helpers)] >>
+  FIRST [fa1 (fuel_ok_compile_ext_call_kwarg :: base @ helpers)] >>
+  FIRST [fa1 (fuel_ok_compile_ext_call_kwarg :: base @ helpers)] >>
+  FIRST [fa1 (fuel_ok_compile_ext_call_kwarg :: base @ helpers)] >>
+  FIRST [fa1 (fuel_ok_compile_ext_call_kwarg :: base @ helpers)] >>
+  FIRST [fa1 (fuel_ok_compile_ext_call_kwarg :: base @ helpers)] >>
+  FIRST [fa1 (fuel_ok_compile_ext_call_kwarg :: base @ helpers)] >>
+  FIRST [fa1 (fuel_ok_compile_ext_call_kwarg :: base @ helpers)] >>
+  FIRST [fa1 (fuel_ok_compile_ext_call_kwarg :: base @ helpers)] >>
+  FIRST [fa1 (fuel_ok_compile_ext_call_kwarg :: base @ helpers)] >>
+  FIRST [fa1 (fuel_ok_compile_ext_call_kwarg :: base @ helpers)] >>
+  FIRST [fa (fuel_ok_compile_ext_call_kwarg :: base @ helpers)] >>
   simp[is_terminator_def]
 QED
 
@@ -359,7 +625,19 @@ Theorem fuel_ok_compile_create_salt:
     !cenv opt Wv E. fuel_ok Wv {} E (compile_create_salt cfn cenv opt)
 Proof
   rpt strip_tac >> Cases_on `opt` >> simp_tac std_ss [compile_create_salt_def] >>
-  fa (lv :: base @ helpers) >> simp[is_terminator_def]
+  FIRST [fa1 (lv :: base @ helpers)] >>
+  FIRST [fa1 (lv :: base @ helpers)] >>
+  FIRST [fa1 (lv :: base @ helpers)] >>
+  FIRST [fa1 (lv :: base @ helpers)] >>
+  FIRST [fa1 (lv :: base @ helpers)] >>
+  FIRST [fa1 (lv :: base @ helpers)] >>
+  FIRST [fa1 (lv :: base @ helpers)] >>
+  FIRST [fa1 (lv :: base @ helpers)] >>
+  FIRST [fa1 (lv :: base @ helpers)] >>
+  FIRST [fa1 (lv :: base @ helpers)] >>
+  FIRST [fa1 (lv :: base @ helpers)] >>
+  FIRST [fa1 (lv :: base @ helpers)] >>
+  FIRST [fa (lv :: base @ helpers)] >> simp[is_terminator_def]
 QED
 
 Theorem fuel_ok_compile_create_ctor_tuple:
@@ -368,7 +646,19 @@ Theorem fuel_ok_compile_create_ctor_tuple:
       fuel_ok Wv {} E (compile_create_ctor_tuple cfn cenv args)
 Proof
   rpt strip_tac >> simp_tac std_ss [compile_create_ctor_tuple_def] >>
-  fa (base @ helpers) >> simp[is_terminator_def]
+  FIRST [fa1 (base @ helpers)] >>
+  FIRST [fa1 (base @ helpers)] >>
+  FIRST [fa1 (base @ helpers)] >>
+  FIRST [fa1 (base @ helpers)] >>
+  FIRST [fa1 (base @ helpers)] >>
+  FIRST [fa1 (base @ helpers)] >>
+  FIRST [fa1 (base @ helpers)] >>
+  FIRST [fa1 (base @ helpers)] >>
+  FIRST [fa1 (base @ helpers)] >>
+  FIRST [fa1 (base @ helpers)] >>
+  FIRST [fa1 (base @ helpers)] >>
+  FIRST [fa1 (base @ helpers)] >>
+  FIRST [fa (base @ helpers)] >> simp[is_terminator_def]
 QED
 
 Theorem fuel_ok_compile_create_blueprint_args:
@@ -377,8 +667,19 @@ Theorem fuel_ok_compile_create_blueprint_args:
       fuel_ok Wv {} E (compile_create_blueprint_args cfn cenv raw args)
 Proof
   rpt strip_tac >> simp_tac std_ss [compile_create_blueprint_args_def] >>
-  fa (lv :: fuel_ok_compile_create_ctor_tuple :: fuel_ok_compile_abi_encode_to_buf ::
-      base @ helpers) >>
+  FIRST [fa1 (lv :: fuel_ok_compile_create_ctor_tuple :: fuel_ok_compile_abi_encode_to_buf :: base @ helpers)] >>
+  FIRST [fa1 (lv :: fuel_ok_compile_create_ctor_tuple :: fuel_ok_compile_abi_encode_to_buf :: base @ helpers)] >>
+  FIRST [fa1 (lv :: fuel_ok_compile_create_ctor_tuple :: fuel_ok_compile_abi_encode_to_buf :: base @ helpers)] >>
+  FIRST [fa1 (lv :: fuel_ok_compile_create_ctor_tuple :: fuel_ok_compile_abi_encode_to_buf :: base @ helpers)] >>
+  FIRST [fa1 (lv :: fuel_ok_compile_create_ctor_tuple :: fuel_ok_compile_abi_encode_to_buf :: base @ helpers)] >>
+  FIRST [fa1 (lv :: fuel_ok_compile_create_ctor_tuple :: fuel_ok_compile_abi_encode_to_buf :: base @ helpers)] >>
+  FIRST [fa1 (lv :: fuel_ok_compile_create_ctor_tuple :: fuel_ok_compile_abi_encode_to_buf :: base @ helpers)] >>
+  FIRST [fa1 (lv :: fuel_ok_compile_create_ctor_tuple :: fuel_ok_compile_abi_encode_to_buf :: base @ helpers)] >>
+  FIRST [fa1 (lv :: fuel_ok_compile_create_ctor_tuple :: fuel_ok_compile_abi_encode_to_buf :: base @ helpers)] >>
+  FIRST [fa1 (lv :: fuel_ok_compile_create_ctor_tuple :: fuel_ok_compile_abi_encode_to_buf :: base @ helpers)] >>
+  FIRST [fa1 (lv :: fuel_ok_compile_create_ctor_tuple :: fuel_ok_compile_abi_encode_to_buf :: base @ helpers)] >>
+  FIRST [fa1 (lv :: fuel_ok_compile_create_ctor_tuple :: fuel_ok_compile_abi_encode_to_buf :: base @ helpers)] >>
+  FIRST [fa (lv :: fuel_ok_compile_create_ctor_tuple :: fuel_ok_compile_abi_encode_to_buf :: base @ helpers)] >>
   simp[is_terminator_def]
 QED
 
@@ -386,7 +687,19 @@ Theorem fuel_ok_compile_create_snapshot:
   !cenv vv ty Wv E. fuel_ok Wv {} E (compile_create_snapshot cenv vv ty)
 Proof
   rpt gen_tac >> simp_tac std_ss [compile_create_snapshot_def] >>
-  fa (base @ helpers) >> simp[is_terminator_def]
+  FIRST [fa1 (base @ helpers)] >>
+  FIRST [fa1 (base @ helpers)] >>
+  FIRST [fa1 (base @ helpers)] >>
+  FIRST [fa1 (base @ helpers)] >>
+  FIRST [fa1 (base @ helpers)] >>
+  FIRST [fa1 (base @ helpers)] >>
+  FIRST [fa1 (base @ helpers)] >>
+  FIRST [fa1 (base @ helpers)] >>
+  FIRST [fa1 (base @ helpers)] >>
+  FIRST [fa1 (base @ helpers)] >>
+  FIRST [fa1 (base @ helpers)] >>
+  FIRST [fa1 (base @ helpers)] >>
+  FIRST [fa (base @ helpers)] >> simp[is_terminator_def]
 QED
 
 Theorem fuel_ok_compile_raw_create:
@@ -396,9 +709,19 @@ Theorem fuel_ok_compile_raw_create:
         (compile_raw_create cfn cenv bytecode_e value_e ctor_args salt_e rof)
 Proof
   rpt strip_tac >> simp_tac std_ss [compile_raw_create_def] >>
-  fa (lv :: fuel_ok_compile_create_ctor_tuple :: fuel_ok_compile_create_salt ::
-      fuel_ok_compile_create_snapshot :: fuel_ok_compile_abi_encode_to_buf ::
-      fuel_ok_compile_create_dispatch :: base @ helpers) >>
+  FIRST [fa1 (lv :: fuel_ok_compile_create_ctor_tuple :: fuel_ok_compile_create_salt :: fuel_ok_compile_create_snapshot :: fuel_ok_compile_abi_encode_to_buf :: fuel_ok_compile_create_dispatch :: base @ helpers)] >>
+  FIRST [fa1 (lv :: fuel_ok_compile_create_ctor_tuple :: fuel_ok_compile_create_salt :: fuel_ok_compile_create_snapshot :: fuel_ok_compile_abi_encode_to_buf :: fuel_ok_compile_create_dispatch :: base @ helpers)] >>
+  FIRST [fa1 (lv :: fuel_ok_compile_create_ctor_tuple :: fuel_ok_compile_create_salt :: fuel_ok_compile_create_snapshot :: fuel_ok_compile_abi_encode_to_buf :: fuel_ok_compile_create_dispatch :: base @ helpers)] >>
+  FIRST [fa1 (lv :: fuel_ok_compile_create_ctor_tuple :: fuel_ok_compile_create_salt :: fuel_ok_compile_create_snapshot :: fuel_ok_compile_abi_encode_to_buf :: fuel_ok_compile_create_dispatch :: base @ helpers)] >>
+  FIRST [fa1 (lv :: fuel_ok_compile_create_ctor_tuple :: fuel_ok_compile_create_salt :: fuel_ok_compile_create_snapshot :: fuel_ok_compile_abi_encode_to_buf :: fuel_ok_compile_create_dispatch :: base @ helpers)] >>
+  FIRST [fa1 (lv :: fuel_ok_compile_create_ctor_tuple :: fuel_ok_compile_create_salt :: fuel_ok_compile_create_snapshot :: fuel_ok_compile_abi_encode_to_buf :: fuel_ok_compile_create_dispatch :: base @ helpers)] >>
+  FIRST [fa1 (lv :: fuel_ok_compile_create_ctor_tuple :: fuel_ok_compile_create_salt :: fuel_ok_compile_create_snapshot :: fuel_ok_compile_abi_encode_to_buf :: fuel_ok_compile_create_dispatch :: base @ helpers)] >>
+  FIRST [fa1 (lv :: fuel_ok_compile_create_ctor_tuple :: fuel_ok_compile_create_salt :: fuel_ok_compile_create_snapshot :: fuel_ok_compile_abi_encode_to_buf :: fuel_ok_compile_create_dispatch :: base @ helpers)] >>
+  FIRST [fa1 (lv :: fuel_ok_compile_create_ctor_tuple :: fuel_ok_compile_create_salt :: fuel_ok_compile_create_snapshot :: fuel_ok_compile_abi_encode_to_buf :: fuel_ok_compile_create_dispatch :: base @ helpers)] >>
+  FIRST [fa1 (lv :: fuel_ok_compile_create_ctor_tuple :: fuel_ok_compile_create_salt :: fuel_ok_compile_create_snapshot :: fuel_ok_compile_abi_encode_to_buf :: fuel_ok_compile_create_dispatch :: base @ helpers)] >>
+  FIRST [fa1 (lv :: fuel_ok_compile_create_ctor_tuple :: fuel_ok_compile_create_salt :: fuel_ok_compile_create_snapshot :: fuel_ok_compile_abi_encode_to_buf :: fuel_ok_compile_create_dispatch :: base @ helpers)] >>
+  FIRST [fa1 (lv :: fuel_ok_compile_create_ctor_tuple :: fuel_ok_compile_create_salt :: fuel_ok_compile_create_snapshot :: fuel_ok_compile_abi_encode_to_buf :: fuel_ok_compile_create_dispatch :: base @ helpers)] >>
+  FIRST [fa (lv :: fuel_ok_compile_create_ctor_tuple :: fuel_ok_compile_create_salt :: fuel_ok_compile_create_snapshot :: fuel_ok_compile_abi_encode_to_buf :: fuel_ok_compile_create_dispatch :: base @ helpers)] >>
   simp[is_terminator_def]
 QED
 
@@ -408,11 +731,19 @@ Theorem fuel_ok_compile_create_call:
       fuel_ok Wv {} E (compile_create_call cfn cenv ck has_salt rof args)
 Proof
   rpt strip_tac >> simp_tac std_ss [compile_create_call_def] >>
-  fa (lv :: fuel_ok_compile_raw_create :: fuel_ok_compile_create_salt ::
-      fuel_ok_compile_create_blueprint_args :: fuel_ok_compile_create_dispatch ::
-      fuel_ok_compile_create_proxy_buf :: fuel_ok_compile_create_copy ::
-      fuel_ok_compile_create_blueprint_check ::
-      fuel_ok_compile_create_blueprint_append :: base @ helpers) >>
+  FIRST [fa1 (lv :: fuel_ok_compile_raw_create :: fuel_ok_compile_create_salt :: fuel_ok_compile_create_blueprint_args :: fuel_ok_compile_create_dispatch :: fuel_ok_compile_create_proxy_buf :: fuel_ok_compile_create_copy :: fuel_ok_compile_create_blueprint_check :: fuel_ok_compile_create_blueprint_append :: base @ helpers)] >>
+  FIRST [fa1 (lv :: fuel_ok_compile_raw_create :: fuel_ok_compile_create_salt :: fuel_ok_compile_create_blueprint_args :: fuel_ok_compile_create_dispatch :: fuel_ok_compile_create_proxy_buf :: fuel_ok_compile_create_copy :: fuel_ok_compile_create_blueprint_check :: fuel_ok_compile_create_blueprint_append :: base @ helpers)] >>
+  FIRST [fa1 (lv :: fuel_ok_compile_raw_create :: fuel_ok_compile_create_salt :: fuel_ok_compile_create_blueprint_args :: fuel_ok_compile_create_dispatch :: fuel_ok_compile_create_proxy_buf :: fuel_ok_compile_create_copy :: fuel_ok_compile_create_blueprint_check :: fuel_ok_compile_create_blueprint_append :: base @ helpers)] >>
+  FIRST [fa1 (lv :: fuel_ok_compile_raw_create :: fuel_ok_compile_create_salt :: fuel_ok_compile_create_blueprint_args :: fuel_ok_compile_create_dispatch :: fuel_ok_compile_create_proxy_buf :: fuel_ok_compile_create_copy :: fuel_ok_compile_create_blueprint_check :: fuel_ok_compile_create_blueprint_append :: base @ helpers)] >>
+  FIRST [fa1 (lv :: fuel_ok_compile_raw_create :: fuel_ok_compile_create_salt :: fuel_ok_compile_create_blueprint_args :: fuel_ok_compile_create_dispatch :: fuel_ok_compile_create_proxy_buf :: fuel_ok_compile_create_copy :: fuel_ok_compile_create_blueprint_check :: fuel_ok_compile_create_blueprint_append :: base @ helpers)] >>
+  FIRST [fa1 (lv :: fuel_ok_compile_raw_create :: fuel_ok_compile_create_salt :: fuel_ok_compile_create_blueprint_args :: fuel_ok_compile_create_dispatch :: fuel_ok_compile_create_proxy_buf :: fuel_ok_compile_create_copy :: fuel_ok_compile_create_blueprint_check :: fuel_ok_compile_create_blueprint_append :: base @ helpers)] >>
+  FIRST [fa1 (lv :: fuel_ok_compile_raw_create :: fuel_ok_compile_create_salt :: fuel_ok_compile_create_blueprint_args :: fuel_ok_compile_create_dispatch :: fuel_ok_compile_create_proxy_buf :: fuel_ok_compile_create_copy :: fuel_ok_compile_create_blueprint_check :: fuel_ok_compile_create_blueprint_append :: base @ helpers)] >>
+  FIRST [fa1 (lv :: fuel_ok_compile_raw_create :: fuel_ok_compile_create_salt :: fuel_ok_compile_create_blueprint_args :: fuel_ok_compile_create_dispatch :: fuel_ok_compile_create_proxy_buf :: fuel_ok_compile_create_copy :: fuel_ok_compile_create_blueprint_check :: fuel_ok_compile_create_blueprint_append :: base @ helpers)] >>
+  FIRST [fa1 (lv :: fuel_ok_compile_raw_create :: fuel_ok_compile_create_salt :: fuel_ok_compile_create_blueprint_args :: fuel_ok_compile_create_dispatch :: fuel_ok_compile_create_proxy_buf :: fuel_ok_compile_create_copy :: fuel_ok_compile_create_blueprint_check :: fuel_ok_compile_create_blueprint_append :: base @ helpers)] >>
+  FIRST [fa1 (lv :: fuel_ok_compile_raw_create :: fuel_ok_compile_create_salt :: fuel_ok_compile_create_blueprint_args :: fuel_ok_compile_create_dispatch :: fuel_ok_compile_create_proxy_buf :: fuel_ok_compile_create_copy :: fuel_ok_compile_create_blueprint_check :: fuel_ok_compile_create_blueprint_append :: base @ helpers)] >>
+  FIRST [fa1 (lv :: fuel_ok_compile_raw_create :: fuel_ok_compile_create_salt :: fuel_ok_compile_create_blueprint_args :: fuel_ok_compile_create_dispatch :: fuel_ok_compile_create_proxy_buf :: fuel_ok_compile_create_copy :: fuel_ok_compile_create_blueprint_check :: fuel_ok_compile_create_blueprint_append :: base @ helpers)] >>
+  FIRST [fa1 (lv :: fuel_ok_compile_raw_create :: fuel_ok_compile_create_salt :: fuel_ok_compile_create_blueprint_args :: fuel_ok_compile_create_dispatch :: fuel_ok_compile_create_proxy_buf :: fuel_ok_compile_create_copy :: fuel_ok_compile_create_blueprint_check :: fuel_ok_compile_create_blueprint_append :: base @ helpers)] >>
+  FIRST [fa (lv :: fuel_ok_compile_raw_create :: fuel_ok_compile_create_salt :: fuel_ok_compile_create_blueprint_args :: fuel_ok_compile_create_dispatch :: fuel_ok_compile_create_proxy_buf :: fuel_ok_compile_create_copy :: fuel_ok_compile_create_blueprint_check :: fuel_ok_compile_create_blueprint_append :: base @ helpers)] >>
   simp[is_terminator_def]
 QED
 
@@ -422,14 +753,38 @@ Theorem fuel_ok_compile_store_words:
   !vs buf off Wv E. fuel_ok Wv {} E (compile_store_words buf vs off)
 Proof
   Induct >> rpt gen_tac >> simp_tac std_ss [compile_store_words_def] >>
-  fa (base @ helpers) >> simp[is_terminator_def]
+  FIRST [fa1 (base @ helpers)] >>
+  FIRST [fa1 (base @ helpers)] >>
+  FIRST [fa1 (base @ helpers)] >>
+  FIRST [fa1 (base @ helpers)] >>
+  FIRST [fa1 (base @ helpers)] >>
+  FIRST [fa1 (base @ helpers)] >>
+  FIRST [fa1 (base @ helpers)] >>
+  FIRST [fa1 (base @ helpers)] >>
+  FIRST [fa1 (base @ helpers)] >>
+  FIRST [fa1 (base @ helpers)] >>
+  FIRST [fa1 (base @ helpers)] >>
+  FIRST [fa1 (base @ helpers)] >>
+  FIRST [fa (base @ helpers)] >> simp[is_terminator_def]
 QED
 
 Theorem fuel_ok_compile_invert:
   !v ty cenv Wv E. fuel_ok Wv {} E (compile_invert v ty cenv)
 Proof
   rpt gen_tac >> Cases_on `ty` >> simp_tac std_ss [compile_invert_def] >>
-  fa (base @ helpers) >> simp[is_terminator_def]
+  FIRST [fa1 (base @ helpers)] >>
+  FIRST [fa1 (base @ helpers)] >>
+  FIRST [fa1 (base @ helpers)] >>
+  FIRST [fa1 (base @ helpers)] >>
+  FIRST [fa1 (base @ helpers)] >>
+  FIRST [fa1 (base @ helpers)] >>
+  FIRST [fa1 (base @ helpers)] >>
+  FIRST [fa1 (base @ helpers)] >>
+  FIRST [fa1 (base @ helpers)] >>
+  FIRST [fa1 (base @ helpers)] >>
+  FIRST [fa1 (base @ helpers)] >>
+  FIRST [fa1 (base @ helpers)] >>
+  FIRST [fa (base @ helpers)] >> simp[is_terminator_def]
 QED
 
 Theorem fuel_ok_compile_acc:
@@ -439,7 +794,19 @@ Theorem fuel_ok_compile_acc:
 Proof
   rpt strip_tac >> Cases_on `item` >>
   simp_tac std_ss [eta_def compile_acc_def] >>
-  fa (lv :: base @ helpers) >> simp[is_terminator_def]
+  FIRST [fa1 (lv :: base @ helpers)] >>
+  FIRST [fa1 (lv :: base @ helpers)] >>
+  FIRST [fa1 (lv :: base @ helpers)] >>
+  FIRST [fa1 (lv :: base @ helpers)] >>
+  FIRST [fa1 (lv :: base @ helpers)] >>
+  FIRST [fa1 (lv :: base @ helpers)] >>
+  FIRST [fa1 (lv :: base @ helpers)] >>
+  FIRST [fa1 (lv :: base @ helpers)] >>
+  FIRST [fa1 (lv :: base @ helpers)] >>
+  FIRST [fa1 (lv :: base @ helpers)] >>
+  FIRST [fa1 (lv :: base @ helpers)] >>
+  FIRST [fa1 (lv :: base @ helpers)] >>
+  FIRST [fa (lv :: base @ helpers)] >> simp[is_terminator_def]
 QED
 
 Theorem fuel_ok_compile_addmod_names:
@@ -447,7 +814,19 @@ Theorem fuel_ok_compile_addmod_names:
     fuel_ok Wv {} E (compile_addmod_names cenv ret_ty aty a bty b mty m)
 Proof
   rpt gen_tac >> simp_tac std_ss [eta_def compile_addmod_names_def] >>
-  fa (fuel_ok_compile_addmod :: base @ helpers) >> simp[is_terminator_def]
+  FIRST [fa1 (fuel_ok_compile_addmod :: base @ helpers)] >>
+  FIRST [fa1 (fuel_ok_compile_addmod :: base @ helpers)] >>
+  FIRST [fa1 (fuel_ok_compile_addmod :: base @ helpers)] >>
+  FIRST [fa1 (fuel_ok_compile_addmod :: base @ helpers)] >>
+  FIRST [fa1 (fuel_ok_compile_addmod :: base @ helpers)] >>
+  FIRST [fa1 (fuel_ok_compile_addmod :: base @ helpers)] >>
+  FIRST [fa1 (fuel_ok_compile_addmod :: base @ helpers)] >>
+  FIRST [fa1 (fuel_ok_compile_addmod :: base @ helpers)] >>
+  FIRST [fa1 (fuel_ok_compile_addmod :: base @ helpers)] >>
+  FIRST [fa1 (fuel_ok_compile_addmod :: base @ helpers)] >>
+  FIRST [fa1 (fuel_ok_compile_addmod :: base @ helpers)] >>
+  FIRST [fa1 (fuel_ok_compile_addmod :: base @ helpers)] >>
+  FIRST [fa (fuel_ok_compile_addmod :: base @ helpers)] >> simp[is_terminator_def]
 QED
 
 Theorem fuel_ok_compile_mulmod_names:
@@ -455,7 +834,19 @@ Theorem fuel_ok_compile_mulmod_names:
     fuel_ok Wv {} E (compile_mulmod_names cenv ret_ty aty a bty b mty m)
 Proof
   rpt gen_tac >> simp_tac std_ss [eta_def compile_mulmod_names_def] >>
-  fa (fuel_ok_compile_mulmod :: base @ helpers) >> simp[is_terminator_def]
+  FIRST [fa1 (fuel_ok_compile_mulmod :: base @ helpers)] >>
+  FIRST [fa1 (fuel_ok_compile_mulmod :: base @ helpers)] >>
+  FIRST [fa1 (fuel_ok_compile_mulmod :: base @ helpers)] >>
+  FIRST [fa1 (fuel_ok_compile_mulmod :: base @ helpers)] >>
+  FIRST [fa1 (fuel_ok_compile_mulmod :: base @ helpers)] >>
+  FIRST [fa1 (fuel_ok_compile_mulmod :: base @ helpers)] >>
+  FIRST [fa1 (fuel_ok_compile_mulmod :: base @ helpers)] >>
+  FIRST [fa1 (fuel_ok_compile_mulmod :: base @ helpers)] >>
+  FIRST [fa1 (fuel_ok_compile_mulmod :: base @ helpers)] >>
+  FIRST [fa1 (fuel_ok_compile_mulmod :: base @ helpers)] >>
+  FIRST [fa1 (fuel_ok_compile_mulmod :: base @ helpers)] >>
+  FIRST [fa1 (fuel_ok_compile_mulmod :: base @ helpers)] >>
+  FIRST [fa (fuel_ok_compile_mulmod :: base @ helpers)] >> simp[is_terminator_def]
 QED
 
 Theorem fuel_ok_compile_powmod256_names:
@@ -463,7 +854,19 @@ Theorem fuel_ok_compile_powmod256_names:
     fuel_ok Wv {} E (compile_powmod256_names cenv ret_ty aty a bty b)
 Proof
   rpt gen_tac >> simp_tac std_ss [eta_def compile_powmod256_names_def] >>
-  fa (fuel_ok_compile_pow_mod256 :: base @ helpers) >> simp[is_terminator_def]
+  FIRST [fa1 (fuel_ok_compile_pow_mod256 :: base @ helpers)] >>
+  FIRST [fa1 (fuel_ok_compile_pow_mod256 :: base @ helpers)] >>
+  FIRST [fa1 (fuel_ok_compile_pow_mod256 :: base @ helpers)] >>
+  FIRST [fa1 (fuel_ok_compile_pow_mod256 :: base @ helpers)] >>
+  FIRST [fa1 (fuel_ok_compile_pow_mod256 :: base @ helpers)] >>
+  FIRST [fa1 (fuel_ok_compile_pow_mod256 :: base @ helpers)] >>
+  FIRST [fa1 (fuel_ok_compile_pow_mod256 :: base @ helpers)] >>
+  FIRST [fa1 (fuel_ok_compile_pow_mod256 :: base @ helpers)] >>
+  FIRST [fa1 (fuel_ok_compile_pow_mod256 :: base @ helpers)] >>
+  FIRST [fa1 (fuel_ok_compile_pow_mod256 :: base @ helpers)] >>
+  FIRST [fa1 (fuel_ok_compile_pow_mod256 :: base @ helpers)] >>
+  FIRST [fa1 (fuel_ok_compile_pow_mod256 :: base @ helpers)] >>
+  FIRST [fa (fuel_ok_compile_pow_mod256 :: base @ helpers)] >> simp[is_terminator_def]
 QED
 
 (* ===== Helpers that call builtin and ABI code ===== *)
@@ -510,7 +913,19 @@ Theorem fuel_ok_compile_return_value_decode:
     fuel_ok Wv {} E (compile_return_value_decode min_sz max_sz)
 Proof
   rpt gen_tac >> simp_tac std_ss [compile_return_value_decode_def] >>
-  fa (fuel_ok_compile_select :: base) >> simp[is_terminator_def]
+  FIRST [fa1 (fuel_ok_compile_select :: base)] >>
+  FIRST [fa1 (fuel_ok_compile_select :: base)] >>
+  FIRST [fa1 (fuel_ok_compile_select :: base)] >>
+  FIRST [fa1 (fuel_ok_compile_select :: base)] >>
+  FIRST [fa1 (fuel_ok_compile_select :: base)] >>
+  FIRST [fa1 (fuel_ok_compile_select :: base)] >>
+  FIRST [fa1 (fuel_ok_compile_select :: base)] >>
+  FIRST [fa1 (fuel_ok_compile_select :: base)] >>
+  FIRST [fa1 (fuel_ok_compile_select :: base)] >>
+  FIRST [fa1 (fuel_ok_compile_select :: base)] >>
+  FIRST [fa1 (fuel_ok_compile_select :: base)] >>
+  FIRST [fa1 (fuel_ok_compile_select :: base)] >>
+  FIRST [fa (fuel_ok_compile_select :: base)] >> simp[is_terminator_def]
 QED
 
 Theorem fuel_ok_compile_default_return_path:
@@ -520,8 +935,19 @@ Theorem fuel_ok_compile_default_return_path:
          max_sz info)
 Proof
   rpt gen_tac >> simp_tac std_ss [compile_default_return_path_def] >>
-  fa (fuel_ok_compile_return_value_decode :: fuel_ok_emit_inst_jnz ::
-      fuel_ok_emit_inst_jmp :: fuel_ok_compile_abi_decode_to_buf :: base @ helpers) >>
+  FIRST [fa1 (fuel_ok_compile_return_value_decode :: fuel_ok_emit_inst_jnz :: fuel_ok_emit_inst_jmp :: fuel_ok_compile_abi_decode_to_buf :: base @ helpers)] >>
+  FIRST [fa1 (fuel_ok_compile_return_value_decode :: fuel_ok_emit_inst_jnz :: fuel_ok_emit_inst_jmp :: fuel_ok_compile_abi_decode_to_buf :: base @ helpers)] >>
+  FIRST [fa1 (fuel_ok_compile_return_value_decode :: fuel_ok_emit_inst_jnz :: fuel_ok_emit_inst_jmp :: fuel_ok_compile_abi_decode_to_buf :: base @ helpers)] >>
+  FIRST [fa1 (fuel_ok_compile_return_value_decode :: fuel_ok_emit_inst_jnz :: fuel_ok_emit_inst_jmp :: fuel_ok_compile_abi_decode_to_buf :: base @ helpers)] >>
+  FIRST [fa1 (fuel_ok_compile_return_value_decode :: fuel_ok_emit_inst_jnz :: fuel_ok_emit_inst_jmp :: fuel_ok_compile_abi_decode_to_buf :: base @ helpers)] >>
+  FIRST [fa1 (fuel_ok_compile_return_value_decode :: fuel_ok_emit_inst_jnz :: fuel_ok_emit_inst_jmp :: fuel_ok_compile_abi_decode_to_buf :: base @ helpers)] >>
+  FIRST [fa1 (fuel_ok_compile_return_value_decode :: fuel_ok_emit_inst_jnz :: fuel_ok_emit_inst_jmp :: fuel_ok_compile_abi_decode_to_buf :: base @ helpers)] >>
+  FIRST [fa1 (fuel_ok_compile_return_value_decode :: fuel_ok_emit_inst_jnz :: fuel_ok_emit_inst_jmp :: fuel_ok_compile_abi_decode_to_buf :: base @ helpers)] >>
+  FIRST [fa1 (fuel_ok_compile_return_value_decode :: fuel_ok_emit_inst_jnz :: fuel_ok_emit_inst_jmp :: fuel_ok_compile_abi_decode_to_buf :: base @ helpers)] >>
+  FIRST [fa1 (fuel_ok_compile_return_value_decode :: fuel_ok_emit_inst_jnz :: fuel_ok_emit_inst_jmp :: fuel_ok_compile_abi_decode_to_buf :: base @ helpers)] >>
+  FIRST [fa1 (fuel_ok_compile_return_value_decode :: fuel_ok_emit_inst_jnz :: fuel_ok_emit_inst_jmp :: fuel_ok_compile_abi_decode_to_buf :: base @ helpers)] >>
+  FIRST [fa1 (fuel_ok_compile_return_value_decode :: fuel_ok_emit_inst_jnz :: fuel_ok_emit_inst_jmp :: fuel_ok_compile_abi_decode_to_buf :: base @ helpers)] >>
+  FIRST [fa (fuel_ok_compile_return_value_decode :: fuel_ok_emit_inst_jnz :: fuel_ok_emit_inst_jmp :: fuel_ok_compile_abi_decode_to_buf :: base @ helpers)] >>
   simp[is_terminator_def]
 QED
 
@@ -534,9 +960,19 @@ Theorem fuel_ok_compile_external_call_kwargs:
          enc dec)
 Proof
   rpt gen_tac >> simp_tac std_ss [compile_external_call_kwargs_def, LET_THM] >>
-  fa (fuel_ok_compile_return_value_decode :: fuel_ok_compile_default_return_path ::
-      fuel_ok_emit_inst_jnz :: fuel_ok_compile_abi_decode_to_buf ::
-      fuel_ok_compile_abi_encode_to_buf :: base @ helpers) >>
+  FIRST [fa1 (fuel_ok_compile_return_value_decode :: fuel_ok_compile_default_return_path :: fuel_ok_emit_inst_jnz :: fuel_ok_compile_abi_decode_to_buf :: fuel_ok_compile_abi_encode_to_buf :: base @ helpers)] >>
+  FIRST [fa1 (fuel_ok_compile_return_value_decode :: fuel_ok_compile_default_return_path :: fuel_ok_emit_inst_jnz :: fuel_ok_compile_abi_decode_to_buf :: fuel_ok_compile_abi_encode_to_buf :: base @ helpers)] >>
+  FIRST [fa1 (fuel_ok_compile_return_value_decode :: fuel_ok_compile_default_return_path :: fuel_ok_emit_inst_jnz :: fuel_ok_compile_abi_decode_to_buf :: fuel_ok_compile_abi_encode_to_buf :: base @ helpers)] >>
+  FIRST [fa1 (fuel_ok_compile_return_value_decode :: fuel_ok_compile_default_return_path :: fuel_ok_emit_inst_jnz :: fuel_ok_compile_abi_decode_to_buf :: fuel_ok_compile_abi_encode_to_buf :: base @ helpers)] >>
+  FIRST [fa1 (fuel_ok_compile_return_value_decode :: fuel_ok_compile_default_return_path :: fuel_ok_emit_inst_jnz :: fuel_ok_compile_abi_decode_to_buf :: fuel_ok_compile_abi_encode_to_buf :: base @ helpers)] >>
+  FIRST [fa1 (fuel_ok_compile_return_value_decode :: fuel_ok_compile_default_return_path :: fuel_ok_emit_inst_jnz :: fuel_ok_compile_abi_decode_to_buf :: fuel_ok_compile_abi_encode_to_buf :: base @ helpers)] >>
+  FIRST [fa1 (fuel_ok_compile_return_value_decode :: fuel_ok_compile_default_return_path :: fuel_ok_emit_inst_jnz :: fuel_ok_compile_abi_decode_to_buf :: fuel_ok_compile_abi_encode_to_buf :: base @ helpers)] >>
+  FIRST [fa1 (fuel_ok_compile_return_value_decode :: fuel_ok_compile_default_return_path :: fuel_ok_emit_inst_jnz :: fuel_ok_compile_abi_decode_to_buf :: fuel_ok_compile_abi_encode_to_buf :: base @ helpers)] >>
+  FIRST [fa1 (fuel_ok_compile_return_value_decode :: fuel_ok_compile_default_return_path :: fuel_ok_emit_inst_jnz :: fuel_ok_compile_abi_decode_to_buf :: fuel_ok_compile_abi_encode_to_buf :: base @ helpers)] >>
+  FIRST [fa1 (fuel_ok_compile_return_value_decode :: fuel_ok_compile_default_return_path :: fuel_ok_emit_inst_jnz :: fuel_ok_compile_abi_decode_to_buf :: fuel_ok_compile_abi_encode_to_buf :: base @ helpers)] >>
+  FIRST [fa1 (fuel_ok_compile_return_value_decode :: fuel_ok_compile_default_return_path :: fuel_ok_emit_inst_jnz :: fuel_ok_compile_abi_decode_to_buf :: fuel_ok_compile_abi_encode_to_buf :: base @ helpers)] >>
+  FIRST [fa1 (fuel_ok_compile_return_value_decode :: fuel_ok_compile_default_return_path :: fuel_ok_emit_inst_jnz :: fuel_ok_compile_abi_decode_to_buf :: fuel_ok_compile_abi_encode_to_buf :: base @ helpers)] >>
+  FIRST [fa (fuel_ok_compile_return_value_decode :: fuel_ok_compile_default_return_path :: fuel_ok_emit_inst_jnz :: fuel_ok_compile_abi_decode_to_buf :: fuel_ok_compile_abi_encode_to_buf :: base @ helpers)] >>
   simp[is_terminator_def]
 QED
 
@@ -552,7 +988,19 @@ Proof
     (Cases_on `cenv.ce_func_info (nsid_to_string fid)` >> Cases_on `r` >> gvs[]) >>
   pop_assum (fn th =>
     simp_tac std_ss [eta_def compile_call_def, LET_THM, uncurry_map, th]) >>
-  fa (lv :: base @ helpers) >> simp[is_terminator_def]
+  FIRST [fa1 (lv :: base @ helpers)] >>
+  FIRST [fa1 (lv :: base @ helpers)] >>
+  FIRST [fa1 (lv :: base @ helpers)] >>
+  FIRST [fa1 (lv :: base @ helpers)] >>
+  FIRST [fa1 (lv :: base @ helpers)] >>
+  FIRST [fa1 (lv :: base @ helpers)] >>
+  FIRST [fa1 (lv :: base @ helpers)] >>
+  FIRST [fa1 (lv :: base @ helpers)] >>
+  FIRST [fa1 (lv :: base @ helpers)] >>
+  FIRST [fa1 (lv :: base @ helpers)] >>
+  FIRST [fa1 (lv :: base @ helpers)] >>
+  FIRST [fa1 (lv :: base @ helpers)] >>
+  FIRST [fa (lv :: base @ helpers)] >> simp[is_terminator_def]
 QED
 
 val extl = [fuel_ok_compile_ext_call_kwargs, fuel_ok_compile_external_call_kwargs];
@@ -566,7 +1014,19 @@ Theorem fuel_ok_compile_call_ext[local]:
 Proof
   rpt strip_tac >> Cases_on `args`
   >- (simp_tac std_ss [eta_def compile_call_def, LET_THM, uncurry_map, listTheory.list_case_def] >>
-      fa (lv :: extl @ base @ helpers) >> simp[is_terminator_def]) >>
+      FIRST [fa1 (lv :: extl @ base @ helpers)] >>
+      FIRST [fa1 (lv :: extl @ base @ helpers)] >>
+      FIRST [fa1 (lv :: extl @ base @ helpers)] >>
+      FIRST [fa1 (lv :: extl @ base @ helpers)] >>
+      FIRST [fa1 (lv :: extl @ base @ helpers)] >>
+      FIRST [fa1 (lv :: extl @ base @ helpers)] >>
+      FIRST [fa1 (lv :: extl @ base @ helpers)] >>
+      FIRST [fa1 (lv :: extl @ base @ helpers)] >>
+      FIRST [fa1 (lv :: extl @ base @ helpers)] >>
+      FIRST [fa1 (lv :: extl @ base @ helpers)] >>
+      FIRST [fa1 (lv :: extl @ base @ helpers)] >>
+      FIRST [fa1 (lv :: extl @ base @ helpers)] >>
+      FIRST [fa (lv :: extl @ base @ helpers)] >> simp[is_terminator_def]) >>
   simp_tac std_ss [eta_def compile_call_def, LET_THM, uncurry_map, listTheory.list_case_def] >>
   (* the wrapped return type only feeds pure arguments; generalize it so the
      fuel steps don't case-split on needs_external_call_wrap *)
@@ -601,7 +1061,19 @@ Theorem fuel_ok_compile_call_send[local]:
       fuel_ok Wv {} E (compile_call cfn cenv ret_ty ty (Send has_gas) args dflt)
 Proof
   rpt strip_tac >> simp_tac std_ss [eta_def compile_call_def, LET_THM, uncurry_map, listTheory.list_case_def] >>
-  fa (lv :: base @ helpers) >> simp[is_terminator_def]
+  FIRST [fa1 (lv :: base @ helpers)] >>
+  FIRST [fa1 (lv :: base @ helpers)] >>
+  FIRST [fa1 (lv :: base @ helpers)] >>
+  FIRST [fa1 (lv :: base @ helpers)] >>
+  FIRST [fa1 (lv :: base @ helpers)] >>
+  FIRST [fa1 (lv :: base @ helpers)] >>
+  FIRST [fa1 (lv :: base @ helpers)] >>
+  FIRST [fa1 (lv :: base @ helpers)] >>
+  FIRST [fa1 (lv :: base @ helpers)] >>
+  FIRST [fa1 (lv :: base @ helpers)] >>
+  FIRST [fa1 (lv :: base @ helpers)] >>
+  FIRST [fa1 (lv :: base @ helpers)] >>
+  FIRST [fa (lv :: base @ helpers)] >> simp[is_terminator_def]
 QED
 
 Theorem fuel_ok_compile_call_rawcall[local]:
@@ -611,8 +1083,19 @@ Theorem fuel_ok_compile_call_rawcall[local]:
         (compile_call cfn cenv ret_ty ty (RawCallTarget rcf) args dflt)
 Proof
   rpt strip_tac >> simp_tac std_ss [eta_def compile_call_def, LET_THM, uncurry_map, listTheory.list_case_def] >>
-  fa (lv :: fuel_ok_compile_ext_call_kwargs :: fuel_ok_compile_raw_call_outbuf ::
-      fuel_ok_compile_raw_call_finish :: base @ helpers) >>
+  FIRST [fa1 (lv :: fuel_ok_compile_ext_call_kwargs :: fuel_ok_compile_raw_call_outbuf :: fuel_ok_compile_raw_call_finish :: base @ helpers)] >>
+  FIRST [fa1 (lv :: fuel_ok_compile_ext_call_kwargs :: fuel_ok_compile_raw_call_outbuf :: fuel_ok_compile_raw_call_finish :: base @ helpers)] >>
+  FIRST [fa1 (lv :: fuel_ok_compile_ext_call_kwargs :: fuel_ok_compile_raw_call_outbuf :: fuel_ok_compile_raw_call_finish :: base @ helpers)] >>
+  FIRST [fa1 (lv :: fuel_ok_compile_ext_call_kwargs :: fuel_ok_compile_raw_call_outbuf :: fuel_ok_compile_raw_call_finish :: base @ helpers)] >>
+  FIRST [fa1 (lv :: fuel_ok_compile_ext_call_kwargs :: fuel_ok_compile_raw_call_outbuf :: fuel_ok_compile_raw_call_finish :: base @ helpers)] >>
+  FIRST [fa1 (lv :: fuel_ok_compile_ext_call_kwargs :: fuel_ok_compile_raw_call_outbuf :: fuel_ok_compile_raw_call_finish :: base @ helpers)] >>
+  FIRST [fa1 (lv :: fuel_ok_compile_ext_call_kwargs :: fuel_ok_compile_raw_call_outbuf :: fuel_ok_compile_raw_call_finish :: base @ helpers)] >>
+  FIRST [fa1 (lv :: fuel_ok_compile_ext_call_kwargs :: fuel_ok_compile_raw_call_outbuf :: fuel_ok_compile_raw_call_finish :: base @ helpers)] >>
+  FIRST [fa1 (lv :: fuel_ok_compile_ext_call_kwargs :: fuel_ok_compile_raw_call_outbuf :: fuel_ok_compile_raw_call_finish :: base @ helpers)] >>
+  FIRST [fa1 (lv :: fuel_ok_compile_ext_call_kwargs :: fuel_ok_compile_raw_call_outbuf :: fuel_ok_compile_raw_call_finish :: base @ helpers)] >>
+  FIRST [fa1 (lv :: fuel_ok_compile_ext_call_kwargs :: fuel_ok_compile_raw_call_outbuf :: fuel_ok_compile_raw_call_finish :: base @ helpers)] >>
+  FIRST [fa1 (lv :: fuel_ok_compile_ext_call_kwargs :: fuel_ok_compile_raw_call_outbuf :: fuel_ok_compile_raw_call_finish :: base @ helpers)] >>
+  FIRST [fa (lv :: fuel_ok_compile_ext_call_kwargs :: fuel_ok_compile_raw_call_outbuf :: fuel_ok_compile_raw_call_finish :: base @ helpers)] >>
   simp[is_terminator_def]
 QED
 
@@ -623,9 +1106,19 @@ Theorem fuel_ok_compile_call_rawcalldata[local]:
         (compile_call cfn cenv ret_ty ty (RawCallCalldataTarget rcf) args dflt)
 Proof
   rpt strip_tac >> simp_tac std_ss [eta_def compile_call_def, LET_THM, uncurry_map, listTheory.list_case_def] >>
-  fa (lv :: fuel_ok_compile_ext_call_kwargs :: fuel_ok_compile_raw_call_outbuf ::
-      fuel_ok_compile_raw_call_finish :: fuel_ok_compile_msg_data_to_memory ::
-      base @ helpers) >>
+  FIRST [fa1 (lv :: fuel_ok_compile_ext_call_kwargs :: fuel_ok_compile_raw_call_outbuf :: fuel_ok_compile_raw_call_finish :: fuel_ok_compile_msg_data_to_memory :: base @ helpers)] >>
+  FIRST [fa1 (lv :: fuel_ok_compile_ext_call_kwargs :: fuel_ok_compile_raw_call_outbuf :: fuel_ok_compile_raw_call_finish :: fuel_ok_compile_msg_data_to_memory :: base @ helpers)] >>
+  FIRST [fa1 (lv :: fuel_ok_compile_ext_call_kwargs :: fuel_ok_compile_raw_call_outbuf :: fuel_ok_compile_raw_call_finish :: fuel_ok_compile_msg_data_to_memory :: base @ helpers)] >>
+  FIRST [fa1 (lv :: fuel_ok_compile_ext_call_kwargs :: fuel_ok_compile_raw_call_outbuf :: fuel_ok_compile_raw_call_finish :: fuel_ok_compile_msg_data_to_memory :: base @ helpers)] >>
+  FIRST [fa1 (lv :: fuel_ok_compile_ext_call_kwargs :: fuel_ok_compile_raw_call_outbuf :: fuel_ok_compile_raw_call_finish :: fuel_ok_compile_msg_data_to_memory :: base @ helpers)] >>
+  FIRST [fa1 (lv :: fuel_ok_compile_ext_call_kwargs :: fuel_ok_compile_raw_call_outbuf :: fuel_ok_compile_raw_call_finish :: fuel_ok_compile_msg_data_to_memory :: base @ helpers)] >>
+  FIRST [fa1 (lv :: fuel_ok_compile_ext_call_kwargs :: fuel_ok_compile_raw_call_outbuf :: fuel_ok_compile_raw_call_finish :: fuel_ok_compile_msg_data_to_memory :: base @ helpers)] >>
+  FIRST [fa1 (lv :: fuel_ok_compile_ext_call_kwargs :: fuel_ok_compile_raw_call_outbuf :: fuel_ok_compile_raw_call_finish :: fuel_ok_compile_msg_data_to_memory :: base @ helpers)] >>
+  FIRST [fa1 (lv :: fuel_ok_compile_ext_call_kwargs :: fuel_ok_compile_raw_call_outbuf :: fuel_ok_compile_raw_call_finish :: fuel_ok_compile_msg_data_to_memory :: base @ helpers)] >>
+  FIRST [fa1 (lv :: fuel_ok_compile_ext_call_kwargs :: fuel_ok_compile_raw_call_outbuf :: fuel_ok_compile_raw_call_finish :: fuel_ok_compile_msg_data_to_memory :: base @ helpers)] >>
+  FIRST [fa1 (lv :: fuel_ok_compile_ext_call_kwargs :: fuel_ok_compile_raw_call_outbuf :: fuel_ok_compile_raw_call_finish :: fuel_ok_compile_msg_data_to_memory :: base @ helpers)] >>
+  FIRST [fa1 (lv :: fuel_ok_compile_ext_call_kwargs :: fuel_ok_compile_raw_call_outbuf :: fuel_ok_compile_raw_call_finish :: fuel_ok_compile_msg_data_to_memory :: base @ helpers)] >>
+  FIRST [fa (lv :: fuel_ok_compile_ext_call_kwargs :: fuel_ok_compile_raw_call_outbuf :: fuel_ok_compile_raw_call_finish :: fuel_ok_compile_msg_data_to_memory :: base @ helpers)] >>
   simp[is_terminator_def]
 QED
 
@@ -635,7 +1128,19 @@ Theorem fuel_ok_compile_call_rawlog[local]:
       fuel_ok Wv {} E (compile_call cfn cenv ret_ty ty RawLog args dflt)
 Proof
   rpt strip_tac >> simp_tac std_ss [eta_def compile_call_def, LET_THM, uncurry_map, listTheory.list_case_def] >>
-  fa (lv :: fuel_ok_compile_multi_exprs :: base @ helpers) >>
+  FIRST [fa1 (lv :: fuel_ok_compile_multi_exprs :: base @ helpers)] >>
+  FIRST [fa1 (lv :: fuel_ok_compile_multi_exprs :: base @ helpers)] >>
+  FIRST [fa1 (lv :: fuel_ok_compile_multi_exprs :: base @ helpers)] >>
+  FIRST [fa1 (lv :: fuel_ok_compile_multi_exprs :: base @ helpers)] >>
+  FIRST [fa1 (lv :: fuel_ok_compile_multi_exprs :: base @ helpers)] >>
+  FIRST [fa1 (lv :: fuel_ok_compile_multi_exprs :: base @ helpers)] >>
+  FIRST [fa1 (lv :: fuel_ok_compile_multi_exprs :: base @ helpers)] >>
+  FIRST [fa1 (lv :: fuel_ok_compile_multi_exprs :: base @ helpers)] >>
+  FIRST [fa1 (lv :: fuel_ok_compile_multi_exprs :: base @ helpers)] >>
+  FIRST [fa1 (lv :: fuel_ok_compile_multi_exprs :: base @ helpers)] >>
+  FIRST [fa1 (lv :: fuel_ok_compile_multi_exprs :: base @ helpers)] >>
+  FIRST [fa1 (lv :: fuel_ok_compile_multi_exprs :: base @ helpers)] >>
+  FIRST [fa (lv :: fuel_ok_compile_multi_exprs :: base @ helpers)] >>
   simp[is_terminator_def]
 QED
 
@@ -645,7 +1150,19 @@ Theorem fuel_ok_compile_call_rawrevert[local]:
       fuel_ok Wv {} E (compile_call cfn cenv ret_ty ty RawRevert args dflt)
 Proof
   rpt strip_tac >> simp_tac std_ss [eta_def compile_call_def, LET_THM, uncurry_map, listTheory.list_case_def] >>
-  fa (lv :: fuel_ok_compile_raw_revert :: base @ helpers) >>
+  FIRST [fa1 (lv :: fuel_ok_compile_raw_revert :: base @ helpers)] >>
+  FIRST [fa1 (lv :: fuel_ok_compile_raw_revert :: base @ helpers)] >>
+  FIRST [fa1 (lv :: fuel_ok_compile_raw_revert :: base @ helpers)] >>
+  FIRST [fa1 (lv :: fuel_ok_compile_raw_revert :: base @ helpers)] >>
+  FIRST [fa1 (lv :: fuel_ok_compile_raw_revert :: base @ helpers)] >>
+  FIRST [fa1 (lv :: fuel_ok_compile_raw_revert :: base @ helpers)] >>
+  FIRST [fa1 (lv :: fuel_ok_compile_raw_revert :: base @ helpers)] >>
+  FIRST [fa1 (lv :: fuel_ok_compile_raw_revert :: base @ helpers)] >>
+  FIRST [fa1 (lv :: fuel_ok_compile_raw_revert :: base @ helpers)] >>
+  FIRST [fa1 (lv :: fuel_ok_compile_raw_revert :: base @ helpers)] >>
+  FIRST [fa1 (lv :: fuel_ok_compile_raw_revert :: base @ helpers)] >>
+  FIRST [fa1 (lv :: fuel_ok_compile_raw_revert :: base @ helpers)] >>
+  FIRST [fa (lv :: fuel_ok_compile_raw_revert :: base @ helpers)] >>
   simp[is_terminator_def]
 QED
 
@@ -656,7 +1173,19 @@ Theorem fuel_ok_compile_call_selfdestruct[local]:
         (compile_call cfn cenv ret_ty ty SelfDestructTarget args dflt)
 Proof
   rpt strip_tac >> simp_tac std_ss [eta_def compile_call_def, LET_THM, uncurry_map, listTheory.list_case_def] >>
-  fa (lv :: fuel_ok_compile_selfdestruct :: base @ helpers) >>
+  FIRST [fa1 (lv :: fuel_ok_compile_selfdestruct :: base @ helpers)] >>
+  FIRST [fa1 (lv :: fuel_ok_compile_selfdestruct :: base @ helpers)] >>
+  FIRST [fa1 (lv :: fuel_ok_compile_selfdestruct :: base @ helpers)] >>
+  FIRST [fa1 (lv :: fuel_ok_compile_selfdestruct :: base @ helpers)] >>
+  FIRST [fa1 (lv :: fuel_ok_compile_selfdestruct :: base @ helpers)] >>
+  FIRST [fa1 (lv :: fuel_ok_compile_selfdestruct :: base @ helpers)] >>
+  FIRST [fa1 (lv :: fuel_ok_compile_selfdestruct :: base @ helpers)] >>
+  FIRST [fa1 (lv :: fuel_ok_compile_selfdestruct :: base @ helpers)] >>
+  FIRST [fa1 (lv :: fuel_ok_compile_selfdestruct :: base @ helpers)] >>
+  FIRST [fa1 (lv :: fuel_ok_compile_selfdestruct :: base @ helpers)] >>
+  FIRST [fa1 (lv :: fuel_ok_compile_selfdestruct :: base @ helpers)] >>
+  FIRST [fa1 (lv :: fuel_ok_compile_selfdestruct :: base @ helpers)] >>
+  FIRST [fa (lv :: fuel_ok_compile_selfdestruct :: base @ helpers)] >>
   simp[is_terminator_def]
 QED
 
