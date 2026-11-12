@@ -8,6 +8,7 @@ Ancestors
   exprSimConvert exprLowering exprOperandVar loweringSlice freshWrites compileEnv
   rich_list fragExec stmtSimForced gasSummary gasOutcome gasSummaryCompose
   fragGasMode fragGasPath valueCopyBytes loweringPosts exprSimConvertBytes
+  gasStorage vyperStorageTrace vyperStorageFootprint
 
 Theorem convert_call_vv_layout[local]:
   expr_body_pre cenv cx env (Call ann (IntCall fid) args drv) es /\

@@ -7,6 +7,7 @@ Ancestors
   exprSimHyps exprSimHypsDefs exprSimDefs exprSimMemDefs
   exprLowering loweringPosts compileEnv valueCopyBytes context
   gasSummary gasSummaryCompose fragGasMode vyperState vyperInterpreter
+  gasStorage vyperStorageTrace vyperStorageFootprint
   convertScalarTyping vyperEvalExprPreservesScopesDom exprSimSource exprLoweringProps
 
 Theorem call_dynamic_vv_convert_summary:
