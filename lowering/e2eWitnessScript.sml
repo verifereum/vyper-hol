@@ -419,10 +419,43 @@ End
 
 (* ===== The premises on p23, one by one ===== *)
 
+val p23_check_dep = EVAL ``check_contract T [] 2w [(NONE, p23_tops)]``;
+val p23_check_run = EVAL ``check_contract F [] 2w [(NONE, p23_tops)]``;
+val p23_initial_imms = EVAL
+  ``initial_immutables (type_env_all_modules [(NONE,p23_tops)]) [(NONE,p23_tops)]``;
+
+val p23_constants_eval = EVAL
+  ``evaluate_all_constants
+      (deploy_evaluation_context p23_tops initial_machine_state p23_deploy_tx)
+      (initial_machine_state with
+        <| immutables := [(2w, THE (initial_immutables
+             (type_env_all_modules [(NONE,p23_tops)]) [(NONE,p23_tops)]))];
+           exports := [(2w,[])] |>) 2w [(NONE,p23_tops)]``;
+val p23_constants_eval_expanded = SIMP_RULE (srw_ss())
+  [vyperInterpreterTheory.initial_machine_state_def, p23_deploy_tx_def,
+   vyperContextTheory.empty_call_txn_def, p23_initial_imms] p23_constants_eval;
+
 Theorem p23_deploy_typing:
   deploy_typing_ok p23_tops initial_machine_state p23_deploy_tx
 Proof
-  cheat
+  simp[deploy_typing_ok_def, vyperInterpreterTheory.initial_machine_state_def,
+       p23_deploy_tx_def, vyperContextTheory.empty_call_txn_def,
+       p23_check_dep, p23_check_run, p23_initial_imms] >>
+  simp[vyperTypeInitialStateTheory.machine_well_typed_def,
+       vyperTypeInvariantsTheory.accounts_well_typed_def,
+       vyperTypeInvariantsTheory.account_well_typed_def,
+       vfmStateTheory.lookup_account_def, vfmStateTheory.empty_accounts_def,
+       vfmStateTheory.empty_account_state_def,
+       vyperTypeContractSoundnessTheory.call_tx_well_typed_def,
+       vyperTypeEntryReadinessTheory.checked_deployment_constants_ready_def] >>
+  simp[p23_constants_eval_expanded,
+       vyperTypeEntryReadinessTheory.deployment_constants_output_typed_def,
+       vyperTypeInvariantsTheory.imms_well_typed_def,
+       p23_tops_def] >>
+  rpt gen_tac >> Cases_on `id = "X"` >>
+  simp[finite_mapTheory.FLOOKUP_UPDATE] >>
+  rpt strip_tac >> gvs[vyperTypingTheory.value_has_type_def,
+                       vyperTypingTheory.well_formed_type_value_def]
 QED
 
 Theorem p23_deploy_state:
@@ -432,10 +465,40 @@ Proof
   cheat
 QED
 
+val p23_exports_eval = EVAL ``exports_ok [] 2w [(NONE,p23_tops)] []``;
+val p23_exports_eval_expanded = REWRITE_RULE
+  [vyperTypeContractTheory.exports_ok_def,p23_tops_def] p23_exports_eval;
+val p23_call_machine_eval = EVAL ``p23_am_call``;
+
 Theorem p23_source_typing:
   source_typing_ok p23_tops p23_am_call p23_call_tx
 Proof
-  cheat
+  simp[source_typing_ok_def, p23_call_machine_eval, p23_call_tx_def,
+       vyperContextTheory.empty_call_txn_def, p23_check_run,
+       vyperTypeContractSoundnessTheory.checked_contract_runtime_ready_def,
+       vyperTypeInitialStateTheory.machine_well_typed_def] >>
+  simp[p23_tops_def, vyperTypeContractTheory.exports_ok_def,
+       vyperTypeContractTheory.var_allocated_def,
+       vyperTypeContractSoundnessTheory.call_tx_well_typed_def,
+       p23_get_calldata_def] >>
+  simp[p23_exports_eval_expanded] >>
+  conj_tac >- (simp[vyperTypeInitialStateTheory.immutables_ready_def,
+                         finite_mapTheory.FLOOKUP_UPDATE,
+       vyperInterpreterTheory.initial_evaluation_context_def,
+       vyperStateTheory.get_source_immutables_def,
+       vyperStateTheory.find_var_decl_by_name_def,
+       vyperValueTheory.evaluate_type_def] >>
+    simp[vyperContextTheory.get_module_code_def] >> rpt strip_tac >>
+    gvs[vyperStateTheory.find_var_decl_by_name_def]) >>
+  conj_tac >- (rw[vyperTypeInvariantsTheory.accounts_well_typed_def] >>
+    Cases_on `addr = 2w` >>
+    simp[vyperTypeInvariantsTheory.account_well_typed_def,
+         vfmStateTheory.lookup_account_def, combinTheory.APPLY_UPDATE_THM]) >>
+  simp[vyperTypeInvariantsTheory.imms_well_typed_def,
+       finite_mapTheory.FLOOKUP_UPDATE] >>
+  rpt gen_tac >> Cases_on `id = "X"` >> simp[] >>
+  rpt strip_tac >> gvs[vyperTypingTheory.value_has_type_def,
+                       vyperTypingTheory.well_formed_type_value_def]
 QED
 
 val p23_call_context_eval = EVAL
