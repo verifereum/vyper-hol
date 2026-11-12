@@ -188,6 +188,59 @@ Proof
   qexistsl_tac [`p`, `s`, `sm`, `post_value_type cenv e`] >> simp[]
 QED
 
+Theorem snapshot_word_unwrap_readonly[local]:
+  !ctx func cenv cx e es sa sm sb s0 ee tv v vv op s.
+    post_value_type cenv e = expr_type e /\
+    is_word_type (expr_type e) /\
+    unwrap_value cenv vv sm = (op, sb) /\
+    read_result cx tv ee = (INL v, ee) /\
+    local_ptrs_reserved cenv sa /\ sa.cs_next_var <= sm.cs_next_var /\
+    fn_has_code sm sb func /\ fn_inst_ids_distinct func /\
+    (?tvt. evaluate_type (get_tenv cx) (expr_type e) = SOME tvt) /\
+    vv_post ctx func cenv cx e es sa sm s0 ee tv vv s /\
+    vv_store_bound cx (expr_type e) (expr_type e) ee tv vv s /\
+    alloca_history func s /\ ~s.vs_halted /\
+    s.vs_current_bb = sm.cs_current_bb /\
+    s.vs_inst_idx = LENGTH sm.cs_current_insts ==>
+    ?u. gas_path_mem ctx func s 0 (OK u) /\
+        expr_post ctx func cenv cx e es sa sb s0 ee v op u /\
+        u.vs_memory = s.vs_memory /\
+        u.vs_alloca_next = s.vs_alloca_next /\ alloca_history func u /\
+        u.vs_current_bb = sb.cs_current_bb /\
+        u.vs_inst_idx = LENGTH sb.cs_current_insts
+Proof
+  rpt gen_tac >> strip_tac >>
+  drule_all vv_post_read_result >> strip_tac >>
+  `local_ptrs_reserved cenv sm` by
+    (irule exprLoweringPropsTheory.local_ptrs_reserved_next_var >>
+     qexists_tac `sa` >> simp[]) >>
+  Cases_on `vv`
+  >- (gvs[unwrap_value_def, comp_return_def] >> qexists_tac `s` >>
+      simp[Once gas_path_mem_cases] >>
+      gvs[vv_post_def, vv_holds_def, vv_at_def, vv_own_def,
+          expr_post_def, expr_val_rel_def, expr_val_at_def, expr_val_own_def,
+          read_result_def, return_def] >> metis_tac[]) >>
+  rename1 `LocatedValue t p` >>
+  `is_word_type t` by
+    (gvs[vv_post_def, vv_holds_def, is_bytestring_word_type] >> metis_tac[]) >>
+  Cases_on `p.ptr_location`
+  >- (irule snapshot_memory_word_readonly >> simp[] >>
+      qexistsl_tac [`p`, `sm`, `t`] >> simp[] >>
+      `?w. eval_operand p.ptr_operand s = SOME w` by
+        (gvs[vv_post_def, vv_holds_def] >> metis_tac[]) >>
+      qexists_tac `w` >> simp[] >>
+      `type_memory_size tvt = 32` by metis_tac[exprSimPropsTheory.word_tv_memory_size] >>
+      gvs[vv_store_bound_def] >> first_x_assum drule_all >> simp[]) 
+  >- (irule snapshot_storage_word_readonly >> simp[] >> metis_tac[])
+  >- (irule snapshot_storage_word_readonly >> simp[] >> metis_tac[])
+  >- (Cases_on `cenv.ce_is_ctor`
+      >- (irule snapshot_ctor_word_readonly >> simp[] >>
+          qexistsl_tac [`p`, `sm`, `t`] >> simp[]) >>
+      irule snapshot_runtime_word_readonly >> simp[] >>
+      qexistsl_tac [`p`, `sm`, `t`] >> simp[]) >>
+  gvs[vv_post_def, vv_holds_def]
+QED
+
 Theorem snapshot_vv_counted_mem:
   !ctx func cenv cx e es sa sm sb s0 ee tv v vv saved s.
     post_value_type cenv e = expr_type e /\
