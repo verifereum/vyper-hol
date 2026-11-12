@@ -10,11 +10,22 @@
  *)
 Theory fmpStageBlockSim
 Ancestors
+  fmpStageBlockSimEntryShape fmpStageBlockSimEntryAssembly cfgHelpers fnFrameStepsPhi
   fmpStageOpSteps fmpStageFmpSteps fmpStageRetStep fmpStageBlockSimCode fmpStageControl
   fmpStageOpBase fmpStageRel ptrStaticDiscipline o1PassContract ptrDiscipline
   contextCodegenRel fmpReclaimDefs fmpAnalysisDefs passSimulationDefs
   venomExecProofs venomInstProofs venomStepProps venomWf venomExecSemantics
   venomState venomInst finite_map words list
+
+Theorem lookup_get_active[local]:
+  lookup_block st.vs_current_bb f.fn_blocks = SOME b /\
+  get_instruction b st.vs_inst_idx = SOME i ==>
+  active_inst f i st
+Proof
+  rw[active_inst_def, get_instruction_def] >> qexists_tac `b` >>
+  imp_res_tac venomExecProofsTheory.lookup_block_MEM >>
+  imp_res_tac venomExecProofsTheory.lookup_block_label >> gvs[]
+QED
 
 Theorem fmp_stage_block_entry:
   fmp_stage_ctx rpolicy D C C' vs vs' fmp eom /\
@@ -30,20 +41,44 @@ Theorem fmp_stage_block_entry:
       (entry_prov fn (jump_to lbl sb) G)
       (entry_taint_vars fn (jump_to lbl sb) tn) fn s1 lo t1 ts
 Proof
-  cheat
+  strip_tac >>
+  drule_all fmpStageOpBaseTheory.fmp_stage_frame_facts >> strip_tac >>
+  `wf_function fn /\ first_block_no_preds fn /\ all_reachable fn` by
+    fs[o1_fn_shape_def, make_ssa_input_ok_def] >>
+  drule_all fmp_entry_jump_edge >> strip_tac >>
+  drule_all fmp_entry_jump_dfs >> strip_tac >>
+  rename1 `lookup_block sb.vs_current_bb fn.fn_blocks = SOME cb` >>
+  `?bb. lookup_block lbl fn.fn_blocks = SOME bb` by
+    (qpat_x_assum `enters_block _ _ _` mp_tac >>
+     simp[enters_block_def, jump_to_def, AllCaseEqs()] >> metis_tac[]) >>
+  `MEM bb fn.fn_blocks /\ bb.bb_label = lbl` by
+    metis_tac[venomExecProofsTheory.lookup_block_MEM,
+              venomExecProofsTheory.lookup_block_label] >>
+  `?infos ctx runner. fmp_stage_lowered infos ctx runner fn fn'` by
+    (fs[fmp_stage_rel_def, fmp_frame_rel_def] >> metis_tac[]) >>
+  drule fmp_entry_block_phis >> disch_then (qspec_then `bb` mp_tac) >>
+  impl_tac >- gvs[] >> strip_tac >>
+  `EL sb.vs_inst_idx cb.bb_instructions = bi` by
+    (irule active_inst_unique >> qexistsl_tac [`fn`, `sb`] >>
+     fs[venomWfTheory.wf_function_def] >>
+     irule lookup_get_active >> qexists_tac `cb` >>
+     simp[get_instruction_def] >> decide_tac) >>
+  `MEM lbl (cfg_succs_of (cfg_analyze fn) cb.bb_label)` by
+    (irule bb_succs_in_cfg_succs >>
+     fs[venomWfTheory.wf_function_def]) >>
+  irule fmp_entry_stage_from_geometry >>
+  goal_assum (drule_at Any) >>
+  simp[] >> rpt conj_tac
+  >- (qexists_tac `bb'` >> gvs[] >> rpt conj_tac >>
+      FIRST [rpt gen_tac >> strip_tac >> conj_tac
+             >- metis_tac[fmp_entry_root_label] >>
+             irule fmp_entry_phi_tidx >> simp[],
+             metis_tac[phi_eval_collect]])
+  >- metis_tac[] >>
+  qexistsl_tac [`C`, `k`, `rpolicy`, `vs`, `vs'`] >> gvs[]
 QED
 
 (* ===== Glue: one exec_block, block-local facts ===== *)
-
-Theorem lookup_get_active[local]:
-  lookup_block st.vs_current_bb f.fn_blocks = SOME b /\
-  get_instruction b st.vs_inst_idx = SOME i ==>
-  active_inst f i st
-Proof
-  rw[active_inst_def, get_instruction_def] >> qexists_tac `b` >>
-  imp_res_tac venomExecProofsTheory.lookup_block_MEM >>
-  imp_res_tac venomExecProofsTheory.lookup_block_label >> gvs[]
-QED
 
 Theorem fmp_stage_rel_cur[local]:
   fmp_stage_rel D C' sm fmp0 raw0 eom restored stk PG G tn fn s lo t ts ==>
