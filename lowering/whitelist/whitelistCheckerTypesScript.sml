@@ -381,24 +381,6 @@ Proof
   Cases_on `blt` >> rw[well_typed_builtin_app_def] >> simp[]
 QED
 
-(* Row 42 (copies and shape): a literal is typed at a tuple of its element
-   types or at an array of their common type, so supported_literal_elements
-   reduces to the element-type parts. *)
-Theorem well_typed_make_array_literal_elements:
-  well_typed_builtin_app ty (MakeArray eo bd) (MAP expr_type es) ==>
-  (supported_literal_elements tops ty es <=>
-   supported_place_type tops ty /\
-   (!tys. ty = TupleT tys ==> supported_tuple_type ty))
-Proof
-  Cases_on `eo` >> rw[well_typed_builtin_app_def] >>
-  simp[supported_literal_elements_def]
-  >- (`LIST_REL supported_copy_types (MAP expr_type es) (MAP expr_type es)`
-        by (irule EVERY2_refl >> simp[supported_copy_types_refl]) >>
-      simp[])
-  >> gvs[EVERY_MAP, EVERY_MEM] >> eq_tac >> rw[] >> res_tac >>
-  gvs[supported_copy_types_refl]
-QED
-
 (* Row 43 (copies): a struct literal lists the declared fields in order at
    their declared types, so supported_struct_elements reduces to the place
    type.  Field names are distinct by check_contract_struct_fields_distinct
