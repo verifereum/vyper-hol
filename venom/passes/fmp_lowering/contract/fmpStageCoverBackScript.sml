@@ -20,6 +20,7 @@ Ancestors
   finite_map words list venomWf venomWfProps
   makeSsaCurrentLockstep makeSsaCurrentPhiBatchRuntime analysisSimProofsBase
   venomExecProofs rich_list
+  fmpStageCoverBackArity fmpStageCoverBackParam fmpStageCoverBackKeptOps
 
 Theorem fmp_stage_src_defined:
   fmp_stage_ctx rpolicy D C C' vs vs' fmp eom /\
@@ -56,7 +57,20 @@ Theorem fmp_stage_back_kept:
   terminates (step_inst k' C' inst t) ==>
   terminates (step_inst k C inst s)
 Proof
-  cheat
+  strip_tac >>
+  Cases_on `inst.inst_opcode = PARAM`
+  >- (`!stk0 PG0 G0 tn0 caller inv st name args callee.
+         frame_reachable vs C stk0 PG0 G0 tn0 caller inv st /\
+         active_inst caller inv st /\ inv.inst_opcode = INVOKE /\
+         inv.inst_operands = Label name::args /\
+         lookup_function name C.ctx_functions = SOME callee ==>
+         LENGTH (fn_user_param_insts callee) <= LENGTH args` by
+        (rpt strip_tac >> drule_all fmp_stage_source_invoke_user_arity >> simp[]) >>
+      drule_all fmp_stage_back_param_conditional >> simp[]) >>
+  `!v. MEM (Var v) inst.inst_operands ==> IS_SOME (lookup_var v s)` by
+    (rpt strip_tac >> irule fmp_stage_src_defined >>
+     metis_tac[MEM]) >>
+  drule_all fmp_stage_back_kept_nonparam >> simp[]
 QED
 
 (* Why it holds: inst_wf fixes DALLOCA as [size_op],[out] and
