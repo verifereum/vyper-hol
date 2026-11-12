@@ -24,7 +24,9 @@ Theory fmpStageCoverage
 Ancestors
   fmpStageCoverStep fmpStageCoverFrame fmpStageCoverInv fmpStageCoverCall fmpStageCoverBack fmpStageCoverMem fmpStageBlockSim fmpStageFmpSteps
   fmpStageOpSteps fmpStageOpBase fmpStageControl fmpStageRel
-  concretizePtrCoverageStaticMemReachability unitMemInv ptrDiscipline
+  concretizePtrCoverageStaticMemReachability ctxLookupAgreeHelpers
+  concretizeStageLookup o1ContractSimplifyCfgSrcFrame fmpStageOpBaseActual
+  fmpStepLayout fmpLowerDefs unitMemInv ptrDiscipline
   contextCodegenRel o1PassContract venomPassSchedule venomCompilerTypes
   passSimulationDefs venomExecSemantics venomState venomInst
   finite_map words list
@@ -49,6 +51,37 @@ Proof
   >- (irule fmp_cov_ret >> metis_tac[])
 QED
 
+Theorem fmp_stage_lowered_entry_label[local]:
+  fmp_stage_lowered infos ctx runner fn fn' ==>
+  fn_entry_label fn' = fn_entry_label fn
+Proof
+  rw[fmp_stage_lowered_def] >>
+  `fmp_lower_function ctx sp fn = SOME (fn',sp')` by
+    simp[fmp_lower_function_def] >>
+  drule fmp_lower_function_preserves_entry_label >> simp[]
+QED
+
+(* The lowering keeps the context entry, its function and its entry
+   label. *)
+Theorem fmp_stage_target_entry[local]:
+  fmp_stage_ctx rpolicy D C C' vs vs' fmp eom /\
+  C.ctx_entry = SOME name /\ lookup_function name C.ctx_functions = SOME fn /\
+  fn_entry_label fn = SOME lbl ==>
+  C'.ctx_entry = SOME name /\
+  ?fn'. lookup_function name C'.ctx_functions = SOME fn' /\
+        fn_entry_label fn' = SOME lbl
+Proof
+  strip_tac >>
+  `ctx_pass_stage rpolicy (CFP_Simple VP_FmpLowering)
+     (o1_walk_view rpolicy 3) C C'` by fs[fmp_stage_ctx_def] >>
+  conj_tac >- fs[ctx_pass_stage_def] >>
+  drule_all ctx_pass_stage_lookup >> strip_tac >>
+  `fn.fn_name = name` by metis_tac[lookup_function_selected_name] >>
+  `MEM fn C.ctx_functions` by metis_tac[lookup_function_MEM] >>
+  first_assum (irule_at Any) >>
+  metis_tac[fmp_stage_actual_witness, fmp_stage_lowered_entry_label]
+QED
+
 Theorem fmp_lowering_stage_lowered_mem:
   ctx_pass_stage rpolicy (CFP_Simple VP_FmpLowering)
     (o1_walk_view rpolicy 3) C C' /\
@@ -57,5 +90,16 @@ Theorem fmp_lowering_stage_lowered_mem:
   fmp_variant_room (SOME fmp) C' vs' /\ max_live_eom C = SOME eom ==>
   mem_inv (lowered_mem_fact eom) C' vs'
 Proof
-  cheat
+  strip_tac >>
+  `?vs. vs = vs' with <| vs_fmp := fmp; vs_initial_fmp := fmp |>` by simp[] >>
+  `fmp_stage_ctx rpolicy D C C' vs vs' fmp eom` by simp[fmp_stage_ctx_def] >>
+  `mem_inv (static_mem_ok eom) C vs` by gvs[o1_inv_def, o1_static_inv_def] >>
+  rewrite_tac[mem_inv_raw_reachable] >> conj_tac
+  >- (fs[mem_inv_raw_reachable] >>
+      drule_all fmp_stage_target_entry >> metis_tac[]) >>
+  rpt strip_tac >>
+  drule ptr_raw_reachable_frame >> strip_tac >>
+  `active_inst fn inst s` by metis_tac[scfg_frame_reachable_active] >>
+  `fmp_cov D C C' vs vs' fmp eom stk fn s` by metis_tac[fmp_stage_coverage] >>
+  metis_tac[fmp_cov_mem]
 QED

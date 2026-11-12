@@ -89,7 +89,7 @@ Proof
        source_memory_write_ranges_def]
 QED
 
-Theorem fmp_cov_tidx_lt[local]:
+Theorem fmp_cov_tidx_lt:
   fmp_stage_tidx plan root lbl insts idx +
   (if (lbl,idx) IN FDOM plan then 1 else 0) <
   fmp_stage_tidx plan root lbl insts (SUC idx) /\
@@ -99,7 +99,7 @@ Proof
   rw[fmp_stage_tidx_def, GENLIST, SUM_SNOC] >> BasicProvers.every_case_tac >> fs[]
 QED
 
-Theorem fmp_cov_target_distinct[local]:
+Theorem fmp_cov_target_distinct:
   fmp_stage_lowered infos ctx runner fn fn' /\ ALL_DISTINCT (fn_labels fn) ==>
   ALL_DISTINCT (fn_labels fn')
 Proof
@@ -109,7 +109,7 @@ Proof
   drule fmp_lower_function_preserves_labels >> simp[]
 QED
 
-Theorem fmp_cov_frame_pos[local]:
+Theorem fmp_cov_frame_pos:
   fmp_stage_rel D C' sm fmp0 raw0 eom restored stk PG G tn fn s lo t ts /\
   lookup_function fn.fn_name C'.ctx_functions = SOME fn' ==>
   ?infos ctx runner.
@@ -157,14 +157,14 @@ Proof
       fmp_callee_info_def, fmp_invoke_target_def]
 QED
 
-Theorem fmp_target_run_zero[local]:
+Theorem fmp_target_run_zero:
   fmp_target_run k C' name t 0 t' ==> t' = t
 Proof
   rw[fmp_target_run_def, run_insts_def] >>
   simp[venom_state_component_equality]
 QED
 
-Theorem fmp_cov_target_labels[local]:
+Theorem fmp_cov_target_labels:
   fmp_stage_ctx rpolicy D C C' vs vs' fmp eom /\
   frame_reachable vs C stk PG G tn fn inst s /\ active_inst fn inst s /\
   fmp_stage_rel D C' sm fmp0 raw0 eom restored stk PG G tn fn s lo t ts /\
