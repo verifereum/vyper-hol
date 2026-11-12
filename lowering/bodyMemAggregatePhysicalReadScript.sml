@@ -11,14 +11,14 @@ Theorem aggregate_unequal_post_read_path_mem[local]:
   post_value_type ce e <> expr_type e /\
   expr_body_pre ce cx env e es /\
   unwrap_value ce vv sm = (op,su) /\
-  vv_post ctx func ce cx e es sa sm s0 es' tvv vv r /\
+  vv_post H ctx func ce cx e es sa sm s0 es' tvv vv r /\
   vv_store_bound cx (expr_type e) (lowered_value_type ce e) es' tvv vv r /\
   alloca_history func r /\ ~r.vs_halted /\
   r.vs_current_bb = sm.cs_current_bb /\
   r.vs_inst_idx = LENGTH sm.cs_current_insts ==>
   ?v. gas_marked_exec T (ctx,func) (read_result cx tvv) (es',r)
         [] (INL v) es' (OK r) /\
-    expr_post ctx func ce cx e es' (sa with cs_next_var := sm.cs_next_var)
+    expr_post H ctx func ce cx e es' (sa with cs_next_var := sm.cs_next_var)
       su r es' v op r /\
     r.vs_current_bb = su.cs_current_bb /\
     r.vs_inst_idx = LENGTH su.cs_current_insts /\
@@ -67,14 +67,14 @@ Theorem aggregate_body_rebased_marked_read_mem_capacity:
          ~is_word_type (expr_type e) ==>
          type_memory_bytes ce (expr_type e) = type_memory_size tvt /\
          type_memory_size tvt < 2 ** 64) /\
-  vv_post ctx func ce cx e es sa sm s0 es' tvv vv r /\
+  vv_post H ctx func ce cx e es sa sm s0 es' tvv vv r /\
   vv_store_bound cx (expr_type e) (lowered_value_type ce e) es' tvv vv r /\
   alloca_history func r /\ ~r.vs_halted /\
   r.vs_current_bb = sm.cs_current_bb /\
   r.vs_inst_idx = LENGTH sm.cs_current_insts ==>
   ?v u. gas_marked_exec T (ctx,func) (read_result cx tvv) (es',r)
           [] (INL v) es' (OK u) /\
-    expr_post ctx func ce cx e es' (sa with cs_next_var := sm.cs_next_var)
+    expr_post H ctx func ce cx e es' (sa with cs_next_var := sm.cs_next_var)
       su r es' v op u /\
     (post_value_type ce e = expr_type e ==>
      expr_store_bound cx (expr_type e) v op u) /\

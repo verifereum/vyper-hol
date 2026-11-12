@@ -48,7 +48,7 @@ Theorem aggregate_body_rebased_store_slice_mem[local]:
   expr_body_pre ce cx env e es /\
   (do res <- eval_expr cx e; read_result cx res od) es = (INL v,es') /\
   compile_store_memory ce op (Var x) (expr_type e) (lowered_value_type ce e) su = ((),sb) /\
-  expr_post ctx func ce cx e es' (sa with cs_next_var := sm.cs_next_var)
+  expr_post H ctx func ce cx e es' (sa with cs_next_var := sm.cs_next_var)
     su r es' v op s /\
   not_fresh_at sm x /\ lookup_var x r = SOME w /\
   sm.cs_next_var <= su.cs_next_var /\
@@ -58,7 +58,7 @@ Theorem aggregate_body_rebased_store_slice_mem[local]:
   value_has_type tv v /\ val_wf tv v /\
   type_memory_bytes ce (expr_type e) = type_memory_size tv /\
   type_memory_size tv < dimword(:256) /\
-  stmt_state_rel ctx func ce cx es' r /\
+  stmt_state_rel H ctx func ce cx es' r /\
   (!n b k. local_region ce es'.scopes r n b k ==>
     b+k <= w2n w \/ w2n w + type_memory_size tv <= b) /\
   (ce.ce_is_ctor ==> !name itv iv off.
@@ -82,7 +82,7 @@ Theorem aggregate_body_rebased_store_slice_mem[local]:
   s.vs_inst_idx = LENGTH su.cs_current_insts ==>
   ?q. gas_path_mem ctx func s 0 (OK q) /\
     val_in_memory tv v (w2n w) q.vs_memory /\
-    stmt_state_rel ctx func ce cx es' q /\
+    stmt_state_rel H ctx func ce cx es' q /\
     (!z a. not_fresh_at sm z /\ lookup_var z r = SOME a ==> lookup_var z q = SOME a) /\
     (!aid a. FLOOKUP r.vs_allocas aid = SOME a ==> FLOOKUP q.vs_allocas aid = SOME a) /\
     (!aid off sz a len.
@@ -117,7 +117,7 @@ Proof
   >- (drule_all aggregate_equal_post_store_kind >> strip_tac
       >- (drule_at (Pat `compile_store_memory _ _ _ _ _ _ = _`)
             aggregate_store_rebased_slice_mem_cursor >>
-          disch_then (drule_at (Pat `expr_post _ _ _ _ _ _ _ _ _ _ _ _ _`)) >>
+          disch_then (drule_at (Pat `expr_post _ _ _ _ _ _ _ _ _ _ _ _ _ _`)) >>
           disch_then (qspecl_then [`w`, `tv`, `env`] mp_tac) >>
           (impl_tac >- (fs[expr_body_pre_def] >> metis_tac[])) >>
           disch_then (qx_choose_then `qq` strip_assume_tac) >>
@@ -179,9 +179,9 @@ Theorem aggregate_body_unwrap_store_slice_mem_cursor:
   type_memory_size tv < 2 ** 64 /\
   (!v. read_result cx tvv (es' with gas_obs := []) =
        (INL v,es' with gas_obs := []) ==> value_has_type tv v /\ val_wf tv v) /\
-  vv_post ctx func ce cx e es sa sm s0 es' tvv vv r /\
+  vv_post H ctx func ce cx e es sa sm s0 es' tvv vv r /\
   vv_store_bound cx (expr_type e) (lowered_value_type ce e) es' tvv vv r /\
-  stmt_state_rel ctx func ce cx es' r /\
+  stmt_state_rel H ctx func ce cx es' r /\
   (!n b k. local_region ce es'.scopes r n b k ==>
     b+k <= w2n w \/ w2n w + type_memory_size tv <= b) /\
   (ce.ce_is_ctor ==> !name itv iv off.
@@ -213,7 +213,7 @@ Theorem aggregate_body_unwrap_store_slice_mem_cursor:
     gas_marked_exec T (ctx,func) (read_result cx tvv) (es',r)
           [] (INL v) es' (OK q) /\
     val_in_memory tv v (w2n w) q.vs_memory /\
-    stmt_state_rel ctx func ce cx es' q /\
+    stmt_state_rel H ctx func ce cx es' q /\
     (!z a. not_fresh_at sm z /\ lookup_var z r = SOME a ==> lookup_var z q = SOME a) /\
     (!aid a. FLOOKUP r.vs_allocas aid = SOME a ==> FLOOKUP q.vs_allocas aid = SOME a) /\
     (!aid off sz a len.
@@ -228,7 +228,7 @@ Theorem aggregate_body_unwrap_store_slice_mem_cursor:
 Proof
   disch_then (map_every assume_tac o CONJUNCTS) >>
   drule_at (Pat `unwrap_value _ _ _ = _`) aggregate_body_rebased_marked_read_mem_capacity >>
-  disch_then (drule_at (Pat `vv_post _ _ _ _ _ _ _ _ _ _ _ _ _`)) >>
+  disch_then (drule_at (Pat `vv_post _ _ _ _ _ _ _ _ _ _ _ _ _ _`)) >>
   disch_then (qspecl_then [`expr_type e`, `sj`, `si`, `env`] mp_tac) >>
   (impl_tac >- gvs[]) >> strip_tac >>
   `gas_path_mem ctx func r 0 (OK u)` by
@@ -249,7 +249,7 @@ Proof
     aggregate_body_rebased_store_slice_mem >>
   disch_then (drule_at (Pat `(do res <- eval_expr _ _; read_result _ res od) _ = _`)) >>
   simp[extract32_expr_post_start_gas_obs, extract32_expr_post_end_gas_obs] >>
-  disch_then (drule_at (Pat `expr_post _ _ _ _ _ _ _ _ _ _ _ _ _`)) >>
+  disch_then (drule_at (Pat `expr_post _ _ _ _ _ _ _ _ _ _ _ _ _ _`)) >>
   disch_then (drule_at (Pat `FLOOKUP _ did = SOME (b,k)`)) >>
   disch_then (qspecl_then [`w`, `env`] mp_tac) >>
   (impl_tac >- (gvs[arithmeticTheory.ADD_COMM] >> metis_tac[])) >>
@@ -277,17 +277,17 @@ Proof
      `pure_frame ce func es sa s0 r /\
       (!z a. not_fresh_at sa z /\ lookup_var z s0 = SOME a ==>
          lookup_var z r = SOME a)` by
-       (qpat_x_assum `vv_post _ _ _ _ _ _ _ _ _ _ _ _ _` mp_tac >>
+       (qpat_x_assum `vv_post _ _ _ _ _ _ _ _ _ _ _ _ _ _` mp_tac >>
         rewrite_tac[vv_post_def] >> strip_tac >> conj_tac
         >- (qpat_x_assum `~expr_has_effect e ==> _` irule >>
             first_assum ACCEPT_TAC) >>
         first_assum ACCEPT_TAC) >>
-     qpat_assum `expr_post _ _ _ _ e _ _ _ _ _ _ _ u`
+     qpat_assum `expr_post _ _ _ _ _ e _ _ _ _ _ _ _ u`
        (mp_then (Pos hd) mp_tac exprSimWordArgsTheory.expr_post_pure_frame) >>
      (impl_tac >- first_assum ACCEPT_TAC) >> strip_tac >>
      `!aid a. FLOOKUP r.vs_allocas aid = SOME a ==>
         FLOOKUP u.vs_allocas aid = SOME a` by
-       (qpat_x_assum `expr_post _ _ _ _ e _ _ _ _ _ _ _ u` mp_tac >>
+       (qpat_x_assum `expr_post _ _ _ _ _ e _ _ _ _ _ _ _ u` mp_tac >>
         rewrite_tac[expr_post_def] >> strip_tac >> first_assum ACCEPT_TAC) >>
      `pure_frame ce func es sa s0 u` by
        (match_mp_tac exprSimPropsTheory.pure_frame_trans >>
