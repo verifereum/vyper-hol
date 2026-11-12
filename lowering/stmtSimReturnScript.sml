@@ -752,7 +752,7 @@ QED
 (* ===== Full-family internal returns ===== *)
 
 (* The release changes only the guard's storage and the instruction index. *)
-Theorem return_unlock_state_frames[local]:
+Theorem return_unlock_state_frames:
   !cenv s id.
     (return_unlock_state cenv s).vs_inst_idx =
       s.vs_inst_idx + LENGTH (return_unlock_insts cenv id) /\
@@ -768,13 +768,13 @@ QED
 
 (* A literal guard store is a straight-line step: no memory, no pointer,
    no GAS mark, and no variable taint. *)
-Theorem return_unlock_origin_ptr[local]:
+Theorem return_unlock_origin_ptr:
   compile_return_unlock cenv sa = ((),su) /\ fn_has_code sa su func /\
   ~s.vs_halted /\ ~s.vs_call_ctx.cc_static /\ allocas_from lo s /\
   ~ctx_has_dalloca ctx /\
   s.vs_current_bb = sa.cs_current_bb /\
   s.vs_inst_idx = LENGTH sa.cs_current_insts ==>
-  ?G' tn'. tn'.t_var = tn.t_var /\
+  ?G' tn'. G' = G /\ tn'.t_var = tn.t_var /\ tn'.t_mem = tn.t_mem /\
     !D. gas_origin_ptr_path (D, lo, explicit, ctx, func, PG) (s, G, tn) []
           (OK (return_unlock_state cenv s), G', tn')
 Proof
@@ -785,8 +785,8 @@ Proof
   qabbrev_tac `info = cenv.ce_nonreentrant` >> PairCases_on `info` >>
   Cases_on `info0` >> Cases_on `info2` >> Cases_on `info3` >>
   gvs[return_unlock_insts_def, return_unlock_state_def] >>
-  TRY (qexistsl_tac [`G`, `tn`] >> simp[gas_origin_ptr_path_rules] >>
-       NO_TAC) >>
+  TRY (qexistsl_tac [`G`, `tn`] >> rw[] >>
+       irule (cj 1 gas_origin_ptr_path_rules) >> simp[] >> NO_TAC) >>
   first_x_assum (qspec_then `0` mp_tac) >> simp[] >> strip_tac >>
   qmatch_asmsub_abbrev_tac `get_instruction bb _ = SOME i` >>
   qmatch_goalsub_abbrev_tac `OK (u with vs_inst_idx := _)` >>
@@ -794,12 +794,20 @@ Proof
     simp[Abbr `i`, Abbr `u`, step_persistent_return_unlock,
          transientLockPropsTheory.step_TSTORE_lit] >>
   `~u.vs_halted /\ u.vs_allocas = s.vs_allocas /\
-   u.vs_requests = s.vs_requests` by
+   u.vs_requests = s.vs_requests /\ u.vs_fmp = s.vs_fmp` by
     simp[Abbr `u`, tstore_def, sstore_def] >>
   qexistsl_tac [`step_prov PG G i u`, `step_taint i s u tn`] >>
   conj_tac
+  >- simp[Abbr `i`, step_prov_def, set_prov_def, mk_inst_def,
+          finite_mapTheory.DRESTRICT_UNIV] >>
+  conj_tac
   >- simp[Abbr `i`, step_taint_def, set_var_taint_def, mk_inst_def,
           finite_mapTheory.DRESTRICT_UNIV] >>
+  conj_tac
+  >- (simp[Abbr `i`, step_taint_def, mem_taint_def, new_site_bytes_def,
+           written_taint_def, step_writes_def, range_bytes_def, mk_inst_def,
+           codegenRelTheory.source_memory_write_ranges_def] >>
+      simp[pred_setTheory.EXTENSION, finite_mapTheory.FLOOKUP_DEF]) >>
   gen_tac >>
   irule (REWRITE_RULE [APPEND] (Q.INST [`left` |-> `[]`, `right` |-> `[]`]
            (SPEC_ALL (cj 2 gas_origin_ptr_path_rules)))) >>
@@ -1011,7 +1019,7 @@ Proof
   Cases_on `u` >> simp[]
 QED
 
-Theorem return_unlock_shadow_prefix[local]:
+Theorem return_unlock_shadow_prefix:
   compile_return_unlock cenv sa = ((),sb) /\
   compile_return_unlock cenv sa' = ((),sb') /\
   gas_shadow_state sb sb' ==>
