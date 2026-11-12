@@ -90,7 +90,8 @@ Proof
   Cases_on `p=q /\ fl<=p /\ ld_dyn_floor_ok fl lo sites X`
   >- (pop_assum strip_assume_tac >>
       qpat_x_assum `p = q` (SUBST_ALL_TAC o SYM) >>
-      irule ld_memory_agree_clean_write_dyn >> metis_tac[]) >>
+      drule_at (Pat `ld_dyn_floor_ok _ _ _ _`) ld_memory_agree_clean_write_dyn >>
+          disch_then irule >> metis_tac[]) >>
   drule_at (Pat `ld_joint_geometry _ _ _ _`) ld_memory_agree_clean_write >>
   disch_then irule >> simp[] >> metis_tac[]
 QED

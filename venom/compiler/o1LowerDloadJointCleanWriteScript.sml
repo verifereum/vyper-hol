@@ -258,7 +258,8 @@ Proof
              disch_then irule >> simp[]) >>
          irule ld_dyn_agree_clean_write_below >> simp[] >> decide_tac)
      >- (gvs[] >> conj_tac
-         >- (irule ld_memory_agree_clean_write_dyn >> metis_tac[]) >>
+         >- (drule_at (Pat `ld_dyn_floor_ok _ _ _ _`) ld_memory_agree_clean_write_dyn >>
+          disch_then irule >> metis_tac[]) >>
          irule ld_dyn_agree_clean_write_same >> simp[]) >>
      conj_tac
      >- (drule_at (Pat `ld_joint_geometry _ _ _ _`) ld_memory_agree_clean_write >>

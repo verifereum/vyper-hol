@@ -247,7 +247,8 @@ Proof
     irule ld_dyn_agree_mstore_below >> simp[] >> decide_tac,
     qpat_assum `dyn_floor C vs <= w2n x` (K ALL_TAC) >>
     qpat_x_assum `w2n x = w2n y` (SUBST_ALL_TAC o SYM) >> conj_tac
-    >- (irule ld_memory_agree_mstore_dyn >> metis_tac[]) >>
+    >- (drule_at (Pat `ld_dyn_floor_ok _ _ _ _`) ld_memory_agree_mstore_dyn >>
+          disch_then irule >> metis_tac[]) >>
     irule ld_dyn_agree_mstore_dyn >> metis_tac[],
     conj_tac
     >- (drule_at (Pat `ld_joint_geometry _ _ _ _`) ld_memory_agree_mstore_geometry >>
