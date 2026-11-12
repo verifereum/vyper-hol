@@ -153,7 +153,8 @@ Proof
      decide_tac) >>
   `stmt_state_rel ctx func cenv cx mid t` by
     (qpat_assum `target_post _ _ _ _ _ _ _ _ _ _ _ _ _` mp_tac >>
-     simp[loweringPostsTheory.target_post_def]) >>
+     rewrite_tac[loweringPostsTheory.target_post_def] >>
+     disch_then (ACCEPT_TAC o CONJUNCT1)) >>
   `alloca_frame cenv es0 sa s0 cenv mid u` by
     (qspecl_then [`cenv`, `es0`, `sa`, `s0`, `cenv`, `mid`, `t`, `ctx`, `func`,
                   `cx`, `sp`, `mid`, `u`] mp_tac
