@@ -9,9 +9,9 @@
   },
   "fixtures": {
     "c02_const_string": {
-      "deploy_sha256": "d7d1b7554eef92ab71de9a5658f5f2c7ac3a3c191743df6a34374ecca0a5ca61",
+      "deploy_sha256": "d9138797aa8ffd7aac8be1ee10a8282c03a969a2dc56ee18a855253fcf64dbcb",
       "frontend_sha256": "aea6850ac24e30dfb446b52e813878de3da94214d45a40247e135bb29222cba5",
-      "runtime_sha256": "6b7afe206e67b276c842f07f98a31a8c413955e65200f8d4ff6bcb1a6d00c931",
+      "runtime_sha256": "966035180e8679316d23996677382ba34633e5a1e387f363954c9f64bd3f4150",
       "source": "sources/c02_const_string.vy",
       "source_sha256": "6c3cd8c471e35030396f9d6df071aae78376a787f8ff428acd399da57a6e7294"
     },
@@ -37,9 +37,9 @@
       "source_sha256": "5a103535d2369ce95d9759d54963c9bdbbc6faacdcdd0e32bbde555da411a0e8"
     },
     "c14_pub_const_string": {
-      "deploy_sha256": "70b743a576578743be4f05a10cc64a4e304e9d01f8742cecc4e954567a6d4895",
+      "deploy_sha256": "e1a4eab934e06ecb27f349de41c877832444e97ab1ffae0ab25d9b5cff3c66eb",
       "frontend_sha256": "4c029c6e25f848ad61d653e5920214d5848a8d003bb8a3d04f43bfea94500f4e",
-      "runtime_sha256": "996519233f96bf19f3f74e0d74c33d6296d1e6c469899cc74a2356955957f245",
+      "runtime_sha256": "0aae89892e541342f2f8f4c35352258148e1097319c8132a6a6e8d218f95f7e9",
       "source": "sources/c14_pub_const_string.vy",
       "source_sha256": "cf42a6b02f90e5f0b404818569c1ab047a06f3c6527567b6dc0ba5e8e563e5f7"
     },
@@ -160,6 +160,6 @@
     "venom_ir_pipeline": "O1"
   },
   "uv_version": "0.13.4 (aarch64-unknown-linux-gnu)",
-  "vyper_commit": "9362e36b145c4b63ceb6a893018ea970e78bf6a6",
-  "vyper_version": "0.5.0a4"
+  "vyper_commit": "577d2534356903076bb79b5b15ebd4d772994693",
+  "vyper_version": "0.5.0b1"
 }
