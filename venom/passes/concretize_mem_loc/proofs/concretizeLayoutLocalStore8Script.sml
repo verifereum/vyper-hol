@@ -122,6 +122,7 @@ Resume concretize_mstore8_execution_geometry[address]:
       simp[source_memory_write_ranges_def, fixed_source_write_range_def,
            mem_write_ops_def]) >>
   conj_tac >- metis_tac[] >>
+  conj_tac >- metis_tac[] >>
   goal_assum (drule_at (Pat `local_rel _ _ _ _ _ _ _`)) >>
   goal_assum (drule_at (Pat `joint_trace _ _ _ _ _ _`)) >>
   simp[] >> metis_tac[]

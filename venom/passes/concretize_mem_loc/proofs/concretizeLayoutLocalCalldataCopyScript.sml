@@ -177,13 +177,14 @@ Proof
     (irule concretize_memory_access_geometry >> simp[] >>
      conj_tac >- (qexists_tac `access` >> simp[]) >>
      conj_tac >- metis_tac[] >>
+     conj_tac >- metis_tac[] >>
      goal_assum (drule_at (Pat `local_rel _ _ _ _ _ _ _`)) >>
      goal_assum (drule_at (Pat `joint_trace _ _ _ _ _ _`)) >> simp[] >> metis_tac[]) >>
   pop_assum strip_assume_tac >> qexists_tac `dstT` >> asm_rewrite_tac[] >>
   `!i. i < len ==> relocation_pair lo (concretize_positions C')
     (EL c (q0::qs)) (w2n dst+i) (w2n dstT+i)` by
     (rpt strip_tac >> `i < cap` by decide_tac >>
-     irule access_geometry_relocation_pairs >> metis_tac[]) >>
+     irule (Q.INST [`len:num` |-> `cap`] access_geometry_relocation_pairs) >> metis_tac[]) >>
   (conj_tac >- suspend "written") >> suspend "retained"
 QED
 Resume concretize_clean_write_geometry[written]:

@@ -139,10 +139,10 @@ Proof
   asm_rewrite_tac[] >>
   `!i. i < w2n sz ==> relocation_pair lo (concretize_positions C')
     (EL c (q0::qs)) (w2n dst+i) (w2n dstT+i)` by
-    (rpt strip_tac >> irule access_geometry_relocation_pairs >> metis_tac[]) >>
+    (rpt strip_tac >> irule (Q.INST [`len:num` |-> `w2n sz`] access_geometry_relocation_pairs) >> metis_tac[]) >>
   `!i. i < w2n sz ==> relocation_pair lo (concretize_positions C')
     (EL c (q0::qs)) (w2n src+i) (w2n srcT+i)` by
-    (rpt strip_tac >> irule access_geometry_relocation_pairs >> metis_tac[]) >>
+    (rpt strip_tac >> irule (Q.INST [`len:num` |-> `w2n sz`] access_geometry_relocation_pairs) >> metis_tac[]) >>
   `post.vs_allocas = s.vs_allocas` by simp[mcopy_def, write_memory_with_expansion_def] >>
   (conj_tac >- (rpt gen_tac >> strip_tac >>
   `a = w2n dst+(a-w2n dst) /\ a-w2n dst < w2n sz` by decide_tac >>
@@ -239,6 +239,7 @@ Resume concretize_mcopy_execution_geometry[destination]:
       simp[source_memory_write_ranges_def, sized_source_write_range_def,
            mem_write_ops_def]) >>
   conj_tac >- metis_tac[] >>
+  conj_tac >- metis_tac[] >>
   goal_assum (drule_at (Pat `local_rel _ _ _ _ _ _ _`)) >>
   goal_assum (drule_at (Pat `joint_trace _ _ _ _ _ _`)) >>
   simp[] >> metis_tac[]
@@ -249,6 +250,7 @@ Resume concretize_mcopy_execution_geometry[source]:
   >- (qexists_tac `<| iao_ofst := ops; iao_size := SOME opn;
                     iao_max_size := SOME opn |>` >>
       simp[source_memory_read_ranges_def, mem_read_ops_def]) >>
+  conj_tac >- metis_tac[] >>
   conj_tac >- metis_tac[] >>
   goal_assum (drule_at (Pat `local_rel _ _ _ _ _ _ _`)) >>
   goal_assum (drule_at (Pat `joint_trace _ _ _ _ _ _`)) >>

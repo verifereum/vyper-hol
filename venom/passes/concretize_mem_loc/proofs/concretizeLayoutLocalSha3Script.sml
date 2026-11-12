@@ -113,11 +113,12 @@ Proof
     (irule concretize_memory_access_geometry >> simp[] >>
      conj_tac >- (qexists_tac `ops` >> simp[]) >>
      conj_tac >- metis_tac[] >>
+     conj_tac >- metis_tac[] >>
      goal_assum (drule_at (Pat `local_rel _ _ _ _ _ _ _`)) >>
      goal_assum (drule_at (Pat `joint_trace _ _ _ _ _ _`)) >> simp[] >> metis_tac[]) >>
   `!i. i < len ==> relocation_pair lo (concretize_positions C')
       (EL c (q0::qs)) (w2n off+i) (w2n offT+i)` by
-    (rpt strip_tac >> irule access_geometry_relocation_pairs >> metis_tac[]) >>
+    (rpt strip_tac >> irule (Q.INST [`len:num` |-> `len`] access_geometry_relocation_pairs) >> metis_tac[]) >>
   qexists_tac `offT` >> simp[] >> rpt strip_tac >>
   irule joint_relocation_demand_current >> simp[] >>
   (conj_tac
