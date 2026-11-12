@@ -11,7 +11,7 @@ Theorem aggregate_add_slice_entry_mem[local]:
   compile_expr ce (expr_type e) e sa = (vv,sm) /\
   local_ptrs_reserved ce sa /\ sa.cs_next_var <= sm.cs_next_var /\
   emit_op ADD [Var x; Lit (n2w off)] sm = (dst,sn) /\
-  vv_post ctx func ce cx e es sa sm s0 es' tvv vv r /\
+  vv_post H ctx func ce cx e es sa sm s0 es' tvv vv r /\
   lookup_var x r = SOME (n2w b) /\ fn_has_code sm sn func /\
   ~r.vs_halted /\ r.vs_current_bb = sm.cs_current_bb /\
   r.vs_inst_idx = LENGTH sm.cs_current_insts /\
@@ -23,7 +23,7 @@ Theorem aggregate_add_slice_entry_mem[local]:
     gas_marked_path T ctx func r 0 (OK u) /\
     ~u.vs_halted /\ u.vs_current_bb = sn.cs_current_bb /\
     u.vs_inst_idx = LENGTH sn.cs_current_insts /\
-    vv_post ctx func ce cx e es sa sn s0 es' tvv vv u /\
+    vv_post H ctx func ce cx e es sa sn s0 es' tvv vv u /\
     eval_operand dst u = SOME (n2w b + n2w off) /\
     u.vs_memory = r.vs_memory /\ u.vs_allocas = r.vs_allocas /\
     u.vs_alloca_next = r.vs_alloca_next /\
@@ -146,7 +146,7 @@ Theorem aggregate_cons_from_slice_mem_cursor:
   expr_body_pre ce cx env e (es with gas_obs := gas_explicit marks s0.vs_gas_readings) /\
   evaluate_type (get_tenv cx) (expr_type e) = SOME tv /\
   type_memory_bytes ce (expr_type e) = type_memory_size tv /\
-  vv_post ctx func ce cx e es sa sm s0 es' tvv vv r /\
+  vv_post H ctx func ce cx e es sa sm s0 es' tvv vv r /\
   vv_store_bound cx (expr_type e) (lowered_value_type ce e) es' tvv vv r /\
   alloca_history func r /\ alloca_inv r /\
   ~r.vs_halted /\ r.vs_current_bb = sm.cs_current_bb /\
@@ -176,9 +176,9 @@ Theorem aggregate_cons_from_slice_mem_cursor:
     type_memory_size tv < 2 ** 64 /\
     (!v. read_result cx tvv (es' with gas_obs := []) = (INL v,es' with gas_obs := []) ==>
       value_has_type tv v /\ val_wf tv v) /\
-    vv_post ctx func ce cx e es sa sn s0 es' tvv vv u /\
+    vv_post H ctx func ce cx e es sa sn s0 es' tvv vv u /\
     vv_store_bound cx (expr_type e) (lowered_value_type ce e) es' tvv vv u /\
-    stmt_state_rel ctx func ce cx es' u /\
+    stmt_state_rel H ctx func ce cx es' u /\
     (!n lo k. local_region ce es'.scopes u n lo k ==>
       lo+k <= w2n (n2w (b+off):bytes32) \/
       w2n (n2w (b+off):bytes32)+type_memory_size tv <= lo) /\
@@ -209,7 +209,7 @@ Theorem aggregate_cons_from_slice_mem_cursor:
            mem_bytes_at p n q.vs_memory = mem_bytes_at p n s0.vs_memory) /\
       gas_marked_exec T (ctx,func) (read_result cx tvv) (es',u) [] (INL v) es' (OK q) /\
       val_in_memory tv v (w2n (n2w (b+off):bytes32)) q.vs_memory /\
-      stmt_state_rel ctx func ce cx es' q /\
+      stmt_state_rel H ctx func ce cx es' q /\
       (!z a. not_fresh_at sn z /\ lookup_var z u = SOME a ==> lookup_var z q = SOME a) /\
       (!i a. FLOOKUP u.vs_allocas i = SOME a ==> FLOOKUP q.vs_allocas i = SOME a) /\
       (!i lo sz a k. FLOOKUP u.vs_allocas i = SOME (lo,sz) /\ i < sa.cs_next_id /\
@@ -234,7 +234,7 @@ Theorem aggregate_cons_from_slice_mem_cursor:
        mem_bytes_at p n q.vs_memory = mem_bytes_at p n s0.vs_memory) /\
     gas_marked_exec T (ctx,func) (read_result cx tvv) (es',r) [] (INL v) es' (OK q) /\
     val_in_memory tv v (b+off) q.vs_memory /\
-    stmt_state_rel ctx func ce cx es' q /\
+    stmt_state_rel H ctx func ce cx es' q /\
     (!z a. not_fresh_at sm z /\ lookup_var z r = SOME a ==> lookup_var z q = SOME a) /\
     (!i a. FLOOKUP r.vs_allocas i = SOME a ==> FLOOKUP q.vs_allocas i = SOME a) /\
     (!i lo sz a k. FLOOKUP r.vs_allocas i = SOME (lo,sz) /\ i < sa.cs_next_id /\
@@ -250,7 +250,7 @@ Proof
   drule_all aggregate_cons_slice_static >> strip_tac >>
   drule_all aggregate_add_slice_entry_mem >> strip_tac >> gvs[] >>
   `P u` by metis_tac[] >>
-  `stmt_state_rel ctx func ce cx es' u` by fs[vv_post_def] >>
+  `stmt_state_rel H ctx func ce cx es' u` by fs[vv_post_def] >>
   qpat_x_assum `!d u. _` (qspecl_then [`d`, `u`] mp_tac) >>
   (impl_tac >- (simp[GSYM arithmeticTheory.ADD_ASSOC] >>
      conj_tac >- (rpt strip_tac >> first_x_assum irule >> metis_tac[]) >>

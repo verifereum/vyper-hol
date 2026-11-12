@@ -24,7 +24,7 @@ Proof
 QED
 
 Theorem aggregate_cons_state_frames_mem[local]:
-  vv_post ctx func ce cx e es sa sm s0 es1 tv vv t1 /\
+  vv_post H ctx func ce cx e es sa sm s0 es1 tv vv t1 /\
   ci_mono sa sm /\ ci_mono sa ss /\
   MAP FDOM es.scopes = MAP FDOM es1.scopes /\
   local_ptrs_reserved ce sa /\ local_ptrs_reserved ce sm /\
@@ -51,11 +51,11 @@ Proof
 QED
 
 Theorem aggregate_cons_success_post_mem:
-  vv_post ctx func ce cx e es sa sm s0 es1 tv vv t1 /\
+  vv_post H ctx func ce cx e es sa sm s0 es1 tv vv t1 /\
   ci_mono sa sm /\ ci_mono sa ss /\
   MAP FDOM es.scopes = MAP FDOM es1.scopes /\
-  stmt_state_rel ctx func ce cx es s0 /\
-  stmt_state_rel ctx func ce cx es1 t1 /\ stmt_state_rel ctx func ce cx es1 q /\
+  stmt_state_rel H ctx func ce cx es s0 /\
+  stmt_state_rel H ctx func ce cx es1 t1 /\ stmt_state_rel H ctx func ce cx es1 q /\
   local_ptrs_reserved ce sa /\ local_ptrs_reserved ce sm /\
   FLOOKUP t1.vs_allocas aid = SOME (b,asz) /\ aid < sa.cs_next_id /\
   (!name lo sz. local_region ce es1.scopes t1 name lo sz ==>
@@ -74,7 +74,7 @@ Theorem aggregate_cons_success_post_mem:
   locals_kept ce es1 es1 t1 q /\ s0.vs_alloca_next <= t1.vs_alloca_next /\
   t1.vs_alloca_next <= q.vs_alloca_next /\
   r.vs_current_bb = sb.cs_current_bb /\ r.vs_inst_idx = LENGTH sb.cs_current_insts /\
-  expr_sim_inv ce cx env es2 /\ stmt_state_rel ctx func ce cx es2 r /\
+  expr_sim_inv ce cx env es2 /\ stmt_state_rel H ctx func ce cx es2 r /\
   tuple_in_memory vs tvs (b+(off+type_memory_size htv)) r.vs_memory /\
   (!z a. not_fresh_at ss z /\ lookup_var z q = SOME a ==> lookup_var z r = SOME a) /\
   (!i a. FLOOKUP q.vs_allocas i = SOME a ==> FLOOKUP r.vs_allocas i = SOME a) /\
@@ -89,7 +89,7 @@ Theorem aggregate_cons_success_post_mem:
     mem_bytes_at p n r.vs_memory = mem_bytes_at p n q.vs_memory) /\
   locals_kept ce es1 es2 q r /\ alloca_history func r /\ q.vs_alloca_next <= r.vs_alloca_next ==>
   r.vs_current_bb = sb.cs_current_bb /\ r.vs_inst_idx = LENGTH sb.cs_current_insts /\
-  expr_sim_inv ce cx env es2 /\ stmt_state_rel ctx func ce cx es2 r /\
+  expr_sim_inv ce cx env es2 /\ stmt_state_rel H ctx func ce cx es2 r /\
   tuple_in_memory (v::vs) (htv::tvs) (b+off) r.vs_memory /\
   (!z a. not_fresh_at sa z /\ lookup_var z s0 = SOME a ==> lookup_var z r = SOME a) /\
   (!i a. FLOOKUP s0.vs_allocas i = SOME a ==> FLOOKUP r.vs_allocas i = SOME a) /\
@@ -117,7 +117,7 @@ Proof
   >- (rpt gen_tac >> disch_tac >> irule aggregate_cons_exterior_frame_mem >>
       goal_assum (drule_at (Pat `vv_post _ _ _ _ _ _ _ _ _ _ _ _ _`)) >>
       asm_rewrite_tac[] >>
-      goal_assum (drule_at (Pat `stmt_state_rel _ _ _ _ _ _`)) >>
+      goal_assum (drule_at (Pat `stmt_state_rel _ _ _ _ _ _ _`)) >>
       goal_assum (drule_at Any) >> goal_assum (drule_at Any) >>
       goal_assum (drule_at Any) >>
       qexists `i` >> asm_rewrite_tac[]) >>

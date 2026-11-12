@@ -22,7 +22,7 @@ Theorem aggregate_body_cons_continuation_mem_cursor:
   expr_body_pre ce cx env e (es with gas_obs := gas_explicit marks s0.vs_gas_readings) /\
   evaluate_type (get_tenv cx) (expr_type e) = SOME tv /\
   type_memory_bytes ce (expr_type e) = type_memory_size tv /\
-  vv_post ctx func ce cx e es sa sm s0 es' tvv vv r /\
+  vv_post H ctx func ce cx e es sa sm s0 es' tvv vv r /\
   vv_store_bound cx (expr_type e) (lowered_value_type ce e) es' tvv vv r /\
   alloca_history func r /\ alloca_inv r /\
   ~r.vs_halted /\ r.vs_current_bb = sm.cs_current_bb /\
@@ -51,7 +51,7 @@ Theorem aggregate_body_cons_continuation_mem_cursor:
     gas_marked_exec T (ctx,func) (read_result cx tvv) (es',r)
           [] (INL v) es' (OK q) /\
     val_in_memory tv v (b+off) q.vs_memory /\
-    stmt_state_rel ctx func ce cx es' q /\
+    stmt_state_rel H ctx func ce cx es' q /\
     (!z a. not_fresh_at sm z /\ lookup_var z r = SOME a ==>
       lookup_var z q = SOME a) /\
     (!i a. FLOOKUP r.vs_allocas i = SOME a ==> FLOOKUP q.vs_allocas i = SOME a) /\
