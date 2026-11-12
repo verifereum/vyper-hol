@@ -1269,6 +1269,101 @@ Proof
        MATCH_MP PERM_EVERY (SPEC_ALL PERM_constants_order)]
 QED
 
+(* Successful reference evaluation identifies every cell a constant expression
+   can read, even when either comparison evaluation fails. *)
+Theorem constant_value_reference_congruence[local]:
+  (!mods ref e v.
+    constant_expr mods e /\ constant_value mods ref e = SOME v ==>
+    !a b.
+      (!s id. declared_constant mods s id /\
+        IS_SOME (FLOOKUP (get_source_immutables s ref) id) ==>
+        FLOOKUP (get_source_immutables s a) id =
+        FLOOKUP (get_source_immutables s b) id) ==>
+      constant_value mods a e = constant_value mods b e) /\
+  (!mods ref es vs.
+    EVERY (constant_expr mods) es /\ constant_values mods ref es = SOME vs ==>
+    !a b.
+      (!s id. declared_constant mods s id /\
+        IS_SOME (FLOOKUP (get_source_immutables s ref) id) ==>
+        FLOOKUP (get_source_immutables s a) id =
+        FLOOKUP (get_source_immutables s b) id) ==>
+      constant_values mods a es = constant_values mods b es)
+Proof
+  ho_match_mp_tac constant_value_ind >>
+  rpt conj_tac >> rpt gen_tac >>
+  simp[constant_expr_def, constant_value_def] >>
+  rpt strip_tac >>
+  RULE_ASSUM_TAC (SIMP_RULE (srw_ss()) [AllCaseEqs()]) >>
+  gvs[] >>
+  rpt (qpat_x_assum `EVERY _ _ ==> _` mp_tac >>
+       simp[EVERY_MEM] >> strip_tac) >>
+  rpt (first_x_assum (qspecl_then [`a`,`b`] mp_tac)) >>
+  simp[] >> rpt strip_tac >> gvs[] >>
+  metis_tac[EVERY_MEM, IS_SOME_EXISTS]
+QED
+
+Theorem constants_fold_module_reference_independence[local]:
+  !mods ref src ts refacc.
+    !out a b acc.
+    constants_fold_module mods ref src ts refacc = SOME out /\
+    (!vis e id ty init. MEM (VariableDecl vis (Constant e) id ty init) ts ==>
+       constant_expr mods e) /\
+    (!id. declared_constant mods src id ==>
+       FLOOKUP (get_source_immutables src ref) id = NONE) /\
+    FDOM refacc SUBSET FDOM acc /\
+    (!s. s <> src /\ IS_SOME (ALOOKUP mods s) ==>
+       get_source_immutables s a = get_source_immutables s b) ==>
+    constants_fold_module mods a src ts acc =
+    constants_fold_module mods b src ts acc
+Proof
+  ho_match_mp_tac constants_fold_module_ind >>
+  rw[constants_fold_module_def] >>
+  RULE_ASSUM_TAC (SIMP_RULE (srw_ss()) [AllCaseEqs()]) >> gvs[] >>
+  `constant_expr mods e` by metis_tac[] >>
+  `constant_value mods (merge_constant_imms src acc a) e =
+   constant_value mods (merge_constant_imms src acc b) e` by
+    (irule (cj 1 constant_value_reference_congruence) >>
+     reverse conj_tac >- simp[] >>
+     qexistsl [`merge_constant_imms src refacc ref`,`v`] >> simp[] >>
+     rpt gen_tac >> strip_tac >>
+     rename1 `declared_constant mods s query` >>
+     Cases_on `s = src` >>
+     gvs[merge_constant_imms_def, get_source_immutables_set_same,
+         get_source_immutables_set_other, FLOOKUP_FUNION]
+     >- (Cases_on `FLOOKUP refacc query` >> gvs[] >>
+         `query IN FDOM acc` by metis_tac[pred_setTheory.SUBSET_DEF, flookup_thm] >>
+         Cases_on `FLOOKUP acc query` >> gvs[FLOOKUP_DEF]) >>
+     `IS_SOME (ALOOKUP mods s)` by
+       (gvs[declared_constant_def] >>
+        Cases_on `ALOOKUP mods s` >> gvs[ALOOKUP_FAILS] >> metis_tac[]) >>
+     simp[]) >>
+  simp[] >> Cases_on `constant_value mods (merge_constant_imms src acc b) e` >>
+  simp[] >> first_x_assum irule >> simp[] >>
+  conj_tac >- metis_tac[] >>
+  fs[pred_setTheory.SUBSET_DEF]
+QED
+
+Theorem constants_fold_module_reference[local]:
+  !rest init final src ts.
+    constants_fold mods init rest = SOME final /\
+    ALL_DISTINCT (MAP FST rest) /\ MEM (src,ts) rest ==>
+    ?ref out.
+      constants_fold_module mods ref src ts FEMPTY = SOME out /\
+      get_source_immutables src ref = get_source_immutables src init
+Proof
+  Induct >- simp[] >>
+  gen_tac >> gen_tac >> gen_tac >> gen_tac >>
+  Cases_on `h` >> rename1 `(headsrc,headts)` >>
+  simp[constants_fold_def, AllCaseEqs()] >> rpt strip_tac >> gvs[]
+  >- metis_tac[] >>
+  `headsrc <> src` by
+    (strip_tac >> gvs[] >>
+     fs[MEM_MAP, pairTheory.EXISTS_PROD] >> metis_tac[]) >>
+  first_x_assum drule_all >> strip_tac >>
+  qexistsl [`ref`,`out`] >>
+  gvs[merge_constant_imms_def, get_source_immutables_set_other]
+QED
+
 (* For a checked contract, folding module src's constants does not read src's
    own immutables slot: a constant initializer names only declared constants
    (constant_expr), an earlier same-module constant is in acc, which
@@ -1282,5 +1377,25 @@ Theorem constants_fold_module_imms_independent:
   constants_fold_module mods imms' src ts FEMPTY =
   constants_fold_module mods imms src ts FEMPTY
 Proof
-  cheat
+  strip_tac >>
+  `contract_constants_ok mods` by
+    (qpat_x_assum `check_contract _ _ _ _ = _` mp_tac >>
+     simp[check_contract_def] >> rw[]) >>
+  `contract_namespaces_ok F mods` by
+    metis_tac[check_contract_runtime_namespaces] >>
+  `ALL_DISTINCT (MAP FST (constants_order mods))` by
+    (fs[contract_namespaces_ok_def] >>
+     metis_tac[ALL_DISTINCT_PERM, PERM_MAP, PERM_constants_order]) >>
+  `MEM (src,ts) (constants_order mods)` by
+    metis_tac[MEM_constants_order, ALOOKUP_MEM] >>
+  Cases_on `initial_immutables (type_env_all_modules mods) mods` >>
+  gvs[contract_constants_ok_def, IS_SOME_EXISTS] >>
+  drule_all constants_fold_module_reference >> strip_tac >>
+  irule constants_fold_module_reference_independence >>
+  conj_tac >- gvs[IS_SOME_EXISTS] >>
+  conj_tac >- metis_tac[checked_constant_decl_typed] >>
+  qexistsl [`out`,`ref`,`FEMPTY`] >> simp[] >>
+  rpt strip_tac >>
+  gvs[declared_constant_def] >>
+  drule_all checked_initial_immutables_constant_absent >> simp[]
 QED
