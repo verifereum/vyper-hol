@@ -78,7 +78,7 @@ Theorem attr_select_field[local]:
   expr_body_pre cenv cx env (Attribute ann obj fld) es /\
   expr_type obj = StructT sid /\
   attribute_type (get_tenv cx) (StructT sid) fld = SOME ann /\
-  vv_post ctx func cenv cx obj es sa sm s0 ee tv bvv t /\
+  vv_post H ctx func cenv cx obj es sa sm s0 ee tv bvv t /\
   eval_expr cx obj (es with gas_obs := gs) = (INL tv, ee) ==>
   ?fs ftv vals fv tv'.
     evaluate_type (get_tenv cx) (StructT sid) = SOME (StructTV fs) /\
@@ -160,7 +160,7 @@ QED
 Theorem attr_field_store_bound[local]:
   !ctx func cenv cx ann obj fld es sa sb s0 ee tv' dst bvv u
    tv sid fs ftv vals fv w t.
-    vv_post ctx func cenv cx (Attribute ann obj fld) es sa sb s0 ee tv'
+    vv_post H ctx func cenv cx (Attribute ann obj fld) es sa sb s0 ee tv'
       (LocatedValue ann (mk_ptr dst (vv_loc bvv))) u /\
     vv_store_bound cx (StructT sid) (lowered_value_type cenv obj) ee tv bvv t /\
     evaluate_type (get_tenv cx) (StructT sid) = SOME (StructTV fs) /\
@@ -216,7 +216,7 @@ Theorem attr_step[local]:
                Lit (n2w (attr_offset cenv (StructT sid) (vv_loc bvv) fld))]
     sm = (dst, sb) /\
   fn_has_code sm sb func /\ fn_inst_ids_distinct func /\
-  vv_post ctx func cenv cx obj es sa sm s0 ee tv bvv t /\
+  vv_post H ctx func cenv cx obj es sa sm s0 ee tv bvv t /\
   vv_store_bound cx (StructT sid) (lowered_value_type cenv obj) ee tv bvv t /\
   t.vs_current_bb = sm.cs_current_bb /\
   t.vs_inst_idx = LENGTH sm.cs_current_insts /\
@@ -227,7 +227,7 @@ Theorem attr_step[local]:
     (!tail. select_result cx (StructT sid) tv (AttrSubscript fld)
               (ee with gas_obs := tail) = (INL tv', ee with gas_obs := tail)) /\
     gas_path_mem ctx func t 0 (OK u) /\
-    vv_post ctx func cenv cx (Attribute ann obj fld) es sa sb s0 ee tv'
+    vv_post H ctx func cenv cx (Attribute ann obj fld) es sa sb s0 ee tv'
       (LocatedValue ann (mk_ptr dst (vv_loc bvv))) u /\
     vv_store_bound cx ann ann ee tv' (LocatedValue ann (mk_ptr dst (vv_loc bvv))) u /\
     u.vs_current_bb = sb.cs_current_bb /\
@@ -243,7 +243,7 @@ Proof
   `post_value_type cenv obj = expr_type obj` by
     (drule attr_pre_base >> strip_tac >> drule_all attr_post_value_type >>
      simp[]) >>
-  `vv_post ctx func cenv cx (Attribute ann obj fld) es sa sb s0 ee tv'
+  `vv_post H ctx func cenv cx (Attribute ann obj fld) es sa sb s0 ee tv'
      (LocatedValue ann (mk_ptr dst (vv_loc bvv))) u` by
     (qpat_assum `!tail. select_result _ _ _ _ _ = _`
        (qspec_then `[]` (assume_tac o MATCH_MP select_result_memory_place)) >>
@@ -283,7 +283,7 @@ Proof
   simp[eval_attr_bind] >>
   irule forced_vv_then_outcome >> simp[] >>
   qexists_tac `\tv ee t.
-    vv_post ctx func cenv cx obj es sa sm s0 ee tv bvv t /\
+    vv_post H ctx func cenv cx obj es sa sm s0 ee tv bvv t /\
     vv_store_bound cx (StructT sid) (lowered_value_type cenv obj) ee tv bvv t /\
     t.vs_current_bb = sm.cs_current_bb /\
     t.vs_inst_idx = LENGTH sm.cs_current_insts /\
