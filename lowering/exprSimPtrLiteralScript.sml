@@ -45,8 +45,8 @@ Proof
 QED
 
 Theorem ghost_inv_gas_obs[local]:
-  ghost_inv d cenv cx es G tn s ==>
-  ghost_inv d cenv cx (es with gas_obs := obs) G tn s
+  ghost_inv H d cenv cx es G tn s ==>
+  ghost_inv H d cenv cx (es with gas_obs := obs) G tn s
 Proof
   simp[ghost_inv_def] >> metis_tac[]
 QED
@@ -68,12 +68,12 @@ Theorem literal_word_sim_ptr[local]:
   expr_sim_ptr d ctx PG func cenv cx ty (Literal ann l) es
 Proof
   rw[expr_sim_ptr_def] >>
-  `stmt_state_rel ctx func cenv cx (es with gas_obs := []) s0` by
+  `stmt_state_rel H ctx func cenv cx (es with gas_obs := []) s0` by
     (drule msg_gas_state_frame >>
      disch_then (qspecl_then [`s0.vs_gas_readings`, `s0.vs_inst_idx`, `[]`]
        mp_tac) >>
      qpat_x_assum `s0.vs_inst_idx = _` kall_tac >> simp[]) >>
-  `ghost_inv d cenv cx (es with gas_obs := []) G0 tn0 s0` by
+  `ghost_inv H d cenv cx (es with gas_obs := []) G0 tn0 s0` by
     simp[ghost_inv_gas_obs] >>
   rewrite_tac[gas_outcome_ptr_def] >> qexists_tac `[]` >> disj1_tac >>
   rewrite_tac[gas_summary_ptr_at_def] >>
@@ -136,9 +136,9 @@ QED
 
 Theorem literal_memory_vv_expr_post[local]:
   ~is_word_type (expr_type e) /\ post_value_type cenv e = expr_type e /\
-  vv_post ctx func cenv cx e es sa sb s0 ee (Value v)
+  vv_post H ctx func cenv cx e es sa sb s0 ee (Value v)
     (LocatedValue (expr_type e) (base_ptr buf)) t ==>
-  expr_post ctx func cenv cx e es sa sb s0 ee v buf.buf_operand t
+  expr_post H ctx func cenv cx e es sa sb s0 ee v buf.buf_operand t
 Proof
   strip_tac >> pop_assum mp_tac >>
   qpat_x_assum `post_value_type _ _ = _` (fn th =>
@@ -153,7 +153,7 @@ fun literal_buffer_run_tac norm size =
   Q.SUBGOAL_THEN size ASSUME_TAC
     >- (simp[wordsTheory.dimword_def] >> decide_tac) >>
   drule_all (norm literal_bytelike_ptr_run) >>
-  disch_then (qspecl_then [`tn0`, `func`, `PG`, `G0`, `cx_dead cx`]
+  disch_then (qspecl_then [`tn0`, `func`, `PG`, `G0`, `cx_dead H cx`]
     strip_assume_tac) >>
   drule_all (norm literal_buffer_ptr_path) >> strip_tac >>
   drule_all (norm literal_bytelike_ptr_nonmemory_frame) >> strip_tac >>
@@ -180,7 +180,7 @@ fun literal_buffer_vv_post_tac norm e size tv =
   rpt conj_tac >> first_assum ACCEPT_TAC;
 
 fun literal_buffer_ghost_tac size =
-  `ghost_inv d cenv cx es G' tn' t /\
+  `ghost_inv H d cenv cx es G' tn' t /\
    ghost_kept cenv es sa G0 tn0 s0 G' tn'` by
     (irule literal_ptr_ghost_frame >> simp[] >>
      qexistsl_tac [`b`, `ctx`, `func`, size, `u`] >>
@@ -251,7 +251,7 @@ fun literal_bytes_consumer_parts is_expr =
     `Literal (BaseT (BytesT (Dynamic n))) (BytesL bs)`
     `32+32*word_size (LENGTH (bs:word8 list))`
     `BaseTV (BytesT (Dynamic n))` `BytesV bs`
-    `vv_post ctx func cenv cx
+    `vv_post H ctx func cenv cx
       (Literal (BaseT (BytesT (Dynamic n))) (BytesL bs)) es sa cs' s0 (es with gas_obs := [])
       (Value (BytesV bs)) (LocatedValue (BaseT (BytesT (Dynamic n))) (base_ptr buf))
       (t with vs_inst_idx := LENGTH cs'.cs_current_insts)`;
@@ -268,7 +268,7 @@ fun literal_string_consumer_parts is_expr =
     `Literal (BaseT (StringT n)) (StringL str)`
     `32+32*word_size (LENGTH (str:string))`
     `BaseTV (StringT n)` `StringV str`
-    `vv_post ctx func cenv cx
+    `vv_post H ctx func cenv cx
       (Literal (BaseT (StringT n)) (StringL str)) es sa cs' s0 (es with gas_obs := [])
       (Value (StringV str)) (LocatedValue (BaseT (StringT n)) (base_ptr buf))
       (t with vs_inst_idx := LENGTH cs'.cs_current_insts)`;

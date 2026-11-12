@@ -561,6 +561,35 @@ End
    source's: equal except at storage bytes the source leaves dead
    (accounts_agree, compileEnv). *)
 
+(* Primitive source/Venom result boundary at one observed storage horizon. *)
+Definition external_call_result_rel_def:
+  external_call_result_rel H tops ret tx (res, am', rqs) vres <=>
+    let cx = initial_evaluation_context am'.sources am'.layouts tx NONE in
+    case (res, vres) of
+      (INL v, Halt ss) =>
+        tx_return_bytes tops ret tx v ss.vs_returndata /\
+        accounts_agree H cx am'.accounts
+          (process_deletions ss.vs_pending_deletions ss.vs_accounts) /\
+        transient_agree H cx am'.tStorage ss.vs_transient /\
+        logs_correspond (compiled_event_info tops) (type_env tops)
+          tx.target am'.logs ss.vs_logs /\
+        LIST_REL (request_agree H cx) rqs ss.vs_requests
+    | (INR HaltException, Halt ss) =>
+        ss.vs_returndata = [] /\
+        accounts_agree H cx am'.accounts
+          (process_deletions ss.vs_pending_deletions ss.vs_accounts) /\
+        transient_agree H cx am'.tStorage ss.vs_transient /\
+        logs_correspond (compiled_event_info tops) (type_env tops)
+          tx.target am'.logs ss.vs_logs /\
+        LIST_REL (request_agree H cx) rqs ss.vs_requests
+    | (INR (AssertException s), Abort Revert_abort _) => T
+    | (INR (AssertException s), Abort ExHalt_abort _) => (s = "UNREACHABLE")
+    | (INR (Error (RevertData _)), Abort Revert_abort _) => T
+    | (INR (Error (RuntimeError m)), Abort _ _) => T
+    | (INR (Error e), Halt _) => unspecified_behaviour_exempt tops e
+    | _ => F
+End
+
 (* Fixed slots use distinct observations; absent slots must be irrelevant
    to the observation selected by run. *)
 Definition gas_readings_rel_def:
