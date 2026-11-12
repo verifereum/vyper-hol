@@ -30,9 +30,6 @@ Theorem dft_step_row:
   o1_fn_row 8 out.fpo_function
 Proof
   strip_tac >>
-  `fmp_sig_no_param out.fpo_function` by
-    (drule fn_pass_step_fmp_sig_no_param >>
-     gvs[o1_fn_row_def, fn_pass_tag_def]) >>
   fs[fn_pass_step_def] >> gvs[] >>
   `MEM fn observed.cu_context.ctx_functions` by
     metis_tac[lookup_unique_function_member] >>

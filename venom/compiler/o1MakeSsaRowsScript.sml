@@ -1,8 +1,7 @@
 (*
  * MakeSSA's o1 function rows.  The walk runs MakeSSA at positions 0 and 4,
- * and the step from row k to row SUC k there needs, besides
- * fmp_sig_no_param (every pass but FmpLowering keeps it):
- *   k = 0: make_ssa_input_ok and no_raw_fmp_ops of the output;
+ * and the step from row k to row SUC k there needs:
+ *   k = 0: make_ssa_input_ok and pre_fmp_ops of the output;
  *   k = 4: no ALLOCA, pseudos as a block prefix, no PARAM-family opcode
  *          outside the first block, and SSA form.
  * MakeSSA inserts PHIs only at non-entry frontier blocks, the rename keeps
@@ -176,14 +175,11 @@ QED
 Theorem make_ssa_step_rows:
   fn_pass_step rpolicy (CFP_Simple VP_MakeSSA) observed s fn out /\
   o1_ctx_shape observed.cu_context /\ ir_supply_inst_ok s /\
-  EVERY fmp_sig_no_param observed.cu_context.ctx_functions /\
   (k = 0 \/ k = 4) /\ o1_fn_row k fn ==>
   o1_fn_row (SUC k) out.fpo_function
 Proof
   strip_tac >>
-  `fmp_sig_no_param fn /\ make_ssa_input_ok fn` by gvs[o1_fn_row_def] >>
-  `fmp_sig_no_param out.fpo_function` by
-    (drule fn_pass_step_fmp_sig_no_param >> gvs[fn_pass_tag_def]) >>
+  `make_ssa_input_ok fn` by gvs[o1_fn_row_def] >>
   `MEM fn observed.cu_context.ctx_functions` by
     (gvs[fn_pass_step_def] >> drule lookup_unique_function_member >> simp[]) >>
   `o1_fn_shape observed.cu_context fn` by gvs[o1_ctx_shape_def, EVERY_MEM] >>
@@ -194,12 +190,21 @@ Proof
   `make_ssa_current_fn s fn = (out.fpo_function,out.fpo_supply)` by
     (gvs[fn_pass_step_def] >> Cases_on `make_ssa_current_fn s fn` >> gvs[]) >>
   gvs[] >> simp[o1_fn_row_def]
-  >~ [`no_raw_fmp_ops _`]
+  >~ [`pre_fmp_ops _`]
   >- (drule_all make_ssa_current_fn_phis_non_degenerate >> strip_tac >>
       drule_all make_ssa_current_fn_input_ok >> strip_tac >>
-      `no_raw_fmp_ops fn` by gvs[o1_fn_row_def] >>
-      `no_raw_fmp_ops out.fpo_function` by
-        metis_tac[make_ssa_current_fn_no_raw_fmp_ops, pairTheory.FST] >>
+      `pre_fmp_ops fn` by gvs[o1_fn_row_def] >>
+      `pre_fmp_ops out.fpo_function` by
+        (drule make_ssa_current_fn_opcodes >>
+         disch_then (qspec_then `\lbl op. pre_fmp_opcode op` mp_tac) >>
+         simp[pre_fmp_opcode_def] >> impl_tac
+         >- (qpat_x_assum `pre_fmp_ops fn` mp_tac >>
+             rpt (pop_assum kall_tac) >>
+             simp[pre_fmp_ops_def, pre_fmp_opcode_def, EVERY_MEM, fn_insts_def,
+                  MEM_fn_insts_blocks_iff] >> metis_tac[]) >>
+         rpt (pop_assum kall_tac) >>
+         simp[pre_fmp_ops_def, pre_fmp_opcode_def, EVERY_MEM, fn_insts_def,
+              MEM_fn_insts_blocks_iff] >> metis_tac[]) >>
       rewrite_tac[make_ssa_input_ok_def] >> asm_rewrite_tac[]) >>
   (* k = 4 *)
   `EVERY (\i. i.inst_opcode <> ALLOCA) (fn_insts fn) /\ fn_pseudos_prefix fn /\

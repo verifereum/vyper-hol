@@ -59,19 +59,25 @@ QED
  * The source's static invariant rows remain premises: no function has
  * an eom, and the fixed region is reserved. Raw memory safety, pointer
  * discipline, taint bounds and DLOAD bounds guard the reconstructed
- * input oracle together. No DALLOCA follows from o1_source_unit_ok. *)
-(* S4 with the output fuel fixed by the input fuel: every pass but
- * CFGNormalization keeps it, and cfg_norm_fuel bounds CFGNormalization's. *)
+ * input oracle together. No DALLOCA follows from o1_source_unit_ok.
+ * The input state runs at a free-memory pointer fmp of the caller's
+ * choice (raw_variant: its FMP fields are fmp, the rest as vs_out's up to
+ * the GAS oracle), which FmpLowering relocates to the output state's
+ * initial pointer; that pointer lies at or above the output's live static
+ * layout end, and fmp at or above it. *)
 Theorem run_venom_pipeline_fuel:
-  !D lo rpolicy unit out vs_out.
+  !D lo rpolicy unit out vs_out fmp.
     o1_pipeline rpolicy unit = SOME out /\
     o1_source_unit_ok unit /\ unit_entry_no_params unit /\
     unit_defs_reach_uses unit /\ unit_fmp_unsealed unit /\ o1_run_state_ok vs_out /\
     reserved_intervals_wf unit.cu_context.ctx_global_reserved /\
     EVERY (\fn. fn.fn_eom = NONE) unit.cu_context.ctx_functions /\
-    fixed_region_reserved lo unit.cu_context /\ dead_wf D
+    fixed_region_reserved lo unit.cu_context /\ dead_wf D /\
+    (!eom. max_live_eom out.po_unit.cu_context = SOME eom ==>
+           eom <= w2n vs_out.vs_initial_fmp) /\
+    w2n vs_out.vs_initial_fmp <= w2n fmp
     ==>
-    ?vs_in. gas_variant vs_in vs_out /\
+    ?vs_in. raw_variant fmp vs_in vs_out /\
       (raw_unit_memory_ok unit.cu_context vs_in /\
        ptr_discipline lo unit.cu_context vs_in /\
        taint_within D unit.cu_context vs_in /\
@@ -95,19 +101,34 @@ Proof
            o1_source_unit_ok_no_dalloca] >> metis_tac[]) >>
      irule o1_source_pre_walk_inv >> simp[]) >>
   fs[o1_pipeline_def] >>
-  drule_all o1_pipeline_stage_facts >> strip_tac >> metis_tac[]
+  drule_all o1_pipeline_stage_facts >> strip_tac >>
+  first_x_assum (qspecl_then [`D`, `fmp`, `vs_out`] mp_tac) >>
+  simp[fmp_variant_room_def] >> metis_tac[]
+QED
+
+(* At the real state's own pointer the raw variant is a GAS variant. *)
+Theorem raw_variant_gas_variant:
+  s'.vs_fmp = s'.vs_initial_fmp ==>
+  (raw_variant s'.vs_initial_fmp s s' <=> gas_variant s s')
+Proof
+  rw[raw_variant_def, gas_variant_def,
+     venomStateTheory.venom_state_component_equality] >>
+  EQ_TAC >> rw[]
 QED
 
 Theorem run_venom_pipeline_correct:
-  !D lo rpolicy unit out vs_out.
+  !D lo rpolicy unit out vs_out fmp.
     o1_pipeline rpolicy unit = SOME out /\
     o1_source_unit_ok unit /\ unit_entry_no_params unit /\
     unit_defs_reach_uses unit /\ unit_fmp_unsealed unit /\ o1_run_state_ok vs_out /\
     reserved_intervals_wf unit.cu_context.ctx_global_reserved /\
     EVERY (\fn. fn.fn_eom = NONE) unit.cu_context.ctx_functions /\
-    fixed_region_reserved lo unit.cu_context /\ dead_wf D
+    fixed_region_reserved lo unit.cu_context /\ dead_wf D /\
+    (!eom. max_live_eom out.po_unit.cu_context = SOME eom ==>
+           eom <= w2n vs_out.vs_initial_fmp) /\
+    w2n vs_out.vs_initial_fmp <= w2n fmp
     ==>
-    ?vs_in. gas_variant vs_in vs_out /\
+    ?vs_in. raw_variant fmp vs_in vs_out /\
       (raw_unit_memory_ok unit.cu_context vs_in /\
        ptr_discipline lo unit.cu_context vs_in /\
        taint_within D unit.cu_context vs_in /\
@@ -128,7 +149,8 @@ Theorem o1_lowered_inv_fixed_pointer[local]:
 Proof
   strip_tac >> fs[o1_lowered_inv_def] >>
   fs[mem_inv_raw_reachable] >>
-  rpt strip_tac >> first_x_assum drule >> simp[static_mem_ok_lowered]
+  rpt strip_tac >> first_x_assum drule >>
+  drule raw_reachable_initial_fmp >> simp[lowered_mem_fact_def]
 QED
 
 (* The output's memory invariant: every access is static (below some
@@ -140,7 +162,9 @@ Theorem run_venom_pipeline_mem_inv:
     unit_defs_reach_uses unit /\ unit_fmp_unsealed unit /\ o1_run_state_ok vs_out /\
     reserved_intervals_wf unit.cu_context.ctx_global_reserved /\
     EVERY (\fn. fn.fn_eom = NONE) unit.cu_context.ctx_functions /\
-    fixed_region_reserved lo unit.cu_context
+    fixed_region_reserved lo unit.cu_context /\
+    (!eom. max_live_eom out.po_unit.cu_context = SOME eom ==>
+           eom <= w2n vs_out.vs_initial_fmp)
     ==>
     ?vs_in. gas_variant vs_in vs_out /\
       (raw_unit_memory_ok unit.cu_context vs_in /\
@@ -155,7 +179,12 @@ Proof
   qabbrev_tac `D = <| d_stor := K (K UNIV); d_trans := K (K UNIV);
                       d_imm := K UNIV; d_ret := K UNIV |>` >>
   `dead_wf D` by simp[Abbr `D`, dead_wf_def] >>
-  drule_all run_venom_pipeline_correct >> strip_tac >>
+  mp_tac (Q.SPECL [`D`, `lo`, `rpolicy`, `unit`, `out`, `vs_out`,
+                   `vs_out.vs_initial_fmp`] run_venom_pipeline_correct) >>
+  impl_tac >- fs[] >>
+  strip_tac >>
+  `gas_variant vs_in vs_out`
+    by metis_tac[raw_variant_gas_variant, o1_run_state_ok_def] >>
   qexists_tac `vs_in` >> simp[] >> strip_tac >>
   `taint_within D unit.cu_context vs_in` by
     simp[Abbr `D`, taint_within_def] >>
@@ -184,6 +213,18 @@ Proof
   gvs[w2n_n2w, arithmeticTheory.LESS_MOD] >>
   qexists_tac `raw_reachable vs` >>
   metis_tac[mem_inv_codegen_obligations, step_write_footprint_holds]
+QED
+
+(* The generated plan's initial free-memory pointer is at or above every
+ * live static layout end: S4's room premise at the codegen entry state. *)
+Theorem generate_context_plan_eom_room:
+  !C cp vs.
+  generate_context_plan C = SOME cp /\ vs.vs_initial_fmp = n2w cp.cp_initial_fmp ==>
+  !eom. max_live_eom C = SOME eom ==> eom <= w2n vs.vs_initial_fmp
+Proof
+  rpt strip_tac >> drule generate_context_plan_spill_gap >> strip_tac >>
+  drule generate_context_plan_layout_wf >>
+  gvs[stackPlanTypesTheory.context_plan_layout_wf_def, w2n_n2w, arithmeticTheory.LESS_MOD]
 QED
 
 (* ===== S6b: resource bound of the output (sufficient gas) ===== *)

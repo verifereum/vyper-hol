@@ -425,8 +425,6 @@ Theorem o1_step_contracts_from_rows:
 Proof
   Induct >> simp[o1_step_contracts_from_def, rows_step_contracts_from_def] >>
   rpt strip_tac >> simp[rows_step_contract_def] >> rpt gen_tac >> strip_tac >>
-  `EVERY fmp_sig_no_param observed.cu_context.ctx_functions` by
-    (fs[EVERY_MEM, o1_fn_row_def] >> metis_tac[]) >>
   qpat_x_assum `o1_step_contract_at _ _ _`
     (mp_tac o REWRITE_RULE [o1_step_contract_at_def]) >>
   disch_then drule_all >> simp[]

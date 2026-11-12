@@ -690,14 +690,17 @@ Proof
   disch_then irule >> metis_tac[raw_reachable_rules]
 QED
 
-(* What the memory facts see of a state: the alloca frame, the initial
-   free-memory pointer and the instruction's memory ranges.  An inserted
-   instruction that touches no memory corresponds to any instruction. *)
+(* What the memory facts see of a state: the alloca frame, the
+   free-memory pointers, DALLOCA's no-wrap bound and the instruction's
+   memory ranges.  An inserted instruction that touches no memory
+   corresponds to any instruction. *)
 Definition mem_corr_def:
   mem_corr inst s inst' s' <=>
     s'.vs_alloca_next = s.vs_alloca_next /\
     s'.vs_allocas = s.vs_allocas /\
     s'.vs_initial_fmp = s.vs_initial_fmp /\
+    s'.vs_fmp = s.vs_fmp /\
+    (dalloca_no_wrap inst s ==> dalloca_no_wrap inst' s') /\
     (inst_mem_ranges inst' s' = [] \/
      inst_mem_ranges inst' s' = inst_mem_ranges inst s)
 End
@@ -989,7 +992,8 @@ QED
 Theorem mem_corr_closed_rf_static_mem_ok:
   mem_corr_closed_rf (static_mem_ok eom)
 Proof
-  rw[mem_corr_closed_rf_def, mem_corr_def, static_mem_ok_def] >> fs[]
+  rw[mem_corr_closed_rf_def, mem_corr_def, static_mem_ok_def] >> fs[] >>
+  metis_tac[]
 QED
 
 
