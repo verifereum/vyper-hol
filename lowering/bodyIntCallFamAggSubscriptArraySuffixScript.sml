@@ -33,8 +33,8 @@ Theorem intcall_framed_array_valid_suffix:
   fn_has_code sc sd fp.jc_func /\ ~s.vs_halted /\
   s.vs_current_bb = sc.cs_current_bb /\ s.vs_inst_idx = LENGTH sc.cs_current_insts /\
   stmt_state_rel fp.jc_ctx fp.jc_func ce fp.jc_cx ee s /\
-  vv_post fp.jc_ctx fp.jc_func ce fp.jc_cx obj es sa sc s0 ee r
-    (LocatedValue (ArrayT et bd) p) s /\
+  vv_post fp.jc_ctx fp.jc_func ce fp.jc_cx (Subscript (ArrayT et bd) obj idx)
+    es sa sc s0 ee r (LocatedValue (ArrayT et bd) p) s /\
   evaluate_type (get_tenv fp.jc_cx) et = SOME etv /\
   evaluate_type (get_tenv fp.jc_cx) (ArrayT et bd) = SOME (ArrayTV etv bd) /\
   read_result fp.jc_cx r ee = (INL (ArrayV av),ee) /\
@@ -47,14 +47,14 @@ Theorem intcall_framed_array_valid_suffix:
   (!q. (!x z. not_fresh_at sc x /\ lookup_var x s = SOME z ==> lookup_var x q = SOME z) /\
        (!aid a. FLOOKUP s.vs_allocas aid = SOME a ==> FLOOKUP q.vs_allocas aid = SOME a) /\
        q.vs_memory = s.vs_memory /\ stmt_state_rel fp.jc_ctx fp.jc_func ce fp.jc_cx ee q ==>
-       vv_post fp.jc_ctx fp.jc_func ce fp.jc_cx obj es sa sd s0 ee r
-         (LocatedValue (ArrayT et bd) p) q) /\
+       vv_post fp.jc_ctx fp.jc_func ce fp.jc_cx (Subscript (ArrayT et bd) obj idx)
+         es sa sd s0 ee r (LocatedValue (ArrayT et bd) p) q) /\
   intcall_frame_ok fp /\ intcall_expr_cont fp ce env es sa s0 ee sc s /\
   sa.cs_next_var <= sc.cs_next_var /\ valid_index (ArrayTV etv bd) av i ==>
   ?q. gas_marked_path F fp.jc_ctx fp.jc_func s 0 (OK q) /\
     intcall_expr_cont fp ce env es sa s0 ee sd q /\
-    vv_post fp.jc_ctx fp.jc_func ce fp.jc_cx obj es sa sd s0 ee r
-      (LocatedValue (ArrayT et bd) p) q /\
+    vv_post fp.jc_ctx fp.jc_func ce fp.jc_cx (Subscript (ArrayT et bd) obj idx)
+      es sa sd s0 ee r (LocatedValue (ArrayT et bd) p) q /\
     eval_operand p.ptr_operand q = SOME w /\
     eval_operand dst q = SOME (w + n2w
       ((case bd of Fixed _ => 0 | Dynamic _ => 32) + Num i * type_memory_size etv)) /\
@@ -88,8 +88,8 @@ Resume intcall_framed_array_valid_suffix[fixed]:
   drule_all intcall_fixed_array_subscript_landing >> strip_tac >>
   `stmt_state_rel fp.jc_ctx fp.jc_func ce fp.jc_cx ee t'` by
     fs[intcall_expr_cont_def, intcall_expr_res_def] >>
-  `vv_post fp.jc_ctx fp.jc_func ce fp.jc_cx obj es sa sd s0 ee r
-      (LocatedValue (ArrayT et (Fixed n)) p) t'` by
+  `vv_post fp.jc_ctx fp.jc_func ce fp.jc_cx (Subscript (ArrayT et (Fixed n)) obj idx)
+      es sa sd s0 ee r (LocatedValue (ArrayT et (Fixed n)) p) t'` by
     (first_x_assum irule >> simp[]) >>
   `eval_operand p.ptr_operand t' = SOME w` by
     (Cases_on `p.ptr_operand` >> gvs[venomStateTheory.eval_operand_def] >>
@@ -114,8 +114,8 @@ Resume intcall_framed_array_valid_suffix[dynamic]:
   drule_all intcall_runtime_array_subscript_landing >> strip_tac >>
   `stmt_state_rel fp.jc_ctx fp.jc_func ce fp.jc_cx ee t'` by
     fs[intcall_expr_cont_def, intcall_expr_res_def] >>
-  `vv_post fp.jc_ctx fp.jc_func ce fp.jc_cx obj es sa sd s0 ee r
-      (LocatedValue (ArrayT et (Dynamic n)) p) t'` by
+  `vv_post fp.jc_ctx fp.jc_func ce fp.jc_cx (Subscript (ArrayT et (Dynamic n)) obj idx)
+      es sa sd s0 ee r (LocatedValue (ArrayT et (Dynamic n)) p) t'` by
     (first_x_assum irule >> simp[]) >>
   `eval_operand p.ptr_operand t' = SOME w` by
     (Cases_on `p.ptr_operand` >> gvs[venomStateTheory.eval_operand_def] >>
@@ -149,7 +149,7 @@ Theorem intcall_framed_array_invalid_suffix:
   fn_has_code sc sd func /\ ~s.vs_halted /\
   s.vs_current_bb = sc.cs_current_bb /\ s.vs_inst_idx = LENGTH sc.cs_current_insts /\
   stmt_state_rel ctx func ce cx ee s /\
-  vv_post ctx func ce cx obj es sa sc s0 ee r
+  vv_post ctx func ce cx (Subscript (ArrayT et bd) obj idx) es sa sc s0 ee r
     (LocatedValue (ArrayT et bd) p) s /\
   evaluate_type (get_tenv cx) et = SOME etv /\
   evaluate_type (get_tenv cx) (ArrayT et bd) = SOME (ArrayTV etv bd) /\
@@ -233,8 +233,8 @@ Theorem intcall_framed_array_suffix_summary:
   fn_has_code sc sd fp.jc_func /\ ~s.vs_halted /\
   s.vs_current_bb = sc.cs_current_bb /\ s.vs_inst_idx = LENGTH sc.cs_current_insts /\
   stmt_state_rel fp.jc_ctx fp.jc_func ce fp.jc_cx ee s /\
-  vv_post fp.jc_ctx fp.jc_func ce fp.jc_cx obj es sa sc s0 ee r
-    (LocatedValue (ArrayT et bd) p) s /\
+  vv_post fp.jc_ctx fp.jc_func ce fp.jc_cx (Subscript (ArrayT et bd) obj idx)
+    es sa sc s0 ee r (LocatedValue (ArrayT et bd) p) s /\
   evaluate_type (get_tenv fp.jc_cx) et = SOME etv /\
   evaluate_type (get_tenv fp.jc_cx) (ArrayT et bd) = SOME (ArrayTV etv bd) /\
   read_result fp.jc_cx r ee = (INL (ArrayV av),ee) /\
@@ -247,8 +247,8 @@ Theorem intcall_framed_array_suffix_summary:
   (!q. (!x z. not_fresh_at sc x /\ lookup_var x s = SOME z ==> lookup_var x q = SOME z) /\
        (!aid a. FLOOKUP s.vs_allocas aid = SOME a ==> FLOOKUP q.vs_allocas aid = SOME a) /\
        q.vs_memory = s.vs_memory /\ stmt_state_rel fp.jc_ctx fp.jc_func ce fp.jc_cx ee q ==>
-       vv_post fp.jc_ctx fp.jc_func ce fp.jc_cx obj es sa sd s0 ee r
-         (LocatedValue (ArrayT et bd) p) q) /\
+       vv_post fp.jc_ctx fp.jc_func ce fp.jc_cx (Subscript (ArrayT et bd) obj idx)
+         es sa sd s0 ee r (LocatedValue (ArrayT et bd) p) q) /\
   intcall_frame_ok fp /\ intcall_expr_cont fp ce env es sa s0 ee sc s /\
   sa.cs_next_var <= sc.cs_next_var /\
   (p.ptr_location = LocMemory ==>
