@@ -57,30 +57,16 @@ Resume tuple_place_equal_storage_run_memory[word]:
   `eval_operand op s = SOME (typed_val_to_w256 stv v)` by fs[expr_val_rel_def] >>
   drule_all place_store_emit_slot_path >>
   disch_then (qspec_then `ctx` strip_assume_tac) >>
-  `n2w (w2n root+delta) = root+n2w delta` by
-    simp[GSYM wordsTheory.word_add_n2w, wordsTheory.n2w_w2n] >>
-  `stmt_state_rel H ctx func cenv cx
-    (set_storage cx ee tr (apply_writes (n2w (w2n root+delta)) writes
-      (get_storage cx ee tr)))
-    (FOLDL (\u i. (if tr then tstore else sstore)
-       (n2w (w2n root+delta+i)) (typed_val_to_w256 stv v) u) s (COUNT_LIST 1))` by
-    (irule (BETA_RULE (Q.INST [`rd` |-> `\i. typed_val_to_w256 stv v`]
-       (SPEC_ALL place_store_encoded_leaf_state))) >>
-     conj_tac >- metis_tac[] >> reverse conj_tac >- simp[] >>
-     goal_assum (drule_at (Pat `declared_storage_region _ _ _ _ = _`)) >>
-     goal_assum (drule_at (Pat `storage_subregion _ _ _ _`)) >>
-     simp[] >> rpt strip_tac >> drule_all place_store_word_live_copy >>
-     disch_then (qspecl_then [`get_storage cx ee tr`, `root+n2w delta`, `b`] mp_tac) >>
-     simp[AC ADD_ASSOC ADD_COMM]) >>
   qmatch_asmsub_abbrev_tac `gas_marked_path F ctx func s 0 (OK t)` >>
   `t.vs_memory = s.vs_memory` by
     (unabbrev_all_tac >> Cases_on `tr` >> simp[tstore_def, sstore_def]) >>
   qexists_tac `t` >> simp[] >> reverse conj_tac
   >- (unabbrev_all_tac >> Cases_on `tr` >> simp[tstore_def, sstore_def, lookup_var_def]) >>
-  qpat_x_assum `stmt_state_rel _ _ _ _ _ _ (FOLDL _ _ _)` mp_tac >>
-  `COUNT_LIST 1 = [0]` by EVAL_TAC >> simp[] >> unabbrev_all_tac >>
-  simp[stmt_state_rel_inst_idx, GSYM wordsTheory.word_add_n2w,
-       wordsTheory.n2w_w2n, wordsTheory.WORD_ADD_COMM]
+  rpt strip_tac >>
+  qpat_x_assum `stmt_state_rel H0 _ _ _ _ ee s` kall_tac >>
+  qpat_x_assum `storage_place_observed H0 _` kall_tac >>
+  drule_all place_store_word_backend_state >>
+  unabbrev_all_tac >> Cases_on `tr` >> simp[stmt_state_rel_inst_idx]
 QED
 
 Resume tuple_place_equal_storage_run_memory[equal]:
