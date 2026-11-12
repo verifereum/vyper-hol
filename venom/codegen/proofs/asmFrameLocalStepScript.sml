@@ -48,7 +48,8 @@ Theorem frame_next_opcode:
   asm_evm_rel (prog ++ [AsmDataItem data]) a es /\
   es.contexts = (c,rb)::rest /\ a.as_pc < LENGTH prog /\
   ~is_data_inst (EL a.as_pc prog) ==>
-  ?op. next_opcode c = SOME op /\ wf_opname op /\
+  ?op. next_opcode c = SOME op /\
+    FLOOKUP c.msgParams.parsed c.pc = SOME op /\ wf_opname op /\
     opcode op = encode_inst (SND (compute_label_offsets
       (prog ++ [AsmDataItem data]))) (EL a.as_pc prog)
 Proof
@@ -71,6 +72,25 @@ Proof
   drule_all asm_evm_step_setup >>
   simp[EL_APPEND1] >> strip_tac >> gvs[] >>
   simp[next_opcode_def] >> metis_tac[]
+QED
+
+Theorem frame_encode_returndatacopy:
+  ~is_data_inst inst /\
+  opcode ReturnDataCopy = encode_inst offsets inst ==>
+  inst = AsmOp "RETURNDATACOPY"
+Proof
+  Cases_on `inst`
+  >- (simp[encode_inst_def] >> strip_tac >>
+      gvs[opcode_def, AllCaseEqs(), evm_opcode_byte_def] >>
+      drule ALOOKUP_MEM >>
+      qpat_x_assum `ALOOKUP _ _ = _` kall_tac >>
+      simp_tac std_ss [evm_opcode_table_def, MEM, pairTheory.PAIR_EQ,
+        wordsTheory.n2w_11, wordsTheory.dimword_8]) >>
+  strip_tac >>
+  gvs[is_data_inst_def, encode_inst_def, opcode_def,
+      AllCaseEqs(), wordsTheory.dimword_8] >>
+  rename1 `encode_inst offsets (AsmPush bytes)` >>
+  Cases_on `bytes` >> gvs[encode_inst_def, wordsTheory.dimword_8]
 QED
 
 Theorem frame_encode_system[local]:

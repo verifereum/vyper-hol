@@ -13,7 +13,8 @@ Theory codegenEntryBounded
 Ancestors
   codegenEntrySim asmRunBounded codegenEntryRel contextCodegenRel unitMemInv
   codegen asmSem venomExecSemantics venomState unitShapeDefs
-  passSimulationDefs frameRel venomInst codegenRel codegenLabelDisciplined
+  passSimulationDefs frameRel venomInst codegenRel venomRunBounded
+  contextCodegenRelProps codegenLabelDisciplined
 
 (* Why it should hold.  codegen_entry_asm_sim is proved by
    gen_fn_simulation (venomToAsmProps), an induction over fuel through
@@ -90,4 +91,35 @@ Proof
   drule initial_ctx_codegen_asm_entry_rel >> strip_tac >>
   first_x_assum irule >> qexistsl_tac [`Inv`, `vs`] >>
   rpt conj_tac >> first_assum ACCEPT_TAC
+QED
+
+(* The bound from the Venom run's resource bound: venom_run_bounded's
+   memory invariant has its own reachability witness, and the conjunction
+   of it with Inv carries both the obligations and the memory bound. *)
+Theorem codegen_entry_asm_bounded_run:
+  !rpolicy unit cp prog fuel M.
+    generate_context_plan unit.cu_context = SOME cp /\
+    codegen_assembly rpolicy unit = SOME prog /\
+    unit_shape_ok unit
+    ==>
+    ?N H. !Inv vs as.
+      codegen_context_obligations Inv unit.cu_context cp /\
+      codegen_reachability_package Inv unit.cu_context vs /\
+      codegen_asm_entry_rel cp prog vs as /\
+      venom_run_bounded fuel M unit.cu_context vs
+      ==>
+      asm_run_bounded (SND (compute_label_offsets prog)) (build_offset_to_pc prog)
+        prog H N as
+Proof
+  rpt gen_tac >> strip_tac >>
+  drule_all codegen_entry_asm_bounded_state >>
+  disch_then (qspecl_then [`fuel`, `M`] strip_assume_tac) >>
+  qexistsl_tac [`N`, `H`] >> rpt gen_tac >> strip_tac >>
+  gvs[venom_run_bounded_def, mem_inv_def] >>
+  rename1 `codegen_reachability_package MemInv unit.cu_context vs` >>
+  qpat_x_assum `!Inv vs as. _` (qspecl_then
+    [`\c f i s. Inv c f i s /\ MemInv c f i s`, `vs`, `as`] mp_tac) >>
+  simp[] >> disch_then irule >>
+  gvs[codegen_context_obligations_conj, codegen_reachability_package_conj] >>
+  metis_tac[]
 QED

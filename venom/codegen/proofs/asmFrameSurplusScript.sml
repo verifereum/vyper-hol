@@ -10,8 +10,9 @@
 
 Theory asmFrameSurplus
 Ancestors
-  asmFrameNext asmFrameGas frameStep asmRunBounded asmFrameRel frameGas
-  vfmExecution vfmExecutionProp
+  asmFrameNext asmFrameGas asmFrameLocalStep frameStep asmRunBounded
+  asmFrameRel frameGas asmSem asmWf symbolResolve vfmExecution
+  vfmExecutionProp vfmContext callTrace list finite_map
 
 (* Why it should hold.  Induction on N along the frame's own states:
    asm_frame_step_next steps the assembly and the frame together
@@ -38,4 +39,60 @@ Theorem asm_frame_gas_surplus:
     r <> INR (SOME OutOfGas) /\ D <= frame_gas_left s'
 Proof
   cheat
+QED
+
+Theorem asm_frame_current_no_returndatacopy[local]:
+  asm_frame_prog_ok prog /\ asm_frame_rel prog data es0 a es /\
+  a.as_pc < LENGTH prog /\ ~is_data_inst (EL a.as_pc prog) /\
+  ~MEM (AsmOp "RETURNDATACOPY") prog ==>
+  ~frame_inst_at es es ReturnDataCopy
+Proof
+  strip_tac >>
+  `?c rb rest. es.contexts = (c,rb)::rest /\
+    asm_evm_rel (prog ++ [AsmDataItem data]) a es` by
+    metis_tac[asm_frame_rel_def] >>
+  drule_all frame_next_opcode >> strip_tac >>
+  simp[frame_inst_at_def] >> rpt strip_tac >>
+  gvs[] >>
+  metis_tac[frame_encode_returndatacopy, MEM_EL]
+QED
+
+(* Lockstep corollary: a frame related to a bounded run of assembly with no
+   RETURNDATACOPY never reaches a ReturnDataCopy opcode at its own depth.
+   Generic in prog; codegen_no_returndatacopy is its codegen instance. *)
+Theorem asm_frame_no_returndatacopy:
+  !N prog data es0 a e H t.
+    asm_frame_prog_ok prog /\ asm_frame_rel prog data es0 a e /\
+    asm_run_bounded (SND (compute_label_offsets prog))
+      (build_offset_to_pc prog) prog H N a /\
+    ~MEM (AsmOp "RETURNDATACOPY") prog
+    ==>
+    ~frame_inst_at e t ReturnDataCopy
+Proof
+  Induct_on `N` >- simp[asm_run_bounded_def] >>
+  rpt gen_tac >> strip_tac >>
+  qpat_x_assum `asm_run_bounded _ _ _ _ _ _` mp_tac >>
+  simp[Once asm_run_bounded_def] >> strip_tac >>
+  `EL a.as_pc prog <> AsmOp "RETURNDATACOPY"` by
+    metis_tac[MEM_EL] >>
+  gvs[] >>
+  `!e. asm_step (SND (compute_label_offsets prog))
+    (build_offset_to_pc prog) (EL a.as_pc prog) a <> AsmError e` by
+    (gen_tac >> strip_tac >> gvs[]) >>
+  `~is_data_inst (EL a.as_pc prog)` by
+    (Cases_on `EL a.as_pc prog` >>
+     gvs[is_data_inst_def, asm_step_def]) >>
+  drule_all asm_frame_current_no_returndatacopy >> strip_tac >>
+  drule_all asm_frame_step_next >> strip_tac
+  >- (strip_tac >>
+      `t = e` by
+        (irule frame_reaches_last >> gvs[frame_inst_at_def]) >> gvs[]) >>
+  gvs[] >> strip_tac >>
+  `t = e \/ RTC (\a b. LENGTH a.contexts >= LENGTH e.contexts /\
+      step a = (INL (),b)) es1 t` by
+    (irule frame_reaches_next >> gvs[frame_inst_at_def])
+  >- gvs[] >>
+  first_x_assum (qspecl_then [`prog`, `data`, `es0`, `as1`, `es1`, `H`, `t`]
+    mp_tac) >>
+  simp[] >> gvs[frame_inst_at_def, frame_next_def] >> metis_tac[]
 QED
