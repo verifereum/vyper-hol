@@ -25,19 +25,19 @@ Libs
    fragment f from an operand x holding w1 runs memory-safely and keeps
    the allocation history. *)
 Definition unop_frag_mem_def:
-  unop_frag_mem ctx func cenv cx f w1 t res es0 <=>
+  unop_frag_mem H ctx func cenv cx f w1 t res es0 <=>
     !sa sb x op s0.
       f x sa = (op, sb) /\ expr_res_ok res /\
       (!z. x = Var z ==> not_fresh_at sa z) /\
       fn_has_code sa sb func /\ fn_inst_ids_distinct func /\
       local_ptrs_reserved cenv sa /\
-      stmt_state_rel ctx func cenv cx es0 s0 /\ alloca_history func s0 /\
+      stmt_state_rel H ctx func cenv cx es0 s0 /\ alloca_history func s0 /\
       eval_operand x s0 = SOME w1 /\ ~s0.vs_halted /\
       s0.vs_current_bb = sa.cs_current_bb /\
       s0.vs_inst_idx = LENGTH sa.cs_current_insts ==>
       ?r. gas_marked_path T ctx func s0 0 r /\
         ((?s v. r = OK s /\ res = INL v /\
-                 stmt_state_rel ctx func cenv cx es0 s /\
+                 stmt_state_rel H ctx func cenv cx es0 s /\
                  expr_val_rel cx t v op s /\
                  (!z w. not_fresh_at sa z /\ lookup_var z s0 = SOME w ==>
                         lookup_var z s = SOME w) /\
@@ -119,7 +119,7 @@ Theorem unop_frag_mem_straight:
             eval_operand x ss = SOME w1 ==>
             ?ss'. run_inst_seq (emitted_insts sa sb) ss =
                     Abort Revert_abort ss')) ==>
-    unop_frag_mem ctx func cenv cx f w1 t res es0
+    unop_frag_mem H ctx func cenv cx f w1 t res es0
 Proof
   rpt gen_tac >> strip_tac >> simp[unop_frag_mem_def] >> rpt gen_tac >>
   strip_tac >>
@@ -190,7 +190,7 @@ Theorem compile_not_frag_mem:
     evaluate_type (get_tenv cx) ann = SOME tv1 /\ value_has_type tv1 v1 /\
     (!nsid m. ann = FlagT nsid /\ tv1 = FlagTV m ==>
               cenv.ce_flag_n_members (nsid_to_string nsid) = m) ==>
-    unop_frag_mem ctx func cenv cx
+    unop_frag_mem H ctx func cenv cx
       (\x. if ann = BaseT BoolT then emit_op ISZERO [x]
            else compile_invert x ann cenv)
       (typed_val_to_w256 tv1 v1) ann (unop_result cx ann Not tys v1 es0) es0
@@ -236,7 +236,7 @@ QED
 Theorem compile_abs_frag_mem:
   !ctx func cenv cx tys v1 es0.
     value_has_type (BaseTV (IntT 256)) v1 ==>
-    unop_frag_mem ctx func cenv cx compile_builtin_abs
+    unop_frag_mem H ctx func cenv cx compile_builtin_abs
       (typed_val_to_w256 (BaseTV (IntT 256)) v1) (BaseT (IntT 256))
       (unop_result cx (BaseT (IntT 256)) Abs tys v1 es0) es0
 Proof
@@ -274,7 +274,7 @@ Theorem compile_neg_frag_mem:
   !ctx func cenv cx t tv v es.
     is_numeric_type t /\ ~is_uint_type t /\
     evaluate_type (get_tenv cx) t = SOME tv /\ value_has_type tv v ==>
-    unop_frag_mem ctx func cenv cx (\x. compile_neg x t)
+    unop_frag_mem H ctx func cenv cx (\x. compile_neg x t)
       (typed_val_to_w256 tv v) t (unop_result cx t Neg [t] v es) es
 Proof
   rpt gen_tac >> strip_tac >>
@@ -293,12 +293,12 @@ QED
 (* unop_continuation_summary (exprSimUnopComposeProps) on the
    memory-checked path, carrying the allocation history. *)
 Theorem unop_continuation_summary_mem:
-  expr_post ctx func cenv cx e1 es sa s1 s0 (ee with gas_obs := []) v1 x t0 /\
+  expr_post H ctx func cenv cx e1 es sa s1 s0 (ee with gas_obs := []) v1 x t0 /\
   t0.vs_current_bb = s1.cs_current_bb /\
   t0.vs_inst_idx = LENGTH s1.cs_current_insts /\ ~t0.vs_halted /\
   alloca_history func t0 /\ s0.vs_alloca_next <= t0.vs_alloca_next /\
   evaluate_type (get_tenv cx) (expr_type e1) = SOME tv1 /\
-  unop_frag_mem ctx func cenv cx f (typed_val_to_w256 tv1 v1) ann
+  unop_frag_mem H ctx func cenv cx f (typed_val_to_w256 tv1 v1) ann
     (unop_result cx ann bi [expr_type e1] v1 ee) (ee with gas_obs := []) /\
   expr_res_ok (unop_result cx ann bi [expr_type e1] v1 ee) /\
   f x s1 = (op,sb) /\ (!z. x = Var z ==> not_fresh_at s1 z) /\
@@ -309,17 +309,17 @@ Theorem unop_continuation_summary_mem:
     (\vs. (unop_result cx ann bi [expr_type e1] v1 vs,vs))
     (ee with gas_obs := [],t0)
     (\res fin t. ?v. res = INL v /\
-      expr_post ctx func cenv cx (Builtin ann bi [e1]) es sa sb s0 fin v op t /\
+      expr_post H ctx func cenv cx (Builtin ann bi [e1]) es sa sb s0 fin v op t /\
       t.vs_current_bb = sb.cs_current_bb /\
       t.vs_inst_idx = LENGTH sb.cs_current_insts /\
       alloca_history func t /\ s0.vs_alloca_next <= t.vs_alloca_next)
     (\res fin r. expr_exit res r)
 Proof
   strip_tac >>
-  `stmt_state_rel ctx func cenv cx (ee with gas_obs := []) t0 /\
+  `stmt_state_rel H ctx func cenv cx (ee with gas_obs := []) t0 /\
    eval_operand x t0 = SOME (typed_val_to_w256 tv1 v1)` by
     gvs[expr_post_def, expr_val_rel_def] >>
-  qpat_x_assum `unop_frag_mem _ _ _ _ _ _ _ _ _`
+  qpat_x_assum `unop_frag_mem _ _ _ _ _ _ _ _ _ _`
     (mp_tac o REWRITE_RULE [unop_frag_mem_def]) >>
   disch_then (qspecl_then [`s1`,`sb`,`x`,`op`,`t0`] mp_tac) >>
   (impl_tac >- simp[]) >> strip_tac
@@ -353,7 +353,7 @@ Theorem compile_unop_sim_mem:
     (!gs1 v1 es1. (do r <- eval_expr cx e1; read_result cx r od)
         (es with gas_obs := gs1) = (INL v1, es1) ==>
        ?tv1. evaluate_type (get_tenv cx) (expr_type e1) = SOME tv1 /\
-             unop_frag_mem ctx func cenv cx f (typed_val_to_w256 tv1 v1) ann
+             unop_frag_mem H ctx func cenv cx f (typed_val_to_w256 tv1 v1) ann
                (unop_result cx ann bi [expr_type e1] v1 es1) es1) ==>
     expr_sim_mem ctx func cenv cx ty (Builtin ann bi [e1]) es
 Proof
