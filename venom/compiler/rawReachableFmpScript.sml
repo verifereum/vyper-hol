@@ -105,7 +105,7 @@ Proof
   `pre_fmp_ops callee_fn` by gvs[EVERY_MEM] >>
   `ret.iret_adopt_fmp = NONE` by metis_tac[run_defs_adopt_fmp_none] >>
   drule (SIMP_RULE (srw_ss()) [update_var_def]
-    (Q.SPEC `\s:venom_state. s.vs_fmp` bind_outputs_preserves)) >>
+    (Q.ISPEC `\s:venom_state. s.vs_fmp` bind_outputs_preserves)) >>
   simp[adopt_return_fmp_def]
 QED
 
