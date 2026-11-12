@@ -2833,6 +2833,35 @@ Proof
     AllCaseEqs(), jump_to_def] >> metis_tac[]
 QED
 
+Theorem abi_dyn_middle_off_cut[local]:
+  !dst src lop base hi info asz msz i sa sb fn id s.
+    (^dyn_middle) dst src lop base hi info asz msz i sa = ((),sb) /\
+    lop <> INVOKE /\ lop <> PHI /\ (^dyn_Old) sa /\
+    fn_has_code sa sb fn /\ (^dyn_R) sa sb s /\ ~at_point sb s ==>
+    ?bb ob inst.
+      lookup_block s.vs_current_bb fn.fn_blocks = SOME bb /\
+      lookup_block s.vs_current_bb (frag_observer sa sb fn id).fn_blocks = SOME ob /\
+      get_instruction bb s.vs_inst_idx = SOME inst /\
+      get_instruction ob s.vs_inst_idx = SOME inst /\ inst.inst_opcode <> INVOKE
+Proof
+  rpt gen_tac >> strip_tac >> rule_assum_tac BETA_RULE >>
+  qpat_x_assum `?suffix k. _` strip_assume_tac >>
+  `fn_has_code sa sb (frag_observer sa sb fn id)` by
+    (irule abi_dyn_observer_has_code >> simp[] >>
+     metis_tac[BETA_RULE abi_dyn_middle_final_exclusion]) >>
+  drule_all (SRULE [code_action_def, code_step_def] abi_dyn_middle_code) >>
+  strip_tac >>
+  `?bb ob inst.
+      lookup_block s.vs_current_bb fn.fn_blocks = SOME bb /\
+      lookup_block s.vs_current_bb (frag_observer sa sb fn id).fn_blocks = SOME ob /\
+      get_instruction bb s.vs_inst_idx = SOME inst /\
+      get_instruction ob s.vs_inst_idx = SOME inst` by
+    metis_tac[BETA_RULE abi_dyn_region_agreement] >>
+  `MEM inst (frag_code sa sb)` by
+    metis_tac[BETA_RULE abi_dyn_region_code, entry_shape_extends] >>
+  qexistsl_tac [`bb`, `ob`, `inst`] >> gvs[EVERY_MEM] >> metis_tac[]
+QED
+
 Theorem abi_dyn_region_cut_instruction[local]:
   !sa sb fn id s. at_point sb s ==>
     ?bb. lookup_block s.vs_current_bb (frag_observer sa sb fn id).fn_blocks = SOME bb /\
