@@ -21,6 +21,8 @@ Ancestors
   bodySimFull bodySim bodyPtrDefs gasOutcomeFullCompose gasOutcomeFull
   fragGasOriginPtr fragGasOriginPtrExec fragGasSeqPtr gasShadowState
   vyperStorageTrace vyperStorageFootprint
+  ptrDiscipline ptrSafeRun memSafeRun unitTransformDefs gasSummary
+  venomExecSemantics venomInst venomState vyperTypeSystem
   list rich_list pair finite_map fragExec freshWrites
   vyperTypeABI
   transientLockProps nonreentrantEquiv accountsRelProps context localPtrsProps
