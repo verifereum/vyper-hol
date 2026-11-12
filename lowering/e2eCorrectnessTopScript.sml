@@ -57,7 +57,7 @@ Proof
   conj_tac >- metis_tac[optionTheory.IS_SOME_EXISTS] >>
   conj_tac >-
    (rpt strip_tac >>
-    qpat_x_assum `!src id ty. _ ==> ?tv v. _` drule >>
+    qpat_x_assum `!src id ty. FLOOKUP art.cta_bare_globals (src,id) = SOME ty ==> ?tv v. _` drule >>
     strip_tac >> gvs[]) >>
   rpt gen_tac >> strip_tac >>
   rename1 `FLOOKUP art.cta_toplevel_vtypes (NONE,id) = SOME (Type ty)` >>
@@ -70,8 +70,9 @@ Proof
     (qspecl_then [`NONE`,`id`,`bare_ty`] mp_tac) >>
   simp[] >> strip_tac >> gvs[] >>
   rpt strip_tac >>
-  qpat_x_assum `!src id ty. _ ==> ?tv v. _` drule >>
-  strip_tac >> gvs[]
+  qpat_x_assum `!src id ty. FLOOKUP art.cta_bare_globals (src,id) = SOME ty ==> ?tv v. _`
+    (qspecl_then [`NONE`,`id`,`bare_ty`] mp_tac) >>
+  simp[]
 QED
 
 Theorem vyper_call_correct_top:
