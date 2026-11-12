@@ -13,6 +13,7 @@
  *)
 Theory fmpStageCoverStep
 Ancestors
+  fmpStageCoverRun fmpStageCoverPoint
   fmpStageCoverInv fmpStageCoverCall fmpStageCoverBack fmpStageCoverMem
   fmpStageBlockSim fmpStageFmpSteps fmpStageOpSteps fmpStageOpBase
   fmpStageControl fmpStageRel ptrDiscipline contextCodegenRel o1PassContract
@@ -128,5 +129,19 @@ Theorem fmp_cov_next:
   fmp_cov D C C' vs vs' fmp eom stk' fn'
     (t2 with vs_inst_idx := SUC t.vs_inst_idx)
 Proof
-  cheat
+  rpt strip_tac >>
+  qpat_x_assum `fmp_cov _ _ _ _ _ _ _ _ _ _`
+    (strip_assume_tac o PURE_REWRITE_RULE [fmp_cov_def])
+  >- (Cases_on `t.vs_inst_idx = t1.vs_inst_idx`
+      >- (`t1 = t` by
+            (qpat_x_assum `!k. fmp_target_run _ _ _ _ _ _`
+               (qspec_then `0` mp_tac) >>
+             simp[] >> metis_tac[fmp_target_run_zero]) >>
+          qpat_x_assum `t1 = t` SUBST_ALL_TAC >>
+          irule fmp_cov_point_next >>
+          conj_tac >- metis_tac[fmp_cov_run_step] >>
+          rpt conj_tac >> metis_tac[]) >>
+      irule fmp_cov_prefix_next >>
+      rpt conj_tac >> metis_tac[arithmeticTheory.LESS_OR_EQ]) >>
+  irule fmp_cov_tail_next >> metis_tac[]
 QED
