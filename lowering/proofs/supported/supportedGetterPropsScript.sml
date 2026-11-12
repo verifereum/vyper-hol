@@ -277,7 +277,7 @@ Proof
   strip_tac >> drule lookup_function_External_cases >> strip_tac
   >- (drule_all supported_program_declaration >>
       simp[supported_declaration_body_def, supported_declaration_header_def,
-           supported_function_argument_def, supported_function_return_def,
+           supported_function_return_def,
            EVERY_MAP, combinTheory.o_DEF]) >>
   drule_all supported_program_declaration >> strip_tac >>
   `supported_place_type tops ret` by (drule_all supported_public_getter_return >> simp[]) >>
