@@ -425,11 +425,39 @@ Proof
   cheat
 QED
 
+val p23_constructor_encoding_eval = EVAL
+  ``constructor_args_encode p23_tops p23_deploy_tx []``;
+val p23_deploy_env_eval = EVAL
+  ``tx_block_fields_rel p23_deploy_tx p23_tx_params``;
+
 Theorem p23_deploy_state:
   deploy_state_rel p23_tops p23_deploy_bc initial_machine_state p23_deploy_tx
     p23_es_dep
 Proof
-  cheat
+  rewrite_tac[deploy_state_rel_def, p23_constructor_encoding_eval,
+              p23_deploy_env_eval] >>
+  qexistsl [`p23_frame p23_deploy_bc [] (Code 2w)`,
+            `p23_dep_rollback`, `[]`] >>
+  rewrite_tac[p23_constructor_encoding_eval, p23_deploy_env_eval] >>
+  simp[p23_es_dep_def, p23_frame_def, p23_dep_rollback_def] >>
+  simp[vfmExecutionPropTheory.wf_state_def,
+       vfmExecutionPropTheory.wf_context_def,
+       vfmExecutionPropTheory.all_accounts_def,
+       vfmExecutionPropTheory.stack_room_ok_def,
+       vfmExecutionPropTheory.gas_stack_ok_def,
+       vfmExecutionPropTheory.outputTo_consistent_stack_def,
+       vfmExecutionPropTheory.outputTo_consistent_ctx_def,
+       vfmExecutionPropTheory.wf_accounts_def,
+       vfmStateTheory.empty_accounts_def,
+       p23_deploy_tx_def, vyperContextTheory.empty_call_txn_def,
+       vyperInterpreterTheory.initial_machine_state_def,
+       value_transfer_ok_def, accounts_after_transfer_def] >>
+  simp[layouts_agree_def, p23_tops_def,
+       vfmStateTheory.account_empty_def, vfmStateTheory.lookup_account_def,
+       vfmStateTheory.empty_accounts_def, vfmStateTheory.empty_account_state_def,
+       vyperInterpreterTheory.bind_arguments_def, listTheory.REV_DEF,
+       tx_block_fields_rel_def, p23_tx_params_def,
+       loweringStateRelDefsTheory.tx_env_ok_def]
 QED
 
 Theorem p23_source_typing:
@@ -444,10 +472,62 @@ Proof
   cheat
 QED
 
+Theorem p23_immutables_section:
+  immutables_section_rel p23_tops
+    (account_immutables p23_am_dep_post p23_deploy_tx.target)
+    (word_to_bytes (42w : bytes32) T)
+Proof
+  simp[immutableSectionRelTheory.immutables_section_rel_def,
+       account_immutables_def, p23_am_dep_post_def, p23_deploy_tx_def,
+       vyperContextTheory.empty_call_txn_def, p23_tops_def] >>
+  conj_tac >- EVAL_TAC >>
+  rpt gen_tac >>
+  simp[listTheory.APPEND_EQ_CONS] >>
+  rpt strip_tac >> gvs[listTheory.APPEND_EQ_CONS] >>
+  qexistsl [`BaseTV (UintT 256)`, `IntV 42`] >> EVAL_TAC
+QED
+
+val p23_committed_code_eval = EVAL
+  ``(lookup_account 2w
+      (process_deletions p23_es_dep_post.rollback.toDelete
+        p23_es_dep_post.rollback.accounts)).code =
+      p23_runtime_bc ++ word_to_bytes (42w : bytes32) T``;
+val p23_runtime_length_eval = EVAL ``LENGTH p23_runtime_bc``;
+
 Theorem p23_call_state:
   call_state_rel p23_tops p23_runtime_bc p23_am_call p23_call_tx p23_es_call
 Proof
-  cheat
+  rewrite_tac[call_state_rel_def, p23_es_call_from_post,
+              p23_es_call_of_def] >>
+  simp[LET_THM] >>
+  simp[p23_frame_def, p23_call_tx_def, vyperContextTheory.empty_call_txn_def,
+       p23_am_call_def, next_source_machine_def,
+       value_transfer_ok_def, accounts_after_transfer_def,
+       tx_block_fields_rel_def, p23_tx_params_def,
+       loweringStateRelDefsTheory.tx_env_ok_def] >>
+  simp[vfmExecutionPropTheory.wf_state_def,
+       vfmExecutionPropTheory.wf_context_def,
+       vfmExecutionPropTheory.all_accounts_def,
+       vfmExecutionPropTheory.stack_room_ok_def,
+       vfmExecutionPropTheory.gas_stack_ok_def,
+       vfmExecutionPropTheory.outputTo_consistent_stack_def,
+       vfmExecutionPropTheory.outputTo_consistent_ctx_def,
+       account_immutables_def, source_deployment_rel_def,
+       p23_am_dep_post_def, layouts_agree_def, p23_tops_def] >>
+  rewrite_tac[EQT_ELIM p23_committed_code_eval] >>
+  simp[p23_runtime_length_eval] >>
+  conj_tac
+  >- (simp[vfmExecutionPropTheory.wf_accounts_def,
+           p23_es_dep_post_def, vfmExecutionTheory.process_deletions_def,
+           vfmStateTheory.lookup_account_def,
+           vfmExecutionPropTheory.wf_account_state_def] >>
+      gen_tac >> EVAL_TAC >> Cases_on `2w = x` >> simp[] >> EVAL_TAC) >>
+  rewrite_tac[immutableSectionRelTheory.installed_code_rel_def] >>
+  qexists_tac `word_to_bytes (42w : bytes32) T` >>
+  simp[] >>
+  mp_tac p23_immutables_section >>
+  simp[account_immutables_def, p23_am_dep_post_def, p23_deploy_tx_def,
+       vyperContextTheory.empty_call_txn_def, p23_tops_def]
 QED
 
 Theorem p23_valid_call:
