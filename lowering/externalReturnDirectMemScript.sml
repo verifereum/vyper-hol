@@ -67,6 +67,9 @@ Theorem external_frame_ret_value_direct_run_mem:
        expr_post unit.cu_context func cenv'
          (initial_evaluation_context am.sources am.layouts tx NONE)
          e es sa s1 s0 ee v op t /\
+       expr_store_bound
+         (initial_evaluation_context am.sources am.layouts tx NONE)
+         (expr_type e) v op t /\
        (?gs ee'.
           bind (eval_expr
                   (initial_evaluation_context am.sources am.layouts tx NONE) e)
@@ -90,7 +93,8 @@ Proof
   qmatch_asmsub_abbrev_tac `expr_post ctx func cenv' cx` >>
   qpat_x_assum `?gs ee'. _` strip_assume_tac >>
   drule_all return_value_typed >> strip_tac >>
-  `compile_external_return (SOME op) (is_word_type ret) cenv'.ce_raw_return
+  `~cenv'.ce_raw_return ==>
+   compile_external_return (SOME op) (is_word_type ret) F
      cenv'.ce_ret_enc_info cenv'.ce_max_return_size F
      (FST (SND cenv'.ce_nonreentrant))
      (FST (SND (SND cenv'.ce_nonreentrant)))
@@ -104,6 +108,31 @@ Proof
      simp[stmt_env_def, declare_stmt_local_def, Once compile_stmt_def,
        comp_bind_def, comp_ignore_bind_def, comp_return_def,
        pairTheory.UNCURRY] >> rpt strip_tac >> gvs[comp_return_def] >>
+     qmatch_goalsub_abbrev_tac `r = ((),SND r)` >>
+     Cases_on `r` >> simp[]) >>
+  `cenv'.ce_raw_return ==>
+   ?buf sm sn.
+     compile_alloc_buffer (type_memory_bytes cenv' ret) s1 = (buf,sm) /\
+     compile_store_memory_typed cenv' buf.buf_operand ret op
+       (lowered_value_type cenv' e) sm = ((),sn) /\
+     compile_external_return (SOME buf.buf_operand) (is_word_type ret) T
+       cenv'.ce_ret_enc_info cenv'.ce_max_return_size F
+       (FST (SND cenv'.ce_nonreentrant))
+       (FST (SND (SND cenv'.ce_nonreentrant)))
+       (SND (SND (SND cenv'.ce_nonreentrant))) sn = ((),sb)` by
+    (qpat_x_assum `stmt_env _ _ _ _ _ = _` mp_tac >>
+     qpat_x_assum `lower_value _ _ _ _ _ = _` mp_tac >>
+     qpat_x_assum `cenv'.ce_return_pc = _` mp_tac >>
+     qpat_x_assum `FST cenv'.ce_nonreentrant = _` mp_tac >>
+     qpat_x_assum `~(~is_word_type ret /\ _ /\ _)` mp_tac >>
+     rpt (pop_assum kall_tac) >>
+     simp[stmt_env_def, declare_stmt_local_def, Once compile_stmt_def,
+       comp_bind_def, comp_ignore_bind_def, comp_return_def,
+       pairTheory.UNCURRY] >> rpt strip_tac >> gvs[comp_return_def] >>
+     gvs[comp_bind_def, comp_ignore_bind_def, comp_return_def] >>
+     rpt (pairarg_tac >> gvs[]) >>
+     rename1 `compile_store_memory_typed _ _ _ _ _ _ = (u,_)` >>
+     Cases_on `u` >>
      qmatch_goalsub_abbrev_tac `r = ((),SND r)` >>
      Cases_on `r` >> simp[]) >>
   suspend "dispatch"
@@ -121,7 +150,13 @@ Resume external_frame_ret_value_direct_run_mem[dispatch]:
   qpat_x_assum `expr_post _ _ _ _ _ _ _ _ _ _ _ _ _`
     (strip_assume_tac o REWRITE_RULE [expr_post_def]) >>
   Cases_on `cenv'.ce_raw_return`
-  >- suspend "raw" >>
+  >- (qpat_x_assum `~cenv'.ce_raw_return ==> _` kall_tac >>
+      qpat_x_assum `cenv'.ce_raw_return ==> _`
+        (fn th => first_assum (strip_assume_tac o MATCH_MP th)) >>
+      suspend "raw") >>
+  qpat_x_assum `cenv'.ce_raw_return ==> _` kall_tac >>
+  qpat_x_assum `~cenv'.ce_raw_return ==> _`
+    (fn th => first_assum (assume_tac o MATCH_MP th)) >>
   Cases_on `is_word_type ret`
   >- suspend "word" >>
   suspend "aggregate"
@@ -165,28 +200,67 @@ Resume external_frame_ret_value_direct_run_mem[raw]:
 QED
 
 Resume external_frame_ret_value_direct_run_mem[raw_leaf]:
-  qpat_x_assum `compile_external_return _ _ _ _ _ _ _ _ _ _ = _` mp_tac >>
-  qpat_x_assum `fn_has_code s1 sb func` mp_tac >>
-  qpat_x_assum `!x. op = Var x ==> _` mp_tac >>
-  qpat_x_assum `stmt_state_rel ctx func cenv' cx ee t` mp_tac >>
-  qpat_x_assum `expr_val_rel _ _ _ _ _` mp_tac >>
-  qpat_x_assum `expr_val_at _ _ _ _ _ _ _ _ _` mp_tac >>
-  qpat_x_assum `evaluate_type _ _ = SOME tv` mp_tac >>
-  qpat_x_assum `value_has_type tv v` mp_tac >>
-  qpat_x_assum `is_bytestring_type (expr_type e)` mp_tac >>
-  qpat_x_assum `~t.vs_halted` mp_tac >>
-  qpat_x_assum `t.vs_current_bb = _` mp_tac >>
-  qpat_x_assum `t.vs_inst_idx = _` mp_tac >>
-  qpat_x_assum `cenv'.ce_raw_return` mp_tac >>
-  rpt (pop_assum kall_tac) >> rpt strip_tac >>
-  qpat_x_assum `cenv'.ce_raw_return` (SUBST_ALL_TAC o EQT_INTRO) >>
   `post_value_type cenv' e = expr_type e` by
     simp[loweringPostsTheory.post_value_type_bytestring] >>
   pop_assum (fn th => RULE_ASSUM_TAC (REWRITE_RULE [th])) >>
-  drule_all external_return_raw_value_mem >>
-  rewrite_tac[frag_exec_mem_def] >>
-  disch_then (qspecl_then [`func`, `t`] mp_tac) >> simp[] >>
-  metis_tac[]
+  `is_bytestring_type ret` by
+    (qpat_x_assum `ret = BaseT (BytesT (Dynamic _))` SUBST1_TAC >>
+     simp[is_bytestring_type_def]) >>
+  `is_bytestring_type (lowered_value_type cenv' e)` by metis_tac[] >>
+  `val_store_size tv v <= type_memory_bytes cenv' ret /\
+   type_memory_bytes cenv' ret < dimword (:256)` by suspend "raw_sizes" >>
+  qspecl_then [`ctx`, `func`, `cenv'`, `cx`, `ee`, `t`, `s1`, `sb`, `sm`, `sn`,
+    `buf`, `op`, `ret`, `expr_type e`, `lowered_value_type cenv' e`,
+    `is_word_type ret`, `cenv'.ce_ret_enc_info`, `cenv'.ce_max_return_size`,
+    `FST (SND cenv'.ce_nonreentrant)`,
+    `FST (SND (SND cenv'.ce_nonreentrant))`,
+    `SND (SND (SND cenv'.ce_nonreentrant))`, `()`, `v`, `tv`]
+    mp_tac external_return_raw_copy_mem >>
+  impl_tac >- (rpt conj_tac >> first_assum ACCEPT_TAC) >>
+  disch_then ACCEPT_TAC
+QED
+
+Resume external_frame_ret_value_direct_run_mem[raw_sizes]:
+  `env.type_defs = get_tenv cx` by
+    (qpat_x_assum `expr_sim_inv _ _ _ _` mp_tac >>
+     simp[exprSimHypsDefsTheory.expr_sim_inv_def,
+       vyperTypeInvariantsTheory.env_consistent_def,
+       vyperTypeInvariantsTheory.env_context_consistent_def]) >>
+  `type_widens_to (get_tenv cx) (expr_type e) ret` by
+    (qpat_x_assum `env.type_defs = _` mp_tac >>
+     qpat_x_assum `IS_SOME (type_stmt _ _ _)` mp_tac >>
+     rpt (pop_assum kall_tac) >>
+     simp[type_stmt_def, AllCaseEqs()] >> rpt strip_tac >> gvs[]) >>
+  drule_all type_widens_to_value_has_type >> strip_tac >>
+  `val_store_size tv v = val_store_size tu v` by
+    (qpat_x_assum `evaluate_type _ ret = SOME tu` mp_tac >>
+     qpat_x_assum `value_has_type tu v` mp_tac >>
+     qpat_x_assum `value_has_type tv v` mp_tac >>
+     qpat_x_assum `evaluate_type _ (expr_type e) = SOME tv` mp_tac >>
+     qpat_x_assum `is_bytestring_type (expr_type e)` mp_tac >>
+     qpat_x_assum `ret = BaseT (BytesT (Dynamic _))` mp_tac >>
+     rpt (pop_assum kall_tac) >> rpt strip_tac >>
+     drule_all valueCopyBytesTheory.bytestring_type_value >> strip_tac >>
+     gvs[vyperValueTheory.evaluate_type_def, AllCaseEqs()] >> Cases_on `v` >>
+     gvs[vyperTypingTheory.value_has_type_def,
+         exprSimPropsTheory.val_store_size_def]) >>
+  `val_store_size tu v <= type_memory_size tu` by
+    metis_tac[exprSimPropsTheory.val_store_size_le,
+              cj 1 valueEncodingTypingTheory.value_has_type_val_wf] >>
+  qpat_x_assum `Abbrev (cx = _)`
+    (SUBST_ALL_TAC o REWRITE_RULE [markerTheory.Abbrev_def]) >>
+  (* the statement's [] has a free element type; package_external_fn ignores it *)
+  `set_external_package_target rpolicy.rpol_target
+     (package_external_fn tops T (K global_nonreentrant_slot)
+        (mut, F, lookup_raw_return_or_F (NONE : num option)
+                    tx.function_name External tops,
+         tx.function_name, args, ([] : expr list), ret, fbody)) =
+     (lbl, cenv0, pos_args, min_cds, is_payable, F, nkey, ut', iv, fbody, rt)` by
+    (qpat_x_assum `set_external_package_target _ _ = _` mp_tac >>
+     simp[package_external_fn_def]) >>
+  drule_all normalize_external_frame_resources >> strip_tac >>
+  `type_memory_bytes cenv' ret = type_memory_size tu` by metis_tac[] >>
+  decide_tac
 QED
 
 Resume external_frame_ret_value_direct_run_mem[aggregate]:

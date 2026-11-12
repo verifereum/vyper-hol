@@ -106,6 +106,15 @@ val () = both "internal_fallback_name" false
     external_k |-> ``FunctionDecl External Nonpayable F F "k" [] [] ^bytes10
       [Return (SOME (Call ^bytes10 (IntCall (NONE,"__default__")) [] NONE))]``]
     base_dom1);
+(* Reserved names and visibilities (function.py: "Only constructors can be
+   marked as `@deploy`", "Constructor must be marked as `@deploy`", "Default
+   function must be marked as `@external`"). Controls: base_dom1 has a
+   `@deploy __init__` and an `@external __default__`. *)
+val () = both "deploy_not_init" false (mutate ctor 4 ``"setup"``);
+val () = both "init_external" false (mutate ctor 0 ``External``);
+val () = both "init_internal" false (mutate ctor 0 ``Internal``);
+val () = both "fallback_internal" false (mutate fallback 0 ``Internal``);
+val () = both "fallback_deploy" false (mutate fallback 0 ``Deploy``);
 val () = both "event_function_same_name" true (mutate burn 4 ``"E1"``);
 val () = both "event_storage_same_name" true
   ``EventDecl "x" [] :: ^base_dom1``;

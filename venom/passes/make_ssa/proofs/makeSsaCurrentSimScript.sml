@@ -66,6 +66,13 @@ Proof
   `execution_frame st' = execution_frame st` by fs[state_rel_def] >>
   Cases_on `p`
   >- (fs[] >> drule_all inst_mem_ranges_pair >> strip_tac >>
+      `dalloca_no_wrap inst st ==> dalloca_no_wrap inst' st'` by
+        (`LIST_REL (\op op'. op_rename sg op op' /\
+            eval_operand op' st' = eval_operand op st)
+            inst.inst_operands inst'.inst_operands` by
+           (irule LIST_REL_op_rename_eval >> fs[inst_pair_def, state_rel_def]) >>
+         fs[inst_pair_def, unitMemInvTheory.dalloca_no_wrap_def] >>
+         rpt strip_tac >> gvs[listTheory.LIST_REL_CONS2] >> metis_tac[]) >>
       simp[mem_corr_def, call_corr_def] >>
       strip_tac >>
       `inst_wf inst` by
@@ -79,6 +86,7 @@ Proof
       `y = Label nm` by (Cases_on `y` >> gvs[op_rename_def]) >>
       gvs[] >> metis_tac[eval_operands_rel]) >>
   fs[] >> simp[mem_corr_def, call_corr_def,
+    unitMemInvTheory.dalloca_no_wrap_def,
     unitMemInvTheory.inst_mem_ranges_def,
     contextCodegenRelTheory.source_memory_read_ranges_def,
     codegenRelTheory.source_memory_write_ranges_def]
@@ -626,3 +634,19 @@ Resume make_ssa_current_fn_fn_bisim[assemble]:
   qexistsl [`s`, `s'`] >> simp[]
 QED
 Finalise make_ssa_current_fn_fn_bisim
+
+
+(* The forward half at the input's fuel: the output finishes on the fuel
+   the input took. *)
+Theorem make_ssa_current_fn_fn_bisim_fuel:
+  make_ssa_input_ok fn /\ fn_inst_wf fn /\ wf_function fn /\
+  first_block_no_preds fn /\ first_block_no_phi fn /\
+  ir_supply_covers_fn s fn /\ ir_supply_inst_ok s /\
+  make_ssa_current_fn s fn = (fn',s') ==>
+  fn_bisim_fuel I fn fn'
+Proof
+  strip_tac >> drule_all make_ssa_current_fn_fn_bisim >>
+  simp[fn_bisim_def, fn_bisim_fuel_def] >> rpt strip_tac >>
+  irule current_entry_run_forward >> simp[] >>
+  qexistsl [`s`, `s'`] >> simp[]
+QED

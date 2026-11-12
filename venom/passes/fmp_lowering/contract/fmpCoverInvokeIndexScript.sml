@@ -47,7 +47,7 @@ Proof
         (CONJUNCTS_THEN assume_tac) >> Cases_on `!rl rp. fmp_stage_root infos ctx fn = SOME (rl,rp) /\
         bb.bb_label = rl ==> rp <= idx`
       >- (`idx <= LENGTH bb.bb_instructions` by decide_tac >>
-          drule fmp_control_tidx_code_unique >> simp[] >>
+          drule fmp_stage_tidx_code >> simp[] >>
           disch_then (qspecl_then [`idx`, `bb`] mp_tac) >>
           simp[] >> strip_tac >>
           `DROP idx bb.bb_instructions =

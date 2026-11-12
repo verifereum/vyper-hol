@@ -18,13 +18,13 @@ Proof
   Cases_on `o'` >> simp[exec_stack_op_def, is_data_inst_def]
 QED
 
-Theorem execute_plan_no_data[local]:
+Theorem execute_plan_no_data:
   EVERY (\i. ~is_data_inst i) (execute_plan fmp ops)
 Proof
   simp[execute_plan_def, EVERY_FLAT, EVERY_MAP, exec_stack_op_no_data]
 QED
 
-Theorem data_suffix_all_data[local]:
+Theorem data_suffix_all_data:
   EVERY is_data_inst (data_segment_asm segs ++ [AsmDataHeader "code_end"])
 Proof
   simp[data_segment_asm_def, data_section_asm_def, EVERY_FLAT, EVERY_MAP,

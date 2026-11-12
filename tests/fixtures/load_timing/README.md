@@ -8,15 +8,16 @@ target's internal call changes the source.
 `conditional_memory_view` returns 2 for either flag because assignment copies
 the selected memory array before the target's pop shortens it. Reading it after
 the target's effects instead would return 1.
-`call_storage_read` and `call_memory_pop` differ between the two runs. The
-source interpreter captures every internal-call argument before reading it, so
-`call_storage_read` returns 10 (the later argument changes the storage scalar
-first) and `call_memory_pop` returns 1 (the later argument pops the memory array
-before the call copies it). The pinned Vyper reads each argument as it is
-evaluated (vyperlang/vyper#5127), so its bytecode returns 0 and 2; the
-interpreter follows once it reads call arguments eagerly too.
+`call_storage_read` returns 0 and `call_memory_pop` returns 2 because a call
+reads each argument as it is evaluated, before the later argument changes the
+storage scalar or pops the memory array.
 `builtin_eager_read` returns 0: `min` reads its first storage argument before
 evaluating the second argument, which changes that storage slot.
+`subscript_base_copy` returns 5: the base `self.a[0]` is read before the index
+call writes `self.a[0][1]`, since the index writes a variable the base reads.
+`subscript_base_live` returns 7: the base `self.d[0]` is a fixed array, not one
+reached through a dynamic array, so it stays a live location while the index
+call writes 7 to `self.d[0][1]`, and the read sees that write.
 
 `vyperLoadTimingTestTheory` translates the annotated AST and layout in `oracle/`,
 binds the entry's declared parameters, and executes the source interpreter.
