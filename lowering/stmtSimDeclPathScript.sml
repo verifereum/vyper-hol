@@ -79,9 +79,11 @@ Proof
 QED
 
 Theorem annassign_alloca_operand_framed_path:
-  !H ctx func cenv cx es st st1 p sz s0.
+  !cx st0 ctx func cenv es st st1 p sz s0.
     emit_inst ALLOCA [Lit (n2w sz)] [p] st = ((), st1) /\
-    stmt_state_rel H ctx func cenv cx es s0 /\ fn_inst_ids_distinct func /\
+    (?H. valid_horizon cx st0 H es.storage_trace) /\
+    (!H. valid_horizon cx st0 H es.storage_trace ==>
+       stmt_state_rel H ctx func cenv cx es s0) /\ fn_inst_ids_distinct func /\
     MEM (mk_inst st.cs_next_id ALLOCA [Lit (n2w sz)] [p]) (fn_insts func) /\
     not_local_ptr cenv es.scopes p /\ sz < dimword (:256) /\
     fn_has_code st st1 func /\ ~s0.vs_halted /\
@@ -93,12 +95,15 @@ Theorem annassign_alloca_operand_framed_path:
       (!x. x <> p ==> lookup_var x s1 = lookup_var x s0) /\
       (!aid entry. FLOOKUP s0.vs_allocas aid = SOME entry ==>
                    FLOOKUP s1.vs_allocas aid = SOME entry) /\
-      stmt_state_rel H ctx func cenv cx es s1 /\ ~s1.vs_halted /\
+      (!H. valid_horizon cx st0 H es.storage_trace ==>
+         stmt_state_rel H ctx func cenv cx es s1) /\ ~s1.vs_halted /\
       s1.vs_current_bb = st1.cs_current_bb /\
       s1.vs_inst_idx = LENGTH st1.cs_current_insts /\
       gas_marked_path F ctx func s0 0 (OK s1)
 Proof
   rpt strip_tac >>
+  qpat_assum `!H. valid_horizon _ _ H _ ==> stmt_state_rel _ _ _ _ _ _ _`
+    (drule_then assume_tac) >>
   qabbrev_tac `A = mk_inst st.cs_next_id ALLOCA [Lit (n2w sz)] [p]` >>
   `A.inst_opcode = ALLOCA /\ A.inst_operands = [Lit (n2w sz)] /\
    A.inst_outputs = [p] /\ A.inst_id = st.cs_next_id` by
@@ -111,6 +116,12 @@ Proof
   drule exec_alloca_operand_frame >> simp[] >> disch_tac >>
   drule_all exec_alloca_memory >> strip_tac >>
   drule_all stmt_state_rel_exec_alloca >> strip_tac >>
+  `!H. valid_horizon cx st0 H es.storage_trace ==>
+     stmt_state_rel H ctx func cenv cx es s1` by
+    (qx_gen_tac `HH` >> strip_tac >>
+     qpat_x_assum `!H. valid_horizon _ _ H _ ==> stmt_state_rel _ _ _ _ _ _ _`
+       (qspec_then `HH` mp_tac) >> simp[] >> strip_tac >>
+     drule_all stmt_state_rel_exec_alloca >> simp[]) >>
   drule_all exec_alloca_frames >> strip_tac >>
   `gas_marked_path F ctx func s0 0
     (OK (s1 with vs_inst_idx := SUC s0.vs_inst_idx))` by

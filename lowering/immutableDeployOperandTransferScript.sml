@@ -327,7 +327,7 @@ Proof
 QED
 
 Theorem immutable_direct_composite_old_path:
-  compile_assign_value cenv dst LocCode src F src_loc dty sty da mem_size sa = ((),sb) /\
+  compile_assign_value cenv dst LocCode src F src_loc dty sty mem_size sa = ((),sb) /\
   cenv.ce_imm_alloca = imm /\
   dty = sty /\ ~is_bytestring_type dty /\
   copy_size = mem_size /\

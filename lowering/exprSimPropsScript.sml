@@ -644,12 +644,9 @@ Theorem immutable_holds_sub:
 Proof
   rpt strip_tac >> fs[immutable_holds_def] >> gvs[] >>
   qexistsl [`name`, `off`, `itv`, `iv`, `k + j`] >>
-  simp[wordsTheory.word_add_n2w]
-  >~ [`sub_layout itv iv k stv sv`]
-  >- (disj1_tac >> fs[sub_layout_def] >> rpt strip_tac >> TRY decide_tac >>
-      res_tac >> res_tac >> fs[]) >>
-  disj2_tac >> fs[sub_layout_def] >>
-  first_x_assum drule >> strip_tac >> fs[] >> decide_tac
+  simp[wordsTheory.word_add_n2w] >>
+  fs[sub_layout_def] >> rpt strip_tac >> TRY decide_tac >>
+  res_tac >> res_tac >> fs[]
 QED
 
 Theorem val_footprint_le_store_size:
