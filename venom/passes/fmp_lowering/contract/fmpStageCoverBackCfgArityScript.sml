@@ -431,24 +431,28 @@ Proof
 QED
 
 Theorem scfg_fn_user_param_count[local]:
-  o1_fn_shape C fn ==>
+  ALL_DISTINCT (fn_labels fn) /\ fn.fn_blocks <> [] /\
+  EVERY bb_well_formed fn.fn_blocks /\ EVERY inst_wf (fn_insts fn) /\
+  EVERY label_positions_ok (fn_insts fn) /\ first_block_no_preds fn /\
+  fn_succs_closed fn /\ fn_label_refs_ok fn /\
+  EVERY (\i. i.inst_opcode <> PHI) (HD fn.fn_blocks).bb_instructions ==>
   LENGTH (fn_user_param_insts fn) <=
   LENGTH (fn_user_param_insts (simplify_cfg_fn fn))
 Proof
   strip_tac >>
   `^iteration_shape (HD fn.fn_blocks).bb_label fn` by
-    (BETA_TAC >>
-     gvs[o1_fn_shape_def, wf_function_def, fn_has_entry_def,
-         fn_inst_wf_def, fn_shape_ok_def, inst_shape_ok_def,
-         first_block_no_phi_def, EVERY_MEM, fn_insts_def,
-         fn_insts_blocks_MEM] >> metis_tac[]) >>
+    (BETA_TAC >> simp[]) >>
   simp[simplify_cfg_fn_def, simplify_cfg_fn_with_labels_def] >>
   irule scfg_iter_count >> qexists_tac `(HD fn.fn_blocks).bb_label` >>
   first_assum ACCEPT_TAC
 QED
 
 Theorem scfg_user_param_count:
-  o1_fn_shape C fn /\
+  ALL_DISTINCT (fn_labels fn) /\ fn.fn_blocks <> [] /\
+  EVERY bb_well_formed fn.fn_blocks /\ EVERY inst_wf (fn_insts fn) /\
+  EVERY label_positions_ok (fn_insts fn) /\ first_block_no_preds fn /\
+  fn_succs_closed fn /\ fn_label_refs_ok fn /\
+  EVERY (\i. i.inst_opcode <> PHI) (HD fn.fn_blocks).bb_instructions /\
   fn_pass_step rpolicy (CFP_Simple VP_SimplifyCFG) observed s fn out ==>
   LENGTH (fn_user_param_insts fn) <=
   LENGTH (fn_user_param_insts out.fpo_function)
