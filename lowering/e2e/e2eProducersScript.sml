@@ -1,5 +1,6 @@
 (* Structural producers for PLAN 8.3.
  * TOP-LEVEL: compile_vyper_runtime_phases (L1), compile_vyper_runtime_nonempty,
+ * compile_vyper_runtime_not_ef,
  * type_env_all_modules_single (L12), o1_pipeline_codegen_obligations (L5),
  * entry_venom_state_initial_venom_state_rel (L6),
  * entry_venom_state_o1_initial_state_ok (L7),
@@ -17,7 +18,7 @@ Ancestors
   compileVyper codegen vyperContext finite_map
   e2eEntry vyperLoweringCorrect codegenCorrectness
   unitShapeDefs unitTransformDefs contextCodegenRel contextPlanLayoutProps
-  venomPipelineDriverProps venomCompilerWf venomWf
+  venomPipelineDriverProps venomCompilerWf venomWf asmCodePrefix
 
 (* Helper: successful code generation exposes the actual generated plan and
    checked assembly, including the data segment and code-end header. *)
@@ -72,6 +73,18 @@ Theorem compile_vyper_runtime_nonempty:
 Proof
   strip_tac >> drule compile_vyper_runtime_phases >> strip_tac >>
   drule codegenAsmProgOkTheory.codegen_assembly_nonempty >> gvs[]
+QED
+
+(* EIP-3541: the runtime code never starts with 0xEF, for either accepted
+   finalizer. *)
+Theorem compile_vyper_runtime_not_ef:
+  compile_vyper fin policy tops = SOME (deploy_bc, runtime_bc) /\
+  fin IN accepted_finalizers ==>
+  ~(?t. runtime_bc = 0xEFw :: t)
+Proof
+  strip_tac >> fs[compile_vyper_def] >>
+  drule compile_vyper_with_success_phases >> strip_tac >>
+  metis_tac[finalize_codegen_not_ef]
 QED
 
 (* L5: successful syntax/structural checks supply only structural facts.
