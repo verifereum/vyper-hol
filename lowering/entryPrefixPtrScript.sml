@@ -123,6 +123,37 @@ Proof
   rpt strip_tac >> gvs[exit_result_def]
 QED
 
+Theorem dispatch_raw_target_safe_probe[local]:
+  lookup_block "fallback" fn.fn_blocks = SOME
+    <|bb_label := "fallback"; bb_instructions :=
+      [mk_inst 90 PHI [Label "@match_0"; Var "incoming"] ["copied"];
+       mk_inst 91 ADD [Var "copied"; Lit 0w] ["sum"]]|> ==>
+  let t = jump_to "fallback" (jump_to "@match_0"
+    (update_var "%0" 1w
+      (update_var "incoming" 0w (init_venom_state "entry")))) in
+  let tn = entry_taint with t_var :=
+    FEMPTY |+ ("incoming", {0}) |+ ("%0", {}) in
+  !D ctx G fuel. ptr_safe_blocks D 0 fuel ctx fn [] G tn t
+Proof
+  strip_tac >> simp[] >> Cases_on `fuel` >>
+  simp[ptr_safe_blocks_def, jump_to_def, init_venom_state_def,
+       update_var_def, eval_phis_def, eval_one_phi_def, resolve_phi_def,
+       eval_operand_def, lookup_var_def, FLOOKUP_UPDATE, mk_inst_def,
+       phi_prefix_length_def] >>
+  once_rewrite_tac[ptr_safe_block_def] >>
+  simp[get_instruction_def, ptr_safe_step_def, ptr_inst_ok_def,
+       access_ok_def, taint_ok_def, source_memory_write_ranges_def,
+       source_memory_read_ranges_def, mk_inst_def, op_taint_def,
+       entry_taint_def, FLOOKUP_UPDATE, allocas_from_def,
+       allocas_below_fmp_def, step_inst_non_invoke,
+       step_inst_base_opcode_eqs, exec_pure2_def, eval_operand_def,
+       lookup_var_def, update_var_def, is_terminator_def] >>
+  rpt gen_tac >> conj_tac
+  >- (gen_tac >> Cases_on `op = Var "copied"` >> gvs[] >>
+      Cases_on `op = Lit 0w` >> gvs[]) >>
+  once_rewrite_tac[ptr_safe_block_def] >> simp[get_instruction_def]
+QED
+
 Theorem ptr_safe_jump_exact_continuation:
   lookup_block s.vs_current_bb fn.fn_blocks = SOME bb /\
   get_instruction bb s.vs_inst_idx = SOME (mk_inst id JMP [Label lbl] []) /\
