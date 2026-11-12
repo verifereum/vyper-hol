@@ -232,6 +232,7 @@ Theorem ifexp_widen_arm_step_full:
      premise until it lands. *)
   (!ty e sa vv sm sb op sc es ee s0 s tv rty G tn Gi ti st0.
     compile_expr cenv ty e sa = (vv,sm) /\
+    (is_word_type (post_value_type cenv e) ==> is_word_type (expr_type e)) /\
     sm.cs_next_var <= sb.cs_next_var /\ sm.cs_next_id <= sb.cs_next_id /\
     unwrap_value cenv vv sb = (op,sc) /\
     local_ptrs_reserved cenv sa /\ local_ptrs_reserved cenv sm /\
@@ -250,7 +251,7 @@ Theorem ifexp_widen_arm_step_full:
     (!H. valid_horizon cx st0 H ee.storage_trace ==>
        vv_post H ctx func cenv cx e es sa sm s0 ee tv vv s /\
        ghost_inv_at (DF H) lo d cenv cx ee G tn s) /\
-    vv_store_bound cx (post_value_type cenv e) (lowered_value_type cenv e) ee tv vv s /\
+    vv_store_bound cx (expr_type e) (lowered_value_type cenv e) ee tv vv s /\
     alloca_history func s /\ s0.vs_alloca_next <= s.vs_alloca_next /\
     ~s.vs_halted /\ s.vs_current_bb = sb.cs_current_bb /\
     s.vs_inst_idx = LENGTH sb.cs_current_insts /\
@@ -279,7 +280,7 @@ Theorem ifexp_widen_arm_step_full:
       (~is_word_type (post_value_type cenv e) ==>
        vv_at cenv cx (post_value_type cenv e) sa sc ee tv
          (LocatedValue (post_value_type cenv e) (mk_ptr op LocMemory)) z) /\
-      expr_store_bound cx (post_value_type cenv e) v op z /\
+      expr_store_bound cx (expr_type e) v op z /\
       z.vs_current_bb = sc.cs_current_bb /\
       z.vs_inst_idx = LENGTH sc.cs_current_insts /\
       alloca_history func z /\ s.vs_alloca_next <= z.vs_alloca_next /\
@@ -309,7 +310,8 @@ Theorem ifexp_widen_arm_step_full:
        step_taint (mk_inst id ALLOCA [Lit n] [p]) s u tn)) /\
   (* compile_alloc_buffer_ghost_frame_at *)
   (!H D lo ctx fn cenv cx es sa sb n buf sc s out u d PG G tn.
-      stmt_state_rel H ctx fn cenv cx es s /\
+      stmt_state_rel (H:(bool # 256 word # type_value) list # num list)
+        ctx fn cenv cx es s /\
       ghost_inv_at D lo d cenv cx es G tn s /\
       local_ptrs_reserved cenv sa /\ sa.cs_next_var <= sb.cs_next_var /\
       (!x sz. cenv.ce_return_buf = SOME (PtrVar (Var x) sz) ==> not_fresh_at sa x) /\
@@ -334,7 +336,7 @@ Theorem ifexp_widen_arm_step_full:
         (step_prov PG G (mk_inst sb.cs_next_id ALLOCA [Lit (n2w n)] [out]) u)
         (step_taint (mk_inst sb.cs_next_id ALLOCA [Lit (n2w n)] [out]) s u tn)) /\
   (* compile_store_bytestring_origin_ptr_path *)
-  (!D lo explicit ctx fn PG sa sb src dst G tn s a b len n bb.
+  (!lo explicit ctx fn PG sa sb src dst G tn s a b len n bb.
       compile_store_bytestring (Var src) (Var dst) sa = ((),sb) /\
       not_fresh_at sa src /\ not_fresh_at sa dst /\
       lookup_var src s = SOME a /\ lookup_var dst s = SOME b /\
@@ -349,8 +351,8 @@ Theorem ifexp_widen_arm_step_full:
       lookup_block s.vs_current_bb fn.fn_blocks = SOME bb /\
       isPREFIX (emitted_insts sa sb) (DROP s.vs_inst_idx bb.bb_instructions) ==>
       ?Gf tnf sf.
-        gas_origin_ptr_path (D,lo,explicit,ctx,fn,PG) (s,G,tn) []
-          (OK (sf with vs_inst_idx := s.vs_inst_idx + LENGTH (emitted_insts sa sb)),Gf,tnf) /\
+        (!D. gas_origin_ptr_path (D,lo,explicit,ctx,fn,PG) (s,G,tn) []
+          (OK (sf with vs_inst_idx := s.vs_inst_idx + LENGTH (emitted_insts sa sb)),Gf,tnf)) /\
         run_inst_seq (emitted_insts sa sb) s = OK sf /\
         tnf.t_imm = tn.t_imm /\ sf.vs_call_ctx = s.vs_call_ctx /\
         sf.vs_accounts = s.vs_accounts /\ sf.vs_transient = s.vs_transient /\
@@ -362,6 +364,7 @@ Theorem ifexp_widen_arm_step_full:
           lookup_var p sf = lookup_var p s /\ FLOOKUP Gf p = FLOOKUP G p /\
           op_taint tnf (Var p) = op_taint tn (Var p))) /\
   compile_expr cenv ty e sa = (vv,sm) /\
+  (is_word_type (post_value_type cenv e) ==> is_word_type (expr_type e)) /\
   compile_ifexp_arm cenv t (lowered_value_type cenv e) vv sm = (op,sb) /\
   ~is_word_type t /\ ~same_memory_layout cenv (lowered_value_type cenv e) t /\
   is_bytestring_type t /\ is_bytestring_type (lowered_value_type cenv e) /\
