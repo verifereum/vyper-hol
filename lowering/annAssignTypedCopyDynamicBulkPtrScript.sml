@@ -5,7 +5,8 @@ Ancestors
   assignBasePtrMcopyTransport fragGasPathPtr bodyPtrDefs
   venomState venomExecSemantics venomInst ptrDiscipline finite_map
   words arithmetic list pred_set robustCopyTransportPtr valueEncodingProps
-  valueEncodingProofs typedMemoryCopy typedCopyPtr
+  valueEncodingProofs typedMemoryCopy typedCopyPtr typedNormalizeDynarray
+  context compileEnv emitHelper fragExec rich_list
 
 Theorem annassign_dynamic_bulk_exact_counted:
   !s fn bb id len sz tmp dst src a b n tn G ctx D PG.
@@ -157,4 +158,65 @@ Proof
   gvs[step_taint_def, mk_inst_def, set_var_taint_def, imm_taint_def,
     update_var_def, lookup_var_def, FLOOKUP_UPDATE, FLOOKUP_DRESTRICT,
     op_taint_def, mcopy_def, write_memory_with_expansion_def]
+QED
+
+Theorem annassign_dynamic_bulk_resources:
+  !s fn bb id len sz tmp dst src a b n tn G ctx D PG sa tv f.
+    ~s.vs_halted /\ ~ctx_has_dalloca ctx /\
+    lookup_block s.vs_current_bb fn.fn_blocks = SOME bb /\
+    get_instruction bb s.vs_inst_idx =
+      SOME (mk_inst id MUL [Var len;Lit (n2w sz)] [tmp]) /\
+    get_instruction bb (SUC s.vs_inst_idx) =
+      SOME (mk_inst (id+1) MCOPY [Var dst;Var src;Var tmp] []) /\
+    lookup_var len s = SOME (n2w n) /\ op_taint tn (Var len) = {} /\
+    lookup_var src s = SOME a /\ lookup_var dst s = SOME b /\
+    src <> tmp /\ dst <> tmp /\ n * sz < dimword (:256) /\
+    ptr_covers G tn src s (n * sz) /\ ptr_covers G tn dst s (n * sz) /\
+    ~not_fresh_at sa tmp /\ sz = type_memory_size tv /\
+    (!i. i < n ==> val_wf tv (f i)) /\
+    (!i. i < n ==> !m. mem_agree_outside tn.t_mem s.vs_memory m ==>
+      val_in_memory tv (f i) (w2n a + i * sz) m) ==>
+    ?H tf t.
+      gas_path_ptr D 0 ctx fn PG G tn s 0 H tf (OK t) /\
+      t.vs_current_bb = s.vs_current_bb /\ t.vs_inst_idx = s.vs_inst_idx+2 /\
+      ~t.vs_halted /\ typed_copy_state_frame sa (w2n b) (n * sz) s t /\
+      (!i. i < n ==> !m. mem_agree_outside tf.t_mem t.vs_memory m ==>
+        val_in_memory tv (f i) (w2n b + i * sz) m) /\
+      (!j. ~(w2n b <= j /\ j < w2n b + n * sz) ==>
+        mem_bytes_at j 1 t.vs_memory = mem_bytes_at j 1 s.vs_memory /\
+        (j IN tf.t_mem <=> j IN tn.t_mem)) /\
+      tf.t_stor = tn.t_stor /\ tf.t_trans = tn.t_trans /\ tf.t_imm = tn.t_imm /\
+      (!x. x <> tmp ==>
+        lookup_var x t = lookup_var x s /\ FLOOKUP H x = FLOOKUP G x /\
+        op_taint tf (Var x) = op_taint tn (Var x))
+Proof
+  rpt gen_tac >> strip_tac >>
+  drule_all annassign_dynamic_bulk_exact_counted >>
+  disch_then (qspecl_then [`D`,`PG`] strip_assume_tac) >>
+  drule_all annassign_dynamic_bulk_endpoint >>
+  disch_then (qspec_then `s.vs_inst_idx+2` strip_assume_tac) >>
+  qexistsl_tac [`g1`,`tf`,`u with vs_inst_idx := s.vs_inst_idx+2`] >>
+  gvs[] >> gvs[]
+QED
+
+Theorem annassign_dynamic_fast_compiler_suffix:
+  compile_copy_dynarray_typed ce dst ty cap src ty sa = ((),sb) ==>
+  sb.cs_current_bb = sa.cs_current_bb /\
+  LENGTH sb.cs_current_insts = LENGTH sa.cs_current_insts+9 /\
+  DROP (LENGTH sa.cs_current_insts+7) sb.cs_current_insts =
+    [mk_inst (sa.cs_next_id+7) MUL
+      [Var ("%" ++ toString sa.cs_next_var);Lit (n2w (type_memory_bytes ce ty))]
+      ["%" ++ toString (sa.cs_next_var+5)];
+     mk_inst (sa.cs_next_id+8) MCOPY
+      [Var ("%" ++ toString (sa.cs_next_var+4));
+       Var ("%" ++ toString (sa.cs_next_var+3));
+       Var ("%" ++ toString (sa.cs_next_var+5))] []]
+Proof
+  pure_rewrite_tac[Once compile_store_memory_typed_def, LET_THM] >> BETA_TAC >>
+  ntac 7 (once_rewrite_tac[dyn_prefix_bind_op, dyn_prefix_bind_void] >>
+    simp_tac (srw_ss()) [ADD_ASSOC, APPEND_ASSOC]) >>
+  simp[compile_copy_memory_dynamic_def, dyn_prefix_bind_op,
+    emit_void_def, fresh_id_def, emit_def, comp_ignore_bind_def,
+    comp_return_def, comp_bind_def, ADD_ASSOC, APPEND_ASSOC] >>
+  strip_tac >> gvs[] >> simp[DROP_APPEND, DROP_DROP, ADD_ASSOC]
 QED
