@@ -2928,6 +2928,8 @@ Proof
   strip_tac >>
   `source_memory_read_ranges i s = source_memory_read_ranges i t` by
     metis_tac[scfg_data_agree_read_ranges] >>
+  `!op. eval_operand op s = eval_operand op t` by
+    metis_tac[scfg_data_agree_eval_operand] >>
   fs[taint_ok_def] >> metis_tac[]
 QED
 

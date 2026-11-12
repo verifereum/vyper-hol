@@ -173,7 +173,7 @@ Proof
   disch_then (qspecl_then [`tv`, `s0`, `es'`, `es`] mp_tac) >>
   simp[frag_exec_mem_def] >> strip_tac >> rpt gen_tac >> strip_tac >>
   first_x_assum (qspec_then `s` mp_tac) >>
-  disch_then (qspecl_then [`cx`, `ctx`, `R`, `fn`] mp_tac) >>
+  disch_then (qspecl_then [`cx`, `ctx`, `R`, `H`, `fn`] mp_tac) >>
   simp[] >> metis_tac[]
 QED
 
@@ -630,7 +630,7 @@ Proof
   simp[unwrap_value_def] >> Cases_on `is_word_type t` >> simp[]
   >- (strip_tac >> fs[compile_ptr_load_def] >>
       drule_all unwrap_memory_word_sim_mem >>
-      disch_then (qspecl_then [`v`, `s0`, `es'`, `es`, `e`, `cx`, `ctx`, `R`] assume_tac) >>
+      disch_then (qspecl_then [`v`, `s0`, `es'`, `es`, `e`, `cx`, `ctx`, `R`, `H`] assume_tac) >>
       irule frag_exec_mem_conseq >> goal_assum (drule_at Any) >> simp[] >>
       rpt strip_tac >> drule vv_post_read_result >> metis_tac[]) >>
   simp[comp_return_def] >> strip_tac >> gvs[] >>
