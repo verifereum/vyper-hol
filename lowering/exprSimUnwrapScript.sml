@@ -2561,7 +2561,7 @@ Proof
              qpat_assum `expr_post _ _ _ _ _ _ _ _ _ _ _ _ _ _`
                (fn th => irule (MATCH_MP (REWRITE_RULE [GSYM AND_IMP_INTRO]
                                   expr_post_fields_transport) th)) >>
-             qexists_tac `t1` >> asm_rewrite_tac[]) >>
+             asm_rewrite_tac[] >> qexists_tac `t1` >> asm_rewrite_tac[]) >>
           qexistsl_tac [`INL v`, `es_end with gas_obs := []`, `OK u2`] >>
           simp[] >>
           `marks = marks ++ []` by simp[] >>
