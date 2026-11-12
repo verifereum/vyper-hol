@@ -500,6 +500,34 @@ Proof
   simp[]
 QED
 
+Theorem fuel_ok_decode_dyn_body_middle[local]:
+  !dst src_op load_opc base_op hi_op elem_info elem_abi_sz elem_mem_sz i_op2.
+    ~is_terminator load_opc /\ load_opc <> PHI /\
+    (!d s Wv E. fuel_ok Wv {} E
+       (compile_abi_decode_to_buf d s load_opc base_op hi_op elem_info)) ==>
+    fuel_ok {} {} {}
+      (do src_data <- emit_op ADD [src_op; Lit 32w];
+          src_off <- emit_op MUL [i_op2; Lit (n2w elem_abi_sz)];
+          elem_src <- emit_op ADD [src_data; src_off];
+          actual_src <-
+            (if dec_info_needs_offset elem_info then
+               compile_abi_decode_dyn_elem_ptr load_opc base_op elem_src
+                 src_data hi_op elem_abi_sz
+             else return elem_src);
+          dst_data <- emit_op ADD [dst; Lit 32w];
+          dst_off <- emit_op MUL [i_op2; Lit (n2w elem_mem_sz)];
+          elem_dst <- emit_op ADD [dst_data; dst_off];
+          compile_abi_decode_to_buf elem_dst actual_src
+            load_opc base_op hi_op elem_info
+       od)
+Proof
+  rpt strip_tac >>
+  simp_tac std_ss [compile_abi_decode_dyn_elem_ptr_def,
+    compile_abi_dec_addr_def, compile_abi_decode_range_check_def] >>
+  fuel_auto [fuel_ok_emit_op, fuel_ok_emit_void, fuel_ok_emit_inst_jmp,
+    fuel_ok_emit_inst_jnz] >> simp[is_terminator_def]
+QED
+
 Theorem abi_dyn_counter_rank[local]:
   !w:bytes32.
     (2 ** 256 - 1) - w2n w < 2 ** 256 /\
