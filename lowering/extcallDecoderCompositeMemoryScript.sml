@@ -211,3 +211,48 @@ Proof
   drule_all (SIMP_RULE (srw_ss()) [] (Q.SPEC `T` run_inst_seq_abort_gas_path)) >>
   simp[gas_marked_path_def] >> metis_tac[]
 QED
+
+(* No semantic validity is needed to select the member pointer path. *)
+Theorem extcall_decoder_member_setup_paths[local]:
+  abi_decode_member_setup dst src MLOAD base_op hi dyn ao vo st = (ops,fin) /\
+  hi <> Lit 0w /\ eval_operand src s = SOME (n2w sb) /\
+  eval_operand dst s = SOME (n2w d) /\ sb < dimword(:256) /\
+  (dyn ==> eval_operand base_op s = SOME (n2w B) /\
+    abi_decode_load MLOAD (n2w (B+(sb+ao)) : bytes32) s = n2w off /\
+    off < dimword(:256) /\ B+sb+ao < dimword(:256) /\
+    B+sb+ao+32 <= s.vs_alloca_next) /\
+  abi_decoder_operand_live st.cs_next_var src /\
+  abi_decoder_operand_live st.cs_next_var dst /\
+  abi_decoder_operand_live st.cs_next_var base_op /\
+  fin.cs_next_var <= limit.cs_next_var /\ fresh_vars_wrt limit s /\
+  ~s.vs_halted /\ lookup_block s.vs_current_bb func.fn_blocks = SOME bb /\
+  isPREFIX (emitted_insts st fin) (DROP s.vs_inst_idx bb.bb_instructions) ==>
+  ?k r. gas_path_mem ctx func s k r /\
+    ((?t. r = OK (t with vs_inst_idx := s.vs_inst_idx + LENGTH (emitted_insts st fin)) /\
+      (dyn ==> sb+off < dimword(:256)) /\
+      eval_operand (FST ops) t = SOME (n2w (sb + if dyn then off else ao)) /\
+      eval_operand (SND ops) t = SOME (n2w (d+vo)) /\
+      abi_decoder_operand_live fin.cs_next_var (FST ops) /\
+      abi_decoder_operand_live fin.cs_next_var (SND ops) /\
+      fresh_vars_wrt limit t /\ abi_decoder_address_frame st.cs_next_var s t /\
+      inst_extends st fin) \/
+     (?t. r = Abort Revert_abort t /\ dyn /\ dimword(:256) <= sb+off))
+Proof
+  strip_tac >> Cases_on `dyn /\ dimword(:256) <= sb+off`
+  >- (gvs[] >> `sb < dimword(:256)` by decide_tac >>
+      `B+sb+ao < dimword(:256) /\ B+sb+ao+32 <= s.vs_alloca_next /\
+       dimword(:256) <= sb+off` by decide_tac >>
+      `abi_decode_load MLOAD (n2w (B+(sb+ao)):bytes32) s = n2w off` by simp[ADD_COMM] >>
+      drule_all extcall_decoder_member_setup_wrap_reentry >>
+      disch_then (qspec_then `ctx` strip_assume_tac) >> qexistsl_tac [`n`, `Abort Revert_abort t`] >> simp[]) >>
+  `dyn ==> sb+off < dimword(:256)` by metis_tac[NOT_LESS] >>
+  `dyn ==> eval_operand base_op s = SOME (n2w B) /\
+    abi_decode_load MLOAD (n2w (B+(sb+ao)):bytes32) s = n2w off /\
+    sb+off < dimword(:256) /\ B+sb+ao < dimword(:256) /\
+    B+sb+ao+32 <= s.vs_alloca_next` by metis_tac[] >>
+  drule_all extcall_decoder_member_setup_success >>
+  disch_then (qspec_then `ctx` strip_assume_tac) >>
+  qexistsl_tac [`LENGTH (FILTER (\i. i.inst_opcode = GAS) (emitted_insts st fin))`,
+    `OK (t with vs_inst_idx := s.vs_inst_idx + LENGTH (emitted_insts st fin))`] >>
+  conj_tac >- simp[] >> disj1_tac >> qexists_tac `t` >> simp[]
+QED
