@@ -22,7 +22,7 @@ Proof
     metis_tac[supported_headers_module_consts_env, supported_program_def,
               supported_declaration_headers_def] >>
   drule classify_functions_external_source >> strip_tac >>
-  gvs[subst_consts_fn_empty]
+  gvs[constSubstTheory.subst_consts_fn_empty]
   >- (disj1_tac >> drule_all supported_program_declaration >>
       simp[supported_declaration_header_def, supported_declaration_body_def]) >>
   disj2_tac >> metis_tac[]

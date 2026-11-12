@@ -57,5 +57,5 @@ Proof
   `module_consts_env tops [] = []` by
     metis_tac[supported_headers_module_consts_env] >>
   drule_all lookup_function_external_raw_member >>
-  simp[subst_consts_fn_empty]
+  simp[constSubstTheory.subst_consts_fn_empty]
 QED
