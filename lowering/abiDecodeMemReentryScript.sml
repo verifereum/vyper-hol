@@ -14,7 +14,7 @@ Proof
   Cases >> simp[eval_operand_def] >> metis_tac[]
 QED
 
-Theorem abi_decode_reentry_memory_checks[local]:
+Theorem abi_decode_reentry_memory_checks:
   abi_decoder_vars_extend extras s t /\ abi_decoder_inputs_defined inst s /\
   abi_decoder_reentry_opcode inst.inst_opcode ==>
   (inst_mem_below_frontier inst s <=> inst_mem_below_frontier inst t) /\
@@ -32,7 +32,7 @@ Proof
   fs[fixed_source_write_range_def, sized_source_write_range_def]
 QED
 
-Theorem abi_decode_reentry_revert[local]:
+Theorem abi_decode_reentry_revert:
   abi_decoder_vars_extend extras s t /\ abi_decoder_inputs_defined inst s /\
   abi_decoder_reentry_opcode inst.inst_opcode /\
   step_inst_base inst s = Abort Revert_abort u ==>

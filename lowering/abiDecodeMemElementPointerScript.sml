@@ -8,7 +8,7 @@ Ancestors
   abiEncoder emitHelperProps exprLoweringProps compileEnv emitHelper
   loweringStateRelDefs venomExecSemantics venomState venomInst words arithmetic list rich_list
 
-Theorem abi_decode_element_shape[local]:
+Theorem abi_decode_element_shape:
   compile_abi_decode_dyn_elem_ptr MLOAD bop src data hi sz st = (ptr_op,st') ==>
   inst_extends st st' /\ st'.cs_blocks = st.cs_blocks /\
   st'.cs_current_bb = st.cs_current_bb /\
@@ -85,7 +85,7 @@ Proof
   metis_tac[pairTheory.PAIR, oneTheory.one]
 QED
 
-Theorem abi_decode_element_sequence[local]:
+Theorem abi_decode_element_sequence:
   compile_abi_decode_dyn_elem_ptr MLOAD bop src data hi sz st = (ptr_op,st') /\
   hi <> Lit 0w /\ eval_operand bop s = SOME b /\ eval_operand src s = SOME p /\
   eval_operand data s = SOME d /\ eval_operand hi s = SOME h /\
@@ -172,7 +172,7 @@ Resume abi_decode_element_sequence[range_reject]:
 QED
 Finalise abi_decode_element_sequence
 
-Theorem abi_decode_element_mem_ok[local]:
+Theorem abi_decode_element_mem_ok:
   compile_abi_decode_dyn_elem_ptr MLOAD bop src data hi sz st = (ptr_op,st') /\
   hi <> Lit 0w /\ eval_operand bop s = SOME b /\ eval_operand src s = SOME p /\
   w2n (b+p) + 32 <= s.vs_alloca_next /\ fresh_vars_wrt st s ==>
@@ -224,7 +224,7 @@ Resume abi_decode_element_mem_ok[tail]:
 QED
 Finalise abi_decode_element_mem_ok
 
-Theorem abi_decode_element_bounds[local]:
+Theorem abi_decode_element_bounds:
   !(d:bytes32) (v:bytes32) sz (h:bytes32).
   sz < dimword (:256) ==>
   ((w2n d <= w2n (d+v) /\ w2n (d+v) <= w2n (d+v+n2w sz) /\
