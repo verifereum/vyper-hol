@@ -40,7 +40,7 @@ Proof
       >- (disch_then (qspec_then `(b,sz)` mp_tac o
             SIMP_RULE (srw_ss()) [ptr_owner_erases_def]) >>
           (impl_tac >- simp[]) >> strip_tac >>
-          disj2_tac >> qexistsl [`ops`,`v`,`b`,`sz`] >> simp[]) >>
+          TRY disj2_tac >> TRY (qexistsl [`ops`,`v`,`b`,`sz`]) >> fs[]) >>
       disch_then (assume_tac o SIMP_RULE (srw_ss()) [ptr_owner_erases_def]) >>
       disj1_tac >> PairCases_on `x` >>
       drule_all ptr_source_ownership_live_cache >>
