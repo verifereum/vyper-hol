@@ -65,7 +65,7 @@ Proof
   strip_tac >> drule_all append_storage_compiler_location >> strip_tac >>
   irule compile_append_storage_aggregate_stmt_frag_mem >>
   (conj_tac >- metis_tac[]) >>
-  qexistsl_tac [`dn`, `elem`, `q`, `r`, `rslot`, `n2w rslot`, `tr`, `tv`] >>
+  qexistsl_tac [`dn`, `elem`, `q`, `r`, `rslot`, `tr`, `tv`] >>
   simp[] >>
   (conj_tac >-
     (rpt strip_tac >>
