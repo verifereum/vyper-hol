@@ -6,7 +6,7 @@ Theory vyperCallFiniteStorage
 Ancestors
   vyperFiniteStoragePreservation vyperStorageFootprint vyperTypeSelectedEntry
   vyperTypeExternalCallMachine vyperTypeExternalDefaults
-  vyperTypeDeploymentMachine vyperTypeContractSoundness
+  vyperTypeDeploymentMachine vyperTypeContractSoundness vyperLookupStorage
 
 (* Intuition: storage_well_formed_on reads only cx.txn.target, so the
    NONE-module context and the selected module's context agree. Lookup and
@@ -18,6 +18,16 @@ Ancestors
    carries the horizon through the body, its observations being a prefix of
    obs. finalize_pending_deletions only empties accounts, and empty storage
    is in range. *)
+
+(* Zero storage decodes on every region. *)
+Theorem empty_storage_well_formed_on:
+  (!b. get_storage cx st b = empty_storage) ==>
+  storage_well_formed_on cx st regions
+Proof
+  rw[storage_well_formed_on_def] >>
+  irule (CONJUNCT1 slots_in_range_zero_reads) >>
+  simp[read_slot_def, lookup_storage_def, empty_storage_def]
+QED
 
 Theorem call_external_storage_well_formed_on:
   check_contract F am.layouts tx.target mods = SOME art /\
