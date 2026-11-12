@@ -14,8 +14,8 @@ Definition stmt_post_ptr_def:
       stmt_lands lctx sb res t /\ ~t.vs_halted /\
       (res = INL () ==> ~block_is_terminated sb /\ cenv'' = cenv') /\
       cenv_top_ext cenv cenv'' ee.scopes /\
-      stmt_state_rel ctx func cenv'' cx ee t /\
-      ghost_inv d cenv'' cx ee G tn t /\
+      stmt_state_rel H ctx func cenv'' cx ee t /\
+      ghost_inv H d cenv'' cx ee G tn t /\
       (!x w. not_fresh_at sa x /\ lookup_var x s0 = SOME w ==>
              lookup_var x t = SOME w) /\
       (!x. not_fresh_at sa x ==>
@@ -119,7 +119,7 @@ Proof
       qexists_tac `jump_to xl t` >> simp[] >>
       qpat_x_assum `stmt_post_ptr _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _` mp_tac >>
       simp[stmt_post_ptr_def] >> strip_tac >>
-      `ghost_inv d cenv cx ee G tn (jump_to xl t)` by
+      `ghost_inv H d cenv cx ee G tn (jump_to xl t)` by
         metis_tac[if_ghost_inv_jump] >>
       gvs[stmt_lands_def, stmt_state_rel_jump_to,
           block_is_terminated_def, jump_to_def, lookup_var_def]) >>
