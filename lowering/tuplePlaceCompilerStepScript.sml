@@ -9,7 +9,9 @@ Theorem tuple_place_compiler_head_step:
   well_typed_target env bt (EL i tys) /\
   call_evaluation_safe cx (int_calls_target bt) /\
   eval_base_place cx bt es = (INL (PlaceR p),ee) /\
-  target_post H ctx func cenv cx es sp sa s0 ee (PlaceR p) (Type (EL i tys)) r s /\
+  (?H. valid_horizon cx st0 H ee.storage_trace) /\
+  (!H. valid_horizon cx st0 H ee.storage_trace ==>
+    target_post H ctx func cenv cx es sp sa s0 ee (PlaceR p) (Type (EL i tys)) r s) /\
   compile_get_target_ptr compile_expr cenv bt sp = (r,sa) /\
   assignable_type (get_tenv cx) (TupleT tys) /\ arg_types_fit ltys tys /\
   evaluate_type (get_tenv cx) (TupleT tys) = SOME (TupleTV tvs) /\
@@ -41,12 +43,17 @@ Theorem tuple_place_compiler_head_step:
     alloca_frame cenv es sp s0 cenv ff t
 Proof
   disch_then (map_every assume_tac o CONJUNCTS) >>
-  `stmt_state_rel H ctx func cenv cx ee s /\
-   (?dw. eval_operand (FST r) s = SOME dw /\
+  qpat_assum `?H. valid_horizon _ _ H _` strip_assume_tac >>
+  `target_post H ctx func cenv cx es sp sa s0 ee (PlaceR p) (Type (EL i tys)) r s` by
+    res_tac >>
+  `(?dw. eval_operand (FST r) s = SOME dw /\
      place_ptr_rel cenv cx s (PlaceR p) dw (FST (SND r)) (Type (EL i tys))) /\
    SND (SND r) = SOME (ValPT (EL i tys)) /\
    (!x. FST r = Var x ==> not_fresh_at sa x)` by
-    fs[loweringPostsTheory.target_post_def, exprLoweringTheory.value_type_place_def] >>
+    (qpat_assum `target_post H _ _ _ _ _ _ _ _ _ _ _ _ _` mp_tac >>
+     rewrite_tac[loweringPostsTheory.target_post_def,
+                 exprLoweringTheory.value_type_place_def] >>
+     metis_tac[]) >>
   `?loc. FST (SND r) = SOME loc /\
     (loc = LocMemory \/ loc = LocStorage \/ loc = LocTransient)` by
     (Cases_on `p` >> fs[loweringPostsTheory.place_ptr_rel_def] >>
@@ -54,7 +61,9 @@ Proof
   drule_all tuplePlacePointerReadyTheory.tuple_place_index_fit >> strip_tac >>
   irule tuple_place_head_step >>
   qpat_assum `tuple_place_head _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _` (irule_at Any) >>
-  qpat_assum `target_post _ _ _ _ _ _ _ _ _ _ _ _ _ _` (irule_at Any) >>
+  qpat_assum `!H. valid_horizon _ _ H _ ==> target_post _ _ _ _ _ _ _ _ _ _ _ _ _ _`
+    (irule_at Any) >>
+  qpat_assum `valid_horizon _ _ H _` (irule_at Any) >>
   qpat_assum `eval_operand _ _ = SOME _` (irule_at Any) >>
   qpat_assum `target_pre _ _ _ _ _` (irule_at Any) >>
   simp[] >> qexistsl [`tops`, `NONE`, `loc`] >>

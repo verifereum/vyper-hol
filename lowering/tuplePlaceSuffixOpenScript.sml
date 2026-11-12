@@ -4,7 +4,7 @@ Ancestors
   tuplePlaceHeadOpen tuplePlaceHeadGas tuplePlaceSource tuplePlaceHead tuplePlaceSuffixCode
   stmtSimForRounds tupleTargetStoreProps vyperInterpreter vyperState
   stmtLowering compileEnv loweringStateRelDefs fragGasMode fragGasPath exprSimHypsDefs
-  vyperTypeDefaults bodySim list rich_list
+  vyperTypeDefaults bodySim vyperStorageTrace list rich_list
 
 Theorem tuple_place_suffix_run_open:
   !ctx func cenv cx env tops gs tys ltys tvs ltvs vs elems w lo.
@@ -29,15 +29,16 @@ Theorem tuple_place_suffix_run_open:
     body_tuple_targets_ok cx (DROP i gs) (DROP i vs) /\
     compile_tuple_store_all cenv (DROP i ltys) (DROP i gs) (DROP i elems) sp = ((),sf) /\
     fn_has_code sp sf func ==>
-    gas_outcome F (cx_tops cx) (ctx,func)
+    gas_outcome F (cx_tops cx) (ctx,func) cx st0
       (assign_tuple_target_list cx (DROP i gs) (DROP i vs)) (es,s0)
-      (\res ff t. res = INL () /\ expr_sim_inv cenv cx env ff /\ ~block_is_terminated sf /\
+      (\H res ff t. res = INL () /\ expr_sim_inv cenv cx env ff /\ ~block_is_terminated sf /\
         tuple_place_head ctx func cenv cx st0 ff lo sf tys ltys ltvs vs elems w (LENGTH tys) t /\
+        stmt_state_rel H ctx func cenv cx ff t /\
         (!x v. not_fresh_at sp x /\ lookup_var x s0 = SOME v ==> lookup_var x t = SOME v) /\
         (!id entry. FLOOKUP s0.vs_allocas id = SOME entry ==>
           FLOOKUP t.vs_allocas id = SOME entry) /\
         alloca_frame cenv es sp s0 cenv ff t)
-      (\res ff r. expr_exit res r)
+      (\H res ff r. expr_exit res r)
 Proof
   rpt gen_tac >> strip_tac >>
   `LENGTH ltys = LENGTH tys /\ LENGTH ltvs = LENGTH tys` by
@@ -54,11 +55,18 @@ Proof
       fs[DROP_LENGTH_TOO_LONG, Once compile_tuple_store_all_def,
          compileEnvTheory.comp_return_def] >>
       simp[DROP_LENGTH_TOO_LONG, Once evaluate_def] >>
-      irule gas_outcome_return_path >>
-      qexists `s0` >> simp[] >>
-      conj_tac >- (irule stmtSimDefsTheory.alloca_frame_same >> simp[]) >>
-      fs[tuple_place_head_def, gas_marked_path_def] >>
-      metis_tac[gas_path_rules]) >>
+      irule gas_outcome_return_path >> qexists `s0` >>
+      conj_tac
+      >- (qpat_assum `tuple_place_head _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _`
+            (strip_assume_tac o REWRITE_RULE [tuple_place_head_def]) >>
+          simp[gas_marked_path_def] >> metis_tac[gas_path_rules]) >>
+      rpt strip_tac >>
+      `stmt_state_rel H ctx func cenv cx es s0` by
+        (qpat_assum `tuple_place_head _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _`
+           (strip_assume_tac o REWRITE_RULE [tuple_place_head_def]) >> res_tac) >>
+      fs[stmtSimDefsTheory.alloca_frame_gas_obs,
+         exprSimWordArgsTheory.stmt_state_rel_gas_obs] >>
+      irule stmtSimDefsTheory.alloca_frame_same >> simp[]) >>
   `i < LENGTH tys` by decide_tac >>
   `?bt. EL i gs = BaseTarget bt /\ EVERY (supported_expr tops) (target_indices bt) /\
     (body_base_target_ok cx bt ==> target_case F ctx func cenv cx bt) /\
@@ -84,7 +92,7 @@ Proof
   asm_rewrite_tac[Once evaluate_def] >>
   simp[Once evaluate_def, ignore_bind_def, bind_assoc] >>
   irule (SRULE [ignore_bind_def] tuple_place_head_gas_continuation_open) >>
-  simp[] >>
+  simp[vyperStorageTraceTheory.evaluate_storage_trace_frame] >>
   conj_tac >- metis_tac[] >>
   qpat_assum `tuple_place_head _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _`
     (irule_at Any) >>
@@ -101,8 +109,7 @@ Proof
   `tuple_place_head ctx func cenv cx st0 (ff with gas_obs := []) lo sb
     tys ltys ltvs vs elems w (SUC i) t` by
     (qpat_x_assum `tuple_place_head _ _ _ _ _ ff _ _ _ _ _ _ _ _ _ _` mp_tac >>
-     simp[tuple_place_head_def, tuplePlacePrefixCertTheory.tuple_place_snapshot_def,
-          exprSimWordArgsTheory.stmt_state_rel_gas_obs]) >>
+     simp[]) >>
   simp[] >> disch_tac >>
   irule exprSimMemDefsTheory.gas_outcome_post_mono >>
   goal_assum (drule_at Any) >>
