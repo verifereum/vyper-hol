@@ -48,7 +48,12 @@ Theorem immutable_normalize_mem_endpoint:
     (t with <|vs_vars := u.vs_vars; vs_memory := u.vs_memory;
       vs_current_bb := mid.cs_current_bb; vs_inst_idx := LENGTH mid.cs_current_insts;
       vs_prev_bb := u.vs_prev_bb|>) = u /\
-    (!x. not_fresh_at sm x ==> lookup_var x t = lookup_var x s)
+    (!x. not_fresh_at sm x ==> lookup_var x t = lookup_var x s) /\
+    exec_alloca (mk_inst sm.cs_next_id ALLOCA
+      [Lit (n2w (type_memory_bytes ce dty))]
+      [STRING #"%" (toString sm.cs_next_var)]) s
+      (n2w (type_memory_bytes ce dty) : bytes32) =
+      OK (u with vs_inst_idx := s.vs_inst_idx)
 Proof
   strip_tac >> drule_all normalize_return_typed_windows >>
   disch_then (qx_choose_then `dtv` (qx_choose_then `t`
@@ -57,6 +62,10 @@ Proof
   drule_all normalize_alloc_mem_cont >>
   disch_then (qspec_then `ctx` strip_assume_tac) >>
   qmatch_asmsub_abbrev_tac `mem_cont_sim ctx func s u` >>
+  `t.vs_inst_idx = s.vs_inst_idx` by
+    (qpat_x_assum `exec_alloca _ _ _ = OK t` mp_tac >>
+     simp[exec_alloca_def, venomInstTheory.mk_inst_def, AllCaseEqs(), update_var_def] >>
+     strip_tac >> gvs[]) >>
   `u.vs_inst_idx = LENGTH mid.cs_current_insts /\
    eval_operand src u = SOME p /\ eval_operand buf.buf_operand u = SOME (n2w b) /\
    u.vs_memory = t.vs_memory /\ u.vs_alloca_next = t.vs_alloca_next` by
@@ -103,6 +112,17 @@ Resume immutable_normalize_mem_endpoint[frame]:
   conj_tac >- (rpt strip_tac >> metis_tac[ADD_COMM]) >>
   drule_at (Pos (el 2)) stmtSimDeclPathTheory.exec_alloca_frames >>
   simp[emitHelperPropsTheory.mk_inst_outputs] >> strip_tac >>
+  reverse conj_tac
+  >- (`(u with vs_inst_idx := s.vs_inst_idx) = t` by
+        (qunabbrev_tac `u` >>
+         qpat_x_assum `t.vs_inst_idx = s.vs_inst_idx` mp_tac >>
+         POP_ASSUM_LIST (K all_tac) >>
+         simp[venom_state_component_equality]) >>
+      qpat_assum `exec_alloca _ _ _ = OK t` mp_tac >>
+      qpat_assum `type_memory_bytes ce dty = type_memory_size dtv` mp_tac >>
+      qpat_assum `(u with vs_inst_idx := s.vs_inst_idx) = t` mp_tac >>
+      qpat_assum `s.vs_inst_idx = LENGTH sm.cs_current_insts` mp_tac >>
+      POP_ASSUM_LIST (K all_tac) >> simp[] >> metis_tac[]) >>
   simp[Abbr `u`, lookup_var_def] >> metis_tac[lookup_var_def]
 QED
 
