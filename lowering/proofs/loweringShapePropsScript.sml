@@ -14393,7 +14393,7 @@ Theorem build_func_defaults_MEM:
       MEM (FunctionDecl Internal mut nr rr (FST nd) args (SND nd) ret body) tops
 Proof
   Induct >> simp[compileVyperTheory.build_func_defaults_def] >>
-  rpt gen_tac >> CASE_TAC >> rw[] >> metis_tac[]
+  rpt gen_tac >> CASE_TAC >> rw[] >> fs[] >> metis_tac[]
 QED
 
 
