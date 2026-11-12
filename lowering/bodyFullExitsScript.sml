@@ -180,6 +180,85 @@ Proof
   conj_tac >> qexists_tac `0` >> simp[exit_result_def]
 QED
 
+(* ===== The exit fragments' target paths ===== *)
+
+(* A raise with no reason runs its one abort instruction. *)
+Theorem compile_raise_abort_path:
+  (rk = RaiseBare \/ rk = RaiseUnreachable) /\
+  stmt_env cenv lctx ty (Raise rk) sa = (cenv', sb) /\
+  fn_has_code sa sb func /\ ~ctx_has_dalloca ctx /\ allocas_from lo s /\
+  s.vs_current_bb = sa.cs_current_bb /\
+  s.vs_inst_idx = LENGTH sa.cs_current_insts /\ ~s.vs_halted ==>
+  ?t. gas_origin_ptr_path (D, lo, explicit, ctx, func, PG) (s, G, tn) []
+        (Abort (if rk = RaiseBare then Revert_abort else ExHalt_abort) t,
+         G, tn)
+Proof
+  disch_then (CONJUNCTS_THEN2 assume_tac strip_assume_tac) >>
+  qpat_x_assum `_ \/ _` (DISJ_CASES_THEN SUBST_ALL_TAC) >> (
+  qpat_x_assum `stmt_env _ _ _ _ sa = _` mp_tac >>
+  simp[stmt_env_def, declare_stmt_local_def, compile_stmt_def, comp_bind_def,
+       comp_ignore_bind_def, comp_return_def] >>
+  qmatch_goalsub_abbrev_tac `emit_inst opc ops [] sa` >>
+  Cases_on `emit_inst opc ops [] sa` >> rename1 `_ = (u, sm)` >>
+  Cases_on `u` >> simp[] >> strip_tac >> gvs[] >>
+  fs[markerTheory.Abbrev_def] >>
+  `?t. step_inst_base (mk_inst sa.cs_next_id opc ops []) s =
+       Abort (if opc = REVERT then Revert_abort else ExHalt_abort) t` by
+    (gvs[] >> metis_tac[step_revert_zero, step_invalid]) >>
+  gvs[] >> qexists_tac `t` >>
+  irule emit_abort_origin_ptr >> simp[] >> metis_tac[])
+QED
+
+(* After an assertion's condition, its JNZ jumps to the continuation block
+   on true and reaches the abort on false. *)
+Theorem compile_assert_cond_path:
+  (ak = AssertBare \/ ak = AssertUnreachable) /\
+  stmt_env cenv lctx ty (Assert e ak) sa = (cenv', sb) /\
+  fn_has_code sa sb func /\
+  lower_value compile_expr cenv (BaseT BoolT) e sa = (op, s1) /\
+  ~ctx_has_dalloca ctx /\ allocas_from lo t /\
+  eval_operand op t = SOME (if b then 1w else 0w) /\ op_taint tn op = {} /\
+  t.vs_current_bb = s1.cs_current_bb /\
+  t.vs_inst_idx = LENGTH s1.cs_current_insts /\ ~t.vs_halted ==>
+  (b ==> gas_origin_ptr_path (D, lo, explicit, ctx, func, PG) (t, G, tn) []
+           (OK (jump_to sb.cs_current_bb t), G, tn)) /\
+  (~b ==> ?u. gas_origin_ptr_path (D, lo, explicit, ctx, func, PG)
+                (t, G, tn) []
+                (Abort (if ak = AssertBare then Revert_abort else ExHalt_abort)
+                   u, G, tn))
+Proof
+  disch_then (CONJUNCTS_THEN2 assume_tac strip_assume_tac) >>
+  qpat_x_assum `_ \/ _` (DISJ_CASES_THEN SUBST_ALL_TAC) >> (
+  qpat_x_assum `stmt_env _ _ _ _ _ = _`
+    (mp_then Any mp_tac compile_assert_parts) >> simp[] >> strip_tac >>
+  gvs[] >>
+  `cs_extends sa s1` by metis_tac[compile_expr_grows] >>
+  qpat_assum `cs_extends sa s1`
+    (mp_then (Pos hd) mp_tac assert_compiler_code) >>
+  disch_then (drule_all_then strip_assume_tac) >>
+  `gas_origin_ptr_path (D, lo, explicit, ctx, func, PG) (t, G, tn) []
+     (OK (jump_to (if b then sb.cs_current_bb else s5.cs_current_bb) t),
+      G, tn)` by
+    (irule emit_jnz_origin_ptr >> simp[] >>
+     qexistsl_tac [`op`, `s3`, `s4`] >> simp[]) >>
+  conj_tac >- (strip_tac >> gvs[]) >>
+  strip_tac >> gvs[] >>
+  qmatch_asmsub_abbrev_tac `emit_inst opc ops [] s5` >>
+  `?u. step_inst_base (mk_inst s5.cs_next_id opc ops [])
+         (jump_to s5.cs_current_bb t) =
+       Abort (if opc = REVERT then Revert_abort else ExHalt_abort) u` by
+    (simp[Abbr `opc`, Abbr `ops`] >>
+     metis_tac[step_revert_zero, step_invalid]) >>
+  `gas_origin_ptr_path (D, lo, explicit, ctx, func, PG)
+     (jump_to s5.cs_current_bb t, G, tn) []
+     (Abort (if opc = REVERT then Revert_abort else ExHalt_abort) u, G, tn)` by
+    (irule emit_abort_origin_ptr >>
+     simp[jump_to_def, Abbr `opc`, Abbr `ops`] >>
+     fs[allocas_from_def, jump_to_def] >> metis_tac[]) >>
+  qexists_tac `u` >> fs[Abbr `opc`] >>
+  metis_tac[gas_origin_ptr_path_append, APPEND_NIL])
+QED
+
 (* ===== Posts at a jump ===== *)
 
 Theorem ghost_inv_at_jump_to[local]:
