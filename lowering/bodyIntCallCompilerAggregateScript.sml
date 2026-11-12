@@ -222,7 +222,8 @@ Proof
       rpt strip_tac >> IF_CASES_TAC >>
       simp[intcall_interval_keccak_key, intcall_interval_return] >>
       rpt (rpt strip_tac >> simp[] >> irule intcall_interval_bind_floor >>
-           simp[intcall_interval_mapping_subscript, intcall_interval_return])) >>
+           simp[intcall_interval_mapping_subscript,
+                intcall_interval_keccak_key, intcall_interval_return])) >>
   rename1 `ValPT bt` >> Cases_on `bt` >>
   simp[compile_tuple_subscript_def] >>
   rpt (rpt strip_tac >> simp[] >> irule intcall_interval_bind_floor >>

@@ -73,5 +73,6 @@ Proof
   qpat_x_assum `(_ ==> 0 < LENGTH ir.iret_values) ==> _` mp_tac >>
   (impl_tac >- asm_rewrite_tac[]) >> strip_tac >>
   qexistsl_tac [`buf`,`sa.cs_next_id`,`off`] >>
-  asm_rewrite_tac[] >> metis_tac[]
+  asm_rewrite_tac[] >>
+  rpt conj_tac >- metis_tac[] >> rpt strip_tac >> fs[]
 QED
