@@ -22,7 +22,7 @@
  *)
 Theory fmpStageCoverage
 Ancestors
-  fmpStageCoverInv fmpStageCoverCall fmpStageCoverBack fmpStageCoverMem fmpStageBlockSim fmpStageFmpSteps
+  fmpStageCoverStep fmpStageCoverFrame fmpStageCoverInv fmpStageCoverCall fmpStageCoverBack fmpStageCoverMem fmpStageBlockSim fmpStageFmpSteps
   fmpStageOpSteps fmpStageOpBase fmpStageControl fmpStageRel
   concretizePtrCoverageStaticMemReachability unitMemInv ptrDiscipline
   contextCodegenRel o1PassContract venomPassSchedule venomCompilerTypes
@@ -35,7 +35,18 @@ Theorem fmp_stage_coverage:
     frame_reachable vs' C' stk' PG' G' tn' fn' ti t ==>
     fmp_cov D C C' vs vs' fmp eom stk' fn' t
 Proof
-  cheat
+  strip_tac >>
+  `!vs0 ctx stk' PG' G' tn' fn' ti t.
+     frame_reachable vs0 ctx stk' PG' G' tn' fn' ti t ==>
+     vs0 = vs' /\ ctx = C' ==> fmp_cov D C C' vs vs' fmp eom stk' fn' t`
+    suffices_by metis_tac[] >>
+  ho_match_mp_tac frame_reachable_strongind >> rpt conj_tac >>
+  rpt strip_tac >> gvs[]
+  >- (irule fmp_cov_entry >> metis_tac[])
+  >- (irule fmp_cov_next >> metis_tac[])
+  >- (irule fmp_cov_block >> metis_tac[])
+  >- (irule fmp_cov_call >> metis_tac[])
+  >- (irule fmp_cov_ret >> metis_tac[])
 QED
 
 Theorem fmp_lowering_stage_lowered_mem:

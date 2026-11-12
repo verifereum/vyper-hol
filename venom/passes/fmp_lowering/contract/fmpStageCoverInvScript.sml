@@ -31,12 +31,17 @@ End
 (* A target state of the lowered fn' is covered when it runs only
    inserted instructions, in its block, up to a state t1 related to a
    reachable source point, or when it is past the RETURNDATACOPY of a
-   revert forwarding of its block. *)
+   revert forwarding of its block.  The relation is past the point's
+   restore (restored) only where a step lemma needs it: at a DALLOCA, an
+   INVOKE or a terminator. *)
 Definition fmp_cov_def:
   fmp_cov D C C' vs vs' fmp eom stk' fn' t <=>
     (?stk PG G tn fn inst s sm lo t1 ts restored bb'.
        frame_reachable vs C stk PG G tn fn inst s /\ active_inst fn inst s /\
        ~s.vs_halted /\
+       (restored ==>
+          MEM inst.inst_opcode [DALLOCA; INVOKE] \/
+          is_terminator inst.inst_opcode) /\
        fmp_stage_rel D C' sm (w2n vs'.vs_initial_fmp) (w2n fmp) eom restored
          stk PG G tn fn s lo t1 ts /\
        lookup_function fn.fn_name C'.ctx_functions = SOME fn' /\
