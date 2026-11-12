@@ -113,14 +113,14 @@ Proof
            >- (irule (Q.INST [`right` |-> `[]`] gas_marked_exec_bind_normal
                       |> REWRITE_RULE [APPEND_NIL]) >>
                qexistsl_tac [`es_end`,`t`,`v`] >> gvs[]) >>
-           gvs[])) >>
+           gvs[] >> disj2_tac >> first_assum ACCEPT_TAC)) >>
       Cases_on `res`
       >- (qpat_x_assum `!H. valid_horizon _ _ H _ ==> expr_exit _ _`
             (drule_then mp_tac) >> simp[]) >>
       simp[gas_summary_at_def] >> qexistsl_tac [`INR y`,`es_end`,`r`] >>
       simp[] >> conj_tac
       >- (irule gas_marked_exec_bind_exception >> simp[]) >>
-      gvs[]) >>
+      gvs[] >> disj2_tac >> first_assum ACCEPT_TAC) >>
   qexists_tac `marks` >> disj2_tac >> disj2_tac >>
   qexistsl_tac [`err`,`ee`,`leaf`,`finish'`] >>
   irule unop_exempt_cert >> simp[]
