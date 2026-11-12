@@ -13,6 +13,8 @@
  *)
 Theory fmpStageOpSimPure
 Ancestors
+  fmpStageOpSimPureAffine fmpStageOpSimPureCompare fmpStageOpSimPureScalar
+  fmpStageOpSimPureShift fmpStageOpSimPureRead fmpStageOpSimPureCopy
   fmpStageOpBase fmpStageRel o1LowerDloadRelocationKernel o1LowerDloadShared
   ptrStaticDiscipline ptrDiscipline o1PassContract contextCodegenRel
   venomExecSemantics venomState venomInst
@@ -70,7 +72,16 @@ Theorem fmp_stage_sim_scalar:
     | Abort ab se => dead_result_rel D r r'
     | _ => F
 Proof
-  cheat
+  strip_tac >> Cases_on `MEM inst.inst_opcode [ADD; SUB]`
+  >- (drule_all fmp_stage_sim_affine >> simp[]) >>
+  Cases_on `MEM inst.inst_opcode [LT; GT; EQ]`
+  >- (drule_all fmp_stage_sim_compare >> simp[]) >>
+  Cases_on `MEM inst.inst_opcode [SHL; SHR; SAR]`
+  >- (drule_all fmp_stage_sim_shift >> simp[]) >>
+  `MEM inst.inst_opcode [MUL; Div; Mod; SDIV; SMOD; Exp; ADDMOD; MULMOD;
+    SLT; SGT; ISZERO; AND; OR; XOR; NOT; SIGNEXTEND; BYTE; OFFSET]`
+    by gvs[listTheory.MEM] >>
+  drule_all fmp_stage_sim_clean >> simp[]
 QED
 
 (* Why: reads of the shared context (ld_shared_agree, the frame fields),
@@ -127,5 +138,13 @@ Theorem fmp_stage_sim_read:
     | Abort ab se => dead_result_rel D r r'
     | _ => F
 Proof
-  cheat
+  strip_tac >>
+  Cases_on `MEM inst.inst_opcode [PARAM; ASSIGN; NOP; ASSERT; ASSERT_UNREACHABLE]`
+  >- (drule_all fmp_stage_sim_copy >> simp[]) >>
+  `MEM inst.inst_opcode [GAS; CALLER; ADDRESS; CALLVALUE; ORIGIN; GASPRICE;
+    CHAINID; COINBASE; TIMESTAMP; NUMBER; PREVRANDAO; GASLIMIT; BASEFEE;
+    BLOBBASEFEE; CALLDATASIZE; CODESIZE; RETURNDATASIZE; SELFBALANCE;
+    BLOCKHASH; BLOBHASH; BALANCE; EXTCODESIZE; EXTCODEHASH;
+    CALLDATALOAD; DLOAD]` by gvs[listTheory.MEM] >>
+  drule_all fmp_stage_sim_reads >> simp[]
 QED
