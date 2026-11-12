@@ -35,27 +35,6 @@ Definition raw_shape_free_program_def:
 End
 
 (* Constants cannot introduce the raw-call or msg.gas shape roots. *)
-Theorem subst_consts_constant_expr:
-  (!e. !E. constant_expr mods e /\
-    (!id r. ALOOKUP E id = SOME r ==> constant_expr mods r) ==>
-    constant_expr mods (subst_consts_expr E e)) /\
-  (!es. !E. EVERY (constant_expr mods) es /\
-    (!id r. ALOOKUP E id = SOME r ==> constant_expr mods r) ==>
-    EVERY (constant_expr mods) (subst_consts_exprs E es)) /\
-  (!fs. !E. EVERY (constant_expr mods) (MAP SND fs) /\
-    (!id r. ALOOKUP E id = SOME r ==> constant_expr mods r) ==>
-    EVERY (constant_expr mods) (MAP SND (subst_consts_fields E fs)))
-Proof
-  ho_match_mp_tac const_local_refs_ind >>
-  simp[constant_expr_def, const_local_refs_def, subst_consts_expr_def] >>
-  rpt strip_tac >> gvs[]
-  >~ [`subst_consts_expr E (TopLevelName ty ns)`]
-  >- (PairCases_on `ns` >> Cases_on `ns0` >>
-      gvs[subst_consts_expr_def, constant_expr_def] >>
-      Cases_on `ALOOKUP E ns1` >> gvs[constant_expr_def] >> metis_tac[]) >>
-  metis_tac[]
-QED
-
 Theorem constant_expr_raw_shape:
   (!e. constant_expr mods e ==> ~supported_expr_exists expr_raw_shape_root e) /\
   (!es. EVERY (constant_expr mods) es ==>
@@ -150,17 +129,90 @@ Proof
   imp_res_tac well_typed_type_builtin_args_arity >> gvs[]
 QED
 
+Theorem fold_const_builtin_shape[local]:
+  ~supported_expr_exists expr_shape_root (Builtin ty bi es) ==>
+  ~supported_expr_exists expr_shape_root (fold_const_builtin ty bi es)
+Proof
+  strip_tac >> Cases_on `bi` >>
+  gvs[fold_const_builtin_def, supported_expr_exists_def, expr_shape_root_def] >>
+  Cases_on `es` >> gvs[supported_expr_exists_def, expr_shape_root_def] >>
+  Cases_on `t` >> gvs[supported_expr_exists_def, expr_shape_root_def] >>
+  Cases_on `h` >> gvs[supported_expr_exists_def, expr_shape_root_def] >>
+  rename1 `Literal aty l` >> Cases_on `l` >>
+  gvs[supported_expr_exists_def, expr_shape_root_def]
+QED
+
+Theorem fold_const_shape[local]:
+  (!e. ~supported_expr_exists expr_shape_root e ==>
+    ~supported_expr_exists expr_shape_root (fold_const_expr e)) /\
+  (!t. ~supported_target_exists expr_shape_root t ==>
+    ~supported_target_exists expr_shape_root (fold_const_btarget t)) /\
+  (!es. ~supported_exprs_exists expr_shape_root es ==>
+    ~supported_exprs_exists expr_shape_root (fold_const_exprs es)) /\
+  (!d. ~supported_opt_exists expr_shape_root d ==>
+    ~supported_opt_exists expr_shape_root (fold_const_opt d)) /\
+  (!fs. ~supported_fields_exists expr_shape_root fs ==>
+    ~supported_fields_exists expr_shape_root (fold_const_fields fs))
+Proof
+  ho_match_mp_tac fold_const_expr_ind >>
+  rpt conj_tac >> rpt gen_tac
+  >~ [`fold_const_expr (Builtin ty bi es)`]
+  >- (simp[fold_const_expr_def] >> strip_tac >> strip_tac >>
+      irule fold_const_builtin_shape >>
+      gvs[supported_expr_exists_def, expr_shape_root_def,
+          fold_const_collection_metadata]) >>
+  simp[fold_const_expr_def, supported_expr_exists_def, expr_shape_root_def,
+       fold_const_collection_metadata] >> metis_tac[]
+QED
+
+Theorem checked_module_consts_shape_acc[local]:
+  !ts pre E.
+    check_contract mode layouts addr mods = SOME artifact /\
+    ALOOKUP mods NONE = SOME tops /\ tops = pre ++ ts /\
+    (!id r. ALOOKUP E id = SOME r ==>
+      ~supported_expr_exists expr_shape_root r) ==>
+    !id r. ALOOKUP (module_consts_env ts E) id = SOME r ==>
+      ~supported_expr_exists expr_shape_root r
+Proof
+  Induct >- (simp[module_consts_env_def] >> metis_tac[]) >>
+  rpt gen_tac >> Cases_on `h` >> pure_rewrite_tac[module_consts_env_def] >>
+  strip_tac
+  >~ [`module_consts_env (VariableDecl vis mut name ty slot :: ts) E`]
+  >- (Cases_on `mut` >> pure_rewrite_tac[module_consts_env_def]
+      >~ [`module_consts_env ts (E ++ [(name,fold_const_expr (subst_consts_expr E e))])`]
+      >- (`constant_expr mods e /\
+           well_typed_expr (artifact_env artifact mods NONE) e` by
+            (drule_all checked_const_initializer_prefix >> metis_tac[]) >>
+          `~supported_expr_exists expr_shape_root e` by
+            metis_tac[constant_expr_raw_shape, well_typed_expr_raw_shape] >>
+          `~supported_expr_exists expr_shape_root
+              (fold_const_expr (subst_consts_expr E e))` by
+            metis_tac[subst_consts_expr_shape, fold_const_shape] >>
+          first_x_assum (qspec_then `pre ++ [VariableDecl vis (Constant e) name ty slot]` mp_tac) >>
+          pure_rewrite_tac[GSYM APPEND_ASSOC, APPEND] >>
+          disch_then (qspec_then `E ++ [(name,fold_const_expr (subst_consts_expr E e))]` mp_tac) >>
+          (impl_tac >- (simp[] >> rpt strip_tac >>
+            gvs[ALOOKUP_APPEND, AllCaseEqs()] >> metis_tac[])) >> simp[]) >>
+      qmatch_asmsub_abbrev_tac `tops = pre ++ hd::ts` >>
+      first_x_assum (qspec_then `pre ++ [hd]` mp_tac) >>
+      pure_rewrite_tac[GSYM APPEND_ASSOC, APPEND] >>
+      disch_then (qspec_then `E` mp_tac) >> simp[] >> metis_tac[]) >>
+  qmatch_asmsub_abbrev_tac `tops = pre ++ hd::ts` >>
+  first_x_assum (qspec_then `pre ++ [hd]` mp_tac) >>
+  pure_rewrite_tac[GSYM APPEND_ASSOC, APPEND] >>
+  disch_then (qspec_then `E` mp_tac) >> simp[] >> metis_tac[]
+QED
+
 Theorem checked_module_consts_env_replacement_shape:
   check_contract mode layouts addr mods = SOME artifact /\
   ALOOKUP mods NONE = SOME tops /\
   ALOOKUP (module_consts_env tops []) id = SOME r ==>
   ~supported_expr_exists expr_shape_root r
 Proof
-  strip_tac >>
-  `constant_expr mods r` by metis_tac[checked_module_consts_env_replacement_constant] >>
-  `well_typed_expr (artifact_env artifact mods NONE) r` by
-    metis_tac[checked_module_consts_env_replacement_typed] >>
-  metis_tac[constant_expr_raw_shape, well_typed_expr_raw_shape]
+  strip_tac >> irule checked_module_consts_shape_acc >>
+  goal_assum (drule_at Any) >>
+  goal_assum (drule_at Any) >>
+  goal_assum (drule_at Any) >> qexists `[]` >> simp[]
 QED
 
 Theorem well_typed_atarget_raw_shape[local]:
@@ -291,6 +343,23 @@ Proof
   metis_tac[type_stmt_raw_shape, well_typed_exprs_raw_shape]
 QED
 
+Theorem checked_runtime_function_defaults_shape[local]:
+  !layouts addr tops art vis mut nr rr name args dflts ret body.
+  check_contract F layouts addr [(NONE, tops)] = SOME art /\
+  raw_shape_free_program tops /\
+  MEM (FunctionDecl vis mut nr rr name args dflts ret body) tops /\
+  vis <> Deploy ==>
+  EVERY (\e. ~supported_expr_exists expr_shape_root e) dflts
+Proof
+  rw[raw_shape_free_program_def] >>
+  first_x_assum drule_all >> strip_tac >>
+  drule check_contract_main_module_allocated >> simp[] >> strip_tac >>
+  drule check_contract_runtime_function_body_MEM >> simp[] >>
+  disch_then drule_all >>
+  simp[check_function_body_def, IS_SOME_EXISTS] >> strip_tac >>
+  metis_tac[well_typed_exprs_raw_shape]
+QED
+
 Theorem check_contract_runtime_bodies_shape_ok:
   check_contract F layouts addr [(NONE, tops)] = SOME art /\
   raw_shape_free_program tops ==>
@@ -306,19 +375,70 @@ Proof
     MEM (FunctionDecl vis mut nr rr name args dflts ret body) tops /\ vis <> Deploy ==>
     ~supported_stmts_expr_exists expr_shape_root body` by
     metis_tac[checked_runtime_function_body_shape] >>
-  rw[runtime_bodies_shape_ok_def]
-  >- (drule classify_functions_external_source >> strip_tac >>
-      gvs[subst_consts_fn_def] >>
-      irule (cj 2 subst_consts_stmt_shape) >> simp[] >>
-      metis_tac[public_getter_body_shape, function_visibility_distinct])
-  >- (gvs[MEM_classify_internal, subst_consts_fn_def] >>
-      irule (cj 2 subst_consts_stmt_shape) >> simp[] >>
-      metis_tac[function_visibility_distinct]) >>
-  drule classify_functions_fallback_mem >> strip_tac >>
-  gvs[subst_consts_fn_def] >>
-  irule (cj 2 subst_consts_stmt_shape) >> simp[] >>
+  `!vis mut nr rr name args dflts ret body.
+    MEM (FunctionDecl vis mut nr rr name args dflts ret body) tops /\ vis <> Deploy ==>
+    EVERY (\e. ~supported_expr_exists expr_shape_root e) dflts` by
+    metis_tac[checked_runtime_function_defaults_shape] >>
+  pure_rewrite_tac[runtime_bodies_shape_ok_def] >>
+  rpt gen_tac >> strip_tac
+  >- suspend "external"
+  >- suspend "internal" >>
+  suspend "fallback"
+QED
+
+Resume check_contract_runtime_bodies_shape_ok[external]:
+  drule classify_functions_external_source >> strip_tac >>
+      gvs[subst_consts_fn_def]
+      >- (conj_tac
+          >- (irule (cj 2 subst_consts_stmt_shape) >> simp[] >>
+              metis_tac[function_visibility_distinct]) >>
+          pure_rewrite_tac[EVERY_NOT_EXISTS] >> BETA_TAC >>
+          pure_rewrite_tac[NOT_CLAUSES] >>
+          CONV_TAC (DEPTH_CONV ETA_CONV) >>
+          pure_rewrite_tac[GSYM supported_exprs_exists_every] >>
+          irule (cj 3 subst_consts_expr_shape) >> simp[] >>
+          gvs[supported_exprs_exists_every, EVERY_MEM, EXISTS_MEM] >>
+          metis_tac[function_visibility_distinct]) >>
+      conj_tac
+      >- (irule (cj 2 subst_consts_stmt_shape) >> simp[] >>
+          metis_tac[public_getter_body_shape]) >>
+      qpat_x_assum `public_getter _ = SOME _` mp_tac >>
+      Cases_on `top` >> simp[public_getter_def] >>
+      rpt gen_tac >> Cases_on `v` >> simp[public_getter_def, vyperGetterTheory.getter_def] >>
+      rpt CASE_TAC >> gvs[] >> rpt (pairarg_tac >> gvs[]) >>
+      strip_tac >> gvs[subst_consts_expr_def]
+QED
+
+Resume check_contract_runtime_bodies_shape_ok[internal]:
+  gvs[MEM_classify_internal, subst_consts_fn_def] >>
+      conj_tac
+      >- (irule (cj 2 subst_consts_stmt_shape) >> simp[] >>
+          metis_tac[function_visibility_distinct]) >>
+      pure_rewrite_tac[EVERY_NOT_EXISTS] >> BETA_TAC >>
+          pure_rewrite_tac[NOT_CLAUSES] >>
+          CONV_TAC (DEPTH_CONV ETA_CONV) >>
+          pure_rewrite_tac[GSYM supported_exprs_exists_every] >>
+      irule (cj 3 subst_consts_expr_shape) >> simp[] >>
+      gvs[supported_exprs_exists_every, EVERY_MEM, EXISTS_MEM] >>
       metis_tac[function_visibility_distinct]
 QED
+
+Resume check_contract_runtime_bodies_shape_ok[fallback]:
+  drule classify_functions_fallback_mem >> strip_tac >>
+  gvs[subst_consts_fn_def] >>
+  conj_tac
+  >- (irule (cj 2 subst_consts_stmt_shape) >> simp[] >>
+      metis_tac[function_visibility_distinct]) >>
+  pure_rewrite_tac[EVERY_NOT_EXISTS] >> BETA_TAC >>
+          pure_rewrite_tac[NOT_CLAUSES] >>
+          CONV_TAC (DEPTH_CONV ETA_CONV) >>
+          pure_rewrite_tac[GSYM supported_exprs_exists_every] >>
+  irule (cj 3 subst_consts_expr_shape) >> simp[] >>
+  gvs[supported_exprs_exists_every, EVERY_MEM, EXISTS_MEM] >>
+  metis_tac[function_visibility_distinct]
+QED
+
+Finalise check_contract_runtime_bodies_shape_ok
 
 (* S2 from the checker. *)
 Theorem lower_vyper_runtime_unit_source_unit_ok_checked:
@@ -381,22 +501,17 @@ Theorem supported_program_raw_shape_free_program:
 Proof
   rpt gen_tac >> strip_tac >> REWRITE_TAC [raw_shape_free_program_def] >>
   rpt gen_tac >> strip_tac >>
-  `~supported_stmts_expr_exists expr_shape_root body` by
+  rename1 `MEM (FunctionDecl vis mut nr rr name args dflts ret stmts) tops` >>
+  `~supported_stmts_expr_exists expr_shape_root stmts` by
     (drule_all supported_program_function >> strip_tac >>
      drule supported_function_body_shape >> simp[]) >>
-  `EVERY (\e. ~supported_expr_exists expr_shape_root e) dflts` by
-    (drule_all supported_program_defaults >>
-     rw[EVERY_MEM, supported_default_expression_def] >>
-     metis_tac[supported_expr_shape]) >>
-  conj_tac
-  >- (strip_tac >>
-      qpat_x_assum `~supported_stmts_expr_exists expr_shape_root _` mp_tac >>
-      simp[] >> irule (CONJUNCT2 supported_stmt_expr_exists_mono) >>
-      first_x_assum (irule_at Any) >>
-      simp[expr_raw_shape_root_def, expr_shape_root_def] >> metis_tac[]) >>
-  fs[EVERY_MEM] >> rpt strip_tac >>
-  qpat_x_assum `!e. MEM e dflts ==> _` drule >> simp[] >>
-  irule (CONJUNCT1 supported_expr_exists_mono) >>
+  reverse conj_tac
+  >- (drule_all supported_program_declaration >>
+      simp[supportedDeclsTheory.supported_declaration_header_def, NULL_EQ] >>
+      metis_tac[]) >>
+  strip_tac >>
+  qpat_x_assum `~supported_stmts_expr_exists expr_shape_root _` mp_tac >>
+  simp[] >> irule (CONJUNCT2 supported_stmt_expr_exists_mono) >>
   first_x_assum (irule_at Any) >>
   simp[expr_raw_shape_root_def, expr_shape_root_def] >> metis_tac[]
 QED
