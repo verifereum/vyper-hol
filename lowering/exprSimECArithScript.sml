@@ -2442,7 +2442,8 @@ Proof
   BETA_TAC >>
   qpat_x_assum `es' with gas_obs := [] = es'` SUBST1_TAC >>
   FIRST [disj2_tac >> simp[] >> strip_tac >> gvs[] >>
-         metis_tac[ec_source_tail_not_halt],
+         qpat_x_assum `ec_source_tail _ _ _ _ _ _ = _` mp_tac >>
+         simp[ec_source_tail_not_halt] >> NO_TAC,
          disj1_tac >> simp[] >>
          irule exprSimCalldataSliceTheory.vv_post_prefix_frame >>
          first_assum (irule_at (Pat `vv_post _ _ _ _ _ _ _ _ _ _ _ _ _`)) >>

@@ -1813,12 +1813,13 @@ Proof
   gvs[ci_mono_def] >> metis_tac[fragExecTheory.fn_has_code_split]
 QED
 
-Theorem imm_expr_exit_inr[local]:
-  !(res : 'a + exception) r.
-    expr_exit res r <=>
-      ?exc. res = INR exc /\ expr_exit (INR exc : 'a + exception) r
+Theorem imm_exit_halt_inr[local]:
+  !cx (res : 'a + exception) ee r.
+    (expr_exit res r /\ halt_exit cx ee res r) <=>
+      ?exc. res = INR exc /\ expr_exit (INR exc : 'a + exception) r /\
+            (exc = HaltException ==> ?s. r = Halt s /\ halt_rel cx ee s)
 Proof
-  Cases >> simp[]
+  rpt gen_tac >> Cases_on `res` >> simp[halt_exit_def]
 QED
 
 Theorem imm_mapping_compile_not_label[local]:
@@ -1993,7 +1994,7 @@ Proof
     t.vs_current_bb = sm.cs_current_bb /\
     t.vs_inst_idx = LENGTH sm.cs_current_insts` >>
   reverse conj_tac
-  >- (simp[GSYM imm_expr_exit_inr] >> first_x_assum irule >> simp[]) >>
+  >- (simp[GSYM imm_exit_halt_inr] >> first_x_assum irule >> simp[]) >>
   rpt gen_tac >> strip_tac >> gvs[] >>
   `FST (SND rb) = SOME LocCode /\
    SND (SND rb) = SOME (ValPT (ArrayT ty bd))` by fs[imm_target_post_def] >>

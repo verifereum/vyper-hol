@@ -1524,7 +1524,10 @@ Proof
   strip_tac
   >- (qexists_tac `marks` >> disj1_tac >>
       qexistsl_tac [`res`, `es_end`, `r`] >> simp[] >>
-      disj1_tac >> suspend "array_post_transport") >>
+      disj1_tac >> suspend "array_post_transport")
+  >- (qexists_tac `marks` >> disj1_tac >>
+      qexistsl_tac [`res`, `es_end`, `r`] >> simp[] >>
+      disj2_tac >> gvs[Abbr `exitrel`, halt_exit_def]) >>
   metis_tac[]
 QED
 

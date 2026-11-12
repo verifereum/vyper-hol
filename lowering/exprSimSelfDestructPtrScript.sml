@@ -235,6 +235,7 @@ Proof
                   (INR HaltException,
                    selfdestruct_final cx a es_end with gas_obs := tail)` by
             (gen_tac >>
+             qpat_assum `~selfdestruct_overflows _ _ _` mp_tac >>
              qspecl_then [`cx`, `v`, `a`, `es_end with gas_obs := tail`]
                mp_tac selfdestruct_tail_halt >>
              simp[]) >>
