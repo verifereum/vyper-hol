@@ -1,6 +1,7 @@
 (* PLAN 5.11 / D28: single-frame creation boundary, NOT a deployment proof.
  * TOP-LEVEL: constructor_args_encode, constructor_call_free, deploy_typing_ok,
- * deploy_storage_ok, deploy_state_rel, deploy_result_rel.
+ * deploy_storage_ok, deploy_state_rel, deploy_result_rel, deploy_call_result_rel.
+ * Storage observations: deploy_storage_trace.
  * Helpers: constructor_call_root, deploy_evaluation_context.
  * DAG: e2eDefs + syntax traversal + source entry readiness -> e2eDeployDefs;
  * e2eDeployDefs -> clean e2eDeployChecks and e2eCorrectness's planned admission.
@@ -11,7 +12,7 @@ Ancestors
   e2eDefs supportedStmtTraverse vyperTypeEntryReadiness
   vyperTypeContractSoundness vyperTypeInitialState vyperStorageLayoutSafety
   vyperInterpreter vyperABI vfmExecution vfmExecutionProp frameOutcome
-  list immutableSectionRel compileEnv callTrace
+  list immutableSectionRel compileEnv callTrace vyperStorageFootprint
 
 (* ===== Canonical constructor ABI and syntactic Call exclusion ===== *)
 
@@ -90,11 +91,27 @@ Definition deploy_typing_ok_def:
         tx.target [(NONE, tops)]
 End
 
+(* The storage observations of the constructor run at outcome oracle orc and
+   gas observations gobs: the deployment twin of source_storage_trace, over
+   the same load_contract run the deployment theorems state. *)
+Definition deploy_storage_trace_def:
+  deploy_storage_trace orc gobs am tx tops =
+    SND (load_contract_trace orc gobs am tx [(NONE, tops)] [])
+End
+
+(* The finite storage guard for the constructor run at gas observations gs:
+   the roots it touches fit the slot space, are pairwise equal or disjoint,
+   miss the lock slots, and decode in the starting state and in every
+   backend the run adopts. *)
 Definition deploy_storage_ok_def:
-  deploy_storage_ok tops am tx <=>
-    contract_storage_well_formed (deploy_evaluation_context tops am tx)
-      (initial_state am []) /\
-    storage_layout_safe (deploy_evaluation_context tops am tx)
+  deploy_storage_ok tops am tx gs <=>
+    let cx = deploy_evaluation_context tops am tx in
+    let obs = deploy_storage_trace NONE gs am tx tops in
+    let (regions, locks) = storage_trace_horizon obs in
+      storage_roots_fit obs /\ regions_consistent regions /\
+      storage_locks_separated regions locks /\
+      storage_well_formed_on cx (initial_state am []) regions /\
+      storage_trace_backends_well_formed cx regions obs
 End
 
 (* ===== Fresh single creation frame, live entry-transfer accounts ===== *)
@@ -123,16 +140,6 @@ Definition deploy_state_rel_def:
       ctxt.msgParams.value = tx.value /\
       tx_block_fields_rel tx es.txParams /\
       tx.function_name = "__init__" /\ ~tx.is_static /\
-      call_outcomes_ok am tx (MAP SND (call_trace es)) /\
-      (* Under constructor_call_free the real call trace is empty, so this
-       * clause is vacuous. It could be discharged by proving that a
-       * call-free constructor compiles (through O1 and codegen) to code with
-       * no CALL-family instruction, leaving call_trace es empty; it is kept
-       * as a premise only to avoid that detour. *)
-      EVERY (\co. contract_storage_well_formed (deploy_evaluation_context tops am tx)
-                    (initial_state (am with <|accounts := co.co_accounts;
-                                              tStorage := co.co_tStorage|>) []))
-        (MAP SND (call_trace es)) /\
       ALOOKUP am.sources tx.target = NONE /\ layouts_agree tops am tx
 End
 
@@ -143,10 +150,11 @@ End
  * installation is not EVM bytecode installation: compare the target modulo
  * code, with its storage modulo storage_dead, all other accounts exactly,
  * transient storage modulo storage_dead, and ordered logs (as the runtime's
- * accounts_agree/transient_agree).
+ * accounts_agree/transient_agree). Dead bytes are taken within the horizon H
+ * of the constructor run's storage observations.
  *)
 Definition deploy_result_rel_def:
-  deploy_result_rel tops runtime_bc tx es r es' src <=>
+  deploy_result_rel H tops runtime_bc tx es r es' src <=>
     case src of
       INL (am', rqs) =>
         let cx = initial_evaluation_context am'.sources am'.layouts tx NONE in
@@ -162,10 +170,10 @@ Definition deploy_result_rel_def:
             <| code := [];
                storage := (lookup_account tx.target es'.rollback.accounts).storage |> /\
           storage_agree
-            (storage_dead cx F (lookup_account tx.target am'.accounts).storage)
+            (storage_dead H F (lookup_account tx.target am'.accounts).storage)
             (lookup_account tx.target am'.accounts).storage
             (lookup_account tx.target es'.rollback.accounts).storage /\
-          transient_agree cx am'.tStorage es'.rollback.tStorage /\
+          transient_agree H cx am'.tStorage es'.rollback.tStorage /\
           logs_correspond (compiled_event_info tops) (type_env tops)
             tx.target am'.logs lgs
     | INR (AssertException s) =>
@@ -177,6 +185,18 @@ Definition deploy_result_rel_def:
     | INR BreakException => F
     | INR ContinueException => F
     | INR (ReturnException _) => F
+End
+
+(* The deployment relation at every gas filling: where the constructor run's
+   finite storage guard holds, its result relates at the run's own horizon. *)
+Definition deploy_call_result_rel_def:
+  deploy_call_result_rel tops runtime_bc am tx es r es' <=>
+    gas_readings_rel (gas_readings es)
+      (\gs. deploy_storage_ok tops am tx gs ==>
+            deploy_result_rel
+              (storage_trace_horizon (deploy_storage_trace NONE gs am tx tops))
+              tops runtime_bc tx es r es'
+              (load_contract NONE gs am tx [(NONE, tops)] [])) T
 End
 
 (* Current-owner kernel gate: definitions are total saved objects, not stage
