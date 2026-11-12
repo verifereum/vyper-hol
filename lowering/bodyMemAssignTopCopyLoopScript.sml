@@ -1,7 +1,7 @@
 (* Linear-memory checks for the actual memory-to-storage copy body. *)
 Theory bodyMemAssignTopCopyLoop
 Ancestors
-  bodyMemAssignTopCopyFacts
+  bodyMemAssignTopCopyIndex
   fragExecMem instMemFrontier context compileEnv emitHelper emitHelperProps
   fragExec exprLoweringProps venomExecSemantics venomState venomInst
   words arithmetic list rich_list finite_map

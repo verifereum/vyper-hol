@@ -78,11 +78,20 @@ Theorem stmt_frag_nil_full:
       (eval_stmts cx []) es
 Proof
   rw[stmt_frag_full_def, stmts_env_def, comp_return_def] >>
-  PURE_REWRITE_TAC[gas_outcome_full_def] >>
-  qexists_tac `[]` >> disj2_tac >> disj1_tac >>
+  `!tail. eval_stmts cx [] (es with gas_obs := tail) =
+          (INL (), es with gas_obs := tail)` by
+    simp[Once evaluate_def, return_def] >>
+  PURE_REWRITE_TAC[gas_outcome_full_def] >> qexists_tac `[]` >>
+  reverse (Cases_on `storage_trace_domain cx st0 es.storage_trace`)
+  (* an input trace without a horizon: the empty focus *)
+  >- (disj1_tac >>
+      conj_tac >- simp[gasStorageTheory.gas_bad_storage_at_def, gas_explicit_def] >>
+      qexistsl_tac [`ARB`, `func`, `PG`, `G0`, `tn0`, `s0`] >>
+      simp[gas_origin_ptr_focus_nil]) >>
+  disj2_tac >> disj1_tac >>
   qexistsl_tac [`INL ()`, `es`, `OK s0`, `G0`, `tn0`] >>
-  conj_tac
-  >- simp[gas_explicit_def, Once evaluate_def, return_def] >>
+  conj_tac >- simp[gas_explicit_def] >>
+  conj_tac >- first_assum ACCEPT_TAC >>
   rpt gen_tac >> strip_tac >> first_x_assum drule >> strip_tac >>
   conj_tac >- simp[gas_origin_ptr_path_rules] >>
   disj1_tac >> qexists_tac `s0` >> simp[] >>
