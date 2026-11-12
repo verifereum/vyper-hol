@@ -33,9 +33,8 @@ Proof
   strip_tac
   >- (Cases_on `FLOOKUP ce.ce_vars h0` >> gvs[]
       >- metis_tac[] >>
-      Cases_on `x` >> gvs[] >>
-      TRY (first_x_assum drule >> simp[] >> NO_TAC) >>
-      Cases_on `emit_op ALLOCA [Lit (n2w n0)] s` >>
+      Cases_on `x` >> gvs[]
+      >- (Cases_on `emit_op ALLOCA [Lit (n2w n0)] s` >>
       gvs[comp_bind_def, comp_ignore_bind_def] >>
       Cases_on `emit_void MSTORE [q; h2] r` >> gvs[] >>
       drule_at (Pat `emit_op _ _ _ = _`) runtime_sym_emit_op >> simp[is_label_operand_def] >> strip_tac >>
@@ -43,7 +42,7 @@ Proof
       `runtime_sym_env (ce with ce_vars updated_by
          (\vars. vars |+ (h0, PtrVar q n0)))` by
         (irule runtime_sym_env_update >> simp[runtime_sym_loc_def]) >>
-      metis_tac[]) >>
+      metis_tac[]) >> metis_tac[]) >>
   `runtime_sym_env (ce with ce_vars updated_by
      (\vars. vars |+ (h0, PtrVar h2
        (case FLOOKUP ce.ce_vars h0 of SOME (MemLoc _ sz) => sz | _ => 0))))` by
