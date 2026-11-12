@@ -214,6 +214,7 @@ Proof
   qexists `\key ee u.
     target_post ctx func cenv cx es sa sn s0 ee (PlaceR (MemoryPlace id path)) bvt rb u /\
     expr_post ctx func cenv cx e (mid with gas_obs := []) sm sn t ee key ix u /\
+    expr_store_bound cx (expr_type e) key ix u /\
     u.vs_current_bb = sn.cs_current_bb /\ u.vs_inst_idx = LENGTH sn.cs_current_insts /\
     alloca_history func u /\ t.vs_alloca_next <= u.vs_alloca_next` >>
   pure_rewrite_tac[BETA_THM] >> reverse conj_tac >- (simp[] >> first_assum ACCEPT_TAC) >>
