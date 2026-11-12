@@ -1721,6 +1721,41 @@ Proof
   qexists_tac `inst` >> gvs[EVERY_MEM] >> metis_tac[]
 QED
 
+(* Bounded emitted-code region.  Upper bounds rule out spurious off-cut
+   states past the last instruction of either sort of block. *)
+val dyn_R = ``\sa sb s.
+  (s.vs_current_bb = sa.cs_current_bb ==>
+     LENGTH sa.cs_current_insts <= s.vs_inst_idx) /\
+  ((s.vs_current_bb = sb.cs_current_bb /\
+      s.vs_inst_idx <= LENGTH sb.cs_current_insts) \/
+   (?bb. MEM bb (emitted_blocks sa sb) /\
+     bb.bb_label = s.vs_current_bb /\
+     s.vs_inst_idx < LENGTH bb.bb_instructions))``;
+
+Theorem abi_dyn_region_cut_instruction[local]:
+  !sa sb fn id s. at_point sb s ==>
+    ?bb. lookup_block s.vs_current_bb (frag_observer sa sb fn id).fn_blocks = SOME bb /\
+      get_instruction bb s.vs_inst_idx = SOME (mk_inst id STOP [] [])
+Proof
+  simp[at_point_def] >> rpt strip_tac >>
+  irule_at Any frag_observer_cut_instruction >> simp[frag_observer_cut_lookup]
+QED
+
+Theorem abi_dyn_region_end[local]:
+  !sa sb s. cs_extends sa sb /\
+    (!bb. MEM bb (emitted_blocks sa sb) ==> bb.bb_label <> sb.cs_current_bb) /\
+    at_point sb s ==> (^dyn_R) sa sb s
+Proof
+  rpt gen_tac >> strip_tac >> simp_tac std_ss [] >>
+  reverse conj_tac >- gvs[at_point_def] >>
+  strip_tac >> drule frag_extends_emitted_shape >>
+  Cases_on `emitted_blocks sa sb = []`
+  >- (simp[] >> strip_tac >> gvs[at_point_def, rich_listTheory.IS_PREFIX_APPEND]) >>
+  simp[] >> strip_tac >>
+  `MEM (LAST (emitted_blocks sa sb)) (emitted_blocks sa sb)`
+    by simp[rich_listTheory.MEM_LAST_NOT_NIL] >> gvs[at_point_def] >> metis_tac[]
+QED
+
 (* Quantitative cutoff diagnostic interface (implementation belongs to the
    subsequent transfer component).
 
