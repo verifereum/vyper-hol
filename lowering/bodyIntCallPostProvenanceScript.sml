@@ -21,6 +21,20 @@ Proof
   rpt strip_tac >> gvs[] >> res_tac >> gvs[] >> metis_tac[]
 QED
 
+Theorem vv_post_code_intcall_provenance:
+  vv_post ctx func cenv cx e es sa sb s0 ee tv (LocatedValue ty p) s /\
+  ~expr_has_effect e /\ p.ptr_location = LocCode ==>
+  intcall_vv_provenance cenv cx (expr_type e) sa sb ee tv
+    (LocatedValue ty p) s
+Proof
+  strip_tac >>
+  `post_value_type cenv e = expr_type e` by
+    metis_tac[effect_free_post_value_type] >>
+  gvs[vv_post_def, vv_holds_def, intcall_vv_provenance_def,
+      immutable_holds_def] >>
+  metis_tac[]
+QED
+
 (* Held (argon, s1-calls branch): the cases vv_post_intcall_provenance
    leaves out, an effect-free argument whose value is a code pointer
    (an immutable or a selection from one) or whose type contains a
