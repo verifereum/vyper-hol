@@ -79,6 +79,24 @@ Proof
   drule_all ghost_kept_wb_trans >> simp[]
 QED
 
+Theorem ifexp_condition_arm_ghost_kept_at:
+  expr_post ctx fn cenv cx c es sa s1 s0 es1 v1 cop tt /\
+  stmt_state_rel ctx fn cenv cx es s0 /\ local_ptrs_reserved cenv sa /\
+  MAP FDOM es.scopes = MAP FDOM es1.scopes /\
+  sa.cs_next_var <= sc.cs_next_var /\ sa.cs_next_id <= sc.cs_next_id /\
+  ghost_kept_at lo cenv es sa G0 tn0 s0 G1 tn1 /\
+  ghost_kept_at lo cenv es1 sc G1 tn1 (jump_to lbl tt) G tn ==>
+  ghost_kept_at lo cenv es sa G0 tn0 s0 G tn
+Proof
+  strip_tac >>
+  `ghost_kept cenv es sa G0 tn0 s0 G1 tn1 /\
+   ghost_kept cenv es1 sc G1 tn1 (jump_to lbl tt) G tn` by
+    (gvs[ghost_kept_at_def, ghost_kept_def] >> metis_tac[]) >>
+  drule_all ifexp_condition_arm_ghost_kept >>
+  simp[ghost_kept_def, ghost_kept_at_def] >>
+  gvs[ghost_kept_at_def] >> metis_tac[]
+QED
+
 Theorem ifexp_word_suffix_ghost:
   is_word_type t /\ eval_operand op u = SOME w /\
   read_result cx tv ee = (INL v,ee) /\ ptr_val_ok cx t v op G tn u /\
