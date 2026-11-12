@@ -253,7 +253,7 @@ Proof
   Cases_on `r`
   >- (simp[result_array_length_def] >> irule extrequest_obs_bind >>
       simp[extrequest_obs_read_result] >>
-      Cases >> simp[] >> CASE_TAC >> simp[]) 
+      Cases >> simp[] >> Cases_on `a` >> simp[]) 
   >- (rename1 `PlaceR p` >> Cases_on `p`
       >- (rename1 `StoragePlace tr slot tv` >> Cases_on `tv` >>
           simp[result_array_length_def] 
@@ -261,11 +261,11 @@ Proof
           >- (Cases_on `bd` >> simp[result_array_length_def] >>
               irule extrequest_obs_bind >> simp[extrequest_obs_storage_backend]) >>
           irule extrequest_obs_bind >> simp[extrequest_obs_read_result] >>
-          Cases >> simp[] >> CASE_TAC >> simp[]) >>
+          Cases >> simp[] >> Cases_on `a` >> simp[]) >>
       simp[result_array_length_def] >> irule extrequest_obs_bind >>
       simp[extrequest_obs_read_result] >>
-      Cases >> simp[] >> CASE_TAC >> simp[]) >>
+      Cases >> simp[] >> Cases_on `a` >> simp[]) >>
   simp[result_array_length_def] >> irule extrequest_obs_bind >>
   simp[extrequest_obs_read_result] >>
-  Cases >> simp[] >> CASE_TAC >> simp[]
+  Cases >> simp[] >> Cases_on `a` >> simp[]
 QED

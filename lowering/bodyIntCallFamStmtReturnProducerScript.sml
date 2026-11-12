@@ -44,7 +44,7 @@ Proof
         pop_assum SUBST1_TAC >>
         rewrite_tac[supported_expr_exists_disj] >>
         fs[intcall_joint_res_def, intcall_expr_res_def, stmt_exprs_ok_def,
-           supported_stmt_expr_exists_def]) >>
+           supported_stmt_expr_exists_def, supported_expr_exists_def]) >>
      irule stmt_expr_body_pre >>
      fs[intcall_joint_res_def, intcall_expr_res_def, stmt_exprs_ok_def,
         supported_stmt_expr_exists_def, alloc_limits_stmt_def,

@@ -90,7 +90,9 @@ Resume intcall_subscript_tuple_producer[normal]:
   `vv_post fp.jc_ctx fp.jc_func ce fp.jc_cx obj
      (es with gas_obs := gas_explicit marks s.vs_gas_readings) sa st1 s
      (mid with gas_obs := []) v bvv t` by
-    (gvs[vv_post_def, locals_kept_def] >> rpt conj_tac >> first_assum ACCEPT_TAC) >>
+    (qpat_assum `vv_post _ _ _ _ obj es sa st1 s _ _ _ _` mp_tac >>
+     rewrite_tac[vv_post_def, locals_kept_def, popped_kept_def] >>
+     simp[] >> metis_tac[]) >>
   drule_all intcall_tuple_source_selection >> strip_tac >>
   `?w. eval_operand (vv_operand bvv) t = SOME w` by
     (Cases_on `bvv` >>

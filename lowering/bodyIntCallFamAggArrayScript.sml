@@ -598,8 +598,11 @@ Resume intcall_array_value_producer[array_endpoint]:
       qexists_tac `w` >> asm_rewrite_tac[]) >>
   reverse conj_tac
   >- (conj_tac >- metis_tac[compiler_ci_mono_not_fresh] >>
-      rpt strip_tac >> qexistsl [`w2n w`, `type_memory_size (ArrayTV tv bnd)`] >>
-      gvs[]) >>
+      rpt strip_tac >>
+      qexistsl [`w2n w`, `type_memory_bytes ce (ArrayT et bnd)`] >>
+      qpat_x_assum `type_memory_bytes ce (ArrayT et bnd) = _`
+        (fn th => rewrite_tac[GSYM th]) >>
+      rpt conj_tac >> TRY disj1_tac >> decide_tac) >>
   `expr_body_pre ce fp.jc_cx env
     (Builtin (ArrayT et bnd) (MakeArray (SOME et) bnd) args)
     (es with gas_obs := gas_explicit marks u'.vs_gas_readings)` by simp[] >>

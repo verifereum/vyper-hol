@@ -22,7 +22,7 @@ Theorem internal_immutable_regions_stack_update:
   internal_immutable_regions ce (cx with stk updated_by f) vs lo =
   internal_immutable_regions ce cx vs lo
 Proof
-  simp[internal_immutable_regions_def]
+  simp[internal_immutable_regions_def, vyperContextTheory.get_tenv_def]
 QED
 
 Theorem internal_entry_root_buffer_separation:
