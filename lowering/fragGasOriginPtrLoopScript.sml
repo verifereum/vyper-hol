@@ -150,6 +150,23 @@ Proof
   gvs[]
 QED
 
+(* One pointer-checked step in front of a checked suffix. *)
+Theorem inst_seq_ptr_cons_step:
+  inst.inst_opcode <> INVOKE /\ step_inst 0 ctx inst s = OK t /\
+  ptr_safe_step D lo 0 ctx func PG G tn inst s /\
+  ghost_step 0 ctx PG G tn inst s = (H,qt) /\
+  inst_seq_ptr D lo ctx func PG H qt ys
+    (t with vs_inst_idx := SUC s.vs_inst_idx) G' tn' ==>
+  inst_seq_ptr D lo ctx func PG G tn (inst::ys) s G' tn'
+Proof
+  strip_tac >>
+  `step_inst_base inst s = OK t` by gvs[step_inst_non_invoke] >>
+  qspecl_then [`0`,`ctx`,`PG`,`G`,`tn`,`inst`,`s`,`t`] mp_tac
+    ghost_step_non_invoke >>
+  simp[] >> strip_tac >> gvs[] >>
+  simp[inst_seq_ptr_def] >> metis_tac[ptr_safe_step_inst_ok]
+QED
+
 Theorem prefix_trace_inst_seq_ptr_indexed[local]:
   !xs k u g q.
     EVERY (\i. i.inst_opcode <> INVOKE) xs /\

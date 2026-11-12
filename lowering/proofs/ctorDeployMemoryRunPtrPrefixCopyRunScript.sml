@@ -560,7 +560,7 @@ Resume prefix_bytestring_success_ghost[finish]:
   >- (rpt strip_tac >>
       `v <> x /\ v <> y /\ v <> z` by metis_tac[] >>
       simp[Abbr `H`, FLOOKUP_DRESTRICT, Abbr `q3`, FLOOKUP_UPDATE]) >>
-  reverse conj_tac >- simp[] >>
+  reverse conj_tac >- first_assum ACCEPT_TAC >>
   strip_tac >> gen_tac >>
   `ptr_safe_block D lo fuel ctx fn PG H qt bb
       (t with vs_inst_idx := s.vs_inst_idx+5)` by
@@ -632,11 +632,14 @@ Theorem prefix_bulk_arith_success_block:
      (!y. y <> x ==> op_taint qt (Var y) = op_taint tn (Var y)) /\
      (ptr_safe_block D lo fuel ctx fn PG H qt bb
         (t with vs_inst_idx := SUC s.vs_inst_idx) ==>
-      ptr_safe_block D lo fuel ctx fn PG G tn bb s)
+      ptr_safe_block D lo fuel ctx fn PG G tn bb s) /\
+     (!ys G' tn'. inst_seq_ptr D lo ctx fn PG H qt ys
+        (t with vs_inst_idx := SUC s.vs_inst_idx) G' tn' ==>
+      inst_seq_ptr D lo ctx fn PG G tn (mk_inst iid opc [a;b] [x]::ys) s G' tn')
 Proof
   strip_tac >> pure_rewrite_tac[LET_THM] >> BETA_TAC >>
-  `ptr_safe_step D lo fuel ctx fn PG G tn (mk_inst iid opc [a;b] [x]) s` by
-    (irule prefix_bool_body_arith_ptr_step >> simp[]) >>
+  `!fuel. ptr_safe_step D lo fuel ctx fn PG G tn (mk_inst iid opc [a;b] [x]) s` by
+    (gen_tac >> irule prefix_bool_body_arith_ptr_step >> simp[]) >>
   `!w. (update_var x w s).vs_allocas = s.vs_allocas /\
         (update_var x w s).vs_fmp = s.vs_fmp` by simp[update_var_def] >>
   mp_tac (Q.INST [`t` |-> `update_var x (if opc = ADD then u+v else u*v) s`]
@@ -647,18 +650,32 @@ Proof
     (Cases_on `opc = ADD` >> gvs[] >>
      simp[slotCopyExecutionTheory.slot_copy_step_add, slotCopyExecutionTheory.slot_copy_step_mul]) >>
   asm_rewrite_tac[] >>
-  `ghost_step fuel ctx PG G tn (mk_inst iid opc [a;b] [x]) s =
+  `!fuel. ghost_step fuel ctx PG G tn (mk_inst iid opc [a;b] [x]) s =
      (if opc = ADD then set_prov G [x] (first_prov G [a;b]) else DRESTRICT G (COMPL {x}),
       step_taint (mk_inst iid opc [a;b] [x]) s
         (update_var x (if opc = ADD then u+v else u*v) s) tn)` by
-    (Cases_on `opc = ADD` >> gvs[] >>
+    (gen_tac >> Cases_on `opc = ADD` >> gvs[] >>
      metis_tac[SRULE [LET_THM] prefix_bool_body_add_ghost,
        SRULE [LET_THM] prefix_bool_body_mul_ghost]) >>
-  `step_inst fuel ctx (mk_inst iid opc [a;b] [x]) s =
+  `!fuel. step_inst fuel ctx (mk_inst iid opc [a;b] [x]) s =
      OK (update_var x (if opc = ADD then u+v else u*v) s)` by
     simp[step_inst_non_invoke, mk_inst_def] >>
   `~is_terminator (mk_inst iid opc [a;b] [x]).inst_opcode` by
     (gvs[] >> simp[mk_inst_def, is_terminator_def]) >>
+  `!ys G' tn'. inst_seq_ptr D lo ctx fn PG
+      (if opc = ADD then set_prov G [x] (first_prov G [a;b]) else DRESTRICT G (COMPL {x}))
+      (step_taint (mk_inst iid opc [a;b] [x]) s
+        (update_var x (if opc = ADD then u+v else u*v) s) tn) ys
+      ((update_var x (if opc = ADD then u+v else u*v) s) with
+         vs_inst_idx := SUC s.vs_inst_idx) G' tn' ==>
+    inst_seq_ptr D lo ctx fn PG G tn (mk_inst iid opc [a;b] [x]::ys) s G' tn'` by
+    (rpt strip_tac >>
+     `(mk_inst iid opc [a;b] [x]).inst_opcode <> INVOKE` by
+       (simp[mk_inst_def] >> strip_tac >> gvs[]) >>
+     irule (Q.INST [`func` |-> `fn`] inst_seq_ptr_cons_step) >> metis_tac[]) >>
+  qpat_x_assum `!fuel. step_inst _ _ _ _ = _` (qspec_then `fuel` assume_tac) >>
+  qpat_x_assum `!fuel. ghost_step _ _ _ _ _ _ _ = _` (qspec_then `fuel` assume_tac) >>
+  qpat_x_assum `!fuel. ptr_safe_step _ _ _ _ _ _ _ _ _ _` (qspec_then `fuel` assume_tac) >>
   drule_all ptr_safe_block_step >> gvs[] >> metis_tac[]
 QED
 
@@ -677,21 +694,40 @@ Theorem prefix_bulk_header_success_block:
      qt.t_trans = tn.t_trans /\ qt.t_imm = tn.t_imm /\
      (ptr_safe_block D lo fuel ctx fn PG G qt bb
        (t with vs_inst_idx := SUC s.vs_inst_idx) ==>
-      ptr_safe_block D lo fuel ctx fn PG G tn bb s)
+      ptr_safe_block D lo fuel ctx fn PG G tn bb s) /\
+     (!ys G' tn'. inst_seq_ptr D lo ctx fn PG G qt ys
+        (t with vs_inst_idx := SUC s.vs_inst_idx) G' tn' ==>
+      inst_seq_ptr D lo ctx fn PG G tn
+        (mk_inst iid MSTORE [Var dst;value] []::ys) s G' tn')
 Proof
   strip_tac >> pure_rewrite_tac[LET_THM] >> BETA_TAC >>
-  `step_inst fuel ctx (mk_inst iid MSTORE [Var dst;value] []) s =
+  `!fuel. step_inst fuel ctx (mk_inst iid MSTORE [Var dst;value] []) s =
      OK (mstore (w2n a) w s)` by simp[prefix_mstore_endpoint] >>
-  `ptr_safe_step D lo fuel ctx fn PG G tn (mk_inst iid MSTORE [Var dst;value] []) s` by
-    (irule prefix_mstore_ptr_step >> goal_assum (drule_at Any) >> simp[] >> metis_tac[]) >>
-  `ghost_step fuel ctx PG G tn (mk_inst iid MSTORE [Var dst;value] []) s =
+  `!fuel. ptr_safe_step D lo fuel ctx fn PG G tn (mk_inst iid MSTORE [Var dst;value] []) s` by
+    (gen_tac >> irule prefix_mstore_ptr_step >> goal_assum (drule_at Any) >> simp[] >>
+     metis_tac[]) >>
+  `!fuel. ghost_step fuel ctx PG G tn (mk_inst iid MSTORE [Var dst;value] []) s =
      (G,step_taint (mk_inst iid MSTORE [Var dst;value] []) s (mstore (w2n a) w s) tn)` by
-    (irule prefix_mstore_ghost_step >> goal_assum (drule_at Any)) >>
+    (gen_tac >>
+     qpat_assum `!fuel. step_inst _ _ _ _ = _` (qspec_then `fuel` assume_tac) >>
+     irule prefix_mstore_ghost_step >> goal_assum (drule_at Any)) >>
   `~is_terminator (mk_inst iid MSTORE [Var dst;value] []).inst_opcode` by
     simp[mk_inst_def, is_terminator_def] >>
+  `!ys G' tn'. inst_seq_ptr D lo ctx fn PG G
+      (step_taint (mk_inst iid MSTORE [Var dst;value] []) s (mstore (w2n a) w s) tn) ys
+      ((mstore (w2n a) w s) with vs_inst_idx := SUC s.vs_inst_idx) G' tn' ==>
+    inst_seq_ptr D lo ctx fn PG G tn
+      (mk_inst iid MSTORE [Var dst;value] []::ys) s G' tn'` by
+    (rpt strip_tac >>
+     `(mk_inst iid MSTORE [Var dst;value] []).inst_opcode <> INVOKE` by simp[mk_inst_def] >>
+     irule (Q.INST [`func` |-> `fn`] inst_seq_ptr_cons_step) >> metis_tac[]) >>
+  qpat_x_assum `!fuel. step_inst _ _ _ _ = _` (qspec_then `fuel` assume_tac) >>
+  qpat_x_assum `!fuel. ghost_step _ _ _ _ _ _ _ = _` (qspec_then `fuel` assume_tac) >>
+  qpat_x_assum `!fuel. ptr_safe_step _ _ _ _ _ _ _ _ _ _` (qspec_then `fuel` assume_tac) >>
   simp[SRULE [LET_THM] prefix_mstore_taint_frame, prefix_mstore_mem_taint] >>
   conj_tac >- (simp[range_bytes_def, DISJOINT_DEF, EXTENSION] >> metis_tac[]) >>
-  drule_all ptr_safe_block_step >> simp[]
+  conj_tac >- (drule_all ptr_safe_block_step >> simp[]) >>
+  first_assum ACCEPT_TAC
 QED
 
 Theorem prefix_bulk_reload_success_block:
@@ -704,24 +740,37 @@ Theorem prefix_bulk_reload_success_block:
   in step_inst_base (mk_inst iid DLOAD [src] [x]) s = OK t /\
      (ptr_safe_block D lo fuel ctx fn PG H qt bb
         (t with vs_inst_idx := SUC s.vs_inst_idx) ==>
-      ptr_safe_block D lo fuel ctx fn PG G tn bb s)
+      ptr_safe_block D lo fuel ctx fn PG G tn bb s) /\
+     (!ys G' tn'. inst_seq_ptr D lo ctx fn PG H qt ys
+        (t with vs_inst_idx := SUC s.vs_inst_idx) G' tn' ==>
+      inst_seq_ptr D lo ctx fn PG G tn (mk_inst iid DLOAD [src] [x]::ys) s G' tn')
 Proof
   strip_tac >> pure_rewrite_tac[LET_THM] >> BETA_TAC >>
   `step_inst_base (mk_inst iid DLOAD [src] [x]) s = OK (update_var x w s)` by
     (drule exprSimUnwrapTheory.step_DLOAD >> disch_then (qspecl_then [`iid`,`x`] mp_tac) >>
      gvs[abi_decode_load_def, abi_decode_source_def]) >>
-  `step_inst fuel ctx (mk_inst iid DLOAD [src] [x]) s = OK (update_var x w s)` by
+  `!fuel. step_inst fuel ctx (mk_inst iid DLOAD [src] [x]) s = OK (update_var x w s)` by
     simp[step_inst_non_invoke, mk_inst_def] >>
-  `ghost_step fuel ctx PG G tn (mk_inst iid DLOAD [src] [x]) s =
+  `!fuel. ghost_step fuel ctx PG G tn (mk_inst iid DLOAD [src] [x]) s =
      (DRESTRICT G (COMPL {x}),tn with t_var := tn.t_var |+ (x,{}))` by
-    (qpat_assum `eval_operand src s = SOME a`
+    (gen_tac >> qpat_assum `eval_operand src s = SOME a`
        (mp_then Any mp_tac prefix_dload_ghost_step) >>
      disch_then (qspecl_then [`iid`,`x`] mp_tac) >>
      gvs[abi_decode_load_def, abi_decode_source_def, prefix_copy_pure_taint]) >>
-  `ptr_safe_step D lo fuel ctx fn PG G tn (mk_inst iid DLOAD [src] [x]) s` by
-    (irule prefix_dload_ptr_step >> simp[]) >>
+  `!fuel. ptr_safe_step D lo fuel ctx fn PG G tn (mk_inst iid DLOAD [src] [x]) s` by
+    (gen_tac >> irule prefix_dload_ptr_step >> simp[]) >>
   `~is_terminator (mk_inst iid DLOAD [src] [x]).inst_opcode` by
     simp[mk_inst_def, is_terminator_def] >>
+  `!ys G' tn'. inst_seq_ptr D lo ctx fn PG (DRESTRICT G (COMPL {x}))
+      (tn with t_var := tn.t_var |+ (x,{})) ys
+      ((update_var x w s) with vs_inst_idx := SUC s.vs_inst_idx) G' tn' ==>
+    inst_seq_ptr D lo ctx fn PG G tn (mk_inst iid DLOAD [src] [x]::ys) s G' tn'` by
+    (rpt strip_tac >>
+     `(mk_inst iid DLOAD [src] [x]).inst_opcode <> INVOKE` by simp[mk_inst_def] >>
+     irule (Q.INST [`func` |-> `fn`] inst_seq_ptr_cons_step) >> metis_tac[]) >>
+  qpat_x_assum `!fuel. step_inst _ _ _ _ = _` (qspec_then `fuel` assume_tac) >>
+  qpat_x_assum `!fuel. ghost_step _ _ _ _ _ _ _ = _` (qspec_then `fuel` assume_tac) >>
+  qpat_x_assum `!fuel. ptr_safe_step _ _ _ _ _ _ _ _ _ _` (qspec_then `fuel` assume_tac) >>
   asm_rewrite_tac[] >> drule_all ptr_safe_block_step >> simp[]
 QED
 
@@ -829,6 +878,7 @@ Theorem prefix_bulk_body_success_block:
      isPREFIX ys (DROP s.vs_inst_idx bb.bb_instructions) /\
      run_inst_seq ys s = OK t ==>
      ?H qt.
+       (!D'. inst_seq_ptr D' lo ctx fn PG G tn ys s H qt) /\
        qt.t_mem SUBSET tn.t_mem /\
        DISJOINT (range_bytes [(w2n d,32+cnt*mem_sz)]) qt.t_mem /\
        qt.t_stor = tn.t_stor /\ qt.t_trans = tn.t_trans /\ qt.t_imm = tn.t_imm /\
@@ -980,8 +1030,40 @@ Proof
       (TAKE (cnt*mem_sz) (DROP (w2n (a+32w)) s5.vs_data_section ++
          REPLICATE (cnt*mem_sz) 0w)) s5` >>
   qabbrev_tac `q6 = step_taint i5 s5 r6 q5` >> strip_tac >>
+  `!D'. inst_seq_ptr D' lo ctx fn PG G tn ys s G5 q6` by
+    (gen_tac >>
+     `inst_seq_ptr D' lo ctx fn PG G5 q5 [i5] s5 G5 q6` by
+       (`step_inst 0 ctx i5 s5 = OK r6` by
+          simp[Abbr `i5`, Abbr `r6`, step_inst_non_invoke, mk_inst_def] >>
+        qunabbrev_tac `q6` >> qunabbrev_tac `i5` >>
+        mp_tac (Q.INST [`iid` |-> `iid+5`, `dst` |-> `z`, `src` |-> `Var q`,
+          `lenop` |-> `Var p`, `s` |-> `s5`, `d` |-> `d+32w`, `sb` |-> `a+32w`,
+          `k` |-> `n2w (cnt*mem_sz)`, `G` |-> `G5`, `tn` |-> `q5`, `t` |-> `r6`,
+          `D` |-> `D'`] prefix_copy_success_ptr) >>
+        impl_tac >- (rpt conj_tac >> first_assum ACCEPT_TAC) >>
+        disch_then ACCEPT_TAC) >>
+     `get_instruction bb s.vs_inst_idx = SOME (mk_inst iid DLOAD [src] [x])` by
+       (qpat_x_assum `!j. j < 6 ==> _` (qspec_then `0` mp_tac) >> simp[Abbr `ys`]) >>
+     drule_all prefix_bulk_reload_success_block >>
+     disch_then (qspecl_then [`0`,`fn`,`PG`,`G`,`D'`] mp_tac) >>
+     pure_rewrite_tac[LET_THM] >> BETA_TAC >> strip_tac >>
+     `ys = [mk_inst iid DLOAD [src] [x]; h; i2; i3; i4; i5]` by
+       simp[Abbr `ys`, Abbr `h`, Abbr `i2`, Abbr `i3`, Abbr `i4`, Abbr `i5`] >>
+     pop_assum SUBST1_TAC >>
+     first_x_assum irule >>
+     qpat_assum `Abbrev (s1 = _)` (fn th =>
+       PURE_REWRITE_TAC [GSYM (REWRITE_RULE [markerTheory.Abbrev_def] th)]) >>
+     qpat_assum `Abbrev (G1 = _)` (fn th =>
+       PURE_REWRITE_TAC [GSYM (REWRITE_RULE [markerTheory.Abbrev_def] th)]) >>
+     qpat_assum `Abbrev (q1 = _)` (fn th =>
+       PURE_REWRITE_TAC [GSYM (REWRITE_RULE [markerTheory.Abbrev_def] th)]) >>
+     first_x_assum irule >> first_x_assum irule >>
+     first_x_assum irule >> first_x_assum irule >>
+     qpat_x_assum `inst_seq_ptr _ _ _ _ _ _ _ [i5] _ _ _` mp_tac >>
+     simp[Abbr `G5`, Abbr `G4`, Abbr `G3`]) >>
   qexistsl [`G5`,`q6`] >>
   rpt conj_tac
+  >- first_assum ACCEPT_TAC
   >- (fs[Abbr `q1`] >> metis_tac[SUBSET_TRANS])
   >- (`range_bytes [(w2n d,32+cnt*mem_sz)] =
          range_bytes [(w2n d,32)] UNION range_bytes [(w2n d+32,cnt*mem_sz)]` by
@@ -1054,7 +1136,8 @@ Theorem prefix_bulk_success_ghost:
        FLOOKUP qt.t_var v = FLOOKUP tn.t_var v) /\
     ((!fuel. ptr_safe_run D lo fuel ctx fn PG H qt
        (t with vs_inst_idx := LENGTH st'.cs_current_insts)) ==>
-     !fuel. ptr_safe_run D lo fuel ctx fn PG G tn s)
+     !fuel. ptr_safe_run D lo fuel ctx fn PG G tn s) /\
+    (!D'. inst_seq_ptr D' lo ctx fn PG G tn (emitted_insts st st') s H qt)
 Proof
   strip_tac >>
   drule_all prefix_bulk_sentinel_code >>
@@ -1181,6 +1264,18 @@ Resume prefix_bulk_success_ghost[body]:
           `G` |-> `G3`, `tn` |-> `q3`] prefix_bulk_body_success_block)))) >>
   (impl_tac >- (simp[] >> metis_tac[MEM])) >>
   strip_tac >>
+  `!D'. inst_seq_ptr D' lo ctx fn PG G tn (emitted_insts st st') s H qt` by
+    (gen_tac >>
+     qpat_x_assum `!D'. inst_seq_ptr D' _ _ _ _ G3 q3 _ u3 H qt`
+       (qspec_then `D'` mp_tac) >>
+     qpat_assum `emitted_insts st st' = xs ++ ys` SUBST1_TAC >>
+     mp_tac (Q.INST [`iid` |-> `st.cs_next_id`, `limit` |-> `maxn`,
+                     `x` |-> `x 0`, `y` |-> `x 1`, `z` |-> `x 2`, `D` |-> `D'`,
+                     `G'` |-> `H`, `tn'` |-> `qt`]
+       prefix_copy_count_success_ptr) >>
+     asm_simp_tac (srw_ss()) [LET_THM, Abbr `xs`] >>
+     simp[Abbr `s3`, Abbr `G3`, Abbr `q3`, Abbr `u3`, Abbr `ys`,
+          DRESTRICT_DRESTRICT, INTER_ASSOC]) >>
   `LENGTH st'.cs_current_insts = s.vs_inst_idx+10` by simp[] >>
   `!fuel. ptr_safe_block D lo fuel ctx fn PG H qt bb
       (t with vs_inst_idx := LENGTH st'.cs_current_insts) ==>
@@ -1213,6 +1308,7 @@ Resume prefix_bulk_success_ghost[body]:
      simp_tac (srw_ss()) [Abbr `s8`, Abbr `s7`, Abbr `s6`, Abbr `s5`,
        Abbr `s4`, Abbr `s3`, update_var_def, mstore_def,
        write_memory_with_expansion_def, LET_THM]) >>
+  reverse conj_tac >- first_assum ACCEPT_TAC >>
   strip_tac >> gen_tac >>
   `ptr_safe_block D lo fuel ctx fn PG H qt bb
       (t with vs_inst_idx := LENGTH st'.cs_current_insts)` by
