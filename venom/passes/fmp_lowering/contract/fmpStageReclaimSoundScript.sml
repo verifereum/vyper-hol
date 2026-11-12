@@ -202,6 +202,41 @@ Proof
   gvs[EVERY_MEM, inst_defs_def] >> metis_tac[EL_MEM]
 QED
 
+Theorem fmp_input_at_terminator[local]:
+  wf_function fn /\ fn_inst_wf fn /\
+  MEM pl (cfg_analyze fn).cfg_dfs_pre /\
+  MEM sl (cfg_analyze fn).cfg_dfs_pre /\
+  MEM sl (cfg_succs_of (cfg_analyze fn) pl) /\
+  lookup_block pl fn.fn_blocks = SOME pbb /\
+  lookup_block sl fn.fn_blocks = SOME sbb /\
+  pbb.bb_instructions <> [] /\
+  MEM x (input_vars_from pl sbb.bb_instructions
+    (live_vars_at (liveness_analyze fn) sl 0)) ==>
+  MEM x (live_vars_at (liveness_analyze fn) pl
+    (PRE (LENGTH pbb.bb_instructions)))
+Proof
+  strip_tac >>
+  `cfg_reachable_of (cfg_analyze fn) pl` by
+    (drule cfgAnalysisPropsTheory.cfg_analyze_reachable_sets >>
+     simp[pred_setTheory.EXTENSION] >> metis_tac[]) >>
+  `MEM x (live_vars_at (liveness_analyze fn) pl
+     (LENGTH pbb.bb_instructions))` by
+    (drule_all analyzed_live_out_edge_subset >>
+     simp[pred_setTheory.SUBSET_DEF]) >>
+  `MEM pbb fn.fn_blocks` by
+    metis_tac[livenessTransferProofsTheory.lookup_block_mem] >>
+  `bb_well_formed pbb` by gvs[wf_function_def] >>
+  `inst_wf (LAST pbb.bb_instructions)` by
+    metis_tac[fn_inst_wf_def, rich_listTheory.MEM_LAST_NOT_NIL] >>
+  `(LAST pbb.bb_instructions).inst_outputs = []` by
+    metis_tac[venomExecProofsTheory.terminator_no_outputs, bb_well_formed_def] >>
+  drule live_vars_at_propagate >> simp[] >> disch_then irule >>
+  `0 < LENGTH pbb.bb_instructions` by
+    (Cases_on `pbb.bb_instructions` >> gvs[]) >>
+  `SUC (PRE (LENGTH pbb.bb_instructions)) = LENGTH pbb.bb_instructions` by decide_tac >>
+  simp[inst_defs_def, GSYM LAST_EL]
+QED
+
 Theorem fmp_stage_live_edge:
   wf_function fn /\ fn_inst_wf fn /\
   fmp_reclaim_states infos fn = SOME states /\
