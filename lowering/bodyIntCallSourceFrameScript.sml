@@ -3,6 +3,7 @@ Theory bodyIntCallSourceFrame
 Ancestors
   vyperInterpreter vyperState vyperStatePreservation vyperStorageBackend
   supportedExprTraverse exprSimHypsDefs vyperPureExpr vyperPlaceFrames vyperContext
+  exprCallBounds vyperAST exprOracleStorageInterfaces
 
 Theorem get_storage_outcomes[local]:
   vyperStorageBackend$get_storage cx (es with <|outcomes := os; gas_obs := gs|>) tr =
@@ -209,7 +210,136 @@ Proof
   cheat
 QED
 
-(* HELD (train 17): 0.5.0b1 arg snapshot re-proof *)
+Theorem effect_free_expr_size_frame[local]:
+  !e. ~supported_expr_exists expr_effect_root e ==>
+    !cx s r t. eval_expr cx e s = (r,t) ==>
+      t = s with <|outcomes := t.outcomes; gas_obs := t.gas_obs|>
+Proof
+  measureInduct_on `expr_size e` >> Cases_on `e` >>
+  simp[supported_expr_exists_def, expr_effect_root_def] >>
+  rpt strip_tac
+  >>~- ([`eval_expr _ (Name _ _) _ = _`],
+    drule_at (Pos last) eval_expr_preserves_state >> simp[pure_expr_def] >>
+    strip_tac >> gvs[])
+  >>~- ([`eval_expr _ (Literal _ _) _ = _`],
+    gvs[Once evaluate_def, return_def])
+  >>~- ([`eval_expr _ (TopLevelName _ _) _ = _`],
+    drule_at (Pos last) eval_expr_preserves_state >> simp[pure_expr_def] >>
+    strip_tac >> gvs[])
+  >>~- ([`eval_expr _ (FlagMember _ _ _) _ = _`],
+    gvs[Once evaluate_def] >> drule lookup_flag_mem_state >> strip_tac >> gvs[])
+  >>~- ([`eval_expr _ (Attribute _ _ _) _ = _`], suspend "attribute")
+  >>~- ([`eval_expr _ (TypeBuiltin _ _ _ _) _ = _`], suspend "typebuiltin")
+  >>~- ([`eval_expr _ (StructLit _ _ _) _ = _`], suspend "struct")
+  >>~- ([`eval_expr _ (Subscript _ _ _) _ = _`], suspend "subscript")
+  >>~- ([`eval_expr _ (IfExp _ _ _ _) _ = _`], suspend "ifexp")
+  >>~- ([`eval_expr _ (Builtin _ _ _) _ = _`], suspend "builtin")
+QED
+
+Resume effect_free_expr_size_frame[attribute]:
+  rename1 `Attribute aty child fld` >>
+  first_x_assum (qspec_then `child` mp_tac) >>
+  simp[expr_size_def] >> strip_tac >>
+  gvs[Once evaluate_def, bind_def, AllCaseEqs()] >>
+  imp_res_tac select_result_state >> gvs[] >> metis_tac[]
+QED
+Resume effect_free_expr_size_frame[typebuiltin]:
+  rename1 `TypeBuiltin aty tb target args` >>
+  `!e. MEM e args ==> !st rr tt. eval_expr cx e st = (rr,tt) ==>
+    tt = st with <|outcomes := tt.outcomes; gas_obs := tt.gas_obs|>` by
+    (rpt strip_tac >>
+     `expr_size e < list_size expr_size args` by
+       (irule expr_list_member_bound >> simp[]) >>
+     qpat_x_assum `!y. _` (qspec_then `e` mp_tac) >>
+     simp[expr_size_def] >>
+     gvs[supported_exprs_exists_every, listTheory.EXISTS_MEM] >>
+     metis_tac[]) >>
+  qpat_assum `!e. MEM e args ==> _` mp_tac >>
+  disch_then (mp_tac o MATCH_MP eval_exprs_frame_from_members) >> strip_tac >>
+  qpat_x_assum `!y. expr_size y < _ ==> _` kall_tac >>
+  gvs[Once evaluate_def, bind_def, ignore_bind_def, AllCaseEqs(),
+      type_check_def, assert_def, return_def, raise_def] >>
+  imp_res_tac lift_sum_state >> gvs[] >> metis_tac[]
+QED
+Resume effect_free_expr_size_frame[struct]:
+  rename1 `StructLit aty nsid fields` >>
+  `!e. MEM e (MAP SND fields) ==> !st rr tt. eval_expr cx e st = (rr,tt) ==>
+    tt = st with <|outcomes := tt.outcomes; gas_obs := tt.gas_obs|>` by
+    (rpt strip_tac >>
+     `expr_size e < expr_size (StructLit aty nsid fields)` by
+       (gvs[listTheory.MEM_MAP] >> PairCases_on `y` >> gvs[] >>
+        drule expr_struct_field_bound >>
+        disch_then (qspecl_then [`nsid`,`aty`] mp_tac) >> simp[expr_size_def]) >>
+     qpat_x_assum `!y. expr_size y < _ ==> _` (qspec_then `e` mp_tac) >>
+     gvs[supported_fields_exists_not_every, listTheory.EVERY_MEM] >>
+     metis_tac[]) >>
+  qpat_assum `!e. MEM e (MAP SND fields) ==> _` mp_tac >>
+  disch_then (mp_tac o MATCH_MP eval_exprs_frame_from_members) >> strip_tac >>
+  qpat_x_assum `!y. expr_size y < _ ==> _` kall_tac >>
+  PairCases_on `nsid` >>
+  gvs[Once evaluate_def, bind_def, return_def, AllCaseEqs()] >> metis_tac[]
+QED
+Resume effect_free_expr_size_frame[subscript]:
+  rename1 `Subscript aty lhs rhs` >>
+  `!cx st rr tt. eval_expr cx lhs st = (rr,tt) ==>
+    tt = st with <|outcomes := tt.outcomes; gas_obs := tt.gas_obs|>` by
+    (qpat_assum `!y. expr_size y < _ ==> _` (qspec_then `lhs` mp_tac) >>
+     simp[expr_size_def]) >>
+  `!cx st rr tt. eval_expr cx rhs st = (rr,tt) ==>
+    tt = st with <|outcomes := tt.outcomes; gas_obs := tt.gas_obs|>` by
+    (qpat_assum `!y. expr_size y < _ ==> _` (qspec_then `rhs` mp_tac) >>
+     simp[expr_size_def]) >>
+  qpat_x_assum `!y. expr_size y < _ ==> _` kall_tac >>
+  Cases_on `subscript_reads_base cx lhs rhs` >>
+  gvs[Once evaluate_def, bind_def, return_def, AllCaseEqs()] >>
+  imp_res_tac read_result_state >> imp_res_tac select_result_state >>
+  gvs[] >> metis_tac[outcomes_frame_trans]
+QED
+Resume effect_free_expr_size_frame[ifexp]:
+  rename1 `IfExp aty cond yes no` >>
+  `!cx st rr tt. eval_expr cx cond st = (rr,tt) ==>
+    tt = st with <|outcomes := tt.outcomes; gas_obs := tt.gas_obs|>` by
+    (qpat_assum `!y. expr_size y < _ ==> _` (qspec_then `cond` mp_tac) >>
+     simp[expr_size_def]) >>
+  `!cx st rr tt. eval_expr cx yes st = (rr,tt) ==>
+    tt = st with <|outcomes := tt.outcomes; gas_obs := tt.gas_obs|>` by
+    (qpat_assum `!y. expr_size y < _ ==> _` (qspec_then `yes` mp_tac) >>
+     simp[expr_size_def]) >>
+  `!cx st rr tt. eval_expr cx no st = (rr,tt) ==>
+    tt = st with <|outcomes := tt.outcomes; gas_obs := tt.gas_obs|>` by
+    (qpat_assum `!y. expr_size y < _ ==> _` (qspec_then `no` mp_tac) >>
+     simp[expr_size_def]) >>
+  qpat_x_assum `!y. expr_size y < _ ==> _` kall_tac >>
+  gvs[Once evaluate_def, bind_def, AllCaseEqs(), switch_BoolV_def, raise_def] >>
+  imp_res_tac read_result_state >> imp_res_tac conditional_result_state >>
+  gvs[] >> rpt (BasicProvers.FULL_CASE_TAC >> gvs[raise_def]) >>
+  metis_tac[outcomes_frame_trans]
+QED
+Resume effect_free_expr_size_frame[builtin]:
+  rename1 `Builtin aty bt args` >>
+  `!e. MEM e args ==> !st rr tt. eval_expr cx e st = (rr,tt) ==>
+    tt = st with <|outcomes := tt.outcomes; gas_obs := tt.gas_obs|>` by
+    (rpt strip_tac >>
+     `expr_size e < list_size expr_size args` by
+       (irule expr_list_member_bound >> simp[]) >>
+     qpat_assum `!y. expr_size y < _ ==> _` (qspec_then `e` mp_tac) >>
+     simp[expr_size_def] >>
+     gvs[supported_exprs_exists_every, listTheory.EXISTS_MEM] >> metis_tac[]) >>
+  qpat_assum `!e. MEM e args ==> _` mp_tac >>
+  disch_then (mp_tac o MATCH_MP eval_exprs_frame_from_members) >> strip_tac >>
+  drule_at (Pos last) builtin_snapshot_frame >>
+  (impl_tac >-
+    (simp[] >> rpt strip_tac
+     >>~- ([`MEM e args`], metis_tac[]) >>
+     gvs[code_slice_source_SOME, supported_expr_exists_def,
+         expr_effect_root_def, listTheory.TL] >>
+     drule_at (Pos last) eval_exprs_frame_from_members >>
+     (impl_tac >-
+       (rpt strip_tac >>
+        qpat_assum `!y. expr_size y < _ ==> _` (qspec_then `e` mp_tac) >>
+        gvs[listTheory.MEM] >> metis_tac[])) >> simp[])) >> simp[]
+QED
+Finalise effect_free_expr_size_frame
 Theorem effect_free_eval_frame[local]:
   (!p e. !cx s r t. ~supported_expr_exists p e /\ p = expr_effect_root /\
     eval_expr cx e s = (r,t) ==>
@@ -225,48 +355,21 @@ Theorem effect_free_eval_frame[local]:
     eval_exprs cx (MAP SND fields) s = (r,t) ==>
     t = s with <| outcomes := t.outcomes; gas_obs := t.gas_obs |>)
 Proof
-  (* original proof, kept while held:
-  ho_match_mp_tac supported_expr_exists_ind >>
-  simp[supported_expr_exists_def, expr_effect_root_def] >>
-  rpt conj_tac >> rpt gen_tac >> rpt strip_tac
-  >>~- ([`eval_expr _ (Name _ _) _ = _`],
-    drule_at (Pos last) eval_expr_preserves_state >> simp[pure_expr_def] >>
-    strip_tac >> gvs[])
-  >>~- ([`eval_expr _ (Literal _ _) _ = _`],
-    gvs[Once evaluate_def, return_def])
-  >>~- ([`eval_expr _ (TopLevelName _ _) _ = _`],
-    drule_at (Pos last) eval_expr_preserves_state >> simp[pure_expr_def] >>
-    strip_tac >> gvs[])
-  >>~- ([`eval_expr _ (FlagMember _ _ _) _ = _`],
-    gvs[Once evaluate_def] >> drule lookup_flag_mem_state >> strip_tac >> gvs[])
-  >>~- ([`eval_exprs _ [] _ = _`], gvs[Once evaluate_def, return_def])
-  >>~- ([`eval_expr _ (Attribute _ _ _) _ = _`],
-    gvs[Once evaluate_def, bind_def, AllCaseEqs()] >>
-    imp_res_tac select_result_state >> gvs[] >> metis_tac[])
-  >>~- ([`eval_expr _ (TypeBuiltin _ _ _ _) _ = _`],
-    gvs[Once evaluate_def, bind_def, ignore_bind_def, AllCaseEqs(),
-        type_check_def, assert_def, return_def, raise_def] >>
-    imp_res_tac lift_sum_state >> gvs[] >> metis_tac[])
-  >>~- ([`eval_expr _ (StructLit _ _ _) _ = _`],
-    rename1 `StructLit ty id fields` >> PairCases_on `id` >>
-    gvs[Once evaluate_def, bind_def, return_def, AllCaseEqs()] >> metis_tac[])
-  >>~- ([`eval_expr _ (Subscript _ _ _) _ = _`],
-    gvs[Once evaluate_def, bind_def, AllCaseEqs()] >>
-    imp_res_tac read_result_state >> imp_res_tac select_result_state >>
-    gvs[] >> metis_tac[outcomes_frame_trans])
-  >>~- ([`eval_expr _ (IfExp _ _ _ _) _ = _`],
-    gvs[Once evaluate_def, bind_def, AllCaseEqs(), switch_BoolV_def, raise_def] >>
-    imp_res_tac read_result_state >> imp_res_tac conditional_result_state >>
-    gvs[] >> rpt (BasicProvers.FULL_CASE_TAC >> gvs[raise_def]) >>
-    metis_tac[outcomes_frame_trans])
-  >>~- ([`eval_exprs _ (_::_) _ = _`],
-    gvs[Once evaluate_def, bind_def, return_def, AllCaseEqs()] >>
-    imp_res_tac read_result_state >> gvs[] >> metis_tac[outcomes_frame_trans])
-  >>~- ([`eval_expr _ (Builtin _ _ _) _ = _`],
-    irule outcomes_frame_builtin >> metis_tac[])
-  >> gvs[expr_effect_root_def, listTheory.MEM] >> metis_tac[]
-  *)
-  cheat
+  simp[] >> conj_tac
+  >- metis_tac[effect_free_expr_size_frame] >>
+  conj_tac
+  >- (rpt strip_tac
+      >- (drule_at (Pos last) eval_exprs_frame_from_members >>
+          (impl_tac >-
+            (gvs[supported_exprs_exists_every, listTheory.EXISTS_MEM] >>
+             metis_tac[effect_free_expr_size_frame])) >> simp[])
+      >> gvs[supported_exprs_exists_every, listTheory.EXISTS_MEM] >>
+      metis_tac[effect_free_expr_size_frame]) >>
+  rpt strip_tac >>
+  drule_at (Pos last) eval_exprs_frame_from_members >>
+  (impl_tac >-
+    (gvs[supported_fields_exists_not_every, listTheory.EVERY_MEM] >>
+     metis_tac[effect_free_expr_size_frame])) >> simp[]
 QED
 
 Theorem effect_free_eval_expr_outcomes:
