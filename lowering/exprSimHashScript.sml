@@ -2520,7 +2520,7 @@ Theorem compile_typed_unary_builtin_vv_sim:
     ?x sm. lower_value compile_expr cenv (expr_type e) e sa = (x,sm) /\
       code x sm = (vv,sb)) /\
   (!x. cs_appends (code x)) /\
-  (!sa sm sb x vv s0 v gs es' s.
+  (!st0 sa sm sb x vv s0 v gs es' s.
     lower_value compile_expr cenv (expr_type e) e sa = (x,sm) /\
     code x sm = (vv,sb) /\ fn_has_code sm sb func /\
     fn_inst_ids_distinct func /\ local_ptrs_reserved cenv sa /\
@@ -2529,14 +2529,17 @@ Theorem compile_typed_unary_builtin_vv_sim:
       (INL v,es') /\
     value_has_type (BaseTV bty) v /\ expr_sim_inv cenv cx env es' /\
     expr_res_ok (builtin_result cx es'.accounts ann bt [expr_type e] [v]) /\
-    expr_post H ctx func cenv cx e es sa sm s0 es' v x s /\ ~s.vs_halted /\
+    (!H. valid_horizon cx st0 H es'.storage_trace ==>
+       expr_post H ctx func cenv cx e es sa sm s0 es' v x s) /\
+    (?H. valid_horizon cx st0 H es'.storage_trace) /\ ~s.vs_halted /\
     s.vs_current_bb = sm.cs_current_bb /\
     s.vs_inst_idx = LENGTH sm.cs_current_insts ==>
     ?n r. gas_marked_path F ctx func s n r /\
       ((?t rv. r = OK t /\
           builtin_result cx es'.accounts ann bt [expr_type e] [v] = INL rv /\
-          vv_post H ctx func cenv cx (Builtin ann bt [e]) es sa sb s0 es'
-            (Value rv) vv t /\
+          (!H. valid_horizon cx st0 H es'.storage_trace ==>
+             vv_post H ctx func cenv cx (Builtin ann bt [e]) es sa sb s0 es'
+               (Value rv) vv t) /\
           t.vs_current_bb = sb.cs_current_bb /\
           t.vs_inst_idx = LENGTH sb.cs_current_insts) \/
        (exit_result r /\
@@ -2564,7 +2567,7 @@ Proof
   irule expr_sim_suffix >>
   first_assum (irule_at (Pat `expr_sim _ _ _ _ _ _ _`)) >>
   first_assum (irule_at (Pat `lower_value _ _ _ _ _ = _`)) >>
-  simp[] >> conj_tac
+  simp[storage_trace_frame_def] >> conj_tac
   >- (rpt strip_tac >> irule expr_exit_INR_cast >> simp[]) >>
   rpt strip_tac >>
   drule_at (Pat `bind _ _ _ = _`)
@@ -2575,7 +2578,8 @@ Proof
     (qpat_x_assum `!gs res ee. _` (qspec_then `gs` mp_tac) >> simp[bind_def] >>
      Cases_on `builtin_result cx ee.accounts ann bt [expr_type e] [v]` >>
      gvs[expr_vv_res_ok_def, expr_res_ok_def]) >>
-  qpat_x_assum `!sa sm sb x vv s0 v gs es' s. _` drule_all >> strip_tac >>
+  qpat_x_assum `!st0 sa sm sb x vv s0 v gs es' s. _`
+    (drule_all o SIMP_RULE bool_ss [PULL_EXISTS]) >> strip_tac >>
   `ee with gas_obs := [] = ee` by
     simp[evaluation_state_component_equality] >>
   qexists_tac `REPLICATE n F` >>
@@ -2584,6 +2588,21 @@ Proof
                    INL w => INL (Value w) | INR exc => INR exc`, `ee`, `r`] >>
   simp[expr_exit_success_map] >>
   Cases_on `builtin_result cx ee.accounts ann bt [expr_type e] [v]` >> gvs[]
+QED
+
+Theorem sha256_continuation_frame[local]:
+  storage_trace_frame (\es1.
+    case builtin_result cx es1.accounts ann Sha256 [ty] [v] of
+      INR exc => (INR exc, es1)
+    | INL w => (do precompile_call_success Sha256; return (Value w) od) es1)
+Proof
+  `!w. storage_trace_frame
+         (do precompile_call_success Sha256; return (Value w) od)` by
+    simp[storage_trace_frame_ignore_bind, storage_trace_frame_return,
+         storage_trace_frame_precompile_call_success] >>
+  simp[storage_trace_frame_def] >> rpt gen_tac >>
+  Cases_on `builtin_result cx st.accounts ann Sha256 [ty] [v]` >> simp[] >>
+  fs[storage_trace_frame_def]
 QED
 
 (* The sha256 composition: the operand, then the digest's precompile call,
@@ -2595,7 +2614,7 @@ Theorem compile_typed_sha256_unary_vv_sim:
     ?x sm. lower_value compile_expr cenv (expr_type e) e sa = (x,sm) /\
       code x sm = (vv,sb)) /\
   (!x. cs_appends (code x)) /\
-  (!sa sm sb x vv s0 v gs es1 s res es2.
+  (!st0 sa sm sb x vv s0 v gs es1 s res es2.
     lower_value compile_expr cenv (expr_type e) e sa = (x,sm) /\
     code x sm = (vv,sb) /\ fn_has_code sm sb func /\
     fn_inst_ids_distinct func /\ local_ptrs_reserved cenv sa /\
@@ -2608,13 +2627,16 @@ Theorem compile_typed_sha256_unary_vv_sim:
        INR exc => (INR exc,es1)
      | INL w => (do precompile_call_success Sha256; return (Value w) od) es1) =
        (res,es2) /\
-    expr_post H ctx func cenv cx e es sa sm s0 es1 v x s /\ ~s.vs_halted /\
+    (!H. valid_horizon cx st0 H es1.storage_trace ==>
+       expr_post H ctx func cenv cx e es sa sm s0 es1 v x s) /\
+    (?H. valid_horizon cx st0 H es1.storage_trace) /\ ~s.vs_halted /\
     s.vs_current_bb = sm.cs_current_bb /\
     s.vs_inst_idx = LENGTH sm.cs_current_insts ==>
     ?n r. gas_marked_path F ctx func s n r /\
       ((?t rv. r = OK t /\ res = INL rv /\
-          vv_post H ctx func cenv cx (Builtin ann Sha256 [e]) es sa sb s0 es2
-            rv vv t /\
+          (!H. valid_horizon cx st0 H es2.storage_trace ==>
+             vv_post H ctx func cenv cx (Builtin ann Sha256 [e]) es sa sb s0 es2
+               rv vv t) /\
           t.vs_current_bb = sb.cs_current_bb /\
           t.vs_inst_idx = LENGTH sb.cs_current_insts) \/
        (exit_result r /\ expr_exit res r))) ==>
@@ -2637,6 +2659,7 @@ Proof
   first_assum (irule_at (Pat `lower_value _ _ _ _ _ = _`)) >>
   simp[] >> conj_tac
   >- (rpt strip_tac >> irule expr_exit_INR_cast >> simp[]) >>
+  conj_tac >- simp[sha256_continuation_frame] >>
   rpt strip_tac >>
   drule_at (Pat `bind _ _ _ = _`)
     (CONV_RULE (DEPTH_CONV ETA_CONV) expr_body_pre_base_result) >>
@@ -2650,7 +2673,8 @@ Proof
   `expr_vv_res_ok res` by
     (qpat_x_assum `!gs res ee. _` (qspec_then `gs` mp_tac) >> simp[bind_def] >>
      disch_then irule >> gvs[]) >>
-  qpat_x_assum `!sa sm sb x vv s0 v gs es1 s res es2. _` drule_all >> strip_tac >>
+  qpat_x_assum `!st0 sa sm sb x vv s0 v gs es1 s res es2. _`
+    (drule_all o SIMP_RULE bool_ss [PULL_EXISTS]) >> strip_tac >>
   drule sha256_continuation_gas_obs >> strip_tac >>
   `es2 with gas_obs := [] = es2` by
     (first_x_assum (qspec_then `[]` mp_tac) >>
@@ -2877,7 +2901,7 @@ Theorem compile_typed_stack_unary_builtin_vv_sim:
      sb.cs_current_insts = sm.cs_current_insts ++ emitted_insts sm sb /\
      EVERY (\i. i.inst_opcode <> INVOKE /\ ~is_terminator i.inst_opcode)
        (emitted_insts sm sb)) /\
-  (!sa sm sb x op s0 v es' s.
+  (!H sa sm sb x op s0 v es' s.
      lower_value compile_expr cenv (expr_type e) e sa = (x,sm) /\
      code x sm = (op,sb) /\ fn_has_code sm sb func /\
      fn_inst_ids_distinct func /\ local_ptrs_reserved cenv sa /\
@@ -2912,14 +2936,19 @@ Proof
   drule (CONV_RULE (DEPTH_CONV ETA_CONV)
     exprSimWordArgsTheory.forced_eval_expr_preserves_scopes_dom) >>
   simp[] >> strip_tac >>
-  qpat_x_assum `!sa sm sb x op s0 v es' s. _` drule_all >>
+  qpat_assum `!H. valid_horizon _ _ H _ ==> expr_post _ _ _ _ _ _ _ _ _ _ _ _ _ _`
+    (drule_then assume_tac) >>
+  qpat_assum `!H sa sm sb x op s0 v es' s. _` drule_all >>
   simp[] >> strip_tac >>
   qpat_x_assum `!x sm op sb. _` drule >> strip_tac >>
   qpat_x_assum `same_blocks _ _`
     (strip_assume_tac o REWRITE_RULE [same_blocks_def]) >>
   drule_all hash_run_path >>
   disch_then (qspec_then `ctx` strip_assume_tac) >>
-  goal_assum drule >> gvs[]
+  goal_assum drule >> gvs[] >> rpt strip_tac >>
+  qpat_x_assum `!H. valid_horizon _ _ H _ ==> expr_post _ _ _ _ _ _ _ _ _ _ _ _ _ _`
+    drule >> strip_tac >>
+  qpat_x_assum `!H sa sm sb x op s0 v es' s. _` drule_all >> strip_tac >> gvs[]
 QED
 
 Theorem compile_keccak256_typed_vv_sim:
@@ -3752,6 +3781,8 @@ Resume compile_method_id_runtime_typed_vv_sim[continuation]:
   drule (CONV_RULE (DEPTH_CONV ETA_CONV)
     exprSimWordArgsTheory.forced_eval_expr_preserves_scopes_dom) >>
   simp[] >> strip_tac >>
+  qpat_assum `!H. valid_horizon _ _ H _ ==> expr_post _ _ _ _ _ _ _ _ _ _ _ _ _ _`
+    (drule_then assume_tac) >>
   drule_at (Pos hd) method_id_runtime_typed_post_run >> simp[] >>
   disch_then drule_all >> strip_tac >>
   drule_at (Pos hd) method_id_typed_suffix_shape >> simp[] >>
@@ -3760,7 +3791,11 @@ Resume compile_method_id_runtime_typed_vv_sim[continuation]:
     (strip_assume_tac o REWRITE_RULE [same_blocks_def]) >>
   drule_all hash_run_path >>
   disch_then (qspec_then `ctx` strip_assume_tac) >>
-  goal_assum drule >> simp[] >>
+  goal_assum drule >> simp[] >> rpt strip_tac >>
+  qpat_x_assum `!H. valid_horizon _ _ H _ ==> expr_post _ _ _ _ _ _ _ _ _ _ _ _ _ _`
+    drule >> strip_tac >>
+  drule_at (Pos hd) method_id_runtime_typed_post_run >> simp[] >>
+  disch_then drule_all >> strip_tac >> gvs[] >>
   Cases_on `fixed` >> gvs[contextTheory.mk_ptr_def] >>
   irule vv_post_pointer_cong >> goal_assum (drule_at Any) >> simp[]
 QED
