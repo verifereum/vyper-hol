@@ -1027,7 +1027,7 @@ Theorem supported_storage_field_write_decl:
   !tops src id fld.
     supported_storage_field_write tops (src, id) fld ==>
     src = NONE /\ find_var_decl_by_name id tops <> NONE /\
-    ?mut sid slot. MEM (VariableDecl Private mut id (StructT sid) slot) tops
+    ?vis mut sid slot. MEM (VariableDecl vis mut id (StructT sid) slot) tops
 Proof
   rpt gen_tac >>
   simp[supported_storage_field_write_def,

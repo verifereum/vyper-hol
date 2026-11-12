@@ -185,7 +185,6 @@ Theorem supported_declaration_exclusions_assembled:
     [FunctionDecl Deploy Nonpayable F F "__init__" [] [expr_test_uint] NoneT [];
      VariableDecl Private Immutable "x" (BaseT (UintT 256)) (SOME 0);
      VariableDecl Private (Constant expr_test_uint) "x" (BaseT (UintT 256)) NONE;
-     VariableDecl (Public F) Storage "x" (BaseT (UintT 256)) (SOME 0);
      VariableDecl Private Storage "x" (BaseT (UintT 256)) NONE;
      VariableDecl Private Storage "x" (BaseT (UintT 8)) (SOME 0);
      StructDecl "S" [("f",StructT (SOME 0,"S"))]]
@@ -288,6 +287,16 @@ QED
 Theorem supported_syntax_not_typing:
   supported_program_deploy [program_test_deploy
     [AnnAssign "x" (BaseT (UintT 256)) (Literal (BaseT BoolT) (BoolL T))]]
+Proof
+  EVAL_TAC
+QED
+
+Theorem supported_public_storage_program:
+  supported_program
+    [VariableDecl (Public F) Storage "x" (BaseT (UintT 256)) (SOME 0)] /\
+  supported_program
+    [HashMapDecl (Public F) F "m" (BaseT AddressT)
+       (Type (BaseT (UintT 256))) (SOME 0)]
 Proof
   EVAL_TAC
 QED

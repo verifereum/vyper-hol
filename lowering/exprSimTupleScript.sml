@@ -477,7 +477,7 @@ Proof
     (qpat_x_assum `expr_body_pre _ _ _ _ _` mp_tac >>
      simp[expr_body_pre_def, Once well_typed_expr_def] >>
      rpt strip_tac >> gvs[] >>
-     drule type_place_expr_vtype_annotation >>
+     drule vyperTypeSystemTheory.type_place_expr_vtype_annotation >>
      Cases_on `vt` >> TRY (rename1 `Type t` >> Cases_on `t`) >>
      gvs[subscript_vtype_def, vtype_annotation_ok_def]) >>
   `?ity k. idx = Literal ity (IntL (&k)) /\ k < LENGTH tys /\ EL k tys = ann` by

@@ -75,7 +75,7 @@ Definition constant_result_shape_def:
     (?src id path. pv = PlaceR (ImmutablePlace src id path))
 End
 
-Theorem constant_result_length[local]:
+Theorem constant_result_length:
   constant_result_shape pv /\ read_result cx pv st = (INL v,st) /\
   constant_length v = SOME n ==>
   result_array_length cx pv st = (INL n,st)
@@ -86,7 +86,7 @@ Proof
   rename1 `constant_length (ArrayV av)` >> Cases_on `av` >> gvs[constant_length_def, return_def]
 QED
 
-Theorem constant_result_selection[local]:
+Theorem constant_result_selection:
   constant_result_shape pv /\
   eval_result_typed (env,cx,st) pv (Type ty) /\
   read_result cx pv st = (INL v,st) /\
@@ -212,6 +212,43 @@ Proof
   strip_tac >> gvs[read_result_def, constant_result_shape_def, raise_def]
 QED
 
+(* Transport observations through a common read value rather than equating
+   Value and ImmutablePlace representations.  These interfaces deliberately
+   describe successful observations only. *)
+Theorem constant_result_length_transport:
+  constant_result_shape p /\ constant_result_shape q /\
+  read_result cx p st = (INL v,st) /\
+  read_result cx q st = (INL v,st) /\
+  result_array_length cx p st = (INL n,st') ==>
+  st' = st /\ result_array_length cx q st = (INL n,st)
+Proof
+  strip_tac >> drule_all constant_result_length_inv >>
+  strip_tac >> gvs[] >> irule constant_result_length >> simp[]
+QED
+
+Theorem constant_result_selection_transport:
+  constant_result_shape p /\ constant_result_shape q /\
+  eval_result_typed (env,cx,st) p (Type ty) /\
+  eval_result_typed (env,cx,st) q (Type ty) /\
+  read_result cx p st = (INL v,st) /\
+  read_result cx q st = (INL v,st) /\
+  env.type_defs = get_tenv cx /\
+  evaluate_type env.type_defs ty = SOME tv /\
+  subscript_type tv sb = SOME etv /\
+  evaluate_type env.type_defs result_ty = SOME etv /\
+  select_result cx ty p sb st = (INL out,st1) /\
+  read_result cx out st1 = (INL w,st2) ==>
+  st1 = st /\ st2 = st /\
+  ?out'. select_result cx ty q sb st = (INL out',st) /\
+    constant_result_shape out' /\
+    eval_result_typed (env,cx,st) out' (Type result_ty) /\
+    read_result cx out' st = (INL w,st)
+Proof
+  strip_tac >> drule_all constant_result_selection_inv >>
+  strip_tac >> gvs[] >> irule constant_result_selection >>
+  simp[] >> metis_tac[]
+QED
+
 (* ===== Expression soundness ===== *)
 
 Theorem get_tenv_sources:
@@ -310,7 +347,7 @@ Proof
   disch_then drule >> disch_then drule >> simp[check_toplevel_decl_def]
 QED
 
-Theorem constant_place_expr_well_typed[local]:
+Theorem constant_place_expr_well_typed:
   check_contract mode (checker_layouts : ('checker_addr, ((num option # string), num) alist # ((num option # string), num) alist) alist) checker_addr mods = SOME artifact /\
   ALOOKUP cx.sources cx.txn.target = SOME mods ==>
   !e vt. constant_expr mods e /\
@@ -333,7 +370,7 @@ Proof
       `assignable_type (type_env_all_modules mods) ty` by
         metis_tac[checked_constant_decl_typed] >>
       `FLOOKUP artifact.cta_toplevel_vtypes (p0,p1) = SOME (Type ty)` by
-        (irule check_contract_bare_global_toplevel_vtype >> metis_tac[]) >>
+        (irule vyperTypeContractStaticMapsTheory.check_contract_bare_global_toplevel_vtype >> metis_tac[]) >>
       gvs[artifact_env_def, vtype_annotation_ok_def, well_typed_expr_def] >>
       Cases_on `t` >> gvs[assignable_type_def] >>
       Cases_on `FLOOKUP (type_env_all_modules mods) p` >>
@@ -347,7 +384,7 @@ Proof
       gvs[artifact_env_def])
 QED
 
-Theorem constant_subscript_base_well_typed[local]:
+Theorem constant_subscript_base_well_typed:
   check_contract mode (checker_layouts : ('checker_addr, ((num option # string), num) alist # ((num option # string), num) alist) alist) checker_addr mods = SOME artifact /\
   ALOOKUP cx.sources cx.txn.target = SOME mods /\
   constant_expr mods e /\
@@ -360,7 +397,7 @@ Proof
 QED
 
 (* Checked constant folding agrees with resolution and explicit reads. *)
-Theorem constant_subscript_type_ok[local]:
+Theorem constant_subscript_type_ok:
   well_typed_expr env (Subscript ty e1 e2) /\
   well_typed_expr env e1 ==>
   subscript_type_ok (expr_type e1) e2 ty
@@ -375,7 +412,7 @@ Proof
   metis_tac[vyperTypeExprResultTheory.well_typed_expr_not_hashmap_place]
 QED
 
-Theorem constant_subscript_index_matches[local]:
+Theorem constant_subscript_index_matches:
   subscript_type_ok ct ie ty /\ constant_value mods imms ie = SOME idx ==>
   vyperTypeExprResult$subscript_index_matches ct ie idx
 Proof
@@ -402,7 +439,7 @@ Proof
   gvs[Once evaluate_type_def, subscript_type_def, AllCaseEqs()]
 QED
 
-Theorem constant_subscript_selected_typed[local]:
+Theorem constant_subscript_selected_typed:
   subscript_type_ok ct ie ty /\
   vyperTypeExprResult$subscript_index_matches ct ie idx /\
   evaluate_type env.type_defs ct = SOME tv /\ value_has_type tv base_value /\
@@ -422,7 +459,7 @@ Proof
   goal_assum (drule_at Any) >> simp[]
 QED
 
-Theorem constant_attribute_selected_typed[local]:
+Theorem constant_attribute_selected_typed:
   attribute_type env.type_defs ct id = SOME ty /\
   evaluate_type env.type_defs ct = SOME tv /\ value_has_type tv base_value /\
   evaluate_subscripts tv base_value [AttrSubscript id] = INL selected ==>
@@ -797,6 +834,25 @@ Proof
   drule_all (cj 2 constant_value_eval_expr_shape) >> simp[]
 QED
 
+Theorem constant_value_eval_expr_observation:
+  constant_value mods imms e = SOME v /\
+  check_contract F cx.layouts cx.txn.target mods = SOME artifact /\
+  ALOOKUP cx.sources cx.txn.target = SOME mods /\
+  constant_machine_immutables am cx.txn.target = imms /\
+  deployment_constant_cells_typed (type_env_all_modules mods)
+    cx.txn.target mods am /\
+  well_typed_expr (artifact_env artifact mods current_src) e /\
+  constant_expr mods e ==>
+  ?pv. eval_expr cx e (initial_state am sc) = (INL pv,initial_state am sc) /\
+    eval_result_typed (artifact_env artifact mods current_src,cx,initial_state am sc)
+      pv (Type (expr_type e)) /\
+    read_result cx pv (initial_state am sc) = (INL v,initial_state am sc) /\
+    value_runtime_typed (artifact_env artifact mods current_src) (expr_type e) v /\
+    constant_result_shape pv
+Proof
+  metis_tac[cj 1 constant_value_eval_expr_shape]
+QED
+
 (* ===== Fold soundness ===== *)
 
 Theorem merge_constants_immutables:
@@ -828,6 +884,19 @@ Proof
   Induct >> simp[well_typed_expr_def] >> metis_tac[]
 QED
 
+Theorem constant_eval_exprs_cons_success[local]:
+  eval_exprs cx (h::es) st = (INL vs,st') ==>
+  ?pv s1 v s2 tail.
+    eval_expr cx h st = (INL pv,s1) /\
+    read_result cx pv s1 = (INL v,s2) /\
+    eval_exprs cx es s2 = (INL tail,st') /\ vs = v::tail
+Proof
+  pure_once_rewrite_tac [evaluate_def] >>
+  simp_tac std_ss [bind_def, return_def] >>
+  simp_tac std_ss [AllCaseEqs()] >>
+  rpt strip_tac >> rpt (goal_assum (drule_at Any)) >> simp[]
+QED
+
 Theorem constant_eval_exprs_fold_lift[local]:
   !es vs st'.
     (!e pv next. MEM e es /\ eval_expr cx e st = (INL pv,next) ==>
@@ -839,21 +908,15 @@ Theorem constant_eval_exprs_fold_lift[local]:
 Proof
   Induct_on `es` >> rpt gen_tac >> strip_tac
   >- gvs[Once evaluate_def, return_def, constant_value_def] >>
-  qpat_x_assum `eval_exprs _ _ _ = _` mp_tac >>
-  simp[Once evaluate_def, bind_def] >>
-  simp[NoAsms, sum_CASE_rator, CaseEq "prod", CaseEq "sum", return_def] >>
-  strip_tac >>
-  drule read_result_state >>
-  disch_then SUBST_ALL_TAC >>
-  `s'' = st` by metis_tac[listTheory.MEM] >>
-  qpat_x_assum `s'' = st` SUBST_ALL_TAC >>
-  `constant_value mods imms h = SOME v''` by metis_tac[listTheory.MEM] >>
-  gvs[IgnAsm `!e pv next. _`, IgnAsm `!vs st'. _`] >>
-  rename1 `eval_exprs cx es st = (INL tailvals,tailstate)` >>
-  `tailstate = st /\ constant_values mods imms es = SOME tailvals` by metis_tac[] >>
-  `constant_value mods imms h = SOME v''` by metis_tac[] >>
+  drule constant_eval_exprs_cons_success >>
+  disch_then (qx_choosel_then [`pv`,`s1`,`v`,`s2`,`tail`] strip_assume_tac) >>
+  `s1 = st` by metis_tac[MEM] >>
+  qpat_x_assum `s1 = st` SUBST_ALL_TAC >>
+  drule read_result_state >> disch_then SUBST_ALL_TAC >>
+  `constant_value mods imms h = SOME v` by metis_tac[MEM] >>
+  `st' = st /\ constant_values mods imms es = SOME tail` by metis_tac[MEM] >>
   qpat_x_assum `!e pv next. _` kall_tac >>
-  simp[constant_value_def]
+  gvs[constant_value_def]
 QED
 
 Theorem constant_eval_expr_fold_agreement[local]:

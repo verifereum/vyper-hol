@@ -7,29 +7,6 @@ Ancestors
 
 val _ = Parse.hide "body";
 
-Theorem supported_external_function_raw_decl[local]:
-  !ts ambient name mut nr args defaults ret body.
-  EVERY (supported_declaration_header ambient) ts /\
-  lookup_function (NONE : num option) name External ts =
-    SOME (mut,nr,args,defaults,ret,body) ==>
-  ?rr. MEM (FunctionDecl External mut nr rr name args defaults ret body) ts /\
-       lookup_raw_return (NONE : num option) name External ts = SOME rr
-Proof
-  Induct_on `ts` >- simp[lookup_function_def] >>
-  rpt gen_tac >> Cases_on `h`
-  >- (simp[listTheory.EVERY_DEF, lookup_function_def, lookup_raw_return_def,
-           listTheory.MEM] >>
-      Cases_on `s = name /\ f = External` >> gvs[] >> metis_tac[])
-  >- (Cases_on `v` >>
-      simp[listTheory.EVERY_DEF, lookup_function_def, lookup_raw_return_def,
-           listTheory.MEM, supported_public_variables_rejected] >> metis_tac[])
-  >- (simp[listTheory.EVERY_DEF, supported_hashmap_header_contract] >>
-      strip_tac >> gvs[lookup_function_def, lookup_raw_return_def,
-                      listTheory.MEM] >> metis_tac[])
-  >> simp[listTheory.EVERY_DEF, lookup_function_def, lookup_raw_return_def,
-          listTheory.MEM] >> metis_tac[]
-QED
-
 Theorem source_typing_raw_return_type:
   source_typing_ok tops am tx /\ supported_program tops /\
   lookup_function NONE tx.function_name External tops =
@@ -38,10 +15,8 @@ Theorem source_typing_raw_return_type:
   ?n. ret = BaseT (BytesT (Dynamic n))
 Proof
   strip_tac >>
-  `EVERY (supported_declaration_header tops) tops` by
-    gvs[supported_program_def, supported_declaration_headers_def] >>
-  drule_all supported_external_function_raw_decl >> strip_tac >>
-  gvs[lookup_raw_return_or_F_def, source_typing_ok_def] >>
+  drule_all source_typing_ok_raw_external_decl >> strip_tac >>
+  fs[source_typing_ok_def] >>
   drule check_contract_function_header >> simp[listTheory.MEM] >>
   disch_then drule >> simp[function_header_ok_def]
 QED

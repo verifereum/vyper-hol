@@ -5,7 +5,7 @@
    its body checks; TASK_020 consumes the lookups. Typing is separate. *)
 Theory supportedDecls
 Ancestors
-  supportedTypes vyperAST list alist
+  supportedTypes vyperAST constSubst list alist
 
 (* ===== Body-independent declarations ===== *)
 
@@ -25,13 +25,13 @@ Definition supported_declaration_header_def:
            (entry_abi_support); supported_program_deploy constrains Deploy's. *)
         (vis = Internal ==> EVERY (supported_value_type tops o SND) args) /\
         supported_function_return tops vis ret
-    | VariableDecl Private Storage name ty (SOME slot) =>
+    | VariableDecl vis Storage name ty (SOME slot) =>
         supported_storage_type tops ty
-    | VariableDecl Private Transient name ty (SOME slot) =>
+    | VariableDecl vis Transient name ty (SOME slot) =>
         supported_storage_type tops ty
     | VariableDecl Private Immutable name ty NONE =>
         supported_value_type tops ty
-    | HashMapDecl Private transient name kt vt (SOME slot) =>
+    | HashMapDecl vis transient name kt vt (SOME slot) =>
         supported_hashmap_key_type kt /\ supported_hashmap_value tops vt
     | StructDecl name fields =>
         ~NULL fields /\ EVERY (supported_place_type tops o SND) fields
@@ -146,7 +146,7 @@ QED
 Theorem supported_hashmap_header_contract:
   supported_declaration_header tops
     (HashMapDecl vis transient name kt vt slot) <=>
-  vis = Private /\ IS_SOME slot /\
+  IS_SOME slot /\
   supported_hashmap_key_type kt /\ supported_hashmap_value tops vt
 Proof
   Cases_on `vis` >> Cases_on `slot` >> simp[supported_declaration_header_def]
@@ -160,10 +160,19 @@ Proof
   simp[supported_declaration_header_def]
 QED
 
-Theorem supported_public_variables_rejected:
-  ~supported_declaration_header tops (VariableDecl (Public nr) mut name ty slot)
+Theorem supported_public_storage_header_contract:
+  supported_declaration_header tops
+    (VariableDecl (Public nr) Storage name ty (SOME slot)) <=>
+  supported_storage_type tops ty
 Proof
-  Cases_on `mut` >> Cases_on `slot` >>
+  simp[supported_declaration_header_def]
+QED
+
+Theorem supported_public_transient_header_contract:
+  supported_declaration_header tops
+    (VariableDecl (Public nr) Transient name ty (SOME slot)) <=>
+  supported_storage_type tops ty
+Proof
   simp[supported_declaration_header_def]
 QED
 
@@ -181,6 +190,21 @@ Theorem supported_constants_rejected:
 Proof
   Cases_on `vis` >> Cases_on `slot` >>
   simp[supported_declaration_header_def]
+QED
+
+Theorem supported_headers_module_consts_env:
+  !ts tops acc.
+    EVERY (supported_declaration_header tops) ts ==>
+    module_consts_env ts acc = acc
+Proof
+  Induct_on `ts` >- simp[module_consts_env_def] >>
+  rpt gen_tac >> Cases_on `h` >>
+  simp[module_consts_env_def]
+  >~ [`VariableDecl vis mut name ty slot`]
+  >- (Cases_on `mut` >>
+      simp[supported_declaration_header_def, module_consts_env_def] >>
+      metis_tac[]) >>
+  metis_tac[]
 QED
 
 Theorem supported_hashmap_location_independent:

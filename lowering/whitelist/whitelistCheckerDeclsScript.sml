@@ -39,7 +39,7 @@ Ancestors
   vyperTypeEventLookup vyperTypeCallGraph vyperTypeInvariants
   supportedTypes supportedDecls supportedNames supportedExprForms
   supportedStmtTraverse compileVyper selectorDispatch contractABI
-  entryDispatchProps
+  entryDispatchProps vyperGetter constSubst sorting
 
 (* ===== The single-module namespace facts ===== *)
 
@@ -309,29 +309,108 @@ Proof
   BasicProvers.every_case_tac >> rw[]
 QED
 
-Theorem build_selectors_sublist[local]:
-  !tops. sublist (MAP FST (build_selectors tenv (FST (classify_functions tops))))
-                 (abi_external_method_ids tenv tops)
+Theorem build_getter_arg_types_projection[local]:
+  !e kt vt n.
+    MAP SND (FST (build_getter e kt vt n)) = kt :: abi_getter_args vt
 Proof
-  Induct >- simp[classify_functions_def, build_selectors_def, sublist_nil] >>
-  rpt gen_tac >>
-  `abi_external_method_ids tenv (h::tops) =
-     MAP (\(name,tys). abi_method_id tenv name tys) (abi_decl_signatures h) ++
-     abi_external_method_ids tenv tops`
-    by simp[abi_external_method_ids_def, abi_external_signatures_def] >>
-  pop_assum SUBST1_TAC >>
-  simp[classify_functions_def, classify_function_fst] >>
-  fs[GSYM classify_functions_def] >>
-  Cases_on `h` >> simp[sublist_append_include] >>
-  rename1 `FunctionDecl fv` >> Cases_on `fv` >>
-  simp[sublist_append_include, abi_decl_signatures_def] >>
-  rw[sublist_append_include, abi_decl_signatures_def, build_selectors_def,
-     compute_selector_abi_method_id] >>
-  once_rewrite_tac[CONS_APPEND] >> irule sublist_append_pair >> simp[] >>
-  irule sublist_member_sing >>
-  simp[MEM_MAP, abi_function_signatures_def, PULL_EXISTS, EXISTS_PROD,
-       abi_entries_member] >>
-  qexists_tac `LENGTH l0` >> simp[TAKE_LENGTH_TOO_LONG]
+  recInduct build_getter_ind >> rpt strip_tac >>
+  simp[Once build_getter_def] >>
+  rpt (pairarg_tac >> gvs[]) >> rpt strip_tac >>
+  gvs[abi_getter_args_def] >>
+  Cases_on `vt` >> gvs[is_ArrayT_def, ArrayT_type_def,
+                         abi_array_getter_args_def]
+QED
+
+Theorem build_getter_arg_types[local]:
+  !e kt vt n args ret exp.
+    build_getter e kt vt n = (args,ret,exp) ==>
+    MAP SND args = kt :: abi_getter_args vt
+Proof
+  metis_tac[build_getter_arg_types_projection, FST]
+QED
+
+Theorem selector_ids_append[local]:
+  !fs gs. MAP FST (build_selectors tenv (fs ++ gs)) =
+    MAP FST (build_selectors tenv fs) ++ MAP FST (build_selectors tenv gs)
+Proof
+  Induct >> simp[build_selectors_def] >>
+  gen_tac >> PairCases_on `h` >> simp[build_selectors_def]
+QED
+
+Theorem selector_ids_subst[local]:
+  !fs env. MAP FST (build_selectors tenv (MAP (subst_consts_fn env) fs)) =
+    MAP FST (build_selectors tenv fs)
+Proof
+  Induct >> simp[build_selectors_def] >>
+  rpt gen_tac >> PairCases_on `h` >>
+  simp[subst_consts_fn_def, build_selectors_def]
+QED
+
+Theorem public_getter_signature[local]:
+  !top m nr rr name args ds ret body.
+    public_getter top = SOME (m,nr,rr,name,args,ds,ret,body) ==>
+    abi_decl_signatures top = [(name,MAP SND args)]
+Proof
+  Cases >> simp[public_getter_def]
+  >- (rename1 `VariableDecl vis mut id ty slot` >> Cases_on `vis` >>
+      simp[public_getter_def] >> Cases_on `ty` >>
+      simp[is_ArrayT_def, abi_decl_signatures_def, abi_array_getter_args_def,
+           public_getter_def, ArrayT_type_def, getter_def] >>
+      rpt gen_tac >> rpt (pairarg_tac >> gvs[]) >>
+      strip_tac >> gvs[] >>
+      imp_res_tac build_getter_arg_types >> gvs[abi_getter_args_def]) >>
+  rename1 `HashMapDecl vis tr id kt vt slot` >> Cases_on `vis` >>
+  simp[public_getter_def, getter_def] >>
+  rpt gen_tac >> rpt (pairarg_tac >> gvs[]) >>
+  strip_tac >> gvs[abi_decl_signatures_def] >>
+  imp_res_tac build_getter_arg_types >> gvs[]
+QED
+
+Theorem build_selectors_provenance[local]:
+  !tops. ?xs.
+    sublist xs (abi_external_method_ids tenv tops) /\
+    PERM (MAP FST (build_selectors tenv
+            (FST (FOLDR classify_function ([],[],NONE,NONE) tops))) ++
+          MAP FST (build_selectors tenv (public_getters tops))) xs
+Proof
+  Induct
+  >- simp[abi_external_method_ids_def, abi_external_signatures_def,
+          build_selectors_def, public_getters_def, sublist_nil] >>
+  simp[abi_external_method_ids_def, abi_external_signatures_def,
+       public_getters_def] >>
+  strip_tac >> gvs[abi_external_method_ids_def, abi_external_signatures_def] >>
+  Cases_on `h`
+  >- (qmatch_goalsub_rename_tac `FunctionDecl vis mut nr rr fname fargs dflts fret fbody` >>
+      Cases_on `vis` >>
+      simp[classify_function_fst, public_getter_def, abi_decl_signatures_def,
+           selector_ids_append, build_selectors_def]
+      >- (Cases_on `fname = "__default__"`
+          >- (gvs[] >> metis_tac[]) >>
+      simp[build_selectors_def, compute_selector_abi_method_id] >>
+      qexists_tac `abi_method_id tenv fname (MAP SND fargs) :: xs` >>
+      simp[] >>
+      `sublist [abi_method_id tenv fname (MAP SND fargs)]
+        (MAP (\(name,tys). abi_method_id tenv name tys)
+          (abi_function_signatures fname fargs dflts))` by
+        (irule sublist_member_sing >>
+         simp[abi_function_signatures_def, MAP_MAP_o, MEM_MAP] >>
+         qexists_tac `(fname,MAP SND fargs)` >> simp[] >>
+         qexists_tac `(fargs,LENGTH dflts)` >>
+         simp[abi_entries_member, TAKE_LENGTH_TOO_LONG]) >>
+      metis_tac[sublist_append_pair, APPEND]) >> metis_tac[]) >>
+  simp[classify_function_fst] >>
+  qmatch_goalsub_abbrev_tac `public_getter top` >>
+  (namedCases_on `public_getter top` ["", "gfn"]
+  >- (simp[selector_ids_append, build_selectors_def] >>
+      qexists_tac `xs` >> simp[] >>
+      metis_tac[sublist_append_include]) >>
+  PairCases_on `gfn` >>
+  drule public_getter_signature >> strip_tac >>
+  simp[selector_ids_append, build_selectors_def,
+       compute_selector_abi_method_id] >>
+  qexists_tac `abi_method_id tenv gfn3 (MAP SND gfn4) :: xs` >>
+  simp[PERM_FUN_APPEND_CONS] >>
+  simp[GSYM sublist_cons])
 QED
 
 Theorem check_contract_selectors_distinct:
@@ -339,8 +418,15 @@ Theorem check_contract_selectors_distinct:
   supported_selectors_distinct tops
 Proof
   strip_tac >> drule check_contract_single_namespaces >> strip_tac >>
-  simp[supported_selectors_distinct_def] >>
-  irule sublist_ALL_DISTINCT >> metis_tac[build_selectors_sublist]
+  qspec_then `tops` strip_assume_tac
+    (Q.INST [`tenv` |-> `type_env tops`]
+      (INST_TYPE [alpha |-> ``:expr``] build_selectors_provenance)) >>
+  simp[supported_selectors_distinct_def, classify_functions_def] >>
+  rpt (pairarg_tac >> gvs[]) >>
+  simp[selector_ids_subst, selector_ids_append] >>
+  drule_all sublist_ALL_DISTINCT >> strip_tac >>
+  drule sortingTheory.ALL_DISTINCT_PERM >> strip_tac >>
+  pop_assum (irule o iffRL) >> first_assum ACCEPT_TAC
 QED
 
 (* ===== S26: no local or loop variable rebinds an argument ===== *)

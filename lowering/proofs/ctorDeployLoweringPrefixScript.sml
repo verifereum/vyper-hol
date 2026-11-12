@@ -269,7 +269,7 @@ Proof
   strip_tac >> PairCases_on `cf` >>
   gvs[compileVyperTheory.ctor_named_init_def] >>
   qspecl_then [`tops`, `NONE`, `"__init__"`] mp_tac
-    ctorDeployInitcodeTheory.classify_functions_ctor_lookup >>
+    ctorDeployDefsTheory.classify_functions_ctor_lookup >>
   simp[] >> strip_tac >>
   gvs[compileVyperTheory.package_constructor_def,
       compileVyperTheory.set_constructor_package_target_def]

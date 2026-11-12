@@ -254,7 +254,7 @@ Resume compile_subscript_array_framed_base_case[base_suffix]:
      >>~- ([`is_int_type (expr_type idx)`], Cases_on `expr_type idx` >> gvs[vyperTypeSystemTheory.is_int_type_def] >>
          rename1 `is_int_type (BaseT bt)` >> Cases_on `bt` >>
          gvs[vyperTypeSystemTheory.is_int_type_def, compileEnvTheory.is_word_type_def]) >>
-     drule type_place_expr_vtype_annotation >> simp[] >> strip_tac >>
+     drule vyperTypeSystemTheory.type_place_expr_vtype_annotation >> simp[] >> strip_tac >>
      Cases_on `vt` >> gvs[vtype_annotation_ok_def, subscript_vtype_def] >>
      Cases_on `expr_type idx` >> gvs[vyperTypeSystemTheory.is_int_type_def] >>
          rename1 `is_int_type (BaseT bt)` >> Cases_on `bt` >>

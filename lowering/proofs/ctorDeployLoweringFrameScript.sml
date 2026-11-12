@@ -1034,31 +1034,6 @@ Proof
   irule alistTheory.ALOOKUP_ALL_DISTINCT_MEM >> simp[MAP_REVERSE]
 QED
 
-Theorem deploy_frame_classified_constructor_lookup:
-  !tops src name.
-    case SND (SND (SND (classify_functions tops))) of
-      NONE => lookup_function src name Deploy tops =
-        SOME (Payable,F,[],[],NoneT,[])
-    | SOME (mut,nr,rr,fname,args,dflts,ret,stmts) =>
-        fname = name ==>
-        lookup_function src name Deploy tops = SOME (mut,nr,args,dflts,ret,stmts)
-Proof
-  Induct >- simp[classify_functions_def, lookup_function_def] >>
-  rpt gen_tac >>
-  first_x_assum (qspecl_then [`src`, `name`] mp_tac) >>
-  simp[classify_functions_def] >>
-  `?a b c d. FOLDR classify_function ([],[],NONE,NONE) tops = (a,b,c,d)` by
-    metis_tac[pairTheory.ABS_PAIR_THM] >>
-  simp[] >> strip_tac >> Cases_on `h` >>
-  simp[classify_function_def, lookup_function_def]
-  >~ [`VariableDecl vd`]
-  >- (Cases_on `vd` >> simp[lookup_function_def])
-  >~ [`HashMapDecl hd`]
-  >- (Cases_on `hd` >> simp[lookup_function_def]) >>
-  qmatch_goalsub_rename_tac `case vv of External => _ | Internal => _ | Deploy => _` >>
-  Cases_on `vv` >> rw[]
-QED
-
 Theorem deploy_ctor_formal_var_types:
   !tops rpolicy runtime_bc dunit stmts cenv nr nkey ut imm exit_lbl
    sa sb sj st_exit st_epilogue st_final func mut args.
@@ -1077,7 +1052,8 @@ Proof
   `fname = "__init__"` by
     (drule_all lower_vyper_deploy_unit_ctor_named_init >> simp[ctor_named_init_def]) >>
   mp_tac (Q.SPECL [`tops`, `NONE:num option`, `"__init__"`]
-    deploy_frame_classified_constructor_lookup) >> simp[] >> strip_tac >> gvs[] >>
+    classify_functions_ctor_lookup) >> simp[] >> strip_tac >>
+  gvs[constSubstTheory.subst_consts_fn_def, constSubstTheory.subst_consts_expr_def] >>
   rpt gen_tac >> strip_tac >>
   drule lookup_function_Deploy_SOME_cases >> strip_tac >> gvs[] >>
   drule_all supported_program_deploy_function >> strip_tac >>
@@ -1103,7 +1079,8 @@ Proof
   `fname = "__init__"` by
     (drule_all lower_vyper_deploy_unit_ctor_named_init >> simp[ctor_named_init_def]) >>
   mp_tac (Q.SPECL [`tops`, `NONE:num option`, `"__init__"`]
-    deploy_frame_classified_constructor_lookup) >> simp[] >> strip_tac >> gvs[] >>
+    classify_functions_ctor_lookup) >> simp[] >> strip_tac >>
+  gvs[constSubstTheory.subst_consts_fn_def, constSubstTheory.subst_consts_expr_def] >>
   `fn_allocs_ok tops (mut,nr,rr,"__init__",args,[],NoneT,stmts)` by
     (irule lower_vyper_deploy_unit_allocs_ok >>
      conj_tac >- metis_tac[] >>
@@ -1305,7 +1282,7 @@ Proof
   strip_tac >>
   drule_all deploy_ctor_target_reserved_entry >> strip_tac >>
   mp_tac (Q.SPECL [`tops`, `NONE:num option`, `"__init__"`]
-    deploy_frame_classified_constructor_lookup) >> simp[] >> strip_tac >>
+    classify_functions_ctor_lookup) >> simp[] >> strip_tac >>
   rpt strip_tac >> drule_all deploy_ctor_target_entry_declared >> simp[]
 QED
 
