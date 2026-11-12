@@ -127,7 +127,8 @@ End
 
 (* The tail never yields a value: it raises HaltException or an error. *)
 Theorem selfdestruct_tail_raises:
-  !cx v st. ?ex st'. selfdestruct_tail cx v st = (INR ex, st')
+  !cx v st. ?ex st'.
+    selfdestruct_tail cx v st = (INR ex : eval_result + exception, st')
 Proof
   rw[selfdestruct_tail_def,
      vyperInterpreterTheory.transfer_value_def, vyperStateTheory.bind_def, vyperStateTheory.ignore_bind_def,

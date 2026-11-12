@@ -1580,7 +1580,8 @@ Theorem aug_place_storage_binop_store_nofresh[local]:
     ((?last. r = OK last /\
         stmt_post ctx func cx lctx cenv cenv s2 sf z res
           (fin with gas_obs := []) last) \/
-     (exit_result r /\ stmt_exit RetQ (fin with gas_obs := []) res r))
+     (exit_result r /\ stmt_exit RetQ (fin with gas_obs := []) res r /\
+      halt_exit cx fin res r))
 Proof
   strip_tac >>
   `bop_result cx ty bop [ty;expr_type e] cur v ee =
@@ -1690,7 +1691,8 @@ Theorem aug_place_storage_binop_store[local]:
     ((?last. r = OK last /\
         stmt_post ctx func cx lctx cenv cenv s2 sf z res
           (fin with gas_obs := []) last) \/
-     (exit_result r /\ stmt_exit RetQ (fin with gas_obs := []) res r))
+     (exit_result r /\ stmt_exit RetQ (fin with gas_obs := []) res r /\
+      halt_exit cx fin res r))
 Proof
   strip_tac >> drule_all aug_place_storage_binop_store_nofresh >> simp[]
 QED
@@ -1755,7 +1757,8 @@ Theorem aug_place_storage_suffix_outcome_nofresh[local]:
         (case type_to_int_bound ty of SOME b => b | NONE => Unsigned 0)
         tv bop cur v)) (write_place cx (StoragePlace tr slot tv))))) (st,u)
     (stmt_post ctx func cx lctx cenv cenv s1 sf u)
-    (\res fin r. !tail. stmt_exit RetQ (fin with gas_obs := tail) res r)
+    (\res fin r. (!tail. stmt_exit RetQ (fin with gas_obs := tail) res r) /\
+                 halt_exit cx fin res r)
 Proof
   strip_tac >>
   drule aug_place_storage_rhs_admissible >> strip_tac >>
@@ -1906,7 +1909,8 @@ Theorem aug_place_storage_suffix_outcome[local]:
         (case type_to_int_bound ty of SOME b => b | NONE => Unsigned 0)
         tv bop cur v)) (write_place cx (StoragePlace tr slot tv))))) (st,u)
     (stmt_post ctx func cx lctx cenv cenv s1 sf u)
-    (\res fin r. !tail. stmt_exit RetQ (fin with gas_obs := tail) res r)
+    (\res fin r. (!tail. stmt_exit RetQ (fin with gas_obs := tail) res r) /\
+                 halt_exit cx fin res r)
 Proof
   strip_tac >> drule_all aug_place_storage_suffix_outcome_nofresh >> simp[]
 QED
@@ -2320,7 +2324,8 @@ Theorem aug_place_storage_success_continue[local]:
         tv bop cur v)) (write_place cx (StoragePlace tr slot tv)))))
     (mid with gas_obs := [],t)
     (stmt_post ctx func cx lctx cenv cenv sa sb s0)
-    (\res fin r. !tail. stmt_exit RetQ (fin with gas_obs := tail) res r)
+    (\res fin r. (!tail. stmt_exit RetQ (fin with gas_obs := tail) res r) /\
+                 halt_exit cx fin res r)
 Proof
   disch_then (map_every assume_tac o CONJUNCTS) >>
   `!l. FST ptrout <> Label l` by
