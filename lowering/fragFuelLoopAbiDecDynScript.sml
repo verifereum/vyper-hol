@@ -3687,6 +3687,227 @@ Proof
   strip_tac >> qexists_tac `j'` >> simp[] >> decide_tac
 QED
 
+Theorem abi_dyn_iterated_header[local]:
+  !N ptr hdr body_lbl exit Kh Kbody G ctx fn.
+    (!s p. s.vs_current_bb = hdr /\ s.vs_inst_idx = 0 /\
+      eval_operand ptr s = SOME p ==>
+      ?j. j <= Kh /\ fuel_outcome G ctx fn s j
+        (\t. vars_kept N {} s t /\ t.vs_labels = s.vs_labels /\
+          eval_operand ptr t = SOME p /\ t.vs_memory = s.vs_memory /\
+          t.vs_inst_idx = 0 /\ (t.vs_current_bb = exit \/
+            (t.vs_current_bb = body_lbl /\
+             w2n (mload (w2n p) s) < 2 ** 256 - 1)))) /\
+    (!s p. s.vs_current_bb = body_lbl /\ s.vs_inst_idx = 0 /\
+      eval_operand ptr s = SOME p ==>
+      ?j. j <= Kbody /\ fuel_outcome G ctx fn s j
+        (\t. vars_kept N {} s t /\ t.vs_labels = s.vs_labels /\
+          eval_operand ptr t = SOME p /\
+          mload (w2n p) t = mload (w2n p) s + 1w /\
+          t.vs_current_bb = hdr /\ t.vs_inst_idx = 0)) /\
+    (!s. s.vs_current_bb = hdr /\ s.vs_inst_idx = 0 /\
+      eval_operand ptr s = NONE ==> fuel_outcome G ctx fn s 0 (\t. F)) ==>
+    !s. s.vs_current_bb = hdr /\ s.vs_inst_idx = 0 ==>
+      ?j. j <= 2 ** 256 * (Kh + Kbody) /\ fuel_outcome G ctx fn s j
+        (\t. vars_kept N {} s t /\ t.vs_labels = s.vs_labels /\
+          t.vs_current_bb = exit /\ t.vs_inst_idx = 0)
+Proof
+  map_every qx_gen_tac [`N`, `ptr_op`, `hdr`, `body_lbl`, `exit`, `Kh`, `Kbody`, `G`, `ctx`, `fn`] >>
+  strip_tac >> rpt gen_tac >> strip_tac >>
+  Cases_on `eval_operand ptr_op s`
+  >- (qexists_tac `0` >> simp[] >>
+      irule fuel_outcome_weaken >> qexists_tac `\t. F` >> simp[] >>
+      first_x_assum irule >> simp[]) >>
+  rename1 `eval_operand ptr_op s = SOME p` >>
+  qabbrev_tac `P = \t. vars_kept N {} s t /\
+    t.vs_labels = s.vs_labels /\ eval_operand ptr_op t = SOME p` >>
+  qspecl_then [`P`, `\t. mload (w2n p) t`, `hdr`, `body_lbl`, `exit`,
+    `Kh`, `Kbody`, `G`, `ctx`, `fn`] mp_tac abi_dyn_ranked_round >>
+  impl_tac
+  >- (conj_tac
+      >- (rpt gen_tac >> strip_tac >>
+          fs[Abbr `P`] >>
+          qpat_assum `!s p. _ = hdr /\ _ ==> _`
+            (qspecl_then [`s'`, `p`] mp_tac) >>
+          impl_tac >- simp[] >> strip_tac >>
+          qexists_tac `j` >> simp[] >>
+          irule fuel_outcome_weaken >> goal_assum (drule_at Any) >>
+          simp[] >> rpt strip_tac >>
+          fs[mload_def] >> metis_tac[vars_kept_trans]) >>
+      rpt gen_tac >> strip_tac >> fs[Abbr `P`] >>
+      qpat_assum `!s p. _ = body_lbl /\ _ ==> _`
+        (qspecl_then [`s'`, `p`] mp_tac) >>
+      impl_tac >- simp[] >> strip_tac >>
+      qexists_tac `j` >> simp[] >>
+      irule fuel_outcome_weaken >> goal_assum (drule_at Any) >>
+      simp[] >> metis_tac[vars_kept_trans]) >>
+  simp_tac std_ss [LET_THM] >> strip_tac >>
+  qspecl_then [`G`, `ctx`, `fn`,
+    `\t. P t /\ t.vs_current_bb = hdr /\ t.vs_inst_idx = 0`,
+    `\t. P t /\ t.vs_current_bb = exit /\ t.vs_inst_idx = 0`,
+    `\t. (2 ** 256 - 1) - w2n (mload (w2n p) t)`,
+    `2 ** 256`, `Kh + Kbody`] mp_tac fuel_outcome_iterate >>
+  simp_tac std_ss [] >> impl_tac
+  >- (conj_tac >- (rpt strip_tac >> simp[]) >>
+      rpt strip_tac >> first_x_assum irule >> simp[]) >>
+  disch_then (qspec_then `s` mp_tac) >>
+  simp[Abbr `P`] >> strip_tac >>
+  qexists_tac `j` >> simp[] >>
+  irule fuel_outcome_weaken >> goal_assum (drule_at Any) >> simp[]
+QED
+Theorem abi_dyn_compile_layout[local]:
+  !dst src_op load_opc base_op hi_op elem_info elem_abi_sz elem_mem_sz
+   i_ptr st hdr body_lbl exit i_op src_addr cnt_hdr cmp done_op i_op2
+   src_data src_off elem_src actual_src dst_data dst_off elem_dst new_i
+   old_hdr old_body old_exit
+   s1 s2 s3 s4 s5 s6 s7 s8 s9 s10 s11 s12 s13 s14 s15 s16
+   s17 s18 s19 s20 s21 s22 s23 s24 s25.
+    fresh_label "dec_dyn_hdr" st = (hdr,s1) /\
+    fresh_label "dec_dyn_body" s1 = (body_lbl,s2) /\
+    fresh_label "dec_dyn_exit" s2 = (exit,s3) /\
+    emit_inst JMP [Label hdr] [] s3 = ((),s4) /\
+    new_block hdr s4 = (old_hdr,s5) /\
+    emit_op MLOAD [i_ptr] s5 = (i_op,s6) /\
+    compile_abi_dec_addr base_op src_op s6 = (src_addr,s7) /\
+    emit_op load_opc [src_addr] s7 = (cnt_hdr,s8) /\
+    emit_op LT [i_op;cnt_hdr] s8 = (cmp,s9) /\
+    emit_op ISZERO [cmp] s9 = (done_op,s10) /\
+    emit_inst JNZ [done_op;Label exit;Label body_lbl] [] s10 = ((),s11) /\
+    new_block body_lbl s11 = (old_body,s12) /\
+    emit_op MLOAD [i_ptr] s12 = (i_op2,s13) /\
+    emit_op ADD [src_op;Lit 32w] s13 = (src_data,s14) /\
+    emit_op MUL [i_op2;Lit (n2w elem_abi_sz)] s14 = (src_off,s15) /\
+    emit_op ADD [src_data;src_off] s15 = (elem_src,s16) /\
+    (if dec_info_needs_offset elem_info then
+       compile_abi_decode_dyn_elem_ptr load_opc base_op elem_src
+         src_data hi_op elem_abi_sz else return elem_src) s16 = (actual_src,s17) /\
+    emit_op ADD [dst;Lit 32w] s17 = (dst_data,s18) /\
+    emit_op MUL [i_op2;Lit (n2w elem_mem_sz)] s18 = (dst_off,s19) /\
+    emit_op ADD [dst_data;dst_off] s19 = (elem_dst,s20) /\
+    compile_abi_decode_to_buf elem_dst actual_src load_opc base_op hi_op
+       elem_info s20 = ((),s21) /\
+    emit_op ADD [i_op2;Lit 1w] s21 = (new_i,s22) /\
+    emit_void MSTORE [i_ptr;new_i] s22 = ((),s23) /\
+    emit_inst JMP [Label hdr] [] s23 = ((),s24) /\
+    new_block exit s24 = (old_exit,s25) /\
+    ~is_terminator load_opc /\ load_opc <> PHI /\ load_opc <> INVOKE /\
+    (!d s Wv E. fuel_ok Wv {} E
+      (compile_abi_decode_to_buf d s load_opc base_op hi_op elem_info)) ==>
+    (^dyn_middle) dst src_op load_opc base_op hi_op elem_info elem_abi_sz
+      elem_mem_sz i_op2 s13 = ((),s21) /\
+    st.cs_next_var <= s3.cs_next_var /\
+    st.cs_next_var <= s5.cs_next_var /\ st.cs_next_var <= s12.cs_next_var /\
+    s6.cs_next_var <= s7.cs_next_var /\ s6.cs_next_var <= s8.cs_next_var /\
+    s6.cs_next_var <= s9.cs_next_var /\ s13.cs_next_var <= s21.cs_next_var /\
+    (^dyn_Old) s13 /\
+    (!v. at_point st v <=> at_point s3 v) /\
+    (!v. at_point s5 v <=> v.vs_current_bb = hdr /\ v.vs_inst_idx = 0) /\
+    (!v. at_point s12 v <=> v.vs_current_bb = body_lbl /\ v.vs_inst_idx = 0) /\
+    (!v. at_point s25 v <=> v.vs_current_bb = exit /\ v.vs_inst_idx = 0) /\
+    (!fn. fn_has_code st s25 fn ==>
+      fn_has_code s3 s4 fn /\ fn_has_code s5 s6 fn /\
+      fn_has_code s6 s7 fn /\ fn_has_code s7 s8 fn /\
+      fn_has_code s8 s9 fn /\ fn_has_code s9 s10 fn /\
+      fn_has_code s10 s11 fn /\ fn_has_code s12 s13 fn /\
+      fn_has_code s13 s21 fn /\ fn_has_code s21 s22 fn /\
+      fn_has_code s22 s23 fn /\ fn_has_code s23 s24 fn)
+Proof
+  rpt gen_tac >> strip_tac >>
+  `(^dyn_middle) dst src_op load_opc base_op hi_op elem_info elem_abi_sz
+    elem_mem_sz i_op2 s13 = ((),s21)` by
+    (BETA_TAC >> simp[comp_bind_def, comp_ignore_bind_def, comp_return_def]) >>
+  `fuel_ok {} {} {} ((^dyn_middle) dst src_op load_opc base_op hi_op
+     elem_info elem_abi_sz elem_mem_sz i_op2)` by
+    (BETA_TAC >> irule fuel_ok_decode_dyn_body_middle >> simp[]) >>
+  `fuel_ok {} {} {} (compile_abi_dec_addr base_op src_op)` by
+    (simp_tac std_ss [compile_abi_dec_addr_def] >>
+     fuel_auto [fuel_ok_emit_op] >> simp[is_terminator_def]) >>
+  rule_assum_tac BETA_RULE >>
+  ntac 2 (qpat_x_assum `fuel_ok {} {} {} _`
+    (mp_tac o SRULE [fuel_ok_def]) >> disch_then drule >> strip_tac) >>
+  imp_res_tac (cj 1 (SRULE [fuel_ok_def] fuel_ok_emit_op)) >>
+  imp_res_tac (cj 2 (SRULE [fuel_ok_def] fuel_ok_emit_op)) >>
+  map_every (fn opc =>
+    (imp_res_tac (SRULE [is_terminator_def]
+       (Q.SPEC opc (cj 1 (SRULE [fuel_ok_def] fuel_ok_emit_op)))) >>
+     imp_res_tac (SRULE [is_terminator_def]
+       (Q.SPEC opc (cj 2 (SRULE [fuel_ok_def] fuel_ok_emit_op))))))
+    [`MLOAD`, `ADD`, `MUL`, `LT`, `ISZERO`] >>
+  imp_res_tac cs_extends_emit_inst >>
+  imp_res_tac cs_extends_new_block >>
+  imp_res_tac cs_extends_fresh_label >>
+  imp_res_tac (SRULE [is_terminator_def]
+    (Q.SPEC `MSTORE` (cj 1 (SRULE [fuel_ok_def] fuel_ok_emit_void)))) >>
+  imp_res_tac cs_extends_trans >>
+  reverse (rpt conj_tac)
+  >- (rpt strip_tac >> rpt conj_tac >>
+      irule fn_has_code_mid >> goal_assum (drule_at Any) >> simp[] >>
+      metis_tac[cs_extends_trans]) >>
+  simp[]
+  >- (qpat_assum `new_block exit _ = _` mp_tac >>
+      POP_ASSUM_LIST (K all_tac) >>
+      simp_tac std_ss [new_block_def, at_point_def] >> rpt strip_tac >> gvs[])
+  >- (qpat_assum `new_block body_lbl _ = _` mp_tac >>
+      POP_ASSUM_LIST (K all_tac) >>
+      simp_tac std_ss [new_block_def, at_point_def] >> rpt strip_tac >> gvs[])
+  >- (qpat_assum `new_block hdr _ = _` mp_tac >>
+      POP_ASSUM_LIST (K all_tac) >>
+      simp_tac std_ss [new_block_def, at_point_def] >> rpt strip_tac >> gvs[])
+  >- (map_every (fn pat => qpat_assum pat mp_tac)
+        [`fresh_label "dec_dyn_hdr" _ = _`,
+         `fresh_label "dec_dyn_body" _ = _`,
+         `fresh_label "dec_dyn_exit" _ = _`] >>
+      POP_ASSUM_LIST (K all_tac) >>
+      simp_tac std_ss [fresh_label_def, at_point_def] >> rpt strip_tac >> gvs[]) >>
+  all_tac
+  >- (Cases_on `base_op = Lit 0w` >>
+      map_every (fn pat => qpat_assum pat
+        (assume_tac o SRULE [fresh_label_def, new_block_def, LET_THM] o
+         AP_TERM ``\p:string # compile_state. (SND p).cs_next_label``))
+        [`fresh_label "dec_dyn_body" _ = _`,
+         `fresh_label "dec_dyn_exit" _ = _`,
+         `new_block hdr _ = _`, `new_block body_lbl _ = _`] >>
+      map_every (fn pat => qpat_assum pat
+        (assume_tac o SRULE [emit_inst_def, fresh_id_def, emit_def,
+          comp_bind_def, comp_ignore_bind_def, comp_return_def] o
+         AP_TERM ``\p:unit # compile_state. (SND p).cs_next_label``))
+        [`emit_inst JMP _ _ s3 = _`, `emit_inst JNZ _ _ _ = _`] >>
+      map_every (fn pat => qpat_assum pat
+        (assume_tac o SRULE [emit_op_def, emit_def, fresh_id_def,
+          fresh_var_def, comp_bind_def, comp_ignore_bind_def, comp_return_def] o
+         SRULE [compile_abi_dec_addr_def] o
+         AP_TERM ``\p:operand # compile_state. (SND p).cs_next_label``))
+        [`emit_op MLOAD _ s5 = _`, `compile_abi_dec_addr _ _ _ = _`,
+         `emit_op load_opc _ _ = _`, `emit_op LT _ _ = _`,
+         `emit_op ISZERO _ _ = _`, `emit_op MLOAD _ s12 = _`] >>
+      qpat_assum `fresh_label "dec_dyn_body" _ = _`
+        (assume_tac o SRULE [fresh_label_def] o
+         AP_TERM ``\p:string # compile_state. FST p``) >>
+      qpat_assum `new_block body_lbl _ = _`
+        (assume_tac o SRULE [new_block_def] o
+         AP_TERM ``\p:string # compile_state. (SND p).cs_current_bb``) >>
+      qpat_assum `emit_op MLOAD _ s12 = _`
+        (assume_tac o SRULE [emit_op_def, emit_def, fresh_id_def,
+          fresh_var_def, comp_bind_def, comp_ignore_bind_def, comp_return_def] o
+         AP_TERM ``\p:operand # compile_state. (SND p).cs_current_bb``) >>
+      qexistsl_tac [`"dec_dyn_body"`, `s1.cs_next_label`] >>
+      rpt (qpat_x_assum `_ _ = (_,_)` kall_tac) >>
+      fs[] >> gvs[comp_return_def, emit_op_def, emit_def, fresh_id_def,
+        fresh_var_def, comp_bind_def, comp_ignore_bind_def]) >>
+  map_every (fn pat => qpat_assum pat
+    (assume_tac o SRULE [fresh_label_def, new_block_def, LET_THM] o
+     AP_TERM ``\p:string # compile_state. (SND p).cs_next_var``))
+    [`fresh_label "dec_dyn_hdr" _ = _`,
+     `fresh_label "dec_dyn_body" _ = _`,
+     `fresh_label "dec_dyn_exit" _ = _`,
+     `new_block hdr _ = _`, `new_block body_lbl _ = _`] >>
+  map_every (fn pat => qpat_assum pat
+    (assume_tac o SRULE [emit_inst_def, fresh_id_def, emit_def, LET_THM,
+      comp_bind_def, comp_ignore_bind_def, comp_return_def] o
+     AP_TERM ``\p:unit # compile_state. (SND p).cs_next_var``))
+    [`emit_inst JMP _ _ s3 = _`, `emit_inst JNZ _ _ _ = _`] >>
+  decide_tac
+QED
+
 (* The counter need not be disjoint from the element destination.  The
    final MSTORE overwrites any writes by the element decoder.  The bound
    is reloaded at every header and need not stay fixed. *)
@@ -3702,5 +3923,71 @@ Theorem fuel_okS_compile_abi_decode_dyn_loop:
         (compile_abi_decode_dyn_loop dst src_op load_opc base_op hi_op
            elem_info elem_abi_sz elem_mem_sz i_ptr cnt)
 Proof
-  cheat
+  rpt gen_tac >> strip_tac >> rpt gen_tac >>
+  simp_tac std_ss [fuel_okS_def] >> rpt gen_tac >> strip_tac >>
+  `fuel_ok Wv {} UNIV
+    (compile_abi_decode_dyn_loop dst src_op load_opc base_op hi_op
+      elem_info elem_abi_sz elem_mem_sz i_ptr cnt)` by
+    (irule fuel_ok_decode_dyn_structure >> simp[]) >>
+  Cases_on `x` >>
+  qpat_x_assum `fuel_ok _ _ _ _` (mp_tac o SRULE [fuel_ok_def]) >>
+  disch_then drule >> strip_tac >> simp[] >>
+  drule fuel_decode_dyn_compile_decompose >> strip_tac >>
+  drule_all abi_dyn_compile_layout >> strip_tac >>
+  `?Kh. !G ctx fn s p.
+    callees_stable G ctx fn /\ no_phi_fn fn /\
+    fn_has_code st s25 fn /\ at_point s5 s /\ eval_operand i_ptr s = SOME p ==>
+    ?j. j <= Kh /\ fuel_outcome G ctx fn s j
+      (\t. vars_kept st.cs_next_var {} s t /\ eval_operand i_ptr t = SOME p /\
+        t.vs_memory = s.vs_memory /\ t.vs_labels = s.vs_labels /\
+        t.vs_inst_idx = 0 /\ (t.vs_current_bb = exit \/
+          (t.vs_current_bb = body' /\ w2n (mload (w2n p) s) < 2 ** 256 - 1)))` by
+    (drule_all abi_dyn_header_outcome >> strip_tac >>
+     qexists_tac `Kh` >> rpt strip_tac >> first_x_assum irule >> simp[]) >>
+  `?Kbody. !G ctx fn s p.
+    callees_stable G ctx fn /\ no_phi_fn fn /\
+    fn_has_code st s25 fn /\ at_point s12 s /\ eval_operand i_ptr s = SOME p ==>
+    ?j. j <= Kbody /\ fuel_outcome G ctx fn s j
+      (\t. vars_kept st.cs_next_var {} s t /\ t.vs_labels = s.vs_labels /\
+        eval_operand i_ptr t = SOME p /\
+        mload (w2n p) t = mload (w2n p) s + 1w /\
+        t.vs_current_bb = hdr /\ t.vs_inst_idx = 0)` by
+    (drule_all abi_dyn_body_outcome >> strip_tac >>
+     qexists_tac `Kbody` >> rpt strip_tac >> first_x_assum irule >> simp[]) >>
+  qexists_tac `1 + 2 ** 256 * (Kh + Kbody)` >>
+  simp_tac std_ss [frag_fuel_def, pred_setTheory.NOT_IN_EMPTY] >>
+  rpt gen_tac >> strip_tac >>
+  `fn_has_code st s25 fn` by metis_tac[] >>
+  `fuel_outcome G ctx fn s 1
+    (\t. vars_kept st.cs_next_var {} s t /\ t.vs_memory = s.vs_memory /\
+      t.vs_labels = s.vs_labels /\ t.vs_current_bb = hdr /\ t.vs_inst_idx = 0)` by
+    (irule abi_dyn_jmp_outcome >>
+     qpat_assum `emit_inst JMP _ _ s3 = _` (irule_at Any) >> metis_tac[]) >>
+  qmatch_goalsub_abbrev_tac `fuel_outcome G ctx fn s _ Q` >>
+  drule fuel_outcome_compose >>
+  disch_then (qspecl_then [`Q`, `2 ** 256 * (Kh + Kbody)`] mp_tac) >>
+  impl_tac
+  >- (simp[] >> qx_gen_tac `t` >> strip_tac >>
+      `?j. j <= 2 ** 256 * (Kh + Kbody) /\ fuel_outcome G ctx fn t j
+        (\u. vars_kept st.cs_next_var {} t u /\ u.vs_labels = t.vs_labels /\
+          u.vs_current_bb = exit /\ u.vs_inst_idx = 0)` by
+        (irule abi_dyn_iterated_header >>
+         simp[] >> qexistsl_tac [`body'`, `i_ptr`] >> simp[] >>
+         rpt conj_tac
+         >- (map_every qx_gen_tac [`v`, `p`] >> strip_tac >>
+             qpat_assum `!G ctx fn s p. _ ==> ?j. j <= Kh /\ _`
+               (qspecl_then [`G`, `ctx`, `fn`, `v`, `p`] mp_tac) >>
+             impl_tac >- simp[] >> strip_tac >>
+             qexists_tac `j` >> simp[] >>
+             irule fuel_outcome_weaken >> goal_assum (drule_at Any) >> simp[])
+         >> rpt strip_tac >> irule abi_dyn_mload_missing >>
+         qpat_assum `emit_op MLOAD _ s5 = _` (irule_at Any) >>
+         simp[] >> metis_tac[arithmeticTheory.ZERO_LESS_EQ]) >>
+      qexists_tac `j` >> conj_tac
+      >- gvs[arithmeticTheory.ADD_COMM] >>
+      irule fuel_outcome_weaken >> goal_assum (drule_at Any) >>
+      simp[Abbr `Q`] >> rpt strip_tac >>
+      `vars_kept st.cs_next_var {} s t'` by metis_tac[vars_kept_trans] >>
+      gvs[vars_kept_def] >> simp[var_below_def]) >>
+  simp[]
 QED
