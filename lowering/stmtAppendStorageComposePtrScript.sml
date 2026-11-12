@@ -59,8 +59,7 @@ Proof
   `!x sz. cenv.ce_return_pc = SOME (PtrVar (Var x) sz) ==>
      not_fresh_at sa x` by metis_tac[ret_pc_ok_def] >>
   qpat_x_assum `eval_stmt _ _ = _` SUBST1_TAC >>
-  irule gas_outcome_ptr_record_storage_event >> conj_tac
-  >- suspend "rhs" >> simp[]
+  irule gas_outcome_ptr_record_storage_event >> simp[] >> suspend "rhs"
 QED
 
 Resume compile_append_storage_word_stmt_frag_ptr[rhs]:
@@ -289,7 +288,9 @@ Resume compile_append_storage_word_stmt_frag_ptr[stored_finish]:
   drule_all append_storage_word_ghost_post >> strip_tac >>
   `storage_well_formed_on cx ee1 (FST H)` by
     (mp_tac (Q.INST
-       [`cx` |-> `cx`, `regions` |-> `FST H`, `st` |-> `es_end with gas_obs := []`,
+       [`cx` |-> `cx`,
+        `regions` |-> `FST (H : (bool # 256 word # type_value) list # num list)`,
+        `st` |-> `es_end with gas_obs := []`,
         `st'` |-> `ee1`, `b` |-> `tr`, `root` |-> `slot`,
         `tv` |-> `ArrayTV tv (Dynamic cap)`, `path` |-> `[]`,
         `delta` |-> `0`, `slot` |-> `slot`, `etv` |-> `tv`,

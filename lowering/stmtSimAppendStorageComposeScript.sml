@@ -253,7 +253,7 @@ Proof
   rename1 `INR ex` >>
   `eval_stmt cx (Append (TopLevelNameTarget nid) e) (es with gas_obs := gs) =
      (INR ex, ee)` by
-    simp[bind_def, ignore_bind_def, record_storage_event_def, return_def] >>
+    fs[bind_def, ignore_bind_def, record_storage_event_def, return_def] >>
   `stmt_res_ok lctx (INR ex)` by metis_tac[gas_admissible_result] >>
   qpat_x_assum `bind _ _ _ = _` mp_tac >> simp[bind_def] >>
   Cases_on `eval_expr cx e (es with <|gas_obs := gs;
@@ -427,7 +427,9 @@ Proof
   rpt gen_tac >> strip_tac >>
   `storage_well_formed_on cx es' (FST H)` by
     (mp_tac (Q.INST
-       [`cx` |-> `cx`, `regions` |-> `FST H`, `st` |-> `es`, `st'` |-> `es'`,
+       [`cx` |-> `cx`,
+        `regions` |-> `FST (H : (bool # 256 word # type_value) list # num list)`,
+        `st` |-> `es`, `st'` |-> `es'`,
         `b` |-> `tr`, `root` |-> `slot`, `tv` |-> `ArrayTV tv (Dynamic cap)`,
         `path` |-> `[]`, `delta` |-> `0`, `slot` |-> `slot`,
         `etv` |-> `tv`, `n` |-> `cap`, `v` |-> `v`, `res` |-> `res`]
@@ -500,8 +502,7 @@ Proof
     (drule (cj 2 compile_expr_grows) >> simp[]) >>
   `local_ptrs_reserved cenv sB` by metis_tac[local_ptrs_reserved_next_var] >>
   qpat_x_assum `eval_stmt _ _ = _` SUBST1_TAC >>
-  irule gas_outcome_record_storage_event >> conj_tac
-  >- suspend "rhs" >> simp[]
+  irule gas_outcome_record_storage_event >> simp[] >> suspend "rhs"
 QED
 
 Resume compile_append_storage_word_stmt_frag[rhs]:

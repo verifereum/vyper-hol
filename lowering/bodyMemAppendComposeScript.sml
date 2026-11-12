@@ -64,8 +64,7 @@ Proof
   `gas_admissible (bind (eval_expr cx e) (read_result cx)) expr_res_ok es_rhs` by
     (simp[Abbr `es_rhs`] >> metis_tac[append_forced_admissible]) >>
   qpat_x_assum `eval_stmt _ _ = _` SUBST1_TAC >>
-  irule gas_outcome_record_storage_event >> conj_tac
-  >- suspend "rhs" >> simp[]
+  irule gas_outcome_record_storage_event >> simp[] >> suspend "rhs"
 QED
 
 Resume compile_append_storage_word_stmt_frag_mem[rhs]:
@@ -145,7 +144,9 @@ Resume compile_append_storage_word_stmt_frag_mem[rhs]:
           `stmt_state_rel H ctx func cenv cx ee' t'` by metis_tac[] >>
           `storage_well_formed_on cx ee' (FST H)` by
             (mp_tac (Q.INST
-               [`cx` |-> `cx`, `regions` |-> `FST H`, `st` |-> `ee`,
+               [`cx` |-> `cx`,
+                `regions` |-> `FST (H : (bool # 256 word # type_value) list # num list)`,
+                `st` |-> `ee`,
                 `st'` |-> `ee'`, `b` |-> `tr`, `root` |-> `slot`,
                 `tv` |-> `ArrayTV tv (Dynamic cap)`, `path` |-> `[]`,
                 `delta` |-> `0`, `slot` |-> `slot`, `etv` |-> `tv`,
