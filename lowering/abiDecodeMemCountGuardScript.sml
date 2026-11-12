@@ -85,7 +85,8 @@ Theorem abi_decode_mload_count_path_mem:
       t.vs_inst_idx = LENGTH st'.cs_current_insts /\ ~t.vs_halted /\
       fresh_vars_wrt st' t /\
       (!op w. eval_operand op s = SOME w ==> eval_operand op t = SOME w) /\
-      t.vs_memory = s.vs_memory /\ t.vs_alloca_next = s.vs_alloca_next /\
+      t.vs_memory = s.vs_memory /\
+      t.vs_call_ctx = s.vs_call_ctx /\ t.vs_data_section = s.vs_data_section /\ t.vs_alloca_next = s.vs_alloca_next /\
       t.vs_allocas = s.vs_allocas /\ alloca_history func t) /\
   (limit < w2n (abi_decode_load MLOAD p s) ==>
     ?t. gas_marked_path T ctx func s 0 (Abort Revert_abort t))

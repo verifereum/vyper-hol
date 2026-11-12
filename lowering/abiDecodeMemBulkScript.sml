@@ -24,7 +24,8 @@ Theorem abi_decode_dynarray_payload_guard_path_mem:
       t.vs_inst_idx = LENGTH st'.cs_current_insts /\ ~t.vs_halted /\
       fresh_vars_wrt st' t /\
       (!op w. eval_operand op s = SOME w ==> eval_operand op t = SOME w) /\
-      t.vs_memory = s.vs_memory /\ t.vs_alloca_next = s.vs_alloca_next /\
+      t.vs_memory = s.vs_memory /\
+      t.vs_call_ctx = s.vs_call_ctx /\ t.vs_data_section = s.vs_data_section /\ t.vs_alloca_next = s.vs_alloca_next /\
       t.vs_allocas = s.vs_allocas /\ alloca_history func t) /\
   (~(w2n p <= w2n (p+q*n2w stride) /\ w2n (p+q*n2w stride) <= w2n h) ==>
     ?t. gas_marked_path T ctx func s 0 (Abort Revert_abort t))
@@ -77,7 +78,9 @@ Resume abi_decode_dynarray_payload_guard_path_mem[multiply_path]:
   `gas_path_mem ctx func s 0 (OK v) /\ alloca_history func v /\
    eval_operand sz v = SOME (q*n2w stride) /\ fresh_vars_wrt mid v /\
    (!op w. eval_operand op s = SOME w ==> eval_operand op v = SOME w) /\
-   v.vs_memory = s.vs_memory /\ v.vs_alloca_next = s.vs_alloca_next /\
+   v.vs_memory = s.vs_memory /\
+   v.vs_call_ctx = s.vs_call_ctx /\ v.vs_data_section = s.vs_data_section /\
+   v.vs_alloca_next = s.vs_alloca_next /\
    v.vs_allocas = s.vs_allocas /\ ~v.vs_halted /\
    v.vs_current_bb = mid.cs_current_bb /\ v.vs_inst_idx = LENGTH mid.cs_current_insts` by
     gvs[Abbr `v`, mk_inst_def, eval_operand_def, lookup_var_def, fresh_vars_wrt_def] >>

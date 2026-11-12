@@ -17,7 +17,8 @@ Theorem abi_decode_add_path_mem:
     (!op w. eval_operand op s = SOME w ==> eval_operand op t = SOME w) /\
     t.vs_current_bb = st'.cs_current_bb /\
     t.vs_inst_idx = LENGTH st'.cs_current_insts /\ ~t.vs_halted /\
-    t.vs_memory = s.vs_memory /\ t.vs_allocas = s.vs_allocas /\
+    t.vs_memory = s.vs_memory /\
+      t.vs_call_ctx = s.vs_call_ctx /\ t.vs_data_section = s.vs_data_section /\ t.vs_allocas = s.vs_allocas /\
     t.vs_alloca_next = s.vs_alloca_next /\ alloca_history func t
 Proof
   strip_tac >> drule_all abi_decode_add_sequence >> strip_tac >>
@@ -51,7 +52,8 @@ Theorem abi_decode_add_range_path_mem[local]:
       t.vs_inst_idx = LENGTH st'.cs_current_insts /\ ~t.vs_halted /\
       fresh_vars_wrt st' t /\
       (!op w. eval_operand op s = SOME w ==> eval_operand op t = SOME w) /\
-      t.vs_memory = s.vs_memory /\ t.vs_alloca_next = s.vs_alloca_next /\
+      t.vs_memory = s.vs_memory /\
+      t.vs_call_ctx = s.vs_call_ctx /\ t.vs_data_section = s.vs_data_section /\ t.vs_alloca_next = s.vs_alloca_next /\
       t.vs_allocas = s.vs_allocas /\ alloca_history func t) /\
   (~(w2n p <= w2n (p+q) /\ w2n (p+q) <= w2n h) ==>
     ?t. gas_marked_path T ctx func s 0 (Abort Revert_abort t))
@@ -96,7 +98,8 @@ Theorem abi_decode_bytes_head_path_mem:
       t.vs_inst_idx = LENGTH st'.cs_current_insts /\ ~t.vs_halted /\
       fresh_vars_wrt st' t /\
       (!op w. eval_operand op s = SOME w ==> eval_operand op t = SOME w) /\
-      t.vs_memory = s.vs_memory /\ t.vs_alloca_next = s.vs_alloca_next /\
+      t.vs_memory = s.vs_memory /\
+      t.vs_call_ctx = s.vs_call_ctx /\ t.vs_data_section = s.vs_data_section /\ t.vs_alloca_next = s.vs_alloca_next /\
       t.vs_allocas = s.vs_allocas /\ alloca_history func t) /\
   (~(w2n p <= w2n (p+32w) /\ w2n (p+32w) <= w2n h) ==>
     ?t. gas_marked_path T ctx func s 0 (Abort Revert_abort t))
@@ -108,7 +111,7 @@ Proof
   pairarg_tac >> strip_tac >> gvs[] >> pairarg_tac >> gvs[] >>
   `eval_operand (Lit 32w) s = SOME 32w` by simp[eval_operand_def] >>
   drule_all abi_decode_add_range_path_mem >>
-  disch_then (qspec_then `ctx` mp_tac) >> metis_tac[]
+  disch_then (qspec_then `ctx` mp_tac) >> simp_tac bool_ss [DE_MORGAN_THM] >> metis_tac[]
 QED
 
 Theorem abi_decode_bytes_payload_guard_path_mem:
@@ -125,7 +128,8 @@ Theorem abi_decode_bytes_payload_guard_path_mem:
       t.vs_inst_idx = LENGTH st'.cs_current_insts /\ ~t.vs_halted /\
       fresh_vars_wrt st' t /\
       (!op w. eval_operand op s = SOME w ==> eval_operand op t = SOME w) /\
-      t.vs_memory = s.vs_memory /\ t.vs_alloca_next = s.vs_alloca_next /\
+      t.vs_memory = s.vs_memory /\
+      t.vs_call_ctx = s.vs_call_ctx /\ t.vs_data_section = s.vs_data_section /\ t.vs_alloca_next = s.vs_alloca_next /\
       t.vs_allocas = s.vs_allocas /\ alloca_history func t) /\
   (~(w2n p <= w2n (p+q) /\ w2n (p+q) <= w2n h) ==>
     ?t. gas_marked_path T ctx func s 0 (Abort Revert_abort t))

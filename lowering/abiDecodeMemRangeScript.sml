@@ -92,6 +92,7 @@ Theorem abi_decode_range_path_mem:
       fresh_vars_wrt st' t /\
       (!op w. eval_operand op s = SOME w ==> eval_operand op t = SOME w) /\
       t.vs_memory = s.vs_memory /\
+      t.vs_call_ctx = s.vs_call_ctx /\ t.vs_data_section = s.vs_data_section /\
       t.vs_alloca_next = s.vs_alloca_next /\ t.vs_allocas = s.vs_allocas /\
       alloca_history func t) /\
   (~(w2n p <= w2n q /\ w2n q <= w2n h) ==>
