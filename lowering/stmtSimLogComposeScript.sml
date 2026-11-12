@@ -372,15 +372,15 @@ Resume compile_log_ready_stmt_frag[post]:
   `MAP FDOM es_end.scopes = MAP FDOM es.scopes` by
     (drule log_args_scopes_dom >> simp[]) >>
   `alloca_frame cenv es sa s0 cenv (es_end with gas_obs := []) t` by
-    (irule log_wb_alloca_frame >>
+    (qpat_assum `stmt_state_rel H1 _ _ _ _ es s0`
+       (mp_then (Pos hd) irule log_wb_alloca_frame) >>
      qpat_assum `log_args_post H1 _ _ _ _ _ _ _ _ _ _ _ _`
        (irule_at Any o MATCH_MP log_args_post_frame) >>
-     qpat_assum `stmt_state_rel H1 _ _ _ _ es s0` (irule_at Any) >>
      simp[]) >>
   `alloca_frame cenv (es_end with gas_obs := []) sm t cenv
      (es_end with <|logs := es_end.logs ++ [ev]; gas_obs := []|>) u` by
-    (irule log_suffix_alloca_frame >>
-     qpat_assum `stmt_state_rel H1 _ _ _ _ _ t` (irule_at Any) >>
+    (qpat_assum `stmt_state_rel H1 _ _ _ _ _ t`
+       (mp_then (Pos hd) irule log_suffix_alloca_frame) >>
      simp[Excl "enc_def"]) >>
   `sa.cs_next_id <= sm.cs_next_id` by
     (drule compile_log_eval_all_grows >> simp[]) >>
