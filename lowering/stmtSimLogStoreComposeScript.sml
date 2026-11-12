@@ -88,7 +88,7 @@ Theorem log_store_encode_continue_bounded:
   fn_has_code stored_st prepared func /\
   compile_abi_encode_to_buf dst.buf_operand src ei prepared = (out,end_st) /\
   fn_has_code prepared end_st func /\
-  stmt_state_rel ctx func ce cx es initial /\ fn_inst_ids_distinct func /\
+  stmt_state_rel H ctx func ce cx es initial /\ fn_inst_ids_distinct func /\
   local_ptrs_reserved ce source_st /\ local_ptrs_reserved ce start /\
   fresh_vars_wrt limit_st initial /\ end_st.cs_next_var <= limit_st.cs_next_var /\
   EVERY supported_scalar_type (MAP SND xs) /\ cap < dimword (:256) /\
@@ -101,7 +101,7 @@ Theorem log_store_encode_continue_bounded:
     mem_bytes_at db (LENGTH (enc (Tuple (vyper_to_abi_types (get_tenv cx) (MAP SND xs))) (ListV avs))) actual.vs_memory =
       enc (Tuple (vyper_to_abi_types (get_tenv cx) (MAP SND xs))) (ListV avs) /\
     eval_operand out actual = SOME (n2w (LENGTH (enc (Tuple (vyper_to_abi_types (get_tenv cx) (MAP SND xs))) (ListV avs)))) /\
-    stmt_state_rel ctx func ce cx es actual /\
+    stmt_state_rel H ctx func ce cx es actual /\
     (!op w. abi_decoder_operand_live start.cs_next_var op /\
       eval_operand op initial = SOME w ==> eval_operand op actual = SOME w) /\
     db < dimword (:256) /\
@@ -224,7 +224,7 @@ Theorem log_store_encode_continue:
   fn_has_code stored_st prepared func /\
   compile_abi_encode_to_buf dst.buf_operand src ei prepared = (out,end_st) /\
   fn_has_code prepared end_st func /\
-  stmt_state_rel ctx func ce cx es initial /\ fn_inst_ids_distinct func /\
+  stmt_state_rel H ctx func ce cx es initial /\ fn_inst_ids_distinct func /\
   local_ptrs_reserved ce source_st /\ local_ptrs_reserved ce start /\
   fresh_vars_wrt limit_st initial /\ end_st.cs_next_var <= limit_st.cs_next_var /\
   EVERY supported_scalar_type (MAP SND xs) /\ cap < dimword (:256) /\
@@ -237,7 +237,7 @@ Theorem log_store_encode_continue:
     mem_bytes_at db (LENGTH (enc (Tuple (vyper_to_abi_types (get_tenv cx) (MAP SND xs))) (ListV avs))) actual.vs_memory =
       enc (Tuple (vyper_to_abi_types (get_tenv cx) (MAP SND xs))) (ListV avs) /\
     eval_operand out actual = SOME (n2w (LENGTH (enc (Tuple (vyper_to_abi_types (get_tenv cx) (MAP SND xs))) (ListV avs)))) /\
-    stmt_state_rel ctx func ce cx es actual /\
+    stmt_state_rel H ctx func ce cx es actual /\
     (!op w. abi_decoder_operand_live start.cs_next_var op /\
       eval_operand op initial = SOME w ==> eval_operand op actual = SOME w) /\
     (!aid a k. aid < source_st.cs_next_id /\ FLOOKUP initial.vs_allocas aid = SOME (a,k) ==>
