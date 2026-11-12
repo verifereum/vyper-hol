@@ -5,17 +5,6 @@ Ancestors
   venomState compileEnv loweringPosts vyperState words arithmetic list
   venomInst venomExecProps memSafeRun instMemFrontier gasCount
 
-(* Storage well-formedness reads only accounts and transient storage. *)
-Theorem array_storage_wf_with_mem[simp]:
-  (storage_well_formed_on cx (es with scopes := sc) R <=>
-   storage_well_formed_on cx es R) /\
-  (storage_well_formed_on cx (es with gas_obs := g) R <=>
-   storage_well_formed_on cx es R)
-Proof
-  conj_tac >>
-  irule vyperStorageFootprintTheory.storage_well_formed_on_backends >> simp[]
-QED
-
 Theorem array_condition_boundary_mem:
   !ctx func cenv cx st0 P vs id idx saved_base base p dst sz ainst cond_lbl st
    k es cc n dv j1 j2 exit_lbl stmts_lbl.
