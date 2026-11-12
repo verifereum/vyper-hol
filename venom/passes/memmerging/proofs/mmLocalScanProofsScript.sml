@@ -17353,6 +17353,75 @@ Proof
   gvs[mm_local_zero_cut_def] >> metis_tac[]
 QED
 
+Theorem mm_local_zero_store_cut_exec[local]:
+  ALL_DISTINCT (MAP (\i. i.inst_id) bb.bb_instructions) /\
+  is = bb.bb_instructions /\ gs = (scan_block_memzero dfg bb).mz_flushed /\
+  r < LENGTH is /\ MEM g gs /\
+  rep_of_group is g = SOME ((EL r is).inst_id,g) /\
+  mm_local_zero_cut dfg is gs H r excluded pc t /\
+  mm_local_zero_capture dfg is (SUC r) r = SOME (d,bs) /\
+  (H (SUC r)).vs_memory = (write_memory_with_expansion d bs (H r)).vs_memory /\
+  mm_local_nonmemory_frame (H (SUC r)) = mm_local_nonmemory_frame (H r) /\
+  (!v. lookup_var v (H (SUC r)) = lookup_var v (H r)) /\
+  g.cg_length = 32 /\ g.cg_dst < dimword (:256) ==>
+  mm_local_exec_prefix fuel ctx [mk_zero_store_inst (EL r is) g.cg_dst] t
+    ((write_memory_with_expansion g.cg_dst (REPLICATE 32 0w) t)
+      with vs_inst_idx := SUC pc) /\
+  mm_local_zero_cut dfg is gs H (SUC r) excluded (SUC pc)
+    ((write_memory_with_expansion g.cg_dst (REPLICATE 32 0w) t)
+      with vs_inst_idx := SUC pc)
+Proof
+  strip_tac >> conj_tac
+  >- (fs[mm_local_zero_cut_def] >>
+      qpat_x_assum `t.vs_inst_idx = pc` (SUBST1_TAC o SYM) >>
+      irule mm_local_zero_store_fragment_exec >> simp[]) >>
+  irule mm_local_zero_cut_representative_write >>
+  simp[mm_local_nonmemory_frame_def, stateFrameTheory.state_frame_def,
+    venomStateTheory.write_memory_with_expansion_def,
+    venomStateTheory.write_memory_def, venomStateTheory.expand_memory_def,
+    venomStateTheory.lookup_var_def] >>
+  conj_tac >- (qexists `bb` >> simp[]) >>
+  qexistsl [`g`,`pc`,`t`] >> gvs[]
+QED
+
+Theorem mm_local_zero_copy_cut_exec[local]:
+  ALL_DISTINCT (MAP (\i. i.inst_id) bb.bb_instructions) /\
+  is = bb.bb_instructions /\ gs = (scan_block_memzero dfg bb).mz_flushed /\
+  r < LENGTH is /\ MEM g gs /\
+  rep_of_group is g = SOME ((EL r is).inst_id,g) /\
+  mm_local_zero_cut dfg is gs H r excluded pc t /\
+  mm_local_zero_capture dfg is (SUC r) r = SOME (d,bs) /\
+  (H (SUC r)).vs_memory = (write_memory_with_expansion d bs (H r)).vs_memory /\
+  mm_local_nonmemory_frame (H (SUC r)) = mm_local_nonmemory_frame (H r) /\
+  (!v. lookup_var v (H (SUC r)) = lookup_var v (H r)) /\
+  g.cg_dst < dimword (:256) /\ g.cg_length < dimword (:256) /\
+  LENGTH t.vs_call_ctx.cc_calldata < dimword (:256) /\ v IN excluded ==>
+  mm_local_exec_prefix fuel ctx
+    [<|inst_id := id; inst_opcode := CALLDATASIZE;
+       inst_operands := []; inst_outputs := [v]|>;
+     mk_memzero_calldatacopy (EL r is) g v] t
+    ((write_memory_with_expansion g.cg_dst (REPLICATE g.cg_length 0w)
+      (update_var v (n2w (LENGTH t.vs_call_ctx.cc_calldata)) t))
+      with vs_inst_idx := pc + 2) /\
+  mm_local_zero_cut dfg is gs H (SUC r) excluded (pc + 2)
+    ((write_memory_with_expansion g.cg_dst (REPLICATE g.cg_length 0w)
+      (update_var v (n2w (LENGTH t.vs_call_ctx.cc_calldata)) t))
+      with vs_inst_idx := pc + 2)
+Proof
+  strip_tac >> conj_tac
+  >- (fs[mm_local_zero_cut_def] >>
+      qpat_x_assum `t.vs_inst_idx = pc` (SUBST1_TAC o SYM) >>
+      irule mm_local_zero_copy_fragment_exec >> simp[]) >>
+  irule mm_local_zero_cut_representative_write >>
+  simp[mm_local_nonmemory_frame_def, stateFrameTheory.state_frame_def,
+    venomStateTheory.write_memory_with_expansion_def,
+    venomStateTheory.write_memory_def, venomStateTheory.expand_memory_def,
+    venomStateTheory.lookup_var_def, venomStateTheory.update_var_def] >>
+  conj_tac >- (qexists `bb` >> simp[]) >>
+  qexistsl [`g`,`pc`,`t`] >>
+  gvs[finite_mapTheory.FLOOKUP_UPDATE] >> metis_tac[]
+QED
+
 Theorem mm_local_zero_erased_pending_suc[local]:
   ALL_DISTINCT (MAP (\i. i.inst_id) bb.bb_instructions) /\
   is = bb.bb_instructions /\ gs = (scan_block_memzero dfg bb).mz_flushed /\
