@@ -101,6 +101,7 @@ Proof
   qexistsl_tac [`G0`, `es`,
     `INL (Value (FlagV (2 ** cenv.ce_flag_member_id (nsid_to_string (nsid0,nsid1)) mid)))`,
     `s0`, `tn0`] >>
+  conj_tac >- simp[] >>
   conj_tac >- simp[Once evaluate_def, lookup_flag_mem_def, return_def] >>
   simp[] >> rpt strip_tac >> first_x_assum drule >> strip_tac >>
   simp[gas_origin_ptr_path_rules, vv_store_bound_def, contextTheory.vv_location_def,
