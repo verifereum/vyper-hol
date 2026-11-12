@@ -168,6 +168,36 @@ Proof
   simp[finite_mapTheory.FLOOKUP_UPDATE]
 QED
 
+(* Finite iteration is independent of the concrete header invariant. *)
+Theorem typed_copy_origin_ptr_counted_path:
+  (!j q G tn. j < N /\ H j q G tn ==>
+     ?r Gr tnr. gas_origin_ptr_path cfg (q,G,tn) [] (OK r,Gr,tnr) /\
+                H (SUC j) r Gr tnr) /\
+  (!q G tn. H N q G tn ==>
+     ?t Gf tnf. gas_origin_ptr_path cfg (q,G,tn) [] (OK t,Gf,tnf) /\
+                R t Gf tnf) ==>
+  !k q G tn. k <= N /\ H k q G tn ==>
+    ?t Gf tnf. gas_origin_ptr_path cfg (q,G,tn) [] (OK t,Gf,tnf) /\
+               R t Gf tnf
+Proof
+  strip_tac >> measureInduct_on `N-k` >> rpt strip_tac >>
+  Cases_on `k = N`
+  >- metis_tac[] >>
+  `k < N` by decide_tac >>
+  qpat_assum `!j q G tn. j < N /\ _ ==> _`
+    (qspecl_then [`k`,`q`,`G`,`tn`] mp_tac) >>
+  (impl_tac >- simp[]) >> strip_tac >>
+  qpat_x_assum `!k'. _ ==> _`
+    (qspec_then `SUC k` mp_tac) >>
+  (impl_tac >- decide_tac) >>
+  disch_then (qspecl_then [`r`,`Gr`,`tnr`] mp_tac) >>
+  (impl_tac >- simp[]) >> strip_tac >>
+  qexistsl_tac [`t`,`Gf`,`tnf`] >> simp[] >>
+  qpat_x_assum `gas_origin_ptr_path cfg (q,G,tn) [] _`
+    (mp_then Any mp_tac gas_origin_ptr_path_append) >>
+  simp[] >> metis_tac[]
+QED
+
 (* The counted loop that copies N elements from xs to xd, element i at
    offset i times the element size on each side (the joint twin of
    placeTypedCopyRecursivePath's typed_copy_forward_index_loop_path). *)
