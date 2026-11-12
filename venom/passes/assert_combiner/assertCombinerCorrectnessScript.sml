@@ -51,11 +51,13 @@ Ancestors
   venomExecProofs venomInstIdsProps venomInst list pred_set
 
 (* The assert combiner preserves semantics: on every run where the original
-   doesn't error, the transformed function ends the same way.  OK and halt
-   states agree up to the variables the transform took from the supply;
-   revert states fully; abort states up to the remaining GAS readings,
-   since a GAS read between the two merged asserts still runs in the
-   transformed function after the original has aborted at the first. *)
+   doesn't error, the transformed function ends the same way.  OK states
+   agree except on the variables the transform took from the supply.  Halt
+   and internal-return states agree on the execution frame, and internal
+   returns on their values.  Aborts, reverts included, have the same kind
+   and agree on the execution frame up to the GAS readings, since a GAS read
+   between the two merged asserts still runs in the transformed function
+   after the original has aborted at the first. *)
 Theorem ac_transform_function_correct:
   !fuel ctx fn su s.
     wf_function fn /\ wf_ssa fn /\ fn_inst_wf fn /\

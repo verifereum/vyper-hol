@@ -5,9 +5,9 @@ Ancestors
 Libs monadsyntax
 
 Theorem assign_memory_relayout_code:
-  !cenv dst src dty sty da n sa sb func.
+  !cenv dst src dty sty n sa sb func.
     compile_assign_value cenv dst LocMemory src F (SOME LocMemory)
-      dty sty da n sa = ((),sb) /\ fn_has_code sa sb func ==>
+      dty sty n sa = ((),sb) /\ fn_has_code sa sb func ==>
     ?buf sm sc.
       compile_alloc_buffer (type_memory_bytes cenv sty) sa = (buf,sm) /\
       compile_copy_memory buf.buf_operand src (type_memory_bytes cenv sty) sm = ((),sc) /\
