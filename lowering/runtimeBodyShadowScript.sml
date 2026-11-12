@@ -9,7 +9,8 @@ Ancestors
   actualDecoderPackaging rawEntryCode loweringShapeProps loweringShapeDefs
   loweringShapeRules compileEnv venomInst list gasShadowShape
   gasShadowStmtEnv externalCallSelected supportedProgram supportedProgramProps supportedNames
-  loweringShapeSource
+  loweringShapeSource gasShadowRuntimeBodies gasShadowRuntimeOps
+  gasShadowModuleOps gasShadowCompileContext gasShadowModuleDefs gasShadowUnitGuards
 
 val _ = Parse.hide "body";
 
@@ -196,5 +197,102 @@ Proof
      metis_tac[]) >>
   `fn_has_code sa sb func /\ fn_has_code sb st' func` by
     metis_tac[fn_has_code_split] >>
-  FAIL_TAC "shadow replay"
+  qspec_then `pre` mp_tac gas_shadow_compiles_compile_external_fn_bodies >>
+  rewrite_tac[gas_shadow_compiles_def] >>
+  disch_then (qspecl_then [`dispatch_st`, `dispatch_st`] mp_tac) >>
+  simp[gas_shadow_state_refl] >>
+  Cases_on `compile_external_fn_bodies (MAP gas_shadow_external_package pre) dispatch_st` >>
+  rename1 `_ = (z,shadow_opened)` >> simp[] >> strip_tac >> gvs[] >>
+  `gas_shadow_state checks (SND (new_block lbl shadow_opened))` by
+    (mp_tac (Q.INST [`label` |-> `lbl`] gas_shadow_compiles_new_block) >>
+     rewrite_tac[gas_shadow_compiles_def] >>
+     disch_then (qspecl_then [`opened`, `shadow_opened`] mp_tac) >> simp[]) >>
+  Cases_on `new_block lbl shadow_opened` >>
+  rename1 `_ = (oldbb,shadow_checks)` >> gvs[] >>
+  `oldbb = shadow_opened.cs_current_bb` by
+    (qpat_x_assum `new_block lbl shadow_opened = _` mp_tac >> simp[new_block_def]) >>
+  `gas_shadow_state st (SND (compile_entry_checks mincd pay shadow_checks))` by
+    (mp_tac (Q.INST [`min_cds` |-> `mincd`, `payable` |-> `pay`] gas_shadow_compiles_compile_entry_checks) >>
+     rewrite_tac[gas_shadow_compiles_def] >>
+     disch_then (qspecl_then [`checks`, `shadow_checks`] mp_tac) >> simp[]) >>
+  Cases_on `compile_entry_checks mincd pay shadow_checks` >>
+  rename1 `_ = (v,shadow_st)` >> Cases_on `v` >> gvs[] >>
+  qspecl_then [`pos`, `ce`, `4`] mp_tac gas_shadow_compiles_compile_register_positional_args >>
+  rewrite_tac[gas_shadow_compiles_def] >>
+  disch_then (qspecl_then [`st`, `shadow_st`] mp_tac) >> simp[] >>
+  Cases_on `compile_register_positional_args ce pos 4 shadow_st` >>
+  rename1 `_ = (shadow_cenv,shadow_sa)` >> simp[] >> strip_tac >> gvs[] >>
+  `gas_shadow_state
+     (SND (compile_guarded_body cenv F key ut iv fbody
+       (if ret = NoneT then NONE else SOME ret) sa))
+     (SND (compile_guarded_body cenv F key ut iv (MAP gas_shadow_stmt fbody)
+       (if ret = NoneT then NONE else SOME ret) shadow_sa))` by
+    (irule (cj 2 (REWRITE_RULE [gas_shadow_compiles_def]
+       gas_shadow_compiles_compile_guarded_body)) >> simp[]) >>
+  Cases_on `compile_guarded_body cenv F key ut iv (MAP gas_shadow_stmt fbody)
+    (if ret = NoneT then NONE else SOME ret) shadow_sa` >>
+  rename1 `_ = (v,shadow_end)` >> Cases_on `v` >> gvs[] >>
+  qspecl_then [`fbody`, `cenv`, `NoLoop`, `ret`] mp_tac gas_shadow_stmts_env >>
+  rewrite_tac[gas_shadow_compiles_def] >>
+  disch_then (qspecl_then [`sa`, `shadow_sa`] mp_tac) >> simp[] >>
+  Cases_on `stmts_env cenv NoLoop ret (MAP gas_shadow_stmt fbody) shadow_sa` >>
+  rename1 `_ = (ec,shadow_sb)` >> simp[] >> strip_tac >> gvs[] >>
+  qmatch_asmsub_abbrev_tac `run_lowering sels packs ips fall rpolicy 0 0 [] info "__entry"` >>
+  `OPTREL gas_shadow_unit (SOME unit)
+    (run_lowering sels (MAP gas_shadow_external_package packs)
+      (MAP gas_shadow_internal_package ips)
+      (OPTION_MAP gas_shadow_fallback_package fall) rpolicy 0 0 [] info "__entry")` by
+    (qpat_x_assum `run_lowering sels packs ips fall _ _ _ _ _ _ = SOME unit`
+       (SUBST1_TAC o SYM) >> irule gas_shadow_run_lowering) >>
+  Cases_on `run_lowering sels (MAP gas_shadow_external_package packs)
+      (MAP gas_shadow_internal_package ips)
+      (OPTION_MAP gas_shadow_fallback_package fall) rpolicy 0 0 [] info "__entry"` >>
+  gvs[optionTheory.OPTREL_def] >> rename1 `gas_shadow_unit unit shadow_unit` >>
+  `EVERY external_fn_shape_ok (MAP gas_shadow_external_package packs)` by
+    (simp[Abbr `packs`, EVERY_MAP, EVERY_MEM] >>
+     metis_tac[gas_shadow_external_fn_shape_ok, EVERY_MEM]) >>
+  `EVERY internal_fn_shape_ok (MAP gas_shadow_internal_package ips)` by
+    (simp[EVERY_MAP, EVERY_MEM] >> metis_tac[gas_shadow_internal_fn_shape_ok, EVERY_MEM]) >>
+  `fallback_shape_ok (OPTION_MAP gas_shadow_fallback_package fall)` by
+    metis_tac[gas_shadow_fallback_shape_ok] >>
+  `EVERY (\d. internal_label_ok (FST d))
+      (internal_fn_descriptors (MAP gas_shadow_internal_package ips)) /\
+    ALL_DISTINCT (MAP FST (internal_fn_descriptors (MAP gas_shadow_internal_package ips)))` by
+    simp[] >>
+  qpat_x_assum `run_lowering sels packs ips fall _ _ _ _ _ _ = _` kall_tac >>
+  qpat_x_assum `run_lowering _ _ _ _ _ _ _ _ _ _ = SOME shadow_unit` mp_tac >>
+  simp_tac (srw_ss()) [Abbr `packs`, MAP_APPEND, gas_shadow_external_package_def] >>
+  strip_tac >>
+  qpat_x_assum `(_,_) = fresh_label _ _` (assume_tac o SYM) >>
+  `EVERY (\(sel,lbl,z). isPREFIX "fn_" lbl) sels` by simp[] >>
+  rule_assum_tac (PURE_REWRITE_RULE [MAP_APPEND, MAP, gas_shadow_external_package_def]) >>
+  drule_all run_lowering_pinned_body_interval >> strip_tac >>
+  `stmts_env cenv NoLoop ret (MAP gas_shadow_stmt fbody) =
+   stmts_env cenv NoLoop
+     (case (if ret = NoneT then NONE else SOME ret) of
+        NONE => BaseT BoolT | SOME t => t) (MAP gas_shadow_stmt fbody)` by
+    (Cases_on `ret = NoneT` >- (
+       gvs[] >>
+       `~stmts_valued_return (MAP gas_shadow_stmt fbody)` by
+         metis_tac[type_stmts_none_valued_return, gas_shadow_valued_return] >>
+       `supported_stmts tops bindings (MAP gas_shadow_stmt fbody)` by
+         metis_tac[gas_shadow_supported_stmts] >>
+       irule stmtsEnvRetTyTheory.stmts_env_ret_ty >> metis_tac[]) >> simp[]) >>
+  `compile_stmts cenv NoLoop
+     (case (if ret = NoneT then NONE else SOME ret) of
+        NONE => BaseT BoolT | SOME t => t) (MAP gas_shadow_stmt fbody) shadow_sa =
+      ((),shadow_sb)` by
+    (simp[stmtSimPropsTheory.compile_stmts_env] >> gvs[]) >>
+  qpat_x_assum `compile_guarded_body _ _ _ _ _ (MAP _ _) _ _ = _`
+    (mp_tac o MATCH_MP guarded_body_code) >> strip_tac >>
+  gvs[] >> rename1 `gas_shadow_state sb shadow_sb` >>
+  `fn_has_code shadow_sa shadow_sb func'` by metis_tac[fn_has_code_split] >>
+  `gas_shadow_context unit.cu_context shadow_unit.cu_context` by
+    fs[gas_shadow_unit_def] >>
+  `gas_shadow_function func func'` by
+    (mp_tac gas_shadow_lookup_function >>
+     disch_then (qspecl_then [`unit.cu_context.ctx_functions`,
+        `shadow_unit.cu_context.ctx_functions`, `"__entry"`] mp_tac) >>
+     fs[gas_shadow_context_def]) >>
+  qexistsl_tac [`shadow_unit.cu_context`, `func'`, `shadow_sa`, `shadow_sb`] >> simp[]
 QED
