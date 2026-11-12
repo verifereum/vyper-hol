@@ -260,11 +260,14 @@ Proof
      b+z <= dyn_floor C vs /\ c+z <= dyn_floor C vs` by
     (fs[ld_dyn_floor_ok_def] >> metis_tac[]) >>
   Cases_on `w2n l=0`
-  >- (gvs[mcopy_def] >> conj_tac
-      >- (irule ld_memory_agree_empty_write >> simp[]) >>
-      simp[ptrDisciplineTheory.ld_dyn_agree_def,
-           regularCallEmitSimTheory.read_byte_write_memory_with_expansion] >>
-      fs[ptrDisciplineTheory.ld_dyn_agree_def]) >>
+  >- (gvs[mcopy_def] >> rpt conj_tac >>
+      (* gvs splits the operand cases here *)
+      ld_on_head "ld_memory_agree"
+        (irule ld_memory_agree_empty_write >> simp[]) >>
+      ld_on_head "ld_dyn_agree"
+        (simp[ptrDisciplineTheory.ld_dyn_agree_def,
+              regularCallEmitSimTheory.read_byte_write_memory_with_expansion] >>
+         fs[ptrDisciplineTheory.ld_dyn_agree_def])) >>
   `l <> 0w` by (strip_tac >> gvs[]) >>
   (* split the operand cases; no simplification after this point, since it
      would reorder the mask's sums away from the lemmas' syntactic form *)
