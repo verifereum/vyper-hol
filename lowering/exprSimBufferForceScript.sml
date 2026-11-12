@@ -58,6 +58,9 @@ Proof
                (INL v, es_end with gas_obs := [])` by
             (qpat_x_assum `vv_post _ _ _ _ _ _ _ _ _ _ _ _ _ _`
                (strip_assume_tac o REWRITE_RULE [vv_post_def, vv_holds_def]) >>
+             rpt (qpat_x_assum `!H. _` kall_tac) >>
+             qpat_assum `p.ptr_location = LocMemory`
+               (fn th => RULE_ASSUM_TAC (SIMP_RULE (srw_ss()) [th])) >>
              metis_tac[]) >>
           qexistsl_tac [`INL v`, `es_end with gas_obs := []`, `OK t'`] >>
           simp[] >> conj_tac
