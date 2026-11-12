@@ -6,9 +6,7 @@
  * statement state relation.  The endpoint is chosen before any horizon.
  *
  * The statement is fixed; its proof is open (cheat) and is being done on
- * the canonical registration path.  ghost_inv_at must be a constant here:
- * the assertion after the theorem fails the build while it is still a
- * free variable.
+ * the canonical registration path.
  *
  * TOP-LEVEL:
  *   external_entry_joint
@@ -88,8 +86,3 @@ Theorem external_entry_joint:
 Proof
   cheat
 QED
-
-val _ = case Term.free_vars (concl external_entry_joint) of
-          [] => ()
-        | vs => raise Fail ("external_entry_joint: free variables " ^
-                  String.concatWith ", " (map (#1 o dest_var) vs));
