@@ -18,7 +18,7 @@ Theorem ld_selected_forwarding:
   ALL_DISTINCT (MAP (\b. b.bb_label) fn.fn_blocks) /\
   ir_supply_covers_fn (HD frames).lf_supply fn /\
   dload_headroom_ok C fn inst s /\ raw_mem_ok C fn inst s /\
-  in_revert_forward fn s ==>
+  in_revert_forward fn s /\ (ctx_has_dalloca C' ==> ctx_has_dalloca C) ==>
   ^ld_forward C' fn' ti t
 Proof
   strip_tac >>
@@ -54,6 +54,7 @@ Proof
 QED
 
 Theorem ld_owned_forwarding:
+  (ctx_has_dalloca C' ==> ctx_has_dalloca C) /\
   (?stk PG G tn fn inst s t0 A frames N X p h.
     ^ld_covered_ambient lo C C' vs0 Sigma names fn fn' /\
     ld_sync lo P C vs0 stk PG G tn fn inst s t0 A frames N /\

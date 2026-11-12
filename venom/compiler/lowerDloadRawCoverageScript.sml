@@ -66,7 +66,8 @@ Theorem ld_raw_next_closed:
    (^ld_forward C' fn' ti t /\
     ALL_DISTINCT (MAP (\b. b.bb_label) fn'.fn_blocks))) /\
   ~is_terminator ti.inst_opcode /\ step_inst fuel C' ti t = OK u /\
-  active_inst fn' next (u with vs_inst_idx := SUC t.vs_inst_idx) ==>
+  active_inst fn' next (u with vs_inst_idx := SUC t.vs_inst_idx) /\
+  (ctx_has_dalloca C' ==> ctx_has_dalloca C) ==>
   (^ld_owned lo P C C' vs Sigma names fn' next
       (u with vs_inst_idx := SUC t.vs_inst_idx) \/
    (^ld_forward C' fn' next (u with vs_inst_idx := SUC t.vs_inst_idx) /\
@@ -204,7 +205,8 @@ Theorem ld_raw_coverage_fixed:
   (!fn. MEM fn C.ctx_functions ==>
     ^ld_covered_ambient lo C C' vs Sigma names fn
       (FST (lower_dload_function_supply (Sigma fn.fn_name) fn))) /\
-  mem_inv raw_mem_ok C vs /\ C'.ctx_entry = C.ctx_entry ==>
+  mem_inv raw_mem_ok C vs /\ C'.ctx_entry = C.ctx_entry /\
+  (ctx_has_dalloca C' ==> ctx_has_dalloca C) ==>
   !fn' ti t. raw_reachable vs C' fn' ti t ==>
     (^ld_owned lo P C C' vs Sigma names fn' ti t \/
      ^ld_forward C' fn' ti t)

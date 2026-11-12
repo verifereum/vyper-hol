@@ -94,7 +94,58 @@ Proof
   Cases_on `FLOOKUP s.vs_vars z` >> simp[]
 QED
 
-Theorem lower_dload_prefix_scratch[local]:
+Theorem lower_dload_alloca_next[local]:
+  exec_alloca inst s sz = OK t ==>
+  t.vs_alloca_next = s.vs_alloca_next +
+    (if FLOOKUP s.vs_allocas inst.inst_id = NONE then w2n sz else 0)
+Proof
+  simp[exec_alloca_def, AllCaseEqs(), update_var_def] >>
+  rpt strip_tac >> gvs[]
+QED
+
+(* The expansion's ALLOCA is its only frontier move: 32 bytes, once. *)
+Theorem lower_dload_prefix_alloca_next[local]:
+  X = [<|inst_id := ai; inst_opcode := ALLOCA;
+         inst_operands := [Lit 32w]; inst_outputs := [a]|>;
+       <|inst_id := zi; inst_opcode := ADD;
+         inst_operands := [off; Label "code_end"]; inst_outputs := [z]|>;
+       <|inst_id := ci; inst_opcode := CODECOPY;
+         inst_operands := [Var a; Var z; Lit 32w]; inst_outputs := []|>;
+       <|inst_id := mi; inst_opcode := MLOAD;
+         inst_operands := [Var a]; inst_outputs := [out]|>] ==>
+  !h t. ld_prefix C fn X p h t0 t ==>
+    t.vs_alloca_next <= t0.vs_alloca_next +
+      (if FLOOKUP t0.vs_allocas ai = NONE then 32 else 0)
+Proof
+  `dimindex (:256) = 256` by CONV_TAC fcpLib.INDEX_CONV >>
+  strip_tac >> Induct_on `h`
+  >- (simp[ld_prefix_zero] >> rpt strip_tac >> gvs[]) >>
+  rpt gen_tac >> disch_tac >>
+  `SUC h < 4` by (drule ld_prefix_bound >> simp[]) >>
+  drule ld_prefix_predecessor >>
+  disch_then (qx_choose_then `v` (qx_choose_then `w` strip_assume_tac)) >>
+  first_x_assum drule >> strip_tac >>
+  `w.vs_alloca_next <= t0.vs_alloca_next +
+     (if FLOOKUP t0.vs_allocas ai = NONE then 32 else 0)`
+    suffices_by (strip_tac >> gvs[]) >>
+  Cases_on `h = 0`
+  >- (gvs[ld_prefix_zero] >>
+      qpat_x_assum `step_inst _ _ _ _ = _` mp_tac >>
+      simp[step_inst_non_invoke, step_inst_base_def, eval_operand_def] >>
+      strip_tac >> drule lower_dload_alloca_next >> simp[dimword_def]) >>
+  `w.vs_alloca_next = v.vs_alloca_next` suffices_by
+    (disch_then SUBST1_TAC >> first_assum ACCEPT_TAC) >>
+  Cases_on `h = 1`
+  >- (fs[] >>
+      `(EL 1 X).inst_opcode = ADD /\ (EL 1 X).inst_outputs = [z]`
+        by simp[] >>
+      drule_all lower_dload_add_preserves >> simp[]) >>
+  `h = 2` by decide_tac >> fs[] >>
+  `(EL 2 X).inst_opcode = CODECOPY` by simp[] >>
+  drule_all lower_dload_codecopy_preserves >> simp[]
+QED
+
+Theorem lower_dload_prefix_scratch:
   X = [<|inst_id := ai; inst_opcode := ALLOCA;
          inst_operands := [Lit 32w]; inst_outputs := [a]|>;
        <|inst_id := zi; inst_opcode := ADD;
@@ -111,10 +162,19 @@ Theorem lower_dload_prefix_scratch[local]:
   !h t. ld_prefix C fn X p h t0 t ==>
     t.vs_alloca_next < dimword(:256) /\
     t.vs_fmp = t0.vs_fmp /\ t.vs_initial_fmp = t0.vs_initial_fmp /\
+    t.vs_alloca_next <= t0.vs_alloca_next +
+      (if FLOOKUP t0.vs_allocas ai = NONE then 32 else 0) /\
     (0 < h ==> ?c. FLOOKUP t.vs_vars a = SOME(n2w c) /\
                        c + 32 <= t.vs_alloca_next)
 Proof
-  strip_tac >> Induct_on `h`
+  strip_tac >>
+  `!h t. ld_prefix C fn X p h t0 t ==>
+     t.vs_alloca_next < dimword(:256) /\
+     t.vs_fmp = t0.vs_fmp /\ t.vs_initial_fmp = t0.vs_initial_fmp /\
+     (0 < h ==> ?c. FLOOKUP t.vs_vars a = SOME(n2w c) /\
+                        c + 32 <= t.vs_alloca_next)` suffices_by
+    (strip_tac >> drule lower_dload_prefix_alloca_next >> metis_tac[]) >>
+  Induct_on `h`
   >- (simp[ld_prefix_zero] >> rpt strip_tac >> gvs[]) >>
   rpt gen_tac >> disch_tac >>
   drule ld_prefix_bound >> simp[] >> strip_tac >>
@@ -166,6 +226,7 @@ Proof
   strip_tac >>
   drule_all lower_dload_prefix_scratch >>
   strip_tac >>
+  qpat_x_assum `t.vs_alloca_next <= _` kall_tac >>
   drule ld_prefix_bound >> simp[] >> strip_tac >>
   qpat_x_assum `!b n. _` kall_tac >>
   Cases_on `h = 0 \/ h = 1`
