@@ -1,0 +1,256 @@
+(* Pointer boundary for the finite ABI encode setup. *)
+Theory abiEncodePtrSetup
+Ancestors
+  exprSimAbiEncodeConcreteBuiltinWrappers exprSimPtrLiteralOps allocationPtr
+  fragGasSeqPtr abiBuiltinAllocation abiBuiltinEncodeCode ptrDiscipline
+  abiEncoderWindow bodyPtrDefs emitHelper emitHelperProps compileEnv context
+  exprLoweringProps venomExecSemantics venomInstProofs venomInst venomState finite_map words
+  list rich_list arithmetic
+
+Theorem setup_add_continuation[local]:
+  IS_SOME (lookup_var src s) /\ IS_SOME (FLOOKUP G src) /\
+  op_taint tn (Var src) = {} /\ ~ctx_has_dalloca ctx ==>
+  (inst_seq_ptr D 0 ctx func PG G tn
+     (mk_inst id ADD [Var src; Lit off] [dst] :: code) s H tf <=>
+   inst_seq_ptr D 0 ctx func PG (G |+ (dst,THE (FLOOKUP G src)))
+     (tn with t_var := tn.t_var |+ (dst,{})) code
+     ((update_var dst (THE (lookup_var src s)+off) s)
+       with vs_inst_idx := SUC s.vs_inst_idx) H tf)
+Proof
+  Cases_on `lookup_var src s` >> simp[] >>
+  Cases_on `FLOOKUP G src` >> simp[] >> strip_tac >>
+  `step_inst_base (mk_inst id ADD [Var src; Lit off] [dst]) s =
+    OK (update_var dst (x+off) s)` by
+    (irule step_ADD >> simp[eval_operand_def]) >>
+  drule literal_add_ghost >> disch_then assume_tac >>
+  simp[inst_seq_ptr_def, literal_add_ptr_inst_ok]
+QED
+
+Theorem setup_mstore_continuation[local]:
+  IS_SOME (lookup_var dst s) /\ ptr_covers G tn dst s 32 /\
+  ~ctx_has_dalloca ctx ==>
+  (inst_seq_ptr D 0 ctx func PG G tn
+     (mk_inst id MSTORE [Var dst; Lit w] [] :: code) s H tf <=>
+   inst_seq_ptr D 0 ctx func PG G
+     (tn with t_mem := tn.t_mem DIFF
+       {i | w2n (THE (lookup_var dst s)) <= i /\
+            i < w2n (THE (lookup_var dst s)) + 32}) code
+     ((mstore (w2n (THE (lookup_var dst s))) w s)
+       with vs_inst_idx := SUC s.vs_inst_idx) H tf)
+Proof
+  Cases_on `lookup_var dst s` >> simp[] >> strip_tac >>
+  `step_inst_base (mk_inst id MSTORE [Var dst; Lit w] []) s =
+    OK (mstore (w2n x) w s)` by
+    (irule step_MSTORE >> simp[eval_operand_def]) >>
+  drule literal_mstore_ghost >> disch_then assume_tac >>
+  simp[inst_seq_ptr_def, literal_mstore_ptr_inst_ok]
+QED
+
+Theorem setup_method_suffix[local]:
+  lookup_var a s = SOME (n2w p) /\ FLOOKUP G a = SOME (p,sz) /\
+  op_taint tn (Var a) = {} /\ a <> b /\ a <> c /\ b <> c /\
+  p+sz < dimword (:256) /\ 64 <= sz /\ 36+n <= sz /\
+  ~ctx_has_dalloca ctx /\
+  run_inst_seq [mk_inst i ADD [Var a; Lit 36w] [b];
+    mk_inst j ADD [Var a; Lit 32w] [c];
+    mk_inst k MSTORE [Var c; Lit w] []] s = OK raw ==>
+  ?H tf.
+    inst_seq_ptr D 0 ctx func PG G tn
+      [mk_inst i ADD [Var a; Lit 36w] [b];
+       mk_inst j ADD [Var a; Lit 32w] [c];
+       mk_inst k MSTORE [Var c; Lit w] []] (s with vs_inst_idx := idx) H tf /\
+    ptr_covers H tf a raw sz /\ op_taint tf (Var b) = {} /\
+    ptr_covers H tf b raw n
+Proof
+  strip_tac >>
+  `step_inst_base (mk_inst i ADD [Var a; Lit 36w] [b]) s =
+    OK (update_var b (n2w p + 36w) s)` by
+    (irule step_ADD >> simp[eval_operand_def]) >>
+  `step_inst_base (mk_inst j ADD [Var a; Lit 32w] [c])
+      (update_var b (n2w p + 36w) s) =
+    OK (update_var c (n2w p + 32w) (update_var b (n2w p + 36w) s))` by
+    (irule step_ADD >> fs[eval_operand_def, lookup_var_def,
+      update_var_def, FLOOKUP_UPDATE]) >>
+  `step_inst_base (mk_inst k MSTORE [Var c; Lit w] [])
+      (update_var c (n2w p + 32w) (update_var b (n2w p + 36w) s)) =
+    OK (mstore (w2n (n2w p + 32w : 256 word)) w
+      (update_var c (n2w p + 32w) (update_var b (n2w p + 36w) s)))` by
+    (irule step_MSTORE >> simp[eval_operand_def, lookup_var_def,
+      update_var_def, FLOOKUP_UPDATE]) >>
+  gvs[run_inst_seq_def] >> fs[lookup_var_def, op_taint_def] >>
+  simp[setup_add_continuation, lookup_var_def, op_taint_def] >>
+  simp[setup_add_continuation, lookup_var_def, update_var_def,
+    op_taint_def, FLOOKUP_UPDATE] >>
+  `p < dimword (:256) /\ p+32 < dimword (:256) /\
+    p+36 < dimword (:256)` by decide_tac >>
+  simp[setup_mstore_continuation, ptr_covers_def, lookup_var_def,
+    update_var_def, op_taint_def, FLOOKUP_UPDATE, word_add_n2w, w2n_n2w] >>
+  simp[inst_seq_ptr_def] >>
+  simp[FLOOKUP_UPDATE] >> decide_tac
+QED
+
+Theorem abi_encode_setup_ptr_sequence:
+  abi_builtin_encode_setup method_id maxlen st = (ops,ready) /\
+  run_inst_seq (emitted_insts st ready) initial = OK raw /\
+  outsz = 32 + 32 * word_size
+    (maxlen + (case method_id of NONE => 0 | SOME mid => 4)) /\
+  ((FLOOKUP initial.vs_allocas st.cs_next_id = NONE /\ p = initial.vs_alloca_next) \/
+    FLOOKUP initial.vs_allocas st.cs_next_id = SOME (p,outsz)) /\
+  outsz < dimword (:256) /\ p+outsz < dimword (:256) /\
+  n <= maxlen /\ ~ctx_has_dalloca ctx ==>
+  ?H tf x.
+    inst_seq_ptr D 0 ctx func PG G tn (emitted_insts st ready) initial H tf /\
+    FST ops = Var x /\ ptr_covers H tf x raw outsz /\
+    op_taint tf (SND ops) = {} /\
+    (0 < n ==> ?y. SND ops = Var y /\ ptr_covers H tf y raw n)
+Proof
+  Cases_on `method_id` >>
+  simp[abi_builtin_encode_setup_def, abi_builtin_encode_method_id_def,
+    compile_alloc_buffer_def, comp_bind_def, comp_ignore_bind_def,
+    comp_return_def, emit_op_def, emit_void_def, fresh_var_def,
+    fresh_id_def, emit_def] >>
+  rpt (pairarg_tac >> gvs[]) >>
+  disch_then (MAP_EVERY assume_tac o CONJUNCTS) >> gvs[] >>
+  fs[emitted_insts_def] >>
+  RULE_ASSUM_TAC (REWRITE_RULE [GSYM APPEND_ASSOC, DROP_LENGTH_APPEND]) >>
+  pure_rewrite_tac[GSYM APPEND_ASSOC] >>
+  fs[DROP_LENGTH_APPEND]
+  >- suspend "none_fresh"
+  >- suspend "none_reused"
+  >- suspend "some_fresh"
+  >> suspend "some_reused"
+QED
+
+Resume abi_encode_setup_ptr_sequence[none_fresh]:
+  qmatch_asmsub_abbrev_tac `Lit (n2w sz)` >>
+  qmatch_goalsub_abbrev_tac `mk_inst _ ALLOCA [Lit (n2w sz)] [x]` >>
+  qmatch_goalsub_abbrev_tac `mk_inst _ ADD [Var x; Lit 32w] [y]` >>
+  `x <> y` by simp[Abbr `x`, Abbr `y`] >>
+  `sz < dimword (:256)` by decide_tac >>
+  qabbrev_tac `u = update_var x (n2w initial.vs_alloca_next)
+    (initial with <|vs_allocas := initial.vs_allocas |+
+      (st.cs_next_id,(initial.vs_alloca_next,sz));
+      vs_alloca_next := initial.vs_alloca_next + sz|>)` >>
+  `step_inst_base (mk_inst st.cs_next_id ALLOCA [Lit (n2w sz)] [x]) initial = OK u` by
+    simp[Abbr `u`, Once step_inst_base_def, exec_alloca_def, mk_inst_def,
+      eval_operand_def, w2n_n2w] >>
+  drule_all fresh_alloca_ghost >>
+  disch_then (qspecl_then [`PG`, `G`, `tn`] strip_assume_tac) >>
+  `step_inst_base (mk_inst (st.cs_next_id+1) ADD [Var x; Lit 32w] [y]) u =
+    OK (update_var y (n2w initial.vs_alloca_next + 32w) u)` by
+    (irule step_ADD >> simp[Abbr `u`, eval_operand_def, lookup_var_def,
+      update_var_def, FLOOKUP_UPDATE]) >>
+  gvs[run_inst_seq_def] >>
+  simp[Once inst_seq_ptr_def, literal_alloca_ptr_inst_ok] >>
+  simp[setup_add_continuation, op_taint_def, lookup_var_def,
+    update_var_def, Abbr `u`, FLOOKUP_UPDATE] >>
+  simp[inst_seq_ptr_def] >>
+  simp[ptr_covers_def, op_taint_def, lookup_var_def, update_var_def,
+    FLOOKUP_UPDATE, w2n_n2w] >>
+  qspec_then `maxlen` assume_tac abi_builtin_word_size_capacity >>
+  `initial.vs_alloca_next + 32 < dimword (:256)` by
+    (fs[Abbr `sz`] >> decide_tac) >>
+  simp[word_add_n2w, w2n_n2w] >> fs[Abbr `sz`] >> decide_tac
+QED
+
+Resume abi_encode_setup_ptr_sequence[none_reused]:
+  qmatch_asmsub_abbrev_tac `Lit (n2w sz)` >>
+  qmatch_goalsub_abbrev_tac `mk_inst _ ALLOCA [Lit (n2w sz)] [x]` >>
+  qmatch_goalsub_abbrev_tac `mk_inst _ ADD [Var x; Lit 32w] [y]` >>
+  `x <> y` by simp[Abbr `x`, Abbr `y`] >>
+  qabbrev_tac `u = update_var x (n2w p) initial` >>
+  `step_inst_base (mk_inst st.cs_next_id ALLOCA [Lit (n2w sz)] [x]) initial = OK u` by
+    (simp[Abbr `u`] >> irule reused_alloca_step >> simp[]) >>
+  drule reused_alloca_ghost >>
+  disch_then (qspecl_then [`x`, `PG`, `G`, `tn`] strip_assume_tac) >>
+  `step_inst_base (mk_inst (st.cs_next_id+1) ADD [Var x; Lit 32w] [y]) u =
+    OK (update_var y (n2w p + 32w) u)` by
+    (irule step_ADD >> simp[Abbr `u`, eval_operand_def, lookup_var_def,
+      update_var_def, FLOOKUP_UPDATE]) >>
+  gvs[run_inst_seq_def, GSYM markerTheory.Abbrev_def] >>
+  simp[Once inst_seq_ptr_def, literal_alloca_ptr_inst_ok] >>
+  `lookup_var x (u with vs_inst_idx := SUC initial.vs_inst_idx) = SOME (n2w p)` by
+    simp[Abbr `u`, lookup_var_def, update_var_def, FLOOKUP_UPDATE] >>
+  `FLOOKUP (G |+ (x,(p,sz))) x = SOME (p,sz)` by simp[FLOOKUP_UPDATE] >>
+  `op_taint (tn with t_var := tn.t_var |+ (x,{})) (Var x) = {}` by
+    simp[op_taint_def, FLOOKUP_UPDATE] >>
+  simp[setup_add_continuation, FLOOKUP_UPDATE] >>
+  simp[inst_seq_ptr_def] >>
+  `p < dimword (:256)` by decide_tac >>
+  `p + 32 < dimword (:256)` by (fs[Abbr `sz`] >> decide_tac) >>
+  simp[ptr_covers_def, op_taint_def, lookup_var_def, update_var_def,
+    FLOOKUP_UPDATE, Abbr `u`, word_add_n2w, w2n_n2w] >>
+  qspec_then `maxlen` assume_tac abi_builtin_word_size_capacity >>
+  fs[Abbr `sz`] >> decide_tac
+QED
+
+Resume abi_encode_setup_ptr_sequence[some_fresh]:
+  qmatch_asmsub_abbrev_tac `Lit (n2w sz)` >>
+  qmatch_goalsub_abbrev_tac `mk_inst _ ALLOCA [Lit (n2w sz)] [a]` >>
+  qmatch_goalsub_abbrev_tac `mk_inst _ ADD [Var a; Lit 36w] [b]` >>
+  qmatch_goalsub_abbrev_tac `mk_inst _ ADD [Var a; Lit 32w] [c]` >>
+  `a <> b /\ a <> c /\ b <> c` by simp[Abbr `a`, Abbr `b`, Abbr `c`] >>
+  `sz < dimword (:256)` by decide_tac >>
+  qabbrev_tac `u = update_var a (n2w initial.vs_alloca_next)
+    (initial with <|vs_allocas := initial.vs_allocas |+
+      (st.cs_next_id,(initial.vs_alloca_next,sz));
+      vs_alloca_next := initial.vs_alloca_next + sz|>)` >>
+  `step_inst_base (mk_inst st.cs_next_id ALLOCA [Lit (n2w sz)] [a]) initial = OK u` by
+    simp[Abbr `u`, Once step_inst_base_def, exec_alloca_def, mk_inst_def,
+      eval_operand_def, w2n_n2w] >>
+  drule_all fresh_alloca_ghost >>
+  disch_then (qspecl_then [`PG`, `G`, `tn`] strip_assume_tac) >>
+  fs[run_inst_seq_def] >>
+  simp[Once inst_seq_ptr_def, literal_alloca_ptr_inst_ok] >>
+  `?H tf. inst_seq_ptr D 0 ctx func PG
+      (G |+ (a,(initial.vs_alloca_next,sz)))
+      (tn with <|t_mem := tn.t_mem UNION
+        {i | initial.vs_alloca_next <= i /\ i < initial.vs_alloca_next+sz};
+        t_var := tn.t_var |+ (a,{})|>)
+      [mk_inst (st.cs_next_id+1) ADD [Var a; Lit 36w] [b];
+       mk_inst (st.cs_next_id+2) ADD [Var a; Lit 32w] [c];
+       mk_inst (st.cs_next_id+3) MSTORE [Var c; Lit (x << 224)] []]
+      (u with vs_inst_idx := SUC initial.vs_inst_idx) H tf /\
+      ptr_covers H tf a raw sz /\ op_taint tf (Var b) = {} /\
+      ptr_covers H tf b raw n` suffices_by (simp[ADD_COMM] >> metis_tac[]) >>
+  irule setup_method_suffix >>
+  simp[Abbr `u`, lookup_var_def, update_var_def, FLOOKUP_UPDATE, op_taint_def] >>
+  conj_tac >- (fs[Abbr `sz`] >>
+    qspec_then `maxlen+4` assume_tac abi_builtin_word_size_capacity >>
+    Cases_on `word_size (maxlen+4)` >> fs[]) >>
+  conj_tac >- (fs[Abbr `sz`] >>
+    qspec_then `maxlen+4` assume_tac abi_builtin_word_size_capacity >> decide_tac) >>
+  fs[run_inst_seq_def, update_var_def]
+QED
+
+Resume abi_encode_setup_ptr_sequence[some_reused]:
+  qmatch_asmsub_abbrev_tac `Lit (n2w sz)` >>
+  qmatch_goalsub_abbrev_tac `mk_inst _ ALLOCA [Lit (n2w sz)] [a]` >>
+  qmatch_goalsub_abbrev_tac `mk_inst _ ADD [Var a; Lit 36w] [b]` >>
+  qmatch_goalsub_abbrev_tac `mk_inst _ ADD [Var a; Lit 32w] [c]` >>
+  `a <> b /\ a <> c /\ b <> c` by simp[Abbr `a`, Abbr `b`, Abbr `c`] >>
+  qabbrev_tac `u = update_var a (n2w p) initial` >>
+  `step_inst_base (mk_inst st.cs_next_id ALLOCA [Lit (n2w sz)] [a]) initial = OK u` by
+    (simp[Abbr `u`] >> irule reused_alloca_step >> simp[]) >>
+  drule reused_alloca_ghost >>
+  disch_then (qspecl_then [`a`, `PG`, `G`, `tn`] strip_assume_tac) >>
+  fs[run_inst_seq_def] >>
+  simp[Once inst_seq_ptr_def, literal_alloca_ptr_inst_ok] >>
+  `?H tf. inst_seq_ptr D 0 ctx func PG (G |+ (a,(p,sz)))
+      (tn with t_var := tn.t_var |+ (a,{}))
+      [mk_inst (st.cs_next_id+1) ADD [Var a; Lit 36w] [b];
+       mk_inst (st.cs_next_id+2) ADD [Var a; Lit 32w] [c];
+       mk_inst (st.cs_next_id+3) MSTORE [Var c; Lit (x << 224)] []]
+      (u with vs_inst_idx := SUC initial.vs_inst_idx) H tf /\
+      ptr_covers H tf a raw sz /\ op_taint tf (Var b) = {} /\
+      ptr_covers H tf b raw n` suffices_by metis_tac[] >>
+  irule setup_method_suffix >>
+  simp[Abbr `u`, lookup_var_def, update_var_def, FLOOKUP_UPDATE, op_taint_def] >>
+  conj_tac >- (fs[Abbr `sz`] >>
+    qspec_then `maxlen+4` assume_tac abi_builtin_word_size_capacity >>
+    Cases_on `word_size (maxlen+4)` >> fs[]) >>
+  conj_tac >- (fs[Abbr `sz`] >>
+    qspec_then `maxlen+4` assume_tac abi_builtin_word_size_capacity >> decide_tac) >>
+  fs[run_inst_seq_def, update_var_def]
+QED
+Finalise abi_encode_setup_ptr_sequence
