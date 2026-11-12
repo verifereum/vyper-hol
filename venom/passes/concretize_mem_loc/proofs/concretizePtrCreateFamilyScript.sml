@@ -286,7 +286,7 @@ Proof
   conj_tac >- metis_tac[arithmeticTheory.ADD_COMM] >>
   conj_tac >- (qexists_tac `n` >> simp[]) >>
   goal_assum (drule_at (Pat `ptr_paired_prefix _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _`)) >>
-  rpt (goal_assum (drule_at Any)) >> simp[]
+  rpt (goal_assum (drule_at Any)) >> simp[] >> fs[]
 QED
 
 Theorem ptr_create_family_scalar_provenance[local]:
