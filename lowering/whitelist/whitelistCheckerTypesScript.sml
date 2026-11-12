@@ -381,9 +381,44 @@ Proof
   Cases_on `blt` >> rw[well_typed_builtin_app_def] >> simp[]
 QED
 
-(* Row 42 (copies and shape): a literal is typed at a tuple of its element
-   types or at an array of their common type, so supported_literal_elements
-   reduces to the element-type parts. *)
+Theorem scalar_arg_type_fits_copy[local]:
+  supported_scalar_type dst /\ arg_type_fits src dst ==>
+  supported_copy_types dst src
+Proof
+  rw[supported_scalar_type_def]
+  >- (`is_prim_word_type dst` by
+        (Cases_on `dst` >> gvs[supported_word_type_def] >>
+         rename1 `BaseT bt` >> Cases_on `bt` >>
+         gvs[supported_word_type_def, is_prim_word_type_def] >>
+         rename1 `BytesT bound` >> Cases_on `bound` >> gvs[supported_word_type_def, is_prim_word_type_def]) >>
+      metis_tac[vyperTypeArgFitsTheory.arg_type_fits_prim_word,
+                supported_copy_types_refl]) >>
+  `(?n. dst = BaseT (StringT n)) \/
+   (?n. dst = BaseT (BytesT (Dynamic n)))` by
+    (Cases_on `dst` >> gvs[supported_string_type_def] >>
+     rename1 `BaseT bt` >> Cases_on `bt` >>
+     gvs[supported_string_type_def] >>
+     rename1 `BytesT bound` >> Cases_on `bound` >> gvs[supported_string_type_def]) >>
+  gvs[] >> Cases_on `src` >>
+  gvs[arg_type_fits_def, supported_copy_types_def] >>
+  rename1 `arg_type_fits (BaseT sbt) _` >> Cases_on `sbt` >>
+  gvs[arg_type_fits_def, supported_copy_types_def] >>
+  rename1 `arg_type_fits (BaseT (BytesT srcbound)) _` >>
+  Cases_on `srcbound` >> gvs[arg_type_fits_def, supported_copy_types_def]
+QED
+
+Theorem scalar_arg_types_fit_copy[local]:
+  !dsts srcs. EVERY supported_scalar_type dsts /\
+    LIST_REL arg_type_fits srcs dsts ==>
+    LIST_REL supported_copy_types dsts srcs
+Proof
+  Induct >> Cases_on `srcs` >> simp[] >>
+  metis_tac[scalar_arg_type_fits_copy]
+QED
+
+(* Row 42 (copies and shape): arrays use the explicit copy premise;
+   supported tuples have scalar destinations, where argument fitting
+   implies copy compatibility even when byte bounds widen. *)
 Theorem well_typed_make_array_literal_elements:
   well_typed_builtin_app ty (MakeArray eo bd) (MAP expr_type es) /\
   (!t b. ty = ArrayT t b ==>
@@ -394,17 +429,36 @@ Theorem well_typed_make_array_literal_elements:
 Proof
   Cases_on `eo` >> rw[well_typed_builtin_app_def] >>
   simp[supported_literal_elements_def]
-  >- (`LIST_REL supported_copy_types (MAP expr_type es) (MAP expr_type es)`
-        by (irule EVERY2_refl >> simp[supported_copy_types_refl]) >>
-      simp[])
-  >> gvs[EVERY_MAP, EVERY_MEM] >> eq_tac >> rw[] >> res_tac >>
-  gvs[supported_copy_types_refl]
+  >- (eq_tac >> rw[] >>
+      irule scalar_arg_types_fit_copy >>
+      gvs[supported_tuple_type_def,
+          vyperTypeArgFitsTheory.arg_types_fit_LIST_REL]) >>
+  gvs[EVERY_MAP, EVERY_MEM] >> eq_tac >> rw[] >>
+  metis_tac[]
 QED
 
 (* Row 43 (copies): a struct literal lists the declared fields in order at
    their declared types, so supported_struct_elements reduces to the place
    type.  Field names are distinct by check_contract_struct_fields_distinct
    (with abi_caller_type_env_struct). *)
+(* Diagnostic: the frozen struct equivalence rejects aggregate widening
+   which the typing producer accepts. *)
+Theorem struct_literal_widening_counterexample[local]:
+  let tops = [StructDecl "S"
+        [("a", ArrayT (BaseT (UintT 256)) (Dynamic 2))]];
+      ty = StructT (NONE, "S");
+      kes = [("a", Name (ArrayT (BaseT (UintT 256)) (Dynamic 1)) "x")];
+      env = ARB with <| type_defs := type_env tops;
+        var_types := FEMPTY |+ ("x", ArrayT (BaseT (UintT 256)) (Dynamic 1)) |>
+  in well_typed_expr env (StructLit ty (NONE, "S") kes) /\
+     env.type_defs = type_env tops /\ ALL_DISTINCT (MAP FST kes) /\
+     supported_place_type tops ty /\
+     ~supported_struct_elements tops ty kes
+Proof
+  EVAL_TAC >>
+  simp[wordsTheory.dimword_def, type_slot_size_def, arg_type_fits_def]
+QED
+
 Theorem well_typed_struct_lit_elements:
   well_typed_expr env (StructLit ty nsid kes) /\
   env.type_defs = type_env tops /\ ALL_DISTINCT (MAP FST kes) ==>
