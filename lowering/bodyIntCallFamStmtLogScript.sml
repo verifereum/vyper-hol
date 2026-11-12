@@ -58,9 +58,7 @@ Proof
   suspend "compose"
 QED
 
-(* HELD (train 15): log_eval_view port (train 17) *)
 Resume intcall_log_stmt_step[compose]:
-  (* original proof, kept while held:
   `~fp.jc_cx.txn.is_static` by
     fs[intcall_joint_res_def, intcall_expr_res_def, exprLoweringPropsTheory.stmt_state_rel_def,
        state_rel_def] >>
@@ -95,8 +93,6 @@ Resume intcall_log_stmt_step[compose]:
   goal_assum (drule_at Any) >> simp[] >>
   rpt gen_tac >> strip_tac >> gvs[] >>
   simp[stmt_lands_def, cenv_top_ext_refl]
-  *)
-  cheat
 QED
 
 Finalise intcall_log_stmt_step
