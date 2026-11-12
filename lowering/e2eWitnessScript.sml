@@ -712,7 +712,7 @@ Proof
   irule gas_readings_rel_empty >>
   rpt strip_tac >>
   simp[call_result_rel_at_def, p23_call_trace, LET_THM] >>
-  simp[p23_src_call_eval, call_success_rel_def] >>
+  simp[p23_src_call_eval, call_success_rel_def] >> rpt strip_tac >>
   qexists `word_to_bytes (42w:bytes32) T` >>
   conj_tac >- (
     simp[frame_outcome_def, p23_es_call_from_post, p23_es_call_of_def,
