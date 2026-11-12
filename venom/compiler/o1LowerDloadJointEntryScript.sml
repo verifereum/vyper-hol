@@ -139,7 +139,8 @@ Proof
     gvs[o1_run_state_ok_def, unitTransformDefsTheory.o1_initial_state_ok_def] >>
   `occurrence_annotation_ok (dyn_floor C vs) 1 0 [] FEMPTY [] FEMPTY [] []
      FEMPTY s1` by
-    metis_tac[o1LowerDloadOccurrenceTheory.occ_frame_reachable_annotation] >>
+    (drule o1LowerDloadOccurrenceTheory.occ_frame_reachable_annotation >>
+     rpt strip_tac >> first_x_assum irule >> simp[] >> metis_tac[]) >>
   `raw_reachable vs C fn inst s1` by
     (irule contextRawReachableTheory.raw_reachable_entry >> metis_tac[]) >>
   `s1.vs_alloca_next < dimword (:256)` by
