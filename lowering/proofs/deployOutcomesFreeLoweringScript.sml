@@ -4,6 +4,13 @@ Ancestors
 
 (* Instruction predicates are kept generic: the constructor application
    instantiates P with exclusion of the six oracle/call opcodes. *)
+Theorem outcomes_free_all_blocks:
+  EVERY P (state_insts s) <=>
+  EVERY (\bb. EVERY P bb.bb_instructions) (all_blocks s)
+Proof
+  simp[state_insts_def, EVERY_FLAT, EVERY_MAP]
+QED
+
 Theorem outcomes_free_state_insts:
   EVERY P (state_insts s) <=>
   EVERY (\bb. EVERY P bb.bb_instructions) s.cs_blocks /\
