@@ -65,18 +65,18 @@ Theorem dload_boundary_core_shift:
   s.vs_labels = t.vs_labels /\
   (!v. MEM (Var v) i.inst_operands ==> v IN V /\ v IN U) /\
   (!v. v IN U ==> (lookup_var v s = NONE <=> lookup_var v t = NONE)) /\
-  dload_boundary_core lo fs V Ws PG PH G H tn un s t cs ds /\
+  dload_boundary_core fl lo fs V Ws PG PH G H tn un s t cs ds /\
   step_inst fuel Ct i t = OK t' ==>
   ?s'. step_inst fuel Cs i s = OK s' /\
     (!v. v IN U ==> (lookup_var v s' = NONE <=> lookup_var v t' = NONE)) /\
-    dload_boundary_core lo fs V Ws PG PH
+    dload_boundary_core fl lo fs V Ws PG PH
       (step_prov PG G i s') (step_prov PH H i t')
       (step_taint i s s' tn) (step_taint i t t' un) s' t' cs ds /\
     s' = s with vs_vars := s'.vs_vars /\
     t' = t with vs_vars := t'.vs_vars
 Proof
   disch_then (map_every assume_tac o CONJUNCTS) >>
-  `dload_vars_match fs V G H tn un s t` by
+  `dload_vars_match fl fs V G H tn un s t` by
     metis_tac[dload_boundary_vars] >>
   drule shift_step_success >> disch_then (drule o iffLR) >>
   strip_tac >> gnvs[] >>
@@ -91,7 +91,7 @@ Proof
   `?w. eval_operand b s = SOME w /\ op_taint tn b = op_taint un b /\
        word_agree_except (op_taint tn b) w y` by
     (irule scalar_matched_data >>
-     qexistsl [`G`,`H`,`V`,`fs`,`t`] >> simp[] >> metis_tac[MEM]) >>
+     qexistsl [`G`,`H`,`V`,`fl`,`fs`,`t`] >> simp[] >> metis_tac[MEM]) >>
   qexists `update_var out
     (if i.inst_opcode = SHL then word_lsl w (w2n x)
      else if i.inst_opcode = SHR then word_lsr w (w2n x)
@@ -122,7 +122,7 @@ Proof
        (shift_taint i.inst_opcode (w2n x) (op_taint un b))` by
     (irule shift_ghost_updates >> simp[]) >>
   simp[update_var_def] >>
-  `dload_vars_match fs V (set_prov G [out] NONE) (set_prov H [out] NONE)
+  `dload_vars_match fl fs V (set_prov G [out] NONE) (set_prov H [out] NONE)
     (tn with t_var := set_var_taint tn.t_var [out]
       (shift_taint i.inst_opcode (w2n x) (op_taint tn b)))
     (un with t_var := set_var_taint un.t_var [out]
@@ -142,13 +142,13 @@ Theorem dload_boundary_core_shift_index:
   s.vs_labels = t.vs_labels /\
   (!v. MEM (Var v) i.inst_operands ==> v IN V /\ v IN U) /\
   (!v. v IN U ==> (lookup_var v s = NONE <=> lookup_var v t = NONE)) /\
-  dload_boundary_core lo fs V Ws PG PH G H tn un s t cs ds /\
+  dload_boundary_core fl lo fs V Ws PG PH G H tn un s t cs ds /\
   step_inst fuel Ct i t = OK t' ==>
   ?s'. step_inst fuel Cs i s = OK s' /\
     (!v. v IN U ==>
       (lookup_var v (s' with vs_inst_idx := SUC s.vs_inst_idx) = NONE <=>
        lookup_var v (t' with vs_inst_idx := SUC t.vs_inst_idx) = NONE)) /\
-    dload_boundary_core lo fs V Ws PG PH
+    dload_boundary_core fl lo fs V Ws PG PH
       (step_prov PG G i s') (step_prov PH H i t')
       (step_taint i s s' tn) (step_taint i t t' un)
       (s' with vs_inst_idx := SUC s.vs_inst_idx)

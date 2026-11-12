@@ -170,7 +170,7 @@ Theorem dload_actual_assign_next:
   frame_reachable vs C' ds PH H un g i t /\
   dload_control_match q f g s t i [i] 0 /\ i.inst_opcode = ASSIGN /\
   ALL_DISTINCT (MAP (\bb. bb.bb_label) g.fn_blocks) /\
-  dload_boundary_core lo fs {v | ~retpc_var f v} Ws PG PH G H tn un s t cs ds /\
+  dload_boundary_core fl lo fs {v | ~retpc_var f v} Ws PG PH G H tn un s t cs ds /\
   (!v. v IN {v | ?ci. MEM ci (fn_insts f) /\
            (MEM v ci.inst_outputs \/ MEM (Var v) ci.inst_operands)} ==>
        (lookup_var v s = NONE <=> lookup_var v t = NONE)) /\
@@ -184,7 +184,7 @@ Theorem dload_actual_assign_next:
       (s1 with vs_inst_idx := SUC s.vs_inst_idx)
       (t1 with vs_inst_idx := SUC t.vs_inst_idx) i' emitted' 0 /\
     j = HD emitted' /\
-    dload_boundary_core lo fs {v | ~retpc_var f v} Ws PG PH
+    dload_boundary_core fl lo fs {v | ~retpc_var f v} Ws PG PH
       (step_prov PG G i s1) (step_prov PH H i t1)
       (step_taint i s s1 tn) (step_taint i t t1 un)
       (s1 with vs_inst_idx := SUC s.vs_inst_idx)
@@ -292,7 +292,7 @@ Theorem dload_actual_scalar_next:
   access_ok lo G f i s /\ taint_ok f tn i s /\
   (!v. MEM (Var v) i.inst_operands ==> ~retpc_var f v) /\
   ALL_DISTINCT (MAP (\bb. bb.bb_label) g.fn_blocks) /\
-  dload_boundary_core lo fs {v | ~retpc_var f v} Ws PG PH G H tn un s t cs ds /\
+  dload_boundary_core fl lo fs {v | ~retpc_var f v} Ws PG PH G H tn un s t cs ds /\
   (!v. v IN {v | ?ci. MEM ci (fn_insts f) /\
            (MEM v ci.inst_outputs \/ MEM (Var v) ci.inst_operands)} ==>
        (lookup_var v s = NONE <=> lookup_var v t = NONE)) /\
@@ -306,7 +306,7 @@ Theorem dload_actual_scalar_next:
       (s1 with vs_inst_idx := SUC s.vs_inst_idx)
       (t1 with vs_inst_idx := SUC t.vs_inst_idx) i' emitted' 0 /\
     j = HD emitted' /\
-    dload_boundary_core lo fs {v | ~retpc_var f v} Ws PG PH
+    dload_boundary_core fl lo fs {v | ~retpc_var f v} Ws PG PH
       (step_prov PG G i s1) (step_prov PH H i t1)
       (step_taint i s s1 tn) (step_taint i t t1 un)
       (s1 with vs_inst_idx := SUC s.vs_inst_idx)
