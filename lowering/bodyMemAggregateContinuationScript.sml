@@ -35,7 +35,8 @@ Theorem aggregate_rebased_marked_read_mem_capacity:
               w2n sw + type_memory_size tvt <= u.vs_alloca_next) /\
     u.vs_current_bb = su.cs_current_bb /\
     u.vs_inst_idx = LENGTH su.cs_current_insts /\
-    alloca_history func u /\ r.vs_alloca_next <= u.vs_alloca_next
+    alloca_history func u /\ r.vs_alloca_next <= u.vs_alloca_next /\
+    u.vs_accounts = r.vs_accounts /\ u.vs_transient = r.vs_transient /\ u.vs_requests = r.vs_requests /\ u.vs_call_ctx = r.vs_call_ctx
 Proof
   strip_tac >>
   drule vv_post_rebase >> strip_tac >>
