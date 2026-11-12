@@ -74,7 +74,7 @@ Proof
      qexists_tac `sa` >> simp[]) >>
   conj_tac
   >- (irule abi_decode_result_wb_frame >>
-      simp[] >> qexistsl_tac [`k`, `a`, `es`, `s`, `sa`, `u`] >> simp[] >>
+      simp[] >> qexistsl_tac [`k`, `a`, `s`, `sa`, `u`] >> simp[] >>
       rpt conj_tac >> first_assum ACCEPT_TAC) >>
   conj_tac >- simp[] >>
   conj_tac >- first_assum ACCEPT_TAC >>

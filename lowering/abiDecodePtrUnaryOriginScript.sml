@@ -50,10 +50,9 @@ Theorem type_builtin_unary_vv_sim_ptr_origin:
         ghost_kept cenv es sa G0 tn0 s0 G' tn')
       (\res ef gt r. expr_exit res r)) \/
     (?err. evaluate_type_builtin cx tb typ [expr_type e] [v] = INR err /\
-      ((tb = Convert /\ err = RuntimeError "convert empty bytes to signed") \/
-       (?unwrap. tb = AbiDecode unwrap /\ err = RuntimeError "abi_decode invalid" /\
-         ?target_ty. occurs_abi_decode_target target_ty (cx_tops cx) /\
-           is_dynamic (vyper_to_abi_type (type_env (cx_tops cx)) target_ty))))) ==>
+      ?unwrap. tb = AbiDecode unwrap /\ err = RuntimeError "abi_decode invalid" /\
+        ?target_ty. occurs_abi_decode_target target_ty (cx_tops cx) /\
+          is_dynamic (vyper_to_abi_type (type_env (cx_tops cx)) target_ty))) ==>
   expr_vv_sim_ptr d ctx PG func cenv cx ty (TypeBuiltin ann tb typ [e]) es
 Proof
   disch_then (map_every assume_tac o CONJUNCTS) >>
