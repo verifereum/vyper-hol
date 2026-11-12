@@ -103,7 +103,7 @@ Theorem vyper_call_correct_at_marks:
     codegen_assembly rpolicy out.po_unit = SOME prog /\
     generate_context_plan out.po_unit.cu_context = SOME cp /\
     gas_variant vs (entry_venom_state prog cp es) /\
-    (!H. raw_unit_memory_ok unit.cu_context vs /\
+    (!H:(bool # bytes32 # type_value) list # num list. raw_unit_memory_ok unit.cu_context vs /\
          ptr_discipline 0 unit.cu_context vs /\
          taint_within (cx_dead H (initial_evaluation_context am.sources am.layouts tx NONE))
            unit.cu_context vs /\
