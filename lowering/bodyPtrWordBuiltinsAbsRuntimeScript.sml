@@ -327,6 +327,7 @@ Proof
     [``package_external_fn``, ``run_lowering``, ``build_selectors``,
      ``package_fallback_fn``, ``fn_allocs_ok``, ``word_abs_runtime_expr``,
      ``fn_has_code``]) >>
+  simp[constSubstTheory.subst_consts_expr_empty] >>
   pure_rewrite_tac [set_external_package_target_all,
     set_fallback_package_target_all, GSYM word_abs_runtime_tops_def,
     GSYM word_abs_runtime_source_def, word_abs_runtime_package,
