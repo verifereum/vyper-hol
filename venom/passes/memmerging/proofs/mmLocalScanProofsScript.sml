@@ -16425,6 +16425,53 @@ Proof
   metis_tac[arithmeticTheory.LESS_IMP_LESS_OR_EQ]
 QED
 
+Theorem mm_local_mem2mem_nonterminator_stopping_boundary[local]:
+  wf_ssa fn0 /\ fn_inst_wf fn0 /\ wf_function fn0 /\
+  ir_supply_covers_fn supply fn0 /\ index < LENGTH fn0.fn_blocks /\
+  k <= 4 /\ mm_local_prefix fn0 supply index k = (bb,sk) /\
+  is = bb.bb_instructions /\ n < LENGTH is /\
+  gs = (scan_block (dfg_build_function fn0) Mem2Mem bb).ss_flushed /\
+  ns = nop_ids_of_groups (dfg_build_function fn0) Mem2Mem is gs /\
+  rs = rep_map_of_groups is gs /\
+  deleted = {v | ?q. MEM q is /\ MEM q.inst_id ns /\ MEM v q.inst_outputs} /\
+  excluded = {v | ~MEM v sk.irs_used_vars \/ v IN deleted} /\
+  mm_local_cut is gs H n excluded pc t /\
+  ~is_terminator (EL n is).inst_opcode /\
+  ~(?err. step_inst fuel ctx (EL n is) (H n) = Error err) /\
+  ~(?u. step_inst fuel ctx (EL n is) (H n) = OK u) ==>
+  (!es. apply_groups_inst_supply Mem2Mem ns rs es (EL n is) = ([EL n is],es)) /\
+  lift_result (\_ _. F) (execution_equiv excluded) revert_equiv
+    (step_inst fuel ctx (EL n is) (H n)) (step_inst fuel ctx (EL n is) t)
+Proof
+  strip_tac >>
+  `(EL n is).inst_opcode <> MSTORE /\
+   (EL n is).inst_opcode <> MCOPY /\ (EL n is).inst_opcode <> MLOAD` by
+    (Cases_on `(EL n is).inst_opcode = INVOKE` >- gvs[] >>
+     Cases_on `step_inst fuel ctx (EL n is) (H n)` >> gvs[]
+     >- (drule opcodeClassTheory.step_inst_halt_opcodes >> strip_tac >> gvs[])
+     >- (drule opcodeClassTheory.step_inst_abort_opcodes >> strip_tac >> gvs[])
+     >- (gvs[venomExecSemanticsTheory.step_inst_non_invoke] >>
+         drule opcodeClassTheory.step_inst_base_intret_opcodes >> strip_tac >> gvs[])) >>
+  `ALL_DISTINCT (MAP (\i. i.inst_id) bb.bb_instructions)` by
+    metis_tac[mm_local_prefix_wf_id_distinct] >>
+  `!es. apply_groups_inst_supply Mem2Mem ns rs es (EL n is) = ([EL n is],es)` by
+    (gvs[] >> irule mm_local_prefix_nonselected_unchanged >>
+     simp[mode_copy_opcode_def, mode_load_opcode_def, EL_MEM] >> metis_tac[]) >>
+  `!v. MEM (Var v) (EL n is).inst_operands ==> v NOTIN excluded` by
+    (qx_gen_tac `v` >> disch_tac >> irule (cj 3 mm_local_retained_operand_protected) >>
+     gvs[] >> metis_tac[EL_MEM, venomWfPropsTheory.operand_var_in_inst_uses]) >>
+  gvs[] >> irule mm_local_cut_nonterminator_stop >>
+  simp[] >>
+  qexistsl [`(scan_block (dfg_build_function fn0) Mem2Mem bb).ss_flushed`,
+    `bb.bb_instructions`,`pc`] >> simp[] >>
+  strip_tac >> irule mm_local_hard_barrier_pending_empty >>
+  simp[] >>
+  qexistsl [`bb`,`fn0`,`index`,`k`,`sk`,`supply`] >>
+  simp[scan_inst_def, mode_copy_opcode_def, mode_load_opcode_def,
+    is_volatile_memory_def, venomEffectsTheory.read_effects_def,
+    venomEffectsTheory.write_effects_def, venomEffectsTheory.all_effects_def]
+QED
+
 Theorem mm_local_stage_correct:
   !fn0 supply index k bb sk fn bb' sk' fn'.
   fn_inst_wf fn0 /\ wf_function fn0 /\ wf_ssa fn0 /\ all_reachable fn0 /\
