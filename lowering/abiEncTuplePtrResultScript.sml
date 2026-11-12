@@ -6,7 +6,7 @@ Ancestors
   abiDecodePtrResultPost abiDecodePtrFlatValue exprSimAbiEncodeTupleResult
   abiBuiltinAllocation exprSimProps exprSimHyps bodyPtrDefs loweringPosts
   valueEncodingDefs valueEncoding valueEncodingProps vyperValue vyperAST
-  vyperInterpreter compileEnv context words list arithmetic
+  vyperInterpreter vyperTypeSystem compileEnv context words list arithmetic
 
 Theorem abi_encode_tuple_result_robust:
   well_typed_type_builtin_args (AbiEncode ensure mid0) target tys /\
@@ -22,15 +22,17 @@ Theorem abi_encode_tuple_result_robust:
     val_in_memory (BaseTV (BytesT (Dynamic N)))
       (BytesV (abi_encode_method_id_bytes mid0 ++ bytes)) p mem
 Proof
-  strip_tac >> irule clean_footprint_value_robust >>
+  strip_tac >> match_mp_tac clean_footprint_value_robust >>
   conj_tac >- (irule abi_encode_tuple_result_memory >>
-    goal_assum (drule_at Any) >> simp[] >> metis_tac[]) >>
+    metis_tac[]) >>
   conj_tac
   >- (simp[val_wf_def, type_memory_size_def] >>
-      mp_tac (Q.SPEC `N` abi_builtin_word_size_capacity) >> decide_tac) >>
+      mp_tac (Q.SPEC `N` abi_builtin_word_size_capacity) >>
+      gvs[LENGTH_APPEND] >> decide_tac) >>
   Cases_on `mid0` >>
-  gvs[abi_encode_method_id_bytes_def, val_footprint_def] >>
-  rpt strip_tac >> first_x_assum irule >> decide_tac
+  gvs[abi_encode_method_id_bytes_def, val_footprint_def,
+      well_typed_type_builtin_args_def] >>
+  rpt strip_tac >> metis_tac[]
 QED
 
 Theorem abi_encode_bytes_pointer_posts:
