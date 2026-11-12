@@ -143,6 +143,9 @@ QED
 (* PORT_ADMISSION SEQ-4381: whole aggregate Append lemma, including static
    types: the old path uses dense FOLDL and the one-word direct store still
    needs a separate proof. Sparse Append repair remains owned separately.
+   Original source: cd551fbe8, body_append_storage_aggregate_fragment.
+   Truth boundary: "TRUE as stated on 67c6f13fd." The existing body_inv
+   and expr_sim_inv supply acyclic struct metadata and field consistency.
    Original proof retained below.
 
 Proof
