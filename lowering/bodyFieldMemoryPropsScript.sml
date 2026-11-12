@@ -62,10 +62,10 @@ Theorem attr_add_run_post:
   compile_expr cenv ty e sa = (vv,sm) /\ local_ptrs_reserved cenv sa /\
   sa.cs_next_var <= sm.cs_next_var /\
   emit_op ADD [vv_operand vv; Lit (n2w off)] sm = (dst,sn) /\
-  vv_post ctx func cenv cx e es sa sm s0 es' tv vv s /\
+  vv_post H ctx func cenv cx e es sa sm s0 es' tv vv s /\
   eval_operand (vv_operand vv) s = SOME w ==>
   ?q. run_inst_seq (emitted_insts sm sn) s = OK q /\
-      vv_post ctx func cenv cx e es sa sn s0 es' tv vv q /\
+      vv_post H ctx func cenv cx e es sa sn s0 es' tv vv q /\
       eval_operand (vv_operand vv) q = SOME w /\
       eval_operand dst q = SOME (w + n2w off) /\
       q.vs_allocas = s.vs_allocas /\ q.vs_alloca_next = s.vs_alloca_next
@@ -114,9 +114,9 @@ Theorem attr_add_frag_mem_at:
   emit_op ADD [vv_operand vv; Lit (n2w off)] sm = (dst,sn) /\
   fn_has_code sm sn func /\ fn_inst_ids_distinct func ==>
   frag_exec_mem ctx sm sn
-    (\s. s = entry /\ vv_post ctx func cenv cx e es sa sm s0 es' tv vv s /\
+    (\s. s = entry /\ vv_post H ctx func cenv cx e es sa sm s0 es' tv vv s /\
          alloca_history func s)
-    (\s. (?w. vv_post ctx func cenv cx e es sa sn s0 es' tv vv s /\
+    (\s. (?w. vv_post H ctx func cenv cx e es sa sn s0 es' tv vv s /\
                eval_operand (vv_operand vv) s = SOME w /\
                eval_operand dst s = SOME (w + n2w off)) /\
          alloca_history func s /\ s.vs_alloca_next = entry.vs_alloca_next /\
@@ -125,12 +125,12 @@ Proof
   rpt strip_tac >> drule emitted_insts_emit_op >> strip_tac >>
   drule emit_op_extends >> strip_tac >>
   qabbrev_tac `P = \s. s = entry /\
-    vv_post ctx func cenv cx e es sa sm s0 es' tv vv s /\
+    vv_post H ctx func cenv cx e es sa sm s0 es' tv vv s /\
     alloca_history func s /\ ~s.vs_halted /\
     s.vs_current_bb = sm.cs_current_bb /\
     s.vs_inst_idx = LENGTH sm.cs_current_insts` >>
   `frag_exec_mem ctx sm sn P
-    (\s. (?w. vv_post ctx func cenv cx e es sa sn s0 es' tv vv s /\
+    (\s. (?w. vv_post H ctx func cenv cx e es sa sn s0 es' tv vv s /\
                eval_operand (vv_operand vv) s = SOME w /\
                eval_operand dst s = SOME (w + n2w off)) /\
          alloca_history func s /\ s.vs_alloca_next = entry.vs_alloca_next /\
@@ -162,9 +162,9 @@ Theorem attr_add_frag_mem:
   emit_op ADD [vv_operand vv; Lit (n2w off)] sm = (dst,sn) /\
   fn_has_code sm sn func /\ fn_inst_ids_distinct func ==>
   frag_exec_mem ctx sm sn
-    (\s. vv_post ctx func cenv cx e es sa sm s0 es' tv vv s /\
+    (\s. vv_post H ctx func cenv cx e es sa sm s0 es' tv vv s /\
          alloca_history func s)
-    (\s. (?w. vv_post ctx func cenv cx e es sa sn s0 es' tv vv s /\
+    (\s. (?w. vv_post H ctx func cenv cx e es sa sn s0 es' tv vv s /\
                eval_operand (vv_operand vv) s = SOME w /\
                eval_operand dst s = SOME (w + n2w off)) /\
          alloca_history func s) R
@@ -237,7 +237,7 @@ QED
 
 Theorem body_attr_memory_at_field:
   !func cenv cx sid sa sn es1 tv bvv q w dst ann fld fs ftv vals fv tv' ctx.
-    stmt_state_rel ctx func cenv cx es1 q /\
+    stmt_state_rel H ctx func cenv cx es1 q /\
     vv_at cenv cx (StructT sid) sa sn es1 tv bvv q /\
     read_result cx tv es1 = (INL (StructV vals), es1) /\
     read_result cx tv' es1 = (INL fv, es1) /\
@@ -293,7 +293,7 @@ QED
 
 Theorem body_attr_memory_vv_post:
   !func cenv cx obj es sa sn s0 es1 tv bvv q w dst ann fld sid fs ftv tv' ctx.
-    vv_post ctx func cenv cx obj es sa sn s0 es1 tv bvv q /\
+    vv_post H ctx func cenv cx obj es sa sn s0 es1 tv bvv q /\
     eval_operand (vv_operand bvv) q = SOME w /\
     eval_operand dst q =
       SOME (w + n2w (attr_offset cenv (StructT sid) (vv_loc bvv) fld)) /\
@@ -310,11 +310,11 @@ Theorem body_attr_memory_vv_post:
     vv_loc bvv = LocMemory /\
     (!id path'. tv' = PlaceR (MemoryPlace id path') <=>
        ?path. path' = path ++ [AttrSubscript fld] /\ tv = PlaceR (MemoryPlace id path)) ==>
-    vv_post ctx func cenv cx (Attribute ann obj fld) es sa sn s0 es1 tv'
+    vv_post H ctx func cenv cx (Attribute ann obj fld) es sa sn s0 es1 tv'
       (LocatedValue ann (mk_ptr dst (vv_loc bvv))) q
 Proof
   rpt gen_tac >> strip_tac >>
-  qpat_x_assum `vv_post ctx _ _ _ obj _ _ _ _ _ _ _ _`
+  qpat_x_assum `vv_post H ctx _ _ _ obj _ _ _ _ _ _ _ _`
     (strip_assume_tac o REWRITE_RULE [vv_post_def]) >> gvs[] >>
   drule_all body_base_memory_holds_struct >> strip_tac >>
   `value_has_type (StructTV fs) v` by metis_tac[] >>
@@ -357,7 +357,7 @@ Proof
       conj_tac >- metis_tac[] >>
       qexistsl [`fld`, `fs`, `sid`, `tv`, `vals`] >> simp[])
   >~ [`vv_own _ _ _ _ _ _ _ _ _`] >- simp[]
-  >~ [`vv_storage_live _ (LocatedValue _ _) _ _`] >- simp[mk_ptr_def] >>
+  >~ [`vv_storage_live _ _ (LocatedValue _ _) _ _`] >- simp[mk_ptr_def] >>
   TRY (first_assum ACCEPT_TAC) >>
   simp[loweringPostsTheory.expr_has_effect_thm]
 QED
@@ -421,7 +421,7 @@ QED
 
 Theorem body_base_memory_post_read_struct:
   !ctx func cenv cx obj es sa sn s0 es1 tv bvv q w sid fs.
-    vv_post ctx func cenv cx obj es sa sn s0 es1 tv bvv q /\
+    vv_post H ctx func cenv cx obj es sa sn s0 es1 tv bvv q /\
     expr_type obj = StructT sid /\ vv_loc bvv = LocMemory /\
     evaluate_type (get_tenv cx) (StructT sid) = SOME (StructTV fs) /\
     eval_operand (vv_operand bvv) q = SOME w ==>
@@ -480,7 +480,7 @@ Proof
   disch_then (qspecl_then [`sm.cs_next_id`, `out`] assume_tac) >>
   qexists_tac `update_var out (mload (w2n w) s) s` >>
   simp[run_inst_seq_def, Abbr `out`] >>
-  `stmt_state_rel ctx func cenv cx es' s` by fs[vv_post_def] >>
+  `stmt_state_rel H ctx func cenv cx es' s` by fs[vv_post_def] >>
   irule expr_post_of_vv_post_load >>
   conj_tac >- simp[] >>
   conj_tac
@@ -496,9 +496,9 @@ Theorem body_word_load_run_post:
   emit_op MLOAD [p.ptr_operand] sm = (op,sb) /\
   p.ptr_location = LocMemory /\ is_word_type t /\
   local_ptrs_reserved cenv sm /\ sa.cs_next_var <= sm.cs_next_var /\
-  vv_post ctx func cenv cx e es sa sm s0 es' (Value v) (LocatedValue t p) s ==>
+  vv_post H ctx func cenv cx e es sa sm s0 es' (Value v) (LocatedValue t p) s ==>
   ?q. run_inst_seq (emitted_insts sm sb) s = OK q /\
-      expr_post ctx func cenv cx e es sa sb s0 es' v op q /\
+      expr_post H ctx func cenv cx e es sa sb s0 es' v op q /\
       q.vs_allocas = s.vs_allocas /\ q.vs_alloca_next = s.vs_alloca_next
 Proof
   rpt strip_tac >>
@@ -536,24 +536,24 @@ Theorem unwrap_memory_word_sim_mem:
   local_ptrs_reserved cenv sm /\ sa.cs_next_var <= sm.cs_next_var /\
   fn_has_code sm sb func /\ fn_inst_ids_distinct func ==>
   frag_exec_mem ctx sm sb
-    (\s. vv_post ctx func cenv cx e es sa sm s0 es' (Value v)
+    (\s. vv_post H ctx func cenv cx e es sa sm s0 es' (Value v)
             (LocatedValue t p) s /\
          (?w. eval_operand p.ptr_operand s = SOME w /\
               w2n w + 32 <= s.vs_alloca_next) /\
          s0.vs_alloca_next <= s.vs_alloca_next /\ alloca_history func s)
-    (\s. expr_post ctx func cenv cx e es sa sb s0 es' v op s /\
+    (\s. expr_post H ctx func cenv cx e es sa sb s0 es' v op s /\
          s0.vs_alloca_next <= s.vs_alloca_next /\ alloca_history func s) R
 Proof
   strip_tac >> drule emitted_insts_emit_op >> strip_tac >>
   drule emit_op_extends >> strip_tac >>
-  qabbrev_tac `P = \s. vv_post ctx func cenv cx e es sa sm s0 es' (Value v)
+  qabbrev_tac `P = \s. vv_post H ctx func cenv cx e es sa sm s0 es' (Value v)
       (LocatedValue t p) s /\
     (?w. eval_operand p.ptr_operand s = SOME w /\ w2n w + 32 <= s.vs_alloca_next) /\
     s0.vs_alloca_next <= s.vs_alloca_next /\ alloca_history func s /\
     ~s.vs_halted /\ s.vs_current_bb = sm.cs_current_bb /\
     s.vs_inst_idx = LENGTH sm.cs_current_insts` >>
   `frag_exec_mem ctx sm sb P
-    (\s. expr_post ctx func cenv cx e es sa sb s0 es' v op s /\
+    (\s. expr_post H ctx func cenv cx e es sa sb s0 es' v op s /\
          s0.vs_alloca_next <= s.vs_alloca_next /\ alloca_history func s) R`
     suffices_by (simp[frag_exec_mem_def, Abbr `P`] >> metis_tac[]) >>
   irule frag_exec_mem_run_inst_seq >> fs[same_blocks_def] >>
@@ -578,7 +578,7 @@ QED
 
 Theorem body_attribute_name_capacity:
   expr_sim_pre cenv cx env (Name (StructT sid) id) es /\
-  stmt_state_rel ctx func cenv cx es q /\
+  stmt_state_rel H ctx func cenv cx es q /\
   compile_expr cenv ty (Name (StructT sid) id) sa = (bvv,sm) /\
   fields_layout fields fs /\
   evaluate_type (get_tenv cx) (StructT sid) = SOME (StructTV fs) /\
@@ -618,11 +618,11 @@ Theorem body_unwrap_memory_read_mem:
   local_ptrs_reserved cenv sm /\ sa.cs_next_var <= sm.cs_next_var /\
   fn_has_code sm sb func /\ fn_inst_ids_distinct func ==>
   frag_exec_mem ctx sm sb
-    (\s. vv_post ctx func cenv cx e es sa sm s0 es' tv (LocatedValue t p) s /\
+    (\s. vv_post H ctx func cenv cx e es sa sm s0 es' tv (LocatedValue t p) s /\
          (is_word_type t ==> ?w. eval_operand p.ptr_operand s = SOME w /\
                                   w2n w + 32 <= s.vs_alloca_next) /\
          s0.vs_alloca_next <= s.vs_alloca_next /\ alloca_history func s)
-    (\s. expr_post ctx func cenv cx e es sa sb s0 es' v op s /\
+    (\s. expr_post H ctx func cenv cx e es sa sb s0 es' v op s /\
          s0.vs_alloca_next <= s.vs_alloca_next /\ alloca_history func s) R
 Proof
   strip_tac >>
@@ -661,7 +661,7 @@ QED
 
 Theorem body_attribute_name_source:
   expr_body_pre cenv cx env (Attribute ann (Name (StructT sid) id) fld) es /\
-  stmt_state_rel ctx func cenv cx es s ==>
+  stmt_state_rel H ctx func cenv cx es s ==>
   ?entry fs ftv vals fv.
     lookup_scopes id es.scopes = SOME entry /\
     entry.type = StructTV fs /\ entry.value = StructV vals /\
@@ -729,14 +729,14 @@ Theorem attr_add_counted_post:
   compile_expr cenv ty e sa = (vv,sm) /\ local_ptrs_reserved cenv sa /\
   sa.cs_next_var <= sm.cs_next_var /\
   emit_op ADD [vv_operand vv; Lit (n2w off)] sm = (dst,sn) /\
-  vv_post ctx func cenv cx e es sa sm s0 es' tv vv s /\
+  vv_post H ctx func cenv cx e es sa sm s0 es' tv vv s /\
   eval_operand (vv_operand vv) s = SOME w /\
   fn_has_code sm sn func /\ fn_inst_ids_distinct func /\
   alloca_history func s /\ ~s.vs_halted /\
   s.vs_current_bb = sm.cs_current_bb /\
   s.vs_inst_idx = LENGTH sm.cs_current_insts ==>
   ?t. gas_path_mem ctx func s 0 (OK t) /\
-      vv_post ctx func cenv cx e es sa sn s0 es' tv vv t /\
+      vv_post H ctx func cenv cx e es sa sn s0 es' tv vv t /\
       eval_operand (vv_operand vv) t = SOME w /\
       eval_operand dst t = SOME (w + n2w off) /\
       t.vs_current_bb = sn.cs_current_bb /\
@@ -783,8 +783,8 @@ Proof
 QED
 
 Theorem body_field_expr_post_inst_idx[simp]:
-  expr_post ctx func cenv cx e es sa sb s0 es' v op (s with vs_inst_idx := n) <=>
-  expr_post ctx func cenv cx e es sa sb s0 es' v op s
+  expr_post H ctx func cenv cx e es sa sb s0 es' v op (s with vs_inst_idx := n) <=>
+  expr_post H ctx func cenv cx e es sa sb s0 es' v op s
 Proof
   simp[expr_post_def, stmt_state_rel_inst_idx, eval_operand_def,
        lookup_var_def, expr_val_rel_def, expr_val_at_def, expr_val_own_def,
@@ -796,14 +796,14 @@ Theorem body_unwrap_memory_counted_read:
   p.ptr_location = LocMemory /\ read_result cx tv es' = (INL v,es') /\
   local_ptrs_reserved cenv sm /\ sa.cs_next_var <= sm.cs_next_var /\
   fn_has_code sm sb func /\ fn_inst_ids_distinct func /\
-  vv_post ctx func cenv cx e es sa sm s0 es' tv (LocatedValue t p) s /\
+  vv_post H ctx func cenv cx e es sa sm s0 es' tv (LocatedValue t p) s /\
   (is_word_type t ==> ?w. eval_operand p.ptr_operand s = SOME w /\
                           w2n w + 32 <= s.vs_alloca_next) /\
   s0.vs_alloca_next <= s.vs_alloca_next /\ alloca_history func s /\
   ~s.vs_halted /\ s.vs_current_bb = sm.cs_current_bb /\
   s.vs_inst_idx = LENGTH sm.cs_current_insts ==>
   ?u. gas_path_mem ctx func s 0 (OK u) /\
-      expr_post ctx func cenv cx e es sa sb s0 es' v op u /\
+      expr_post H ctx func cenv cx e es sa sb s0 es' v op u /\
       u.vs_current_bb = sb.cs_current_bb /\
       u.vs_inst_idx = LENGTH sb.cs_current_insts /\
       alloca_history func u /\ s0.vs_alloca_next <= u.vs_alloca_next /\
@@ -815,7 +815,7 @@ Proof
    vv_store_bound cx t lt es' (Value v) (LocatedValue t p) s` by
     (rw[vv_store_bound_def] >> gvs[read_result_def, return_def] >>
      metis_tac[]) >>
-  `vv_post ctx func cenv cx e es sa sm s0 es' (Value v) (LocatedValue t p) s` by
+  `vv_post H ctx func cenv cx e es sa sm s0 es' (Value v) (LocatedValue t p) s` by
     metis_tac[vv_post_read_result] >>
   qpat_x_assum `unwrap_value _ _ _ = _` mp_tac >>
   simp[unwrap_value_def] >> Cases_on `is_word_type t` >> simp[]

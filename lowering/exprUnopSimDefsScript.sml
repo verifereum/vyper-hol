@@ -6,18 +6,22 @@ Ancestors
 
 Definition unop_frag_def:
   unop_frag ctx func cenv cx f w1 t res es0 <=>
-    !sa sb x op s0.
+    !st0 sa sb x op s0.
       f x sa = (op, sb) /\ expr_res_ok res /\
       (!z. x = Var z ==> not_fresh_at sa z) /\
       fn_has_code sa sb func /\ fn_inst_ids_distinct func /\
       local_ptrs_reserved cenv sa /\
-      stmt_state_rel ctx func cenv cx es0 s0 /\
+      (!H. valid_horizon cx st0 H es0.storage_trace ==>
+        stmt_state_rel H ctx func cenv cx es0 s0 /\
+        storage_well_formed_on cx es0 (FST H)) /\
       eval_operand x s0 = SOME w1 /\ ~s0.vs_halted /\
       s0.vs_current_bb = sa.cs_current_bb /\
       s0.vs_inst_idx = LENGTH sa.cs_current_insts ==>
       ?r. gas_marked_path F ctx func s0 0 r /\
         ((?s v. r = OK s /\ res = INL v /\
-                 stmt_state_rel ctx func cenv cx es0 s /\
+                 (!H. valid_horizon cx st0 H es0.storage_trace ==>
+                   stmt_state_rel H ctx func cenv cx es0 s /\
+                   storage_well_formed_on cx es0 (FST H)) /\
                  expr_val_rel cx t v op s /\
                  (!z w. not_fresh_at sa z /\ lookup_var z s0 = SOME w ==>
                         lookup_var z s = SOME w) /\

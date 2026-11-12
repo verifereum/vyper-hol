@@ -18,7 +18,7 @@ Theorem array_loop_initialize_mem:
     SOME <|bb_label := entry; bb_instructions :=
       [mk_inst ei ASSIGN [Lit 0w] [idx]; mk_inst ej JMP [Label cond] []]|> /\
   s0.vs_inst_idx = LENGTH pre /\ ~s0.vs_halted /\
-  stmt_state_rel ctx func cenv cx es s0 /\ P es /\
+  stmt_state_rel H ctx func cenv cx es s0 /\ P es /\
   lookup_scopes id es.scopes = NONE /\ name <> id /\
   FLOOKUP cenv.ce_vars name = SOME (PtrVar saved_base arr_sz) /\
   eval_operand saved_base s0 = SOME array_base /\ ret_pc_ok cenv st s0 /\
@@ -86,7 +86,7 @@ Resume array_loop_initialize_mem[finish]:
   suspend "history"
 QED
 Resume array_loop_initialize_mem[invariant]:
-  `stmt_state_rel ctx func cenv cx es (update_var idx 0w (jump_to entry s1))` by
+  `stmt_state_rel H ctx func cenv cx es (update_var idx 0w (jump_to entry s1))` by
     (irule stmt_state_rel_update_var >> simp[stmt_state_rel_jump_to]) >>
   `eval_operand saved_base s1 = SOME array_base` by
     (drule_all exec_alloca_operand_frame >> simp[]) >>
