@@ -419,10 +419,43 @@ End
 
 (* ===== The premises on p23, one by one ===== *)
 
+val p23_check_dep = EVAL ``check_contract T [] 2w [(NONE, p23_tops)]``;
+val p23_check_run = EVAL ``check_contract F [] 2w [(NONE, p23_tops)]``;
+val p23_initial_imms = EVAL
+  ``initial_immutables (type_env_all_modules [(NONE,p23_tops)]) [(NONE,p23_tops)]``;
+
+val p23_constants_eval = EVAL
+  ``evaluate_all_constants
+      (deploy_evaluation_context p23_tops initial_machine_state p23_deploy_tx)
+      (initial_machine_state with
+        <| immutables := [(2w, THE (initial_immutables
+             (type_env_all_modules [(NONE,p23_tops)]) [(NONE,p23_tops)]))];
+           exports := [(2w,[])] |>) 2w [(NONE,p23_tops)]``;
+val p23_constants_eval_expanded = SIMP_RULE (srw_ss())
+  [vyperInterpreterTheory.initial_machine_state_def, p23_deploy_tx_def,
+   vyperContextTheory.empty_call_txn_def, p23_initial_imms] p23_constants_eval;
+
 Theorem p23_deploy_typing:
   deploy_typing_ok p23_tops initial_machine_state p23_deploy_tx
 Proof
-  cheat
+  simp[deploy_typing_ok_def, vyperInterpreterTheory.initial_machine_state_def,
+       p23_deploy_tx_def, vyperContextTheory.empty_call_txn_def,
+       p23_check_dep, p23_check_run, p23_initial_imms] >>
+  simp[vyperTypeInitialStateTheory.machine_well_typed_def,
+       vyperTypeInvariantsTheory.accounts_well_typed_def,
+       vyperTypeInvariantsTheory.account_well_typed_def,
+       vfmStateTheory.lookup_account_def, vfmStateTheory.empty_accounts_def,
+       vfmStateTheory.empty_account_state_def,
+       vyperTypeContractSoundnessTheory.call_tx_well_typed_def,
+       vyperTypeEntryReadinessTheory.checked_deployment_constants_ready_def] >>
+  simp[p23_constants_eval_expanded,
+       vyperTypeEntryReadinessTheory.deployment_constants_output_typed_def,
+       vyperTypeInvariantsTheory.imms_well_typed_def,
+       p23_tops_def] >>
+  rpt gen_tac >> Cases_on `id = "X"` >>
+  simp[finite_mapTheory.FLOOKUP_UPDATE] >>
+  rpt strip_tac >> gvs[vyperTypingTheory.value_has_type_def,
+                       vyperTypingTheory.well_formed_type_value_def]
 QED
 
 val p23_constructor_encoding_eval = EVAL
@@ -460,16 +493,61 @@ Proof
        loweringStateRelDefsTheory.tx_env_ok_def]
 QED
 
+val p23_exports_eval = EVAL ``exports_ok [] 2w [(NONE,p23_tops)] []``;
+val p23_exports_eval_expanded = REWRITE_RULE
+  [vyperTypeContractTheory.exports_ok_def,p23_tops_def] p23_exports_eval;
+val p23_call_machine_eval = EVAL ``p23_am_call``;
+
 Theorem p23_source_typing:
   source_typing_ok p23_tops p23_am_call p23_call_tx
 Proof
-  cheat
+  simp[source_typing_ok_def, p23_call_machine_eval, p23_call_tx_def,
+       vyperContextTheory.empty_call_txn_def, p23_check_run,
+       vyperTypeContractSoundnessTheory.checked_contract_runtime_ready_def,
+       vyperTypeInitialStateTheory.machine_well_typed_def] >>
+  simp[p23_tops_def, vyperTypeContractTheory.exports_ok_def,
+       vyperTypeContractTheory.var_allocated_def,
+       vyperTypeContractSoundnessTheory.call_tx_well_typed_def,
+       p23_get_calldata_def] >>
+  simp[p23_exports_eval_expanded] >>
+  conj_tac >- (simp[vyperTypeInitialStateTheory.immutables_ready_def,
+                         finite_mapTheory.FLOOKUP_UPDATE,
+       vyperInterpreterTheory.initial_evaluation_context_def,
+       vyperStateTheory.get_source_immutables_def,
+       vyperStateTheory.find_var_decl_by_name_def,
+       vyperValueTheory.evaluate_type_def] >>
+    simp[vyperContextTheory.get_module_code_def] >> rpt strip_tac >>
+    gvs[vyperStateTheory.find_var_decl_by_name_def]) >>
+  conj_tac >- (rw[vyperTypeInvariantsTheory.accounts_well_typed_def] >>
+    Cases_on `addr = 2w` >>
+    simp[vyperTypeInvariantsTheory.account_well_typed_def,
+         vfmStateTheory.lookup_account_def, combinTheory.APPLY_UPDATE_THM]) >>
+  simp[vyperTypeInvariantsTheory.imms_well_typed_def,
+       finite_mapTheory.FLOOKUP_UPDATE] >>
+  rpt gen_tac >> Cases_on `id = "X"` >> simp[] >>
+  rpt strip_tac >> gvs[vyperTypingTheory.value_has_type_def,
+                       vyperTypingTheory.well_formed_type_value_def]
 QED
+
+val p23_call_context_eval = EVAL
+  ``initial_evaluation_context p23_am_call.sources p23_am_call.layouts
+      p23_call_tx NONE``;
 
 Theorem p23_source_storage:
   source_storage_ok p23_tops p23_am_call p23_call_tx
 Proof
-  cheat
+  simp[source_storage_ok_def, p23_call_context_eval,
+       vyperStorageLayoutSafetyTheory.contract_storage_well_formed_def,
+       vyperStorageLayoutSafetyTheory.storage_layout_safe_def,
+       vyperLookupStorageTheory.well_formed_storage_def,
+       vyperLookupStorageTheory.well_formed_layout_def,
+       vyperLookupStorageTheory.storage_var_in_range_def,
+       vyperLookupStorageTheory.storage_var_info_def,
+       vyperStorageLayoutSafetyTheory.declared_storage_region_def,
+       vyperStorageLayoutSafetyTheory.nonreentrant_slot_separated_def,
+       vyperContextTheory.get_module_code_def,
+       vyperStateTheory.find_var_decl_by_name_def,
+       COND_RAND, COND_RATOR]
 QED
 
 Theorem p23_immutables_section:
@@ -530,10 +608,17 @@ Proof
        vyperContextTheory.empty_call_txn_def, p23_tops_def]
 QED
 
+val p23_get_lookup_eval = EVAL
+  ``vyperInterpreter$lookup_function NONE "get" External p23_tops``;
+
 Theorem p23_valid_call:
   valid_vyper_call p23_tops p23_call_tx p23_get_calldata (BaseT (UintT 256))
 Proof
-  cheat
+  simp[valid_vyper_call_def, p23_call_tx_def,
+       vyperContextTheory.empty_call_txn_def, p23_get_lookup_eval,
+       vyperInterpreterTheory.bind_arguments_def,
+       selectorDispatchTheory.calldata_encodes_def,
+       p23_get_calldata_encodes]
 QED
 
 Theorem p23_constructor_call_free:
@@ -550,6 +635,39 @@ Proof
   ACCEPT_TAC p23_dso_eval
 QED
 
+Theorem gas_readings_rel_empty[local]:
+  (!gs. f gs = out) ==> gas_readings_rel [] f out
+Proof
+  strip_tac >> simp[gas_readings_rel_def] >>
+  qexists `[]` >> simp[]
+QED
+
+Theorem p23_deploy_result_from_immutables:
+  immutables_section_rel p23_tops
+    (account_immutables p23_am_dep_post p23_deploy_tx.target)
+    (word_to_bytes (42w:bytes32) T) ==>
+  deploy_call_result_rel p23_tops p23_runtime_bc initial_machine_state
+    p23_deploy_tx p23_es_dep (INR NONE) p23_es_dep_post
+Proof
+  strip_tac >> simp[deploy_call_result_rel_def, p23_dep_trace] >>
+  irule gas_readings_rel_empty >> simp[p23_load, deploy_result_rel_def] >>
+  rpt strip_tac >> qexists `word_to_bytes (42w:bytes32) T` >>
+  conj_tac >- simp[] >>
+  conj_tac >- (
+    simp[frame_outcome_def, p23_es_dep_def, p23_frame_def,
+         p23_es_dep_post_def, p23_am_dep_post_def] >>
+    EVAL_TAC >> simp[vfmContextTheory.transaction_parameters_component_equality]) >>
+  simp[loweringStateRelDefsTheory.storage_agree_def,
+       loweringStateRelDefsTheory.transient_agree_def,
+       p23_am_dep_post_def, p23_es_dep_post_def, p23_deploy_tx_def,
+       initial_evaluation_context_def, vfmStateTheory.lookup_account_def,
+       vfmStateTheory.empty_accounts_def, vfmStateTheory.empty_account_state_def,
+       vfmContextTheory.empty_transient_storage_def, combinTheory.APPLY_UPDATE_THM,
+       vfmStateTheory.account_state_component_equality] >>
+  EVAL_TAC >> simp[]
+QED
+
+(* Final assembly, owned by C1.5 once the shared section fact is integrated. *)
 Theorem p23_deploy_result:
   deploy_call_result_rel p23_tops p23_runtime_bc initial_machine_state
     p23_deploy_tx p23_es_dep (INR NONE) p23_es_dep_post
@@ -561,7 +679,22 @@ Theorem p23_call_result:
   call_result_rel p23_tops (BaseT (UintT 256)) p23_am_call p23_call_tx
     p23_es_call (INR NONE) p23_es_call_post
 Proof
-  cheat
+  simp[call_result_rel_def, p23_call_trace] >>
+  irule gas_readings_rel_empty >>
+  simp[p23_src_call_eval, call_success_rel_def] >>
+  qexists `word_to_bytes (42w:bytes32) T` >>
+  conj_tac >- (
+    simp[frame_outcome_def, p23_es_call_from_post, p23_es_call_of_def,
+         p23_frame_def, p23_es_call_post_def] >>
+    EVAL_TAC >> simp[vfmContextTheory.transaction_parameters_component_equality]) >>
+  conj_tac >- (EVAL_TAC >> simp[] >> EVAL_TAC) >>
+  simp[loweringStateRelDefsTheory.accounts_agree_def,
+       loweringStateRelDefsTheory.storage_agree_def,
+       loweringStateRelDefsTheory.transient_agree_def,
+       p23_es_call_post_def, vfmContextTheory.empty_transient_storage_def,
+       vfmStateTheory.empty_storage_def, call_requests_def, p23_call_trace] >>
+  simp[vfmExecutionTheory.process_deletions_def, initial_evaluation_context_def,
+       p23_call_tx_def, vfmStateTheory.account_state_component_equality]
 QED
 
 (* ===== The witness ===== *)
