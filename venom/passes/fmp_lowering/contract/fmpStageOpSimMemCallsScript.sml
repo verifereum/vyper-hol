@@ -2,7 +2,7 @@
 Theory fmpStageOpSimMemCalls
 Ancestors
   fmpStageOpSimMemSupport fmpStageOpSimMemReads fmpStageOpBase fmpStageRel
-  o1LowerDloadExternalOracle o1LowerDloadExternalEffects o1LowerDloadShared
+  o1LowerDloadExternalOracle o1LowerDloadExternalEffects o1LowerDloadPrecompileEffects o1LowerDloadShared
   o1LowerDloadRangeTransport o1LowerDloadRelocationKernel o1PassContract
   ptrDiscipline ptrStaticDiscipline contextCodegenRel codegenRel unitShapeDefs
   venomExecSemantics venomCallOracleDefs extCallOracle venomState venomInst
@@ -158,4 +158,153 @@ Proof
          fixed_source_write_range_def] >>
      `?w. eval_operand vop s = SOME w` by metis_tac[] >> simp[]) >>
   gvs[] >> metis_tac[])
+QED
+
+Theorem fmp_mem_call_decode[local]:
+  MEM inst.inst_opcode [CALL;STATICCALL;DELEGATECALL] /\
+  step_inst k C inst s = OK s1 ==>
+  ?gop adop vop offop szop rop rsop gas addr value off sz ro rs static prefix.
+    eval_operand gop s = SOME gas /\ eval_operand adop s = SOME addr /\
+    eval_operand offop s = SOME off /\ eval_operand szop s = SOME sz /\
+    eval_operand rop s = SOME ro /\ eval_operand rsop s = SOME rs /\
+    ((inst.inst_opcode = CALL /\ prefix = [gop;adop;vop] /\
+      eval_operand vop s = SOME value /\ static = s.vs_call_ctx.cc_static /\
+      ~(s.vs_call_ctx.cc_static /\ value <> 0w)) \/
+     (MEM inst.inst_opcode [STATICCALL;DELEGATECALL] /\ prefix = [gop;adop] /\
+      value = 0w /\ static = (inst.inst_opcode = STATICCALL))) /\
+    inst.inst_operands = prefix ++ [offop;szop;rop;rsop] /\
+    (if inst.inst_opcode = DELEGATECALL then
+      exec_delegatecall inst s gas addr off sz ro rs
+     else exec_ext_call inst s gas addr value off sz ro rs static) = OK s1
+Proof
+  strip_tac >> qpat_x_assum `step_inst _ _ _ _ = _` mp_tac >> fs[] >>
+  simp[step_inst_non_invoke, step_inst_base_opcode_eqs, AllCaseEqs()] >>
+  rpt strip_tac >> gvs[] >> metis_tac[]
+QED
+
+Theorem fmp_mem_call_scalar_values[local]:
+  (!op x. MEM op (prefix ++ [szop;rsop]) /\ eval_operand op s = SOME x ==>
+    eval_operand op t = SOME x) /\
+  ((inst.inst_opcode = CALL /\ prefix = [gop;adop;vop] /\
+     eval_operand vop s = SOME value) \/
+   (MEM inst.inst_opcode [STATICCALL;DELEGATECALL] /\ prefix = [gop;adop] /\ value = 0w)) /\
+  eval_operand gop s = SOME gas /\ eval_operand adop s = SOME addr /\
+  eval_operand szop s = SOME sz /\ eval_operand rsop s = SOME rs ==>
+  eval_operand gop t = SOME gas /\ eval_operand adop t = SOME addr /\
+  eval_operand szop t = SOME sz /\ eval_operand rsop t = SOME rs /\
+  (inst.inst_opcode = CALL ==> eval_operand vop t = SOME value)
+Proof
+  strip_tac >> gvs[] >> metis_tac[]
+QED
+
+Theorem fmp_mem_call_observe[local]:
+  fmp_stage_ctx rpolicy D C C' vs vs' fmp eom /\
+  frame_reachable vs C stk PG G tn fn inst s /\ active_inst fn inst s /\
+  fmp_stage_rel D C' sm fmp0 raw0 eom restored stk PG G tn fn s lo t ts /\
+  inst.inst_opcode <> INVOKE /\ step_inst k C inst s = OK (update_var out w1 r1) /\
+  read_memory (w2n off) (w2n sz) s = read_memory (w2n off') (w2n sz) t /\
+  rq1 = (venom_call_request s addr value off sz static with cr_kind := kind) /\
+  rq2 = (venom_call_request t addr value off' sz static with cr_kind := kind) /\
+  consume_call_outcome rq1 ro rs s = (w1,r1) /\
+  consume_call_outcome rq2 ro' rs t = (w2,r2) ==>
+  w1 = w2 /\ r1.vs_returndata = r2.vs_returndata /\
+  ld_shared_agree D s.vs_call_ctx.cc_address
+    (tn with <|t_stor := if ~rq1.cr_static /\ r1.vs_requests <> s.vs_requests /\
+                    r1.vs_outcomes <> s.vs_outcomes /\ (HD s.vs_outcomes).co_success
+                  then {} else tn.t_stor;
+               t_trans := if ~rq1.cr_static /\ r1.vs_requests <> s.vs_requests /\
+                    r1.vs_outcomes <> s.vs_outcomes /\ (HD s.vs_outcomes).co_success
+                  then {} else tn.t_trans|>) r1 r2
+Proof
+  strip_tac >>
+  `s.vs_call_ctx = t.vs_call_ctx` by fs[fmp_stage_rel_def, fmp_frame_rel_def] >>
+  `ld_shared_agree D s.vs_call_ctx.cc_address tn s t` by fs[fmp_stage_rel_def] >>
+  `rq1.cr_accounts = s.vs_accounts /\ rq2.cr_accounts = t.vs_accounts /\
+   rq1.cr_tStorage = s.vs_transient /\ rq2.cr_tStorage = t.vs_transient /\
+   rq1.cr_target = rq2.cr_target /\ rq1.cr_data = rq2.cr_data /\
+   computed_precompile rq1 = computed_precompile rq2` by
+    simp[venom_call_request_def, computed_precompile_def] >>
+  Cases_on `computed_precompile rq1`
+  >- (`computed_precompile rq2` by metis_tac[] >> `r1.vs_requests = s.vs_requests` by
+        (qpat_x_assum `consume_call_outcome rq1 _ _ s = _` mp_tac >>
+         simp[consume_call_outcome_eq, record_request_def] >> strip_tac >>
+         gvs[Excl "consume_call_outcome_eq"]) >>
+      drule_all ld_consume_precompile_shared >> strip_tac >>
+      gvs[Excl "consume_call_outcome_eq"]) >>
+  `LENGTH s.vs_requests < LENGTH (update_var out w1 r1).vs_requests` by
+    (qpat_x_assum `consume_call_outcome rq1 _ _ s = _` mp_tac >>
+     simp[consume_call_outcome_eq, record_request_def, update_var_def] >>
+     strip_tac >> gvs[]) >>
+  `accounts_agree_except D s.vs_accounts t.vs_accounts /\
+   transient_agree_except D s.vs_transient t.vs_transient` by
+    metis_tac[fmp_mem_external_world] >>
+  `request_agree_except D rq1 rq2` by
+    simp[request_agree_except_def, venom_call_request_def,
+         call_request_component_equality] >>
+  `s.vs_outcomes = t.vs_outcomes /\
+   LIST_REL (request_agree_except D) s.vs_requests t.vs_requests` by fs[ld_shared_agree_def] >>
+  drule_all ld_consume_call_outcome_masked_observation >> strip_tac >> simp[] >>
+  drule_all ld_consume_call_outcome_shared_effects >> simp[]
+QED
+
+Theorem fmp_mem_call_execute[local]:
+  fmp_stage_ctx rpolicy D C C' vs vs' fmp eom /\
+  frame_reachable vs C stk PG G tn fn inst s /\ active_inst fn inst s /\
+  fmp_stage_rel D C' sm fmp0 raw0 eom restored stk PG G tn fn s lo t ts /\
+  ~in_revert_forward fn s /\ MEM inst.inst_opcode [CALL;STATICCALL;DELEGATECALL] /\
+  step_inst k C inst s = OK s1 ==>
+  ?out w1 w2 r1 r2 addr value off off' sz (ro:bytes32) (ro':bytes32) (rs:bytes32) static kind rq1 rq2.
+    inst.inst_outputs = [out] /\ s1 = update_var out w1 r1 /\
+    step_inst k C' inst t = OK (update_var out w2 r2) /\
+    rq1 = (venom_call_request s addr value off sz static with cr_kind := kind) /\
+    rq2 = (venom_call_request t addr value off' sz static with cr_kind := kind) /\
+    consume_call_outcome rq1 (w2n ro) (w2n rs) s = (w1,r1) /\
+    consume_call_outcome rq2 (w2n ro') (w2n rs) t = (w2,r2) /\
+    read_memory (w2n off) (w2n sz) s = read_memory (w2n off') (w2n sz) t /\
+    source_memory_write_ranges inst s = [(w2n ro,w2n rs)] /\
+    (w2n rs=0 \/ (w2n ro=w2n ro' /\ w2n ro+w2n rs<=eom) \/
+     (?id b c z j. FLOOKUP (fmp_ld_sites sm) id = SOME (b,c,z) /\ j+w2n rs<=z /\
+                    w2n ro=b+j /\ w2n ro'=c+j)) /\
+    kind = (if inst.inst_opcode = DELEGATECALL then DelegateMessageCall else MessageCall) /\
+    static = (if inst.inst_opcode = CALL then s.vs_call_ctx.cc_static
+              else inst.inst_opcode = STATICCALL)
+Proof
+  strip_tac >> drule_all fmp_mem_call_decode >> strip_tac >> (
+  `(!op. MEM op prefix ==> ?w. eval_operand op s = SOME w)` by (gvs[] >> metis_tac[]) >>
+  `(!op x. MEM op (prefix ++ [szop;rsop]) /\ eval_operand op s = SOME x ==>
+     eval_operand op t = SOME x) /\
+   ?off' ro'. eval_operand offop t = SOME off' /\ eval_operand rop t = SOME ro' /\
+    read_memory (w2n off) (w2n sz) s = read_memory (w2n off') (w2n sz) t /\
+    (w2n rs=0 \/ (w2n ro=w2n ro' /\ w2n ro+w2n rs<=eom) \/
+     (?id b c z j. FLOOKUP (fmp_ld_sites sm) id = SOME (b,c,z) /\ j+w2n rs<=z /\
+                    w2n ro=b+j /\ w2n ro'=c+j))` by
+    (irule fmp_mem_call_operands >> simp[] >>
+     goal_assum (drule_at (Pat `fmp_stage_rel _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _`)) >>
+     goal_assum (drule_at (Pat `fmp_stage_ctx _ _ _ _ _ _ _ _`)) >>
+     goal_assum (drule_at (Pat `frame_reachable _ _ _ _ _ _ _ _ _`)) >>
+     fs[] >> metis_tac[]) >>
+  `eval_operand gop t = SOME gas /\ eval_operand adop t = SOME addr /\
+   eval_operand szop t = SOME sz /\ eval_operand rsop t = SOME rs /\
+   (inst.inst_opcode = CALL ==> eval_operand vop t = SOME value)` by
+    (irule fmp_mem_call_scalar_values >> metis_tac[]) >>
+  qpat_x_assum `!op x. _` kall_tac >>
+  `s.vs_call_ctx = t.vs_call_ctx` by fs[fmp_stage_rel_def, fmp_frame_rel_def] >>
+  qabbrev_tac `kind = if inst.inst_opcode = DELEGATECALL then DelegateMessageCall else MessageCall` >>
+  qabbrev_tac `rq1 = venom_call_request s addr value off sz static with cr_kind := kind` >>
+  qabbrev_tac `rq2 = venom_call_request t addr value off' sz static with cr_kind := kind` >>
+  Cases_on `consume_call_outcome rq1 (w2n ro) (w2n rs) s` >>
+  rename1 `consume_call_outcome rq1 _ _ s = (w1,r1)` >>
+  Cases_on `consume_call_outcome rq2 (w2n ro') (w2n rs) t` >>
+  rename1 `consume_call_outcome rq2 _ _ t = (w2,r2)` >>
+  `?out. inst.inst_outputs = [out] /\ s1 = update_var out w1 r1` by
+    (gvs[Abbr `rq1`, Abbr `kind`, exec_ext_call_def, exec_delegatecall_def,
+         venom_call_request_def, Excl "consume_call_outcome_eq", AllCaseEqs()] >> metis_tac[]) >>
+  qexistsl_tac [`out`,`w1`,`w2`,`r1`,`r2`,`addr`,`value`,`off`,`off'`,`sz`,
+                `ro`,`ro'`,`rs`,`static`,`kind`,`rq1`,`rq2`] >>
+  simp[Excl "consume_call_outcome_eq", Abbr `rq1`, Abbr `rq2`] >>
+  gvs[MEM, Abbr `kind`, Excl "consume_call_outcome_eq"] >>
+  gvs[venom_call_request_def, Excl "consume_call_outcome_eq"] >>
+  simp[step_inst_non_invoke, step_inst_base_opcode_eqs, exec_ext_call_def,
+       exec_delegatecall_def, venom_call_request_def, source_memory_write_ranges_def,
+       Excl "consume_call_outcome_eq"] >> metis_tac[])
 QED
