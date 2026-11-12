@@ -758,6 +758,134 @@ Proof
 QED
 
 
+Theorem abi_dyn_decode_fresh[local]:
+  (!dst src lop base hi info.
+    (^dyn_fresh_unit) (compile_abi_decode_to_buf dst src lop base hi info)) /\
+  (!dst src lop base hi elems ao vo.
+    (^dyn_fresh_unit) (compile_abi_decode_complex_elems dst src lop base hi elems ao vo)) /\
+  (!dst src lop base hi info asz msz ip cnt.
+    (^dyn_fresh_unit) (compile_abi_decode_dyn_loop dst src lop base hi info asz msz ip cnt))
+Proof
+  qabbrev_tac `U = ^dyn_fresh_unit` >>
+  qabbrev_tac `FrO = ^dyn_fresh_op` >>
+  qabbrev_tac `B = ^dyn_fresh_buffer` >>
+  qabbrev_tac `L = ^dyn_fresh_label` >>
+  `(!m f. FrO m /\ (!x. U (f x)) ==> U (comp_bind m f)) /\
+   (!m f. FrO m /\ (!x. FrO (f x)) ==> FrO (comp_bind m f)) /\
+   (!m f. FrO m /\ (!x. B (f x)) ==> B (comp_bind m f)) /\
+   (!m f. B m /\ (!x. U (f x)) ==> U (comp_bind m f)) /\
+   (!m f. L m /\ (!x. U (f x)) ==> U (comp_bind m f)) /\
+   (!m f. U m /\ (!x. U (f x)) ==> U (comp_bind m f))`
+    by (rpt conj_tac >> simp_tac std_ss [Abbr `U`, Abbr `FrO`, Abbr `B`, Abbr `L`] >>
+        MATCH_ACCEPT_TAC (BETA_RULE abi_dyn_fresh_bind)) >>
+  `(!m n. U m /\ U n ==> U (comp_ignore_bind m n)) /\
+   (!m n. U m /\ FrO n ==> FrO (comp_ignore_bind m n)) /\
+   (!m n. L m /\ U n ==> U (comp_ignore_bind m n))`
+    by (rpt conj_tac >> simp_tac std_ss [Abbr `U`, Abbr `FrO`, Abbr `L`] >>
+        MATCH_ACCEPT_TAC (BETA_RULE abi_dyn_fresh_ignore_bind)) >>
+  `(!opc ops. FrO (emit_op opc ops)) /\
+   (!opc ops. U (emit_void opc ops)) /\
+   (!opc ops. U (emit_inst opc ops [])) /\
+   (!l. L (fresh_label l)) /\ (!l. L (new_block l)) /\
+   (!sz. B (compile_alloc_buffer sz)) /\
+   (!v. U (comp_return v)) /\ (!v. FrO (comp_return v)) /\
+   (!v. B (comp_return v)) /\ (!v. L (comp_return v))`
+    by (rpt conj_tac >> simp_tac std_ss [Abbr `U`, Abbr `FrO`, Abbr `B`, Abbr `L`] >>
+        FIRST (map (MATCH_ACCEPT_TAC o BETA_RULE)
+          [abi_dyn_fresh_emit_op, abi_dyn_fresh_emit_void, abi_dyn_fresh_emit_inst,
+           abi_dyn_fresh_label, abi_dyn_fresh_block, abi_dyn_fresh_alloc,
+           abi_dyn_fresh_return])) >>
+  `!opc m n p. U m /\ U n /\ U p ==>
+    U (case opc of CALLDATALOAD => m | DLOAD => n | _ => p)`
+    by (Cases_on `opc` >> simp[]) >>
+  qpat_x_assum `Abbrev (U = _)` kall_tac >>
+  qpat_x_assum `Abbrev (FrO = _)` kall_tac >>
+  qpat_x_assum `Abbrev (B = _)` kall_tac >>
+  qpat_x_assum `Abbrev (L = _)` kall_tac >>
+  ho_match_mp_tac compile_abi_decode_to_buf_ind >> rpt strip_tac >>
+  simp_tac std_ss [Once compile_abi_decode_to_buf_def,
+    compile_abi_dec_addr_def, compile_abi_decode_static_def,
+    compile_abi_clamp_basetype_def, compile_abi_int_clamp_def,
+    compile_abi_bytes_clamp_def, compile_abi_decode_range_check_def,
+    compile_getelemptr_abi_def, compile_abi_decode_dyn_elem_ptr_def] >>
+  ASM_SIMP_TAC std_ss []
+  >- suspend "word"
+  >- suspend "bytes"
+  >- suspend "array"
+  >- suspend "complex"
+  >- suspend "cons"
+  >> suspend "loop"
+QED
+
+Resume abi_dyn_decode_fresh[word]:
+  Cases_on `base' = Lit 0w` >> ASM_SIMP_TAC std_ss [] >>
+  Cases_on `clamp_info` >>
+  simp_tac std_ss [compile_abi_clamp_basetype_def, compile_abi_int_clamp_def,
+    compile_abi_bytes_clamp_def] >> rpt IF_CASES_TAC >>
+  rpt (FIRST [first_assum MATCH_ACCEPT_TAC,
+    CHANGED_TAC (simp_tac std_ss [LET_THM]),
+    first_assum irule, IF_CASES_TAC, gen_tac, conj_tac])
+QED
+
+Resume abi_dyn_decode_fresh[bytes]:
+  rpt (FIRST [first_assum MATCH_ACCEPT_TAC,
+    CHANGED_TAC (simp_tac std_ss [LET_THM]),
+    first_assum irule, IF_CASES_TAC, gen_tac, conj_tac])
+QED
+Resume abi_dyn_decode_fresh[array]:
+  rpt (FIRST [first_assum MATCH_ACCEPT_TAC,
+    CHANGED_TAC (simp_tac std_ss [LET_THM]),
+    first_assum irule, IF_CASES_TAC, gen_tac, conj_tac]) >>
+  gvs[] >> metis_tac[]
+QED
+Resume abi_dyn_decode_fresh[complex]:
+  gvs[] >> rpt (FIRST [first_assum MATCH_ACCEPT_TAC,
+    CHANGED_TAC (simp_tac std_ss [LET_THM]),
+    first_assum irule, IF_CASES_TAC, gen_tac, conj_tac]) >> gvs[]
+QED
+Resume abi_dyn_decode_fresh[cons]:
+  rpt (FIRST [first_assum MATCH_ACCEPT_TAC,
+    CHANGED_TAC (simp_tac std_ss [LET_THM]),
+    first_assum irule, IF_CASES_TAC, gen_tac, conj_tac])
+QED
+Resume abi_dyn_decode_fresh[loop]:
+  rpt (FIRST [first_assum MATCH_ACCEPT_TAC,
+    CHANGED_TAC (simp_tac std_ss [LET_THM]),
+    first_assum irule, IF_CASES_TAC, gen_tac, conj_tac])
+QED
+Finalise abi_dyn_decode_fresh
+
+Theorem abi_dyn_body_middle_fresh[local]:
+  !dst src_op load_opc base_op hi_op elem_info elem_abi_sz elem_mem_sz i_op2.
+    (^dyn_fresh_unit)
+      (do src_data <- emit_op ADD [src_op; Lit 32w];
+          src_off <- emit_op MUL [i_op2; Lit (n2w elem_abi_sz)];
+          elem_src <- emit_op ADD [src_data; src_off];
+          actual_src <-
+            (if dec_info_needs_offset elem_info then
+               compile_abi_decode_dyn_elem_ptr load_opc base_op elem_src
+                 src_data hi_op elem_abi_sz
+             else return elem_src);
+          dst_data <- emit_op ADD [dst; Lit 32w];
+          dst_off <- emit_op MUL [i_op2; Lit (n2w elem_mem_sz)];
+          elem_dst <- emit_op ADD [dst_data; dst_off];
+          compile_abi_decode_to_buf elem_dst actual_src
+            load_opc base_op hi_op elem_info
+       od)
+Proof
+  rpt gen_tac >>
+  simp_tac std_ss [compile_abi_decode_dyn_elem_ptr_def,
+    compile_abi_dec_addr_def, compile_abi_decode_range_check_def] >>
+  rpt (FIRST [MATCH_ACCEPT_TAC (BETA_RULE (CONJUNCT1 abi_dyn_decode_fresh)),
+    MATCH_ACCEPT_TAC (BETA_RULE abi_dyn_fresh_emit_op),
+    MATCH_ACCEPT_TAC (BETA_RULE abi_dyn_fresh_emit_void),
+    MATCH_ACCEPT_TAC (BETA_RULE abi_dyn_fresh_return),
+    CHANGED_TAC (simp_tac std_ss [LET_THM]),
+    ho_match_mp_tac (BETA_RULE abi_dyn_fresh_bind),
+    ho_match_mp_tac (BETA_RULE abi_dyn_fresh_ignore_bind),
+    IF_CASES_TAC, gen_tac, conj_tac])
+QED
+
 (* Quantitative cutoff diagnostic interface (implementation belongs to the
    subsequent transfer component).
 
