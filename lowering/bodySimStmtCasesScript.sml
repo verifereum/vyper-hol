@@ -497,7 +497,14 @@ Theorem body_append_storage_narrow:
     type_memory_bytes cenv elem < 2 ** 64 ==>
     body_stmt_ok cx (Append (TopLevelNameTarget nid) e)
 Proof
-  cheat
+  rpt gen_tac >> strip_tac >> rw[body_stmt_ok_def] >>
+  `tops' = tops /\ cenv'.ce_struct_fields = cenv.ce_struct_fields` by
+    (fs[body_inv_def] >> metis_tac[]) >>
+  `type_memory_bytes cenv' elem = type_memory_bytes cenv elem` by
+    metis_tac[type_memory_bytes_struct_fields] >>
+  gvs[] >> Cases_on `nid` >>
+  irule body_append_storage_aggregate_fragment >>
+  simp[] >> metis_tac[supported_stmt_def]
 QED
 
 (* The storage/transient root adapter relates the element and length writes. *)
