@@ -346,10 +346,17 @@ Proof
   qexists_tac `m` >> metis_tac[]
 QED
 
-(* TEMPORARILY CHEATED - gas sufficiency S6b fuel leaf, on its branch only:
-   LowerDload keeps the fuel.  It expands an instruction inside its
-   block and adds no block, so the runner simulation's output fuel is the
-   input's (ld_runner_simulation, with m = k). *)
+(* Gas sufficiency S6b fuel leaf: LowerDload keeps the fuel.
+   The pass expands DLOAD / DLOADBYTES inside a block (to ALLOCA, ADD,
+   CODECOPY, MLOAD) and adds no block, label, terminator or INVOKE, so
+   the output runs on the input's fuel.  The runner packets ldPexec,
+   ldPrun and ldPstep (o1LowerDloadRunner) state the output fuel as ?m;
+   the bound is lost at SUC (MAX m m') in ld_runner_run_clause and at
+   MAX m m' in the call_ok case of o1LowerDloadRunnerExec.  Every other
+   witness is already the input fuel (the endpoint cases of
+   ld_runner_exec_clause; ld_joint_noncall_continue is uniform in m).
+   With m fixed to the input's k the stage follows as lower_dload_stage_sim
+   does. *)
 Theorem lower_dload_stage_sim_fuel:
   !rpolicy D view C C' vs names.
     ctx_pass_stage rpolicy (CFP_Simple VP_LowerDload) view C C' /\
