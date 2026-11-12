@@ -739,7 +739,7 @@ Proof
   qpat_x_assum `entry_array_init_resources _ _ _ _ _ _`
     (map_every assume_tac o CONJUNCTS o PURE_REWRITE_RULE [entry_array_init_resources_def]) >>
   qpat_assum `abi_decoder_ranges _ _ _ _ _ _ _ _ _ _ _ _ _`
-    (map_every assume_tac o CONJUNCTS o PURE_REWRITE_RULE [abiDecoderTypedContractTheory.abi_decoder_ranges_def]) >>
+    (map_every assume_tac o CONJUNCTS o PURE_REWRITE_RULE [abiDecoderTypedContractTheory.abi_decoder_ranges_def, arithmeticTheory.ADD]) >>
   `d < dimword (:256)` by decide_tac >>
   `abi_decode_load CALLDATALOAD (n2w sb:bytes32) initial = n2w (LENGTH avs)` by
     (irule abiCanonicalHeadSizeTheory.canonical_dynamic_array_count_load >>
@@ -747,7 +747,7 @@ Proof
   drule_all owned_array_initializer_gas >>
   disch_then (qx_choose_then `t` strip_assume_tac) >>
   qexists_tac `t` >> asm_rewrite_tac[] >>
-  pure_rewrite_tac[abiDecoderTypedContractTheory.abi_decoder_ranges_def] >>
+  pure_rewrite_tac[abiDecoderTypedContractTheory.abi_decoder_ranges_def, eval_operand_def, arithmeticTheory.ADD] >>
   asm_rewrite_tac[] >>
   fs[entry_loop_fields_def, abi_decode_source_def, Excl "enc_def"] >> metis_tac[]
 QED
