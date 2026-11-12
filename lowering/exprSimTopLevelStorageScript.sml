@@ -54,7 +54,8 @@ Proof
     (drule read_result_gas_obs >> disch_then (qspec_then `[]` assume_tac) >>
      qspecl_then [`cx`, `PlaceR (StoragePlace tr (n2w slot) tvt)`,
                   `es with gas_obs := []`, `obs`] mp_tac
-       vyperEvalPureExprTheory.read_result_trace >>
+       (Q.GENL [`cx`, `r`, `st`, `p`]
+          vyperEvalPureExprTheory.read_result_trace) >>
      simp[]) >>
   `stmt_state_rel H ctx func cenv cx
      (es with <|storage_trace := obs; gas_obs := []|>) s0` by
@@ -71,7 +72,7 @@ Proof
     (if tr then contract_transient s0 else contract_storage s0)
     (n2w slot) tvt` by
     (irule storage_range_agree_of_live >> conj_tac >- first_assum ACCEPT_TAC >>
-     qexists_tac `tr` >> simp[] >> Cases_on `tr` >>
+     qexistsl_tac [`H`, `tr`] >> simp[] >> Cases_on `tr` >>
      gvs[stmt_state_rel_def, state_rel_def, storage_rel_def,
          transient_rel_def, vyperStorageBackendTheory.get_storage_def,
          vfmStateTheory.lookup_account_def]) >>
@@ -100,13 +101,16 @@ Proof
   conj_tac >- (irule toplevel_storage_marked_exec >> simp[]) >>
   disj1_tac >> simp[] >> rpt strip_tac >>
   `valid_horizon cx st0 H es.storage_trace /\ MEM (tr,n2w slot,tvt) (FST H)` by
-    gvs[valid_horizon_def, storage_observations_ok_def,
-        storage_trace_regions_def] >>
+    gvs[vyperStorageFootprintTheory.valid_horizon_def,
+        vyperStorageFootprintTheory.storage_observations_ok_def,
+        vyperStorageFootprintTheory.storage_trace_regions_def] >>
   first_x_assum drule >> strip_tac >>
   `slots_in_range (get_storage cx es tr) (w2n ((n2w slot):bytes32)) tvt` by
-    gvs[storage_well_formed_on_def] >>
+    gvs[vyperStorageFootprintTheory.storage_well_formed_on_def] >>
   `w2n ((n2w slot):bytes32) + type_slot_size tvt <= dimword (:256)` by
-    (gvs[valid_horizon_def, regions_consistent_def] >> metis_tac[]) >>
+    (gvs[vyperStorageFootprintTheory.valid_horizon_def,
+         vyperStorageFootprintTheory.regions_consistent_def] >>
+     qpat_x_assum `!b slot tv. MEM _ _ ==> _` (drule_then mp_tac) >> simp[]) >>
   `!st. storage_read_live H tr st (n2w slot) tvt` by
     metis_tac[observed_storage_region_read_live] >>
   `typ = ann` by
@@ -120,5 +124,10 @@ Proof
      (LocatedValue ann (mk_ptr (Lit (n2w slot))
         (if tr then LocTransient else LocStorage)),sa)` by
     (Cases_on `tr` >> gvs[compile_expr_def, vyperASTTheory.expr_type_def]) >>
-  gvs[] >> irule toplevel_storage_value_post >> simp[]
+  gvs[] >>
+  `es with <|gas_obs := []; storage_trace := es.storage_trace ++ [StorageRoot tr slot tvt]|> =
+   es with <|storage_trace := es.storage_trace ++ [StorageRoot tr slot tvt]; gas_obs := []|>` by
+    simp[evaluation_state_component_equality] >>
+  pop_assum SUBST1_TAC >>
+  irule toplevel_storage_value_post >> simp[]
 QED

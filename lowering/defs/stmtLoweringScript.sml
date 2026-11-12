@@ -108,26 +108,6 @@ Termination
   WF_REL_TAC `measure (λ(cenv,ops,tys,buf,off). LENGTH ops)` >> simp[]
 End
 
-(* Declared type and DynArray capacity of the target's root variable: a
-   local's from the local tables, a module variable's from its own. *)
-Definition target_root_type_def:
-  target_root_type cenv (NameTarget id) = cenv.ce_var_type id ∧
-  target_root_type cenv (TopLevelNameTarget nsid) =
-    cenv.ce_module_var_type nsid ∧
-  target_root_type cenv (SubscriptTarget bt _) = target_root_type cenv bt ∧
-  target_root_type cenv (AttributeTarget bt _) = target_root_type cenv bt
-End
-
-Definition target_root_capacity_def:
-  target_root_capacity cenv (NameTarget id) = cenv.ce_dynarray_capacity id ∧
-  target_root_capacity cenv (TopLevelNameTarget nsid) =
-    cenv.ce_module_dynarray_capacity nsid ∧
-  target_root_capacity cenv (SubscriptTarget bt _) =
-    target_root_capacity cenv bt ∧
-  target_root_capacity cenv (AttributeTarget bt _) =
-    target_root_capacity cenv bt
-End
-
 (* Convert assignment target to expression for location inference *)
 Definition target_to_expr_def:
   target_to_expr (NameTarget id) = Name NoneT id ∧
@@ -458,22 +438,16 @@ End
    SOME LocMemory means source is in memory → may alias destination.
    NONE means stack/computed value → no aliasing possible.
    Mirrors Python: src_vv.location (None for stack, DataLocation.X for located).
-   dynarray_info: NONE for non-dynarray types, SOME (elem_words, elem_mem_size) for DynArray.
-   When SOME, uses dynarray_to_storage (copies only length + actual elems).
-   When NONE, uses bulk word copy (copies all words).
+   A complex value goes to storage or transient storage by compile_store_slots,
+   which writes only the live words of its DynArrays and bytestrings.
    Mirrors Python: vyper/codegen_venom/context.py:Context.store_variable *)
 Definition compile_assign_value_def:
   compile_assign_value cenv dst_op dst_loc val_op is_prim_word
                        (src_loc : data_location option)
-                       (dst_ty : type) (src_ty : type)
-                       (dynarray_info : (num # num) option) mem_size =
-    (* A bytestring source keeps its own, possibly narrower, buffer, so a
-       storage or transient target gets only the words it holds.
-       Immutable bytestring stores use their runtime length below.
-       Mirrors Python: stmt.py _store_complex_type with copy_typ
-       (vyperlang/vyper#5332). *)
-    let copy_size = (if is_bytestring_type dst_ty
-                     then type_memory_bytes cenv src_ty else mem_size) in
+                       (dst_ty : type) (src_ty : type) mem_size =
+    (* An immutable bytestring target gets only the words its runtime length
+       covers: compile_store_immutable_bytestring.
+       Mirrors Python: stmt.py _store_complex_type (vyperlang/vyper#5332). *)
     case dst_loc of
       LocMemory =>
         if is_prim_word then emit_void MSTORE [dst_op; val_op]
@@ -506,22 +480,7 @@ Definition compile_assign_value_def:
                 od
               else return val_op);
            if is_prim_word then emit_void SSTORE [dst_op; val_op']
-           else
-             (case dynarray_info of
-                SOME (ew, ems) =>
-                  (* DynArray→storage: copy only length + actual elements.
-                     Mirrors Python: vyper/codegen_venom/context.py:Context.copy_dynarray_to_storage *)
-                  compile_dynarray_to_storage val_op' dst_op ew ems F
-              | NONE =>
-                if copy_size ≤ 32 then
-                  do loaded <- emit_op MLOAD [val_op'];
-                     emit_void SSTORE [dst_op; loaded]
-                  od
-                else
-                  do compile_memory_to_storage val_op' dst_op
-                                               (copy_size DIV 32);
-                     return ()
-                  od)
+           else compile_store_slots cenv val_op' dst_op dst_ty F
         od
     | LocTransient =>
         do val_op' <-
@@ -534,20 +493,7 @@ Definition compile_assign_value_def:
                 od
               else return val_op);
            if is_prim_word then emit_void TSTORE [dst_op; val_op']
-           else
-             (case dynarray_info of
-                SOME (ew, ems) =>
-                  compile_dynarray_to_storage val_op' dst_op ew ems T
-              | NONE =>
-                if copy_size ≤ 32 then
-                  do loaded <- emit_op MLOAD [val_op'];
-                     emit_void TSTORE [dst_op; loaded]
-                  od
-                else
-                  do compile_memory_to_transient val_op' dst_op
-                                                 (copy_size DIV 32);
-                     return ()
-                  od)
+           else compile_store_slots cenv val_op' dst_op dst_ty T
         od
     | LocCode =>
         do val_op' <-
@@ -639,17 +585,12 @@ Definition compile_tuple_store_all_def:
        mem_sz <- return (type_memory_bytes cenv dst_ty);
        src_is_word <- return (is_word_type src_ty);
        dst_is_word <- return is_prim;
-       da_info <- return (case dst_ty of
-          ArrayT elem_ty (Dynamic _) =>
-            let ems = type_memory_bytes cenv elem_ty in
-            SOME ((ems + 31) DIV 32, ems)
-        | _ => NONE);
        (if src_is_word then
           if dst_is_word then compile_store_at_loc cenv.ce_imm_alloca dst_op val_op loc_opt
           else emit_void INVALID []
         else
           compile_assign_value cenv dst_op dst_loc val_op is_prim
-                        NONE dst_ty src_ty da_info mem_sz);
+                        NONE dst_ty src_ty mem_sz);
        compile_tuple_store_all cenv src_tys targets vals
     od ∧
   (* Non-BaseTarget element: emit INVALID (shouldn't occur in valid AST) *)
@@ -900,25 +841,15 @@ Definition compile_stmt_def:
              else
              let is_prim = is_word_type vtyp in
              let mem_size = type_memory_bytes cenv vtyp in
-             let da_info = (case vtyp of
-                ArrayT elem_ty (Dynamic _) =>
-                  let ems = type_memory_bytes cenv elem_ty in
-                  SOME ((ems + 31) DIV 32, ems)
-              | _ => NONE) in
              compile_assign_value cenv (Lit (n2w offset)) LocMemory val_op
-                                  is_prim src_loc vtyp src_ty da_info mem_size
+                                  is_prim src_loc vtyp src_ty mem_size
          | SOME (PtrVar ptr_op _) =>
              if empty_value then emit_void MSTORE [ptr_op; Lit 0w]
              else
              let is_prim = is_word_type vtyp in
              let mem_size = type_memory_bytes cenv vtyp in
-             let da_info = (case vtyp of
-                ArrayT elem_ty (Dynamic _) =>
-                  let ems = type_memory_bytes cenv elem_ty in
-                  SOME ((ems + 31) DIV 32, ems)
-              | _ => NONE) in
              compile_assign_value cenv ptr_op LocMemory val_op
-                                  is_prim src_loc vtyp src_ty da_info mem_size
+                                  is_prim src_loc vtyp src_ty mem_size
          | _ =>
              (* Unsupported: AnnAssign without its preallocated memory binding. *)
              emit_void INVALID [])
@@ -955,14 +886,9 @@ Definition compile_stmt_def:
         dst_ty <- return (case dst_ty_opt of SOME (ValPT t) => t | _ => src_ty);
         is_prim <- return (is_word_type dst_ty);
         mem_size <- return (type_memory_bytes cenv dst_ty);
-        da_info <- return (case dst_ty of
-           ArrayT elem_ty (Dynamic _) =>
-             let ems = type_memory_bytes cenv elem_ty in
-             SOME ((ems + 31) DIV 32, ems)
-         | _ => NONE);
         (case dst_loc_opt of
            SOME loc => compile_assign_value cenv dst_op loc val_op is_prim
-                        src_loc dst_ty src_ty da_info mem_size
+                        src_loc dst_ty src_ty mem_size
          | NONE =>
              (* Unsupported: unresolved assignment targets must not disappear. *)
              emit_void INVALID [])
@@ -1207,14 +1133,14 @@ Definition compile_stmt_def:
      Delegates to compile_dynarray_append for correct opcode dispatch.
      Mirrors Python: expr.py _lower_dynarray_append *)
   compile_stmt cenv lctx ty (Append target val_e) =
-    (let target_op = compile_target_base cenv target in
-     (* Use array element type, not threading ty.
-        Python: elem_typ = darray_typ.value_type *)
-     let elem_ty = (case target_root_type cenv target of
-                      SOME (ArrayT t _) => t | _ => ty) in
+    (do result <- compile_get_target_ptr compile_expr cenv target;
+     let target_op = FST result in
+     let loc = (case FST (SND result) of SOME l => l | NONE => LocMemory) in
+     let elem_ty = (case SND (SND result) of
+                      SOME (ValPT (ArrayT t _)) => t | _ => BaseT (UintT 256)) in
      let is_prim = is_word_type elem_ty in
-     let capacity = target_root_capacity cenv target in
-     let loc = infer_array_location cenv (target_to_expr target) in
+     let capacity = (case SND (SND result) of
+                        SOME (ValPT (ArrayT _ (Dynamic n))) => n | _ => 0) in
      let ws = word_scale loc in
      let elem_size = elem_size_in_location cenv loc elem_ty in
      let load_opc = load_opc_for loc in
@@ -1238,7 +1164,7 @@ Definition compile_stmt_def:
                                      elem_ty src_elem_ty
                                      capacity is_prim
                                      load_opc store_opc
-     od) ∧
+     od od) ∧
 
   (* Assign with TupleTarget: tuple unpacking.
      Mirrors Python: vyper/codegen_venom/stmt.py:_lower_tuple_unpack

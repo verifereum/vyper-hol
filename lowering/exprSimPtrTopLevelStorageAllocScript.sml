@@ -43,7 +43,7 @@ Theorem toplevel_storage_allocated_bounds:
   expr_body_pre cenv cx env (TopLevelName ann nsid) es /\
   evaluate_type (get_tenv cx) ann = SOME tv /\ ~is_word_type ann /\
   nb = type_memory_bytes cenv ann /\
-  stmt_state_rel ctx func cenv cx es s1 /\
+  stmt_state_rel H ctx func cenv cx es s1 /\
   FLOOKUP s1.vs_allocas id = SOME (b,nb) ==>
   nb = 32 * type_slot_size tv /\ type_slot_size tv < 2**256 /\
   b + 32 * type_slot_size tv < 2**256 /\
@@ -73,7 +73,7 @@ QED
    changes when lifting its successful ALLOCA to a counted pointer path. *)
 Theorem toplevel_alloc_buffer_ptr_path:
   compile_alloc_buffer nb sa = (buf,sb) /\ fn_has_code sa sb fn /\
-  stmt_state_rel ctx fn cenv cx es s /\ nb < dimword (:256) /\
+  stmt_state_rel H ctx fn cenv cx es s /\ nb < dimword (:256) /\
   ~ctx_has_dalloca ctx /\ ~s.vs_halted /\
   s.vs_current_bb = sa.cs_current_bb /\
   s.vs_inst_idx = LENGTH sa.cs_current_insts /\
@@ -124,7 +124,7 @@ Proof
 QED
 
 Theorem toplevel_alloca_ghost_frame:
-  stmt_state_rel ctx fn cenv cx es s /\
+  stmt_state_rel H ctx fn cenv cx es s /\
   MEM (mk_inst id ALLOCA [Lit (n2w nb)] [p]) (fn_insts fn) /\
   nb < dimword (:256) /\
   step_inst_base (mk_inst id ALLOCA [Lit (n2w nb)] [p]) s = OK u /\
@@ -155,14 +155,14 @@ QED
 
 Theorem toplevel_alloc_buffer_ptr_run:
   compile_alloc_buffer nb sa = (buf,sb) /\ fn_has_code sa sb fn /\
-  stmt_state_rel ctx fn cenv cx es s /\ fn_inst_ids_distinct fn /\
+  stmt_state_rel H ctx fn cenv cx es s /\ fn_inst_ids_distinct fn /\
   local_ptrs_reserved cenv sa /\ nb < dimword (:256) /\
   ~ctx_has_dalloca ctx /\ ~s.vs_halted /\
   s.vs_current_bb = sa.cs_current_bb /\
   s.vs_inst_idx = LENGTH sa.cs_current_insts ==>
   ?u w Gf tnf p.
     run_inst_seq (emitted_insts sa sb) s = OK u /\
-    stmt_state_rel ctx fn cenv cx es u /\
+    stmt_state_rel H ctx fn cenv cx es u /\
     buf.buf_operand = Var p /\ eval_operand (Var p) u = SOME w /\
     FLOOKUP u.vs_allocas sa.cs_next_id = SOME (w2n w,nb) /\
     w2n w + nb < dimword (:256) /\ u.vs_memory = s.vs_memory /\
@@ -193,7 +193,7 @@ Proof
   drule_all toplevel_alloca_ghost_frame >>
   disch_then (qspecl_then [`tn`, `PG`, `G`] strip_assume_tac) >>
   `w2n w + nb <= t.vs_alloca_next` by
-    (qpat_assum `stmt_state_rel _ _ _ _ _ t` mp_tac >>
+    (qpat_assum `stmt_state_rel _ _ _ _ _ _ t` mp_tac >>
      qpat_assum `FLOOKUP t.vs_allocas _ = SOME _` mp_tac >>
      POP_ASSUM_LIST (K all_tac) >>
      simp[stmt_state_rel_def, venomMemDefsTheory.alloca_inv_def,

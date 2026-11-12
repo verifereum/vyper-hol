@@ -66,8 +66,8 @@ Theorem hash_sha256_bytes_abort_path:
   b+32 < dimword (:256) /\ n < dimword (:256) /\ op_taint tn (Var x) = {} /\
   (!i. b <= i /\ i < b+32+n ==> i NOTIN tn.t_mem) /\
   mem_word_at b s.vs_memory = n2w n /\
-  stmt_state_rel ctx fn cenv cx es s /\ fn_inst_ids_distinct fn /\
-  local_ptrs_reserved cenv sa /\ ghost_inv d cenv cx es G tn s /\
+  stmt_state_rel H ctx fn cenv cx es s /\ fn_inst_ids_distinct fn /\
+  local_ptrs_reserved cenv sa /\ ghost_inv H d cenv cx es G tn s /\
   (!p k. cenv.ce_return_buf = SOME (PtrVar (Var p) k) ==> not_fresh_at sa p) /\
   (!p k. cenv.ce_return_pc = SOME (PtrVar (Var p) k) ==> not_fresh_at sa p) /\
   MEM (mk_inst (sa.cs_next_id+2) ALLOCA [Lit 32w]
@@ -114,7 +114,7 @@ Resume hash_sha256_bytes_abort_path[call]:
   qpat_x_assum `data_op = Var p` SUBST_ALL_TAC >>
   `a.vs_inst_idx = s.vs_inst_idx+2` by simp[] >>
   `emit_op STATICCALL [gas_op;Lit 2w;Var p;len_op;buf.buf_operand;Lit 32w] sg = (success_op,sc) /\
-   stmt_state_rel ctx fn cenv cx es a /\ ghost_inv d cenv cx es G1 tn1 a /\
+   stmt_state_rel H ctx fn cenv cx es a /\ ghost_inv H d cenv cx es G1 tn1 a /\
    eval_operand (Var p) a = SOME (n2w (b+32)) /\
    eval_operand len_op a = SOME (n2w n) /\
    ptr_covers G1 tn1 p a (w2n (n2w n:bytes32)) /\ ~a.vs_halted /\
@@ -170,8 +170,8 @@ Theorem hash_sha256_bytes_success_path:
   b+32 < dimword (:256) /\ n < dimword (:256) /\ op_taint tn (Var x) = {} /\
   (!i. b <= i /\ i < b+32+n ==> i NOTIN tn.t_mem) /\
   mem_word_at b s.vs_memory = n2w n /\
-  stmt_state_rel ctx fn cenv cx es s /\ fn_inst_ids_distinct fn /\
-  local_ptrs_reserved cenv sa /\ ghost_inv d cenv cx es G tn s /\
+  stmt_state_rel H ctx fn cenv cx es s /\ fn_inst_ids_distinct fn /\
+  local_ptrs_reserved cenv sa /\ ghost_inv H d cenv cx es G tn s /\
   (!p k. cenv.ce_return_buf = SOME (PtrVar (Var p) k) ==> not_fresh_at sa p) /\
   (!p k. cenv.ce_return_pc = SOME (PtrVar (Var p) k) ==> not_fresh_at sa p) /\
   MEM (mk_inst (sa.cs_next_id+2) ALLOCA [Lit 32w]
@@ -190,7 +190,7 @@ Theorem hash_sha256_bytes_success_path:
     gas_path_ptr D 0 ctx fn PG G tn s 1 Gf tf
       (OK (t with vs_inst_idx := s.vs_inst_idx+7)) /\
     eval_operand op t = SOME (SHA_256_bytes bs) /\
-    ghost_inv d cenv cx (es with outcomes := SOME rest) Gf tf
+    ghost_inv H d cenv cx (es with outcomes := SOME rest) Gf tf
       (t with vs_inst_idx := s.vs_inst_idx+7) /\
     ghost_kept cenv es sa G tn s Gf tf /\ op_taint tf op = {} /\
     op_prov Gf op = NONE
@@ -269,7 +269,7 @@ Resume hash_sha256_bytes_success_path[compose]:
   conj_tac
   >- (drule_all gas_path_ptr_then >> simp[]) >>
   qpat_x_assum `eval_operand op (_ with vs_inst_idx := _) = _` mp_tac >>
-  qpat_x_assum `ghost_inv d cenv cx (es with outcomes := SOME rest) Gf tf _` mp_tac >>
+  qpat_x_assum `ghost_inv H d cenv cx (es with outcomes := SOME rest) Gf tf _` mp_tac >>
   simp[hash_eval_operand_inst_idx, hash_ghost_inv_inst_idx]
 QED
 Finalise hash_sha256_bytes_success_path

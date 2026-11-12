@@ -7,10 +7,12 @@ Ancestors
 Libs monadsyntax
 
 Theorem alloc_copy_memory_framed_capacity_path:
-  !ctx func cenv cx es sa sm sb s0 p src capacity nbytes sw tv v.
+  !cx st0 ctx func cenv es sa sm sb s0 p src capacity nbytes sw tv v.
     emit_inst ALLOCA [Lit (n2w capacity)] [p] sa = ((),sm) /\
     emit_void MCOPY [Var p;src;Lit (n2w nbytes)] sm = ((),sb) /\
-    stmt_state_rel ctx func cenv cx es s0 /\ fn_inst_ids_distinct func /\
+    (?H. valid_horizon cx st0 H es.storage_trace) /\
+    (!H. valid_horizon cx st0 H es.storage_trace ==>
+       stmt_state_rel H ctx func cenv cx es s0) /\ fn_inst_ids_distinct func /\
     MEM (mk_inst sa.cs_next_id ALLOCA [Lit (n2w capacity)] [p]) (fn_insts func) /\
     not_local_ptr cenv es.scopes p /\ nbytes <= capacity /\ capacity < dimword (:256) /\
     src <> Var p /\ eval_operand src s0 = SOME sw /\
@@ -19,7 +21,8 @@ Theorem alloc_copy_memory_framed_capacity_path:
     fn_has_code sa sm func /\ fn_has_code sm sb func /\ ~s0.vs_halted /\
     s0.vs_current_bb = sa.cs_current_bb /\ s0.vs_inst_idx = LENGTH sa.cs_current_insts ==>
     ?t w. gas_marked_path F ctx func s0 0 (OK t) /\
-      stmt_state_rel ctx func cenv cx es t /\
+      (!H. valid_horizon cx st0 H es.storage_trace ==>
+         stmt_state_rel H ctx func cenv cx es t) /\
       val_in_memory tv v (w2n w) t.vs_memory /\ lookup_var p t = SOME w /\
       FLOOKUP t.vs_allocas sa.cs_next_id = SOME (w2n w,capacity) /\
       (!x. x <> p ==> lookup_var x t = lookup_var x s0) /\
@@ -30,12 +33,14 @@ Theorem alloc_copy_memory_framed_capacity_path:
       ~t.vs_halted /\ t.vs_current_bb = sb.cs_current_bb /\
       t.vs_inst_idx = LENGTH sb.cs_current_insts
 Proof
-  rpt strip_tac >> drule_all annassign_alloca_operand_framed_path >>
+  rpt strip_tac >>
+  drule_all (SRULE [PULL_EXISTS] annassign_alloca_operand_framed_path) >>
   disch_then (qx_choosel_then [`s1`,`w`] strip_assume_tac) >>
   `eval_operand src s1 = SOME sw` by simp[] >>
   `val_in_memory tv v (w2n sw) s1.vs_memory` by simp[] >>
-  `stmt_state_rel ctx func cenv cx es (mcopy (w2n w) (w2n sw) nbytes s1)` by
-    (irule stmt_state_rel_mcopy_alloca >> simp[] >>
+  `!H. valid_horizon cx st0 H es.storage_trace ==>
+     stmt_state_rel H ctx func cenv cx es (mcopy (w2n w) (w2n sw) nbytes s1)` by
+    (rpt strip_tac >> irule stmt_state_rel_mcopy_alloca >> simp[] >>
      qexistsl_tac [`capacity`, `mk_inst sa.cs_next_id ALLOCA [Lit (n2w capacity)] [p]`, `p`] >>
      simp[mk_inst_def]) >>
   `val_in_memory tv v (w2n w) (mcopy (w2n w) (w2n sw) nbytes s1).vs_memory` by

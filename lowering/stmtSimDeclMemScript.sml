@@ -69,8 +69,8 @@ Proof
 QED
 
 Theorem compile_assign_memory_appends:
-  !cenv dst src loc ty info sz.
-    cs_appends (compile_assign_value cenv dst LocMemory src F loc ty ty info sz)
+  !cenv dst src loc ty sz.
+    cs_appends (compile_assign_value cenv dst LocMemory src F loc ty ty sz)
 Proof
   rpt gen_tac >>
   simp[compile_assign_value_def, compile_store_memory_def] >>
@@ -116,9 +116,9 @@ Proof
 QED
 
 Theorem compile_assign_memory_widen_appends:
-  !cenv dst src loc dty sty info sz.
+  !cenv dst src loc dty sty sz.
     sty = dty \/ is_bytestring_type dty ==>
-    cs_appends (compile_assign_value cenv dst LocMemory src F loc dty sty info sz)
+    cs_appends (compile_assign_value cenv dst LocMemory src F loc dty sty sz)
 Proof
   rpt gen_tac >> strip_tac >- simp[compile_assign_memory_appends] >>
   simp[compile_assign_value_def, compile_store_memory_bytestring_src] >>
@@ -145,9 +145,6 @@ Theorem compile_annassign_memory_parts[local]:
       lower_value compile_expr cenv (expr_type e) e sA = (op, sB) /\
       compile_assign_value cenv (Var p) LocMemory op F (vv_location vv)
         vtyp (lowered_value_type cenv e)
-        (case vtyp of ArrayT elem_ty (Dynamic _) =>
-           SOME ((type_memory_bytes cenv elem_ty + 31) DIV 32,
-                 type_memory_bytes cenv elem_ty) | _ => NONE)
         (type_memory_bytes cenv vtyp) sB = ((), sf)
 Proof
   rpt gen_tac >> strip_tac >>
@@ -240,9 +237,6 @@ Theorem annassign_memory_code_parts[local]:
       lower_value compile_expr c (expr_type e) e sA = (op, sB) /\
       compile_assign_value c (Var p) LocMemory op F (vv_location vv) vtyp
         (lowered_value_type cenv e)
-        (case vtyp of ArrayT elem_ty (Dynamic _) =>
-           SOME ((type_memory_bytes c elem_ty + 31) DIV 32,
-                 type_memory_bytes c elem_ty) | _ => NONE)
         (type_memory_bytes c vtyp) sB = ((), sf) /\
       local_ptrs_reserved c st /\ local_ptrs_reserved c sA /\ not_fresh_at sA p /\
       cs_extends st sA /\ cs_extends sA sB /\ cs_extends sB sf /\
@@ -267,7 +261,7 @@ Proof
   qexistsl [`st`, `sA`, `sV`, `sB`, `vv`, `op`,
             `STRING #"%" (toString sa.cs_next_var)`] >>
   simp[] >>
-  qpat_x_assum `compile_assign_value _ _ _ _ _ _ _ _ _ _ _ = _` mp_tac >>
+  qpat_x_assum `compile_assign_value _ _ _ _ _ _ _ _ _ _ = _` mp_tac >>
   simp[]
 QED
 
@@ -497,7 +491,7 @@ Proof
 QED
 
 Theorem annassign_memory_store_path[local]:
-  !ctx func cenv cx es s id p sz w inst v tyv sc rest a src ty sa sb sw.
+  !cx st0 ctx func cenv es s id p sz w inst v tyv sc rest a src ty sa sb sw.
     compile_store_memory cenv src (Var p) ty ty sa = ((), sb) /\
     (!x. src = Var x ==> not_fresh_at sa x) /\ not_fresh_at sa p /\
     eval_operand src s = SOME sw /\ lookup_var p s = SOME w /\
@@ -506,7 +500,8 @@ Theorem annassign_memory_store_path[local]:
     val_in_memory tyv v (w2n sw) s.vs_memory /\
     type_memory_bytes cenv ty = type_memory_size tyv /\
     type_memory_size tyv <= sz /\ type_memory_size tyv + 64 < dimword (:256) /\
-    stmt_state_rel H ctx func cenv cx es s /\ fn_inst_ids_distinct func /\
+    (!H. valid_horizon cx st0 H es.storage_trace ==>
+         stmt_state_rel H ctx func cenv cx es s) /\ fn_inst_ids_distinct func /\
     es.scopes = sc :: rest /\ lookup_scopes id es.scopes = NONE /\
     FLOOKUP cenv.ce_vars id = SOME (PtrVar (Var p) sz) /\
     not_local_ptr cenv es.scopes p /\ MEM inst (fn_insts func) /\
@@ -515,9 +510,10 @@ Theorem annassign_memory_store_path[local]:
     local_ptrs_reserved cenv sa /\ fn_has_code sa sb func /\ ~s.vs_halted /\
     s.vs_current_bb = sa.cs_current_bb /\
     s.vs_inst_idx = LENGTH sa.cs_current_insts ==>
-    ?t. stmt_state_rel H ctx func cenv cx
-          (es with scopes :=
-            (sc |+ (id, <|assignable := a; type := tyv; value := v; popped := []|>)) :: rest) t /\
+    ?t. (!H. valid_horizon cx st0 H es.storage_trace ==>
+           stmt_state_rel H ctx func cenv cx
+             (es with scopes :=
+               (sc |+ (id, <|assignable := a; type := tyv; value := v; popped := []|>)) :: rest) t) /\
         ~t.vs_halted /\ t.vs_current_bb = sb.cs_current_bb /\
         t.vs_inst_idx = LENGTH sb.cs_current_insts /\
         (!x. not_fresh_at sa x ==> lookup_var x t = lookup_var x s) /\
@@ -532,9 +528,14 @@ Proof
   drule compile_store_memory_run_size_bound_with_capacity >>
   disch_then (qspecl_then [`s`, `get_tenv cx`, `tyv`, `v`, `sw`, `w`] mp_tac) >>
   impl_tac >- simp[] >> strip_tac >>
-  qmatch_goalsub_abbrev_tac `stmt_state_rel H ctx func cenv cx es'` >>
-  `stmt_state_rel H ctx func cenv cx es' t` by
-    (simp[Abbr `es'`] >> irule stmt_state_rel_declare_store_frame >>
+  qabbrev_tac `es' = es with scopes :=
+    (sc |+ (id, <|assignable := a; type := tyv; value := v; popped := []|>)) :: rest` >>
+  `!H. valid_horizon cx st0 H es.storage_trace ==>
+     stmt_state_rel H ctx func cenv cx es' t` by
+    (qx_gen_tac `HH` >> strip_tac >>
+     qpat_assum `!H. _ ==> stmt_state_rel _ _ _ _ _ _ s`
+       (qspec_then `HH` mp_tac) >> impl_tac >- first_assum ACCEPT_TAC >> strip_tac >>
+     simp[Abbr `es'`] >> irule stmt_state_rel_declare_store_frame >>
      simp[] >> qexistsl_tac [`inst`, `s`, `sa`, `w`] >> gs[] >>
      rpt conj_tac >> first_assum ACCEPT_TAC) >>
   `t.vs_allocas = s.vs_allocas` by
@@ -570,9 +571,9 @@ QED
    destination copies the runtime length whatever the source's bound.  The
    allocation output is fresh at the assignment entry. *)
 Theorem annassign_staged_memory_widen_parts:
-  !cenv dst src dty sty info bytes sa sb func.
+  !cenv dst src dty sty bytes sa sb func.
     compile_assign_value cenv dst LocMemory src F (SOME LocMemory)
-      dty sty info bytes sa = ((),sb) /\
+      dty sty bytes sa = ((),sb) /\
     (sty = dty \/ is_bytestring_type dty) /\
     0 < type_memory_bytes cenv sty /\ fn_has_code sa sb func ==>
     ?sx sm sn tmp.
@@ -594,7 +595,7 @@ Proof
     (rpt gen_tac >> qpat_x_assum `_ \/ _` strip_assume_tac >>
      simp[compile_store_memory_bytestring_src]) >>
   qpat_x_assum `_ \/ _` kall_tac >>
-  qpat_x_assum `compile_assign_value _ _ _ _ _ _ _ _ _ _ _ = _` mp_tac >>
+  qpat_x_assum `compile_assign_value _ _ _ _ _ _ _ _ _ _ = _` mp_tac >>
   simp[compile_assign_value_def, comp_bind_def, comp_ignore_bind_def,
        comp_return_def] >>
   rpt (pairarg_tac >> gvs[]) >> strip_tac >>
@@ -627,9 +628,9 @@ Proof
 QED
 
 Theorem annassign_staged_memory_parts:
-  !cenv dst src ty info bytes sa sb func.
+  !cenv dst src ty bytes sa sb func.
     compile_assign_value cenv dst LocMemory src F (SOME LocMemory)
-      ty ty info bytes sa = ((),sb) /\
+      ty ty bytes sa = ((),sb) /\
     0 < type_memory_bytes cenv ty /\ fn_has_code sa sb func ==>
     ?sx sm sn tmp.
       sx = sa with cs_next_var := sa.cs_next_var + 1 /\
@@ -650,8 +651,8 @@ QED
 
 (* As above, and the other allocas older than the store keep their bytes. *)
 Theorem annassign_memory_assign_framed_path[local]:
-  !ctx func cenv cx es s id p sz w inst v tyv sc rest a src ty sty sa sb sw loc info bytes.
-    compile_assign_value cenv (Var p) LocMemory src F loc ty sty info bytes sa = ((),sb) /\
+  !cx st0 ctx func cenv es s id p sz w inst v tyv sc rest a src ty sty sa sb sw loc bytes.
+    compile_assign_value cenv (Var p) LocMemory src F loc ty sty bytes sa = ((),sb) /\
     (sty = ty \/ is_bytestring_type ty) /\
     0 < type_memory_bytes cenv sty /\ type_memory_bytes cenv sty < dimword (:256) /\
     val_footprint tyv v <= type_memory_bytes cenv sty /\
@@ -663,7 +664,9 @@ Theorem annassign_memory_assign_framed_path[local]:
     type_memory_bytes cenv ty = type_memory_size tyv /\
     0 < type_memory_size tyv /\ type_memory_size tyv <= sz /\
     type_memory_size tyv + 64 < dimword (:256) /\
-    stmt_state_rel H ctx func cenv cx es s /\ fn_inst_ids_distinct func /\
+    (?H. valid_horizon cx st0 H es.storage_trace) /\
+    (!H. valid_horizon cx st0 H es.storage_trace ==>
+         stmt_state_rel H ctx func cenv cx es s) /\ fn_inst_ids_distinct func /\
     es.scopes = sc :: rest /\ lookup_scopes id es.scopes = NONE /\
     FLOOKUP cenv.ce_vars id = SOME (PtrVar (Var p) sz) /\
     not_local_ptr cenv es.scopes p /\ MEM inst (fn_insts func) /\
@@ -672,9 +675,10 @@ Theorem annassign_memory_assign_framed_path[local]:
     local_ptrs_reserved cenv sa /\ fn_has_code sa sb func /\ ~s.vs_halted /\
     s.vs_current_bb = sa.cs_current_bb /\
     s.vs_inst_idx = LENGTH sa.cs_current_insts ==>
-    ?t. stmt_state_rel H ctx func cenv cx
-          (es with scopes :=
-            (sc |+ (id, <|assignable := a; type := tyv; value := v; popped := []|>)) :: rest) t /\
+    ?t. (!H. valid_horizon cx st0 H es.storage_trace ==>
+           stmt_state_rel H ctx func cenv cx
+             (es with scopes :=
+               (sc |+ (id, <|assignable := a; type := tyv; value := v; popped := []|>)) :: rest) t) /\
         ~t.vs_halted /\ t.vs_current_bb = sb.cs_current_bb /\
         t.vs_inst_idx = LENGTH sb.cs_current_insts /\
         (!x. not_fresh_at sa x ==> lookup_var x t = lookup_var x s) /\
@@ -686,6 +690,9 @@ Theorem annassign_memory_assign_framed_path[local]:
         gas_marked_path F ctx func s 0 (OK t)
 Proof
   rpt gen_tac >> disch_then (MAP_EVERY assume_tac o CONJUNCTS) >>
+  qpat_x_assum `?H. valid_horizon _ _ H _` (qx_choose_then `H0` assume_tac) >>
+  qpat_assum `!H. _ ==> stmt_state_rel _ _ _ _ _ _ s`
+    (qspec_then `H0` mp_tac) >> impl_tac >- first_assum ACCEPT_TAC >> strip_tac >>
   `venomMemDefs$allocas_non_overlapping s` by
     (qpat_assum `stmt_state_rel _ _ _ _ _ _ s` (strip_assume_tac o
        REWRITE_RULE [stmt_state_rel_def, venomMemDefsTheory.alloca_inv_def]) >>
@@ -702,9 +709,11 @@ Proof
       `src <> Var tmp /\ p <> tmp` by metis_tac[] >>
       `s.vs_current_bb = sx.cs_current_bb /\
        s.vs_inst_idx = LENGTH sx.cs_current_insts` by simp[] >>
-      drule_all alloc_copy_memory_framed_path >>
+      drule_all (SIMP_RULE bool_ss [PULL_EXISTS] alloc_copy_memory_framed_path) >>
       disch_then
         (qx_choosel_then [`u`, `uw`] strip_assume_tac) >>
+      qpat_assum `!H. _ ==> stmt_state_rel _ _ _ _ _ _ u`
+        (qspec_then `H0` mp_tac) >> impl_tac >- first_assum ACCEPT_TAC >> strip_tac >>
       `lookup_var p u = SOME w /\
        FLOOKUP u.vs_allocas inst.inst_id = SOME (w2n w,sz)` by simp[] >>
       `not_fresh_at sn p` by
@@ -773,9 +782,11 @@ Proof
 QED
 
 Theorem annassign_memory_store_post_path[local]:
-  !ctx func cenv cx e es es1 s0 s sa sb sf op id p sz w inst v etv tyv vtyp sty
-   sc rest a loc info bytes.
-    expr_post H ctx func cenv cx e es sa sb s0 es1 v op s /\
+  !cx st0 ctx func cenv e es es1 s0 s sa sb sf op id p sz w inst v etv tyv vtyp sty
+   sc rest a loc bytes.
+    (!H. valid_horizon cx st0 H es1.storage_trace ==>
+         expr_post H ctx func cenv cx e es sa sb s0 es1 v op s) /\
+    (?H. valid_horizon cx st0 H es1.storage_trace) /\
     post_value_type cenv e = expr_type e /\
     lower_value compile_expr cenv (expr_type e) e sa = (op,sb) /\
     cs_extends sa sb /\ local_ptrs_reserved cenv sa /\
@@ -792,7 +803,7 @@ Theorem annassign_memory_store_post_path[local]:
     0 < type_memory_bytes cenv sty /\ type_memory_bytes cenv sty < dimword (:256) /\
     val_footprint tyv v <= type_memory_bytes cenv sty /\
     compile_assign_value cenv (Var p) LocMemory op F loc
-      vtyp sty info bytes sb = ((),sf) /\
+      vtyp sty bytes sb = ((),sf) /\
     fn_has_code sb sf func /\ fn_inst_ids_distinct func /\
     ~s.vs_halted /\ s.vs_current_bb = sb.cs_current_bb /\
     s.vs_inst_idx = LENGTH sb.cs_current_insts /\
@@ -802,9 +813,10 @@ Theorem annassign_memory_store_post_path[local]:
     lookup_var p s0 = SOME w /\
     MEM inst (fn_insts func) /\ inst.inst_opcode = ALLOCA /\ inst.inst_outputs = [p] /\
     FLOOKUP s0.vs_allocas inst.inst_id = SOME (w2n w,sz) ==>
-    ?t. stmt_state_rel H ctx func cenv cx
-          (es1 with scopes :=
-             (sc |+ (id, <|assignable := a; type := tyv; value := v; popped := []|>)) :: rest) t /\
+    ?t. (!H. valid_horizon cx st0 H es1.storage_trace ==>
+           stmt_state_rel H ctx func cenv cx
+             (es1 with scopes :=
+                (sc |+ (id, <|assignable := a; type := tyv; value := v; popped := []|>)) :: rest) t) /\
         ~t.vs_halted /\ t.vs_current_bb = sf.cs_current_bb /\
         t.vs_inst_idx = LENGTH sf.cs_current_insts /\
         (!x u. not_fresh_at sa x /\ lookup_var x s0 = SOME u ==>
@@ -818,8 +830,17 @@ Theorem annassign_memory_store_post_path[local]:
         gas_marked_path F ctx func s 0 (OK t)
 Proof
   rpt gen_tac >> disch_then (MAP_EVERY assume_tac o CONJUNCTS) >>
+  qpat_x_assum `?H. valid_horizon _ _ H _` (qx_choose_then `H0` assume_tac) >>
+  `!H. valid_horizon cx st0 H es1.storage_trace ==>
+     stmt_state_rel H ctx func cenv cx es1 s` by
+    (qx_gen_tac `HH` >> strip_tac >>
+     qpat_assum `!H. _ ==> expr_post _ _ _ _ _ _ _ _ _ _ _ _ _ _`
+       (qspec_then `HH` mp_tac) >> impl_tac >- first_assum ACCEPT_TAC >>
+     simp[expr_post_def]) >>
+  qpat_assum `!H. _ ==> expr_post _ _ _ _ _ _ _ _ _ _ _ _ _ _`
+    (qspec_then `H0` mp_tac) >> impl_tac >- first_assum ACCEPT_TAC >> strip_tac >>
   drule_then (drule_then assume_tac) compile_lower_value_var >>
-  qpat_x_assum `expr_post H ctx _ _ _ _ _ _ _ _ _ _ _ _` mp_tac >>
+  qpat_x_assum `expr_post H0 ctx _ _ _ _ _ _ _ _ _ _ _ _` mp_tac >>
   simp[expr_post_def] >> strip_tac >>
   qpat_x_assum `post_value_type cenv e = expr_type e` kall_tac >>
   `val_wf tyv v` by simp[value_has_type_memory_wf] >>
@@ -838,7 +859,7 @@ Proof
     (irule not_fresh_at_mono >> qexists_tac `sa` >> simp[]) >>
   `local_ptrs_reserved cenv sb` by
     (irule local_ptrs_reserved_next_var >> qexists_tac `sa` >> simp[]) >>
-  drule_all annassign_memory_assign_framed_path >>
+  drule_all (SIMP_RULE bool_ss [PULL_EXISTS] annassign_memory_assign_framed_path) >>
   disch_then (qspecl_then [`a`] mp_tac) >>
   disch_then (qx_choose_then `t` strip_assume_tac) >>
   `!x u. not_fresh_at sa x /\ lookup_var x s0 = SOME u ==>
@@ -903,9 +924,9 @@ Proof
 QED
 
 Theorem compile_assign_value_memory_widen_open:
-  !cenv dst src loc dty sty info bytes sa sb.
+  !cenv dst src loc dty sty bytes sa sb.
     0 < type_memory_bytes cenv dty /\ (sty = dty \/ is_bytestring_type dty) /\
-    compile_assign_value cenv dst LocMemory src F loc dty sty info bytes sa = ((),sb) ==>
+    compile_assign_value cenv dst LocMemory src F loc dty sty bytes sa = ((),sb) ==>
     ~block_is_terminated sb
 Proof
   rpt gen_tac >> disch_then (MAP_EVERY assume_tac o CONJUNCTS) >>
@@ -922,9 +943,9 @@ Proof
 QED
 
 Theorem compile_assign_value_memory_same_open:
-  !cenv dst src loc ty info bytes sa sb.
+  !cenv dst src loc ty bytes sa sb.
     0 < type_memory_bytes cenv ty /\
-    compile_assign_value cenv dst LocMemory src F loc ty ty info bytes sa = ((),sb) ==>
+    compile_assign_value cenv dst LocMemory src F loc ty ty bytes sa = ((),sb) ==>
     ~block_is_terminated sb
 Proof
   rpt strip_tac >>
@@ -932,8 +953,8 @@ Proof
 QED
 
 Theorem annassign_memory_normal_continuation[local]:
-  !ctx func old c cx lctx id typ tyv e es etv ltv sa0 st sa sb sf salloc
-    marks v ee s op p sz w inst loc info bytes.
+  !ctx func old c cx st0 H0 lctx id typ tyv e es etv ltv sa0 st sa sb sf salloc
+    marks v ee s op p sz w inst loc bytes.
     declare_local old id typ sa0 = (c,st) /\ old.ce_alloca_locals /\
     (!l. FLOOKUP old.ce_vars id = SOME l ==> ?q z. l = PtrVar q z) /\
     gas_admissible (eval_stmt cx (AnnAssign id typ e)) (stmt_res_ok lctx) es /\
@@ -955,12 +976,13 @@ Theorem annassign_memory_normal_continuation[local]:
        (es with gas_obs := gs) = (INL v,es1) ==>
        value_has_type tyv v /\ value_has_type ltv v) /\
     local_ptrs_reserved c sa /\ cs_extends sa sb /\
-    stmt_state_rel H ctx func c cx es salloc /\
+    (!H. valid_horizon cx st0 H es.storage_trace ==>
+         stmt_state_rel H ctx func c cx es salloc) /\
     sa0.cs_next_id <= inst.inst_id /\ sa0.cs_next_id <= sa.cs_next_id /\
     sa0.cs_next_var <= sa.cs_next_var /\
     lower_value compile_expr c (expr_type e) e sa = (op,sb) /\
     compile_assign_value c (Var p) LocMemory op F loc typ
-      (lowered_value_type c e) info bytes sb = ((),sf) /\
+      (lowered_value_type c e) bytes sb = ((),sf) /\
     fn_has_code sb sf func /\ fn_inst_ids_distinct func /\
     FLOOKUP c.ce_vars id = SOME (PtrVar (Var p) sz) /\ not_fresh_at sa p /\
     lookup_var p salloc = SOME w /\
@@ -968,13 +990,35 @@ Theorem annassign_memory_normal_continuation[local]:
     FLOOKUP salloc.vs_allocas inst.inst_id = SOME (w2n w,sz) /\
     gas_marked_exec F (ctx,func) (bind (eval_expr cx e) (read_result cx))
       (es,salloc) marks (INL v) ee (OK s) /\
-    expr_post H ctx func c cx e es sa sb salloc (ee with gas_obs := []) v op s /\
+    valid_horizon cx st0 H0 ee.storage_trace /\
+    (!H. valid_horizon cx st0 H ee.storage_trace ==>
+         expr_post H ctx func c cx e es sa sb salloc (ee with gas_obs := []) v op s) /\
     s.vs_current_bb = sb.cs_current_bb /\ s.vs_inst_idx = LENGTH sb.cs_current_insts ==>
     ?ff u. gas_marked_exec F (ctx,func) (new_variable id tyv v)
       (ee with gas_obs := [],s) [] (INL ()) ff (OK u) /\
-      stmt_post H ctx func cx lctx old c sa0 sf es salloc (INL ()) ff u
+      !H. valid_horizon cx st0 H ff.storage_trace ==>
+        stmt_post H ctx func cx lctx old c sa0 sf es salloc (INL ()) ff u
 Proof
   rpt gen_tac >> disch_then (MAP_EVERY assume_tac o CONJUNCTS) >>
+  `valid_horizon cx st0 H0 es.storage_trace` by
+    (qpat_assum `gas_marked_exec _ _ (bind _ _) _ _ _ _ _`
+       (mp_tac o MATCH_MP (REWRITE_RULE [GSYM AND_IMP_INTRO]
+                          gas_marked_exec_valid_prefix)) >>
+     impl_tac >- simp[vyperStorageTraceTheory.storage_trace_frame_bind_all,
+                      vyperStorageTraceTheory.storage_trace_frame_read_result,
+                      vyperStorageTraceTheory.evaluate_storage_trace_frame] >>
+     disch_then irule >> gs[]) >>
+  qpat_assum `!H. _ ==> stmt_state_rel _ _ _ _ _ _ salloc`
+    (qspec_then `H0` mp_tac) >> impl_tac >- first_assum ACCEPT_TAC >> strip_tac >>
+  qpat_assum `!H. _ ==> expr_post _ _ _ _ _ _ _ _ _ _ _ _ _ _`
+    (qspec_then `H0` mp_tac) >> impl_tac >- first_assum ACCEPT_TAC >> strip_tac >>
+  `valid_horizon cx st0 H0 (ee with gas_obs := []).storage_trace` by simp[] >>
+  `!H. valid_horizon cx st0 H (ee with gas_obs := []).storage_trace ==>
+     expr_post H ctx func c cx e es sa sb salloc (ee with gas_obs := []) v op s` by
+    (rpt strip_tac >>
+     qpat_x_assum `!H. valid_horizon _ _ H ee.storage_trace ==>
+                       expr_post _ _ _ _ _ _ _ _ _ _ _ _ _ _` irule >>
+     gs[]) >>
   `!tail. bind (eval_expr cx e) (read_result cx)
     (es with gas_obs := gas_explicit marks salloc.vs_gas_readings ++ tail) =
       (INL v, ee with gas_obs := tail)` by fs[gas_marked_exec_def] >>
@@ -1006,7 +1050,7 @@ Proof
     (qpat_x_assum `lowered_value_type c e = expr_type e \/ _` strip_assume_tac
      >- (irule post_value_type_lowered >> first_assum ACCEPT_TAC) >>
      irule post_value_type_bytestring >> first_assum ACCEPT_TAC) >>
-  drule_all annassign_memory_store_post_path >>
+  drule_all (SIMP_RULE bool_ss [PULL_EXISTS] annassign_memory_store_post_path) >>
   disch_then (qspec_then `T` strip_assume_tac) >>
   `MAP FDOM (ee with gas_obs := []).scopes = MAP FDOM es.scopes` by
     (qpat_assum `!tail. bind _ _ _ = _` (qspec_then `[]` assume_tac) >>
@@ -1056,6 +1100,21 @@ Proof
     (sc |+ (id, <|assignable := T; type := tyv; value := v; popped := []|>)) :: rest|>`, `t`] >>
   conj_tac
   >- simp[gas_marked_exec_def] >>
+  qx_gen_tac `HH` >> strip_tac >>
+  `valid_horizon cx st0 HH (ee with gas_obs := []).storage_trace` by gs[] >>
+  qpat_x_assum `!H. _ ==> stmt_state_rel _ _ _ _ _ _ t`
+    (qspec_then `HH` mp_tac) >> impl_tac >- first_assum ACCEPT_TAC >> strip_tac >>
+  `!X. X.accounts = ee.accounts /\ X.tStorage = ee.tStorage ==>
+       storage_well_formed_on cx X (FST HH)` by
+    (rpt strip_tac >>
+     `storage_well_formed_on cx (ee with gas_obs := []) (FST HH)` by
+       (qpat_assum `!H. valid_horizon _ _ H (ee with gas_obs := []).storage_trace ==>
+                        expr_post _ _ _ _ _ _ _ _ _ _ _ _ _ _`
+          (qspec_then `HH` mp_tac) >> impl_tac >- first_assum ACCEPT_TAC >>
+        simp[expr_post_def]) >>
+     `(ee with gas_obs := []).accounts = ee.accounts /\
+      (ee with gas_obs := []).tStorage = ee.tStorage` by simp[] >>
+     metis_tac[vyperStorageFootprintTheory.storage_well_formed_on_backends]) >>
   simp[stmt_post_def, stmt_lands_def] >>
   qmatch_goalsub_abbrev_tac `stmt_state_rel _ _ _ _ _ (ee with scopes := scs) _` >>
   `ee with <|scopes := scs; gas_obs := []|> =
@@ -1135,34 +1194,43 @@ Theorem compile_annassign_memory_widen_stmt_frag:
 Proof
   rpt gen_tac >> disch_then (MAP_EVERY assume_tac o CONJUNCTS) >>
   simp[stmt_frag_def, stmt_framed_frag_def] >> rpt gen_tac >> strip_tac >>
+  reverse (Cases_on `storage_trace_domain cx st0 es.storage_trace`)
+  >- (rewrite_tac[gas_outcome_def] >> qexists_tac `[]` >> disj1_tac >>
+      irule gasStorageTheory.gas_bad_storage_at_initial >>
+      simp[vyperStorageTraceTheory.evaluate_storage_trace_frame]) >>
+  `?H0. valid_horizon cx st0 H0 es.storage_trace` by
+    metis_tac[vyperStorageFootprintTheory.storage_trace_domain_def] >>
   `!st0 c st1. declare_local cenv id vtyp st0 = (c, st1) ==>
      !a b op. lower_value compile_expr c (expr_type e) e a = (op, b) ==>
-              cs_extends a b` by metis_tac[] >>
+              cs_extends a b` by
+    (rpt strip_tac >> qpat_assum `!st0 c st1. _ ==> _ /\ _` drule >> strip_tac >>
+     qpat_x_assum `!sa sb op. _` drule >> simp[]) >>
   drule_all annassign_memory_code_parts >>
   disch_then (qx_choosel_then [`st`, `sA`, `sV`, `sB`, `vv`, `op`, `p`] strip_assume_tac) >>
   rename1 `declare_local cenv id vtyp sa = (c, st)` >>
   qpat_x_assum `!st0 c st1. _ ==> _ /\ _` drule >> strip_tac >>
   drule_all declare_local_memory_types >> strip_tac >>
-  `stmt_state_rel H ctx func c cx es s0` by
-    (irule stmt_state_rel_declare_local_entry >> metis_tac[]) >>
+  `!H. valid_horizon cx st0 H es.storage_trace ==>
+     stmt_state_rel H ctx func c cx es s0` by
+    (rpt strip_tac >> irule stmt_state_rel_declare_local_entry >> metis_tac[]) >>
   `not_local_ptr c es.scopes p` by metis_tac[local_ptrs_reserved_not_live] >>
   `s0.vs_current_bb = st.cs_current_bb /\
    s0.vs_inst_idx = LENGTH st.cs_current_insts` by
     (drule_all declare_local_ptr >> simp[] >> strip_tac >> gvs[]) >>
   `type_memory_bytes cenv vtyp < dimword (:256)` by (simp[] >> decide_tac) >>
-  drule_all annassign_alloca_operand_framed_path >>
+  drule_all (SIMP_RULE bool_ss [PULL_EXISTS] annassign_alloca_operand_framed_path) >>
   disch_then (qx_choosel_then [`salloc`, `w`] strip_assume_tac) >>
   `gas_admissible (bind (eval_expr cx e) (read_result cx)) expr_res_ok es` by
     (irule annassign_admissible_rhs >> metis_tac[]) >>
-  `gas_outcome F (cx_tops cx) (ctx,func)
+  `gas_outcome F (cx_tops cx) (ctx,func) cx st0
     (bind (eval_expr cx e) (read_result cx)) (es,salloc)
-    (\res ee t. ?v. res = INL v /\
+    (\H res ee t. ?v. res = INL v /\
       expr_post H ctx func c cx e es sA sB salloc ee v op t /\
       t.vs_current_bb = sB.cs_current_bb /\
       t.vs_inst_idx = LENGTH sB.cs_current_insts)
-    (\res ee r. expr_exit res r)` by
+    (\H res ee r. expr_exit res r)` by
     (qpat_x_assum `expr_sim _ _ _ _ _ _ _` mp_tac >>
-     simp[expr_sim_def] >> disch_then irule >> simp[]) >>
+     simp[expr_sim_def] >> disch_then irule >> simp[] >> metis_tac[]) >>
   qmatch_asmsub_abbrev_tac `MEM ai (fn_insts func)` >>
   `ai.inst_opcode = ALLOCA /\ ai.inst_outputs = [p] /\
    FLOOKUP salloc.vs_allocas ai.inst_id =
@@ -1179,26 +1247,28 @@ Proof
      drule emit_inst_extends >>
      simp[Abbr `ai`, venomInstTheory.mk_inst_def]) >>
   irule annassign_outcome_entry_prefix >>
-  simp[] >> qexists_tac `salloc` >> simp[] >>
+  simp[vyperStorageTraceTheory.evaluate_storage_trace_frame] >>
+  qexists_tac `salloc` >> simp[] >>
   irule annassign_rhs_outcome >>
   goal_assum (drule_at Any) >> simp[] >>
   reverse conj_tac >- metis_tac[] >>
   rpt gen_tac >> strip_tac >>
+  `t.vs_current_bb = sB.cs_current_bb /\
+   t.vs_inst_idx = LENGTH sB.cs_current_insts` by metis_tac[] >>
+  `!H. valid_horizon cx st0 H ee.storage_trace ==>
+     expr_post H ctx func c cx e es sA sB salloc (ee with gas_obs := []) v op t` by
+    metis_tac[] >>
   `?ff u. gas_marked_exec F (ctx,func) (new_variable id tyv v)
     (ee with gas_obs := [],t) [] (INL ()) ff (OK u) /\
-    stmt_post H ctx func cx lctx cenv c sa sb es salloc (INL ()) ff u` suffices_by
-    (strip_tac >> qexistsl_tac [`ff`, `u`] >>
-     conj_tac >- first_assum ACCEPT_TAC >>
-     qpat_x_assum `stmt_post _ _ _ _ _ _ _ _ _ _ _ _ _ _` mp_tac >>
-     POP_ASSUM_LIST (K ALL_TAC) >>
-     simp[stmt_post_def, stmt_state_rel_def, state_rel_gas_obs, immutable_alloca_sep_def,
-          alloca_frame_def] >>
-     metis_tac[]) >>
+    !H. valid_horizon cx st0 H ff.storage_trace ==>
+      stmt_post H ctx func cx lctx cenv c sa sb es salloc (INL ()) ff u` suffices_by
+    (strip_tac >> qexistsl_tac [`ff`, `u`] >> simp[stmt_post_end_gas_obs]) >>
   irule annassign_memory_normal_continuation >>
-  qpat_assum `expr_post _ _ _ _ _ _ _ _ _ _ _ _ _ _` (irule_at Any) >>
+  qpat_assum `lower_value _ _ _ _ _ = _` (irule_at Any) >>
+  qpat_assum `valid_horizon cx st0 _ ee.storage_trace` (irule_at Any) >>
   qpat_assum `declare_local _ _ _ _ = _` (irule_at Any) >>
   simp[] >>
-  qpat_assum `compile_assign_value _ _ _ _ _ _ _ _ _ _ _ = _` (irule_at Any) >>
+  qpat_assum `compile_assign_value _ _ _ _ _ _ _ _ _ _ = _` (irule_at Any) >>
   simp[] >>
   qexistsl_tac [`marks`, `ai`] >> simp[] >>
   qpat_x_assum `!gs v es1. _ ==> value_has_type _ _ /\ value_has_type _ _` mp_tac >>

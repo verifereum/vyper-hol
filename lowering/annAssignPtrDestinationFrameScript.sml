@@ -8,7 +8,7 @@ Ancestors
 
 Theorem annassign_alloca_window_excludes_locals_ptr:
  !ctx func cenv cx es s inst p b sz k.
- stmt_state_rel ctx func cenv cx es s /\ fn_inst_ids_distinct func /\
+ stmt_state_rel H ctx func cenv cx es s /\ fn_inst_ids_distinct func /\
  MEM inst (fn_insts func) /\ inst.inst_outputs = [p] /\
  not_local_ptr cenv es.scopes p /\
  FLOOKUP s.vs_allocas inst.inst_id = SOME (b,sz) /\ k <= sz ==>
@@ -50,18 +50,18 @@ QED
 
 Theorem annassign_state_memory_exterior_ptr:
  !ctx func cenv cx es s mem writes.
- stmt_state_rel ctx func cenv cx es s /\ ~cenv.ce_is_ctor /\
+ stmt_state_rel H ctx func cenv cx es s /\ ~cenv.ce_is_ctor /\
  (!name b sz i. local_region cenv es.scopes s name b sz /\
     b <= i /\ i < b+sz ==> i NOTIN writes) /\
  (!i. i NOTIN writes ==> mem_bytes_at i 1 mem = mem_bytes_at i 1 s.vs_memory) ==>
- stmt_state_rel ctx func cenv cx es (s with vs_memory := mem)
+ stmt_state_rel H ctx func cenv cx es (s with vs_memory := mem)
 Proof
  rpt gen_tac >> strip_tac >>
  `local_ptrs_rel func cenv es.scopes (s with vs_memory := mem)` by
    (irule annassign_local_ptrs_exterior_ptr >>
     conj_tac >- (qexists `writes` >> asm_rewrite_tac[]) >>
     fs[stmt_state_rel_def, state_rel_def]) >>
- `state_rel func cenv cx es (s with vs_memory := mem)` by
+ `state_rel H func cenv cx es (s with vs_memory := mem)` by
    (irule state_rel_frame >> simp[] >> qexistsl [`es`,`s`] >> simp[] >>
     fs[stmt_state_rel_def, state_rel_def, immutables_rel_def] >>
     asm_rewrite_tac[]) >>
@@ -75,7 +75,7 @@ QED
 
 Theorem annassign_state_vars_exterior_ptr:
  !ctx func cenv cx es s sf writes.
- stmt_state_rel ctx func cenv cx es s /\ ~cenv.ce_is_ctor /\
+ stmt_state_rel H ctx func cenv cx es s /\ ~cenv.ce_is_ctor /\
  (sf with <|vs_vars := s.vs_vars; vs_memory := s.vs_memory;
             vs_inst_idx := s.vs_inst_idx|>) = s /\
  (!name b sz i. local_region cenv es.scopes s name b sz /\
@@ -85,13 +85,13 @@ Theorem annassign_state_vars_exterior_ptr:
     FLOOKUP cenv.ce_vars name = SOME (PtrVar (Var p) sz) ==>
     lookup_var p sf = lookup_var p s) /\
  (!p. cenv.ce_imm_alloca = SOME (Var p) ==> lookup_var p sf = lookup_var p s) ==>
- stmt_state_rel ctx func cenv cx es sf
+ stmt_state_rel H ctx func cenv cx es sf
 Proof
  rpt gen_tac >> strip_tac >>
- `stmt_state_rel ctx func cenv cx es (s with vs_memory := sf.vs_memory)` by
+ `stmt_state_rel H ctx func cenv cx es (s with vs_memory := sf.vs_memory)` by
    (irule annassign_state_memory_exterior_ptr >>
     conj_tac >- (qexists `writes` >> asm_rewrite_tac[]) >> simp[]) >>
- `stmt_state_rel ctx func cenv cx es
+ `stmt_state_rel H ctx func cenv cx es
     ((s with vs_memory := sf.vs_memory) with vs_vars := sf.vs_vars)` by
    (irule stmt_state_rel_vars_frame >> asm_rewrite_tac[] >>
     simp[lookup_var_def] >> rpt strip_tac >>
@@ -124,8 +124,8 @@ QED
 
 Theorem annassign_allocated_destination_invariants_ptr:
  !ctx func cenv cx es d s sf G tn Gf tnf sa G0 tn0 s0 inst p b sz k st.
- stmt_state_rel ctx func cenv cx es s /\ ~cenv.ce_is_ctor /\
- ghost_inv d cenv cx es G tn s /\ ghost_kept cenv es sa G0 tn0 s0 G tn /\
+ stmt_state_rel H ctx func cenv cx es s /\ ~cenv.ce_is_ctor /\
+ ghost_inv H d cenv cx es G tn s /\ ghost_kept cenv es sa G0 tn0 s0 G tn /\
  fn_inst_ids_distinct func /\ MEM inst (fn_insts func) /\
  inst.inst_outputs = [p] /\ not_local_ptr cenv es.scopes p /\
  FLOOKUP s.vs_allocas inst.inst_id = SOME (b,sz) /\ k <= sz /\
@@ -148,7 +148,7 @@ Theorem annassign_allocated_destination_invariants_ptr:
  (!i. ~(b <= i /\ i < b+k) ==>
     mem_bytes_at i 1 sf.vs_memory = mem_bytes_at i 1 s.vs_memory /\
     (i IN tnf.t_mem <=> i IN tn.t_mem)) ==>
- stmt_state_rel ctx func cenv cx es sf /\ ghost_inv d cenv cx es Gf tnf sf /\
+ stmt_state_rel H ctx func cenv cx es sf /\ ghost_inv H d cenv cx es Gf tnf sf /\
  ghost_kept cenv es sa G0 tn0 s0 Gf tnf
 Proof
  rpt gen_tac >> strip_tac >>
@@ -169,8 +169,8 @@ Proof
      conj_tac >- (rpt strip_tac >> metis_tac[]) >>
      fs[venom_state_component_equality]) >>
  conj_tac
- >- (drule_at (Pat `ghost_inv _ _ _ _ _ _ _`) annassign_ghost_vars_exterior_ptr >>
-     disch_then (drule_at (Pat `stmt_state_rel _ _ _ _ _ _`)) >>
+ >- (drule_at (Pat `ghost_inv _ _ _ _ _ _ _ _`) annassign_ghost_vars_exterior_ptr >>
+     disch_then (drule_at (Pat `stmt_state_rel _ _ _ _ _ _ _`)) >>
      disch_then irule >> asm_rewrite_tac[] >> rpt conj_tac
      >- (rpt strip_tac >> metis_tac[])
      >- (rpt strip_tac >> metis_tac[])
@@ -199,8 +199,8 @@ Theorem annassign_allocated_store_memory_path_ptr:
   else k = type_memory_bytes cenv ty) /\
  val_wf tv v /\ val_footprint tv v <= k /\
  (!m. mem_agree_outside tn.t_mem s.vs_memory m ==> val_in_memory tv v (w2n a) m) /\
- stmt_state_rel ctx func cenv cx es s /\ ~cenv.ce_is_ctor /\
- ghost_inv d cenv cx es G tn s /\ ghost_kept cenv es sa G0 tn0 s0 G tn /\
+ stmt_state_rel H ctx func cenv cx es s /\ ~cenv.ce_is_ctor /\
+ ghost_inv H d cenv cx es G tn s /\ ghost_kept cenv es sa G0 tn0 s0 G tn /\
  fn_inst_ids_distinct func /\ MEM inst (fn_insts func) /\
  inst.inst_opcode = ALLOCA /\ inst.inst_outputs = [dst] /\
  not_local_ptr cenv es.scopes dst /\
@@ -217,7 +217,7 @@ Theorem annassign_allocated_store_memory_path_ptr:
  (!q nsz. cenv.ce_return_pc = SOME (PtrVar (Var q) nsz) ==> not_fresh_at st q) /\
  (!q. cenv.ce_imm_alloca = SOME (Var q) ==> not_fresh_at st q) ==>
  ?Gf tnf sf.
- gas_path_ptr (cx_dead cx) 0 ctx func PG G tn s 0 Gf tnf (OK sf) /\
+ gas_path_ptr (cx_dead H cx) 0 ctx func PG G tn s 0 Gf tnf (OK sf) /\
  sf.vs_current_bb = sb.cs_current_bb /\ sf.vs_inst_idx = LENGTH sb.cs_current_insts /\
  ~sf.vs_halted /\
  (sf with <|vs_vars := s.vs_vars; vs_memory := s.vs_memory;
@@ -229,7 +229,7 @@ Theorem annassign_allocated_store_memory_path_ptr:
     mem_bytes_at i 1 sf.vs_memory = mem_bytes_at i 1 s.vs_memory /\
     (i IN tnf.t_mem <=> i IN tn.t_mem)) /\
  (!m. mem_agree_outside tnf.t_mem sf.vs_memory m ==> val_in_memory tv v (w2n b) m) /\
- stmt_state_rel ctx func cenv cx es sf /\ ghost_inv d cenv cx es Gf tnf sf /\
+ stmt_state_rel H ctx func cenv cx es sf /\ ghost_inv H d cenv cx es Gf tnf sf /\
  ghost_kept cenv es sa G0 tn0 s0 Gf tnf
 Proof
  rpt gen_tac >> strip_tac >> (
@@ -241,9 +241,9 @@ Proof
  disch_then (drule_at (Pat `~ctx_has_dalloca _`)) >>
  disch_then (drule_at (Pat `if _ then _ else _`)) >>
  disch_then (drule_at (Pat `val_wf _ _`)) >>
- disch_then (qspecl_then [`cx_dead cx`,`PG`] mp_tac) >>
+ disch_then (qspecl_then [`cx_dead H cx`,`PG`] mp_tac) >>
  (impl_tac >- (asm_rewrite_tac[] >> simp[])) >> strip_tac >>
- `stmt_state_rel ctx func cenv cx es sf /\ ghost_inv d cenv cx es Gf tnf sf /\
+ `stmt_state_rel H ctx func cenv cx es sf /\ ghost_inv H d cenv cx es Gf tnf sf /\
   ghost_kept cenv es sa G0 tn0 s0 Gf tnf` by
    (drule_all annassign_allocated_destination_invariants_ptr >> simp[]) >>
  qexistsl [`Gf`,`tnf`,`sf`] >> asm_rewrite_tac[])

@@ -212,3 +212,48 @@ Proof
   Cases_on `encode_value tv v` >>
   simp[return_def, raise_def, bind_def, set_storage_backend_eq]
 QED
+
+Theorem append_storage_full:
+  cap <= w2n (lookup_storage slot (get_storage cx es tr)) ==>
+  append_place cx (StoragePlace tr slot (ArrayTV tv (Dynamic cap))) v es =
+    (INR (Error (RuntimeError "append full storage array")), es)
+Proof
+  strip_tac >>
+  simp[Once append_place_def, get_storage_backend_eq, bind_def,
+       ignore_bind_def, check_def, assert_def, return_def]
+QED
+
+Theorem append_storage_writes:
+  w2n (lookup_storage slot (get_storage cx es tr)) < cap ==>
+  append_place cx (StoragePlace tr slot (ArrayTV tv (Dynamic cap))) v es =
+  (ignore_bind
+    (write_storage_slot cx tr
+      (slot + n2w (1 + w2n (lookup_storage slot (get_storage cx es tr)) *
+                       type_slot_size tv)) tv v)
+    (write_storage_slot cx tr slot (BaseTV (UintT 256))
+      (IntV &(w2n (lookup_storage slot (get_storage cx es tr)) + 1)))) es
+Proof
+  strip_tac >>
+  simp[Once append_place_def, get_storage_backend_eq, bind_def,
+       ignore_bind_def, check_def, assert_def, return_def]
+QED
+
+Theorem append_storage_word_success:
+  ~cx.txn.is_static /\
+  len = w2n (lookup_storage slot (get_storage cx es tr)) /\
+  len < cap /\ type_slot_size tv = 1 /\
+  encode_value tv v = SOME [(0,w)] ==>
+  append_place cx (StoragePlace tr slot (ArrayTV tv (Dynamic cap))) v es =
+  (INL (),
+   set_storage cx
+     (set_storage cx es tr
+       (update_storage (slot + n2w (1 + len)) w (get_storage cx es tr))) tr
+     (update_storage slot (n2w (len + 1))
+       (update_storage (slot + n2w (1 + len)) w (get_storage cx es tr))))
+Proof
+  strip_tac >> gvs[] >>
+  simp[append_storage_writes, ignore_bind_def, bind_def,
+       write_storage_slot_eq, apply_writes_def,
+       get_storage_after_set, encode_value_def, encode_base_to_slot_def,
+       integer_wordTheory.i2w_def]
+QED

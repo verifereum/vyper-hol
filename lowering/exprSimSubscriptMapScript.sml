@@ -228,7 +228,7 @@ Proof
           qexists_tac `marks` >> disj1_tac >>
           irule gasStorageTheory.gas_bad_storage_at_bind_left >> simp[] >>
           irule gasStorageTheory.gas_bad_storage_at_counted_prefix >>
-          goal_assum drule >> simp[]) >>
+          metis_tac[]) >>
       `valid_horizon cx st0 (storage_trace_horizon mid.storage_trace)
          mid.storage_trace` by
         fs[vyperStorageFootprintTheory.storage_trace_domain_def] >>
@@ -285,7 +285,7 @@ Proof
           qexists_tac `marks` >> disj1_tac >>
           irule gasStorageTheory.gas_bad_storage_at_bind_left >> simp[] >>
           irule gasStorageTheory.gas_bad_storage_at_counted_prefix >>
-          goal_assum drule >> simp[]) >>
+          metis_tac[]) >>
       `valid_horizon cx st0 (storage_trace_horizon mid.storage_trace)
          mid.storage_trace` by
         fs[vyperStorageFootprintTheory.storage_trace_domain_def] >>
@@ -389,39 +389,6 @@ QED
 
 (* Storage preservation accepts both value and place typing.  A mapping
    base uses the latter, not well_typed_expr. *)
-Theorem expr_pre_storage_preserved:
-  !cenv cx env e es res es'.
-    expr_sim_inv cenv cx env es /\
-    (well_typed_expr env e \/ ?vt. type_place_expr env e = SOME vt) /\
-    call_evaluation_safe cx (int_calls_expr e) /\ ~expr_has_evm_run e /\
-    EVERY (\c. FST c = NONE /\
-               ?tops. supported_program tops /\
-                      get_module_code cx NONE = SOME tops) (int_calls_expr e) /\
-    eval_expr cx e es = (res, es') ==>
-    contract_storage_well_formed cx es' /\ oracle_storage_ok cx es'
-Proof
-  rpt gen_tac >> strip_tac >> (conj_tac
-  >- (Cases_on `int_calls_expr e = []`
-      >- (drule_at (Pat `eval_expr _ _ _ = _`)
-            (cj 5 eval_expr_oracle_storage_mutual) >>
-          disch_then (qspec_then `env` mp_tac) >>
-          (impl_tac >-
-            gvs[expr_sim_inv_def, expr_has_evm_run_def,
-                runtime_storage_consistent_def, runtime_consistent_def]) >>
-          metis_tac[]) >>
-      `?tops. supported_program tops /\ get_module_code cx NONE = SOME tops`
-        by (Cases_on `int_calls_expr e` >> gvs[] >> metis_tac[]) >>
-      drule_at (Pat `eval_expr _ _ _ = _`) (cj 5 body_oracle_storage_mutual) >>
-      disch_then (qspecl_then [`tops`, `env`] mp_tac) >>
-      (impl_tac >-
-        (gvs[expr_sim_inv_def, listTheory.EVERY_CONJ,
-             runtime_storage_consistent_def, runtime_consistent_def] >>
-         metis_tac[])) >> metis_tac[]) >>
-  irule oracle_storage_ok_suffix >> qexists_tac `es` >>
-  gvs[expr_sim_inv_def] >>
-  drule_then irule (cj 5 eval_outcome_suffix_mutual))
-QED
-
 Theorem expr_map_pre_eval_result:
   !cenv cx env e es res es'.
     expr_map_pre cenv cx env e es /\ eval_expr cx e es = (res, es') ==>
@@ -430,10 +397,6 @@ Theorem expr_map_pre_eval_result:
             eval_result_typed (env,cx,es') tv vt
 Proof
   rpt gen_tac >> strip_tac >>
-  `contract_storage_well_formed cx es' /\ oracle_storage_ok cx es'` by
-    (irule expr_pre_storage_preserved >>
-     qexistsl_tac [`cenv`, `e`, `env`, `es`, `res`] >>
-     gvs[expr_map_pre_def, listTheory.EVERY_MEM] >> metis_tac[]) >>
   `IS_SOME es'.outcomes` by
     (irule eval_expr_outcomes_some >>
      gvs[expr_map_pre_def, expr_sim_inv_def] >> metis_tac[]) >>
@@ -661,7 +624,7 @@ Proof
   simp[vyperHashMapStorageTheory.select_result_hashmap_nested]
 QED
 
-Theorem forced_then_outcome_exec[local]:
+Theorem forced_then_outcome_exec:
   gas_outcome memory tops (ctx,func)
     (bind (eval_expr cx e) (read_result cx)) (es,s0)
     (\res ee t. ?v. res = INL v /\ P v ee t)

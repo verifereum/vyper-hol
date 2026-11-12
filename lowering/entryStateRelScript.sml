@@ -22,7 +22,7 @@ Ancestors
   e2eDefs vyperLoweringCorrect entryDecodePlanProps entryArgPtrs fragExec
   compileEnv loweringStateRelDefs compileVyper moduleLowering supportedProgram supportedNames
   supportedDecls immutableLocationProps immutableSectionRel immutableRelation
-  structFieldsProps
+  structFieldsProps externalBodySupport
   vyperTypeContract vyperTypeContractStaticMaps vyperTypeContractContext
   vyperInterpreter vyperState vyperContext vyperAST vyperValue vyperTypeDefaults
   venomState
@@ -520,22 +520,6 @@ Theorem type_env_all_modules_one[local]:
   type_env_all_modules [(NONE, tops)] = type_env tops
 Proof
   simp[type_env_all_modules_def, type_env_def, FUNION_FEMPTY_2]
-QED
-
-(* With no public variables, an external function lookup_function selects
-   is a declared function, not a getter. *)
-Theorem lookup_function_external_decl:
-  !tops tops0 name mut nr args dflts ret fbody.
-    EVERY (supported_declaration_header tops0) tops /\
-    lookup_function NONE name External tops =
-      SOME (mut, nr, args, dflts, ret, fbody) ==>
-    ?raw. MEM (FunctionDecl External mut nr raw name args dflts ret fbody) tops
-Proof
-  Induct >- simp[lookup_function_def] >>
-  rpt gen_tac >> strip_tac >> gvs[] >>
-  Cases_on `h` >> gvs[supported_declaration_header_def, lookup_function_def] >>
-  BasicProvers.every_case_tac >> gvs[lookup_function_def, AllCaseEqs()] >>
-  metis_tac[]
 QED
 
 (* The source typing check gives the parameters distinct names and

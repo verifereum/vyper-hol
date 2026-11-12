@@ -49,7 +49,7 @@ Theorem immutable_normalized_composite_path:
   type_widens_to tenv sty dty /\
   evaluate_type tenv sty = SOME stv /\ evaluate_type tenv dty = SOME dtv /\
   value_has_type stv v /\ value_has_type dtv v /\ val_wf stv v /\ val_wf dtv v /\
-  stmt_state_rel ctx func cenv cx es s /\
+  stmt_state_rel H ctx func cenv cx es s /\
   eval_operand src s = SOME sw /\ eval_operand dst s = SOME dw /\
   val_in_memory stv v (w2n sw) s.vs_memory /\
   type_memory_size dtv < dimword (:256) /\
@@ -69,7 +69,7 @@ Theorem immutable_normalized_composite_path:
   off+L < dimword (:256) ==>
   ?r q pw.
     gas_marked_path F ctx func s 0 (OK r) /\
-    stmt_state_rel ctx func cenv cx es r /\
+    stmt_state_rel H ctx func cenv cx es r /\
     eval_operand buf.buf_operand r = SOME pw /\
     eval_operand dst r = SOME (n2w off) /\
     (!region. imm = SOME region ==> eval_operand region r = SOME 0w) /\
@@ -110,9 +110,9 @@ Proof
   drule compile_alloc_buffer_parts >> strip_tac >>
   `w2n sw + type_memory_size stv <= w2n w \/
    w2n w + type_memory_size dtv <= w2n sw` by
-    (qpat_x_assum `stmt_state_rel _ _ _ _ _ u` kall_tac >>
+    (qpat_x_assum `stmt_state_rel _ _ _ _ _ _ u` kall_tac >>
      irule place_alloca_source_disjoint >> simp[] >>
-     goal_assum (drule_at (Pat `stmt_state_rel _ _ _ _ _ _`)) >>
+     goal_assum (drule_at (Pat `stmt_state_rel _ _ _ _ _ _ _`)) >>
      qexistsl_tac [
        `mk_inst sa.cs_next_id ALLOCA [Lit (n2w (type_memory_size dtv))]
          [STRING #"%" (toString sa.cs_next_var)]`,
@@ -149,7 +149,7 @@ Proof
   disch_then (qspec_then `ctx` mp_tac) >>
   simp[] >> (impl_tac >- first_assum ACCEPT_TAC) >> strip_tac >>
   (drule_all buffer_alloc_code >> strip_tac >>
-  `stmt_state_rel ctx func cenv cx es t` by
+  `stmt_state_rel H ctx func cenv cx es t` by
     (irule place_typed_copy_alloca_state_frame >>
      goal_assum (drule_at (Pat `typed_copy_state_frame _ _ _ _ _`)) >>
      qexistsl_tac [`type_memory_size dtv`,
@@ -175,7 +175,7 @@ Proof
        (strip_assume_tac o SRULE [typed_copy_state_frame_def,
           venom_state_component_equality]) >> simp[]) >>
   `regions_disjoint (w2n w) L off L` by
-    (qpat_assum `stmt_state_rel _ _ _ _ _ t`
+    (qpat_assum `stmt_state_rel _ _ _ _ _ _ t`
        (strip_assume_tac o REWRITE_RULE[stmt_state_rel_def]) >>
      qpat_x_assum `immutable_alloca_sep _ _ _ _ _`
        (strip_assume_tac o REWRITE_RULE[immutable_alloca_sep_def]) >>
