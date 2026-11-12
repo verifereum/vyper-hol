@@ -979,7 +979,11 @@ Proof
   TRY disj2_tac >> qexists_tac `s0` >> simp[] >>
   `state_rel H func cenv cx es s0` by fs[stmt_state_rel_def] >>
   drule state_rel_scopes_nil >>
-  strip_tac >> irule (iffRL state_rel_gas_obs) >> first_assum ACCEPT_TAC
+  strip_tac >>
+  `es with <|scopes := []; gas_obs := tail|> =
+   (es with scopes := []) with gas_obs := tail` by simp[] >>
+  pop_assum SUBST1_TAC >> REWRITE_TAC[state_rel_gas_obs] >>
+  first_assum ACCEPT_TAC
 QED
 
 Theorem internal_frame_ret_none_full:
@@ -1248,7 +1252,11 @@ Proof
   `state_rel H func cenv cx mid t` by
     fs[expr_post_def, stmt_state_rel_def] >>
   drule state_rel_scopes_nil >>
-  strip_tac >> irule (iffRL state_rel_gas_obs) >> first_assum ACCEPT_TAC
+  strip_tac >>
+  `mid with <|scopes := []; gas_obs := tail|> =
+   (mid with scopes := []) with gas_obs := tail` by simp[] >>
+  pop_assum SUBST1_TAC >> REWRITE_TAC[state_rel_gas_obs] >>
+  first_assum ACCEPT_TAC
 QED
 
 Theorem internal_frame_ret_word_full:
