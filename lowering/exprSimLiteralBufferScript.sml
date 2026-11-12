@@ -1058,7 +1058,7 @@ Resume compile_literal_other_vv_sim[string]:
    MEM (mk_inst sa.cs_next_id ALLOCA
           [Lit (n2w (32 + 32 * word_size (STRLEN str)))]
           [STRING #"%" (toString sa.cs_next_var)]) (fn_insts func)` by
-    (once_rewrite_tac[ADD_COMM] >> conj_tac >> first_assum ACCEPT_TAC) >>
+    (once_rewrite_tac[arithmeticTheory.ADD_COMM] >> conj_tac >> first_assum ACCEPT_TAC) >>
   mp_tac (SRULE [] (Q.INST [`H` |-> `H0`]
     (Q.SPECL [`func`, `cenv`, `cx`, `es with gas_obs := []`,
               `MAP (n2w o ORD) str : word8 list`, `sa`, `cs'`, `buf`, `s0`,
