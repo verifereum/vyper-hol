@@ -170,6 +170,25 @@ Proof
   gvs[exprLoweringTheory.lowered_value_type_def, vyperASTTheory.expr_type_def]
 QED
 
+(* A mapping subscript never reads its base, so the index hypothesis of
+   body_subscript_case holds for the base's own result. *)
+Theorem expr_map_pre_subscript_not_read[local]:
+  expr_map_pre cenv cx env (Subscript ann obj idx) es ==>
+  ~subscript_reads_base cx obj idx
+Proof
+  strip_tac >>
+  `?kt vt. type_place_expr env obj = SOME (HashMapT kt vt)` by
+    (fs[exprSimMapDefsTheory.expr_map_pre_def,
+        vyperTypeSystemTheory.well_typed_expr_def, AllCaseEqs()] >>
+     rename1 `subscript_vtype bty _ = SOME (HashMapT _ _)` >>
+     Cases_on `bty`
+     >- (rename1 `subscript_vtype (Type ty) _ = _` >>
+         Cases_on `ty` >>
+         gvs[vyperTypeSystemTheory.subscript_vtype_def, AllCaseEqs()]) >>
+     gvs[vyperTypeSystemTheory.subscript_vtype_def, AllCaseEqs()]) >>
+  drule exprSimSubscriptMapTheory.map_base_no_overlap >> simp[]
+QED
+
 (* exprSimPlaces' compile_subscript_case, whose array and mapping cases are
    cheated there for compile_expr_sim too. *)
 Theorem body_subscript_case:
@@ -194,6 +213,12 @@ Proof
         (irule expr_sim_case_of_vv >> simp[]) >>
       fs[expr_sim_case_def, expr_vv_case_def] >> metis_tac[]) >>
   rpt gen_tac >> strip_tac >>
+  drule expr_map_pre_subscript_not_read >> strip_tac >>
+  `!s0 r0 t0. eval_expr cx e1 s0 = (INL r0,t0) ==> body_expr_ok cx e2` by
+    (rpt strip_tac >>
+     qpat_x_assum `!s'' res t s3 res' t'. _`
+       (qspecl_then [`s0`, `r0`, `t0`, `t0`, `r0`, `t0`] mp_tac) >>
+     fs[vyperStateTheory.return_def]) >>
   `expr_map_case F ctx func cenv cx (Subscript v8 e1 e2)` by
     (irule compile_subscript_map_map_case >> conj_tac
      >~ [`expr_sim_case`] >- (rpt strip_tac >> metis_tac[body_expr_ok_case]) >>
