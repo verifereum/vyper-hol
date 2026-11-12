@@ -20,9 +20,9 @@ Ancestors
 
 (* The ghost invariant ignores the control position (jump_to, say). *)
 Theorem ghost_inv_jump_to:
-  ghost_inv d cenv cx es G tn
+  ghost_inv H d cenv cx es G tn
     (s with <| vs_prev_bb := p; vs_current_bb := l; vs_inst_idx := i |>) <=>
-  ghost_inv d cenv cx es G tn s
+  ghost_inv H d cenv cx es G tn s
 Proof
   simp[ghost_inv_def, ptr_covers_def, stor_taint_ok_def, lookup_var_def] >>
   Cases_on `d` >> TRY (PairCases_on `x`) >>
@@ -51,8 +51,8 @@ Proof
 QED
 
 Theorem ghost_inv_gas_obs:
-  ghost_inv d cenv cx (es with gas_obs := gs) G tn s <=>
-  ghost_inv d cenv cx es G tn s
+  ghost_inv H d cenv cx (es with gas_obs := gs) G tn s <=>
+  ghost_inv H d cenv cx es G tn s
 Proof
   simp[ghost_inv_def]
 QED
