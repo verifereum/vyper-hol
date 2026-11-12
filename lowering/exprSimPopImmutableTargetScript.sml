@@ -3001,8 +3001,8 @@ QED
    discharges this case.  Its discharge splits in two: (i) the immutable
    frame step above for indices that do not touch the root, and (ii) the
    shared target read/write overlap exclusion, the same one behind
-   pop_nested_storage_effectful_dead_case, pop_nested_local_popped_case
-   and targetPlaceSimCases' target_subscript_case; it belongs in
+   pop_nested_storage_effectful_dead_case, targetLocalLive's
+   local_target_live and targetPlaceSimCases' target_subscript_case; it belongs in
    supported_program / target_pre, and in static target checking once
    supported_program is gone. *)
 Theorem pop_nested_immutable_deploy_impure_index_case:

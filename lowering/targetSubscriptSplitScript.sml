@@ -7,13 +7,12 @@
  *                          or a storage root whose indices are all pure
  *   target_subscript_storage_effectful_case — RESIDUAL: a storage root
  *                          with an index that calls or pops
- *   target_subscript_local_pop_case — RESIDUAL: a local root with an index
- *                          that pops
+ *   target_subscript_local_pop_case — a local root with an index that pops
  *)
 
 Theory targetSubscriptSplit
 Ancestors
-  targetPlaceLive targetSubscriptMemory targetSubscriptDecode targetSubscriptContinuation
+  targetLocalLive targetPlaceLive targetSubscriptMemory targetSubscriptDecode targetSubscriptContinuation
   targetPlaceSimCasesBase exprReasonOperand exprSimPopNestedLocalHandoff
   exprSimFieldLayout exprSafeOperandBuiltins exprSafeOperand
   exprSimSource
@@ -1351,52 +1350,9 @@ Proof
   disch_then irule >> simp[] >> metis_tac[]
 QED
 
-(* RESIDUAL (self-overlap): a run of the index pops the base's own place
-   out of the local's value, so the target overlaps its own index.
-   Upstream rejects such targets (CompilerPanic "risky overlap"), so this
-   stays admitted for the target read/write overlap exclusion. *)
-Theorem target_subscript_local_popped_case:
-  target_pre cenv cx env (SubscriptTarget bt e) es /\
-  (nocalls ==> int_calls_target (SubscriptTarget bt e) = []) /\
-  ((?s p s1. eval_base_place cx bt s = (INL p,s1)) ==>
-    expr_sim_case nocalls ctx func cenv cx e /\
-    expr_vv_case nocalls ctx func cenv cx e) /\
-  target_root bt = NameTarget id /\
-  type_place_target env bt = SOME bvt /\
-  subscript_vtype bvt (expr_type e) = SOME vt /\
-  compile_get_target_ptr compile_expr cenv bt sa = (rb,sm) /\
-  lower_value compile_expr cenv (expr_type e) e sm = (ix,sn) /\
-  target_subscript_suffix cenv e rb ix sn = (op,sb) /\
-  ci_mono sa sm /\ ci_mono sm sn /\ ci_mono sn sb /\
-  fn_has_code sm sn func /\ fn_has_code sn sb func /\
-  fn_inst_ids_distinct func /\ local_ptrs_reserved cenv sa /\
-  gas_admissible (eval_base_place cx (SubscriptTarget bt e)) target_res_ok es /\
-  stmt_state_rel ctx func cenv cx es s0 /\
-  gas_marked_exec F (ctx,func) (eval_base_place cx bt)
-    (es,s0) left (INL pv) mid (OK t) /\
-  target_post ctx func cenv cx es sa sm s0 (mid with gas_obs := []) pv bvt rb t /\
-  t.vs_current_bb = sm.cs_current_bb /\
-  t.vs_inst_idx = LENGTH sm.cs_current_insts /\
-  bind (eval_expr cx e) (read_result cx) (mid with gas_obs := gs) =
-    (INL key0,fin) /\
-  ~(?path entry v. pv = PlaceR (MemoryPlace id path) /\
-      lookup_scopes id fin.scopes = SOME entry /\
-      evaluate_subscripts entry.type entry.value path = INL v) ==>
-  gas_outcome F (cx_tops cx) (ctx,func)
-    (bind (bind (eval_expr cx e) (read_result cx))
-      (\key. extend_place cx pv (ValueSubscript key)))
-    (mid with gas_obs := [],t)
-    (\res ee u. ?pv'. res = INL pv' /\
-      target_post ctx func cenv cx es sa sb s0 ee pv' vt op u /\
-      u.vs_current_bb = sb.cs_current_bb /\
-      u.vs_inst_idx = LENGTH sb.cs_current_insts)
-    (\res ee r. expr_exit res r)
-Proof
-  cheat
-QED
-
 (* target_subscript_base_continuation for a local root whose indices may
-   pop: split on whether the base's place is still live after the index. *)
+   pop: every successful run of the index leaves the base's place live
+   (local_subscript_index_live). *)
 Theorem target_subscript_local_pop_continuation:
   target_pre cenv cx env (SubscriptTarget bt e) es /\
   (nocalls ==> int_calls_target (SubscriptTarget bt e) = []) /\
@@ -1430,15 +1386,21 @@ Theorem target_subscript_local_pop_continuation:
     (\res ee r. expr_exit res r)
 Proof
   strip_tac >>
-  Cases_on `!gs key ee.
+  `!gs key ee.
     bind (eval_expr cx e) (read_result cx) (mid with gas_obs := gs) =
       (INL key,ee) ==>
     ?path entry v. pv = PlaceR (MemoryPlace id path) /\
       lookup_scopes id ee.scopes = SOME entry /\
-      evaluate_subscripts entry.type entry.value path = INL v`
-  >- (drule_all target_subscript_local_live_continuation >> simp[]) >>
-  pop_assum (strip_assume_tac o SIMP_RULE pure_ss [NOT_FORALL_THM, NOT_IMP]) >>
-  drule_all target_subscript_local_popped_case >> simp[]
+      evaluate_subscripts entry.type entry.value path = INL v` by
+    (rpt strip_tac >>
+     drule target_subscript_marked_base_source >>
+     disch_then (qspec_then `gs` assume_tac) >>
+     qspecl_then [`cenv`, `cx`, `env`,
+       `es with gas_obs := gas_explicit left s0.vs_gas_readings ++ gs`,
+       `bt`, `e`, `bvt`, `id`, `pv`, `mid with gas_obs := gs`, `gs`, `key`,
+       `ee`] mp_tac local_subscript_index_live >>
+     impl_tac >- fs[target_pre_def] >> simp[]) >>
+  drule_all target_subscript_local_live_continuation >> simp[]
 QED
 
 (* An element of an array or a mapping, when no index can shrink an array
@@ -1542,12 +1504,9 @@ Proof
   cheat
 QED
 
-(* RESIDUAL (a pop in a local target's index): the pop can pop an ancestor
-   of the base (x[0][len(x.pop()) - 1] = v).  The compiled pointer then
-   points at memory the pop left in place, and the source reads the base
-   through read_memory_path's popped history, but no invariant relates the
-   popped history to memory yet.  exprSimPopNested's pop_nested_local_sim
-   is of the same family. *)
+(* A pop in a local target's index (x[len(y.pop()) - 1] = v): the index
+   leaves the base's place live (local_subscript_index_live), so the
+   local's memory still holds it. *)
 Theorem target_subscript_local_pop_case:
   !nocalls ctx func cenv cx bt e id.
     target_case nocalls ctx func cenv cx bt /\
