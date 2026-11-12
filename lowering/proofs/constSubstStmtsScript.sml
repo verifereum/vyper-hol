@@ -678,10 +678,15 @@ Proof
   simp[FUN_EQ_THM, evaluate_builtin_def, get_tenv_stk]
 QED
 
+Theorem evaluate_type_builtin_oneline[local] =
+  oneline evaluate_type_builtin_def
+
 Theorem evaluate_type_builtin_stk[local]:
   evaluate_type_builtin (cx with stk := s) = evaluate_type_builtin cx
 Proof
-  simp[FUN_EQ_THM, oneline evaluate_type_builtin_def, get_tenv_stk]
+  simp[FUN_EQ_THM] >> rpt gen_tac >>
+  ONCE_REWRITE_TAC[evaluate_type_builtin_oneline] >>
+  REWRITE_TAC[get_tenv_stk]
 QED
 
 Theorem eval_exprs_stk_from_elements[local]:
@@ -700,27 +705,29 @@ Theorem constant_expr_eval_stk:
 Proof
   ho_match_mp_tac constant_expr_ind >>
   rw[constant_expr_def] >> simp[evaluate_def]
-  >~ [`TopLevelName`] >- (PairCases_on `v1` >> simp[evaluate_def, lookup_global_stk])
+  >~ [`lookup_global`] >- simp[lookup_global_stk]
   >~ [`StructLit`]
   >- (PairCases_on `v4` >> simp[evaluate_def, bind_def] >>
       `!st. eval_exprs (cx with stk := s) (MAP SND kes) st =
             eval_exprs cx (MAP SND kes) st` by
         (irule eval_exprs_stk_from_elements >> gvs[EVERY_MEM]) >>
       simp[])
-  >~ [`Subscript`]
-  >- (simp[bind_def, read_result_stk, select_result_stk])
-  >~ [`Attribute`]
-  >- (simp[bind_def, select_result_stk])
-  >~ [`Builtin`]
+  >~ [`ValueSubscript`]
+  >- gvs[bind_def, read_result_stk, select_result_stk]
+  >~ [`AttrSubscript`]
+  >- gvs[bind_def, select_result_stk]
+  >~ [`builtin_args_length_ok`]
   >- (`!st. eval_exprs (cx with stk := s) es st = eval_exprs cx es st` by
         (irule eval_exprs_stk_from_elements >> gvs[EVERY_MEM]) >>
-      simp[bind_def, ignore_bind_def, get_tenv_stk, evaluate_builtin_stk,
-           result_array_length_stk] >>
-      rw[] >> gvs[constant_builtin_def])
-  >~ [`TypeBuiltin`]
+      Cases_on `bt = Len`
+      >- (Cases_on `es` >>
+          gvs[builtin_args_length_ok_def, type_check_def, assert_def,
+              bind_def, ignore_bind_def, result_array_length_stk]) >>
+      gvs[bind_def, ignore_bind_def, COND_RATOR, get_tenv_stk, evaluate_builtin_stk])
+  >~ [`evaluate_type_builtin`]
   >- (`!st. eval_exprs (cx with stk := s) es st = eval_exprs cx es st` by
         (irule eval_exprs_stk_from_elements >> gvs[EVERY_MEM]) >>
-      simp[bind_def, ignore_bind_def, evaluate_type_builtin_stk])
+      gvs[bind_def, ignore_bind_def, evaluate_type_builtin_stk])
 QED
 
 Theorem const_results_related_stk[local]:
@@ -760,10 +767,12 @@ Proof
   >- (rpt strip_tac >> irule checked_frame_context_transport >>
       simp[frame_maps_def, function_entry_constant_maps] >> metis_tac[])
   >> rpt strip_tac >> res_tac >> gvs[] >>
+  `FLOOKUP art.cta_bare_globals (NONE,id) = SOME (expr_type r)` by
+    (first_x_assum drule >> simp[]) >>
   drule check_contract_bare_globals_consistent_checked >>
-  disch_then (qspec_then `cx.sources` mp_tac) >>
-  disch_then (qspec_then `cx.txn` mp_tac) >> simp[] >>
-  disch_then drule >> strip_tac >> simp[]
+  disch_then (qspecl_then [`cx.txn`,`cx.sources`,`cx.layouts`,`NONE`,`id`,
+                           `expr_type r`] mp_tac) >>
+  simp[] >> strip_tac >> simp[]
 QED
 
 Theorem const_subst_intcall_body:
@@ -783,11 +792,13 @@ Proof
     (drule_then irule (cj 1 checked_typed_intcall_body) >>
      gvs[frame_maps_def] >> metis_tac[]) >>
   `cx with stk updated_by CONS (NONE,fn) = cx with stk := (NONE,fn)::cx.stk` by
-    simp[theorem "evaluation_context_component_equality"] >>
+    simp[vyperContextTheory.evaluation_context_component_equality] >>
   pop_assum SUBST1_TAC >>
   irule const_subst_eval_stmts >> goal_assum (drule_at Any) >>
-  simp[] >> irule const_subst_context_stk >> simp[] >>
-  irule const_subst_context_function_entry >> metis_tac[]
+  qexistsl [`art`,`mods`,`roots`] >> simp[] >>
+  drule_all const_subst_context_function_entry >>
+  disch_then (qspecl_then [`NONE`,`args`] assume_tac) >>
+  drule const_subst_context_stk >> impl_tac >- metis_tac[] >> simp[]
 QED
 
 Theorem module_consts_env_constant_expr:
