@@ -1748,10 +1748,7 @@ Theorem ifexp_marked_valid_prefix[local]:
     valid_horizon cx st0 H ee.storage_trace ==>
     valid_horizon cx st0 H es.storage_trace
 Proof
-  rpt gen_tac >> rewrite_tac[gas_marked_exec_def] >> strip_tac >>
-  first_x_assum (qspec_then `[]` assume_tac) >>
-  `valid_horizon cx st0 H (ee with gas_obs := []).storage_trace` by simp[] >>
-  drule_all valid_horizon_frame_prefix >> simp[]
+  metis_tac[gas_marked_exec_valid_prefix]
 QED
 
 Theorem ifexp_root_cont_frame[local]:
