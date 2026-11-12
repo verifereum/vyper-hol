@@ -1,7 +1,7 @@
 (* Common-witness probes: state relation and outstanding RHS snapshots. *)
 Theory tuplePlaceStore
 Ancestors
-  tuplePlaceSnapshot tuplePlaceStaging assignRelayoutFrame placeStore placeStoreStorage
+  tuplePlaceSnapshot assignRelayoutFrame placeStore placeStoreStorage
   exprLoweringProps compileEnv loweringStateRelDefs loweringPosts venomState venomExecSemantics
   valueEncoding valueEncodingProofs
 
@@ -180,7 +180,7 @@ Proof
     (qpat_assum `t with <|vs_vars := _; vs_memory := _;
        vs_prev_bb := _; vs_current_bb := _; vs_inst_idx := _|> = u`
        (strip_assume_tac o SRULE [venom_state_component_equality]) >>
-     rpt strip_tac >> irule tuplePlaceStagingTheory.stmt_state_rel_fields_transport >>
+     rpt strip_tac >> irule exprLoweringPropsTheory.stmt_state_rel_fields_transport >>
      qexists_tac `H0` >> fs[]) >>
   `!aid b len a n. FLOOKUP s.vs_allocas aid = SOME (b,len) /\
      aid < sa.cs_next_id /\ b <= a /\ a + n <= b + len ==>

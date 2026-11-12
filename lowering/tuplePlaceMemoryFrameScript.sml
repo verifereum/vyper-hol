@@ -263,7 +263,7 @@ Resume tuple_place_memory_forward_frame[staged_post]:
     (qpat_assum `(r with <|vs_vars := _; vs_inst_idx := _;
        vs_allocas := _; vs_alloca_next := _|>) = s`
        (strip_assume_tac o SRULE [venom_state_component_equality]) >>
-     rpt strip_tac >> irule tuplePlaceStagingTheory.stmt_state_rel_fields_transport >>
+     rpt strip_tac >> irule exprLoweringPropsTheory.stmt_state_rel_fields_transport >>
      qexists_tac `H0` >> fs[]) >>
   qexistsl_tac [`r`, `t`] >>
   qpat_x_assum `!H. _ ==> stmt_state_rel H _ _ _ _ ee r` (fn th => simp[th]) >>

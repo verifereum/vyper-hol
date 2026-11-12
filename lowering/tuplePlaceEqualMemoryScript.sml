@@ -234,7 +234,7 @@ Resume tuple_place_equal_memory_forward[post]:
     (qpat_assum `(r with <|vs_vars := _; vs_inst_idx := _;
        vs_allocas := _; vs_alloca_next := _|>) = s`
        (strip_assume_tac o SRULE [venom_state_component_equality]) >>
-     rpt strip_tac >> irule tuplePlaceStagingTheory.stmt_state_rel_fields_transport >>
+     rpt strip_tac >> irule exprLoweringPropsTheory.stmt_state_rel_fields_transport >>
      qexists_tac `H0` >> fs[]) >>
   qexistsl_tac [`r`, `t`] >> simp[] >>
   conj_tac >- metis_tac[] >> conj_tac >- metis_tac[] >>

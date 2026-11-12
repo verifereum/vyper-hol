@@ -381,7 +381,7 @@ Resume tuple_place_owned_memory_forward_frame[staged]:
     (qpat_assum `(r with <|vs_vars := _; vs_allocas := _;
        vs_alloca_next := _; vs_inst_idx := _|>) = s`
        (strip_assume_tac o SRULE [venom_state_component_equality]) >>
-     rpt strip_tac >> irule tuplePlaceStagingTheory.stmt_state_rel_fields_transport >>
+     rpt strip_tac >> irule exprLoweringPropsTheory.stmt_state_rel_fields_transport >>
      qexists_tac `H0` >> fs[]) >>
   qexistsl_tac [`r`, `t`] >>
   rpt (conj_tac >- first_assum ACCEPT_TAC) >>
