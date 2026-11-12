@@ -45,7 +45,8 @@ Theorem aug_place_operator_write_path_mem[local]:
     value_has_type dtv v /\ ?ff. write_place cx p v ee = (INL (),ff) /\
       (!tail. write_place cx p v (ee with gas_obs := tail) =
         (INL (),ff with gas_obs := tail)) /\
-      (!H. valid_horizon cx st0 H ff.storage_trace ==>
+      (!H. valid_horizon cx st0 H ff.storage_trace /\
+           storage_well_formed_on cx ee (FST H) ==>
            storage_well_formed_on cx ff (FST H))) /\
   ~s.vs_halted /\ s.vs_current_bb = s2.cs_current_bb /\
   s.vs_inst_idx = LENGTH s2.cs_current_insts /\ ~block_is_terminated sf /\
@@ -152,11 +153,17 @@ Proof
            (qspec_then `H` mp_tac) >>
          impl_tac >- (conj_tac >> first_assum ACCEPT_TAC) >> strip_tac >>
          first_assum ACCEPT_TAC) >>
-      `storage_well_formed_on cx ff (FST H)` by
-        (qpat_assum `!H. valid_horizon cx st0 H ff.storage_trace ==>
-                          storage_well_formed_on cx ff (FST H)`
+      `storage_well_formed_on cx ee (FST H)` by
+        (qpat_assum `!H. valid_horizon cx st0 H ee.storage_trace ==>
+                          stmt_state_rel H _ _ _ _ ee s /\ _`
            (qspec_then `H` mp_tac) >>
          impl_tac >- first_assum ACCEPT_TAC >> strip_tac >>
+         first_assum ACCEPT_TAC) >>
+      `storage_well_formed_on cx ff (FST H)` by
+        (qpat_assum `!H. valid_horizon cx st0 H ff.storage_trace /\
+                          storage_well_formed_on cx ee (FST H) ==> _`
+           (qspec_then `H` mp_tac) >>
+         impl_tac >- (conj_tac >> first_assum ACCEPT_TAC) >> strip_tac >>
          first_assum ACCEPT_TAC) >>
       `storage_well_formed_on cx (ff with gas_obs := []) (FST H)` by
         (`(ff with gas_obs := []).accounts = ff.accounts /\
@@ -226,7 +233,8 @@ Theorem aug_place_rhs_operator_write_mem:
        value_has_type dtv v /\ ?ff. write_place cx p v ee = (INL (),ff) /\
          (!tail. write_place cx p v (ee with gas_obs := tail) =
            (INL (),ff with gas_obs := tail)) /\
-         (!H. valid_horizon cx st0 H ff.storage_trace ==>
+         (!H. valid_horizon cx st0 H ff.storage_trace /\
+              storage_well_formed_on cx ee (FST H) ==>
               storage_well_formed_on cx ff (FST H)))) ==>
   gas_outcome T (cx_tops cx) (ctx,func) cx st0
     (bind (bind (eval_expr cx e) (read_result cx))
