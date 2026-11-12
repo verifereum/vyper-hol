@@ -132,7 +132,8 @@ fun remove_interface_sources annotated_ast translated = let
       "vyperCheckContractFrontendLib: import/source count mismatch"
 in
   pairSyntax.mk_pair
-    (listSyntax.mk_list (main_source::kept, source_ty), rest)
+    (normalize_sources (listSyntax.mk_list (main_source::kept, source_ty)),
+     rest)
 end
 
 fun prepare_translated_input

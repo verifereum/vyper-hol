@@ -291,7 +291,9 @@ Resume checked_compile_saved_log_statement[endpoint]:
   `log_args_safe args atvs allocated (w2n (memory_snapshot_addr topic_cut.cs_next_id ss))
     (type_memory_size (TupleTV (select_log_args F flags ftvs)))` by
     (qpat_x_assum `log_args_safe args atvs allocated _ _` mp_tac >> simp[]) >>
-  drule_all (Q.INST [`ss` |-> `allocated`, `cs` |-> `store_cut`]
+  drule_all (Q.INST [`ss` |-> `allocated`, `cs` |-> `store_cut`, `initial` |-> `begin`,
+                     `src` |-> `data_buf.buf_operand`,
+                     `root_addr` |-> `memory_snapshot_addr topic_cut.cs_next_id ss`]
     checked_compile_saved_log_data) >>
   disch_then (qspec_then `ctx` (qx_choose_then `out` (qx_choose_then `ev` strip_assume_tac))) >>
   `allocated.vs_logs = ss.vs_logs` by

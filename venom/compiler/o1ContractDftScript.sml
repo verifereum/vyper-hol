@@ -16,7 +16,7 @@ Theorem dft_stage_walk_gas:
   o1_run_contract_gas rpolicy D fmp 7
 Proof
   simp[o1_run_contract_gas_def, o1_fn_passes_def, o1_stage_contract_gas_def,
-       fmp_variant_def, fmp_variant_room_def, o1_inv_def, o1_ssa_inv_def] >>
+       fmp_variant_def, fmp_variant_room_def, o1_inv_def, o1_ssa_inv_def, pass_fuel_def] >>
   rpt strip_tac >>
   Cases_on `EVERY wf_ssa C.ctx_functions`
   >- (drule_all dft_stage_sim_gas >> strip_tac >>
