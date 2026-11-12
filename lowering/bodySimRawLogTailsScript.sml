@@ -27,13 +27,14 @@ Theorem raw_log_dynamic_tail_counted:
   TAKE (LENGTH bs) (DROP (b + 32) s.vs_memory ++
     REPLICATE (LENGTH bs) 0w) = bs /\
   b + 32 < dimword (:256) /\ LENGTH bs < dimword (:256) /\
-  stmt_state_rel ctx func cenv cx es s /\ local_ptrs_reserved cenv sm /\
+  stmt_state_rel H ctx func cenv cx es s /\
+  storage_well_formed_on cx es (FST H) /\ local_ptrs_reserved cenv sm /\
   wb_frame cenv es0 es sa s0 s /\ sa.cs_next_var <= sm.cs_next_var /\
   post_value_type cenv e = expr_type e /\ expr_type e = NoneT /\ fn_has_code sm sb func /\
   ~s.vs_halted /\ s.vs_current_bb = sm.cs_current_bb /\
   s.vs_inst_idx = LENGTH sm.cs_current_insts ==>
   ?t. gas_marked_path F ctx func s 0 (OK t) /\
-    expr_post ctx func cenv cx e es0 sa sb s0
+    expr_post H ctx func cenv cx e es0 sa sb s0
       (es with logs := es.logs ++
         [encode_raw_event_values cx.txn.target vals bs]) NoneV (Lit 0w) t /\
     ~t.vs_halted /\ t.vs_current_bb = sb.cs_current_bb /\
@@ -55,7 +56,7 @@ Proof
      simp[rich_listTheory.DROP_LENGTH_APPEND, mk_inst_def, is_terminator_def]) >>
   `?t'. step_inst_base (mk_inst s2.cs_next_id LOG
       (Lit (n2w (LENGTH ops)) :: (REVERSE ops ++ [len_op; ptr_op])) []) t = OK t' /\
-    stmt_state_rel ctx func cenv cx
+    stmt_state_rel H ctx func cenv cx
       (es with logs := es.logs ++
         [encode_raw_event_values cx.txn.target vals bs]) t' /\
     wb_frame cenv es0 (es with logs := es.logs ++ [encode_raw_event_values cx.txn.target vals bs]) sa s0 t'` by
@@ -89,7 +90,8 @@ Theorem raw_log_fixed_tail_counted:
   eval_operand ptr_op s = SOME p /\ eval_operand data_op s = SOME w /\
   eval_operands ops s = SOME (MAP event_value_to_word vals) /\ LENGTH ops <= 4 /\
   LENGTH bs = 32 /\ TAKE 32 (word_to_bytes_be w) = bs /\
-  stmt_state_rel ctx func cenv cx es s /\ wb_frame cenv es0 es sa s0 s /\
+  stmt_state_rel H ctx func cenv cx es s /\
+  storage_well_formed_on cx es (FST H) /\ wb_frame cenv es0 es sa s0 s /\
   local_ptrs_reserved cenv sa /\
   MAP FDOM es0.scopes = MAP FDOM es.scopes /\
   MEM inst (fn_insts func) /\ inst.inst_opcode = ALLOCA /\
@@ -103,7 +105,7 @@ Theorem raw_log_fixed_tail_counted:
   s.vs_current_bb = sm.cs_current_bb /\
   s.vs_inst_idx = LENGTH sm.cs_current_insts ==>
   ?t. gas_marked_path F ctx func s 0 (OK t) /\
-    expr_post ctx func cenv cx e es0 sa sb s0
+    expr_post H ctx func cenv cx e es0 sa sb s0
       (es with logs := es.logs ++
         [encode_raw_event_values cx.txn.target vals bs]) NoneV (Lit 0w) t /\
     ~t.vs_halted /\ t.vs_current_bb = sb.cs_current_bb /\
@@ -138,7 +140,7 @@ Proof
   `?t. step_inst_base (mk_inst s1.cs_next_id LOG
       (Lit (n2w (LENGTH ops)) :: (REVERSE ops ++ [Lit 32w; ptr_op])) [])
       (mstore (w2n p) w s) = OK t /\
-    stmt_state_rel ctx func cenv cx
+    stmt_state_rel H ctx func cenv cx
       (es with logs := es.logs ++
         [encode_raw_event_values cx.txn.target vals bs]) t /\
     wb_frame cenv es0 (es with logs := es.logs ++ [encode_raw_event_values cx.txn.target vals bs]) sa s0 t` by
@@ -185,9 +187,9 @@ Proof
 QED
 
 Theorem raw_log_data_post_transport:
-  wb_args_post ctx func cenv cx es0 sa s0 es1 ops vals t /\
-  expr_post ctx func cenv cx data es1 sm sn t es2 v data_op u /\
-  stmt_state_rel ctx func cenv cx es0 s0 /\ local_ptrs_reserved cenv sa /\
+  wb_args_post H ctx func cenv cx es0 sa s0 es1 ops vals t /\
+  expr_post H ctx func cenv cx data es1 sm sn t es2 v data_op u /\
+  stmt_state_rel H ctx func cenv cx es0 s0 /\ local_ptrs_reserved cenv sa /\
   MAP FDOM es0.scopes = MAP FDOM es1.scopes /\
   sa.cs_next_var <= sm.cs_next_var /\ sa.cs_next_id <= sm.cs_next_id /\
   EVERY (\op. (!x. op = Var x ==> not_fresh_at sm x) /\
@@ -200,8 +202,8 @@ Proof
   gvs[wb_args_post_def] >> conj_tac
   >- (irule wb_frame_trans >> simp[] >> reverse conj_tac
       >- (qexistsl_tac [`es1`, `sm`, `t`] >> simp[]) >>
-      qexistsl_tac [`ctx`, `cx`, `func`] >> simp[]) >>
-  qpat_x_assum `expr_post _ _ _ _ _ _ _ _ _ _ _ _ _` kall_tac >>
+      qexistsl_tac [`H`, `ctx`, `cx`, `func`] >> simp[]) >>
+  qpat_x_assum `expr_post _ _ _ _ _ _ _ _ _ _ _ _ _ _` kall_tac >>
   qpat_x_assum `LIST_REL _ ops vals` mp_tac >>
   qpat_x_assum `EVERY _ ops` mp_tac >>
   qid_spec_tac `vals` >> Induct_on `ops` >> simp[] >>
@@ -212,8 +214,8 @@ Proof
 QED
 
 Theorem raw_log_fixed_buffer_after_data:
-  expr_post ctx func cenv cx data es sm sn t es' v data_op s /\
-  stmt_state_rel ctx func cenv cx es t /\ local_ptrs_reserved cenv sm /\
+  expr_post H ctx func cenv cx data es sm sn t es' v data_op s /\
+  stmt_state_rel H ctx func cenv cx es t /\ local_ptrs_reserved cenv sm /\
   MAP FDOM es.scopes = MAP FDOM es'.scopes /\
   not_fresh_at sm pvar /\ lookup_var pvar t = SOME p /\
   FLOOKUP t.vs_allocas aid = SOME (w2n p,32) /\ sa.cs_next_id <= aid /\
@@ -250,13 +252,13 @@ QED
 
 Theorem raw_log_alloc_counted:
   compile_alloc_buffer sz sm = (buf,sn) /\ fn_has_code sm sn func /\
-  stmt_state_rel ctx func cenv cx es s /\ fn_inst_ids_distinct func /\
+  stmt_state_rel H ctx func cenv cx es s /\ fn_inst_ids_distinct func /\
   local_ptrs_reserved cenv sm /\ sz < dimword (:256) /\
   wb_frame cenv es0 es sa s0 s /\ sa.cs_next_var <= sm.cs_next_var /\
   ~s.vs_halted /\ s.vs_current_bb = sm.cs_current_bb /\
   s.vs_inst_idx = LENGTH sm.cs_current_insts ==>
   ?t w. gas_marked_path F ctx func s 0 (OK t) /\
-    stmt_state_rel ctx func cenv cx es t /\ wb_frame cenv es0 es sa s0 t /\
+    stmt_state_rel H ctx func cenv cx es t /\ wb_frame cenv es0 es sa s0 t /\
     eval_operand buf.buf_operand t = SOME w /\
     FLOOKUP t.vs_allocas sm.cs_next_id = SOME (w2n w,sz) /\
     w2n w + sz < dimword (:256) /\ t.vs_memory = s.vs_memory /\
@@ -302,14 +304,14 @@ Proof
 QED
 
 Theorem raw_log_post_gas_obs:
-  expr_post ctx func cenv cx e es0 sa sb s0 ee v op t ==>
-  expr_post ctx func cenv cx e es0 sa sb s0 (ee with gas_obs := gs) v op t
+  expr_post H ctx func cenv cx e es0 sa sb s0 ee v op t ==>
+  expr_post H ctx func cenv cx e es0 sa sb s0 (ee with gas_obs := gs) v op t
 Proof
   `locals_kept cenv es0 (ee with gas_obs := gs) s0 t <=>
    locals_kept cenv es0 ee s0 t` by
     simp[NoAsms, locals_kept_def, popped_kept_def] >>
   simp[expr_post_def, expr_val_at_def, expr_val_own_def] >> strip_tac >> simp[] >>
-  `stmt_state_rel ctx func cenv cx (ee with gas_obs := gs) t` by
+  `stmt_state_rel H ctx func cenv cx (ee with gas_obs := gs) t` by
     (drule msg_gas_state_frame >>
      disch_then (qspecl_then [`t.vs_gas_readings`, `t.vs_inst_idx`, `gs`] mp_tac) >>
      simp[]) >> simp[]

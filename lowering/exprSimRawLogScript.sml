@@ -6,8 +6,25 @@ Ancestors
   vyperAST vyperTypeSystem vyperInterpreter vyperContext vyperValue vyperState
   vyperEvent venomExecSemantics venomInst venomState venomMemDefs exprLowering exprLoweringProps
   exprSimHash builtinSystem emitHelper fragExec emitHelperProps venomExecProofs
+  vyperStorageFootprint
 Libs
   pairLib
+
+(* An event log or a gas observation list does not touch the storage
+   backends the finite regions are decoded from. *)
+Theorem storage_well_formed_on_logs[simp]:
+  storage_well_formed_on cx (st with logs := l) regions <=>
+  storage_well_formed_on cx st regions
+Proof
+  irule vyperStorageFootprintTheory.storage_well_formed_on_backends >> simp[]
+QED
+
+Theorem storage_well_formed_on_gas_obs_tail[simp]:
+  storage_well_formed_on cx (st with gas_obs := gs) regions <=>
+  storage_well_formed_on cx st regions
+Proof
+  irule vyperStorageFootprintTheory.storage_well_formed_on_backends >> simp[]
+QED
 
 Theorem raw_log_topic_word:
   value_has_type (BaseTV (BytesT (Fixed 32))) v ==>
@@ -403,6 +420,9 @@ Theorem raw_log_dynamic_tail_core:
   b + 32 < dimword (:256) /\ LENGTH bs < dimword (:256) /\
   stmt_state_rel H ctx func cenv cx es s /\ local_ptrs_reserved cenv sm /\
   wb_frame cenv es0 es sa s0 s /\ sa.cs_next_var <= sm.cs_next_var /\
+  storage_well_formed_on cx
+    (es with logs := es.logs ++
+      [encode_raw_event_values cx.txn.target vals bs]) (FST H) /\
   post_value_type cenv e = expr_type e /\ expr_type e = NoneT ==>
   frag_exec ctx sm sb ($= s)
     (expr_post H ctx func cenv cx e es0 sa sb s0
@@ -529,7 +549,11 @@ Theorem raw_log_fixed_tail_core:
      FLOOKUP s.vs_allocas aid = SOME (b,sz) ==>
      regions_disjoint (w2n p) 32 b sz) /\
   (!n b sz. local_region cenv es.scopes s n b sz ==>
-     regions_disjoint (w2n p) 32 b sz) /\ post_value_type cenv e = expr_type e /\ expr_type e = NoneT ==>
+     regions_disjoint (w2n p) 32 b sz) /\
+  storage_well_formed_on cx
+    (es with logs := es.logs ++
+      [encode_raw_event_values cx.txn.target vals bs]) (FST H) /\
+  post_value_type cenv e = expr_type e /\ expr_type e = NoneT ==>
   frag_exec ctx sm sb ($= s)
     (expr_post H ctx func cenv cx e es0 sa sb s0
       (es with logs := es.logs ++
