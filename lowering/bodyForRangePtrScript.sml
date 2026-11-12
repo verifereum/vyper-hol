@@ -51,11 +51,13 @@ Resume body_for_range_lit_ptr[facts]:
   `GENLIST (\j. IntV (n1 + &j)) (Num (n2 - n1)) <> [] ==>
    body_stmts_ptr_ok cx body` by
     (strip_tac >>
-     qpat_x_assum `!tenv s'' tyv t s3 vs t' s4 x t''. _`
-       (qspecl_then [`get_tenv cx`, `es`, `tyv`, `es`, `es`,
-         `GENLIST (\j. IntV (n1 + &j)) (Num (n2 - n1))`, `es`, `es`, `()`, `es`] mp_tac) >>
+     qpat_x_assum `!a b c d e f g h i j. _` mp_tac >>
      simp[lift_option_type_def, return_def, eval_iterator_range_lit,
-          check_def, assert_def, compatible_bound_def, body_for_ptr_ok_def]) >>
+          check_def, assert_def, compatible_bound_def, body_for_ptr_ok_def] >>
+     disch_then irule >>
+     `0 < Num (n2 - n1)` by (gvs[GENLIST_EQ_NIL] >> intLib.ARITH_TAC) >>
+     gvs[GENLIST_EQ_NIL, listTheory.HD_GENLIST_COR,
+         read_result_def, return_def]) >>
   `Num (n2 - n1) < dimword (:256)` by metis_tac[range_end_words] >>
   `cenv.ce_alloca_locals` by fs[body_inv_def] >>
   `lookup_scopes id es.scopes = NONE` by
@@ -149,14 +151,16 @@ Theorem body_for_range_active_ptr[local]:
 Proof
   strip_tac >>
   `eval_iterator cx (Range e1 e2) es0 =
-   (INL (GENLIST (\j. IntV (lo + &j)) (Num (hi - lo))), es2)` by
+   (INL (GENLIST (\j. Value (IntV (lo + &j))) (Num (hi - lo))), es2)` by
     (gvs[bind_def, AllCaseEqs()] >>
      simp[Once evaluate_def, bind_def, get_range_limits_def,
           lift_sum_def, return_def]) >>
   gvs[lift_option_type_def, return_def, check_def, assert_def,
       compatible_bound_def] >>
   first_x_assum drule >> simp[body_for_ptr_ok_def, GENLIST_EQ_NIL] >>
-  Cases_on `hi = lo` >> gvs[]
+  Cases_on `hi = lo` >> gvs[] >>
+  disch_then irule >>
+  simp[listTheory.HD_GENLIST_COR, read_result_def, return_def]
 QED
 
 Theorem for_ptr_range_typing[local]:
