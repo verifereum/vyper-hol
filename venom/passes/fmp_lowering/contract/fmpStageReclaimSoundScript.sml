@@ -20,7 +20,7 @@ Theory fmpStageReclaimSound
 Ancestors
   fmpStageRel ptrStaticDiscipline cfgWf venomWf livenessProofs
   fmpLowerReclaimPlan venomWfProps venomExecProofs removeUnusedProofs
-  fnFrameSinglePred fmpReclaimDefs list arithmetic
+  fnFrameSinglePred fmpReclaimDefs list arithmetic fmpStageReclaimFresh
 
 Theorem fmp_stage_frame_sites:
   fmp_stage_ctx rpolicy D C C' vs vs' fmp eom /\
