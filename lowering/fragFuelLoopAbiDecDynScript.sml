@@ -3022,6 +3022,36 @@ Proof
   disj2_tac >> qexists_tac `<|bb_label := sa.cs_current_bb;
     bb_instructions := sm.cs_current_insts ++ tail|>` >> simp[]
 QED
+Theorem abi_dyn_middle_entry[local]:
+  !dst src lop base hi info asz msz i sa sb s.
+    (^dyn_middle) dst src lop base hi info asz msz i sa = ((),sb) /\
+    lop <> INVOKE /\ lop <> PHI /\ at_point sa s ==>
+    (^dyn_R) sa sb s
+Proof
+  rpt gen_tac >> strip_tac >> rule_assum_tac BETA_RULE >>
+  qpat_x_assum `comp_bind _ _ sa = _` mp_tac >>
+  simp_tac std_ss [Once comp_bind_def] >>
+  Cases_on `emit_op ADD [src; Lit 32w] sa` >>
+  rename1 `emit_op ADD [src; Lit 32w] sa = (data,sm)` >>
+  simp_tac std_ss [LET_THM] >>
+  qmatch_goalsub_abbrev_tac `tail sm = ((),sb)` >> strip_tac >>
+  `code_action (\opc. opc <> INVOKE /\ opc <> PHI /\
+      (lop <> DJMP ==> opc <> DJMP)) tail` by
+    (unabbrev_all_tac >>
+     simp_tac std_ss [compile_abi_decode_dyn_elem_ptr_def,
+       compile_abi_dec_addr_def, compile_abi_decode_range_check_def] >>
+     rpt (FIRST [irule (CONJUNCT1 abi_dyn_decode_code),
+       CHANGED_TAC (ASM_SIMP_TAC std_ss [code_action_emit_op,
+         code_action_emit_void, code_action_return]),
+       irule code_action_bind, irule code_action_ignore_bind,
+       irule code_action_emit_op, irule code_action_emit_void,
+       IF_CASES_TAC, gen_tac, conj_tac]) >> simp[]) >>
+  `entry_shape sm sb` by metis_tac[code_action_def, code_step_def] >>
+  irule (BETA_RULE abi_dyn_region_entry_prefix) >> simp[] >> qexists_tac `sm` >>
+  gvs[emit_op_def, comp_bind_def, comp_ignore_bind_def, comp_return_def,
+    fresh_var_def, emit_inst_def, fresh_id_def, emit_def]
+QED
+
 
 Theorem abi_dyn_region_cut_instruction[local]:
   !sa sb fn id s. at_point sb s ==>
@@ -3149,6 +3179,32 @@ Proof
   qexistsl_tac [`tb`, `tob`] >> simp[] >>
   `vars_kept N {} s0 t` by metis_tac[vars_kept_trans] >>
   gvs[vars_kept_def, lookup_var_def] >> metis_tac[]
+QED
+
+Theorem abi_dyn_middle_region_interface[local]:
+  !dst src lop base hi info asz msz i sa sb N s0 ctx fn ctx0 id.
+    (^dyn_middle) dst src lop base hi info asz msz i sa = ((),sb) /\
+    ~is_terminator lop /\ lop <> INVOKE /\ lop <> PHI /\ (^dyn_Old) sa /\
+    N <= sa.cs_next_var /\ fn_has_code sa sb fn /\ no_phi_fn fn ==>
+    (!s. at_point sa s ==> (^dyn_R) sa sb s) /\
+    (!s. at_point sb s ==> (^dyn_R) sa sb s) /\
+    fn_has_code sa sb (frag_observer sa sb fn id) /\
+    (^abi_dyn_cut_hyp) ((^dyn_R) sa sb) (at_point sb)
+      (\s. vars_kept N {} s0 s /\ s.vs_labels = s0.vs_labels)
+      ctx fn ctx0 (frag_observer sa sb fn id)
+Proof
+  rpt gen_tac >> strip_tac >> rule_assum_tac BETA_RULE >>
+  `!bb. MEM bb (emitted_blocks sa sb) ==> bb.bb_label <> sb.cs_current_bb`
+    by metis_tac[BETA_RULE abi_dyn_middle_final_exclusion] >>
+  `cs_extends sa sb` by
+    (drule_all (SRULE [code_action_def, code_step_def] abi_dyn_middle_code) >>
+     metis_tac[entry_shape_extends]) >>
+  conj_tac >- metis_tac[BETA_RULE abi_dyn_middle_entry] >>
+  conj_tac >- metis_tac[BETA_RULE abi_dyn_region_end] >>
+  conj_tac >- metis_tac[abi_dyn_observer_has_code] >>
+  irule abi_dyn_middle_cut_hyp >> simp_tac std_ss [] >>
+  goal_assum (drule_at Any) >> simp[] >>
+  qpat_assum `comp_bind _ _ sa = _` (irule_at Any) >> simp[]
 QED
 
 val abi_dyn_cut_result = ``\C Q ctx fn ctx0 obs n s.
