@@ -21,7 +21,8 @@ Ancestors
   fmpStageRel ptrStaticDiscipline cfgWf venomWf livenessProofs
   concretizeAnalysisRoots fmpAliasProps fmpAliasDefs livenessTransferProofs
   ctxLookupAgreeHelpers pointerClosure pointerConfinedDefs ptrDiscipline o1PassContract
-  list finite_map pred_set venomInst
+  list finite_map pred_set venomInst venomExecSemantics venomState
+  contextCodegenRel dftCommutation
 
 Theorem fmp_stage_frame_sites:
   fmp_stage_ctx rpolicy D C C' vs vs' fmp eom /\
@@ -271,6 +272,16 @@ Proof
   qexistsl [`P`, `fn`] >> gvs[fn_static_ptr_ok_def] >> gvs[])
 QED
 
+Theorem reclaim_dalloca_output[local]:
+  inst.inst_opcode = DALLOCA /\ step_inst k C inst s = OK s1 ==>
+  ?out. inst.inst_outputs = [out] /\ lookup_var out s1 = SOME s.vs_fmp
+Proof
+  strip_tac >>
+  gvs[step_inst_non_invoke] >>
+  gvs[Once step_inst_base_def, AllCaseEqs(), update_var_def,
+      lookup_var_def, FLOOKUP_UPDATE]
+QED
+
 Theorem fmp_stage_covers_dalloca:
   fmp_base_analyze (fn_insts fn) = SOME env /\ wf_function fn /\
   active_inst fn inst s /\ inst.inst_opcode = DALLOCA /\
@@ -286,7 +297,77 @@ Theorem fmp_stage_covers_dalloca:
     env eb (lo + (w2n s1.vs_fmp - w2n s.vs_fmp))
     (step_prov PG G inst s1)
 Proof
-  cheat
+  strip_tac >>
+  drule_all reclaim_dalloca_output >> strip_tac >>
+  `MEM inst (fn_insts fn)` by
+    (gvs[active_inst_def, fn_insts_def, fn_insts_blocks_MEM] >>
+     metis_tac[MEM_EL]) >>
+  `MEM inst.inst_id (fmp_bases env out)` by
+    (irule fmp_base_analyze_propagates >>
+     qexistsl [`inst`, `fn_insts fn`] >>
+     simp[fmp_base_output_def, fmp_single_output_def,
+          fmp_generated_bases_def]) >>
+  gvs[step_prov_def, out_prov_def, set_prov_def] >>
+  simp[fmp_frame_covers_def] >> rpt gen_tac >> strip_tac >>
+  gvs[FLOOKUP_UPDATE, AllCaseEqs()]
+  >- (Cases_on `s1.vs_fmp = s.vs_fmp` >>
+      gvs[FLOOKUP_UPDATE] >>
+      first_x_assum drule >> simp[]) >>
+  Cases_on `s1.vs_fmp = s.vs_fmp`
+  >- (gvs[fmp_frame_covers_def] >> metis_tac[]) >>
+  gvs[FLOOKUP_UPDATE, AllCaseEqs()]
+  >- (qpat_x_assum `!v b z. _` drule >> simp[] >>
+      strip_tac >> gvs[]) >>
+  qpat_assum `!b z c id. _` drule >> strip_tac >>
+  gvs[fmp_frame_covers_def]
+QED
+
+Theorem covers_phi_bases[local]:
+  fmp_base_analyze insts = SOME env /\ MEM inst insts /\
+  inst.inst_opcode = PHI /\ inst.inst_outputs = [out] /\
+  phi_prov prev G inst = SOME (b,z) /\
+  fmp_frame_covers sm env eb lo G /\
+  FLOOKUP sm (b,z) = SOME (c,id) /\ eb <= b /\ c < lo ==>
+  MEM id (fmp_bases env out)
+Proof
+  rpt strip_tac >>
+  gvs[phi_prov_def, AllCaseEqs()] >>
+  rename1 `resolve_phi lbl inst.inst_operands = SOME op` >>
+  Cases_on `op` >> gvs[op_prov_def] >>
+  rename1 `FLOOKUP G u = SOME (b,z)` >>
+  `MEM id (fmp_bases env u)` by metis_tac[fmp_frame_covers_def] >>
+  `MEM (Var u) inst.inst_operands` by metis_tac[resolve_phi_MEM] >>
+  irule fmp_base_analyze_propagates >>
+  qexistsl [`inst`, `insts`] >>
+  simp[fmp_base_output_def, fmp_single_output_def,
+       fmp_generated_bases_def, mem_foldl_list_union, MEM_MAP] >>
+  metis_tac[fmp_operand_bases_def]
+QED
+
+Theorem covers_phis_list[local]:
+  !insts. fmp_base_analyze allinsts = SOME env /\
+  EVERY (\i. MEM i allinsts) insts /\
+  fmp_frame_covers sm env eb lo G ==>
+  fmp_frame_covers sm env eb lo (phis_prov prev G insts)
+Proof
+  Induct >> simp[phis_prov_def] >> rpt strip_tac >>
+  Cases_on `h.inst_opcode = PHI` >> simp[phis_prov_def] >>
+  `fmp_frame_covers sm env eb lo (phis_prov prev G insts)` by gvs[] >>
+  Cases_on `h.inst_outputs`
+  >- (gvs[set_prov_def, fmp_frame_covers_def, FLOOKUP_DRESTRICT] >>
+      metis_tac[]) >>
+  rename1 `h.inst_outputs = out::outs` >>
+  Cases_on `outs`
+  >- (Cases_on `phi_prov prev G h`
+      >- (gvs[set_prov_def, fmp_frame_covers_def, FLOOKUP_DRESTRICT] >>
+          metis_tac[]) >>
+      simp[set_prov_def, fmp_frame_covers_def, FLOOKUP_UPDATE] >>
+      rpt strip_tac >> Cases_on `out = v` >> gvs[]
+      >- (irule covers_phi_bases >> metis_tac[]) >>
+      metis_tac[fmp_frame_covers_def]) >>
+  Cases_on `phi_prov prev G h` >>
+  gvs[set_prov_def, fmp_frame_covers_def, FLOOKUP_DRESTRICT] >>
+  metis_tac[]
 QED
 
 Theorem fmp_stage_covers_phis:
@@ -295,7 +376,13 @@ Theorem fmp_stage_covers_phis:
   lookup_block s.vs_current_bb fn.fn_blocks = SOME bb ==>
   fmp_frame_covers sm env eb lo (entry_prov fn s G)
 Proof
-  cheat
+  rpt strip_tac >> simp[entry_prov_def] >>
+  irule covers_phis_list >>
+  reverse conj_tac >- simp[] >>
+  qexists_tac `fn_insts fn` >> simp[EVERY_MEM] >>
+  drule lookup_block_mem >> strip_tac >>
+  simp[venomInstTheory.fn_insts_def] >>
+  metis_tac[venomInstTheory.fmp_fn_insts_blocks_intro]
 QED
 
 Theorem fmp_stage_live_edge:
