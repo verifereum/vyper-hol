@@ -41,7 +41,7 @@ Theorem asm_frame_current_gas[local]:
   a.as_pc < LENGTH prog /\ ~is_data_inst (EL a.as_pc prog) /\
   EL a.as_pc prog <> AsmOp "RETURNDATACOPY" /\
   asm_inst_gas_ok H (EL a.as_pc prog) a.as_stack /\
-  frame_op_gas H + D <= frame_gas_left e /\ frame_inst_at e e op /\
+  frame_op_gas H + 64 * D <= frame_gas_left e /\ frame_inst_at e e op /\
   step_inst op e = (r,s') /\ LENGTH s'.contexts = LENGTH e.contexts ==>
   r <> INR (SOME OutOfGas) /\ D <= frame_gas_left s'
 Proof
@@ -52,8 +52,11 @@ Proof
     (irule frame_inst_at_unique >> qexistsl_tac [`e`, `e`] >>
      simp[] >> irule frame_inst_at_self >> simp[]) >>
   `frame_op_gas H <= frame_gas_left e` by decide_tac >>
+  `D <= (frame_gas_left e - frame_op_gas H) DIV 64` by
+    (simp[X_LE_DIV] >> decide_tac) >>
   drule_all asm_frame_gas_step >> strip_tac >>
-  gvs[]
+  qpat_x_assum `!op r s'. _` (qspecl_then [`op`, `r`, `s'`] mp_tac) >>
+  gvs[] >> rw[] >> decide_tac
 QED
 
 (* Why it should hold.  Induction on N along the frame's own states:
@@ -63,8 +66,9 @@ QED
    side conditions until a RETURNDATACOPY or a terminal step, and
    asm_frame_gas_step bounds each step's cost by frame_op_gas H, with a
    call or create leaving at least (gas - frame_op_gas H) DIV 64.  So
-   g = G N with G 0 = frame_op_gas H + D and
-   G (SUC k) = 64 * G k + frame_op_gas H + D (or any larger recurrence)
+   g = G N with G 0 = frame_op_gas H + 64 * D and
+   G (SUC k) = 64 * G k + frame_op_gas H + 64 * D (or any larger
+   recurrence); the 64 * D covers a CREATE whose own step keeps a 64th
    works.  A RETURNDATACOPY state before s is excluded by the hypothesis. *)
 Theorem asm_frame_gas_surplus:
   !H N D. ?g. !prog data es0 a e s op r s'.
@@ -83,16 +87,16 @@ Proof
   gen_tac >> Induct >> gen_tac
   >- simp[asm_run_bounded_def] >>
   first_x_assum (qspec_then `D` (qx_choose_then `b` assume_tac)) >>
-  qexists_tac `64 * b + frame_op_gas H + D` >>
+  qexists_tac `64 * b + frame_op_gas H + 64 * D` >>
   rpt gen_tac >> strip_tac >>
   drule asm_run_bounded_step >> strip_tac >>
   `EL a.as_pc prog <> AsmOp "RETURNDATACOPY"` by
     (irule asm_frame_before_copy >> metis_tac[]) >>
   fs[] >>
-  `frame_op_gas H + D <= frame_gas_left e` by decide_tac >>
+  `frame_op_gas H + 64 * D <= frame_gas_left e` by decide_tac >>
   Cases_on `s = e`
   >- (gvs[] >>
-      `frame_op_gas H + D <= frame_gas_left e` by decide_tac >>
+      `frame_op_gas H + 64 * D <= frame_gas_left e` by decide_tac >>
       drule_all asm_frame_current_gas >> simp[]) >>
   drule_all asm_frame_step_next >> strip_tac
   >- (fs[frame_inst_at_def] >> metis_tac[frame_reaches_last]) >>
