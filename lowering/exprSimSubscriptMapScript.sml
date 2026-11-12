@@ -201,74 +201,118 @@ Proof
 QED
 
 Theorem gas_outcome_bind_result:
-  gas_outcome memory tops (ctx, func)
+  gas_outcome memory tops (ctx, func) cx st0
     (a : evaluation_state -> eval_result evaluation_result) (es, s0)
-    (\res ee t. ?v. res = INL v /\ P v ee t)
-    (\res ee r. ?ex. res = INR ex /\ R (INR ex) ee r) /\
-  (!v mid t. P v (mid with gas_obs := []) t ==>
-     gas_outcome memory tops (ctx, func) (k v)
-       (mid with gas_obs := [], t) Q R) ==>
-  gas_outcome memory tops (ctx, func) (bind a k) (es, s0) Q R
+    (\H res ee t. ?v. res = INL v /\ P H v ee t)
+    (\H res ee r. ?ex. res = INR ex /\ R H (INR ex) ee r) /\
+  (!v mid t. (!H. valid_horizon cx st0 H mid.storage_trace ==>
+                P H v (mid with gas_obs := []) t) ==>
+     gas_outcome memory tops (ctx, func) cx st0 (k v)
+       (mid with gas_obs := [], t) Q R) /\
+  (!v. storage_trace_frame (k v)) ==>
+  gas_outcome memory tops (ctx, func) cx st0 (bind a k) (es, s0) Q R
 Proof
-  disch_then (CONJUNCTS_THEN2
-    (mp_tac o REWRITE_RULE [gasOutcomeTheory.gas_outcome_def]) assume_tac) >>
+  strip_tac >>
+  qpat_x_assum `gas_outcome _ _ _ _ _ a _ _ _`
+    (mp_tac o BETA_RULE o REWRITE_RULE [gasOutcomeTheory.gas_outcome_def]) >>
   disch_then (qx_choose_then `marks` (DISJ_CASES_THEN mp_tac))
-  >- (rewrite_tac[gas_summary_at_def] >>
+  >- (strip_tac >> rewrite_tac[gasOutcomeTheory.gas_outcome_def] >>
+      qexists_tac `marks` >> disj1_tac >>
+      irule gasStorageTheory.gas_bad_storage_at_bind_left >> simp[]) >>
+  disch_then (DISJ_CASES_THEN mp_tac)
+  >- (rewrite_tac[gas_summary_at_def] >> BETA_TAC >>
       disch_then (qx_choose_then `res` (qx_choose_then `mid`
         (qx_choose_then `r` (CONJUNCTS_THEN2 assume_tac mp_tac)))) >>
+      reverse (Cases_on `vyperStorageFootprint$storage_trace_domain cx st0 mid.storage_trace`)
+      >- (disch_then kall_tac >> rewrite_tac[gasOutcomeTheory.gas_outcome_def] >>
+          qexists_tac `marks` >> disj1_tac >>
+          irule gasStorageTheory.gas_bad_storage_at_bind_left >> simp[] >>
+          irule gasStorageTheory.gas_bad_storage_at_counted_prefix >>
+          goal_assum drule >> simp[]) >>
+      `valid_horizon cx st0 (storage_trace_horizon mid.storage_trace)
+         mid.storage_trace` by
+        fs[vyperStorageFootprintTheory.storage_trace_domain_def] >>
       disch_then (DISJ_CASES_THEN strip_assume_tac)
-      >- (gvs[] >> irule gas_outcome_result_prefix >>
-          qexistsl_tac [`marks`, `mid`, `t`, `v`] >>
-          simp[] >> first_x_assum irule >> simp[]) >>
-      gvs[] >> rewrite_tac[gasOutcomeTheory.gas_outcome_def] >>
-      qexists_tac `marks` >> disj1_tac >>
+      >- (qpat_x_assum `!H. _` (assume_tac o SIMP_RULE (srw_ss()) []) >>
+          first_assum (drule_then strip_assume_tac) >> gvs[] >>
+          irule gas_outcome_result_prefix >>
+          qexistsl_tac [`marks`, `mid`, `t`, `v`] >> simp[] >>
+          first_x_assum irule >> metis_tac[]) >>
+      qpat_x_assum `!H. _` (assume_tac o SIMP_RULE (srw_ss()) []) >>
+      first_assum (drule_then strip_assume_tac) >> gvs[] >>
+      rewrite_tac[gasOutcomeTheory.gas_outcome_def] >>
+      qexists_tac `marks` >> disj2_tac >> disj1_tac >>
       rewrite_tac[gas_summary_at_def] >>
       qexistsl_tac [`INR ex`, `mid`, `r`] >>
-      conj_tac >- (irule gas_marked_exec_bind_exception >> simp[]) >> simp[]) >>
+      conj_tac >- (irule gas_marked_exec_bind_exception >> simp[]) >>
+      BETA_TAC >> simp[] >> metis_tac[]) >>
   strip_tac >>
   rename1 `gas_exempt_cert _ _ _ _ _ marks (err, ef) (callee, tf)` >>
   rewrite_tac[gasOutcomeTheory.gas_outcome_def] >>
-  qexists_tac `marks` >> disj2_tac >>
+  qexists_tac `marks` >> disj2_tac >> disj2_tac >>
   qexistsl_tac [`err`, `ef`, `callee`, `tf`] >>
   rewrite_tac[ignore_bind_def, vyperStateTheory.bind_assoc] >>
   irule gas_exempt_cert_error_result >> simp[]
 QED
 
 Theorem gas_outcome_bind_result_exec:
-  gas_outcome memory tops (ctx, func)
+  gas_outcome memory tops (ctx, func) cx st0
     (a : evaluation_state -> eval_result evaluation_result) (es, s0) P Exit /\
-  (!res ee t. P res ee t ==> ?v. res = INL v) /\
-  (!res ee r. Exit res ee r ==> ?ex. res = INR ex /\ R (INR ex) ee r) /\
+  (!H res ee t. P H res ee t ==> ?v. res = INL v) /\
+  (!H res ee r. Exit H res ee r ==> ?ex. res = INR ex /\ R H (INR ex) ee r) /\
   (!marks v mid t.
      gas_marked_exec memory (ctx, func) a (es, s0) marks (INL v) mid (OK t) /\
-     P (INL v) (mid with gas_obs := []) t ==>
-     gas_outcome memory tops (ctx, func) (k v)
-       (mid with gas_obs := [], t) Q R) ==>
-  gas_outcome memory tops (ctx, func) (bind a k) (es, s0) Q R
+     (!H. valid_horizon cx st0 H mid.storage_trace ==>
+        P H (INL v) (mid with gas_obs := []) t) ==>
+     gas_outcome memory tops (ctx, func) cx st0 (k v)
+       (mid with gas_obs := [], t) Q R) /\
+  (!v. storage_trace_frame (k v)) ==>
+  gas_outcome memory tops (ctx, func) cx st0 (bind a k) (es, s0) Q R
 Proof
-  disch_then (CONJUNCTS_THEN2
-    (mp_tac o REWRITE_RULE [gasOutcomeTheory.gas_outcome_def]) assume_tac) >>
+  strip_tac >>
+  qpat_x_assum `gas_outcome _ _ _ _ _ a _ _ _`
+    (mp_tac o BETA_RULE o REWRITE_RULE [gasOutcomeTheory.gas_outcome_def]) >>
   disch_then (qx_choose_then `marks` (DISJ_CASES_THEN mp_tac))
-  >- (rewrite_tac[gas_summary_at_def] >>
+  >- (strip_tac >> rewrite_tac[gasOutcomeTheory.gas_outcome_def] >>
+      qexists_tac `marks` >> disj1_tac >>
+      irule gasStorageTheory.gas_bad_storage_at_bind_left >> simp[]) >>
+  disch_then (DISJ_CASES_THEN mp_tac)
+  >- (rewrite_tac[gas_summary_at_def] >> BETA_TAC >>
       disch_then (qx_choose_then `res` (qx_choose_then `mid`
         (qx_choose_then `r` (CONJUNCTS_THEN2 assume_tac mp_tac)))) >>
+      reverse (Cases_on `vyperStorageFootprint$storage_trace_domain cx st0 mid.storage_trace`)
+      >- (disch_then kall_tac >> rewrite_tac[gasOutcomeTheory.gas_outcome_def] >>
+          qexists_tac `marks` >> disj1_tac >>
+          irule gasStorageTheory.gas_bad_storage_at_bind_left >> simp[] >>
+          irule gasStorageTheory.gas_bad_storage_at_counted_prefix >>
+          goal_assum drule >> simp[]) >>
+      `valid_horizon cx st0 (storage_trace_horizon mid.storage_trace)
+         mid.storage_trace` by
+        fs[vyperStorageFootprintTheory.storage_trace_domain_def] >>
       disch_then (DISJ_CASES_THEN strip_assume_tac)
-      >- (`?v. res = INL v` by metis_tac[] >> gvs[] >>
+      >- (qpat_x_assum `!H. valid_horizon _ _ H _ ==> _`
+            (assume_tac o SIMP_RULE (srw_ss()) []) >>
+          `?v. res = INL v` by metis_tac[] >> gvs[] >>
           irule gas_outcome_result_prefix >>
-          qexistsl_tac [`marks`, `mid`, `t`, `v`] >>
-          simp[] >> first_x_assum irule >> simp[] >>
+          qexistsl_tac [`marks`, `mid`, `t`, `v`] >> simp[] >>
+          first_x_assum irule >> simp[] >>
           goal_assum (drule_at Any)) >>
-      `?ex. res = INR ex /\ R (INR ex) (mid with gas_obs := []) r` by
-        metis_tac[] >>
-      gvs[] >> rewrite_tac[gasOutcomeTheory.gas_outcome_def] >>
-      qexists_tac `marks` >> disj1_tac >>
+      qpat_x_assum `!H. valid_horizon _ _ H _ ==> _`
+        (assume_tac o SIMP_RULE (srw_ss()) []) >>
+      `?ex. res = INR ex` by metis_tac[] >> gvs[] >>
+      rewrite_tac[gasOutcomeTheory.gas_outcome_def] >>
+      qexists_tac `marks` >> disj2_tac >> disj1_tac >>
       rewrite_tac[gas_summary_at_def] >>
       qexistsl_tac [`INR ex`, `mid`, `r`] >>
-      conj_tac >- (irule gas_marked_exec_bind_exception >> simp[]) >> simp[]) >>
+      conj_tac >- (irule gas_marked_exec_bind_exception >> simp[]) >>
+      BETA_TAC >> simp[] >> rpt strip_tac >>
+      `?ex'. INR ex = INR ex' /\ R H (INR ex') (mid with gas_obs := []) r` by
+        metis_tac[] >>
+      gvs[]) >>
   strip_tac >>
   rename1 `gas_exempt_cert _ _ _ _ _ marks (err, ef) (callee, tf)` >>
   rewrite_tac[gasOutcomeTheory.gas_outcome_def] >>
-  qexists_tac `marks` >> disj2_tac >>
+  qexists_tac `marks` >> disj2_tac >> disj2_tac >>
   qexistsl_tac [`err`, `ef`, `callee`, `tf`] >>
   rewrite_tac[ignore_bind_def, vyperStateTheory.bind_assoc] >>
   irule gas_exempt_cert_error_result >> simp[]
