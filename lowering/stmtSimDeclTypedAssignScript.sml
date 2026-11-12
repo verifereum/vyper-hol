@@ -12,6 +12,23 @@ Ancestors
   loweringHalt abiTupleProps exprSimAlloc rich_list annassignRelayoutBounds
   placeMemoryCopyEffect
 
+(* A write confined to a window of one alloca keeps every other alloca's
+   bytes. *)
+Theorem window_alloca_frame[local]:
+  !s t a1 b1 z1 aid off z n.
+    allocas_non_overlapping s /\ FLOOKUP s.vs_allocas a1 = SOME (b1,z1) /\
+    FLOOKUP s.vs_allocas aid = SOME (off,z) /\ aid <> a1 /\ n <= z1 /\
+    (!ad len. ad + len <= b1 \/ b1 + n <= ad ==>
+       mem_bytes_at ad len t.vs_memory = mem_bytes_at ad len s.vs_memory) ==>
+    mem_bytes_at off z t.vs_memory = mem_bytes_at off z s.vs_memory
+Proof
+  rpt strip_tac >> first_x_assum irule >>
+  qpat_x_assum `allocas_non_overlapping _`
+    (mp_tac o REWRITE_RULE [allocas_non_overlapping_def]) >>
+  disch_then (qspecl_then [`aid`, `a1`, `off`, `z`, `b1`, `z1`] mp_tac) >>
+  impl_tac >- simp[] >> decide_tac
+QED
+
 (* Both memory-store shapes (typed relayout and equal-layout bulk copy) write
    the value at the declared alloca and frame everything else. *)
 Theorem store_memory_declare_path[local]:
@@ -52,7 +69,9 @@ Theorem store_memory_declare_path[local]:
       (!aid entry. FLOOKUP s.vs_allocas aid = SOME entry ==>
         FLOOKUP t.vs_allocas aid = SOME entry)) /\
       ~t.vs_halted /\ t.vs_current_bb = sb.cs_current_bb /\
-      t.vs_inst_idx = LENGTH sb.cs_current_insts
+      t.vs_inst_idx = LENGTH sb.cs_current_insts /\
+      (!ad len. ad + len <= w2n w \/ w2n w + type_memory_size dtv <= ad ==>
+         mem_bytes_at ad len t.vs_memory = mem_bytes_at ad len s.vs_memory)
 Proof
   disch_then (MAP_EVERY assume_tac o CONJUNCTS) >>
   `eval_operand (Var p) s = SOME w` by simp[eval_operand_def] >>
@@ -76,7 +95,8 @@ Proof
                `inst`, `v`, `dtv`, `sc`, `rest`, `a`, `ctx`] mp_tac
     stmt_state_rel_declare_copy_frame >>
   impl_tac >- (rpt conj_tac >> first_assum ACCEPT_TAC) >>
-  strip_tac >> qexists_tac `t` >> fs[typed_copy_effect_def]
+  strip_tac >> qexists_tac `t` >> rpt conj_tac >> TRY (first_assum ACCEPT_TAC) >>
+  fs[typed_copy_effect_def]
 QED
 
 Theorem compile_assign_value_typed_path:
@@ -122,9 +142,13 @@ Theorem compile_assign_value_typed_path:
       (!aid entry. FLOOKUP s.vs_allocas aid = SOME entry ==>
         FLOOKUP t.vs_allocas aid = SOME entry)) /\
       ~t.vs_halted /\ t.vs_current_bb = sb.cs_current_bb /\
-      t.vs_inst_idx = LENGTH sb.cs_current_insts
+      t.vs_inst_idx = LENGTH sb.cs_current_insts /\
+      (!aid off z. FLOOKUP s.vs_allocas aid = SOME (off,z) /\
+         aid <> inst.inst_id /\ aid < sa.cs_next_id ==>
+         mem_bytes_at off z t.vs_memory = mem_bytes_at off z s.vs_memory)
 Proof
   disch_then (MAP_EVERY assume_tac o CONJUNCTS) >>
+  `allocas_non_overlapping s` by fs[stmt_state_rel_def, alloca_inv_def] >>
   Cases_on `src_loc = SOME LocMemory`
   >- (gvs[compile_assign_value_def,
           comp_bind_def, comp_ignore_bind_def, comp_return_def] >>
@@ -236,9 +260,57 @@ Proof
          mp_tac (Q.SPECL [`buf.buf_operand`, `src`, `type_memory_size stv`, `sm`]
            exprLoweringPropsTheory.ci_mono_compile_copy_memory) >>
          simp[] >> simp[ci_mono_def] >> decide_tac) >>
+      `!aid off z. FLOOKUP s.vs_allocas aid = SOME (off,z) /\
+         aid <> inst.inst_id /\ aid < sa.cs_next_id ==>
+         mem_bytes_at off z t.vs_memory = mem_bytes_at off z s.vs_memory` by
+        (rpt strip_tac >>
+         `FLOOKUP r.vs_allocas aid = SOME (off,z) /\
+          FLOOKUP u.vs_allocas aid = SOME (off,z)` by metis_tac[] >>
+         `allocas_non_overlapping r /\ allocas_non_overlapping u` by
+           fs[stmt_state_rel_def, alloca_inv_def] >>
+         `aid <> sa.cs_next_id` by decide_tac >>
+         qspecl_then [`u`, `t`, `inst.inst_id`, `w2n w`, `sz`, `aid`, `off`, `z`,
+                      `type_memory_size dtv`] mp_tac window_alloca_frame >>
+         impl_tac
+         >- (rpt conj_tac >> TRY (first_assum ACCEPT_TAC) >> rpt strip_tac >>
+             qpat_x_assum `!a len. _ ==> mem_bytes_at _ _ t.vs_memory = _` irule >>
+             decide_tac) >>
+         disch_then SUBST1_TAC >>
+         qspecl_then [`r`, `u`, `sa.cs_next_id`, `w2n tw`, `type_memory_size stv`,
+                      `aid`, `off`, `z`, `type_memory_size stv`]
+           mp_tac window_alloca_frame >>
+         impl_tac
+         >- (rpt conj_tac >> TRY (first_assum ACCEPT_TAC) >> TRY decide_tac >>
+             rpt strip_tac >>
+             qpat_x_assum `!a len. _ ==> mem_bytes_at _ _ u.vs_memory = _` irule >>
+             decide_tac) >>
+         disch_then SUBST1_TAC >> AP_TERM_TAC >> first_assum ACCEPT_TAC) >>
       qexists_tac `t` >> simp[] >>
       metis_tac[loweringShapeDefsTheory.not_fresh_at_mono]) >>
   `compile_store_memory cenv src (Var p) dty sty sa = ((),sb)` by
     gvs[compile_assign_value_def] >>
-  irule store_memory_declare_path >> metis_tac[]
+  `?t. gas_marked_path F ctx func s 0 (OK t) /\
+       (stmt_state_rel ctx func cenv cx
+         (es with scopes :=
+           (sc |+ (id, <|assignable := a; type := dtv; value := v; popped := []|>)) :: rest) t /\
+        (!x. not_fresh_at sa x ==> lookup_var x t = lookup_var x s) /\
+        (!aid entry. FLOOKUP s.vs_allocas aid = SOME entry ==>
+          FLOOKUP t.vs_allocas aid = SOME entry)) /\
+       ~t.vs_halted /\ t.vs_current_bb = sb.cs_current_bb /\
+       t.vs_inst_idx = LENGTH sb.cs_current_insts /\
+       (!ad len. ad + len <= w2n w \/ w2n w + type_memory_size dtv <= ad ==>
+          mem_bytes_at ad len t.vs_memory = mem_bytes_at ad len s.vs_memory)` by
+    (irule store_memory_declare_path >> metis_tac[]) >>
+  `!aid off z. FLOOKUP s.vs_allocas aid = SOME (off,z) /\
+     aid <> inst.inst_id /\ aid < sa.cs_next_id ==>
+     mem_bytes_at off z t.vs_memory = mem_bytes_at off z s.vs_memory` by
+    (rpt strip_tac >>
+     qspecl_then [`s`, `t`, `inst.inst_id`, `w2n w`, `sz`, `aid`, `off`, `z`,
+                  `type_memory_size dtv`] mp_tac window_alloca_frame >>
+     impl_tac
+     >- (rpt conj_tac >> TRY (first_assum ACCEPT_TAC) >> rpt strip_tac >>
+         qpat_x_assum `!a len. _ ==> mem_bytes_at _ _ t.vs_memory = _` irule >>
+         decide_tac) >>
+     disch_then ACCEPT_TAC) >>
+  qexists_tac `t` >> rpt conj_tac >> first_assum ACCEPT_TAC
 QED
