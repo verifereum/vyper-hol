@@ -121,9 +121,11 @@ Resume compile_pop_storage_normalized_vv_sim_mem[positive]:
     (LocatedValue ann (mk_ptr (Var x6) (if tr then LocTransient else LocStorage))) t` by
     (`!es1. vv_place_ptr cenv cx es1 t (PlaceR (StoragePlace tr elem tv))
         (LocatedValue ann (mk_ptr (Var x6) (if tr then LocTransient else LocStorage)))` by
-       (Cases_on `tr` >>
-        simp[loweringPostsTheory.vv_place_ptr_def, contextTheory.mk_ptr_def,
-             loweringPostsTheory.slot_loc_def, eval_operand_def]) >>
+       (qpat_assum `lookup_var x6 t = SOME elem` (fn th =>
+          Cases_on `tr` >>
+          simp[th, loweringPostsTheory.vv_place_ptr_def, contextTheory.mk_ptr_def,
+               loweringPostsTheory.slot_loc_def, eval_operand_def]) >>
+        simp[Abbr `elem`, word_add_n2w, word_mul_n2w]) >>
      irule pop_storage_vv_post >> simp[] >>
      conj_tac
      >- (irule pop_mem_updated_state_rel_cursor >> metis_tac[]) >>
