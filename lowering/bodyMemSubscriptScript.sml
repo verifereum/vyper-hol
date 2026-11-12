@@ -2,7 +2,7 @@
    subscript. *)
 Theory bodyMemSubscript
 Ancestors
-  bodyMemoryPreds bodyMemMapBase
+  bodyMemoryPreds bodyMemMapBase bodyMemSubscriptArrayPlaceBase
 
 Theorem body_subscript_mem_case:
   !cx v8 e1 e2.
