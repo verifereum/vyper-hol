@@ -47,7 +47,7 @@ Theorem subscript_array_framed_code_ptr:
   !cx ann e1 e2 d PG tops ctx func cenv env ty es et bd.
     (!s res t. eval_expr cx e1 s = (INL res,t) ==> body_expr_ptr_ok cx e2) /\
     body_expr_ptr_ok cx e1 /\ body_inv tops ctx cenv cx /\
-    ~subscript_reads_base cx e1 e2 /\
+    ~subscript_reads_base cx e1 e2 /\ ~copies_subscript_base cenv e1 e2 /\
     expr_body_pre cenv cx env (Subscript ann e1 e2) es /\
     expr_type e1 = ArrayT et bd /\
     place_type cenv e1 = ValPT (ArrayT et bd) /\
