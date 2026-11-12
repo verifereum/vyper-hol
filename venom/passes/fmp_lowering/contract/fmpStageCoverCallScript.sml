@@ -76,5 +76,29 @@ Theorem fmp_stage_back_ret:
     active_inst f.cf_fn inst'
       (s' with vs_inst_idx := SUC f.cf_state.vs_inst_idx)
 Proof
+  strip_tac >>
+  `s.vs_labels = t.vs_labels` by
+    (fs[fmp_stage_rel_def, fmp_frame_rel_def] >> metis_tac[]) >>
+  `rinst.inst_opcode <> PHI` by simp[] >>
+  `!v. MEM (Var v) rinst.inst_operands ==> IS_SOME (lookup_var v s)` by
+    (rpt strip_tac >> drule_all fmp_stage_src_defined >> simp[]) >>
+  qpat_x_assum `step_inst k' C' rinst t = _` mp_tac >>
+  simp[Once step_inst_def, step_inst_base_def] >>
+  strip_tac >> gvs[AllCaseEqs()] >>
+  `IS_SOME (eval_operands rinst.inst_operands s)` by
+    (`IS_SOME (eval_operands rinst.inst_operands t)` by simp[] >>
+     fs[eval_operands_IS_SOME_EVERY, EVERY_MEM] >>
+     rpt strip_tac >> Cases_on `op` >> fs[eval_operand_def] >>
+     metis_tac[eval_operand_def]) >>
+  Cases_on `eval_operands rinst.inst_operands s` >> gvs[] >>
+  `!ops st vals. eval_operands ops st = SOME vals ==>
+     LENGTH vals = LENGTH ops` by
+    (Induct >> simp[eval_operands_def] >>
+     rpt strip_tac >> gvs[AllCaseEqs()] >> metis_tac[]) >>
+  `LENGTH x = LENGTH (v3::v4)` by metis_tac[] >>
+  `x <> []` by (Cases_on `x` >> fs[]) >>
+  qexistsl [`<| iret_values := FRONT x; iret_adopt_fmp := NONE |>`, `s`] >>
+  simp[Once step_inst_def, step_inst_base_def] >>
+  Cases_on `x` >> gvs[] >>
   cheat
 QED
