@@ -778,11 +778,12 @@ Proof
   drule vyperTypeContractStaticMapsTheory.lookup_function_Deploy_SOME_cases >>
   strip_tac >> gvs[] >>
   gvs[ctorDeployDefsTheory.deploy_source_ok_def, deploy_typing_ok_def] >>
-  mp_tac (Q.SPECL [`T`, `am.layouts`, `tx.target`, `[(NONE,tops)]`, `deploy_art`,
-      `NONE`, `tops`, `mut`, `T`, `raw`, `fname`, `args`, `dflts`, `ret`, `body`]
+  qspecl_then [`T`, `am.layouts`, `tx.target`, `[(NONE,tops)]`, `deploy_art`,
+      `NONE`, `tops`, `mut`, `T`, `raw`, `fname`, `args`, `dflts`, `ret`, `body'`]
+    mp_tac
     (Q.GENL [`in_deploy`, `layouts`, `addr`, `mods`, `art`, `src`, `tls`, `mut`,
         `nr`, `rr`, `name`, `args`, `dflts`, `ret`, `body`]
-      vyperTypeContractTheory.check_contract_deploy_nonreentrant)) >>
+      vyperTypeContractTheory.check_contract_deploy_nonreentrant) >>
   simp[]
 QED
 
@@ -872,6 +873,15 @@ Proof
     (drule_all storage_trace_frame_result >>
      disch_then (qspec_then `obs` mp_tac) >>
      simp[initial_state_def]) >>
+  `bind (eval_external_defaults cx [])
+      (\dflt_vs. case bind_arguments (type_env_all_modules [(NONE,tops)]) args
+          (tx.args ++ dflt_vs) of
+        NONE => raise (Error (RuntimeError "call bind_arguments"))
+      | SOME env => ignore_bind (set_scopes [env])
+          (ignore_bind (return ()) (eval_stmts cx bdy))) =
+    ignore_bind (set_scopes [env])
+      (ignore_bind (return ()) (eval_stmts cx bdy))` by
+    simp[FUN_EQ_THM, bind_def] >>
   qpat_x_assum `_ (initial_state _ _ with
        <|outcomes := NONE; requests := []; gas_obs := gobs;
          storage_trace := obs|>) = _` mp_tac >>
