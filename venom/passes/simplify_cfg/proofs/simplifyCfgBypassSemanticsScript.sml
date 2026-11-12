@@ -274,3 +274,19 @@ Proof
   FIRST [irule scfg_bypass_runs_forward, irule scfg_bypass_runs_backward] >>
   goal_assum (drule_at Any) >> simp[] >> metis_tac[]
 QED
+
+Theorem scfg_bypass_fn_bisim_fuel:
+  scfg_bypass_hyp fn a b fn' ==> fn_bisim_fuel I fn fn'
+Proof
+  strip_tac >> rewrite_tac[fn_bisim_fuel_def] >>
+  `fn_entry_label fn' = fn_entry_label fn` by metis_tac[scfg_bypass_entry_eq] >>
+  conj_tac >- (fs[scfg_bypass_hyp_def] >> drule do_merge_jump_metadata >>
+              simp[fn_identity_metadata_eq_def]) >>
+  conj_tac >- simp[] >> rpt strip_tac >> simp[] >>
+  `scfg_bypass_aligned a b s s` by metis_tac[scfg_bypass_initial_aligned] >>
+  `scfg_bprefix ctx fn s s /\ s.vs_inst_idx = 0` by
+    fs[scfg_bprefix_rules, fn_entry_state_def] >>
+  irule scfg_bypass_runs_forward_fuel_from_terminal >>
+  goal_assum (drule_at Any) >> simp[] >>
+  metis_tac[scfg_bypass_run_block_terminal_forward_fuel]
+QED
