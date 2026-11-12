@@ -11,11 +11,91 @@ Ancestors
   lowerDloadSafetyKernel lowerDloadSafetyAmbient lowerDloadSafetyAssemblyPremises
   lowerDloadSafetyRelation lowerDloadSafetyScalarEffects
   lowerDloadOracleCallAssembly o1PassContract venomInst
-  venomExecSemantics ptrDiscipline finite_map list words
+  venomExecSemantics ptrDiscipline lowerDloadSafetyValues lowerDloadSafetyUpdates
+  venomState memLocDefs pointerConfinedDefs finite_map list words
+
+Theorem ld_dalloca_step[local]:
+  inst.inst_opcode = DALLOCA /\
+  eval_operands inst.inst_operands s = eval_operands inst.inst_operands t /\
+  step_inst_base inst t = OK ts ==>
+  ?op out sz. inst.inst_operands = [op] /\ inst.inst_outputs = [out] /\
+    ts = update_var out t.vs_fmp
+           (t with vs_fmp := t.vs_fmp + n2w (ceil32 (w2n (sz:bytes32)))) /\
+    step_inst_base inst s =
+      OK (update_var out s.vs_fmp
+            (s with vs_fmp := s.vs_fmp + n2w (ceil32 (w2n sz))))
+Proof
+  strip_tac >>
+  qpat_x_assum `step_inst_base inst t = OK ts` mp_tac >>
+  pure_once_rewrite_tac[step_inst_base_def] >>
+  asm_rewrite_tac[opcode_case_def] >>
+  simp[AllCaseEqs()] >> rpt strip_tac >>
+  gvs[eval_operands_def, AllCaseEqs()] >>
+  simp[Once step_inst_base_def] >> qexists_tac `sz` >> simp[]
+QED
+
+Theorem ld_dalloca_taint[local]:
+  inst.inst_opcode = DALLOCA /\ inst.inst_operands = [op] ==>
+  step_taint inst s s' tn =
+    tn with <| t_mem := tn.t_mem UNION new_site_bytes s s';
+               t_var := set_var_taint tn.t_var inst.inst_outputs {} |>
+Proof
+  strip_tac >>
+  simp[step_taint_def, mem_taint_def, written_taint_def, step_writes_def,
+       codegenRelTheory.source_memory_write_ranges_def, range_bytes_def,
+       store_taint_def, adopt_reset_def, imm_taint_def, out_taint_def,
+       taint_component_equality] >>
+  Cases_on `eval_operand op s` >> simp[pred_setTheory.EXTENSION]
+QED
+
+(* The fresh region lies in [fl, 2^256), whether or not the pointer wraps. *)
+Theorem ld_ghost_ok_dalloca[local]:
+  ld_ghost_ok fl A H G /\ fl <= b /\ b < dimword (:256) /\
+  e < dimword (:256) ==>
+  ld_ghost_ok fl A (set_prov H [out] NONE) (G |+ (out,(b,e - b)))
+Proof
+  simp[lowerDloadSafetyRelationTheory.ld_ghost_ok_def, set_prov_def,
+       FLOOKUP_DRESTRICT, FLOOKUP_UPDATE] >>
+  rpt strip_tac >> Cases_on `out = v` >> gvs[] >> metis_tac[]
+QED
+
+Theorem ld_memory_dalloca[local]:
+  ld_memory lo A tn s t ==>
+  tn.t_mem SUBSET tn'.t_mem /\
+  s'.vs_memory = s.vs_memory /\ t'.vs_memory = t.vs_memory ==>
+  ld_memory lo A tn' s' t'
+Proof
+  simp[ld_memory_def, pred_setTheory.SUBSET_DEF] >> metis_tac[]
+QED
+
+Theorem ld_nonghost_dalloca[local]:
+  ld_nonghost tn s t /\ tn'.t_stor = tn.t_stor /\ tn'.t_trans = tn.t_trans /\
+  tn'.t_imm = tn.t_imm ==>
+  ld_nonghost tn' (update_var out s.vs_fmp (s with vs_fmp := s.vs_fmp + d))
+    (update_var out t.vs_fmp (t with vs_fmp := t.vs_fmp + d))
+Proof
+  strip_tac >> fs[ld_nonghost_def, update_var_def] >> metis_tac[]
+QED
+
+Theorem ld_vars_dalloca_write[local]:
+  ld_vars P A f /\ MEM out (fn_ir_vars f.lf_fn) /\ tv = f.lf_tv /\
+  ss.vs_vars = f.lf_src.vs_vars |+ (out,x) /\
+  ss.vs_params = f.lf_src.vs_params /\
+  ts.vs_vars = f.lf_tgt.vs_vars |+ (out,x) /\
+  ts.vs_params = f.lf_tgt.vs_params ==>
+  ld_vars P A (f with <|lf_src := ss; lf_tgt := ts;
+    lf_H := set_prov f.lf_H [out] NONE; lf_tv := tv |+ (out,{})|>)
+Proof
+  strip_tac >>
+  `ld_vars P A (f with <|lf_src := f.lf_src with vs_vars := f.lf_src.vs_vars |+ (out,x);
+      lf_tgt := f.lf_tgt with vs_vars := f.lf_tgt.vs_vars |+ (out,x);
+      lf_H := set_prov f.lf_H [out] NONE; lf_tv := tv |+ (out,{})|>)` by
+    (irule ld_vars_write >> simp[FLOOKUP_UPDATE, ld_word_agree_empty]) >>
+  pop_assum mp_tac >> simp[lowerDloadSafetyRelationTheory.ld_vars_def]
+QED
 
 (* A DALLOCA moves both free memory pointers past a fresh dynamic region:
    its output's provenance is that region in G and nothing in H. *)
-(* TEMPORARILY CHEATED - P4b in progress: new lemma, proof pending. *)
 Theorem ld_sync_dalloca_effect:
   ld_sync lo P C vs0 stk PG G tn fn inst s t A (f::fs) N /\
   ld_global lo A (f::fs) /\ o1_ctx_shape C /\ ptr_discipline lo C vs0 /\
@@ -34,7 +114,90 @@ Theorem ld_sync_dalloca_effect:
     ss.vs_current_bb = s.vs_current_bb /\ ts.vs_current_bb = t.vs_current_bb /\
     ss.vs_prev_bb = s.vs_prev_bb /\ ts.vs_prev_bb = t.vs_prev_bb
 Proof
-  cheat
+  disch_then (REPEAT_TCL CONJUNCTS_THEN assume_tac) >>
+  `MEM fn C.ctx_functions` by
+    (qhdtm_x_assum `ld_sync` mp_tac >>
+     simp[lowerDloadSafetyRelationTheory.ld_sync_def, EVERY_MEM] >>
+     strip_tac >> metis_tac[MEM]) >>
+  `fn_shape_ok fn` by
+    (drule_all ld_sync_fn_shape >> metis_tac[o1_fn_shape_components]) >>
+  `MEM inst (fn_insts fn)` by
+    (drule ld_sync_source >> metis_tac[ld_active_inst_member]) >>
+  `ctx_has_dalloca C` by
+    (simp[ctx_has_dalloca_def, EXISTS_MEM] >> metis_tac[]) >>
+  `w2n vs0.vs_initial_fmp <= w2n s.vs_fmp` by
+    (drule ld_sync_source >> strip_tac >>
+     drule o1LowerDloadOccurrenceTheory.frame_reachable_initial_fmp >>
+     strip_tac >>
+     qpat_x_assum `ptr_discipline _ _ _` mp_tac >>
+     simp[ptr_discipline_def] >> rpt strip_tac >>
+     first_x_assum drule >> gvs[allocas_below_fmp_def]) >>
+  `fn_ptr_ok P fn` by metis_tac[ld_sync_ptr_ok] >>
+  `s.vs_labels = t.vs_labels` by metis_tac[ld_sync_labels] >>
+  `taint_ok fn tn inst s` by metis_tac[ld_sync_taint_ok] >>
+  `!a. a IN FRANGE f.lf_H ==> a IN FDOM A` by
+    metis_tac[ld_global_selected, MEM] >>
+  `ld_dyn_agree (dyn_floor C vs0) tn.t_mem s.vs_memory t.vs_memory` by
+    metis_tac[lowerDloadSafetyRelationTheory.ld_sync_dyn_agree] >>
+  drule ld_sync_active >> simp[] >> strip_tac >>
+  drule ld_sync_ghosts >> simp[] >> strip_tac >>
+  drule ld_sync_memory >> strip_tac >>
+  gvs[step_inst_non_invoke] >>
+  `!v. MEM (Var v) inst.inst_operands ==>
+     MEM v (fn_ir_vars f.lf_fn) /\ v NOTIN fn_pv P f.lf_fn` by
+    (gen_tac >> strip_tac >> conj_tac
+     >- metis_tac[ld_inst_input_ir] >>
+     irule ld_ptr_use_scalar >> simp[] >> qexists_tac `inst` >>
+     gvs[mem_read_ops_def, mem_write_ops_def, is_pointer_preserving_op_def]) >>
+  `~MEM inst.inst_opcode
+     [ASSIGN;PHI;RET;RETFMP;DRET;MUL;SHL;SHR;SAR;MSTORE;SSTORE;TSTORE;ISTORE]` by
+    gvs[] >>
+  `tn.t_var = f.lf_tv` by simp[] >>
+  `eval_operands inst.inst_operands f.lf_src =
+   eval_operands inst.inst_operands f.lf_tgt` by
+    (drule_all ld_vars_numeric_operands_equal >> simp[]) >>
+  qpat_x_assum `tn.t_var = f.lf_tv` kall_tac >>
+  `f.lf_src.vs_fmp = f.lf_tgt.vs_fmp` by fs[ld_nonghost_def] >>
+  drule_all ld_dalloca_step >> strip_tac >>
+  qabbrev_tac `ss = update_var out f.lf_src.vs_fmp
+    (f.lf_src with vs_fmp := f.lf_src.vs_fmp + n2w (ceil32 (w2n sz)))` >>
+  `ld_dyn_agree (dyn_floor C vs0) (step_taint inst f.lf_src ss tn).t_mem
+     ss.vs_memory ts.vs_memory` by
+    (irule lowerDloadSafetyRelationTheory.ld_dyn_agree_unwritten >>
+     simp[Abbr`ss`, update_var_def,
+          codegenRelTheory.source_memory_write_ranges_def] >>
+     qexists_tac `f.lf_tgt` >> simp[]) >>
+  `step_taint inst f.lf_src ss tn =
+   tn with <| t_mem := tn.t_mem UNION new_site_bytes f.lf_src ss;
+              t_var := set_var_taint tn.t_var inst.inst_outputs {} |>` by
+    (irule ld_dalloca_taint >> simp[]) >>
+  `step_prov PG G inst ss =
+   G |+ (out, (w2n f.lf_src.vs_fmp, w2n ss.vs_fmp - w2n f.lf_src.vs_fmp))` by
+    simp[step_prov_def, out_prov_def, set_prov_def, Abbr`ss`,
+         update_var_def, lookup_var_def, FLOOKUP_UPDATE] >>
+  `ld_ghost_ok (dyn_floor C vs0) A (set_prov f.lf_H [out] NONE)
+     (step_prov PG G inst ss)` by
+    (simp[] >> irule ld_ghost_ok_dalloca >>
+     simp[dyn_floor_def, wordsTheory.w2n_lt] >> metis_tac[]) >>
+  `ld_nonghost (step_taint inst f.lf_src ss tn) ss ts` by
+    (qpat_x_assum `ts = _` SUBST1_TAC >> qunabbrev_tac `ss` >>
+     irule ld_nonghost_dalloca >> simp[] >> qexists_tac `tn` >> simp[]) >>
+  `ld_memory lo A (step_taint inst f.lf_src ss tn) ss ts` by
+    (simp[] >> drule_then irule ld_memory_dalloca >>
+     simp[Abbr`ss`, update_var_def, pred_setTheory.SUBSET_UNION]) >>
+  `ld_vars P A (f with <|lf_src := ss; lf_tgt := ts;
+      lf_H := set_prov f.lf_H [out] NONE;
+      lf_tv := (step_taint inst f.lf_src ss tn).t_var|>)` by
+    (simp[set_var_taint_def] >> irule ld_vars_dalloca_write >>
+     simp[Abbr`ss`, update_var_def] >>
+     `MEM out (fn_ir_vars f.lf_fn)` by metis_tac[ld_inst_output_ir, MEM] >>
+     simp[] >> qexists_tac `f.lf_tgt.vs_fmp` >> simp[]) >>
+  `!a. a IN FRANGE (set_prov f.lf_H [out] NONE) ==> a IN FDOM A` by
+    (gen_tac >> strip_tac >> irule ld_set_prov_selected >>
+     qexistsl_tac [`f.lf_H`,`[out]`,`NONE`] >> simp[]) >>
+  qexistsl_tac [`ss`, `set_prov f.lf_H [out] NONE`] >>
+  rpt conj_tac >> TRY (first_assum ACCEPT_TAC) >>
+  simp[Abbr`ss`, update_var_def]
 QED
 
 val ld_effect_tac =
