@@ -6,25 +6,6 @@ Ancestors
   simplifyCfgAvailability cfgTransform venomWf o1PassLift venomExecProofs
   venomExecProps analysisSimProofsBase
 
-Theorem scfg_gas_events_block_suffix:
-  !b s b' n C owner.
-  LENGTH b.bb_instructions = LENGTH b'.bb_instructions /\
-  DROP s.vs_inst_idx b.bb_instructions = DROP s.vs_inst_idx b'.bb_instructions ==>
-  gas_events_block n C owner b s = gas_events_block n C owner b' s
-Proof
-  rpt gen_tac >>
-  measureInduct_on `LENGTH b.bb_instructions - s.vs_inst_idx` >>
-  rpt strip_tac >>
-  Cases_on `s.vs_inst_idx < LENGTH b.bb_instructions`
-  >- (`EL s.vs_inst_idx b.bb_instructions = EL s.vs_inst_idx b'.bb_instructions` by
-        metis_tac[HD_DROP] >>
-      once_rewrite_tac[gas_events_block_def] >> simp[get_instruction_def] >>
-      Cases_on `step_inst n C (EL s.vs_inst_idx b'.bb_instructions) s` >> simp[] >>
-      IF_CASES_TAC >> simp[] >> first_x_assum irule >> simp[] >>
-      metis_tac[DROP_SUC]) >>
-  once_rewrite_tac[gas_events_block_def] >> simp[get_instruction_def]
-QED
-
 Theorem scfg_iprefix_silent_replay:
   !C bb s t. scfg_iprefix C bb s t ==>
   (!j i. s.vs_inst_idx <= j /\ j < t.vs_inst_idx /\
@@ -67,7 +48,8 @@ Proof
   strip_tac >>
   `LENGTH (fix_phis_in_block actual_preds bb).bb_instructions =
    LENGTH bb.bb_instructions` by metis_tac[scfg_fix_phis_length] >>
-  irule scfg_gas_events_block_suffix >> simp[] >>
+  irule gas_events_block_suffix_cong >>
+  qexists_tac `DROP s.vs_inst_idx bb.bb_instructions` >> simp[] >>
   irule LIST_EQ >> simp[EL_DROP] >> rpt strip_tac >>
   `s.vs_inst_idx + x = LENGTH ps + (s.vs_inst_idx + x - LENGTH ps)` by decide_tac >>
   `s.vs_inst_idx + x - LENGTH ps < LENGTH tail` by gvs[] >>
