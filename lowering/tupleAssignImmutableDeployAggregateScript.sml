@@ -43,7 +43,8 @@ Theorem tuple_immutable_aggregate_store:
   type_memory_size dtv < dimword (:256) /\
   w2n sw + type_memory_size stv < dimword (:256) /\
   w2n sw + type_memory_size stv <= s.vs_alloca_next /\
-  (!b sz. FLOOKUP s.vs_allocas sa.cs_next_id = SOME (b,sz) ==>
+  (dty <> sty /\ ~is_bytestring_type dty ==>
+   !b sz. FLOOKUP s.vs_allocas sa.cs_next_id = SOME (b,sz) ==>
     w2n sw + type_memory_size stv <= b \/ b + sz <= w2n sw) /\
   regions_disjoint (w2n sw) (type_memory_size stv) off L /\
   ~s.vs_halted /\ s.vs_current_bb = sa.cs_current_bb /\
