@@ -12,7 +12,7 @@ Libs
   monadsyntax
 
 (* PORT_ADMISSION SEQ-4381: body_append_storage_narrow_mem.
-   Argon 2026-11-12 18:16: TRUE as stated on 67c6f13fd; body_inv and
+   Original source: 488580bb2. TRUE as stated on 67c6f13fd; body_inv and
    expr_sim_inv supply acyclic_struct_metadata and field consistency.
    The lower metadata-free memory helper is false, so the cut is here.
    This masks the whole aggregate case, including previously proved static
