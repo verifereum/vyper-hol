@@ -458,7 +458,11 @@ Proof
       supported_integer_type_def, supported_unsigned_type_def,
       supported_word_type_def] >>
   imp_res_tac assignable_int_width >> gvs[supported_int_width_def] >>
-  TRY (irule nonneg_int_literal_supported >> simp[])
+  TRY (irule nonneg_int_literal_supported >> simp[]) >>
+  gvs[augassign_operand_ok_def] >>
+  Cases_on `e` >> gvs[power_exponent_ok_def] >>
+  rename1 `Literal _ lit` >> Cases_on `lit` >>
+  gvs[power_exponent_ok_def, nonneg_int_literal_def, int_literal_value_def]
 QED
 
 Theorem type_place_target_attribute_subscript_base:
