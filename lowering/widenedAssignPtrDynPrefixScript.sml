@@ -3,9 +3,9 @@ Theory widenedAssignPtrDynPrefix
 Ancestors
   bodyPtrBopInHeaderControl bodyPtrSubscriptLengthRead
   bodyPtrBytestringBuiltinsSource bodyPtrPrecompileBuiltinsArithmeticValue
-  augAssignPtrFieldLoad pred_set
+  augAssignPtrFieldLoad pred_set typedCopyRobustTransportPtr
   assignTuplePtrLoadStep representationCleanPtr valueEncoding
-  bodyPtrDefs contextProps valueEncodingProps freshWrites
+  bodyPtrDefs contextProps valueEncodingProps valueEncodingDefs freshWrites
   widenedAssignPtrIndexAdmin typedMemoryCopy emitHelperProps emitHelper
   compileEnv exprLoweringProps loweringStateRelDefs fragExec fragGasPathPtr
   venomState venomExecSemantics ptrDiscipline finite_map words list arithmetic
@@ -270,4 +270,72 @@ Proof
     (mp_then Any mp_tac gas_path_ptr_then) >> disch_then drule >> simp[] >> strip_tac >>
   qexistsl_tac [`G''`,`tn''`,`t''`] >> simp[] >>
   metis_tac[typed_copy_state_frame_trans]
+QED
+
+Theorem widened_assign_dynarray_header_prefix_counted:
+  emit_op MLOAD [Var src] a = (length,b) /\
+  emit_op GT [length; Lit (n2w C)] b = (Var flag,c) /\
+  emit_op ISZERO [Var flag] c = (Var valid,d) /\
+  emit_void ASSERT [Var valid] d = ((),e) /\
+  emit_void MSTORE [Var dst; length] e = ((),f) /\
+  emit_op ADD [Var src; Lit 32w] f = (Var sd,g) /\
+  emit_op ADD [Var dst; Lit 32w] g = (Var dd,h) /\
+  ptr_covers G tn src s (32+scap*type_memory_size stv) /\
+  lookup_var src s = SOME sw /\
+  ptr_covers G tn dst s (32+dn) /\ lookup_var dst s = SOME dw /\
+  not_fresh_at a src /\ not_fresh_at a dst /\
+  w2n sw + 32 < dimword (:256) /\ w2n dw + 32 < dimword (:256) /\
+  val_wf (ArrayTV stv (Dynamic scap)) (ArrayV (DynArrayV vs)) /\
+  (!m. mem_agree_outside tn.t_mem s.vs_memory m ==>
+    val_in_memory (ArrayTV stv (Dynamic scap)) (ArrayV (DynArrayV vs))
+      (w2n sw) m) /\
+  (w2n sw + type_memory_size (ArrayTV stv (Dynamic scap)) <= w2n dw \/
+    w2n dw + 32 <= w2n sw) /\
+  LENGTH vs <= C /\ C < dimword (:256) /\ fn_has_code a h fn /\
+  ~ctx_has_dalloca ctx /\ ~s.vs_halted /\
+  s.vs_current_bb = a.cs_current_bb /\
+  s.vs_inst_idx = LENGTH a.cs_current_insts ==>
+  ?H tm t.
+    gas_path_ptr D 0 ctx fn PG G tn s 0 H tm (OK t) /\
+    t.vs_current_bb = h.cs_current_bb /\
+    t.vs_inst_idx = LENGTH h.cs_current_insts /\ ~t.vs_halted /\
+    eval_operand length t = SOME (n2w (LENGTH vs)) /\
+    op_taint tm length = {} /\ op_prov H length = NONE /\
+    lookup_var sd t = SOME (sw+32w) /\
+    ptr_covers H tm sd t (LENGTH vs * type_memory_size stv) /\
+    lookup_var dd t = SOME (dw+32w) /\ ptr_covers H tm dd t dn /\
+    (!m. mem_agree_outside tm.t_mem t.vs_memory m ==>
+      mem_word_at (w2n dw) m = n2w (LENGTH vs)) /\
+    (!m. mem_agree_outside tm.t_mem t.vs_memory m ==>
+      elems_in_memory vs (w2n sw + 32) stv m) /\
+    typed_copy_state_frame a (w2n dw) 32 s t /\
+    tm.t_mem = tn.t_mem DIFF {i | w2n dw <= i /\ i < w2n dw + 32} /\
+    tm.t_stor = tn.t_stor /\ tm.t_trans = tn.t_trans /\ tm.t_imm = tn.t_imm /\
+    (!x. not_fresh_at a x ==> lookup_var x t = lookup_var x s /\
+      FLOOKUP H x = FLOOKUP G x /\ op_taint tm (Var x) = op_taint tn (Var x))
+Proof
+  disch_tac >> RULE_L_ASSUM_TAC CONJUNCTS >>
+  `!m. mem_agree_outside tn.t_mem s.vs_memory m ==>
+    mem_word_at (w2n sw) m = n2w (LENGTH vs)` by
+    gvs[val_in_memory_def] >>
+  drule_all widened_assign_checked_header_prefix_counted >>
+  disch_then (qspecl_then [`PG`,`D`] strip_assume_tac) >>
+  `!m. mem_agree_outside tm.t_mem t.vs_memory m ==>
+    val_in_memory (ArrayTV stv (Dynamic scap)) (ArrayV (DynArrayV vs))
+      (w2n sw) m` by
+    (rpt strip_tac >> irule robust_representation_exterior_frame >>
+     conj_tac >- simp[] >>
+     qexistsl_tac [`w2n dw`, `s.vs_memory`, `t.vs_memory`, `32`,
+                  `tn.t_mem`, `tm.t_mem`] >>
+     gvs[typed_copy_state_frame_def, typed_copy_frame_def] >>
+     rpt strip_tac >> first_x_assum irule >> decide_tac) >>
+  `LENGTH vs <= scap` by gvs[val_wf_def] >>
+  `LENGTH vs * type_memory_size stv <= scap * type_memory_size stv` by
+    simp[LESS_MONO_MULT] >>
+  qexistsl_tac [`H`,`tm`,`t`] >> simp[] >>
+  conj_tac >-
+    (gvs[ptr_covers_def] >> irule LESS_EQ_TRANS >>
+     qexists_tac `w2n (sw+32w) + scap * type_memory_size stv` >>
+     simp[LESS_MONO_MULT]) >>
+  gvs[val_in_memory_def]
 QED
