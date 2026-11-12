@@ -134,7 +134,7 @@ Theorem log_store_data_stmt:
       eval_operand op t = eval_operand op s)
 Proof
   strip_tac >> drule_all compile_log_store_data_input >>
-  disch_then (qspec_then `sf` strip_assume_tac) >>
+  disch_then (Q.ISPEC_THEN `sf` strip_assume_tac) >>
   drule log_data_sources_types >> strip_tac >>
   `LENGTH s.vs_memory <= LENGTH t.vs_memory` by
     (drule_all log_store_data_memory_mono >> simp[]) >>
