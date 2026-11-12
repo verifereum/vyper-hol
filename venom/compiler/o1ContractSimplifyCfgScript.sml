@@ -342,7 +342,7 @@ Proof
      >- metis_tac[simplify_cfg_fn_metadata, fn_fmp_convention_eq_def]
      >- (simp[pre_fmp_ops_def, simplify_cfg_fn_def] >>
          irule simplify_cfg_fn_with_labels_opcodes >>
-         simp[pre_fmp_opcode_def] >> metis_tac[pre_fmp_ops_def]) >>
+         fs[pre_fmp_ops_def, pre_fmp_opcode_def, EVERY_MEM] >> metis_tac[]) >>
      metis_tac[]) >> simp[] >>
   gen_tac >> strip_tac >> simp[EVERY_MAP, EVERY_MEM] >>
   gen_tac >> strip_tac >> irule simplify_cfg_fn_shape_ptr_ok >>
