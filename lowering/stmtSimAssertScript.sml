@@ -11,6 +11,22 @@ Ancestors
 Libs
   monadsyntax intLib
 
+(* The continuation after the condition only appends storage observations. *)
+val assert_cont_frame_tac =
+  simp[vyperStorageTraceTheory.storage_trace_frame_cond,
+       vyperStorageTraceTheory.storage_trace_frame_return,
+       vyperStorageTraceTheory.storage_trace_frame_raise];
+
+(* The condition left the storage domain: the whole Assert is a bad-storage
+   run under the condition's marks. *)
+val assert_out_of_domain_tac =
+  simp[eval_assert_bind] >>
+  irule gasStorageTheory.gas_bad_storage_at_bind_left >>
+  assert_cont_frame_tac >>
+  irule gasStorageTheory.gas_bad_storage_at_counted_prefix >>
+  qpat_assum `gas_marked_exec _ _ (bind _ _) _ _ _ _ _` (irule_at Any) >>
+  simp[];
+
 Theorem compile_assert_frag:
   !ctx func cx lctx RetQ cenv ty e ak es.
     (ak = AssertBare \/ ak = AssertUnreachable) /\
@@ -31,22 +47,38 @@ Proof
     metis_tac[assert_expr_admissible] >>
   qpat_x_assum `expr_sim _ _ _ _ _ _ _`
     (mp_tac o REWRITE_RULE [expr_sim_def]) >>
-  disch_then drule >> simp[] >>
-  disch_then (qspec_then `s0` mp_tac) >> simp[] >>
-  simp[gas_outcome_def, gas_summary_at_def] >>
-  disch_then (qx_choose_then `marks` (DISJ_CASES_THEN assume_tac))
-  >- (qexists_tac `marks` >> disj1_tac >>
-      qpat_x_assum `?res es_end r. _` strip_assume_tac >> gvs[]
-      >- suspend "normal"
-      >> suspend "exception") >>
-  qexists_tac `marks` >> disj2_tac >>
-  pop_assum strip_assume_tac >>
-  qexistsl_tac [`err`, `ee`, `leaf`, `finish'`] >>
-  irule assert_expr_exempt >> simp[])
+  disch_then (qspecl_then [`st0`, `sa`, `s1`, `op`, `s0`] mp_tac) >>
+  impl_tac >- simp[] >>
+  rewrite_tac[gas_outcome_def, gas_summary_at_def] >> BETA_TAC >>
+  disch_then (qx_choose_then `marks` strip_assume_tac) >>
+  qexists_tac `marks`
+  >- (disj1_tac >> simp[eval_assert_bind] >>
+      irule gasStorageTheory.gas_bad_storage_at_bind_left >>
+      assert_cont_frame_tac >> first_assum ACCEPT_TAC)
+  >- (reverse (Cases_on `storage_trace_domain cx st0 es_end.storage_trace`)
+      >- (disj1_tac >> assert_out_of_domain_tac) >>
+      disj2_tac >> disj1_tac >> suspend "normal")
+  >- (reverse (Cases_on `storage_trace_domain cx st0 es_end.storage_trace`)
+      >- (disj1_tac >> assert_out_of_domain_tac) >>
+      disj2_tac >> disj1_tac >> suspend "exception") >>
+  disj2_tac >> disj2_tac >> metis_tac[assert_expr_exempt])
 QED
 
 Resume compile_assert_frag[normal]:
   markerLib.RESUME_TAC >> (
+  `?H0. valid_horizon cx st0 H0 es_end.storage_trace` by
+    metis_tac[vyperStorageFootprintTheory.storage_trace_domain_def] >>
+  `!H. valid_horizon cx st0 H es_end.storage_trace ==>
+       valid_horizon cx st0 H es.storage_trace` by
+    (qpat_assum `gas_marked_exec _ _ (bind _ _) _ _ _ _ _`
+       (mp_tac o MATCH_MP (REWRITE_RULE [GSYM AND_IMP_INTRO]
+                          gas_marked_exec_valid_prefix)) >>
+     impl_tac >- simp[vyperStorageTraceTheory.storage_trace_frame_bind_all,
+          vyperStorageTraceTheory.storage_trace_frame_read_result,
+          vyperStorageTraceTheory.evaluate_storage_trace_frame] >>
+     simp[]) >>
+  qpat_assum `!H. valid_horizon _ _ H _ ==> ?v. _` (qspec_then `H0` mp_tac) >>
+  (impl_tac >- simp[]) >> strip_tac >> gvs[] >>
   qmatch_goalsub_abbrev_tac `eval_stmt cx (Assert e ak)` >>
   qpat_x_assum `gas_marked_exec _ _ _ _ _ _ _ _` mp_tac >>
   simp[gas_marked_exec_def, gas_marked_path_def] >> strip_tac >>
@@ -61,8 +93,9 @@ Resume compile_assert_frag[normal]:
      qpat_x_assum `!tail. _ = _` (qspec_then `[]` assume_tac) >>
      gvs[bind_def]) >>
   `eval_operand op t = SOME (if b then 1w else 0w)` by
-    gvs[expr_post_def, expr_val_rel_def, evaluate_type_def, is_word_type_def,
-        typed_val_to_w256_def, val_to_w256_def] >>
+    (gvs[expr_post_def, expr_val_rel_def, evaluate_type_def, is_word_type_def,
+         typed_val_to_w256_def, val_to_w256_def] >>
+     metis_tac[]) >>
   `gas_path ctx func t 0
      (OK (jump_to (if b then sb.cs_current_bb else s5.cs_current_bb) t))` by
     (imp_res_tac emit_inst_extends >>
@@ -77,15 +110,21 @@ QED
 
 Resume compile_assert_frag[exception]:
   markerLib.RESUME_TAC >> (
-  Cases_on `res` >- fs[expr_exit_def] >>
+  `?H0. valid_horizon cx st0 H0 es_end.storage_trace` by
+    metis_tac[vyperStorageFootprintTheory.storage_trace_domain_def] >>
+  Cases_on `res`
+  >- (qpat_x_assum `!H. valid_horizon _ _ H _ ==> expr_exit _ _`
+        (qspec_then `H0` mp_tac) >> simp[expr_exit_def]) >>
   qexistsl_tac [`INR y`, `es_end`, `r`] >>
   conj_tac
   >- (qpat_x_assum `gas_marked_exec _ _ _ _ _ _ _ _` mp_tac >>
       simp[gas_marked_exec_def] >> strip_tac >> simp[] >>
       gen_tac >> asm_simp_tac (srw_ss()) [eval_assert_bind] >>
       simp[Once bind_def]) >>
-  disj2_tac >> simp[stmt_exit_def] >>
-  metis_tac[expr_exit_INR_type])
+  disj2_tac >> simp[stmt_exit_def] >> rpt strip_tac >>
+  qpat_x_assum `!H. valid_horizon _ _ H _ ==> expr_exit _ _`
+    (qspec_then `H` mp_tac) >>
+  simp[] >> metis_tac[expr_exit_INR_type])
 QED
 
 Resume compile_assert_frag[true]:
@@ -98,7 +137,11 @@ Resume compile_assert_frag[true]:
           asm_simp_tac (srw_ss()) [eval_assert_bind] >>
           simp[Once bind_def, return_def]) >>
       metis_tac[gas_path_then, arithmeticTheory.ADD_CLAUSES]) >>
-  disj1_tac >> simp[] >> irule assert_success_post >>
+  disj1_tac >> simp[] >> rpt strip_tac >>
+  `stmt_state_rel H ctx func cenv cx es s0 /\
+   expr_post H ctx func cenv cx e es sa s1 s0 (es_end with gas_obs := [])
+     (BoolV T) op t` by metis_tac[] >>
+  irule assert_success_post >>
   simp[] >> conj_tac
   >- (qpat_x_assum `!tail. _` (qspec_then `[]` assume_tac) >>
       drule stmtSimDefsTheory.eval_read_preserves_scopes_dom >> simp[]) >>
