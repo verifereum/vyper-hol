@@ -147,6 +147,110 @@ QED
 
 Finalise typed_copy_origin_ptr_byte_offset_path
 
+Theorem typed_copy_origin_ptr_offset_path:
+ !cenv ctx dty sty dtv stv v xd xs doff soff dtotal stotal
+   sa s1 s2 sb dp sp lo explicit func PG s G tn dw sw.
+  typed_copy_origin_ptr_entry cenv ctx dty sty dtv stv v /\
+  compile_with_byte_offset (Var xd) doff sa = (dp,s1) /\
+  compile_with_byte_offset (Var xs) soff s1 = (sp,s2) /\
+  compile_store_memory_typed cenv dp dty sp sty s2 = ((),sb) /\
+  not_fresh_at sa xs /\ not_fresh_at sa xd /\
+  lookup_var xs s = SOME sw /\ lookup_var xd s = SOME dw /\
+  (!mem. mem_agree_outside tn.t_mem s.vs_memory mem ==>
+     val_in_memory stv v (w2n sw + soff) mem) /\
+  doff + type_memory_size dtv <= dtotal /\
+  soff + type_memory_size stv <= stotal /\
+  w2n sw + soff + type_memory_size stv < dimword (:256) /\
+  w2n dw + doff + type_memory_size dtv < dimword (:256) /\
+  (type_memory_size stv = 0 \/
+   w2n sw + soff + type_memory_size stv <= s.vs_alloca_next) /\
+  (type_memory_size dtv = 0 \/
+   w2n dw + doff + type_memory_size dtv <= s.vs_alloca_next) /\
+  (w2n sw + soff + type_memory_size stv <= w2n dw + doff \/
+   w2n dw + doff + type_memory_size dtv <= w2n sw + soff) /\
+  ptr_covers G tn xs s stotal /\ ptr_covers G tn xd s dtotal /\
+  allocas_from lo s /\ lo <= s.vs_alloca_next /\ ~ctx_has_dalloca ctx /\
+  fn_has_code sa sb func /\ fn_inst_ids_distinct func /\
+  ~s.vs_halted /\ s.vs_current_bb = sa.cs_current_bb /\
+  s.vs_inst_idx = LENGTH sa.cs_current_insts ==>
+  ?t Gf tnf.
+    gas_origin_ptr_path
+      (<| d_stor := K (K {}); d_trans := K (K {}); d_imm := K {};
+          d_ret := K {} |>,lo,explicit,ctx,func,PG)
+      (s,G,tn) [] (OK t,Gf,tnf) /\
+    val_in_memory dtv v (w2n dw + doff) t.vs_memory /\
+    typed_copy_state_frame sa (w2n dw + doff) (type_memory_size dtv) s t /\
+    ~t.vs_halted /\ t.vs_current_bb = sb.cs_current_bb /\
+    t.vs_inst_idx = LENGTH sb.cs_current_insts /\
+    tnf.t_imm = tn.t_imm /\ tnf.t_stor = tn.t_stor /\
+    tnf.t_trans = tn.t_trans /\
+    (!i. ~(w2n dw + doff <= i /\
+            i < w2n dw + doff + type_memory_size dtv) ==>
+         (i IN tnf.t_mem <=> i IN tn.t_mem)) /\
+    (!mem. mem_agree_outside tnf.t_mem t.vs_memory mem ==>
+       val_in_memory dtv v (w2n dw + doff) mem) /\
+    (!p. not_fresh_at sa p ==>
+       FLOOKUP Gf p = FLOOKUP G p /\
+       op_taint tnf (Var p) = op_taint tn (Var p))
+Proof
+  rpt gen_tac >> disch_then (REPEAT_TCL CONJUNCTS_THEN assume_tac) >>
+  `ci_mono sa s1 /\ ci_mono s1 s2 /\ ci_mono s2 sb` by
+    metis_tac[typed_copy_offset_mono, cj 1 exprLoweringPropsTheory.ci_mono_typed_memory_family, pairTheory.SND] >>
+  `cs_extends sa s1 /\ cs_extends s1 s2 /\ cs_extends s2 sb /\
+   cs_extends s1 sb` by
+    (gvs[exprLoweringPropsTheory.ci_mono_def] >> metis_tac[cs_extends_trans]) >>
+  `fn_has_code sa s1 func /\ fn_has_code s1 s2 func /\
+   fn_has_code s2 sb func` by metis_tac[fragExecTheory.fn_has_code_split] >>
+  qpat_assum `compile_with_byte_offset (Var xd) _ _ = _`
+    (mp_then Any mp_tac typed_copy_origin_ptr_byte_offset_path) >>
+  disch_then (qspecl_then [`type_memory_size dtv`, `dtotal`, `dw`,
+    `lo`, `explicit`, `ctx`, `func`, `PG`, `s`, `G`, `tn`,
+    `w2n dw + doff`, `type_memory_size dtv`] mp_tac) >>
+  (impl_tac >- (simp[] >> decide_tac)) >> strip_tac >>
+  `not_fresh_at s1 xs` by
+    (gvs[not_fresh_at_def, exprLoweringPropsTheory.ci_mono_def] >> decide_tac) >>
+  `lookup_var xs t = SOME sw /\ ptr_covers Gf tnf xs t stotal` by
+    (gvs[ptr_covers_def] >> metis_tac[]) >>
+  qpat_assum `compile_with_byte_offset (Var xs) _ _ = _`
+    (mp_then Any mp_tac typed_copy_origin_ptr_byte_offset_path) >>
+  disch_then (qspecl_then [`type_memory_size stv`, `stotal`, `sw`,
+    `lo`, `explicit`, `ctx`, `func`, `PG`, `t`, `Gf`, `tnf`,
+    `w2n dw + doff`, `type_memory_size dtv`] mp_tac) >>
+  (impl_tac >- (simp[] >> decide_tac)) >> strip_tac >>
+  `not_fresh_at s2 p` by
+    (gvs[not_fresh_at_def, exprLoweringPropsTheory.ci_mono_def] >> decide_tac) >>
+  `lookup_var p t' = SOME (n2w (w2n dw + doff)) /\
+   ptr_covers Gf' tnf' p t' (type_memory_size dtv)` by
+    (gvs[ptr_covers_def] >> metis_tac[]) >>
+  `w2n (n2w (w2n dw + doff):256 word) = w2n dw + doff /\
+   w2n (n2w (w2n sw + soff):256 word) = w2n sw + soff` by
+    (simp[wordsTheory.w2n_n2w] >> decide_tac) >>
+  qpat_x_assum `dp = _` SUBST_ALL_TAC >>
+  qpat_x_assum `sp = _` SUBST_ALL_TAC >>
+  drule typed_copy_origin_ptr_entry_run >>
+  disch_then drule >>
+  disch_then (qspecl_then [`tnf'`, `n2w (w2n sw + soff)`, `t'`,
+    `lo`, `func`, `explicit`, `n2w (w2n dw + doff)`, `PG`, `Gf'`] mp_tac) >>
+  (impl_tac >- (fs[arithmeticTheory.ADD_COMM] >> metis_tac[])) >> strip_tac >>
+  qpat_assum `w2n (n2w (w2n dw + doff)) = _`
+    (fn th => RULE_ASSUM_TAC (PURE_REWRITE_RULE [th])) >>
+  `ci_mono sa s2` by
+    (gvs[exprLoweringPropsTheory.ci_mono_def] >>
+     metis_tac[cs_extends_trans, arithmeticTheory.LESS_EQ_TRANS]) >>
+  `typed_copy_state_frame sa (w2n dw + doff) (type_memory_size dtv) t t'` by
+    (irule typed_copy_state_frame_mono >> qexists_tac `s1` >> simp[]) >>
+  `typed_copy_state_frame sa (w2n dw + doff) (type_memory_size dtv) t' t''` by
+    (irule typed_copy_state_frame_mono >> qexists_tac `s2` >> simp[]) >>
+  `typed_copy_state_frame sa (w2n dw + doff) (type_memory_size dtv) s t''` by
+    metis_tac[typed_copy_state_frame_trans] >>
+  qexistsl_tac [`t''`, `Gf''`, `tnf''`] >>
+  conj_tac >- (metis_tac[gas_origin_ptr_path_append, listTheory.APPEND_NIL]) >>
+  simp[] >> rpt strip_tac >>
+  `not_fresh_at s1 p'' /\ not_fresh_at s2 p''` by
+    (gvs[not_fresh_at_def, exprLoweringPropsTheory.ci_mono_def] >> decide_tac) >>
+  metis_tac[]
+QED
+
 Theorem typed_copy_origin_ptr_tuple_entry:
   !cenv tenv ctx dtys sty dtv stv v.
     acyclic_struct_metadata cenv.ce_struct_fields /\
