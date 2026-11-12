@@ -4,7 +4,7 @@ Ancestors
   mmSupplyWfProofs mmTransformSupply mmCopyEquiv dftGasFromListTraceDefs unitMemInv o1PassLift
   venomFnScheduleRunner allocaRemapSSA o1MakeSsaCfg makeSsaCurrentWfSsa
   cfgWf venomWf stateEquiv rich_list mmTransform mmScan mmCopy list sorting
-  simplifyCfgPhiSemantics basePtrProofs mmTraceProofs frameViewMemory dftCommutation
+  simplifyCfgPhiSemantics simplifyCfgFixupStatic basePtrProofs mmTraceProofs frameViewMemory dftCommutation
   regularMemorySim rangeAnalysisProofs dftIndexedExec removeUnusedProofs analysisSimProofsBase
 Libs
   wordsLib finite_mapLib stepInstBaseLib
@@ -14077,7 +14077,7 @@ Proof
   strip_tac >>
   qpat_x_assum `step_inst _ _ _ _ = _` mp_tac >>
   simp[venomExecSemanticsTheory.step_inst_non_invoke,
-    venomExecSemanticsTheory.step_inst_base_def,
+    venomExecSemanticsTheory.step_inst_base_opcode_eqs,
     venomExecSemanticsTheory.exec_write2_def, venomStateTheory.eval_operand_def] >>
   Cases_on `lookup_var v t` >> gvs[] >> strip_tac >>
   simp[apply_groups_inst_supply_def,
@@ -16541,8 +16541,7 @@ Proof
   `phi_prefix_length is <= LENGTH is` by
     simp[venomExecProofsTheory.phi_prefix_length_le] >>
   `EVERY (\i. i.inst_opcode = PHI) (TAKE (phi_prefix_length is) is)` by
-    (qid_spec_tac `is` >> Induct >> simp[venomExecSemanticsTheory.phi_prefix_length_def] >>
-     gen_tac >> IF_CASES_TAC >> simp[]) >>
+    simp[analysisSimProofsBaseTheory.phi_prefix_all_phi] >>
   `mm_flat_map_supply (apply_groups_inst_supply Mem2Mem ns rs) sk
     (TAKE (phi_prefix_length is) is) = (TAKE (phi_prefix_length is) is,sk)` by
     (irule mm_local_mem2mem_phi_emission >>
@@ -16635,6 +16634,76 @@ Proof
   gvs[dft_exec_suffix_def, lift_result_def] >>
   Cases_on `step_inst fuel ctx (EL n bb.bb_instructions) t` >>
   gvs[dft_exec_suffix_def, lift_result_def]
+QED
+
+Theorem mm_local_mem2mem_run_block_result[local]:
+  wf_ssa fn0 /\ fn_inst_wf fn0 /\ wf_function fn0 /\
+  ir_supply_covers_fn supply fn0 /\ index < LENGTH fn0.fn_blocks /\
+  k <= 4 /\ mm_local_prefix fn0 supply index k = (bb,sk) /\
+  MEM (SOME Mem2Mem) (DROP k [NONE; SOME CalldataMerge; SOME DloadMerge; SOME Mem2Mem]) /\
+  is = bb.bb_instructions /\
+  gs = (scan_block (dfg_build_function fn0) Mem2Mem bb).ss_flushed /\
+  ns = nop_ids_of_groups (dfg_build_function fn0) Mem2Mem is gs /\
+  rs = rep_map_of_groups is gs /\
+  deleted = {v | ?q. MEM q is /\ MEM q.inst_id ns /\ MEM v q.inst_outputs} /\
+  excluded = {v | ~MEM v sk.irs_used_vars \/ v IN deleted} /\
+  transform_block_mode_supply (dfg_build_function fn0) Mem2Mem sk bb = (bb',sk') /\
+  fn = fn0 with fn_blocks := LUPDATE bb index fn0.fn_blocks /\
+  s.vs_current_bb = bb.bb_label /\
+  lookup_block s.vs_current_bb fn.fn_blocks = SOME bb /\ eom < dimword (:256) /\
+  EVERY (\((p,d',id),f,i,t). p = [] ==> static_mem_ok eom ctx f i t)
+    (trace_blocks [] d (SUC fuel) ctx fn s) /\
+  ~(?err. run_block fuel ctx bb s = Error err) ==>
+  lift_result
+    (\u v. state_equiv excluded (u with vs_inst_idx := 0) (v with vs_inst_idx := 0))
+    (execution_equiv excluded) revert_equiv
+    (run_block fuel ctx bb s) (run_block fuel ctx bb' s)
+Proof
+  strip_tac >>
+  `ALL_DISTINCT (MAP (\i. i.inst_id) bb.bb_instructions)` by
+    metis_tac[mm_local_prefix_wf_id_distinct] >>
+  `bb_well_formed bb` by
+    (irule (cj 1 mm_local_prefix_wf_last) >>
+     qexistsl [`fn0`,`index`,`k`,`sk`,`supply`] >>
+     gvs[venomWfTheory.wf_ssa_def, ir_supply_covers_fn_def,
+       irSupplyTheory.fn_ir_inst_ids_def, irSupplyTheory.block_ir_inst_ids_def,
+       EVERY_MEM, MEM_FLAT, MEM_MAP] >> metis_tac[EL_MEM, MEM_MAP]) >>
+  `EVERY (\i. i.inst_opcode <> PHI) (DROP (phi_prefix_length is) is)` by
+    (irule simplifyCfgFixupStaticTheory.scfg_phi_suffix_nonphi >>
+     gvs[venomWfTheory.bb_well_formed_def]) >>
+  Cases_on `mm_flat_map_supply (apply_groups_inst_supply Mem2Mem ns rs) sk
+    (DROP (phi_prefix_length is) is)` >>
+  rename1 `mm_flat_map_supply _ sk _ = (out,es)` >>
+  mp_tac (Q.INST [`phis` |-> `TAKE (phi_prefix_length is) is`,
+    `tail_insts` |-> `DROP (phi_prefix_length is) is`] mm_local_mem2mem_phi_boundary) >>
+  (impl_tac >- gvs[TAKE_DROP, analysisSimProofsBaseTheory.phi_prefix_all_phi]) >>
+  strip_tac >>
+  `bb'.bb_instructions = TAKE (phi_prefix_length is) is ++ out` by
+    (qpat_x_assum `transform_block_mode_supply _ _ _ _ = _` mp_tac >>
+     simp[transform_block_mode_supply_def] >> gvs[] >> strip_tac >> gvs[]) >>
+  mp_tac (Q.SPECL [`s`,`bb.bb_instructions`]
+    venomExecSemanticsTheory.eval_phis_ok_or_error_defs) >>
+  disch_then (DISJ_CASES_THEN strip_assume_tac)
+  >- (rename1 `eval_phis s bb.bb_instructions = OK sp` >>
+      drule_all dftGasFromListTraceDefsTheory.trace_blocks_enter >>
+      disch_then (fn th => fs[th, EVERY_APPEND]) >>
+      `sp.vs_current_bb = bb.bb_label` by
+        metis_tac[venomExecProofsTheory.eval_phis_preserves_current_bb] >>
+      `~(?err. exec_block fuel ctx bb
+          (sp with vs_inst_idx := phi_prefix_length bb.bb_instructions) = Error err)` by
+        gvs[venomExecSemanticsTheory.run_block_def] >>
+      `lift_result
+        (\u v. state_equiv excluded (u with vs_inst_idx := 0) (v with vs_inst_idx := 0))
+        (execution_equiv excluded) revert_equiv
+        (exec_block fuel ctx bb (sp with vs_inst_idx := phi_prefix_length bb.bb_instructions))
+        (exec_block fuel ctx bb' (sp with vs_inst_idx := phi_prefix_length bb.bb_instructions))` by
+        (irule mm_local_mem2mem_post_phi_result >>
+         (conj_tac >- metis_tac[]) >>
+         (conj_tac >- simp[]) >>
+         qexistsl [`SUC d`,`deleted`,`eom`,`fn`,`fn0`,`gs`,`index`,`is`,`k`,`ns`,`rs`,`sk`,`sk'`,`supply`] >>
+         gvs[]) >>
+      gvs[venomExecSemanticsTheory.run_block_def]) >>
+  gvs[venomExecSemanticsTheory.run_block_def]
 QED
 
 Theorem mm_local_stage_correct:
