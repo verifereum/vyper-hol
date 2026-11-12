@@ -1,6 +1,7 @@
 Theory lowerDloadPtrJointAlloc
 Ancestors
-  lowerDloadPtrJointNext lowerDloadPtrAllocTransport lowerDloadPtrAlloc
+o1SafeUpto
+    lowerDloadPtrJointNext lowerDloadPtrAllocTransport lowerDloadPtrAlloc
   lowerDloadPtrRel lowerDloadPtrAggregate lowerDloadPtrCall lowerDloadPtrBlockEntry ptrDiscipline
   o1PassContract lowerDloadDefs venomExecSemantics venomState venomInst
   contextCodegenRel finite_map list pred_set words
@@ -42,7 +43,7 @@ Theorem dload_actual_alloca_next:
   dload_live_layout lo s.vs_alloca_next t.vs_alloca_next (r::rs) /\
   dload_memory_match lo (r::rs) tn un s t /\
   r.dr_scratch = FDOM t.vs_allocas DIFF {ci.inst_id | MEM ci (fn_insts f)} /\
-  o1_ctx_shape C /\ o1_src_inv D C vs /\
+  o1_ctx_shape C /\ o1_safe_upto D lo cut C vs /\
   SUM (MAP (\r. CARD r.dr_scratch) (r::rs)) <= ctx_dload_count C ==>
   ?s1 r1 i' emitted'.
     step_inst fuel C i s = OK s1 /\
@@ -141,7 +142,7 @@ Theorem dload_actual_alloca_boundary_next:
   active_inst g j (t1 with vs_inst_idx := SUC t.vs_inst_idx) /\
   dload_boundary_core lo (r::rs) V Ws PG PH G H tn un s t cs ds /\
   r.dr_scratch = FDOM t.vs_allocas DIFF {ci.inst_id | MEM ci (fn_insts f)} /\
-  o1_ctx_shape C /\ o1_src_inv D C vs /\
+  o1_ctx_shape C /\ o1_safe_upto D lo cut C vs /\
   SUM (MAP (\r. CARD r.dr_scratch) (r::rs)) <= ctx_dload_count C ==>
   ?s1 r1 i' emitted'.
     step_inst fuel C i s = OK s1 /\

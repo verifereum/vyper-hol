@@ -1,7 +1,8 @@
 (* Actual supply-threaded entry control witnesses. *)
 Theory lowerDloadPtrJointEntry
 Ancestors
-  lowerDloadPtrPhi lowerDloadPtrRel o1ContractLowerDload
+o1SafeUpto
+    lowerDloadPtrPhi lowerDloadPtrRel o1ContractLowerDload
   lowerDloadPtrStatic o1PassLift o1PassContract venomPassSchedule
   lowerDloadPtrEntry lowerDloadPtrAggregate ptrDiscipline venomWf
   unitTransformDefs irSupply
@@ -154,8 +155,7 @@ QED
 Theorem dload_actual_joint_entry:
   ctx_pass_stage rpolicy (CFP_Simple VP_LowerDload) view C C' /\
   dead_wf D /\ o1_ctx_shape C /\ o1_run_state_ok vs /\
-  o1_src_inv D C vs /\ callee_first names C.ctx_functions /\
-  fixed_region_reserved lo C /\ ptr_discipline lo C vs /\
+  o1_safe_upto D lo cut C vs /\ callee_first names C.ctx_functions /\
   C'.ctx_entry = SOME name /\ lookup_function name C'.ctx_functions = SOME g /\
   fn_entry_label g = SOME lbl /\
   enters_block g
@@ -205,7 +205,7 @@ Proof
      simp[dload_control_match_def] >> metis_tac[]) >>
   `frame_reachable vs C [] [] FEMPTY entry_taint f i t` by
     (irule frame_reachable_entry >> metis_tac[]) >>
-  `mem_inv dload_headroom_ok C vs` by gvs[o1_src_inv_def] >>
+  `mem_inv dload_headroom_ok C vs` by gvs[o1_safe_upto_def] >>
   `vs.vs_alloca_next < dimword (:256)` by
     (irule dload_active_entry_frontier_bound >> goal_assum (drule_at Any) >>
      goal_assum (drule_at Any) >> metis_tac[]) >>
@@ -213,7 +213,8 @@ Proof
     (qpat_x_assum `o1_run_state_ok vs` mp_tac >>
      simp[o1_run_state_ok_def, o1_initial_state_ok_def, code_layout_valid_def]) >>
   `lo <= t.vs_alloca_next` by
-    (qpat_x_assum `ptr_discipline lo C vs` mp_tac >> simp[ptr_discipline_def]) >>
+    (qpat_x_assum `o1_safe_upto _ _ _ _ _` mp_tac >>
+     simp[o1_safe_upto_def, o1_ptr_safe_upto_def, ptr_discipline_upto_def]) >>
   `t.vs_alloca_next < dimword (:256)` by simp[] >>
   `t.vs_allocas = FEMPTY` by gvs[o1_run_state_ok_def, o1_initial_state_ok_def] >>
   `?k. k < LENGTH C.ctx_functions /\ EL k C.ctx_functions = f` by
@@ -228,8 +229,7 @@ QED
 Theorem dload_actual_joint_entry_tracked:
   ctx_pass_stage rpolicy (CFP_Simple VP_LowerDload) view C C' /\
   dead_wf D /\ o1_ctx_shape C /\ o1_run_state_ok vs /\
-  o1_src_inv D C vs /\ callee_first names C.ctx_functions /\
-  fixed_region_reserved lo C /\ ptr_discipline lo C vs /\
+  o1_safe_upto D lo cut C vs /\ callee_first names C.ctx_functions /\
   C'.ctx_entry = SOME name /\ lookup_function name C'.ctx_functions = SOME g /\
   fn_entry_label g = SOME lbl /\
   enters_block g
