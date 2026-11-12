@@ -41,22 +41,6 @@ Ancestors
 
 val _ = Parse.hide "body";
 
-(* ===== The unit's storage guards ===== *)
-
-(* Storage guards that hold of the source call's observations put them in
-   their own horizon's domain. *)
-Theorem source_storage_guards_domain[local]:
-  source_storage_ok am tx os gs /\ call_outcomes_storage_ok am tx os gs ==>
-  storage_trace_domain
-    (initial_evaluation_context am.sources am.layouts tx NONE)
-    (initial_state am []) (source_storage_trace am tx os gs)
-Proof
-  simp[source_storage_ok_def, call_outcomes_storage_ok_def,
-       storage_trace_domain_def, valid_horizon_def,
-       storage_observations_ok_def, storage_trace_horizon_def,
-       listTheory.EVERY_MEM]
-QED
-
 (* ===== The source's result ===== *)
 
 (* call_external_body without a lock, from es0 in the bound scope, where
