@@ -10,7 +10,6 @@ roots = [
   # the results: semantics, analyses, passes, lowering and compiler proofs
   "vyperHolScript.sml",
   # whitelist-removal leaves awaiting integration into the stage proofs
-  "lowering/whitelist/whitelistDeployScript.sml",
   "lowering/whitelist/whitelistVisibilityScript.sml",
   "lowering/whitelist/whitelistExprOpenScript.sml",
   "lowering/whitelist/whitelistS2ExtrasScript.sml",
