@@ -26,6 +26,7 @@ Ancestors
   o1DftStep dftSsaPreserve dftRunRel dftScheduleOrder dftDefs o1PassLift
   o1PassContract unitMemInv unitShapeDefs lowerDloadDefs venomPassDispatcher
   venomExecSemantics venomWf venomInst venomState list
+  dftGasMask gasEvents gasCount
 
 Theorem ctx_pass_stage_dft:
   ctx_pass_stage rpolicy (CFP_Simple VP_DFT) view C C' ==>
@@ -287,4 +288,36 @@ Proof
      CONV_TAC (DEPTH_CONV PairRules.PBETA_CONV) >> simp[]) >>
   pop_assum (fn th => ONCE_REWRITE_TAC[th]) >>
   irule dftSsaPreserveTheory.dft_block_rel_wf_ssa >> simp[]
+QED
+
+(* One raw-slot mask, fixed before every filling of the target's readings,
+ * covers the source events of each compatible filling at the actual entry.
+ * Source fillings that terminate are simulated for every dead mask. *)
+Theorem dft_ctx_gas_mask:
+  LIST_REL (\fn fn'. fn' = dft_fn fn) C.ctx_functions C'.ctx_functions /\
+  LIST_REL dft_fn_rel C.ctx_functions C'.ctx_functions /\
+  C'.ctx_entry = C.ctx_entry /\ C'.ctx_global_reserved = C.ctx_global_reserved /\
+  o1_ctx_shape C /\
+  ctx_labels_bound C vs'.vs_labels /\ o1_run_state_ok vs' /\
+  C'.ctx_entry = SOME nm /\ lookup_function nm C'.ctx_functions = SOME fn' /\
+  fn_entry_label fn' = SOME lbl /\
+  terminates (run_context fuel C' vs') /\
+  gas_count_blocks fuel C' fn'
+    (vs' with <| vs_prev_bb := NONE; vs_current_bb := lbl; vs_inst_idx := 0 |>) <=
+    LENGTH vs'.vs_gas_readings ==>
+  ?fn raw_slots sites unused.
+    lookup_function nm C.ctx_functions = SOME fn /\ fn_entry_label fn = SOME lbl /\
+    LENGTH raw_slots = LENGTH sites /\
+    PERM (MAP THE (FILTER IS_SOME raw_slots) ++ unused) vs'.vs_gas_readings /\
+    !gobs tail.
+      LIST_REL (\slot w. slot = NONE \/ slot = SOME w) raw_slots gobs ==>
+      (?extra. sites =
+         gas_events_blocks fuel C fn
+           (vs' with <| vs_gas_readings := gobs ++ tail; vs_prev_bb := NONE;
+                        vs_current_bb := lbl; vs_inst_idx := 0 |>) ++ extra) /\
+      ((?fr. terminates
+               (run_context fr C (vs' with vs_gas_readings := gobs ++ tail))) ==>
+       !D. ctx_sim D C C' (vs' with vs_gas_readings := gobs ++ tail) vs')
+Proof
+  cheat
 QED

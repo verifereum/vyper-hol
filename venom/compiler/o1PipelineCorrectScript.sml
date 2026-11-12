@@ -14,6 +14,7 @@ Ancestors
   venomPassSchedule o1PassContract o1PipelineCompose ctxLookupAgree
   ptrDiscipline contextPlanLayoutProps stepWriteFootprint
   contextCodegenRel stackPlanGen venomCompilerTypes venomState words
+  gasEvents gasCount
 
 (* This is the compiler's existing O1 hook, with all three checks K T.
  * Naming it does not change compile_vyper or its literal pipeline hooks. *)
@@ -90,6 +91,53 @@ Proof
      irule o1_source_pre_walk_inv >> simp[]) >>
   fs[o1_pipeline_def] >>
   drule_all o1_pipeline_stage_facts_all_dead >> strip_tac >> metis_tac[]
+QED
+
+(* The uniform gas mask through O1: one raw-slot tuple, fixed before every
+ * filling, suffix and dead mask, covers the raw unit's entry events of each
+ * terminating compatible filling, which the output then simulates. *)
+Theorem run_venom_pipeline_gas_mask:
+  !lo rpolicy unit out vs_out fuel nm fn lbl.
+    o1_pipeline rpolicy unit = SOME out /\
+    o1_source_unit_ok unit /\ unit_entry_no_params unit /\
+    unit_defs_reach_uses unit /\ unit_fmp_unsealed unit /\ o1_run_state_ok vs_out /\
+    reserved_intervals_wf unit.cu_context.ctx_global_reserved /\
+    EVERY (\fn. fn.fn_eom = NONE) unit.cu_context.ctx_functions /\
+    fixed_region_reserved lo unit.cu_context /\
+    out.po_unit.cu_context.ctx_entry = SOME nm /\
+    lookup_function nm out.po_unit.cu_context.ctx_functions = SOME fn /\
+    fn_entry_label fn = SOME lbl /\
+    terminates (run_context fuel out.po_unit.cu_context vs_out) /\
+    gas_count_blocks fuel out.po_unit.cu_context fn
+      (vs_out with <| vs_prev_bb := NONE; vs_current_bb := lbl; vs_inst_idx := 0 |>) <=
+      LENGTH vs_out.vs_gas_readings
+    ==>
+    ?raw_slots sites unused.
+      LENGTH raw_slots = LENGTH sites /\
+      PERM (MAP THE (FILTER IS_SOME raw_slots) ++ unused) vs_out.vs_gas_readings /\
+      !gobs tail D.
+        LIST_REL (\slot w. slot = NONE \/ slot = SOME w) raw_slots gobs /\
+        (?fr. terminates (run_context fr unit.cu_context
+                            (vs_out with vs_gas_readings := gobs ++ tail))) /\
+        dead_wf D /\
+        raw_unit_memory_ok unit.cu_context (vs_out with vs_gas_readings := gobs ++ tail) /\
+        ptr_discipline lo unit.cu_context (vs_out with vs_gas_readings := gobs ++ tail) /\
+        taint_within D unit.cu_context (vs_out with vs_gas_readings := gobs ++ tail) /\
+        mem_inv dload_offset_ok unit.cu_context (vs_out with vs_gas_readings := gobs ++ tail) /\
+        mem_inv dload_headroom_ok unit.cu_context (vs_out with vs_gas_readings := gobs ++ tail) ==>
+        (?fn0 lbl0. unit.cu_context.ctx_entry = SOME nm /\
+           lookup_function nm unit.cu_context.ctx_functions = SOME fn0 /\
+           fn_entry_label fn0 = SOME lbl0 /\
+           !fr. terminates (run_context fr unit.cu_context
+                              (vs_out with vs_gas_readings := gobs ++ tail)) ==>
+             ?extra. sites =
+               gas_events_blocks fr unit.cu_context fn0
+                 (vs_out with <| vs_gas_readings := gobs ++ tail; vs_prev_bb := NONE;
+                                 vs_current_bb := lbl0; vs_inst_idx := 0 |>) ++ extra) /\
+        ctx_sim D unit.cu_context out.po_unit.cu_context
+          (vs_out with vs_gas_readings := gobs ++ tail) vs_out
+Proof
+  cheat
 QED
 
 Theorem run_venom_pipeline_correct:
