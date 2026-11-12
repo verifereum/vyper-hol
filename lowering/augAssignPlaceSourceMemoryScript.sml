@@ -5,7 +5,8 @@ Ancestors
   stmtSimAugAssignPlaceMemory stmtSimAugAssignPlace stmtSimAugAssign
   tupleTargetStoreProps gasContext vyperState bodyMemoryPreds
   augAssignPlaceSuffixAdmissibility augAssignPlaceSourcePrefix
-  exprSimSource exprSimHyps exprSimHypsDefs
+  exprSimSource exprSimHyps exprSimHypsDefs vyperFiniteStoragePreservation
+  vyperStoragePlaceObserved vyperStorageFootprint vyperStorageTrace
 
 Theorem aug_place_memory_suffix_source[local]:
   bop <> In /\ bop <> NotIn /\ word_value cur /\
@@ -87,6 +88,51 @@ Proof
   disch_then (qspecl_then [`tr`, `slot`, `ee`] strip_assume_tac) >>
   goal_assum (drule_at Any) >>
   drule aug_place_storage_write_gas_obs >> simp[]
+QED
+
+(* A storage place reached by a traced root is observed by every horizon
+   that is valid for the trace. *)
+Theorem aug_place_storage_rooted_observed:
+  valid_horizon cx st0 H trace /\ MEM (StorageRoot tr offset tv0) trace /\
+  storage_subregion tv0 path delta tv /\ slot = n2w offset + n2w delta ==>
+  storage_place_observed H (StoragePlace tr slot tv)
+Proof
+  strip_tac >>
+  `storage_observations_ok cx H trace` by
+    fs[vyperStorageFootprintTheory.valid_horizon_def] >>
+  `MEM (tr,n2w offset,tv0) (FST H)` by
+    metis_tac[vyperFiniteStoragePreservationTheory.storage_observations_ok_root] >>
+  simp[storage_place_observed_def] >>
+  qexistsl_tac [`n2w offset`, `tv0`, `path`, `delta`] >> simp[]
+QED
+
+(* A whole-leaf storage write at a traced root keeps the backends well
+   formed on a horizon valid after it. *)
+Theorem aug_place_storage_store_wf:
+  MEM (StorageRoot tr offset tv0) ee.storage_trace /\
+  storage_subregion tv0 path delta tv /\ slot = n2w offset + n2w delta /\
+  well_formed_type_value tv /\ value_has_type tv v /\
+  write_place cx (StoragePlace tr slot tv) v ee = (INL (),ff) /\
+  valid_horizon cx st0 H ff.storage_trace /\
+  storage_well_formed_on cx ee (FST H) ==>
+  storage_well_formed_on cx ff (FST H)
+Proof
+  strip_tac >>
+  `?xs. ff.storage_trace = ee.storage_trace ++ xs` by
+    metis_tac[vyperStorageTraceTheory.storage_trace_frame_prefix,
+              vyperStorageTraceTheory.storage_trace_frame_write_place] >>
+  `regions_consistent (FST H) /\ storage_observations_ok cx H ee.storage_trace` by
+    (qpat_x_assum `valid_horizon _ _ _ _` mp_tac >>
+     simp[vyperStorageFootprintTheory.valid_horizon_def]) >>
+  mp_tac (Q.INST [`st` |-> `ee`, `observations` |-> `ee.storage_trace`,
+                  `p` |-> `StoragePlace tr slot tv`, `leaf_tv` |-> `tv`,
+                  `res` |-> `INL ()`, `st'` |-> `ff`]
+    vyperFiniteStoragePreservationTheory.write_place_preserves_storage_well_formed_on) >>
+  impl_tac
+  >- (rpt conj_tac >> TRY (first_assum ACCEPT_TAC)
+      >- (rpt strip_tac >> gvs[] >> qexistsl_tac [`offset`, `tv0`, `path`, `delta`] >> simp[]) >>
+      simp[vyperPlaceTypingTheory.runtime_place_typed_storage]) >>
+  simp[]
 QED
 
 Theorem aug_place_memory_rhs_callback:
