@@ -2718,7 +2718,8 @@ Theorem u2s_alloc_vv_path:
   post_value_type cenv e = expr_type e /\
   compile_uint2str op n sz sa = (out,sb) /\
   fn_has_code sa sb func /\ fn_has_code sa sb fn /\
-  stmt_state_rel H ctx func cenv cx es s /\ fn_inst_ids_distinct func /\
+  stmt_state_rel H ctx func cenv cx es s /\
+  storage_well_formed_on cx es (FST H) /\ fn_inst_ids_distinct func /\
   local_ptrs_reserved cenv sa /\ s.vs_current_bb = sa.cs_current_bb /\
   s.vs_inst_idx = LENGTH sa.cs_current_insts /\ ~s.vs_halted /\
   (!z. op = Var z ==> not_fresh_at sa z) /\ (!l. op <> Label l) /\
@@ -2765,7 +2766,8 @@ Theorem u2s_alloc_vv_exit:
   post_value_type cenv e = expr_type e /\
   compile_uint2str op n sz sa = (out,sb) /\
   fn_has_code sa sb func /\ fn_has_code sa sb fn /\
-  stmt_state_rel H ctx func cenv cx es s /\ fn_inst_ids_distinct func /\
+  stmt_state_rel H ctx func cenv cx es s /\
+  storage_well_formed_on cx es (FST H) /\ fn_inst_ids_distinct func /\
   local_ptrs_reserved cenv sa /\ s.vs_current_bb = sa.cs_current_bb /\
   s.vs_inst_idx = LENGTH sa.cs_current_insts /\ ~s.vs_halted /\
   (!z. op = Var z ==> not_fresh_at sa z) /\ (!l. op <> Label l) /\
@@ -2790,7 +2792,8 @@ QED
 Theorem u2s_alloc_vv_frag:
   post_value_type cenv e = expr_type e /\
   compile_uint2str op n sz sa = (out,sb) /\ fn_has_code sa sb func /\
-  stmt_state_rel H ctx func cenv cx es s /\ fn_inst_ids_distinct func /\
+  stmt_state_rel H ctx func cenv cx es s /\
+  storage_well_formed_on cx es (FST H) /\ fn_inst_ids_distinct func /\
   local_ptrs_reserved cenv sa /\
   (!z. op = Var z ==> not_fresh_at sa z) /\ (!l. op <> Label l) /\
   eval_operand op s = SOME (n2w X) /\
@@ -2974,6 +2977,7 @@ Proof
   `is_word_type (expr_type e)` by simp[is_word_type_def] >>
   drule_all exprSimSourceTheory.expr_body_pre_lower_value_word_shape >> strip_tac >>
   `stmt_state_rel H ctx func cenv cx es' s` by metis_tac[expr_post_state] >>
+  `storage_well_formed_on cx es' (FST H)` by fs[expr_post_def] >>
   `IS_SOME (evaluate_type (get_tenv cx) (expr_type e))` by
     metis_tac[expr_body_pre_type_evaluates] >>
   `eval_operand x s = SOME (n2w X)` by
@@ -3066,6 +3070,7 @@ Proof
   `is_word_type (expr_type e)` by simp[is_word_type_def] >>
   drule_all exprSimSourceTheory.expr_body_pre_lower_value_word_shape >> strip_tac >>
   `stmt_state_rel H ctx func cenv cx es' s` by metis_tac[expr_post_state] >>
+  `storage_well_formed_on cx es' (FST H)` by fs[expr_post_def] >>
   `IS_SOME (evaluate_type (get_tenv cx) (expr_type e))` by
     metis_tac[expr_body_pre_type_evaluates] >>
   `eval_operand x s = SOME (n2w X)` by
