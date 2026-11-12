@@ -264,7 +264,7 @@ Proof
 QED
 
 Definition log_args_post_def:
-  log_args_post ctx func cenv cx es sa sb s0 es' xs vs s <=>
+  log_args_post H ctx func cenv cx es sa sb s0 es' xs vs s <=>
     stmt_state_rel H ctx func cenv cx es' s /\
     LIST_REL (log_arg_rel cenv cx sa sb es' s) xs vs /\
     wb_frame cenv es es' sa s0 s
@@ -272,27 +272,27 @@ End
 
 Theorem log_args_post_nil:
   stmt_state_rel H ctx func cenv cx es s ==>
-  log_args_post ctx func cenv cx es sa sa s es [] [] s
+  log_args_post H ctx func cenv cx es sa sa s es [] [] s
 Proof
   simp[log_args_post_def, wb_frame_refl]
 QED
 
 Theorem log_args_post_state:
-  log_args_post ctx func cenv cx es sa sb s0 es' xs vs s ==>
+  log_args_post H ctx func cenv cx es sa sb s0 es' xs vs s ==>
   stmt_state_rel H ctx func cenv cx es' s
 Proof
   simp[log_args_post_def]
 QED
 
 Theorem log_args_post_frame:
-  log_args_post ctx func cenv cx es sa sb s0 es' xs vs s ==>
+  log_args_post H ctx func cenv cx es sa sb s0 es' xs vs s ==>
   wb_frame cenv es es' sa s0 s
 Proof
   simp[log_args_post_def]
 QED
 
 Theorem log_args_post_values:
-  log_args_post ctx func cenv cx es sa sb s0 es' xs vs s ==>
+  log_args_post H ctx func cenv cx es sa sb s0 es' xs vs s ==>
   LIST_REL (\arg v. expr_val_rel cx (SND arg) v (FST arg) s) xs vs
 Proof
   simp[log_args_post_def] >> strip_tac >>
@@ -301,7 +301,7 @@ Proof
 QED
 
 Theorem log_args_post_placements:
-  log_args_post ctx func cenv cx es sa sb s0 es' xs vs s ==>
+  log_args_post H ctx func cenv cx es sa sb s0 es' xs vs s ==>
   LIST_REL (\arg v. expr_val_at cenv cx (SND arg) sa sb es' v (FST arg) s) xs vs
 Proof
   simp[log_args_post_def] >> strip_tac >>
@@ -320,8 +320,8 @@ Theorem log_args_post_cons:
   expr_sim_inv cenv cx env0 es0 /\ expr_type e = BaseT bt /\
   post_value_type cenv e = expr_type e /\
   expr_post H ctx func cenv cx e es sa sm s0 es1 v x t /\
-  log_args_post ctx func cenv cx es1 sm sb t es' ys vs u ==>
-  log_args_post ctx func cenv cx es sa sb s0 es'
+  log_args_post H ctx func cenv cx es1 sm sb t es' ys vs u ==>
+  log_args_post H ctx func cenv cx es sa sb s0 es'
     ((x,expr_type e)::ys) (v::vs) u
 Proof
   strip_tac >>

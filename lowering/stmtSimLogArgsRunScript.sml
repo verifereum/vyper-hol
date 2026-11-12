@@ -129,7 +129,7 @@ Theorem compile_log_eval_all_gas:
     s0.vs_inst_idx = LENGTH sa.cs_current_insts ==>
     gas_outcome F (cx_tops cx) (ctx,func) (eval_exprs cx args) (es,s0)
       (\res ee t. ?vs. res = INL vs /\
-         log_args_post ctx func cenv cx es sa sb s0 ee xs vs t /\
+         log_args_post H ctx func cenv cx es sa sb s0 ee xs vs t /\
          t.vs_current_bb = sb.cs_current_bb /\
          t.vs_inst_idx = LENGTH sb.cs_current_insts /\
          LIST_REL (\ty v. ?tv. evaluate_type (get_tenv cx) ty = SOME tv /\
