@@ -11,6 +11,7 @@ Ancestors
   ptrSafeRun ptrDiscipline venomExecSemantics venomState venomInst
   codegenRel contextCodegenRel memLocDefs finite_map words pred_set
   abiEncoder emitHelper exprLoweringProps fragExec list
+  fragGasSeqPtr fragGasOriginPtrLoop
 
 Theorem prefix_copy_cnt_success_steps:
   eval_operand src s = SOME a /\ op_taint tn src = {} /\
@@ -251,6 +252,116 @@ Proof
   drule_all ptr_safe_block_step >> simp[]
 QED
 
+(* The forward twin of prefix_copy_count_success_block: the count checks are
+   the pointer check along the same run, before any checked suffix. *)
+Theorem prefix_copy_count_success_ptr:
+  eval_operand src s = SOME a /\ op_taint tn src = {} /\
+  abi_decode_load DLOAD a s = n2w cnt /\
+  cnt <= limit /\ limit < dimword (:256) /\
+  allocas_from lo s /\ ~ctx_has_dalloca ctx ==>
+  let i = mk_inst iid DLOAD [src] [x];
+      j = mk_inst (iid+1) GT [Var x;Lit (n2w limit)] [y];
+      k = mk_inst (iid+2) ISZERO [Var y] [z];
+      l = mk_inst (iid+3) ASSERT [Var z] [];
+      s1 = update_var x (n2w cnt) s;
+      s2 = update_var y 0w s1;
+      s3 = update_var z 1w s2;
+      G1 = DRESTRICT G (COMPL {x});
+      G2 = DRESTRICT G1 (COMPL {y});
+      G3 = DRESTRICT G2 (COMPL {z});
+      q1 = tn with t_var := tn.t_var |+ (x,{});
+      q2 = q1 with t_var := q1.t_var |+ (y,{});
+      q3 = q2 with t_var := q2.t_var |+ (z,{})
+  in inst_seq_ptr D lo ctx fn PG G3 q3 ys
+       (s3 with vs_inst_idx := s.vs_inst_idx+4) G' tn' ==>
+     inst_seq_ptr D lo ctx fn PG G tn ([i;j;k;l] ++ ys) s G' tn'
+Proof
+  strip_tac >> pure_rewrite_tac[LET_THM] >> BETA_TAC >> strip_tac >>
+  qabbrev_tac `s1 = update_var x (n2w cnt) s` >>
+  qabbrev_tac `s2 = update_var y 0w s1` >>
+  qabbrev_tac `s3 = update_var z 1w s2` >>
+  qabbrev_tac `u = (\j. EL j [s;s1;s2;s3;s3])` >>
+  qabbrev_tac `g = (\j. EL j [G;DRESTRICT G (COMPL {x});
+    DRESTRICT G (COMPL {x} INTER COMPL {y});
+    DRESTRICT G (COMPL {x} INTER COMPL {y} INTER COMPL {z});
+    DRESTRICT G (COMPL {x} INTER COMPL {y} INTER COMPL {z})])` >>
+  qabbrev_tac `q1 = tn with t_var := tn.t_var |+ (x,{})` >>
+  qabbrev_tac `q2 = q1 with t_var := q1.t_var |+ (y,{})` >>
+  qabbrev_tac `q3 = q2 with t_var := q2.t_var |+ (z,{})` >>
+  qabbrev_tac `q = (\j. EL j [tn;q1;q2;q3;q3])` >>
+  qabbrev_tac `xs = [mk_inst iid DLOAD [src] [x];
+    mk_inst (iid+1) GT [Var x;Lit (n2w limit)] [y];
+    mk_inst (iid+2) ISZERO [Var y] [z];
+    mk_inst (iid+3) ASSERT [Var z] []]` >>
+  `!m. eval_operand src (s with vs_inst_idx := m) = SOME a /\
+       abi_decode_load DLOAD a (s with vs_inst_idx := m) = n2w cnt /\
+       allocas_from lo (s with vs_inst_idx := m)` by
+    (gvs[ghostPcTransportPtrTheory.eval_operand_inst_idx, abi_decode_load_def, abi_decode_source_def,
+         allocas_from_def] >> metis_tac[]) >>
+  `!fuel j. j < LENGTH xs ==>
+    step_inst fuel ctx (EL j xs) ((u j) with vs_inst_idx := s.vs_inst_idx+j) =
+      OK ((u (SUC j)) with vs_inst_idx := s.vs_inst_idx+j) /\
+    ptr_safe_step D lo fuel ctx fn PG (g j) (q j) (EL j xs)
+      ((u j) with vs_inst_idx := s.vs_inst_idx+j) /\
+    ghost_step fuel ctx PG (g j) (q j) (EL j xs)
+      ((u j) with vs_inst_idx := s.vs_inst_idx+j) = (g (SUC j),q (SUC j))` by
+    (rpt gen_tac >> simp[Abbr `xs`] >> strip_tac >>
+     `j = 0 \/ j = 1 \/ j = 2 \/ j = 3` by decide_tac >>
+     mp_tac (Q.INST [`s` |-> `s with vs_inst_idx := s.vs_inst_idx+j`]
+       prefix_copy_cnt_success_steps) >>
+     asm_simp_tac bool_ss [LET_THM] >>
+     simp[Abbr `u`, Abbr `g`, Abbr `q`,
+          Abbr `q1`, Abbr `q2`, Abbr `q3`,
+          Abbr `s1`, Abbr `s2`, Abbr `s3`, prefix_copy_pure_taint] >>
+     rpt strip_tac >> gvs[] >>
+     mp_tac prefix_copy_cnt_success_steps >>
+     asm_simp_tac bool_ss [LET_THM] >>
+     simp[prefix_copy_pure_taint] >>
+     rpt strip_tac >>
+     gvs[step_inst_non_invoke, mk_inst_def, update_var_def, INTER_ASSOC]) >>
+  pop_assum (assume_tac o Q.SPEC `0`) >>
+  `u 0 = s /\ g 0 = G /\ q 0 = tn` by
+    simp[Abbr `u`, Abbr `g`, Abbr `q`] >>
+  `EVERY (\i. i.inst_opcode <> INVOKE) xs` by
+    simp[Abbr `xs`, mk_inst_def] >>
+  qspecl_then [`xs`, `s`, `u`, `g`, `q`] mp_tac
+    (Q.INST [`func` |-> `fn`] prefix_trace_inst_seq_ptr) >>
+  simp[Abbr `u`, Abbr `g`, Abbr `q`, Abbr `xs`, DRESTRICT_DRESTRICT,
+       INTER_ASSOC]
+QED
+
+(* The forward twin of prefix_copy_success_block. *)
+Theorem prefix_copy_success_ptr:
+  eval_operand (Var dst) s = SOME d /\ eval_operand src s = SOME sb /\
+  eval_operand lenop s = SOME k /\
+  FLOOKUP G dst = SOME (b,sz) /\ b <= w2n d /\ w2n d+w2n k <= b+sz /\
+  op_taint tn (Var dst) = {} /\ op_taint tn src = {} /\ op_taint tn lenop = {} /\
+  allocas_from lo s /\ ~ctx_has_dalloca ctx /\
+  step_inst 0 ctx (mk_inst iid DLOADBYTES [Var dst;src;lenop] []) s = OK t ==>
+  inst_seq_ptr D lo ctx fn PG G tn [mk_inst iid DLOADBYTES [Var dst;src;lenop] []] s
+    G (step_taint (mk_inst iid DLOADBYTES [Var dst;src;lenop] []) s t tn)
+Proof
+  strip_tac >>
+  `ptr_safe_step D lo 0 ctx fn PG G tn
+      (mk_inst iid DLOADBYTES [Var dst;src;lenop] []) s` by
+    (irule prefix_dloadbytes_ptr_step >>
+     goal_assum (drule_at Any) >> simp[] >> metis_tac[]) >>
+  `ghost_step 0 ctx PG G tn
+      (mk_inst iid DLOADBYTES [Var dst;src;lenop] []) s =
+      (G,step_taint (mk_inst iid DLOADBYTES [Var dst;src;lenop] []) s t tn)` by
+    (irule prefix_dloadbytes_ghost_step >> goal_assum (drule_at Any)) >>
+  `step_inst_base (mk_inst iid DLOADBYTES [Var dst;src;lenop] []) s = OK t` by
+    (qpat_x_assum `step_inst _ _ _ _ = _` mp_tac >>
+     simp[Once step_inst_non_invoke, mk_inst_def]) >>
+  `step_prov PG G (mk_inst iid DLOADBYTES [Var dst;src;lenop] []) t = G` by
+    (qspecl_then [`0`, `ctx`, `PG`, `G`, `tn`,
+                  `mk_inst iid DLOADBYTES [Var dst;src;lenop] []`, `s`, `t`]
+       mp_tac ghost_step_non_invoke >>
+     impl_tac >- (simp[] >> simp[mk_inst_def]) >>
+     simp[]) >>
+  simp[inst_seq_ptr_def] >> metis_tac[ptr_safe_step_inst_ok]
+QED
+
 Theorem prefix_bytestring_success_ghost:
   compile_abi_decode_to_buf (Var dst) src DLOAD (Lit 0w) (Lit 0w) (DecBytestring n) st = ((),st') /\
   fn_has_code st st' fn /\ s.vs_current_bb = st.cs_current_bb /\
@@ -272,7 +383,8 @@ Theorem prefix_bytestring_success_ghost:
        FLOOKUP qt.t_var v = FLOOKUP tn.t_var v) /\
     ((!fuel. ptr_safe_run D lo fuel ctx fn PG H qt
        (t with vs_inst_idx := LENGTH st'.cs_current_insts)) ==>
-     !fuel. ptr_safe_run D lo fuel ctx fn PG G tn s)
+     !fuel. ptr_safe_run D lo fuel ctx fn PG G tn s) /\
+    (!D'. inst_seq_ptr D' lo ctx fn PG G tn (emitted_insts st st') s H qt)
 Proof
   strip_tac >>
   drule prefix_bytestring_sentinel_code >>
@@ -413,6 +525,27 @@ Resume prefix_bytestring_success_ghost[finish]:
      simp[LET_THM, w2n_n2w, Abbr `u`, Abbr `qt`, Abbr `i`,
        ghostPcTransportPtrTheory.step_taint_inst_idx, mk_inst_def, ADD1]) >>
   qpat_assum `!fuel. qt.t_mem SUBSET _ /\ _` (qspec_then `0` strip_assume_tac) >>
+  `!D'. inst_seq_ptr D' lo ctx fn PG H q3 [i] u H qt` by
+    (gen_tac >>
+     `step_inst 0 ctx (mk_inst (st.cs_next_id+4) DLOADBYTES
+       [Var dst;src;Lit (n2w (abi_decode_bytes_copy_size n))] []) u =
+       OK (t with vs_inst_idx := s.vs_inst_idx+4)` by simp[Abbr `i`, Abbr `u`] >>
+     `w2n d + w2n (n2w (abi_decode_bytes_copy_size n) : bytes32) <= b+sz` by
+       simp[w2n_n2w] >>
+     drule_all prefix_copy_success_ptr >>
+     simp[w2n_n2w, Abbr `u`, Abbr `qt`, Abbr `i`,
+       ghostPcTransportPtrTheory.step_taint_inst_idx, mk_inst_def]) >>
+  `!D'. inst_seq_ptr D' lo ctx fn PG G tn (emitted_insts st st') s H qt` by
+    (gen_tac >>
+     qpat_x_assum `!D'. inst_seq_ptr D' _ _ _ _ _ _ [i] _ _ _`
+       (qspec_then `D'` mp_tac) >>
+     qpat_assum `emitted_insts st st' = xs ++ [i]` SUBST1_TAC >>
+     simp[Abbr `u`] >>
+     mp_tac (Q.INST [`iid` |-> `st.cs_next_id`, `limit` |-> `n`, `D` |-> `D'`,
+                     `ys` |-> `[i]`, `G'` |-> `H`, `tn'` |-> `qt`]
+       prefix_copy_count_success_ptr) >>
+     asm_simp_tac (srw_ss()) [LET_THM, Abbr `xs`] >>
+     simp[Abbr `s3`, Abbr `H`, Abbr `q3`, DRESTRICT_DRESTRICT, INTER_ASSOC]) >>
   qexistsl_tac [`H`,`qt`] >>
   `q3.t_mem = tn.t_mem /\ q3.t_stor = tn.t_stor /\
    q3.t_trans = tn.t_trans /\ q3.t_imm = tn.t_imm` by simp[Abbr `q3`] >>
@@ -427,6 +560,7 @@ Resume prefix_bytestring_success_ghost[finish]:
   >- (rpt strip_tac >>
       `v <> x /\ v <> y /\ v <> z` by metis_tac[] >>
       simp[Abbr `H`, FLOOKUP_DRESTRICT, Abbr `q3`, FLOOKUP_UPDATE]) >>
+  reverse conj_tac >- simp[] >>
   strip_tac >> gen_tac >>
   `ptr_safe_block D lo fuel ctx fn PG H qt bb
       (t with vs_inst_idx := s.vs_inst_idx+5)` by
