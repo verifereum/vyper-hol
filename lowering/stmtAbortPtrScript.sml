@@ -85,7 +85,7 @@ Proof
   `?a t. step_inst_base (mk_inst sa.cs_next_id opc ops []) s0 = Abort a t /\
          expr_exit (INR (AssertException msg) : unit + exception) (Abort a t)` by
     (simp[expr_exit_def] >> metis_tac[step_revert_zero, step_invalid]) >>
-  `gas_path_ptr (cx_dead cx) 0 ctx func PG G0 tn0 s0 0 G0 tn0 (Abort a t)` by
+  `gas_path_ptr (cx_dead H cx) 0 ctx func PG G0 tn0 s0 0 G0 tn0 (Abort a t)` by
     (irule emit_abort_zero_path_ptr >> simp[] >>
      qexistsl_tac [`opc`, `ops`, `sa`, `sb`] >> simp[] >>
      irule ptr_inst_ok_abort_zero >> simp[]) >>

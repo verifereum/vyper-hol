@@ -19,7 +19,7 @@ Proof
 QED
 
 Theorem hash_sha256_source_success:
-  stmt_state_rel ctx fn cenv cx ee s /\
+  stmt_state_rel H ctx fn cenv cx ee s /\
   builtin_result cx ee.accounts ann Sha256 tys [v] = INL r /\
   s.vs_outcomes = outcome::rest /\ outcome.co_success ==>
   !tail.
@@ -36,7 +36,7 @@ Proof
 QED
 
 Theorem hash_sha256_source_failure:
-  stmt_state_rel ctx fn cenv cx ee s /\ ee.gas_obs = [] /\
+  stmt_state_rel H ctx fn cenv cx ee s /\ ee.gas_obs = [] /\
   builtin_result cx ee.accounts ann Sha256 tys [v] = INL r /\
   ~(?outcome rest. s.vs_outcomes = outcome::rest /\ outcome.co_success) ==>
   ?ef. ef = (case s.vs_outcomes of [] => ee
@@ -62,7 +62,7 @@ QED
 
 (* Shared exceptional packaging for both fixed and dynamic SHA paths. *)
 Theorem hash_sha256_abort_summary:
-  stmt_state_rel ctx fn cenv cx ee s /\ ee.gas_obs = [] /\
+  stmt_state_rel H ctx fn cenv cx ee s /\ ee.gas_obs = [] /\
   builtin_result cx ee.accounts ann Sha256 tys [v] = INL r /\
   ~(?outcome rest. s.vs_outcomes = outcome::rest /\ outcome.co_success) /\
   gas_path_ptr D 0 ctx fn PG G tn s 1 Gf tf (Abort Revert_abort t) ==>

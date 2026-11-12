@@ -6,7 +6,7 @@ Ancestors allocationPtr robustCopyTransportPtr loweringHalt bodyPtrDefs lowering
 
 Theorem alloca_step_expr_robust_preserved:
   !ctx func cenv cx es s t sa sb v op tv w id n out s1 b tn.
-    stmt_state_rel ctx func cenv cx es s /\
+    stmt_state_rel H ctx func cenv cx es s /\
     expr_val_at cenv cx t sa sb es v op s /\
     evaluate_type (get_tenv cx) t = SOME tv /\ ~is_word_type t /\
     val_wf tv v /\ eval_operand op s = SOME w /\ fn_inst_ids_distinct func /\
@@ -54,7 +54,7 @@ Finalise alloca_step_expr_robust_preserved
 
 Theorem compile_alloc_buffer_expr_resources_separated:
   !ctx func cenv cx e es sa sb s0 es' v op s n buf sc tv w tn PG G.
-    expr_post ctx func cenv cx e es sa sb s0 es' v op s /\
+    expr_post H ctx func cenv cx e es sa sb s0 es' v op s /\
     not_local_ptr cenv es'.scopes (STRING #"%" (toString sb.cs_next_var)) /\
     (!p. op = Var p ==> p <> STRING #"%" (toString sb.cs_next_var)) /\
     fn_inst_ids_distinct func /\
@@ -80,14 +80,14 @@ Theorem compile_alloc_buffer_expr_resources_separated:
         val_in_memory tv v (w2n w) m) /\
       (!p k. p <> out /\ ptr_covers G tn p s k ==>
         ptr_covers G1 tn1 p s1 k) /\
-      (stor_taint_ok cx tn s ==> stor_taint_ok cx tn1 s1)
+      (stor_taint_ok H cx tn s ==> stor_taint_ok H cx tn1 s1)
 Proof
   rpt gen_tac >> disch_then (map_every assume_tac o CONJUNCTS) >>
   drule compile_alloc_buffer_emission >> strip_tac >>
   `MEM (mk_inst sb.cs_next_id ALLOCA [Lit (n2w n)] [p]) (fn_insts func)` by
     (drule_all fn_has_code_split >> strip_tac >>
      drule_all emit_inst_fn_member >> simp[]) >>
-  qpat_x_assum `expr_post _ _ _ _ _ _ _ _ _ _ _ _ _` mp_tac >>
+  qpat_x_assum `expr_post _ _ _ _ _ _ _ _ _ _ _ _ _ _` mp_tac >>
   qpat_assum `post_value_type cenv e = _`
     (fn th => rewrite_tac[expr_post_def, th]) >>
   disch_then (map_every assume_tac o CONJUNCTS) >>
@@ -147,7 +147,7 @@ Finalise compile_alloc_buffer_expr_resources_separated
 
 Theorem compile_alloc_buffer_expr_resources:
   !ctx func cenv cx e es sa sb s0 es' v op s n buf sc tv w tn PG G.
-    expr_post ctx func cenv cx e es sa sb s0 es' v op s /\
+    expr_post H ctx func cenv cx e es sa sb s0 es' v op s /\
     fresh_vars_wrt sb s /\ fn_inst_ids_distinct func /\
     compile_alloc_buffer n sb = (buf,sc) /\ fn_has_code sb sc func /\
     evaluate_type (get_tenv cx) (expr_type e) = SOME tv /\
@@ -170,7 +170,7 @@ Theorem compile_alloc_buffer_expr_resources:
       (!m. mem_agree_outside tn1.t_mem s1.vs_memory m ==>
         val_in_memory tv v (w2n w) m) /\
       (!p k. ptr_covers G tn p s k ==> ptr_covers G1 tn1 p s1 k) /\
-      (stor_taint_ok cx tn s ==> stor_taint_ok cx tn1 s1)
+      (stor_taint_ok H cx tn s ==> stor_taint_ok H cx tn1 s1)
 Proof
   rpt gen_tac >> disch_then (map_every assume_tac o CONJUNCTS) >>
   `lookup_var (STRING #"%" (toString sb.cs_next_var)) s = NONE` by
