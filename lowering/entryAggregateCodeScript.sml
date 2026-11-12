@@ -50,13 +50,15 @@ Proof
 QED
 
 Theorem entry_code_make_tuple:
-  !es cenv buf off. (!e ce ty. MEM e es ==>
+  !es tys cenv buf off. (!e ce ty. MEM e es ==>
     entry_preserves_code (\i. i.inst_opcode <> DALLOCA) (cfn ce ty e)) ==>
   entry_preserves_code (\i. i.inst_opcode <> DALLOCA)
-    (compile_make_tuple cfn cenv es buf off)
+    (compile_make_tuple cfn cenv es tys buf off)
 Proof
   Induct_on `es` >- simp[compile_make_tuple_def, entry_code_return] >>
-  rpt strip_tac >> gvs[] >>
+  rpt strip_tac >> Cases_on `tys`
+  >- simp[compile_make_tuple_def, entry_code_return] >>
+  gvs[] >>
   simp[compile_make_tuple_def, compileEnvTheory.comp_ignore_bind_def] >>
   ntac 4 (irule entry_code_bind >> reverse conj_tac
     >- simp[entry_code_emit_op, entry_code_unwrap_value, entry_code_store_memory] >>

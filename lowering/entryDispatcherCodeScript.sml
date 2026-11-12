@@ -30,7 +30,7 @@ Proof
   rpt (pairarg_tac >> gvs[]) >>
   gvs[oneline as_ptr_val_def, AllCaseEqs()] >>
   imp_res_tac (SRULE [entry_preserves_code_def] entry_code_alloc_buffer)
-  >~ [`compile_make_tuple _ _ _ _ _ _ = _`]
+  >~ [`compile_make_tuple _ _ _ _ _ _ _ = _`]
   >- (drule entry_code_make_tuple >>
       disch_then (fn th => imp_res_tac (SRULE [entry_preserves_code_def] th))) >>
   drule entry_code_make_array >>
