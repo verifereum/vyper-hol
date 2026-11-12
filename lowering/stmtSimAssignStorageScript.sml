@@ -266,7 +266,7 @@ Proof
        write_place_def, ignore_bind_def, record_storage_event_def]
 QED
 
-Theorem write_storage_slot_storage_trace[local]:
+Theorem write_storage_slot_storage_trace:
   write_storage_slot cx tr slot tv v st = (res, st') ==>
   write_storage_slot cx tr slot tv v (st with storage_trace := obs) =
     (res, st' with storage_trace := obs)
