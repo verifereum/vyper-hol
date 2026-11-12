@@ -2,7 +2,7 @@
 Theory typedCopyOriginPtrDynArray
 Ancestors
   typedCopyOriginPtrBase placeTypedCopyRecursivePath fragGasOriginPtr fragGasSeqPtr
-  bodyPtrDefs ptrSafeRun ptrDiscipline typedMemoryCopy
+  bodyPtrDefs ptrSafeRun ptrDiscipline typedMemoryCopy representationCleanPtr
   compileEnv emitHelper loweringStateRelDefs
 
 (* A single checked emitted instruction, with its concrete ghosts. *)
@@ -594,6 +594,129 @@ Resume typed_copy_origin_ptr_dyn_data_path[header_robust]:
 QED
 
 Finalise typed_copy_origin_ptr_dyn_data_path
+
+Theorem typed_copy_origin_ptr_dyn_read_path:
+  emit_op MLOAD [Var xs] a = (Var lv,b) /\
+  not_fresh_at a xs /\ lookup_var xs s = SOME sw /\
+  ptr_covers G tn xs s 32 /\
+  w2n sw + 32 < dimword (:256) /\ w2n sw + 32 <= s.vs_alloca_next /\
+  (!mem. mem_agree_outside tn.t_mem s.vs_memory mem ==>
+     mem_word_at (w2n sw) mem = n2w N) /\
+  allocas_from lo s /\ lo <= s.vs_alloca_next /\ ~ctx_has_dalloca ctx /\
+  fn_has_code a b func /\ fn_inst_ids_distinct func /\ ~s.vs_halted /\
+  s.vs_current_bb = a.cs_current_bb /\
+  s.vs_inst_idx = LENGTH a.cs_current_insts ==>
+  ?t Gf tnf.
+    gas_origin_ptr_path
+      (<|d_stor := K (K {}); d_trans := K (K {}); d_imm := K {}; d_ret := K {}|>,
+       lo,explicit,ctx,func,PG) (s,G,tn) [] (OK t,Gf,tnf) /\
+    ~t.vs_halted /\ t.vs_current_bb = b.cs_current_bb /\
+    t.vs_inst_idx = LENGTH b.cs_current_insts /\
+    t.vs_alloca_next = s.vs_alloca_next /\
+    eval_operand (Var lv) t = SOME (n2w N) /\ FLOOKUP Gf lv = NONE /\
+    op_taint tnf (Var lv) = {} /\ t.vs_memory = s.vs_memory /\
+    tnf.t_mem = tn.t_mem /\ tnf.t_imm = tn.t_imm /\
+    tnf.t_stor = tn.t_stor /\ tnf.t_trans = tn.t_trans /\
+    typed_copy_state_frame a off len s t /\
+    (!p. not_fresh_at a p ==>
+       lookup_var p t = lookup_var p s /\ FLOOKUP Gf p = FLOOKUP G p /\
+       op_taint tnf (Var p) = op_taint tn (Var p)) /\
+    (!p n. not_fresh_at a p /\ ptr_covers G tn p s n ==>
+       ptr_covers Gf tnf p t n)
+Proof
+  strip_tac >>
+  `!i. w2n sw <= i /\ i < w2n sw + 32 ==> i NOTIN tn.t_mem` by
+    (drule robust_mem_word_at_clean >> simp[]) >>
+  `mem_word_at (w2n sw) s.vs_memory = n2w N` by
+    (first_x_assum irule >> simp[mem_agree_outside_def]) >>
+  `b.cs_current_bb = a.cs_current_bb /\
+   b.cs_current_insts = a.cs_current_insts ++
+     [mk_inst a.cs_next_id MLOAD [Var xs] [lv]] /\
+   ~not_fresh_at a lv` by
+    gvs[emitHelperTheory.emit_op_def, compileEnvTheory.comp_bind_def,
+        compileEnvTheory.comp_ignore_bind_def, compileEnvTheory.comp_return_def,
+        compileEnvTheory.fresh_var_def, compileEnvTheory.fresh_id_def,
+        compileEnvTheory.emit_def, loweringStateRelDefsTheory.not_fresh_at_def] >>
+  qmatch_goalsub_abbrev_tac `gas_origin_ptr_path cx _ _ _` >>
+  qabbrev_tac `inst = mk_inst a.cs_next_id MLOAD [Var xs] [lv]` >>
+  qabbrev_tac `u = update_var lv (n2w N) s` >>
+  qabbrev_tac `gf = step_prov PG G inst u` >>
+  qabbrev_tac `tf = step_taint inst s u tn` >>
+  `step_inst_base inst s = OK u` by
+    simp[Abbr `inst`, Abbr `u`, venomExecSemanticsTheory.step_inst_base_opcode_eqs,
+         venomInstTheory.mk_inst_def, venomExecSemanticsTheory.exec_read1_def,
+         venomStateTheory.eval_operand_def,
+         GSYM valueEncodingPropsTheory.mem_word_at_eq_mload] >>
+  `ptr_inst_ok (FST cx) lo 0 ctx func G tn inst s` by
+    (simp[Abbr `inst`, ptr_inst_ok_def, access_ok_def, taint_ok_def,
+          venomInstTheory.mk_inst_def,
+          codegenRelTheory.source_memory_write_ranges_def,
+          contextCodegenRelTheory.source_memory_read_ranges_def,
+          venomStateTheory.eval_operand_def] >>
+     conj_tac >-
+       (gvs[ptr_covers_def] >> rpt strip_tac >>
+        gvs[memLocDefsTheory.mem_read_ops_def] >> metis_tac[]) >>
+     gvs[ptr_covers_def] >>
+     simp[venomExecSemanticsTheory.step_inst_non_invoke] >>
+     asm_simp_tac bool_ss
+       [venomExecSemanticsTheory.step_inst_base_opcode_eqs,
+        venomInstTheory.instruction_accessors,
+        venomInstTheory.instruction_accfupds,
+        venomInstTheory.opcode_case_def, combinTheory.K_THM] >>
+     simp[venomExecSemanticsTheory.exec_read1_def,
+          venomStateTheory.eval_operand_def, AllCaseEqs(),
+          venomStateTheory.update_var_def] >> rpt strip_tac >> gvs[]) >>
+  `emit_inst MLOAD [Var xs] [lv] a =
+     ((), b with cs_next_var := a.cs_next_var)` by
+    (qpat_x_assum `emit_op _ _ _ = _` mp_tac >>
+     simp[emitHelperTheory.emit_op_def, emitHelperTheory.emit_inst_def,
+          compileEnvTheory.comp_bind_def, compileEnvTheory.comp_ignore_bind_def,
+          compileEnvTheory.comp_return_def, compileEnvTheory.fresh_var_def,
+          compileEnvTheory.fresh_id_def, compileEnvTheory.emit_def] >>
+     strip_tac >> gvs[] >>
+     simp[compileEnvTheory.compile_state_component_equality]) >>
+  `fn_has_code a (b with cs_next_var := a.cs_next_var) func` by
+    gvs[fragExecTheory.fn_has_code_def, fragExecTheory.emitted_blocks_def] >>
+  `inst_mem_below_frontier inst s /\ inst_dload_in_section inst s` by
+    simp[Abbr `inst`, unitTransformDefsTheory.inst_mem_below_frontier_def,
+         codegenRelTheory.source_memory_write_ranges_def,
+         contextCodegenRelTheory.source_memory_read_ranges_def,
+         venomStateTheory.eval_operand_def, venomInstTheory.mk_inst_def] >>
+  `gas_origin_ptr_path cx (s,G,tn) []
+     (OK (u with vs_inst_idx := SUC s.vs_inst_idx),gf,tf)` by
+    (simp[NoAsms, Abbr `cx`, Abbr `gf`, Abbr `tf`, Abbr `inst`] >>
+     irule typed_copy_emit_inst_origin_ptr_path >>
+     simp[venomInstTheory.is_terminator_def] >>
+     gvs[]) >>
+  qexistsl [`u with vs_inst_idx := SUC s.vs_inst_idx`, `gf`, `tf`] >>
+  simp[Abbr `u`, venomStateTheory.update_var_def,
+       venomStateTheory.eval_operand_def, venomStateTheory.lookup_var_def,
+       finite_mapTheory.FLOOKUP_UPDATE] >>
+  simp[Abbr `gf`, Abbr `tf`, Abbr `inst`, step_prov_def, set_prov_def,
+       out_prov_def, step_taint_def, set_var_taint_def, out_taint_def,
+       op_taint_def, venomInstTheory.mk_inst_def,
+       mem_word_taint_def, mem_taint_def, new_site_bytes_def,
+       step_writes_def, written_taint_def,
+       codegenRelTheory.source_memory_write_ranges_def, range_bytes_def,
+       venomStateTheory.update_var_def, store_taint_def, adopt_reset_def,
+       finite_mapTheory.FLOOKUP_UPDATE, finite_mapTheory.FLOOKUP_DRESTRICT] >>
+  `!p. not_fresh_at a p ==> p <> lv` by metis_tac[] >>
+  `!k. k < 32 ==> k + w2n sw NOTIN tn.t_mem` by
+    (gen_tac >> strip_tac >>
+     qpat_x_assum `!i. _ /\ _ ==> i NOTIN _` irule >> decide_tac) >>
+  simp[venomStateTheory.eval_operand_def, imm_taint_def,
+       finite_mapTheory.FLOOKUP_DEF, pred_setTheory.EXTENSION] >>
+  conj_tac >- metis_tac[] >>
+  conj_tac >- metis_tac[] >>
+  conj_tac >-
+    (simp[typed_copy_state_frame_def, typed_copy_frame_def,
+          venomStateTheory.lookup_var_def, finite_mapTheory.FLOOKUP_UPDATE,
+          venomStateTheory.venom_state_component_equality]) >>
+  rpt strip_tac >>
+  gvs[ptr_covers_def, op_taint_def, venomStateTheory.lookup_var_def,
+      finite_mapTheory.FLOOKUP_DRESTRICT, finite_mapTheory.FLOOKUP_UPDATE] >>
+  Cases_on `lv = p` >> gvs[]
+QED
 
 Theorem typed_copy_origin_ptr_dynarray_entry:
   !cenv tenv ctx de cap sty dtv stv v.
