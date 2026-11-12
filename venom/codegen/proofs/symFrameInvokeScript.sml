@@ -1036,7 +1036,7 @@ Proof
     metis_tac[arithmeticTheory.ADD_COMM] >>
   drule_all symShuffleSimTheory.sym_pop_numeric >>
   disch_then (qspecl_then [`env`, `R`] strip_assume_tac) >>
-  qexists_tac `ss''` >> conj_tac
+  qexists_tac `out` >> conj_tac
   >- simp[Once sym_steps_add] >>
   simp[] >> metis_tac[]
 QED
