@@ -25,23 +25,25 @@ Ancestors
    (target_place_sim's conclusion, at every start). *)
 Definition pop_target_frag_def:
   pop_target_frag ctx func cenv cx env bt es <=>
-    !ty sa sb r s0.
+    !ty st0 sa sb r s0.
       type_place_target env bt = SOME (Type ty) /\
       compile_get_target_ptr compile_expr cenv bt sa = (r, sb) /\
       fn_has_code sa sb func /\ fn_inst_ids_distinct func /\
       local_ptrs_reserved cenv sa /\
       gas_admissible (eval_target_place cx bt) target_place_res_ok es /\
-      stmt_state_rel ctx func cenv cx es s0 /\ ~s0.vs_halted /\
+      (!H. valid_horizon cx st0 H es.storage_trace ==>
+        stmt_state_rel H ctx func cenv cx es s0 /\
+        storage_well_formed_on cx es (FST H)) /\ ~s0.vs_halted /\
       s0.vs_current_bb = sa.cs_current_bb /\
       s0.vs_inst_idx = LENGTH sa.cs_current_insts ==>
-      gas_outcome F (cx_tops cx) (ctx, func) (eval_target_place cx bt)
+      gas_outcome F (cx_tops cx) (ctx, func) cx st0 (eval_target_place cx bt)
         (es, s0)
-        (\res ee t. ?p. res = INL p /\
-          target_post ctx func cenv cx es sa sb s0 ee (PlaceR p) (Type ty)
+        (\H res ee t. ?p. res = INL p /\
+          target_post H ctx func cenv cx es sa sb s0 ee (PlaceR p) (Type ty)
             r t /\
           t.vs_current_bb = sb.cs_current_bb /\
           t.vs_inst_idx = LENGTH sb.cs_current_insts)
-        (\res ee r. expr_exit res r)
+        (\H res ee r. expr_exit res r)
 End
 
 Theorem pop_target_frag_of_sim:
@@ -182,8 +184,8 @@ QED
 Theorem nested_pop_storage_dead_header:
   declared_storage_region cx mid name subs = SOME (tr,root_slot,root) /\
   storage_subregion root path delta (ArrayTV tv (Dynamic n)) /\
-  w2n slot = w2n root_slot + delta /\ storage_dead cx tr st j b ==>
-  storage_dead cx tr
+  w2n slot = w2n root_slot + delta /\ storage_dead H tr st j b ==>
+  storage_dead H tr
     (update_storage slot (n2w (w2n (lookup_storage slot st) - 1)) st) j b
 Proof
   strip_tac >> fs[storage_dead_def] >>
@@ -207,11 +209,11 @@ Proof
 QED
 
 Theorem nested_pop_stmt_state_rel_header:
-  stmt_state_rel ctx func cenv cx es s /\
+  stmt_state_rel H ctx func cenv cx es s /\
   declared_storage_region cx mid name subs = SOME (tr,root_slot,root) /\
   storage_subregion root path delta (ArrayTV tv (Dynamic n)) /\
   w2n slot = w2n root_slot + delta ==>
-  stmt_state_rel ctx func cenv cx
+  stmt_state_rel H ctx func cenv cx
     (set_storage cx es tr
       (update_storage slot (n2w (w2n (lookup_storage slot (get_storage cx es tr)) - 1))
         (get_storage cx es tr)))
@@ -221,10 +223,10 @@ Theorem nested_pop_stmt_state_rel_header:
        sstore slot (n2w (w2n (lookup_storage slot (get_storage cx es tr)) - 1)) s)
 Proof
   strip_tac >>
-  `s.vs_call_ctx.cc_address = cx.txn.target /\ accounts_rel cx es s` by
+  `s.vs_call_ctx.cc_address = cx.txn.target /\ accounts_rel H cx es s` by
     fs[stmt_state_rel_def, state_rel_def, call_ctx_rel_def] >>
-  qmatch_goalsub_abbrev_tac `stmt_state_rel ctx _ _ _ es1 s1` >>
-  `accounts_rel cx es1 s1` by
+  qmatch_goalsub_abbrev_tac `stmt_state_rel H ctx _ _ _ es1 s1` >>
+  `accounts_rel H cx es1 s1` by
     (Cases_on `tr` >> gvs[Abbr `s1`, Abbr `es1`]
      >- (irule accountsRelPropsTheory.accounts_rel_tstore >> simp[] >> qexists `es` >>
          simp[vyperStorageBackendTheory.set_storage_backend_eq, vyperStorageBackendTheory.get_storage_def, vfmStateTheory.lookup_account_def] >>
@@ -235,7 +237,7 @@ Proof
   `s1.vs_call_ctx = s.vs_call_ctx` by
     (Cases_on `tr` >> simp[Abbr `s1`, sstore_def, tstore_def, LET_THM]) >>
   drule accountsRelPropsTheory.accounts_rel_storage_transient >> strip_tac >>
-  `state_rel func cenv cx es1 s1` by
+  `state_rel H func cenv cx es1 s1` by
     (Cases_on `tr` >> gvs[Abbr `s1`, Abbr `es1`] >>
      fs[stmt_state_rel_def, state_rel_def, sstore_def, tstore_def, LET_THM,
         vyperStorageBackendTheory.set_storage_def, local_ptrs_rel_def, local_backed_def, local_region_def,
@@ -257,8 +259,8 @@ Proof
 QED
 
 Theorem nested_pop_live_array_agree:
-  stmt_state_rel ctx func cenv cx es s /\
-  storage_read_live cx tr (vyperStorageBackend$get_storage cx es tr) slot (ArrayTV tv (Dynamic n)) /\
+  stmt_state_rel H ctx func cenv cx es s /\
+  storage_read_live H tr (vyperStorageBackend$get_storage cx es tr) slot (ArrayTV tv (Dynamic n)) /\
   w2n slot + type_slot_size (ArrayTV tv (Dynamic n)) <= dimword(:256) ==>
   storage_range_agree (vyperStorageBackend$get_storage cx es tr)
     (if tr then contract_transient s else contract_storage s) slot (ArrayTV tv (Dynamic n))
@@ -286,7 +288,7 @@ Proof
 QED
 
 Theorem nested_pop_updated_state_rel:
-  stmt_state_rel ctx func cenv cx es s /\
+  stmt_state_rel H ctx func cenv cx es s /\
   declared_storage_region cx mid name subs = SOME (tr,root_slot,root) /\
   storage_subregion root path delta (ArrayTV tv (Dynamic n)) /\
   w2n slot = w2n root_slot + delta /\
@@ -297,7 +299,7 @@ Theorem nested_pop_updated_state_rel:
          (n2w (w2n (lookup_storage slot (vyperStorageBackend$get_storage cx es tr)) - 1)) s)
         with vs_vars := u.vs_vars /\
   (!q. not_fresh_at sa q ==> lookup_var q u = lookup_var q s) ==>
-  stmt_state_rel ctx func cenv cx
+  stmt_state_rel H ctx func cenv cx
     (vyperStorageBackend$set_storage cx es tr
       (apply_writes slot [(0,n2w (w2n (lookup_storage slot
         (vyperStorageBackend$get_storage cx es tr)) - 1))]
@@ -503,14 +505,14 @@ Proof
 QED
 
 Theorem nested_pop_storage_target_metadata:
-  target_post ctx func cenv cx es sa sm s0 es' (PlaceR (StoragePlace tr slot vt))
+  target_post H ctx func cenv cx es sa sm s0 es' (PlaceR (StoragePlace tr slot vt))
     (Type (ArrayT ann (Dynamic n))) (hdr,loc,pt) t ==>
   ?tv. vt = ArrayTV tv (Dynamic n) /\
     evaluate_type (get_tenv cx) ann = SOME tv /\
     eval_operand hdr t = SOME slot /\ loc = SOME (slot_loc tr) /\
     pt = SOME (ValPT (ArrayT ann (Dynamic n))) /\
     (!x. hdr = Var x ==> not_fresh_at sm x) /\
-    stmt_state_rel ctx func cenv cx es' t
+    stmt_state_rel H ctx func cenv cx es' t
 Proof
   simp[target_post_def, place_ptr_rel_def, value_type_place_def,
        vyperValueTheory.evaluate_type_def, AllCaseEqs()] >> metis_tac[]
@@ -805,14 +807,14 @@ Proof
 QED
 
 Theorem nested_pop_suffix_vv_post:
-  target_post ctx func cenv cx es sa sm s0 mid pv vt op t /\
-  ci_mono sa sm /\ stmt_state_rel ctx func cenv cx es' u /\
+  target_post H ctx func cenv cx es sa sm s0 mid pv vt op t /\
+  ci_mono sa sm /\ stmt_state_rel H ctx func cenv cx es' u /\
   es'.scopes = mid.scopes /\
   storage_holds cx tr ann v slot es' u /\ lookup_var x u = SOME slot /\
   u.vs_memory = t.vs_memory /\ u.vs_allocas = t.vs_allocas /\
   (!q. not_fresh_at sm q ==> lookup_var q u = lookup_var q t) /\
   (!id path. v <> PlaceR (MemoryPlace id path)) ==>
-  vv_post ctx func cenv cx (Pop ann bt) es sa r s0 es' v
+  vv_post H ctx func cenv cx (Pop ann bt) es sa r s0 es' v
     (LocatedValue ann (mk_ptr (Var x) (if tr then LocTransient else LocStorage))) u
 Proof
   strip_tac >>
@@ -845,9 +847,9 @@ Theorem nested_pop_storage_live_suffix_sim:
   storage_place_region cx (StoragePlace tr slot (ArrayTV tv (Dynamic n))) /\
   slots_in_range (vyperStorageBackend$get_storage cx es tr) (w2n slot)
     (ArrayTV tv (Dynamic n)) /\
-  storage_read_live cx tr (vyperStorageBackend$get_storage cx es tr) slot
+  storage_read_live H tr (vyperStorageBackend$get_storage cx es tr) slot
     (ArrayTV tv (Dynamic n)) /\
-  target_post ctx func cenv cx es0 sa sm s0 es
+  target_post H ctx func cenv cx es0 sa sm s0 es
     (PlaceR (StoragePlace tr slot (ArrayTV tv (Dynamic n))))
     (Type (ArrayT ann (Dynamic n))) (hdr,SOME (slot_loc tr),pt) t /\
   compile_dynarray_pop hdr 1 (type_slot_size tv) cenv.ce_is_ctor
@@ -859,7 +861,7 @@ Theorem nested_pop_storage_live_suffix_sim:
   t.vs_inst_idx = LENGTH sm.cs_current_insts ==>
   gas_summary_at F (ctx,func) []
     (pop_place cx (StoragePlace tr slot (ArrayTV tv (Dynamic n)))) (es,t)
-    (\res fin u. ?v. res = INL v /\ vv_post ctx func cenv cx (Pop ann bt) es0 sa r s0 fin v
+    (\res fin u. ?v. res = INL v /\ vv_post H ctx func cenv cx (Pop ann bt) es0 sa r s0 fin v
       (LocatedValue ann (mk_ptr q (if tr then LocTransient else LocStorage))) u /\
       u.vs_current_bb = r.cs_current_bb /\ u.vs_inst_idx = LENGTH r.cs_current_insts)
     (\res fin r. expr_exit res r)
@@ -868,7 +870,7 @@ Proof
   `!tail. pop_place cx (StoragePlace tr slot (ArrayTV tv (Dynamic n)))
        (es with gas_obs := tail) = (res,es' with gas_obs := tail)` by
     metis_tac[nested_pop_storage_gas_obs] >>
-  `stmt_state_rel ctx func cenv cx es t` by fs[target_post_def] >>
+  `stmt_state_rel H ctx func cenv cx es t` by fs[target_post_def] >>
   `~cx.txn.is_static /\ ~t.vs_call_ctx.cc_static` by
     fs[stmt_state_rel_def, state_rel_def] >>
   drule nested_pop_storage_target_metadata >> strip_tac >> gvs[] >>
@@ -931,14 +933,14 @@ Resume nested_pop_storage_live_suffix_sim[positive]:
   `!q. not_fresh_at sa q ==> lookup_var q u = lookup_var q t` by
     (fs[ci_mono_def, not_fresh_at_def] >> rpt strip_tac >>
      first_x_assum irule >> fs[] >> metis_tac[arithmeticTheory.LESS_EQ_TRANS]) >>
-  `stmt_state_rel ctx func cenv cx
+  `stmt_state_rel H ctx func cenv cx
     (vyperStorageBackend$set_storage cx es tr
       (apply_writes slot [(0,n2w (w2n lenw - 1))]
         (vyperStorageBackend$get_storage cx es tr))) u` by
     (`w2n slot = w2n root + delta` by simp[arithmeticTheory.ADD_COMM] >>
      qunabbrev_tac `lenw` >> drule_all nested_pop_updated_state_rel >> simp[]) >>
   qmatch_asmsub_abbrev_tac
-    `stmt_state_rel ctx func cenv cx fin u` >>
+    `stmt_state_rel H ctx func cenv cx fin u` >>
   `storage_holds cx tr ann
     (PlaceR (StoragePlace tr (slot + n2w (1 + (w2n lenw - 1) * type_slot_size tv)) tv))
     (slot + n2w (1 + (w2n lenw - 1) * type_slot_size tv)) fin u` by
@@ -998,7 +1000,7 @@ Resume nested_pop_storage_live_suffix_sim[positive]:
     (qunabbrev_tac `fin` >> Cases_on `tr` >>
      simp[vyperStorageBackendTheory.set_storage_def]) >>
   irule nested_pop_suffix_vv_post >>
-  qpat_assum `target_post _ _ _ _ _ _ _ _ _ _ _ _ _` (irule_at Any) >>
+  qpat_assum `target_post H _ _ _ _ _ _ _ _ _ _ _ _ _` (irule_at Any) >>
   simp[] >>
   qpat_x_assum `storage_holds _ _ _ _ _ fin u` mp_tac >> simp[]
 QED
@@ -1009,7 +1011,7 @@ Theorem nested_pop_storage_suffix_sim:
   expr_sim_inv cenv cx env es /\
   EVERY pure_expr (target_indices bt) /\
   eval_target_place cx bt es = (INL (StoragePlace tr slot (ArrayTV tv (Dynamic n))),es) /\
-  target_post ctx func cenv cx es0 sa sm s0 es
+  target_post H ctx func cenv cx es0 sa sm s0 es
     (PlaceR (StoragePlace tr slot (ArrayTV tv (Dynamic n))))
     (Type (ArrayT ann (Dynamic n))) (hdr,SOME (slot_loc tr),pt) t /\
   compile_dynarray_pop hdr 1 (type_slot_size tv) cenv.ce_is_ctor
@@ -1021,7 +1023,7 @@ Theorem nested_pop_storage_suffix_sim:
   t.vs_inst_idx = LENGTH sm.cs_current_insts ==>
   gas_summary_at F (ctx,func) []
     (pop_place cx (StoragePlace tr slot (ArrayTV tv (Dynamic n)))) (es,t)
-    (\res fin u. ?v. res = INL v /\ vv_post ctx func cenv cx (Pop ann bt) es0 sa r s0 fin v
+    (\res fin u. ?v. res = INL v /\ vv_post H ctx func cenv cx (Pop ann bt) es0 sa r s0 fin v
       (LocatedValue ann (mk_ptr q (if tr then LocTransient else LocStorage))) u /\
       u.vs_current_bb = r.cs_current_bb /\ u.vs_inst_idx = LENGTH r.cs_current_insts)
     (\res fin r. expr_exit res r)
@@ -1053,7 +1055,7 @@ QED
    - The pop suffix (nested_pop_suffix_def) has no GAS, INVOKE or
      terminator, so its straight-line run is a 0-count path
      (exprSimHash.hash_run_path, fragGasSeqAbort.run_inst_seq_abort_zero_path).
-     The SSTORE/TSTORE in it needs ~cc_static, which stmt_state_rel at the
+     The SSTORE/TSTORE in it needs ~cc_static, which stmt_state_rel H at the
      target's end state supplies (state_rel), as does ~cx.txn.is_static for
      the source write.
    - The facts the old frag_exec proof used are all still here; only the
@@ -1124,7 +1126,7 @@ Resume pop_nested_storage_pure_sim[summary]:
 QED
 
 Resume pop_nested_storage_pure_sim[normal]:
-  rename1 `target_post _ _ _ _ _ _ _ _ _ (PlaceR p) _ _ t` >>
+  rename1 `target_post H _ _ _ _ _ _ _ _ _ (PlaceR p) _ _ t` >>
   `eval_target_place cx bt
      (es with gas_obs := gas_explicit marks s0.vs_gas_readings) =
      (INL p, tend with gas_obs := [])` by
