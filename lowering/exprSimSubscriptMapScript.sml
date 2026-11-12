@@ -170,17 +170,21 @@ Theorem gas_outcome_result_prefix:
   gas_marked_exec memory (ctx, func)
     (a : evaluation_state -> eval_result evaluation_result)
     (es, s0) left (INL v) mid (OK t) /\
-  gas_outcome memory tops (ctx, func) (k v)
+  gas_outcome memory tops (ctx, func) cx st0 (k v)
     (mid with gas_obs := [], t) Q R ==>
-  gas_outcome memory tops (ctx, func) (bind a k) (es, s0) Q R
+  gas_outcome memory tops (ctx, func) cx st0 (bind a k) (es, s0) Q R
 Proof
   disch_then (CONJUNCTS_THEN2 assume_tac mp_tac) >>
   rewrite_tac[gasOutcomeTheory.gas_outcome_def] >>
   disch_then (qx_choose_then `right` (DISJ_CASES_THEN mp_tac))
+  >- (strip_tac >> qexists_tac `left ++ right` >> disj1_tac >>
+      irule gasStorageTheory.gas_bad_storage_at_bind_right >>
+      goal_assum (drule_at Any) >> simp[]) >>
+  disch_then (DISJ_CASES_THEN mp_tac)
   >- (rewrite_tac[gas_summary_at_def] >>
       disch_then (qx_choose_then `out` (qx_choose_then `fin`
         (qx_choose_then `r` (CONJUNCTS_THEN2 assume_tac assume_tac)))) >>
-      qexists_tac `left ++ right` >> disj1_tac >>
+      qexists_tac `left ++ right` >> disj2_tac >> disj1_tac >>
       rewrite_tac[gas_summary_at_def] >>
       qexistsl_tac [`out`, `fin`, `r`] >>
       conj_tac >- (irule gas_marked_exec_bind_normal >>
@@ -188,7 +192,7 @@ Proof
       first_assum ACCEPT_TAC) >>
   strip_tac >>
   rename1 `gas_exempt_cert _ _ _ _ _ right (err, ef) (callee, tf)` >>
-  qexists_tac `left ++ right` >> disj2_tac >>
+  qexists_tac `left ++ right` >> disj2_tac >> disj2_tac >>
   qexistsl_tac [`err`, `ef`, `callee`, `tf`] >>
   rewrite_tac[ignore_bind_def, vyperStateTheory.bind_assoc] >>
   irule gas_exempt_cert_bind_result >>
@@ -674,10 +678,10 @@ Proof
 QED
 
 Theorem gas_outcome_conseq:
-  gas_outcome memory tops p source start Q R /\
-  (!res ee t. Q res ee t ==> Q' res ee t) /\
-  (!res ee r. R res ee r ==> R' res ee r) ==>
-  gas_outcome memory tops p source start Q' R'
+  gas_outcome memory tops p cx st0 source start Q R /\
+  (!H res ee t. Q H res ee t ==> Q' H res ee t) /\
+  (!H res ee r. R H res ee r ==> R' H res ee r) ==>
+  gas_outcome memory tops p cx st0 source start Q' R'
 Proof
   PairCases_on `p` >> PairCases_on `start` >>
   pure_rewrite_tac[gas_outcome_def, gas_summary_at_def] >>
