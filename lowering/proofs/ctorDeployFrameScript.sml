@@ -116,7 +116,7 @@ QED
 Theorem shadow_root_call_requests[local]:
   es.contexts <> [] ==> call_requests (shadow_root es) = call_requests es
 Proof
-  simp[call_requests_def, call_trace_def, shadow_root_frame_obs]
+  simp[callTraceTheory.call_requests_def, callTraceTheory.call_trace_def, shadow_root_frame_obs]
 QED
 
 Theorem deploy_venom_frame:

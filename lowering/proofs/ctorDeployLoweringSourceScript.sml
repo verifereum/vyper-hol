@@ -64,9 +64,13 @@ Theorem outcomes_replace_record_storage[simp]:
      SND (record_storage_event ob s) with outcomes := oc) /\
   record_storage_backend (s with outcomes := oc) =
     (FST (record_storage_backend s),
-     SND (record_storage_backend s) with outcomes := oc)
+     SND (record_storage_backend s) with outcomes := oc) /\
+  ignore_bind (record_storage_event ob) (return x) (s with outcomes := oc) =
+    (FST (ignore_bind (record_storage_event ob) (return x) s),
+     SND (ignore_bind (record_storage_event ob) (return x) s) with outcomes := oc)
 Proof
-  simp[record_storage_event_def, record_storage_backend_def, return_def]
+  simp[record_storage_event_def, record_storage_backend_def, return_def,
+       ignore_bind_def, bind_def]
 QED
 
 Theorem outcomes_replace_finally:
@@ -662,9 +666,11 @@ Proof
   Cases_on `cx.nonreentrant_slot` >> simp[raise_def] >>
   simp[acquire_nonreentrant_lock_def, ignore_bind_def, bind_def,
     get_transient_storage_def, update_transient_def, return_def,
+    record_storage_event_def,
     raise_def, check_not_static_def, check_def, assert_def, COND_RATOR] >>
   rpt IF_CASES_TAC >>
-  simp[bind_def, return_def, raise_def, update_transient_def, assert_def] >>
+  simp[bind_def, return_def, raise_def, update_transient_def, assert_def,
+       record_storage_event_def] >>
   Cases_on `view` >> simp[]
 QED
 
@@ -835,7 +841,8 @@ Proof
       qpat_x_assum `action st = _` mp_tac >> simp[Abbr `action`] >>
       Cases_on `(deploy_evaluation_context tops am tx).nonreentrant_slot` >>
       rw[return_def, release_nonreentrant_lock_def, bind_def,
-         get_transient_storage_def, update_transient_def]) >>
+         get_transient_storage_def, update_transient_def,
+         ignore_bind_def, record_storage_event_def]) >>
   rename1 `INR ex` >> Cases_on `ex` >>
   gvs[deploy_ctor_finish_def, Abbr `cx`, unlock_if_nr_def] >>
   simp[vyperValueOperationTheory.safe_cast_def] >>
@@ -844,7 +851,8 @@ Proof
   qpat_x_assum `action st = _` mp_tac >> simp[Abbr `action`] >>
   Cases_on `(deploy_evaluation_context tops am tx).nonreentrant_slot` >>
   rw[return_def, release_nonreentrant_lock_def, bind_def,
-     get_transient_storage_def, update_transient_def]
+     get_transient_storage_def, update_transient_def,
+     ignore_bind_def, record_storage_event_def]
 QED
 
 Theorem deploy_ctor_finish_outcomes:
@@ -854,6 +862,7 @@ Proof
   Cases_on `nr` >> Cases_on `cx.nonreentrant_slot` >>
   simp[deploy_ctor_finish_def, unlock_if_nr_def,
     release_nonreentrant_lock_def, update_transient_def,
+    ignore_bind_def, bind_def, record_storage_event_def,
     return_def, raise_def, abstract_machine_from_state_def] >>
   Cases_on `mut` >>
   simp[bind_def, get_transient_storage_def, update_transient_def,
