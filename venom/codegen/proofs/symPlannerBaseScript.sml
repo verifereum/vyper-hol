@@ -58,20 +58,6 @@ Proof
        EVERY_MEM, MEM_COUNT_LIST]
 QED
 
-Theorem mem_sval_at_clear:
-  mem_sval_at (mem_labels_clear labs (in_mem_range off 32)) off (Val w)
-Proof
-  simp[mem_sval_at_def, mem_labels_clear_def, finite_mapTheory.FDOM_DRESTRICT]
-QED
-
-Theorem sym_steps_compose_ok:
-  sym_steps p env m ss = SymOK mid /\
-  sym_steps p env n mid = SymOK last ==>
-  sym_steps p env (m+n) ss = SymOK last
-Proof
-  simp[sym_steps_add]
-QED
-
 Theorem store_label_lookup_outside:
   ~in_mem_range off 32 i ==>
   FLOOKUP (labs |++ GENLIST (\j. (off+j,(l,d,j))) 32) i = FLOOKUP labs i

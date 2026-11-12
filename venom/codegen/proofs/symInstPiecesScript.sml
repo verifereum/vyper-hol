@@ -88,12 +88,6 @@ Proof
   disch_then (qspec_then `env` strip_assume_tac) >> metis_tac[]
 QED
 
-Theorem execute_plan_poke_cons:
-  execute_plan initial_fmp (SOPoke d op :: ops) = execute_plan initial_fmp ops
-Proof
-  simp[execute_plan_def, exec_stack_op_def]
-QED
-
 Theorem sym_phi_dead_cleanup_sim:
   ssa_form fn /\ retpc_shape_ok fn /\ label_flow_ok ctx /\
   MEM fn ctx.ctx_functions /\ MEM inst (fn_insts fn) /\
@@ -111,7 +105,7 @@ Theorem sym_phi_dead_cleanup_sim:
     ss'.sym_base.as_pc = ss.sym_base.as_pc + LENGTH (execute_plan initial_fmp (SOPoke d (Var x) :: ops)) /\
     (!b. ~R b ==> FLOOKUP ss'.sym_mem_labels b = FLOOKUP ss.sym_mem_labels b)
 Proof
-  simp[execute_plan_poke_cons] >> strip_tac >>
+  simp[execute_plan_def, exec_stack_op_def] >> strip_tac >>
   `sym_kinds_ok cplan fn ret srest
     (ps with ps_stack := stack_poke d (Var x) ps.ps_stack) ss` by
     metis_tac[sym_phi_rename] >>
@@ -1241,40 +1235,6 @@ Proof
   irule reverse_two_operands >> simp[]
 QED
 
-(* generate_inst_plan's LOG case, decomposed (the cutover's log_plan_decompose
-   states the converse direction over generate_regular_inst_plan) *)
-Theorem log_inst_plan_decompose[local]:
-  !liveness dfg cfg fn inst nl halting term bb ps ops ps' tc rest.
-    inst.inst_opcode = LOG /\ inst.inst_operands = Lit tc :: rest /\
-    inst_wf inst /\
-    generate_inst_plan liveness dfg cfg fn inst nl halting term bb ps =
-      SOME (ops,ps') ==>
-    ?input_ops ps1 reorder_ops ps4.
-      inst.inst_outputs = [] /\
-      emit_input_plan LOG rest nl ps = (input_ops,ps1) /\
-      reorder_plan dfg rest ps1 = (reorder_ops,ps4) /\
-      ops = input_ops ++ reorder_ops ++
-        [SOEmit ("LOG" ++ num_to_dec_string (w2n tc))] /\
-      ps' = release_dead_spills nl
-        (ps4 with ps_stack := stack_pop (LENGTH rest) ps4.ps_stack)
-Proof
-  rpt gen_tac >> strip_tac >>
-  `inst.inst_outputs = []` by
-    (qpat_x_assum `inst_wf inst` mp_tac >>
-     simp[venomWfTheory.inst_wf_def]) >>
-  qpat_x_assum `generate_inst_plan _ _ _ _ _ _ _ _ _ _ = _` mp_tac >>
-  simp[generate_inst_plan_def, is_pre_codegen_opcode_def,
-       is_unlowered_fmp_opcode_def, is_unlowered_internal_call_opcode_def,
-       venomInstTheory.is_raw_fmp_opcode_def,
-       venomInstTheory.is_fmp_param_opcode_def,
-       venomInstTheory.is_param_opcode_def] >>
-  simp[generate_regular_inst_plan_def, compute_operands_def,
-       venomEffectsTheory.is_commutative_def, LET_THM] >>
-  pairarg_tac >> simp[] >> pairarg_tac >> simp[] >>
-  simp[generate_emit_ops_def, asmIRTheory.venom_to_evm_name_def, LET_THM] >>
-  strip_tac >> gvs[]
-QED
-
 Theorem sym_log_inst_symbolic_run:
   lo = SND (compute_label_offsets prog) /\
   inst.inst_opcode = LOG /\ inst_wf inst /\
@@ -1317,7 +1277,7 @@ Theorem sym_log_inst_symbolic_run:
 Proof
   strip_tac >> `inst.inst_opcode <> INVOKE` by simp[] >>
   drule_all frame_inst_local_setup >> strip_tac >>
-  drule_all log_inst_plan_decompose >> strip_tac >>
+  drule_all genBlockSimTheory.log_inst_plan_decompose >> strip_tac >>
   rename1 `emit_input_plan LOG selected nl ps = (iops,prepared)` >>
   rename1 `reorder_plan _ selected prepared = (rops,arranged)` >>
   `spill_alloc_layout_wf ps.ps_alloc ps.ps_spilled /\ plan_slots_bounded sb ps /\

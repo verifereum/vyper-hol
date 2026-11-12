@@ -959,7 +959,7 @@ Theorem sym_steps_unchanged_mem_compose[local]:
   last.sym_mem_labels = ss.sym_mem_labels /\
   last.sym_base.as_pc = ss.sym_base.as_pc + (m+n)
 Proof
-  strip_tac >> drule_all_then assume_tac sym_steps_compose_ok >>
+  strip_tac >> drule_all_then assume_tac sym_steps_compose >>
   asm_simp_tac bool_ss [arithmeticTheory.ADD_ASSOC]
 QED
 
@@ -1755,7 +1755,7 @@ Theorem sym_dup_save_finish[local]:
     scratch_frame offsets ss.sym_mem_labels last.sym_mem_labels /\
     last.sym_base.as_pc = ss.sym_base.as_pc + LENGTH (execute_plan initial_fmp (saves ++ loads))
 Proof
-  strip_tac >> drule_all_then assume_tac sym_steps_compose_ok >>
+  strip_tac >> drule_all_then assume_tac sym_steps_compose >>
   gvs[execute_plan_append, LENGTH_APPEND, APPEND,
     LIST_REL_def, SF SFY_ss]
 QED
@@ -2051,7 +2051,7 @@ Theorem sym_steps_same_mem_frame_compose:
     last.sym_base.as_pc = ss.sym_base.as_pc + (m+n) /\
     (!b. ~P b ==> FLOOKUP last.sym_mem_labels b = FLOOKUP ss.sym_mem_labels b)
 Proof
-  strip_tac >> drule_all_then assume_tac sym_steps_compose_ok >>
+  strip_tac >> drule_all_then assume_tac sym_steps_compose >>
   metis_tac[arithmeticTheory.ADD_ASSOC]
 QED
 
@@ -2335,7 +2335,7 @@ Theorem sym_plan_append_runs[local]:
     (!b. ~(r.sr_spill_base <= b /\ b < r.sr_spill_end) ==>
       FLOOKUP last.sym_mem_labels b = FLOOKUP ss.sym_mem_labels b)
 Proof
-  rw[execute_plan_append] >> drule_all_then assume_tac sym_steps_compose_ok >>
+  rw[execute_plan_append] >> drule_all_then assume_tac sym_steps_compose >>
   metis_tac[arithmeticTheory.ADD_COMM]
 QED
 

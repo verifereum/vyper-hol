@@ -458,14 +458,6 @@ Proof
   rpt strip_tac >> metis_tac[sym_pushed_mload, sym_push_offset_then]
 QED
 
-Theorem sym_steps_ok_append:
-  sym_steps p env m ss = SymOK mid /\
-  sym_steps p env n mid = SymOK out ==>
-  sym_steps p env (m + n) ss = SymOK out
-Proof
-  simp[sym_steps_add]
-QED
-
 Theorem sym_spill_offsets_cons_result:
   !p env ss mid out off sv xs stk.
     sym_steps p env 2 ss = SymOK mid /\
@@ -480,7 +472,7 @@ Theorem sym_spill_offsets_cons_result:
       result.sym_mem_labels = scratch_labels_store ss.sym_mem_labels ((off,sv)::xs) /\
       result.sym_base.as_pc = ss.sym_base.as_pc + 2 * LENGTH ((off,sv)::xs)
 Proof
-  rpt strip_tac >> drule_all sym_steps_ok_append >>
+  rpt strip_tac >> drule_all sym_steps_compose >>
   gvs[scratch_labels_store_def, arithmeticTheory.MULT_CLAUSES]
 QED
 
@@ -560,7 +552,7 @@ Theorem sym_restore_offsets_cons_result:
       result.sym_mem_labels = ss.sym_mem_labels /\
       result.sym_base.as_pc = ss.sym_base.as_pc + 2 * LENGTH ((off,sv)::xs)
 Proof
-  rpt strip_tac >> drule_all sym_steps_ok_append >>
+  rpt strip_tac >> drule_all sym_steps_compose >>
   gvs[arithmeticTheory.MULT_CLAUSES] >> strip_tac >>
   qexists_tac `sv' :: vals` >> simp[]
 QED
@@ -673,7 +665,7 @@ Proof
   drule_all sym_restore_offsets_steps >>
   disch_then (qspec_then `env` strip_assume_tac) >>
   qexistsl_tac [`out`, `vals`] >>
-  drule_all sym_steps_ok_append >> simp[]
+  drule_all sym_steps_compose >> simp[]
 QED
 
 Theorem scratch_ranges_outside:
@@ -1098,7 +1090,7 @@ Proof
   qpat_x_assum `!s. sym_kinds_ok _ _ _ _ ps s /\ _ ==> _`
     (qspec_then `ss` mp_tac) >> simp[] >> strip_tac >>
   first_x_assum (qspec_then `t` mp_tac) >> simp[] >> strip_tac >>
-  qexists `t'` >> simp[] >> metis_tac[sym_steps_ok_append, arithmeticTheory.ADD_ASSOC]
+  qexists `t'` >> simp[] >> metis_tac[sym_steps_compose, arithmeticTheory.ADD_ASSOC]
 QED
 
 Theorem sym_swap_pop_numeric:

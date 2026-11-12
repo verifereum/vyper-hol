@@ -300,6 +300,21 @@ Proof
   Cases_on `sym_step p env (EL ss.sym_base.as_pc p) ss` >> simp[]
 QED
 
+Theorem sym_steps_compose:
+  sym_steps p env m ss = SymOK mid /\
+  sym_steps p env n mid = SymOK out ==>
+  sym_steps p env (m + n) ss = SymOK out
+Proof
+  simp[sym_steps_add]
+QED
+
+Theorem mem_sval_at_clear:
+  mem_sval_at (mem_labels_clear labs (in_mem_range off 32)) off (Val w)
+Proof
+  simp[mem_sval_at_def, mem_labels_clear_def,
+       finite_mapTheory.FDOM_DRESTRICT, pred_setTheory.IN_APP]
+QED
+
 (* A run of n steps to ss' continues as the run from ss'. *)
 Theorem sym_steps_run:
   !n ss ss' fuel.

@@ -1524,14 +1524,6 @@ Proof
   metis_tac[phi_prefix_output_not_operand]
 QED
 
-Theorem phi_output_retpc:
-  retpc_shape_ok fn /\ MEM inst (fn_insts fn) /\ inst.inst_opcode = PHI /\
-  MEM out inst.inst_outputs /\ MEM (Var src) inst.inst_operands ==>
-  (retpc_var fn out <=> retpc_var fn src)
-Proof
-  ACCEPT_TAC frameViewFactsTheory.phi_output_retpc
-QED
-
 Theorem phi_selected_frame_value:
   retpc_shape_ok fn /\ MEM inst (fn_insts fn) /\ inst.inst_opcode = PHI /\
   MEM inst phis /\ EVERY (\i. i.inst_opcode = PHI) phis /\
@@ -1553,7 +1545,7 @@ Proof
   `MEM (Var src) inst.inst_operands` by
     metis_tac[dftCommutationTheory.resolve_phi_MEM] >>
   `retpc_var fn out = retpc_var fn src` by
-    (irule phi_output_retpc >> simp[] >> qexists_tac `inst` >> simp[]) >>
+    (irule frameViewFactsTheory.phi_output_retpc >> simp[] >> qexists_tac `inst` >> simp[]) >>
   simp[operand_val_def, frame_view_vars_lookup]
 QED
 

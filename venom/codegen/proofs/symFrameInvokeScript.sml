@@ -449,12 +449,6 @@ Proof
   Cases_on `P b` >> simp[mem_labels_clear_def, finite_mapTheory.FLOOKUP_DRESTRICT]
 QED
 
-Theorem mem_sval_at_store_word:
-  mem_sval_at (mem_labels_clear labs (in_mem_range off 32)) off (Val w)
-Proof
-  simp[mem_sval_at_def, mem_labels_clear_def, finite_mapTheory.FDOM_DRESTRICT]
-QED
-
 Theorem sym_mstore_slot:
   ss.sym_stack = Val (n2w off) :: sv :: stk /\ off < dimword (:256) ==>
   ?ss'. sym_mstore ss = SymOK ss' /\ ss'.sym_stack = stk /\
@@ -471,7 +465,7 @@ Proof
        asm_op_arity_table_def, log_table_def,
        asm_next_def, asm_op_mem_reads_def, asm_op_mem_writes_def,
        mem_labels_hit_def, Excl "GENLIST_NUMERALS", mem_sval_at_store_label,
-       mem_sval_at_store_word, mem_labels_clear_lookup, mstore_labels_lookup,
+       mem_sval_at_clear, mem_labels_clear_lookup, mstore_labels_lookup,
        in_mem_range_def] >>
   pure_once_rewrite_tac[arithmeticTheory.ADD_COMM] >>
   simp[mem_sval_at_store_label, mstore_labels_lookup, Excl "GENLIST_NUMERALS"]

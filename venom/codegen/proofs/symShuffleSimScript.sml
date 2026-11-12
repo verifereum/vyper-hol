@@ -11,14 +11,6 @@ Ancestors
   contextCodegenRel asmSymSem asmSem stackPlanTypes list arithmetic
 
 (* Successful symbolic runs compose without inspecting intermediate states. *)
-Theorem sym_steps_compose:
-  sym_steps p env m ss = SymOK mid /\
-  sym_steps p env n mid = SymOK out ==>
-  sym_steps p env (m + n) ss = SymOK out
-Proof
-  simp[sym_steps_add]
-QED
-
 Theorem sym_steps_single:
   asm_block_at p ss.sym_base.as_pc [inst] ==>
   sym_steps p env 1 ss = sym_step p env inst ss
@@ -211,13 +203,6 @@ Theorem mem_labels_clear_flookup:
 Proof
   simp[mem_labels_clear_def, finite_mapTheory.FLOOKUP_DRESTRICT,
        pred_setTheory.IN_APP] >> IF_CASES_TAC >> gvs[]
-QED
-
-Theorem mem_sval_at_clear:
-  mem_sval_at (mem_labels_clear labs (in_mem_range off 32)) off (Val w)
-Proof
-  simp[mem_sval_at_def, mem_labels_clear_def,
-       finite_mapTheory.FDOM_DRESTRICT, pred_setTheory.IN_APP]
 QED
 
 Theorem mem_labels_frame_domain:
