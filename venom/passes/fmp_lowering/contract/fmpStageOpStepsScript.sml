@@ -283,10 +283,10 @@ Theorem fmp_stage_revert_forward:
   fmp_stage_rel D C' sm fmp0 raw0 eom F stk PG G tn fn s lo t ts /\
   lookup_block s.vs_current_bb fn.fn_blocks = SOME bb /\
   exec_block k C bb s = r /\ terminates r ==>
-  ?fn' bb' k' r'.
+  ?fn' bb' r'.
     lookup_function fn.fn_name C'.ctx_functions = SOME fn' /\
     lookup_block t.vs_current_bb fn'.fn_blocks = SOME bb' /\
-    exec_block k' C' bb' t = r' /\ dead_result_rel D r r'
+    exec_block k C' bb' t = r' /\ dead_result_rel D r r'
 Proof
   strip_tac >> drule_all fmp_stage_frame_facts >> strip_tac >>
   `ALL_DISTINCT (fn_labels fn)` by gvs[o1_fn_shape_def, wf_function_def] >>
@@ -309,6 +309,6 @@ Proof
   `exec_block k C bb s = Abort reason se` by gvs[] >>
   drule_all fmp_forward_available_abort >>
   disch_then (qspec_then `C'` strip_assume_tac) >>
-  qexistsl_tac [`fn'`, `bb'`, `k`, `Abort reason t1`] >>
+  qexistsl_tac [`fn'`, `bb'`, `Abort reason t1`] >>
   gvs[dead_result_rel_def]
 QED
