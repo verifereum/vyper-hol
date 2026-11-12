@@ -2,6 +2,7 @@ Theory o1LabelFlowMiddleTraversal
 Ancestors
   o1LabelFlowMiddleRenameLocal o1MakeSsaEventFrames o1MakeSsaActualNames
   o1MakeSsaOwnership o1MakeSsaTraversalFrames
+  o1LabelFlowMiddleOperandOwners o1LabelFlowMiddlePhiOwners
   makeSsaDefs venomInst list rich_list pair
 
 Theorem indexed_patch_frame_adjacent:
@@ -94,4 +95,133 @@ Proof
   disch_then (qspecl_then [`pre`,`post`,`j`,`d`] mp_tac) >>
   (impl_tac >- simp[]) >> strip_tac >>
   qexistsl [`out`,`pre'`,`d`,`j`,`post'`,`x`,`op`,`dst`,`sz`] >> simp[]
+QED
+
+Theorem rename_current_block_operand_lengths:
+  !xs s rs rt t ys.
+  rename_current_block_insts s rs xs = (rt,t,ys) ==>
+  MAP (\i. (i.inst_opcode, LENGTH i.inst_operands)) ys =
+  MAP (\i. (i.inst_opcode, LENGTH i.inst_operands)) xs
+Proof
+  Induct >> simp[rename_current_block_insts_def] >> rpt gen_tac >>
+  rpt (pairarg_tac >> gvs[]) >> strip_tac >> gvs[] >>
+  conj_tac
+  >- (gvs[rename_current_inst_def] >>
+      Cases_on `h.inst_opcode = PHI` >> gvs[] >>
+      rpt (pairarg_tac >> gvs[]) >>
+      simp[o1MakeSsaFormatsTheory.rename_current_operands_length]) >>
+  metis_tac[]
+QED
+
+Theorem current_block_owned_operands:
+  rename_current_block_insts s rs xs = (rt,t,ys) /\
+  current_name_owner V H u /\ current_stack_owner V H (SND rs) /\
+  LIST_REL (\i j. LIST_REL (\v n. (n,v) IN H)
+    i.inst_outputs j.inst_outputs) xs ys /\
+  k < LENGTH xs /\ (EL k xs).inst_opcode <> PHI /\
+  (!v. MEM (Var v) (EL k xs).inst_operands ==> v IN V) ==>
+  LIST_REL (\a b. case a of Var v => ?n. b = Var n /\ (n,v) IN H
+                   | _ => b = a)
+    (EL k xs).inst_operands (EL k ys).inst_operands
+Proof
+  strip_tac >>
+  drule rename_current_block_operand_lengths >> strip_tac >>
+  `LENGTH ys = LENGTH xs` by
+    metis_tac[o1MakeSsaCfgTheory.rename_current_block_insts_length] >>
+  `LENGTH (EL k ys).inst_operands = LENGTH (EL k xs).inst_operands` by
+    (qpat_x_assum `MAP _ _ = MAP _ _` (mp_tac o Q.AP_TERM `EL k`) >>
+     simp[EL_MAP]) >>
+  simp[LIST_REL_EL_EQN] >> rpt strip_tac >>
+  Cases_on `EL n (EL k xs).inst_operands` >> simp[]
+  >- (irule current_rename_block_nonvar >> simp[] >> metis_tac[])
+  >- metis_tac[current_fixed_owner_block_operand, EL_MEM] >>
+  irule current_rename_block_nonvar >> simp[] >> metis_tac[]
+QED
+
+Theorem visit_event_owned_position:
+  visit_blocks path s rs bbs sm tree = ((ct,t,final),events) /\
+  ALL_DISTINCT (dom_tree_postorder tree) /\ MEM e events /\
+  lookup_block e.sve_label bbs = SOME bb /\
+  current_name_owner V H u /\ current_stack_owner V H (SND e.sve_in) /\
+  LIST_REL (\i j. LIST_REL (\v n. (n,v) IN H)
+    i.inst_outputs j.inst_outputs) e.sve_before e.sve_after /\
+  k < LENGTH bb.bb_instructions /\
+  (!v. MEM (Var v) (EL k bb.bb_instructions).inst_operands ==> v IN V) ==>
+  ?out. lookup_block e.sve_label final = SOME out /\
+    LENGTH out.bb_instructions = LENGTH bb.bb_instructions /\
+    (EL k out.bb_instructions).inst_opcode = (EL k bb.bb_instructions).inst_opcode /\
+    LIST_REL (\v n. (n,v) IN H) (EL k bb.bb_instructions).inst_outputs
+      (EL k out.bb_instructions).inst_outputs /\
+    ((EL k bb.bb_instructions).inst_opcode <> PHI ==>
+     LIST_REL (\a b. case a of Var v => ?n. b = Var n /\ (n,v) IN H
+                      | _ => b = a)
+       (EL k bb.bb_instructions).inst_operands (EL k out.bb_instructions).inst_operands)
+Proof
+  strip_tac >>
+  `indexed_patch_frame bb (bb with bb_instructions := e.sve_before)` by
+    metis_tac[cj 1 visit_event_input_frame] >>
+  `rename_current_block_insts e.sve_supply_in e.sve_in e.sve_before =
+    (e.sve_out,e.sve_supply_out,e.sve_after)` by
+    (qspecl_then [`tree`,`path`,`s`,`rs`,`bbs`,`sm`] mp_tac
+      (cj 1 visit_local_rename) >> simp[EVERY_MEM] >> metis_tac[]) >>
+  drule_all (cj 1 visit_event_final_frame) >> strip_tac >>
+  drule rename_current_block_operand_lengths >> strip_tac >>
+  `LENGTH e.sve_after = LENGTH e.sve_before` by
+    metis_tac[o1MakeSsaCfgTheory.rename_current_block_insts_length] >>
+  `(EL k e.sve_after).inst_opcode = (EL k e.sve_before).inst_opcode` by
+    (qpat_x_assum `MAP _ _ = MAP _ _` (mp_tac o Q.AP_TERM `EL k`) >>
+     fs[indexed_patch_frame_def] >> simp[EL_MAP]) >>
+  qexists `out` >> fs[indexed_patch_frame_def, LIST_REL_EL_EQN] >>
+  strip_tac >>
+  `(EL k e.sve_before) = EL k bb.bb_instructions /\
+   (EL k out.bb_instructions) = EL k e.sve_after` by metis_tac[] >>
+  `LIST_REL (\a b. case a of Var v => ?n. b = Var n /\ (n,v) IN H
+                        | _ => b = a)
+     (EL k e.sve_before).inst_operands (EL k e.sve_after).inst_operands` by
+    (irule current_block_owned_operands >> simp[LIST_REL_EL_EQN] >>
+     metis_tac[]) >>
+  gvs[LIST_REL_EL_EQN]
+QED
+
+Theorem owned_operands_identity:
+  current_name_owner V H u /\
+  (!v. MEM (Var v) ops ==> v IN V) ==>
+  LIST_REL (\a b. case a of Var v => ?n. b = Var n /\ (n,v) IN H
+                   | _ => b = a) ops ops
+Proof
+  simp[LIST_REL_EL_EQN] >> rpt strip_tac >>
+  Cases_on `EL n ops` >> simp[] >>
+  metis_tac[current_name_owner_identity, EL_MEM]
+QED
+
+Theorem visit_blocks_owned_position:
+  visit_blocks path s rs bbs sm tree = ((ct,t,final),events) /\
+  ALL_DISTINCT (dom_tree_postorder tree) /\
+  (!q. MEM q (dom_tree_postorder tree) ==> IS_SOME (lookup_block q bbs)) /\
+  current_name_owner V H u /\
+  (!e. MEM e events ==> current_stack_owner V H (SND e.sve_in) /\
+    LIST_REL (\i j. LIST_REL (\v n. (n,v) IN H)
+      i.inst_outputs j.inst_outputs) e.sve_before e.sve_after) /\
+  lookup_block q bbs = SOME bb /\ k < LENGTH bb.bb_instructions /\
+  (!v. MEM (Var v) (EL k bb.bb_instructions).inst_operands ==> v IN V) /\
+  (!v. MEM v (EL k bb.bb_instructions).inst_outputs ==> v IN V) ==>
+  ?out. lookup_block q final = SOME out /\
+    LENGTH out.bb_instructions = LENGTH bb.bb_instructions /\
+    (EL k out.bb_instructions).inst_opcode = (EL k bb.bb_instructions).inst_opcode /\
+    LIST_REL (\v n. (n,v) IN H) (EL k bb.bb_instructions).inst_outputs
+      (EL k out.bb_instructions).inst_outputs /\
+    ((EL k bb.bb_instructions).inst_opcode <> PHI ==>
+     LIST_REL (\a b. case a of Var v => ?n. b = Var n /\ (n,v) IN H
+                      | _ => b = a)
+       (EL k bb.bb_instructions).inst_operands (EL k out.bb_instructions).inst_operands)
+Proof
+  strip_tac >> Cases_on `MEM q (dom_tree_postorder tree)`
+  >- (drule_all (cj 1 visit_tree_coverage) >> simp[MEM_MAP] >> strip_tac >>
+      qpat_x_assum `q = _` SUBST_ALL_TAC >>
+      irule visit_event_owned_position >> metis_tac[]) >>
+  drule_all (cj 1 visit_excluded_frame) >> strip_tac >>
+  qexists `out` >> fs[indexed_patch_frame_def] >>
+  conj_tac
+  >- (simp[LIST_REL_EL_EQN] >> metis_tac[current_name_owner_identity, EL_MEM]) >>
+  strip_tac >> irule owned_operands_identity >> metis_tac[]
 QED
