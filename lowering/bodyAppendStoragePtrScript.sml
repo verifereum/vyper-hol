@@ -2,6 +2,10 @@
 Theory bodyAppendStoragePtr
 Ancestors
   stmtAppendStorageComposePtr bodyAppendStorageAdapter bodyAppendStorageFacts
+  bodyAppendAggregateMetadata appendAggregateLayout appendDynamicPurePtr appendDynamicTransportPtr
+  appendDynamicPointerAddPtr appendDynamicHeaderStorePtr appendDynamicPrefixPtr
+  appendDynamicStageCopyPtr appendDynamicStagePathPtr appendAggregateAllocationPtr
+  appendDynamicLiveStagePtr appendAggregateLiveSeparationPtr
   bodyPtrPreds bodyPtrDefs bodySim exprSimHypsDefs exprSimHyps
   bodyExprPreFacts supportedStmts supportedStmtTraverse supportedTypes
   supportedExprs supportedDecls bodyStorageMetadata stmtSimDefs exprLoweringProps

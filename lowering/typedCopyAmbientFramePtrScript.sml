@@ -1,6 +1,7 @@
 (* Complete ambient projections on the concrete copy-prefix witnesses. *)
 Theory typedCopyAmbientFramePtr
-Ancestors typedCopyPtr typedCopyLoopHeaderPtr
+Ancestors appendDynamicMemoryStepPtr typedCopyPtr typedCopyLoopHeaderPtr
+  emitHelper context compileEnv loweringStateRelDefs venomInst ptrDiscipline venomState
 
 Theorem emit_copy_len_binop_ambient_frag_ptr:
   !opc f G cx ctx PG R sa sb left right out tn s a b.
@@ -25,6 +26,60 @@ Proof
   typedCopyAmbientLib.emit_binop (copy_len_binop_frag_ptr, copy_len_binop_ghost_frame)
 QED
 
+Theorem emit_mload_clean_ambient_core:
+  !cx ctx PG R sa sb src out G tn s a.
+    emit_op MLOAD [Var src] sa = (Var out,sb) /\
+    ptr_covers G tn src s 32 /\ lookup_var src s = SOME a /\
+    (!i. w2n a <= i /\ i < w2n a + 32 ==> i NOTIN tn.t_mem) ==>
+    ?Gf tnf sf.
+      (sf.vs_inst_idx = SUC s.vs_inst_idx /\
+       step_inst_base (mk_inst sa.cs_next_id MLOAD [Var src] [out]) s =
+         OK (sf with vs_inst_idx := s.vs_inst_idx) /\
+       step_prov PG G (mk_inst sa.cs_next_id MLOAD [Var src] [out])
+         (sf with vs_inst_idx := s.vs_inst_idx) = Gf /\
+       step_taint (mk_inst sa.cs_next_id MLOAD [Var src] [out]) s
+         (sf with vs_inst_idx := s.vs_inst_idx) tn = tnf /\
+       (!D fuel ctx fn. ~ctx_has_dalloca ctx ==>
+         ptr_inst_ok D 0 fuel ctx fn G tn
+           (mk_inst sa.cs_next_id MLOAD [Var src] [out]) s) /\
+       (sf with <|vs_vars := s.vs_vars; vs_memory := s.vs_memory;
+                  vs_inst_idx := s.vs_inst_idx|>) = s) /\
+      frag_exec_ptr cx ctx PG sa sb
+        (\g t v. g = G /\ t = tn /\ v = s)
+        (\g t v. g = Gf /\ t = tnf /\ v = sf) R /\
+      lookup_var out sf = SOME (mload (w2n a) s) /\
+      op_taint tnf (Var out) = {} /\
+      sf.vs_memory = s.vs_memory /\ tnf.t_mem = tn.t_mem /\
+      tnf.t_stor = tn.t_stor /\ tnf.t_trans = tn.t_trans /\
+      tnf.t_imm = tn.t_imm /\ sf.vs_call_ctx = s.vs_call_ctx /\
+      sf.vs_accounts = s.vs_accounts /\ sf.vs_transient = s.vs_transient /\
+      (!p. not_fresh_at sa p ==>
+        lookup_var p sf = lookup_var p s /\
+        FLOOKUP Gf p = FLOOKUP G p /\
+        op_taint tnf (Var p) = op_taint tn (Var p))
+Proof
+  rpt gen_tac >> strip_tac >>
+  `sb.cs_current_bb = sa.cs_current_bb /\
+   sb.cs_current_insts = sa.cs_current_insts ++
+     [mk_inst sa.cs_next_id MLOAD [Var src] [out]] /\
+   (!p. not_fresh_at sa p ==> p <> out)` by
+    (gvs[emit_op_def, comp_bind_def, comp_ignore_bind_def, fresh_var_def,
+         fresh_id_def, emit_def, comp_return_def, not_fresh_at_def] >>
+     metis_tac[arithmeticTheory.LESS_EQ_REFL]) >>
+  drule_all dynamic_mload_clean_step_ptr >>
+  disch_then (qspecl_then [`PG`, `sa.cs_next_id`, `out`] strip_assume_tac) >>
+  qexistsl_tac [`Gf`, `tf`, `u with vs_inst_idx := SUC s.vs_inst_idx`] >>
+  conj_tac >- gvs[update_var_def] >>
+  conj_tac >-
+    (irule mload_frag_ptr >> simp[mk_inst_def] >> gvs[mk_inst_def]) >>
+  `tf.t_imm = tn.t_imm` by
+    gvs[step_taint_def, set_var_taint_def, adopt_reset_def, imm_taint_def, mk_inst_def] >>
+  simp[lookup_var_def] >>
+  gvs[update_var_def] >>
+  simp[finite_mapTheory.FLOOKUP_UPDATE] >> rpt strip_tac >>
+  `p <> out` by metis_tac[] >> simp[]
+QED
+
 Theorem emit_mload_clean_ambient_frag_ptr:
   !cx ctx PG R sa sb src out G tn s a.
     emit_op MLOAD [Var src] sa = (Var out,sb) /\
@@ -45,7 +100,9 @@ Theorem emit_mload_clean_ambient_frag_ptr:
         FLOOKUP Gf p = FLOOKUP G p /\
         op_taint tnf (Var p) = op_taint tn (Var p))
 Proof
-  typedCopyAmbientLib.emit_mload (mload_frag_ptr, mload_ghost_clean)
+  rpt gen_tac >> strip_tac >> drule_all emit_mload_clean_ambient_core >>
+  disch_then (qspecl_then [`cx`, `ctx`, `PG`, `R`] strip_assume_tac) >>
+  qexistsl_tac [`Gf`, `tnf`, `sf`] >> simp[]
 QED
 
 Theorem compile_bytestring_copy_len_ambient_frag_ptr:
