@@ -18,10 +18,13 @@ Proof
   strip_tac >>
   qspecl_then [`tops`, `NONE`, `"__init__"`] mp_tac
     classify_functions_ctor_lookup >> simp[] >> strip_tac >>
-  gvs[constructor_args_encode_def, optionTheory.IS_SOME_EXISTS] >> metis_tac[]
+  gvs[constructor_args_encode_def, optionTheory.IS_SOME_EXISTS,
+      constSubstTheory.subst_consts_fn_def,
+      constSubstTheory.subst_consts_expr_def] >> metis_tac[]
 QED
 
 Theorem ctor_task_start_source:
+  supported_program tops /\
   SND (SND (SND (classify_functions tops))) =
     SOME (fmut,fnr,rr,fname,fargs,dflts,ret,fbody) /\
   fname = "__init__" /\ tx.function_name = "__init__" /\
@@ -29,6 +32,10 @@ Theorem ctor_task_start_source:
   fmut = mut /\ fnr = nr /\ dflts = [] /\ ret = NoneT /\ fbody = stmts
 Proof
   strip_tac >>
+  `module_consts_env tops [] = []` by
+    metis_tac[supportedProgramTheory.supported_program_def,
+      supportedDeclsTheory.supported_declaration_headers_def,
+      supportedDeclsTheory.supported_headers_module_consts_env] >>
   qspecl_then [`tops`, `NONE`, `"__init__"`] mp_tac
     classify_functions_ctor_lookup >> simp[] >> strip_tac >>
   gvs[deploy_ctor_start_def]
@@ -165,8 +172,12 @@ Proof
   drule_all ctor_task_encoded_source >> strip_tac >>
   `vyperInterpreter$lookup_function NONE fname Deploy tops =
     SOME (fmut,fnr,fargs,dflts,ret,fbody)` by
-    (qspecl_then [`tops`, `NONE`, `fname`] mp_tac
-      classify_functions_ctor_lookup >> simp[]) >>
+    (`module_consts_env tops [] = []` by
+       metis_tac[supportedProgramTheory.supported_program_def,
+         supportedDeclsTheory.supported_declaration_headers_def,
+         supportedDeclsTheory.supported_headers_module_consts_env] >>
+     qspecl_then [`tops`, `NONE`, `fname`] mp_tac
+       classify_functions_ctor_lookup >> simp[] >> strip_tac >> gvs[]) >>
   drule_all ctor_task_source_params >> strip_tac >>
   gvs[] >> metis_tac[]
 QED
