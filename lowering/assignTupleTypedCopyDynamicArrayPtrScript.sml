@@ -6,7 +6,7 @@ Ancestors
   wordLoadStorePtr valueEncodingProps representationCleanPtr
   augAssignPtrScalarCertificate
   augAssignPtrScalarSafety augAssignPtrScalarRun
-  typedNormalizeDynarrayLoop typedCopyAmbientFramePtr
+  typedNormalizeDynarrayLoop typedCopyAmbientFramePtr typedCopyPtr
   bodyPtrDefs ptrDiscipline ptrSafeRun fragGasSeqPtr
   venomState venomInst venomExecSemantics venomInstProofs
   exprSimBufferStore valueEncodingDefs exprLoweringProps fragExec finite_map words arithmetic list pred_set
@@ -192,6 +192,61 @@ Proof
       irule mstore_mem_bytes_at_disjoint >> simp[]) >>
   simp[Abbr `u`, mstore_def, lookup_var_def, op_taint_def]
 QED
+
+(* Pointer arithmetic retains a complete concrete endpoint, including the
+   empty data window at the end of the address space. *)
+Triviality typed_dynarray_data_address_frag_ptr:
+  sb.cs_current_bb = sa.cs_current_bb /\
+  sb.cs_current_insts = sa.cs_current_insts ++
+    [mk_inst id ADD [Var root; Lit (n2w off)] [out]] /\
+  ptr_covers G tn root s span /\ lookup_var root s = SOME a /\
+  off + n <= span /\ (n = 0 \/ w2n a + off < dimword(:256)) ==>
+  ?H tm u.
+    frag_exec_ptr cx ctx PG sa sb (\g t v. g = G /\ t = tn /\ v = s)
+      (\g t v. g = H /\ t = tm /\ v = u) R /\
+    u = (update_var out (a + n2w off) s with vs_inst_idx := SUC s.vs_inst_idx) /\
+    lookup_var out u = SOME (a + n2w off) /\
+    (n = 0 \/ ptr_covers H tm out u n) /\
+    (u with <|vs_vars := s.vs_vars; vs_inst_idx := s.vs_inst_idx|>) = s /\
+    tm.t_mem = tn.t_mem /\ tm.t_stor = tn.t_stor /\
+    tm.t_trans = tn.t_trans /\ tm.t_imm = tn.t_imm /\
+    (!x. x <> out ==> lookup_var x u = lookup_var x s /\
+      FLOOKUP H x = FLOOKUP G x /\ op_taint tm (Var x) = op_taint tn (Var x))
+Proof
+  disch_then (map_every assume_tac o CONJUNCTS) >>
+  qabbrev_tac `v = update_var out (a + n2w off) s` >>
+  qabbrev_tac `H = step_prov PG G (mk_inst id ADD [Var root; Lit (n2w off)] [out]) v` >>
+  qabbrev_tac `tm = step_taint (mk_inst id ADD [Var root; Lit (n2w off)] [out]) s v tn` >>
+  qexistsl_tac [`H`, `tm`, `v with vs_inst_idx := SUC s.vs_inst_idx`] >>
+  conj_tac
+  >- (irule copy_len_binop_frag_ptr >> simp[] >>
+      qexistsl_tac [`word_add`, `id`, `Var root`, `ADD`, `Lit (n2w off)`, `out`] >>
+      gvs[ptr_covers_def, eval_operand_def, op_taint_def, Abbr `H`, Abbr `tm`, Abbr `v`]) >>
+  conj_tac >- simp[Abbr `v`] >>
+  conj_tac >- simp[Abbr `v`, lookup_var_def, update_var_def, FLOOKUP_UPDATE] >>
+  conj_tac >- suspend "data_coverage" >>
+  conj_tac >- simp[Abbr `v`, update_var_def] >>
+  suspend "data_frame"
+QED
+Resume typed_dynarray_data_address_frag_ptr[data_coverage]:
+  Cases_on `n = 0` >> simp[] >>
+  `op_taint tm (Var out) = {}` by
+    simp[Abbr `tm`, Abbr `v`, copy_len_binop_ghost_frame] >>
+  gvs[ptr_covers_def] >>
+  `off < dimword(:256)` by decide_tac >>
+  `w2n (a + n2w off) = w2n a + off` by
+    simp[typedMemoryCopyTheory.typed_copy_offset_nonwrap] >>
+  simp[Abbr `H`, Abbr `v`, ptr_covers_def,
+       step_prov_def, set_prov_def, out_prov_def, first_prov_def, op_prov_def,
+       mk_inst_def, lookup_var_def, update_var_def, FLOOKUP_UPDATE] >>
+  decide_tac
+QED
+Resume typed_dynarray_data_address_frag_ptr[data_frame]:
+  simp[Abbr `H`, Abbr `tm`, Abbr `v`, copy_len_binop_ghost_frame] >>
+  simp[step_taint_def, mk_inst_def, out_taint_def, store_taint_def,
+       imm_taint_def, lookup_var_def, update_var_def, FLOOKUP_UPDATE]
+QED
+Finalise typed_dynarray_data_address_frag_ptr
 
 (* The child premise ranges over actual compiler slices and arbitrary runtime
    states. Capacity windows are geometric, not taint-cleanliness assumptions. *)
