@@ -16,7 +16,8 @@ Ancestors
 
 Theorem fmp_stage_invoke_arity:
   fmp_stage_ctx rpolicy D C C' vs vs' fmp eom /\ MEM fn C.ctx_functions /\
-  MEM inst (fn_insts fn) /\ decode_invoke inst = SOME (nm,args) /\
+  MEM inst (fn_insts fn) /\ inst.inst_opcode = INVOKE /\
+  decode_invoke inst = SOME (nm,args) /\
   lookup_function nm C.ctx_functions = SOME callee ==>
   LENGTH args = LENGTH (fn_user_param_insts callee)
 Proof

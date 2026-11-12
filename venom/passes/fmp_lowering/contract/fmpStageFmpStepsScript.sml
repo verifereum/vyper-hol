@@ -11,13 +11,12 @@
  *   fmp_stage_retpc_step     - RETPC_PARAM, with the root before it
  *   fmp_stage_entry          - the context entry's first related point
  *   fmp_stage_invoke_call    - INVOKE, into the callee's first point
- *   fmp_stage_ret_step       - RET returns the same values on both sides
  *   fmp_stage_invoke_return  - RET, back to the caller past its INVOKE
  *)
 Theory fmpStageFmpSteps
 Ancestors
   fmpStageOpBase fmpStageControl fmpStageReclaimSound fmpStageRel
-  fmpStageCallArity
+  fmpStageCallArity fmpStageRetStep
   fmpStageFmpStepsEntryLayout fmpStageFmpStepsEntryInitialization
   ptrStaticDiscipline o1PassContract
   ptrDiscipline venomExecSemantics venomState venomInst finite_map words
@@ -31,6 +30,11 @@ Theorem fmp_stage_restore:
   fmp_stage_rel D C' sm fmp0 raw0 eom F stk PG G tn fn s lo t ts ==>
   ?n t1 lo'.
     (!k. fmp_target_run k C' fn.fn_name t n t1) /\ lo' <= lo /\
+    n <= 1 /\
+    (n = 1 ==>
+     ?fn' bb'. lookup_function fn.fn_name C'.ctx_functions = SOME fn' /\
+       lookup_block t.vs_current_bb fn'.fn_blocks = SOME bb' /\
+       (EL t.vs_inst_idx bb'.bb_instructions).inst_opcode = ASSIGN) /\
     fmp_stage_rel D C'
       (DRESTRICT sm {key | key IN FDOM sm /\ FST (sm ' key) < lo'})
       fmp0 raw0 eom T stk PG G tn fn s lo' t1 ts
@@ -137,19 +141,6 @@ Theorem fmp_stage_invoke_call:
           cf_prov := G; cf_tvar := tn.t_var |> :: stk)
       (MAP (op_prov G) ops) FEMPTY (tn with t_var := FEMPTY) callee s1
       lo t1 ((t,lo)::ts)
-Proof
-  cheat
-QED
-
-Theorem fmp_stage_ret_step:
-  fmp_stage_ctx rpolicy D C C' vs vs' fmp eom /\
-  frame_reachable vs C stk PG G tn fn inst s /\ active_inst fn inst s /\
-  inst.inst_opcode = RET /\
-  fmp_stage_rel D C' sm fmp0 raw0 eom restored stk PG G tn fn s lo t ts /\
-  step_inst k C inst s = IntRet ir s1 ==>
-  s1 = s /\ ir.iret_adopt_fmp = NONE /\
-  ?jr. (!k'. step_inst k' C' inst t = IntRet jr t) /\
-       jr.iret_values = ir.iret_values /\ jr.iret_adopt_fmp = NONE
 Proof
   cheat
 QED
