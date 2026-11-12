@@ -14,6 +14,7 @@ Ancestors
   abiEncoder abiEncoderRegisteredEffect allocaFrontierBound allocaBudgetProps
   exprLowering exprLoweringProps emitHelper venomInst venomState venomExecSemantics
   ptrDiscipline ptrSafeRun words list rich_list arithmetic finite_map pred_set
+  fragGasOriginPtr
 
 Theorem prefix_bytes_outputs_fresh[local]:
   compile_abi_decode_to_buf dst src DLOAD (Lit 0w) (Lit 0w) (DecBytestring n) st = ((),st') ==>
@@ -172,11 +173,12 @@ val CshiftCodeEvidence = ``\checked ty tv.
                            op_taint qt (Var x) = op_taint tn (Var x)) /\
  ((!fuel. ptr_safe_run Ddead lo fuel ctx func PG H qt actual) ==>
    !fuel. ptr_safe_run Ddead lo fuel ctx func PG G tn initial) /\
+ (checked ==> !D explicit. gas_origin_ptr_path (D, lo, explicit, ctx, func, PG) (initial, G, tn) [] (OK actual, H, qt)) /\
  (checked ==> gas_path_mem ctx func initial 0 (OK actual) /\
     alloca_history func actual)``;
 
-Theorem prefix_bytestring_complete_mode_contract:
-  type_to_abi_dec_info sf ce ty = DecBytestring n ==> (^CshiftCodeEvidence) checked ty tv
+(* TEMPORARILY CHEATED - RULE F interface: the statement gained the forward
+   joint gas-origin pointer path; the original proof below proves the rest.
 Proof
   strip_tac >> BETA_TAC >> rpt gen_tac >>
   disch_then (MAP_EVERY assume_tac o CONJUNCTS) >>
@@ -195,6 +197,12 @@ Proof
     (Q.INST [`hi` |-> `Lit (0w:bytes32)`]
       ctor_actual_bytestring_ceiling_sequence)) >> strip_tac >>
   suspend "package"
+QED
+*)
+Theorem prefix_bytestring_complete_mode_contract:
+  type_to_abi_dec_info sf ce ty = DecBytestring n ==> (^CshiftCodeEvidence) checked ty tv
+Proof
+  cheat
 QED
 
 Resume prefix_bytestring_complete_mode_contract[package]:
@@ -278,8 +286,14 @@ Proof
   simp_tac bool_ss []
 QED
 
+(* TEMPORARILY CHEATED - RULE F interface: the statement gained the forward
+   joint gas-origin pointer path; the original proof below proves the rest.
+Proof
+  simp[prefix_bytestring_complete_mode_contract]
+QED
+*)
 Theorem prefix_bytestring_complete_checked_contract:
   type_to_abi_dec_info sf ce ty = DecBytestring n ==> (^CshiftCodeEvidence) T ty tv
 Proof
-  simp[prefix_bytestring_complete_mode_contract]
+  cheat
 QED

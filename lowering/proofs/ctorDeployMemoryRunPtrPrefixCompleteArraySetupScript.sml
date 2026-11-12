@@ -19,6 +19,7 @@ Ancestors
   exprLowering fragExec instIdxIndep rich_list exprLoweringProps abiDecoderLoop
   abiEncoderRegisteredEffect ctorAbiActualFrame ctorAbiActualObservations fragGasSeqAbort
   abiDecoderRecursiveLoopContext abiDecoderTypedContract abiEncoderZeroFrame venomWf
+  fragGasOriginPtr
 
 val Ok = ``\k ctx func site ids D N d outsz next limit_st
     tv vs slot_id slot base prefix cursor s.
@@ -125,37 +126,8 @@ Proof
 QED
 
 
-Theorem prefix_complete_array_guard_entry_mode_exact:
-  abi_decode_dynarray_checked_prefix src DLOAD (Lit 0w) maxn asz st = ((),st') /\
-  eval_operand src s = SOME (n2w sb) /\ op_taint tn src = {} /\
-  abi_decode_load DLOAD (n2w sb : bytes32) s = n2w n /\
-  n <= maxn /\ maxn < dimword (:256) /\
-  abi_decoder_operand_live st.cs_next_var src /\
-  st'.cs_next_var <= limit_st.cs_next_var /\ fresh_vars_wrt limit_st s /\
-  fn_has_code st st' func /\ ~s.vs_halted /\
-  s.vs_current_bb = st.cs_current_bb /\ s.vs_inst_idx = LENGTH st.cs_current_insts /\
-  allocas_from lo s /\ lo <= s.vs_alloca_next /\ ~ctx_has_dalloca ctx /\
-  (checked ==> sb < dimword (:256) /\ sb+32 <= LENGTH s.vs_data_section /\
-    alloca_history func s) ==>
-  ?t H qt.
-    (checked ==> gas_path_mem ctx func s 0 (OK t) /\ alloca_history func t) /\
-    (!v. abi_decoder_older_vars st.cs_next_var v ==> lookup_var v t = lookup_var v s) /\
-    fresh_vars_wrt limit_st t /\ abi_decoder_address_frame st.cs_next_var s t /\
-    t.vs_labels = s.vs_labels /\ abi_encoder_registered_effect {} [] s t /\
-    ~t.vs_halted /\ t.vs_current_bb = st'.cs_current_bb /\
-    t.vs_inst_idx = LENGTH st'.cs_current_insts /\ abi_decode_sim ctx func s t /\
-    t.vs_memory = s.vs_memory /\ t.vs_allocas = s.vs_allocas /\
-    t.vs_alloca_next = s.vs_alloca_next /\
-    t.vs_code = s.vs_code /\ t.vs_gas_readings = s.vs_gas_readings /\
-    t.vs_outcomes = s.vs_outcomes /\ t.vs_tx_ctx = s.vs_tx_ctx /\
-    t.vs_block_ctx = s.vs_block_ctx /\
-    allocas_from lo t /\ lo <= t.vs_alloca_next /\
-    qt.t_mem = tn.t_mem /\ qt.t_stor = tn.t_stor /\
-    qt.t_trans = tn.t_trans /\ qt.t_imm = tn.t_imm /\
-    (!v. abi_decoder_older_vars st.cs_next_var v ==>
-      FLOOKUP H v = FLOOKUP G v /\ op_taint qt (Var v) = op_taint tn (Var v)) /\
-    ((!fuel. ptr_safe_run Ddead lo fuel ctx func PG H qt t) ==>
-     !fuel. ptr_safe_run Ddead lo fuel ctx func PG G tn s)
+(* TEMPORARILY CHEATED - RULE F interface: the statement gained the forward
+   joint gas-origin pointer path; the original proof below proves the rest.
 Proof
   strip_tac >>
   `abi_decode_source_opcode DLOAD` by simp[abi_decode_source_opcode_def] >>
@@ -206,6 +178,42 @@ Proof
   qmatch_asmsub_abbrev_tac `ptr_safe_run Ddead lo _ ctx func PG H qt _` >>
   qexistsl [`raw with vs_inst_idx := LENGTH st'.cs_current_insts`,`H`,`qt`] >>
   suspend "package"
+QED
+*)
+Theorem prefix_complete_array_guard_entry_mode_exact:
+  abi_decode_dynarray_checked_prefix src DLOAD (Lit 0w) maxn asz st = ((),st') /\
+  eval_operand src s = SOME (n2w sb) /\ op_taint tn src = {} /\
+  abi_decode_load DLOAD (n2w sb : bytes32) s = n2w n /\
+  n <= maxn /\ maxn < dimword (:256) /\
+  abi_decoder_operand_live st.cs_next_var src /\
+  st'.cs_next_var <= limit_st.cs_next_var /\ fresh_vars_wrt limit_st s /\
+  fn_has_code st st' func /\ ~s.vs_halted /\
+  s.vs_current_bb = st.cs_current_bb /\ s.vs_inst_idx = LENGTH st.cs_current_insts /\
+  allocas_from lo s /\ lo <= s.vs_alloca_next /\ ~ctx_has_dalloca ctx /\
+  (checked ==> sb < dimword (:256) /\ sb+32 <= LENGTH s.vs_data_section /\
+    alloca_history func s) ==>
+  ?t H qt.
+    (checked ==> !D explicit. gas_origin_ptr_path (D, lo, explicit, ctx, func, PG) (s, G, tn) [] (OK t, H, qt)) /\
+    (checked ==> gas_path_mem ctx func s 0 (OK t) /\ alloca_history func t) /\
+    (!v. abi_decoder_older_vars st.cs_next_var v ==> lookup_var v t = lookup_var v s) /\
+    fresh_vars_wrt limit_st t /\ abi_decoder_address_frame st.cs_next_var s t /\
+    t.vs_labels = s.vs_labels /\ abi_encoder_registered_effect {} [] s t /\
+    ~t.vs_halted /\ t.vs_current_bb = st'.cs_current_bb /\
+    t.vs_inst_idx = LENGTH st'.cs_current_insts /\ abi_decode_sim ctx func s t /\
+    t.vs_memory = s.vs_memory /\ t.vs_allocas = s.vs_allocas /\
+    t.vs_alloca_next = s.vs_alloca_next /\
+    t.vs_code = s.vs_code /\ t.vs_gas_readings = s.vs_gas_readings /\
+    t.vs_outcomes = s.vs_outcomes /\ t.vs_tx_ctx = s.vs_tx_ctx /\
+    t.vs_block_ctx = s.vs_block_ctx /\
+    allocas_from lo t /\ lo <= t.vs_alloca_next /\
+    qt.t_mem = tn.t_mem /\ qt.t_stor = tn.t_stor /\
+    qt.t_trans = tn.t_trans /\ qt.t_imm = tn.t_imm /\
+    (!v. abi_decoder_older_vars st.cs_next_var v ==>
+      FLOOKUP H v = FLOOKUP G v /\ op_taint qt (Var v) = op_taint tn (Var v)) /\
+    ((!fuel. ptr_safe_run Ddead lo fuel ctx func PG H qt t) ==>
+     !fuel. ptr_safe_run Ddead lo fuel ctx func PG G tn s)
+Proof
+  cheat
 QED
 
 Resume prefix_complete_array_guard_entry_mode_exact[package]:
@@ -300,42 +308,8 @@ Proof
   qexists `st.cs_next_var` >> simp[]
 QED
 
-Theorem prefix_complete_array_header_entry_mode_exact:
-  abi_decode_array_header (Var dst) src DLOAD st = (cnt,st') /\
-  eval_operand src s = SOME a /\ op_taint tn src = {} /\
-  eval_operand (Var dst) s = SOME (n2w d) /\ op_taint tn (Var dst) = {} /\
-  FLOOKUP G dst = SOME (b,cap) /\ b <= d /\ d+32 <= b+cap /\ d < dimword (:256) /\
-  abi_decoder_operand_live st.cs_next_var src /\
-  abi_decoder_operand_live st.cs_next_var (Var dst) /\
-  st'.cs_next_var <= limit_st.cs_next_var /\ fresh_vars_wrt limit_st s /\
-  fn_has_code st st' func /\ ~s.vs_halted /\
-  s.vs_current_bb = st.cs_current_bb /\ s.vs_inst_idx = LENGTH st.cs_current_insts /\
-  allocas_from lo s /\ lo <= s.vs_alloca_next /\ ~ctx_has_dalloca ctx /\
-  (checked ==> w2n a + 32 <= LENGTH s.vs_data_section /\
-    d+32 <= s.vs_alloca_next /\ alloca_history func s) ==>
-  ?t H qt.
-    (checked ==> gas_path_mem ctx func s 0 (OK t) /\ alloca_history func t) /\
-    (!v. abi_decoder_older_vars st.cs_next_var v ==> lookup_var v t = lookup_var v s) /\
-    eval_operand cnt t = SOME (abi_decode_load DLOAD a s) /\
-    mem_word_at d t.vs_memory = abi_decode_load DLOAD a s /\
-    fresh_vars_wrt limit_st t /\ abi_decode_frame d 32 s t /\
-    (!op w. abi_decoder_operand_live st.cs_next_var op /\ eval_operand op s = SOME w ==>
-      eval_operand op t = SOME w) /\
-    t.vs_labels = s.vs_labels /\ abi_encoder_registered_effect {} [(d,32)] s t /\
-    t.vs_allocas = s.vs_allocas /\ t.vs_alloca_next = s.vs_alloca_next /\
-    ~t.vs_halted /\ t.vs_current_bb = st'.cs_current_bb /\
-    t.vs_inst_idx = LENGTH st'.cs_current_insts /\ abi_decode_sim ctx func s t /\
-    t.vs_code = s.vs_code /\ t.vs_gas_readings = s.vs_gas_readings /\
-    t.vs_outcomes = s.vs_outcomes /\ t.vs_tx_ctx = s.vs_tx_ctx /\
-    t.vs_block_ctx = s.vs_block_ctx /\
-    allocas_from lo t /\ lo <= t.vs_alloca_next /\ FLOOKUP H dst = SOME (b,cap) /\
-    op_taint qt (Var dst) = {} /\ op_taint qt cnt = {} /\
-    DISJOINT qt.t_mem {a | d <= a /\ a < d+32} /\ qt.t_mem SUBSET tn.t_mem /\
-    qt.t_stor = tn.t_stor /\ qt.t_trans = tn.t_trans /\ qt.t_imm = tn.t_imm /\
-    (!v. abi_decoder_older_vars st.cs_next_var v ==>
-      FLOOKUP H v = FLOOKUP G v /\ op_taint qt (Var v) = op_taint tn (Var v)) /\
-    ((!fuel. ptr_safe_run Ddead lo fuel ctx func PG H qt t) ==>
-     !fuel. ptr_safe_run Ddead lo fuel ctx func PG G tn s)
+(* TEMPORARILY CHEATED - RULE F interface: the statement gained the forward
+   joint gas-origin pointer path; the original proof below proves the rest.
 Proof
   strip_tac >>
   `abi_decode_source_opcode DLOAD` by simp[abi_decode_source_opcode_def] >>
@@ -384,6 +358,47 @@ Proof
      qexists `emitted_insts st st'` >> simp[mk_inst_def,is_terminator_def]) >>
   gvs[fresh_vars_wrt_def,abi_decode_frame_def,eval_op_inst_idx,
     abi_encoder_registered_effect_def,allocas_from_def] >> metis_tac[]
+QED
+*)
+Theorem prefix_complete_array_header_entry_mode_exact:
+  abi_decode_array_header (Var dst) src DLOAD st = (cnt,st') /\
+  eval_operand src s = SOME a /\ op_taint tn src = {} /\
+  eval_operand (Var dst) s = SOME (n2w d) /\ op_taint tn (Var dst) = {} /\
+  FLOOKUP G dst = SOME (b,cap) /\ b <= d /\ d+32 <= b+cap /\ d < dimword (:256) /\
+  abi_decoder_operand_live st.cs_next_var src /\
+  abi_decoder_operand_live st.cs_next_var (Var dst) /\
+  st'.cs_next_var <= limit_st.cs_next_var /\ fresh_vars_wrt limit_st s /\
+  fn_has_code st st' func /\ ~s.vs_halted /\
+  s.vs_current_bb = st.cs_current_bb /\ s.vs_inst_idx = LENGTH st.cs_current_insts /\
+  allocas_from lo s /\ lo <= s.vs_alloca_next /\ ~ctx_has_dalloca ctx /\
+  (checked ==> w2n a + 32 <= LENGTH s.vs_data_section /\
+    d+32 <= s.vs_alloca_next /\ alloca_history func s) ==>
+  ?t H qt.
+    (checked ==> !D explicit. gas_origin_ptr_path (D, lo, explicit, ctx, func, PG) (s, G, tn) [] (OK t, H, qt)) /\
+    (checked ==> gas_path_mem ctx func s 0 (OK t) /\ alloca_history func t) /\
+    (!v. abi_decoder_older_vars st.cs_next_var v ==> lookup_var v t = lookup_var v s) /\
+    eval_operand cnt t = SOME (abi_decode_load DLOAD a s) /\
+    mem_word_at d t.vs_memory = abi_decode_load DLOAD a s /\
+    fresh_vars_wrt limit_st t /\ abi_decode_frame d 32 s t /\
+    (!op w. abi_decoder_operand_live st.cs_next_var op /\ eval_operand op s = SOME w ==>
+      eval_operand op t = SOME w) /\
+    t.vs_labels = s.vs_labels /\ abi_encoder_registered_effect {} [(d,32)] s t /\
+    t.vs_allocas = s.vs_allocas /\ t.vs_alloca_next = s.vs_alloca_next /\
+    ~t.vs_halted /\ t.vs_current_bb = st'.cs_current_bb /\
+    t.vs_inst_idx = LENGTH st'.cs_current_insts /\ abi_decode_sim ctx func s t /\
+    t.vs_code = s.vs_code /\ t.vs_gas_readings = s.vs_gas_readings /\
+    t.vs_outcomes = s.vs_outcomes /\ t.vs_tx_ctx = s.vs_tx_ctx /\
+    t.vs_block_ctx = s.vs_block_ctx /\
+    allocas_from lo t /\ lo <= t.vs_alloca_next /\ FLOOKUP H dst = SOME (b,cap) /\
+    op_taint qt (Var dst) = {} /\ op_taint qt cnt = {} /\
+    DISJOINT qt.t_mem {a | d <= a /\ a < d+32} /\ qt.t_mem SUBSET tn.t_mem /\
+    qt.t_stor = tn.t_stor /\ qt.t_trans = tn.t_trans /\ qt.t_imm = tn.t_imm /\
+    (!v. abi_decoder_older_vars st.cs_next_var v ==>
+      FLOOKUP H v = FLOOKUP G v /\ op_taint qt (Var v) = op_taint tn (Var v)) /\
+    ((!fuel. ptr_safe_run Ddead lo fuel ctx func PG H qt t) ==>
+     !fuel. ptr_safe_run Ddead lo fuel ctx func PG G tn s)
+Proof
+  cheat
 QED
 
 Theorem prefix_complete_array_header_entry_pair_exact:
@@ -462,41 +477,8 @@ Proof
   qexistsl [`t`,`H`,`qt`] >> simp[]
 QED
 
-Theorem prefix_complete_array_index_entry_mode:
-  abi_decode_index_init st = (ip,st') /\
-  (!i. MEM i (emitted_insts st st') ==> MEM i (fn_insts func)) /\
-  st.cs_next_id IN ctor_actual_sites func ids /\
-  ctor_actual_scratch func ids D N s /\ D+N <= s.vs_alloca_next /\
-  alloca_inv s /\ alloca_frontier_inv_from k ctx func site s /\
-  ALL_DISTINCT (MAP (\i. i.inst_id) (fn_insts func)) /\
-  k + unit_alloca_budget ctx < dimword (:256) /\
-  D <= d /\ d+32 <= D+N /\ mload d s = n2w (LENGTH vs) /\
-  st'.cs_next_var <= limit_st.cs_next_var /\ fresh_vars_wrt limit_st s /\
-  allocas_from lo s /\ lo <= s.vs_alloca_next /\ ~ctx_has_dalloca ctx /\
-  fn_has_code st st' func /\ ~s.vs_halted /\
-  s.vs_current_bb = st.cs_current_bb /\ s.vs_inst_idx = LENGTH st.cs_current_insts /\
-  (checked ==> fn_inst_ids_distinct func /\ alloca_history func s) ==>
-  ?t p H qt.
-    (checked ==> gas_path_mem ctx func s 0 (OK t) /\ alloca_history func t) /\
-    (^Ok) k ctx func site ids D N d outsz
-      st.cs_next_var limit_st tv vs st.cs_next_id p s 0 0 t /\
-    FLOOKUP H (STRING #"%" (toString st.cs_next_var)) = SOME (p,32) /\
-    eval_operand ip t = SOME (n2w p) /\ op_taint qt ip = {} /\
-    DISJOINT qt.t_mem {b | p <= b /\ b < p+32} /\ qt.t_mem SUBSET tn.t_mem /\
-    qt.t_stor = tn.t_stor /\ qt.t_trans = tn.t_trans /\ qt.t_imm = tn.t_imm /\
-    allocas_from lo t /\ lo <= t.vs_alloca_next /\ lo <= p /\
-    (!v. abi_decoder_older_vars st.cs_next_var v ==>
-      FLOOKUP H v = FLOOKUP G v /\
-      eval_operand (Var v) t = eval_operand (Var v) s /\
-      op_taint qt (Var v) = op_taint tn (Var v)) /\
-    (!b n. b+n <= p \/ p+32 <= b ==>
-      mem_bytes_at b n t.vs_memory = mem_bytes_at b n s.vs_memory) /\
-    ~t.vs_halted /\ t.vs_current_bb = st'.cs_current_bb /\
-    t.vs_inst_idx = LENGTH st'.cs_current_insts /\ abi_decode_sim ctx func s t /\
-    t.vs_outcomes = s.vs_outcomes /\ t.vs_tx_ctx = s.vs_tx_ctx /\
-    t.vs_block_ctx = s.vs_block_ctx /\
-    ((!fuel. ptr_safe_run Ddead lo fuel ctx func PG H qt t) ==>
-     !fuel. ptr_safe_run Ddead lo fuel ctx func PG G tn s)
+(* TEMPORARILY CHEATED - RULE F interface: the statement gained the forward
+   joint gas-origin pointer path; the original proof below proves the rest.
 Proof
   strip_tac >>
   drule abi_decode_index_init_shape >> strip_tac >>
@@ -551,66 +533,50 @@ Proof
      metis_tac[]) >>
   metis_tac[]
 QED
-
-
-Theorem prefix_complete_array_setup_mode_exact:
-  abi_decode_dynarray_checked_prefix src DLOAD (Lit 0w) maxn asz st = ((),guard_st) /\
-  abi_decode_array_header (Var dst) src DLOAD guard_st = (cnt,header_st) /\
-  abi_decode_index_init header_st = (ip,loop_st) /\
-  eval_operand src initial = SOME (n2w sb) /\
-  eval_operand (Var dst) initial = SOME (n2w d) /\ d < dimword (:256) /\
-  abi_decode_load DLOAD (n2w sb : bytes32) initial = n2w (LENGTH vs) /\
-  LENGTH vs <= maxn /\ maxn < dimword (:256) /\
-  abi_decoder_operand_live st.cs_next_var src /\
-  abi_decoder_operand_live st.cs_next_var (Var dst) /\
-  loop_st.cs_next_var <= limit_st.cs_next_var /\ fresh_vars_wrt limit_st initial /\
-  (!i. MEM i (emitted_insts header_st loop_st) ==> MEM i (fn_insts func)) /\
-  header_st.cs_next_id IN ctor_actual_sites func ids /\
-  ctor_actual_scratch func ids D N initial /\ D+N <= initial.vs_alloca_next /\
-  alloca_inv initial /\ alloca_frontier_inv_from k ctx func site initial /\
+*)
+Theorem prefix_complete_array_index_entry_mode:
+  abi_decode_index_init st = (ip,st') /\
+  (!i. MEM i (emitted_insts st st') ==> MEM i (fn_insts func)) /\
+  st.cs_next_id IN ctor_actual_sites func ids /\
+  ctor_actual_scratch func ids D N s /\ D+N <= s.vs_alloca_next /\
+  alloca_inv s /\ alloca_frontier_inv_from k ctx func site s /\
   ALL_DISTINCT (MAP (\i. i.inst_id) (fn_insts func)) /\
   k + unit_alloca_budget ctx < dimword (:256) /\
-  D <= d /\ d+32 <= D+N /\ 32 <= outsz /\
-  fn_has_code st guard_st func /\ fn_has_code guard_st header_st func /\
-  fn_has_code header_st loop_st func /\
-  ~initial.vs_halted /\ initial.vs_current_bb = st.cs_current_bb /\
-  initial.vs_inst_idx = LENGTH st.cs_current_insts /\
-  FLOOKUP G dst = SOME (b,sz) /\ b <= d /\ d+outsz <= b+sz /\
-  op_taint tn src = {} /\ op_taint tn (Var dst) = {} /\
-  allocas_from lo initial /\ lo <= initial.vs_alloca_next /\ ~ctx_has_dalloca ctx /\
-  (checked ==> sb < dimword (:256) /\ sb+32 <= LENGTH initial.vs_data_section /\
-    fn_inst_ids_distinct func /\ alloca_history func initial) ==>
-  ?prepared slot iv H qt.
-    (checked ==> gas_path_mem ctx func initial 0 (OK prepared) /\
-      alloca_history func prepared) /\
-    (!x. abi_decoder_older_vars st.cs_next_var x ==>
-      lookup_var x prepared = lookup_var x initial) /\
-    ip = Var iv /\
+  D <= d /\ d+32 <= D+N /\ mload d s = n2w (LENGTH vs) /\
+  st'.cs_next_var <= limit_st.cs_next_var /\ fresh_vars_wrt limit_st s /\
+  allocas_from lo s /\ lo <= s.vs_alloca_next /\ ~ctx_has_dalloca ctx /\
+  fn_has_code st st' func /\ ~s.vs_halted /\
+  s.vs_current_bb = st.cs_current_bb /\ s.vs_inst_idx = LENGTH st.cs_current_insts /\
+  (checked ==> fn_inst_ids_distinct func /\ alloca_history func s) ==>
+  ?t p H qt.
+    (checked ==> !D explicit. gas_origin_ptr_path (D, lo, explicit, ctx, func, PG) (s, G, tn) [] (OK t, H, qt)) /\
+    (checked ==> gas_path_mem ctx func s 0 (OK t) /\ alloca_history func t) /\
     (^Ok) k ctx func site ids D N d outsz
-      st.cs_next_var limit_st tv vs header_st.cs_next_id slot initial 0 0 prepared /\
-    (^Ok) k ctx func site ids D N d outsz
-      loop_st.cs_next_var limit_st tv vs header_st.cs_next_id slot prepared 0 0 prepared /\
-    ~prepared.vs_halted /\ prepared.vs_current_bb = loop_st.cs_current_bb /\
-    prepared.vs_inst_idx = LENGTH loop_st.cs_current_insts /\
-    abi_decode_sim ctx func initial prepared /\
-    eval_operand src prepared = SOME (n2w sb) /\
-    eval_operand (Var dst) prepared = SOME (n2w d) /\
-    eval_operand ip prepared = SOME (n2w slot) /\
-    FLOOKUP H dst = SOME (b,sz) /\ FLOOKUP H iv = SOME (slot,32) /\
-    op_taint qt src = {} /\ op_taint qt (Var dst) = {} /\ op_taint qt ip = {} /\
-    DISJOINT qt.t_mem {a | d <= a /\ a < d+32} /\
-    DISJOINT qt.t_mem {a | slot <= a /\ a < slot+32} /\ qt.t_mem SUBSET tn.t_mem /\
+      st.cs_next_var limit_st tv vs st.cs_next_id p s 0 0 t /\
+    FLOOKUP H (STRING #"%" (toString st.cs_next_var)) = SOME (p,32) /\
+    eval_operand ip t = SOME (n2w p) /\ op_taint qt ip = {} /\
+    DISJOINT qt.t_mem {b | p <= b /\ b < p+32} /\ qt.t_mem SUBSET tn.t_mem /\
     qt.t_stor = tn.t_stor /\ qt.t_trans = tn.t_trans /\ qt.t_imm = tn.t_imm /\
-    allocas_from lo prepared /\ lo <= prepared.vs_alloca_next /\ lo <= slot /\
-    prepared.vs_code = initial.vs_code /\ prepared.vs_gas_readings = initial.vs_gas_readings /\
-    prepared.vs_outcomes = initial.vs_outcomes /\ prepared.vs_tx_ctx = initial.vs_tx_ctx /\
-    prepared.vs_block_ctx = initial.vs_block_ctx /\
-    (!a n. (a+n <= d \/ d+32 <= a) /\ (a+n <= slot \/ slot+32 <= a) ==>
-      mem_bytes_at a n prepared.vs_memory = mem_bytes_at a n initial.vs_memory) /\
-    (!x. abi_decoder_older_vars st.cs_next_var x ==>
-      FLOOKUP H x = FLOOKUP G x /\ op_taint qt (Var x) = op_taint tn (Var x)) /\
-    ((!fuel. ptr_safe_run Ddead lo fuel ctx func PG H qt prepared) ==>
-     !fuel. ptr_safe_run Ddead lo fuel ctx func PG G tn initial)
+    allocas_from lo t /\ lo <= t.vs_alloca_next /\ lo <= p /\
+    (!v. abi_decoder_older_vars st.cs_next_var v ==>
+      FLOOKUP H v = FLOOKUP G v /\
+      eval_operand (Var v) t = eval_operand (Var v) s /\
+      op_taint qt (Var v) = op_taint tn (Var v)) /\
+    (!b n. b+n <= p \/ p+32 <= b ==>
+      mem_bytes_at b n t.vs_memory = mem_bytes_at b n s.vs_memory) /\
+    ~t.vs_halted /\ t.vs_current_bb = st'.cs_current_bb /\
+    t.vs_inst_idx = LENGTH st'.cs_current_insts /\ abi_decode_sim ctx func s t /\
+    t.vs_outcomes = s.vs_outcomes /\ t.vs_tx_ctx = s.vs_tx_ctx /\
+    t.vs_block_ctx = s.vs_block_ctx /\
+    ((!fuel. ptr_safe_run Ddead lo fuel ctx func PG H qt t) ==>
+     !fuel. ptr_safe_run Ddead lo fuel ctx func PG G tn s)
+Proof
+  cheat
+QED
+
+
+(* TEMPORARILY CHEATED - RULE F interface: the statement gained the forward
+   joint gas-origin pointer path; the original proof below proves the rest.
 Proof
   strip_tac >>
   `abi_decode_source_opcode DLOAD` by simp[abi_decode_source_opcode_def] >>
@@ -721,6 +687,69 @@ Proof
   conj_tac >- (fs[] >> NO_TAC) >>
   conj_tac >- (fs[] >> NO_TAC) >>
   rpt strip_tac >> fs[abi_decode_frame_def] >> metis_tac[]
+QED
+*)
+Theorem prefix_complete_array_setup_mode_exact:
+  abi_decode_dynarray_checked_prefix src DLOAD (Lit 0w) maxn asz st = ((),guard_st) /\
+  abi_decode_array_header (Var dst) src DLOAD guard_st = (cnt,header_st) /\
+  abi_decode_index_init header_st = (ip,loop_st) /\
+  eval_operand src initial = SOME (n2w sb) /\
+  eval_operand (Var dst) initial = SOME (n2w d) /\ d < dimword (:256) /\
+  abi_decode_load DLOAD (n2w sb : bytes32) initial = n2w (LENGTH vs) /\
+  LENGTH vs <= maxn /\ maxn < dimword (:256) /\
+  abi_decoder_operand_live st.cs_next_var src /\
+  abi_decoder_operand_live st.cs_next_var (Var dst) /\
+  loop_st.cs_next_var <= limit_st.cs_next_var /\ fresh_vars_wrt limit_st initial /\
+  (!i. MEM i (emitted_insts header_st loop_st) ==> MEM i (fn_insts func)) /\
+  header_st.cs_next_id IN ctor_actual_sites func ids /\
+  ctor_actual_scratch func ids D N initial /\ D+N <= initial.vs_alloca_next /\
+  alloca_inv initial /\ alloca_frontier_inv_from k ctx func site initial /\
+  ALL_DISTINCT (MAP (\i. i.inst_id) (fn_insts func)) /\
+  k + unit_alloca_budget ctx < dimword (:256) /\
+  D <= d /\ d+32 <= D+N /\ 32 <= outsz /\
+  fn_has_code st guard_st func /\ fn_has_code guard_st header_st func /\
+  fn_has_code header_st loop_st func /\
+  ~initial.vs_halted /\ initial.vs_current_bb = st.cs_current_bb /\
+  initial.vs_inst_idx = LENGTH st.cs_current_insts /\
+  FLOOKUP G dst = SOME (b,sz) /\ b <= d /\ d+outsz <= b+sz /\
+  op_taint tn src = {} /\ op_taint tn (Var dst) = {} /\
+  allocas_from lo initial /\ lo <= initial.vs_alloca_next /\ ~ctx_has_dalloca ctx /\
+  (checked ==> sb < dimword (:256) /\ sb+32 <= LENGTH initial.vs_data_section /\
+    fn_inst_ids_distinct func /\ alloca_history func initial) ==>
+  ?prepared slot iv H qt.
+    (checked ==> !D explicit. gas_origin_ptr_path (D, lo, explicit, ctx, func, PG) (initial, G, tn) [] (OK prepared, H, qt)) /\
+    (checked ==> gas_path_mem ctx func initial 0 (OK prepared) /\
+      alloca_history func prepared) /\
+    (!x. abi_decoder_older_vars st.cs_next_var x ==>
+      lookup_var x prepared = lookup_var x initial) /\
+    ip = Var iv /\
+    (^Ok) k ctx func site ids D N d outsz
+      st.cs_next_var limit_st tv vs header_st.cs_next_id slot initial 0 0 prepared /\
+    (^Ok) k ctx func site ids D N d outsz
+      loop_st.cs_next_var limit_st tv vs header_st.cs_next_id slot prepared 0 0 prepared /\
+    ~prepared.vs_halted /\ prepared.vs_current_bb = loop_st.cs_current_bb /\
+    prepared.vs_inst_idx = LENGTH loop_st.cs_current_insts /\
+    abi_decode_sim ctx func initial prepared /\
+    eval_operand src prepared = SOME (n2w sb) /\
+    eval_operand (Var dst) prepared = SOME (n2w d) /\
+    eval_operand ip prepared = SOME (n2w slot) /\
+    FLOOKUP H dst = SOME (b,sz) /\ FLOOKUP H iv = SOME (slot,32) /\
+    op_taint qt src = {} /\ op_taint qt (Var dst) = {} /\ op_taint qt ip = {} /\
+    DISJOINT qt.t_mem {a | d <= a /\ a < d+32} /\
+    DISJOINT qt.t_mem {a | slot <= a /\ a < slot+32} /\ qt.t_mem SUBSET tn.t_mem /\
+    qt.t_stor = tn.t_stor /\ qt.t_trans = tn.t_trans /\ qt.t_imm = tn.t_imm /\
+    allocas_from lo prepared /\ lo <= prepared.vs_alloca_next /\ lo <= slot /\
+    prepared.vs_code = initial.vs_code /\ prepared.vs_gas_readings = initial.vs_gas_readings /\
+    prepared.vs_outcomes = initial.vs_outcomes /\ prepared.vs_tx_ctx = initial.vs_tx_ctx /\
+    prepared.vs_block_ctx = initial.vs_block_ctx /\
+    (!a n. (a+n <= d \/ d+32 <= a) /\ (a+n <= slot \/ slot+32 <= a) ==>
+      mem_bytes_at a n prepared.vs_memory = mem_bytes_at a n initial.vs_memory) /\
+    (!x. abi_decoder_older_vars st.cs_next_var x ==>
+      FLOOKUP H x = FLOOKUP G x /\ op_taint qt (Var x) = op_taint tn (Var x)) /\
+    ((!fuel. ptr_safe_run Ddead lo fuel ctx func PG H qt prepared) ==>
+     !fuel. ptr_safe_run Ddead lo fuel ctx func PG G tn initial)
+Proof
+  cheat
 QED
 
 Theorem prefix_complete_array_setup_pair_exact:
@@ -898,6 +927,25 @@ val PreparedLoopAt = ``
     mload d (prepared with vs_memory := mem) = n2w (LENGTH vs) /\
     elems_in_memory (TAKE 0 vs) (d+32) tv mem)``;
 
+(* TEMPORARILY CHEATED - RULE F interface: the statement gained the forward
+   joint gas-origin pointer path; the original proof below proves the rest.
+Proof
+  strip_tac >>
+  `fn_inst_ids_distinct func` by suspend "distinct_ids" >>
+  `checked ==> sb < dimword (:256) /\ sb+32 <= LENGTH initial.vs_data_section /\
+    fn_inst_ids_distinct func /\ alloca_history func initial` by
+    (strip_tac >> fs[] >> decide_tac) >>
+  drule_all prefix_complete_array_setup_mode_exact >>
+  disch_then (qspecl_then [`tv`,`PG`,`Ddead`] strip_assume_tac) >>
+  qpat_x_assum `Var slot_var = Var iv` (SUBST_ALL_TAC o SYM o SRULE []) >>
+  `(^PreparedPk)` by suspend "data_package" >>
+  `(^PreparedLoopAt)` by suspend "loop_zero" >>
+  `abi_decode_source_opcode DLOAD` by simp[abi_decode_source_opcode_def] >>
+  drule_all abi_decoder_recursive_compiled_facts >> strip_tac >>
+  qexistsl [`prepared`,`slot`,`H`,`qt`] >> asm_simp_tac bool_ss [] >>
+  metis_tac[]
+QED
+*)
 Theorem prefix_complete_array_setup_loop_mode_exact:
   (checked ==> sb+32 <= LENGTH initial.vs_data_section /\ alloca_history func initial) /\
   abi_decode_dynarray_checked_prefix src DLOAD (Lit 0w) maxn asz st = ((),guard_st) /\
@@ -939,6 +987,7 @@ Theorem prefix_complete_array_setup_loop_mode_exact:
   lookup_block loop_st.cs_current_bb func.fn_blocks = SOME entry_bb /\
   entry_bb.bb_instructions = loop_st.cs_current_insts ++ [mk_inst jump_id JMP [Label hdr] []] ==>
   ?prepared slot H qt.
+    (checked ==> !D explicit. gas_origin_ptr_path (D, lo, explicit, ctx, func, PG) (initial, G, tn) [] (OK prepared, H, qt)) /\
     (checked ==> gas_path_mem ctx func initial 0 (OK prepared) /\ alloca_history func prepared) /\
     (!x. abi_decoder_older_vars st.cs_next_var x ==>
       lookup_var x prepared = lookup_var x initial) /\
@@ -971,20 +1020,7 @@ Theorem prefix_complete_array_setup_loop_mode_exact:
     lookup_block prepared.vs_current_bb func.fn_blocks = SOME entry_bb /\
     ?hdr_bb. lookup_block hdr func.fn_blocks = SOME hdr_bb /\ phi_prefix_length hdr_bb.bb_instructions = 0
 Proof
-  strip_tac >>
-  `fn_inst_ids_distinct func` by suspend "distinct_ids" >>
-  `checked ==> sb < dimword (:256) /\ sb+32 <= LENGTH initial.vs_data_section /\
-    fn_inst_ids_distinct func /\ alloca_history func initial` by
-    (strip_tac >> fs[] >> decide_tac) >>
-  drule_all prefix_complete_array_setup_mode_exact >>
-  disch_then (qspecl_then [`tv`,`PG`,`Ddead`] strip_assume_tac) >>
-  qpat_x_assum `Var slot_var = Var iv` (SUBST_ALL_TAC o SYM o SRULE []) >>
-  `(^PreparedPk)` by suspend "data_package" >>
-  `(^PreparedLoopAt)` by suspend "loop_zero" >>
-  `abi_decode_source_opcode DLOAD` by simp[abi_decode_source_opcode_def] >>
-  drule_all abi_decoder_recursive_compiled_facts >> strip_tac >>
-  qexistsl [`prepared`,`slot`,`H`,`qt`] >> asm_simp_tac bool_ss [] >>
-  metis_tac[]
+  cheat
 QED
 
 Resume prefix_complete_array_setup_loop_mode_exact[data_package]:

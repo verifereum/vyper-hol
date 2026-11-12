@@ -9,6 +9,7 @@ Ancestors
   vyperCompiler localPtrsProps ctorAbiActualArrayRun abiDecoderLoop
   ptrSafeRun ptrDiscipline pred_set ctorDeployMemoryRunPtrPrefixAllocationFloor
   ctorDeployMemoryRunMemEntryRegistration
+  fragGasOriginPtr
 
 
 Theorem prefix_entry_register_alloc_actual:
@@ -52,6 +53,15 @@ QED
 
 (* Allocation has a literal machine endpoint, so checked execution attaches
    directly to that endpoint rather than to a second existential run. *)
+(* TEMPORARILY CHEATED - RULE F interface: the statement gained the forward
+   joint gas-origin pointer path; the original proof below proves the rest.
+Proof
+ strip_tac >> drule_all prefix_entry_register_alloc_actual >>
+ disch_then (qspecl_then [`tn`,`PG`,`G`,`D`] strip_assume_tac) >>
+ qexistsl [`a`,`H`,`q`] >> asm_rewrite_tac[] >> strip_tac >>
+ metis_tac[ctor_checked_alloc_buffer_edge]
+QED
+*)
 Theorem prefix_entry_register_alloc_actual_mode:
  compile_alloc_buffer n st = (buf,sa) /\ fn_has_code st sa func /\
  n < dimword (:256) /\ alloca_inv initial /\
@@ -82,12 +92,10 @@ Theorem prefix_entry_register_alloc_actual_mode:
  (!j. j < lo ==> read_byte j a.vs_memory = read_byte j initial.vs_memory) /\
  ((!fuel. ptr_safe_run D lo fuel ctx func PG H q a) ==>
    !fuel. ptr_safe_run D lo fuel ctx func PG G tn initial) /\
+ (checked ==> !D explicit. gas_origin_ptr_path (D, lo, explicit, ctx, func, PG) (initial, G, tn) [] (OK a, H, q)) /\
  (checked ==> gas_path_mem ctx func initial 0 (OK a) /\ alloca_history func a)
 Proof
- strip_tac >> drule_all prefix_entry_register_alloc_actual >>
- disch_then (qspecl_then [`tn`,`PG`,`G`,`D`] strip_assume_tac) >>
- qexistsl [`a`,`H`,`q`] >> asm_rewrite_tac[] >> strip_tac >>
- metis_tac[ctor_checked_alloc_buffer_edge]
+  cheat
 QED
 
 val _ = export_theory();

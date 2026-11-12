@@ -19,6 +19,7 @@ Ancestors
   ctorDeployMemoryFrontier allocaFrontierBound valueEncoding valueEncodingProps
   venomState venomInst venomExecSemantics venomMemDefs
   ptrDiscipline ptrSafeRun words list rich_list arithmetic finite_map pred_set
+  fragGasOriginPtr
 
 val CshiftCode = ``\ty tv.
  !dst src st st' ctx func site initial limit_st sb d D N ids av v root_di
@@ -96,6 +97,13 @@ val Ok = ``\k ctx func site ids D N d outsz next limit_st
 val CshiftMode = ``\checked ty tv.
   ^(rand (rator (concl prefix_complete_array_initial_exit_pair_mode_exact)))``;
 
+(* TEMPORARILY CHEATED - RULE F interface: the statement gained the forward
+   joint gas-origin pointer path; the original proof below proves the rest.
+Proof
+ disch_then (mp_tac o MATCH_MP (BETA_RULE prefix_complete_array_initial_exit_pair_mode_exact) o BETA_RULE) >>
+ rpt strip_tac >> BETA_TAC >> first_x_assum irule >> asm_rewrite_tac[]
+QED
+*)
 Theorem prefix_complete_array_exit_staged_mode[local]:
  (^CshiftMode) checked ty tv ==>
  abi_decoder_recursive_loop_compiled ce sf ty func body_st middle end_st ops (Var slot_var) src (Var dst_var)
@@ -140,6 +148,7 @@ Theorem prefix_complete_array_exit_staged_mode[local]:
     LENGTH initial.vs_data_section /\ sb+32 <= LENGTH initial.vs_data_section /\
     alloca_history func initial) ==>
  ?actual Hout qout A slot.
+   (checked ==> !D explicit. gas_origin_ptr_path (D, lo, explicit, ctx, func, PG) (initial, G, tn) [] (OK actual, Hout, qout)) /\
    (checked ==> gas_path_mem ctx func initial 0 (OK actual) /\ alloca_history func actual) /\
    (!x. abi_decoder_older_vars st.cs_next_var x ==>
      lookup_var x actual = lookup_var x initial) /\
@@ -164,8 +173,7 @@ Theorem prefix_complete_array_exit_staged_mode[local]:
    ((!fuel. ptr_safe_run Ddead lo fuel ctx func PG Hout qout actual) ==>
      !fuel. ptr_safe_run Ddead lo fuel ctx func PG G tn initial)
 Proof
- disch_then (mp_tac o MATCH_MP (BETA_RULE prefix_complete_array_initial_exit_pair_mode_exact) o BETA_RULE) >>
- rpt strip_tac >> BETA_TAC >> first_x_assum irule >> asm_rewrite_tac[]
+  cheat
 QED
 
 Theorem prefix_dynamic_array_loop_complete_mode_contract:

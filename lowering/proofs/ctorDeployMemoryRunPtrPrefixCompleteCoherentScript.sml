@@ -9,6 +9,7 @@ Ancestors
   ctorDeployMemoryRunPtrPrefixCompleteArrayContract
   ctorDeployMemoryRunPtrPrefixCompleteCode
   exprLowering abiDecoderCoherence
+  fragGasOriginPtr
 
 val CshiftCode = ``\ty tv.
  !dst src st st' ctx func site initial limit_st sb d D N ids av v root_di
@@ -185,6 +186,7 @@ val CshiftMode = ``\checked ty tv.
                            op_taint qt (Var x) = op_taint tn (Var x)) /\
  ((!fuel. ptr_safe_run Ddead lo fuel ctx func PG H qt actual) ==>
    !fuel. ptr_safe_run Ddead lo fuel ctx func PG G tn initial) /\
+ (checked ==> !D explicit. gas_origin_ptr_path (D, lo, explicit, ctx, func, PG) (initial, G, tn) [] (OK actual, H, qt)) /\
  (checked ==> gas_path_mem ctx func initial 0 (OK actual) /\ alloca_history func actual)``;
 
 val CshiftChecked = ``(^CshiftMode) T``;

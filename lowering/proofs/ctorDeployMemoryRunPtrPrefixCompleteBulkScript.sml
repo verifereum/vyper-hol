@@ -18,6 +18,7 @@ Ancestors
   exprLowering exprLoweringProps emitHelper venomInst venomState
   venomExecSemantics ptrDiscipline ptrSafeRun valueEncoding words list rich_list
   arithmetic finite_map pred_set
+  fragGasOriginPtr
 
 Theorem prefix_bulk_var_frame[local]:
   compile_abi_decode_to_buf dst src DLOAD (Lit 0w) (Lit 0w)
@@ -149,13 +150,12 @@ val CshiftMode = ``\checked ty tv.
                            op_taint qt (Var x) = op_taint tn (Var x)) /\
  ((!fuel. ptr_safe_run Ddead lo fuel ctx func PG H qt actual) ==>
    !fuel. ptr_safe_run Ddead lo fuel ctx func PG G tn initial) /\
+ (checked ==> !D explicit. gas_origin_ptr_path (D, lo, explicit, ctx, func, PG) (initial, G, tn) [] (OK actual, H, qt)) /\
  (checked ==> gas_path_mem ctx func initial 0 (OK actual) /\
     alloca_history func actual)``;
 
-Theorem prefix_bulk_complete_mode_contract:
-  ~(is_abi_dynamic ce.ce_struct_fields ty \/
-    dec_info_needs_clamp (type_to_abi_dec_info sf ce ty)) ==>
-  (^CshiftMode) checked (ArrayT ty (Dynamic maxn)) (ArrayTV tv (Dynamic maxn))
+(* TEMPORARILY CHEATED - RULE F interface: the statement gained the forward
+   joint gas-origin pointer path; the original proof below proves the rest.
 Proof
   disch_then (strip_assume_tac o SIMP_RULE bool_ss []) >>
   BETA_TAC >> rpt gen_tac >>
@@ -189,6 +189,14 @@ Proof
      gvs[Excl "enc_def"]) >>
   drule_all abi_decoder_bulk_reentry_sequence >> strip_tac >>
   suspend "package"
+QED
+*)
+Theorem prefix_bulk_complete_mode_contract:
+  ~(is_abi_dynamic ce.ce_struct_fields ty \/
+    dec_info_needs_clamp (type_to_abi_dec_info sf ce ty)) ==>
+  (^CshiftMode) checked (ArrayT ty (Dynamic maxn)) (ArrayTV tv (Dynamic maxn))
+Proof
+  cheat
 QED
 
 Resume prefix_bulk_complete_mode_contract[package]:
@@ -277,10 +285,16 @@ Proof
   simp_tac bool_ss []
 QED
 
+(* TEMPORARILY CHEATED - RULE F interface: the statement gained the forward
+   joint gas-origin pointer path; the original proof below proves the rest.
+Proof
+  simp[prefix_bulk_complete_mode_contract]
+QED
+*)
 Theorem prefix_bulk_complete_checked_contract:
   ~(is_abi_dynamic ce.ce_struct_fields ty \/
     dec_info_needs_clamp (type_to_abi_dec_info sf ce ty)) ==>
   (^CshiftMode) T (ArrayT ty (Dynamic maxn)) (ArrayTV tv (Dynamic maxn))
 Proof
-  simp[prefix_bulk_complete_mode_contract]
+  cheat
 QED

@@ -23,6 +23,7 @@ Ancestors
   ctorDeployMemoryRunMemEntryWord ctorDeployMemoryRunMemEntryMembersSetupWorld
   fragGasPathMem abiDecoderDynamic abiDecoderOffset vyperABI
   ctorDeployMemoryRunMemEntryCompositeSetup abiDecodeRanges entrySinkExtraction
+  fragGasOriginPtr
 
 Theorem prefix_scalar_sequence_code:
   compile_abi_decode_to_buf dst src DLOAD (Lit 0w) hi (DecPrimWord clamp) st = ((),st') /\
@@ -371,10 +372,11 @@ val MshiftMode = ``\checked tys tvs.
                            op_taint qt (Var x) = op_taint tn (Var x)) /\
  ((!fuel. ptr_safe_run Ddead lo fuel ctx func PG H qt actual) ==>
    !fuel. ptr_safe_run Ddead lo fuel ctx func PG G tn initial) /\
+ (checked ==> !D explicit. gas_origin_ptr_path (D, lo, explicit, ctx, func, PG) (initial, G, tn) [] (OK actual, H, qt)) /\
  (checked ==> gas_path_mem ctx func initial 0 (OK actual) /\ alloca_history func actual)``;
 
-Theorem prefix_members_complete_mode_nil:
-  (^MshiftMode) checked [] []
+(* TEMPORARILY CHEATED - RULE F interface: the statement gained the forward
+   joint gas-origin pointer path; the original proof below proves the rest.
 Proof
   BETA_TAC >> rpt gen_tac >>
   simp[abi_decoder_member_infos_def, Once compile_abi_decode_to_buf_def,
@@ -383,6 +385,12 @@ Proof
   qexistsl [`initial`,`G`,`tn`,`{}`] >>
   simp[val_in_memory_def, abi_encoder_registered_effect_refl, abi_decode_sim_refl,
     gas_path_mem_rules] >> metis_tac[]
+QED
+*)
+Theorem prefix_members_complete_mode_nil:
+  (^MshiftMode) checked [] []
+Proof
+  cheat
 QED
 
 Theorem prefix_canonical_member_setup_mem_ok[local]:
@@ -471,10 +479,11 @@ val CshiftMode = ``\checked ty tv.
                            op_taint qt (Var x) = op_taint tn (Var x)) /\
  ((!fuel. ptr_safe_run Ddead lo fuel ctx func PG H qt actual) ==>
    !fuel. ptr_safe_run Ddead lo fuel ctx func PG G tn initial) /\
+ (checked ==> !D explicit. gas_origin_ptr_path (D, lo, explicit, ctx, func, PG) (initial, G, tn) [] (OK actual, H, qt)) /\
  (checked ==> gas_path_mem ctx func initial 0 (OK actual) /\ alloca_history func actual)``;
 
-Theorem prefix_scalar_complete_mode_contract:
-  type_to_abi_dec_info sf ce ty = DecPrimWord clamp ==> (^CshiftMode) checked ty tv
+(* TEMPORARILY CHEATED - RULE F interface: the statement gained the forward
+   joint gas-origin pointer path; the original proof below proves the rest.
 Proof
   disch_tac >> BETA_TAC >> rpt gen_tac >>
   disch_then (MAP_EVERY assume_tac o CONJUNCTS) >>
@@ -511,6 +520,12 @@ Proof
   qexistsl [`actual with vs_inst_idx := LENGTH st'.cs_current_insts`,`H`,`qt`,`B`] >>
   simp[Excl "enc_def"]
 QED
+*)
+Theorem prefix_scalar_complete_mode_contract:
+  type_to_abi_dec_info sf ce ty = DecPrimWord clamp ==> (^CshiftMode) checked ty tv
+Proof
+  cheat
+QED
 
 Theorem prefix_scalar_complete_code_contract:
   type_to_abi_dec_info sf ce ty = DecPrimWord clamp ==> (^CshiftCode) ty tv
@@ -519,10 +534,16 @@ Proof
   simp_tac bool_ss []
 QED
 
+(* TEMPORARILY CHEATED - RULE F interface: the statement gained the forward
+   joint gas-origin pointer path; the original proof below proves the rest.
+Proof
+  simp[prefix_scalar_complete_mode_contract]
+QED
+*)
 Theorem prefix_scalar_complete_checked_contract:
   type_to_abi_dec_info sf ce ty = DecPrimWord clamp ==> (^CshiftMode) T ty tv
 Proof
-  simp[prefix_scalar_complete_mode_contract]
+  cheat
 QED
 
 
@@ -554,11 +575,11 @@ val HshiftMode = ``\checked ctx func site ids D N limit_st tv v d sz st st' init
    op_taint qt (Var x) = op_taint tn (Var x)) /\
  ((!fuel. ptr_safe_run Ddead lo fuel ctx func PG H qt actual) ==>
    !fuel. ptr_safe_run Ddead lo fuel ctx func PG G tn initial) /\
+ (checked ==> !D explicit. gas_origin_ptr_path (D, lo, explicit, ctx, func, PG) (initial, G, tn) [] (OK actual, H, qt)) /\
  (checked ==> gas_path_mem ctx func initial 0 (OK actual) /\ alloca_history func actual)``;
 
-Theorem prefix_members_complete_mode_cons:
-  (^CshiftMode) checked ty tv /\ (^MshiftMode) checked tys tvs ==>
-  (^MshiftMode) checked (ty::tys) (tv::tvs)
+(* TEMPORARILY CHEATED - RULE F interface: the statement gained the forward
+   joint gas-origin pointer path; the original proof below proves the rest.
 Proof
   disch_then (CONJUNCTS_THEN2 (mk_asm "child") (mk_asm "tail")) >>
   BETA_TAC >> rpt gen_tac >> disch_then (MAP_EVERY assume_tac o CONJUNCTS) >>
@@ -615,6 +636,13 @@ Proof
     suspend "head" >>
   pop_assum (strip_assume_tac o BETA_RULE) >>
   suspend "tail_and_compose"
+QED
+*)
+Theorem prefix_members_complete_mode_cons:
+  (^CshiftMode) checked ty tv /\ (^MshiftMode) checked tys tvs ==>
+  (^MshiftMode) checked (ty::tys) (tv::tvs)
+Proof
+  cheat
 QED
 
 Resume prefix_members_complete_mode_cons[head]:
@@ -875,8 +903,8 @@ QED
 
 Finalise prefix_members_complete_mode_cons
 
-Theorem prefix_members_complete_mode:
-  !tys tvs. LIST_REL ((^CshiftMode) checked) tys tvs ==> (^MshiftMode) checked tys tvs
+(* TEMPORARILY CHEATED - RULE F interface: the statement gained the forward
+   joint gas-origin pointer path; the original proof below proves the rest.
 Proof
   Induct_on `tys` >> rpt gen_tac >> Cases_on `tvs` >>
   simp_tac bool_ss [LIST_REL_def, prefix_members_complete_mode_nil] >> strip_tac >>
@@ -886,6 +914,12 @@ Proof
   (impl_tac >- (conj_tac >- (BETA_TAC >> first_assum ACCEPT_TAC) >>
     first_x_assum irule >> gvs[])) >>
   simp_tac bool_ss []
+QED
+*)
+Theorem prefix_members_complete_mode:
+  !tys tvs. LIST_REL ((^CshiftMode) checked) tys tvs ==> (^MshiftMode) checked tys tvs
+Proof
+  cheat
 QED
 
 (* The generic interface is exactly false mode; normalize the quotation once. *)

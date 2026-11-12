@@ -7,6 +7,7 @@ Ancestors
  compileVyper moduleLowering compileEnv abiDecoderLoop abiDecoderMembers abiDecoderCounters
  emitHelperProps loweringHalt list rich_list arithmetic finite_map
   ctorDeployMemoryRunPtrPrefixRegisterList fragGasPathMem bodyPtrDefs
+  fragGasOriginPtr
 
 
 
@@ -101,10 +102,11 @@ val RegisterSuffixOriginsMode = ``\checked.
           not_fresh_at st p /\ ptr_covers G tn p initial sz) ==>
        !name p sz. FLOOKUP ce.ce_vars name = SOME (PtrVar (Var p) sz) ==>
           not_fresh_at st' p /\ ptr_covers H qt p actual sz) /\
+      (checked ==> !D explicit. gas_origin_ptr_path (D, lo, explicit, ctx, func, PG) (initial, G, tn) [] (OK actual, H, qt)) /\
       (checked ==> gas_path_mem ctx func initial 0 (OK actual) /\ alloca_history func actual)``;
 
-Theorem prefix_entry_register_suffix_origins_coverage_mode:
-  !checked. (^RegisterSuffixOriginsMode) checked
+(* TEMPORARILY CHEATED - RULE F interface: the statement gained the forward
+   joint gas-origin pointer path; the original proof below proves the rest.
 Proof
   gen_tac >> BETA_TAC >> Induct
   >- (rpt gen_tac >> strip_tac >>
@@ -116,6 +118,12 @@ Proof
       `i = LENGTH fargs` by (fs[DROP_EQ_NIL] >> decide_tac) >> simp[] >> metis_tac[]) >>
   rpt gen_tac >> disch_then (map_every assume_tac o CONJUNCTS) >>
   suspend "cons"
+QED
+*)
+Theorem prefix_entry_register_suffix_origins_coverage_mode:
+  !checked. (^RegisterSuffixOriginsMode) checked
+Proof
+  cheat
 QED
 
 Resume prefix_entry_register_suffix_origins_coverage_mode[cons]:

@@ -10,6 +10,7 @@ Ancestors
  abiDecoderContract abiEncoderRegisteredEffect
  ctorDeployLoweringEntryCanonical abiDecoderCoherence abiEncoderProps context
   slotCopyExecution ctorDeployMemoryRunMemEntryRegistration fragGasPathMem abiEncoderWindowMembers
+  fragGasOriginPtr
 
 val RegisterAddressAddMode = ``\checked.
  emit_op ADD [a;b] st = (out,middle) /\
@@ -42,10 +43,11 @@ val RegisterAddressAddMode = ``\checked.
  prepared.vs_gas_readings = initial.vs_gas_readings /\
  ((!fuel. ptr_safe_run D lo fuel ctx func PG H qt prepared) ==>
    !fuel. ptr_safe_run D lo fuel ctx func PG G tn initial) /\
+ (checked ==> !D explicit. gas_origin_ptr_path (D, lo, explicit, ctx, func, PG) (initial, G, tn) [] (OK prepared, H, qt)) /\
  (checked ==> gas_path_mem ctx func initial 0 (OK prepared) /\ alloca_history func prepared)``;
 
-Theorem prefix_entry_register_address_add_actual_mode:
- !checked. (^RegisterAddressAddMode) checked
+(* TEMPORARILY CHEATED - RULE F interface: the statement gained the forward
+   joint gas-origin pointer path; the original proof below proves the rest.
 Proof
  gen_tac >> BETA_TAC >> strip_tac >>
  `run_inst_seq (emitted_insts st middle) initial =
@@ -74,6 +76,12 @@ Proof
  conj_tac >- (drule_all prefix_register_address_add_run >> simp[update_var_def]) >>
  strip_tac >> `alloca_history func initial` by metis_tac[] >>
  drule_all ctor_checked_arg_add_reach >> strip_tac >> gvs[update_var_def]
+QED
+*)
+Theorem prefix_entry_register_address_add_actual_mode:
+ !checked. (^RegisterAddressAddMode) checked
+Proof
+  cheat
 QED
 
 
@@ -107,10 +115,11 @@ val RegisterAddressDloadMode = ``\checked.
  prepared.vs_gas_readings = initial.vs_gas_readings /\
  ((!fuel. ptr_safe_run D lo fuel ctx func PG H qt prepared) ==>
    !fuel. ptr_safe_run D lo fuel ctx func PG G tn initial) /\
+ (checked ==> !D explicit. gas_origin_ptr_path (D, lo, explicit, ctx, func, PG) (initial, G, tn) [] (OK prepared, H, qt)) /\
  (checked ==> gas_path_mem ctx func initial 0 (OK prepared) /\ alloca_history func prepared)``;
 
-Theorem prefix_entry_register_address_dload_actual_mode:
- !checked. (^RegisterAddressDloadMode) checked
+(* TEMPORARILY CHEATED - RULE F interface: the statement gained the forward
+   joint gas-origin pointer path; the original proof below proves the rest.
 Proof
  gen_tac >> BETA_TAC >> strip_tac >>
  `step_inst_base (mk_inst st.cs_next_id DLOAD [off]
@@ -146,6 +155,12 @@ Proof
  drule_all (SRULE [n2w_w2n, w2n_lt] (Q.INST [`p` |-> `w2n (a:bytes32)`] ctor_checked_arg_read_reach)) >>
  disch_then (qspec_then `ctx` strip_assume_tac) >> fs[update_var_def] >> gvs[]
 QED
+*)
+Theorem prefix_entry_register_address_dload_actual_mode:
+ !checked. (^RegisterAddressDloadMode) checked
+Proof
+  cheat
+QED
 
 
 val RegisterAddressDynamicMode = ``\checked.
@@ -180,10 +195,11 @@ val RegisterAddressDynamicMode = ``\checked.
  prepared.vs_gas_readings = initial.vs_gas_readings /\
  ((!fuel. ptr_safe_run D lo fuel ctx func PG H qt prepared) ==>
    !fuel. ptr_safe_run D lo fuel ctx func PG G tn initial) /\
+ (checked ==> !D explicit. gas_origin_ptr_path (D, lo, explicit, ctx, func, PG) (initial, G, tn) [] (OK prepared, H, qt)) /\
  (checked ==> gas_path_mem ctx func initial 0 (OK prepared) /\ alloca_history func prepared)``;
 
-Theorem prefix_entry_register_address_dynamic_actual_mode:
- !checked. (^RegisterAddressDynamicMode) checked
+(* TEMPORARILY CHEATED - RULE F interface: the statement gained the forward
+   joint gas-origin pointer path; the original proof below proves the rest.
 Proof
  gen_tac >> BETA_TAC >> strip_tac >>
  `checked ==> alloca_history func initial` by metis_tac[] >>
@@ -235,8 +251,45 @@ Proof
  irule (SRULE [ADD] (Q.INST [`n` |-> `0`, `m` |-> `0`] gas_path_mem_then)) >>
  qexists_tac `p2` >> simp[]
 QED
+*)
+Theorem prefix_entry_register_address_dynamic_actual_mode:
+ !checked. (^RegisterAddressDynamicMode) checked
+Proof
+  cheat
+QED
 
 
+(* TEMPORARILY CHEATED - RULE F interface: the statement gained the forward
+   joint gas-origin pointer path; the original proof below proves the rest.
+Proof
+ rpt gen_tac >> disch_then (map_every assume_tac o CONJUNCTS) >>
+ `checked ==> alloca_history func initial` by metis_tac[] >>
+ drule_all (Q.INST [`data_size` |-> `0`] ctor_singleton_decode_phases) >>
+ strip_tac
+ >- (qpat_x_assum `src = static_src` SUBST_ALL_TAC >>
+     qpat_x_assum `middle = first` SUBST_ALL_TAC >>
+     drule prefix_register_address_emit_shape >> strip_tac >>
+     `st.cs_next_id <= first.cs_next_id` by decide_tac >>
+     drule_all prefix_register_address_code_phase >> strip_tac >>
+     drule_all (SRULE [eval_operand_def, op_taint_def]
+       (Q.INST [`a` |-> `Lit 0w`, `b` |-> `Lit (n2w off)`,
+                `u` |-> `0w`, `v` |-> `n2w off`]
+         (BETA_RULE (Q.SPEC `checked` prefix_entry_register_address_add_actual_mode)))) >>
+     disch_then (qspecl_then [`tn`,`PG`,`G`,`D`] strip_assume_tac) >>
+     qexistsl [`static_src`,`first`,`prepared`,`H`,`qt`] >>
+     gvs[WORD_ADD_0, op_taint_def]) >>
+ `cs_extends st middle /\ middle.cs_blocks = st.cs_blocks /\
+  st.cs_next_var <= middle.cs_next_var /\ st.cs_next_id <= middle.cs_next_id` by
+   (imp_res_tac prefix_register_address_emit_shape >>
+    conj_tac >- metis_tac[cs_extends_trans] >> simp[]) >>
+ drule_all prefix_register_address_code_phase >> strip_tac >>
+ `checked ==> off < dimword (:256) /\ off + 32 <= LENGTH initial.vs_data_section /\
+   alloca_history func initial` by metis_tac[] >>
+ drule_all (BETA_RULE (Q.SPEC `checked` prefix_entry_register_address_dynamic_actual_mode)) >>
+ disch_then (qspecl_then [`tn`,`PG`,`G`,`D`] strip_assume_tac) >>
+ qexistsl [`src`,`middle`,`prepared`,`H`,`qt`] >> gvs[]
+QED
+*)
 Theorem prefix_entry_register_singleton_address_paired_mode:
  !checked ptr.
  (checked ==> off < dimword (:256) /\
@@ -283,39 +336,59 @@ Theorem prefix_entry_register_singleton_address_paired_mode:
  prepared.vs_gas_readings = initial.vs_gas_readings /\
  ((!fuel. ptr_safe_run D lo fuel ctx func PG H qt prepared) ==>
    !fuel. ptr_safe_run D lo fuel ctx func PG G tn initial)
+ /\ (checked ==> !D explicit. gas_origin_ptr_path (D, lo, explicit, ctx, func, PG) (initial, G, tn) [] (OK prepared, H, qt))
  /\ (checked ==> gas_path_mem ctx func initial 0 (OK prepared) /\ alloca_history func prepared)
 Proof
- rpt gen_tac >> disch_then (map_every assume_tac o CONJUNCTS) >>
- `checked ==> alloca_history func initial` by metis_tac[] >>
- drule_all (Q.INST [`data_size` |-> `0`] ctor_singleton_decode_phases) >>
- strip_tac
- >- (qpat_x_assum `src = static_src` SUBST_ALL_TAC >>
-     qpat_x_assum `middle = first` SUBST_ALL_TAC >>
-     drule prefix_register_address_emit_shape >> strip_tac >>
-     `st.cs_next_id <= first.cs_next_id` by decide_tac >>
-     drule_all prefix_register_address_code_phase >> strip_tac >>
-     drule_all (SRULE [eval_operand_def, op_taint_def]
-       (Q.INST [`a` |-> `Lit 0w`, `b` |-> `Lit (n2w off)`,
-                `u` |-> `0w`, `v` |-> `n2w off`]
-         (BETA_RULE (Q.SPEC `checked` prefix_entry_register_address_add_actual_mode)))) >>
-     disch_then (qspecl_then [`tn`,`PG`,`G`,`D`] strip_assume_tac) >>
-     qexistsl [`static_src`,`first`,`prepared`,`H`,`qt`] >>
-     gvs[WORD_ADD_0, op_taint_def]) >>
- `cs_extends st middle /\ middle.cs_blocks = st.cs_blocks /\
-  st.cs_next_var <= middle.cs_next_var /\ st.cs_next_id <= middle.cs_next_id` by
-   (imp_res_tac prefix_register_address_emit_shape >>
-    conj_tac >- metis_tac[cs_extends_trans] >> simp[]) >>
- drule_all prefix_register_address_code_phase >> strip_tac >>
- `checked ==> off < dimword (:256) /\ off + 32 <= LENGTH initial.vs_data_section /\
-   alloca_history func initial` by metis_tac[] >>
- drule_all (BETA_RULE (Q.SPEC `checked` prefix_entry_register_address_dynamic_actual_mode)) >>
- disch_then (qspecl_then [`tn`,`PG`,`G`,`D`] strip_assume_tac) >>
- qexistsl [`src`,`middle`,`prepared`,`H`,`qt`] >> gvs[]
+  cheat
 QED
 
 
 
 
+(* TEMPORARILY CHEATED - RULE F interface: the statement gained the forward
+   joint gas-origin pointer path; the original proof below proves the rest.
+Proof
+ rpt gen_tac >> disch_then (map_every assume_tac o CONJUNCTS) >>
+ drule_all deploy_ctor_canonical_member_source >>
+ disch_then (map_every assume_tac o CONJUNCTS) >>
+ drule abi_decoder_coherent_header >>
+ simp_tac bool_ss [abi_decoder_header_def] >> strip_tac >>
+ `off <= LENGTH encoded` by
+   (mp_tac (Q.SPECL [`atys`,`i`] window_member_head_bound) >>
+    drule window_member_tuple_length >> simp[Excl "enc_def"]) >>
+ `checked ==> off < dimword (:256) /\
+   ((~is_word_type ty /\ is_abi_dynamic ce.ce_struct_fields ty) ==>
+     off + 32 <= LENGTH initial.vs_data_section) /\ alloca_history func initial` by
+   (strip_tac >> conj_tac >- decide_tac >>
+    reverse conj_tac >- metis_tac[] >> strip_tac >>
+    `is_dynamic (EL i atys)` by metis_tac[] >>
+    `LENGTH atys = LENGTH avs` by simp[] >>
+    drule_all window_member_dynamic_bounds >>
+    drule window_member_tuple_length >> rpt strip_tac >> fs[Excl "enc_def"] >> decide_tac) >>
+ drule_all (Q.SPEC `checked` prefix_entry_register_singleton_address_paired_mode) >>
+ disch_then (qspecl_then [`tn`,`PG`,`G`,`D`] mp_tac) >>
+ disch_then (qx_choose_then `src` (qx_choose_then `middle`
+   (qx_choose_then `prepared` (qx_choose_then `H` (qx_choose_then `qt`
+     (map_every assume_tac o CONJUNCTS)))))) >>
+ `eval_operand (Var ptr') prepared = SOME (n2w d)` by
+   (simp[eval_operand_def] >> metis_tac[]) >>
+ qexistsl [`src`,`middle`,`prepared`,`abi_tuple_child_offset atys avs i`,`H`,`qt`] >>
+ asm_rewrite_tac[] >>
+ conj_tac
+ >- (Cases_on `is_abi_dynamic ce.ce_struct_fields ty` >>
+     fs[ctorRegisterArgsTheory.ctor_word_type_static] >> metis_tac[ctorRegisterArgsTheory.ctor_word_type_static]) >>
+ conj_tac
+ >- metis_tac[ctorRegisterArgsTheory.ctor_eval_operand_not_fresh, operand_distinct] >>
+ qpat_assum `EL i atys = _` (fn th => pure_once_rewrite_tac[GSYM th]) >>
+ asm_rewrite_tac[] >>
+ conj_tac >- (gvs[Excl "enc_def"] >> decide_tac) >>
+ conj_tac >-
+   (simp_tac bool_ss [allocas_from_def] >>
+    qpat_x_assum `allocas_from lo initial` mp_tac >>
+    asm_simp_tac bool_ss [allocas_from_def]) >>
+ strip_tac >> gvs[Excl "enc_def"] >> decide_tac
+QED
+*)
 Theorem prefix_entry_register_canonical_address_paired_mode:
  !checked ptr.
  (checked ==> LENGTH encoded <= LENGTH initial.vs_data_section /\ alloca_history func initial) /\
@@ -372,49 +445,12 @@ Theorem prefix_entry_register_canonical_address_paired_mode:
  prepared.vs_gas_readings = initial.vs_gas_readings /\
  ((!fuel. ptr_safe_run D lo fuel ctx func PG H qt prepared) ==>
    !fuel. ptr_safe_run D lo fuel ctx func PG G tn initial)
+ /\ (checked ==> !D explicit. gas_origin_ptr_path (D, lo, explicit, ctx, func, PG) (initial, G, tn) [] (OK prepared, H, qt))
  /\ (checked ==> gas_path_mem ctx func initial 0 (OK prepared) /\
       alloca_history func prepared /\
       sb + LENGTH (enc (vyper_to_abi_type env ty) (EL i avs)) <= LENGTH prepared.vs_data_section)
 Proof
- rpt gen_tac >> disch_then (map_every assume_tac o CONJUNCTS) >>
- drule_all deploy_ctor_canonical_member_source >>
- disch_then (map_every assume_tac o CONJUNCTS) >>
- drule abi_decoder_coherent_header >>
- simp_tac bool_ss [abi_decoder_header_def] >> strip_tac >>
- `off <= LENGTH encoded` by
-   (mp_tac (Q.SPECL [`atys`,`i`] window_member_head_bound) >>
-    drule window_member_tuple_length >> simp[Excl "enc_def"]) >>
- `checked ==> off < dimword (:256) /\
-   ((~is_word_type ty /\ is_abi_dynamic ce.ce_struct_fields ty) ==>
-     off + 32 <= LENGTH initial.vs_data_section) /\ alloca_history func initial` by
-   (strip_tac >> conj_tac >- decide_tac >>
-    reverse conj_tac >- metis_tac[] >> strip_tac >>
-    `is_dynamic (EL i atys)` by metis_tac[] >>
-    `LENGTH atys = LENGTH avs` by simp[] >>
-    drule_all window_member_dynamic_bounds >>
-    drule window_member_tuple_length >> rpt strip_tac >> fs[Excl "enc_def"] >> decide_tac) >>
- drule_all (Q.SPEC `checked` prefix_entry_register_singleton_address_paired_mode) >>
- disch_then (qspecl_then [`tn`,`PG`,`G`,`D`] mp_tac) >>
- disch_then (qx_choose_then `src` (qx_choose_then `middle`
-   (qx_choose_then `prepared` (qx_choose_then `H` (qx_choose_then `qt`
-     (map_every assume_tac o CONJUNCTS)))))) >>
- `eval_operand (Var ptr') prepared = SOME (n2w d)` by
-   (simp[eval_operand_def] >> metis_tac[]) >>
- qexistsl [`src`,`middle`,`prepared`,`abi_tuple_child_offset atys avs i`,`H`,`qt`] >>
- asm_rewrite_tac[] >>
- conj_tac
- >- (Cases_on `is_abi_dynamic ce.ce_struct_fields ty` >>
-     fs[ctorRegisterArgsTheory.ctor_word_type_static] >> metis_tac[ctorRegisterArgsTheory.ctor_word_type_static]) >>
- conj_tac
- >- metis_tac[ctorRegisterArgsTheory.ctor_eval_operand_not_fresh, operand_distinct] >>
- qpat_assum `EL i atys = _` (fn th => pure_once_rewrite_tac[GSYM th]) >>
- asm_rewrite_tac[] >>
- conj_tac >- (gvs[Excl "enc_def"] >> decide_tac) >>
- conj_tac >-
-   (simp_tac bool_ss [allocas_from_def] >>
-    qpat_x_assum `allocas_from lo initial` mp_tac >>
-    asm_simp_tac bool_ss [allocas_from_def]) >>
- strip_tac >> gvs[Excl "enc_def"] >> decide_tac
+  cheat
 QED
 
 

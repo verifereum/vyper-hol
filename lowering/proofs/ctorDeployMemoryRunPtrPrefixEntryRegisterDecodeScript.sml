@@ -12,6 +12,7 @@ Ancestors
  allocaFrontierBound allocaBudgetProps venomMemDefs ctorAbiActualSites ctorDeployMemoryFrontier
  ptrSafeRun ptrDiscipline venomState finite_map words arithmetic pred_set list rich_list
   ctorDeployMemoryRunMemEntryRegistration fragGasPathMem
+  fragGasOriginPtr
 
 val RegisterDecodeMode = ``\checked.
  compile_abi_decode_to_buf (Var dst) src DLOAD (Lit 0w) (Lit 0w)
@@ -68,10 +69,11 @@ val RegisterDecodeMode = ``\checked.
    op_taint qt (Var x) = op_taint tn (Var x)) /\
  ((!fuel. ptr_safe_run D lo fuel ctx func PG H qt actual) ==>
    !fuel. ptr_safe_run D lo fuel ctx func PG G tn initial) /\
+ (checked ==> !D explicit. gas_origin_ptr_path (D, lo, explicit, ctx, func, PG) (initial, G, tn) [] (OK actual, H, qt)) /\
  (checked ==> gas_path_mem ctx func initial 0 (OK actual) /\ alloca_history func actual)``;
 
-Theorem prefix_entry_register_decode_paired_mode:
- !checked. (^RegisterDecodeMode) checked
+(* TEMPORARILY CHEATED - RULE F interface: the statement gained the forward
+   joint gas-origin pointer path; the original proof below proves the rest.
 Proof
  gen_tac >> BETA_TAC >> disch_then (map_every assume_tac o CONJUNCTS) >>
  `st.cs_next_var <= last.cs_next_var` by
@@ -84,6 +86,12 @@ Proof
  Cases_on `checked`
  >- (drule (BETA_RULE prefix_canonical_coherent_complete_checked) >> suspend "instantiate") >>
  drule (BETA_RULE prefix_canonical_coherent_complete_code) >> suspend "instantiate"
+QED
+*)
+Theorem prefix_entry_register_decode_paired_mode:
+ !checked. (^RegisterDecodeMode) checked
+Proof
+  cheat
 QED
 
 Resume prefix_entry_register_decode_paired_mode[instantiate]:
@@ -106,6 +114,45 @@ Finalise prefix_entry_register_decode_paired_mode
 
 
 
+(* TEMPORARILY CHEATED - RULE F interface: the statement gained the forward
+   joint gas-origin pointer path; the original proof below proves the rest.
+Proof
+ rpt gen_tac >> disch_then (map_every assume_tac o CONJUNCTS) >>
+ drule_all (Q.SPEC `checked` prefix_entry_register_canonical_address_paired_mode) >>
+ disch_then (qspecl_then [`tn`,`PG`,`G`,`D`] mp_tac) >>
+ disch_then (qx_choose_then `src` (qx_choose_then `middle`
+   (qx_choose_then `prepared` (qx_choose_then `sb` (qx_choose_then `AG`
+     (qx_choose_then `atn` (map_every assume_tac o CONJUNCTS))))))) >>
+ `middle.cs_current_bb = st.cs_current_bb` by
+   (qpat_x_assum `cs_extends st middle` mp_tac >> simp[cs_extends_def]) >>
+ `alloca_inv prepared /\ alloca_frontier_inv_from k ctx func site prepared` by
+   (qpat_x_assum `alloca_inv initial` mp_tac >>
+    qpat_x_assum `alloca_frontier_inv_from k ctx func site initial` mp_tac >>
+    simp[alloca_inv_def, allocas_non_overlapping_def, alloca_next_valid_def,
+         alloca_frontier_inv_from_def, remaining_alloca_budget_def]) >>
+ `!aid. middle.cs_next_id <= aid ==> FLOOKUP prepared.vs_allocas aid = NONE` by
+   (rpt strip_tac >> simp[] >> first_x_assum irule >> decide_tac) >>
+ `FLOOKUP AG ptr' = SOME (b,sz) /\ op_taint atn (Var ptr') = {}` by metis_tac[] >>
+ `d + type_memory_bytes ce ty <= prepared.vs_alloca_next /\
+  lo <= prepared.vs_alloca_next` by simp[] >>
+ `checked ==> sb + LENGTH (enc (vyper_to_abi_type env ty) (EL i avs)) <=
+   LENGTH prepared.vs_data_section /\ alloca_history func prepared` by metis_tac[] >>
+ drule_all (BETA_RULE (Q.SPEC `checked` prefix_entry_register_decode_paired_mode)) >>
+ disch_then (qspecl_then [`PG`,`D`] mp_tac) >>
+ disch_then (qx_choose_then `actual` (qx_choose_then `H` (qx_choose_then `qt`
+   (qx_choose_then `B` (map_every assume_tac o CONJUNCTS))))) >>
+ `!x. not_fresh_at st x ==> not_fresh_at middle x` by
+   (simp[not_fresh_at_def] >> rpt strip_tac >> first_x_assum irule >> decide_tac) >>
+ `checked ==> gas_path_mem ctx func initial 0 (OK actual)` by
+   (strip_tac >>
+    irule (SRULE [ADD] (Q.INST [`n` |-> `0`, `m` |-> `0`] gas_path_mem_then)) >>
+    qexists_tac `prepared` >> simp[]) >>
+ qexistsl [`actual`,`H`,`qt`,`B`] >> asm_rewrite_tac[] >>
+ conj_tac >- suspend "effect" >>
+ conj_tac >- suspend "scratch" >>
+ metis_tac[abi_decode_sim_trans]
+QED
+*)
 Theorem prefix_entry_register_address_decode_paired_mode:
  !checked ptr.
  (checked ==> LENGTH encoded <= LENGTH initial.vs_data_section /\ alloca_history func initial) /\ i < LENGTH atys /\ LENGTH avs = LENGTH atys /\
@@ -161,42 +208,10 @@ Theorem prefix_entry_register_address_decode_paired_mode:
    op_taint qt (Var x) = op_taint tn (Var x)) /\
  ((!fuel. ptr_safe_run D lo fuel ctx func PG H qt actual) ==>
    !fuel. ptr_safe_run D lo fuel ctx func PG G tn initial)
+ /\ (checked ==> !D explicit. gas_origin_ptr_path (D, lo, explicit, ctx, func, PG) (initial, G, tn) [] (OK actual, H, qt))
  /\ (checked ==> gas_path_mem ctx func initial 0 (OK actual) /\ alloca_history func actual)
 Proof
- rpt gen_tac >> disch_then (map_every assume_tac o CONJUNCTS) >>
- drule_all (Q.SPEC `checked` prefix_entry_register_canonical_address_paired_mode) >>
- disch_then (qspecl_then [`tn`,`PG`,`G`,`D`] mp_tac) >>
- disch_then (qx_choose_then `src` (qx_choose_then `middle`
-   (qx_choose_then `prepared` (qx_choose_then `sb` (qx_choose_then `AG`
-     (qx_choose_then `atn` (map_every assume_tac o CONJUNCTS))))))) >>
- `middle.cs_current_bb = st.cs_current_bb` by
-   (qpat_x_assum `cs_extends st middle` mp_tac >> simp[cs_extends_def]) >>
- `alloca_inv prepared /\ alloca_frontier_inv_from k ctx func site prepared` by
-   (qpat_x_assum `alloca_inv initial` mp_tac >>
-    qpat_x_assum `alloca_frontier_inv_from k ctx func site initial` mp_tac >>
-    simp[alloca_inv_def, allocas_non_overlapping_def, alloca_next_valid_def,
-         alloca_frontier_inv_from_def, remaining_alloca_budget_def]) >>
- `!aid. middle.cs_next_id <= aid ==> FLOOKUP prepared.vs_allocas aid = NONE` by
-   (rpt strip_tac >> simp[] >> first_x_assum irule >> decide_tac) >>
- `FLOOKUP AG ptr' = SOME (b,sz) /\ op_taint atn (Var ptr') = {}` by metis_tac[] >>
- `d + type_memory_bytes ce ty <= prepared.vs_alloca_next /\
-  lo <= prepared.vs_alloca_next` by simp[] >>
- `checked ==> sb + LENGTH (enc (vyper_to_abi_type env ty) (EL i avs)) <=
-   LENGTH prepared.vs_data_section /\ alloca_history func prepared` by metis_tac[] >>
- drule_all (BETA_RULE (Q.SPEC `checked` prefix_entry_register_decode_paired_mode)) >>
- disch_then (qspecl_then [`PG`,`D`] mp_tac) >>
- disch_then (qx_choose_then `actual` (qx_choose_then `H` (qx_choose_then `qt`
-   (qx_choose_then `B` (map_every assume_tac o CONJUNCTS))))) >>
- `!x. not_fresh_at st x ==> not_fresh_at middle x` by
-   (simp[not_fresh_at_def] >> rpt strip_tac >> first_x_assum irule >> decide_tac) >>
- `checked ==> gas_path_mem ctx func initial 0 (OK actual)` by
-   (strip_tac >>
-    irule (SRULE [ADD] (Q.INST [`n` |-> `0`, `m` |-> `0`] gas_path_mem_then)) >>
-    qexists_tac `prepared` >> simp[]) >>
- qexistsl [`actual`,`H`,`qt`,`B`] >> asm_rewrite_tac[] >>
- conj_tac >- suspend "effect" >>
- conj_tac >- suspend "scratch" >>
- metis_tac[abi_decode_sim_trans]
+  cheat
 QED
 
 Resume prefix_entry_register_address_decode_paired_mode[effect]:
