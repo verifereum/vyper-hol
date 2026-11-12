@@ -330,9 +330,12 @@ Proof
   cheat
 QED
 
+(* HELD (train 17): 0.5.0b1 arg snapshot re-proof; these Resume blocks hang off a held proof, commented out with it *)
+(*
 (* HELD (train 15): pure_frame sweep (tuple literal), retired in train 16 *)
 Resume intcall_tuple_literal_step[pure_frame]:
   cheat
 QED
 
 Finalise intcall_tuple_literal_step
+*)
