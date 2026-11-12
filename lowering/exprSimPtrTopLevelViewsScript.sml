@@ -100,8 +100,8 @@ Proof
   drule vyperTypeValuesTheory.evaluate_type_well_formed_type_value >> strip_tac >>
   drule_all decode_value_from_slots_in_range >> strip_tac >>
   qpat_x_assum `!slot tvt v. _` (qspecl_then [`slot`, `tvt`, `v`] mp_tac) >>
-  simp[read_storage_slot_def, vyperStorageBackendTheory.get_storage_backend_eq,
-       bind_def, lift_option_def, return_def]
+  fs[read_storage_slot_def, vyperStorageBackendTheory.get_storage_backend_eq,
+     bind_def, lift_option_def, return_def, wordsTheory.w2n_n2w]
 QED
 
 Theorem compile_toplevel_storage_vv_sim_ptr:
