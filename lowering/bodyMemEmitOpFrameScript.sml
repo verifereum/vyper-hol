@@ -18,11 +18,11 @@ Theorem emit_op_word_path_frame_mem:
     fn_has_code sa sb func /\ fn_inst_ids_distinct func /\ ~s0.vs_halted /\
     s0.vs_current_bb = sa.cs_current_bb /\
     s0.vs_inst_idx = LENGTH sa.cs_current_insts /\
-    local_ptrs_reserved cenv sa /\ stmt_state_rel ctx func cenv cx es s0 /\
+    local_ptrs_reserved cenv sa /\ stmt_state_rel H ctx func cenv cx es s0 /\
     alloca_history func s0 ==>
     ?t. gas_marked_path T ctx func s0 0 (OK t) /\
       eval_operand op t = SOME w /\
-      stmt_state_rel ctx func cenv cx es t /\
+      stmt_state_rel H ctx func cenv cx es t /\
       ~t.vs_halted /\ t.vs_current_bb = sb.cs_current_bb /\
       t.vs_inst_idx = LENGTH sb.cs_current_insts /\
       local_ptrs_reserved cenv sb /\ alloca_history func t /\
@@ -62,7 +62,7 @@ Proof
      qexists_tac `sa` >> simp[]) >>
   `local_ptrs_reserved cenv sb` by
     (irule local_ptrs_reserved_next_var >> qexists_tac `sa` >> simp[]) >>
-  `stmt_state_rel ctx func cenv cx es (update_var out w s0)` by
+  `stmt_state_rel H ctx func cenv cx es (update_var out w s0)` by
     (irule stmt_state_rel_update_var >> simp[]) >>
   qexists_tac `update_var out w s0 with vs_inst_idx := LENGTH sb.cs_current_insts` >>
   simp[gas_marked_path_def, stmt_state_rel_inst_idx, eval_operand_def] >>
