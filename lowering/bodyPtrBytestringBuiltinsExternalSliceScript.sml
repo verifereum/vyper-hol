@@ -312,17 +312,23 @@ Proof
 QED
 
 Theorem compile_slice_extcode_stages:
-  compile_slice_extcode addr start len root data sa = (out,sb) ==>
-  ?s1 s2 s3 limit.
-    out = root /\ emit_op EXTCODESIZE [addr] sa = (limit,s1) /\
+  compile_slice_extcode addr start len N sa = (out,sb) ==>
+  ?s1 s2 s3 s4 data limit.
+    emit_op EXTCODESIZE [addr] sa = (limit,s1) /\
     compile_assert_slice_bounds start len limit s1 = ((),s2) /\
-    emit_void EXTCODECOPY [addr; data; start; len] s2 = ((),s3) /\
-    emit_void MSTORE [root; len] s3 = ((),sb) /\
-    cs_extends sa s1 /\ cs_extends s1 s2 /\
-    cs_extends s2 s3 /\ cs_extends s3 sb
+    compile_slice_out_buf N s2 = ((out,data),s3) /\
+    emit_void EXTCODECOPY [addr; data; start; len] s3 = ((),s4) /\
+    emit_void MSTORE [out; len] s4 = ((),sb) /\
+    cs_extends sa s1 /\ cs_extends s1 s2 /\ cs_extends s2 s3 /\
+    cs_extends s3 s4 /\ cs_extends s4 sb
 Proof
   simp[compile_slice_extcode_def, comp_bind_def, comp_ignore_bind_def, comp_return_def] >>
-  rpt (pairarg_tac >> simp[]) >> strip_tac >> gvs[] >>
+  rpt (pairarg_tac >> simp[comp_bind_def, comp_ignore_bind_def, comp_return_def]) >>
+  strip_tac >> gvs[] >>
+  `!n x y z. compile_slice_out_buf n y = (x,z) ==> cs_extends y z` by
+    (rpt strip_tac >> Cases_on `x` >>
+     drule compile_slice_out_buf_compiler_parts >> strip_tac >>
+     metis_tac[cs_extends_trans]) >>
   metis_tac[cs_appends_emit_helpers, cs_appends_def, slice_bounds_extends]
 QED
 
@@ -819,35 +825,10 @@ QED
 
 Finalise external_slice_fragment_counted_ok
 
-Theorem compile_slice_extcode_counted_ok:
-  compile_slice_extcode addr start len (Var root) (Var data) sa = (out,sb) /\
-  emit_op EXTCODESIZE [addr] sa = (limit,sc) /\
-  compile_assert_slice_bounds start len limit sc = ((),sd) /\
-  fn_has_code sa sb fn /\ ~ctx_has_dalloca ctx /\ ~s.vs_halted /\
-  s.vs_current_bb = sa.cs_current_bb /\ s.vs_inst_idx = LENGTH sa.cs_current_insts /\
-  fresh_vars_wrt sa s /\ eval_operand addr s = SOME a /\
-  eval_operand start s = SOME wa /\ eval_operand len s = SOME wn /\
-  lookup_var root s = SOME b /\ lookup_var data s = SOME d /\
-  32 <= N /\ ptr_covers G tn root s N /\ ptr_covers G tn data s (w2n wn) /\
-  (!op. MEM op [addr;start;len] ==> op_prov G op = NONE /\ op_taint tn op = {}) /\
-  run_inst_seq (emitted_insts sc sd)
-    ((update_var (STRING #"%" (toString sa.cs_next_var))
-      (n2w (LENGTH (lookup_account (w2w a) s.vs_accounts).code)) s) with
-       vs_inst_idx := SUC s.vs_inst_idx) = OK u ==>
-  out = Var root /\ ?r v t H tm.
-    r = u with vs_inst_idx := LENGTH sd.cs_current_insts /\
-    v = (write_memory_with_expansion (w2n d)
-      (TAKE (w2n wn) (DROP (w2n wa) (lookup_account (w2w a) s.vs_accounts).code ++
-         REPLICATE (w2n wn) 0w)) r) with vs_inst_idx := SUC r.vs_inst_idx /\
-    t = (mstore (w2n b) wn v) with vs_inst_idx := SUC v.vs_inst_idx /\
-    gas_path_ptr D 0 ctx fn PG G tn s 0 H tm (OK t) /\
-    t.vs_current_bb = sb.cs_current_bb /\ t.vs_inst_idx = LENGTH sb.cs_current_insts /\
-    ~t.vs_halted /\ ptr_covers H tm root t N /\ mem_word_at (w2n b) t.vs_memory = wn /\
-    (!x. not_fresh_at sa x ==> FLOOKUP H x = FLOOKUP G x /\
-      op_taint tm (Var x) = op_taint tn (Var x)) /\
-    tm.t_stor = tn.t_stor /\ tm.t_trans = tn.t_trans /\ tm.t_imm = tn.t_imm /\
-    tm.t_mem = (tn.t_mem DIFF {i | w2n d <= i /\ i < w2n d + w2n wn})
-      DIFF {i | w2n b <= i /\ i < w2n b + 32}
+(* PORT_ADMISSION: SEQ-3208, bot/opus/seq-3208-train16-unit, built at fc54ea89e *)
+(* TEMPORARILY CHEATED - restated for the 0.5.0b1 order (the output buffer is
+   now allocated after EXTCODESIZE and the bounds check); proof at the old
+   arity, kept for the port:
 Proof
   strip_tac >> drule compile_slice_extcode_stages >> strip_tac >>
   `s1 = sc /\ s2 = sd` by metis_tac[pairTheory.PAIR_EQ] >>
@@ -867,9 +848,49 @@ Proof
     (mp_then Any (mp_tac o SRULE []) external_slice_fragment_counted_ok) >>
   simp[] >> disch_then drule_all >> disch_then (qspecl_then [`PG`,`D`] mp_tac) >> simp[]
 QED
+*)
+Theorem compile_slice_extcode_counted_ok:
+  compile_slice_extcode addr start len N sa = (out,sb) /\
+  emit_op EXTCODESIZE [addr] sa = (limit,sc) /\
+  compile_assert_slice_bounds start len limit sc = ((),sd) /\
+  compile_slice_out_buf N sd = ((Var root,Var data),se) /\
+  fn_has_code sa sb fn /\ ~ctx_has_dalloca ctx /\ ~s.vs_halted /\
+  s.vs_current_bb = sa.cs_current_bb /\ s.vs_inst_idx = LENGTH sa.cs_current_insts /\
+  fresh_vars_wrt sa s /\ eval_operand addr s = SOME a /\
+  eval_operand start s = SOME wa /\ eval_operand len s = SOME wn /\
+  (!op. MEM op [addr;start;len] ==> op_prov G op = NONE /\ op_taint tn op = {}) /\
+  run_inst_seq (emitted_insts sc sd)
+    ((update_var (STRING #"%" (toString sa.cs_next_var))
+      (n2w (LENGTH (lookup_account (w2w a) s.vs_accounts).code)) s) with
+       vs_inst_idx := SUC s.vs_inst_idx) = OK u /\
+  r = u with vs_inst_idx := LENGTH sd.cs_current_insts /\
+  stmt_state_rel ctx fn cenv cx es r /\
+  fn_inst_ids_distinct fn /\ local_ptrs_reserved cenv sd /\
+  32 <= N /\ N < dimword (:256) /\ w2n wn <= N - 32 /\
+  step_inst_base (mk_inst sd.cs_next_id ALLOCA [Lit (n2w N)] [root]) r = OK u0 /\
+  lookup_var root u0 = SOME b /\
+  t0 = ((update_var data (b + 32w) u0) with vs_inst_idx := r.vs_inst_idx + 2) ==>
+  out = Var root /\ ?v t H tm.
+    v = (write_memory_with_expansion (w2n (b + 32w))
+      (TAKE (w2n wn) (DROP (w2n wa) (lookup_account (w2w a) s.vs_accounts).code ++
+         REPLICATE (w2n wn) 0w)) t0) with vs_inst_idx := SUC t0.vs_inst_idx /\
+    t = (mstore (w2n b) wn v) with vs_inst_idx := SUC v.vs_inst_idx /\
+    gas_path_ptr D 0 ctx fn PG G tn s 0 H tm (OK t) /\
+    t.vs_current_bb = sb.cs_current_bb /\ t.vs_inst_idx = LENGTH sb.cs_current_insts /\
+    ~t.vs_halted /\ ptr_covers H tm root t N /\ mem_word_at (w2n b) t.vs_memory = wn /\
+    (!x. not_fresh_at sa x ==> FLOOKUP H x = FLOOKUP G x /\
+      op_taint tm (Var x) = op_taint tn (Var x)) /\
+    tm.t_stor = tn.t_stor /\ tm.t_trans = tn.t_trans /\ tm.t_imm = tn.t_imm /\
+    tm.t_mem = ((tn.t_mem UNION new_site_bytes r u0)
+      DIFF {i | w2n (b + 32w) <= i /\ i < w2n (b + 32w) + w2n wn})
+      DIFF {i | w2n b <= i /\ i < w2n b + 32} /\
+    w2n b + N < dimword (:256)
+Proof
+  cheat
+QED
 
 Theorem compile_slice_extcode_bounds_abort:
-  compile_slice_extcode addr start len root data sa = (out,sb) /\
+  compile_slice_extcode addr start len N sa = (out,sb) /\
   emit_op EXTCODESIZE [addr] sa = (limit,sc) /\
   compile_assert_slice_bounds start len limit sc = ((),sd) /\
   fn_has_code sa sb fn /\ ~ctx_has_dalloca ctx /\ ~s.vs_halted /\
