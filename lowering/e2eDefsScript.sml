@@ -112,21 +112,8 @@ Definition call_outcomes_storage_ok_def:
         (FST (storage_trace_horizon obs)) obs
 End
 
-(* What the call theorem asks of the oracle outcomes: every one leaves the
-   declared storage and transient regions decoding.  call_outcomes_ok adds
-   the outcome bounds the proof uses (return data shorter than 2 ** 256
-   bytes, runtime well-typed accounts); call_state_rel_call_outcomes_ok
-   derives them for the outcomes of the real run from call_state_rel. *)
-Definition call_outcomes_storage_ok_def:
-  call_outcomes_storage_ok am tx os <=>
-    let cx = initial_evaluation_context am.sources am.layouts tx NONE in
-      EVERY (\outcome.
-               contract_storage_well_formed cx
-                 (initial_state (am with <| accounts := outcome.co_accounts;
-                                            tStorage := outcome.co_tStorage |>) []))
-            os
-End
-
+(* The global storage-and-bounds predicate remains available independently.
+   The compiler boundary uses the finite selected-trace guards above. *)
 Definition call_outcomes_ok_def:
   call_outcomes_ok am tx os <=>
     let cx = initial_evaluation_context am.sources am.layouts tx NONE in
@@ -290,15 +277,20 @@ QED
 
 Theorem call_state_rel_call_outcomes_ok:
   call_state_rel tops runtime_bc am tx es /\
-  call_outcomes_storage_ok am tx (MAP SND (call_trace es)) ==>
+  EVERY (\outcome.
+    contract_storage_well_formed
+      (initial_evaluation_context am.sources am.layouts tx NONE)
+      (initial_state (am with <| accounts := outcome.co_accounts;
+                                tStorage := outcome.co_tStorage |>) []))
+    (MAP SND (call_trace es)) ==>
   call_outcomes_ok am tx (MAP SND (call_trace es))
 Proof
   strip_tac >>
   `wf_state es /\ balance_bounded (2 ** 256 - 1) es /\ returndata_bounded es` by
     fs[call_state_rel_def] >>
   drule_all call_trace_outcomes_bounded >>
-  qpat_x_assum `call_outcomes_storage_ok _ _ _` mp_tac >>
-  simp[call_outcomes_ok_def, call_outcomes_storage_ok_def, listTheory.EVERY_MEM] >>
+  qpat_x_assum `EVERY _ (MAP SND (call_trace es))` mp_tac >>
+  simp[call_outcomes_ok_def, listTheory.EVERY_MEM] >>
   rpt strip_tac >> res_tac
 QED
 
