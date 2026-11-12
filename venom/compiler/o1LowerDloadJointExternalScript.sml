@@ -398,7 +398,8 @@ Resume ld_joint_delegatecall_next[memory]:
   `ld_dyn_floor_ok (dyn_floor C vs) lo sites X` by fs[ld_joint_boundary_def] >>
   drule_at (Pat `ld_joint_geometry _ _ _ _`) ld_memory_agree_return_buffer >>
   disch_then irule >> simp[] >> conj_tac
-  >- (qpat_x_assum `rs = 0 \/ _` strip_assume_tac
+  >- (qexists_tac `dyn_floor C vs` >>
+      qpat_x_assum `rs = 0 \/ _` strip_assume_tac
       >- simp[]
       >- (disj2_tac >> disj1_tac >> simp[] >>
           simp[arithmeticTheory.MIN_DEF] >> decide_tac)
@@ -1043,7 +1044,8 @@ Resume ld_joint_call_next[memory]:
     fs[ld_joint_boundary_def, Excl "consume_call_outcome_eq"] >>
   drule_at (Pat `ld_joint_geometry _ _ _ _`) ld_memory_agree_return_buffer >>
   disch_then irule >> simp[] >> conj_tac
-  >- (qpat_x_assum `w2n rs = 0 \/ _` strip_assume_tac
+  >- (qexists_tac `dyn_floor C vs` >>
+      qpat_x_assum `w2n rs = 0 \/ _` strip_assume_tac
       >- gvs[Excl "consume_call_outcome_eq"]
       >- (disj2_tac >> disj1_tac >>
           gvs[Excl "consume_call_outcome_eq"] >>
