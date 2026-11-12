@@ -125,8 +125,10 @@ Proof
     (qpat_assum `target_post _ _ _ _ _ _ _ _ _ _ _ _ _` mp_tac >>
      simp[loweringPostsTheory.target_post_def]) >>
   `alloca_frame cenv es0 sa s0 cenv mid u` by
-    (irule augAssignPlaceWordStoreMemoryTheory.alloca_frame_memory_kept >>
-     simp[] >> metis_tac[]) >>
+    (qspecl_then [`cenv`, `es0`, `sa`, `s0`, `cenv`, `mid`, `t`, `ctx`, `func`,
+                  `cx`, `sp`, `mid`, `u`] mp_tac
+       augAssignPlaceWordStoreMemoryTheory.alloca_frame_memory_kept >>
+     impl_tac >- simp[] >> simp[]) >>
   irule aug_place_reads_suffix >> simp[] >>
   qexists_tac `\res ee v. res = INL () /\
     stmt_post ctx func cx lctx cenv cenv sa sf es0 s0 res ee v /\

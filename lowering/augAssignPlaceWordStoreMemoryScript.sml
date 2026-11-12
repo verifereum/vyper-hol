@@ -55,6 +55,7 @@ QED
 (* A step that keeps the memory and the registers handed out before sp
    keeps an alloca frame, re-read at scopes with the same names. *)
 Theorem alloca_frame_memory_kept:
+  !c0 e0 sa0 s0 c ee t ctx func cx sp ee1 u.
   alloca_frame c0 e0 sa0 s0 c ee t /\ stmt_state_rel ctx func c cx ee t /\
   local_ptrs_reserved c sp /\ MAP FDOM ee1.scopes = MAP FDOM ee.scopes /\
   (!x w. not_fresh_at sp x /\ lookup_var x t = SOME w ==>
@@ -62,7 +63,8 @@ Theorem alloca_frame_memory_kept:
   u.vs_memory = t.vs_memory ==>
   alloca_frame c0 e0 sa0 s0 c ee1 u
 Proof
-  rewrite_tac[stmtSimDefsTheory.alloca_frame_def] >> strip_tac >> rpt gen_tac >> strip_tac >>
+  rpt gen_tac >> rewrite_tac[stmtSimDefsTheory.alloca_frame_def] >> strip_tac >>
+  rpt gen_tac >> strip_tac >>
   qpat_x_assum `!aid off sz. FLOOKUP s0.vs_allocas _ = _ /\ _ ==> _`
     (qspecl_then [`aid`, `off`, `sz`] mp_tac) >>
   (impl_tac >- (rpt conj_tac >> first_assum ACCEPT_TAC)) >> strip_tac >>

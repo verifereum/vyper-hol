@@ -112,11 +112,16 @@ Proof
   >- (gvs[] >>
       rename1 `eval_operand op t = SOME (val_to_w256 v)` >>
       `alloca_frame cenv es0 sa s_entry cenv ee t` by
-        (irule augAssignPlaceWordStoreMemoryTheory.alloca_frame_memory_kept >>
-         simp[] >> metis_tac[]) >>
+        (qspecl_then [`cenv`, `es0`, `sa`, `s_entry`, `cenv`, `ee`, `s`, `ctx`,
+                      `func`, `cx`, `s2`, `ee`, `t`] mp_tac
+           augAssignPlaceWordStoreMemoryTheory.alloca_frame_memory_kept >>
+         impl_tac >- (rpt conj_tac >> FIRST [REFL_TAC, first_assum ACCEPT_TAC]) >>
+         simp[]) >>
       drule_all aug_place_word_store_after_operator_mem >> strip_tac >>
       `alloca_frame cenv es0 sa s_entry cenv (ff with gas_obs := []) u` by
-        (`alloca_frame cenv es0 sa s_entry cenv ff u` by metis_tac[] >>
+        (`alloca_frame cenv es0 sa s_entry cenv ff u` by
+           (qpat_x_assum `!c0 e0 sa0 sx. alloca_frame _ _ _ _ _ _ _ ==> _`
+              irule >> first_assum ACCEPT_TAC) >>
          pop_assum mp_tac >> simp[stmtSimDefsTheory.alloca_frame_def]) >>
       `gas_marked_path T ctx func s 0 (OK u)` by
         (drule_all fragGasModeTheory.gas_marked_path_then >> simp[]) >>
