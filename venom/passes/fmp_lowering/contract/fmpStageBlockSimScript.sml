@@ -10,7 +10,7 @@
  *)
 Theory fmpStageBlockSim
 Ancestors
-  fmpStageRel o1PassContract ptrDiscipline contextCodegenRel
+  fmpStageBlockSimCode fmpStageRel o1PassContract ptrDiscipline contextCodegenRel
   venomExecSemantics venomState venomInst finite_map words list
 
 Theorem fmp_stage_block_entry:
