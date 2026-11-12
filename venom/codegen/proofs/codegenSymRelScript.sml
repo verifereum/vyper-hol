@@ -23,16 +23,13 @@
  *                            holds in a frame
  *   sym_kinds_ok           - the kinds part of the frame invariant
  *   sym_frame_inv          - fn_frame_inv's symbolic twin
- *   sym_steps              - n symbolic steps, as asm_steps
- *   sym_run_terminal_never_bad - a symbolic run that ends never misuses a
- *                            label, at any fuel
  *   asm_sym_steps_lockstep - an OK symbolic run is shadowed by a related
  *                            OK concrete run
  *)
 
 Theory codegenSymRel
 Ancestors
-  asmDataEnv asmSymBridge asmSymSem asmSem frameRel contextCodegenRel codegenRel
+  asmDataEnv asmSymBridge asmSplice asmSymSem asmSem frameRel contextCodegenRel codegenRel
   unitShapeDefs stackPlanTypes venomWf venomExecSemantics venomState
   venomInst allocaRemapSSA dfgAnalysisProps dfgDefs list finite_map arithmetic
 
@@ -243,24 +240,7 @@ End
 
 (* ===== Runs ===== *)
 
-(* n symbolic steps, as asm_steps: the state they reach, or the result
-   that stopped them. *)
-Definition sym_steps_def:
-  sym_steps p env 0 ss = SymOK ss /\
-  sym_steps p env (SUC n) ss =
-    if ss.sym_base.as_pc >= LENGTH p then SymError "pc out of bounds"
-    else
-      case sym_step p env (EL ss.sym_base.as_pc p) ss of
-        SymOK ss' => sym_steps p env n ss'
-      | r => r
-End
 
-
-Theorem sym_run_zero[local]:
-  sym_run p env 0 ss = SymError "out of fuel"
-Proof
-  simp[Once sym_run_def]
-QED
 
 Theorem sym_run_SUC_step[local]:
   sym_run p env (SUC fuel) ss =
@@ -271,22 +251,6 @@ Theorem sym_run_SUC_step[local]:
     | r => r
 Proof
   simp[Once sym_run_def]
-QED
-
-(* The symbolic run is deterministic, and fuel only cuts it short with an
-   error: so one that ends never misuses a label, at any fuel. *)
-Theorem sym_run_terminal_never_bad:
-  !fuel0 ss. sym_terminal (sym_run p env fuel0 ss) ==>
-             !fuel msg. sym_run p env fuel ss <> SymBad msg
-Proof
-  Induct
-  >- simp[sym_run_zero, sym_terminal_def] >>
-  rpt gen_tac >> strip_tac >> Cases
-  >- simp[sym_run_zero] >>
-  gvs[sym_run_SUC_step] >>
-  Cases_on `ss.sym_base.as_pc >= LENGTH p` >> gvs[sym_terminal_def] >>
-  Cases_on `sym_step p env (EL ss.sym_base.as_pc p) ss` >>
-  gvs[sym_terminal_def] >> first_x_assum drule >> simp[]
 QED
 
 Theorem sym_steps_add:
@@ -308,24 +272,31 @@ Proof
   simp[sym_steps_add]
 QED
 
+Theorem mem_sval_at_store_label:
+  mem_sval_at (labs |++ GENLIST (\i. (off+i,(l,d,i))) 32) off (Lab l d)
+Proof
+  simp[mem_sval_at_def, mem_label_at_def, mstore_labels_lookup,
+       EVERY_MEM, rich_listTheory.MEM_COUNT_LIST]
+QED
+
+Theorem store_label_lookup_outside:
+  ~in_mem_range off 32 i ==>
+  FLOOKUP (labs |++ GENLIST (\j. (off+j,(l,d,j))) 32) i = FLOOKUP labs i
+Proof
+  simp[mstore_labels_lookup, in_mem_range_def]
+QED
+
+Theorem mem_labels_clear_lookup:
+  FLOOKUP (mem_labels_clear labs P) b = if P b then NONE else FLOOKUP labs b
+Proof
+  Cases_on `P b` >> simp[mem_labels_clear_def, finite_mapTheory.FLOOKUP_DRESTRICT]
+QED
+
 Theorem mem_sval_at_clear:
   mem_sval_at (mem_labels_clear labs (in_mem_range off 32)) off (Val w)
 Proof
   simp[mem_sval_at_def, mem_labels_clear_def,
        finite_mapTheory.FDOM_DRESTRICT, pred_setTheory.IN_APP]
-QED
-
-(* A run of n steps to ss' continues as the run from ss'. *)
-Theorem sym_steps_run:
-  !n ss ss' fuel.
-    sym_steps p env n ss = SymOK ss' ==>
-    sym_run p env (n + fuel) ss = sym_run p env fuel ss'
-Proof
-  Induct >> simp[sym_steps_def, ADD_CLAUSES] >> rpt gen_tac >>
-  simp[sym_run_SUC_step] >>
-  IF_CASES_TAC >> simp[] >>
-  Cases_on `sym_step p env (EL ss.sym_base.as_pc p) ss` >> simp[] >>
-  ONCE_REWRITE_TAC [ADD_COMM] >> simp[]
 QED
 
 (* A run of n steps that ends ends the run with more fuel. *)

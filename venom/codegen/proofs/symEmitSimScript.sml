@@ -117,15 +117,15 @@ Theorem sym_steps_single_emit:
   sym_step p env inst ss = SymOK ss' ==>
   sym_steps p env 1 ss = SymOK ss'
 Proof
-  simp[asm_block_at_def, sym_steps_def] >> rpt strip_tac >>
-  simp[codegenSymRelTheory.sym_steps_compute]
+  simp[asm_block_at_def, asmSpliceTheory.sym_steps_def] >> rpt strip_tac >>
+  simp[asmSpliceTheory.sym_steps_compute]
 QED
 
 Theorem sym_assert_success_run:
   ss.sym_stack = Val w :: tail /\ w <> 0w /\
   asm_block_at p ss.sym_base.as_pc
     [AsmOp "ISZERO"; AsmPushLabel "revert"; AsmOp "JUMPI"] ==>
-  codegenSymRel$sym_steps p env 3 ss = SymOK
+  sym_steps p env 3 ss = SymOK
     (ss with <| sym_base := (ss.sym_base with <| as_stack := [];
                               as_pc := ss.sym_base.as_pc + 3 |>);
                 sym_stack := tail |>)
@@ -135,7 +135,7 @@ Proof
     map_every (fn n => qspec_then n mp_tac th) [`0`, `1`, `2`]) >>
   simp[] >> rpt strip_tac >>
   drule asmSpliceTheory.sym_step_iszero_val >> strip_tac >>
-  simp[codegenSymRelTheory.sym_steps_compute,
+  simp[asmSpliceTheory.sym_steps_compute,
        asmSpliceTheory.sym_step_iszero_val,
        asmSpliceTheory.sym_step_push_label,
        asm_next_def] >>
@@ -148,7 +148,7 @@ Theorem sym_assert_unreachable_success_run:
   asm_block_at p ss.sym_base.as_pc
     [AsmPushLabel lbl; AsmOp "JUMPI"; AsmOp "INVALID"; AsmLabel lbl] /\
   INDEX_OF (AsmLabel lbl) p = SOME (ss.sym_base.as_pc + 3) ==>
-  codegenSymRel$sym_steps p env 3 ss = SymOK
+  sym_steps p env 3 ss = SymOK
     (ss with <| sym_base := (ss.sym_base with <| as_stack := [];
                               as_pc := ss.sym_base.as_pc + 4 |>);
                 sym_stack := tail |>)
@@ -157,7 +157,7 @@ Proof
   qpat_x_assum `!j. _` (fn th =>
     map_every (fn n => qspec_then n mp_tac th) [`0`, `1`, `3`]) >>
   simp[] >> rpt strip_tac >>
-  simp[codegenSymRelTheory.sym_steps_compute,
+  simp[asmSpliceTheory.sym_steps_compute,
        asmSpliceTheory.sym_step_push_label, asm_next_def] >>
   simp[sym_step_def, sym_step_op_def, sym_jumpi_def, sym_jump_dest_def,
        sym_set_stack_def, sym_lift_def, asm_step_def, asm_next_def,
@@ -177,7 +177,7 @@ QED
 
 Theorem sym_initial_fmp_run:
   asm_block_at p ss.sym_base.as_pc [AsmPush (encode_num_bytes initial_fmp)] ==>
-  codegenSymRel$sym_steps p env 1 ss = SymOK
+  sym_steps p env 1 ss = SymOK
     (ss with <| sym_base := asm_next (ss.sym_base with as_stack := []);
                 sym_stack := Val (n2w initial_fmp) :: ss.sym_stack |>)
 Proof
@@ -215,7 +215,7 @@ QED
 Theorem sym_bump_success_run:
   ss.sym_stack = Val delta :: Val fmp :: tail /\
   asm_block_at p ss.sym_base.as_pc [AsmOp "DUP2"; AsmOp "ADD"] ==>
-  codegenSymRel$sym_steps p env 2 ss = SymOK
+  sym_steps p env 2 ss = SymOK
     (ss with <| sym_base := ss.sym_base with <| as_stack := [];
                               as_pc := ss.sym_base.as_pc + 2 |>;
                 sym_stack := Val (fmp + delta) :: Val fmp :: tail |>)
@@ -224,7 +224,7 @@ Proof
   qpat_x_assum `!j. _` (fn th =>
     map_every (fn n => qspec_then n mp_tac th) [`0`, `1`]) >>
   simp[] >> rpt strip_tac >>
-  simp[codegenSymRelTheory.sym_steps_compute, Once sym_step_def,
+  simp[asmSpliceTheory.sym_steps_compute, Once sym_step_def,
        Once sym_step_op_def, dup_table_def, sym_dup_def, sym_set_stack_def,
        asm_next_def] >>
   qmatch_goalsub_abbrev_tac `sym_step p env (AsmOp "ADD") mid` >>
@@ -263,7 +263,7 @@ Theorem sym_istore_success_run:
   (!b. b IN FDOM ss.sym_mem_labels ==>
        ~in_mem_range (w2n off) 32 b) /\
   asm_block_at p ss.sym_base.as_pc [AsmOp "SWAP1"; AsmOp "MSTORE"] ==>
-  codegenSymRel$sym_steps p env 2 ss = SymOK
+  sym_steps p env 2 ss = SymOK
     (ss with <| sym_base := ss.sym_base with <| as_stack := [];
                   as_memory := mem_write32 (w2n off) value ss.sym_base.as_memory;
                   as_pc := ss.sym_base.as_pc + 2 |>;
@@ -273,7 +273,7 @@ Proof
   qpat_x_assum `!j. _` (fn th =>
     map_every (fn n => qspec_then n mp_tac th) [`0`, `1`]) >>
   simp[] >> rpt strip_tac >>
-  simp[codegenSymRelTheory.sym_steps_compute, Once sym_step_def,
+  simp[asmSpliceTheory.sym_steps_compute, Once sym_step_def,
        Once sym_step_op_def, dup_table_def, swap_table_def, sym_swap_def,
        sym_set_stack_def, asm_next_def, LUPDATE_compute] >>
   qmatch_goalsub_abbrev_tac `sym_step p env (AsmOp "MSTORE") mid` >>
@@ -2322,7 +2322,7 @@ Theorem sym_named_steps_ok_stack_suffix:
 Proof
   simp[asm_block_at_def] >>
   rpt strip_tac >>
-  gvs[codegenSymRelTheory.sym_steps_compute, sym_step_def, AllCaseEqs()] >>
+  gvs[asmSpliceTheory.sym_steps_compute, sym_step_def, AllCaseEqs()] >>
   simp[sym_named_op_ok_stack_suffix]
 QED
 

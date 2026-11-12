@@ -59,7 +59,7 @@ Proof
     is_param_opcode_def, is_unlowered_fmp_opcode_def,
     is_unlowered_internal_call_opcode_def, is_raw_fmp_opcode_def] >>
   qexists `ss` >>
-  gvs[execute_plan_def, sym_steps_def, sym_frame_inv_def,
+  gvs[execute_plan_def, asmSpliceTheory.sym_steps_def, sym_frame_inv_def,
     asmSymBridgeTheory.asm_sym_rel_def]
 QED
 

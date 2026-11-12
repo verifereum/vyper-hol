@@ -51,20 +51,6 @@ Proof
   metis_tac[mem_label_at_cong]
 QED
 
-Theorem mem_sval_at_store_label:
-  mem_sval_at (labs |++ GENLIST (\i. (off+i,(l,d,i))) 32) off (Lab l d)
-Proof
-  simp[mem_sval_at_def, mem_label_at_def, mstore_labels_lookup,
-       EVERY_MEM, MEM_COUNT_LIST]
-QED
-
-Theorem store_label_lookup_outside:
-  ~in_mem_range off 32 i ==>
-  FLOOKUP (labs |++ GENLIST (\j. (off+j,(l,d,j))) 32) i = FLOOKUP labs i
-Proof
-  simp[mstore_labels_lookup, in_mem_range_def]
-QED
-
 Theorem clear_lookup_outside:
   ~in_mem_range off 32 i ==>
   FLOOKUP (mem_labels_clear labs (in_mem_range off 32)) i = FLOOKUP labs i
@@ -364,5 +350,5 @@ Theorem sym_steps_frame_empty:
   ss.sym_base.as_pc = ss.sym_base.as_pc + 0 /\
   (!b. ~P b ==> FLOOKUP ss.sym_mem_labels b = FLOOKUP ss.sym_mem_labels b)
 Proof
-  simp[sym_steps_def]
+  simp[asmSpliceTheory.sym_steps_def]
 QED

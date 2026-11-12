@@ -480,17 +480,17 @@ Theorem sym_reduce_depth_plan_frame_sim:
 Proof
   Induct >> rpt gen_tac >> strip_tac
   >- gvs[stackPlanOpsTheory.reduce_depth_plan_def, execute_plan_def,
-         asm_steps_def, sym_steps_def] >>
+         asm_steps_def, asmSpliceTheory.sym_steps_def] >>
   qpat_x_assum `reduce_depth_plan (SUC fuel) _ _ _ _ _ = _` mp_tac >>
   simp[Once stackPlanOpsTheory.reduce_depth_plan_def] >>
   Cases_on `f + 1 < LENGTH pending`
-  >- (strip_tac >> gvs[execute_plan_def, asm_steps_def, sym_steps_def]) >>
+  >- (strip_tac >> gvs[execute_plan_def, asm_steps_def, asmSpliceTheory.sym_steps_def]) >>
   Cases_on `stack_get_unfixed_depth op f (LENGTH pending) ps.ps_stack` >> simp[]
-  >- (strip_tac >> gvs[execute_plan_def, asm_steps_def, sym_steps_def]) >>
+  >- (strip_tac >> gvs[execute_plan_def, asm_steps_def, asmSpliceTheory.sym_steps_def]) >>
   rename1 `_ = SOME dist` >> Cases_on `dist <= 16` >> simp[]
-  >- (strip_tac >> gvs[execute_plan_def, asm_steps_def, sym_steps_def]) >>
+  >- (strip_tac >> gvs[execute_plan_def, asm_steps_def, asmSpliceTheory.sym_steps_def]) >>
   Cases_on `select_spill_candidate ps.ps_stack pending dist (LENGTH pending)` >> simp[]
-  >- (strip_tac >> gvs[execute_plan_def, asm_steps_def, sym_steps_def]) >>
+  >- (strip_tac >> gvs[execute_plan_def, asm_steps_def, asmSpliceTheory.sym_steps_def]) >>
   pairarg_tac >> rename1 `do_spill_at cand ps = (hops,ps1)` >> gvs[] >>
   pairarg_tac >> rename1 `reduce_depth_plan fuel pending op f (LENGTH pending) ps1 = (tops,ps2)` >>
   strip_tac >> gvs[] >> suspend "selected_spill"
@@ -529,20 +529,6 @@ Theorem mem_label_at_from_bytes:
 Proof
   strip_tac >> first_assum (qspec_then `0` assume_tac) >>
   gvs[mem_label_at_def, listTheory.EVERY_MEM, rich_listTheory.MEM_COUNT_LIST]
-QED
-
-Theorem scratch_label_store_cell:
-  mem_sval_at (labs |++ GENLIST (\i. (off+i,(l,d,i))) 32) off (Lab l d)
-Proof
-  pure_rewrite_tac[mem_sval_at_def] >> irule mem_label_at_from_bytes >>
-  simp[asmSymBridgeTheory.mstore_labels_lookup, Excl "GENLIST"]
-QED
-
-Theorem scratch_label_store_outside:
-  ~in_mem_range off 32 b ==>
-  FLOOKUP (labs |++ GENLIST (\i. (off+i,(l,d,i))) 32) b = FLOOKUP labs b
-Proof
-  simp[asmSymBridgeTheory.mstore_labels_lookup, in_mem_range_def]
 QED
 
 Theorem mem_sval_at_local_cong:
@@ -588,9 +574,9 @@ Theorem sym_mstore_label_cell:
 Proof
   strip_tac >>
   qspecl_then [`ss.sym_mem_labels`, `w2n off`, `l`, `d`] assume_tac
-    (Q.GENL [`labs`, `off`, `l`, `d`] (SPEC_ALL scratch_label_store_cell)) >>
+    (Q.GENL [`labs`, `off`, `l`, `d`] (SPEC_ALL mem_sval_at_store_label)) >>
   qspecl_then [`w2n off`, `ss.sym_mem_labels`, `l`, `d`] mp_tac
-    (Q.GENL [`off`, `labs`, `l`, `d`, `b`] (SPEC_ALL scratch_label_store_outside)) >>
+    (Q.GENL [`off`, `labs`, `l`, `d`, `i`] (SPEC_ALL store_label_lookup_outside)) >>
   strip_tac >> gvs[sym_mstore_def, sym_lift_def, asm_mstore_def, asm_next_def]
 QED
 
@@ -692,7 +678,7 @@ Proof
   drule sym_scratch_store_step >> strip_tac >> qexists_tac `ss'` >>
   gvs[execute_plan_def, exec_stack_op_def, Abbr `pushed`, asm_next_def,
       wordsTheory.w2n_n2w] >>
-  rewrite_tac[arithmeticTheory.TWO, arithmeticTheory.ONE, sym_steps_def] >>
+  rewrite_tac[arithmeticTheory.TWO, arithmeticTheory.ONE, asmSpliceTheory.sym_steps_def] >>
   gvs[stackOpSimTheory.asm_block_at_cons] >>
   simp[sym_push_scratch_address, asm_next_def] >>
   gvs[sym_step_def, sym_step_op_def]
@@ -750,7 +736,7 @@ Proof
   drule_all sym_scratch_load_step >> strip_tac >>
   qexistsl_tac [`ss'`, `sv'`] >>
   gvs[execute_plan_def, exec_stack_op_def, Abbr `pushed`, asm_next_def] >>
-  rewrite_tac[arithmeticTheory.TWO, arithmeticTheory.ONE, sym_steps_def] >>
+  rewrite_tac[arithmeticTheory.TWO, arithmeticTheory.ONE, asmSpliceTheory.sym_steps_def] >>
   gvs[stackOpSimTheory.asm_block_at_cons] >>
   simp[sym_push_scratch_address, asm_next_def] >>
   gvs[sym_step_def, sym_step_op_def]
@@ -877,7 +863,7 @@ Theorem sym_scratch_spill_bulk_steps:
         b IN FDOM ss.sym_mem_labels \/
         EXISTS (\off. in_mem_range off 32 b) offsets)
 Proof
-  Induct >> simp[execute_plan_def, sym_steps_def] >>
+  Induct >> simp[execute_plan_def, asmSpliceTheory.sym_steps_def] >>
   rpt strip_tac >>
   `(!i j. i < LENGTH offsets /\ j < LENGTH offsets /\ i <> j ==>
       EL i offsets + 32 <= EL j offsets \/ EL j offsets + 32 <= EL i offsets) /\
@@ -920,7 +906,7 @@ Theorem sym_scratch_restore_bulk_sim:
       ss'.sym_mem_labels = ss.sym_mem_labels /\
       cs'.as_pc = cs.as_pc + 2 * LENGTH offsets
 Proof
-  Induct >> simp[execute_plan_def, sym_steps_def, asm_steps_def] >>
+  Induct >> simp[execute_plan_def, asmSpliceTheory.sym_steps_def, asm_steps_def] >>
   rpt gen_tac >> strip_tac >> Cases_on `vals` >> gvs[] >>
   rename1 `mem_sval_at ss.sym_mem_labels h sv` >>
   `asm_block_at p cs.as_pc (execute_plan fmp [SORestore h]) /\
@@ -1337,9 +1323,9 @@ Theorem sym_reorder_restore_frame_sim:
 Proof
   Cases_on `stack_get_unfixed_depth op f (LENGTH pending) ps.ps_stack` >> simp[]
   >- (Cases_on `FLOOKUP ps.ps_spilled op` >> simp[]
-      >- (strip_tac >> gvs[execute_plan_def, asm_steps_def, sym_steps_def]) >>
+      >- (strip_tac >> gvs[execute_plan_def, asm_steps_def, asmSpliceTheory.sym_steps_def]) >>
       strip_tac >> drule_all sym_do_restore_frame_sim >> simp[]) >>
-  strip_tac >> gvs[execute_plan_def, asm_steps_def, sym_steps_def]
+  strip_tac >> gvs[execute_plan_def, asm_steps_def, asmSpliceTheory.sym_steps_def]
 QED
 
 Theorem sym_reorder_prepare_reduce_frame_sim:
@@ -1484,10 +1470,10 @@ Theorem sym_reorder_place_frame_sim:
     cs'.as_pc = cs.as_pc + LENGTH (execute_plan initial_fmp ops)
 Proof
   Cases_on `stack_get_unfixed_depth op f (LENGTH pending) ps.ps_stack` >> simp[]
-  >- (strip_tac >> gvs[execute_plan_def, asm_steps_def, sym_steps_def]) >>
+  >- (strip_tac >> gvs[execute_plan_def, asm_steps_def, asmSpliceTheory.sym_steps_def]) >>
   rename1 `_ = SOME d` >>
   Cases_on `d = f` >> simp[]
-  >- (strip_tac >> gvs[execute_plan_def, asm_steps_def, sym_steps_def]) >>
+  >- (strip_tac >> gvs[execute_plan_def, asm_steps_def, asmSpliceTheory.sym_steps_def]) >>
   Cases_on `operand_equiv dfg op (stack_peek f ps.ps_stack)`
   >- suspend "relabel" >>
   strip_tac >> gvs[AllCaseEqs()] >>
@@ -1496,7 +1482,7 @@ Proof
 QED
 
 Resume sym_reorder_place_frame_sim[relabel]:
-  strip_tac >> gvs[execute_plan_def, asm_steps_def, sym_steps_def] >>
+  strip_tac >> gvs[execute_plan_def, asm_steps_def, asmSpliceTheory.sym_steps_def] >>
   irule sym_frame_inv_reorder_relabel >>
   drule stackModelTheory.stack_get_unfixed_depth_props >> simp[]
 QED
@@ -1849,7 +1835,7 @@ Theorem sym_plan_steps_reorder_frame_sim_marked:
 Proof
   Induct
   >- (rpt gen_tac >> strip_tac >> gvs[foldlSimTheory.plan_steps_def] >>
-      simp[execute_plan_def, asm_steps_def, sym_steps_def]) >>
+      simp[execute_plan_def, asm_steps_def, asmSpliceTheory.sym_steps_def]) >>
   rpt gen_tac >> PairCases_on `h` >> strip_tac >>
   drule reorderStagesTheory.plan_steps_cons_result >> strip_tac >>
   qpat_x_assum `ops = _` SUBST_ALL_TAC >>
@@ -1959,7 +1945,7 @@ Theorem sym_restore_spilled_plan_frame_sim:
 Proof
   Induct
   >- simp[stackPlanOpsTheory.restore_spilled_plan_def, execute_plan_def,
-          asm_steps_def, sym_steps_def] >>
+          asm_steps_def, asmSpliceTheory.sym_steps_def] >>
   rpt gen_tac >>
   simp[stackPlanOpsTheory.restore_spilled_plan_def] >>
   rpt (pairarg_tac >> gvs[]) >> strip_tac >> gvs[] >>
@@ -2065,7 +2051,7 @@ Theorem sym_jump_steps:
                     sym_stack := stk|>)
 Proof
   strip_tac >>
-  rewrite_tac[arithmeticTheory.ONE, sym_steps_def] >>
+  rewrite_tac[arithmeticTheory.ONE, asmSpliceTheory.sym_steps_def] >>
   gvs[asm_block_at_def, sym_step_def, sym_step_op_def, sym_jump_def]
 QED
 
@@ -2076,7 +2062,7 @@ Theorem sym_jmp_suffix:
     SymOK (ss with sym_base := ss.sym_base with as_pc := pc)
 Proof
   strip_tac >>
-  rewrite_tac[arithmeticTheory.TWO, arithmeticTheory.ONE, sym_steps_def] >>
+  rewrite_tac[arithmeticTheory.TWO, arithmeticTheory.ONE, asmSpliceTheory.sym_steps_def] >>
   gvs[stackOpSimTheory.asm_block_at_cons, sym_step_def, sym_step_op_def,
       sym_set_stack_def, asm_next_def, sym_jump_def]
 QED
@@ -2090,7 +2076,7 @@ Theorem sym_jnz_suffix_nonzero:
                     sym_stack := stk|>)
 Proof
   strip_tac >>
-  rewrite_tac[arithmeticTheory.TWO, arithmeticTheory.ONE, sym_steps_def] >>
+  rewrite_tac[arithmeticTheory.TWO, arithmeticTheory.ONE, asmSpliceTheory.sym_steps_def] >>
   gvs[stackOpSimTheory.asm_block_at_cons, sym_step_def, sym_step_op_def,
       sym_set_stack_def, asm_next_def, sym_jumpi_def]
 QED
@@ -2106,7 +2092,7 @@ Theorem sym_jnz_suffix_zero:
 Proof
   strip_tac >>
   rewrite_tac[numLib.num_CONV ``4:num``, numLib.num_CONV ``3:num``,
-              arithmeticTheory.TWO, arithmeticTheory.ONE, sym_steps_def] >>
+              arithmeticTheory.TWO, arithmeticTheory.ONE, asmSpliceTheory.sym_steps_def] >>
   gvs[stackOpSimTheory.asm_block_at_cons, sym_step_def, sym_step_op_def,
       sym_set_stack_def, asm_next_def, sym_jumpi_def, sym_jump_def]
 QED
@@ -2198,7 +2184,7 @@ Theorem sym_gas_steps:
                    ss.sym_stack|>)
 Proof
   strip_tac >>
-  rewrite_tac[arithmeticTheory.ONE, sym_steps_def] >>
+  rewrite_tac[arithmeticTheory.ONE, asmSpliceTheory.sym_steps_def] >>
   gvs[asm_block_at_def, sym_step_gas]
 QED
 
@@ -2492,7 +2478,7 @@ Theorem sym_terminal_step_runs:
   sym_terminal (sym_step p env inst ss) ==>
   sym_steps p env 1 ss = sym_step p env inst ss
 Proof
-  strip_tac >> rewrite_tac[arithmeticTheory.ONE, sym_steps_def] >>
+  strip_tac >> rewrite_tac[arithmeticTheory.ONE, asmSpliceTheory.sym_steps_def] >>
   gvs[asm_block_at_def] >>
   Cases_on `sym_step p env (EL ss.sym_base.as_pc p) ss` >> gvs[sym_terminal_def]
 QED
@@ -2549,7 +2535,7 @@ Proof
   fs[revert_postamble_def, execute_plan_def, exec_stack_op_def,
      stackOpSimTheory.asm_block_at_cons] >>
   rewrite_tac[numLib.num_CONV ``4:num``, numLib.num_CONV ``3:num``,
-              arithmeticTheory.TWO, arithmeticTheory.ONE, sym_steps_def] >>
+              arithmeticTheory.TWO, arithmeticTheory.ONE, asmSpliceTheory.sym_steps_def] >>
   `word_of_bytes F (0w:bytes32) (REVERSE (encode_num_bytes_fuel 32 0)) = 0w`
     by EVAL_TAC >>
   simp[Once sym_step_def, sym_lift_def, asm_step_def, asm_next_def] >>
@@ -4629,7 +4615,7 @@ Proof
   qexistsl [`ss'`, `top'`] >> simp[] >>
   `ss.sym_base.as_pc = cs.as_pc` by metis_tac[asm_sym_rel_pc] >>
   fs[asm_block_at_def] >>
-  pure_rewrite_tac[arithmeticTheory.ONE, sym_steps_def] >> simp[]
+  pure_rewrite_tac[arithmeticTheory.ONE, asmSpliceTheory.sym_steps_def] >> simp[]
 QED
 
 Theorem sym_rf_copy_success_execution:
@@ -6686,7 +6672,7 @@ Proof
   strip_tac >>
   fs[stackOpSimTheory.asm_block_at_cons] >>
   rewrite_tac[numLib.num_CONV ``3:num``, arithmeticTheory.TWO,
-              arithmeticTheory.ONE, sym_steps_def] >>
+              arithmeticTheory.ONE, asmSpliceTheory.sym_steps_def] >>
   simp[Once sym_step_def, sym_set_stack_def, asm_next_def] >>
   simp[Once sym_step_def, sym_step_op_def, sym_jumpi_def] >>
   simp[sym_set_stack_def, asm_next_def] >>
@@ -6700,12 +6686,12 @@ QED
 Theorem sym_assert_zero_iszero:
   asm_block_at p ss.sym_base.as_pc [AsmOp "ISZERO"] /\
   ss.sym_stack = Val 0w :: stk ==>
-  codegenSymRel$sym_steps p env 1 ss = SymOK
+  sym_steps p env 1 ss = SymOK
     (ss with <|sym_base := asm_next (ss.sym_base with as_stack := []);
                sym_stack := Val 1w :: stk|>)
 Proof
   strip_tac >> fs[stackOpSimTheory.asm_block_at_cons] >>
-  rewrite_tac[arithmeticTheory.ONE, codegenSymRelTheory.sym_steps_def] >>
+  rewrite_tac[arithmeticTheory.ONE, asmSpliceTheory.sym_steps_def] >>
   drule asmSpliceTheory.sym_step_iszero_val >>
   disch_then (qspecl_then [`p`, `env`] assume_tac) >> simp[]
 QED
@@ -6977,7 +6963,7 @@ Theorem sym_pop_pushed_steps:
     SymOK (ss with <|sym_base := ss.sym_base with as_pc := ss.sym_base.as_pc + 1;
                     sym_stack := stk|>)
 Proof
-  strip_tac >> rewrite_tac[arithmeticTheory.ONE, sym_steps_def] >>
+  strip_tac >> rewrite_tac[arithmeticTheory.ONE, asmSpliceTheory.sym_steps_def] >>
   gvs[asm_block_at_def, sym_step_def, sym_step_op_def, sym_set_stack_def,
       asm_next_def]
 QED
@@ -7041,7 +7027,7 @@ Theorem sym_gas_optimistic_frame_sim:
     cs'.as_pc = cs.as_pc + LENGTH (execute_plan initial_fmp ops)
 Proof
   strip_tac >> drule gasFrameSimTheory.gas_optimistic_cases >> strip_tac
-  >- (gvs[execute_plan_def, asm_steps_def, sym_steps_def]) >>
+  >- (gvs[execute_plan_def, asm_steps_def, asmSpliceTheory.sym_steps_def]) >>
   `dist < LENGTH ps.ps_stack` by metis_tac[planWfTheory.stack_get_depth_bound] >>
   drule_all sym_do_swap_frame_sim >> simp[]
 QED

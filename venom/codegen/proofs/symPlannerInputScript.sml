@@ -97,9 +97,9 @@ Theorem sym_input_var[local]:
 Proof
   strip_tac >> Cases_on `MEM v nl`
   >- (Cases_on `stack_get_depth (Var v) ps.ps_stack`
-      >- gvs[execute_plan_def, sym_steps_def] >>
+      >- gvs[execute_plan_def, asmSpliceTheory.sym_steps_def] >>
       irule sym_input_dup >> gvs[SF SFY_ss]) >>
-  gvs[execute_plan_def, sym_steps_def]
+  gvs[execute_plan_def, asmSpliceTheory.sym_steps_def]
 QED
 
 Theorem sym_emit_one_input_unspilled:
@@ -346,6 +346,6 @@ Theorem sym_emit_input_plan:
       FLOOKUP last.sym_mem_labels b = FLOOKUP ss.sym_mem_labels b)
 Proof
   Induct
-  >- simp[emit_input_plan_def, execute_plan_def, sym_steps_def] >>
+  >- simp[emit_input_plan_def, execute_plan_def, asmSpliceTheory.sym_steps_def] >>
   drule_then MATCH_ACCEPT_TAC sym_input_cons_run
 QED

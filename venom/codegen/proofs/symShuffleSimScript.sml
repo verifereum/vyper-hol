@@ -16,8 +16,8 @@ Theorem sym_steps_single:
   sym_steps p env 1 ss = sym_step p env inst ss
 Proof
   simp[stackOpSimTheory.asm_block_at_cons] >> strip_tac >>
-  simp[Once codegenSymRelTheory.sym_steps_compute] >>
-  Cases_on `sym_step p env inst ss` >> simp[codegenSymRelTheory.sym_steps_def]
+  simp[Once asmSpliceTheory.sym_steps_compute] >>
+  Cases_on `sym_step p env inst ss` >> simp[asmSpliceTheory.sym_steps_def]
 QED
 
 Theorem sym_steps_pop:
@@ -158,7 +158,7 @@ Theorem sym_steps_pops:
         sym_base := ss.sym_base with as_pc := ss.sym_base.as_pc + k;
         sym_stack := DROP k ss.sym_stack |>)
 Proof
-  Induct >- simp[codegenSymRelTheory.sym_steps_def,
+  Induct >- simp[asmSpliceTheory.sym_steps_def,
                  sym_state_component_equality] >>
   rpt strip_tac >> namedCases_on `ss.sym_stack` ["", "v stk"]
   >- gvs[] >>
@@ -188,21 +188,6 @@ Proof
   strip_tac >> Cases_on `sv`
   >- (simp[mem_sval_at_def] >> metis_tac[finite_mapTheory.FLOOKUP_DEF, optionTheory.NOT_SOME_NONE]) >>
   drule mem_label_at_locality >> simp[mem_sval_at_def]
-QED
-
-Theorem mem_sval_at_install:
-  mem_sval_at (labs |++ GENLIST (\i. (off+i, (l,d,i))) 32) off (Lab l d)
-Proof
-  simp[mem_sval_at_def, mem_label_at_def, asmSymBridgeTheory.mstore_labels_lookup,
-       EVERY_MEM, rich_listTheory.MEM_COUNT_LIST]
-QED
-
-Theorem mem_labels_clear_flookup:
-  FLOOKUP (mem_labels_clear labs P) b =
-    if P b then NONE else FLOOKUP labs b
-Proof
-  simp[mem_labels_clear_def, finite_mapTheory.FLOOKUP_DRESTRICT,
-       pred_setTheory.IN_APP] >> IF_CASES_TAC >> gvs[]
 QED
 
 Theorem mem_labels_frame_domain:
@@ -296,7 +281,7 @@ Theorem sym_mstore_label:
 Proof
   strip_tac >> drule sym_mstore_label_effect >> strip_tac >>
   qexists_tac `ss'` >>
-  pure_asm_rewrite_tac[mem_sval_at_install,
+  pure_asm_rewrite_tac[mem_sval_at_store_label,
                        asmSymBridgeTheory.mstore_labels_lookup] >>
   simp[in_mem_range_def]
 QED
@@ -310,7 +295,7 @@ Theorem sym_mstore_val:
              FLOOKUP ss'.sym_mem_labels b = FLOOKUP ss.sym_mem_labels b)
 Proof
   strip_tac >> drule sym_mstore_val_effect >> strip_tac >>
-  qexists_tac `ss'` >> simp[mem_sval_at_clear, mem_labels_clear_flookup]
+  qexists_tac `ss'` >> simp[mem_sval_at_clear, mem_labels_clear_lookup]
 QED
 
 Theorem sym_steps_mstore:
@@ -564,7 +549,7 @@ Theorem sym_prefix_push_var:
       ss'.sym_mem_labels = ss.sym_mem_labels
 Proof
   simp[exec_stack_op_def, apply_prefix_op_def, apply_simple_op_def,
-       codegenSymRelTheory.sym_steps_def]
+       asmSpliceTheory.sym_steps_def]
 QED
 
 Theorem sym_prefix_poke:
@@ -577,7 +562,7 @@ Theorem sym_prefix_poke:
       ss'.sym_mem_labels = ss.sym_mem_labels
 Proof
   simp[exec_stack_op_def, apply_prefix_op_def, apply_simple_op_def,
-       codegenSymRelTheory.sym_steps_def]
+       asmSpliceTheory.sym_steps_def]
 QED
 
 Theorem sym_steps_push_offset:
@@ -850,7 +835,7 @@ Theorem sym_prefix_ops_sim:
                FLOOKUP ss'.sym_mem_labels b = FLOOKUP ss.sym_mem_labels b)
 Proof
   Induct_on `ops`
-  >- simp[execute_plan_def, apply_prefix_ops_def, codegenSymRelTheory.sym_steps_def] >>
+  >- simp[execute_plan_def, apply_prefix_ops_def, asmSpliceTheory.sym_steps_def] >>
   suspend "cons"
 QED
 
