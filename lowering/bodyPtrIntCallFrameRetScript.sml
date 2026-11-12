@@ -633,6 +633,7 @@ Theorem internal_return_widened_ptr:
     cenv.ce_return_pc = SOME (PtrVar (Var rpc) rsz) /\
     (!off sz. cenv.ce_return_buf <> SOME (MemLoc off sz)) /\
     cenv.ce_imm_alloca = NONE /\
+    (!nr nkey ut iv. cenv.ce_nonreentrant = (nr,nkey,ut,iv) ==> ut) /\
     cenv.ce_returns_count =
       returns_stack_count
         (\name. MAP (FST o SND) (get_struct_fields cenv.ce_struct_fields name))
