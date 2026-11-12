@@ -112,6 +112,7 @@ End
 Theorem compile_expr_tuple_subscript[local]:
   !cenv ty ann obj idx tys st vv st'.
     compile_expr cenv ty (Subscript ann obj idx) st = (vv, st') /\
+    expr_type obj = TupleT tys /\
     place_type cenv obj = ValPT (TupleT tys) ==>
     ?bvv st1 p.
       compile_expr cenv ty obj st = (bvv, st1) /\
@@ -121,6 +122,9 @@ Theorem compile_expr_tuple_subscript[local]:
       vv = LocatedValue ann (mk_ptr p (vv_loc bvv))
 Proof
   rpt gen_tac >> strip_tac >>
+  `~copies_subscript_base cenv obj idx` by
+    simp[exprLoweringTheory.copies_subscript_base_def,
+         vyperSubscriptOverlapTheory.subscript_overlap_def] >>
   qpat_x_assum `compile_expr _ _ (Subscript _ _ _) _ = _` mp_tac >>
   simp[Once (CONJUNCT1 compile_expr_raw_def), compile_expr_body_def,
        compile_subscript_def, compile_tuple_subscript_def, comp_bind_def,
@@ -504,7 +508,18 @@ Theorem eval_expr_tuple_subscript[local]:
         select_result cx (expr_type obj) r (ValueSubscript (IntV (&k))) od)
       es
 Proof
-  rpt gen_tac >> simp[Once evaluate_def, bind_def] >>
+  rpt gen_tac >>
+  `~subscript_reads_base cx obj (Literal ity (IntL (&k)))` by
+    (`!vs. ~any_written vs []` by
+       (Induct >> simp[vyperSubscriptOverlapTheory.any_written_def]) >>
+     simp[vyperInterpreterTheory.subscript_reads_base_def,
+          vyperSubscriptOverlapTheory.subscript_overlap_def,
+          vyperSubscriptOverlapTheory.expr_accesses_def,
+          vyperSubscriptOverlapTheory.accesses_expr_def,
+          vyperSubscriptOverlapTheory.reached_functions_def,
+          vyperTypeCallGraphTheory.int_calls_expr_def]) >>
+  qpat_assum `~subscript_reads_base _ _ _` (fn th =>
+    simp[th, Once evaluate_def, bind_def, return_def]) >>
   Cases_on `eval_expr cx obj es` >> rename1 `_ = (rr, es1)` >>
   Cases_on `rr` >> simp[] >>
   simp[Once evaluate_def, evaluate_literal_def, return_def, read_result_def]

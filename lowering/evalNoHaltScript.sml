@@ -530,6 +530,11 @@ Proof
   >~ [`Assert _ AssertUnreachable`] >- switch_tac
   >~ [`Assert _ (AssertReason _)`] >- switch_tac
   >~ [`IfExp _ _ _ _`] >- switch_tac
+  >~ [`Subscript _ _ _`]
+  >- (rpt strip_tac >> pop_assum mp_tac >>
+      simp([Once evaluate_def] @ case_ss) >> gvs(syn_ss @ case_ss) >>
+      Cases_on `subscript_reads_base cx e e'` >> gvs(bind_def :: case_ss) >>
+      gvs(AllCaseEqs() :: case_ss) >> metis_tac[])
   >> generic_tac
 QED
 

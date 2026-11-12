@@ -34,7 +34,7 @@
 
 Theory exprLowering
 Ancestors
-  pred_set list exprCallBounds vyperAST byte keccak
+  pred_set list exprCallBounds vyperAST vyperSubscriptOverlap byte keccak
   emitHelper compileEnv context valueEncoding venomInst vyperValueOperation
   builtinAbi builtinBytes builtinCreate
   builtinHashing builtinMath builtinMisc builtinSimple
@@ -1341,41 +1341,46 @@ Termination
   \\ gvs[finite_mapTheory.TO_FLOOKUP]
 End
 
-(* Stage internal call arguments based on pass_via_stack classification.
+(* Lower and stage internal call arguments, one at a time, based on the
+   pass_via_stack classification.
    arg_types: parallel list of argument types (for computing alloca size).
-   For stack-passed word args: use value directly.
-   For memory-passed: allocate type-sized buffer, copy value, pass pointer.
-   Mirrors Python: expr.py _lower_internal_call arg staging loop *)
+   Each argument is staged right after it is lowered, before the next one is,
+   so later arguments can't change what it reads: a stack-passed word
+   argument's value is read at once; a memory-passed one is copied into a
+   type-sized buffer allocated for it.
+   Mirrors Python: expr.py _lower_internal_call argument loop
+   (snapshot_value_for_delayed_use; new_temporary_value, store_vyper_value) *)
 Definition compile_stage_intcall_args_def:
-  compile_stage_intcall_args cenv [] _ _ = return ([] : operand list) ∧
-  compile_stage_intcall_args cenv (vv :: vals) (T :: flags) (_ :: tys) =
-    (* Python preserves VyperValues while evaluating every argument, then
-       unwraps each one only when staging it. *)
-    do val_op <- unwrap_value cenv vv;
-       rest <- compile_stage_intcall_args cenv vals flags tys;
+  compile_stage_intcall_args cfn cenv [] _ _ = return ([] : operand list) ∧
+  compile_stage_intcall_args cfn cenv (e :: es) (T :: flags) (_ :: tys) =
+    do vv <- cfn cenv (expr_type e) e;
+       val_op <- unwrap_value cenv vv;
+       rest <- compile_stage_intcall_args cfn cenv es flags tys;
        return (val_op :: rest)
     od ∧
-  compile_stage_intcall_args cenv (vv :: vals) (F :: flags) (ty :: tys) =
+  compile_stage_intcall_args cfn cenv (e :: es) (F :: flags) (ty :: tys) =
     (let mem_size = type_memory_bytes cenv ty in
      let is_bs = (case ty of
          BaseT (BytesT (Dynamic _)) => T
        | BaseT (StringT _) => T
        | _ => F) in
-     do val_op <- unwrap_value cenv vv;
+     do vv <- cfn cenv (expr_type e) e;
         buf_alloc <- compile_alloc_buffer (MAX 32 mem_size);
         let buf = buf_alloc.buf_operand in
-        do (if is_word_type ty then emit_void MSTORE [buf; val_op]
+        do val_op <- unwrap_value cenv vv;
+           (if is_word_type ty then emit_void MSTORE [buf; val_op]
             else if is_bs then
               do compile_store_bytestring val_op buf; return () od
             else compile_store_memory cenv val_op buf ty (vv_type vv));
-           rest <- compile_stage_intcall_args cenv vals flags tys;
+           rest <- compile_stage_intcall_args cfn cenv es flags tys;
            return (buf :: rest)
         od
      od) ∧
   (* Fallback: extra args without flags/types default to stack *)
-  compile_stage_intcall_args cenv (vv :: vals) _ _ =
-    do val_op <- unwrap_value cenv vv;
-       rest <- compile_stage_intcall_args cenv vals [] [];
+  compile_stage_intcall_args cfn cenv (e :: es) _ _ =
+    do vv <- cfn cenv (expr_type e) e;
+       val_op <- unwrap_value cenv vv;
+       rest <- compile_stage_intcall_args cfn cenv es [] [];
        return (val_op :: rest)
     od
 End
@@ -2322,59 +2327,6 @@ Proof
   irule compile_multi_exprs_callback_cong >> simp[FUN_EQ_THM]
 QED
 
-(* Compile subscript access: array[index], mapping[key], tuple[N].
-   Dispatches on base type. HashMap (mapping) dispatched via ce_hashmap_info.
-   Mirrors Python: expr.py _lower_subscript *)
-Definition compile_subscript_def:
-  compile_subscript cfn cenv ret_ty ty base_e idx_e =
-    do base_vv <- cfn cenv ty base_e;
-       let base_op = vv_operand base_vv in
-       let loc = (case vv_location base_vv of
-                     SOME l => l | NONE => LocMemory) in
-       case place_type cenv base_e of
-         MapPT kt vt =>
-           do key_op <- lower_value cfn cenv (expr_type idx_e) idx_e;
-              hashed_key <- (if is_bytestring_type kt
-                             then compile_keccak256_key key_op F
-                             else return key_op);
-              slot <- compile_mapping_subscript base_op hashed_key;
-              return (LocatedValue ret_ty (mk_ptr slot loc))
-           od
-       | ValPT (TupleT tys) =>
-           let idx = literal_int_index idx_e in
-           do p <- compile_tuple_subscript base_op
-                     (SUM (TAKE idx (MAP (elem_size_in_location cenv loc) tys)));
-              return (LocatedValue ret_ty (mk_ptr p loc))
-           od
-       | ValPT (StructT nsid) =>
-           let idx = literal_int_index idx_e in
-           let fld_info = get_struct_fields cenv.ce_struct_fields (nsid_to_string nsid) in
-           do p <- compile_tuple_subscript base_op
-                     (SUM (TAKE idx
-                       (MAP (λ(name, fty, sz). if is_slot_addressed loc
-                                              then (sz + 31) DIV 32 else sz)
-                            fld_info)));
-              return (LocatedValue ret_ty (mk_ptr p loc))
-           od
-       | ValPT base_type =>
-           let is_dynamic = (case base_type of ArrayT _ (Fixed _) => F | _ => T) in
-           let elem_ty = (case base_type of
-                            ArrayT t _ => t | _ => BaseT (UintT 256)) in
-           let static_count = (case base_type of
-                                 ArrayT _ (Fixed n) => n | _ => 0) in
-           let ws = word_scale loc in
-           let elem_size = elem_size_in_location cenv loc elem_ty in
-           let loader = compile_ptr_load cenv.ce_is_ctor cenv.ce_imm_alloca loc in
-           let is_signed_idx = is_signed_type (expr_type idx_e) in
-           do idx_op <- lower_value cfn cenv ty idx_e;
-              elem_ptr <-
-                compile_array_subscript base_op idx_op is_dynamic static_count
-                                         ws elem_size is_signed_idx loader;
-              return (LocatedValue ret_ty (mk_ptr elem_ptr loc))
-           od
-    od
-End
-
 (* Compile attribute access. Returns VyperValue with correct location.
    unwrap_value handles loading for word types.
    Mirrors Python: expr.py lower_Attribute → VyperValue.from_ptr *)
@@ -2590,6 +2542,96 @@ Proof
   irule compile_abi_encode_args_callback_cong >> simp[FUN_EQ_THM]
 QED
 
+
+(* Whether subscript base_e[idx_e] copies its base before lowering the index:
+   the index could resize a dynamic array the base was derived from.
+   Mirrors Python: expr.py _lower_array_subscript (overlap) *)
+Definition copies_subscript_base_def:
+  copies_subscript_base cenv base_e idx_e =
+    subscript_overlap cenv.ce_modules base_e idx_e
+End
+
+(* Compile subscript access: array[index], mapping[key], tuple[N].
+   Dispatches on base type. HashMap (mapping) dispatched via ce_hashmap_info.
+   Mirrors Python: expr.py _lower_subscript *)
+Definition compile_subscript_def:
+  compile_subscript cfn cenv ret_ty ty base_e idx_e =
+    do base_vv0 <- cfn cenv ty base_e;
+       (* Mirrors Python: expr.py _lower_array_subscript (materialize_value
+          on overlap); mapping, tuple and struct subscripts are never
+          copied. *)
+       base_vv <- (if copies_subscript_base cenv base_e idx_e
+                   then compile_snapshot_vv cenv T base_vv0
+                   else return base_vv0);
+       let base_op = vv_operand base_vv in
+       let loc = (case vv_location base_vv of
+                     SOME l => l | NONE => LocMemory) in
+       case place_type cenv base_e of
+         MapPT kt vt =>
+           do key_op <- lower_value cfn cenv (expr_type idx_e) idx_e;
+              hashed_key <- (if is_bytestring_type kt
+                             then compile_keccak256_key key_op F
+                             else return key_op);
+              slot <- compile_mapping_subscript base_op hashed_key;
+              return (LocatedValue ret_ty (mk_ptr slot loc))
+           od
+       | ValPT (TupleT tys) =>
+           let idx = literal_int_index idx_e in
+           do p <- compile_tuple_subscript base_op
+                     (SUM (TAKE idx (MAP (elem_size_in_location cenv loc) tys)));
+              return (LocatedValue ret_ty (mk_ptr p loc))
+           od
+       | ValPT (StructT nsid) =>
+           let idx = literal_int_index idx_e in
+           let fld_info = get_struct_fields cenv.ce_struct_fields (nsid_to_string nsid) in
+           do p <- compile_tuple_subscript base_op
+                     (SUM (TAKE idx
+                       (MAP (λ(name, fty, sz). if is_slot_addressed loc
+                                              then (sz + 31) DIV 32 else sz)
+                            fld_info)));
+              return (LocatedValue ret_ty (mk_ptr p loc))
+           od
+       | ValPT base_type =>
+           let is_dynamic = (case base_type of ArrayT _ (Fixed _) => F | _ => T) in
+           let elem_ty = (case base_type of
+                            ArrayT t _ => t | _ => BaseT (UintT 256)) in
+           let static_count = (case base_type of
+                                 ArrayT _ (Fixed n) => n | _ => 0) in
+           let ws = word_scale loc in
+           let elem_size = elem_size_in_location cenv loc elem_ty in
+           let loader = compile_ptr_load cenv.ce_is_ctor cenv.ce_imm_alloca loc in
+           let is_signed_idx = is_signed_type (expr_type idx_e) in
+           do idx_op <- lower_value cfn cenv ty idx_e;
+              elem_ptr <-
+                compile_array_subscript base_op idx_op is_dynamic static_count
+                                         ws elem_size is_signed_idx loader;
+              return (LocatedValue ret_ty (mk_ptr elem_ptr loc))
+           od
+    od
+End
+
+(* An argument value read from storage, transient storage or code is copied
+   to memory at its call-site type (VyperValue.from_ptr with v.typ). *)
+Definition ext_call_arg_value_def:
+  ext_call_arg_value ty (LocatedValue _ p) = LocatedValue ty p ∧
+  ext_call_arg_value ty vv = vv
+End
+
+(* Lower the positional arguments of extcall/staticcall, freezing each one
+   at its call-site type (lowered_value_type) before the next argument and the
+   keyword operands kw_es are lowered.
+   Mirrors Python: expr.py _lower_external_call argument loop *)
+Definition compile_ext_call_args_def:
+  compile_ext_call_args cfn cenv kw_es (ty::tys) (e::es) =
+    do vv <- cfn cenv (expr_type e) e;
+       vv <- compile_snapshot_vv cenv (exprs_can_mutate cenv (es ++ kw_es))
+               (ext_call_arg_value ty vv);
+       rest <- compile_ext_call_args cfn cenv kw_es tys es;
+       comp_return (vv::rest)
+    od ∧
+  compile_ext_call_args cfn cenv kw_es _ _ = comp_return ([] : vyper_value list)
+End
+
 (* Lower one keyword operand of extcall/staticcall: value= and gas= are
    uint256 words; default_return_value= is a word of the return type, or,
    for any other type, a value Python materializes where it is lowered, at
@@ -2796,17 +2838,17 @@ Definition compile_call_def:
        Mirrors Python: _make_ptr_value(return_buf, MEMORY, func_t.return_type) *)
     let call_ty = cenv.ce_func_return_type name in
     let arg_types = MAP expr_type args in
-    let (arg_vals, st1) = compile_multi_vvs cfn cenv args st in
+    (* Python allocates the return buffer before lowering the arguments. *)
     let (return_buf, st2) =
       (if returns_count > 0 then
-         let (rbuf, st_b) = compile_alloc_buffer (32 * returns_count) st1 in
+         let (rbuf, st_b) = compile_alloc_buffer (32 * returns_count) st in
          (SOME rbuf, st_b)
        else if return_buf_size > 0 then
-         let (rbuf, st_b) = compile_alloc_buffer return_buf_size st1 in
+         let (rbuf, st_b) = compile_alloc_buffer return_buf_size st in
          (SOME rbuf, st_b)
-       else (NONE, st1)) in
+       else (NONE, st)) in
     let (invoke_args, st3) =
-      compile_stage_intcall_args cenv arg_vals pass_via_stack arg_types st2 in
+      compile_stage_intcall_args cfn cenv args pass_via_stack arg_types st2 in
     let buf_prefix = (case return_buf of
         SOME rbuf => if returns_count = 0 then [rbuf.buf_operand] else []
       | NONE => []) in
@@ -2837,12 +2879,6 @@ Definition compile_call_def:
        let (addr_op, st1) = lower_value cfn cenv (BaseT AddressT) addr_e st in
        let func_args = TAKE (LENGTH arg_types) rest_after_addr in
        let kw_es = DROP (LENGTH arg_types) rest_after_addr in
-       (* Python evaluates all positional arguments before call kwargs and
-          allocates their memory-layout tuple only after the call buffer. *)
-       let (arg_vals, st2) = compile_multi_vvs cfn cenv func_args st1 in
-       let ((value_opt, gas_opt, default_opt), st3) =
-         compile_ext_call_kwargs cfn cenv return_type opts kw_es st2 in
-       let value_op = (case value_opt of SOME v => v | NONE => Lit 0w) in
        (* Python lays the argument buffer out with the types of the lowered
           argument values (_lower_external_call: TupleT(v.typ for v in
           arg_vals)), not the declared parameter types. A storage, transient
@@ -2850,6 +2886,13 @@ Definition compile_call_def:
           vyper#5239. The selector is the same under both, since bounds don't
           appear in it. *)
        let call_arg_types = MAP (lowered_value_type cenv) func_args in
+       (* Python evaluates all positional arguments before call kwargs and
+          allocates their memory-layout tuple only after the call buffer. *)
+       let (arg_vals, st2) =
+         compile_ext_call_args cfn cenv kw_es call_arg_types func_args st1 in
+       let ((value_opt, gas_opt, default_opt), st3) =
+         compile_ext_call_kwargs cfn cenv return_type opts kw_es st2 in
+       let value_op = (case value_opt of SOME v => v | NONE => Lit 0w) in
        let args_mem_size = SUM (MAP (type_memory_bytes cenv) call_arg_types) in
        let args_abi_size = abi_size_bound cenv.ce_struct_fields (TupleT call_arg_types) in
        let args_enc_info = type_to_abi_enc_info cenv.ce_struct_fields cenv (TupleT call_arg_types) in
@@ -3429,11 +3472,10 @@ Definition compile_builtin_dispatch_body_def:
           else if is_extcode src_e then
             (let (start_op, st1) = lower_value compile_expr cenv ty start_e st in
              let (len_op, st2) = lower_value compile_expr cenv ty len_e st1 in
-             let ((out_buf, out_data), st3) = compile_slice_out_buf out_size st2 in
              let addr_e = extcode_addr_expr src_e in
-             let (addr_op, st4) = lower_value compile_expr cenv ty addr_e st3 in
+             let (addr_op, st3) = lower_value compile_expr cenv ty addr_e st2 in
              as_ptr_val ret_ty LocMemory
-               (compile_slice_extcode addr_op start_op len_op out_buf out_data st4))
+               (compile_slice_extcode addr_op start_op len_op out_size st3))
           else
             let src_ty = expr_type src_e in
             (* lower_value handles ensure_in_memory for bytestrings *)

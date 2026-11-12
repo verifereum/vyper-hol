@@ -1169,10 +1169,12 @@ Theorem aug_place_storage_load_path[local]:
 Proof
   strip_tac >> irule emitHelperPropsTheory.emit_op_zero_path >> simp[] >>
   qexistsl_tac [`[arg]`, `op`, `if tr then TLOAD else SLOAD`, `sb`] >>
-  Cases_on `tr` >>
-  simp[venomInstTheory.is_terminator_def,
-       venomExecSemanticsTheory.step_inst_base_def,
-       venomExecSemanticsTheory.exec_read1_def, venomInstTheory.mk_inst_def]
+  Cases_on `tr` >> full_simp_tac bool_ss [] >>
+  (conj_tac
+   >- (gen_tac >>
+       rw[venomExecSemanticsTheory.step_inst_base_def,
+          venomExecSemanticsTheory.exec_read1_def, venomInstTheory.mk_inst_def]) >>
+   asm_simp_tac (srw_ss()) [venomInstTheory.is_terminator_def])
 QED
 
 Theorem aug_place_storage_load_endpoint[local]:
