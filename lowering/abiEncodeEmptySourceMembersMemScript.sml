@@ -4,7 +4,7 @@ Ancestors
   abiEncodeEmptySourceMemberLayout abiEncodeEmptySourceMemberTransportMem
   abiEncodeEmptySourceChildMem abiEncodeEmptySourceInput abiEncoderInput abiEncoderBufferFrame
   abiEncoderWindowPhaseFrameMem abiEncoderWindowMemFrame memContinuation
-  abiEncoderWindowMembersMem abiEncoderWindowStructuralMembers
+  abiEncoderWindowMembersMem abiEncoderWindowStructuralMembers abiEncoderSourceAggregate
   abiEncoderWindowPhase abiEncoderWindowContract abiEncoderWindowMembers
   compileEnv fragExec freshWrites venomState
   words list rich_list arithmetic pred_set
@@ -659,3 +659,118 @@ Resume empty_source_members_cons_run[package]:
 QED
 
 Finalise empty_source_members_cons_run
+
+Theorem empty_source_members_remaining_run[local]:
+  ^empty_member_inv /\ DROP k (infos:(abi_enc_info # num # num # bool) list) = rest /\
+  (!ei az ms dyn. MEM (ei,az,ms,dyn) rest ==> ^empty_child_contract) /\
+  compile_abi_encode_complex_elems dst src rest
+    (abi_encoder_member_span (TAKE k infos))
+    (SUM (MAP abi_member_head_size (TAKE k ats))) dp st = (out,en) ==>
+  ?t. window_phase ctx func st en
+        (window_alloca_sites func (frag_ids st en) UNION
+          (if EXISTS (\(_,_,_,dyn). dyn) infos then {site} else {}))
+        [(d,LENGTH (enc at (ListV avs)))] s t /\
+      ^(Term.subst [``s:venom_state`` |-> ``t:venom_state``,
+        ``st:compile_state`` |-> ``en:compile_state``, ``k:num`` |-> ``LENGTH (infos:(abi_enc_info # num # num # bool) list)``] empty_member_inv) /\
+      (!R. (!i b sz. i IN R /\ FLOOKUP s.vs_allocas i = SOME (b,sz) ==> sz = 32) ==>
+           !i b sz. i IN R /\ FLOOKUP t.vs_allocas i = SOME (b,sz) ==> sz = 32) /\
+      mem_cont_sim ctx func s t /\ window_mem_frame ctx func s t
+Proof
+  map_every qid_spec_tac [`out`, `s`, `en`, `st`, `d`, `sb`, `slot`, `site`, `dp`,
+    `dst`, `src`, `k`, `avs`, `ats`, `at`, `infos`, `func`, `ctx`, `rest`] >>
+  Induct_on `rest`
+  >- (rpt gen_tac >> strip_tac >>
+      qpat_x_assum `compile_abi_encode_complex_elems _ _ [] _ _ _ _ = _` mp_tac >>
+      simp_tac bool_ss [Once abiEncoderTheory.compile_abi_encode_child_def,
+        comp_return_def, pairTheory.PAIR_EQ] >> strip_tac >>
+      `k = LENGTH infos` by
+        (qpat_assum `window_member_prefix _ _ _ _ _ _` mp_tac >>
+         simp_tac bool_ss [window_member_prefix_def] >>
+         strip_tac >> fs[DROP_EQ_NIL] >> decide_tac) >>
+      qpat_x_assum `!ei az ms dyn. _` kall_tac >>
+      qpat_x_assum `st = en` SUBST_ALL_TAC >>
+      qpat_x_assum `k = LENGTH infos` SUBST_ALL_TAC >>
+      qexists_tac `s` >> asm_rewrite_tac[] >>
+      (conj_tac >- (irule window_phase_refl >> asm_rewrite_tac[])) >>
+      simp[mem_cont_sim_refl, window_mem_frame_refl]) >>
+  rpt gen_tac >> strip_tac >> PairCases_on `h` >>
+  `^(Term.subst [``ei:abi_enc_info`` |-> ``h0:abi_enc_info``] empty_child_contract)` by
+    (qpat_assum `!ei az ms dyn. _` (qspecl_then [`h0`, `h1`, `h2`, `h3`] mp_tac) >>
+     rewrite_tac[MEM]) >>
+  drule_all empty_source_members_cons_run >> strip_tac >>
+  suspend "tail"
+QED
+
+Resume empty_source_members_remaining_run[tail]:
+  `!ei az ms dyn. MEM (ei,az,ms,dyn) rest ==> ^empty_child_contract` by
+    (rpt gen_tac >> disch_tac >>
+     qpat_assum `!ei az ms dyn. MEM (ei,az,ms,dyn) (_::rest) ==> _` (qspecl_then [`ei`, `az`, `ms`, `dyn`] mp_tac) >>
+     (impl_tac >- (rewrite_tac[MEM] >> disj2_tac >> first_assum ACCEPT_TAC)) >>
+     disch_then ACCEPT_TAC) >>
+  qpat_x_assum `!ctx func infos at ats avs k src dst dp site slot sb d st en s out. _`
+    drule_all >> strip_tac >>
+  `mem_cont_sim ctx func s t` by metis_tac[mem_cont_sim_trans] >>
+  `window_mem_frame ctx func s t` by metis_tac[window_mem_frame_trans] >>
+  `!R. (!i b sz. i IN R /\ FLOOKUP s.vs_allocas i = SOME (b,sz) ==> sz = 32) ==>
+       !i b sz. i IN R /\ FLOOKUP t.vs_allocas i = SOME (b,sz) ==> sz = 32` by
+    (gen_tac >> disch_tac >>
+     qpat_x_assum `!R. _` (qspec_then `R` mp_tac) >>
+     (impl_tac >- (first_x_assum (qspec_then `R` mp_tac) >> asm_rewrite_tac[])) >>
+     rewrite_tac[]) >>
+  qexists_tac `t` >> asm_rewrite_tac[] >>
+  irule window_phase_chain >>
+  qexistsl_tac [`window_alloca_sites func (frag_ids st en) UNION
+      (if EXISTS (\(_,_,_,dyn). dyn) infos then {site} else {})`,
+    `[(d,LENGTH (enc at (ListV avs)))]`, `mid`,
+    `window_alloca_sites func (frag_ids mid en) UNION
+      (if EXISTS (\(_,_,_,dyn). dyn) infos then {site} else {})`,
+    `[(d,LENGTH (enc at (ListV avs)))]`, `u`] >>
+  asm_rewrite_tac[] >>
+  qpat_x_assum `window_alloca_sites func (frag_ids mid en) SUBSET _` mp_tac >>
+  simp_tac (srw_ss()) [SUBSET_DEF] >> metis_tac[]
+QED
+
+Finalise empty_source_members_remaining_run
+
+Theorem empty_source_initialized_members_run_frame:
+  ^(Term.subst [``k:num`` |-> ``0:num``] empty_member_inv) /\
+  (!ei az ms dyn. MEM (ei,az,ms,dyn) infos ==> ^empty_child_contract) /\
+  compile_abi_encode_complex_elems dst src infos 0 0 dp st = (out,en) ==>
+  ?t. window_phase ctx func st en
+        (window_alloca_sites func (frag_ids st en) UNION
+          (if EXISTS (\(_,_,_,dyn). dyn) infos then {site} else {}))
+        [(d,LENGTH (enc at (ListV avs)))] s t /\
+      mem_bytes_at d (LENGTH (enc at (ListV avs))) t.vs_memory = enc at (ListV avs) /\
+      (EXISTS (\(_,_,_,dyn). dyn) infos ==>
+        mem_word_at slot t.vs_memory = n2w (LENGTH (enc at (ListV avs)))) /\
+      (!R. (!i b sz. i IN R /\ FLOOKUP s.vs_allocas i = SOME (b,sz) ==> sz = 32) ==>
+           !i b sz. i IN R /\ FLOOKUP t.vs_allocas i = SOME (b,sz) ==> sz = 32) /\
+      mem_cont_sim ctx func s t /\ window_mem_frame ctx func s t
+Proof
+  strip_tac >>
+  mp_tac (Q.INST [`k` |-> `0`, `rest` |-> `infos`] empty_source_members_remaining_run) >>
+  pure_rewrite_tac [DROP_0, TAKE_0, MAP, SUM, abiEncoderInputTheory.abi_encoder_member_span_def] >>
+  (impl_tac >- asm_rewrite_tac[]) >> strip_tac >>
+  suspend "complete"
+QED
+
+Resume empty_source_initialized_members_run_frame[complete]:
+  `LENGTH infos = LENGTH ats /\ LENGTH ats = LENGTH avs` by
+    (qpat_assum `window_member_prefix _ _ _ _ _ t.vs_memory` mp_tac >>
+     simp_tac bool_ss [window_member_prefix_def] >> metis_tac[]) >>
+  `enc at (ListV avs) = enc (Tuple ats) (ListV avs)` by
+    (irule abi_encoder_tuple_type_encoding >> asm_rewrite_tac[]) >>
+  `mem_bytes_at d (LENGTH (enc at (ListV avs))) t.vs_memory = enc at (ListV avs)` by
+    metis_tac[window_structural_member_prefix_complete] >>
+  `window_member_tail infos ats avs (LENGTH infos) = LENGTH (enc at (ListV avs))` by
+    (`TAKE (LENGTH infos) ats = ats /\ TAKE (LENGTH infos) avs = avs` by
+       metis_tac[TAKE_LENGTH_ID] >>
+     drule window_structural_member_tuple_length >>
+     pure_asm_rewrite_tac[window_member_tail_def] >> metis_tac[]) >>
+  qexists_tac `t` >> asm_rewrite_tac[] >>
+  disch_tac >>
+  qpat_x_assum `_ ==> mem_word_at slot t.vs_memory = _` drule >>
+  asm_rewrite_tac[]
+QED
+
+Finalise empty_source_initialized_members_run_frame
