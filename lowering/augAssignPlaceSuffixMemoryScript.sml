@@ -22,8 +22,8 @@ Theorem aug_place_word_store_after_operator_mem:
   eval_operand op t = SOME (val_to_w256 v) /\
   is_word_type ty /\ evaluate_type (get_tenv cx) ty = SOME dtv /\
   value_has_type dtv v /\ word_value v /\ expr_sim_inv cenv cx env ee /\
-  acyclic_struct_metadata cenv.ce_struct_fields /\ storage_place_region cx p /\
-  stmt_state_rel ctx func cenv cx ee t /\
+  acyclic_struct_metadata cenv.ce_struct_fields /\ storage_place_observed H p /\
+  stmt_state_rel H ctx func cenv cx ee t /\
   write_place cx p v ee = (INL (),ff) /\
   fn_has_code s3 sf func /\ fn_inst_ids_distinct func /\
   ~t.vs_halted /\ t.vs_current_bb = s3.cs_current_bb /\
@@ -31,7 +31,7 @@ Theorem aug_place_word_store_after_operator_mem:
   s.vs_alloca_next <= t.vs_alloca_next /\
   (loc = LocMemory ==> w2n w + 32 <= s.vs_alloca_next) ==>
   ?u. gas_marked_path T ctx func t 0 (OK u) /\
-      stmt_state_rel ctx func cenv cx ff u /\
+      stmt_state_rel H ctx func cenv cx ff u /\
       (!z. not_fresh_at s3 z ==> lookup_var z u = lookup_var z t) /\
       (!aid b. FLOOKUP t.vs_allocas aid = SOME b ==>
                FLOOKUP u.vs_allocas aid = SOME b) /\
