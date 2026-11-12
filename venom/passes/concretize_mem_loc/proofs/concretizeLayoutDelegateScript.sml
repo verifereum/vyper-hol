@@ -281,7 +281,7 @@ Theorem concretize_delegate_local_complete:
     (o1_walk_view rpolicy 2) C C' /\ o1_ctx_shape C /\
   EVERY (\fn. fn.fn_eom = NONE) C.ctx_functions /\
   ctx_inst_ids_distinct C /\ o1_run_state_ok vs0 /\
-  EVERY wf_function C.ctx_functions /\ mem_inv raw_mem_ok C vs0 /\
+  EVERY wf_function C.ctx_functions /\
   vs0.vs_allocas = FEMPTY /\ layout_cut_safe D lo ncut vs0 C q /\ callee_first names C.ctx_functions /\ EVERY ssa_form C.ctx_functions /\
   EVERY fn_defs_reach_uses C.ctx_functions /\ EVERY all_reachable C.ctx_functions /\
   ~ctx_has_dalloca C /\ fixed_region_reserved lo C /\ activation_depth q0 = 0 /\

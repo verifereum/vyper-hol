@@ -41,7 +41,7 @@ Theorem concretize_comparison_geometry:
     (o1_walk_view rpolicy 2) C C' /\ o1_ctx_shape C /\
   EVERY (\fn. fn.fn_eom = NONE) C.ctx_functions /\
   ctx_inst_ids_distinct C /\ o1_run_state_ok vs0 /\
-  EVERY wf_function C.ctx_functions /\ mem_inv raw_mem_ok C vs0 /\
+  EVERY wf_function C.ctx_functions /\ s.vs_alloca_next < dimword (:256) /\
   vs0.vs_allocas = FEMPTY /\
   joint_config_reachable vs0 C
     (JointConfig stk PG G tn fn inst s oms om hs h) /\
@@ -78,7 +78,7 @@ Proof
       (fn::MAP (\f. f.cf_fn) stk) (tu0,tu1) = concretize_positions C' owner tu1` by
     metis_tac[resolved_activation_lookup] >>
   `b+sz < dimword (:256)` by
-    (drule_all joint_activation_cache_strict >> simp[]) >>
+    (drule_all joint_activation_cache_strict_frontier >> simp[]) >>
   drule_all concretize_positions_activation_numeric >> strip_tac >>
   simp[arithmeticTheory.ADD_COMM])
 QED
@@ -104,7 +104,7 @@ Theorem concretize_compare_local_complete:
     (o1_walk_view rpolicy 2) C C' /\ o1_ctx_shape C /\
   EVERY (\fn. fn.fn_eom = NONE) C.ctx_functions /\
   ctx_inst_ids_distinct C /\ o1_run_state_ok vs0 /\
-  EVERY wf_function C.ctx_functions /\ mem_inv raw_mem_ok C vs0 /\
+  EVERY wf_function C.ctx_functions /\
   vs0.vs_allocas = FEMPTY /\ layout_cut_safe Dc lo ncut vs0 C q /\
   EVERY (fn_ptr_ok P) C.ctx_functions /\
   EVERY (\f. EVERY inst_wf (fn_insts f)) C.ctx_functions /\
@@ -195,6 +195,9 @@ Proof
     (irule disciplined_compare_vars >> simp[] >>
      qexistsl_tac [`P`, `fn`, `w`] >> gvs[]) >>
   `FLOOKUP rv u <> NONE \/ FLOOKUP rv k <> NONE` by (fs[] >> metis_tac[]) >>
+  `c <= LENGTH es` by simp[] >>
+  `s.vs_alloca_next < dimword (:256)` by
+    (drule_all layout_cut_safe_frontier >> simp[]) >>
   drule_at (Pat `ctx_pass_stage _ _ _ _ _`) concretize_comparison_geometry >>
   disch_then (drule_at (Pat `resolved_config_ok _ _ _`)) >>
   disch_then (drule_at (Pat `lifetime_ok _ _ _`)) >>

@@ -27,7 +27,7 @@ Theorem concretize_word_load_local_complete:
     (o1_walk_view rpolicy 2) C C' /\ o1_ctx_shape C /\
   EVERY (\fn. fn.fn_eom = NONE) C.ctx_functions /\
   ctx_inst_ids_distinct C /\ o1_run_state_ok vs0 /\
-  EVERY wf_function C.ctx_functions /\ mem_inv raw_mem_ok C vs0 /\
+  EVERY wf_function C.ctx_functions /\
   vs0.vs_allocas = FEMPTY /\ layout_cut_safe Dc lo ncut vs0 C q /\
   joint_trace vs0 C q0 es qs q /\ c < LENGTH es /\
   EL c (q0::qs) = JointConfig stk PG G tn fn inst s oms om hs h /\
