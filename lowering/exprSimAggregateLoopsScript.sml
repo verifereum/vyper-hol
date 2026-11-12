@@ -908,7 +908,10 @@ Resume aggregate_make_tuple_flat_sim[rest]:
 QED
 
 Resume aggregate_make_tuple_flat_sim[tuple_join]:
-  gnvs[] >>
+  qpat_x_assum `rr = INL _` SUBST_ALL_TAC >> qunabbrev_tac `r` >>
+  qpat_x_assum `type_memory_bytes ce mty = _` (fn th =>
+    RULE_ASSUM_TAC (REWRITE_RULE [th]) >> assume_tac th) >>
+  asm_simp_tac (srw_ss()) [] >>
   qpat_x_assum `q.vs_memory = t1.vs_memory` (fn th =>
     RULE_ASSUM_TAC (REWRITE_RULE [GSYM th]) >> assume_tac th) >>
   qpat_x_assum `q.vs_allocas = t1.vs_allocas` (fn th =>
