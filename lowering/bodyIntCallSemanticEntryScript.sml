@@ -100,7 +100,8 @@ Proof
        ALL_DISTINCT_APPEND] >> rpt strip_tac >>
   gvs[MEM_MAP] >>
   drule (iffLR collect_locals_supported_bindings) >> strip_tac >>
-  metis_tac[MEM_MAP, FST]
+  gvs[listTheory.EVERY_MEM, MEM_MAP, PULL_EXISTS, pairTheory.FORALL_PROD] >>
+  metis_tac[]
 QED
 
 Theorem supported_build_internal_env_param_type:
