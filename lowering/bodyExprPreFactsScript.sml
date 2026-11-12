@@ -599,7 +599,7 @@ Proof
   rpt strip_tac >>
   `IS_SOME es1.outcomes` by
     (drule (cj 1 eval_outcome_suffix_mutual) >>
-     rw[outcome_suffix_def] >> gvs[expr_sim_inv_def]) >>
+     rw[outcome_suffix_def] >> fs[expr_sim_inv_def]) >>
   drule stmt_env_declare >> strip_tac >>
   qspecl_then [`cx`, `s`, `env`, `ret_ty`, `env'`, `es`, `INL ()`, `es1`]
     mp_tac (cj 1 eval_scc_type_sound_mutual) >>
