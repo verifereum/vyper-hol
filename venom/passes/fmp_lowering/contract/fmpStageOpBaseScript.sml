@@ -16,6 +16,7 @@ Ancestors
   fmpStageRel ptrStaticDiscipline ptrDiscipline o1PassContract
   fmpStepBridge fmpLowerDefs fmpWfDefs livenessProofs cfgHelpers pred_set
   contextCodegenRel venomExecSemantics venomInst list
+  fmpStageOpBaseRoot fmpStageOpBaseActual
 
 Theorem frame_reachable_fn_mem[local]:
   !vs ctx stk PG G tn fn inst s.
@@ -99,5 +100,10 @@ Theorem fmp_stage_witness_pin:
   (fn_is_context_entry ctx fn <=> C.ctx_entry = SOME fn.fn_name) /\
   !i. MEM i (fn_insts fn) ==> ~MEM runner i.inst_outputs
 Proof
-  cheat
+  strip_tac >>
+  drule_all fmp_stage_actual_witness >> strip_tac >>
+  imp_res_tac fmp_stage_lowered_root_fingerprint >>
+  Cases_on `fmp_stage_root infos0 ctx0 fn` >> gvs[] >>
+  Cases_on `fn_is_context_entry ctx fn` >>
+  Cases_on `fn_is_context_entry ctx0 fn` >> gvs[]
 QED
