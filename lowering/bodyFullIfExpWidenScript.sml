@@ -228,6 +228,101 @@ Proof
   simp[vv_post_def] >> rpt strip_tac >> metis_tac[]
 QED
 
+Theorem ifexp_widen_alloc_resources_frame:
+  compile_ifexp_arm cenv t lt vv sm = (op,sb) /\
+  post_value_type cenv e = t /\ expr_type e = t /\ ~is_word_type t /\
+  evaluate_type (get_tenv cx) t = SOME rty /\
+  (!v. read_result cx tv ee = (INL v,ee) ==> value_has_type rty v) /\
+  ptr_vv_ok cx t tv vv ee G tn s /\
+  vv_store_bound cx t lt ee tv vv s /\
+  (!t' op0. vv = StackValue t' op0 /\ ~is_word_type t ==>
+     ptr_buf_ok cenv e op0 G s) /\
+  (!t' p. vv = LocatedValue t' p /\ p.ptr_location = LocMemory ==>
+     ptr_buf_ok cenv e p.ptr_operand G s) /\
+  (cenv.ce_is_ctor /\ vv_location vv = SOME LocCode ==>
+   ?val. read_result cx tv ee = (INL val,ee) /\
+     !rt w. evaluate_type (get_tenv cx) t = SOME rt /\
+            eval_operand (vv_operand vv) s = SOME w ==>
+       w2n w + type_memory_size rt <= lo /\
+       (!mem. mem_agree_outside tn.t_mem s.vs_memory mem ==>
+          val_in_memory rt val (w2n w) mem)) /\
+  eval_operand (vv_operand vv) q = eval_operand (vv_operand vv) s /\
+  op_taint tq (vv_operand vv) = op_taint tn (vv_operand vv) /\
+  op_prov Gq (vv_operand vv) = op_prov G (vv_operand vv) /\
+  (!x. vv_operand vv = Var x ==> FLOOKUP Gq x = FLOOKUP G x) /\
+  q.vs_memory = s.vs_memory /\ q.vs_accounts = s.vs_accounts /\
+  q.vs_call_ctx = s.vs_call_ctx /\ q.vs_transient = s.vs_transient /\
+  tq.t_stor = tn.t_stor /\ tq.t_trans = tn.t_trans /\
+  s.vs_alloca_next <= q.vs_alloca_next /\ lo <= s.vs_alloca_next /\
+  (!i. i < s.vs_alloca_next ==> (i IN tq.t_mem <=> i IN tn.t_mem)) ==>
+  ptr_vv_ok cx t tv vv ee Gq tq q /\
+  vv_store_bound cx t lt ee tv vv q /\
+  (!t' op0. vv = StackValue t' op0 /\ ~is_word_type t ==>
+     ptr_buf_ok cenv e op0 Gq q) /\
+  (!t' p. vv = LocatedValue t' p /\ p.ptr_location = LocMemory ==>
+     ptr_buf_ok cenv e p.ptr_operand Gq q) /\
+  (cenv.ce_is_ctor /\ vv_location vv = SOME LocCode ==>
+   ?val. read_result cx tv ee = (INL val,ee) /\
+     !rt w. evaluate_type (get_tenv cx) t = SOME rt /\
+            eval_operand (vv_operand vv) q = SOME w ==>
+       w2n w + type_memory_size rt <= lo /\
+       (!mem. mem_agree_outside tq.t_mem q.vs_memory mem ==>
+          val_in_memory rt val (w2n w) mem))
+Proof
+  strip_tac >>
+  `!v. read_result cx tv ee = (INL v,ee) ==> val_wf rty v` by
+    metis_tac[valueEncodingTypingTheory.value_has_type_val_wf] >>
+  `!v p. val_wf rty v /\
+      (val_store_size rty v = 0 \/ p + val_store_size rty v <= s.vs_alloca_next) /\
+      (!m. mem_agree_outside tn.t_mem s.vs_memory m ==> val_in_memory rty v p m) ==>
+      !m. mem_agree_outside tq.t_mem q.vs_memory m ==> val_in_memory rty v p m` by
+    (rpt gen_tac >> disch_then (map_every assume_tac o CONJUNCTS) >>
+     rpt gen_tac >> disch_tac >> irule robust_val_in_memory_exterior_frame >>
+     conj_tac >- simp[] >>
+     map_every qexists_tac [`s.vs_memory`, `q.vs_memory`, `tn.t_mem`, `tq.t_mem`,
+                   `{i | s.vs_alloca_next <= i}`] >>
+     simp[] >> rpt strip_tac >>
+     mp_tac (Q.SPECL [`rty`, `v`] val_footprint_le_store_size) >> decide_tac) >>
+  conj_tac >- suspend "pointer" >>
+  conj_tac >- suspend "bound" >>
+  conj_tac >- (rpt strip_tac >> Cases_on `vv` >> gvs[vv_operand_def, ptr_buf_ok_def] >> metis_tac[]) >>
+  conj_tac >- (rpt strip_tac >> Cases_on `vv` >> gvs[vv_operand_def, ptr_buf_ok_def] >> metis_tac[]) >>
+  suspend "ctor"
+QED
+
+Resume ifexp_widen_alloc_resources_frame[pointer]:
+  Cases_on `vv` >> gvs[vv_operand_def, ptr_vv_ok_def, ptr_val_ok_def] >>
+  TRY (rename1 `p.ptr_operand` >> Cases_on `p.ptr_location` >>
+       gvs[] >> NO_TAC) >>
+  gvs[ptr_mem_ok_def] >> rpt strip_tac >>
+  first_x_assum drule >> simp[] >> strip_tac >>
+  gvs[vv_store_bound_def] >> metis_tac[]
+QED
+Resume ifexp_widen_alloc_resources_frame[bound]:
+  qpat_x_assum `vv_store_bound _ _ _ _ _ _ _` mp_tac >>
+  qpat_x_assum `eval_operand _ q = _` mp_tac >>
+  qpat_x_assum `s.vs_alloca_next <= q.vs_alloca_next` mp_tac >>
+  POP_ASSUM_LIST (K ALL_TAC) >>
+  Cases_on `vv` >> simp[vv_operand_def, vv_store_bound_def] >>
+  metis_tac[arithmeticTheory.LESS_EQ_TRANS]
+QED
+Resume ifexp_widen_alloc_resources_frame[ctor]:
+  strip_tac >>
+  qpat_x_assum `cenv.ce_is_ctor /\ _ ==> _` mp_tac >>
+  simp[] >> strip_tac >> qexists_tac `val` >> simp[] >>
+  rpt gen_tac >> strip_tac >>
+  first_x_assum drule >> simp[] >> strip_tac >>
+  `val_wf rty val` by metis_tac[] >>
+  `val_footprint rty val <= type_memory_size rty` by
+    simp[val_footprint_le] >>
+  rpt strip_tac >> irule robust_val_in_memory_exterior_frame >>
+  conj_tac >- simp[] >>
+  map_every qexists_tac [`s.vs_memory`, `q.vs_memory`, `tn.t_mem`, `tq.t_mem`,
+                        `{i | s.vs_alloca_next <= i}`] >>
+  simp[] >> rpt strip_tac >> decide_tac
+QED
+Finalise ifexp_widen_alloc_resources_frame
+
 Theorem ifexp_widen_arm_step_full:
   (* The shared joint unwrap_value lemma on H (r8, family form), here a
      premise until it lands. *)
