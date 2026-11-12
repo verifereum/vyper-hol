@@ -23,6 +23,21 @@ Proof
   gvs[] >> metis_tac[storage_trace_domain_prefix]
 QED
 
+Theorem gas_bad_storage_at_initial:
+  storage_trace_frame source /\
+  ~storage_trace_domain cx st0 es.storage_trace ==>
+  gas_bad_storage_at cx st0 source es s0 marks
+Proof
+  rw[gas_bad_storage_at_def] >>
+  Cases_on `source (es with gas_obs :=
+    gas_explicit marks s0.vs_gas_readings ++ tail)` >>
+  rename1 `source _ = (res,ee)` >>
+  `~storage_trace_domain cx st0
+    (es with gas_obs :=
+      gas_explicit marks s0.vs_gas_readings ++ tail).storage_trace` by simp[] >>
+  drule_all storage_trace_frame_preserves_bad_domain >> simp[]
+QED
+
 Theorem gas_bad_storage_at_bind_left:
   gas_bad_storage_at cx st0 source es s0 marks /\
   (!v. storage_trace_frame (k v)) ==>
