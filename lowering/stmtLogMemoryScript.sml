@@ -14,6 +14,7 @@ Ancestors
   vyperInterpreter vyperState vyperTyping list rich_list
   gasOutcome gasSummary gasSummaryCompose gasExemptCert gasContext
   fragGasMode fragGasPath fragGasPathMem
+  gasStorage vyperStorageTrace vyperStorageFootprint
 Libs
   monadsyntax
 
@@ -104,8 +105,15 @@ Proof
   strip_tac >>
   qpat_x_assum `!e tail s. _` (assume_tac o CONV_RULE (DEPTH_CONV ETA_CONV)) >>
   simp[stmt_frag_mem_def] >> rpt gen_tac >> strip_tac >>
+  reverse (Cases_on `?H. valid_horizon cx st0 H es.storage_trace`)
+  >- (rewrite_tac[gas_outcome_def] >> qexists_tac `[]` >> disj1_tac >>
+      irule gas_bad_storage_at_initial >>
+      fs[storage_trace_domain_def, evaluate_storage_trace_frame]) >>
+  qpat_x_assum `?H. _` (qx_choose_then `H0` assume_tac) >>
   (* A static frame has no related target state. *)
-  `~cx.txn.is_static` by fs[stmt_state_rel_def, state_rel_def] >>
+  `~cx.txn.is_static` by
+    (`stmt_state_rel H0 ctx func cenv cx es s0` by metis_tac[] >>
+     fs[stmt_state_rel_def, state_rel_def]) >>
   gvs[stmt_env_def, declare_stmt_local_def, comp_bind_def, comp_return_def,
       comp_ignore_bind_def] >>
   pairarg_tac >> gvs[] >>
@@ -113,35 +121,60 @@ Proof
   `gas_admissible (eval_exprs cx args)
      (\r. !exc. r = INR exc ==> expr_res_ok (INR exc : value + exception)) es` by
     metis_tac[log_mem_args_admissible] >>
-  qspecl_then [`args`, `ctx`, `func`, `cenv`, `cx`, `R`, `es`, `sa`, `xs`, `sm`,
+  qspecl_then [`args`, `ctx`, `func`, `cenv`, `cx`, `R`, `st0`, `es`, `sa`, `xs`, `sm`,
                `s0`, `env`, `env`, `es`, `ys`] mp_tac compile_log_eval_all_gas_mem >>
   impl_tac
   >- (RULE_ASSUM_TAC (CONV_RULE (DEPTH_CONV ETA_CONV)) >> simp[] >>
       first_assum ACCEPT_TAC) >>
   qpat_assum `~cx.txn.is_static` (rewrite_tac o single o MATCH_MP log_mem_eval_bind) >>
-  simp[gas_outcome_def] >> strip_tac
-  >- suspend "args_summary" >>
-  qexists_tac `marks` >> disj2_tac >>
+  `!vs. storage_trace_frame
+     (bind (lift_option (encode_source_event (get_tenv cx) cx.sources
+                           cx.txn.target id vs) "Log encode event") push_log)` by
+    (gen_tac >> irule storage_trace_frame_bind_all >>
+     simp[storage_trace_frame_lifts, storage_trace_frame_state_updates]) >>
+  `storage_trace_frame (eval_exprs cx args)` by
+    simp[evaluate_storage_trace_frame] >>
+  rewrite_tac[gas_outcome_def] >> strip_tac
+  >- (qexists_tac `marks` >> disj1_tac >>
+      irule gas_bad_storage_at_bind_left >> simp[])
+  >- (qpat_x_assum `gas_summary_at _ _ _ _ _ _ _`
+        (strip_assume_tac o REWRITE_RULE [gas_summary_at_def]) >>
+      (reverse (Cases_on `storage_trace_domain cx st0 es_end.storage_trace`)
+       >- (qexists_tac `marks` >> disj1_tac >>
+           irule gas_bad_storage_at_bind_left >> simp[] >>
+           irule gas_bad_storage_at_counted_prefix >> metis_tac[])) >>
+      `valid_horizon cx st0 (storage_trace_horizon es_end.storage_trace)
+         es_end.storage_trace` by fs[storage_trace_domain_def]
+      >- suspend "args_value"
+      >> suspend "args_exit") >>
+  qexists_tac `marks` >> disj2_tac >> disj2_tac >>
   rename1 `gas_exempt_cert _ _ _ _ _ marks (err,ee) (leaf,fin)` >>
   qexistsl_tac [`err`, `ee`, `leaf`, `fin`] >>
   rewrite_tac[log_mem_ignore_bind_bind] >>
   irule gas_exempt_cert_error_values >> first_assum ACCEPT_TAC
 QED
 
-Resume compile_log_ready_stmt_frag_mem[args_summary]:
-  qpat_x_assum `gas_summary_at _ _ _ _ _ _ _` mp_tac >>
-  simp[gas_summary_at_def, Excl "enc_def"] >> strip_tac
-  >- suspend "args_value" >>
-  `?ex. res = INR ex` by (Cases_on `res` >> gvs[]) >> gvs[] >>
-  qexists_tac `marks` >> disj1_tac >> simp[gas_summary_at_def] >>
+Resume compile_log_ready_stmt_frag_mem[args_exit]:
+  qpat_x_assum `(\res ee r. _) _ _ _` (assume_tac o SIMP_RULE (srw_ss()) []) >>
+  `expr_exit res r` by metis_tac[] >>
+  `?ex. res = INR ex` by (Cases_on `res` >> gvs[expr_exit_def]) >> gvs[] >>
+  qexists_tac `marks` >> disj2_tac >> disj1_tac >> simp[gas_summary_at_def] >>
   qexistsl_tac [`INR ex`, `es_end`, `r`] >> conj_tac
   >- (irule gas_marked_exec_bind_exception >> simp[]) >>
-  disj2_tac >> simp[] >> gen_tac >> simp[stmt_exit_def] >> disj1_tac >>
+  disj2_tac >> simp[] >> rpt strip_tac >> simp[stmt_exit_def] >> disj1_tac >>
   metis_tac[expr_exit_INR_type]
 QED
 
 Resume compile_log_ready_stmt_frag_mem[args_value]:
-  gvs[Excl "enc_def"] >>
+  qpat_x_assum `(\res ee t. _) _ _ _`
+    (assume_tac o SIMP_RULE (srw_ss()) [Excl "enc_def"]) >>
+  qpat_assum `!H. valid_horizon _ _ H es_end.storage_trace ==> ?vs. _`
+    (drule_then (qx_choose_then `vs` strip_assume_tac)) >>
+  qpat_x_assum `res = INL vs` SUBST_ALL_TAC >>
+  qpat_x_assum `r = OK t` SUBST_ALL_TAC >>
+  qpat_x_assum `!H. valid_horizon _ _ H es_end.storage_trace ==> ?vs. _`
+    (assume_tac o SIMP_RULE (srw_ss()) [Excl "enc_def"]) >>
+  qabbrev_tac `Hc = storage_trace_horizon es_end.storage_trace` >>
   qabbrev_tac `xs = ZIP (MAP FST ys,MAP expr_type args)` >>
   `~t.vs_halted` by
     (qpat_x_assum `gas_marked_exec _ _ _ _ _ _ _ _` mp_tac >>
@@ -162,8 +195,8 @@ Resume compile_log_ready_stmt_frag_mem[args_value]:
        (qpat_x_assum `MAP SND xs = _` (mp_tac o Q.AP_TERM `EL n`) >>
         simp[EL_MAP, Excl "enc_def"]) >>
      qpat_x_assum `!n. n < LENGTH args ==> _` (qspec_then `n` mp_tac) >>
-     simp[Excl "enc_def"]) >>
-  `stmt_state_rel H ctx func cenv cx (es_end with gas_obs := []) t` by
+     gvs[Excl "enc_def"]) >>
+  `stmt_state_rel Hc ctx func cenv cx (es_end with gas_obs := []) t` by
     metis_tac[log_args_post_state] >>
   `local_ptrs_reserved cenv sm` by
     (drule_all compile_log_eval_all_grows >> strip_tac >>
@@ -237,7 +270,7 @@ Resume compile_log_ready_stmt_frag_mem[suffix]:
               wordsTheory.w2w_id, Excl "enc_def"] >>
          simp[Once contractABITheory.enc_def]) >>
      metis_tac[]) >>
-  qexists_tac `marks ++ REPLICATE n F` >> disj1_tac >>
+  qexists_tac `marks ++ REPLICATE n F` >> disj2_tac >> disj1_tac >>
   simp[gas_summary_at_def, Excl "enc_def"] >>
   qexistsl_tac [`INL ()`, `es_end with logs := es_end.logs ++ [ev]`,
                 `OK (u with vs_inst_idx := LENGTH sb.cs_current_insts)`] >>
@@ -268,7 +301,23 @@ Resume compile_log_ready_stmt_frag_mem[post]:
      simp[venomStateTheory.eval_operand_def, venomStateTheory.lookup_var_def]) >>
   simp[stmt_lands_def, stmt_state_rel_inst_idx, Excl "enc_def"] >>
   simp[cenv_top_ext_refl, Excl "enc_def"] >>
-  disj1_tac >> rpt conj_tac
+  disj1_tac >> rpt strip_tac >>
+  `valid_horizon cx st0 H es_end.storage_trace` by fs[Excl "enc_def"] >>
+  `log_args_post H ctx func cenv cx es sa sm s0 (es_end with gas_obs := []) xs vs t` by
+    (qpat_assum `!H. valid_horizon _ _ H es_end.storage_trace ==>
+                   log_args_post _ _ _ _ _ _ _ _ _ _ _ _ _ /\ _`
+       drule >> simp[Excl "enc_def"]) >>
+  `storage_well_formed_on cx (es_end with gas_obs := []) (FST H)` by
+    fs[log_args_post_def, Excl "enc_def"] >>
+  `stmt_state_rel H ctx func cenv cx (es_end with gas_obs := []) t` by
+    metis_tac[log_args_post_state] >>
+  qpat_assum `MAP SND xs = MAP expr_type args`
+    (fn th => drule_all (REWRITE_RULE [th] log_success_suffix_actual_run)) >>
+  disch_then (qx_choose_then `u2` strip_assume_tac) >>
+  `u2 = u` by
+    (qpat_x_assum `run_inst_seq _ t = OK u2` mp_tac >> simp[Excl "enc_def"]) >>
+  pop_assum SUBST_ALL_TAC >>
+  rpt conj_tac
   >- fs[same_blocks_def]
   >- (drule_all log_stmt_open >> simp[Excl "enc_def"])
   >- (qpat_x_assum `stmt_state_rel _ _ _ _ _ (_ with logs := _) u` mp_tac >>
@@ -278,6 +327,10 @@ Resume compile_log_ready_stmt_frag_mem[post]:
         simp[Abbr `E1`, Abbr `E2`, Abbr `ev`, wordsTheory.w2w_id,
              evaluation_state_component_equality, Excl "enc_def"] >>
       simp[Excl "enc_def"])
+  >- (qpat_x_assum `storage_well_formed_on cx (es_end with gas_obs := []) (FST H)`
+        mp_tac >>
+      match_mp_tac (METIS_PROVE [] ``(A <=> B) ==> A ==> B``) >>
+      irule storage_well_formed_on_backends >> simp[Excl "enc_def"])
   >- fs[lookup_var_def, Excl "enc_def"] >>
   qspecl_then [`d`, `cenv`, `cenv`, `sa`, `sb`, `s0`,
                `u with vs_inst_idx := LENGTH sb.cs_current_insts`]

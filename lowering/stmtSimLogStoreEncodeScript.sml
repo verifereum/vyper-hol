@@ -204,7 +204,7 @@ Resume log_tuple_encoder_owned[dynamic]:
      >- (qexists_tac `st.cs_next_id` >> simp[]) >>
      conj_tac >- (qexistsl_tac [`srccap`,`srcid`] >> simp[]) >>
      conj_tac >- (qexists_tac `prepared` >> simp[]) >>
-     qexistsl_tac [`ctx`,`func`] >> simp[]) >>
+     qexistsl_tac [`H`,`ctx`,`func`] >> simp[]) >>
   Q.SUBGOAL_THEN `?actual.
     run_inst_seq (emitted_insts prepared end_st) initial = OK actual /\
     inst_extends prepared end_st /\ fresh_vars_wrt limit_st actual /\

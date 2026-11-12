@@ -13,8 +13,9 @@ Theorem aggregate_completed_buffer_result:
   ~is_word_type (expr_type e) /\
   evaluate_type (get_tenv cx) (expr_type e) = SOME tv /\
   type_memory_size tv <= sz /\ val_in_memory tv v b r.vs_memory /\
-  stmt_state_rel ctx func ce cx es t /\
-  stmt_state_rel ctx func ce cx es' r /\
+  stmt_state_rel H ctx func ce cx es t /\
+  stmt_state_rel H ctx func ce cx es' r /\
+  storage_well_formed_on cx es' (FST H) /\
   p.ptr_location = LocMemory /\ eval_operand p.ptr_operand r = SOME (n2w b) /\
   ci_mono sa sm /\ ci_mono sm sb /\ sa.cs_next_id < sm.cs_next_id /\
   local_ptrs_reserved ce sm /\ b + sz < dimword (:256) /\
@@ -39,7 +40,7 @@ Theorem aggregate_completed_buffer_result:
     mem_bytes_at a n r.vs_memory = mem_bytes_at a n t.vs_memory) /\
   t.vs_memory = s0.vs_memory /\ locals_kept ce es es' t r /\
   (~expr_has_effect e ==> pure_frame ce func es sa s0 r) ==>
-  vv_post ctx func ce cx e es sa sb s0 es' (Value v)
+  vv_post H ctx func ce cx e es sa sb s0 es' (Value v)
     (LocatedValue (expr_type e) p) r /\
   vv_store_bound cx (expr_type e) (lowered_value_type ce e) es' (Value v)
     (LocatedValue (expr_type e) p) r

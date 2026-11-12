@@ -19,7 +19,7 @@ Theorem aggregate_body_head_continuation_same_mem[local]:
   (!st. expr_sim_inv ce cx env st ==> not_local_ptr ce st.scopes x) /\
   not_fresh_at sa x /\ lookup_var x s0 = SOME (n2w b) /\
   FLOOKUP s0.vs_allocas inst.inst_id = SOME (b,asz) /\
-  stmt_state_rel ctx func ce cx es s0 /\
+  stmt_state_rel H ctx func ce cx es s0 /\
   evaluate_type (get_tenv cx) (expr_type e) = SOME htv /\
   off + type_memory_size htv <= asz /\ b+asz < dimword (:256) /\
   (ce.ce_is_ctor ==> !name itv iv io.
@@ -29,7 +29,7 @@ Theorem aggregate_body_head_continuation_same_mem[local]:
     regions_disjoint io (type_memory_size itv) (b+off) (type_memory_size htv)) /\
   gas_marked_exec T (ctx,func) (eval_expr cx e) (es,s0)
     marks (INL tv) es1 (OK t1) /\ es1.gas_obs = [] /\
-  vv_post ctx func ce cx e es sa sm s0 es1 tv vv t1 /\
+  vv_post H ctx func ce cx e es sa sm s0 es1 tv vv t1 /\
   vv_store_bound cx (expr_type e) (lowered_value_type ce e) es1 tv vv t1 /\
   t1.vs_current_bb = sm.cs_current_bb /\
   t1.vs_inst_idx = LENGTH sm.cs_current_insts /\ alloca_history func t1 ==>
@@ -47,7 +47,7 @@ Theorem aggregate_body_head_continuation_same_mem[local]:
     gas_marked_exec T (ctx,func) (read_result cx tv) (es1,t1)
       [] (INL v) es1 (OK q) /\
     val_in_memory htv v (b+off) q.vs_memory /\
-    stmt_state_rel ctx func ce cx es1 q /\
+    stmt_state_rel H ctx func ce cx es1 q /\
     (!z a. not_fresh_at sm z /\ lookup_var z t1 = SOME a ==> lookup_var z q = SOME a) /\
     (!i a. FLOOKUP t1.vs_allocas i = SOME a ==> FLOOKUP q.vs_allocas i = SOME a) /\
     (!i lo sz a k. FLOOKUP t1.vs_allocas i = SOME (lo,sz) /\ i < sa.cs_next_id /\
@@ -62,7 +62,9 @@ Theorem aggregate_body_head_continuation_same_mem[local]:
     FLOOKUP q.vs_allocas inst.inst_id = SOME (b,asz) /\
     expr_sim_inv ce cx env es1 /\ body_exprs_mem_ok cx args /\
     value_has_type htv v /\ MAP FDOM es.scopes = MAP FDOM es1.scopes /\
-    mem_bytes_at b asz t1.vs_memory = mem_bytes_at b asz s0.vs_memory
+    mem_bytes_at b asz t1.vs_memory = mem_bytes_at b asz s0.vs_memory /\
+    q.vs_accounts = t1.vs_accounts /\ q.vs_transient = t1.vs_transient /\
+    q.vs_requests = t1.vs_requests /\ q.vs_call_ctx = t1.vs_call_ctx
 Proof
   strip_tac >>
   `es1 with gas_obs := [] = es1` by
@@ -74,7 +76,7 @@ Proof
     metis_tac[expr_sim_inv_memory_size] >>
   `lookup_var x t1 = SOME (n2w b) /\
    FLOOKUP t1.vs_allocas inst.inst_id = SOME (b,asz) /\
-   stmt_state_rel ctx func ce cx es1 t1` by (fs[vv_post_def] >> metis_tac[]) >>
+   stmt_state_rel H ctx func ce cx es1 t1` by (fs[vv_post_def] >> metis_tac[]) >>
   `not_fresh_at sm x` by metis_tac[not_fresh_at_mono, ci_mono_def] >>
   `alloca_inv t1` by fs[stmt_state_rel_def] >>
   `!name lo sz. local_region ce es1.scopes t1 name lo sz ==>
@@ -137,7 +139,7 @@ Theorem aggregate_body_head_continuation_mem:
   (!st. expr_sim_inv ce cx env st ==> not_local_ptr ce st.scopes x) /\
   not_fresh_at sa x /\ lookup_var x s0 = SOME (n2w b) /\
   FLOOKUP s0.vs_allocas inst.inst_id = SOME (b,asz) /\
-  stmt_state_rel ctx func ce cx es s0 /\
+  stmt_state_rel H ctx func ce cx es s0 /\
   evaluate_type (get_tenv cx) dty = SOME htv /\
   off + type_memory_size htv <= asz /\ b+asz < dimword (:256) /\
   (ce.ce_is_ctor ==> !name itv iv io.
@@ -147,7 +149,7 @@ Theorem aggregate_body_head_continuation_mem:
     regions_disjoint io (type_memory_size itv) (b+off) (type_memory_size htv)) /\
   gas_marked_exec T (ctx,func) (eval_expr cx e) (es,s0)
     marks (INL tv) es1 (OK t1) /\ es1.gas_obs = [] /\
-  vv_post ctx func ce cx e es sa sm s0 es1 tv vv t1 /\
+  vv_post H ctx func ce cx e es sa sm s0 es1 tv vv t1 /\
   vv_store_bound cx (expr_type e) (lowered_value_type ce e) es1 tv vv t1 /\
   t1.vs_current_bb = sm.cs_current_bb /\
   t1.vs_inst_idx = LENGTH sm.cs_current_insts /\ alloca_history func t1 ==>
@@ -165,7 +167,7 @@ Theorem aggregate_body_head_continuation_mem:
     gas_marked_exec T (ctx,func) (read_result cx tv) (es1,t1)
       [] (INL v) es1 (OK q) /\
     val_in_memory htv v (b+off) q.vs_memory /\
-    stmt_state_rel ctx func ce cx es1 q /\
+    stmt_state_rel H ctx func ce cx es1 q /\
     (!z a. not_fresh_at sm z /\ lookup_var z t1 = SOME a ==> lookup_var z q = SOME a) /\
     (!i a. FLOOKUP t1.vs_allocas i = SOME a ==> FLOOKUP q.vs_allocas i = SOME a) /\
     (!i lo sz a k. FLOOKUP t1.vs_allocas i = SOME (lo,sz) /\ i < sa.cs_next_id /\
@@ -180,7 +182,9 @@ Theorem aggregate_body_head_continuation_mem:
     FLOOKUP q.vs_allocas inst.inst_id = SOME (b,asz) /\
     expr_sim_inv ce cx env es1 /\ body_exprs_mem_ok cx args /\
     value_has_type htv v /\ MAP FDOM es.scopes = MAP FDOM es1.scopes /\
-    mem_bytes_at b asz t1.vs_memory = mem_bytes_at b asz s0.vs_memory
+    mem_bytes_at b asz t1.vs_memory = mem_bytes_at b asz s0.vs_memory /\
+    q.vs_accounts = t1.vs_accounts /\ q.vs_transient = t1.vs_transient /\
+    q.vs_requests = t1.vs_requests /\ q.vs_call_ctx = t1.vs_call_ctx
 Proof
   strip_tac >>
   `es1 with gas_obs := [] = es1` by
