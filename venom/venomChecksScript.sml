@@ -17,6 +17,7 @@ Ancestors
   concretizeCallFrameRegression dftEffectOrderTest dftAbortOrderTest fmpAliasProbe dsePassChecks
   mem2varWitness functionInlinerReturnPcWitness phiElimNonVacuity
   functionInlinerCallWitness
+  assertCombinerNonVacuity
   (* branch_opt's output checker accepts and runs a rewritten function *)
   branchOptCheckWitness
   (* execution of INVOKE with no arguments and of STOP after a call *)
