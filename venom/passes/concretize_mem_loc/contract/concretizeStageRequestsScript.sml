@@ -10,6 +10,7 @@ Ancestors
   unitMemInv concretizeMemLocDefs venomPassDispatcher cfgWf
   concretizeLayoutStageSimulation concretizeLayoutCorridorRequests
   concretizeLayoutRequestRelations concretizeLayoutRequestRun
+  concretizeLayoutRequestBase
 
 Theorem concretize_stage_abort_rq:
   ctx_pass_stage rpolicy (CFP_Simple VP_ConcretizeMemLoc)
