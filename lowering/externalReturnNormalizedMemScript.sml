@@ -357,7 +357,7 @@ Resume external_frame_ret_value_normalized_run_mem[external_flag]:
   qpat_x_assum `compile_register_positional_args _ _ _ _ = _` mp_tac >>
   qpat_x_assum `same_frame _ _` mp_tac >>
   rpt (pop_assum kall_tac) >> rpt strip_tac >>
-  drule entryStateRelTheory.compile_register_positional_args_cenv >> strip_tac >>
+  drule moduleLoweringPropsTheory.compile_register_positional_args_cenv >> strip_tac >>
   `cenv0.ce_is_external` by
     (qpat_x_assum `set_external_package_target _ _ = _` mp_tac >>
      simp[package_external_fn_def, set_external_package_target_def] >>

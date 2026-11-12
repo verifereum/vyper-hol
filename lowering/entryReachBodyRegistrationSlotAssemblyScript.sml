@@ -65,7 +65,7 @@ Theorem entry_slot_ctor_flag[local]:
   compile_register_positional_args ce slots off st = (ce1,last) ==>
   ce1.ce_is_ctor = ce.ce_is_ctor
 Proof
-  strip_tac >> drule entryStateRelTheory.compile_register_positional_args_cenv >>
+  strip_tac >> drule moduleLoweringPropsTheory.compile_register_positional_args_cenv >>
   disch_then (mp_tac o CONJUNCT1) >>
   disch_then (mp_tac o AP_TERM ``\ce:compile_env. ce.ce_is_ctor``) >> simp[]
 QED
