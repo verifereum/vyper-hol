@@ -80,7 +80,7 @@ Definition asm_frame_step_ok_def:
     | AsmRevert as1 =>
         ?r es'. run_call es = SOME (r, es') /\
           (?lgs. frame_outcome es0 r es' (SOME Reverted) as1.as_returndata lgs) /\
-          call_requests es = []
+          call_requests es = [] /\ frame_inst_raises es0 Reverted Revert
     | AsmFault as1 =>
         ?r es'. run_call es = SOME (r, es') /\
           (?exc lgs. exc <> Reverted /\ frame_outcome es0 r es' (SOME exc) [] lgs) /\

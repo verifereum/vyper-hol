@@ -8,7 +8,7 @@
  * TOP-LEVEL:
  *   step_transplant_continue - a continuing step
  *   step_transplant_end      - a step that ends the frame
- *   step_transplant_starved  - a starving step names its raising instruction
+ *   step_transplant_raises   - a starving or reverting step names its raising instruction
  *)
 
 Theory evmStepTransplant
@@ -915,7 +915,7 @@ QED
 (* inc_pc_or_jump fails only on a bad jump target. *)
 Theorem inc_pc_or_jump_not_resource[local]:
   inc_pc_or_jump op s = (INR e, t) ==>
-  e <> SOME OutOfGas /\ e <> SOME StackOverflow
+  e <> SOME OutOfGas /\ e <> SOME StackOverflow /\ e <> SOME Reverted
 Proof
   rw[inc_pc_or_jump_def, bind_def, ignore_bind_def, get_current_context_def,
      set_current_context_def, return_def, assert_def, fail_def] >>
@@ -926,15 +926,17 @@ Proof
 QED
 
 (* A step of a call frame that pushes no context and runs out of gas or
-   stack: the instruction it runs raises that at the frame's depth. *)
-Theorem step_transplant_starved:
+   stack, or reverts: the instruction it runs, the one parsed at the pc,
+   raises that at the frame's depth. *)
+Theorem step_transplant_raises:
   es.contexts = (c, rb) :: rest /\ wf_context c /\
   (!a. c.msgParams.outputTo <> Code a) /\
   (!op. next_opcode c = SOME op ==>
         ~MEM op [Call; CallCode; DelegateCall; StaticCall; Create; Create2]) /\
   step (es with contexts := [(c, rb)]) = (INR (SOME exc), t) /\
-  (exc = OutOfGas \/ exc = StackOverflow) ==>
-  ?op. frame_inst_raises es exc op
+  (exc = OutOfGas \/ exc = StackOverflow \/ exc = Reverted) ==>
+  ?op. frame_inst_raises es exc op /\
+       !op'. FLOOKUP c.msgParams.parsed c.pc = SOME op' ==> op' = op
 Proof
   pure_rewrite_tac[GSYM AND_IMP_INTRO] >> rpt disch_tac >>
   qpat_x_assum `exc = OutOfGas \/ _` mp_tac >>
@@ -966,12 +968,13 @@ Proof
   Cases_on `FLOOKUP c.msgParams.parsed c.pc` >> simp[]
   >- (strip_tac >> disch_tac >>
       qexists_tac `if LENGTH c.msgParams.code <= c.pc then Stop else Invalid` >>
-      irule frame_inst_raises_here >> simp[] >>
+      simp[] >> irule frame_inst_raises_here >> simp[] >>
       first_x_assum (qspec_then
         `if LENGTH c.msgParams.code <= c.pc then Stop else Invalid` mp_tac) >>
       (impl_tac >- (IF_CASES_TAC >> gvs[])) >>
       strip_tac >> qexists_tac `s'` >> gvs[]) >>
   rename1 `FLOOKUP _ _ = SOME op` >>
+  `!op'. FLOOKUP c.msgParams.parsed c.pc = SOME op' ==> op' = op` by simp[] >>
   simp[ignore_bind_def, bind_def] >>
   Cases_on `step_inst op s1` >> rename1 `step_inst op s1 = (r1,s2)` >>
   Cases_on `r1` >> simp[]
@@ -981,6 +984,6 @@ Proof
     (irule transplant_lookup_allowed >> qexists_tac `c` >> gvs[]) >>
   qpat_x_assum `!op'. _ /\ step_inst op' s1 = _ ==> _` (qspec_then `op` mp_tac) >>
   (impl_tac >- gvs[]) >> strip_tac >>
-  qexists_tac `op` >> irule frame_inst_raises_here >> simp[] >>
+  irule frame_inst_raises_here >> simp[] >>
   goal_assum drule >> simp[]
 QED

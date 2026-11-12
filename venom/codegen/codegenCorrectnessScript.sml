@@ -260,7 +260,8 @@ Definition venom_frame_rel_def:
         es'.rollback.tStorage = vs'.vs_transient /\
         vs'.vs_requests = call_requests es
     | Abort Revert_abort vs' =>
-        ?lgs. frame_outcome es r es' (SOME Reverted) vs'.vs_returndata lgs
+        (?lgs. frame_outcome es r es' (SOME Reverted) vs'.vs_returndata lgs) /\
+        frame_inst_raises es Reverted Revert
     | Abort ExHalt_abort vs' =>
         ?exc lgs. exc <> Reverted /\ frame_outcome es r es' (SOME exc) [] lgs
     | Error _ => T

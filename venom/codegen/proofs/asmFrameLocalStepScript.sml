@@ -30,6 +30,76 @@ Proof
   strip_tac >> gvs[asm_evm_rel_def]
 QED
 
+(* Only REVERT steps to AsmRevert. *)
+Theorem asm_consume_outcome_not_revert[local]:
+  asm_consume_call_outcome rq ro rs stk st <> AsmRevert x /\
+  asm_consume_create_outcome rq stk st <> AsmRevert x
+Proof
+  simp[asm_consume_call_outcome_def, asm_consume_create_outcome_def] >>
+  rpt (pairarg_tac >> gvs[])
+QED
+
+Theorem asm_helpers_not_revert[local]:
+  asm_binop ff st <> AsmRevert x /\ asm_unop gg st <> AsmRevert x /\
+  asm_ternop hh st <> AsmRevert x /\ asm_push_val w st <> AsmRevert x /\
+  asm_pop st <> AsmRevert x /\ asm_dup n st <> AsmRevert x /\
+  asm_swap n st <> AsmRevert x /\ asm_state_unop kk st <> AsmRevert x /\
+  asm_mload st <> AsmRevert x /\ asm_mstore st <> AsmRevert x /\
+  asm_mstore8 st <> AsmRevert x /\ asm_sload st <> AsmRevert x /\
+  asm_sstore st <> AsmRevert x /\ asm_tload st <> AsmRevert x /\
+  asm_tstore st <> AsmRevert x /\ asm_jump o2 st <> AsmRevert x /\
+  asm_jumpi o2 st <> AsmRevert x /\ asm_return_op st <> AsmRevert x /\
+  asm_log n st <> AsmRevert x /\ asm_sha3 st <> AsmRevert x /\
+  asm_copy_to_mem bs st <> AsmRevert x /\
+  asm_returndatacopy st <> AsmRevert x /\
+  asm_extcodecopy st <> AsmRevert x /\ asm_mcopy st <> AsmRevert x /\
+  asm_selfdestruct st <> AsmRevert x /\ asm_exec_call b st <> AsmRevert x /\
+  asm_exec_staticcall st <> AsmRevert x /\ asm_gas st <> AsmRevert x /\
+  asm_exec_delegatecall st <> AsmRevert x /\
+  asm_exec_create st <> AsmRevert x /\ asm_exec_create2 st <> AsmRevert x
+Proof
+  simp[asm_consume_outcome_not_revert, AllCaseEqs(), asm_binop_def,
+       asm_unop_def, asm_ternop_def, asm_push_val_def, asm_pop_def,
+       asm_dup_def, asm_swap_def, asm_state_unop_def, asm_mload_def,
+       asm_mstore_def, asm_mstore8_def, asm_sload_def, asm_sstore_def,
+       asm_tload_def, asm_tstore_def, asm_jump_def, asm_jumpi_def,
+       asm_return_op_def, asm_log_def, asm_sha3_def, asm_copy_to_mem_def,
+       asm_returndatacopy_def, asm_extcodecopy_def, asm_mcopy_def,
+       asm_selfdestruct_def, asm_exec_call_def, asm_exec_staticcall_def,
+       asm_gas_def, asm_exec_delegatecall_def, asm_exec_create_def,
+       asm_exec_create2_def, LET_THM] >>
+  rw[] >> gvs[]
+QED
+
+Theorem asm_step_groups_not_revert[local]:
+  asm_step_arith name st <> SOME (AsmRevert x) /\
+  asm_step_compare name st <> SOME (AsmRevert x) /\
+  asm_step_bitwise name st <> SOME (AsmRevert x) /\
+  asm_step_memory name st <> SOME (AsmRevert x) /\
+  asm_step_extcall name st <> SOME (AsmRevert x) /\
+  asm_step_copy name st <> SOME (AsmRevert x) /\
+  asm_step_context name st <> SOME (AsmRevert x)
+Proof
+  rw[asm_step_arith_def, asm_step_compare_def, asm_step_bitwise_def,
+     asm_step_memory_def, asm_step_extcall_def, asm_step_copy_def,
+     asm_step_context_def, asm_helpers_not_revert]
+QED
+
+Theorem asm_step_control_revert[local]:
+  asm_step_control o2pc name st = SOME (AsmRevert x) ==> name = "REVERT"
+Proof
+  rw[asm_step_control_def, asm_helpers_not_revert]
+QED
+
+Theorem asm_step_revert_inst:
+  asm_step lo o2pc i a = AsmRevert a1 ==> i = AsmOp "REVERT"
+Proof
+  Cases_on `i` >> simp[asm_step_def, AllCaseEqs()] >>
+  simp[asm_step_op_def, AllCaseEqs(), asm_step_groups_not_revert,
+       asm_helpers_not_revert] >>
+  metis_tac[asm_step_control_revert]
+QED
+
 Theorem frame_local_instruction[local]:
   asm_frame_prog_ok prog /\ i < LENGTH prog /\
   ~is_data_inst (EL i prog) /\
@@ -275,7 +345,8 @@ Proof
     (irule frame_terminal_singleton_length >> goal_assum (drule_at Any) >>
      simp[] >> metis_tac[]) >>
   `?op. frame_inst_raises es exc op` by
-    (irule step_transplant_starved >> gvs[wf_state_def] >> metis_tac[]) >>
+    (drule_at (Pat `step _ = _`) step_transplant_raises >>
+     gvs[wf_state_def] >> metis_tac[]) >>
   `frame_inst_raises es0 exc op` by
     (irule frameGasTheory.frame_inst_raises_mid >> qexists_tac `es` >>
      fs[asm_frame_rel_def] >> gvs[]) >>
@@ -554,6 +625,20 @@ Resume frame_plain_step[revert]:
   drule (SRULE [MEM] frame_terminal_rel_lift) >>
   disch_then drule >> simp[vfm_abort_def] >>
   strip_tac >> first_x_assum drule >> strip_tac >>
+  `EL a.as_pc prog = AsmOp "REVERT"` by metis_tac[asm_step_revert_inst] >>
+  `FLOOKUP c.msgParams.parsed c.pc = SOME Revert` by
+    (drule_all frame_next_opcode >> strip_tac >>
+     `op = Revert` by
+       (irule opcode_wf_inj >> simp[wf_opname_def, opcode_def] >>
+        gvs[encode_inst_def] >> EVAL_TAC) >>
+     gvs[next_opcode_def, AllCaseEqs()]) >>
+  `?op. frame_inst_raises es Reverted op /\
+        !op'. FLOOKUP c.msgParams.parsed c.pc = SOME op' ==> op' = op` by
+    (irule step_transplant_raises >> gvs[wf_state_def] >>
+     metis_tac[frame_rel_output_to]) >>
+  `frame_inst_raises es0 Reverted Revert` by
+    (irule frameGasTheory.frame_inst_raises_mid >> qexists_tac `es` >>
+     fs[asm_frame_rel_def] >> gvs[] >> metis_tac[]) >>
   disj2_tac >> metis_tac[]
 QED
 Resume frame_plain_step[fault]:

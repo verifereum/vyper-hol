@@ -351,7 +351,8 @@ Theorem assert_result_does_not_compare_requests:
     (INR (AssertException s),am',rqs) ==>
   (call_result_rel_at [] tops ret am tx es r es' <=>
     ?exc out lgs. frame_outcome es r es' (SOME exc) out lgs /\
-      (exc = Reverted \/ s = "UNREACHABLE"))
+      ((exc = Reverted /\ frame_raises es Reverted) \/
+       s = "UNREACHABLE"))
 Proof
   simp[call_result_rel_at_def]
 QED

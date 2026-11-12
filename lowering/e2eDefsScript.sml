@@ -613,7 +613,8 @@ Definition call_result_rel_at_def:
           LIST_REL (request_agree cx) rqs (call_requests es)
     | (INR (AssertException s), _, _) =>
         ?exc out lgs. frame_outcome es r es' (SOME exc) out lgs /\
-                      (exc = Reverted \/ s = "UNREACHABLE")
+                      ((exc = Reverted /\ frame_raises es Reverted) \/
+                       s = "UNREACHABLE")
     | (INR (Error e), _, _) =>
         unspecified_behaviour_exempt tops e \/
         ?exc out lgs. frame_outcome es r es' (SOME exc) out lgs
