@@ -93,7 +93,16 @@ Proof
      rpt strip_tac >> gvs[vyperTypingTheory.value_has_type_def,
                           compileEnvTheory.is_word_type_def]) >>
   drule_all intcall_framed_array_index_endpoint >> strip_tac >>
-  drule_at (Pat `vv_post _ _ _ _ _ _ _ _ _ _ _ _ _`) framed_array_post_view >>
+  `vv_post fp.jc_ctx fp.jc_func ce fp.jc_cx (Subscript (ArrayT et bd) obj idx)
+     es sa sc s0 ee r (LocatedValue (ArrayT et bd) p) s` by
+    (`expr_sim_inv ce fp.jc_cx env t /      stmt_state_rel fp.jc_ctx fp.jc_func ce fp.jc_cx es s0 /      stmt_state_rel fp.jc_ctx fp.jc_func ce fp.jc_cx ee s` by
+       fs[intcall_expr_cont_def, intcall_expr_res_def] >>
+     irule framed_array_base_endpoint >>
+     qpat_assum `vv_post _ _ _ _ _ _ _ sb _ _ _ _ u` (irule_at Any) >>
+     qpat_assum `expr_post _ _ _ _ idx _ _ _ _ _ _ _ _` (irule_at Any) >>
+     fs[]) >>
+  drule_at (Pat `vv_post _ _ _ _ (Subscript _ _ _) _ _ _ _ _ _ _ _`)
+    framed_array_post_view >>
   disch_then (qspecl_then [`t`,`env`] mp_tac) >>
   (impl_tac >- (simp[] >> metis_tac[])) >> strip_tac >>
   `expr_sim_inv ce fp.jc_cx env t /\

@@ -31,7 +31,21 @@ Proof
   Cases_on `lower_value compile_expr ce fp.jc_ret_ty e sa` >>
   rename1 `_ = (op,sm)` >> simp[] >> strip_tac >> gvs[] >>
   `expr_body_pre ce fp.jc_cx env e es` by
-    (irule stmt_expr_body_pre >>
+    (`~supported_expr_exists
+        (\e'. ~is_extcode e' /\ (~byte_widths_expr e' \/ ~alloc_limits_expr ce e')) e` by
+       (`~supported_stmt_expr_exists (\e. ~is_extcode e /\ ~alloc_limits_expr ce e)
+           (Return (SOME e))` by
+          (irule allocLimitsPropsTheory.alloc_limits_stmt_exists >>
+           fs[intcall_joint_res_def, intcall_expr_res_def, stmt_exprs_ok_def]) >>
+        `(\e'. ~is_extcode e' /\ (~byte_widths_expr e' \/ ~alloc_limits_expr ce e')) =
+         (\e'. (\x. ~is_extcode x /\ ~byte_widths_expr x) e' \/
+                (\x. ~is_extcode x /\ ~alloc_limits_expr ce x) e')` by
+          (simp[FUN_EQ_THM] >> metis_tac[]) >>
+        pop_assum SUBST1_TAC >>
+        rewrite_tac[supported_expr_exists_disj] >>
+        fs[intcall_joint_res_def, intcall_expr_res_def, stmt_exprs_ok_def,
+           supported_stmt_expr_exists_def]) >>
+     irule stmt_expr_body_pre >>
      fs[intcall_joint_res_def, intcall_expr_res_def, stmt_exprs_ok_def,
         supported_stmt_expr_exists_def, alloc_limits_stmt_def,
         supported_expr_exists_def] >>

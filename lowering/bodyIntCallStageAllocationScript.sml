@@ -36,7 +36,7 @@ Theorem intcall_stage_allocation:
     (!aid entry. FLOOKUP s.vs_allocas aid = SOME entry ==>
        FLOOKUP u.vs_allocas aid = SOME entry) /\
     (!aid lb sz. FLOOKUP s.vs_allocas aid = SOME (lb,sz) ==>
-       compileEnv$regions_disjoint s.vs_alloca_next nb lb sz)
+       loweringStateRelDefs$regions_disjoint s.vs_alloca_next nb lb sz)
 Proof
   strip_tac >> drule_all fresh_buffer_allocation_path >>
   disch_then (qspec_then `ctx` strip_assume_tac) >>
@@ -50,7 +50,7 @@ Proof
   `wb_frame ce es es sm s u /\ intcall_held_args ce cx a si es u H` by
     suspend "held" >>
   `!aid lb sz. FLOOKUP s.vs_allocas aid = SOME (lb,sz) ==>
-     compileEnv$regions_disjoint s.vs_alloca_next nb lb sz` by
+     loweringStateRelDefs$regions_disjoint s.vs_alloca_next nb lb sz` by
     (gvs[stmt_state_rel_def, alloca_inv_def, alloca_next_valid_def,
          loweringStateRelDefsTheory.regions_disjoint_def] >> metis_tac[]) >>
   drule_all actual_alloc_buffer_site >> disch_tac >>

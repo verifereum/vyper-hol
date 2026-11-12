@@ -46,7 +46,12 @@ Proof
   strip_tac >> simp[wb_frame_def] >> conj_tac
   >- (rpt strip_tac >> qpat_x_assum `!off len. _ ==> _` irule >>
       metis_tac[]) >>
-  simp[locals_kept_def] >> rpt strip_tac >>
+  simp[locals_kept_def] >> rpt strip_tac >~ [`popped_kept`]
+  >- (simp[popped_kept_def] >> rpt strip_tac >>
+      irule exprSimPropsTheory.snapshot_in_mem_agree >>
+      qexists_tac `s.vs_memory` >> conj_tac
+      >- (qpat_x_assum `!off len. _ ==> _` irule >> res_tac >> decide_tac) >>
+      qpat_x_assum `!entry. _ ==> snapshot_in _ _ _ _ _` irule >> simp[]) >>
   qpat_x_assum `!off len. _ ==> _` irule >>
   res_tac >> decide_tac
 QED

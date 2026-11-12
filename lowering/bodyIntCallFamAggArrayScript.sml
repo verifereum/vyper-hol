@@ -594,7 +594,7 @@ Resume intcall_array_value_producer[array_endpoint]:
       qexists_tac `w` >> asm_rewrite_tac[]) >>
   reverse conj_tac
   >- (conj_tac >- metis_tac[compiler_ci_mono_not_fresh] >>
-      strip_tac >> qexistsl [`w2n w`, `type_memory_size (ArrayTV tv bnd)`] >>
+      rpt strip_tac >> qexistsl [`w2n w`, `type_memory_size (ArrayTV tv bnd)`] >>
       gvs[]) >>
   `expr_body_pre ce fp.jc_cx env
     (Builtin (ArrayT et bnd) (MakeArray (SOME et) bnd) args)

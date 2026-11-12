@@ -57,7 +57,8 @@ Proof
       rename1 `vv_at ce fp.jc_cx (post_value_type ce child) birth d ef child_r child_vv u` >>
       qexists_tac `birth` >> asm_rewrite_tac[]) >>
   conj_tac
-  >- (drule_all intcall_expr_cont_trans >> disch_then ACCEPT_TAC) >>
+  >- (`intcall_expr_res fp ce env es a s` by fs[intcall_joint_res_def] >>
+      drule_all intcall_expr_cont_trans >> disch_then ACCEPT_TAC) >>
   drule vyperEvalExprPreservesScopesDomTheory.eval_expr_preserves_scopes_dom >>
   simp[]
 QED

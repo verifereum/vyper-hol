@@ -48,6 +48,7 @@ Proof
       metis_tac[])
   >- (irule locals_kept_trans >> metis_tac[]) >>
   strip_tac >> irule exprSimPropsTheory.pure_frame_trans >>
+  conj_tac >- fs[] >>
   qexistsl [`ee`, `sm`, `s`] >> fs[]
 QED
 
