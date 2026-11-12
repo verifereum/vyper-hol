@@ -54,10 +54,8 @@ Proof
   `?t. FLOOKUP env.bare_globals (NONE, nsid1) = SOME t` by
     metis_tac[bare_globals_complete_def] >>
   `~cx_const_name cx (NONE,nsid1)` by
-    (drule (cj 1 bodySimTheory.body_inv_const_name_free) >>
-     disch_then (qspec_then `TopLevelName (BaseT BoolT) (NONE,nsid1)` mp_tac) >>
-     simp[supportedExprTraverseTheory.supported_expr_exists_def,
-         exprSimHypsDefsTheory.const_name_root_def]) >>
+    (strip_tac >> drule_all bodySimTheory.body_inv_const_name_decl >>
+     strip_tac >> gvs[]) >>
   fs[expr_sim_inv_def] >> metis_tac[]
 QED
 

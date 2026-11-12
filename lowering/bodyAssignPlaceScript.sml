@@ -45,10 +45,7 @@ Ancestors
    - CapMcopy: bodySimStmtCases' [local] body_inv_mcopy's proof;
 
 (* stmt_expr_body_pre's const-name premise, discharged from body_inv. *)
-fun irule_body_pre th =
-  TRY (drule_then assume_tac (cj 1 bodySimTheory.body_inv_const_name_free)) >> irule th >>
-  TRY (qpat_x_assum `!e. ~supported_expr_exists (const_name_root _) e`
-         (fn a => PURE_REWRITE_TAC [a, NOT_CLAUSES, AND_CLAUSES]));
+val irule_body_pre = bodyConstNameLib.irule_body_pre;
      acyclic_struct_metadata: body_inv_def. *)
 Theorem assign_place_typing[local]:
   type_stmt env ret_ty (Assign (BaseTarget t) e) = SOME env' ==>

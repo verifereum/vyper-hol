@@ -39,7 +39,7 @@ Ancestors
   supportedProgram supportedStmts supportedStmtTraverse supportedExprTraverse
   vyperAST vyperInterpreter vyperState vyperValue vyperTypeSystem
   vyperTypeCallGraph vyperTypeCallStackSoundness immutableRelation
-  immutableLocationProps exprSimMapDefs
+  immutableLocationProps exprSimMapDefs supportedNameRoot
 
 (* ===== The frame ===== *)
 
@@ -131,34 +131,58 @@ Proof
   simp[]
 QED
 
-Theorem supported_exists_never[local]:
-  (!p e. (!x. ~p x) ==> ~supported_expr_exists p e) /\
-  (!p bt. (!x. ~p x) ==> ~supported_target_exists p bt) /\
-  (!p es. (!x. ~p x) ==> ~supported_exprs_exists p es) /\
-  (!p opt. (!x. ~p x) ==> ~supported_opt_exists p opt) /\
-  (!p fs. (!x. ~p x) ==> ~supported_fields_exists p fs)
-Proof
-  ho_match_mp_tac supported_expr_exists_ind >>
-  rw[supported_expr_exists_def]
-QED
-
 (* A supported program declares no constant, so a body's expressions name
    none (cx_const_name). *)
-Theorem body_inv_const_name_free:
-  body_inv tops ctx cenv cx ==>
-  ~supported_expr_exists (const_name_root cx) e /\
-  ~supported_target_exists (const_name_root cx) bt
+(* A name const_name_root marks is a constant declaration of tops: neither a
+   place root, storage nor an immutable, so supported code never names one. *)
+Theorem body_inv_const_name_decl:
+  body_inv tops ctx cenv cx /\ cx_const_name cx nsid ==>
+  ?vis c ty slot.
+    supported_variable_decl tops nsid = SOME (vis,Constant c,ty,slot)
 Proof
   strip_tac >>
-  `!x. ~const_name_root cx x` suffices_by metis_tac[supported_exists_never] >>
-  `cx_tops cx = tops /\ module_consts_env tops [] = []` by
-    (gvs[body_inv_def, supported_program_def,
-          supportedDeclsTheory.supported_declaration_headers_def] >>
-     metis_tac[gasContextTheory.cx_tops_module,
-                supportedDeclsTheory.supported_headers_module_consts_env]) >>
-  Cases >> simp[const_name_root_def] >>
-  rename1 `cx_const_name cx nsid` >> PairCases_on `nsid` >>
-  simp[cx_const_name_def]
+  `cx_tops cx = tops /\
+   ALL_DISTINCT (FLAT (MAP (toplevel_vtype_keys_toplevel (NONE:num option)) tops))` by
+    gvs[body_inv_def, gasContextTheory.cx_tops_module] >>
+  PairCases_on `nsid` >> gvs[cx_const_name_def] >>
+  drule_all distinct_module_consts_env_names_constant >> simp[]
+QED
+
+Theorem body_inv_const_name_not_root:
+  body_inv tops ctx cenv cx /\ cx_const_name cx nsid ==>
+  ~supported_place_root tops nsid /\
+  (!ty. ~supported_storage_value tops nsid ty) /\
+  supported_immutable_type tops nsid = NONE
+Proof
+  strip_tac >> drule_all body_inv_const_name_decl >> strip_tac >>
+  drule supported_constant_decl_not_root >> simp[]
+QED
+
+Theorem body_inv_const_name_root:
+  body_inv tops ctx cenv cx ==>
+  !x. const_name_root cx x ==>
+    ?ty id. x = TopLevelName ty id /\
+      ~supported_place_root tops id /\ ~supported_storage_value tops id ty /\
+      supported_immutable_type tops id = NONE
+Proof
+  rpt strip_tac >> Cases_on `x` >> gvs[const_name_root_def] >>
+  drule_all body_inv_const_name_not_root >> simp[]
+QED
+
+Theorem body_inv_const_name_free:
+  body_inv tops ctx cenv cx /\ supported_expr tops e ==>
+  ~supported_expr_exists (const_name_root cx) e
+Proof
+  strip_tac >> drule body_inv_const_name_root >> strip_tac >>
+  drule_all supported_expr_no_name_root >> simp[]
+QED
+
+Theorem body_inv_target_const_name_free:
+  body_inv tops ctx cenv cx /\ supported_target_info tops bindings bt <> NONE ==>
+  ~supported_target_exists (const_name_root cx) bt
+Proof
+  strip_tac >> drule body_inv_const_name_root >> strip_tac >>
+  irule (cj 2 supported_target_info_no_name_root) >> metis_tac[]
 QED
 
 (* The compile env binds no local the typing does not know: every name

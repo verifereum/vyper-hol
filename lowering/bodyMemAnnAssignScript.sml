@@ -21,10 +21,7 @@ Libs
   monadsyntax
 
 (* stmt_expr_body_pre's const-name premise, discharged from body_inv. *)
-fun irule_body_pre th =
-  TRY (drule_then assume_tac (cj 1 bodySimTheory.body_inv_const_name_free)) >> irule th >>
-  TRY (qpat_x_assum `!e. ~supported_expr_exists (const_name_root _) e`
-         (fn a => PURE_REWRITE_TAC [a, NOT_CLAUSES, AND_CLAUSES]));
+val irule_body_pre = bodyConstNameLib.irule_body_pre;
 
 Theorem body_annassign_mem_rhs_pre[local]:
   !cenv cx env e es tops id typ ctx.

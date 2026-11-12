@@ -26,10 +26,7 @@ Libs
    touches no memory, so it lands past the store with every variable and
 
 (* stmt_expr_body_pre's const-name premise, discharged from body_inv. *)
-fun irule_body_pre th =
-  TRY (drule_then assume_tac (cj 1 bodySimTheory.body_inv_const_name_free)) >> irule th >>
-  TRY (qpat_x_assum `!e. ~supported_expr_exists (const_name_root _) e`
-         (fn a => PURE_REWRITE_TAC [a, NOT_CLAUSES, AND_CLAUSES]));
+val irule_body_pre = bodyConstNameLib.irule_body_pre;
    allocation kept. *)
 Theorem assign_storage_store_path_mem:
   !ctx func cenv cx es' s tr slot op w st st'.

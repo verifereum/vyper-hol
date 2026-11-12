@@ -100,10 +100,16 @@ Proof
         is_immutable_decl id ts` by
     (fs[env_context_consistent_def] >> metis_tac[]) >>
   `~cx_const_name cx (src,id)` by
-    (drule (cj 1 bodySimTheory.body_inv_const_name_free) >>
-     disch_then (qspec_then `TopLevelName (BaseT BoolT) (src,id)` mp_tac) >>
-     simp[supportedExprTraverseTheory.supported_expr_exists_def,
-         exprSimHypsDefsTheory.const_name_root_def]) >>
+    (strip_tac >> drule_all bodySimTheory.body_inv_const_name_decl >>
+     strip_tac >>
+     qpat_assum `cx_const_name _ _`
+       (strip_assume_tac o REWRITE_RULE [exprSimHypsDefsTheory.cx_const_name_def]) >>
+     gvs[] >> `ts = tops` by fs[body_inv_def] >> gvs[] >>
+     drule is_immutable_decl_mem >> strip_tac >>
+     `ALL_DISTINCT (FLAT (MAP (toplevel_vtype_keys_toplevel (NONE:num option)) tops))` by
+       fs[body_inv_def] >>
+     drule_all supportedNameRootTheory.supported_variable_decl_distinct_mem >>
+     gvs[]) >>
   `src = NONE` by (fs[expr_sim_inv_def] >> metis_tac[]) >>
   gvs[] >>
   `ts = tops` by fs[body_inv_def] >> gvs[] >>

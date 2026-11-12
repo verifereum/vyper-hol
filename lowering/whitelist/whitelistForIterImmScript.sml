@@ -239,6 +239,7 @@ Theorem body_for_immutable_array:
        body_iterator_ok cx
          (Array (TopLevelName (ArrayT typ bd) (src,name)))) /\
     body_inv tops ctx cenv cx /\
+    IS_SOME (supported_immutable_type tops (src,name)) /\
     supported_type_namespace typ /\ supported_stmts tops bindings stmts /\
     ~supported_stmts_expr_exists expr_internal_call_root stmts /\
     bound_length bd <= n /\
@@ -268,10 +269,8 @@ Proof
   rpt gen_tac >> strip_tac >>
   imp_res_tac body_stmt_safe_for_body >>
   `~cx_const_name cx (src,name)` by
-    (drule (cj 1 bodySimTheory.body_inv_const_name_free) >>
-     disch_then (qspec_then `TopLevelName (BaseT BoolT) (src,name)` mp_tac) >>
-     simp[supportedExprTraverseTheory.supported_expr_exists_def,
-         exprSimHypsDefsTheory.const_name_root_def]) >>
+    (strip_tac >> drule_all bodySimTheory.body_inv_const_name_not_root >>
+     gvs[]) >>
   drule_all immutable_for_typing_ready >> strip_tac >> gvs[] >>
   drule_all immutable_for_elements_ready >> strip_tac >>
   qmatch_asmsub_abbrev_tac `LENGTH vs <= bound_length bd` >>

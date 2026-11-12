@@ -181,10 +181,8 @@ Proof
   strip_tac >>
   `expr_sim_inv ce cx env es` by fs[expr_body_pre_def] >>
   `~cx_const_name cx (src,id)` by
-    (drule (cj 1 bodySimTheory.body_inv_const_name_free) >>
-     disch_then (qspec_then `TopLevelName (BaseT BoolT) (src,id)` mp_tac) >>
-     simp[supportedExprTraverseTheory.supported_expr_exists_def,
-         exprSimHypsDefsTheory.const_name_root_def]) >>
+    (strip_tac >> drule_all bodySimTheory.body_inv_const_name_not_root >>
+     gvs[]) >>
   drule_all immutable_assign_bare_global >> strip_tac >>
   drule_all immutable_assign_target_layout >>
   disch_then (qspec_then `compile_expr` strip_assume_tac) >> gvs[] >>

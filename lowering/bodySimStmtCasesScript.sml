@@ -76,10 +76,7 @@ Libs
   monadsyntax
 
 (* stmt_expr_body_pre's const-name premise, discharged from body_inv. *)
-fun irule_body_pre th =
-  TRY (drule_then assume_tac (cj 1 bodySimTheory.body_inv_const_name_free)) >> irule th >>
-  TRY (qpat_x_assum `!e. ~supported_expr_exists (const_name_root _) e`
-         (fn a => PURE_REWRITE_TAC [a, NOT_CLAUSES, AND_CLAUSES]));
+val irule_body_pre = bodyConstNameLib.irule_body_pre;
 
 (* ===== Helpers ===== *)
 
@@ -400,6 +397,7 @@ Theorem assert_reason_vv_sim[local]:
   !cx e se tops ctx func cenv env es es1.
     (!s'' tv t. eval_expr cx e s'' = (INL tv,t) ==> body_expr_ok cx se) /\
     body_inv tops ctx cenv cx /\ expr_sim_pre cenv cx env e es /\
+    supported_string_reason tops se /\
     well_typed_expr env se /\ int_calls_expr se = [] /\
     ~expr_has_evm_run se /\
     ~supported_expr_exists
@@ -414,7 +412,8 @@ Theorem assert_reason_vv_sim[local]:
 Proof
   rpt strip_tac >> drule_all expr_sim_pre_eval >> strip_tac >>
   `~supported_expr_exists (const_name_root cx) se` by
-    metis_tac[bodySimTheory.body_inv_const_name_free] >>
+    (drule bodySimTheory.body_inv_const_name_root >> strip_tac >>
+     drule_all supportedNameRootTheory.supported_string_reason_no_name_root >> simp[]) >>
   `?tv t. eval_expr cx e es = (INL tv, t)` by
     (qpat_x_assum `bind _ _ _ = _` mp_tac >>
      simp[bind_def, AllCaseEqs()] >> metis_tac[]) >>
