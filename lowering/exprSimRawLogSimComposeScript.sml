@@ -29,10 +29,9 @@ Proof
       first_assum ACCEPT_TAC) >>
   strip_tac >>
   qexists_tac `left ++ right` >> disj2_tac >> disj2_tac >>
-  qexistsl_tac [`err`, `ee`, `leaf`, `finish`] >>
   rewrite_tac[ignore_bind_def] >> once_rewrite_tac[bind_assoc] >>
-  irule gas_exempt_cert_bind_values >>
-  goal_assum (drule_at Any) >> simp[GSYM ignore_bind_def]
+  irule_at Any gas_exempt_cert_bind_values >>
+  simp[GSYM ignore_bind_def] >> metis_tac[]
 QED
 
 (* Empty-mark administration before topics also preserves an exempt
@@ -113,7 +112,7 @@ Proof
   strip_tac >>
   rewrite_tac[gas_outcome_def] >>
   qexists_tac `marks` >> disj2_tac >> disj2_tac >>
-  qexistsl_tac [`err`, `ee`, `leaf`, `finish`] >>
   rewrite_tac[ignore_bind_def] >> once_rewrite_tac[bind_assoc] >>
-  irule gas_exempt_cert_error_values >> simp[GSYM ignore_bind_def]
+  irule_at Any gas_exempt_cert_error_values >>
+  simp[GSYM ignore_bind_def] >> metis_tac[]
 QED

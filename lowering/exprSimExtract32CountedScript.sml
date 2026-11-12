@@ -68,12 +68,10 @@ Proof
                             goal_assum drule >> simp[]) >>
               first_assum ACCEPT_TAC) >>
           strip_tac >>
-          rename1 `gas_exempt_cert _ _ _ _ _ right (err, ef) (callee, tf)` >>
           rewrite_tac[gas_outcome_def] >>
           qexists_tac `marks ++ right` >> disj2_tac >> disj2_tac >>
-          qexistsl_tac [`err`, `ef`, `callee`, `tf`] >>
           rewrite_tac[ignore_bind_def, vyperStateTheory.bind_assoc] >>
-          irule gas_exempt_cert_bind_value >>
+          irule_at Any gas_exempt_cert_bind_value >>
           simp[GSYM ignore_bind_def] >> metis_tac[]) >>
       qpat_x_assum `!H. valid_horizon _ _ H _ ==> _`
         (assume_tac o SIMP_RULE (srw_ss()) []) >>
@@ -88,12 +86,11 @@ Proof
         metis_tac[] >>
       gvs[]) >>
   strip_tac >>
-  rename1 `gas_exempt_cert _ _ _ _ _ marks (err, ef) (callee, tf)` >>
   rewrite_tac[gas_outcome_def] >>
   qexists_tac `marks` >> disj2_tac >> disj2_tac >>
-  qexistsl_tac [`err`, `ef`, `callee`, `tf`] >>
   rewrite_tac[ignore_bind_def, vyperStateTheory.bind_assoc] >>
-  irule gas_exempt_cert_error_value >> simp[]
+  irule_at Any gas_exempt_cert_error_value >>
+  simp[GSYM ignore_bind_def] >> metis_tac[]
 QED
 
 Theorem extract32_outcome_bind_value:
@@ -137,11 +134,9 @@ Proof
                     goal_assum drule >> simp[]) >>
       first_assum ACCEPT_TAC) >>
   strip_tac >>
-  rename1 `gas_exempt_cert _ _ _ _ _ right (err, ef) (callee, tf)` >>
   qexists_tac `left ++ right` >> disj2_tac >> disj2_tac >>
-  qexistsl_tac [`err`, `ef`, `callee`, `tf`] >>
   rewrite_tac[ignore_bind_def, vyperStateTheory.bind_assoc] >>
-  irule gas_exempt_cert_bind_value >>
+  irule_at Any gas_exempt_cert_bind_value >>
   simp[GSYM ignore_bind_def] >> metis_tac[]
 QED
 
