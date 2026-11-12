@@ -68,7 +68,9 @@ Proof
   `vv_post ctx func ce cx e (es with gas_obs := []) sa sm s0
      (ee with gas_obs := []) r vv t` by simp[vv_post_initial_gas] >>
   `stmt_state_rel ctx func ce cx (ee with gas_obs := []) t /\
-   wb_frame ce es ee sa s0 t` by (gvs[vv_post_def, wb_frame_def, locals_kept_def] >> metis_tac[]) >>
+   wb_frame ce es ee sa s0 t` by
+    (fs[vv_post_def] >> fs[wb_frame_def, locals_kept_def, popped_kept_def] >>
+     rpt conj_tac >> first_assum ACCEPT_TAC) >>
   simp[] >> irule extrequest_strong_captures_extend >>
   qpat_assum `extrequest_strong_captures _ _ _ _ _ _ _ _ sa s0` (irule_at Any) >>
   qpat_assum `vv_post _ _ _ _ _ (es with gas_obs := []) _ _ _ _ _ _ _`
@@ -197,7 +199,7 @@ Resume extrequest_unread_resource_cps[head_landing]:
    vv_post ctx func cenv cx h (es with gas_obs := []) sa sm s0
      (mid with gas_obs := []) r head_vv t /\
    extrequest_read_frame cx (es with gas_obs := []) (mid with gas_obs := []) /\
-   wb_frame cenv es ee sa s0 t /\
+   wb_frame cenv es mid sa s0 t /\
    extrequest_strong_capture ctx func cenv cx h r head_vv (mid with gas_obs := []) sm t /\
    extrequest_strong_captures ctx func cenv cx old_es old_rs old_vvs
      (mid with gas_obs := []) sm t` by
@@ -246,10 +248,14 @@ Resume extrequest_unread_resource_cps[tail_composition]:
     (qpat_assum `extrequest_read_frame _ _ _`
        (strip_assume_tac o REWRITE_RULE [extrequest_read_frame_def]) >>
      fs[]) >>
+  `wb_frame cenv mid ee sm t t'` by
+    (qpat_x_assum `wb_frame _ (mid with gas_obs := []) _ _ _ _` mp_tac >>
+     simp[wb_frame_def, locals_kept_def, popped_kept_def] >>
+     strip_tac >> rpt conj_tac >> first_assum ACCEPT_TAC) >>
   `wb_frame cenv es ee sa s0 t'` by
     (irule wb_frame_trans >>
-     qpat_assum `wb_frame _ _ _ s0 t` (irule_at Any) >>
-     qpat_assum `wb_frame _ _ sm t t'` (irule_at Any) >>
+     qpat_assum `wb_frame _ _ _ _ s0 t` (irule_at Any) >>
+     qpat_assum `wb_frame _ _ _ sm t t'` (irule_at Any) >>
      gvs[ci_mono_def] >> metis_tac[]) >>
   qpat_x_assum `!rs ee t. _` irule >>
   simp[extrequest_strong_captures_cons]
