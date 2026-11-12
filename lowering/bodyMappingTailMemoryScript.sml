@@ -6,7 +6,7 @@ Ancestors
   exprLoweringProps loweringStateRelDefs emitHelper emitHelperProps
   context venomExecSemantics venomState venomInst venomMemDefs
   finite_map words list rich_list compileEnv abiDecoderIndexInit dynCopyExec
-  freshWrites exprSimWordArgs
+  freshWrites exprSimWordArgs mappingTailFrames
 
 Theorem mapping_slot_store_hash_mem[local]:
   eval_operand (Var x) s = SOME (n2w p) /\ eval_operand key s = SOME k /\
