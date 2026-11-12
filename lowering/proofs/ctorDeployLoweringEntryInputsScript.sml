@@ -220,9 +220,10 @@ Proof
  `ut = T /\ key = global_nonreentrant_slot` by
    fs[set_constructor_package_target_def, package_constructor_def] >>
  fs[] >>
- drule (SRULE [] (Q.INST [`nkey_map` |-> `(K global_nonreentrant_slot : string -> num)`]
-   deploy_ctor_target_package_layout)) >>
- disch_then (qspecl_then [`imm_opt`, `ce_pack with ce_imm_alloca := imm_opt`] mp_tac) >>
+ qspecl_then [`tops`, `T`, `K global_nonreentrant_slot`, `mut`, `F`, `rr`,
+   `"__init__"`, `args`, `[]`, `NoneT`, `body'`, `rp.rpol_target`, `ce_pack`,
+   `pos_args`, `imm_opt`, `ce_pack with ce_imm_alloca := imm_opt`] mp_tac
+   deploy_ctor_target_package_layout >>
  simp[] >> strip_tac >>
  drule_all deploy_ctor_allocation_bounds >> strip_tac >>
  `ce_pack.ce_struct_fields = cenv.ce_struct_fields` by
