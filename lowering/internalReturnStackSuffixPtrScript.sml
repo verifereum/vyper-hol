@@ -3,12 +3,9 @@ Theory internalReturnStackSuffixPtr
 Ancestors internalReturnStackPtr internalReturnCountedPtr stmtLowering
   exprLoweringProps compileEnv fragGasPathPtr stateFrame
 
-(* FALSE on t16 after compile_return_unlock; restated from su in the unlock port.
-   compile_internal_return_from_env now runs compile_return_unlock (a
-   TSTORE/SSTORE of the nonreentrant key) before RET, so the storage,
-   transient and taint frame conclusions below no longer hold.
 Theorem internal_return_stack_suffix_path_ptr:
-  compile_internal_return_from_env ce ty sty op (Var rpc) sa = ((),sb) /\
+  compile_internal_return_from_env ce ty sty op (Var rpc) sa0 = ((),sb) /\
+  compile_return_unlock ce sa0 = ((),sa) /\
   (!off sz. ce.ce_return_buf <> SOME (MemLoc off sz)) /\
   0 < ce.ce_returns_count /\
   ets = (case ty of TupleT ts => ts | StructT ns =>
@@ -48,7 +45,8 @@ Proof
     ty sty ets NONE sa = ((),sb)` by
     (qpat_x_assum `compile_internal_return_from_env _ _ _ _ _ _ = _` mp_tac >>
      Cases_on `ce.ce_return_buf` >>
-     simp[compile_internal_return_from_env_def, comp_bind_def, comp_return_def] >>
+     asm_simp_tac (srw_ss()) [compile_internal_return_from_env_def,
+       comp_ignore_bind_def, comp_bind_def, comp_return_def] >>
      TRY (rename1 `ce.ce_return_buf = SOME loc` >> Cases_on `loc`) >>
      fs[compile_internal_return_def, comp_bind_def, comp_return_def] >>
      Cases_on `ty` >> fs[]) >>
@@ -84,4 +82,3 @@ Proof
   conj_tac >- metis_tac[gas_path_ptr_then, arithmeticTheory.ADD_0] >>
   gvs[stateFrameTheory.state_frame_def, venomStateTheory.venom_state_component_equality]
 QED
-*)

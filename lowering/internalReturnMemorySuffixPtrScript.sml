@@ -3,12 +3,9 @@ Theory internalReturnMemorySuffixPtr
 Ancestors internalReturnStorePtr internalReturnCountedPtr stmtLowering
   typedMemoryCopy compileEnv fragGasPathPtr
 
-(* FALSE on t16 after compile_return_unlock; restated from su in the unlock port.
-   compile_internal_return_from_env now runs compile_return_unlock (a
-   TSTORE/SSTORE of the nonreentrant key) before RET, so the storage,
-   transient and taint frame conclusions below no longer hold.
 Theorem internal_return_memory_suffix_path_ptr:
-  compile_internal_return_from_env ce ty sty (Var src) (Var rpc) sa = ((),sb) /\
+  compile_internal_return_from_env ce ty sty (Var src) (Var rpc) sa0 = ((),sb) /\
+  compile_return_unlock ce sa0 = ((),sa) /\
   ce.ce_return_buf = SOME (PtrVar (Var dst) cap) /\ ce.ce_returns_count = 0 /\
   ~is_word_type ty /\ (ty = sty \/ is_bytestring_type ty) /\
   n = (if is_bytestring_type ty then 32 + 32 * word_size len
@@ -40,8 +37,9 @@ Theorem internal_return_memory_suffix_path_ptr:
 Proof
   rpt gen_tac >> disch_then (map_every assume_tac o CONJUNCTS) >>
   qpat_x_assum `compile_internal_return_from_env _ _ _ _ _ _ = _` mp_tac >>
-  simp[compile_internal_return_from_env_def, compile_internal_return_def,
-       comp_ignore_bind_def, comp_bind_def, comp_return_def] >>
+  asm_simp_tac (srw_ss()) [compile_internal_return_from_env_def,
+       compile_internal_return_def, comp_ignore_bind_def, comp_bind_def,
+       comp_return_def, LET_THM] >>
   pairarg_tac >> simp[] >> strip_tac >>
   rename1 `compile_store_memory ce (Var src) (Var dst) ty sty sa = (uval,sm)` >>
   Cases_on `uval` >>
@@ -66,4 +64,3 @@ Proof
   simp[typed_copy_state_frame_def, venomStateTheory.venom_state_component_equality] >>
   strip_tac >> gvs[bodyPtrDefsTheory.stor_taint_ok_def]
 QED
-*)
