@@ -1074,7 +1074,7 @@ QED
 
 (* The buffer allocation leaves the Venom fields the horizon-dependent
    part of state_rel reads unchanged. *)
-Theorem alloc_buffer_fields[local]:
+Theorem alloc_buffer_fields:
   compile_alloc_buffer sz sa = (buf,sm) /\
   run_inst_seq (emitted_insts sa sm) s = OK t ==>
   t.vs_accounts = s.vs_accounts /\ t.vs_transient = s.vs_transient /\
