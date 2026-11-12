@@ -272,6 +272,8 @@ Theorem compile_entry_checks_ptr_endpoint:
   m <= LENGTH s.vs_call_ctx.cc_calldata /\
   LENGTH s.vs_call_ctx.cc_calldata < dimword (:256) ==>
   ?u G' tn'.
+    gas_path_mem ctx fn s 0 (OK u) /\
+    (!D explicit. gas_origin_ptr_path (D, lo, explicit, ctx, fn, PG) (s, G, tn) [] (OK u, G', tn')) /\
     vars_pc_only s u /\ fresh_vars_wrt st' u /\ ~u.vs_halted /\
     u.vs_current_bb = st'.cs_current_bb /\
     u.vs_inst_idx = LENGTH st'.cs_current_insts /\
