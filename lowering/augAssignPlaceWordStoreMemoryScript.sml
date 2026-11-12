@@ -55,8 +55,8 @@ QED
 (* A step that keeps the memory and the registers handed out before sp
    keeps an alloca frame, re-read at scopes with the same names. *)
 Theorem alloca_frame_memory_kept:
-  !c0 e0 sa0 s0 c ee t ctx func cx sp ee1 u.
-  alloca_frame c0 e0 sa0 s0 c ee t /\ stmt_state_rel ctx func c cx ee t /\
+  !H c0 e0 sa0 s0 c ee t ctx func cx sp ee1 u.
+  alloca_frame c0 e0 sa0 s0 c ee t /\ stmt_state_rel H ctx func c cx ee t /\
   local_ptrs_reserved c sp /\ MAP FDOM ee1.scopes = MAP FDOM ee.scopes /\
   (!x w. not_fresh_at sp x /\ lookup_var x t = SOME w ==>
          lookup_var x u = SOME w) /\
@@ -78,7 +78,7 @@ QED
    leaves memory alone, and a local store writes inside the local. *)
 Theorem place_store_word_alloca_frame[local]:
   alloca_frame c0 e0 sa0 s0 cenv ee s /\
-  stmt_state_rel ctx func cenv cx ee s /\ local_ptrs_reserved cenv sa /\
+  stmt_state_rel H ctx func cenv cx ee s /\ local_ptrs_reserved cenv sa /\
   place_ptr_rel cenv cx s (PlaceR p) w (SOME loc) (Type dty) /\
   is_word_type dty /\ evaluate_type (get_tenv cx) dty = SOME dtv /\
   (!id path entry t0.
@@ -136,13 +136,13 @@ Theorem place_store_word_run_mem:
   is_word_type dty /\ expr_val_rel cx dty v op s /\
   expr_sim_inv cenv cx env ee /\
   acyclic_struct_metadata cenv.ce_struct_fields /\
-  local_ptrs_reserved cenv sa /\ storage_place_region cx p /\
+  local_ptrs_reserved cenv sa /\ storage_place_observed H p /\
   (!id path entry t0.
      p = MemoryPlace id path /\ lookup_scopes id ee.scopes = SOME entry /\
      cenv.ce_var_type id = SOME t0 ==>
      evaluate_type (get_tenv cx) t0 = SOME entry.type) /\
   evaluate_type (get_tenv cx) dty = SOME dtv /\ value_has_type dtv v /\
-  stmt_state_rel ctx func cenv cx ee s /\
+  stmt_state_rel H ctx func cenv cx ee s /\
   write_place cx p v ee = (INL (), ff) /\
   fn_has_code sa sb func /\ fn_inst_ids_distinct func /\
   ~s.vs_halted /\ s.vs_current_bb = sa.cs_current_bb /\
@@ -150,7 +150,7 @@ Theorem place_store_word_run_mem:
   alloca_history func s /\
   (loc = LocMemory ==> w2n w + 32 <= s.vs_alloca_next) ==>
   ?t. gas_marked_path T ctx func s 0 (OK t) /\
-      stmt_state_rel ctx func cenv cx ff t /\
+      stmt_state_rel H ctx func cenv cx ff t /\
       (!x. not_fresh_at sa x ==> lookup_var x t = lookup_var x s) /\
       (!aid b. FLOOKUP s.vs_allocas aid = SOME b ==>
                FLOOKUP t.vs_allocas aid = SOME b) /\
@@ -166,7 +166,7 @@ Proof
   qabbrev_tac `u = (case loc of LocStorage => sstore w (typed_val_to_w256 dtv v) s
                   | LocTransient => tstore w (typed_val_to_w256 dtv v) s
                   | _ => mstore (w2n w) (typed_val_to_w256 dtv v) s)` >>
-  `stmt_state_rel ctx func cenv cx ff u` by
+  `stmt_state_rel H ctx func cenv cx ff u` by
     (Cases_on `p`
      >- (gvs[place_ptr_rel_def, Abbr `u`, slot_loc_def] >>
          drule_all place_store_word_backend_state >> Cases_on `b` >> gvs[])
