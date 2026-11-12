@@ -319,10 +319,10 @@ Proof
      disch_then (drule_at (Pat `FLOOKUP t1.vs_allocas _ = _`)) >>
      disch_then (drule_at (Pat `inst.inst_outputs = _`)) >>
      disch_then (drule_at (Pat `local_region _ _ _ _ _ _`)) >> simp[]) >>
-  irule aggregate_tuple_value_bind_any >> goal_assum (drule_at Any) >>
+  irule aggregate_tuple_value_bind >> goal_assum (drule_at Any) >>
   `es1 with gas_obs := [] = es1` by
     simp[vyperStateTheory.evaluation_state_component_equality] >> asm_rewrite_tac[] >>
-  BETA_TAC >> irule aggregate_tuple_values_outcome_any >>
+  BETA_TAC >> irule aggregate_tuple_values_outcome >>
   goal_assum (drule_at (Pat `gas_outcome _ _ _ (eval_exprs _ _) _ _ _`)) >>
   conj_tac >- (simp[] >> rpt strip_tac >> gvs[]) >>
   rpt gen_tac >> strip_tac >> gvs[] >>
@@ -590,7 +590,7 @@ Theorem aggregate_make_tuple_body_sim_mem:
 Proof
   Induct_on `args`
   >- (rpt gen_tac >> strip_tac >> gvs[compile_make_tuple_def, comp_return_def] >>
-      irule aggregate_tuple_nil_outcome_mem >> simp[valueEncodingDefsTheory.val_in_memory_def, stmt_state_rel_gas_obs]) >>
+      irule aggregate_tuple_nil_outcome >> simp[valueEncodingDefsTheory.val_in_memory_def, stmt_state_rel_gas_obs]) >>
   pop_assum (fn ih =>
     rpt gen_tac >> strip_tac >>
     Cases_on `tys` >- fs[] >> gns[] >>
@@ -611,7 +611,7 @@ Proof
     vv_store_bound cx (expr_type h) (lowered_value_type ce h) ee tv vv r /\
     r.vs_current_bb = sm.cs_current_bb /\ r.vs_inst_idx = LENGTH sm.cs_current_insts /\
     alloca_history func r /\ s0.vs_alloca_next <= r.vs_alloca_next`
-    (Q.GEN `P` aggregate_tuple_bind_outcome_any)) >>
+    (Q.GEN `P` aggregate_tuple_bind_outcome)) >>
   conj_tac
   >- (irule aggregate_tuple_gas_outcome_mono >> goal_assum (drule_at Any) >>
       simp[] >> rpt strip_tac >> Cases_on `res` >> gvs[exprSimDefsTheory.expr_exit_def]) >>

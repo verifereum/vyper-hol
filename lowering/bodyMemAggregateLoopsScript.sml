@@ -80,7 +80,7 @@ Proof
   Induct_on `args`
   >- (rpt gen_tac >> strip_tac >>
       gvs[compile_make_tuple_def, comp_return_def] >>
-      irule aggregate_tuple_nil_outcome_mem >>
+      irule aggregate_tuple_nil_outcome >>
       simp[val_in_memory_def, stmt_state_rel_gas_obs]) >>
   pop_assum (fn ih =>
     rpt gen_tac >> strip_tac >>
@@ -111,7 +111,7 @@ Proof
     r.vs_current_bb = sm.cs_current_bb /\
     r.vs_inst_idx = LENGTH sm.cs_current_insts /\
     alloca_history func r /\ s0.vs_alloca_next <= r.vs_alloca_next`
-    (Q.GEN `P` aggregate_tuple_bind_outcome_any)) >>
+    (Q.GEN `P` aggregate_tuple_bind_outcome)) >>
   conj_tac
   >- (qpat_x_assum `gas_outcome _ _ _ (eval_expr _ _) _ _ _` mp_tac >>
       rpt (pop_assum kall_tac) >>
@@ -196,7 +196,7 @@ Resume aggregate_make_tuple_flat_sim_mem[tail]:
     (drule_all aggregate_body_exprs_mem_tail >> simp[]) >>
   `~q.vs_halted` by
     metis_tac[gas_marked_exec_def, gas_marked_path_exec, gas_path_normal] >>
-  irule aggregate_tuple_value_bind_any >>
+  irule aggregate_tuple_value_bind >>
   goal_assum (drule_at Any) >> simp[] >>
   qpat_x_assum `!tys ce' cx' env' off' sa' out' sb' es' tvs' func' inst' x' b' asz' s0' ctx' tops'. _`
     (drule_at (Pat `compile_make_tuple _ _ _ _ _ _ _ = _`)) >>
@@ -223,7 +223,7 @@ QED
 
 Resume aggregate_make_tuple_flat_sim_mem[assembly]:
   qpat_x_assum `dty = expr_type h \/ _` kall_tac >>
-  irule aggregate_tuple_values_outcome_any >>
+  irule aggregate_tuple_values_outcome >>
   goal_assum (drule_at Any) >>
   qpat_x_assum `gas_outcome _ _ _ (eval_exprs _ _) _ _ _` kall_tac >>
   qpat_x_assum `gas_outcome _ _ _ (eval_expr _ _) _ _ _` kall_tac >>
