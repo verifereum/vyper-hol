@@ -18,13 +18,27 @@ Ancestors
   allocLimits compileVyper compileEnv supportedExprTraverse
   supportedStmtTraverse vyperAST list
 
+Theorem alloc_limits_expr_not_extcode:
+  alloc_limits_expr cenv e ==> ~is_extcode e
+Proof
+  Cases_on `e` >> simp[exprLoweringTheory.is_extcode_def] >>
+  rename1 `Builtin ty bi es` >> Cases_on `bi` >>
+  simp[exprLoweringTheory.is_extcode_def, Once alloc_limits_expr_def] >>
+  rename1 `Acc item` >> Cases_on `item` >>
+  simp[exprLoweringTheory.is_extcode_def, Once alloc_limits_expr_def]
+QED
+
 Theorem lowered_value_type_struct_fields:
   !c e c'. c'.ce_struct_fields = c.ce_struct_fields /\
               c'.ce_func_return_type = c.ce_func_return_type ==>
            lowered_value_type c' e = lowered_value_type c e
 Proof
   ho_match_mp_tac exprLoweringTheory.lowered_value_type_ind >> rpt strip_tac >>
-  gvs[exprLoweringTheory.lowered_value_type_def]
+  gvs[exprLoweringTheory.lowered_value_type_def] >>
+  Cases_on `LENGTH args = 1 /\ ~ensure` >> gvs[] >>
+  `MAP (lowered_value_type c') args = MAP (lowered_value_type c) args` by
+    (irule MAP_CONG >> rw[] >> metis_tac[]) >>
+  CONV_TAC (DEPTH_CONV ETA_CONV) >> gvs[]
 QED
 
 Theorem ext_call_alloc_ok_struct_fields:
@@ -97,7 +111,8 @@ Proof
   rpt strip_tac >> drule type_memory_bytes_frame >> strip_tac >>
   drule ext_call_alloc_ok_struct_fields >> strip_tac >>
   drule_all target_subscript_overlap_frame >> strip_tac >>
-  simp[alloc_limits_expr_def, type_alloc_ok_def]
+  simp[alloc_limits_expr_def, type_alloc_ok_def,
+       exprLoweringTheory.copies_subscript_base_def]
 QED
 
 (* A slice's .code source, which the check skips for its address, is
@@ -195,7 +210,7 @@ Proof
   imp_res_tac alloc_limits_raise_exists >> simp[]
 QED
 
-(* The other checks read only the struct sizes too. *)
+(* The other checks read only the struct sizes and the modules too. *)
 Theorem alloc_limits_assignment_struct_fields:
   (!c g c'. c'.ce_struct_fields = c.ce_struct_fields /\
               c'.ce_func_return_type = c.ce_func_return_type /\
@@ -330,8 +345,7 @@ Theorem lowered_value_type_frame:
            c'.ce_func_return_type = c.ce_func_return_type ==>
            lowered_value_type c' e = lowered_value_type c e
 Proof
-  recInduct exprLoweringTheory.lowered_value_type_ind >>
-  simp[exprLoweringTheory.lowered_value_type_def]
+  metis_tac[lowered_value_type_struct_fields]
 QED
 
 Theorem assign_alloc_ok_frame:
