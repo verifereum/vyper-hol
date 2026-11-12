@@ -77,14 +77,18 @@ Resume tuple_place_equal_storage_run_memory[equal]:
     (fs[stmt_state_rel_def, alloca_room_def] >> decide_tac) >>
   `w2n w + type_memory_size stv < dimword (:256)` by
     (first_x_assum (qspec_then `w` mp_tac) >> simp[] >> strip_tac >> fs[] >> decide_tac) >>
-  `n2w (w2n root+delta) = root+n2w delta` by
-    simp[GSYM wordsTheory.word_add_n2w, wordsTheory.n2w_w2n] >>
   qspecl_then [`cenv`, `op`, `dst_op`, `dty`, `tr`, `sa`, `sb`, `stv`, `func`, `s`,
-      `w`, `w2n root + delta`, `ctx`, `cx`, `env`, `ee`, `mid`, `var_name`, `keys`,
-      `root`, `tv`, `path`, `delta`, `writes`, `v`] mp_tac
-    place_store_slots_suffix_run >>
+      `w`, `w2n (root + n2w delta)`, `ctx`, `cx`, `env`, `ee`, `writes`, `v`] mp_tac
+    place_store_slots_suffix_run_horizons >>
   (impl_tac >- (fs[] >> metis_tac[])) >>
-  strip_tac >> qexists_tac `t` >> gvs[]
+  strip_tac >> qexists_tac `t` >> gvs[] >> rpt conj_tac
+  >~ [`stmt_state_rel _ _ _ _ _ (set_storage _ _ _ _) _`] >-
+  (rpt strip_tac >>
+  `?rk rt pth dl. MEM (tr,rk,rt) (FST H) /\ storage_subregion rt pth dl stv /\
+     w2n (root + n2w delta) = w2n rk + dl` by
+    (irule tuple_place_storage_leaf_horizon >> simp[] >> metis_tac[]) >>
+  qpat_x_assum `!H rootk root path delta. _ ==> _` irule >> simp[] >>
+  metis_tac[])
 QED
 Finalise tuple_place_equal_storage_run_memory
 
