@@ -110,7 +110,7 @@ Proof
     metis_tac[state_rel_def, execution_frame_fields] >>
   `ctx_has_dalloca C' ==> allocas_below_fmp s2` by
     (strip_tac >> `allocas_below_fmp s` by metis_tac[] >>
-     fs[allocas_below_fmp_def]) >>
+     fs[allocas_below_fmp_def] >> metis_tac[]) >>
   `p /\ in_revert_forward fn s ==> in_revert_forward fn2 s2` by
     (Cases_on `p` >> simp[] >>
      drule_all make_ssa_lockstep_revert >> simp[]) >>
