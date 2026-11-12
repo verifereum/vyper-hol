@@ -5,6 +5,8 @@ Ancestors
   representationCleanPtr exprSimTypedAlloc exprSimProps venomState
   loweringPosts valueEncoding valueEncodingDefs vyperTyping arithmetic
   tuplePlacePrefixCert loweringStateRelDefs
+  exprSimAggregateLayout stmtSimAugAssign vyperTypeEnv tupleTargetStoreProps
+  list exprSimHypsDefs vyperTypeInvariants typedNormalizeWidening vyperTypeArgFits
 
 Theorem tuple_store_supported_array_layout:
   !tops et b dt.
@@ -125,4 +127,57 @@ Proof
   strip_tac >> gvs[tuple_place_snapshot_def] >>
   `regions_disjoint scratch capacity b sz` by metis_tac[LESS_LESS_EQ_TRANS] >>
   gvs[regions_disjoint_def] >> decide_tac
+QED
+
+(* Actual local layouts come from the typing environment, not bindings. *)
+Theorem tuple_store_local_member_resources:
+  expr_sim_inv cenv cx env es /\
+  LIST_REL (\g ty. well_typed_atarget env g ty) gs tys /\
+  EVERY (assignable_type env.type_defs) tys /\
+  i < LENGTH gs /\ EL i gs = BaseTarget (NameTarget id) ==>
+  FLOOKUP env.var_types id = SOME (EL i tys) /\
+  0 < type_memory_bytes cenv (EL i tys) /\
+  cenv.ce_var_type id = SOME (EL i tys) /\
+  ?p sz entry. FLOOKUP cenv.ce_vars id = SOME (PtrVar (Var p) sz) /\
+    lookup_scopes id es.scopes = SOME entry /\
+    evaluate_type (get_tenv cx) (EL i tys) = SOME entry.type
+Proof
+  strip_tac >>
+  `i < LENGTH tys /\ well_typed_atarget env (BaseTarget (NameTarget id)) (EL i tys)` by
+    (gvs[LIST_REL_EL_EQN] >> metis_tac[]) >>
+  `FLOOKUP env.var_types id = SOME (EL i tys)` by
+    gvs[well_typed_atarget_def, well_typed_target_def,
+        type_place_target_NameTarget, AllCaseEqs()] >>
+  `assignable_type env.type_defs (EL i tys)` by metis_tac[EVERY_EL] >>
+  `env.type_defs = get_tenv cx` by
+    gvs[expr_sim_inv_def, env_consistent_def, env_context_consistent_def] >>
+  `0 < type_memory_bytes cenv (EL i tys)` by
+    (irule expr_sim_inv_memory_bytes_pos >> metis_tac[]) >>
+  `cenv.ce_var_type id = SOME (EL i tys)` by fs[expr_sim_inv_def] >>
+  drule_all stmtSimAugAssignTheory.expr_sim_inv_local >> metis_tac[]
+QED
+
+Theorem tuple_store_typed_local_resources:
+  expr_sim_inv cenv cx env es /\
+  type_stmt env ret_ty (Assign (TupleTarget gs) e) = SOME env' /\
+  expr_type e = TupleT tys /\ arg_types_fit sts tys /\
+  i < LENGTH gs /\ EL i gs = BaseTarget (NameTarget id) ==>
+  i < LENGTH sts /\ i < LENGTH tys /\
+  arg_type_fits (EL i sts) (EL i tys) /\
+  FLOOKUP env.var_types id = SOME (EL i tys) /\
+  0 < type_memory_bytes cenv (EL i tys) /\
+  cenv.ce_var_type id = SOME (EL i tys) /\
+  ?p sz entry. FLOOKUP cenv.ce_vars id = SOME (PtrVar (Var p) sz) /\
+    lookup_scopes id es.scopes = SOME entry /\
+    evaluate_type (get_tenv cx) (EL i tys) = SOME entry.type
+Proof
+  strip_tac >> drule tuple_targets_typing >> strip_tac >> gvs[] >>
+  `EVERY (assignable_type env.type_defs) tys` by
+    metis_tac[assignable_type_def] >>
+  `LENGTH gs = LENGTH tys` by metis_tac[LIST_REL_LENGTH] >>
+  `LENGTH sts = LENGTH tys` by metis_tac[arg_types_fit_LENGTH] >>
+  `arg_type_fits (EL i sts) (EL i tys)` by
+    (irule arg_types_fit_EL >> simp[]) >>
+  simp[] >> irule tuple_store_local_member_resources >>
+  metis_tac[]
 QED
