@@ -2880,6 +2880,36 @@ Proof
     IF_CASES_TAC, gen_tac, conj_tac]) >> simp[]
 QED
 
+Theorem abi_dyn_middle_jump_target[local]:
+  !dst src lop base hi info asz msz i sa sb inst s t.
+    (^dyn_middle) dst src lop base hi info asz msz i sa = ((),sb) /\
+    lop <> JMP /\ lop <> JNZ /\ (^dyn_Old) sa /\
+    MEM inst (frag_code sa sb) /\ MEM inst.inst_opcode [JMP; JNZ] /\
+    step_inst_base inst s = OK t ==>
+    t.vs_current_bb IN (^dyn_B) sa sb /\
+    t.vs_current_bb <> sa.cs_current_bb
+Proof
+  rpt gen_tac >> strip_tac >> rule_assum_tac BETA_RULE >>
+  `EVERY ((^dyn_J) ((^dyn_B) sa sb)) (frag_code sa sb)` by
+    (drule_all (BETA_RULE abi_dyn_middle_closed) >>
+     disch_then (qspec_then `{}` mp_tac) >> simp[]) >>
+  `EVERY ((^dyn_J) ((^dyn_I) sa.cs_next_label sb.cs_next_label))
+     (frag_code sa sb)` by
+    (drule_all (BETA_RULE abi_dyn_middle_targets) >>
+     disch_then (qspec_then `{}` mp_tac) >> simp[]) >>
+  `t.vs_current_bb IN (^dyn_B) sa sb /\
+   t.vs_current_bb IN (^dyn_I) sa.cs_next_label sb.cs_next_label` by
+    (conj_tac >> irule abi_dyn_literal_jump_target >>
+     qexistsl_tac [`inst`, `s`] >>
+     asm_simp_tac std_ss [] >>
+     rule_assum_tac (BETA_RULE o REWRITE_RULE [EVERY_MEM]) >>
+     first_assum irule >> first_assum ACCEPT_TAC) >>
+  conj_tac >- first_assum ACCEPT_TAC >>
+  rule_assum_tac BETA_RULE >>
+  qpat_x_assum `?suffix k. _` strip_assume_tac >>
+  metis_tac[BETA_RULE abi_dyn_interval_excludes_old]
+QED
+
 Theorem abi_dyn_region_cut_instruction[local]:
   !sa sb fn id s. at_point sb s ==>
     ?bb. lookup_block s.vs_current_bb (frag_observer sa sb fn id).fn_blocks = SOME bb /\
