@@ -39,11 +39,13 @@ Definition deploy_entry_state_def:
     entry_venom_state prog cplan es with vs_alloca_next := imm_len tops
 End
 
-(* The source-side hypotheses of e2e_deploy_correctness. *)
+(* The source-side hypotheses of e2e_deploy_correctness that hold at every
+   gas filling; the finite storage guard deploy_storage_ok depends on the
+   filling, so the unit theorem states it per filling. *)
 Definition deploy_source_ok_def:
   deploy_source_ok tops am tx <=>
     supported_program tops /\ constructor_call_free tops /\
-    deploy_typing_ok tops am tx /\ deploy_storage_ok tops am tx
+    deploy_typing_ok tops am tx
 End
 
 (* The deployment's dead bytes, fixed before the run (so independent of its
