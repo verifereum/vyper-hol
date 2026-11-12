@@ -40,6 +40,7 @@ Theorem concretize_mstore8_execution_geometry:
   EL c es = SOME (OriginOrdinary fuel post) /\
   resolved_config_ok (JointConfig stk PG G tn fn inst s oms om hs h)
     (birth::ids) ((rp,rv)::anns) /\
+  (~ctx_has_dalloca C ==> resolved_complete (EL c (q0::qs)) ((rp,rv)::anns)) /\
   lifetime_ok n (birth::ids) (JointConfig stk PG G tn fn inst s oms om hs h) /\
   ~joint_read_exempt (EL c (q0::qs)) /\
   o1_fn_shape C fn /\ fn_ptr_ok P fn /\ MEM inst (fn_insts fn) /\
@@ -73,7 +74,7 @@ Proof
      simp[joint_transition_ordinary, step_inst_def, step_inst_base_def, exec_write2_def] >> metis_tac[]) >>
   `eval_operand opv t = SOME value` by suspend "value" >>
   `?dstT. eval_operand opd t = SOME dstT /\
-    ((w2n dst+1 <= lo /\ w2n dstT = w2n dst) \/
+    (((w2n dst+1 <= lo \/ dyn_floor C s <= w2n dst) /\ w2n dstT = w2n dst) \/
      (?d owner aid b sz.
        activation_cache (JointConfig stk PG G tn fn inst s oms om hs h)
          d owner aid (b,sz) /\ lo <= b /\ b <= w2n dst /\
@@ -181,6 +182,7 @@ Theorem concretize_mstore8_local_complete:
   EL c es = SOME (OriginOrdinary fuel post) /\
   resolved_config_ok (JointConfig stk PG G tn fn inst s oms om hs h)
     (birth::ids) ((rp,rv)::anns) /\
+  (~ctx_has_dalloca C ==> resolved_complete (EL c (q0::qs)) ((rp,rv)::anns)) /\
   lifetime_ok n (birth::ids) (JointConfig stk PG G tn fn inst s oms om hs h) /\
   ~joint_read_exempt (EL c (q0::qs)) /\
   o1_fn_shape C fn /\ fn_ptr_ok P fn /\ MEM inst (fn_insts fn) /\

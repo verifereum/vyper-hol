@@ -134,6 +134,7 @@ Theorem concretize_clean_write_geometry:
   EL c es = SOME (OriginOrdinary fuel post) /\
   resolved_config_ok (JointConfig stk PG G tn fn inst s oms om hs h)
     (birth::ids) ((rp,rv)::anns) /\
+  (~ctx_has_dalloca C ==> resolved_complete (EL c (q0::qs)) ((rp,rv)::anns)) /\
   lifetime_ok n (birth::ids) (JointConfig stk PG G tn fn inst s oms om hs h) /\
   ~joint_read_exempt (EL c (q0::qs)) /\
   o1_fn_shape C fn /\ fn_ptr_ok P fn /\ MEM inst (fn_insts fn) /\
@@ -168,7 +169,7 @@ Proof
       qexists_tac `dstT` >> simp[] >> rpt strip_tac >>
       irule joint_relocation_demand_retained >> simp[range_bytes_def] >> metis_tac[]) >>
   `?dstT. eval_operand opd t = SOME dstT /\
-    ((w2n dst+cap <= lo /\ w2n dstT = w2n dst) \/
+    (((w2n dst+cap <= lo \/ dyn_floor C s <= w2n dst) /\ w2n dstT = w2n dst) \/
      (?d owner aid b sz.
        activation_cache (JointConfig stk PG G tn fn inst s oms om hs h)
          d owner aid (b,sz) /\ lo <= b /\ b <= w2n dst /\ w2n dst+cap <= b+sz /\
@@ -182,8 +183,7 @@ Proof
   `!i. i < len ==> relocation_pair lo (concretize_positions C')
     (EL c (q0::qs)) (w2n dst+i) (w2n dstT+i)` by
     (rpt strip_tac >> `i < cap` by decide_tac >>
-     irule relocation_pair_range >>
-     qexists_tac `cap` >> asm_rewrite_tac[] >> metis_tac[]) >>
+     irule access_geometry_relocation_pairs >> metis_tac[]) >>
   (conj_tac >- suspend "written") >> suspend "retained"
 QED
 Resume concretize_clean_write_geometry[written]:
@@ -235,6 +235,7 @@ Theorem concretize_calldatacopy_execution_geometry:
   EL c es = SOME (OriginOrdinary fuel post) /\
   resolved_config_ok (JointConfig stk PG G tn fn inst s oms om hs h)
     (birth::ids) ((rp,rv)::anns) /\
+  (~ctx_has_dalloca C ==> resolved_complete (EL c (q0::qs)) ((rp,rv)::anns)) /\
   lifetime_ok n (birth::ids) (JointConfig stk PG G tn fn inst s oms om hs h) /\
   ~joint_read_exempt (EL c (q0::qs)) /\
   o1_fn_shape C fn /\ fn_ptr_ok P fn /\ MEM inst (fn_insts fn) /\
@@ -412,6 +413,7 @@ Theorem concretize_calldatacopy_local_complete:
   EL c es = SOME (OriginOrdinary fuel post) /\
   resolved_config_ok (JointConfig stk PG G tn fn inst s oms om hs h)
     (birth::ids) ((rp,rv)::anns) /\
+  (~ctx_has_dalloca C ==> resolved_complete (EL c (q0::qs)) ((rp,rv)::anns)) /\
   lifetime_ok n (birth::ids) (JointConfig stk PG G tn fn inst s oms om hs h) /\
   ~joint_read_exempt (EL c (q0::qs)) /\
   o1_fn_shape C fn /\ fn_ptr_ok P fn /\ MEM inst (fn_insts fn) /\

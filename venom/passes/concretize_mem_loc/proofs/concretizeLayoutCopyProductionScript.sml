@@ -71,6 +71,7 @@ Theorem concretize_mcopy_execution_geometry:
   EL c es = SOME (OriginOrdinary fuel post) /\
   resolved_config_ok (JointConfig stk PG G tn fn inst s oms om hs h)
     (birth::ids) ((rp,rv)::anns) /\
+  (~ctx_has_dalloca C ==> resolved_complete (EL c (q0::qs)) ((rp,rv)::anns)) /\
   lifetime_ok n (birth::ids) (JointConfig stk PG G tn fn inst s oms om hs h) /\
   ~joint_read_exempt (EL c (q0::qs)) /\
   o1_fn_shape C fn /\ fn_ptr_ok P fn /\ MEM inst (fn_insts fn) /\
@@ -110,11 +111,12 @@ Proof
     (qpat_x_assum `joint_transition _ _ _ _` mp_tac >>
      simp[joint_transition_ordinary, step_inst_def, step_inst_base_def] >> metis_tac[]) >>
   `SND o_f rv = G` by
-    (drule resolved_config_current >> simp[] >> metis_tac[resolved_frame_erasure]) >>
+    (qpat_x_assum `~ctx_has_dalloca C ==> resolved_complete _ _` mp_tac >>
+     fs[resolved_complete_def]) >>
   `eval_operand opn t = SOME sz` by suspend "size" >>
   Cases_on `w2n sz = 0` >- suspend "zero" >>
   `?dstT. eval_operand opd t = SOME dstT /\
-    ((w2n dst+w2n sz <= lo /\ w2n dstT = w2n dst) \/
+    (((w2n dst+w2n sz <= lo \/ dyn_floor C s <= w2n dst) /\ w2n dstT = w2n dst) \/
      (?d owner aid b len.
        activation_cache (JointConfig stk PG G tn fn inst s oms om hs h)
          d owner aid (b,len) /\ lo <= b /\ b <= w2n dst /\
@@ -123,7 +125,7 @@ Proof
     suspend "destination" >>
   pop_assum strip_assume_tac >>
   `?srcT. eval_operand ops t = SOME srcT /\
-    ((w2n src+w2n sz <= lo /\ w2n srcT = w2n src) \/
+    (((w2n src+w2n sz <= lo \/ dyn_floor C s <= w2n src) /\ w2n srcT = w2n src) \/
      (?d owner aid b len.
        activation_cache (JointConfig stk PG G tn fn inst s oms om hs h)
          d owner aid (b,len) /\ lo <= b /\ b <= w2n src /\
@@ -137,12 +139,10 @@ Proof
   asm_rewrite_tac[] >>
   `!i. i < w2n sz ==> relocation_pair lo (concretize_positions C')
     (EL c (q0::qs)) (w2n dst+i) (w2n dstT+i)` by
-    (rpt strip_tac >> irule relocation_pair_range >>
-     qexists_tac `w2n sz` >> asm_rewrite_tac[] >> metis_tac[]) >>
+    (rpt strip_tac >> irule access_geometry_relocation_pairs >> metis_tac[]) >>
   `!i. i < w2n sz ==> relocation_pair lo (concretize_positions C')
     (EL c (q0::qs)) (w2n src+i) (w2n srcT+i)` by
-    (rpt strip_tac >> irule relocation_pair_range >>
-     qexists_tac `w2n sz` >> asm_rewrite_tac[] >> metis_tac[]) >>
+    (rpt strip_tac >> irule access_geometry_relocation_pairs >> metis_tac[]) >>
   `post.vs_allocas = s.vs_allocas` by simp[mcopy_def, write_memory_with_expansion_def] >>
   (conj_tac >- (rpt gen_tac >> strip_tac >>
   `a = w2n dst+(a-w2n dst) /\ a-w2n dst < w2n sz` by decide_tac >>

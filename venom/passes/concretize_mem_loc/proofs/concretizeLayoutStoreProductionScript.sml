@@ -109,6 +109,7 @@ Theorem concretize_mstore_execution_geometry:
   EL c es = SOME (OriginOrdinary fuel post) /\
   resolved_config_ok (JointConfig stk PG G tn fn inst s oms om hs h)
     (birth::ids) ((rp,rv)::anns) /\
+  (~ctx_has_dalloca C ==> resolved_complete (EL c (q0::qs)) ((rp,rv)::anns)) /\
   lifetime_ok n (birth::ids) (JointConfig stk PG G tn fn inst s oms om hs h) /\
   ~joint_read_exempt (EL c (q0::qs)) /\
   o1_fn_shape C fn /\ fn_ptr_ok P fn /\ MEM inst (fn_insts fn) /\
@@ -141,7 +142,8 @@ Proof
   `access_ok lo G fn inst s /\ taint_ok fn tn inst s` by
     (fs[ptr_discipline_def] >> metis_tac[]) >>
   `SND o_f rv = G` by
-    (drule resolved_config_current >> simp[] >> metis_tac[resolved_frame_erasure]) >>
+    (qpat_x_assum `~ctx_has_dalloca C ==> resolved_complete _ _` mp_tac >>
+     fs[resolved_complete_def]) >>
   `~in_revert_forward fn s` by fs[joint_read_exempt_def] >>
   `post = mstore (w2n dst) value s` by
     (qpat_x_assum `joint_transition _ _ _ _` mp_tac >>
@@ -153,7 +155,7 @@ Proof
   `?valueT. eval_operand opv t = SOME valueT` by suspend "value" >>
   pop_assum strip_assume_tac >>
   `?dstT. eval_operand opd t = SOME dstT /\
-    ((w2n dst+32 <= lo /\ w2n dstT = w2n dst) \/
+    (((w2n dst+32 <= lo \/ dyn_floor C s <= w2n dst) /\ w2n dstT = w2n dst) \/
      (?d owner aid b sz.
        activation_cache (JointConfig stk PG G tn fn inst s oms om hs h)
          d owner aid (b,sz) /\ lo <= b /\ b <= w2n dst /\
@@ -263,6 +265,7 @@ Theorem concretize_mstore_demand_execution:
   EL c es = SOME (OriginOrdinary fuel post) /\
   resolved_config_ok (JointConfig stk PG G tn fn inst s oms om hs h)
     (birth::ids) ((rp,rv)::anns) /\
+  (~ctx_has_dalloca C ==> resolved_complete (EL c (q0::qs)) ((rp,rv)::anns)) /\
   lifetime_ok n (birth::ids) (JointConfig stk PG G tn fn inst s oms om hs h) /\
   ~joint_read_exempt (EL c (q0::qs)) /\
   o1_fn_shape C fn /\ fn_ptr_ok P fn /\ MEM inst (fn_insts fn) /\
