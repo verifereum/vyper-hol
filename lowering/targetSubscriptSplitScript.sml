@@ -916,7 +916,7 @@ Proof
   gvs[place_ptr_rel_def]
 QED
 
-Theorem target_subscript_storage_ready[local]:
+Theorem target_subscript_storage_ready:
   storage_layout_safe cx /\ contract_storage_well_formed cx es /\
   EVERY pure_expr (target_indices (SubscriptTarget bt e)) /\
   eval_base_place cx bt es = (INL (PlaceR (StoragePlace tr slot tv)),mid) /\
@@ -1047,7 +1047,7 @@ Proof
   metis_tac[exprOperandVarTheory.compiler_subscript_ops_var]
 QED
 
-Theorem target_subscript_vtype_well_formed[local]:
+Theorem target_subscript_vtype_well_formed:
   !tenv base_vt idx_ty result_vt.
     well_formed_vtype tenv base_vt /\
     subscript_vtype base_vt idx_ty = SOME result_vt ==>
@@ -1088,7 +1088,7 @@ Proof
   drule_all attribute_type_runtime_step >> strip_tac >> metis_tac[]
 QED
 
-Theorem target_subscript_pre_result_well_formed[local]:
+Theorem target_subscript_pre_result_well_formed:
   target_pre cenv cx env bt es /\ type_place_target env bt = SOME vt ==>
   well_formed_vtype (get_tenv cx) vt
 Proof
