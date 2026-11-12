@@ -182,7 +182,8 @@ Theorem forced_then_stmt_outcome:
                 stmt_post ctx func cx lctx cenv cenv' sa sb s0 res
                   (ee' with gas_obs := []) t') \/
           (exit_result r /\
-           !tail. stmt_exit RetQ (ee' with gas_obs := tail) res r))) ==>
+           (!tail. stmt_exit RetQ (ee' with gas_obs := tail) res r) /\
+           halt_exit cx ee' res r))) ==>
     gas_outcome F (cx_tops cx) (ctx, func) (eval_stmt cx s) (es, s0)
       (stmt_post ctx func cx lctx cenv cenv' sa sb s0)
       (\res ee r. (!tail. stmt_exit RetQ (ee with gas_obs := tail) res r) /\ halt_exit cx ee res r)
@@ -248,7 +249,8 @@ Theorem forced_vv_then_stmt_outcome:
                 stmt_post ctx func cx lctx cenv cenv' sa sb s0 res
                   (ee' with gas_obs := []) t') \/
           (exit_result r /\
-           !tail. stmt_exit RetQ (ee' with gas_obs := tail) res r))) ==>
+           (!tail. stmt_exit RetQ (ee' with gas_obs := tail) res r) /\
+           halt_exit cx ee' res r))) ==>
     gas_outcome F (cx_tops cx) (ctx, func) (eval_stmt cx s) (es, s0)
       (stmt_post ctx func cx lctx cenv cenv' sa sb s0)
       (\res ee r. (!tail. stmt_exit RetQ (ee with gas_obs := tail) res r) /\ halt_exit cx ee res r)

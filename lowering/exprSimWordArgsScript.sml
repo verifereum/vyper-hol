@@ -57,6 +57,12 @@ Definition builtin_result_def:
     | INR err => INR (Error err)
 End
 
+Theorem builtin_result_not_halt[simp]:
+  builtin_result cx acc ty bt ts vs <> INR HaltException
+Proof
+  simp[builtin_result_def] >> CASE_TAC >> simp[]
+QED
+
 Theorem eval_expr_builtin_cases:
   !cx ann bt args es res es'.
     bt <> Len /\ bt <> Env MsgGas /\ ~precompile_builtin bt /\ bt <> Bop In /\ bt <> Bop NotIn /\
@@ -980,7 +986,11 @@ Resume compile_word_builtin_sim[normal]:
    >- (irule (Q.INST [`right` |-> `[]`] gas_marked_exec_bind_normal
                 |> REWRITE_RULE [APPEND_NIL]) >>
        qpat_assum `gas_marked_exec _ _ _ _ _ (INL vs) _ _` (irule_at Any) >>
-       gvs[]) >> gvs[])
+       gvs[]) >> gvs[] >>
+   disj2_tac >> rewrite_tac[halt_exit_def] >> strip_tac >> gvs[] >>
+   qpat_x_assum `gas_marked_exec _ _ (\st. _) _ _ _ _ _`
+     (mp_tac o cj 1 o REWRITE_RULE [gas_marked_exec_def]) >>
+   disch_then (qspec_then `[]` mp_tac) >> simp[])
 QED
 Resume compile_word_builtin_sim[exit]:
   Cases_on `res` >- gvs[wb_args_exit_def] >>
