@@ -1645,6 +1645,274 @@ Resume abi_dyn_decode_provenance[loop]:
 QED
 Finalise abi_dyn_decode_provenance
 
+(* Fresh branch targets, carried ambiently until their allocating bind. *)
+val dyn_target_span = ``\A a b. entry_shape a b /\
+  a.cs_next_label <= b.cs_next_label /\
+  EVERY ((^dyn_J) (A UNION (^dyn_I) a.cs_next_label b.cs_next_label))
+    (frag_code a b)``;
+val dyn_target = ``\A m. !a r b. m a = (r,b) ==>
+  (^dyn_target_span) A a b``;
+
+Theorem abi_dyn_target_compose[local]:
+  !A a b c. (^dyn_target_span) A a b /\ (^dyn_target_span) A b c ==>
+    (^dyn_target_span) A a c
+Proof
+  simp_tac std_ss [] >> rpt gen_tac >> strip_tac >>
+  `entry_shape a c` by metis_tac[entry_shape_trans] >>
+  `a.cs_next_label <= c.cs_next_label` by decide_tac >> ASM_SIMP_TAC std_ss [] >>
+  `cs_extends a b /\ cs_extends b c` by metis_tac[entry_shape_extends] >>
+  `(^dyn_I) a.cs_next_label b.cs_next_label SUBSET
+    (^dyn_I) a.cs_next_label c.cs_next_label /\
+   (^dyn_I) b.cs_next_label c.cs_next_label SUBSET
+    (^dyn_I) a.cs_next_label c.cs_next_label`
+    by (BETA_TAC >> conj_tac >> irule (BETA_RULE abi_dyn_interval_mono) >> simp[]) >>
+  `A UNION (^dyn_I) a.cs_next_label b.cs_next_label SUBSET
+     A UNION (^dyn_I) a.cs_next_label c.cs_next_label /\
+   A UNION (^dyn_I) b.cs_next_label c.cs_next_label SUBSET
+     A UNION (^dyn_I) a.cs_next_label c.cs_next_label`
+    by ASM_SET_TAC[] >>
+  drule_all frag_code_compose_perm >> strip_tac >>
+  drule PERM_EVERY >> disch_then (irule o iffRL) >>
+  simp_tac std_ss [EVERY_APPEND] >> conj_tac
+  >- (irule EVERY_MONOTONIC >> goal_assum (drule_at Any) >>
+      gen_tac >> strip_tac >> simp_tac std_ss [] >>
+      irule (BETA_RULE abi_dyn_targets_mono) >>
+      qexists_tac `A UNION (^dyn_I) a.cs_next_label b.cs_next_label` >>
+      BETA_TAC >> rule_assum_tac BETA_RULE >> ASM_SIMP_TAC std_ss []) >>
+  irule EVERY_MONOTONIC >> goal_assum (drule_at Any) >>
+  gen_tac >> strip_tac >> simp_tac std_ss [] >>
+  irule (BETA_RULE abi_dyn_targets_mono) >>
+  qexists_tac `A UNION (^dyn_I) b.cs_next_label c.cs_next_label` >>
+  BETA_TAC >> rule_assum_tac BETA_RULE >> ASM_SIMP_TAC std_ss []
+QED
+
+Theorem abi_dyn_target_bind[local]:
+  !A m f. (^dyn_target) A m /\
+    (!x. (^(inst [alpha |-> beta] dyn_target)) A (f x)) ==>
+    (^(inst [alpha |-> beta] dyn_target)) A (comp_bind m f)
+Proof
+  simp_tac std_ss [comp_bind_def] >> rpt gen_tac >> strip_tac >>
+  rpt gen_tac >> strip_tac >> Cases_on `m a` >> gvs[] >>
+  first_x_assum drule >> strip_tac >> first_x_assum drule >> strip_tac >>
+  irule (SRULE [] (BETA_RULE abi_dyn_target_compose)) >>
+  qexists_tac `r'` >> simp[]
+QED
+
+Theorem abi_dyn_target_ignore_bind[local]:
+  !A m n. (^dyn_target) A m /\
+    (^(inst [alpha |-> beta] dyn_target)) A n ==>
+    (^(inst [alpha |-> beta] dyn_target)) A (comp_ignore_bind m n)
+Proof
+  simp_tac std_ss [comp_ignore_bind_def] >> rpt gen_tac >> strip_tac >>
+  ho_match_mp_tac (BETA_RULE abi_dyn_target_bind) >> simp[]
+QED
+
+Theorem abi_dyn_target_return[local]:
+  !A v. (^dyn_target) A (comp_return v)
+Proof
+  simp[comp_return_def, entry_shape_refl, frag_code_def,
+    emitted_insts_def, emitted_blocks_def]
+QED
+
+Theorem abi_dyn_target_emit_op[local]:
+  !A opc ops. opc <> JMP /\ opc <> JNZ ==>
+    (^(inst [alpha |-> ``:operand``] dyn_target)) A (emit_op opc ops)
+Proof
+  simp_tac std_ss [emit_op_def, comp_bind_def, comp_ignore_bind_def,
+    comp_return_def, fresh_var_def, fresh_id_def, emit_def] >>
+  rpt strip_tac >> gvs[] >>
+  simp[entry_shape_def, frag_code_def, emitted_insts_def,
+    emitted_blocks_def, mk_inst_def, DROP_APPEND]
+QED
+
+Theorem abi_dyn_target_emit_inst[local]:
+  !A opc ops outs. (^dyn_J) A (mk_inst 0 opc ops outs) ==>
+    (^(inst [alpha |-> ``:unit``] dyn_target)) A (emit_inst opc ops outs)
+Proof
+  simp_tac std_ss [emit_inst_def, comp_bind_def, fresh_id_def, emit_def] >>
+  rpt strip_tac >> gvs[] >>
+  simp[entry_shape_def, frag_code_def, emitted_insts_def,
+    emitted_blocks_def, mk_inst_def, DROP_APPEND] >> metis_tac[]
+QED
+
+Theorem abi_dyn_target_emit_void[local]:
+  !A opc ops. (^dyn_J) A (mk_inst 0 opc ops []) ==>
+    (^(inst [alpha |-> ``:unit``] dyn_target)) A (emit_void opc ops)
+Proof
+  simp_tac std_ss [emit_void_def, GSYM emit_inst_def] >>
+  MATCH_ACCEPT_TAC (BETA_RULE abi_dyn_target_emit_inst)
+QED
+
+Theorem abi_dyn_target_block[local]:
+  !A l. (^(inst [alpha |-> ``:string``] dyn_target)) A (new_block l)
+Proof
+  simp[new_block_def, entry_shape_def, frag_code_def, emitted_insts_def,
+    emitted_blocks_def] >> rpt strip_tac >>
+  disj2_tac >> qexistsl_tac [`[]`, `[]`] >> simp[]
+QED
+
+Theorem abi_dyn_target_fresh_label_bind[local]:
+  !A suffix f. (!l. (^dyn_target) (A UNION {l}) (f l)) ==>
+    (^dyn_target) A (comp_bind (fresh_label suffix) f)
+Proof
+  simp_tac std_ss [comp_bind_def, fresh_label_def, LET_THM] >>
+  rpt gen_tac >> strip_tac >> rpt gen_tac >> strip_tac >>
+  first_x_assum drule >> strip_tac >>
+  gvs[Excl "IN_UNION", Excl "IN_INSERT"] >>
+  `entry_shape a b` by fs[entry_shape_def] >>
+  `a.cs_next_label <= b.cs_next_label` by decide_tac >>
+  ASM_SIMP_TAC std_ss [] >>
+  `A UNION {fresh_label_output suffix a.cs_next_label} UNION
+      (^dyn_I) (a.cs_next_label + 1) b.cs_next_label SUBSET
+    A UNION (^dyn_I) a.cs_next_label b.cs_next_label`
+    by (`(^dyn_I) (a.cs_next_label + 1) b.cs_next_label SUBSET
+           (^dyn_I) a.cs_next_label b.cs_next_label`
+          by (BETA_TAC >> irule (BETA_RULE abi_dyn_interval_mono) >> simp[]) >>
+        `fresh_label_output suffix a.cs_next_label IN
+           (^dyn_I) a.cs_next_label b.cs_next_label`
+          by (simp[] >> qexistsl_tac [`suffix`, `a.cs_next_label`] >> simp[]) >>
+        ASM_SET_TAC[]) >>
+  `frag_code (a with cs_next_label := a.cs_next_label + 1) b = frag_code a b`
+    by simp[frag_code_def, emitted_insts_def, emitted_blocks_def] >>
+  qpat_x_assum `frag_code _ _ = _`
+    (fn th => rule_assum_tac (PURE_REWRITE_RULE [th])) >>
+  irule EVERY_MONOTONIC >> goal_assum (drule_at Any) >>
+  gen_tac >> strip_tac >> simp_tac std_ss [] >>
+  irule (BETA_RULE abi_dyn_targets_mono) >>
+  qexists_tac `A UNION {fresh_label_output suffix a.cs_next_label} UNION
+      (^dyn_I) (a.cs_next_label + 1) b.cs_next_label` >>
+  BETA_TAC >> rule_assum_tac BETA_RULE >> ASM_SIMP_TAC std_ss []
+QED
+
+Theorem abi_dyn_target_alloc[local]:
+  !A size. (^(inst [alpha |-> ``:buffer``] dyn_target)) A (compile_alloc_buffer size)
+Proof
+  rpt gen_tac >> simp_tac std_ss [compile_alloc_buffer_def] >>
+  MATCH_MP_TAC (BETA_RULE abi_dyn_target_bind) >> conj_tac
+  >- (MATCH_MP_TAC (BETA_RULE abi_dyn_target_emit_op) >> simp[]) >>
+  gen_tac >> BETA_TAC >> MATCH_ACCEPT_TAC (BETA_RULE abi_dyn_target_return)
+QED
+
+Theorem abi_dyn_target_if[local]:
+  !A p m n. (^dyn_target) A m /\ (^dyn_target) A n ==>
+    (^dyn_target) A (if p then m else n)
+Proof
+  Cases_on `p` >> simp[]
+QED
+
+Theorem abi_dyn_target_copy_case[local]:
+  !A opc m n p. (^dyn_target) A m /\ (^dyn_target) A n /\ (^dyn_target) A p ==>
+    (^dyn_target) A (case opc of CALLDATALOAD => m | DLOAD => n | _ => p)
+Proof
+  rpt gen_tac >> qmatch_goalsub_abbrev_tac `P m` >>
+  Cases_on `opc` >> pure_rewrite_tac[opcode_case_def] >> metis_tac[]
+QED
+
+Theorem abi_dyn_decode_targets[local]:
+  (!dst src lop base hi info. lop <> JMP /\ lop <> JNZ ==> !A.
+    (^(inst [alpha |-> ``:unit``] dyn_target)) A
+      (compile_abi_decode_to_buf dst src lop base hi info)) /\
+  (!dst src lop base hi elems ao vo. lop <> JMP /\ lop <> JNZ ==> !A.
+    (^(inst [alpha |-> ``:unit``] dyn_target)) A
+      (compile_abi_decode_complex_elems dst src lop base hi elems ao vo)) /\
+  (!dst src lop base hi info asz msz ip cnt. lop <> JMP /\ lop <> JNZ ==> !A.
+    (^(inst [alpha |-> ``:unit``] dyn_target)) A
+      (compile_abi_decode_dyn_loop dst src lop base hi info asz msz ip cnt))
+Proof
+  qabbrev_tac `U = ^(inst [alpha |-> ``:unit``] dyn_target)` >>
+  qabbrev_tac `FrO = ^(inst [alpha |-> ``:operand``] dyn_target)` >>
+  qabbrev_tac `B = ^(inst [alpha |-> ``:buffer``] dyn_target)` >>
+  qabbrev_tac `L = ^(inst [alpha |-> ``:string``] dyn_target)` >>
+  `(!T m f. FrO T m /\ (!x. U T (f x)) ==> U T (comp_bind m f)) /\
+   (!T m f. FrO T m /\ (!x. FrO T (f x)) ==> FrO T (comp_bind m f)) /\
+   (!T m f. FrO T m /\ (!x. B T (f x)) ==> B T (comp_bind m f)) /\
+   (!T m f. B T m /\ (!x. U T (f x)) ==> U T (comp_bind m f)) /\
+   (!T m f. U T m /\ (!x. U T (f x)) ==> U T (comp_bind m f))`
+    by (rpt conj_tac >> simp_tac std_ss [Abbr `U`, Abbr `FrO`, Abbr `B`] >>
+        MATCH_ACCEPT_TAC (BETA_RULE abi_dyn_target_bind)) >>
+  `(!T suffix f. (!l. U (T UNION {l}) (f l)) ==>
+      U T (comp_bind (fresh_label suffix) f))`
+    by (simp_tac std_ss [Abbr `U`] >>
+        MATCH_ACCEPT_TAC (BETA_RULE abi_dyn_target_fresh_label_bind)) >>
+  `(!T m n. U T m /\ U T n ==> U T (comp_ignore_bind m n)) /\
+   (!T m n. U T m /\ FrO T n ==> FrO T (comp_ignore_bind m n)) /\
+   (!T m n. L T m /\ U T n ==> U T (comp_ignore_bind m n))`
+    by (rpt conj_tac >> simp_tac std_ss [Abbr `U`, Abbr `FrO`, Abbr `L`] >>
+        MATCH_ACCEPT_TAC (BETA_RULE abi_dyn_target_ignore_bind)) >>
+  `(!T opc ops. opc <> JMP /\ opc <> JNZ ==> FrO T (emit_op opc ops)) /\
+   (!T opc ops. opc <> JMP /\ opc <> JNZ ==> U T (emit_void opc ops)) /\
+   (!T l. l IN T ==> U T (emit_inst JMP [Label l] [])) /\
+   (!T v l r. l IN T /\ r IN T ==> U T (emit_inst JNZ [v; Label l; Label r] [])) /\
+   (!T l. L T (new_block l)) /\
+   (!T sz. B T (compile_alloc_buffer sz)) /\
+   (!T v. U T (comp_return v)) /\ (!T v. FrO T (comp_return v)) /\
+   (!T v. B T (comp_return v)) /\ (!T v. L T (comp_return v))`
+    by (rpt conj_tac >>
+        simp_tac std_ss [Abbr `U`, Abbr `FrO`, Abbr `B`, Abbr `L`] >>
+        FIRST (map (MATCH_ACCEPT_TAC o BETA_RULE)
+          [abi_dyn_target_emit_op, abi_dyn_target_block,
+           abi_dyn_target_alloc, abi_dyn_target_return] @
+          [rpt gen_tac >> strip_tac >>
+           FIRST [MATCH_MP_TAC (BETA_RULE abi_dyn_target_emit_void),
+                  MATCH_MP_TAC (BETA_RULE abi_dyn_target_emit_inst)] >>
+           simp[mk_inst_def]])) >>
+  `(!T p m n. U T m /\ U T n ==> U T (if p then m else n)) /\
+   (!T p m n. FrO T m /\ FrO T n ==> FrO T (if p then m else n))`
+    by (rpt conj_tac >> simp_tac std_ss [Abbr `U`, Abbr `FrO`] >>
+        MATCH_ACCEPT_TAC (BETA_RULE abi_dyn_target_if)) >>
+  `!T opc m n p. U T m /\ U T n /\ U T p ==>
+    U T (case opc of CALLDATALOAD => m | DLOAD => n | _ => p)`
+    by (simp_tac std_ss [Abbr `U`] >>
+        MATCH_ACCEPT_TAC (BETA_RULE abi_dyn_target_copy_case)) >>
+  qpat_x_assum `Abbrev (U = _)` kall_tac >>
+  qpat_x_assum `Abbrev (FrO = _)` kall_tac >>
+  qpat_x_assum `Abbrev (B = _)` kall_tac >>
+  qpat_x_assum `Abbrev (L = _)` kall_tac >>
+  ho_match_mp_tac compile_abi_decode_to_buf_ind >> rpt strip_tac >>
+  simp_tac std_ss [Once compile_abi_decode_to_buf_def,
+    compile_abi_dec_addr_def, compile_abi_decode_static_def,
+    compile_abi_clamp_basetype_def, compile_abi_int_clamp_def,
+    compile_abi_bytes_clamp_def, compile_abi_decode_range_check_def,
+    compile_getelemptr_abi_def, compile_abi_decode_dyn_elem_ptr_def] >>
+  ASM_SIMP_TAC std_ss []
+  >- suspend "word"
+  >- suspend "bytes"
+  >- suspend "array"
+  >- suspend "complex"
+  >- suspend "cons"
+  >> suspend "loop"
+QED
+Resume abi_dyn_decode_targets[word]:
+  Cases_on `clamp_info` >>
+  simp_tac std_ss [compile_abi_clamp_basetype_def, compile_abi_int_clamp_def,
+    compile_abi_bytes_clamp_def] >> simp[] >> dyn_certificate_tac
+QED
+Resume abi_dyn_decode_targets[bytes]:
+  dyn_certificate_tac
+QED
+Resume abi_dyn_decode_targets[array]:
+  Cases_on `~elem_is_dyn /\ ~dec_info_needs_clamp info`
+  >- (ASM_SIMP_TAC std_ss [LET_THM] >> dyn_certificate_tac) >>
+  `elem_is_dyn \/ dec_info_needs_clamp info` by metis_tac[] >>
+  qpat_x_assum `!can_bulk_copy ip i_ptr_alloc cnt. _` mp_tac >>
+  ASM_SIMP_TAC std_ss [LET_THM] >> disch_tac >> dyn_certificate_tac
+QED
+Resume abi_dyn_decode_targets[complex]:
+  Cases_on `hi = Lit 0w` >>
+  FULL_SIMP_TAC std_ss [LET_THM] >> dyn_certificate_tac
+QED
+Resume abi_dyn_decode_targets[cons]:
+  qpat_x_assum `!is_dyn dst src. _` (qspec_then `dec_info_needs_offset info` mp_tac) >>
+  ASM_SIMP_TAC std_ss [] >> disch_tac >>
+  qpat_x_assum `!is_dyn. _` (qspec_then `dec_info_needs_offset info` mp_tac) >>
+  ASM_SIMP_TAC std_ss [LET_THM] >> disch_tac >> dyn_certificate_tac
+QED
+Resume abi_dyn_decode_targets[loop]:
+  qpat_x_assum `!is_dyn_elem dst src. _` (qspec_then `dec_info_needs_offset info` mp_tac) >>
+  ASM_SIMP_TAC std_ss [] >> disch_tac >> dyn_certificate_tac
+QED
+Finalise abi_dyn_decode_targets
+
 (* The concrete middle, as metalevel notation only. *)
 val dyn_middle = ``\dst src lop base hi info asz msz i.
   do data <- emit_op ADD [src; Lit 32w];
@@ -1688,6 +1956,32 @@ Proof
     ho_match_mp_tac (BETA_RULE abi_dyn_prov_bind),
     ho_match_mp_tac (BETA_RULE abi_dyn_prov_ignore_bind),
     IF_CASES_TAC, gen_tac, conj_tac])
+QED
+
+Theorem abi_dyn_middle_targets[local]:
+  !dst src lop base hi info asz msz i A.
+    lop <> JMP /\ lop <> JNZ ==>
+    (^(inst [alpha |-> ``:unit``] dyn_target)) A
+      ((^dyn_middle) dst src lop base hi info asz msz i)
+Proof
+  rpt gen_tac >> strip_tac >>
+  simp_tac std_ss [compile_abi_decode_dyn_elem_ptr_def,
+    compile_abi_dec_addr_def, compile_abi_decode_range_check_def] >>
+  rpt (FIRST [(MATCH_MP_TAC (BETA_RULE (CONJUNCT1 abi_dyn_decode_targets)) >> simp[]),
+    MATCH_ACCEPT_TAC (BETA_RULE abi_dyn_target_return),
+    (MATCH_MP_TAC (BETA_RULE abi_dyn_target_emit_op) >> simp[]),
+    (MATCH_MP_TAC (BETA_RULE abi_dyn_target_emit_void) >> simp[mk_inst_def]),
+    ho_match_mp_tac (BETA_RULE abi_dyn_target_bind),
+    ho_match_mp_tac (BETA_RULE abi_dyn_target_ignore_bind),
+    IF_CASES_TAC, gen_tac, conj_tac]) >> simp[]
+QED
+
+Theorem abi_dyn_interval_excludes_old[local]:
+  !lo hi suffix k. k < lo ==>
+    fresh_label_output suffix k NOTIN (^dyn_I) lo hi
+Proof
+  simp[] >> rpt strip_tac >>
+  drule emitHelperPropsTheory.fresh_label_output_inj >> simp[]
 QED
 
 Theorem abi_dyn_fresh_step_frame[local]:
