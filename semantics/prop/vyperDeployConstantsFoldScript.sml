@@ -6,7 +6,8 @@
 Theory vyperDeployConstantsFold
 Ancestors
   vyperInterpreter vyperState vyperTypeContract vyperTypeConstantFold
-  vyperTypeContractSoundness
+  vyperTypeContractSoundness vyperDeployConstantsFoldAssembly
+  vyperProtectedImmutableFrame
 
 (* Intuition: evaluate_all_constants stores the fold's cenv over the initial
    main-module slot (constants_fold_evaluate_module_constants, from
@@ -23,5 +24,13 @@ Theorem load_contract_establishes_constants_fold:
     constants_fold_module [(NONE, tops)] imms NONE tops FEMPTY = SOME cenv /\
     cenv SUBMAP get_source_immutables NONE imms
 Proof
-  cheat
+  strip_tac >>
+  irule load_contract_constants_fold_from_frames >>
+  conj_tac
+  >- (rpt strip_tac >>
+      drule_all (cj 6 protected_writes_frame_mutual) >> simp[]) >>
+  conj_tac
+  >- (rpt strip_tac >>
+      drule_all (cj 2 protected_writes_frame_mutual) >> simp[]) >>
+  metis_tac[]
 QED
