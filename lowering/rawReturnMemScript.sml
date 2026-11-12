@@ -18,7 +18,7 @@ Proof
   simp[Once mem_safe_block_def, Once exec_block_def]
 QED
 
-Theorem compile_external_return_raw_mem_parts[local]:
+Theorem compile_external_return_raw_mem_parts:
   !op prim ei msz nr nkey ut iv st x st'.
     compile_external_return (SOME op) prim T ei msz nr nkey ut iv st =
       (x, st') /\ (nr /\ ~iv ==> ut) ==>
