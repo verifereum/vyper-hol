@@ -20,6 +20,8 @@ Theory fmpStageReclaimSound
 Ancestors
   fmpStageRel ptrStaticDiscipline cfgWf venomWf livenessProofs
   fnBlockPlanStaticOffsetLive fnPlanLineageLiveness fnBlockPlanStatic
+  pair list finite_map indexedLists livenessDefs venomInst fmpReclaimDefs basePtrProofs
+  venomExecSemantics venomFnInstsProofs fnLineageStatic
 
 Theorem fmp_stage_frame_sites:
   fmp_stage_ctx rpolicy D C C' vs vs' fmp eom /\
@@ -75,6 +77,140 @@ Theorem fmp_stage_covers_phis:
   fmp_frame_covers sm env eb lo (entry_prov fn s G)
 Proof
   cheat
+QED
+
+(* First occurrence selection, without distinct predecessor labels. *)
+Theorem fmp_resolve_find_pairs[local]:
+  !ops pred. phi_well_formed ops ==>
+    resolve_phi pred ops =
+      case FIND (\(l,w). l = pred) (phi_pairs ops) of
+        NONE => NONE | SOME (_,w) => SOME (Var w)
+Proof
+  ho_match_mp_tac venomInstTheory.phi_pairs_ind >>
+  rw[phi_pairs_def, phi_well_formed_def, resolve_phi_def, FIND_thm] >> rw[]
+QED
+
+Theorem fmp_maps_fold_selected[local]:
+  !items (om:string |-> num) (mm:num |-> string) pred v idx src.
+    EVERY (\(i,phi).
+      (MEM v (MAP SND (phi_pairs phi.inst_operands)) ==> i = idx) /\
+      (i = idx ==> MEM v (MAP SND (phi_pairs phi.inst_operands)) /\
+        FIND (\(l,w). l = pred) (phi_pairs phi.inst_operands) =
+                    SOME (pred,src))) items /\
+    (MEM idx (MAP FST items) \/
+     (FLOOKUP om v = SOME idx /\ FLOOKUP mm idx = SOME src)) ==>
+    FLOOKUP (FST (FOLDL (\(op_map,matching) (i,phi).
+      (FOLDL (\m (l,w). m |+ (w,i)) op_map (phi_pairs phi.inst_operands),
+       case FIND (\(l,w). l = pred) (phi_pairs phi.inst_operands) of
+         NONE => matching | SOME (_,w) => matching |+ (i,w)))
+      (om,mm) items)) v = SOME idx /\
+    FLOOKUP (SND (FOLDL (\(op_map,matching) (i,phi).
+      (FOLDL (\m (l,w). m |+ (w,i)) op_map (phi_pairs phi.inst_operands),
+       case FIND (\(l,w). l = pred) (phi_pairs phi.inst_operands) of
+         NONE => matching | SOME (_,w) => matching |+ (i,w)))
+      (om,mm) items)) idx = SOME src
+Proof
+  Induct >- simp[] >> rpt gen_tac >> Cases_on `h` >>
+  rename1 `(i,phi) :: items` >> simp[NoAsms] >>
+  disch_then (CONJUNCTS_THEN2 strip_assume_tac assume_tac) >>
+  first_x_assum irule >>
+  (conj_tac >- first_assum ACCEPT_TAC) >>
+  qpat_x_assum `EVERY _ items` kall_tac >>
+  Cases_on `i = idx`
+  >- (qpat_x_assum `i = idx ==> _` drule >> strip_tac >>
+      qpat_x_assum `MEM _ _ ==> _` kall_tac >>
+      gvs[fnLineageStaticTheory.phi_pair_updates_lookup, FLOOKUP_UPDATE]) >>
+  `~MEM v (MAP SND (phi_pairs phi.inst_operands))` by metis_tac[] >>
+  qpat_x_assum `MEM _ _ ==> _` kall_tac >>
+  qpat_x_assum `i = idx ==> _` kall_tac >>
+  Cases_on `FIND (\(l,w). l = pred) (phi_pairs phi.inst_operands)` >>
+  gvs[fnLineageStaticTheory.phi_pair_updates_lookup, FLOOKUP_UPDATE, AllCaseEqs()] >>
+  rename1 `FIND _ _ = SOME found` >> Cases_on `found` >>
+  simp[FLOOKUP_UPDATE]
+QED
+
+Theorem fmp_phi_index_unique[local]:
+  wf_function fn /\ MEM bb fn.fn_blocks /\
+  i < LENGTH (collect_phis bb.bb_instructions) /\
+  j < LENGTH (collect_phis bb.bb_instructions) /\
+  EL i (collect_phis bb.bb_instructions) =
+    EL j (collect_phis bb.bb_instructions) ==> i = j
+Proof
+  strip_tac >>
+  `ALL_DISTINCT (MAP (\q. q.inst_id) bb.bb_instructions)` by
+    (irule all_distinct_flat_mem >>
+     qexists_tac `MAP (\b. MAP (\q. q.inst_id) b.bb_instructions) fn.fn_blocks` >>
+     conj_tac >- gvs[wf_function_def, fn_inst_ids_distinct_def] >>
+     simp[MEM_MAP] >> qexists_tac `bb` >> simp[]) >>
+  `EL i (collect_phis bb.bb_instructions) = EL i bb.bb_instructions /\
+   EL j (collect_phis bb.bb_instructions) = EL j bb.bb_instructions`
+    by metis_tac[collect_phis_index] >>
+  drule ALL_DISTINCT_EL_IMP >>
+  disch_then (qspecl_then [`i`,`j`] mp_tac) >>
+  simp[EL_MAP] >>
+  `LENGTH (collect_phis bb.bb_instructions) <= LENGTH bb.bb_instructions`
+    by simp[current_collect_phis_length] >>
+  gvs[]
+QED
+
+Theorem fmp_ready_source_index[local]:
+  wf_function fn /\ MEM bb fn.fn_blocks /\
+  fmp_phi_ready_block (liveness_analyze fn) bb /\
+  idx < LENGTH (collect_phis bb.bb_instructions) /\
+  MEM u (MAP SND (phi_pairs
+    (EL idx (collect_phis bb.bb_instructions)).inst_operands)) ==>
+  !i. i < LENGTH (collect_phis bb.bb_instructions) /\
+    MEM u (MAP SND (phi_pairs
+      (EL i (collect_phis bb.bb_instructions)).inst_operands)) ==> i = idx
+Proof
+  strip_tac >> rpt strip_tac >>
+  irule fmp_phi_index_unique >> qexistsl_tac [`bb`,`fn`] >> simp[] >>
+  `MEM u (inst_uses (EL idx (collect_phis bb.bb_instructions))) /\
+   MEM u (inst_uses (EL i (collect_phis bb.bb_instructions)))`
+    by metis_tac[inst_uses_def, phi_pairs_mem_operand_vars] >>
+  gvs[fmp_phi_ready_block_def, EVERY_MEM] >>
+  metis_tac[EL_MEM]
+QED
+
+Theorem fmp_ready_selected_input[local]:
+  wf_function fn /\ fn_inst_wf fn /\ MEM bb fn.fn_blocks /\
+  fmp_phi_ready_block (liveness_analyze fn) bb /\
+  MEM phi (collect_phis bb.bb_instructions) /\
+  resolve_phi pred phi.inst_operands = SOME (Var u) /\ MEM u live ==>
+  MEM u (input_vars_from pred bb.bb_instructions live)
+Proof
+  strip_tac >>
+  `MEM phi bb.bb_instructions /\ phi.inst_opcode = PHI`
+    by metis_tac[collect_phis_mem] >>
+  `inst_wf phi` by metis_tac[fn_inst_wf_def] >>
+  `phi_well_formed phi.inst_operands` by gvs[inst_wf_def] >>
+  drule fmp_resolve_find_pairs >>
+  disch_then (qspec_then `pred` mp_tac) >>
+  Cases_on `FIND (\(l,w). l = pred) (phi_pairs phi.inst_operands)` >>
+  gvs[] >> rename1 `FIND _ _ = SOME found` >> Cases_on `found` >> gvs[] >> strip_tac >> gvs[] >>
+  rename1 `FIND _ _ = SOME (label,u)` >>
+  `label = pred` by (drule venomInstTheory.FIND_P >> simp[]) >> gvs[] >>
+  `MEM u (MAP SND (phi_pairs phi.inst_operands))`
+    by (drule venomInstTheory.FIND_MEM >> simp[MEM_MAP] >> metis_tac[SND]) >>
+  qpat_x_assum `MEM phi (collect_phis _)`
+    (strip_assume_tac o REWRITE_RULE [MEM_EL]) >> rename1 `idx < LENGTH _` >>
+  `!i. i < LENGTH (collect_phis bb.bb_instructions) /\
+     MEM u (MAP SND (phi_pairs
+       (EL i (collect_phis bb.bb_instructions)).inst_operands)) ==> i = idx`
+    by metis_tac[fmp_ready_source_index] >>
+  rename1 `resolve_phi pred _ = _` >>
+  mp_tac (Q.SPECL [`MAPi (\i phi. (i,phi)) (collect_phis bb.bb_instructions)`,
+    `FEMPTY`, `FEMPTY`, `pred`, `u`, `idx`, `u`] fmp_maps_fold_selected) >>
+  impl_tac
+  >- (conj_tac
+      >- (simp[EVERY_MEM, MEM_MAPi, FORALL_PROD] >> rpt strip_tac >> gvs[])
+      >> simp[MEM_MAP, MEM_MAPi] >> qexists_tac `(idx,phi)` >> simp[] >>
+      qexists_tac `idx` >> simp[]) >>
+  strip_tac >> irule input_vars_from_trigger_maps >>
+  qexistsl_tac [`idx`,
+    `SND (build_phi_maps pred (collect_phis bb.bb_instructions))`,
+    `FST (build_phi_maps pred (collect_phis bb.bb_instructions))`, `u`] >>
+  simp[build_phi_maps_def]
 QED
 
 Theorem fmp_ready_nonphi_input[local]:
