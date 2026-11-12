@@ -178,7 +178,7 @@ Proof
      >- (
   `!w. MEM (Var w) inst.inst_operands ==> clean_scalar (retpc_var fn) rv tn w` by
     (rpt strip_tac >>
-     `~MEM inst.inst_opcode [ASSIGN; PHI; RET; SHL; SHR; SAR; MSTORE; SSTORE; TSTORE; ISTORE]` by simp[] >>
+     `~MEM inst.inst_opcode [ASSIGN; PHI; RET; MUL; SHL; SHR; SAR; MSTORE; SSTORE; TSTORE; ISTORE]` by simp[] >>
      `FLOOKUP rv w = NONE` by metis_tac[] >>
      drule_all disciplined_clean_scalar >> simp[]) >>
   drule_at (Pat `local_rel _ _ _ _ _ _ _`) guarded_scalar_binary_step >>

@@ -189,8 +189,9 @@ Proof
     rename1 `FLOOKUP s0.vs_allocas st.cs_next_id = SOME entry` >>
     PairCases_on `entry` >> simp[exec_alloca_def, mk_inst_def]) >>
  `step_inst_base (mk_inst st.cs_next_id ALLOCA [Lit (n2w sz)] [p]) s0 = OK u` by
-   (PURE_ONCE_REWRITE_TAC[step_inst_base_def] >>
-    simp[mk_inst_def, eval_operand_def] >> simp[GSYM mk_inst_def]) >>
+   (simp[venomExecSemanticsTheory.step_inst_base_opcode_eqs, mk_inst_def,
+         instruction_accessors, eval_operand_def] >>
+    gvs[mk_inst_def]) >>
  drule_all annassign_emit_instruction_ptr >> strip_tac >>
  `lookup_block s0.vs_current_bb func.fn_blocks = SOME bb /\
   get_instruction bb s0.vs_inst_idx =
