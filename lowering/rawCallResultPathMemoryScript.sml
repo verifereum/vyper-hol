@@ -25,7 +25,7 @@ Theorem raw_call_nonrevert_positive_path_mem:
           emit_void MCOPY [dst;ov;Lit (n2w (32 + ((n + 31) DIV 32) * 32))];
           return buf.buf_operand od
      else return ok) sa = (result,sb) /\ 0 < n /\
-  stmt_state_rel H ctx func cenv cx es s /\ storage_well_formed_on cx es (FST H) /\
+  stmt_state_rel (H : (bool # 256 word # type_value) list # num list) ctx func cenv cx es s /\
   wb_frame cenv es0 es sf s0 s /\
   fn_has_code sa sb func /\ fn_inst_ids_distinct func /\
   MEM alloc (fn_insts func) /\ alloc.inst_opcode = ALLOCA /\
@@ -59,31 +59,40 @@ Theorem raw_call_nonrevert_positive_path_mem:
     gas_path_mem ctx func s 0 (OK (t with vs_inst_idx := LENGTH sb.cs_current_insts)) /\
     alloca_history func (t with vs_inst_idx := LENGTH sb.cs_current_insts) /\
     t.vs_current_bb = sb.cs_current_bb /\
-    vv_post H ctx func cenv cx e es0 sf sb s0 es
-      (Value (ArrayV (TupleV [BoolV success;BytesV (TAKE n s.vs_returndata)])))
-      (LocatedValue (expr_type e) (mk_ptr result LocMemory))
-      (t with vs_inst_idx := LENGTH sb.cs_current_insts) /\
-    vv_store_bound cx (expr_type e) (lowered_value_type cenv e) es
-      (Value (ArrayV (TupleV [BoolV success;BytesV (TAKE n s.vs_returndata)])))
-      (LocatedValue (expr_type e) (mk_ptr result LocMemory))
-      (t with vs_inst_idx := LENGTH sb.cs_current_insts)
+    (!(H2 : (bool # 256 word # type_value) list # num list).
+      stmt_state_rel H2 ctx func cenv cx es s /\ storage_well_formed_on cx es (FST H2) ==>
+      vv_post H2 ctx func cenv cx e es0 sf sb s0 es
+        (Value (ArrayV (TupleV [BoolV success;BytesV (TAKE n s.vs_returndata)])))
+        (LocatedValue (expr_type e) (mk_ptr result LocMemory))
+        (t with vs_inst_idx := LENGTH sb.cs_current_insts) /\
+      vv_store_bound cx (expr_type e) (lowered_value_type cenv e) es
+        (Value (ArrayV (TupleV [BoolV success;BytesV (TAKE n s.vs_returndata)])))
+        (LocatedValue (expr_type e) (mk_ptr result LocMemory))
+        (t with vs_inst_idx := LENGTH sb.cs_current_insts))
 Proof
   strip_tac >>
   drule_all raw_call_nonrevert_positive_run >> strip_tac >>
   drule_all raw_call_nonrevert_positive_mem_ok >> strip_tac >>
   `alloca_inv s` by fs[stmt_state_rel_def] >>
   drule_all raw_call_nonrevert_suffix_counted_mem >> strip_tac >>
-  `vv_post H ctx func cenv cx e es0 sf sb s0 es
-    (Value (ArrayV (TupleV [BoolV success;BytesV (TAKE n s.vs_returndata)])))
-    (LocatedValue (expr_type e) (mk_ptr result LocMemory)) t` by
-    (qpat_assum `lowered_value_type _ _ = _`
-       (assume_tac o MATCH_MP loweringPostsTheory.post_value_type_lowered) >>
-     irule raw_call_tuple_post >> simp[] >> qexists_tac `ti` >>
-     fs[arithmeticTheory.MULT_COMM] >> metis_tac[]) >>
-  `vv_store_bound cx (expr_type e) (lowered_value_type cenv e) es
-    (Value (ArrayV (TupleV [BoolV success;BytesV (TAKE n s.vs_returndata)])))
-    (LocatedValue (expr_type e) (mk_ptr result LocMemory)) t` by
-    (irule aggregate_allocated_result_store_bound_mem >>
+  `!(H2 : (bool # 256 word # type_value) list # num list).
+     stmt_state_rel H2 ctx func cenv cx es s /\ storage_well_formed_on cx es (FST H2) ==>
+     vv_post H2 ctx func cenv cx e es0 sf sb s0 es
+       (Value (ArrayV (TupleV [BoolV success;BytesV (TAKE n s.vs_returndata)])))
+       (LocatedValue (expr_type e) (mk_ptr result LocMemory)) t /\
+     vv_store_bound cx (expr_type e) (lowered_value_type cenv e) es
+       (Value (ArrayV (TupleV [BoolV success;BytesV (TAKE n s.vs_returndata)])))
+       (LocatedValue (expr_type e) (mk_ptr result LocMemory)) t` by
+    (qx_gen_tac `H2` >> strip_tac >>
+     `stmt_state_rel H2 ctx func cenv cx es t` by
+       (drule_all (Q.SPEC `H2` raw_call_nonrevert_positive_run) >>
+        strip_tac >> gvs[]) >>
+     conj_tac
+     >- (qpat_assum `lowered_value_type _ _ = _`
+           (assume_tac o MATCH_MP loweringPostsTheory.post_value_type_lowered) >>
+         irule raw_call_tuple_post >> simp[] >> qexists_tac `ti` >>
+         fs[arithmeticTheory.MULT_COMM] >> metis_tac[]) >>
+     irule aggregate_allocated_result_store_bound_mem >>
      conj_tac >- fs[stmt_state_rel_def] >>
      conj_tac
      >- (qexistsl_tac [`ti`,`w2n tw`,
