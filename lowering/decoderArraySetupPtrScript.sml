@@ -355,7 +355,7 @@ Proof
   fs[] >> drule run_inst_seq_append_ok >> strip_tac >>
   rename1 `run_inst_seq (emitted_insts st mid) s = OK m` >>
   drule_all emit_calldata_load_endpoint_ptr_core >>
-  disch_then (qspecl_then [`G`,`cx`,`ctx`,`PG`,`R`] strip_assume_tac) >>
+  disch_then (qspecl_then [`H`,`G`,`cx`,`ctx`,`PG`,`R`] strip_assume_tac) >>
   rename1 `op_taint u1 off = {}` >> rename1 `op_prov H1 off = NONE` >>
   `m.vs_current_bb = s.vs_current_bb` by
     (qpat_assum `emit_op CALLDATALOAD _ _ = _`

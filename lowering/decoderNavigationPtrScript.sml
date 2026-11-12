@@ -511,7 +511,7 @@ Theorem emit_calldata_load_endpoint_ptr:
         FLOOKUP HG q = FLOOKUP G q /\ op_taint u (Var q) = op_taint tn (Var q))
 Proof
   rpt strip_tac >> drule_all emit_calldata_load_endpoint_ptr_core >>
-  disch_then (qspecl_then [`G`,`cx`,`ctx`,`PG`,`R`] strip_assume_tac) >>
+  disch_then (qspecl_then [`H`,`G`,`cx`,`ctx`,`PG`,`R`] strip_assume_tac) >>
   qexistsl_tac [`HG`,`u`] >> simp[]
 QED
 
@@ -591,7 +591,7 @@ Resume calldata_ep_source_frag_ptr[dynamic]:
   strip_tac >> rename1 `run_inst_seq (emitted_insts c1 c2) _ = OK s2` >>
   qpat_x_assum `s2 = update_var _ _ _` kall_tac >>
   drule_all emit_calldata_load_endpoint_ptr >>
-  disch_then (qspecl_then [`H1`,`cx`,`ctx`,`PG`,`R`] mp_tac) >> strip_tac >>
+  disch_then (qspecl_then [`H`,`H1`,`cx`,`ctx`,`PG`,`R`] mp_tac) >> strip_tac >>
   rename1 `op_taint u2 off = {}` >> rename1 `op_prov H2 off = NONE` >>
   `sa.cs_next_var <= c1.cs_next_var /\ c1.cs_next_var <= c2.cs_next_var /\
    cs_extends sa c1 /\ cs_extends c1 c2 /\ cs_extends c2 cs'` by
@@ -614,7 +614,7 @@ Resume calldata_ep_source_frag_ptr[dynamic]:
   rename1 `run_inst_seq (emitted_insts c2 cs') _ = OK s3` >>
   qpat_assum `emit_op ADD [src;off] c2 = _`
     (mp_then Any mp_tac emit_scalar_add_endpoint_ptr) >>
-  disch_then (qspecl_then [`s2 with vs_inst_idx := SUC (SUC s.vs_inst_idx)`,
+  disch_then (qspecl_then [`H`, `s2 with vs_inst_idx := SUC (SUC s.vs_inst_idx)`,
     `s3`] mp_tac) >> simp[] >>
   disch_then (qspecl_then [`H2`,`u2`,`cx`,`ctx`,`PG`,`R`] mp_tac) >> simp[] >> strip_tac >>
   rename1 `op_taint u3 actual_ptr = {}` >> rename1 `op_prov H3 actual_ptr = NONE` >>
