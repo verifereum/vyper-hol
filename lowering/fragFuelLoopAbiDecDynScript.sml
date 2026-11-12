@@ -1114,6 +1114,92 @@ Resume abi_dyn_skeleton_closed[available]:
 QED
 Finalise abi_dyn_skeleton_closed
 
+val dyn_loop_header = ``\ip base src lop.
+  do i <- emit_op MLOAD [ip];
+     addr <- compile_abi_dec_addr base src;
+     cnt <- emit_op lop [addr];
+     cmp <- emit_op LT [i;cnt];
+     done_op <- emit_op ISZERO [cmp];
+     return done_op od``;
+val dyn_loop_body = ``\dst src lop base hi info asz msz ip.
+  do i <- emit_op MLOAD [ip];
+     data <- emit_op ADD [src; Lit 32w];
+     off <- emit_op MUL [i; Lit (n2w asz)];
+     elem_src <- emit_op ADD [data; off];
+     actual_src <- (if dec_info_needs_offset info then
+       compile_abi_decode_dyn_elem_ptr lop base elem_src data hi asz
+       else return elem_src);
+     dst_data <- emit_op ADD [dst; Lit 32w];
+     dst_off <- emit_op MUL [i; Lit (n2w msz)];
+     elem_dst <- emit_op ADD [dst_data; dst_off];
+     compile_abi_decode_to_buf elem_dst actual_src lop base hi info;
+     new_i <- emit_op ADD [i; Lit 1w];
+     emit_void MSTORE [ip; new_i] od``;
+
+Theorem abi_dyn_loop_skeleton[local]:
+  !dst src lop base hi info asz msz ip cnt.
+  compile_abi_decode_dyn_loop dst src lop base hi info asz msz ip cnt =
+  do lh <- fresh_label "dec_dyn_hdr";
+     lb <- fresh_label "dec_dyn_body";
+     le <- fresh_label "dec_dyn_exit";
+     (^dyn_skel) lh lb le (emit_inst JMP [Label lh] [])
+       (do done_op <- (^dyn_loop_header) ip base src lop;
+           emit_inst JNZ [done_op; Label le; Label lb] [] od)
+       (do (^dyn_loop_body) dst src lop base hi info asz msz ip;
+           emit_inst JMP [Label lh] [] od) od
+Proof
+  simp_tac std_ss [Once compile_abi_decode_to_buf_def, LET_THM,
+    comp_ignore_bind_def, compileEnvTheory.comp_bind_assoc,
+    comp_bind_return]
+QED
+
+Theorem abi_dyn_loop_closed[local]:
+  !dst src lop base hi info asz msz ip cnt.
+    lop <> JMP /\ lop <> JNZ /\
+    (!T d s. (^(inst [alpha |-> ``:unit``] dyn_closed)) T (compile_abi_decode_to_buf d s lop base hi info)) ==>
+    !T. (^(inst [alpha |-> ``:unit``] dyn_closed)) T
+      (compile_abi_decode_dyn_loop dst src lop base hi info asz msz ip cnt)
+Proof
+  rpt gen_tac >> strip_tac >> gen_tac >>
+  simp_tac std_ss [abi_dyn_loop_skeleton] >>
+  ho_match_mp_tac (BETA_RULE abi_dyn_closed_bind) >>
+  conj_tac >- (MATCH_ACCEPT_TAC (BETA_RULE abi_dyn_closed_label)) >> gen_tac >>
+  ho_match_mp_tac (BETA_RULE abi_dyn_closed_bind) >>
+  conj_tac >- (MATCH_ACCEPT_TAC (BETA_RULE abi_dyn_closed_label)) >> gen_tac >>
+  ho_match_mp_tac (BETA_RULE abi_dyn_closed_bind) >>
+  conj_tac >- (MATCH_ACCEPT_TAC (BETA_RULE abi_dyn_closed_label)) >> gen_tac >>
+  MATCH_MP_TAC (BETA_RULE abi_dyn_skeleton_closed) >>
+  rpt conj_tac
+  >- (MATCH_MP_TAC (BETA_RULE abi_dyn_closed_emit_inst) >> simp[mk_inst_def])
+  >- suspend "header"
+  >> suspend "body"
+QED
+
+Resume abi_dyn_loop_closed[header]:
+  simp_tac std_ss [compile_abi_dec_addr_def] >>
+  rpt (FIRST [CHANGED_TAC BETA_TAC,
+    MATCH_ACCEPT_TAC (BETA_RULE abi_dyn_closed_return),
+    (MATCH_MP_TAC (BETA_RULE abi_dyn_closed_emit_op) >> simp[]),
+    (MATCH_MP_TAC (BETA_RULE abi_dyn_closed_emit_inst) >> simp[mk_inst_def]),
+    MATCH_MP_TAC (BETA_RULE abi_dyn_closed_bind), conj_tac, gen_tac,
+    IF_CASES_TAC])
+QED
+Resume abi_dyn_loop_closed[body]:
+  simp_tac std_ss [compile_abi_decode_dyn_elem_ptr_def,
+    compile_getelemptr_abi_def, compile_abi_dec_addr_def,
+    compile_abi_decode_range_check_def] >>
+  rpt (FIRST [CHANGED_TAC BETA_TAC,
+    first_assum (MATCH_ACCEPT_TAC o BETA_RULE),
+    MATCH_ACCEPT_TAC (BETA_RULE abi_dyn_closed_return),
+    (MATCH_MP_TAC (BETA_RULE abi_dyn_closed_emit_op) >> simp[]),
+    (MATCH_MP_TAC (BETA_RULE abi_dyn_closed_emit_inst) >> simp[mk_inst_def]),
+    (MATCH_MP_TAC (BETA_RULE abi_dyn_closed_emit_void) >> simp[mk_inst_def]),
+    MATCH_MP_TAC (BETA_RULE abi_dyn_closed_bind),
+    MATCH_MP_TAC (BETA_RULE abi_dyn_closed_ignore_bind),
+    conj_tac, gen_tac, IF_CASES_TAC])
+QED
+Finalise abi_dyn_loop_closed
+
 (* Quantitative cutoff diagnostic interface (implementation belongs to the
    subsequent transfer component).
 
