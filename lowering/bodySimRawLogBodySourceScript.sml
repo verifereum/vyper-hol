@@ -6,7 +6,7 @@ Ancestors
   exprSimWordArgs exprLowering compileEnv emitHelper venomExecSemantics
   exprLoweringProps venomState venomMemDefs exprSimDefs exprSimStack loweringPosts exprSimHypsDefs exprSimSource vyperEvent fragExec venomInst
   exprSimHash exprSimBuffer exprSimPrecompiles emitHelperProps ASCIInumbers exprSimRawLog
-  bodySimRawLogSource
+  bodySimRawLogSource bodyRawLogArgPre
 Libs
   pairLib
 
@@ -51,23 +51,6 @@ Proof
        vyperValueTheory.compatible_bound_def,
        vyperContextTheory.builtin_args_length_ok_def] >>
   rpt strip_tac >> gvs[vyperValueTheory.compatible_bound_def]
-QED
-
-Theorem expr_body_pre_raw_log_arg:
-  !cenv cx env ann args dflt e es es'.
-    expr_body_pre cenv cx env (Call ann RawLog args dflt) es /\
-    MEM e args /\ expr_sim_inv cenv cx env es' ==>
-    expr_body_pre cenv cx env e es'
-Proof
-  rw[expr_body_pre_def, well_typed_expr_def,
-     vyperTypeCallGraphTheory.int_calls_expr_def,
-     byte_widths_expr_def, allocLimitsTheory.alloc_limits_expr_def,
-     supportedExprTraverseTheory.supported_expr_exists_def,
-     supportedExprTraverseTheory.supported_exprs_exists_every, EXISTS_MEM] >>
-  imp_res_tac int_calls_exprs_every_mem >>
-  gvs[supportedExprTraverseTheory.expr_has_evm_run_thm, EXISTS_MEM] >>
-  metis_tac[well_typed_exprs_member, byte_widths_exprs_mem,
-            alloc_limits_exprs_mem, call_evaluation_safe_exprs_mem]
 QED
 
 Theorem raw_log_body_topics_ready:
