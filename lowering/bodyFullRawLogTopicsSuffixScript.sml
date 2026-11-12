@@ -10,7 +10,7 @@ Ancestors
 Theorem raw_log_topics_suffix_full_under_compose:
   (!tops ctx func cenv cx env ann n pre e rest data dflt
    sa sm sb shadow_sa shadow_sm shadow_sb op ops
-   H DF lo d es s G0 tn0 xs mid v u G1 tn1 ys ee vs t G tn.
+   (H : (bool # 256 word # type_value) list # num list) DF lo d es s G0 tn0 xs mid v u G1 tn1 ys ee vs t G tn.
   body_inv tops ctx cenv cx /\
   expr_body_pre cenv cx env
     (Call ann RawLog
@@ -352,7 +352,7 @@ Resume raw_log_topics_suffix_full_under_compose[return_cons]:
     (fn th => pure_rewrite_tac[REWRITE_RULE [markerTheory.Abbrev_def] th]) >>
   BETA_TAC >> strip_tac >>
   qpat_x_assum `tailres = INL _` SUBST_ALL_TAC >>
-  disj1_tac >> qexists_tac `vs` >> simp[] >>
+  disj1_tac >> qexists_tac `vs` >> conj_tac >- REFL_TAC >>
   irule gas_outcome_full_pure >>
   qexistsl_tac [`G2`,`ee`,`INL (v::vs)`,`t`,`tn2`] >>
   conj_tac >- simp[return_def] >>
@@ -361,11 +361,74 @@ Resume raw_log_topics_suffix_full_under_compose[return_cons]:
   BETA_TAC >>
   `ee with gas_obs := [] = ee` by simp[evaluation_state_component_equality] >>
   pop_assum SUBST1_TAC >>
-  qpat_assum `LENGTH rest = LENGTH vs` (fn th => once_rewrite_tac[GSYM th]) >>
   qpat_assum `op::tailops = ops` (fn th => rewrite_tac[GSYM th]) >>
   simp_tac (srw_ss()) [] >>
-  last_x_assum (mp_tac o SIMP_RULE (srw_ss()) []) >>
-  FAIL_TAC "normalized contract"
+  last_x_assum (irule o CONV_RULE (RAND_CONV (SIMP_CONV (srw_ss()) [])) o SPEC_ALL) >>
+  `expr_type e = BaseT (BytesT (Fixed 32))` by
+    (qpat_assum `expr_body_pre _ _ _ (Builtin _ _ topics) es` mp_tac >>
+     rewrite_tac[exprSimHypsDefsTheory.expr_body_pre_def] >>
+     strip_tac >>
+     fs[vyperTypeSystemTheory.well_typed_expr_def,
+        vyperTypeSystemTheory.well_typed_builtin_app_def] >>
+     qpat_x_assum `topics = _` SUBST_ALL_TAC >>
+     gvs[EVERY_APPEND]) >>
+  `(!z. op = Var z ==> not_fresh_at sm z) /\ (!l. op <> Label l)` by
+    (`is_word_type (expr_type e)` by simp[is_word_type_def] >>
+     drule_all expr_body_pre_lower_value_word_shape >> simp[]) >>
+  simp[] >>
+  conj_tac
+  >- (qexistsl_tac [`shadow_sa`,`shadow_last`,`shadow_sm`] >>
+      qpat_assum `lower_value _ _ _ (gas_shadow_expr e) shadow_sa = _` mp_tac >>
+      qpat_assum `compile_multi_exprs _ _ _ shadow_sm = _` mp_tac >>
+      qpat_assum `op = sop` mp_tac >>
+      qpat_assum `tailops = stailops` mp_tac >>
+      qpat_assum `expr_type e = _` mp_tac >>
+      POP_ASSUM_LIST (K all_tac) >> metis_tac[]) >>
+  conj_tac >- (qexists_tac `tops` >> simp[]) >>
+  conj_tac
+  >- (qexistsl_tac [`ann`,`data`,`dflt`,`env`,`n`,`pre`] >>
+      qpat_assum `topics = _` (fn th => rewrite_tac[GSYM th]) >> simp[]) >>
+  `eval_exprs cx rest (mid with gas_obs := gas_explicit tailmarks u.vs_gas_readings) = (INL vs,ee)` by
+    (qpat_assum `!tail. eval_exprs cx rest _ = _` (qspec_then `[]` mp_tac) >>
+     qpat_assum `ee.gas_obs = []` mp_tac >>
+     POP_ASSUM_LIST (K all_tac) >>
+     simp[evaluation_state_component_equality]) >>
+  `valid_horizon cx st0 H mid.storage_trace` by
+    (qpat_assum `eval_exprs cx rest _ = (INL vs,ee)` mp_tac >>
+     qpat_assum `valid_horizon cx st0 H ee.storage_trace` mp_tac >>
+     POP_ASSUM_LIST (K all_tac) >> rpt strip_tac >>
+     drule_at (Pos (el 2)) vyperStorageFootprintTheory.valid_horizon_frame >>
+     simp[vyperStorageTraceTheory.evaluate_storage_trace_frame]) >>
+  `storage_trace_frame (bind (eval_expr cx e) (read_result cx))` by
+    (irule vyperStorageTraceTheory.storage_trace_frame_bind >>
+     simp[vyperStorageTraceTheory.evaluate_storage_trace_frame,
+          vyperStorageTraceTheory.storage_trace_frame_read_result]) >>
+  `valid_horizon cx st0 H es.storage_trace` by
+    (qpat_assum `bind _ _ _ = (INL v,mid)` mp_tac >>
+     qpat_assum `storage_trace_frame (bind _ _)` mp_tac >>
+     qpat_assum `valid_horizon cx st0 H mid.storage_trace` mp_tac >>
+     POP_ASSUM_LIST (K all_tac) >> rpt strip_tac >>
+     drule_all vyperStorageFootprintTheory.valid_horizon_frame >> simp[]) >>
+  qpat_assum `!H. valid_horizon _ _ H es.storage_trace ==> _` drule >> strip_tac >>
+  qpat_assum `!H. valid_horizon _ _ H mid.storage_trace ==> headQ _ _ _ _ _ _ /\ _` drule >>
+  qpat_assum `Abbrev (headQ = _)`
+    (fn th => pure_rewrite_tac[REWRITE_RULE [markerTheory.Abbrev_def] th]) >>
+  BETA_TAC >> strip_tac >>
+  qpat_assum `!H. valid_horizon _ _ H ee.storage_trace ==> _` drule >>
+  qpat_assum `Abbrev (tailQ = _)`
+    (fn th => pure_rewrite_tac[REWRITE_RULE [markerTheory.Abbrev_def] th]) >>
+  BETA_TAC >> strip_tac >>
+  conj_tac >- first_assum ACCEPT_TAC >>
+  qexistsl_tac [`G1`,`mid`,`tn1`,`u`,
+    `gas_explicit marks s.vs_gas_readings`,
+    `gas_explicit tailmarks u.vs_gas_readings`] >>
+  fs[ci_mono_def] >>
+  qpat_x_assum `op = sop` (fn th =>
+    RULE_ASSUM_TAC (REWRITE_RULE [GSYM th]) >> rewrite_tac[GSYM th]) >>
+  qpat_x_assum `tailops = stailops` (fn th => rewrite_tac[GSYM th]) >>
+  qpat_x_assum `last = sb` (fn th => RULE_ASSUM_TAC (REWRITE_RULE [th])) >>
+  qpat_assum `expr_type e = _` (fn th => RULE_ASSUM_TAC (REWRITE_RULE [th])) >>
+  simp[]
 QED
 
 Finalise raw_log_topics_suffix_full_under_compose
