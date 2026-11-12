@@ -6,7 +6,7 @@ Ancestors
   vyperAST vyperTypeSystem vyperInterpreter vyperContext vyperValue vyperState
   vyperEvent venomExecSemantics venomInst venomState venomMemDefs exprLowering exprLoweringProps
   exprSimHash builtinSystem emitHelper fragExec emitHelperProps venomExecProofs
-  vyperStorageFootprint
+  vyperStorageFootprint vyperStorageTrace
 Libs
   pairLib
 
@@ -269,6 +269,41 @@ Proof
   Cases_on `read_result cx tv ds` >> rename1 `read_result cx tv ds = (vr, ds')` >>
   Cases_on `vr` >>
   simp[dest_ArrayV_def, lift_option_type_def, return_def, bind_def]
+QED
+
+(* The data read and the log push after the topics add only storage
+   observations, so a horizon valid at their end is valid at their start. *)
+Theorem raw_log_tail_trace_frame:
+  (!cx data vs.
+     storage_trace_frame
+       (do dv <- bind (eval_expr cx data) (read_result cx);
+           bs <- lift_option_type (dest_BytesV dv) "raw_log data";
+           type_check (LENGTH vs <= 4) "raw_log too many topics";
+           push_log (encode_raw_event_values cx.txn.target vs bs);
+           return NoneV
+        od)) /\
+  (!cx dv vs.
+     storage_trace_frame
+       (do bs <- lift_option_type (dest_BytesV dv) "raw_log data";
+           type_check (LENGTH vs <= 4) "raw_log too many topics";
+           push_log (encode_raw_event_values cx.txn.target vs bs);
+           return NoneV
+        od))
+Proof
+  conj_tac
+  >- (rpt gen_tac >> irule storage_trace_frame_bind_all >> conj_tac
+      >- (irule storage_trace_frame_bind_all >>
+          simp[evaluate_storage_trace_frame, storage_trace_frame_read_result]) >>
+      gen_tac >> irule storage_trace_frame_bind_all >>
+      simp[storage_trace_frame_lifts] >> gen_tac >>
+      irule storage_trace_frame_ignore_bind >> simp[storage_trace_frame_checks] >>
+      irule storage_trace_frame_ignore_bind >>
+      simp[storage_trace_frame_state_updates, storage_trace_frame_return]) >>
+  rpt gen_tac >> irule storage_trace_frame_bind_all >>
+  simp[storage_trace_frame_lifts] >> gen_tac >>
+  irule storage_trace_frame_ignore_bind >> simp[storage_trace_frame_checks] >>
+  irule storage_trace_frame_ignore_bind >>
+  simp[storage_trace_frame_state_updates, storage_trace_frame_return]
 QED
 
 Theorem raw_log_dynamic_data_view:
