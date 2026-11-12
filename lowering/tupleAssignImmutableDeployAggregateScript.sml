@@ -55,7 +55,8 @@ Theorem tuple_immutable_aggregate_store:
   FLOOKUP cenv.ce_module_vars (cenv.ce_module,id) = SOME (ImmutableLoc off) /\
   cenv.ce_module_var_type (cenv.ce_module,id) = SOME dty /\
   L = type_memory_size dtv /\ L = 32*n /\ 0 < L /\ off+L < dimword (:256) ==>
-  ?r q. stmt_state_rel ctx func cenv cx es r /\
+  ?r q. (dty = sty ==> r = s) /\
+    stmt_state_rel ctx func cenv cx es r /\
     alloca_frame cenv es sa s cenv es r /\
     gas_marked_path F ctx func s 0 (OK q) /\
     val_in_memory dtv v off q.vs_memory /\
