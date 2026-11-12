@@ -124,7 +124,7 @@ Proof
   drule_all annassign_word_store_path >>
   disch_then (qspec_then `a` mp_tac) >>
   disch_then (qx_choose_then `u` strip_assume_tac) >>
-  qexists `u` >> simp[] >> metis_tac[]
+  gvs[] >> metis_tac[]
 QED
 
 val raw_cont_frame_tac =
@@ -286,13 +286,19 @@ Proof
      drule vyperEvalExprPreservesScopesDomTheory.eval_expr_preserves_scopes_dom >>
      simp[]) >>
   `alloca_frame c es sa salloc c (ee with gas_obs := []) s` by
-    (irule vv_post_alloca_frame >> metis_tac[]) >>
+    (drule_all vv_post_alloca_frame >> disch_then ACCEPT_TAC) >>
   `allocas_non_overlapping s /\ lookup_var p s = SOME w /\
    FLOOKUP s.vs_allocas inst.inst_id = SOME (w2n w, sz) /\
    (!aid b. FLOOKUP salloc.vs_allocas aid = SOME b ==>
             FLOOKUP s.vs_allocas aid = SOME b)` by
-    (qpat_x_assum `vv_post _ _ _ _ _ _ _ _ _ _ _ _ _ _` mp_tac >>
-     simp[vv_post_def, stmt_state_rel_def, venomMemDefsTheory.alloca_inv_def] >> metis_tac[]) >>
+    (qpat_x_assum `vv_post _ _ _ _ _ _ _ _ _ _ _ _ _ _`
+       (strip_assume_tac o SIMP_RULE pure_ss [vv_post_def]) >>
+     rpt conj_tac
+     >- (qpat_x_assum `stmt_state_rel _ _ _ _ _ _ s` mp_tac >>
+         simp[stmt_state_rel_def, venomMemDefsTheory.alloca_inv_def])
+     >- (qpat_x_assum `!x w. _ ==> lookup_var _ s = _` irule >> simp[])
+     >- (qpat_x_assum `!aid b. _ ==> FLOOKUP s.vs_allocas _ = _` irule >> simp[]) >>
+     qpat_x_assum `!aid b. _ ==> FLOOKUP s.vs_allocas _ = _` ACCEPT_TAC) >>
   drule_all declare_local_ptr >> strip_tac >>
   `32 <= sz` by
     (qspecl_then [`get_tenv cx`, `typ`, `tyv`, `0`, `(mstore 0 0w s).vs_memory`]
@@ -335,7 +341,7 @@ Proof
   `storage_well_formed_on cx ((ee with gas_obs := []) with scopes :=
      (sc |+ (id, <|assignable := T; type := tyv; value := v; popped := []|>)) :: rest)
      (FST HH)` by
-    (qpat_x_assum `vv_post HH _ _ _ _ _ _ _ _ _ _ _ _` mp_tac >>
+    (qpat_x_assum `vv_post HH _ _ _ _ _ _ _ _ _ _ _ _ _` mp_tac >>
      rewrite_tac[vv_post_def, vyperStorageFootprintTheory.storage_well_formed_on_def,
                  vyperStorageBackendTheory.get_storage_scopes] >>
      strip_tac >> first_assum ACCEPT_TAC) >>
@@ -500,7 +506,13 @@ Proof
     (rpt strip_tac >> res_tac >> gvs[]) >>
   `t.vs_current_bb = sB.cs_current_bb /\
    t.vs_inst_idx = LENGTH sB.cs_current_insts` by metis_tac[] >>
+  `!H. valid_horizon cx st0 H ee.storage_trace ==>
+     vv_post H ctx func c cx e es sA sB salloc (ee with gas_obs := []) (Value v) vv t` by
+    (rpt strip_tac >>
+     qpat_x_assum `!H. _ ==> vv_post _ _ _ _ _ _ _ _ _ _ _ _ _ _ /\ _`
+       (drule_then strip_assume_tac) >>
+     first_assum ACCEPT_TAC) >>
   `type_memory_size tyv <= type_memory_bytes cenv vtyp` by simp[] >>
-  drule_all annassign_empty_normal_continuation >> strip_tac >>
+  drule_all (SRULE [PULL_EXISTS] annassign_empty_normal_continuation) >> strip_tac >>
   qexistsl_tac [`ff`, `u`] >> simp[stmt_post_end_gas_obs]
 QED
