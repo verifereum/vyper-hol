@@ -235,7 +235,9 @@ QED
 Theorem o1_pipeline_label_flow_ok:
   !rpolicy unit out.
   o1PipelineCorrect$o1_pipeline rpolicy unit = SOME out /\
-  o1_source_unit_ok unit /\ label_flow_ok unit.cu_context /\
+  o1_source_unit_ok unit /\ unit_entry_no_params unit /\
+  unit_defs_reach_uses unit /\ unit_fmp_unsealed unit /\
+  label_flow_ok unit.cu_context /\
   (!fn inst. MEM fn unit.cu_context.ctx_functions /\ MEM inst (fn_insts fn) ==>
              ~MEM (Label "code_end") inst.inst_operands) ==>
   label_flow_ok out.po_unit.cu_context
@@ -247,6 +249,8 @@ QED
 Theorem o1_pipeline_sym_unit_static_ok:
   !rpolicy unit out.
   o1PipelineCorrect$o1_pipeline rpolicy unit = SOME out /\
+  o1_source_unit_ok unit /\ unit_entry_no_params unit /\
+  unit_defs_reach_uses unit /\ unit_fmp_unsealed unit /\
   EVERY (\ds. EVERY (\di. case di of DataBytes _ => T | DataLabel _ => F)
                     ds.ds_items) unit.cu_data_segment /\
   ((?fn inst. MEM fn unit.cu_context.ctx_functions /\
@@ -269,6 +273,8 @@ Theorem o1_pipeline_code_end_offset_ok:
     reserved_intervals_wf unit.cu_context.ctx_global_reserved /\
     EVERY (\fn. fn.fn_eom = NONE) unit.cu_context.ctx_functions /\
     fixed_region_reserved lo unit.cu_context /\ dead_wf D /\
+    (!fn inst. MEM fn unit.cu_context.ctx_functions /\ MEM inst (fn_insts fn) ==>
+               ~MEM (Label "code_end") inst.inst_operands) /\
     LENGTH vs_out.vs_data_section < dimword (:256) DIV 2
     ==>
     ?vs_in. gas_variant vs_in vs_out /\

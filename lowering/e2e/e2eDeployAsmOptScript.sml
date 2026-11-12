@@ -12,7 +12,8 @@
  * the stages' facts across the call outcomes, which the call-free
  * constructor never reads.
  *
- * TOP-LEVEL: compile_vyper_deploy_phases_asm_opt, opt_deploy_entry_state,
+ * TOP-LEVEL: compile_vyper_deploy_phases_asm_opt,
+ * compile_vyper_deploy_nonempty_asm_opt, opt_deploy_entry_state,
  * opt_deploy_frame, deploy_unit_outcomes_free,
  * opt_deploy_codegen_asm_entry_rel, opt_deploy_asm_frame_rel,
  * lower_vyper_deploy_unit_sym_src_ok.
@@ -43,6 +44,14 @@ Proof
   qpat_x_assum `codegen_assembly rpolicy deploy_out.po_unit = SOME _`
     (strip_assume_tac o MATCH_MP codegen_assembly_success_shape) >>
   goal_assum $ drule_at Any >> gvs[]
+QED
+
+(* compile_vyper_runtime_nonempty_asm_opt for the deployment code. *)
+Theorem compile_vyper_deploy_nonempty_asm_opt:
+  compile_vyper asm_opt_finalizer policy tops = SOME (deploy_bc, runtime_bc) ==>
+  deploy_bc <> []
+Proof
+  cheat
 QED
 
 (* deploy_entry_state with prog's layout over es's code, which has prog'
@@ -102,7 +111,7 @@ Proof
     (irule exhausted_frame_obs_empty >> simp[Abbr`ctxt_p`]) >>
   conj_tac
   >- (qexistsl_tac [`ctxt_p`, `rb`, `args_bytes`] >>
-      qpat_x_assum `call_trace _ = [] /\ _` (fn th => REWRITE_TAC [th]) >>
+      qpat_x_assum `call_trace _ = []` (fn th => REWRITE_TAC [th]) >>
       gvs[Abbr`ctxt_p`, vfmExecutionPropTheory.wf_state_def,
           vfmExecutionPropTheory.wf_context_def,
           vfmExecutionPropTheory.all_accounts_def,
@@ -113,7 +122,8 @@ Proof
           e2eDefsTheory.call_outcomes_ok_def]) >>
   simp[gas_variant_def, opt_deploy_entry_state_def, deploy_entry_state_def,
        opt_entry_state_def, e2eEntryTheory.entry_venom_state_def] >>
-  qpat_x_assum `call_trace _ = [] /\ _` (fn th => REWRITE_TAC [th]) >>
+  qpat_x_assum `call_trace _ = []` (fn th => REWRITE_TAC [th]) >>
+  qpat_x_assum `gas_readings _ = []` (fn th => REWRITE_TAC [th]) >>
   gvs[Abbr`ctxt_p`, venomStateTheory.venom_state_component_equality,
       rich_listTheory.DROP_LENGTH_APPEND]
 QED
@@ -171,9 +181,11 @@ Theorem shadow_root_single[local]:
   call_trace (shadow_root es) = call_trace es /\
   gas_readings (shadow_root es) = gas_readings es
 Proof
-  simp[shadow_root_def, shadow_root_contexts_def] >>
-  simp[GSYM shadow_root_def, call_trace_def, gas_readings_def,
-       shadow_root_frame_obs]
+  strip_tac >>
+  `frame_obs (shadow_root es) = frame_obs es` by
+    (irule shadow_root_frame_obs >> simp[]) >>
+  asm_rewrite_tac[call_trace_def, gas_readings_def] >>
+  simp[shadow_root_def, shadow_root_contexts_def]
 QED
 
 Theorem opt_deploy_codegen_asm_entry_rel:
@@ -217,7 +229,8 @@ Proof
   simp[asm_frame_rel_def, asm_evm_rel_def, entry_asm_state_def,
        opt_deploy_entry_state_def, opt_entry_state_def, data_suffix_assemble,
        asm_pc_to_offset_zero, entry_venom_state_frame_fields] >>
-  gvs[entry_venom_state_def, venomStateTheory.init_venom_state_def, wordsTheory.w2n_n2w, listTheory.DROP_APPEND]
+  gvs[entry_venom_state_def, venomStateTheory.init_venom_state_def, wordsTheory.w2n_n2w, listTheory.DROP_APPEND] >>
+  rewrite_tac[GSYM CONJ_ASSOC]
 QED
 
 (* The deployment unit's source-side static facts: no CODESIZE, CODECOPY

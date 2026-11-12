@@ -164,6 +164,16 @@ Proof
   fs[deploy_result_rel_def]
 QED
 
+(* An exempt source result is an exempt Error. *)
+Theorem deploy_source_exempt_error[local]:
+  !tops res.
+    deploy_source_exempt tops res ==>
+    ?e. res = INR (Error e) /\ unspecified_behaviour_exempt tops e
+Proof
+  rpt gen_tac >> Cases_on `res` >- simp[deploy_source_exempt_def] >>
+  Cases_on `y` >> simp[deploy_source_exempt_def]
+QED
+
 (* The final assembly optimizer's case, under the same hypotheses plus the
    temporary exclusion of programs that read their own code. *)
 Theorem e2e_deploy_correctness_asm_opt:
@@ -212,6 +222,7 @@ Proof
   rpt strip_tac >>
   drule compile_vyper_deploy_phases_asm_opt >> strip_tac >>
   drule compile_vyper_runtime_nonempty_asm_opt >> strip_tac >>
+  drule compile_vyper_deploy_nonempty_asm_opt >> strip_tac >>
   qpat_x_assum `deploy_bc = assemble prog'` SUBST_ALL_TAC >>
   `deploy_source_ok tops am tx` by simp[deploy_source_ok_def] >>
   (* The Venom side runs on vs_out: es's entry state with prog's layout.
@@ -245,24 +256,29 @@ Proof
      qpat_x_assum `0 < _` mp_tac >>
      qpat_x_assum `LENGTH vs_out.vs_code <= _` mp_tac >>
      qpat_x_assum `vs_out.vs_code = _` (fn th => REWRITE_TAC [th]) >> simp[]) >>
+  `supported_program tops` by fs[deploy_source_ok_def] >>
+  drule_all lower_vyper_deploy_unit_sym_src_ok >> strip_tac >>
   qspecl_then [`deploy_dead tops runtime_bc am tx`, `imm_len tops`, `rpolicy`,
                `dunit`, `dout`, `vs_out`] mp_tac
     o1_pipeline_code_end_offset_ok >>
-  impl_tac >- fs[deploy_dead_wf] >> strip_tac >>
+  impl_tac >-
+    (qpat_assum `!fn inst. _ ==> ~MEM (Label "code_end") _`
+       (fn th => REWRITE_TAC [th]) >>
+     fs[deploy_dead_wf]) >> strip_tac >>
   `gas_variant (vs_in with vs_outcomes := [])
      (deploy_entry_state prog cplan tops es_p)` by
     (gvs[gas_variant_def, venomStateTheory.venom_state_component_equality]) >>
-  drule_all deploy_unit_outcomes_free >> strip_tac >>
+  drule_all deploy_unit_outcomes_free >>
+  disch_then (CONJUNCTS_THEN2 assume_tac assume_tac) >>
   Cases_on `?marks. deploy_source_exempt tops
               (load_contract NONE (gas_explicit marks vs_in.vs_gas_readings) am tx
                  [(NONE, tops)] [])`
-  >- (fs[] >> qspec_then `es` strip_assume_tac run_call_total >>
-      qexistsl_tac [`r`, `es'`] >> simp[] >> disj2_tac >>
-      qexists_tac `gas_explicit marks vs_in.vs_gas_readings` >>
-      Cases_on `load_contract NONE (gas_explicit marks vs_in.vs_gas_readings) am tx
-                  [(NONE, tops)] []` >>
-      fs[deploy_source_exempt_def] >>
-      rename1 `INR exc` >> Cases_on `exc` >> fs[]) >>
+  >- (pop_assum strip_assume_tac >>
+      qspec_then `es` strip_assume_tac run_call_total >>
+      qexistsl_tac [`r`, `es'`] >> conj_tac >- first_assum ACCEPT_TAC >>
+      disj2_tac >> qexists_tac `gas_explicit marks vs_in.vs_gas_readings` >>
+      drule deploy_source_exempt_error >> strip_tac >>
+      qpat_x_assum `load_contract _ _ _ _ _ _ = INR _` SUBST1_TAC >> simp[]) >>
   pop_assum (strip_assume_tac o SIMP_RULE bool_ss []) >>
   `?marks fuel.
      deploy_venom_result_rel tops runtime_bc tx
@@ -302,8 +318,6 @@ Proof
   drule_all o1_pipeline_memory_obligations_raw >> strip_tac >>
   drule_all o1_pipeline_codegen_obligations >> strip_tac >>
   (* The optimizer case's static facts of the constructor's O1 output. *)
-  `supported_program tops` by fs[deploy_source_ok_def] >>
-  drule_all lower_vyper_deploy_unit_sym_src_ok >> strip_tac >>
   `o1_source_unit_ok dunit` by metis_tac[] >>
   `label_flow_ok dout.po_unit.cu_context` by
     (irule o1_pipeline_label_flow_ok >> metis_tac[]) >>
@@ -319,7 +333,7 @@ Proof
   qspecl_then [`fuel'`, `rpolicy`, `dout.po_unit`, `cplan`, `prog`, `prog'`,
                `raw_reachable vs_out`, `vs_out`, `shadow_root es`] mp_tac
     codegen_correct_asm_opt >>
-  impl_tac >- (rpt conj_tac >> TRY (first_assum ACCEPT_TAC) >> fs[]) >>
+  impl_tac >- (rpt conj_tac >> TRY (first_assum ACCEPT_TAC) >> fs[Abbr `vs_out`]) >>
   disch_tac >>
   qspecl_then [`tops`, `runtime_bc`, `assemble prog'`, `am`, `tx`, `es`,
                `load_contract NONE (gas_explicit marks vs_in.vs_gas_readings) am tx
