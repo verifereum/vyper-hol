@@ -1682,7 +1682,7 @@ QED
 
 Finalise compile_imm_store_loop_path
 
-Theorem immutable_transfers_normalize[local]:
+Theorem immutable_transfers_normalize:
   !n off t.
   store_copy_normalize s (immutable_transfers T T a b n off t) =
     immutable_transfers T T a b n off (store_copy_normalize s t)
