@@ -40,6 +40,36 @@ Definition frame_gas_left_def:
     | [] => 0
 End
 
+Theorem step_stack_gas_budget:
+  es.contexts = (c,rb)::rest /\ c.gasUsed <= c.msgParams.gasLimit /\
+  (!args. cost args <= B) /\ B <= c.msgParams.gasLimit - c.gasUsed /\
+  (do args <- pop_stack n; consume_gas (cost args); push_stack (f args) od) es = (r,s') ==>
+  r <> INR (SOME OutOfGas) /\
+  frame_gas_left es <= frame_gas_left s' + B
+Proof
+  strip_tac >>
+  gvs[pop_stack_def, bind_def, ignore_bind_def,
+      get_current_context_def, return_def, assert_def,
+      set_current_context_def, consume_gas_def, push_stack_def,
+      LET_THM, AllCaseEqs()] >>
+  gvs[frame_gas_left_def] >>
+  first_x_assum (qspec_then `TAKE n c.stack` mp_tac) >> decide_tac
+QED
+
+Theorem step_stack_fixed_gas_budget:
+  (do args <- pop_stack n; consume_gas k; push_stack (f args) od) es = (r,s') ==>
+  !c rb rest B.
+  es.contexts = (c,rb)::rest /\ c.gasUsed <= c.msgParams.gasLimit /\
+  k <= B /\ B <= c.msgParams.gasLimit - c.gasUsed ==>
+  r <> INR (SOME OutOfGas) /\
+  frame_gas_left es <= frame_gas_left s' + B
+Proof
+  disch_tac >> rpt gen_tac >> strip_tac >>
+  irule step_stack_gas_budget >>
+  conj_tac >- (qexistsl_tac [`c`, `rb`, `rest`] >> simp[]) >>
+  qexistsl_tac [`K k`, `f`, `n`] >> simp[]
+QED
+
 (* PC handling never charges gas, including an invalid jump. *)
 Theorem frame_gas_left_inc_pc_or_jump:
   s.contexts <> [] /\ inc_pc_or_jump op s = (r,t) ==>
