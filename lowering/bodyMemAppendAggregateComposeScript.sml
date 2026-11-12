@@ -38,7 +38,6 @@ Theorem compile_append_storage_aggregate_stmt_frag_mem:
   type_memory_bytes cenv elem = 32*type_slot_size tv /\
   type_memory_bytes cenv elem < 2**64 /\
   0 < type_slot_size tv /\ well_formed_type_value tv /\ cap < dimword (:256) /\
-  well_formed_type_value (ArrayTV tv (Dynamic cap)) /\
   (!gs v es1. (do result <- eval_expr cx e; read_result cx result od)
       (es with <|gas_obs := gs; storage_trace := es.storage_trace ++
          [StorageRoot tr offset (ArrayTV tv (Dynamic cap))]|>) = (INL v,es1) ==>
@@ -50,7 +49,10 @@ Theorem compile_append_storage_aggregate_stmt_frag_mem:
     (stmt_env cenv lctx ty (Append (TopLevelNameTarget nid) e))
     (eval_stmt cx (Append (TopLevelNameTarget nid) e)) es
 Proof
-  strip_tac >> simp[stmt_frag_mem_def] >> rpt gen_tac >> strip_tac >>
+  strip_tac >>
+  `well_formed_type_value (ArrayTV tv (Dynamic cap))` by
+    simp[vyperTypingTheory.well_formed_type_value_def] >>
+  simp[stmt_frag_mem_def] >> rpt gen_tac >> strip_tac >>
   drule_all append_storage_copy_code_parts >> strip_tac >> gvs[] >>
   rename1 `lower_value _ _ _ _ sa = (op,sB)` >>
   rename1 `compile_alloc_buffer _ sB = (buf,sc)` >>
