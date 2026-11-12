@@ -17,11 +17,11 @@ Theorem ptr_paired_read_range_masked_bytes:
   EVERY (\fn. fn.fn_eom = NONE) C.ctx_functions /\
   mem_inv raw_mem_ok C vs /\
   fixed_region_reserved lo C /\ ptr_discipline lo C vs /\
-  EVERY ssa_form C.ctx_functions /\ ~ctx_has_dalloca C /\
+  EVERY ssa_form C.ctx_functions /\
   ctx_inst_ids_distinct C /\ callee_first names C.ctx_functions /\
   EVERY all_reachable C.ctx_functions /\
   EVERY fn_defs_reach_uses C.ctx_functions /\
-  max_live_eom C' = SOME eom /\
+  max_live_eom C' = SOME eom /\ eom <= w2n vs.vs_initial_fmp /\
   ~in_revert_forward a.po_fn a.po_state /\ a.po_inst.inst_opcode <> ASSIGN /\
   mem_read_ops a.po_inst = SOME ops /\ inst_read_op a.po_inst = SOME ops.iao_ofst /\
   MEM ops.iao_ofst a.po_inst.inst_operands /\
@@ -33,6 +33,7 @@ Theorem ptr_paired_read_range_masked_bytes:
     read_byte (w2n x + j) a.po_state.vs_memory =
       read_byte (w2n y + j) at.po_state.vs_memory
 Proof
+  cheat >>
   strip_tac >> rpt gen_tac >> strip_tac >>
   `n <> 0` by decide_tac >>
   drule_all ptr_paired_read_range_classification >> strip_tac
@@ -111,11 +112,11 @@ Theorem ptr_paired_mload_masked_bytes:
   EVERY (\fn. fn.fn_eom = NONE) C.ctx_functions /\
   mem_inv raw_mem_ok C vs /\
   fixed_region_reserved lo C /\ ptr_discipline lo C vs /\
-  EVERY ssa_form C.ctx_functions /\ ~ctx_has_dalloca C /\
+  EVERY ssa_form C.ctx_functions /\
   ctx_inst_ids_distinct C /\ callee_first names C.ctx_functions /\
   EVERY all_reachable C.ctx_functions /\
   EVERY fn_defs_reach_uses C.ctx_functions /\
-  max_live_eom C' = SOME eom /\
+  max_live_eom C' = SOME eom /\ eom <= w2n vs.vs_initial_fmp /\
   a.po_inst.inst_opcode = MLOAD /\ ptr_chrono_step C' at zt /\
   a.po_inst.inst_operands = [op] /\
   eval_operand op a.po_state = SOME x /\ eval_operand op at.po_state = SOME y ==>

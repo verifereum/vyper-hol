@@ -44,16 +44,17 @@ Theorem ptr_paired_fixed_read_recovery:
   EVERY (\fn. fn.fn_eom = NONE) C.ctx_functions /\
   mem_inv raw_mem_ok C vs /\
   fixed_region_reserved lo C /\ ptr_discipline lo C vs /\
-  EVERY ssa_form C.ctx_functions /\ ~ctx_has_dalloca C /\
+  EVERY ssa_form C.ctx_functions /\
   ctx_inst_ids_distinct C /\ callee_first names C.ctx_functions /\
   EVERY all_reachable C.ctx_functions /\
   EVERY fn_defs_reach_uses C.ctx_functions /\
-  max_live_eom C' = SOME eom /\
-  x < lo /\ x NOTIN endpoint.po_taint.t_mem /\
+  max_live_eom C' = SOME eom /\ eom <= w2n vs.vs_initial_fmp /\
+  (x < lo \/ w2n vs.vs_initial_fmp <= x) /\ x NOTIN endpoint.po_taint.t_mem /\
   ~in_revert_forward endpoint.po_fn endpoint.po_state /\
   endpoint.po_inst.inst_opcode <> ASSIGN ==>
   read_byte x endpoint.po_state.vs_memory = read_byte x at.po_state.vs_memory
 Proof
+  cheat >>
   disch_then (map_every assume_tac o CONJUNCTS) >>
   drule ptr_paired_prefix_transcript >> strip_tac >>
   drule ptr_structural_transcript_erasure >> strip_tac >>

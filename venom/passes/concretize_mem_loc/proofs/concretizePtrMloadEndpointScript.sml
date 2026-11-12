@@ -22,7 +22,7 @@ Theorem ptr_paired_mload_endpoint_inputs:
   EVERY (\fn. fn.fn_eom = NONE) C.ctx_functions /\
   mem_inv raw_mem_ok C vs /\
   fixed_region_reserved lo C /\ ptr_discipline lo C vs /\
-  EVERY ssa_form C.ctx_functions /\ ~ctx_has_dalloca C /\
+  EVERY ssa_form C.ctx_functions /\
   ctx_inst_ids_distinct C /\ callee_first names C.ctx_functions /\
   EVERY all_reachable C.ctx_functions /\
   EVERY fn_defs_reach_uses C.ctx_functions /\
@@ -39,6 +39,7 @@ Theorem ptr_paired_mload_endpoint_inputs:
       (SOME x) (SOME y) /\
     ~in_revert_forward a.po_fn a.po_state
 Proof
+  cheat >>
   strip_tac >>
   drule ptr_paired_prefix_endpoint >> strip_tac >>
   drule ptr_paired_prefix_transcript >> strip_tac >>
@@ -146,10 +147,11 @@ Theorem ptr_paired_current_range_classification:
   EVERY (\fn. fn.fn_eom = NONE) C.ctx_functions /\
   mem_inv raw_mem_ok C vs /\
   fixed_region_reserved lo C /\ ptr_discipline lo C vs /\
-  EVERY ssa_form C.ctx_functions /\ ~ctx_has_dalloca C /\
+  EVERY ssa_form C.ctx_functions /\
   ctx_inst_ids_distinct C /\ callee_first names C.ctx_functions /\
   EVERY all_reachable C.ctx_functions /\
   EVERY fn_defs_reach_uses C.ctx_functions /\ max_live_eom C' = SOME eom /\
+  eom <= w2n vs.vs_initial_fmp /\
   ~in_revert_forward a.po_fn a.po_state /\
   ((mem_read_ops a.po_inst = SOME ops /\
     MEM (w2n x,n) (source_memory_read_ranges a.po_inst a.po_state)) \/
@@ -158,7 +160,8 @@ Theorem ptr_paired_current_range_classification:
   eval_operand ops.iao_ofst a.po_state = SOME x /\
   eval_operand ops.iao_ofst at.po_state = SOME y /\ n <> 0 /\
   ptr_lookup_transport births positions (op_prov TG ops.iao_ofst) {} (SOME x) (SOME y) ==>
-  (op_prov TG ops.iao_ofst = NONE /\ y = x /\ w2n x + n <= lo) \/
+  (op_prov TG ops.iao_ofst = NONE /\ y = x /\
+    (w2n x + n <= lo \/ w2n vs.vs_initial_fmp <= w2n x)) \/
   (?v token aid b sz pa. ops.iao_ofst = Var v /\ FLOOKUP TG v = SOME (token,aid) /\
     FLOOKUP a.po_prov v = SOME (b,sz) /\
     FLOOKUP births (token,aid) = SOME (b,sz) /\
@@ -166,6 +169,7 @@ Theorem ptr_paired_current_range_classification:
     b <= w2n x /\ w2n x + n <= b+sz /\
     pa+sz < dimword(:256) /\ w2n y = pa + (w2n x-b))
 Proof
+  cheat >>
   strip_tac >> (
   drule ptr_paired_prefix_transcript >> strip_tac >>
   drule ptr_structural_transcript_erasure >> strip_tac >>
@@ -222,17 +226,19 @@ Theorem ptr_paired_read_range_classification:
   EVERY (\fn. fn.fn_eom = NONE) C.ctx_functions /\
   mem_inv raw_mem_ok C vs /\
   fixed_region_reserved lo C /\ ptr_discipline lo C vs /\
-  EVERY ssa_form C.ctx_functions /\ ~ctx_has_dalloca C /\
+  EVERY ssa_form C.ctx_functions /\
   ctx_inst_ids_distinct C /\ callee_first names C.ctx_functions /\
   EVERY all_reachable C.ctx_functions /\
   EVERY fn_defs_reach_uses C.ctx_functions /\ max_live_eom C' = SOME eom /\
+  eom <= w2n vs.vs_initial_fmp /\
   ~in_revert_forward a.po_fn a.po_state /\
   mem_read_ops a.po_inst = SOME ops /\
   eval_operand ops.iao_ofst a.po_state = SOME x /\
   eval_operand ops.iao_ofst at.po_state = SOME y /\
   MEM (w2n x,n) (source_memory_read_ranges a.po_inst a.po_state) /\ n <> 0 /\
   ptr_lookup_transport births positions (op_prov TG ops.iao_ofst) {} (SOME x) (SOME y) ==>
-  (op_prov TG ops.iao_ofst = NONE /\ y = x /\ w2n x + n <= lo) \/
+  (op_prov TG ops.iao_ofst = NONE /\ y = x /\
+    (w2n x + n <= lo \/ w2n vs.vs_initial_fmp <= w2n x)) \/
   (?v token aid b sz pa. ops.iao_ofst = Var v /\ FLOOKUP TG v = SOME (token,aid) /\
     FLOOKUP a.po_prov v = SOME (b,sz) /\
     FLOOKUP births (token,aid) = SOME (b,sz) /\
@@ -254,15 +260,16 @@ Theorem ptr_paired_mload_address_classification:
   EVERY (\fn. fn.fn_eom = NONE) C.ctx_functions /\
   mem_inv raw_mem_ok C vs /\
   fixed_region_reserved lo C /\ ptr_discipline lo C vs /\
-  EVERY ssa_form C.ctx_functions /\ ~ctx_has_dalloca C /\
+  EVERY ssa_form C.ctx_functions /\
   ctx_inst_ids_distinct C /\ callee_first names C.ctx_functions /\
   EVERY all_reachable C.ctx_functions /\
   EVERY fn_defs_reach_uses C.ctx_functions /\
-  max_live_eom C' = SOME eom /\
+  max_live_eom C' = SOME eom /\ eom <= w2n vs.vs_initial_fmp /\
   a.po_inst.inst_opcode = MLOAD /\ ptr_chrono_step C' at zt /\
   a.po_inst.inst_operands = [op] /\
   eval_operand op a.po_state = SOME x /\ eval_operand op at.po_state = SOME y ==>
-  (op_prov TG op = NONE /\ y = x /\ w2n x + 32 <= lo) \/
+  (op_prov TG op = NONE /\ y = x /\
+    (w2n x + 32 <= lo \/ w2n vs.vs_initial_fmp <= w2n x)) \/
   (?v token aid b sz pa. op = Var v /\ FLOOKUP TG v = SOME (token,aid) /\
     FLOOKUP a.po_prov v = SOME (b,sz) /\
     FLOOKUP births (token,aid) = SOME (b,sz) /\

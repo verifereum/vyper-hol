@@ -4,15 +4,18 @@ Ancestors
   concretizePtrActivationChronology concretizePtrChronologicalHistory
   ptrDiscipline venomExecSemantics venomInst finite_map list pred_set arithmetic
 
-(* Only allocation creates a tag. All other instructions use the already
-   checked, polymorphic copying operations. The post-cache lookup covers
-   both first execution and reuse of a cached ALLOCA. *)
+(* Only allocation creates a tag. A DALLOCA output is untagged: it points
+   into the dynamic region, which concretization leaves in place. All other
+   instructions use the already checked, polymorphic copying operations. The
+   post-cache lookup covers both first execution and reuse of a cached
+   ALLOCA. *)
 Definition ptr_tagged_step_def:
   ptr_tagged_step token PT TG inst s =
     if inst.inst_opcode = ALLOCA then
       set_prov TG inst.inst_outputs
         (case FLOOKUP s.vs_allocas inst.inst_id of
            NONE => NONE | SOME site => SOME (token,inst.inst_id))
+    else if inst.inst_opcode = DALLOCA then set_prov TG inst.inst_outputs NONE
     else step_prov PT TG inst s
 End
 

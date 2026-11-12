@@ -123,7 +123,7 @@ Proof
 QED
 
 Theorem ptr_birth_step_tables[local]:
-  ptr_chrono_step C a b /\ a.po_inst.inst_opcode <> DALLOCA ==>
+  ptr_chrono_step C a b ==>
   (LENGTH b.po_stack = LENGTH a.po_stack ==>
     (!aid site. FLOOKUP a.po_state.vs_allocas aid = SOME site ==>
       FLOOKUP b.po_state.vs_allocas aid = SOME site) /\
@@ -175,7 +175,7 @@ Proof
 QED
 
 Theorem ptr_birth_step_compatible[local]:
-  ptr_chrono_step C a b /\ a.po_inst.inst_opcode <> DALLOCA /\
+  ptr_chrono_step C a b /\
   LENGTH tokens = SUC (LENGTH a.po_stack) /\
   ptr_birth_slices a tokens births /\ ptr_birth_token_bound h births ==>
   !aid site.
@@ -205,7 +205,7 @@ Proof
 QED
 
 Theorem ptr_birth_step_passive[local]:
-  ptr_chrono_step C a b /\ a.po_inst.inst_opcode <> DALLOCA /\
+  ptr_chrono_step C a b /\
   LENGTH tokens = SUC (LENGTH a.po_stack) /\
   ptr_birth_slices a tokens births ==>
   !d aid. d < LENGTH b.po_stack ==>
@@ -242,7 +242,7 @@ Proof
 QED
 
 Theorem ptr_birth_step_slices[local]:
-  ptr_chrono_step C a b /\ a.po_inst.inst_opcode <> DALLOCA /\
+  ptr_chrono_step C a b /\
   LENGTH tokens = SUC (LENGTH a.po_stack) /\
   ALL_DISTINCT (ptr_activation_tokens h a b tokens) /\
   LENGTH (ptr_activation_tokens h a b tokens) = SUC (LENGTH b.po_stack) /\
@@ -268,8 +268,7 @@ Theorem ptr_source_birth_caches_invariant[local]:
   !vs0 C h a tokens registry births.
   ptr_source_birth_caches vs0 C h a tokens registry births ==>
   ptr_ledger_source_activations vs0 C h a tokens registry /\
-  (EVERY (\fn. EVERY (\i. i.inst_opcode <> DALLOCA) (fn_insts fn)) C.ctx_functions ==>
-    ptr_birth_slices a tokens births /\ ptr_birth_token_bound h births)
+  ptr_birth_slices a tokens births /\ ptr_birth_token_bound h births
 Proof
   ho_match_mp_tac ptr_source_birth_caches_ind >> conj_tac
   >- (rpt gen_tac >> strip_tac >> conj_tac
@@ -281,10 +280,8 @@ Proof
   `ptr_ledger_source_activations vs0 C (h ++ [b]) b
     (ptr_activation_tokens h a b tokens) (ptr_activation_registry h a b registry)` by
     metis_tac[ptr_ledger_source_activations_rules] >>
-  conj_tac >- simp[] >> strip_tac >>
+  conj_tac >- simp[] >>
   `ptr_birth_slices a tokens births /\ ptr_birth_token_bound h births` by metis_tac[] >>
-  `a.po_inst.inst_opcode <> DALLOCA` by
-    metis_tac[ptr_source_activations_sound, ptr_birth_reachable_no_dalloca] >>
   qpat_assum `ptr_ledger_source_activations _ _ h a tokens _`
     (mp_then Any strip_assume_tac ptr_birth_token_geometry) >>
   qpat_assum `ptr_ledger_source_activations _ _ (h ++ [b]) _ _ _`
@@ -295,24 +292,21 @@ Proof
 QED
 
 Theorem ptr_source_birth_caches_slices:
-  ptr_source_birth_caches vs0 C h a tokens registry births /\
-  EVERY (\fn. EVERY (\i. i.inst_opcode <> DALLOCA) (fn_insts fn)) C.ctx_functions ==>
+  ptr_source_birth_caches vs0 C h a tokens registry births ==>
   ptr_birth_slices a tokens births
 Proof
   metis_tac[ptr_source_birth_caches_invariant]
 QED
 
 Theorem ptr_source_birth_caches_token_bound:
-  ptr_source_birth_caches vs0 C h a tokens registry births /\
-  EVERY (\fn. EVERY (\i. i.inst_opcode <> DALLOCA) (fn_insts fn)) C.ctx_functions ==>
+  ptr_source_birth_caches vs0 C h a tokens registry births ==>
   ptr_birth_token_bound h births
 Proof
   metis_tac[ptr_source_birth_caches_invariant]
 QED
 
 Theorem ptr_source_birth_caches_active_lookup:
-  ptr_source_birth_caches vs0 C h a tokens registry births /\
-  EVERY (\fn. EVERY (\i. i.inst_opcode <> DALLOCA) (fn_insts fn)) C.ctx_functions ==>
+  ptr_source_birth_caches vs0 C h a tokens registry births ==>
   !aid. FLOOKUP births (HD tokens,aid) = FLOOKUP a.po_state.vs_allocas aid
 Proof
   strip_tac >>
@@ -325,7 +319,6 @@ QED
 
 Theorem ptr_source_birth_caches_snoc_retained:
   ptr_source_birth_caches vs0 C h a tokens registry births /\
-  EVERY (\fn. EVERY (\i. i.inst_opcode <> DALLOCA) (fn_insts fn)) C.ctx_functions /\
   ptr_chrono_step C a b ==>
   !key site. FLOOKUP births key = SOME site ==>
     FLOOKUP (ptr_birth_overlay (HD (ptr_activation_tokens h a b tokens))
@@ -334,8 +327,6 @@ Proof
   strip_tac >>
   drule ptr_source_birth_caches_invariant >> simp[] >> strip_tac >>
   drule ptr_birth_token_geometry >> strip_tac >>
-  `a.po_inst.inst_opcode <> DALLOCA` by
-    metis_tac[ptr_source_activations_sound, ptr_birth_reachable_no_dalloca] >>
   rpt gen_tac >> strip_tac >> irule ptr_birth_overlay_retains >> conj_tac
   >- (rpt strip_tac >> irule ptr_birth_step_compatible >> metis_tac[]) >> simp[]
 QED
