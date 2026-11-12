@@ -8,13 +8,13 @@ Ancestors
 Definition typed_args_post_ptr_def:
   typed_args_post_ptr d ctx func cenv cx es sa s0 G0 tn0 ee args xs vs G tn s <=>
     typed_args_post ctx func cenv cx es sa s0 ee args xs vs s /\
-    ghost_inv d cenv cx ee G tn s /\
+    ghost_inv H d cenv cx ee G tn s /\
     EVERY (\op. op_taint tn op = {}) xs /\
     ghost_kept cenv es sa G0 tn0 s0 G tn
 End
 
 Theorem typed_args_post_ptr_nil:
-  stmt_state_rel ctx func cenv cx ee s /\ ghost_inv d cenv cx ee G tn s ==>
+  stmt_state_rel H ctx func cenv cx ee s /\ ghost_inv H d cenv cx ee G tn s ==>
   typed_args_post_ptr d ctx func cenv cx ee sa s G tn ee [] [] [] G tn s
 Proof
   simp[typed_args_post_ptr_def, typed_args_post_def,
@@ -22,9 +22,9 @@ Proof
 QED
 
 Theorem typed_args_post_ptr_cons:
-  expr_post ctx func cenv cx e es sa s1 s0 es1 v x t /\
+  expr_post H ctx func cenv cx e es sa s1 s0 es1 v x t /\
   typed_args_post_ptr d ctx func cenv cx es1 s1 t G1 tn1 ee args xs vs G tn u /\
-  stmt_state_rel ctx func cenv cx es s0 /\ local_ptrs_reserved cenv sa /\
+  stmt_state_rel H ctx func cenv cx es s0 /\ local_ptrs_reserved cenv sa /\
   local_ptrs_reserved cenv s1 /\
   MAP FDOM es.scopes = MAP FDOM es1.scopes /\
   sa.cs_next_var <= s1.cs_next_var /\ sa.cs_next_id <= s1.cs_next_id /\
@@ -49,8 +49,8 @@ Proof
 QED
 
 Theorem lower_typed_args_nil_sim_ptr:
-  stmt_state_rel ctx func cenv cx es s0 /\ ~s0.vs_halted /\
-  ghost_inv d cenv cx es G0 tn0 s0 /\
+  stmt_state_rel H ctx func cenv cx es s0 /\ ~s0.vs_halted /\
+  ghost_inv H d cenv cx es G0 tn0 s0 /\
   s0.vs_current_bb = sa.cs_current_bb /\
   s0.vs_inst_idx = LENGTH sa.cs_current_insts ==>
   gas_outcome_ptr D (cx_tops cx) (ctx,func) PG (eval_exprs cx [])
