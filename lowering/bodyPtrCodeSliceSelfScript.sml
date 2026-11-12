@@ -43,9 +43,9 @@ Theorem code_slice_self_compile_decompose:
   compile_slice_code start len sz sa = (r, sb) ==>
   ?out dst sc sd se sf limit.
     r = out /\
-    compile_slice_out_buf sz sa = ((out,dst),sc) /\
-    emit_op CODESIZE [] sc = (limit,sd) /\
-    compile_assert_slice_bounds start len limit sd = ((),se) /\
+    emit_op CODESIZE [] sa = (limit,sc) /\
+    compile_assert_slice_bounds start len limit sc = ((),sd) /\
+    compile_slice_out_buf sz sd = ((out,dst),se) /\
     emit_void CODECOPY [dst;start;len] se = ((),sf) /\
     emit_void MSTORE [out;len] sf = ((),sb)
 Proof
@@ -276,9 +276,9 @@ Resume code_slice_self_vv_ptr[runtime]:
   qpat_x_assum `k = w2n _` (fn th => once_rewrite_tac[th]) >>
   irule gasSummaryComposePtrTheory.gas_outcome_ptr_conseq >>
   irule_at Any self_code_continue_outcome_ptr >>
-  qpat_assum `compile_slice_out_buf _ sn = _` (irule_at Any) >>
-  qpat_assum `emit_op CODESIZE _ _ = _` (irule_at Any) >>
+  qpat_assum `emit_op CODESIZE _ sn = _` (irule_at Any) >>
   qpat_assum `compile_assert_slice_bounds _ _ _ _ = _` (irule_at Any) >>
+  qpat_assum `compile_slice_out_buf _ _ = _` (irule_at Any) >>
   qpat_assum `emit_void CODECOPY _ _ = _` (irule_at Any) >>
   qpat_assum `emit_void MSTORE _ _ = _` (irule_at Any) >>
   simp[wordsTheory.w2n_n2w] >>
@@ -300,6 +300,11 @@ Resume code_slice_self_vv_ptr[runtime]:
   simp[vyperASTTheory.expr_type_def] >>
   rpt gen_tac >> strip_tac >> gvs[] >>
   `sa.cs_next_var <= sn.cs_next_var /\ sa.cs_next_id <= sn.cs_next_id` by decide_tac >>
+  `~expr_has_effect (Builtin (BaseT (BytesT (Dynamic n))) (Slice n)
+      [Builtin ct (Acc Code) [Builtin st (Env SelfAddr) []]; start; len]) ==>
+   pure_frame cenv func es sa s0 t` by
+    (strip_tac >> qpat_x_assum `_ /\ _ ==> pure_frame _ _ _ _ _ _` irule >>
+     pop_assum mp_tac >> simp[]) >>
   drule_all code_slice_vv_post_ptr_rebase >> simp[contextTheory.mk_ptr_def]
 QED
 
