@@ -24,8 +24,8 @@ Proof
   strip_tac >>
   `?stk0 G0 tn0. frame_reachable vs0 ctx stk0 PG G0 tn0 fn j t` by
     metis_tac[ptr_history_realized_def] >>
-  qpat_assum `ptr_discipline _ _ _` mp_tac >>
-  simp[ptr_discipline_def] >> strip_tac >>
+  qpat_assum `ptr_discipline _ _ _`
+    (strip_assume_tac o REWRITE_RULE [ptr_discipline_def]) >>
   `fn_ptr_ok P fn` by fs[EVERY_MEM] >>
   `access_ok lo G0 fn j t` by metis_tac[] >>
   mp_tac (Q.INST [`G` |-> `G0`, `stk` |-> `stk0`, `tn` |-> `tn0`,
