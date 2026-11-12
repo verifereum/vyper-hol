@@ -1,14 +1,13 @@
 (*
- * The expression-statement case of the full body induction
+ * Helpers for the expression-statement case of the full body induction
  * (bodySimFullMain): Expr e evaluates e and drops its value, so the
  * statement's joint outcome is the expression's, with the same GAS marks,
  * target execution and pointer ghosts.
  *
  * TOP-LEVEL:
- *   body_expr_stmt_case_full -- the joint twin of bodyPtrCtrlCases'
- *     body_expr_stmt_case_ptr
  *   compile_expr_stmt_frag_ok_full -- the joint twin of stmtFragPtr's
- *     compile_expr_stmt_frag_ok_ptr
+ *     compile_expr_stmt_frag_ok_ptr, with the gas-shadow compile
+ *     correspondence for e as a premise
  *
  * Helper:
  *   gas_outcome_full_expr_stmt -- the expression's joint outcome is the
