@@ -34,7 +34,8 @@ Theorem asm_frame_gas_step_call:
     EL a.as_pc prog <> AsmOp "RETURNDATACOPY" /\
     asm_inst_gas_ok H (EL a.as_pc prog) a.as_stack /\
     frame_op_gas H <= frame_gas_left es /\
-    (EL a.as_pc prog = AsmOp "CALL" \/ EL a.as_pc prog = AsmOp "STATICCALL") ==>
+    (EL a.as_pc prog = AsmOp "CALL" \/ EL a.as_pc prog = AsmOp "STATICCALL" \/
+     EL a.as_pc prog = AsmOp "DELEGATECALL") ==>
     (!op r s'.
        next_opcode (FST (HD es.contexts)) = SOME op /\
        step_inst op es = (r, s') /\
@@ -50,12 +51,22 @@ Proof
   `c.stack = a.as_stack` by gvs[asm_evm_rel_def] >>
   `~c.msgParams.static` by metis_tac[] >>
   `EVERY (wf_context o FST) es.contexts` by fs[wf_state_def] >>
-  Q.SUBGOAL_THEN `?name. (name = "CALL" \/ name = "STATICCALL") /\
+  Q.SUBGOAL_THEN `?name. (name = "CALL" \/ name = "STATICCALL" \/ name = "DELEGATECALL") /\
       EL a.as_pc prog = AsmOp name` (qx_choose_then `name` assume_tac)
   >- metis_tac[] >>
   `EL a.as_pc prog = AsmOp name` by metis_tac[] >>
-  `next_opcode c = SOME (if name = "CALL" then Call else StaticCall)` by
-    (drule_all asm_frame_call_decode >> simp[] >> metis_tac[]) >>
+  `next_opcode c = SOME (if name = "CALL" then Call else if name = "STATICCALL" then StaticCall else DelegateCall)` by
+    (`next_opcode (FST (HD es.contexts)) =
+       SOME (if name = "CALL" then Call else
+             if name = "STATICCALL" then StaticCall else DelegateCall)` suffices_by simp[] >>
+     irule asm_frame_opcode_decode >>
+     conj_tac
+     >- (Cases_on `name = "CALL"` >> Cases_on `name = "STATICCALL"` >>
+         simp[wf_opname_def]) >>
+     qexistsl_tac [`a`, `data`, `prog`] >>
+     Cases_on `name = "CALL"` >> Cases_on `name = "STATICCALL"` >>
+     gvs[is_data_inst_def, encode_inst_def, evm_opcode_byte_def,
+         evm_opcode_table_def, wf_opname_def, opcode_def]) >>
   `asm_inst_gas_ok H (AsmOp name) c.stack` by metis_tac[] >>
   `frame_op_gas H <= c.msgParams.gasLimit - c.gasUsed` by
     fs[frame_gas_left_def] >>
@@ -64,12 +75,13 @@ QED
 
 Resume asm_frame_gas_step_call[raw]:
   rpt gen_tac >> rpt disch_tac >>
-  `op = (if name = "CALL" then Call else StaticCall)` by
+  `op = (if name = "CALL" then Call else if name = "STATICCALL" then StaticCall else DelegateCall)` by
     (qpat_x_assum `next_opcode (FST _) = _` mp_tac >> simp[]) >>
   `step_call op es = (r,s')` by
     (qpat_x_assum `step_inst _ _ = _` mp_tac >>
-     Cases_on `name = "CALL"` >> gvs[step_inst_def]) >>
-  Q.SUBGOAL_THEN `name = "CALL" \/ name = "STATICCALL"` assume_tac
+     Cases_on `name = "CALL"` >> Cases_on `name = "STATICCALL"` >>
+     gvs[step_inst_def]) >>
+  Q.SUBGOAL_THEN `name = "CALL" \/ name = "STATICCALL" \/ name = "DELEGATECALL"` assume_tac
   >- simp[] >>
   `frame_op_gas H = 50000 + 8 * H + memory_cost H` by simp[frame_op_gas_def] >>
   drule_all asm_step_call_budget_same_depth >> strip_tac >>
@@ -82,14 +94,19 @@ Resume asm_frame_gas_step_call[handled]:
   gen_tac >> disch_tac >>
   qpat_x_assum `frame_next _ _`
     (strip_assume_tac o REWRITE_RULE [frame_next_def]) >>
-  Q.SUBGOAL_THEN `name = "CALL" \/ name = "STATICCALL"` assume_tac
+  Q.SUBGOAL_THEN `name = "CALL" \/ name = "STATICCALL" \/ name = "DELEGATECALL"` assume_tac
   >- simp[] >>
   `frame_op_gas H = 50000 + 8 * H + memory_cost H` by simp[frame_op_gas_def] >>
   Q.SUBGOAL_THEN `es1 = v \/ LENGTH v.contexts = SUC (LENGTH es.contexts) /\
      run_call v = SOME (INL (),es1)` assume_tac >- simp[] >>
   `(c.msgParams.gasLimit - c.gasUsed - frame_op_gas H) DIV 64 <=
     (FST (HD es1.contexts)).msgParams.gasLimit - (FST (HD es1.contexts)).gasUsed` by
-    metis_tac[asm_step_call_budget_reserve] >>
+    (drule_at (Pat `next_opcode _ = _`) asm_step_call_budget_reserve >>
+     simp[] >> disch_then irule >>
+     conj_tac >- gvs[] >>
+     conj_tac
+     >- (qexistsl_tac [`d`, `rb`, `rest`, `es`, `v`] >> gvs[]) >>
+     qexists_tac `name` >> gvs[]) >>
   Cases_on `es1.contexts` >- gvs[] >>
   rename1 `_.contexts = head::tail` >> Cases_on `head` >>
   gvs[frame_gas_left_def]
@@ -229,7 +246,8 @@ Theorem asm_frame_gas_step:
 Proof
   rpt gen_tac >> strip_tac >>
   Cases_on `EL a.as_pc prog = AsmOp "CALL" \/
-            EL a.as_pc prog = AsmOp "STATICCALL"`
+            EL a.as_pc prog = AsmOp "STATICCALL" \/
+            EL a.as_pc prog = AsmOp "DELEGATECALL"`
   >- (drule_all asm_frame_gas_step_call >> gvs[]) >>
   Cases_on `MEM (EL a.as_pc prog) [AsmOp "DELEGATECALL"; AsmOp "CREATE";
               AsmOp "CREATE2"; AsmOp "SELFDESTRUCT"]`

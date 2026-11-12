@@ -77,7 +77,7 @@ End
 (* The CALL families expose the same two ranges, after their value slot. *)
 Theorem asm_inst_gas_ok_call_ranges:
   asm_inst_gas_ok H (AsmOp name) stk /\
-  (name = "CALL" \/ name = "STATICCALL") /\
+  (name = "CALL" \/ name = "STATICCALL" \/ name = "DELEGATECALL") /\
   6 + (if name = "CALL" then 1 else 0) <= LENGTH stk ==>
   (w2n (EL (3 + (if name = "CALL" then 1 else 0)) stk) = 0 \/
    w2n (EL (2 + (if name = "CALL" then 1 else 0)) stk) +

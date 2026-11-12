@@ -903,7 +903,7 @@ QED
 
 Theorem asm_call_prepare_stack_room:
   s.contexts = (c,rb)::rest /\ s.msdomain = Collect d /\
-  ~c.msgParams.static /\ (op = Call \/ op = StaticCall) /\
+  ~c.msgParams.static /\
   EVERY (wf_context o FST) s.contexts /\
   asm_call_prepare op s =
     (INL (sender,address,value,ao,az,code,stipend,ro,rs,accounts),u) ==>
@@ -1376,7 +1376,7 @@ QED
 
 Theorem asm_call_prepare_failure_view:
   s.contexts = (c,rb)::rest /\ s.msdomain = Collect d /\
-  ~c.msgParams.static /\ (op = Call \/ op = StaticCall) /\
+  ~c.msgParams.static /\
   6 + (if call_has_value op then 1 else 0) <= LENGTH c.stack /\
   asm_call_prepare op s = (INR e,t) ==>
   (t.contexts = (c with stack := DROP (6 + (if call_has_value op then 1 else 0)) c.stack,rb)::rest /\
@@ -1476,8 +1476,8 @@ Finalise asm_call_prepare_failure_view
 
 Theorem asm_call_prepare_overhead_budget:
   asm_inst_gas_ok H (AsmOp name) stk /\
-  (name = "CALL" \/ name = "STATICCALL") /\
-  op = (if name = "CALL" then Call else StaticCall) /\
+  (name = "CALL" \/ name = "STATICCALL" \/ name = "DELEGATECALL") /\
+  op = (if name = "CALL" then Call else if name = "STATICCALL" then StaticCall else DelegateCall) /\
   6 + (if call_has_value op then 1 else 0) <= LENGTH stk /\
   ao = w2n (EL (2 + (if call_has_value op then 1 else 0)) stk) /\
   az = w2n (EL (3 + (if call_has_value op then 1 else 0)) stk) /\
@@ -1494,20 +1494,21 @@ Proof
   pure_rewrite_tac[GSYM AND_IMP_INTRO] >> rpt disch_tac >>
   Q.SUBGOAL_THEN `(az = 0 \/ ao + az <= H) /\ (rs = 0 \/ ro + rs <= H)`
     assume_tac
-  >- (Cases_on `name = "CALL"` >> gvs[call_has_value_def] >>
+  >- (Cases_on `name = "CALL"` >> Cases_on `name = "STATICCALL"` >>
+      gvs[call_has_value_def] >>
       drule asm_inst_gas_ok_call_ranges >> simp[]) >>
   `mc <= memory_cost H` by
     (qpat_x_assum `mc = _` SUBST1_TAC >>
      irule call_memory_expansion_cost_bound >> asm_rewrite_tac[]) >>
   conj_tac >- decide_tac >>
-  Cases_on `name = "CALL"` >>
+  Cases_on `name = "CALL"` >> Cases_on `name = "STATICCALL"` >>
   simp[static_gas_def, vfmConstantsTheory.warm_access_cost_def]
 QED
 
 Theorem asm_call_prepare_budget_success:
   s.contexts = (c,rb)::rest /\ s.msdomain = Collect d /\
-  ~c.msgParams.static /\ (name = "CALL" \/ name = "STATICCALL") /\
-  op = (if name = "CALL" then Call else StaticCall) /\
+  ~c.msgParams.static /\ (name = "CALL" \/ name = "STATICCALL" \/ name = "DELEGATECALL") /\
+  op = (if name = "CALL" then Call else if name = "STATICCALL" then StaticCall else DelegateCall) /\
   asm_inst_gas_ok H (AsmOp name) c.stack /\
   B = 50000 + 8 * H + memory_cost H /\
   B <= c.msgParams.gasLimit - c.gasUsed /\
@@ -1541,8 +1542,8 @@ QED
 
 Theorem asm_call_prepare_budget_no_failure:
   s.contexts = (c,rb)::rest /\ s.msdomain = Collect d /\
-  ~c.msgParams.static /\ (name = "CALL" \/ name = "STATICCALL") /\
-  op = (if name = "CALL" then Call else StaticCall) /\
+  ~c.msgParams.static /\ (name = "CALL" \/ name = "STATICCALL" \/ name = "DELEGATECALL") /\
+  op = (if name = "CALL" then Call else if name = "STATICCALL" then StaticCall else DelegateCall) /\
   asm_inst_gas_ok H (AsmOp name) c.stack /\
   B = 50000 + 8 * H + memory_cost H /\
   B <= c.msgParams.gasLimit - c.gasUsed /\
@@ -1550,8 +1551,8 @@ Theorem asm_call_prepare_budget_no_failure:
   asm_call_prepare op s <> (INR e,t)
 Proof
   pure_rewrite_tac[GSYM AND_IMP_INTRO] >> rpt disch_tac >>
-  Q.SUBGOAL_THEN `op = Call \/ op = StaticCall` assume_tac
-  >- (Cases_on `name = "CALL"` >> gvs[]) >>
+  Q.SUBGOAL_THEN `op = Call \/ op = StaticCall \/ op = DelegateCall` assume_tac
+  >- (Cases_on `name = "CALL"` >> Cases_on `name = "STATICCALL"` >> gvs[]) >>
   drule_all asm_call_prepare_failure_view >> strip_tac >>
   Q.SUBGOAL_THEN `mc + oc + 6400 <= B /\ static_gas op <= 100`
     strip_assume_tac
@@ -1563,8 +1564,8 @@ QED
 Theorem asm_step_call_budget_same_depth:
   s.contexts = (c,rb)::rest /\ s.msdomain = Collect d /\
   ~c.msgParams.static /\ EVERY (wf_context o FST) s.contexts /\
-  (name = "CALL" \/ name = "STATICCALL") /\
-  op = (if name = "CALL" then Call else StaticCall) /\
+  (name = "CALL" \/ name = "STATICCALL" \/ name = "DELEGATECALL") /\
+  op = (if name = "CALL" then Call else if name = "STATICCALL" then StaticCall else DelegateCall) /\
   asm_inst_gas_ok H (AsmOp name) c.stack /\
   B = 50000 + 8 * H + memory_cost H /\
   B <= c.msgParams.gasLimit - c.gasUsed /\
@@ -1575,8 +1576,8 @@ Theorem asm_step_call_budget_same_depth:
     (FST (HD t.contexts)).gasUsed + B
 Proof
   pure_rewrite_tac[GSYM AND_IMP_INTRO] >> rpt disch_tac >>
-  Q.SUBGOAL_THEN `op = Call \/ op = StaticCall` assume_tac
-  >- (Cases_on `name = "CALL"` >> gvs[]) >>
+  Q.SUBGOAL_THEN `op = Call \/ op = StaticCall \/ op = DelegateCall` assume_tac
+  >- (Cases_on `name = "CALL"` >> Cases_on `name = "STATICCALL"` >> gvs[]) >>
   Cases_on `6 + (if call_has_value op then 1 else 0) <= LENGTH c.stack`
   >- suspend "adequate" >>
   `LENGTH c.stack < 6 + (if call_has_value op then 1 else 0)` by
@@ -6107,8 +6108,8 @@ QED
 
 Theorem asm_step_call_budget_reserve:
   s.contexts = (c,rb)::rest /\ s.msdomain = Collect d /\
-  ~c.msgParams.static /\ (name = "CALL" \/ name = "STATICCALL") /\
-  op = (if name = "CALL" then Call else StaticCall) /\
+  ~c.msgParams.static /\ (name = "CALL" \/ name = "STATICCALL" \/ name = "DELEGATECALL") /\
+  op = (if name = "CALL" then Call else if name = "STATICCALL" then StaticCall else DelegateCall) /\
   asm_inst_gas_ok H (AsmOp name) c.stack /\
   B = 50000 + 8 * H + memory_cost H /\
   B <= c.msgParams.gasLimit - c.gasUsed /\ wf_state s /\
@@ -6143,8 +6144,7 @@ Resume asm_step_call_budget_reserve[adequate]:
       rename1 `asm_call_prepare op s =
         (INL (sender,address,value,ao,az,code,stipend,ro,rs,accounts),u)` >>
       drule_all asm_call_prepare_budget_success >> strip_tac >>
-      Q.SUBGOAL_THEN `op = Call \/ op = StaticCall` assume_tac
-      >- (Cases_on `name = "CALL"` >> gvs[]) >>
+
       `EVERY (wf_context o FST) s.contexts` by fs[wf_state_def] >>
       drule_all asm_call_prepare_stack_room >> disch_tac >>
       `LENGTH p.stack < stack_limit` by
@@ -6230,7 +6230,7 @@ Resume asm_step_call_budget_reserve[inline]:
      simp[next_opcode_def] >> IF_CASES_TAC >> simp[] >> strip_tac >>
      simp[step_inner_def, get_current_context_def, bind_def, ignore_bind_def,
        return_def] >>
-     qpat_x_assum `op = Call \/ op = StaticCall` strip_assume_tac >>
+     qpat_x_assum `op = Call \/ op = StaticCall \/ op = DelegateCall` strip_assume_tac >>
      gvs[step_inst_def]) >>
   drule_all asm_call_step_inner_pop_invariants >> strip_tac >>
   qpat_x_assum `t = v \/ _` strip_assume_tac
