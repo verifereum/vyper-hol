@@ -104,9 +104,11 @@ Theorem unwrap_slot_copy_wb_frame:
     b+len <= start \/ start+nb <= b) /\
   (!off len. off+len <= start \/ start+nb <= off ==>
     mem_bytes_at off len z.vs_memory = mem_bytes_at off len s.vs_memory) ==>
-  wb_frame cenv es sa s z
+  wb_frame cenv es es sa s z
 Proof
-  strip_tac >> simp[wb_frame_def] >> conj_tac
+  strip_tac >> simp[wb_frame_def] >> rpt conj_tac
+  >- metis_tac[]
+  >- metis_tac[]
   >- metis_tac[] >>
   irule locals_kept_regions >> metis_tac[]
 QED
