@@ -90,6 +90,39 @@ Proof
   asm_rewrite_tac [] >> simp[]
 QED
 
+Theorem dynamic_run_advanced_cons[local]:
+  !i s v code w.
+    step_inst_base i s = OK (v with vs_inst_idx := s.vs_inst_idx) /\
+    EVERY (\i. ~is_terminator i.inst_opcode) code /\
+    run_inst_seq code v = OK (w with vs_inst_idx := v.vs_inst_idx) ==>
+    run_inst_seq (i::code) s = OK (w with vs_inst_idx := s.vs_inst_idx)
+Proof
+  rpt strip_tac >>
+  simp[Once run_inst_seq_def] >>
+  drule fragExecTheory.run_inst_seq_inst_idx >>
+  disch_then (qspecl_then [`v`, `s.vs_inst_idx`] mp_tac) >>
+  simp[instIdxIndepTheory.exec_result_map_def]
+QED
+
+Theorem dynamic_restore_trans[local]:
+  !a b c.
+    (c with <|vs_vars := b.vs_vars; vs_memory := b.vs_memory;
+      vs_inst_idx := b.vs_inst_idx|>) = b /\
+    (b with <|vs_vars := a.vs_vars; vs_memory := a.vs_memory;
+      vs_inst_idx := a.vs_inst_idx|>) = a ==>
+    (c with <|vs_vars := a.vs_vars; vs_memory := a.vs_memory;
+      vs_inst_idx := a.vs_inst_idx|>) = a
+Proof
+  rpt strip_tac >>
+  `c with <|vs_vars := a.vs_vars; vs_memory := a.vs_memory;
+      vs_inst_idx := a.vs_inst_idx|> =
+   (c with <|vs_vars := b.vs_vars; vs_memory := b.vs_memory;
+      vs_inst_idx := b.vs_inst_idx|>) with
+      <|vs_vars := a.vs_vars; vs_memory := a.vs_memory;
+        vs_inst_idx := a.vs_inst_idx|>` by simp[NoAsms] >>
+  metis_tac[]
+QED
+
 Theorem append_dynamic_prefix_core:
   !cx ctx PG R G tn s sa s1 s2 s3 s4 s5 s6 s7 sb
     src dst len gt ok sd dd count a b l sn dn esz.
@@ -112,6 +145,10 @@ Theorem append_dynamic_prefix_core:
     w2n a+32 < dimword(:256) /\ w2n b+32 < dimword(:256) /\
     (w2n a+32+sn*esz <= w2n b \/ w2n b+32+dn*esz <= w2n a) ==>
     ?Gf tnf sf.
+      sf.vs_inst_idx = s.vs_inst_idx + 8 /\
+      (sf with <|vs_vars := s.vs_vars; vs_memory := s.vs_memory;
+        vs_inst_idx := s.vs_inst_idx|>) = s /\
+      run_inst_seq (emitted_insts sa sb) s = OK (sf with vs_inst_idx := s.vs_inst_idx) /\
       (!D ctx fn. ~ctx_has_dalloca ctx ==>
         inst_seq_ptr D 0 ctx fn PG G tn (emitted_insts sa sb) s Gf tnf) /\
       frag_exec_ptr cx ctx PG sa sb
@@ -219,6 +256,43 @@ Proof
   disch_then (qspecl_then [`cx`, `ctx`, `PG`, `R`]
     (qx_choose_then `G8` (qx_choose_then `tn8` (qx_choose_then `v8` strip_assume_tac)))) >>
   qexistsl_tac [`G8`, `tn8`, `v8`] >>
+  (conj_tac >- (simp[Abbr `v4`] >> decide_tac)) >>
+  (conj_tac >-
+    (`v4 with <|vs_vars := v3.vs_vars; vs_memory := v3.vs_memory;
+        vs_inst_idx := v3.vs_inst_idx|> = v3` by simp[Abbr `v4`, NoAsms] >>
+     irule dynamic_restore_trans >> qexists_tac `v7` >> asm_rewrite_tac[] >>
+     irule dynamic_restore_trans >> qexists_tac `v6` >> asm_rewrite_tac[] >>
+     irule dynamic_restore_trans >> qexists_tac `v5` >> asm_rewrite_tac[] >>
+     irule dynamic_restore_trans >> qexists_tac `v4` >> asm_rewrite_tac[] >>
+     irule dynamic_restore_trans >> qexists_tac `v3` >> asm_rewrite_tac[] >>
+     irule dynamic_restore_trans >> qexists_tac `v2` >> asm_rewrite_tac[] >>
+     irule dynamic_restore_trans >> qexists_tac `v1` >> asm_rewrite_tac[])) >>
+  (conj_tac >-
+    (qpat_assum `emitted_insts _ _ = _` (fn th => pure_rewrite_tac[th]) >>
+     rpt (qpat_x_assum `_.vs_inst_idx = _` kall_tac) >>
+     irule dynamic_run_advanced_cons >>
+     (reverse conj_tac >- simp[mk_inst_def, is_terminator_def]) >> qexists_tac `v1` >>
+     asm_rewrite_tac [] >>
+     irule dynamic_run_advanced_cons >>
+     (reverse conj_tac >- simp[mk_inst_def, is_terminator_def]) >> qexists_tac `v2` >>
+     asm_rewrite_tac [] >>
+     irule dynamic_run_advanced_cons >>
+     (reverse conj_tac >- simp[mk_inst_def, is_terminator_def]) >> qexists_tac `v3` >>
+     asm_rewrite_tac [] >>
+     `v4 with vs_inst_idx := v3.vs_inst_idx = v3` by simp[Abbr `v4`, NoAsms] >>
+     irule dynamic_run_advanced_cons >>
+     (reverse conj_tac >- simp[mk_inst_def, is_terminator_def]) >> qexists_tac `v4` >>
+     asm_rewrite_tac [] >>
+     irule dynamic_run_advanced_cons >>
+     (reverse conj_tac >- simp[mk_inst_def, is_terminator_def]) >> qexists_tac `v5` >>
+     asm_rewrite_tac [] >>
+     irule dynamic_run_advanced_cons >>
+     (reverse conj_tac >- simp[mk_inst_def, is_terminator_def]) >> qexists_tac `v6` >>
+     asm_rewrite_tac [] >>
+     irule dynamic_run_advanced_cons >>
+     (reverse conj_tac >- simp[mk_inst_def, is_terminator_def]) >> qexists_tac `v7` >>
+     asm_rewrite_tac [] >>
+     simp[run_inst_seq_def])) >>
   (conj_tac >-
     (rpt strip_tac >>
      qpat_x_assum `emitted_insts _ _ = _` (fn th => pure_rewrite_tac[th]) >>
