@@ -59,7 +59,7 @@ Ancestors
   vyperTypeCallStackSoundness stmtSimReason stmtSimReasonExpr
   stmtSimReasonStorage stmtSimReasonCode supportedExprs stmtSimAssign stmtSimDeclStore
   stmtSimAugAssign vyperTypeEvalSoundness vyperTypeInvariants
-  bodyAssignPlace
+  bodyAssignPlace stmtSimAssignStorageSparse
   vyperTypeExprSoundness vyperEvalOutcomeSuffix exprSimMain
   exprReasonOperand
   vyperTypeValues vyperTyping vyperTypeDefaults stmtSimAssignTuple
@@ -1195,11 +1195,35 @@ Proof
   simp[exprLoweringTheory.lowered_value_type_def]
 QED
 
-(* An assignment to a private storage or transient variable of a type that
-   is not a word, not a DynArray and not empty, from a value of exactly that
-   type: stmtSimAssignStorageCopy's compile_assign_storage_copy_stmt_frag.
-   The region separation it asks for comes from storage_layout_safe in
-   expr_sim_inv. *)
+(* A storage variable is never a bytestring and, unless a DynArray, has no
+   length word. *)
+Theorem topcopy_not_bytestring:
+  !tops t. supported_storage_type tops t ==> ~is_bytestring_type t
+Proof
+  Cases_on `t` >> simp[is_bytestring_type_def] >>
+  rename1 `BaseT bt` >> Cases_on `bt` >>
+  simp[is_bytestring_type_def, supportedTypesTheory.supported_storage_type_def,
+       Once supportedTypesTheory.supported_nested_type_def,
+       supportedTypesTheory.supported_full_word_type_def] >>
+  rename1 `BytesT bd` >> Cases_on `bd` >>
+  simp[is_bytestring_type_def, supportedTypesTheory.supported_storage_type_def,
+       Once supportedTypesTheory.supported_nested_type_def,
+       supportedTypesTheory.supported_full_word_type_def]
+QED
+
+Theorem topcopy_no_length_word:
+  !tops t. supported_storage_type tops t /\
+    (!elem n. t <> ArrayT elem (Dynamic n)) ==> ~has_length_word t
+Proof
+  rpt gen_tac >> strip_tac >>
+  drule topcopy_not_bytestring >>
+  Cases_on `t` >> simp[has_length_word_def, is_bytestring_type_def] >>
+  Cases_on `b` >> gvs[has_length_word_def, is_bytestring_type_def]
+QED
+
+(* An assignment to a private storage or transient aggregate: the dense
+   copy for an ABI-static type, the live-slot store otherwise.  Region
+   separation comes from storage_layout_safe in expr_sim_inv. *)
 Theorem body_assign_toplevel_copy[local]:
   !cx nsid e tops ctx func cenv env env' ret_ty lctx RetQ es res es' mut ty
    slot.
@@ -1250,12 +1274,24 @@ Proof
      simp[supported_declaration_header_def]) >>
   `lowered_value_type cenv e = expr_type e` by
     (drule_all storage_rhs_lowered_type >> simp[]) >>
+  `sfields_tenv_consistent cenv.ce_struct_fields (get_tenv cx)` by
+    fs[expr_sim_inv_def] >>
+  `env.type_defs = get_tenv cx` by
+    gvs[env_consistent_def, env_context_consistent_def] >>
+  Cases_on `is_abi_dynamic cenv.ce_struct_fields (expr_type e)`
+  >- (`~is_bytestring_type (expr_type e) /\ ~has_length_word (expr_type e)` by
+        metis_tac[topcopy_not_bytestring, topcopy_no_length_word] >>
+      `acyclic_struct_metadata cenv.ce_struct_fields` by fs[body_inv_def] >>
+      irule compile_assign_storage_sparse_stmt_frag >> asm_rewrite_tac[] >>
+      qexistsl_tac [`env`, `id_str`, `off`, `tr`, `tops`, `tvt`,
+                    `expr_type e`] >>
+      asm_rewrite_tac[] >>
+      rpt strip_tac >> drule_all expr_body_pre_eval_gas >> strip_tac >>
+      gvs[value_runtime_typed_def]) >>
   irule compile_assign_storage_copy_stmt_frag >> asm_rewrite_tac[] >>
   qexistsl_tac [`id_str`, `off`, `tr`, `tops`, `tvt`, `expr_type e`] >>
   asm_rewrite_tac[] >>
   rpt strip_tac >> drule_all expr_body_pre_eval_gas >> strip_tac >>
-  `env.type_defs = get_tenv cx` by
-    gvs[env_consistent_def, env_context_consistent_def] >>
   gvs[value_runtime_typed_def])
 QED
 
@@ -2053,10 +2089,6 @@ Proof
   Cases_on `EXISTS (\g. ?nsid. g = BaseTarget (TopLevelNameTarget nsid) /\
     cx.in_deploy /\ IS_SOME (supported_immutable_type tops nsid)) gs`
   >- (irule immutable_deploy_tuple_assign >> metis_tac[]) >>
-  Cases_on `EXISTS (\g. ?nsid key.
-    g = BaseTarget (SubscriptTarget (TopLevelNameTarget nsid) key) /\
-    ~supported_pure_expr tops key) gs`
-  >- (irule tuple_assign_effectful_index >> metis_tac[]) >>
   `expr_body_pre cenv cx env e es` by
     (irule body_assign_tuple_rhs_pre >> metis_tac[]) >>
   drule_all tuple_places_typing >> strip_tac >>
@@ -2068,14 +2100,9 @@ Proof
     (drule_all body_expr_ok_case >>
      disch_then (qspec_then `func` strip_assume_tac) >>
      gvs[expr_sim_case_def] >> metis_tac[]) >>
-  `EVERY (\g. ?bt. g = BaseTarget bt /\ supported_target_pure tops bt /\
-    target_case F ctx func cenv cx bt /\ ~immutable_root cx bt /\
-    target_indices_pre cenv cx env bt) gs` by
-    (rw[EVERY_MEM] >>
-     drule_all tuple_places_member >> strip_tac >> gvs[] >>
-     conj_tac >- metis_tac[tuple_places_target_case] >>
-     metis_tac[tuple_places_indices_pre]) >>
+  drule_all tuple_places_targets_ready >> strip_tac >>
   irule compile_assign_tuple_places_stmt_frag >> simp[] >>
+  conj_tac >- first_assum ACCEPT_TAC >>
   qexistsl_tac [`env`, `tops`] >> simp[] >>
   metis_tac[tuple_places_component_bound, tuple_widened_component_bound]
 QED

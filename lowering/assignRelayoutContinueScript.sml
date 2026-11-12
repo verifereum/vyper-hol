@@ -12,7 +12,7 @@ Libs monadsyntax
 
 Theorem assign_relayout_store_post_path:
   !ctx func cenv cx e es es1 s0 s sa sb sf op id p cap dw v stv dtv sty dty
-   pre scope entry rest loc info bytes.
+   pre scope entry rest loc bytes.
     expr_post ctx func cenv cx e es sa sb s0 es1 v op s /\
     post_value_type cenv e = sty /\ sty <> expr_type e /\
     type_widens_to (get_tenv cx) sty (expr_type e) /\
@@ -33,7 +33,7 @@ Theorem assign_relayout_store_post_path:
     type_memory_bytes cenv sty = type_memory_size stv /\
     type_memory_bytes cenv sty < dimword (:256) /\ type_memory_size dtv <= cap /\
     compile_assign_value cenv (Var p) LocMemory op F loc
-      dty sty info bytes sb = ((),sf) /\ (loc = NONE \/ loc = SOME LocMemory) /\
+      dty sty bytes sb = ((),sf) /\ (loc = NONE \/ loc = SOME LocMemory) /\
     fn_has_code sb sf func /\ fn_inst_ids_distinct func /\
     ~s.vs_halted /\ s.vs_current_bb = sb.cs_current_bb /\
     s.vs_inst_idx = LENGTH sb.cs_current_insts /\

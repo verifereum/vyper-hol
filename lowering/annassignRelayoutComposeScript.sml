@@ -10,7 +10,7 @@ Libs monadsyntax
 
 Theorem annassign_relayout_normal_continuation:
   !ctx func old c cx lctx id typ tyv e es stv sty sa0 st sa sb sf salloc
-   marks v ee s op p sz w inst loc info bytes.
+   marks v ee s op p sz w inst loc bytes.
     declare_local old id typ sa0 = (c,st) /\ old.ce_alloca_locals /\
     (!l. FLOOKUP old.ce_vars id = SOME l ==> ?q z. l = PtrVar q z) /\
     gas_admissible (eval_stmt cx (AnnAssign id typ e)) (stmt_res_ok lctx) es /\
@@ -38,7 +38,7 @@ Theorem annassign_relayout_normal_continuation:
     evaluate_type (get_tenv cx) sty = SOME stv /\
     type_memory_bytes c sty = type_memory_size stv /\
     type_memory_bytes c sty < dimword (:256) /\ type_memory_size tyv <= sz /\
-    compile_assign_value c (Var p) LocMemory op F loc typ sty info bytes sb = ((),sf) /\
+    compile_assign_value c (Var p) LocMemory op F loc typ sty bytes sb = ((),sf) /\
     (loc = NONE \/ loc = SOME LocMemory) /\
     fn_has_code sb sf func /\ fn_inst_ids_distinct func /\ ~block_is_terminated sb /\
     FLOOKUP c.ce_vars id = SOME (PtrVar (Var p) sz) /\ not_fresh_at sa p /\
@@ -143,7 +143,7 @@ QED
 
 Theorem annassign_relayout_rhs_outcome:
   !ctx func old c cx lctx RetQ id typ tyv e es stv sty sa0 st sa sb sf salloc
-   op p sz w inst loc info bytes.
+   op p sz w inst loc bytes.
     declare_local old id typ sa0 = (c,st) /\ old.ce_alloca_locals /\
     (!l. FLOOKUP old.ce_vars id = SOME l ==> ?q z. l = PtrVar q z) /\
     gas_admissible (eval_stmt cx (AnnAssign id typ e)) (stmt_res_ok lctx) es /\
@@ -171,7 +171,7 @@ Theorem annassign_relayout_rhs_outcome:
     evaluate_type (get_tenv cx) sty = SOME stv /\
     type_memory_bytes c sty = type_memory_size stv /\
     type_memory_bytes c sty < dimword (:256) /\ type_memory_size tyv <= sz /\
-    compile_assign_value c (Var p) LocMemory op F loc typ sty info bytes sb = ((),sf) /\
+    compile_assign_value c (Var p) LocMemory op F loc typ sty bytes sb = ((),sf) /\
     (loc = NONE \/ loc = SOME LocMemory) /\
     fn_has_code sb sf func /\ fn_inst_ids_distinct func /\ ~block_is_terminated sb /\
     FLOOKUP c.ce_vars id = SOME (PtrVar (Var p) sz) /\ not_fresh_at sa p /\
