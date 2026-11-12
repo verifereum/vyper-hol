@@ -189,3 +189,131 @@ Proof
  `p <> gt /\ p <> ok` by metis_tac[] >>
  simp[lookup_var_def, FLOOKUP_UPDATE, FLOOKUP_DRESTRICT, op_taint_def]
 QED
+
+(* A clean store makes the entire written word robust, not just its
+   current concrete contents. *)
+Theorem typed_copy_clean_store_word:
+ !off w s tm m.
+ mem_agree_outside (tm DIFF {i | off <= i /\ i < off+32})
+   (mstore off w s).vs_memory m ==> mem_word_at off m = w
+Proof
+ rpt gen_tac >> strip_tac >>
+ `mem_bytes_at off 32 (mstore off w (s with vs_memory := m)).vs_memory =
+  mem_bytes_at off 32 m` by
+   (irule annAssignPtrStoreTheory.annassign_clean_store_observation_ptr >>
+    metis_tac[]) >>
+ `mem_word_at off (mstore off w (s with vs_memory := m)).vs_memory =
+  mem_word_at off m` by
+   gvs[valueEncodingDefsTheory.mem_word_at_def,
+       valueEncodingDefsTheory.mem_bytes_at_def] >>
+ gvs[valueEncodingPropsTheory.mstore_mem_word_at_same]
+QED
+
+Theorem typed_copy_emit_clean_mstore_path_ptr:
+ !D ctx fn PG G tn s sa sb dst value a w.
+ emit_inst MSTORE [Var dst;value] [] sa = ((),sb) /\ fn_has_code sa sb fn /\
+ ~s.vs_halted /\ ~ctx_has_dalloca ctx /\
+ s.vs_current_bb = sa.cs_current_bb /\ s.vs_inst_idx = LENGTH sa.cs_current_insts /\
+ ptr_covers G tn dst s 32 /\ lookup_var dst s = SOME a /\
+ eval_operand value s = SOME w /\ op_taint tn value = {} ==>
+ ?sf.
+ gas_path_ptr D 0 ctx fn PG G tn s 0 G
+  (tn with t_mem := tn.t_mem DIFF {i | w2n a <= i /\ i < w2n a+32}) (OK sf) /\
+ sf = (mstore (w2n a) w s with vs_inst_idx := SUC s.vs_inst_idx) /\
+ sf.vs_current_bb = sb.cs_current_bb /\
+ sf.vs_inst_idx = LENGTH sb.cs_current_insts /\ ~sf.vs_halted /\
+ (sf with <|vs_memory := s.vs_memory; vs_inst_idx := s.vs_inst_idx|>) = s /\
+ (!m. mem_agree_outside
+    (tn.t_mem DIFF {i | w2n a <= i /\ i < w2n a+32}) sf.vs_memory m ==>
+    mem_word_at (w2n a) m = w) /\
+ (!i. i < w2n a \/ w2n a+32 <= i ==>
+   mem_bytes_at i 1 sf.vs_memory = mem_bytes_at i 1 s.vs_memory)
+Proof
+ rpt gen_tac >> strip_tac >>
+ drule_all annAssignPtrSetupTheory.annassign_emit_instruction_ptr >> strip_tac >>
+ `step_prov PG G (mk_inst sa.cs_next_id MSTORE [Var dst;value] [])
+    (mstore (w2n a) w s) = G /\
+  step_taint (mk_inst sa.cs_next_id MSTORE [Var dst;value] []) s
+    (mstore (w2n a) w s) tn =
+    (tn with t_mem := tn.t_mem DIFF {i | w2n a <= i /\ i < w2n a+32})` by
+   (irule exprSimPtrTopLevelImmutableCopyTheory.toplevel_immutable_mstore_ghost_frame >>
+    simp[]) >>
+ qexists_tac `mstore (w2n a) w s with vs_inst_idx := SUC s.vs_inst_idx` >>
+ conj_tac
+ >- (`gas_path_ptr D 0 ctx fn PG G tn s 0
+       (step_prov PG G (mk_inst sa.cs_next_id MSTORE [Var dst;value] [])
+         (mstore (w2n a) w s))
+       (step_taint (mk_inst sa.cs_next_id MSTORE [Var dst;value] []) s
+         (mstore (w2n a) w s) tn)
+       (OK (mstore (w2n a) w s with vs_inst_idx := SUC s.vs_inst_idx))` by
+       (irule annAssignPtrStoreTheory.annassign_mstore_path_ptr >> simp[] >>
+        metis_tac[]) >> gvs[]) >>
+ `sb.cs_current_bb = sa.cs_current_bb /\
+  LENGTH sb.cs_current_insts = SUC (LENGTH sa.cs_current_insts)` by
+   (qpat_x_assum `emit_inst _ _ _ _ = _` mp_tac >>
+    simp[emit_inst_def, comp_bind_def, comp_ignore_bind_def, fresh_id_def,
+      emit_def, comp_return_def] >> strip_tac >> gvs[]) >>
+ `!m. mem_agree_outside
+    (tn.t_mem DIFF {i | w2n a <= i /\ i < w2n a+32})
+    (mstore (w2n a) w s).vs_memory m ==> mem_word_at (w2n a) m = w` by
+   (rpt strip_tac >> irule typed_copy_clean_store_word >> metis_tac[]) >>
+ `!i. i < w2n a \/ w2n a+32 <= i ==>
+   mem_bytes_at i 1 (mstore (w2n a) w s).vs_memory =
+   mem_bytes_at i 1 s.vs_memory` by
+   (rpt strip_tac >>
+    irule valueEncodingPropsTheory.mstore_mem_bytes_at_disjoint >> decide_tac) >>
+ simp[] >> gvs[venomStateTheory.mstore_def, venom_state_component_equality] >>
+ first_assum ACCEPT_TAC
+QED
+
+Theorem typed_copy_emit_offset_path_ptr:
+ !D ctx fn PG G tn s sa sb root out a off sz.
+ emit_op ADD [Var root;Lit(n2w off)] sa = (Var out,sb) /\ fn_has_code sa sb fn /\
+ ~s.vs_halted /\ ~ctx_has_dalloca ctx /\
+ s.vs_current_bb = sa.cs_current_bb /\ s.vs_inst_idx = LENGTH sa.cs_current_insts /\
+ ptr_covers G tn root s (off+sz) /\ lookup_var root s = SOME a /\
+ w2n a+off+sz < dimword(:256) ==>
+ ?Gf tnf sf.
+ gas_path_ptr D 0 ctx fn PG G tn s 0 Gf tnf (OK sf) /\
+ sf = (update_var out (n2w(w2n a+off)) s with vs_inst_idx := SUC s.vs_inst_idx) /\
+ sf.vs_current_bb = sb.cs_current_bb /\
+ sf.vs_inst_idx = LENGTH sb.cs_current_insts /\ ~sf.vs_halted /\
+ lookup_var out sf = SOME(n2w(w2n a+off)) /\ ptr_covers Gf tnf out sf sz /\
+ (sf with <|vs_vars := s.vs_vars; vs_inst_idx := s.vs_inst_idx|>) = s /\
+ tnf.t_mem = tn.t_mem /\ tnf.t_stor = tn.t_stor /\
+ tnf.t_trans = tn.t_trans /\ tnf.t_imm = tn.t_imm /\
+ (!p. not_fresh_at sa p ==> lookup_var p sf = lookup_var p s /\
+   FLOOKUP Gf p = FLOOKUP G p /\ op_taint tnf (Var p) = op_taint tn (Var p))
+Proof
+ rpt gen_tac >> strip_tac >>
+ `op_taint tn (Var root) = {}` by fs[ptr_covers_def] >>
+ `a + n2w off = n2w(w2n a+off)` by simp[GSYM word_add_n2w] >>
+ `?Gf tnf sf.
+   gas_path_ptr D 0 ctx fn PG G tn s 0 Gf tnf (OK sf) /\
+   sf = (update_var out (a+n2w off) s with vs_inst_idx := SUC s.vs_inst_idx) /\
+   Gf = step_prov PG G (mk_inst sa.cs_next_id ADD [Var root;Lit(n2w off)] [out])
+      (update_var out (a+n2w off) s) /\
+   tnf = step_taint (mk_inst sa.cs_next_id ADD [Var root;Lit(n2w off)] [out]) s
+      (update_var out (a+n2w off) s) tn /\
+   tnf.t_mem = tn.t_mem /\ tnf.t_stor = tn.t_stor /\
+   tnf.t_trans = tn.t_trans /\ tnf.t_imm = tn.t_imm /\
+   (!p. p <> out ==> FLOOKUP Gf p = FLOOKUP G p /\
+     op_taint tnf (Var p) = op_taint tn (Var p))` by
+   (drule (attribute_emit_binop_path_ptr |> Q.INST [`opc` |-> `ADD`, `f` |-> `word_add`] |> SRULE []) >>
+    simp[eval_operand_def, op_taint_def] >>
+    disch_then (drule_at Any) >>
+    disch_then (qspecl_then [`tn`,`fn`,`ctx`,`PG`,`G`,`D`] mp_tac) >>
+    gvs[op_taint_def] >> metis_tac[]) >>
+ qexistsl [`Gf`,`tnf`,`sf`] >>
+ `sb.cs_current_bb = sa.cs_current_bb /\
+  LENGTH sb.cs_current_insts = SUC (LENGTH sa.cs_current_insts) /\
+  ~not_fresh_at sa out` by metis_tac[annassign_emit_op_instruction_ptr] >>
+ `ptr_covers Gf tnf out sf sz` by
+   (pure_asm_rewrite_tac[ghostPcTransportPtrTheory.ptr_covers_inst_idx] >>
+    irule exprSimPtrLiteralOpsTheory.literal_add_ptr_covers >>
+    gvs[ptr_covers_def] >> qexistsl [`b`,`sz'`] >> simp[] >> decide_tac) >>
+ simp[] >>
+ simp[update_var_def, venom_state_component_equality, lookup_var_def, FLOOKUP_UPDATE] >>
+ rpt strip_tac >> `p <> out` by metis_tac[] >>
+ gvs[update_var_def] >> metis_tac[]
+QED
