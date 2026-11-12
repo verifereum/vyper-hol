@@ -99,7 +99,7 @@ Theorem raw_log_dynamic_continuation_mem:
   (!H. valid_horizon cx st0 H es.storage_trace ==>
      stmt_state_rel H ctx func cenv cx es s /\
      storage_well_formed_on cx es (FST H)) /\
-  valid_horizon cx st0 H0 es.storage_trace /\ local_ptrs_reserved cenv sm /\
+  storage_trace_domain cx st0 es.storage_trace /\ local_ptrs_reserved cenv sm /\
   wb_frame cenv es0 es sa s0 s /\ sa.cs_next_var <= sm.cs_next_var /\
   post_value_type cenv e = expr_type e /\ expr_type e = NoneT /\
   fn_has_code sm sb func /\
@@ -109,7 +109,7 @@ Theorem raw_log_dynamic_continuation_mem:
   s0.vs_alloca_next <= s.vs_alloca_next /\
   ~s.vs_halted /\ s.vs_current_bb = sm.cs_current_bb /\
   s.vs_inst_idx = LENGTH sm.cs_current_insts ==>
-  gas_outcome T tops (ctx,func) cx st0
+  gas_outcome T (cx_tops cx) (ctx,func) cx st0
     (do bs' <- lift_option_type (dest_BytesV (BytesV bs)) "raw_log data";
         type_check (LENGTH vals <= 4) "raw_log too many topics";
         push_log (encode_raw_event_values cx.txn.target vals bs');
@@ -118,9 +118,12 @@ Theorem raw_log_dynamic_continuation_mem:
        expr_post H ctx func cenv cx e es0 sa sb s0 ee NoneV (Lit 0w) t /\
        alloca_history func t /\ s0.vs_alloca_next <= t.vs_alloca_next /\
        ~t.vs_halted /\ t.vs_current_bb = sb.cs_current_bb /\
-       t.vs_inst_idx = LENGTH sb.cs_current_insts) R
+       t.vs_inst_idx = LENGTH sb.cs_current_insts)
+    (\H rr ee r. expr_exit rr r)
 Proof
   disch_then (map_every assume_tac o CONJUNCTS) >>
+  `?H0. valid_horizon cx st0 H0 es.storage_trace` by
+    metis_tac[vyperStorageFootprintTheory.storage_trace_domain_def] >>
   drule_all raw_log_dynamic_tail_mem_counted >> strip_tac >>
   rewrite_tac[gas_outcome_def] >> qexists_tac `[]` >>
   disj2_tac >> disj1_tac >>
@@ -169,7 +172,7 @@ Theorem raw_log_fixed_continuation_mem:
   (!H. valid_horizon cx st0 H es.storage_trace ==>
      stmt_state_rel H ctx func cenv cx es s /\
      storage_well_formed_on cx es (FST H)) /\
-  valid_horizon cx st0 H0 es.storage_trace /\ wb_frame cenv es0 es sa s0 s /\
+  storage_trace_domain cx st0 es.storage_trace /\ wb_frame cenv es0 es sa s0 s /\
   local_ptrs_reserved cenv sa /\ MAP FDOM es0.scopes = MAP FDOM es.scopes /\
   MEM inst (fn_insts func) /\ inst.inst_opcode = ALLOCA /\
   FLOOKUP s.vs_allocas inst.inst_id = SOME (w2n p,32) /\
@@ -182,7 +185,7 @@ Theorem raw_log_fixed_continuation_mem:
   w2n p + 32 <= s.vs_alloca_next /\ s0.vs_alloca_next <= s.vs_alloca_next /\
   ~s.vs_halted /\ s.vs_current_bb = sm.cs_current_bb /\
   s.vs_inst_idx = LENGTH sm.cs_current_insts ==>
-  gas_outcome T tops (ctx,func) cx st0
+  gas_outcome T (cx_tops cx) (ctx,func) cx st0
     (do bs' <- lift_option_type (dest_BytesV (BytesV bs)) "raw_log data";
         type_check (LENGTH vals <= 4) "raw_log too many topics";
         push_log (encode_raw_event_values cx.txn.target vals bs');
@@ -191,9 +194,12 @@ Theorem raw_log_fixed_continuation_mem:
        expr_post H ctx func cenv cx e es0 sa sb s0 ee NoneV (Lit 0w) t /\
        alloca_history func t /\ s0.vs_alloca_next <= t.vs_alloca_next /\
        ~t.vs_halted /\ t.vs_current_bb = sb.cs_current_bb /\
-       t.vs_inst_idx = LENGTH sb.cs_current_insts) R
+       t.vs_inst_idx = LENGTH sb.cs_current_insts)
+    (\H rr ee r. expr_exit rr r)
 Proof
   disch_then (map_every assume_tac o CONJUNCTS) >>
+  `?H0. valid_horizon cx st0 H0 es.storage_trace` by
+    metis_tac[vyperStorageFootprintTheory.storage_trace_domain_def] >>
   drule_all raw_log_fixed_tail_mem_counted >> strip_tac >>
   rewrite_tac[gas_outcome_def] >> qexists_tac `[]` >>
   disj2_tac >> disj1_tac >>

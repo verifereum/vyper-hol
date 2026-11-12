@@ -304,7 +304,9 @@ Proof
   BasicProvers.VAR_EQ_TAC >>
   `!H. valid_horizon cx st0 H mid2.storage_trace ==>
      expr_post H ctx func cenv cx data (mid with gas_obs := []) sm sn t
-       (mid2 with gas_obs := []) dv data_op td /     td.vs_current_bb = sn.cs_current_bb /     td.vs_inst_idx = LENGTH sn.cs_current_insts` by
+       (mid2 with gas_obs := []) dv data_op td /\
+     td.vs_current_bb = sn.cs_current_bb /\
+     td.vs_inst_idx = LENGTH sn.cs_current_insts` by
     (rpt strip_tac >>
      qpat_assum `!H. valid_horizon _ _ H mid2.storage_trace ==> _`
        (qspec_then `H` mp_tac) >>
@@ -409,7 +411,7 @@ Proof
   conj_tac
   >- (irule raw_log_post_gas_obs >>
       qpat_assum `!H. valid_horizon _ _ H (mid2 with gas_obs := []).storage_trace ==>
-          expr_post _ _ _ _ _ _ _ _ _ _ _ _ _ _ _` irule >>
+          expr_post _ _ _ _ _ _ _ _ _ _ _ _ _ _` irule >>
       asm_simp_tac (srw_ss()) []) >>
   simp[]
 QED
@@ -814,7 +816,7 @@ Proof
   conj_tac
   >- (irule raw_log_post_gas_obs >>
       qpat_assum `!H. valid_horizon _ _ H (mid2 with gas_obs := []).storage_trace ==>
-          expr_post _ _ _ _ _ _ _ _ _ _ _ _ _ _ _` irule >>
+          expr_post _ _ _ _ _ _ _ _ _ _ _ _ _ _` irule >>
       asm_simp_tac (srw_ss()) []) >>
   simp[]
 QED
