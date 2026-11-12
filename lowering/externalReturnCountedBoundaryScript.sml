@@ -30,8 +30,8 @@ Proof
 QED
 
 Theorem return_expr_post_start_gas_obs:
-  expr_post ctx func ce cx e (es with gas_obs := gs) sa sb s0 ee v op s <=>
-  expr_post ctx func ce cx e es sa sb s0 ee v op s
+  expr_post H ctx func ce cx e (es with gas_obs := gs) sa sb s0 ee v op s <=>
+  expr_post H ctx func ce cx e es sa sb s0 ee v op s
 Proof
   simp[expr_post_def, locals_kept_def, popped_kept_def]
 QED

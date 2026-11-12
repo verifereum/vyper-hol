@@ -46,7 +46,7 @@ Theorem entry_body_state_assembly:
   abi_alloca_history (fn_insts fn) t /\ fresh_vars_wrt final t /\
   (!id r. FLOOKUP t.vs_allocas id = SOME r ==> id < registered.cs_next_id) /\
   entry_loop_fields vs t /\ cef.ce_is_ctor = F ==>
-  stmt_state_rel unit.cu_context fn cef
+  stmt_state_rel H unit.cu_context fn cef
     (initial_evaluation_context am.sources am.layouts tx NONE) es0 t
 Proof
   strip_tac >>

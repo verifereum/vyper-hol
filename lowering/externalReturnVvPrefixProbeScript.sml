@@ -4,7 +4,7 @@ Ancestors
   stmtSimReturn exprSimMemorySource vyperAST
 
 Theorem return_vv_located_tag:
-  vv_post ctx func ce cx e es sa sb s0 es' tv (LocatedValue ty p) s ==>
+  vv_post H ctx func ce cx e es sa sb s0 es' tv (LocatedValue ty p) s ==>
   (ty = post_value_type ce e \/
    p.ptr_location = LocMemory /\ is_bytestring_type (post_value_type ce e) /\
    is_bytestring_type ty)
@@ -20,12 +20,12 @@ Theorem return_vv_located_prefix:
   fn_has_code sa sb func /\ fn_inst_ids_distinct func /\
   local_ptrs_reserved ce sa /\
   gas_admissible (eval_expr cx e) expr_vv_res_ok es /\
-  stmt_state_rel ctx func ce cx es s0 /\ ~s0.vs_halted /\
+  stmt_state_rel H ctx func ce cx es s0 /\ ~s0.vs_halted /\
   s0.vs_current_bb = sa.cs_current_bb /\
   s0.vs_inst_idx = LENGTH sa.cs_current_insts ==>
   gas_outcome F (cx_tops cx) (ctx,func) (eval_expr cx e) (es,s0)
     (\res ee s. ?tv. res = INL tv /\
-      vv_post ctx func ce cx e es sa sb s0 ee tv (LocatedValue ty p) s /\
+      vv_post H ctx func ce cx e es sa sb s0 ee tv (LocatedValue ty p) s /\
       s.vs_current_bb = sb.cs_current_bb /\
       s.vs_inst_idx = LENGTH sb.cs_current_insts)
     (\res ee r. expr_exit res r)
@@ -53,13 +53,13 @@ Theorem return_intcall_vv_prefix:
   local_ptrs_reserved ce sa /\
   gas_admissible (eval_stmt cx (Return (SOME (Call ann (IntCall fid) args drv))))
     (stmt_res_ok lctx) es /\
-  stmt_state_rel ctx func ce cx es s0 /\ ~s0.vs_halted /\
+  stmt_state_rel H ctx func ce cx es s0 /\ ~s0.vs_halted /\
   s0.vs_current_bb = sa.cs_current_bb /\
   s0.vs_inst_idx = LENGTH sa.cs_current_insts ==>
   gas_outcome F (cx_tops cx) (ctx,func)
     (eval_expr cx (Call ann (IntCall fid) args drv)) (es,s0)
     (\res ee s. ?tv. res = INL tv /\
-      vv_post ctx func ce cx (Call ann (IntCall fid) args drv) es sa sb s0 ee tv
+      vv_post H ctx func ce cx (Call ann (IntCall fid) args drv) es sa sb s0 ee tv
         (LocatedValue (ce.ce_func_return_type (nsid_to_string fid)) p) s /\
       s.vs_current_bb = sb.cs_current_bb /\
       s.vs_inst_idx = LENGTH sb.cs_current_insts)

@@ -37,13 +37,13 @@ Theorem return_selected_forced_prefix:
   local_ptrs_reserved ce sa /\
   expr_sim ctx func ce cx ct e es /\ expr_vv_sim ctx func ce cx ct e es /\
   gas_admissible (eval_stmt cx (Return (SOME e))) (stmt_res_ok lctx) es /\
-  stmt_state_rel ctx func ce cx es s0 /\ ~s0.vs_halted /\
+  stmt_state_rel H ctx func ce cx es s0 /\ ~s0.vs_halted /\
   s0.vs_current_bb = sa.cs_current_bb /\
   s0.vs_inst_idx = LENGTH sa.cs_current_insts ==>
   gas_outcome F (cx_tops cx) (ctx,func)
     (bind (eval_expr cx e) (read_result cx)) (es,s0)
     (\res ee s. ?v. res = INL v /\
-      expr_post ctx func ce cx e es sa sb s0 ee v op s /\
+      expr_post H ctx func ce cx e es sa sb s0 ee v op s /\
       s.vs_current_bb = sb.cs_current_bb /\
       s.vs_inst_idx = LENGTH sb.cs_current_insts /\
       ((!ann fid args drv. e <> Call ann (IntCall fid) args drv) \/

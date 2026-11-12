@@ -20,14 +20,14 @@ Theorem return_intcall_stack_force:
   gas_admissible
     (eval_stmt cx (Return (SOME (Call ann (IntCall fid) args drv))))
     (stmt_res_ok lctx) es /\
-  stmt_state_rel ctx func ce cx es s0 /\ ~s0.vs_halted /\
+  stmt_state_rel H ctx func ce cx es s0 /\ ~s0.vs_halted /\
   s0.vs_current_bb = sa.cs_current_bb /\
   s0.vs_inst_idx = LENGTH sa.cs_current_insts ==>
   gas_outcome F (cx_tops cx) (ctx,func)
     (bind (eval_expr cx (Call ann (IntCall fid) args drv)) (read_result cx))
     (es,s0)
     (\res ee s. ?v. res = INL v /\
-      expr_post ctx func ce cx (Call ann (IntCall fid) args drv)
+      expr_post H ctx func ce cx (Call ann (IntCall fid) args drv)
         es sa sm s0 ee v (Lit 0w) s /\
       s.vs_current_bb = sm.cs_current_bb /\
       s.vs_inst_idx = LENGTH sm.cs_current_insts)

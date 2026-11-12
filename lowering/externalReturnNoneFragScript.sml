@@ -49,7 +49,7 @@ Proof
        build_compile_env_def] >>
      rpt (pairarg_tac >> gvs[]) >>
      simp[compile_env_component_equality] >> strip_tac >> gvs[]) >>
-  `state_rel func ce cx es s0` by fs[stmt_state_rel_def] >>
+  `state_rel H func ce cx es s0` by fs[stmt_state_rel_def] >>
   drule_all return_none_suffix_path >>
   disch_then (qspecl_then [`am.exports`,`ctx`] strip_assume_tac) >>
   simp[gas_outcome_def] >> qexists_tac `REPLICATE n F` >> disj1_tac >>

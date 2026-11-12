@@ -17,7 +17,7 @@ Theorem return_intcall_located_force:
   gas_admissible
     (eval_stmt cx (Return (SOME (Call ann (IntCall fid) args drv))))
     (stmt_res_ok lctx) es /\
-  stmt_state_rel ctx func ce cx es s0 /\ ~s0.vs_halted /\
+  stmt_state_rel H ctx func ce cx es s0 /\ ~s0.vs_halted /\
   s0.vs_current_bb = sa.cs_current_bb /\
   s0.vs_inst_idx = LENGTH sa.cs_current_insts ==>
   gas_outcome F (cx_tops cx) (ctx,func)
@@ -26,7 +26,7 @@ Theorem return_intcall_located_force:
     (\res ee s. ?v. res = INL v /\
       ty = ce.ce_func_return_type (nsid_to_string fid) /\
       p.ptr_location = LocMemory /\
-      expr_post ctx func ce cx (Call ann (IntCall fid) args drv)
+      expr_post H ctx func ce cx (Call ann (IntCall fid) args drv)
         es sa sb s0 ee v op s /\
       s.vs_current_bb = sb.cs_current_bb /\
       s.vs_inst_idx = LENGTH sb.cs_current_insts)

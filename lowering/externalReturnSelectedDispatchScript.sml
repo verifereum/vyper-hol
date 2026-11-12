@@ -21,7 +21,7 @@ Theorem return_selected_success_suffix:
   IS_SOME (type_stmt env ret (Return (SOME e))) /\
   call_evaluation_safe cx (int_calls_expr e) /\
   (do r <- eval_expr cx e; read_result cx r od) es = (INL v,ee) /\
-  expr_post ctx func ce cx e es se sa s0 ee v op s /\
+  expr_post H ctx func ce cx e es se sa s0 ee v op s /\
   ce.ce_raw_return = lookup_raw_return_or_F (NONE:num option)
     tx.function_name External tops /\
   cx.sources = am.sources /\ cx.layouts = am.layouts /\ cx.txn.target = tx.target /\
@@ -66,7 +66,7 @@ Proof
   drule_all return_runtime_physical_widens >> strip_tac >>
   `env.type_defs = get_tenv (initial_evaluation_context am.sources am.layouts tx NONE)` by
     fs[vyperTypeInvariantsTheory.env_consistent_def, vyperTypeInvariantsTheory.env_context_consistent_def] >>
-  `stmt_state_rel ctx func ce
+  `stmt_state_rel H ctx func ce
     (initial_evaluation_context am.sources am.layouts tx NONE) ee s` by
     fs[expr_post_def] >>
   gvs[lowered_value_type_def, vyperASTTheory.expr_type_def] >>

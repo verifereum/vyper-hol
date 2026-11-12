@@ -20,7 +20,7 @@ Theorem entry_runtime_state_rel:
   transient_vars_rel cenv (initial_evaluation_context am.sources am.layouts tx NONE) /\
   cenv.ce_module = NONE /\ ~cenv.ce_is_ctor /\
   immutable_section_layout cenv tops /\ ss.vs_data_section = vs.vs_data_section ==>
-  state_rel func cenv (initial_evaluation_context am.sources am.layouts tx NONE) es ss
+  state_rel H func cenv (initial_evaluation_context am.sources am.layouts tx NONE) es ss
 Proof
   strip_tac >> drule send_call_value_accounts >> strip_tac >>
   `immutables_rel cenv tx.target NONE F es ss` by

@@ -32,7 +32,7 @@ QED
 
 Theorem normalize_alloc_registered[local]:
   compile_alloc_buffer n sb = (buf,sc) /\ fn_has_code sb sc func /\
-  stmt_state_rel ctx func cenv cx es s /\ n < dimword (:256) /\
+  stmt_state_rel H ctx func cenv cx es s /\ n < dimword (:256) /\
   exec_alloca (mk_inst sb.cs_next_id ALLOCA [Lit (n2w n)]
     [STRING #"%" (toString sb.cs_next_var)]) s (n2w n : bytes32) = OK t /\
   eval_operand buf.buf_operand t = SOME (n2w b) /\
@@ -71,7 +71,7 @@ Theorem normalize_return_store_mem_cont:
   compile_alloc_buffer (type_memory_bytes cenv dty) sb = (buf,sc) /\
   compile_store_memory_typed cenv buf.buf_operand dty src sty sc = ((),sd) /\
   fn_has_code sb sc func /\ fn_has_code sc sd func /\ fn_inst_ids_distinct func /\
-  stmt_state_rel ctx func cenv cx es s /\ local_ptrs_reserved cenv sb /\
+  stmt_state_rel H ctx func cenv cx es s /\ local_ptrs_reserved cenv sb /\
   expr_val_at cenv cx sty sa sb es v src s /\ expr_val_rel cx sty v src s /\
   type_widens_to (get_tenv cx) sty dty /\ sty <> dty /\
   ~is_word_type dty /\ ~(is_bytestring_type dty /\ is_bytestring_type sty) /\

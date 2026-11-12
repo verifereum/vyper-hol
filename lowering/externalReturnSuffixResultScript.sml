@@ -7,7 +7,7 @@ Theorem return_output_alloc_encoder_result_rel:
   compile_alloc_buffer msz st = (buf,mid) /\
   compile_abi_encode_to_buf buf.buf_operand src ei mid = (out,en) /\
   fn_has_code st mid func /\ fn_has_code mid en func /\
-  fn_inst_ids_distinct func /\ stmt_state_rel ctx func cenv cx es s /\
+  fn_inst_ids_distinct func /\ stmt_state_rel H ctx func cenv cx es s /\
   local_ptrs_reserved cenv st /\ msz < dimword (:256) /\
   LENGTH (enc at av) <= msz /\ abi_encoder_admissible ei /\
   abi_encoder_window_input ei at av sb cap s.vs_memory /\

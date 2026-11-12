@@ -7,7 +7,7 @@ Theorem external_raw_halt_unlock_result[local]:
   !func cenv cx es es' s ss nr nkey iv tops tx srcs exps layouts v bs ret.
     lookup_raw_return_or_F (NONE:num option) tx.function_name External tops /\
     cx.sources = srcs /\ cx.layouts = layouts /\ cx.txn.target = tx.target /\
-    state_rel func cenv cx es s /\
+    state_rel H func cenv cx es s /\
     (if nr /\ ~iv then release_nonreentrant_lock cx.txn.target nkey
      else vyperState$return ()) es = (INL (), es') /\
     raw_return_bytes v = SOME bs /\ ss.vs_returndata = bs /\
@@ -25,17 +25,17 @@ Proof
      (if nr /\ ~iv then (tstore (n2w nkey) 0w s).vs_transient
       else s.vs_transient)` by
     (Cases_on `nr /\ ~iv` >> fs[]) >>
-  `accounts_agree (initial_evaluation_context srcs layouts tx NONE)
+  `accounts_agree H (initial_evaluation_context srcs layouts tx NONE)
      (finalize_pending_deletions
         (abstract_machine_from_state srcs exps layouts es')).accounts
      (process_deletions ss.vs_pending_deletions ss.vs_accounts) /\
-   transient_agree (initial_evaluation_context srcs layouts tx NONE)
+   transient_agree H (initial_evaluation_context srcs layouts tx NONE)
      (finalize_pending_deletions
         (abstract_machine_from_state srcs exps layouts es')).tStorage ss.vs_transient /\
    logs_correspond (compiled_event_info tops) (type_env tops) tx.target
      (finalize_pending_deletions
         (abstract_machine_from_state srcs exps layouts es')).logs ss.vs_logs /\
-   LIST_REL (request_agree (initial_evaluation_context srcs layouts tx NONE))
+   LIST_REL (request_agree H (initial_evaluation_context srcs layouts tx NONE))
      es'.requests ss.vs_requests` by
     metis_tac[external_halt_success_unlock] >>
   gvs[external_call_result_rel_def, tx_return_bytes_def,
@@ -57,7 +57,7 @@ Theorem external_return_raw_unlock_result_rel:
     evaluate_type (type_env tops) ret = SOME tv /\ safe_cast tv v0 = SOME v /\
     is_bytestring_type ret ==>
     frag_exec ctx st st'
-      (\s. state_rel func cenv cx es s /\
+      (\s. state_rel H func cenv cx es s /\
            (?p. eval_operand op s = SOME p /\
                 val_in_memory tv v0 (w2n p) s.vs_memory /\
                 w2n p + val_footprint tv v0 <= dimword (:256)))
@@ -68,7 +68,7 @@ Theorem external_return_raw_unlock_result_rel:
           es'.requests))
 Proof
   rpt strip_tac >>
-  `!s. state_rel func cenv cx es s ==> ~s.vs_call_ctx.cc_static` by
+  `!s. state_rel H func cenv cx es s ==> ~s.vs_call_ctx.cc_static` by
     simp[loweringStateRelDefsTheory.state_rel_def] >>
   `v = v0` by metis_tac[safe_cast_some_eq] >>
   `value_has_type tv v0` by metis_tac[safe_cast_result_well_typed] >>

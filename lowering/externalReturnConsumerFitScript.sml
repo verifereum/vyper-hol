@@ -87,10 +87,10 @@ QED
 (* Unlike a physical-zero-size claim, this gives exactly annotation memory.
    In the located branch the producer supplies sty = expr_type e. *)
 Theorem return_consumer_annotation_memory:
-  expr_post ctx func ce cx e es sa sb s0 ee v op s /\
+  expr_post H ctx func ce cx e es sa sb s0 ee v op s /\
   evaluate_type (get_tenv cx) (post_value_type ce e) = SOME tv /\
   ~is_word_type (post_value_type ce e) ==>
-  ?w. stmt_state_rel ctx func ce cx ee s /\
+  ?w. stmt_state_rel H ctx func ce cx ee s /\
     eval_operand op s = SOME w /\ val_in_memory tv v (w2n w) s.vs_memory /\
     expr_val_at ce cx (post_value_type ce e) sa sb ee v op s /\ val_wf tv v
 Proof
@@ -101,7 +101,7 @@ QED
    Package/typing facts are deliberately explicit; no source ownership is
    demanded when the footprint is zero. *)
 Theorem return_consumer_located_normalize:
-  expr_post ctx func ce cx e es se sa s0 ee v src s /\
+  expr_post H ctx func ce cx e es se sa s0 ee v src s /\
   sty = post_value_type ce e /\ ~is_word_type sty /\
   compile_alloc_buffer (type_memory_bytes ce dty) sa = (buf,sm) /\
   compile_store_memory_typed ce buf.buf_operand dty src sty sm = ((),sb) /\
@@ -121,7 +121,7 @@ Theorem return_consumer_located_normalize:
   value_has_type stv v /\ value_has_type dtv v /\ val_wf dtv v /\
   (!x. src = Var x ==> not_fresh_at sa x) ==>
   frag_exec ctx sa sb (\z. z = s)
-    (\t. ?w. stmt_state_rel ctx func ce cx ee t /\
+    (\t. ?w. stmt_state_rel H ctx func ce cx ee t /\
       eval_operand buf.buf_operand t = SOME w /\
       FLOOKUP t.vs_allocas sa.cs_next_id = SOME (w2n w,type_memory_size dtv) /\
       w2n w + type_memory_size dtv < dimword (:256) /\
