@@ -48,6 +48,12 @@ Theorem concretize_comparison_geometry:
   resolved_config_ok (JointConfig stk PG G tn fn inst s oms om hs h)
     (birth::ids) ((rp,rv)::anns) /\
   lifetime_ok n (birth::ids) (JointConfig stk PG G tn fn inst s oms om hs h) /\
+  ((!k aid b sz.
+      k < LENGTH ((fn,s.vs_allocas)::MAP (\f. (f.cf_fn,f.cf_state.vs_allocas)) stk) /\
+      FLOOKUP (SND (EL k ((fn,s.vs_allocas)::
+        MAP (\f. (f.cf_fn,f.cf_state.vs_allocas)) stk))) aid = SOME (b,sz) ==>
+      b + sz <= w2n s.vs_initial_fmp) \/
+   SND o_f rv = G) /\
   access_ok lo G fn inst s /\
   (inst.inst_opcode = EQ \/ inst.inst_opcode = LT \/ inst.inst_opcode = GT) /\
   inst.inst_operands = [Var u; Var w] /\
@@ -66,7 +72,7 @@ Proof
   drule resolved_config_current >> simp[] >> strip_tac >>
   drule resolved_compare_access >> disch_then drule >>
   disch_then (qspecl_then [`w`, `u`] mp_tac) >>
-  (impl_tac >- (simp[] >> metis_tac[])) >> strip_tac >>
+  (impl_tac >- (fs[] >> metis_tac[])) >> strip_tac >>
   PairCases_on `tu` >> PairCases_on `tw` >>
   `((tu0,tu1):num # num) = (tw0,tw1)` by
     (irule resolved_positive_site_tokens >> goal_assum (drule_at Any) >>
@@ -114,6 +120,7 @@ Theorem concretize_compare_local_complete:
   resolved_config_ok (JointConfig stk PG G tn fn inst s oms om hs h)
     (birth::ids) ((rp,rv)::anns) /\
   lifetime_ok n (birth::ids) (JointConfig stk PG G tn fn inst s oms om hs h) /\
+  (~ctx_has_dalloca C ==> SND o_f rv = G) /\
   o1_fn_shape C fn /\ fn_ptr_ok P fn /\ MEM inst (fn_insts fn) /\
   (inst.inst_opcode = EQ \/ inst.inst_opcode = LT \/ inst.inst_opcode = GT) /\
   inst.inst_outputs = [v] /\ step_inst_base inst s = OK post /\
@@ -152,6 +159,15 @@ Proof
      metis_tac[joint_origin_history_erasure, origin_frame_erasure]) >>
   `taint_ok fn tn inst s /\ access_ok lo G fn inst s` by
     (fs[ptr_discipline_def] >> metis_tac[]) >>
+  `(!k aid b sz.
+      k < LENGTH ((fn,s.vs_allocas)::MAP (\f. (f.cf_fn,f.cf_state.vs_allocas)) stk) /\
+      FLOOKUP (SND (EL k ((fn,s.vs_allocas)::
+        MAP (\f. (f.cf_fn,f.cf_state.vs_allocas)) stk))) aid = SOME (b,sz) ==>
+      b + sz <= w2n s.vs_initial_fmp) \/
+   SND o_f rv = G` by
+    (Cases_on `ctx_has_dalloca C`
+     >- (disj1_tac >> irule frame_reachable_caches_below >> metis_tac[]) >>
+     fs[]) >>
   `!u. FLOOKUP rv u <> NONE ==> u IN fn_pv P fn` by
     (drule resolved_config_current >> simp[] >> strip_tac >>
      rpt strip_tac >> irule reachable_resolved_support >>
@@ -198,6 +214,7 @@ Proof
   drule_at (Pat `ctx_pass_stage _ _ _ _ _`) concretize_comparison_geometry >>
   disch_then (drule_at (Pat `resolved_config_ok _ _ _`)) >>
   disch_then (drule_at (Pat `lifetime_ok _ _ _`)) >>
+  disch_then (drule_at (Pat `_ \/ SND o_f _ = _`)) >>
   disch_then (qspecl_then [`k`, `vs0`, `u`, `lo`] mp_tac) >>
   simp[] >> strip_tac >>
   drule_at (Pat `local_rel _ _ _ _ _ _ _`) guarded_pointer_compare_step >>

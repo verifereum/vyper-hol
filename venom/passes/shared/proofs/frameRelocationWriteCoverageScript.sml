@@ -24,9 +24,9 @@ Theorem relocation_pair_range:
   !i. i < len ==> relocation_pair lo positions q (off+i) (offT+i)
 Proof
   strip_tac >> rpt strip_tac
-  >- (simp[relocation_pair_def] >> decide_tac) >>
-  simp[relocation_pair_def] >>
-  qexistsl_tac [`d`, `owner`, `aid`, `b`, `sz`] >> simp[] >> decide_tac
+  >- (gvs[] >> irule relocation_pair_static >> decide_tac) >>
+  irule relocation_pair_cached >> conj_tac >- decide_tac >>
+  qexistsl_tac [`aid`, `b`, `d`, `owner`, `sz`] >> gvs[]
 QED
 
 (* Operational footprints in both directions, with identical byte offsets.

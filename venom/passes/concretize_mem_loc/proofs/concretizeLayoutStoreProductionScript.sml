@@ -27,22 +27,65 @@ Theorem joint_mstore_demand_address_coherence:
   c < LENGTH es /\
   EL c (q0::qs) = JointConfig stk PG G tn fn inst s oms om hs h /\
   EL c es = SOME (OriginOrdinary fuel post) /\ post.vs_allocas = s.vs_allocas /\
+  (a < lo \/ (o1_ctx_shape C /\ ptr_discipline lo C vs0)) /\
   joint_relocation_demand lo positions q0 es qs (SUC c) a z /\
   relocation_pair lo positions (EL c (q0::qs)) a w ==> z = w
 Proof
   strip_tac >>
   drule_all joint_trace_edge_at >> strip_tac >>
   `!d owner aid site.
-    activation_cache (EL c (q0::qs)) d owner aid site ==>
+    activation_cache (EL c (q0::qs)) d owner aid site <=>
     activation_cache (EL (SUC c) (q0::qs)) d owner aid site` by
-    (gvs[joint_transition_ordinary, activation_cache_def]) >>
-  gvs[joint_relocation_demand_def, relocation_pair_def] >>
-  `activation_cache (EL c qs) d'' owner'' aid'' (b'',sz'')` by
-    metis_tac[] >>
-  `d = d'' /\ owner = owner'' /\ aid = aid'' /\ b = b'' /\ sz = sz''` by
-    (irule joint_activation_cache_byte_unique >>
-     conj_tac >- (qexists_tac `a` >> simp[]) >>
-     qexistsl_tac [`C`, `EL c qs`, `vs0`] >> simp[]) >> gvs[]
+    gvs[joint_transition_ordinary, activation_cache_def] >>
+  qpat_x_assum `joint_relocation_demand _ _ _ _ _ _ _ _` mp_tac >>
+  simp[joint_relocation_demand_def] >>
+  disch_then (qx_choose_then `j` (map_every assume_tac o CONJUNCTS)) >>
+  Cases_on `a < lo` >- fs[relocation_pair_static_eq] >>
+  `lo <= a /\ c <= LENGTH es` by decide_tac >>
+  `o1_ctx_shape C /\ ptr_discipline lo C vs0` by fs[] >>
+  `!d owner aid b sz.
+     activation_cache (EL j (q0::qs)) d owner aid (b,sz) /\
+     b <= a /\ a < b + sz ==>
+     activation_cache (EL c (q0::qs)) d owner aid (b,sz)` by
+    (rpt strip_tac >>
+     `activation_cache (EL (SUC c) (q0::qs)) d owner aid (b,sz)`
+       suffices_by metis_tac[] >>
+     irule (cj 2 joint_untainted_demand_cache) >>
+     goal_assum (drule_at (Pat `joint_trace _ _ _ _ _ _`)) >>
+     goal_assum (drule_at (Pat `activation_cache _ _ _ _ _`)) >>
+     qexists_tac `a` >> simp[] >> qexists_tac `SUC c` >>
+     gvs[joint_observed_read_def]) >>
+  qpat_x_assum `relocation_pair _ _ (EL c _) _ _` mp_tac >>
+  qpat_x_assum `relocation_pair _ _ (EL j _) _ _` mp_tac >>
+  rewrite_tac[relocation_pair_def] >>
+  disch_then strip_assume_tac
+  >- fs[]
+  >- (`activation_cache (EL c (q0::qs)) d owner aid (b,sz)` by metis_tac[] >>
+      disch_then strip_assume_tac
+      >- fs[]
+      >- (`d = d' /\ owner = owner' /\ aid = aid' /\ b = b' /\ sz = sz'` by
+            (irule joint_activation_cache_byte_unique >>
+             conj_tac >- (qexists_tac `a` >> simp[]) >>
+             qexistsl_tac [`C`, `EL c (q0::qs)`, `vs0`] >> metis_tac[]) >>
+          gvs[]) >>
+      `b + sz <= joint_initial_fmp (EL c (q0::qs))` by metis_tac[] >>
+      decide_tac) >>
+  disch_then strip_assume_tac
+  >- fs[]
+  >- (Cases_on `ctx_has_dalloca C`
+      >- (`EVERY wf_function C.ctx_functions` by
+            fs[o1_ctx_shape_def, o1_fn_shape_def, EVERY_MEM] >>
+          `b + sz <= w2n vs0.vs_initial_fmp` by
+            (irule joint_cache_below_initial_fmp >> metis_tac[]) >>
+          `joint_initial_fmp (EL j (q0::qs)) = w2n vs0.vs_initial_fmp` by
+            (irule joint_initial_fmp_trace >> metis_tac[]) >>
+          decide_tac) >>
+      `?d owner aid b sz. activation_cache (EL j (q0::qs)) d owner aid (b,sz) /\
+         b <= a /\ a < b + sz` by
+        (irule joint_observed_read_cached >> metis_tac[]) >>
+      `b' + sz' <= joint_initial_fmp (EL j (q0::qs))` by metis_tac[] >>
+      decide_tac) >>
+  simp[]
 QED
 
 val _ = if null (hyp joint_mstore_demand_address_coherence) then ()

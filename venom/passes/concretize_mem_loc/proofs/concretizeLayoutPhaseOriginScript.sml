@@ -66,6 +66,7 @@ Definition layout_ordinary_trace_def:
     EL g.lop_cursor (q0::qs) = g.lop_config /\
     resolved_config_ok g.lop_config g.lop_ids g.lop_anns /\
     lifetime_ok g.lop_bound g.lop_ids g.lop_config /\
+    (~ctx_has_dalloca C ==> resolved_complete g.lop_config g.lop_anns) /\
     (g.lop_pending ==>
       ?c fuel. g.lop_cursor = SUC c /\ c < LENGTH es /\
         EL c es = SOME (OriginOrdinary fuel s) /\

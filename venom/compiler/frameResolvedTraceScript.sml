@@ -84,6 +84,68 @@ Definition resolved_config_ok_def:
           (MAP (\f. (f.cf_fn,f.cf_state.vs_allocas)) stk)
 End
 
+(* Every pointer of every frame resolves, as in a run without DALLOCA. *)
+Definition resolved_complete_def:
+  resolved_complete q anns <=>
+    case q of JointConfig stk PG G tn fn inst s oms om hs h =>
+      ?ann saved. anns = ann::saved /\
+        MAP (OPTION_MAP SND) (FST ann) = PG /\ SND o_f SND ann = G /\
+        LIST_REL (\f a. MAP (OPTION_MAP SND) (FST a) = f.cf_params /\
+                        SND o_f SND a = f.cf_prov) stk saved
+End
+
+(* A frame is suspended in the state it was reachable in, so a property
+   every reachable state has holds of every saved frame too. *)
+Theorem frame_reachable_saved_below_fmp:
+  !vs0 ctx stk PG G tn fn inst s.
+    frame_reachable vs0 ctx stk PG G tn fn inst s ==>
+    (!stk PG G tn fn inst s. frame_reachable vs0 ctx stk PG G tn fn inst s ==>
+       allocas_below_fmp s) ==>
+    EVERY (\f. allocas_below_fmp f.cf_state) stk
+Proof
+  ho_match_mp_tac frame_reachable_strongind >> rw[] >> metis_tac[]
+QED
+
+Theorem frame_reachable_initial_fmp:
+  !vs0 ctx stk PG G tn fn inst s.
+    frame_reachable vs0 ctx stk PG G tn fn inst s ==>
+    s.vs_initial_fmp = vs0.vs_initial_fmp /\
+    EVERY (\f. f.cf_state.vs_initial_fmp = vs0.vs_initial_fmp) stk
+Proof
+  ho_match_mp_tac frame_reachable_ind >> rw[] >>
+  imp_res_tac enters_block_initial_fmp >> imp_res_tac step_inst_initial_fmp >>
+  imp_res_tac setup_callee_initial_fmp >> imp_res_tac bind_outputs_initial_fmp >>
+  gvs[]
+QED
+
+(* With DALLOCA, every cache of a reachable frame and its callers lies below
+   the dynamic region. *)
+Theorem frame_reachable_caches_below:
+  frame_reachable vs0 ctx stk PG G tn fn inst s /\ ptr_discipline lo ctx vs0 /\
+  ctx_has_dalloca ctx ==>
+  !k aid b sz.
+    k < LENGTH ((fn,s.vs_allocas)::MAP (\f. (f.cf_fn,f.cf_state.vs_allocas)) stk) /\
+    FLOOKUP (SND (EL k ((fn,s.vs_allocas)::
+      MAP (\f. (f.cf_fn,f.cf_state.vs_allocas)) stk))) aid = SOME (b,sz) ==>
+    b + sz <= w2n s.vs_initial_fmp
+Proof
+  strip_tac >>
+  `!stk PG G tn fn inst s. frame_reachable vs0 ctx stk PG G tn fn inst s ==>
+     allocas_below_fmp s` by (fs[ptr_discipline_def] >> metis_tac[]) >>
+  `allocas_below_fmp s` by metis_tac[] >>
+  drule_all frame_reachable_saved_below_fmp >> strip_tac >>
+  drule frame_reachable_initial_fmp >> strip_tac >>
+  qpat_x_assum `!stk PG G tn fn inst s. _` kall_tac >>
+  rpt gen_tac >> Cases_on `k` >> simp[]
+  >- (fs[allocas_below_fmp_def] >> metis_tac[]) >>
+  strip_tac >>
+  `allocas_below_fmp (EL n stk).cf_state /\
+   (EL n stk).cf_state.vs_initial_fmp = vs0.vs_initial_fmp` by fs[EVERY_EL] >>
+  fs[allocas_below_fmp_def] >>
+  `FLOOKUP (EL n stk).cf_state.vs_allocas aid = SOME (b,sz)` by gvs[EL_MAP] >>
+  metis_tac[]
+QED
+
 Theorem resolved_frame_empty:
   resolved_frame_ok dyn birth cache [] FEMPTY FEMPTY [] FEMPTY ids frames
 Proof
@@ -97,6 +159,12 @@ Proof
   simp[resolved_config_ok_def, resolved_stack_ok_def, resolved_frame_empty]
 QED
 
+Theorem resolved_complete_initial:
+  joint_initial vs0 C q ==> resolved_complete q [([],FEMPTY)]
+Proof
+  simp[Once joint_initial_cases] >> rpt strip_tac >> simp[resolved_complete_def]
+QED
+
 Theorem resolved_frame_erasure:
   resolved_frame_ok dyn birth cache PG G om rp rv ids frames ==>
   LIST_REL (\r p. case r of
@@ -107,8 +175,58 @@ Theorem resolved_frame_erasure:
   origin_erase om = G
 Proof
   simp[resolved_frame_ok_def] >> strip_tac >> gvs[] >>
-  simp[origin_erase_lookup, PULL_EXISTS, FORALL_PROD] >>
-  metis_tac[resolution_erasure, origin_erase_lookup]
+  simp[origin_erase_lookup, PULL_EXISTS, pairTheory.FORALL_PROD] >> rpt strip_tac
+  >- (drule_all resolution_erasure >> rw[origin_erase_lookup] >> metis_tac[]) >>
+  qpat_x_assum `!v tag site. _` drule_all >> simp[]
+QED
+
+Theorem resolved_frame_complete:
+  resolved_frame_ok dyn birth cache PG G om rp rv ids frames ==>
+  ((MAP (OPTION_MAP SND) rp = PG /\ SND o_f rv = G) <=>
+   !d. resolved_frame_ok d birth cache PG G om rp rv ids frames)
+Proof
+  strip_tac >> eq_tac
+  >- (strip_tac >> gen_tac >>
+      qpat_x_assum `MAP _ rp = PG` (SUBST_ALL_TAC o SYM) >>
+      qpat_x_assum `SND o_f rv = G` (SUBST_ALL_TAC o SYM) >>
+      fs[resolved_frame_ok_def] >> rpt conj_tac
+      >- (simp[LIST_REL_MAP2] >> irule EVERY2_refl >> Cases >> simp[]) >>
+      rpt strip_tac >>
+      `FLOOKUP (origin_erase om) v = FLOOKUP (SND o_f rv) v` by fs[] >>
+      gvs[origin_erase_lookup, FLOOKUP_o_f] >> res_tac >> fs[]) >>
+  strip_tac >>
+  `!d. LIST_REL (\r p. case r of
+                         SOME e => p = SOME (SND e)
+                       | NONE => !site. p = SOME site ==> d <= FST site) rp PG /\
+       !v site. FLOOKUP G v = SOME site /\ FLOOKUP rv v = NONE ==> d <= FST site` by
+    (gen_tac >> qpat_x_assum `!d. _`
+       (qspec_then `d` (strip_assume_tac o MATCH_MP resolved_frame_erasure)) >>
+     metis_tac[]) >>
+  `LENGTH PG = LENGTH rp /\
+   !k e. k < LENGTH rp /\ EL k rp = SOME e ==> EL k PG = SOME (SND e)` by
+    (qpat_x_assum `!d. LIST_REL _ _ _ /\ _` (qspec_then `0` mp_tac) >>
+     simp[LIST_REL_EL_EQN] >> rpt strip_tac >> gvs[] >>
+     qpat_x_assum `!n. n < _ ==> _` (qspec_then `k` mp_tac) >> simp[]) >>
+  `!v e. FLOOKUP rv v = SOME e ==> FLOOKUP G v = SOME (SND e)` by
+    metis_tac[resolved_frame_erasure] >>
+  conj_tac
+  >- (simp[LIST_EQ_REWRITE] >> rpt strip_tac >>
+      `EL x (MAP (OPTION_MAP SND) rp) = OPTION_MAP SND (EL x rp)` by
+        (irule EL_MAP >> fs[]) >>
+      fs[] >> Cases_on `EL x rp` >> Cases_on `EL x PG` >> fs[] >>
+      res_tac >> fs[] >>
+      qpat_x_assum `!d. LIST_REL _ _ _ /\ _`
+        (qspec_then `SUC (FST x')` strip_assume_tac) >>
+      qpat_x_assum `LIST_REL _ rp PG`
+        (strip_assume_tac o REWRITE_RULE [LIST_REL_EL_EQN]) >>
+      first_x_assum (qspec_then `x` mp_tac) >> fs[]) >>
+  simp[fmap_eq_flookup, FLOOKUP_o_f] >> gen_tac >>
+  Cases_on `FLOOKUP rv x` >> simp[]
+  >- (Cases_on `FLOOKUP G x` >> simp[] >>
+      qpat_x_assum `!d. LIST_REL _ _ _ /\ _`
+        (qspec_then `SUC (FST x')` strip_assume_tac) >>
+      res_tac >> fs[]) >>
+  res_tac >> fs[]
 QED
 
 Theorem resolved_frame_parameters:
@@ -117,7 +235,7 @@ Theorem resolved_frame_parameters:
   !k e. k < LENGTH rp /\ EL k rp = SOME e ==> EL k PG = SOME (SND e)
 Proof
   simp[resolved_frame_ok_def, LIST_REL_EL_EQN] >> rpt strip_tac >>
-  first_x_assum drule >> simp[]
+  qpat_x_assum `!n. n < _ ==> _` (qspec_then `k` mp_tac) >> gvs[]
 QED
 
 Theorem resolved_config_current:
@@ -213,13 +331,12 @@ Theorem resolved_frame_callee:
   resolved_frame_ok dyn fresh callee_cache (MAP (op_prov G) ops) FEMPTY FEMPTY
     (MAP (resolved_op rv) ops) FEMPTY (fresh::ids) ((callee,callee_cache)::frames)
 Proof
-  simp[resolved_frame_ok_def, resolution_empty, origin_erase_def] >>
+  strip_tac >> drule resolved_frame_erasure >> strip_tac >>
+  fs[resolved_frame_ok_def, resolution_empty, origin_erase_def] >>
   rpt strip_tac
-  >- (simp[LIST_REL_MAP1, LIST_REL_MAP2, EVERY2_refl_EQ] >>
-      irule EVERY2_refl >> Cases >> simp[resolved_op_def, op_prov_def] >>
-      Cases_on `FLOOKUP rv s` >> simp[]
-      >- metis_tac[] >>
-      metis_tac[resolution_erasure, pairTheory.SND]) >>
+  >- (simp[LIST_REL_EL_EQN, EL_MAP] >> rpt strip_tac >>
+      Cases_on `EL n ops` >> simp[resolved_op_def, op_prov_def] >>
+      Cases_on `FLOOKUP rv s` >> simp[] >> metis_tac[]) >>
   irule resolved_live_weaken >> metis_tac[resolved_arguments_live]
 QED
 
@@ -255,9 +372,9 @@ Proof
   simp[resolution_def] >> rpt strip_tac >>
   first_x_assum (qspec_then `v` mp_tac) >>
   Cases_on `FLOOKUP om v` >> simp[] >> PairCases_on `x` >> simp[] >>
-  Cases_on `resolve_tag (resolved_cache birth cache) rp x0 x1`
+  Cases_on `resolve_tag (resolved_cache birth cache) rp x0 (x1,x2)`
   >- (simp[] >> strip_tac >> gvs[unresolved_tag_def, resolve_tag_def]) >>
-  simp[] >> metis_tac[resolve_cache_transport]
+  drule_all resolve_cache_transport >> simp[]
 QED
 
 Theorem resolved_frame_cache_transport:
@@ -306,8 +423,8 @@ Definition resolved_entry_def:
 End
 
 Theorem origin_set_floor[local]:
-  (!v tag site. FLOOKUP om v = SOME (tag,site) /\ FLOOKUP rv v = NONE ==>
-     dyn <= FST site) /\
+  (!v tag site. FLOOKUP om v = SOME (tag,site:num # num) /\ FLOOKUP rv v = NONE ==>
+     (dyn:num) <= FST site) /\
   (!tag site. p = SOME (tag,site) /\ r = NONE ==> dyn <= FST site) ==>
   !v tag site. FLOOKUP (origin_set om outs p) v = SOME (tag,site) /\
     FLOOKUP (origin_set rv outs r) v = NONE ==> dyn <= FST site
@@ -375,7 +492,7 @@ Proof
      rpt strip_tac >> drule resolved_phis_property >>
      disch_then (qspecl_then [`s.vs_prev_bb`, `x.bb_instructions`, `v`, `entry`] mp_tac) >>
      simp[]) >>
-  fs[resolved_frame_ok_def]
+  fs[resolved_frame_ok_def] >> metis_tac[]
 QED
 
 Theorem resolved_config_block:
@@ -417,7 +534,7 @@ Theorem resolved_parameter_unresolved:
   resolve_tag ct rp (OriginParameter k) site = NONE ==>
   unresolved_tag rp (OriginParameter k) /\ dyn <= FST site
 Proof
-  rw[LIST_REL_EL_EQN] >> first_x_assum drule >>
+  rw[LIST_REL_EL_EQN] >> qpat_x_assum `!n. n < _ ==> _` (qspec_then `k` mp_tac) >>
   Cases_on `EL k rp` >> gvs[resolve_tag_def, unresolved_tag_def]
 QED
 
@@ -491,7 +608,8 @@ Proof
      dyn <= FST site` by
     (simp[origin_step_def] >> ho_match_mp_tac origin_set_floor >>
      conj_tac >- fs[resolved_frame_ok_def] >>
-     simp[resolved_out_def] >> metis_tac[resolved_origin_out]) >>
+     simp[resolved_out_def] >> rpt strip_tac >> gvs[] >>
+     drule_all resolved_origin_out >> simp[]) >>
   `!v entry. FLOOKUP (origin_set rv inst.inst_outputs
        (resolved_out birth s.vs_allocas rp (origin_out PG om inst s))) v =
        SOME entry ==> resolved_live (birth::ids) ((fn,s.vs_allocas)::frames) entry` by
@@ -500,10 +618,10 @@ Proof
      simp[resolved_out_def] >>
      Cases_on `origin_out PG om inst s` >> simp[] >> PairCases_on `x` >>
      simp[] >> metis_tac[resolved_tag_live]) >>
-  fs[resolved_frame_ok_def]
+  fs[resolved_frame_ok_def] >> metis_tac[]
 QED
 
-Theorem resolved_dalloca_output[local]:
+Theorem resolved_dalloca_output:
   inst.inst_opcode = DALLOCA /\ step_inst fuel ctx inst s = OK post /\
   inst.inst_outputs = [out] /\ lookup_var out post = SOME b ==> b = s.vs_fmp
 Proof
@@ -549,6 +667,26 @@ Proof
   gvs[lifetime_step_def] >> metis_tac[resolved_config_return]
 QED
 
+(* A reachable DALLOCA is an instruction of the program. *)
+Theorem joint_reachable_dalloca:
+  joint_config_reachable vs0 C (JointConfig stk PG G tn fn inst s oms om hs h) /\
+  inst.inst_opcode = DALLOCA ==> ctx_has_dalloca C
+Proof
+  strip_tac >> spose_not_then assume_tac >>
+  `frame_reachable vs0 C stk PG G tn fn inst s` by
+    (fs[joint_config_reachable_def] >>
+     metis_tac[joint_origin_history_erasure, origin_frame_erasure]) >>
+  `MEM fn C.ctx_functions` by metis_tac[frame_allocation_ownership] >>
+  `active_inst fn inst s` by
+    (fs[joint_config_reachable_def] >>
+     metis_tac[joint_origin_history_projection, frame_history_active]) >>
+  qpat_x_assum `~ctx_has_dalloca C` mp_tac >>
+  simp[ctx_has_dalloca_def, EXISTS_MEM] >>
+  qexists_tac `fn` >> simp[] >>
+  gvs[active_inst_def, fn_insts_def, fn_insts_blocks_flat, MEM_FLAT, MEM_MAP] >>
+  metis_tac[MEM_EL]
+QED
+
 Theorem resolved_reachable_transition:
   joint_config_reachable vs0 C q /\ ptr_discipline lo C vs0 /\
   joint_transition C q ev q' /\ resolved_config_ok q ids anns ==>
@@ -556,20 +694,11 @@ Theorem resolved_reachable_transition:
 Proof
   Cases_on `q` >> rpt strip_tac >>
   rename1 `joint_config_reachable vs0 C (JointConfig stk PG G tn fn inst s oms om hs h)` >>
-  `frame_reachable vs0 C stk PG G tn fn inst s` by
-    (fs[joint_config_reachable_def] >>
-     metis_tac[joint_origin_history_erasure, origin_frame_erasure]) >>
-  `MEM fn C.ctx_functions` by metis_tac[frame_allocation_ownership] >>
   `inst.inst_opcode = DALLOCA ==> w2n s.vs_initial_fmp <= w2n s.vs_fmp` by
-    (strip_tac >>
-     `ctx_has_dalloca C` by
-       (simp[ctx_has_dalloca_def, EXISTS_MEM] >>
-        `active_inst fn inst s` by
-          (fs[joint_config_reachable_def] >>
-           metis_tac[joint_origin_history_projection, frame_history_active]) >>
-        qexists_tac `fn` >> simp[] >>
-        gvs[active_inst_def, fn_insts_def, fn_insts_blocks_flat, MEM_FLAT, MEM_MAP] >>
-        metis_tac[MEM_EL]) >>
+    (strip_tac >> drule_all joint_reachable_dalloca >> strip_tac >>
+     `frame_reachable vs0 C stk PG G tn fn inst s` by
+       (fs[joint_config_reachable_def] >>
+        metis_tac[joint_origin_history_erasure, origin_frame_erasure]) >>
      fs[ptr_discipline_def, allocas_below_fmp_def] >> metis_tac[]) >>
   irule resolved_config_transition >> goal_assum (drule_at Any) >> simp[] >>
   goal_assum (drule_at Any)

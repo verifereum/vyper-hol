@@ -92,8 +92,9 @@ Proof
   >- (rpt strip_tac >> irule joint_mstore_demand_address_coherence >>
       `post.vs_allocas = s.vs_allocas` by
         simp[istore_def, mstore_def, write_memory_with_expansion_def] >>
+      `a < lo` by decide_tac >>
       `relocation_pair lo (concretize_positions C') (EL c (q0::qs)) a a` by
-        (simp[relocation_pair_def] >> decide_tac) >>
+        (irule relocation_pair_static >> simp[]) >>
       metis_tac[]) >>
   rpt strip_tac >>
   `a NOTIN joint_writes (EL c (q0::qs)) (EL c es)` by
@@ -103,7 +104,8 @@ Proof
     (irule concretizeLayoutRelocationTheory.concretize_positions_demand_write_complement >>
      conj_tac
      >- (rpt strip_tac >> qexists_tac `w` >> simp[] >>
-         simp[relocation_pair_def] >> fs[range_bytes_def] >> decide_tac) >>
+         `w < lo` by (fs[range_bytes_def] >> decide_tac) >>
+         simp[relocation_pair_def]) >>
      simp[] >>
      goal_assum (drule_at (Pat `joint_trace _ _ _ _ _ _`)) >>
      goal_assum (drule_at (Pat `callee_first _ _`)) >> simp[] >> metis_tac[]) >>

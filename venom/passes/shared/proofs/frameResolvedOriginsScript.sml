@@ -119,7 +119,12 @@ Theorem resolution_arguments_erasure:
   EL k (MAP (resolved_op rv) ops) = SOME e ==>
   EL k (MAP (op_prov (origin_erase om)) ops) = SOME (SND e)
 Proof
-  rpt strip_tac >> gvs[EL_MAP] >> drule_all resolution_operand_erasure >> simp[]
+  rpt strip_tac >>
+  `EL k (MAP (resolved_op rv) ops) = resolved_op rv (EL k ops)` by
+    (irule EL_MAP >> simp[]) >>
+  `EL k (MAP (op_prov (origin_erase om)) ops) =
+   op_prov (origin_erase om) (EL k ops)` by (irule EL_MAP >> simp[]) >>
+  pop_assum SUBST1_TAC >> irule resolution_operand_erasure >> metis_tac[]
 QED
 
 Theorem resolution_origin_set:
@@ -132,10 +137,13 @@ Proof
   >- (strip_tac >> Cases_on `outs` >>
       gvs[origin_set_def] >> metis_tac[resolution_restrict]) >>
   PairCases_on `x` >> simp[] >> strip_tac >> gvs[] >>
-  Cases_on `outs` >> simp[origin_set_def, resolution_restrict] >>
-  Cases_on `t` >> simp[origin_set_def, resolution_restrict] >>
-  Cases_on `resolve_tag ct rp x0 x1` >> simp[] >>
-  metis_tac[resolution_update, resolution_unresolved_update]
+  Cases_on `outs` >- (simp[origin_set_def] >> metis_tac[resolution_restrict]) >>
+  reverse (Cases_on `t`)
+  >- (Cases_on `resolve_tag ct rp x0 (x1,x2)` >> simp[origin_set_def] >>
+      metis_tac[resolution_restrict]) >>
+  Cases_on `resolve_tag ct rp x0 (x1,x2)` >> gvs[origin_set_def]
+  >- (irule resolution_unresolved_update >> fs[]) >>
+  irule resolution_update >> fs[]
 QED
 
 Theorem resolve_parameter_forward:
@@ -192,9 +200,10 @@ Theorem resolution_phis:
 Proof
   Induct >> simp[origin_phis_def, resolved_phis_def] >> strip_tac >>
   Cases_on `h.inst_opcode = PHI` >> simp[] >> strip_tac >>
-  irule resolution_origin_set >> conj_tac
-  >- metis_tac[resolution_phi] >>
-  metis_tac[]
+  irule resolution_origin_set >> fs[] >>
+  mp_tac (Q.SPECL [`prev`, `h`] (Q.GENL [`prev`, `inst`] resolution_phi)) >>
+  fs[] >> Cases_on `origin_phi prev om h` >> simp[] >>
+  PairCases_on `x` >> simp[] >> metis_tac[]
 QED
 
 (* Passing a PARAM-derived pointer onwards preserves its ancestor token. *)
@@ -205,7 +214,8 @@ Theorem resolved_parameter_to_parameter:
     SOME entry
 Proof
   strip_tac >> drule_all resolution_lookup >>
-  gvs[resolve_tag_def, resolved_op_def]
+  Cases_on `SND entry = site` >>
+  gvs[resolve_tag_def, resolved_op_def, unresolved_tag_def]
 QED
 
 (* Parallel PHIs select from the same pre-map, even when the first output
