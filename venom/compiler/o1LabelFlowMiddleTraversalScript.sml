@@ -308,3 +308,125 @@ Proof
   disch_then (qspecl_then [`u`,`q`,`k`,`bb`,`V`,`H`] mp_tac) >> simp[] >>
   metis_tac[]
 QED
+
+Theorem owned_instruction_protected_read:
+  current_name_owner V H u /\ (n,x) IN H /\
+  j.inst_opcode = i.inst_opcode /\ i.inst_opcode <> PHI /\
+  LIST_REL (\a b. case a of Var v => ?m. b = Var m /\ (m,v) IN H
+                   | _ => b = a) i.inst_operands j.inst_operands /\
+  (!v. MEM (Var v) i.inst_operands /\ v = x ==>
+    i.inst_opcode = CODECOPY /\
+    ?dst sz. i.inst_operands = [dst; Var x; sz] /\
+      dst <> Var x /\ sz <> Var x) /\
+  MEM (Var n) j.inst_operands ==>
+  j.inst_opcode = CODECOPY /\
+  ?dst sz. j.inst_operands = [dst; Var n; sz] /\
+    dst <> Var n /\ sz <> Var n
+Proof
+  strip_tac >>
+  `MEM (Var x) i.inst_operands` by
+    (gvs[MEM_EL] >> metis_tac[owned_operand_var_origin]) >>
+  `i.inst_opcode = CODECOPY` by metis_tac[] >> simp[] >>
+  irule owned_codecopy_read >> metis_tac[]
+QED
+
+Theorem owned_instruction_protected_output:
+  current_name_owner V H u /\ (n,x) IN H /\
+  LIST_REL (\v m. (m,v) IN H) i.inst_outputs j.inst_outputs /\
+  (!v. MEM v i.inst_outputs /\ v = x ==> i = d) /\
+  MEM n j.inst_outputs ==> i = d
+Proof
+  metis_tac[owned_output_origin]
+QED
+
+Theorem visit_blocks_protected_read:
+  visit_blocks path s rs bbs sm tree = ((ct,t,final),events) /\
+  ALL_DISTINCT (dom_tree_postorder tree) /\
+  ALL_DISTINCT (MAP (\bb. bb.bb_label) bbs) /\
+  (!q. MEM q (dom_tree_postorder tree) ==> IS_SOME (lookup_block q bbs)) /\
+  (!l ss. ALOOKUP sm l = SOME ss ==> ALL_DISTINCT ss) /\
+  EVERY current_nondeg_block_shape bbs /\
+  current_name_owner V H u /\ (n,x) IN H /\
+  (!e. MEM e events ==>
+    current_stack_owner V H (SND e.sve_in) /\
+    current_stack_owner V H (SND e.sve_out) /\
+    LIST_REL (\i j. LIST_REL (\v m. (m,v) IN H)
+      i.inst_outputs j.inst_outputs) e.sve_before e.sve_after) /\
+  (!bb i v. MEM bb bbs /\ MEM i bb.bb_instructions ==>
+    (MEM (Var v) i.inst_operands \/ MEM v i.inst_outputs ==> v IN V)) /\
+  (!bb i. MEM bb bbs /\ MEM i bb.bb_instructions /\
+    MEM (Var x) i.inst_operands ==>
+    i.inst_opcode = CODECOPY /\
+    ?dst sz. i.inst_operands = [dst; Var x; sz] /\
+      dst <> Var x /\ sz <> Var x) ==>
+  !q out j. lookup_block q final = SOME out /\
+    MEM j out.bb_instructions /\ MEM (Var n) j.inst_operands ==>
+    j.inst_opcode = CODECOPY /\
+    ?dst sz. j.inst_operands = [dst; Var n; sz] /\
+      dst <> Var n /\ sz <> Var n
+Proof
+  rpt gen_tac >> strip_tac >> rpt gen_tac >> strip_tac >>
+  `j.inst_opcode <> PHI` by
+    (strip_tac >>
+     `!q bb i. lookup_block q bbs = SOME bb /\ MEM i bb.bb_instructions /\
+       i.inst_opcode = PHI ==> ~MEM (Var x) i.inst_operands` by
+       (rpt strip_tac >>
+        `MEM bb bbs` by metis_tac[livenessTransferProofsTheory.lookup_block_mem] >>
+        `i.inst_opcode = CODECOPY` by metis_tac[] >> gvs[]) >>
+     drule visit_phi_operand_exclusion >>
+     disch_then (qspecl_then [`x`,`u`,`n`,`V`,`H`] mp_tac) >>
+     disch_then (qspecl_then [`q`,`out`,`j`] mp_tac) >>
+     simp[] >>
+     `!e. MEM e events ==> current_stack_owner V H (SND e.sve_out)` by
+       metis_tac[] >> simp[] >>
+     metis_tac[livenessTransferProofsTheory.lookup_block_mem]) >>
+  qpat_x_assum `MEM j out.bb_instructions`
+    (strip_assume_tac o REWRITE_RULE [MEM_EL]) >>
+  drule visit_blocks_owned_origin >> simp[] >>
+  disch_then (qspecl_then [`u`,`q`,`out`,`n'`,`V`,`H`] mp_tac) >>
+  (impl_tac >- metis_tac[]) >> strip_tac >>
+  irule owned_instruction_protected_read >>
+  conj_tac >- metis_tac[] >>
+  qexistsl [`H`,`V`,`EL n' bb.bb_instructions`,`u`,`x`] >>
+  simp[] >> metis_tac[livenessTransferProofsTheory.lookup_block_mem, EL_MEM]
+QED
+
+Theorem owned_code_end_seed_origin:
+  LIST_REL (\a b. case a of Var v => ?m. b = Var m /\ (m,v) IN H
+                   | _ => b = a) ops [op; Label "code_end"] /\
+  LIST_REL (\v m. (m,v) IN H) vs ns /\ MEM n ns ==>
+  ?a x. ops = [a; Label "code_end"] /\ MEM x vs /\ (n,x) IN H
+Proof
+  Cases_on `ops` >> simp[] >> Cases_on `t` >> simp[] >>
+  Cases_on `t'` >> simp[] >> rpt strip_tac >>
+  Cases_on `h'` >> gvs[] >>
+  gvs[MEM_EL, LIST_REL_EL_EQN] >> metis_tac[EL_MEM]
+QED
+
+Theorem code_end_var_owned_bound:
+  !g n. code_end_var g n ==> !f H.
+  (!j. MEM j (fn_insts g) /\ j.inst_opcode = ADD ==>
+    ?i. MEM i (fn_insts f) /\ i.inst_opcode = ADD /\
+      LIST_REL (\a b. case a of Var v => ?m. b = Var m /\ (m,v) IN H
+                       | _ => b = a) i.inst_operands j.inst_operands /\
+      LIST_REL (\v m. (m,v) IN H) i.inst_outputs j.inst_outputs) /\
+  (!j n x. MEM j (fn_insts g) /\ MEM (Var n) j.inst_operands /\
+    (n,x) IN H /\ code_end_var f x ==> j.inst_opcode = CODECOPY) ==>
+  ?x. (n,x) IN H /\ code_end_var f x
+Proof
+  Induct_on `code_end_var` >> rpt strip_tac
+  >- (
+      `?i. MEM i (fn_insts f) /\ i.inst_opcode = ADD /\
+        LIST_REL (\a b. case a of Var v => ?m. b = Var m /\ (m,v) IN H
+                         | _ => b = a) i.inst_operands inst.inst_operands /\
+        LIST_REL (\v m. (m,v) IN H) i.inst_outputs inst.inst_outputs` by
+        metis_tac[] >>
+      `?a x. i.inst_operands = [a; Label "code_end"] /\
+        MEM x i.inst_outputs /\ (n,x) IN H` by
+        metis_tac[owned_code_end_seed_origin] >>
+      qexists `x` >> simp[] >> irule (cj 1 code_end_var_rules) >>
+      metis_tac[]) >>
+  first_x_assum (qspecl_then [`f`,`H`] mp_tac) >>
+  (impl_tac >- metis_tac[]) >> strip_tac >>
+  `inst.inst_opcode = CODECOPY` by metis_tac[MEM] >> gvs[]
+QED
