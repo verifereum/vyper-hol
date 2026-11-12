@@ -345,7 +345,8 @@ Theorem ifexp_widened_call_arm_step_full:
         (step_taint (mk_inst sb.cs_next_id ALLOCA [Lit (n2w n)] [out]) s u tn) u) /\
   (* compile_alloc_buffer_kept_frame_at *)
   (!H lo ctx fn cenv cx e es sa sb s0 es' tv vv s n buf sc out u PG G0 tn0 G tn.
-      vv_post H ctx fn cenv cx e es sa sb s0 es' tv vv s /\
+      vv_post (H:(bool # 256 word # type_value) list # num list)
+        ctx fn cenv cx e es sa sb s0 es' tv vv s /\
       ghost_kept_at lo cenv es sa G0 tn0 s0 G tn /\
       lo <= s.vs_alloca_next /\
       local_ptrs_reserved cenv sa /\ MAP FDOM es.scopes = MAP FDOM es'.scopes /\
