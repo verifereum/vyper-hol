@@ -2,7 +2,7 @@ Theory bodyIntCallReturnAdapters
 Ancestors
   bodyIntCallAssemblyModes bodyIntCallCompilerBoundary vyperValue exprLoweringProps venomMemDefs
 
-(* RESTATED (train 17): 0.5.0b1 per-argument staging; proof being ported *)
+(* RESTATED (train 17): 0.5.0b1 per-argument staging *)
 Theorem compiled_void_return:
   expr_has_effect e /\
   post_value_type ce e = expr_type e /\
@@ -39,7 +39,6 @@ Theorem compiled_void_return:
     out.vs_current_bb = sb.cs_current_bb /\
     out.vs_inst_idx = LENGTH sb.cs_current_insts
 Proof
-  (* batch-shape proof, kept while porting:
   strip_tac >>
   drule_all intcall_void_compiler_boundary >> strip_tac >>
   `tv = NoneTV` by
@@ -55,11 +54,9 @@ Proof
     `ee` |-> `ee with gas_obs := []`] (SPEC_ALL void_return_endpoint)
     |> SIMP_RULE (srw_ss()) [] |> GEN_ALL) >>
   strip_tac >> qexistsl_tac [`k`,`out`] >> gvs[]
-  *)
-  cheat
 QED
 
-(* RESTATED (train 17): 0.5.0b1 per-argument staging; proof being ported *)
+(* RESTATED (train 17): 0.5.0b1 per-argument staging *)
 Theorem compiled_memory_return:
   expr_has_effect e /\
   post_value_type ce e = expr_type e /\
@@ -99,7 +96,6 @@ Theorem compiled_memory_return:
     out.vs_current_bb = sb.cs_current_bb /\
     out.vs_inst_idx = LENGTH sb.cs_current_insts
 Proof
-  (* batch-shape proof, kept while porting:
   strip_tac >>
   drule_all intcall_void_compiler_boundary >> strip_tac >>
   `immutable_alloca_sep func ce cx
@@ -110,11 +106,9 @@ Proof
     `ee` |-> `ee with gas_obs := []`] (SPEC_ALL memory_return_endpoint)
     |> SIMP_RULE (srw_ss()) [] |> GEN_ALL) >>
   strip_tac >> qexistsl_tac [`k`,`out`] >> gvs[]
-  *)
-  cheat
 QED
 
-(* RESTATED (train 17): 0.5.0b1 per-argument staging; proof being ported *)
+(* RESTATED (train 17): 0.5.0b1 per-argument staging *)
 Theorem compiled_stack_return:
   expr_has_effect e /\
   post_value_type ce e = expr_type e /\
@@ -160,7 +154,6 @@ Theorem compiled_stack_return:
     out.vs_current_bb = sb.cs_current_bb /\
     out.vs_inst_idx = LENGTH sb.cs_current_insts
 Proof
-  (* batch-shape proof, kept while porting:
   strip_tac >>
   drule_all intcall_stack_compiler_boundary >> strip_tac >>
   `immutable_alloca_sep func ce cx
@@ -174,11 +167,9 @@ Proof
     `ee` |-> `ee with gas_obs := []`] (SPEC_ALL stack_return_endpoint)
     |> SIMP_RULE (srw_ss()) [] |> GEN_ALL) >>
   strip_tac >> qexistsl_tac [`k`,`out`] >> gvs[]
-  *)
-  cheat
 QED
 
-(* RESTATED (train 17): 0.5.0b1 per-argument staging; proof being ported *)
+(* RESTATED (train 17): 0.5.0b1 per-argument staging *)
 Theorem compiled_return_dispatch:
   !nret.
   expr_has_effect e /\
@@ -233,19 +224,18 @@ Theorem compiled_return_dispatch:
     out.vs_current_bb = sb.cs_current_bb /\
     out.vs_inst_idx = LENGTH sb.cs_current_insts
 Proof
-  (* batch-shape proof, kept while porting:
   gen_tac >> strip_tac >> Cases_on `nret = 0`
   >- (`ir.iret_values = []` by (Cases_on `ir.iret_values` >> fs[]) >>
       Cases_on `expr_type e = NoneT`
-      >- (qpat_x_assum `_ ==> s2 = s1 /\ _` mp_tac >>
+      >- (qpat_x_assum `_ ==> s2 = sa /\ _` mp_tac >>
           (impl_tac >- simp[]) >> strip_tac >>
-          `ci_mono s1 s2` by fs[ci_mono_refl] >>
+          `ci_mono sa s2` by fs[ci_mono_refl] >>
           Cases_on `u` >>
           `vv = StackValue NoneT (Lit 0w)` by fs[] >>
           drule_all compiled_void_return >> simp[]) >>
       qpat_x_assum `0 < nret \/ _ ==> _` mp_tac >> simp[] >> strip_tac >>
-      `ci_mono s1 s2` by
-        (qspecl_then [`rbs`,`s1`] mp_tac ci_mono_compile_alloc_buffer >> simp[]) >>
+      `ci_mono sa s2` by
+        (qspecl_then [`rbs`,`sa`] mp_tac ci_mono_compile_alloc_buffer >> simp[]) >>
       `eval_operand buf.buf_operand t = SOME w` by fs[] >>
       `off < dimword (:256)` by
         (qpat_x_assum `stmt_state_rel _ _ _ _ _ _` mp_tac >>
@@ -260,8 +250,8 @@ Proof
       drule_all compiled_memory_return >> simp[]) >>
   `0 < nret` by decide_tac >>
   qpat_x_assum `0 < nret \/ _ ==> _` mp_tac >> simp[] >> strip_tac >>
-  `ci_mono s1 s2` by
-    (qspecl_then [`32 * nret`,`s1`] mp_tac ci_mono_compile_alloc_buffer >> simp[]) >>
+  `ci_mono sa s2` by
+    (qspecl_then [`32 * nret`,`sa`] mp_tac ci_mono_compile_alloc_buffer >> simp[]) >>
   Q.SUBGOAL_THEN
     `?ai. MEM ai (fn_insts func) /\ ai.inst_opcode = ALLOCA /\ ai.inst_id = aid`
     assume_tac >- metis_tac[] >>
@@ -269,6 +259,4 @@ Proof
     (\name. MAP (FST o SND) (get_struct_fields ce.ce_struct_fields name))
     (expr_type e)` by metis_tac[] >>
   drule_all compiled_stack_return >> simp[]
-  *)
-  cheat
 QED

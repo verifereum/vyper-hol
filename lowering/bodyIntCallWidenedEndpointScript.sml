@@ -93,7 +93,7 @@ Proof
   metis_tac[arithmeticTheory.ADD_COMM]
 QED
 
-(* RESTATED (train 17): 0.5.0b1 per-argument staging; proof being ported *)
+(* RESTATED (train 17): 0.5.0b1 per-argument staging *)
 Theorem physical_source_return_dispatch:
   !nret.
   compile_stage_intcall_args compile_expr ce es flags tys s2 = (args,si) /\
@@ -154,23 +154,18 @@ Theorem physical_source_return_dispatch:
        (!id lb lsz. local_region ce prev out id lb lsz ==>
          off + buf.buf_size <= lb \/ lb + lsz <= off)))
 Proof
-  (* batch-shape proof, kept while porting:
   gen_tac >> strip_tac >> Cases_on `nret = 0`
   >- (`ir.iret_values = []` by (Cases_on `ir.iret_values` >> fs[]) >>
       Cases_on `cty = NoneT`
       >- suspend "void" >>
       suspend "memory") >>
   suspend "stack"
-  *)
-  cheat
 QED
 
-(* HELD (train 17): 0.5.0b1 arg snapshot re-proof; statement no longer typechecks, commented out whole *)
-(*
 Resume physical_source_return_dispatch[void]:
-  qpat_x_assum `_ ==> s2 = s1 /\ _` mp_tac >>
+  qpat_x_assum `_ ==> s2 = sa /\ _` mp_tac >>
   (impl_tac >- simp[]) >> strip_tac >> gvs[] >>
-  `ci_mono s1 s1` by simp[ci_mono_refl] >>
+  `ci_mono sa sa` by simp[ci_mono_refl] >>
   drule_all intcall_void_compiler_boundary >> strip_tac >>
   `bind_outputs [] ir.iret_values
     (adopt_return_fmp ir (merge_callee_state t cs)) =
@@ -192,15 +187,12 @@ Resume physical_source_return_dispatch[void]:
        comp_bind_def, comp_ignore_bind_def, comp_return_def] >>
   disch_then (SUBST1_TAC o SYM) >> simp[]
 QED
-*)
 
-(* HELD (train 17): 0.5.0b1 arg snapshot re-proof; statement no longer typechecks, commented out whole *)
-(*
 Resume physical_source_return_dispatch[memory]:
   qpat_x_assum `0 < nret \/ _ ==> _` mp_tac >>
   simp[] >> strip_tac >> gvs[] >>
-  `ci_mono s1 s2` by
-    (qspecl_then [`rbs`,`s1`] mp_tac ci_mono_compile_alloc_buffer >> simp[]) >>
+  `ci_mono sa s2` by
+    (qspecl_then [`rbs`,`sa`] mp_tac ci_mono_compile_alloc_buffer >> simp[]) >>
   drule_all intcall_void_compiler_boundary >> strip_tac >>
   `bind_outputs [] ir.iret_values
     (adopt_return_fmp ir (merge_callee_state t cs)) =
@@ -239,16 +231,13 @@ Resume physical_source_return_dispatch[memory]:
   qpat_x_assum `!k. stmt_state_rel _ _ _ _ _ _ /\ _` (qspec_then `SUC (LENGTH si.cs_current_insts)` strip_assume_tac) >>
   fs[regions_disjoint_def] >> metis_tac[ADD_COMM]
 QED
-*)
 
-(* HELD (train 17): 0.5.0b1 arg snapshot re-proof; statement no longer typechecks, commented out whole *)
-(*
 Resume physical_source_return_dispatch[stack]:
   `0 < nret` by decide_tac >>
   qpat_x_assum `0 < nret \/ _ ==> _` mp_tac >> simp[] >> strip_tac >>
   gvs[] >>
-  `ci_mono s1 s2` by
-    (qspecl_then [`32 * LENGTH ir.iret_values`,`s1`] mp_tac ci_mono_compile_alloc_buffer >> simp[]) >>
+  `ci_mono sa s2` by
+    (qspecl_then [`32 * LENGTH ir.iret_values`,`sa`] mp_tac ci_mono_compile_alloc_buffer >> simp[]) >>
   drule_all intcall_stack_compiler_boundary >> strip_tac >>
   drule_all emit_multi_invoke_instruction >> strip_tac >>
   `LENGTH outs = LENGTH ir.iret_values` by simp[] >>
@@ -329,9 +318,5 @@ Resume physical_source_return_dispatch[stack]:
   qexists_tac `out` >> simp[] >>
   qexistsl_tac [`buf`,`ai.inst_id`,`off`] >> simp[] >> gvs[]
 QED
-*)
 
-(* HELD (train 17): 0.5.0b1 arg snapshot re-proof; statement no longer typechecks, commented out whole *)
-(*
 Finalise physical_source_return_dispatch
-*)

@@ -5,7 +5,7 @@ Ancestors
 
 (* The compiler's stronger, provenance-carrying branches are consumed here;
    the final source state is restored explicitly, not a matching parameter. *)
-(* RESTATED (train 17): 0.5.0b1 per-argument staging; proof being ported *)
+(* RESTATED (train 17): 0.5.0b1 per-argument staging *)
 Theorem source_return_dispatch:
   !nret.
   expr_has_effect e /\
@@ -62,11 +62,9 @@ Theorem source_return_dispatch:
     out.vs_current_bb = sb.cs_current_bb /\
     out.vs_inst_idx = LENGTH sb.cs_current_insts
 Proof
-  (* batch-shape proof, kept while porting:
   gen_tac >> strip_tac >>
   irule compiled_return_dispatch >>
   simp[] >>
-  goal_assum (drule_at (Pat `compile_multi_vvs _ _ _ _ = _`)) >>
   goal_assum (drule_at (Pat `compile_stage_intcall_args _ _ _ _ _ = _`)) >>
   goal_assum (drule_at (Pat `gas_path _ _ _ _ _`)) >>
   goal_assum (drule_at (Pat `state_rel _ _ _ _ _`)) >>
@@ -74,8 +72,6 @@ Proof
   gvs[] >> asm_rewrite_tac[] >> disch_tac >>
   qpat_x_assum `(_ ==> 0 < LENGTH ir.iret_values) ==> _` mp_tac >>
   (impl_tac >- asm_rewrite_tac[]) >> strip_tac >>
-  qexistsl_tac [`buf`,`s1.cs_next_id`,`off`] >>
+  qexistsl_tac [`buf`,`sa.cs_next_id`,`off`] >>
   asm_rewrite_tac[] >> metis_tac[]
-  *)
-  cheat
 QED

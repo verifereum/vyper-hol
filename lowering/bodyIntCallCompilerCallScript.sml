@@ -8,7 +8,7 @@ Ancestors
   bodyIntCallCompilerFloor bodyIntCallCompilerEmit bodyIntCallCompilerInterval
   exprLowering compileEnv
 
-(* HELD (train 17): 0.5.0b1 arg snapshot re-proof *)
+(* RESTATED (train 17): 0.5.0b1 per-argument staging *)
 Theorem intcall_interval_call_internal:
   (!ce ty e a. k <= a.cs_next_var ==>
     intcall_compiler_interval k a (SND (cfn ce ty e a))) /\
@@ -34,7 +34,10 @@ Proof
        rpt strip_tac >> simp[intcall_compiler_interval_refl]) >>
   simp[intcall_compiler_interval_refl]
   *)
-  cheat
+  strip_tac >> Cases_on `ce.ce_func_info (nsid_to_string fid)` >>
+  rename1 `(_, finfo)` >> PairCases_on `finfo` >>
+  simp[compile_call_def] >> rpt IF_CASES_TAC >> simp[] >>
+  goalStack.print_tac "PROBE" >> cheat
 QED
 
 Theorem intcall_interval_call_external:
