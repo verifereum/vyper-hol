@@ -267,16 +267,6 @@ Proof
   qexists `tv::tvs` >> simp[]
 QED
 
-Theorem constant_expr_types_OPT_MMAP[local]:
-  !kes tvs.
-    LIST_REL (\e tv. evaluate_type tenv (expr_type e) = SOME tv)
-      (MAP SND kes) tvs ==>
-    OPT_MMAP (evaluate_type tenv) (MAP (expr_type o SND) kes) = SOME tvs
-Proof
-  Induct >> Cases_on `tvs` >> simp[OPT_MMAP_def] >>
-  PairCases_on `h` >> simp[OPT_MMAP_def]
-QED
-
 Theorem constant_struct_value_typed[local]:
   well_typed_expr env (StructLit ty sid kes) /\
   LIST_REL (\e v. value_runtime_typed env (expr_type e) v)
@@ -286,16 +276,7 @@ Proof
   strip_tac >> drule constant_values_runtime_types >>
   rw[exprs_runtime_typed_def, value_runtime_typed_def] >>
   gvs[well_typed_expr_def, well_formed_type_def, IS_SOME_EXISTS] >>
-  qpat_x_assum `evaluate_type _ (StructT _) = SOME _` mp_tac >>
-  simp[Once evaluate_type_def, AllCaseEqs(), evaluate_types_OPT_MMAP] >>
-  strip_tac >> gvs[value_has_type_def] >>
-  drule constant_expr_types_OPT_MMAP >>
-  qpat_x_assum `MAP (expr_type o SND) kes = MAP SND args` (assume_tac o GSYM) >>
-  gvs[] >>
-  drule vyperTypeEvalSoundnessTheory.OPT_MMAP_evaluate_type_mono_stmt >> strip_tac >> gvs[] >>
-  strip_tac >> gvs[] >> irule vyperTypeEvalSoundnessTheory.struct_has_type_zip_same_names_stmt >>
-  imp_res_tac LIST_REL_LENGTH >> gvs[LENGTH_MAP] >>
-  metis_tac[LENGTH_MAP]
+  metis_tac[vyperTypeEvalSoundnessTheory.struct_lit_value_has_type]
 QED
 
 Theorem checked_constant_decl_typed[local]:

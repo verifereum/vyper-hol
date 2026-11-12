@@ -14,20 +14,19 @@ Libs
   monadsyntax
 
 Theorem aggregate_tuple_body_cons_compile:
-  compile_make_tuple compile_expr ce (e::args) buf off sa = (out,sb) ==>
+  compile_make_tuple compile_expr ce (e::args) (MAP expr_type (e::args))
+    buf off sa = (out,sb) ==>
   ?vv sm dst sn op su st.
     compile_expr ce (expr_type e) e sa = (vv,sm) /\
     emit_op ADD [buf; Lit (n2w off)] sm = (dst,sn) /\
     unwrap_value ce vv sn = (op,su) /\
     compile_store_memory ce op dst (expr_type e) (lowered_value_type ce e)
       su = ((),st) /\
-    compile_make_tuple compile_expr ce args buf
+    compile_make_tuple compile_expr ce args (MAP expr_type args) buf
       (off + type_memory_bytes ce (expr_type e)) st = (out,sb)
 Proof
-  simp[Once compile_make_tuple_def, comp_bind_def] >>
-  rpt (pairarg_tac >> fs[]) >> rpt strip_tac >> gvs[] >>
-  gvs[comp_ignore_bind_def, comp_bind_def] >>
-  pairarg_tac >> gvs[] >> Cases_on `v'` >> metis_tac[]
+  rewrite_tac[listTheory.MAP] >>
+  disch_then (ACCEPT_TAC o MATCH_MP exprSimAggregateLoopsTheory.compile_make_tuple_cons)
 QED
 
 Theorem aggregate_body_tuple_marked_child_source:
@@ -263,7 +262,8 @@ QED
 
 Theorem aggregate_make_tuple_body_sim:
   !args ce cx env off sa out sb es tvs func inst x b asz s0 ctx.
-  compile_make_tuple compile_expr ce args (Var x) off sa = (out,sb) /\
+  compile_make_tuple compile_expr ce args (MAP expr_type args) (Var x) off sa =
+    (out,sb) /\
   OPT_MMAP (evaluate_type (get_tenv cx)) (MAP expr_type args) = SOME tvs /\
   expr_sim_inv ce cx env es /\
   (!e st. MEM e args /\ expr_sim_inv ce cx env st ==>
@@ -336,12 +336,8 @@ Resume aggregate_make_tuple_body_sim[cons]:
   `ci_mono sn su` by metis_tac[ci_mono_unwrap_value, pairTheory.SND] >>
   `ci_mono su st` by metis_tac[ci_mono_compile_store_memory, pairTheory.SND] >>
   `ci_mono st sb` by
-    (qspec_then `compile_expr` mp_tac ci_mono_compile_make_tuple_cfn >>
-     simp[cj 1 compile_expr_ci_mono] >>
-     disch_then (qspecl_then
-       [`ce`, `args`, `Var x`, `off + type_memory_bytes ce (expr_type h)`, `st`]
-       mp_tac) >> simp[]) >>
-  conj_tac >- suspend "result" >>
+    metis_tac[ci_mono_compile_make_tuple_cfn, compile_expr_ci_mono, pairTheory.SND] >>
+  conj_tac >- metis_tac[exprOperandVarTheory.compiler_make_tuple_result] >>
   `cs_extends sm sb` by (fs[ci_mono_def] >> metis_tac[cs_extends_trans]) >>
   `fn_has_code sa sm func` by metis_tac[fn_has_code_split] >>
   drule_all (SRULE [] (Q.INST [`nocalls` |-> `F`]
@@ -390,17 +386,6 @@ Resume aggregate_make_tuple_body_sim[cons]:
   suspend "tail"
 QED
 
-Resume aggregate_make_tuple_body_sim[result]:
-  qsuff_tac `!xs off a out z.
-    compile_make_tuple compile_expr ce xs (Var x) off a = (out,z) ==>
-    out = Var x`
-  >- metis_tac[] >>
-  POP_ASSUM_LIST (K all_tac) >> Induct
-  >- simp[compile_make_tuple_def, comp_return_def] >>
-  rpt gen_tac >> strip_tac >>
-  drule aggregate_tuple_body_cons_compile >> strip_tac >> metis_tac[]
-QED
-
 Resume aggregate_make_tuple_body_sim[tail]:
   `not_fresh_at st x` by
     (fs[not_fresh_at_def, ci_mono_def] >> metis_tac[arithmeticTheory.LESS_EQ_TRANS]) >>
@@ -425,7 +410,7 @@ Resume aggregate_make_tuple_body_sim[tail]:
        `p` |-> `b+(off+type_memory_size tvt)`, `len` |-> `type_memory_size_list t'`]
        (SPEC_ALL aggregate_body_immutable_slice)) >>
      (impl_tac >- (fs[type_memory_size_def] >> first_assum ACCEPT_TAC)) >> simp[]) >>
-  first_x_assum (drule_at (Pat `compile_make_tuple _ _ _ _ _ _ = _`)) >>
+  first_x_assum (drule_at (Pat `compile_make_tuple _ _ _ _ _ _ _ = _`)) >>
   disch_then (drule_at (Pat `OPT_MMAP _ _ = _`)) >>
   disch_then (drule_at (Pat `stmt_state_rel _ _ _ _ _ _`)) >>
   disch_then (drule_at (Pat `expr_sim_inv _ _ _ _`)) >>
