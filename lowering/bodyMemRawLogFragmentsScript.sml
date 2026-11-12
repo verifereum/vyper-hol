@@ -7,7 +7,7 @@ Ancestors
   exprSimPrecompiles exprSimWordArgs exprSimSource fragGasPath gasSummary fragGasMode gasOutcome
   exprLowering exprLoweringProps freshWrites compileEnv bodyMemoryPreds
   venomState venomInst vyperState vyperValue vyperAST list loweringStateRelDefs
-  gasStorage stmtReasonVvMemory vyperStorageTrace vyperStorageFootprint
+  gasStorage stmtReasonVvMemory vyperStorageTrace vyperStorageFootprint exprSimRawLog
 
 (* The data endpoint, dynamic payload: the data evaluation ends at one state
    (the horizon-free endpoint) whose posts hold at every valid horizon. *)
