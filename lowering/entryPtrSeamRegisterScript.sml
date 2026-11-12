@@ -3002,6 +3002,72 @@ QED
 
 Finalise registration_actual_endpoint_relations
 
+Theorem registration_positional_args_ptr_no_dalloca:
+  !tops rpolicy unit am tx ret vs mut args fbody env es0 efn elbl lbl cenv0
+   pos_args min_cds is_payable nkey ut' iv rt st cenv sa s1 G1 tn1.
+    lower_vyper_runtime_unit tops rpolicy = SOME unit /\
+    supported_program tops /\ source_typing_ok tops am tx /\
+    source_storage_ok tops am tx /\ source_deployment_rel tops am tx /\
+    valid_vyper_call tops tx vs.vs_call_ctx.cc_calldata ret /\
+    initial_venom_state_rel tops am tx vs /\ call_outcomes_ok am tx vs.vs_outcomes /\
+    lookup_function NONE tx.function_name External tops =
+      SOME (mut, F, args, [], ret, fbody) /\
+    bind_arguments (type_env tops) args tx.args = SOME env /\
+    send_call_value mut
+      (initial_evaluation_context am.sources am.layouts tx NONE)
+      (initial_state am [env] with
+         <| outcomes := SOME vs.vs_outcomes; requests := [] |>) = (INL (), es0) /\
+    lookup_function "__entry" unit.cu_context.ctx_functions = SOME efn /\
+    fn_entry_label efn = SOME elbl /\
+    set_external_package_target rpolicy.rpol_target
+      (package_external_fn tops F (assign_nkeys tops 0)
+         (mut, F, lookup_raw_return_or_F (NONE : num option)
+                     tx.function_name External tops,
+          tx.function_name, args, [], ret, fbody)) =
+      (lbl, cenv0, pos_args, min_cds, is_payable, F, nkey, ut', iv, fbody, rt) /\
+    compile_register_positional_args cenv0 pos_args 4 st = (cenv, sa) /\
+    fn_has_code st sa efn /\ fn_inst_ids_distinct efn /\
+    vars_pc_only
+      (vs with <| vs_prev_bb := NONE; vs_current_bb := elbl;
+                  vs_inst_idx := 0 |>) s1 /\
+    fresh_vars_wrt st s1 /\ ~s1.vs_halted /\
+    s1.vs_current_bb = st.cs_current_bb /\
+    s1.vs_inst_idx = LENGTH st.cs_current_insts /\
+    tn1.t_mem = {} /\ tn1.t_stor = {} /\ tn1.t_trans = {} /\ tn1.t_imm = {} /\
+    ~ctx_has_dalloca unit.cu_context ==>
+    ?s0 G0 tn0.
+      stmt_state_rel unit.cu_context efn cenv
+        (initial_evaluation_context am.sources am.layouts tx NONE) es0 s0 /\
+      ghost_inv NONE cenv
+        (initial_evaluation_context am.sources am.layouts tx NONE) es0 G0 tn0 s0 /\
+      ~s0.vs_halted /\ s0.vs_current_bb = sa.cs_current_bb /\
+      s0.vs_inst_idx = LENGTH sa.cs_current_insts /\
+      s0.vs_gas_readings = s1.vs_gas_readings /\
+      !D. (!fuel. ptr_safe_run D 0 fuel unit.cu_context efn [] G0 tn0 s0) ==>
+          !fuel. ptr_safe_run D 0 fuel unit.cu_context efn [] G1 tn1 s1
+Proof
+  rpt gen_tac >> strip_tac >>
+  drule_all registration_owned_locals_endpoint_resources >>
+  disch_then (qspecl_then [`tn1`, `ARB:instruction`, `G1`] strip_assume_tac) >>
+  qexistsl_tac [`s0`, `G0`, `tn0`] >>
+  `stmt_state_rel unit.cu_context efn cenv
+     (initial_evaluation_context am.sources am.layouts tx NONE) es0 s0 /\
+   ghost_inv NONE cenv
+     (initial_evaluation_context am.sources am.layouts tx NONE) es0 G0 tn0 s0` by
+    (`!j. j < LENGTH args ==> ?aid q p n.
+       FLOOKUP s0.vs_allocas aid = SOME (p,n) /\
+       FLOOKUP cenv.ce_vars (FST (EL j args)) = SOME (PtrVar (Var q) n) /\
+       lookup_var q s0 = SOME (n2w p) /\ ptr_covers G0 tn0 q s0 n /\
+       (!mem. mem_agree_outside tn0.t_mem s0.vs_memory mem ==>
+         val_in_memory (EL j tvs) (EL j tx.args) p mem)` by
+       (rpt strip_tac >>
+        qpat_x_assum `!j. j < LENGTH args ==> ?aid q p n inst. _`
+          (qspec_then `j` mp_tac) >> simp[] >> strip_tac >>
+        qexistsl_tac [`inst.inst_id`, `q`, `p`, `type_memory_size (EL j tvs)`] >> simp[]) >>
+     `tn0.t_stor = {} /\ tn0.t_trans = {} /\ tn0.t_imm = {}` by simp[] >>
+     drule_all registration_actual_endpoint_relations >> simp[]) >> simp[]
+QED
+
 (* SEAM (cheated; proved by its own alan run).  This is the largest seam:
    it owns the caller side of the decoder contract.
    Hints (not binding):
