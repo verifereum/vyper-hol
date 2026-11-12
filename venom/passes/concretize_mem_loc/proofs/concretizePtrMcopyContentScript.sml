@@ -43,7 +43,7 @@ Proof
      simp[mem_read_ops_def, inst_read_op_def] >>
      conj_tac >- (qexists `w2n n` >> simp[]) >>
      goal_assum (drule_at (Pat `ptr_paired_prefix _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _`)) >>
-     rpt (goal_assum (drule_at Any)) >> simp[]) >>
+     rpt (goal_assum (drule_at Any)) >> simp[] >> fs[]) >>
   suspend "content"
 QED
 

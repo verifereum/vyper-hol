@@ -21,7 +21,7 @@ Theorem ptr_paired_read_range_masked_bytes:
   ctx_inst_ids_distinct C /\ callee_first names C.ctx_functions /\
   EVERY all_reachable C.ctx_functions /\
   EVERY fn_defs_reach_uses C.ctx_functions /\
-  max_live_eom C' = SOME eom /\ eom <= w2n vs.vs_initial_fmp /\
+  max_live_eom C' = SOME eom /\ (ctx_has_dalloca C ==> eom <= w2n vs.vs_initial_fmp) /\
   ~in_revert_forward a.po_fn a.po_state /\ a.po_inst.inst_opcode <> ASSIGN /\
   mem_read_ops a.po_inst = SOME ops /\ inst_read_op a.po_inst = SOME ops.iao_ofst /\
   MEM ops.iao_ofst a.po_inst.inst_operands /\
@@ -49,7 +49,7 @@ Theorem ptr_paired_mload_masked_bytes:
   ctx_inst_ids_distinct C /\ callee_first names C.ctx_functions /\
   EVERY all_reachable C.ctx_functions /\
   EVERY fn_defs_reach_uses C.ctx_functions /\
-  max_live_eom C' = SOME eom /\ eom <= w2n vs.vs_initial_fmp /\
+  max_live_eom C' = SOME eom /\ (ctx_has_dalloca C ==> eom <= w2n vs.vs_initial_fmp) /\
   a.po_inst.inst_opcode = MLOAD /\ ptr_chrono_step C' at zt /\
   a.po_inst.inst_operands = [op] /\
   eval_operand op a.po_state = SOME x /\ eval_operand op at.po_state = SOME y ==>
@@ -66,5 +66,6 @@ Proof
     (SPEC_ALL ptr_paired_read_range_masked_bytes) |> SIMP_RULE (srw_ss()) [ADD_COMM]) >>
   rpt (goal_assum (drule_at Any)) >>
   simp[mem_read_ops_def, inst_read_op_def, source_memory_read_ranges_def] >>
-  rpt (goal_assum (drule_at Any)) >> simp[]
+  rpt (goal_assum (drule_at Any)) >> simp[] >>
+  rpt conj_tac >> metis_tac[]
 QED
