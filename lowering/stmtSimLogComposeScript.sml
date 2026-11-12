@@ -429,12 +429,12 @@ Resume compile_log_ready_stmt_frag[post]:
       `eval_operand (Var x) u = SOME w` by
         (qpat_x_assum `!op w. _ /\ _ /\ eval_operand op t = SOME w ==> _`
            irule >>
-         rpt conj_tac >>
          simp[venomStateTheory.eval_operand_def,
-              venomStateTheory.lookup_var_def] >>
-         first_assum ACCEPT_TAC) >>
-      pop_assum mp_tac >>
-      simp[venomStateTheory.eval_operand_def, venomStateTheory.lookup_var_def])
+              venomStateTheory.lookup_var_def]) >>
+      (* simp_tac, not simp: the frame fact would rewrite the antecedent to T *)
+      pop_assum (mp_tac o REWRITE_RULE [venomStateTheory.eval_operand_def,
+                                        venomStateTheory.lookup_var_def]) >>
+      simp_tac (srw_ss()) [venomStateTheory.lookup_var_def])
   >> irule alloca_frame_same_state >> qexists_tac `u` >> simp[] >>
   irule alloca_frame_trans >>
   qexistsl_tac [`cenv`, `es_end with gas_obs := []`, `t`, `sm`] >>
