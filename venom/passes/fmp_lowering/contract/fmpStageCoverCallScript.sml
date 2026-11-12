@@ -11,7 +11,8 @@
  *)
 Theory fmpStageCoverCall
 Ancestors
-  fmpStageCoverBack
+  fmpStageCoverBack fmpCoverInvokeIndex fmpCoverSavedOutputs
+  fnFrameBoundaryInvoke
   fmpStageOpBase fmpStageRel o1PassContract ptrDiscipline contextCodegenRel
   unitTransformDefs passSimulationDefs venomExecSemantics venomState venomInst
   simplifyCfgAvailability o1ContractSimplifyCfgSrcFrame
@@ -121,6 +122,10 @@ Theorem fmp_stage_back_ret:
       (s' with vs_inst_idx := SUC f.cf_state.vs_inst_idx)
 Proof
   strip_tac >>
+  `ivk'.inst_outputs = f.cf_inst.inst_outputs` by
+    (irule fmp_cover_saved_outputs >>
+     conj_tac >- metis_tac[fmp_cover_invoke_index] >>
+     metis_tac[]) >>
   `s.vs_labels = t.vs_labels` by
     (fs[fmp_stage_rel_def, fmp_frame_rel_def] >> metis_tac[]) >>
   `rinst.inst_opcode <> PHI` by simp[] >>
@@ -135,14 +140,25 @@ Proof
      rpt strip_tac >> Cases_on `op` >> fs[eval_operand_def] >>
      metis_tac[eval_operand_def]) >>
   Cases_on `eval_operands rinst.inst_operands s` >> gvs[] >>
-  `!ops st vals. eval_operands ops st = SOME vals ==>
-     LENGTH vals = LENGTH ops` by
-    (Induct >> simp[eval_operands_def] >>
-     rpt strip_tac >> gvs[AllCaseEqs()] >> metis_tac[]) >>
-  `LENGTH x = LENGTH (v3::v4)` by metis_tac[] >>
-  `x <> []` by (Cases_on `x` >> fs[]) >>
-  qexistsl [`<| iret_values := FRONT x; iret_adopt_fmp := NONE |>`, `s`] >>
-  simp[Once step_inst_def, step_inst_base_def] >>
-  Cases_on `x` >> gvs[] >>
-  cheat
+  rename1 `eval_operands rinst.inst_operands s = SOME srcvals` >>
+  rename1 `eval_operands rinst.inst_operands t = SOME (hdval::tlvals)` >>
+  `LENGTH srcvals = LENGTH (hdval::tlvals)` by
+    metis_tac[eval_operands_some_length] >>
+  `srcvals <> []` by (Cases_on `srcvals` >> fs[]) >>
+  `LENGTH f.cf_inst.inst_outputs = LENGTH (FRONT srcvals)` by
+    (fs[bind_outputs_def] >>
+     simp[LENGTH_FRONT] >> fs[]) >>
+  `?s'. bind_outputs f.cf_inst.inst_outputs (FRONT srcvals)
+      (merge_callee_state f.cf_state s) = SOME s'` by
+    simp[bind_outputs_def] >>
+  `bind_outputs f.cf_inst.inst_outputs
+     (<| iret_values := FRONT srcvals; iret_adopt_fmp := NONE |>).iret_values
+     (adopt_return_fmp
+       <| iret_values := FRONT srcvals; iret_adopt_fmp := NONE |>
+       (merge_callee_state f.cf_state s)) = SOME s'` by
+    simp[adopt_return_fmp_def] >>
+  drule_all fmp_back_saved_continuation >> strip_tac >>
+  qexistsl [`<| iret_values := FRONT srcvals; iret_adopt_fmp := NONE |>`, `s`, `s'`, `inst'`] >>
+  simp[adopt_return_fmp_def] >>
+  Cases_on `srcvals` >> gvs[Once step_inst_def, step_inst_base_def]
 QED
