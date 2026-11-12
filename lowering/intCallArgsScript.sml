@@ -10,6 +10,11 @@
  *   stage_mem_arg_frag — the ALLOCA and the store: the buffer, at the old
  *                        allocation frontier, holds the value, and memory
  *                        changes only there
+ *
+ * stage_mem_arg_frag predates eager argument staging: it runs the store
+ * right after the ALLOCA, while compile_stage_intcall_args now unwraps
+ * the argument between the two. The internal-call step has to split it
+ * into the ALLOCA and a store from a later state.
  *)
 
 Theory intCallArgs

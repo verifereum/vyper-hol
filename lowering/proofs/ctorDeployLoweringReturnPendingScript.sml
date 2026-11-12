@@ -357,6 +357,10 @@ Proof
   >- (match_mp_tac pending_frame_bind_guarded >> conj_tac
       >- (rewrite_tac[state_rel_frame_result] >> metis_tac[]) >>
       rpt strip_tac >> BETA_TAC >>
+      match_mp_tac pending_frame_bind_guarded >> conj_tac
+      >- (IF_CASES_TAC >>
+          simp[pending_frame_bind, pending_frame_reads, pending_frame_primitives]) >>
+      rpt strip_tac >> BETA_TAC >>
       match_mp_tac pending_frame_bind >> conj_tac
       >- (rewrite_tac[state_rel_frame_result] >> metis_tac[]) >>
       simp[pending_frame_bind, pending_frame_reads])

@@ -18,7 +18,8 @@ Proof
   rename1 `SOME loc` >> Cases_on `var_location_decode_operand loc` >>
   simp[cs_appends_return, cs_appends_emit_helpers] >>
   rpt (FIRST [CHANGED_TAC (simp[cs_appends_emit_helpers,
-    cj 1 cs_appends_abi_decode_mutual]), gen_tac,
+    cj 1 cs_appends_abi_decode_mutual, compile_abi_arg_ptr_guard_def,
+    cs_appends_return]), gen_tac,
     irule cs_appends_bind, irule cs_appends_ignore_bind, conj_tac])
 QED
 
@@ -117,7 +118,8 @@ Proof
   rename1 `SOME loc` >> Cases_on `var_location_decode_operand loc` >>
   simp[abi_decoder_vars_mono_return, abi_decoder_vars_mono_prims] >>
   rpt (FIRST [CHANGED_TAC (simp[abi_decoder_vars_mono_prims,
-    cj 1 abi_decoder_vars_mono_mutual]), gen_tac,
+    cj 1 abi_decoder_vars_mono_mutual, compile_abi_arg_ptr_guard_def,
+    abi_decoder_vars_mono_return]), gen_tac,
     irule abi_decoder_vars_mono_bind, irule abi_decoder_vars_mono_ignore_bind, conj_tac])
 QED
 

@@ -92,7 +92,8 @@ Proof
   rpt strip_tac >> drule type_memory_bytes_frame >> strip_tac >>
   drule ext_call_alloc_ok_struct_fields >> strip_tac >>
   drule_all target_subscript_overlap_frame >> strip_tac >>
-  simp[alloc_limits_expr_def, type_alloc_ok_def]
+  simp[alloc_limits_expr_def, type_alloc_ok_def,
+       exprLoweringTheory.copies_subscript_base_def]
 QED
 
 (* A slice's .code source, which the check skips for its address, is
@@ -190,7 +191,7 @@ Proof
   imp_res_tac alloc_limits_raise_exists >> simp[]
 QED
 
-(* The other checks read only the struct sizes too. *)
+(* The other checks read only the struct sizes and the modules too. *)
 Theorem alloc_limits_assignment_struct_fields:
   (!c g c'. c'.ce_struct_fields = c.ce_struct_fields /\
               c'.ce_func_return_type = c.ce_func_return_type /\

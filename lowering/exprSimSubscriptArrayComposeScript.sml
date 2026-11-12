@@ -67,6 +67,7 @@ Finalise framed_array_index_outcome_compose
 (* The suffix callback retains the static Code-or-Fixed provenance and
    captured-base post; neither is inferred from the runtime operand. *)
 Theorem framed_array_after_base:
+  ~subscript_reads_base cx obj idx ==>
   gas_marked_exec F (ctx,func) (eval_expr cx obj)
     (es,s0) left (INL captured) mid (OK t) /\
   expr_sim ctx func cenv cx ty idx (mid with gas_obs := []) /\
@@ -92,12 +93,12 @@ Theorem framed_array_after_base:
     (eval_expr cx (Subscript ann obj idx)) (es,s0)
     Q (\res ee out. expr_exit res out)
 Proof
-  strip_tac >>
+  disch_tac >> strip_tac >>
   qpat_x_assum `expr_sim _ _ _ _ _ _ _`
     (mp_tac o REWRITE_RULE [expr_sim_def]) >>
   disch_then (qspecl_then [`sm`,`si`,`iop`,`t`] mp_tac) >>
   (impl_tac >- simp[]) >> strip_tac >>
-  pure_once_rewrite_tac[eval_expr_subscript_bind] >>
+qpat_assum `~subscript_reads_base _ _ _` (fn th => pure_once_rewrite_tac[MATCH_MP eval_expr_subscript_bind th]) >>
   irule (BETA_RULE (Q.ISPEC `\r v. select_result cx (expr_type obj) r (ValueSubscript v)`
     (Q.GEN `k` framed_array_index_outcome_compose))) >>
   goal_assum (drule_at Any) >> BETA_TAC >>

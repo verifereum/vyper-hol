@@ -283,6 +283,7 @@ Proof
       metis_tac[])
   >- (rpt strip_tac >>
       gvs[Once evaluate_def, bind_def, AllCaseEqs(), return_def, raise_def] >>
+      gvs[COND_RATOR, AllCaseEqs(), bind_def, return_def] >>
       imp_res_tac read_result_state >> imp_res_tac select_result_state >>
       gvs[] >> metis_tac[])
   >- (rpt strip_tac >>
