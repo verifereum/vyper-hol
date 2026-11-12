@@ -184,7 +184,7 @@ Proof
                            FLOOKUP_UPDATE] >> metis_tac[]
 QED
 
-Theorem array_iter_copy_no_gas[local]:
+Theorem array_iter_copy_no_gas:
   compile_iter_elem_copy ce src dst stride LocMemory F ty ty sa = ((),sb) ==>
   EVERY (\i. i.inst_opcode <> GAS) (emitted_insts sa sb)
 Proof

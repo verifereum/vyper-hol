@@ -33,9 +33,11 @@ Theorem decode_singleton_aggregate_prelude:
   ?head after_head src first.
     emit_op ADD [Lit (n2w 4); Lit (n2w (off - 4))] st = (head,after_head) /\
     (if dyn then
-       ?offset after_load.
+       ?offset after_load after_src.
          emit_op CALLDATALOAD [head] after_head = (offset,after_load) /\
-         emit_op ADD [Lit (n2w 4); offset] after_load = (src,first)
+         emit_op ADD [Lit (n2w 4); offset] after_load = (src,after_src) /\
+         compile_abi_arg_ptr_guard CALLDATALOAD src (Lit 4w) after_src =
+           ((),first)
      else src = head /\ first = after_head) /\
     compile_abi_decode_to_buf dst src CALLDATALOAD (Lit 0w) (Lit 0w) info first = ((),stf)
 Proof

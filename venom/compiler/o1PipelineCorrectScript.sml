@@ -7,6 +7,8 @@
  * No compiler hook or final-unit check is changed to obtain output shape.
  * S4 supplies the lowered output invariant at its chosen input oracle;
  * S5 consumes that same output invariant for codegen.
+ * run_venom_pipeline_run_bounded (S6b) is the output's resource bound,
+ * which codegen's gas proof consumes.
  *)
 Theory o1PipelineCorrect
 Ancestors
@@ -14,6 +16,7 @@ Ancestors
   venomPassSchedule o1PassContract o1PipelineCompose ctxLookupAgree
   ptrDiscipline contextPlanLayoutProps stepWriteFootprint
   contextCodegenRel stackPlanGen venomCompilerTypes venomState words
+  venomRunBounded
 
 (* This is the compiler's existing O1 hook, with all three checks K T.
  * Naming it does not change compile_vyper or its literal pipeline hooks. *)
@@ -62,7 +65,7 @@ QED
  * the GAS oracle), which FmpLowering relocates to the output state's
  * initial pointer; that pointer lies at or above the output's live static
  * layout end, and fmp at or above it. *)
-Theorem run_venom_pipeline_correct:
+Theorem run_venom_pipeline_fuel:
   !D lo rpolicy unit out vs_out fmp.
     o1_pipeline rpolicy unit = SOME out /\
     o1_source_unit_ok unit /\ unit_entry_no_params unit /\
@@ -80,7 +83,8 @@ Theorem run_venom_pipeline_correct:
        taint_within D unit.cu_context vs_in /\
        mem_inv dload_offset_ok unit.cu_context vs_in /\
        mem_inv dload_headroom_ok unit.cu_context vs_in ==>
-       ctx_sim D unit.cu_context out.po_unit.cu_context vs_in vs_out /\
+       ctx_sim_fuel (cfg_norm_fuel out.po_unit.cu_context) D
+         unit.cu_context out.po_unit.cu_context vs_in vs_out /\
        o1_lowered_inv out.po_unit.cu_context vs_out)
 Proof
   rpt strip_tac >>
@@ -110,6 +114,32 @@ Proof
   rw[raw_variant_def, gas_variant_def,
      venomStateTheory.venom_state_component_equality] >>
   EQ_TAC >> rw[]
+QED
+
+Theorem run_venom_pipeline_correct:
+  !D lo rpolicy unit out vs_out fmp.
+    o1_pipeline rpolicy unit = SOME out /\
+    o1_source_unit_ok unit /\ unit_entry_no_params unit /\
+    unit_defs_reach_uses unit /\ unit_fmp_unsealed unit /\ o1_run_state_ok vs_out /\
+    reserved_intervals_wf unit.cu_context.ctx_global_reserved /\
+    EVERY (\fn. fn.fn_eom = NONE) unit.cu_context.ctx_functions /\
+    fixed_region_reserved lo unit.cu_context /\ dead_wf D /\
+    (!eom. max_live_eom out.po_unit.cu_context = SOME eom ==>
+           eom <= w2n vs_out.vs_initial_fmp) /\
+    w2n vs_out.vs_initial_fmp <= w2n fmp
+    ==>
+    ?vs_in. raw_variant fmp vs_in vs_out /\
+      (raw_unit_memory_ok unit.cu_context vs_in /\
+       ptr_discipline lo unit.cu_context vs_in /\
+       taint_within D unit.cu_context vs_in /\
+       mem_inv dload_offset_ok unit.cu_context vs_in /\
+       mem_inv dload_headroom_ok unit.cu_context vs_in ==>
+       ctx_sim D unit.cu_context out.po_unit.cu_context vs_in vs_out /\
+       o1_lowered_inv out.po_unit.cu_context vs_out)
+Proof
+  rpt strip_tac >>
+  drule_all run_venom_pipeline_fuel >> strip_tac >>
+  qexists_tac `vs_in` >> metis_tac[ctx_sim_fuel_imp_ctx_sim]
 QED
 
 Theorem o1_lowered_inv_fixed_pointer[local]:
@@ -195,6 +225,68 @@ Proof
   rpt strip_tac >> drule generate_context_plan_spill_gap >> strip_tac >>
   drule generate_context_plan_layout_wf >>
   gvs[stackPlanTypesTheory.context_plan_layout_wf_def, w2n_n2w, arithmeticTheory.LESS_MOD]
+QED
+
+(* ===== S6b: resource bound of the output (sufficient gas) ===== *)
+
+(* S6b.  A fuel bound on the source unit that holds for every entry state
+ * gives the output a fuel bound and a memory bound that hold for every
+ * entry state, so neither depends on the external-call outcomes or the GAS
+ * readings.  Takes S4's premises, with the input-side facts and the
+ * source's termination at every input state S4 may pick (a gas_variant of
+ * the output state); the plan cp locates the spill slots (below
+ * cp_initial_fmp) and the DRET packing area (above it).  The output fuel
+ * is cfg_norm_fuel of the source fuel (run_venom_pipeline_fuel), and the
+ * memory bound is the output's max_live_eom: every access stays static
+ * (o1_lowered_inv). *)
+Theorem run_venom_pipeline_run_bounded:
+  !lo rpolicy unit out cp fuel.
+    o1_pipeline rpolicy unit = SOME out /\
+    generate_context_plan out.po_unit.cu_context = SOME cp
+    ==>
+    ?fuel' M. !D vs.
+      o1_source_unit_ok unit /\ unit_entry_no_params unit /\
+      unit_defs_reach_uses unit /\ unit_fmp_unsealed unit /\
+      o1_run_state_ok vs /\
+      reserved_intervals_wf unit.cu_context.ctx_global_reserved /\
+      EVERY (\fn. fn.fn_eom = NONE) unit.cu_context.ctx_functions /\
+      fixed_region_reserved lo unit.cu_context /\ dead_wf D /\
+      vs.vs_initial_fmp = n2w cp.cp_initial_fmp /\
+      (!vs_in. gas_variant vs_in vs ==>
+         raw_unit_memory_ok unit.cu_context vs_in /\
+         ptr_discipline lo unit.cu_context vs_in /\
+         taint_within D unit.cu_context vs_in /\
+         mem_inv dload_offset_ok unit.cu_context vs_in /\
+         mem_inv dload_headroom_ok unit.cu_context vs_in /\
+         terminates (run_context fuel unit.cu_context vs_in))
+      ==>
+      venom_run_bounded fuel' M out.po_unit.cu_context vs
+Proof
+  rpt gen_tac >> strip_tac >>
+  qexistsl_tac [`cfg_norm_fuel out.po_unit.cu_context fuel`,
+                `case max_live_eom out.po_unit.cu_context of
+                   SOME eom => eom | NONE => 0`] >>
+  rpt gen_tac >> strip_tac >>
+  mp_tac (Q.SPECL [`D`, `lo`, `rpolicy`, `unit`, `out`, `vs`]
+            run_venom_pipeline_fuel) >>
+  impl_tac >- simp[] >> strip_tac >>
+  qpat_x_assum `!vs_in. gas_variant vs_in vs ==> _`
+    (qspec_then `vs_in` mp_tac) >>
+  simp[] >> strip_tac >>
+  `ctx_sim_fuel (cfg_norm_fuel out.po_unit.cu_context) D unit.cu_context
+     out.po_unit.cu_context vs_in vs /\
+   o1_lowered_inv out.po_unit.cu_context vs` by metis_tac[] >>
+  fs[o1_lowered_inv_def, ctx_sim_fuel_def] >>
+  qpat_x_assum `!fuel. _` (qspec_then `fuel` mp_tac) >>
+  simp[] >> strip_tac >>
+  simp[venom_run_bounded_def] >> conj_tac
+  >- metis_tac[dead_result_rel_terminates] >>
+  `static_mem_ok eom =
+     (\ctx fn inst s. in_revert_forward fn s \/
+        EVERY (\(off,len). len = 0 \/ off + len <= eom)
+          (inst_mem_ranges inst s))` by
+    simp[FUN_EQ_THM, static_mem_ok_def] >>
+  fs[]
 QED
 
 (* ===== S6: output shape without new compiler checks ===== *)
