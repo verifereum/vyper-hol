@@ -48,7 +48,7 @@ QED
 Theorem local_memory_vv_post:
   expr_has_effect e /\
   post_value_type cenv e = expr_type e /\
-  stmt_state_rel ctx func cenv cx es' u /\
+  stmt_state_rel H ctx func cenv cx es' u /\
   wb_frame cenv es es' sa s0 u /\
   read_result cx result es' = (INL v,es') /\
   evaluate_type (get_tenv cx) (expr_type e) = SOME tv /\
@@ -59,7 +59,7 @@ Theorem local_memory_vv_post:
   locbase <= w2n w /\ w2n w + val_footprint tv v <= locbase + sz /\
   local_val_at cenv cx id (w2n w - locbase) tv v /\
   local_place_at cenv cx id (w2n w - locbase) tv result ==>
-  vv_post ctx func cenv cx e es sa sb s0 es' result
+  vv_post H ctx func cenv cx e es sa sb s0 es' result
     (LocatedValue (expr_type e) (mk_ptr op LocMemory)) u
 Proof
   strip_tac >> simp[vv_post_def] >>
@@ -152,7 +152,7 @@ QED
 (* Reuse the general local-store immutable frame and the existing state
    relation scope wrapper; no field-by-field state relation expansion. *)
 Theorem pop_path_stmt_state_rel:
-  stmt_state_rel ctx func cenv cx es s /\
+  stmt_state_rel H ctx func cenv cx es s /\
   local_ptrs_reserved cenv sa /\
   MAP FDOM es.scopes = MAP FDOM scopes' /\
   local_ptrs_rel func cenv scopes' u /\
@@ -160,7 +160,7 @@ Theorem pop_path_stmt_state_rel:
   u = s with <|vs_vars := u.vs_vars; vs_memory := u.vs_memory|> /\
   u.vs_memory = (mstore (locbase + k) w s).vs_memory /\
   (!x. not_fresh_at sa x ==> lookup_var x u = lookup_var x s) ==>
-  stmt_state_rel ctx func cenv cx (es with scopes := scopes') u
+  stmt_state_rel H ctx func cenv cx (es with scopes := scopes') u
 Proof
   strip_tac >>
   `u.vs_data_section = s.vs_data_section` by
@@ -208,7 +208,7 @@ QED
 Theorem pop_path_vv_post:
   expr_has_effect e /\
   post_value_type cenv e = expr_type e /\
-  stmt_state_rel ctx func cenv cx es' u /\ wb_frame cenv es es' sa s0 u /\
+  stmt_state_rel H ctx func cenv cx es' u /\ wb_frame cenv es es' sa s0 u /\
   read_result cx result es' = (INL (LAST vs),es') /\
   evaluate_type (get_tenv cx) (expr_type e) = SOME etv /\
   mutable_place_path tv path /\ value_has_type tv a /\
@@ -224,7 +224,7 @@ Theorem pop_path_vv_post:
   w2n w = locbase + k + 32 + (LENGTH vs - 1) * type_memory_size etv /\
   local_place_at cenv cx id (k + 32 + (LENGTH vs - 1) * type_memory_size etv)
     etv result ==>
-  vv_post ctx func cenv cx e es sa sb s0 es' result
+  vv_post H ctx func cenv cx e es sa sb s0 es' result
     (LocatedValue (expr_type e) (mk_ptr op LocMemory)) u
 Proof
   strip_tac >>

@@ -36,7 +36,7 @@ Proof
 QED
 
 Theorem compile_encode_log_topic_scalar_mem_ok:
-  stmt_state_rel ctx func ce cx es s /\
+  stmt_state_rel H ctx func ce cx es s /\
   log_arg_rel ce cx sa sm es s (x,ty) v /\
   supported_scalar_type ty /\ evaluate_type (get_tenv cx) ty = SOME tv /\
   value_has_type tv v /\ (!z. x = Var z ==> not_fresh_at sm z) /\
@@ -112,7 +112,7 @@ QED
 
 Theorem compile_log_topic_ops_mem_ok:
   !xs vs sm ops sb s.
-  stmt_state_rel ctx func ce cx es s /\ local_ptrs_reserved ce sm /\
+  stmt_state_rel H ctx func ce cx es s /\ local_ptrs_reserved ce sm /\
   compile_log_topic_ops (MAP (\p. (FST p,is_bytestring_type (SND p))) xs) sm = (ops,sb) /\
   EVERY (\p. (!z. FST p = Var z ==> not_fresh_at sm z) /\
     (!l. FST p <> Label l)) xs /\
@@ -142,7 +142,7 @@ Proof
 QED
 Resume compile_log_topic_ops_mem_ok[compose]:
   rename1 `run_inst_seq (emitted_insts sm sc) s = OK u` >>
-  `stmt_state_rel ctx func ce cx es u` by
+  `stmt_state_rel H ctx func ce cx es u` by
     (irule hash_readonly_state_rel >> goal_assum (drule_at Any) >> simp[]) >>
   `local_ptrs_reserved ce sc` by
     (irule local_ptrs_reserved_next_var >> goal_assum (drule_at Any) >> simp[]) >>
@@ -175,7 +175,7 @@ QED
 Finalise compile_log_topic_ops_mem_ok
 
 Theorem compile_split_log_topics_mem_ok:
-  stmt_state_rel ctx func ce cx es s /\ local_ptrs_reserved ce sm /\
+  stmt_state_rel H ctx func ce cx es s /\ local_ptrs_reserved ce sm /\
   LENGTH flags = LENGTH xs /\
   compile_log_topic_ops (FST (split_log_ops xs flags)) sm = (ops,sb) /\
   EVERY (\p. (!z. FST p = Var z ==> not_fresh_at sm z) /\
@@ -204,7 +204,7 @@ Proof
     (irule log_indexed_selection_every >> simp[]) >>
   conj_tac
   >- (irule compile_log_topic_ops_mem_ok >>
-      goal_assum (drule_at (Pat `stmt_state_rel _ _ _ _ _ _`)) >>
+      goal_assum (drule_at (Pat `stmt_state_rel _ _ _ _ _ _ _`)) >>
       goal_assum (drule_at (Pat `compile_log_topic_ops _ _ = _`)) >>
       qexistsl_tac [`sa`,`MAP FST (FILTER SND (ZIP (vs,flags)))`] >>
       simp[] >> conj_tac >> irule log_indexed_selection_rel >> simp[]) >>

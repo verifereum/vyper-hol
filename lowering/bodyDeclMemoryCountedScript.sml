@@ -51,14 +51,14 @@ Theorem annassign_setup_body_gas_path_mem:
   emit_inst ALLOCA [Lit (n2w (type_memory_bytes ce ty))] [p] st = ((),sA) /\
   type_memory_bytes ce ty < dimword (:256) /\
   fn_has_code sa sA func /\ fn_inst_ids_distinct func /\
-  local_ptrs_reserved ce sa /\ stmt_state_rel ctx func ce cx es s /\
+  local_ptrs_reserved ce sa /\ stmt_state_rel H ctx func ce cx es s /\
   alloca_history func s /\ return_buf_frame d ce sa s /\
   ~s.vs_halted /\ s.vs_current_bb = sa.cs_current_bb /\
   s.vs_inst_idx = LENGTH sa.cs_current_insts ==>
   ?t. gas_path_mem ctx func s 0 (OK t) /\
     ~t.vs_halted /\ t.vs_current_bb = sA.cs_current_bb /\
     t.vs_inst_idx = LENGTH sA.cs_current_insts /\
-    stmt_state_rel ctx func c cx es t /\ alloca_history func t /\
+    stmt_state_rel H ctx func c cx es t /\ alloca_history func t /\
     return_buf_frame d c sA t /\ s.vs_alloca_next <= t.vs_alloca_next /\
     local_ptrs_reserved c sA /\ not_fresh_at sA p /\
     FLOOKUP c.ce_vars id = SOME (PtrVar (Var p) (type_memory_bytes ce ty)) /\
@@ -70,7 +70,7 @@ Theorem annassign_setup_body_gas_path_mem:
       w2n w + type_memory_bytes ce ty <= t.vs_alloca_next
 Proof
   strip_tac >> drule_all annassign_setup_shape >> strip_tac >>
-  `stmt_state_rel ctx func c cx es s` by metis_tac[stmt_state_rel_declare_local_entry] >>
+  `stmt_state_rel H ctx func c cx es s` by metis_tac[stmt_state_rel_declare_local_entry] >>
   qabbrev_tac `A = mk_inst st.cs_next_id ALLOCA
     [Lit (n2w (type_memory_bytes ce ty))] [p]` >>
   `A.inst_opcode = ALLOCA /\ A.inst_operands = [Lit (n2w (type_memory_bytes ce ty))] /\
@@ -181,7 +181,7 @@ Theorem annassign_memory_store_body_path:
     val_in_memory tyv v (w2n sw) s.vs_memory /\
     type_memory_bytes cenv ty = type_memory_size tyv /\
     type_memory_size tyv <= sz /\ type_memory_size tyv + 64 < dimword (:256) /\
-    stmt_state_rel ctx func cenv cx es s /\ fn_inst_ids_distinct func /\
+    stmt_state_rel H ctx func cenv cx es s /\ fn_inst_ids_distinct func /\
     es.scopes = sc :: rest /\ lookup_scopes id es.scopes = NONE /\
     FLOOKUP cenv.ce_vars id = SOME (PtrVar (Var p) sz) /\
     not_local_ptr cenv es.scopes p /\ MEM inst (fn_insts func) /\
@@ -196,7 +196,7 @@ Theorem annassign_memory_store_body_path:
     ?t. gas_path_mem ctx func s 0 (OK t) /\ ~t.vs_halted /\
       t.vs_current_bb = sb.cs_current_bb /\
       t.vs_inst_idx = LENGTH sb.cs_current_insts /\
-      stmt_state_rel ctx func cenv cx
+      stmt_state_rel H ctx func cenv cx
         (es with scopes :=
           (sc |+ (id, <|assignable := a; type := tyv; value := v; popped := []|>)) :: rest) t /\
       alloca_history func t /\ s.vs_alloca_next <= t.vs_alloca_next /\
@@ -209,7 +209,7 @@ Proof
   drule compile_store_memory_run_size_bound_with_capacity >>
   disch_then (qspecl_then [`s`, `get_tenv cx`, `tyv`, `v`, `sw`, `w`] mp_tac) >>
   (impl_tac >- simp[]) >> strip_tac >>
-  `stmt_state_rel ctx func cenv cx
+  `stmt_state_rel H ctx func cenv cx
      (es with scopes :=
        (sc |+ (id, <|assignable := a; type := tyv; value := v; popped := []|>)) :: rest) t` by
     (irule body_stmt_state_rel_declare_store_frame >> simp[] >>
@@ -251,7 +251,7 @@ Theorem compile_scratch_prefix_body_path:
     compile_alloc_buffer n sa = (buf,sm) /\
     compile_copy_memory buf.buf_operand src n sm = ((),sn) /\
     fn_has_code sa sn func /\ fn_inst_ids_distinct func /\
-    local_ptrs_reserved ce sa /\ stmt_state_rel ctx func ce cx es s /\
+    local_ptrs_reserved ce sa /\ stmt_state_rel H ctx func ce cx es s /\
     alloca_history func s /\ return_buf_frame d ce sa s /\
     (!x. src = Var x ==> not_fresh_at sa x) /\
     eval_operand src s = SOME sw /\ n < dimword (:256) /\
@@ -263,7 +263,7 @@ Theorem compile_scratch_prefix_body_path:
     ?t. gas_path_mem ctx func s 0 (OK t) /\ ~t.vs_halted /\
       t.vs_current_bb = sn.cs_current_bb /\
       t.vs_inst_idx = LENGTH sn.cs_current_insts /\
-      stmt_state_rel ctx func ce cx es t /\ alloca_history func t /\
+      stmt_state_rel H ctx func ce cx es t /\ alloca_history func t /\
       return_buf_frame d ce sn t /\ s.vs_alloca_next <= t.vs_alloca_next /\
       (!x. not_fresh_at sa x ==> lookup_var x t = lookup_var x s) /\
       (!aid b. FLOOKUP s.vs_allocas aid = SOME b ==>
@@ -318,7 +318,7 @@ Theorem annassign_memory_assign_body_path:
     val_in_memory tyv v (w2n sw) s.vs_memory /\
     type_memory_bytes cenv ty = type_memory_size tyv /\
     type_memory_size tyv <= sz /\ type_memory_size tyv + 64 < dimword (:256) /\
-    stmt_state_rel ctx func cenv cx es s /\ fn_inst_ids_distinct func /\
+    stmt_state_rel H ctx func cenv cx es s /\ fn_inst_ids_distinct func /\
     es.scopes = sc :: rest /\ lookup_scopes id es.scopes = NONE /\
     FLOOKUP cenv.ce_vars id = SOME (PtrVar (Var p) sz) /\
     not_local_ptr cenv es.scopes p /\ MEM inst (fn_insts func) /\
@@ -333,7 +333,7 @@ Theorem annassign_memory_assign_body_path:
     ?t. gas_path_mem ctx func s 0 (OK t) /\ ~t.vs_halted /\
       t.vs_current_bb = sb.cs_current_bb /\
       t.vs_inst_idx = LENGTH sb.cs_current_insts /\
-      stmt_state_rel ctx func cenv cx
+      stmt_state_rel H ctx func cenv cx
         (es with scopes :=
           (sc |+ (id, <|assignable := a; type := tyv; value := v; popped := []|>)) :: rest) t /\
       alloca_history func t /\ s.vs_alloca_next <= t.vs_alloca_next /\
@@ -391,7 +391,7 @@ Theorem annassign_name_rhs_body_path:
     ~is_word_type ty /\ evaluate_type (get_tenv cx) ty = SOME tyv /\
     type_memory_bytes cenv ty = type_memory_size tyv /\
     type_memory_size tyv <= sz /\ type_memory_size tyv + 64 < dimword (:256) /\
-    stmt_state_rel ctx func cenv cx es s /\ fn_inst_ids_distinct func /\
+    stmt_state_rel H ctx func cenv cx es s /\ fn_inst_ids_distinct func /\
     es.scopes = sc :: rest /\ lookup_scopes id es.scopes = NONE /\
     FLOOKUP cenv.ce_vars id = SOME (PtrVar (Var p) sz) /\
     not_local_ptr cenv es.scopes p /\ MEM inst (fn_insts func) /\
@@ -405,7 +405,7 @@ Theorem annassign_name_rhs_body_path:
     ?t. gas_path_mem ctx func s 0 (OK t) /\ ~t.vs_halted /\
       t.vs_current_bb = sb.cs_current_bb /\
       t.vs_inst_idx = LENGTH sb.cs_current_insts /\
-      stmt_state_rel ctx func cenv cx
+      stmt_state_rel H ctx func cenv cx
         (es with scopes :=
           (sc |+ (id, <|assignable := a; type := tyv; value := v; popped := []|>)) :: rest) t /\
       alloca_history func t /\ s.vs_alloca_next <= t.vs_alloca_next /\
