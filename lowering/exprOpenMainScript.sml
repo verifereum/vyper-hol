@@ -236,7 +236,8 @@ Resume compile_expr_open_general[builtin_dispatch]:
           (strip_tac >> gvs[well_typed_builtin_app_def, well_typed_binop_def]) >>
         gvs[SF ETA_ss] >>
         qspecl_then
-          [`expr_child_callback (list_size expr_size [arg_e;arg2_e]) compile_expr`,
+          [`expr_child_callback (list_size expr_size [arg_e;arg2_e] + cenv_defaults_size cenv)
+             compile_expr`,
            `cenv`, `ann`, `aty`, `op`, `arg_e`, `arg2_e`, `sa`, `v`, `st`]
           mp_tac compile_dispatch_bop_open >>
         simp[expr_size_def, SF ETA_ss] >> disch_then irule >> strip_tac >>

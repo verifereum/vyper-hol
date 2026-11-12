@@ -790,11 +790,12 @@ Theorem abi_image_child_lower_label:
   lower_value (expr_child_callback bound f) ce ty e sa = (Label l,sb) ==>
   sb.cs_blocks = sa.cs_blocks
 Proof
-  Cases_on `expr_size e < bound` >>
+  Cases_on `cenv_defaults_size ce + expr_size e < bound` >>
   simp[lower_value_def, comp_bind_def, expr_child_callback_def,
        invalid_expr_call_def, unwrap_value_def, comp_return_def, LET_THM] >>
   rpt strip_tac >> rpt (pairarg_tac >> gvs[])
-  >- (drule abi_image_unwrap_label >> strip_tac >> gvs[] >> metis_tac[]) >>
+  >- (`expr_size e < bound` by decide_tac >>
+      drule abi_image_unwrap_label >> strip_tac >> gvs[] >> metis_tac[]) >>
   gvs[unwrap_value_def, comp_return_def]
 QED
 
