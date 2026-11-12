@@ -307,12 +307,12 @@ Proof
   Cases_on `dmut` >>
   simp[is_bare_global_decl_def, constSubstTheory.module_consts_env_def] >>
   TRY (metis_tac[]) >>
-  rename1 `subst_consts_expr acc ce` >> strip_tac >>
-  Cases_on `dname = id`
-  >- (gvs[] >>
-      qspecl_then [`ts`, `acc ++ [(id, fold_const_expr (subst_consts_expr acc ce))]`]
-        strip_assume_tac module_consts_env_acc_prefix >> gvs[]) >>
-  gvs[] >> metis_tac[]
+  rename1 `subst_consts_expr acc ce` >>
+  `MEM dname (MAP FST (module_consts_env ts
+     (acc ++ [(dname, fold_const_expr (subst_consts_expr acc ce))])))` by
+    (qspecl_then [`ts`, `acc ++ [(dname, fold_const_expr (subst_consts_expr acc ce))]`]
+       strip_assume_tac module_consts_env_acc_prefix >> simp[]) >>
+  rpt strip_tac >> gvs[] >> metis_tac[]
 QED
 
 Theorem is_immutable_decl_variable_decl[local]:
