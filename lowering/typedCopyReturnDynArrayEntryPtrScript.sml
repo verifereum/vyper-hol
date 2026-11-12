@@ -5,7 +5,8 @@ Ancestors bodyPtrSubscriptLengthRead bodyPtrBopInHeaderControl
   fragExec fragGasPathPtr fragGasSeqPtr emitHelperProps emitHelper compileEnv
   venomState venomInst venomExecSemantics ptrDiscipline finite_map words
   typedCopyLayoutPtr representationCleanPtr valueEncodingProps ptrCoverage typedCopyPtr
-  bodyPtrDefs
+  bodyPtrDefs bodyPtrBytestringBuiltinsSource bodyPtrPrecompileBuiltinsArithmeticValue
+  typedCopyRobustTransportPtr abiDecodeStaticProps augAssignPtrFieldLoad
 
 Theorem typed_copy_capacity_counted[local]:
   emit_op GT [len; Lit (n2w cap)] sa = (flagop,sb) /\
@@ -112,3 +113,88 @@ Proof
   conj_tac >- (qpat_x_assum `t = _` SUBST1_TAC >> simp[]) >>
   metis_tac[]
 QED
+
+Theorem typed_copy_dynarray_store_length[local]:
+  emit_void MSTORE [Var dst; Var len] sa = ((),sb) /\
+  fn_has_code sa sb fn /\ ~ctx_has_dalloca ctx /\ ~s.vs_halted /\
+  s.vs_current_bb = sa.cs_current_bb /\
+  s.vs_inst_idx = LENGTH sa.cs_current_insts /\
+  ptr_covers G tn dst s 32 /\ lookup_var dst s = SOME b /\
+  lookup_var len s = SOME (n2w n) /\ op_taint tn (Var len) = {} /\
+  val_wf tv v /\
+  (p + type_memory_size tv <= w2n b \/ w2n b+32 <= p) /\
+  (!m. mem_agree_outside tn.t_mem s.vs_memory m ==> val_in_memory tv v p m) ==>
+  ?tm t.
+    gas_path_ptr D 0 ctx fn PG G tn s 0 G tm (OK t) /\
+    t = (mstore (w2n b) (n2w n) s) with vs_inst_idx := SUC s.vs_inst_idx /\
+    t.vs_current_bb = sb.cs_current_bb /\
+    t.vs_inst_idx = LENGTH sb.cs_current_insts /\ ~t.vs_halted /\
+    tm.t_mem = tn.t_mem DIFF {i | w2n b <= i /\ i < w2n b+32} /\
+    tm.t_var = tn.t_var /\ tm.t_stor = tn.t_stor /\
+    tm.t_trans = tn.t_trans /\ tm.t_imm = tn.t_imm /\
+    (!root cap. ptr_covers G tn root s cap ==> ptr_covers G tm root t cap) /\
+    (!m. mem_agree_outside tm.t_mem t.vs_memory m ==>
+      mem_word_at (w2n b) m = n2w n) /\
+    (!m. mem_agree_outside tm.t_mem t.vs_memory m ==> val_in_memory tv v p m) /\
+    (!i. ~(w2n b <= i /\ i < w2n b+32) ==>
+      mem_bytes_at i 1 t.vs_memory = mem_bytes_at i 1 s.vs_memory /\
+      (i IN tm.t_mem <=> i IN tn.t_mem))
+Proof
+  strip_tac >> (
+  `eval_operand (Var len) s = SOME (n2w n)` by simp[eval_operand_def] >>
+  drule_all emit_scratch_word_counted >>
+  disch_then (qspecl_then [`D`,`PG`] strip_assume_tac) >>
+  qexistsl_tac [`tn'`,`t`] >> simp[] >>
+  `!i. ~(w2n b <= i /\ i < w2n b+32) ==>
+    mem_bytes_at i 1 t.vs_memory = mem_bytes_at i 1 s.vs_memory /\
+    (i IN tn'.t_mem <=> i IN tn.t_mem)` by
+    (simp[] >> rpt strip_tac >>
+     `i < w2n b \/ w2n b+32 <= i` by decide_tac >>
+     gvs[mem_bytes_at_mstore_outside]) >>
+  conj_tac
+  >- (rpt strip_tac >>
+      `mem_word_at (w2n b) t.vs_memory = mem_word_at (w2n b) m` by
+        (irule clean_word_mem_agree >> qexists_tac `tn'.t_mem` >> simp[]) >>
+      metis_tac[]) >>
+  conj_tac >- (rpt strip_tac >> irule robust_representation_exterior_frame >>
+    simp[] >> qexistsl_tac [`w2n b`,`s.vs_memory`,`t.vs_memory`,`32`,
+      `tn.t_mem`,`tn'.t_mem`] >> simp[] >> metis_tac[]) >>
+  gvs[] >> metis_tac[])
+QED
+
+Theorem typed_copy_dynarray_shift_root[local]:
+  emit_op ADD [Var root; Lit 32w] sa = (Var out,sb) /\
+  fn_has_code sa sb fn /\ ~ctx_has_dalloca ctx /\ ~s.vs_halted /\
+  s.vs_current_bb = sa.cs_current_bb /\
+  s.vs_inst_idx = LENGTH sa.cs_current_insts /\ not_fresh_at sa root /\
+  ptr_covers G tn root s (32+n) /\ lookup_var root s = SOME a /\
+  w2n a+32 < dimword(:256) ==>
+  ?H tm t.
+    gas_path_ptr D 0 ctx fn PG G tn s 0 H tm (OK t) /\
+    lookup_var out t = SOME (a+32w) /\ op_taint tm (Var out) = {} /\
+    (0 < n ==> ptr_covers H tm out t n) /\
+    t.vs_current_bb = sb.cs_current_bb /\
+    t.vs_inst_idx = LENGTH sb.cs_current_insts /\ ~t.vs_halted /\
+    t = s with <|vs_vars := t.vs_vars; vs_inst_idx := t.vs_inst_idx|> /\
+    tm.t_mem = tn.t_mem /\ tm.t_stor = tn.t_stor /\
+    tm.t_trans = tn.t_trans /\ tm.t_imm = tn.t_imm /\
+    (!p. not_fresh_at sa p ==> lookup_var p t = lookup_var p s /\
+      FLOOKUP H p = FLOOKUP G p /\ op_taint tm (Var p) = op_taint tn (Var p))
+Proof
+  strip_tac >> Cases_on `n = 0`
+  >- (gvs[] >>
+      `op_taint tn (Var root) = {} /\
+       eval_operand (Lit 32w) s = SOME 32w /\ op_taint tn (Lit 32w) = {}` by
+        gvs[ptr_covers_def,eval_operand_def,op_taint_def] >>
+      drule_all typed_copy_clean_address_counted >>
+      disch_then (qspecl_then [`PG`,`G`,`D`] strip_assume_tac) >>
+      gvs[] >> goal_assum (drule_at (Pat `gas_path_ptr _ _ _ _ _ _ _ _ _ _ _ _`)) >>
+      simp[]) >>
+  `32 < 32+n /\ 32+n <= 32+n` by decide_tac >>
+  drule_all (emit_add_literal_path_ptr |> Q.INST [`off` |-> `32`, `n` |-> `n`]
+    |> SRULE []) >>
+  disch_then (qspecl_then [`PG`,`D`] strip_assume_tac) >>
+  goal_assum (drule_at (Pat `gas_path_ptr _ _ _ _ _ _ _ _ _ _ _ _`)) >>
+  simp[update_var_def]
+QED
+
