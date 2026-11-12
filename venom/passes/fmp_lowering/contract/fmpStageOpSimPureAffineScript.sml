@@ -121,3 +121,101 @@ Proof
   gvs[step_inst_non_invoke, step_inst_base_def, exec_pure2_def,
       AllCaseEqs(), passSimulationDefsTheory.terminates_def]
 QED
+
+Theorem fmp_affine_update_taint[local]:
+  MEM inst.inst_opcode [ADD; SUB] /\ inst.inst_operands = [op1;op2] /\
+  inst.inst_outputs = [out] ==>
+  step_taint inst s (update_var out x s) tn =
+    tn with t_var := tn.t_var |+ (out,{})
+Proof
+  strip_tac >> fs[MEM] >>
+  gvs[step_taint_def, out_taint_def, set_var_taint_def,
+      mem_taint_def, store_taint_def, adopt_reset_def, imm_taint_def,
+      update_var_def, new_site_bytes_def, written_taint_def, step_writes_def,
+      codegenRelTheory.source_memory_write_ranges_def, range_bytes_def,
+      FLOOKUP_DEF, SF CONJ_ss, AllCaseEqs(), taint_component_equality] >>
+  Cases_on `eval_operand op1 s` >> simp[]
+QED
+
+Theorem fmp_affine_update_value[local]:
+  MEM inst.inst_opcode [ADD; SUB] /\ inst.inst_operands = [op1;op2] /\
+  inst.inst_outputs = [out] /\
+  fmp_value_rel sm (out_prov PG G inst (update_var out x s)) {} x y ==>
+  (!v. ~MEM v inst.inst_outputs ==>
+     FLOOKUP (update_var out x s).vs_vars v = FLOOKUP s.vs_vars v /\
+     FLOOKUP (update_var out y t).vs_vars v = FLOOKUP t.vs_vars v) /\
+  (!v z. MEM v inst.inst_outputs /\
+      FLOOKUP (update_var out x s).vs_vars v = SOME z ==>
+    ?w. FLOOKUP (update_var out y t).vs_vars v = SOME w /\
+      (~retpc_var fn v ==>
+       fmp_value_rel sm (FLOOKUP (step_prov PG G inst (update_var out x s)) v)
+        (op_taint (step_taint inst s (update_var out x s) tn) (Var v)) z w))
+Proof
+  strip_tac >> drule_all fmp_affine_update_taint >> strip_tac >>
+  simp[update_var_def, FLOOKUP_UPDATE, op_taint_def, step_prov_def] >>
+  Cases_on `out_prov PG G inst (update_var out x s)` >>
+  gvs[set_prov_def, FLOOKUP_UPDATE, FLOOKUP_DRESTRICT, update_var_def]
+QED
+
+Theorem fmp_affine_update_agree[local]:
+  MEM inst.inst_opcode [ADD; SUB] /\ inst.inst_operands = [op1;op2] /\
+  inst.inst_outputs = [out] /\
+  ld_memory_agree (fmp_ld_sites sm) eom tn.t_mem s.vs_memory t.vs_memory /\
+  ld_shared_agree D s.vs_call_ctx.cc_address tn s t ==>
+  ld_memory_agree (fmp_ld_sites sm) eom
+    (step_taint inst s (update_var out x s) tn).t_mem
+    (update_var out x s).vs_memory (update_var out y t).vs_memory /\
+  ld_shared_agree D s.vs_call_ctx.cc_address
+    (step_taint inst s (update_var out x s) tn)
+    (update_var out x s) (update_var out y t)
+Proof
+  strip_tac >> drule_all fmp_affine_update_taint >> strip_tac >>
+  gvs[update_var_def, o1LowerDloadSharedTheory.ld_shared_agree_def]
+QED
+
+Theorem fmp_affine_update_post[local]:
+  MEM inst.inst_opcode [ADD; SUB] /\ inst.inst_operands = [op1;op2] /\
+  inst.inst_outputs = [out] /\
+  s1 = update_var out x s /\ t1 = update_var out y t /\
+  fmp_value_rel sm (out_prov PG G inst s1) {} x y /\
+  ld_memory_agree (fmp_ld_sites sm) eom tn.t_mem s.vs_memory t.vs_memory /\
+  ld_shared_agree D s.vs_call_ctx.cc_address tn s t /\
+  s.vs_returndata = t.vs_returndata /\ ~s.vs_halted /\ ~t.vs_halted ==>
+  (!v. ~MEM v inst.inst_outputs ==>
+    FLOOKUP s1.vs_vars v = FLOOKUP s.vs_vars v /\
+    FLOOKUP t1.vs_vars v = FLOOKUP t.vs_vars v) /\
+  (!v z. MEM v inst.inst_outputs /\ FLOOKUP s1.vs_vars v = SOME z ==>
+    ?w. FLOOKUP t1.vs_vars v = SOME w /\
+      (~retpc_var fn v ==>
+        fmp_value_rel sm (FLOOKUP (step_prov PG G inst s1) v)
+          (op_taint (step_taint inst s s1 tn) (Var v)) z w)) /\
+  ld_memory_agree (fmp_ld_sites sm) eom
+    (step_taint inst s s1 tn).t_mem s1.vs_memory t1.vs_memory /\
+  ld_shared_agree D s.vs_call_ctx.cc_address (step_taint inst s s1 tn) s1 t1 /\
+  s1.vs_returndata = t1.vs_returndata /\ ~s1.vs_halted /\ ~t1.vs_halted /\
+  s1.vs_current_bb = s.vs_current_bb /\ s1.vs_prev_bb = s.vs_prev_bb /\
+  s1.vs_inst_idx = s.vs_inst_idx /\ s1.vs_params = s.vs_params /\
+  s1.vs_call_ctx = s.vs_call_ctx /\ s1.vs_tx_ctx = s.vs_tx_ctx /\
+  s1.vs_block_ctx = s.vs_block_ctx /\
+  s1.vs_data_section = s.vs_data_section /\
+  s1.vs_labels = s.vs_labels /\ s1.vs_code = s.vs_code /\
+  s1.vs_prev_hashes = s.vs_prev_hashes /\
+  s1.vs_initial_fmp = s.vs_initial_fmp /\ s1.vs_fmp = s.vs_fmp /\
+  t1.vs_current_bb = t.vs_current_bb /\ t1.vs_prev_bb = t.vs_prev_bb /\
+  t1.vs_inst_idx = t.vs_inst_idx /\ t1.vs_params = t.vs_params /\
+  t1.vs_call_ctx = t.vs_call_ctx /\ t1.vs_tx_ctx = t.vs_tx_ctx /\
+  t1.vs_block_ctx = t.vs_block_ctx /\
+  t1.vs_data_section = t.vs_data_section /\
+  t1.vs_labels = t.vs_labels /\ t1.vs_code = t.vs_code /\
+  t1.vs_prev_hashes = t.vs_prev_hashes /\
+  t1.vs_initial_fmp = t.vs_initial_fmp /\ t1.vs_fmp = t.vs_fmp
+Proof
+  strip_tac >>
+  qpat_x_assum `s1 = _` SUBST_ALL_TAC >>
+  qpat_x_assum `t1 = _` SUBST_ALL_TAC >>
+  drule_all fmp_affine_update_value >>
+  disch_then (qspecl_then [`tn`,`t`,`fn`] strip_assume_tac) >>
+  drule_all fmp_affine_update_agree >>
+  disch_then (qspecl_then [`y`,`x`] strip_assume_tac) >>
+  gvs[update_var_def]
+QED
