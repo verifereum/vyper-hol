@@ -8,7 +8,7 @@
 Theory fragFuelLoopAbiDecDyn
 Ancestors
   fragFuel fragFuelContextBase abiEncoder compileEnv emitHelper context
-  exprSimAbiEncodeObliviousCode
+  exprSimAbiEncodeObliviousCode fragFuelLoopAbiDecDynSteps
   venomInst venomMemProps venomInstProps venomExecSemantics venomEffects venomState
 Libs
   fragFuelLib
@@ -676,6 +676,141 @@ Finalise abi_dyn_decode_code
    Thus the original also stays fixed from k on.  Exhaustion need not be
    mistaken for termination.  The overhead is zero for run_from: only
    entered jumps are counted; the initial partial block costs no fuel. *)
+(* Metalevel notation only: no new logical constants. *)
+val abi_dyn_cut_hyp = ``\R C Q (ctx:venom_context) fn (ctx0:venom_context) obs.
+  (!s. R s /\ Q s /\ C s ==>
+    ?bb id. lookup_block s.vs_current_bb obs.fn_blocks = SOME bb /\
+      get_instruction bb s.vs_inst_idx = SOME (mk_inst id STOP [] [])) /\
+  (!s. R s /\ Q s /\ ~C s ==>
+    ?bb ob inst.
+      lookup_block s.vs_current_bb fn.fn_blocks = SOME bb /\
+      lookup_block s.vs_current_bb obs.fn_blocks = SOME ob /\
+      get_instruction bb s.vs_inst_idx = SOME inst /\
+      get_instruction ob s.vs_inst_idx = SOME inst /\
+      inst.inst_opcode <> INVOKE) /\
+  (!s bb inst t. R s /\ Q s /\ ~C s /\
+    lookup_block s.vs_current_bb fn.fn_blocks = SOME bb /\
+    get_instruction bb s.vs_inst_idx = SOME inst /\
+    step_inst_base inst s = OK t /\ ~is_terminator inst.inst_opcode ==>
+    R (t with vs_inst_idx := SUC s.vs_inst_idx) /\
+    Q (t with vs_inst_idx := SUC s.vs_inst_idx)) /\
+  (!s bb inst t. R s /\ Q s /\ ~C s /\
+    lookup_block s.vs_current_bb fn.fn_blocks = SOME bb /\
+    get_instruction bb s.vs_inst_idx = SOME inst /\
+    step_inst_base inst s = OK t /\ is_terminator inst.inst_opcode /\
+    ~t.vs_halted ==>
+    ?tb tob. lookup_block t.vs_current_bb fn.fn_blocks = SOME tb /\
+      lookup_block t.vs_current_bb obs.fn_blocks = SOME tob /\
+      phi_prefix_length tb.bb_instructions = 0 /\
+      phi_prefix_length tob.bb_instructions = 0 /\
+      R (t with vs_inst_idx := 0) /\ Q (t with vs_inst_idx := 0))``;
+
+val abi_dyn_cut_result = ``\C Q ctx fn ctx0 obs n s.
+  (?j t. j <= n /\ C t /\ Q t /\
+    (!f. run_from (f+j) ctx fn s = run_from f ctx fn t) /\
+    run_from n ctx0 obs s = Halt (halt_state (t with vs_returndata := []))) \/
+  (?r. !f. n <= f ==> run_from f ctx fn s = r /\
+                        run_from f ctx0 obs s = r) \/
+  (run_from n ctx fn s = Error "out of fuel" /\
+   run_from n ctx0 obs s = Error "out of fuel")``;
+
+Theorem abi_dyn_cutoff_trichotomy[local]:
+  !R C Q ctx fn ctx0 obs.
+    ^abi_dyn_cut_hyp R C Q ctx fn ctx0 obs ==>
+    !n s. R s /\ Q s ==> ^abi_dyn_cut_result C Q ctx fn ctx0 obs n s
+Proof
+  BETA_TAC >> rpt gen_tac >> strip_tac >> completeInduct_on `n` >>
+  gen_tac >> measureInduct_on
+    `(\s. case lookup_block s.vs_current_bb fn.fn_blocks of
+       NONE => 0 | SOME bb => LENGTH bb.bb_instructions - s.vs_inst_idx) s` >>
+  rpt strip_tac >> rename1 `R ss` >> Cases_on `C ss`
+  >- (disj1_tac >> qexistsl_tac [`0`, `ss`] >> simp[] >>
+      qpat_x_assum `!s. R s /\ Q s /\ C s ==> _` drule_all >>
+      strip_tac >> irule fragExecTheory.run_from_halt >>
+      goal_assum (drule_at Any) >>
+      simp[step_inst_base_opcode_eqs, mk_inst_def]) >>
+  qpat_x_assum `!s. R s /\ Q s /\ ~C s ==> _` drule_all >>
+  strip_tac >> Cases_on `step_inst_base inst ss`
+  >- suspend "ok" >>
+  disj2_tac >> disj1_tac >> qexists_tac `run_from n ctx fn ss` >>
+  rpt strip_tac >>
+  `!fuel ctxt. run_from fuel ctxt fn ss = step_inst_base inst ss` by
+    (irule abi_dyn_run_from_exit >> simp[] >> metis_tac[exec_result_distinct]) >>
+  `!fuel ctxt. run_from fuel ctxt obs ss = step_inst_base inst ss` by
+    (irule abi_dyn_run_from_exit >> simp[] >> metis_tac[exec_result_distinct]) >>
+  simp[]
+QED
+
+Resume abi_dyn_cutoff_trichotomy[ok]:
+  rename1 `step_inst_base inst ss = OK next` >>
+  Cases_on `is_terminator inst.inst_opcode`
+  >- suspend "term" >>
+  `!fuel. run_from fuel ctx fn ss =
+      run_from fuel ctx fn (next with vs_inst_idx := SUC ss.vs_inst_idx)` by
+    (gen_tac >> irule fragExecTheory.run_from_step >> simp[]) >>
+  `!fuel. run_from fuel ctx0 obs ss =
+      run_from fuel ctx0 obs (next with vs_inst_idx := SUC ss.vs_inst_idx)` by
+    (gen_tac >> irule fragExecTheory.run_from_step >> simp[]) >>
+  qpat_x_assum `!s bb inst t. _ ==> R (t with vs_inst_idx := _) /\ _` drule_all >>
+  strip_tac >>
+  `next.vs_current_bb = ss.vs_current_bb` by
+    metis_tac[step_preserves_control_flow, step_inst_non_invoke] >>
+  `ss.vs_inst_idx < LENGTH bb.bb_instructions` by
+    gvs[get_instruction_def, AllCaseEqs()] >>
+  qpat_x_assum `!y. _` (qspec_then
+    `next with vs_inst_idx := SUC ss.vs_inst_idx` mp_tac) >>
+  simp[]
+QED
+
+Resume abi_dyn_cutoff_trichotomy[term]:
+  Cases_on `next.vs_halted`
+  >- (disj2_tac >> disj1_tac >> qexists_tac `Halt next` >>
+      rpt strip_tac >> metis_tac[abi_dyn_run_from_term]) >>
+  qpat_x_assum `!s bb inst t. _ ==> ?tb tob. _` drule_all >>
+  strip_tac >>
+  Cases_on `n`
+  >- (disj2_tac >> disj2_tac >> conj_tac >>
+      irule abi_dyn_run_from_term_zero >> simp[]) >>
+  rename1 `SUC k` >>
+  `!fuel. run_from (SUC fuel) ctx fn ss =
+      run_from fuel ctx fn (next with vs_inst_idx := 0)` by
+    (gen_tac >> irule abi_dyn_run_from_term_enter >> simp[]) >>
+  `!fuel. run_from (SUC fuel) ctx0 obs ss =
+      run_from fuel ctx0 obs (next with vs_inst_idx := 0)` by
+    (gen_tac >> irule abi_dyn_run_from_term_enter >> simp[]) >>
+  qpat_x_assum `!y. _ < _ ==> _` kall_tac >>
+  qpat_x_assum `!m. m < _ ==> _` (qspec_then `k` mp_tac) >>
+  simp[] >> disch_then (qspec_then `next with vs_inst_idx := 0` mp_tac) >>
+  simp[] >> strip_tac
+  >- (disj1_tac >> qexistsl_tac [`SUC j`, `t`] >> simp[arithmeticTheory.ADD_CLAUSES])
+  >- (disj2_tac >> disj1_tac >> qexists_tac `r` >>
+      gen_tac >> strip_tac >> Cases_on `f` >> gvs[]) >>
+  disj2_tac >> disj2_tac >> simp[]
+QED
+
+Finalise abi_dyn_cutoff_trichotomy
+
+Theorem abi_dyn_cutoff_stable[local]:
+  !R C Q ctx fn ctx0 obs k s.
+    ^abi_dyn_cut_hyp R C Q ctx fn ctx0 obs /\ R s /\ Q s /\
+    (!f. k <= f ==> run_from f ctx0 obs s = run_from k ctx0 obs s) ==>
+    (?j t. j <= k /\ C t /\ Q t /\
+       (!f. run_from (f+j) ctx fn s = run_from f ctx fn t)) \/
+    (!f. k <= f ==> run_from f ctx fn s = run_from k ctx fn s)
+Proof
+  rpt gen_tac >> strip_tac >>
+  drule abi_dyn_cutoff_trichotomy >>
+  disch_then (fn th => qspec_then `k` mp_tac th >> assume_tac th) >>
+  disch_then (qspec_then `s` mp_tac) >>
+  (impl_tac >- simp[]) >> BETA_TAC >> strip_tac
+  >- (disj1_tac >> qexistsl_tac [`j`, `t`] >> simp[]) 
+  >- (disj2_tac >> metis_tac[arithmeticTheory.LESS_EQ_REFL]) >>
+  disj2_tac >> gen_tac >> strip_tac >>
+  qpat_x_assum `!n s. _` (qspec_then `f` mp_tac) >>
+  disch_then (qspec_then `s` mp_tac) >> simp[] >> BETA_TAC >>
+  strip_tac >> metis_tac[exec_result_distinct, arithmeticTheory.LESS_EQ_REFL]
+QED
+
 Theorem abi_dyn_empty_context_stable[local]:
   !ctx fn G. callees_stable G (ctx with ctx_functions := []) fn
 Proof
