@@ -285,7 +285,7 @@ Resume fmp_frame_sites_invariant[ret]:
     (qspecl_then [`f::pre`, `saved`, `rest`] mp_tac) >> simp[]
 QED
 
-Finalise fmp_frame_sites_invariant
+Finalise fmp_frame_sites_invariant[local]
 
 Theorem fmp_stage_frame_sites:
   fmp_stage_ctx rpolicy D C C' vs vs' fmp eom /\
