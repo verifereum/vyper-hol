@@ -177,6 +177,13 @@ Proof
   gvs[asm_mem_ranges_def]
 QED
 
+Theorem list_cases3[local]:
+  ∀l. l = [] ∨ (∃a. l = [a]) ∨ (∃a b. l = [a; b]) ∨
+      ∃a b c t. l = a::b::c::t
+Proof
+  Cases >> simp[] >> Cases_on `t` >> simp[] >> Cases_on `t'` >> simp[]
+QED
+
 (* asm_inst_gas_ok reads a stack only through its memory ranges and a
    CREATE's size, which those ranges carry. *)
 Theorem gas_ok_ranges[local]:
@@ -188,7 +195,8 @@ Proof
   reverse (Cases_on `inst = AsmOp "CREATE" ∨ inst = AsmOp "CREATE2"`)
   >- fs[] >>
   pop_assum strip_assume_tac >> gvs[asm_mem_ranges_def] >>
-  BasicProvers.every_case_tac >> gvs[]
+  qspec_then `stk1` strip_assume_tac list_cases3 >>
+  qspec_then `stk2` strip_assume_tac list_cases3 >> gvs[]
 QED
 
 Theorem sym_gas_ok_conc:
