@@ -311,8 +311,141 @@ Proof
   disch_then ACCEPT_TAC
 QED
 
+Theorem local_memory_store_horizon_path[local]:
+  !ctx func cenv cx st0 es s id p sz pre env entry rest v src ty sa sb sw tyv sty stv.
+    compile_store_memory cenv src (Var p) ty sty sa = ((), sb) /\
+    (!x. src = Var x ==> not_fresh_at sa x) /\
+    eval_operand src s = SOME sw /\
+    ~is_word_type ty /\ evaluate_type (get_tenv cx) ty = SOME tyv /\
+    entry.type = tyv /\ value_has_type tyv v /\ val_wf tyv v /\
+    val_in_memory stv v (w2n sw) s.vs_memory /\
+    evaluate_type (get_tenv cx) sty = SOME stv /\ value_has_type stv v /\
+    (ty = sty \/ is_bytestring_type ty /\ is_bytestring_type sty) /\
+    type_memory_bytes cenv ty = type_memory_size tyv /\
+    type_memory_size tyv + 64 < dimword (:256) /\
+    (?H. valid_horizon cx st0 H es.storage_trace) /\
+    (!H. valid_horizon cx st0 H es.storage_trace ==>
+         stmt_state_rel H ctx func cenv cx es s) /\
+    find_containing_scope id es.scopes = SOME (pre, env, entry, rest) /\
+    FLOOKUP cenv.ce_vars id = SOME (PtrVar (Var p) sz) /\
+    local_ptrs_reserved cenv sa /\ fn_has_code sa sb func /\
+    ~s.vs_halted /\ s.vs_current_bb = sa.cs_current_bb /\
+    s.vs_inst_idx = LENGTH sa.cs_current_insts ==>
+    ?dw t. lookup_var p s = SOME dw /\
+        (!H. valid_horizon cx st0 H es.storage_trace ==>
+           stmt_state_rel H ctx func cenv cx
+             (es with scopes :=
+                pre ++ (env |+ (id, entry with <|value := v; popped := []|>)) ::
+                rest) t) /\
+        ~t.vs_halted /\ t.vs_current_bb = sb.cs_current_bb /\
+        t.vs_inst_idx = LENGTH sb.cs_current_insts /\
+        (!x. not_fresh_at sa x ==> lookup_var x t = lookup_var x s) /\
+        (!aid b. FLOOKUP s.vs_allocas aid = SOME b ==>
+                 FLOOKUP t.vs_allocas aid = SOME b) /\
+        (!a len. a + len <= w2n dw \/
+           w2n dw + MIN (type_memory_size stv) (type_memory_size tyv) <= a ==>
+           mem_bytes_at a len t.vs_memory = mem_bytes_at a len s.vs_memory) /\
+        alloca_frame cenv es sa s cenv
+          (es with scopes :=
+             pre ++ (env |+ (id, entry with <|value := v; popped := []|>)) :: rest) t /\
+        gas_marked_path F ctx func s 0 (OK t)
+Proof
+  rpt gen_tac >> disch_then (map_every assume_tac o CONJUNCTS) >>
+  qpat_x_assum `?H. valid_horizon _ _ H _` (qx_choose_then `H0` assume_tac) >>
+  `stmt_state_rel H0 ctx func cenv cx es s` by metis_tac[] >>
+  `lookup_scopes id es.scopes = SOME entry` by
+    metis_tac[find_containing_scope_lookup] >>
+  `?w. lookup_var p s = SOME w` by
+    (fs[stmt_state_rel_def, state_rel_def, local_ptrs_rel_def] >>
+     metis_tac[]) >>
+  `not_fresh_at sa p` by metis_tac[local_ptrs_reserved_def] >>
+  `eval_operand (Var p) s = SOME w` by simp[eval_operand_def] >>
+  `~is_word_type sty` by metis_tac[is_bytestring_word_type] >>
+  `if is_word_type sty then sw = typed_val_to_w256 stv v
+   else val_in_memory stv v (w2n sw) s.vs_memory` by simp[] >>
+  `!x. Var p = Var x ==> not_fresh_at sa x` by simp[] >>
+  drule_all compile_store_memory_run_source_bound_with_capacity >> strip_tac >>
+  `!a len. a + len <= w2n w \/ w2n w + type_memory_size tyv <= a ==>
+     mem_bytes_at a len t.vs_memory = mem_bytes_at a len s.vs_memory` by
+    (rpt strip_tac >> first_x_assum irule >> simp[arithmeticTheory.MIN_DEF] >> decide_tac) >>
+  `FILTER (\i. i.inst_opcode = GAS) (emitted_insts sa sb) = []` by
+    (drule_all compile_store_memory_no_gas >> simp[]) >>
+  qpat_x_assum `ty = sty \/ _` kall_tac >>
+  `!q. ~not_local_ptr cenv es.scopes q ==> lookup_var q t = lookup_var q s` by
+    (rpt strip_tac >> first_x_assum irule >>
+     fs[not_local_ptr_def, local_ptrs_reserved_def] >> metis_tac[]) >>
+  qpat_x_assum `entry.type = tyv` (SUBST_ALL_TAC o SYM) >>
+  qabbrev_tac `es1 = es with scopes :=
+    pre ++ (env |+ (id, entry with <|value := v; popped := []|>)) :: rest` >>
+  `type_memory_size entry.type <= sz` by
+    (fs[stmt_state_rel_def, state_rel_def, local_ptrs_rel_def] >> metis_tac[]) >>
+  `local_region cenv es.scopes s id (w2n w) sz` by simp[local_region_def] >>
+  `t.vs_data_section = s.vs_data_section` by
+    (qpat_x_assum `t with <|vs_vars := _; vs_memory := _|> = s` mp_tac >>
+     simp_tac (srw_ss()) [venom_state_component_equality]) >>
+  `immutables_rel cenv cx.txn.target cenv.ce_module cenv.ce_is_ctor es t` by
+    (irule (INST_TYPE [alpha |-> ``:256``] local_copy_immutables) >>
+     goal_assum (drule_at (Pat `local_region _ _ _ _ _ _`)) >>
+     goal_assum (drule_at (Pat `stmt_state_rel _ _ _ _ _ _ _`)) >>
+     qexists_tac `type_memory_size entry.type` >> simp[] >>
+     rpt strip_tac >> qpat_x_assum `!a len. _ ==> mem_bytes_at _ _ _ = _` irule >>
+     decide_tac) >>
+  `memory_value_rel entry.type v (w2n w) t.vs_memory` by
+    (irule val_in_memory_memory_value_rel >> simp[]) >>
+  `!H. valid_horizon cx st0 H es.storage_trace ==>
+       stmt_state_rel H ctx func cenv cx es1 t` by
+    (rpt strip_tac >>
+     qpat_x_assum `stmt_state_rel H0 _ _ _ _ _ _` kall_tac >>
+     `stmt_state_rel H ctx func cenv cx es s` by metis_tac[] >>
+     drule_all stmt_state_rel_write_local >> simp[Abbr `es1`]) >>
+  `t.vs_allocas = s.vs_allocas` by
+    (qpat_x_assum `t with <|vs_vars := _; vs_memory := _|> = s` mp_tac >>
+     simp[venom_state_component_equality]) >>
+  `(?bb rest. lookup_block s.vs_current_bb func.fn_blocks = SOME bb /\
+       DROP s.vs_inst_idx bb.bb_instructions = emitted_insts sa sb ++ rest) /\
+   s.vs_inst_idx + LENGTH (emitted_insts sa sb) = LENGTH sb.cs_current_insts` by
+    (gvs[fn_has_code_def, IS_PREFIX_APPEND, same_blocks_def] >>
+     simp[DROP_APPEND, DROP_LENGTH_TOO_LONG]) >>
+  `isPREFIX (emitted_insts sa sb) (DROP s.vs_inst_idx bb.bb_instructions)` by simp[] >>
+  `gas_path ctx func s 0
+    (OK (t with vs_inst_idx := LENGTH sb.cs_current_insts))` by
+    (drule_all tuple_run_inst_seq_gas_path >> simp[]) >>
+  `MAP FDOM es1.scopes = MAP FDOM es.scopes` by
+    (drule find_containing_scope_structure >> strip_tac >>
+     simp[Abbr `es1`, FDOM_FUPDATE] >>
+     gvs[FLOOKUP_DEF, pred_setTheory.ABSORPTION_RWT]) >>
+  `alloca_frame cenv es sa s cenv es1 t` by
+    (irule (INST_TYPE [alpha |-> ``:256``] alloca_frame_local_store) >>
+     simp[] >> reverse conj_tac >- metis_tac[] >>
+     qexistsl_tac [`w2n w`, `es`, `id`, `type_memory_size entry.type`, `s`, `sz`] >>
+     simp[alloca_frame_def] >>
+     rpt strip_tac >> fs[local_ptrs_reserved_def] >> metis_tac[]) >>
+  qexistsl_tac [`w`, `t with vs_inst_idx := LENGTH sb.cs_current_insts`] >>
+  simp[stmt_state_rel_inst_idx, lookup_var_def, gas_marked_path_def] >>
+  qpat_x_assum `t with <|vs_vars := _; vs_memory := _|> = s` mp_tac >>
+  simp[venom_state_component_equality] >>
+  strip_tac >> gvs[same_blocks_def, lookup_var_def] >>
+  conj_tac >- first_assum ACCEPT_TAC >>
+  irule alloca_frame_same_state >> goal_assum (drule_at Any) >> simp[]
+QED
+
+val local_memory_store_horizon_same = local_memory_store_horizon_path
+  |> SPEC_ALL |> Q.INST [`sty` |-> `ty`, `stv` |-> `tyv`]
+  |> GEN_ALL |> PURE_REWRITE_RULE [REFL_CLAUSE, OR_CLAUSES, AND_CLAUSES];
+
+val alloc_copy_horizon_path =
+  SIMP_RULE bool_ss [PULL_EXISTS] alloc_copy_memory_framed_path;
+
+(* Rewrite a gas_bad_storage_at goal on the assignment statement to one on
+   its bind form, as stmtSimAssignCompose does. *)
+val assign_bad_storage_tac =
+  drule assign_local_admissible_run >>
+  disch_then (fn th =>
+    PURE_REWRITE_TAC [gasStorageTheory.gas_bad_storage_at_def, th]) >>
+  PURE_REWRITE_TAC [GSYM gasStorageTheory.gas_bad_storage_at_def];
+
 Theorem local_memory_assign_path:
-  !ctx func cenv cx es s id p sz pre env entry rest v src ty sa sb sw tyv
+  !ctx func cenv cx st0 es s id p sz pre env entry rest v src ty sa sb sw tyv
    loc bytes.
     compile_assign_value cenv (Var p) LocMemory src F loc ty ty bytes sa =
       ((), sb) /\
@@ -323,16 +456,19 @@ Theorem local_memory_assign_path:
     val_in_memory tyv v (w2n sw) s.vs_memory /\
     type_memory_bytes cenv ty = type_memory_size tyv /\
     0 < type_memory_size tyv /\ type_memory_size tyv + 64 < dimword (:256) /\
-    stmt_state_rel H ctx func cenv cx es s /\ fn_inst_ids_distinct func /\
+    (?H. valid_horizon cx st0 H es.storage_trace) /\
+    (!H. valid_horizon cx st0 H es.storage_trace ==>
+         stmt_state_rel H ctx func cenv cx es s) /\ fn_inst_ids_distinct func /\
     find_containing_scope id es.scopes = SOME (pre, env, entry, rest) /\
     FLOOKUP cenv.ce_vars id = SOME (PtrVar (Var p) sz) /\
     local_ptrs_reserved cenv sa /\ fn_has_code sa sb func /\
     ~s.vs_halted /\ s.vs_current_bb = sa.cs_current_bb /\
     s.vs_inst_idx = LENGTH sa.cs_current_insts ==>
-    ?t. stmt_state_rel H ctx func cenv cx
+    ?t. (!H. valid_horizon cx st0 H es.storage_trace ==>
+           stmt_state_rel H ctx func cenv cx
           (es with scopes :=
              pre ++ (env |+ (id, entry with <|value := v; popped := []|>)) ::
-             rest) t /\
+             rest) t) /\
         ~t.vs_halted /\ t.vs_current_bb = sb.cs_current_bb /\
         t.vs_inst_idx = LENGTH sb.cs_current_insts /\
         (!x. not_fresh_at sa x ==> lookup_var x t = lookup_var x s) /\
@@ -343,7 +479,10 @@ Theorem local_memory_assign_path:
              pre ++ (env |+ (id, entry with <|value := v; popped := []|>)) :: rest) t /\
         gas_marked_path F ctx func s 0 (OK t)
 Proof
-  rpt gen_tac >> strip_tac >> Cases_on `loc = SOME LocMemory`
+  rpt gen_tac >> disch_then (map_every assume_tac o CONJUNCTS) >>
+  qpat_assum `?H. valid_horizon _ _ H _` (qx_choose_then `H0` assume_tac) >>
+  `stmt_state_rel H0 ctx func cenv cx es s` by metis_tac[] >>
+  Cases_on `loc = SOME LocMemory`
   >- (pop_assum SUBST_ALL_TAC >>
       `0 < type_memory_bytes cenv ty` by simp[] >>
       drule_all annassign_staged_memory_parts >>
@@ -366,10 +505,11 @@ Proof
         metis_tac[val_footprint_le] >>
       `s.vs_current_bb = sx.cs_current_bb /\
        s.vs_inst_idx = LENGTH sx.cs_current_insts` by simp[] >>
-      drule_all alloc_copy_memory_framed_path >>
+      drule_all alloc_copy_horizon_path >>
       disch_then (qx_choosel_then [`u`, `uw`] strip_assume_tac) >>
+      `stmt_state_rel H0 ctx func cenv cx es u` by metis_tac[] >>
       `alloca_frame cenv es sa s cenv es u` by
-        (irule alloca_frame_owned_copy >>
+        (irule (INST_TYPE [alpha |-> ``:256``] alloca_frame_owned_copy) >>
          simp[] >>
          conj_tac >- metis_tac[] >>
          conj_tac >- fs[stmt_state_rel_def, venomMemDefsTheory.alloca_inv_def] >>
@@ -381,9 +521,7 @@ Proof
         (irule local_ptrs_reserved_next_var >> qexists_tac `sa` >> simp[]) >>
       `!x. Var tmp = Var x ==> not_fresh_at sn x` by simp[] >>
       `eval_operand (Var tmp) u = SOME uw` by simp[eval_operand_def] >>
-      drule_all (local_memory_store_path |> SPEC_ALL
-        |> Q.INST [`sty` |-> `ty`, `stv` |-> `tyv`]
-        |> GEN_ALL |> PURE_REWRITE_RULE [REFL_CLAUSE, OR_CLAUSES, AND_CLAUSES]) >>
+      drule_all local_memory_store_horizon_same >>
       disch_then (qx_choosel_then [`dw`, `t`] strip_assume_tac) >>
       `gas_marked_path F ctx func s 0 (OK t)` by
         (drule_all gas_marked_path_then >> simp[]) >>
@@ -402,14 +540,12 @@ Proof
       `x <> tmp` by metis_tac[] >> simp[]) >>
   `compile_store_memory cenv src (Var p) ty ty sa = ((),sb)` by
     gvs[compile_assign_value_def] >>
-  drule_all (local_memory_store_path |> SPEC_ALL
-        |> Q.INST [`sty` |-> `ty`, `stv` |-> `tyv`]
-        |> GEN_ALL |> PURE_REWRITE_RULE [REFL_CLAUSE, OR_CLAUSES, AND_CLAUSES]) >> strip_tac >>
+  drule_all local_memory_store_horizon_same >> strip_tac >>
   qexists_tac `t` >> simp[]
 QED
 
 Theorem local_memory_assign_widen_path:
-  !ctx func cenv cx es s id p sz pre env entry rest v src ty sty sa sb sw tyv
+  !ctx func cenv cx st0 es s id p sz pre env entry rest v src ty sty sa sb sw tyv
    loc bytes.
     compile_assign_value cenv (Var p) LocMemory src F loc ty sty bytes sa = ((), sb) /\
     (sty = ty \/ is_bytestring_type ty) /\
@@ -421,15 +557,18 @@ Theorem local_memory_assign_widen_path:
     val_in_memory tyv v (w2n sw) s.vs_memory /\
     type_memory_bytes cenv ty = type_memory_size tyv /\
     0 < type_memory_size tyv /\ type_memory_size tyv + 64 < dimword (:256) /\
-    stmt_state_rel H ctx func cenv cx es s /\ fn_inst_ids_distinct func /\
+    (?H. valid_horizon cx st0 H es.storage_trace) /\
+    (!H. valid_horizon cx st0 H es.storage_trace ==>
+         stmt_state_rel H ctx func cenv cx es s) /\ fn_inst_ids_distinct func /\
     find_containing_scope id es.scopes = SOME (pre, env, entry, rest) /\
     FLOOKUP cenv.ce_vars id = SOME (PtrVar (Var p) sz) /\
     local_ptrs_reserved cenv sa /\ fn_has_code sa sb func /\
     ~s.vs_halted /\ s.vs_current_bb = sa.cs_current_bb /\
     s.vs_inst_idx = LENGTH sa.cs_current_insts ==>
-    ?t. stmt_state_rel H ctx func cenv cx
+    ?t. (!H. valid_horizon cx st0 H es.storage_trace ==>
+           stmt_state_rel H ctx func cenv cx
           (es with scopes :=
-             pre ++ (env |+ (id, entry with <|value := v; popped := []|>)) :: rest) t /\
+             pre ++ (env |+ (id, entry with <|value := v; popped := []|>)) :: rest) t) /\
         ~t.vs_halted /\ t.vs_current_bb = sb.cs_current_bb /\
         t.vs_inst_idx = LENGTH sb.cs_current_insts /\
         (!x. not_fresh_at sa x ==> lookup_var x t = lookup_var x s) /\
@@ -440,17 +579,15 @@ Theorem local_memory_assign_widen_path:
         gas_marked_path F ctx func s 0 (OK t)
 Proof
   rpt gen_tac >> disch_then (map_every assume_tac o CONJUNCTS) >>
+  qpat_assum `?H. valid_horizon _ _ H _` (qx_choose_then `H0` assume_tac) >>
+  `stmt_state_rel H0 ctx func cenv cx es s` by metis_tac[] >>
   Cases_on `loc = SOME LocMemory`
   >- suspend "staged" >>
   `compile_store_memory cenv src (Var p) ty ty sa = ((),sb)` by
     (gvs[compile_assign_value_def] >>
      metis_tac[compile_store_memory_bytestring_src]) >>
-  drule local_memory_store_path >>
-  disch_then (drule_at (Pat `stmt_state_rel _ _ _ _ _ _ _`)) >>
-  disch_then (drule_at (Pat `find_containing_scope _ _ = _`)) >>
-  disch_then (drule_at (Pat `eval_operand _ _ = _`)) >>
-  disch_then (drule_at (Pat `val_in_memory _ _ _ _`)) >>
-  simp[] >> strip_tac >> qexists_tac `t` >> simp[]
+  drule_all local_memory_store_horizon_same >> strip_tac >>
+  qexists_tac `t` >> simp[]
 QED
 
 Resume local_memory_assign_widen_path[staged]:
@@ -472,10 +609,11 @@ Resume local_memory_assign_widen_path[staged]:
   `src <> Var tmp` by metis_tac[] >>
   `s.vs_current_bb = sx.cs_current_bb /\
    s.vs_inst_idx = LENGTH sx.cs_current_insts` by simp[] >>
-  drule_all alloc_copy_memory_framed_path >>
+  drule_all alloc_copy_horizon_path >>
   disch_then (qx_choosel_then [`u`, `uw`] strip_assume_tac) >>
+  `stmt_state_rel H0 ctx func cenv cx es u` by metis_tac[] >>
   `alloca_frame cenv es sa s cenv es u` by
-    (irule alloca_frame_owned_copy >> simp[] >>
+    (irule (INST_TYPE [alpha |-> ``:256``] alloca_frame_owned_copy) >> simp[] >>
      conj_tac >- metis_tac[] >>
      conj_tac >- fs[stmt_state_rel_def, venomMemDefsTheory.alloca_inv_def] >>
      conj_tac >-
@@ -485,12 +623,7 @@ Resume local_memory_assign_widen_path[staged]:
     (irule local_ptrs_reserved_next_var >> qexists_tac `sa` >> simp[]) >>
   `!x. Var tmp = Var x ==> not_fresh_at sn x` by simp[] >>
   `eval_operand (Var tmp) u = SOME uw` by simp[eval_operand_def] >>
-  drule local_memory_store_path >>
-  disch_then (drule_at (Pat `eval_operand _ _ = _`)) >>
-  disch_then (drule_at (Pat `stmt_state_rel _ _ _ _ _ _ _`)) >>
-  disch_then (drule_at (Pat `find_containing_scope _ _ = _`)) >>
-  disch_then (drule_at (Pat `val_in_memory _ _ _ _`)) >>
-  simp[] >>
+  drule_all local_memory_store_horizon_same >>
   disch_then (qx_choosel_then [`dw`, `t`] strip_assume_tac) >>
   `alloca_frame cenv es sa s cenv
      (es with scopes :=
@@ -511,7 +644,7 @@ QED
 Finalise local_memory_assign_widen_path
 
 Theorem assign_local_memory_normal_continuation:
-  !ctx func cenv cx lctx id e es tyv sa sb sf s0 marks v ee s op p sz loc bytes.
+  !ctx func cenv cx st0 lctx id e es tyv sa sb sf s0 marks v ee s op p sz loc bytes.
     gas_admissible (eval_stmt cx (Assign (BaseTarget (NameTarget id)) e))
       (stmt_res_ok lctx) es /\
     ~is_word_type (expr_type e) /\ post_value_type cenv e = expr_type e /\
@@ -526,19 +659,36 @@ Theorem assign_local_memory_normal_continuation:
       (expr_type e) (expr_type e) bytes sb = ((), sf) /\
     fn_has_code sb sf func /\ fn_inst_ids_distinct func /\
     local_ptrs_reserved cenv sb /\ (!x. op = Var x ==> not_fresh_at sb x) /\
-    stmt_state_rel H ctx func cenv cx es s0 /\ local_ptrs_reserved cenv sa /\
+    (!H. valid_horizon cx st0 H es.storage_trace ==>
+         stmt_state_rel H ctx func cenv cx es s0) /\ local_ptrs_reserved cenv sa /\
     sa.cs_next_id <= sb.cs_next_id /\
     sa.cs_next_var <= sb.cs_next_var /\ ~block_is_terminated sf /\
     FLOOKUP cenv.ce_vars id = SOME (PtrVar (Var p) sz) /\
     gas_marked_exec F (ctx,func) (bind (eval_expr cx e) (read_result cx))
       (es,s0) marks (INL v) ee (OK s) /\
-    expr_post H ctx func cenv cx e es sa sb s0 (ee with gas_obs := []) v op s /\
+    (?H. valid_horizon cx st0 H ee.storage_trace) /\
+    (!H. valid_horizon cx st0 H ee.storage_trace ==>
+         expr_post H ctx func cenv cx e es sa sb s0 (ee with gas_obs := []) v op s) /\
     s.vs_current_bb = sb.cs_current_bb /\ s.vs_inst_idx = LENGTH sb.cs_current_insts ==>
     ?ff u. gas_marked_exec F (ctx,func) (write_place cx (MemoryPlace id []) v)
       (ee with gas_obs := [],s) [] (INL ()) ff (OK u) /\
-      stmt_post H ctx func cx lctx cenv cenv sa sf es s0 (INL ()) ff u
+      !H. valid_horizon cx st0 H ff.storage_trace ==>
+        stmt_post H ctx func cx lctx cenv cenv sa sf es s0 (INL ()) ff u
 Proof
-  rpt gen_tac >> strip_tac >>
+  rpt gen_tac >> disch_then (map_every assume_tac o CONJUNCTS) >>
+  `!H. valid_horizon cx st0 H ee.storage_trace ==>
+       valid_horizon cx st0 H es.storage_trace` by
+    (qpat_assum `gas_marked_exec _ _ (bind _ _) _ _ _ _ _`
+       (mp_tac o MATCH_MP (REWRITE_RULE [GSYM AND_IMP_INTRO]
+                          gas_marked_exec_valid_prefix)) >>
+     impl_tac >- simp[vyperStorageTraceTheory.storage_trace_frame_bind_all,
+          vyperStorageTraceTheory.storage_trace_frame_read_result,
+          vyperStorageTraceTheory.evaluate_storage_trace_frame] >>
+     simp[]) >>
+  qpat_assum `?H. valid_horizon _ _ H ee.storage_trace`
+    (qx_choose_then `H0` assume_tac) >>
+  `expr_post H0 ctx func cenv cx e es sa sb s0 (ee with gas_obs := []) v op s /\
+   stmt_state_rel H0 ctx func cenv cx es s0` by metis_tac[] >>
   `!tail. bind (eval_expr cx e) (read_result cx)
     (es with gas_obs := gas_explicit marks s0.vs_gas_readings ++ tail) =
       (INL v, ee with gas_obs := tail)` by fs[gas_marked_exec_def] >>
@@ -557,18 +707,28 @@ Proof
     (qpat_assum `!tail. bind _ _ _ = _` (qspec_then `[]` mp_tac) >>
      disch_then (mp_tac o MATCH_MP eval_read_preserves_scopes_dom) >> simp[]) >>
   `alloca_frame cenv es sa s0 cenv (ee with gas_obs := []) s` by
-    (irule expr_post_alloca_frame >> simp[] >>
-     goal_assum (drule_at (Pat `expr_post _ _ _ _ _ _ _ _ _ _ _ _ _ _`)) >> simp[]) >>
-  qpat_x_assum `expr_post _ _ _ _ _ _ _ _ _ _ _ _ _ _` mp_tac >>
-  simp[expr_post_def] >> strip_tac >>
-  qpat_x_assum `post_value_type _ _ = _`
-    (fn th => RULE_ASSUM_TAC (REWRITE_RULE [th])) >>
+    (drule_at (Pat `expr_post _ _ _ _ _ _ _ _ _ _ _ _ _ _`) expr_post_alloca_frame >>
+     disch_then (drule_at (Pat `stmt_state_rel _ _ _ _ _ _ _`)) >> simp[]) >>
+  qpat_assum `expr_post H0 _ _ _ _ _ _ _ _ _ _ _ _ _`
+    (strip_assume_tac o REWRITE_RULE [expr_post_def]) >>
   `?sw. eval_operand op s = SOME sw /\ val_in_memory tyv v (w2n sw) s.vs_memory` by
-    (gvs[expr_val_rel_def] >> metis_tac[]) >>
+    (qpat_x_assum `post_value_type _ _ = _`
+       (fn th => qpat_x_assum `expr_val_rel _ _ _ _ _`
+          (mp_tac o REWRITE_RULE [th])) >>
+     simp[expr_val_rel_def] >> metis_tac[]) >>
   `val_wf tyv v` by metis_tac[value_has_type_memory_wf] >>
-  `stmt_state_rel H ctx func cenv cx ee s` by
-    (qpat_x_assum `stmt_state_rel _ _ _ _ _ _ _` mp_tac >>
-     simp[stmt_state_rel_def, state_rel_gas_obs, immutable_alloca_sep_def] >> metis_tac[]) >>
+  `!H. valid_horizon cx st0 H ee.storage_trace ==>
+       stmt_state_rel H ctx func cenv cx ee s` by
+    (rpt strip_tac >>
+     `expr_post H ctx func cenv cx e es sa sb s0 (ee with gas_obs := []) v op s` by
+       metis_tac[] >>
+     pop_assum (strip_assume_tac o REWRITE_RULE [expr_post_def]) >>
+     qpat_assum `stmt_state_rel H _ _ _ _ (ee with gas_obs := []) s` mp_tac >>
+     match_mp_tac EQ_IMPLIES >>
+     simp_tac (srw_ss()) [stmt_state_rel_def, state_rel_gas_obs,
+                          immutable_alloca_sep_def]) >>
+  Q.SUBGOAL_THEN `?H. valid_horizon cx st0 H ee.storage_trace` assume_tac
+    >- metis_tac[] >>
   drule_all local_memory_assign_path >> strip_tac >>
   `alloca_frame cenv es sa s0 cenv ee s` by
     (fs[alloca_frame_def] >> first_assum ACCEPT_TAC) >>
@@ -579,6 +739,26 @@ Proof
   qexistsl_tac [`ee with scopes :=
     pre ++ (env |+ (id, entry with <|value := v; popped := []|>)) :: rest`, `t`] >>
   conj_tac >- simp[gas_marked_exec_def] >>
+  qx_gen_tac `H'` >> simp[] >> strip_tac >>
+  `expr_post H' ctx func cenv cx e es sa sb s0 (ee with gas_obs := []) v op s` by
+    metis_tac[] >>
+  qpat_x_assum `expr_post H' _ _ _ _ _ _ _ _ _ _ _ _ _`
+    (strip_assume_tac o REWRITE_RULE [expr_post_def]) >>
+  `storage_well_formed_on cx ee (FST H')` by
+    (qpat_assum `storage_well_formed_on cx (ee with gas_obs := []) _` mp_tac >>
+     match_mp_tac EQ_IMPLIES >>
+     `!b. get_storage cx (ee with gas_obs := []) b = get_storage cx ee b` by
+       (Cases >> simp_tac (srw_ss()) [vyperStorageBackendTheory.get_storage_def]) >>
+     pop_assum (fn th => simp_tac (srw_ss())
+       [vyperStorageFootprintTheory.storage_well_formed_on_def, th])) >>
+  `storage_well_formed_on cx (ee with scopes :=
+     pre ++ (env |+ (id, entry with <|value := v; popped := []|>)) :: rest)
+     (FST H')` by
+    fs[vyperStorageFootprintTheory.storage_well_formed_on_def,
+       vyperStorageBackendTheory.get_storage_scopes] >>
+  `stmt_state_rel H' ctx func cenv cx (ee with scopes :=
+     pre ++ (env |+ (id, entry with <|value := v; popped := []|>)) :: rest) t` by
+    metis_tac[] >>
   simp[stmt_post_def, stmt_lands_def] >>
   simp[cenv_top_ext_refl] >>
   rpt strip_tac >>
@@ -602,28 +782,49 @@ Theorem assign_local_memory_rhs_outcome:
     (expr_type e) (expr_type e) bytes sb = ((),sf) /\
   fn_has_code sb sf func /\ fn_inst_ids_distinct func /\
   local_ptrs_reserved cenv sb /\ (!x. op = Var x ==> not_fresh_at sb x) /\
-  stmt_state_rel H ctx func cenv cx es s0 /\ local_ptrs_reserved cenv sa /\
+  (!H. valid_horizon cx st0 H es.storage_trace ==>
+       stmt_state_rel H ctx func cenv cx es s0) /\ local_ptrs_reserved cenv sa /\
   sa.cs_next_id <= sb.cs_next_id /\
   sa.cs_next_var <= sb.cs_next_var /\ ~block_is_terminated sf /\
   FLOOKUP cenv.ce_vars id = SOME (PtrVar (Var p) sz) /\
-  gas_outcome F (cx_tops cx) (ctx,func)
+  gas_outcome F (cx_tops cx) (ctx,func) cx st0
     (bind (eval_expr cx e) (read_result cx)) (es,s0)
-    (\res ee t. ?v. res = INL v /\
+    (\H res ee t. ?v. res = INL v /\
       expr_post H ctx func cenv cx e es sa sb s0 ee v op t /\
       t.vs_current_bb = sb.cs_current_bb /\ t.vs_inst_idx = LENGTH sb.cs_current_insts)
-    (\res ee r. expr_exit res r) ==>
-  gas_outcome F (cx_tops cx) (ctx,func)
+    (\H res ee r. expr_exit res r) ==>
+  gas_outcome F (cx_tops cx) (ctx,func) cx st0
     (eval_stmt cx (Assign (BaseTarget (NameTarget id)) e)) (es,s0)
-    (stmt_post H ctx func cx lctx cenv cenv sa sf es s0)
-    (\res ee r. !tail. stmt_exit RetQ (ee with gas_obs := tail) res r)
+    (\H. stmt_post H ctx func cx lctx cenv cenv sa sf es s0)
+    (\H res ee r. !tail. stmt_exit (RetQ H) (ee with gas_obs := tail) res r)
 Proof
   strip_tac >> rewrite_tac[gas_outcome_def] >>
-  qpat_x_assum `gas_outcome _ _ _ _ _ _ _`
+  qpat_x_assum `gas_outcome _ _ _ _ _ _ _ _ _`
     (mp_tac o REWRITE_RULE [gas_outcome_def]) >> strip_tac
-  >- (qexists `marks` >> disj1_tac >>
+  >- (qexists `marks` >> disj1_tac >> assign_bad_storage_tac >>
+      irule gasStorageTheory.gas_bad_storage_at_bind_left >>
+      simp[vyperStorageTraceTheory.storage_trace_frame_write_place])
+  >- (qexists `marks` >>
       qpat_x_assum `gas_summary_at _ _ _ _ _ _ _`
-        (mp_tac o REWRITE_RULE [gas_summary_at_def]) >> strip_tac
-      >- (gvs[] >> drule_all assign_local_memory_normal_continuation >> strip_tac >>
+        (mp_tac o REWRITE_RULE [gas_summary_at_def]) >> BETA_TAC >> strip_tac
+      >- (reverse (Cases_on `storage_trace_domain cx st0 es_end.storage_trace`)
+          >- (disj1_tac >> assign_bad_storage_tac >>
+              irule gasStorageTheory.gas_bad_storage_at_bind_left >>
+              simp[vyperStorageTraceTheory.storage_trace_frame_write_place] >>
+              metis_tac[gasStorageTheory.gas_bad_storage_at_counted_prefix]) >>
+          `?H0. valid_horizon cx st0 H0 es_end.storage_trace` by
+            metis_tac[vyperStorageFootprintTheory.storage_trace_domain_def] >>
+          gvs[] >>
+          `?v. res = INL v` by metis_tac[] >> gvs[] >>
+          `!H. valid_horizon cx st0 H es_end.storage_trace ==>
+               expr_post H ctx func cenv cx e es sa sb s0
+                 (es_end with gas_obs := []) v op t` by metis_tac[] >>
+          `t.vs_current_bb = sb.cs_current_bb /\
+           t.vs_inst_idx = LENGTH sb.cs_current_insts` by metis_tac[] >>
+          Q.SUBGOAL_THEN `?H. valid_horizon cx st0 H es_end.storage_trace` assume_tac
+    >- metis_tac[] >>
+          drule_all assign_local_memory_normal_continuation >> strip_tac >>
+          disj2_tac >> disj1_tac >>
           simp[gas_summary_at_def] >>
           qexistsl [`INL ()`, `ff`, `OK u`] >> simp[stmt_post_end_gas_obs] >>
           irule assign_local_marked_exec >>
@@ -632,17 +833,27 @@ Proof
             |> REWRITE_RULE [APPEND_NIL]) >>
           qexistsl [`es_end with gas_obs := []`, `t`, `v`] >> simp[] >>
           irule gas_marked_exec_end_gas_obs >> simp[]) >>
+      reverse (Cases_on `storage_trace_domain cx st0 es_end.storage_trace`)
+      >- (disj1_tac >> assign_bad_storage_tac >>
+              irule gasStorageTheory.gas_bad_storage_at_bind_left >>
+          simp[vyperStorageTraceTheory.storage_trace_frame_write_place] >>
+          metis_tac[gasStorageTheory.gas_bad_storage_at_counted_prefix]) >>
+      `?H0. valid_horizon cx st0 H0 es_end.storage_trace` by
+        metis_tac[vyperStorageFootprintTheory.storage_trace_domain_def] >>
+      `expr_exit res r` by (gs[] >> metis_tac[]) >>
       Cases_on `res` >- gvs[expr_exit_def] >>
+      disj2_tac >> disj1_tac >>
       simp[gas_summary_at_def] >>
       qexistsl [`INR y`, `es_end`, `r`] >> simp[] >> conj_tac
       >- (irule assign_local_marked_exec >>
           (conj_tac >- (qexists `lctx` >> simp[])) >>
           irule gas_marked_exec_bind_exception >> simp[]) >>
-      disj2_tac >> gen_tac >> simp[stmt_exit_def] >>
+      rpt strip_tac >> simp[stmt_exit_def] >>
       metis_tac[expr_exit_INR_type]) >>
-  qexists `marks` >> disj2_tac >>
+  qexists `marks` >> disj2_tac >> disj2_tac >>
   qexistsl [`err`, `ee`, `leaf`, `finish'`] >>
-  irule assign_local_exempt >> simp[gas_exempt_cert_unforce_result]
+  irule assign_local_exempt >>
+  simp[gasExemptCertTheory.gas_exempt_cert_unforce_result]
 QED
 
 
@@ -786,19 +997,36 @@ Theorem assign_local_memory_widen_normal_continuation:
   compile_assign_value cenv (Var p) LocMemory op F loc vtyp sty bytes sb = ((),sf) /\
   fn_has_code sb sf func /\ ~block_is_terminated sf /\
   fn_inst_ids_distinct func /\ local_ptrs_reserved cenv sa /\
-  stmt_state_rel H ctx func cenv cx es s0 /\ sa.cs_next_id <= sb.cs_next_id /\
+  (!H. valid_horizon cx st0 H es.storage_trace ==>
+       stmt_state_rel H ctx func cenv cx es s0) /\ sa.cs_next_id <= sb.cs_next_id /\
   sa.cs_next_var <= sb.cs_next_var /\
   (!x. op = Var x ==> not_fresh_at sb x) /\
   FLOOKUP cenv.ce_vars id = SOME (PtrVar (Var p) sz) /\
   gas_marked_exec F (ctx,func) (bind (eval_expr cx e) (read_result cx))
     (es,s0) marks (INL v) ee (OK s) /\
-  expr_post H ctx func cenv cx e es sa sb s0 (ee with gas_obs := []) v op s /\
+  (?H. valid_horizon cx st0 H ee.storage_trace) /\
+  (!H. valid_horizon cx st0 H ee.storage_trace ==>
+       expr_post H ctx func cenv cx e es sa sb s0 (ee with gas_obs := []) v op s) /\
   s.vs_current_bb = sb.cs_current_bb /\ s.vs_inst_idx = LENGTH sb.cs_current_insts ==>
   ?ff u. gas_marked_exec F (ctx,func) (write_place cx (MemoryPlace id []) v)
     (ee with gas_obs := [],s) [] (INL ()) ff (OK u) /\
-    stmt_post H ctx func cx lctx cenv cenv sa sf es s0 (INL ()) ff u
+    !H. valid_horizon cx st0 H ff.storage_trace ==>
+      stmt_post H ctx func cx lctx cenv cenv sa sf es s0 (INL ()) ff u
 Proof
   disch_then (map_every assume_tac o CONJUNCTS) >>
+  `!H. valid_horizon cx st0 H ee.storage_trace ==>
+       valid_horizon cx st0 H es.storage_trace` by
+    (qpat_assum `gas_marked_exec _ _ (bind _ _) _ _ _ _ _`
+       (mp_tac o MATCH_MP (REWRITE_RULE [GSYM AND_IMP_INTRO]
+                          gas_marked_exec_valid_prefix)) >>
+     impl_tac >- simp[vyperStorageTraceTheory.storage_trace_frame_bind_all,
+          vyperStorageTraceTheory.storage_trace_frame_read_result,
+          vyperStorageTraceTheory.evaluate_storage_trace_frame] >>
+     simp[]) >>
+  qpat_assum `?H. valid_horizon _ _ H ee.storage_trace`
+    (qx_choose_then `H0` assume_tac) >>
+  `expr_post H0 ctx func cenv cx e es sa sb s0 (ee with gas_obs := []) v op s /\
+   stmt_state_rel H0 ctx func cenv cx es s0` by metis_tac[] >>
   `!tail. bind (eval_expr cx e) (read_result cx)
     (es with gas_obs := gas_explicit marks s0.vs_gas_readings ++ tail) =
       (INL v, ee with gas_obs := tail)` by fs[gas_marked_exec_def] >>
@@ -819,10 +1047,10 @@ Proof
     (qpat_assum `!tail. bind _ _ _ = _` (qspec_then `[]` mp_tac) >>
      disch_then (mp_tac o MATCH_MP eval_read_preserves_scopes_dom) >> simp[]) >>
   `alloca_frame cenv es sa s0 cenv (ee with gas_obs := []) s` by
-    (irule expr_post_alloca_frame >> simp[] >>
-     goal_assum (drule_at (Pat `expr_post _ _ _ _ _ _ _ _ _ _ _ _ _ _`)) >> simp[]) >>
-  qpat_x_assum `expr_post _ _ _ _ _ _ _ _ _ _ _ _ _ _` mp_tac >>
-  simp[expr_post_def] >> strip_tac >>
+    (drule_at (Pat `expr_post _ _ _ _ _ _ _ _ _ _ _ _ _ _`) expr_post_alloca_frame >>
+     disch_then (drule_at (Pat `stmt_state_rel _ _ _ _ _ _ _`)) >> simp[]) >>
+  qpat_assum `expr_post H0 _ _ _ _ _ _ _ _ _ _ _ _ _`
+    (strip_assume_tac o REWRITE_RULE [expr_post_def]) >>
   qpat_x_assum `post_value_type _ _ = _`
     (fn th => RULE_ASSUM_TAC (REWRITE_RULE [th])) >>
   `val_wf tyv v` by simp[valueTypingMemoryPropsTheory.value_has_type_memory_wf] >>
@@ -836,9 +1064,18 @@ Proof
   `val_in_memory tyv v (w2n sw) s.vs_memory` by
     (qpat_x_assum `expr_type e = _ \/ _` strip_assume_tac >> gvs[] >>
      irule bytestring_val_in_memory_transfer >> metis_tac[]) >>
-  `stmt_state_rel H ctx func cenv cx ee s` by
-    (qpat_x_assum `stmt_state_rel _ _ _ _ _ _ _` mp_tac >>
-     simp[stmt_state_rel_def, state_rel_gas_obs, immutable_alloca_sep_def] >> metis_tac[]) >>
+  `!H. valid_horizon cx st0 H ee.storage_trace ==>
+       stmt_state_rel H ctx func cenv cx ee s` by
+    (rpt strip_tac >>
+     `expr_post H ctx func cenv cx e es sa sb s0 (ee with gas_obs := []) v op s` by
+       metis_tac[] >>
+     pop_assum (strip_assume_tac o REWRITE_RULE [expr_post_def]) >>
+     qpat_assum `stmt_state_rel H _ _ _ _ (ee with gas_obs := []) s` mp_tac >>
+     match_mp_tac EQ_IMPLIES >>
+     simp_tac (srw_ss()) [stmt_state_rel_def, state_rel_gas_obs,
+                          immutable_alloca_sep_def]) >>
+  Q.SUBGOAL_THEN `?H. valid_horizon cx st0 H ee.storage_trace` assume_tac
+    >- metis_tac[] >>
   `local_ptrs_reserved cenv sb` by
     (irule local_ptrs_reserved_next_var >> qexists_tac `sa` >> simp[]) >>
   drule_all local_memory_assign_widen_path >> strip_tac >>
@@ -851,6 +1088,26 @@ Proof
   qexistsl_tac [`ee with scopes :=
     pre ++ (env |+ (id, entry with <|value := v; popped := []|>)) :: rest`, `t`] >>
   conj_tac >- simp[gas_marked_exec_def] >>
+  qx_gen_tac `H'` >> simp[] >> strip_tac >>
+  `expr_post H' ctx func cenv cx e es sa sb s0 (ee with gas_obs := []) v op s` by
+    metis_tac[] >>
+  qpat_x_assum `expr_post H' _ _ _ _ _ _ _ _ _ _ _ _ _`
+    (strip_assume_tac o REWRITE_RULE [expr_post_def]) >>
+  `storage_well_formed_on cx ee (FST H')` by
+    (qpat_assum `storage_well_formed_on cx (ee with gas_obs := []) _` mp_tac >>
+     match_mp_tac EQ_IMPLIES >>
+     `!b. get_storage cx (ee with gas_obs := []) b = get_storage cx ee b` by
+       (Cases >> simp_tac (srw_ss()) [vyperStorageBackendTheory.get_storage_def]) >>
+     pop_assum (fn th => simp_tac (srw_ss())
+       [vyperStorageFootprintTheory.storage_well_formed_on_def, th])) >>
+  `storage_well_formed_on cx (ee with scopes :=
+     pre ++ (env |+ (id, entry with <|value := v; popped := []|>)) :: rest)
+     (FST H')` by
+    fs[vyperStorageFootprintTheory.storage_well_formed_on_def,
+       vyperStorageBackendTheory.get_storage_scopes] >>
+  `stmt_state_rel H' ctx func cenv cx (ee with scopes :=
+     pre ++ (env |+ (id, entry with <|value := v; popped := []|>)) :: rest) t` by
+    metis_tac[] >>
   simp[stmt_post_def, stmt_lands_def, cenv_top_ext_refl] >>
   metis_tac[not_fresh_at_mono]
 QED
@@ -874,31 +1131,52 @@ Theorem assign_local_memory_widen_rhs_outcome:
   compile_assign_value cenv (Var p) LocMemory op F loc vtyp sty bytes sb = ((),sf) /\
   fn_has_code sb sf func /\ ~block_is_terminated sf /\
   fn_inst_ids_distinct func /\ local_ptrs_reserved cenv sa /\
-  stmt_state_rel H ctx func cenv cx es s0 /\ sa.cs_next_id <= sb.cs_next_id /\
+  (!H. valid_horizon cx st0 H es.storage_trace ==>
+       stmt_state_rel H ctx func cenv cx es s0) /\ sa.cs_next_id <= sb.cs_next_id /\
   sa.cs_next_var <= sb.cs_next_var /\
   (!x. op = Var x ==> not_fresh_at sb x) /\
   FLOOKUP cenv.ce_vars id = SOME (PtrVar (Var p) sz) /\
-  gas_outcome F (cx_tops cx) (ctx,func)
+  gas_outcome F (cx_tops cx) (ctx,func) cx st0
     (bind (eval_expr cx e) (read_result cx)) (es,s0)
-    (\res ee t. ?v. res = INL v /\
+    (\H res ee t. ?v. res = INL v /\
       expr_post H ctx func cenv cx e es sa sb s0 ee v op t /\
       t.vs_current_bb = sb.cs_current_bb /\ t.vs_inst_idx = LENGTH sb.cs_current_insts)
-    (\res ee r. expr_exit res r) ==>
-  gas_outcome F (cx_tops cx) (ctx,func)
+    (\H res ee r. expr_exit res r) ==>
+  gas_outcome F (cx_tops cx) (ctx,func) cx st0
     (eval_stmt cx (Assign (BaseTarget (NameTarget id)) e)) (es,s0)
-    (stmt_post H ctx func cx lctx cenv cenv sa sf es s0)
-    (\res ee r. !tail. stmt_exit RetQ (ee with gas_obs := tail) res r)
+    (\H. stmt_post H ctx func cx lctx cenv cenv sa sf es s0)
+    (\H res ee r. !tail. stmt_exit (RetQ H) (ee with gas_obs := tail) res r)
 Proof
   disch_then (map_every assume_tac o CONJUNCTS) >> rewrite_tac[gas_outcome_def] >>
-  qpat_x_assum `gas_outcome _ _ _ _ _ _ _`
+  qpat_x_assum `gas_outcome _ _ _ _ _ _ _ _ _`
     (mp_tac o REWRITE_RULE [gas_outcome_def]) >> strip_tac
-  >- (qexists `marks` >> disj1_tac >>
+  >- (qexists `marks` >> disj1_tac >> assign_bad_storage_tac >>
+      irule gasStorageTheory.gas_bad_storage_at_bind_left >>
+      simp[vyperStorageTraceTheory.storage_trace_frame_write_place])
+  >- (qexists `marks` >>
       qpat_x_assum `gas_summary_at _ _ _ _ _ _ _`
-        (mp_tac o REWRITE_RULE [gas_summary_at_def]) >> strip_tac
-      >- (qpat_x_assum `(\res ee t. _) _ _ _` (strip_assume_tac o BETA_RULE) >>
-          qpat_x_assum `r = OK t` SUBST_ALL_TAC >>
-          qpat_x_assum `_ = INL v` SUBST_ALL_TAC >>
+        (mp_tac o REWRITE_RULE [gas_summary_at_def]) >> BETA_TAC >> strip_tac
+      >- (reverse (Cases_on `storage_trace_domain cx st0 es_end.storage_trace`)
+          >- (disj1_tac >> assign_bad_storage_tac >>
+              irule gasStorageTheory.gas_bad_storage_at_bind_left >>
+              simp[vyperStorageTraceTheory.storage_trace_frame_write_place] >>
+              metis_tac[gasStorageTheory.gas_bad_storage_at_counted_prefix]) >>
+          `?H0. valid_horizon cx st0 H0 es_end.storage_trace` by
+            metis_tac[vyperStorageFootprintTheory.storage_trace_domain_def] >>
+          RULE_ASSUM_TAC (SIMP_RULE (srw_ss()) []) >>
+          qpat_x_assum `r = OK _` SUBST_ALL_TAC >>
+          `?v. res = INL v` by metis_tac[] >>
+          qpat_x_assum `res = INL _` SUBST_ALL_TAC >>
+          RULE_ASSUM_TAC (SIMP_RULE (srw_ss()) []) >>
+          `!H. valid_horizon cx st0 H es_end.storage_trace ==>
+               expr_post H ctx func cenv cx e es sa sb s0
+                 (es_end with gas_obs := []) v op t` by metis_tac[] >>
+          `t.vs_current_bb = sb.cs_current_bb /\
+           t.vs_inst_idx = LENGTH sb.cs_current_insts` by metis_tac[] >>
+          Q.SUBGOAL_THEN `?H. valid_horizon cx st0 H es_end.storage_trace` assume_tac
+    >- metis_tac[] >>
           drule_all assign_local_memory_widen_normal_continuation >> strip_tac >>
+          disj2_tac >> disj1_tac >>
           simp[gas_summary_at_def] >>
           qexistsl [`INL ()`, `ff`, `OK u`] >> simp[stmt_post_end_gas_obs] >>
           irule assign_local_marked_exec >>
@@ -907,17 +1185,27 @@ Proof
             |> REWRITE_RULE [APPEND_NIL]) >>
           qexistsl [`es_end with gas_obs := []`, `t`, `v`] >> simp[] >>
           irule gas_marked_exec_end_gas_obs >> simp[]) >>
+      reverse (Cases_on `storage_trace_domain cx st0 es_end.storage_trace`)
+      >- (disj1_tac >> assign_bad_storage_tac >>
+              irule gasStorageTheory.gas_bad_storage_at_bind_left >>
+          simp[vyperStorageTraceTheory.storage_trace_frame_write_place] >>
+          metis_tac[gasStorageTheory.gas_bad_storage_at_counted_prefix]) >>
+      `?H0. valid_horizon cx st0 H0 es_end.storage_trace` by
+        metis_tac[vyperStorageFootprintTheory.storage_trace_domain_def] >>
+      `expr_exit res r` by (gs[] >> metis_tac[]) >>
       Cases_on `res` >- gvs[expr_exit_def] >>
+      disj2_tac >> disj1_tac >>
       simp[gas_summary_at_def] >>
       qexistsl [`INR y`, `es_end`, `r`] >> simp[] >> conj_tac
       >- (irule assign_local_marked_exec >>
           (conj_tac >- (qexists `lctx` >> simp[])) >>
           irule gas_marked_exec_bind_exception >> simp[]) >>
-      disj2_tac >> gen_tac >> simp[stmt_exit_def] >>
+      rpt strip_tac >> simp[stmt_exit_def] >>
       metis_tac[expr_exit_INR_type]) >>
-  qexists `marks` >> disj2_tac >>
+  qexists `marks` >> disj2_tac >> disj2_tac >>
   qexistsl [`err`, `ee`, `leaf`, `finish'`] >>
-  irule assign_local_exempt >> simp[gas_exempt_cert_unforce_result]
+  irule assign_local_exempt >>
+  simp[gasExemptCertTheory.gas_exempt_cert_unforce_result]
 QED
 
 (* x = e for a local x whose type T is not a word type, where e has type T,
@@ -1050,7 +1338,7 @@ Proof
      (mstore (w2n w) wd s)` by
     (irule local_copy_immutables >>
      goal_assum (drule_at (Pat `local_region _ _ _ _ _ _`)) >>
-     qexistsl_tac [`ctx`, `func`, `32`] >>
+     qexistsl_tac [`H`, `ctx`, `func`, `32`] >>
      simp[immutableMemoryFrameTheory.immutable_mstore_capacity] >>
      first_assum ACCEPT_TAC) >>
   irule stmt_state_rel_write_local >>
@@ -1062,9 +1350,11 @@ Proof
 QED
 
 Theorem local_header_store_path:
-  !ctx func cenv cx es s id p sz w pre env entry rest v wd sa sb.
+  !ctx func cenv cx st0 es s id p sz w pre env entry rest v wd sa sb.
     emit_void MSTORE [Var p; Lit wd] sa = ((), sb) /\
-    stmt_state_rel H ctx func cenv cx es s /\
+    (?H. valid_horizon cx st0 H es.storage_trace) /\
+    (!H. valid_horizon cx st0 H es.storage_trace ==>
+         stmt_state_rel H ctx func cenv cx es s) /\
     find_containing_scope id es.scopes = SOME (pre, env, entry, rest) /\
     FLOOKUP cenv.ce_vars id = SOME (PtrVar (Var p) sz) /\
     lookup_var p s = SOME w /\ 32 <= type_memory_size entry.type /\
@@ -1073,9 +1363,10 @@ Theorem local_header_store_path:
     fn_has_code sa sb func /\ ~s.vs_halted /\
     s.vs_current_bb = sa.cs_current_bb /\
     s.vs_inst_idx = LENGTH sa.cs_current_insts ==>
-    ?t. stmt_state_rel H ctx func cenv cx
-          (es with scopes := pre ++
-            (env |+ (id, entry with <|value := v; popped := []|>)) :: rest) t /\
+    ?t. (!H. valid_horizon cx st0 H es.storage_trace ==>
+           stmt_state_rel H ctx func cenv cx
+             (es with scopes := pre ++
+               (env |+ (id, entry with <|value := v; popped := []|>)) :: rest) t) /\
         ~t.vs_halted /\ t.vs_current_bb = sb.cs_current_bb /\
         t.vs_inst_idx = LENGTH sb.cs_current_insts /\
         (!x. lookup_var x t = lookup_var x s) /\
@@ -1087,8 +1378,22 @@ Theorem local_header_store_path:
              pre ++ (env |+ (id, entry with <|value := v; popped := []|>)) :: rest) t /\
         gas_marked_path F ctx func s 0 (OK t)
 Proof
-  rpt strip_tac >>
-  drule_all local_header_store_state >> strip_tac >>
+  rpt gen_tac >> disch_then (map_every assume_tac o CONJUNCTS) >>
+  qpat_x_assum `?H. valid_horizon _ _ H _` (qx_choose_then `H0` assume_tac) >>
+  `!H. valid_horizon cx st0 H es.storage_trace ==>
+       stmt_state_rel H ctx func cenv cx
+         (es with scopes := pre ++
+           (env |+ (id, entry with <|value := v; popped := []|>)) :: rest)
+         (mstore (w2n w) wd s) /\
+       stmt_state_rel H ctx func cenv cx
+         (es with scopes := pre ++
+           (env |+ (id, entry with <|value := v; popped := []|>)) :: rest)
+         (mstore (w2n w) wd s with vs_inst_idx := SUC s.vs_inst_idx)` by
+    (qx_gen_tac `HH` >> strip_tac >>
+     `stmt_state_rel HH ctx func cenv cx es s` by metis_tac[] >>
+     drule_all local_header_store_state >>
+     simp[stmt_state_rel_inst_idx]) >>
+  `stmt_state_rel H0 ctx func cenv cx es s` by metis_tac[] >>
   `eval_operand (Lit wd) s = SOME wd` by simp[eval_operand_def] >>
   drule_all emit_mstore_marked_path >> strip_tac >>
   `sb.cs_current_bb = sa.cs_current_bb /\
@@ -1130,7 +1435,8 @@ Proof
     (mstore (w2n w) wd s with vs_inst_idx := SUC s.vs_inst_idx)` by
     (irule alloca_frame_same_state >> goal_assum (drule_at Any) >> simp[]) >>
   qexists_tac `mstore (w2n w) wd s with vs_inst_idx := SUC s.vs_inst_idx` >>
-  simp[stmt_state_rel_inst_idx, lookup_var_def, mstore_def, LET_THM]
+  conj_tac >- metis_tac[] >>
+  simp[lookup_var_def, mstore_def, LET_THM]
 QED
 
 Theorem assign_local_empty_code_parts:
@@ -1211,6 +1517,17 @@ Theorem compile_assign_local_empty_stmt_frag:
 Proof
   rpt gen_tac >> strip_tac >>
   simp[stmt_frag_def, stmt_framed_frag_def] >> rpt gen_tac >> strip_tac >>
+  reverse (Cases_on `storage_trace_domain cx st0 es.storage_trace`)
+  >- (rewrite_tac[gas_outcome_def] >> qexists_tac `[]` >> disj1_tac >>
+      irule gasStorageTheory.gas_bad_storage_at_initial >>
+      simp[vyperStorageTraceTheory.evaluate_storage_trace_frame]) >>
+  `?H0. valid_horizon cx st0 H0 es.storage_trace` by
+    metis_tac[vyperStorageFootprintTheory.storage_trace_domain_def] >>
+  `!H. valid_horizon cx st0 H es.storage_trace ==>
+       stmt_state_rel H ctx func cenv cx es s0` by metis_tac[] >>
+  `stmt_state_rel H0 ctx func cenv cx es s0` by metis_tac[] >>
+  Q.SUBGOAL_THEN `?H. valid_horizon cx st0 H es.storage_trace` assume_tac
+    >- metis_tac[] >>
   drule_all assign_local_empty_code_parts >> strip_tac >>
   qpat_x_assum `cenv' = cenv` SUBST_ALL_TAC >>
   `!gs. bind (eval_expr cx e) (read_result cx) (es with gas_obs := gs) =
@@ -1230,13 +1547,15 @@ Proof
      simp[valueEncodingPropsTheory.mstore_mem_word_at_same] >>
      qexistsl_tac [`get_tenv cx`, `vtyp`] >> simp[]) >>
   drule (CONJUNCT1 default_memory_layout) >> strip_tac >>
-  gvs[] >> drule_all local_header_store_path >> strip_tac >>
+  gvs[] >>
+  drule_all (SIMP_RULE bool_ss [PULL_EXISTS] local_header_store_path) >> strip_tac >>
   `type_memory_size entry.type <= sz` by
     (fs[stmt_state_rel_def, state_rel_def, local_ptrs_rel_def] >> metis_tac[]) >>
   `32 <= sz` by decide_tac >>
   `local_region cenv es.scopes s0 id (w2n w) sz` by
     (simp[local_region_def] >> metis_tac[]) >>
   `alloca_frame cenv es sa s0 cenv es s0` by (irule alloca_frame_same >> simp[]) >>
+  `stmt_state_rel H0 ctx func cenv cx es s0` by metis_tac[] >>
   `MAP FDOM es.scopes = MAP FDOM es.scopes` by simp[] >>
   `!x u. not_fresh_at sa x /\ lookup_var x s0 = SOME u ==> lookup_var x s0 = SOME u` by
     simp[] >>
@@ -1257,26 +1576,45 @@ Proof
   `alloca_frame cenv es sa s0 cenv (es with <|scopes := pre ++
       (env |+ (id, entry with <|value := default_value entry.type; popped := []|>)) :: rest;
       gas_obs := []|>) t` by
-    (mp_tac (Q.INST [`c` |-> `cenv`, `es1` |-> `es`, `s` |-> `s0`,
+    (mp_tac (Q.INST [`H` |-> `H0`, `c` |-> `cenv`, `es1` |-> `es`, `s` |-> `s0`,
        `b` |-> `w2n (w:bytes32)`, `z` |-> `sz`, `n0` |-> `32`,
        `ee` |-> `es with <|scopes := pre ++
           (env |+ (id, entry with <|value := default_value entry.type; popped := []|>)) :: rest;
-          gas_obs := []|>`] alloca_frame_local_store) >>
+          gas_obs := []|>`]
+       (INST_TYPE [alpha |-> ``:256``] alloca_frame_local_store)) >>
      impl_tac >- (rpt conj_tac >> first_assum ACCEPT_TAC) >>
      simp[]) >>
-  rewrite_tac[gas_outcome_def] >> qexists_tac `[]` >> disj1_tac >>
+  rewrite_tac[gas_outcome_def] >> qexists_tac `[]` >> disj2_tac >> disj1_tac >>
   rewrite_tac[gas_summary_at_def] >>
   qexistsl [`INL ()`,
     `es with scopes := pre ++
       (env |+ (id, entry with <|value := default_value entry.type; popped := []|>)) :: rest`,
     `OK t`] >>
   conj_tac >- simp[gas_marked_exec_def] >>
-  disj1_tac >> simp[stmt_post_def, stmt_lands_def, cenv_top_ext_refl] >>
-  drule emit_void_nonterminator_open >> simp[is_terminator_def] >>
-  strip_tac >>
-  qpat_x_assum `stmt_state_rel _ _ _ _ _ (es with scopes := _) t` mp_tac >>
-  disch_then (mp_tac o Q.INST
-    [`gs` |-> `[]`, `readings` |-> `t.vs_gas_readings`, `k` |-> `t.vs_inst_idx`]
-    o MATCH_MP msg_gas_state_frame) >> simp[stmt_state_rel_inst_idx] >>
-  strip_tac >> first_assum ACCEPT_TAC
+  qabbrev_tac `es2 = es with scopes := pre ++
+      (env |+ (id, entry with <|value := default_value entry.type; popped := []|>)) :: rest` >>
+  `es2.storage_trace = es.storage_trace` by simp[Abbr `es2`] >>
+  disj1_tac >> simp[] >> qx_gen_tac `H'` >> strip_tac >>
+  `valid_horizon cx st0 H' es.storage_trace` by fs[] >>
+  `stmt_state_rel H' ctx func cenv cx es s0 /\
+   storage_well_formed_on cx es (FST H')` by metis_tac[] >>
+  `stmt_state_rel H' ctx func cenv cx es2 t` by metis_tac[] >>
+  `storage_well_formed_on cx es2 (FST H')` by
+    (simp[Abbr `es2`] >>
+     fs[vyperStorageFootprintTheory.storage_well_formed_on_def,
+        vyperStorageBackendTheory.get_storage_scopes]) >>
+  `stmt_state_rel H' ctx func cenv cx (es2 with gas_obs := []) t` by
+    (qpat_x_assum `stmt_state_rel H' _ _ _ _ es2 t` mp_tac >>
+     match_mp_tac EQ_IMPLIES >>
+     simp_tac (srw_ss()) [stmt_state_rel_def, state_rel_gas_obs,
+                          immutable_alloca_sep_def]) >>
+  `storage_well_formed_on cx (es2 with gas_obs := []) (FST H')` by
+    (qpat_x_assum `storage_well_formed_on cx es2 _` mp_tac >>
+     match_mp_tac EQ_IMPLIES >>
+     `!b. get_storage cx (es2 with gas_obs := []) b = get_storage cx es2 b` by
+       (Cases >> simp_tac (srw_ss()) [vyperStorageBackendTheory.get_storage_def]) >>
+     pop_assum (fn th => simp_tac (srw_ss())
+       [vyperStorageFootprintTheory.storage_well_formed_on_def, th])) >>
+  simp[stmt_post_def, stmt_lands_def, cenv_top_ext_refl] >>
+  drule emit_void_nonterminator_open >> simp[is_terminator_def]
 QED
