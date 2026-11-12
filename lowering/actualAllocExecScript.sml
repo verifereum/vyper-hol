@@ -7,6 +7,21 @@ Ancestors
   allocaFrontierBound allocaBudgetProps vyperCompiler venomInst
   venomMemProps venomMemDefs emitHelperProps exprLoweringProps finite_map words arithmetic list rich_list
 
+Theorem physical_word_alloca_fresh_run:
+  inst.inst_opcode = ALLOCA /\ inst.inst_operands = [Lit 32w] /\
+  inst.inst_outputs = [out] /\ FLOOKUP s.vs_allocas inst.inst_id = NONE /\
+  s.vs_alloca_next + 32 < dimword (:256) ==>
+  step_inst_base inst s = OK
+    (update_var out (n2w s.vs_alloca_next)
+      (s with <|vs_allocas := s.vs_allocas |+
+        (inst.inst_id,(s.vs_alloca_next,32));
+        vs_alloca_next := s.vs_alloca_next + 32|>))
+Proof
+  strip_tac >> simp[step_inst_base_def, exec_alloca_def] >>
+  simp[update_var_def, FLOOKUP_UPDATE,
+       dimword_def, fcpLib.INDEX_CONV ``dimindex (:256)``]
+QED
+
 Theorem actual_word_alloca_fresh_run:
   alloca_frontier_inv ctx fn site s /\ MEM inst (fn_insts fn) /\
   inst.inst_opcode = ALLOCA /\ inst.inst_operands = [Lit 32w] /\
