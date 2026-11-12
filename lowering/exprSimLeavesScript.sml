@@ -204,9 +204,11 @@ Proof
   rw[expr_sim_ok_def] >>
   `args = [] /\ ann = env_item_type PrevHash` by
     gvs[expr_sim_pre_def, well_typed_expr_def, well_typed_builtin_app_def] >>
-  gvs[] >> irule expr_sim_values >> rpt strip_tac >>
+  gvs[] >> irule expr_sim_values_domain >> rpt gen_tac >> strip_tac >>
+  rename1 `valid_horizon cx st0 H0 es.storage_trace` >>
   `call_ctx_rel cx.txn s0.vs_call_ctx s0.vs_tx_ctx s0.vs_block_ctx` by
-    gvs[stmt_state_rel_def, state_rel_def] >>
+    (`stmt_state_rel H0 ctx func cenv cx es s0` by metis_tac[] >>
+     gvs[stmt_state_rel_def, state_rel_def]) >>
   `tx_env_ok cx.txn` by gvs[call_ctx_rel_def] >>
   `!tail. bind (eval_expr cx (Builtin (env_item_type PrevHash) (Env PrevHash) []))
             (read_result cx) (es with gas_obs := tail) =
@@ -257,19 +259,33 @@ Proof
    t.vs_gas_readings = s0.vs_gas_readings` by
     (qpat_x_assum `t = _ with vs_vars := _` (fn th => ONCE_REWRITE_TAC [th]) >>
      simp[]) >>
-  `stmt_state_rel H ctx func cenv cx es t` by
-    (qpat_x_assum `t = _ with vs_vars := _` (fn th => ONCE_REWRITE_TAC [th]) >>
-     irule stmt_state_rel_vars_frame >> simp[] >> rpt strip_tac >>
-     simp[lookup_var_def] >> first_x_assum irule >>
-     fs[local_ptrs_reserved_def] >> metis_tac[]) >>
-  drule msg_gas_state_frame >>
-  disch_then (qspecl_then [`t.vs_gas_readings`,
-    `LENGTH sb.cs_current_insts`, `[]`] mp_tac) >>
-  simp[] >> strip_tac >>
+  `!H. valid_horizon cx st0 H es.storage_trace ==>
+       stmt_state_rel H ctx func cenv cx (es with gas_obs := [])
+         (t with vs_inst_idx := LENGTH sb.cs_current_insts) /\
+       stmt_state_rel H ctx func cenv cx es s0 /\
+       storage_well_formed_on cx es (FST H) /\
+       storage_well_formed_on cx (es with gas_obs := []) (FST H)` by
+    (gen_tac >> strip_tac >>
+     `stmt_state_rel H ctx func cenv cx es s0 /\
+      storage_well_formed_on cx es (FST H)` by metis_tac[] >>
+     `(es with gas_obs := []).accounts = es.accounts /\
+      (es with gas_obs := []).tStorage = es.tStorage` by simp[] >>
+     `storage_well_formed_on cx (es with gas_obs := []) (FST H)` by
+       metis_tac[vyperStorageFootprintTheory.storage_well_formed_on_backends] >>
+     `stmt_state_rel H ctx func cenv cx es t` by
+       (qpat_x_assum `t = _ with vs_vars := _` (fn th => ONCE_REWRITE_TAC [th]) >>
+        irule stmt_state_rel_vars_frame >> simp[] >> rpt strip_tac >>
+        simp[lookup_var_def] >> first_x_assum irule >>
+        fs[local_ptrs_reserved_def] >> metis_tac[]) >>
+     drule msg_gas_state_frame >>
+     disch_then (qspecl_then [`t.vs_gas_readings`,
+       `LENGTH sb.cs_current_insts`, `[]`] mp_tac) >>
+     simp[]) >>
   qexistsl_tac [`[]`, `BytesV (word_to_bytes_be (EL 0 cx.txn.block_hashes))`,
     `es`, `t with vs_inst_idx := LENGTH sb.cs_current_insts`] >>
   simp[gas_value_prefix_def, gas_marked_exec_def, gas_marked_path_def,
        GSYM ETA_THM] >>
+  gen_tac >> strip_tac >> first_x_assum drule >> strip_tac >>
   simp[expr_post_def, expr_val_rel_def, expr_val_at_def,
        vyperASTTheory.expr_type_def, env_item_type_def, is_word_type_def,
        vyperValueTheory.evaluate_type_def, typed_val_to_w256_def,

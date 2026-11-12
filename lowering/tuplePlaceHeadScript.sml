@@ -127,12 +127,12 @@ QED
    - old allocation lookup: target_post_def.  Its byte frame additionally needs
      aid < pointer-start.cs_next_id and nonlocal separation of the whole owner;
      owned snapshot supplies these once the index bound is transported.
-   - borrowed bytes: tuple_place_pure_target_scopes and
-     tuple_place_pure_target_borrow_bytes.  Reconstruct local regions using
+   - borrowed bytes: tuple_place_supported_target_scopes and
+     tuple_place_supported_target_borrow_bytes.  Reconstruct local regions using
      copy_buffer_local_region_frame and local_region_scopes_domain, not entry
      equality.  local_path_at is static in cenv,cx.
    - static call safety for reachable-target geometry:
-     tuple_place_rhs_empty_call_safe / tuple_place_rhs_target_call_safe.
+     the root EVERY's call_evaluation_safe cx (int_calls_target bt).
 
    Store step (tuple_place_value_run_frame, or equal_value_run_frame):
    - head source operand freshness: head plus compiler monotonicity; pointer
@@ -161,7 +161,7 @@ QED
      actual destination containment, NOT arbitrary place_ptr_rel separation.
      Borrowed snapshot has ltys=tys, hence EL i ltys=EL i tys; the widening
      side condition disappears in tuple_place_equal_value_run_frame.
-   - borrowed destination separation: tuple_place_borrow_destination_apart
+   - borrowed destination separation: tuple_place_writable_borrow_destination_apart
      using ACTUAL evaluated typed target, call safety and full local extent.
      tuple_place_head_borrow_frame checks consumption of the resulting local
      slice frame and region reconstruction at the runner's endpoint.
@@ -188,8 +188,9 @@ QED
      P = target_post ctx func cenv cx es sp sa s0 ee (PlaceR p)
            (Type (EL i tys)) (dst,SOME loc,SOME (EL i tys)) s
      E = eval_base_place cx bt es = (INL (PlaceR p),ee)
-     S = supported_target_pure tops bt /\ well_typed_target env bt (EL i tys) /\
-         target_indices_pre cenv cx env bt /\ call_evaluation_safe cx []
+     S = EVERY (supported_expr tops) (target_indices bt) /\
+         well_typed_target env bt (EL i tys) /\ target_indices_pre cenv cx env bt /\
+         call_evaluation_safe cx (int_calls_target bt)
      C = compile_get_target_ptr compile_expr cenv bt sp =
            ((dst,SOME loc,SOME (EL i tys)),sa)
      K = cs_extends sp sa
@@ -238,9 +239,10 @@ QED
      consequence of P. Code equations, fn_has_code, fn_inst_ids_distinct and
      control/halted facts are actual compilation/gas-path inputs; H's control
      at sp is NOT control at sa. The pointer execution must supply the latter.
-   - Static call safety: tuple_place_rhs_empty_call_safe from original RHS
-     expr_body_pre. S follows at every iteration from root EVERY/LIST_REL;
-     it does not require re-establishing RHS expr_body_pre after a write.
+   - Static call safety: the root EVERY's per-target call_evaluation_safe,
+     from the statement's int_calls_stmt.  S follows at every iteration from
+     root EVERY/LIST_REL; it does not require re-establishing RHS
+     expr_body_pre after a write.
 
    WORD BRANCH
    place_store_word_run needs exactly its emit_void equation, destination
@@ -293,7 +295,7 @@ QED
    BORROWED EQUAL-LAYOUT AGGREGATE BRANCH
    H's borrowed alternative supplies ltys=tys, hence sty=dty and ltvs=tvs.
    Memory: select tuple_place_equal_memory_run_frame. Its premises are:
-   nonword ty; compile_assign_value at ty/ty, word flag F and actual arr;
+   nonword ty; compile_assign_value at ty/ty with word flag F;
    destination eval/place; both freshness facts; evaluated ty/value typing;
    expr_val_rel; 0<size(tv) and size(tv)+64<D; source inv; reserved locals;
    source-containing LOCAL REGION OR OLD ALLOCATION; state_rel; actual write;
@@ -304,10 +306,9 @@ QED
    unconditional CapMcopy premise. Its local and old-allocation byte frames
    share its correctness endpoint. Destination separation is needed only
    to CONSUME these frames for pending snapshots, not to run the equal copy.
-   Storage/transient: select tuple_place_equal_storage_run_memory for
-   !et n. dty<>ArrayT et (Dynamic n), otherwise tuple_place_equal_dyn_run_memory.
-   Their common premises are loc=Storage or Transient, same-layout code with
-   the exact stride pair, destination eval/place, both freshness facts,
+   Storage/transient: select tuple_place_equal_storage_run_memory.
+   Its premises are loc=Storage or Transient, same-layout code,
+   destination eval/place, both freshness facts,
    widening dty->dty, evaluated type/value typing, expr_val_rel, CapMcopy,
    inv/acyclic/reserved/storage region, source end<=s.alloca_next for nonwords,
    positive destination slot count, state_rel/write, code/distinctness/control.
@@ -323,7 +324,7 @@ QED
        source operand equations and all pending aggregate representations
        from H hold at s, and tuple_place_snapshot ... ee ... sa.next_id ... s.
        Use tuple_place_target_allocation for an owner and
-       tuple_place_pure_target_borrow_bytes for a borrow; local-region
+       tuple_place_supported_target_borrow_bytes for a borrow; local-region
        equivalence is wb_frame_local_regions with scope-domain equality.
        Prove owner nonlocal separation at ee by the REVERSE region equivalence,
        not merely forward transport of the one borrowed local.
@@ -338,12 +339,14 @@ QED
        w2n w0=b+k ==> w2n w0+N<=w2n dw \/ w2n dw+size(dtv)<=w2n w0
        for LocMemory. tuple_place_local_path_extent and
        tuple_place_borrow_destination_apart supply the geometry. The latter
-       expects eval_base_place cx bt ee=(INL(PlaceR p),ee), not E as written.
-       Candidate adapter: supported_target_pure tops bt /\ E ==> ee=es.
-       targetPlaceLive.nested_pop_eval_base_pure_state proves this from
-       EVERY pure_expr (target_indices bt); a supported-purity-to-semantic-
-       purity adapter is still to be checked/proved (scope equality alone
-       is not full state equality). Do not silently instantiate ee=es.
+       expects eval_base_place cx bt ee=(INL(PlaceR p),ee), not E as written,
+       and takes pure target indices, so it does not cover the chain's
+       targets, whose supported indices may have effects (ee<>es).  The chain
+       instead uses tuple_place_writable_borrow_destination_apart, which takes
+       writable_place_result cx ee (PlaceR p) (from
+       tuple_place_target_endpoint_writable), with local_region moved to ee by
+       tuple_place_supported_target_scopes; see
+       tuple_place_pointer_snapshot_apart. Do not instantiate ee=es.
    B5: The antecedent of B1 plus branch certificate and the frozen indexed
        size bounds ==> the selected runner's exact arithmetic/containment
        antecedents (enumerated above), including CapMcopy and type_alloc_ok

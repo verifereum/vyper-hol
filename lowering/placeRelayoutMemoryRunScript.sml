@@ -11,8 +11,8 @@ Ancestors
 Libs monadsyntax
 
 Theorem place_relayout_memory_run:
-  !ctx func cenv cx env ee ff s p dw dst src src_loc dty sty stv dtv v sa sb info bytes sw.
-  compile_assign_value cenv dst LocMemory src F src_loc dty sty info bytes sa = ((),sb) /\
+  !ctx func cenv cx env ee ff s p dw dst src src_loc dty sty stv dtv v sa sb bytes sw.
+  compile_assign_value cenv dst LocMemory src F src_loc dty sty bytes sa = ((),sb) /\
   (src_loc = NONE \/ src_loc = SOME LocMemory) /\
   ~is_word_type dty /\ ~is_bytestring_type dty /\ dty <> sty /\
   acyclic_struct_metadata cenv.ce_struct_fields /\
