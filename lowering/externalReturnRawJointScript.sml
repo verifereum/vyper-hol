@@ -10,7 +10,7 @@ Ancestors
 
 (* Unlike literal-count return fragments, the actual suffix obtains its
    count from a clean MLOAD. The halt check works for every dead mask. *)
-Theorem raw_return_operand_check[local]:
+Theorem raw_return_operand_check:
   eval_operand a s = SOME w /\ eval_operand n s = SOME k /\
   op_taint tn a = {} /\ op_taint tn n = {} /\
   allocas_from lo s /\ ~ctx_has_dalloca ctx /\
