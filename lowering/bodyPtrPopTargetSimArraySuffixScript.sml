@@ -17,6 +17,10 @@ Ancestors
   targetPlaceLive vyperStorageLayoutSafety exprPtrUnwrapTypedSize
   bodyPtrPopTargetSimStorageHeader
 
+(* The posts here keep the source state as `em with gas_obs := []`; stripping
+   gas_obs only inside target_post would split it from expr_post. *)
+val _ = temp_delsimps ["tuple_place_target_post_gas_obs"];
+
 Theorem target_array_normal_suffix_ptr:
   target_pre cenv cx env (SubscriptTarget bt e) es /\
   type_place_target env bt = SOME (Type (ArrayT et bd)) /\

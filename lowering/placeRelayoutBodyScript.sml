@@ -132,9 +132,10 @@ Proof
        Cases_on `res` >> simp[expr_exit_def]) >>
     qexists_tac `ex` >> asm_rewrite_tac[] >> gen_tac >>
     pure_rewrite_tac[stmt_exit_def] >> disj1_tac >>
-    gvs[] >> Cases_on `ex` >> Cases_on `r` >>
-    TRY (first_assum ACCEPT_TAC) >>
-    gvs[expr_exit_def] >> Cases_on `e'` >> gvs[expr_exit_def]) >>
+    qpat_x_assum `res = INR ex` SUBST_ALL_TAC >>
+    qpat_x_assum `expr_exit _ _` mp_tac >>
+    rpt (pop_assum kall_tac) >>
+    simp[stmtSimPropsTheory.expr_exit_INR_type]) >>
   reverse conj_tac >- (rpt strip_tac >> qexists_tac `v` >> asm_rewrite_tac[]) >>
   rpt strip_tac >>
   `!tail. eval_expr cx e
@@ -257,7 +258,7 @@ Proof
      strip_tac >> gvs[contextTheory.vv_location_def]) >>
   `~block_is_terminated sb` by
     (qpat_assum `~is_word_type dty` (fn th =>
-       qpat_assum `compile_assign_value _ _ _ _ _ _ _ _ _ _ _ = _`
+       qpat_assum `compile_assign_value _ _ _ _ _ _ _ _ _ _ = _`
          (mp_tac o REWRITE_RULE [th])) >>
      disch_then (mp_then Any mp_tac compile_assign_place_endpoint_open) >>
      simp[]) >>

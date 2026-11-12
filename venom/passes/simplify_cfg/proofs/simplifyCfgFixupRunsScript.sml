@@ -6,12 +6,12 @@ Ancestors
   simplifyCfgFixupStatic contextCodegenRel passSimulationDefs
   simplifyCfgStruct
 
-Theorem scfg_fix_all_phis_runs_forward:
+Theorem scfg_fix_all_phis_runs_forward_same_fuel:
   !n s r. wf_function fn /\ fn_inst_wf fn /\ simplify_cfg_fn_ok fn /\
   (!b. MEM b fn.fn_blocks ==> fn_reachable fn b.bb_label) /\
   fn_entry_state fn s0 /\ scfg_bprefix C fn s0 s /\ (!e. r <> Error e) /\
   run_blocks n C fn s = r ==>
-  ?m. run_blocks m C (fix_all_phis fn) s = r
+  run_blocks n C (fix_all_phis fn) s = r
 Proof
   Induct_on `n` >- simp[Once run_blocks_def] >>
   rpt gen_tac >> strip_tac >>
@@ -20,23 +20,31 @@ Proof
   Cases_on `lookup_block s.vs_current_bb fn.fn_blocks` >> simp[] >>
   rename1 `lookup_block _ _ = SOME bb` >>
   Cases_on `run_block n C bb s` >> simp[] >> strip_tac
-  >- (`?k. run_block k C (fix_phis_in_block (pred_labels fn bb.bb_label) bb) s = OK v` by
-        (irule scfg_rooted_fix_phis_run_block >> simp[] >> metis_tac[]) >>
+  >- (`run_block n C (fix_phis_in_block (pred_labels fn bb.bb_label) bb) s = OK v` by
+        (irule scfg_rooted_fix_phis_run_block_same_fuel >> simp[] >> metis_tac[]) >>
       Cases_on `v.vs_halted`
-      >- (qexists_tac `SUC k` >>
-          gvs[run_blocks_unfold, scfg_fix_all_phis_lookup]) >>
+      >- gvs[run_blocks_unfold, scfg_fix_all_phis_lookup] >>
       `scfg_bprefix C fn s0 v` by
         metis_tac[scfg_bprefix_single, scfg_bprefix_trans] >>
-      `?m. run_blocks m C (fix_all_phis fn) v = r` by
+      `run_blocks n C (fix_all_phis fn) v = r` by
         (first_x_assum irule >> gvs[]) >>
-      irule scfg_bstep_continue >> simp[scfg_fix_all_phis_lookup] >>
-      metis_tac[]) >>
+      simp[run_blocks_unfold, scfg_fix_all_phis_lookup]) >>
   gvs[] >>
-  `?k. run_block k C (fix_phis_in_block (pred_labels fn bb.bb_label) bb) s =
+  `run_block n C (fix_phis_in_block (pred_labels fn bb.bb_label) bb) s =
        run_block n C bb s` by
-    (irule scfg_rooted_fix_phis_run_block >> simp[] >> metis_tac[]) >>
-  qexists_tac `SUC k` >> simp[run_blocks_unfold, scfg_fix_all_phis_lookup] >>
+    (irule scfg_rooted_fix_phis_run_block_same_fuel >> simp[] >> metis_tac[]) >>
+  simp[run_blocks_unfold, scfg_fix_all_phis_lookup] >>
   Cases_on `run_block n C bb s` >> gvs[]
+QED
+
+Theorem scfg_fix_all_phis_runs_forward:
+  !n s r. wf_function fn /\ fn_inst_wf fn /\ simplify_cfg_fn_ok fn /\
+  (!b. MEM b fn.fn_blocks ==> fn_reachable fn b.bb_label) /\
+  fn_entry_state fn s0 /\ scfg_bprefix C fn s0 s /\ (!e. r <> Error e) /\
+  run_blocks n C fn s = r ==>
+  ?m. run_blocks m C (fix_all_phis fn) s = r
+Proof
+  metis_tac[scfg_fix_all_phis_runs_forward_same_fuel]
 QED
 
 Theorem scfg_fix_all_phis_runs_backward:
@@ -70,6 +78,16 @@ Proof
   qexists_tac `SUC k` >> simp[run_blocks_unfold] >>
   Cases_on `run_block n C (fix_phis_in_block (pred_labels fn bb.bb_label) bb) s` >>
   gvs[]
+QED
+
+Theorem scfg_fix_all_phis_entry_runs_forward_same_fuel:
+  wf_function fn /\ fn_inst_wf fn /\ simplify_cfg_fn_ok fn /\
+  (!b. MEM b fn.fn_blocks ==> fn_reachable fn b.bb_label) /\
+  fn_entry_state fn s /\ (!e. r <> Error e) /\ run_blocks n C fn s = r ==>
+  run_blocks n C (fix_all_phis fn) s = r
+Proof
+  rpt strip_tac >> irule scfg_fix_all_phis_runs_forward_same_fuel >>
+  simp[] >> metis_tac[scfg_bprefix_rules]
 QED
 
 Theorem scfg_fix_all_phis_entry_runs_forward:

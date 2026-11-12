@@ -85,8 +85,8 @@ Theorem assign_base_attr_storage_source_counted:
       p <- eval_target_place cx (AttributeTarget (TopLevelNameTarget (src,id)) fld);
       v <- read_result cx raw; write_place cx p v
     od) (ee with gas_obs := tail) = (res,ee' with gas_obs := tail)) /\
-    (!u st. storage_dead H tr (update_storage (n2w slot + n2w off) u st) =
-      storage_dead H tr st)
+    (!u st. storage_dead cx tr (update_storage (n2w slot + n2w off) u st) =
+      storage_dead cx tr st)
 Proof
   strip_tac >>
   Cases_on `eval_stmt cx
@@ -111,25 +111,30 @@ Theorem assign_base_attr_storage_store_post_ptr:
   fn_has_code su sb fn /\ ~ctx_has_dalloca ctx /\ ~s.vs_halted /\
   ~block_is_terminated sb /\
   s.vs_current_bb = su.cs_current_bb /\ s.vs_inst_idx = LENGTH su.cs_current_insts /\
-  expr_post H ctx fn cenv cx e es sa su s0 ee v op s /\
-  ghost_inv H d cenv cx ee G tn s /\ ghost_kept cenv es sa Gi ti s0 G tn /\
+  expr_post ctx fn cenv cx e es sa su s0 ee v op s /\
+  stmt_state_rel ctx fn cenv cx es s0 /\ local_ptrs_reserved cenv sa /\
+  MAP FDOM ee.scopes = MAP FDOM es.scopes /\
+  ghost_inv d cenv cx ee G tn s /\ ghost_kept cenv es sa Gi ti s0 G tn /\
   is_word_type (expr_type e) /\ ptr_val_ok cx (expr_type e) v op G tn s /\
   evaluate_type (get_tenv cx) (expr_type e) = SOME ftv /\
   eval_operand dst s = SOME slot /\ op_taint tn dst = {} /\
   encode_value ftv v = SOME [(0,typed_val_to_w256 ftv v)] /\
   write_storage_slot cx tr slot ftv v ee = (res,ff) /\
-  (!u st. storage_dead H tr (update_storage slot u st) = storage_dead H tr st) /\
+  (!u st. storage_dead cx tr (update_storage slot u st) = storage_dead cx tr st) /\
   (!tail. k (ee with gas_obs := tail) = (res,ff with gas_obs := tail)) ==>
   ?tf u.
-    gas_marked_exec_ptr (cx_dead H cx) (ctx,fn) PG k
+    gas_marked_exec_ptr (cx_dead cx) (ctx,fn) PG k
       (ee,s,G,tn) [] (INL ()) ff G tf (OK u) /\
-    stmt_post H ctx fn cx lctx cenv cenv sa sb s0 (INL ()) ff u /\
-    ghost_inv H d cenv cx ff G tf u /\
+    stmt_post ctx fn cx lctx cenv cenv sa sb es s0 (INL ()) ff u /\
+    ghost_inv d cenv cx ff G tf u /\
     (!x. not_fresh_at sa x ==>
       FLOOKUP G x = FLOOKUP Gi x /\ op_taint tf (Var x) = op_taint ti (Var x))
 Proof
   strip_tac >>
-  `stmt_state_rel H ctx fn cenv cx ee s /\
+  drule_all expr_post_alloca_frame >> strip_tac >>
+  `ff.scopes = ee.scopes` by
+    (drule vyperScopePreservationTheory.write_storage_slot_scopes >> simp[]) >>
+  `stmt_state_rel ctx fn cenv cx ee s /\
    eval_operand op s = SOME (typed_val_to_w256 ftv v)` by
     (fs[expr_post_def, expr_val_rel_def] >> metis_tac[]) >>
   `op_taint tn op = {}` by fs[ptr_val_ok_def] >>
@@ -138,11 +143,18 @@ Proof
     (SOME (if tr then LocTransient else LocStorage)) su = ((),sb)` by
     (Cases_on `tr` >> gvs[compile_store_at_loc_def]) >>
   drule_all tuple_storage_store_head_path_ptr >>
-  disch_then (qspecl_then [`PG`, `cx_dead H cx`] strip_assume_tac) >>
+  disch_then (qspecl_then [`PG`, `cx_dead cx`] strip_assume_tac) >>
   qexistsl_tac [`tn'`, `t`] >> conj_tac
   >- simp[gas_marked_exec_ptr_def] >>
   simp[] >> conj_tac
   >- (simp[stmt_post_def, stmt_lands_def, cenv_top_ext_refl] >>
+      `alloca_frame cenv es sa s0 cenv ff t` by
+        (`alloca_frame cenv es sa s0 cenv ee t` by
+           (irule alloca_frame_same_state >> qexists_tac `s` >>
+            simp[finite_mapTheory.FLOOKUP_EXT, FUN_EQ_THM] >>
+            fs[lookup_var_def]) >>
+         qpat_x_assum `alloca_frame _ _ _ _ _ ee t` mp_tac >>
+         asm_rewrite_tac[alloca_frame_def]) >>
       fs[expr_post_def] >> metis_tac[]) >>
   fs[ghost_kept_def] >> metis_tac[]
 QED
@@ -165,26 +177,26 @@ Theorem assign_base_attr_storage_normal_ptr:
   fn_has_code sm sn fn /\ fn_has_code sn su fn /\ fn_has_code su sb fn /\
   ~ctx_has_dalloca ctx /\ ~cenv.ce_is_ctor /\ ~block_is_terminated sb /\
   sa.cs_next_var <= sm.cs_next_var /\ local_ptrs_reserved cenv sa /\
-  stmt_state_rel H ctx fn cenv cx es s0 /\
-  gas_marked_exec_ptr (cx_dead H cx) (ctx,fn) PG (eval_expr cx e)
+  stmt_state_rel ctx fn cenv cx es s0 /\
+  gas_marked_exec_ptr (cx_dead cx) (ctx,fn) PG (eval_expr cx e)
     (es,s0,Gi,ti) marks (INL raw) ee G tn (OK s) /\
-  vv_post H ctx fn cenv cx e es sa sm s0 (ee with gas_obs := []) raw vv s /\
-  ghost_inv H d cenv cx (ee with gas_obs := []) G tn s /\
+  vv_post ctx fn cenv cx e es sa sm s0 (ee with gas_obs := []) raw vv s /\
+  ghost_inv d cenv cx (ee with gas_obs := []) G tn s /\
   ghost_kept cenv es sa Gi ti s0 G tn /\
   ptr_vv_ok cx (expr_type e) raw vv (ee with gas_obs := []) G tn s /\
   ~s.vs_halted /\ s.vs_current_bb = sm.cs_current_bb /\
   s.vs_inst_idx = LENGTH sm.cs_current_insts /\
   (!x cap. cenv.ce_return_buf = SOME (PtrVar (Var x) cap) ==> not_fresh_at sa x) /\
   (!x cap. cenv.ce_return_pc = SOME (PtrVar (Var x) cap) ==> not_fresh_at sa x) ==>
-  ?ff HG tf u.
-    gas_marked_exec_ptr (cx_dead H cx) (ctx,fn) PG
+  ?ff H tf u.
+    gas_marked_exec_ptr (cx_dead cx) (ctx,fn) PG
       (eval_stmt cx (Assign (BaseTarget
         (AttributeTarget (TopLevelNameTarget (src,id)) fld)) e))
-      (es,s0,Gi,ti) marks (INL ()) ff HG tf (OK u) /\
-    stmt_post H ctx fn cx lctx cenv cenv sa sb s0 (INL ()) ff u /\
-    ghost_inv H d cenv cx ff HG tf u /\
+      (es,s0,Gi,ti) marks (INL ()) ff H tf (OK u) /\
+    stmt_post ctx fn cx lctx cenv cenv sa sb es s0 (INL ()) ff u /\
+    ghost_inv d cenv cx ff H tf u /\
     (!x. not_fresh_at sa x ==>
-      FLOOKUP HG x = FLOOKUP Gi x /\ op_taint tf (Var x) = op_taint ti (Var x))
+      FLOOKUP H x = FLOOKUP Gi x /\ op_taint tf (Var x) = op_taint ti (Var x))
 Proof
   strip_tac >> drule_all assign_base_attr_local_rhs_source >> strip_tac >>
   `MAP FDOM es.scopes = MAP FDOM (ee with gas_obs := []).scopes /\
@@ -208,20 +220,20 @@ Resume assign_base_attr_storage_normal_ptr[store]:
     (drule_all gas_marked_exec_ptr_exec >> simp[gas_marked_exec_def] >> strip_tac >>
      drule gas_marked_path_exec >> strip_tac >> drule gas_path_normal >> simp[]) >>
   `?tf' u.
-    gas_marked_exec_ptr (cx_dead H cx) (ctx,fn) PG
+    gas_marked_exec_ptr (cx_dead cx) (ctx,fn) PG
       (do p <- eval_target_place cx
         (AttributeTarget (TopLevelNameTarget (src,id)) fld);
         v <- read_result cx raw; write_place cx p v od)
-      (ee with gas_obs := [],z,HG,tf) [] (INL ()) ee' HG tf' (OK u) /\
-    stmt_post H ctx fn cx lctx cenv cenv sa sb s0 (INL ()) ee' u /\
-    ghost_inv H d cenv cx ee' HG tf' u /\
-    (!x. not_fresh_at sa x ==> FLOOKUP HG x = FLOOKUP Gi x /\
+      (ee with gas_obs := [],z,H,tf) [] (INL ()) ee' H tf' (OK u) /\
+    stmt_post ctx fn cx lctx cenv cenv sa sb es s0 (INL ()) ee' u /\
+    ghost_inv d cenv cx ee' H tf' u /\
+    (!x. not_fresh_at sa x ==> FLOOKUP H x = FLOOKUP Gi x /\
       op_taint tf' (Var x) = op_taint ti (Var x))` by
     (irule assign_base_attr_storage_store_post_ptr >> simp[] >>
      goal_assum (drule_at (Pat `emit_void _ _ _ = _`)) >>
-     goal_assum (drule_at (Pat `expr_post _ _ _ _ _ _ _ _ _ _ _ _ _ _`)) >>
+     goal_assum (drule_at (Pat `expr_post _ _ _ _ _ _ _ _ _ _ _ _ _`)) >>
      simp[] >> metis_tac[]) >>
-  qexistsl_tac [`ee'`, `HG`, `tf'`, `u`] >> simp[] >>
+  qexistsl_tac [`ee'`, `H`, `tf'`, `u`] >> simp[] >>
   rewrite_tac[eval_assign_attr_toplevel_action] >>
   irule (SIMP_RULE std_ss [APPEND_NIL]
     (Q.INST [`right` |-> `[]`] gas_marked_exec_ptr_bind_normal)) >>
@@ -307,20 +319,20 @@ Resume compile_assign_attr_storage_case_ptr[normal]:
   `~t.vs_halted` by
     (drule_all gas_marked_exec_ptr_exec >> simp[gas_marked_exec_def] >> strip_tac >>
      drule gas_marked_path_exec >> strip_tac >> drule gas_path_normal >> simp[]) >>
-  `?ff HG tf u.
-    gas_marked_exec_ptr (cx_dead H cx) (ctx,fn) PG
+  `?ff H tf u.
+    gas_marked_exec_ptr (cx_dead cx) (ctx,fn) PG
       (eval_stmt cx (Assign (BaseTarget
         (AttributeTarget (TopLevelNameTarget (src,id)) fld)) e))
-      (es,s0,G0,tn0) marks (INL ()) ff HG tf (OK u) /\
-    stmt_post H ctx fn cx lctx cenv cenv sa sb s0 (INL ()) ff u /\
-    ghost_inv H d cenv cx ff HG tf u /\
+      (es,s0,G0,tn0) marks (INL ()) ff H tf (OK u) /\
+    stmt_post ctx fn cx lctx cenv cenv sa sb es s0 (INL ()) ff u /\
+    ghost_inv d cenv cx ff H tf u /\
     (!x. not_fresh_at sa x ==>
-      FLOOKUP HG x = FLOOKUP G0 x /\ op_taint tf (Var x) = op_taint tn0 (Var x))` by
+      FLOOKUP H x = FLOOKUP G0 x /\ op_taint tf (Var x) = op_taint tn0 (Var x))` by
     (irule assign_base_attr_storage_normal_ptr >> simp[] >>
      (conj_tac >- metis_tac[]) >>
      goal_assum (drule_at (Pat `gas_marked_exec_ptr _ _ _ _ _ _ _ _ _ _ _`)) >>
      simp[] >> metis_tac[]) >>
-  qexistsl_tac [`INL ()`,`ff`,`HG`,`tf`,`OK u`] >> simp[] >>
+  qexistsl_tac [`INL ()`,`ff`,`H`,`tf`,`OK u`] >> simp[] >>
   disj1_tac >> fs[stmt_post_def] >>
   simp[ghost_inv_gas_obs] >> metis_tac[]
 QED

@@ -10,7 +10,7 @@ Ancestors
   ctorDeployFrame
   compileVyper compilePhasesProps codegen e2eProducers e2eComposition
   o1PipelineCorrect o1PassContract codegenCorrectness passSimulationDefs
-  lowerDloadDefs e2eEntry gasSummary
+  lowerDloadDefs e2eEntry gasSummary asmOptimizer
 
 (* A successful compilation exposes the deployment unit's phases. *)
 Theorem compile_vyper_deploy_phases:
@@ -28,14 +28,15 @@ Proof
   goal_assum $ drule_at Any >> gvs[]
 QED
 
-Theorem gas_variant_code_layout_valid[local]:
+Theorem gas_variant_code_layout_valid:
   gas_variant si so /\ code_layout_valid so ==> code_layout_valid si
 Proof
   rw[gas_variant_def] >> qpat_x_assum `so = _` SUBST_ALL_TAC >>
   fs[code_layout_valid_def]
 QED
 
-(* TOP-LEVEL: PLAN 5.11, D28, section 9. Proved from the deployment pieces
+(* The -O none case of e2e_deploy_correctness: PLAN 5.11, D28, section 9.
+ * Proved from the deployment pieces
  * (ctorDeploy* theories) and the generic O1 pipeline and codegen stages.
  * Not on the logical dependency path of call correctness.
  *
@@ -55,11 +56,19 @@ QED
  * readings the EVM run produced. The theorem does not claim agreement for
  * malformed constructors excluded by constructor_args_encode. There is no
  * nested-creation frame_outcome claim and no Some-root oracle hypothesis.
+ *
+ * A constructor that halts (selfdestruct) makes load_contract succeed without
+ * installing the source at tx.target, so that INL is told apart by
+ * ALOOKUP am'.sources tx.target = NONE (deploy_state_rel has it NONE at
+ * entry). Then the EVM frame halts with empty output and deposits no code, and
+ * the accounts after the pending deletions, transient storage and logs agree
+ * as in a halting call (call_result_rel_at).
  *)
-Theorem e2e_deploy_correctness:
+Theorem e2e_deploy_correctness_identity:
   !policy tops deploy_bc runtime_bc am tx es.
     compile_vyper (K SOME) policy tops = SOME (deploy_bc, runtime_bc) /\
-    supported_program tops /\ constructor_call_free tops /\
+    supported_program tops /\ supported_program_deploy tops /\
+    constructor_call_free tops /\
     deploy_typing_ok tops am tx /\ deploy_storage_ok tops am tx /\
     deploy_state_rel tops deploy_bc am tx es /\
     ~(?t. runtime_bc = 0xEFw :: t)
@@ -69,6 +78,18 @@ Theorem e2e_deploy_correctness:
       (frame_resource_starved es r es' \/
        ?gobs. case load_contract NONE gobs am tx [(NONE, tops)] [] of
          INL (am', rqs) =>
+           if ALOOKUP am'.sources tx.target = NONE then
+             let cx = initial_evaluation_context
+                        ((tx.target, [(NONE, tops)]) :: am'.sources) am'.layouts tx NONE in
+             ?lgs.
+               frame_outcome es r es' NONE [] lgs /\
+               (lookup_account tx.target es'.rollback.accounts).code = [] /\
+               accounts_agree cx am'.accounts
+                 (process_deletions es'.rollback.toDelete es'.rollback.accounts) /\
+               transient_agree cx am'.tStorage es'.rollback.tStorage /\
+               logs_correspond (compiled_event_info tops) (type_env tops)
+                 tx.target am'.logs lgs
+           else
            let cx = initial_evaluation_context am'.sources am'.layouts tx NONE in
             ?section lgs.
               immutables_section_rel tops (account_immutables am' tx.target) section /\
@@ -169,6 +190,110 @@ Proof
   fs[deploy_result_rel_def]
 QED
 
+(* The final assembly optimizer's case, under the same hypotheses plus the
+   temporary exclusion of programs that read their own code. *)
+Theorem e2e_deploy_correctness_asm_opt:
+  !policy tops deploy_bc runtime_bc am tx es.
+    compile_vyper asm_opt_finalizer policy tops = SOME (deploy_bc, runtime_bc) /\
+    ~program_reads_self_code tops /\
+    supported_program tops /\ constructor_call_free tops /\
+    deploy_typing_ok tops am tx /\ deploy_storage_ok tops am tx /\
+    deploy_state_rel tops deploy_bc am tx es /\
+    ~(?t. runtime_bc = 0xEFw :: t)
+    ==>
+    ?r es'.
+      run_call es = SOME (r, es') /\
+      (frame_resource_starved es r es' \/
+       ?gobs. case load_contract NONE gobs am tx [(NONE, tops)] [] of
+         INL (am', rqs) =>
+           let cx = initial_evaluation_context am'.sources am'.layouts tx NONE in
+            ?section lgs.
+              immutables_section_rel tops (account_immutables am' tx.target) section /\
+              frame_outcome es r es' NONE (runtime_bc ++ section) lgs /\
+              (lookup_account tx.target es'.rollback.accounts).code = runtime_bc ++ section /\
+             (!a. a <> tx.target ==>
+                  lookup_account a es'.rollback.accounts =
+                  lookup_account a am'.accounts) /\
+             (lookup_account tx.target es'.rollback.accounts) with code := [] =
+             (lookup_account tx.target am'.accounts) with
+               <| code := [];
+                  storage := (lookup_account tx.target es'.rollback.accounts).storage |> /\
+             storage_agree
+               (storage_dead cx F (lookup_account tx.target am'.accounts).storage)
+               (lookup_account tx.target am'.accounts).storage
+               (lookup_account tx.target es'.rollback.accounts).storage /\
+             transient_agree cx am'.tStorage es'.rollback.tStorage /\
+             logs_correspond (compiled_event_info tops) (type_env tops)
+               tx.target am'.logs lgs
+       | INR (AssertException s) =>
+           ?exc out lgs. frame_outcome es r es' (SOME exc) out lgs /\
+                         (exc = Reverted \/ s = "UNREACHABLE")
+       | INR (Error e) =>
+           unspecified_behaviour_exempt tops e \/
+           ?exc out lgs. frame_outcome es r es' (SOME exc) out lgs
+       | INR BreakException => F
+       | INR ContinueException => F
+       | INR (ReturnException _) => F)
+Proof
+  cheat
+QED
+
+(* TOP-LEVEL: one theorem over the accepted finalizers (Python's -O none and
+   O1 final assembly).  The optimizer's case excludes, for now, programs that
+   read their own code. *)
+Theorem e2e_deploy_correctness:
+  !fin policy tops deploy_bc runtime_bc am tx es.
+    fin IN accepted_finalizers /\
+    (fin = asm_opt_finalizer ==> ~program_reads_self_code tops) /\
+    compile_vyper fin policy tops = SOME (deploy_bc, runtime_bc) /\
+    supported_program tops /\ supported_program_deploy tops /\
+    constructor_call_free tops /\
+    deploy_typing_ok tops am tx /\ deploy_storage_ok tops am tx /\
+    deploy_state_rel tops deploy_bc am tx es /\
+    ~(?t. runtime_bc = 0xEFw :: t)
+    ==>
+    ?r es'.
+      run_call es = SOME (r, es') /\
+      (frame_resource_starved es r es' \/
+       ?gobs. case load_contract NONE gobs am tx [(NONE, tops)] [] of
+         INL (am', rqs) =>
+           let cx = initial_evaluation_context am'.sources am'.layouts tx NONE in
+            ?section lgs.
+              immutables_section_rel tops (account_immutables am' tx.target) section /\
+              frame_outcome es r es' NONE (runtime_bc ++ section) lgs /\
+              (lookup_account tx.target es'.rollback.accounts).code = runtime_bc ++ section /\
+             (!a. a <> tx.target ==>
+                  lookup_account a es'.rollback.accounts =
+                  lookup_account a am'.accounts) /\
+             (lookup_account tx.target es'.rollback.accounts) with code := [] =
+             (lookup_account tx.target am'.accounts) with
+               <| code := [];
+                  storage := (lookup_account tx.target es'.rollback.accounts).storage |> /\
+             storage_agree
+               (storage_dead cx F (lookup_account tx.target am'.accounts).storage)
+               (lookup_account tx.target am'.accounts).storage
+               (lookup_account tx.target es'.rollback.accounts).storage /\
+             transient_agree cx am'.tStorage es'.rollback.tStorage /\
+             logs_correspond (compiled_event_info tops) (type_env tops)
+               tx.target am'.logs lgs
+       | INR (AssertException s) =>
+           ?exc out lgs. frame_outcome es r es' (SOME exc) out lgs /\
+                         (exc = Reverted \/ s = "UNREACHABLE")
+       | INR (Error e) =>
+           unspecified_behaviour_exempt tops e \/
+           ?exc out lgs. frame_outcome es r es' (SOME exc) out lgs
+       | INR BreakException => F
+       | INR ContinueException => F
+       | INR (ReturnException _) => F)
+Proof
+  rpt gen_tac >> strip_tac >>
+  `fin = K SOME \/ fin = asm_opt_finalizer` by fs[accepted_finalizers_def] >>
+  pop_assum strip_assume_tac >> pop_assum SUBST_ALL_TAC
+  >- (drule_all e2e_deploy_correctness_identity >> simp[])
+  >> `~program_reads_self_code tops` by fs[] >>
+  drule_all e2e_deploy_correctness_asm_opt >> simp[]
+QED
+
 (* Typed kernel schema gate. This is an ML check, not a proved alias, and adds
  * no theorem dependency. The clean result-case definition must expand to
  * precisely the literal 5.11 conclusion above, including its explicit failure
@@ -178,9 +303,12 @@ QED
 val savedDeploymentAdmission = DB.fetch "e2eDeployCorrectness" "e2e_deploy_correctness";
 val _ =
   let
-    val expected = ``!policy tops deploy_bc runtime_bc am tx es.
-      compile_vyper (K SOME) policy tops = SOME (deploy_bc,runtime_bc) /\
-      supported_program tops /\ constructor_call_free tops /\
+    val expected = ``!fin policy tops deploy_bc runtime_bc am tx es.
+      fin IN accepted_finalizers /\
+      (fin = asm_opt_finalizer ==> ~program_reads_self_code tops) /\
+      compile_vyper fin policy tops = SOME (deploy_bc,runtime_bc) /\
+      supported_program tops /\ supported_program_deploy tops /\
+      constructor_call_free tops /\
       deploy_typing_ok tops am tx /\ deploy_storage_ok tops am tx /\
       deploy_state_rel tops deploy_bc am tx es /\
       ~(?t. runtime_bc = 0xEFw :: t) ==>

@@ -163,7 +163,6 @@ Theorem copy_buffer_expr_post_physical[local]:
     evaluate_type (get_tenv cx) (post_value_type cenv e) = SOME tv /\
     val_wf tv v /\ val_in_memory tv v (w2n w) s.vs_memory /\
     stmt_state_rel H ctx func cenv cx es' s /\
-    storage_well_formed_on cx es' (FST H) /\
     eval_operand op s = SOME w /\
     FLOOKUP s.vs_allocas aid = SOME (w2n w,sz) /\
     sa.cs_next_id <= aid /\ aid < sb.cs_next_id /\
@@ -206,7 +205,6 @@ Theorem copy_buffer_expr_post:
     evaluate_type (get_tenv cx) (expr_type e) = SOME tv /\
     val_wf tv v /\ val_in_memory tv v (w2n w) s.vs_memory /\
     stmt_state_rel H ctx func cenv cx es' s /\
-    storage_well_formed_on cx es' (FST H) /\
     eval_operand op s = SOME w /\
     FLOOKUP s.vs_allocas aid = SOME (w2n w,sz) /\
     sa.cs_next_id <= aid /\ aid < sb.cs_next_id /\
@@ -302,7 +300,6 @@ Proof
      rpt strip_tac >>
      qpat_x_assum `!off len. _ ==> mem_bytes_at off len z.vs_memory = _` irule >>
      fs[loweringStateRelDefsTheory.regions_disjoint_def]) >>
-  `storage_well_formed_on cx es' (FST H)` by fs[vv_post_def] >>
   drule copy_static_fields >> strip_tac >>
   irule copy_buffer_expr_post_physical >>
   simp[] >> conj_tac
@@ -625,13 +622,11 @@ Theorem immutable_holds_memory:
   val_in_memory tv v (w2n a) uu.vs_memory
 Proof
   rw[immutable_holds_def, stmt_state_rel_def, state_rel_def,
-     immutables_rel_def, read_result_def, return_def]
-  >~ [`sub_layout`]
-  >- (gvs[] >> first_x_assum drule_all >> strip_tac >>
-      gvs[sub_layout_def] >> first_x_assum drule >> strip_tac >>
-      `off + k < dimword (:256)` by decide_tac >>
-      gvs[arithmeticTheory.ADD_COMM]) >>
-  `off + k < dimword (:256)` by decide_tac >> gvs[]
+     immutables_rel_def, read_result_def, return_def] >>
+  gvs[] >> first_x_assum drule_all >> strip_tac >>
+  gvs[sub_layout_def] >> first_x_assum drule >> strip_tac >>
+  `off + k < dimword (:256)` by decide_tac >>
+  gvs[arithmeticTheory.ADD_COMM]
 QED
 
 Theorem immutable_holds_alloca_disjoint:
@@ -1438,7 +1433,7 @@ Resume unwrap_ctor_code_copy_base_sim[ctor_suffix]:
   `regions_disjoint (w2n a) (type_memory_size tv)
       (w2n w) (type_memory_size tv)` by
     (irule immutable_holds_alloca_disjoint >>
-     qexistsl_tac [`H`, `cenv`, `ctx`, `cx`, `es'`, `func`] >>
+     qexistsl_tac [`cenv`, `ctx`, `cx`, `es'`, `func`] >>
      goal_assum (drule_at Any) >> simp[mk_inst_def] >>
      qexistsl_tac [`t`, `u`, `v`] >> simp[]) >>
   qpat_assum `frag_exec ctx sm mid _ _ R` (mp_then Any mp_tac frag_exec_then) >>
@@ -1642,7 +1637,7 @@ Resume runtime_code_copy_run_post_physical[post]:
   `sm.cs_next_id < cs''.cs_next_id` by decide_tac >>
   fs[copy_runtime_frame_def] >>
   gvs[] >>
-  drule_at (Pat `vv_post _ _ _ _ _ _ _ _ _ _ _ _ _ _`) copy_buffer_post_transport_physical >>
+  drule_at (Pat `vv_post H _ _ _ _ _ _ _ _ _ _ _ _ _`) copy_buffer_post_transport_physical >>
   disch_then (drule_at (Pat `FLOOKUP _ _ = SOME _`)) >>
   disch_then (drule_at (Pat `copy_static _ = _`)) >>
   disch_then (drule_at (Pat `!x. not_fresh_at _ x ==> lookup_var x _ = lookup_var x _`)) >>
