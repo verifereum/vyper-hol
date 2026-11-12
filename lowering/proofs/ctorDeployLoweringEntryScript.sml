@@ -27,7 +27,7 @@ Theorem deploy_ctor_entry_reaches_body:
     nr' = nr /\ body' = body /\
     local_ptrs_reserved cenv sa /\ ~block_is_terminated sa /\
     ?s0.
-      stmt_state_rel dunit.cu_context func cenv (deploy_evaluation_context tops am tx)
+      stmt_state_rel H dunit.cu_context func cenv (deploy_evaluation_context tops am tx)
         (es0 with outcomes := SOME vs.vs_outcomes) s0 /\
       ~s0.vs_halted /\ s0.vs_current_bb = sa.cs_current_bb /\
       s0.vs_inst_idx = LENGTH sa.cs_current_insts /\

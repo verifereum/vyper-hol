@@ -524,7 +524,7 @@ Theorem deploy_frame_source_start_setup:
 Proof
   rpt gen_tac >> strip_tac >>
   `~nr` by metis_tac[deploy_ctor_not_nonreentrant] >>
-  gvs[deploy_source_ok_def, deploy_typing_ok_def, deploy_ctor_start_def] >>
+  gvs[deploy_source_ok_def, deploy_typing_ok_constants_ready, deploy_ctor_start_def] >>
   qpat_x_assum `ignore_bind _ _ _ = _` mp_tac >>
   simp[lock_if_nr_def, ignore_bind_def, bind_def, return_def, AllCaseEqs()] >>
   strip_tac >> gvs[] >>
@@ -1144,7 +1144,7 @@ Theorem deploy_ctor_body_inv:
        st_epilogue,st_final,func) ==>
     body_inv tops dunit.cu_context cenv (deploy_evaluation_context tops am tx)
 Proof
-  rpt gen_tac >> simp[deploy_source_ok_def, deploy_typing_ok_def,
+  rpt gen_tac >> simp[deploy_source_ok_def, deploy_typing_ok_constants_ready,
                       deploy_ctor_code_def] >> strip_tac >>
   `body_inv tops dunit.cu_context cenv0 (deploy_evaluation_context tops am tx)` by
     (irule deploy_frame_package_body_inv >> simp[] >>

@@ -4,7 +4,7 @@ Ancestors
  ctorDeployLoweringEntryLocalBounds ctorDeployLoweringEntryCoordinatedDeployment
  ctorDeployLoweringEntryInputs ctorDeployLoweringEntryPrefix
  ctorDeployLoweringEntryRegisterRun ctorDeployLoweringEntryTransport
- ctorDeployLoweringDefs ctorDeployDefs compileEnv compileVyper
+ ctorDeployLoweringDefs ctorDeployDefs immSectionDead compileEnv compileVyper
  abiDecoderLoop ctorDeployMemoryFrontier
  ctorDeployLoweringEntrySelection e2eDeployDefs ctorDeployInitcode
  allocaFrontierBound finite_map venomState venomInst moduleLoweringProps
@@ -425,7 +425,7 @@ Proof
  drule deploy_ctor_entry_immutable_layout >> strip_tac >>
  drule deploy_ctor_static_tables >> strip_tac >>
  `contract_namespaces_ok T [(NONE,tops)]` by
-   (fs[deploy_typing_ok_def] >>
+   (fs[deploy_typing_ok_constants_ready] >>
     qpat_x_assum `check_contract T _ _ _ = _`
       (mp_tac o MATCH_MP check_contract_namespaces_ok) >> simp[]) >>
  `ALL_DISTINCT (FLAT (MAP (toplevel_vtype_keys_toplevel (NONE:num option)) tops)) /\

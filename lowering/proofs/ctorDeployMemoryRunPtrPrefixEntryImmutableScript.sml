@@ -2,7 +2,7 @@
 Theory ctorDeployMemoryRunPtrPrefixEntryImmutable
 Ancestors
   loweringStateRelDefs valueEncodingDefs
-  ctorDeployLoweringDefs ctorDeployDefs e2eDeployDefs
+  ctorDeployLoweringDefs ctorDeployDefs immSectionDead e2eDeployDefs
   ctorDeployLoweringEntryTransport ctorDeployLoweringEntrySourceFrame
   compileVyper vyperInterpreter moduleLowering
   immutableEncoding immutableEncodingProofs immutableSectionRel immutableValue
@@ -285,7 +285,7 @@ Theorem prefix_entry_initialized_zero_section[local]:
 Proof
   strip_tac >>
   `?art. check_contract T am.layouts tx.target [(NONE,tops)] = SOME art` by
-    gvs[deploy_typing_ok_def] >>
+    gvs[deploy_typing_ok_constants_ready] >>
   pop_assum strip_assume_tac >>
   irule prefix_entry_zero_section >> rpt gen_tac >> strip_tac >>
   `MEM (VariableDecl vis Immutable name ty slot) tops` by simp[] >>

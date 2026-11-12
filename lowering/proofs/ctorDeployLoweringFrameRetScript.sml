@@ -133,7 +133,7 @@ Theorem compile_constructor_epilogue_padded_gas_path:
   compile_constructor_epilogue rt cap imm st = ((),st') /\
   fn_has_code st st' func /\ fn_inst_ids_distinct func /\
   ~block_is_terminated st /\
-  stmt_state_rel ctx func cenv cx es s /\ cenv.ce_is_ctor /\
+  stmt_state_rel H ctx func cenv cx es s /\ cenv.ce_is_ctor /\
   rt + cap < dimword(:256) /\
   (cap <> 0 ==> cenv.ce_imm_alloca = SOME imm /\
     (!x. imm = Var x ==> not_fresh_at st x)) /\
@@ -238,7 +238,7 @@ Theorem constructor_exit_gas_path:
   (nr ==> ut /\ storage_layout_safe cx /\ cx.nonreentrant_slot = SOME nkey) /\
   (cap <> 0 ==> cenv.ce_imm_alloca = SOME imm /\
     (!x. imm = Var x ==> not_fresh_at st_epilogue x)) /\
-  stmt_state_rel ctx func body_cenv cx es s /\ ~s.vs_halted /\
+  stmt_state_rel H ctx func body_cenv cx es s /\ ~s.vs_halted /\
   s.vs_current_bb = st_exit.cs_current_bb /\ s.vs_inst_idx = 0 ==>
   ?final. gas_path ctx func s 0 (Halt final) /\
     constructor_return_q func cenv cx rt cap nr nkey NoneV
@@ -253,7 +253,7 @@ Proof
     else es` >>
   qabbrev_tac `s1 = (if nr then tstore (n2w nkey) 0w s else s) with
     vs_inst_idx := LENGTH st_epilogue.cs_current_insts` >>
-  `stmt_state_rel ctx func body_cenv cx es1 s1` by
+  `stmt_state_rel H ctx func body_cenv cx es1 s1` by
     (simp[Abbr `s1`, stmt_state_rel_inst_idx] >>
      Cases_on `nr` >> gvs[Abbr `es1`] >>
      irule constructor_unlock_stmt_state_rel >> simp[]) >>
@@ -272,7 +272,7 @@ Proof
   drule_all compile_constructor_epilogue_padded_gas_path >> strip_tac >>
   qexists_tac `final` >> conj_tac
   >- (drule_all gas_path_then >> simp[]) >>
-  `state_rel func cenv cx (es1 with scopes := []) s1` by
+  `state_rel H func cenv cx (es1 with scopes := []) s1` by
     (irule constructor_exit_state_rel >> qexists `body_cenv` >>
      gvs[stmt_state_rel_def]) >>
   `(if nr then es0 with tStorage := (cx.txn.target =+
@@ -311,7 +311,7 @@ Proof
   pairarg_tac >> simp[] >> strip_tac >> gvs[] >>
   rename1 `emit_inst _ _ _ sa = (_, sj)` >>
   drule emit_inst_extends >> strip_tac >>
-  `stmt_state_rel ctx func body_cenv cx es (jump_to st_exit.cs_current_bb s0)` by
+  `stmt_state_rel H ctx func body_cenv cx es (jump_to st_exit.cs_current_bb s0)` by
     simp[stmt_state_rel_jump_to] >>
   `?final. gas_path ctx func (jump_to st_exit.cs_current_bb s0) 0 (Halt final) /\
     constructor_return_q func cenv cx rt cap nr nkey NoneV

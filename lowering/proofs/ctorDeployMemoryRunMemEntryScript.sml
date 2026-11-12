@@ -56,7 +56,7 @@ Theorem deploy_ctor_entry_run_mem:
     ==>
     cenv.ce_return_buf = NONE /\
     ?s0.
-      stmt_state_rel dunit.cu_context func cenv
+      stmt_state_rel H dunit.cu_context func cenv
         (deploy_evaluation_context tops am tx)
         (es0 with outcomes := SOME vs.vs_outcomes) s0 /\
       alloca_history func s0 /\

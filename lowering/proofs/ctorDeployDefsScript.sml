@@ -131,12 +131,14 @@ Definition deploy_entry_state_def:
     entry_venom_state prog cplan es with vs_alloca_next := imm_len tops
 End
 
-(* The source-side hypotheses of e2e_deploy_correctness. *)
+(* The source-side hypotheses of e2e_deploy_correctness that hold at every
+   gas filling; the finite storage guard deploy_storage_ok depends on the
+   filling, so the unit theorem states it per filling. *)
 Definition deploy_source_ok_def:
   deploy_source_ok tops am tx <=>
     supported_program tops /\ supported_program_deploy tops /\
     constructor_call_free tops /\
-    deploy_typing_ok tops am tx /\ deploy_storage_ok tops am tx
+    deploy_typing_ok tops am tx
 End
 
 (* The deployment's dead bytes, fixed before the run (so independent of its
@@ -145,14 +147,12 @@ End
    and the dead bytes of the immutables section the run returns after the
    runtime code.  vs_immutables are not observed, so all of them are dead. *)
 Definition deploy_dead_def:
-  deploy_dead tops runtime_bc am tx =
-    let cx = initial_evaluation_context ((tx.target, [(NONE, tops)]) :: am.sources)
-               am.layouts tx NONE in
+  deploy_dead H tops runtime_bc am tx =
     <| d_stor := (\a st. if a = tx.target
-                         then {(k,b) | storage_dead cx F st (w2n k) b}
+                         then {(k,b) | storage_dead H F st (w2n k) b}
                          else {});
        d_trans := (\a st. if a = tx.target
-                          then {(k,b) | storage_dead cx T st (w2n k) b}
+                          then {(k,b) | storage_dead H T st (w2n k) b}
                           else {});
        d_imm := K UNIV;
        d_ret := (\r. {i | LENGTH runtime_bc <= i /\
@@ -174,7 +174,7 @@ End
    and logs. Failures abort; a source Error may also halt
    only when it is exempt. *)
 Definition deploy_venom_result_rel_def:
-  deploy_venom_result_rel tops runtime_bc tx
+  deploy_venom_result_rel H tops runtime_bc tx
     (src : (abstract_machine # call_request list) + exception) vres <=>
     case (src, vres) of
       (INL (am', rqs), Halt ss) =>
@@ -193,6 +193,18 @@ Definition deploy_venom_result_rel_def:
             tx.target am'.logs ss.vs_logs
         else
         let cx = initial_evaluation_context am'.sources am'.layouts tx NONE in
+        if ALOOKUP am'.sources tx.target = NONE then
+          (* The constructor halted (selfdestruct): no source installed, the
+           * unit halts with empty returndata, and the target is queued for
+           * deletion on both sides. *)
+          ss.vs_returndata = [] /\
+          MEM tx.target ss.vs_pending_deletions /\
+          accounts_agree H cx am'.accounts
+            (process_deletions ss.vs_pending_deletions ss.vs_accounts) /\
+          transient_agree H cx am'.tStorage ss.vs_transient /\
+          logs_correspond (compiled_event_info tops) (type_env tops)
+            tx.target am'.logs ss.vs_logs
+        else
         ?section.
           ss.vs_returndata = runtime_bc ++ section /\
           immutables_section_rel tops (account_immutables am' tx.target) section /\
@@ -203,10 +215,10 @@ Definition deploy_venom_result_rel_def:
             <| code := [];
                storage := (lookup_account tx.target ss.vs_accounts).storage |> /\
           storage_agree
-            (storage_dead cx F (lookup_account tx.target am'.accounts).storage)
+            (storage_dead H F (lookup_account tx.target am'.accounts).storage)
             (lookup_account tx.target am'.accounts).storage
             (lookup_account tx.target ss.vs_accounts).storage /\
-          transient_agree cx am'.tStorage ss.vs_transient /\
+          transient_agree H cx am'.tStorage ss.vs_transient /\
           logs_correspond (compiled_event_info tops) (type_env tops)
             tx.target am'.logs ss.vs_logs
     | (INR (AssertException s), Abort Revert_abort _) => T
@@ -217,7 +229,7 @@ Definition deploy_venom_result_rel_def:
 End
 
 Theorem deploy_venom_result_rel_terminates:
-  deploy_venom_result_rel tops runtime_bc tx src res ==> terminates res
+  deploy_venom_result_rel H tops runtime_bc tx src res ==> terminates res
 Proof
   Cases_on `res` >> simp[terminates_def] >>
   Cases_on `src`

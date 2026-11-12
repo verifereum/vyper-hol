@@ -84,7 +84,7 @@ Theorem deploy_ptr_source_variable_names_distinct[local]:
   deploy_source_ok tops am tx ==>
   ALL_DISTINCT (FLAT (MAP (toplevel_vtype_keys_toplevel (NONE:num option)) tops))
 Proof
-  simp[deploy_source_ok_def, deploy_typing_ok_def] >>
+  simp[deploy_source_ok_def, deploy_typing_ok_constants_ready] >>
   rpt strip_tac >>
   qpat_x_assum `check_contract T _ _ _ = _` mp_tac >>
   simp[check_contract_def, contract_namespaces_ok_def,

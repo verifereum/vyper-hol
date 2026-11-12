@@ -20,6 +20,15 @@ Proof
   simp[state_rel_frame_result] >> metis_tac[]
 QED
 
+Theorem pending_frame_trace_preserving:
+  (!st res st'. f st = (res,st') ==>
+     st' = st with storage_trace := st'.storage_trace) ==>
+  state_rel_frame (\(s:evaluation_state) t. t.pending_deletions = s.pending_deletions) f
+Proof
+  simp[state_rel_frame_result] >> rpt strip_tac >>
+  first_x_assum drule >> disch_then SUBST1_TAC >> simp[]
+QED
+
 Theorem pending_frame_reads:
   state_rel_frame (\(s:evaluation_state) t. t.pending_deletions = s.pending_deletions)
     (read_place cx p) /\
@@ -40,10 +49,18 @@ Theorem pending_frame_reads:
   state_rel_frame (\(s:evaluation_state) t. t.pending_deletions = s.pending_deletions)
     (array_iterator_results cx ty res)
 Proof
-  rpt conj_tac >> irule pending_frame_state_preserving >>
-  metis_tac[read_place_state, read_result_state, read_results_state,
-    place_type_value_state, lookup_global_state, get_place_state,
-    extend_place_state, select_result_state, array_iterator_results_state]
+  rpt conj_tac
+  >- (irule pending_frame_state_preserving >> metis_tac[read_place_state])
+  >- (irule pending_frame_state_preserving >> metis_tac[read_result_state])
+  >- (irule pending_frame_state_preserving >> metis_tac[read_results_state])
+  >- (irule pending_frame_state_preserving >>
+      metis_tac[place_type_value_state])
+  >- (irule pending_frame_trace_preserving >> metis_tac[lookup_global_state])
+  >- (irule pending_frame_state_preserving >> metis_tac[get_place_state])
+  >- (irule pending_frame_trace_preserving >> metis_tac[extend_place_state])
+  >- (irule pending_frame_trace_preserving >> metis_tac[select_result_state]) >>
+  irule pending_frame_state_preserving >>
+  metis_tac[array_iterator_results_state]
 QED
 
 Theorem pending_frame_primitives:
@@ -196,12 +213,12 @@ Theorem pending_frame_transfer_lock:
 Proof
   simp[state_rel_frame_def, transfer_value_def,
     acquire_nonreentrant_lock_def, get_accounts_def, update_accounts_def,
-    get_transient_storage_def, update_transient_def,
+    get_transient_storage_def, update_transient_def, record_storage_event_def,
     bind_def, ignore_bind_def, return_def, raise_def, check_def,
     type_check_def, assert_def, AllCaseEqs()] >> rpt strip_tac >>
   rpt (BasicProvers.PURE_CASE_TAC >>
     gvs[return_def, raise_def, update_accounts_def, update_transient_def,
-        get_accounts_def, get_transient_storage_def,
+        get_accounts_def, get_transient_storage_def, record_storage_event_def,
         bind_def, ignore_bind_def, check_def, assert_def, AllCaseEqs()])
 QED
 
@@ -248,15 +265,28 @@ Proof
   first_x_assum (qspec_then `st` mp_tac) >> simp[]
 QED
 
+Theorem pending_module_constants_trace[local]:
+  !mods am am_c obs.
+  evaluate_module_constants_trace cx am addr mods = (SOME am_c, obs) ==>
+  am_c.pending_deletions = am.pending_deletions
+Proof
+  Induct >> simp[evaluate_module_constants_trace_def] >>
+  rpt gen_tac >> PairCases_on `h` >>
+  simp[evaluate_module_constants_trace_def] >> strip_tac >>
+  pairarg_tac >> gvs[AllCaseEqs()] >>
+  pairarg_tac >> gvs[] >>
+  first_x_assum drule >> simp[merge_constants_def]
+QED
+
 Theorem pending_module_constants:
   !mods am am_c.
   evaluate_module_constants cx am addr mods = SOME am_c ==>
   am_c.pending_deletions = am.pending_deletions
 Proof
-  Induct >> simp[evaluate_module_constants_def] >>
-  rpt gen_tac >> PairCases_on `h` >>
-  simp[evaluate_module_constants_def, AllCaseEqs()] >> strip_tac >>
-  first_x_assum drule >> simp[merge_constants_def]
+  rpt gen_tac >> simp[evaluate_module_constants_def] >>
+  Cases_on `evaluate_module_constants_trace cx am addr mods` >>
+  simp[] >> strip_tac >> gvs[] >>
+  drule pending_module_constants_trace >> simp[]
 QED
 
 Theorem pending_all_constants:

@@ -104,7 +104,7 @@ Theorem ctor_task_checked_namespaces:
   contract_namespaces_ok T [((NONE:num option),tops)] /\
   ALL_DISTINCT (FLAT (MAP (type_def_keys_toplevel (NONE:num option)) tops))
 Proof
-  simp[deploy_source_ok_def, deploy_typing_ok_def] >> strip_tac >>
+  simp[deploy_source_ok_def, deploy_typing_ok_constants_ready] >> strip_tac >>
   `contract_namespaces_ok T [((NONE:num option),tops)]` by
     gvs[vyperTypeContractTheory.check_contract_def] >>
   simp[] >> irule contract_namespaces_ok_module_type_def_keys >>
@@ -122,7 +122,7 @@ Proof
   strip_tac >>
   `params_ok (type_env_all_modules [(NONE,tops)]) args` by
     (irule ctor_task_checked_params >>
-     gvs[deploy_source_ok_def, deploy_typing_ok_def] >>
+     gvs[deploy_source_ok_def, deploy_typing_ok_constants_ready] >>
      conj_tac >- (qexistsl [`tx.target`, `deploy_art`, `T`, `am.layouts`] >> simp[]) >>
      goal_assum (drule_at Any) >> simp[]) >>
   gvs[vyperTypeContractTheory.params_ok_def,

@@ -29,7 +29,7 @@ QED
 
 Theorem deploy_expr_exit_result[local]:
   expr_exit (INR e : unit + exception) r ==>
-  deploy_venom_result_rel tops runtime_bc tx (INR e) r
+  deploy_venom_result_rel HS tops runtime_bc tx (INR e) r
 Proof
   Cases_on `r` >> simp[expr_exit_def] >>
   Cases_on `e` >> simp[expr_exit_def, deploy_venom_result_rel_def] >>
@@ -65,7 +65,7 @@ Theorem deploy_unit_execution_correct:
       deploy_source_exempt tops
         (load_contract NONE (gas_explicit marks vs.vs_gas_readings) am tx
            [(NONE, tops)] []) \/
-      ?fuel. deploy_venom_result_rel tops runtime_bc tx
+      ?fuel. deploy_venom_result_rel HS tops runtime_bc tx
                (load_contract NONE (gas_explicit marks vs.vs_gas_readings) am tx
                   [(NONE, tops)] [])
                (run_context fuel dunit.cu_context vs)

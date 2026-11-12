@@ -187,7 +187,7 @@ Theorem deploy_no_ctor_run_ptr_safe:
     lookup_function "__deploy" dunit.cu_context.ctx_functions = SOME fn /\
     fn_entry_label fn = SOME lbl
     ==>
-    !fuel. ptr_safe_blocks (deploy_dead tops runtime_bc am tx) (imm_len tops)
+    !fuel. ptr_safe_blocks (deploy_dead HS tops runtime_bc am tx) (imm_len tops)
              fuel dunit.cu_context fn [] FEMPTY entry_taint
              (vs with <| vs_prev_bb := NONE; vs_current_bb := lbl;
                          vs_inst_idx := 0 |>)

@@ -86,7 +86,7 @@ Proof
          supportedDeclsTheory.supported_headers_module_consts_env] >>
      gvs[constSubstTheory.subst_consts_fn_empty]) >>
   `?art. check_contract T am.layouts tx.target [(NONE,tops)] = SOME art` by
-    fs[deploy_source_ok_def, deploy_typing_ok_def] >>
+    fs[deploy_source_ok_def, deploy_typing_ok_constants_ready] >>
   `check_toplevel_decl [(NONE,tops)] art NONE
      (FunctionDecl Deploy cf0 cf1 cf2 cf3 cf4 cf5 cf6 cf7)` by
     (qpat_x_assum `check_contract _ _ _ _ = _` mp_tac >>
