@@ -6,7 +6,10 @@ Theory calldataExact
 Ancestors
   vyperCalldata calldataRecursiveExecution calldataBulkLive
   abiDecoderContract abiDecoderBulk calldataBulkLeaf abiDecoderFrameCompose
-  calldataDynOwned arithmetic list
+  calldataDynOwned arithmetic list calldataRegistration abiValueEncoding
+  calldataFiniteTransport calldataWordLive calldataSourceWord
+  calldataSourceCorrespondence calldataReconstruction abiCallerAllocation
+  abiDecoderCoherence abiDecoderFrame exprLowering vyperTyping valueEncodingDefs compileEnv
 
 Theorem calldata_bulk_live_frag_mem_mod_guard:
   compile_abi_decode_to_buf dst src CALLDATALOAD (Lit 0w) (Lit 0w)
@@ -58,6 +61,112 @@ Proof
   drule_all calldata_bulk_rejected_live_mod >> strip_tac >>
   disj2_tac >> qexists_tac `t` >>
   simp[instIdxIndepTheory.eval_op_inst_idx]
+QED
+
+Theorem calldata_exact_word_owned_run:
+  abi_decoder_coherent ce env sf ty tv /\ is_word_type ty /\
+  compile_abi_decode_to_buf dst src CALLDATALOAD (Lit 0w) (Lit 0w)
+    (type_to_abi_dec_info sf ce ty) st = ((),last) /\
+  fn_has_code st last fn /\
+  eval_operand src initial = SOME p /\ eval_operand dst initial = SOME (n2w d) /\
+  abi_decoder_operand_live st.cs_next_var src /\
+  abi_decoder_operand_live st.cs_next_var dst /\
+  alloca_inv initial /\ alloca_frontier_inv ctx fn site initial /\
+  (!id q k. st.cs_next_id <= id /\ id < last.cs_next_id /\
+    FLOOKUP initial.vs_allocas id = SOME (q,k) ==>
+    k = 32 /\ q < dimword (:256) /\ q+32 <= initial.vs_alloca_next /\
+    ?ins. MEM ins (fn_insts fn) /\ ins.inst_id = id /\
+      ins.inst_opcode = ALLOCA /\ ins.inst_operands = [Lit 32w]) /\
+  FLOOKUP initial.vs_allocas oid = SOME (base_addr,cap) /\
+  (oid < st.cs_next_id \/ last.cs_next_id <= oid) /\
+  base_addr <= d /\ d+type_memory_size tv <= base_addr+cap /\
+  d+type_memory_size tv < dimword (:256) /\
+  ~initial.vs_halted /\ initial.vs_current_bb = st.cs_current_bb /\
+  initial.vs_inst_idx = LENGTH st.cs_current_insts ==>
+  (cd_decode F initial.vs_call_ctx.cc_calldata tv (w2n p) = NONE /\
+   ?fuel z. run_from fuel ctx fn initial = Abort Revert_abort z /\
+    mem_safe_run fuel ctx fn initial) \/
+  ?v x sc. cd_decode F initial.vs_call_ctx.cc_calldata tv (w2n p) = SOME x /\
+    ~v.vs_halted /\ v.vs_current_bb = last.cs_current_bb /\
+    v.vs_inst_idx = LENGTH last.cs_current_insts /\ value_has_type tv x /\
+    val_wf tv x /\ val_in_memory tv x d v.vs_memory /\
+    (!fuel r. run_from fuel ctx fn v = r /\ (!err. r <> Error err) ==>
+      ?fuel'. run_from fuel' ctx fn initial = r /\
+        (mem_safe_run fuel ctx fn v ==> mem_safe_run fuel' ctx fn initial)) /\
+    v.vs_call_ctx = initial.vs_call_ctx /\ v.vs_data_section = initial.vs_data_section /\
+    alloca_inv v /\ alloca_frontier_inv ctx fn site v /\
+    (!id q k. st.cs_next_id <= id /\ id < last.cs_next_id /\
+      FLOOKUP v.vs_allocas id = SOME (q,k) ==>
+      k = 32 /\ q < dimword (:256) /\ q+32 <= v.vs_alloca_next /\
+      ?ins. MEM ins (fn_insts fn) /\ ins.inst_id = id /\
+        ins.inst_opcode = ALLOCA /\ ins.inst_operands = [Lit 32w]) /\
+    initial.vs_alloca_next <= v.vs_alloca_next /\
+    (!id q k. FLOOKUP initial.vs_allocas id = SOME (q,k) ==>
+      FLOOKUP v.vs_allocas id = SOME (q,k)) /\
+    (!id. id < st.cs_next_id \/ last.cs_next_id <= id ==>
+      FLOOKUP v.vs_allocas id = FLOOKUP initial.vs_allocas id) /\
+    (!op. abi_decoder_operand_live st.cs_next_var op ==>
+      eval_operand op v = eval_operand op initial) /\
+    abi_decode_footprint_frame ((d,type_memory_size tv)::sc) initial v /\
+    (!q k. MEM (q,k) sc ==> ?id. st.cs_next_id <= id /\ id < last.cs_next_id /\
+      FLOOKUP v.vs_allocas id = SOME (q,k))
+Proof
+  disch_then (map_every assume_tac o CONJUNCTS) >>
+  `?c. type_to_abi_dec_info sf ce ty = DecPrimWord c` by
+    metis_tac[word_type_decoder_primitive] >>
+  drule abi_decoder_coherent_header >>
+  simp_tac bool_ss [abi_decoder_header_def] >> strip_tac >>
+  `type_memory_size tv = 32` by (irule abi_word_type_size >> metis_tac[]) >>
+  `!cd pos. cd_decode F cd tv pos = cd_word_value tv (cd_word cd pos)` by
+    (qpat_x_assum `evaluate_type env ty = SOME tv` mp_tac >>
+     qpat_x_assum `is_word_type ty` mp_tac >>
+     rpt (pop_assum kall_tac) >>
+     Cases_on `ty` >> simp[is_word_type_def, vyperValueTheory.evaluate_type_def, AllCaseEqs()] >>
+     rpt strip_tac >> gvs[is_word_type_def, cd_decode_def]) >>
+  `d+32 <= initial.vs_alloca_next` by
+    (irule abi_caller_allocation_end >> conj_tac >- first_assum ACCEPT_TAC >>
+     qexistsl_tac [`cap`,`oid`,`base_addr`] >> conj_tac
+     >- (qpat_x_assum `d + type_memory_size tv <= _` mp_tac >> asm_rewrite_tac[]) >>
+     first_assum ACCEPT_TAC) >>
+  `d < dimword (:256)` by
+    (qpat_x_assum `d + type_memory_size tv < _` mp_tac >>
+     asm_rewrite_tac[] >> decide_tac) >>
+  qpat_x_assum `compile_abi_decode_to_buf _ _ _ (Lit 0w) _ _ _ = _` mp_tac >>
+  asm_rewrite_tac[] >> disch_tac >>
+  drule_all calldata_word_live_frag_mem_guard >>
+  disch_then (qspec_then `ctx` assume_tac) >>
+  drule_all calldata_finite_fragment_run_guard >> strip_tac
+  >- (disj1_tac >> conj_tac
+      >- (drule_all calldata_coherent_word_rejects >>
+          simp[GSYM calldata_decode_load_word]) >>
+      qexistsl_tac [`fuel`,`z`] >> asm_rewrite_tac[]) >>
+  qpat_x_assum `(\t. _) t` (strip_assume_tac o BETA_RULE) >>
+  `cd_word_value tv (abi_decode_load CALLDATALOAD p initial) <> NONE` by
+    (drule_all calldata_coherent_word_accepts >> simp[]) >>
+  Cases_on `cd_word_value tv (abi_decode_load CALLDATALOAD p initial)`
+  >- metis_tac[] >>
+  rename1 `cd_word_value tv _ = SOME x` >>
+  `value_has_type tv x /\ typed_val_to_w256 tv x = abi_decode_load CALLDATALOAD p initial` by
+    (drule_all calldata_coherent_word_value >> metis_tac[]) >>
+  `val_wf tv x` by
+    (irule (cj 1 valueEncodingTypingTheory.value_has_type_val_wf) >> asm_rewrite_tac[]) >>
+  `val_in_memory tv x d t.vs_memory` by
+    (irule calldata_word_representation >> asm_rewrite_tac[] >>
+     qexistsl_tac [`env`,`ty`] >> asm_rewrite_tac[]) >>
+  disj2_tac >>
+  qpat_x_assum `frag_exec_mem _ _ _ _ _ _` kall_tac >>
+  qpat_x_assum `compile_abi_decode_to_buf _ _ _ (Lit 0w) _ _ _ = _` kall_tac >>
+  qexistsl_tac [`t`,`x`,`[]`] >>
+  asm_rewrite_tac[GSYM calldata_decode_load_word] >>
+  `alloca_inv t` by (irule calldata_alloca_inv_fields >> asm_rewrite_tac[] >>
+    qexists_tac `initial` >> asm_rewrite_tac[]) >>
+  `alloca_frontier_inv ctx fn site t` by
+    (irule calldata_alloca_frontier_inv_fields >> qexists_tac `initial` >> asm_rewrite_tac[]) >>
+  qpat_x_assum `abi_decode_frame _ _ _ _` mp_tac >>
+  simp_tac std_ss [abiDecoderContractTheory.abi_decode_frame_def,
+    abi_decode_footprint_frame_def, abi_footprint_disjoint_def] >>
+  strip_tac >> asm_rewrite_tac[] >>
+  simp_tac (srw_ss()) [] >> metis_tac[]
 QED
 
 Theorem calldata_exact_owned_run:
