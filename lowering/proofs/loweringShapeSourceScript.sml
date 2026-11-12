@@ -381,9 +381,14 @@ Theorem supported_program_raw_shape_free_program:
 Proof
   rpt gen_tac >> strip_tac >> REWRITE_TAC [raw_shape_free_program_def] >>
   rpt gen_tac >> strip_tac >>
-  drule supported_program_runtime_bodies_shape_ok >>
-  REWRITE_TAC [runtime_bodies_shape_ok_def] >>
-  disch_then drule_all >> strip_tac >> conj_tac
+  `~supported_stmts_expr_exists expr_shape_root body` by
+    (drule_all supported_program_function >> strip_tac >>
+     drule supported_function_body_shape >> simp[]) >>
+  `EVERY (\e. ~supported_expr_exists expr_shape_root e) dflts` by
+    (drule_all supported_program_defaults >>
+     rw[EVERY_MEM, supported_default_expression_def] >>
+     metis_tac[supported_expr_shape]) >>
+  conj_tac
   >- (strip_tac >>
       qpat_x_assum `~supported_stmts_expr_exists expr_shape_root _` mp_tac >>
       simp[] >> irule (CONJUNCT2 supported_stmt_expr_exists_mono) >>

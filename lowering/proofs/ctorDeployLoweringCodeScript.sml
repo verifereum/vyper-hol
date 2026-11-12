@@ -77,7 +77,14 @@ Theorem deploy_constructor_package_not_view:
 Proof
   rpt gen_tac >> strip_tac >> PairCases_on `cf` >>
   `MEM (FunctionDecl Deploy cf0 cf1 cf2 cf3 cf4 cf5 cf6 cf7) tops` by
-    (irule deploy_classify_constructor_mem >> simp[]) >>
+    (`SND (SND (SND (classify_functions tops))) =
+        SOME (cf0,cf1,cf2,cf3,cf4,cf5,cf6,cf7)` by simp[] >>
+     drule classify_functions_ctor_mem >> strip_tac >>
+     `module_consts_env tops [] = []` by
+       metis_tac[deploy_source_ok_def, supported_program_def,
+         supportedDeclsTheory.supported_declaration_headers_def,
+         supportedDeclsTheory.supported_headers_module_consts_env] >>
+     gvs[constSubstTheory.subst_consts_fn_empty]) >>
   `?art. check_contract T am.layouts tx.target [(NONE,tops)] = SOME art` by
     fs[deploy_source_ok_def, deploy_typing_ok_def] >>
   `check_toplevel_decl [(NONE,tops)] art NONE

@@ -14256,6 +14256,17 @@ Proof
   IF_CASES_TAC >> simp[]
 QED
 
+Theorem public_getter_defaults[local]:
+  !top mut nr rr name args dflts ret body.
+    public_getter top = SOME (mut,nr,rr,name,args,dflts,ret,body) ==>
+    dflts = []
+Proof
+  Cases_on `top` >> simp[public_getter_def] >> rpt gen_tac >>
+  Cases_on `v` >> simp[public_getter_def, getter_def] >>
+  rpt CASE_TAC >> gvs[] >> rpt (pairarg_tac >> gvs[]) >>
+  strip_tac >> gvs[]
+QED
+
 (* The supported fragment has no default arguments for now, so a supported
    program's runtime unit takes the ordinary run_lowering path. *)
 Theorem supported_program_no_external_defaults:
@@ -14263,9 +14274,15 @@ Theorem supported_program_no_external_defaults:
     ~EXISTS external_has_defaults (FST (classify_functions tops))
 Proof
   rw[NOT_EXISTS, EVERY_MEM, pairTheory.FORALL_PROD, external_has_defaults_def] >>
+  `module_consts_env tops [] = []` by
+    (irule supportedDeclsTheory.supported_headers_module_consts_env >>
+     gvs[supported_program_def, supportedDeclsTheory.supported_declaration_headers_def] >>
+     metis_tac[]) >>
   drule classify_functions_external_source >> strip_tac >>
-  drule_all supported_program_declaration >>
-  simp[supportedDeclsTheory.supported_function_header_contract]
+  gvs[constSubstTheory.subst_consts_fn_empty]
+  >- (drule_all supported_program_declaration >>
+      simp[supportedDeclsTheory.supported_function_header_contract]) >>
+  metis_tac[public_getter_defaults, NULL_EQ]
 QED
 
 Theorem MEM_classify_internal:
@@ -14346,16 +14363,7 @@ Proof
   simp[supported_expr_exists_def, expr_shape_root_def]
 QED
 
-Theorem public_getter_defaults[local]:
-  !top mut nr rr name args dflts ret body.
-    public_getter top = SOME (mut,nr,rr,name,args,dflts,ret,body) ==>
-    dflts = []
-Proof
-  Cases_on `top` >> simp[public_getter_def] >> rpt gen_tac >>
-  Cases_on `v` >> simp[public_getter_def, getter_def] >>
-  rpt CASE_TAC >> gvs[] >> rpt (pairarg_tac >> gvs[]) >>
-  strip_tac >> gvs[]
-QED
+
 
 Theorem supported_program_runtime_bodies_shape_ok:
   !tops. supported_program tops ==> runtime_bodies_shape_ok tops

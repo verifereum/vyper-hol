@@ -6,7 +6,7 @@ Ancestors
   supportedNames supportedTypes supportedStmts supportedStmtTraverse
   e2eDefs vyperTypeContractGetter vyperTypeContractContext bodyStorageMetadata
   compileEnv exprLowering vyperGetter vyperInterpreter list pair finite_map
-  placeTypingBuildProps
+  placeTypingBuildProps bodyStorageCases
 
 val _ = Parse.hide "body";
 
@@ -252,6 +252,12 @@ Theorem supported_getter_return_body[local]:
   ~supported_expr_exists expr_nonmain_type_root exp ==>
   supported_function_body tops External args [Return (SOME exp)]
 Proof
+  strip_tac >>
+  `supported_stmts tops args [Return (SOME exp)]` by
+    simp[supported_stmt_def, supported_expr_def] >>
+  `body_stmts_safe tops [Return (SOME exp)]` by
+    (rw[body_stmts_safe_iff] >>
+     drule (CONJUNCT2 supported_stmts_storage_syntax) >> simp[]) >>
   simp[supported_function_body_def, supported_function_bindings_def,
        supported_stmt_bindings_def, supported_stmt_def,
        supported_stmt_expr_exists_def, supported_expr_def,

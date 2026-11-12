@@ -33,7 +33,7 @@ QED
 
 Theorem package_constructor_shape_ok[local]:
   !tops use_trans nkey_map target cf cenv args pay nr nkey trans body ret.
-    supported_program_deploy tops /\
+    supported_program tops /\ supported_program_deploy tops /\
     SND (SND (SND (classify_functions tops))) = SOME cf /\
     set_constructor_package_target target
       (package_constructor tops use_trans nkey_map cf) =
@@ -44,7 +44,7 @@ Proof
   rpt gen_tac >> PairCases_on `cf` >> strip_tac >>
   drule classify_functions_ctor_mem >> strip_tac >>
   `module_consts_env tops [] = []` by
-    metis_tac[supported_program_deploy_def, supportedDeclsTheory.supported_declaration_headers_def,
+    metis_tac[supported_program_def, supportedDeclsTheory.supported_declaration_headers_def,
               supportedDeclsTheory.supported_headers_module_consts_env] >>
   gvs[constSubstTheory.subst_consts_fn_empty] >>
   drule_all supported_program_deploy_function >> strip_tac >>
