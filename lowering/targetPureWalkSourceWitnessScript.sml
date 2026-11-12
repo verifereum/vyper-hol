@@ -1,6 +1,6 @@
 Theory targetPureWalkSourceWitness
 Ancestors
-  targetPureWalkWitness targetPureWalkProbe targetPlaceSimCases exprSimMain exprSimHypsDefs
+  targetPureWalkWitness targetPureWalkProbe targetPlaceSim targetPlaceSimCases exprSimMain exprSimHypsDefs
   vyperTypeInvariants
 
 Theorem w_sim_inv:
@@ -56,4 +56,71 @@ Proof
   rpt strip_tac >> gvs[AllCaseEqs()] >>
   gvs[vyperInterpreterTheory.lookup_callable_function_def,
       vyperInterpreterTheory.lookup_function_def]
+QED
+
+Theorem raw_log_index_body_pre[local]:
+  expr_sim_inv w_cenv w_cx env es ==>
+  expr_body_pre w_cenv w_cx env raw_log_index es
+Proof
+  strip_tac >> rewrite_tac[expr_body_pre_def] >>
+  simp[raw_log_index_typed, w_calls_safe] >>
+  rpt conj_tac >> EVAL_TAC >> simp[]
+QED
+
+Theorem w_target_pre:
+  target_pre w_cenv w_cx w_env w_bt w_es
+Proof
+  simp[target_pre_def, w_sim_inv, immutable_root_def, w_bt_def,
+       target_root_def, target_indices_pre_def, raw_log_index_body_pre] >>
+  EVAL_TAC
+QED
+
+Theorem w_target_sim:
+  target_sim w_ctx w_func w_cenv w_cx w_env w_bt w_es
+Proof
+  irule (SRULE [target_case_def] target_case_all) >>
+  simp[w_target_pre] >> qexists_tac `F` >> simp[] >>
+  irule target_idx_case_ok >>
+  simp[w_bt_def, targetPlaceLiveTheory.target_indices_def,
+       raw_log_index_def, vyperTypeCallGraphTheory.int_calls_expr_def,
+       cj 1 compile_expr_sim_mutual]
+QED
+
+Theorem w_target_typed:
+  type_place_target w_env w_bt = SOME (Type (BaseT (UintT 256)))
+Proof
+  simp[w_bt_def, vyperTypeSystemTheory.well_typed_expr_def,
+       raw_log_index_typed, w_env_def, finite_mapTheory.FLOOKUP_UPDATE,
+       finite_mapTheory.FLOOKUP_EMPTY, raw_log_index_def,
+       vyperASTTheory.expr_type_def] >> EVAL_TAC >>
+  simp[wordsTheory.dimword_def, venomLayoutTheory.dimindex_256]
+QED
+
+Theorem w_source_pins:
+  ~expr_can_mutate w_cenv (target_to_expr w_bt) /\
+  w_cenv.ce_func_mutability = build_func_mutability (cx_tops w_cx) /\
+  (!vis mut nr rr fn args dflts ret body.
+    MEM (FunctionDecl vis mut nr rr fn args dflts ret body) (cx_tops w_cx) ==>
+    function_mutability_ok [(NONE, cx_tops w_cx)] vis mut nr dflts body) /\
+  get_module_code w_cx NONE = SOME (cx_tops w_cx) /\
+  EVERY (\c. FST c = NONE) (int_calls_target w_bt)
+Proof
+  EVAL_TAC >> simp[]
+QED
+
+Theorem w_gas_admissible:
+  gas_admissible (eval_base_place w_cx w_bt) target_res_ok w_es
+Proof
+  rewrite_tac[gasContextTheory.gas_admissible_def] >>
+  rpt gen_tac >>
+  `eval_base_place w_cx w_bt (w_es with gas_obs := gs) =
+    (INL (PlaceR (MemoryPlace "a" [ValueSubscript (IntV 0)])),
+     (w_es with gas_obs := gs) with logs :=
+       (w_es with gas_obs := gs).logs ++
+       [encode_raw_event_values w_cx.txn.target [] []])` by
+    (rewrite_tac[w_bt_def] >> irule raw_log_target_execution >>
+     simp[w_cx_def, w_es_def, vyperContextTheory.empty_evaluation_context_def,
+          vyperContextTheory.empty_call_txn_def, vyperStateTheory.lookup_scopes_def,
+          finite_mapTheory.FLOOKUP_UPDATE, finite_mapTheory.FLOOKUP_EMPTY]) >>
+  simp[] >> rpt strip_tac >> gvs[targetPlaceSimDefsTheory.target_res_ok_def]
 QED
