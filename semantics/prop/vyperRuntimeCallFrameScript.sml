@@ -5,7 +5,7 @@ Ancestors
   vyperTypeContractSoundness vyperStatePreservation
   list rich_list finite_map
 
-Theorem eval_external_defaults_immutables_frame:
+Theorem eval_external_defaults_immutables_frame[local]:
   (!st r st'. eval_exprs cx es st = (r,st') ==>
     st'.immutables = st.immutables) /\
   eval_external_defaults cx es st = (r,st') ==>

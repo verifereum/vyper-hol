@@ -6,7 +6,7 @@ Ancestors
   vyperTypeContractContext vyperContext vyperInterpreter vyperState alist
   vyperGetter vyperTypeContractGetter
 
-Theorem well_typed_runtime_writes:
+Theorem well_typed_runtime_writes[local]:
   (!env e. well_typed_expr env e ==>
     !R. env.bare_global_assignable = FEMPTY /\
       (!sid id vt. FLOOKUP env.toplevel_vtypes (sid,id) = SOME vt /\
@@ -39,7 +39,7 @@ Proof
   gvs[AllCaseEqs()] >> metis_tac[]
 QED
 
-Theorem well_typed_atarget_runtime_writes:
+Theorem well_typed_atarget_runtime_writes[local]:
   !env tgt ty. well_typed_atarget env tgt ty ==>
     !R. env.bare_global_assignable = FEMPTY /\
       (!sid id vt. FLOOKUP env.toplevel_vtypes (sid,id) = SOME vt /\
@@ -55,7 +55,7 @@ Proof
   metis_tac[]
 QED
 
-Theorem atarget_accepts_runtime_writes:
+Theorem atarget_accepts_runtime_writes[local]:
   atarget_accepts env tgt ty /\ env.bare_global_assignable = FEMPTY /\
   (!sid id vt. FLOOKUP env.toplevel_vtypes (sid,id) = SOME vt /\
     FLOOKUP env.bare_globals (sid,id) = NONE ==> R sid id) ==>
@@ -70,7 +70,7 @@ Proof
   metis_tac[well_typed_atarget_runtime_writes]
 QED
 
-Theorem type_stmt_runtime_writes:
+Theorem type_stmt_runtime_writes[local]:
   (!env ret s env'. type_stmt env ret s = SOME env' ==>
     !R. env.bare_global_assignable = FEMPTY /\
       (!sid id vt. FLOOKUP env.toplevel_vtypes (sid,id) = SOME vt /\
@@ -99,7 +99,7 @@ Proof
   metis_tac[type_stmt_preserve_nonlocal_fields]
 QED
 
-Theorem check_function_body_runtime_writes:
+Theorem check_function_body_runtime_writes[local]:
   !layouts addr mods art src vis mut nr args dflts ret body R.
   check_function_body layouts addr mods
     (art with cta_bare_global_assignable := FEMPTY)
@@ -120,7 +120,7 @@ Proof
   simp[function_entry_env_def, FOLDL_extend_local_args_static, artifact_env_def]
 QED
 
-Theorem checked_runtime_function_writes:
+Theorem checked_runtime_function_writes[local]:
   !layouts addr mods art src ts vis mut nr raw fn args dflts ret body R.
   check_contract F layouts addr mods = SOME art /\
   ALOOKUP mods src = SOME ts /\
@@ -151,7 +151,7 @@ Proof
        function_live_def]
 QED
 
-Theorem checked_singleton_callable_writes:
+Theorem checked_singleton_callable_writes[local]:
   check_contract F layouts addr [(NONE,tops)] = SOME art /\
   (!sid id vt. FLOOKUP art.cta_toplevel_vtypes (sid,id) = SOME vt /\
     FLOOKUP art.cta_bare_globals (sid,id) = NONE ==> R sid id) ==>
@@ -167,7 +167,7 @@ Proof
   goal_assum (drule_at Any) >> simp[]
 QED
 
-Theorem checked_runtime_write_roots:
+Theorem checked_runtime_write_roots[local]:
   check_contract F layouts addr mods = SOME art /\
   ALOOKUP sources addr = SOME mods /\ tx.target = addr ==>
   !sid id vt. FLOOKUP art.cta_toplevel_vtypes (sid,id) = SOME vt /\
@@ -181,7 +181,7 @@ Proof
   gvs[get_module_code_def, initial_evaluation_context_def] >> metis_tac[]
 QED
 
-Theorem build_getter_writes_ok:
+Theorem build_getter_writes_ok[local]:
   !e kt vt n args ret exp.
   build_getter e kt vt n = (args,ret,exp) ==>
   !P. expr_writes_ok P e ==> expr_writes_ok P exp
@@ -196,7 +196,7 @@ Proof
   simp[expr_writes_ok_def]
 QED
 
-Theorem getter_writes_ok:
+Theorem getter_writes_ok[local]:
   getter nr e kt vt = (mut,gnr,args,dflts,ret,bod) /\ expr_writes_ok P e ==>
   EVERY (expr_writes_ok P) dflts /\ stmts_writes_ok P bod
 Proof
@@ -204,7 +204,7 @@ Proof
   simp[stmt_writes_ok_def] >> metis_tac[build_getter_writes_ok]
 QED
 
-Theorem external_getter_writes_ok:
+Theorem external_getter_writes_ok[local]:
   external_getter_tuple src decl = SOME (mut,nr,args,dflts,ret,bod) ==>
   EVERY (expr_writes_ok P) dflts /\ stmts_writes_ok P bod
 Proof
@@ -218,7 +218,7 @@ Proof
   metis_tac[getter_writes_ok, expr_writes_ok_def]
 QED
 
-Theorem checked_external_selected_writes:
+Theorem checked_external_selected_writes[local]:
   !am tx mods art cx src ts mut nr args dflts ret bod R.
   check_contract F am.layouts tx.target mods = SOME art /\
   ALOOKUP am.sources tx.target = SOME mods /\
