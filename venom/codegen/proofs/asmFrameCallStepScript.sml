@@ -1572,6 +1572,57 @@ Proof
   drule_all call_gas_budget_reserve >> strip_tac >> decide_tac
 QED
 
+Theorem asm_step_call_budget_same_depth:
+  s.contexts = (c,rb)::rest /\ s.msdomain = Collect d /\
+  ~c.msgParams.static /\ EVERY (wf_context o FST) s.contexts /\
+  (name = "CALL" \/ name = "STATICCALL") /\
+  op = (if name = "CALL" then Call else StaticCall) /\
+  asm_inst_gas_ok H (AsmOp name) c.stack /\
+  B = 50000 + 8 * H + memory_cost H /\
+  B <= c.msgParams.gasLimit - c.gasUsed /\
+  step_call op s = (r,t) /\ LENGTH t.contexts = LENGTH s.contexts ==>
+  r <> INR (SOME OutOfGas) /\
+  c.msgParams.gasLimit - c.gasUsed <=
+    (FST (HD t.contexts)).msgParams.gasLimit -
+    (FST (HD t.contexts)).gasUsed + B
+Proof
+  pure_rewrite_tac[GSYM AND_IMP_INTRO] >> rpt disch_tac >>
+  Q.SUBGOAL_THEN `op = Call \/ op = StaticCall` assume_tac
+  >- (Cases_on `name = "CALL"` >> gvs[]) >>
+  Cases_on `6 + (if call_has_value op then 1 else 0) <= LENGTH c.stack`
+  >- suspend "adequate" >>
+  `LENGTH c.stack < 6 + (if call_has_value op then 1 else 0)` by
+    wordsLib.WORD_DECIDE_TAC >>
+  drule_all asm_pop_stack_underflow >> disch_tac >>
+  qpat_x_assum `step_call _ _ = _` mp_tac >>
+  simp[asm_step_call_factor, asm_call_prepare_def, bind_def, LET_THM] >>
+  strip_tac >> gvs[]
+QED
+
+Resume asm_step_call_budget_same_depth[adequate]:
+  Cases_on `asm_call_prepare op s` >> rename1 `asm_call_prepare op s = (res,u)` >>
+  Cases_on `res`
+  >- (rename1 `asm_call_prepare op s = (INL args,u)` >>
+      PairCases_on `args` >>
+      rename1 `asm_call_prepare op s =
+        (INL (sender,address,value,ao,az,code,stipend,ro,rs,accounts),u)` >>
+      drule_all asm_call_prepare_budget_success >> strip_tac >>
+      drule_all asm_call_prepare_stack_room >> disch_tac >>
+      `LENGTH p.stack < stack_limit` by
+        (qpat_x_assum `LENGTH (FST (HD u.contexts)).stack < _` mp_tac >> simp[]) >>
+      `stipend <= p.gasUsed` by decide_tac >>
+      `LENGTH u.contexts = LENGTH s.contexts` by simp[] >>
+      `asm_call_finish op (sender,address,value,ao,az,code,stipend,ro,rs,accounts) u = (r,t)` by
+        (qpat_x_assum `step_call _ _ = _` mp_tac >>
+         simp[asm_step_call_factor, bind_def]) >>
+      `LENGTH t.contexts = LENGTH u.contexts` by metis_tac[] >>
+      drule_all asm_call_finish_same_depth_refund >> strip_tac >>
+      conj_tac >- simp[] >> asm_rewrite_tac[] >> decide_tac) >>
+  drule_all asm_call_prepare_budget_no_failure >> simp[]
+QED
+
+Finalise asm_step_call_budget_same_depth
+
 Theorem asm_run_call_stops_after_step:
   step s = (r,t) /\ (~ISL r \/ LENGTH t.contexts < LENGTH s.contexts) ==>
   run_call s = SOME (r,t)
