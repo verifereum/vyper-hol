@@ -386,7 +386,8 @@ Proof
          (n2w (sb+32+LENGTH pre * abi_embedded_static_size ce.ce_struct_fields ty) : bytes32) s =
          n2w (LENGTH (pre ++ av::post) * abi_member_head_size (vyper_to_abi_type env ty) +
            SUM (MAP (abi_member_tail_size (vyper_to_abi_type env ty)) pre))` by
-        (drule abi_decoder_canonical_dynamic_setup_inputs >>
+        (drule (PURE_REWRITE_RULE [arithmeticTheory.ADD]
+           (Q.INST [`B` |-> `0`] abi_decoder_canonical_dynamic_setup_inputs)) >>
          asm_simp_tac bool_ss [] >>
          disch_then (qspecl_then [`sb`, `s`, `CALLDATALOAD`, `Lit 0w`] mp_tac) >>
          (impl_tac >- gvs[Excl "enc_def"]) >> simp[]) >>
