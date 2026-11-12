@@ -246,7 +246,7 @@ Proof
    simp[MEM_APPEND])
 QED
 
-Theorem eval_target_place_observed_region[local]:
+Theorem eval_target_place_observed_region:
   eval_target_place cx bt st = (INL (StoragePlace b slot leaf),st') ==>
   ?offset tv path delta.
     MEM (StorageRoot b offset tv) st'.storage_trace /\
