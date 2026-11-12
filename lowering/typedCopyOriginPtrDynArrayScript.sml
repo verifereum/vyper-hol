@@ -41,6 +41,87 @@ Proof
   irule (cj 1 gas_origin_ptr_path_rules) >> simp[]
 QED
 
+(* Package the emitted dynamic-array payload loop; the shared loop theorem
+   owns the recursive execution and ghost invariant. *)
+Theorem typed_copy_origin_ptr_dynarray_slow_data_path:
+  fresh_label "typed_dyn_cond" sa = (hdr,l1) /\
+  fresh_label "typed_dyn_body" l1 = (blabel,l2) /\
+  fresh_label "typed_dyn_exit" l2 = (exit,l3) /\
+  fresh_var l3 = (counter,init) /\
+  emit_inst ASSIGN [Lit 0w] [counter] init = ((),st0) /\
+  emit_inst JMP [Label hdr] [] st0 = ((),st1) /\
+  new_block hdr st1 = (u1,sth) /\
+  emit_op LT [Var counter; length] sth = (lt,h1) /\
+  emit_op ISZERO [lt] h1 = (done,stj) /\
+  emit_inst JNZ [done; Label exit; Label blabel] [] stj = ((),st2) /\
+  new_block blabel st2 = (u2,stb) /\
+  emit_op MUL [Var counter; Lit (n2w (type_memory_size stv))] stb = (so,b1) /\
+  emit_op MUL [Var counter; Lit (n2w (type_memory_size dtv))] b1 = (doff,b2) /\
+  emit_op ADD [Var xs;so] b2 = (sp,b3) /\
+  emit_op ADD [Var xd;doff] b3 = (dp,b4) /\
+  compile_store_memory_typed cenv dp dty sp sty b4 = ((),b5) /\
+  emit_op ADD [Var counter; Lit 1w] b5 = (inc,b6) /\
+  emit_inst ASSIGN [inc] [counter] b6 = ((),ste) /\
+  emit_inst JMP [Label hdr] [] ste = ((),st3) /\
+  new_block exit st3 = (u3,stx) /\
+  (!x. length = Var x ==>
+       not_fresh_at sa x /\ FLOOKUP G x = NONE /\ op_taint tn (Var x) = {}) /\
+  eval_operand length s = SOME (n2w N) /\ N < dimword (:256) /\
+  (!i. i < N ==> typed_copy_origin_ptr_entry cenv ctx dty sty dtv stv (f i) /\
+                   val_wf stv (f i) /\ val_wf dtv (f i)) /\
+  not_fresh_at sa xs /\ not_fresh_at sa xd /\
+  lookup_var xs s = SOME sw /\ lookup_var xd s = SOME dw /\
+  (!i mem. i < N /\ mem_agree_outside tn.t_mem s.vs_memory mem ==>
+     val_in_memory stv (f i) (w2n sw + i * type_memory_size stv) mem) /\
+  w2n sw + N * type_memory_size stv < dimword (:256) /\
+  w2n dw + N * type_memory_size dtv < dimword (:256) /\
+  (N * type_memory_size stv = 0 \/
+   w2n sw + N * type_memory_size stv <= s.vs_alloca_next) /\
+  (N * type_memory_size dtv = 0 \/
+   w2n dw + N * type_memory_size dtv <= s.vs_alloca_next) /\
+  (w2n sw + N * type_memory_size stv <= w2n dw \/
+   w2n dw + N * type_memory_size dtv <= w2n sw) /\
+  ptr_covers G tn xs s (N * type_memory_size stv) /\
+  ptr_covers G tn xd s (N * type_memory_size dtv) /\
+  allocas_from lo s /\ lo <= s.vs_alloca_next /\ ~ctx_has_dalloca ctx /\
+  fn_has_code sa stx func /\ fn_inst_ids_distinct func /\ ~s.vs_halted /\
+  s.vs_current_bb = sa.cs_current_bb /\
+  s.vs_inst_idx = LENGTH sa.cs_current_insts ==>
+  ?t Gf tnf.
+    gas_origin_ptr_path
+      (<| d_stor := K (K {}); d_trans := K (K {}); d_imm := K {};
+          d_ret := K {} |>,lo,explicit,ctx,func,PG)
+      (s,G,tn) [] (OK t,Gf,tnf) /\
+    (!i. i < N ==> val_in_memory dtv (f i)
+       (w2n dw + i * type_memory_size dtv) t.vs_memory) /\
+    typed_copy_state_frame sa (w2n dw) (N * type_memory_size dtv) s t /\
+    ~t.vs_halted /\ t.vs_current_bb = stx.cs_current_bb /\
+    t.vs_inst_idx = LENGTH stx.cs_current_insts /\
+    tnf.t_imm = tn.t_imm /\ tnf.t_stor = tn.t_stor /\ tnf.t_trans = tn.t_trans /\
+    (!i. ~(w2n dw <= i /\ i < w2n dw + N * type_memory_size dtv) ==>
+         (i IN tnf.t_mem <=> i IN tn.t_mem)) /\
+    (!i mem. i < N /\ mem_agree_outside tnf.t_mem t.vs_memory mem ==>
+       val_in_memory dtv (f i) (w2n dw + i * type_memory_size dtv) mem) /\
+    (!p. not_fresh_at sa p ==>
+       FLOOKUP Gf p = FLOOKUP G p /\ op_taint tnf (Var p) = op_taint tn (Var p))
+Proof
+  disch_then (REPEAT_TCL CONJUNCTS_THEN assume_tac) >>
+  drule_all typed_copy_dynarray_slow_layout >> strip_tac >>
+  irule typed_copy_origin_ptr_index_loop >> simp[] >>
+  qpat_assum `emit_inst ASSIGN [Lit 0w] _ _ = _`
+    (irule_at (Pat `emit_inst ASSIGN [Lit 0w] _ _ = _`)) >>
+  qpat_assum `emit_op LT _ _ = _` (irule_at (Pat `emit_op LT _ _ = _`)) >>
+  qpat_assum `emit_op ISZERO _ _ = _` (irule_at (Pat `emit_op ISZERO _ _ = _`)) >>
+  qpat_assum `emit_inst JNZ _ _ _ = _` (irule_at (Pat `emit_inst JNZ _ _ _ = _`)) >>
+  qpat_assum `compile_store_memory_typed _ _ _ _ _ _ = _`
+    (irule_at (Pat `compile_store_memory_typed _ _ _ _ _ _ = _`)) >>
+  qpat_assum `emit_op ADD [Var xs;so] b2 = (sp,b3)`
+    (irule_at (Pat `emit_op ADD [Var _;_] _ = _`)) >>
+  qpat_assum `emit_op MUL [Var counter; Lit (n2w (type_memory_size stv))] stb = (so,b1)`
+    (irule_at (Pat `emit_op MUL _ stb = _`)) >>
+  rpt (goal_assum (drule_at Any)) >> gvs[]
+QED
+
 Theorem typed_copy_origin_ptr_dynarray_entry:
   !cenv tenv ctx de cap sty dtv stv v.
     acyclic_struct_metadata cenv.ce_struct_fields /\
