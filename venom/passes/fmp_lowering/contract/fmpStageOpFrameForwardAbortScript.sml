@@ -69,7 +69,7 @@ Proof
   gvs[is_terminator_def, update_var_def]
 QED
 
-Theorem fmp_forward_suffix_abort:
+Theorem fmp_forward_suffix_abort[local]:
   !d s t bb bb' ri fuel C C' reason s1.
   s.vs_labels = t.vs_labels /\
   (!v x. FLOOKUP s.vs_vars v = SOME x ==>
@@ -136,6 +136,12 @@ Proof
   simp[arithmeticTheory.ADD_CLAUSES]
 QED
 
+(* Why: LowerDload's ld_available_forward_abort needs the two states to
+   agree both ways on which variables are defined, over a set V. The FMP
+   stage relation only gives one way: every variable defined in the source
+   is defined in the target, and operand values carry over from source to
+   target. Neither form implies the other, and their common generalisation
+   would belong next to the LowerDload lemma in venom/compiler. *)
 Theorem fmp_forward_available_abort:
   s.vs_labels = t.vs_labels /\
   (!v x. FLOOKUP s.vs_vars v = SOME x ==>

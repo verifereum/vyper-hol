@@ -119,8 +119,9 @@ Proof
   `?p q out x y. inst.inst_operands = [p;q] /\ inst.inst_outputs = [out] /\
     eval_operand p s = SOME x /\ eval_operand q s = SOME y` by
     (qpat_x_assum `step_inst _ _ _ _ = _` mp_tac >> fs[MEM] >>
-     simp[step_inst_non_invoke, step_inst_base_def, exec_pure2_def,
-          AllCaseEqs()] >> metis_tac[]) >>
+     simp[step_inst_non_invoke] >>
+     asm_simp_tac (srw_ss()) [step_inst_base_opcode_eqs] >>
+     simp[exec_pure2_def, AllCaseEqs()] >> metis_tac[]) >>
   drule_all fmp_compare_operand_results >> strip_tac >>
   qpat_x_assum `step_inst _ C inst s = _` mp_tac >> fs[MEM] >>
   (simp[step_inst_non_invoke] >>
