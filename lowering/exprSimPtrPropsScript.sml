@@ -15,7 +15,7 @@
  *)
 Theory exprSimPtrProps
 Ancestors
-  bodyPtrDefs fragGasPathPtr exprSimStack exprSimDefs loweringPosts
+  wordLoadStorePtr bodyPtrDefs fragGasPathPtr exprSimStack exprSimDefs loweringPosts
   gasExemptCert exprLowering emitHelper compileEnv loweringStateRelDefs vyperInterpreter
   vyperState ptrDiscipline fragGasSeqPtr typedCopyPtr decoderGhostFramePtr
   emitHelperProps fragExec exprLoweringProps venomInst venomState
@@ -25,22 +25,22 @@ Theorem expr_stack_outcome_ptr:
   gas_outcome_ptr D tops (ctx,func) PG
     (bind (eval_expr cx e) (read_result cx)) (es,s0,G0,tn0)
     (\res ee G tn u. ?v. res = INL v /\
-      expr_post ctx func cenv cx e es sa sb s0 ee v op u /\
+      expr_post H ctx func cenv cx e es sa sb s0 ee v op u /\
       u.vs_current_bb = sb.cs_current_bb /\
       u.vs_inst_idx = LENGTH sb.cs_current_insts /\
-      ghost_inv d cenv cx ee G tn u /\
-      ptr_val_ok cx (expr_type e) v op G tn u /\
-      (~is_word_type (expr_type e) ==> ptr_buf_ok cenv e op G u) /\
+      ghost_inv H d cenv cx ee G tn u /\
+      ptr_val_ok cx (post_value_type cenv e) v op G tn u /\
+      (~is_word_type (post_value_type cenv e) ==> ptr_buf_ok cenv e op G u) /\
       ghost_kept cenv es sa G0 tn0 s0 G tn)
     (\res ee gt r. expr_exit res r) ==>
   gas_outcome_ptr D tops (ctx,func) PG (eval_expr cx e) (es,s0,G0,tn0)
     (\res ee G tn u. ?tv. res = INL tv /\
-      vv_post ctx func cenv cx e es sa sb s0 ee tv (StackValue ty op) u /\
+      vv_post H ctx func cenv cx e es sa sb s0 ee tv (StackValue ty op) u /\
       u.vs_current_bb = sb.cs_current_bb /\
       u.vs_inst_idx = LENGTH sb.cs_current_insts /\
-      ghost_inv d cenv cx ee G tn u /\
-      ptr_vv_ok cx (expr_type e) tv (StackValue ty op) ee G tn u /\
-      (~is_word_type (expr_type e) ==> ptr_buf_ok cenv e op G u) /\
+      ghost_inv H d cenv cx ee G tn u /\
+      ptr_vv_ok cx (post_value_type cenv e) tv (StackValue ty op) ee G tn u /\
+      (~is_word_type (post_value_type cenv e) ==> ptr_buf_ok cenv e op G u) /\
       ghost_kept cenv es sa G0 tn0 s0 G tn)
     (\res ee gt r. expr_exit res r)
 Proof
@@ -84,7 +84,7 @@ Proof
 QED
 
 Theorem ghost_inv_fresh_frame:
-  ghost_inv d cenv cx es G tn s /\ local_ptrs_reserved cenv sa /\
+  ghost_inv H d cenv cx es G tn s /\ local_ptrs_reserved cenv sa /\
   (!x sz. cenv.ce_return_buf = SOME (PtrVar (Var x) sz) ==>
           not_fresh_at sa x) /\
   (!x sz. cenv.ce_return_pc = SOME (PtrVar (Var x) sz) ==>
@@ -97,7 +97,7 @@ Theorem ghost_inv_fresh_frame:
   tn'.t_trans = tn.t_trans /\ tn'.t_imm = tn.t_imm /\
   s'.vs_call_ctx = s.vs_call_ctx /\ s'.vs_accounts = s.vs_accounts /\
   s'.vs_transient = s.vs_transient ==>
-  ghost_inv d cenv cx es' G' tn' s'
+  ghost_inv H d cenv cx es' G' tn' s'
 Proof
   strip_tac >>
   `!x sz. not_fresh_at sa x /\ ptr_covers G tn x s sz ==>

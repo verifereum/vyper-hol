@@ -1763,11 +1763,18 @@ Proof
   ci_mono_chain_tac ci_mono_emit_rws
 QED
 
+Theorem ci_mono_compile_word_copy_loop_op:
+  ∀ src dst cnt ll sl ic sa.
+    ci_mono sa (SND (compile_word_copy_loop_op src dst cnt ll sl ic sa))
+Proof
+  simp[contextTheory.compile_word_copy_loop_op_def, ci_mono_word_copy]
+QED
+
 Theorem ci_mono_compile_word_copy_loop:
   ∀ src dst wc ll sl ic sa.
     ci_mono sa (SND (compile_word_copy_loop src dst wc ll sl ic sa))
 Proof
-  simp[compile_word_copy_loop_def, compile_word_copy_loop_op_def, ci_mono_word_copy]
+  simp[contextTheory.compile_word_copy_loop_def, ci_mono_compile_word_copy_loop_op]
 QED
 
 Theorem ci_mono_store_immutable_bytestring:
@@ -1811,7 +1818,7 @@ Proof
   ci_mono_chain_tac [ci_mono_compile_word_copy_loop]
 QED
 
-Theorem ci_mono_compile_lit_byte_offset[local]:
+Theorem ci_mono_compile_lit_byte_offset:
   !op off sa. ci_mono sa (SND (compile_lit_byte_offset op off sa))
 Proof
   rpt gen_tac >> simp[contextTheory.compile_lit_byte_offset_def] >>
@@ -5317,4 +5324,12 @@ Proof
   Cases_on `bt` >> gvs[compile_literal_vv_def, comp_return_def] >>
   rename1 `BytesT bound` >>
   Cases_on `bound` >> gvs[compile_literal_vv_def, comp_return_def]
+QED
+
+Theorem stmt_state_rel_start_gas_obs:
+  stmt_state_rel H ctx func cenv cx (es with gas_obs := gs) s =
+  stmt_state_rel H ctx func cenv cx es s
+Proof
+  simp[stmt_state_rel_def, loweringStateRelDefsTheory.state_rel_gas_obs,
+       immutable_alloca_sep_def]
 QED

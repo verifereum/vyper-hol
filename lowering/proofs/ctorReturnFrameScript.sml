@@ -60,20 +60,6 @@ Proof
   qexistsl [`es`, `s`] >> simp[tstore_def]
 QED
 
-Theorem constructor_exit_state_rel:
-  same_frame cenv cenv' /\ state_rel func cenv' cx es s ==>
-  state_rel func cenv cx (es with scopes := []) s
-Proof
-  strip_tac >> dxrule state_rel_scopes_nil >> strip_tac >>
-  gvs[same_frame_def, compile_env_component_equality, state_rel_def,
-      local_ptrs_rel_def, local_region_def, lookup_scopes_def,
-      storage_vars_rel_def, transient_vars_rel_def, logs_rel_def,
-      log_entry_equiv_def, listTheory.LIST_REL_EL_EQN, immutables_rel_def] >>
-  rpt strip_tac >> gvs[] >>
-  qpat_x_assum `!name tv v byte_offset. _` (drule_all_then strip_assume_tac) >>
-  simp[]
-QED
-
 Theorem constructor_exit_code[local]:
   (if nr then compile_nonreentrant_unlock nkey ut F else comp_return ())
     st_exit = ((), st_epilogue) /\

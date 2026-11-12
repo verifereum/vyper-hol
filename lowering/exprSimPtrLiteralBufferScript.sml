@@ -71,7 +71,7 @@ Proof
 QED
 
 Theorem literal_ghost_inv_frame:
-  ghost_inv d cenv cx es G tn s /\ local_ptrs_reserved cenv sa /\
+  ghost_inv H d cenv cx es G tn s /\ local_ptrs_reserved cenv sa /\
   (!x sz. cenv.ce_return_buf = SOME (PtrVar (Var x) sz) ==>
           not_fresh_at sa x) /\
   (!x sz. cenv.ce_return_pc = SOME (PtrVar (Var x) sz) ==>
@@ -92,7 +92,7 @@ Theorem literal_ghost_inv_frame:
   tn'.t_stor = tn.t_stor /\ tn'.t_trans = tn.t_trans /\ tn'.t_imm = tn.t_imm /\
   s'.vs_call_ctx = s.vs_call_ctx /\ s'.vs_accounts = s.vs_accounts /\
   s'.vs_transient = s.vs_transient ==>
-  ghost_inv d cenv cx es G' tn' s'
+  ghost_inv H d cenv cx es G' tn' s'
 Proof
   strip_tac >>
   `!x sz. not_fresh_at sa x /\ ptr_covers G tn x s sz ==>
@@ -231,7 +231,7 @@ Proof
 QED
 
 Theorem literal_ptr_alloca_ghost:
-  stmt_state_rel ctx func cenv cx es s /\
+  stmt_state_rel H ctx func cenv cx es s /\
   MEM (mk_inst id ALLOCA [Lit (n2w n)] [out]) (fn_insts func) /\
   n < dimword (:256) /\
   step_inst_base (mk_inst id ALLOCA [Lit (n2w n)] [out]) s = OK s1 ==>
@@ -306,7 +306,7 @@ QED
 
 Theorem literal_bytelike_ptr_run:
   compile_bytelike_literal bs (LENGTH bs) sa = (buf,sb) /\
-  stmt_state_rel ctx func cenv cx es s /\ fn_has_code sa sb func /\
+  stmt_state_rel H ctx func cenv cx es s /\ fn_has_code sa sb func /\
   fn_inst_ids_distinct func /\ local_ptrs_reserved cenv sa /\
   ~ctx_has_dalloca ctx /\ 32+32*word_size (LENGTH bs) < dimword (:256) ==>
   ?u t b p sh G' tn'.
@@ -314,7 +314,7 @@ Theorem literal_bytelike_ptr_run:
     (!x. not_fresh_at sa x ==> not_fresh_at sh x) /\
     run_inst_seq (emitted_insts sa sb) s = OK t /\
     inst_seq_ptr D 0 ctx fn PG G tn (emitted_insts sa sb) s G' tn' /\
-    stmt_state_rel ctx func cenv cx es u /\ u.vs_memory = s.vs_memory /\
+    stmt_state_rel H ctx func cenv cx es u /\ u.vs_memory = s.vs_memory /\
     FLOOKUP u.vs_allocas sa.cs_next_id = SOME (b,32+32*word_size (LENGTH bs)) /\
     (!aid entry. FLOOKUP s.vs_allocas aid = SOME entry ==>
       FLOOKUP u.vs_allocas aid = SOME entry) /\
@@ -420,7 +420,7 @@ Finalise literal_bytelike_ptr_run
 
 (* Ordinary transport across the fully written buffer. *)
 Theorem literal_ptr_state_memory_frame:
-  stmt_state_rel ctx func cenv cx es u /\ local_ptrs_reserved cenv sa /\
+  stmt_state_rel H ctx func cenv cx es u /\ local_ptrs_reserved cenv sa /\
   (!x. not_fresh_at sa x ==> not_fresh_at sh x) /\
   (t with <|vs_vars := u.vs_vars; vs_memory := u.vs_memory|>) = u /\
   LENGTH u.vs_memory <= LENGTH t.vs_memory /\
@@ -431,7 +431,7 @@ Theorem literal_ptr_state_memory_frame:
     mem_bytes_at a len t.vs_memory = mem_bytes_at a len u.vs_memory) /\
   MEM (mk_inst aid ALLOCA [Lit (n2w n)] [p]) (fn_insts func) /\
   FLOOKUP u.vs_allocas aid = SOME (b,n) ==>
-  stmt_state_rel ctx func cenv cx es t
+  stmt_state_rel H ctx func cenv cx es t
 Proof
   strip_tac >> irule literal_state_memory_frame >>
   qexists_tac `u` >> simp[] >>
@@ -450,7 +450,7 @@ Proof
       qpat_x_assum `!x. not_fresh_at sh x ==> _` irule >> metis_tac[]) >>
   rpt strip_tac >>
   `regions_disjoint off (type_memory_size tv) b n` by
-    (qpat_x_assum `stmt_state_rel ctx _ _ _ _ u` mp_tac >>
+    (qpat_x_assum `stmt_state_rel H ctx _ _ _ _ u` mp_tac >>
      simp[stmt_state_rel_def, immutable_alloca_sep_def] >> strip_tac >>
      first_x_assum drule_all >> strip_tac >>
      qpat_x_assum `!inst b sz. MEM inst _ /\ _ ==> regions_disjoint _ _ b sz` irule >>
@@ -465,7 +465,7 @@ Theorem literal_ptr_memory_vv_post:
     ~is_word_type (expr_type e) /\ post_value_type cenv e = expr_type e /\
     evaluate_type (get_tenv cx) (expr_type e) = SOME tvt /\
     val_wf tvt v /\ val_in_memory tvt v (w2n w) t.vs_memory /\
-    stmt_state_rel ctx func cenv cx es t /\
+    stmt_state_rel H ctx func cenv cx es t /\
     eval_operand buf.buf_operand t = SOME w /\
     FLOOKUP t.vs_allocas sa.cs_next_id = SOME (w2n w,sz) /\
     sa.cs_next_id < sb.cs_next_id /\ val_footprint tvt v <= sz /\
@@ -480,7 +480,7 @@ Theorem literal_ptr_memory_vv_post:
     (!name b len. local_region cenv es.scopes s0 name b len ==>
        mem_bytes_at b len t.vs_memory = mem_bytes_at b len s0.vs_memory) /\
     pure_frame cenv func es sa s0 t ==>
-    vv_post ctx func cenv cx e es sa sb s0 es (Value v)
+    vv_post H ctx func cenv cx e es sa sb s0 es (Value v)
       (LocatedValue (expr_type e) (base_ptr buf))
       (t with vs_inst_idx := LENGTH sb.cs_current_insts)
 Proof
@@ -507,7 +507,7 @@ Proof
 QED
 
 Theorem literal_ptr_local_footprint_exterior:
-  stmt_state_rel ctx func cenv cx es s /\
+  stmt_state_rel H ctx func cenv cx es s /\
   (!name a len. local_region cenv es.scopes s name a len ==>
     regions_disjoint b n a len) ==>
   !name entry p sz w.
@@ -522,7 +522,7 @@ Proof
   `local_region cenv es.scopes s name (w2n w) sz` by
     (simp[local_region_def] >> metis_tac[]) >>
   `type_memory_size entry.type <= sz /\ val_wf entry.type entry.value` by
-    (qpat_x_assum `stmt_state_rel _ _ _ _ _ _` mp_tac >>
+    (qpat_x_assum `stmt_state_rel _ _ _ _ _ _ _` mp_tac >>
      simp[stmt_state_rel_def, state_rel_def, local_ptrs_rel_def] >>
      metis_tac[]) >>
   `val_footprint entry.type entry.value <= sz` by metis_tac[val_footprint_le, arithmeticTheory.LESS_EQ_TRANS] >>
@@ -532,8 +532,8 @@ Proof
 QED
 
 Theorem literal_ptr_ghost_frame:
-  ghost_inv d cenv cx es G tn s /\
-  stmt_state_rel ctx func cenv cx es u /\ local_ptrs_reserved cenv sa /\
+  ghost_inv H d cenv cx es G tn s /\
+  stmt_state_rel H ctx func cenv cx es u /\ local_ptrs_reserved cenv sa /\
   (!x sz. cenv.ce_return_buf = SOME (PtrVar (Var x) sz) ==> not_fresh_at sa x) /\
   (!x sz. cenv.ce_return_pc = SOME (PtrVar (Var x) sz) ==> not_fresh_at sa x) /\
   (!x. not_fresh_at sa x ==> lookup_var x u = lookup_var x s /\
@@ -548,7 +548,7 @@ Theorem literal_ptr_ghost_frame:
   tn'.t_stor = tn.t_stor /\ tn'.t_trans = tn.t_trans /\ tn'.t_imm = tn.t_imm /\
   t.vs_call_ctx = s.vs_call_ctx /\ t.vs_accounts = s.vs_accounts /\
   t.vs_transient = s.vs_transient ==>
-  ghost_inv d cenv cx es G' tn' t /\ ghost_kept cenv es sa G tn s G' tn'
+  ghost_inv H d cenv cx es G' tn' t /\ ghost_kept cenv es sa G tn s G' tn'
 Proof
   strip_tac >>
   `!x. not_fresh_at sa x ==> FLOOKUP G' x = FLOOKUP G x /\
@@ -624,7 +624,7 @@ Theorem literal_ptr_memory_vv_frame_post:
   evaluate_type (get_tenv cx) (expr_type e) = SOME tv /\
   val_wf tv v /\ val_in_memory tv v (w2n w) t.vs_memory /\
   val_footprint tv v <= n /\
-  stmt_state_rel ctx func cenv cx es u /\ local_ptrs_reserved cenv sa /\
+  stmt_state_rel H ctx func cenv cx es u /\ local_ptrs_reserved cenv sa /\
   (!x. not_fresh_at sa x ==> not_fresh_at sh x) /\
   (!x. not_fresh_at sa x ==> lookup_var x u = lookup_var x s) /\
   (t with <|vs_vars := u.vs_vars; vs_memory := u.vs_memory|>) = u /\
@@ -642,12 +642,12 @@ Theorem literal_ptr_memory_vv_frame_post:
   (!aid a len. aid < sa.cs_next_id /\ FLOOKUP s.vs_allocas aid = SOME (a,len) ==>
     regions_disjoint (w2n w) n a len) /\
   eval_operand buf.buf_operand t = SOME w /\ sa.cs_next_id < sb.cs_next_id ==>
-  vv_post ctx func cenv cx e es sa sb s es (Value v)
+  vv_post H ctx func cenv cx e es sa sb s es (Value v)
     (LocatedValue (expr_type e) (base_ptr buf))
     (t with vs_inst_idx := LENGTH sb.cs_current_insts)
 Proof
   strip_tac >>
-  `stmt_state_rel ctx func cenv cx es t` by
+  `stmt_state_rel H ctx func cenv cx es t` by
     (irule literal_ptr_state_memory_frame >> goal_assum (drule_at Any) >> simp[] >>
      qexistsl_tac [`p`, `sa`, `sh`] >> simp[] >>
      conj_tac >- (first_assum ACCEPT_TAC) >>
@@ -726,8 +726,8 @@ Proof
 QED
 
 Theorem literal_ptr_ghost_inv_normalize:
-  ghost_inv d cenv cx (es with gas_obs := gs) G tn (s with vs_inst_idx := idx) <=>
-  ghost_inv d cenv cx es G tn s
+  ghost_inv H d cenv cx (es with gas_obs := gs) G tn (s with vs_inst_idx := idx) <=>
+  ghost_inv H d cenv cx es G tn s
 Proof
   simp[ghost_inv_def, ptr_covers_def, return_buf_ptr_def, stor_taint_ok_def,
        lookup_var_def] >> Cases_on `d` >> simp[return_buf_ptr_def] >>

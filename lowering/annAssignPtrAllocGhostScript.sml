@@ -31,7 +31,7 @@ QED
 
 Theorem annassign_alloca_robust_below_frontier_ptr:
   !ctx func cenv cx es s id n out u tn tv v b.
-    stmt_state_rel ctx func cenv cx es s /\
+    stmt_state_rel H ctx func cenv cx es s /\
     MEM (mk_inst id ALLOCA [Lit (n2w n)] [out]) (fn_insts func) /\
     n < dimword (:256) /\
     step_inst_base (mk_inst id ALLOCA [Lit (n2w n)] [out]) s = OK u /\
@@ -55,7 +55,7 @@ QED
 
 Theorem annassign_alloca_local_robust_ptr:
   !ctx func cenv cx es s id n out u tn name entry p sz w.
-    stmt_state_rel ctx func cenv cx es s /\
+    stmt_state_rel H ctx func cenv cx es s /\
     MEM (mk_inst id ALLOCA [Lit (n2w n)] [out]) (fn_insts func) /\
     n < dimword (:256) /\
     step_inst_base (mk_inst id ALLOCA [Lit (n2w n)] [out]) s = OK u /\
@@ -82,7 +82,7 @@ QED
 
 Theorem annassign_alloca_effects_ptr:
   !ctx func cenv cx es s id n out u PG G tn.
-    stmt_state_rel ctx func cenv cx es s /\
+    stmt_state_rel H ctx func cenv cx es s /\
     MEM (mk_inst id ALLOCA [Lit (n2w n)] [out]) (fn_insts func) /\
     n < dimword (:256) /\
     step_inst_base (mk_inst id ALLOCA [Lit (n2w n)] [out]) s = OK u ==>
@@ -114,14 +114,14 @@ QED
 
 Theorem annassign_alloca_ghost_inv_ptr:
   !ctx func cenv cx es s u aid n p d PG G tn.
-    stmt_state_rel ctx func cenv cx es s /\
+    stmt_state_rel H ctx func cenv cx es s /\
     MEM (mk_inst aid ALLOCA [Lit (n2w n)] [p]) (fn_insts func) /\
     not_local_ptr cenv es.scopes p /\ n < dimword (:256) /\
     (!x sz. cenv.ce_return_buf = SOME (PtrVar (Var x) sz) ==> x <> p) /\
     (!x sz. cenv.ce_return_pc = SOME (PtrVar (Var x) sz) ==> x <> p) /\
-    ghost_inv d cenv cx es G tn s /\
+    ghost_inv H d cenv cx es G tn s /\
     step_inst_base (mk_inst aid ALLOCA [Lit (n2w n)] [p]) s = OK u ==>
-    ghost_inv d cenv cx es
+    ghost_inv H d cenv cx es
       (step_prov PG G (mk_inst aid ALLOCA [Lit (n2w n)] [p]) u)
       (step_taint (mk_inst aid ALLOCA [Lit (n2w n)] [p]) s u tn) u
 Proof
@@ -154,7 +154,7 @@ Finalise annassign_alloca_ghost_inv_ptr
 
 Theorem annassign_alloca_ghost_kept_ptr:
   !ctx func cenv cx es s u aid n p sa PG G tn.
-    stmt_state_rel ctx func cenv cx es s /\
+    stmt_state_rel H ctx func cenv cx es s /\
     MEM (mk_inst aid ALLOCA [Lit (n2w n)] [p]) (fn_insts func) /\
     n < dimword (:256) /\ ~not_fresh_at sa p /\
     step_inst_base (mk_inst aid ALLOCA [Lit (n2w n)] [p]) s = OK u ==>
@@ -184,16 +184,16 @@ QED
 
 Theorem annassign_alloca_ghost_frame_ptr:
   !ctx func cenv cx es s u aid n p sa d PG G tn.
-    stmt_state_rel ctx func cenv cx es s /\
+    stmt_state_rel H ctx func cenv cx es s /\
     fn_inst_ids_distinct func /\
     MEM (mk_inst aid ALLOCA [Lit (n2w n)] [p]) (fn_insts func) /\
     not_local_ptr cenv es.scopes p /\ n < dimword (:256) /\
     ~not_fresh_at sa p /\
     (!x sz. cenv.ce_return_buf = SOME (PtrVar (Var x) sz) ==> x <> p) /\
     (!x sz. cenv.ce_return_pc = SOME (PtrVar (Var x) sz) ==> x <> p) /\
-    ghost_inv d cenv cx es G tn s /\
+    ghost_inv H d cenv cx es G tn s /\
     step_inst_base (mk_inst aid ALLOCA [Lit (n2w n)] [p]) s = OK u ==>
-    ghost_inv d cenv cx es
+    ghost_inv H d cenv cx es
       (step_prov PG G (mk_inst aid ALLOCA [Lit (n2w n)] [p]) u)
       (step_taint (mk_inst aid ALLOCA [Lit (n2w n)] [p]) s u tn) u /\
     ghost_kept cenv es sa G tn s

@@ -148,7 +148,7 @@ Proof
 QED
 
 Theorem log_wb_alloca_frame:
-  stmt_state_rel ctx func cenv cx es s0 /\
+  stmt_state_rel H ctx func cenv cx es s0 /\
   local_ptrs_reserved cenv sa /\
   MAP FDOM ee.scopes = MAP FDOM es.scopes /\
   wb_frame cenv es es1 sa s0 t ==>
@@ -159,7 +159,7 @@ Proof
 QED
 
 Theorem log_suffix_alloca_frame:
-  stmt_state_rel ctx func cenv cx es s /\
+  stmt_state_rel H ctx func cenv cx es s /\
   local_ptrs_reserved cenv sm /\
   MAP FDOM ee.scopes = MAP FDOM es.scopes /\
   (!op w. (!z. op = Var z ==> not_fresh_at sm z) /\
@@ -261,7 +261,7 @@ Resume compile_log_ready_stmt_frag[args_value]:
         simp[EL_MAP, Excl "enc_def"]) >>
      qpat_x_assum `!n. n < LENGTH args ==> _` (qspec_then `n` mp_tac) >>
      simp[Excl "enc_def"]) >>
-  `stmt_state_rel ctx func cenv cx (es_end with gas_obs := []) t` by
+  `stmt_state_rel H ctx func cenv cx (es_end with gas_obs := []) t` by
     metis_tac[log_args_post_state] >>
   `local_ptrs_reserved cenv sm` by
     (drule_all compile_log_eval_all_grows >> strip_tac >>
@@ -343,7 +343,7 @@ Resume compile_log_ready_stmt_frag[post]:
   rpt conj_tac
   >- fs[same_blocks_def]
   >- (drule_all log_stmt_open >> simp[])
-  >- (qpat_x_assum `stmt_state_rel _ _ _ _ (_ with logs := _) u` mp_tac >>
+  >- (qpat_x_assum `stmt_state_rel _ _ _ _ _ (_ with logs := _) u` mp_tac >>
       simp[Abbr `ev`, wordsTheory.w2w_id, Excl "enc_def"])
   >- (rpt strip_tac >>
       `lookup_var x t = SOME w` by metis_tac[] >>

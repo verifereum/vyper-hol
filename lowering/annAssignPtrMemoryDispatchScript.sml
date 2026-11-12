@@ -6,14 +6,14 @@ Ancestors annAssignPtrMemoryContinuation stmtLowering
  valueTypingMemoryProps bodyPtrDefs compileEnv loweringStateRelDefs
 
 Theorem annassign_memory_assignment_location_ptr:
- !ctx func cenv cx es sa sb p cap w aid src a sty dty info bytes
+ !ctx func cenv cx es sa sb p cap w aid src a sty dty bytes
   s0 d PG G0 tn0 t ea eb tv dtv stv v inst sc rest id loc fr.
  compile_assign_value cenv (Var p) LocMemory (Var src) F loc
-   dty sty info bytes sa = ((),sb) /\
+   dty sty bytes sa = ((),sb) /\
  (sty = dty \/ is_bytestring_type dty) /\
  0 < type_memory_bytes cenv sty /\ type_memory_bytes cenv sty < dimword (:256) /\
  fn_has_code sa sb func /\ fn_inst_ids_distinct func /\
- stmt_state_rel ctx func cenv cx es s0 /\ ghost_inv d cenv cx es G0 tn0 s0 /\
+ stmt_state_rel H ctx func cenv cx es s0 /\ ghost_inv H d cenv cx es G0 tn0 s0 /\
  local_ptrs_reserved cenv sa /\ not_fresh_at sa p /\ not_fresh_at sa src /\
  (!x n. cenv.ce_return_buf = SOME (PtrVar (Var x) n) ==> not_fresh_at sa x) /\
  (!x n. cenv.ce_return_pc = SOME (PtrVar (Var x) n) ==> not_fresh_at sa x) /\
@@ -42,13 +42,13 @@ Theorem annassign_memory_assignment_location_ptr:
  type_memory_size stv = type_memory_bytes cenv sty /\
  type_memory_size dtv = type_memory_bytes cenv dty /\ type_memory_size dtv <= cap ==>
  ?sf Gf tnf.
- gas_path_ptr (cx_dead cx) 0 ctx func PG G0 tn0 s0 0 Gf tnf (OK sf) /\
+ gas_path_ptr (cx_dead H cx) 0 ctx func PG G0 tn0 s0 0 Gf tnf (OK sf) /\
  sf.vs_current_bb = sb.cs_current_bb /\ sf.vs_inst_idx = LENGTH sb.cs_current_insts /\
  ~sf.vs_halted /\
- stmt_state_rel ctx func cenv cx
+ stmt_state_rel H ctx func cenv cx
    (es with scopes := (sc |+ (id,<|assignable := T; type := dtv;
                                  value := v; popped := []|>)) :: rest) sf /\
- ghost_inv d cenv cx
+ ghost_inv H d cenv cx
    (es with scopes := (sc |+ (id,<|assignable := T; type := dtv;
                                  value := v; popped := []|>)) :: rest) Gf tnf sf /\
  ghost_kept cenv es fr G0 tn0 s0 Gf tnf /\
@@ -59,11 +59,11 @@ Proof
  Cases_on `loc = SOME LocMemory`
  >- (pop_assum SUBST_ALL_TAC >>
      qspecl_then [`ctx`, `func`, `cenv`, `cx`, `es`, `sa`, `sb`, `p`, `cap`,
-       `w`, `aid`, `src`, `a`, `sty`, `dty`, `info`, `bytes`, `s0`, `d`, `PG`,
+       `w`, `aid`, `src`, `a`, `sty`, `dty`, `bytes`, `s0`, `d`, `PG`,
        `G0`, `tn0`, `t`, `ea`, `eb`, `tv`, `dtv`, `stv`, `v`, `inst`, `sc`,
        `rest`, `id`, `fr`] mp_tac annassign_memory_assignment_declaration_ptr >>
      asm_rewrite_tac[]) >>
- qpat_x_assum `compile_assign_value _ _ _ _ _ _ _ _ _ _ _ = _` mp_tac >>
+ qpat_x_assum `compile_assign_value _ _ _ _ _ _ _ _ _ _ = _` mp_tac >>
  simp[compile_assign_value_def] >> disch_tac >>
  `!m. mem_agree_outside tn0.t_mem s0.vs_memory m ==>
        val_in_memory dtv v (w2n a) m` by

@@ -10,17 +10,17 @@ Ancestors
   exprSimHash aggregateCountedStraightExec exprSimAbiGasBridge
 
 Theorem place_alloc_buffer_source_frag:
-  !ctx func cenv cx es sm mid buf sz s src a R.
+  !H ctx func cenv cx es sm mid buf sz s src a R.
     compile_alloc_buffer sz sm = (buf,mid) /\
     MEM (mk_inst sm.cs_next_id ALLOCA [Lit (n2w sz)]
       [STRING #"%" (toString sm.cs_next_var)]) (fn_insts func) /\
-    stmt_state_rel ctx func cenv cx es s /\ fn_inst_ids_distinct func /\
+    stmt_state_rel H ctx func cenv cx es s /\ fn_inst_ids_distinct func /\
     local_ptrs_reserved cenv sm /\ sz < dimword (:256) /\
     eval_operand src s = SOME a /\
     (!x. src = Var x ==> not_fresh_at sm x) ==>
     ?u w. frag_exec ctx sm mid (\z. z = s) (\z. z = u) R /\
       eval_operand src u = SOME a /\
-      stmt_state_rel ctx func cenv cx es u /\
+      stmt_state_rel H ctx func cenv cx es u /\
       eval_operand buf.buf_operand u = SOME w /\
       FLOOKUP u.vs_allocas sm.cs_next_id = SOME (w2n w,sz) /\
       w2n w + sz < dimword (:256) /\ u.vs_memory = s.vs_memory /\
@@ -58,7 +58,7 @@ QED
 (* Unlike the ancestor fragment, only the semantic ALLOCA membership is needed.
    In particular the function subsequently executing this fragment is arbitrary. *)
 Theorem place_normalize_framed_frag:
-  !ctx func cenv cx es ty sty stv dtv v val_op sa sm sb buf s sw R.
+  !H ctx func cenv cx es ty sty stv dtv v val_op sa sm sb buf s sw R.
     compile_alloc_buffer (type_memory_bytes cenv ty) sa = (buf, sm) /\
     compile_store_memory_typed cenv buf.buf_operand ty val_op sty sm =
       ((), sb) /\
@@ -81,7 +81,7 @@ Theorem place_normalize_framed_frag:
        EVERY (\(fname, fty, sz). !tv.
          evaluate_type (get_tenv cx) fty = SOME tv ==>
          sz = type_memory_size tv) fields) /\
-    stmt_state_rel ctx func cenv cx es s /\
+    stmt_state_rel H ctx func cenv cx es s /\
     eval_operand val_op s = SOME sw /\
     val_in_memory stv v (w2n sw) s.vs_memory /\
     w2n sw + type_memory_size stv < dimword (:256) /\
@@ -91,7 +91,7 @@ Theorem place_normalize_framed_frag:
      (?n b len. local_region cenv es.scopes s n b len /\
                 b <= w2n sw /\ w2n sw + type_memory_size stv <= b + len)) ==>
     frag_exec ctx sa sb (\z. z = s)
-      (\u. ?w. stmt_state_rel ctx func cenv cx es u /\
+      (\u. ?w. stmt_state_rel H ctx func cenv cx es u /\
                eval_operand buf.buf_operand u = SOME w /\
                w2n w + type_memory_size dtv < dimword (:256) /\
                val_in_memory dtv v (w2n w) u.vs_memory /\
@@ -142,7 +142,7 @@ Proof
   disch_then (drule_at (Pat `sfields_tenv_consistent _ _`)) >>
   disch_then (drule_at (Pat `eval_operand _ _ = _`)) >>
   disch_then (qspecl_then [`dtv`, `ctx`, `R`,
-    `\t. stmt_state_rel ctx func cenv cx es t /\
+    `\t. stmt_state_rel H ctx func cenv cx es t /\
       (!off len. off + len <= w2n w \/ w2n w + type_memory_size dtv <= off ==>
         mem_bytes_at off len t.vs_memory = mem_bytes_at off len s.vs_memory)`] mp_tac) >>
   (impl_tac >- suspend "frame" >> suspend "post")
@@ -226,7 +226,7 @@ Proof
 QED
 
 Theorem place_normalize_framed_path:
-  !ctx func cenv cx es ty sty stv dtv v val_op sa sm sb buf s sw.
+  !H ctx func cenv cx es ty sty stv dtv v val_op sa sm sb buf s sw.
     compile_alloc_buffer (type_memory_bytes cenv ty) sa = (buf, sm) /\
     compile_store_memory_typed cenv buf.buf_operand ty val_op sty sm = ((), sb) /\
     MEM (mk_inst sa.cs_next_id ALLOCA [Lit (n2w (type_memory_bytes cenv ty))]
@@ -245,7 +245,7 @@ Theorem place_normalize_framed_path:
        ALL_DISTINCT (MAP FST fields) /\
        EVERY (\(fname, fty, sz). !tv. evaluate_type (get_tenv cx) fty = SOME tv ==>
          sz = type_memory_size tv) fields) /\
-    stmt_state_rel ctx func cenv cx es s /\ eval_operand val_op s = SOME sw /\
+    stmt_state_rel H ctx func cenv cx es s /\ eval_operand val_op s = SOME sw /\
     val_in_memory stv v (w2n sw) s.vs_memory /\
     w2n sw + type_memory_size stv < dimword (:256) /\
     ((?aid b len. aid < sa.cs_next_id /\ FLOOKUP s.vs_allocas aid = SOME (b,len) /\
@@ -255,7 +255,7 @@ Theorem place_normalize_framed_path:
     ~s.vs_halted /\ s.vs_current_bb = sa.cs_current_bb /\
     s.vs_inst_idx = LENGTH sa.cs_current_insts ==>
     ?u w. gas_marked_path F ctx func s 0 (OK u) /\
-      stmt_state_rel ctx func cenv cx es u /\
+      stmt_state_rel H ctx func cenv cx es u /\
       eval_operand buf.buf_operand u = SOME w /\
       w2n w + type_memory_size dtv < dimword (:256) /\
       val_in_memory dtv v (w2n w) u.vs_memory /\
@@ -334,13 +334,13 @@ Resume place_normalize_framed_path[relabel]:
   qexists_tac `sa` >> simp[] >> rpt gen_tac >> strip_tac >>
   drule_all place_normalize_start_relabel >>
   disch_then (qspec_then `L` strip_assume_tac) >>
-  `stmt_state_rel ctx func cenv cx es (s with vs_current_bb := L)` by
+  `stmt_state_rel H ctx func cenv cx es (s with vs_current_bb := L)` by
     simp[aggregate_stmt_state_rel_current_bb] >>
   qpat_x_assum `compile_alloc_buffer _ sa = _` kall_tac >>
   qpat_x_assum `compile_store_memory_typed _ _ _ _ _ sm = _` kall_tac >>
   drule place_normalize_framed_frag >>
   disch_then (drule_at (Pat `compile_store_memory_typed _ _ _ _ _ _ = _`)) >>
-  disch_then (drule_at (Pat `stmt_state_rel _ _ _ _ _ _`)) >>
+  disch_then (drule_at (Pat `stmt_state_rel _ _ _ _ _ _ _`)) >>
   disch_then (qspecl_then [`stv`, `dtv`, `v`, `sw`, `(\r. F)`] mp_tac) >>
   (impl_tac >- suspend "relabel_pre") >>
   simp[frag_exec_def] >>

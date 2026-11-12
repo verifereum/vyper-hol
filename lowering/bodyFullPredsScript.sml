@@ -122,8 +122,10 @@ Definition body_iterator_full_ok_def:
 End
 
 Definition body_for_full_ok_def:
-  body_for_full_ok cx (tyv : type_value) (nm : identifier) body (vs : value list)
-  <=> vs <> [] ==> body_stmts_full_ok cx body
+  body_for_full_ok cx (tyv : type_value) (nm : identifier) body (vs : eval_result list)
+  <=>
+    (?s v t. vs <> [] /\ read_result cx (HD vs) s = (INL v,t)) ==>
+    body_stmts_full_ok cx body
 End
 
 Definition body_base_target_full_ok_def:

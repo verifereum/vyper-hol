@@ -87,7 +87,7 @@ Proof
      irule ld_ptr_use_scalar >> simp[Excl "MEM"] >> qexists_tac `inst` >>
      gvs[MEM, mem_read_ops_def, mem_write_ops_def, is_pointer_preserving_op_def]) >>
   `~MEM inst.inst_opcode
-     [ASSIGN;PHI;RET;RETFMP;DRET;SHL;SHR;SAR;MSTORE;SSTORE;TSTORE;ISTORE]` by
+     [ASSIGN;PHI;RET;RETFMP;DRET;MUL;SHL;SHR;SAR;MSTORE;SSTORE;TSTORE;ISTORE]` by
     gvs[MEM] >>
   `eval_operands inst.inst_operands f.lf_src =
    eval_operands inst.inst_operands f.lf_tgt` by

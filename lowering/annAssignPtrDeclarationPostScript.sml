@@ -24,8 +24,8 @@ Theorem annassign_copied_declaration_path_ptr:
  val_wf entry.type entry.value /\ val_footprint entry.type entry.value <= k /\
  (!m. mem_agree_outside tn.t_mem s.vs_memory m ==>
       val_in_memory entry.type entry.value (w2n a) m) /\
- stmt_state_rel ctx func cenv cx es s /\ ~cenv.ce_is_ctor /\
- ghost_inv d cenv cx es G tn s /\ ghost_kept cenv es sa G0 tn0 s0 G tn /\
+ stmt_state_rel H ctx func cenv cx es s /\ ~cenv.ce_is_ctor /\
+ ghost_inv H d cenv cx es G tn s /\ ghost_kept cenv es sa G0 tn0 s0 G tn /\
  fn_inst_ids_distinct func /\ MEM inst (fn_insts func) /\
  inst.inst_opcode = ALLOCA /\ inst.inst_outputs = [dst] /\
  not_local_ptr cenv es.scopes dst /\
@@ -44,16 +44,16 @@ Theorem annassign_copied_declaration_path_ptr:
  es.scopes = sc :: rest /\
  FLOOKUP cenv.ce_vars id = SOME (PtrVar (Var dst) sz) ==>
  ?Gf tnf sf.
- gas_path_ptr (cx_dead cx) 0 ctx func PG G tn s 0 Gf tnf (OK sf) /\
+ gas_path_ptr (cx_dead H cx) 0 ctx func PG G tn s 0 Gf tnf (OK sf) /\
  sf.vs_current_bb = sb.cs_current_bb /\ sf.vs_inst_idx = LENGTH sb.cs_current_insts /\
  ~sf.vs_halted /\
- stmt_state_rel ctx func cenv cx es sf /\
- ghost_inv d cenv cx es Gf tnf sf /\
+ stmt_state_rel H ctx func cenv cx es sf /\
+ ghost_inv H d cenv cx es Gf tnf sf /\
  ghost_kept cenv es sa G0 tn0 s0 Gf tnf /\
  ptr_covers Gf tnf dst sf sz /\ lookup_var dst sf = SOME b /\
  (!m. mem_agree_outside tnf.t_mem sf.vs_memory m ==>
       val_in_memory entry.type entry.value (w2n b) m) /\
- ghost_inv d cenv cx (es with scopes := (sc |+ (id,entry)) :: rest) Gf tnf sf /\
+ ghost_inv H d cenv cx (es with scopes := (sc |+ (id,entry)) :: rest) Gf tnf sf /\
  (!q. not_fresh_at st q ==> lookup_var q sf = lookup_var q s) /\
  sf.vs_allocas = s.vs_allocas
 Proof
@@ -67,7 +67,7 @@ Proof
   op_taint tnf (Var dst) = op_taint tn (Var dst)` by metis_tac[] >>
  `ptr_covers Gf tnf dst sf sz` by
    (irule annassign_ptr_covers_frame_ptr >> qexistsl [`G`,`s`,`tn`] >> simp[]) >>
- `ghost_inv d cenv cx (es with scopes := (sc |+ (id,entry)) :: rest) Gf tnf sf` by
+ `ghost_inv H d cenv cx (es with scopes := (sc |+ (id,entry)) :: rest) Gf tnf sf` by
    (irule annassign_ghost_scope_update_ptr >> simp[] >>
     rpt strip_tac >> gvs[] >> first_x_assum drule >> simp[]) >>
  qexistsl [`Gf`,`tnf`,`sf`] >> asm_rewrite_tac[] >>

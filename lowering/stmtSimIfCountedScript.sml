@@ -11,6 +11,26 @@ Ancestors
 Libs
   monadsyntax intLib
 
+(* The branches after the condition only append storage observations. *)
+val if_cont_frame_tac =
+  simp[vyperStorageTraceTheory.storage_trace_frame_cond,
+       vyperStorageTraceTheory.storage_trace_frame_ignore_bind,
+       vyperStorageTraceTheory.storage_trace_frame_finally,
+       vyperStorageTraceTheory.storage_trace_frame_state_updates,
+       vyperStorageTraceTheory.storage_trace_frame_pop_scope,
+       vyperStorageTraceTheory.storage_trace_frame_raise,
+       vyperStorageTraceTheory.evaluate_storage_trace_frame];
+
+(* The condition left the storage domain: the whole If is a bad-storage run
+   under the condition's marks. *)
+val if_out_of_domain_tac =
+  rewrite_tac[eval_stmt_if_forced] >>
+  irule gasStorageTheory.gas_bad_storage_at_bind_left >>
+  if_cont_frame_tac >>
+  irule gasStorageTheory.gas_bad_storage_at_counted_prefix >>
+  qpat_assum `gas_marked_exec _ _ (bind _ _) _ _ _ _ _` (irule_at Any) >>
+  simp[];
+
 Theorem compile_if_stmt_frag:
   !ctx func cx lctx RetQ cenv ty c ss1 ss2 es.
     expr_type c = BaseT BoolT /\
@@ -42,23 +62,42 @@ Proof
     (irule if_condition_admissible >> metis_tac[]) >>
   qpat_x_assum `expr_sim _ _ _ _ _ _ _` mp_tac >>
   rewrite_tac[expr_sim_def] >>
-  disch_then (qspecl_then [`sa`, `cond`, `op`, `s0`] mp_tac) >>
+  disch_then (qspecl_then [`st0`, `sa`, `cond`, `op`, `s0`] mp_tac) >>
   impl_tac >- simp[] >>
-  rewrite_tac[gas_outcome_def, gas_summary_at_def] >> strip_tac
+  rewrite_tac[gas_outcome_def, gas_summary_at_def] >> BETA_TAC >> strip_tac
+  >- (qexists_tac `marks` >> disj1_tac >> rewrite_tac[eval_stmt_if_forced] >>
+      irule gasStorageTheory.gas_bad_storage_at_bind_left >>
+      if_cont_frame_tac >> first_assum ACCEPT_TAC)
   >- suspend "selected_branch"
-  >- (gvs[] >> Cases_on `res` >- fs[] >>
+  >- (Cases_on `res`
+      >- (`~storage_trace_domain cx st0 es_end.storage_trace` by
+            (simp[vyperStorageFootprintTheory.storage_trace_domain_def] >>
+             strip_tac >>
+             qpat_x_assum `!H. _ ==> expr_exit _ _`
+               (qspec_then `storage_trace_horizon es_end.storage_trace` mp_tac) >>
+             simp[expr_exit_def]) >>
+          qexists_tac `marks` >> disj1_tac >> if_out_of_domain_tac) >>
       rename1 `INR ex` >>
-      qexists_tac `marks` >> disj1_tac >>
+      qexists_tac `marks` >> disj2_tac >> disj1_tac >>
       qexistsl_tac [`INR ex`, `es_end`, `r`] >>
       conj_tac
       >- (rewrite_tac[eval_stmt_if_forced] >>
           irule gas_marked_exec_bind_exception >> simp[]) >>
-      disj2_tac >> simp[stmt_exit_def] >> metis_tac[expr_exit_INR_type]) >>
-  qexists_tac `marks` >> disj2_tac >>
+      disj2_tac >> simp[stmt_exit_def] >> rpt strip_tac >>
+      qpat_x_assum `!H. _ ==> expr_exit _ _` (qspec_then `H` mp_tac) >>
+      simp[] >> metis_tac[expr_exit_INR_type]) >>
+  qexists_tac `marks` >> disj2_tac >> disj2_tac >>
   drule eval_stmt_if_condition_cert >> metis_tac[]
 QED
 
 Resume compile_if_stmt_frag[selected_branch]:
+  gvs[] >>
+  reverse (Cases_on `storage_trace_domain cx st0 es_end.storage_trace`)
+  >- (qexists_tac `marks` >> disj1_tac >> if_out_of_domain_tac) >>
+  `?H0. valid_horizon cx st0 H0 es_end.storage_trace` by
+    metis_tac[vyperStorageFootprintTheory.storage_trace_domain_def] >>
+  qpat_assum `!H. valid_horizon _ _ H es_end.storage_trace ==> ?v. _`
+    (drule_then strip_assume_tac) >>
   gvs[] >>
   `?b. v = BoolV b` by
     (spose_not_then assume_tac >>
@@ -89,7 +128,9 @@ Resume compile_if_stmt_frag[selected_branch]:
   qpat_x_assum `compile_stmt _ _ _ _ _ = _` kall_tac >>
   qpat_x_assum `lower_value _ _ _ _ _ = _` kall_tac >>
   `eval_operand op t = SOME (val_to_w256 (BoolV b))` by
-    (drule_all if_condition_operand >> simp[]) >>
+    (qpat_assum `!H. valid_horizon _ _ H es_end.storage_trace ==> _`
+       (drule_then strip_assume_tac) >>
+     drule_all if_condition_operand >> simp[]) >>
   `~t.vs_halted` by
     (fs[gas_marked_exec_def, fragGasModeTheory.gas_marked_path_def] >>
      metis_tac[gas_path_normal]) >>
@@ -104,7 +145,7 @@ Resume compile_if_stmt_frag[selected_branch]:
   impl_tac >- (qpat_x_assum `!tail. bind _ _ _ = _`
     (qspec_then `[]` mp_tac) >> simp[SF ETA_ss]) >>
   rewrite_tac[stmt_frag_def, stmt_framed_frag_def] >>
-  disch_then (qspecl_then [`entry`, `last`, `jump_to (if b then tl else el) t`,
+  disch_then (qspecl_then [`st0`, `entry`, `last`, `jump_to (if b then tl else el) t`,
       `FST (stmts_env cenv lctx ty (if b then ss1 else ss2) entry)`] mp_tac) >>
   impl_tac
   >- (simp[compile_stmts_env, ret_pc_ok_jump_to, stmt_state_rel_jump_to,
@@ -115,28 +156,44 @@ Resume compile_if_stmt_frag[selected_branch]:
       conj_tac >- metis_tac[local_ptrs_reserved_next_var] >>
       conj_tac
       >- (irule ret_pc_ok_frame >> qexistsl_tac [`cenv`, `s0`, `sa`] >>
+          qpat_assum `!H. valid_horizon _ _ H es_end.storage_trace ==> _`
+            (drule_then strip_assume_tac) >>
           fs[expr_post_def]) >>
       conj_tac
       >- (qpat_x_assum `gas_admissible (eval_stmts _ _) _ _` mp_tac >>
           simp[gas_admissible_def]) >>
-      fs[expr_post_def]) >>
+      rpt strip_tac >>
+      qpat_x_assum `!H. valid_horizon _ _ H es_end.storage_trace ==> _`
+        (qspec_then `H` mp_tac) >>
+      simp[expr_post_def] >> strip_tac >>
+      fs[vyperStorageFootprintTheory.storage_well_formed_on_def,
+         vyperStorageBackendTheory.get_storage_scopes]) >>
   simp[] >> strip_tac >>
-  `gas_outcome F (cx_tops cx) (ctx,func)
+  `gas_outcome F (cx_tops cx) (ctx,func) cx st0
      (ignore_bind push_scope (finally (eval_stmts cx (if b then ss1 else ss2)) pop_scope))
      (es_end with gas_obs := [], jump_to (if b then tl else el) t)
-     (stmt_post ctx func cx lctx cenv cenv entry sb (es_end with gas_obs := []) (jump_to (if b then tl else el) t))
-     (\res ee r. !tail. stmt_exit RetQ (ee with gas_obs := tail) res r)` by
+     (\H. stmt_post H ctx func cx lctx cenv cenv entry sb (es_end with gas_obs := []) (jump_to (if b then tl else el) t))
+     (\H res ee r. !tail. stmt_exit (RetQ H) (ee with gas_obs := tail) res r)` by
     (irule if_branch_outcome >> simp[jump_to_def] >>
      qexistsl_tac [`after`, `FST (stmts_env cenv lctx ty (if b then ss1 else ss2) entry)`,
        `last`, `xl`] >> simp[] >>
      conj_tac >- (Cases_on `block_is_terminated last` >> fs[]) >>
-     qpat_x_assum `gas_outcome _ _ _ (eval_stmts _ _) _ _ _` mp_tac >>
+     qpat_x_assum `gas_outcome _ _ _ _ _ (eval_stmts _ _) _ _ _` mp_tac >>
      simp[jump_to_def]) >>
   `MAP FDOM es_end.scopes = MAP FDOM es.scopes` by
     (qpat_x_assum `!tail. bind _ _ _ = _` (qspec_then `[]` mp_tac) >>
      strip_tac >> drule eval_read_preserves_scopes_dom >> simp[]) >>
+  `!H. valid_horizon cx st0 H es_end.storage_trace ==>
+     expr_post H ctx func cenv cx c es sa cond s0 (es_end with gas_obs := [])
+       (BoolV b) op t` by
+    (rpt strip_tac >>
+     qpat_x_assum `!H. valid_horizon _ _ H es_end.storage_trace ==> _`
+       (qspec_then `H` mp_tac) >> simp[]) >>
+  `!H. valid_horizon cx st0 H es.storage_trace ==>
+     stmt_state_rel H ctx func cenv cx es s0` by metis_tac[] >>
   drule_all if_selected_outcome_prefix >>
-  simp[gas_outcome_def, gas_summary_at_def]
+  rewrite_tac[gas_outcome_def, gas_summary_at_def] >> BETA_TAC >>
+  simp[]
 QED
 
 Finalise compile_if_stmt_frag
