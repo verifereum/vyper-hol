@@ -72,6 +72,31 @@ Definition asm_run_bounded_def:
       | _ => T))
 End
 
+(* The CALL families expose the same two ranges, after their value slot. *)
+Theorem asm_inst_gas_ok_call_ranges:
+  asm_inst_gas_ok H (AsmOp name) stk /\
+  (name = "CALL" \/ name = "STATICCALL") /\
+  6 + (if name = "CALL" then 1 else 0) <= LENGTH stk ==>
+  (w2n (EL (3 + (if name = "CALL" then 1 else 0)) stk) = 0 \/
+   w2n (EL (2 + (if name = "CALL" then 1 else 0)) stk) +
+   w2n (EL (3 + (if name = "CALL" then 1 else 0)) stk) <= H) /\
+  (w2n (EL (5 + (if name = "CALL" then 1 else 0)) stk) = 0 \/
+   w2n (EL (4 + (if name = "CALL" then 1 else 0)) stk) +
+   w2n (EL (5 + (if name = "CALL" then 1 else 0)) stk) <= H)
+Proof
+  strip_tac >>
+  namedCases_on `stk` ["", "x0 xs0"] >> gvs[] >>
+  namedCases_on `xs0` ["", "x1 xs1"] >> gvs[] >>
+  namedCases_on `xs1` ["", "x2 xs2"] >> gvs[] >>
+  namedCases_on `xs2` ["", "x3 xs3"] >> gvs[] >>
+  namedCases_on `xs3` ["", "x4 xs4"] >> gvs[] >>
+  namedCases_on `xs4` ["", "x5 xs5"] >> gvs[] >>
+  Cases_on `name = "CALL"` >>
+  gvs[asm_inst_gas_ok_def, asm_mem_ranges_def] >>
+  namedCases_on `xs5` ["", "x6 xs6"] >>
+  gvs[asm_inst_gas_ok_def, asm_mem_ranges_def]
+QED
+
 Theorem asm_run_bounded_step:
   asm_run_bounded lo o2pc prog H (SUC k) s ==>
   s.as_pc < LENGTH prog /\ ~is_data_inst (EL s.as_pc prog) /\
