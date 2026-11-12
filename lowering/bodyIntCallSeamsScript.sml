@@ -51,12 +51,13 @@ End
    state s0.  t is at the INVOKE, es1 is the source state push_function
    leaves, prev the caller's scopes it saved, penv the parameters' scope
    and rtv the evaluated return type.
-   - Source: the arguments evaluated and read to the values penv binds,
+   - Source: the arguments evaluated to the values penv binds,
      and the lock taken when the callee is nonreentrant; the callee's
      body is call-safe at the pushed context.
    - Code: the call's code as compile_call_intcall_shape gives it: the
-     arguments (sa to st1), the return buffer rbuf if any (st1 to st2),
-     the staging (st2 to st3), the INVOKE of the callee's label at st3
+     return buffer rbuf if any (sa to st2), each argument lowered and
+     staged at the callee's declared parameter type (st2 to st3), the
+     INVOKE of the callee's label at st3
      with the buffer's pointer first when the callee returns through it,
      and after it the results' store into rbuf, up to sb; vv is rbuf's
      located value, or the void call's literal.
@@ -78,9 +79,8 @@ Definition intcall_entry_def:
   intcall_entry tops ctx func cenv cx tenv name es sa sb vv s0 es0
                 (mut,nr,args,ret,ss,rr) prev penv rtv es1 t <=>
     ~MEM (NONE,name) cx.stk /\
-    (?s1 results t1 s2 vs t2 s3 u t3.
-       eval_expr_results cx es s1 = (INL results,t1) /\
-       read_results cx results s2 = (INL vs,t2) /\
+    (?s1 vs t1 s3 u t3.
+       eval_exprs cx es s1 = (INL vs,t1) /\
        bind_arguments (get_tenv cx) args vs = SOME penv /\
        lock_if_nr cx nr (is_view_mut mut) s3 = (INL u,t3)) /\
     evaluate_type (get_tenv cx) ret = SOME rtv /\
@@ -100,23 +100,23 @@ Definition intcall_entry_def:
                   off + sz <= b \/ b + sz' <= off) ==>
        mem_bytes_at off sz t.vs_memory = mem_bytes_at off sz s0.vs_memory) /\
     locals_kept cenv es0 (es1 with scopes := prev) s0 t /\
-    ?arg_vals st1 st2 invoke_args st3 rc rbs pvs lbl arg_ops bb inst argv.
+    ?st2 invoke_args st3 rc rbs pvs lbl arg_ops bb inst argv.
       cenv.ce_func_info (nsid_to_string (NONE,name)) = (rc,rbs,pvs) /\
-      compile_multi_vvs compile_expr cenv es sa = (arg_vals,st1) /\
-      compile_stage_intcall_args cenv arg_vals pvs (MAP expr_type es) st2 =
-        (invoke_args,st3) /\
+      compile_stage_intcall_args compile_expr cenv es pvs
+        (TAKE (LENGTH es) (cenv.ce_func_param_types (nsid_to_string (NONE,name))))
+        st2 = (invoke_args,st3) /\
       lbl = internal_fn_label (cenv.ce_func_ids (nsid_to_string (NONE,name)))
               (nsid_to_string (NONE,name))
               (cenv.ce_func_param_types (nsid_to_string (NONE,name)))
               cenv.ce_is_ctor /\
       (rc = 0 /\ rbs = 0 ==>
-       st2 = st1 /\ arg_ops = invoke_args /\
+       st2 = sa /\ arg_ops = invoke_args /\
        (?u. emit_void INVOKE (Label lbl :: invoke_args) st3 = (u,sb)) /\
        vv = StackValue (cenv.ce_func_return_type (nsid_to_string (NONE,name)))
               (Lit 0w)) /\
       (0 < rc \/ 0 < rbs ==>
        ?rbuf aid off.
-         compile_alloc_buffer (if 0 < rc then 32 * rc else rbs) st1 =
+         compile_alloc_buffer (if 0 < rc then 32 * rc else rbs) sa =
            (rbuf,st2) /\
          vv = LocatedValue
                 (cenv.ce_func_return_type (nsid_to_string (NONE,name)))
@@ -221,7 +221,7 @@ Theorem intcall_args_frame_setup:
     lookup_callable_function cx.in_deploy name tops =
       SOME (mut,nr,args,[],ret,ss) /\
     MEM (FunctionDecl Internal mut nr rr name args [] ret ss) tops /\
-    (~MEM (NONE,name) cx.stk ==> body_results_ok cx es) /\
+    (~MEM (NONE,name) cx.stk ==> body_exprs_ok cx es) /\
     compile_expr cenv ty (Call ann (IntCall (NONE,name)) es dflt) sa =
       (vv,sb) /\
     fn_has_code sa sb func /\ fn_inst_ids_distinct func /\
@@ -325,9 +325,8 @@ Theorem intcall_entry_source:
     (mut,nr,args,ret,ss,rr) prev penv rtv es1 t ==>
   ~MEM (NONE,name) cx.stk /\
   evaluate_type (get_tenv cx) ret = SOME rtv /\
-  ?s1 results t1 s2 vs t2 s3 u t3.
-    eval_expr_results cx es s1 = (INL results,t1) /\
-    read_results cx results s2 = (INL vs,t2) /\
+  ?s1 vs t1 s3 u t3.
+    eval_exprs cx es s1 = (INL vs,t1) /\
     bind_arguments (get_tenv cx) args vs = SOME penv /\
     lock_if_nr cx nr (is_view_mut mut) s3 = (INL u,t3)
 Proof

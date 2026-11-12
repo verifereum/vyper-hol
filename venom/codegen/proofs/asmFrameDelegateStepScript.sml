@@ -144,7 +144,7 @@ Proof
       `c.gasUsed <= c.msgParams.gasLimit` by
         gvs[wf_state_def, wf_context_def] >>
       `?r s'. run_call s = SOME (r,s') /\
-        frame_outcome s r s' (SOME OutOfGas) [] []` by
+        frame_outcome s r s' (SOME OutOfGas) [] [] /\ call_requests s = []` by
         (irule asm_step_fault_outcome >> simp[vfm_abort_def] >>
          qexistsl [`c with stack := DROP 6 c.stack`, `t`] >> simp[]) >>
       `frame_resource_starved s r s'` by

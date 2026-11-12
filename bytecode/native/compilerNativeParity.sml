@@ -5,7 +5,7 @@
  * lines, as read by evalCompilerBytecodeLib.read_hex_bytes).
  *
  * Usage: bytecode_parity_native.exe BYTECODE_DIR [PATH ...]
- * A fixture is named by its .hex file's path under BYTECODE_DIR, such as
+ * A fixture is named by its .hex file's path relative to BYTECODE_DIR, such as
  * python-o1-no-asm-opt/add_arg.hex or builtin-forms/oracle/ceil_dec.hex.  A
  * PATH selects that fixture, or every fixture under that directory; without
  * one, every fixture runs.  Every .hex file in a directory a selected fixture
@@ -68,6 +68,8 @@ structure compilerNativeParity = struct
      pointers, which the pinned Python does not (see
      ../pending-bounded-decode-guards.md). *)
   val decoder_divergent = [
+      "abi-codegen/oracle/dec_bytes_unwrapT.hex",
+      "abi-codegen/oracle/dec_uint_unwrapT.hex",
       "external-calls/oracle/e04_ret_string.hex",
       "external-calls/oracle/e05_ret_bytes.hex",
       "external-calls/oracle/e19_gas_kw.hex",
@@ -78,7 +80,10 @@ structure compilerNativeParity = struct
       "external-calls/oracle/e37_default_ret_string.hex",
       "external-calls/oracle/e38_default_ret_local_array.hex",
       "external-calls/oracle/e45_default_ret_ifexp.hex",
-      "memory-stores/oracle/t04_tuple_assign_extcall.hex"]
+      "memory-stores/oracle/dec_from_memory2.hex",
+      "memory-stores/oracle/t03_tuple_assign_abi_decode.hex",
+      "memory-stores/oracle/t04_tuple_assign_extcall.hex",
+      "memory-stores/oracle/t11_tuple_onew_decode_mem.hex"]
 
   fun hex_files root dir = let
     val d = OS.FileSys.openDir (OS.Path.concat (root, dir))
@@ -93,7 +98,7 @@ structure compilerNativeParity = struct
   (* Oracles out of parity until their vyperlang/vyper#5127 port lands, as
      listed in ../pending-5127-port.md: `main/NAME` is the main corpus
      (python-o1-no-asm-opt/NAME.hex), `SUITE/NAME` a feature suite's
-     SUITE/oracle/NAME.hex. *)
+     SUITE/oracle/NAME.hex, except load_timing under ../tests/fixtures. *)
   fun pending_oracles root = let
     val path = OS.Path.concat (root, "pending-5127-port.md")
     val prefix = "- `"
@@ -103,6 +108,7 @@ structure compilerNativeParity = struct
                (hd (String.fields (fn c => c = #"`")
                       (String.extract (line, size prefix, NONE)))) of
           ["main", n] => SOME ("python-o1-no-asm-opt/" ^ n ^ ".hex")
+        | ["load_timing", n] => SOME ("../tests/fixtures/load_timing/oracle/" ^ n ^ ".hex")
         | [suite, n] => SOME (suite ^ "/oracle/" ^ n ^ ".hex")
         | _ => NONE
       else NONE

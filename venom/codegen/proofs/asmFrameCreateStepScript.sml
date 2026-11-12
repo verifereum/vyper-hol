@@ -795,7 +795,8 @@ Theorem asm_frame_create_failure_starved:
     (case salt_opt of NONE => stk | SOME salt => salt::stk) /\
   s.contexts = (c,rb)::rest /\ ~c.msgParams.static /\
   step_create (IS_SOME salt_opt) s = (INR e,u) ==>
-  ?r t. run_call s = SOME (r,t) /\ frame_resource_starved es0 r t
+  ?r t. run_call s = SOME (r,t) /\ frame_resource_starved es0 r t /\
+        call_requests s = []
 Proof
   strip_tac >>
   `wf_state s /\ (?d. s.msdomain = Collect d) /\ ~c.msgParams.static /\
@@ -833,7 +834,8 @@ Proof
     (Cases_on `rest` >> simp[] >> Cases_on `c.msgParams.outputTo` >>
      gvs[] >> fs[wf_state_def, outputTo_consistent_stack_def]) >>
   `?r t. run_call s = SOME (r,t) /\
-     frame_outcome s r t (SOME OutOfGas) [] []` by
+     frame_outcome s r t (SOME OutOfGas) [] [] /\
+     call_requests s = []` by
     (irule asm_step_fault_outcome >> simp[vfm_abort_def] >>
      qexistsl [`p`, `u`] >> simp[]) >>
   `frame_resource_starved s r t` by
@@ -869,7 +871,8 @@ Proof
   `(rest = [] \/ (?mr. c.msgParams.outputTo = Memory mr))` by
     (Cases_on `rest` >> simp[] >> Cases_on `c.msgParams.outputTo` >>
      gvs[asm_evm_rel_def] >> fs[wf_state_def, outputTo_consistent_stack_def]) >>
-  `?r u. run_call s = SOME (r,u) /\ frame_outcome s r u (SOME ex) [] []` by
+  `?r u. run_call s = SOME (r,u) /\ frame_outcome s r u (SOME ex) [] [] /\
+         call_requests s = []` by
     (irule asm_step_fault_outcome >> simp[] >>
      qexistsl [`p`, `t`] >> gvs[vfm_abort_def]) >>
   irule asm_frame_fault_step_ok >> goal_assum (drule_at Any) >>

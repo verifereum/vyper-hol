@@ -153,17 +153,17 @@ Definition supported_storage_value_def:
   supported_storage_value tops id ty <=>
     supported_storage_type tops ty /\
     case supported_variable_decl tops id of
-      SOME (Private, Storage, declared, SOME slot) => declared = ty
-    | SOME (Private, Transient, declared, SOME slot) => declared = ty
+      SOME (vis, Storage, declared, SOME slot) => declared = ty
+    | SOME (vis, Transient, declared, SOME slot) => declared = ty
     | _ => F
 End
 
 Definition supported_storage_array_def:
   supported_storage_array tops id <=>
     case supported_variable_decl tops id of
-      SOME (Private, Storage, ArrayT elem bd, SOME slot) =>
+      SOME (vis, Storage, ArrayT elem bd, SOME slot) =>
         supported_storage_type tops (ArrayT elem bd)
-    | SOME (Private, Transient, ArrayT elem bd, SOME slot) =>
+    | SOME (vis, Transient, ArrayT elem bd, SOME slot) =>
         supported_storage_type tops (ArrayT elem bd)
     | _ => F
 End
@@ -182,7 +182,7 @@ Definition supported_subscript_base_def:
   supported_subscript_base tops id <=>
     supported_storage_array tops id \/
     case supported_hashmap_decl tops id of
-      SOME (Private, transient, kt, vt, SOME slot) =>
+      SOME (vis, transient, kt, vt, SOME slot) =>
         supported_hashmap_key_type kt /\ supported_hashmap_value tops vt
     | _ => F
 End
@@ -190,10 +190,10 @@ End
 Definition supported_storage_fields_def:
   supported_storage_fields tops id =
     case supported_variable_decl tops id of
-      SOME (Private, Storage, StructT sid, SOME slot) =>
+      SOME (vis, Storage, StructT sid, SOME slot) =>
         if supported_storage_type tops (StructT sid)
         then supported_struct_fields tops sid else NONE
-    | SOME (Private, Transient, StructT sid, SOME slot) =>
+    | SOME (vis, Transient, StructT sid, SOME slot) =>
         if supported_storage_type tops (StructT sid)
         then supported_struct_fields tops sid else NONE
     | _ => NONE
@@ -216,12 +216,12 @@ End
 Definition supported_place_root_def:
   supported_place_root tops id <=>
     case supported_variable_decl tops id of
-      SOME (Private, Storage, ty, SOME slot) => supported_storage_type tops ty
-    | SOME (Private, Transient, ty, SOME slot) => supported_storage_type tops ty
+      SOME (vis, Storage, ty, SOME slot) => supported_storage_type tops ty
+    | SOME (vis, Transient, ty, SOME slot) => supported_storage_type tops ty
     | SOME _ => F
     | NONE =>
         (case supported_hashmap_decl tops id of
-           SOME (Private, transient, kt, vt, SOME slot) =>
+           SOME (vis, transient, kt, vt, SOME slot) =>
              supported_hashmap_key_type kt /\ supported_hashmap_value tops vt
          | _ => F)
 End

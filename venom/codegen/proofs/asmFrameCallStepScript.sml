@@ -1414,7 +1414,8 @@ Theorem asm_step_fault_outcome:
   popped.gasUsed <= popped.msgParams.gasLimit /\
   exc <> Reverted /\ ~vfm_abort (SOME exc) /\
   t.txParams = s.txParams ==>
-  ?r s'. run_call s = SOME (r,s') /\ frame_outcome s r s' (SOME exc) [] []
+  ?r s'. run_call s = SOME (r,s') /\ frame_outcome s r s' (SOME exc) [] [] /\
+         call_requests s = []
 Proof
   pure_rewrite_tac[GSYM AND_IMP_INTRO] >> rpt disch_tac >>
   `c.gasUsed <= c.msgParams.gasLimit` by
@@ -1438,8 +1439,10 @@ Resume asm_step_fault_outcome[single]:
   `step s = (INR (SOME exc), t with contexts :=
     [(popped with <|gasUsed := popped.msgParams.gasLimit; returnData := []|>,rb)])`
     by metis_tac[] >>
+  `call_trace s = []` by
+    (drule frame_obs_terminal >> asm_simp_tac (srw_ss()) []) >>
   drule asm_run_call_stops_after_step >> simp[] >> strip_tac >>
-  simp[frame_outcome_def]
+  simp[frame_outcome_def, call_requests_def]
 QED
 
 Resume asm_step_fault_outcome[nested]:
@@ -1447,8 +1450,10 @@ Resume asm_step_fault_outcome[nested]:
       (h0 with <|pc := SUC h0.pc; stack := 0w::h0.stack; returnData := [];
         memory := buffer_write mr.offset [] h0.memory|>,h1)::t'; rollback := rb|>)`
     by simp[] >>
+  `call_trace s = []` by
+    (drule frame_obs_terminal >> asm_simp_tac (srw_ss()) []) >>
   drule asm_run_call_stops_after_step >> simp[] >> strip_tac >>
-  simp[frame_outcome_def] >> metis_tac[]
+  simp[frame_outcome_def, call_requests_def] >> metis_tac[]
 QED
 Finalise asm_step_fault_outcome
 
@@ -1459,7 +1464,8 @@ Theorem asm_call_prepare_failure_starved:
   6 + (if call_has_value op then 1 else 0) <= LENGTH c.stack /\
   (rest = [] \/ (?mr. c.msgParams.outputTo = Memory mr)) /\
   asm_call_prepare op s = (INR (SOME OutOfGas),t) ==>
-  ?r s'. run_call s = SOME (r,s') /\ frame_resource_starved s r s'
+  ?r s'. run_call s = SOME (r,s') /\ frame_resource_starved s r s' /\
+         call_requests s = []
 Proof
   pure_rewrite_tac[GSYM AND_IMP_INTRO] >> rpt disch_tac >>
   drule_all asm_call_prepare_failure_step >> disch_tac >>
@@ -1467,7 +1473,7 @@ Proof
   `c.gasUsed <= c.msgParams.gasLimit` by
     (qpat_x_assum `wf_state s` mp_tac >> simp[wf_state_def, wf_context_def]) >>
   `?r s'. run_call s = SOME (r,s') /\
-    frame_outcome s r s' (SOME OutOfGas) [] []` by
+    frame_outcome s r s' (SOME OutOfGas) [] [] /\ call_requests s = []` by
     (irule asm_step_fault_outcome >> simp[vfm_abort_def] >>
      qexistsl [`c with stack := DROP (6 + (if call_has_value op then 1 else 0)) c.stack`, `t`] >>
      simp[]) >>
@@ -1480,7 +1486,8 @@ Theorem asm_frame_call_prepare_failure_starved:
   6 + (if call_has_value op then 1 else 0) <= LENGTH c.stack /\
   (rest = [] \/ (?mr. c.msgParams.outputTo = Memory mr)) /\
   asm_call_prepare op s = (INR (SOME OutOfGas),t) ==>
-  ?r s'. run_call s = SOME (r,s') /\ frame_resource_starved es0 r s'
+  ?r s'. run_call s = SOME (r,s') /\ frame_resource_starved es0 r s' /\
+         call_requests s = []
 Proof
   pure_rewrite_tac[GSYM AND_IMP_INTRO] >> rpt disch_tac >>
   qpat_x_assum `asm_frame_rel _ _ _ _ _` mp_tac >>
@@ -1494,7 +1501,7 @@ Theorem asm_frame_fault_step_ok:
   asm_step (SND (compute_label_offsets prog)) (build_offset_to_pc prog)
     (EL a.as_pc prog) a = AsmFault a1 /\
   run_call s = SOME (r,s') /\ exc <> Reverted /\
-  frame_outcome s r s' (SOME exc) [] [] ==>
+  frame_outcome s r s' (SOME exc) [] [] /\ call_requests s = [] ==>
   asm_frame_step_ok prog data es0 a s
 Proof
   strip_tac >>
@@ -1511,7 +1518,8 @@ Theorem asm_call_prepare_static_outcome:
   asm_call_prepare op s = (INR (SOME WriteInStaticContext),t) ==>
   c.msgParams.static /\ op = Call /\ 0 < w2n (EL 2 c.stack) /\
   ?r s'. run_call s = SOME (r,s') /\
-    frame_outcome s r s' (SOME WriteInStaticContext) [] []
+    frame_outcome s r s' (SOME WriteInStaticContext) [] [] /\
+    call_requests s = []
 Proof
   pure_rewrite_tac[GSYM AND_IMP_INTRO] >> rpt disch_tac >>
   drule_all asm_call_prepare_failure_step >> disch_tac >>

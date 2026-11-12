@@ -31,7 +31,7 @@ End
 (* ===== Facts from the codegen preconditions ===== *)
 
 (* DUP and SWAP reach 16 slots. *)
-Theorem body_operands_le_16[local]:
+Theorem body_operands_le_16:
   !fn inst.
     codegen_ready_fn fn /\ MEM inst (fn_insts fn) /\
     inst.inst_opcode <> PHI ==>
@@ -43,7 +43,7 @@ Proof
 QED
 
 (* The EVM has LOG0 to LOG4. *)
-Theorem body_log_topics[local]:
+Theorem body_log_topics:
   !fn inst.
     codegen_ready_fn fn /\ MEM inst (fn_insts fn) /\
     inst.inst_opcode <> PHI ==>
@@ -57,7 +57,7 @@ QED
 
 (* A revert forwarding's code neither spills nor restores:
    block_plan_state_static's last conjunct. *)
-Theorem body_revert_no_spill[local]:
+Theorem body_revert_no_spill:
   !liveness dfg cfg ch growth spill_base lbl_ctr fn fn_ops ps_end lbl bb
    ps_l ps_dfs ps_dfs_after h promised block_ops ps_after k ps inst next_live
    next_is_term.
@@ -101,7 +101,7 @@ Proof
     (MATCH_MP (SPEC_ALL block_plan_state_static) th))))
 QED
 
-Theorem log_case_topics[local]:
+Theorem log_case_topics:
   !ops. (case ops of Lit tc :: _ => w2n tc <= 4 | _ => F) ==>
         ?tc args. ops = Lit tc :: args /\ w2n tc <= 4
 Proof
@@ -110,7 +110,7 @@ QED
 
 (* ===== block_rest, one instruction at a time ===== *)
 
-Theorem block_rest_advance[local]:
+Theorem block_rest_advance:
   get_instruction bb vs.vs_inst_idx = SOME inst /\
   step_inst fuel ctx inst vs = OK vs1 /\ ~is_terminator inst.inst_opcode ==>
   block_rest fuel ctx fn bb vs =
@@ -121,7 +121,7 @@ Proof
   simp[]
 QED
 
-Theorem block_rest_jump[local]:
+Theorem block_rest_jump:
   get_instruction bb vs.vs_inst_idx = SOME inst /\
   step_inst fuel ctx inst vs = OK vs1 /\ is_terminator inst.inst_opcode /\
   ~vs1.vs_halted ==>
@@ -132,7 +132,7 @@ Proof
   simp[]
 QED
 
-Theorem block_rest_other[local]:
+Theorem block_rest_other:
   get_instruction bb vs.vs_inst_idx = SOME inst /\
   step_inst fuel ctx inst vs = res /\ (!s. res <> OK s) ==>
   block_rest fuel ctx fn bb vs = res
@@ -142,7 +142,7 @@ Proof
   Cases_on `res` >> gvs[] >> metis_tac[]
 QED
 
-Theorem block_rest_error[local]:
+Theorem block_rest_error:
   exec_block fuel ctx bb vs = Error e ==>
   block_rest fuel ctx fn bb vs = Error e
 Proof

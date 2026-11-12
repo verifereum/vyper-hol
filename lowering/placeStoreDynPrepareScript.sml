@@ -59,27 +59,6 @@ Proof
   rpt strip_tac >> first_x_assum irule >> simp[] >> metis_tac[]
 QED
 
-Theorem place_dyn_assign_compile_cut:
-  (loc = LocStorage \/ loc = LocTransient) /\
-  compile_assign_value cenv dst loc src F src_loc (ArrayT et (Dynamic n)) sty
-    (SOME (ew,ems)) sz sa = ((),sb) ==>
-  ?prepared mid.
-    (if ArrayT et (Dynamic n) <> sty then
-       comp_bind (compile_alloc_buffer sz)
-         (\buf. comp_bind
-           (compile_store_memory_typed cenv buf.buf_operand
-              (ArrayT et (Dynamic n)) src sty)
-           (\u. comp_return buf.buf_operand))
-     else comp_return src) sa = (prepared,mid) /\
-    compile_dynarray_to_storage prepared dst ew ems (loc = LocTransient)
-      mid = ((),sb)
-Proof
-  strip_tac >>
-  gvs[compile_assign_value_def, is_bytestring_type_def, comp_bind_def,
-      comp_return_def, AllCaseEqs()] >> pairarg_tac >> gvs[] >>
-  goal_assum (drule_at Any) >> gvs[comp_ignore_bind_def, comp_bind_def]
-QED
-
 Theorem place_alloca_source_disjoint:
   stmt_state_rel ctx func cenv cx es s /\
   inst.inst_outputs = [out] /\ exec_alloca inst s (n2w sz:bytes32) = OK t /\

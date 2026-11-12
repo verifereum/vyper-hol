@@ -1,6 +1,6 @@
 Theory exprSimAggregateBodyCountedLoops
 Ancestors
-  aggregateCountedPureFramePrep
+  aggregateCountedPureFramePrep exprSimAggregateBodyLoops
   exprSimAggregateBodyCountedChildren exprSimAggregateLoops exprLowering
   compileEnv loweringStateRelDefs exprLoweringProps emitHelper list exprSimSource exprSimHypsDefs exprSimDefs
   vyperImmutableMetadataFrame vyperEvalExprPreservesScopesDom gasSummary gasContext
@@ -25,13 +25,14 @@ Proof
 QED
 
 Theorem aggregate_struct_fields_body_sim:
-  !fields ce cx env ty off sa out sb es tvs func inst x b asz s0 ctx.
-  EVERY (\(name,e).
+  !fields tys ce cx env ty off sa out sb es tvs func inst x b asz s0 ctx.
+  LIST_REL (\t (name,e).
     ALOOKUP (get_struct_fields ce.ce_struct_fields
       (case ty of StructT nsid => nsid_to_string nsid | _ => "")) name =
-      SOME (expr_type e,type_memory_bytes ce (expr_type e))) fields /\
+      SOME (t,type_memory_bytes ce t)) tys fields /\
+  LIST_REL (\t e. arg_type_fits (expr_type e) t) tys (MAP SND fields) /\
   compile_struct_lit compile_expr ce ty fields (Var x) off sa = (out,sb) /\
-  OPT_MMAP (evaluate_type (get_tenv cx)) (MAP expr_type (MAP SND fields)) = SOME tvs /\
+  OPT_MMAP (evaluate_type (get_tenv cx)) tys = SOME tvs /\
   expr_sim_inv ce cx env es /\
   (!e st. MEM e (MAP SND fields) /\ expr_sim_inv ce cx env st ==>
     expr_body_pre ce cx env e st) /\
@@ -88,12 +89,16 @@ Theorem aggregate_struct_fields_body_sim:
       expr_exit (INR exc : eval_result + exception) exit)
 Proof
   rpt gen_tac >> strip_tac >>
-  `compile_make_tuple compile_expr ce (MAP SND fields) (Var x) off sa = (out,sb)` by
+  `compile_make_tuple compile_expr ce (MAP SND fields) tys (Var x) off sa = (out,sb)` by
     metis_tac[compile_struct_lit_as_tuple] >>
-  drule_all aggregate_make_tuple_body_sim >> strip_tac >> simp[] >>
+  mp_tac (Q.INST [`args` |-> `MAP SND (fields : (string # expr) list)`]
+    (SPEC_ALL aggregate_body_make_tuple_fits_sim)) >>
+  impl_tac >- (rpt conj_tac >> TRY (first_assum ACCEPT_TAC) >> metis_tac[]) >>
+  strip_tac >> simp[] >>
   irule counted_outcome_conseq >> goal_assum (drule_at Any) >> simp[] >>
   rpt strip_tac >> simp[] >>
   conj_tac >- (irule aggregate_body_tuple_fields_memory >> simp[] >>
-    drule vyperTypeABITheory.OPT_MMAP_LENGTH >> simp[]) >>
+    imp_res_tac listTheory.LIST_REL_LENGTH >>
+    drule vyperTypeABITheory.OPT_MMAP_LENGTH >> fs[]) >>
   rpt conj_tac >> first_assum MATCH_ACCEPT_TAC
 QED

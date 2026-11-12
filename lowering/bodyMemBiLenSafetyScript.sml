@@ -126,13 +126,11 @@ Theorem len_mem_immutable_holds_memory[local]:
             val_in_memory tvt v (w2n w) s.vs_memory
 Proof
   rw[immutable_holds_def, stmt_state_rel_def, state_rel_def,
-     immutables_rel_def]
-  >~ [`sub_layout`]
-  >- (gvs[] >> first_x_assum drule_all >> strip_tac >>
-      gvs[sub_layout_def] >> first_x_assum drule >> strip_tac >>
-      `off + k < dimword (:256)` by DECIDE_TAC >>
-      gvs[arithmeticTheory.ADD_COMM]) >>
-  `off + k < dimword (:256)` by DECIDE_TAC >> gvs[] >> metis_tac[]
+     immutables_rel_def] >>
+  gvs[] >> first_x_assum drule_all >> strip_tac >>
+  gvs[sub_layout_def] >> first_x_assum drule >> strip_tac >>
+  `off + k < dimword (:256)` by DECIDE_TAC >>
+  gvs[arithmeticTheory.ADD_COMM]
 QED
 
 Theorem len_mem_vv_holds_len_header_widens:

@@ -2,6 +2,7 @@ Theory frameRelocationCleanValueSteps
 Ancestors frameRelocationScalarSteps frameRelocationTaintOrder
   frameRelocationCopyTaint frameRelocationLocal frameRelocationDemand
   frameRelocationMemory frameRelocationGuardedValues frameRelocationGhostCopy
+  frameRelocationStoreValues
   frameOriginUpdates ptrDiscipline venomExecSemantics venomState
   finite_map pred_set words list
 
@@ -47,8 +48,95 @@ Proof
   fs[local_rel_def, demand_agree_def] >> metis_tac[]
 QED
 
+Theorem guarded_masked_write_restrict:
+  local_rel (\u. F) (guarded_ptr Opaque L rv)
+    (guarded_bytes Opaque rv tn) R
+    (\s t. dead_result_rel D (Halt s) (Halt t)) s t /\
+  word_agree_except m x y /\ (!a b. next a b ==> R a b) ==>
+  local_rel (\u. F) (guarded_ptr Opaque L (origin_set rv [v] NONE))
+    (guarded_bytes Opaque (origin_set rv [v] NONE)
+      (tn with t_var := tn.t_var |+ (v,m))) next
+    (\s t. dead_result_rel D (Halt s) (Halt t))
+    (update_var v x s) (update_var v y t)
+Proof
+  strip_tac >>
+  `local_rel (\u. F) (guarded_ptr Opaque L (origin_set rv [v] NONE))
+    (guarded_bytes Opaque (origin_set rv [v] NONE)
+      (tn with t_var := tn.t_var |+ (v,m))) R
+    (\s t. dead_result_rel D (Halt s) (Halt t))
+    (update_var v x s) (update_var v y t)` by
+    (irule local_rel_update_observation_invariant >>
+     simp[guarded_ptr_def, guarded_bytes_def, copy_ptr_def, copy_bytes_def,
+          origin_set_lookup, op_taint_def, FLOOKUP_UPDATE] >>
+     conj_tac >- simp[update_var_def, dead_result_rel_def] >>
+     qexistsl_tac [`guarded_bytes Opaque rv tn`, `\u. F`, `guarded_ptr Opaque L rv`] >>
+     simp[guarded_ptr_def, guarded_bytes_def, copy_ptr_def, copy_bytes_def,
+          op_taint_def, update_var_def, dead_result_rel_def]) >>
+  fs[local_rel_def, frameRelocationDemandTheory.demand_agree_def] >> metis_tac[]
+QED
+
+Theorem relocation_masked_write_taint:
+  relocation_taint_le R tn un /\ (!a b. next a b ==> R a b) /\
+  m SUBSET n ==>
+  relocation_taint_le next (tn with t_var := tn.t_var |+ (v,n))
+    (un with t_var := un.t_var |+ (v,m))
+Proof
+  simp[relocation_taint_le_def, op_taint_def, FLOOKUP_UPDATE] >>
+  strip_tac >> conj_tac
+  >- (fs[frameRelocationCopyTaintTheory.demand_taint_def] >> metis_tac[]) >>
+  rpt strip_tac >> IF_CASES_TAC >> simp[]
+QED
+
+Theorem guarded_selector_mul_execution:
+  inst.inst_opcode = MUL /\ inst.inst_operands = [a;b] /\
+  inst.inst_outputs = [v] /\ taint_ok fn tn inst s /\
+  local_rel (\u. F) (guarded_ptr Opaque L rv)
+    (guarded_bytes Opaque rv tn) R Obs s t /\
+  s.vs_labels = t.vs_labels /\
+  (!w. MEM (Var w) inst.inst_operands ==>
+    FLOOKUP rv w = NONE /\ ~Opaque w) /\
+  relocation_taint_le R tn un /\ step_inst_base inst s = OK post ==>
+  ?x y. post = update_var v x s /\
+    step_inst_base inst t = OK (update_var v y t) /\
+    word_agree_except (out_taint tn inst s) x y /\
+    out_taint un inst t SUBSET out_taint tn inst s
+Proof
+  strip_tac >>
+  qpat_x_assum `step_inst_base _ _ = _` mp_tac >>
+  simp[step_inst_base_def, exec_pure2_def, AllCaseEqs()] >> strip_tac >> gvs[] >>
+  `?x1. eval_operand a t = SOME x1 /\ word_agree_except (op_taint tn a) v1 x1` by
+    (irule guarded_masked_operand >> metis_tac[MEM]) >>
+  `?x2. eval_operand b t = SOME x2 /\ word_agree_except (op_taint tn b) v2 x2` by
+    (irule guarded_masked_operand >> metis_tac[MEM]) >>
+  `op_taint tn a = {} \/
+    (op_taint tn b = {} /\ (v2 = 0w \/ v2 = 1w))` by
+    (Cases_on `op_taint tn a = {}` >- simp[] >>
+     qpat_x_assum `taint_ok _ _ _ _` mp_tac >> simp[taint_ok_def] >>
+     strip_tac >> first_x_assum (qspec_then `a` mp_tac) >>
+     simp[] >> strip_tac >> gvs[]) >>
+  `op_taint tn b = {} \/
+    (op_taint tn a = {} /\ (v1 = 0w \/ v1 = 1w))` by
+    (Cases_on `op_taint tn b = {}` >- simp[] >>
+     qpat_x_assum `taint_ok _ _ _ _` mp_tac >> simp[taint_ok_def] >>
+     strip_tac >> first_x_assum (qspec_then `b` mp_tac) >>
+     simp[] >> strip_tac >> gvs[]) >>
+  qexistsl_tac [`v1 * v2`, `x1 * x2`] >>
+  simp[step_inst_base_def, exec_pure2_def, out_taint_def] >> conj_tac
+  >- (mp_tac (Q.INST [`m` |-> `op_taint tn a`, `n` |-> `op_taint tn b`,
+       `x` |-> `v1`, `y` |-> `v2`, `x'` |-> `x1`, `y'` |-> `x2`]
+       word_agree_except_selector_mul) >> simp[]) >>
+  `op_taint un a SUBSET op_taint tn a /\
+   op_taint un b SUBSET op_taint tn b` by
+    (Cases_on `a` >> Cases_on `b` >>
+     fs[relocation_taint_le_def, op_taint_def] >> metis_tac[SUBSET_EMPTY]) >>
+  gvs[] >> imp_res_tac word_agree_except_empty >>
+  gvs[wordsTheory.WORD_MULT_CLAUSES, word_agree_except_def]
+QED
+
 Theorem clean_value_taint:
-  clean_value_shape inst /\ inst.inst_outputs = [v] ==>
+  clean_value_shape inst /\ inst.inst_outputs = [v] /\
+  (inst.inst_opcode = MUL ==>
+    EVERY (\op. op_taint tn op = {}) inst.inst_operands) ==>
   step_taint inst s (update_var v x s) tn =
     tn with t_var := tn.t_var |+ (v,{})
 Proof
@@ -146,6 +234,14 @@ Theorem guarded_clean_value_step:
       (step_taint inst t (update_var v z t) un)
 Proof
   strip_tac >> drule_all clean_value_execution >> strip_tac >>
+  `EVERY (\op. op_taint tn op = {}) inst.inst_operands` by
+    (simp[EVERY_MEM] >> rpt strip_tac >> Cases_on `op` >>
+     fs[op_taint_def, clean_scalar_def] >> metis_tac[]) >>
+  `EVERY (\op. op_taint un op = {}) inst.inst_operands` by
+    (fs[EVERY_MEM] >> rpt strip_tac >>
+     `op_taint un op SUBSET op_taint tn op` by
+       (Cases_on `op` >> fs[op_taint_def, relocation_taint_le_def]) >>
+     metis_tac[SUBSET_EMPTY]) >>
   qexists_tac `z` >> simp[] >>
   `step_taint inst s post tn = tn with t_var := tn.t_var |+ (v,{})` by
     metis_tac[clean_value_taint] >>

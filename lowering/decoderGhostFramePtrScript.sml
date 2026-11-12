@@ -55,3 +55,11 @@ Theorem step_taint_nonmemory_frame:
 Proof
   simp[step_taint_def, adopt_reset_def, store_taint_def, imm_taint_def]
 QED
+
+Theorem ptr_covers_frame:
+  ptr_covers G tn p s n /\ lookup_var p t = lookup_var p s /\
+  FLOOKUP H p = FLOOKUP G p /\ op_taint u (Var p) = op_taint tn (Var p) ==>
+  ptr_covers H u p t n
+Proof
+  simp[ptr_covers_def]
+QED

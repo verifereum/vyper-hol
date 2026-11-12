@@ -1,5 +1,6 @@
 (* Structural producers for PLAN 8.3.
- * TOP-LEVEL: compile_vyper_runtime_phases (L1), compile_vyper_runtime_nonempty,
+ * TOP-LEVEL: program_reads_self_code, compile_vyper_runtime_phases (L1),
+ * compile_vyper_runtime_nonempty,
  * type_env_all_modules_single (L12), o1_pipeline_codegen_obligations (L5),
  * entry_venom_state_initial_venom_state_rel (L6),
  * entry_venom_state_o1_initial_state_ok (L7),
@@ -18,6 +19,21 @@ Ancestors
   e2eEntry vyperLoweringCorrect codegenCorrectness
   unitShapeDefs unitTransformDefs contextCodegenRel contextPlanLayoutProps
   venomPipelineDriverProps venomCompilerWf venomWf
+
+(* The program reads its own code: self.code occurs in a function body or a
+   default argument (the only places code is generated from), as
+   slice(self.code, ...) needs, which lowers to CODESIZE and a CODECOPY from
+   a computed offset.  The final assembly optimizer changes the code bytes,
+   so the top theorems' asm_opt_finalizer case excludes such programs for
+   now. *)
+Definition program_reads_self_code_def:
+  program_reads_self_code tops <=>
+    EXISTS (\top. case top of
+              FunctionDecl _ _ _ _ _ _ dflts _ stmts =>
+                supported_exprs_exists is_self_code dflts \/
+                supported_stmts_expr_exists is_self_code stmts
+            | _ => F) tops
+End
 
 (* Helper: successful code generation exposes the actual generated plan and
    checked assembly, including the data segment and code-end header. *)

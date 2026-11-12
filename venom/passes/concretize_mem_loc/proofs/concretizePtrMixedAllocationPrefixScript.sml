@@ -9,7 +9,7 @@ Ancestors venomWfProps concretizePtrRequestHistory
   concretizePtrStructuralTranscript concretizePtrChronologicalHistory
   concretizePtrStructuralTrace concretizePtrDeletedGapHistory removeUnusedSsaProofs
   concretizePtrEventEmbedding codegenRel
-  concretizeStepStructure concretizeStepShape concretizeStepCallChecks
+  concretizeStepStructure concretizeStepShape
   concretizeStepRetpc concretizeStageShape
   o1PassContract stackPlanGen ptrDiscipline unitMemInv venomWf cfgWf
   o1ScheduleDecomp venomExecSemantics venomInst unitShapeDefs

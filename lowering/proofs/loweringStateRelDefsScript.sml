@@ -180,6 +180,18 @@ Definition local_region_def:
       lookup_var p ss = SOME w ∧ base = w2n w
 End
 
+(* Live local regions depend only on the locals' pointer variables. *)
+Theorem local_region_lookup_cong:
+  (∀name entry p sz.
+     lookup_scopes name scopes = SOME entry ∧
+     FLOOKUP cenv.ce_vars name = SOME (PtrVar (Var p) sz) ⇒
+     lookup_var p t = lookup_var p s) ⇒
+  (local_region cenv scopes t name lo sz ⇔
+   local_region cenv scopes s name lo sz)
+Proof
+  rw[local_region_def] >> metis_tac[]
+QED
+
 (* x is not the pointer variable of a live local, so assigning it leaves the
    locals in place. *)
 Definition not_scope_ptr_def:
@@ -285,13 +297,13 @@ End
 
 (* ===== Storage Relation up to Dead Bytes ===== *)
 (* The source writes a bytestring as its length and the slots its bytes use
-   (encode_dyn_bytes_slots), zero-padding the last one.  The lowering copies
-   the value's whole storage block from its memory buffer
-   (compile_memory_to_storage, Python's _store_memory_to_storage), so the
-   bytes past the length, up to the capacity, hold whatever the buffer held
-   there.  A DynArray nested in another value is copied the same way, so its
-   elements past its length do too.  Nothing reads them: decoding reads a
-   length first and only the bytes or elements below it.  The relation on
+   (encode_dyn_bytes_slots), zero-padding the last one.  The lowering
+   (compile_store_slots) writes the same slots, but copies the last word of
+   a bytestring from its memory buffer as it is, so the bytes past a
+   bytestring's length can differ.  DynArray capacity elements remain
+   related even after a shrink: both sides write only the active elements,
+   and a previously captured child pointer may still read the inactive
+   ones' headers or values.  The relation on
    the running contract's storage and transient storage therefore only
    compares the bytes that are not dead.
 
@@ -299,8 +311,8 @@ End
    dead in a value of type tv stored at slot base of st, by the lengths
    that st holds:
    - a bytestring: a data byte at or past the length, within the capacity;
-   - a DynArray: every byte of an element at or past the length, and the
-     dead bytes of the elements below it;
+   - a DynArray: the dead bytes of every capacity element, regardless of
+     the current length;
    - a struct, tuple or static array: the dead bytes of its members. *)
 Definition dyn_bytes_dead_def:
   dyn_bytes_dead (st:storage) base max (j:num) (b:num) ⇔
@@ -321,11 +333,7 @@ Definition dead_bytes_def:
      ∃i. i < n ∧ dead_bytes st (base + i * type_slot_size tv) tv j b) ∧
   (dead_bytes st base (ArrayTV tv (Dynamic n)) j b ⇔
      ∃i. i < n ∧
-         if i < w2n (lookup_storage (n2w base) st) then
-           dead_bytes st (base + 1 + i * type_slot_size tv) tv j b
-         else
-           base + 1 + i * type_slot_size tv ≤ j ∧
-           j < base + 1 + (i + 1) * type_slot_size tv ∧ b < 32) ∧
+         dead_bytes st (base + 1 + i * type_slot_size tv) tv j b) ∧
   (dead_bytes st base (StructTV fields) j b ⇔
      dead_bytes_fields st base fields j b) ∧
   (dead_bytes_list st base [] j b ⇔ F) ∧
@@ -432,7 +440,8 @@ Definition transient_rel_def:
       (vs.tStorage addr) (contract_transient ss)
 End
 
-(* The accounts and the transient storage of every address agree.
+(* The accounts and the transient storage of every address agree, and
+   Venom's active frame code (ss.vs_code) equals cx.txn.code.
    Other addresses' accounts and
    transient storage change during a body only through the call oracle,
    whose outcome both sides adopt the same way (adopt_outcome), which makes
@@ -441,7 +450,8 @@ End
 Definition accounts_rel_def:
   accounts_rel cx (vs:evaluation_state) ss ⇔
     accounts_agree cx vs.accounts ss.vs_accounts ∧
-    transient_agree cx vs.tStorage ss.vs_transient
+    transient_agree cx vs.tStorage ss.vs_transient ∧
+    ss.vs_code = cx.txn.code
 End
 
 (* ===== Immutables Relation ===== *)

@@ -4,6 +4,7 @@
    MSTORE there. *)
 Theory bodyMemAugAssignAttrLocal
 Ancestors
+  supportedExprTraverse allocLimitsProps
   bodySim vyperTypeCallGraph supportedStmts supportedStmtTraverse
   bodyMemoryPreds bodyMemoryDefs stmtSimAugAssignAttr stmtSimAugAssign stmtSimAssignAttr
   exprSimMemDefs bodyExprPreFacts bodyBinopFamiliesMemory bodyBinopFragMemory
@@ -696,7 +697,7 @@ Proof
        exec_pure2_def, eval_operand_def, wordsTheory.WORD_ADD_COMM]
 QED
 
-Theorem augassign_field_read_path_mem[local]:
+Theorem augassign_field_read_path_mem:
   emit_op MLOAD [dst] sa = (cur,sb) /\
   eval_operand dst s0 = SOME addr /\ w2n addr + 32 <= s0.vs_alloca_next /\
   fn_has_code sa sb func /\ fn_inst_ids_distinct func /\ ~s0.vs_halted /\
@@ -1044,6 +1045,9 @@ Resume compile_augassign_attr_local_mem[operator]:
   `word_value fv` by metis_tac[word_value_type_typed] >>
   `eval_operand (Var out) t = SOME (val_to_w256 fv)` by
     simp[exprSimPropsTheory.typed_val_to_w256_word_value] >>
+  `post_value_type cenv e = expr_type e` by
+    (irule loweringPostsTheory.post_value_type_word >>
+     metis_tac[word_value_type_word]) >>
   `eval_operand rhs u = SOME (val_to_w256 v)` by
     (irule expr_val_rel_word >> fs[expr_post_def] >>
      goal_assum (drule_at Any) >> simp[word_value_type_word]) >>
@@ -2076,6 +2080,7 @@ Finalise compile_augassign_attr_local_mem[local]
 
 Theorem body_augassign_attr_local_mem:
   !cx ty id fld bop e d tops bindings ctx func cenv env env' ret_ty lctx RetQ es.
+    body_stmt_safe tops (AugAssign ty (AttributeTarget (NameTarget id) fld) bop e) /\
     (!s'' p t' s'3' cur t'' s'4' ptv t'3'.
        eval_target_place cx (AttributeTarget (NameTarget id) fld) s'' = (INL p,t') /\
        read_place cx p s'3' = (INL cur,t'') /\
@@ -2097,7 +2102,19 @@ Theorem body_augassign_attr_local_mem:
 Proof
   rpt strip_tac >>
   `supported_expr tops e` by gvs[supported_stmt_def] >>
-  drule_then strip_assume_tac supported_expr_body_calls >>
+  qpat_assum `body_stmt_safe _ _` (strip_assume_tac o
+    SIMP_RULE std_ss [body_stmt_safe_def, supported_stmt_expr_exists_def,
+      supported_assignment_exists_def, supported_iterator_exists_def,
+      supported_assert_exists_def, supported_raise_exists_def,
+      supported_expr_exists_def, int_calls_stmt_def, int_calls_atarget_def,
+      int_calls_iterator_def, int_calls_assert_reason_def, int_calls_raise_reason_def,
+      listTheory.EVERY_APPEND, listTheory.EVERY_CONJ,
+      DE_MORGAN_THM, GSYM expr_has_evm_run_def]) >>
+  qpat_assum `stmt_exprs_ok _ _` (strip_assume_tac o
+    SIMP_RULE std_ss [stmt_exprs_ok_def, alloc_limits_stmt_def,
+      alloc_limits_iterator_def, alloc_limits_assert_def, alloc_limits_raise_def,
+      alloc_limits_expr_def]) >>
+  imp_res_tac alloc_limits_expr_not_extcode >>
   `cx_tops cx = tops` by
     (irule gasContextTheory.cx_tops_module >> fs[body_inv_def]) >>
   `expr_body_pre cenv cx env e es` by
@@ -2123,7 +2140,7 @@ Proof
   conj_tac
   >- (gen_tac >>
       qpat_x_assum `body_expr_mem_ok cx e`
-        (mp_tac o REWRITE_RULE [body_expr_mem_ok_def]) >>
+        (mp_tac o CONJUNCT1 o REWRITE_RULE [body_expr_mem_ok_def]) >>
       disch_then (qspecl_then [`tops`, `ctx`, `func`, `cenv`, `env`, `ty`,
         `es with gas_obs := gs`] mp_tac) >> simp[body_inv_def]) >>
   conj_tac >- metis_tac[] >>

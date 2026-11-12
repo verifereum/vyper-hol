@@ -17,7 +17,7 @@ Definition typed_sa_header_state_def:
       (update_var cmp (bool_to_word (i < ncount)) s)
 End
 
-Theorem typed_sa_header_prefix[local]:
+Theorem typed_sa_header_prefix:
   eval_operand (Var ctr) s = SOME (n2w i) /\
   i <= ncount /\ ncount < dimword(:256) ==>
   run_inst_seq (TAKE 2 (typed_sa_header_insts id ctr cmp done ncount body_lbl exit_lbl)) s =

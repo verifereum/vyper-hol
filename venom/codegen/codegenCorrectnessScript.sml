@@ -7,6 +7,8 @@
  *
  * TOP-LEVEL:
  *   codegen_correct    — planned S7 (run_context vs run_call/frame outcome)
+ *   codegen_gas_sufficient — planned S7g: a resource-bounded Venom run needs
+ *     bounded gas, except for a RETURNDATACOPY of a callee's data
  *   initial_ctx_rel, venom_frame_rel — exact initial/terminal frame interfaces
  *   TASK056: obsolete positioned codegen admission retired (inactive archive).
  *
@@ -27,7 +29,7 @@
  * How each EVM exception is handled in the correctness argument:
  *
  * OutOfGas and StackOverflow — resource-starvation disjuncts of S7.
- *   No existential sufficient-gas bound or generated-stack bound is claimed.
+ *   S7 claims no sufficient-gas bound; S7g (codegen_gas_sufficient) does.
  *
  * StackUnderflow — discharged by construction (codegen stack model
  *   tracks height; well-formed plans never underflow).
@@ -66,7 +68,8 @@ Ancestors
   codegenRel asmSem asmWf stackPlanGen stackPlanTypes planExec
   symbolResolve venomExecSemantics venomState venomInst contextCodegenRel
   stackOpSim fnPlanDecomp list rich_list finite_map arithmetic
-  frameOutcome callTrace unitShapeDefs vfmExecutionProp
+  frameOutcome callTrace unitShapeDefs vfmExecutionProp unitMemInv
+  frameGas venomRunBounded
 Libs
   BasicProvers
 
@@ -299,6 +302,37 @@ Proof
   >- (res_tac >> gvs[venom_asm_terminal_rel_def]) >>
   rename1 `Abort a _` >> Cases_on `a` >>
   res_tac >> gvs[venom_asm_terminal_rel_def] >> metis_tac[]
+QED
+
+(* PLANNED ADMISSION S7g (sufficient gas), next to S7.  Given the Venom
+   run's resource bound (fuel and memory, venom_run_bounded), some gas g,
+   independent of the EVM state, is enough: with g' >= g more gas, our
+   frame runs out of gas only once it has run a RETURNDATACOPY, whose size
+   the callee sets.  The generated code runs RETURNDATACOPY only to forward
+   a failed callee's revert data, followed by the REVERT's operands and the
+   REVERT, so the exemption covers that tail.  Proof idea: each Venom block runs a bounded number of assembly
+   steps, each with a bounded cost under the memory bound, and each call
+   forwards at most all but 1/64 of the remaining gas, so g grows by a
+   factor of 64 per call the fuel allows. *)
+Theorem codegen_gas_sufficient:
+  !rpolicy unit cp prog fuel M.
+    generate_context_plan unit.cu_context = SOME cp /\
+    codegen_assembly rpolicy unit = SOME prog /\
+    unit_shape_ok unit
+    ==>
+    ?g. !g' Inv vs es.
+      g <= g' /\ wf_state es /\
+      codegen_context_obligations Inv unit.cu_context cp /\
+      codegen_reachability_package Inv unit.cu_context vs /\
+      initial_ctx_rel cp prog unit.cu_context vs (add_frame_gas g' es) /\
+      venom_run_bounded fuel M unit.cu_context vs
+      ==>
+      ?r es'.
+        run_call (add_frame_gas g' es) = SOME (r, es') /\
+        ((?op. frame_inst_raises (add_frame_gas g' es) OutOfGas op) ==>
+         ?s. frame_inst_at (add_frame_gas g' es) s ReturnDataCopy)
+Proof
+  cheat
 QED
 
 (* TASK056 RETIRED SOURCE ARCHIVE. Replaced by initial_ctx_rel and S7 above;

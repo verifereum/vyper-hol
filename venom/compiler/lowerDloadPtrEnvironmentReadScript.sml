@@ -67,7 +67,7 @@ Theorem environment_read_ghost_updates[local]:
     tn with t_var := set_var_taint tn.t_var [out] {}
 Proof
   strip_tac >>
-  `~MEM i.inst_opcode [MLOAD; ILOAD; SLOAD; TLOAD; ASSIGN; SHL; SHR; SAR] /\
+  `~MEM i.inst_opcode [MLOAD; ILOAD; SLOAD; TLOAD; ASSIGN; MUL; SHL; SHR; SAR] /\
    ~MEM i.inst_opcode [MSTORE; ISTORE; MCOPY]` by gvs[MEM] >>
   `out_taint tn i s = {} /\ written_taint tn i s = {}` by
     metis_tac[out_taint_opcode_exclusion, written_taint_opcode_exclusion] >>
