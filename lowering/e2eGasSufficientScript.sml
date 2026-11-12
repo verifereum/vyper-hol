@@ -336,6 +336,7 @@ Proof
   (* the creation frame at the new gas *)
   `deploy_state_rel tops deploy_bc am tx (add_frame_gas g' es)` by
     (irule deploy_state_rel_add_frame_gas >> fs[]) >>
+  `wf_state es` by fs[deploy_state_rel_def] >>
   qpat_x_assum `deploy_state_rel _ _ _ _ es` kall_tac >>
   drule_all deploy_initcode_half_bounded >> strip_tac >>
   drule_all deploy_entry_state_ok >> strip_tac >>

@@ -11,7 +11,7 @@ Theory asmFrameRun
 Ancestors
   asmFrameRel asmFrameLocalStep asmFrameCallStep asmFrameCreateStep
   asmFrameDelegateStep asmFrameSelfdestructStep asmSem asmWf symbolResolve
-  frameOutcome callTrace vfmExecution
+  frameOutcome frameStep callTrace vfmExecution
 
 (* Preserve the local-step interface while dispatching stateful frame steps. *)
 Theorem asm_frame_local_step:
@@ -19,28 +19,40 @@ Theorem asm_frame_local_step:
   as.as_pc < LENGTH prog /\ ~is_data_inst (EL as.as_pc prog) /\
   EL as.as_pc prog <> AsmOp "CALL" /\
   EL as.as_pc prog <> AsmOp "STATICCALL" ==>
-  asm_frame_step_ok prog data es0 as es
+  asm_frame_step_ok prog data es0 as es /\
+  ((!e. asm_step (SND (compute_label_offsets prog)) (build_offset_to_pc prog)
+       (EL as.as_pc prog) as <> AsmError e) ==>
+   frame_last es \/ ?as1 es1.
+     asm_step (SND (compute_label_offsets prog)) (build_offset_to_pc prog)
+       (EL as.as_pc prog) as = AsmOK as1 /\
+     frame_next es es1 /\ asm_frame_rel prog data es0 as1 es1)
 Proof
   strip_tac >>
   Cases_on `EL as.as_pc prog = AsmOp "DELEGATECALL"`
-  >- (irule asm_frame_delegate_step >> simp[]) >>
+  >- (simp[asm_frame_delegate_step]) >>
   Cases_on `EL as.as_pc prog = AsmOp "CREATE" \/
             EL as.as_pc prog = AsmOp "CREATE2"`
   >- (irule asm_frame_create_step >> simp[]) >>
   Cases_on `EL as.as_pc prog = AsmOp "SELFDESTRUCT"`
   >- (irule asm_frame_selfdestruct_step >> simp[]) >>
-  irule asm_frame_noncall_step >> simp[] >> metis_tac[]
+  drule asm_frame_noncall_step >> simp[] >> metis_tac[]
 QED
 
 Theorem asm_frame_step:
   asm_frame_prog_ok prog /\ asm_frame_rel prog data es0 as es /\
   as.as_pc < LENGTH prog /\ ~is_data_inst (EL as.as_pc prog) ==>
-  asm_frame_step_ok prog data es0 as es
+  asm_frame_step_ok prog data es0 as es /\
+  ((!e. asm_step (SND (compute_label_offsets prog)) (build_offset_to_pc prog)
+       (EL as.as_pc prog) as <> AsmError e) ==>
+   frame_last es \/ ?as1 es1.
+     asm_step (SND (compute_label_offsets prog)) (build_offset_to_pc prog)
+       (EL as.as_pc prog) as = AsmOK as1 /\
+     frame_next es es1 /\ asm_frame_rel prog data es0 as1 es1)
 Proof
   strip_tac >>
   Cases_on `EL as.as_pc prog = AsmOp "CALL" \/
             EL as.as_pc prog = AsmOp "STATICCALL"`
-  >- (irule asm_frame_call_step >> simp[]) >>
+  >- (drule_all asm_frame_call_step >> simp[]) >>
   irule asm_frame_local_step >> fs[]
 QED
 
@@ -69,7 +81,7 @@ Proof
   Cases_on `is_data_inst (EL as.as_pc prog)`
   >- (Cases_on `EL as.as_pc prog` >>
       gvs[is_data_inst_def, asm_step_def, asm_steps_def]) >>
-  `asm_frame_step_ok prog data es0 as es` by (irule asm_frame_step >> simp[]) >>
+  `asm_frame_step_ok prog data es0 as es` by (irule (cj 1 asm_frame_step) >> simp[]) >>
   pop_assum mp_tac >> simp[asm_frame_step_ok_def] >> strip_tac
   >- gvs[] >>
   simp[asm_steps_def] >>

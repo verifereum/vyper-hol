@@ -1,5 +1,5 @@
 (* Creation-frame completion after the initcode has returned its bytes.
-   TOP-LEVEL: deploy_frame_complete.
+   TOP-LEVEL: deploy_frame_complete, deploy_handle_step_out_of_gas.
    This hook does not establish reachability of that return state. *)
 Theory e2eDeployFrame
 Ancestors
@@ -98,4 +98,36 @@ Proof
   disj1_tac >> irule deploy_exception_out_of_gas >>
   conj_tac >- metis_tac[] >>
   goal_assum (drule_at Any) >> simp[Abbr `charged`]
+QED
+
+(* With gas for the largest allowed deposit, the creation frame's halt
+   handler ends in OutOfGas only on an oversized deposit. *)
+Theorem deploy_handle_step_out_of_gas:
+  !es c rb target.
+    es.contexts = [(c,rb)] /\ c.msgParams.outputTo = Code target /\
+    c.gasUsed + code_deposit_cost * max_code_size <= c.msgParams.gasLimit /\
+    FST (handle_step NONE es) = INR (SOME OutOfGas) ==>
+    max_code_size < LENGTH c.returnData
+Proof
+  rpt strip_tac >> CCONTR_TAC >> gvs[arithmeticTheory.NOT_LESS] >>
+  `code_deposit_cost * LENGTH c.returnData <=
+   code_deposit_cost * max_code_size` by simp[] >>
+  Cases_on `case c.returnData of h::_ => h <> n2w 0xef | [] => T`
+  >- (drule_all deploy_create >> simp[] >> strip_tac >>
+      gvs[handle_step_def, vfm_abort_def, handle_def] >>
+      gvs[deploy_exception_none]) >>
+  `handle_create NONE es =
+     ((INR (SOME InvalidContractPrefix) : unit + exception option), es)` by
+    (simp[handle_create_def, get_return_data_def, get_output_to_def,
+          bind_def, ignore_bind_def, get_current_context_def, return_def,
+          assert_def] >>
+     Cases_on `c.returnData` >> gvs[]) >>
+  `c.gasUsed <= c.msgParams.gasLimit` by decide_tac >>
+  qpat_x_assum `FST _ = _` mp_tac >>
+  simp[handle_step_def, vfm_abort_def, handle_def] >>
+  qpat_x_assum `handle_create _ _ = _` (fn th => simp[th]) >>
+  simp[handle_exception_def, get_gas_left_def, bind_def,
+       ignore_bind_def, get_current_context_def, return_def,
+       consume_gas_def, set_current_context_def, assert_def,
+       set_return_data_def, get_num_contexts_def, reraise_def]
 QED
