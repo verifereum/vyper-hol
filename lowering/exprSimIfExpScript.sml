@@ -2344,7 +2344,7 @@ Proof
   metis_tac[gas_path_then, arithmeticTheory.ADD_CLAUSES]
 QED
 
-Theorem ifexp_root_finish_post[local]:
+Theorem ifexp_root_finish_post:
   post_value_type cenv e = expr_type e /\
   expr_post ctx func cenv cx c es sa s1 s0 es1 v1 cop tt /\
   expr_post ctx func cenv cx e es1 sc sd (jump_to lbl tt) ee v op u /\
