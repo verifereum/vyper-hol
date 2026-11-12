@@ -45,8 +45,10 @@ Proof
   `F` suffices_by simp[] >>
   drule vyperTypeValuesTheory.evaluate_type_well_formed_type_value >> strip_tac >>
   drule_all decode_value_from_slots_in_range >> strip_tac >>
+  qpat_x_assum `decode_value _ _ _ = SOME v`
+    (assume_tac o REWRITE_RULE [wordsTheory.w2n_n2w]) >>
   qpat_x_assum `!slot tvt v. _` (qspecl_then [`slot`, `tvt`, `v`] mp_tac) >>
   simp[read_storage_slot_def, vyperStorageBackendTheory.get_storage_backend_eq,
-       bind_def, lift_option_def, return_def]
+       bind_def, lift_option_def, return_def, wordsTheory.w2n_n2w]
 QED
 
