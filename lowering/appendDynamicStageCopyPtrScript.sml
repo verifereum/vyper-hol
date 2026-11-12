@@ -3,9 +3,10 @@ Theory appendDynamicStageCopyPtr
 Ancestors appendDynamicMemoryStepPtr appendDynamicPrefixPtr appendDynamicTransportPtr typedCopyLayoutPtr
   annAssignPtrCopy typedCopyPtr valueTypingMemoryProps contextCodegenRel
   compileEnv context emitHelper venomState venomInst words finite_map
+  fragGasSeqPtr exprSimPtrLiteralChunks exprLoweringProps fragExec emitHelperProps list rich_list
   valueEncodingProps representationCleanPtr bodyPtrDefs vyperTyping loweringShapeRules
 
-Theorem append_dynamic_stage_copy_ptr:
+Theorem append_dynamic_stage_copy_core:
   !cx ctx PG R cenv et tv vs sn dn src dst sa sb G tn s a b.
     compile_copy_dynarray_typed cenv (Var dst) et dn (Var src) et sa = ((),sb) /\
     supported_full_word_type et /\
@@ -23,6 +24,17 @@ Theorem append_dynamic_stage_copy_ptr:
     (w2n a+32+sn*type_memory_size tv <= w2n b \/
      w2n b+32+dn*type_memory_size tv <= w2n a) ==>
     ?Gf tnf sf.
+      sf.vs_inst_idx = s.vs_inst_idx + 9 /\
+      (sf with <|vs_vars := s.vs_vars; vs_memory := s.vs_memory;
+        vs_inst_idx := s.vs_inst_idx|>) = s /\
+      run_inst_seq (emitted_insts sa sb) s = OK (sf with vs_inst_idx := s.vs_inst_idx) /\
+      (!D ctx fn. ~ctx_has_dalloca ctx ==>
+        inst_seq_ptr D 0 ctx fn PG G tn (emitted_insts sa sb) s Gf tnf) /\
+      LENGTH (emitted_insts sa sb) = 9 /\
+      EVERY (\i. i.inst_opcode <> INVOKE /\ ~is_terminator i.inst_opcode /\
+        i.inst_opcode <> GAS) (emitted_insts sa sb) /\
+      sb.cs_current_bb = sa.cs_current_bb /\
+      sb.cs_current_insts = sa.cs_current_insts ++ emitted_insts sa sb /\
       frag_exec_ptr cx ctx PG sa sb
         (\g t v. g = G /\ t = tn /\ v = s)
         (\g t v. g = Gf /\ t = tnf /\ v = sf) R /\
@@ -68,7 +80,7 @@ Proof
   rename1 `emit_op ADD [Var dst; Lit 32w] s6 = (Var dd,s7)` >>
   rename1 `emit_op MUL _ s7 = (Var cnt,last)` >>
   drule (SIMP_RULE bool_ss [GSYM AND_IMP_INTRO]
-    append_dynamic_prefix_ptr_conditional) >>
+    append_dynamic_prefix_core) >>
   ntac 7 (disch_then drule) >>
   disch_then (qspecl_then [`cx`, `ctx`, `PG`, `R`] mp_tac) >>
   disch_then (qspecl_then [`G`, `tn`, `s`, `a`, `b`, `LENGTH vs`, `sn`] mp_tac) >>
@@ -82,11 +94,23 @@ Proof
    cs_extends last sb` by
     (gvs[emit_void_def, comp_bind_def, fresh_id_def, emit_def,
          comp_return_def, cs_extends_def]) >>
+  drule_all append_dynamic_prefix_shape >> strip_tac >>
+  `inst_extends sa last` by
+    (imp_res_tac inst_extends_emit_op >> imp_res_tac inst_extends_emit_void >>
+     metis_tac[inst_extends_trans]) >>
+  `emitted_insts sa sb = emitted_insts sa last ++
+    [mk_inst last.cs_next_id MCOPY [Var dd;Var sd;Var cnt] []]` by
+    (gvs[inst_extends_def, emitted_insts_def, APPEND_ASSOC, DROP_LENGTH_APPEND]) >>
   qabbrev_tac `n = LENGTH vs * type_memory_size tv` >>
   qabbrev_tac `u = mcopy (w2n b+32) (w2n a+32) n sp` >>
   qabbrev_tac `tf = step_taint
     (mk_inst last.cs_next_id MCOPY [Var dd;Var sd;Var cnt] []) sp u tp` >>
-  `step_prov PG Gp (mk_inst last.cs_next_id MCOPY [Var dd;Var sd;Var cnt] []) u = Gp /\
+  `step_inst_base (mk_inst last.cs_next_id MCOPY [Var dd;Var sd;Var cnt] []) sp = OK u /\
+   (!D fuel ctx fn. ~ctx_has_dalloca ctx ==>
+     ptr_inst_ok D 0 fuel ctx fn Gp tp
+       (mk_inst last.cs_next_id MCOPY [Var dd;Var sd;Var cnt] []) sp) /\
+   (u with vs_memory := sp.vs_memory) = sp /\
+   step_prov PG Gp (mk_inst last.cs_next_id MCOPY [Var dd;Var sd;Var cnt] []) u = Gp /\
    tf.t_var = tp.t_var /\ tf.t_stor = tp.t_stor /\ tf.t_trans = tp.t_trans /\
    tf.t_imm = tp.t_imm /\
    tf.t_mem = (tp.t_mem DIFF {i | w2n b+32 <= i /\ i < w2n b+32+n}) UNION
@@ -134,6 +158,42 @@ Proof
        (qspec_then `w2n a+32+i` mp_tac) >>
      (impl_tac >- decide_tac) >> simp[]) >>
   (qexistsl_tac [`Gp`, `tf`, `u with vs_inst_idx := SUC sp.vs_inst_idx`] >>
+  conj_tac >-
+    (simp[Abbr `u`, venomExecSemanticsTheory.mcopy_def,
+      venomStateTheory.write_memory_with_expansion_def] >> decide_tac) >>
+  conj_tac >-
+    (qpat_x_assum `(sp with <|vs_vars := _; vs_memory := _; vs_inst_idx := _|>) = s` mp_tac >>
+     simp[Abbr `u`, venomExecSemanticsTheory.mcopy_def,
+       venomStateTheory.write_memory_with_expansion_def]) >>
+  conj_tac >-
+    (`run_inst_seq [mk_inst last.cs_next_id MCOPY [Var dd;Var sd;Var cnt] []] sp = OK u` by
+       (simp[run_inst_seq_def] >> asm_rewrite_tac[]) >>
+     qpat_assum `emitted_insts sa sb = _` (fn th => pure_rewrite_tac[th]) >>
+     qpat_assum `run_inst_seq (emitted_insts sa last) s = _`
+       (mp_then Any mp_tac run_inst_seq_append) >> disch_then (qspec_then
+       `[mk_inst last.cs_next_id MCOPY [Var dd;Var sd;Var cnt] []]`
+       (fn th => pure_rewrite_tac[th])) >>
+     simp[run_inst_seq_inst_idx, mk_inst_def, is_terminator_def,
+       instIdxIndepTheory.exec_result_map_def]) >>
+  conj_tac >-
+    (rpt strip_tac >>
+     qpat_assum `emitted_insts sa sb = _` (fn th => pure_rewrite_tac[th]) >>
+     `LENGTH (emitted_insts sa last) = 8` by simp[] >>
+     `((sp with vs_inst_idx := s.vs_inst_idx) with
+       vs_inst_idx := s.vs_inst_idx + LENGTH (emitted_insts sa last)) = sp` by
+       (asm_rewrite_tac[] >>
+        qpat_assum `sp.vs_inst_idx = _` (fn th => rewrite_tac[GSYM th]) >>
+        simp[NoAsms]) >>
+     irule literal_inst_seq_ptr_append >>
+     (conj_tac >- simp[mk_inst_def, is_terminator_def]) >>
+     qexistsl_tac [`Gp`, `tp`, `sp with vs_inst_idx := s.vs_inst_idx`] >>
+     conj_tac >- asm_rewrite_tac[] >>
+     conj_tac >- metis_tac[] >>
+     asm_rewrite_tac[] >> simp[inst_seq_ptr_def, Abbr `tf`] >> metis_tac[]) >>
+  conj_tac >- simp[] >>
+  conj_tac >- simp[mk_inst_def, is_terminator_def] >>
+  conj_tac >- simp[] >>
+  conj_tac >- gvs[inst_extends_def, APPEND_ASSOC] >>
   conj_tac >- (irule fragExecPtrTheory.frag_exec_ptr_seq >> metis_tac[]) >>
   conj_tac >-
     (rpt strip_tac >> irule append_dynamic_live_transport >>
@@ -151,4 +211,44 @@ Proof
   simp[Abbr `u`, venomExecSemanticsTheory.mcopy_def,
     venomStateTheory.write_memory_with_expansion_def] >>
   gvs[lookup_var_def, ptrDisciplineTheory.op_taint_def])
+QED
+
+Theorem append_dynamic_stage_copy_ptr:
+  !cx ctx PG R cenv et tv vs sn dn src dst sa sb G tn s a b.
+    compile_copy_dynarray_typed cenv (Var dst) et dn (Var src) et sa = ((),sb) /\
+    supported_full_word_type et /\
+    type_memory_bytes cenv et = type_memory_size tv /\
+    value_has_type (ArrayTV tv (Dynamic sn)) (ArrayV (DynArrayV vs)) /\
+    (!m. mem_agree_outside tn.t_mem s.vs_memory m ==>
+      val_in_memory (ArrayTV tv (Dynamic sn)) (ArrayV (DynArrayV vs)) (w2n a) m) /\
+    not_fresh_at sa src /\ not_fresh_at sa dst /\
+    lookup_var src s = SOME a /\ lookup_var dst s = SOME b /\
+    ptr_covers G tn src s (32+sn*type_memory_size tv) /\
+    ptr_covers G tn dst s (32+dn*type_memory_size tv) /\
+    sn <= dn /\ dn < dimword(:256) /\
+    LENGTH vs * type_memory_size tv < dimword(:256) /\
+    w2n a+32 < dimword(:256) /\ w2n b+32 < dimword(:256) /\
+    (w2n a+32+sn*type_memory_size tv <= w2n b \/
+     w2n b+32+dn*type_memory_size tv <= w2n a) ==>
+    ?Gf tnf sf.
+      frag_exec_ptr cx ctx PG sa sb
+        (\g t v. g = G /\ t = tn /\ v = s)
+        (\g t v. g = Gf /\ t = tnf /\ v = sf) R /\
+      (!m. mem_agree_outside tnf.t_mem sf.vs_memory m ==>
+        val_in_memory (ArrayTV tv (Dynamic dn)) (ArrayV (DynArrayV vs)) (w2n b) m) /\
+      (!i. i < w2n b \/ w2n b+32+dn*type_memory_size tv <= i ==>
+        mem_bytes_at i 1 sf.vs_memory = mem_bytes_at i 1 s.vs_memory /\
+        (i IN tnf.t_mem <=> i IN tn.t_mem)) /\
+      cs_extends sa sb /\
+      tnf.t_stor = tn.t_stor /\ tnf.t_trans = tn.t_trans /\
+      tnf.t_imm = tn.t_imm /\ sf.vs_call_ctx = s.vs_call_ctx /\
+      sf.vs_accounts = s.vs_accounts /\ sf.vs_transient = s.vs_transient /\
+      (!p. not_fresh_at sa p ==>
+        lookup_var p sf = lookup_var p s /\ FLOOKUP Gf p = FLOOKUP G p /\
+        op_taint tnf (Var p) = op_taint tn (Var p))
+Proof
+  rpt gen_tac >> disch_then (map_every assume_tac o CONJUNCTS) >>
+  drule_all append_dynamic_stage_copy_core >>
+  disch_then (qspecl_then [`cx`, `ctx`, `PG`, `R`] strip_assume_tac) >>
+  qexistsl_tac [`Gf`, `tnf`, `sf`] >> asm_rewrite_tac[]
 QED
