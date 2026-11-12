@@ -211,12 +211,9 @@ Proof
       `slots_in_range (get_storage cx s'' b)
          (w2n base' + 1 + Num idx * type_slot_size tv) tv` by
         (irule dyn_slots_in_range_index >>
-         qexists `w2n (read_slot (get_storage cx s'' b) (w2n base'))` >>
+         qexists `n` >>
          gvs[slots_in_range_def, vyperStorageTheory.read_slot_def] >>
-         `MIN (w2n (lookup_storage base' (get_storage cx s'' b))) n =
-          w2n (lookup_storage base' (get_storage cx s'' b))` by
-           (simp[arithmeticTheory.MIN_DEF] >> decide_tac) >>
-         gvs[]) >>
+         decide_tac) >>
       `base' + n2w (1 + Num idx * type_slot_size tv) =
        base' + n2w (Num idx * type_slot_size tv + 1)` by
         (AP_TERM_TAC >> AP_TERM_TAC >>
