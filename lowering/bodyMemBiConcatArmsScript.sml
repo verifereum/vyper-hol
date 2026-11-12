@@ -10,7 +10,7 @@ Libs
   monadsyntax
 
 Theorem concat_fixed_arm_mem:
-  !ctx func cenv cx es t sx s2 data_ptr off_ptr x m bs ow k binst B bsz oinst.
+  !H ctx func cenv cx es t sx s2 data_ptr off_ptr x m bs ow k binst B bsz oinst.
     (do offset_op <- emit_op MLOAD [off_ptr];
         dst <- emit_op ADD [data_ptr; offset_op];
         emit_void MSTORE [dst; x];
@@ -20,7 +20,7 @@ Theorem concat_fixed_arm_mem:
     fn_has_code sx s2 func /\ fn_inst_ids_distinct func /\ ~t.vs_halted /\
     t.vs_current_bb = sx.cs_current_bb /\
     t.vs_inst_idx = LENGTH sx.cs_current_insts /\
-    local_ptrs_reserved cenv sx /\ stmt_state_rel ctx func cenv cx es t /\
+    local_ptrs_reserved cenv sx /\ stmt_state_rel H ctx func cenv cx es t /\
     eval_operand data_ptr t = SOME (n2w (B + 32)) /\
     eval_operand off_ptr t = SOME ow /\
     eval_operand x t = SOME (word_of_bytes_be (PAD_RIGHT 0w 32 bs)) /\
@@ -38,7 +38,7 @@ Theorem concat_fixed_arm_mem:
     mload (w2n ow) t = n2w k /\ LENGTH bs = m /\ m <= 32 /\
     32 + k + 32 <= bsz /\ alloca_history func t ==>
     ?t2. gas_path_mem ctx func t 0 (OK t2) /\
-      stmt_state_rel ctx func cenv cx es t2 /\ ~t2.vs_halted /\
+      stmt_state_rel H ctx func cenv cx es t2 /\ ~t2.vs_halted /\
       t2.vs_current_bb = s2.cs_current_bb /\
       t2.vs_inst_idx = LENGTH s2.cs_current_insts /\
       t2.vs_allocas = t.vs_allocas /\
@@ -49,7 +49,9 @@ Theorem concat_fixed_arm_mem:
       (!p n. (p + n <= B \/ B + bsz <= p) /\
              (p + n <= w2n ow \/ w2n ow + 64 <= p) ==>
              mem_bytes_at p n t2.vs_memory = mem_bytes_at p n t.vs_memory) /\
-      alloca_history func t2 /\ t2.vs_alloca_next = t.vs_alloca_next
+      alloca_history func t2 /\ t2.vs_alloca_next = t.vs_alloca_next /\
+      t2.vs_accounts = t.vs_accounts /\ t2.vs_transient = t.vs_transient /\
+      t2.vs_requests = t.vs_requests /\ t2.vs_call_ctx = t.vs_call_ctx
 Proof
   rpt gen_tac >> disch_then (MAP_EVERY assume_tac o CONJUNCTS) >>
   `B + bsz <= t.vs_alloca_next /\ w2n ow + 64 <= t.vs_alloca_next` by
@@ -98,14 +100,14 @@ Proof
 QED
 
 Resume concat_fixed_arm_mem[relation]:
-  `stmt_state_rel ctx func cenv cx es (mstore a wd t)` by
+  `stmt_state_rel H ctx func cenv cx es (mstore a wd t)` by
     (irule literal_mstore_state_rel >> conj_tac
      >- (qexistsl_tac [`B`, `binst`, `bsz`] >> simp[Abbr `a`] >> metis_tac[]) >>
      first_assum ACCEPT_TAC) >>
   `!name lb lsz. local_region cenv es.scopes (mstore a wd t) name lb lsz <=>
       local_region cenv es.scopes t name lb lsz` by
     simp[local_region_def, lookup_var_def, mstore_def] >>
-  `stmt_state_rel ctx func cenv cx es
+  `stmt_state_rel H ctx func cenv cx es
     (mstore (w2n ow) (n2w (k + m)) (mstore a wd t))` by
     (irule literal_mstore_state_rel >> conj_tac
      >- (qexistsl_tac [`w2n ow`, `oinst`, `64`] >>
@@ -151,7 +153,7 @@ QED
 Finalise concat_fixed_arm_mem
 
 Theorem concat_bytes_arm_mem:
-  !ctx func cenv cx es t sx s2 mem_ptr data_ptr off_ptr sw bs ow k binst B bsz oinst.
+  !H ctx func cenv cx es t sx s2 mem_ptr data_ptr off_ptr sw bs ow k binst B bsz oinst.
     (do arg_len <- emit_op MLOAD [mem_ptr];
         arg_data <- emit_op ADD [mem_ptr; Lit 32w];
         offset_op <- emit_op MLOAD [off_ptr];
@@ -163,7 +165,7 @@ Theorem concat_bytes_arm_mem:
     fn_has_code sx s2 func /\ fn_inst_ids_distinct func /\ ~t.vs_halted /\
     t.vs_current_bb = sx.cs_current_bb /\
     t.vs_inst_idx = LENGTH sx.cs_current_insts /\
-    local_ptrs_reserved cenv sx /\ stmt_state_rel ctx func cenv cx es t /\
+    local_ptrs_reserved cenv sx /\ stmt_state_rel H ctx func cenv cx es t /\
     eval_operand mem_ptr t = SOME sw /\
     eval_operand data_ptr t = SOME (n2w (B + 32)) /\
     eval_operand off_ptr t = SOME ow /\
@@ -184,7 +186,7 @@ Theorem concat_bytes_arm_mem:
     mload (w2n ow) t = n2w k /\ 32 + k + LENGTH bs <= bsz /\
     w2n sw + 32 + LENGTH bs <= t.vs_alloca_next /\ alloca_history func t ==>
     ?t2. gas_path_mem ctx func t 0 (OK t2) /\
-      stmt_state_rel ctx func cenv cx es t2 /\ ~t2.vs_halted /\
+      stmt_state_rel H ctx func cenv cx es t2 /\ ~t2.vs_halted /\
       t2.vs_current_bb = s2.cs_current_bb /\
       t2.vs_inst_idx = LENGTH s2.cs_current_insts /\
       t2.vs_allocas = t.vs_allocas /\
@@ -195,7 +197,9 @@ Theorem concat_bytes_arm_mem:
       (!p n. (p + n <= B \/ B + bsz <= p) /\
              (p + n <= w2n ow \/ w2n ow + 64 <= p) ==>
              mem_bytes_at p n t2.vs_memory = mem_bytes_at p n t.vs_memory) /\
-      alloca_history func t2 /\ t2.vs_alloca_next = t.vs_alloca_next
+      alloca_history func t2 /\ t2.vs_alloca_next = t.vs_alloca_next /\
+      t2.vs_accounts = t.vs_accounts /\ t2.vs_transient = t.vs_transient /\
+      t2.vs_requests = t.vs_requests /\ t2.vs_call_ctx = t.vs_call_ctx
 Proof
   rpt gen_tac >> disch_then (MAP_EVERY assume_tac o CONJUNCTS) >>
   `B + bsz <= t.vs_alloca_next /\ w2n ow + 64 <= t.vs_alloca_next` by
@@ -248,7 +252,7 @@ Resume concat_bytes_arm_mem[path]:
 QED
 
 Resume concat_bytes_arm_mem[relation]:
-  `stmt_state_rel ctx func cenv cx es t1` by
+  `stmt_state_rel H ctx func cenv cx es t1` by
     (qunabbrev_tac `t1` >> irule alloca_mcopy_state_rel >> conj_tac
      >- (qexistsl_tac [`B`, `binst`, `bsz`] >> simp[Abbr `a`] >> metis_tac[]) >>
      first_assum ACCEPT_TAC) >>
@@ -256,7 +260,7 @@ Resume concat_bytes_arm_mem[relation]:
       local_region cenv es.scopes t name lb lsz` by
     simp[Abbr `t1`, local_region_def, lookup_var_def, mcopy_def,
          write_memory_with_expansion_def] >>
-  `stmt_state_rel ctx func cenv cx es
+  `stmt_state_rel H ctx func cenv cx es
     (mstore (w2n ow) (n2w (k + LENGTH bs)) t1)` by
     (irule literal_mstore_state_rel >> conj_tac
      >- (qexistsl_tac [`w2n ow`, `oinst`, `64`] >>

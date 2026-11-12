@@ -9,12 +9,12 @@ Ancestors
   fragExec loweringPosts vyperInterpreter vyperState words arithmetic list
   rich_list finite_map allocaHistory gasSummary gasOutcome gasContext
   exprSimCopy stmtSimDeclCompose venomMemDefs
-  stmtReasonVvMemory exprSimMemDefs
+  stmtReasonVvMemory exprSimMemDefs vyperStorageFootprint
 Libs
   monadsyntax
 
 Theorem immutable_compiled_loop_outcome_mem:
-  !d ctx func cx cenv lctx RetQ ty id et bd n src name off stmts tv vs es P st st' s.
+  !d ctx func cx st0 cenv lctx RetQ ty id et bd n src name off stmts tv vs es P st st' s.
   FLOOKUP cenv.ce_module_vars (src,name) = SOME (ImmutableLoc off) /\
   cenv.ce_alloca_locals /\ FLOOKUP cenv.ce_vars id = NONE /\
   evaluate_type (get_tenv cx) et = SOME tv /\
@@ -24,7 +24,7 @@ Theorem immutable_compiled_loop_outcome_mem:
   LENGTH vs <= bound_length bd /\ bound_length bd < dimword (:256) /\
   (case bd of Fixed cap => LENGTH vs = cap | Dynamic cap => T) /\
   (!c lc sa sb. compile_stmts c lc ty stmts sa = ((),sb) ==> cs_extends sa sb) /\
-  (!ei s. P ei /\ stmt_state_rel ctx func cenv cx ei s ==>
+  (!H ei s. P ei /\ stmt_state_rel H ctx func cenv cx ei s ==>
     (case bd of Fixed cap => T | Dynamic cap =>
        ?av. immutable_holds cenv cx (ArrayT et (Dynamic cap))
                (Value (ArrayV av)) (n2w off) ei s /\
@@ -53,24 +53,31 @@ Theorem immutable_compiled_loop_outcome_mem:
     (For id et (Array (TopLevelName (ArrayT et bd) (src,name))) n stmts) st = ((),st') /\
   fn_has_code st st' func /\ fn_inst_ids_distinct func /\
   local_ptrs_reserved cenv st /\ ret_pc_ok cenv st s /\
-  stmt_state_rel ctx func cenv cx es s /\ ~s.vs_halted /\
+  (?H. valid_horizon cx st0 H es.storage_trace) /\
+  (!H. valid_horizon cx st0 H es.storage_trace ==>
+     stmt_state_rel H ctx func cenv cx es s /\
+     storage_well_formed_on cx es (FST H)) /\ ~s.vs_halted /\
   s.vs_current_bb = st.cs_current_bb /\ s.vs_inst_idx = LENGTH st.cs_current_insts /\
   P es /\ lookup_scopes id es.scopes = NONE /\
-  gas_admissible (eval_for cx tv id stmts vs) (stmt_res_ok lctx) es /\
+  gas_admissible (eval_for cx tv id stmts (MAP Value vs)) (stmt_res_ok lctx) es /\
   alloca_history func s /\ return_buf_frame d cenv st s ==>
-  gas_outcome T (cx_tops cx) (ctx,func)
-    (eval_for cx tv id stmts vs) (es,s)
-    (\res ee t. res = INL () /\
+  gas_outcome T (cx_tops cx) (ctx,func) cx st0
+    (eval_for cx tv id stmts (MAP Value vs)) (es,s)
+    (\H res ee t. res = INL () /\
        t.vs_current_bb = st'.cs_current_bb /\
        t.vs_inst_idx = LENGTH st'.cs_current_insts /\ ~t.vs_halted /\
-       stmt_state_rel ctx func cenv cx ee t /\ array_caller_frame st s t /\
+       stmt_state_rel H ctx func cenv cx ee t /\
+       storage_well_formed_on cx ee (FST H) /\ array_caller_frame st s t /\
        (!aid b. FLOOKUP s.vs_allocas aid = SOME b ==> FLOOKUP t.vs_allocas aid = SOME b) /\
        return_buf_frame d cenv st' t /\ alloca_history func t /\
        s.vs_alloca_next <= t.vs_alloca_next)
-    (\res ee r. ?ex. res = INR ex /\
-       !tail. stmt_exit RetQ (ee with gas_obs := tail) (INR ex) r)
+    (\H res ee r. ?ex. res = INR ex /\
+       !tail. stmt_exit (RetQ H) (ee with gas_obs := tail) (INR ex) r)
 Proof
   rpt gen_tac >> strip_tac >>
+  rename1 `valid_horizon cx st0 Hv es.storage_trace` >>
+  `(?H. valid_horizon cx st0 H es.storage_trace)` by metis_tac[] >>
+  `stmt_state_rel Hv ctx func cenv cx es s` by metis_tac[] >>
   drule_all compile_for_immutable_entry_code_normalized >> strip_tac >>
   drule_all immutable_optional_load_ready >> strip_tac >>
   `sb0.cs_next_var <= sb1.cs_next_var` by
@@ -106,7 +113,7 @@ Proof
      irule local_ptrs_reserved_fresh >> qexists_tac `st1` >> simp[]) >>
   `!x. lvo = Var x ==> ~MEM x [p;idx;g;vld]` by metis_tac[] >>
   `?u dst cc.
-    array_loop_inv ctx func cenv cx P vs id idx (Lit (n2w off)) (n2w off)
+    array_loop_inv ctx func cenv cx st0 P vs id idx (Lit (n2w off)) (n2w off)
       p dst (type_memory_bytes cenv et) ainst cond st 0 es cc /\
     eval_operand lvo u = SOME (n2w (LENGTH vs)) /\
     eval_operand lvo cc = SOME (n2w (LENGTH vs)) /\
@@ -119,7 +126,7 @@ Proof
     alloca_history func u /\ alloca_history func cc /\
     return_buf_frame d cenv st u /\ return_buf_frame d cenv st1 u /\
     return_buf_frame d cenv st cc /\ return_buf_frame d cenv st1 cc` by
-    (qpat_assum `!ei s. P ei /\ stmt_state_rel _ _ _ _ _ _ ==> _` drule_all >>
+    (qpat_assum `!H ei s. P ei /\ stmt_state_rel _ _ _ _ _ _ _ ==> _` drule_all >>
      strip_tac >>
      irule immutable_initialize_post_load_mem >>
      qpat_assum `(if dyn then _ else _) st = (lvo,st1)` (irule_at Any) >>
@@ -145,7 +152,7 @@ Proof
      qpat_assum `array_caller_frame st1 u cc` mp_tac >>
      rpt (pop_assum kall_tac) >>
      simp[ret_pc_ok_def, array_caller_frame_def] >> metis_tac[]) >>
-  `array_round_inv d ctx func cenv cx P vs id idx (Lit (n2w off)) (n2w off)
+  `array_round_inv d ctx func cenv cx st0 P vs id idx (Lit (n2w off)) (n2w off)
     p dst (type_memory_bytes cenv et) ainst cond st1 u 0 es cc` by
     (pure_rewrite_tac [array_round_inv_def] >> conj_tac
      >- (qhdtm_x_assum `array_loop_inv` mp_tac >>
@@ -153,10 +160,10 @@ Proof
      simp[array_round_frame_def] >>
      qpat_x_assum `array_caller_frame st1 u cc` mp_tac >>
      simp[array_caller_frame_def]) >>
-  `!ei t k. P ei /\ stmt_state_rel ctx func cenv cx ei t /\ k < LENGTH vs ==>
+  `!H ei t k. P ei /\ stmt_state_rel H ctx func cenv cx ei t /\ k < LENGTH vs ==>
     immutable_holds cenv cx et (Value (EL k vs))
       (n2w off + n2w ((if dyn then 32 else 0) + k * type_memory_size tv)) ei t` by
-    (qpat_x_assum `!ei s. P ei /\ stmt_state_rel _ _ _ _ _ _ ==> _` mp_tac >>
+    (qpat_x_assum `!H ei s. P ei /\ stmt_state_rel _ _ _ _ _ _ _ ==> _` mp_tac >>
      qpat_x_assum `dyn <=> _` mp_tac >>
      rpt (pop_assum kall_tac) >> Cases_on `bd` >> simp[] >> metis_tac[]) >>
   mp_tac (Q.INST [`ok` |-> `stmt_res_ok lctx`] immutable_code_loop_outcome_mem) >>
