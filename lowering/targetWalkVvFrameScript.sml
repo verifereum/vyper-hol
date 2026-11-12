@@ -35,7 +35,6 @@ Theorem target_walk_vv_frame:
     type_place_target env bt = SOME vt /\
     vv_post ctx func cenv cx e es sa sm s0 es1 tv vv s1 /\
     vv_storage_live cx vv es1 s1 /\
-    (cenv.ce_is_ctor ==> vv_location vv <> SOME LocCode) /\
     (!x. vv_operand vv = Var x ==> not_fresh_at sm x) /\
     (!l. vv_operand vv <> Label l) /\
     sa.cs_next_var <= sm.cs_next_var /\ sa.cs_next_id <= sm.cs_next_id /\

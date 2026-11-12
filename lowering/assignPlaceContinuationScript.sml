@@ -6,7 +6,7 @@ Ancestors
   stmtSimAugAssignPlaceMemory assignPlaceTargetLive exprSimHyps
   exprOperandVar exprSimAggregateSource exprSimSource
   stmtLoweringMono stmtSimDeclCompose targetPlaceSimDefs targetPlaceSim loweringPosts
-  compileEnv stmtSimDefs vyperExprNoControl assignPlaceCtorImmutableRhsResidue
+  compileEnv stmtSimDefs vyperExprNoControl
   exprSimHypsDefs exprLowering vyperStoragePlaceProvenance bodySimAugPlaceLoad
 Libs monadsyntax
 
@@ -117,11 +117,8 @@ Proof
         qexistsl_tac [`ee`, `gs`] >> gnvs[] >>
         simp[Once vyperInterpreterTheory.evaluate_def, vyperStateTheory.bind_def]) >>
      gvs[target_res_ok_def, target_place_res_ok_def]) >>
-  Cases_on `cenv.ce_is_ctor /\ vv_location vv = SOME LocCode`
-  >- (irule assign_place_ctor_immutable_rhs_residue >> metis_tac[]) >>
   `sa.cs_next_var <= sm.cs_next_var /\ sa.cs_next_id <= sm.cs_next_id` by
     fs[exprLoweringPropsTheory.ci_mono_def] >>
-  `(cenv.ce_is_ctor ==> vv_location vv <> SOME LocCode)` by metis_tac[] >>
   `vv_post ctx func cenv cx e es sa sm s0 (mid with gas_obs := [])
       (Value v) vv t` by metis_tac[exprSimUnwrapPropsTheory.vv_post_read_result] >>
   qpat_x_assum `vv_post _ _ _ _ _ _ _ _ _ _ pv _ _` kall_tac >>

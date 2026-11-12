@@ -180,7 +180,6 @@ Theorem target_saved_holds_frame:
   (!w. eval_operand (vv_operand vv) s = SOME w ==>
        eval_operand (vv_operand vv) u = SOME w) /\
   vv_storage_live cx vv es s /\
-  (cenv.ce_is_ctor ==> vv_location vv <> SOME LocCode) /\
   storage_rel cx cx.txn.target es u /\
   transient_rel cx cx.txn.target es u ==>
   vv_holds cenv cx ty r vv es u
@@ -239,8 +238,7 @@ Theorem target_saved_post_transport:
   sm.cs_next_id <= sb.cs_next_id /\
   stmt_state_rel ctx func cenv cx es s0 /\
   local_ptrs_reserved cenv sa /\ local_ptrs_reserved cenv sm /\
-  vv_storage_live cx vv es1 s /\
-  (cenv.ce_is_ctor ==> vv_location vv <> SOME LocCode) ==>
+  vv_storage_live cx vv es1 s ==>
   vv_post ctx func cenv cx e ee sa sb u ee r vv u /\
   wb_frame cenv es ee sa s0 u
 Proof
