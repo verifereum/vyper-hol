@@ -607,7 +607,28 @@ Theorem occurrence_annotation_return:
     stk f.cf_params (DRESTRICT f.cf_prov (COMPL (set f.cf_inst.inst_outputs)))
     (s' with vs_inst_idx := idx)
 Proof
-  (* P4a in progress *) cheat
+  strip_tac >>
+  `s'.vs_allocas = f.cf_state.vs_allocas` by
+    (qspec_then `\s. s.vs_allocas` mp_tac
+       venomInstProofs1Theory.bind_outputs_preserves >>
+     simp[venomStateTheory.update_var_def] >> disch_then drule >>
+     simp[merge_callee_state_def]) >>
+  `~MEM a (MAP (\u. u.of_owner) (u::U))` by
+    gvs[occurrence_annotation_ok_def] >>
+  `occurrence_saved_ok fl (DRESTRICT B {id | FST id <> a}) (u::U) (f::stk)` by
+    (irule occurrence_saved_transport >> qexists_tac `B` >>
+     conj_tac
+     >- (simp[FLOOKUP_DRESTRICT] >> rpt strip_tac >> gvs[] >>
+         IF_CASES_TAC >> gvs[] >> metis_tac[]) >>
+     gvs[occurrence_annotation_ok_def]) >>
+  gvs[occurrence_annotation_ok_def, occurrence_saved_ok_def,
+      occurrence_allocas_ok_def, FDOM_DRESTRICT] >>
+  conj_tac
+  >- (rpt strip_tac >>
+      qpat_x_assum `!id. id IN FDOM B ==> _` (qspec_then `id` mp_tac) >> simp[]) >>
+  qpat_x_assum `occurrence_env_ok fl (DRESTRICT B _) _ u.of_prov f.cf_prov` mp_tac >>
+  simp[occurrence_env_ok_def, FLOOKUP_DRESTRICT] >>
+  rpt strip_tac >> gvs[AllCaseEqs()] >> metis_tac[]
 QED
 
 Theorem frame_reachable_initial_fmp:
@@ -616,7 +637,13 @@ Theorem frame_reachable_initial_fmp:
     s.vs_initial_fmp = vs.vs_initial_fmp /\
     EVERY (\f. f.cf_state.vs_initial_fmp = vs.vs_initial_fmp) stk
 Proof
-  (* P4a in progress *) cheat
+  ho_match_mp_tac frame_reachable_ind >> rpt conj_tac >> rpt gen_tac >>
+  strip_tac >> gvs[]
+  >- (drule enters_block_initial_fmp >> simp[])
+  >- (drule step_inst_initial_fmp >> simp[])
+  >- metis_tac[enters_block_initial_fmp, step_inst_initial_fmp]
+  >- metis_tac[enters_block_initial_fmp, setup_callee_initial_fmp] >>
+  drule bind_outputs_initial_fmp >> simp[]
 QED
 
 Theorem occ_frame_reachable_annotation:
@@ -626,8 +653,76 @@ Theorem occ_frame_reachable_annotation:
     (vs.vs_allocas = FEMPTY /\ ptr_discipline lo C vs ==>
      occurrence_annotation_ok (dyn_floor C vs) n a U B HP H stk PG G s)
 Proof
-  (* P4a in progress *) cheat
+  ho_match_mp_tac occ_frame_reachable_strongind >> rpt conj_tac
+  >- suspend "entry"
+  >- suspend "next"
+  >- suspend "block"
+  >- suspend "call"
+  >> suspend "ret"
 QED
+
+Resume occ_frame_reachable_annotation[entry]:
+  rpt gen_tac >> strip_tac >>
+  `MEM fn C.ctx_functions` by metis_tac[venomInstTheory.lookup_function_MEM] >>
+  simp[] >> strip_tac >>
+  drule occurrence_enters_block_allocas >>
+  simp[occurrence_annotation_ok_def, occurrence_allocas_ok_def,
+       occurrence_env_ok_def, occurrence_saved_ok_def]
+QED
+
+Resume occ_frame_reachable_annotation[next]:
+  rpt gen_tac >> strip_tac >> gvs[] >> strip_tac >>
+  `frame_reachable vs C stk PG G tn fn inst s` by
+    metis_tac[occ_frame_reachable_projection] >>
+  `MEM inst (fn_insts fn)` by
+    (qpat_x_assum `active_inst fn inst s` mp_tac >>
+     rw[contextCodegenRelTheory.active_inst_def, venomInstTheory.fn_insts_def,
+        o1PassContractTheory.fn_insts_blocks_MEM] >> metis_tac[MEM_EL]) >>
+  `inst.inst_opcode = DALLOCA ==> dyn_floor C vs <= w2n s.vs_fmp` by
+    (strip_tac >>
+     `ctx_has_dalloca C` by (simp[ctx_has_dalloca_def, EXISTS_MEM] >> metis_tac[]) >>
+     `allocas_below_fmp s` by metis_tac[ptr_discipline_def] >>
+     `s.vs_initial_fmp = vs.vs_initial_fmp` by metis_tac[frame_reachable_initial_fmp] >>
+     gvs[dyn_floor_def, allocas_below_fmp_def]) >>
+  `(inst.inst_opcode = ADD \/ inst.inst_opcode = SUB) ==>
+   !o1 o2. inst.inst_operands = [o1; o2] ==>
+     op_prov G o1 = NONE \/ op_prov G o2 = NONE` by
+    (rpt strip_tac >>
+     `?P. EVERY (fn_ptr_ok P) C.ctx_functions` by
+       (fs[ptr_discipline_def, EVERY_MEM] >> metis_tac[]) >>
+     drule o1LowerDloadGhostTheory.frame_reachable_prov_support >>
+     disch_then (qspec_then `P` mp_tac) >> simp[] >> strip_tac >>
+     `affine_pointer_ops fn (ptr_roots P fn)` by
+       (gvs[EVERY_MEM, fn_ptr_ok_def] >> metis_tac[]) >>
+     `?bb. MEM bb fn.fn_blocks /\ MEM inst bb.bb_instructions` by
+       (fs[contextCodegenRelTheory.active_inst_def] >> metis_tac[MEM_EL]) >>
+     qpat_x_assum `affine_pointer_ops _ _`
+       (mp_tac o SRULE [pointerConfinedDefsTheory.affine_pointer_ops_def, LET_THM]) >>
+     disch_then (qspecl_then [`bb`,`inst`,`o1`,`o2`] mp_tac) >> simp[] >>
+     Cases_on `o1` >> Cases_on `o2` >> simp[op_prov_def] >>
+     gvs[FLOOKUP_DEF, SUBSET_DEF, fn_pv_def] >> metis_tac[]) >>
+  irule occurrence_annotation_next >> metis_tac[]
+QED
+
+Resume occ_frame_reachable_annotation[block]:
+  rpt gen_tac >> strip_tac >> gvs[] >> strip_tac >>
+  irule occurrence_annotation_block >> metis_tac[]
+QED
+
+Resume occ_frame_reachable_annotation[call]:
+  rpt gen_tac >> strip_tac >>
+  `MEM fn' C.ctx_functions` by metis_tac[venomInstTheory.lookup_function_MEM] >>
+  simp[] >> strip_tac >>
+  irule occurrence_annotation_call >> metis_tac[]
+QED
+
+Resume occ_frame_reachable_annotation[ret]:
+  rpt gen_tac >> strip_tac >> gvs[] >> strip_tac >>
+  irule (INST_TYPE [alpha |-> ``:string``] occurrence_annotation_return) >>
+  metis_tac[]
+QED
+
+Finalise occ_frame_reachable_annotation
 
 Theorem frame_reachable_occurrence_annotation:
   vs.vs_allocas = FEMPTY /\ ptr_discipline lo C vs /\

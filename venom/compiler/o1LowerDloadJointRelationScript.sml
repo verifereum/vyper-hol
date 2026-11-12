@@ -148,7 +148,7 @@ Theorem ld_joint_source:
     n a U B HP H sites X ts ==>
   occ_frame_reachable vs C stk PG G tn fn inst s n a U B HP H
 Proof
-  (* P4a in progress *) cheat
+  simp[ld_joint_boundary_def]
 QED
 
 Theorem ld_joint_erasure_lookup:
@@ -205,7 +205,8 @@ Theorem ld_joint_original_site:
   ?c. FLOOKUP sites (a,aid) = SOME (b,c,z) /\
       FLOOKUP t.vs_allocas aid = SOME (c,z)
 Proof
-  (* P4a in progress *) cheat
+  simp[ld_joint_boundary_def, occurrence_annotation_ok_def, ld_joint_frame_def] >>
+  rpt strip_tac >> drule_all ld_joint_frame_site >> simp[]
 QED
 
 Theorem ld_joint_original_lookup:
@@ -213,21 +214,24 @@ Theorem ld_joint_original_lookup:
     n a U B HP H sites X ts /\ MEM aid (fn_ir_inst_ids fn) ==>
   (FLOOKUP s.vs_allocas aid = NONE <=> FLOOKUP t.vs_allocas aid = NONE)
 Proof
-  (* P4a in progress *) cheat
+  simp[ld_joint_boundary_def, occurrence_annotation_ok_def, ld_joint_frame_def] >>
+  rpt strip_tac >> drule_all ld_joint_frame_lookup >> simp[]
 QED
 
 Theorem ld_joint_environment:
   ld_joint_boundary vs C C' lo D stk PG G tn fn inst s t
     n a U B HP H sites X ts ==> ld_env_agree sites fn H tn s t
 Proof
-  (* P4a in progress *) cheat
+  simp[ld_joint_boundary_def, ld_joint_frame_def] >>
+  rpt strip_tac >> gvs[ld_env_agree_def, op_taint_def]
 QED
 
 Theorem ld_joint_labels:
   ld_joint_boundary vs C C' lo D stk PG G tn fn inst s t
     n a U B HP H sites X ts ==> s.vs_labels = t.vs_labels
 Proof
-  (* P4a in progress *) cheat
+  simp[ld_joint_boundary_def, ld_joint_frame_def, ld_joint_local_fields_def] >>
+  rpt strip_tac >> simp[]
 QED
 
 Theorem ld_joint_operand_defined:
@@ -268,7 +272,9 @@ Theorem ld_joint_saved_head:
         FLOOKUP t.vs_allocas aid = SOME (c,z)) /\
   ld_joint_saved C' sites X lo U stk ts /\ occurrence_saved_ok fl B U stk
 Proof
-  (* P4a in progress *) cheat
+  simp[ld_joint_saved_def, occurrence_saved_ok_def, ld_joint_frame_def] >>
+  rpt strip_tac >>
+  metis_tac[ld_joint_frame_lookup, ld_joint_frame_site]
 QED
 
 Theorem ld_joint_saved_projection:
@@ -277,7 +283,8 @@ Theorem ld_joint_saved_projection:
   ld_joint_saved C' sites X lo U stk ts /\
   occurrence_saved_ok (dyn_floor C vs) B U stk /\ ld_joint_erasure sites B
 Proof
-  (* P4a in progress *) cheat
+  simp[ld_joint_boundary_def, occurrence_annotation_ok_def] >>
+  rpt strip_tac >> simp[]
 QED
 
 Theorem ld_joint_operand_clean:

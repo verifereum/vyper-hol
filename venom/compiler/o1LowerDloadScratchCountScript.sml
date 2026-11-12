@@ -105,7 +105,24 @@ Theorem ld_joint_scratch_support[local]:
     MEM op (fn_insts (EL i (fn::MAP (\f. f.cf_fn) stk))) /\
     op.inst_opcode = DLOAD /\ SND id = op.inst_id
 Proof
-  (* P4a in progress *) cheat
+  simp_tac bool_ss [ld_joint_boundary_def] >> strip_tac >>
+  rpt gen_tac >> strip_tac >>
+  `MEM (FST id) (a::MAP (\f. f.of_owner) U)` by
+    gvs[ld_joint_geometry_def] >>
+  Cases_on `FST id = a`
+  >- (`?op. MEM op (fn_insts fn) /\ op.inst_id = SND id /\
+         op.inst_opcode = DLOAD` by
+        (irule ld_frame_scratch_support >> metis_tac[pairTheory.PAIR]) >>
+      qexistsl_tac [`0`, `op`] >> simp[]) >>
+  `?j. j < LENGTH U /\ FST id = (EL j U).of_owner` by
+    (gvs[MEM_MAP, MEM_EL] >> metis_tac[]) >>
+  `LENGTH U = LENGTH stk` by metis_tac[occ_frame_reachable_stack_length] >>
+  `?op. MEM op (fn_insts (EL j stk).cf_fn) /\
+      op.inst_id = SND id /\ op.inst_opcode = DLOAD` by
+    (drule ld_saved_scratch_support >>
+     disch_then (qspecl_then [`j`, `SND id`] mp_tac) >>
+     simp[] >> metis_tac[pairTheory.PAIR]) >>
+  qexistsl_tac [`SUC j`, `op`] >> simp[EL_MAP]
 QED
 
 Theorem ld_joint_supported_scratch_count[local]:
@@ -142,7 +159,8 @@ Theorem ld_joint_scratch_domain[local]:
     n a U B HP H sites X ts ==>
   {id | id IN FDOM X /\ MEM (FST id) (a::MAP (\f. f.of_owner) U)} = FDOM X
 Proof
-  (* P4a in progress *) cheat
+  simp[ld_joint_boundary_def, ld_joint_geometry_def, EXTENSION] >>
+  metis_tac[]
 QED
 
 Theorem ld_joint_scratch_count:

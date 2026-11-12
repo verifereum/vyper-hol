@@ -21,7 +21,19 @@ Theorem ld_forward_suffix_raw:
   s.vs_alloca_next < dimword (:256) ==>
   raw_mem_ok ctx fn inst s
 Proof
-  (* P4a in progress *) cheat
+  strip_tac >> simp[raw_mem_ok_def, inst_mem_ok_in_fn_def] >>
+  Cases_on `s.vs_inst_idx = i`
+  >- (disj2_tac >>
+      simp[revert_forward_at_def] >> metis_tac[]) >>
+  Cases_on `s.vs_inst_idx = j`
+  >- (disj2_tac >>
+      simp[revert_forward_at_def] >> metis_tac[]) >>
+  `inst.inst_opcode = ASSIGN` by
+    (gvs[revert_forward_pair_def] >> first_x_assum irule >>
+     qexists_tac `s.vs_inst_idx` >> simp[] >> decide_tac) >>
+  disj1_tac >> simp[inst_mem_below_frontier_def,
+    source_memory_read_ranges_def, source_memory_write_ranges_def,
+    mem_read_ops_def, mem_write_ops_def]
 QED
 
 Theorem ld_forward_suffix_step_frontier:

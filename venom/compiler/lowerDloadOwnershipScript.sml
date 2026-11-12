@@ -81,7 +81,11 @@ Theorem ld_source_frame_raw_bound:
   frame_reachable vs C stk PG G tn fn inst s ==>
   s.vs_alloca_next < dimword (:256)
 Proof
-  (* P4a in progress *) cheat
+  strip_tac >> drule_all ld_frame_reachable_raw >>
+  qpat_x_assum `o1_src_inv D C vs` mp_tac >>
+  simp[o1_src_inv_def, mem_inv_raw_reachable] >> rpt strip_tac >>
+  qpat_x_assum `!f i t. raw_reachable vs C f i t ==> raw_mem_ok C f i t`
+    (drule_then mp_tac) >> simp[raw_mem_ok_def]
 QED
 
 Theorem ld_source_frame_no_dalloca:
@@ -89,7 +93,14 @@ Theorem ld_source_frame_no_dalloca:
   frame_reachable vs C stk PG G tn fn inst s ==>
   inst.inst_opcode <> DALLOCA
 Proof
-  (* P4a in progress *) cheat
+  strip_tac >> drule_all ld_frame_reachable_prefix >> strip_tac >>
+  `MEM fn C.ctx_functions` by metis_tac[ld_stack_origin_member] >>
+  `active_inst fn inst s` by metis_tac[frame_reach_active] >>
+  `EVERY (\i. i.inst_opcode <> DALLOCA) (fn_insts fn)` by
+    (qpat_x_assum `o1_src_inv D C vs` mp_tac >>
+     simp[o1_src_inv_def, ctx_has_dalloca_def, EXISTS_MEM, EVERY_MEM] >>
+     metis_tac[]) >>
+  drule_all EVERY_active_inst >> simp[]
 QED
 
 (* Natural endpoint geometry: no word no-wrap premise is needed. *)

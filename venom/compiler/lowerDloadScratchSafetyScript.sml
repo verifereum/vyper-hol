@@ -36,7 +36,9 @@ Theorem lower_dload_pure_raw[local]:
   s.vs_alloca_next < dimword(:256) ==>
   raw_mem_ok C fn inst s
 Proof
-  (* P4a in progress *) cheat
+  simp[raw_mem_ok_def, inst_mem_ok_in_fn_def,
+       inst_mem_below_frontier_def] >> strip_tac >>
+  simp[source_memory_read_ranges_def, source_memory_write_ranges_def]
 QED
 
 Theorem lower_dload_add_preserves[local]:
@@ -68,7 +70,14 @@ Theorem lower_dload_scratch_access_raw[local]:
   c + 32 <= s.vs_alloca_next /\ s.vs_alloca_next < dimword(:256) ==>
   raw_mem_ok C fn inst s
 Proof
-  (* P4a in progress *) cheat
+  `dimindex (:256) = 256` by CONV_TAC fcpLib.INDEX_CONV >>
+  strip_tac >>
+  `c < dimword(:256)` by decide_tac >>
+  simp[raw_mem_ok_def, inst_mem_ok_in_fn_def] >> disj1_tac >>
+  simp[inst_mem_below_frontier_def, source_memory_read_ranges_def,
+       source_memory_write_ranges_def, sized_source_write_range_def,
+       eval_operand_def, lookup_var_def] >>
+  Cases_on `FLOOKUP s.vs_vars z` >> simp[]
 QED
 
 Theorem lower_dload_prefix_scratch[local]:

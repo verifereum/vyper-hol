@@ -41,7 +41,25 @@ Theorem ld_joint_identity_boundary_next:
       (s with vs_inst_idx := SUC s.vs_inst_idx)
       (t with vs_inst_idx := SUC t.vs_inst_idx) n a U B HP H sites X ts
 Proof
-  (* P4a in progress *) cheat
+  strip_tac >>
+  `MEM fn C.ctx_functions` by
+    (drule ld_joint_source >> drule occ_frame_reachable_annotation >> simp[]) >>
+  `ALL_DISTINCT (MAP (\bb. bb.bb_label) fn.fn_blocks)` by
+    (gvs[o1_ctx_shape_def, EVERY_MEM] >>
+     first_x_assum drule >> simp[o1_fn_shape_def, wf_function_def, fn_labels_def]) >>
+  qhdtm_assum `ld_joint_boundary`
+    (strip_assume_tac o REWRITE_RULE [ld_joint_boundary_def]) >>
+  qhdtm_assum `ld_joint_frame`
+    (strip_assume_tac o REWRITE_RULE [ld_joint_frame_def]) >>
+  drule_all ld_joint_control_unchanged_next >> strip_tac >>
+  qexistsl_tac [`u`,`fn'`] >> simp[] >>
+  simp[ld_joint_boundary_def] >> conj_tac
+  >- (qexists_tac `u` >>
+      gvs[ld_joint_frame_def, ld_params_agree_def, ld_joint_local_fields_def,
+          ld_joint_allocas_def, ld_env_agree_def, op_taint_def] >>
+      qpat_x_assum `ld_joint_control _ _ _ (_ with vs_inst_idx := _) _` mp_tac >>
+      simp[NoAsms, ld_joint_control_def] >> strip_tac >> gvs[] >> metis_tac[]) >>
+  gvs[ld_shared_agree_def]
 QED
 
 Theorem ld_joint_identity_annotations:
@@ -81,7 +99,33 @@ Theorem ld_joint_identity_next:
       (t1 with vs_inst_idx := SUC t.vs_inst_idx)
       n a U B HP (occurrence_step a HP H inst s1) sites X ts
 Proof
-  (* P4a in progress *) cheat
+  strip_tac >> drule_all ld_joint_identity_step >> strip_tac >> gvs[] >>
+  `occ_frame_reachable vs C stk PG G tn fn inst s n a U B HP H` by
+    metis_tac[ld_joint_source] >>
+  `occurrence_annotation_ok (dyn_floor C vs) n a U B HP H stk PG G s` by
+    gvs[ld_joint_boundary_def] >>
+  `MEM fn C.ctx_functions` by
+    (drule occ_frame_reachable_annotation >> simp[]) >>
+  `inst_wf inst` by
+    (fs[o1_ctx_shape_def, EVERY_MEM] >> first_x_assum drule >>
+     simp[o1_fn_shape_def] >> strip_tac >>
+     fs[fn_inst_wf_def, active_inst_def] >> metis_tac[MEM_EL]) >>
+  `step_prov PG G inst s = G /\ occurrence_step a HP H inst s = H /\
+   step_taint inst s s tn = tn` by
+    (irule ld_joint_identity_annotations >> simp[]) >>
+  `~MEM inst.inst_opcode [DLOAD; DLOADBYTES]` by gvs[MEM] >>
+  `~is_terminator inst.inst_opcode /\ inst.inst_opcode <> INVOKE` by
+    gvs[is_terminator_def, MEM] >>
+  `occ_frame_reachable vs C stk PG G tn fn inst2
+     (s with vs_inst_idx := SUC s.vs_inst_idx) n a U B HP H` by
+    (drule_all occ_frame_reachable_next >> simp[occurrence_sites_step_def] >> gvs[]) >>
+  `occurrence_annotation_ok (dyn_floor C vs) n a U B HP H stk PG G
+     (s with vs_inst_idx := SUC s.vs_inst_idx)` by
+    (drule occurrence_annotation_next >>
+     disch_then (qspecl_then [`s`,`inst`,`SUC s.vs_inst_idx`,`fuel`,`C`] mp_tac) >>
+     simp[occurrence_sites_step_def] >> gvs[]) >>
+  simp[] >>
+  irule ld_joint_identity_boundary_next >> simp[] >> metis_tac[]
 QED
 
 Theorem ld_joint_assert_abort:

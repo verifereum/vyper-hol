@@ -49,7 +49,21 @@ Theorem ld_joint_stop_sink_result:
   ?t1. step_inst fuel C' inst t = Halt t1 /\
        dead_result_rel D (Halt s1) (Halt t1)
 Proof
-  (* P4a in progress *) cheat
+  strip_tac >>
+  `inst.inst_opcode <> INVOKE` by gvs[] >>
+  drule_all ld_joint_halt_taint_within >> strip_tac >>
+  `ld_shared_agree D s.vs_call_ctx.cc_address tn s t /\
+   s.vs_returndata = t.vs_returndata` by fs[ld_joint_boundary_def] >>
+  qpat_x_assum `step_inst _ _ _ _ = _` mp_tac >>
+  simp[step_inst_non_invoke] >>
+  asm_simp_tac (srw_ss()) [step_inst_base_opcode_eqs] >> strip_tac >> gvs[] >>
+  (simp[step_inst_non_invoke] >>
+   asm_simp_tac (srw_ss()) [step_inst_base_opcode_eqs] >>
+   irule (Q.INST [`A` |-> `s.vs_call_ctx.cc_address`,
+                  `tn` |-> `tn`, `R` |-> `{}`] ld_shared_halt_result) >>
+   gvs[halt_state_def, set_returndata_def, step_taint_def, store_taint_def,
+       adopt_reset_def, imm_taint_def, ret_taint_def, ld_shared_agree_def] >>
+   qexists_tac `tn` >> simp[])
 QED
 
 Theorem ld_joint_selfdestruct_operand[local]:
@@ -96,7 +110,30 @@ Theorem ld_joint_return_slice[local]:
       EL k (read_memory (w2n p) (w2n len) s) =
       EL k (read_memory (w2n q) (w2n len) t))
 Proof
-  (* P4a in progress *) cheat
+  strip_tac >>
+  `eval_operand sz s = eval_operand sz t` by
+    (irule ld_joint_return_length >> metis_tac[]) >>
+  `frame_reachable vs C stk PG G tn fn inst s` by
+    metis_tac[ld_joint_source, occ_frame_reachable_projection] >>
+  `taint_ok fn tn inst s` by metis_tac[ptr_discipline_def] >>
+  `op_taint tn addr = {}` by
+    (qpat_x_assum `taint_ok _ _ _ _` mp_tac >> gvs[taint_ok_def] >> metis_tac[]) >>
+  `?q. eval_operand addr t = SOME q /\
+    (w2n len=0 \/ (w2n p=w2n q /\ w2n p+w2n len<=lo) \/
+     (?id b c z j. FLOOKUP sites id = SOME (b,c,z) /\ j+w2n len<=z /\
+       w2n p=b+j /\ w2n q=c+j))` by
+    (drule ld_joint_read_operand_range >>
+     disch_then (qspecl_then [`p`,
+       `<|iao_ofst := addr; iao_size := SOME sz; iao_max_size := SOME sz|>`,
+       `addr`, `w2n len`] mp_tac) >>
+     simp[mem_read_ops_def] >> disch_then irule >> simp[] >>
+     simp[mem_read_ops_def, source_memory_read_ranges_def,
+          memory_range_of_operands_def, retpc_use_ok_def] >>
+     gvs[]) >>
+  qexists_tac `q` >> gvs[] >> rpt strip_tac >>
+  irule ld_memory_agree_slice_element >> simp[] >>
+  qexistsl_tac [`lo`,`tn.t_mem`,`sites`] >>
+  gvs[ret_taint_def] >> fs[ld_joint_boundary_def] >> metis_tac[]
 QED
 
 Theorem ld_joint_return_result:
@@ -107,7 +144,30 @@ Theorem ld_joint_return_result:
   ?t1. step_inst fuel C' inst t = Halt t1 /\
        dead_result_rel D (Halt s1) (Halt t1)
 Proof
-  (* P4a in progress *) cheat
+  strip_tac >>
+  `inst.inst_opcode <> INVOKE` by gvs[] >>
+  drule_all ld_joint_halt_taint_within >> strip_tac >>
+  `ld_shared_agree D s.vs_call_ctx.cc_address tn s t` by fs[ld_joint_boundary_def] >>
+  qpat_x_assum `step_inst _ _ _ _ = _` mp_tac >>
+  simp[step_inst_non_invoke] >>
+  asm_simp_tac (srw_ss()) [step_inst_base_def] >>
+  simp[AllCaseEqs()] >> strip_tac >> fs[] >>
+  rename1 `inst.inst_operands = [addr;sizeop]` >>
+  rename1 `eval_operand addr s = SOME p` >>
+  rename1 `eval_operand sizeop s = SOME len` >>
+  `?q. eval_operand addr t = SOME q /\ eval_operand sizeop t = SOME len /\
+    (!k. k < w2n len /\ k NOTIN ret_taint tn inst s ==>
+      EL k (read_memory (w2n p) (w2n len) s) =
+      EL k (read_memory (w2n q) (w2n len) t))` by
+    (irule ld_joint_return_slice >> metis_tac[]) >>
+  gvs[] >> simp[step_inst_non_invoke] >>
+  asm_simp_tac (srw_ss()) [step_inst_base_def] >> simp[] >>
+  irule ld_shared_halt_result >>
+  gvs[halt_state_def, set_returndata_def, step_taint_def, store_taint_def,
+      adopt_reset_def, imm_taint_def, ld_read_memory_length,
+      GSYM read_memory_def] >>
+  conj_tac >- metis_tac[] >>
+  qexistsl_tac [`s.vs_call_ctx.cc_address`, `tn`] >> gvs[ld_shared_agree_def]
 QED
 
 Theorem ld_shared_balances[local]:
@@ -161,7 +221,18 @@ Theorem ld_joint_selfdestruct_result:
   ?t1. step_inst fuel C' inst t = Halt t1 /\
        dead_result_rel D (Halt s1) (Halt t1)
 Proof
-  (* P4a in progress *) cheat
+  strip_tac >>
+  `inst.inst_opcode <> INVOKE` by gvs[] >>
+  drule_all ld_joint_halt_taint_within >> strip_tac >>
+  `ld_shared_agree D s.vs_call_ctx.cc_address tn s t /\
+   s.vs_call_ctx = t.vs_call_ctx` by
+    fs[ld_joint_boundary_def, ld_joint_frame_def, ld_joint_local_fields_def] >>
+  `!op. MEM op inst.inst_operands ==> eval_operand op s = eval_operand op t` by
+    (rpt strip_tac >> irule ld_joint_selfdestruct_operand >> metis_tac[]) >>
+  drule_all ld_shared_selfdestruct_step >> disch_then (qspec_then `C'` strip_assume_tac) >>
+  qexists_tac `t1` >> simp[] >>
+  irule ld_shared_halt_result >> gvs[] >> conj_tac >- (qexists_tac `{}` >> simp[]) >>
+  qexistsl_tac [`s1.vs_call_ctx.cc_address`, `step_taint inst s s1 tn`] >> simp[]
 QED
 
 Theorem ld_joint_halt_result:

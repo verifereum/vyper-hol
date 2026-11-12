@@ -17,7 +17,8 @@ Theorem ld_joint_current_bb[local]:
   ld_joint_boundary vs C C' lo D stk PG G tn fn i s t
     n a U B HP H sites X ts ==> s.vs_current_bb = t.vs_current_bb
 Proof
-  (* P4a in progress *) cheat
+  simp[ld_joint_boundary_def, ld_joint_frame_def, ld_joint_control_def] >>
+  metis_tac[]
 QED
 
 Theorem ld_runner_exec_clause:
@@ -116,11 +117,63 @@ Resume ld_runner_exec_clause[abort]:
 QED
 
 Resume ld_runner_exec_clause[ret]:
-  (* P4a in progress *) cheat
+  rename1 `step_inst fuel C i s = IntRet ir se` >>
+  `exec_block fuel C bb s = IntRet ir se` by simp[Once exec_block_def] >>
+  Cases_on `i.inst_opcode = INVOKE`
+  >- (gvs[terminates_def] >> metis_tac[]) >>
+  `MEM fn C.ctx_functions` by
+    (drule ld_joint_source >> strip_tac >>
+     drule occ_frame_reachable_annotation >> simp[]) >>
+  `MEM i (fn_insts fn)` by
+    (fs[active_inst_def, fn_insts_def, fn_insts_blocks_MEM] >> metis_tac[MEM_EL]) >>
+  `~is_raw_fmp_opcode i.inst_opcode /\ no_dret fn` by
+    (fs[o1_src_inv_def, fmp_free_ctx_def, o1_ctx_shape_def, EVERY_MEM,
+        o1_fn_shape_def, no_raw_fmp_ops_def] >> metis_tac[]) >>
+  `i.inst_opcode = RET` by
+    (drule step_inst_intret_opcodes >>
+     fs[no_dret_def, EVERY_MEM] >> strip_tac >>
+     gvs[is_raw_fmp_opcode_def]) >>
+  drule_all ld_runner_ret_endpoint >> strip_tac >>
+  qexists_tac `fuel` >> fs[Abbr `RR`] >> metis_tac[]
 QED
 
 Resume ld_runner_exec_clause[call_ok]:
-  (* P4a in progress *) cheat
+  gvs[terminates_def] >>
+  first_x_assum (drule_all_then strip_assume_tac) >>
+  `~MEM i.inst_opcode [DLOAD; DLOADBYTES]` by simp[] >>
+  drule_all ld_joint_unchanged_fetch >> strip_tac >>
+  `wf_function fn` by
+    (drule ld_joint_source >> strip_tac >> drule occ_frame_reachable_annotation >>
+     strip_tac >> fs[o1_ctx_shape_def, EVERY_MEM] >>
+     metis_tac[o1_fn_shape_def]) >>
+  `get_instruction bb (SUC s.vs_inst_idx) = SOME next` by
+    (qpat_x_assum `active_inst fn next _` mp_tac >>
+     simp[active_inst_def] >> strip_tac >>
+     `lookup_block s.vs_current_bb fn.fn_blocks = SOME bb''` by
+       (irule MEM_lookup_block >> fs[wf_function_def, fn_labels_def]) >>
+     gvs[get_instruction_def]) >>
+  first_x_assum (drule_all_then strip_assume_tac) >>
+  `t1.vs_current_bb = t.vs_current_bb` by
+    (imp_res_tac ld_joint_current_bb >> fs[]) >>
+  gvs[] >>
+  `terminates (exec_block m' C' bb' (t1 with vs_inst_idx := SUC t.vs_inst_idx))` by
+    (irule ld_runner_packet_terminates >>
+     qpat_x_assum `RR _ _ _ _ _ _ _ _ _ _` mp_tac >>
+     simp[Abbr `RR`] >> metis_tac[]) >>
+  `step_inst (MAX m m') C' i t = OK t1` by
+    (`terminates (step_inst m C' i t)` by simp[terminates_def] >>
+     drule step_inst_terminates_mono >>
+     disch_then (qspec_then `MAX m m'` mp_tac) >> simp[]) >>
+  `exec_block (MAX m m') C' bb' (t1 with vs_inst_idx := SUC t.vs_inst_idx) =
+   exec_block m' C' bb' (t1 with vs_inst_idx := SUC t.vs_inst_idx)` by
+    (irule exec_block_terminates_mono >> simp[]) >>
+  `exec_block fuel C bb s =
+   exec_block fuel C bb (v with vs_inst_idx := SUC s.vs_inst_idx)` by
+    simp[Once exec_block_def] >>
+  `exec_block (MAX m m') C' bb' t =
+   exec_block m' C' bb' (t1 with vs_inst_idx := SUC t.vs_inst_idx)` by
+    simp[Once exec_block_def] >>
+  qexists_tac `MAX m m'` >> simp[]
 QED
 Finalise ld_runner_exec_clause
 
@@ -226,11 +279,52 @@ Resume ld_runner_exec_clause_fuel[abort]:
 QED
 
 Resume ld_runner_exec_clause_fuel[ret]:
-  (* P4a in progress *) cheat
+  rename1 `step_inst fuel C i s = IntRet ir se` >>
+  `exec_block fuel C bb s = IntRet ir se` by simp[Once exec_block_def] >>
+  Cases_on `i.inst_opcode = INVOKE`
+  >- (gvs[terminates_def] >> metis_tac[]) >>
+  `MEM fn C.ctx_functions` by
+    (drule ld_joint_source >> strip_tac >>
+     drule occ_frame_reachable_annotation >> simp[]) >>
+  `MEM i (fn_insts fn)` by
+    (fs[active_inst_def, fn_insts_def, fn_insts_blocks_MEM] >> metis_tac[MEM_EL]) >>
+  `~is_raw_fmp_opcode i.inst_opcode /\ no_dret fn` by
+    (fs[o1_src_inv_def, fmp_free_ctx_def, o1_ctx_shape_def, EVERY_MEM,
+        o1_fn_shape_def, no_raw_fmp_ops_def] >> metis_tac[]) >>
+  `i.inst_opcode = RET` by
+    (drule step_inst_intret_opcodes >>
+     fs[no_dret_def, EVERY_MEM] >> strip_tac >>
+     gvs[is_raw_fmp_opcode_def]) >>
+  drule_all ld_runner_ret_endpoint >> strip_tac >>
+  fs[Abbr `RR`] >> metis_tac[]
 QED
 
 Resume ld_runner_exec_clause_fuel[call_ok]:
-  (* P4a in progress *) cheat
+  gvs[terminates_def] >>
+  first_x_assum (drule_all_then strip_assume_tac) >>
+  `~MEM i.inst_opcode [DLOAD; DLOADBYTES]` by simp[] >>
+  drule_all ld_joint_unchanged_fetch >> strip_tac >>
+  `wf_function fn` by
+    (drule ld_joint_source >> strip_tac >> drule occ_frame_reachable_annotation >>
+     strip_tac >> fs[o1_ctx_shape_def, EVERY_MEM] >>
+     metis_tac[o1_fn_shape_def]) >>
+  `get_instruction bb (SUC s.vs_inst_idx) = SOME next` by
+    (qpat_x_assum `active_inst fn next _` mp_tac >>
+     simp[active_inst_def] >> strip_tac >>
+     `lookup_block s.vs_current_bb fn.fn_blocks = SOME bb''` by
+       (irule MEM_lookup_block >> fs[wf_function_def, fn_labels_def]) >>
+     gvs[get_instruction_def]) >>
+  first_x_assum (drule_all_then strip_assume_tac) >>
+  `t1.vs_current_bb = t.vs_current_bb` by
+    (imp_res_tac ld_joint_current_bb >> fs[]) >>
+  gvs[] >>
+  `exec_block fuel C bb s =
+   exec_block fuel C bb (v with vs_inst_idx := SUC s.vs_inst_idx)` by
+    simp[Once exec_block_def] >>
+  `exec_block fuel C' bb' t =
+   exec_block fuel C' bb' (t1 with vs_inst_idx := SUC t.vs_inst_idx)` by
+    simp[Once exec_block_def] >>
+  simp[]
 QED
 Finalise ld_runner_exec_clause_fuel
 

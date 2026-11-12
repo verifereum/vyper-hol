@@ -144,5 +144,32 @@ Theorem ld_joint_dload_fresh_metadata:
     t1.vs_alloca_next = s.vs_alloca_next +
       32 * CARD {id | id IN FDOM X1 /\ MEM (FST id) (a::MAP (\f. f.of_owner) U)}
 Proof
-  (* P4a in progress *) cheat
+  strip_tac >> simp_tac (srw_ss()) [LET_THM] >>
+  `occ_frame_reachable vs C stk PG G tn fn inst s n a U B HP H` by
+    metis_tac[ld_joint_source] >>
+  `s.vs_alloca_next + 32 * ctx_dload_count C < dimword (:256)` by
+    (irule ld_occurrence_shape_headroom >> metis_tac[]) >>
+  drule_all ld_joint_scratch_credit >> strip_tac >>
+  drule ld_joint_boundary_site_frontiers >> strip_tac >>
+  drule ld_joint_boundary_scratch_frontier >> strip_tac >>
+  `~MEM aid (fn_ir_inst_ids fn)` by metis_tac[ld_scratch_source_id_fresh] >>
+  qhdtm_x_assum `ld_joint_boundary` mp_tac >>
+  simp_tac bool_ss [ld_joint_boundary_def] >> strip_tac >>
+  `ld_joint_allocas sites X a fn t` by fs[ld_joint_frame_def] >>
+  `FLOOKUP t.vs_allocas aid = NONE` by
+    (drule_all ld_scratch_allocation_absent >> simp[]) >>
+  `CARD {id | id IN FDOM (X |+ ((a,inst.inst_id),(aid,t.vs_alloca_next))) /\
+       MEM (FST id) (a::MAP (\f. f.of_owner) U)} =
+   CARD {id | id IN FDOM X /\ MEM (FST id) (a::MAP (\f. f.of_owner) U)} + 1` by
+    (irule ld_scratch_owner_credit_extend >> simp[]) >>
+  fs[ld_joint_frame_def] >>
+  `t.vs_alloca_next + 32 < dimword (:256)` by decide_tac >>
+  `lo <= t.vs_alloca_next` by decide_tac >>
+  simp[] >> rpt conj_tac
+  >- (irule ld_geometry_scratch_extend_frontier >> simp[] >> metis_tac[]) 
+  >- (irule ld_allocas_scratch_extend >> metis_tac[]) 
+  >- (simp[FLOOKUP_UPDATE] >> rpt gen_tac >>
+      Cases_on `inst.inst_id = d` >> simp[] >> metis_tac[])
+  >- (irule ld_saved_scratch_extend >> fs[occurrence_annotation_ok_def]) >>
+  decide_tac
 QED

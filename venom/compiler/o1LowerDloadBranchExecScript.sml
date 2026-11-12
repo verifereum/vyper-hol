@@ -28,5 +28,20 @@ Theorem ld_joint_branch_step:
        s1.vs_prev_bb = t1.vs_prev_bb /\
        s1.vs_halted = s.vs_halted /\ t1.vs_halted = t.vs_halted
 Proof
-  (* P4a in progress *) cheat
+  strip_tac >>
+  `!op. MEM op inst.inst_operands ==> eval_operand op s = eval_operand op t` by
+    metis_tac[ld_joint_branch_operands_clean] >>
+  `ld_joint_local_fields s t /\ s.vs_current_bb = t.vs_current_bb` by
+    fs[ld_joint_boundary_def, ld_joint_frame_def, ld_joint_control_def] >>
+  qpat_x_assum `ld_joint_boundary _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _` kall_tac >>
+  fs[ld_joint_local_fields_def, MEM] >>
+  (qpat_x_assum `step_inst _ _ _ _ = _` mp_tac >>
+   simp[step_inst_non_invoke] >>
+   asm_simp_tac (srw_ss()) [step_inst_base_opcode_eqs] >>
+   simp[AllCaseEqs()] >> strip_tac >>
+   gvs[] >>
+   `!op. MEM op inst.inst_operands ==> eval_operand op t = eval_operand op s` by
+     (rpt strip_tac >> gvs[MEM] >> metis_tac[]) >>
+   asm_simp_tac (srw_ss()) [] >>
+   simp[jump_to_def])
 QED
