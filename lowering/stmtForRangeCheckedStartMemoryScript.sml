@@ -4,6 +4,20 @@ Ancestors
   stmtSimProps exprSimProps compileEnv loweringStateRelDefs exprLoweringProps fragGasMode fragGasPathMem allocaHistory
   venomExecSemantics venomState venomInst finite_map list rich_list words
 
+val vars_frame_tac =
+  irule stmt_state_rel_vars_frame >> simp[] >>
+  qpat_assum `!x. MEM x _ ==> not_local_ptr _ _ x` mp_tac >>
+  qpat_assum `!x. ~MEM x _ ==> lookup_var _ _ = _` mp_tac >>
+  POP_ASSUM_LIST (K all_tac) >>
+  rpt disch_tac >> conj_tac
+  >- (qx_genl_tac [`nm`,`en`,`q`,`sz`] >> strip_tac >>
+      first_x_assum irule >> strip_tac >>
+      qpat_x_assum `!x. MEM x _ ==> _` (qspec_then `q` mp_tac) >>
+      simp[not_local_ptr_def] >> metis_tac[]) >>
+  qx_gen_tac `q` >> strip_tac >> first_x_assum irule >> strip_tac >>
+  qpat_x_assum `!x. MEM x _ ==> _` (qspec_then `q` mp_tac) >>
+  simp[not_local_ptr_def] >> metis_tac[];
+
 Theorem for_range_checked_start_mem:
   !ctx func cenv cx es s0 sa d aa aid sz p pre lbl entry_lbl cond_lbl j
    op1 op2 a b cmp cv rv g1 z1 g2 z2 ev bound i.
@@ -40,6 +54,8 @@ Theorem for_range_checked_start_mem:
       ?cc w. gas_path_mem ctx func s0 0 (OK cc) /\
         cc.vs_current_bb = cond_lbl /\ cc.vs_inst_idx = 0 /\ ~cc.vs_halted /\
         stmt_state_rel H ctx func cenv cx es cc /\
+        (!(H':(bool # bytes32 # type_value) list # num list). stmt_state_rel H' ctx func cenv cx es s0 ==>
+              stmt_state_rel H' ctx func cenv cx es cc) /\
         lookup_var cv cc = SOME a /\ lookup_var ev cc = SOME b /\
         lookup_var p cc = SOME w /\ FLOOKUP cc.vs_allocas aid = SOME (w2n w,sz) /\
         return_buf_frame d cenv sa cc /\ ret_pc_ok cenv sa cc /\
@@ -51,6 +67,8 @@ Proof
   `?ee w. gas_path_mem ctx func s0 0 (OK ee) /\
       ee.vs_current_bb = entry_lbl /\ ee.vs_inst_idx = 0 /\ ~ee.vs_halted /\
       stmt_state_rel H ctx func cenv cx es ee /\
+      (!(H':(bool # bytes32 # type_value) list # num list). stmt_state_rel H' ctx func cenv cx es s0 ==>
+            stmt_state_rel H' ctx func cenv cx es ee) /\
       lookup_var p ee = SOME w /\ FLOOKUP ee.vs_allocas aid = SOME (w2n w,sz) /\
       return_buf_frame d cenv sa ee /\ ret_pc_ok cenv sa ee /\
       alloca_history func ee /\ s0.vs_alloca_next <= ee.vs_alloca_next /\
@@ -100,19 +118,14 @@ Proof
 QED
 
 Resume for_range_checked_start_mem[success]:
+  `!(H':(bool # bytes32 # type_value) list # num list). stmt_state_rel H' ctx func cenv cx es ee ==>
+        stmt_state_rel H' ctx func cenv cx es (ee with vs_vars := vs)` by
+    (rpt strip_tac >> vars_frame_tac) >>
+  `!(H':(bool # bytes32 # type_value) list # num list). stmt_state_rel H' ctx func cenv cx es s0 ==>
+        stmt_state_rel H' ctx func cenv cx es (ee with vs_vars := vs)` by
+    metis_tac[] >>
   `stmt_state_rel H ctx func cenv cx es (ee with vs_vars := vs)` by
-    (irule stmt_state_rel_vars_frame >> simp[] >>
-     qpat_assum `!x. MEM x _ ==> not_local_ptr _ _ x` mp_tac >>
-     qpat_assum `!x. ~MEM x _ ==> lookup_var _ _ = _` mp_tac >>
-     POP_ASSUM_LIST (K all_tac) >>
-     rpt disch_tac >> conj_tac
-     >- (qx_genl_tac [`nm`,`en`,`q`,`sz`] >> strip_tac >>
-         first_x_assum irule >> strip_tac >>
-         qpat_x_assum `!x. MEM x _ ==> _` (qspec_then `q` mp_tac) >>
-         simp[not_local_ptr_def] >> metis_tac[]) >>
-     qx_gen_tac `q` >> strip_tac >> first_x_assum irule >> strip_tac >>
-     qpat_x_assum `!x. MEM x _ ==> _` (qspec_then `q` mp_tac) >>
-     simp[not_local_ptr_def] >> metis_tac[]) >>
+    vars_frame_tac >>
   `!x. not_fresh_at sa x ==>
        lookup_var x (ee with vs_vars := vs) = lookup_var x s0` by
     (rpt strip_tac >>
@@ -140,6 +153,9 @@ Resume for_range_checked_start_mem[success]:
     (qpat_x_assum `ALL_DISTINCT _` mp_tac >> simp[ALL_DISTINCT] >> strip_tac >>
      qpat_x_assum `!x. ~MEM x _ ==> lookup_var _ _ = _` (qspec_then `p` mp_tac) >>
      simp[]) >>
+  `!(H':(bool # bytes32 # type_value) list # num list). stmt_state_rel H' ctx func cenv cx es s0 ==>
+        stmt_state_rel H' ctx func cenv cx es cc` by
+    (rpt strip_tac >> simp[Abbr `cc`, stmt_state_rel_jump_to]) >>
   qexistsl_tac [`cc`, `w`] >> simp[] >>
   qpat_x_assum `lookup_block entry_lbl _ = _` kall_tac >>
   qpat_x_assum `lookup_block s0.vs_current_bb _ = _` kall_tac >>

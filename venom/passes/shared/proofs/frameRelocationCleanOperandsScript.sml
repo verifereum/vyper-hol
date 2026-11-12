@@ -5,7 +5,7 @@ Ancestors frameRelocationGuardedValues frameRelocationOpaque
 
 Theorem taint_ok_operand_exclusion:
   taint_ok fn tn inst s /\ MEM op inst.inst_operands /\
-  ~MEM inst.inst_opcode [ASSIGN; SHL; SHR; SAR; MSTORE; SSTORE; TSTORE; ISTORE] ==>
+  ~MEM inst.inst_opcode [ASSIGN; MUL; SHL; SHR; SAR; MSTORE; SSTORE; TSTORE; ISTORE] ==>
   op_taint tn op = {}
 Proof
   simp[taint_ok_def] >> metis_tac[]
@@ -14,7 +14,7 @@ QED
 Theorem disciplined_clean_scalar:
   o1_fn_shape C fn /\ fn_ptr_ok P fn /\ MEM inst (fn_insts fn) /\
   taint_ok fn tn inst s /\
-  ~MEM inst.inst_opcode [ASSIGN; PHI; RET; SHL; SHR; SAR; MSTORE; SSTORE; TSTORE; ISTORE] /\
+  ~MEM inst.inst_opcode [ASSIGN; PHI; RET; MUL; SHL; SHR; SAR; MSTORE; SSTORE; TSTORE; ISTORE] /\
   MEM (Var v) inst.inst_operands /\ FLOOKUP rv v = NONE ==>
   clean_scalar (retpc_var fn) rv tn v
 Proof
@@ -26,7 +26,7 @@ QED
 Theorem disciplined_scalar_operand:
   o1_fn_shape C fn /\ fn_ptr_ok P fn /\ MEM inst (fn_insts fn) /\
   taint_ok fn tn inst s /\
-  ~MEM inst.inst_opcode [ASSIGN; PHI; RET; SHL; SHR; SAR; MSTORE; SSTORE; TSTORE; ISTORE] /\
+  ~MEM inst.inst_opcode [ASSIGN; PHI; RET; MUL; SHL; SHR; SAR; MSTORE; SSTORE; TSTORE; ISTORE] /\
   MEM op inst.inst_operands /\
   (!v. op = Var v ==> FLOOKUP rv v = NONE) /\
   s.vs_labels = t.vs_labels /\
@@ -58,7 +58,7 @@ Proof
     (irule resolved_sub_right_absent >>
      qexistsl_tac [`P`, `a`, `fn`, `inst`] >> simp[] >>
      rpt strip_tac >> drule_all reachable_resolved_support >> simp[]) >>
-  `~MEM inst.inst_opcode [ASSIGN; PHI; RET; SHL; SHR; SAR; MSTORE; SSTORE; TSTORE; ISTORE]` by simp[] >>
+  `~MEM inst.inst_opcode [ASSIGN; PHI; RET; MUL; SHL; SHR; SAR; MSTORE; SSTORE; TSTORE; ISTORE]` by simp[] >>
   `MEM (Var w) inst.inst_operands` by simp[] >>
   `!v. Var w = Var v ==> FLOOKUP rv v = NONE` by simp[] >>
   drule_all disciplined_scalar_operand >> simp[]
