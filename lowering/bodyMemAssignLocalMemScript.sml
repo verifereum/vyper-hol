@@ -535,7 +535,8 @@ Proof
     (simp[] >> irule val_footprint_le >> simp[]) >>
   `type_memory_bytes cenv lt < dimword (:256)` by simp[] >>
   `w2n sw + type_memory_bytes cenv lt <= s.vs_alloca_next` by simp[] >>
-  drule_all compile_scratch_prefix_body_path >> strip_tac >>
+  drule_all (compile_scratch_prefix_body_path
+             |> Q.SPECL [`\H'. H' = H`, `H`] |> SIMP_RULE bool_ss []) >> strip_tac >>
   `sa.cs_next_var <= sn.cs_next_var` by
     (drule_all body_scratch_prefix_shape >> simp[]) >>
   `!x. not_fresh_at sa x ==> not_fresh_at sn x` by
