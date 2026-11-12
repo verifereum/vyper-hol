@@ -95,7 +95,7 @@
  *     or without default arguments, and the constructor: entryLocals;
  *     internal functions: package_internal_fn_prologue_ptrs in
  *     intCallCallee) and how the statement lowering declares
- *     locals; state_rel only relates the locals that are held so
+ *     locals; state_rel H only relates the locals that are held so
  *     (local_ptrs_rel), and compile_name_vv emits INVALID for a name it
  *     does not find.
  *   - The local types clause: the compile environment's type of a local
