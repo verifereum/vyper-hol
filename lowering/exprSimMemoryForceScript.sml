@@ -66,7 +66,7 @@ Proof
       >- (first_x_assum irule >>
           drule_all emit_mload_marked_path >> simp[Abbr `u`]) >>
       simp[] >> qx_gen_tac `H1` >> strip_tac >>
-      qpat_assum `!H. _ ==> vv_post _ _ _ _ _ _ _ _ _ _ (Value _) _ _`
+      qpat_assum `!H. _ ==> vv_post _ _ _ _ _ _ _ _ _ _ _ (Value _) _ _`
         (qspec_then `H1` mp_tac) >>
       impl_tac >- simp[] >> strip_tac >>
       irule expr_post_of_vv_post_load_physical >>

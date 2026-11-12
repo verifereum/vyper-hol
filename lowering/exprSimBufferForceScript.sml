@@ -49,10 +49,10 @@ Proof
       rewrite_tac[gas_summary_at_def] >> BETA_TAC
       >- (qpat_x_assum `!H. valid_horizon _ _ H _ ==> _`
             (assume_tac o SIMP_RULE (srw_ss()) []) >>
-          first_assum (drule_then strip_assume_tac) >> gvs[] >>
           `?v. read_result cx tv (es_end with gas_obs := []) =
                (INL v, es_end with gas_obs := [])` by
-            (qpat_x_assum `vv_post _ _ _ _ _ _ _ _ _ _ _ _ _ _` mp_tac >>
+            (qpat_assum `!H. valid_horizon _ _ H es_end.storage_trace ==> _`
+               (drule_then mp_tac) >>
              simp[vv_post_def, vv_holds_def] >> metis_tac[]) >>
           qexistsl_tac [`INL v`, `es_end with gas_obs := []`, `OK t'`] >>
           simp[] >> conj_tac
