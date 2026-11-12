@@ -1,4 +1,7 @@
-(* Return coverage from a restored related source point. *)
+(* Return coverage from a restored related source point.
+   The backward/forward return contracts provide the source step and its
+   image; source frame reachability, not merging callee state, proves the
+   resumed caller is not halted. *)
 Theory fmpStageCoverFrameRet
 Ancestors
   fmpStageCoverInv fmpStageCoverCall fmpStageFmpSteps fmpStageOpBase
