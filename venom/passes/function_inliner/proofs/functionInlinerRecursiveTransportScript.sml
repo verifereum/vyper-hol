@@ -557,3 +557,23 @@ Proof
     metis_tac[functionInlinerReturnRoutingTheory.inline_routed_leaf_annotated_path] >>
   drule_all inline_boundary_path_fetch >> metis_tac[]
 QED
+
+Theorem inline_activation_boundary_return:
+  inline_live_stack C cert root ((p,a,route,snap)::rest) frame /\
+  inline_annotated_origin C n root cert /\
+  inline_routed_leaf cert root p a.ia_function path /\
+  ~frame.ipf_state.vs_halted /\
+  lookup_block snap.ils_state.vs_current_bb a.ia_function.fn_blocks = SOME rf /\
+  get_instruction rf snap.ils_state.vs_inst_idx = SOME ret /\
+  step_inst fuel C ret snap.ils_state = IntRet ir u /\ ret.inst_opcode <> INVOKE /\
+  lookup_block frame.ipf_state.vs_current_bb root.fn_blocks = SOME rb /\
+  inline_parameter_boundary_path path a.ia_function
+    snap.ils_state.vs_current_bb snap.ils_state.vs_inst_idx root
+    frame.ipf_state.vs_current_bb frame.ipf_state.vs_inst_idx ==>
+  inline_activation_outcome C Tctx cert root p a route rest frame
+    (InlineBody rb frame.ipf_state) (IntRet ir u)
+Proof
+  strip_tac >> drule_all inline_noninvoke_boundary_location >> strip_tac >>
+  irule inline_activation_return_here >>
+  simp[functionInlinerLiveInvariantTheory.inline_live_location_def] >> metis_tac[]
+QED
