@@ -14,8 +14,11 @@
  *)
 Theory bodyFullExprCore
 Ancestors
+  gasOutcomeFullCompose exprSimProps exprSimSource exprLoweringProps
+  exprLowering vyperTyping vyperTypeSystem loweringPosts valueEncoding vyperValueOperation
+  exprSimMemDefs bodyPtrDefs gasShadow fragGasOriginPtr ptrDiscipline loweringSlice
   bodyFullPreds bodySimFull bodySim exprSimHypsDefs compileEnv
-  vyperContext vyperAST vyperInterpreter vyperState list
+  vyperContext vyperAST vyperInterpreter vyperState vyperValue venomState list
 
 val _ = Parse.hide "body";
 
@@ -36,10 +39,96 @@ QED
 (* A flag member compiles to StackValue (Lit _) and emits no instruction
    (compile_expr_def), in runtime and constructor frames alike; the source
    side is exprSimFlagWord's. *)
+Theorem flag_member_value_full[local]:
+  expr_body_pre cenv cx env (FlagMember ann nsid mid) es ==>
+  expr_sim_full (DF,lo,d,ctx,shadow_ctx,PG,func,shadow_func)
+    cenv cx ty (FlagMember ann nsid mid) es
+Proof
+  rw[expr_sim_full_def] >> PairCases_on `nsid` >>
+  drule eval_expr_flag_member_gas >> strip_tac >>
+  `cenv.ce_flag_member_id (nsid_to_string (nsid0,nsid1)) mid = i` by
+    (gvs[expr_body_pre_def, expr_sim_inv_def] >> metis_tac[]) >>
+  `ann = FlagT (nsid0,nsid1)` by
+    gvs[expr_body_pre_def, well_typed_expr_def] >>
+  gvs[gas_shadow_expr_def] >>
+  qpat_x_assum `lower_value _ _ _ _ sa = _` mp_tac >>
+  simp[lower_value_def, compile_expr_def, comp_bind_def, comp_return_def,
+       unwrap_value_def] >> strip_tac >> gvs[] >>
+  irule gas_outcome_full_pure >>
+  qexistsl_tac [`G0`, `es`,
+    `INL (FlagV (2 ** cenv.ce_flag_member_id (nsid_to_string (nsid0,nsid1)) mid))`,
+    `s0`, `tn0`] >>
+  simp[] >> rpt strip_tac >>
+  first_x_assum drule >> strip_tac >>
+  simp[gas_origin_ptr_path_rules, expr_store_bound_def,
+       expr_type_def, is_word_type_def, ptr_val_ok_def, op_taint_def,
+       ghost_inv_at_def, ghost_kept_at_def] >>
+  `stmt_state_rel H ctx func cenv cx (es with gas_obs := []) s0` by
+    (drule msg_gas_state_frame >>
+     disch_then (qspecl_then [`s0.vs_gas_readings`, `s0.vs_inst_idx`, `[]`] mp_tac) >>
+     simp[NoAsms]) >>
+  simp[expr_post_def, expr_val_rel_def, expr_val_at_def, expr_type_def,
+       is_word_type_def, typed_val_to_w256_word_value, word_value_def,
+       val_to_w256_def, eval_operand_def, locals_kept_def] >>
+  gvs[ghost_inv_at_def, vyperStorageFootprintTheory.storage_well_formed_on_def]
+  >- (rpt gen_tac >>
+      qpat_x_assum `!b slot tv. _` (qspec_then `b` mp_tac) >>
+      Cases_on `b` >> simp[vyperStorageBackendTheory.get_storage_def])
+  >- (gvs[op_taint_def] >> metis_tac[]) >>
+  gvs[expr_type_def, is_word_type_def]
+QED
+
+Theorem flag_member_vv_full[local]:
+  expr_body_pre cenv cx env (FlagMember ann nsid mid) es ==>
+  expr_vv_sim_full (DF,lo,d,ctx,shadow_ctx,PG,func,shadow_func)
+    cenv cx ty (FlagMember ann nsid mid) es
+Proof
+  rw[expr_vv_sim_full_def] >> PairCases_on `nsid` >>
+  `gas_admissible (bind (eval_expr cx (FlagMember ann (nsid0,nsid1) mid))
+     (read_result cx)) expr_res_ok es` by
+    (irule exprSimStackTheory.eval_expr_force_admissible >> simp[] >>
+     rpt gen_tac >> simp[Once evaluate_def, lookup_flag_mem_def] >>
+     rpt (BasicProvers.TOP_CASE_TAC >> simp[raise_def, return_def]) >> rw[]) >>
+  drule eval_expr_flag_member_gas >> strip_tac >>
+  `cenv.ce_flag_member_id (nsid_to_string (nsid0,nsid1)) mid = i` by
+    (gvs[expr_body_pre_def, expr_sim_inv_def] >> metis_tac[]) >>
+  `ann = FlagT (nsid0,nsid1)` by
+    gvs[expr_body_pre_def, well_typed_expr_def] >>
+  gvs[gas_shadow_expr_def] >>
+  qpat_x_assum `compile_expr _ _ _ sa = _` mp_tac >>
+  simp[compile_expr_def, comp_return_def] >> strip_tac >> gvs[] >>
+  irule gas_outcome_full_pure >>
+  qexistsl_tac [`G0`, `es`,
+    `INL (Value (FlagV (2 ** cenv.ce_flag_member_id (nsid_to_string (nsid0,nsid1)) mid)))`,
+    `s0`, `tn0`] >>
+  conj_tac >- simp[Once evaluate_def, lookup_flag_mem_def, return_def] >>
+  simp[] >> rpt strip_tac >> first_x_assum drule >> strip_tac >>
+  simp[gas_origin_ptr_path_rules, vv_store_bound_def, contextTheory.vv_location_def,
+       expr_type_def, is_word_type_def, ptr_vv_ok_def, ptr_val_ok_def,
+       read_result_def, return_def, op_taint_def,
+       ghost_inv_at_def, ghost_kept_at_def] >>
+  `stmt_state_rel H ctx func cenv cx (es with gas_obs := []) s0` by
+    (drule msg_gas_state_frame >>
+     disch_then (qspecl_then [`s0.vs_gas_readings`, `s0.vs_inst_idx`, `[]`] mp_tac) >>
+     simp[NoAsms]) >>
+  simp[vv_post_def, vv_holds_def, vv_at_def, vv_storage_live_def,
+       read_result_def, return_def, expr_val_rel_def, expr_val_at_def,
+       expr_type_def, is_word_type_def, typed_val_to_w256_word_value,
+       word_value_def, val_to_w256_def, eval_operand_def, locals_kept_def] >>
+  gvs[ghost_inv_at_def, vyperStorageFootprintTheory.storage_well_formed_on_def]
+  >- (rpt gen_tac >>
+      qpat_x_assum `!b slot tv. _` (qspec_then `b` mp_tac) >>
+      Cases_on `b` >> simp[vyperStorageBackendTheory.get_storage_def])
+  >- (gvs[op_taint_def] >> metis_tac[]) >>
+  gvs[expr_type_def, is_word_type_def] >>
+  gvs[contextTheory.vv_location_def]
+QED
+
 Theorem flag_member_expr_full_ok:
   !cx ann nsid mid. body_expr_full_ok cx (FlagMember ann nsid mid)
 Proof
-  cheat
+  simp[body_expr_full_ok_def] >> rpt strip_tac >>
+  metis_tac[flag_member_value_full, flag_member_vv_full]
 QED
 
 Theorem literal_expr_full_ok:
