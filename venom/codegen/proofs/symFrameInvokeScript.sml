@@ -2250,7 +2250,15 @@ Proof
   rpt gen_tac >> strip_tac >>
   drule_all fnFrameBoundaryInvokeTheory.invoke_source_halt >> strip_tac >>
   drule_at (Pat `generate_inst_plan _ _ _ _ _ _ _ _ _ _ = _`)
-    sym_invoke_enter_callee_paired >> disch_then drule_all >> strip_tac >>
+    sym_invoke_enter_callee_paired >>
+  disch_then (drule_at (Pat `sym_frame_inv _ _ _ _ _ _ _ _ _ _ _`)) >>
+  disch_then (drule_at (Pat `fn_frame_inv _ _ _ _ _ _ _ _ _ _`)) >>
+  disch_then (drule_at (Pat `codegen_context_obligations _ _ _`)) >>
+  disch_then (drule_at (Pat `codegen_assembly _ _ = _`)) >>
+  disch_then (drule_at (Pat `setup_callee _ _ _ = _`)) >>
+  disch_then (drule_at (Pat `generated_plan_state_wf_marked _ _`)) >>
+  disch_then (drule_at (Pat `sym_fn_sim_at _`)) >>
+  disch_then drule_all >> strip_tac >>
   qpat_x_assum `!v. run_blocks _ _ _ _ = Halt v ==> _` drule >> strip_tac >>
   drule_all sym_invoke_halt_compose >> simp[]
 QED
@@ -2316,7 +2324,15 @@ Proof
   rpt gen_tac >> strip_tac >>
   drule_all fnFrameBoundaryInvokeTheory.invoke_source_abort >> strip_tac >>
   drule_at (Pat `generate_inst_plan _ _ _ _ _ _ _ _ _ _ = _`)
-    sym_invoke_enter_callee_paired >> disch_then drule_all >> strip_tac >>
+    sym_invoke_enter_callee_paired >>
+  disch_then (drule_at (Pat `sym_frame_inv _ _ _ _ _ _ _ _ _ _ _`)) >>
+  disch_then (drule_at (Pat `fn_frame_inv _ _ _ _ _ _ _ _ _ _`)) >>
+  disch_then (drule_at (Pat `codegen_context_obligations _ _ _`)) >>
+  disch_then (drule_at (Pat `codegen_assembly _ _ = _`)) >>
+  disch_then (drule_at (Pat `setup_callee _ _ _ = _`)) >>
+  disch_then (drule_at (Pat `generated_plan_state_wf_marked _ _`)) >>
+  disch_then (drule_at (Pat `sym_fn_sim_at _`)) >>
+  disch_then drule_all >> strip_tac >>
   qpat_x_assum `!a v. run_blocks _ _ _ _ = Abort a v ==> _` drule >>
   disch_then (qx_choose_then `n` (qx_choose_then `fin`
     (CONJUNCTS_THEN2 assume_tac strip_assume_tac))) >>
