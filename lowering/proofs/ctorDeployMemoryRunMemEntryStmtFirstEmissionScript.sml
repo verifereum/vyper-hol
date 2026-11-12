@@ -379,10 +379,11 @@ Proof
        >- simp[cs_appends_emit_helpers] >> rpt gen_tac) >>
   ho_match_mp_tac cs_appends_ignore_bind >> conj_tac
   >- (Cases_on `prim` >> simp[cs_appends_emit_helpers] >>
-      IF_CASES_TAC >> ho_match_mp_tac cs_appends_ignore_bind >> conj_tac >>
-      simp[cs_appends_emit_helpers] >> irule ctor_ci_mono_appends >>
-      simp[ci_mono_compile_store_memory, ci_mono_compile_word_copy_loop,
-           comp_return_def, ci_mono_def, cs_extends_refl]) >>
+      IF_CASES_TAC
+      >- (ho_match_mp_tac cs_appends_ignore_bind >> conj_tac >>
+          simp[cs_appends_emit_helpers] >> irule ctor_ci_mono_appends >>
+          simp[ci_mono_compile_store_memory, comp_return_def, ci_mono_def, cs_extends_refl]) >>
+      irule ctor_ci_mono_appends >> simp[ci_mono_compile_store_slots]) >>
   ho_match_mp_tac cs_appends_bind >> simp[cs_appends_emit_helpers]
 QED
 
