@@ -79,7 +79,7 @@ Theorem ld_memory_agree_mstore_dyn[local]:
 Proof
   strip_tac >>
   `lo <= fl /\ !id b c z. FLOOKUP sites id = SOME (b,c,z) ==>
-     b+z <= fl /\ c+z <= fl` by fs[ld_dyn_floor_ok_def] >>
+     b+z <= fl /\ c+z <= fl` by (fs[ld_dyn_floor_ok_def] >> metis_tac[]) >>
   rewrite_tac[ld_memory_agree_def] >> conj_tac
   >- (rpt strip_tac >> `~(a <= i /\ i < a+32)` by decide_tac >>
       asm_rewrite_tac[ld_mstore_bytes] >> irule ld_memory_agree_fixed_byte >>
@@ -92,7 +92,7 @@ Proof
 QED
 
 (* An MSTORE wholly below the dynamic floor on both sides. *)
-Theorem ld_dyn_agree_mstore_below[local]:
+Theorem ld_dyn_agree_mstore_below:
   ld_dyn_agree fl mask s.vs_memory t.vs_memory /\ a+32 <= fl /\ c+32 <= fl ==>
   ld_dyn_agree fl
     ((mask DIFF {i | a <= i /\ i < a+32}) UNION {a+k | k IN m})

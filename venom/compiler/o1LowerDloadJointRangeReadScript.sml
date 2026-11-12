@@ -13,15 +13,21 @@ Theorem ld_mload_range_masked:
   ld_memory_agree sites lo mask s.vs_memory t.vs_memory /\
   ((p=q /\ p+32<=lo) \/
    (?id b c z j. FLOOKUP sites id = SOME (b,c,z) /\ j+32<=z /\
-                    p=b+j /\ q=c+j)) ==>
+                    p=b+j /\ q=c+j) \/
+   (p=q /\ fl<=p /\ p+32<=dimword (:256) /\
+    ld_dyn_agree fl mask s.vs_memory t.vs_memory)) ==>
   word_agree_except (mem_word_taint mask p) (mload p s) (mload q t)
 Proof
   strip_tac
   >- (gvs[] >> irule ld_mload_masked_bytes >> rpt strip_tac >>
       irule ld_memory_agree_fixed_byte >>
       qexistsl_tac [`lo`,`mask`,`sites`] >>
-      gvs[mem_word_taint_def] >> decide_tac) >>
-  gvs[] >> irule ld_mload_site_masked >> metis_tac[]
+      gvs[mem_word_taint_def] >> decide_tac)
+  >- (gvs[] >> irule ld_mload_site_masked >> metis_tac[]) >>
+  gvs[] >> irule ld_mload_masked_bytes >> rpt strip_tac >>
+  qpat_x_assum `ld_dyn_agree _ _ _ _`
+    (irule o REWRITE_RULE [ptrDisciplineTheory.ld_dyn_agree_def]) >>
+  gvs[mem_word_taint_def] >> decide_tac
 QED
 
 Theorem ld_joint_iload_read:
@@ -41,7 +47,8 @@ Proof
   `op_taint tn p = {}` by
     (qpat_x_assum `taint_ok _ _ _ _` mp_tac >> gvs[taint_ok_def] >> metis_tac[]) >>
   `?y. eval_operand p t = SOME y /\
-    (32=0 \/ (w2n x=w2n y /\ w2n x+32<=lo) \/
+    (32=0 \/ (w2n x=w2n y /\ (w2n x+32<=lo \/
+       dyn_floor C vs<=w2n x /\ w2n x+32<=dimword (:256))) \/
      (?id b c z j. FLOOKUP sites id = SOME (b,c,z) /\ j+32<=z /\
                     w2n x=b+j /\ w2n y=c+j))` by
     (drule ld_joint_read_operand_range >>
@@ -49,8 +56,10 @@ Proof
      simp[mem_read_ops_def] >> disch_then irule >> simp[] >>
      simp[mem_read_ops_def, source_memory_read_ranges_def, eval_operand_def,
           retpc_use_ok_def] >> metis_tac[]) >>
-  qexists_tac `y` >> simp[] >> irule ld_mload_range_masked >>
-  qexistsl_tac [`lo`,`sites`] >> fs[ld_joint_boundary_def] >> metis_tac[]
+  `ld_memory_agree sites lo tn.t_mem s.vs_memory t.vs_memory /\
+   ld_dyn_agree (dyn_floor C vs) tn.t_mem s.vs_memory t.vs_memory` by
+    fs[ld_joint_boundary_def] >>
+  qexists_tac `y` >> simp[] >> irule ld_mload_range_masked >> metis_tac[]
 QED
 
 Theorem ld_joint_iload_step:
@@ -86,12 +95,20 @@ Theorem ld_memory_agree_clean_slice:
   ld_memory_agree sites lo mask s.vs_memory t.vs_memory /\
   (len=0 \/ (p=q /\ p+len<=lo) \/
    (?id b c z j. FLOOKUP sites id = SOME (b,c,z) /\ j+len<=z /\
-                  p=b+j /\ q=c+j)) /\
+                  p=b+j /\ q=c+j) \/
+   (p=q /\ fl<=p /\ p+len<=dimword (:256) /\
+    ld_dyn_agree fl mask s.vs_memory t.vs_memory)) /\
   (!k. k<len ==> p+k NOTIN mask) ==>
   read_memory p len s = read_memory q len t
 Proof
   rpt gen_tac >> disch_tac >>
   irule LIST_EQ >> simp[ld_read_memory_length] >> rpt strip_tac >>
+  Cases_on `p=q /\ fl<=p /\ p+len<=dimword (:256) /\
+            ld_dyn_agree fl mask s.vs_memory t.vs_memory`
+  >- (fs[ld_read_memory_element] >> gvs[] >>
+      qpat_x_assum `ld_dyn_agree _ _ _ _`
+        (irule o REWRITE_RULE [ptrDisciplineTheory.ld_dyn_agree_def]) >>
+      simp[] >> decide_tac) >>
   irule ld_memory_agree_slice_element >> simp[] >>
   qexistsl_tac [`lo`,`mask`,`sites`] >> gvs[] >> metis_tac[arithmeticTheory.ADD_COMM]
 QED
@@ -136,7 +153,8 @@ Proof
   `MEM (w2n x,w2n l) (source_memory_read_ranges inst s)` by
     simp[source_memory_read_ranges_def, memory_range_of_operands_def] >>
   `?y. eval_operand p t = SOME y /\
-    (w2n l=0 \/ (w2n x=w2n y /\ w2n x+w2n l<=lo) \/
+    (w2n l=0 \/ (w2n x=w2n y /\ (w2n x+w2n l<=lo \/
+       dyn_floor C vs<=w2n x /\ w2n x+w2n l<=dimword (:256))) \/
      (?id b c z j. FLOOKUP sites id = SOME (b,c,z) /\ j+w2n l<=z /\
                     w2n x=b+j /\ w2n y=c+j))` by
     (drule ld_joint_read_operand_range >>
@@ -149,9 +167,11 @@ Proof
      gvs[taint_ok_def, about_to_revert_def] >>
      disj2_tac >> qexistsl_tac [`w2n x`,`w2n l`,`w2n x+k`] >>
      simp[arithmeticTheory.ADD_COMM]) >>
+  `ld_memory_agree sites lo tn.t_mem s.vs_memory t.vs_memory /\
+   ld_dyn_agree (dyn_floor C vs) tn.t_mem s.vs_memory t.vs_memory` by
+    fs[ld_joint_boundary_def] >>
   qexists_tac `y` >> simp[] >> irule ld_memory_agree_clean_slice >>
-  qexistsl_tac [`lo`,`tn.t_mem`,`sites`] >> simp[] >>
-  gvs[ld_joint_boundary_def] >> metis_tac[arithmeticTheory.ADD_COMM]
+  metis_tac[arithmeticTheory.ADD_COMM]
 QED
 
 Theorem ld_joint_sha3_step:

@@ -110,8 +110,8 @@ Finalise ld_oracle_call_range_transport
 Theorem ld_sync_oracle_call_raw:
   ld_sync lo P C vs0 stk PG G tn fn inst s t A (f::fs) N /\
   ld_global lo A (f::fs) /\ o1_ctx_shape C /\ ptr_discipline lo C vs0 /\
-  mem_inv dload_headroom_ok C vs0 /\ ~in_revert_forward fn s /\
-  MEM inst.inst_opcode [CALL;STATICCALL] ==>
+  mem_inv dload_headroom_ok C vs0 /\ mem_inv raw_mem_ok C vs0 /\
+  ~in_revert_forward fn s /\ MEM inst.inst_opcode [CALL;STATICCALL] ==>
   raw_mem_ok C fn inst t
 Proof
   strip_tac >>
@@ -155,6 +155,11 @@ Proof
     (rpt strip_tac >>
      `?x. eval_operand op f.lf_src = SOME x` suffices_by metis_tac[] >>
      irule ld_write_operand_defined >> simp[] >> metis_tac[]) >>
+  `raw_mem_ok C fn inst s` by (irule ld_sync_source_mem_inv >> metis_tac[]) >>
+  `ld_nonghost tn s t` by fs[ld_sync_def] >>
+  `w2n t.vs_initial_fmp <= w2n t.vs_fmp` by
+    (fs[ld_nonghost_def, raw_mem_ok_def] >> metis_tac[]) >>
+  `dalloca_no_wrap inst t` by gvs[dalloca_no_wrap_def] >>
   simp[raw_mem_ok_def, inst_mem_ok_in_fn_def] >> disj1_tac >>
   pure_rewrite_tac[inst_mem_below_frontier_def, EVERY_MEM] >>
   qx_gen_tac `r` >> PairCases_on `r` >> pure_rewrite_tac[UNCURRY] >>

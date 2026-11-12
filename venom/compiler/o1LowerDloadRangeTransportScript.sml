@@ -125,31 +125,186 @@ Proof
   disch_then irule >> simp[] >> metis_tac[]
 QED
 
+(* A clean write at or above the dynamic floor, at the same address on
+   both sides, leaves the fixed bytes and the sites alone. *)
+Theorem ld_memory_agree_clean_write_dyn:
+  ld_memory_agree sites lo mask s.vs_memory t.vs_memory /\
+  ld_dyn_floor_ok fl lo sites X /\ fl <= p ==>
+  ld_memory_agree sites lo (mask DIFF {i | p<=i /\ i<p+LENGTH xs})
+    (write_memory_with_expansion p xs s).vs_memory
+    (write_memory_with_expansion p xs t).vs_memory
+Proof
+  strip_tac >>
+  `lo <= fl /\ !id b c z. FLOOKUP sites id = SOME (b,c,z) ==>
+     b+z <= fl /\ c+z <= fl` by (fs[ld_dyn_floor_ok_def] >> metis_tac[]) >>
+  rewrite_tac[ld_memory_agree_def] >> conj_tac
+  >- (rpt strip_tac >> `~(p <= i /\ i < p+LENGTH xs)` by decide_tac >>
+      asm_rewrite_tac[read_byte_write_memory_with_expansion] >>
+      irule ld_memory_agree_fixed_byte >>
+      qexistsl_tac [`lo`,`mask`,`sites`] >> gvs[]) >>
+  rpt strip_tac >>
+  `b+z <= fl /\ c+z <= fl` by metis_tac[] >>
+  `~(p <= b+j /\ b+j < p+LENGTH xs) /\ ~(p <= c+j /\ c+j < p+LENGTH xs)` by
+    decide_tac >>
+  asm_rewrite_tac[read_byte_write_memory_with_expansion] >>
+  irule ld_memory_agree_site_byte >>
+  qexistsl_tac [`id`,`lo`,`mask`,`sites`,`z`] >> gvs[]
+QED
+
+(* A clean write wholly below the dynamic floor on both sides. *)
+Theorem ld_dyn_agree_clean_write_below:
+  ld_dyn_agree fl mask s.vs_memory t.vs_memory /\
+  p+LENGTH xs <= fl /\ q+LENGTH xs <= fl ==>
+  ld_dyn_agree fl (mask DIFF {i | p<=i /\ i<p+LENGTH xs})
+    (write_memory_with_expansion p xs s).vs_memory
+    (write_memory_with_expansion q xs t).vs_memory
+Proof
+  rewrite_tac[ptrDisciplineTheory.ld_dyn_agree_def] >> rpt strip_tac >>
+  `~(p <= i /\ i < p+LENGTH xs) /\ ~(q <= i /\ i < q+LENGTH xs)` by decide_tac >>
+  asm_rewrite_tac[read_byte_write_memory_with_expansion] >>
+  first_x_assum irule >> gvs[]
+QED
+
+(* The same clean write on both sides. *)
+Theorem ld_dyn_agree_clean_write_same:
+  ld_dyn_agree fl mask s.vs_memory t.vs_memory ==>
+  ld_dyn_agree fl (mask DIFF {i | p<=i /\ i<p+LENGTH xs})
+    (write_memory_with_expansion p xs s).vs_memory
+    (write_memory_with_expansion p xs t).vs_memory
+Proof
+  rewrite_tac[ptrDisciplineTheory.ld_dyn_agree_def] >> rpt strip_tac >>
+  rewrite_tac[read_byte_write_memory_with_expansion] >>
+  IF_CASES_TAC >- rewrite_tac[] >>
+  first_x_assum irule >> gvs[]
+QED
+
+
+(* A slice read from a fixed, site or dynamic-region source. *)
+Theorem ld_snapshot_slice_element:
+  ld_memory_agree sites lo mask s.vs_memory t.vs_memory /\
+  ((rp=rq /\ rp+len<=lo) \/
+   (?id b c z j. FLOOKUP sites id = SOME (b,c,z) /\ j+len<=z /\
+                 rp=b+j /\ rq=c+j) \/
+   (rp=rq /\ fl<=rp /\ rp+len<=dimword (:256) /\
+    ld_dyn_agree fl mask s.vs_memory t.vs_memory)) /\
+  k<len /\ rp+k NOTIN mask ==>
+  EL k (read_memory rp len s) = EL k (read_memory rq len t)
+Proof
+  rpt gen_tac >>
+  disch_then (CONJUNCTS_THEN2 assume_tac
+    (CONJUNCTS_THEN2 assume_tac (CONJUNCTS_THEN2 assume_tac assume_tac))) >>
+  Cases_on `rp=rq /\ fl<=rp /\ rp+len<=dimword (:256) /\
+            ld_dyn_agree fl mask s.vs_memory t.vs_memory`
+  >- (fs[ld_read_memory_element] >> gvs[] >>
+      qpat_x_assum `ld_dyn_agree _ _ _ _`
+        (irule o REWRITE_RULE [ptrDisciplineTheory.ld_dyn_agree_def]) >>
+      simp[] >> decide_tac) >>
+  irule ld_memory_agree_slice_element >> metis_tac[]
+QED
+
+(* A write at or above the dynamic floor, at the same address on both
+   sides, leaves the fixed bytes and the sites alone. *)
+Theorem ld_memory_agree_write_dyn:
+  ld_memory_agree sites lo mask s.vs_memory t.vs_memory /\
+  ld_dyn_floor_ok fl lo sites X /\ fl <= p /\
+  LENGTH xs = len /\ LENGTH ys = len ==>
+  ld_memory_agree sites lo
+    ((mask DIFF {i | p<=i /\ i<p+len}) UNION
+      {p+k | k<len /\ k IN payload_mask})
+    (write_memory_with_expansion p xs s).vs_memory
+    (write_memory_with_expansion p ys t).vs_memory
+Proof
+  strip_tac >>
+  `lo <= fl /\ !id b c z. FLOOKUP sites id = SOME (b,c,z) ==>
+     b+z <= fl /\ c+z <= fl` by (fs[ld_dyn_floor_ok_def] >> metis_tac[]) >>
+  rewrite_tac[ld_memory_agree_def] >> conj_tac
+  >- (rpt strip_tac >>
+      `~(p <= i /\ i < p+LENGTH xs) /\ ~(p <= i /\ i < p+LENGTH ys)` by
+        decide_tac >>
+      asm_rewrite_tac[read_byte_write_memory_with_expansion] >>
+      irule ld_memory_agree_fixed_byte >>
+      qexistsl_tac [`lo`,`mask`,`sites`] >> gvs[]) >>
+  rpt strip_tac >>
+  `b+z <= fl /\ c+z <= fl` by metis_tac[] >>
+  `~(p <= b+j /\ b+j < p+LENGTH xs) /\ ~(p <= c+j /\ c+j < p+LENGTH ys)` by
+    decide_tac >>
+  asm_rewrite_tac[read_byte_write_memory_with_expansion] >>
+  irule ld_memory_agree_site_byte >>
+  qexistsl_tac [`id`,`lo`,`mask`,`sites`,`z`] >> gvs[]
+QED
+
 Theorem ld_memory_agree_snapshot_copy:
   ld_memory_agree sites lo mask s.vs_memory t.vs_memory /\
   ld_joint_geometry sites X lo owners /\
   ((rp=rq /\ rp+len<=lo) \/
    (?id b c z j. FLOOKUP sites id = SOME (b,c,z) /\ j+len<=z /\
-                 rp=b+j /\ rq=c+j)) /\
+                 rp=b+j /\ rq=c+j) \/
+   (rp=rq /\ fl<=rp /\ rp+len<=dimword (:256) /\
+    ld_dyn_agree fl mask s.vs_memory t.vs_memory)) /\
   ((p=q /\ p+len<=lo) \/
    (?id b c z j. FLOOKUP sites id = SOME (b,c,z) /\ j+len<=z /\
-                 p=b+j /\ q=c+j)) ==>
+                 p=b+j /\ q=c+j) \/
+   (p=q /\ fl<=p /\ ld_dyn_floor_ok fl lo sites X)) ==>
   ld_memory_agree sites lo
     ((mask DIFF {i | p<=i /\ i<p+len}) UNION
       {p+k | k<len /\ rp+k IN mask})
     (write_memory_with_expansion p (read_memory rp len s) s).vs_memory
     (write_memory_with_expansion q (read_memory rq len t) t).vs_memory
 Proof
-  strip_tac >>
+  rpt gen_tac >>
+  disch_then (CONJUNCTS_THEN2 assume_tac
+    (CONJUNCTS_THEN2 assume_tac (CONJUNCTS_THEN2 assume_tac assume_tac))) >>
   `!k. k<len /\ rp+k NOTIN mask ==>
     EL k (read_memory rp len s) = EL k (read_memory rq len t)` by
-    (rpt strip_tac >> irule ld_memory_agree_slice_element >> metis_tac[]) >>
+    (rpt strip_tac >> irule ld_snapshot_slice_element >> metis_tac[]) >>
   `{p+k | k<len /\ rp+k IN mask} =
    {p+k | k<len /\ k IN {k | rp+k IN mask}}` by simp[] >>
   pop_assum SUBST1_TAC >>
+  Cases_on `p=q /\ fl<=p /\ ld_dyn_floor_ok fl lo sites X`
+  >- (pop_assum strip_assume_tac >>
+      qpat_x_assum `p = q` (SUBST_ALL_TAC o SYM) >>
+      irule ld_memory_agree_write_dyn >>
+      simp[ld_read_memory_length] >> metis_tac[]) >>
   drule_at (Pat `ld_joint_geometry _ _ _ _`) ld_memory_agree_write_geometry >>
   disch_then irule >>
   simp[ld_read_memory_length] >> metis_tac[ADD_COMM]
+QED
+
+(* The dynamic-region agreement survives a snapshot copy whose two
+   destinations coincide or both lie below the floor. *)
+Theorem ld_dyn_agree_snapshot_copy:
+  ld_memory_agree sites lo mask s.vs_memory t.vs_memory /\
+  ld_dyn_agree fl mask s.vs_memory t.vs_memory /\
+  ((rp=rq /\ rp+len<=lo) \/
+   (?id b c z j. FLOOKUP sites id = SOME (b,c,z) /\ j+len<=z /\
+                 rp=b+j /\ rq=c+j) \/
+   (rp=rq /\ fl<=rp /\ rp+len<=dimword (:256))) /\
+  (p=q \/ (p+len<=fl /\ q+len<=fl)) ==>
+  ld_dyn_agree fl
+    ((mask DIFF {i | p<=i /\ i<p+len}) UNION
+      {p+k | k<len /\ rp+k IN mask})
+    (write_memory_with_expansion p (read_memory rp len s) s).vs_memory
+    (write_memory_with_expansion q (read_memory rq len t) t).vs_memory
+Proof
+  rpt gen_tac >>
+  disch_then (CONJUNCTS_THEN2 assume_tac
+    (CONJUNCTS_THEN2 assume_tac (CONJUNCTS_THEN2 assume_tac assume_tac))) >>
+  `!k. k<len /\ rp+k NOTIN mask ==>
+    EL k (read_memory rp len s) = EL k (read_memory rq len t)` by
+    (rpt strip_tac >> irule ld_snapshot_slice_element >> metis_tac[]) >>
+  rewrite_tac[ptrDisciplineTheory.ld_dyn_agree_def] >> rpt strip_tac >>
+  rewrite_tac[read_byte_write_memory_with_expansion, ld_read_memory_length] >>
+  qpat_x_assum `p = q \/ _` strip_assume_tac
+  >- (qpat_x_assum `p = q` (SUBST_ALL_TAC o SYM) >>
+      IF_CASES_TAC
+      >- (`i-p < len` by decide_tac >>
+          `rp+(i-p) NOTIN mask` by
+            (gvs[] >> metis_tac[arithmeticTheory.SUB_ADD, ADD_COMM]) >>
+          metis_tac[]) >>
+      fs[ptrDisciplineTheory.ld_dyn_agree_def] >> metis_tac[]) >>
+  `~(p <= i /\ i < p+len) /\ ~(q <= i /\ i < q+len)` by decide_tac >>
+  asm_rewrite_tac[] >>
+  fs[ptrDisciplineTheory.ld_dyn_agree_def] >> metis_tac[]
 QED
 
 (* Checked padding/empty edge cases; the copy theorem above has no

@@ -142,7 +142,8 @@ Proof
       `eval_operand vop s = eval_operand vop t` by
         (drule ld_joint_clean_write_scalar >> disch_then irule >> simp[] >> metis_tac[]) >>
       `?d'. eval_operand dop t = SOME d' /\
-        ((w2n d=w2n d' /\ w2n d+1<=lo) \/
+        ((w2n d=w2n d' /\ (w2n d+1<=lo \/
+           dyn_floor C vs<=w2n d /\ w2n d+1<=dimword (:256))) \/
          (?id b c z j. FLOOKUP sites id = SOME (b,c,z) /\ j+1<=z /\
                         w2n d=b+j /\ w2n d'=c+j))` by
         (drule ld_joint_clean_write_destination >> simp[] >> metis_tac[]) >>
@@ -161,7 +162,8 @@ Proof
        (conj_tac >> drule ld_joint_clean_write_scalar >> disch_then irule >>
         simp[] >> metis_tac[]) >> metis_tac[]) >>
   `?d'. eval_operand dop t = SOME d' /\
-    (w2n l=0 \/ (w2n d=w2n d' /\ w2n d+w2n l<=lo) \/
+    (w2n l=0 \/ (w2n d=w2n d' /\ (w2n d+w2n l<=lo \/
+       dyn_floor C vs<=w2n d /\ w2n d+w2n l<=dimword (:256))) \/
      (?id b c z j. FLOOKUP sites id = SOME (b,c,z) /\ j+w2n l<=z /\
                     w2n d=b+j /\ w2n d'=c+j))` by
     (drule ld_joint_clean_write_destination >> disch_then irule >> simp[] >> metis_tac[]) >>
@@ -182,7 +184,8 @@ Resume ld_joint_clean_write_execution[extcopy]:
   `eval_operand aop t = SOME av /\ eval_operand rop t = SOME r /\
    eval_operand lop t = SOME l` by metis_tac[MEM] >>
   `?d'. eval_operand dop t = SOME d' /\
-    (w2n l=0 \/ (w2n d=w2n d' /\ w2n d+w2n l<=lo) \/
+    (w2n l=0 \/ (w2n d=w2n d' /\ (w2n d+w2n l<=lo \/
+       dyn_floor C vs<=w2n d /\ w2n d+w2n l<=dimword (:256))) \/
      (?id b c z j. FLOOKUP sites id = SOME (b,c,z) /\ j+w2n l<=z /\
                     w2n d=b+j /\ w2n d'=c+j))` by
     (drule ld_joint_clean_write_destination >> disch_then irule >> simp[] >> metis_tac[]) >>
@@ -230,17 +233,39 @@ Proof
   disch_then (qx_choose_then `p` (qx_choose_then `q` (qx_choose_then `xs` assume_tac))) >>
   gnvs[] >>
   `ld_memory_agree sites lo tn.t_mem s.vs_memory t.vs_memory /\
-   ld_joint_geometry sites X lo (a::MAP (\u. u.of_owner) U)` by
+   ld_joint_geometry sites X lo (a::MAP (\u. u.of_owner) U) /\
+   ld_dyn_agree (dyn_floor C vs) tn.t_mem s.vs_memory t.vs_memory /\
+   ld_dyn_floor_ok (dyn_floor C vs) lo sites X` by
     fs[ld_joint_boundary_def] >>
+  `lo <= dyn_floor C vs /\ !id b c z. FLOOKUP sites id = SOME (b,c,z) ==>
+     b+z <= dyn_floor C vs /\ c+z <= dyn_floor C vs` by
+    fs[ld_dyn_floor_ok_def] >>
   `mem_taint tn inst s (write_memory_with_expansion p xs s) =
     tn.t_mem DIFF {i | p<=i /\ i<p+LENGTH xs}` by
     (irule ld_mem_taint_clean_write >> simp[]) >>
   asm_rewrite_tac[] >>
-  conj_tac
-  >- (Cases_on `LENGTH xs=0`
-      >- (gvs[] >> irule ld_memory_agree_empty_write >> simp[]) >>
-      drule_at (Pat `ld_joint_geometry _ _ _ _`) ld_memory_agree_clean_write >>
-      disch_then irule >> gvs[] >> metis_tac[]) >>
+  `ld_memory_agree sites lo (tn.t_mem DIFF {i | p<=i /\ i<p+LENGTH xs})
+     (write_memory_with_expansion p xs s).vs_memory
+     (write_memory_with_expansion q xs t).vs_memory /\
+   ld_dyn_agree (dyn_floor C vs) (tn.t_mem DIFF {i | p<=i /\ i<p+LENGTH xs})
+     (write_memory_with_expansion p xs s).vs_memory
+     (write_memory_with_expansion q xs t).vs_memory` by
+    (qpat_x_assum `LENGTH xs = 0 \/ _` strip_assume_tac
+     >- (gvs[] >> conj_tac >- (irule ld_memory_agree_empty_write >> simp[]) >>
+         fs[ld_dyn_agree_def, regularCallEmitSimTheory.read_byte_write_memory_with_expansion])
+     >- (gvs[] >> conj_tac
+         >- (drule_at (Pat `ld_joint_geometry _ _ _ _`) ld_memory_agree_clean_write >>
+             disch_then irule >> simp[]) >>
+         irule ld_dyn_agree_clean_write_below >> simp[] >> decide_tac)
+     >- (gvs[] >> conj_tac
+         >- (irule ld_memory_agree_clean_write_dyn >> metis_tac[]) >>
+         irule ld_dyn_agree_clean_write_same >> simp[]) >>
+     conj_tac
+     >- (drule_at (Pat `ld_joint_geometry _ _ _ _`) ld_memory_agree_clean_write >>
+         disch_then irule >> metis_tac[]) >>
+     `b+z <= dyn_floor C vs /\ c+z <= dyn_floor C vs` by metis_tac[] >>
+     irule ld_dyn_agree_clean_write_below >> simp[] >> decide_tac) >>
+  conj_tac >- fs[] >> conj_tac >- fs[] >>
   qexistsl_tac [`(write_memory_with_expansion p xs s).vs_memory`,
                 `(write_memory_with_expansion q xs t).vs_memory`] >>
   simp[write_memory_with_expansion_def]

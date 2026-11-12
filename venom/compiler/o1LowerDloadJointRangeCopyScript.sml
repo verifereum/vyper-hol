@@ -168,14 +168,16 @@ Proof
     (qpat_x_assum `taint_ok _ _ _ _` mp_tac >> gvs[taint_ok_def] >> metis_tac[]) >>
   `!v. ~retpc_use_ok inst v` by simp[retpc_use_ok_def] >>
   `?d'. eval_operand dst t = SOME d' /\
-    (w2n l=0 \/ (w2n d=w2n d' /\ w2n d+w2n l<=lo) \/
+    (w2n l=0 \/ (w2n d=w2n d' /\ (w2n d+w2n l<=lo \/
+       dyn_floor C vs<=w2n d /\ w2n d+w2n l<=dimword (:256))) \/
      (?id b c z j. FLOOKUP sites id = SOME (b,c,z) /\ j+w2n l<=z /\
                     w2n d=b+j /\ w2n d'=c+j))` by
     (drule ld_joint_write_operand_range >> disch_then irule >> simp[] >>
      simp[mem_write_ops_def, source_memory_write_ranges_def,
           fixed_source_write_range_def, sized_source_write_range_def, eval_operand_def] >> metis_tac[]) >>
   `?r'. eval_operand src t = SOME r' /\
-    (w2n l=0 \/ (w2n r=w2n r' /\ w2n r+w2n l<=lo) \/
+    (w2n l=0 \/ (w2n r=w2n r' /\ (w2n r+w2n l<=lo \/
+       dyn_floor C vs<=w2n r /\ w2n r+w2n l<=dimword (:256))) \/
      (?id b c z j. FLOOKUP sites id = SOME (b,c,z) /\ j+w2n l<=z /\
                     w2n r=b+j /\ w2n r'=c+j))` by
     (drule ld_joint_read_operand_range >> disch_then irule >> simp[] >>
@@ -228,13 +230,34 @@ Proof
     (irule ld_mem_taint_mcopy >> metis_tac[]) >>
   asm_rewrite_tac[] >>
   `ld_memory_agree sites lo tn.t_mem s.vs_memory t.vs_memory /\
-   ld_joint_geometry sites X lo (a::MAP (\u. u.of_owner) U)` by
+   ld_joint_geometry sites X lo (a::MAP (\u. u.of_owner) U) /\
+   ld_dyn_agree (dyn_floor C vs) tn.t_mem s.vs_memory t.vs_memory /\
+   ld_dyn_floor_ok (dyn_floor C vs) lo sites X` by
     fs[ld_joint_boundary_def, ld_joint_frame_def, ld_joint_allocas_def] >>
+  `lo <= dyn_floor C vs /\ !id b c z. FLOOKUP sites id = SOME (b,c,z) ==>
+     b+z <= dyn_floor C vs /\ c+z <= dyn_floor C vs` by
+    (fs[ld_dyn_floor_ok_def] >> metis_tac[]) >>
   Cases_on `w2n l=0`
-  >- (gvs[mcopy_def] >> irule ld_memory_agree_empty_write >> simp[]) >>
+  >- (gvs[mcopy_def] >> conj_tac
+      >- (irule ld_memory_agree_empty_write >> simp[]) >>
+      fs[ptrDisciplineTheory.ld_dyn_agree_def,
+         regularCallEmitSimTheory.read_byte_write_memory_with_expansion]) >>
+  `(w2n d=w2n d' /\ (w2n d+w2n l<=lo \/
+      dyn_floor C vs<=w2n d /\ w2n d+w2n l<=dimword (:256))) \/
+   (?id b c z j. FLOOKUP sites id = SOME (b,c,z) /\ j+w2n l<=z /\
+                  w2n d=b+j /\ w2n d'=c+j)` by metis_tac[] >>
+  `w2n d = w2n d' \/
+   (w2n d+w2n l <= dyn_floor C vs /\ w2n d'+w2n l <= dyn_floor C vs)` by
+    (qpat_x_assum `(w2n d = w2n d' /\ _) \/ _` strip_assume_tac >> simp[] >>
+     `b+z <= dyn_floor C vs /\ c+z <= dyn_floor C vs` by metis_tac[] >>
+     decide_tac) >>
   pure_rewrite_tac[mcopy_def, GSYM read_memory_def, LET_THM] >> BETA_TAC >>
-  drule_at (Pat `ld_joint_geometry _ _ _ _`) ld_memory_agree_snapshot_copy >>
-  disch_then irule >> gvs[] >> metis_tac[]
+  conj_tac
+  >- (drule_at (Pat `ld_joint_geometry _ _ _ _`)
+        (Q.INST [`fl` |-> `dyn_floor C vs`] ld_memory_agree_snapshot_copy) >>
+      disch_then irule >> metis_tac[]) >>
+  drule_at (Pat `ld_memory_agree _ _ _ _ _`) ld_dyn_agree_snapshot_copy >>
+  disch_then irule >> metis_tac[]
 QED
 
 Theorem ld_joint_mcopy_next:

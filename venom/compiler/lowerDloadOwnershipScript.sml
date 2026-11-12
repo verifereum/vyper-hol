@@ -98,9 +98,9 @@ Proof
   `!vs C fn inst s. raw_reachable vs C fn inst s ==>
      active_inst fn inst s /\ ?nm. lookup_function nm C.ctx_functions = SOME fn` by
     (Induct_on `raw_reachable` >> rw[] >> metis_tac[]) >>
-  `active_inst fn inst s /\ MEM fn C.ctx_functions` by metis_tac[lookup_function_MEM] >>
+  `active_inst fn inst s /\ MEM fn C.ctx_functions` by metis_tac[venomInstTheory.lookup_function_MEM] >>
   `MEM inst (fn_insts fn)` by
-    (fs[active_inst_def, fn_insts_def, o1PassContractTheory.fn_insts_blocks_MEM] >>
+    (fs[active_inst_def, venomInstTheory.fn_insts_def, o1PassContractTheory.fn_insts_blocks_MEM] >>
      metis_tac[MEM_EL]) >>
   fs[ctx_has_dalloca_def, EXISTS_MEM] >> metis_tac[]
 QED
