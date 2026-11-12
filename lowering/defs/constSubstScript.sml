@@ -153,6 +153,115 @@ Proof
   Cases_on `h` >> simp[no_sha256_expr_def]
 QED
 
+(* No ** whose exponent is a negative integer literal, as checked after
+   constant substitution: power_operands_ok requires it, and inlining a
+   negative constant into an exponent would expose one. *)
+Definition no_neg_exp_expr_def:
+  no_neg_exp_expr (Name ty id) = T /\
+  no_neg_exp_expr (TopLevelName ty ns) = T /\
+  no_neg_exp_expr (FlagMember ty ns id) = T /\
+  no_neg_exp_expr (Literal ty l) = T /\
+  no_neg_exp_expr (IfExp ty a b c) =
+    (no_neg_exp_expr a /\ no_neg_exp_expr b /\ no_neg_exp_expr c) /\
+  no_neg_exp_expr (StructLit ty ns fs) = no_neg_exp_fields fs /\
+  no_neg_exp_expr (Subscript ty a b) = (no_neg_exp_expr a /\ no_neg_exp_expr b) /\
+  no_neg_exp_expr (Attribute ty a id) = no_neg_exp_expr a /\
+  no_neg_exp_expr (Builtin ty bi es) =
+    ((bi = Bop Exp ==>
+      case es of [b; Literal _ (IntL n)] => 0 <= n | _ => T) /\
+     no_neg_exp_exprs es) /\
+  no_neg_exp_expr (TypeBuiltin ty bi t es) = no_neg_exp_exprs es /\
+  no_neg_exp_expr (Pop ty tgt) = no_neg_exp_btarget tgt /\
+  no_neg_exp_expr (Call ty ct es d) = (no_neg_exp_exprs es /\ no_neg_exp_opt d) /\
+  no_neg_exp_btarget (NameTarget id) = T /\
+  no_neg_exp_btarget (TopLevelNameTarget ns) = T /\
+  no_neg_exp_btarget (SubscriptTarget tgt e) =
+    (no_neg_exp_btarget tgt /\ no_neg_exp_expr e) /\
+  no_neg_exp_btarget (AttributeTarget tgt id) = no_neg_exp_btarget tgt /\
+  no_neg_exp_exprs [] = T /\
+  no_neg_exp_exprs (e::es) = (no_neg_exp_expr e /\ no_neg_exp_exprs es) /\
+  no_neg_exp_opt NONE = T /\
+  no_neg_exp_opt (SOME e) = no_neg_exp_expr e /\
+  no_neg_exp_fields [] = T /\
+  no_neg_exp_fields ((id,e)::fs) = (no_neg_exp_expr e /\ no_neg_exp_fields fs)
+Termination
+  qexists_tac `measure (\(x : expr + base_assignment_target + expr list +
+      expr option + (identifier # expr) list).
+    case x of
+      INL e => expr_size e
+    | INR (INL t) => base_assignment_target_size t
+    | INR (INR (INL es)) => list_size expr_size es
+    | INR (INR (INR (INL opt))) => option_size expr_size opt
+    | INR (INR (INR (INR fs))) =>
+        list_size (pair_size (list_size char_size) expr_size) fs)` >>
+  conj_tac >- MATCH_ACCEPT_TAC prim_recTheory.WF_measure >>
+  PURE_REWRITE_TAC [prim_recTheory.measure_thm, sumTheory.sum_case_def,
+                    pairTheory.pair_case_def] >>
+  simp[expr_size_def, list_size_def, basicSizeTheory.pair_size_def,
+       basicSizeTheory.option_size_def, bnfPrelimsTheory.option_size_map,
+       bnfPrelimsTheory.pair_size_map, list_size_map, SF ETA_ss]
+End
+
+Theorem no_neg_exp_collections:
+  no_neg_exp_exprs es = EVERY no_neg_exp_expr es /\
+  no_neg_exp_opt d = (case d of NONE => T | SOME e => no_neg_exp_expr e) /\
+  no_neg_exp_fields fs = EVERY (no_neg_exp_expr o SND) fs
+Proof
+  rpt conj_tac
+  >- (Induct_on `es` >> simp[no_neg_exp_expr_def])
+  >- (Cases_on `d` >> simp[no_neg_exp_expr_def])
+  >> Induct_on `fs` >> simp[no_neg_exp_expr_def] >>
+  Cases_on `h` >> simp[no_neg_exp_expr_def]
+QED
+
+Definition no_neg_exp_target_def:
+  no_neg_exp_target (BaseTarget tgt) = no_neg_exp_btarget tgt /\
+  no_neg_exp_target (TupleTarget ts) = no_neg_exp_targets ts /\
+  no_neg_exp_targets [] = T /\
+  no_neg_exp_targets (t::ts) = (no_neg_exp_target t /\ no_neg_exp_targets ts)
+End
+
+Definition no_neg_exp_stmt_def:
+  no_neg_exp_stmt Pass = T /\
+  no_neg_exp_stmt Continue = T /\
+  no_neg_exp_stmt Break = T /\
+  no_neg_exp_stmt (Expr e) = no_neg_exp_expr e /\
+  no_neg_exp_stmt (For id ty it n body) =
+    ((case it of
+        Array e => no_neg_exp_expr e
+      | Range a b => (no_neg_exp_expr a /\ no_neg_exp_expr b)) /\
+     no_neg_exp_stmts body) /\
+  no_neg_exp_stmt (If e a b) =
+    (no_neg_exp_expr e /\ no_neg_exp_stmts a /\ no_neg_exp_stmts b) /\
+  no_neg_exp_stmt (Assert e r) =
+    (no_neg_exp_expr e /\
+     case r of
+       AssertReason e' => no_neg_exp_expr e'
+     | AssertCustomError (CustomError ns es fs) =>
+         (no_neg_exp_exprs es /\ no_neg_exp_fields fs)
+     | _ => T) /\
+  no_neg_exp_stmt (Log ns es) = no_neg_exp_exprs es /\
+  no_neg_exp_stmt (Raise r) =
+    (case r of
+       RaiseReason e => no_neg_exp_expr e
+     | RaiseCustomError (CustomError ns es fs) =>
+         (no_neg_exp_exprs es /\ no_neg_exp_fields fs)
+     | _ => T) /\
+  no_neg_exp_stmt (Return e) = no_neg_exp_opt e /\
+  no_neg_exp_stmt (Assign t e) = (no_neg_exp_target t /\ no_neg_exp_expr e) /\
+  no_neg_exp_stmt (AugAssign ty t bi e) =
+    (no_neg_exp_btarget t /\ no_neg_exp_expr e) /\
+  no_neg_exp_stmt (Append t e) = (no_neg_exp_btarget t /\ no_neg_exp_expr e) /\
+  no_neg_exp_stmt (AnnAssign id ty e) = no_neg_exp_expr e /\
+  no_neg_exp_stmts [] = T /\
+  no_neg_exp_stmts (s::ss) = (no_neg_exp_stmt s /\ no_neg_exp_stmts ss)
+End
+
+Definition no_neg_exp_fn_def:
+  no_neg_exp_fn (mut,nr,rr,id,args,dflts,ret,body) =
+    (no_neg_exp_exprs dflts /\ no_neg_exp_stmts body)
+End
+
 Definition subst_consts_expr_def:
   subst_consts_expr env (Name ty id) = Name ty id /\
   subst_consts_expr env (TopLevelName ty (ns,id)) =
@@ -359,6 +468,10 @@ QED
 val () = cv_auto_trans fold_const_builtin_def;
 val () = cv_auto_trans fold_const_expr_def;
 val () = cv_auto_trans no_sha256_expr_def;
+val () = cv_auto_trans no_neg_exp_expr_def;
+val () = cv_auto_trans no_neg_exp_target_def;
+val () = cv_auto_trans no_neg_exp_stmt_def;
+val () = cv_auto_trans no_neg_exp_fn_def;
 val () = cv_auto_trans subst_consts_expr_def;
 val () = cv_auto_trans subst_consts_target_def;
 val () = cv_auto_trans subst_consts_iter_def;

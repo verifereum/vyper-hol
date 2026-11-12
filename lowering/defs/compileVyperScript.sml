@@ -1558,6 +1558,10 @@ Definition lower_vyper_runtime_unit_def:
          tops < 0x6000 ∧
        EVERY external_return_buffer_ok external_fns ∧
        EVERY (fn_allocs_ok tops)
+         (ext_fns ++ int_fns ++ (case fb_fn of NONE => [] | SOME f => [f])) ∧
+       EVERY (no_sha256_expr o SND) (module_consts_env tops []) ∧
+       EVERY (no_neg_exp_expr o SND) (module_consts_env tops []) ∧
+       EVERY no_neg_exp_fn
          (ext_fns ++ int_fns ++ (case fb_fn of NONE => [] | SOME f => [f]))
     then
       if EXISTS external_has_defaults ext_fns then
@@ -1604,6 +1608,10 @@ Theorem lower_vyper_runtime_unit_no_external_defaults:
          tops < 0x6000 ∧
        EVERY external_return_buffer_ok external_fns ∧
        EVERY (fn_allocs_ok tops)
+         (ext_fns ++ int_fns ++ (case fb_fn of NONE => [] | SOME f => [f])) ∧
+       EVERY (no_sha256_expr o SND) (module_consts_env tops []) ∧
+       EVERY (no_neg_exp_expr o SND) (module_consts_env tops []) ∧
+       EVERY no_neg_exp_fn
          (ext_fns ++ int_fns ++ (case fb_fn of NONE => [] | SOME f => [f]))
     then
       run_lowering selectors external_fns runtime_int_fns fallback_fn rpolicy
@@ -1640,6 +1648,21 @@ Proof
   first_x_assum irule >> simp[]
 QED
 
+(* A unit that lowers has its constants free of Sha256 and of negative
+   literal exponents, and so have its substituted functions. *)
+Theorem lower_vyper_runtime_unit_consts_guard:
+  ∀tops rpolicy unit exts ints fb ctor.
+    lower_vyper_runtime_unit tops rpolicy = SOME unit ∧
+    classify_functions tops = (exts, ints, fb, ctor) ⇒
+    EVERY (no_sha256_expr o SND) (module_consts_env tops []) ∧
+    EVERY (no_neg_exp_expr o SND) (module_consts_env tops []) ∧
+    EVERY no_neg_exp_fn
+      (exts ++ ints ++ (case fb of NONE => [] | SOME f => [f]))
+Proof
+  rpt gen_tac >> strip_tac >>
+  gvs[lower_vyper_runtime_unit_def, AllCaseEqs()]
+QED
+
 (* Only __init__ may be a Deploy function, as the constructor.
    Mirrors Python: vyper/semantics/types/function.py
    (ContractFunctionT.from_FunctionDef: "Only constructors can be marked as
@@ -1670,6 +1693,10 @@ Definition lower_vyper_deploy_unit_def:
           else [] in
     if ¬(immutables_len < 0x6000) ∨
        ¬EVERY (fn_allocs_ok tops)
+          (int_fns ++ (case ctor_fn of NONE => [] | SOME f => [f])) ∨
+       ¬EVERY (no_sha256_expr o SND) (module_consts_env tops []) ∨
+       ¬EVERY (no_neg_exp_expr o SND) (module_consts_env tops []) ∨
+       ¬EVERY no_neg_exp_fn
           (int_fns ++ (case ctor_fn of NONE => [] | SOME f => [f])) ∨
        ¬ctor_named_init ctor_fn
     then NONE else
@@ -1704,6 +1731,20 @@ Theorem lower_vyper_deploy_unit_ctor_named_init:
 Proof
   rpt gen_tac >> strip_tac >>
   gvs[lower_vyper_deploy_unit_def, AllCaseEqs()]
+QED
+
+(* A deploy unit that lowers has its constants free of Sha256 and of
+   negative literal exponents, and so have its substituted functions. *)
+Theorem lower_vyper_deploy_unit_consts_guard:
+  ∀tops rpolicy bytes unit exts ints fb ctor.
+    lower_vyper_deploy_unit tops rpolicy bytes = SOME unit ∧
+    classify_functions tops = (exts, ints, fb, ctor) ⇒
+    EVERY (no_sha256_expr o SND) (module_consts_env tops []) ∧
+    EVERY (no_neg_exp_expr o SND) (module_consts_env tops []) ∧
+    EVERY no_neg_exp_fn (ints ++ (case ctor of NONE => [] | SOME f => [f]))
+Proof
+  rpt gen_tac >> strip_tac >>
+  gvs[lower_vyper_deploy_unit_def, AllCaseEqs(), combinTheory.o_DEF, SF ETA_ss]
 QED
 
 (* A deploy unit that lowers has the constructor's and every internal
