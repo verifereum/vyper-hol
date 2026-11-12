@@ -195,7 +195,7 @@ Proof
   metis_tac[fn_has_code_mid, cs_extends_refl]
 QED
 
-Theorem log_stmt_open_widen[local]:
+Theorem log_stmt_open_widen:
   cenv.ce_event_info (nsid_to_string id) = SOME (h,tys,flags) /\
   compile_log_eval_all cenv args sa = (xs,sm) /\
   compile_log_topic_ops (FST (split_log_ops xs flags)) sm = (ops,st) /\
