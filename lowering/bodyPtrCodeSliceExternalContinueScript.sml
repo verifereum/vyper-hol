@@ -179,16 +179,6 @@ Proof
     write_memory_with_expansion_def, lookup_var_def]
 QED
 
-(* A pointer older than sa keeps its cover across a kept ghost. *)
-Theorem external_code_kept_covers[local]:
-  ghost_kept cenv es sa G0 tn0 s0 G tn /\
-  not_fresh_at sa p /\ lookup_var p s = lookup_var p s0 /\
-  ptr_covers G0 tn0 p s0 sz ==>
-  ptr_covers G tn p s sz
-Proof
-  rw[ghost_kept_def, ptr_covers_def] >> metis_tac[]
-QED
-
 Theorem external_code_prefix_success_frame:
   emit_op EXTCODESIZE [addr] sa = (limit,sb) /\
   compile_assert_slice_bounds src len limit sb = ((),sc) /\
@@ -218,8 +208,14 @@ Proof
   qexistsl_tac [`Gf`,`tnf`] >> simp[] >> conj_tac
   >- (rpt gen_tac >> strip_tac >> irule self_code_prefix_operand_frame >>
       goal_assum (drule_at Any) >> metis_tac[]) >>
-  rpt strip_tac >> irule external_code_kept_covers >>
-  goal_assum (drule_at Any) >> metis_tac[]
+  rpt strip_tac >>
+  `lookup_var p t = lookup_var p s` by metis_tac[] >>
+  qpat_x_assum `ghost_kept cenv es sa G tn s Gf tnf` mp_tac >>
+  qpat_x_assum `ptr_covers G tn p s sz` mp_tac >>
+  qpat_x_assum `not_fresh_at sa p` mp_tac >>
+  qpat_x_assum `lookup_var p t = _` mp_tac >>
+  rpt (pop_assum kall_tac) >>
+  rw[ghost_kept_def, ptr_covers_def] >> metis_tac[]
 QED
 
 Theorem external_code_tail_abort_checked:

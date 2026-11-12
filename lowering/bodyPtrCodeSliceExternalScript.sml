@@ -9,7 +9,7 @@ Ancestors
   vyperInterpreter vyperContext vyperState
 
 (* Rebase a tail's post over the start and length operand evaluations. *)
-Theorem code_slice_external_post_rebase[local]:
+Theorem code_slice_external_post_rebase:
   stmt_state_rel ctx func cenv cx ec u /\
   local_ptrs_reserved cenv sc /\ local_ptrs_reserved cenv sd /\
   MAP FDOM ec.scopes = MAP FDOM e1.scopes /\
