@@ -545,13 +545,16 @@ Proof
   simp[same_frame_refl]
 QED
 
-(* Admitted: the joint twin of body_selfdestruct_case_ptr_at (bodyPtrCallCases). *)
+(* Vacuous: expr_body_pre excludes selfdestruct (expr_evm_run_root). *)
 Theorem body_selfdestruct_case_full:
   !cx v24 es v25.
     body_exprs_full_ok cx es ==>
     body_expr_full_ok cx (Call v24 SelfDestructTarget es v25)
 Proof
-  cheat
+  rw[body_expr_full_ok_def] >>
+  gvs[exprSimHypsDefsTheory.expr_body_pre_def,
+      supportedExprTraverseTheory.expr_has_evm_run_thm,
+      supportedExprTraverseTheory.expr_evm_run_root_def]
 QED
 
 (* Admitted: the joint twin of body_send_case_ptr_at (bodyPtrCallCases). *)
