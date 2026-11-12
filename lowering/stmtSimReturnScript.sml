@@ -928,7 +928,8 @@ Proof
   `gas_origin_ptr_path (D, lo, explicit, ctx, func, PG) (s1, G', tn') []
      (IntRet <| iret_values := []; iret_adopt_fmp := NONE |> s1, G', tn')` by
     (irule (Q.INST [`ops` |-> `[]`] emitted_ret_origin_ptr) >>
-     simp[eval_operands_def] >> metis_tac[]) >>
+     simp[eval_operands_def] >>
+     qexistsl_tac [`pc`, `rpc`, `su`, `sb`] >> fs[]) >>
   metis_tac[gas_origin_ptr_path_append, APPEND_NIL]
 QED
 
