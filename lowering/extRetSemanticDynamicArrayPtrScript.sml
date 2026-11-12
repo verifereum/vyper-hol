@@ -5,7 +5,8 @@ Ancestors
   extRetDynamicArrayEntryPtr extRetDynamicArrayCountPtr
   extRetSemanticDynamicLoopPtr abiEncoderArrayLoopLayout abiEncoderArrayHeader
   fragGasSeqPtr extRetRecursiveResourcePtr extRetScratchResourcePtr
-  extRetFramedChildPtr
+  extRetFramedChildPtr extRetDynamicBodyPtr extRetRecursiveFramePtr
+  robustCopyTransportPtr valueEncodingProps allocaSiteResource
   extRetScratchInitPtr fragGasPathPtr fragExec emitHelperProps exprLoweringProps
   emitHelper compileEnv bodyPtrDefs ptrDiscipline venomState venomExecSemantics
   venomMemDefs venomMemProps valueEncoding words finite_map pred_set arithmetic
@@ -161,4 +162,82 @@ Proof
   asm_simp_tac (srw_ss()) [jump_to_def, lookup_var_def, mload_def,
                          ptr_covers_def, encoder_ambient_frame_def] >>
   fs[jump_to_def] >> metis_tac[]
+QED
+
+Theorem encoder_dynamic_initialized_entry_counted_ptr:
+  abi_encode_array_dynamic_init (Var cv) 32 si = ((Var ip,Var cursor),sh) /\
+  abi_encode_array_header (Var ip) (Var cv) sh = ((hdr,body_lbl,exit_lbl),sa) /\
+  fn_has_code si sh fn /\ fn_has_code sh sa fn /\
+  s.vs_current_bb = si.cs_current_bb /\
+  s.vs_inst_idx = LENGTH si.cs_current_insts /\ ~s.vs_halted /\
+  ~ctx_has_dalloca ctx /\ encoder_resource ctx fn sites a scap protected s /\
+  si.cs_next_id IN sites /\ si.cs_next_id+2 IN sites /\
+  not_fresh_at si src /\ not_fresh_at si dst /\ not_fresh_at si cv /\
+  lookup_var src s = SOME (n2w a) /\ lookup_var dst s = SOME (n2w b) /\
+  lookup_var cv s = SOME (n2w N) /\
+  ptr_covers G tn src s scap /\ ptr_covers G tn dst s dcap /\
+  op_taint tn (Var cv) = {} /\ op_prov G (Var cv) = NONE /\
+  val_wf tv v /\ val_footprint tv v <= scap /\
+  (!mem. mem_agree_outside tn.t_mem s.vs_memory mem ==> val_in_memory tv v a mem) /\
+  MEM (did,dbase,dsize) protected /\ dbase <= b /\ b+dcap <= dbase+dsize /\
+  32 <= dcap /\ (!i. b <= i /\ i < b+32 ==> i NOTIN tn.t_mem) ==>
+  ?p c Gf tnf sf.
+    gas_path_ptr D 0 ctx fn PG G tn s 0 Gf tnf (OK sf) /\
+    sf.vs_current_bb = hdr /\ sf.vs_inst_idx = 0 /\
+    encoder_dynamic_loop_inv ctx fn sites protected
+      ip cursor src dst cv p c a b scap dcap tv v N ns 0 Gf tnf sf /\
+    encoder_dynamic_effect si sites b dcap G tn s Gf tnf sf /\
+    FLOOKUP sf.vs_allocas si.cs_next_id = SOME (p,32) /\
+    FLOOKUP sf.vs_allocas (si.cs_next_id+2) = SOME (c,32) /\
+    p+32 < dimword(:256) /\ c+32 < dimword(:256) /\
+    (!i. b <= i /\ i < b+32 ==> i NOTIN tnf.t_mem)
+Proof
+  strip_tac >>
+  `eval_operand (Var cv) s = SOME (n2w N) /\
+   (!x. Var cv = Var x ==> not_fresh_at si x)` by simp[eval_operand_def] >>
+  drule_all encoder_dynamic_init_to_header_counted_ptr >>
+  disch_then (qspecl_then [`PG`,`G`,`D`] strip_assume_tac) >>
+  qmatch_asmsub_abbrev_tac `mem_agree_outside writes sf.vs_memory s.vs_memory` >>
+  `!i. a <= i /\ i < a+val_footprint tv v ==> i NOTIN writes` by
+    (qpat_assum `encoder_resource ctx fn sites a scap protected sf` mp_tac >>
+     pure_rewrite_tac [encoder_resource_def, scratch_resource_def] >> strip_tac >>
+     gen_tac >> strip_tac >> `scap <> 0` by decide_tac >>
+     `regions_disjoint (a,scap) (p,32) /\ regions_disjoint (a,scap) (c,32)` by
+       metis_tac[] >>
+     qpat_x_assum `regions_disjoint (a,scap) (p,32)` mp_tac >>
+     qpat_x_assum `regions_disjoint (a,scap) (c,32)` mp_tac >>
+     simp_tac (srw_ss()) [regions_disjoint_def, Abbr `writes`] >> decide_tac) >>
+  `!i. i NOTIN writes ==> (i IN tnf.t_mem <=> i IN tn.t_mem)` by
+    (simp[Abbr `writes`] >> metis_tac[]) >>
+  `!mem. mem_agree_outside tnf.t_mem sf.vs_memory mem ==> val_in_memory tv v a mem` by
+    (rpt strip_tac >> irule robust_val_in_memory_exterior_frame >>
+     conj_tac >- simp[] >>
+     qexistsl [`s.vs_memory`,`sf.vs_memory`,`tn.t_mem`,`tnf.t_mem`,`writes`] >>
+     simp[mem_agree_outside_def] >> metis_tac[mem_agree_outside_def]) >>
+  `lookup_var src sf = SOME (n2w a) /\ lookup_var dst sf = SOME (n2w b) /\
+   lookup_var cv sf = SOME (n2w N) /\ op_taint tnf (Var cv) = {} /\
+   op_prov Gf (Var cv) = NONE /\ ptr_covers Gf tnf src sf scap /\
+   ptr_covers Gf tnf dst sf dcap` by
+    (qpat_assum `!v. not_fresh_at si v ==> _` (qspec_then `src` mp_tac) >>
+     qpat_assum `!v. not_fresh_at si v ==> _` (qspec_then `dst` mp_tac) >>
+     qpat_assum `!v. not_fresh_at si v ==> _` (qspec_then `cv` mp_tac) >>
+     simp[] >> rpt strip_tac >> gvs[ptr_covers_def, op_prov_def]) >>
+  `encoder_dynamic_loop_inv ctx fn sites protected
+     ip cursor src dst cv p c a b scap dcap tv v N ns 0 Gf tnf sf` by
+    (irule encoder_dynamic_loop_inv_init >> simp[]) >>
+  `writes SUBSET encoder_write_envelope sites sf b dcap` by
+    (simp[SUBSET_DEF, Abbr `writes`, encoder_write_envelope_def,
+          encoder_scratch_span_def] >> metis_tac[]) >>
+  `encoder_dynamic_effect si sites b dcap G tn s Gf tnf sf` by
+    (irule encoder_dynamic_effect_from_footprint >> metis_tac[]) >>
+  `!i. b <= i /\ i < b+32 ==> i NOTIN writes` by
+    (drule_all encoder_resource_protected >>
+     pure_rewrite_tac [scratch_resource_def] >> strip_tac >>
+     `dsize <> 0` by decide_tac >>
+     `regions_disjoint (dbase,dsize) (p,32) /\
+      regions_disjoint (dbase,dsize) (c,32)` by metis_tac[] >>
+     qpat_x_assum `regions_disjoint (dbase,dsize) (p,32)` mp_tac >>
+     qpat_x_assum `regions_disjoint (dbase,dsize) (c,32)` mp_tac >>
+     simp_tac (srw_ss()) [regions_disjoint_def, Abbr `writes`] >> decide_tac) >>
+  qexistsl [`p`,`c`,`Gf`,`tnf`,`sf`] >> simp[] >> metis_tac[]
 QED
