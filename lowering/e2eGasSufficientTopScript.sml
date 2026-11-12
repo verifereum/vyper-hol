@@ -8,7 +8,7 @@
  *)
 Theory e2eGasSufficientTop
 Ancestors
-  e2eGasSufficient asmOptimizer
+  e2eGasSufficient e2eComposition asmOptimizer
 
 (* ===== The assembly optimizer's cases ===== *)
 
