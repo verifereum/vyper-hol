@@ -52,7 +52,7 @@ Theorem dynarray_snapshot_memory:
   entry.type = ArrayTV tv (Dynamic c) /\
   entry.value = ArrayV (DynArrayV vs) /\ LENGTH vs <= c /\
   FLOOKUP cenv.ce_vars name = SOME (PtrVar (Var dp) sz) /\
-  stmt_state_rel ctx func cenv cx ei s ==>
+  stmt_state_rel H ctx func cenv cx ei s ==>
   ?base. eval_operand (Var dp) s = SOME base /\
     mload (w2n base) s = n2w (LENGTH vs) /\
     (!k. k < LENGTH vs ==>
@@ -151,7 +151,7 @@ Theorem dynarray_snapshot_frontier:
   lookup_scopes name ei.scopes = SOME entry /\
   entry.type = ArrayTV tv (Dynamic c) /\ LENGTH vs <= c /\
   FLOOKUP cenv.ce_vars name = SOME (PtrVar (Var dp) sz) /\
-  stmt_state_rel ctx func cenv cx ei s ==>
+  stmt_state_rel H ctx func cenv cx ei s ==>
   ?base. eval_operand (Var dp) s = SOME base /\
     w2n base + 32 + LENGTH vs * type_memory_size tv <= s.vs_alloca_next
 Proof
