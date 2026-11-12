@@ -545,6 +545,7 @@ Proof
       get_scopes_def, bind_def] >>
   imp_res_tac finally_set_scopes >> imp_res_tac read_results_state >>
   imp_res_tac (SRULE[ignore_bind_def] finally_conditional_lock_scopes) >>
+  imp_res_tac (SRULE[ignore_bind_def] finally_unless_halt_conditional_lock_scopes) >>
   gvs[lock_if_nr_def, push_function_def, ignore_bind_def, bind_def,
       return_def, raise_def, COND_RATOR, vyperMiscTheory.option_CASE_rator,
       AllCaseEqs()] >>
@@ -562,7 +563,7 @@ Theorem eval_observation_frame_pred[local]:
   (!(cx:evaluation_context) (s:stmt). T) /\
   (!(cx:evaluation_context) (ss:stmt list). T) /\
   (!(cx:evaluation_context) (it:iterator). T) /\
-  (!(cx:evaluation_context) (tyv:type_value) (nm:string) (body:stmt list) (vs:value list). T) /\
+  (!(cx:evaluation_context) (tyv:type_value) (nm:string) (body:stmt list) (vs:eval_result list). T) /\
   (!cx e. expr_writes_ok ok e /\ ~supported_expr_exists P e ==>
     !st res st'. eval_expr cx e st = (res,st') ==> obs cx st' = obs cx st) /\
   (!cx es. EVERY (expr_writes_ok ok) es /\ ~supported_exprs_exists P es ==>
@@ -614,7 +615,9 @@ Proof
    imp_res_tac eval_raw_call_preserves_non_accounts >>
    imp_res_tac push_log_scopes >> imp_res_tac push_log_immutables >>
    imp_res_tac transfer_value_scopes >> imp_res_tac transfer_value_immutables >>
-   gvs[get_accounts_def, return_def] >> res_tac >> gvs[])
+   gvs[get_accounts_def, COND_RATOR, update_accounts_def,
+       update_pending_deletions_def, bind_def, ignore_bind_def,
+       return_def, AllCaseEqs()] >> res_tac >> gvs[])
 QED
 
 Resume eval_observation_frame_pred[TopLevelName]:
@@ -805,7 +808,7 @@ Theorem eval_name_projection_mutual:
   (!(cx:evaluation_context) (s:stmt). T) /\
   (!(cx:evaluation_context) (ss:stmt list). T) /\
   (!(cx:evaluation_context) (it:iterator). T) /\
-  (!(cx:evaluation_context) (tyv:type_value) (nm:string) (body:stmt list) (vs:value list). T) /\
+  (!(cx:evaluation_context) (tyv:type_value) (nm:string) (body:stmt list) (vs:eval_result list). T) /\
   (!cx e. expr_writes_ok (\w. FST (place_access w []) <> NameTarget name) e ==>
     !st res st'. eval_expr cx e st = (res,st') ==>
       MAP (\sc. FLOOKUP sc name) st'.scopes = MAP (\sc. FLOOKUP sc name) st.scopes) /\
@@ -850,7 +853,8 @@ Proof
    imp_res_tac eval_raw_call_preserves_non_accounts >>
    imp_res_tac push_log_scopes >> imp_res_tac transfer_value_scopes >>
    imp_res_tac get_accounts_scopes >>
-   gvs[] >> res_tac >> gvs[])
+   gvs[COND_RATOR, update_accounts_def, update_pending_deletions_def,
+       bind_def, ignore_bind_def, return_def, AllCaseEqs()] >> res_tac >> gvs[])
 QED
 
 Resume eval_name_projection_mutual[TopLevelName]:
@@ -1171,7 +1175,7 @@ Theorem typed_guarded_assignment_projection_mutual[local]:
   (!(cx:evaluation_context) (s:stmt). T) /\
   (!(cx:evaluation_context) (ss:stmt list). T) /\
   (!(cx:evaluation_context) (it:iterator). T) /\
-  (!(cx:evaluation_context) (tyv:type_value) (nm:string) (body:stmt list) (vs:value list). T) /\
+  (!(cx:evaluation_context) (tyv:type_value) (nm:string) (body:stmt list) (vs:eval_result list). T) /\
   (!(cx:evaluation_context) (e:expr). T) /\
   (!(cx:evaluation_context) (es:expr list). T) /\
   (!(cx:evaluation_context) (bt:base_assignment_target). T) /\
@@ -1635,7 +1639,8 @@ Proof
   qpat_x_assum `eval_iterator _ _ _ = _` mp_tac >>
   simp[Once evaluate_def, bind_def, AllCaseEqs()] >> strip_tac >>
   imp_res_tac read_result_state >> imp_res_tac lift_option_type_state >>
-  imp_res_tac lift_sum_state >> gvs[return_def] >>
+  imp_res_tac lift_sum_state >> imp_res_tac array_iterator_results_state >>
+  gvs[return_def] >>
   imp_res_tac typed_expr_name_projection >> gvs[]
 QED
 
