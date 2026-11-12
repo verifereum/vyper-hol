@@ -5,7 +5,8 @@ Ancestors
   loweringShapeDefs fragExec venomWf vyperTypeSystem
 
 Definition w_cx_def:
-  w_cx = empty_evaluation_context with sources := [(0w, [(NONE, [])])]
+  w_cx = empty_evaluation_context with <|
+    sources := [(0w, [(NONE, [])])]; stk := [(NONE, "walk")] |>
 End
 
 Definition w_cenv_def:

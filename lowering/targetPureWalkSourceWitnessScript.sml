@@ -35,10 +35,25 @@ Proof
     vyperStateTheory.find_var_decl_by_name_def, AllCaseEqs()]
 QED
 
-(* The sufficient simulation producer requires a nonempty call stack,
-   even when the expression contains no internal calls. *)
-Theorem w_calls_not_safe:
-  ~call_evaluation_safe w_cx (int_calls_expr raw_log_index)
+(* A singleton owner stack and the empty graph certify call safety. *)
+Theorem w_calls_safe:
+  call_evaluation_safe w_cx (int_calls_expr raw_log_index)
 Proof
-  EVAL_TAC >> simp[]
+  rewrite_tac[vyperTypeCallStackSoundnessTheory.call_evaluation_safe_def] >>
+  qexistsl_tac [`[]`, `(NONE,"walk")`, `[]`] >>
+  simp[w_cx_def, vyperTypeCallStackSoundnessTheory.call_stack_follows_def,
+       vyperTypeCallStackSoundnessTheory.calls_follow_call_graph_def,
+       raw_log_index_def, vyperTypeCallGraphTheory.int_calls_expr_def] >>
+  conj_tac
+  >- (simp[relationTheory.irreflexive_def,
+           vyperTypeCallGraphSoundnessTheory.call_edge_rel_def,
+           relationTheory.TC_DEF] >>
+      qx_gen_tac `x` >> qexists_tac `\x y. F` >> simp[]) >>
+  simp[vyperTypeCallStackSoundnessTheory.functions_follow_call_graph_def,
+       vyperContextTheory.get_module_code_def,
+       vyperContextTheory.empty_evaluation_context_def,
+       vyperContextTheory.empty_call_txn_def] >>
+  rpt strip_tac >> gvs[AllCaseEqs()] >>
+  gvs[vyperInterpreterTheory.lookup_callable_function_def,
+      vyperInterpreterTheory.lookup_function_def]
 QED
