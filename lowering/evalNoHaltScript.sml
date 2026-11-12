@@ -591,7 +591,10 @@ Resume eval_no_halt_every[Builtin]:
   simp([Once evaluate_def, COND_RATOR] @ case_ss) >>
   gvs(syn_ss @ case_ss) >> rpt strip_tac >>
   gvs[builtin_args_length_ok_def, LENGTH_EQ_NUM_compute] >>
-  gvs(syn_ss @ case_ss) >> metis_tac[]
+  gvs(syn_ss @ case_ss) >>
+  Cases_on `code_slice_source bt es` >- (gvs[] >> metis_tac[]) >>
+  rename1 `code_slice_source bt es = SOME p` >> PairCases_on `p` >>
+  gvs([code_slice_source_SOME] @ syn_ss @ case_ss) >> metis_tac[]
 QED
 
 Resume eval_no_halt_every[ExtCall]:

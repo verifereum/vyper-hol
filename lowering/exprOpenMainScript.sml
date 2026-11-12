@@ -122,7 +122,12 @@ Resume compile_expr_open_general[builtin]:
      drule_at (Pat `lower_value _ _ _ _ _ = _`) lower_value_child_open >>
      simp[] >> disch_then irule >>
      rpt gen_tac >> strip_tac >>
-     drule eval_builtin_head_success >> strip_tac >>
+     drule eval_builtin_head_success >>
+     impl_tac
+     >- (disj1_tac >> rpt strip_tac >>
+         gvs[supported_expr_def, supported_pure_expr_def,
+             supported_effect_expr_def, supported_builtin_form_def]) >>
+     strip_tac >>
      drule expr_body_pre_builtin_head >>
      impl_tac
      >- (disj1_tac >> rpt strip_tac >>

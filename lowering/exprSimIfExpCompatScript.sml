@@ -284,7 +284,14 @@ Proof
       vyperTypeSystemTheory.arg_type_fits_def]
 QED
 
-Theorem ifexp_lowered_type_classify:
+Theorem ifexp_mapped_types_fit[local]:
+  !args. EVERY (\e. arg_type_fits (lowered_value_type ce e) (expr_type e)) args ==>
+    arg_types_fit (MAP (lowered_value_type ce) args) (MAP expr_type args)
+Proof
+  Induct >> simp[vyperTypeSystemTheory.arg_type_fits_def]
+QED
+
+Theorem ifexp_lowered_type_classify_calls[local]:
   !ce e env.
   well_typed_expr env e /\
   (!id t. FLOOKUP env.var_types id = SOME t ==>
@@ -293,7 +300,7 @@ Theorem ifexp_lowered_type_classify:
   lowered_value_type ce e = expr_type e \/
   is_bytestring_type (expr_type e) /\ is_bytestring_type (lowered_value_type ce e) /\
     arg_type_fits (lowered_value_type ce e) (expr_type e) \/
-  (?ty fid args drv. e = Call ty (IntCall fid) args drv)
+  int_calls_expr e <> []
 Proof
   ho_match_mp_tac lowered_value_type_ind >>
   simp[lowered_value_type_def, expr_type_def,
@@ -302,7 +309,9 @@ Proof
        vyperTypeCallGraphTheory.int_calls_expr_def,
        is_bytestring_type_def] >>
   rpt strip_tac >> gvs[vyperTypeSystemTheory.well_typed_literal_def,
-    vyperTypeSystemTheory.arg_type_fits_def, vyperValueTheory.compatible_bound_def] >>
+    vyperTypeSystemTheory.arg_type_fits_def, vyperValueTheory.compatible_bound_def]
+  >~ [`concat_buffer_type ty _`]
+  >- (disj2_tac >> irule ifexp_concat_lowered_fits >> goal_assum drule) >>
   `!xs. well_typed_exprs env xs ==>
          EVERY (well_formed_type env.type_defs o expr_type) xs` by
     (Induct >> simp[vyperTypeSystemTheory.well_typed_expr_def] >>
@@ -314,9 +323,27 @@ Proof
     (Induct >> simp[evaluate_type_def, vyperTypeSystemTheory.well_formed_type_def] >>
      rpt strip_tac >> gvs[optionTheory.IS_SOME_EXISTS] >> simp[]) >>
   `?tvs. evaluate_types env.type_defs (MAP expr_type args) [] = SOME tvs` by metis_tac[] >>
-  TRY (disj2_tac >> irule ifexp_concat_lowered_fits >>
-       goal_assum drule >> NO_TAC) >>
-  qmatch_goalsub_abbrev_tac `abi_size_bound ce.ce_struct_fields enc_ty` >>
+  `abi_size_bound ce.ce_struct_fields
+     (if LENGTH args = 1 /\ ~ensure then lowered_value_type ce (HD args)
+      else TupleT (MAP (lowered_value_type ce) args)) <=
+   abi_size_bound ce.ce_struct_fields
+     (if LENGTH args = 1 /\ ~ensure then expr_type (HD args)
+      else TupleT (MAP expr_type args))` by
+    (IF_CASES_TAC
+     >- (irule (cj 1 exprSimAbiEncodeArgsPhysicalCapacityTheory.abi_args_fits_size_bound) >>
+         gvs[LENGTH_EQ_NUM_compute, vyperTypeSystemTheory.well_typed_expr_def,
+             vyperTypeCallGraphTheory.int_calls_expr_def] >>
+         metis_tac[ifexp_arg_type_fits_refl]) >>
+     simp[] >>
+     irule (cj 2 exprSimAbiEncodeArgsPhysicalCapacityTheory.abi_args_fits_size_bound) >>
+     irule ifexp_mapped_types_fit >> simp[EVERY_MEM] >>
+     rpt strip_tac >>
+     `well_typed_expr env e` by
+       metis_tac[well_typed_exprs_member] >>
+     `int_calls_expr e = []` by metis_tac[int_calls_exprs_mem] >>
+     metis_tac[ifexp_arg_type_fits_refl]) >>
+  qabbrev_tac `enc_ty = if LENGTH args = 1 /\ ~ensure then expr_type (HD args)
+                       else TupleT (MAP expr_type args)` >>
   `abi_size_bound ce.ce_struct_fields enc_ty <= vyper_abi_size_bound env.type_defs enc_ty` by
     (simp[Abbr `enc_ty`] >> IF_CASES_TAC >-
        (`?tv. evaluate_type env.type_defs (expr_type (HD args)) = SOME tv` by
@@ -336,7 +363,114 @@ Proof
   simp[Abbr `enc_ty`, is_bytestring_type_def] >>
   qmatch_asmsub_rename_tac `well_typed_exprs env (head::rest)` >>
   Cases_on `ensure` >> Cases_on `rest` >>
-  gvs[is_bytestring_type_def] >> decide_tac
+  gvs[is_bytestring_type_def] >> strip_tac >> disj2_tac >>
+  irule arithmeticTheory.LESS_EQ_TRANS >> goal_assum (drule_at Any) >>
+  simp[] >> metis_tac[arithmeticTheory.LESS_EQ_TRANS]
+QED
+
+Theorem ifexp_intcall_lowered_fits[local]:
+  !ce env ty fid args drv.
+  well_typed_expr env (Call ty (IntCall fid) args drv) /\
+  (!fid sig. FLOOKUP env.fn_sigs fid = SOME sig ==>
+     ce.ce_func_return_type (nsid_to_string fid) = sig.ret_ty) ==>
+  arg_type_fits (lowered_value_type ce (Call ty (IntCall fid) args drv)) ty
+Proof
+  rpt gen_tac >> PairCases_on `fid` >>
+  simp[vyperTypeSystemTheory.well_typed_expr_def, lowered_value_type_def] >>
+  strip_tac >> first_x_assum (drule_then SUBST1_TAC) >>
+  gvs[vyperTypeSystemTheory.type_widens_to_def, ifexp_arg_type_fits_refl]
+QED
+
+Theorem ifexp_classified_fits[local]:
+  !ce env e.
+  well_typed_expr env e ==>
+  (!fid sig. FLOOKUP env.fn_sigs fid = SOME sig ==>
+     ce.ce_func_return_type (nsid_to_string fid) = sig.ret_ty) ==>
+  (lowered_value_type ce e = expr_type e \/
+   is_bytestring_type (expr_type e) /\ is_bytestring_type (lowered_value_type ce e) /\
+     arg_type_fits (lowered_value_type ce e) (expr_type e) \/
+   (?ty fid args drv. e = Call ty (IntCall fid) args drv)) ==>
+  arg_type_fits (lowered_value_type ce e) (expr_type e)
+Proof
+  rpt strip_tac >> gvs[ifexp_arg_type_fits_refl, expr_type_def] >>
+  irule ifexp_intcall_lowered_fits >> metis_tac[]
+QED
+
+Theorem ifexp_lowered_type_classify:
+  !ce e env.
+  well_typed_expr env e /\
+  (!id t. FLOOKUP env.var_types id = SOME t ==>
+          well_formed_type env.type_defs t) /\
+  sfields_tenv_consistent ce.ce_struct_fields env.type_defs /\
+  (!fid sig. FLOOKUP env.fn_sigs fid = SOME sig ==>
+     ce.ce_func_return_type (nsid_to_string fid) = sig.ret_ty) ==>
+  lowered_value_type ce e = expr_type e \/
+  is_bytestring_type (expr_type e) /\ is_bytestring_type (lowered_value_type ce e) /\
+    arg_type_fits (lowered_value_type ce e) (expr_type e) \/
+  (?ty fid args drv. e = Call ty (IntCall fid) args drv)
+Proof
+  ho_match_mp_tac lowered_value_type_ind >>
+  simp[lowered_value_type_def, expr_type_def,
+       vyperTypeSystemTheory.well_typed_expr_def,
+       vyperTypeSystemTheory.type_builtin_result_ok_def,
+       vyperTypeCallGraphTheory.int_calls_expr_def,
+       is_bytestring_type_def] >>
+  rpt strip_tac >> gvs[vyperTypeSystemTheory.well_typed_literal_def,
+    vyperTypeSystemTheory.arg_type_fits_def, vyperValueTheory.compatible_bound_def]
+  >~ [`concat_buffer_type ty _`]
+  >- (disj2_tac >> irule ifexp_concat_lowered_fits >> goal_assum drule) >>
+  `!xs. well_typed_exprs env xs ==>
+         EVERY (well_formed_type env.type_defs o expr_type) xs` by
+    (Induct >> simp[vyperTypeSystemTheory.well_typed_expr_def] >>
+     rpt strip_tac >> irule exprSafeOperandTheory.well_typed_expr_type_well_formed >>
+     goal_assum drule >> simp[]) >>
+  `EVERY (well_formed_type env.type_defs o expr_type) args` by metis_tac[] >>
+  `!xs acc. EVERY (well_formed_type env.type_defs o expr_type) xs ==>
+     ?tvs. evaluate_types env.type_defs (MAP expr_type xs) acc = SOME tvs` by
+    (Induct >> simp[evaluate_type_def, vyperTypeSystemTheory.well_formed_type_def] >>
+     rpt strip_tac >> gvs[optionTheory.IS_SOME_EXISTS] >> simp[]) >>
+  `?tvs. evaluate_types env.type_defs (MAP expr_type args) [] = SOME tvs` by metis_tac[] >>
+  `abi_size_bound ce.ce_struct_fields
+     (if LENGTH args = 1 /\ ~ensure then lowered_value_type ce (HD args)
+      else TupleT (MAP (lowered_value_type ce) args)) <=
+   abi_size_bound ce.ce_struct_fields
+     (if LENGTH args = 1 /\ ~ensure then expr_type (HD args)
+      else TupleT (MAP expr_type args))` by
+    (IF_CASES_TAC
+     >- (irule (cj 1 exprSimAbiEncodeArgsPhysicalCapacityTheory.abi_args_fits_size_bound) >>
+         gvs[LENGTH_EQ_NUM_compute, vyperTypeSystemTheory.well_typed_expr_def] >>
+         metis_tac[ifexp_classified_fits]) >>
+     simp[] >>
+     irule (cj 2 exprSimAbiEncodeArgsPhysicalCapacityTheory.abi_args_fits_size_bound) >>
+     irule ifexp_mapped_types_fit >> simp[EVERY_MEM] >>
+     rpt strip_tac >>
+     `well_typed_expr env e` by
+       metis_tac[well_typed_exprs_member] >>
+     metis_tac[ifexp_classified_fits]) >>
+  qabbrev_tac `enc_ty = if LENGTH args = 1 /\ ~ensure then expr_type (HD args)
+                       else TupleT (MAP expr_type args)` >>
+  `abi_size_bound ce.ce_struct_fields enc_ty <= vyper_abi_size_bound env.type_defs enc_ty` by
+    (simp[Abbr `enc_ty`] >> IF_CASES_TAC >-
+       (`?tv. evaluate_type env.type_defs (expr_type (HD args)) = SOME tv` by
+          (gvs[LENGTH_EQ_NUM_compute, combinTheory.o_DEF,
+               evaluate_type_def, AllCaseEqs()]) >>
+        irule ifexp_compat_abi_size_bound_source >> simp[] >> metis_tac[]) >>
+     irule ifexp_compat_abi_tuple_size_bound_source >> simp[] >> metis_tac[]) >>
+  `abi_encode_method_id_size method_id = if IS_SOME method_id then 4 else 0` by
+    (Cases_on `method_id` >>
+     gvs[vyperTypeSystemTheory.well_typed_type_builtin_args_def,
+         vyperTypeSystemTheory.abi_encode_method_id_size_def,
+         vyperASTTheory.abi_encode_method_id_bytes_def]) >>
+  qpat_x_assum `abi_encode_size_ok _ _ _ _ _` mp_tac >>
+  simp[vyperTypeSystemTheory.abi_encode_size_ok_def] >>
+  Cases_on `args` >>
+  gvs[vyperTypeSystemTheory.well_typed_type_builtin_args_def] >>
+  simp[Abbr `enc_ty`, is_bytestring_type_def] >>
+  qmatch_asmsub_rename_tac `well_typed_exprs env (head::rest)` >>
+  Cases_on `ensure` >> Cases_on `rest` >>
+  gvs[is_bytestring_type_def] >> strip_tac >> disj2_tac >>
+  irule arithmeticTheory.LESS_EQ_TRANS >> goal_assum (drule_at Any) >>
+  simp[] >> metis_tac[arithmeticTheory.LESS_EQ_TRANS]
 QED
 
 Theorem ifexp_compat_lowered_type:
@@ -351,7 +485,7 @@ Theorem ifexp_compat_lowered_type:
     arg_type_fits (lowered_value_type ce e) (expr_type e) \/
   same_memory_layout ce (lowered_value_type ce e) (expr_type e)
 Proof
-  rpt strip_tac >> drule ifexp_lowered_type_classify >>
+  rpt strip_tac >> drule ifexp_lowered_type_classify_calls >>
   disch_then (qspec_then `ce` mp_tac) >>
   (impl_tac >- metis_tac[]) >> strip_tac >>
   gvs[vyperTypeCallGraphTheory.int_calls_expr_def]
@@ -374,6 +508,9 @@ Proof
     gvs[expr_body_pre_def, expr_sim_inv_def,
         vyperTypeInvariantsTheory.env_consistent_def,
         vyperTypeInvariantsTheory.env_context_consistent_def] >>
+  `!fid sig. FLOOKUP env.fn_sigs fid = SOME sig ==>
+     ce.ce_func_return_type (nsid_to_string fid) = sig.ret_ty` by
+    gvs[expr_body_pre_def, expr_sim_inv_def] >>
   drule ifexp_lowered_type_classify >>
   disch_then (qspec_then `ce` mp_tac) >>
   (impl_tac >- metis_tac[]) >> strip_tac >> gvs[] >>
