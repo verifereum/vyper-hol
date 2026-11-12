@@ -3,6 +3,8 @@ Theory functionInlinerRecursiveTransport
 Ancestors
   functionInlinerSelectedSource functionInlinerSelectedContinuation
   functionInlinerLiveSteps functionInlinerLiveEdges functionInlinerFuel
+  functionInlinerLocation functionInlinerParameterLocations
+  functionInlinerActivation functionInlinerSiteLayout cfgTransform
   venomExecSemantics venomExecProofs arithmetic
 
 Datatype:
@@ -383,4 +385,175 @@ Theorem inline_resume_body_return:
   inline_resume C fn fuel (InlineBody bb s) = IntRet ir u
 Proof
   simp[inline_resume_def, Once exec_block_def]
+QED
+
+Theorem inline_boundary_repair_opcode[local]:
+  (inline_edit_repair e bb l inst).inst_opcode = inst.inst_opcode
+Proof
+  simp[inline_edit_repair_def, subst_label_inst_def] >>
+  IF_CASES_TAC >> simp[]
+QED
+
+Theorem inline_boundary_keep_fetch[local]:
+  inline_site_edit_valid e /\
+  lookup_block e.ise_block e.ise_caller.fn_blocks = SOME source_bb /\
+  e.ise_index < LENGTH source_bb.bb_instructions /\
+  (EL e.ise_index source_bb.bb_instructions).inst_opcode = INVOKE /\
+  ~MEM e.ise_return (fn_labels e.ise_caller) /\
+  lookup_block l e.ise_caller.fn_blocks = SOME bb /\
+  get_instruction bb j = SOME inst /\ inst.inst_opcode <> INVOKE ==>
+  ?ml mj tb ti.
+    inline_keep_boundary e l j = (ml,mj) /\
+    lookup_block ml e.ise_final.fn_blocks = SOME tb /\
+    get_instruction tb mj = SOME ti /\ ti.inst_opcode <> INVOKE /\
+    inline_choice_location (InlineKeep e)
+      <|il_block := l; il_phase := InlineAtInstruction j; il_counter := k|> =
+      SOME <|il_block := ml; il_phase := InlineAtInstruction mj; il_counter := k|>
+Proof
+  strip_tac >> Cases_on `l = e.ise_block`
+  >- (gvs[] >>
+      `j < LENGTH bb.bb_instructions /\ inst = EL j bb.bb_instructions` by
+        gvs[venomInstTheory.get_instruction_def] >>
+      `j <> e.ise_index` by metis_tac[] >>
+      `e.ise_index <= LENGTH bb.bb_instructions` by decide_tac >>
+      Cases_on `j < e.ise_index`
+      >- (drule_all inline_edit_prefix_fetch >>
+          simp[inline_fetched_fields_def, inline_inst_fields_def,
+               inline_keep_boundary_def, inline_choice_location_def] >>
+          metis_tac[inline_boundary_repair_opcode]) >>
+      `e.ise_index < j` by decide_tac >>
+      drule_all inline_edit_suffix_fetch >>
+      simp[inline_fetched_fields_def, inline_inst_fields_def,
+           inline_keep_boundary_def, inline_choice_location_def] >>
+      metis_tac[inline_boundary_repair_opcode]) >>
+  drule_all inline_edit_other_fetch >>
+  simp[inline_fetched_fields_def, inline_inst_fields_def,
+       inline_keep_boundary_def, inline_choice_location_def] >>
+  metis_tac[inline_boundary_repair_opcode]
+QED
+
+Theorem inline_boundary_enter_fetch[local]:
+  inline_site_edit_valid e /\
+  lookup_block e.ise_block e.ise_caller.fn_blocks = SOME bb /\
+  e.ise_index < LENGTH bb.bb_instructions /\
+  ~MEM e.ise_return (fn_labels e.ise_caller) /\
+  lookup_block l e.ise_callee.fn_blocks = SOME cb /\
+  ~MEM (STRCAT e.ise_prefix l) (fn_labels e.ise_caller) /\
+  STRCAT e.ise_prefix l <> e.ise_return /\
+  get_instruction cb j = SOME inst /\ inst.inst_opcode <> INVOKE ==>
+  ?counter tb ti.
+    lookup_block (STRCAT e.ise_prefix l) e.ise_final.fn_blocks = SOME tb /\
+    get_instruction tb (LENGTH (FST (inline_cell_prefix e bb cb j))) = SOME ti /\
+    ti.inst_opcode <> INVOKE /\
+    inline_choice_location (InlineEnter e)
+      <|il_block := l; il_phase := InlineAtInstruction j; il_counter := k|> =
+      SOME <|il_block := STRCAT e.ise_prefix l;
+             il_phase := InlineAtInstruction (LENGTH (FST (inline_cell_prefix e bb cb j)));
+             il_counter := counter|>
+Proof
+  strip_tac >>
+  `j < LENGTH cb.bb_instructions /\ inst = EL j cb.bb_instructions` by
+    gvs[venomInstTheory.get_instruction_def] >>
+  drule_all inline_edit_enter_focus_fetch >>
+  simp[LET_THM] >> disch_then (qspec_then `0` mp_tac) >>
+  simp[functionInlinerOccurrencesTheory.inline_rewrite_expansion_nonempty] >>
+  qmatch_goalsub_abbrev_tac `inline_edit_repair _ _ _ head` >>
+  `(clone_instruction e.ise_prefix (fn_labels e.ise_callee)
+      (EL j cb.bb_instructions)).inst_opcode <> INVOKE` by
+    gvs[functionInlinerDefsTheory.clone_instruction_def] >>
+  `head.inst_opcode <> INVOKE` by
+    (simp[Abbr `head`] >>
+     metis_tac[functionInlinerOccurrencesTheory.inline_rewrite_invoke_cell,
+       functionInlinerOccurrencesTheory.inline_rewrite_expansion_nonempty,
+       listTheory.EL_def]) >>
+  simp[inline_fetched_fields_def, inline_inst_fields_def] >> strip_tac >>
+  simp[inline_choice_location_def, functionInlinerReachableCutsTheory.inline_cell_prefix_def] >>
+  metis_tac[inline_boundary_repair_opcode]
+QED
+
+Theorem inline_boundary_choice_fetch[local]:
+  inline_annotated_origin C e.ise_state.is_inline_count e.ise_caller a /\
+  inline_annotated_origin C e.ise_state.is_inline_count e.ise_callee b /\
+  inline_site_edit_valid e /\
+  ((choice = InlineKeep e /\ fn = e.ise_caller) \/
+   (choice = InlineEnter e /\ fn = e.ise_callee)) /\
+  lookup_block l fn.fn_blocks = SOME sb /\
+  get_instruction sb j = SOME inst /\ inst.inst_opcode <> INVOKE /\
+  inline_parameter_boundary choice fn l j root ml mj ==>
+  ?counter tb ti.
+    inline_choice_location choice
+      <|il_block := l; il_phase := InlineAtInstruction j; il_counter := k|> =
+      SOME <|il_block := ml; il_phase := InlineAtInstruction mj; il_counter := counter|> /\
+    lookup_block ml root.fn_blocks = SOME tb /\
+    get_instruction tb mj = SOME ti /\ ti.inst_opcode <> INVOKE
+Proof
+  strip_tac >>
+  drule_all functionInlinerOccurrencesTheory.inline_annotated_edit_fetch_facts >>
+  strip_tac
+  >- (gvs[inline_parameter_boundary_def] >>
+      `ALL_DISTINCT (fn_labels e.ise_caller)` by
+        metis_tac[functionInlinerOccurrencesTheory.inline_annotated_origin_labels] >>
+      `?bb. lookup_block e.ise_block e.ise_caller.fn_blocks = SOME bb /\
+        e.ise_index < LENGTH bb.bb_instructions /\
+        (EL e.ise_index bb.bb_instructions).inst_opcode = INVOKE` by
+        (irule functionInlinerWfTheory.find_invoke_site_lookup >>
+         gvs[inline_site_edit_valid_def] >> metis_tac[]) >>
+      gvs[] >> drule_all inline_boundary_keep_fetch >>
+      disch_then (qspec_then `k` strip_assume_tac) >>
+      gvs[] >> metis_tac[]) >>
+  gvs[inline_parameter_boundary_def] >>
+  `MEM l (fn_labels e.ise_callee)` by
+    metis_tac[venomExecPropsTheory.lookup_block_label,
+      venomExecPropsTheory.lookup_block_MEM, venomInstTheory.fn_labels_def, listTheory.MEM_MAP] >>
+  `~MEM (STRCAT e.ise_prefix l) (fn_labels e.ise_caller) /\
+   STRCAT e.ise_prefix l <> e.ise_return` by metis_tac[] >>
+  drule_all inline_boundary_enter_fetch >>
+  disch_then (qspec_then `k` strip_assume_tac) >> gvs[] >> metis_tac[]
+QED
+
+Theorem inline_boundary_path_fetch[local]:
+  !path fn root l j sb inst ml mj k.
+    inline_annotated_choice_path C path fn root /\
+    lookup_block l fn.fn_blocks = SOME sb /\
+    get_instruction sb j = SOME inst /\ inst.inst_opcode <> INVOKE /\
+    inline_parameter_boundary_path path fn l j root ml mj ==>
+    ?counter tb ti.
+      inline_path_location path
+        (SOME <|il_block := l; il_phase := InlineAtInstruction j; il_counter := k|>) =
+        SOME <|il_block := ml; il_phase := InlineAtInstruction mj; il_counter := counter|> /\
+      lookup_block ml root.fn_blocks = SOME tb /\
+      get_instruction tb mj = SOME ti /\ ti.inst_opcode <> INVOKE
+Proof
+  Induct >>
+  simp[functionInlinerParameterPropagationTheory.inline_annotated_choice_path_def,
+       inline_parameter_boundary_path_def] >> rpt strip_tac >>
+  rename1 `inline_parameter_boundary h fn l j mid il ij` >>
+  `mid = e.ise_final` by gvs[inline_parameter_boundary_def] >>
+  `?counter tb ti.
+    inline_choice_location h
+      <|il_block := l; il_phase := InlineAtInstruction j; il_counter := k|> =
+      SOME <|il_block := il; il_phase := InlineAtInstruction ij; il_counter := counter|> /\
+    lookup_block il mid.fn_blocks = SOME tb /\
+    get_instruction tb ij = SOME ti /\ ti.inst_opcode <> INVOKE` by
+    (irule inline_boundary_choice_fetch >> metis_tac[]) >>
+  gvs[] >> first_x_assum drule_all >> strip_tac >>
+  simp[inline_path_location_def, listTheory.FOLDL, inline_location_step_def] >>
+  metis_tac[inline_path_location_def]
+QED
+
+Theorem inline_noninvoke_boundary_location:
+  inline_annotated_origin C n root cert /\
+  inline_routed_leaf cert root p fn path /\
+  lookup_block l fn.fn_blocks = SOME sb /\
+  get_instruction sb j = SOME inst /\ inst.inst_opcode <> INVOKE /\
+  inline_parameter_boundary_path path fn l j root ml mj ==>
+  ?counter.
+    inline_path_location path
+      (SOME <|il_block := l; il_phase := InlineAtInstruction j; il_counter := 0|>) =
+      SOME <|il_block := ml; il_phase := InlineAtInstruction mj; il_counter := counter|>
+Proof
+  strip_tac >>
+  `inline_annotated_choice_path C path fn root` by
+    metis_tac[functionInlinerReturnRoutingTheory.inline_routed_leaf_annotated_path] >>
+  drule_all inline_boundary_path_fetch >> metis_tac[]
 QED
