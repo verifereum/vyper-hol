@@ -14,7 +14,9 @@ Ancestors
   vyperInterpreter vyperState vyperValue vyperTypeSystem
   vyperTypeInvariants vyperTypeCallGraph gasContext stmtSimReturn
   vyperTypeCallStackSoundness vyperTypeValues compileVyper targetPlaceSim exprSimTopLevelProps
-  bodyStorageMetadata
+  bodyStorageMetadata bodyImmFragMemory whitelistForIterImmSource
+  whitelistForIterImmFrame whitelistForIterImmCopy valueEncodingTyping
+  valueEncodingProps vyperTypeEnv supportedExprTraverse allocLimitsProps arithmetic vyperValueOperation loweringPosts
 Libs
   monadsyntax
 
@@ -202,8 +204,8 @@ Proof
   cheat
 QED
 
-(* ADMITTED (packet A2-mem, immutable array): memory twin of
-   whitelistForIterImm's body_for_immutable_array. *)
+(* Immutable-array memory iteration: instantiate the memory fragment with
+   the expression invariant and an unchanged immutable lookup snapshot. *)
 Theorem body_for_immutable_array_mem:
   !cx id typ it n body d tops bindings ctx func cenv env env' ret_ty lctx RetQ
    es.
@@ -238,8 +240,150 @@ Theorem body_for_immutable_array_mem:
       (stmt_env cenv lctx ret_ty (For id typ it n body))
       (eval_stmt cx (For id typ it n body)) es
 Proof
-  cheat
+  rpt gen_tac >> strip_tac >> gvs[] >>
+  `id NOTIN FDOM env.var_types /\
+   iterator_unmodified (Array (TopLevelName (ArrayT typ bd) (src,name))) body /\
+   ?env_b. type_stmts (extend_local env id typ F) ret_ty body = SOME env_b` by
+    gvs[type_stmt_def, well_typed_iterator_def, expr_type_def,
+        optionTheory.IS_SOME_EXISTS, AllCaseEqs()] >>
+  drule_all immutable_array_source_ready >> strip_tac >>
+  drule evaluate_type_ArrayT_cases >> strip_tac >> gvs[] >>
+  rename1 `evaluate_type (get_tenv cx) typ = SOME tv` >>
+  `FLOOKUP cenv.ce_vars id = NONE` by
+    (irule declared_name_unbound >> metis_tac[]) >>
+  `lookup_scopes id es.scopes = NONE` by
+    (Cases_on `lookup_scopes id es.scopes` >> simp[] >>
+     gvs[expr_sim_inv_def, env_consistent_def, env_scopes_consistent_def] >>
+     qpat_x_assum `!id entry. lookup_scopes _ _ = _ ==> _` drule >>
+     simp[FLOOKUP_DEF]) >>
+  qmatch_asmsub_abbrev_tac `INL vs` >>
+  `LENGTH vs <= bound_length bd /\ bound_length bd < dimword (:256) /\
+   (case bd of Fixed cap => LENGTH vs = cap | Dynamic cap => T)` by
+    suspend "bounds" >>
+  `LENGTH vs <= n` by decide_tac >>
+  `eval_iterator cx (Array (TopLevelName (ArrayT typ bd) (cenv.ce_module,name)))
+      es = (INL vs,es)` by
+    (`es = es with gas_obs := es.gas_obs` by
+       simp[vyperStateTheory.evaluation_state_component_equality] >>
+     pop_assum SUBST1_TAC >>
+     qpat_assum `!gs. eval_iterator _ _ _ = (INL vs,_)` (fn th => rewrite_tac [th])) >>
+  `body_for_mem_ok cx tv id body vs` by
+    (qpat_x_assum `!s3 vs t' s4 t''. _` mp_tac >>
+     simp[lift_option_type_def, return_def, check_def, assert_def, compatible_bound_def] >>
+     disch_then irule >> simp[] >> qexistsl_tac [`es`, `es`] >> simp[]) >>
+  `cenv.ce_alloca_locals /\ supported_program tops /\
+   get_module_code cx NONE = SOME tops` by fs[body_inv_def] >>
+  `supported_stmts tops bindings body /\
+   ~supported_stmts_expr_exists expr_internal_call_root body` by
+    fs[supported_stmt_def, supported_iterator_def] >>
+  `type_memory_bytes cenv typ < 2 ** 64` by
+    fs[stmt_exprs_ok_def, supported_stmt_expr_exists_def,
+       alloc_limits_stmt_def, stmt_valued_return_def] >>
+  `type_memory_bytes cenv typ = type_memory_size tv` by
+    metis_tac[expr_sim_inv_memory_size] >>
+  `elem_size_in_location cenv LocCode typ = type_memory_size tv` by
+    simp[elem_size_in_location_def, is_slot_addressed_def] >>
+  `0 < type_memory_size tv` by metis_tac[immutable_array_element_size_positive] >>
+  `type_memory_bytes cenv typ + 64 < dimword (:256)` by
+    (fs[wordsTheory.dimword_def] >> decide_tac) >>
+  `!k. k < LENGTH vs ==> value_has_type tv (EL k vs)` by suspend "typed" >>
+  suspend "assemble"
 QED
+Resume body_for_immutable_array_mem[assemble]:
+  match_mp_tac compile_for_immutable_frag_mem >>
+  qexistsl_tac [`off`, `tv`, `vs`,
+    `\ei. expr_sim_inv cenv cx env ei /\
+       lookup_immutable cx ei cenv.ce_module name = lookup_immutable cx es cenv.ce_module name`] >>
+  simp[] >> rpt conj_tac
+  >- (rpt gen_tac >> strip_tac >>
+      drule (SIMP_RULE std_ss [cs_mono_def] (cj 2 compile_stmt_cs_mono)) >> simp[])
+  >- suspend "source"
+  >- suspend "body"
+  >- suspend "scope" >>
+  simp[expr_sim_inv_gas_obs, vyperBareGlobalNameTheory.lookup_immutable_def]
+QED
+Resume body_for_immutable_array_mem[bounds]:
+  `bound_length bd < dimword (:256)` by
+    (qpat_x_assum `evaluate_type _ (ArrayT _ _) = _` mp_tac >>
+     simp[evaluate_type_def, AllCaseEqs(), type_slot_size_def] >>
+     rpt strip_tac >> Cases_on `bd` >> fs[type_slot_size_def, bound_length_def] >>
+     `n' <= n' * type_slot_size tv` by
+       (irule LESS_EQ_TRANS >> qexists_tac `n' * 1` >> simp[]) >> decide_tac) >>
+  Cases_on `bd` >> Cases_on `av` >>
+  gvs[value_has_type_def, array_elements_def, bound_length_def, Abbr `vs`]
+QED
+Resume body_for_immutable_array_mem[typed]:
+  gen_tac >> strip_tac >>
+  Cases_on `bd` >> Cases_on `av` >>
+  gvs[value_has_type_def, Abbr `vs`]
+  >- (irule (cj 1 fixed_array_elements_typed) >> simp[value_has_type_def] >> metis_tac[]) >>
+  gvs[array_elements_def, all_have_type_EVERY, EVERY_EL]
+QED
+Resume body_for_immutable_array_mem[source]:
+  rpt gen_tac >> strip_tac >>
+  `lookup_immutable cx ei cenv.ce_module name = SOME (ArrayTV tv bd,ArrayV av)` by
+    gvs[vyperBareGlobalNameTheory.lookup_immutable_def] >>
+  drule_all immutable_array_source_ready >> strip_tac >>
+  gvs[vyperBareGlobalNameTheory.lookup_immutable_def] >>
+  `immutable_holds cenv cx (ArrayT typ bd) (Value (ArrayV av)) (n2w off) ei s` by
+    (simp[immutable_holds_def, read_result_def, return_def] >>
+     qexistsl_tac [`name`, `off`, `ArrayTV tv bd`, `ArrayV av`, `0`] >>
+     simp[sub_layout_def]) >>
+  conj_tac
+  >- (Cases_on `bd` >> simp[] >> qexists_tac `av` >>
+      Cases_on `av` >> gvs[value_has_type_def, array_elements_def, array_length_def, Abbr `vs`]) >>
+  rpt strip_tac >> once_rewrite_tac[ADD_COMM] >>
+  irule (cj 1 immutable_iter_element_ready) >> simp[] >>
+  qexistsl_tac [`av`, `Value (ArrayV av)`] >>
+  simp[read_result_def, return_def, Abbr `vs`] >>
+  metis_tac[value_has_type_val_wf]
+QED
+Resume body_for_immutable_array_mem[body]:
+  rpt gen_tac >> strip_tac >>
+  `vs <> []` by (Cases_on `vs` >> fs[]) >>
+  `body_stmts_mem_ok cx body` by fs[body_for_mem_ok_def] >>
+  `body_stmts_safe tops body` by metis_tac[body_stmt_safe_for_body] >>
+  `!target. supported_stmts_expr_exists (expr_abi_decode_target_root target) body ==>
+    occurs_abi_decode_target target tops` by fs[supported_stmt_expr_exists_def] >>
+  `EVERY (stmt_exprs_ok cenv) body` by
+    fs[stmt_exprs_ok_def, supported_stmt_expr_exists_def,
+       stmts_exprs_ok_EVERY, alloc_limits_stmt_def, stmt_valued_return_def] >>
+  `call_evaluation_safe cx (int_calls_stmts body)` by
+    (fs[int_calls_stmt_def] >> metis_tac[call_evaluation_safe_append_right]) >>
+  irule array_body_fragment_callback_mem >> metis_tac[]
+QED
+Resume body_for_immutable_array_mem[scope]:
+  rpt gen_tac >> strip_tac >>
+  `call_evaluation_safe cx (int_calls_stmts body)` by
+    (fs[int_calls_stmt_def] >> metis_tac[call_evaluation_safe_append_right]) >>
+  `expr_sim_inv cenv cx env (ei with gas_obs := gs)` by
+    simp[expr_sim_inv_gas_obs] >>
+  `value_has_type tv (EL k vs)` by simp[] >>
+  `lookup_scopes id (ei with gas_obs := gs).scopes = NONE` by simp[] >>
+  `eval_stmts cx body
+    ((ei with gas_obs := gs) with scopes := (FEMPTY |+ (id,
+      <|assignable := F; type := tv; value := EL k vs; popped := []|>)) ::
+        (ei with gas_obs := gs).scopes) = (r,es2)` by simp[] >>
+  conj_tac >- (drule_all array_body_result_ok >> simp[]) >>
+  drule_all array_body_scope_shape >> strip_tac >>
+  qexistsl_tac [`sc`, `rest`] >> simp[] >> strip_tac >>
+  `expr_sim_inv cenv cx env (es2 with scopes := rest)` by
+    (irule expr_sim_inv_for_pop >> metis_tac[]) >>
+  `lookup_scopes id rest = NONE` by
+    (Cases_on `lookup_scopes id rest` >> simp[] >>
+     gvs[expr_sim_inv_def, env_consistent_def, env_scopes_consistent_def] >>
+     qpat_x_assum `!id entry. lookup_scopes _ _ = _ ==> _` drule >>
+     simp[FLOOKUP_DEF]) >>
+  simp[] >>
+  `env_context_consistent (extend_local env id typ F) cx` by
+    (fs[expr_sim_inv_def, env_consistent_def, env_context_consistent_def,
+        extend_local_def] >> metis_tac[]) >>
+  `FLOOKUP (extend_local env id typ F).bare_globals (cenv.ce_module,name) =
+     SOME (ArrayT typ bd)` by simp[extend_local_def] >>
+  drule_all immutable_array_body_observation >>
+  gvs[vyperBareGlobalNameTheory.lookup_immutable_def, extend_local_def]
+QED
+Finalise body_for_immutable_array_mem
 
 (* ADMITTED (packet A2-mem, memory iterable): a For over an array that is
    neither a name nor a top-level name, nor a place rooted at a storage
