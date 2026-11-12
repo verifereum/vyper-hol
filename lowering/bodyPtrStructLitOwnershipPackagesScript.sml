@@ -71,7 +71,7 @@ QED
 
 Theorem structlit_constructor_package_body:
   !tops tr nk target mut nr rr name args defaults ret body.
-  supported_program tops /\
+  supported_program tops /\ supported_program_deploy tops /\
   SND (SND (SND (classify_functions tops))) =
     SOME (mut,nr,rr,name,args,defaults,ret,body) ==>
   (\(ce,a,p,n,k,t,stmts,r).
@@ -82,5 +82,7 @@ Proof
   rpt gen_tac >> strip_tac >>
   simp[set_constructor_package_target_def, package_constructor_def] >>
   drule structlit_classify_constructor_source >> strip_tac >>
-  drule_all structlit_supported_function_body >> simp[]
+  `~supported_stmts_expr_exists expr_shape_root body` by
+    (irule structlit_supported_function_body >> metis_tac[]) >>
+  simp[]
 QED

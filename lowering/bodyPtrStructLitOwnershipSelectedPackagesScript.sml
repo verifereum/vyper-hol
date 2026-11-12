@@ -62,7 +62,7 @@ QED
 
 Theorem structlit_selected_constructor_package:
   !tops tr nk target mut nr rr name args defaults ret fbody.
-  supported_program tops /\
+  supported_program tops /\ supported_program_deploy tops /\
   SND (SND (SND (classify_functions tops))) =
     SOME (mut,nr,rr,name,args,defaults,ret,fbody) ==>
   (\(ce,a,p,n,k,t,stmts,r).
@@ -86,7 +86,7 @@ QED
 
 Theorem structlit_selected_deploy_packages:
   !tops exts ints fb ctor tr nk target ilen.
-  supported_program tops /\ classify_functions tops = (exts,ints,fb,ctor) ==>
+  supported_program tops /\ supported_program_deploy tops /\ classify_functions tops = (exts,ints,fb,ctor) ==>
   (case ctor of NONE => T
    | SOME cf =>
      (\(ce,args,pay,nr,key,t,stmts,rt).

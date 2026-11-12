@@ -14,11 +14,14 @@ QED
 
 Theorem structlit_supported_function_body:
   !tops vis mut nr rr name args defaults ret body.
-  supported_program tops /\
+  supported_program tops /\ (vis = Deploy ==> supported_program_deploy tops) /\
   MEM (FunctionDecl vis mut nr rr name args defaults ret body) tops ==>
   ~supported_stmts_expr_exists expr_shape_root body
 Proof
-  rpt gen_tac >> strip_tac >> drule_all supported_program_function >>
+  rpt gen_tac >> strip_tac >> Cases_on `vis = Deploy`
+  >- (gvs[] >> drule_all supported_program_deploy_function >>
+      metis_tac[supported_function_body_shape]) >>
+  drule_all supported_program_function >>
   metis_tac[supported_function_body_shape]
 QED
 
@@ -67,7 +70,8 @@ QED
 
 Theorem structlit_classified_function_body:
   !tops exts ints fb ctor mut nr rr name args defaults ret body.
-  supported_program tops /\ classify_functions tops = (exts,ints,fb,ctor) /\
+  supported_program tops /\ supported_program_deploy tops /\
+  classify_functions tops = (exts,ints,fb,ctor) /\
   (MEM (mut,nr,rr,name,args,defaults,ret,body) exts \/
    MEM (mut,nr,rr,name,args,defaults,ret,body) ints \/
    fb = SOME (mut,nr,rr,name,args,defaults,ret,body) \/
