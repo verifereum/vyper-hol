@@ -530,6 +530,14 @@ Proof
  gvs[AllCaseEqs()]
 QED
 
+Theorem gas_variant_deploy_entry_memory[local]:
+  gas_variant vs (deploy_entry_state prog cplan tops es) ==> vs.vs_memory = []
+Proof
+  rewrite_tac[o1PassContractTheory.gas_variant_def] >> strip_tac >>
+  pop_assum (mp_tac o AP_TERM ``venom_state_vs_memory``) >>
+  simp[deploy_entry_state_def, entry_venom_state_def, init_venom_state_def]
+QED
+
 Theorem deploy_ctor_entry_body_resources:
  !policy tops deploy_bc runtime_bc rp unit dout prog cplan am tx es vs
  body cenv nr key ut imm lbl sa sb sj se sp sf func mut nr' body' am_c es0.
@@ -569,9 +577,7 @@ Proof
  drule_all deploy_ctor_entry_registered_map_bounds >>
  disch_then (qspec_then `T` strip_assume_tac) >> fs[] >>
  `deploy_typing_ok tops am tx /\ supported_program tops` by fs[deploy_source_ok_def] >>
- `vs.vs_memory = []` by
-   (fs[o1PassContractTheory.gas_variant_def, deploy_entry_state_def,
-       entry_venom_state_def, init_venom_state_def, venom_state_component_equality]) >>
+ drule gas_variant_deploy_entry_memory >> strip_tac >>
  `!id b sz. local_region cenv es0.scopes actual id b sz ==> imm_len tops <= b` by
    (rpt strip_tac >>
     `local_region ce1 [scope] actual id b sz` by

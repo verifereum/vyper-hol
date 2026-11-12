@@ -11,11 +11,11 @@ Ancestors
   context valueEncodingProofs arithmetic exprSimVVFrame venomMemDefs
   gasOutcome venomInstProofs venomExecSemantics list fragGasMode exprSimMemUnwrap
 
-Theorem memory_value_post_gas_obs[local]:
+Theorem memory_value_post_gas_obs:
   p.ptr_location = LocMemory /\
-  vv_post H ctx func cenv cx e es sa sb s0 ee (Value v) (LocatedValue ty p) t /\
-  stmt_state_rel H ctx func cenv cx (ee with gas_obs := gs) t ==>
-  vv_post H ctx func cenv cx e es sa sb s0 (ee with gas_obs := gs)
+  vv_post ctx func cenv cx e es sa sb s0 ee (Value v) (LocatedValue ty p) t /\
+  stmt_state_rel ctx func cenv cx (ee with gas_obs := gs) t ==>
+  vv_post ctx func cenv cx e es sa sb s0 (ee with gas_obs := gs)
     (Value v) (LocatedValue ty p) t
 Proof
   strip_tac >>
@@ -27,7 +27,7 @@ Proof
   metis_tac[]
 QED
 
-Theorem value_store_bound_gas_obs[local]:
+Theorem value_store_bound_gas_obs:
   vv_store_bound cx ty lt (ee with gas_obs := gs) (Value v) vv t <=>
   vv_store_bound cx ty lt ee (Value v) vv t
 Proof
@@ -69,7 +69,7 @@ Proof
   drule_all compile_builtin_empty_complex_run >> strip_tac >>
   drule_all compile_empty_buffer_mem_path >> strip_tac >>
   drule_all empty_type_default_memory >> strip_tac >>
-  `vv_post H ctx func cenv cx (TypeBuiltin typ Empty typ []) es sa sb s0 es
+  `vv_post ctx func cenv cx (TypeBuiltin typ Empty typ []) es sa sb s0 es
      (Value (default_value tv)) (LocatedValue typ (base_ptr buf)) t` by
     (irule (SRULE [expr_type_def]
       (Q.INST [`e` |-> `TypeBuiltin typ Empty typ []`] (SPEC_ALL buffer_memory_vv_post))) >>
@@ -122,7 +122,7 @@ Proof
   conj_tac >- simp[gas_marked_exec_def, gas_marked_path_def] >>
   simp[expr_type_def, lowered_value_type_def] >>
   conj_tac
-  >- (`stmt_state_rel H ctx func cenv cx (es with gas_obs := []) t` by
+  >- (`stmt_state_rel ctx func cenv cx (es with gas_obs := []) t` by
         (drule msg_gas_state_frame >>
          disch_then (qspecl_then [`t.vs_gas_readings`, `t.vs_inst_idx`, `[]`] mp_tac) >>
          simp[NoAsms]) >>

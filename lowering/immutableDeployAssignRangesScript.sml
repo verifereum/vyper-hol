@@ -5,7 +5,7 @@ Ancestors
   compileEnv loweringStateRelDefs loweringPosts placeStoreStorage exprSimHyps valueTypingMemoryProps
 
 Theorem immutable_assign_source_range:
-  stmt_state_rel H ctx func cenv cx es s /\
+  stmt_state_rel ctx func cenv cx es s /\
   expr_val_at cenv cx sty sa sb es v op s /\
   evaluate_type (get_tenv cx) sty = SOME stv /\ ~is_word_type sty /\
   eval_operand op s = SOME w /\ cenv.ce_is_ctor /\

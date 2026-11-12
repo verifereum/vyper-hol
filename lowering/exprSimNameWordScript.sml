@@ -18,7 +18,7 @@ Theorem compile_name_word_path:
   is_word_type ann /\
   lookup_scopes id es.scopes = SOME entry /\ word_value entry.value /\
   lower_value compile_expr cenv ty (Name ann id) sa = (op,sb) /\
-  fn_has_code sa sb func /\ stmt_state_rel H ctx func cenv cx es s0 /\
+  fn_has_code sa sb func /\ stmt_state_rel ctx func cenv cx es s0 /\
   ~s0.vs_halted /\ s0.vs_current_bb = sa.cs_current_bb /\
   s0.vs_inst_idx = LENGTH sa.cs_current_insts ==>
   ?out. op = Var out /\ emit_op MLOAD [Var p] sa = (Var out,sb) /\
@@ -56,10 +56,9 @@ QED
 
 Theorem name_word_post:
   emit_op MLOAD [Var p] sa = (Var out,sb) /\
-  local_ptrs_reserved cenv sa /\ stmt_state_rel H ctx func cenv cx es s0 /\
-  storage_well_formed_on cx es (FST H) /\
+  local_ptrs_reserved cenv sa /\ stmt_state_rel ctx func cenv cx es s0 /\
   is_word_type ann /\ word_value entry.value ==>
-  expr_post H ctx func cenv cx (Name ann id) es sa sb s0
+  expr_post ctx func cenv cx (Name ann id) es sa sb s0
     (es with gas_obs := []) entry.value (Var out)
     (update_var out (val_to_w256 entry.value)
       (s0 with vs_inst_idx := LENGTH sb.cs_current_insts))
@@ -70,11 +69,7 @@ Proof
         fresh_id_def, fresh_var_def, emit_def] >>
   `not_local_ptr cenv (es with gas_obs := []).scopes out` by
     (gvs[] >> irule local_ptrs_reserved_fresh >> qexists_tac `sa` >> simp[]) >>
-  `storage_well_formed_on cx (es with gas_obs := []) (FST H)` by
-    (`(es with gas_obs := []).accounts = es.accounts /\
-      (es with gas_obs := []).tStorage = es.tStorage` by simp[] >>
-     metis_tac[vyperStorageFootprintTheory.storage_well_formed_on_backends]) >>
-  `stmt_state_rel H ctx func cenv cx (es with gas_obs := [])
+  `stmt_state_rel ctx func cenv cx (es with gas_obs := [])
     (update_var out (val_to_w256 entry.value)
       (s0 with vs_inst_idx := LENGTH sb.cs_current_insts))` by
     (irule stmt_state_rel_update_var >> simp[] >>
@@ -97,33 +92,21 @@ Theorem compile_name_word_sim:
     lookup_scopes id es.scopes = SOME entry /\ word_value entry.value ==>
     expr_sim ctx func cenv cx ty (Name ann id) es
 Proof
-  rpt strip_tac >> irule expr_sim_values_domain >>
-  rpt gen_tac >> strip_tac >>
-  rename1 `valid_horizon cx st0 H0 es.storage_trace` >>
-  `stmt_state_rel H0 ctx func cenv cx es s0` by metis_tac[] >>
+  rpt strip_tac >> irule expr_sim_values >>
+  rpt strip_tac >>
   drule_all compile_name_word_path >> strip_tac >> gvs[] >>
   qexistsl_tac [`[]`, `entry.value`, `es`,
     `update_var out (val_to_w256 entry.value)
       (s0 with vs_inst_idx := LENGTH sb.cs_current_insts)`] >>
-  `gas_marked_exec F (ctx,func) (bind (eval_expr cx (Name ann id)) (read_result cx))
-     (es,s0) [] (INL entry.value) es
-     (OK (update_var out (val_to_w256 entry.value)
-       (s0 with vs_inst_idx := LENGTH sb.cs_current_insts)))` by
-    (simp[gas_marked_exec_def, gas_explicit_def,
-          gas_marked_path_def] >>
-     gen_tac >>
-     qspecl_then [`cx`, `ann`, `id`, `es with gas_obs := tail`, `entry`]
-       mp_tac eval_name_word >> simp[] >>
-     CONV_TAC (DEPTH_CONV ETA_CONV) >> simp[]) >>
-  conj_tac >- first_assum ACCEPT_TAC >>
-  rpt strip_tac >>
-  qpat_x_assum `!H. valid_horizon _ _ H _ ==> stmt_state_rel _ _ _ _ _ _ _ /\ _`
-    (drule_then strip_assume_tac) >>
-  `expr_post H ctx func cenv cx (Name ann id) es sa sb s0
-     (es with gas_obs := []) entry.value (Var out)
-     (update_var out (val_to_w256 entry.value)
-       (s0 with vs_inst_idx := LENGTH sb.cs_current_insts))` by
-    (irule name_word_post >> simp[] >> metis_tac[]) >>
-  simp[gas_value_prefix_def, update_var_def]
+  simp[gas_value_prefix_def] >>
+  conj_tac
+  >- (simp[gas_marked_exec_def, gas_explicit_def,
+           gas_marked_path_def] >>
+      gen_tac >>
+      qspecl_then [`cx`, `ann`, `id`, `es with gas_obs := tail`, `entry`]
+        mp_tac eval_name_word >> simp[] >>
+      CONV_TAC (DEPTH_CONV ETA_CONV) >> simp[]) >>
+  conj_tac >- (irule name_word_post >> simp[] >> metis_tac[]) >>
+  simp[update_var_def]
 QED
 

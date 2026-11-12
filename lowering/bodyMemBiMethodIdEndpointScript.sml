@@ -12,7 +12,7 @@ Ancestors
 Theorem method_id_fixed_hash_mem_ok_any_block:
   compile_keccak256_bytesm src m sa = (op,sb) /\ m <= 32 /\
   eval_operand src s = SOME w /\ fn_has_code sa sb func /\
-  stmt_state_rel H ctx func cenv cx es s ==>
+  stmt_state_rel ctx func cenv cx es s ==>
   run_inst_seq_mem_ok (emitted_insts sa sb) s
 Proof
   strip_tac >>
@@ -62,7 +62,7 @@ Proof
 QED
 
 Theorem method_id_typed_hash_mem_ok_any_block:
-  expr_post H ctx func cenv cx e es sa sm s0 es' v src s /\
+  expr_post ctx func cenv cx e es sa sm s0 es' v src s /\
   expr_type e = BaseT bty /\ is_bytes_or_string_type (expr_type e) /\
   evaluate_type (get_tenv cx) (expr_type e) = SOME (BaseTV bty) /\
   value_has_type (BaseTV bty) v /\
@@ -92,7 +92,7 @@ Proof
 QED
 
 Theorem method_id_runtime_typed_mem_ok_any_block:
-  expr_post H ctx func cenv cx e es sa sm s0 es' v x s /\
+  expr_post ctx func cenv cx e es sa sm s0 es' v x s /\
   expr_type e = BaseT bty /\ is_bytes_or_string_type (expr_type e) /\
   evaluate_type (get_tenv cx) (expr_type e) = SOME (BaseTV bty) /\
   value_has_type (BaseTV bty) v /\
@@ -167,7 +167,7 @@ Proof
 QED
 
 Theorem method_id_runtime_typed_post_run_mem_any_block:
-  expr_post H ctx func cenv cx e es sa sm s0 es' v x s /\
+  expr_post ctx func cenv cx e es sa sm s0 es' v x s /\
   expr_type e = BaseT bty /\ is_bytes_or_string_type (expr_type e) /\
   evaluate_type (get_tenv cx) (expr_type e) = SOME (BaseTV bty) /\
   value_has_type (BaseTV bty) v /\
@@ -183,7 +183,7 @@ Theorem method_id_runtime_typed_post_run_mem_any_block:
     builtin_result cx es'.accounts
       (BaseT (BytesT (if fixed then Fixed 4 else Dynamic 4)))
       MethodId [expr_type e] [v] = INL r /\
-    vv_post H ctx func cenv cx
+    vv_post ctx func cenv cx
       (Builtin (BaseT (BytesT (if fixed then Fixed 4 else Dynamic 4))) MethodId [e])
       es sa sb s0 es' (Value r)
       (if fixed then StackValue (BaseT (BytesT (Fixed 4))) op else

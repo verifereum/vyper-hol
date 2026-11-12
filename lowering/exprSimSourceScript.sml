@@ -53,6 +53,34 @@ QED
 
 
 
+Theorem expr_body_pre_storage_preserved:
+  !cenv cx env e es res es'.
+    expr_body_pre cenv cx env e es /\ eval_expr cx e es = (res, es') ==>
+    contract_storage_well_formed cx es' /\ oracle_storage_ok cx es'
+Proof
+  rpt gen_tac >> strip_tac >> conj_tac
+  >- (Cases_on `int_calls_expr e = []`
+      >- (irule eval_expr_oracle_preserves_contract_storage_well_formed >>
+          gvs[expr_body_pre_def, expr_sim_inv_def,
+              runtime_storage_consistent_def, runtime_consistent_def] >>
+          metis_tac[]) >>
+      `?tops. supported_program tops /\ get_module_code cx NONE = SOME tops`
+        by (Cases_on `int_calls_expr e` >> gvs[expr_body_pre_def] >>
+            metis_tac[]) >>
+      `EVERY (\c. FST c = NONE /\
+                  IS_SOME (supported_function_decl tops c Internal))
+         (int_calls_expr e)` by
+        (gvs[expr_body_pre_def, listTheory.EVERY_MEM] >>
+         rpt strip_tac >> res_tac >> gvs[]) >>
+      irule eval_expr_body_oracle_storage >>
+      gvs[expr_body_pre_def, expr_sim_inv_def, listTheory.EVERY_CONJ,
+          runtime_storage_consistent_def, runtime_consistent_def] >>
+      metis_tac[]) >>
+  irule oracle_storage_ok_suffix >> qexists_tac `es` >>
+  gvs[expr_body_pre_def, expr_sim_inv_def] >>
+  drule_then irule (cj 5 eval_outcome_suffix_mutual)
+QED
+
 (* The outcomes stay SOME: evaluation only drops some from the front. *)
 Theorem eval_expr_outcomes_some:
   !cx e es res es'.
@@ -272,6 +300,7 @@ Theorem expr_body_pre_eval_result:
          eval_result_typed (env,cx,es') tv (Type (expr_type e))
 Proof
   rpt gen_tac >> strip_tac >>
+  drule_all expr_body_pre_storage_preserved >> strip_tac >>
   `IS_SOME es'.outcomes` by
     (irule eval_expr_outcomes_some >>
      gvs[expr_body_pre_def, expr_sim_inv_def] >> metis_tac[]) >>
@@ -351,7 +380,8 @@ Theorem eval_expr_calls_no_halt:
   eval_expr cx e st <> (INR HaltException, st')
 Proof
   strip_tac >> irule (cj 1 eval_no_halt) >> fs[expr_has_evm_run_def] >>
-  Cases_on `int_calls_expr e` >> fs[] >> fs[EVERY_MEM]
+  Cases_on `int_calls_expr e` >> fs[] >> fs[EVERY_MEM] >>
+  metis_tac[optionTheory.SOME_11]
 QED
 
 Theorem expr_body_pre_res_ok:

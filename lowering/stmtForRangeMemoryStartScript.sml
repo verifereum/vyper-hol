@@ -11,14 +11,14 @@ Theorem for_range_alloca_start_mem:
     lookup_block s0.vs_current_bb func.fn_blocks =
       SOME <|bb_label := lbl; bb_instructions := pre ++ [aa; mk_inst j JMP [Label entry_lbl] []]|> /\
     s0.vs_inst_idx = LENGTH pre /\ ~s0.vs_halted /\
-    stmt_state_rel H ctx func cenv cx es s0 /\ local_ptrs_reserved cenv sa /\
+    stmt_state_rel ctx func cenv cx es s0 /\ local_ptrs_reserved cenv sa /\
     return_buf_frame d cenv sa s0 /\ ret_pc_ok cenv sa s0 /\
     alloca_history func s0 /\ MEM aa (fn_insts func) /\ fn_inst_ids_distinct func /\
     not_local_ptr cenv es.scopes p /\
     (!x. not_fresh_at sa x ==> x <> p) ==>
     ?ee w. gas_path_mem ctx func s0 0 (OK ee) /\
       ee.vs_current_bb = entry_lbl /\ ee.vs_inst_idx = 0 /\ ~ee.vs_halted /\
-      stmt_state_rel H ctx func cenv cx es ee /\
+      stmt_state_rel ctx func cenv cx es ee /\
       lookup_var p ee = SOME w /\ FLOOKUP ee.vs_allocas aid = SOME (w2n w,sz) /\
       return_buf_frame d cenv sa ee /\ ret_pc_ok cenv sa ee /\
       alloca_history func ee /\ s0.vs_alloca_next <= ee.vs_alloca_next /\
@@ -32,7 +32,7 @@ Proof
      >- simp[exec_alloca_def, mk_inst_def] >>
      rename1 `FLOOKUP s0.vs_allocas aa.inst_id = SOME ent` >>
      PairCases_on `ent` >> simp[exec_alloca_def, mk_inst_def]) >>
-  `stmt_state_rel H ctx func cenv cx es s1 /\
+  `stmt_state_rel ctx func cenv cx es s1 /\
    ?w. lookup_var p s1 = SOME w /\
        FLOOKUP s1.vs_allocas aid = SOME (w2n w,sz)` by
     (drule stmt_state_rel_exec_alloca >>
@@ -107,7 +107,7 @@ Theorem for_range_lit_start_mem:
         [mk_inst i1 ASSIGN [Lit a] [cv]; mk_inst i2 ADD [Lit a; Lit (b-a)] [ev];
          mk_inst i3 JMP [Label cond_lbl] []]|> /\
     s0.vs_inst_idx = LENGTH pre /\ ~s0.vs_halted /\
-    stmt_state_rel H ctx func cenv cx es s0 /\ local_ptrs_reserved cenv sa /\
+    stmt_state_rel ctx func cenv cx es s0 /\ local_ptrs_reserved cenv sa /\
     return_buf_frame d cenv sa s0 /\ ret_pc_ok cenv sa s0 /\
     alloca_history func s0 /\ MEM aa (fn_insts func) /\ fn_inst_ids_distinct func /\
     ALL_DISTINCT [p;cv;ev] /\
@@ -116,7 +116,7 @@ Theorem for_range_lit_start_mem:
     (!x. not_fresh_at sa x ==> x <> p /\ x <> cv /\ x <> ev) ==>
     ?cc w. gas_path_mem ctx func s0 0 (OK cc) /\
       cc.vs_current_bb = cond_lbl /\ cc.vs_inst_idx = 0 /\ ~cc.vs_halted /\
-      stmt_state_rel H ctx func cenv cx es cc /\
+      stmt_state_rel ctx func cenv cx es cc /\
       lookup_var cv cc = SOME a /\ lookup_var ev cc = SOME b /\
       lookup_var p cc = SOME w /\ FLOOKUP cc.vs_allocas aid = SOME (w2n w,sz) /\
       return_buf_frame d cenv sa cc /\ ret_pc_ok cenv sa cc /\
@@ -127,7 +127,7 @@ Proof
   rpt gen_tac >> strip_tac >>
   `?ee w. gas_path_mem ctx func s0 0 (OK ee) /\
       ee.vs_current_bb = entry_lbl /\ ee.vs_inst_idx = 0 /\ ~ee.vs_halted /\
-      stmt_state_rel H ctx func cenv cx es ee /\
+      stmt_state_rel ctx func cenv cx es ee /\
       lookup_var p ee = SOME w /\ FLOOKUP ee.vs_allocas aid = SOME (w2n w,sz) /\
       return_buf_frame d cenv sa ee /\ ret_pc_ok cenv sa ee /\
       alloca_history func ee /\ s0.vs_alloca_next <= ee.vs_alloca_next /\
@@ -145,7 +145,7 @@ Proof
   qabbrev_tac `cc = jump_to cond_lbl (update_var ev b (update_var cv a ee))` >>
   `gas_path_mem ctx func s0 0 (OK cc)` by
     (drule_all gas_path_mem_then >> simp[Abbr `cc`]) >>
-  `stmt_state_rel H ctx func cenv cx es cc` by
+  `stmt_state_rel ctx func cenv cx es cc` by
     (simp[Abbr `cc`, stmt_state_rel_jump_to] >>
      irule stmt_state_rel_update_var >> simp[] >>
      irule stmt_state_rel_update_var >> simp[]) >>

@@ -10,8 +10,8 @@ Theorem nocopy_ifexp_post_annotated:
   expr_body_pre ce cx env e es /\
   (do r <- eval_expr cx e; read_result cx r od) es = (INL v,ee) /\
   (is_word_type (expr_type e) \/ same_memory_layout ce (lowered_value_type ce e) (expr_type e)) /\
-  expr_post H ctx func ce cx e es origin sb s0 ee v op q ==>
-  expr_post H ctx func ce cx (IfExp (expr_type e) c a b) es origin sb s0 ee v op q
+  expr_post ctx func ce cx e es origin sb s0 ee v op q ==>
+  expr_post ctx func ce cx (IfExp (expr_type e) c a b) es origin sb s0 ee v op q
 Proof
   rpt gen_tac >> disch_then (map_every assume_tac o CONJUNCTS) >>
   Cases_on `post_value_type ce e = expr_type e`
@@ -31,7 +31,7 @@ Proof
      goal_assum (drule_at Any) >> fs[expr_body_pre_def] >> metis_tac[]) >>
   `arg_type_fits (lowered_value_type ce (Call ann (IntCall fid) args drv)) ann` by
     gvs[type_widens_to_def] >>
-  qpat_assum `expr_post H _ _ _ _ _ _ _ _ _ _ _ _ _`
+  qpat_assum `expr_post _ _ _ _ _ _ _ _ _ _ _ _ _`
     (strip_assume_tac o PURE_REWRITE_RULE[expr_post_def]) >>
   gvs[expr_type_def] >>
   `expr_val_rel cx ann v op q` by
@@ -89,8 +89,8 @@ Theorem compile_nocopy_ifexp_post_frag:
   origin.cs_next_var <= sa.cs_next_var /\ origin.cs_next_id <= sa.cs_next_id /\
   MAP FDOM es.scopes = MAP FDOM ee.scopes ==>
   frag_exec ctx sa sb
-    (\s. vv_post H ctx func ce cx e es origin sa s0 ee tvv vv s)
-    (\q. expr_post H ctx func ce cx (IfExp (expr_type e) c a b)
+    (\s. vv_post ctx func ce cx e es origin sa s0 ee tvv vv s)
+    (\q. expr_post ctx func ce cx (IfExp (expr_type e) c a b)
       es origin sb s0 ee v op q) R
 Proof
   rpt gen_tac >> disch_then (map_every assume_tac o CONJUNCTS) >>

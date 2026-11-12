@@ -94,27 +94,20 @@ QED
 Theorem calldata_target_prefix:
   lower_value compile_expr cenv ty (Builtin (BaseT (UintT 256)) CalldataLen []) sa = (op,sb) /\
   fn_has_code sa sb func /\ local_ptrs_reserved cenv sa /\
-  (!H. valid_horizon cx st0 H es.storage_trace ==>
-    stmt_state_rel H ctx func cenv cx es s0 /\
-    storage_well_formed_on cx es (FST H)) /\
-  (?H. valid_horizon cx st0 H es.storage_trace) /\ ~s0.vs_halted /\
+  stmt_state_rel ctx func cenv cx es s0 /\ ~s0.vs_halted /\
   s0.vs_current_bb = sa.cs_current_bb /\
   s0.vs_inst_idx = LENGTH sa.cs_current_insts ==>
   ?t. gas_path ctx func s0 0 (OK t) /\
-      (!H. valid_horizon cx st0 H es.storage_trace ==>
-        expr_post H ctx func cenv cx (Builtin (BaseT (UintT 256)) CalldataLen [])
+      expr_post ctx func cenv cx (Builtin (BaseT (UintT 256)) CalldataLen [])
         es sa sb s0 (es with gas_obs := [])
-        (IntV &LENGTH cx.txn.calldata) op t) /\
+        (IntV &LENGTH cx.txn.calldata) op t /\
       t.vs_current_bb = sb.cs_current_bb /\
       t.vs_inst_idx = LENGTH sb.cs_current_insts
 Proof
-  strip_tac >>
-  rename1 `valid_horizon cx st0 H0 es.storage_trace` >>
-  `stmt_state_rel H0 ctx func cenv cx es s0` by metis_tac[] >> gvs[lower_value_calldata_len] >>
+  strip_tac >> gvs[lower_value_calldata_len] >>
   `!out. step_inst_base (mk_inst sa.cs_next_id CALLDATASIZE [] [out]) s0 =
      OK (update_var out (val_to_w256 (IntV &LENGTH cx.txn.calldata)) s0)` by
-    (qpat_x_assum `!H. valid_horizon _ _ H _ ==> _` (drule_then strip_assume_tac) >>
-     simp[step_inst_base_opcode_eqs, exec_read0_def, mk_inst_def] >>
+    (simp[step_inst_base_opcode_eqs, exec_read0_def, mk_inst_def] >>
      fs[stmt_state_rel_def, state_rel_def, call_ctx_rel_def,
         val_to_w256_def, integer_wordTheory.i2w_def]) >>
   qabbrev_tac `out = STRING #"%" (toString sa.cs_next_var)` >>
@@ -124,24 +117,6 @@ Proof
   >- (`CALLDATASIZE <> GAS /\ CALLDATASIZE <> INVOKE /\
        ~is_terminator CALLDATASIZE` by simp[is_terminator_def] >>
       drule_all emit_op_zero_path >> simp[Abbr `out`]) >>
-  `!H. valid_horizon cx st0 H es.storage_trace ==>
-     expr_post H ctx func cenv cx (Builtin (BaseT (UintT 256)) CalldataLen [])
-        es sa sb s0 (es with gas_obs := [])
-        (IntV &LENGTH cx.txn.calldata) op
-          (update_var out (val_to_w256 (IntV &LENGTH cx.txn.calldata)) s0
-                          with vs_inst_idx := SUC s0.vs_inst_idx) /\
-     (update_var out (val_to_w256 (IntV &LENGTH cx.txn.calldata)) s0
-                with vs_inst_idx := SUC s0.vs_inst_idx).vs_current_bb = sb.cs_current_bb /\
-     (update_var out (val_to_w256 (IntV &LENGTH cx.txn.calldata)) s0
-                with vs_inst_idx := SUC s0.vs_inst_idx).vs_inst_idx = LENGTH sb.cs_current_insts` suffices_by
-    (strip_tac >> metis_tac[]) >>
-  rpt strip_tac >>
-  qpat_x_assum `!H. valid_horizon _ _ H _ ==> stmt_state_rel _ _ _ _ _ _ _ /\ _`
-    (drule_then strip_assume_tac) >>
-  `storage_well_formed_on cx (es with gas_obs := []) (FST H)` by
-    (`(es with gas_obs := []).accounts = es.accounts /\
-      (es with gas_obs := []).tStorage = es.tStorage` by simp[] >>
-     metis_tac[vyperStorageFootprintTheory.storage_well_formed_on_backends]) >>
   drule emitted_insts_emit_op >> strip_tac >>
   `sb.cs_current_bb = sa.cs_current_bb` by
     gvs[emit_op_def, comp_bind_def, fresh_var_def, fresh_id_def,
@@ -152,7 +127,7 @@ Proof
   `not_local_ptr cenv es.scopes out` by
     (simp[Abbr `out`] >> irule local_ptrs_reserved_fresh >>
      metis_tac[arithmeticTheory.LESS_EQ_REFL]) >>
-  `stmt_state_rel H ctx func cenv cx es
+  `stmt_state_rel ctx func cenv cx es
       (update_var out (val_to_w256 (IntV &LENGTH cx.txn.calldata)) s0)` by
     (irule stmt_state_rel_update_var >> simp[]) >>
   drule msg_gas_state_frame >>
@@ -185,18 +160,16 @@ Proof
   `args = [] /\ ann = BaseT (UintT 256)` by
     gvs[expr_sim_pre_def, well_typed_expr_def, well_typed_builtin_app_def] >>
   gvs[] >>
-  irule expr_sim_values_domain >> rpt gen_tac >> strip_tac >>
+  irule expr_sim_values >> rpt strip_tac >>
   `?t. gas_path ctx func s0 0 (OK t) /\
-       (!H. valid_horizon cx st0 H es.storage_trace ==>
-         expr_post H ctx func cenv cx (Builtin (BaseT (UintT 256)) CalldataLen [])
+       expr_post ctx func cenv cx (Builtin (BaseT (UintT 256)) CalldataLen [])
          es sa sb s0 (es with gas_obs := [])
-         (IntV &LENGTH cx.txn.calldata) op t) /\
+         (IntV &LENGTH cx.txn.calldata) op t /\
        t.vs_current_bb = sb.cs_current_bb /\
        t.vs_inst_idx = LENGTH sb.cs_current_insts` by
     metis_tac[calldata_target_prefix] >>
   qexistsl_tac [`[]`, `IntV &LENGTH cx.txn.calldata`, `es`, `t`] >>
   simp[gas_value_prefix_def, gas_marked_exec_def, gas_marked_path_def,
-       calldata_source_all_tails, GSYM ETA_THM] >>
-  rpt strip_tac >> metis_tac[]
+       calldata_source_all_tails, GSYM ETA_THM]
 QED
 

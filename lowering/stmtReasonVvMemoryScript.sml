@@ -36,7 +36,7 @@ QED
 (* A source state's read of a reason's value succeeds, whatever form the
    lowering left it in. *)
 Theorem vv_post_read_ok:
-  vv_post H ctx func cenv cx e es sa sb s0 ee tv vv s ==>
+  vv_post ctx func cenv cx e es sa sb s0 ee tv vv s ==>
   ?v. read_result cx tv ee = (INL v, ee)
 Proof
   Cases_on `vv` >> simp[vv_post_def, vv_holds_def] >> strip_tac
@@ -219,7 +219,7 @@ Theorem raise_reason_vv_outcome:
          (type_memory_bytes cenv (expr_type se)) sm = ((), sb) /\
        fn_has_code sm sb func /\ fn_inst_ids_distinct func /\
        local_ptrs_reserved cenv sa /\
-       vv_post H ctx func cenv cx se es sa sm s0 ee tv vv t /\
+       vv_post ctx func cenv cx se es sa sm s0 ee tv vv t /\
        vv_store_bound cx (expr_type se) (lowered_value_type cenv se) ee tv vv t /\
        read_result cx tv ee = (INL (StringV str), ee) /\
        ~t.vs_halted /\ t.vs_current_bb = sm.cs_current_bb /\
@@ -232,7 +232,7 @@ Theorem raise_reason_vv_outcome:
     fn_has_code sa sb func /\ fn_inst_ids_distinct func /\
     local_ptrs_reserved cenv sa /\
     gas_admissible (eval_stmt cx (Raise (RaiseReason se))) (stmt_res_ok lctx) es /\
-    stmt_state_rel H ctx func cenv cx es s /\ alloca_history func s /\
+    stmt_state_rel ctx func cenv cx es s /\ alloca_history func s /\
     ~s.vs_halted /\ s.vs_current_bb = sa.cs_current_bb /\
     s.vs_inst_idx = LENGTH sa.cs_current_insts ==>
     gas_outcome T (cx_tops cx) (ctx,func) (eval_stmt cx (Raise (RaiseReason se)))
@@ -313,7 +313,7 @@ Theorem compile_raise_reason_vv_frag_mem:
          (type_memory_bytes cenv (expr_type se)) sm = ((), sb) /\
        fn_has_code sm sb func /\ fn_inst_ids_distinct func /\
        local_ptrs_reserved cenv sa /\
-       vv_post H ctx func cenv cx se es sa sm s0 ee tv vv t /\
+       vv_post ctx func cenv cx se es sa sm s0 ee tv vv t /\
        vv_store_bound cx (expr_type se) (lowered_value_type cenv se) ee tv vv t /\
        read_result cx tv ee = (INL (StringV str), ee) /\
        ~t.vs_halted /\ t.vs_current_bb = sm.cs_current_bb /\
@@ -474,7 +474,7 @@ Theorem compile_assert_reason_vv_frag_mem:
          (type_memory_bytes cenv (expr_type se)) sm = ((), sb) /\
        fn_has_code sm sb func /\ fn_inst_ids_distinct func /\
        local_ptrs_reserved cenv sa /\
-       vv_post H ctx func cenv cx se es sa sm s0 ee tv vv t /\
+       vv_post ctx func cenv cx se es sa sm s0 ee tv vv t /\
        vv_store_bound cx (expr_type se) (lowered_value_type cenv se) ee tv vv t /\
        read_result cx tv ee = (INL (StringV str), ee) /\
        ~t.vs_halted /\ t.vs_current_bb = sm.cs_current_bb /\
@@ -577,9 +577,9 @@ Resume compile_assert_reason_vv_frag_mem[false]:
   `gas_admissible (eval_stmt cx (Raise (RaiseReason se))) (stmt_res_ok lctx)
      (mid with gas_obs := [])` by
     (irule assert_reason_raise_admissible >> metis_tac[]) >>
-  `stmt_state_rel H ctx func cenv cx (mid with gas_obs := [])
+  `stmt_state_rel ctx func cenv cx (mid with gas_obs := [])
      (jump_to s5.cs_current_bb t)` by
-    (qpat_assum `expr_post _ _ _ _ _ _ _ _ _ _ _ _ _ _`
+    (qpat_assum `expr_post _ _ _ _ _ _ _ _ _ _ _ _ _`
        (strip_assume_tac o REWRITE_RULE [expr_post_def]) >>
      rewrite_tac[stmt_state_rel_jump_to] >> metis_tac[]) >>
   `alloca_history func (jump_to s5.cs_current_bb t)` by

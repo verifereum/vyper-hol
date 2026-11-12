@@ -18,9 +18,8 @@ QED
 
 Theorem msg_gas_post_frame:
   compile_env_var MsgGas sa = (Var out,sb) /\
-  local_ptrs_reserved cenv sa /\ stmt_state_rel H ctx func cenv cx es s0 /\
-  storage_well_formed_on cx es (FST H) ==>
-  expr_post H ctx func cenv cx (Builtin (env_item_type MsgGas) (Env MsgGas) [])
+  local_ptrs_reserved cenv sa /\ stmt_state_rel ctx func cenv cx es s0 ==>
+  expr_post ctx func cenv cx (Builtin (env_item_type MsgGas) (Env MsgGas) [])
     es sa sb s0 (es with gas_obs := []) (IntV (&w2n w)) (Var out)
     (update_var out w (s0 with <|vs_gas_readings := DROP 1 s0.vs_gas_readings;
                                vs_inst_idx := LENGTH sb.cs_current_insts|>))
@@ -32,17 +31,13 @@ Proof
         emit_def] >>
   `not_local_ptr cenv (es with gas_obs := []).scopes out` by
     (gvs[] >> irule local_ptrs_reserved_fresh >> qexists_tac `sa` >> simp[]) >>
-  `stmt_state_rel H ctx func cenv cx (es with gas_obs := [])
+  `stmt_state_rel ctx func cenv cx (es with gas_obs := [])
     (update_var out w (s0 with <|vs_gas_readings := DROP 1 s0.vs_gas_readings;
                                vs_inst_idx := LENGTH sb.cs_current_insts|>))` by
     (irule stmt_state_rel_update_var >> simp[] >>
      drule msg_gas_state_frame >>
      disch_then (qspecl_then [`DROP 1 s0.vs_gas_readings`,
                             `LENGTH sb.cs_current_insts`, `[]`] mp_tac) >> simp[]) >>
-  `storage_well_formed_on cx (es with gas_obs := []) (FST H)` by
-    (fs[vyperStorageFootprintTheory.storage_well_formed_on_def] >>
-     rpt strip_tac >> res_tac >>
-     Cases_on `b` >> fs[vyperStorageBackendTheory.get_storage_def]) >>
   simp[expr_post_def, expr_val_rel_def, expr_val_at_def,
        vyperASTTheory.expr_type_def, vyperTypeSystemTheory.env_item_type_def,
        is_word_type_def, eval_operand_def, update_var_def, lookup_var_def,
@@ -56,25 +51,22 @@ Proof
 QED
 
 Theorem compile_msg_gas_post:
-  !st0 ctx func cenv cx env ty ann args es sa sb op s0.
+  !ctx func cenv cx env ty ann args es sa sb op s0.
     expr_sim_pre cenv cx env (Builtin ann (Env MsgGas) args) es /\
     lower_value compile_expr cenv ty (Builtin ann (Env MsgGas) args) sa =
       (op, sb) /\
     fn_has_code sa sb func /\ fn_inst_ids_distinct func /\
     local_ptrs_reserved cenv sa /\
-    (!H. valid_horizon cx st0 H es.storage_trace ==>
-       stmt_state_rel H ctx func cenv cx es s0 /\
-       storage_well_formed_on cx es (FST H)) /\ ~s0.vs_halted /\
+    stmt_state_rel ctx func cenv cx es s0 /\ ~s0.vs_halted /\
     s0.vs_current_bb = sa.cs_current_bb /\
     s0.vs_inst_idx = LENGTH sa.cs_current_insts ==>
     gas_summary_at T (ctx, func) [T]
       (bind (eval_expr cx (Builtin ann (Env MsgGas) args)) (read_result cx))
       (es, s0)
       (\res ee t.
-         (!H. valid_horizon cx st0 H ee.storage_trace ==>
-           ?v. res = INL v /\
-               expr_post H ctx func cenv cx (Builtin ann (Env MsgGas) args)
-                 es sa sb s0 ee v op t) /\
+         (?v. res = INL v /\
+              expr_post ctx func cenv cx (Builtin ann (Env MsgGas) args)
+                es sa sb s0 ee v op t) /\
          t.vs_current_bb = sb.cs_current_bb /\
          t.vs_inst_idx = LENGTH sb.cs_current_insts)
       (\res ee r. F)
@@ -83,6 +75,11 @@ Proof
   drule lower_value_env >> strip_tac >>
   drule_all compile_msg_gas_mem_path >>
   disch_then (qspec_then `ctx` strip_assume_tac) >>
+  `expr_post ctx func cenv cx (Builtin (env_item_type MsgGas) (Env MsgGas) [])
+    es sa sb s0 (es with gas_obs := []) (IntV (&w2n w)) (Var out)
+    (update_var out w (s0 with <|vs_gas_readings := DROP 1 s0.vs_gas_readings;
+                               vs_inst_idx := LENGTH sb.cs_current_insts|>))` by
+    (irule msg_gas_post_frame >> simp[]) >>
   `gas_explicit [T] s0.vs_gas_readings = [w]`
     by simp[gas_explicit_def] >>
   rewrite_tac[gas_summary_at_def, gas_marked_exec_def,
@@ -91,9 +88,7 @@ Proof
     `OK (update_var out w
       (s0 with <|vs_gas_readings := DROP 1 s0.vs_gas_readings;
                  vs_inst_idx := LENGTH sb.cs_current_insts|>))`] >>
-  fs[msg_gas_source, update_var_def] >> rpt strip_tac >>
-  irule (SIMP_RULE (srw_ss()) [update_var_def] msg_gas_post_frame) >>
-  simp[] >> metis_tac[]
+  simp[msg_gas_source] >> gvs[update_var_def]
 QED
 
 Theorem compile_msg_gas_sim:
@@ -101,8 +96,12 @@ Theorem compile_msg_gas_sim:
 Proof
   rw[expr_sim_ok_def, expr_sim_def] >>
   drule_all compile_msg_gas_post >> strip_tac >>
-  PURE_REWRITE_TAC[gas_outcome_def] >> qexists_tac `[T]` >> disj2_tac >> disj1_tac >>
-  irule gas_summary_at_from_mem >>
-  fs[gas_summary_at_def] >> metis_tac[]
+  PURE_REWRITE_TAC[gas_outcome_def] >> qexists_tac `[T]` >> disj1_tac >>
+  fs[gas_summary_at_def, gas_marked_exec_def,
+     fragGasModeTheory.gas_marked_path_def] >>
+  rename1 `expr_post ctx func cenv cx _ es sa sb s0
+             (ee with gas_obs := []) v op t` >>
+  qexistsl_tac [`INL v`, `ee`, `OK t`] >> simp[] >>
+  metis_tac[fragGasPathMemTheory.gas_path_mem_exec]
 QED
 

@@ -12,7 +12,7 @@ Libs
   monadsyntax
 
 Theorem extract32_source_post_view:
-  expr_post H ctx func cenv cx src es sa sm s0 es' (BytesV bs) op s /\
+  expr_post ctx func cenv cx src es sa sm s0 es' (BytesV bs) op s /\
   expr_type src = BaseT (BytesT (Dynamic m)) /\
   evaluate_type (get_tenv cx) (expr_type src) = SOME (BaseTV (BytesT (Dynamic m))) ==>
   ?p. eval_operand op s = SOME (n2w p) /\
@@ -34,7 +34,7 @@ Proof
 QED
 
 Theorem extract32_post_operand_kept:
-  expr_post H ctx func cenv cx e es sm sb s es' v op s' /\
+  expr_post ctx func cenv cx e es sm sb s es' v op s' /\
   (!z. x = Var z ==> not_fresh_at sm z) /\ (!l. x <> Label l) ==>
   !w. eval_operand x s = SOME w ==> eval_operand x s' = SOME w
 Proof
@@ -44,19 +44,19 @@ Proof
 QED
 
 Theorem extract32_posts_to_vv_post_frame:
-  expr_post H ctx func cenv cx src es sa sm s0 es1 (BytesV bs) src_op s1 /\
-  expr_post H ctx func cenv cx off es1 sm st3 s1 es2 (IntV i) off_op s2 /\
-  stmt_state_rel H ctx func cenv cx es s0 /\
+  expr_post ctx func cenv cx src es sa sm s0 es1 (BytesV bs) src_op s1 /\
+  expr_post ctx func cenv cx off es1 sm st3 s1 es2 (IntV i) off_op s2 /\
+  stmt_state_rel ctx func cenv cx es s0 /\
   local_ptrs_reserved cenv sa /\ local_ptrs_reserved cenv st3 /\
   MAP FDOM es.scopes = MAP FDOM es1.scopes /\
   sa.cs_next_var <= sm.cs_next_var /\ sm.cs_next_var <= st3.cs_next_var /\
   sa.cs_next_id <= sm.cs_next_id /\
-  stmt_state_rel H ctx func cenv cx es2 u /\
+  stmt_state_rel ctx func cenv cx es2 u /\
   u.vs_memory = s2.vs_memory /\ u.vs_allocas = s2.vs_allocas /\
   (!x w. not_fresh_at st3 x /\ lookup_var x s2 = SOME w ==> lookup_var x u = SOME w) /\
   is_word_type ann /\ evaluate_type (get_tenv cx) ann = SOME tv /\
   eval_operand op u = SOME (typed_val_to_w256 tv v) ==>
-  vv_post H ctx func cenv cx (TypeBuiltin ann Extract32 target [src;off])
+  vv_post ctx func cenv cx (TypeBuiltin ann Extract32 target [src;off])
     es sa final s0 es2 (Value v) (StackValue ty op) u
 Proof
   strip_tac >>
@@ -79,14 +79,14 @@ Proof
 QED
 
 Theorem extract32_prepare_post:
-  expr_post H ctx func cenv cx src es sa sm s0 es' (BytesV bs) op s /\
+  expr_post ctx func cenv cx src es sa sm s0 es' (BytesV bs) op s /\
   expr_type src = BaseT (BytesT (Dynamic m)) /\
   evaluate_type (get_tenv cx) (expr_type src) = SOME (BaseTV (BytesT (Dynamic m))) /\
   compile_bytestring_src op sm = ((len,dp),sb) /\
   fresh_vars_wrt sm s /\ local_ptrs_reserved cenv sm /\
   sa.cs_next_var <= sm.cs_next_var ==>
   ?u p. run_inst_seq (emitted_insts sm sb) s = OK u /\
-    expr_post H ctx func cenv cx src es sa sb s0 es' (BytesV bs) op u /\
+    expr_post ctx func cenv cx src es sa sb s0 es' (BytesV bs) op u /\
     eval_operand op u = SOME (n2w p) /\
     eval_operand len u = SOME (n2w (LENGTH bs)) /\
     eval_operand dp u = SOME (n2w (p+32)) /\
@@ -102,7 +102,7 @@ Proof
   `u.vs_memory = s.vs_memory /\ u.vs_allocas = s.vs_allocas` by
     (qpat_x_assum `_ with vs_vars := _ = _`
       (mp_tac o Q.AP_TERM `\z. (z.vs_memory,z.vs_allocas)`) >> simp[]) >>
-  `stmt_state_rel H ctx func cenv cx es' u` by
+  `stmt_state_rel ctx func cenv cx es' u` by
     (irule hash_readonly_state_rel >> qexistsl [`s`,`sm`] >>
      gvs[expr_post_def]) >>
   `!n b sz. local_region cenv es'.scopes u n b sz <=>
@@ -139,10 +139,10 @@ QED
 
 Theorem extract32_offset_post_view:
   expr_sim_inv cenv cx env es1 /\
-  expr_post H ctx func cenv cx src es sa sm s0 es1 (BytesV bs) src_op s1 /\
+  expr_post ctx func cenv cx src es sa sm s0 es1 (BytesV bs) src_op s1 /\
   expr_type src = BaseT (BytesT (Dynamic m)) /\
   evaluate_type (get_tenv cx) (expr_type src) = SOME (BaseTV (BytesT (Dynamic m))) /\
-  expr_post H ctx func cenv cx off es1 sm sb s1 es2 (IntV i) off_op s2 /\
+  expr_post ctx func cenv cx off es1 sm sb s1 es2 (IntV i) off_op s2 /\
   (!z. src_op = Var z ==> not_fresh_at sm z) /\
   (!z. len = Var z ==> not_fresh_at sm z) /\
   (!z. dp = Var z ==> not_fresh_at sm z) /\
@@ -305,9 +305,9 @@ Theorem extract32_compiled_offset_post_view:
   emit_op ADD [src_op; Lit 32w] sy = (dp,sm) /\
   expr_body_pre cenv cx env off es1 /\
   (do r <- eval_expr cx off; read_result cx r od) es1 = (INL (IntV i),es2) /\
-  expr_post H ctx func cenv cx src es sa sm s0 es1 (BytesV bs) src_op s1 /\
+  expr_post ctx func cenv cx src es sa sm s0 es1 (BytesV bs) src_op s1 /\
   expr_type src = BaseT (BytesT (Dynamic m)) /\
-  expr_post H ctx func cenv cx off es1 sm sb s1 es2 (IntV i) off_op s2 /\
+  expr_post ctx func cenv cx off es1 sm sb s1 es2 (IntV i) off_op s2 /\
   eval_operand src_op s1 = SOME (n2w p) /\
   eval_operand len s1 = SOME (n2w (LENGTH bs)) /\
   eval_operand dp s1 = SOME (n2w (p+32)) /\
@@ -343,15 +343,15 @@ Proof
 QED
 
 Theorem extract32_expr_post_start_gas_obs:
-  expr_post H ctx func cenv cx e (es with gas_obs := gs) sa sb s0 ee v op s =
-  expr_post H ctx func cenv cx e es sa sb s0 ee v op s
+  expr_post ctx func cenv cx e (es with gas_obs := gs) sa sb s0 ee v op s =
+  expr_post ctx func cenv cx e es sa sb s0 ee v op s
 Proof
   simp[expr_post_def, locals_kept_def, popped_kept_def]
 QED
 
 Theorem extract32_expr_post_end_gas_obs:
-  expr_post H ctx func cenv cx e es sa sb s0 (ee with gas_obs := gs) v op s =
-  expr_post H ctx func cenv cx e es sa sb s0 ee v op s
+  expr_post ctx func cenv cx e es sa sb s0 (ee with gas_obs := gs) v op s =
+  expr_post ctx func cenv cx e es sa sb s0 ee v op s
 Proof
   simp[expr_post_def, expr_val_at_def, expr_val_own_def, stmt_state_rel_def,
        state_rel_gas_obs, locals_kept_def, popped_kept_def]

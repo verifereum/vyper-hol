@@ -5,7 +5,7 @@ Ancestors
   exprSimHypsDefs loweringPosts venomMemDefs venomState words exprLoweringProps
 
 Theorem aggregate_alloca_capacity_mem:
-  stmt_state_rel H ctx func ce cx es s /\
+  stmt_state_rel ctx func ce cx es s /\
   FLOOKUP s.vs_allocas aid = SOME (b,sz) ==>
   b + sz <= s.vs_alloca_next
 Proof
@@ -22,8 +22,8 @@ Theorem aggregate_alloc_buffer_entry_mem:
     inst.inst_id < sm.cs_next_id /\ not_fresh_at sm x /\
     local_ptrs_reserved ce sm /\ (!scopes. not_local_ptr ce scopes x) /\
     frag_exec_mem ctx sa sm
-      (\s. s = s0 /\ stmt_state_rel H ctx func ce cx es s /\ alloca_history func s)
-      (\t. ?b. stmt_state_rel H ctx func ce cx es t /\
+      (\s. s = s0 /\ stmt_state_rel ctx func ce cx es s /\ alloca_history func s)
+      (\t. ?b. stmt_state_rel ctx func ce cx es t /\
         eval_operand buf.buf_operand t = SOME (n2w b) /\
         FLOOKUP t.vs_allocas inst.inst_id = SOME (b,sz) /\
         b + sz < dimword (:256) /\ b + sz <= t.vs_alloca_next /\
@@ -41,7 +41,7 @@ Proof
 QED
 
 Theorem aggregate_allocated_result_store_bound_mem:
-  vv_post H ctx func ce cx e es sa sb s0 es' tv
+  vv_post ctx func ce cx e es sa sb s0 es' tv
     (LocatedValue (expr_type e) p) t /\
   lowered_value_type ce e = expr_type e /\
   evaluate_type (get_tenv cx) (expr_type e) = SOME ftv /\

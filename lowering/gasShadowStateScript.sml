@@ -61,30 +61,6 @@ Proof
   Cases_on `f s` >> Cases_on `g t` >> gvs[comp_bind_def]
 QED
 
-Theorem gas_shadow_compiles_bind_mapped:
-  (!s t. gas_shadow_state s t ==>
-    FST (g t) = m (FST (f s)) /\
-    gas_shadow_state (SND (f s)) (SND (g t))) /\
-  (!x. gas_shadow_compiles (h x) (k (m x))) ==>
-  gas_shadow_compiles (comp_bind f h) (comp_bind g k)
-Proof
-  rewrite_tac[gas_shadow_compiles_def] >> rpt gen_tac >> strip_tac >>
-  rpt gen_tac >> strip_tac >>
-  qpat_x_assum `!s t. gas_shadow_state s t ==> _` drule_all >> strip_tac >>
-  first_x_assum (qspecl_then [`FST (f s)`, `SND (f s)`, `SND (g t)`] mp_tac) >>
-  Cases_on `f s` >> Cases_on `g t` >> gvs[comp_bind_def]
-QED
-
-Theorem gas_shadow_compiles_mapped_result_iff:
-  gas_shadow_compiles (comp_bind f (\x. comp_return (m x))) g <=>
-  (!s t. gas_shadow_state s t ==>
-    FST (g t) = m (FST (f s)) /\
-    gas_shadow_state (SND (f s)) (SND (g t)))
-Proof
-  simp[gas_shadow_compiles_def, comp_bind_def, comp_return_def,
-       pairTheory.UNCURRY, EQ_SYM_EQ]
-QED
-
 Theorem gas_shadow_compiles_fresh_var:
   gas_shadow_compiles fresh_var fresh_var
 Proof

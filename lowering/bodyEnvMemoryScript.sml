@@ -14,14 +14,14 @@ Theorem body_env_read_frag_mem:
   emit_op opc [] sm = (dst,sn) /\ ~is_terminator opc /\ opc <> INVOKE /\
   (!s. inst_mem_below_frontier
     (mk_inst sm.cs_next_id opc [] [STRING #"%" (toString sm.cs_next_var)]) s) /\
-  (!s. stmt_state_rel H ctx func cenv cx es s ==>
+  (!s. stmt_state_rel ctx func cenv cx es s ==>
     step_inst_base (mk_inst sm.cs_next_id opc [] [STRING #"%" (toString sm.cs_next_var)]) s =
       OK (update_var (STRING #"%" (toString sm.cs_next_var)) w s)) /\
   local_ptrs_reserved cenv sm /\ fn_has_code sm sn func /\
   fn_inst_ids_distinct func ==>
   frag_exec_mem ctx sm sn
-    (\s. s = entry /\ stmt_state_rel H ctx func cenv cx es s /\ alloca_history func s)
-    (\s. stmt_state_rel H ctx func cenv cx es s /\ eval_operand dst s = SOME w /\
+    (\s. s = entry /\ stmt_state_rel ctx func cenv cx es s /\ alloca_history func s)
+    (\s. stmt_state_rel ctx func cenv cx es s /\ eval_operand dst s = SOME w /\
          (!z v. not_fresh_at sm z /\ lookup_var z entry = SOME v ==>
                 lookup_var z s = SOME v) /\
          s.vs_memory = entry.vs_memory /\ s.vs_allocas = entry.vs_allocas /\
@@ -29,12 +29,12 @@ Theorem body_env_read_frag_mem:
 Proof
   rpt strip_tac >> drule emitted_insts_emit_op >> strip_tac >>
   drule emit_op_extends >> strip_tac >>
-  qabbrev_tac `P = \s. s = entry /\ stmt_state_rel H ctx func cenv cx es s /\
+  qabbrev_tac `P = \s. s = entry /\ stmt_state_rel ctx func cenv cx es s /\
     alloca_history func s /\ ~s.vs_halted /\
     s.vs_current_bb = sm.cs_current_bb /\
     s.vs_inst_idx = LENGTH sm.cs_current_insts` >>
   `frag_exec_mem ctx sm sn P
-    (\s. stmt_state_rel H ctx func cenv cx es s /\ eval_operand dst s = SOME w /\
+    (\s. stmt_state_rel ctx func cenv cx es s /\ eval_operand dst s = SOME w /\
          (!z v. not_fresh_at sm z /\ lookup_var z entry = SOME v ==>
                 lookup_var z s = SOME v) /\
          s.vs_memory = entry.vs_memory /\ s.vs_allocas = entry.vs_allocas /\
@@ -53,7 +53,7 @@ Proof
   `not_local_ptr cenv es.scopes out` by
     (simp[Abbr `out`] >> irule local_ptrs_reserved_fresh >>
      metis_tac[arithmeticTheory.LESS_EQ_REFL]) >>
-  `stmt_state_rel H ctx func cenv cx es (update_var out w entry)` by
+  `stmt_state_rel ctx func cenv cx es (update_var out w entry)` by
     (irule stmt_state_rel_update_var >> simp[]) >>
   `alloca_inv entry` by gvs[stmt_state_rel_def] >>
   `(?bb rest. lookup_block entry.vs_current_bb func.fn_blocks = SOME bb /\
@@ -79,8 +79,8 @@ Theorem body_env_frag_mem[local]:
   local_ptrs_reserved cenv sa /\ fn_has_code sa sb func /\
   fn_inst_ids_distinct func ==>
   frag_exec_mem ctx sa sb
-    (\s. s = s0 /\ stmt_state_rel H ctx func cenv cx es s /\ alloca_history func s)
-    (\s. stmt_state_rel H ctx func cenv cx es s /\
+    (\s. s = s0 /\ stmt_state_rel ctx func cenv cx es s /\ alloca_history func s)
+    (\s. stmt_state_rel ctx func cenv cx es s /\
          eval_operand op s = SOME (val_to_w256 v) /\
          (!z w. not_fresh_at sa z /\ lookup_var z s0 = SOME w ==>
                 lookup_var z s = SOME w) /\
@@ -102,15 +102,15 @@ Theorem body_env_read_counted[local]:
   emit_op opc [] sm = (dst,sn) /\ ~is_terminator opc /\ opc <> INVOKE /\ opc <> GAS /\
   (!s. inst_mem_below_frontier
     (mk_inst sm.cs_next_id opc [] [STRING #"%" (toString sm.cs_next_var)]) s) /\
-  (!s. stmt_state_rel H ctx func cenv cx es s ==>
+  (!s. stmt_state_rel ctx func cenv cx es s ==>
     step_inst_base (mk_inst sm.cs_next_id opc [] [STRING #"%" (toString sm.cs_next_var)]) s =
       OK (update_var (STRING #"%" (toString sm.cs_next_var)) w s)) /\
   local_ptrs_reserved cenv sm /\ fn_has_code sm sn func /\ fn_inst_ids_distinct func /\
-  stmt_state_rel H ctx func cenv cx es entry /\ alloca_history func entry /\
+  stmt_state_rel ctx func cenv cx es entry /\ alloca_history func entry /\
   ~entry.vs_halted /\ entry.vs_current_bb = sm.cs_current_bb /\
   entry.vs_inst_idx = LENGTH sm.cs_current_insts ==>
   ?t. gas_path_mem ctx func entry 0 (OK t) /\
-      stmt_state_rel H ctx func cenv cx es t /\ eval_operand dst t = SOME w /\
+      stmt_state_rel ctx func cenv cx es t /\ eval_operand dst t = SOME w /\
       (!z v. not_fresh_at sm z /\ lookup_var z entry = SOME v ==> lookup_var z t = SOME v) /\
       t.vs_memory = entry.vs_memory /\ t.vs_allocas = entry.vs_allocas /\
       t.vs_alloca_next = entry.vs_alloca_next /\ alloca_history func t /\
@@ -124,7 +124,7 @@ Proof
   `not_local_ptr cenv es.scopes out` by
     (simp[Abbr `out`] >> irule local_ptrs_reserved_fresh >>
      metis_tac[arithmeticTheory.LESS_EQ_REFL]) >>
-  `stmt_state_rel H ctx func cenv cx es (update_var out w entry)` by
+  `stmt_state_rel ctx func cenv cx es (update_var out w entry)` by
     (irule stmt_state_rel_update_var >> simp[]) >>
   `alloca_inv entry` by gvs[stmt_state_rel_def] >>
   `(?bb rest. lookup_block entry.vs_current_bb func.fn_blocks = SOME bb /\
@@ -149,7 +149,7 @@ Proof
 QED
 
 Theorem stmt_state_rel_call_ctx[local]:
-  stmt_state_rel H ctx func cenv cx es s ==>
+  stmt_state_rel ctx func cenv cx es s ==>
   call_ctx_rel cx.txn s.vs_call_ctx s.vs_tx_ctx s.vs_block_ctx
 Proof
   simp[stmt_state_rel_def, state_rel_def]
@@ -161,11 +161,11 @@ Theorem body_env_counted[local]:
   evaluate_builtin cx es.accounts (env_item_type item) (Env item) [] [] = INL v /\
   local_ptrs_reserved cenv sa /\ fn_has_code sa sb func /\
   fn_inst_ids_distinct func /\
-  stmt_state_rel H ctx func cenv cx es s0 /\ alloca_history func s0 /\
+  stmt_state_rel ctx func cenv cx es s0 /\ alloca_history func s0 /\
   ~s0.vs_halted /\ s0.vs_current_bb = sa.cs_current_bb /\
   s0.vs_inst_idx = LENGTH sa.cs_current_insts ==>
   ?t. gas_path_mem ctx func s0 0 (OK t) /\
-      stmt_state_rel H ctx func cenv cx es t /\ eval_operand op t = SOME (val_to_w256 v) /\
+      stmt_state_rel ctx func cenv cx es t /\ eval_operand op t = SOME (val_to_w256 v) /\
       (!z w. not_fresh_at sa z /\ lookup_var z s0 = SOME w ==> lookup_var z t = SOME w) /\
       t.vs_memory = s0.vs_memory /\ t.vs_allocas = s0.vs_allocas /\
       t.vs_alloca_next = s0.vs_alloca_next /\ alloca_history func t /\
@@ -214,22 +214,22 @@ Theorem body_env_mem_prefix[local]:
   item <> PrevHash /\ item <> MsgGas /\
   lower_value compile_expr cenv ty (Builtin (env_item_type item) (Env item) []) sa = (op,sb) /\
   fn_has_code sa sb func /\ fn_inst_ids_distinct func /\ local_ptrs_reserved cenv sa /\
-  stmt_state_rel H ctx func cenv cx es s0 /\ alloca_history func s0 /\
+  stmt_state_rel ctx func cenv cx es s0 /\ alloca_history func s0 /\
   ~s0.vs_halted /\ s0.vs_current_bb = sa.cs_current_bb /\
   s0.vs_inst_idx = LENGTH sa.cs_current_insts ==>
-  ?v t. gas_value_prefix H T (ctx,func,cenv,cx)
+  ?v t. gas_value_prefix T (ctx,func,cenv,cx)
     (ty,Builtin (env_item_type item) (Env item) []) (sa,sb,op) (es,s0) [] (v,es,t)
 Proof
   strip_tac >> drule_all body_env_source >>
   disch_then (qspecl_then [`es`, `cx`] strip_assume_tac) >>
   `?t. gas_path_mem ctx func s0 0 (OK t) /\
-      stmt_state_rel H ctx func cenv cx es t /\ eval_operand op t = SOME (val_to_w256 v) /\
+      stmt_state_rel ctx func cenv cx es t /\ eval_operand op t = SOME (val_to_w256 v) /\
       (!z w. not_fresh_at sa z /\ lookup_var z s0 = SOME w ==> lookup_var z t = SOME w) /\
       t.vs_memory = s0.vs_memory /\ t.vs_allocas = s0.vs_allocas /\
       t.vs_alloca_next = s0.vs_alloca_next /\ alloca_history func t /\
       t.vs_current_bb = sb.cs_current_bb /\ t.vs_inst_idx = LENGTH sb.cs_current_insts` by
     (drule lower_value_env >> strip_tac >> drule_all body_env_counted >> simp[]) >>
-  `stmt_state_rel H ctx func cenv cx (es with gas_obs := []) t` by
+  `stmt_state_rel ctx func cenv cx (es with gas_obs := []) t` by
     (drule msg_gas_state_frame >>
      disch_then (qspecl_then [`t.vs_gas_readings`, `t.vs_inst_idx`, `[]`] mp_tac) >>
      simp[NoAsms]) >>
@@ -295,7 +295,8 @@ Theorem body_env_mem_case:
   !cx ann item args. item <> PrevHash /\ item <> MsgGas ==>
     body_expr_mem_ok cx (Builtin ann (Env item) args)
 Proof
-  rpt gen_tac >> strip_tac >> pure_rewrite_tac[body_expr_mem_ok_def] >>
+  rpt gen_tac >> strip_tac >> (rpt gen_tac >> match_mp_tac body_expr_mem_ok_intro >>
+   conj_tac >- (rpt strip_tac >> gvs[])) >>
   rpt gen_tac >> strip_tac >>
   `args = [] /\ ann = env_item_type item` by
     gvs[expr_body_pre_def, well_typed_expr_def, well_typed_builtin_app_def] >>

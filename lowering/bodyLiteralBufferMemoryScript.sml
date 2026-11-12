@@ -143,7 +143,7 @@ Proof
   strip_tac >> res_tac >> simp[]
 QED
 
-Theorem literal_alloca_frontier[local]:
+Theorem literal_alloca_frontier:
   run_inst_seq [mk_inst i ALLOCA ops outs] s = OK t ==>
   s.vs_alloca_next <= t.vs_alloca_next
 Proof
@@ -164,7 +164,7 @@ QED
 Theorem literal_bytelike_seq_mem:
   !func cenv cx es bs sa sb buf s ctx.
     compile_bytelike_literal bs (LENGTH bs) sa = (buf,sb) /\
-    stmt_state_rel H ctx func cenv cx es s /\ fn_inst_ids_distinct func /\
+    stmt_state_rel ctx func cenv cx es s /\ fn_inst_ids_distinct func /\
     local_ptrs_reserved cenv sa /\
     32 + 32 * word_size (LENGTH bs) < dimword (:256) /\
     MEM (mk_inst sa.cs_next_id ALLOCA
@@ -257,7 +257,7 @@ Theorem literal_bytelike_mem_path:
   !func cenv cx es bs sa sb buf s ctx t.
     compile_bytelike_literal bs (LENGTH bs) sa = (buf,sb) /\
     fn_has_code sa sb func /\
-    stmt_state_rel H ctx func cenv cx es s /\ fn_inst_ids_distinct func /\
+    stmt_state_rel ctx func cenv cx es s /\ fn_inst_ids_distinct func /\
     local_ptrs_reserved cenv sa /\ alloca_history func s /\ ~s.vs_halted /\
     s.vs_current_bb = sa.cs_current_bb /\
     s.vs_inst_idx = LENGTH sa.cs_current_insts /\
@@ -307,11 +307,11 @@ Theorem literal_buffer_mem_run:
     32 + 32 * word_size (LENGTH bs) < dimword (:256) /\
     fn_has_code sa sb func /\ fn_inst_ids_distinct func /\
     local_ptrs_reserved cenv sa /\
-    stmt_state_rel H ctx func cenv cx es s0 /\ alloca_history func s0 /\
+    stmt_state_rel ctx func cenv cx es s0 /\ alloca_history func s0 /\
     ~s0.vs_halted /\ s0.vs_current_bb = sa.cs_current_bb /\
     s0.vs_inst_idx = LENGTH sa.cs_current_insts ==>
     ?t w. gas_path_mem ctx func s0 0 (OK t) /\
-      vv_post H ctx func cenv cx e es sa sb s0 es (Value v)
+      vv_post ctx func cenv cx e es sa sb s0 es (Value v)
         (LocatedValue (expr_type e) (base_ptr buf)) t /\
       eval_operand buf.buf_operand t = SOME w /\
       w2n w + (32 + 32 * word_size (LENGTH bs)) <= t.vs_alloca_next /\
@@ -324,7 +324,7 @@ Proof
   drule_all literal_bytelike_run >> strip_tac >>
   drule_all literal_bytelike_mem_path >> strip_tac >>
   drule_all literal_bytelike_gas_path >> strip_tac >>
-  `vv_post H ctx func cenv cx e es sa sb s0 es (Value v)
+  `vv_post ctx func cenv cx e es sa sb s0 es (Value v)
      (LocatedValue (expr_type e) (base_ptr buf))
      (t with vs_inst_idx := LENGTH sb.cs_current_insts)` by
     (irule literal_memory_vv_post >>
@@ -366,7 +366,7 @@ Theorem literal_buffer_vv_sim_mem:
 Proof
   rpt gen_tac >> strip_tac >> rw[expr_vv_sim_mem_def] >>
   qpat_x_assum `!sa vv sb. _` drule >> strip_tac >> gvs[] >>
-  `stmt_state_rel H ctx func cenv cx (es with gas_obs := []) s0` by
+  `stmt_state_rel ctx func cenv cx (es with gas_obs := []) s0` by
     (drule msg_gas_state_frame >>
      disch_then (qspecl_then [`s0.vs_gas_readings`, `s0.vs_inst_idx`, `[]`] mp_tac) >>
      simp[NoAsms]) >>
@@ -408,7 +408,7 @@ Proof
   qpat_x_assum `!sa vv sb. _` drule >> strip_tac >> gvs[] >>
   simp[unwrap_memory_compile, base_ptr_def, comp_return_def] >>
   strip_tac >> gvs[] >>
-  `stmt_state_rel H ctx func cenv cx (es with gas_obs := []) s0` by
+  `stmt_state_rel ctx func cenv cx (es with gas_obs := []) s0` by
     (drule msg_gas_state_frame >>
      disch_then (qspecl_then [`s0.vs_gas_readings`, `s0.vs_inst_idx`, `[]`] mp_tac) >>
      simp[NoAsms]) >>

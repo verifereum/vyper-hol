@@ -21,7 +21,7 @@ QED
 Theorem conditional_marked_read_success:
   gas_marked_exec memory (ctx,func) a (es,s0) marks (INL raw) mid (OK t) /\
   gas_admissible (bind a (conditional_result cx)) expr_vv_res_ok es /\
-  vv_post H ctx semantic_func ce cx e es sa sb s0 mid raw vv t ==>
+  vv_post ctx semantic_func ce cx e es sa sb s0 mid raw vv t ==>
   ?tv v.
     conditional_result cx raw (mid with gas_obs := []) =
       (INL tv,mid with gas_obs := []) /\

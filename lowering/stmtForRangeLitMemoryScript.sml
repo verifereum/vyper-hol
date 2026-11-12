@@ -79,7 +79,7 @@ Proof
      irule local_ptrs_reserved_fresh >> qexists_tac `sa` >> simp[]) >>
   `?cc w. gas_path_mem ctx func s0 0 (OK cc) /\
      cc.vs_current_bb = cond_lbl /\ cc.vs_inst_idx = 0 /\ ~cc.vs_halted /\
-     stmt_state_rel H ctx func cenv cx es cc /\
+     stmt_state_rel ctx func cenv cx es cc /\
      lookup_var cv cc = SOME (i2w n1) /\ lookup_var ev cc = SOME (i2w n2) /\
      lookup_var p cc = SOME w /\
      FLOOKUP cc.vs_allocas sa.cs_next_id = SOME (w2n w,type_memory_bytes cenv fty) /\
@@ -133,7 +133,7 @@ Resume compile_for_range_lit_frag_mem[loop]:
   `gas_outcome T (cx_tops cx) (ctx,func)
      (eval_for cx tyv id stmts (GENLIST (\j. Value (IntV (n1 + &(0 + j)))) (Num (n2-n1)))) (es,cc)
      (\res ee s. res = INL () /\ s.vs_current_bb = exit_lbl /\
-       s.vs_inst_idx = 0 /\ ~s.vs_halted /\ stmt_state_rel H ctx func cenv cx ee s /\
+       s.vs_inst_idx = 0 /\ ~s.vs_halted /\ stmt_state_rel ctx func cenv cx ee s /\
        return_buf_frame d cenv sa s /\ alloca_history func s /\
        cc.vs_alloca_next <= s.vs_alloca_next /\
        (!x v. not_fresh_at sa x /\ lookup_var x cc = SOME v ==> lookup_var x s = SOME v) /\

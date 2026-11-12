@@ -20,7 +20,7 @@ Theorem for_body_entry_mem:
     lookup_block body_lbl func.fn_blocks = SOME bbb /\
     get_instruction bbb 0 = SOME (mk_inst j3 MSTORE [Var p; Var cv] []) /\
     cc.vs_current_bb = cond_lbl /\ cc.vs_inst_idx = 0 /\ ~cc.vs_halted /\
-    stmt_state_rel H ctx func cenv cx esk cc /\
+    stmt_state_rel ctx func cenv cx esk cc /\
     lookup_var cv cc = SOME (i2w (n1 + &k)) /\
     lookup_var ev cc = SOME (i2w n2) /\ lookup_var p cc = SOME w /\
     FLOOKUP cc.vs_allocas ainst.inst_id = SOME (w2n w, sz) /\
@@ -41,7 +41,7 @@ Theorem for_body_entry_mem:
     alloca_history func cc ==>
     ?s2. s2.vs_current_bb = body_lbl /\ s2.vs_inst_idx = 1 /\
          ~s2.vs_halted /\
-         stmt_state_rel H ctx func bc cx
+         stmt_state_rel ctx func bc cx
            (esk with scopes :=
               (FEMPTY |+ (id, <| assignable := F; type := tyv;
                                  value := IntV (n1 + &k); popped := [] |>)) :: esk.scopes)
@@ -63,10 +63,10 @@ Proof
     (simp[Abbr `s1`, jump_to_def, update_var_def, lookup_var_def,
           FLOOKUP_UPDATE] >> fs[lookup_var_def]) >>
   qabbrev_tac `s2 = mstore (w2n w) (i2w (n1 + &k)) s1 with vs_inst_idx := 1` >>
-  `stmt_state_rel H ctx func cenv cx (esk with scopes := FEMPTY :: esk.scopes) s1` by
+  `stmt_state_rel ctx func cenv cx (esk with scopes := FEMPTY :: esk.scopes) s1` by
     (simp[Abbr `s1`, stmt_state_rel_jump_to, stmt_state_rel_push_scope] >>
      irule stmt_state_rel_update_var >> simp[]) >>
-  `stmt_state_rel H ctx func bc cx (esk with scopes := FEMPTY :: esk.scopes) s1` by
+  `stmt_state_rel ctx func bc cx (esk with scopes := FEMPTY :: esk.scopes) s1` by
     (irule stmt_state_rel_cenv_cong >> qexists_tac `cenv` >> simp[] >>
      rpt strip_tac >> Cases_on `n = id` >> gvs[lookup_scopes_def] >>
      res_tac >> gvs[]) >>
@@ -92,7 +92,7 @@ Proof
         fs[stmt_state_rel_def, state_rel_def]) >>
      irule EQ_SYM >> irule mstore_mem_bytes_at_disjoint >>
      fs[regions_disjoint_def] >> decide_tac) >>
-  `stmt_state_rel H ctx func bc cx
+  `stmt_state_rel ctx func bc cx
      (esk with scopes :=
        (FEMPTY |+ (id, <| assignable := F; type := tyv;
                           value := IntV (n1 + &k); popped := [] |>)) :: esk.scopes)

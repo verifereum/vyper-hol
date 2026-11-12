@@ -8,19 +8,19 @@ Ancestors
    Keep that endpoint fixed while framing each write, rather than rebasing
    the operand post to a later endpoint which would make temporaries old. *)
 Theorem rest_word_vv_address_frame:
-  vv_post H ctx func cenv cx e es sa sm s0 es' tv vv s /\
+  vv_post ctx func cenv cx e es sa sm s0 es' tv vv s /\
   local_ptrs_reserved cenv sa /\ sa.cs_next_var <= sm.cs_next_var /\
   ~not_fresh_at sm mulvar /\ ~not_fresh_at sm totalvar /\
   ~not_fresh_at sm addrvar /\
   (!z. vv_operand vv = Var z ==> not_fresh_at sm z) ==>
-  vv_post H ctx func cenv cx e es sa sm s0 es' tv vv
+  vv_post ctx func cenv cx e es sa sm s0 es' tv vv
     (update_var addrvar (baseword + n2w (off + i * stride))
       (if 0 < off then update_var totalvar (n2w (off + i * stride))
           (update_var mulvar (n2w (i * stride)) s)
        else update_var mulvar (n2w (i * stride)) s))
 Proof
   strip_tac >>
-  `vv_post H ctx func cenv cx e es sa sm s0 es' tv vv
+  `vv_post ctx func cenv cx e es sa sm s0 es' tv vv
      (update_var mulvar (n2w (i * stride)) s)` by
     (irule vv_post_update_var >> simp[] >> goal_assum (drule_at Any) >> simp[]) >>
   Cases_on `0 < off` >> simp[] >>
@@ -31,8 +31,8 @@ Proof
 QED
 
 Theorem rest_word_vv_post_jump:
-  vv_post H ctx func cenv cx e es sa sb s0 es' tv vv (jump_to lbl s) <=>
-  vv_post H ctx func cenv cx e es sa sb s0 es' tv vv s
+  vv_post ctx func cenv cx e es sa sb s0 es' tv vv (jump_to lbl s) <=>
+  vv_post ctx func cenv cx e es sa sb s0 es' tv vv s
 Proof
   `!op. eval_operand op (jump_to lbl s) = eval_operand op s` by
     (Cases >> simp[venomStateTheory.eval_operand_def,
@@ -124,21 +124,21 @@ QED
 (* The concrete persistent part of the search invariant.  The operand
    compiler endpoint sm stays fixed throughout the loop. *)
 Definition rest_word_search_rep_def:
-  rest_word_search_rep H ctx func cenv cx e es sa sm s0 es' tv vv
+  rest_word_search_rep ctx func cenv cx e es sa sm s0 es' tv vv
       needleop needle lenop len s <=>
-    vv_post H ctx func cenv cx e es sa sm s0 es' tv vv s /\
+    vv_post ctx func cenv cx e es sa sm s0 es' tv vv s /\
     eval_operand needleop s = SOME needle /\
     eval_operand lenop s = SOME (n2w len)
 End
 
 Theorem rest_word_search_rep_update:
-  rest_word_search_rep H ctx func cenv cx e es sa sm s0 es' tv vv
+  rest_word_search_rep ctx func cenv cx e es sa sm s0 es' tv vv
     needleop needle lenop len s /\
   local_ptrs_reserved cenv sa /\ sa.cs_next_var <= sm.cs_next_var /\
   ~not_fresh_at sm x /\
   (!z. vv_operand vv = Var z ==> not_fresh_at sm z) /\
   needleop <> Var x /\ lenop <> Var x ==>
-  rest_word_search_rep H ctx func cenv cx e es sa sm s0 es' tv vv
+  rest_word_search_rep ctx func cenv cx e es sa sm s0 es' tv vv
     needleop needle lenop len (update_var x w s)
 Proof
   simp[rest_word_search_rep_def] >> strip_tac >> conj_tac
@@ -150,13 +150,13 @@ Proof
 QED
 
 Theorem rest_word_search_rep_control:
-  (rest_word_search_rep H ctx func cenv cx e es sa sm s0 es' tv vv
+  (rest_word_search_rep ctx func cenv cx e es sa sm s0 es' tv vv
      needleop needle lenop len (jump_to lbl s) <=>
-   rest_word_search_rep H ctx func cenv cx e es sa sm s0 es' tv vv
+   rest_word_search_rep ctx func cenv cx e es sa sm s0 es' tv vv
      needleop needle lenop len s) /\
-  (rest_word_search_rep H ctx func cenv cx e es sa sm s0 es' tv vv
+  (rest_word_search_rep ctx func cenv cx e es sa sm s0 es' tv vv
      needleop needle lenop len (s with vs_inst_idx := k) <=>
-   rest_word_search_rep H ctx func cenv cx e es sa sm s0 es' tv vv
+   rest_word_search_rep ctx func cenv cx e es sa sm s0 es' tv vv
      needleop needle lenop len s)
 Proof
   simp[rest_word_search_rep_def, rest_word_vv_post_jump] >>
@@ -168,14 +168,14 @@ QED
 Theorem rest_word_search_rep_load:
   context$compile_ptr_load ctor imm loc addr cl = (op,cm) /\
   loc <> LocCalldata /\ sm.cs_next_var <= cl.cs_next_var /\
-  rest_word_search_rep H ctx func cenv cx e es sa sm s0 es' tv vv
+  rest_word_search_rep ctx func cenv cx e es sa sm s0 es' tv vv
     needleop needle lenop len s /\
   local_ptrs_reserved cenv sa /\ sa.cs_next_var <= sm.cs_next_var /\
   (!z. vv_operand vv = Var z ==> not_fresh_at sm z) /\
   (!z. needleop = Var z ==> not_fresh_at cl z) /\
   (!z. lenop = Var z ==> not_fresh_at cl z) /\
   run_inst_seq (emitted_insts cl cm) s = OK t ==>
-  rest_word_search_rep H ctx func cenv cx e es sa sm s0 es' tv vv
+  rest_word_search_rep ctx func cenv cx e es sa sm s0 es' tv vv
     needleop needle lenop len t
 Proof
   Cases_on `loc` >> Cases_on `ctor` >> Cases_on `imm` >>
@@ -239,21 +239,21 @@ Theorem rest_word_compiled_search:
   (!h cl cm v i p.
     rest_word_loop_prefix needleop arrop lenop stride off bound_opt cs = (h,cl) /\
     context$compile_ptr_load ctor imm loc h.rw_addr cl = (v,cm) /\ i < len /\
-    rest_word_search_rep H ctx func cenv cx e es sa sm s0 es' tv vv
+    rest_word_search_rep ctx func cenv cx e es sa sm s0 es' tv vv
       needleop needle lenop len p /\
     eval_operand arrop p = SOME baseword /\
     eval_operand h.rw_addr p = SOME (baseword + n2w (off + i * stride)) ==>
     ?q. run_inst_seq (emitted_insts cl cm) p = OK q /\
         eval_operand v q = SOME (elem i) /\
         (memory ==> run_inst_seq_mem_ok (emitted_insts cl cm) p)) /\
-  rest_word_search_rep H ctx func cenv cx e es sa sm s0 es' tv vv
+  rest_word_search_rep ctx func cenv cx e es sa sm s0 es' tv vv
     needleop needle lenop len s /\ eval_operand arrop s = SOME baseword /\
   s.vs_current_bb = cs.cs_current_bb /\
   s.vs_inst_idx = LENGTH cs.cs_current_insts /\ ~s.vs_halted ==>
   ?t. gas_marked_path memory execctx fn s 0 (OK t) /\
     t.vs_current_bb = ct.cs_current_bb /\
     t.vs_inst_idx = LENGTH ct.cs_current_insts /\ ~t.vs_halted /\
-    rest_word_search_rep H ctx func cenv cx e es sa sm s0 es' tv vv
+    rest_word_search_rep ctx func cenv cx e es sa sm s0 es' tv vv
       needleop needle lenop len t /\ eval_operand arrop t = SOME baseword /\
     eval_operand out t = SOME (bool_to_word
       (if is_in then (?j. j < len /\ elem j = needle)
@@ -262,7 +262,7 @@ Proof
   strip_tac >> drule_all exprSimBopRestWordLayoutTheory.rest_word_ptr_loop_layout_safe >>
   disch_then (qx_choose_then `h` (qx_choose_then `cl`
     (qx_choose_then `cm` (qx_choose_then `v` strip_assume_tac)))) >>
-  qabbrev_tac `R = \u. rest_word_search_rep H ctx func cenv cx e es sa sm s0 es' tv vv
+  qabbrev_tac `R = \u. rest_word_search_rep ctx func cenv cx e es sa sm s0 es' tv vv
     needleop needle lenop len u /\ eval_operand arrop u = SOME baseword` >>
   `!u x w. R u /\ ~not_fresh_at cs x ==> R (update_var x w u)` by
     (rpt gen_tac >> simp[Abbr `R`] >> strip_tac >> conj_tac
@@ -386,13 +386,13 @@ Resume rest_word_compiled_search[body]:
   `?q. run_inst_seq (emitted_insts cl cm) p = OK q /\
        eval_operand v q = SOME (elem i) /\
        (memory ==> run_inst_seq_mem_ok (emitted_insts cl cm) p)` by
-    (`rest_word_search_rep H ctx func cenv cx e es sa sm s0 es' tv vv
+    (`rest_word_search_rep ctx func cenv cx e es sa sm s0 es' tv vv
         needleop needle lenop len p` by fs[Abbr `R`] >>
      `eval_operand arrop p = SOME baseword` by fs[Abbr `R`] >>
      qpat_x_assum `!h cl cm v i p. _` drule_all >> simp[]) >>
-  `rest_word_search_rep H ctx func cenv cx e es sa sm s0 es' tv vv
+  `rest_word_search_rep ctx func cenv cx e es sa sm s0 es' tv vv
       needleop needle lenop len p` by fs[Abbr `R`] >>
-  `rest_word_search_rep H ctx func cenv cx e es sa sm s0 es' tv vv
+  `rest_word_search_rep ctx func cenv cx e es sa sm s0 es' tv vv
       needleop needle lenop len q` by
     (`sm.cs_next_var <= cl.cs_next_var` by decide_tac >>
      `(!z. needleop = Var z ==> not_fresh_at cl z) /\

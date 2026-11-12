@@ -52,19 +52,20 @@ Proof
 QED
 
 Theorem append_storage_header_agree_mem:
-  stmt_state_rel H ctx func cenv cx es s /\
-  MEM (tr,slot,ArrayTV tv (Dynamic cap)) (FST H) /\
+  stmt_state_rel ctx func cenv cx es s /\
   declared_storage_region cx mid n [] = SOME (tr,slot,ArrayTV tv (Dynamic cap)) ==>
   (if tr then tload slot s else sload slot s) =
     lookup_storage slot (get_storage cx es tr)
 Proof
   strip_tac >>
-  `storage_rel H cx.txn.target es s /\ transient_rel H cx.txn.target es s` by
-    fs[stmt_state_rel_def, state_rel_def] >>
-  `storage_read_live H tr (get_storage cx es tr) slot
+  `accounts_rel cx es s /\ s.vs_call_ctx.cc_address = cx.txn.target` by
+    fs[stmt_state_rel_def, state_rel_def, call_ctx_rel_def] >>
+  drule accounts_rel_storage_transient >>
+  disch_then (drule_at Any) >> strip_tac >>
+  `storage_read_live cx tr (get_storage cx es tr) slot
      (ArrayTV tv (Dynamic cap))` by
-    metis_tac[observed_storage_region_read_live] >>
-  `storage_agree (storage_dead H tr (get_storage cx es tr))
+    metis_tac[declared_storage_region_read_live] >>
+  `storage_agree (storage_dead cx tr (get_storage cx es tr))
       (get_storage cx es tr)
       (if tr then contract_transient s else contract_storage s)` by
     (Cases_on `tr` >>

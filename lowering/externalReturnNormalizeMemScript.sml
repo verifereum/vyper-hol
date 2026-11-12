@@ -66,7 +66,7 @@ Proof
 QED
 
 Theorem normalized_bytes_tuple_window[local]:
-  stmt_state_rel H ctx func cenv cx es s /\
+  stmt_state_rel ctx func cenv cx es s /\
   expr_val_at cenv cx (TupleT [BaseT (BytesT (Dynamic 1))])
     sa sb es (ArrayV (TupleV [BytesV [0w]])) op s ==>
   ?p. eval_operand op s = SOME p /\
@@ -178,7 +178,7 @@ QED
 (* A normalization site comes after the source expression's sites.  Its
    recorded row may be reused; no global freshness assumption is needed. *)
 Theorem normalize_alloca_source_separate:
-  stmt_state_rel H ctx func ce cx es s /\ fn_inst_ids_distinct func /\
+  stmt_state_rel ctx func ce cx es s /\ fn_inst_ids_distinct func /\
   expr_val_at ce cx ty sa sb es v src s /\
   evaluate_type (get_tenv cx) ty = SOME tv /\ ~is_word_type ty /\
   0 < val_footprint tv v /\ eval_operand src s = SOME p /\

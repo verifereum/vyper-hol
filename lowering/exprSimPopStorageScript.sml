@@ -22,30 +22,22 @@ Theorem eval_pop_storage:
   evaluate_type (get_tenv cx) (ArrayT et (Dynamic n)) = SOME (ArrayTV tv (Dynamic n)) /\
   ~cx.txn.is_static ==>
   eval_expr cx (Pop ann (TopLevelNameTarget (src,id))) es =
-    let len = w2n (lookup_storage (n2w slot) (get_storage cx es tr));
-        obs = es.storage_trace ++ [StorageRoot tr slot (ArrayTV tv (Dynamic n))] in
+    let len = w2n (lookup_storage (n2w slot) (get_storage cx es tr)) in
     if len = 0 then
-      (INR (Error (RuntimeError "pop empty storage array")),
-       es with storage_trace := obs)
+      (INR (Error (RuntimeError "pop empty storage array")), es)
     else
       (INL (PlaceR (StoragePlace tr
         (n2w slot + n2w (1 + (len - 1) * type_slot_size tv)) tv)),
        set_storage cx es tr
-         (apply_writes (n2w slot) [(0,n2w (len - 1))] (get_storage cx es tr))
-       with storage_trace := obs)
+         (apply_writes (n2w slot) [(0,n2w (len - 1))] (get_storage cx es tr)))
 Proof
   strip_tac >>
   simp[evaluate_def, lookup_global_def, bind_def, lift_option_type_def,
        return_def, get_place_def, pop_place_def, get_storage_backend_eq,
        ignore_bind_def, check_def, assert_def, raise_def,
-       record_storage_event_def,
        write_storage_slot_eq, encode_value_def, encode_base_to_slot_def,
        integer_wordTheory.i2w_def] >>
-  `get_storage cx (es with storage_trace := es.storage_trace ++
-      [StorageRoot tr slot (ArrayTV tv (Dynamic n))]) tr = get_storage cx es tr` by
-    (Cases_on `tr` >> simp[vyperStorageBackendTheory.get_storage_def]) >>
-  IF_CASES_TAC >> gvs[] >> IF_CASES_TAC >> gvs[] >>
-  Cases_on `tr` >> simp[vyperStorageBackendTheory.set_storage_def]
+  IF_CASES_TAC >> gvs[] >> IF_CASES_TAC >> gvs[]
 QED
 
 Theorem pop_storage_target_facts:
@@ -125,19 +117,14 @@ Theorem dead_bytes_dynarray_shorten:
 Proof
   rpt gen_tac >> strip_tac >> simp[dead_bytes_def] >> rpt strip_tac >>
   qexists_tac `i` >> simp[] >>
-  Cases_on `i < w2n (lookup_storage (n2w bs) st')`
-  >- (`i < w2n (lookup_storage (n2w bs) st)` by decide_tac >>
-      gvs[] >>
-      `dead_bytes st' (bs + 1 + i * type_slot_size tv) tv j b <=>
-       dead_bytes st (bs + 1 + i * type_slot_size tv) tv j b` suffices_by simp[] >>
-      irule (cj 1 dead_bytes_frame) >> rpt strip_tac >>
-      first_x_assum irule >>
-      `i * type_slot_size tv + type_slot_size tv <= n * type_slot_size tv` by
-        (qpat_x_assum `i < n` (strip_assume_tac o MATCH_MP arithmeticTheory.LESS_ADD_1) >>
-         simp[arithmeticTheory.RIGHT_ADD_DISTRIB, arithmeticTheory.LEFT_ADD_DISTRIB]) >>
-      decide_tac) >>
-  gvs[] >> Cases_on `i < w2n (lookup_storage (n2w bs) st)` >> gvs[] >>
-  drule (cj 1 dead_bytes_range) >> simp[]
+  `dead_bytes st' (bs + 1 + i * type_slot_size tv) tv j b <=>
+   dead_bytes st (bs + 1 + i * type_slot_size tv) tv j b` suffices_by simp[] >>
+  irule (cj 1 dead_bytes_frame) >> rpt strip_tac >>
+  first_x_assum irule >>
+  `i * type_slot_size tv + type_slot_size tv <= n * type_slot_size tv` by
+    (qpat_x_assum `i < n` (strip_assume_tac o MATCH_MP arithmeticTheory.LESS_ADD_1) >>
+     simp[arithmeticTheory.RIGHT_ADD_DISTRIB, arithmeticTheory.LEFT_ADD_DISTRIB]) >>
+  decide_tac
 QED
 
 Theorem dead_bytes_pop_header:
@@ -167,8 +154,8 @@ QED
 Theorem storage_dead_pop_header:
   declared_storage_region cx mid name subs =
     SOME (tr, slot, ArrayTV tv (Dynamic n)) /\
-  storage_dead H tr st j b ==>
-  storage_dead H tr
+  storage_dead cx tr st j b ==>
+  storage_dead cx tr
     (update_storage slot (n2w (w2n (lookup_storage slot st) - 1)) st) j b
 Proof
   strip_tac >> fs[storage_dead_def] >>
@@ -195,10 +182,10 @@ Proof
 QED
 
 Theorem stmt_state_rel_pop_header:
-  stmt_state_rel H ctx func cenv cx es s /\
+  stmt_state_rel ctx func cenv cx es s /\
   declared_storage_region cx mid name subs =
     SOME (tr, slot, ArrayTV tv (Dynamic n)) ==>
-  stmt_state_rel H ctx func cenv cx
+  stmt_state_rel ctx func cenv cx
     (set_storage cx es tr
       (update_storage slot (n2w (w2n (lookup_storage slot (get_storage cx es tr)) - 1))
         (get_storage cx es tr)))
@@ -208,10 +195,10 @@ Theorem stmt_state_rel_pop_header:
        sstore slot (n2w (w2n (lookup_storage slot (get_storage cx es tr)) - 1)) s)
 Proof
   strip_tac >>
-  `s.vs_call_ctx.cc_address = cx.txn.target /\ accounts_rel H cx es s` by
+  `s.vs_call_ctx.cc_address = cx.txn.target /\ accounts_rel cx es s` by
     fs[stmt_state_rel_def, state_rel_def, call_ctx_rel_def] >>
-  qmatch_goalsub_abbrev_tac `stmt_state_rel H ctx _ _ _ es1 s1` >>
-  `accounts_rel H cx es1 s1` by
+  qmatch_goalsub_abbrev_tac `stmt_state_rel ctx _ _ _ es1 s1` >>
+  `accounts_rel cx es1 s1` by
     (Cases_on `tr` >> gvs[Abbr `s1`, Abbr `es1`]
      >- (irule accounts_rel_tstore >> simp[] >> qexists_tac `es` >>
          simp[set_storage_backend_eq, get_storage_def, vfmStateTheory.lookup_account_def] >>
@@ -222,7 +209,7 @@ Proof
   `s1.vs_call_ctx = s.vs_call_ctx` by
     (Cases_on `tr` >> simp[Abbr `s1`, sstore_def, tstore_def, LET_THM]) >>
   drule accounts_rel_storage_transient >> strip_tac >>
-  `state_rel H func cenv cx es1 s1` by
+  `state_rel func cenv cx es1 s1` by
     (Cases_on `tr` >> gvs[Abbr `s1`, Abbr `es1`] >>
      fs[stmt_state_rel_def, state_rel_def, sstore_def, tstore_def, LET_THM,
         set_storage_def, local_ptrs_rel_def, local_backed_def, local_region_def,
@@ -272,11 +259,11 @@ Proof
   rpt strip_tac >> qpat_x_assum `!k b. _` irule >>
   reverse conj_tac >- decide_tac >> strip_tac >>
   qpat_x_assum `~dead_bytes _ _ _ _ _` mp_tac >>
+  qpat_x_assum `len = _` (fn th => pure_rewrite_tac[GSYM th]) >>
   simp_tac bool_ss [arithmeticTheory.ADD_ASSOC] >>
   irule dyn_array_elem_dead >>
-  conj_tac >- simp[] >>
-  conj_tac >- decide_tac >>
-  conj_tac >- decide_tac >> qexists_tac `n` >> simp[]
+  simp[arithmeticTheory.MULT_COMM] >>
+  qexists_tac `n` >> simp[] >> decide_tac
 QED
 
 Theorem storage_range_agree_frame:
@@ -470,12 +457,12 @@ QED
 Theorem pop_storage_vv_post:
   (!id path. tv <> PlaceR (MemoryPlace id path)) /\
   es'.scopes = es.scopes /\
-  stmt_state_rel H ctx func cenv cx es' u /\
+  stmt_state_rel ctx func cenv cx es' u /\
   storage_holds cx tr ann tv slot es' u /\
   lookup_var x u = SOME slot /\
   u.vs_memory = s0.vs_memory /\ u.vs_allocas = s0.vs_allocas /\
   (!q. not_fresh_at sa q ==> lookup_var q u = lookup_var q s0) ==>
-  vv_post H ctx func cenv cx (Pop ann tgt) es sa sb s0 es' tv
+  vv_post ctx func cenv cx (Pop ann tgt) es sa sb s0 es' tv
     (LocatedValue ann (mk_ptr (Var x) (if tr then LocTransient else LocStorage))) u
 Proof
   strip_tac >>
@@ -488,7 +475,7 @@ QED
 
 Theorem pop_declared_array_agree:
   expr_sim_inv cenv cx env es /\
-  stmt_state_rel H ctx func cenv cx es s /\
+  stmt_state_rel ctx func cenv cx es s /\
   declared_storage_region cx mid id [] = SOME (tr,w,ArrayTV tv (Dynamic n)) ==>
   storage_range_agree (get_storage cx es tr)
     (if tr then contract_transient s else contract_storage s)
@@ -496,10 +483,10 @@ Theorem pop_declared_array_agree:
 Proof
   strip_tac >>
   `storage_layout_safe cx` by fs[expr_sim_inv_def] >>
-  `storage_read_live H tr (get_storage cx es tr) w (ArrayTV tv (Dynamic n))` by
+  `storage_read_live cx tr (get_storage cx es tr) w (ArrayTV tv (Dynamic n))` by
     (irule declared_storage_region_read_live >> metis_tac[]) >>
   drule_all vyperStorageLayoutSafetyTheory.storage_layout_safe_region_nonoverflow >> strip_tac >>
-  `storage_agree (storage_dead H tr (get_storage cx es tr))
+  `storage_agree (storage_dead cx tr (get_storage cx es tr))
     (get_storage cx es tr)
     (if tr then contract_transient s else contract_storage s)` by
     (Cases_on `tr` >>
@@ -510,7 +497,7 @@ QED
 
 Theorem pop_declared_array_slots:
   expr_sim_inv cenv cx env es /\
-  stmt_state_rel H ctx func cenv cx es s /\
+  stmt_state_rel ctx func cenv cx es s /\
   declared_storage_region cx mid id [] = SOME (tr,w,ArrayTV tv (Dynamic n)) ==>
   slots_in_range (get_storage cx es tr) (w2n w) (ArrayTV tv (Dynamic n))
 Proof
@@ -522,15 +509,15 @@ QED
 
 Theorem pop_declared_header_load:
   expr_sim_inv cenv cx env es /\
-  stmt_state_rel H ctx func cenv cx es s /\
+  stmt_state_rel ctx func cenv cx es s /\
   declared_storage_region cx mid id [] = SOME (tr,w,ArrayTV tv (Dynamic n)) ==>
   (if tr then tload w s else sload w s) =
     lookup_storage w (get_storage cx es tr)
 Proof
   strip_tac >>
-  `storage_read_live H tr (get_storage cx es tr) w (ArrayTV tv (Dynamic n))` by
+  `storage_read_live cx tr (get_storage cx es tr) w (ArrayTV tv (Dynamic n))` by
     (irule declared_storage_region_read_live >> metis_tac[]) >>
-  `storage_agree (storage_dead H tr (get_storage cx es tr))
+  `storage_agree (storage_dead cx tr (get_storage cx es tr))
     (get_storage cx es tr)
     (if tr then contract_transient s else contract_storage s)` by
     (Cases_on `tr` >>
@@ -557,10 +544,9 @@ Theorem pop_array_last_slots:
 Proof
   strip_tac >>
   `len <= n` by metis_tac[pop_array_length_bound] >>
-  `MIN len n = len` by simp[arithmeticTheory.MIN_DEF] >>
-  `dyn_slots_in_range st (w2n w + 1) tv len` by
+  `dyn_slots_in_range st (w2n w + 1) tv n` by
     gvs[Once slots_in_range_def, read_slot_def] >>
-  `len - 1 < len` by decide_tac >>
+  `len - 1 < n` by decide_tac >>
   drule_all vyperStorageWritePreservationTheory.dyn_slots_in_range_index >>
   strip_tac >>
   `slots_in_range st
@@ -598,14 +584,14 @@ Proof
 QED
 
 Theorem pop_storage_updated_state_rel:
-  stmt_state_rel H ctx func cenv cx es s /\
+  stmt_state_rel ctx func cenv cx es s /\
   declared_storage_region cx mid id [] = SOME (tr,w,ArrayTV tv (Dynamic n)) /\
   local_ptrs_reserved cenv sa /\
   u = (if tr then tstore w (n2w (w2n (lookup_storage w (get_storage cx es tr)) - 1)) s
        else sstore w (n2w (w2n (lookup_storage w (get_storage cx es tr)) - 1)) s)
         with vs_vars := u.vs_vars /\
   (!q. not_fresh_at sa q ==> lookup_var q u = lookup_var q s) ==>
-  stmt_state_rel H ctx func cenv cx
+  stmt_state_rel ctx func cenv cx
     (set_storage cx es tr
       (apply_writes w [(0,n2w (w2n (lookup_storage w (get_storage cx es tr)) - 1))]
         (get_storage cx es tr))) u
@@ -621,7 +607,7 @@ QED
 
 Theorem pop_storage_positive_holds:
   expr_sim_inv cenv cx env es /\
-  stmt_state_rel H ctx func cenv cx es s /\
+  stmt_state_rel ctx func cenv cx es s /\
   declared_storage_region cx mid id [] = SOME (tr,w,ArrayTV tv (Dynamic n)) /\
   evaluate_type (get_tenv cx) ann = SOME tv /\
   len = w2n (lookup_storage w (get_storage cx es tr)) /\ 0 < len /\
@@ -683,8 +669,8 @@ Proof
 QED
 
 Theorem pop_ssr_gas_obs:
-  stmt_state_rel H ctx func cenv cx es s ==>
-  stmt_state_rel H ctx func cenv cx (es with gas_obs := g) s
+  stmt_state_rel ctx func cenv cx es s ==>
+  stmt_state_rel ctx func cenv cx (es with gas_obs := g) s
 Proof
   strip_tac >> drule msg_gas_state_frame >>
   disch_then (qspecl_then [`s.vs_gas_readings`, `s.vs_inst_idx`, `g`] mp_tac) >>
@@ -788,7 +774,7 @@ Resume compile_pop_storage_normalized_sim[positive]:
   `u.vs_current_bb = s0.vs_current_bb` by
     (qpat_x_assum `u = _` (fn th => once_rewrite_tac[th]) >>
      Cases_on `tr` >> simp[sstore_def, tstore_def]) >>
-  `vv_post H ctx func cenv cx (Pop ann (TopLevelNameTarget (src,id))) es sa r s0
+  `vv_post ctx func cenv cx (Pop ann (TopLevelNameTarget (src,id))) es sa r s0
      (set_storage cx es tr
         (apply_writes (n2w slot)
            [(0, n2w (w2n (lookup_storage (n2w slot) (get_storage cx es tr)) - 1))]
@@ -830,7 +816,7 @@ Resume compile_pop_storage_normalized_sim[positive]:
      `OK (u with vs_inst_idx := LENGTH sa.cs_current_insts + 9)`] >>
   simp[gas_marked_exec_def, gas_marked_path_def, exit_result_def, LET_THM,
        pop_storage_gas_obs] >>
-  qpat_x_assum `vv_post H _ _ _ _ _ _ _ _ _ _ _ _ _` mp_tac >> simp[]
+  qpat_x_assum `vv_post _ _ _ _ _ _ _ _ _ _ _ _ _` mp_tac >> simp[]
 QED
 
 Finalise compile_pop_storage_normalized_sim

@@ -23,7 +23,7 @@ Theorem compile_selected_ifexp_post_path:
   origin.cs_next_var <= sa.cs_next_var /\ origin.cs_next_id <= sa.cs_next_id /\
   MAP FDOM es.scopes = MAP FDOM ee.scopes /\
   acyclic_struct_metadata ce.ce_struct_fields /\
-  vv_post H ctx func ce cx e es origin sa s0 ee tvv vv s /\
+  vv_post ctx func ce cx e es origin sa s0 ee tvv vv s /\
   ~s.vs_halted /\ s.vs_current_bb = sa.cs_current_bb /\
   s.vs_inst_idx = LENGTH sa.cs_current_insts /\
   sfields_tenv_consistent ce.ce_struct_fields (get_tenv cx) /\
@@ -35,7 +35,7 @@ Theorem compile_selected_ifexp_post_path:
     type_memory_bytes ce (expr_type e) = type_memory_size tv /\
     type_memory_size tv < dimword (:256)) ==>
   ?q. gas_marked_path F ctx func s 0 (OK q) /\
-    expr_post H ctx func ce cx (IfExp (expr_type e) c a b)
+    expr_post ctx func ce cx (IfExp (expr_type e) c a b)
       es origin sb s0 ee v op q /\
     (~is_word_type (expr_type e) ==> vv_at ce cx (expr_type e) origin sb ee tvv
       (LocatedValue (expr_type e) (mk_ptr op LocMemory)) q) /\
@@ -68,7 +68,7 @@ Proof
   `post_value_type ce e <> expr_type e` by metis_tac[] >>
   `(do r <- eval_expr cx e; read_result cx r od) es = (INL v,ee)` by
     simp[ignore_bind_def, bind_def] >>
-  `?src. expr_post H ctx func ce cx e es origin sa s0 ee v src s /\
+  `?src. expr_post ctx func ce cx e es origin sa s0 ee v src s /\
     (!st. unwrap_value ce vv st = (src,st)) /\
     (!x. src = Var x ==> not_fresh_at sa x)` by
     (qpat_x_assum `_ ==> ~expr_has_effect e` kall_tac >>
@@ -101,7 +101,7 @@ Theorem selected_ifexp_arm_outcome:
   gas_admissible (bind (eval_expr cx e) (conditional_result cx)) expr_vv_res_ok es /\
   fn_has_code sc sb func /\ fn_inst_ids_distinct func /\
   local_ptrs_reserved ce sc /\ local_ptrs_rel func ce es.scopes s0 /\
-  stmt_state_rel H ctx func ce cx es s0 /\ ~s0.vs_halted /\
+  stmt_state_rel ctx func ce cx es s0 /\ ~s0.vs_halted /\
   s0.vs_current_bb = sc.cs_current_bb /\
   s0.vs_inst_idx = LENGTH sc.cs_current_insts /\
   acyclic_struct_metadata ce.ce_struct_fields /\
@@ -116,7 +116,7 @@ Theorem selected_ifexp_arm_outcome:
   gas_outcome F (cx_tops cx) (ctx,func)
     (bind (eval_expr cx e) (conditional_result cx)) (es,s0)
     (\res ee t. ?tv v. res = INL tv /\ read_result cx tv ee = (INL v,ee) /\
-      expr_post H ctx func ce cx (IfExp (expr_type e) c a b)
+      expr_post ctx func ce cx (IfExp (expr_type e) c a b)
         es sc sb s0 ee v op t /\
       (~is_word_type (expr_type e) ==> vv_at ce cx (expr_type e) sc sb ee tv
         (LocatedValue (expr_type e) (mk_ptr op LocMemory)) t) /\
@@ -163,7 +163,7 @@ Proof
   `local_ptrs_reserved ce sa` by metis_tac[local_ptrs_reserved_next_var] >>
   `~t.vs_halted` by
     (fs[gas_marked_exec_def, gas_marked_path_def] >> metis_tac[cj 1 gas_path_normal]) >>
-  `vv_post H ctx func ce cx e
+  `vv_post ctx func ce cx e
     (es with gas_obs := gas_explicit marks s0.vs_gas_readings)
     sc sa s0 (mid with gas_obs := []) v vv t` by
     (fs[vv_post_def, locals_kept_def, popped_kept_def] >> metis_tac[]) >>
@@ -172,13 +172,13 @@ Proof
   drule_at (Pat `eval_expr _ _ _ = _`) compile_selected_ifexp_post_path >>
   disch_then (drule_at (Pat `read_result _ _ _ = _`)) >>
   simp[] >>
-  disch_then (drule_at (Pat `vv_post H _ _ _ _ _ _ _ _ _ _ _ _ _`)) >>
+  disch_then (drule_at (Pat `vv_post _ _ _ _ _ _ _ _ _ _ _ _ _`)) >>
   disch_then (drule_at (Pat `compile_expr _ _ _ _ = _`)) >>
   disch_then (drule_at (Pat `compile_ifexp_arm _ _ _ _ _ = _`)) >>
   simp[] >>
   disch_then (qspecl_then [`env`, `c`, `b`, `a`] mp_tac) >>
   (impl_tac >- metis_tac[]) >> strip_tac >>
-  `expr_post H ctx func ce cx (IfExp (expr_type e) c a b)
+  `expr_post ctx func ce cx (IfExp (expr_type e) c a b)
     es sc sb s0 (mid with gas_obs := []) v' op q` by
     (fs[expr_post_def, locals_kept_def, popped_kept_def] >> metis_tac[]) >>
   simp[gas_outcome_def] >> qexists_tac `[]` >> disj1_tac >>

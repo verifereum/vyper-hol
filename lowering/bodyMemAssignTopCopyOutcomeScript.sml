@@ -20,6 +20,8 @@ Theorem compile_assign_storage_copy_stmt_frag_mem:
     expr_type e = typ /\ lowered_value_type cenv e = expr_type e /\
     ~is_word_type typ /\ ~is_bytestring_type typ /\ ~has_length_word typ /\
     (!elem n. typ <> ArrayT elem (Dynamic n)) /\
+    sfields_tenv_consistent cenv.ce_struct_fields (get_tenv cx) /\
+    ~is_abi_dynamic cenv.ce_struct_fields typ /\
     evaluate_type (get_tenv cx) typ = SOME tvt /\
     0 < type_slot_size tvt /\
     type_memory_bytes cenv typ = type_memory_size tvt /\
@@ -47,12 +49,9 @@ Proof
     (irule toplevel_storage_ce_vars >>
      gvs[stmt_state_rel_def, state_rel_def] >> metis_tac[]) >>
   `~(has_length_word (expr_type e) /\ is_empty_value_expr e)` by simp[] >>
-  drule_all topcopy_code_parts >> strip_tac >>
+  drule_all assign_storage_copy_code_parts >> strip_tac >>
   rename1 `lower_value _ _ _ _ sa = (op, sB)` >> gvs[] >>
-  drule (INST_TYPE [alpha |-> ``:num # num``] topcopy_no_dyn_info) >>
-  disch_then (qspec_then
-    `\elem. ((type_memory_bytes cenv elem + 31) DIV 32,
-             type_memory_bytes cenv elem)` assume_tac) >> fs[] >>
+  fs[] >>
   `cs_extends sa sB` by metis_tac[cj 2 compile_expr_grows] >>
   `cs_extends sB sb` by
     metis_tac[cj 1 ci_mono_stmt_helpers, ci_mono_def, pairTheory.SND] >>
@@ -63,7 +62,7 @@ Proof
     RULE_ASSUM_TAC (REWRITE_RULE [th]) >> REWRITE_TAC [th])) >>
   drule forced_then_admissible >> strip_tac >>
   `~block_is_terminated sb` by
-    (irule topcopy_suffix_open >> goal_assum (drule_at Any) >> simp[]) >>
+    (irule assign_storage_copy_suffix_open >> goal_assum (drule_at Any) >> simp[]) >>
   `sa.cs_next_var <= sb.cs_next_var` by
     (drule (cj 2 compile_expr_grows) >> strip_tac >>
      `ci_mono sB sb` by
@@ -73,7 +72,7 @@ Proof
   conj_tac
   >- (rpt strip_tac >> simp[stmt_exit_def] >> metis_tac[expr_exit_INR_type]) >>
   qexists_tac `\v ee t.
-    expr_post H ctx func cenv cx e es sa sB s0 ee v op t /\
+    expr_post ctx func cenv cx e es sa sB s0 ee v op t /\
     expr_store_bound cx (expr_type e) v op t /\
     t.vs_current_bb = sB.cs_current_bb /\
     t.vs_inst_idx = LENGTH sB.cs_current_insts /\
@@ -88,7 +87,7 @@ Resume compile_assign_storage_copy_stmt_frag_mem[success]:
   rpt gen_tac >> BETA_TAC >> strip_tac >>
   `value_has_type tvt v` by metis_tac[] >>
   `~cx.txn.is_static` by fs[expr_post_def, stmt_state_rel_def, state_rel_def] >>
-  drule_all topcopy_typed_storage_write >>
+  drule_all typed_storage_copy_write >>
   disch_then (qspecl_then [`tr`, `n2w slot`, `ee`] mp_tac) >>
   strip_tac >>
   qmatch_asmsub_abbrev_tac `write_storage_slot cx tr (n2w slot) tvt v ee = (INL (), ee')` >>

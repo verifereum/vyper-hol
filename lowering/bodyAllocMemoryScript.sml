@@ -32,7 +32,7 @@ Theorem compile_alloc_buffer_body_site:
   !ctx func cenv cx es s n sa buf sb.
     compile_alloc_buffer n sa = (buf,sb) /\
     fn_has_code sa sb func /\ ~block_is_terminated sa /\
-    stmt_state_rel H ctx func cenv cx es s /\ n < dimword (:256) ==>
+    stmt_state_rel ctx func cenv cx es s /\ n < dimword (:256) ==>
     ?p. FLOOKUP (abi_builtin_allocate_state sa.cs_next_id n s).vs_allocas
           sa.cs_next_id = SOME (p,n)
 Proof
@@ -52,7 +52,7 @@ Theorem compile_alloc_buffer_body_header_mem_ok:
     compile_alloc_buffer n sa = (buf,sm) /\
     emit_void MSTORE [buf.buf_operand; value] sm = ((),sb) /\
     fn_has_code sa sm func /\ ~block_is_terminated sa /\
-    stmt_state_rel H ctx func cenv cx es s /\ fresh_vars_wrt sa s /\
+    stmt_state_rel ctx func cenv cx es s /\ fresh_vars_wrt sa s /\
     32 <= n /\ n < dimword (:256) ==>
     run_inst_seq_mem_ok
       (emitted_insts sa sm ++ emitted_insts sm sb) s
@@ -68,7 +68,7 @@ Theorem compile_alloc_buffer_body_frontier:
   !ctx func cenv cx es s n sa buf sb.
     compile_alloc_buffer n sa = (buf,sb) /\
     fn_has_code sa sb func /\ ~block_is_terminated sa /\
-    stmt_state_rel H ctx func cenv cx es s /\ n < dimword (:256) ==>
+    stmt_state_rel ctx func cenv cx es s /\ n < dimword (:256) ==>
     s.vs_alloca_next <=
       (abi_builtin_allocate_state sa.cs_next_id n s).vs_alloca_next
 Proof
@@ -104,7 +104,7 @@ Theorem compile_alloc_buffer_body_header_run_mem:
     compile_alloc_buffer n sa = (buf,sm) /\
     emit_void MSTORE [buf.buf_operand; value] sm = ((),sb) /\
     fn_has_code sa sb func /\ ~block_is_terminated sa /\
-    stmt_state_rel H ctx func cenv cx es s /\ fresh_vars_wrt sa s /\
+    stmt_state_rel ctx func cenv cx es s /\ fresh_vars_wrt sa s /\
     32 <= n /\ n < dimword (:256) /\
     s.vs_current_bb = sa.cs_current_bb /\
     s.vs_inst_idx = LENGTH sa.cs_current_insts ==>
@@ -134,7 +134,7 @@ Theorem compile_alloc_buffer_body_header_history:
     compile_alloc_buffer n sa = (buf,sm) /\
     emit_void MSTORE [buf.buf_operand; value] sm = ((),sb) /\
     fn_has_code sa sb func /\ ~block_is_terminated sa /\
-    stmt_state_rel H ctx func cenv cx es s /\ fresh_vars_wrt sa s /\
+    stmt_state_rel ctx func cenv cx es s /\ fresh_vars_wrt sa s /\
     32 <= n /\ n < dimword (:256) /\
     s.vs_current_bb = sa.cs_current_bb /\
     s.vs_inst_idx = LENGTH sa.cs_current_insts /\
@@ -154,7 +154,7 @@ Theorem compile_alloc_buffer_body_mem_ok:
   !n sa buf sb func ctx cenv cx es s.
     compile_alloc_buffer n sa = (buf,sb) /\
     fn_has_code sa sb func /\ ~block_is_terminated sa /\
-    stmt_state_rel H ctx func cenv cx es s /\ fresh_vars_wrt sa s /\
+    stmt_state_rel ctx func cenv cx es s /\ fresh_vars_wrt sa s /\
     n < dimword (:256) ==>
     run_inst_seq_mem_ok (emitted_insts sa sb) s
 Proof
@@ -221,8 +221,8 @@ Theorem compile_alloc_buffer_body_frag_mem:
     inst.inst_id < sm.cs_next_id /\ not_fresh_at sm x /\
     local_ptrs_reserved ce sm /\ (!scopes. not_local_ptr ce scopes x) /\
     frag_exec_mem ctx sa sm
-      (\s. s = s0 /\ stmt_state_rel H ctx func ce cx es s /\ alloca_history func s)
-      (\t. ?b. stmt_state_rel H ctx func ce cx es t /\
+      (\s. s = s0 /\ stmt_state_rel ctx func ce cx es s /\ alloca_history func s)
+      (\t. ?b. stmt_state_rel ctx func ce cx es t /\
         lookup_var x t = SOME (n2w b) /\
         FLOOKUP t.vs_allocas inst.inst_id = SOME (b,sz) /\
         b + sz < dimword (:256) /\ t.vs_memory = s0.vs_memory /\
@@ -287,7 +287,7 @@ QED
 Theorem compile_mapping_subscript_body_mem_ok:
   compile_mapping_subscript base_slot key_op sa = (op,sb) /\
   fn_has_code sa sb func /\ ~block_is_terminated sa /\
-  stmt_state_rel H ctx func cenv cx es s /\ fresh_vars_wrt sa s /\
+  stmt_state_rel ctx func cenv cx es s /\ fresh_vars_wrt sa s /\
   eval_operand base_slot s = SOME b /\ eval_operand key_op s = SOME k ==>
   run_inst_seq_mem_ok (emitted_insts sa sb) s
 Proof
@@ -348,14 +348,14 @@ QED
 Theorem alloc_buffer_source_frag_mem:
   !ctx func cenv cx es sm mid buf sz s src a R.
     compile_alloc_buffer sz sm = (buf,mid) /\ fn_has_code sm mid func /\
-    stmt_state_rel H ctx func cenv cx es s /\ fn_inst_ids_distinct func /\
+    stmt_state_rel ctx func cenv cx es s /\ fn_inst_ids_distinct func /\
     local_ptrs_reserved cenv sm /\ sz < dimword (:256) /\
     eval_operand src s = SOME a /\
     (!x. src = Var x ==> not_fresh_at sm x) /\ alloca_history func s ==>
     ?u w. frag_exec_mem ctx sm mid (\z. z = s)
             (\z. z = u /\ alloca_history func z) R /\
       eval_operand src u = SOME a /\
-      stmt_state_rel H ctx func cenv cx es u /\
+      stmt_state_rel ctx func cenv cx es u /\
       eval_operand buf.buf_operand u = SOME w /\
       FLOOKUP u.vs_allocas sm.cs_next_id = SOME (w2n w,sz) /\
       w2n w + sz < dimword (:256) /\ u.vs_memory = s.vs_memory /\

@@ -39,7 +39,7 @@ QED
 Resume array_condition_boundary_mem[invariant]:
   fs[array_loop_inv_def] >>
   rename1 `eval_operand saved_base cc = SOME array_base` >>
-  `stmt_state_rel H ctx func cenv cx es
+  `stmt_state_rel ctx func cenv cx es
      (update_var dv (bool_to_word (k = n)) cc)` by
     (irule stmt_state_rel_update_var >> simp[]) >>
   `eval_operand saved_base (update_var dv (bool_to_word (k = n)) cc) = SOME array_base` by
@@ -138,7 +138,7 @@ QED
 Resume array_increment_boundary_mem[invariant]:
   fs[array_loop_inv_def] >>
   rename1 `eval_operand saved_base dd = SOME array_base` >>
-  `stmt_state_rel H ctx func cenv cx es
+  `stmt_state_rel ctx func cenv cx es
      (update_var idx (n2w (k+1)) (update_var nv (n2w (k+1)) dd))` by
     (irule stmt_state_rel_update_var >> simp[] >>
      irule stmt_state_rel_update_var >> simp[]) >>

@@ -5,7 +5,7 @@ Ancestors
   exprLoweringProps emitHelperProps emitHelper compileEnv loweringStateRelDefs context venomInst
   venomState venomExecSemantics venomMemDefs finite_map list words arithmetic
 
-Theorem slice_bounds_shape[local]:
+Theorem slice_bounds_shape:
   compile_assert_slice_bounds a n limit sa = ((), sb) ==>
   sb.cs_next_var = sa.cs_next_var + 5 /\
   sb.cs_next_id = sa.cs_next_id + 6 /\
@@ -401,7 +401,7 @@ val () = List.app (fn th =>
    for the bytestring header read, including an unsuccessful read prefix. *)
 Theorem compile_bytestring_src_local_mem_ok:
   !ctx func cenv cx es s name entry p sz sa result sb.
-    stmt_state_rel H ctx func cenv cx es s /\
+    stmt_state_rel ctx func cenv cx es s /\
     lookup_scopes name es.scopes = SOME entry /\
     FLOOKUP cenv.ce_vars name = SOME (PtrVar (Var p) sz) /\
     32 <= sz /\

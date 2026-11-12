@@ -101,7 +101,7 @@ QED
 
 Theorem place_ptr_rel_memory_current:
   !ctx func cenv cx env es s id path entry v w loc ty tv.
-    expr_sim_inv cenv cx env es /\ stmt_state_rel H ctx func cenv cx es s /\
+    expr_sim_inv cenv cx env es /\ stmt_state_rel ctx func cenv cx es s /\
     place_ptr_rel cenv cx s (PlaceR (MemoryPlace id path)) w loc (Type ty) /\
     lookup_scopes id es.scopes = SOME entry /\
     evaluate_subscripts entry.type entry.value path = INL v /\
@@ -144,7 +144,7 @@ QED
 
 Theorem array_len_ok_memory_current:
   !ctx func cenv cx env es s id path entry vs w loc ty etv cap ptr cnt.
-    expr_sim_inv cenv cx env es /\ stmt_state_rel H ctx func cenv cx es s /\
+    expr_sim_inv cenv cx env es /\ stmt_state_rel ctx func cenv cx es s /\
     place_ptr_rel cenv cx s (PlaceR (MemoryPlace id path)) w loc (Type ty) /\
     lookup_scopes id es.scopes = SOME entry /\
     evaluate_subscripts entry.type entry.value path = INL (ArrayV (DynArrayV vs)) /\
@@ -163,9 +163,9 @@ Proof
 QED
 
 Theorem target_post_suffix_frame:
-  target_post H ctx func cenv cx es sa sm s0 es' pv vt rb t /\
+  target_post ctx func cenv cx es sa sm s0 es' pv vt rb t /\
   sa.cs_next_var <= sm.cs_next_var /\
-  stmt_state_rel H ctx func cenv cx es' u /\
+  stmt_state_rel ctx func cenv cx es' u /\
   (?w. eval_operand dst u = SOME w /\ place_ptr_rel cenv cx u pv' w loc vt') /\
   (!x. dst = Var x ==> not_fresh_at sb x) /\
   place_readable cx es' pv' /\
@@ -174,7 +174,7 @@ Theorem target_post_suffix_frame:
   (!aid b. FLOOKUP t.vs_allocas aid = SOME b ==>
            FLOOKUP u.vs_allocas aid = SOME b) /\
   u.vs_memory = t.vs_memory ==>
-  target_post H ctx func cenv cx es sa sb s0 es' pv' vt'
+  target_post ctx func cenv cx es sa sb s0 es' pv' vt'
     (dst,loc,SOME (value_type_place vt')) u
 Proof
   strip_tac >>
@@ -267,7 +267,7 @@ Proof
 QED
 
 Theorem target_post_memory_step:
-  target_post H ctx func cenv cx es sa sm s0 es2
+  target_post ctx func cenv cx es sa sm s0 es2
     (PlaceR (MemoryPlace id path)) (Type ty) rb t /\
   lookup_scopes id es2.scopes = SOME entry /\
   evaluate_subscripts entry.type entry.value path = INL v /\
@@ -277,7 +277,7 @@ Theorem target_post_memory_step:
   evaluate_type (get_tenv cx) ety = SOME etv /\
   eval_operand (FST rb) t = SOME w /\
   eval_operand dst u = SOME (w + n2w k) /\
-  stmt_state_rel H ctx func cenv cx es2 u /\
+  stmt_state_rel ctx func cenv cx es2 u /\
   local_ptrs_reserved cenv sm /\ sa.cs_next_var <= sm.cs_next_var /\
   (!x. dst = Var x ==> not_fresh_at sb x) /\
   (!x z. not_fresh_at sm x /\ lookup_var x t = SOME z ==>
@@ -285,7 +285,7 @@ Theorem target_post_memory_step:
   (!aid b. FLOOKUP t.vs_allocas aid = SOME b ==>
            FLOOKUP u.vs_allocas aid = SOME b) /\
   u.vs_memory = t.vs_memory ==>
-  target_post H ctx func cenv cx es sa sb s0 es3 pv' (Type ety)
+  target_post ctx func cenv cx es sa sb s0 es3 pv' (Type ety)
     (dst,SOME LocMemory,SOME (ValPT ety)) u
 Proof
   strip_tac >>
@@ -345,13 +345,13 @@ QED
 Theorem target_memory_header_load:
   compile_ptr_load cenv.ce_is_ctor cenv.ce_imm_alloca LocMemory base_op sa = (dst,sb) /\
   fn_has_code sa sb func /\ local_ptrs_reserved cenv sa /\
-  stmt_state_rel H ctx func cenv cx es s /\ ~s.vs_halted /\
+  stmt_state_rel ctx func cenv cx es s /\ ~s.vs_halted /\
   s.vs_current_bb = sa.cs_current_bb /\
   s.vs_inst_idx = LENGTH sa.cs_current_insts /\
   eval_operand base_op s = SOME w ==>
   ?t. gas_marked_path F ctx func s 0 (OK t) /\
       eval_operand dst t = SOME (mload (w2n w) s) /\
-      stmt_state_rel H ctx func cenv cx es t /\
+      stmt_state_rel ctx func cenv cx es t /\
       (!x v. not_fresh_at sa x /\ lookup_var x s = SOME v ==>
              lookup_var x t = SOME v) /\
       t.vs_allocas = s.vs_allocas /\ t.vs_memory = s.vs_memory /\
@@ -389,7 +389,7 @@ Theorem target_array_check_ptr_path:
   comp_ignore_bind (array_bounds_check idx_op len_op sgn)
     (array_elem_ptr base_op idx_op dyn ws esz) sa = (dst,sb) /\
   fn_has_code sa sb func /\ local_ptrs_reserved cenv sa /\
-  stmt_state_rel H ctx func cenv cx es s /\ ~s.vs_halted /\
+  stmt_state_rel ctx func cenv cx es s /\ ~s.vs_halted /\
   s.vs_current_bb = sa.cs_current_bb /\
   s.vs_inst_idx = LENGTH sa.cs_current_insts /\
   (!x. base_op = Var x ==> not_fresh_at sa x) /\
@@ -400,7 +400,7 @@ Theorem target_array_check_ptr_path:
   ?t. gas_marked_path F ctx func s 0 (OK t) /\
       eval_operand dst t =
         SOME ((if dyn then b + n2w ws else b) + i * n2w esz) /\
-      stmt_state_rel H ctx func cenv cx es t /\
+      stmt_state_rel ctx func cenv cx es t /\
       (!x v. not_fresh_at sa x /\ lookup_var x s = SOME v ==>
              lookup_var x t = SOME v) /\
       (!aid a. FLOOKUP s.vs_allocas aid = SOME a ==>
@@ -468,7 +468,7 @@ Theorem target_memory_dynamic_array_path:
   comp_ignore_bind (array_bounds_check idx_op len_op sgn)
     (array_elem_ptr base_op idx_op T ws esz) sm = (dst,sb) /\
   fn_has_code sa sm func /\ fn_has_code sm sb func /\
-  local_ptrs_reserved cenv sa /\ stmt_state_rel H ctx func cenv cx es s /\
+  local_ptrs_reserved cenv sa /\ stmt_state_rel ctx func cenv cx es s /\
   ~s.vs_halted /\ s.vs_current_bb = sa.cs_current_bb /\
   s.vs_inst_idx = LENGTH sa.cs_current_insts /\
   (!x. base_op = Var x ==> not_fresh_at sa x) /\
@@ -478,7 +478,7 @@ Theorem target_memory_dynamic_array_path:
   idx_in_range sgn i (mload (w2n b) s) ==>
   ?t. gas_marked_path F ctx func s 0 (OK t) /\
       eval_operand dst t = SOME (b + n2w ws + i * n2w esz) /\
-      stmt_state_rel H ctx func cenv cx es t /\
+      stmt_state_rel ctx func cenv cx es t /\
       (!x v. not_fresh_at sa x /\ lookup_var x s = SOME v ==>
              lookup_var x t = SOME v) /\
       (!aid a. FLOOKUP s.vs_allocas aid = SOME a ==>
@@ -513,7 +513,7 @@ Theorem target_memory_dynamic_array_abort_path:
   comp_ignore_bind (array_bounds_check idx_op len_op sgn)
     (array_elem_ptr base_op idx_op T ws esz) sm = (dst,sb) /\
   fn_has_code sa sm func /\ fn_has_code sm sb func /\
-  local_ptrs_reserved cenv sa /\ stmt_state_rel H ctx func cenv cx es s /\
+  local_ptrs_reserved cenv sa /\ stmt_state_rel ctx func cenv cx es s /\
   ~s.vs_halted /\ s.vs_current_bb = sa.cs_current_bb /\
   s.vs_inst_idx = LENGTH sa.cs_current_insts /\
   (!x. idx_op = Var x ==> not_fresh_at sa x) /\
@@ -541,7 +541,7 @@ Theorem target_memory_array_path:
   compile_array_subscript base_op idx_op dyn cnt ws esz sgn
     (compile_ptr_load cenv.ce_is_ctor cenv.ce_imm_alloca LocMemory) sa = (dst,sb) /\
   fn_has_code sa sb func /\ local_ptrs_reserved cenv sa /\
-  stmt_state_rel H ctx func cenv cx es s /\ ~s.vs_halted /\
+  stmt_state_rel ctx func cenv cx es s /\ ~s.vs_halted /\
   s.vs_current_bb = sa.cs_current_bb /\
   s.vs_inst_idx = LENGTH sa.cs_current_insts /\
   (!x. base_op = Var x ==> not_fresh_at sa x) /\
@@ -551,7 +551,7 @@ Theorem target_memory_array_path:
   idx_in_range sgn i (if dyn then mload (w2n b) s else n2w cnt) ==>
   ?t. gas_marked_path F ctx func s 0 (OK t) /\
       eval_operand dst t = SOME ((if dyn then b + n2w ws else b) + i * n2w esz) /\
-      stmt_state_rel H ctx func cenv cx es t /\
+      stmt_state_rel ctx func cenv cx es t /\
       (!x v. not_fresh_at sa x /\ lookup_var x s = SOME v ==>
              lookup_var x t = SOME v) /\
       (!aid a. FLOOKUP s.vs_allocas aid = SOME a ==>
@@ -581,7 +581,7 @@ Theorem target_memory_array_abort_path:
   compile_array_subscript base_op idx_op dyn cnt ws esz sgn
     (compile_ptr_load cenv.ce_is_ctor cenv.ce_imm_alloca LocMemory) sa = (dst,sb) /\
   fn_has_code sa sb func /\ local_ptrs_reserved cenv sa /\
-  stmt_state_rel H ctx func cenv cx es s /\ ~s.vs_halted /\
+  stmt_state_rel ctx func cenv cx es s /\ ~s.vs_halted /\
   s.vs_current_bb = sa.cs_current_bb /\
   s.vs_inst_idx = LENGTH sa.cs_current_insts /\
   (!x. idx_op = Var x ==> not_fresh_at sa x) /\ (!l. idx_op <> Label l) /\
@@ -668,7 +668,7 @@ Proof
 QED
 
 Theorem target_memory_array_range:
-  expr_sim_inv cenv cx env es /\ stmt_state_rel H ctx func cenv cx es s /\
+  expr_sim_inv cenv cx env es /\ stmt_state_rel ctx func cenv cx es s /\
   place_ptr_rel cenv cx s (PlaceR (MemoryPlace id path)) b loc
     (Type (ArrayT ety (if dyn then Dynamic cnt else Fixed cnt))) /\
   lookup_scopes id es.scopes = SOME entry /\
@@ -718,7 +718,7 @@ Proof
 QED
 
 Theorem target_memory_array_error_suffix:
-  target_post H ctx func cenv cx es0 sa sm s0 es
+  target_post ctx func cenv cx es0 sa sm s0 es
     (PlaceR (MemoryPlace id path))
     (Type (ArrayT ety (if dyn then Dynamic cnt else Fixed cnt))) rb s /\
   expr_sim_inv cenv cx env es /\
@@ -743,7 +743,7 @@ Theorem target_memory_array_error_suffix:
   err = Error (RuntimeError "evaluate_subscripts array_index") /\ es' = es
 Proof
   strip_tac >>
-  `stmt_state_rel H ctx func cenv cx es s /\
+  `stmt_state_rel ctx func cenv cx es s /\
    ?b. eval_operand (FST rb) s = SOME b /\
        place_ptr_rel cenv cx s (PlaceR (MemoryPlace id path)) b
          (FST (SND rb)) (Type (ArrayT ety (if dyn then Dynamic cnt else Fixed cnt)))` by
@@ -757,7 +757,7 @@ Proof
 QED
 
 Theorem target_memory_array_suffix:
-  target_post H ctx func cenv cx es0 sa sm s0 es
+  target_post ctx func cenv cx es0 sa sm s0 es
     (PlaceR (MemoryPlace id path))
     (Type (ArrayT ety (if dyn then Dynamic cnt else Fixed cnt))) rb s /\
   expr_sim_inv cenv cx env es /\
@@ -779,13 +779,13 @@ Theorem target_memory_array_suffix:
   extend_place cx (PlaceR (MemoryPlace id path)) (ValueSubscript (IntV i)) es =
     (INL pv',es') ==>
   ?u. gas_marked_path F ctx func s 0 (OK u) /\
-      target_post H ctx func cenv cx es0 sa sb s0 es' pv' (Type ety)
+      target_post ctx func cenv cx es0 sa sb s0 es' pv' (Type ety)
         (dst,SOME LocMemory,SOME (ValPT ety)) u /\
       ~u.vs_halted /\ u.vs_current_bb = sb.cs_current_bb /\
       u.vs_inst_idx = LENGTH sb.cs_current_insts
 Proof
   strip_tac >>
-  `stmt_state_rel H ctx func cenv cx es s /\
+  `stmt_state_rel ctx func cenv cx es s /\
    (?b. eval_operand (FST rb) s = SOME b /\
         place_ptr_rel cenv cx s (PlaceR (MemoryPlace id path)) b
           (FST (SND rb)) (Type (ArrayT ety (if dyn then Dynamic cnt else Fixed cnt)))) /\

@@ -1,12 +1,14 @@
 (* Creation-frame boundary: a run of the root-shadowed frame related to the
  * deployment unit's result gives the real creation frame's result
  * (shadow_root_run_halt/_exception and deploy_frame_complete).
- * TOP-LEVEL: deploy_venom_frame (a piece of e2e_deploy_correctness; admitted until proved).
+ * TOP-LEVEL: deploy_venom_frame (a piece of e2e_deploy_correctness; admitted until proved),
+ * deploy_frame_gas_sufficient (S7g-d, a piece of e2e_deploy_gas_sufficient; a planned admission).
  *)
 Theory ctorDeployFrame
 Ancestors
   ctorDeployDefs deployFrameReplay codegenCorrectness e2eDeployFrame
   frameOutcome vfmRunCall vfmState passSimulationDefs e2eDeployDefs
+  frameGas venomRunBounded
 
 (* Single-frame outcomes depend on the start state only through its one
    context's logs and the transaction parameters. *)
@@ -194,4 +196,47 @@ Proof
       gvs[deploy_venom_result_rel_def, deploy_result_rel_def] >>
       metis_tac[]) >>
   drule deploy_venom_result_rel_terminates >> simp[terminates_def]
+QED
+
+(* PLANNED ADMISSION S7g-d, sufficient gas for deployment: the deploy-side
+   counterpart of codegen_gas_sufficient together with deploy_venom_frame.
+   Given the constructor unit's resource bound, some gas g, independent of
+   the creation frame, is enough: with g' >= g more gas, the creation frame
+   ends in OutOfGas only when the code it deposits, runtime_bc and the
+   immutables section, is longer than max_code_size, which handle_create
+   rejects with OutOfGas at any gas.  No RETURNDATACOPY exemption: the
+   constructor makes no calls.  The last premise says what the constructor
+   returns, so the deposit's length is LENGTH runtime_bc + imm_len tops.
+   Proof idea: S7g's per-instruction argument on the root-shadowed frame
+   codegen runs (shadow_root), with no RETURNDATACOPY run, plus the
+   deposit, which costs at most code_deposit_cost * max_code_size. *)
+Theorem deploy_frame_gas_sufficient:
+  !policy tops deploy_bc runtime_bc rpolicy dunit dout prog cplan fuel M.
+    deploy_phases policy tops (deploy_bc, runtime_bc)
+      (rpolicy, dunit, dout, prog, cplan) /\
+    unit_shape_ok dout.po_unit /\
+    constructor_call_free tops
+    ==>
+    ?g. !g' am tx es Inv.
+      g <= g' /\
+      deploy_state_rel tops deploy_bc am tx (add_frame_gas g' es) /\
+      LENGTH (FST (HD (add_frame_gas g' es).contexts)).msgParams.code
+        <= dimword(:256) DIV 2 /\
+      codegen_context_obligations Inv dout.po_unit.cu_context cplan /\
+      codegen_reachability_package Inv dout.po_unit.cu_context
+        (deploy_entry_state prog cplan tops (add_frame_gas g' es)) /\
+      venom_run_bounded fuel M dout.po_unit.cu_context
+        (deploy_entry_state prog cplan tops (add_frame_gas g' es)) /\
+      (?src vfuel.
+         ~deploy_source_exempt tops src /\
+         deploy_venom_result_rel tops runtime_bc tx src
+           (run_context vfuel dout.po_unit.cu_context
+              (deploy_entry_state prog cplan tops (add_frame_gas g' es))))
+      ==>
+      ?r es'.
+        run_call (add_frame_gas g' es) = SOME (r, es') /\
+        (r = INR (SOME OutOfGas) ==>
+         max_code_size < LENGTH runtime_bc + imm_len tops)
+Proof
+  cheat
 QED

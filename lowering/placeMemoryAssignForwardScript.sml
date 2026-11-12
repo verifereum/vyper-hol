@@ -31,11 +31,6 @@ Theorem compile_assign_memory_forward_local_frame:
   !ctx func cenv cx env ee ff s p w loc dst_op op src_loc dty sty stv v sa sb.
     loc = LocMemory /\
     compile_assign_value cenv dst_op loc op (is_word_type dty) src_loc dty sty
-      (case dty of
-         ArrayT et (Dynamic _) =>
-           SOME ((type_memory_bytes cenv et + 31) DIV 32,
-                 type_memory_bytes cenv et)
-       | _ => NONE)
       (type_memory_bytes cenv dty) sa = ((), sb) /\
     eval_operand dst_op s = SOME w /\
     place_ptr_rel cenv cx s (PlaceR p) w (SOME loc) (Type dty) /\
@@ -70,7 +65,7 @@ Theorem compile_assign_memory_forward_local_frame:
            w2n w + type_memory_size dtv + 64 < dimword (:256)) /\
     (!dtv. evaluate_type (get_tenv cx) dty = SOME dtv ==>
            0 < type_slot_size dtv) /\
-    stmt_state_rel H ctx func cenv cx ee s /\
+    stmt_state_rel ctx func cenv cx ee s /\
     write_place cx p v ee = (INL (), ff) /\
     fn_has_code sa sb func /\ fn_inst_ids_distinct func /\
     ~s.vs_halted /\ s.vs_current_bb = sa.cs_current_bb /\
@@ -78,7 +73,7 @@ Theorem compile_assign_memory_forward_local_frame:
     ?dtv r t.
       evaluate_type (get_tenv cx) dty = SOME dtv /\
       val_in_memory dtv v (w2n w) t.vs_memory /\
-      stmt_state_rel H ctx func cenv cx ee r /\
+      stmt_state_rel ctx func cenv cx ee r /\
       gas_marked_path F ctx func s 0 (OK t) /\
       (t with <|vs_vars := r.vs_vars; vs_memory := r.vs_memory;
         vs_prev_bb := r.vs_prev_bb; vs_current_bb := r.vs_current_bb;

@@ -4,7 +4,7 @@
  * The lowering writes a child's value into its parent's buffer with
  * compile_store_memory: a word store, an MCOPY, or a bytestring store.
  * The code runs, val_in_memory holds at the destination, and only the
- * destination window changes; stmt_state_rel H survives when that window is
+ * destination window changes; stmt_state_rel survives when that window is
  * clear of the locals.
  *
  * TOP-LEVEL:
@@ -71,7 +71,7 @@ Proof
   rpt strip_tac >> drule emitted_insts_emit_void >> strip_tac >>
   `step_inst_base (mk_inst sa.cs_next_id MCOPY [dst; src; sz] []) s =
      OK (mcopy (w2n d) (w2n w) (w2n n) s)` by
-    simp[step_inst_base_def] >>
+    simp[step_inst_base_opcode_eqs] >>
   simp[run_inst_seq_def]
 QED
 
@@ -501,7 +501,7 @@ QED
 
 Theorem buffer_store_state_frame:
   !func cenv cx es sa s q dst n ctx.
-    stmt_state_rel H ctx func cenv cx es s /\ local_ptrs_reserved cenv sa /\
+    stmt_state_rel ctx func cenv cx es s /\ local_ptrs_reserved cenv sa /\
     (q with <|vs_vars := s.vs_vars; vs_memory := s.vs_memory|>) = s /\
     (!x. not_fresh_at sa x ==> lookup_var x q = lookup_var x s) /\
     (!a k. a+k <= dst \/ dst+n <= a ==>
@@ -515,7 +515,7 @@ Theorem buffer_store_state_frame:
       FLOOKUP (case ALOOKUP es.immutables cx.txn.target of NONE => FEMPTY
         | SOME imms => get_source_immutables cenv.ce_module imms) name = SOME (tv,v) ==>
       regions_disjoint off (type_memory_size tv) dst n) ==>
-    stmt_state_rel H ctx func cenv cx es q
+    stmt_state_rel ctx func cenv cx es q
 Proof
   rpt gen_tac >> strip_tac >> irule literal_state_memory_frame >>
   qexists_tac `s` >> simp[] >> conj_tac
@@ -539,11 +539,11 @@ QED
    memory. The allocation can be larger than the copied prefix. *)
 Theorem stmt_state_rel_mcopy_alloca:
   !func cenv cx es s inst p dst src sz alloc_sz ctx.
-    stmt_state_rel H ctx func cenv cx es s /\ fn_inst_ids_distinct func /\
+    stmt_state_rel ctx func cenv cx es s /\ fn_inst_ids_distinct func /\
     MEM inst (fn_insts func) /\ inst.inst_opcode = ALLOCA /\ inst.inst_outputs = [p] /\
     not_local_ptr cenv es.scopes p /\ sz <= alloc_sz /\
     FLOOKUP s.vs_allocas inst.inst_id = SOME (dst, alloc_sz) ==>
-    stmt_state_rel H ctx func cenv cx es (mcopy dst src sz s)
+    stmt_state_rel ctx func cenv cx es (mcopy dst src sz s)
 Proof
   rpt strip_tac >>
   `(mcopy dst src sz s with <|vs_vars := s.vs_vars;
@@ -560,7 +560,7 @@ Proof
      conj_tac >- simp[mcopy_def, write_memory_with_expansion_def] >>
      reverse conj_tac >- gvs[stmt_state_rel_def, state_rel_def] >>
      rpt strip_tac >> irule mem_bytes_at_mcopy_disjoint >>
-     qpat_assum `stmt_state_rel H ctx _ _ _ _ _` mp_tac >>
+     qpat_assum `stmt_state_rel ctx _ _ _ _ _` mp_tac >>
      pure_rewrite_tac[stmt_state_rel_def, immutable_alloca_sep_def] >>
      strip_tac >> qpat_x_assum `cenv.ce_is_ctor ==> _` drule >>
      disch_then drule_all >> strip_tac >>
@@ -581,14 +581,14 @@ Theorem mcopy_alloca_framed_frag:
     emit_void MCOPY [Var p; src; Lit (n2w sz)] sa = ((), sb) /\
     lookup_var p s = SOME dw /\ eval_operand src s = SOME sw /\
     sz < dimword (:256) /\ sz <= alloc_sz /\
-    stmt_state_rel H ctx func cenv cx es s /\ fn_inst_ids_distinct func /\
+    stmt_state_rel ctx func cenv cx es s /\ fn_inst_ids_distinct func /\
     MEM inst (fn_insts func) /\ inst.inst_opcode = ALLOCA /\ inst.inst_outputs = [p] /\
     not_local_ptr cenv es.scopes p /\
     FLOOKUP s.vs_allocas inst.inst_id = SOME (w2n dw, alloc_sz) /\
     val_in_memory tv v (w2n sw) s.vs_memory /\ val_wf tv v /\
     val_footprint tv v <= sz ==>
     frag_exec ctx sa sb (\t. t = s)
-      (\t. stmt_state_rel H ctx func cenv cx es t /\
+      (\t. stmt_state_rel ctx func cenv cx es t /\
            val_in_memory tv v (w2n dw) t.vs_memory /\
            (!q. lookup_var q t = lookup_var q s) /\
            t.vs_allocas = s.vs_allocas /\
@@ -599,7 +599,7 @@ Proof
   rpt strip_tac >>
   `eval_operand (Var p) s = SOME dw` by simp[eval_operand_def] >>
   drule_all emit_mcopy_run >> strip_tac >>
-  `stmt_state_rel H ctx func cenv cx es (mcopy (w2n dw) (w2n sw) sz s)` by
+  `stmt_state_rel ctx func cenv cx es (mcopy (w2n dw) (w2n sw) sz s)` by
     (irule stmt_state_rel_mcopy_alloca >> simp[] >>
      qexistsl_tac [`alloc_sz`, `inst`, `p`] >> simp[]) >>
   `val_in_memory tv v (w2n dw) (mcopy (w2n dw) (w2n sw) sz s).vs_memory` by
