@@ -7,7 +7,8 @@
  *)
 Theory dftRequestsGas
 Ancestors
-  dftGasRequestSchedule dftGasRequestRel dftContractGas o1RequestContract o1PassContract o1PassLift unitMemInv
+  dftGasRequestPartner dftGasRequestSchedule dftGasRequestRel
+  dftContractGas o1RequestContract o1PassContract o1PassLift unitMemInv
   dftDefs venomExecSemantics venomState list
 
 Theorem dft_ctx_sim_rq_gas:
