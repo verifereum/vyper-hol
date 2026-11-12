@@ -639,6 +639,24 @@ Definition allocas_below_fmp_def:
                b + sz <= w2n s.vs_initial_fmp
 End
 
+(* DALLOCA moves the free memory pointer up by the rounded size and leaves
+   the ALLOCA sites alone, so allocas_below_fmp holds after it as long as
+   the pointer doesn't wrap. *)
+Theorem allocas_below_fmp_dalloca:
+  inst.inst_opcode = DALLOCA /\ step_inst fuel ctx inst s = OK s' /\
+  allocas_below_fmp s /\
+  (!sz_op sz. inst.inst_operands = [sz_op] /\
+              eval_operand sz_op s = SOME sz ==>
+              w2n s.vs_fmp + ceil32 (w2n sz) < dimword (:256)) ==>
+  allocas_below_fmp s'
+Proof
+  rpt strip_tac >>
+  gvs[step_inst_non_invoke, step_inst_base_def, AllCaseEqs()] >>
+  `ceil32 (w2n sz) < dimword (:256)` by decide_tac >>
+  gvs[allocas_below_fmp_def, update_var_def, word_add_def, w2n_n2w] >>
+  first_assum ACCEPT_TAC
+QED
+
 (* ALLOCA sites lie at or above lo: below it is the fixed region, which
    both runs address with the same constants. *)
 Definition allocas_from_def:
