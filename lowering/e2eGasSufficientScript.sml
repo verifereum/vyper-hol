@@ -120,6 +120,21 @@ End
 
 (* ===== The call cases ===== *)
 
+(* PLANNED ADMISSION: the runtime unit S7g runs reaches no oversized CREATE.
+   supported_program's body_stmt_safe excludes CreateTarget, so the lowering
+   emits no CREATE or CREATE2 and O1 keeps them absent; the premise then
+   holds at every state. *)
+Theorem o1_runtime_unit_create_size_ok:
+  !tops rpolicy unit out vs.
+    supported_program tops /\
+    lower_vyper_runtime_unit tops rpolicy = SOME unit /\
+    o1PipelineCorrect$o1_pipeline rpolicy unit = SOME out
+    ==>
+    mem_inv (\ctx fn inst s. inst_create_size_ok inst s) out.po_unit.cu_context vs
+Proof
+  cheat
+QED
+
 (* vyper_call_correct's hypotheses.  The two that range over the call
    trace, and so over what the callees do with the gas they get, are
    stated at the new gas.  ~gas_source_exempt is S3's ~source_exempt (on
@@ -181,6 +196,9 @@ Proof
   qspecl_then [`rpolicy`, `out.po_unit`, `cplan`, `prog`, `fuel'`, `M`]
     mp_tac codegen_gas_sufficient >>
   impl_tac >- simp[] >> disch_then (qx_choose_then `g` assume_tac) >>
+  `!vs. mem_inv (\ctx fn inst s. inst_create_size_ok inst s)
+          out.po_unit.cu_context vs` by
+    metis_tac[o1_runtime_unit_create_size_ok] >>
   qexists_tac `g` >> rpt strip_tac >>
   (* the entry state at the new gas, as in vyper_call_correct *)
   `call_state_rel tops (assemble prog) am tx (add_frame_gas g' es)` by
