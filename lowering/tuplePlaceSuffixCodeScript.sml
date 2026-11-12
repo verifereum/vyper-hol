@@ -14,16 +14,13 @@ Theorem tuple_place_suffix_code_parts:
     compile_get_target_ptr compile_expr cenv bt sp = (r,sa) /\
     (let dst = FST r; loc_opt = FST (SND r); dst_ty_opt = SND (SND r);
          loc = case loc_opt of SOME l => l | NONE => LocMemory;
-         dty = case dst_ty_opt of SOME (ValPT t) => t | _ => EL i ltys;
-         arr = case dty of ArrayT et (Dynamic _) =>
-           SOME ((type_memory_bytes cenv et+31) DIV 32,type_memory_bytes cenv et)
-           | _ => NONE
+         dty = case dst_ty_opt of SOME (ValPT t) => t | _ => EL i ltys
      in (if is_word_type (EL i ltys) then
            if is_word_type dty then
              compile_store_at_loc cenv.ce_imm_alloca dst (EL i elems) loc_opt
            else emit_void INVALID []
          else compile_assign_value cenv dst loc (EL i elems) (is_word_type dty)
-           NONE dty (EL i ltys) arr (type_memory_bytes cenv dty)) sa) = ((),sb) /\
+           NONE dty (EL i ltys) (type_memory_bytes cenv dty)) sa) = ((),sb) /\
     compile_tuple_store_all cenv (DROP (SUC i) ltys) (DROP (SUC i) gs)
       (DROP (SUC i) elems) sb = ((),sf) /\
     cs_extends sp sa /\ cs_extends sa sb /\ cs_extends sb sf /\

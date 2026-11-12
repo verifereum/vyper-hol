@@ -85,9 +85,7 @@ QED
 
 Theorem owned_target_relayout_store_run:
   compile_assign_value cenv dst loc op (is_word_type dty) src_loc dty sty
-    (case dty of ArrayT et (Dynamic _) =>
-       SOME ((type_memory_bytes cenv et + 31) DIV 32, type_memory_bytes cenv et)
-     | _ => NONE) (type_memory_bytes cenv dty) sb = ((),sf) /\
+    (type_memory_bytes cenv dty) sb = ((),sf) /\
   compile_get_target_ptr cfn cenv bt sa = ((dst,SOME loc,SOME (ValPT dty)),sb) /\
   target_post ctx func cenv cx es sa sb s0 ee (PlaceR p) (Type dty)
     (dst,SOME loc,SOME (ValPT dty)) s /\
@@ -142,7 +140,7 @@ Proof
   qpat_x_assum `lowered_value_type cenv e = sty` (SUBST_ALL_TAC o SYM) >>
   irule place_relayout_storage_run >> simp[] >>
   (conj_tac >- metis_tac[]) >>
-  goal_assum (drule_at (Pat `compile_assign_value _ _ _ _ _ _ _ _ _ _ _ = _`)) >>
+  goal_assum (drule_at (Pat `compile_assign_value _ _ _ _ _ _ _ _ _ _ = _`)) >>
   goal_assum (drule_at (Pat `compile_get_target_ptr _ _ _ _ = _`)) >>
   goal_assum (drule_at (Pat `write_place _ _ _ _ = _`)) >>
   simp[] >> metis_tac[arithmeticTheory.ADD_COMM]
@@ -157,11 +155,11 @@ Resume owned_target_relayout_store_run[memory]:
     (drule stmt_state_rel_region_lt >> strip_tac >>
      first_x_assum drule >> decide_tac) >>
   qpat_x_assum `loc = LocMemory` SUBST_ALL_TAC >>
-  qpat_x_assum `compile_assign_value _ _ _ _ _ _ _ _ _ _ _ = _` mp_tac >>
+  qpat_x_assum `compile_assign_value _ _ _ _ _ _ _ _ _ _ = _` mp_tac >>
   simp[] >> strip_tac >>
   irule place_relayout_memory_run >> simp[] >>
   (conj_tac >- metis_tac[]) >>
-  goal_assum (drule_at (Pat `compile_assign_value _ _ _ _ _ _ _ _ _ _ _ = _`)) >>
+  goal_assum (drule_at (Pat `compile_assign_value _ _ _ _ _ _ _ _ _ _ = _`)) >>
   goal_assum (drule_at (Pat `write_place _ _ _ _ = _`)) >>
   simp[] >> metis_tac[]
 QED

@@ -1711,11 +1711,18 @@ Proof
   ci_mono_chain_tac ci_mono_emit_rws
 QED
 
+Theorem ci_mono_compile_word_copy_loop_op:
+  ∀ src dst cnt ll sl ic sa.
+    ci_mono sa (SND (compile_word_copy_loop_op src dst cnt ll sl ic sa))
+Proof
+  simp[contextTheory.compile_word_copy_loop_op_def, ci_mono_word_copy]
+QED
+
 Theorem ci_mono_compile_word_copy_loop:
   ∀ src dst wc ll sl ic sa.
     ci_mono sa (SND (compile_word_copy_loop src dst wc ll sl ic sa))
 Proof
-  simp[compile_word_copy_loop_def, compile_word_copy_loop_op_def, ci_mono_word_copy]
+  simp[contextTheory.compile_word_copy_loop_def, ci_mono_compile_word_copy_loop_op]
 QED
 
 Theorem ci_mono_store_immutable_bytestring:
@@ -1759,7 +1766,7 @@ Proof
   ci_mono_chain_tac [ci_mono_compile_word_copy_loop]
 QED
 
-Theorem ci_mono_compile_lit_byte_offset[local]:
+Theorem ci_mono_compile_lit_byte_offset:
   !op off sa. ci_mono sa (SND (compile_lit_byte_offset op off sa))
 Proof
   rpt gen_tac >> simp[contextTheory.compile_lit_byte_offset_def] >>
@@ -4754,12 +4761,13 @@ Proof
 QED
 
 Theorem ci_mono_compile_make_tuple_cfn:
-  ∀cfn cenv es buf_op cur_offset st.
+  ∀cfn cenv es tys buf_op cur_offset st.
     (∀ce ty e s. ci_mono s (SND (cfn ce ty e s))) ⇒
-    ci_mono st (SND (compile_make_tuple cfn cenv es buf_op cur_offset st))
+    ci_mono st (SND (compile_make_tuple cfn cenv es tys buf_op cur_offset st))
 Proof
   gen_tac >> gen_tac >> Induct >> rpt gen_tac >> strip_tac
   >- simp[compile_make_tuple_def, ci_mono_comp_return] >>
+  Cases_on `tys` >- simp[compile_make_tuple_def, ci_mono_comp_return] >>
   simp[Once compile_make_tuple_def, LET_THM, comp_ignore_bind_def] >> BETA_TAC >>
   rpt (ho_match_mp_tac ci_mono_bind >> conj_tac
        >- simp[ci_mono_emit_op, ci_mono_unwrap_value, ci_mono_compile_store_memory]
