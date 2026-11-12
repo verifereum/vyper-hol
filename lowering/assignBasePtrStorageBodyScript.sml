@@ -3,7 +3,7 @@ Theory assignBasePtrStorageBody
 Ancestors
   assignBasePtrStorageFragment bodyPtrPreds bodySimStmtCases bodySim
   bodyExprPreFacts exprSimHypsDefs exprSimHyps exprSimSource
-  exprSimTopLevelProps stmtSimAssignStorage compileEnv context
+  exprSimTopLevelProps stmtSimAssignStorage assignBasePtrStorageSparse compileEnv context
   vyperStorageLayoutSafety vyperLookupStorage vyperStorageBackend
   vyperTypeEnv vyperTyping vyperTypeContractStaticMaps
   supportedDecls supportedProgram supportedTypes supportedStmtTraverse
@@ -157,11 +157,9 @@ Proof
      drule_all supported_program_declaration >> simp[supported_declaration_header_def]) >>
   `expr_sim_ptr d ctx PG func cenv cx (expr_type e) e es` by
     metis_tac[body_expr_ptr_ok_def] >>
-  (* PORT_ADMISSION: SEQ-4319, bot/opus/seq-3208-train16-unit, built at fc54ea89e.
-     ABI-dynamic aggregates now take the sparse store (compile_store_slots);
-     their pointer twin of compile_assign_storage_sparse_stmt_frag is open. *)
-  Cases_on `is_abi_dynamic cenv.ce_struct_fields (expr_type e)` >- cheat >>
-  irule compile_assign_storage_copy_stmt_frag_ptr >>
+  Cases_on `is_abi_dynamic cenv.ce_struct_fields (expr_type e)` >|
+    [irule compile_assign_storage_sparse_stmt_frag_ptr,
+     irule compile_assign_storage_copy_stmt_frag_ptr] >>
   simp[] >> reverse conj_tac >- metis_tac[] >>
   qexistsl_tac [`id`, `n2w off`, `NONE`, `tr`] >>
   simp[] >> conj_tac
