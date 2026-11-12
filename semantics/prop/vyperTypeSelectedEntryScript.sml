@@ -4,13 +4,15 @@
  * selected_entry am tx mods sel says that call_external's three setup
  * lookups succeed for tx: the target has sources mods, and
  * lookup_exported_function selects sel = (mut,nr,args,dflts,ret,body).  Under
- * it, call_external is exactly the selected call_external_function step;
+ * it, call_external_trace is the selected call_external_function_trace step,
+ * preserving its observations through finalization. call_external projects it;
  * otherwise call_external fails with a RuntimeError and leaves the machine
  * unchanged.  Defaults, argument binding and deployment constants are other
  * pieces of #420.
  *
  * TOP-LEVEL: selected_entry_def, selected_entry_module_code,
- *            call_external_selected_entry, call_external_not_selected_entry,
+ *            call_external_selected_entry_trace, call_external_selected_entry,
+ *            call_external_not_selected_entry,
  *            selected_entry_checked_cases, selected_entry_unique.
  *)
 
@@ -48,6 +50,25 @@ Proof
       initial_evaluation_context_def, AllCaseEqs()]
 QED
 
+Theorem call_external_selected_entry_trace:
+  selected_entry am tx mods (mut,nr,args,dflts,ret,body) /\
+  src = find_function_module am tx.target tx.function_name /\
+  cx = initial_evaluation_context am.sources am.layouts tx src /\
+  ALOOKUP mods src = SOME ts ==>
+  call_external_trace orc gobs am tx =
+    case call_external_function_trace orc gobs am cx nr mut ts mods args dflts
+           tx.args body ret of
+      (INL value, am', rqs, observations) =>
+        (INL value, finalize_pending_deletions am', rqs, observations)
+    | (INR HaltException, am', rqs, observations) =>
+        (INR HaltException, finalize_pending_deletions am', rqs, observations)
+    | failure => failure
+Proof
+  rw[selected_entry_def] >> simp[call_external_trace_def] >>
+  Cases_on `find_function_module am tx.target tx.function_name` >>
+  gvs[get_self_code_def, get_module_code_def, initial_evaluation_context_def]
+QED
+
 Theorem call_external_selected_entry:
   selected_entry am tx mods (mut,nr,args,dflts,ret,body) /\
   src = find_function_module am tx.target tx.function_name /\
@@ -61,10 +82,9 @@ Theorem call_external_selected_entry:
         (INR HaltException, finalize_pending_deletions am', rqs)
     | failure => failure
 Proof
-  rw[selected_entry_def] >>
-  simp[call_external_def, call_external_trace_def, call_external_function_def] >>
-  Cases_on `find_function_module am tx.target tx.function_name` >>
-  gvs[get_self_code_def, get_module_code_def, initial_evaluation_context_def] >>
+  strip_tac >> drule_all call_external_selected_entry_trace >>
+  disch_then (fn th => rewrite_tac[call_external_def, th,
+                                 call_external_function_def]) >>
   qpat_abbrev_tac `entry_result = call_external_function_trace _ _ _ _ _ _ _ _ _ _ _ _ _` >>
   PairCases_on `entry_result` >> Cases_on `entry_result0` >> simp[] >>
   Cases_on `y` >> simp[]
