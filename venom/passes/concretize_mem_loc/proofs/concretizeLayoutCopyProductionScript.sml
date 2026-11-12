@@ -139,10 +139,12 @@ Proof
   asm_rewrite_tac[] >>
   `!i. i < w2n sz ==> relocation_pair lo (concretize_positions C')
     (EL c (q0::qs)) (w2n dst+i) (w2n dstT+i)` by
-    (rpt strip_tac >> irule (Q.INST [`len:num` |-> `w2n sz`] access_geometry_relocation_pairs) >> metis_tac[]) >>
+    (rpt strip_tac >> `c <= LENGTH es` by decide_tac >>
+     irule (Q.INST [`len:num` |-> `w2n sz`] access_geometry_relocation_pairs) >> metis_tac[]) >>
   `!i. i < w2n sz ==> relocation_pair lo (concretize_positions C')
     (EL c (q0::qs)) (w2n src+i) (w2n srcT+i)` by
-    (rpt strip_tac >> irule (Q.INST [`len:num` |-> `w2n sz`] access_geometry_relocation_pairs) >> metis_tac[]) >>
+    (rpt strip_tac >> `c <= LENGTH es` by decide_tac >>
+     irule (Q.INST [`len:num` |-> `w2n sz`] access_geometry_relocation_pairs) >> metis_tac[]) >>
   `post.vs_allocas = s.vs_allocas` by simp[mcopy_def, write_memory_with_expansion_def] >>
   (conj_tac >- (rpt gen_tac >> strip_tac >>
   `a = w2n dst+(a-w2n dst) /\ a-w2n dst < w2n sz` by decide_tac >>

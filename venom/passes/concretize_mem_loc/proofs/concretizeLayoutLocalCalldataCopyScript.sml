@@ -184,6 +184,7 @@ Proof
   `!i. i < len ==> relocation_pair lo (concretize_positions C')
     (EL c (q0::qs)) (w2n dst+i) (w2n dstT+i)` by
     (rpt strip_tac >> `i < cap` by decide_tac >>
+     `c <= LENGTH es` by decide_tac >>
      irule (Q.INST [`len:num` |-> `cap`] access_geometry_relocation_pairs) >> metis_tac[]) >>
   (conj_tac >- suspend "written") >> suspend "retained"
 QED

@@ -74,7 +74,8 @@ Proof
   (all_tac >>
   `!i. i < 32 ==> relocation_pair lo (concretize_positions C')
       (EL c (q0::qs)) (w2n dst+i) (w2n dstT+i)` by
-    (rpt strip_tac >> irule (Q.INST [`len:num` |-> `32`] access_geometry_relocation_pairs) >> metis_tac[]) >>
+    (rpt strip_tac >> `c <= LENGTH es` by decide_tac >>
+     irule (Q.INST [`len:num` |-> `32`] access_geometry_relocation_pairs) >> metis_tac[]) >>
   qexists_tac `dstT` >> simp[step_inst_base_def, exec_read1_def] >>
   rpt strip_tac >> irule joint_relocation_demand_current >> simp[] >>
   conj_tac
