@@ -28,7 +28,7 @@ Proof
   metis_tac[]
 QED
 
-Theorem calldata_exact_static_elems[local]:
+Theorem calldata_exact_static_elems:
   !n i d. ~tv_abi_dynamic tv /\
   (!j. j < n ==> ?x.
     cd_decode T cd tv (pos + (i+j)*type_memory_size tv) = SOME x /\
