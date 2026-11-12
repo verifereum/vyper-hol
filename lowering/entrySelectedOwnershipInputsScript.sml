@@ -3,7 +3,7 @@ Theory entrySelectedOwnershipInputs
 Ancestors
   entrySelectedDescriptorValues entrySelectedLocationMetadata
   entryCapacitySourceProbe entryRuntimeSlice entryExternalPackageCoherence
-  supportedProgram compileVyper compileEnv e2eDefs list pair
+  supportedProgram compileVyper compileEnv e2eDefs list pair entryStateRel
 
 Theorem selected_package_allocation_layout[local]:
   set_external_package_target target
@@ -22,6 +22,7 @@ QED
 
 Theorem selected_package_parameter_nonwrap[local]:
   lower_vyper_runtime_unit tops rp = SOME unit /\ supported_program tops /\
+  ALL_DISTINCT (FLAT (MAP (external_name_keys_toplevel (NONE:num option)) tops)) /\
   valid_vyper_call tops tx calldata ret /\
   vyperInterpreter$lookup_function NONE tx.function_name External tops =
     SOME (mut,F,args,[],ret,fbody) /\
@@ -94,7 +95,10 @@ Proof
   drule_all selected_external_evaluated_value_locations >> strip_tac >>
   drule_all selected_external_package_distinct_names >> strip_tac >>
   `!name ty. MEM (name,ty) args ==> type_memory_bytes ce ty < dimword (:256)` by
-    (rpt strip_tac >> irule selected_package_parameter_nonwrap >>
+    (rpt strip_tac >>
+     `ALL_DISTINCT (FLAT (MAP (external_name_keys_toplevel (NONE:num option)) tops))` by
+       metis_tac[source_typing_ok_external_names_distinct] >>
+     irule selected_package_parameter_nonwrap >>
      goal_assum (drule_at Any) >> simp[] >> metis_tac[]) >>
   drule_all evaluated_values_capacity >> strip_tac >>
   qexists_tac `values` >> simp[] >>

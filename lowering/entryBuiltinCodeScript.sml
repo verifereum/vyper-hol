@@ -168,8 +168,11 @@ Theorem entry_code_slice_calldata:
     (compile_slice_calldata start len sz)
 Proof
   simp[compile_slice_calldata_def, compileEnvTheory.comp_ignore_bind_def] >>
+  ntac 2 (irule entry_code_bind >> reverse conj_tac
+    >- simp[entry_code_assert_slice_bounds, entry_code_emit_op] >>
+    rpt gen_tac >> BETA_TAC) >>
   irule entry_code_bind >> reverse conj_tac >- simp[entry_code_slice_out_buf] >>
-  gen_tac >> PairCases_on `x` >> simp[] >>
+  Cases >> simp[] >>
   rpt (irule entry_code_bind >> reverse conj_tac
     >- simp[entry_code_assert_slice_bounds, entry_code_emit_op, entry_code_emit_void] >>
     rpt gen_tac >> BETA_TAC) >> simp[entry_code_return]

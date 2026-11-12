@@ -381,55 +381,6 @@ Proof
   Cases_on `blt` >> rw[well_typed_builtin_app_def] >> simp[]
 QED
 
-(* Row 42 (copies and shape): a literal is typed at a tuple of its element
-   types or at an array of their common type, so supported_literal_elements
-   reduces to the element-type parts. *)
-Theorem well_typed_make_array_literal_elements:
-  well_typed_builtin_app ty (MakeArray eo bd) (MAP expr_type es) ==>
-  (supported_literal_elements tops ty es <=>
-   supported_place_type tops ty /\
-   (!tys. ty = TupleT tys ==> supported_tuple_type ty))
-Proof
-  Cases_on `eo` >> rw[well_typed_builtin_app_def] >>
-  simp[supported_literal_elements_def]
-  >- (`LIST_REL supported_copy_types (MAP expr_type es) (MAP expr_type es)`
-        by (irule EVERY2_refl >> simp[supported_copy_types_refl]) >>
-      simp[])
-  >> gvs[EVERY_MAP, EVERY_MEM] >> eq_tac >> rw[] >> res_tac >>
-  gvs[supported_copy_types_refl]
-QED
-
-(* Row 43 (copies): a struct literal lists the declared fields in order at
-   their declared types, so supported_struct_elements reduces to the place
-   type.  Field names are distinct by check_contract_struct_fields_distinct
-   (with abi_caller_type_env_struct). *)
-Theorem well_typed_struct_lit_elements:
-  well_typed_expr env (StructLit ty nsid kes) /\
-  env.type_defs = type_env tops /\ ALL_DISTINCT (MAP FST kes) ==>
-  (supported_struct_elements tops ty kes <=> supported_place_type tops ty)
-Proof
-  rw[well_typed_expr_def] >>
-  `FLOOKUP (type_env tops) nsid = SOME (StructArgs args)` by fs[] >>
-  drule type_env_struct_fields >> strip_tac >>
-  `!n. n < LENGTH kes ==>
-       ALOOKUP args (FST (EL n kes)) = SOME (expr_type (SND (EL n kes)))`
-    by (rw[] >>
-        `LENGTH args = LENGTH kes` by metis_tac[LENGTH_MAP] >>
-        `ALL_DISTINCT (MAP FST args)` by metis_tac[] >>
-        `EL n (MAP FST kes) = EL n (MAP FST args) /\
-         EL n (MAP (expr_type o SND) kes) = EL n (MAP SND args)`
-          by metis_tac[] >>
-        gvs[EL_MAP] >> metis_tac[ALOOKUP_ALL_DISTINCT_EL]) >>
-  `EVERY (\(name,e). case ALOOKUP args name of
-                       SOME dst => supported_copy_types dst (expr_type e)
-                     | NONE => F) kes`
-    by (simp[EVERY_EL] >> rw[] >> first_x_assum drule >>
-        Cases_on `EL n kes` >> simp[supported_copy_types_refl]) >>
-  simp[supported_struct_elements_def] >>
-  qpat_x_assum `supported_struct_fields _ _ = _` (fn th => simp[th]) >>
-  qpat_x_assum `EVERY _ kes` (fn th => simp[th])
-QED
-
 (* Row 46. *)
 Theorem well_typed_neg_supported:
   well_typed_builtin_app ty Neg ts /\ well_formed_type tenv ty ==>

@@ -23,13 +23,19 @@ Ancestors
    constructor, or an index that changes the locals or the immutables. *)
 Theorem body_subscript_array_place_base_ptr:
   !cx ann e1 e2 d PG tops ctx func cenv env ty es et bd.
-    (!s res t. eval_expr cx e1 s = (INL res,t) ==> body_expr_ptr_ok cx e2) /\
+    (!s'' res t s3 res' t'.
+       eval_expr cx e1 s'' = (INL res,t) /\
+       (if subscript_reads_base cx e1 e2 then
+          bind (read_result cx res) (\v. return (Value v))
+        else return res) s3 = (INL res',t') ==>
+       body_expr_ptr_ok cx e2) /\
     body_expr_ptr_ok cx e1 /\ body_inv tops ctx cenv cx /\
     expr_body_pre cenv cx env (Subscript ann e1 e2) es /\
     expr_type e1 = ArrayT et bd /\ place_type cenv e1 = ValPT (ArrayT et bd) /\
     post_value_type cenv e1 = expr_type e1 /\
     ~((!t r t'. eval_expr cx e2 t = (INL r, t') ==>
                 t'.scopes = t.scopes /\ t'.immutables = t.immutables) /\
+      ~subscript_reads_base cx e1 e2 /\
       (!s tr slot vt t.
          eval_expr cx e1 s <> (INL (PlaceR (StoragePlace tr slot vt)), t)) /\
       ((~cenv.ce_is_ctor /\
