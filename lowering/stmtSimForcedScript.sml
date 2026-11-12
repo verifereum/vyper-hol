@@ -107,33 +107,61 @@ Proof
 QED
 
 Theorem forced_then_outcome:
-  !memory tops ctx func cx e k es s0 P Q R.
-    gas_outcome memory tops (ctx, func)
+  !memory tops ctx func cx st0 e k es s0 P Q R.
+    gas_outcome memory tops (ctx, func) cx st0
       (bind (eval_expr cx e) (read_result cx)) (es, s0)
-      (\res ee t. ?v. res = INL v /\ P v ee t)
-      (\res ee r. expr_exit res r) /\
+      (\H res ee t. ?v. res = INL v /\ P H v ee t)
+      (\H res ee r. expr_exit res r) /\
+    (!v. storage_trace_frame (k v)) /\
     (!v ee t.
-       P v ee t /\ ee.gas_obs = [] /\ ~t.vs_halted /\
-       (?gs. bind (eval_expr cx e) (read_result cx) (es with gas_obs := gs) =
+       (?H. valid_horizon cx st0 H ee.storage_trace) /\
+       (!H. valid_horizon cx st0 H ee.storage_trace ==> P H v ee t) /\
+       ee.gas_obs = [] /\ ~t.vs_halted /\
+       (?gs. (bind (eval_expr cx e) (read_result cx)) (es with gas_obs := gs) =
                  (INL v, ee)) ==>
        ?res ee' r.
          (!tail. k v (ee with gas_obs := tail) =
                  (res, ee' with gas_obs := tail)) /\
          gas_marked_path memory ctx func t 0 r /\
-         ((?t'. r = OK t' /\ Q res (ee' with gas_obs := []) t') \/
-          (exit_result r /\ R res (ee' with gas_obs := []) r))) /\
-    (!ex ee r. expr_exit (INR ex : value + exception) r ==>
-               R (INR ex) ee r) ==>
-    gas_outcome memory tops (ctx, func)
+         ((?t'. r = OK t' /\
+                !H. valid_horizon cx st0 H ee'.storage_trace ==>
+                    Q H res (ee' with gas_obs := []) t') \/
+          (exit_result r /\
+           !H. valid_horizon cx st0 H ee'.storage_trace ==>
+               R H res (ee' with gas_obs := []) r))) /\
+    (!H ex ee r. expr_exit (INR ex : value + exception) r ==>
+                 R H (INR ex) ee r) ==>
+    gas_outcome memory tops (ctx, func) cx st0
       (bind (bind (eval_expr cx e) (read_result cx)) k) (es, s0) Q R
 Proof
   rpt gen_tac >> strip_tac >>
-  qpat_x_assum `gas_outcome _ _ _ _ _ _ _` mp_tac >>
-  simp[gas_outcome_def] >> strip_tac
+  qpat_x_assum `gas_outcome _ _ _ _ _ _ _ _ _` mp_tac >>
+  rewrite_tac[gas_outcome_def] >> strip_tac
   >- (qexists_tac `marks` >> disj1_tac >>
-      irule forced_then_summary >> conj_tac >- first_assum ACCEPT_TAC >>
-      qexists_tac `P` >> conj_tac >> first_assum ACCEPT_TAC) >>
-  qexists_tac `marks` >> disj2_tac >>
+      irule gasStorageTheory.gas_bad_storage_at_bind_left >> simp[])
+  >- (qpat_x_assum `gas_summary_at _ _ _ _ _ _ _`
+        (strip_assume_tac o BETA_RULE o REWRITE_RULE [gas_summary_at_def]) >>
+      qexists_tac `marks` >>
+      (reverse (Cases_on `storage_trace_domain cx st0 es_end.storage_trace`)
+       >- (disj1_tac >> irule gasStorageTheory.gas_bad_storage_at_bind_left >>
+           simp[] >> metis_tac[gasStorageTheory.gas_bad_storage_at_counted_prefix]) >>
+       `?H0. valid_horizon cx st0 H0 es_end.storage_trace` by
+         metis_tac[vyperStorageFootprintTheory.storage_trace_domain_def] >>
+       disj2_tac >> disj1_tac >>
+       irule (INST_TYPE [alpha |-> ``:value``] forced_then_summary) >>
+       conj_tac >- simp[] >>
+       qexists_tac `\v ee t. (?H. valid_horizon cx st0 H ee.storage_trace) /\
+                 !H. valid_horizon cx st0 H ee.storage_trace ==> P H v ee t` >>
+       conj_tac
+       >- (rpt gen_tac >> BETA_TAC >> strip_tac >>
+           rename1 `gas_marked_path _ _ _ tt 0 _` >>
+           qpat_x_assum `!v ee t. _ ==> ?res ee' r. _`
+             (qspecl_then [`v`, `ee`, `tt`] mp_tac) >>
+           impl_tac >- metis_tac[] >> simp[] >> metis_tac[]) >>
+       simp[gas_summary_at_def] >>
+       qexistsl_tac [`res`, `es_end`, `r`] >> gs[] >>
+       metis_tac[sumTheory.INL_11])) >>
+  qexists_tac `marks` >> disj2_tac >> disj2_tac >>
   qexistsl_tac [`err`, `ee`, `leaf`, `finish'`] >>
   ONCE_REWRITE_TAC [ignore_bind_bind_value] >>
   irule gas_exempt_cert_error_value >> simp[]
@@ -164,101 +192,150 @@ QED
 (* The statement form: stmt_framed_frag's obligation for a statement
    whose source action forces e and then continues without gas. *)
 Theorem forced_then_stmt_outcome:
-  !ctx func cx lctx RetQ cenv cenv' sa sb s0 s e k es P.
+  !ctx func cx st0 lctx RetQ cenv cenv' sa sb s0 s e k es P.
     eval_stmt cx s = bind (bind (eval_expr cx e) (read_result cx)) k /\
-    gas_outcome F (cx_tops cx) (ctx, func)
+    gas_outcome F (cx_tops cx) (ctx, func) cx st0
       (bind (eval_expr cx e) (read_result cx)) (es, s0)
-      (\res ee t. ?v. res = INL v /\ P v ee t)
-      (\res ee r. expr_exit res r) /\
+      (\H res ee t. ?v. res = INL v /\ P H v ee t)
+      (\H res ee r. expr_exit res r) /\
+    (!v. storage_trace_frame (k v)) /\
     (!v ee t.
-       P v ee t /\ ee.gas_obs = [] /\ ~t.vs_halted /\
-       (?gs. bind (eval_expr cx e) (read_result cx) (es with gas_obs := gs) =
+       (?H. valid_horizon cx st0 H ee.storage_trace) /\
+       (!H. valid_horizon cx st0 H ee.storage_trace ==> P H v ee t) /\
+       ee.gas_obs = [] /\ ~t.vs_halted /\
+       (?gs. (bind (eval_expr cx e) (read_result cx)) (es with gas_obs := gs) =
                  (INL v, ee)) ==>
        ?res ee' r.
          (!tail. k v (ee with gas_obs := tail) =
                  (res, ee' with gas_obs := tail)) /\
          gas_marked_path F ctx func t 0 r /\
          ((?t'. r = OK t' /\
-                stmt_post ctx func cx lctx cenv cenv' sa sb es s0 res
-                  (ee' with gas_obs := []) t') \/
+                !H. valid_horizon cx st0 H ee'.storage_trace ==>
+                    stmt_post H ctx func cx lctx cenv cenv' sa sb es s0 res
+                      (ee' with gas_obs := []) t') \/
           (exit_result r /\
-           !tail. stmt_exit RetQ (ee' with gas_obs := tail) res r))) ==>
-    gas_outcome F (cx_tops cx) (ctx, func) (eval_stmt cx s) (es, s0)
-      (stmt_post ctx func cx lctx cenv cenv' sa sb es s0)
-      (\res ee r. !tail. stmt_exit RetQ (ee with gas_obs := tail) res r)
+           !H. valid_horizon cx st0 H ee'.storage_trace ==>
+               !tail. stmt_exit (RetQ H) (ee' with gas_obs := tail) res r))) ==>
+    gas_outcome F (cx_tops cx) (ctx, func) cx st0 (eval_stmt cx s) (es, s0)
+      (\H. stmt_post H ctx func cx lctx cenv cenv' sa sb es s0)
+      (\H res ee r. !tail. stmt_exit (RetQ H) (ee with gas_obs := tail) res r)
 Proof
   rpt gen_tac >> strip_tac >>
   qpat_x_assum `eval_stmt _ _ = _` SUBST1_TAC >>
-  irule forced_then_outcome >> conj_tac
-  >- simp[stmt_exit_def, expr_exit_INR_unit] >>
+  qspecl_then [`F`, `cx_tops cx`, `ctx`, `func`, `cx`, `st0`, `e`, `k`, `es`,
+               `s0`, `P`] irule forced_then_outcome >>
+  rpt conj_tac
+  >~ [`expr_exit (INR _) _`] >- simp[stmt_exit_def, expr_exit_INR_unit]
+  >~ [`storage_trace_frame _`] >- first_assum ACCEPT_TAC >>
   qexists_tac `P` >> reverse conj_tac >- first_assum ACCEPT_TAC >>
-  rpt gen_tac >>
-  disch_then (fn th => first_x_assum (fn h => mp_tac (MATCH_MP h th))) >>
-  simp[]
+  rpt gen_tac >> strip_tac >>
+  qpat_x_assum `!v ee t. _ ==> ?res ee' r. _`
+    (qspecl_then [`v`, `ee`, `t`] mp_tac) >>
+  impl_tac >- metis_tac[] >> simp[]
 QED
 
 (* The same for an expression evaluated to a result (expr_vv_sim's
    shape), the continuation reading it. *)
 Theorem forced_vv_then_outcome:
-  !memory tops ctx func cx e k es s0 P Q R.
-    gas_outcome memory tops (ctx, func) (eval_expr cx e) (es, s0)
-      (\res ee t. ?tv. res = INL tv /\ P tv ee t)
-      (\res ee r. expr_exit res r) /\
+  !memory tops ctx func cx st0 e k es s0 P Q R.
+    gas_outcome memory tops (ctx, func) cx st0
+      (eval_expr cx e) (es, s0)
+      (\H res ee t. ?tv. res = INL tv /\ P H tv ee t)
+      (\H res ee r. expr_exit res r) /\
+    (!tv. storage_trace_frame (k tv)) /\
     (!tv ee t.
-       P tv ee t /\ ee.gas_obs = [] /\ ~t.vs_halted /\
-       (?gs. eval_expr cx e (es with gas_obs := gs) =
+       (?H. valid_horizon cx st0 H ee.storage_trace) /\
+       (!H. valid_horizon cx st0 H ee.storage_trace ==> P H tv ee t) /\
+       ee.gas_obs = [] /\ ~t.vs_halted /\
+       (?gs. (eval_expr cx e) (es with gas_obs := gs) =
                  (INL tv, ee)) ==>
        ?res ee' r.
          (!tail. k tv (ee with gas_obs := tail) =
                  (res, ee' with gas_obs := tail)) /\
          gas_marked_path memory ctx func t 0 r /\
-         ((?t'. r = OK t' /\ Q res (ee' with gas_obs := []) t') \/
-          (exit_result r /\ R res (ee' with gas_obs := []) r))) /\
-    (!ex ee r. expr_exit (INR ex : eval_result + exception) r ==>
-               R (INR ex) ee r) ==>
-    gas_outcome memory tops (ctx, func) (bind (eval_expr cx e) k) (es, s0) Q R
+         ((?t'. r = OK t' /\
+                !H. valid_horizon cx st0 H ee'.storage_trace ==>
+                    Q H res (ee' with gas_obs := []) t') \/
+          (exit_result r /\
+           !H. valid_horizon cx st0 H ee'.storage_trace ==>
+               R H res (ee' with gas_obs := []) r))) /\
+    (!H ex ee r. expr_exit (INR ex : eval_result + exception) r ==>
+                 R H (INR ex) ee r) ==>
+    gas_outcome memory tops (ctx, func) cx st0
+      (bind (eval_expr cx e) k) (es, s0) Q R
 Proof
   rpt gen_tac >> strip_tac >>
-  qpat_x_assum `gas_outcome _ _ _ _ _ _ _` mp_tac >>
-  simp[gas_outcome_def] >> strip_tac
+  qpat_x_assum `gas_outcome _ _ _ _ _ _ _ _ _` mp_tac >>
+  rewrite_tac[gas_outcome_def] >> strip_tac
   >- (qexists_tac `marks` >> disj1_tac >>
-      irule forced_then_summary >> conj_tac >- first_assum ACCEPT_TAC >>
-      qexists_tac `P` >> conj_tac >> first_assum ACCEPT_TAC) >>
-  qexists_tac `marks` >> disj2_tac >>
+      irule gasStorageTheory.gas_bad_storage_at_bind_left >> simp[])
+  >- (qpat_x_assum `gas_summary_at _ _ _ _ _ _ _`
+        (strip_assume_tac o BETA_RULE o REWRITE_RULE [gas_summary_at_def]) >>
+      qexists_tac `marks` >>
+      (reverse (Cases_on `storage_trace_domain cx st0 es_end.storage_trace`)
+       >- (disj1_tac >> irule gasStorageTheory.gas_bad_storage_at_bind_left >>
+           simp[] >> metis_tac[gasStorageTheory.gas_bad_storage_at_counted_prefix]) >>
+       `?H0. valid_horizon cx st0 H0 es_end.storage_trace` by
+         metis_tac[vyperStorageFootprintTheory.storage_trace_domain_def] >>
+       disj2_tac >> disj1_tac >>
+       irule (INST_TYPE [alpha |-> ``:eval_result``] forced_then_summary) >>
+       conj_tac >- simp[] >>
+       qexists_tac `\tv ee t. (?H. valid_horizon cx st0 H ee.storage_trace) /\
+                 !H. valid_horizon cx st0 H ee.storage_trace ==> P H tv ee t` >>
+       conj_tac
+       >- (rpt gen_tac >> BETA_TAC >> strip_tac >>
+           rename1 `gas_marked_path _ _ _ tt 0 _` >>
+           qpat_x_assum `!tv ee t. _ ==> ?res ee' r. _`
+             (qspecl_then [`v`, `ee`, `tt`] mp_tac) >>
+           impl_tac >- metis_tac[] >> simp[] >> metis_tac[]) >>
+       simp[gas_summary_at_def] >>
+       qexistsl_tac [`res`, `es_end`, `r`] >> gs[] >>
+       metis_tac[sumTheory.INL_11])) >>
+  qexists_tac `marks` >> disj2_tac >> disj2_tac >>
   qexistsl_tac [`err`, `ee`, `leaf`, `finish'`] >>
   ONCE_REWRITE_TAC [ignore_bind_bind_result] >>
   irule gas_exempt_cert_error_result >> simp[]
 QED
 
 Theorem forced_vv_then_stmt_outcome:
-  !ctx func cx lctx RetQ cenv cenv' sa sb s0 s e k es P.
+  !ctx func cx st0 lctx RetQ cenv cenv' sa sb s0 s e k es P.
     eval_stmt cx s = bind (eval_expr cx e) k /\
-    gas_outcome F (cx_tops cx) (ctx, func) (eval_expr cx e) (es, s0)
-      (\res ee t. ?tv. res = INL tv /\ P tv ee t)
-      (\res ee r. expr_exit res r) /\
+    gas_outcome F (cx_tops cx) (ctx, func) cx st0
+      (eval_expr cx e) (es, s0)
+      (\H res ee t. ?tv. res = INL tv /\ P H tv ee t)
+      (\H res ee r. expr_exit res r) /\
+    (!tv. storage_trace_frame (k tv)) /\
     (!tv ee t.
-       P tv ee t /\ ee.gas_obs = [] /\ ~t.vs_halted /\
-       (?gs. eval_expr cx e (es with gas_obs := gs) =
+       (?H. valid_horizon cx st0 H ee.storage_trace) /\
+       (!H. valid_horizon cx st0 H ee.storage_trace ==> P H tv ee t) /\
+       ee.gas_obs = [] /\ ~t.vs_halted /\
+       (?gs. (eval_expr cx e) (es with gas_obs := gs) =
                  (INL tv, ee)) ==>
        ?res ee' r.
          (!tail. k tv (ee with gas_obs := tail) =
                  (res, ee' with gas_obs := tail)) /\
          gas_marked_path F ctx func t 0 r /\
          ((?t'. r = OK t' /\
-                stmt_post ctx func cx lctx cenv cenv' sa sb es s0 res
-                  (ee' with gas_obs := []) t') \/
+                !H. valid_horizon cx st0 H ee'.storage_trace ==>
+                    stmt_post H ctx func cx lctx cenv cenv' sa sb es s0 res
+                      (ee' with gas_obs := []) t') \/
           (exit_result r /\
-           !tail. stmt_exit RetQ (ee' with gas_obs := tail) res r))) ==>
-    gas_outcome F (cx_tops cx) (ctx, func) (eval_stmt cx s) (es, s0)
-      (stmt_post ctx func cx lctx cenv cenv' sa sb es s0)
-      (\res ee r. !tail. stmt_exit RetQ (ee with gas_obs := tail) res r)
+           !H. valid_horizon cx st0 H ee'.storage_trace ==>
+               !tail. stmt_exit (RetQ H) (ee' with gas_obs := tail) res r))) ==>
+    gas_outcome F (cx_tops cx) (ctx, func) cx st0 (eval_stmt cx s) (es, s0)
+      (\H. stmt_post H ctx func cx lctx cenv cenv' sa sb es s0)
+      (\H res ee r. !tail. stmt_exit (RetQ H) (ee with gas_obs := tail) res r)
 Proof
   rpt gen_tac >> strip_tac >>
   qpat_x_assum `eval_stmt _ _ = _` SUBST1_TAC >>
-  irule forced_vv_then_outcome >> conj_tac
-  >- simp[stmt_exit_def, expr_exit_INR_unit_result] >>
+  qspecl_then [`F`, `cx_tops cx`, `ctx`, `func`, `cx`, `st0`, `e`, `k`, `es`,
+               `s0`, `P`] irule forced_vv_then_outcome >>
+  rpt conj_tac
+  >~ [`expr_exit (INR _) _`] >- simp[stmt_exit_def, expr_exit_INR_unit_result]
+  >~ [`storage_trace_frame _`] >- first_assum ACCEPT_TAC >>
   qexists_tac `P` >> reverse conj_tac >- first_assum ACCEPT_TAC >>
-  rpt gen_tac >>
-  disch_then (fn th => first_x_assum (fn h => mp_tac (MATCH_MP h th))) >>
-  simp[]
+  rpt gen_tac >> strip_tac >>
+  qpat_x_assum `!tv ee t. _ ==> ?res ee' r. _`
+    (qspecl_then [`tv`, `ee`, `t`] mp_tac) >>
+  impl_tac >- metis_tac[] >> simp[]
 QED
