@@ -1751,7 +1751,7 @@ Proof
   metis_tac[gas_marked_exec_valid_prefix]
 QED
 
-Theorem ifexp_root_cont_frame[local]:
+Theorem ifexp_root_cont_frame:
   storage_trace_frame
     (if v = BoolV T then vyperState$bind (eval_expr cx a) (conditional_result cx)
      else if v = BoolV F then
