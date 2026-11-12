@@ -47,7 +47,7 @@ Proof
   disch_then (qx_choose_then `right` (DISJ_CASES_THEN mp_tac))
   >- (strip_tac >> qexists_tac `left ++ right` >> disj1_tac >>
       irule gas_bad_storage_at_bind_right >>
-      goal_assum (drule_at Any) >> simp[]) >>
+      metis_tac[]) >>
   disch_then (DISJ_CASES_THEN mp_tac)
   >- (rewrite_tac[gas_summary_at_def] >>
       disch_then (qx_choose_then `res` (qx_choose_then `fin`

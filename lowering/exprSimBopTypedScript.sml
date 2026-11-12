@@ -90,8 +90,9 @@ Proof
        >- (qexists_tac `marks` >> disj1_tac >>
            pure_once_rewrite_tac[REWRITE_RULE [ETA_AX] eval_expr_bop_bind] >>
            irule gas_bad_storage_at_bind_left >>
-           conj_tac >- (irule gas_bad_storage_at_counted_prefix >> metis_tac[]) >>
-           (rw[] >> irule storage_trace_frame_bind_all >> simp[]))) >>
+           reverse conj_tac
+           >- (irule gas_bad_storage_at_counted_prefix >> metis_tac[]) >>
+           rw[] >> irule storage_trace_frame_bind_all >> simp[])) >>
       `valid_horizon cx st0 (storage_trace_horizon es_end.storage_trace)
          es_end.storage_trace` by fs[storage_trace_domain_def]
       >- suspend "left_normal"
@@ -167,7 +168,8 @@ Resume compile_bop_typed_sim[left_normal]:
            irule gas_bad_storage_at_bind_right >>
            qpat_assum `gas_marked_exec _ _ _ (es, s0) _ _ _ _` (irule_at Any) >>
            simp[] >> irule gas_bad_storage_at_bind_left >>
-           conj_tac >- (irule gas_bad_storage_at_counted_prefix >> metis_tac[]) >>
+           reverse conj_tac
+           >- (irule gas_bad_storage_at_counted_prefix >> metis_tac[]) >>
            simp[])) >>
       `valid_horizon cx st0 (storage_trace_horizon es_end'.storage_trace)
          es_end'.storage_trace` by fs[storage_trace_domain_def]

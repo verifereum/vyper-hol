@@ -990,14 +990,16 @@ Resume compile_literal_other_vv_sim[bytes]:
   rpt (qpat_x_assum `stmt_state_rel H0 _ _ _ _ _ _` kall_tac) >>
   qpat_x_assum `storage_well_formed_on _ _ (FST H0)` kall_tac >>
   qpat_x_assum `valid_horizon _ _ H0 _` kall_tac >>
-  simp[gasOutcomeTheory.gas_outcome_def] >> qexists_tac `[]` >> disj2_tac >> disj1_tac >>
-  simp[gasSummaryTheory.gas_summary_at_def] >>
+  PURE_REWRITE_TAC[gasOutcomeTheory.gas_outcome_def] >> qexists_tac `[]` >> disj2_tac >> disj1_tac >>
+  PURE_REWRITE_TAC[gasSummaryTheory.gas_summary_at_def] >>
   qexistsl_tac [`INL (Value (BytesV bs))`, `es`,
     `OK (t with vs_inst_idx := LENGTH cs'.cs_current_insts)`] >>
   conj_tac
   >- simp[gasSummaryTheory.gas_marked_exec_def, fragGasModeTheory.gas_marked_path_def,
           Once evaluate_def, return_def, evaluate_literal_def] >>
-  simp[] >> rpt strip_tac >>
+  disj1_tac >> qexists_tac `t with vs_inst_idx := LENGTH cs'.cs_current_insts` >>
+  BETA_TAC >> rewrite_tac[] >> gen_tac >> strip_tac >>
+  qexists_tac `Value (BytesV bs)` >> simp[] >>
   qpat_assum `!H. _ ==> stmt_state_rel H _ _ _ _ (es with gas_obs := []) _ /\ _`
     (qspec_then `H` mp_tac) >> (impl_tac >- simp[]) >> strip_tac >>
   `stmt_state_rel H ctx func cenv cx (es with gas_obs := []) t` by
@@ -1061,14 +1063,16 @@ Resume compile_literal_other_vv_sim[string]:
   rpt (qpat_x_assum `stmt_state_rel H0 _ _ _ _ _ _` kall_tac) >>
   qpat_x_assum `storage_well_formed_on _ _ (FST H0)` kall_tac >>
   qpat_x_assum `valid_horizon _ _ H0 _` kall_tac >>
-  simp[gasOutcomeTheory.gas_outcome_def] >> qexists_tac `[]` >> disj2_tac >> disj1_tac >>
-  simp[gasSummaryTheory.gas_summary_at_def] >>
+  PURE_REWRITE_TAC[gasOutcomeTheory.gas_outcome_def] >> qexists_tac `[]` >> disj2_tac >> disj1_tac >>
+  PURE_REWRITE_TAC[gasSummaryTheory.gas_summary_at_def] >>
   qexistsl_tac [`INL (Value (StringV str))`, `es`,
     `OK (t with vs_inst_idx := LENGTH cs'.cs_current_insts)`] >>
   conj_tac
   >- simp[gasSummaryTheory.gas_marked_exec_def, fragGasModeTheory.gas_marked_path_def,
           Once evaluate_def, return_def, evaluate_literal_def] >>
-  simp[] >> rpt strip_tac >>
+  disj1_tac >> qexists_tac `t with vs_inst_idx := LENGTH cs'.cs_current_insts` >>
+  BETA_TAC >> rewrite_tac[] >> gen_tac >> strip_tac >>
+  qexists_tac `Value (StringV str)` >> simp[] >>
   qpat_assum `!H. _ ==> stmt_state_rel H _ _ _ _ (es with gas_obs := []) _ /\ _`
     (qspec_then `H` mp_tac) >> (impl_tac >- simp[]) >> strip_tac >>
   `stmt_state_rel H ctx func cenv cx (es with gas_obs := []) t` by
