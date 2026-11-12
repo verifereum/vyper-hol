@@ -164,7 +164,7 @@ Proof
     (gvs[EVERY_MEM] >> metis_tac[]) >>
   irule (PURE_REWRITE_RULE [pairTheory.FST]
     (Q.INST [`site` |-> `(b,sz)`] ptr_frame_operand_seed)) >>
-  rpt (goal_assum (drule_at Any))
+  rpt conj_tac >> metis_tac[]
 QED
 
 (* An allocating seed is in the writer activation or a suspended ancestor at
