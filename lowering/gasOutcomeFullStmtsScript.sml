@@ -5,7 +5,54 @@ Ancestors
   gasOutcomeFullCompose gasOutcomeFull fragGasOriginPtr fragGasOrigin
   fragGasMode fragGasPath fragExec gasOutcome gasExemptCert gasSummary
   gasSummaryCompose gasStorage fragGasPathMem stmtSimExpr stmtSimIfProps
+  bodyDeclMemoryCompose
   vyperStorageTrace vyperStorageFootprint vyperInterpreter vyperState list
+
+Theorem origin_ptr_path_zero_prefix[local]:
+  gas_origin_ptr_path cx st [] (OK s1, G1, tn1) /\
+  gas_origin_ptr_path cx (s1, G1, tn1) marks out ==>
+  gas_origin_ptr_path cx st marks out
+Proof
+  PairCases_on `out` >> strip_tac >>
+  qpat_x_assum `gas_origin_ptr_path _ _ [] _`
+    (mp_tac o MATCH_MP gas_origin_ptr_path_append) >>
+  simp[] >> disch_then drule >> simp[]
+QED
+
+(* A step that consumes no GAS reading runs ahead of a full outcome on
+   every horizon. *)
+Theorem gas_outcome_full_zero_prefix:
+  (!H. gas_origin_ptr_path (DF H, lo, explicit, ctx, func, PG)
+         (s0, G0, tn0) [] (OK s1, G1, tn1)) /\
+  gas_outcome_full (DF, lo, explicit, ctx, func, PG) tops cx st0 source
+    (es, s1, G1, tn1) Q R ==>
+  gas_outcome_full (DF, lo, explicit, ctx, func, PG) tops cx st0 source
+    (es, s0, G0, tn0) Q R
+Proof
+  strip_tac >>
+  `gas_path_mem ctx func s0 0 (OK s1)` by
+    (qpat_assum `!H. gas_origin_ptr_path _ _ [] _`
+       (qspec_then `ARB` assume_tac) >>
+     drule gas_origin_ptr_path_projections >> strip_tac >>
+     drule gas_origin_path_erase >> simp[gas_marked_path_def]) >>
+  `s1.vs_gas_readings = s0.vs_gas_readings` by
+    (drule gas_path_mem_ok_suffix >> simp[]) >>
+  qpat_x_assum `gas_outcome_full _ _ _ _ _ _ _ _`
+    (strip_assume_tac o ONCE_REWRITE_RULE [gas_outcome_full_def]) >>
+  rewrite_tac[gas_outcome_full_def] >> qexists_tac `marks`
+  >- (disj1_tac >> gvs[gas_bad_storage_at_def])
+  >- (disj2_tac >> disj1_tac >>
+      qexistsl_tac [`res`, `ee`, `r`, `G'`, `tn'`] >> gvs[] >>
+      rpt strip_tac >> res_tac >> simp[] >>
+      metis_tac[origin_ptr_path_zero_prefix]) >>
+  disj2_tac >> disj2_tac >>
+  qexistsl_tac [`err`, `ee`, `leaf`, `leaf_pg`, `leaf_g`, `leaf_tn`,
+                `finish'`] >>
+  conj_tac >- (irule gas_exempt_cert_zero_prefix_mem >> metis_tac[]) >>
+  rpt strip_tac >> res_tac >>
+  qpat_x_assum `!H. gas_origin_ptr_path _ _ [] _` (qspec_then `H` assume_tac) >>
+  drule (cj 2 gas_origin_ptr_focus_rules) >> disch_then drule >> simp[]
+QED
 
 Theorem expr_stmt_bad_storage[local]:
   gas_bad_storage_at cx st0 (eval_expr cx e) es s marks ==>
