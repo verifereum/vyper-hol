@@ -22,7 +22,9 @@ Theorem convert_cast_counted_mem:
             lookup_var z t = SOME w) /\
      t.vs_current_bb = sb.cs_current_bb /\
      t.vs_inst_idx = LENGTH sb.cs_current_insts /\
-     alloca_history func t /\ t.vs_alloca_next = s.vs_alloca_next) \/
+     alloca_history func t /\ t.vs_alloca_next = s.vs_alloca_next /\
+     t.vs_accounts = s.vs_accounts /\ t.vs_transient = s.vs_transient /\
+     t.vs_requests = s.vs_requests /\ t.vs_call_ctx = s.vs_call_ctx) \/
   (?t. gas_marked_path T ctx func s 0 (Abort Revert_abort t) /\ n < L)
 Proof
   strip_tac >> drule convert_cast_static_frame >> strip_tac >>

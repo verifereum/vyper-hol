@@ -29,6 +29,8 @@ Theorem convert_dynamic_counted_cont_mem:
     tt.vs_inst_idx = LENGTH sb.cs_current_insts /\
     alloca_history func tt /\ tt.vs_alloca_next = s.vs_alloca_next /\
     tt.vs_memory = s.vs_memory /\ tt.vs_allocas = s.vs_allocas /\
+    tt.vs_accounts = s.vs_accounts /\ tt.vs_transient = s.vs_transient /\
+    tt.vs_requests = s.vs_requests /\ tt.vs_call_ctx = s.vs_call_ctx /\
     (!p. eval_operand x s = SOME p ==> eval_operand op tt = SOME p)) \/
   (?tt. gas_marked_path T ctx func s 0 (Abort Revert_abort tt) /\
     expr_exit (convert_result cx (expr_type e1) (expr_type e) v)
