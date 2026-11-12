@@ -26,7 +26,7 @@ Proof
   Cases_on `step_inst_base inst ss` >> simp[]
 QED
 
-Theorem compile_load_tuple_elements_mem_ok:
+Theorem compile_load_tuple_elements_mem_ok[local]:
   !tys cenv bop off sa elems sb s w.
   compile_load_tuple_elements cenv bop tys off sa = (elems,sb) /\
   (!x. bop = Var x ==> not_fresh_at sa x) /\

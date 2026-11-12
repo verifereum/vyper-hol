@@ -1,7 +1,7 @@
 (* Compatible caller-buffer returns reuse the exact S1 epilogue frame. *)
 Theory internalReturnBufferValue
 Ancestors
-  intCallReturnMem valueCopyBytes stmtLowering loweringPosts fragExec
+  intCallReturnMem exprSimAggregateLoops valueCopyBytes stmtLowering loweringPosts fragExec
   compileEnv valueEncoding vyperState venomState list finite_map
 
 Theorem internal_return_buffer_source_code[local]:
@@ -11,19 +11,6 @@ Theorem internal_return_buffer_source_code[local]:
 Proof
   strip_tac >> simp[compile_internal_return_def] >>
   metis_tac[compile_store_memory_bytestring_src]
-QED
-
-Theorem internal_return_buffer_source_value[local]:
-  (sty = ty \/ is_bytestring_type sty /\ is_bytestring_type ty) /\
-  evaluate_type (get_tenv cx) sty = SOME stv /\
-  evaluate_type (get_tenv cx) ty = SOME tv /\ value_has_type tv v /\
-  expr_val_rel cx sty v op s ==>
-  expr_val_rel cx ty v op s
-Proof
-  strip_tac >> Cases_on `sty = ty` >- gvs[] >>
-  `~is_word_type sty /\ ~is_word_type ty` by
-    metis_tac[is_bytestring_word_type] >>
-  gvs[expr_val_rel_def] >> metis_tac[bytestring_val_in_memory_transfer]
 QED
 
 Theorem compile_internal_return_buffer_value_frag:
@@ -65,5 +52,5 @@ Proof
   drule_all compile_internal_return_memory_frag >>
   simp[frag_exec_def] >> rpt strip_tac >>
   first_x_assum irule >> simp[] >>
-  metis_tac[internal_return_buffer_source_value]
+  metis_tac[exprSimAggregateLoopsTheory.expr_val_rel_compatible]
 QED

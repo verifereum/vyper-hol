@@ -6,27 +6,6 @@ Ancestors
   valueEncoding stmtSimDefs venomExecSemantics venomInstProofs venomState venomInst
   emitHelperProps exprLoweringProps list rich_list arithmetic
 
-Theorem internal_word_return_mem_safe:
-  !cenv st st' func ctx s op rpc w pc fuel.
-  fn_has_code st st' func /\
-  st'.cs_current_bb = st.cs_current_bb /\
-  st'.cs_current_insts = st.cs_current_insts ++
-    return_unlock_insts cenv st.cs_next_id ++
-    [mk_inst (st.cs_next_id + LENGTH (return_unlock_insts cenv st.cs_next_id))
-       RET [op;rpc] []] /\
-  s.vs_current_bb = st.cs_current_bb /\
-  s.vs_inst_idx = LENGTH st.cs_current_insts /\
-  eval_operand op s = SOME w /\ eval_operand rpc s = SOME pc /\
-  ~s.vs_call_ctx.cc_static ==>
-  mem_safe_run fuel ctx func s
-Proof
-  rpt strip_tac >>
-  irule (cj 2 internal_return_values_run_mem) >>
-  conj_tac >- simp[] >>
-  qexistsl_tac [`cenv`, `[op]`, `pc`, `rpc`, `st`, `st'`, `[w]`] >>
-  simp[eval_operands_def]
-QED
-
 Theorem compile_internal_word_return_path_mem:
   is_word_type ty /\ cenv.ce_return_buf = NONE /\ cenv.ce_returns_count = 1 /\
   compile_internal_return_from_env cenv ty src_ty op rpc st = ((),st') /\
@@ -40,10 +19,9 @@ Theorem compile_internal_word_return_path_mem:
       (return_unlock_state cenv s))
 Proof
   strip_tac >> drule_all compile_internal_word_return_code >> strip_tac >>
-  irule run_from_gas_path_mem >> simp[exit_result_def] >>
-  qexists_tac `0` >> conj_tac
-  >- (irule internal_word_return_run >> metis_tac[]) >>
-  irule internal_word_return_mem_safe >> metis_tac[]
+  irule (Q.INST [`ops` |-> `[op]`] internal_return_values_path_mem) >>
+  simp[eval_operands_def] >>
+  qexistsl_tac [`pc`, `rpc`, `st`, `st'`] >> metis_tac[]
 QED
 
 Theorem compile_internal_word_return_intret_mem:

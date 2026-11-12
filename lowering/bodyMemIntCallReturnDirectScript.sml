@@ -8,7 +8,7 @@ Theory bodyMemIntCallReturnDirect
 Ancestors
   bodyMemoryDefs intCallReturnMem stmtSimReturn compileEnv valueEncoding
   compileVyper internalReturnSummaryMem internalReturnVoidBoundaryMem
-  internalReturnStackBoundaryMem internalReturnBufferBoundaryMem
+  internalReturnBufferBoundaryMem
   internalReturnWordBoundaryMem internalReturnTupleBoundaryMem
   exprLoweringProps stmtSimDefs fragExec stmtLoweringMono
   returnValueTyped vyperTypeSystem vyperTypeInvariants exprSimHypsDefs
