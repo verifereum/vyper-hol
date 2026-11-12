@@ -254,8 +254,9 @@ Theorem compile_call_intcall_shape:
       (v, st') /\
     cenv.ce_func_info (nsid_to_string func_id) = (ret_count, rbs, pvs) ==>
     ?st2 invoke_args st3.
-      compile_stage_intcall_args cfn cenv args pvs (MAP expr_type args) st2 =
-        (invoke_args, st3) /\
+      compile_stage_intcall_args cfn cenv args pvs
+        (TAKE (LENGTH args) (cenv.ce_func_param_types (nsid_to_string func_id)))
+        st2 = (invoke_args, st3) /\
       (0 < ret_count ==>
        ?rbuf results st4 u.
          compile_alloc_buffer (32 * ret_count) st = (rbuf, st2) /\

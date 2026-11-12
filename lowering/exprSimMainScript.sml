@@ -69,6 +69,7 @@ QED
 
 Theorem compile_builtin_case_sim:
   !cenv ann bi args.
+    acyclic_struct_metadata cenv.ce_struct_fields /\
     expr_sim_below cenv (list_size expr_size args) ==>
     builtin_sim_ok cenv ann bi args
 Proof
@@ -144,6 +145,7 @@ QED
 
 Theorem compile_expr_case_sim:
   !cenv e.
+    acyclic_struct_metadata cenv.ce_struct_fields /\
     expr_sim_below cenv (expr_size e) /\
     (!ann bi args. list_size expr_size args < expr_size e ==>
                    builtin_sim_ok cenv ann bi args) /\
@@ -174,17 +176,22 @@ QED
 (* ===== The theorem ===== *)
 
 Theorem compile_expr_sim_mutual:
-  (!cenv e. expr_ok cenv e) /\
-  (!cenv ann bi args. builtin_sim_ok cenv ann bi args) /\
-  (!cenv ann tb t args. type_builtin_sim_ok cenv ann tb t args)
+  (!cenv e. acyclic_struct_metadata cenv.ce_struct_fields ==> expr_ok cenv e) /\
+  (!cenv ann bi args. acyclic_struct_metadata cenv.ce_struct_fields ==>
+     builtin_sim_ok cenv ann bi args) /\
+  (!cenv ann tb t args. acyclic_struct_metadata cenv.ce_struct_fields ==>
+     type_builtin_sim_ok cenv ann tb t args)
 Proof
   mp_tac (BETA_RULE (Q.SPECL
-    [`\cenv ty e st. expr_ok cenv e`,
-     `\cenv ret_ty ty bi args st. builtin_sim_ok cenv ret_ty bi args`,
+    [`\cenv ty e st. acyclic_struct_metadata cenv.ce_struct_fields ==>
+        expr_ok cenv e`,
+     `\cenv ret_ty ty bi args st. acyclic_struct_metadata cenv.ce_struct_fields ==>
+        builtin_sim_ok cenv ret_ty bi args`,
      `\cenv vv_ty ty tb ret_ty args st.
+        acyclic_struct_metadata cenv.ce_struct_fields ==>
         type_builtin_sim_ok cenv vv_ty tb ret_ty args`] compile_expr_ind)) >>
   impl_tac
-  >- (rpt conj_tac >> rpt gen_tac >> strip_tac
+  >- (rpt conj_tac >> rpt gen_tac >> strip_tac >> strip_tac
       >- (irule compile_expr_case_sim >> rw[expr_sim_below_def] >>
           metis_tac[])
       >- (irule compile_builtin_case_sim >> rw[expr_sim_below_def] >>
@@ -196,6 +203,7 @@ QED
 
 Theorem compile_expr_sim:
   !ctx func cenv cx env ty e es.
+    acyclic_struct_metadata cenv.ce_struct_fields /\
     expr_sim_pre cenv cx env e es ==> expr_sim ctx func cenv cx ty e es
 Proof
   metis_tac[compile_expr_sim_mutual, expr_ok_def, expr_sim_ok_def]
@@ -203,6 +211,7 @@ QED
 
 Theorem compile_expr_vv_sim:
   !ctx func cenv cx env ty e es.
+    acyclic_struct_metadata cenv.ce_struct_fields /\
     expr_sim_pre cenv cx env e es ==> expr_vv_sim ctx func cenv cx ty e es
 Proof
   metis_tac[compile_expr_sim_mutual, expr_ok_def, expr_vv_ok_def]

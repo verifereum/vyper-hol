@@ -293,7 +293,7 @@ QED
    BORROWED EQUAL-LAYOUT AGGREGATE BRANCH
    H's borrowed alternative supplies ltys=tys, hence sty=dty and ltvs=tvs.
    Memory: select tuple_place_equal_memory_run_frame. Its premises are:
-   nonword ty; compile_assign_value at ty/ty, word flag F and actual arr;
+   nonword ty; compile_assign_value at ty/ty with word flag F;
    destination eval/place; both freshness facts; evaluated ty/value typing;
    expr_val_rel; 0<size(tv) and size(tv)+64<D; source inv; reserved locals;
    source-containing LOCAL REGION OR OLD ALLOCATION; state_rel; actual write;
@@ -304,10 +304,9 @@ QED
    unconditional CapMcopy premise. Its local and old-allocation byte frames
    share its correctness endpoint. Destination separation is needed only
    to CONSUME these frames for pending snapshots, not to run the equal copy.
-   Storage/transient: select tuple_place_equal_storage_run_memory for
-   !et n. dty<>ArrayT et (Dynamic n), otherwise tuple_place_equal_dyn_run_memory.
-   Their common premises are loc=Storage or Transient, same-layout code with
-   the exact stride pair, destination eval/place, both freshness facts,
+   Storage/transient: select tuple_place_equal_storage_run_memory.
+   Its premises are loc=Storage or Transient, same-layout code,
+   destination eval/place, both freshness facts,
    widening dty->dty, evaluated type/value typing, expr_val_rel, CapMcopy,
    inv/acyclic/reserved/storage region, source end<=s.alloca_next for nonwords,
    positive destination slot count, state_rel/write, code/distinctness/control.
