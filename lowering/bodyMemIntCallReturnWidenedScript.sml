@@ -7,16 +7,11 @@ Ancestors
   bodyMemoryDefs intCallReturnMem intCallReturnWidenMem
   internalReturnValueEndpointMem internalReturnBytestringMem
   internalReturnCompoundEndpointMem internalReturnCompositionMem
+  internalReturnEndpointMetadataMem internalReturnSourceSeparationMem
+  internalReturnEndpointFrameMem externalReturnNormalizedMem
   intCallReturnDirectBranchesMem stmtSimReturn compileEnv valueEncoding
-  compileVyper
+  compileVyper loweringPosts exprLoweringProps stmtLowering
 
-(* RESIDUAL (held): as loweringMemFrameRet's held
-   external_frame_ret_widened_call_mem.  A widened call's value has
-   expr_sim_mem only at expr_type e, while the return lowers it at
-   lowered_value_type; and compile_internal_return_memory_widen_frag's
-   compound branch needs the source disjoint from the return buffer, which
-   return_buf_frame doesn't give (the buffer is the caller's, not a fresh
-   ALLOCA). *)
 Theorem internal_return_widened_mem:
   !tops ctx func cx cenv ret_ty ret_tv rb rpc rsz cenv' env lctx eo es.
     body_inv tops ctx cenv cx /\
@@ -59,5 +54,90 @@ Theorem internal_return_widened_mem:
          | SOME (bw,cap) => intret_mem_q func cenv cx ret_tv bw)
       cenv' (stmt_env cenv' lctx ret_ty (Return eo)) (eval_stmt cx (Return eo)) es
 Proof
-  cheat
+  rpt gen_tac >> strip_tac >>
+  `cenv'.ce_returns_count = cenv.ce_returns_count /\
+   cenv'.ce_return_pc = cenv.ce_return_pc` by
+    (qpat_x_assum `same_frame _ _` mp_tac >>
+     simp[bodySimTheory.same_frame_def, compile_env_component_equality]) >>
+  `?e bw cap. eo = SOME e /\ rb = SOME (bw,cap) /\
+    cenv'.ce_returns_count = 0 /\ ~is_word_type ret_ty /\
+    well_typed_expr env e /\ type_widens_to (get_tenv cx) (expr_type e) ret_ty` by
+    (irule internal_return_widened_reachable >>
+     metis_tac[]) >> gvs[] >>
+  irule internal_return_memory_compose_mem >> simp[intret_mem_q_gas_obs] >>
+  rpt gen_tac >> strip_tac >>
+  `ret_pc_ok cenv' sm t /\
+   return_buf_frame (SOME (bw,type_memory_size ret_tv)) cenv' sm t` by
+    (irule internal_return_endpoint_frames_mem >> metis_tac[]) >>
+  `cenv'.ce_imm_alloca = NONE` by
+    (qpat_x_assum `same_frame _ _` mp_tac >>
+     simp[bodySimTheory.same_frame_def, compile_env_component_equality]) >>
+  qpat_x_assum `compile_internal_return_from_env _ _ _ _ _ _ = _` mp_tac >>
+  simp[stmtLoweringTheory.compile_internal_return_from_env_def,
+       comp_bind_def, comp_return_def] >> strip_tac >>
+  `type_memory_bytes cenv' ret_ty = type_memory_size ret_tv` by
+    (irule externalReturnCopyRecursiveTheory.return_copy_memory_size >>
+     qexists_tac `get_tenv cx` >> fs[exprSimHypsDefsTheory.expr_sim_inv_def] >> metis_tac[]) >>
+  irule internal_return_endpoint_post_frame_mem >>
+  first_assum (irule_at (Pat `same_frame _ _`)) >>
+  Cases_on `is_bytestring_type ret_ty`
+  >- (irule internal_return_bytestring_suffix_mem >>
+      simp[] >> conj_tac
+      >- (match_mp_tac (GEN_ALL internal_return_endpoint_constructor_separation) >>
+          first_assum (irule_at (Pat `same_frame _ _`)) >>
+          first_assum (irule_at (Pat `expr_sim_inv _ _ _ _`)) >>
+          simp[] >> metis_tac[]) >>
+      first_assum (irule_at (Pat `lower_value _ _ _ _ _ = _`)) >>
+      first_assum (irule_at (Pat `expr_post _ _ _ _ _ _ _ _ _ _ _ _ _`)) >>
+      simp[] >> metis_tac[]) >>
+  suspend "compound"
 QED
+
+Resume internal_return_widened_mem[compound]:
+  `post_value_type cenv' e = lowered_value_type cenv' e` by
+    (irule compound_return_post_type >> metis_tac[]) >>
+  drule_all return_value_physical_typed >> strip_tac >>
+  Cases_on `lowered_value_type cenv' e = ret_ty`
+  >- suspend "equal" >>
+  irule internal_return_compound_suffix_mem >> simp[] >>
+  conj_tac >- fs[exprSimHypsDefsTheory.expr_sim_inv_def] >>
+  conj_tac >- gvs[bodySimTheory.body_inv_def, bodySimTheory.same_frame_def,
+                 compile_env_component_equality] >>
+  conj_tac
+  >- (match_mp_tac (GEN_ALL internal_return_endpoint_constructor_separation) >>
+      first_assum (irule_at (Pat `same_frame _ _`)) >>
+      first_assum (irule_at (Pat `expr_sim_inv _ _ _ _`)) >> simp[] >> metis_tac[]) >>
+  conj_tac >- fs[exprSimHypsDefsTheory.expr_sim_inv_def] >>
+  first_assum (irule_at (Pat `lower_value _ _ _ _ _ = _`)) >>
+  first_assum (irule_at (Pat `expr_post _ _ _ _ _ _ _ _ _ _ _ _ _`)) >>
+  first_assum (irule_at (Pat `IS_SOME (type_stmt _ _ _)`)) >>
+  first_assum (irule_at (Pat `compile_internal_return _ _ _ _ _ _ _ _ _ = _`)) >>
+  first_assum (irule_at (Pat `bind _ _ _ = _`)) >>
+  simp[] >> rpt strip_tac >>
+  irule internal_return_source_buffer_disjoint_mem >>
+  first_assum (irule_at (Pat `body_inv _ _ _ _`)) >>
+  first_assum (irule_at (Pat `expr_post _ _ _ _ _ _ _ _ _ _ _ _ _`)) >>
+  simp[] >> fs[expr_post_def] >> metis_tac[]
+QED
+
+Resume internal_return_widened_mem[equal]:
+  `stv = ret_tv /\ post_value_type cenv' e = ret_ty` by fs[] >>
+  `value_has_type ret_tv v` by metis_tac[] >>
+  `expr_store_bound cx ret_ty v op t /\
+   ?sw. eval_operand op t = SOME sw /\
+     (type_memory_size ret_tv = 0 \/
+      w2n sw + type_memory_size ret_tv <= t.vs_alloca_next)` by
+    (qpat_x_assum `!stv. _` (qspec_then `ret_tv` mp_tac) >> simp[] >> metis_tac[]) >>
+  qpat_x_assum `compile_internal_return _ _ _ _ _ _ _ _ _ = _` mp_tac >>
+  simp[] >> disch_tac >>
+  irule internal_return_equal_endpoint_mem >>
+  first_assum (irule_at (Pat `lower_value _ _ _ _ _ = _`)) >>
+  first_assum (irule_at (Pat `expr_post _ _ _ _ _ _ _ _ _ _ _ _ _`)) >> simp[] >>
+  first_assum (irule_at (Pat `compile_internal_return _ _ _ _ _ _ _ _ _ = _`)) >>
+  simp[] >>
+  match_mp_tac (GEN_ALL internal_return_endpoint_constructor_separation) >>
+  first_assum (irule_at (Pat `same_frame _ _`)) >>
+  first_assum (irule_at (Pat `expr_sim_inv _ _ _ _`)) >> simp[] >> metis_tac[]
+QED
+
+Finalise internal_return_widened_mem

@@ -7,7 +7,7 @@ Ancestors
   loweringPosts exprLoweringProps fragExecMem typedMemoryCopy
   loweringStateRelDefs venomExecSemantics venomState vyperState
 
-Theorem compound_return_post_type[local]:
+Theorem compound_return_post_type:
   expr_sim_inv ce cx env es /\
   IS_SOME (type_stmt env ty (Return (SOME e))) /\
   type_widens_to (get_tenv cx) (expr_type e) ty /\
