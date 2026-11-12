@@ -15,7 +15,32 @@ Ancestors
   fmpStageOpBase fmpStageRel o1PassContract ptrDiscipline contextCodegenRel
   unitTransformDefs passSimulationDefs venomExecSemantics venomState venomInst
   simplifyCfgAvailability o1ContractSimplifyCfgSrcFrame
+  o1LowerDloadReadiness venomInstProofs1 concretizePtrOwnerPath
   finite_map words list
+
+(* Saved INVOKE control survives the return merge and output assignment. *)
+Theorem fmp_back_saved_continuation:
+  fmp_stage_ctx rpolicy D C C' vs vs' fmp eom /\
+  frame_reachable vs C (f::stk) PG G tn fn rinst s /\
+  bind_outputs f.cf_inst.inst_outputs ret.iret_values
+    (adopt_return_fmp ret (merge_callee_state f.cf_state s_end)) = SOME s' ==>
+  ?inst'. active_inst f.cf_fn inst'
+    (s' with vs_inst_idx := SUC f.cf_state.vs_inst_idx)
+Proof
+  strip_tac >>
+  drule scfg_frame_reachable_functions >> simp[] >> strip_tac >>
+  drule ptr_owner_frame_active >> simp[] >> strip_tac >>
+  `wf_function f.cf_fn` by
+    (fs[fmp_stage_ctx_def, o1_ctx_shape_def, EVERY_MEM, o1_fn_shape_def] >>
+     metis_tac[]) >>
+  `s'.vs_current_bb = f.cf_state.vs_current_bb` by
+    (qspec_then `\u. u.vs_current_bb` mp_tac bind_outputs_preserves >>
+     simp[update_var_def] >> disch_then drule >>
+     Cases_on `ret.iret_adopt_fmp` >>
+     simp[adopt_return_fmp_def, merge_callee_state_def]) >>
+  irule ld_nonterminator_successor >> simp[] >>
+  qexists_tac `f.cf_inst` >> simp[is_terminator_def]
+QED
 
 (* Why it holds: the entry fn is wf_function with first_block_no_phi,
    and the initial state is o1_initial_state_ok. *)
