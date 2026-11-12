@@ -978,7 +978,9 @@ Proof
   simp[intret_q_def, result_rel_def, intret_vals_match_def] >>
   TRY disj2_tac >> qexists_tac `s0` >> simp[] >>
   `state_rel H func cenv cx es s0` by fs[stmt_state_rel_def] >>
-  drule state_rel_scopes_nil >> simp[state_rel_gas_obs]
+  drule state_rel_scopes_nil >>
+  mp_tac (Q.INST [`es` |-> `es with scopes := []`, `readings` |-> `tail`]
+            (SPEC_ALL state_rel_gas_obs)) >> simp[]
 QED
 
 Theorem internal_frame_ret_none_full:
@@ -1246,7 +1248,9 @@ Proof
   first_x_assum (drule_then strip_assume_tac) >>
   `state_rel H func cenv cx mid t` by
     fs[expr_post_def, stmt_state_rel_def] >>
-  drule state_rel_scopes_nil >> simp[state_rel_gas_obs]
+  drule state_rel_scopes_nil >>
+  mp_tac (Q.INST [`es` |-> `mid with scopes := []`, `readings` |-> `tail`]
+            (SPEC_ALL state_rel_gas_obs)) >> simp[]
 QED
 
 Theorem internal_frame_ret_word_full:
