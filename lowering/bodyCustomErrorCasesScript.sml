@@ -24,7 +24,7 @@ Theory bodyCustomErrorCases
 Ancestors
   bodySim bodyMemoryPreds bodyPtrPreds supportedExprs supportedStmtTraverse
   loweringPosts vyperInterpreter vyperAST vyperTypeCallGraph vyperTypeSystem
-  vyperTypeContract
+  vyperTypeContract bodyCustomErrorRaise bodyCustomErrorAssert stmtSimCustomErrorPath
 
 val _ = Parse.hide "body";
 
@@ -80,7 +80,13 @@ Theorem body_custom_error_cases:
          (stmt_env cenv lctx ret_ty (Assert e (AssertCustomError err)))
          (eval_stmt cx (Assert e (AssertCustomError err))) es)
 Proof
-  cheat
+  conj_tac
+  >- (mp_tac body_raise_custom_error_using_path >>
+      (impl_tac >- ACCEPT_TAC compile_raise_custom_error_ready_frag) >>
+      disch_then ACCEPT_TAC) >>
+  mp_tac body_assert_custom_error_using_path >>
+  (impl_tac >- ACCEPT_TAC compile_raise_custom_error_ready_frag) >>
+  disch_then ACCEPT_TAC
 QED
 
 (* ADMITTED: S3 memory rows 8 and 12; siblings body_raise_reason_mem_case
