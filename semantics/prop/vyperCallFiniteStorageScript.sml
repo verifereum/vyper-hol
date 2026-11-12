@@ -13,6 +13,8 @@ Ancestors
   vyperGetterFiniteStorage vyperExternalBodyFiniteStorage
   vyperExternalEntryStorageFrame vyperExplicitEntryFiniteStorage
   vyperGetterEntryFiniteStorage vyperTypeInitialState vyperTypeContractFunction
+  vyperConstructorInitialReady vyperConstructorEntryFiniteStorage
+  vyperConstantsStorageFrame
 
 val _ = Parse.hide "body";
 
@@ -189,5 +191,132 @@ Theorem load_contract_storage_well_formed_on:
        (tx with created_in_tx := T) NONE with in_deploy := T)
     (initial_state am' []) (FST H)
 Proof
-  cheat
+  strip_tac >>
+  qabbrev_tac `cx = (initial_evaluation_context ((tx.target,mods)::am.sources)
+    am.layouts (tx with created_in_tx := T) NONE with in_deploy := T)` >>
+  qpat_x_assum `load_contract_trace _ _ _ _ _ _ = _` mp_tac >>
+  simp[Once load_contract_trace_def] >>
+  Cases_on `initial_immutables (type_env_all_modules mods) mods` >> simp[] >>
+  rename1 `initial_immutables _ _ = SOME imms` >>
+  Cases_on `lookup_function NONE tx.function_name Deploy
+    (case ALOOKUP mods NONE of NONE => [] | SOME ts => ts)` >> simp[] >>
+  PairCases_on `x` >>
+  rename1 `lookup_function _ _ _ _ = SOME (mut,nr,args,dflts,ret,body)` >>
+  simp_tac std_ss [] >>
+  Cases_on `call_external_function_trace orc gobs
+    (am with <|exports updated_by CONS (tx.target,exps);
+      immutables updated_by CONS (tx.target,imms)|>) cx nr mut
+    (case ALOOKUP mods NONE of NONE => [] | SOME ts => ts)
+    mods args dflts tx.args body ret` >>
+  rename1 `call_external_function_trace _ _ _ _ _ _ _ _ _ _ _ _ _ = (out,p)` >>
+  PairCases_on `p` >>
+  rename1 `call_external_function_trace _ _ _ _ _ _ _ _ _ _ _ _ _ = (out,am_run,rqs_run,obs_run)` >>
+  strip_tac >>
+  `obs_run = obs` by (Cases_on `out` >> gvs[] >>
+    rename1 `call_external_function_trace _ _ _ _ _ _ _ _ _ _ _ _ _ = (INR exc,_)` >>
+    Cases_on `exc` >> gvs[]) >>
+  `storage_well_formed_on cx (initial_state am_run []) (FST H)` suffices_by
+    (strip_tac >> Cases_on `out` >> gvs[]
+     >- (irule finalize_pending_deletions_preserves_storage_well_formed_on >>
+         irule (iffRL storage_well_formed_on_backends) >>
+         goal_assum (drule_at Any) >> simp[initial_state_def]) >>
+     rename1 `call_external_function_trace _ _ _ _ _ _ _ _ _ _ _ _ _ = (INR exc,_)` >>
+     Cases_on `exc` >> gvs[] >>
+     irule finalize_pending_deletions_preserves_storage_well_formed_on >> simp[]) >>
+  drule_at (Pat `call_external_function_trace _ _ _ _ _ _ _ _ _ _ _ _ _ = _`)
+    call_external_function_trace_storage_well_formed_on_general >>
+  disch_then (qspec_then `H` mp_tac) >>
+  simp[Excl "lock_if_nr_def", Excl "is_view_mut_def"] >>
+  impl_tac >- suspend "initial_and_entry" >> simp[]
 QED
+
+Resume load_contract_storage_well_formed_on[initial_and_entry]:
+  `regions_consistent (FST H) /\ storage_locks_separated (FST H) (SND H) /\
+   storage_well_formed_on cx (initial_state am []) (FST H) /\
+   storage_observations_ok cx H obs` by fs[valid_horizon_def] >>
+  `storage_well_formed_on cx (initial_state
+     (am with <|exports updated_by CONS (tx.target,exps);
+       immutables updated_by CONS (tx.target,imms)|>) []) (FST H)` by
+    (irule (iffRL storage_well_formed_on_backends) >>
+     goal_assum (drule_at Any) >> simp[initial_state_def]) >>
+  ASM_SIMP_TAC bool_ss [] >>
+  rpt gen_tac >> strip_tac >>
+  `cx.in_deploy /\ cx.txn.target = tx.target` by
+    simp[Abbr `cx`, initial_evaluation_context_def] >>
+  `evaluate_all_constants cx
+     (am with <|exports updated_by CONS (tx.target,exps);
+       immutables updated_by CONS (tx.target,imms)|>) tx.target mods = SOME am_c` by
+    (simp[evaluate_all_constants_def, evaluate_module_constants_def] >>
+     gvs[]) >>
+  `machine_well_typed (am with <|exports updated_by CONS (tx.target,exps);
+     immutables updated_by CONS (tx.target,imms)|>)` by
+    (drule_all deployment_initial_machine_well_typed >>
+     disch_then (qspecl_then [`exps`,`tx.target`] mp_tac) >> simp[]) >>
+  `checked_deployment_constants_ready cx
+    (am with <|exports updated_by CONS (tx.target,exps);
+       immutables updated_by CONS (tx.target,imms)|>) tx.target mods` by
+    (metis_tac[SRULE [] checked_constructor_constants_ready]) >>
+  `cx = (initial_evaluation_context ((tx.target,mods)::am.sources)
+    am.layouts (tx with created_in_tx := T) NONE with in_deploy := T)` by
+    simp[Abbr `cx`] >>
+  `ALOOKUP ((tx.target,mods)::am.sources) tx.target = SOME mods /\
+   (tx with created_in_tx := T).target = tx.target` by simp[] >>
+  `state_well_typed (initial_state am_c [FEMPTY] with
+      <|outcomes := orc; requests := []; gas_obs := gobs; storage_trace := constant_trace|>) /\
+   accounts_well_typed am_c.accounts /\
+   env_immutables_consistent (artifact_env deploy_art mods NONE) cx
+     (initial_state am_c [FEMPTY] with
+      <|outcomes := orc; requests := []; gas_obs := gobs; storage_trace := constant_trace|>)` by
+    (irule checked_constructor_initial_state_ready >>
+     qexistsl [`am with exports updated_by CONS (tx.target,exps)`,`imms`,
+       `am.layouts`,`runtime_art`,`(tx.target,mods)::am.sources`,`tx.target`,
+       `tx with created_in_tx := T`] >> simp[NoAsms] >> metis_tac[]) >>
+  `am_c.accounts = am.accounts /\ am_c.tStorage = am.tStorage` by
+    (drule evaluate_all_constants_machine_frame >>
+     disch_then (mp_tac o Q.AP_TERM `\m. (m.accounts,m.tStorage)`) >> simp[]) >>
+  `storage_well_formed_on cx (initial_state am_c [FEMPTY] with
+      <|outcomes := orc; requests := []; gas_obs := gobs; storage_trace := constant_trace|>) (FST H)` by
+    (irule (iffRL storage_well_formed_on_backends) >>
+     qexists `initial_state am []` >> simp[initial_state_def]) >>
+  Cases_on `ALOOKUP mods NONE`
+  >- suspend "synthetic" >>
+  rename1 `ALOOKUP mods NONE = SOME ts` >>
+  `lookup_function NONE (tx with created_in_tx := T).function_name Deploy ts =
+    SOME (mut,nr,args,dflts,ret,body)` by
+    (qpat_x_assum `lookup_function _ _ _ _ = _` mp_tac >> simp[NoAsms]) >>
+  `check_contract T am.layouts (tx with created_in_tx := T).target mods = SOME deploy_art /\
+   check_contract F am.layouts (tx with created_in_tx := T).target mods = SOME runtime_art` by simp[] >>
+  `accounts_well_typed (initial_state am_c [FEMPTY] with
+      <|outcomes := orc; requests := []; gas_obs := gobs; storage_trace := constant_trace|>).accounts` by
+    (simp[NoAsms, initial_state_def] >> metis_tac[]) >>
+  metis_tac[checked_constructor_entry_storage_well_formed_on]
+QED
+
+Resume load_contract_storage_well_formed_on[synthetic]:
+  qpat_x_assum `lookup_function _ _ _ _ = _` mp_tac >>
+  simp_tac (srw_ss()) [lookup_function_def] >>
+  strip_tac >>
+  map_every (fn q => qpat_x_assum q SUBST_ALL_TAC)
+    [`mut = Payable`, `args = []`, `dflts = []`, `ret = NoneT`, `body = []`] >>
+  qpat_x_assum `~nr` (SUBST_ALL_TAC o EQF_INTRO) >>
+  qpat_x_assum `ignore_bind _ _ _ = _` mp_tac >>
+  simp_tac (srw_ss()) [eval_external_defaults_nil, bind_arguments_def,
+    lock_if_nr_def, evaluate_def, bind_def, ignore_bind_def,
+    set_scopes_def, return_def] >>
+  qmatch_goalsub_abbrev_tac `send_call_value Payable cx st` >>
+  Cases_on `send_call_value Payable cx st` >>
+  rename1 `send_call_value Payable cx st = (sr,ss)` >>
+  `storage_well_formed_on cx ss (FST H)` by
+    (irule send_call_value_preserves_storage_well_formed_on >>
+     goal_assum (drule_at Any) >> simp_tac bool_ss [Abbr `st`] >> metis_tac[]) >>
+  Cases_on `sr` >> simp_tac (srw_ss()) []
+  >- (Cases_on `bind_arguments (type_env_all_modules mods) [] tx.args` >>
+      simp_tac (srw_ss()) [raise_def, bind_def, set_scopes_def, return_def] >>
+      strip_tac >>
+      qpat_x_assum `_ = u` (SUBST_ALL_TAC o SYM) >>
+      irule (iffRL storage_well_formed_on_backends) >>
+      qexists `ss` >> simp[]) >>
+  strip_tac >> metis_tac[pairTheory.PAIR_EQ]
+QED
+
+Finalise load_contract_storage_well_formed_on

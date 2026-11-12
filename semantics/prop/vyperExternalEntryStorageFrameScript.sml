@@ -74,11 +74,12 @@ Proof
   simp[initial_state_def, abstract_machine_from_state_def]
 QED
 
-Theorem call_external_function_trace_storage_well_formed_on:
-  ~cx.in_deploy /\
+Theorem call_external_function_trace_storage_well_formed_on_general:
   regions_consistent (FST H) /\ storage_locks_separated (FST H) (SND H) /\
   storage_well_formed_on cx (initial_state am []) (FST H) /\
-  (!r u.
+  (!am_c constant_trace r u.
+    (if cx.in_deploy then evaluate_module_constants_trace cx am cx.txn.target (constants_order mods)
+     else (SOME am, [])) = (SOME am_c,constant_trace) /\
     (do send_call_value mut cx;
         dvs <- eval_external_defaults cx (DROP (LENGTH dflts - (LENGTH args - LENGTH vals)) dflts);
         case bind_arguments (type_env_all_modules mods) args (vals ++ dvs) of
@@ -86,8 +87,8 @@ Theorem call_external_function_trace_storage_well_formed_on:
         | SOME env => do
             set_scopes [env]; lock_if_nr cx nr (is_view_mut mut); eval_stmts cx body
           od
-     od) (initial_state am [FEMPTY] with
-       <|outcomes := orc; requests := []; gas_obs := gobs; storage_trace := []|>) = (r,u) /\
+     od) (initial_state am_c [FEMPTY] with
+       <|outcomes := orc; requests := []; gas_obs := gobs; storage_trace := constant_trace|>) = (r,u) /\
     storage_observations_ok cx H u.storage_trace ==>
     storage_well_formed_on cx u (FST H)) /\
   storage_observations_ok cx H obs /\
@@ -100,13 +101,19 @@ Proof
   simp[call_external_function_trace_def] >>
   Cases_on `LENGTH vals > LENGTH args \/ LENGTH args - LENGTH vals > LENGTH dflts` >>
   simp[] >- (strip_tac >> gvs[]) >>
+  Cases_on `if cx.in_deploy then evaluate_module_constants_trace cx am cx.txn.target (constants_order mods)
+    else (SOME am, [])` >>
+  rename1 `(if cx.in_deploy then _ else _) = (constants,constant_trace)` >>
+  Cases_on `constants` >> simp[] >- (strip_tac >> gvs[]) >>
+  rename1 `(if cx.in_deploy then _ else _) = (SOME am_c,constant_trace)` >>
   qmatch_goalsub_abbrev_tac `ignore_bind (send_call_value mut cx) rest s0` >>
   Cases_on `ignore_bind (send_call_value mut cx) rest s0` >>
   rename1 `ignore_bind (send_call_value mut cx) rest s0 = (out,u)` >>
   `!r t. ignore_bind (send_call_value mut cx) rest s0 = (r,t) /\
     storage_observations_ok cx H t.storage_trace ==>
     storage_well_formed_on cx t (FST H)` by
-    (qpat_x_assum `!r u. _` mp_tac >>
+    (qpat_x_assum `!am_c constant_trace r u. _`
+       (qspecl_then [`am_c`,`constant_trace`] mp_tac) >>
      simp[Abbr `rest`, lock_if_nr_def, is_view_mut_def]) >>
   Cases_on `out` >> simp[]
   >- (qmatch_goalsub_abbrev_tac `unlock u` >>
@@ -145,4 +152,32 @@ Proof
           drule_all unlock_if_nr_preserves_storage_well_formed_on >> simp[]) >>
       strip_tac >> gvs[]) >>
   strip_tac >> gvs[initial_state_abstract_machine_storage_well_formed_on]
+QED
+
+Theorem call_external_function_trace_storage_well_formed_on:
+  ~cx.in_deploy /\
+  regions_consistent (FST H) /\ storage_locks_separated (FST H) (SND H) /\
+  storage_well_formed_on cx (initial_state am []) (FST H) /\
+  (!r u.
+    (do send_call_value mut cx;
+        dvs <- eval_external_defaults cx (DROP (LENGTH dflts - (LENGTH args - LENGTH vals)) dflts);
+        case bind_arguments (type_env_all_modules mods) args (vals ++ dvs) of
+          NONE => raise (Error (RuntimeError "call bind_arguments"))
+        | SOME env => do
+            set_scopes [env]; lock_if_nr cx nr (is_view_mut mut); eval_stmts cx body
+          od
+     od) (initial_state am [FEMPTY] with
+       <|outcomes := orc; requests := []; gas_obs := gobs; storage_trace := []|>) = (r,u) /\
+    storage_observations_ok cx H u.storage_trace ==>
+    storage_well_formed_on cx u (FST H)) /\
+  storage_observations_ok cx H obs /\
+  call_external_function_trace orc gobs am cx nr mut ts mods args dflts vals body ret =
+    (res,am_out,rqs,obs) ==>
+  storage_well_formed_on cx (initial_state am_out []) (FST H)
+Proof
+  strip_tac >>
+  drule_at (Pat `call_external_function_trace _ _ _ _ _ _ _ _ _ _ _ _ _ = _`)
+    call_external_function_trace_storage_well_formed_on_general >>
+  disch_then (qspec_then `H` mp_tac) >>
+  simp[Excl "lock_if_nr_def", Excl "is_view_mut_def"]
 QED
