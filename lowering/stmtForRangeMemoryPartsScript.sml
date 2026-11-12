@@ -13,7 +13,7 @@ Theorem for_range_allocated_store_below:
     inst_mem_below_frontier (mk_inst iid MSTORE [dst; v] outs) s
 Proof
   rpt strip_tac >> simp[below_frontier_MSTORE] >>
-  rpt strip_tac >> gvs[] >>
+  rpt strip_tac >> gvs[] >> disj1_tac >>
   irule alloca_region_below_frontier >>
   conj_tac >- fs[alloca_inv_def] >>
   qexistsl_tac [`aid`, `b`, `sz`] >> simp[]

@@ -156,7 +156,7 @@ Proof
   simp[write_place_def, bind_def, get_immutables_def,
        get_address_immutables_def, lift_option_type_def, lift_sum_def,
        return_def, raise_def] >>
-  rpt (BasicProvers.FULL_CASE_TAC >>
+  rpt (BasicProvers.PURE_FULL_CASE_TAC >>
        gvs[bind_def, ignore_bind_def, lift_option_type_def, lift_sum_def,
            get_immutables_def, get_address_immutables_def, return_def, raise_def]) >>
   metis_tac[set_immutable_scopes]

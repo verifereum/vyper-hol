@@ -115,7 +115,8 @@ Theorem fmp_read_update_ghosts[local]:
     tn with t_var := tn.t_var |+ (out,{})
 Proof
   strip_tac >>
-  `~MEM inst.inst_opcode [MLOAD; ILOAD; SLOAD; TLOAD; ASSIGN; SHL; SHR; SAR] /\
+  `~MEM inst.inst_opcode [MLOAD; ILOAD; SLOAD; TLOAD; ASSIGN; SHL; SHR; SAR;
+     MUL] /\
    ~MEM inst.inst_opcode [MSTORE; ISTORE; MCOPY]` by gvs[MEM] >>
   `out_taint tn inst s = {} /\ written_taint tn inst s = {}` by
     (qpat_x_assum `MEM _ _` kall_tac >> fs[MEM] >>

@@ -116,17 +116,6 @@ Proof
   qexistsl_tac [`es`,`s`] >> asm_simp_tac (srw_ss()) []
 QED
 
-Theorem log_encode_local_region_frame[local]:
-  (!name entry p sz. lookup_scopes name scopes = SOME entry /\
-    FLOOKUP ce.ce_vars name = SOME (PtrVar (Var p) sz) ==>
-    lookup_var p t = lookup_var p s) ==>
-  (local_region ce scopes t name lo sz <=> local_region ce scopes s name lo sz)
-Proof
-  strip_tac >> simp[local_region_def] >>
-  eq_tac >> strip_tac >> qexistsl_tac [`entry`,`p`,`w`] >>
-  asm_simp_tac bool_ss [] >> metis_tac[]
-QED
-
 Theorem log_encode_immutable_sep_frame[local]:
   immutable_alloca_sep func ce cx es s /\
   (!name lo sz. local_region ce es.scopes t name lo sz ==>
@@ -265,7 +254,7 @@ Proof
      qpat_x_assum `t.vs_alloca_next = _` kall_tac >>
      `!name lo sz. local_region ce es.scopes t name lo sz ==>
        local_region ce es.scopes s name lo sz` by
-       (drule log_encode_local_region_frame >> metis_tac[]) >>
+       (drule local_region_lookup_cong >> metis_tac[]) >>
      irule log_encode_immutable_sep_frame >> qexists_tac `s` >>
      asm_simp_tac bool_ss [] >> rpt conj_tac >> first_assum ACCEPT_TAC) >>
   `immutable_base_zero ce t` by
@@ -349,6 +338,8 @@ Theorem log_scalar_tuple_continue:
     mem_bytes_at db (LENGTH (enc (Tuple ats) (ListV avs))) actual.vs_memory =
       enc (Tuple ats) (ListV avs) /\
     eval_operand out actual = SOME (n2w (LENGTH (enc (Tuple ats) (ListV avs)))) /\
+    abi_decode_footprint_frame
+      ((db,outcap)::(if (?infos. ei = AbiComplex infos) then [(p,32)] else [])) initial actual /\
     stmt_state_rel ctx func ce cx es actual /\
     (!op w. abi_decoder_operand_live st.cs_next_var op /\
       eval_operand op initial = SOME w ==> eval_operand op actual = SOME w)

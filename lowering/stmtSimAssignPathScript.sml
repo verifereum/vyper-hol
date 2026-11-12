@@ -26,6 +26,8 @@ Theorem assign_local_word_store_path:
         (!x. lookup_var x t = lookup_var x s) /\
         (!aid b. FLOOKUP s.vs_allocas aid = SOME b ==>
                  FLOOKUP t.vs_allocas aid = SOME b) /\
+        (!w. lookup_var p s = SOME w ==>
+             t.vs_memory = (mstore (w2n w) (typed_val_to_w256 etv v) s).vs_memory) /\
         gas_marked_path F ctx func s 0 (OK t)
 Proof
   rpt strip_tac >>
@@ -61,10 +63,11 @@ Theorem assign_local_normal_continuation:
     gas_marked_exec F (ctx,func) (bind (eval_expr cx e) (read_result cx))
       (es,s0) marks (INL v) ee (OK s) /\
     expr_post ctx func cenv cx e es sa sb s0 (ee with gas_obs := []) v op s /\
+    stmt_state_rel ctx func cenv cx es s0 /\ local_ptrs_reserved cenv sa /\
     s.vs_current_bb = sb.cs_current_bb /\ s.vs_inst_idx = LENGTH sb.cs_current_insts ==>
     ?ff u. gas_marked_exec F (ctx,func) (write_place cx (MemoryPlace id []) v)
       (ee with gas_obs := [],s) [] (INL ()) ff (OK u) /\
-      stmt_post ctx func cx lctx cenv cenv sa sf s0 (INL ()) ff u
+      stmt_post ctx func cx lctx cenv cenv sa sf es s0 (INL ()) ff u
 Proof
   rpt gen_tac >> strip_tac >>
   `!tail. bind (eval_expr cx e) (read_result cx)
@@ -83,6 +86,11 @@ Proof
      qpat_x_assum `!gs v es1 entry. _` irule >>
      qexistsl [`ee with gas_obs := []`,
        `gas_explicit marks s0.vs_gas_readings ++ []`] >> simp[]) >>
+  `MAP FDOM (ee with gas_obs := []).scopes = MAP FDOM es.scopes` by
+    (qpat_assum `!tail. bind _ _ _ = _` (qspec_then `[]` assume_tac) >>
+     drule eval_read_preserves_scopes_dom >> simp[]) >>
+  `alloca_frame cenv es sa s0 cenv (ee with gas_obs := []) s` by
+    (irule expr_post_alloca_frame >> metis_tac[]) >>
   qpat_x_assum `expr_post _ _ _ _ _ _ _ _ _ _ _ _ _` mp_tac >>
   simp[expr_post_def] >> strip_tac >>
   `eval_operand op s = SOME (typed_val_to_w256 etv v)` by
@@ -92,6 +100,44 @@ Proof
      simp[stmt_state_rel_def, state_rel_gas_obs, immutable_alloca_sep_def] >>
      metis_tac[]) >>
   drule_all assign_local_word_store_path >> strip_tac >>
+  `local_ptrs_rel func cenv ee.scopes s` by
+    fs[stmt_state_rel_def, state_rel_def] >>
+  `?w. lookup_var p s = SOME w /\ 32 <= sz` by
+    (qpat_x_assum `local_ptrs_rel _ _ _ _` mp_tac >>
+     rewrite_tac[local_ptrs_rel_def] >> strip_tac >>
+     qpat_x_assum `!name entry p sz. lookup_scopes _ _ = _ /\ _ ==> _`
+       (qspecl_then [`id`, `entry`, `p`, `sz`] mp_tac) >>
+     simp[] >> strip_tac >> fs[stmtSimDeclStoreTheory.store_lays_out_def]) >>
+  `ee.scopes = pre ++ env :: rest /\ id IN FDOM env` by
+    (drule vyperLookupTheory.find_containing_scope_structure >>
+     simp[finite_mapTheory.FLOOKUP_DEF]) >>
+  `local_region cenv ee.scopes s id (w2n w) sz` by
+    (simp[local_region_def] >> metis_tac[]) >>
+  `!ad len. ad + len <= w2n w \/ w2n w + 32 <= ad ==>
+     mem_bytes_at ad len t.vs_memory = mem_bytes_at ad len s.vs_memory` by
+    (rpt strip_tac >>
+     `t.vs_memory = (mstore (w2n w) (typed_val_to_w256 etv v) s).vs_memory` by
+       (qpat_x_assum `!w. lookup_var p s = SOME w ==> _` irule >>
+        first_assum ACCEPT_TAC) >>
+     qpat_assum `t.vs_memory = _` (fn th => REWRITE_TAC [th]) >>
+     irule valueEncodingPropsTheory.mstore_mem_bytes_at_disjoint >>
+     decide_tac) >>
+  `alloca_frame cenv es sa s0 cenv (ee with scopes :=
+     pre ++ (env |+ (id, entry with <|value := v; popped := []|>)) :: rest) t` by
+    (mp_tac (Q.INST [`c` |-> `cenv`, `es1` |-> `ee with gas_obs := []`,
+       `b` |-> `w2n (w:bytes32)`, `z` |-> `sz`, `n0` |-> `32`,
+       `ee` |-> `ee with scopes :=
+          pre ++ (env |+ (id, entry with <|value := v; popped := []|>)) :: rest`]
+       alloca_frame_local_store) >>
+     impl_tac >- (simp[pred_setTheory.ABSORPTION_RWT] >> rpt conj_tac
+       >- (qpat_assum `ee.scopes = _` (fn th =>
+             qpat_assum `local_region _ ee.scopes _ _ _ _`
+               (mp_tac o REWRITE_RULE [th])) >> simp[])
+       >- (qpat_assum `ee.scopes = _` (fn th =>
+             qpat_assum `MAP FDOM (ee with gas_obs := []).scopes = _`
+               (mp_tac o SIMP_RULE (srw_ss()) [th])) >> simp[])
+       >> first_assum ACCEPT_TAC) >>
+     simp[]) >>
   qexistsl [`ee with scopes :=
     pre ++ (env |+ (id, entry with <|value := v; popped := []|>)) :: rest`, `t`] >>
   conj_tac >- simp[gas_marked_exec_def] >>

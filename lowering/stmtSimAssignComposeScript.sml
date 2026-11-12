@@ -39,6 +39,7 @@ Theorem assign_local_rhs_outcome:
   emit_void MSTORE [Var p;op] sb = ((),sf) /\ fn_has_code sb sf func /\
   ~block_is_terminated sf /\
   FLOOKUP cenv.ce_vars id = SOME (PtrVar (Var p) sz) /\
+  stmt_state_rel ctx func cenv cx es s0 /\ local_ptrs_reserved cenv sa /\
   gas_outcome F (cx_tops cx) (ctx,func)
     (bind (eval_expr cx e) (read_result cx)) (es,s0)
     (\res ee t. ?v. res = INL v /\
@@ -47,7 +48,7 @@ Theorem assign_local_rhs_outcome:
     (\res ee r. expr_exit res r) ==>
   gas_outcome F (cx_tops cx) (ctx,func)
     (eval_stmt cx (Assign (BaseTarget (NameTarget id)) e)) (es,s0)
-    (stmt_post ctx func cx lctx cenv cenv sa sf s0)
+    (stmt_post ctx func cx lctx cenv cenv sa sf es s0)
     (\res ee r. !tail. stmt_exit RetQ (ee with gas_obs := tail) res r)
 Proof
   strip_tac >> rewrite_tac[gas_outcome_def] >>

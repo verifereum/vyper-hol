@@ -10,6 +10,7 @@ Ancestors
   o1PassContract concretizePtrPairedFields concretizePtrChronologicalHistory list pair
   contextCodegenRel concretizePtrOperationalOpcodes stepWriteFootprintBase
   venomExecProofs venomWf venomExecSemantics venomInst codegenRel
+  ptrDisciplineEmptyTaint ptrDiscipline ctxLookupAgree
 
 Theorem ptr_paired_coverage_static_mem:
   ctx_pass_stage rpolicy (CFP_Simple VP_ConcretizeMemLoc)
@@ -44,6 +45,38 @@ Theorem ptr_paired_coverage_static_mem:
   mem_inv (static_mem_ok eom) C' vs
 Proof
   strip_tac >>
+  `EVERY (\f. EVERY (\i. allocation_free_opcode i.inst_opcode) (fn_insts f))
+     C'.ctx_functions` by
+    (simp[EVERY_MEM] >> qx_gen_tac `g` >> strip_tac >>
+     drule_all LIST_REL_MEM_IMP_R >> strip_tac >>
+     rename1 `ptr_paired_code R lp positions f g` >>
+     `fn_inst_wf f /\ (?P. fn_ptr_ok P f) /\
+      EVERY (\i. i.inst_opcode <> DALLOCA) (fn_insts f)` by
+       (fs[ptr_discipline_def, ctx_has_dalloca_def, EVERY_MEM, EXISTS_MEM] >>
+        metis_tac[]) >>
+     fs[] >>
+     `fn_insts g = fn_insts (concretize_function_with_positions (lp f) f)` by
+       fs[ptr_paired_code_def, fn_insts_def] >>
+     simp[] >>
+     `EVERY (\i. i.inst_opcode <> ALLOCA)
+        (fn_insts (concretize_function_with_positions (lp f) f))` by
+       metis_tac[concretizeStepStructureTheory.concretize_positions_no_alloca] >>
+     `EVERY (\i. i.inst_opcode = ALLOCA \/ allocation_free_opcode i.inst_opcode)
+        (fn_insts (concretize_function_with_positions (lp f) f))` by
+       (ho_match_mp_tac concretizeStepShapeTheory.concretize_positions_opcode_every >>
+        fs[allocation_free_opcode_def, fn_ptr_ok_def, EVERY_MEM]) >>
+     fs[EVERY_MEM] >> metis_tac[]) >>
+  `!fn inst s. raw_reachable vs C' fn inst s ==>
+      dalloca_no_wrap inst s /\ w2n s.vs_initial_fmp <= w2n s.vs_fmp` by
+    (rpt strip_tac >> drule ptr_raw_reachable_frame >> strip_tac >>
+     drule_all allocation_free_frame_fmp >> strip_tac >>
+     drule raw_reachable_initial_fmp >> strip_tac >>
+     `allocation_free_opcode inst.inst_opcode` by
+       (`EVERY (\i. allocation_free_opcode i.inst_opcode) (fn_insts fn)` by
+          (fs[EVERY_MEM] >> metis_tac[]) >>
+        drule raw_reachable_active >> strip_tac >>
+        drule_all ctxLookupAgreeHelpersTheory.EVERY_active_inst >> simp[]) >>
+     fs[allocation_free_opcode_def, dalloca_no_wrap_def, o1_run_state_ok_def]) >>
   `C'.ctx_entry = C.ctx_entry` by fs[ctx_pass_stage_def] >>
   `?name fn lbl. C.ctx_entry = SOME name /\
     lookup_function name C.ctx_functions = SOME fn /\ fn_entry_label fn = SOME lbl` by
@@ -54,9 +87,11 @@ Proof
       Cases_on `lookup_function name C'.ctx_functions` >> simp[] >>
       strip_tac >> fs[ptr_paired_code_def] >> metis_tac[]) >>
   rpt gen_tac >> strip_tac >>
+  `dalloca_no_wrap inst s /\ w2n s.vs_initial_fmp <= w2n s.vs_fmp` by
+    metis_tac[] >>
   drule ptr_raw_reachable_frame >> strip_tac >>
   drule ptr_reachable_has_chrono_history >> strip_tac >>
-  qpat_x_assum `!ht at. _` drule >> strip_tac
+  qpat_x_assum `!ht at. ptr_chrono_history _ _ _ _ ==> _` drule >> strip_tac
   >- (drule_at (Pat `ptr_paired_prefix _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _`)
         ptr_paired_current_static_bound >>
       simp[] >>
