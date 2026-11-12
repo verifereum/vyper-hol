@@ -684,6 +684,39 @@ Proof
   gvs[]
 QED
 
+Theorem noninvoke_head_events_splice[local]:
+  EVERY (\i. i.inst_opcode <> INVOKE /\ ~is_terminator i.inst_opcode) pre /\
+  FOLDR (dft_exec_cons fuel C) OK pre s = OK a /\
+  ~is_terminator y.inst_opcode /\ step_inst fuel C y a = OK v /\
+  b = v with vs_inst_idx := SUC a.vs_inst_idx ==>
+  gas_events_block fuel C owner
+    <|bb_label := s.vs_current_bb; bb_instructions :=
+      REPLICATE s.vs_inst_idx (mk_inst 0 STOP [] []) ++ (pre ++ y::post)|> s =
+  MAP (\i. (owner,i.inst_id)) (FILTER (\i. i.inst_opcode = GAS) pre) ++
+  gas_events_step fuel C owner y a ++
+  gas_events_block fuel C owner
+    <|bb_label := b.vs_current_bb; bb_instructions :=
+      REPLICATE b.vs_inst_idx (mk_inst 0 STOP [] []) ++ post|> b
+Proof
+  strip_tac >>
+  drule_all noninvoke_prefix_events_exact >>
+  disch_then (qspecl_then [`owner`, `s.vs_current_bb`, `y::post`] mp_tac) >>
+  disch_then SUBST1_TAC >>
+  qmatch_goalsub_abbrev_tac `gas_events_block fuel C owner blk a` >>
+  `get_instruction blk a.vs_inst_idx = SOME y` by
+    simp[Abbr `blk`, venomInstTheory.get_instruction_def, EL_APPEND_EQN] >>
+  drule_all gas_events_block_nonterminator >>
+  disch_then (qspec_then `owner` mp_tac) >>
+  disch_then SUBST1_TAC >>
+  simp_tac (srw_ss()) [APPEND_ASSOC] >>
+  qpat_x_assum `b = _` SUBST1_TAC >>
+  irule gas_events_block_suffix_cong >> qexists_tac `post` >>
+  simp_tac (srw_ss()) [Abbr `blk`, DROP_APPEND, DROP_REPLICATE] >>
+  `a.vs_inst_idx - SUC a.vs_inst_idx = 0` by decide_tac >>
+  `SUC a.vs_inst_idx - (a.vs_inst_idx + 1) = 0` by decide_tac >>
+  asm_simp_tac (srw_ss()) []
+QED
+
 Theorem noninvoke_prefix_readings_exact[local]:
   !pre s pg rest u.
     EVERY (\i. i.inst_opcode <> INVOKE /\ ~is_terminator i.inst_opcode) pre /\
@@ -2210,6 +2243,724 @@ Proof
   qpat_x_assum `es = _ ++ extra` kall_tac >> fs[] >> metis_tac[]
 QED
 
+Theorem source_suffix_mask_cuts[local]:
+  !fuel C C'.
+  let CalleeIH = (!fn fn' t.
+      LIST_REL (\f g. g = dft_fn f) C.ctx_functions C'.ctx_functions /\
+      LIST_REL dft_fn_rel C.ctx_functions C'.ctx_functions /\
+      o1_ctx_shape C /\ o1_ctx_shape C' /\
+      MEM fn C.ctx_functions /\ fn' = dft_fn fn /\
+      dft_fn_rel fn fn' /\ strict_dom_vars_defined fn t /\
+      fn_reachable fn t.vs_current_bb /\
+      ctx_labels_bound C t.vs_labels /\ ctx_labels_bound C' t.vs_labels /\
+      ~t.vs_call_ctx.cc_static /\ terminates (run_blocks fuel C' fn' t) /\
+      gas_count_blocks fuel C' fn' t <= LENGTH t.vs_gas_readings ==>
+      ?m es unused.
+        LENGTH m = LENGTH es /\
+        PERM (MAP THE (FILTER IS_SOME m) ++ unused) t.vs_gas_readings /\
+        (!u. (?ir. run_blocks fuel C' fn' t = IntRet ir u) ==>
+          EVERY IS_SOME m /\ unused = u.vs_gas_readings) /\
+        !gs tail. LIST_REL (\slot w. slot = NONE \/ slot = SOME w) m gs ==>
+          (?extra. es = gas_events_blocks fuel C fn
+             (t with vs_gas_readings := gs ++ tail) ++ extra) /\
+          ((?j. terminates (run_blocks j C fn
+             (t with vs_gas_readings := gs ++ tail))) ==>
+           terminates (run_blocks fuel C fn (t with vs_gas_readings := gs ++ tail)) /\
+           dft_res_rel
+             (restore_result [] (run_blocks fuel C fn (t with vs_gas_readings := gs ++ tail)))
+             (restore_result [] (run_blocks fuel C' fn' t)) /\
+           (!u. (?ir. run_blocks fuel C' fn' t = IntRet ir u) ==>
+             gas_events_blocks fuel C fn (t with vs_gas_readings := gs ++ tail) = es /\
+             residual_result tail (run_blocks fuel C' fn' t)
+               (run_blocks fuel C fn (t with vs_gas_readings := gs ++ tail)))));
+      R = (\n D xs st. FOLDR (dft_exec_cons n D) OK xs st);
+      E = (\D xs st. gas_events_block fuel D owner
+        <|bb_label := st.vs_current_bb; bb_instructions :=
+          REPLICATE st.vs_inst_idx (mk_inst 0 STOP [] []) ++ xs|> st);
+      S = (\xs st m es unused.
+        LENGTH m = LENGTH es /\
+        PERM (MAP THE (FILTER IS_SOME m) ++ unused) st.vs_gas_readings /\
+        (!u. (R fuel C' xs st = OK u \/ (?ir. R fuel C' xs st = IntRet ir u)) ==>
+          EVERY IS_SOME m /\ unused = u.vs_gas_readings) /\
+        !gs tail. LIST_REL (\slot w. slot = NONE \/ slot = SOME w) m gs ==>
+          (?extra. es = E C xs (st with vs_gas_readings := gs ++ tail) ++ extra) /\
+          ((?j. terminates (R j C xs (st with vs_gas_readings := gs ++ tail))) ==>
+            terminates (R fuel C xs (st with vs_gas_readings := gs ++ tail)) /\
+            dft_res_rel
+              (restore_result [] (R fuel C xs (st with vs_gas_readings := gs ++ tail)))
+              (restore_result [] (R fuel C' xs st)) /\
+            (((?u. R fuel C' xs st = OK u) \/ (?ir u. R fuel C' xs st = IntRet ir u)) ==>
+              E C xs (st with vs_gas_readings := gs ++ tail) = es /\
+              residual_result tail (R fuel C' xs st)
+                (R fuel C xs (st with vs_gas_readings := gs ++ tail)))));
+      P = (\xs s ms ess.
+      LENGTH ms = LENGTH xs /\ LENGTH ess = LENGTH xs /\
+      LIST_REL (\m es. LENGTH m = LENGTH es) ms ess /\
+      (!k. k < LENGTH xs ==>
+        (((EL k xs).inst_opcode <> INVOKE /\ (EL k xs).inst_opcode <> GAS ==>
+           EL k ms = [] /\ EL k ess = []) /\
+         ((EL k xs).inst_opcode = GAS ==>
+           (EL k ms = [] /\ EL k ess = []) \/
+           (?w. EL k ms = [SOME w] /\
+             EL k ess = [(owner,(EL k xs).inst_id)])))) /\
+      (!k t. k < LENGTH xs /\ (EL k xs).inst_opcode = INVOKE /\
+        EVERY (\i. ~is_terminator i.inst_opcode) (TAKE k xs) /\
+        R fuel C' (TAKE k xs) s = OK t ==>
+        let P = (\unused_k t.
+          LENGTH (EL k ms) = LENGTH (EL k ess) /\
+          PERM (MAP THE (FILTER IS_SOME (EL k ms)) ++ unused_k) t.vs_gas_readings /\
+          (!u. (step_inst fuel C' (EL k xs) t = OK u \/
+                (?ir. step_inst fuel C' (EL k xs) t = IntRet ir u)) ==>
+            EVERY IS_SOME (EL k ms) /\ unused_k = u.vs_gas_readings) /\
+          !gs tail. LIST_REL (\slot w. slot = NONE \/ slot = SOME w) (EL k ms) gs ==>
+            (?extra. EL k ess = gas_events_step fuel C t.vs_current_bb (EL k xs)
+               (t with vs_gas_readings := gs ++ tail) ++ extra) /\
+            ((?j. terminates (step_inst j C (EL k xs)
+               (t with vs_gas_readings := gs ++ tail))) ==>
+              terminates (step_inst fuel C (EL k xs) (t with vs_gas_readings := gs ++ tail)) /\
+              dft_res_rel
+                (restore_result [] (step_inst fuel C (EL k xs) (t with vs_gas_readings := gs ++ tail)))
+                (restore_result [] (step_inst fuel C' (EL k xs) t)) /\
+              (((?u. step_inst fuel C' (EL k xs) t = OK u) \/
+                (?ir u. step_inst fuel C' (EL k xs) t = IntRet ir u)) ==>
+                gas_events_step fuel C t.vs_current_bb (EL k xs)
+                  (t with vs_gas_readings := gs ++ tail) = EL k ess /\
+                residual_result tail (step_inst fuel C' (EL k xs) t)
+                  (step_inst fuel C (EL k xs) (t with vs_gas_readings := gs ++ tail)))));
+            n = gas_count_step fuel C' (EL k xs) t;
+            p = TAKE n t.vs_gas_readings
+        in gasOracleReplay$gas_replay_at n (step_inst fuel C' (EL k xs)) t /\
+          ?u0.
+            PERM (MAP THE (FILTER IS_SOME (EL k ms)) ++ u0) p /\
+            (!unused_k. P unused_k t ==>
+              !us. EVERY (\q. ~MEM (Var (FST q)) (EL k xs).inst_operands /\
+                               ~MEM (FST q) (EL k xs).inst_outputs) us ==>
+                P unused_k (FOLDL (\st q. update_var (FST q) (SND q) st) t us)) /\
+            !r. P (u0 ++ r) (t with vs_gas_readings := p ++ r) /\
+              (!u. (step_inst fuel C' (EL k xs) (t with vs_gas_readings := p ++ r) = OK u \/
+                (?ir. step_inst fuel C' (EL k xs) (t with vs_gas_readings := p ++ r) = IntRet ir u)) ==>
+                u0 = []) /\
+              !us. EVERY (\q. ~MEM (Var (FST q)) (EL k xs).inst_operands /\
+                               ~MEM (FST q) (EL k xs).inst_outputs) us ==>
+                P (u0 ++ r) (FOLDL (\st q. update_var (FST q) (SND q) st)
+                  (t with vs_gas_readings := p ++ r) us)) /\
+      (!j t. j < LENGTH xs /\ (EL j xs).inst_opcode = GAS /\
+        EVERY (\i. ~is_terminator i.inst_opcode) (TAKE j xs) /\
+        R fuel C' (TAKE j xs) s = OK t ==>
+        ?w rest. t.vs_gas_readings = w::rest /\ EL j ms = [SOME w] /\
+          EL j ess = [(owner,(EL j xs).inst_id)]) /\
+      (!j. j < LENGTH xs /\ ~(?t. R fuel C' (TAKE j xs) s = OK t) ==>
+        EL j ms = [] /\ EL j ess = []) /\
+      (!n. n <= LENGTH xs ==> ?unused.
+         S (TAKE n xs) s
+           (FLAT (TAKE n (GENLIST (\j. if j < LENGTH xs /\
+             (EL j xs).inst_opcode = GAS /\ ~(?t. R fuel C' (TAKE j xs) s = OK t)
+             then [NONE] else EL j ms) (LENGTH xs))))
+           (FLAT (TAKE n (GENLIST (\j. if j < LENGTH xs /\
+             (EL j xs).inst_opcode = GAS /\ ~(?t. R fuel C' (TAKE j xs) s = OK t)
+             then [(owner,(EL j xs).inst_id)] else EL j ess) (LENGTH xs)))) unused) /\
+      !n. n <= LENGTH xs ==> ?unused.
+        S (TAKE n xs) s (FLAT (TAKE n ms)) (FLAT (TAKE n ess)) unused)
+  in
+  !fn bb xs post s.
+    CalleeIH /\
+    LIST_REL (\f g. g = dft_fn f) C.ctx_functions C'.ctx_functions /\
+    LIST_REL dft_fn_rel C.ctx_functions C'.ctx_functions /\
+    o1_ctx_shape C /\ o1_ctx_shape C' /\ MEM fn C.ctx_functions /\
+    wf_ssa fn /\ wf_function fn /\ MEM bb fn.fn_blocks /\
+    EVERY inst_wf bb.bb_instructions /\
+    EVERY (\i. ~is_alloca_op i.inst_opcode) bb.bb_instructions /\
+    EVERY (\i. MEM i bb.bb_instructions) xs /\
+    (?src. dft_head_bubbles
+      (\x y. MEM x bb.bb_instructions /\ MEM y bb.bb_instructions /\
+        ~is_pseudo x.inst_opcode /\ ~is_pseudo y.inst_opcode /\
+        id_before (MAP (\i. i.inst_id) bb.bb_instructions) x.inst_id y.inst_id /\
+        ~dft_must_order x y /\ dft_abort_compatible x.inst_opcode y.inst_opcode)
+      src xs /\ dft_remaining_inv fn bb (src ++ post) s) /\
+    ctx_labels_bound C s.vs_labels /\ ctx_labels_bound C' s.vs_labels /\
+    ~s.vs_call_ctx.cc_static /\ terminates (R fuel C' xs s) /\
+    LENGTH (E C' xs s) <= LENGTH s.vs_gas_readings ==>
+    ?ms ess. P xs s ms ess /\
+      (!gss tail k u.
+        LIST_REL (\m gs. LIST_REL (\slot w. slot = NONE \/ slot = SOME w) m gs) ms gss /\
+        k <= LENGTH xs /\
+        R fuel C (TAKE k xs) (s with vs_gas_readings := FLAT gss ++ tail) = OK u ==>
+        E C (TAKE k xs) (s with vs_gas_readings := FLAT gss ++ tail) = FLAT (TAKE k ess) /\
+        u.vs_gas_readings = FLAT (DROP k gss) ++ tail /\
+        (?t. R fuel C' (TAKE k xs) s = OK t)) /\
+      let pm = GENLIST (\j. if j < LENGTH xs /\
+            (EL j xs).inst_opcode = GAS /\ ~(?t. R fuel C' (TAKE j xs) s = OK t)
+            then [NONE] else EL j ms) (LENGTH xs);
+          pe = GENLIST (\j. if j < LENGTH xs /\
+            (EL j xs).inst_opcode = GAS /\ ~(?t. R fuel C' (TAKE j xs) s = OK t)
+            then [(owner,(EL j xs).inst_id)] else EL j ess) (LENGTH xs)
+      in
+      (!gss tail k u.
+        LIST_REL (LIST_REL (\slot w. slot = NONE \/ slot = SOME w)) pm gss /\
+        k <= LENGTH xs /\
+        R fuel C (TAKE k xs) (s with vs_gas_readings := FLAT gss ++ tail) = OK u ==>
+        E C (TAKE k xs) (s with vs_gas_readings := FLAT gss ++ tail) = FLAT (TAKE k pe) /\
+        u.vs_gas_readings = FLAT (DROP k gss) ++ tail /\
+        (?t. R fuel C' (TAKE k xs) s = OK t)) /\
+      (!gss tail k.
+        LIST_REL (LIST_REL (\slot w. slot = NONE \/ slot = SOME w)) pm gss /\
+        k < LENGTH xs /\ (EL k xs).inst_opcode = INVOKE /\
+        ~(?t. R fuel C' (TAKE k xs) s = OK t) ==>
+        ~(?v. R fuel C (TAKE k xs) (s with vs_gas_readings := FLAT gss ++ tail) = OK v))
+Proof
+  ntac 3 gen_tac >> BasicProvers.LET_ELIM_TAC >>
+  qsuff_tac `?ms ess. P xs s ms ess`
+  >- suspend "exact_prefixes" >>
+  simp[Abbr `P`] >>
+  `!st. S' [] st [] [] st.vs_gas_readings` by
+    (simp[Abbr `S'`, Abbr `R`, Abbr `E`, Once gas_events_block_def,
+          venomInstTheory.get_instruction_def, residual_result_cases,
+          restore_result_def, dftRunRelTheory.dft_res_rel_def,
+          passSimulationDefsTheory.terminates_def] >>
+     simp[Once gas_events_block_def, venomInstTheory.get_instruction_def]) >>
+  qpat_x_assum `LENGTH (E _ _ _) <= _` mp_tac >>
+  qpat_x_assum `terminates (R _ _ _ _)` mp_tac >>
+  qpat_x_assum `~s.vs_call_ctx.cc_static` mp_tac >>
+  qpat_x_assum `ctx_labels_bound C' s.vs_labels` mp_tac >>
+  qpat_x_assum `ctx_labels_bound C s.vs_labels` mp_tac >>
+  qpat_x_assum `dft_remaining_inv _ _ _ _` mp_tac >>
+  qpat_x_assum `dft_head_bubbles _ _ _` mp_tac >>
+  qpat_x_assum `EVERY (\i. MEM i _) xs` mp_tac >>
+  qid_spec_tac `src` >> qid_spec_tac `post` >>
+  qid_spec_tac `s` >> Induct_on `xs` >> gen_tac >> rpt strip_tac
+  >- (qexistsl_tac [`[]`, `[]`] >> simp[] >> rpt strip_tac >>
+      gvs[markerTheory.Abbrev_def] >> metis_tac[]) >>
+  qpat_x_assum `dft_head_bubbles _ src (h::xs)` mp_tac >>
+  simp[Once dftRunRelTheory.dft_head_bubbles_cases] >>
+  disch_then (qx_choose_then `pre` (qx_choose_then `after` strip_assume_tac)) >>
+  qpat_x_assum `src = _` SUBST_ALL_TAC >>
+  `inst_wf h` by fs[EVERY_MEM] >>
+  `terminates (step_inst fuel C' h s)` by
+    (qpat_x_assum `terminates (R _ _ _ _)` mp_tac >>
+     simp[Abbr `R`, dftIndexedExecTheory.dft_exec_cons_def] >>
+     Cases_on `step_inst fuel C' h s` >>
+     simp[passSimulationDefsTheory.terminates_def]) >>
+  `LENGTH (gas_events_step fuel C' s.vs_current_bb h s) <=
+     LENGTH s.vs_gas_readings` by
+    (qpat_x_assum `LENGTH (E _ _ _) <= _` mp_tac >>
+     simp[Abbr `E`, Once gas_events_block_def,
+          venomInstTheory.get_instruction_def, EL_APPEND_EQN] >>
+     Cases_on `step_inst fuel C' h s` >> simp[gas_events_length]) >>
+  qabbrev_tac `H = (\m es unused t.
+    LENGTH m = LENGTH es /\
+    PERM (MAP THE (FILTER IS_SOME m) ++ unused) t.vs_gas_readings /\
+    (!u. (step_inst fuel C' h t = OK u \/
+          (?ir. step_inst fuel C' h t = IntRet ir u)) ==>
+      EVERY IS_SOME m /\ unused = u.vs_gas_readings) /\
+    !gs tail. LIST_REL (\slot w. slot = NONE \/ slot = SOME w) m gs ==>
+      (?extra. es = gas_events_step fuel C owner h
+         (t with vs_gas_readings := gs ++ tail) ++ extra) /\
+      ((?j. terminates (step_inst j C h (t with vs_gas_readings := gs ++ tail))) ==>
+        terminates (step_inst fuel C h (t with vs_gas_readings := gs ++ tail)) /\
+        dft_res_rel
+          (restore_result [] (step_inst fuel C h (t with vs_gas_readings := gs ++ tail)))
+          (restore_result [] (step_inst fuel C' h t)) /\
+        (((?u. step_inst fuel C' h t = OK u) \/
+          (?ir u. step_inst fuel C' h t = IntRet ir u)) ==>
+          gas_events_step fuel C owner h
+            (t with vs_gas_readings := gs ++ tail) = es /\
+          residual_result tail (step_inst fuel C' h t)
+            (step_inst fuel C h (t with vs_gas_readings := gs ++ tail)))))` >>
+  `!D st. h.inst_opcode = INVOKE ==>
+     gas_events_step fuel D owner h st =
+     gas_events_step fuel D st.vs_current_bb h st` by
+    simp[gas_events_step_def] >>
+  `?m es unused.
+    (h.inst_opcode <> INVOKE ==>
+      if h.inst_opcode = GAS then
+        ?w rest. s.vs_gas_readings = w::rest /\
+          m = [SOME w] /\ es = [(owner,h.inst_id)]
+      else m = [] /\ es = []) /\
+    H m es unused s /\
+    (h.inst_opcode = INVOKE ==>
+      gasOracleReplay$gas_replay_at (gas_count_step fuel C' h s) (step_inst fuel C' h) s /\
+      ?u0. PERM (MAP THE (FILTER IS_SOME m) ++ u0)
+                (TAKE (gas_count_step fuel C' h s) s.vs_gas_readings) /\
+        !r. H m es (u0 ++ r) (s with vs_gas_readings :=
+              TAKE (gas_count_step fuel C' h s) s.vs_gas_readings ++ r) /\
+          (!u. (step_inst fuel C' h (s with vs_gas_readings :=
+                    TAKE (gas_count_step fuel C' h s) s.vs_gas_readings ++ r) = OK u \/
+            (?ir. step_inst fuel C' h (s with vs_gas_readings :=
+                    TAKE (gas_count_step fuel C' h s) s.vs_gas_readings ++ r) = IntRet ir u)) ==>
+            u0 = []))` by
+    (Cases_on `h.inst_opcode = INVOKE`
+     >- (mp_tac (Q.SPECL [`fuel`, `C`, `C'`, `h`, `s`] invoke_segment_mask_tail_free) >>
+         (impl_tac >- simp[GSYM markerTheory.Abbrev_def, Abbr `CalleeIH`]) >>
+         pure_rewrite_tac[LET_THM] >> BETA_TAC >> strip_tac >>
+         qexistsl_tac [`m`, `es`, `u0 ++ DROP (gas_count_step fuel C' h s) s.vs_gas_readings`] >>
+         simp[] >> conj_tac
+         >- (qpat_x_assum `!r. _` (qspec_then `DROP (gas_count_step fuel C' h s) s.vs_gas_readings` mp_tac) >>
+             simp[TAKE_DROP, Abbr `H`, gas_events_step_def] >>
+             POP_ASSUM_LIST (K all_tac) >> metis_tac[]) >>
+         qexists_tac `u0` >> simp[Abbr `H`, gas_events_step_def] >> gen_tac >>
+         qpat_x_assum `!r. _` (qspec_then `r` mp_tac) >>
+         simp[APPEND_ASSOC, gas_events_step_def] >>
+         POP_ASSUM_LIST (K all_tac) >> metis_tac[]) >>
+     simp[Abbr `H`] >> irule noninvoke_segment_mask_shape >> simp[]) >>
+  qpat_assum `Abbrev (H = _)` (fn th =>
+    qpat_assum `H m es unused s` mp_tac >>
+    pure_rewrite_tac[REWRITE_RULE [markerTheory.Abbrev_def] th] >>
+    BETA_TAC >> strip_tac) >>
+  `!a b v st us. h.inst_opcode = INVOKE /\
+      EVERY (\q. ~MEM (Var (FST q)) h.inst_operands /\
+                   ~MEM (FST q) h.inst_outputs) us ==>
+      (H a b v (FOLDL (\st q. update_var (FST q) (SND q) st) st us) <=> H a b v st)` by
+    (rpt gen_tac >> strip_tac >> simp[Abbr `H`] >>
+     qpat_x_assum `EVERY _ us` mp_tac >>
+     qpat_x_assum `h.inst_opcode = INVOKE` mp_tac >>
+     POP_ASSUM_LIST (K all_tac) >>
+     simp[SRULE [LET_THM] invoke_fixed_segment_updates]) >>
+  Cases_on `?u. step_inst fuel C' h s = OK u`
+  >- suspend "returning_head" >>
+  `!gs tail. LIST_REL (\slot w. slot = NONE \/ slot = SOME w) m gs ==>
+    ~(?u. step_inst fuel C h (s with vs_gas_readings := gs ++ tail) = OK u)` by
+    (rpt gen_tac >> strip_tac >> strip_tac >>
+     qpat_x_assum `!gs tail. LIST_REL _ m gs ==> _`
+       (qspecl_then [`gs`, `tail`] mp_tac) >>
+     (impl_tac >- simp[]) >> disch_then strip_assume_tac >>
+     `?j. terminates (step_inst j C h (s with vs_gas_readings := gs ++ tail))` by
+       (qexists_tac `fuel` >> simp[passSimulationDefsTheory.terminates_def]) >>
+     qpat_x_assum `(?j. _) ==> _` mp_tac >>
+     (impl_tac >- metis_tac[]) >> disch_then strip_assume_tac >>
+     Cases_on `step_inst fuel C' h s`
+     >- metis_tac[] >>
+     qpat_x_assum `dft_res_rel _ _` mp_tac >>
+     simp[restore_result_def, dftRunRelTheory.dft_res_rel_def]) >>
+  `!ys. R fuel C' (h::ys) s = step_inst fuel C' h s` by
+    (simp[Abbr `R`, dftIndexedExecTheory.dft_exec_cons_def] >>
+     Cases_on `step_inst fuel C' h s` >> fs[]) >>
+  `!gs tail ys. LIST_REL (\slot w. slot = NONE \/ slot = SOME w) m gs ==>
+    R fuel C (h::ys) (s with vs_gas_readings := gs ++ tail) =
+      step_inst fuel C h (s with vs_gas_readings := gs ++ tail) /\
+    E C (h::ys) (s with vs_gas_readings := gs ++ tail) =
+      gas_events_step fuel C owner h
+        (s with vs_gas_readings := gs ++ tail)` by
+    (rpt strip_tac >>
+     first_x_assum drule >> strip_tac >>
+     simp[Abbr `R`, Abbr `E`, dftIndexedExecTheory.dft_exec_cons_def,
+          Once gas_events_block_def, venomInstTheory.get_instruction_def,
+          EL_APPEND_EQN] >>
+     Cases_on `step_inst fuel C h (s with vs_gas_readings := gs ++ tail)` >> fs[] >>
+     metis_tac[]) >>
+  qexistsl_tac [`m::REPLICATE (LENGTH xs) []`, `es::REPLICATE (LENGTH xs) []`] >>
+  simp[rich_listTheory.LIST_REL_REPLICATE_same] >>
+  conj_tac
+  >- (qpat_x_assum `!st suffix source. EVERY _ xs ==> _` kall_tac >>
+      qpat_x_assum `dft_remaining_inv _ _ _ _` kall_tac >>
+      qpat_x_assum `dft_head_bubbles _ _ _` kall_tac >>
+      qpat_x_assum `EVERY _ pre` kall_tac >>
+      rpt strip_tac >> Cases_on `k` >>
+      gvs[rich_listTheory.EL_REPLICATE] >>
+      Cases_on `h.inst_opcode = GAS` >> gvs[] >>
+      Cases_on `h.inst_opcode = INVOKE` >> gvs[]) >>
+  conj_tac >- suspend "stopped_provenance" >>
+  conj_tac >- suspend "stopped_gas_provenance" >>
+  conj_tac >- suspend "stopped_empty_unreached" >>
+  once_rewrite_tac[CONJ_COMM] >>
+  conj_asm1_tac >- suspend "stopped_legacy" >>
+  suspend "stopped_padding"
+QED
+Resume source_suffix_mask_cuts[stopped_legacy]:
+  gen_tac >> strip_tac >> Cases_on `n`
+  >- (simp[] >> metis_tac[]) >>
+  simp[TAKE] >>
+  pure_rewrite_tac [rich_listTheory.REPLICATE_GENLIST, TAKE_GENLIST] >>
+  simp[GSYM rich_listTheory.REPLICATE_GENLIST,
+       iffRL FLAT_EQ_NIL, rich_listTheory.EVERY_REPLICATE] >>
+  qexists_tac `unused` >> simp[Abbr `S'`] >>
+  conj_tac >- metis_tac[] >>
+  rpt gen_tac >> strip_tac >>
+  qpat_x_assum `!gs tail ys. LIST_REL _ m gs ==> _ /\ _`
+    (qspecl_then [`gs`, `tail`, `TAKE n' xs`] mp_tac) >>
+  (impl_tac >- simp[]) >> strip_tac >> simp[] >>
+  strip_tac >>
+  `?j. terminates (step_inst j C h (s with vs_gas_readings := gs ++ tail))` by
+    (qexists_tac `j` >>
+     qpat_x_assum `terminates (R _ _ _ _)` mp_tac >>
+     simp[Abbr `R`, dftIndexedExecTheory.dft_exec_cons_def] >>
+     Cases_on `step_inst j C h (s with vs_gas_readings := gs ++ tail)` >>
+     simp[passSimulationDefsTheory.terminates_def]) >>
+  qpat_x_assum `!gs tail. LIST_REL _ m gs ==> _`
+    (qspecl_then [`gs`, `tail`] mp_tac) >>
+  (impl_tac >- simp[]) >> strip_tac >>
+  metis_tac[]
+QED
+
+Resume source_suffix_mask_cuts[returning_head]:
+  qpat_x_assum `?u. step_inst fuel C' h s = OK u` strip_assume_tac >>
+  Cases_on `is_terminator h.inst_opcode`
+  >- suspend "terminator_head" >>
+  `dft_remaining_inv fn bb ((pre ++ after) ++ post)
+      (u with vs_inst_idx := SUC s.vs_inst_idx)` by
+    (drule_at (Pat `step_inst _ _ _ _ = OK _`)
+       dftRunRelTheory.dft_remaining_inv_step >>
+     disch_then (qspecl_then [`pre`, `after ++ post`, `fn`, `bb`] mp_tac) >>
+     simp[APPEND_ASSOC] >> metis_tac[APPEND, APPEND_ASSOC]) >>
+  `ctx_labels_bound C u.vs_labels /\ ctx_labels_bound C' u.vs_labels` by
+    metis_tac[dftRunRelTheory.ctx_labels_bound_step] >>
+  `~u.vs_call_ctx.cc_static` by
+    metis_tac[venomInstProofsTheory.step_preserves_call_ctx] >>
+  `terminates (R fuel C' xs (u with vs_inst_idx := SUC s.vs_inst_idx))` by
+    (qpat_x_assum `terminates (R fuel C' (h::xs) s)` mp_tac >>
+     simp[Abbr `R`, dftIndexedExecTheory.dft_exec_cons_def]) >>
+  `u.vs_gas_readings = DROP (LENGTH (gas_events_step fuel C' owner h s))
+       s.vs_gas_readings` by
+    (mp_tac (cj 1 gasCountTheory.gas_count_suffix) >>
+     disch_then (qspecl_then [`fuel`, `C'`, `h`, `s`] mp_tac) >>
+     simp[gasCountTheory.gas_count_suffix_def, gasEventsTheory.gas_events_length]) >>
+  `u.vs_current_bb = s.vs_current_bb` by
+    (fs[dftRunRelTheory.dft_remaining_inv_def]) >>
+  `gas_events_block fuel C' owner
+     <|bb_label := s.vs_current_bb; bb_instructions :=
+       REPLICATE s.vs_inst_idx (mk_inst 0 STOP [] []) ++ h::xs|>
+     (u with vs_inst_idx := SUC s.vs_inst_idx) =
+    E C' xs (u with vs_inst_idx := SUC s.vs_inst_idx)` by
+    (simp[Abbr `E`] >> irule gas_events_block_suffix_cong >>
+     qexists_tac `xs` >>
+     simp[DROP_APPEND, DROP_DROP_T, arithmeticTheory.ADD1]) >>
+  `LENGTH (E C' xs (u with vs_inst_idx := SUC s.vs_inst_idx)) <=
+      LENGTH u.vs_gas_readings` by
+    (qpat_x_assum `LENGTH (E C' (h::xs) s) <= _` mp_tac >>
+     pure_once_rewrite_tac [markerTheory.Abbrev_def] >>
+     simp[SimpLHS, Abbr `E`, Once gas_events_block_def,
+          venomInstTheory.get_instruction_def, EL_APPEND_EQN]) >>
+  `EVERY (\i. MEM i bb.bb_instructions) xs` by fs[] >>
+  qpat_x_assum `!st suffix source. EVERY _ xs ==> _`
+    (qspecl_then [`u with vs_inst_idx := SUC s.vs_inst_idx`, `post`,
+                  `pre ++ after`] mp_tac) >>
+  simp[IgnAsm `u.vs_gas_readings = _`] >> strip_tac >>
+  qexistsl_tac [`m::ms`, `es::ess`] >> simp[] >>
+  conj_tac
+  >- (gen_tac >> strip_tac >> Cases_on `k` >> gvs[] >>
+      Cases_on `h.inst_opcode = GAS` >> gvs[] >>
+      Cases_on `h.inst_opcode = INVOKE` >> gvs[]) >>
+  conj_tac >- suspend "returning_provenance" >>
+  conj_tac >- suspend "returning_gas_provenance" >>
+  conj_tac >- suspend "returning_empty_unreached" >>
+  conj_tac >- suspend "returning_padding" >>
+  gen_tac >> strip_tac >> Cases_on `n`
+  >- (simp[] >> metis_tac[]) >>
+  qpat_x_assum `!n. n <= LENGTH xs ==> _` (qspec_then `n'` mp_tac) >>
+  simp[] >> disch_then (qx_choose_then `unused'` assume_tac) >>
+  qexists_tac `unused'` >> simp[TAKE] >>
+  qabbrev_tac `m' = FLAT (TAKE n' ms)` >>
+  qabbrev_tac `es' = FLAT (TAKE n' ess)` >>
+  qpat_x_assum `S' _ _ _ _ _` mp_tac >>
+  qunabbrev_tac `S'` >> BETA_TAC >> strip_tac >>
+  qunabbrev_tac `R` >> qunabbrev_tac `E` >>
+  CONV_TAC (REDEPTH_CONV BETA_CONV) >>
+  match_mp_tac (Q.INST [`u` |-> `u`, `unused` |-> `unused`]
+    (CONV_RULE (REDEPTH_CONV BETA_CONV)
+      (PURE_REWRITE_RULE [LET_THM] identity_mask_cons))) >>
+  rule_assum_tac (CONV_RULE (REDEPTH_CONV BETA_CONV)) >>
+  rule_assum_tac (PURE_REWRITE_RULE
+    [venomStateTheory.venom_state_accfupds, combinTheory.K_THM, REPLICATE, APPEND]) >>
+  qpat_x_assum `u.vs_gas_readings = _` kall_tac >>
+  qpat_assum `u.vs_current_bb = _` (fn th =>
+    rule_assum_tac (PURE_REWRITE_RULE [th]) >> rewrite_tac [th] >> assume_tac th) >>
+  simp[venomStateTheory.venom_state_accfupds] >>
+  conj_tac
+  >- (qpat_x_assum `!v. _ ==> EVERY IS_SOME m' /\ _`
+        mp_tac >> simp[]) >>
+  rpt gen_tac >> strip_tac >>
+  qpat_x_assum `!gs tail. LIST_REL _ m' gs ==> _`
+    (qspecl_then [`gs`, `tail`] mp_tac) >> simp[] >>
+  POP_ASSUM_LIST (K all_tac) >> metis_tac[]
+QED
+Resume source_suffix_mask_cuts[terminator_head]:
+  `!n D st ys. R n D (h::ys) st =
+     case step_inst n D h st of
+       OK v => if v.vs_halted then Halt v else OK v
+     | Halt v => Halt v | Abort a v => Abort a v
+     | IntRet ir v => IntRet ir v | Error e => Error e` by
+    (simp[Abbr `R`, dftIndexedExecTheory.dft_exec_cons_def] >>
+     rpt gen_tac >> Cases_on `step_inst n D h st` >> simp[]) >>
+  `!n D st ys. terminates (R n D (h::ys) st) <=>
+      terminates (step_inst n D h st)` by
+    (rpt gen_tac >> simp[] >> Cases_on `step_inst n D h st` >>
+     simp[passSimulationDefsTheory.terminates_def] >>
+     Cases_on `v.vs_halted` >> simp[passSimulationDefsTheory.terminates_def]) >>
+  `!D st ys. E D (h::ys) st = gas_events_step fuel D owner h st` by
+    (simp[Abbr `E`, Once gas_events_block_def,
+          venomInstTheory.get_instruction_def, EL_APPEND_EQN] >>
+     rpt gen_tac >> Cases_on `step_inst fuel D h st` >> simp[]) >>
+  qpat_x_assum `!u. _ ==> EVERY IS_SOME m /\ _`
+    (qspec_then `u` mp_tac) >> simp[] >> strip_tac >>
+  qexistsl_tac [`m::REPLICATE (LENGTH xs) []`, `es::REPLICATE (LENGTH xs) []`] >>
+  simp[rich_listTheory.LIST_REL_REPLICATE_same] >>
+  conj_tac
+  >- (qpat_x_assum `!st suffix source. EVERY _ xs ==> _` kall_tac >>
+      qpat_x_assum `dft_remaining_inv _ _ _ _` kall_tac >>
+      qpat_x_assum `dft_head_bubbles _ _ _` kall_tac >>
+      qpat_x_assum `EVERY _ pre` kall_tac >>
+      rpt strip_tac >> Cases_on `k` >>
+      gvs[rich_listTheory.EL_REPLICATE] >>
+      Cases_on `h.inst_opcode = GAS` >> gvs[] >>
+      Cases_on `h.inst_opcode = INVOKE` >> gvs[]) >>
+  conj_tac >- suspend "terminator_provenance" >>
+  conj_tac >- suspend "terminator_gas_provenance" >>
+  conj_tac >- suspend "terminator_empty_unreached" >>
+  once_rewrite_tac[CONJ_COMM] >>
+  conj_asm1_tac >- suspend "terminator_legacy" >>
+  suspend "terminator_padding"
+QED
+Resume source_suffix_mask_cuts[terminator_legacy]:
+  gen_tac >> strip_tac >> Cases_on `n`
+  >- (simp[] >> metis_tac[]) >>
+  simp[TAKE] >>
+  pure_rewrite_tac [rich_listTheory.REPLICATE_GENLIST, TAKE_GENLIST] >>
+  simp[GSYM rich_listTheory.REPLICATE_GENLIST,
+       iffRL FLAT_EQ_NIL, rich_listTheory.EVERY_REPLICATE] >>
+  qexists_tac `unused` >> simp[Abbr `S'`] >>
+  conj_tac >- gvs[] >>
+  conj_tac
+  >- (Cases_on `u.vs_halted` >> simp[]) >>
+  rpt gen_tac >> strip_tac >>
+  qpat_x_assum `!gs tail. LIST_REL _ m gs ==> _`
+    (qspecl_then [`gs`, `tail`] mp_tac) >> simp[] >>
+  disch_then strip_assume_tac >> strip_tac >>
+  qpat_x_assum `(?j. _) ==> _` mp_tac >>
+  (impl_tac >- metis_tac[]) >> simp[residual_result_cases] >>
+  strip_tac >> Cases_on `u.vs_halted` >>
+  simp[restore_result_def, dftRunRelTheory.dft_res_rel_def,
+       residual_result_cases, passSimulationDefsTheory.terminates_def]
+QED
+Resume source_suffix_mask_cuts[stopped_provenance]:
+  rpt (FIRST [gen_tac, disch_then strip_assume_tac]) >> Cases_on `k`
+  >- (gvs[Abbr `R`] >>
+      pure_rewrite_tac [LET_THM] >> BETA_TAC >>
+      `!v st. P v st = H m es v st` by
+        (rpt gen_tac >> simp[Abbr `P`, Abbr `H`]) >>
+      qexists_tac `u0` >> simp[] >> metis_tac[]) >>
+  qpat_x_assum `R fuel C' (TAKE _ _) s = OK t` mp_tac >>
+  simp[TAKE] >> Cases_on `step_inst fuel C' h s` >> fs[]
+QED
+Resume source_suffix_mask_cuts[returning_provenance]:
+  rpt (FIRST [gen_tac, disch_then strip_assume_tac]) >> Cases_on `k`
+  >- (gvs[Abbr `R`] >>
+      pure_rewrite_tac [LET_THM] >> BETA_TAC >>
+      `!v st. P v st = H m es v st` by
+        (rpt gen_tac >> simp[Abbr `P`, Abbr `H`]) >>
+      qexists_tac `u0` >> simp[] >> metis_tac[]) >>
+  gvs[TAKE, Abbr `R`, dftIndexedExecTheory.dft_exec_cons_def] >>
+  first_x_assum irule >> simp[]
+QED
+Resume source_suffix_mask_cuts[terminator_provenance]:
+  rpt (FIRST [gen_tac, disch_then strip_assume_tac]) >> Cases_on `k`
+  >- gvs[Abbr `R`, venomInstTheory.is_terminator_def] >>
+  fs[TAKE]
+QED
+Resume source_suffix_mask_cuts[stopped_gas_provenance]:
+  rpt gen_tac >> strip_tac >> Cases_on `j`
+  >- (gvs[Abbr `R`] >>
+      Cases_on `h.inst_opcode = INVOKE` >> gvs[]) >>
+  qpat_x_assum `R fuel C' (TAKE _ _) s = OK t` mp_tac >>
+  simp[TAKE, Abbr `R`, dftIndexedExecTheory.dft_exec_cons_def] >>
+  Cases_on `step_inst fuel C' h s` >> fs[]
+QED
+Resume source_suffix_mask_cuts[returning_gas_provenance]:
+  rpt gen_tac >> strip_tac >> Cases_on `j`
+  >- (gvs[Abbr `R`] >>
+      Cases_on `h.inst_opcode = INVOKE` >> gvs[]) >>
+  gvs[TAKE, Abbr `R`, dftIndexedExecTheory.dft_exec_cons_def] >>
+  first_x_assum irule >> simp[]
+QED
+Resume source_suffix_mask_cuts[terminator_gas_provenance]:
+  rpt gen_tac >> strip_tac >> Cases_on `j`
+  >- gvs[Abbr `R`, venomInstTheory.is_terminator_def] >>
+  fs[TAKE]
+QED
+Resume source_suffix_mask_cuts[stopped_padding]:
+  gen_tac >> strip_tac >> Cases_on `n`
+  >- (simp[] >> metis_tac[]) >>
+  `!j. ~(?t. R fuel C' (TAKE (SUC j) (h::xs)) s = OK t)` by
+    (simp[TAKE] >> Cases_on `step_inst fuel C' h s` >> fs[]) >>
+  `!t. step_inst fuel C' h s <> OK t` by metis_tac[] >>
+  `R fuel C' [] s = OK s` by simp[Abbr `R`] >>
+  simp[GENLIST_CONS, combinTheory.o_DEF, TAKE] >>
+  `GENLIST (\j. if j < LENGTH xs /\ (EL j xs).inst_opcode = GAS then [NONE]
+       else EL j (REPLICATE (LENGTH xs) [])) (LENGTH xs) =
+    GENLIST (\j. if (EL j xs).inst_opcode = GAS then [NONE:bytes32 option] else []) (LENGTH xs)` by
+    (irule GENLIST_CONG >> simp[] >> rpt strip_tac >>
+     simp[rich_listTheory.EL_REPLICATE]) >>
+  `GENLIST (\j. if j < LENGTH xs /\ (EL j xs).inst_opcode = GAS then [(owner,(EL j xs).inst_id)]
+       else EL j (REPLICATE (LENGTH xs) [])) (LENGTH xs) =
+    GENLIST (\j. if (EL j xs).inst_opcode = GAS then [(owner,(EL j xs).inst_id)] else []) (LENGTH xs)` by
+    (irule GENLIST_CONG >> simp[] >> rpt strip_tac >>
+     simp[rich_listTheory.EL_REPLICATE]) >>
+  simp[] >>
+  qmatch_goalsub_abbrev_tac `m ++ pad` >>
+  qmatch_goalsub_abbrev_tac `es ++ slack` >>
+  `EVERY (\x. x = NONE) pad` by
+    (simp[Abbr `pad`, EVERY_FLAT, TAKE_GENLIST, EVERY_GENLIST] >>
+     gen_tac >> strip_tac >> IF_CASES_TAC >> simp[]) >>
+  `LENGTH pad = LENGTH slack` by
+    (simp[Abbr `pad`, Abbr `slack`, TAKE_GENLIST, rich_listTheory.LENGTH_FLAT,
+          MAP_GENLIST] >> AP_TERM_TAC >> irule GENLIST_CONG >> simp[] >>
+     rpt strip_tac >> IF_CASES_TAC >> simp[]) >>
+  qpat_x_assum `!n. n <= SUC (LENGTH xs) ==> _` (qspec_then `SUC n'` mp_tac) >>
+  simp[TAKE] >>
+  pure_rewrite_tac [rich_listTheory.REPLICATE_GENLIST, TAKE_GENLIST] >>
+  simp[GSYM rich_listTheory.REPLICATE_GENLIST] >>
+  disch_then (qx_choose_then `unused0` assume_tac) >>
+  qexists_tac `unused0` >>
+  qunabbrev_tac `S'` >> BETA_TAC >>
+  qspecl_then [`R fuel C' (h::TAKE n' xs) s`,
+      `\j rs. R j C (h::TAKE n' xs) (s with vs_gas_readings := rs)`,
+      `\rs. E C (h::TAKE n' xs) (s with vs_gas_readings := rs)`]
+    (mp_tac o CONV_RULE (REDEPTH_CONV BETA_CONV) o PURE_REWRITE_RULE [LET_THM])
+    mask_none_slack >>
+  CONV_TAC (REDEPTH_CONV BETA_CONV) >> disch_then irule >>
+  fs[iffRL FLAT_EQ_NIL, rich_listTheory.EVERY_REPLICATE] >>
+  `(?ir t. step_inst fuel C' h s = IntRet ir t) ==> xs = []` by
+    (strip_tac >>
+     `is_terminator h.inst_opcode` by
+       metis_tac[dftRunRelTheory.dft_swap_nonterminator_no_intret] >>
+     `pre = []` by
+       (Cases_on `pre` >> fs[dftScheduleOrderTheory.dft_must_order_def]) >>
+     `after ++ post = []` by
+       (irule dftRunRelTheory.dft_remaining_inv_terminal >>
+        metis_tac[APPEND, APPEND_ASSOC]) >>
+     fs[] >> qpat_x_assum `dft_head_bubbles _ _ _` mp_tac >>
+     simp[Once dftRunRelTheory.dft_head_bubbles_cases]) >>
+  Cases_on `?ir t. step_inst fuel C' h s = IntRet ir t`
+  >- (gvs[Abbr `pad`, Abbr `slack`] >> metis_tac[]) >>
+  fs[]
+QED
+Resume source_suffix_mask_cuts[returning_padding]:
+  gen_tac >> strip_tac >> Cases_on `n`
+  >- (simp[] >> metis_tac[]) >>
+  `R fuel C' [] s = OK s` by simp[Abbr `R`] >>
+  `!j. R fuel C' (TAKE (SUC j) (h::xs)) s =
+       R fuel C' (TAKE j xs) (u with vs_inst_idx := SUC s.vs_inst_idx)` by
+    simp[TAKE, Abbr `R`, dftIndexedExecTheory.dft_exec_cons_def] >>
+  simp[GENLIST_CONS, combinTheory.o_DEF, TAKE] >>
+  qpat_x_assum `!n. n <= LENGTH xs ==> ?unused. S' _ _
+      (FLAT (TAKE n (GENLIST _ _))) _ unused`
+    (qspec_then `n'` mp_tac) >>
+  simp[] >> disch_then (qx_choose_then `unused'` assume_tac) >>
+  qexists_tac `unused'` >>
+  qmatch_goalsub_abbrev_tac `m ++ m'` >>
+  qmatch_goalsub_abbrev_tac `es ++ es'` >>
+  qpat_x_assum `S' _ _ _ _ _` mp_tac >>
+  qunabbrev_tac `S'` >> BETA_TAC >> strip_tac >>
+  qunabbrev_tac `R` >> qunabbrev_tac `E` >>
+  CONV_TAC (REDEPTH_CONV BETA_CONV) >>
+  match_mp_tac (Q.INST [`u` |-> `u`, `unused` |-> `unused`]
+    (CONV_RULE (REDEPTH_CONV BETA_CONV)
+      (PURE_REWRITE_RULE [LET_THM] identity_mask_cons))) >>
+  rule_assum_tac (CONV_RULE (REDEPTH_CONV BETA_CONV)) >>
+  rule_assum_tac (PURE_REWRITE_RULE
+    [venomStateTheory.venom_state_accfupds, combinTheory.K_THM, REPLICATE, APPEND]) >>
+  qpat_x_assum `u.vs_gas_readings = _` kall_tac >>
+  qpat_assum `u.vs_current_bb = _` (fn th =>
+    rule_assum_tac (PURE_REWRITE_RULE [th]) >> rewrite_tac [th] >> assume_tac th) >>
+  simp[venomStateTheory.venom_state_accfupds] >>
+  conj_tac
+  >- (qpat_x_assum `!v. _ ==> EVERY IS_SOME m' /\ _`
+        mp_tac >> simp[]) >>
+  rpt gen_tac >> strip_tac >>
+  qpat_x_assum `!gs tail. LIST_REL _ m' gs ==> _`
+    (qspecl_then [`gs`, `tail`] mp_tac) >> simp[] >>
+  POP_ASSUM_LIST (K all_tac) >> metis_tac[]
+QED
+Resume source_suffix_mask_cuts[terminator_padding]:
+  `xs = []` by
+    (`pre = []` by
+       (Cases_on `pre` >> fs[dftScheduleOrderTheory.dft_must_order_def]) >>
+     `after ++ post = []` by
+       (irule dftRunRelTheory.dft_remaining_inv_terminal >>
+        metis_tac[APPEND, APPEND_ASSOC]) >>
+     fs[] >> qpat_x_assum `dft_head_bubbles _ _ _` mp_tac >>
+     simp[Once dftRunRelTheory.dft_head_bubbles_cases]) >>
+  gvs[] >> gen_tac >> strip_tac >>
+  `R fuel C' [] s = OK s` by simp[Abbr `R`] >>
+  simp[GENLIST_CONS] >> metis_tac[]
+QED
+Resume source_suffix_mask_cuts[stopped_empty_unreached]:
+  gen_tac >> strip_tac >> Cases_on `j` >>
+  gvs[Abbr `R`, rich_listTheory.EL_REPLICATE]
+QED
+Resume source_suffix_mask_cuts[returning_empty_unreached]:
+  gen_tac >> strip_tac >> Cases_on `j`
+  >- gvs[Abbr `R`] >>
+  gvs[TAKE, Abbr `R`, dftIndexedExecTheory.dft_exec_cons_def] >>
+  first_x_assum irule >> simp[]
+QED
+Resume source_suffix_mask_cuts[terminator_empty_unreached]:
+  gen_tac >> strip_tac >> Cases_on `j` >>
+  gvs[Abbr `R`, rich_listTheory.EL_REPLICATE]
+QED
+Resume source_suffix_mask_cuts[exact_prefixes]:
+  strip_tac >>
+  `!ams aes.
+    (!n. n <= LENGTH xs ==> ?unused.
+      S' (TAKE n xs) s (FLAT (TAKE n ams)) (FLAT (TAKE n aes)) unused) ==>
+    !gss tail k u.
+      LIST_REL (LIST_REL (\slot w. slot = NONE \/ slot = SOME w)) ams gss /\
+      k <= LENGTH xs /\
+      R fuel C (TAKE k xs) (s with vs_gas_readings := FLAT gss ++ tail) = OK u ==>
+      E C (TAKE k xs) (s with vs_gas_readings := FLAT gss ++ tail) = FLAT (TAKE k aes) /\
+      u.vs_gas_readings = FLAT (DROP k gss) ++ tail /\
+      (?t. R fuel C' (TAKE k xs) s = OK t)` by suspend "prefix_projection" >>
+  qexistsl_tac [`ms`, `ess`] >> simp[] >>
+  qpat_x_assum `P xs s ms ess` mp_tac >>
+  simp[Abbr `P`] >> strip_tac >>
+  rpt gen_tac >> rpt disch_tac >>
+  conj_tac
+  >- (qpat_x_assum `!ams aes. _`
+        (qspecl_then [`ms`, `ess`] mp_tac) >>
+      simp[SF ETA_ss] >> metis_tac[]) >>
+  conj_asm1_tac
+  >- (qpat_x_assum `!ams aes. _`
+        (qspecl_then [`pm`, `pe`] mp_tac) >>
+      simp[Abbr `pm`, Abbr `pe`] >> metis_tac[]) >>
+  rpt strip_tac >> metis_tac[arithmeticTheory.LESS_IMP_LESS_OR_EQ]
+QED
+Resume source_suffix_mask_cuts[prefix_projection]:
+  rpt gen_tac >> strip_tac >> rpt gen_tac >> strip_tac >>
+  qpat_x_assum `!n. n <= LENGTH xs ==> _` (qspec_then `k` mp_tac) >>
+  simp[] >> strip_tac >>
+  `!as:(bytes32 option list) list. !bs. LIST_REL (LIST_REL (\slot w. slot = NONE \/ slot = SOME w)) as bs ==>
+     LIST_REL (\slot w. slot = NONE \/ slot = SOME w) (FLAT as) (FLAT bs)` by
+    (POP_ASSUM_LIST (K all_tac) >>
+     Induct >> Cases_on `bs` >> simp[] >> metis_tac[LIST_REL_APPEND_suff]) >>
+  `LIST_REL (\slot w. slot = NONE \/ slot = SOME w)
+     (FLAT (TAKE k ams)) (FLAT (TAKE k gss))` by
+    (first_x_assum irule >>
+     qpat_x_assum `LIST_REL _ ams gss` mp_tac >>
+     POP_ASSUM_LIST (K all_tac) >>
+     simp[SF ETA_ss] >> metis_tac[rich_listTheory.LIST_REL_TAKE]) >>
+  `FLAT (TAKE k gss) ++ FLAT (DROP k gss) = FLAT gss` by
+    metis_tac[TAKE_DROP, FLAT_APPEND] >>
+  qpat_x_assum `S' _ _ _ _ _` mp_tac >>
+  simp[Abbr `S'`] >> strip_tac >>
+  qpat_x_assum `!gs tail. LIST_REL _ _ gs ==> _`
+    (qspecl_then [`FLAT (TAKE k gss)`, `FLAT (DROP k gss) ++ tail`] mp_tac) >>
+  pure_rewrite_tac[GSYM APPEND_ASSOC] >>
+  qpat_assum `FLAT (TAKE k gss) ++ FLAT (DROP k gss) = _`
+    (fn th => pure_rewrite_tac[th]) >>
+  simp[] >> strip_tac >>
+  `?j. terminates (R j C (TAKE k xs) (s with vs_gas_readings := FLAT gss ++ tail))` by
+    (qexists_tac `fuel` >> simp[passSimulationDefsTheory.terminates_def]) >>
+  qpat_x_assum `(?j. _) ==> _` mp_tac >>
+  (impl_tac >- metis_tac[]) >> strip_tac >>
+  `?t. R fuel C' (TAKE k xs) s = OK t` by
+    (qpat_x_assum `dft_res_rel _ _` mp_tac >>
+     simp[restore_result_def] >>
+     Cases_on `R fuel C' (TAKE k xs) s` >>
+     simp[restore_result_def, dftRunRelTheory.dft_res_rel_def]) >>
+  qpat_x_assum `(_ \/ _) ==> _` mp_tac >>
+  (impl_tac >- metis_tac[]) >>
+  simp[residual_result_cases] >> metis_tac[]
+QED
+Finalise source_suffix_mask_cuts[local]
+
 Theorem identity_suffix_mask_cuts[local]:
   !fuel C C'.
   let CalleeIH = (!fn fn' t.
@@ -2370,530 +3121,16 @@ Theorem identity_suffix_mask_cuts[local]:
         ~(?v. R fuel C (TAKE k xs) (s with vs_gas_readings := FLAT gss ++ tail) = OK v))
 Proof
   ntac 3 gen_tac >> BasicProvers.LET_ELIM_TAC >>
-  qsuff_tac `?ms ess. P xs s ms ess`
-  >- suspend "exact_prefixes" >>
-  simp[Abbr `P`] >>
-  `!st. S' [] st [] [] st.vs_gas_readings` by
-    (simp[Abbr `S'`, Abbr `R`, Abbr `E`, Once gas_events_block_def,
-          venomInstTheory.get_instruction_def, residual_result_cases,
-          restore_result_def, dftRunRelTheory.dft_res_rel_def,
-          passSimulationDefsTheory.terminates_def] >>
-     simp[Once gas_events_block_def, venomInstTheory.get_instruction_def]) >>
-  qpat_x_assum `LENGTH (E _ _ _) <= _` mp_tac >>
-  qpat_x_assum `terminates (R _ _ _ _)` mp_tac >>
-  qpat_x_assum `~s.vs_call_ctx.cc_static` mp_tac >>
-  qpat_x_assum `ctx_labels_bound C' s.vs_labels` mp_tac >>
-  qpat_x_assum `ctx_labels_bound C s.vs_labels` mp_tac >>
-  qpat_x_assum `dft_remaining_inv _ _ _ _` mp_tac >>
-  qpat_x_assum `EVERY (\i. MEM i _) xs` mp_tac >>
-  qid_spec_tac `s` >> Induct_on `xs` >> gen_tac >> rpt strip_tac
-  >- (qexistsl_tac [`[]`, `[]`] >> simp[] >> rpt strip_tac >>
-      gvs[markerTheory.Abbrev_def] >> metis_tac[]) >>
-  `inst_wf h` by fs[EVERY_MEM] >>
-  `terminates (step_inst fuel C' h s)` by
-    (qpat_x_assum `terminates (R _ _ _ _)` mp_tac >>
-     simp[Abbr `R`, dftIndexedExecTheory.dft_exec_cons_def] >>
-     Cases_on `step_inst fuel C' h s` >>
-     simp[passSimulationDefsTheory.terminates_def]) >>
-  `LENGTH (gas_events_step fuel C' s.vs_current_bb h s) <=
-     LENGTH s.vs_gas_readings` by
-    (qpat_x_assum `LENGTH (E _ _ _) <= _` mp_tac >>
-     simp[Abbr `E`, Once gas_events_block_def,
-          venomInstTheory.get_instruction_def, EL_APPEND_EQN] >>
-     Cases_on `step_inst fuel C' h s` >> simp[gas_events_length]) >>
-  qabbrev_tac `H = (\m es unused t.
-    LENGTH m = LENGTH es /\
-    PERM (MAP THE (FILTER IS_SOME m) ++ unused) t.vs_gas_readings /\
-    (!u. (step_inst fuel C' h t = OK u \/
-          (?ir. step_inst fuel C' h t = IntRet ir u)) ==>
-      EVERY IS_SOME m /\ unused = u.vs_gas_readings) /\
-    !gs tail. LIST_REL (\slot w. slot = NONE \/ slot = SOME w) m gs ==>
-      (?extra. es = gas_events_step fuel C owner h
-         (t with vs_gas_readings := gs ++ tail) ++ extra) /\
-      ((?j. terminates (step_inst j C h (t with vs_gas_readings := gs ++ tail))) ==>
-        terminates (step_inst fuel C h (t with vs_gas_readings := gs ++ tail)) /\
-        dft_res_rel
-          (restore_result [] (step_inst fuel C h (t with vs_gas_readings := gs ++ tail)))
-          (restore_result [] (step_inst fuel C' h t)) /\
-        (((?u. step_inst fuel C' h t = OK u) \/
-          (?ir u. step_inst fuel C' h t = IntRet ir u)) ==>
-          gas_events_step fuel C owner h
-            (t with vs_gas_readings := gs ++ tail) = es /\
-          residual_result tail (step_inst fuel C' h t)
-            (step_inst fuel C h (t with vs_gas_readings := gs ++ tail)))))` >>
-  `!D st. h.inst_opcode = INVOKE ==>
-     gas_events_step fuel D owner h st =
-     gas_events_step fuel D st.vs_current_bb h st` by
-    simp[gas_events_step_def] >>
-  `?m es unused.
-    (h.inst_opcode <> INVOKE ==>
-      if h.inst_opcode = GAS then
-        ?w rest. s.vs_gas_readings = w::rest /\
-          m = [SOME w] /\ es = [(owner,h.inst_id)]
-      else m = [] /\ es = []) /\
-    H m es unused s /\
-    (h.inst_opcode = INVOKE ==>
-      gasOracleReplay$gas_replay_at (gas_count_step fuel C' h s) (step_inst fuel C' h) s /\
-      ?u0. PERM (MAP THE (FILTER IS_SOME m) ++ u0)
-                (TAKE (gas_count_step fuel C' h s) s.vs_gas_readings) /\
-        !r. H m es (u0 ++ r) (s with vs_gas_readings :=
-              TAKE (gas_count_step fuel C' h s) s.vs_gas_readings ++ r) /\
-          (!u. (step_inst fuel C' h (s with vs_gas_readings :=
-                    TAKE (gas_count_step fuel C' h s) s.vs_gas_readings ++ r) = OK u \/
-            (?ir. step_inst fuel C' h (s with vs_gas_readings :=
-                    TAKE (gas_count_step fuel C' h s) s.vs_gas_readings ++ r) = IntRet ir u)) ==>
-            u0 = []))` by
-    (Cases_on `h.inst_opcode = INVOKE`
-     >- (mp_tac (Q.SPECL [`fuel`, `C`, `C'`, `h`, `s`] invoke_segment_mask_tail_free) >>
-         (impl_tac >- simp[GSYM markerTheory.Abbrev_def, Abbr `CalleeIH`]) >>
-         pure_rewrite_tac[LET_THM] >> BETA_TAC >> strip_tac >>
-         qexistsl_tac [`m`, `es`, `u0 ++ DROP (gas_count_step fuel C' h s) s.vs_gas_readings`] >>
-         simp[] >> conj_tac
-         >- (qpat_x_assum `!r. _` (qspec_then `DROP (gas_count_step fuel C' h s) s.vs_gas_readings` mp_tac) >>
-             simp[TAKE_DROP, Abbr `H`, gas_events_step_def] >>
-             POP_ASSUM_LIST (K all_tac) >> metis_tac[]) >>
-         qexists_tac `u0` >> simp[Abbr `H`, gas_events_step_def] >> gen_tac >>
-         qpat_x_assum `!r. _` (qspec_then `r` mp_tac) >>
-         simp[APPEND_ASSOC, gas_events_step_def] >>
-         POP_ASSUM_LIST (K all_tac) >> metis_tac[]) >>
-     simp[Abbr `H`] >> irule noninvoke_segment_mask_shape >> simp[]) >>
-  qpat_assum `Abbrev (H = _)` (fn th =>
-    qpat_assum `H m es unused s` mp_tac >>
-    pure_rewrite_tac[REWRITE_RULE [markerTheory.Abbrev_def] th] >>
-    BETA_TAC >> strip_tac) >>
-  `!a b v st us. h.inst_opcode = INVOKE /\
-      EVERY (\q. ~MEM (Var (FST q)) h.inst_operands /\
-                   ~MEM (FST q) h.inst_outputs) us ==>
-      (H a b v (FOLDL (\st q. update_var (FST q) (SND q) st) st us) <=> H a b v st)` by
-    (rpt gen_tac >> strip_tac >> simp[Abbr `H`] >>
-     qpat_x_assum `EVERY _ us` mp_tac >>
-     qpat_x_assum `h.inst_opcode = INVOKE` mp_tac >>
-     POP_ASSUM_LIST (K all_tac) >>
-     simp[SRULE [LET_THM] invoke_fixed_segment_updates]) >>
-  Cases_on `?u. step_inst fuel C' h s = OK u`
-  >- suspend "returning_head" >>
-  `!gs tail. LIST_REL (\slot w. slot = NONE \/ slot = SOME w) m gs ==>
-    ~(?u. step_inst fuel C h (s with vs_gas_readings := gs ++ tail) = OK u)` by
-    (rpt gen_tac >> strip_tac >> strip_tac >>
-     qpat_x_assum `!gs tail. LIST_REL _ m gs ==> _`
-       (qspecl_then [`gs`, `tail`] mp_tac) >>
-     (impl_tac >- simp[]) >> disch_then strip_assume_tac >>
-     `?j. terminates (step_inst j C h (s with vs_gas_readings := gs ++ tail))` by
-       (qexists_tac `fuel` >> simp[passSimulationDefsTheory.terminates_def]) >>
-     qpat_x_assum `(?j. _) ==> _` mp_tac >>
-     (impl_tac >- metis_tac[]) >> disch_then strip_assume_tac >>
-     Cases_on `step_inst fuel C' h s`
-     >- metis_tac[] >>
-     qpat_x_assum `dft_res_rel _ _` mp_tac >>
-     simp[restore_result_def, dftRunRelTheory.dft_res_rel_def]) >>
-  `!ys. R fuel C' (h::ys) s = step_inst fuel C' h s` by
-    (simp[Abbr `R`, dftIndexedExecTheory.dft_exec_cons_def] >>
-     Cases_on `step_inst fuel C' h s` >> fs[]) >>
-  `!gs tail ys. LIST_REL (\slot w. slot = NONE \/ slot = SOME w) m gs ==>
-    R fuel C (h::ys) (s with vs_gas_readings := gs ++ tail) =
-      step_inst fuel C h (s with vs_gas_readings := gs ++ tail) /\
-    E C (h::ys) (s with vs_gas_readings := gs ++ tail) =
-      gas_events_step fuel C owner h
-        (s with vs_gas_readings := gs ++ tail)` by
-    (rpt strip_tac >>
-     first_x_assum drule >> strip_tac >>
-     simp[Abbr `R`, Abbr `E`, dftIndexedExecTheory.dft_exec_cons_def,
-          Once gas_events_block_def, venomInstTheory.get_instruction_def,
-          EL_APPEND_EQN] >>
-     Cases_on `step_inst fuel C h (s with vs_gas_readings := gs ++ tail)` >> fs[] >>
-     metis_tac[]) >>
-  qexistsl_tac [`m::REPLICATE (LENGTH xs) []`, `es::REPLICATE (LENGTH xs) []`] >>
-  simp[rich_listTheory.LIST_REL_REPLICATE_same] >>
-  conj_tac
-  >- (qpat_x_assum `!s. EVERY _ xs ==> _` kall_tac >>
-      rpt strip_tac >> Cases_on `k` >>
-      gvs[rich_listTheory.EL_REPLICATE] >>
-      Cases_on `h.inst_opcode = GAS` >> gvs[] >>
-      Cases_on `h.inst_opcode = INVOKE` >> gvs[]) >>
-  conj_tac >- suspend "stopped_provenance" >>
-  conj_tac >- suspend "stopped_gas_provenance" >>
-  conj_tac >- suspend "stopped_empty_unreached" >>
-  once_rewrite_tac[CONJ_COMM] >>
-  conj_asm1_tac >- suspend "stopped_legacy" >>
-  suspend "stopped_padding"
+  mp_tac (Q.SPECL [`fuel`, `C`, `C'`] source_suffix_mask_cuts) >>
+  pure_rewrite_tac [LET_THM] >> BETA_TAC >>
+  disch_then (qspecl_then [`fn`, `bb`, `xs`, `post`, `s`] mp_tac) >>
+  (impl_tac >-
+    (simp[GSYM markerTheory.Abbrev_def] >>
+     conj_tac >- (qpat_x_assum `CalleeIH` mp_tac >> simp[Abbr `CalleeIH`]) >>
+     qexists_tac `xs` >> simp[dftRunRelTheory.dft_head_bubbles_refl])) >>
+  simp[Abbr `P`, Abbr `S'`, Abbr `R`, Abbr `E`] >>
+  pure_rewrite_tac [markerTheory.Abbrev_def] >> simp[]
 QED
-Resume identity_suffix_mask_cuts[stopped_legacy]:
-  gen_tac >> strip_tac >> Cases_on `n`
-  >- (simp[] >> metis_tac[]) >>
-  simp[TAKE] >>
-  pure_rewrite_tac [rich_listTheory.REPLICATE_GENLIST, TAKE_GENLIST] >>
-  simp[GSYM rich_listTheory.REPLICATE_GENLIST,
-       iffRL FLAT_EQ_NIL, rich_listTheory.EVERY_REPLICATE] >>
-  qexists_tac `unused` >> simp[Abbr `S'`] >>
-  conj_tac >- metis_tac[] >>
-  rpt gen_tac >> strip_tac >>
-  qpat_x_assum `!gs tail ys. LIST_REL _ m gs ==> _ /\ _`
-    (qspecl_then [`gs`, `tail`, `TAKE n' xs`] mp_tac) >>
-  (impl_tac >- simp[]) >> strip_tac >> simp[] >>
-  strip_tac >>
-  `?j. terminates (step_inst j C h (s with vs_gas_readings := gs ++ tail))` by
-    (qexists_tac `j` >>
-     qpat_x_assum `terminates (R _ _ _ _)` mp_tac >>
-     simp[Abbr `R`, dftIndexedExecTheory.dft_exec_cons_def] >>
-     Cases_on `step_inst j C h (s with vs_gas_readings := gs ++ tail)` >>
-     simp[passSimulationDefsTheory.terminates_def]) >>
-  qpat_x_assum `!gs tail. LIST_REL _ m gs ==> _`
-    (qspecl_then [`gs`, `tail`] mp_tac) >>
-  (impl_tac >- simp[]) >> strip_tac >>
-  metis_tac[]
-QED
-
-Resume identity_suffix_mask_cuts[returning_head]:
-  qpat_x_assum `?u. step_inst fuel C' h s = OK u` strip_assume_tac >>
-  Cases_on `is_terminator h.inst_opcode`
-  >- suspend "terminator_head" >>
-  `dft_remaining_inv fn bb (xs ++ post) (u with vs_inst_idx := SUC s.vs_inst_idx)` by
-    (irule (SRULE [] (Q.INST [`pre` |-> `[]`] dftRunRelTheory.dft_remaining_inv_step)) >>
-     simp[] >> metis_tac[APPEND]) >>
-  `ctx_labels_bound C u.vs_labels /\ ctx_labels_bound C' u.vs_labels` by
-    metis_tac[dftRunRelTheory.ctx_labels_bound_step] >>
-  `~u.vs_call_ctx.cc_static` by
-    metis_tac[venomInstProofsTheory.step_preserves_call_ctx] >>
-  `terminates (R fuel C' xs (u with vs_inst_idx := SUC s.vs_inst_idx))` by
-    (qpat_x_assum `terminates (R fuel C' (h::xs) s)` mp_tac >>
-     simp[Abbr `R`, dftIndexedExecTheory.dft_exec_cons_def]) >>
-  `u.vs_gas_readings = DROP (LENGTH (gas_events_step fuel C' owner h s))
-       s.vs_gas_readings` by
-    (mp_tac (cj 1 gasCountTheory.gas_count_suffix) >>
-     disch_then (qspecl_then [`fuel`, `C'`, `h`, `s`] mp_tac) >>
-     simp[gasCountTheory.gas_count_suffix_def, gasEventsTheory.gas_events_length]) >>
-  `u.vs_current_bb = s.vs_current_bb` by
-    (fs[dftRunRelTheory.dft_remaining_inv_def]) >>
-  `gas_events_block fuel C' owner
-     <|bb_label := s.vs_current_bb; bb_instructions :=
-       REPLICATE s.vs_inst_idx (mk_inst 0 STOP [] []) ++ h::xs|>
-     (u with vs_inst_idx := SUC s.vs_inst_idx) =
-    E C' xs (u with vs_inst_idx := SUC s.vs_inst_idx)` by
-    (simp[Abbr `E`] >> irule gas_events_block_suffix_cong >>
-     qexists_tac `xs` >>
-     simp[DROP_APPEND, DROP_DROP_T, arithmeticTheory.ADD1]) >>
-  `LENGTH (E C' xs (u with vs_inst_idx := SUC s.vs_inst_idx)) <=
-      LENGTH u.vs_gas_readings` by
-    (qpat_x_assum `LENGTH (E C' (h::xs) s) <= _` mp_tac >>
-     pure_once_rewrite_tac [markerTheory.Abbrev_def] >>
-     simp[SimpLHS, Abbr `E`, Once gas_events_block_def,
-          venomInstTheory.get_instruction_def, EL_APPEND_EQN]) >>
-  `EVERY (\i. MEM i bb.bb_instructions) xs` by fs[] >>
-  qpat_x_assum `!st. EVERY _ xs ==> _`
-    (qspec_then `u with vs_inst_idx := SUC s.vs_inst_idx` mp_tac) >>
-  simp[IgnAsm `u.vs_gas_readings = _`] >> strip_tac >>
-  qexistsl_tac [`m::ms`, `es::ess`] >> simp[] >>
-  conj_tac
-  >- (gen_tac >> strip_tac >> Cases_on `k` >> gvs[] >>
-      Cases_on `h.inst_opcode = GAS` >> gvs[] >>
-      Cases_on `h.inst_opcode = INVOKE` >> gvs[]) >>
-  conj_tac >- suspend "returning_provenance" >>
-  conj_tac >- suspend "returning_gas_provenance" >>
-  conj_tac >- suspend "returning_empty_unreached" >>
-  conj_tac >- suspend "returning_padding" >>
-  gen_tac >> strip_tac >> Cases_on `n`
-  >- (simp[] >> metis_tac[]) >>
-  qpat_x_assum `!n. n <= LENGTH xs ==> _` (qspec_then `n'` mp_tac) >>
-  simp[] >> disch_then (qx_choose_then `unused'` assume_tac) >>
-  qexists_tac `unused'` >> simp[TAKE] >>
-  qabbrev_tac `m' = FLAT (TAKE n' ms)` >>
-  qabbrev_tac `es' = FLAT (TAKE n' ess)` >>
-  qpat_x_assum `S' _ _ _ _ _` mp_tac >>
-  qunabbrev_tac `S'` >> BETA_TAC >> strip_tac >>
-  qunabbrev_tac `R` >> qunabbrev_tac `E` >>
-  CONV_TAC (REDEPTH_CONV BETA_CONV) >>
-  match_mp_tac (Q.INST [`u` |-> `u`, `unused` |-> `unused`]
-    (CONV_RULE (REDEPTH_CONV BETA_CONV)
-      (PURE_REWRITE_RULE [LET_THM] identity_mask_cons))) >>
-  rule_assum_tac (CONV_RULE (REDEPTH_CONV BETA_CONV)) >>
-  rule_assum_tac (PURE_REWRITE_RULE
-    [venomStateTheory.venom_state_accfupds, combinTheory.K_THM, REPLICATE, APPEND]) >>
-  qpat_x_assum `u.vs_gas_readings = _` kall_tac >>
-  qpat_assum `u.vs_current_bb = _` (fn th =>
-    rule_assum_tac (PURE_REWRITE_RULE [th]) >> rewrite_tac [th] >> assume_tac th) >>
-  simp[venomStateTheory.venom_state_accfupds] >>
-  conj_tac
-  >- (qpat_x_assum `!v. _ ==> EVERY IS_SOME m' /\ _`
-        mp_tac >> simp[]) >>
-  rpt gen_tac >> strip_tac >>
-  qpat_x_assum `!gs tail. LIST_REL _ m' gs ==> _`
-    (qspecl_then [`gs`, `tail`] mp_tac) >> simp[] >>
-  POP_ASSUM_LIST (K all_tac) >> metis_tac[]
-QED
-Resume identity_suffix_mask_cuts[terminator_head]:
-  `!n D st ys. R n D (h::ys) st =
-     case step_inst n D h st of
-       OK v => if v.vs_halted then Halt v else OK v
-     | Halt v => Halt v | Abort a v => Abort a v
-     | IntRet ir v => IntRet ir v | Error e => Error e` by
-    (simp[Abbr `R`, dftIndexedExecTheory.dft_exec_cons_def] >>
-     rpt gen_tac >> Cases_on `step_inst n D h st` >> simp[]) >>
-  `!n D st ys. terminates (R n D (h::ys) st) <=>
-      terminates (step_inst n D h st)` by
-    (rpt gen_tac >> simp[] >> Cases_on `step_inst n D h st` >>
-     simp[passSimulationDefsTheory.terminates_def] >>
-     Cases_on `v.vs_halted` >> simp[passSimulationDefsTheory.terminates_def]) >>
-  `!D st ys. E D (h::ys) st = gas_events_step fuel D owner h st` by
-    (simp[Abbr `E`, Once gas_events_block_def,
-          venomInstTheory.get_instruction_def, EL_APPEND_EQN] >>
-     rpt gen_tac >> Cases_on `step_inst fuel D h st` >> simp[]) >>
-  qpat_x_assum `!u. _ ==> EVERY IS_SOME m /\ _`
-    (qspec_then `u` mp_tac) >> simp[] >> strip_tac >>
-  qexistsl_tac [`m::REPLICATE (LENGTH xs) []`, `es::REPLICATE (LENGTH xs) []`] >>
-  simp[rich_listTheory.LIST_REL_REPLICATE_same] >>
-  conj_tac
-  >- (qpat_x_assum `!s. EVERY _ xs ==> _` kall_tac >>
-      rpt strip_tac >> Cases_on `k` >>
-      gvs[rich_listTheory.EL_REPLICATE] >>
-      Cases_on `h.inst_opcode = GAS` >> gvs[] >>
-      Cases_on `h.inst_opcode = INVOKE` >> gvs[]) >>
-  conj_tac >- suspend "terminator_provenance" >>
-  conj_tac >- suspend "terminator_gas_provenance" >>
-  conj_tac >- suspend "terminator_empty_unreached" >>
-  once_rewrite_tac[CONJ_COMM] >>
-  conj_asm1_tac >- suspend "terminator_legacy" >>
-  suspend "terminator_padding"
-QED
-Resume identity_suffix_mask_cuts[terminator_legacy]:
-  gen_tac >> strip_tac >> Cases_on `n`
-  >- (simp[] >> metis_tac[]) >>
-  simp[TAKE] >>
-  pure_rewrite_tac [rich_listTheory.REPLICATE_GENLIST, TAKE_GENLIST] >>
-  simp[GSYM rich_listTheory.REPLICATE_GENLIST,
-       iffRL FLAT_EQ_NIL, rich_listTheory.EVERY_REPLICATE] >>
-  qexists_tac `unused` >> simp[Abbr `S'`] >>
-  conj_tac >- gvs[] >>
-  conj_tac
-  >- (Cases_on `u.vs_halted` >> simp[]) >>
-  rpt gen_tac >> strip_tac >>
-  qpat_x_assum `!gs tail. LIST_REL _ m gs ==> _`
-    (qspecl_then [`gs`, `tail`] mp_tac) >> simp[] >>
-  disch_then strip_assume_tac >> strip_tac >>
-  qpat_x_assum `(?j. _) ==> _` mp_tac >>
-  (impl_tac >- metis_tac[]) >> simp[residual_result_cases] >>
-  strip_tac >> Cases_on `u.vs_halted` >>
-  simp[restore_result_def, dftRunRelTheory.dft_res_rel_def,
-       residual_result_cases, passSimulationDefsTheory.terminates_def]
-QED
-Resume identity_suffix_mask_cuts[stopped_provenance]:
-  rpt (FIRST [gen_tac, disch_then strip_assume_tac]) >> Cases_on `k`
-  >- (gvs[Abbr `R`] >>
-      pure_rewrite_tac [LET_THM] >> BETA_TAC >>
-      `!v st. P v st = H m es v st` by
-        (rpt gen_tac >> simp[Abbr `P`, Abbr `H`]) >>
-      qexists_tac `u0` >> simp[] >> metis_tac[]) >>
-  qpat_x_assum `R fuel C' (TAKE _ _) s = OK t` mp_tac >>
-  simp[TAKE] >> Cases_on `step_inst fuel C' h s` >> fs[]
-QED
-Resume identity_suffix_mask_cuts[returning_provenance]:
-  rpt (FIRST [gen_tac, disch_then strip_assume_tac]) >> Cases_on `k`
-  >- (gvs[Abbr `R`] >>
-      pure_rewrite_tac [LET_THM] >> BETA_TAC >>
-      `!v st. P v st = H m es v st` by
-        (rpt gen_tac >> simp[Abbr `P`, Abbr `H`]) >>
-      qexists_tac `u0` >> simp[] >> metis_tac[]) >>
-  gvs[TAKE, Abbr `R`, dftIndexedExecTheory.dft_exec_cons_def] >>
-  first_x_assum irule >> simp[]
-QED
-Resume identity_suffix_mask_cuts[terminator_provenance]:
-  rpt (FIRST [gen_tac, disch_then strip_assume_tac]) >> Cases_on `k`
-  >- gvs[Abbr `R`, venomInstTheory.is_terminator_def] >>
-  fs[TAKE]
-QED
-Resume identity_suffix_mask_cuts[stopped_gas_provenance]:
-  rpt gen_tac >> strip_tac >> Cases_on `j`
-  >- (gvs[Abbr `R`] >>
-      Cases_on `h.inst_opcode = INVOKE` >> gvs[]) >>
-  qpat_x_assum `R fuel C' (TAKE _ _) s = OK t` mp_tac >>
-  simp[TAKE, Abbr `R`, dftIndexedExecTheory.dft_exec_cons_def] >>
-  Cases_on `step_inst fuel C' h s` >> fs[]
-QED
-Resume identity_suffix_mask_cuts[returning_gas_provenance]:
-  rpt gen_tac >> strip_tac >> Cases_on `j`
-  >- (gvs[Abbr `R`] >>
-      Cases_on `h.inst_opcode = INVOKE` >> gvs[]) >>
-  gvs[TAKE, Abbr `R`, dftIndexedExecTheory.dft_exec_cons_def] >>
-  first_x_assum irule >> simp[]
-QED
-Resume identity_suffix_mask_cuts[terminator_gas_provenance]:
-  rpt gen_tac >> strip_tac >> Cases_on `j`
-  >- gvs[Abbr `R`, venomInstTheory.is_terminator_def] >>
-  fs[TAKE]
-QED
-Resume identity_suffix_mask_cuts[stopped_padding]:
-  gen_tac >> strip_tac >> Cases_on `n`
-  >- (simp[] >> metis_tac[]) >>
-  `!j. ~(?t. R fuel C' (TAKE (SUC j) (h::xs)) s = OK t)` by
-    (simp[TAKE] >> Cases_on `step_inst fuel C' h s` >> fs[]) >>
-  `!t. step_inst fuel C' h s <> OK t` by metis_tac[] >>
-  `R fuel C' [] s = OK s` by simp[Abbr `R`] >>
-  simp[GENLIST_CONS, combinTheory.o_DEF, TAKE] >>
-  `GENLIST (\j. if j < LENGTH xs /\ (EL j xs).inst_opcode = GAS then [NONE]
-       else EL j (REPLICATE (LENGTH xs) [])) (LENGTH xs) =
-    GENLIST (\j. if (EL j xs).inst_opcode = GAS then [NONE:bytes32 option] else []) (LENGTH xs)` by
-    (irule GENLIST_CONG >> simp[] >> rpt strip_tac >>
-     simp[rich_listTheory.EL_REPLICATE]) >>
-  `GENLIST (\j. if j < LENGTH xs /\ (EL j xs).inst_opcode = GAS then [(owner,(EL j xs).inst_id)]
-       else EL j (REPLICATE (LENGTH xs) [])) (LENGTH xs) =
-    GENLIST (\j. if (EL j xs).inst_opcode = GAS then [(owner,(EL j xs).inst_id)] else []) (LENGTH xs)` by
-    (irule GENLIST_CONG >> simp[] >> rpt strip_tac >>
-     simp[rich_listTheory.EL_REPLICATE]) >>
-  simp[] >>
-  qmatch_goalsub_abbrev_tac `m ++ pad` >>
-  qmatch_goalsub_abbrev_tac `es ++ slack` >>
-  `EVERY (\x. x = NONE) pad` by
-    (simp[Abbr `pad`, EVERY_FLAT, TAKE_GENLIST, EVERY_GENLIST] >>
-     gen_tac >> strip_tac >> IF_CASES_TAC >> simp[]) >>
-  `LENGTH pad = LENGTH slack` by
-    (simp[Abbr `pad`, Abbr `slack`, TAKE_GENLIST, rich_listTheory.LENGTH_FLAT,
-          MAP_GENLIST] >> AP_TERM_TAC >> irule GENLIST_CONG >> simp[] >>
-     rpt strip_tac >> IF_CASES_TAC >> simp[]) >>
-  qpat_x_assum `!n. n <= SUC (LENGTH xs) ==> _` (qspec_then `SUC n'` mp_tac) >>
-  simp[TAKE] >>
-  pure_rewrite_tac [rich_listTheory.REPLICATE_GENLIST, TAKE_GENLIST] >>
-  simp[GSYM rich_listTheory.REPLICATE_GENLIST] >>
-  disch_then (qx_choose_then `unused0` assume_tac) >>
-  qexists_tac `unused0` >>
-  qunabbrev_tac `S'` >> BETA_TAC >>
-  qspecl_then [`R fuel C' (h::TAKE n' xs) s`,
-      `\j rs. R j C (h::TAKE n' xs) (s with vs_gas_readings := rs)`,
-      `\rs. E C (h::TAKE n' xs) (s with vs_gas_readings := rs)`]
-    (mp_tac o CONV_RULE (REDEPTH_CONV BETA_CONV) o PURE_REWRITE_RULE [LET_THM])
-    mask_none_slack >>
-  CONV_TAC (REDEPTH_CONV BETA_CONV) >> disch_then irule >>
-  fs[iffRL FLAT_EQ_NIL, rich_listTheory.EVERY_REPLICATE] >>
-  `(?ir t. step_inst fuel C' h s = IntRet ir t) ==> xs = []` by
-    (strip_tac >>
-     `is_terminator h.inst_opcode` by
-       metis_tac[dftRunRelTheory.dft_swap_nonterminator_no_intret] >>
-     drule_all dftRunRelTheory.dft_remaining_inv_terminal >> simp[]) >>
-  Cases_on `?ir t. step_inst fuel C' h s = IntRet ir t`
-  >- (gvs[Abbr `pad`, Abbr `slack`] >> metis_tac[]) >>
-  fs[]
-QED
-Resume identity_suffix_mask_cuts[returning_padding]:
-  gen_tac >> strip_tac >> Cases_on `n`
-  >- (simp[] >> metis_tac[]) >>
-  `R fuel C' [] s = OK s` by simp[Abbr `R`] >>
-  `!j. R fuel C' (TAKE (SUC j) (h::xs)) s =
-       R fuel C' (TAKE j xs) (u with vs_inst_idx := SUC s.vs_inst_idx)` by
-    simp[TAKE, Abbr `R`, dftIndexedExecTheory.dft_exec_cons_def] >>
-  simp[GENLIST_CONS, combinTheory.o_DEF, TAKE] >>
-  qpat_x_assum `!n. n <= LENGTH xs ==> ?unused. S' _ _
-      (FLAT (TAKE n (GENLIST _ _))) _ unused`
-    (qspec_then `n'` mp_tac) >>
-  simp[] >> disch_then (qx_choose_then `unused'` assume_tac) >>
-  qexists_tac `unused'` >>
-  qmatch_goalsub_abbrev_tac `m ++ m'` >>
-  qmatch_goalsub_abbrev_tac `es ++ es'` >>
-  qpat_x_assum `S' _ _ _ _ _` mp_tac >>
-  qunabbrev_tac `S'` >> BETA_TAC >> strip_tac >>
-  qunabbrev_tac `R` >> qunabbrev_tac `E` >>
-  CONV_TAC (REDEPTH_CONV BETA_CONV) >>
-  match_mp_tac (Q.INST [`u` |-> `u`, `unused` |-> `unused`]
-    (CONV_RULE (REDEPTH_CONV BETA_CONV)
-      (PURE_REWRITE_RULE [LET_THM] identity_mask_cons))) >>
-  rule_assum_tac (CONV_RULE (REDEPTH_CONV BETA_CONV)) >>
-  rule_assum_tac (PURE_REWRITE_RULE
-    [venomStateTheory.venom_state_accfupds, combinTheory.K_THM, REPLICATE, APPEND]) >>
-  qpat_x_assum `u.vs_gas_readings = _` kall_tac >>
-  qpat_assum `u.vs_current_bb = _` (fn th =>
-    rule_assum_tac (PURE_REWRITE_RULE [th]) >> rewrite_tac [th] >> assume_tac th) >>
-  simp[venomStateTheory.venom_state_accfupds] >>
-  conj_tac
-  >- (qpat_x_assum `!v. _ ==> EVERY IS_SOME m' /\ _`
-        mp_tac >> simp[]) >>
-  rpt gen_tac >> strip_tac >>
-  qpat_x_assum `!gs tail. LIST_REL _ m' gs ==> _`
-    (qspecl_then [`gs`, `tail`] mp_tac) >> simp[] >>
-  POP_ASSUM_LIST (K all_tac) >> metis_tac[]
-QED
-Resume identity_suffix_mask_cuts[terminator_padding]:
-  `xs = []` by
-    (fs[APPEND] >>
-     drule_all dftRunRelTheory.dft_remaining_inv_terminal >> simp[]) >>
-  gvs[] >> gen_tac >> strip_tac >>
-  `R fuel C' [] s = OK s` by simp[Abbr `R`] >>
-  simp[GENLIST_CONS] >> metis_tac[]
-QED
-Resume identity_suffix_mask_cuts[stopped_empty_unreached]:
-  gen_tac >> strip_tac >> Cases_on `j` >>
-  gvs[Abbr `R`, rich_listTheory.EL_REPLICATE]
-QED
-Resume identity_suffix_mask_cuts[returning_empty_unreached]:
-  gen_tac >> strip_tac >> Cases_on `j`
-  >- gvs[Abbr `R`] >>
-  gvs[TAKE, Abbr `R`, dftIndexedExecTheory.dft_exec_cons_def] >>
-  first_x_assum irule >> simp[]
-QED
-Resume identity_suffix_mask_cuts[terminator_empty_unreached]:
-  gen_tac >> strip_tac >> Cases_on `j` >>
-  gvs[Abbr `R`, rich_listTheory.EL_REPLICATE]
-QED
-Resume identity_suffix_mask_cuts[exact_prefixes]:
-  strip_tac >>
-  `!ams aes.
-    (!n. n <= LENGTH xs ==> ?unused.
-      S' (TAKE n xs) s (FLAT (TAKE n ams)) (FLAT (TAKE n aes)) unused) ==>
-    !gss tail k u.
-      LIST_REL (LIST_REL (\slot w. slot = NONE \/ slot = SOME w)) ams gss /\
-      k <= LENGTH xs /\
-      R fuel C (TAKE k xs) (s with vs_gas_readings := FLAT gss ++ tail) = OK u ==>
-      E C (TAKE k xs) (s with vs_gas_readings := FLAT gss ++ tail) = FLAT (TAKE k aes) /\
-      u.vs_gas_readings = FLAT (DROP k gss) ++ tail /\
-      (?t. R fuel C' (TAKE k xs) s = OK t)` by suspend "prefix_projection" >>
-  qexistsl_tac [`ms`, `ess`] >> simp[] >>
-  qpat_x_assum `P xs s ms ess` mp_tac >>
-  simp[Abbr `P`] >> strip_tac >>
-  rpt gen_tac >> rpt disch_tac >>
-  conj_tac
-  >- (qpat_x_assum `!ams aes. _`
-        (qspecl_then [`ms`, `ess`] mp_tac) >>
-      simp[SF ETA_ss] >> metis_tac[]) >>
-  conj_asm1_tac
-  >- (qpat_x_assum `!ams aes. _`
-        (qspecl_then [`pm`, `pe`] mp_tac) >>
-      simp[Abbr `pm`, Abbr `pe`] >> metis_tac[]) >>
-  rpt strip_tac >> metis_tac[arithmeticTheory.LESS_IMP_LESS_OR_EQ]
-QED
-Resume identity_suffix_mask_cuts[prefix_projection]:
-  rpt gen_tac >> strip_tac >> rpt gen_tac >> strip_tac >>
-  qpat_x_assum `!n. n <= LENGTH xs ==> _` (qspec_then `k` mp_tac) >>
-  simp[] >> strip_tac >>
-  `!as:(bytes32 option list) list. !bs. LIST_REL (LIST_REL (\slot w. slot = NONE \/ slot = SOME w)) as bs ==>
-     LIST_REL (\slot w. slot = NONE \/ slot = SOME w) (FLAT as) (FLAT bs)` by
-    (POP_ASSUM_LIST (K all_tac) >>
-     Induct >> Cases_on `bs` >> simp[] >> metis_tac[LIST_REL_APPEND_suff]) >>
-  `LIST_REL (\slot w. slot = NONE \/ slot = SOME w)
-     (FLAT (TAKE k ams)) (FLAT (TAKE k gss))` by
-    (first_x_assum irule >>
-     qpat_x_assum `LIST_REL _ ams gss` mp_tac >>
-     POP_ASSUM_LIST (K all_tac) >>
-     simp[SF ETA_ss] >> metis_tac[rich_listTheory.LIST_REL_TAKE]) >>
-  `FLAT (TAKE k gss) ++ FLAT (DROP k gss) = FLAT gss` by
-    metis_tac[TAKE_DROP, FLAT_APPEND] >>
-  qpat_x_assum `S' _ _ _ _ _` mp_tac >>
-  simp[Abbr `S'`] >> strip_tac >>
-  qpat_x_assum `!gs tail. LIST_REL _ _ gs ==> _`
-    (qspecl_then [`FLAT (TAKE k gss)`, `FLAT (DROP k gss) ++ tail`] mp_tac) >>
-  pure_rewrite_tac[GSYM APPEND_ASSOC] >>
-  qpat_assum `FLAT (TAKE k gss) ++ FLAT (DROP k gss) = _`
-    (fn th => pure_rewrite_tac[th]) >>
-  simp[] >> strip_tac >>
-  `?j. terminates (R j C (TAKE k xs) (s with vs_gas_readings := FLAT gss ++ tail))` by
-    (qexists_tac `fuel` >> simp[passSimulationDefsTheory.terminates_def]) >>
-  qpat_x_assum `(?j. _) ==> _` mp_tac >>
-  (impl_tac >- metis_tac[]) >> strip_tac >>
-  `?t. R fuel C' (TAKE k xs) s = OK t` by
-    (qpat_x_assum `dft_res_rel _ _` mp_tac >>
-     simp[restore_result_def] >>
-     Cases_on `R fuel C' (TAKE k xs) s` >>
-     simp[restore_result_def, dftRunRelTheory.dft_res_rel_def]) >>
-  qpat_x_assum `(_ \/ _) ==> _` mp_tac >>
-  (impl_tac >- metis_tac[]) >>
-  simp[residual_result_cases] >> metis_tac[]
-QED
-Finalise identity_suffix_mask_cuts[local]
 
 Theorem identity_suffix_mask[local]:
   !fuel C C'.
@@ -3265,6 +3502,70 @@ Proof
   >- (strip_tac >> first_x_assum (qspecl_then
         [`t with vs_inst_idx := j`, `t.vs_inst_idx`] mp_tac) >> simp[]) >>
   metis_tac[]
+QED
+
+Theorem invoke_partner_endpoint_packet[local]:
+  !m es unused fuel C C' i pre s pg rs a.
+  let K = (\unused t.
+    LENGTH m = LENGTH es /\
+    PERM (MAP THE (FILTER IS_SOME m) ++ unused) t.vs_gas_readings /\
+    (!u. (step_inst fuel C' i t = OK u \/
+          (?ir. step_inst fuel C' i t = IntRet ir u)) ==>
+      EVERY IS_SOME m /\ unused = u.vs_gas_readings) /\
+    !gs tail. LIST_REL (\slot w. slot = NONE \/ slot = SOME w) m gs ==>
+      (?extra. es = gas_events_step fuel C t.vs_current_bb i
+         (t with vs_gas_readings := gs ++ tail) ++ extra) /\
+      ((?n. terminates (step_inst n C i (t with vs_gas_readings := gs ++ tail))) ==>
+        terminates (step_inst fuel C i (t with vs_gas_readings := gs ++ tail)) /\
+        dft_res_rel
+          (restore_result [] (step_inst fuel C i (t with vs_gas_readings := gs ++ tail)))
+          (restore_result [] (step_inst fuel C' i t)) /\
+        (((?v. step_inst fuel C' i t = OK v) \/
+          (?ir v. step_inst fuel C' i t = IntRet ir v)) ==>
+          gas_events_step fuel C t.vs_current_bb i
+            (t with vs_gas_readings := gs ++ tail) = es /\
+          residual_result tail (step_inst fuel C' i t)
+            (step_inst fuel C i (t with vs_gas_readings := gs ++ tail)))));
+      U = (\q. ~MEM (Var (FST q)) i.inst_operands /\
+                 ~MEM (FST q) i.inst_outputs);
+      F = (\us st. FOLDL (\st q. update_var (FST q) (SND q) st) st us)
+  in
+    i.inst_opcode = INVOKE /\
+    EVERY (\x. dft_gas_swap_pair x i /\ inst_wf x) pre /\
+    LENGTH pg = LENGTH (FILTER (\x. x.inst_opcode = GAS) pre) /\
+    FOLDR (dft_exec_cons fuel C) OK pre
+      (s with vs_gas_readings := pg ++ rs) = OK a /\
+    (!us. EVERY U us ==> K unused (F us (s with vs_gas_readings := rs))) ==>
+    K unused a /\
+    !out w j. U (out,w) ==>
+      K unused ((update_var out w a) with vs_inst_idx := j)
+Proof
+  rpt gen_tac >> rpt BasicProvers.LET_ELIM_TAC >>
+  `!t j. K' unused (t with vs_inst_idx := j) <=> K' unused t` by
+    (rpt gen_tac >> simp[Abbr `K'`] >>
+     mp_tac invoke_fixed_segment_inst_idx >>
+     disch_then (qspecl_then [`m`, `es`, `unused`, `fuel`, `C`, `C'`, `i`] mp_tac) >>
+     simp[LET_THM]) >>
+  `EVERY (\x. dft_gas_swap_pair x i /\ inst_wf x /\
+      dftGasInvCallPartner$inv_partner_inputs x s s) pre` by
+    (fs[EVERY_MEM, dftGasInvCallPartnerTheory.inv_partner_inputs_def]) >>
+  drule_all (Q.INST [`y` |-> `i`] invoke_partner_prefix_portable) >>
+  disch_then (qspecl_then [`C`, `rs`] strip_assume_tac) >>
+  `EVERY U us` by (fs[Abbr `U`, EVERY_MEM] >> metis_tac[]) >>
+  `a = (F' us (s with vs_gas_readings := rs)) with
+      vs_inst_idx := s.vs_inst_idx + LENGTH pre` by
+    (simp[Abbr `F'`, pairTheory.LAMBDA_PROD, GSYM foldl_update_var_idx])
+  >- metis_tac[] >>
+  `EVERY U (us ++ [(out,w)])` by simp[] >>
+  `K' unused (F' (us ++ [(out,w)]) (s with vs_gas_readings := rs))` by
+    metis_tac[] >>
+  `((update_var out w a) with vs_inst_idx := j) =
+    (F' (us ++ [(out,w)]) (s with vs_gas_readings := rs)) with
+      vs_inst_idx := j` by
+    (asm_rewrite_tac[] >>
+     simp[Abbr `F'`, FOLDL_APPEND, update_var_def]) >>
+  qpat_x_assum `(_ with vs_inst_idx := j) = _` SUBST1_TAC >>
+  simp[]
 QED
 
 Theorem invoke_target_entry[local]:
@@ -6715,6 +7016,1177 @@ Proof
   asm "stopped_source" (qspecl_then
     [`FLAT pgss`, `fg`, `FLAT postgss ++ tail`, `TAKE (k - LENGTH pre - 1) post`] mp_tac) >>
   simp[APPEND_ASSOC]
+QED
+
+(* Padding commutes with the actual returning target-head cut.  The generic
+   packet payload covers both slot and event arrays without parallel proofs. *)
+Theorem occurrence_padding_returning_head[local]:
+  !fuel C' y rest s u a as fill.
+    y.inst_opcode = INVOKE /\ step_inst fuel C' y s = OK u ==>
+    GENLIST (\j. if j < LENGTH (y::rest) /\
+        (EL j (y::rest)).inst_opcode = GAS /\
+        ~(?t. FOLDR (dft_exec_cons fuel C') OK (TAKE j (y::rest)) s = OK t)
+      then fill (EL j (y::rest)) else EL j (a::as)) (LENGTH (y::rest)) =
+    a :: GENLIST (\j. if j < LENGTH rest /\
+        (EL j rest).inst_opcode = GAS /\
+        ~(?t. FOLDR (dft_exec_cons fuel C') OK (TAKE j rest)
+          (u with vs_inst_idx := SUC s.vs_inst_idx) = OK t)
+      then fill (EL j rest) else EL j as) (LENGTH rest)
+Proof
+  rpt strip_tac >>
+  simp[listTheory.GENLIST_CONS, combinTheory.o_DEF, EL, TAKE_def,
+       dftIndexedExecTheory.dft_exec_cons_def, venomInstTheory.is_terminator_def]
+QED
+
+(* The recursive prefix and the extracted call share this actual endpoint.
+   In particular the caller updates are replayed, not chosen a second time. *)
+Theorem invoke_extract_shared_successor[local]:
+  !pre s v pg fg tail a.
+    y.inst_opcode = INVOKE /\
+    EVERY (\x. dft_gas_swap_pair x y /\ inst_wf x /\
+      dftGasInvCallPartner$inv_partner_inputs x s
+        (v with vs_inst_idx := SUC s.vs_inst_idx)) pre /\
+    LENGTH pg = LENGTH (FILTER (\x. x.inst_opcode = GAS) pre) /\
+    FOLDR (dft_exec_cons fuel C) OK pre
+      (s with vs_gas_readings := pg ++ (fg ++ tail)) = OK a /\
+    step_inst fuel C y (s with vs_gas_readings := fg ++ tail) =
+      OK (v with vs_gas_readings := tail) ==>
+    ?b.
+      FOLDR (dft_exec_cons fuel C) OK pre
+        (v with <|vs_inst_idx := SUC s.vs_inst_idx;
+                  vs_gas_readings := pg ++ tail|>) = OK b /\
+      FOLDR (dft_exec_cons fuel C) OK (pre ++ [y])
+        (s with vs_gas_readings := pg ++ (fg ++ tail)) = OK b
+Proof
+  rpt gen_tac >> strip_tac >>
+  drule_at (Pat `FOLDR _ _ _ _ = OK _`)
+    (Q.INST [`D` |-> `C`] invoke_partner_prefix_replay) >>
+  disch_then (qspecl_then [`y`,
+    `v with vs_inst_idx := SUC s.vs_inst_idx`, `tail`] mp_tac) >>
+  (impl_tac >- simp[]) >>
+  disch_then (qx_choose_then `uss` strip_assume_tac) >>
+  qexists_tac `FOLDL (\st q. update_var (FST q) (SND q) st)
+    (v with <|vs_gas_readings := tail;
+              vs_inst_idx := SUC s.vs_inst_idx + LENGTH pre|>) (FLAT uss)` >>
+  conj_tac >- gvs[] >>
+  `EVERY (\q. ~MEM (Var (FST q)) y.inst_operands /\
+                ~MEM (FST q) y.inst_outputs) (FLAT uss)` by
+    (fs[EVERY_MEM] >> metis_tac[]) >>
+  `EVERY (\i. ~is_terminator i.inst_opcode) pre` by
+    (fs[EVERY_MEM, dft_gas_swap_pair_def] >> metis_tac[]) >>
+  pure_rewrite_tac[FOLDR_APPEND] >>
+  simp[Once dftRunRelTheory.dft_exec_prefix_continue] >>
+  simp[dftIndexedExecTheory.dft_exec_cons_def,
+       venomInstTheory.is_terminator_def] >>
+  drule_all invoke_updates_concrete_frame >>
+  disch_then (qspecl_then [`fuel`, `C`,
+    `s with <|vs_inst_idx := s.vs_inst_idx + LENGTH pre;
+              vs_gas_readings := fg ++ tail|>`] mp_tac) >>
+  simp[analysisSimProofsBaseTheory.invoke_step_inst_idx_OK_only,
+       arithmeticTheory.ADD_COMM] >>
+  strip_tac >>
+  `(\st q. update_var (FST q) (SND q) st) =
+    (\st (out,value). update_var out value st)` by
+    simp[FUN_EQ_THM, pairTheory.FORALL_PROD] >>
+  pop_assum (fn th => pure_rewrite_tac[th]) >>
+  simp[foldl_update_var_inst_idx, foldl_update_var_idx,
+       arithmeticTheory.ADD_CLAUSES, arithmeticTheory.ADD_COMM]
+QED
+
+Theorem invoke_extract_occurrence_transport_success[local]:
+  !fuel C C' owner fn bb.
+  let R = (\n D xs st. FOLDR (dft_exec_cons n D) OK xs st);
+      E = (\D xs st. gas_events_block fuel D owner
+        <|bb_label := st.vs_current_bb; bb_instructions :=
+          REPLICATE st.vs_inst_idx (mk_inst 0 STOP [] []) ++ xs|> st);
+      B = (\x y. MEM x bb.bb_instructions /\ MEM y bb.bb_instructions /\
+        ~is_pseudo x.inst_opcode /\ ~is_pseudo y.inst_opcode /\
+        id_before (MAP (\i. i.inst_id) bb.bb_instructions) x.inst_id y.inst_id /\
+        ~dft_must_order x y /\ dft_abort_compatible x.inst_opcode y.inst_opcode);
+      S = (\xs st m es unused.
+        LENGTH m = LENGTH es /\
+        PERM (MAP THE (FILTER IS_SOME m) ++ unused) st.vs_gas_readings /\
+        (!u. (R fuel C' xs st = OK u \/ (?ir. R fuel C' xs st = IntRet ir u)) ==>
+          EVERY IS_SOME m /\ unused = u.vs_gas_readings) /\
+        !gs tail. LIST_REL (\slot w. slot = NONE \/ slot = SOME w) m gs ==>
+          (?extra. es = E C xs (st with vs_gas_readings := gs ++ tail) ++ extra) /\
+          ((?j. terminates (R j C xs (st with vs_gas_readings := gs ++ tail))) ==>
+            terminates (R fuel C xs (st with vs_gas_readings := gs ++ tail)) /\
+            dft_res_rel
+              (restore_result [] (R fuel C xs (st with vs_gas_readings := gs ++ tail)))
+              (restore_result [] (R fuel C' xs st)) /\
+            (((?u. R fuel C' xs st = OK u) \/ (?ir u. R fuel C' xs st = IntRet ir u)) ==>
+              E C xs (st with vs_gas_readings := gs ++ tail) = es /\
+              residual_result tail (R fuel C' xs st)
+                (R fuel C xs (st with vs_gas_readings := gs ++ tail)))));
+      P = (\xs s ms ess.
+      LENGTH ms = LENGTH xs /\ LENGTH ess = LENGTH xs /\
+      LIST_REL (\m es. LENGTH m = LENGTH es) ms ess /\
+      (!k. k < LENGTH xs ==>
+        (((EL k xs).inst_opcode <> INVOKE /\ (EL k xs).inst_opcode <> GAS ==>
+           EL k ms = [] /\ EL k ess = []) /\
+         ((EL k xs).inst_opcode = GAS ==>
+           (EL k ms = [] /\ EL k ess = []) \/
+           (?w. EL k ms = [SOME w] /\
+             EL k ess = [(owner,(EL k xs).inst_id)])))) /\
+      (!k t. k < LENGTH xs /\ (EL k xs).inst_opcode = INVOKE /\
+        EVERY (\i. ~is_terminator i.inst_opcode) (TAKE k xs) /\
+        R fuel C' (TAKE k xs) s = OK t ==>
+        let P = (\unused_k t.
+          LENGTH (EL k ms) = LENGTH (EL k ess) /\
+          PERM (MAP THE (FILTER IS_SOME (EL k ms)) ++ unused_k) t.vs_gas_readings /\
+          (!u. (step_inst fuel C' (EL k xs) t = OK u \/
+                (?ir. step_inst fuel C' (EL k xs) t = IntRet ir u)) ==>
+            EVERY IS_SOME (EL k ms) /\ unused_k = u.vs_gas_readings) /\
+          !gs tail. LIST_REL (\slot w. slot = NONE \/ slot = SOME w) (EL k ms) gs ==>
+            (?extra. EL k ess = gas_events_step fuel C t.vs_current_bb (EL k xs)
+               (t with vs_gas_readings := gs ++ tail) ++ extra) /\
+            ((?j. terminates (step_inst j C (EL k xs)
+               (t with vs_gas_readings := gs ++ tail))) ==>
+              terminates (step_inst fuel C (EL k xs) (t with vs_gas_readings := gs ++ tail)) /\
+              dft_res_rel
+                (restore_result [] (step_inst fuel C (EL k xs) (t with vs_gas_readings := gs ++ tail)))
+                (restore_result [] (step_inst fuel C' (EL k xs) t)) /\
+              (((?u. step_inst fuel C' (EL k xs) t = OK u) \/
+                (?ir u. step_inst fuel C' (EL k xs) t = IntRet ir u)) ==>
+                gas_events_step fuel C t.vs_current_bb (EL k xs)
+                  (t with vs_gas_readings := gs ++ tail) = EL k ess /\
+                residual_result tail (step_inst fuel C' (EL k xs) t)
+                  (step_inst fuel C (EL k xs) (t with vs_gas_readings := gs ++ tail)))));
+            n = gas_count_step fuel C' (EL k xs) t;
+            p = TAKE n t.vs_gas_readings
+        in gasOracleReplay$gas_replay_at n (step_inst fuel C' (EL k xs)) t /\
+          ?u0.
+            PERM (MAP THE (FILTER IS_SOME (EL k ms)) ++ u0) p /\
+            (!unused_k. P unused_k t ==>
+              !us. EVERY (\q. ~MEM (Var (FST q)) (EL k xs).inst_operands /\
+                               ~MEM (FST q) (EL k xs).inst_outputs) us ==>
+                P unused_k (FOLDL (\st q. update_var (FST q) (SND q) st) t us)) /\
+            !r. P (u0 ++ r) (t with vs_gas_readings := p ++ r) /\
+              (!u. (step_inst fuel C' (EL k xs) (t with vs_gas_readings := p ++ r) = OK u \/
+                (?ir. step_inst fuel C' (EL k xs) (t with vs_gas_readings := p ++ r) = IntRet ir u)) ==>
+                u0 = []) /\
+              !us. EVERY (\q. ~MEM (Var (FST q)) (EL k xs).inst_operands /\
+                               ~MEM (FST q) (EL k xs).inst_outputs) us ==>
+                P (u0 ++ r) (FOLDL (\st q. update_var (FST q) (SND q) st)
+                  (t with vs_gas_readings := p ++ r) us)) /\
+      (!j t. j < LENGTH xs /\ (EL j xs).inst_opcode = GAS /\
+        EVERY (\i. ~is_terminator i.inst_opcode) (TAKE j xs) /\
+        R fuel C' (TAKE j xs) s = OK t ==>
+        ?w rest. t.vs_gas_readings = w::rest /\ EL j ms = [SOME w] /\
+          EL j ess = [(owner,(EL j xs).inst_id)]) /\
+      (!j. j < LENGTH xs /\ ~(?t. R fuel C' (TAKE j xs) s = OK t) ==>
+        EL j ms = [] /\ EL j ess = []) /\
+      (!n. n <= LENGTH xs ==> ?unused.
+         S (TAKE n xs) s
+           (FLAT (TAKE n (GENLIST (\j. if j < LENGTH xs /\
+             (EL j xs).inst_opcode = GAS /\ ~(?t. R fuel C' (TAKE j xs) s = OK t)
+             then [NONE] else EL j ms) (LENGTH xs))))
+           (FLAT (TAKE n (GENLIST (\j. if j < LENGTH xs /\
+             (EL j xs).inst_opcode = GAS /\ ~(?t. R fuel C' (TAKE j xs) s = OK t)
+             then [(owner,(EL j xs).inst_id)] else EL j ess) (LENGTH xs)))) unused) /\
+      !n. n <= LENGTH xs ==> ?unused.
+        S (TAKE n xs) s (FLAT (TAKE n ms)) (FLAT (TAKE n ess)) unused);
+      padM = (\xs st ms. GENLIST (\j.
+        if j < LENGTH xs /\ (EL j xs).inst_opcode = GAS /\
+           ~(?t. R fuel C' (TAKE j xs) st = OK t)
+        then [NONE] else EL j ms) (LENGTH xs));
+      padE = (\xs st ess. GENLIST (\j.
+        if j < LENGTH xs /\ (EL j xs).inst_opcode = GAS /\
+           ~(?t. R fuel C' (TAKE j xs) st = OK t)
+        then [(owner,(EL j xs).inst_id)] else EL j ess) (LENGTH xs));
+      T = (\xs st pm pe src pi.
+        let M = MAP (\j. EL j pm) pi;
+            ES = MAP (\j. EL j pe) pi
+        in
+        LENGTH M = LENGTH src /\ LENGTH ES = LENGTH src /\
+        LIST_REL (\m es. LENGTH m = LENGTH es) M ES /\
+        (?unused.
+          PERM (MAP THE (FILTER IS_SOME (FLAT M)) ++ unused) st.vs_gas_readings /\
+          (!u. (R fuel C' xs st = OK u \/ (?ir. R fuel C' xs st = IntRet ir u)) ==>
+            EVERY IS_SOME (FLAT M) /\ unused = u.vs_gas_readings) /\
+          !gss tail.
+            LIST_REL (LIST_REL (\slot w. slot = NONE \/ slot = SOME w)) M gss ==>
+            (?extra. FLAT ES = E C src (st with vs_gas_readings := FLAT gss ++ tail) ++ extra) /\
+            ((?j. terminates (R j C src (st with vs_gas_readings := FLAT gss ++ tail))) ==>
+              terminates (R fuel C src (st with vs_gas_readings := FLAT gss ++ tail)) /\
+              dft_res_rel
+                (restore_result [] (R fuel C src (st with vs_gas_readings := FLAT gss ++ tail)))
+                (restore_result [] (R fuel C' xs st)) /\
+              (((?u. R fuel C' xs st = OK u) \/ (?ir u. R fuel C' xs st = IntRet ir u)) ==>
+                E C src (st with vs_gas_readings := FLAT gss ++ tail) = FLAT ES /\
+                residual_result tail (R fuel C' xs st)
+                  (R fuel C src (st with vs_gas_readings := FLAT gss ++ tail))))) /\
+        (!gss tail k u.
+          LIST_REL (LIST_REL (\slot w. slot = NONE \/ slot = SOME w)) M gss /\
+          k <= LENGTH src /\
+          R fuel C (TAKE k src) (st with vs_gas_readings := FLAT gss ++ tail) = OK u ==>
+          E C (TAKE k src) (st with vs_gas_readings := FLAT gss ++ tail) = FLAT (TAKE k ES) /\
+          u.vs_gas_readings = FLAT (DROP k gss) ++ tail) /\
+        (!gss tail k.
+          LIST_REL (LIST_REL (\slot w. slot = NONE \/ slot = SOME w)) M gss /\
+          k < LENGTH src /\ (EL k src).inst_opcode = INVOKE /\
+          ~(?t. R fuel C' (TAKE (EL k pi) xs) st = OK t) ==>
+          ~(?v. R fuel C (TAKE k src) (st with vs_gas_readings := FLAT gss ++ tail) = OK v)))
+  in
+  !y rest pre post suffix rho mh eh mt et s.
+    LIST_REL (\f g. g = dft_fn f) C.ctx_functions C'.ctx_functions /\
+    LIST_REL dft_fn_rel C.ctx_functions C'.ctx_functions /\
+    o1_ctx_shape C /\ o1_ctx_shape C' /\ MEM fn C.ctx_functions /\
+    wf_ssa fn /\ wf_function fn /\ MEM bb fn.fn_blocks /\
+    EVERY inst_wf bb.bb_instructions /\
+    EVERY (\i. ~is_alloca_op i.inst_opcode) bb.bb_instructions /\
+    EVERY (\i. MEM i bb.bb_instructions) (y::rest) /\
+    ctx_labels_bound C s.vs_labels /\ ctx_labels_bound C' s.vs_labels /\
+    ~s.vs_call_ctx.cc_static /\ y.inst_opcode = INVOKE /\
+    PERM rho (COUNT_LIST (LENGTH rest)) /\
+    pre ++ post = MAP (\j. EL j rest) rho /\
+    dft_head_bubbles B (pre ++ post) rest /\ EVERY (\x. B x y) pre /\
+    dft_remaining_inv fn bb ((pre ++ y::post) ++ suffix) s /\
+    terminates (R fuel C' (y::rest) s) /\
+    LENGTH (E C' (y::rest) s) <= LENGTH s.vs_gas_readings /\
+    P (y::rest) s (mh::mt) (eh::et) /\
+    (!u. step_inst fuel C' y s = OK u ==>
+      let v = u with vs_inst_idx := SUC s.vs_inst_idx in
+      P rest v mt et /\
+      T rest v (padM rest v mt) (padE rest v et) (pre ++ post) rho) /\
+    (?u. step_inst fuel C' y s = OK u)
+    ==>
+    T (y::rest) s (padM (y::rest) s (mh::mt))
+      (padE (y::rest) s (eh::et)) (pre ++ y::post)
+      (MAP SUC (TAKE (LENGTH pre) rho) ++ [0] ++
+       MAP SUC (DROP (LENGTH pre) rho))
+Proof
+  ntac 6 gen_tac >> BasicProvers.LET_ELIM_TAC >>
+  `EVERY (\x. dft_gas_swap_pair x y /\ inst_wf x /\ inst_wf y) pre` by
+    (simp[EVERY_MEM] >> gen_tac >> disch_tac >>
+     qpat_assum `EVERY (\x. B x y) pre`
+       (mp_tac o SRULE [EVERY_MEM, Abbr `B`]) >>
+     disch_then (qspec_then `x` mp_tac) >> simp[] >> strip_tac >>
+     fs[Abbr `B`] >>
+     conj_tac
+     >- (irule (cj 1 dftRunRelTheory.dft_crossing_swap_pair) >>
+         simp[] >> qexistsl_tac [`bb`, `fn`] >> simp[]) >>
+     fs[EVERY_MEM]) >>
+  all_tac >>
+      `padM (y::rest) s (mh::mt) =
+         mh :: padM rest (u with vs_inst_idx := SUC s.vs_inst_idx) mt` by
+        (simp[Abbr `padM`, Abbr `R`] >>
+         ho_match_mp_tac (SRULE [] occurrence_padding_returning_head) >> simp[]) >>
+      `padE (y::rest) s (eh::et) =
+         eh :: padE rest (u with vs_inst_idx := SUC s.vs_inst_idx) et` by
+        (simp[Abbr `padE`, Abbr `R`] >>
+         ho_match_mp_tac (SRULE [] occurrence_padding_returning_head) >> simp[]) >>
+      `dft_remaining_inv fn bb ((pre ++ post) ++ suffix)
+        (u with vs_inst_idx := SUC s.vs_inst_idx)` by
+        (drule_at (Pat `step_inst _ _ _ _ = OK _`)
+           dftRunRelTheory.dft_remaining_inv_step >>
+         disch_then (qspecl_then [`pre`, `post ++ suffix`, `fn`, `bb`] mp_tac) >>
+         impl_tac
+         >- (simp[venomInstTheory.is_terminator_def] >>
+             qpat_assum `dft_remaining_inv fn bb _ s`
+               (mp_tac o PURE_REWRITE_RULE [GSYM APPEND_ASSOC, APPEND]) >>
+             simp[]) >>
+         simp[APPEND_ASSOC]) >>
+      `EVERY (\x. dftGasInvCallPartner$inv_partner_inputs x s u) pre` by
+        (simp[EVERY_MEM] >> rpt strip_tac >>
+         irule invoke_return_partner_inputs >>
+         qexistsl_tac [`C'`, `fuel`, `y`] >> simp[] >>
+         fs[EVERY_MEM]) >>
+      qpat_x_assum `!u v. Abbrev (v = u with vs_inst_idx := _) ==>
+        step_inst fuel C' y s = OK u ==> _`
+        (mp_tac o SRULE [markerTheory.Abbrev_def] o Q.SPEC `u`) >>
+      impl_tac >- simp[] >> strip_tac >>
+      `!rs. ?a. R fuel C pre
+        ((u with vs_inst_idx := SUC s.vs_inst_idx) with vs_gas_readings := rs) = OK a` by
+        (gen_tac >> simp[Abbr `R`] >>
+         irule invoke_partner_prefix_total >>
+         conj_tac
+         >- (qexists_tac `y` >> simp[] >> fs[EVERY_MEM]) >>
+         qexistsl_tac [`bb`, `fn`, `post ++ suffix`] >> simp[] >>
+         irule dftRunRelTheory.dft_remaining_inv_gas_variant >>
+         qexists_tac `u with vs_inst_idx := SUC s.vs_inst_idx` >>
+         simp[] >> metis_tac[APPEND_ASSOC]) >>
+      qpat_assum `Abbrev (T' = _)` (fn def =>
+        qpat_assum `T' rest _ _ _ _ _`
+          (assume_tac o cj 5 o
+           SIMP_RULE bool_ss [REWRITE_RULE [markerTheory.Abbrev_def] def,
+                              markerTheory.Abbrev_def])) >>
+      `!gss tail.
+        LIST_REL (LIST_REL (\slot w. slot = NONE \/ slot = SOME w))
+          (MAP (\j. EL j (padM rest (u with vs_inst_idx := SUC s.vs_inst_idx) mt)) rho') gss ==>
+        E C pre (u with <|vs_gas_readings := FLAT gss ++ tail;
+          vs_inst_idx := SUC s.vs_inst_idx|>) =
+        FLAT (TAKE (LENGTH pre)
+          (MAP (\j. EL j (padE rest (u with vs_inst_idx := SUC s.vs_inst_idx) et)) rho'))` by
+        (rpt strip_tac >>
+         qpat_assum `!rs. ?a. R fuel C pre _ = OK a`
+           (qspec_then `FLAT gss ++ tail` (qx_choose_then `a` assume_tac)) >>
+         qpat_x_assum `!gss tail k u'. _`
+           (qspecl_then [`gss`, `tail`, `LENGTH pre`, `a`] mp_tac) >>
+         fs[TAKE_APPEND, venom_state_fupdcanon]) >>
+      `EVERY (\i. i.inst_opcode <> INVOKE /\ ~is_terminator i.inst_opcode) pre` by
+        (fs[EVERY_MEM] >> rpt strip_tac >>
+         first_x_assum (drule_then strip_assume_tac) >>
+         metis_tac[invoke_partner_total_guards]) >>
+      `!rs. E C pre
+        (u with <|vs_gas_readings := rs; vs_inst_idx := SUC s.vs_inst_idx|>) =
+        MAP (\i. (owner,i.inst_id)) (FILTER (\i. i.inst_opcode = GAS) pre)` by
+        (gen_tac >>
+         qpat_assum `!rs. ?a. R fuel C pre _ = OK a`
+           (qspec_then `rs` (qx_choose_then `a` assume_tac)) >>
+         qpat_assum `Abbrev (R = _)` (fn def =>
+           qpat_x_assum `R fuel C pre _ = OK a`
+             (assume_tac o SIMP_RULE bool_ss [REWRITE_RULE [markerTheory.Abbrev_def] def])) >>
+         drule_all noninvoke_prefix_events_exact >>
+         disch_then (qspecl_then [`owner`, `u.vs_current_bb`, `[]`] mp_tac) >>
+         simp[Abbr `E`, APPEND_NIL, venom_state_fupdcanon] >>
+         disch_tac >>
+         simp[Once gas_events_block_def, venomInstTheory.get_instruction_def]) >>
+      qpat_assum `Abbrev (T' = _)` (fn def =>
+        qpat_assum `T' rest _ _ _ _ _`
+          (assume_tac o cj 3 o
+           SIMP_RULE bool_ss [REWRITE_RULE [markerTheory.Abbrev_def] def,
+                              markerTheory.Abbrev_def])) >>
+      `!gss tail.
+        LIST_REL (LIST_REL (\slot w. slot = NONE \/ slot = SOME w))
+          (MAP (\j. EL j (padM rest (u with vs_inst_idx := SUC s.vs_inst_idx) mt)) rho') gss ==>
+        LENGTH (FLAT (TAKE (LENGTH pre) gss)) =
+        LENGTH (FILTER (\i. i.inst_opcode = GAS) pre)` by
+        (rpt strip_tac >>
+         qpat_assum `!gss tail. _ ==> E C pre _ = _`
+           (qspecl_then [`gss`, `tail`] mp_tac) >>
+         (impl_tac >- simp[]) >>
+         qpat_assum `!rs. E C pre _ = _`
+           (qspec_then `FLAT gss ++ tail` (fn th => rewrite_tac[th])) >>
+         disch_tac >>
+         qmatch_asmsub_abbrev_tac `LIST_REL (LIST_REL _) masks gss` >>
+         qmatch_asmsub_abbrev_tac `LIST_REL (\m es. LENGTH m = LENGTH es) masks events` >>
+         `MAP LENGTH masks = MAP LENGTH gss` by
+           (simp[MAP_EQ_EVERY2] >> conj_tac
+            >- metis_tac[LIST_REL_LENGTH] >>
+            irule LIST_REL_mono >>
+            qexists_tac `LIST_REL (\slot w. slot = NONE \/ slot = SOME w)` >>
+            simp[] >> metis_tac[LIST_REL_LENGTH]) >>
+         `MAP LENGTH masks = MAP LENGTH events` by
+           (simp[MAP_EQ_EVERY2] >> metis_tac[LIST_REL_LENGTH]) >>
+         `MAP LENGTH (TAKE (LENGTH pre) gss) =
+          MAP LENGTH (TAKE (LENGTH pre) events)` by
+           (pure_rewrite_tac[MAP_TAKE] >> AP_TERM_TAC >>
+            qpat_x_assum `MAP LENGTH masks = MAP LENGTH gss`
+              (fn th => rewrite_tac[GSYM th]) >>
+            qpat_x_assum `MAP LENGTH masks = MAP LENGTH events`
+              (fn th => rewrite_tac[th])) >>
+         qpat_x_assum `_ = FLAT (TAKE (LENGTH pre) events)`
+           (mp_tac o Q.AP_TERM `LENGTH`) >>
+         simp[rich_listTheory.LENGTH_FLAT]) >>
+      `!rs. ?a. R fuel C pre (s with vs_gas_readings := rs) = OK a` by
+        (gen_tac >> simp[Abbr `R`] >>
+         irule invoke_partner_prefix_total >> conj_tac
+         >- (qexists_tac `y` >> simp[] >> fs[EVERY_MEM]) >>
+         qexistsl_tac [`bb`, `fn`, `(y::post) ++ suffix`] >> simp[] >>
+         irule dftRunRelTheory.dft_remaining_inv_gas_variant >>
+         qexists_tac `s` >> simp[] >> metis_tac[APPEND_ASSOC]) >>
+      `EVERY (\x. dft_gas_swap_pair x y /\ inst_wf x /\
+         dftGasInvCallPartner$inv_partner_inputs x s
+           (u with vs_inst_idx := SUC s.vs_inst_idx)) pre` by
+        (simp[EVERY_MEM] >> gen_tac >> disch_tac >>
+         qpat_assum `EVERY (\x. dft_gas_swap_pair x y /\ inst_wf x /\ inst_wf y) pre`
+           (mp_tac o SRULE [EVERY_MEM]) >>
+         disch_then (drule_then strip_assume_tac) >>
+         qpat_assum `EVERY (\x. dftGasInvCallPartner$inv_partner_inputs x s u) pre`
+           (mp_tac o SRULE [EVERY_MEM]) >>
+         disch_then drule >>
+         simp[dftGasInvCallPartnerTheory.inv_partner_inputs_def] >>
+         rpt strip_tac >> Cases_on `op` >>
+         fs[eval_operand_def, lookup_var_def]) >>
+      qpat_assum `Abbrev (P = _)` (fn def =>
+        qpat_assum `P (y::rest) s (mh::mt) (eh::et)`
+          (mp_tac o cj 5 o BETA_RULE o PURE_REWRITE_RULE
+            [REWRITE_RULE [markerTheory.Abbrev_def] def])) >>
+      disch_then (qspecl_then [`0`, `s`] mp_tac) >>
+      pure_rewrite_tac[EL, HD] >>
+      qmatch_goalsub_abbrev_tac `_ = (HP : bytes32 list -> venom_state -> bool)` >>
+      BasicProvers.LET_ELIM_TAC >>
+      qpat_x_assum `0 < LENGTH (y::rest) /\ _ ==> _` mp_tac >>
+      (impl_tac >- simp[Abbr `R`]) >> strip_tac >>
+      qpat_assum `Abbrev (T' = _)` (fn def =>
+        pure_rewrite_tac [REWRITE_RULE [markerTheory.Abbrev_def] def]) >>
+      pure_rewrite_tac [markerTheory.Abbrev_def] >>
+      BETA_TAC >>
+      asm_rewrite_tac [occurrence_extract_packets] >>
+      qmatch_goalsub_abbrev_tac `TAKE (LENGTH pre) rm ++ [mh] ++ DROP (LENGTH pre) rm` >>
+      qmatch_goalsub_abbrev_tac `TAKE (LENGTH pre) re ++ [eh] ++ DROP (LENGTH pre) re` >>
+      `LENGTH rm = LENGTH pre + LENGTH post /\
+       LENGTH re = LENGTH pre + LENGTH post` by
+        (qpat_assum `pre ++ post = _` (mp_tac o Q.AP_TERM `LENGTH`) >>
+         simp[Abbr `rm`, Abbr `re`]) >>
+      `LENGTH mh = LENGTH eh` by
+        (qpat_assum `Abbrev (P = _)` (fn def =>
+          qpat_assum `P (y::rest) s (mh::mt) (eh::et)`
+            (mp_tac o cj 3 o SIMP_RULE bool_ss
+              [REWRITE_RULE [markerTheory.Abbrev_def] def])) >>
+         simp[]) >>
+      ntac 2 gen_tac >> disch_then SUBST1_TAC >> disch_then SUBST1_TAC >>
+      conj_tac >- simp[] >>
+      conj_tac >- simp[] >>
+      conj_tac
+      >- (irule EVERY2_APPEND_suff >> conj_tac
+          >- simp[EVERY2_TAKE] >>
+          simp[EVERY2_DROP]) >>
+      pure_rewrite_tac[GSYM LEFT_EXISTS_AND_THM] >>
+          qpat_assum `Abbrev (P = _)` (fn def =>
+            qpat_assum `P (y::rest) s (mh::mt) (eh::et)`
+              (mp_tac o cj 8 o BETA_RULE o PURE_REWRITE_RULE
+                [REWRITE_RULE [markerTheory.Abbrev_def] def])) >>
+          disch_then (qspec_then `LENGTH (y::rest)` mp_tac) >>
+          `LENGTH (padM rest (u with vs_inst_idx := SUC s.vs_inst_idx) mt) = LENGTH rest /\
+           LENGTH (padE rest (u with vs_inst_idx := SUC s.vs_inst_idx) et) = LENGTH rest` by
+            simp[Abbr `padM`, Abbr `padE`] >>
+          simp[TAKE_LENGTH_TOO_LONG] >>
+          disch_then (qx_choose_then `unused` assume_tac) >>
+          qpat_assum `Abbrev (S' = _)` (fn def =>
+            qpat_assum `S' (y::rest) s _ _ unused`
+              (strip_assume_tac o BETA_RULE o PURE_REWRITE_RULE
+                [REWRITE_RULE [markerTheory.Abbrev_def] def])) >>
+          `PERM rm (padM rest (u with vs_inst_idx := SUC s.vs_inst_idx) mt)` by
+            (simp[Abbr `rm`] >>
+             `GENLIST (\j. EL j (padM rest (u with vs_inst_idx := SUC s.vs_inst_idx) mt)) (LENGTH rest) =
+               padM rest (u with vs_inst_idx := SUC s.vs_inst_idx) mt` by
+               simp[LIST_EQ_REWRITE, EL_GENLIST] >>
+             metis_tac[MAP_COUNT_LIST, PERM_MAP]) >>
+          `PERM (TAKE (LENGTH pre) rm ++ [mh] ++ DROP (LENGTH pre) rm)
+             (mh::padM rest (u with vs_inst_idx := SUC s.vs_inst_idx) mt)` by
+            (irule PERM_TRANS >> qexists_tac `mh::rm` >> conj_tac
+             >- (pure_rewrite_tac[GSYM APPEND_ASSOC, APPEND, PERM_FUN_APPEND_CONS, TAKE_DROP, PERM_REFL]) >>
+             simp[]) >>
+          drule PERM_FLAT >> simp[] >> disch_tac >>
+          CONV_TAC (HO_REWR_CONV (GSYM LEFT_EXISTS_AND_THM)) >>
+          qexists_tac `unused` >>
+          pure_rewrite_tac[GSYM CONJ_ASSOC] >>
+          conj_tac
+          >- (drule (Q.ISPEC `IS_SOME` PERM_FILTER) >>
+              disch_then (mp_tac o MATCH_MP (Q.ISPEC `THE` PERM_MAP)) >>
+              metis_tac[PERM_TRANS, PERM_APPEND_IFF]) >>
+          conj_tac
+          >- (qx_gen_tac `v` >> disch_tac >>
+              qpat_assum `!v. _ ==> EVERY IS_SOME _ /\ unused = _`
+                (qspec_then `v` mp_tac) >>
+              (impl_tac >- simp[]) >> strip_tac >>
+              qpat_assum `PERM _ (mh ++ FLAT _)`
+                (mp_tac o MATCH_MP (Q.ISPEC `IS_SOME` (GEN_ALL PERM_EVERY))) >>
+              simp[EVERY_APPEND] >> metis_tac[]) >>
+          pure_rewrite_tac[GSYM AND_IMP_INTRO] >>
+          CONV_TAC (DEPTH_CONV (HO_REWR_CONV (GSYM FORALL_AND_THM))) >>
+          CONV_TAC (DEPTH_CONV (HO_REWR_CONV RIGHT_FORALL_IMP_THM)) >>
+          pure_rewrite_tac[GSYM IMP_CONJ_THM] >>
+          qx_gen_tac `gss` >> disch_tac >>
+          CONV_TAC (DEPTH_CONV (HO_REWR_CONV (GSYM FORALL_AND_THM))) >>
+          qx_gen_tac `tail` >>
+          qpat_x_assum `LIST_REL _ (TAKE (LENGTH pre) rm ++ [mh] ++ DROP (LENGTH pre) rm) gss` mp_tac >>
+          pure_rewrite_tac[GSYM APPEND_ASSOC] >>
+          pure_once_rewrite_tac[LIST_REL_SPLIT1] >>
+          disch_then (qx_choose_then `gp` (qx_choose_then `gr` strip_assume_tac)) >>
+          Cases_on `gr` >> fs[] >> rename1 `LIST_REL _ mh gh` >>
+          rename1 `LIST_REL _ (DROP (LENGTH pre) rm) gt` >>
+          `LIST_REL (LIST_REL (\slot w. slot = NONE \/ slot = SOME w)) rm (gp ++ gt)` by
+            (qpat_assum `LIST_REL _ (TAKE (LENGTH pre) rm) gp` mp_tac >>
+             qpat_assum `LIST_REL _ (DROP (LENGTH pre) rm) gt` mp_tac >>
+             POP_ASSUM_LIST (K all_tac) >>
+             metis_tac[LIST_REL_APPEND_suff, TAKE_DROP]) >>
+          `LENGTH gp = LENGTH pre` by
+            (qpat_assum `LIST_REL _ (TAKE (LENGTH pre) rm) gp`
+               (mp_tac o MATCH_MP LIST_REL_LENGTH) >> simp[]) >>
+          `LENGTH (FLAT gp) = LENGTH (FILTER (\i. i.inst_opcode = GAS) pre)` by
+            (qpat_assum `!gss'. LIST_REL _ rm gss' ==> LENGTH _ = _`
+               (qspec_then `gp ++ gt` mp_tac) >>
+             (impl_tac >- asm_rewrite_tac[]) >>
+             qpat_assum `LENGTH gp = LENGTH pre`
+               (fn th => rewrite_tac[GSYM th]) >>
+             simp[TAKE_APPEND]) >>
+          qpat_assum `!rs. ?a. R fuel C pre (s with vs_gas_readings := rs) = OK a`
+            (qspec_then `FLAT gp ++ gh ++ (FLAT gt ++ tail)`
+              (qx_choose_then `a` assume_tac)) >>
+          `EVERY (\x. dft_gas_swap_pair x y /\ inst_wf x) pre` by
+            (fs[EVERY_MEM] >> metis_tac[]) >>
+          qpat_assum `Abbrev (R = _)` (fn def =>
+            qpat_assum `R fuel C pre (s with vs_gas_readings := _) = OK a`
+              (assume_tac o BETA_RULE o PURE_REWRITE_RULE
+                [REWRITE_RULE [markerTheory.Abbrev_def] def, GSYM APPEND_ASSOC])) >>
+          drule_all invoke_partner_prefix_concrete >>
+          disch_then (qx_choose_then `us` strip_assume_tac) >>
+          `EVERY (\q. ~MEM (Var (FST q)) y.inst_operands /\
+             ~MEM (FST q) y.inst_outputs) us` by
+            (qpat_assum `EVERY (\x. dft_gas_swap_pair x y /\ inst_wf x) pre` mp_tac >>
+             qpat_assum `EVERY (\q. MEM (FST q) (FLAT _) /\ _) us` mp_tac >>
+             POP_ASSUM_LIST (K all_tac) >>
+             simp[EVERY_MEM, MEM_FLAT, MEM_MAP,
+               dft_gas_swap_pair_def, venomInstTheory.inst_defs_def,
+               pred_setTheory.DISJOINT_DEF, pred_setTheory.EXTENSION] >>
+             metis_tac[]) >>
+          qpat_assum `!r. HP (u0 ++ r) _ /\ _`
+            (assume_tac o SRULE [TAKE_DROP] o cj 1 o
+              Q.SPEC `DROP (gas_count_step fuel C' y s) s.vs_gas_readings`) >>
+          qpat_assum `Abbrev (HP = _)` (fn def =>
+            qpat_assum `HP _ s`
+              (mp_tac o cj 3 o BETA_RULE o PURE_REWRITE_RULE
+                [REWRITE_RULE [markerTheory.Abbrev_def] def])) >>
+          disch_then (qspecl_then [`gh`, `FLAT gt ++ tail`] mp_tac) >>
+          simp[] >> strip_tac >>
+          drule_all invoke_reached_prefix_observations >>
+          disch_then (qspecl_then [`fuel`, `owner`] strip_assume_tac) >>
+          `gas_events_step fuel C owner y a =
+             gas_events_step fuel C s.vs_current_bb y
+               (s with vs_gas_readings := gh ++ FLAT gt ++ tail)` by
+            (qpat_assum `gas_events_step fuel C owner y a = _` SUBST1_TAC >>
+             `s with <|vs_gas_readings := gh ++ (FLAT gt ++ tail);
+                vs_inst_idx := s.vs_inst_idx + LENGTH pre|> =
+              (s with vs_gas_readings := gh ++ FLAT gt ++ tail) with
+                vs_inst_idx := s.vs_inst_idx + LENGTH pre` by
+               simp[APPEND_ASSOC] >>
+             asm_rewrite_tac[] >>
+             simp[gas_events_invoke_inst_idx, gas_events_step_def]) >>
+          `terminates (step_inst fuel C y a) <=>
+             terminates (step_inst fuel C y
+               (s with vs_gas_readings := gh ++ FLAT gt ++ tail))` by
+            (qpat_assum `terminates (step_inst fuel C y a) <=> _` SUBST1_TAC >>
+             `s with <|vs_gas_readings := gh ++ (FLAT gt ++ tail);
+                vs_inst_idx := s.vs_inst_idx + LENGTH pre|> =
+              (s with vs_gas_readings := gh ++ FLAT gt ++ tail) with
+                vs_inst_idx := s.vs_inst_idx + LENGTH pre` by
+               simp[APPEND_ASSOC] >>
+             asm_rewrite_tac[] >>
+             simp[analysisSimProofsBaseTheory.invoke_step_inst_idx_OK_only] >>
+             Cases_on `step_inst fuel C y
+               (s with vs_gas_readings := gh ++ FLAT gt ++ tail)` >>
+             simp[passSimulationDefsTheory.terminates_def]) >>
+          qpat_assum `Abbrev (T' = _)` (fn def =>
+            qpat_assum `T' rest _ _ _ _ _`
+              (mp_tac o cj 4 o SIMP_RULE bool_ss
+                [REWRITE_RULE [markerTheory.Abbrev_def] def,
+                 markerTheory.Abbrev_def])) >>
+          disch_then (qx_choose_then `unusedR` strip_assume_tac) >>
+          qpat_assum `!gss tail. LIST_REL _ _ gss ==> _`
+            (qspecl_then [`gp ++ gt`, `tail`] mp_tac) >>
+          (impl_tac >- simp[Abbr `rm`]) >> strip_tac >>
+          `EVERY (\i. ~is_terminator i.inst_opcode) pre` by
+            (fs[EVERY_MEM] >> metis_tac[]) >>
+          `!k u'. k <= LENGTH pre /\
+            R fuel C (TAKE k (pre ++ y::post))
+              (s with vs_gas_readings := FLAT gp ++ (gh ++ (FLAT gt ++ tail))) = OK u' ==>
+            E C (TAKE k (pre ++ y::post))
+              (s with vs_gas_readings := FLAT gp ++ (gh ++ (FLAT gt ++ tail))) =
+              FLAT (TAKE k (TAKE (LENGTH pre) re ++ [eh] ++ DROP (LENGTH pre) re)) /\
+            u'.vs_gas_readings = FLAT (DROP k (gp ++ [gh] ++ gt)) ++ tail` by
+            (rpt gen_tac >> strip_tac >>
+             `?z. R fuel C (TAKE k pre)
+               (u with <|vs_inst_idx := SUC s.vs_inst_idx;
+                 vs_gas_readings := FLAT (gp ++ gt) ++ tail|>) = OK z` by
+               (qpat_assum `!rs. ?a. R fuel C pre (u with <|vs_inst_idx := _; vs_gas_readings := rs|>) = OK a`
+                  (qspec_then `FLAT (gp ++ gt) ++ tail` (qx_choose_then `z0` mp_tac)) >>
+                qpat_assum `Abbrev (R = _)` (fn def =>
+                  pure_rewrite_tac [REWRITE_RULE [markerTheory.Abbrev_def] def]) >>
+                BETA_TAC >>
+                `pre = TAKE k pre ++ DROP k pre` by simp[] >>
+                pop_assum (fn th => once_rewrite_tac[th]) >>
+                pure_rewrite_tac[FOLDR_APPEND] >>
+                `EVERY (\i. ~is_terminator i.inst_opcode) (TAKE k pre)` by
+                  (irule EVERY_TAKE >> simp[]) >>
+                qpat_assum `EVERY _ (TAKE k pre)` (fn th =>
+                  simp_tac (srw_ss()) [Once dftRunRelTheory.dft_exec_prefix_continue, th]) >>
+                Cases_on `R fuel C (TAKE k pre)
+                  (u with <|vs_inst_idx := SUC s.vs_inst_idx;
+                    vs_gas_readings := FLAT gp ++ FLAT gt ++ tail|>)` >> simp[]) >>
+             qpat_assum `!gss' tail k u'. _ ==> E C _ _ = _ /\ _`
+               (qspecl_then [`gp ++ gt`, `tail`, `k`, `z`] mp_tac) >>
+             (impl_tac >-
+               (`k - LENGTH pre = 0` by decide_tac >>
+                pure_rewrite_tac[TAKE_APPEND] >>
+                qpat_assum `k - LENGTH pre = 0` (fn th => pure_rewrite_tac[th]) >>
+                simp_tac (srw_ss()) [TAKE_0, APPEND_NIL] >>
+                conj_tac >- first_assum ACCEPT_TAC >>
+                conj_tac >- decide_tac >>
+                qpat_assum `R fuel C (TAKE k pre) _ = OK z`
+                  (fn th => ACCEPT_TAC (PURE_REWRITE_RULE [FLAT_APPEND] th)))) >> strip_tac >>
+             `k - LENGTH pre = 0` by decide_tac >>
+             `EVERY (\i. i.inst_opcode <> INVOKE /\ ~is_terminator i.inst_opcode)
+               (TAKE k pre)` by (irule EVERY_TAKE >> simp[]) >>
+             `R fuel C (TAKE k pre)
+               (s with vs_gas_readings := FLAT gp ++ (gh ++ FLAT gt ++ tail)) = OK u'` by
+               (qpat_assum `R fuel C (TAKE k (pre ++ y::post)) _ = OK u'` mp_tac >>
+                pure_rewrite_tac[TAKE_APPEND] >>
+                qpat_assum `k - LENGTH pre = 0` (fn th => pure_rewrite_tac[th]) >>
+                simp_tac (srw_ss()) [TAKE_0, APPEND_NIL, APPEND_ASSOC]) >>
+             `!st v. R fuel C (TAKE k pre) st = OK v ==>
+               E C (TAKE k pre) st =
+               MAP (\i. (owner,i.inst_id)) (FILTER (\i. i.inst_opcode = GAS) (TAKE k pre))` by
+               (qx_gen_tac `st` >> qx_gen_tac `z0` >> strip_tac >>
+                qpat_assum `R fuel C (TAKE k pre) st = OK z0` mp_tac >>
+                qpat_assum `Abbrev (R = _)` (fn def =>
+                  pure_rewrite_tac [REWRITE_RULE [markerTheory.Abbrev_def] def]) >>
+                BETA_TAC >> strip_tac >>
+                drule_all noninvoke_prefix_events_exact >>
+                disch_then (qspecl_then [`owner`, `st.vs_current_bb`, `[]`] mp_tac) >>
+                qpat_assum `Abbrev (E = _)` (fn def =>
+                  pure_rewrite_tac [REWRITE_RULE [markerTheory.Abbrev_def] def]) >>
+                BETA_TAC >> simp[Once gas_events_block_def,
+                  venomInstTheory.get_instruction_def]) >>
+             conj_tac
+             >- (qpat_assum `E C (TAKE k (pre ++ post)) _ = _` mp_tac >>
+                 qpat_assum `k - LENGTH pre = 0` mp_tac >>
+                 qpat_assum `k <= LENGTH pre` mp_tac >>
+                 qpat_assum `!st v. R fuel C (TAKE k pre) st = OK v ==> _` mp_tac >>
+                 qpat_assum `R fuel C (TAKE k pre) _ = OK z` mp_tac >>
+                 qpat_assum `R fuel C (TAKE k pre) _ = OK u'` mp_tac >>
+                 qpat_assum `LENGTH re = _` mp_tac >>
+                 POP_ASSUM_LIST (K all_tac) >> rpt strip_tac >>
+                 `k - (LENGTH pre + 1) = 0 /\
+                  LENGTH (TAKE (LENGTH pre) re) = LENGTH pre /\
+                  MIN k (LENGTH pre) = k` by simp[arithmeticTheory.MIN_ALT] >>
+                 pure_rewrite_tac[TAKE_APPEND, TAKE_TAKE] >>
+                 simp_tac (srw_ss()) [LENGTH_APPEND, LENGTH, FLAT_APPEND, FLAT] >>
+                 pure_asm_rewrite_tac[TAKE_TAKE_MIN, TAKE_0, APPEND_NIL, FLAT] >>
+                 qpat_assum `E C (TAKE k (pre ++ post)) _ = _` mp_tac >>
+                 pure_rewrite_tac[TAKE_APPEND] >>
+                 pure_asm_rewrite_tac[TAKE_0, APPEND_NIL] >>
+                 RULE_ASSUM_TAC (PURE_REWRITE_RULE [FLAT_APPEND, APPEND_ASSOC]) >>
+                 pure_rewrite_tac[FLAT_APPEND, APPEND_ASSOC] >>
+                 metis_tac[]) >>
+             `LENGTH (FLAT gp) = LENGTH (FILTER (\i. i.inst_opcode = GAS) pre)` by
+               (qpat_assum `!gss'. LIST_REL _ rm gss' ==> LENGTH _ = _`
+                  (qspec_then `gp ++ gt` mp_tac) >> simp[TAKE_APPEND]) >>
+             `!st rs v. R fuel C (TAKE k pre)
+               (st with vs_gas_readings := FLAT gp ++ rs) = OK v ==>
+               v.vs_gas_readings =
+               DROP (LENGTH (FILTER (\i. i.inst_opcode = GAS) (TAKE k pre))) (FLAT gp) ++ rs` by
+               (rpt gen_tac >>
+                qpat_assum `Abbrev (R = _)` (fn def =>
+                  pure_rewrite_tac [REWRITE_RULE [markerTheory.Abbrev_def] def]) >>
+                BETA_TAC >> strip_tac >>
+                drule_at (Pos last) invoke_partner_cut_observations >>
+                disch_then (qspec_then `y` mp_tac) >>
+                (impl_tac >- fs[EVERY_MEM]) >> simp[]) >>
+             `u'.vs_gas_readings =
+               DROP (LENGTH (FILTER (\i. i.inst_opcode = GAS) (TAKE k pre))) (FLAT gp) ++
+               (gh ++ FLAT gt ++ tail)` by
+               (qpat_assum `!st rs v. R fuel C (TAKE k pre) _ = OK v ==> _`
+                  (qspecl_then [`s`, `gh ++ FLAT gt ++ tail`, `u'`] mp_tac) >> simp[]) >>
+             `z.vs_gas_readings =
+               DROP (LENGTH (FILTER (\i. i.inst_opcode = GAS) (TAKE k pre))) (FLAT gp) ++
+               (FLAT gt ++ tail)` by
+               (qpat_assum `!st rs v. R fuel C (TAKE k pre) _ = OK v ==> _`
+                  (qspecl_then [`u with vs_inst_idx := SUC s.vs_inst_idx`, `FLAT gt ++ tail`, `z`] mp_tac) >>
+                qpat_assum `R fuel C (TAKE k pre) _ = OK z` mp_tac >>
+                POP_ASSUM_LIST (K all_tac) >> simp[FLAT_APPEND, APPEND_ASSOC]) >>
+             qpat_assum `u'.vs_gas_readings = _` mp_tac >>
+             qpat_assum `z.vs_gas_readings = _ ++ (FLAT gt ++ tail)` mp_tac >>
+             qpat_assum `z.vs_gas_readings = FLAT _ ++ tail` mp_tac >>
+             qpat_assum `LENGTH gp = LENGTH pre` mp_tac >>
+             qpat_assum `k - LENGTH pre = 0` mp_tac >>
+             POP_ASSUM_LIST (K all_tac) >> rpt strip_tac >>
+             fs[DROP_APPEND, FLAT_APPEND, APPEND_ASSOC] >>
+             `k - LENGTH gp = 0 /\ k - LENGTH pre = 0 /\
+              k - (LENGTH pre + 1) = 0` by decide_tac >>
+             pure_asm_rewrite_tac[DROP_0, FLAT, APPEND_NIL] >>
+             gvs[APPEND_ASSOC]) >>
+          Cases_on `?v. step_inst fuel C y a = OK v`
+          >- (pop_assum (qx_choose_then `v` assume_tac) >>
+              `terminates (step_inst fuel C y a)` by
+                (qpat_assum `step_inst fuel C y a = OK v` SUBST1_TAC >>
+                 simp[passSimulationDefsTheory.terminates_def]) >>
+              qpat_assum `(?j. terminates (step_inst j C y _)) ==> _` mp_tac >>
+              (impl_tac >- metis_tac[]) >> strip_tac >>
+              `step_inst fuel C y
+                 (s with vs_gas_readings := gh ++ (FLAT gt ++ tail)) =
+                 OK (u with vs_gas_readings := FLAT gt ++ tail)` by
+                asm_rewrite_tac[APPEND_ASSOC] >>
+              drule_all invoke_extract_shared_successor >>
+              disch_then (qx_choose_then `b` strip_assume_tac) >>
+              `R fuel C pre
+                 (u with <|vs_inst_idx := SUC s.vs_inst_idx;
+                   vs_gas_readings := FLAT gp ++ (FLAT gt ++ tail)|>) = OK b /\
+               R fuel C (pre ++ [y])
+                 (s with vs_gas_readings := FLAT gp ++ (gh ++ (FLAT gt ++ tail))) = OK b` by
+                (qpat_assum `Abbrev (R = _)` (fn def =>
+                   pure_rewrite_tac [REWRITE_RULE [markerTheory.Abbrev_def] def]) >>
+                 BETA_TAC >> asm_rewrite_tac[]) >>
+              `b = v with vs_inst_idx := SUC a.vs_inst_idx` by
+                (qpat_assum `FOLDR _ OK (pre ++ [y]) _ = OK b` mp_tac >>
+                 pure_rewrite_tac[FOLDR_APPEND] >>
+                 qpat_assum `EVERY (\i. ~is_terminator i.inst_opcode) pre`
+                   (fn th => simp_tac (srw_ss())
+                     [Once dftRunRelTheory.dft_exec_prefix_continue, th]) >>
+                 pure_rewrite_tac[GSYM APPEND_ASSOC] >>
+                 qpat_assum `FOLDR _ OK pre _ = OK a`
+                   (fn th => pure_rewrite_tac[th]) >>
+                 simp_tac (srw_ss()) [FOLDR, dftIndexedExecTheory.dft_exec_cons_def] >>
+                 qpat_assum `step_inst fuel C y a = OK v`
+                   (fn th => pure_rewrite_tac[th]) >>
+                 simp[venomInstTheory.is_terminator_def]) >>
+              `!zs. R fuel C (pre ++ zs)
+                 (u with <|vs_inst_idx := SUC s.vs_inst_idx;
+                   vs_gas_readings := FLAT gp ++ (FLAT gt ++ tail)|>) =
+               R fuel C zs b` by
+                (gen_tac >> qpat_assum `Abbrev (R = _)` (fn def =>
+                   pure_rewrite_tac [REWRITE_RULE [markerTheory.Abbrev_def] def]) >>
+                 BETA_TAC >> pure_rewrite_tac[FOLDR_APPEND] >>
+                 qpat_assum `EVERY (\i. ~is_terminator i.inst_opcode) pre`
+                   (fn th => simp_tac (srw_ss())
+                     [Once dftRunRelTheory.dft_exec_prefix_continue, th]) >>
+                 pure_rewrite_tac[GSYM APPEND_ASSOC] >>
+                 qpat_assum `FOLDR _ OK pre _ = OK b`
+                   (fn th => simp_tac (srw_ss()) [th])) >>
+              `!zs. R fuel C (pre ++ y::zs)
+                 (s with vs_gas_readings := FLAT gp ++ (gh ++ (FLAT gt ++ tail))) =
+               R fuel C zs b` by
+                (gen_tac >> qpat_assum `Abbrev (R = _)` (fn def =>
+                   pure_rewrite_tac [REWRITE_RULE [markerTheory.Abbrev_def] def]) >>
+                 BETA_TAC >> pure_rewrite_tac[FOLDR_APPEND] >>
+                 qpat_assum `EVERY (\i. ~is_terminator i.inst_opcode) pre`
+                   (fn th => simp_tac (srw_ss())
+                     [Once dftRunRelTheory.dft_exec_prefix_continue, th]) >>
+                 pure_rewrite_tac[GSYM APPEND_ASSOC] >>
+                 qpat_assum `FOLDR _ OK pre _ = OK a`
+                   (fn th => simp_tac (srw_ss()) [th]) >>
+                 simp_tac (srw_ss()) [FOLDR, dftIndexedExecTheory.dft_exec_cons_def] >>
+                 qpat_assum `step_inst fuel C y a = OK v`
+                   (fn th => pure_rewrite_tac[th]) >>
+                 simp[venomInstTheory.is_terminator_def]) >>
+              `!st z xs. FOLDR (dft_exec_cons fuel C) OK pre st = OK z ==>
+                 E C (pre ++ xs) st =
+                 MAP (\i. (owner,i.inst_id)) (FILTER (\i. i.inst_opcode = GAS) pre) ++
+                 E C xs z` by
+                (rpt strip_tac >>
+                 qpat_assum `Abbrev (E = _)` (fn def =>
+                   pure_rewrite_tac [REWRITE_RULE [markerTheory.Abbrev_def] def]) >>
+                 BETA_TAC >>
+                 qpat_assum `FOLDR _ OK pre st = OK z` mp_tac >>
+                 qpat_assum `EVERY (\i. i.inst_opcode <> INVOKE /\ _) pre` mp_tac >>
+                 POP_ASSUM_LIST (K all_tac) >> rpt strip_tac >>
+                 drule_all noninvoke_prefix_events_exact >>
+                 disch_then (qspecl_then [`owner`, `st.vs_current_bb`, `xs`] mp_tac) >>
+                 disch_then (fn th => rewrite_tac[th]) >>
+                 AP_TERM_TAC >> irule gas_events_block_suffix_cong >>
+                 simp[]) >>
+              `!zs. E C (pre ++ zs)
+                 (u with <|vs_inst_idx := SUC s.vs_inst_idx;
+                   vs_gas_readings := FLAT gp ++ (FLAT gt ++ tail)|>) =
+                 FLAT (TAKE (LENGTH pre) re) ++ E C zs b` by
+                (gen_tac >> qpat_assum `!st z xs. _ ==> E C (pre ++ xs) st = _`
+                   (qspecl_then [`u with <|vs_inst_idx := SUC s.vs_inst_idx;
+                     vs_gas_readings := FLAT gp ++ (FLAT gt ++ tail)|>`, `b`, `zs`] mp_tac) >>
+                 (impl_tac >- asm_rewrite_tac[]) >>
+                 disch_then SUBST1_TAC >>
+                 qpat_assum `!gss'. LIST_REL _ rm gss' ==> MAP _ _ = _`
+                   (qspec_then `gp ++ gt` mp_tac) >> simp[]) >>
+              `gas_events_step fuel C owner y a = eh` by
+                (qpat_assum `gas_events_step fuel C owner y a = gas_events_step _ _ s.vs_current_bb _ _`
+                   (fn th => pure_rewrite_tac[th]) >>
+                 qpat_assum `gas_events_step fuel C s.vs_current_bb _ _ = eh` ACCEPT_TAC) >>
+              `MAP (\i. (owner,i.inst_id)) (FILTER (\i. i.inst_opcode = GAS) pre) =
+                 FLAT (TAKE (LENGTH pre) re)` by
+                (qpat_assum `!gss'. LIST_REL _ rm gss' ==> MAP _ _ = _`
+                   (qspec_then `gp ++ gt` mp_tac) >> simp[]) >>
+              `!zs. E C (pre ++ y::zs)
+                 (s with vs_gas_readings := FLAT gp ++ (gh ++ (FLAT gt ++ tail))) =
+                 FLAT (TAKE (LENGTH pre) re) ++ eh ++ E C zs b` by
+                (gen_tac >> qpat_assum `Abbrev (E = _)` (fn def =>
+                   pure_rewrite_tac [REWRITE_RULE [markerTheory.Abbrev_def] def]) >>
+                 BETA_TAC >>
+                 qpat_assum `FOLDR _ OK pre _ = OK a` mp_tac >>
+                 qpat_assum `EVERY (\i. i.inst_opcode <> INVOKE /\ _) pre` mp_tac >>
+                 qpat_assum `step_inst fuel C y a = OK v` mp_tac >>
+                 qpat_assum `b = v with vs_inst_idx := SUC a.vs_inst_idx` mp_tac >>
+                 qpat_assum `gas_events_step fuel C owner y a = eh` mp_tac >>
+                 qpat_assum `MAP _ (FILTER _ pre) = FLAT (TAKE _ re)` mp_tac >>
+                 qpat_assum `y.inst_opcode = INVOKE` mp_tac >>
+                 POP_ASSUM_LIST (K all_tac) >> rpt strip_tac >>
+                 `~is_terminator y.inst_opcode` by simp[venomInstTheory.is_terminator_def] >>
+                 drule_all noninvoke_head_events_splice >>
+                 disch_then (qspecl_then [`zs`, `owner`] mp_tac) >>
+                 simp[]) >>
+              conj_tac
+              >- (conj_tac
+              >- (qexists_tac `extra'` >>
+                  qpat_assum `FLAT (MAP _ _) = E C (pre ++ post) _ ++ extra'` mp_tac >>
+                  qpat_assum `!zs. E C (pre ++ zs) _ = FLAT (TAKE _ re) ++ E C zs b` (qspec_then `post` mp_tac) >>
+                  qpat_assum `!zs. E C (pre ++ y::zs) _ = _` (qspec_then `post` mp_tac) >>
+                  qpat_assum `Abbrev (re = _)` mp_tac >>
+                  POP_ASSUM_LIST (K all_tac) >>
+                  pure_rewrite_tac [markerTheory.Abbrev_def, FLAT_APPEND, APPEND_ASSOC] >>
+                  simp_tac (srw_ss()) [] >>
+                  rpt strip_tac >>
+                  `FLAT re = FLAT (TAKE (LENGTH pre) re) ++ FLAT (DROP (LENGTH pre) re)` by
+                    metis_tac[TAKE_DROP, FLAT_APPEND] >>
+                  gvs[] >> metis_tac[APPEND_ASSOC, APPEND_11]) >>
+              strip_tac >>
+              `?j. terminates (R j C post b)` by
+                (qexists_tac `j` >>
+                 qpat_assum `Abbrev (R = _)` (fn def =>
+                   RULE_ASSUM_TAC (BETA_RULE o PURE_REWRITE_RULE
+                     [REWRITE_RULE [markerTheory.Abbrev_def] def]) >>
+                   pure_rewrite_tac [REWRITE_RULE [markerTheory.Abbrev_def] def]) >>
+                 BETA_TAC >>
+                 qpat_assum `terminates (FOLDR _ OK (pre ++ y::post) _)` mp_tac >>
+                 qpat_assum `FOLDR _ OK (pre ++ [y]) _ = OK b` mp_tac >>
+                 qpat_assum `EVERY (\i. ~is_terminator i.inst_opcode) pre` mp_tac >>
+                 qpat_assum `y.inst_opcode = INVOKE` mp_tac >>
+                 POP_ASSUM_LIST (K all_tac) >> rpt strip_tac >>
+                 irule prefix_exact_cut_terminates >>
+                 qexistsl_tac [`fuel`, `pre ++ [y]`,
+                   `s with vs_gas_readings := FLAT gp ++ (gh ++ (FLAT gt ++ tail))`] >>
+                 pure_rewrite_tac[GSYM APPEND_ASSOC, APPEND] >>
+                 RULE_ASSUM_TAC (PURE_REWRITE_RULE [GSYM APPEND_ASSOC]) >>
+                 simp[EVERY_APPEND, venomInstTheory.is_terminator_def]) >>
+              `!n. R n C pre = R fuel C pre` by
+                (gen_tac >>
+                 qpat_assum `Abbrev (R = _)` (fn def =>
+                   pure_rewrite_tac [REWRITE_RULE [markerTheory.Abbrev_def] def]) >>
+                 BETA_TAC >> simp_tac bool_ss [FUN_EQ_THM] >> gen_tac >>
+                 AP_THM_TAC >> irule FOLDR_CONG >> simp_tac bool_ss [] >>
+                 rpt strip_tac >>
+                 `x.inst_opcode <> INVOKE` by fs[EVERY_MEM] >>
+                 simp[dftIndexedExecTheory.dft_exec_cons_def,
+                   FUN_EQ_THM, venomExecSemanticsTheory.step_inst_def]) >>
+              `?n. terminates (R n C (pre ++ post)
+                 (u with <|vs_inst_idx := SUC s.vs_inst_idx;
+                   vs_gas_readings := FLAT (gp ++ gt) ++ tail|>))` by
+                (qexists_tac `j'` >>
+                 qpat_assum `!n. R n C pre = R fuel C pre` (qspec_then `j'` mp_tac) >>
+                 qpat_assum `terminates (R j' C post b)` mp_tac >>
+                 qpat_assum `R fuel C pre _ = OK b` mp_tac >>
+                 qpat_assum `EVERY (\i. ~is_terminator i.inst_opcode) pre` mp_tac >>
+                 qpat_assum `Abbrev (R = _)` (fn def =>
+                   RULE_ASSUM_TAC (BETA_RULE o PURE_REWRITE_RULE
+                     [REWRITE_RULE [markerTheory.Abbrev_def] def]) >>
+                   pure_rewrite_tac [REWRITE_RULE [markerTheory.Abbrev_def] def]) >>
+                 POP_ASSUM_LIST (K all_tac) >> BETA_TAC >> rpt strip_tac >>
+                 pure_rewrite_tac[FOLDR_APPEND] >>
+                 qpat_assum `EVERY (\i. ~is_terminator i.inst_opcode) pre`
+                   (fn th => simp_tac (srw_ss())
+                     [Once dftRunRelTheory.dft_exec_prefix_continue, th]) >>
+                 pure_rewrite_tac[GSYM APPEND_ASSOC] >>
+                 RULE_ASSUM_TAC (BETA_RULE o PURE_REWRITE_RULE [FUN_EQ_THM]) >>
+                 gvs[FLAT_APPEND]) >>
+              qpat_x_assum `(?j. terminates (R j C (pre ++ post) _)) ==> _` mp_tac >>
+              (impl_tac >- (qexists_tac `n` >>
+                qpat_assum `terminates (R n C (pre ++ post) _)` mp_tac >>
+                POP_ASSUM_LIST (K all_tac) >> simp[])) >>
+              strip_tac >>
+              `R fuel C' (y::rest) s =
+                 R fuel C' rest (u with vs_inst_idx := SUC s.vs_inst_idx)` by
+                (qpat_assum `Abbrev (R = _)` (fn def =>
+                   pure_rewrite_tac [REWRITE_RULE [markerTheory.Abbrev_def] def]) >>
+                 BETA_TAC >>
+                 simp_tac (srw_ss()) [FOLDR, dftIndexedExecTheory.dft_exec_cons_def] >>
+                 qpat_assum `step_inst fuel C' y s = OK u`
+                   (fn th => pure_rewrite_tac[th]) >>
+                 simp[venomInstTheory.is_terminator_def]) >>
+              qpat_assum `R fuel C' (y::rest) s = _` mp_tac >>
+              qpat_assum `terminates (R fuel C (pre ++ post) _)` mp_tac >>
+              qpat_assum `dft_res_rel (restore_result [] (R fuel C (pre ++ post) _)) _` mp_tac >>
+              qpat_assum `(_ \/ _) ==> E C (pre ++ post) _ = _ /\ _` mp_tac >>
+              qpat_assum `!zs. R fuel C (pre ++ zs) _ = R fuel C zs b` (qspec_then `post` mp_tac) >>
+              qpat_assum `!zs. R fuel C (pre ++ y::zs) _ = R fuel C zs b` (qspec_then `post` mp_tac) >>
+              qpat_assum `!zs. E C (pre ++ zs) _ = FLAT (TAKE _ re) ++ E C zs b` (qspec_then `post` mp_tac) >>
+              qpat_assum `!zs. E C (pre ++ y::zs) _ = _` (qspec_then `post` mp_tac) >>
+              qpat_assum `Abbrev (re = _)` mp_tac >>
+              POP_ASSUM_LIST (K all_tac) >>
+              pure_rewrite_tac[markerTheory.Abbrev_def, FLAT_APPEND, APPEND_ASSOC, APPEND] >>
+              simp_tac (srw_ss()) [] >> rpt strip_tac >>
+              `FLAT re = FLAT (TAKE (LENGTH pre) re) ++ FLAT (DROP (LENGTH pre) re)` by
+                metis_tac[TAKE_DROP, FLAT_APPEND] >>
+              gvs[] >> metis_tac[APPEND_11]) >>
+              conj_tac
+              >- (rpt gen_tac >> strip_tac >> Cases_on `k <= LENGTH pre`
+                  >- (strip_tac >>
+                      qpat_assum `!k u'. k <= LENGTH pre /\ _ ==> _`
+                        (qspecl_then [`k`, `u'`] mp_tac) >>
+                      qpat_assum `k <= LENGTH pre` mp_tac >>
+                      qpat_assum `R fuel C (TAKE k (pre ++ y::post)) _ = OK u'` mp_tac >>
+                      POP_ASSUM_LIST (K all_tac) >>
+                      pure_rewrite_tac[GSYM APPEND_ASSOC, APPEND] >>
+                      metis_tac[]) >>
+                  strip_tac >>
+                  `TAKE k (pre ++ y::post) = pre ++ y::TAKE (k - (LENGTH pre + 1)) post /\
+                   TAKE (k-1) (pre ++ post) = pre ++ TAKE (k - (LENGTH pre + 1)) post` by
+                    (qpat_assum `~(k <= LENGTH pre)` mp_tac >>
+                     POP_ASSUM_LIST (K all_tac) >> strip_tac >>
+                     `LENGTH pre <= k /\ LENGTH pre <= k-1 /\
+                      k - LENGTH pre = SUC (k - (LENGTH pre + 1)) /\
+                      k-1-LENGTH pre = k - (LENGTH pre + 1)` by decide_tac >>
+                     simp[TAKE_APPEND, TAKE_def]) >>
+                  `!zs. R fuel C (pre ++ y::zs)
+                     (s with vs_gas_readings := FLAT gp ++ (gh ++ (FLAT gt ++ tail))) =
+                   R fuel C (pre ++ zs)
+                     (u with <|vs_inst_idx := SUC s.vs_inst_idx;
+                       vs_gas_readings := FLAT gp ++ (FLAT gt ++ tail)|>)` by
+                    (gen_tac >>
+                     qpat_assum `!zs. R fuel C (pre ++ zs) _ = R fuel C zs b`
+                       (fn th => pure_rewrite_tac[th]) >>
+                     qpat_assum `!zs. R fuel C (pre ++ y::zs) _ = R fuel C zs b`
+                       (fn th => pure_rewrite_tac[th]) >> REFL_TAC) >>
+                  `R fuel C (TAKE (k-1) (pre ++ post))
+                     (u with <|vs_inst_idx := SUC s.vs_inst_idx;
+                       vs_gas_readings := FLAT (gp ++ gt) ++ tail|>) = OK u'` by
+                    (qpat_assum `R fuel C (TAKE k (pre ++ y::post)) _ = OK u'` mp_tac >>
+                     qpat_assum `!zs. R fuel C (pre ++ y::zs) _ = _` mp_tac >>
+                     qpat_assum `TAKE k (pre ++ y::post) = _` mp_tac >>
+                     qpat_assum `TAKE (k-1) (pre ++ post) = _` mp_tac >>
+                     POP_ASSUM_LIST (K all_tac) >> rpt strip_tac >>
+                     RULE_ASSUM_TAC (PURE_REWRITE_RULE [APPEND_ASSOC]) >>
+                     pure_asm_rewrite_tac[FLAT_APPEND, APPEND_ASSOC] >>
+                     metis_tac[]) >>
+                  qpat_assum `!gss' tail k u'. _ ==> E C _ _ = _ /\ _`
+                    (qspecl_then [`gp ++ gt`, `tail`, `k-1`, `u'`] mp_tac) >>
+                  (impl_tac >- (conj_tac >- first_assum ACCEPT_TAC >>
+                    conj_tac >- fs[LENGTH_APPEND] >> first_assum ACCEPT_TAC)) >>
+                  strip_tac >> reverse conj_tac
+                  >- (qpat_assum `u'.vs_gas_readings = FLAT (DROP _ _) ++ tail` mp_tac >>
+                      qpat_assum `LENGTH gp = LENGTH pre` mp_tac >>
+                      qpat_assum `~(k <= LENGTH pre)` mp_tac >>
+                      POP_ASSUM_LIST (K all_tac) >> rpt strip_tac >>
+                      `LENGTH gp <= k /\ LENGTH gp <= k-1 /\
+                       k - LENGTH gp = SUC (k - (LENGTH gp + 1)) /\
+                       k-1-LENGTH gp = k - (LENGTH gp + 1)` by decide_tac >>
+                      pure_rewrite_tac[DROP_APPEND, LENGTH_APPEND, LENGTH] >>
+                      pure_asm_rewrite_tac[DROP_def, APPEND_NIL] >>
+                      simp[FLAT_APPEND, FLAT, APPEND_ASSOC, DROP_APPEND,
+                        DROP_LENGTH_TOO_LONG]) >>
+                  qpat_assum `!zs. E C (pre ++ zs) _ = _`
+                    (qspec_then `TAKE (k - (LENGTH pre + 1)) post` mp_tac) >>
+                  qpat_assum `!zs. E C (pre ++ y::zs) _ = _`
+                    (qspec_then `TAKE (k - (LENGTH pre + 1)) post` mp_tac) >>
+                  qpat_assum `E C (TAKE (k-1) (pre ++ post)) _ = _` mp_tac >>
+                  qpat_assum `TAKE k (pre ++ y::post) = _` mp_tac >>
+                  qpat_assum `TAKE (k-1) (pre ++ post) = _` mp_tac >>
+                  qpat_assum `LENGTH re = _` mp_tac >>
+                  qpat_assum `k <= _` mp_tac >>
+                  qpat_assum `~(k <= LENGTH pre)` mp_tac >>
+                  POP_ASSUM_LIST (K all_tac) >> rpt strip_tac >>
+                  RULE_ASSUM_TAC (PURE_REWRITE_RULE [FLAT_APPEND, APPEND_ASSOC]) >>
+                  pure_rewrite_tac[GSYM APPEND_ASSOC, APPEND] >>
+                  pure_asm_rewrite_tac[APPEND_ASSOC] >>
+                  `LENGTH (TAKE (LENGTH pre) re) = LENGTH pre /\
+                   LENGTH pre <= k /\ LENGTH pre <= k-1 /\
+                   k - LENGTH pre = SUC (k - (LENGTH pre + 1)) /\
+                   k-1-LENGTH pre = k - (LENGTH pre + 1)` by simp[] >>
+                  `TAKE (k-1) re = TAKE (LENGTH pre) re ++
+                     TAKE (k - (LENGTH pre + 1)) (DROP (LENGTH pre) re)` by
+                    (`re = TAKE (LENGTH pre) re ++ DROP (LENGTH pre) re` by simp[] >>
+                     pop_assum (fn th => GEN_REWRITE_TAC (LAND_CONV o RAND_CONV) empty_rewrites [th]) >>
+                     simp[TAKE_APPEND]) >>
+                  `TAKE k (TAKE (LENGTH pre) re) = TAKE (LENGTH pre) re` by
+                    (irule TAKE_LENGTH_TOO_LONG >> simp[]) >>
+                  pure_rewrite_tac[TAKE_APPEND] >>
+                  pure_asm_rewrite_tac[TAKE_LENGTH_ID_rwt, TAKE_def, FLAT_APPEND, FLAT] >>
+                  gvs[Once gas_events_block_def, venomInstTheory.get_instruction_def,
+                    arithmeticTheory.MIN_ALT, TAKE_APPEND, EVERY_MEM, FLAT_APPEND,
+                    APPEND_ASSOC, DROP_APPEND, TAKE_def, LENGTH_APPEND, FLAT,
+                    DROP_LENGTH_TOO_LONG, EVERY_TAKE, noninvoke_prefix_events_exact,
+                    TAKE_LENGTH_TOO_LONG]) >>
+              rpt gen_tac >> strip_tac >> strip_tac >> strip_tac >>
+              Cases_on `k < LENGTH pre`
+              >- (qpat_assum `EVERY (\i. i.inst_opcode <> INVOKE /\ _) pre`
+                    (mp_tac o SRULE [EVERY_EL]) >>
+                  disch_then (qspec_then `k` mp_tac) >>
+                  fs[EL_APPEND_EQN]) >>
+              Cases_on `k = LENGTH pre`
+              >- (qpat_x_assum `!t. R fuel C' _ s <> OK t`
+                    (qspec_then `s` mp_tac) >>
+                  qpat_assum `k = LENGTH pre` mp_tac >>
+                  qpat_assum `Abbrev (R = _)` mp_tac >>
+                  qpat_assum `PERM rho' _` (mp_tac o MATCH_MP PERM_LENGTH) >>
+                  qpat_assum `pre ++ post = _` (mp_tac o Q.AP_TERM `LENGTH`) >>
+                  POP_ASSUM_LIST (K all_tac) >> rpt strip_tac >>
+                  fs[LENGTH_APPEND, LENGTH_MAP, LENGTH_COUNT_LIST] >>
+                  `LENGTH (TAKE (LENGTH pre) rho') = LENGTH pre` by
+                    (irule LENGTH_TAKE >> decide_tac) >>
+                  gvs[EL_APPEND_EQN, Abbr `R`]) >>
+              `LENGTH pre < k /\ k-1 < LENGTH (pre ++ post)` by
+                (simp[LENGTH_APPEND] >> decide_tac) >>
+              `LENGTH (TAKE (LENGTH pre) rho') = LENGTH pre` by
+                (irule LENGTH_TAKE >>
+                 qpat_assum `pre ++ post = _` (mp_tac o Q.AP_TERM `LENGTH`) >>
+                 simp[]) >>
+              `(EL k (MAP SUC (TAKE (LENGTH pre) rho') ++ [0] ++
+                  MAP SUC (DROP (LENGTH pre) rho'))) = SUC (EL (k-1) rho')` by
+                (qpat_assum `LENGTH (TAKE (LENGTH pre) rho') = _` mp_tac >>
+                 qpat_assum `LENGTH pre < k` mp_tac >>
+                 qpat_assum `k < LENGTH pre + SUC (LENGTH post)` mp_tac >>
+                 qpat_assum `pre ++ post = _` (mp_tac o Q.AP_TERM `LENGTH`) >>
+                 POP_ASSUM_LIST (K all_tac) >> rpt strip_tac >>
+                 `k-1 < LENGTH rho' /\ k-(LENGTH pre+1) < LENGTH (DROP (LENGTH pre) rho')` by
+                   (fs[LENGTH_APPEND, LENGTH_MAP, LENGTH_DROP] >> decide_tac) >>
+                 `k - LENGTH pre = SUC (k - (LENGTH pre + 1)) /\
+                  k-1-LENGTH pre = k-(LENGTH pre+1)` by decide_tac >>
+                 simp[EL_APPEND_EQN, EL_MAP, EL_DROP]) >>
+              qpat_assum `Abbrev (T' = _)` (fn def =>
+                qpat_assum `T' rest _ _ _ _ _`
+                  (mp_tac o cj 6 o SIMP_RULE bool_ss
+                    [REWRITE_RULE [markerTheory.Abbrev_def] def,
+                     markerTheory.Abbrev_def])) >>
+              disch_then (qspecl_then [`gp ++ gt`, `tail`, `k-1`] mp_tac) >>
+              (impl_tac >-
+                (conj_tac >- fs[Abbr `rm`] >>
+                 conj_tac >- first_assum ACCEPT_TAC >>
+                 conj_tac
+                 >- (qpat_assum `(EL k (pre ++ y::post)).inst_opcode = INVOKE` mp_tac >>
+                     qpat_assum `LENGTH pre < k` mp_tac >>
+                     POP_ASSUM_LIST (K all_tac) >> rpt strip_tac >>
+                     `k-LENGTH pre = SUC (k-1-LENGTH pre)` by decide_tac >>
+                     fs[EL_APPEND_EQN]) >>
+                 qpat_assum `!t. R fuel C' _ s <> OK t` mp_tac >>
+                 qpat_assum `EL k (MAP SUC _ ++ _ ++ _) = _` mp_tac >>
+                 qpat_assum `step_inst fuel C' y s = OK u` mp_tac >>
+                 qpat_assum `y.inst_opcode = INVOKE` mp_tac >>
+                 qpat_assum `Abbrev (R = _)` mp_tac >>
+                 POP_ASSUM_LIST (K all_tac) >> rpt strip_tac >>
+                 qpat_assum `EL k (MAP SUC _ ++ _ ++ _) = _`
+                   (fn th => RULE_ASSUM_TAC (PURE_REWRITE_RULE [th])) >>
+                 fs[Abbr `R`, TAKE_def, FOLDR, dftIndexedExecTheory.dft_exec_cons_def,
+                    venomInstTheory.is_terminator_def] >>
+                 gvs[venomInstTheory.is_terminator_def])) >>
+              qpat_assum `!zs. R fuel C (pre ++ zs) _ = R fuel C zs b` mp_tac >>
+              qpat_assum `!zs. R fuel C (pre ++ y::zs) _ = R fuel C zs b` mp_tac >>
+              qpat_assum `LENGTH pre < k` mp_tac >>
+              POP_ASSUM_LIST (K all_tac) >> rpt strip_tac >>
+              `k - LENGTH pre = SUC (k - (LENGTH pre + 1)) /\
+               k-1-LENGTH pre = k - (LENGTH pre + 1)` by decide_tac >>
+              qpat_x_assum `!v. R fuel C _ _ <> OK v` mp_tac >>
+              pure_rewrite_tac[TAKE_APPEND] >>
+              pure_asm_rewrite_tac[TAKE_LENGTH_TOO_LONG, TAKE_def, FLAT_APPEND, APPEND_ASSOC] >>
+              gvs[TAKE_APPEND, TAKE_LENGTH_TOO_LONG, TAKE_def, APPEND_ASSOC] >>
+              metis_tac[]) >>
+          `E C (pre ++ y::post)
+             (s with vs_gas_readings := FLAT gp ++ (gh ++ (FLAT gt ++ tail))) =
+             MAP (\i. (owner,i.inst_id)) (FILTER (\i. i.inst_opcode = GAS) pre) ++
+             gas_events_step fuel C owner y a` by
+            (qpat_assum `Abbrev (E = _)` (fn def =>
+               pure_rewrite_tac [REWRITE_RULE [markerTheory.Abbrev_def] def]) >>
+             BETA_TAC >>
+             qpat_assum `FOLDR _ OK pre _ = OK a` mp_tac >>
+             qpat_assum `EVERY (\i. i.inst_opcode <> INVOKE /\ _) pre` mp_tac >>
+             qpat_assum `~?v. step_inst fuel C y a = OK v` mp_tac >>
+             POP_ASSUM_LIST (K all_tac) >> rpt strip_tac >>
+             drule_all noninvoke_prefix_events_exact >>
+             disch_then (qspecl_then [`owner`, `s.vs_current_bb`, `y::post`] mp_tac) >>
+             disch_then (mp_tac o SRULE []) >>
+             simp_tac (srw_ss()) [] >> disch_then SUBST1_TAC >>
+             simp[Once gas_events_block_def, venomInstTheory.get_instruction_def,
+               LENGTH_REPLICATE, EL_APPEND_EQN] >>
+             Cases_on `step_inst fuel C y a` >> gvs[]) >>
+          conj_tac
+          >- (conj_tac
+          >- (qexists_tac `extra ++ FLAT (DROP (LENGTH pre) re)` >>
+              qpat_assum `E C (pre ++ y::post) _ = _` mp_tac >>
+              qpat_assum `gas_events_step fuel C owner y a = gas_events_step _ _ s.vs_current_bb _ _` mp_tac >>
+              qpat_assum `eh = _ ++ extra` mp_tac >>
+              qpat_assum `!gss'. LIST_REL _ rm gss' ==> MAP _ _ = _`
+                (qspec_then `gp ++ gt` mp_tac) >>
+              qpat_assum `LIST_REL _ rm (gp ++ gt)` mp_tac >>
+              POP_ASSUM_LIST (K all_tac) >>
+              pure_rewrite_tac[APPEND_ASSOC, APPEND] >>
+              simp_tac (srw_ss()) [] >> metis_tac[APPEND_ASSOC]) >>
+          strip_tac >>
+          `EVERY (\i. ~is_terminator i.inst_opcode) pre` by fs[EVERY_MEM] >>
+          `terminates (FOLDR (dft_exec_cons j C) OK (y::post) a)` by
+            (irule prefix_exact_cut_terminates >>
+             qexistsl_tac [`fuel`, `pre`,
+               `s with vs_gas_readings := FLAT gp ++ (gh ++ (FLAT gt ++ tail))`] >>
+             qpat_assum `terminates (R j C (pre ++ y::post) _)` mp_tac >>
+             qpat_assum `Abbrev (R = _)` (fn def =>
+               pure_rewrite_tac [REWRITE_RULE [markerTheory.Abbrev_def] def]) >>
+             BETA_TAC >> simp[APPEND_ASSOC]) >>
+          `terminates (step_inst j C y a)` by
+            (qpat_assum `terminates (FOLDR _ OK (y::post) a)` mp_tac >>
+             qpat_assum `y.inst_opcode = INVOKE` mp_tac >>
+             POP_ASSUM_LIST (K all_tac) >> rpt strip_tac >>
+             gvs[FOLDR, dftIndexedExecTheory.dft_exec_cons_def,
+               venomInstTheory.is_terminator_def, AllCaseEqs(),
+               passSimulationDefsTheory.terminates_def] >>
+             Cases_on `step_inst j C y a` >> gvs[]) >>
+          `terminates (step_inst j C y
+             (s with vs_gas_readings := gh ++ FLAT gt ++ tail))` by
+            (drule_all invoke_reached_prefix_observations >>
+             disch_then (qspecl_then [`j`, `owner`] strip_assume_tac) >>
+             qpat_assum `terminates (step_inst j C y a) <=> _` mp_tac >>
+             qpat_assum `terminates (step_inst j C y a)` mp_tac >>
+             qpat_assum `y.inst_opcode = INVOKE` mp_tac >>
+             POP_ASSUM_LIST (K all_tac) >> rpt strip_tac >>
+             fs[APPEND_ASSOC, analysisSimProofsBaseTheory.invoke_step_inst_idx_OK_only,
+               passSimulationDefsTheory.terminates_def] >>
+             Cases_on `step_inst j C y
+               (s with vs_gas_readings := gh ++ FLAT gt ++ tail)` >>
+             gvs[APPEND_ASSOC, analysisSimProofsBaseTheory.invoke_step_inst_idx_OK_only,
+               passSimulationDefsTheory.terminates_def, invoke_reached_prefix_observations]) >>
+          qpat_x_assum `(?j. terminates (step_inst j C y _)) ==> _` mp_tac >>
+          (impl_tac >- metis_tac[]) >> strip_tac >>
+          qpat_assum `~?v. step_inst fuel C y a = OK v` mp_tac >>
+          qpat_assum `a = FOLDL _ _ us` mp_tac >>
+          qpat_assum `EVERY (\q. ~MEM (Var (FST q)) y.inst_operands /\ _) us` mp_tac >>
+          qpat_assum `y.inst_opcode = INVOKE` mp_tac >>
+          qpat_assum `step_inst fuel C y (s with vs_gas_readings := _) = OK _` mp_tac >>
+          POP_ASSUM_LIST (K all_tac) >> rpt strip_tac >>
+          gvs[APPEND_ASSOC, invoke_updates_concrete_frame,
+            analysisSimProofsBaseTheory.invoke_step_inst_idx_OK_only]) >>
+          `!zs v. R fuel C (pre ++ y::zs)
+            (s with vs_gas_readings := FLAT gp ++ (gh ++ (FLAT gt ++ tail))) <> OK v` by
+            (rpt gen_tac >>
+             qpat_assum `FOLDR _ OK pre _ = OK a` mp_tac >>
+             qpat_assum `EVERY (\i. ~is_terminator i.inst_opcode) pre` mp_tac >>
+             qpat_assum `~?v. step_inst fuel C y a = OK v` mp_tac >>
+             qpat_assum `y.inst_opcode = INVOKE` mp_tac >>
+             qpat_assum `Abbrev (R = _)` (fn def =>
+               pure_rewrite_tac [REWRITE_RULE [markerTheory.Abbrev_def] def]) >>
+             POP_ASSUM_LIST (K all_tac) >> BETA_TAC >>
+             pure_rewrite_tac[APPEND_ASSOC] >> rpt strip_tac >>
+             qpat_assum `EVERY _ pre` (fn th =>
+               fs[Once dftRunRelTheory.dft_exec_prefix_continue, FOLDR_APPEND, th]) >>
+             gvs[AllCaseEqs(), FOLDR, dftIndexedExecTheory.dft_exec_cons_def,
+               venomInstTheory.is_terminator_def] >>
+             Cases_on `step_inst fuel C y a` >> gvs[]) >>
+          conj_tac
+          >- (rpt gen_tac >> strip_tac >> strip_tac >>
+              Cases_on `k <= LENGTH pre`
+              >- (qpat_assum `!k u'. k <= LENGTH pre /\ _ ==> _`
+                    (qspecl_then [`k`, `u'`] mp_tac) >>
+                  qpat_assum `k <= LENGTH pre` mp_tac >>
+                  qpat_assum `R fuel C (TAKE k (pre ++ y::post)) _ = OK u'` mp_tac >>
+                  POP_ASSUM_LIST (K all_tac) >>
+                  pure_rewrite_tac[GSYM APPEND_ASSOC, APPEND] >> metis_tac[]) >>
+              qpat_assum `!zs v. R fuel C (pre ++ y::zs) _ <> OK v` mp_tac >>
+              qpat_assum `R fuel C (TAKE k (pre ++ y::post)) _ = OK u'` mp_tac >>
+              qpat_assum `~(k <= LENGTH pre)` mp_tac >>
+              POP_ASSUM_LIST (K all_tac) >> rpt strip_tac >>
+              `LENGTH pre <= k /\ k-LENGTH pre = SUC (k-(LENGTH pre+1))` by decide_tac >>
+              fs[TAKE_APPEND, TAKE_LENGTH_TOO_LONG, TAKE_def, APPEND_ASSOC] >> metis_tac[]) >>
+          rpt gen_tac >> strip_tac >> strip_tac >> strip_tac >>
+          Cases_on `k < LENGTH pre`
+          >- (qpat_assum `EVERY (\i. i.inst_opcode <> INVOKE /\ _) pre`
+                (mp_tac o SRULE [EVERY_EL]) >>
+              disch_then (qspec_then `k` mp_tac) >> fs[EL_APPEND_EQN]) >>
+          Cases_on `k = LENGTH pre`
+          >- (qpat_x_assum `!t. R fuel C' _ s <> OK t`
+                (qspec_then `s` mp_tac) >>
+              qpat_assum `k = LENGTH pre` mp_tac >>
+              qpat_assum `Abbrev (R = _)` mp_tac >>
+              qpat_assum `PERM rho' _` (mp_tac o MATCH_MP PERM_LENGTH) >>
+              qpat_assum `pre ++ post = _` (mp_tac o Q.AP_TERM `LENGTH`) >>
+              POP_ASSUM_LIST (K all_tac) >> rpt strip_tac >>
+              fs[LENGTH_APPEND, LENGTH_MAP, LENGTH_COUNT_LIST] >>
+              `LENGTH (TAKE (LENGTH pre) rho') = LENGTH pre` by
+                (irule LENGTH_TAKE >> decide_tac) >>
+              gvs[EL_APPEND_EQN, Abbr `R`]) >>
+          qpat_assum `!zs v. R fuel C (pre ++ y::zs) _ <> OK v` mp_tac >>
+          qpat_assum `~(k < LENGTH pre)` mp_tac >>
+          qpat_assum `k <> LENGTH pre` mp_tac >>
+          POP_ASSUM_LIST (K all_tac) >> rpt strip_tac >>
+          `LENGTH pre <= k /\ k-LENGTH pre = SUC (k-(LENGTH pre+1))` by decide_tac >>
+          fs[TAKE_APPEND, TAKE_LENGTH_TOO_LONG, TAKE_def, APPEND_ASSOC] >>
+          qpat_x_assum `!zs v'. _ <> OK v'`
+            (qspecl_then [`TAKE (k - (LENGTH pre + 1)) post`, `v`] mp_tac) >>
+          simp[]
 QED
 
 Theorem dft_blocks_gas_mask:
