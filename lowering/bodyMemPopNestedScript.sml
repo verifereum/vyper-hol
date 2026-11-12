@@ -6,6 +6,7 @@ Ancestors
   popNestedImmutableAccess
   popNestedLocalTypeMemory popNestedLocalPathMemory
   popNestedLocalAccessMemory popNestedLocalSuffixMemory
+  popNestedLocalReadinessMemory
   popNestedStorageSuffixMemory popNestedStorageMemory
 
 Theorem body_pop_nested_mem_case:
