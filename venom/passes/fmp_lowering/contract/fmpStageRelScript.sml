@@ -151,7 +151,8 @@ End
 Definition fmp_stage_lowered_def:
   fmp_stage_lowered infos ctx runner fn fn' <=>
     analyze_fmp_context ctx = SOME infos /\
-    ?sp sp'. fmp_lower_function_with_info infos ctx sp fn = SOME (fn',sp') /\
+    ?sp sp'. ir_supply_covers_fn sp fn /\
+             fmp_lower_function_with_info infos ctx sp fn = SOME (fn',sp') /\
              runner = FST (fresh_ir_var sp)
 End
 
