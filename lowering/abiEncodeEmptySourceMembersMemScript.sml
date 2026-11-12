@@ -2,7 +2,7 @@
 Theory abiEncodeEmptySourceMembersMem
 Ancestors
   abiEncodeEmptySourceMemberLayout abiEncodeEmptySourceMemberTransportMem
-  abiEncodeEmptySourceChildMem abiEncoderBufferFrame
+  abiEncodeEmptySourceChildMem abiEncodeEmptySourceInput abiEncoderInput abiEncoderBufferFrame
   abiEncoderWindowPhaseFrameMem abiEncoderWindowMemFrame
   abiEncoderWindowMembersMem abiEncoderWindowStructuralMembers
   abiEncoderWindowPhase abiEncoderWindowContract abiEncoderWindowMembers
@@ -61,7 +61,7 @@ Theorem empty_source_member_source_prepare[local]:
    mem_cont_sim ctx func s t /\ window_mem_frame ctx func s t
 Proof
   strip_tac >>
-  `eval_operand (Lit (n2w so)) s = SOME (n2w so)` by simp[eval_operand_def] >>
+  `eval_operand (Lit (n2w so)) s = SOME (n2w so)` by simp[NoAsms, eval_operand_def] >>
   drule_all window_emit_add_phase_mem_frame >> strip_tac >>
   `!R. (!i b sz. i IN R /\ FLOOKUP s.vs_allocas i = SOME (b,sz) ==> sz = 32) ==>
        !i b sz. i IN R /\ FLOOKUP t.vs_allocas i = SOME (b,sz) ==> sz = 32` by
@@ -177,3 +177,234 @@ Proof
   rule_assum_tac (PURE_REWRITE_RULE [window_member_tail_def]) >>
   pure_rewrite_tac[window_member_tail_def] >> decide_tac
 QED
+
+Theorem empty_source_static_member_run[local]:
+  (abi_encoder_admissible (AbiComplex infos) /\
+   abi_encoder_window_input (AbiComplex infos) at (ListV avs) sb 0 s.vs_memory /\
+   eval_operand src s = SOME (n2w sb) /\ eval_operand dst s = SOME (n2w d) /\
+   (!x. src = Var x \/ dst = Var x ==> not_fresh_at st x) /\
+   fn_has_code st en func /\ fn_inst_ids_distinct func /\
+   alloca_inv s /\ alloca_room ctx func s /\
+   d + LENGTH (enc at (ListV avs)) <= s.vs_alloca_next /\
+   venomMemDefs$regions_disjoint (sb,0) (d,LENGTH (enc at (ListV avs))) /\
+   (!inst b sz. MEM inst (fn_insts func) /\ inst.inst_opcode = ALLOCA /\
+     inst.inst_id IN frag_ids st en /\ FLOOKUP s.vs_allocas inst.inst_id = SOME (b,sz) ==>
+     sz = 32 /\ venomMemDefs$regions_disjoint (sb,0) (b,sz) /\
+     venomMemDefs$regions_disjoint (d,LENGTH (enc at (ListV avs))) (b,sz)) /\
+   ~s.vs_halted /\ s.vs_current_bb = st.cs_current_bb /\
+   s.vs_inst_idx = LENGTH st.cs_current_insts) /\
+  abi_encoder_tuple_type at ats /\ LIST_REL abi_encoder_structural_valid ats avs /\
+  window_member_head_size infos = head_lengths ats 0 /\
+  window_member_prefix infos ats avs k d s.vs_memory /\
+  window_member_cursor infos dp site slot sb 0 d (LENGTH (enc at (ListV avs))) st s /\
+  (EXISTS (\(_,_,_,dyn). dyn) infos ==>
+    site NOTIN window_alloca_sites func (frag_ids st en) /\
+    mem_word_at slot s.vs_memory = n2w (window_member_tail infos ats avs k)) /\
+  k < LENGTH infos /\ EL k infos = (ei,az,ms,F) /\ abi_encoder_admissible ei /\
+  (!dst src st out st' ctx func s at av sb d.
+    compile_abi_encode_to_buf dst src ei st = (out,st') /\
+    abi_encoder_admissible ei /\
+    abi_encoder_window_input ei at av sb 0 s.vs_memory /\
+    eval_operand src s = SOME (n2w sb) /\ eval_operand dst s = SOME (n2w d) /\
+    (!x. src = Var x \/ dst = Var x ==> not_fresh_at st x) /\
+    fn_has_code st st' func /\ fn_inst_ids_distinct func /\
+    alloca_inv s /\ alloca_room ctx func s /\
+    d + LENGTH (enc at av) <= s.vs_alloca_next /\
+    venomMemDefs$regions_disjoint (sb,0) (d,LENGTH (enc at av)) /\
+    (!inst b sz. MEM inst (fn_insts func) /\ inst.inst_opcode = ALLOCA /\
+      inst.inst_id IN frag_ids st st' /\ FLOOKUP s.vs_allocas inst.inst_id = SOME (b,sz) ==>
+      sz = 32 /\ venomMemDefs$regions_disjoint (sb,0) (b,sz) /\
+      venomMemDefs$regions_disjoint (d,LENGTH (enc at av)) (b,sz)) /\
+    ~s.vs_halted /\ s.vs_current_bb = st.cs_current_bb /\
+    s.vs_inst_idx = LENGTH st.cs_current_insts ==>
+    ?t. window_strong_result ctx func st st' out at av d s t /\
+      mem_cont_sim ctx func s t /\ window_mem_frame ctx func s t) /\
+  compile_abi_encode_child dst child_src ei F
+    (SUM (MAP abi_member_head_size (TAKE k ats))) dp st = (out,en) /\
+  eval_operand child_src s = SOME (n2w (sb+abi_encoder_member_span (TAKE k infos))) /\
+  (!x. child_src = Var x ==> not_fresh_at st x) ==>
+  ?t. window_phase ctx func st en (window_alloca_sites func (frag_ids st en))
+      [(d+SUM (MAP abi_member_head_size (TAKE k ats)),
+        LENGTH (enc (EL k ats) (EL k avs)))] s t /\
+    window_member_prefix infos ats avs (SUC k) d t.vs_memory /\
+    (EXISTS (\(_,_,_,dyn). dyn) infos ==>
+      mem_word_at slot t.vs_memory = n2w (window_member_tail infos ats avs (SUC k))) /\
+    (!i b sz. i IN window_alloca_sites func (frag_ids st en) /\
+      FLOOKUP t.vs_allocas i = SOME (b,sz) ==> sz = 32) /\
+    mem_cont_sim ctx func s t /\ window_mem_frame ctx func s t
+Proof
+  strip_tac >> drule_all empty_source_complex_child >> strip_tac >>
+  `ats' = ats` by metis_tac[abi_encoder_tuple_type_unique] >>
+  qpat_x_assum `ats' = ats` SUBST_ALL_TAC >>
+  `LENGTH ats = LENGTH avs /\ k < LENGTH ats` by decide_tac >>
+  `~is_dynamic (EL k ats)` by metis_tac[] >>
+  drule_all empty_source_member_output_bounds >> strip_tac >>
+  drule_all empty_source_member_total_bounds >> strip_tac >>
+  `SUM (MAP abi_member_head_size (TAKE k ats)) +
+     LENGTH (enc (EL k ats) (EL k avs)) <= LENGTH (enc at (ListV avs))` by
+    (qpat_assum `~is_dynamic _ ==> _` drule >> decide_tac) >>
+  `d+SUM (MAP abi_member_head_size (TAKE k ats)) +
+     LENGTH (enc (EL k ats) (EL k avs)) <= s.vs_alloca_next` by decide_tac >>
+  `!inst b sz. MEM inst (fn_insts func) /\ inst.inst_opcode = ALLOCA /\
+    inst.inst_id IN frag_ids st en /\ FLOOKUP s.vs_allocas inst.inst_id = SOME (b,sz) ==>
+    sz = 32 /\ venomMemDefs$regions_disjoint (sb,0) (b,sz) /\
+    venomMemDefs$regions_disjoint
+      (d+SUM (MAP abi_member_head_size (TAKE k ats)),LENGTH (enc (EL k ats) (EL k avs))) (b,sz)` by
+    (rpt gen_tac >> strip_tac >>
+     qpat_assum `!inst b sz. MEM inst _ /\ _ ==> _` drule_all >> strip_tac >>
+     (conj_tac >- first_assum ACCEPT_TAC) >>
+     (conj_tac >- first_assum ACCEPT_TAC) >>
+     qpat_x_assum `venomMemDefs$regions_disjoint (d,_) (b,sz)` mp_tac >>
+     pure_rewrite_tac[venomMemDefsTheory.regions_disjoint_def] >> decide_tac) >>
+  `eval_operand (Lit (n2w (d+SUM (MAP abi_member_head_size (TAKE k ats))))) s =
+     SOME (n2w (d+SUM (MAP abi_member_head_size (TAKE k ats))))` by simp[NoAsms, eval_operand_def] >>
+  `venomMemDefs$regions_disjoint (sb,0)
+    (d+SUM (MAP abi_member_head_size (TAKE k ats)),LENGTH (enc (EL k ats) (EL k avs)))` by
+    simp[NoAsms, venomMemDefsTheory.regions_disjoint_def] >>
+  `!x. child_src = Var x \/ Lit (n2w (d+SUM (MAP abi_member_head_size (TAKE k ats)))) = Var x ==>
+    not_fresh_at st x` by (simp_tac (srw_ss()) [] >> metis_tac[]) >>
+  `!x. dst = Var x ==> not_fresh_at st x` by metis_tac[] >>
+  `abi_encoder_window_input ei (EL k ats) (EL k avs) sb 0 s.vs_memory` by metis_tac[] >>
+  `eval_operand child_src s = SOME (n2w sb)` by
+    (qpat_x_assum `eval_operand child_src s = _` mp_tac >> metis_tac[ADD_CLAUSES]) >>
+  drule_all empty_source_static_child_run_frame >> strip_tac >>
+  suspend "advance"
+QED
+
+Resume empty_source_static_member_run[advance]:
+  `!i b sz. i IN window_alloca_sites func (frag_ids st en) /\
+    FLOOKUP s.vs_allocas i = SOME (b,sz) ==>
+    venomMemDefs$regions_disjoint (d,LENGTH (enc at (ListV avs))) (b,sz)` by
+    (simp_tac (srw_ss()) [window_alloca_sites_def] >> metis_tac[]) >>
+  drule_all empty_source_static_member_advance >> strip_tac >>
+  qexists_tac `t` >> asm_rewrite_tac[]
+QED
+
+Finalise empty_source_static_member_run
+
+Theorem empty_source_dynamic_member_run[local]:
+  (abi_encoder_admissible (AbiComplex infos) /\
+   abi_encoder_window_input (AbiComplex infos) at (ListV avs) sb 0 s.vs_memory /\
+   eval_operand src s = SOME (n2w sb) /\ eval_operand dst s = SOME (n2w d) /\
+   (!x. src = Var x \/ dst = Var x ==> not_fresh_at st x) /\
+   fn_has_code st en func /\ fn_inst_ids_distinct func /\
+   alloca_inv s /\ alloca_room ctx func s /\
+   d + LENGTH (enc at (ListV avs)) <= s.vs_alloca_next /\
+   venomMemDefs$regions_disjoint (sb,0) (d,LENGTH (enc at (ListV avs))) /\
+   (!inst b sz. MEM inst (fn_insts func) /\ inst.inst_opcode = ALLOCA /\
+     inst.inst_id IN frag_ids st en /\ FLOOKUP s.vs_allocas inst.inst_id = SOME (b,sz) ==>
+     sz = 32 /\ venomMemDefs$regions_disjoint (sb,0) (b,sz) /\
+     venomMemDefs$regions_disjoint (d,LENGTH (enc at (ListV avs))) (b,sz)) /\
+   ~s.vs_halted /\ s.vs_current_bb = st.cs_current_bb /\
+   s.vs_inst_idx = LENGTH st.cs_current_insts) /\
+  abi_encoder_tuple_type at ats /\ LIST_REL abi_encoder_structural_valid ats avs /\
+  window_member_head_size infos = head_lengths ats 0 /\
+  window_member_prefix infos ats avs k d s.vs_memory /\
+  window_member_cursor infos dp site slot sb 0 d (LENGTH (enc at (ListV avs))) st s /\
+  (EXISTS (\(_,_,_,dyn). dyn) infos ==>
+    site NOTIN window_alloca_sites func (frag_ids st en) /\
+    mem_word_at slot s.vs_memory = n2w (window_member_tail infos ats avs k)) /\
+  k < LENGTH infos /\ EL k infos = (ei,az,ms,T) /\ abi_encoder_admissible ei /\
+  (!dst src st out st' ctx func s at av sb d.
+    compile_abi_encode_to_buf dst src ei st = (out,st') /\
+    abi_encoder_admissible ei /\
+    abi_encoder_window_input ei at av sb 0 s.vs_memory /\
+    eval_operand src s = SOME (n2w sb) /\ eval_operand dst s = SOME (n2w d) /\
+    (!x. src = Var x \/ dst = Var x ==> not_fresh_at st x) /\
+    fn_has_code st st' func /\ fn_inst_ids_distinct func /\
+    alloca_inv s /\ alloca_room ctx func s /\
+    d + LENGTH (enc at av) <= s.vs_alloca_next /\
+    venomMemDefs$regions_disjoint (sb,0) (d,LENGTH (enc at av)) /\
+    (!inst b sz. MEM inst (fn_insts func) /\ inst.inst_opcode = ALLOCA /\
+      inst.inst_id IN frag_ids st st' /\ FLOOKUP s.vs_allocas inst.inst_id = SOME (b,sz) ==>
+      sz = 32 /\ venomMemDefs$regions_disjoint (sb,0) (b,sz) /\
+      venomMemDefs$regions_disjoint (d,LENGTH (enc at av)) (b,sz)) /\
+    ~s.vs_halted /\ s.vs_current_bb = st.cs_current_bb /\
+    s.vs_inst_idx = LENGTH st.cs_current_insts ==>
+    ?t. window_strong_result ctx func st st' out at av d s t /\
+      mem_cont_sim ctx func s t /\ window_mem_frame ctx func s t) /\
+  compile_abi_encode_child dst child_src ei T
+    (SUM (MAP abi_member_head_size (TAKE k ats))) dp st = (out,en) /\
+  eval_operand child_src s = SOME (n2w (sb+abi_encoder_member_span (TAKE k infos))) /\
+  (!x. child_src = Var x ==> not_fresh_at st x) ==>
+  ?t. window_phase ctx func st en (window_alloca_sites func (frag_ids st en) UNION {site})
+      [(d+SUM (MAP abi_member_head_size (TAKE k ats)),32);
+       (d+window_member_tail infos ats avs k,LENGTH (enc (EL k ats) (EL k avs)))] s t /\
+    window_member_prefix infos ats avs (SUC k) d t.vs_memory /\
+    mem_word_at slot t.vs_memory = n2w (window_member_tail infos ats avs (SUC k)) /\
+    (!i b sz. i IN (window_alloca_sites func (frag_ids st en) UNION {site}) /\
+      FLOOKUP t.vs_allocas i = SOME (b,sz) ==> sz = 32) /\
+    mem_cont_sim ctx func s t /\ window_mem_frame ctx func s t
+Proof
+  strip_tac >> drule_all empty_source_complex_child >> strip_tac >>
+  `ats' = ats` by metis_tac[abi_encoder_tuple_type_unique] >>
+  qpat_x_assum `ats' = ats` SUBST_ALL_TAC >>
+  `LENGTH ats = LENGTH avs /\ k < LENGTH ats` by decide_tac >>
+  `is_dynamic (EL k ats)` by metis_tac[] >>
+  `EXISTS (\(_,_,_,dyn). dyn) infos` by
+    (simp_tac (srw_ss()) [EXISTS_MEM] >>
+     qexists_tac `(ei,az,ms,T)` >> simp_tac (srw_ss()) [] >>
+     metis_tac[MEM_EL]) >>
+  `site NOTIN window_alloca_sites func (frag_ids st en) /\
+   mem_word_at slot s.vs_memory = n2w (window_member_tail infos ats avs k)` by metis_tac[] >>
+  `?cursor. dp = Var cursor /\ not_fresh_at st cursor /\
+    eval_operand (Var cursor) s = SOME (n2w slot) /\
+    FLOOKUP s.vs_allocas site = SOME (slot,32) /\ slot < dimword (:256) /\
+    venomMemDefs$regions_disjoint (d,LENGTH (enc at (ListV avs))) (slot,32)` by
+    metis_tac[window_member_cursor_def] >>
+  qpat_x_assum `dp = Var cursor` SUBST_ALL_TAC >>
+  drule_all empty_source_dynamic_member_layout >>
+  disch_then (REPEAT_TCL CONJUNCTS_THEN assume_tac) >>
+  drule_all empty_source_member_output_bounds >> strip_tac >>
+  `window_member_tail infos ats avs k + LENGTH (enc (EL k ats) (EL k avs)) <=
+    LENGTH (enc at (ListV avs))` by metis_tac[] >>
+  `d+window_member_tail infos ats avs k + LENGTH (enc (EL k ats) (EL k avs)) <=
+    s.vs_alloca_next` by decide_tac >>
+  suspend "child"
+QED
+
+Resume empty_source_dynamic_member_run[child]:
+  `!inst b sz. MEM inst (fn_insts func) /\ inst.inst_opcode = ALLOCA /\
+    inst.inst_id IN frag_ids st en /\ FLOOKUP s.vs_allocas inst.inst_id = SOME (b,sz) ==>
+    sz = 32 /\ venomMemDefs$regions_disjoint (sb,0) (b,sz) /\
+    venomMemDefs$regions_disjoint
+      (d+window_member_tail infos ats avs k,LENGTH (enc (EL k ats) (EL k avs))) (b,sz)` by
+    (rpt gen_tac >> strip_tac >>
+     qpat_assum `!inst b sz. MEM inst _ /\ _ ==> _` drule_all >> strip_tac >>
+     (conj_tac >- first_assum ACCEPT_TAC) >>
+     (conj_tac >- first_assum ACCEPT_TAC) >>
+     qpat_x_assum `venomMemDefs$regions_disjoint (d,_) (b,sz)` mp_tac >>
+     pure_rewrite_tac[venomMemDefsTheory.regions_disjoint_def] >> decide_tac) >>
+  `eval_operand (Lit (n2w (d+window_member_tail infos ats avs k))) s =
+    SOME (n2w (d+window_member_tail infos ats avs k))` by simp[NoAsms, eval_operand_def] >>
+  `venomMemDefs$regions_disjoint (sb,0)
+    (d+window_member_tail infos ats avs k,LENGTH (enc (EL k ats) (EL k avs)))` by
+    simp[NoAsms, venomMemDefsTheory.regions_disjoint_def] >>
+  `!x. child_src = Var x \/ Lit (n2w (d+window_member_tail infos ats avs k)) = Var x ==>
+    not_fresh_at st x` by (simp_tac (srw_ss()) [] >> metis_tac[]) >>
+  `!x. dst = Var x ==> not_fresh_at st x` by metis_tac[] >>
+  `abi_encoder_window_input ei (EL k ats) (EL k avs) sb 0 s.vs_memory` by metis_tac[] >>
+  `eval_operand child_src s = SOME (n2w sb)` by
+    (qpat_x_assum `eval_operand child_src s = _` mp_tac >> metis_tac[ADD_CLAUSES]) >>
+  drule_all empty_source_dynamic_child_run_frame >> strip_tac >>
+  suspend "advance"
+QED
+
+Resume empty_source_dynamic_member_run[advance]:
+  qpat_x_assum `!dst src st out st' ctx func s at av sb d. _` kall_tac >>
+  `!i b sz. i IN (window_alloca_sites func (frag_ids st en) UNION {site}) /\
+    FLOOKUP s.vs_allocas i = SOME (b,sz) ==>
+    venomMemDefs$regions_disjoint (d,LENGTH (enc at (ListV avs))) (b,sz)` by
+    (rpt gen_tac >>
+     disch_then (CONJUNCTS_THEN2 mp_tac assume_tac) >>
+     pure_rewrite_tac[IN_UNION, IN_SING] >>
+     disch_then DISJ_CASES_TAC
+     >- (qpat_x_assum `i IN window_alloca_sites _ _` mp_tac >>
+         simp_tac (srw_ss()) [window_alloca_sites_def] >> metis_tac[]) >>
+     qpat_x_assum `i = site` SUBST_ALL_TAC >>
+     metis_tac[optionTheory.SOME_11, pairTheory.PAIR_EQ]) >>
+  drule_all empty_source_dynamic_member_advance >> strip_tac >>
+  qexists_tac `t` >> rpt conj_tac >> first_assum ACCEPT_TAC
+QED
+
+Finalise empty_source_dynamic_member_run
