@@ -233,9 +233,11 @@ Proof
  `EVERY (\a. type_memory_bytes (ce_pack with ce_imm_alloca := imm_opt) (SND a)
     < dimword(:256)) args` by
    (irule deploy_ctor_argument_bounds_transport >> qexists `cenv` >> simp[]) >>
- drule deploy_ctor_target_bound_source_inputs >>
- disch_then (qspecl_then [`imm_opt`, `ce_pack with ce_imm_alloca := imm_opt`] mp_tac) >>
- simp_tac bool_ss [] >> disch_then drule_all >> strip_tac >>
+ qspecl_then [`tops`, `T`, `K global_nonreentrant_slot`, `mut`, `F`, `rr`,
+   `"__init__"`, `args`, `[]`, `NoneT`, `body'`, `rp.rpol_target`, `ce_pack`,
+   `pos_args`, `imm_opt`, `ce_pack with ce_imm_alloca := imm_opt`] mp_tac
+   deploy_ctor_target_bound_source_inputs >>
+ simp_tac bool_ss [combinTheory.K_THM] >> disch_then drule_all >> strip_tac >>
  drule_all deploy_ctor_bound_decoder_metadata >> strip_tac >>
  drule_all deploy_ctor_entry_data_size >> strip_tac >>
  gvs[mem_bytes_at_def, TAKE_LENGTH_APPEND] >> qexists `avs` >> simp[]
