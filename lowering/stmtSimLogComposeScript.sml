@@ -424,7 +424,10 @@ Resume compile_log_ready_stmt_frag[post]:
   >- (rpt strip_tac >>
       `lookup_var x t = SOME w` by metis_tac[] >>
       `not_fresh_at sm x` by metis_tac[not_fresh_at_mono] >>
-      qpat_x_assum `!op w. _` (qspecl_then [`Var x`, `w`] mp_tac) >>
+      qpat_x_assum `lookup_var x t = SOME w`
+        (assume_tac o REWRITE_RULE [venomStateTheory.lookup_var_def]) >>
+      qpat_x_assum `!op w. _ /\ _ /\ eval_operand op t = SOME w ==> _`
+        (qspecl_then [`Var x`, `w`] mp_tac) >>
       simp[venomStateTheory.eval_operand_def, venomStateTheory.lookup_var_def])
   >> irule alloca_frame_same_state >> qexists_tac `u` >> simp[] >>
   irule alloca_frame_trans >>
