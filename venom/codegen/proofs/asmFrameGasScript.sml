@@ -213,7 +213,20 @@ Theorem asm_frame_gas_step_create:
        then frame_gas_left es <= frame_gas_left es1 + frame_op_gas H
        else (frame_gas_left es - frame_op_gas H) DIV 64 <= frame_gas_left es1)
 Proof
-  cheat
+  rpt gen_tac >> strip_tac >>
+  Cases_on `EL a.as_pc prog = AsmOp "DELEGATECALL"`
+  >- (drule asm_frame_gas_step_call >>
+      disch_then (qspecl_then [`data`, `es0`, `a`, `es`, `H`] mp_tac) >>
+      simp[]) >>
+  pure_rewrite_tac[frame_op_gas_def] >>
+  rule_assum_tac (PURE_REWRITE_RULE [frame_op_gas_def]) >>
+  Cases_on `EL a.as_pc prog = AsmOp "SELFDESTRUCT"`
+  >- (drule_all asm_frame_selfdestruct_gas >>
+      gvs[frame_op_gas_def]) >>
+  `MEM (EL a.as_pc prog) [AsmOp "CREATE"; AsmOp "CREATE2"]` by
+    gvs[listTheory.MEM] >>
+  drule_all asm_frame_create_gas >>
+  gvs[frame_op_gas_def, listTheory.MEM]
 QED
 
 (* The frame's step at es, an instruction of prog that is
