@@ -126,3 +126,73 @@ Proof
   drule immutable_fixed_words_output_fresh >> strip_tac >>
   gvs[EVERY_MEM] >> metis_tac[]
 QED
+
+Theorem immutable_fixed_copy_operand_mem_endpoint:
+  compile_imm_store_words (SOME region) src dst n off sa = ((),sb) /\
+  eval_operand src s = SOME (n2w a) /\ eval_operand dst s = SOME (n2w b) /\
+  eval_operand region s = SOME 0w /\
+  (!x. src = Var x ==> not_fresh_at sa x) /\
+  (!x. dst = Var x ==> not_fresh_at sa x) /\
+  (!x. region = Var x ==> not_fresh_at sa x) /\ 0 < n /\
+  a + off + 32*n <= s.vs_alloca_next /\
+  b + off + 32*n <= s.vs_alloca_next /\
+  a + off + 32*n < dimword (:256) /\
+  b + off + 32*n < dimword (:256) /\
+  (b + off + 32*n <= a + off \/ a + off + 32*n <= b + off) /\
+  fn_has_code sa sb func /\ ~s.vs_halted /\
+  s.vs_current_bb = sa.cs_current_bb /\
+  s.vs_inst_idx = LENGTH sa.cs_current_insts ==>
+  ?t. run_inst_seq (emitted_insts sa sb) s = OK t /\
+    sb.cs_current_insts = sa.cs_current_insts ++ emitted_insts sa sb /\
+    same_blocks sa sb /\
+    (!x. not_fresh_at sa x ==> lookup_var x t = lookup_var x s) /\
+    t.vs_data_section = s.vs_data_section /\
+    run_inst_seq_mem_ok (emitted_insts sa sb) s /\
+    mem_cont_sim ctx func s (t with vs_inst_idx := LENGTH sb.cs_current_insts) /\
+    t.vs_allocas = s.vs_allocas /\ t.vs_alloca_next = s.vs_alloca_next /\
+    t = s with <|vs_vars := t.vs_vars; vs_memory := t.vs_memory;
+                 vs_immutables := t.vs_immutables|> /\
+    t.vs_memory = (mcopy (b+off) (a+off) (32*n) s).vs_memory /\
+    mem_bytes_at (b+off) (32*n) t.vs_memory =
+      mem_bytes_at (a+off) (32*n) s.vs_memory /\
+    (!p k. p+k <= b+off \/ b+off+32*n <= p ==>
+      mem_bytes_at p k t.vs_memory = mem_bytes_at p k s.vs_memory)
+Proof
+  strip_tac >>
+  `?t0. immutable_execution_frame sa (drop_fresh sa s) sb t0 /\
+    run_inst_seq_mem_ok (emitted_insts sa sb) (drop_fresh sa s) /\
+    t0.vs_allocas = s.vs_allocas /\ t0.vs_alloca_next = s.vs_alloca_next /\
+    t0 = (drop_fresh sa s) with <|vs_vars := t0.vs_vars;
+      vs_memory := t0.vs_memory; vs_immutables := t0.vs_immutables|> /\
+    t0.vs_memory = (mcopy (b+off) (a+off) (32*n) s).vs_memory /\
+    mem_bytes_at (b+off) (32*n) t0.vs_memory =
+      mem_bytes_at (a+off) (32*n) s.vs_memory /\
+    (!p k. p+k <= b+off \/ b+off+32*n <= p ==>
+      mem_bytes_at p k t0.vs_memory = mem_bytes_at p k s.vs_memory)` by
+    (mp_tac (Q.INST [`s` |-> `drop_fresh sa s`] immutable_fixed_copy_mem_endpoint) >>
+     simp[fresh_vars_wrt_drop_fresh, freshWritesTheory.eval_operand_drop_fresh,
+          drop_fresh_def, mcopy_def, write_memory_with_expansion_def] >> metis_tac[]) >>
+  drule_all immutable_fixed_words_run_transport >> strip_tac >>
+  rename1 `run_inst_seq (emitted_insts sa sb) s = OK t` >>
+  drule immutable_fixed_words_code >> strip_tac >>
+  suspend "finish"
+QED
+
+Resume immutable_fixed_copy_operand_mem_endpoint[finish]:
+  markerLib.RESUME_TAC >>
+  `frag_exec_mem ctx sa sb (\u. u = s)
+    (\u. u = (t with vs_inst_idx := LENGTH sb.cs_current_insts)) (K F)` by
+    (irule fragExecMemTheory.frag_exec_mem_run_inst_seq >>
+     fs[same_blocks_def, emitted_insts_def, DROP_APPEND] >>
+     gvs[EVERY_MEM] >> rpt gen_tac >> disch_tac >>
+     qpat_x_assum `!i. MEM i _ ==> _` drule >>
+     strip_tac >> gvs[is_terminator_def]) >>
+  `mem_cont_sim ctx func s (t with vs_inst_idx := LENGTH sb.cs_current_insts)` by
+    (drule memContinuationTheory.mem_cont_sim_from_fragment >>
+     disch_then (qspec_then `s` mp_tac) >> simp[]) >>
+  qexists_tac `t` >>
+  gvs[drop_fresh_def, emitted_insts_def, DROP_APPEND,
+      venom_state_component_equality] >> gvs[]
+QED
+
+Finalise immutable_fixed_copy_operand_mem_endpoint
