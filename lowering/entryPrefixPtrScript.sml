@@ -31,6 +31,78 @@ Proof
   qexists_tac `Var "copied"` >> simp[]
 QED
 
+Theorem dispatch_singleton_compile_probe[local]:
+  compile_selector_checks (Lit 0w) [(0,"fallback")]
+    <| cs_next_var := 0; cs_next_label := 0; cs_next_id := 0;
+       cs_current_bb := "entry"; cs_current_insts := [];
+       cs_blocks := []; cs_data_sections := [] |> =
+  ((), <| cs_next_var := 1; cs_next_label := 2; cs_next_id := 3;
+          cs_current_bb := "@next_1"; cs_current_insts := [];
+          cs_blocks :=
+            [<|bb_label := "@match_0";
+               bb_instructions := [mk_inst 2 JMP [Label "fallback"] []]|>;
+             <|bb_label := "entry";
+               bb_instructions :=
+                 [mk_inst 0 EQ [Lit 0w; Lit 0w] ["%0"];
+                  mk_inst 1 JNZ [Var "%0"; Label "@match_0";
+                                  Label "@next_1"] []]|>];
+          cs_data_sections := [] |>)
+Proof
+  EVAL_TAC
+QED
+
+Theorem dispatch_singleton_state_probe[local]:
+  let st = <|cs_next_var := 0; cs_next_label := 0; cs_next_id := 0;
+             cs_current_bb := "entry"; cs_current_insts := [];
+             cs_blocks := []; cs_data_sections := []|> in
+  let ss = update_var "incoming" 0w (init_venom_state "entry") in
+    fresh_vars_wrt st ss /\ ~ss.vs_halted /\
+    ss.vs_current_bb = st.cs_current_bb /\
+    ss.vs_inst_idx = LENGTH st.cs_current_insts /\
+    eval_operand (Lit 0w) ss = SOME 0w /\
+    eval_operand (Var "incoming") ss = SOME 0w /\
+    allocas_from 0 ss /\ allocas_below_fmp ss /\
+    op_taint (entry_taint with t_var := FEMPTY |+ ("incoming", {0}))
+      (Lit 0w) = {}
+Proof
+  simp[fresh_vars_wrt_def, update_var_def, init_venom_state_def,
+       eval_operand_def, lookup_var_def, FLOOKUP_UPDATE,
+       allocas_from_def, allocas_below_fmp_def, op_taint_def]
+QED
+
+Theorem dispatch_singleton_layout_probe[local]:
+  let st = <|cs_next_var := 0; cs_next_label := 0; cs_next_id := 0;
+             cs_current_bb := "entry"; cs_current_insts := [];
+             cs_blocks := []; cs_data_sections := []|> in
+  let st' = SND (compile_selector_checks (Lit 0w) [(0,"fallback")] st) in
+  let blocks = REVERSE st'.cs_blocks ++
+    [<|bb_label := "@next_1"; bb_instructions := []|>;
+     <|bb_label := "fallback"; bb_instructions :=
+       [mk_inst 90 PHI [Label "@match_0"; Var "incoming"] ["copied"];
+        mk_inst 91 ADD [Var "copied"; Lit 0w] ["sum"]]|>] in
+  !fn. fn.fn_blocks = blocks ==>
+    fn_has_code st st' fn /\
+    (?bb. lookup_block st'.cs_current_bb fn.fn_blocks = SOME bb /\
+          phi_prefix_length bb.bb_instructions = 0) /\
+    lookup_block "entry" fn.fn_blocks = SOME
+      <|bb_label := "entry"; bb_instructions :=
+        [mk_inst 0 EQ [Lit 0w; Lit 0w] ["%0"];
+         mk_inst 1 JNZ [Var "%0"; Label "@match_0"; Label "@next_1"] []]|> /\
+    lookup_block "@match_0" fn.fn_blocks = SOME
+      <|bb_label := "@match_0";
+        bb_instructions := [mk_inst 2 JMP [Label "fallback"] []]|> /\
+    lookup_block "@next_1" fn.fn_blocks = SOME
+      <|bb_label := "@next_1"; bb_instructions := []|> /\
+    lookup_block "fallback" fn.fn_blocks = SOME
+      <|bb_label := "fallback"; bb_instructions :=
+        [mk_inst 90 PHI [Label "@match_0"; Var "incoming"] ["copied"];
+         mk_inst 91 ADD [Var "copied"; Lit 0w] ["sum"]]|>
+Proof
+  simp[dispatch_singleton_compile_probe] >> rpt strip_tac >>
+  rw[fn_has_code_def, emitted_blocks_def, lookup_block_def,
+       phi_prefix_length_def, FIND_thm] >> gvs[FIND_thm]
+QED
+
 Theorem ptr_safe_jump_exact_continuation:
   lookup_block s.vs_current_bb fn.fn_blocks = SOME bb /\
   get_instruction bb s.vs_inst_idx = SOME (mk_inst id JMP [Label lbl] []) /\
