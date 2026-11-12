@@ -20,6 +20,15 @@ Proof
   simp[state_rel_frame_result] >> metis_tac[]
 QED
 
+Theorem pending_frame_trace_preserving:
+  (!st res st'. f st = (res,st') ==>
+     st' = st with storage_trace := st'.storage_trace) ==>
+  state_rel_frame (\(s:evaluation_state) t. t.pending_deletions = s.pending_deletions) f
+Proof
+  simp[state_rel_frame_result] >> rpt strip_tac >>
+  first_x_assum drule >> disch_then SUBST1_TAC >> simp[]
+QED
+
 Theorem pending_frame_reads:
   state_rel_frame (\(s:evaluation_state) t. t.pending_deletions = s.pending_deletions)
     (read_place cx p) /\
@@ -40,10 +49,18 @@ Theorem pending_frame_reads:
   state_rel_frame (\(s:evaluation_state) t. t.pending_deletions = s.pending_deletions)
     (array_iterator_results cx ty res)
 Proof
-  rpt conj_tac >> irule pending_frame_state_preserving >>
-  metis_tac[read_place_state, read_result_state, read_results_state,
-    place_type_value_state, lookup_global_state, get_place_state,
-    extend_place_state, select_result_state, array_iterator_results_state]
+  rpt conj_tac
+  >- (irule pending_frame_state_preserving >> metis_tac[read_place_state])
+  >- (irule pending_frame_state_preserving >> metis_tac[read_result_state])
+  >- (irule pending_frame_state_preserving >> metis_tac[read_results_state])
+  >- (irule pending_frame_state_preserving >>
+      metis_tac[place_type_value_state])
+  >- (irule pending_frame_trace_preserving >> metis_tac[lookup_global_state])
+  >- (irule pending_frame_state_preserving >> metis_tac[get_place_state])
+  >- (irule pending_frame_trace_preserving >> metis_tac[extend_place_state])
+  >- (irule pending_frame_trace_preserving >> metis_tac[select_result_state]) >>
+  irule pending_frame_state_preserving >>
+  metis_tac[array_iterator_results_state]
 QED
 
 Theorem pending_frame_primitives:

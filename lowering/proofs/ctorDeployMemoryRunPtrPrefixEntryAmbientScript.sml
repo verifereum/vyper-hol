@@ -36,7 +36,7 @@ Theorem deploy_ptr_entry_actual_state_rel:
   local_ptrs_rel func ce es0.scopes actual /\
   immutables_rel ce (deploy_evaluation_context tops am tx).txn.target
     ce.ce_module ce.ce_is_ctor (es0 with outcomes := SOME vs.vs_outcomes) actual ==>
-  state_rel func ce (deploy_evaluation_context tops am tx)
+  state_rel H func ce (deploy_evaluation_context tops am tx)
     (es0 with outcomes := SOME vs.vs_outcomes) actual
 Proof
   rpt gen_tac >> strip_tac >>

@@ -575,7 +575,7 @@ Proof
 QED
 
 Theorem deploy_snapshot_observations[local]:
-  state_rel func cenv (deploy_evaluation_context tops am tx)
+  state_rel H func cenv (deploy_evaluation_context tops am tx)
     (st with scopes := []) before ==>
   (!a. a <> tx.target ==>
     lookup_account a before.vs_accounts = lookup_account a st.accounts) /\
@@ -598,7 +598,7 @@ Proof
   `log_entry_equiv cenv (deploy_evaluation_context tops am tx).txn.target = $=` by
     simp[FUN_EQ_THM, log_entry_equiv_def] >>
   `st.logs = before.vs_logs` by
-    (qpat_x_assum `state_rel _ _ _ _ _` mp_tac >>
+    (qpat_x_assum `state_rel _ _ _ _ _ _` mp_tac >>
      simp[state_rel_def, logs_rel_def, LIST_REL_eq] >> metis_tac[]) >>
   `log_entry_corresponds (compiled_event_info tops) (type_env tops) tx.target = $=` by
     simp[FUN_EQ_THM, e2eDefsTheory.log_entry_corresponds_concrete_event] >>
@@ -610,7 +610,7 @@ Proof
 QED
 
 Theorem deploy_snapshot_immutables[local]:
-  state_rel func cenv (deploy_evaluation_context tops am tx)
+  state_rel H func cenv (deploy_evaluation_context tops am tx)
     (st with scopes := []) before /\
   cenv.ce_module = NONE /\ cenv.ce_is_ctor ==>
   immutables_rel cenv tx.target NONE T (st with scopes := []) before
@@ -1016,7 +1016,7 @@ Proof
   qpat_x_assum `deploy_ctor_start _ _ _ _` kall_tac >>
   qpat_x_assum `eval_stmts _ _ _ = _` kall_tac >>
   qpat_x_assum `_ \/ _` kall_tac >>
-  qpat_x_assum `state_rel _ _ _ _ _` kall_tac >>
+  qpat_x_assum `state_rel _ _ _ _ _ _` kall_tac >>
   qpat_x_assum `immutables_rel _ _ _ _ _ _` kall_tac >>
   qpat_x_assum `!pre vis name ty slot post. _` kall_tac >>
   simp[deploy_venom_result_rel_def, abstract_machine_from_state_def,

@@ -144,7 +144,7 @@ Theorem deploy_ctor_entry_body_state_rel:
  actual.vs_gas_readings = vs.vs_gas_readings /\ actual.vs_code = vs.vs_code /\
  actual.vs_outcomes = vs.vs_outcomes /\ actual.vs_tx_ctx = vs.vs_tx_ctx /\
  actual.vs_block_ctx = vs.vs_block_ctx ==>
- state_rel func cenv (deploy_evaluation_context tops am tx)
+ state_rel H func cenv (deploy_evaluation_context tops am tx)
    (es0 with outcomes := SOME vs.vs_outcomes) actual
 Proof
  rpt gen_tac >> strip_tac >>

@@ -14,25 +14,6 @@ Proof
   simp[oracle_storage_ok_payload]
 QED
 
-(* A sufficient backend-frame hypothesis, not a consequence of
-   call_outcomes_ok: the latter checks a different source context. *)
-Theorem deploy_oracle_storage_backend_frame:
-  deploy_storage_ok tops am tx /\
-  (!co. MEM co os ==> !b.
-    get_storage (deploy_evaluation_context tops am tx)
-      (empty_state with <|accounts := co.co_accounts;
-                         tStorage := co.co_tStorage|>) b =
-    get_storage (deploy_evaluation_context tops am tx)
-      (initial_state am []) b) ==>
-  oracle_storage_ok (deploy_evaluation_context tops am tx)
-    (es0 with outcomes := SOME os)
-Proof
-  strip_tac >> simp[deploy_oracle_storage_payload, EVERY_MEM] >>
-  rpt strip_tac >> irule contract_storage_well_formed_storage_frame >>
-  qexists `initial_state am []` >>
-  gvs[deploy_storage_ok_def]
-QED
-
 (* Exact residual reads in the installed context. Neither validity in the
    old context nor validity of the initial backends asserts these reads. *)
 Theorem deploy_oracle_storage_read_obligations:
