@@ -77,7 +77,7 @@ Proof
   `out_taint tn (mk_inst id opc ops [out]) s = {}` by
     (gvs[] >>
      (simp[ptrDisciplineTheory.out_taint_def, mk_inst_def] >>
-      rpt (BasicProvers.TOP_CASE_TAC >> gvs[]))) >>
+      rpt (BasicProvers.CASE_TAC >> gvs[]))) >>
   qspecl_then [`PG`, `G`, `tn`, `s`, `id`, `opc`, `ops`, `out`, `s'`]
     mp_tac typed_copy_loop_arith_ghost >> simp[]
 QED
