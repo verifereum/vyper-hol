@@ -1,13 +1,19 @@
-(* Owner-approved residue: the pure-target frame does not preserve dead
+(* Owner-approved residue: the target-walk frame does not preserve dead
    popped storage/transient slots after an effectful RHS. *)
 Theory assignPlaceEffectfulRhsResidue
 Ancestors
-  bodySim supportedTargets targetPlaceSim stmtSimDefs exprSimHypsDefs
+  bodySim targetPlaceSim stmtSimDefs exprSimHypsDefs
   stmtLowering exprLowering compileEnv vyperInterpreter vyperTypeSystem
 
 Theorem assign_place_effectful_rhs_residue:
-  !ctx func cx lctx RetQ cenv ty env tops bt e es dty.
-    supported_target_pure tops bt /\
+  !ctx func cx lctx RetQ cenv ty env bt e es dty.
+    ~expr_can_mutate cenv (target_to_expr bt) /\
+    cenv.ce_func_mutability = build_func_mutability (cx_tops cx) /\
+    (!vis mut nr rr fn args dflts ret body.
+       MEM (FunctionDecl vis mut nr rr fn args dflts ret body) (cx_tops cx) ==>
+       function_mutability_ok [(NONE, cx_tops cx)] vis mut nr dflts body) /\
+    get_module_code cx NONE = SOME (cx_tops cx) /\
+    EVERY (\c. FST c = NONE) (int_calls_target bt) /\
     type_place_target env bt = SOME (Type dty) /\
     type_widens_to env.type_defs (expr_type e) dty /\
     assignable_type env.type_defs (expr_type e) /\
