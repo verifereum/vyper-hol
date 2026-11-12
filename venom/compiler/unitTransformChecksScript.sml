@@ -167,9 +167,13 @@ Proof
 QED
 
 (* An access inside the dynamic region [vs_initial_fmp, vs_fmp) passes above
- * the alloca frontier; one byte past vs_fmp does not. *)
+ * the alloca frontier; one starting a byte below vs_initial_fmp or ending a
+ * byte past vs_fmp does not. *)
 Theorem memory_dynamic_region_check:
   inst_mem_below_frontier (mk_inst 0 MLOAD [Lit 64w] ["x"])
+    (s with <| vs_alloca_next := 0; vs_initial_fmp := 64w;
+             vs_fmp := 96w |>) /\
+  ~inst_mem_below_frontier (mk_inst 0 MLOAD [Lit 63w] ["x"])
     (s with <| vs_alloca_next := 0; vs_initial_fmp := 64w;
              vs_fmp := 96w |>) /\
   ~inst_mem_below_frontier (mk_inst 0 MLOAD [Lit 65w] ["x"])
