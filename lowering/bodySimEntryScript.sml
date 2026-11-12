@@ -341,7 +341,8 @@ Proof
       gvs[exprSimHypsDefsTheory.cx_const_name_def]) >>
   `?ts. get_module_code cx NONE = SOME ts /\ is_immutable_decl id ts` by
     (gvs[IS_SOME_EXISTS, env_consistent_def, env_context_consistent_def] >>
-     metis_tac[]) >>
+     qpat_x_assum `!src id ty. FLOOKUP env.bare_global_assignable _ = SOME _ ==> _`
+       drule >> strip_tac >> gvs[]) >>
   gvs[] >> metis_tac[is_immutable_decl_variable_decl]
 QED
 
