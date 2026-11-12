@@ -40,7 +40,7 @@ Theorem vyper_call_gas_sufficient_asm_opt:
     ?g. !g'.
       g <= g' /\
       call_outcomes_storage_ok am tx (MAP SND (call_trace (add_frame_gas g' es))) /\
-      (!obs. ~source_exempt tops
+      (!obs. ~gas_source_exempt tops
          (call_external (SOME (MAP SND (call_trace (add_frame_gas g' es))))
             obs am tx))
       ==>
@@ -88,6 +88,9 @@ Proof
   qspecl_then [`rpolicy`, `out.po_unit`, `cplan`, `prog`, `prog'`, `fuel'`, `M`]
     mp_tac codegen_gas_sufficient_asm_opt >>
   impl_tac >- simp[] >> disch_then (qx_choose_then `g` assume_tac) >>
+  `!vs. mem_inv (\ctx fn inst s. inst_create_size_ok inst s)
+          out.po_unit.cu_context vs` by
+    metis_tac[o1_runtime_unit_create_size_ok] >>
   qexists_tac `g` >> rpt strip_tac >>
   (* the entry state at the new gas, as in vyper_call_correct_asm_opt *)
   `call_state_rel tops (assemble prog') am tx (add_frame_gas g' es)` by
@@ -145,7 +148,7 @@ Proof
       call_outcomes_ok am tx vi.vs_outcomes /\
       !marks. ~source_exempt tops
         (call_external (SOME vi.vs_outcomes)
-           (gas_explicit marks vi.vs_gas_readings) am tx)` by simp[] >>
+           (gas_explicit marks vi.vs_gas_readings) am tx)` by fs[gas_source_exempt_def] >>
      `code_layout_valid vi` by
        (irule gas_variant_code_layout_valid >> qexists_tac `vs` >> simp[]) >>
      drule_all lower_vyper_runtime_unit_memory_ok >> strip_tac >>
@@ -222,7 +225,8 @@ Theorem e2e_deploy_gas_sufficient_asm_opt:
   !policy tops deploy_bc runtime_bc am tx es.
     compile_vyper asm_opt_finalizer policy tops = SOME (deploy_bc, runtime_bc) /\
     ~program_reads_self_code tops /\
-    supported_program tops /\ constructor_call_free tops /\
+    supported_program tops /\ supported_program_deploy tops /\
+    constructor_call_free tops /\
     deploy_typing_ok tops am tx /\ deploy_storage_ok tops am tx /\
     deploy_state_rel tops deploy_bc am tx es /\
     ~(?t. runtime_bc = 0xEFw :: t)
@@ -234,7 +238,7 @@ Theorem e2e_deploy_gas_sufficient_asm_opt:
                     (initial_state (am with <|accounts := co.co_accounts;
                                               tStorage := co.co_tStorage|>) []))
         (MAP SND (call_trace (add_frame_gas g' es))) /\
-      (!obs. ~deploy_source_exempt tops
+      (!obs. ~deploy_gas_source_exempt tops
          (load_contract NONE obs am tx [(NONE, tops)] []))
       ==>
       ?r es'.
@@ -392,7 +396,7 @@ Proof
     metis_tac[ctx_sim_def] >>
   `~deploy_source_exempt tops
       (load_contract NONE (gas_explicit marks vs_in.vs_gas_readings) am tx
-         [(NONE, tops)] [])` by fs[] >>
+         [(NONE, tops)] [])` by fs[deploy_gas_source_exempt_def] >>
   qspecl_then [`tops`, `runtime_bc`, `am`, `tx`,
                `gas_explicit marks vs_in.vs_gas_readings`] mp_tac
     deploy_venom_result_rel_dead >>
@@ -456,7 +460,7 @@ Theorem vyper_call_gas_sufficient:
         run_call (add_frame_gas g' es) = SOME (r, es') /\
         (call_outcomes_storage_ok am tx
            (MAP SND (call_trace (add_frame_gas g' es))) /\
-         (!obs. ~source_exempt tops
+         (!obs. ~gas_source_exempt tops
             (call_external (SOME (MAP SND (call_trace (add_frame_gas g' es))))
                obs am tx)) /\
          (?op. frame_inst_raises (add_frame_gas g' es) OutOfGas op) ==>
@@ -467,7 +471,7 @@ Proof
      g <= g' /\
      call_outcomes_storage_ok am tx
        (MAP SND (call_trace (add_frame_gas g' es))) /\
-     (!obs. ~source_exempt tops
+     (!obs. ~gas_source_exempt tops
         (call_external (SOME (MAP SND (call_trace (add_frame_gas g' es))))
            obs am tx))
      ==>
@@ -498,7 +502,8 @@ Theorem e2e_deploy_gas_sufficient:
     fin IN accepted_finalizers /\
     (fin = asm_opt_finalizer ==> ~program_reads_self_code tops) /\
     compile_vyper fin policy tops = SOME (deploy_bc, runtime_bc) /\
-    supported_program tops /\ constructor_call_free tops /\
+    supported_program tops /\ supported_program_deploy tops /\
+    constructor_call_free tops /\
     deploy_typing_ok tops am tx /\ deploy_storage_ok tops am tx /\
     deploy_state_rel tops deploy_bc am tx es /\
     ~(?t. runtime_bc = 0xEFw :: t)
@@ -514,7 +519,7 @@ Theorem e2e_deploy_gas_sufficient:
                        (initial_state (am with <|accounts := co.co_accounts;
                                                  tStorage := co.co_tStorage|>) []))
            (MAP SND (call_trace (add_frame_gas g' es))) /\
-         (!obs. ~deploy_source_exempt tops
+         (!obs. ~deploy_gas_source_exempt tops
             (load_contract NONE obs am tx [(NONE, tops)] [])) /\
          r = INR (SOME OutOfGas) ==>
          max_code_size < LENGTH runtime_bc + imm_len tops \/
@@ -530,7 +535,7 @@ Proof
                    (initial_state (am with <|accounts := co.co_accounts;
                                              tStorage := co.co_tStorage|>) []))
        (MAP SND (call_trace (add_frame_gas g' es))) /\
-     (!obs. ~deploy_source_exempt tops
+     (!obs. ~deploy_gas_source_exempt tops
         (load_contract NONE obs am tx [(NONE, tops)] []))
      ==>
      ?r es'.

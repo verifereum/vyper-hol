@@ -409,7 +409,8 @@ Theorem codegen_gas_sufficient:
       codegen_context_obligations Inv unit.cu_context cp /\
       codegen_reachability_package Inv unit.cu_context vs /\
       initial_ctx_rel cp prog unit.cu_context vs (add_frame_gas g' es) /\
-      venom_run_bounded fuel M unit.cu_context vs
+      venom_run_bounded fuel M unit.cu_context vs /\
+      mem_inv (\ctx fn inst s. inst_create_size_ok inst s) unit.cu_context vs
       ==>
       ?r es'.
         run_call (add_frame_gas g' es) = SOME (r, es') /\

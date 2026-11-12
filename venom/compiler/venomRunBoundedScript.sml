@@ -20,3 +20,15 @@ Definition venom_run_bounded_def:
                EVERY (\(off,len). len = 0 \/ off + len <= M)
                  (inst_mem_ranges inst s)) ctx vs
 End
+
+(* Every CREATE or CREATE2 the run reaches has an initcode within the
+   EIP-3860 limit; the EVM answers a longer one with OutOfGas at any gas.
+   S7g takes it as mem_inv (\ctx fn inst s. inst_create_size_ok inst s). *)
+Definition inst_create_size_ok_def:
+  inst_create_size_ok inst s <=>
+    !v off sz salt sz_w.
+      ((inst.inst_opcode = CREATE /\ inst.inst_operands = [v; off; sz]) \/
+       (inst.inst_opcode = CREATE2 /\ inst.inst_operands = [v; off; sz; salt])) /\
+      eval_operand sz s = SOME sz_w ==>
+      w2n sz_w <= 2 * max_code_size
+End
