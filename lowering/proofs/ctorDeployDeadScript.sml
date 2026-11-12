@@ -68,6 +68,109 @@ Proof
   simp[EL_APPEND_EQN, EL_DROP]
 QED
 
+(* deploy_dead's storage and transient dead bytes are those of
+   accounts_agree and transient_agree at the target: agreeing up to them
+   composes with the source relation, as external_call_dead's do. *)
+Theorem accounts_agree_except_target_dead[local]:
+  (!a st. D.d_stor a st =
+     if a = t then {(k,b) | storage_dead H F st (w2n k) b} else {}) ==>
+  (accounts_agree_except D a1 a2 <=>
+   (!a. (a1 a with storage := (a2 a).storage) = a2 a) /\
+   (!a. a <> t ==> (a1 a).storage = (a2 a).storage) /\
+   storage_agree (storage_dead H F (a1 t).storage)
+     (a1 t).storage (a2 t).storage)
+Proof
+  strip_tac >> simp[accounts_agree_except_def] >>
+  pop_assum (fn th => simp[th]) >> eq_tac
+  >- (strip_tac >> rpt conj_tac
+      >- (gen_tac >> first_x_assum (qspec_then `a` (ACCEPT_TAC o CONJUNCT1)))
+      >- (rpt strip_tac >> first_x_assum (qspec_then `a` mp_tac) >>
+          gvs[storage_agree_except_empty]) >>
+      first_x_assum (qspec_then `t` mp_tac) >>
+      simp[storage_agree_except_storage_dead]) >>
+  rpt strip_tac
+  >- (first_x_assum (qspec_then `a` ACCEPT_TAC)) >>
+  Cases_on `a = t` >>
+  gvs[storage_agree_except_storage_dead, storage_agree_except_empty]
+QED
+
+Theorem transient_agree_except_target_dead[local]:
+  (!a st. D.d_trans a st =
+     if a = t then {(k,b) | storage_dead H T st (w2n k) b} else {}) ==>
+  (transient_agree_except D t1 t2 <=>
+   (!a. a <> t ==> t1 a = t2 a) /\
+   storage_agree (storage_dead H T (t1 t)) (t1 t) (t2 t))
+Proof
+  strip_tac >> simp[transient_agree_except_def] >>
+  pop_assum (fn th => simp[th]) >> eq_tac
+  >- (strip_tac >> conj_tac
+      >- (rpt strip_tac >> first_x_assum (qspec_then `a` mp_tac) >>
+          gvs[storage_agree_except_empty]) >>
+      first_x_assum (qspec_then `t` mp_tac) >>
+      simp[storage_agree_except_storage_dead]) >>
+  rpt strip_tac >> Cases_on `a = t` >>
+  gvs[storage_agree_except_storage_dead, storage_agree_except_empty]
+QED
+
+Theorem accounts_agree_dead_target_trans[local]:
+  !D a1 H cx a0 a2.
+    (!a st. D.d_stor a st =
+       if a = cx.txn.target then {(k,b) | storage_dead H F st (w2n k) b}
+       else {}) /\
+    accounts_agree H cx a0 a1 /\ accounts_agree_except D a1 a2 ==>
+    accounts_agree H cx a0 a2
+Proof
+  rpt strip_tac >> irule accounts_agree_storage_dead_trans >>
+  qexists_tac `a1` >>
+  drule accounts_agree_except_target_dead >>
+  disch_then (fn th => gvs[th])
+QED
+
+Theorem transient_agree_dead_target_trans[local]:
+  !D t1 H cx t0 t2.
+    (!a st. D.d_trans a st =
+       if a = cx.txn.target then {(k,b) | storage_dead H T st (w2n k) b}
+       else {}) /\
+    transient_agree H cx t0 t1 /\ transient_agree_except D t1 t2 ==>
+    transient_agree H cx t0 t2
+Proof
+  rpt strip_tac >> irule transient_agree_storage_dead_trans >>
+  qexists_tac `t1` >>
+  drule transient_agree_except_target_dead >>
+  disch_then (fn th => gvs[th])
+QED
+
+Theorem request_agree_dead_target_trans[local]:
+  !D r1 H cx r0 r2.
+    (!a st. D.d_stor a st =
+       if a = cx.txn.target then {(k,b) | storage_dead H F st (w2n k) b}
+       else {}) /\
+    (!a st. D.d_trans a st =
+       if a = cx.txn.target then {(k,b) | storage_dead H T st (w2n k) b}
+       else {}) /\
+    request_agree H cx r0 r1 /\ request_agree_except D r1 r2 ==>
+    request_agree H cx r0 r2
+Proof
+  rw[request_agree_def, request_agree_except_def]
+  >- gvs[extCallOracleTheory.call_request_component_equality]
+  >- metis_tac[accounts_agree_dead_target_trans]
+  >> metis_tac[transient_agree_dead_target_trans]
+QED
+
+(* Masking the target's code to the same value keeps accounts equal up to
+   dead storage bytes: the code update leaves every storage alone. *)
+Theorem accounts_agree_except_code_update[local]:
+  accounts_agree_except D a1 a2 ==>
+  accounts_agree_except D
+    (update_account t (lookup_account t a1 with code := c) a1)
+    (update_account t (lookup_account t a2 with code := c) a2)
+Proof
+  simp[accounts_agree_except_def, vfmStateTheory.update_account_def,
+       vfmStateTheory.lookup_account_def, combinTheory.APPLY_UPDATE_THM] >>
+  strip_tac >> gen_tac >> first_x_assum (qspec_then `a` strip_assume_tac) >>
+  IF_CASES_TAC >> gvs[vfmStateTheory.account_state_component_equality]
+QED
+
 Theorem deploy_venom_result_rel_dead:
   !H tops runtime_bc am tx gobs src res res'.
     deploy_source_ok tops am tx /\
@@ -89,48 +192,17 @@ Proof
           impl_tac >- (qpat_x_assum `deploy_source_ok _ _ _` mp_tac >>
                        simp[deploy_source_ok_def]) >>
           strip_tac >>
-          `(initial_evaluation_context am'.sources am'.layouts tx NONE).txn = tx`
-            by simp[initial_evaluation_context_def] >>
-          qabbrev_tac `cx = initial_evaluation_context am'.sources am'.layouts tx NONE` >>
-          `deploy_dead H tops runtime_bc am tx =
-           <| d_stor := (\a st. if a = tx.target
-                                then {(k,b) | storage_dead H F st (w2n k) b}
-                                else {});
-              d_trans := (\a st. if a = tx.target
-                                 then {(k,b) | storage_dead H T st (w2n k) b}
-                                 else {});
-              d_imm := K UNIV;
-              d_ret := (\r. {i | LENGTH runtime_bc <= i /\
-                                imm_section_dead tops (DROP (LENGTH runtime_bc) r)
-                                  (i - LENGTH runtime_bc)}) |>` by
-            simp[deploy_dead_def, Abbr`cx`] >>
-          pop_assum (fn th => fs[th]) >>
+          qabbrev_tac `D = deploy_dead H tops runtime_bc am tx` >>
           fs[deploy_venom_result_rel_def, LET_THM] >>
           (* returndata *)
           qspecl_then [`runtime_bc`, `section`, `s'.vs_returndata`,
                        `imm_section_dead tops section`] mp_tac
             append_agree_except_suffix >>
-          impl_tac >- (gvs[] >> rpt strip_tac >> first_x_assum irule >>
-                       simp[DROP_LENGTH_APPEND]) >>
-          strip_tac >> qexists_tac `sec2` >> simp[] >>
-          `!a. a <> tx.target ==> s'.vs_accounts a = s.vs_accounts a` by
-            (rpt strip_tac >>
-             qpat_x_assum `accounts_agree_except _ _ _` mp_tac >>
-             simp[accounts_agree_except_def] >>
-             disch_then (qspec_then `a` strip_assume_tac) >>
-             gvs[storage_agree_except_empty] >>
-             qpat_x_assum `_ with storage := _ = _` (SUBST1_TAC o SYM) >>
-             simp[vfmStateTheory.account_state_component_equality]) >>
-          `s.vs_accounts tx.target with storage :=
-             (s'.vs_accounts tx.target).storage = s'.vs_accounts tx.target /\
-           storage_agree (storage_dead H F (s.vs_accounts tx.target).storage)
-             (s.vs_accounts tx.target).storage
-             (s'.vs_accounts tx.target).storage` by
-            (qpat_x_assum `accounts_agree_except _ _ _` mp_tac >>
-             simp[accounts_agree_except_def] >>
-             disch_then (qspec_then `tx.target` mp_tac) >>
-             simp[storage_agree_except_storage_dead]) >>
-          rpt conj_tac
+          impl_tac >- (gvs[Abbr `D`, deploy_dead_def] >> rpt strip_tac >>
+                       first_x_assum irule >> simp[DROP_LENGTH_APPEND]) >>
+          strip_tac >> qexists_tac `sec2` >> rpt conj_tac
+          >~ [`s'.vs_returndata = _`] >- first_assum ACCEPT_TAC
+          >~ [`immutables_section_rel _ _ sec2`]
           >- (`!pre vis name ty slot post tv v.
                  tops = pre ++ VariableDecl vis Immutable name ty slot :: post /\
                  FLOOKUP (get_source_immutables NONE
@@ -142,25 +214,33 @@ Proof
               impl_tac >- (rpt conj_tac >> TRY (first_assum ACCEPT_TAC >> NO_TAC) >>
                            simp[]) >>
               simp[])
-          >- gvs[vfmStateTheory.lookup_account_def]
-          >- (fs[vfmStateTheory.lookup_account_def,
-                 vfmStateTheory.account_state_component_equality])
-          >- (fs[vfmStateTheory.lookup_account_def] >>
-              irule storage_agree_dead_trans >>
-              qexists_tac `(s.vs_accounts tx.target).storage` >> simp[])
-          >- (qpat_x_assum `transient_agree _ _ _ _` mp_tac >>
-              qpat_x_assum `transient_agree_except _ _ _` mp_tac >>
-              simp[transient_agree_def, transient_agree_except_def] >>
-              rpt strip_tac
-              >- (qpat_x_assum `!a. storage_agree_except _ _ _`
-                    (qspec_then `addr` mp_tac) >>
-                  simp[storage_agree_except_empty] >> metis_tac[]) >>
-              qpat_x_assum `!a. storage_agree_except _ _ _`
-                (qspec_then `tx.target` mp_tac) >>
-              simp[storage_agree_except_storage_dead] >> strip_tac >>
-              irule storage_agree_dead_trans >>
-              qexists_tac `s.vs_transient tx.target` >> simp[]) >>
-          gvs[]) >>
+          >~ [`accounts_agree H _ _ _`]
+          >- (`s'.vs_pending_deletions = s.vs_pending_deletions` by gvs[] >>
+              pop_assum SUBST1_TAC >>
+              irule accounts_agree_dead_target_trans >>
+              qexistsl [`D`, `process_deletions s.vs_pending_deletions
+                 (update_account tx.target
+                    (lookup_account tx.target s.vs_accounts with
+                       code := (lookup_account tx.target am'.accounts).code)
+                    s.vs_accounts)`] >>
+              rpt conj_tac >> TRY (first_assum ACCEPT_TAC) >>
+              TRY (simp[Abbr `D`, deploy_dead_def, initial_evaluation_context_def] >>
+                   NO_TAC) >>
+              irule accounts_agree_except_process_deletions >>
+              irule accounts_agree_except_code_update >> first_assum ACCEPT_TAC)
+          >~ [`transient_agree H _ _ _`]
+          >- (irule transient_agree_dead_target_trans >>
+              qexistsl [`D`, `s.vs_transient`] >>
+              rpt conj_tac >> TRY (first_assum ACCEPT_TAC) >>
+              simp[Abbr `D`, deploy_dead_def, initial_evaluation_context_def])
+          >~ [`logs_correspond _ _ _ _ _`] >- gvs[] >>
+          gvs[LIST_REL_EL_EQN] >> rpt strip_tac >>
+          irule request_agree_dead_target_trans >>
+          qexistsl [`D`, `EL n s.vs_requests`] >>
+          rpt conj_tac >> TRY (first_assum ACCEPT_TAC)
+          >- simp[Abbr `D`, deploy_dead_def, initial_evaluation_context_def]
+          >- simp[Abbr `D`, deploy_dead_def, initial_evaluation_context_def] >>
+          metis_tac[]) >>
       rename1 `INR exc` >> Cases_on `exc` >>
       gvs[deploy_venom_result_rel_def, deploy_source_exempt_def]) >>
   Cases_on `src`
