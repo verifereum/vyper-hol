@@ -38,7 +38,8 @@ Proof
           drule_all eval_expr_force_value >> simp[]) >>
       rpt strip_tac >> first_x_assum drule >> strip_tac >> gvs[expr_exit_success_map] >>
       gvs[expr_post_def, vv_post_def, vv_holds_def, vv_at_def,
-          read_result_def, return_def, vv_own_def]) >>
+          read_result_def, return_def, vv_own_def] >>
+      first_assum ACCEPT_TAC) >>
   disj2_tac >> disj2_tac >> drule eval_expr_force_ignore >>
   disch_then (fn th => fs[th]) >> metis_tac[]
 QED
