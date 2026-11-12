@@ -3,7 +3,7 @@ Theory targetPureWalkSimulationProbe
 Ancestors
   targetPureWalkModuleProbe intCallStep venomExecSemantics
   venomState venomInst list finite_map compileEnv exprLowering vyperAST
-  emitHelper fragExec
+  emitHelper fragExec loweringStateRelDefs
 
 Definition simulation_probe_label_def:
   simulation_probe_label = internal_fn_label 0 "index" [] F
@@ -13,6 +13,7 @@ Definition simulation_probe_cenv_def:
   simulation_probe_cenv = (ARB : compile_env) with
     <| ce_vars := FEMPTY |+ ("a", PtrVar (Var "a_ptr") 32);
        ce_module_vars := FEMPTY;
+       ce_imm_alloca := NONE;
        ce_var_type := (\n. if n = "a" then
          SOME (ArrayT (BaseT (UintT 256)) (Fixed 1)) else NONE);
        ce_func_info := (\n. (0,0,[]));
@@ -22,6 +23,12 @@ Definition simulation_probe_cenv_def:
        ce_func_mutability := build_func_mutability module_probe_tops;
        ce_is_ctor := F |>
 End
+
+Theorem simulation_probe_immutable_base_zero[local]:
+  !s. immutable_base_zero simulation_probe_cenv s
+Proof
+  simp[immutable_base_zero_def, simulation_probe_cenv_def]
+QED
 
 Definition simulation_probe_callee_def:
   simulation_probe_callee = mk_raw_function simulation_probe_label
