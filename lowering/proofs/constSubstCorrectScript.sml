@@ -2725,10 +2725,6 @@ Proof
          REWRITE_RULE [ignore_bind_def]) >>
       disch_then (mp_tac o SRULE []) >>
       ntac 8 (disch_then drule) >> strip_tac >>
-      (* PORT_ADMISSION: SEQ-3071, bot/sol/seq-3071-whitelist-mergeup-3b, built at 94a261456 *)
-      (* The checked IntCall body preserves the declared constant cell;
-         scope push/pop and halt-dependent lock cleanup do not write it.
-         Original remaining IntCall proof, retained for the active repair:
       qpat_x_assum `!st res st' mods art src id env addr.
         eval_exprs _ _ _ = _ /\ _ ==> _` kall_tac >>
       qpat_x_assum `!a b st res st' mods art src id env addr.
@@ -2737,8 +2733,8 @@ Proof
       >- (rpt strip_tac >> simp_tac bool_ss [] >>
           irule protected_cell_frame_bind >>
           simp[protected_cell_frame_pure_guards, protected_cell_frame_return]) >>
-      [ Previously the pop and unlock were one finally cleanup bind.
-         The evaluator now skips unlocking on halt, but always pops. ]
+      (* Previously the pop and unlock were one finally cleanup bind.
+         The evaluator now skips unlocking on halt, but always pops. *)
       irule state_rel_frame_finally_unless_halt >>
       conj_tac >- metis_tac[protected_cell_frame_trans] >>
       reverse conj_tac
@@ -2759,8 +2755,6 @@ Proof
       qexistsl [`art`, `function_entry_env art mods call_src Internal tup2`, `mods`, `tup4`] >>
       simp[] >> irule checked_frame_context_push_function >>
       goal_assum drule >> simp[])
-      *)
-      cheat)
   >~ [`type_stmt env ret (Append bt e)`]
   >- (`well_typed_expr env e` by
         (qpat_x_assum `IS_SOME (type_stmt env ret (Append bt e))` mp_tac >>
@@ -2816,8 +2810,8 @@ Proof
       irule protected_cell_frame_bind >> reverse conj_tac
       >- (Cases_on `subscript_reads_base cx e e'` >>
           simp[protected_cell_frame_return] >>
-          irule protected_cell_frame_read_tail >>
-          simp[protected_cell_frame_return]) >>
+          irule protected_cell_frame_bind >>
+          simp[protected_cell_frame_reads, protected_cell_frame_return]) >>
       rpt strip_tac >> simp_tac bool_ss [] >>
       irule protected_cell_frame_bind >> reverse conj_tac
       >- (simp[state_rel_frame_result] >> metis_tac[]) >>
@@ -2832,8 +2826,8 @@ Proof
       irule protected_cell_frame_bind >> reverse conj_tac
       >- (Cases_on `subscript_reads_base cx e e'` >>
           simp[protected_cell_frame_return] >>
-          irule protected_cell_frame_read_tail >>
-          simp[protected_cell_frame_return]) >>
+          irule protected_cell_frame_bind >>
+          simp[protected_cell_frame_reads, protected_cell_frame_return]) >>
       rpt strip_tac >> simp_tac bool_ss [] >>
       irule protected_cell_frame_bind >> reverse conj_tac
       >- (simp[state_rel_frame_result] >> metis_tac[]) >>
@@ -3054,8 +3048,7 @@ Proof
       >- (simp[state_rel_frame_result] >> rpt strip_tac >>
           gvs[arithmeticTheory.ADD_COMM] >> metis_tac[]) >>
       rpt strip_tac >> simp_tac bool_ss [] >>
-      irule protected_cell_frame_bind >>
-      simp[protected_cell_frame_reads, protected_cell_frame_ext_call])
+      simp[protected_cell_frame_ext_call])
   >~ [`IS_SOME (type_place_target env (NameTarget name))`]
   >- (rewrite_tac[ignore_bind_def] >>
       irule protected_cell_frame_bind >> simp[protected_cell_frame_primitives] >>
