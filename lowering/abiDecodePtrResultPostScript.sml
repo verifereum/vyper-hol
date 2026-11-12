@@ -62,6 +62,7 @@ Theorem abi_decode_tuple_result_posts:
   (!mem. mem_agree_outside tk.t_mem t.vs_memory mem ==>
     tuple_in_memory vs tvs (w2n d) mem) /\
   stmt_state_rel ctx func cenv cx ee t /\ wb_frame cenv es ee sa s0 t /\
+  (~expr_has_effect e ==> pure_frame cenv func es sa s0 t) /\
   FLOOKUP t.vs_allocas aid = SOME (w2n d,type_memory_bytes cenv (TupleT tys)) /\
   sa.cs_next_id <= aid /\ aid < sb.cs_next_id /\
   (!name b k. local_region cenv ee.scopes t name b k ==>
@@ -77,6 +78,8 @@ Proof
   `!mem. mem_agree_outside tk.t_mem t.vs_memory mem ==>
     val_in_memory (TupleTV tvs) (ArrayV (TupleV vs)) (w2n d) mem` by
     simp[val_in_memory_tuple] >>
+  `post_value_type cenv e = expr_type e` by
+    (irule post_value_type_lowered >> simp[]) >>
   conj_tac
   >- (qpat_assum `expr_type e = TupleT tys` (SUBST1_TAC o GSYM) >>
       irule vv_post_allocated_memory_intro >>

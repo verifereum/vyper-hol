@@ -9,7 +9,7 @@ Ancestors
 Theorem type_builtin_unary_vv_sim_ptr_origin:
   expr_body_pre cenv cx env e es /\
   expr_sim_ptr d ctx PG func cenv cx (expr_type e) e es /\
-  type_builtin_args_length_ok tb 1 /\
+  type_builtin_args_length_ok tb 1 /\ post_value_type cenv e = expr_type e /\
   (!sa sb vv. compile_expr cenv ty (TypeBuiltin ann tb typ [e]) sa = (vv,sb) ==>
     ?x sm. lower_value compile_expr cenv (expr_type e) e sa = (x,sm) /\
       code x sm = (vv,sb)) /\
@@ -72,6 +72,8 @@ Proof
         (strip_assume_tac o REWRITE_RULE [gas_summary_ptr_at_marked]) >>
       gvs[]
       >- (drule hash_marked_ptr_normal >> strip_tac >>
+          qpat_assum `post_value_type _ _ = _`
+            (fn th => rule_assum_tac (REWRITE_RULE [th])) >>
           qpat_x_assum `!sa sm sb x vv s0 G0 tn0 gs v ee G tn s. _` drule >>
           simp[] >> disch_then (drule_at (Pat `bind _ _ _ = _`)) >>
           simp[] >> disch_then drule_all >> strip_tac

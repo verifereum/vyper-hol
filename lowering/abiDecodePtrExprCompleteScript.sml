@@ -1,7 +1,7 @@
 (* Join operand simulation with decoder paths and whole-expression origins. *)
 Theory abiDecodePtrExprComplete
 Ancestors
-  loweringStateRelDefs exprSimHashBoundary
+  loweringStateRelDefs exprSimHashBoundary exprSimWordArgs
   abiDecodePtrExpr abiDecodePtrUnaryOrigin abiDecodePtrResultPost
   abiDecodePtrRejectOutcome abiDecodePtrCallerMetadata
   abiDecodePtrCallbackMetadata abiDecodePtrSuccessPost
@@ -147,7 +147,11 @@ Resume abi_decode_normal_callback[success]:
    ptr_vv_ok cx (TupleT tys) (Value (ArrayV (TupleV vs)))
      (LocatedValue (TupleT tys) (mk_ptr (Var dst) LocMemory)) ee H tf v /\
    ptr_buf_ok cenv (TypeBuiltin (TupleT tys) (AbiDecode b) (TupleT tys) [e]) (Var dst) H v` by
-    (irule abi_decode_tuple_result_posts >>
+    (`~expr_has_effect e ==> pure_frame cenv func es sa s0 v` by
+       (strip_tac >>
+        qpat_x_assum `pure_frame _ _ _ _ _ _ ==> pure_frame _ _ _ _ _ _` irule >>
+        metis_tac[expr_post_pure_frame]) >>
+     irule abi_decode_tuple_result_posts >>
      simp[expr_type_def, lowered_value_type_def] >>
      qexistsl_tac [`sh.cs_next_id`, `tvs`] >> simp[] >>
      rpt conj_tac >> first_assum ACCEPT_TAC) >>
@@ -250,6 +254,8 @@ Theorem abi_decode_unary_vv_sim_ptr:
 Proof
   strip_tac >> drule_all abi_decode_body_target_metadata >> strip_tac >> gvs[] >>
   drule abi_decode_body_pre_shape >> strip_tac >> gvs[] >>
+  `post_value_type cenv e = expr_type e` by
+    (irule post_value_type_bytestring >> fs[is_bytestring_type_def]) >>
   irule type_builtin_unary_vv_sim_ptr_origin >>
   asm_rewrite_tac[] >> simp[type_builtin_args_length_ok_def] >>
   reverse conj_tac >- (qexists_tac `env` >> simp[]) >>
