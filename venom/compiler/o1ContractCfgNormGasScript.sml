@@ -143,5 +143,12 @@ Theorem cfg_norm_stage_terminates_back:
     !s fuel'. fn_entry_state fn s /\ terminates (run_blocks fuel' C' fn' s) ==>
       ?fuel. terminates (run_blocks fuel C fn s)
 Proof
-  cheat
+  strip_tac >> drule cfg_norm_stage_supply_lookup >>
+  disch_then (qspec_then `name` mp_tac) >>
+  Cases_on `lookup_function name C.ctx_functions` >> simp[] >> strip_tac >>
+  rename1 `lookup_function name C.ctx_functions = SOME fn` >>
+  drule_all cfg_norm_stage_bisim >> simp[ctx_bisim_def] >> strip_tac >>
+  first_x_assum drule >> strip_tac >> gvs[] >> rpt strip_tac >>
+  first_x_assum drule >> strip_tac >> first_x_assum drule >> strip_tac >>
+  metis_tac[frame_result_rel_terminates]
 QED
