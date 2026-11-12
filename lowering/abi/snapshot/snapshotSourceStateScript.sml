@@ -55,10 +55,10 @@ Proof
   >- (`out = ss` by fs[] >> qexists_tac `out` >> asm_simp_tac bool_ss [] >> gvs[]) >>
   `source_memory_separated cenv es.scopes ss (w2n (memory_snapshot_addr cs.cs_next_id ss)) (type_memory_size tv)` by
     (qpat_x_assum `_ ==> source_memory_separated _ _ _ _ _` mp_tac >> impl_tac >- fs[] >> simp[]) >>
-  qspecl_then [`H`, `func`, `cenv`, `cx`, `es`, `ss`, `out`, `tv`, `1`,
-    `w2n (memory_snapshot_addr cs.cs_next_id ss)`, `cs.cs_next_var`] mp_tac
-    (Q.GEN `H` source_relations_copy_frame) >>
-  impl_tac >- (simp_tac bool_ss [MULT_CLAUSES] >> rpt conj_tac >> first_assum MATCH_ACCEPT_TAC) >>
+  drule_all (SIMP_RULE bool_ss [MULT_CLAUSES]
+    (Q.SPECL [`func`, `cenv`, `cx`, `es`, `ss`, `out`, `tv`, `1`,
+      `w2n (memory_snapshot_addr cs.cs_next_id ss)`, `cs.cs_next_var`]
+      source_relations_copy_frame)) >>
   strip_tac >> qexists_tac `out` >> asm_simp_tac bool_ss []
 QED
 
@@ -124,8 +124,7 @@ Proof
        compile_materialize_source_separated) >>
      impl_tac >- (rpt conj_tac >> FIRST [first_assum MATCH_ACCEPT_TAC,
        asm_simp_tac bool_ss [] >> first_assum MATCH_ACCEPT_TAC]) >> simp[]) >>
-  qspecl_then [`H`, `tops`, `dep`, `layouts`, `addr`, `art`, `ctx`, `func`, `cenv`, `cx`, `es`, `ty`, `tv`, `v`,
-    `src`, `suffix`, `cs`, `op`, `cs'`, `ss`, `args`, `atvs`, `values`] mp_tac
-    (Q.GEN `H` checked_compile_log_save_arg_state) >>
+  mp_tac (Q.SPECL [`tops`, `dep`, `layouts`, `addr`, `art`, `ctx`, `func`, `cenv`, `cx`, `es`, `ty`, `tv`, `v`,
+    `src`, `suffix`, `cs`, `op`, `cs'`, `ss`, `args`, `atvs`, `values`] checked_compile_log_save_arg_state) >>
   impl_tac >- (rpt conj_tac >> first_assum MATCH_ACCEPT_TAC) >> simp[]
 QED
