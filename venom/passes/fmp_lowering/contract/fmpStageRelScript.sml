@@ -151,7 +151,8 @@ End
 Definition fmp_stage_lowered_def:
   fmp_stage_lowered infos ctx runner fn fn' <=>
     analyze_fmp_context ctx = SOME infos /\
-    ?sp sp'. fmp_lower_function_with_info infos ctx sp fn = SOME (fn',sp') /\
+    ?sp sp'. ir_supply_covers_fn sp fn /\
+             fmp_lower_function_with_info infos ctx sp fn = SOME (fn',sp') /\
              runner = FST (fresh_ir_var sp)
 End
 
@@ -378,7 +379,8 @@ End
 (* Why: the INVOKE case of the runner induction (run_defs_ind's step_inst
    predicate): from a related point past the INVOKE's restores, the target
    INVOKE matches the source one, returning to a related point with the
-   same site map and runner. *)
+   same runner, on the source's fuel; the site map may change across the
+   call. *)
 Definition fmp_invoke_sim_def:
   fmp_invoke_sim rpolicy D C C' vs vs' fmp eom k inv s <=>
     !stk PG G tn fn sm lo t ts fn' inv' r.
@@ -390,17 +392,17 @@ Definition fmp_invoke_sim_def:
       lookup_function fn.fn_name C'.ctx_functions = SOME fn' /\
       active_inst fn' inv' t /\
       step_inst k C inv s = r /\ terminates r ==>
-      ?m r'.
-        step_inst m C' inv' t = r' /\
+      ?r'.
+        step_inst k C' inv' t = r' /\
         case r of
           OK s1 =>
-            ?t1 tn1 next.
+            ?t1 tn1 next sm1.
               r' = OK t1 /\
               active_inst fn next (s1 with vs_inst_idx := SUC s.vs_inst_idx) /\
               frame_reachable vs C stk PG
                 (DRESTRICT G (COMPL (set inv.inst_outputs))) tn1 fn next
                 (s1 with vs_inst_idx := SUC s.vs_inst_idx) /\
-              fmp_stage_rel D C' sm (w2n vs'.vs_initial_fmp) (w2n fmp) eom F
+              fmp_stage_rel D C' sm1 (w2n vs'.vs_initial_fmp) (w2n fmp) eom F
                 stk PG (DRESTRICT G (COMPL (set inv.inst_outputs))) tn1 fn
                 (s1 with vs_inst_idx := SUC s.vs_inst_idx) lo
                 (t1 with vs_inst_idx := SUC t.vs_inst_idx) ts
