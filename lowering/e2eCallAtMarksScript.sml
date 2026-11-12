@@ -57,6 +57,39 @@ Proof
   drule_all external_call_result_rel_frame >> simp[]
 QED
 
+Theorem selected_raw_memory[local]:
+  lower_vyper_runtime_unit tops rp = SOME unit /\
+  o1_source_unit_ok unit /\
+  lookup_function "__entry" unit.cu_context.ctx_functions = SOME fn /\
+  fn_entry_label fn = SOME "__entry" /\
+  vs.vs_alloca_next = 0 /\ code_layout_valid vs /\
+  (!n. mem_safe_blocks n unit.cu_context fn
+    (vs with <|vs_prev_bb := NONE; vs_current_bb := "__entry"; vs_inst_idx := 0|>)) /\
+  (!n. ptr_safe_blocks D 0 n unit.cu_context fn [] FEMPTY entry_taint
+    (vs with <|vs_prev_bb := NONE; vs_current_bb := "__entry"; vs_inst_idx := 0|>)) ==>
+  raw_unit_memory_ok unit.cu_context vs /\
+  ptr_discipline 0 unit.cu_context vs /\ taint_within D unit.cu_context vs /\
+  mem_inv dload_offset_ok unit.cu_context vs /\
+  mem_inv dload_headroom_ok unit.cu_context vs
+Proof
+  strip_tac >>
+  drule lower_vyper_runtime_unit_context_entry >> strip_tac >>
+  drule vyperCompilerTheory.lowering_context_ok_dload_budget >> strip_tac >>
+  drule o1_source_unit_ok_no_dalloca >> strip_tac >>
+  `unit_alloca_budget unit.cu_context +
+   32 * ctx_dload_count unit.cu_context < dimword (:256)` by
+    gvs[ctx_dload_count_def, rich_listTheory.FILTER_FLAT,
+        rich_listTheory.LENGTH_FLAT, listTheory.MAP_MAP_o, combinTheory.o_DEF] >>
+  `0 <= vs.vs_alloca_next` by simp[] >>
+  drule_all lowered_unit_ptr_taint >> strip_tac >>
+  rpt conj_tac
+  >- (irule lowered_unit_raw_memory_ok_from >> simp[] >> gvs[])
+  >- simp[]
+  >- simp[]
+  >- (irule lowered_unit_dload_offset_ok >> simp[] >> gvs[]) >>
+  irule lowered_unit_dload_headroom_ok_from >> simp[] >> gvs[]
+QED
+
 Theorem vyper_call_correct_at_marks:
   !policy tops deploy_bc runtime_bc am tx ret es rpolicy unit out prog cp vs marks.
     compile_vyper (K SOME) policy tops = SOME (deploy_bc, runtime_bc) /\
