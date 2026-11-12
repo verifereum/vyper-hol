@@ -777,7 +777,7 @@ Proof
   rpt strip_tac >>
   drule vyperTypeContractStaticMapsTheory.lookup_function_Deploy_SOME_cases >>
   strip_tac >> gvs[] >>
-  gvs[ctorDeployDefsTheory.deploy_source_ok_def, deploy_typing_ok_def] >>
+  gvs[ctorDeployDefsTheory.deploy_source_ok_def, deploy_typing_ok_constants_ready] >>
   qspecl_then [`T`, `am.layouts`, `tx.target`, `[(NONE,tops)]`, `deploy_art`,
       `NONE`, `tops`, `mut`, `T`, `raw`, `fname`, `args`, `dflts`, `ret`, `body'`]
     mp_tac
@@ -1180,7 +1180,7 @@ Proof
      lookup_function NONE fname Deploy tops =
        SOME (mut,nr,args,dflts,ret,body) ==> ~nr` by
     metis_tac[deploy_source_ctor_not_nr] >>
-  gvs[ctorDeployDefsTheory.deploy_source_ok_def, deploy_typing_ok_def,
+  gvs[ctorDeployDefsTheory.deploy_source_ok_def, deploy_typing_ok_constants_ready,
       constructor_call_free_def] >>
   `ALOOKUP [(NONE,tops)] NONE = SOME tops /\
    MEM (NONE,tops) [(NONE,tops)]` by simp[] >>
