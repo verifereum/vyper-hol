@@ -6,7 +6,7 @@ Ancestors
   allocaHistoryFragment freshWrites fragGasFresh
   instMemFrontier memSafeRun fragExecMem loweringStateRelDefs bodyUnopFragMemory
 
-Theorem abi_decode_range_sequence[local]:
+Theorem abi_decode_range_sequence:
   compile_abi_decode_range_check src e hi st = ((),st') /\
   fresh_vars_wrt st s /\ eval_operand src s = SOME p /\
   eval_operand e s = SOME q /\ eval_operand hi s = SOME h ==>

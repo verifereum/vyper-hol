@@ -29,7 +29,7 @@ Proof
        IS_PREFIX_APPEND]
 QED
 
-Theorem abi_decode_mem_ge_rejected[local]:
+Theorem abi_decode_mem_ge_rejected:
   abi_decode_ge_guard a b st = ((),st') /\
   eval_operand a s = SOME va /\ eval_operand b s = SOME vb /\
   w2n va < w2n vb /\ fresh_vars_wrt st s ==>
