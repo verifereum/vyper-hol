@@ -15089,18 +15089,35 @@ Proof
   simp[source_internal_fn_descriptor_def]
 QED
 
-Theorem classified_internal_names:
+Theorem classify_fold_internal_names[local]:
   !tops. MAP (\p. FST (SND (SND (SND p))))
-      (FST (SND (classify_functions tops))) =
+      (FST (SND (FOLDR classify_function ([],[],NONE,NONE) tops))) =
     supported_internal_function_names tops
 Proof
-  Induct >> simp[classify_functions_def, supported_internal_function_names_def] >>
-  gen_tac >> fs[classify_functions_def] >>
+  Induct >> simp[supported_internal_function_names_def] >>
+  gen_tac >>
   qmatch_goalsub_abbrev_tac `classify_function h acc` >>
   PairCases_on `acc` >> Cases_on `h` >>
   gvs[classify_function_def, supported_internal_function_names_def] >>
   rename1 `case vis of External => _ | Internal => _ | Deploy => _` >>
   Cases_on `vis` >> simp[] >> IF_CASES_TAC >> simp[]
+QED
+
+Theorem classified_internal_names:
+  !tops. MAP (\p. FST (SND (SND (SND p))))
+      (FST (SND (classify_functions tops))) =
+    supported_internal_function_names tops
+Proof
+  `!cs fns. MAP (\p. FST (SND (SND (SND p))))
+      (MAP (subst_consts_fn cs)
+        (fns : (function_mutability # bool # bool # string # argument list #
+                expr list # type # stmt list) list)) =
+    MAP (\p. FST (SND (SND (SND p)))) fns` by
+    (gen_tac >> Induct_on `fns` >> simp[] >>
+     gen_tac >> PairCases_on `h` >> simp[constSubstTheory.subst_consts_fn_def]) >>
+  gen_tac >> simp[classify_functions_def] >>
+  pairarg_tac >> simp[] >>
+  qspec_then `tops` mp_tac classify_fold_internal_names >> fs[]
 QED
 
 Theorem classified_internal_names_distinct:
