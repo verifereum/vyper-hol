@@ -52,7 +52,7 @@ Theorem target_attribute_memory:
     type_place_target env bt = SOME vt /\
     compile_get_target_ptr compile_expr cenv bt sa = (op,sb) /\
     fn_has_code sa sb func /\ fn_inst_ids_distinct func /\
-    local_ptrs_reserved cenv sa /\
+    local_ptrs_reserved cenv sa /\ ~block_is_terminated sa /\
     gas_admissible (eval_base_place cx bt) target_res_ok es /\
     stmt_state_rel ctx func cenv cx es s0 /\ alloca_history func s0 /\
     ~s0.vs_halted /\ s0.vs_current_bb = sa.cs_current_bb /\
@@ -71,7 +71,7 @@ Theorem target_attribute_memory:
     type_place_target env (AttributeTarget bt fld) = SOME vt /\
     compile_get_target_ptr compile_expr cenv (AttributeTarget bt fld) sa = (op,sb) /\
     fn_has_code sa sb func /\ fn_inst_ids_distinct func /\
-    local_ptrs_reserved cenv sa /\
+    local_ptrs_reserved cenv sa /\ ~block_is_terminated sa /\
     gas_admissible (eval_base_place cx (AttributeTarget bt fld)) target_res_ok es /\
     stmt_state_rel ctx func cenv cx es s0 /\ alloca_history func s0 /\
     ~s0.vs_halted /\ s0.vs_current_bb = sa.cs_current_bb /\
