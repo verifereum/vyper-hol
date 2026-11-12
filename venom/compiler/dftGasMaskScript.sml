@@ -6621,10 +6621,18 @@ Proof
        fs[EVERY_MEM, dft_gas_swap_pair_def] >>
      qpat_assum `Abbrev (R = _)` (fn th =>
        pure_rewrite_tac[REWRITE_RULE [markerTheory.Abbrev_def] th]) >> BETA_TAC >>
-     pure_rewrite_tac[FOLDR_APPEND, Once dftRunRelTheory.dft_exec_prefix_continue] >>
-     qpat_assum `FOLDR _ OK pre _ = OK a` (fn th => pure_rewrite_tac[th]) >>
-     pure_rewrite_tac[dftIndexedExecTheory.dft_exec_cons_def] >> BETA_TAC >>
-     Cases_on `step_inst fuel C y a` >> fs[]) >>
+     pure_rewrite_tac[FOLDR_APPEND] >>
+     qpat_assum `EVERY (\i. ~is_terminator i.inst_opcode) pre`
+       (fn th => pure_once_rewrite_tac[MATCH_MP
+         (Q.SPECL [`pre`, `s with vs_gas_readings := pg ++ fg ++ r`]
+           dftRunRelTheory.dft_exec_prefix_continue) th]) >>
+     pure_rewrite_tac[APPEND_ASSOC] >>
+     qpat_assum `FOLDR _ OK pre _ = OK a`
+       (fn th => pure_rewrite_tac[REWRITE_RULE [APPEND_ASSOC] th]) >>
+     pure_rewrite_tac[listTheory.FOLDR, dftIndexedExecTheory.dft_exec_cons_def] >> BETA_TAC >>
+     Cases_on `step_inst fuel C y a` >>
+     qpat_assum `step_inst fuel C y a = _` (fn th => pure_rewrite_tac[th]) >>
+     simp_tac (srw_ss()) [] >> fs[]) >>
   pop_assum (mk_asm "stopped_source") >>
   conj_tac
   >- (rpt gen_tac >> strip_tac >> Cases_on `k <= LENGTH pre`
@@ -6661,8 +6669,52 @@ Proof
           irule noninvoke_prefix_readings_exact >>
           qexistsl_tac [`C`, `fuel`, `FLAT (TAKE k gss)`, `TAKE k pre`, `s`] >>
           fs[Abbr `R`, APPEND_ASSOC]) >>
-      FAIL_TAC "late cuts") >>
-  FAIL_TAC "barrier"
+      gvs[LIST_REL_SPLIT1] >>
+      rename1 `LIST_REL _ mh fg` >>
+      rename1 `LIST_REL _ (MAP _ pre) pgss` >>
+      rename1 `LIST_REL _ (MAP _ post) postgss` >>
+      `LENGTH (FLAT pgss) = LENGTH (FILTER (\x. x.inst_opcode = GAS) pre)` by
+        (asm "padding_filling_length" irule >> first_assum ACCEPT_TAC) >>
+      `TAKE k pre = pre` by (irule TAKE_LENGTH_TOO_LONG >> decide_tac) >>
+      pop_assum SUBST_ALL_TAC >>
+      `k - LENGTH pre = SUC (k - LENGTH pre - 1)` by decide_tac >>
+      pop_assum SUBST_ALL_TAC >>
+      fs[TAKE] >>
+      asm "stopped_source" (qspecl_then
+        [`FLAT pgss`, `fg`, `FLAT postgss ++ tail`, `TAKE (k - LENGTH pre - 1) post`] mp_tac) >>
+      simp[APPEND_ASSOC]) >>
+  rpt gen_tac >> strip_tac >>
+  Cases_on `k < LENGTH pre`
+  >- (`MEM (EL k pre) pre` by simp[EL_MEM] >>
+      `EVERY (\x. x.inst_opcode <> INVOKE) pre` by
+        (fs[EVERY_MEM] >> rpt strip_tac >>
+         metis_tac[dft_gas_swap_pair_sym,
+           dftGasInvCallPartnerTheory.inv_call_partner_class]) >>
+      fs[EL_APPEND1, EVERY_MEM]) >>
+  Cases_on `k = LENGTH pre`
+  >- (gvs[] >>
+      `EL (LENGTH pre)
+        (MAP SUC (TAKE (LENGTH pre) rho') ++ [0] ++
+          MAP SUC (DROP (LENGTH pre) rho')) = 0` by
+        (`LENGTH pre <= LENGTH rho'` by
+           (qpat_assum `_ ++ _ = MAP _ rho'` (mp_tac o Q.AP_TERM `LENGTH`) >>
+            simp[]) >>
+         simp[EL_APPEND_EQN, LENGTH_MAP, LENGTH_TAKE]) >>
+      fs[Abbr `R`]) >>
+  gvs[LIST_REL_SPLIT1] >>
+  rename1 `LIST_REL _ mh fg` >>
+  rename1 `LIST_REL _ (MAP _ pre) pgss` >>
+  rename1 `LIST_REL _ (MAP _ post) postgss` >>
+  `LENGTH (FLAT pgss) = LENGTH (FILTER (\x. x.inst_opcode = GAS) pre)` by
+    (asm "padding_filling_length" irule >> first_assum ACCEPT_TAC) >>
+  `TAKE k pre = pre` by (irule TAKE_LENGTH_TOO_LONG >> decide_tac) >>
+  pop_assum SUBST_ALL_TAC >>
+  `k - LENGTH pre = SUC (k - LENGTH pre - 1)` by decide_tac >>
+  pop_assum SUBST_ALL_TAC >>
+  fs[TAKE] >>
+  asm "stopped_source" (qspecl_then
+    [`FLAT pgss`, `fg`, `FLAT postgss ++ tail`, `TAKE (k - LENGTH pre - 1) post`] mp_tac) >>
+  simp[APPEND_ASSOC]
 QED
 
 Theorem dft_blocks_gas_mask:
