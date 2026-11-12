@@ -5,17 +5,19 @@ Ancestors
   exprSimDefs loweringPosts builtinBytes vyperAST vyperState
 
 Theorem extract32_outcome_post_conseq:
-  gas_outcome memory tops (ctx,func) source (es,s) Q R /\
-  (!res ee t. Q res ee t ==> Q' res ee t) ==>
-  gas_outcome memory tops (ctx,func) source (es,s) Q' R
+  gas_outcome memory tops (ctx,func) cx st0 source (es,s) Q R /\
+  (!H res ee t. Q H res ee t ==> Q' H res ee t) ==>
+  gas_outcome memory tops (ctx,func) cx st0 source (es,s) Q' R
 Proof
-  pure_rewrite_tac[gas_outcome_def, gas_summary_at_def] >> metis_tac[]
+  pure_rewrite_tac[gas_outcome_def, gas_summary_at_def] >> BETA_TAC >>
+  metis_tac[]
 QED
 
 Theorem extract32_tail_ready_any_post:
-  expr_post H ctx func cenv cx src es sa sm s0 es1 (BytesV bs) src_op s1 /\
-  expr_post H ctx func cenv cx off es1 sm st3 s1 es2 (IntV i) off_op s2 /\
-  stmt_state_rel H ctx func cenv cx es s0 /\
+  (!H. valid_horizon cx st0 H es2.storage_trace ==>
+     expr_post H ctx func cenv cx src es sa sm s0 es1 (BytesV bs) src_op s1 /\
+     expr_post H ctx func cenv cx off es1 sm st3 s1 es2 (IntV i) off_op s2 /\
+     stmt_state_rel H ctx func cenv cx es s0) /\
   local_ptrs_reserved cenv sa /\ local_ptrs_reserved cenv st3 /\
   MAP FDOM es.scopes = MAP FDOM es1.scopes /\
   sa.cs_next_var <= sm.cs_next_var /\ sm.cs_next_var <= st3.cs_next_var /\
@@ -39,16 +41,16 @@ Theorem extract32_tail_ready_any_post:
   fn_has_code st3 sb func /\ es2.gas_obs = [] /\
   ~s2.vs_halted /\ s2.vs_current_bb = st3.cs_current_bb /\
   s2.vs_inst_idx = LENGTH st3.cs_current_insts ==>
-  gas_outcome F (cx_tops cx) (ctx,func)
+  gas_outcome F (cx_tops cx) (ctx,func) cx st0
     (bind (lift_sum (evaluate_type_builtin cx Extract32 (BaseT bt)
        [expr_type src;expr_type off] [BytesV bs;IntV i])) (\v. return (Value v)))
     (es2,s2)
-    (\res ee t. ?tv. res = INL tv /\
+    (\H res ee t. ?tv. res = INL tv /\
       vv_post H ctx func cenv cx (TypeBuiltin (BaseT bt) Extract32 (BaseT bt) [src;off])
         es sa sb s0 ee tv (StackValue ty op) t /\
       t.vs_current_bb = sb.cs_current_bb /\
       t.vs_inst_idx = LENGTH sb.cs_current_insts)
-    (\res ee r. expr_exit res r)
+    (\H res ee r. expr_exit res r)
 Proof
   strip_tac >> drule_all extract32_tail_ready_any >>
   disch_then (qspec_then `ty` assume_tac) >>
