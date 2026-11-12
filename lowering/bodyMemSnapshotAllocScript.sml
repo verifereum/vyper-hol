@@ -51,7 +51,20 @@ Proof
   drule_all ifexp_alloc_preserves_post >> strip_tac >>
   gvs[] >>
   qexistsl_tac [`q with vs_inst_idx := LENGTH mid.cs_current_insts`, `w`] >>
-  simp[ifexp_vv_post_inst_idx] >>
+  `!ctx9 func9 cenv9 cx9 e9 es9 sa9 sb9 s09 ee9 raw9 vv9 s9 n9.
+     vv_post ctx9 func9 cenv9 cx9 e9 es9 sa9 sb9 s09 ee9 raw9 vv9
+       (s9 with vs_inst_idx := n9) <=>
+     vv_post ctx9 func9 cenv9 cx9 e9 es9 sa9 sb9 s09 ee9 raw9 vv9 s9` by
+    (rpt gen_tac >>
+     `!op. eval_operand op (s9 with vs_inst_idx := n9) = eval_operand op s9` by
+       (Cases >> simp[eval_operand_def, lookup_var_def]) >>
+     Cases_on `vv9` >>
+     simp[vv_post_def, stmt_state_rel_inst_idx, vv_holds_def, vv_at_def,
+          vv_own_def, expr_val_rel_def, expr_val_at_def, expr_val_own_def,
+          lookup_var_def, loweringStateRelDefsTheory.local_region_def, storage_holds_def,
+          immutable_holds_def, venomStateTheory.contract_storage_def,
+          venomStateTheory.contract_transient_def]) >>
+  simp[] >>
   conj_tac
   >- (irule vv_store_bound_frame_mem_src >> qexists_tac `s` >>
       simp[eval_operand_def, lookup_var_def] >>

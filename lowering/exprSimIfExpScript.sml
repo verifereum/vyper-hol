@@ -964,7 +964,7 @@ Proof
        IS_PREFIX_APPEND, venomInstTheory.mk_inst_def, is_terminator_def]
 QED
 
-Theorem ifexp_vv_post_inst_idx:
+Theorem ifexp_vv_post_inst_idx[local]:
   vv_post ctx func cenv cx e es sa sb s0 es' raw vv (s with vs_inst_idx := n) <=>
   vv_post ctx func cenv cx e es sa sb s0 es' raw vv s
 Proof
