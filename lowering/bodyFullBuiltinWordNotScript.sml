@@ -29,17 +29,34 @@ Theorem word_not_bool_origin_path[local]:
   ~s.vs_halted /\ s.vs_current_bb = sa.cs_current_bb /\
   s.vs_inst_idx = LENGTH sa.cs_current_insts /\
   eval_operand x s = SOME (bool_to_word b) /\
-  (!out. ptr_inst_ok D lo 0 ctx func G tn
-    (mk_inst sa.cs_next_id ISZERO [x] [out]) s) ==>
+  ~ctx_has_dalloca ctx /\ allocas_from lo s /\ op_taint tn x = {} ==>
   ?t G' tn'.
     gas_origin_ptr_path (D,lo,explicit,ctx,func,PG)
       (s,G,tn) [] (OK t,G',tn') /\
     eval_operand op t = SOME (bool_to_word (~b)) /\
     t.vs_current_bb = sb.cs_current_bb /\
     t.vs_inst_idx = LENGTH sb.cs_current_insts /\
-    unop_result cx (BaseT BoolT) Not tys (BoolV b) es = INL (BoolV (~b))
+    unop_result cx (BaseT BoolT) Not tys (BoolV b) es = INL (BoolV (~b)) /\
+    ?out inst u.
+      out = STRING #"%" (toString sa.cs_next_var) /\
+      inst = mk_inst sa.cs_next_id ISZERO [x] [out] /\
+      u = update_var out (bool_to_word (~b)) s /\
+      t = (u with vs_inst_idx := SUC s.vs_inst_idx) /\
+      G' = step_prov PG G inst u /\ tn' = step_taint inst s u tn
 Proof
   strip_tac >>
+  `!out. ptr_inst_ok D lo 0 ctx func G tn
+    (mk_inst sa.cs_next_id ISZERO [x] [out]) s` by
+    (gen_tac >> simp[ptrSafeRunTheory.ptr_inst_ok_def,
+       ptrDisciplineTheory.access_ok_def, ptrDisciplineTheory.taint_ok_def,
+       contextCodegenRelTheory.source_memory_read_ranges_def,
+       codegenRelTheory.source_memory_write_ranges_def, mk_inst_def] >>
+     `step_inst 0 ctx (mk_inst sa.cs_next_id ISZERO [x] [out]) s =
+       OK (update_var out (bool_to_word (~b)) s)` by
+       (simp[step_inst_non_invoke, mk_inst_def] >>
+        drule step_ISZERO >> Cases_on `b` >>
+        simp[bool_to_word_def, mk_inst_def]) >>
+     gvs[mk_inst_def, update_var_def]) >>
   drule emitted_insts_emit_op >> strip_tac >>
   `sb.cs_current_bb = sa.cs_current_bb` by
     gvs[emit_op_def, comp_bind_def, fresh_var_def, fresh_id_def,
