@@ -438,7 +438,7 @@ Inductive ld_annotated_reachable:
   (!vs0 ctx astk k L AP AG tn fn inst inst' s s' fuel k' L'.
      ld_annotated_reachable vs0 ctx astk k L AP AG tn fn inst s /\
      active_inst fn inst s /\ ~is_terminator inst.inst_opcode /\
-     inst.inst_opcode <> INVOKE /\ inst.inst_opcode <> DALLOCA /\
+     inst.inst_opcode <> INVOKE /\
      step_inst fuel ctx inst s = OK s' /\
      ld_select_alloca k L inst s' = (k',L') /\
      ld_erase L' = s'.vs_allocas /\
@@ -483,55 +483,55 @@ Inductive ld_annotated_reachable:
        f.lf_fn inst' (s' with vs_inst_idx := SUC f.lf_state.vs_inst_idx))
 End
 
+(* Every annotated state is frame reachable.  The frame provenance is
+   existential: a DALLOCA gives its output a dynamic site in the frame's
+   provenance and none in the annotated one, and that site can flow into
+   parameters and saved frames.  The saved frames agree on everything the
+   stack origin reads. *)
 Theorem ld_annotated_erasure:
   !vs0 ctx astk k L AP AG tn fn inst s.
   ld_annotated_reachable vs0 ctx astk k L AP AG tn fn inst s ==>
-  frame_reachable vs0 ctx (MAP ld_erase_frame astk)
-    (MAP (OPTION_MAP SND) AP) (ld_erase AG) tn fn inst s
+  ?stk PG G. frame_reachable vs0 ctx stk PG G tn fn inst s /\
+    LIST_REL (\af f. f.cf_fn = af.lf_fn /\ f.cf_inst = af.lf_inst /\
+                     f.cf_state = af.lf_state /\ f.cf_tvar = af.lf_tvar)
+      astk stk
 Proof
-  ho_match_mp_tac ld_annotated_reachable_ind >> rpt conj_tac
-  >- suspend "entry"
-  >- suspend "next"
-  >- suspend "block"
-  >- suspend "call"
-  >> suspend "ret"
+  ho_match_mp_tac ld_annotated_reachable_ind >> rpt conj_tac >> rpt strip_tac
+  >- (qexistsl_tac [`[]`, `[]`, `FEMPTY`] >> simp[] >>
+      irule frame_reachable_entry >> metis_tac[])
+  >- (qexistsl_tac [`stk`, `PG`, `step_prov PG G inst s'`] >> simp[] >>
+      irule frame_reachable_next >> metis_tac[])
+  >- (qexistsl_tac [`stk`, `PG`, `entry_prov fn s' G`] >> simp[] >>
+      irule frame_reachable_block >> metis_tac[])
+  >- (qexistsl_tac [`<| cf_fn := fn; cf_inst := inst; cf_state := s;
+                       cf_params := PG; cf_prov := G; cf_tvar := tn.t_var |>
+                     :: stk`, `MAP (op_prov G) ops`, `FEMPTY`] >>
+      simp[] >> irule frame_reachable_call >> metis_tac[]) >>
+  rename1 `LIST_REL _ (f::astk) stk0` >>
+  Cases_on `stk0` >> fs[] >> rename1 `LIST_REL _ astk stk` >>
+  qexistsl_tac [`stk`, `h.cf_params`,
+                `DRESTRICT h.cf_prov (COMPL (set h.cf_inst.inst_outputs))`] >>
+  simp[] >>
+  qpat_x_assum `h.cf_fn = _` (SUBST_ALL_TAC o SYM) >>
+  qpat_x_assum `h.cf_inst = _` (SUBST_ALL_TAC o SYM) >>
+  qpat_x_assum `h.cf_state = _` (SUBST_ALL_TAC o SYM) >>
+  qpat_x_assum `h.cf_tvar = _` (SUBST_ALL_TAC o SYM) >>
+  irule frame_reachable_ret >> metis_tac[]
 QED
 
-Resume ld_annotated_erasure[entry]:
-  rpt strip_tac >> simp[ld_erase_def, o_f_FEMPTY] >>
-  irule frame_reachable_entry >> metis_tac[]
+(* The stack origin reads only the saved functions, invokes and states. *)
+Theorem ld_stack_origin_erased:
+  !astk stk fn s0.
+  LIST_REL (\af f. f.cf_fn = af.lf_fn /\ f.cf_inst = af.lf_inst /\
+                   f.cf_state = af.lf_state /\ f.cf_tvar = af.lf_tvar)
+    astk stk /\
+  ld_stack_origin vs C stk fn s0 ==>
+  ld_stack_origin vs C (MAP ld_erase_frame astk) fn s0
+Proof
+  Induct >- simp[] >>
+  rpt gen_tac >> Cases_on `stk` >> simp[] >> strip_tac >>
+  fs[ld_stack_origin_cons, ld_erase_frame_def] >> metis_tac[]
 QED
-
-Resume ld_annotated_erasure[next]:
-  rpt strip_tac >>
-  drule_all ld_erase_step_prov >> disch_then (fn th => simp[th]) >>
-  irule frame_reachable_next >> metis_tac[]
-QED
-
-Resume ld_annotated_erasure[block]:
-  rpt strip_tac >> simp[ld_erase_entry_prov] >>
-  irule frame_reachable_block >> metis_tac[]
-QED
-
-Resume ld_annotated_erasure[call]:
-  rpt strip_tac >>
-  simp[MAP_MAP_o, combinTheory.o_DEF, ld_erase_op_prov,
-       ld_erase_frame_def, ETA_THM] >>
-  `ld_erase (FEMPTY:(string, (num # num) # (num # num)) fmap) = FEMPTY`
-    by simp[ld_erase_def, o_f_FEMPTY] >>
-  asm_rewrite_tac[] >> CONV_TAC (DEPTH_CONV ETA_CONV) >>
-  irule frame_reachable_call >> metis_tac[]
-QED
-
-Resume ld_annotated_erasure[ret]:
-  rpt strip_tac >> simp[ld_erase_restrict] >>
-  qpat_x_assum `frame_reachable _ _ _ _ _ _ _ _ _` mp_tac >>
-  simp[ld_erase_frame_def] >> strip_tac >>
-  drule frame_reachable_ret >> simp[ld_erase_frame_def] >>
-  disch_then irule >> metis_tac[]
-QED
-
-Finalise ld_annotated_erasure
 
 Theorem ld_select_alloca_erase:
   ld_erase L = s.vs_allocas /\ i.inst_opcode <> INVOKE /\

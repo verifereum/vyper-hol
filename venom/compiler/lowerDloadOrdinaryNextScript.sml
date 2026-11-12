@@ -43,7 +43,7 @@ Theorem ld_normal_ordinary_next_backward:
      TIMESTAMP; NUMBER; PREVRANDAO; CHAINID; SELFBALANCE; BALANCE;
      BLOCKHASH; BASEFEE; CODESIZE; CODECOPY; EXTCODESIZE; EXTCODEHASH;
      EXTCODECOPY; RETURNDATASIZE; RETURNDATACOPY; BLOBHASH; BLOBBASEFEE;
-     SHA3; LOG; ASSERT; ASSERT_UNREACHABLE; OFFSET] /\
+     SHA3; LOG; ASSERT; ASSERT_UNREACHABLE; OFFSET; DALLOCA] /\
   ld_normal_data CS fn V U lo E L H AP BP AG BH tn un s t
     astk live keys d A suspended gstk f /\
   step_inst fuel CT i t = OK t' /\
@@ -61,8 +61,7 @@ Theorem ld_normal_ordinary_next_backward:
 Proof
   gen_tac >> strip_tac >>
   drule_all ld_normal_ordinary_backward >> strip_tac >>
-  `i.inst_opcode <> ALLOCA /\ i.inst_opcode <> DALLOCA /\
-   i.inst_opcode <> INVOKE` by
+  `i.inst_opcode <> ALLOCA /\ i.inst_opcode <> INVOKE` by
     (qpat_x_assum `MEM i.inst_opcode _` mp_tac >> simp[MEM] >>
      strip_tac >> simp[]) >>
   `ld_erase L = s'.vs_allocas` by

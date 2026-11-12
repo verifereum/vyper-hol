@@ -5414,7 +5414,7 @@ Theorem ld_recursive_next_opcode_partition:
   ~is_terminator opc /\ opc <> INVOKE ==>
   (MEM opc ^ld_audited_ordinary_opcodes <=>
    ~MEM opc [ALLOCA; DLOAD; DLOADBYTES; CALL; STATICCALL; DELEGATECALL;
-             CREATE; CREATE2; MEMTOP; FMP_PARAM; PHI; DALLOCA; GETFMP; SETFMP])
+             CREATE; CREATE2; MEMTOP; FMP_PARAM; PHI; GETFMP; SETFMP])
 Proof
   Cases_on `opc` >> simp[is_terminator_def]
 QED
@@ -5894,7 +5894,7 @@ val ld_recursive_combined_singleton_choice =
 (* Opcode classification for a single non-macro instruction; kept apart so
    the 200-way case split runs without the proof's assumptions. *)
 Theorem ld_singleton_opcode_class[local]:
-  !op. op <> PHI /\ op <> DALLOCA /\ op <> SETFMP /\ op <> GETFMP /\
+  !op. op <> PHI /\ op <> SETFMP /\ op <> GETFMP /\
        op <> FMP_PARAM /\ op <> MEMTOP /\ op <> DLOADBYTES /\ op <> DLOAD /\
        op <> INVOKE /\ ~is_terminator op ==>
        MEM op
@@ -5907,7 +5907,7 @@ Theorem ld_singleton_opcode_class[local]:
           TIMESTAMP; NUMBER; PREVRANDAO; CHAINID; SELFBALANCE; BALANCE;
           BLOCKHASH; BASEFEE; CODESIZE; CODECOPY; EXTCODESIZE; EXTCODEHASH;
           EXTCODECOPY; RETURNDATASIZE; RETURNDATACOPY; BLOBHASH; BLOBBASEFEE;
-          SHA3; LOG; ASSERT; ASSERT_UNREACHABLE; OFFSET] \/
+          SHA3; LOG; ASSERT; ASSERT_UNREACHABLE; OFFSET; DALLOCA] \/
        MEM op [CALL; STATICCALL; DELEGATECALL; CREATE; CREATE2] \/
        op = ALLOCA
 Proof
