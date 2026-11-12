@@ -21,6 +21,10 @@ val _ = Parse.hide "body";
 Theorem precompile_builtin_sim_full:
   !DF lo d ctx shadow_ctx PG tops func shadow_func cenv env cx ty a bt args es.
     (!DF lo d ctx shadow_ctx PG func shadow_func cenv cx ty e es.
+       (~is_word_type (expr_type e) ==>
+        !tvt. evaluate_type (get_tenv cx) (lowered_value_type cenv e) =
+                SOME tvt ==>
+              type_memory_size tvt = 0) /\
        expr_sim_full (DF, lo, d, ctx, shadow_ctx, PG, func, shadow_func)
          cenv cx ty e es /\
        (!sa. ?t op sb. compile_expr cenv ty e sa = (StackValue t op,sb)) /\
