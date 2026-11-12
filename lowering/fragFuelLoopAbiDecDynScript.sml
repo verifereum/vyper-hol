@@ -8,7 +8,8 @@
 Theory fragFuelLoopAbiDecDyn
 Ancestors
   fragFuel fragFuelContextBase abiEncoder compileEnv emitHelper context
-  exprSimAbiEncodeObliviousCode fragFuelLoopAbiDecDynSteps
+  exprSimAbiEncodeObliviousCode exprSimAbiEncodeObliviousContext fragExec
+  fragFuelLoopAbiDecDynSteps exprSimAbiGasBridge exprLoweringProps list sorting
   venomInst venomMemProps venomInstProps venomExecSemantics venomEffects venomState
 Libs
   fragFuelLib
@@ -639,6 +640,123 @@ Resume abi_dyn_decode_code[loop]:
     gen_tac, conj_tac]) >> simp[]
 QED
 Finalise abi_dyn_decode_code
+
+(* Quotation-only instruction and action interfaces. *)
+val dyn_F = ``\P a b. entry_shape a b /\ EVERY P (frag_code a b)``;
+val dyn_O = ``\N i. EVERY (\x. ~var_below N x) i.inst_outputs``;
+val dyn_fresh = ``\m. !N a r b. N <= a.cs_next_var /\ m a = (r,b) ==>
+  (^dyn_F) ((^dyn_O) N) a b /\ a.cs_next_var <= b.cs_next_var``;
+val dyn_fresh_op = inst [alpha |-> ``:operand``] dyn_fresh;
+val dyn_fresh_unit = inst [alpha |-> ``:unit``] dyn_fresh;
+val dyn_fresh_label = inst [alpha |-> ``:string``] dyn_fresh;
+val dyn_fresh_buffer = inst [alpha |-> ``:buffer``] dyn_fresh;
+
+Theorem abi_dyn_fixed_compose[local]:
+  !P a b c. (^dyn_F) P a b /\ (^dyn_F) P b c ==> (^dyn_F) P a c
+Proof
+  simp_tac std_ss [] >> rpt strip_tac
+  >- metis_tac[entry_shape_trans] >>
+  drule_all frag_code_compose_perm >> strip_tac >>
+  drule PERM_EVERY >> disch_then (irule o iffRL) >> simp[EVERY_APPEND]
+QED
+
+Theorem abi_dyn_fresh_bind[local]:
+  !m f. (^dyn_fresh) m /\ (!x. (^(inst [alpha |-> beta] dyn_fresh)) (f x)) ==>
+    (^(inst [alpha |-> beta] dyn_fresh)) (comp_bind m f)
+Proof
+  simp_tac std_ss [comp_bind_def] >> rpt gen_tac >> strip_tac >>
+  rpt gen_tac >> strip_tac >> Cases_on `m a` >> gvs[] >>
+  first_x_assum (qspecl_then [`N`, `a`, `q`, `r'`] mp_tac) >>
+  simp[] >> strip_tac >>
+  first_x_assum (qspec_then `q` mp_tac) >>
+  disch_then (qspecl_then [`N`, `r'`, `r`, `b`] mp_tac) >>
+  impl_tac >- (simp[] >> decide_tac) >> strip_tac >>
+  conj_tac >- (irule (SRULE [] abi_dyn_fixed_compose) >>
+    qexists_tac `r'` >> simp[]) >> decide_tac
+QED
+
+Theorem abi_dyn_fresh_ignore_bind[local]:
+  !m n. (^dyn_fresh) m /\ (^(inst [alpha |-> beta] dyn_fresh)) n ==>
+    (^(inst [alpha |-> beta] dyn_fresh)) (comp_ignore_bind m n)
+Proof
+  simp_tac std_ss [comp_ignore_bind_def] >> rpt gen_tac >> strip_tac >>
+  ho_match_mp_tac (BETA_RULE abi_dyn_fresh_bind) >> simp[] >> metis_tac[]
+QED
+
+Theorem abi_dyn_fresh_return[local]:
+  !v. (^dyn_fresh) (comp_return v)
+Proof
+  simp[comp_return_def, entry_shape_refl, frag_code_def,
+       emitted_blocks_def, emitted_insts_def]
+QED
+
+Theorem abi_dyn_fresh_emit_op[local]:
+  !opc ops. (^dyn_fresh_op) (emit_op opc ops)
+Proof
+  simp_tac std_ss [emit_op_def, comp_bind_def, comp_ignore_bind_def,
+    comp_return_def, fresh_var_def, fresh_id_def, emit_def] >>
+  rpt strip_tac >> gvs[] >>
+  simp[entry_shape_def, frag_code_def, emitted_blocks_def, emitted_insts_def,
+       DROP_APPEND, mk_inst_def, var_below_fresh] >>
+  qexists_tac `[mk_inst a.cs_next_id opc ops
+    [STRING #"%" (toString a.cs_next_var)]]` >> simp[]
+QED
+
+Theorem abi_dyn_fresh_emit_inst[local]:
+  !opc ops. (^dyn_fresh_unit) (emit_inst opc ops [])
+Proof
+  simp_tac std_ss [emit_inst_def, comp_bind_def, fresh_id_def, emit_def] >>
+  rpt strip_tac >> gvs[] >>
+  simp[entry_shape_def, frag_code_def, emitted_blocks_def, emitted_insts_def,
+       DROP_APPEND, mk_inst_def] >>
+  qexists_tac `[mk_inst a.cs_next_id opc ops []]` >> simp[]
+QED
+
+Theorem abi_dyn_fresh_emit_void[local]:
+  !opc ops. (^dyn_fresh_unit) (emit_void opc ops)
+Proof
+  simp_tac std_ss [emit_void_def, GSYM emit_inst_def] >>
+  metis_tac[BETA_RULE abi_dyn_fresh_emit_inst]
+QED
+
+Theorem abi_dyn_fresh_label[local]:
+  !suffix. (^dyn_fresh_label) (fresh_label suffix)
+Proof
+  simp[fresh_label_def, entry_shape_def, frag_code_def,
+       emitted_blocks_def, emitted_insts_def]
+QED
+
+Theorem abi_dyn_fresh_block[local]:
+  !l. (^dyn_fresh_label) (new_block l)
+Proof
+  simp[new_block_def, entry_shape_def, frag_code_def,
+       emitted_blocks_def, emitted_insts_def] >>
+  rpt strip_tac >> disj2_tac >> qexistsl_tac [`[]`, `[]`] >> simp[]
+QED
+
+Theorem abi_dyn_fresh_alloc[local]:
+  !size. (^dyn_fresh_buffer) (compile_alloc_buffer size)
+Proof
+  gen_tac >> simp_tac std_ss [compile_alloc_buffer_def] >>
+  ho_match_mp_tac (BETA_RULE abi_dyn_fresh_bind) >>
+  conj_tac >- (MATCH_ACCEPT_TAC (BETA_RULE abi_dyn_fresh_emit_op)) >>
+  gen_tac >> MATCH_ACCEPT_TAC (BETA_RULE abi_dyn_fresh_return)
+QED
+
+Theorem abi_dyn_fresh_if[local]:
+  !b m n. (^dyn_fresh) m /\ (^dyn_fresh) n ==>
+    (^dyn_fresh) (if b then m else n)
+Proof
+  Cases_on `b` >> simp[] >> metis_tac[]
+QED
+
+Theorem abi_dyn_fresh_copy_case[local]:
+  !opc m n p. (^dyn_fresh) m /\ (^dyn_fresh) n /\ (^dyn_fresh) p ==>
+    (^dyn_fresh) (case opc of CALLDATALOAD => m | DLOAD => n | _ => p)
+Proof
+  Cases_on `opc` >> simp[] >> metis_tac[]
+QED
+
 
 (* Quantitative cutoff diagnostic interface (implementation belongs to the
    subsequent transfer component).
