@@ -46,10 +46,10 @@ Theorem lookup_account_process_deletions:
     lookup_account a (process_deletions ds accs) =
     if MEM a ds then empty_account_state else lookup_account a accs
 Proof
-  Induct >>
-  rw[process_deletions_def, lookup_account_def, update_account_def,
-     combinTheory.APPLY_UPDATE_THM] >>
-  gvs[]
+  simp[lookup_account_def] >> Induct >>
+  gvs[process_deletions_def, update_account_def,
+      combinTheory.APPLY_UPDATE_THM] >>
+  rw[]
 QED
 
 Theorem run_call_balance_bounded:
