@@ -17251,6 +17251,38 @@ Proof
   irule mm_local_write_log_memory_cong >> simp[]
 QED
 
+Theorem mm_local_zero_cut_representative_write[local]:
+  ALL_DISTINCT (MAP (\i. i.inst_id) bb.bb_instructions) /\
+  is = bb.bb_instructions /\ gs = (scan_block_memzero dfg bb).mz_flushed /\
+  r < LENGTH is /\ MEM g gs /\
+  rep_of_group is g = SOME ((EL r is).inst_id,g) /\
+  mm_local_zero_cut dfg is gs H r excluded pc t /\
+  mm_local_zero_capture dfg is (SUC r) r = SOME (d,bs) /\
+  (H (SUC r)).vs_memory = (write_memory_with_expansion d bs (H r)).vs_memory /\
+  mm_local_nonmemory_frame (H (SUC r)) = mm_local_nonmemory_frame (H r) /\
+  (!v. lookup_var v (H (SUC r)) = lookup_var v (H r)) /\
+  t'.vs_memory = (write_memory_with_expansion g.cg_dst
+    (REPLICATE g.cg_length 0w) t).vs_memory /\
+  mm_local_nonmemory_frame t' = mm_local_nonmemory_frame t /\
+  (!v. v NOTIN excluded ==> lookup_var v t' = lookup_var v t) /\
+  t'.vs_inst_idx = pc' ==>
+  mm_local_zero_cut dfg is gs H (SUC r) excluded pc' t'
+Proof
+  strip_tac >>
+  `mm_local_pending (mm_local_zero_capture dfg is (SUC r))
+    (mm_local_pending_indices is gs r) (H r) t` by
+    (irule mm_local_pending_cap_cong >>
+     qexists `mm_local_zero_capture dfg is r` >>
+     fs[mm_local_zero_cut_def] >> rpt strip_tac >>
+     irule mm_local_zero_capture_past >> gvs[mm_local_pending_indices_mem]) >>
+  `mm_local_pending (mm_local_zero_capture dfg is (SUC r))
+    (mm_local_pending_indices is gs (SUC r)) (H (SUC r)) t'` by
+    (irule mm_local_zero_representative_discharge >> simp[] >>
+     conj_tac >- (qexistsl [`bb`,`dfg`] >> simp[]) >>
+     qexistsl [`g`,`H r`,`t`] >> gvs[]) >>
+  gvs[mm_local_zero_cut_def] >> metis_tac[]
+QED
+
 Theorem mm_local_zero_erased_pending_suc[local]:
   ALL_DISTINCT (MAP (\i. i.inst_id) bb.bb_instructions) /\
   is = bb.bb_instructions /\ gs = (scan_block_memzero dfg bb).mz_flushed /\
