@@ -9,29 +9,6 @@ Ancestors
   gasSummary gasSummaryCompose fragGasMode vyperState vyperInterpreter
   convertScalarTyping vyperEvalExprPreservesScopesDom exprSimSource exprLoweringProps
 
-Theorem call_read_summary_bind[local]:
-  gas_marked_exec T (ctx,func) source (ee,s) [] (INL v) ee (OK s) /\
-  ee.gas_obs = [] /\
-  gas_summary_at T (ctx,func) [] (next v) (ee,s) Q R ==>
-  gas_summary_at T (ctx,func) [] (bind source next) (ee,s) Q R
-Proof
-  rewrite_tac[gas_summary_at_def] >> strip_tac >>
-  `ee with gas_obs := [] = ee` by simp[evaluation_state_component_equality] >>
-  qexistsl_tac [`res`, `es_end`, `r`] >> simp[] >>
-  irule (Q.INST [`right` |-> `[]`] gas_marked_exec_bind_normal
-    |> REWRITE_RULE [listTheory.APPEND_NIL]) >>
-  goal_assum (drule_at Any) >> gvs[]
-QED
-
-Theorem call_summary_post_mono[local]:
-  (!res fin t. Q res fin t ==> Q' res fin t) /\
-  (!res fin r. R res fin r ==> R' res fin r) /\
-  gas_summary_at m tops marks source (es,s0) Q R ==>
-  gas_summary_at m tops marks source (es,s0) Q' R'
-Proof
-  PairCases_on `tops` >> rewrite_tac[gas_summary_at_def] >> metis_tac[]
-QED
-
 Theorem call_dynamic_vv_convert_summary:
   e = Call a (IntCall fid) args drv /\
   expr_body_pre cenv cx env (TypeBuiltin ann Convert ann [e]) es /\
@@ -108,7 +85,7 @@ Proof
      lowered_value_type cenv (Call a (IntCall fid) args drv) = BaseT (StringT 0)) ==>
      v = BytesV [] \/ v = StringV "")` by
     metis_tac[convert_call_read_zero_empty, expr_body_pre_gas_obs] >>
-  irule call_read_summary_bind >> simp[] >> qexists_tac `v` >> simp[] >>
+  irule (Q.INST [`v` |-> `v`, `u` |-> `t`] convert_read_summary_bind) >> simp[] >>
   mp_tac (Q.INST [`e1` |-> `Call a (IntCall fid) args drv`, `t` |-> `ann`,
                   `t0` |-> `t`, `v1` |-> `v`, `s1` |-> `sm`, `x` |-> `x`,
                   `sb` |-> `sb`, `op` |-> `op`, `ee` |-> `ee`,
@@ -206,7 +183,7 @@ Proof
     (qpat_assum `expr_post H0 _ _ _ _ _ _ _ _ _ _ _ _ _`
        (strip_assume_tac o REWRITE_RULE [expr_post_def, stmt_state_rel_def]) >>
      first_assum ACCEPT_TAC) >>
-  irule call_read_summary_bind >> simp[] >> qexists_tac `v` >> simp[] >>
+  irule (Q.INST [`v` |-> `v`, `u` |-> `t`] convert_read_summary_bind) >> simp[] >>
   irule (Q.INST [`Q` |-> `\res fin tt. !H. valid_horizon cx st0 H fin.storage_trace ==>
       ?v'. res = INL v' /\
       expr_post H ctx func cenv cx
@@ -218,7 +195,7 @@ Proof
       (?w. eval_operand op tt = SOME w /\
         w2n w + type_memory_bytes cenv ann <= tt.vs_alloca_next)`,
     `R` |-> `\res fin r. !H. valid_horizon cx st0 H fin.storage_trace ==> expr_exit res r`]
-    call_summary_post_mono) >>
+    convert_summary_post_mono) >>
   rpt conj_tac >|
   [rpt gen_tac >> CONV_TAC (DEPTH_CONV BETA_CONV) >> rpt strip_tac >>
    qpat_x_assum `!H'. valid_horizon cx st0 H' fin.storage_trace ==> _`

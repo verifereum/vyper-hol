@@ -4,7 +4,32 @@ Ancestors
   bodyMemTbConvertReadSuffix allocaHistoryFragment exprSimConvertFromBytes
   varsExt freshWrites fragGasMode fragGasPathMem fragExec exprSimDefs loweringPosts gasSummary
   exprLoweringProps compileEnv venomState venomExecSemantics rich_list list
-  gasStorage vyperStorageTrace vyperStorageFootprint
+  gasStorage vyperStorageTrace vyperStorageFootprint gasSummaryCompose
+  vyperState vyperInterpreter
+
+(* Bind composition of a marked read window with a counted continuation. *)
+Theorem convert_read_summary_bind:
+  gas_marked_exec T (ctx,func) source (ee,s) [] (INL v) ee (OK u) /\
+  ee.gas_obs = [] /\
+  gas_summary_at T (ctx,func) [] (next v) (ee,u) Q R ==>
+  gas_summary_at T (ctx,func) [] (bind source next) (ee,s) Q R
+Proof
+  rewrite_tac[gas_summary_at_def] >> strip_tac >>
+  `ee with gas_obs := [] = ee` by simp[evaluation_state_component_equality] >>
+  qexistsl_tac [`res`, `es_end`, `r`] >> simp[] >>
+  irule (Q.INST [`right` |-> `[]`] gas_marked_exec_bind_normal
+    |> REWRITE_RULE [listTheory.APPEND_NIL]) >>
+  goal_assum (drule_at Any) >> gvs[]
+QED
+
+Theorem convert_summary_post_mono:
+  (!res fin t. Q res fin t ==> Q' res fin t) /\
+  (!res fin r. R res fin r ==> R' res fin r) /\
+  gas_summary_at m tops marks source (es,s0) Q R ==>
+  gas_summary_at m tops marks source (es,s0) Q' R'
+Proof
+  PairCases_on `tops` >> rewrite_tac[gas_summary_at_def] >> metis_tac[]
+QED
 
 Theorem dynamic_scalar_counted_fragment_mem:
   is_bytestring_type src /\ ~is_bytestring_type dst /\
