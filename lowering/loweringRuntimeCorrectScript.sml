@@ -327,7 +327,8 @@ Proof
               impl_tac >- gvs[Abbr`cx`, initial_evaluation_context_def] >>
               strip_tac >>
               gvs[external_call_result_rel_def, Abbr`cx`,
-                  initial_evaluation_context_def]) >>
+                  initial_evaluation_context_def,
+                  abstract_machine_from_state_def]) >>
           `!v. e <> ReturnException v` by
             (rpt strip_tac >> gvs[] >>
              qpat_x_assum `expr_exit _ _` mp_tac >>

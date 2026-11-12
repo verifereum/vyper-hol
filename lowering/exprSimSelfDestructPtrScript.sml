@@ -43,7 +43,7 @@ Proof
   rpt strip_tac >> gvs[AllCaseEqs(), halt_state_def, set_returndata_def] >>
   gvs[stor_taint_ok_def, vfmExecutionTheory.transfer_value_def,
       update_account_def, lookup_account_def, APPLY_UPDATE_THM] >>
-  rw[] >> gvs[]
+  rw[APPLY_UPDATE_THM] >> gvs[]
 QED
 
 (* ===== Target tail ===== *)
