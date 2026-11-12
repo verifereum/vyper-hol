@@ -2,7 +2,7 @@
 Theory ctorCallFreeOps
 Ancestors
   list compileEnv venomInst loweringShapeDefs emitHelper exprLowering
-  builtinSimple ctorCallFreeRules
+  builtinSimple builtinMath builtinMisc ctorCallFreeRules
 
 Theorem call_free_select:
   EVERY (\i. i.inst_opcode <> RETURNDATACOPY /\ i.inst_opcode <> INVOKE) (state_insts st) ==>
@@ -170,4 +170,142 @@ Proof
       call_free_safe_arithmetic, call_free_safe_pow, call_free_compare,
       call_free_wrap_truncate, call_free_select, every_state_insts_return]),
     IF_CASES_TAC >> simp[], gen_tac])
+QED
+
+Theorem call_free_int_clamp[local]:
+  EVERY (\i. i.inst_opcode <> RETURNDATACOPY /\ i.inst_opcode <> INVOKE) (state_insts st) ==>
+  EVERY (\i. i.inst_opcode <> RETURNDATACOPY /\ i.inst_opcode <> INVOKE)
+    (state_insts (SND (compile_int_clamp signed bits v st)))
+Proof
+  Cases_on `signed` >> qid_spec_tac `st` >> simp[compile_int_clamp_def] >>
+  rpt (FIRST [ho_match_mp_tac every_state_insts_bind >> conj_tac,
+    ho_match_mp_tac every_state_insts_ignore_bind >> conj_tac,
+    gen_tac, CHANGED_TAC (simp[call_free_emit_op, call_free_emit_void,
+                              every_state_insts_return])])
+QED
+
+Theorem call_free_load_bytestring_as_word[local]:
+  opc <> RETURNDATACOPY /\ opc <> INVOKE ==>
+  !st. EVERY (\i. i.inst_opcode <> RETURNDATACOPY /\ i.inst_opcode <> INVOKE) (state_insts st) ==>
+  EVERY (\i. i.inst_opcode <> RETURNDATACOPY /\ i.inst_opcode <> INVOKE)
+    (state_insts (SND (load_bytestring_as_word v opc st)))
+Proof
+  strip_tac >> Cases_on `opc = SAR` >> simp[load_bytestring_as_word_def] >>
+  rpt (FIRST [ho_match_mp_tac every_state_insts_bind >> conj_tac,
+    ho_match_mp_tac every_state_insts_ignore_bind >> conj_tac,
+    gen_tac, CHANGED_TAC (simp[call_free_emit_op, every_state_insts_return])])
+QED
+
+Theorem call_free_type_convert:
+  EVERY (\i. i.inst_opcode <> RETURNDATACOPY /\ i.inst_opcode <> INVOKE) (state_insts st) ==>
+  EVERY (\i. i.inst_opcode <> RETURNDATACOPY /\ i.inst_opcode <> INVOKE)
+    (state_insts (SND (compile_type_convert v cop st)))
+Proof
+  Cases_on `cop` >> qid_spec_tac `st` >> simp[compile_type_convert_def] >>
+  rpt (FIRST [ho_match_mp_tac every_state_insts_bind >> conj_tac,
+    ho_match_mp_tac every_state_insts_ignore_bind >> conj_tac,
+    CHANGED_TAC (simp[call_free_emit_op, call_free_emit_void,
+      call_free_int_clamp, call_free_load_bytestring_as_word,
+      every_state_insts_return]),
+    IF_CASES_TAC >> simp[], gen_tac,
+    pairarg_tac >> gvs[] >> qid_spec_tac `st`])
+QED
+
+Theorem call_free_modular:
+  (!a b c st.
+    EVERY (\i. i.inst_opcode <> RETURNDATACOPY /\ i.inst_opcode <> INVOKE) (state_insts st) ==>
+    EVERY (\i. i.inst_opcode <> RETURNDATACOPY /\ i.inst_opcode <> INVOKE)
+      (state_insts (SND (compile_addmod a b c st)))) /\
+  (!a b c st.
+    EVERY (\i. i.inst_opcode <> RETURNDATACOPY /\ i.inst_opcode <> INVOKE) (state_insts st) ==>
+    EVERY (\i. i.inst_opcode <> RETURNDATACOPY /\ i.inst_opcode <> INVOKE)
+      (state_insts (SND (compile_mulmod a b c st)))) /\
+  (!a b st.
+    EVERY (\i. i.inst_opcode <> RETURNDATACOPY /\ i.inst_opcode <> INVOKE) (state_insts st) ==>
+    EVERY (\i. i.inst_opcode <> RETURNDATACOPY /\ i.inst_opcode <> INVOKE)
+      (state_insts (SND (compile_pow_mod256 a b st))))
+Proof
+  rpt conj_tac >> rpt gen_tac >>
+  simp[compile_addmod_def, compile_mulmod_def, compile_pow_mod256_def,
+    every_state_insts_ignore_bind, call_free_emit_void, call_free_emit_op]
+QED
+
+Theorem call_free_blockhash:
+  EVERY (\i. i.inst_opcode <> RETURNDATACOPY /\ i.inst_opcode <> INVOKE) (state_insts st) ==>
+  EVERY (\i. i.inst_opcode <> RETURNDATACOPY /\ i.inst_opcode <> INVOKE)
+    (state_insts (SND (compile_blockhash v st)))
+Proof
+  qid_spec_tac `st` >> simp[compile_blockhash_def] >>
+  rpt (FIRST [ho_match_mp_tac every_state_insts_bind >> conj_tac,
+    ho_match_mp_tac every_state_insts_ignore_bind >> conj_tac,
+    gen_tac, CHANGED_TAC (simp[call_free_emit_op, call_free_emit_void])])
+QED
+
+Theorem call_free_blobhash:
+  EVERY (\i. i.inst_opcode <> RETURNDATACOPY /\ i.inst_opcode <> INVOKE) (state_insts st) ==>
+  EVERY (\i. i.inst_opcode <> RETURNDATACOPY /\ i.inst_opcode <> INVOKE)
+    (state_insts (SND (compile_blobhash v st)))
+Proof
+  simp[compile_blobhash_def, call_free_emit_op]
+QED
+
+Theorem call_free_rounding:
+  (!v divisor st.
+    EVERY (\i. i.inst_opcode <> RETURNDATACOPY /\ i.inst_opcode <> INVOKE) (state_insts st) ==>
+    EVERY (\i. i.inst_opcode <> RETURNDATACOPY /\ i.inst_opcode <> INVOKE)
+      (state_insts (SND (compile_floor v divisor st)))) /\
+  (!v divisor st.
+    EVERY (\i. i.inst_opcode <> RETURNDATACOPY /\ i.inst_opcode <> INVOKE) (state_insts st) ==>
+    EVERY (\i. i.inst_opcode <> RETURNDATACOPY /\ i.inst_opcode <> INVOKE)
+      (state_insts (SND (compile_ceil v divisor st))))
+Proof
+  conj_tac >> rpt gen_tac >> qid_spec_tac `st` >>
+  simp[compile_floor_def, compile_ceil_def] >>
+  rpt (FIRST [ho_match_mp_tac every_state_insts_bind >> conj_tac,
+    gen_tac, CHANGED_TAC (simp[call_free_emit_op, call_free_select])])
+QED
+
+Theorem call_free_as_wei_value:
+  (!v scale signed st.
+    EVERY (\i. i.inst_opcode <> RETURNDATACOPY /\ i.inst_opcode <> INVOKE) (state_insts st) ==>
+    EVERY (\i. i.inst_opcode <> RETURNDATACOPY /\ i.inst_opcode <> INVOKE)
+      (state_insts (SND (compile_as_wei_value_int v scale signed st)))) /\
+  (!v scale divisor st.
+    EVERY (\i. i.inst_opcode <> RETURNDATACOPY /\ i.inst_opcode <> INVOKE) (state_insts st) ==>
+    EVERY (\i. i.inst_opcode <> RETURNDATACOPY /\ i.inst_opcode <> INVOKE)
+      (state_insts (SND (compile_as_wei_value_decimal v scale divisor st))))
+Proof
+  conj_tac >> rpt gen_tac >> qid_spec_tac `st` >>
+  simp[compile_as_wei_value_int_def, compile_as_wei_value_decimal_def] >>
+  rpt (FIRST [ho_match_mp_tac every_state_insts_bind >> conj_tac,
+    ho_match_mp_tac every_state_insts_ignore_bind >> conj_tac,
+    CHANGED_TAC (simp[call_free_emit_op, call_free_emit_void,
+      every_state_insts_return]), IF_CASES_TAC >> simp[], gen_tac])
+QED
+
+Theorem call_free_clamp_basetype:
+  EVERY (\i. i.inst_opcode <> RETURNDATACOPY /\ i.inst_opcode <> INVOKE) (state_insts st) ==>
+  EVERY (\i. i.inst_opcode <> RETURNDATACOPY /\ i.inst_opcode <> INVOKE)
+    (state_insts (SND (compile_clamp_basetype v ty st)))
+Proof
+  Cases_on `ty` >> simp[compile_clamp_basetype_def, every_state_insts_return] >>
+  rename1 `BaseT bt` >> Cases_on `bt` >>
+  simp[compile_clamp_basetype_def, every_state_insts_return] >>
+  FIRST [rename1 `compile_clamp_basetype v (BaseT (BytesT bd))` >>
+         Cases_on `bd` >> simp[compile_clamp_basetype_def, every_state_insts_return],
+         all_tac] >>
+  qid_spec_tac `st` >>
+  rpt (FIRST [ho_match_mp_tac every_state_insts_bind >> conj_tac,
+    ho_match_mp_tac every_state_insts_ignore_bind >> conj_tac,
+    CHANGED_TAC (simp[call_free_emit_op, call_free_emit_void,
+      call_free_clamp_and_return, every_state_insts_return]),
+    IF_CASES_TAC >> simp[], gen_tac])
+QED
+
+Theorem call_free_calldatasize:
+  EVERY (\i. i.inst_opcode <> RETURNDATACOPY /\ i.inst_opcode <> INVOKE) (state_insts st) ==>
+  EVERY (\i. i.inst_opcode <> RETURNDATACOPY /\ i.inst_opcode <> INVOKE)
+    (state_insts (SND (compile_builtin_calldatasize st)))
+Proof
+  simp[compile_builtin_calldatasize_def, call_free_emit_op]
 QED
