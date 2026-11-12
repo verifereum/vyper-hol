@@ -2,15 +2,14 @@
  * Target-side facts for FmpLowering's block simulation (fmpStageBlockSim):
  * the lowered function's blocks are well formed with distinct labels, a
  * straight-line run of a block's non-final instructions is skipped by
- * exec_block, a related INVOKE has a target instruction to run, and a
- * related RET returns the source's values.
+ * exec_block, and a related INVOKE has a target instruction to run.
  *
  * TOP-LEVEL:
  *   fmp_stage_target_shape   - the lowered function is well formed
  *   exec_block_run_prefix    - exec_block skips a run of non-final insts
  *   fmp_target_run_exec_block - likewise for fmp_target_run
  *   fmp_stage_invoke_target  - a related INVOKE has a target instruction
- *   fmp_stage_ret_step       - a related RET returns the same values
+ *   active_inst_unique       - at most one instruction is active
  *)
 Theory fmpStageBlockSimCode
 Ancestors
@@ -253,105 +252,12 @@ Proof
   imp_res_tac stackPlanGenTheory.FIND_SOME_MEM >> gvs[]
 QED
 
-Theorem fmp_run_ret_clean[local]:
-  ptr_use_static_ok P pv inst /\ inst.inst_opcode = RET /\
-  FDOM G SUBSET pv /\ MEM op inst.inst_operands ==>
-  op_prov G op = NONE
+(* Why: an active instruction is the one at the state's block and index
+   (active_inst_lookup_distinct); with distinct labels there is one. *)
+Theorem active_inst_unique:
+  ALL_DISTINCT (fn_labels f) /\ active_inst f i1 st /\ active_inst f i2 st ==>
+  i1 = i2
 Proof
-  strip_tac >> Cases_on `op` >> simp[op_prov_def] >>
-  rename1 `MEM (Var v) inst.inst_operands` >>
-  `v NOTIN pv` by
-    (strip_tac >> gvs[ptr_use_static_ok_def, is_pointer_preserving_op_def,
-       mem_read_ops_def, mem_write_ops_def] >> metis_tac[]) >>
-  fs[SUBSET_DEF, FLOOKUP_DEF] >> metis_tac[]
+  rpt strip_tac >> imp_res_tac dftGasToListReachBoundaryTheory.active_inst_lookup_distinct >> gvs[]
 QED
 
-Theorem fmp_run_operand_defined[local]:
-  fmp_env_rel sm fn live G tv s t /\ s.vs_labels = t.vs_labels /\
-  eval_operand op s = SOME x ==> ?y. eval_operand op t = SOME y
-Proof
-  Cases_on `op` >>
-  simp[eval_operand_def, lookup_var_def, fmp_env_rel_def] >> metis_tac[]
-QED
-
-Theorem fmp_run_ret_front_operand[local]:
-  fmp_stage_ctx rpolicy D C C' vs vs' fmp eom /\
-  frame_reachable vs C stk PG G tn fn inst s /\ active_inst fn inst s /\
-  inst.inst_opcode = RET /\ inst.inst_operands <> [] /\
-  fmp_stage_rel D C' sm fmp0 raw0 eom restored stk PG G tn fn s lo t ts /\
-  MEM op (FRONT inst.inst_operands) /\ eval_operand op s = SOME x ==>
-  eval_operand op t = SOME x
-Proof
-  strip_tac >> drule_all fmp_stage_frame_facts >> strip_tac >>
-  `MEM op inst.inst_operands` by metis_tac[rich_listTheory.MEM_FRONT_NOT_NIL] >>
-  `!v. op = Var v ==> ~retpc_var fn v` by
-    (gvs[o1_fn_shape_def, unitShapeDefsTheory.fn_shape_ok_def] >>
-     metis_tac[o1LowerDloadOpaqueTheory.ret_front_non_retpc]) >>
-  `ptr_use_static_ok P (fn_pv P fn) inst` by
-    (gvs[EVERY_MEM, fn_static_ptr_ok_def] >> metis_tac[]) >>
-  drule fmp_stage_prov_support >> disch_then (qspec_then `P` mp_tac) >>
-  simp[] >> strip_tac >>
-  `op_prov G op = NONE` by metis_tac[fmp_run_ret_clean] >>
-  `op_taint tn op = {}` by metis_tac[o1LowerDloadGhostTheory.ret_operand_untainted] >>
-  `inst.inst_opcode <> PHI` by simp[] >>
-  drule_all fmp_stage_operand >> simp[] >> strip_tac >>
-  gvs[fmp_value_rel_def, o1LowerDloadRelocationKernelTheory.ld_value_agree_def,
-      word_agree_except_bits] >>
-  simp[fcpTheory.CART_EQ]
-QED
-
-Theorem fmp_run_eval_front_transfer[local]:
-  !ops xs s t.
-  eval_operands ops s = SOME xs /\
-  (!op x. MEM op ops /\ eval_operand op s = SOME x ==>
-     ?y. eval_operand op t = SOME y) /\
-  (!op x. MEM op (FRONT ops) /\ eval_operand op s = SOME x ==>
-     eval_operand op t = SOME x) ==>
-  ?ys. eval_operands ops t = SOME ys /\ LENGTH ys = LENGTH xs /\
-       FRONT ys = FRONT xs
-Proof
-  Induct >> simp[eval_operands_def] >> rpt gen_tac >> strip_tac >>
-  Cases_on `ops`
-  >- (gvs[eval_operands_def, AllCaseEqs()] >> metis_tac[]) >>
-  gvs[eval_operands_def, AllCaseEqs()] >>
-  first_x_assum (qspecl_then [`v'::vs'`, `s`, `t`] mp_tac) >>
-  (impl_tac >- (simp[] >> metis_tac[])) >>
-  strip_tac >> qexists `v::ys` >>
-  `eval_operand h t = SOME v` by metis_tac[] >>
-  gvs[eval_operands_def]
-QED
-
-(* Why: fmp_stage_result's RET case.  RET returns its front operands,
-   which carry no provenance (no pointer reaches RET: ptr_use_static_ok)
-   and no taint (taint_ok) and aren't the return pc (opaque_use_ok), so
-   the relation makes them equal; RET changes no state. *)
-Theorem fmp_stage_ret_step:
-  fmp_stage_ctx rpolicy D C C' vs vs' fmp eom /\
-  frame_reachable vs C stk PG G tn fn inst s /\ active_inst fn inst s /\
-  inst.inst_opcode = RET /\
-  fmp_stage_rel D C' sm fmp0 raw0 eom restored stk PG G tn fn s lo t ts /\
-  step_inst k C inst s = IntRet ir s1 ==>
-  s1 = s /\ ir.iret_adopt_fmp = NONE /\
-  ?jr. (!k'. step_inst k' C' inst t = IntRet jr t) /\
-       jr.iret_values = ir.iret_values /\ jr.iret_adopt_fmp = NONE
-Proof
-  strip_tac >>
-  `fmp_env_rel sm fn
-     (live_vars_at (liveness_analyze fn) s.vs_current_bb s.vs_inst_idx)
-     G tn.t_var s t /\ s.vs_labels = t.vs_labels` by
-    (gvs[fmp_stage_rel_def, fmp_frame_rel_def] >> metis_tac[]) >>
-  `!op x. MEM op inst.inst_operands /\ eval_operand op s = SOME x ==>
-     ?y. eval_operand op t = SOME y` by
-    metis_tac[fmp_run_operand_defined] >>
-  `inst.inst_operands <> []` by
-    (strip_tac >> gvs[step_inst_non_invoke, step_inst_base_def, eval_operands_def]) >>
-  `!op x. MEM op (FRONT inst.inst_operands) /\
-     eval_operand op s = SOME x ==> eval_operand op t = SOME x` by
-    metis_tac[fmp_run_ret_front_operand] >>
-  qpat_x_assum `step_inst _ _ _ _ = _` mp_tac >>
-  simp[step_inst_non_invoke, step_inst_base_def, AllCaseEqs()] >>
-  strip_tac >> gvs[] >>
-  drule_all fmp_run_eval_front_transfer >> strip_tac >>
-  qexists `<|iret_values := FRONT ys; iret_adopt_fmp := NONE|>` >>
-  Cases_on `ys` >> gvs[step_inst_non_invoke, step_inst_base_def]
-QED
