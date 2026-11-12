@@ -23,6 +23,12 @@ Ancestors
 Libs
   monadsyntax
 
+(* stmt_expr_body_pre's const-name premise, discharged from body_inv. *)
+fun irule_body_pre th =
+  TRY (drule_then assume_tac (cj 1 bodySimTheory.body_inv_const_name_free)) >> irule th >>
+  TRY (qpat_x_assum `!e. ~supported_expr_exists (const_name_root _) e`
+         (fn a => PURE_REWRITE_TAC [a, NOT_CLAUSES, AND_CLAUSES]));
+
 Theorem body_assign_local_rhs_pre[local]:
   !cx id e tops bindings ctx cenv env env' ret_ty es ty.
     body_inv tops ctx cenv cx /\
@@ -67,7 +73,7 @@ Proof
   `!target. is_dynamic (vyper_to_abi_type (get_tenv cx) target) ==>
       is_dynamic (vyper_to_abi_type (type_env tops) target)` by
     gvs[body_inv_def] >>
-  irule stmt_expr_body_pre >>
+  irule_body_pre stmt_expr_body_pre >>
   gvs[stmt_exprs_ok_flat, supported_stmt_expr_exists_def,
       supported_assignment_exists_def, int_calls_stmt_def,
       int_calls_atarget_def, int_calls_expr_def] >>

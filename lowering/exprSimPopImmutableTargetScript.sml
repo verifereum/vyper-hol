@@ -99,6 +99,11 @@ Proof
         FLOOKUP env.bare_globals (src,id) = SOME ty0 /\
         is_immutable_decl id ts` by
     (fs[env_context_consistent_def] >> metis_tac[]) >>
+  `~cx_const_name cx (src,id)` by
+    (drule (cj 1 bodySimTheory.body_inv_const_name_free) >>
+     disch_then (qspec_then `TopLevelName (BaseT BoolT) (src,id)` mp_tac) >>
+     simp[supportedExprTraverseTheory.supported_expr_exists_def,
+         exprSimHypsDefsTheory.const_name_root_def]) >>
   `src = NONE` by (fs[expr_sim_inv_def] >> metis_tac[]) >>
   gvs[] >>
   `ts = tops` by fs[body_inv_def] >> gvs[] >>
@@ -280,8 +285,9 @@ Proof
   rename1 `_ = SOME tvv` >> PairCases_on `tvv` >>
   `evaluate_type (get_tenv cx) ty = SOME tvv0` by metis_tac[] >>
   fs[expr_sim_inv_def] >>
-  qpat_x_assum `!src id ty. FLOOKUP env.bare_globals _ = _ ==> _`
-    drule >> strip_tac >>
+  qpat_x_assum `!src id ty. FLOOKUP env.bare_globals _ = _ /\ _ ==> _`
+    (qspecl_then [`src`, `id`, `ty`] mp_tac) >>
+  impl_tac >- fs[] >> strip_tac >>
   qexists_tac `off` >> simp[]
 QED
 

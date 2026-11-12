@@ -25,6 +25,12 @@ Ancestors
   bodyExprPreFacts bodySimExprCases bodyImmutableAugAssignCompose
   supportedStmtTraverse vyperTypeCallGraph vyperState exprSimTopLevelProps
 
+(* stmt_expr_body_pre's const-name premise, discharged from body_inv. *)
+fun irule_body_pre th =
+  TRY (drule_then assume_tac (cj 1 bodySimTheory.body_inv_const_name_free)) >> irule th >>
+  TRY (qpat_x_assum `!e. ~supported_expr_exists (const_name_root _) e`
+         (fn a => PURE_REWRITE_TAC [a, NOT_CLAUSES, AND_CLAUSES]));
+
 Theorem supported_word_type_is_word:
   !ty. supported_word_type ty ==> is_word_type ty
 Proof
@@ -190,7 +196,7 @@ Proof
   gvs[type_stmt_def, stmt_exprs_ok_flat, supported_stmt_expr_exists_def,
       allocLimitsTheory.alloc_limits_stmt_def, int_calls_stmt_def, AllCaseEqs()] >>
   imp_res_tac alloc_limits_expr_not_extcode >>
-  irule stmt_expr_body_pre >>
+  irule_body_pre stmt_expr_body_pre >>
   fs[body_inv_def, gasContextTheory.cx_tops_def] >>
   metis_tac[vyperTypeCallStackSoundnessTheory.call_evaluation_safe_append_right,
             APPEND_NIL]

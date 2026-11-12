@@ -9,6 +9,12 @@ Ancestors
   vyperABI vyperTypeInvariants vyperTypeExprSoundness vyperTypeCallGraph
   vyperTypeCallStackSoundness exprLowering
 
+(* stmt_expr_body_pre's const-name premise, discharged from body_inv. *)
+fun irule_body_pre th =
+  TRY (drule_then assume_tac (cj 1 bodySimTheory.body_inv_const_name_free)) >> irule th >>
+  TRY (qpat_x_assum `!e. ~supported_expr_exists (const_name_root _) e`
+         (fn a => PURE_REWRITE_TAC [a, NOT_CLAUSES, AND_CLAUSES]));
+
 (* ===== The event's metadata ===== *)
 
 Theorem supported_event_fields_some[local]:
@@ -113,7 +119,7 @@ Proof
     fs[body_inv_def] >>
   `cx_tops cx = tops` by simp[gasContextTheory.cx_tops_def] >>
   qspecl_then [`cenv`, `cx`, `env`, `e`, `es`, `calls`]
-    irule stmt_expr_body_pre >> simp[] >> metis_tac[]
+    irule_body_pre stmt_expr_body_pre >> simp[] >> metis_tac[]
 QED
 
 (* Body safety and root allocation checks give each argument expr_body_pre;

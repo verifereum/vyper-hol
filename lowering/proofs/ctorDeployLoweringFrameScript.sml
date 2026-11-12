@@ -885,7 +885,6 @@ QED
 
 Theorem deploy_frame_bare_global_hashmap_exclusion:
   !tops am tx art env st cenv.
-    supported_program tops /\
     check_contract T am.layouts tx.target [(NONE,tops)] = SOME art /\
     env_consistent env (deploy_evaluation_context tops am tx) st /\
     cenv.ce_hashmap_info = build_hashmap_info tops ==>
@@ -901,21 +900,21 @@ Proof
   drule_all env_consistent_bare_global_find_NONE >> strip_tac >>
   gvs[deploy_evaluation_context_def, initial_evaluation_context_def,
       get_module_code_def] >>
-  `?vis ty slot. MEM (VariableDecl vis Immutable nsid1 ty slot) tops` by
-    (irule supported_bare_global_immutable >> fs[supported_program_def]) >>
+  drule bare_global_variable_decl >> strip_tac >>
   drule_all build_hashmap_info_variable >> simp[]
 QED
 
 Theorem deploy_frame_static_bare_globals:
   !tops vis mut fname args ret stmts locks cx env es.
-    supported_program tops /\
     (!src ts. get_module_code cx src = SOME ts ==> src = NONE /\ ts = tops) /\
     get_module_code cx NONE = SOME tops /\
     get_tenv cx = type_env tops /\
     ALL_DISTINCT (FLAT (MAP (type_def_keys_toplevel (NONE:num option)) tops)) /\
     env_consistent env cx es /\
     imm_len tops < dimword(:256) ==>
-    !src id ty. FLOOKUP env.bare_globals (src,id) = SOME ty ==>
+    !src id ty. FLOOKUP env.bare_globals (src,id) = SOME ty /\
+      (~cx_const_name cx (src,id) \/
+       IS_SOME (FLOOKUP env.bare_global_assignable (src,id))) ==>
       src = NONE /\
       ?off. FLOOKUP (build_compile_env tops vis mut fname args ret stmts locks)
                .ce_module_vars (src,id) = SOME (ImmutableLoc off) /\
@@ -926,7 +925,7 @@ Proof
   drule_all env_consistent_bare_global_find_NONE >> strip_tac >>
   `src = NONE /\ ts = tops` by metis_tac[] >> gvs[] >>
   `?dvis dty dslot. MEM (VariableDecl dvis Immutable id dty dslot) tops` by
-    metis_tac[supported_bare_global_immutable, supported_program_def] >>
+    metis_tac[bare_global_clause_immutable] >>
   drule immutable_build_compile_env_declared >>
   disch_then (strip_assume_tac o SPEC_ALL) >>
   qexists `off` >> fs[build_compile_env_module_vars] >> rpt strip_tac >>
@@ -979,11 +978,12 @@ Theorem deploy_ctor_bare_global_bounds:
     deploy_ctor_code tops rpolicy runtime_bc dunit
       (stmts,cenv,nr,nkey,ut,imm,exit_lbl,sa,sb,sj,st_exit,
        st_epilogue,st_final,func) /\
-    supported_program tops /\
     check_contract T am.layouts tx.target [(NONE,tops)] = SOME art /\
     env_consistent env (deploy_evaluation_context tops am tx) es /\
     imm_len tops < dimword(:256) ==>
-    !src id ty. FLOOKUP env.bare_globals (src,id) = SOME ty ==>
+    !src id ty. FLOOKUP env.bare_globals (src,id) = SOME ty /\
+      (~cx_const_name (deploy_evaluation_context tops am tx) (src,id) \/
+       IS_SOME (FLOOKUP env.bare_global_assignable (src,id))) ==>
       src = cenv.ce_module /\
       ?off. FLOOKUP cenv.ce_module_vars (src,id) = SOME (ImmutableLoc off) /\
         !tv. evaluate_type (get_tenv (deploy_evaluation_context tops am tx)) ty = SOME tv ==>

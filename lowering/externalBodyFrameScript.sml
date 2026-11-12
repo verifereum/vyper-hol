@@ -1121,7 +1121,7 @@ QED
 
 Theorem external_package_bare_globals:
   lower_vyper_runtime_unit tops rpolicy = SOME unit /\
-  supported_program tops /\ source_deployment_rel tops am tx /\
+  source_deployment_rel tops am tx /\
   initial_venom_state_rel tops am tx vs /\
   es0.immutables = am.immutables /\
   env_consistent env_t
@@ -1131,7 +1131,10 @@ Theorem external_package_bare_globals:
       (mut,F,rr,tx.function_name,args,[],ret,fbody)) =
     (lbl,cenv0,pos_args,min_cds,is_payable,F,nkey,ut',iv,fbody,rt) /\
   compile_register_positional_args cenv0 pos_args 4 st = (cenv,sa) ==>
-  !src id ty. FLOOKUP env_t.bare_globals (src,id) = SOME ty ==>
+  !src id ty. FLOOKUP env_t.bare_globals (src,id) = SOME ty /\
+    (~cx_const_name (initial_evaluation_context am.sources am.layouts tx NONE)
+       (src,id) \/
+     IS_SOME (FLOOKUP env_t.bare_global_assignable (src,id))) ==>
     src = cenv.ce_module /\
     ?off. FLOOKUP cenv.ce_module_vars (src,id) = SOME (ImmutableLoc off) /\
       !tv. evaluate_type (get_tenv
@@ -1156,19 +1159,21 @@ Proof
   >- (gvs[env_consistent_def, env_immutables_consistent_def,
           initial_evaluation_context_def, get_source_immutables_def] >>
       rpt strip_tac >> first_x_assum drule >> simp[]) >>
-  `!src id ty. FLOOKUP env_t.bare_globals (src,id) = SOME ty ==>
+  `!src id ty. FLOOKUP env_t.bare_globals (src,id) = SOME ty /\
+     (~cx_const_name (initial_evaluation_context am.sources am.layouts tx NONE)
+        (src,id) \/
+      IS_SOME (FLOOKUP env_t.bare_global_assignable (src,id))) ==>
      src = (build_compile_env tops External mut tx.function_name args ret fbody T).ce_module /\
      ?off. FLOOKUP (build_compile_env tops External mut tx.function_name args ret fbody T).ce_module_vars
        (src,id) = SOME (ImmutableLoc off) /\
        !tv. evaluate_type (get_tenv
          (initial_evaluation_context am.sources am.layouts tx NONE)) ty = SOME tv ==>
          off + type_memory_size tv < dimword (:256)` by
-    (drule_at (Pat `supported_program _`) build_compile_env_bare_globals >>
+    (drule_at (Pat `env_consistent _ _ _`) build_compile_env_bare_globals >>
      simp[] >>
-     disch_then (drule_at (Pat `env_consistent _ _ _`)) >>
-     gvs[account_immutables_def, initial_evaluation_context_def,
-         build_compile_env_module_vars] >>
-     disch_tac >> metis_tac[]) >>
+     disch_then (qspecl_then [`tops`, `External`, `mut`, `tx.function_name`,
+       `args`, `ret`, `fbody`, `T`, `x`, `vs.vs_data_section`] mp_tac) >>
+     gvs[account_immutables_def, initial_evaluation_context_def]) >>
   drule compile_register_positional_args_cenv >> strip_tac >>
   gvs[package_external_fn_def, set_external_package_target_def] >>
   Cases_on `ret = NoneT` >>

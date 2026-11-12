@@ -39,6 +39,11 @@ Proof
    FLOOKUP env.bare_global_assignable (NONE,id) = SOME ity` by
     metis_tac[bare_globals_complete_def, bare_global_assignable_complete_def] >>
   gvs[type_place_target_TopLevelNameTarget] >>
+  `~cx_const_name cx (NONE,id)` by
+    (drule (cj 1 bodySimTheory.body_inv_const_name_free) >>
+     disch_then (qspec_then `TopLevelName (BaseT BoolT) (NONE,id)` mp_tac) >>
+     simp[supportedExprTraverseTheory.supported_expr_exists_def,
+         exprSimHypsDefsTheory.const_name_root_def]) >>
   fs[expr_sim_inv_def, bare_globals_layout_def, body_inv_def] >>
   metis_tac[exprSimSourceTheory.word_value_type_word]
 QED

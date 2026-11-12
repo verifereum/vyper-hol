@@ -9,6 +9,12 @@ Ancestors
   vyperTypeInvariants vyperTypeExprSoundness vyperTypeCallStackSoundness
   gasContext allocLimits vyperInterpreter vyperState list
 
+(* stmt_expr_body_pre's const-name premise, discharged from body_inv. *)
+fun irule_body_pre th =
+  TRY (drule_then assume_tac (cj 1 bodySimTheory.body_inv_const_name_free)) >> irule th >>
+  TRY (qpat_x_assum `!e. ~supported_expr_exists (const_name_root _) e`
+         (fn a => PURE_REWRITE_TAC [a, NOT_CLAUSES, AND_CLAUSES]));
+
 (* The argument's explicit body-safety facts supply the call preconditions. *)
 Theorem log_mem_arg_body_pre[local]:
   !tops ctx cenv cx env e es.
@@ -33,7 +39,7 @@ Proof
     fs[body_inv_def] >>
   `cx_tops cx = tops` by simp[gasContextTheory.cx_tops_def] >>
   qspecl_then [`cenv`, `cx`, `env`, `e`, `es`, `[]`]
-    irule stmt_expr_body_pre >> simp[] >> metis_tac[]
+    irule_body_pre stmt_expr_body_pre >> simp[] >> metis_tac[]
 QED
 
 (* One step of the arguments: the head simulates under the memory

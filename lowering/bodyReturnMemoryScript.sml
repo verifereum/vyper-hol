@@ -6,6 +6,12 @@ Ancestors
   supportedExprTraverse supportedStmtTraverse supportedStmts
   vyperInterpreter vyperTypeSystem vyperState vyperAST vyperTypeCallGraph
 
+(* stmt_expr_body_pre's const-name premise, discharged from body_inv. *)
+fun irule_body_pre th =
+  TRY (drule_then assume_tac (cj 1 bodySimTheory.body_inv_const_name_free)) >> irule th >>
+  TRY (qpat_x_assum `!e. ~supported_expr_exists (const_name_root _) e`
+         (fn a => PURE_REWRITE_TAC [a, NOT_CLAUSES, AND_CLAUSES]));
+
 Theorem return_expr_body_pre[local]:
   !tops bindings ctx cenv cx env ret_ty e env' es.
     body_inv tops ctx cenv cx /\
@@ -37,7 +43,7 @@ Proof
   `supported_program tops /\ get_module_code cx NONE = SOME tops` by
     gvs[body_inv_def] >>
   `cx_tops cx = tops` by (drule cx_tops_module >> simp[]) >>
-  irule stmt_expr_body_pre >>
+  irule_body_pre stmt_expr_body_pre >>
   gvs[type_stmt_def, stmt_exprs_ok_flat, supported_stmt_expr_exists_def,
       supported_expr_exists_def, int_calls_stmt_def, int_calls_expr_def,
       body_inv_def] >>
@@ -54,7 +60,7 @@ Proof
   `supported_program tops /\ get_module_code cx NONE = SOME tops` by
     gvs[body_inv_def] >>
   `expr_body_pre cenv cx env e es` by
-    (irule stmt_expr_body_pre >>
+    (irule_body_pre stmt_expr_body_pre >>
      gvs[type_stmt_def, stmt_exprs_ok_flat, supported_stmt_expr_exists_def,
          supported_expr_exists_def, int_calls_stmt_def, int_calls_expr_def] >>
      qexists_tac `[]` >> simp[]) >>
