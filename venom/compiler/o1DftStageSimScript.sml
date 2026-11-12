@@ -23,7 +23,8 @@ QED
 
 Theorem dft_stage_gas_mask:
   ctx_pass_stage rpolicy (CFP_Simple VP_DFT) view C C' /\ o1_pre 7 C C' /\
-  o1_ctx_shape C /\ EVERY wf_ssa C.ctx_functions /\ o1_run_state_ok vs' /\
+  o1_ctx_shape C /\ o1_ctx_shape C' /\ EVERY wf_ssa C.ctx_functions /\
+  o1_run_state_ok vs' /\
   C'.ctx_entry = SOME nm /\ lookup_function nm C'.ctx_functions = SOME fn' /\
   fn_entry_label fn' = SOME lbl /\
   terminates (run_context fuel C' vs') /\
@@ -43,7 +44,13 @@ Theorem dft_stage_gas_mask:
                         vs_current_bb := lbl; vs_inst_idx := 0 |>) ++ extra) /\
       ((?fr. terminates
                (run_context fr C (vs' with vs_gas_readings := gobs ++ tail))) ==>
+       terminates (run_context fuel C (vs' with vs_gas_readings := gobs ++ tail)) /\
        !D. ctx_sim D C C' (vs' with vs_gas_readings := gobs ++ tail) vs')
 Proof
-  cheat
+  strip_tac >> drule_all dft_stage_fn_rel >> strip_tac >>
+  drule ctx_pass_stage_dft >> strip_tac >>
+  `ctx_labels_bound C vs'.vs_labels` by
+    (irule dft_ctx_labels_bound >> gvs[o1_run_state_ok_def]) >>
+  drule_all dft_ctx_gas_mask >> strip_tac >>
+  qexistsl [`fn`, `raw_slots`, `sites`, `unused`] >> gvs[]
 QED
