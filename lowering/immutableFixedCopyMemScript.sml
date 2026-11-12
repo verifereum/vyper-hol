@@ -202,7 +202,7 @@ Proof
   conj_tac >- (irule immutable_frame_mem_append >> metis_tac[]) >> simp[]
 QED
 
-Theorem immutable_store_one_code[local]:
+Theorem immutable_store_one_code:
   immutable_store_one (SOME region) src dst off sa = ((),sb) ==>
   same_blocks sa sb /\
   ?is. sb.cs_current_insts = sa.cs_current_insts ++ is /\
@@ -228,7 +228,7 @@ Proof
   gvs[EVERY_MEM] >> metis_tac[]
 QED
 
-Theorem immutable_fixed_words_code[local]:
+Theorem immutable_fixed_words_code:
   !n off sa sb.
   compile_imm_store_words (SOME region) src dst n off sa = ((),sb) ==>
   same_blocks sa sb /\
