@@ -1,7 +1,7 @@
 (* Memory safety of caller-buffer store/RET suffixes. *)
 Theory internalReturnBufferSafety
 Ancestors
-  internalReturnUnlockMem internalReturnSequenceMem
+  internalReturnUnlockMem internalReturnSequenceMem internalReturnZeroStore
   bodyMemAssignTupleLocalsStores fragExecMem memSafeRun instMemFrontier
   stmtSimReturn stmtLowering emitHelper emitHelperProps exprLoweringProps fragExec instIdxIndep context compileEnv
   venomExecSemantics venomInstProofs venomState venomInst list rich_list arithmetic
@@ -62,7 +62,8 @@ Theorem internal_buffer_store_ret_mem_safe[local]:
   (ty = sty \/ is_bytestring_type ty /\ is_bytestring_type sty) /\
   type_memory_bytes cenv ty = type_memory_size tv /\
   type_memory_size tv + 64 < dimword (:256) /\
-  w2n sw + val_store_size stv v <= s.vs_alloca_next /\
+  (val_store_size stv v = 0 \/
+   w2n sw + val_store_size stv v <= s.vs_alloca_next) /\
   w2n dw + type_memory_size tv <= s.vs_alloca_next /\
   fn_has_code sa sb func /\
   s.vs_current_bb = sa.cs_current_bb /\
@@ -74,7 +75,18 @@ Proof
   simp[compile_internal_return_def, comp_bind_def, comp_ignore_bind_def] >>
   pairarg_tac >> simp[] >> strip_tac >>
   rename1 `compile_store_memory _ _ _ _ _ _ = (u,sm)` >>
-  Cases_on `u` >> fs[] >>
+  Cases_on `u` >> gnvs[] >>
+  Cases_on `val_store_size stv v = 0`
+  >- (`compile_store_memory cenv src dst ty sty sa = ((),sa)` by
+        (irule compile_compatible_zero_store >> metis_tac[]) >>
+      gvs[] >>
+      qpat_x_assum `emit_inst RET _ _ _ = _` mp_tac >>
+      simp[emit_inst_def, comp_bind_def, fresh_id_def, emit_def] >>
+      strip_tac >> gvs[] >>
+      drule fn_has_code_same_block >> simp[] >> strip_tac >>
+      irule buffer_ret_mem_safe >>
+      qexistsl_tac [`bb`, `sa.cs_next_id`, `pc`, `rpc`] >>
+      simp[] >> first_x_assum (qspec_then `0` mp_tac) >> simp[]) >>
   drule tuple_compatible_store_run_mem >>
   disch_then (qspecl_then [`s`, `tenv`, `tv`, `stv`, `v`, `sw`, `dw`] mp_tac) >>
   (impl_tac >- simp[ADD_COMM]) >> strip_tac >>
@@ -133,7 +145,8 @@ Theorem compile_internal_return_buffer_mem_safe:
   (ty = sty \/ is_bytestring_type ty /\ is_bytestring_type sty) /\
   type_memory_bytes cenv ty = type_memory_size tv /\
   type_memory_size tv + 64 < dimword (:256) /\
-  w2n sw + val_store_size stv v <= s.vs_alloca_next /\
+  (val_store_size stv v = 0 \/
+   w2n sw + val_store_size stv v <= s.vs_alloca_next) /\
   w2n dw + type_memory_size tv <= s.vs_alloca_next /\
   fn_has_code sa su func /\ fn_has_code su sb func /\
   s.vs_current_bb = sa.cs_current_bb /\

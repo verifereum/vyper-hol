@@ -33,7 +33,8 @@ Theorem compile_internal_return_buffer_path_mem:
   stmt_state_rel ctx func cenv cx (es with scopes := []) s /\
   expr_val_rel cx sty v src s /\ eval_operand src s = SOME sw /\
   eval_operand dst s = SOME bw /\ eval_operand rpc s = SOME pc /\
-  w2n sw + val_store_size stv v <= s.vs_alloca_next /\
+  (val_store_size stv v = 0 \/
+   w2n sw + val_store_size stv v <= s.vs_alloca_next) /\
   w2n bw + type_memory_size tv <= s.vs_alloca_next /\
   ~s.vs_halted /\ s.vs_current_bb = sa.cs_current_bb /\
   s.vs_inst_idx = LENGTH sa.cs_current_insts ==>
