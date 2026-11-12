@@ -219,7 +219,7 @@ Finalise initial_state_bridge
 (* run_blocks never returns OK — it always terminates with
    Halt/Abort/IntRet/Error. Induction on fuel: base returns Error,
    step either recurses (smaller fuel) or passes through non-OK. *)
-Theorem run_blocks_never_ok[local]:
+Theorem run_blocks_never_ok:
   !fuel ctx fn s vs1. run_blocks fuel ctx fn s <> OK vs1
 Proof
   Induct >- simp[Once run_blocks_def] >>
@@ -228,7 +228,7 @@ Proof
 QED
 
 (* run_function never returns OK — unfolds to run_blocks. *)
-Theorem run_function_never_ok[local]:
+Theorem run_function_never_ok:
   !fuel ctx fn vs vs1. run_function fuel ctx fn vs <> OK vs1
 Proof
   simp[run_function_def] >>
@@ -237,7 +237,7 @@ QED
 
 (* run_context also never returns OK — it either dispatches to
    run_function (which never returns OK) or returns Error. *)
-Theorem run_context_never_ok[local]:
+Theorem run_context_never_ok:
   !fuel ctx vs vs1. run_context fuel ctx vs <> OK vs1
 Proof
   rpt gen_tac >> simp[Once run_context_def] >>
@@ -345,7 +345,7 @@ Proof
   qspecl_then [`H`, `N`, `D`] strip_assume_tac asm_frame_gas_surplus >>
   qexists_tac `g` >> rpt gen_tac >> strip_tac >>
   qabbrev_tac `e = add_frame_gas g' es` >>
-  drule initial_ctx_codegen_asm_entry_rel >> strip_tac >>
+  drule codegenLabelDisciplinedTheory.initial_ctx_codegen_asm_entry_rel >> strip_tac >>
   `asm_run_bounded (SND (compute_label_offsets prog))
      (build_offset_to_pc prog) prog H N (entry_asm_state vs e)` by
     metis_tac[] >>
@@ -380,7 +380,7 @@ Proof
   rpt strip_tac >>
   drule_all codegen_entry_asm_bounded_run >>
   disch_then (qspecl_then [`fuel`, `M`] strip_assume_tac) >>
-  drule initial_ctx_codegen_asm_entry_rel >> strip_tac >>
+  drule codegenLabelDisciplinedTheory.initial_ctx_codegen_asm_entry_rel >> strip_tac >>
   `asm_run_bounded (SND (compute_label_offsets prog))
      (build_offset_to_pc prog) prog H N (entry_asm_state vs es)` by
     metis_tac[] >>

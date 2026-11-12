@@ -41,7 +41,7 @@ Ancestors
   loweringShapeProps loweringShapeSource passSimulationDefs
   codegenCorrectness immutableCodeLayout frameOutcome frameGas
   venomRunBounded unitMemInv
-  asmOptimizer callTrace
+  asmOptimizer callTrace e2eAsmOpt
   e2eDeployCorrectness e2eDeployDefs ctorDeployDefs ctorDeployLowering
   ctorDeployFrame ctorDeployShape ctorDeployDefsReach ctorDeployInitcode
   ctorDeployEntry ctorDeployMemory ctorDeployDload ctorDeployDead

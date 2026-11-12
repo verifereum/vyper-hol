@@ -59,6 +59,20 @@ Proof
   CASE_TAC >> simp[]
 QED
 
+Theorem window_bounded_plain1[local]:
+  sym_steps p env 1 ss = SymOK b ∧
+  sym_steps_ok (λi stk. asm_plain_inst i) (λi. F) p env 1 ss ∧
+  sym_steps_ok (λi stk. asm_plain_inst i) (λi. F) p' env j' ss ∧
+  sym_within_ok P Q ∧ sym_run_within P Q p env k ss ⇒
+  sym_run_within P Q p' env (2 * k) ss ∨
+  ∃a. sym_steps p env 1 ss = SymOK a ∧
+      sym_run_within P Q p env (k - 1) a ∧
+      sym_steps_ok P Q p' env j' ss
+Proof
+  strip_tac >> disj2_tac >> qexists_tac `b` >> simp[] >>
+  drule_all window_within_plain >> simp[]
+QED
+
 (* From t, one step of either program leaves the window or ends the same
    way. *)
 Theorem terminal_window_refines:
@@ -74,7 +88,31 @@ Proof
   `LENGTH pfx < LENGTH p ∧ EL (LENGTH pfx) p = t ∧
    LENGTH pfx < LENGTH q ∧ EL (LENGTH pfx) q = t`
     by simp[Abbr `p`, Abbr `q`, listTheory.EL_APPEND_EQN] >>
-  qexistsl_tac [`1`, `1`] >> simp[sym_steps_one] >>
+  qexistsl_tac [`1`, `1`] >>
+  conj_tac >- simp[] >> conj_tac >- simp[] >>
+  CONV_TAC (REWR_CONV CONJ_ASSOC) >>
+  reverse conj_tac
+  >- (rpt strip_tac >>
+      `0 < k` by (Cases_on `k` >> gvs[sym_run_within_def]) >>
+      Cases_on `name = "JUMP"`
+      >- (gvs[] >>
+          Cases_on `∃a. sym_step p env (AsmOp "JUMP") ss = SymOK a`
+          >- (gvs[] >> irule window_bounded_plain1 >>
+              simp[sym_steps_one, sym_steps_ok_one, asm_plain_inst_def,
+                   is_data_inst_def]) >>
+          `asm_plain_inst (AsmOp "JUMP")` by simp[asm_plain_inst_def, is_data_inst_def] >>
+          `¬Q (AsmOp "JUMP")` by gvs[sym_within_ok_def] >>
+          Cases_on `k` >> gvs[sym_run_within_def] >>
+          Cases_on `sym_step p env (AsmOp "JUMP") ss` >>
+          gvs[sym_step_def, sym_step_op_def, sym_jump_def, AllCaseEqs()]) >>
+      `sym_step q env (AsmOp name) ss = sym_step p env (AsmOp name) ss`
+        by (irule sym_step_prog_cong >> gvs[asm_terminal_op_def] >>
+            simp[Abbr `p`, Abbr `q`] >> metis_tac[]) >>
+      `∀a. sym_step p env (AsmOp name) ss ≠ SymOK a`
+        by (gen_tac >> irule sym_step_halting_not_ok >> gvs[]) >>
+      disj1_tac >> irule within_same_halting_step >>
+      first_assum (irule_at Any) >> gvs[]) >>
+  simp[sym_steps_one] >>
   Cases_on `name = "JUMP"`
   >- (gvs[sym_step_def, sym_step_op_def, sym_jump_def] >>
       Cases_on `ss.sym_stack` >> simp[sym_terminal_def] >>

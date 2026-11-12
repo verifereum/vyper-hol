@@ -44,6 +44,11 @@ Proof
     by simp[sym_step_def, sym_step_op_def, sym_jump_def,
             sym_jump_dest_def] >>
   qexistsl_tac [`2`, `0`] >>
+  reverse (rpt conj_tac)
+  >- (rpt strip_tac >> irule window_bounded_plain >>
+      simp[sym_steps_pos, sym_steps_def, sym_steps_ok_pos,
+           sym_steps_ok_def] >>
+      simp[asm_plain_inst_def, asmWfTheory.is_data_inst_def]) >>
   simp[sym_steps_pos, sym_steps_def, sym_terminal_def] >>
   simp[Abbr `s1`, splice_pc_def, sym_with_pc_def,
        sym_state_component_equality,

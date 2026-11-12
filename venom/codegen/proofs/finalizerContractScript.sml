@@ -3,7 +3,8 @@
  *
  * asm_refines is reflexive and transitive, so the identity finalizer is
  * correct, correct finalizers compose, and the final assembly optimizer is
- * correct once each of its rules refines its input.
+ * correct once each of its rules refines its input.  sym_run_within takes
+ * more fuel freely (sym_run_within_mono).
  *
  * TOP-LEVEL:
  *   finalizer_correct_identity  — K SOME is correct
@@ -85,22 +86,39 @@ Proof
   simp[sym_result_rel_def]
 QED
 
+(* ===== Bounded runs ===== *)
+
+Theorem sym_run_within_mono:
+  ∀k k' ss.
+    sym_run_within P Q p env k ss ∧ k ≤ k' ⇒ sym_run_within P Q p env k' ss
+Proof
+  Induct >> simp[sym_run_within_def] >> rpt gen_tac >> strip_tac >>
+  Cases_on `k'` >> gvs[sym_run_within_def] >>
+  Cases_on `sym_step p env (EL ss.sym_base.as_pc p) ss` >> gvs[]
+QED
+
 (* ===== asm_refines ===== *)
 
 Theorem asm_refines_refl:
   asm_refines p p
 Proof
-  rw[asm_refines_def] >> metis_tac[sym_result_rel_refl]
+  rw[asm_refines_def] >- metis_tac[sym_result_rel_refl] >>
+  qexists_tac `1` >> simp[]
 QED
 
 Theorem asm_refines_trans:
   asm_refines p1 p2 ∧ asm_refines p2 p3 ⇒ asm_refines p1 p3
 Proof
-  rw[asm_refines_def] >> gvs[] >>
-  first_x_assum drule >> strip_tac >>
-  drule sym_result_rel_terminal >> strip_tac >>
-  first_x_assum drule >> strip_tac >>
-  metis_tac[sym_result_rel_trans]
+  rw[asm_refines_def] >> gvs[]
+  >- (first_x_assum drule >> strip_tac >>
+      drule sym_result_rel_terminal >> strip_tac >>
+      first_x_assum drule >> strip_tac >>
+      metis_tac[sym_result_rel_trans]) >>
+  qmatch_asmsub_rename_tac `sym_run_within _ _ p2 _ (ca * _) _` >>
+  qmatch_asmsub_rename_tac `sym_run_within _ _ p3 _ (cb * _) _` >>
+  qexists_tac `cb * ca` >> rpt strip_tac >>
+  `cb * ca * k = cb * (ca * k)` by simp[] >> pop_assum SUBST1_TAC >>
+  metis_tac[]
 QED
 
 (* ===== Finalizers ===== *)

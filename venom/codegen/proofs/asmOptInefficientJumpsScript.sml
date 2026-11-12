@@ -63,13 +63,20 @@ Proof
     by simp[Abbr `s1`, asmSemTheory.asm_next_def] >>
   reverse (Cases_on `∃c stk. ss.sym_stack = Val c :: stk`)
   >- ((* a Lab condition, or too few items: p's JUMPI misuses its stack *)
-      `∃e. sym_step p env (AsmOp "JUMPI") s1 = SymError e ∨
-           sym_step p env (AsmOp "JUMPI") s1 = SymBad e`
-        by (Cases_on `ss.sym_stack` >> gvs[]
-            >- simp[sym_step_def, sym_step_op_def, sym_jumpi_def] >>
-            rename1 `ss.sym_stack = v :: _` >> Cases_on `v` >>
-            gvs[sym_step_def, sym_step_op_def, sym_jumpi_def]) >>
+      Q.SUBGOAL_THEN
+        `∃e. sym_step p env (AsmOp "JUMPI") s1 = SymError e ∨
+             sym_step p env (AsmOp "JUMPI") s1 = SymBad e` assume_tac
+      >- (Cases_on `ss.sym_stack` >> gvs[]
+          >- simp[sym_step_def, sym_step_op_def, sym_jumpi_def] >>
+          rename1 `ss.sym_stack = v :: _` >> Cases_on `v` >>
+          gvs[sym_step_def, sym_step_op_def, sym_jumpi_def]) >>
       qexistsl_tac [`2`, `0`] >>
+      conj_tac >- simp[] >> conj_tac >- simp[] >>
+      CONV_TAC (REWR_CONV CONJ_ASSOC) >> reverse conj_tac
+      >- (pop_assum strip_assume_tac >> (rpt strip_tac >> irule window_bounded_cases >>
+          simp[sym_steps_pos, sym_steps_def, sym_steps_ok_pos,
+               sym_steps_ok_def, sym_terminal_def, asm_plain_inst_def,
+               asmWfTheory.is_data_inst_def])) >>
       pop_assum strip_assume_tac >>
       simp[sym_steps_pos, sym_terminal_def]) >>
   gvs[] >>
@@ -106,6 +113,12 @@ Proof
   reverse (Cases_on `c = 0w`)
   >- ((* nonzero: p jumps to LABEL x, q falls through onto it *)
       qexistsl_tac [`2`, `3`] >>
+      conj_tac >- simp[] >> conj_tac >- simp[] >>
+      CONV_TAC (REWR_CONV CONJ_ASSOC) >> reverse conj_tac
+      >- (rpt strip_tac >> irule window_bounded_cases >>
+          simp[sym_steps_pos, sym_steps_def, sym_steps_ok_pos,
+               sym_steps_ok_def, sym_terminal_def, asm_plain_inst_def,
+               asmWfTheory.is_data_inst_def]) >>
       simp[sym_steps_pos, sym_steps_def, sym_terminal_def] >>
       simp[Abbr `s1`, Abbr `t1`, Abbr `t2`, splice_pc_def,
            asmSemTheory.asm_next_def, sym_with_pc_def,
@@ -131,6 +144,12 @@ Proof
     by simp[Abbr `s3`, sym_step_def, sym_step_op_def, sym_jump_def,
             sym_jump_dest_def] >>
   qexistsl_tac [`4`, `3`] >>
+  conj_tac >- simp[] >> conj_tac >- simp[] >>
+  CONV_TAC (REWR_CONV CONJ_ASSOC) >> reverse conj_tac
+  >- (Cases_on `INDEX_OF (AsmLabel y) p` >> (rpt strip_tac >> irule window_bounded_cases >>
+          simp[sym_steps_pos, sym_steps_def, sym_steps_ok_pos,
+               sym_steps_ok_def, sym_terminal_def, asm_plain_inst_def,
+               asmWfTheory.is_data_inst_def])) >>
   Cases_on `INDEX_OF (AsmLabel y) p` >>
   simp[sym_steps_pos, sym_steps_def, sym_terminal_def] >>
   rename1 `INDEX_OF (AsmLabel y) p = SOME i` >>
