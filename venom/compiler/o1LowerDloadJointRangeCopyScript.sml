@@ -247,21 +247,21 @@ Proof
       simp[ptrDisciplineTheory.ld_dyn_agree_def,
            regularCallEmitSimTheory.read_byte_write_memory_with_expansion] >>
       fs[ptrDisciplineTheory.ld_dyn_agree_def] >> NO_TAC],
+    `l <> 0w` by (strip_tac >> gvs[]) >>
+    qpat_x_assum `eval_operand dop t = SOME d' /\ _` strip_assume_tac >>
+    gvs[] >>
     `w2n d = w2n d' \/
      (w2n d+w2n l <= dyn_floor C vs /\ w2n d'+w2n l <= dyn_floor C vs)` by
-      (Cases_on `w2n d = w2n d'` >> simp[] >>
-       `?id b c z j. FLOOKUP sites id = SOME (b,c,z) /\ j+w2n l<=z /\
-                     w2n d=b+j /\ w2n d'=c+j` by metis_tac[] >>
-       `b+z <= dyn_floor C vs /\ c+z <= dyn_floor C vs` by metis_tac[] >>
-       decide_tac) >>
+      (TRY (disj1_tac >> simp[] >> NO_TAC) >> disj2_tac >>
+       res_tac >> decide_tac) >>
     pure_rewrite_tac[mcopy_def, GSYM read_memory_def, LET_THM] >> BETA_TAC >>
     rpt conj_tac >>
     FIRST [
       drule_at (Pat `ld_joint_geometry _ _ _ _`)
         (Q.INST [`fl` |-> `dyn_floor C vs`] ld_memory_agree_snapshot_copy) >>
-      disch_then irule >> metis_tac[] >> NO_TAC,
+      disch_then irule >> simp[] >> metis_tac[] >> NO_TAC,
       drule_at (Pat `ld_memory_agree _ _ _ _ _`) ld_dyn_agree_snapshot_copy >>
-      disch_then irule >> metis_tac[] >> NO_TAC]]
+      disch_then irule >> simp[] >> metis_tac[] >> NO_TAC]]
 QED
 
 Theorem ld_joint_mcopy_next:
