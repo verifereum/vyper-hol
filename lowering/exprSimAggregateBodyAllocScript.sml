@@ -7,7 +7,7 @@ Ancestors
 Theorem aggregate_body_alloc_immutable_prefix:
   compile_alloc_buffer sz sa = (buf,sm) /\
   fn_has_code sa sm func /\
-  stmt_state_rel ctx func ce cx es t /\
+  stmt_state_rel H ctx func ce cx es t /\
   FLOOKUP t.vs_allocas sa.cs_next_id = SOME (b,sz) /\ used <= sz ==>
   ce.ce_is_ctor ==>
   !name itv iv io.

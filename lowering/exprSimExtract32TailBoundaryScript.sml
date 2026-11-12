@@ -13,9 +13,9 @@ Proof
 QED
 
 Theorem extract32_tail_ready_any_post:
-  expr_post ctx func cenv cx src es sa sm s0 es1 (BytesV bs) src_op s1 /\
-  expr_post ctx func cenv cx off es1 sm st3 s1 es2 (IntV i) off_op s2 /\
-  stmt_state_rel ctx func cenv cx es s0 /\
+  expr_post H ctx func cenv cx src es sa sm s0 es1 (BytesV bs) src_op s1 /\
+  expr_post H ctx func cenv cx off es1 sm st3 s1 es2 (IntV i) off_op s2 /\
+  stmt_state_rel H ctx func cenv cx es s0 /\
   local_ptrs_reserved cenv sa /\ local_ptrs_reserved cenv st3 /\
   MAP FDOM es.scopes = MAP FDOM es1.scopes /\
   sa.cs_next_var <= sm.cs_next_var /\ sm.cs_next_var <= st3.cs_next_var /\
@@ -44,7 +44,7 @@ Theorem extract32_tail_ready_any_post:
        [expr_type src;expr_type off] [BytesV bs;IntV i])) (\v. return (Value v)))
     (es2,s2)
     (\res ee t. ?tv. res = INL tv /\
-      vv_post ctx func cenv cx (TypeBuiltin (BaseT bt) Extract32 (BaseT bt) [src;off])
+      vv_post H ctx func cenv cx (TypeBuiltin (BaseT bt) Extract32 (BaseT bt) [src;off])
         es sa sb s0 ee tv (StackValue ty op) t /\
       t.vs_current_bb = sb.cs_current_bb /\
       t.vs_inst_idx = LENGTH sb.cs_current_insts)
