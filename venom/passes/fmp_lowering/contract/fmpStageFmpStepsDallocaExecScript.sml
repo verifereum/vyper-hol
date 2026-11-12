@@ -1,6 +1,7 @@
 Theory fmpStageFmpStepsDallocaExec
 Ancestors
   fmpStageRel fmpStageOpBase fmpStageReclaimSound fmpStageControl
+  fmpStageFmpStepsDallocaCode
   fmpLowerSequenceExec ptrStaticDiscipline unitMemInv frameViewFacts
   venomExecSemantics venomState words list finite_map passSimulationDefs
 
@@ -355,4 +356,49 @@ Proof
   reverse conj_tac >- gvs[fmp_dalloca_control_advance] >>
   gen_tac >> irule fmp_dalloca_target_run >> simp[] >>
   qexistsl [`bb'`, `seq`, `tail`] >> simp[Abbr `seq`] >> gvs[]
+QED
+
+Theorem fmp_dalloca_execution:
+  fmp_stage_ctx rpolicy D C C' vs vs' fmp eom /\
+  fmp0 = w2n vs'.vs_initial_fmp /\ raw0 = w2n fmp /\
+  frame_reachable vs C stk PG G tn fn inst s /\ active_inst fn inst s /\
+  ~s.vs_halted /\ inst.inst_opcode = DALLOCA /\
+  fmp_stage_rel D C' sm fmp0 raw0 eom T stk PG G tn fn s lo t ts /\
+  step_inst k C inst s = r /\ terminates r ==>
+  ?out size_op sz z runner plus31 mask aligned s1 t1 fn' infos ctx bb
+    rl rp env states st regions.
+    z = ceil32 (w2n sz) /\ r = OK s1 /\
+    inst.inst_operands = [size_op] /\ inst.inst_outputs = [out] /\
+    eval_operand size_op s = SOME sz /\ eval_operand size_op t = SOME sz /\
+    s1 = update_var out s.vs_fmp (s with vs_fmp := n2w (w2n s.vs_fmp+z)) /\
+    t1 = (update_var runner (n2w (lo+z))
+      (update_var out (n2w lo) (update_var aligned (n2w z)
+       (update_var mask (~31w) (update_var plus31 (sz+31w) t)))))
+      with vs_inst_idx := t.vs_inst_idx+4 /\
+    (!k'. fmp_target_run k' C' fn.fn_name t 4 t1) /\
+    w2n s.vs_fmp+z < dimword (:256) /\ lo+z < dimword (:256) /\
+    fmp_frontier_rel fmp0 raw0 (lo+z) s1.vs_fmp /\
+    ALL_DISTINCT [plus31;mask;aligned;runner;out] /\
+    EVERY (\v. ~MEM v (fn_ir_vars fn)) [plus31;mask;aligned;runner] /\
+    lookup_function fn.fn_name C'.ctx_functions = SOME fn' /\
+    fmp_stage_lowered infos ctx runner fn fn' /\
+    fmp_stage_root infos ctx fn = SOME (rl,rp) /\
+    ~(s.vs_current_bb = rl /\ s.vs_inst_idx < rp) /\
+    lookup_block s.vs_current_bb fn.fn_blocks = SOME bb /\
+    fmp_base_analyze (fn_insts fn) = SOME env /\
+    fmp_reclaim_states infos fn = SOME states /\
+    df_at NONE states s.vs_current_bb s.vs_inst_idx = SOME st /\
+    MAP (\r. r.fr_mark) regions = SND (fmp_pop_at infos fn
+      (liveness_analyze fn) env (s.vs_current_bb,s.vs_inst_idx) inst st) /\
+    fmp_ledger_ok (fn_insts fn) env t lo regions /\
+    EVERY (\r. fmp_frame_lo fmp0 ts <= r.fr_lo) regions /\
+    fmp_ledger_link sm (fmp_frame_base raw0 stk) lo regions /\
+    fmp_frame_covers sm env (fmp_frame_base raw0 stk) lo G /\
+    t.vs_inst_idx+4 = fmp_stage_tidx (fmp_stage_plan infos ctx fn)
+      (fmp_stage_root infos ctx fn) s.vs_current_bb bb.bb_instructions
+      (SUC s.vs_inst_idx)
+Proof
+  strip_tac >> mp_tac fmp_dalloca_execution_from_suffix >>
+  impl_tac >- (conj_tac >- (rpt gen_tac >> MATCH_ACCEPT_TAC fmp_dalloca_indexed_suffix) >>
+               asm_rewrite_tac[]) >> simp[]
 QED
