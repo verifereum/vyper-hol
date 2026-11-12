@@ -17,6 +17,31 @@ Ancestors
   simplifyCfgAvailability o1ContractSimplifyCfgSrcFrame
   o1LowerDloadReadiness venomInstProofs1 concretizePtrOwnerPath
   finite_map words list
+  o1LowerDloadStackFunctions ctxLookupAgreeHelpers
+  unitShapeDefs venomWf
+
+Theorem fmp_call_entry_ancestry[local]:
+  !vs C stk PG G tn fn inst s.
+    frame_reachable vs C stk PG G tn fn inst s ==>
+    !names. callee_first names C.ctx_functions ==>
+    EVERY (\g. C.ctx_entry = SOME g.fn_name \/
+      ?root. C.ctx_entry = SOME root /\ list_precedes g.fn_name root names)
+      (fn :: MAP (\f. f.cf_fn) stk)
+Proof
+  ho_match_mp_tac frame_reachable_strongind >> rpt conj_tac
+  >- (rpt strip_tac >> drule lookup_function_selected_name >> simp[])
+  >- (rpt strip_tac >> metis_tac[])
+  >- (rpt strip_tac >> metis_tac[])
+  >- (rpt gen_tac >> strip_tac >> gen_tac >> strip_tac >>
+      first_x_assum drule >> strip_tac >>
+      `MEM fn C.ctx_functions` by
+        metis_tac[scfg_frame_reachable_functions] >>
+      `list_precedes fn'.fn_name fn.fn_name names` by
+        (irule ld_active_callee_precedes >> metis_tac[]) >>
+      gvs[] >> metis_tac[ld_list_precedes_trans])
+  >> rpt gen_tac >> strip_tac >> gen_tac >> strip_tac >>
+  first_x_assum drule >> simp[]
+QED
 
 (* Saved INVOKE control survives the return merge and output assignment. *)
 Theorem fmp_back_saved_continuation:
@@ -73,7 +98,54 @@ Theorem fmp_stage_back_call:
     eval_operands ops s = SOME args /\ setup_callee callee args s = SOME cs /\
     enters_block callee cs s1 /\ active_inst callee inst s1
 Proof
-  cheat
+  strip_tac >>
+  drule_all fmp_stage_frame_facts >> strip_tac >>
+  `?nm ops. ivk.inst_operands = Label nm :: ops /\
+     MEM nm (ctx_fn_names C)` by
+    metis_tac[o1_fn_shape_def, fn_invoke_ok_def] >>
+  `decode_invoke ivk = SOME (nm,ops)` by simp[decode_invoke_def] >>
+  `?callee. lookup_function nm C.ctx_functions = SOME callee` by
+    (Cases_on `lookup_function nm C.ctx_functions` >>
+     fs[ctx_fn_names_def] >> metis_tac[lookup_function_not_mem]) >>
+  `?names. callee_first names C.ctx_functions` by
+    (fs[fmp_stage_ctx_def, o1_inv_def] >> metis_tac[]) >>
+  `list_precedes callee.fn_name fn.fn_name names` by
+    (irule ld_active_callee_precedes >> metis_tac[]) >>
+  `C.ctx_entry <> SOME nm` by
+    (drule_all fmp_call_entry_ancestry >> simp[] >> strip_tac >>
+     drule lookup_function_selected_name >> strip_tac >>
+     strip_tac >> gvs[] >>
+     metis_tac[ld_list_precedes_trans, ld_list_precedes_irrefl]) >>
+  `EVERY (\op. ~is_label_operand op) ops` by
+    (`inst_shape_ok ivk` by
+       (fs[o1_fn_shape_def, fn_shape_ok_def, EVERY_MEM] >> metis_tac[]) >>
+     qpat_x_assum `inst_shape_ok ivk` mp_tac >>
+     simp[inst_shape_ok_def, label_positions_ok_def]) >>
+  `IS_SOME (eval_operands ops s)` by
+    (simp[eval_operands_IS_SOME_EVERY, EVERY_MEM] >> rpt strip_tac >>
+     Cases_on `op` >> simp[eval_operand_def]
+     >- (`MEM (Var s') ivk.inst_operands /\ ivk.inst_opcode <> PHI` by simp[] >>
+         drule_all fmp_stage_src_defined >> simp[]) >>
+     qpat_x_assum `EVERY (\op. ~is_label_operand op) ops` mp_tac >>
+     simp[EVERY_MEM] >> disch_then (qspec_then `Label s'` mp_tac) >>
+     simp[stackPlanTypesTheory.is_label_operand_def]) >>
+  Cases_on `eval_operands ops s` >> gvs[] >>
+  `wf_function callee /\ first_block_no_phi callee` by
+    (fs[fmp_stage_ctx_def, o1_ctx_shape_def, EVERY_MEM, o1_fn_shape_def] >>
+     metis_tac[lookup_function_MEM]) >>
+  `callee.fn_blocks <> []` by
+    (fs[wf_function_def, fn_has_entry_def] >> Cases_on `callee.fn_blocks` >> fs[]) >>
+  Cases_on `callee.fn_blocks` >> gvs[] >> rename1 `callee.fn_blocks = bb::bbs` >>
+  `bb.bb_instructions <> []` by
+    metis_tac[wf_function_def, bb_well_formed_def, MEM] >>
+  Cases_on `bb.bb_instructions` >> gvs[] >> rename1 `bb.bb_instructions = first::rest` >>
+  `first.inst_opcode <> PHI` by fs[first_block_no_phi_def] >>
+  simp[setup_callee_def] >>
+  qmatch_goalsub_abbrev_tac `enters_block callee cs` >>
+  qexistsl_tac [`cs`, `first`] >>
+  simp[enters_block_def, active_inst_def, Abbr `cs`, lookup_block_def,
+       get_instruction_def, eval_phis_def, phi_prefix_length_def, FIND_thm] >>
+  qexists_tac `bb` >> simp[]
 QED
 
 (* Why it holds: the source RET has nonempty, defined operands, so it
