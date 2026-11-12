@@ -12,12 +12,17 @@
  * TEMPORARY: admitted (cheat) while the simulation is proved as its own
  * pieces; the statement is frozen.
  *
+ * fmp_stage_invoke_sim is the INVOKE case of the same simulation (the
+ * run_defs_ind predicate), exported on its own because the coverage
+ * proof (fmpStageCoverage) closes its invariant over INVOKE steps.
+ *
  * TOP-LEVEL:
  *   fmp_lowering_stage_sim
+ *   fmp_stage_invoke_sim
  *)
 Theory fmpStageRunner
 Ancestors
-  o1PassContract venomPassSchedule venomCompilerTypes
+  o1PassContract venomPassSchedule venomCompilerTypes fmpStageRel
 
 Theorem fmp_lowering_stage_sim:
   ctx_pass_stage rpolicy (CFP_Simple VP_FmpLowering)
@@ -26,6 +31,12 @@ Theorem fmp_lowering_stage_sim:
   o1_inv D 3 C (vs' with <| vs_fmp := fmp; vs_initial_fmp := fmp |>) /\
   fmp_variant_room (SOME fmp) C' vs' ==>
   ctx_sim D C C' (vs' with <| vs_fmp := fmp; vs_initial_fmp := fmp |>) vs'
+Proof
+  cheat
+QED
+
+Theorem fmp_stage_invoke_sim:
+  fmp_invoke_sim rpolicy D C C' vs vs' fmp eom k ivk s
 Proof
   cheat
 QED
