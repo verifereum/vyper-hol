@@ -159,8 +159,10 @@ Theorem body_append_storage_aggregate_fragment:
   stmt_frag ctx func cx lctx RetQ cenv
     (stmt_env cenv lctx ret_ty (Append (TopLevelNameTarget (src,id)) e))
     (eval_stmt cx (Append (TopLevelNameTarget (src,id)) e)) es
-(* PORT_ADMISSION: approved combined-train boundary; sparse aggregate Append
-   repair remains owned separately. Original proof retained below.
+(* PORT_ADMISSION SEQ-4381: whole aggregate Append lemma, including static
+   types: the old path uses dense FOLDL and the one-word direct store still
+   needs a separate proof. Sparse Append repair remains owned separately.
+   Original proof retained below.
 
 Proof
   strip_tac >> drule body_append_aggregate_metadata >>
