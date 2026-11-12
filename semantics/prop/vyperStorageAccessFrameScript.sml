@@ -270,6 +270,12 @@ Proof
   simp[storage_subregion_def, WORD_ADD_0]
 QED
 
+(* extend_place and select_result record a storage observation: their end
+   state is the start state with a longer storage_trace.  Substitute that
+   equation so get_storage_storage_trace can drop the trace update. *)
+val trace_subst_tac =
+  rpt (qpat_x_assum `_ = _ with storage_trace := _` SUBST_ALL_TAC);
+
 Theorem lookup_global_labelled_mapping[local]:
   lookup_global cx mid n st = (INL (HashMapRef tr slot kt vt),st') /\
   MEM (WriteAcc (StateRef (mid,n))) A ==>
@@ -278,7 +284,8 @@ Proof
   simp[lookup_global_def, bind_def, lift_option_type_def,
        return_def, raise_def, AllCaseEqs()] >> rpt strip_tac >>
   gvs[option_CASE_rator, prod_CASE_rator,
-      var_decl_info_CASE_rator, bind_def, lift_option_type_def,
+      var_decl_info_CASE_rator, bind_def, ignore_bind_def,
+      record_storage_event_def, lift_option_type_def,
       return_def, raise_def, AllCaseEqs()] >>
   simp_tac (srw_ss()) [] >>
   qexistsl_tac [`mid`,`n`,`[]`] >> simp[] >> rpt gen_tac >> strip_tac >>
@@ -341,8 +348,9 @@ Proof
   Cases_on `sb` >>
   simp[extend_place_def, bind_def, lift_option_type_def,
        return_def, raise_def, AllCaseEqs()] >> rpt strip_tac >>
-  gvs[value_type_CASE_rator, option_CASE_rator,
-      bind_def, lift_option_type_def, return_def, raise_def, AllCaseEqs()] >>
+  gvs[value_type_CASE_rator, option_CASE_rator, bind_def, ignore_bind_def,
+      record_storage_event_def, lift_option_type_def, return_def, raise_def,
+      AllCaseEqs()] >>
   drule mapping_prefix_step >> disch_then (qspec_then `v` assume_tac)
   >- (first_x_assum (qspecl_then
         [`[]`,`hashmap_slot slot (encode_hashmap_key kt v)`,`tv`] mp_tac) >>
@@ -374,20 +382,18 @@ Proof
   simp[Once evaluate_def, bind_def, AllCaseEqs(), get_scopes_def,
        type_check_def, assert_def, ignore_bind_def, return_def, raise_def,
        accesses_expr_def] >>
-  rpt strip_tac >> gvs[] >>
-  FIRST [simp[] >> NO_TAC,
-         drule lookup_global_labelled_result >>
-         disch_then (qspec_then `[ReadAcc (StateRef (p0,p1)); WriteAcc (StateRef (p0,p1))]` mp_tac) >>
-         simp[] >> NO_TAC,
-         qmatch_assum_rename_tac `eval_base_place cx child st = (INL child_pv,child_st)` >>
-         qpat_x_assum `!y. _` (qspec_then `child` mp_tac) >>
-         simp[vyperASTTheory.expr_size_def] >> strip_tac >>
-         first_x_assum drule >> strip_tac >>
-         drule_at Any (SRULE [] extend_labelled_result) >>
-         disch_then drule >> strip_tac >>
-         Cases_on `pv` >> gvs[] >>
-         TRY (rename1 `PlaceR p` >> Cases_on `p` >> gvs[]) >>
-         metis_tac[]]
+  rpt strip_tac >> gvs[]
+  >~ [`lookup_global _ _ _ _`]
+  >- (drule lookup_global_labelled_result >>
+      disch_then (qspec_then `[ReadAcc (StateRef (p0,p1)); WriteAcc (StateRef (p0,p1))]` mp_tac) >>
+      simp[]) >>
+  qmatch_assum_rename_tac `eval_base_place cx child st = (INL child_pv,child_st)` >>
+  qpat_x_assum `!y. _` (qspec_then `child` mp_tac) >>
+  simp[vyperASTTheory.expr_size_def] >> strip_tac >>
+  first_x_assum drule >> strip_tac >>
+  drule_at Any (SRULE [] extend_labelled_result) >>
+  disch_then drule >> strip_tac >>
+  rpt CASE_TAC >> gvs[] >> metis_tac[]
 QED
 
 Theorem eval_target_place_labelled_region:
@@ -616,8 +622,8 @@ Proof
   simp[finally_unless_halt_def] >>
   Cases_on `r1` >> TRY (rename1 `INR ex` >> Cases_on `ex`) >>
   simp[ignore_bind_def, bind_def, return_def, raise_def] >>
-  Cases_on `ur` >> simp[] >> strip_tac >> rpt BasicProvers.VAR_EQ_TAC >>
-  TRY (qexists_tac `[]` >> simp[] >> NO_TAC) >>
+  Cases_on `ur` >> simp[] >> strip_tac >> rpt BasicProvers.VAR_EQ_TAC
+  >>~- ([`_ = (INR HaltException,_)`], qexists_tac `[]` >> simp[]) >>
   first_assum ACCEPT_TAC
 QED
 
@@ -1854,9 +1860,9 @@ Resume evaluate_finite_frame[assert_reason]:
   strip_tac >>
   asm_x "reason_ih" drule >> disch_then (mk_asm "reason_ih") >>
   gvs[AllCaseEqs()] >> imp_res_tac read_result_state >>
-  gvs[COND_RATOR, AllCaseEqs(), return_def, raise_def] >>
-  (asm "prefix" (ACCEPT_TAC o BETA_RULE) ORELSE
-   (qspecl_then [`cx`,`e`] (drule_all o CONJUNCT1)
+  gvs[COND_RATOR, AllCaseEqs(), return_def, raise_def]
+  >>~- ([`read_result _ _ _ = (INL (BoolV F),_)`],
+    qspecl_then [`cx`,`e`] (drule_all o CONJUNCT1)
       (cj 5 eval_scc_type_sound_results_mutual) >> strip_tac >>
     gvs[] >>
     rename1 `eval_expr cx e st = (INL x,s1)` >>
@@ -1874,7 +1880,8 @@ Resume evaluate_finite_frame[assert_reason]:
     gvs[option_CASE_rator, AllCaseEqs(), raise_def, return_def] >>
     irule (BETA_RULE finite_frame_trans) >> qexists_tac `s1` >>
     (conj_tac >- asm "prefix" (ACCEPT_TAC o BETA_RULE)) >>
-    asm "suffix" (ACCEPT_TAC o BETA_RULE)))
+    asm "suffix" (ACCEPT_TAC o BETA_RULE)) >>
+  asm "prefix" (ACCEPT_TAC o BETA_RULE)
 QED
 
 Resume evaluate_finite_frame[risky_Send]:
@@ -2405,7 +2412,7 @@ QED
 Resume evaluate_finite_frame[base_global]:
   rpt gen_tac >> strip_tac >>
   gvs[Once evaluate_def] >>
-  drule lookup_global_state >> strip_tac >> gvs[] >>
+  drule lookup_global_state >> disch_then SUBST1_TAC >>
   qexists_tac `[]` >> simp[]
 QED
 
@@ -2414,7 +2421,7 @@ Resume evaluate_finite_frame[base_attr]:
   gvs[vyperTypeSystemTheory.well_typed_expr_def,
       accesses_expr_def, int_calls_expr_def,
       Once evaluate_def, bind_def, AllCaseEqs()] >>
-  imp_res_tac vyperPlaceFramesTheory.extend_place_state >> gvs[] >>
+  imp_res_tac vyperPlaceFramesTheory.extend_place_state >> trace_subst_tac >> gvs[] >>
   first_x_assum irule >> goal_assum (drule_at Any) >> simp[] >>
   (conj_tac >- (qexists_tac `R` >> conj_tac
     >- first_assum ACCEPT_TAC >> simp[])) >>
@@ -2458,7 +2465,7 @@ Resume evaluate_finite_frame[base_subscript]:
   qpat_x_assum `^frame cx A s1 s2` (mk_asm "suffix") >>
   gvs[bind_def, AllCaseEqs()] >>
   imp_res_tac read_result_state >>
-  imp_res_tac vyperPlaceFramesTheory.extend_place_state >> gvs[] >>
+  imp_res_tac vyperPlaceFramesTheory.extend_place_state >> trace_subst_tac >> gvs[] >>
   irule (BETA_RULE finite_frame_trans) >> qexists_tac `s1` >>
   (conj_tac >- asm "prefix" (ACCEPT_TAC o SRULE [])) >>
   asm "suffix" (ACCEPT_TAC o SRULE [])
@@ -2472,7 +2479,7 @@ QED
 
 Resume evaluate_finite_frame[expr_global]:
   rpt gen_tac >> strip_tac >> gvs[Once evaluate_def] >>
-  drule lookup_global_state >> strip_tac >> gvs[] >>
+  drule lookup_global_state >> disch_then SUBST1_TAC >>
   qexists_tac `[]` >> simp[]
 QED
 
@@ -2492,7 +2499,7 @@ Resume evaluate_finite_frame[expr_attr]:
   gvs[vyperTypeSystemTheory.well_typed_expr_def,
       accesses_expr_def, int_calls_expr_def,
       Once evaluate_def, bind_def, AllCaseEqs()] >>
-  imp_res_tac vyperPlaceFramesTheory.select_result_state >> gvs[] >>
+  imp_res_tac vyperPlaceFramesTheory.select_result_state >> trace_subst_tac >> gvs[] >>
   first_x_assum irule >> goal_assum (drule_at Any) >> simp[] >>
   (conj_tac >- (qexists_tac `R` >> conj_tac
     >- first_assum ACCEPT_TAC >> simp[])) >>
@@ -2662,8 +2669,8 @@ Resume evaluate_finite_frame[expr_ifexp]:
   imp_res_tac conditional_result_state >> gvs[] >>
   gvs[switch_BoolV_def, bind_def, AllCaseEqs()] >>
   imp_res_tac read_result_state >>
-  gvs[COND_RATOR, AllCaseEqs(), return_def, raise_def] >>
-  FIRST [asm "prefix" (ACCEPT_TAC o SRULE []),
+  gvs[COND_RATOR, AllCaseEqs(), return_def, raise_def]
+  >>~- ([`read_result _ _ _ = (INL (BoolV _),_)`],
     (qspecl_then [`cx`,`e`] (drule_all o CONJUNCT1)
        (cj 5 eval_scc_type_sound_results_mutual) >> strip_tac >> gvs[] >>
      FIRST [
@@ -2680,7 +2687,8 @@ Resume evaluate_finite_frame[expr_ifexp]:
      goal_assum (drule_at Any) >> simp[] >>
      (conj_tac >- (qexists_tac `R` >> simp[] >>
        asm "closure" (ACCEPT_TAC o SRULE []))) >>
-     qexists_tac `env` >> simp[])]
+     qexists_tac `env` >> simp[])) >>
+  asm "prefix" (ACCEPT_TAC o SRULE [])
 QED
 
 Resume evaluate_finite_frame[expr_subscript]:
@@ -2723,7 +2731,7 @@ Resume evaluate_finite_frame[expr_subscript]:
   asm_x "index_ih" kall_tac >>
   gvs[bind_def, AllCaseEqs()] >>
   imp_res_tac read_result_state >>
-  imp_res_tac vyperPlaceFramesTheory.select_result_state >> gvs[] >>
+  imp_res_tac vyperPlaceFramesTheory.select_result_state >> trace_subst_tac >> gvs[] >>
   irule (SRULE [] finite_frame_trans) >> qexists_tac `s1` >>
   (conj_tac >- asm "prefix" (ACCEPT_TAC o SRULE [])) >>
   asm "suffix" (ACCEPT_TAC o SRULE []))
