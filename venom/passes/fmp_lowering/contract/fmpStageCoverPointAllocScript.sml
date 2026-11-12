@@ -7,12 +7,17 @@ Ancestors
   venomInst finite_map words list
 
 Theorem fmp_cov_point_alloc:
-  (!fn' C' name ti t fuel t2 n u.
+  (!fn' C' name bb' ti t fuel t2 n u.
     ALL_DISTINCT (fn_labels fn') /\
-    lookup_function name C'.ctx_functions = SOME fn' /\ active_inst fn' ti t /\
+    lookup_function name C'.ctx_functions = SOME fn' /\
+    lookup_block t.vs_current_bb fn'.fn_blocks = SOME bb' /\
+    active_inst fn' ti t /\
     ~is_terminator ti.inst_opcode /\ ti.inst_opcode <> INVOKE /\
     step_inst fuel C' ti t = OK t2 /\ 0 < n /\
-    (!k. fmp_target_run k C' name t n u) ==>
+    (!k. fmp_target_run k C' name t n u) /\
+    (!i. t.vs_inst_idx < i /\ i < t.vs_inst_idx + n ==>
+      ~is_terminator (EL i bb'.bb_instructions).inst_opcode /\
+      (EL i bb'.bb_instructions).inst_opcode <> INVOKE) ==>
     !k. fmp_target_run k C' name
       (t2 with vs_inst_idx := SUC t.vs_inst_idx) (n-1) u) /\
   (!rpolicy D C C' vs vs' fmp eom stk PG G tn fn inst s fuel s1.
