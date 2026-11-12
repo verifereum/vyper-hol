@@ -88,7 +88,7 @@ Proof
     mems (ptr_owner_view d endpoint).cf_inst` by
     (irule (METIS_PROVE [] ``!A B. (A \/ B) /\ ~B ==> A``) >>
      qexists `w2n vs.vs_initial_fmp <= b` >> reverse conj_tac
-     >- (simp[] >> decide_tac) >>
+     >- metis_tac[arithmeticTheory.LESS_EQ_TRANS] >>
      irule ptr_owner_selected_read_seed >> simp[] >> metis_tac[]) >>
   qexists `w` >> simp[] >>
   qpat_x_assum `(ptr_owner_view d (EL w h)).cf_fn = _` (fn th =>
@@ -158,7 +158,7 @@ Proof
     mems (ptr_owner_view d endpoint).cf_inst` by
     (irule (METIS_PROVE [] ``!A B. (A \/ B) /\ ~B ==> A``) >>
      qexists `w2n vs.vs_initial_fmp <= b` >> reverse conj_tac
-     >- (simp[] >> decide_tac) >>
+     >- metis_tac[arithmeticTheory.LESS_EQ_TRANS] >>
      irule ptr_owner_selected_read_seed >> simp[] >> metis_tac[]) >>
   qexists `w` >> simp[arithmeticTheory.ADD1] >>
   qpat_x_assum `(ptr_owner_view d (EL w h)).cf_fn = _` (fn th =>

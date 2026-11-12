@@ -647,6 +647,22 @@ Proof
   simp[ptr_ledger_probe_owner_erasure]
 QED
 
+Theorem ptr_ledger_o3_prov_other[local]:
+  v <> "p" ==> FLOOKUP (ptr_ledger_o3 s).po_prov v = NONE
+Proof
+  strip_tac >>
+  ` (ptr_ledger_o3 s).po_prov = (ptr_ledger_o1 s).po_prov` by
+    simp[ptr_ledger_o3_def, ptr_ledger_o2_def, ptr_ledger_next_def,
+      ptr_observe_def, step_prov_def, mk_inst_def, set_prov_def,
+      fmap_EXT, DRESTRICT_DEF] >>
+  simp[ptr_ledger_o1_def, ptr_ledger_next_def, ptr_observe_def,
+    ptr_ledger_source_entry_def, step_prov_def, mk_inst_def,
+    ptr_ledger_s1_def, ptr_probe_allocated_state_def, update_var_def,
+    FLOOKUP_UPDATE] >>
+  simp[set_prov_def, out_prov_def, ptr_probe_entry_state_def,
+    FLOOKUP_UPDATE]
+QED
+
 Theorem ptr_ledger_probe_owned_read_byte:
   s.vs_alloca_next < dimword (:256) /\ k < 32 ==>
   ptr_ledger_owned_byte ptr_ledger_probe_registry (ptr_ledger_probe_births s)
@@ -695,6 +711,7 @@ Proof
   >- (gvs[] >> asm_simp_tac bool_ss [ptr_prefix_value_def, WORD_SUB_REFL,
         WORD_SUB_RZERO, optionTheory.option_CLAUSES, pairTheory.PAIR_EQ,
         pairTheory.pair_case_thm, optionTheory.option_case_def]) >>
+  `FLOOKUP (ptr_ledger_o3 s).po_prov v = NONE` by simp[ptr_ledger_o3_prov_other] >>
   Cases_on `lookup_var v s` >>
   simp[ptr_prefix_value_def, word_agree_except_def]
 QED
