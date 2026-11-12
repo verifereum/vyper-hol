@@ -82,7 +82,8 @@ QED
 Theorem body_msg_gas_mem_case:
   !cx ann args. body_expr_mem_ok cx (Builtin ann (Env MsgGas) args)
 Proof
-  rpt gen_tac >> pure_rewrite_tac[body_expr_mem_ok_def] >>
+  rpt gen_tac >> (rpt gen_tac >> match_mp_tac body_expr_mem_ok_intro >>
+   conj_tac >- (rpt strip_tac >> gvs[])) >>
   rpt gen_tac >> strip_tac >>
   `args = [] /\ ann = env_item_type MsgGas` by
     gvs[expr_body_pre_def, well_typed_expr_def, well_typed_builtin_app_def] >>

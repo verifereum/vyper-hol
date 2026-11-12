@@ -3124,7 +3124,7 @@ Proof
   rpt (ho_match_mp_tac ci_mono_bind >> conj_tac >- simp[ci_mono_emit_op] >> rpt gen_tac >> rpt strip_tac) >> TRY (ho_match_mp_tac ci_mono_ignore_bind >> conj_tac >- simp[ci_mono_emit_void] >> rpt strip_tac) >> simp[ci_mono_comp_return, ci_mono_emit_void]
 QED
 
-Theorem ci_mono_compile_extract32_load[local]:
+Theorem ci_mono_compile_extract32_load:
   ∀ src_len src_data start_op sa.
     ci_mono sa (SND (compile_extract32_load src_len src_data start_op sa))
 Proof
@@ -3136,7 +3136,7 @@ Proof
   simp[ci_mono_emit_op]
 QED
 
-Theorem ci_mono_compile_clamp_basetype[local]:
+Theorem ci_mono_compile_clamp_basetype:
   ∀ val_op ty sa. ci_mono sa (SND (compile_clamp_basetype val_op ty sa))
 Proof
   ho_match_mp_tac compile_clamp_basetype_ind >>
