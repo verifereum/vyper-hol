@@ -11,11 +11,11 @@ Libs
   monadsyntax
 
 Theorem tuple_place_mcopy_path[local]:
-  !ctx func cenv cx es sa sb s inst p dw sw src sz tv v.
+  !H ctx func cenv cx es sa sb s inst p dw sw src sz tv v.
     emit_void MCOPY [Var p; src; Lit (n2w sz)] sa = ((), sb) /\
     lookup_var p s = SOME dw /\ eval_operand src s = SOME sw /\
     sz < dimword (:256) /\
-    stmt_state_rel ctx func cenv cx es s /\ fn_inst_ids_distinct func /\
+    stmt_state_rel H ctx func cenv cx es s /\ fn_inst_ids_distinct func /\
     MEM inst (fn_insts func) /\ inst.inst_opcode = ALLOCA /\ inst.inst_outputs = [p] /\
     not_local_ptr cenv es.scopes p /\
     FLOOKUP s.vs_allocas inst.inst_id = SOME (w2n dw, sz) /\
@@ -23,7 +23,7 @@ Theorem tuple_place_mcopy_path[local]:
     val_footprint tv v <= sz /\ fn_has_code sa sb func /\
     ~s.vs_halted /\ s.vs_current_bb = sa.cs_current_bb /\
     s.vs_inst_idx = LENGTH sa.cs_current_insts ==>
-    ?t. stmt_state_rel ctx func cenv cx es t /\
+    ?t. stmt_state_rel H ctx func cenv cx es t /\
       val_in_memory tv v (w2n dw) t.vs_memory /\
       (!q. lookup_var q t = lookup_var q s) /\ t.vs_allocas = s.vs_allocas /\
       ~t.vs_halted /\ t.vs_current_bb = sb.cs_current_bb /\
@@ -33,7 +33,7 @@ Theorem tuple_place_mcopy_path[local]:
         mem_bytes_at a len t.vs_memory = mem_bytes_at a len s.vs_memory)
 Proof
   rpt strip_tac >>
-  `stmt_state_rel ctx func cenv cx es (mcopy (w2n dw) (w2n sw) sz s)` by
+  `stmt_state_rel H ctx func cenv cx es (mcopy (w2n dw) (w2n sw) sz s)` by
     (irule stmt_state_rel_mcopy_alloca >> simp[] >>
      qexistsl [`sz`, `inst`, `p`] >> simp[]) >>
   `val_in_memory tv v (w2n dw) (mcopy (w2n dw) (w2n sw) sz s).vs_memory` by
@@ -58,7 +58,7 @@ Proof
 QED
 
 Theorem tuple_place_stage_path:
-  !ctx func cenv cx es sa sb staged op s sw sz tv v.
+  !H ctx func cenv cx es sa sb staged op s sw sz tv v.
     (do buf <- compile_alloc_buffer sz;
         emit_void MCOPY [buf.buf_operand; op; Lit (n2w sz)];
         comp_return buf.buf_operand od) sa = (staged,sb) /\
@@ -67,13 +67,13 @@ Theorem tuple_place_stage_path:
     eval_operand op s = SOME sw /\
     val_in_memory tv v (w2n sw) s.vs_memory /\ val_wf tv v /\
     val_footprint tv v <= sz /\ sz < dimword (:256) /\
-    stmt_state_rel ctx func cenv cx es s /\ fn_inst_ids_distinct func /\
+    stmt_state_rel H ctx func cenv cx es s /\ fn_inst_ids_distinct func /\
     ~s.vs_halted /\ s.vs_current_bb = sa.cs_current_bb /\
     s.vs_inst_idx = LENGTH sa.cs_current_insts ==>
     ?t w. eval_operand staged t = SOME w /\
       FLOOKUP t.vs_allocas sa.cs_next_id = SOME (w2n w,sz) /\
       val_in_memory tv v (w2n w) t.vs_memory /\
-      stmt_state_rel ctx func cenv cx es t /\
+      stmt_state_rel H ctx func cenv cx es t /\
       (!x. not_fresh_at sa x ==> lookup_var x t = lookup_var x s) /\
       (!aid entry. FLOOKUP s.vs_allocas aid = SOME entry ==>
         FLOOKUP t.vs_allocas aid = SOME entry) /\
@@ -98,7 +98,7 @@ Proof
   disch_then (qx_choosel_then [`s1`, `w`] strip_assume_tac) >>
   `eval_operand op s1 = SOME sw` by metis_tac[] >>
   `val_in_memory tv v (w2n sw) s1.vs_memory` by simp[] >>
-  `?t. stmt_state_rel ctx func cenv cx es t /\
+  `?t. stmt_state_rel H ctx func cenv cx es t /\
       val_in_memory tv v (w2n w) t.vs_memory /\
       (!q. lookup_var q t = lookup_var q s1) /\ t.vs_allocas = s1.vs_allocas /\
       ~t.vs_halted /\ t.vs_current_bb = sb.cs_current_bb /\
@@ -136,7 +136,7 @@ Proof
 QED
 
 Theorem tuple_place_stage_snapshot_path:
-  !ctx func cenv cx es sa sb staged op s sw ltvs v lo tys ltys.
+  !H ctx func cenv cx es sa sb staged op s sw ltvs v lo tys ltys.
     (do buf <- compile_alloc_buffer (type_memory_size_list ltvs);
         emit_void MCOPY [buf.buf_operand; op; Lit (n2w (type_memory_size_list ltvs))];
         comp_return buf.buf_operand od) sa = (staged,sb) /\
@@ -147,13 +147,13 @@ Theorem tuple_place_stage_snapshot_path:
     val_wf (TupleTV ltvs) v /\
     val_footprint (TupleTV ltvs) v <= type_memory_size_list ltvs /\
     type_memory_size_list ltvs < dimword (:256) /\
-    stmt_state_rel ctx func cenv cx es s /\ fn_inst_ids_distinct func /\
+    stmt_state_rel H ctx func cenv cx es s /\ fn_inst_ids_distinct func /\
     ~s.vs_halted /\ s.vs_current_bb = sa.cs_current_bb /\
     s.vs_inst_idx = LENGTH sa.cs_current_insts /\ lo <= sa.cs_next_id ==>
     ?t w. eval_operand staged t = SOME w /\
       FLOOKUP t.vs_allocas sa.cs_next_id = SOME (w2n w,type_memory_size_list ltvs) /\
       val_in_memory (TupleTV ltvs) v (w2n w) t.vs_memory /\
-      stmt_state_rel ctx func cenv cx es t /\
+      stmt_state_rel H ctx func cenv cx es t /\
       (!x. not_fresh_at sa x ==> lookup_var x t = lookup_var x s) /\
       (!aid entry. FLOOKUP s.vs_allocas aid = SOME entry ==>
         FLOOKUP t.vs_allocas aid = SOME entry) /\
