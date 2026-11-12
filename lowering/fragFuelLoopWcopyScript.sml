@@ -84,12 +84,31 @@ Theorem word_copy_loop_prefix[local]:
     s7.cs_next_var = st.cs_next_var + 1 /\
     s10.cs_next_var = st.cs_next_var + 2 /\
     s7.cs_current_bb = cl /\ s7.cs_current_insts = [] /\
-    s10.cs_current_bb = bl /\ s10.cs_current_insts = []
+    s10.cs_current_bb = bl /\ s10.cs_current_insts = [] /\
+    cs_extends st s6 /\ cs_extends s7 s10 /\ cs_extends s6 s7 /\
+    cs_extends st s9 /\ cs_extends s9 s10 /\ cs_extends st s10 /\
+    s4.cs_current_bb = st.cs_current_bb /\
+    s4.cs_current_insts = st.cs_current_insts
 Proof
-  rpt gen_tac >>
-  simp[new_block_def, fresh_label_def, fresh_var_def, emit_op_def,
+  rpt gen_tac >> strip_tac >>
+  imp_res_tac cs_extends_fresh_label >>
+  imp_res_tac cs_extends_fresh_var >>
+  imp_res_tac cs_extends_emit_inst >>
+  imp_res_tac cs_extends_new_block >>
+  `cs_extends s7 s8` by
+    (mp_tac (Q.SPECL [`EQ`, `[Var cv; cnt]`, `{}`, `{}`] fuel_ok_emit_op) >>
+     simp[is_terminator_def, fuel_ok_def] >> metis_tac[]) >>
+  `cs_extends st s3` by metis_tac[cs_extends_trans] >>
+  `cs_extends st s5` by metis_tac[cs_extends_trans] >>
+  `cs_extends st s6 /\ cs_extends s7 s9` by metis_tac[cs_extends_trans] >>
+  `cs_extends st s7` by metis_tac[cs_extends_trans] >>
+  `cs_extends st s9 /\ cs_extends s7 s10` by metis_tac[cs_extends_trans] >>
+  `cs_extends st s10` by metis_tac[cs_extends_trans] >>
+  simp[] >>
+  rpt (qhdtm_x_assum `cs_extends` kall_tac) >>
+  gvs[new_block_def, fresh_label_def, fresh_var_def, emit_op_def,
        emit_inst_def, comp_bind_def, comp_ignore_bind_def, comp_return_def,
-       fresh_id_def, emit_def] >> rpt strip_tac >> gvs[]
+       fresh_id_def, emit_def]
 QED
 
 Theorem word_copy_loop_initial_code[local]:
@@ -340,31 +359,6 @@ Proof
   rpt strip_tac >> gvs[] >> simp[mk_inst_def]
 QED
 
-Theorem wcopy_code_frame_append[local]:
-  !sa sb sc a b.
-    sa.cs_next_var <= sb.cs_next_var /\
-    sb.cs_next_var <= sc.cs_next_var /\
-    sb.cs_blocks = sa.cs_blocks /\ sc.cs_blocks = sb.cs_blocks /\
-    sb.cs_current_bb = sa.cs_current_bb /\
-    sc.cs_current_bb = sb.cs_current_bb /\
-    sb.cs_current_insts = sa.cs_current_insts ++ a /\
-    sc.cs_current_insts = sb.cs_current_insts ++ b /\
-    EVERY (\i. (i.inst_opcode <> INVALID ==> ~is_terminator i.inst_opcode) /\
-      (!x. MEM x i.inst_outputs ==> ~var_below sa.cs_next_var x)) a /\
-    EVERY (\i. (i.inst_opcode <> INVALID ==> ~is_terminator i.inst_opcode) /\
-      (!x. MEM x i.inst_outputs ==> ~var_below sb.cs_next_var x)) b ==>
-    sa.cs_next_var <= sc.cs_next_var /\
-    sc.cs_blocks = sa.cs_blocks /\ sc.cs_current_bb = sa.cs_current_bb /\
-    sc.cs_current_insts = sa.cs_current_insts ++ (a ++ b) /\
-    EVERY (\i. (i.inst_opcode <> INVALID ==> ~is_terminator i.inst_opcode) /\
-      (!x. MEM x i.inst_outputs ==> ~var_below sa.cs_next_var x)) (a ++ b)
-Proof
-  rpt gen_tac >> strip_tac >> simp[listTheory.APPEND_ASSOC] >>
-  fs[listTheory.EVERY_MEM] >> rpt strip_tac >>
-  first_x_assum drule >> strip_tac >> simp[] >>
-  fs[var_below_def] >> metis_tac[arithmeticTheory.LESS_EQ_TRANS]
-QED
-
 Theorem wcopy_ptr_load_frame[local]:
   !ctor imm loc op sa v sb.
     compile_ptr_load ctor imm loc op sa = (v,sb) ==>
@@ -534,6 +528,61 @@ Proof
   metis_tac[]
 QED
 
+(* Runtime counting is independent of compiler cut-state bookkeeping. *)
+Theorem wcopy_bounded_fixed[local]:
+  !G ctx fn H Body Q (b:256 word) C.
+    (!s. H s ==>
+      fuel_outcome G ctx fn s 1 (if C s = b then Q else Body (C s))) /\
+    (!c s. Body c s ==> fuel_outcome G ctx fn s 1
+      (\t. H t /\ C t = c + 1w)) ==>
+    !s. H s ==> ?j. j <= (2 ** 256) * 2 /\
+      fuel_outcome G ctx fn s j Q
+Proof
+  rpt gen_tac >> strip_tac >>
+  ho_match_mp_tac fuel_outcome_iterate >>
+  qexists_tac `\s. w2n (b - C s)` >>
+  conj_tac >- metis_tac[wcopy_distance_bound] >>
+  rpt strip_tac >>
+  qpat_x_assum `!s. H s ==> _` (qspec_then `s` mp_tac) >>
+  simp[] >> strip_tac >> Cases_on `C s = b`
+  >- (qexists_tac `1` >> simp[] >>
+      irule fuel_outcome_weaken >> goal_assum (drule_at Any) >> simp[]) >>
+  gvs[] >>
+  `2 = 1 + 1` by simp[] >> pop_assum SUBST1_TAC >>
+  irule fuel_outcome_compose >>
+  qexists_tac `Body (C s)` >> simp[] >>
+  rpt strip_tac >> qexists_tac `1` >> simp[] >>
+  irule fuel_outcome_weaken >>
+  qexists_tac `\t. H t /\ C t = C s + 1w` >>
+  conj_tac
+  >- (rpt strip_tac >> gvs[] >> disj2_tac >> simp[] >>
+      pure_rewrite_tac[wordsTheory.WORD_SUB_INTRO, wordsTheory.WORD_MULT_CLAUSES] >>
+      metis_tac[wcopy_distance_decreases]) >>
+  metis_tac[]
+QED
+
+Theorem wcopy_operand_frame[local]:
+  !op M s t.
+    (!x. op = Var x ==> var_below M x) /\
+    vars_kept M {} s t /\ t.vs_labels = s.vs_labels ==>
+    eval_operand op t = eval_operand op s
+Proof
+  Cases >> simp[eval_operand_def, vars_kept_def] >> metis_tac[]
+QED
+
+Theorem wcopy_outcome_zero_seq[local]:
+  !G ctx fn s P Q.
+    fuel_outcome G ctx fn s 0 P /\
+    (!t. P t ==> fuel_outcome G ctx fn t 1 Q) ==>
+    fuel_outcome G ctx fn s 1 Q
+Proof
+  simp[fuel_outcome_def] >> rpt strip_tac
+  >- (first_x_assum drule >> strip_tac
+      >- (disj1_tac >> goal_assum (drule_at Any) >> simp[]) >>
+      disj2_tac >> simp[arithmeticTheory.LESS_EQ_ADD]) >>
+  disj2_tac >> simp[arithmeticTheory.LESS_EQ_ADD]
+QED
+
 Theorem fuel_okS_compile_word_copy_loop_base:
   !src_op dst_op count_op load_loc store_loc is_ctor imm Wv E.
     fuel_okS (\st. !x. count_op = Var x ==> var_below st.cs_next_var x) Wv {} E
@@ -544,5 +593,170 @@ Proof
   rpt gen_tac >> strip_tac >>
   drule word_copy_loop_structure >> strip_tac >> simp[] >>
   drule word_copy_loop_cut_points >> strip_tac >>
-  FAIL_TAC "assembled compiler cut points; runtime round interface required"
+  drule_all word_copy_loop_prefix >> strip_tac >>
+  drule_all wcopy_body_code_frame >> strip_tac >>
+  `cs_extends s10 s14` by
+    (irule cs_extends_same_block >> simp[] >>
+     metis_tac[rich_listTheory.IS_PREFIX_APPEND]) >>
+  `cs_extends s14 st' /\ cs_extends s14 s17 /\ cs_extends s17 st'` by
+    (qpat_assum `emit_op ADD _ s14 = _` mp_tac >>
+     qpat_assum `emit_inst ASSIGN _ _ s15 = _` mp_tac >>
+     qpat_assum `emit_inst JMP _ _ s16 = _` mp_tac >>
+     qpat_assum `new_block el s17 = _` mp_tac >>
+     rpt (pop_assum kall_tac) >> rpt strip_tac >>
+     gvs[emit_inst_def, emit_op_def, new_block_def, fresh_var_def,
+         comp_bind_def, comp_ignore_bind_def, comp_return_def,
+         fresh_id_def, emit_def, cs_extends_def, listTheory.APPEND_ASSOC,
+         rich_listTheory.IS_PREFIX_APPEND]) >>
+  qexists_tac `1 + (2 ** 256) * 2` >>
+  simp[frag_fuel_def] >> rpt gen_tac >> strip_tac >>
+  `fn_has_code st s10 fn /\ fn_has_code s10 s14 fn /\
+   fn_has_code s14 st' fn` by
+    metis_tac[fn_has_code_split, cs_extends_trans] >>
+  `fn_has_code s6 s7 fn /\ fn_has_code s9 s10 fn` by
+    metis_tac[fn_has_code_mid, fn_has_code_split] >>
+  drule_all word_copy_loop_initial_code >> strip_tac >>
+  drule_all word_copy_loop_condition_code >> strip_tac >>
+  `fn_has_code s17 st' fn` by metis_tac[fn_has_code_split] >>
+  drule_all word_copy_loop_increment_code >> strip_tac >>
+  `at_point s4 s` by gvs[at_point_def] >>
+  `fuel_outcome G ctx fn s 1
+     (\t. t = jump_to cl (update_var cv 0w s))` by
+    (qmatch_asmsub_abbrev_tac `lookup_block s4.cs_current_bb _ = SOME ibb` >>
+     irule wcopy_assign_jump_outcome >> simp[] >>
+     qexistsl_tac [`mk_inst s4.cs_next_id ASSIGN [Lit 0w] [cv]`, `ibb`,
+       `mk_inst (s4.cs_next_id + 1) JMP [Label cl] []`, `Lit 0w`] >>
+     gvs[at_point_def, Abbr `ibb`, get_instruction_def, mk_inst_def,
+         eval_operand_def, listTheory.EL_APPEND_EQN, arithmeticTheory.ADD1]) >>
+  `!u c. at_point s7 u /\ lookup_var cv u = SOME c ==>
+     fuel_outcome G ctx fn u 1
+       (\t. ?b. eval_operand count_op u = SOME b /\
+          t = jump_to (if c = b then el else bl)
+            (update_var ("%" ++ toString s7.cs_next_var)
+              (bool_to_word (c = b)) u))` by
+    (qmatch_asmsub_abbrev_tac `lookup_block s7.cs_current_bb _ = SOME cbb` >>
+     rpt strip_tac >> irule wcopy_cond_outcome >> simp[] >>
+     qexistsl_tac [`cbb`, `cv`,
+       `mk_inst s7.cs_next_id EQ [Var cv; count_op]
+          ["%" ++ toString s7.cs_next_var]`,
+       `mk_inst (s7.cs_next_id + 1) JNZ [done; Label el; Label bl] []`] >>
+     gvs[at_point_def, Abbr `cbb`, get_instruction_def, mk_inst_def]) >>
+  `!u c. at_point s14 u /\ lookup_var cv u = SOME c ==>
+     fuel_outcome G ctx fn u 1
+       (\t. t = jump_to cl
+          (update_var cv (c + 1w)
+            (update_var ("%" ++ toString s14.cs_next_var) (c + 1w) u)))` by
+    (qmatch_asmsub_abbrev_tac `lookup_block s14.cs_current_bb _ = SOME bbb` >>
+     rpt strip_tac >> irule wcopy_increment_outcome >> simp[] >>
+     qexistsl_tac [
+       `mk_inst (s14.cs_next_id + 1) ASSIGN [new_ctr] [cv]`, `bbb`,
+       `mk_inst (s14.cs_next_id + 2) JMP [Label cl] []`,
+       `mk_inst s14.cs_next_id ADD [Var cv; Lit 1w]
+          ["%" ++ toString s14.cs_next_var]`] >>
+     gvs[at_point_def, Abbr `bbb`, get_instruction_def, mk_inst_def,
+         listTheory.EL_APPEND_EQN, arithmeticTheory.ADD1]) >>
+  `!u. at_point s10 u ==> fuel_outcome G ctx fn u 0
+     (\t. at_point s14 t /\ vars_kept s10.cs_next_var {} u t /\
+          t.vs_labels = u.vs_labels)` by
+    (rpt strip_tac >> irule wcopy_body_framed_outcome >>
+     simp[] >> rpt (goal_assum (drule_at Any)) >> simp[]) >>
+  qabbrev_tac `M = st.cs_next_var` >>
+  qabbrev_tac `Frame = \u. vars_kept M {} s u /\ u.vs_labels = s.vs_labels` >>
+  qabbrev_tac `H = \u. at_point s7 u /\ Frame u /\ ?c. lookup_var cv u = SOME c` >>
+  qabbrev_tac `Body = \c u. at_point s10 u /\ Frame u /\ lookup_var cv u = SOME c` >>
+  qabbrev_tac `Q = \u. at_point st' u /\ Frame u` >>
+  `!u. Frame u ==> eval_operand count_op u = eval_operand count_op s` by
+    (rpt strip_tac >> fs[Abbr `Frame`] >>
+     irule wcopy_operand_frame >> simp[] >>
+     qexists_tac `M` >> simp[Abbr `M`]) >>
+  `!u n w l. Frame u /\ M <= n ==>
+    Frame (jump_to l (update_var ("%" ++ toString n) w u))` by
+    (simp[Abbr `Frame`, vars_kept_def, jump_to_def, lookup_var_def,
+          update_var_def] >> rpt strip_tac >>
+     rename1 `var_below M z` >>
+     `z <> "%" ++ toString n` by
+       (drule var_below_fresh >> simp[] >> metis_tac[]) >>
+     simp[finite_mapTheory.FLOOKUP_UPDATE] >> gvs[]) >>
+  `Frame (jump_to cl (update_var cv 0w s))` by
+    (fs[] >> first_x_assum irule >> simp[Abbr `Frame`]) >>
+  `H (jump_to cl (update_var cv 0w s))` by
+    (simp[Abbr `H`, at_point_def, jump_to_def, lookup_var_def,
+          update_var_def, finite_mapTheory.FLOOKUP_UPDATE]) >>
+  `cv <> "%" ++ toString s7.cs_next_var` by
+    (fs[var_below_def] >> simp[]) >>
+  `!u c. H u /\ lookup_var cv u = SOME c ==>
+    fuel_outcome G ctx fn u 1
+      (\t. ?b. eval_operand count_op s = SOME b /\
+        if c = b then Q t else Body c t)` by
+    (rpt gen_tac >> strip_tac >>
+     `at_point s7 u /\ Frame u` by fs[Abbr `H`] >>
+     qpat_assum `!u c. at_point s7 u /\ _ ==> _`
+       (drule_all_then assume_tac) >>
+     irule fuel_outcome_weaken >> goal_assum (drule_at Any) >>
+     rpt strip_tac >> fs[] >>
+     `eval_operand count_op u = eval_operand count_op s` by metis_tac[] >>
+     qexists_tac `b` >> simp[] >> Cases_on `c = b` >> simp[]
+     >- (simp[Abbr `Q`, at_point_def, jump_to_def] >>
+         fs[] >> first_x_assum irule >> simp[]) >>
+     `Frame (jump_to bl (update_var ("%" ++ toString s7.cs_next_var)
+        (bool_to_word F) u))` by simp[] >>
+     gvs[Abbr `Body`, at_point_def, jump_to_def,
+          lookup_var_def, update_var_def, finite_mapTheory.FLOOKUP_UPDATE]) >>
+  pop_assum (mk_asm "cond_framed") >>
+  `!c u. Body c u ==> fuel_outcome G ctx fn u 1
+      (\t. H t /\ lookup_var cv t = SOME (c + 1w))` by
+    (rpt gen_tac >> strip_tac >>
+     `at_point s10 u /\ Frame u /\ lookup_var cv u = SOME c` by fs[Abbr `Body`] >>
+     qpat_assum `!u. at_point s10 u ==> _` (drule_all_then assume_tac) >>
+     irule wcopy_outcome_zero_seq >>
+     qexists_tac `\v. at_point s14 v /\ vars_kept s10.cs_next_var {} u v /\
+       v.vs_labels = u.vs_labels` >> simp[] >>
+     rpt strip_tac >> fs[] >>
+     `lookup_var cv t = SOME c` by
+       (fs[vars_kept_def] >> first_x_assum (qspec_then `cv` mp_tac) >>
+        simp[var_below_def]) >>
+     `Frame t` by
+       (fs[Abbr `Frame`, vars_kept_def] >> rpt strip_tac >>
+        rename1 `var_below M z` >>
+        `var_below s10.cs_next_var z` by
+          (fs[var_below_def] >> rpt strip_tac >> first_x_assum irule >> simp[]) >>
+        metis_tac[]) >>
+     qpat_assum `!u c. at_point s14 u /\ _ ==> _` (drule_all_then assume_tac) >>
+     irule fuel_outcome_weaken >> goal_assum (drule_at Any) >>
+     rpt strip_tac >> gvs[] >>
+     simp[Abbr `H`, at_point_def, jump_to_def, lookup_var_def,
+          update_var_def, finite_mapTheory.FLOOKUP_UPDATE] >>
+     fs[Abbr `Frame`, vars_kept_def] >> rpt strip_tac >>
+     rename1 `var_below M z` >>
+     `z <> "%" ++ toString M /\ z <> "%" ++ toString s14.cs_next_var` by
+       (fs[var_below_def] >> metis_tac[arithmeticTheory.LESS_EQ_REFL,
+          arithmeticTheory.LESS_EQ_TRANS, arithmeticTheory.LESS_EQ_ADD]) >>
+     gvs[lookup_var_def, finite_mapTheory.FLOOKUP_UPDATE]) >>
+  `!u. H u ==> ?j. j <= (2 ** 256) * 2 /\ fuel_outcome G ctx fn u j Q` by
+    (Cases_on `eval_operand count_op s`
+     >- (rpt strip_tac >>
+         `?c. lookup_var cv u = SOME c` by fs[Abbr `H`] >>
+         asm "cond_framed" (drule_all_then assume_tac) >>
+         qexists_tac `1` >> simp[] >>
+         irule fuel_outcome_weaken >> goal_assum (drule_at Any) >> simp[]) >>
+     rename1 `eval_operand count_op s = SOME b` >>
+     ho_match_mp_tac wcopy_bounded_fixed >>
+     qexistsl_tac [`Body`, `b`, `\u. THE (lookup_var cv u)`] >>
+     conj_tac
+     >- (qx_gen_tac `v` >> strip_tac >>
+         `?c. lookup_var cv v = SOME c` by fs[Abbr `H`] >>
+         asm "cond_framed"
+           (qspecl_then [`v`, `c`] mp_tac) >>
+         simp[] >> Cases_on `c = b` >> simp[SF ETA_ss]) >>
+     rpt strip_tac >>
+     qpat_assum `!c u. Body c u ==> _` (drule_all_then assume_tac) >>
+     irule fuel_outcome_weaken >> goal_assum (drule_at Any) >> simp[]) >>
+  `?j. j <= 1 + (2 ** 256) * 2 /\ fuel_outcome G ctx fn s j Q` by
+    (irule fuel_outcome_compose >>
+     qexists_tac `\t. t = jump_to cl (update_var cv 0w s)` >> gvs[]) >>
+  qexists_tac `j` >> conj_tac >- gvs[] >>
+  irule fuel_outcome_weaken >> goal_assum (drule_at Any) >>
+  simp[Abbr `Q`, Abbr `Frame`] >> rpt strip_tac >> simp[] >>
+  fs[vars_kept_def] >> rpt strip_tac >> first_x_assum irule >>
+  fs[var_below_def] >> rpt strip_tac >> first_x_assum irule >> simp[]
 QED
