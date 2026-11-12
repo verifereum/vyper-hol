@@ -297,6 +297,20 @@ Proof
   simp[expr_sim_inv_def]
 QED
 
+Theorem expr_sim_inv_storage_trace[simp]:
+  expr_sim_inv cenv cx env (es with storage_trace := observations) <=>
+  expr_sim_inv cenv cx env es
+Proof
+  simp[expr_sim_inv_def]
+QED
+
+Theorem expr_body_pre_storage_trace[simp]:
+  expr_body_pre cenv cx env e (es with storage_trace := observations) <=>
+  expr_body_pre cenv cx env e es
+Proof
+  simp[expr_body_pre_def]
+QED
+
 (* Stack-valued forms lift the counted value simulation to both judgments. *)
 Theorem expr_ok_stack:
   !cenv e.
