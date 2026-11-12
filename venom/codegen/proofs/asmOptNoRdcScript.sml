@@ -45,12 +45,13 @@ Proof
 QED
 
 Theorem merge_jumpdests_walk_no_rdc[local]:
-  !d l c. no_rdc d /\ no_rdc l ==> no_rdc (FST (merge_jumpdests_walk d l c))
+  !l d c. no_rdc d /\ no_rdc l ==> no_rdc (FST (merge_jumpdests_walk d l c))
 Proof
-  ho_match_mp_tac merge_jumpdests_walk_ind >> rpt gen_tac >> strip_tac >>
-  strip_tac >> ONCE_REWRITE_TAC [merge_jumpdests_walk_def] >> simp[] >>
-  BasicProvers.every_case_tac >> gvs[MEM_REVERSE] >>
-  first_x_assum irule >> gvs[MEM_MAP, rename_push_label_op] >> metis_tac[]
+  measureInduct_on `LENGTH l` >> rpt gen_tac >> strip_tac >>
+  ONCE_REWRITE_TAC [merge_jumpdests_walk_def] >>
+  BasicProvers.every_case_tac >>
+  gvs[MEM_REVERSE, MEM_MAP, rename_push_label_op] >>
+  first_x_assum irule >> simp[MEM_MAP, rename_push_label_op]
 QED
 
 Theorem prune_inefficient_jumps_no_rdc[local]:
@@ -67,17 +68,63 @@ Proof
   rw[optimize_inefficient_jumps_def] >> rpt (pairarg_tac >> gvs[])
 QED
 
+Theorem peep_swap_pair_mem[local]:
+  peep_swap_pair a b c rest = (l1, ch) /\ MEM x l1 ==> MEM x (a::b::c::rest)
+Proof
+  rw[peep_swap_pair_def] >> gvs[] >> metis_tac[]
+QED
+
+Theorem peep_swap_comm_mem[local]:
+  peep_swap_comm l = SOME (l', ch) /\ MEM x l' ==> MEM x l
+Proof
+  rw[peep_swap_comm_def, AllCaseEqs()] >> gvs[] >> metis_tac[]
+QED
+
+Theorem peep_dup_swap_mem[local]:
+  peep_dup_swap l = SOME (l', ch) /\ MEM x l' ==> MEM x l
+Proof
+  rw[peep_dup_swap_def, AllCaseEqs()] >> gvs[] >> metis_tac[]
+QED
+
+Theorem peep_chain_no_rdc[local]:
+  peep_swap_pair a b c rest = (l1, ch1) ==>
+  peep_swap_comm l1 = SOME (l2, ch2) ==>
+  peep_dup_swap l2 = SOME (l3, ch3) ==>
+  LENGTH (TL l3) <= LENGTH rest + 2 /\
+  (no_rdc (a::b::c::rest) ==>
+   HD l3 <> AsmOp "RETURNDATACOPY" /\ no_rdc (TL l3))
+Proof
+  rpt disch_tac >>
+  imp_res_tac peep_swap_pair_length >> imp_res_tac peep_swap_comm_length >>
+  imp_res_tac peep_dup_swap_length >>
+  `!x. MEM x l3 ==> MEM x (a::b::c::rest)` by
+    metis_tac[peep_swap_pair_mem, peep_swap_comm_mem, peep_dup_swap_mem] >>
+  Cases_on `l3` >> fs[] >>
+  `LENGTH t <= LENGTH rest + 2` by decide_tac >> simp[] >>
+  rpt strip_tac >> metis_tac[MEM]
+QED
+
 Theorem stack_peephole_opts_no_rdc[local]:
   !l out c. stack_peephole_opts l = SOME (out, c) /\ no_rdc l ==> no_rdc out
 Proof
-  ho_match_mp_tac stack_peephole_opts_ind >> rpt gen_tac >> strip_tac >>
-  ONCE_REWRITE_TAC [stack_peephole_opts_def] >>
-  Cases_on `l` >> simp[] >> Cases_on `t` >> simp[] >>
-  Cases_on `t'` >> simp[] >>
-  rw[] >> gvs[AllCaseEqs()] >> rpt (pairarg_tac >> gvs[]) >>
-  gvs[peep_swap_pair_def, peep_swap_comm_def, peep_dup_swap_def,
-      AllCaseEqs()] >>
-  first_x_assum irule >> gvs[] >> metis_tac[]
+  measureInduct_on `LENGTH l` >> rpt gen_tac >> strip_tac >>
+  Cases_on `?a b c rest. l = a::b::c::rest`
+  >- (gvs[] >>
+      `!y out' c'. stack_peephole_opts y = SOME (out', c') ==>
+                   LENGTH y <= LENGTH rest + 2 ==> no_rdc y ==> no_rdc out'` by
+        (rpt strip_tac >> first_x_assum (qspec_then `y` mp_tac) >>
+         impl_tac >- simp[] >> disch_then drule_all >> simp[]) >>
+      qpat_x_assum `!y. LENGTH y < _ ==> _` kall_tac >>
+      qpat_x_assum `stack_peephole_opts _ = _` mp_tac >>
+      ONCE_REWRITE_TAC [stack_peephole_opts_def] >> simp[] >>
+      rw[] >> gvs[AllCaseEqs()] >> rpt (pairarg_tac >> gvs[AllCaseEqs()]) >>
+      imp_res_tac peep_chain_no_rdc >> gvs[] >>
+      first_x_assum (drule_then mp_tac) >> simp[]) >>
+  qpat_x_assum `!y. LENGTH y < _ ==> _` kall_tac >>
+  Cases_on `l` >- gvs[Once stack_peephole_opts_def] >>
+  Cases_on `t` >- gvs[Once stack_peephole_opts_def] >>
+  Cases_on `t'` >- gvs[Once stack_peephole_opts_def] >>
+  gvs[]
 QED
 
 Theorem optimize_round_no_rdc[local]:

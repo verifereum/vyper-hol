@@ -71,7 +71,10 @@ Proof
   (* the unoptimized run is bounded and uses its labels as labels *)
   `(?v. run_context fuel unit.cu_context vs = Halt v) \/
    (?a v. run_context fuel unit.cu_context vs = Abort a v)` by
-    (fs[venom_run_bounded_def, terminates_def] >>
+    (qspecl_then [`fuel`, `rpolicy`, `unit`, `cplan`, `prog`, `Inv`, `vs`,
+                  `as`] mp_tac codegen_entry_asm_sim_state >>
+     impl_tac >- simp[] >> strip_tac >>
+     fs[venom_run_bounded_def, terminates_def] >>
      Cases_on `run_context fuel unit.cu_context vs` >>
      fs[run_context_never_ok]) >>
   `label_disciplined (asm_data_env prog (assemble prog ++ x)) prog as` by
@@ -126,12 +129,17 @@ Proof
   disch_then (qspecl_then [`fuel`, `M`] (qx_choosel_then [`N`, `H`] assume_tac)) >>
   qspecl_then [`H`, `N`, `D`] (qx_choose_then `g` assume_tac)
     asm_frame_gas_surplus >>
-  qexists_tac `g` >> rpt strip_tac >>
+  qexists_tac `g` >> rpt gen_tac >> strip_tac >>
   qabbrev_tac `s0 = entry_asm_state vs (add_frame_gas g' es)` >>
   `s0.as_code = vs.vs_code` by simp[Abbr`s0`, entry_asm_state_def] >>
-  qpat_x_assum `!Inv vs as. _` (qspecl_then [`Inv`, `vs`, `s0`] mp_tac) >>
-  impl_tac >- simp[] >> strip_tac >>
-  qpat_x_assum `!prog data es0 a e s op r s'. _`
+  `asm_frame_prog_ok prog' /\
+   asm_run_bounded (SND (compute_label_offsets prog'))
+     (build_offset_to_pc prog') prog' H N
+     (s0 with as_code := assemble prog' ++ vs.vs_data_section)` by
+    (qpat_x_assum `!Inv vs as. codegen_context_obligations _ _ _ /\ _ ==> _`
+       (qspecl_then [`Inv`, `vs`, `s0`] mp_tac) >>
+     impl_tac >- simp[] >> simp[]) >>
+  qpat_x_assum `!prog data es0 a e s op r s'. asm_frame_prog_ok _ /\ _ ==> _`
     (qspecl_then [`prog'`, `vs.vs_data_section`, `add_frame_gas g' es`,
                   `s0 with as_code := assemble prog' ++ vs.vs_data_section`,
                   `add_frame_gas g' es`, `s`, `op`, `r`, `s'`] mp_tac) >>
@@ -216,6 +224,8 @@ Proof
   `wf_state (add_frame_gas g' es) /\
    g' <= frame_gas_left (add_frame_gas g' es)` by
     metis_tac[add_frame_gas_wf_state, wf_state_frame_gas_left] >>
+  `LENGTH s.contexts = LENGTH (add_frame_gas g' es).contexts` by
+    fs[frame_inst_at_def] >>
   first_x_assum (qspecl_then [`g'`, `Inv`, `vs`, `es`, `s`, `op`, `s'`]
                    mp_tac) >>
   metis_tac[]
