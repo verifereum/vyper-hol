@@ -34,14 +34,16 @@ Proof
       irule gas_bad_storage_at_bind_left >> simp[])
   >- (qpat_x_assum `gas_summary_at _ _ _ _ _ _ _`
         (strip_assume_tac o REWRITE_RULE [gas_summary_at_def]) >>
-      Cases_on `storage_trace_domain cx st0 es_end.storage_trace`
-      >- (`valid_horizon cx st0 (storage_trace_horizon es_end.storage_trace)
-             es_end.storage_trace` by fs[storage_trace_domain_def]
-          >- suspend "normal"
-          >> suspend "exit") >>
-      rewrite_tac[gas_outcome_def] >> qexists_tac `marks` >> disj1_tac >>
-      irule gas_bad_storage_at_bind_left >> simp[] >>
-      irule gas_bad_storage_at_counted_prefix >> metis_tac[]) >>
+      (reverse (Cases_on `storage_trace_domain cx st0 es_end.storage_trace`)
+       >- (rewrite_tac[gas_outcome_def] >> qexists_tac `marks` >> disj1_tac >>
+           irule gas_bad_storage_at_bind_left >> simp[] >>
+           irule gas_bad_storage_at_counted_prefix >>
+           qexistsl_tac [`ctx`, `es_end`, `func`, `F`, `r`, `res`] >>
+           simp[])) >>
+      `valid_horizon cx st0 (storage_trace_horizon es_end.storage_trace)
+         es_end.storage_trace` by fs[storage_trace_domain_def]
+      >- suspend "normal"
+      >> suspend "exit") >>
   suspend "exempt"
 QED
 
@@ -112,18 +114,20 @@ Proof
       simp[storage_trace_frame_return])
   >- (qpat_x_assum `gas_summary_at _ _ _ _ _ _ _`
         (strip_assume_tac o REWRITE_RULE [gas_summary_at_def]) >>
-      Cases_on `storage_trace_domain cx st0 es_end.storage_trace`
-      >- (`valid_horizon cx st0 (storage_trace_horizon es_end.storage_trace)
-             es_end.storage_trace` by fs[storage_trace_domain_def]
-          >- suspend "normal"
-          >> suspend "exit") >>
-      rewrite_tac[gas_outcome_def] >> qexists_tac `marks` >> disj1_tac >>
-      irule (SRULE [] (Q.INST [`left` |-> `[]`]
-        (SPEC_ALL gas_bad_storage_at_bind_right))) >>
-      goal_assum (drule_at Any) >> simp[] >>
-      irule gas_bad_storage_at_bind_left >>
-      simp[storage_trace_frame_return] >>
-      irule gas_bad_storage_at_counted_prefix >> metis_tac[]) >>
+      (reverse (Cases_on `storage_trace_domain cx st0 es_end.storage_trace`)
+       >- (rewrite_tac[gas_outcome_def] >> qexists_tac `marks` >> disj1_tac >>
+           irule (SRULE [] (Q.INST [`left` |-> `[]`]
+             (SPEC_ALL gas_bad_storage_at_bind_right))) >>
+           goal_assum (drule_at Any) >> simp[] >>
+           irule gas_bad_storage_at_bind_left >>
+           simp[storage_trace_frame_return] >>
+           irule gas_bad_storage_at_counted_prefix >>
+           qexistsl_tac [`ctx`, `es_end`, `func`, `F`, `r`, `res`] >>
+           simp[])) >>
+      `valid_horizon cx st0 (storage_trace_horizon es_end.storage_trace)
+         es_end.storage_trace` by fs[storage_trace_domain_def]
+      >- suspend "normal"
+      >> suspend "exit") >>
   suspend "exempt"
 QED
 
