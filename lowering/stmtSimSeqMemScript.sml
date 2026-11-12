@@ -53,9 +53,9 @@ Proof
 QED
 
 Resume stmt_frag_cons_env_mem[normal]:
-  `stmt_post ctx func cx lctx cenv c sa sm s0 (INL ()) (es_end with gas_obs := []) t` by
-    (simp[stmt_post_def] >> metis_tac[]) >>
-  drule_all stmt_post_normal_entry >> strip_tac >>
+  `stmt_post_core ctx func cx lctx cenv c sa sm s0 (INL ()) (es_end with gas_obs := []) t` by
+    (simp[stmt_post_core_def] >> metis_tac[]) >>
+  drule_all stmt_post_core_normal_entry >> strip_tac >>
   `!tail. eval_stmt cx stmt
       (es with gas_obs := gas_explicit left s0.vs_gas_readings ++ tail) =
       (INL (), es_end with gas_obs := tail)` by
@@ -129,35 +129,35 @@ Resume stmt_frag_cons_env_mem[tail_exempt]:
   simp[GSYM ignore_bind_def]
 QED
 Resume stmt_frag_cons_env_mem[exception_post]:
-  `stmt_post ctx func cx lctx cenv c sa sm s0 (INR exc)
+  `stmt_post_core ctx func cx lctx cenv c sa sm s0 (INR exc)
       (es_end with gas_obs := []) t` by
-    (simp[stmt_post_def] >> qexists_tac `cenv''` >> simp[]) >>
-  `stmt_post ctx func cx lctx cenv cenv' sa sb s0 (INR exc)
+    (simp[stmt_post_core_def] >> qexists_tac `cenv''` >> simp[]) >>
+  `stmt_post_core ctx func cx lctx cenv cenv' sa sb s0 (INR exc)
       (es_end with gas_obs := []) t` by
-    (irule stmt_post_exception_endpoint >> metis_tac[]) >>
+    (irule stmt_post_core_exception_endpoint >> metis_tac[]) >>
   qexists_tac `cenv''` >> simp[] >> conj_tac
-  >- (gvs[stmt_post_def] >> metis_tac[]) >>
+  >- (gvs[stmt_post_core_def] >> metis_tac[]) >>
   irule return_buf_frame_frame >>
   qexistsl_tac [`cenv''`, `t`, `sm`] >> simp[]
 QED
 Resume stmt_frag_cons_env_mem[sequence_post]:
-  `stmt_post ctx func cx lctx c cenv' sm sb t res
+  `stmt_post_core ctx func cx lctx c cenv' sm sb t res
       (es_end' with gas_obs := []) t'` by
-    (simp[stmt_post_def] >> qexists_tac `cenv''` >> simp[]) >>
+    (simp[stmt_post_core_def] >> qexists_tac `cenv''` >> simp[]) >>
   qpat_x_assum `gas_marked_exec _ _ (eval_stmts _ _) _ _ _ _ _` mp_tac >>
   simp[gas_marked_exec_def] >> strip_tac >>
   first_x_assum (qspec_then `[]` mp_tac) >> simp[] >>
   disch_then (assume_tac o MATCH_MP eval_stmts_preserves_scopes_dom) >>
-  `stmt_post ctx func cx lctx cenv cenv' sa sb s0 res
+  `stmt_post_core ctx func cx lctx cenv cenv' sa sb s0 res
       (es_end' with gas_obs := []) t'` by
-    (irule stmt_post_sequence >>
+    (irule stmt_post_core_sequence >>
      qexistsl_tac [`c`, `es_end with gas_obs := []`, `sm`, `t`] >>
      gvs[preserves_scopes_dom_def]) >>
   qexists_tac `cenv''` >> simp[] >> conj_tac
   >- (irule cenv_top_ext_trans >>
       qexistsl_tac [`c`, `es_end.scopes`] >>
       gvs[preserves_scopes_dom_def]) >>
-  gvs[stmt_post_def]
+  gvs[stmt_post_core_def]
 QED
 Finalise stmt_frag_cons_env_mem
 

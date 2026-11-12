@@ -1169,7 +1169,7 @@ Proof
   Cases_on `int_literal_value e2` >> simp[]
 QED
 
-Theorem ifexp_arg_type_fits_refl[local]:
+Theorem ifexp_arg_type_fits_refl:
   !t. arg_type_fits t t
 Proof
   Induct >> simp[arg_type_fits_def]
