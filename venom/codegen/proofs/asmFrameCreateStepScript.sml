@@ -313,7 +313,8 @@ Theorem asm_create_charged_failure[local]:
         if b3 then abort_create_exists sender
         else proceed_create sender address value code n
       od
-   od) s = (INR e,t) ==> e = SOME OutOfGas
+   od) s = (INR e,t) ==>
+  e = SOME OutOfGas /\ c.msgParams.gasLimit < c.gasUsed + n
 Proof
   pure_rewrite_tac[GSYM AND_IMP_INTRO] >> ntac 4 disch_tac >>
   Cases_on `c.gasUsed + n <= c.msgParams.gasLimit` >>
@@ -331,36 +332,6 @@ Proof
   goal_assum (drule_at Any) >> fs[vfmConstantsTheory.stack_limit_def]
 QED
 
-Theorem asm_create_raw_failure:
-  s.contexts = (c,rb)::rest /\ wf_state s /\ s.msdomain = Collect d /\
-  ~c.msgParams.static /\ (if two then 4 else 3) <= LENGTH c.stack /\
-  step_create two s = (INR e,t) ==> e = SOME OutOfGas
-Proof
-  pure_rewrite_tac[GSYM AND_IMP_INTRO] >> ntac 5 disch_tac >>
-  `LENGTH c.stack <= stack_limit` by gvs[wf_state_def, wf_context_def] >>
-  simp[step_create_def, pop_stack_def, memory_expansion_info_def,
-       get_current_context_def, set_current_context_def,
-       bind_def, ignore_bind_def, return_def, assert_def, fail_def] >>
-  qmatch_goalsub_abbrev_tac `consume_gas charge _` >>
-  qmatch_goalsub_abbrev_tac `expand_memory expansion _` >>
-  simp[Once consume_gas_def, get_current_context_def,
-       set_current_context_def, bind_def, ignore_bind_def,
-       assert_def, return_def, fail_def] >>
-  qmatch_goalsub_abbrev_tac `if paid then _ else _` >>
-  Cases_on `paid` >> simp[] >>
-  simp[expand_memory_def, read_memory_def, get_callee_def, get_accounts_def,
-       get_gas_left_def, get_current_context_def, set_current_context_def,
-       bind_def, ignore_bind_def, return_def] >>
-  qmatch_goalsub_abbrev_tac `if size_ok then _ else _` >>
-  Cases_on `size_ok` >> simp[] >>
-  qmatch_goalsub_abbrev_tac `consume_gas gas prepared` >>
-  strip_tac >>
-  drule_at (Pat `_ = (INR _,_)`)
-    (SRULE[ignore_bind_def, bind_def] asm_create_charged_failure) >>
-  simp[Abbr `prepared`] >>
-  Cases_on `two` >> fs[vfmConstantsTheory.stack_limit_def]
-QED
-
 Theorem asm_create_initcode_length[local]:
   LENGTH (buffer_take off sz
     (buffer_extend (MAX (buffer_length mem)
@@ -376,6 +347,57 @@ Proof
      simp[max_expansion_range_def] >>
      Cases_on `sz = 0` >> simp[]) >>
   simp[vfmBufferTheory.buffer_read_to_list]
+QED
+
+Theorem asm_create_raw_failure:
+  s.contexts = (c,rb)::rest /\ wf_state s /\ s.msdomain = Collect d /\
+  ~c.msgParams.static /\ (if two then 4 else 3) <= LENGTH c.stack /\
+  step_create two s = (INR e,t) ==>
+  e = SOME OutOfGas /\
+  (w2n (EL 2 c.stack) <= 2 * max_code_size ==>
+   c.msgParams.gasLimit < c.gasUsed +
+    (static_gas (if two then Create2 else Create) +
+     init_code_word_cost * word_size (w2n (EL 2 c.stack)) +
+     (if two then keccak256_per_word_cost * word_size (w2n (EL 2 c.stack)) else 0) +
+     memory_expansion_cost (buffer_length c.memory)
+       (if 0 < w2n (EL 2 c.stack)
+        then word_size (w2n (EL 1 c.stack) + w2n (EL 2 c.stack)) * 32 else 0)))
+Proof
+  pure_rewrite_tac[GSYM AND_IMP_INTRO] >> ntac 5 disch_tac >>
+  qpat_abbrev_tac `upfront = static_gas _ + _ + _ + memory_expansion_cost _ _` >>
+  `LENGTH c.stack <= stack_limit` by gvs[wf_state_def, wf_context_def] >>
+  simp[step_create_def, pop_stack_def, memory_expansion_info_def,
+       get_current_context_def, set_current_context_def,
+       bind_def, ignore_bind_def, return_def, assert_def, fail_def] >>
+  qmatch_goalsub_abbrev_tac `consume_gas charge _` >>
+  qmatch_goalsub_abbrev_tac `expand_memory expansion _` >>
+  `charge = upfront` by
+    (Cases_on `two` >>
+     gvs[Abbr `charge`, Abbr `upfront`, listTheory.EL_TAKE]) >>
+  simp[Once consume_gas_def, get_current_context_def,
+       set_current_context_def, bind_def, ignore_bind_def,
+       assert_def, return_def, fail_def] >>
+  qmatch_goalsub_abbrev_tac `if paid then _ else _` >>
+  reverse (Cases_on `paid`)
+  >- gvs[] >>
+  simp[] >>
+  simp[expand_memory_def, read_memory_def, get_callee_def, get_accounts_def,
+       get_gas_left_def, get_current_context_def, set_current_context_def,
+       bind_def, ignore_bind_def, return_def] >>
+  qmatch_goalsub_abbrev_tac `if size_ok then _ else _` >>
+  reverse (Cases_on `size_ok`)
+  >- (Cases_on `two` >>
+      gvs[Abbr `expansion`, listTheory.EL_TAKE,
+          asm_create_initcode_length]) >>
+  simp[] >>
+  qmatch_goalsub_abbrev_tac `consume_gas gas prepared` >>
+  strip_tac >>
+  drule_at (Pat `_ = (INR _,_)`)
+    (SRULE[ignore_bind_def, bind_def] asm_create_charged_failure) >>
+  qpat_x_assum `_ = (INR e,t)` kall_tac >>
+  simp[Abbr `prepared`] >>
+  Cases_on `two` >> fs[vfmConstantsTheory.stack_limit_def] >>
+  strip_tac >> gvs[Abbr `gas`]
 QED
 
 Theorem asm_create_success_prefix[local]:
@@ -415,6 +437,9 @@ Proof
        bind_def, ignore_bind_def, return_def, assert_def, fail_def] >>
   qmatch_goalsub_abbrev_tac `consume_gas charge _` >>
   qmatch_goalsub_abbrev_tac `expand_memory expansion _` >>
+  `charge = upfront` by
+    (Cases_on `two` >>
+     gvs[Abbr `charge`, Abbr `upfront`, listTheory.EL_TAKE]) >>
   simp[Once consume_gas_def, get_current_context_def,
        set_current_context_def, bind_def, ignore_bind_def,
        assert_def, return_def, fail_def] >>
@@ -553,6 +578,65 @@ Proof
   >- decide_tac >>
   goal_assum (drule_at Any) >> simp[]
 QED
+Theorem asm_create_raw_budget:
+  s.contexts = (c,rb)::rest /\ wf_state s /\ s.msdomain = Collect d /\
+  ~c.msgParams.static /\ (if two then 4 else 3) <= LENGTH c.stack /\
+  w2n (EL 2 c.stack) <= 2 * max_code_size /\
+  k = static_gas (if two then Create2 else Create) +
+    init_code_word_cost * word_size (w2n (EL 2 c.stack)) +
+    (if two then keccak256_per_word_cost * word_size (w2n (EL 2 c.stack)) else 0) +
+    memory_expansion_cost (buffer_length c.memory)
+      (if 0 < w2n (EL 2 c.stack)
+       then word_size (w2n (EL 1 c.stack) + w2n (EL 2 c.stack)) * 32 else 0) /\
+  k <= B /\ B <= c.msgParams.gasLimit - c.gasUsed /\
+  step_create two s = (r,t) ==>
+  r <> INR (SOME OutOfGas) /\
+  (LENGTH t.contexts = LENGTH s.contexts ==>
+   ?p. t.contexts = (p,rb)::rest /\ p.msgParams = c.msgParams /\
+     (c.msgParams.gasLimit - c.gasUsed - B) DIV 64 <=
+       p.msgParams.gasLimit - p.gasUsed) /\
+  (LENGTH t.contexts = SUC (LENGTH s.contexts) ==>
+   ?child crb p. t.contexts = (child,crb)::(p,rb)::rest /\
+     p.msgParams = c.msgParams /\
+     (c.msgParams.gasLimit - c.gasUsed - B) DIV 64 <=
+       p.msgParams.gasLimit - p.gasUsed)
+Proof
+  strip_tac >>
+  `0 < k` by
+    (qpat_assum `k = _` mp_tac >> Cases_on `two` >> simp[]) >>
+  `k <= c.msgParams.gasLimit - c.gasUsed` by decide_tac >>
+  `r = INL ()` by
+    (Cases_on `r`
+     >- (rename1 `INL z = INL ()` >> Cases_on `z` >> simp[]) >>
+     drule_all asm_create_raw_failure >>
+     qpat_x_assum `k = _` mp_tac >> simp[] >>
+     disch_then (fn th => pure_rewrite_tac[GSYM th]) >>
+     rpt strip_tac >> gvs[]) >>
+  qpat_x_assum `r = _` SUBST_ALL_TAC >>
+  conj_tac >- simp[] >>
+  conj_tac
+  >- (strip_tac >> drule_all asm_create_raw_same_depth >> strip_tac >>
+      `charge = k` by metis_tac[] >>
+      qpat_x_assum `k = _` kall_tac >>
+      qpat_x_assum `charge = _ + memory_expansion_cost _ _` kall_tac >>
+      goal_assum (drule_at Any) >>
+      simp[ExclSF "ARITH"] >>
+      drule_all asmCallGasArithmeticTheory.create_forwarded_gas_reserve >>
+      gvs[ExclSF "ARITH"] >>
+      qpat_x_assum `p.gasUsed <= _` mp_tac >>
+      POP_ASSUM_LIST (K ALL_TAC) >>
+      pure_rewrite_tac[arithmeticTheory.SUB_PLUS] >> decide_tac) >>
+  strip_tac >> drule_all asm_create_raw_child_entry >> strip_tac >>
+  `charge = k` by metis_tac[] >>
+  qpat_x_assum `k = _` kall_tac >>
+  qpat_x_assum `charge = _ + memory_expansion_cost _ _` kall_tac >>
+  goal_assum (drule_at Any) >> simp[ExclSF "ARITH"] >>
+  drule_all asmCallGasArithmeticTheory.create_forwarded_gas_reserve >>
+  gvs[ExclSF "ARITH"] >>
+  POP_ASSUM_LIST (K ALL_TAC) >>
+  pure_rewrite_tac[arithmeticTheory.SUB_PLUS] >> decide_tac
+QED
+
 Theorem asm_frame_create_consume[local]:
   asm_evm_rel (prog ++ [AsmDataItem data]) a s /\
   s.contexts = (c,rb)::rest /\
