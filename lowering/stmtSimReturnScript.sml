@@ -1221,7 +1221,11 @@ Proof
   >~ [`gas_outcome_full _ _ _ _ (bind (eval_expr _ _) _)`]
   >- (irule gas_outcome_full_post_source >> goal_assum (drule_at Any) >>
       simp[] >> rpt strip_tac >> gvs[] >>
-      Cases_on `res` >> gvs[expr_exit_def, stmt_exit_ptr_def]) >>
+      Cases_on `res` >> gvs[expr_exit_def, stmt_exit_ptr_def] >>
+      gen_tac >> disj1_tac >>
+      Cases_on `r` >> gvs[expr_exit_def] >>
+      Cases_on `y` >> gvs[expr_exit_def] >>
+      rename1 `Error err` >> Cases_on `err` >> gvs[expr_exit_def]) >>
   (* the value is on hand: release and RET *)
   rpt strip_tac >>
   `valid_horizon cx st0 (storage_trace_horizon mid.storage_trace)
