@@ -158,7 +158,7 @@ Theorem registration_resource_decoder_run_gas:
      emit_op CALLDATALOAD [head] after_head = (offset,after_load) /\
      emit_op ADD [Lit (n2w 4); offset] after_load = (src,first)
    else src = head /\ first = after_head) /\
-  compile_abi_decode_to_buf buf.buf_operand src CALLDATALOAD (Lit 0w)
+  compile_abi_decode_to_buf buf.buf_operand src CALLDATALOAD (Lit 0w) (Lit 0w)
     (type_to_abi_dec_info ce.ce_struct_fields ce ty) first = ((),last) /\
   abi_decoder_coherent ce env ce.ce_struct_fields ty tv /\
   entry_source_metadata ce env ce.ce_struct_fields ty tv
@@ -231,7 +231,7 @@ Proof
     0 (unit_alloca_budget ctx) site limit_st first last p tv value v t /\
     gas_path ctx fn v 0 (OK t)` by
     (irule entry_source_registration_decoder_endpoint_gas >>
-     qpat_assum `compile_abi_decode_to_buf _ _ _ _ _ _ = _` (irule_at Any) >>
+     qpat_assum `compile_abi_decode_to_buf _ _ _ _ _ _ _ = _` (irule_at Any) >>
      qpat_assum `entry_source_metadata _ _ _ _ _ _ _ _` (irule_at Any) >>
      qpat_assum `compile_guarded_body _ _ _ _ _ _ _ _ = _` (irule_at Any) >>
      qpat_assum `compile_register_positional_args body_ce _ _ _ = _` (irule_at Any) >>

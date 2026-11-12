@@ -86,10 +86,10 @@ Theorem entry_source_certified_iteration_callback_gas:
      (ip,src,dst,st,ops,mid,last,limit_st,next,nv),
      (ctx,fn,site,cid,oid,root,extent,d,b,reserve,prepared,p,sb,ambient),
      (hdr,body_lbl,exit,hid,bb)) /\ iteration_callback_config cfg /\
-  abi_decode_array_element_setup ip src dst CALLDATALOAD (Lit 0w)
+  abi_decode_array_element_setup ip src dst CALLDATALOAD (Lit 0w) (Lit 0w)
     (type_to_abi_dec_info sf ce ty)
     (abi_embedded_static_size ce.ce_struct_fields ty) (type_memory_bytes ce ty) st = (ops,mid) /\
-  compile_abi_decode_to_buf (SND (SND ops)) (FST (SND ops)) CALLDATALOAD (Lit 0w)
+  compile_abi_decode_to_buf (SND (SND ops)) (FST (SND ops)) CALLDATALOAD (Lit 0w) (Lit 0w)
     (type_to_abi_dec_info sf ce ty) mid = ((),last) /\
   abi_decoder_coherent ce env sf (ArrayT ty (Dynamic maxn)) (ArrayTV tv (Dynamic maxn)) /\
   entry_source_metadata ce env sf (ArrayT ty (Dynamic maxn)) (ArrayTV tv (Dynamic maxn))
@@ -100,7 +100,7 @@ Theorem entry_source_certified_iteration_callback_gas:
   cert last /\
   (!j. j < LENGTH xs ==>
     !st last dst src sb cell s.
-    compile_abi_decode_to_buf dst src CALLDATALOAD (Lit 0w)
+    compile_abi_decode_to_buf dst src CALLDATALOAD (Lit 0w) (Lit 0w)
       (type_to_abi_dec_info sf ce ty) st = ((),last) /\
     abi_decoder_coherent ce env sf ty tv /\
     entry_source_metadata ce env sf ty tv (type_to_abi_dec_info sf ce ty) (EL j avs) (EL j xs) /\
@@ -164,10 +164,10 @@ Proof
 QED
 Resume entry_source_certified_iteration_callback_gas[execute]:
   first_x_assum (drule_at (Pat `j < LENGTH xs`)) >> disch_tac >>
-  drule_at (Pat `abi_decode_array_element_setup _ _ _ _ _ _ _ _ _ = _`)
+  drule_at (Pat `abi_decode_array_element_setup _ _ _ _ _ _ _ _ _ _ = _`)
     (SIMP_RULE bool_ss [] entry_source_certified_array_child_gas) >>
   disch_then (drule_at (Pat `entry_source_metadata _ _ _ _ _ _ _ _`)) >>
-  disch_then (drule_at (Pat `compile_abi_decode_to_buf _ _ _ _ _ _ = _`)) >>
+  disch_then (drule_at (Pat `compile_abi_decode_to_buf _ _ _ _ _ _ _ = _`)) >>
   disch_then (drule_at (Pat `entry_owned_region _ _ _ _ _ _`)) >>
   disch_then (drule_at (Pat `FLOOKUP _ _ = _`)) >>
   disch_then (drule_at (Pat `bb.bb_instructions = _`)) >>

@@ -706,7 +706,7 @@ Proof
   `entry_array_init_resources dst src maxn asz
     (st,guard_st,header_st,loop_st,ip,cnt) (ctx,fn,site,d,sz,p,32,p,s)` by
     fs[entry_array_init_resources_def] >>
-  `abi_decoder_ranges CALLDATALOAD (Lit 0w) src dst sb
+  `abi_decoder_ranges CALLDATALOAD (Lit 0w) (Lit 0w) src dst 0 sb
     (LENGTH (enc (Array NONE aty) (ListV avs))) d sz p 32 s` by
     simp[abi_decoder_ranges_def, abi_decode_source_opcode_def] >>
   drule_all owned_array_canonical_initializer_gas >>

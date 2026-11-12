@@ -705,7 +705,7 @@ Finalise owned_array_initializer_gas
 Theorem owned_array_canonical_initializer_gas:
   entry_array_init_resources dst src maxn abi_sz
     (st,guard_st,header_st,loop_st,ip,cnt) (ctx,fn,site,d,sz,b,cap,p,initial) /\
-  abi_decoder_ranges CALLDATALOAD (Lit 0w) src dst sb
+  abi_decoder_ranges CALLDATALOAD (Lit 0w) (Lit 0w) src dst 0 sb
     (LENGTH (enc (Array NONE aty) (ListV avs))) d sz b cap initial /\
   mem_bytes_at sb (LENGTH (enc (Array NONE aty) (ListV avs)))
     (abi_decode_source CALLDATALOAD initial) = enc (Array NONE aty) (ListV avs) /\
@@ -727,7 +727,7 @@ Theorem owned_array_canonical_initializer_gas:
     t.vs_current_bb = loop_st.cs_current_bb /\
     t.vs_inst_idx = LENGTH loop_st.cs_current_insts /\
     (!op. abi_decoder_operand_live st.cs_next_var op ==> eval_operand op t = eval_operand op initial) /\
-    abi_decoder_ranges CALLDATALOAD (Lit 0w) src dst sb
+    abi_decoder_ranges CALLDATALOAD (Lit 0w) (Lit 0w) src dst 0 sb
       (LENGTH (enc (Array NONE aty) (ListV avs))) d sz b cap t /\
     mem_bytes_at sb (LENGTH (enc (Array NONE aty) (ListV avs)))
       (abi_decode_source CALLDATALOAD t) = enc (Array NONE aty) (ListV avs) /\
@@ -738,7 +738,7 @@ Proof
   disch_then (map_every assume_tac o CONJUNCTS) >>
   qpat_x_assum `entry_array_init_resources _ _ _ _ _ _`
     (map_every assume_tac o CONJUNCTS o PURE_REWRITE_RULE [entry_array_init_resources_def]) >>
-  qpat_assum `abi_decoder_ranges _ _ _ _ _ _ _ _ _ _ _`
+  qpat_assum `abi_decoder_ranges _ _ _ _ _ _ _ _ _ _ _ _ _`
     (map_every assume_tac o CONJUNCTS o PURE_REWRITE_RULE [abiDecoderTypedContractTheory.abi_decoder_ranges_def]) >>
   `d < dimword (:256)` by decide_tac >>
   `abi_decode_load CALLDATALOAD (n2w sb:bytes32) initial = n2w (LENGTH avs)` by

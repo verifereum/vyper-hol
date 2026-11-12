@@ -105,7 +105,7 @@ Finalise entry_source_dynamic_producer
 val _ = temp_overload_on ("source_child_gas", ``
   \cert ce env sf ty tv av v ctx fn oid root extent ambient b cap site limit_st.
   !st last dst src sb cell s.
-    compile_abi_decode_to_buf dst src CALLDATALOAD (Lit 0w)
+    compile_abi_decode_to_buf dst src CALLDATALOAD (Lit 0w) (Lit 0w)
       (type_to_abi_dec_info sf ce ty) st = ((),last) /\
     abi_decoder_coherent ce env sf ty tv /\
     entry_source_metadata ce env sf ty tv (type_to_abi_dec_info sf ce ty) av v /\
@@ -180,7 +180,7 @@ Resume entry_source_dynamic_producer_gas[nonbulk]:
       (is_abi_dynamic ce.ce_struct_fields ty) n` by simp[Once type_to_abi_dec_info_def] >>
   irule entry_source_nonbulk_array_constructor_gas >>
   qpat_assum `entry_source_metadata _ _ _ _ _ _ _ _` (irule_at Any) >>
-  qpat_assum `compile_abi_decode_to_buf _ _ _ _ _ _ = _` (irule_at Any) >>
+  qpat_assum `compile_abi_decode_to_buf _ _ _ _ _ _ _ = _` (irule_at Any) >>
   simp[Excl "enc_def", GSYM vyper_to_abi_type_def] >>
   goal_assum (drule_at Any) >> simp[Excl "enc_def"] >>
   metis_tac[]
@@ -238,8 +238,8 @@ Proof
        (strip_assume_tac o PURE_REWRITE_RULE [abi_decoder_metadata_def]) >>
      drule_all abi_decoder_descended_encoding_length >> simp[]) >>
   `sb < dimword (:256) /\ cell < dimword (:256)` by decide_tac >>
-  `compile_abi_decode_to_buf dst src CALLDATALOAD (Lit 0w) (DecPrimWord clamp) st = ((),last)` by
-    (qpat_x_assum `compile_abi_decode_to_buf _ _ _ _ _ _ = _` mp_tac >> simp[]) >>
+  `compile_abi_decode_to_buf dst src CALLDATALOAD (Lit 0w) (Lit 0w) (DecPrimWord clamp) st = ((),last)` by
+    (qpat_x_assum `compile_abi_decode_to_buf _ _ _ _ _ _ _ = _` mp_tac >> simp[]) >>
   `abi_decoder_metadata ce env (BaseT bt) tv (DecPrimWord clamp) av v` by gvs[] >>
   `mem_bytes_at sb 32 (abi_decode_source CALLDATALOAD s) = enc (vyper_to_abi_type env (BaseT bt)) av` by gvs[] >>
   `entry_owned_region oid root extent cell (type_memory_bytes ce (BaseT bt)) s` by gvs[] >>
@@ -269,8 +269,8 @@ Proof
      metis_tac[abi_decoder_bytes_copy_size, type_memory_bytes_def]) >>
   `n < dimword (:256) /\ cell+abi_decode_bytes_copy_size n < dimword (:256)` by
     (gvs[] >> decide_tac) >>
-  `compile_abi_decode_to_buf dst src CALLDATALOAD (Lit 0w) (DecBytestring n) st = ((),last)` by
-    (qpat_x_assum `compile_abi_decode_to_buf _ _ _ _ _ _ = _` mp_tac >> simp[]) >>
+  `compile_abi_decode_to_buf dst src CALLDATALOAD (Lit 0w) (Lit 0w) (DecBytestring n) st = ((),last)` by
+    (qpat_x_assum `compile_abi_decode_to_buf _ _ _ _ _ _ _ = _` mp_tac >> simp[]) >>
   `abi_decoder_metadata ce env (BaseT bt) tv (DecBytestring n) av v` by gvs[] >>
   `entry_owned_region oid root extent cell (type_memory_bytes ce (BaseT bt)) s` by gvs[] >>
   drule_all entry_canonical_bytes_owned_endpoint_gas >>

@@ -89,7 +89,7 @@ QED
 val _ = temp_overload_on ("source_child_gas", ``
   \cert ce env sf ty tv av v ctx fn oid root extent ambient b cap site limit_st.
   !st last dst src sb cell s.
-    compile_abi_decode_to_buf dst src CALLDATALOAD (Lit 0w)
+    compile_abi_decode_to_buf dst src CALLDATALOAD (Lit 0w) (Lit 0w)
       (type_to_abi_dec_info sf ce ty) st = ((),last) /\
     abi_decoder_coherent ce env sf ty tv /\
     entry_source_metadata ce env sf ty tv (type_to_abi_dec_info sf ce ty) av v /\
@@ -162,7 +162,7 @@ Proof
 QED
 
 Theorem entry_source_canonical_window_endpoint_gas:
-  compile_abi_decode_to_buf dst src CALLDATALOAD (Lit 0w)
+  compile_abi_decode_to_buf dst src CALLDATALOAD (Lit 0w) (Lit 0w)
     (type_to_abi_dec_info sf ce ty) st = ((),last) /\
   abi_decoder_coherent ce env sf ty tv /\
   entry_source_metadata ce env sf ty tv (type_to_abi_dec_info sf ce ty) av v /\

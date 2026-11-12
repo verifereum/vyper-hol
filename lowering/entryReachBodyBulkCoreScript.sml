@@ -201,7 +201,7 @@ Proof
 QED
 
 Theorem entry_bulk_owned_core_gas:
-  compile_abi_decode_to_buf dst src CALLDATALOAD (Lit 0w)
+  compile_abi_decode_to_buf dst src CALLDATALOAD (Lit 0w) (Lit 0w)
     (DecDynArray ei abi_sz mem_sz F maxn) st = ((),last) /\
   ~dec_info_needs_clamp ei /\
   static_layout_compatible ce env ty tv /\ all_have_type tv xs /\

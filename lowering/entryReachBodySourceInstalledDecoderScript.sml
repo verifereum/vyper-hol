@@ -46,7 +46,7 @@ QED
 Theorem entry_source_registration_decoder_endpoint_gas:
   !ce env ty tv av v ctx fn oid root extent ambient b cap site limit_st
    dst src st last sb cell s body_ce args off cef registered key ut iv body rt z.
-  compile_abi_decode_to_buf dst src CALLDATALOAD (Lit 0w)
+  compile_abi_decode_to_buf dst src CALLDATALOAD (Lit 0w) (Lit 0w)
     (type_to_abi_dec_info ce.ce_struct_fields ce ty) st = ((),last) /\
   abi_decoder_coherent ce env ce.ce_struct_fields ty tv /\
   entry_source_metadata ce env ce.ce_struct_fields ty tv

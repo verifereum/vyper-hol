@@ -135,7 +135,7 @@ Theorem entry_source_certified_array_child_gas:
   off = abi_array_child_offset NONE (vyper_to_abi_type env ty) avs j /\
   cell = d+32+j*type_memory_bytes ce ty /\
   total = type_memory_bytes ce (ArrayT ty (Dynamic maxn)) /\
-  abi_decode_array_element_setup ip src dst CALLDATALOAD (Lit 0w)
+  abi_decode_array_element_setup ip src dst CALLDATALOAD (Lit 0w) (Lit 0w)
     (type_to_abi_dec_info sf ce ty)
     (abi_embedded_static_size ce.ce_struct_fields ty) (type_memory_bytes ce ty) st = (ops,mid) /\
   abi_decoder_coherent ce env sf (ArrayT ty (Dynamic maxn)) (ArrayTV tv (Dynamic maxn)) /\
@@ -155,7 +155,7 @@ Theorem entry_source_certified_array_child_gas:
   s.vs_inst_idx = LENGTH st.cs_current_insts /\ entry_owned_region oid root extent d total s /\
   entry_scratch_ready ambient b cap s /\ alloca_inv s /\
   abi_alloca_history (fn_insts fn) s /\ alloca_frontier_inv ctx fn site s /\
-  compile_abi_decode_to_buf (SND (SND ops)) (FST (SND ops)) CALLDATALOAD (Lit 0w)
+  compile_abi_decode_to_buf (SND (SND ops)) (FST (SND ops)) CALLDATALOAD (Lit 0w) (Lit 0w)
     (type_to_abi_dec_info sf ce ty) mid = ((),last) /\
   last.cs_next_var <= limit_st.cs_next_var /\ fn_has_code mid last fn /\
   abi_decoder_code mid last /\ fn_inst_ids_distinct fn /\
@@ -168,7 +168,7 @@ Theorem entry_source_certified_array_child_gas:
   bb.bb_instructions = last.cs_current_insts ++ abi_decode_backedge_insts bid iv nv ip hdr /\
   abi_decode_load CALLDATALOAD (n2w sb : bytes32) s = n2w n /\
   (!st last dst src sb cell s.
-    compile_abi_decode_to_buf dst src CALLDATALOAD (Lit 0w)
+    compile_abi_decode_to_buf dst src CALLDATALOAD (Lit 0w) (Lit 0w)
       (type_to_abi_dec_info sf ce ty) st = ((),last) /\
     abi_decoder_coherent ce env sf ty tv /\
     entry_source_metadata ce env sf ty tv (type_to_abi_dec_info sf ce ty) (EL j avs) (EL j xs) /\
@@ -201,7 +201,7 @@ Theorem entry_source_certified_array_child_gas:
 Proof
   rpt gen_tac >> strip_tac >>
   drule_all entry_source_array_owned_entry_gas >> strip_tac >>
-  first_x_assum (drule_at (Pat `compile_abi_decode_to_buf _ _ _ _ _ _ = _`)) >>
+  first_x_assum (drule_at (Pat `compile_abi_decode_to_buf _ _ _ _ _ _ _ = _`)) >>
   disch_then (qspecl_then [`sb+off`, `cell`, `u`] mp_tac) >>
   asm_simp_tac bool_ss [] >> (impl_tac >- metis_tac[]) >> strip_tac >>
   `array_child_result ctx fn oid root extent ambient child_ids b cap site limit_st

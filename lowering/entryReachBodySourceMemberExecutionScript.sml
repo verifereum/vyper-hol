@@ -409,9 +409,9 @@ Theorem source_empty_member_endpoint_gas[local]:
   abi_decoder_coherent ce env sf ty tv /\
   entry_source_metadata ce env sf ty tv (DecComplex T []) av v /\
   type_to_abi_dec_info sf ce ty = DecComplex T [] /\
-  abi_decode_member_setup dst src CALLDATALOAD (Lit 0w)
+  abi_decode_member_setup dst src CALLDATALOAD (Lit 0w) (Lit 0w)
     (dec_info_needs_offset (DecComplex T [])) ao vo st = (ops,mid) /\
-  compile_abi_decode_to_buf (SND ops) (FST ops) CALLDATALOAD (Lit 0w)
+  compile_abi_decode_to_buf (SND ops) (FST ops) CALLDATALOAD (Lit 0w) (Lit 0w)
     (DecComplex T []) mid = ((),last) /\
   eval_operand src s = SOME (n2w sb) /\ eval_operand dst s = SOME (n2w d) /\
   abi_decoder_operand_live st.cs_next_var src /\
@@ -429,12 +429,12 @@ Theorem source_empty_member_endpoint_gas[local]:
 Proof
   strip_tac >>
   `last = mid` by
-    (qpat_x_assum `compile_abi_decode_to_buf _ _ _ _ _ _ = _` mp_tac >>
+    (qpat_x_assum `compile_abi_decode_to_buf _ _ _ _ _ _ _ = _` mp_tac >>
      simp[abi_decode_empty_complex_phases, abi_decode_complex_head_guard_def, comp_return_def]) >>
   gvs[] >>
   drule_all entry_source_empty_descriptor_value >> strip_tac >>
   `~dec_info_needs_offset (DecComplex T [])` by simp[abi_decoder_needs_offset_iff] >>
-  qpat_x_assum `abi_decode_member_setup _ _ _ _ _ _ _ _ = _` mp_tac >>
+  qpat_x_assum `abi_decode_member_setup _ _ _ _ _ _ _ _ _ = _` mp_tac >>
   asm_rewrite_tac[] >> strip_tac >>
   mp_tac (Q.INST [`dyn` |-> `F`, `mid` |-> `last`, `ctx` |-> `ctx`]
     entry_member_setup_endpoint_gas) >>
@@ -447,9 +447,9 @@ Theorem source_empty_member_child_result_gas[local]:
   type_to_abi_dec_info sf ce ty = DecComplex T [] /\
   canonical_members_frame ctx fn oid root extent sites b cap site limit_st
     dst src sb d outsz st s /\ vo <= outsz /\
-  abi_decode_member_setup dst src CALLDATALOAD (Lit 0w)
+  abi_decode_member_setup dst src CALLDATALOAD (Lit 0w) (Lit 0w)
     (dec_info_needs_offset (DecComplex T [])) ao vo st = (ops,mid) /\
-  compile_abi_decode_to_buf (SND ops) (FST ops) CALLDATALOAD (Lit 0w)
+  compile_abi_decode_to_buf (SND ops) (FST ops) CALLDATALOAD (Lit 0w) (Lit 0w)
     (DecComplex T []) mid = ((),next) /\
   next.cs_next_var <= limit_st.cs_next_var /\ fn_has_code st next fn ==>
   ?t. array_child_result ctx fn oid root extent sites ids b cap site limit_st
@@ -488,12 +488,12 @@ Theorem source_member_child_endpoint_gas[local]:
   d+outsz < dimword (:256) /\
   canonical_members_frame ctx fn oid root extent sites b cap site limit_st
     dst src sb d outsz st s /\
-  abi_decode_member_setup dst src CALLDATALOAD (Lit 0w)
+  abi_decode_member_setup dst src CALLDATALOAD (Lit 0w) (Lit 0w)
     (dec_info_needs_offset ei) ao vo st = (ops,mid) /\
-  compile_abi_decode_to_buf (SND ops) (FST ops) CALLDATALOAD (Lit 0w)
+  compile_abi_decode_to_buf (SND ops) (FST ops) CALLDATALOAD (Lit 0w) (Lit 0w)
     ei mid = ((),next) /\
   (!st last dst src sb cell s.
-    compile_abi_decode_to_buf dst src CALLDATALOAD (Lit 0w)
+    compile_abi_decode_to_buf dst src CALLDATALOAD (Lit 0w) (Lit 0w)
       (type_to_abi_dec_info sf ce ty) st = ((),last) /\
     abi_decoder_coherent ce env sf ty tv /\
     entry_source_metadata ce env sf ty tv (type_to_abi_dec_info sf ce ty) av v /\
@@ -538,7 +538,7 @@ Proof
   qpat_x_assum `mem_bytes_at sb _ _ = _` kall_tac >>
   qpat_x_assum `canonical_members_frame _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _` kall_tac >>
   qpat_x_assum `!st last dst src sb cell s. _` mp_tac >>
-  disch_then (drule_at (Pat `compile_abi_decode_to_buf _ _ _ _ _ _ = _`)) >>
+  disch_then (drule_at (Pat `compile_abi_decode_to_buf _ _ _ _ _ _ _ = _`)) >>
   disch_then drule_all >> strip_tac >>
   `gas_path ctx fn s 0 (OK t)` by
     (irule (SRULE [] (Q.INST [`n` |-> `0`, `m` |-> `0`] fragGasPathTheory.gas_path_then)) >>
@@ -570,7 +570,7 @@ QED
 Theorem entry_source_members_callback_gas:
   (!i. i < LENGTH fulltys ==>
     !st last dst src sb cell s.
-    compile_abi_decode_to_buf dst src CALLDATALOAD (Lit 0w)
+    compile_abi_decode_to_buf dst src CALLDATALOAD (Lit 0w) (Lit 0w)
       (type_to_abi_dec_info sf ce (EL i fulltys)) st = ((),last) /\
     abi_decoder_coherent ce env sf (EL i fulltys) (EL i fulltvs) /\
     entry_source_metadata ce env sf (EL i fulltys) (EL i fulltvs)
@@ -601,13 +601,13 @@ Theorem entry_source_members_callback_gas:
   !pre ty tys ao vo st ops middle next last s.
     ao = SUM (MAP (abi_embedded_static_size ce.ce_struct_fields) pre) /\
     vo = SUM (MAP (type_memory_bytes ce) pre) /\
-    compile_abi_decode_complex_elems dst src CALLDATALOAD (Lit 0w)
+    compile_abi_decode_complex_elems dst src CALLDATALOAD (Lit 0w) (Lit 0w)
       (abi_decoder_member_infos sf ce tys)
       (ao + abi_embedded_static_size ce.ce_struct_fields ty)
       (vo + type_memory_bytes ce ty) next = ((),last) /\
-    abi_decode_member_setup dst src CALLDATALOAD (Lit 0w)
+    abi_decode_member_setup dst src CALLDATALOAD (Lit 0w) (Lit 0w)
       (dec_info_needs_offset (type_to_abi_dec_info sf ce ty)) ao vo st = (ops,middle) /\
-    compile_abi_decode_to_buf (SND ops) (FST ops) CALLDATALOAD (Lit 0w)
+    compile_abi_decode_to_buf (SND ops) (FST ops) CALLDATALOAD (Lit 0w) (Lit 0w)
       (type_to_abi_dec_info sf ce ty) middle = ((),next) /\
     st.cs_next_var <= middle.cs_next_var /\ middle.cs_next_var <= next.cs_next_var /\
     next.cs_next_var <= last.cs_next_var /\ last.cs_next_var <= limit_st.cs_next_var /\
@@ -657,9 +657,9 @@ Proof
     gas_path ctx fn s 0 (OK t)` by suspend "child" >>
   rename1 `array_child_result _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ endpoint` >>
   qpat_x_assum `!i. _ ==> _` kall_tac >>
-  qpat_x_assum `compile_abi_decode_complex_elems _ _ _ _ _ _ _ _ = _` kall_tac >>
-  qpat_x_assum `abi_decode_member_setup _ _ _ _ _ _ _ _ = _` kall_tac >>
-  qpat_x_assum `compile_abi_decode_to_buf _ _ _ _ _ _ = _` kall_tac >>
+  qpat_x_assum `compile_abi_decode_complex_elems _ _ _ _ _ _ _ _ _ = _` kall_tac >>
+  qpat_x_assum `abi_decode_member_setup _ _ _ _ _ _ _ _ _ = _` kall_tac >>
+  qpat_x_assum `compile_abi_decode_to_buf _ _ _ _ _ _ _ = _` kall_tac >>
   qhdtm_assum `canonical_members_frame`
     (strip_assume_tac o PURE_REWRITE_RULE [canonical_members_frame_def]) >>
   `entry_source_probe_cursor ce env sf fulltys fulltvs fullavs fullvs sb d
@@ -722,7 +722,7 @@ Finalise entry_source_members_callback_gas
 Theorem entry_source_certified_members_endpoint_gas:
   (!i. i < LENGTH tys ==>
     !st last dst src sb cell s.
-    compile_abi_decode_to_buf dst src CALLDATALOAD (Lit 0w)
+    compile_abi_decode_to_buf dst src CALLDATALOAD (Lit 0w) (Lit 0w)
       (type_to_abi_dec_info sf ce (EL i tys)) st = ((),last) /\
     abi_decoder_coherent ce env sf (EL i tys) (EL i tvs) /\
     entry_source_metadata ce env sf (EL i tys) (EL i tvs)
@@ -753,11 +753,11 @@ Theorem entry_source_certified_members_endpoint_gas:
   mem_bytes_at sb (LENGTH (enc (Tuple (MAP (vyper_to_abi_type env) tys)) (ListV avs)))
     (abi_decode_source CALLDATALOAD s) = enc (Tuple (MAP (vyper_to_abi_type env) tys)) (ListV avs) /\
   (!a z elems ao vo.
-    compile_abi_decode_complex_elems dst src CALLDATALOAD (Lit 0w) elems ao vo a = ((),z) /\
+    compile_abi_decode_complex_elems dst src CALLDATALOAD (Lit 0w) (Lit 0w) elems ao vo a = ((),z) /\
     fn_has_code a z fn /\ cert z ==> cert a) /\ cert last /\
   canonical_members_frame ctx fn oid root extent sites b cap site limit_st
     dst src sb d outsz st s /\
-  compile_abi_decode_complex_elems dst src CALLDATALOAD (Lit 0w)
+  compile_abi_decode_complex_elems dst src CALLDATALOAD (Lit 0w) (Lit 0w)
     (abi_decoder_member_infos sf ce tys) 0 0 st = ((),last) /\
   last.cs_next_var <= limit_st.cs_next_var /\ fn_has_code st last fn /\
   fn_inst_ids_distinct fn /\ unit_alloca_budget ctx < dimword(:256) /\
@@ -782,7 +782,7 @@ Proof
     (asm_rewrite_tac[] >> rpt gen_tac >> strip_tac >>
      irule entry_source_members_callback_gas >>
      qpat_assum `cert next` (irule_at Any) >>
-     qpat_assum `abi_decode_member_setup _ _ _ _ _ _ _ _ = _`
+     qpat_assum `abi_decode_member_setup _ _ _ _ _ _ _ _ _ = _`
        (irule_at Any) >> asm_rewrite_tac[] >> metis_tac[])) >>
   strip_tac >>
   qpat_x_assum `entry_source_probe_cursor _ _ _ _ _ _ _ _ _ tys [] last t`

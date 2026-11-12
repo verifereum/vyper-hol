@@ -144,7 +144,7 @@ Proof
 QED
 
 Theorem entry_canonical_word_owned_endpoint_gas:
-  compile_abi_decode_to_buf dst src CALLDATALOAD (Lit 0w) (DecPrimWord clamp) st = ((),last) /\
+  compile_abi_decode_to_buf dst src CALLDATALOAD (Lit 0w) (Lit 0w) (DecPrimWord clamp) st = ((),last) /\
   abi_decoder_coherent ce env sf ty tv /\
   type_to_abi_dec_info sf ce ty = DecPrimWord clamp /\
   abi_decoder_metadata ce env ty tv (DecPrimWord clamp) av v /\

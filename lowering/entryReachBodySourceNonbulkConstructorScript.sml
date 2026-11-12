@@ -167,7 +167,7 @@ Theorem entry_source_nonbulk_array_constructor_gas:
   parent_di = DecDynArray (type_to_abi_dec_info sf ce ty)
     (abi_embedded_static_size ce.ce_struct_fields ty) (type_memory_bytes ce ty) dyn maxn /\
   (dyn \/ dec_info_needs_clamp (type_to_abi_dec_info sf ce ty)) /\
-  compile_abi_decode_to_buf dst src CALLDATALOAD (Lit 0w) parent_di st = ((),final) /\
+  compile_abi_decode_to_buf dst src CALLDATALOAD (Lit 0w) (Lit 0w) parent_di st = ((),final) /\
   abi_decoder_coherent ce env sf (ArrayT ty (Dynamic maxn)) (ArrayTV tv (Dynamic maxn)) /\
   entry_source_metadata ce env sf (ArrayT ty (Dynamic maxn)) (ArrayTV tv (Dynamic maxn))
     root_di (ListV avs) (ArrayV (DynArrayV xs)) /\
@@ -191,7 +191,7 @@ Theorem entry_source_nonbulk_array_constructor_gas:
   s.vs_inst_idx = LENGTH st.cs_current_insts /\
   (!j. j < LENGTH xs ==>
     !st last dst src sb cell s.
-    compile_abi_decode_to_buf dst src CALLDATALOAD (Lit 0w)
+    compile_abi_decode_to_buf dst src CALLDATALOAD (Lit 0w) (Lit 0w)
       (type_to_abi_dec_info sf ce ty) st = ((),last) /\
     abi_decoder_coherent ce env sf ty tv /\
     entry_source_metadata ce env sf ty tv (type_to_abi_dec_info sf ce ty) (EL j avs) (EL j xs) /\
@@ -276,8 +276,8 @@ Resume entry_source_nonbulk_array_constructor_gas[iterate]:
 QED
 Resume entry_source_nonbulk_array_constructor_gas[callback]:
   drule_at (Pat `iteration_callback_config _`) entry_source_certified_iteration_callback_gas >>
-  disch_then (drule_at (Pat `abi_decode_array_element_setup _ _ _ _ _ _ _ _ _ = _`)) >>
-  disch_then (drule_at (Pat `compile_abi_decode_to_buf _ _ _ _ _ _ = _`)) >>
+  disch_then (drule_at (Pat `abi_decode_array_element_setup _ _ _ _ _ _ _ _ _ _ = _`)) >>
+  disch_then (drule_at (Pat `compile_abi_decode_to_buf _ _ _ _ _ _ _ = _`)) >>
   simp[Excl "enc_def"] >>
   disch_then (qspec_then
     `\z. z.cs_current_insts = [] ==> !bb.

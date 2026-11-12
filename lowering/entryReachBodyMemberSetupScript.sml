@@ -85,7 +85,7 @@ QED
 
 (* The generated navigation reaches the resource endpoint without GAS. *)
 Theorem entry_member_setup_endpoint_gas:
-  abi_decode_member_setup dst src CALLDATALOAD (Lit 0w) dyn ao vo st = (ops,mid) /\
+  abi_decode_member_setup dst src CALLDATALOAD (Lit 0w) (Lit 0w) dyn ao vo st = (ops,mid) /\
   eval_operand src s = SOME (n2w sb) /\ eval_operand dst s = SOME (n2w d) /\
   (dyn ==> abi_decode_load CALLDATALOAD (n2w (sb+ao) : bytes32) s = n2w payload_off /\
     sb + payload_off < dimword (:256)) /\

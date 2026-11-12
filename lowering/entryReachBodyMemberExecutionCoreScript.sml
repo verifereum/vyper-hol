@@ -244,11 +244,11 @@ Theorem entry_members_core_cons_gas[local]:
     vo = SUM (MAP (type_memory_bytes ce) pre) /\
     canonical_members_frame ctx fn oid root extent sites b cap site limit_st
       dst src sb d outsz st s /\
-    abi_decode_member_setup dst src CALLDATALOAD (Lit 0w)
+    abi_decode_member_setup dst src CALLDATALOAD (Lit 0w) (Lit 0w)
       (dec_info_needs_offset (type_to_abi_dec_info sf ce ty)) ao vo st = (ops,middle) /\
-    compile_abi_decode_to_buf (SND ops) (FST ops) CALLDATALOAD (Lit 0w)
+    compile_abi_decode_to_buf (SND ops) (FST ops) CALLDATALOAD (Lit 0w) (Lit 0w)
       (type_to_abi_dec_info sf ce ty) middle = ((),next) /\
-    compile_abi_decode_complex_elems dst src CALLDATALOAD (Lit 0w)
+    compile_abi_decode_complex_elems dst src CALLDATALOAD (Lit 0w) (Lit 0w)
       (abi_decoder_member_infos sf ce tys)
       (ao + abi_embedded_static_size ce.ce_struct_fields ty)
       (vo + type_memory_bytes ce ty) next = ((),last) /\
@@ -270,12 +270,12 @@ Theorem entry_members_core_cons_gas[local]:
         (window_alloca_sites fn (abi_decoder_ids st.cs_next_id last.cs_next_id))
         [(d,outsz)] s t /\ gas_path ctx fn s 0 (OK t)) /\
   (!a z elems ao vo.
-    compile_abi_decode_complex_elems dst src CALLDATALOAD (Lit 0w) elems ao vo a = ((),z) /\
+    compile_abi_decode_complex_elems dst src CALLDATALOAD (Lit 0w) (Lit 0w) elems ao vo a = ((),z) /\
     fn_has_code a z fn /\ cert z ==> cert a) /\ cert last /\
   cursor pre (ty::tys) st s /\
   canonical_members_frame ctx fn oid root extent sites b cap site limit_st
     dst src sb d outsz st s /\
-  compile_abi_decode_complex_elems dst src CALLDATALOAD (Lit 0w)
+  compile_abi_decode_complex_elems dst src CALLDATALOAD (Lit 0w) (Lit 0w)
     (abi_decoder_member_infos sf ce (ty::tys))
     (SUM (MAP (abi_embedded_static_size ce.ce_struct_fields) pre))
     (SUM (MAP (type_memory_bytes ce) pre)) st = ((),last) /\
@@ -286,7 +286,7 @@ Theorem entry_members_core_cons_gas[local]:
   ?next t. cursor (pre++[ty]) tys next t /\
     canonical_members_frame ctx fn oid root extent sites b cap site limit_st
       dst src sb d outsz next t /\
-    compile_abi_decode_complex_elems dst src CALLDATALOAD (Lit 0w)
+    compile_abi_decode_complex_elems dst src CALLDATALOAD (Lit 0w) (Lit 0w)
       (abi_decoder_member_infos sf ce tys)
       (SUM (MAP (abi_embedded_static_size ce.ce_struct_fields) (pre++[ty])))
       (SUM (MAP (type_memory_bytes ce) (pre++[ty]))) next = ((),last) /\
@@ -302,13 +302,13 @@ Proof
   drule_all abi_decoder_member_cons_code >> strip_tac >>
   drule_all abi_decoder_member_body_code >> strip_tac >>
   `cert end_st` by
-    (first_x_assum (drule_at (Pat `compile_abi_decode_complex_elems _ _ _ _ _ _ _ _ = _`)) >>
+    (first_x_assum (drule_at (Pat `compile_abi_decode_complex_elems _ _ _ _ _ _ _ _ _ = _`)) >>
      disch_then drule_all >> simp[]) >>
   `abi_decoder_code middle end_st` by
     (drule_all abi_decoder_to_buf_code >> simp[]) >>
   first_x_assum (drule_at (Pat `cursor pre (ty::tys) st s`)) >>
   simp_tac bool_ss [AND_IMP_INTRO, GSYM CONJ_ASSOC, FORALL_AND_THM] >>
-  disch_then (drule_at (Pat `abi_decode_member_setup _ _ _ _ _ _ _ _ = _`)) >>
+  disch_then (drule_at (Pat `abi_decode_member_setup _ _ _ _ _ _ _ _ _ = _`)) >>
   disch_then drule_all >> simp[] >> strip_tac >>
   qexistsl_tac [`end_st`, `t`] >> asm_rewrite_tac[] >>
   conj_tac >- (simp[MAP_APPEND, SUM_APPEND]) >> decide_tac
@@ -322,11 +322,11 @@ Theorem entry_members_execution_suffix_gas:
     vo = SUM (MAP (type_memory_bytes ce) pre) /\
     canonical_members_frame ctx fn oid root extent sites b cap site limit_st
       dst src sb d outsz st s /\
-    abi_decode_member_setup dst src CALLDATALOAD (Lit 0w)
+    abi_decode_member_setup dst src CALLDATALOAD (Lit 0w) (Lit 0w)
       (dec_info_needs_offset (type_to_abi_dec_info sf ce ty)) ao vo st = (ops,middle) /\
-    compile_abi_decode_to_buf (SND ops) (FST ops) CALLDATALOAD (Lit 0w)
+    compile_abi_decode_to_buf (SND ops) (FST ops) CALLDATALOAD (Lit 0w) (Lit 0w)
       (type_to_abi_dec_info sf ce ty) middle = ((),next) /\
-    compile_abi_decode_complex_elems dst src CALLDATALOAD (Lit 0w)
+    compile_abi_decode_complex_elems dst src CALLDATALOAD (Lit 0w) (Lit 0w)
       (abi_decoder_member_infos sf ce tys)
       (ao + abi_embedded_static_size ce.ce_struct_fields ty)
       (vo + type_memory_bytes ce ty) next = ((),last) /\
@@ -348,12 +348,12 @@ Theorem entry_members_execution_suffix_gas:
         (window_alloca_sites fn (abi_decoder_ids st.cs_next_id last.cs_next_id))
         [(d,outsz)] s t /\ gas_path ctx fn s 0 (OK t)) /\
   (!a z elems ao vo.
-    compile_abi_decode_complex_elems dst src CALLDATALOAD (Lit 0w) elems ao vo a = ((),z) /\
+    compile_abi_decode_complex_elems dst src CALLDATALOAD (Lit 0w) (Lit 0w) elems ao vo a = ((),z) /\
     fn_has_code a z fn /\ cert z ==> cert a) /\ cert last /\
   cursor pre tys st s /\
   canonical_members_frame ctx fn oid root extent sites b cap site limit_st
     dst src sb d outsz st s /\
-  compile_abi_decode_complex_elems dst src CALLDATALOAD (Lit 0w)
+  compile_abi_decode_complex_elems dst src CALLDATALOAD (Lit 0w) (Lit 0w)
     (abi_decoder_member_infos sf ce tys)
     (SUM (MAP (abi_embedded_static_size ce.ce_struct_fields) pre))
     (SUM (MAP (type_memory_bytes ce) pre)) st = ((),last) /\
@@ -405,11 +405,11 @@ Theorem entry_members_execution_gas:
     vo = SUM (MAP (type_memory_bytes ce) pre) /\
     canonical_members_frame ctx fn oid root extent sites b cap site limit_st
       dst src sb d outsz st s /\
-    abi_decode_member_setup dst src CALLDATALOAD (Lit 0w)
+    abi_decode_member_setup dst src CALLDATALOAD (Lit 0w) (Lit 0w)
       (dec_info_needs_offset (type_to_abi_dec_info sf ce ty)) ao vo st = (ops,middle) /\
-    compile_abi_decode_to_buf (SND ops) (FST ops) CALLDATALOAD (Lit 0w)
+    compile_abi_decode_to_buf (SND ops) (FST ops) CALLDATALOAD (Lit 0w) (Lit 0w)
       (type_to_abi_dec_info sf ce ty) middle = ((),next) /\
-    compile_abi_decode_complex_elems dst src CALLDATALOAD (Lit 0w)
+    compile_abi_decode_complex_elems dst src CALLDATALOAD (Lit 0w) (Lit 0w)
       (abi_decoder_member_infos sf ce tys)
       (ao + abi_embedded_static_size ce.ce_struct_fields ty)
       (vo + type_memory_bytes ce ty) next = ((),last) /\
@@ -431,12 +431,12 @@ Theorem entry_members_execution_gas:
         (window_alloca_sites fn (abi_decoder_ids st.cs_next_id last.cs_next_id))
         [(d,outsz)] s t /\ gas_path ctx fn s 0 (OK t)) /\
   (!a z elems ao vo.
-    compile_abi_decode_complex_elems dst src CALLDATALOAD (Lit 0w) elems ao vo a = ((),z) /\
+    compile_abi_decode_complex_elems dst src CALLDATALOAD (Lit 0w) (Lit 0w) elems ao vo a = ((),z) /\
     fn_has_code a z fn /\ cert z ==> cert a) /\ cert last /\
   cursor [] tys st s /\
   canonical_members_frame ctx fn oid root extent sites b cap site limit_st
     dst src sb d outsz st s /\
-  compile_abi_decode_complex_elems dst src CALLDATALOAD (Lit 0w)
+  compile_abi_decode_complex_elems dst src CALLDATALOAD (Lit 0w) (Lit 0w)
     (abi_decoder_member_infos sf ce tys) 0 0 st = ((),last) /\
   last.cs_next_var <= limit_st.cs_next_var /\ fn_has_code st last fn /\
   fn_inst_ids_distinct fn /\ unit_alloca_budget ctx < dimword(:256) /\
