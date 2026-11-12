@@ -996,6 +996,17 @@ QED
    calldata dispatches to (tx supplies only the environment: sender,
    target, value, block), and reverts with empty returndata when it
    dispatches to nothing. *)
+(* The declared return type of the external entry f, which fixes how the
+   call's return bytes encode the source result.  Every f that
+   calldata_dispatch returns is found by lookup_function, so the NoneT
+   default is never read there. *)
+Definition external_return_type_def:
+  external_return_type tops f =
+    case vyperInterpreter$lookup_function NONE f External tops of
+      SOME (_, _, _, _, ret, _) => ret
+    | NONE => NoneT
+End
+
 Theorem vyper_call_correct:
   !policy tops deploy_bc runtime_bc am tx es.
     compile_vyper (K SOME) policy tops = SOME (deploy_bc, runtime_bc) /\
@@ -1019,8 +1030,8 @@ Theorem vyper_call_correct:
               (buffer_to_list (FST (HD es.contexts)).msgParams.data) of
          NONE => ?lgs. frame_outcome es r es' (SOME Reverted) [] lgs
        | SOME (f, vals) =>
-           ?ret. call_result_rel tops ret am
-                   (tx with <| function_name := f; args := vals |>) es r es')
+           call_result_rel tops (external_return_type tops f) am
+             (tx with <| function_name := f; args := vals |>) es r es')
 Proof
   rpt strip_tac >>
   Cases_on `calldata_dispatch tops
@@ -1033,5 +1044,5 @@ Proof
                `tx with <| function_name := fv0; args := fv1 |>`, `ret`, `es`]
     mp_tac vyper_call_correct_dispatched >>
   impl_tac >- gvs[dispatched_vyper_call_def, call_premises_dispatch_invariant] >>
-  strip_tac >> simp[] >> metis_tac[]
+  strip_tac >> simp[external_return_type_def] >> metis_tac[]
 QED
