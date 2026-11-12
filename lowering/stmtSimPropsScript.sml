@@ -483,9 +483,9 @@ QED
 (* The same for a marked run of a storage-trace frame. *)
 Theorem gas_marked_exec_valid_prefix:
   gas_marked_exec memory (ctx,func) source (es,s0) marks res es_end r /\
-  storage_trace_frame source /\
-  valid_horizon cx st0 H es_end.storage_trace ==>
-  valid_horizon cx st0 H es.storage_trace
+  storage_trace_frame source ==>
+  !cx st0 H. valid_horizon cx st0 H es_end.storage_trace ==>
+    valid_horizon cx st0 H es.storage_trace
 Proof
   rw[gasSummaryTheory.gas_marked_exec_def] >>
   first_x_assum (qspec_then `[]` assume_tac) >>

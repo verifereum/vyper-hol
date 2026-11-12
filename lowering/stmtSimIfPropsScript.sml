@@ -676,16 +676,21 @@ Proof
       qexists_tac `marks` >> disj2_tac >> disj1_tac >>
       Cases_on `?H. valid_horizon cx st0 H (ee with gas_obs := []).storage_trace`
       >- (pop_assum strip_assume_tac >>
-          qpat_assum `!H. valid_horizon _ _ H _ ==> _` drule >> strip_tac >>
-          drule_all if_branch_post_to_exit >> strip_tac >>
-          qexistsl_tac [`res`, `ee`, `OK u`] >>
+          `gas_path ctx func t 0
+             (OK (if res = INL () then jump_to xl t else t))` by
+            (qpat_assum `!H. valid_horizon _ _ H _ ==> _` drule >> strip_tac >>
+             drule_all if_branch_post_to_exit >> strip_tac >> gvs[]) >>
+          qexistsl_tac [`res`, `ee`,
+                        `OK (if res = INL () then jump_to xl t else t)`] >>
           conj_tac
           >- (qpat_x_assum `gas_marked_exec _ _ _ _ _ _ _ _` mp_tac >>
               simp[gas_marked_exec_def, fragGasModeTheory.gas_marked_path_def] >>
               strip_tac >> simp[] >>
               drule_all gas_path_then >> simp[]) >>
-          disj1_tac >> qexists_tac `u` >> simp[] >> rpt strip_tac >>
-          qpat_assum `!H. valid_horizon _ _ H _ ==> _` drule >> strip_tac >>
+          disj1_tac >> qexists_tac `if res = INL () then jump_to xl t else t` >>
+          simp[] >> qx_gen_tac `HH` >> strip_tac >>
+          qpat_x_assum `!H. valid_horizon _ _ H _ ==> _`
+            (qspec_then `HH` mp_tac) >> impl_tac >- gs[] >> strip_tac >>
           drule_all if_branch_post_to_exit >> strip_tac >> gvs[]) >>
       qexistsl_tac [`res`, `ee`, `r`] >> gs[])
   >- (qexists_tac `marks` >> disj2_tac >> disj1_tac >>
@@ -778,9 +783,9 @@ QED
 Resume if_selected_outcome_prefix[bad]:
   qexists_tac `marks ++ marks'` >> disj1_tac >>
   rewrite_tac[eval_stmt_if_forced] >>
-  irule (Q.INST [`v` |-> `BoolV b`, `t` |-> `jump_to label t`]
-           gasStorageTheory.gas_bad_storage_at_bind_right) >>
-  first_assum (irule_at (Pos hd)) >>
+  irule gasStorageTheory.gas_bad_storage_at_bind_right >>
+  qpat_assum `gas_marked_exec _ _ _ _ _ _ _ (OK (jump_to _ _))`
+    (irule_at Any) >>
   Cases_on `b` >> fs[]
 QED
 Resume if_selected_outcome_prefix[normal]:
@@ -792,28 +797,34 @@ Resume if_selected_outcome_prefix[normal]:
      qexistsl_tac [`mid`, `jump_to label t`, `BoolV b`] >>
      simp[] >> Cases_on `b` >> fs[]) >>
   qexists_tac `marks ++ marks'` >> disj2_tac >> disj1_tac >>
-  qexistsl_tac [`res`, `es_end`, `OK t'`] >> simp[] >> rpt strip_tac >>
+  qexistsl_tac [`res`, `es_end`, `OK t'`] >>
+  conj_tac >- first_assum ACCEPT_TAC >>
+  disj1_tac >> qexists_tac `t'` >> conj_tac >- simp[] >> rpt strip_tac >>
   `valid_horizon cx st0 H (mid with gas_obs := []).storage_trace` by
-    (irule gas_marked_exec_valid_prefix >>
-     qpat_assum `gas_marked_exec _ _ (ignore_bind _ _) _ _ _ _ _` (irule_at Any) >>
-     simp[vyperStorageTraceTheory.storage_trace_frame_ignore_bind,
+    (qpat_assum `gas_marked_exec _ _ (ignore_bind _ _) _ _ _ _ _`
+       (mp_tac o MATCH_MP (REWRITE_RULE [GSYM AND_IMP_INTRO]
+                          gas_marked_exec_valid_prefix)) >>
+     impl_tac >- simp[vyperStorageTraceTheory.storage_trace_frame_ignore_bind,
           vyperStorageTraceTheory.storage_trace_frame_finally,
           vyperStorageTraceTheory.storage_trace_frame_state_updates,
           vyperStorageTraceTheory.storage_trace_frame_pop_scope,
-          vyperStorageTraceTheory.evaluate_storage_trace_frame]) >>
+          vyperStorageTraceTheory.evaluate_storage_trace_frame] >>
+     disch_then irule >> gs[]) >>
   `valid_horizon cx st0 H es.storage_trace` by
-    (irule gas_marked_exec_valid_prefix >>
-     qpat_assum `gas_marked_exec _ _ (eval_stmt _ _) _ _ _ _ _` (irule_at Any) >>
-     simp[vyperStorageTraceTheory.evaluate_storage_trace_frame]) >>
+    (qpat_assum `gas_marked_exec _ _ (eval_stmt _ _) _ _ _ _ _`
+       (mp_tac o MATCH_MP (REWRITE_RULE [GSYM AND_IMP_INTRO]
+                          gas_marked_exec_valid_prefix)) >>
+     impl_tac >- simp[vyperStorageTraceTheory.evaluate_storage_trace_frame] >>
+     disch_then irule >> gs[]) >>
   qpat_x_assum `!H. valid_horizon _ _ H mid.storage_trace ==> _`
     (qspec_then `H` mp_tac) >> impl_tac >- gs[] >> strip_tac >>
   qpat_x_assum `!H. valid_horizon _ _ H es.storage_trace ==> _`
     (qspec_then `H` mp_tac) >> impl_tac >- simp[] >> strip_tac >>
   qpat_x_assum `!H. valid_horizon _ _ H _ ==> _` (qspec_then `H` mp_tac) >>
   impl_tac >- gs[] >> strip_tac >>
-  mp_tac (Q.INST [`mid` |-> `mid with gas_obs := []`, `v` |-> `BoolV b`,
-                  `ee` |-> `es_end with gas_obs := []`, `u` |-> `t'`]
-                 if_condition_stmt_post) >>
+  irule if_condition_stmt_post >>
+  qpat_assum `expr_post _ _ _ _ _ _ _ _ cond _ _ _ _ _` (irule_at Any) >>
+  qpat_assum `stmt_post _ _ _ _ _ _ _ entry _ _ _ _ _ _` (irule_at Any) >>
   simp[]
 QED
 Resume if_selected_outcome_prefix[exit]:
@@ -841,8 +852,8 @@ Theorem if_branch_post_pop_mem:
     stmt_lands lctx sb res t /\ ~t.vs_halted /\
     (res = INL () ==> ~block_is_terminated sb /\ cenv'' = cenv') /\
     cenv_top_ext cenv cenv'' ee.scopes /\
-    stmt_state_rel H ctx func cenv'' cx ee t /\\
-    storage_well_formed_on cx ee (FST H) /\\
+    stmt_state_rel H ctx func cenv'' cx ee t /\
+    storage_well_formed_on cx ee (FST H) /\
     (!x w. not_fresh_at sa x /\ lookup_var x s0 = SOME w ==>
            lookup_var x t = SOME w) /\
     (!aid b. FLOOKUP s0.vs_allocas aid = SOME b ==>
@@ -885,8 +896,8 @@ Theorem if_branch_outcome_cleanup_mem:
       stmt_lands lctx sb res t /\ ~t.vs_halted /\
       (res = INL () ==> ~block_is_terminated sb /\ cenv'' = cenv') /\
       cenv_top_ext cenv cenv'' ee.scopes /\
-      stmt_state_rel H ctx func cenv'' cx ee t /\\
-      storage_well_formed_on cx ee (FST H) /\\
+      stmt_state_rel H ctx func cenv'' cx ee t /\
+      storage_well_formed_on cx ee (FST H) /\
       (!x w. not_fresh_at sa x /\ lookup_var x s0 = SOME w ==>
              lookup_var x t = SOME w) /\
       (!aid b. FLOOKUP s0.vs_allocas aid = SOME b ==>
@@ -901,8 +912,8 @@ Theorem if_branch_outcome_cleanup_mem:
       stmt_lands lctx sb res t /\ ~t.vs_halted /\
       (res = INL () ==> ~block_is_terminated sb /\ cenv'' = cenv) /\
       cenv_top_ext cenv cenv'' ee.scopes /\
-      stmt_state_rel H ctx func cenv'' cx ee t /\\
-      storage_well_formed_on cx ee (FST H) /\\
+      stmt_state_rel H ctx func cenv'' cx ee t /\
+      storage_well_formed_on cx ee (FST H) /\
       (!x w. not_fresh_at sa x /\ lookup_var x s0 = SOME w ==>
              lookup_var x t = SOME w) /\
       (!aid b. FLOOKUP s0.vs_allocas aid = SOME b ==>
@@ -948,8 +959,8 @@ Theorem if_branch_post_to_exit_mem:
     stmt_lands lctx last res t /\ ~t.vs_halted /\
     (res = INL () ==> ~block_is_terminated last /\ cenv'' = cenv) /\
     cenv_top_ext cenv cenv'' ee.scopes /\
-    stmt_state_rel H ctx func cenv'' cx ee t /\\
-    storage_well_formed_on cx ee (FST H) /\\
+    stmt_state_rel H ctx func cenv'' cx ee t /\
+    storage_well_formed_on cx ee (FST H) /\
     (!x w. not_fresh_at sa x /\ lookup_var x s0 = SOME w ==>
            lookup_var x t = SOME w) /\
     (!aid b. FLOOKUP s0.vs_allocas aid = SOME b ==>
@@ -967,8 +978,8 @@ Theorem if_branch_post_to_exit_mem:
       stmt_lands lctx sb res u /\ ~u.vs_halted /\
       (res = INL () ==> ~block_is_terminated sb /\ cenv'' = cenv) /\
       cenv_top_ext cenv cenv'' ee.scopes /\
-      stmt_state_rel H ctx func cenv'' cx ee u /\\
-      storage_well_formed_on cx ee (FST H) /\\
+      stmt_state_rel H ctx func cenv'' cx ee u /\
+      storage_well_formed_on cx ee (FST H) /\
       (!x w. not_fresh_at sa x /\ lookup_var x s0 = SOME w ==>
              lookup_var x u = SOME w) /\
       (!aid b. FLOOKUP s0.vs_allocas aid = SOME b ==>
@@ -998,7 +1009,7 @@ Proof
          jump_to_def, lookup_var_def, allocaHistoryTheory.alloca_history_def] >>
       Cases_on `d` >> gvs[return_buf_frame_def] >>
       PairCases_on `x` >> gvs[return_buf_frame_def, lookup_var_def]) >>
-  pop_assum (fn th => REWRITE_TAC[th]) >>
+  pop_assum (fn th => REWRITE_TAC[th] >> assume_tac th) >>
   conj_tac >- metis_tac[fragGasPathMemTheory.gas_path_mem_rules] >>
   qexists_tac `cenv''` >> gvs[stmt_lands_def]
 QED
@@ -1009,8 +1020,8 @@ Theorem if_branch_outcome_to_exit_mem:
       stmt_lands lctx last res t /\ ~t.vs_halted /\
       (res = INL () ==> ~block_is_terminated last /\ cenv'' = cenv) /\
       cenv_top_ext cenv cenv'' ee.scopes /\
-      stmt_state_rel H ctx func cenv'' cx ee t /\\
-      storage_well_formed_on cx ee (FST H) /\\
+      stmt_state_rel H ctx func cenv'' cx ee t /\
+      storage_well_formed_on cx ee (FST H) /\
       (!x w. not_fresh_at sa x /\ lookup_var x s0 = SOME w ==>
              lookup_var x t = SOME w) /\
       (!aid b. FLOOKUP s0.vs_allocas aid = SOME b ==>
@@ -1027,8 +1038,8 @@ Theorem if_branch_outcome_to_exit_mem:
       stmt_lands lctx sb res t /\ ~t.vs_halted /\
       (res = INL () ==> ~block_is_terminated sb /\ cenv'' = cenv) /\
       cenv_top_ext cenv cenv'' ee.scopes /\
-      stmt_state_rel H ctx func cenv'' cx ee t /\\
-      storage_well_formed_on cx ee (FST H) /\\
+      stmt_state_rel H ctx func cenv'' cx ee t /\
+      storage_well_formed_on cx ee (FST H) /\
       (!x w. not_fresh_at sa x /\ lookup_var x s0 = SOME w ==>
              lookup_var x t = SOME w) /\
       (!aid b. FLOOKUP s0.vs_allocas aid = SOME b ==>
@@ -1042,19 +1053,22 @@ Proof
       qexists_tac `marks` >> disj2_tac >> disj1_tac >>
       Cases_on `?H. valid_horizon cx st0 H (ee with gas_obs := []).storage_trace`
       >- (pop_assum strip_assume_tac >>
-          qpat_assum `!H. valid_horizon _ _ H _ ==> _` drule >> disch_tac >>
-          drule_all (SRULE [] (Q.INST [`ee` |-> `ee with gas_obs := []`]
-            if_branch_post_to_exit_mem)) >> strip_tac >>
-          qexistsl_tac [`res`, `ee`, `OK u`] >> conj_tac
+          `gas_path_mem ctx func t 0
+             (OK (if res = INL () then jump_to xl t else t))` by
+            (qpat_assum `!H. valid_horizon _ _ H _ ==> _` drule >> strip_tac >>
+             drule_all (SRULE [PULL_EXISTS] if_branch_post_to_exit_mem) >> strip_tac >> gvs[]) >>
+          qexistsl_tac [`res`, `ee`,
+                        `OK (if res = INL () then jump_to xl t else t)`] >>
+          conj_tac
           >- (qpat_x_assum `gas_marked_exec _ _ _ _ _ _ _ _` mp_tac >>
               simp[gas_marked_exec_def, fragGasModeTheory.gas_marked_path_def] >>
               strip_tac >> simp[] >>
               drule_all fragGasPathMemTheory.gas_path_mem_then >> simp[]) >>
-          disj1_tac >> qexists_tac `u` >> simp[] >> rpt strip_tac >>
-          qpat_assum `!H. valid_horizon _ _ H _ ==> _` drule >> disch_tac >>
-          drule_all (SRULE [] (Q.INST [`ee` |-> `ee with gas_obs := []`]
-            if_branch_post_to_exit_mem)) >> strip_tac >>
-          gvs[] >> metis_tac[]) >>
+          disj1_tac >> qexists_tac `if res = INL () then jump_to xl t else t` >>
+          simp[] >> qx_gen_tac `HH` >> strip_tac >>
+          qpat_x_assum `!H. valid_horizon _ _ H _ ==> _`
+            (qspec_then `HH` mp_tac) >> impl_tac >- gs[] >> strip_tac >>
+          drule_all (SRULE [PULL_EXISTS] if_branch_post_to_exit_mem) >> strip_tac >> gvs[] >> metis_tac[]) >>
       qexistsl_tac [`res`, `ee`, `r`] >> gs[])
   >- (qexists_tac `marks` >> disj2_tac >> disj1_tac >>
       qexistsl_tac [`res`, `es_end`, `r`] >> simp[]) >>
@@ -1068,8 +1082,8 @@ Theorem if_branch_outcome_mem:
       stmt_lands lctx last res t /\ ~t.vs_halted /\
       (res = INL () ==> ~block_is_terminated last /\ cenv'' = cenv') /\
       cenv_top_ext cenv cenv'' ee.scopes /\
-      stmt_state_rel H ctx func cenv'' cx ee t /\\
-      storage_well_formed_on cx ee (FST H) /\\
+      stmt_state_rel H ctx func cenv'' cx ee t /\
+      storage_well_formed_on cx ee (FST H) /\
       (!x w. not_fresh_at sa x /\ lookup_var x s0 = SOME w ==>
              lookup_var x t = SOME w) /\
       (!aid b. FLOOKUP s0.vs_allocas aid = SOME b ==>
@@ -1089,8 +1103,8 @@ Theorem if_branch_outcome_mem:
       stmt_lands lctx sb res t /\ ~t.vs_halted /\
       (res = INL () ==> ~block_is_terminated sb /\ cenv'' = cenv) /\
       cenv_top_ext cenv cenv'' ee.scopes /\
-      stmt_state_rel H ctx func cenv'' cx ee t /\\
-      storage_well_formed_on cx ee (FST H) /\\
+      stmt_state_rel H ctx func cenv'' cx ee t /\
+      storage_well_formed_on cx ee (FST H) /\
       (!x w. not_fresh_at sa x /\ lookup_var x s0 = SOME w ==>
              lookup_var x t = SOME w) /\
       (!aid b. FLOOKUP s0.vs_allocas aid = SOME b ==>
@@ -1112,8 +1126,8 @@ Theorem if_condition_stmt_post_mem:
     stmt_lands lctx sb res u /\ ~u.vs_halted /\
     (res = INL () ==> ~block_is_terminated sb /\ cenv'' = cenv) /\
     cenv_top_ext cenv cenv'' ee.scopes /\
-    stmt_state_rel H ctx func cenv'' cx ee u /\\
-    storage_well_formed_on cx ee (FST H) /\\
+    stmt_state_rel H ctx func cenv'' cx ee u /\
+    storage_well_formed_on cx ee (FST H) /\
     (!x w. not_fresh_at entry x /\ lookup_var x (jump_to label t) = SOME w ==>
            lookup_var x u = SOME w) /\
     (!aid b. FLOOKUP (jump_to label t).vs_allocas aid = SOME b ==>
@@ -1124,8 +1138,8 @@ Theorem if_condition_stmt_post_mem:
     stmt_lands lctx sb res u /\ ~u.vs_halted /\
     (res = INL () ==> ~block_is_terminated sb /\ cenv'' = cenv) /\
     cenv_top_ext cenv cenv'' ee.scopes /\
-    stmt_state_rel H ctx func cenv'' cx ee u /\\
-    storage_well_formed_on cx ee (FST H) /\\
+    stmt_state_rel H ctx func cenv'' cx ee u /\
+    storage_well_formed_on cx ee (FST H) /\
     (!x w. not_fresh_at sa x /\ lookup_var x s0 = SOME w ==>
            lookup_var x u = SOME w) /\
     (!aid b. FLOOKUP s0.vs_allocas aid = SOME b ==>
@@ -1154,8 +1168,8 @@ Theorem if_selected_outcome_prefix_mem:
       stmt_lands lctx sb res u /\ ~u.vs_halted /\
       (res = INL () ==> ~block_is_terminated sb /\ cenv'' = cenv) /\
       cenv_top_ext cenv cenv'' ee.scopes /\
-      stmt_state_rel H ctx func cenv'' cx ee u /\\
-      storage_well_formed_on cx ee (FST H) /\\
+      stmt_state_rel H ctx func cenv'' cx ee u /\
+      storage_well_formed_on cx ee (FST H) /\
       (!x w. not_fresh_at entry x /\ lookup_var x (jump_to label t) = SOME w ==>
              lookup_var x u = SOME w) /\
       (!aid b. FLOOKUP (jump_to label t).vs_allocas aid = SOME b ==>
@@ -1168,8 +1182,8 @@ Theorem if_selected_outcome_prefix_mem:
       stmt_lands lctx sb res u /\ ~u.vs_halted /\
       (res = INL () ==> ~block_is_terminated sb /\ cenv'' = cenv) /\
       cenv_top_ext cenv cenv'' ee.scopes /\
-      stmt_state_rel H ctx func cenv'' cx ee u /\\
-      storage_well_formed_on cx ee (FST H) /\\
+      stmt_state_rel H ctx func cenv'' cx ee u /\
+      storage_well_formed_on cx ee (FST H) /\
       (!x w. not_fresh_at sa x /\ lookup_var x s0 = SOME w ==>
              lookup_var x u = SOME w) /\
       (!aid b. FLOOKUP s0.vs_allocas aid = SOME b ==>
@@ -1196,9 +1210,9 @@ QED
 Resume if_selected_outcome_prefix_mem[bad]:
   qexists_tac `marks ++ marks'` >> disj1_tac >>
   rewrite_tac[eval_stmt_if_forced] >>
-  irule (Q.INST [`v` |-> `BoolV b`, `t` |-> `jump_to label t`]
-           gasStorageTheory.gas_bad_storage_at_bind_right) >>
-  first_assum (irule_at (Pos hd)) >>
+  irule gasStorageTheory.gas_bad_storage_at_bind_right >>
+  qpat_assum `gas_marked_exec _ _ _ _ _ _ _ (OK (jump_to _ _))`
+    (irule_at Any) >>
   Cases_on `b` >> fs[]
 QED
 Resume if_selected_outcome_prefix_mem[normal]:
@@ -1211,13 +1225,15 @@ Resume if_selected_outcome_prefix_mem[normal]:
   disj1_tac >> qexists_tac `t'` >> conj_tac >- simp[] >>
   rpt strip_tac >>
   `valid_horizon cx st0 H (mid with gas_obs := []).storage_trace` by
-    (irule gas_marked_exec_valid_prefix >>
-     qpat_assum `gas_marked_exec _ _ (ignore_bind _ _) _ _ _ _ _` (irule_at Any) >>
-     simp[vyperStorageTraceTheory.storage_trace_frame_ignore_bind,
+    (qpat_assum `gas_marked_exec _ _ (ignore_bind _ _) _ _ _ _ _`
+       (mp_tac o MATCH_MP (REWRITE_RULE [GSYM AND_IMP_INTRO]
+                          gas_marked_exec_valid_prefix)) >>
+     impl_tac >- simp[vyperStorageTraceTheory.storage_trace_frame_ignore_bind,
           vyperStorageTraceTheory.storage_trace_frame_finally,
           vyperStorageTraceTheory.storage_trace_frame_state_updates,
           vyperStorageTraceTheory.storage_trace_frame_pop_scope,
-          vyperStorageTraceTheory.evaluate_storage_trace_frame]) >>
+          vyperStorageTraceTheory.evaluate_storage_trace_frame] >>
+     disch_then irule >> gs[]) >>
   qpat_x_assum `!H. valid_horizon _ _ H mid.storage_trace ==> _`
     (qspec_then `H` mp_tac) >> impl_tac >- gs[] >> strip_tac >>
   qpat_x_assum `!H. valid_horizon _ _ H _ ==> _` (qspec_then `H` mp_tac) >>

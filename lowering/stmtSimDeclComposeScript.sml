@@ -373,11 +373,13 @@ Proof
           vs_inst_idx := SUC s.vs_inst_idx)` by
     (qx_gen_tac `HH` >> strip_tac >>
      `valid_horizon cx st0 HH es.storage_trace` by
-       (irule gas_marked_exec_valid_prefix >>
-        qpat_assum `gas_marked_exec _ _ (bind _ _) _ _ _ _ _` (irule_at Any) >>
-        simp[vyperStorageTraceTheory.storage_trace_frame_bind_all,
+       (qpat_assum `gas_marked_exec _ _ (bind _ _) _ _ _ _ _`
+          (mp_tac o MATCH_MP (REWRITE_RULE [GSYM AND_IMP_INTRO]
+                             gas_marked_exec_valid_prefix)) >>
+        impl_tac >- simp[vyperStorageTraceTheory.storage_trace_frame_bind_all,
              vyperStorageTraceTheory.storage_trace_frame_read_result,
-             vyperStorageTraceTheory.evaluate_storage_trace_frame]) >>
+             vyperStorageTraceTheory.evaluate_storage_trace_frame] >>
+        disch_then irule >> gs[]) >>
      qpat_x_assum `!H. valid_horizon _ _ H es.storage_trace ==> _`
        (qspec_then `HH` mp_tac) >> impl_tac >- simp[] >> strip_tac >>
      qpat_x_assum `!H. valid_horizon _ _ H ee.storage_trace ==> _`
@@ -389,7 +391,8 @@ Proof
     `mstore (w2n w) (typed_val_to_w256 etv v) s with
        vs_inst_idx := SUC s.vs_inst_idx`] >>
   conj_tac >- metis_tac[] >>
-  rpt strip_tac >> first_x_assum irule >> gs[]
+  qx_gen_tac `HH` >> strip_tac >>
+  first_x_assum (qspec_then `HH` mp_tac) >> impl_tac >- gs[] >> simp[]
 QED
 
 Theorem stmt_post_end_gas_obs:
@@ -447,7 +450,14 @@ Proof
   `!H. valid_horizon cx st0 H ee.storage_trace ==>
      expr_post H ctx func c cx e es sa sb salloc (ee with gas_obs := []) v op t` by
     metis_tac[] >>
-  drule_all annassign_normal_continuation >> strip_tac >>
+  `?H'. valid_horizon cx st0 H' ee.storage_trace` by
+    (qexists_tac `H` >> first_assum ACCEPT_TAC) >>
+  qspecl_then [`ctx`, `func`, `old`, `c`, `cx`, `st0`, `lctx`, `id`, `typ`,
+               `tyv`, `e`, `es`, `etv`, `sa0`, `st`, `sa`, `sb`, `sf`,
+               `salloc`, `marks`, `v`, `ee`, `t`, `op`, `p`, `sz`, `w`,
+               `inst`] mp_tac
+    (INST_TYPE [alpha |-> ``:256``] annassign_normal_continuation) >>
+  impl_tac >- (simp[] >> metis_tac[]) >> strip_tac >>
   qexistsl_tac [`ff`, `u`] >> simp[stmt_post_end_gas_obs]
 QED
 
@@ -506,12 +516,15 @@ Proof
       qexistsl_tac [`res`, `es_end`, `r`] >> simp[] >>
       disj1_tac >> rpt strip_tac >>
       `valid_horizon cx st0 H es.storage_trace` by
-        (irule gas_marked_exec_valid_prefix >>
-         qpat_assum `gas_marked_exec _ _ _ _ _ _ _ _` (irule_at Any) >>
-         gs[]) >>
+        (qpat_assum `gas_marked_exec _ _ _ _ _ _ _ _`
+           (mp_tac o MATCH_MP (REWRITE_RULE [GSYM AND_IMP_INTRO]
+                              gas_marked_exec_valid_prefix)) >>
+         impl_tac >- simp[vyperStorageTraceTheory.evaluate_storage_trace_frame] >>
+         disch_then irule >> gs[]) >>
       `stmt_state_rel H ctx func old cx es s0` by metis_tac[] >>
       `alloca_frame old es sa0 s0 old es salloc` by
-        (irule alloca_frame_of_mem_frame >> simp[] >> metis_tac[]) >>
+        (irule (INST_TYPE [alpha |-> ``:256``] alloca_frame_of_mem_frame) >>
+         simp[] >> metis_tac[]) >>
       irule (Q.INST [`sa` |-> `sa0`, `es1` |-> `es`, `s1` |-> `salloc`]
                stmt_post_entry_frame) >>
       simp[] >> metis_tac[]) >>
