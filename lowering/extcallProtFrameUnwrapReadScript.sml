@@ -6,7 +6,7 @@ Ancestors
   exprLoweringProps loweringPosts compileEnv venomState venomExecSemantics
   valueEncodingProps vyperInterpreter vyperState exprLowering freshWrites
   fragGasMode fragGasPath gasSummary emitHelperProps
-  valueCopyBytes valueEncoding exprSimMemorySource
+  valueCopyBytes valueEncoding exprSimMemorySource loweringStateRelDefs valueEncodingDefs
 
 Theorem extcall_readonly_word_finalize:
   post_value_type cenv e = expr_type e /\

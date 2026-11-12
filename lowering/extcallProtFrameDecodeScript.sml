@@ -3,7 +3,7 @@ Theory extcallProtFrameDecode
 Ancestors
   abiValidAllocatedContract abiMalformedSiteFrame abiMalformedRecursiveInterface
   extcallProtFramePath abiEncoderWindowContract compileEnv venomMemDefs
-  venomState finite_map pred_set arithmetic
+  venomState finite_map pred_set arithmetic loweringStateRelDefs valueEncodingDefs
 
 Theorem abi_valid_allocated_frame_protected:
   abi_valid_allocated_frame sites d n s t /\

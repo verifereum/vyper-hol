@@ -6,7 +6,7 @@ Ancestors
   loweringPosts exprLoweringProps compileEnv freshWrites
   gasSummary fragGasMode fragGasPath
   venomState venomExecSemantics emitHelperProps emitHelper
-  venomInst context valueEncodingProps
+  venomInst context valueEncodingProps loweringStateRelDefs valueEncodingDefs
 
 Theorem extcall_allocated_copy_joint_payload:
   compile_alloc_buffer sz sn = (buf,mid) /\

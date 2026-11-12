@@ -1,7 +1,7 @@
 Theory extcallProtFramePrefixJoint
 Ancestors
   extcallProtFramePrefixCompose extcallProtFrameTupleFold extcallProtFrameTupleCell
-  extcallProtFrameJointUnwrap exprExtRequestTupleFold compileEnv
+  extcallProtFrameJointUnwrap exprExtRequestTupleFold compileEnv loweringStateRelDefs valueEncodingDefs
 
 Theorem extcall_protframe_tuple_fold_joint:
   !cells off sm sb s.

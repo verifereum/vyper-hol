@@ -2,7 +2,7 @@
 Theory extcallProtFramePrefix
 Ancestors
   extcallProtFramePath abiEncoderWindowContract abiEncoderRegisteredEffect compileEnv
-  finite_map pred_set list
+  finite_map pred_set list loweringStateRelDefs valueEncodingDefs
 
 Theorem extcall_protframe_growth_geometry:
   window_alloca_growth s t /\

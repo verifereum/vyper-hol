@@ -4,7 +4,7 @@ Ancestors
   exprExtRequestTupleFold extcallProtFramePath exprExtRequestHistory
   exprExtRequestHistoryCompose exprLoweringProps exprLowering compileEnv
   vyperInterpreter vyperState valueEncodingProps valueTypingMemoryProps
-  gasSummary fragGasMode fragExec
+  gasSummary fragGasMode fragExec loweringStateRelDefs valueEncodingDefs
 
 Theorem extcall_tuple_store_fold_protected:
   (!e r vv ty tv v off sm sb s.
@@ -103,7 +103,7 @@ Proof
   disch_then (mk_asm "single") >> Induct
   >- (simp[compile_extcall_store_values_def, comp_return_def] >>
       rpt strip_tac >> qexists_tac `s` >>
-      simp[valueEncodingTheory.val_in_memory_def, gas_marked_path_def] >>
+      simp[valueEncodingDefsTheory.val_in_memory_def, gas_marked_path_def] >>
       metis_tac[cj 1 fragGasPathTheory.gas_path_rules]) >>
   qx_gen_tac `cell` >> PairCases_on `cell` >> rpt gen_tac >>
   simp[compile_extcall_store_values_def, comp_bind_def, comp_ignore_bind_def] >>
@@ -181,7 +181,7 @@ Resume extcall_tuple_store_fold_protected[finish]:
   qexists_tac `q` >>
   conj_tac
   >- (drule_all gas_marked_path_then >> simp[]) >>
-  simp[valueEncodingTheory.val_in_memory_def] >>
+  simp[valueEncodingDefsTheory.val_in_memory_def] >>
   conj_tac >- metis_tac[arithmeticTheory.ADD_ASSOC, arithmeticTheory.ADD_COMM] >>
   reverse conj_tac >- metis_tac[] >>
   suspend "windows"

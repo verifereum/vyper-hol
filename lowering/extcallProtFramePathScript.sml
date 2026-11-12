@@ -3,7 +3,7 @@ Theory extcallProtFramePath
 Ancestors
   abiEncoderWindowContract allocaFrontierBound fragGasMode fragGasPath
   fragExec venomExecSemantics venomExecProofs venomMemProofs venomState
-  finite_map list arithmetic
+  finite_map list arithmetic loweringStateRelDefs valueEncodingDefs
 
 Theorem normal_step_allocation_frame[local]:
   step_inst fuel ctx inst s = OK t ==>

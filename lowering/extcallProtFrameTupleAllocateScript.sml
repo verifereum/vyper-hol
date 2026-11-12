@@ -5,7 +5,7 @@ Ancestors
   exprExtRequestHistory extcallProtFramePrefix extcallProtFramePath
   exprLoweringProps exprLowering compileEnv vyperInterpreter vyperState
   valueEncodingProps valueTypingMemoryProps gasSummary fragGasMode fragExec
-  loweringHalt
+  loweringHalt loweringStateRelDefs valueEncodingDefs
 
 Theorem extcall_protframe_allocate_tuple_endpoint:
   (!cells off sm sb t eb cb tb buf w live tuple_base capacity.

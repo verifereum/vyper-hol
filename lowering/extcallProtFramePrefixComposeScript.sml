@@ -8,7 +8,7 @@ Ancestors
   compileEnv emitHelperProps exprLoweringProps exprSimAlloc venomInst venomExecSemantics venomState
   valueEncoding valueEncodingProofs valueEncodingProps exprSafeOperand
   emitHelper exprExtRequestHistory exprExtRequestReconstruct loweringHalt
-  fragExec fragGasMode finite_map list arithmetic
+  fragExec fragGasMode finite_map list arithmetic loweringStateRelDefs valueEncodingDefs
 
 Theorem extcall_protframe_alloc_selector_endpoint:
   compile_alloc_buffer sz sa = (buf,sm) /\

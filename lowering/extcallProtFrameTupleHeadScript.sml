@@ -9,7 +9,7 @@ Ancestors
   exprExtRequestTupleHead exprExtRequestHistoryCompose exprExtRequestJointUnwrap
   exprSafeOperand exprLoweringProps emitHelperProps exprLowering compileEnv
   context emitHelper venomState venomInst loweringPosts venomInstProofs
-  venomExecSemantics freshWrites gasSummaryCompose fragGasMode
+  venomExecSemantics freshWrites gasSummaryCompose fragGasMode loweringStateRelDefs valueEncodingDefs
 
 Theorem extcall_tuple_head_read_protected:
   emit_op ADD [buf; Lit (n2w off)] sm = (dst,sn) /\

@@ -8,7 +8,7 @@ Ancestors
   exprExtRequestStrongCapture exprExtRequestHistory exprExtRequestRetained
   exprLoweringProps exprSimProps exprSimDefs exprSimHyps loweringPosts compileEnv gasSummary
   gasOutcome stmtSimDeclGas stmtSimForRounds loweringHalt pair fragExec exprOperandVar exprSafeOperand context typedMemoryCopy exprSimAggregateSource
-  fragGasPath fragGasMode exprLowering vyperInterpreter vyperState vyperTypeSystem allocLimits
+  fragGasPath fragGasMode exprLowering vyperInterpreter vyperState vyperTypeSystem allocLimits loweringStateRelDefs valueEncodingDefs
 Libs
   monadsyntax
 

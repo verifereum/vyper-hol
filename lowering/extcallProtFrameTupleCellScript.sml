@@ -4,7 +4,7 @@ Ancestors
   exprExtRequestTupleFold exprExtRequestStrongCapture exprExtRequestHistoryCompose
   exprExtRequestHistory exprLoweringProps exprLowering compileEnv
   vyperInterpreter vyperState valueEncodingProps valueTypingMemoryProps
-  gasSummary fragGasMode fragExec abiDecodeStaticProps
+  gasSummary fragGasMode fragExec abiDecodeStaticProps loweringStateRelDefs valueEncodingDefs
 
 Theorem extcall_tuple_cell_store_protected:
   extrequest_tuple_cell ctx func cenv cx eb cb tb ee (e,r,vv,ty,tv,v) /\
