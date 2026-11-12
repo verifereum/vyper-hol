@@ -58,7 +58,8 @@ Theorem codegen_entry_asm_bounded_state:
       codegen_asm_entry_rel cp prog vs as /\
       terminates (run_context fuel unit.cu_context vs) /\
       (!fn inst s. Inv unit.cu_context fn inst s /\ ~in_revert_forward fn s ==>
-         EVERY (\(off,len). len = 0 \/ off + len <= M) (inst_mem_ranges inst s))
+         EVERY (\(off,len). len = 0 \/ off + len <= M) (inst_mem_ranges inst s)) /\
+      (!fn inst s. Inv unit.cu_context fn inst s ==> inst_create_size_ok inst s)
       ==>
       asm_run_bounded (SND (compute_label_offsets prog)) (build_offset_to_pc prog)
         prog H N as
@@ -79,7 +80,8 @@ Theorem codegen_entry_asm_bounded:
       initial_ctx_rel cp prog unit.cu_context vs es /\
       terminates (run_context fuel unit.cu_context vs) /\
       (!fn inst s. Inv unit.cu_context fn inst s /\ ~in_revert_forward fn s ==>
-         EVERY (\(off,len). len = 0 \/ off + len <= M) (inst_mem_ranges inst s))
+         EVERY (\(off,len). len = 0 \/ off + len <= M) (inst_mem_ranges inst s)) /\
+      (!fn inst s. Inv unit.cu_context fn inst s ==> inst_create_size_ok inst s)
       ==>
       asm_run_bounded (SND (compute_label_offsets prog)) (build_offset_to_pc prog)
         prog H N (entry_asm_state vs es)
@@ -91,6 +93,19 @@ Proof
   drule initial_ctx_codegen_asm_entry_rel >> strip_tac >>
   first_x_assum irule >> qexistsl_tac [`Inv`, `vs`] >>
   rpt conj_tac >> first_assum ACCEPT_TAC
+QED
+
+(* Two memory invariants of a run hold together, with the conjunction of
+   their reachability witnesses. *)
+Theorem mem_inv_conj:
+  mem_inv M1 ctx vs /\ mem_inv M2 ctx vs ==>
+  mem_inv (\c f i s. M1 c f i s /\ M2 c f i s) ctx vs
+Proof
+  simp[mem_inv_def] >>
+  disch_then (CONJUNCTS_THEN2 (qx_choose_then `I1` strip_assume_tac)
+                               (qx_choose_then `I2` strip_assume_tac)) >>
+  qexists_tac `\c f i s. I1 c f i s /\ I2 c f i s` >>
+  simp[codegen_reachability_package_conj]
 QED
 
 (* The bound from the Venom run's resource bound: venom_run_bounded's
@@ -106,7 +121,8 @@ Theorem codegen_entry_asm_bounded_run:
       codegen_context_obligations Inv unit.cu_context cp /\
       codegen_reachability_package Inv unit.cu_context vs /\
       codegen_asm_entry_rel cp prog vs as /\
-      venom_run_bounded fuel M unit.cu_context vs
+      venom_run_bounded fuel M unit.cu_context vs /\
+      mem_inv (\ctx fn inst s. inst_create_size_ok inst s) unit.cu_context vs
       ==>
       asm_run_bounded (SND (compute_label_offsets prog)) (build_offset_to_pc prog)
         prog H N as
@@ -115,8 +131,13 @@ Proof
   drule_all codegen_entry_asm_bounded_state >>
   disch_then (qspecl_then [`fuel`, `M`] strip_assume_tac) >>
   qexistsl_tac [`N`, `H`] >> rpt gen_tac >> strip_tac >>
-  gvs[venom_run_bounded_def, mem_inv_def] >>
-  rename1 `codegen_reachability_package MemInv unit.cu_context vs` >>
+  fs[venom_run_bounded_def] >>
+  qpat_x_assum `mem_inv (\ctx fn inst s. in_revert_forward fn s \/ _) _ _`
+    (fn th1 =>
+     qpat_x_assum `mem_inv (\ctx fn inst s. inst_create_size_ok inst s) _ _`
+       (fn th2 => mp_tac (MATCH_MP mem_inv_conj (CONJ th1 th2)))) >>
+  disch_then (qx_choose_then `MemInv` strip_assume_tac o
+              REWRITE_RULE [mem_inv_def]) >>
   qpat_x_assum `!Inv vs as. _` (qspecl_then
     [`\c f i s. Inv c f i s /\ MemInv c f i s`, `vs`, `as`] mp_tac) >>
   simp[] >> disch_then irule >>

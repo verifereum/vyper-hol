@@ -196,6 +196,8 @@ Theorem asm_noncall_cheap_gas_conditional:
     50000 + 8 * H + memory_cost H <= frame_gas_left es /\
     EL a.as_pc prog <> AsmOp "CALL" /\
     EL a.as_pc prog <> AsmOp "STATICCALL" /\
+    ~MEM (EL a.as_pc prog) [AsmOp "DELEGATECALL"; AsmOp "CREATE";
+      AsmOp "CREATE2"; AsmOp "SELFDESTRUCT"] /\
     ~(?name. EL a.as_pc prog = AsmOp name /\
        MEM name ["SLOAD";"SSTORE";"TLOAD";"TSTORE";"MLOAD";"MSTORE";
          "MSTORE8";"SHA3";"RETURN";"REVERT";"CALLDATACOPY";"CODECOPY";
@@ -302,6 +304,8 @@ Theorem asm_noncall_cheap_gas:
     50000 + 8 * H + memory_cost H <= frame_gas_left es /\
     EL a.as_pc prog <> AsmOp "CALL" /\
     EL a.as_pc prog <> AsmOp "STATICCALL" /\
+    ~MEM (EL a.as_pc prog) [AsmOp "DELEGATECALL"; AsmOp "CREATE";
+      AsmOp "CREATE2"; AsmOp "SELFDESTRUCT"] /\
     ~(?name. EL a.as_pc prog = AsmOp name /\
        MEM name ["SLOAD";"SSTORE";"TLOAD";"TSTORE";"MLOAD";"MSTORE";
          "MSTORE8";"SHA3";"RETURN";"REVERT";"CALLDATACOPY";"CODECOPY";

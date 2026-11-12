@@ -40,7 +40,8 @@ Theorem codegen_opt_run_bounded[local]:
       vs.vs_code = assemble prog ++ vs.vs_data_section /\
       as.as_code = vs.vs_code /\
       codegen_asm_entry_rel cplan prog vs as /\
-      venom_run_bounded fuel M unit.cu_context vs
+      venom_run_bounded fuel M unit.cu_context vs /\
+      mem_inv (\ctx fn inst s. inst_create_size_ok inst s) unit.cu_context vs
       ==>
       asm_frame_prog_ok prog' /\
       asm_run_bounded (SND (compute_label_offsets prog'))
@@ -116,6 +117,7 @@ Theorem codegen_gas_surplus_asm_opt:
            as_code := assemble prog' ++ vs.vs_data_section)
         (add_frame_gas g' es) /\
       venom_run_bounded fuel M unit.cu_context vs /\
+      mem_inv (\ctx fn inst s. inst_create_size_ok inst s) unit.cu_context vs /\
       frame_inst_at (add_frame_gas g' es) s op /\
       (!t. frame_inst_at (add_frame_gas g' es) t ReturnDataCopy ==>
            ~RTC (\a b. LENGTH a.contexts >= LENGTH s.contexts /\
@@ -163,6 +165,7 @@ Theorem codegen_no_returndatacopy_asm_opt:
       (entry_asm_state vs es with
          as_code := assemble prog' ++ vs.vs_data_section) es /\
     venom_run_bounded fuel M unit.cu_context vs /\
+    mem_inv (\ctx fn inst s. inst_create_size_ok inst s) unit.cu_context vs /\
     ~MEM (AsmOp "RETURNDATACOPY") prog
     ==>
     ~frame_inst_at es t ReturnDataCopy

@@ -105,7 +105,9 @@ Theorem asm_frame_gas_step_noncall:
     asm_inst_gas_ok H (EL a.as_pc prog) a.as_stack /\
     frame_op_gas H <= frame_gas_left es /\
     EL a.as_pc prog <> AsmOp "CALL" /\
-    EL a.as_pc prog <> AsmOp "STATICCALL" ==>
+    EL a.as_pc prog <> AsmOp "STATICCALL" /\
+    ~MEM (EL a.as_pc prog) [AsmOp "DELEGATECALL"; AsmOp "CREATE";
+      AsmOp "CREATE2"; AsmOp "SELFDESTRUCT"] ==>
     (!op r s'.
        next_opcode (FST (HD es.contexts)) = SOME op /\
        step_inst op es = (r,s') /\
@@ -164,11 +166,46 @@ QED
 
 Finalise asm_frame_gas_step_noncall
 
+(* The instructions unit_shape_ok admits beyond CALL and STATICCALL: like
+   asm_frame_gas_step below.  DELEGATECALL, CREATE and CREATE2 run a child
+   frame, which leaves our frame at least a 64th of what is left after
+   their cost; SELFDESTRUCT ends the frame.  CREATE and CREATE2 charge the
+   forwarded gas before a same-depth abort on an existing account
+   (abort_create_exists), so their own step leaves only the 64th too.  Each costs less than
+   frame_op_gas H: CREATE2 at most 32000 + 8 words per initcode word
+   (asm_inst_gas_ok bounds the initcode by 2 * max_code_size) plus memory
+   below H, SELFDESTRUCT at most 5000 + 2600 + 25000. *)
+Theorem asm_frame_gas_step_create:
+  !prog data es0 a es H.
+    asm_frame_prog_ok prog /\ asm_frame_rel prog data es0 a es /\
+    a.as_pc < LENGTH prog /\ ~is_data_inst (EL a.as_pc prog) /\
+    asm_inst_gas_ok H (EL a.as_pc prog) a.as_stack /\
+    frame_op_gas H <= frame_gas_left es /\
+    MEM (EL a.as_pc prog) [AsmOp "DELEGATECALL"; AsmOp "CREATE";
+      AsmOp "CREATE2"; AsmOp "SELFDESTRUCT"] ==>
+    (!op r s'.
+       next_opcode (FST (HD es.contexts)) = SOME op /\
+       step_inst op es = (r, s') /\
+       LENGTH s'.contexts = LENGTH es.contexts ==>
+       r <> INR (SOME OutOfGas) /\
+       if EL a.as_pc prog = AsmOp "CREATE" \/ EL a.as_pc prog = AsmOp "CREATE2"
+       then (frame_gas_left es - frame_op_gas H) DIV 64 <= frame_gas_left s'
+       else frame_gas_left es <= frame_gas_left s' + frame_op_gas H) /\
+    (!es1. frame_next es es1 ==>
+       if EL a.as_pc prog = AsmOp "SELFDESTRUCT"
+       then frame_gas_left es <= frame_gas_left es1 + frame_op_gas H
+       else (frame_gas_left es - frame_op_gas H) DIV 64 <= frame_gas_left es1)
+Proof
+  cheat
+QED
+
 (* The frame's step at es, an instruction of prog that is
    asm_inst_gas_ok H and not RETURNDATACOPY, with frame_op_gas H gas left:
    step_inst doesn't run out of gas at our depth and uses at most
-   frame_op_gas H there, and at the frame's next state a CALL or
-   STATICCALL leaves at least a 64th of what is left after that. *)
+   frame_op_gas H there (a CREATE or CREATE2 leaves at least a 64th of what
+   is left after that), and at the frame's next state an instruction that
+   runs a child frame (CALL, STATICCALL, DELEGATECALL, CREATE, CREATE2)
+   leaves at least a 64th of what is left after that. *)
 Theorem asm_frame_gas_step:
   !prog data es0 a es H.
     asm_frame_prog_ok prog /\ asm_frame_rel prog data es0 a es /\
@@ -181,18 +218,23 @@ Theorem asm_frame_gas_step:
        step_inst op es = (r, s') /\
        LENGTH s'.contexts = LENGTH es.contexts ==>
        r <> INR (SOME OutOfGas) /\
-       frame_gas_left es <= frame_gas_left s' + frame_op_gas H) /\
+       if EL a.as_pc prog = AsmOp "CREATE" \/ EL a.as_pc prog = AsmOp "CREATE2"
+       then (frame_gas_left es - frame_op_gas H) DIV 64 <= frame_gas_left s'
+       else frame_gas_left es <= frame_gas_left s' + frame_op_gas H) /\
     (!es1. frame_next es es1 ==>
-       if EL a.as_pc prog = AsmOp "CALL" \/
-          EL a.as_pc prog = AsmOp "STATICCALL"
+       if MEM (EL a.as_pc prog) [AsmOp "CALL"; AsmOp "STATICCALL";
+            AsmOp "DELEGATECALL"; AsmOp "CREATE"; AsmOp "CREATE2"]
        then (frame_gas_left es - frame_op_gas H) DIV 64 <= frame_gas_left es1
        else frame_gas_left es <= frame_gas_left es1 + frame_op_gas H)
 Proof
   rpt gen_tac >> strip_tac >>
   Cases_on `EL a.as_pc prog = AsmOp "CALL" \/
             EL a.as_pc prog = AsmOp "STATICCALL"`
-  >- (drule_all asm_frame_gas_step_call >> simp[]) >>
+  >- (drule_all asm_frame_gas_step_call >> gvs[]) >>
+  Cases_on `MEM (EL a.as_pc prog) [AsmOp "DELEGATECALL"; AsmOp "CREATE";
+              AsmOp "CREATE2"; AsmOp "SELFDESTRUCT"]`
+  >- (drule_all asm_frame_gas_step_create >> gvs[]) >>
   `EL a.as_pc prog <> AsmOp "CALL" /\
    EL a.as_pc prog <> AsmOp "STATICCALL"` by gvs[] >>
-  drule_all asm_frame_gas_step_noncall >> simp[]
+  drule_all asm_frame_gas_step_noncall >> gvs[]
 QED

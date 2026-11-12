@@ -331,6 +331,7 @@ Theorem codegen_gas_surplus:
       codegen_reachability_package Inv unit.cu_context vs /\
       initial_ctx_rel cp prog unit.cu_context vs (add_frame_gas g' es) /\
       venom_run_bounded fuel M unit.cu_context vs /\
+      mem_inv (\ctx fn inst s. inst_create_size_ok inst s) unit.cu_context vs /\
       frame_inst_at (add_frame_gas g' es) s op /\
       (!t. frame_inst_at (add_frame_gas g' es) t ReturnDataCopy ==>
            ~RTC (\a b. LENGTH a.contexts >= LENGTH s.contexts /\
@@ -373,6 +374,7 @@ Theorem codegen_no_returndatacopy:
     codegen_reachability_package Inv unit.cu_context vs /\
     initial_ctx_rel cp prog unit.cu_context vs es /\
     venom_run_bounded fuel M unit.cu_context vs /\
+    mem_inv (\ctx fn inst s. inst_create_size_ok inst s) unit.cu_context vs /\
     ~MEM (AsmOp "RETURNDATACOPY") prog
     ==>
     ~frame_inst_at es t ReturnDataCopy

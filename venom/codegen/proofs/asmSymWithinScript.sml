@@ -167,7 +167,7 @@ Proof
   Cases_on `MEM name ["MSTORE8"; "SHA3"; "RETURN"; "REVERT"; "LOG0"; "LOG1";
                       "LOG2"; "LOG3"; "LOG4"; "CALLDATACOPY";
                       "RETURNDATACOPY"; "EXTCODECOPY"; "MCOPY"; "CALL";
-                      "STATICCALL"]`
+                      "STATICCALL"; "DELEGATECALL"; "CREATE"; "CREATE2"]`
   >- (`name ≠ "POP" ∧ name ≠ "JUMP" ∧ name ≠ "JUMPI" ∧ name ≠ "ADD" ∧
        name ≠ "CODESIZE" ∧ ALOOKUP dup_table name = NONE ∧
        ALOOKUP swap_table name = NONE` by (gvs[] >> EVAL_TAC) >>
@@ -175,6 +175,20 @@ Proof
         by simp[sym_step_op_def] >>
       gvs[] >> irule concrete_mem_ranges >> metis_tac[]) >>
   gvs[asm_mem_ranges_def]
+QED
+
+(* asm_inst_gas_ok reads a stack only through its memory ranges and a
+   CREATE's size, which those ranges carry. *)
+Theorem gas_ok_ranges[local]:
+  LENGTH stk1 = LENGTH stk2 ∧
+  asm_mem_ranges inst stk1 = asm_mem_ranges inst stk2 ⇒
+  (asm_inst_gas_ok H inst stk1 ⇔ asm_inst_gas_ok H inst stk2)
+Proof
+  rw[asm_inst_gas_ok_def] >>
+  reverse (Cases_on `inst = AsmOp "CREATE" ∨ inst = AsmOp "CREATE2"`)
+  >- fs[] >>
+  pop_assum strip_assume_tac >> gvs[asm_mem_ranges_def] >>
+  BasicProvers.every_case_tac >> gvs[]
 QED
 
 Theorem sym_gas_ok_conc:
@@ -187,7 +201,9 @@ Proof
   `asm_mem_ranges inst (MAP sval_word ss.sym_stack) =
    asm_mem_ranges inst cs.as_stack`
     by (irule sym_step_mem_ranges >> fs[asm_sym_rel_def] >> metis_tac[]) >>
-  simp[sym_gas_ok_def, asm_inst_gas_ok_def]
+  `LENGTH ss.sym_stack = LENGTH cs.as_stack`
+    by (fs[asm_sym_rel_def] >> metis_tac[LIST_REL_LENGTH]) >>
+  simp[sym_gas_ok_def] >> irule gas_ok_ranges >> simp[]
 QED
 
 (* ===== Runs ===== *)
