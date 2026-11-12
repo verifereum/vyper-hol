@@ -2,7 +2,11 @@
    Argument evaluation retains its physical operand types. The suffix uses
    a log_eval_view at the declared field types, whose non-indexed layouts
    determine both allocation limits. Scalar compatibility preserves topic
-   encoding, ABI encoding and each value's occupied memory footprint. *)
+   encoding, ABI encoding and each value's occupied memory footprint.
+   An indexed declared StringT (2 ** 256), paired with a StringT 1 argument,
+   can satisfy the helper premises while the declared type does not evaluate.
+   Indexed hashing ignores that capacity. The helpers therefore do not imply
+   that every declared indexed field has an evaluated type. *)
 Theory whitelistLogWiden
 Ancestors
   allocLimits allocLimitsProps
