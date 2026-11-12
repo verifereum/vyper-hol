@@ -123,7 +123,7 @@ Proof
   conj_tac
   >- (irule fresh_vars_wrt_advance >> simp[] >>
       goal_assum (drule_at Any) >> gvs[]) >>
-  conj_tac >- simp[update_var_def] >> rpt strip_tac >>
+  rpt strip_tac >>
   irule eval_operand_update_fresh >> simp[] >>
   goal_assum (drule_at Any) >> gvs[]
 QED
