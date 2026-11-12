@@ -15,7 +15,7 @@ Ancestors
   vyperInterpreter vyperState venomState fragGasSeqPtr fragGasEmitCtrl
   instMemFrontier memSafeRun ptrSafeRun ptrDiscipline venomInst
   venomExecSemantics loweringStateRelDefs finite_map typedCopyDomain vyperTypeSystem
-  context memoryLayoutSource memoryLayoutDefs typedMemoryCopy
+  context memoryLayoutSource memoryLayoutDefs typedMemoryCopy robustCopyTransportPtr freshWrites
 
 Theorem ifexp_widened_call_store_normalize:
   compile_ifexp_arm cenv t sty vv sm = (op,sb) /\
@@ -60,6 +60,119 @@ Proof
       simp[]) >>
   simp[compile_store_memory_def]
 QED
+
+Theorem ifexp_widened_call_copy_ghost_frame:
+  compile_ifexp_arm cenv t sty vv sm = (Var xd,sb) /\
+  typed_copy_state_frame k B N s q /\
+  (!p. not_fresh_at k p ==> FLOOKUP Gq p = FLOOKUP G p /\
+    op_taint tq (Var p) = op_taint tn (Var p)) /\
+  tq.t_imm = tn.t_imm /\ tq.t_stor = tn.t_stor /\ tq.t_trans = tn.t_trans /\
+  (!i. ~(B <= i /\ i < B+N) ==> (i IN tq.t_mem <=> i IN tn.t_mem)) /\
+  ghost_inv_at D lo d cenv cx ee G tn s /\
+  ghost_kept_at lo cenv es sa Gi ti s0 G tn /\
+  sa.cs_next_var <= k.cs_next_var /\ local_ptrs_reserved cenv k /\
+  (!x sz. cenv.ce_return_buf = SOME (PtrVar (Var x) sz) ==> not_fresh_at k x) /\
+  (!x sz. cenv.ce_return_pc = SOME (PtrVar (Var x) sz) ==> not_fresh_at k x) /\
+  (!x. lo <> 0 /\ cenv.ce_imm_alloca = SOME (Var x) ==> not_fresh_at k x) /\
+  lo <= B /\
+  (!name entry p sz w. lookup_scopes name ee.scopes = SOME entry /\
+    FLOOKUP cenv.ce_vars name = SOME (PtrVar (Var p) sz) /\
+    lookup_var p s = SOME w ==>
+    val_wf entry.type entry.value /\
+    (w2n w + val_footprint entry.type entry.value <= B \/ B+N <= w2n w)) /\
+  (!aid off sz. FLOOKUP s0.vs_allocas aid = SOME (off,sz) /\ aid < sa.cs_next_id ==>
+    off+sz <= B \/ B+N <= off) /\
+  (!name b sz. local_region cenv es.scopes s0 name b sz ==>
+    b+sz <= B \/ B+N <= b) /\
+  evaluate_type (get_tenv cx) t = SOME rty /\ ~is_word_type t /\
+  N = type_memory_size rty /\ type_memory_bytes cenv t = N /\
+  lookup_var xd s = SOME w /\ B = w2n w /\ not_fresh_at k xd /\
+  FLOOKUP G xd = SOME (B,N) /\ op_taint tn (Var xd) = {} /\
+  B+N <= s.vs_alloca_next /\ val_wf rty v /\
+  (!mem. mem_agree_outside tq.t_mem q.vs_memory mem ==> val_in_memory rty v B mem) ==>
+  ghost_inv_at D lo d cenv cx ee Gq tq q /\
+  ghost_kept_at lo cenv es sa Gi ti s0 Gq tq /\
+  ptr_val_ok cx t v (Var xd) Gq tq q /\
+  (!e'. lowered_value_type cenv e' = t ==> ptr_buf_ok cenv e' (Var xd) Gq q) /\
+  (!rt w'. evaluate_type (get_tenv cx) t = SOME rt /\ eval_operand (Var xd) q = SOME w' ==>
+    type_memory_size rt = 0 \/ w2n w' + type_memory_size rt <= q.vs_alloca_next)
+Proof
+  strip_tac >>
+  `q.vs_call_ctx = s.vs_call_ctx /\ q.vs_accounts = s.vs_accounts /\
+   q.vs_transient = s.vs_transient /\ q.vs_immutables = s.vs_immutables /\
+   q.vs_allocas = s.vs_allocas /\ q.vs_alloca_next = s.vs_alloca_next` by
+    gvs[typed_copy_state_frame_def, venom_state_component_equality] >>
+  `!p. not_fresh_at k p ==> lookup_var p q = lookup_var p s` by
+    gvs[typed_copy_state_frame_def] >>
+  `!i. ~(B <= i /\ i < B+N) ==>
+    mem_bytes_at i 1 q.vs_memory = mem_bytes_at i 1 s.vs_memory` by
+    (gvs[typed_copy_state_frame_def, typed_copy_frame_def] >>
+     rpt strip_tac >> first_x_assum irule >> decide_tac) >>
+  `mem_bytes_at 0 lo q.vs_memory = mem_bytes_at 0 lo s.vs_memory` by
+    (gvs[typed_copy_state_frame_def, typed_copy_frame_def] >>
+     first_x_assum irule >> decide_tac) >>
+  `!p sz. not_fresh_at k p /\ ptr_covers G tn p s sz ==>
+    ptr_covers Gq tq p q sz` by
+    (rpt strip_tac >> gvs[ptr_covers_def] >> metis_tac[]) >>
+  conj_tac >- suspend "inv" >>
+  conj_tac >- suspend "kept" >>
+  conj_tac >- suspend "value" >>
+  conj_tac >- (rpt strip_tac >> simp[ptr_buf_ok_def, eval_operand_def] >> metis_tac[]) >>
+  simp[eval_operand_def] >> metis_tac[]
+QED
+
+Resume ifexp_widened_call_copy_ghost_frame[inv]:
+  qpat_x_assum `ghost_inv_at _ _ _ _ _ _ _ _ _` mp_tac >>
+  pure_rewrite_tac[ghost_inv_at_def] >> strip_tac >>
+  conj_tac >- suspend "locals" >>
+  conj_tac >- (Cases_on `d` >> gvs[return_buf_ptr_def] >>
+    PairCases_on `x` >> gvs[return_buf_ptr_def] >> metis_tac[]) >>
+  conj_tac >- metis_tac[] >>
+  conj_tac >- gvs[stor_taint_ok_at_def] >>
+  conj_tac >- (rpt strip_tac >> `~(B <= i /\ i < B+N)` by decide_tac >> metis_tac[]) >>
+  conj_tac >- metis_tac[] >>
+  gvs[allocas_from_def] >> metis_tac[]
+QED
+
+Resume ifexp_widened_call_copy_ghost_frame[locals]:
+  rpt gen_tac >> strip_tac >>
+  `not_fresh_at k p` by metis_tac[local_ptrs_reserved_def] >>
+  conj_tac >- metis_tac[] >>
+  rpt gen_tac >> strip_tac >>
+  `lookup_var p s = SOME w'` by metis_tac[] >>
+  `val_wf entry.type entry.value /\
+   (w2n w' + val_footprint entry.type entry.value <= B \/ B+N <= w2n w')` by metis_tac[] >>
+  `!i. w2n w' <= i /\ i < w2n w' + val_footprint entry.type entry.value ==>
+    ~(B <= i /\ i < B+N)` by (rpt strip_tac >> decide_tac) >>
+  irule robust_val_in_memory_exterior_frame >>
+  (conj_tac >- metis_tac[]) >>
+  qexistsl_tac [`s.vs_memory`, `q.vs_memory`, `tn.t_mem`, `tq.t_mem`, `{i | B <= i /\ i < B+N}`] >>
+  simp[] >> metis_tac[]
+QED
+
+Resume ifexp_widened_call_copy_ghost_frame[kept]:
+  `!x. not_fresh_at sa x ==> not_fresh_at k x` by metis_tac[not_fresh_at_mono] >>
+  qpat_x_assum `ghost_kept_at _ _ _ _ _ _ _ _ _` mp_tac >>
+  pure_rewrite_tac[ghost_kept_at_def] >> strip_tac >>
+  conj_tac >- metis_tac[] >>
+  conj_tac >- (rpt strip_tac >>
+    `off+sz <= B \/ B+N <= off` by metis_tac[] >>
+    `~(B <= i /\ i < B+N)` by decide_tac >> metis_tac[]) >>
+  conj_tac >- (rpt strip_tac >>
+    `b+sz <= B \/ B+N <= b` by metis_tac[] >>
+    `~(B <= i /\ i < B+N)` by decide_tac >> metis_tac[]) >>
+  rpt strip_tac >> `~(B <= i /\ i < B+N)` by decide_tac >> metis_tac[]
+QED
+
+Resume ifexp_widened_call_copy_ghost_frame[value]:
+  `lookup_var xd q = SOME w /\ FLOOKUP Gq xd = SOME (B,N) /\
+    op_taint tq (Var xd) = {}` by metis_tac[] >>
+  simp[ptr_val_ok_def, ptr_mem_ok_def, eval_operand_def] >>
+  (conj_tac >- metis_tac[]) >>
+  rpt strip_tac >> metis_tac[exprSimPropsTheory.val_store_size_le]
+QED
+
+Finalise ifexp_widened_call_copy_ghost_frame
 
 Theorem ifexp_widened_call_arm_step_full:
   (* The shared joint unwrap_value lemma on H (r8, family form), here a
