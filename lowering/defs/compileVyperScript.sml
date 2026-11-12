@@ -650,6 +650,7 @@ Definition build_compile_env_def:
        ce_module_var_type := var_type_map;
        ce_hashmap_info := hashmap_info;
        ce_event_info := event_info;
+       ce_error_info := (λname. lookup_custom_error_args_in name tops);
        ce_type_env := tenv;
        ce_returns_count := rc;
        ce_return_buf := ret_buf;

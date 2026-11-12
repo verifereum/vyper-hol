@@ -321,7 +321,6 @@ Proof
   >- (rpt gen_tac >> strip_tac >>
       rename1 `expr_body_pre _ _ _ (Call ann (IntCall func_id) args drv) _` >>
       simp[lowered_value_type_def] >>
-      rename1 `Call ann (IntCall func_id) args drv` >>
       `expr_sim_inv cenv cx env es /\
        well_typed_expr env (Call ann (IntCall func_id) args drv)` by
         gvs[expr_body_pre_def] >>

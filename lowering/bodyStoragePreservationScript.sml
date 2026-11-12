@@ -542,7 +542,8 @@ Resume body_oracle_storage_mutual[global_target]:
   rpt strip_tac >>
   qpat_x_assum `eval_base_place _ _ _ = _` mp_tac >>
   pure_once_rewrite_tac [evaluate_def] >> strip_tac >>
-  imp_res_tac lookup_global_state >> gvs[runtime_storage_consistent_def]
+  imp_res_tac lookup_global_state >> gvs[runtime_storage_consistent_def] >>
+  qpat_x_assum `_ = _ with storage_trace := _` SUBST1_TAC >> simp[]
 QED
 
 Resume body_oracle_storage_mutual[if_expr]:
@@ -583,7 +584,8 @@ Resume body_oracle_storage_mutual[global_expr]:
   rpt strip_tac >>
   qpat_x_assum `eval_expr _ _ _ = _` mp_tac >>
   simp[Once evaluate_def] >> strip_tac >>
-  imp_res_tac lookup_global_state >> gvs[runtime_storage_consistent_def]
+  imp_res_tac lookup_global_state >> gvs[runtime_storage_consistent_def] >>
+  qpat_x_assum `_ = _ with storage_trace := _` SUBST1_TAC >> simp[]
 QED
 
 Resume body_oracle_storage_mutual[flag_expr]:
@@ -848,7 +850,10 @@ Resume body_oracle_storage_mutual[intcall_lock_success]:
       `get_module_code (cx with stk updated_by CONS (NONE,fn)) NONE = SOME tops` by
         (qpat_x_assum `get_module_code cx NONE = _` mp_tac >>
          simp[vyperContextTheory.get_module_code_def]) >>
-      gvs[Excl "lock_if_nr_def", Excl "unlock_if_nr_def", Excl "lift_option_type_def"] >>
+      (* set the IH aside: as a gvs rewrite it made this step slow *)
+      qpat_x_assum `!s0 results t0 prev s1 dflt_vs t1 s2 vs t2 s3 ce t3 s4 rtv t4 s5 t5 s6 cxf t6. _`
+        (fn ih => gvs[Excl "lock_if_nr_def", Excl "unlock_if_nr_def",
+                      Excl "lift_option_type_def"] >> assume_tac ih) >>
       qpat_x_assum `!vs st results lock_st cxf call_env body_st args_st tops env ret_ty env' st' res st''. (_ /\ _) /\ type_stmts _ _ _ = _ /\ _ ==> _` irule >>
       simp[Excl "lock_if_nr_def", Excl "is_view_mut_def"] >>
       conj_tac

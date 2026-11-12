@@ -160,7 +160,6 @@ Theorem entry_body_frame_sim[local]:
     (LENGTH (HD fn.fn_blocks).bb_instructions) 0
     (non_param_insts (HD fn.fn_blocks)) ps1 = SOME (body_ops, ps_after) /\
   vs.vs_inst_idx = LENGTH (get_params (HD fn.fn_blocks).bb_instructions) /\
-  ~vs.vs_call_ctx.cc_static /\
   asm_block_at prog pc_bb (execute_plan cp.cp_initial_fmp
     (SOLabel (HD fn.fn_blocks).bb_label :: param_ops ++ body_ops)) /\
   as.as_pc = pc_bb + LENGTH (execute_plan cp.cp_initial_fmp

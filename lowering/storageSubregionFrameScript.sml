@@ -269,14 +269,14 @@ QED
 Finalise storage_subregion_dead_bytes_frame_outside
 
 Theorem storage_dead_subregion_frame_outside:
- !cx tr mid n subs slot tv path off leaf st st' j b.
-  declared_storage_region cx mid n subs = SOME (tr,slot,tv) /\
+ !H tr slot tv path off leaf st st' j b.
+  MEM (tr,slot,tv) (FST H) /\
   storage_subregion tv path off leaf /\
   (!k:bytes32. ~(w2n slot + off <= w2n k /\
                  w2n k < w2n slot + off + type_slot_size leaf) ==>
        lookup_storage k st' = lookup_storage k st) /\
   ~(w2n slot + off <= j /\ j < w2n slot + off + type_slot_size leaf) ==>
-  (storage_dead cx tr st' j b <=> storage_dead cx tr st j b)
+  (storage_dead H tr st' j b <=> storage_dead H tr st j b)
 Proof
   rpt gen_tac >> strip_tac >>
   `!w tvw. w2n w + type_slot_size tvw <= dimword (:256) /\
@@ -302,10 +302,10 @@ Proof
 QED
 
 Theorem storage_agree_subregion_patch:
- !cx tr mid n subs slot tv path off leaf st st' ts ts'.
-  declared_storage_region cx mid n subs = SOME (tr,slot,tv) /\
+ !H tr slot tv path off leaf st st' ts ts'.
+  MEM (tr,slot,tv) (FST H) /\
   storage_subregion tv path off leaf /\
-  storage_agree (storage_dead cx tr st) st ts /\
+  storage_agree (storage_dead H tr st) st ts /\
   (!k:bytes32. ~(w2n slot + off <= w2n k /\
                  w2n k < w2n slot + off + type_slot_size leaf) ==>
        lookup_storage k st' = lookup_storage k st /\
@@ -313,17 +313,17 @@ Theorem storage_agree_subregion_patch:
   (!k:bytes32. !b. b < 32 /\
        w2n slot + off <= w2n k /\
        w2n k < w2n slot + off + type_slot_size leaf /\
-       ~storage_dead cx tr st' (w2n k) b ==>
+       ~storage_dead H tr st' (w2n k) b ==>
        EL b (word_to_bytes (lookup_storage k st') T) =
        EL b (word_to_bytes (lookup_storage k ts') T)) ==>
-  storage_agree (storage_dead cx tr st') st' ts'
+  storage_agree (storage_dead H tr st') st' ts'
 Proof
   rpt gen_tac >> strip_tac >>
   `!j b. ~(w2n slot + off <= j /\
            j < w2n slot + off + type_slot_size leaf) ==>
-     (storage_dead cx tr st' j b <=> storage_dead cx tr st j b)` by
+     (storage_dead H tr st' j b <=> storage_dead H tr st j b)` by
     (rpt strip_tac >> irule storage_dead_subregion_frame_outside >>
-     goal_assum (drule_at (Pat `declared_storage_region _ _ _ _ = _`)) >>
+     goal_assum (drule_at (Pat `MEM (_,_,_) (FST _)`)) >>
      goal_assum (drule_at (Pat `storage_subregion _ _ _ _`)) >>
      asm_rewrite_tac[] >> metis_tac[]) >>
   pure_rewrite_tac[storage_agree_def] >> rpt gen_tac >> strip_tac >>

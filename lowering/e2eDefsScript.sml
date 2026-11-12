@@ -1,6 +1,6 @@
 (* PLAN 5.5 boundary, not a compiler correctness certificate.
  * TOP-LEVEL: layouts_agree, source_deployment_rel, source_typing_ok,
- * source_storage_ok, call_outcomes_ok, tx_block_fields_rel,
+ * source_storage_ok, call_outcomes_storage_ok, tx_block_fields_rel,
  * tx_env_ok (defined in compileEnv, as part of call_ctx_rel),
  * value_transfer_ok, accounts_after_transfer, call_state_rel,
  * call_external_transaction_pending_deletions,
@@ -16,11 +16,12 @@
  *)
 Theory e2eDefs
 Ancestors
-  vfmExecution vfmExecutionProp vfmState
+  vfmExecution vfmExecutionProp vfmState vfmRunCall
+  vfmTotalBalance vfmReturndataBound
   frameOutcome callTrace
   vyperABI vyperEvent vyperInterpreter vyperCall
   vyperTypeContract vyperTypeContractSoundness vyperTypeInitialState
-  vyperStorageLayoutSafety vyperRuntimeAccounts
+  vyperStorageLayoutSafety vyperStorageFootprint vyperRuntimeAccounts
   supportedProgram compileEnv loweringStateRelDefs selectorDispatch immutableSectionRel context
   sorting
 
@@ -99,12 +100,25 @@ Definition source_typing_ok_def:
 End
 
 Definition source_storage_ok_def:
-  source_storage_ok (tops : toplevel list) am tx <=>
+  source_storage_ok am tx os gs <=>
     let cx = initial_evaluation_context am.sources am.layouts tx NONE in
-      contract_storage_well_formed cx (initial_state am []) /\
-      storage_layout_safe cx
+    let obs = source_storage_trace am tx os gs in
+    let (regions, locks) = storage_trace_horizon obs in
+      storage_roots_fit obs ∧ regions_consistent regions ∧
+      storage_locks_separated regions locks ∧
+      storage_well_formed_on cx (initial_state am []) regions
 End
 
+Definition call_outcomes_storage_ok_def:
+  call_outcomes_storage_ok am tx os gs <=>
+    let cx = initial_evaluation_context am.sources am.layouts tx NONE in
+    let obs = source_storage_trace am tx os gs in
+      storage_trace_backends_well_formed cx
+        (FST (storage_trace_horizon obs)) obs
+End
+
+(* The global storage-and-bounds predicate remains available independently.
+   The compiler boundary uses the finite selected-trace guards above. *)
 Definition call_outcomes_ok_def:
   call_outcomes_ok am tx os <=>
     let cx = initial_evaluation_context am.sources am.layouts tx NONE in
@@ -175,6 +189,7 @@ Definition call_state_rel_def:
       LENGTH ctxt.msgParams.code <= 24576 /\
       ctxt.pc = 0 /\ ctxt.stack = [] /\ ctxt.logs = [] /\
       ctxt.returnData = [] /\ buffer_to_list ctxt.memory = [] /\
+      balance_bounded (2 ** 256 - 1) es /\ returndata_bounded es /\
       value_transfer_ok tx am.accounts /\
       es.rollback.accounts = accounts_after_transfer tx am.accounts /\
       es.rollback.toDelete = am.pending_deletions /\
@@ -186,6 +201,103 @@ Definition call_state_rel_def:
       tx_block_fields_rel tx es.txParams /\
       source_deployment_rel tops am tx
 End
+
+(* ===== Outcome bounds of the real run ===== *)
+
+(* Every outcome call_trace records is outcome_of a state the run reaches:
+   the return data of its top frame and its live accounts.  wf_state bounds
+   every account's code (wf_accounts), balance_bounded every account map's
+   total balance, returndata_bounded every frame's return data, and a step
+   keeps all three. *)
+Theorem outcome_of_bounded[local]:
+  wf_state s /\ balance_bounded (2 ** 256 - 1) s /\ returndata_bounded s ==>
+  LENGTH (outcome_of k s n m).co_returnData < dimword(:256) /\
+  accounts_runtime_well_typed (outcome_of k s n m).co_accounts
+Proof
+  strip_tac >>
+  simp[outcome_of_def, accounts_runtime_well_typed_def,
+       account_runtime_well_typed_def] >> conj_tac
+  >- (CONV_TAC (DEPTH_CONV wordsLib.SIZES_CONV) >>
+      Cases_on `s.contexts` >> gvs[wf_state_def, returndata_bounded_def])
+  >> gen_tac >> conj_tac
+  >- (drule balance_bounded_rollback >> strip_tac >>
+      irule arithmeticTheory.LESS_EQ_LESS_TRANS >>
+      qexists_tac `total_balance s.rollback.accounts` >>
+      simp[lookup_balance_le_total_balance] >>
+      pop_assum mp_tac >> simp[])
+  >> `wf_accounts s.rollback.accounts` by fs[wf_state_def, all_accounts_def] >>
+  fs[wf_accounts_def, wf_account_state_def, lookup_account_def] >>
+  first_x_assum (qspec_then `addr` mp_tac) >> simp[]
+QED
+
+Theorem step_outcome_invariant[local]:
+  wf_state s /\ balance_bounded (2 ** 256 - 1) s /\ returndata_bounded s /\
+  step s = (r, s') ==>
+  wf_state s' /\ balance_bounded (2 ** 256 - 1) s' /\ returndata_bounded s'
+Proof
+  strip_tac >>
+  drule step_preserves_wf_state >> drule step_returndata_bounded >>
+  fs[balance_bounded_def] >> drule_all step_total_balance_bounded >>
+  fs[]
+QED
+
+Theorem frame_obs_tr_every_outcome:
+  !d obs s r s'.
+    (!t. Inv t ==> Inv (SND (step t))) /\
+    (!t k n m. Inv t ==> Q (outcome_of k t n m)) /\
+    Inv s' /\ EVERY Q (MAP SND obs.entries) ==>
+    EVERY Q (MAP SND (frame_obs_tr d obs s (r,s')).entries)
+Proof
+  recInduct frame_obs_tr_ind >> rpt gen_tac >> strip_tac >>
+  rpt gen_tac >> strip_tac >>
+  `EVERY Q (MAP SND (observe d s (r,s') obs).entries)` by
+    (simp[observe_def] >> rw[] >> BasicProvers.every_case_tac >>
+     gvs[listTheory.EVERY_APPEND]) >>
+  `Inv (SND (step s'))` by (first_assum irule >> fs[]) >>
+  simp[Once frame_obs_tr_def] >>
+  IF_CASES_TAC >- fs[] >>
+  first_x_assum (qspec_then `observe d s (r,s') obs` mp_tac) >>
+  fs[] >> Cases_on `step s'` >> fs[]
+QED
+
+Theorem call_trace_outcomes_bounded:
+  wf_state es /\ balance_bounded (2 ** 256 - 1) es /\ returndata_bounded es ==>
+  EVERY (\co. LENGTH co.co_returnData < dimword(:256) /\
+              accounts_runtime_well_typed co.co_accounts)
+    (MAP SND (call_trace es))
+Proof
+  strip_tac >> REWRITE_TAC[call_trace_def, frame_obs_def] >>
+  Cases_on `step es` >>
+  drule_all step_outcome_invariant >> strip_tac >>
+  irule frame_obs_tr_every_outcome >>
+  reverse conj_tac >- simp[] >>
+  qexists_tac `\t. wf_state t /\ balance_bounded (2 ** 256 - 1) t /\
+                   returndata_bounded t` >>
+  BETA_TAC >>
+  conj_tac >- asm_rewrite_tac[] >>
+  conj_tac >- (rpt strip_tac >> drule_all outcome_of_bounded >> simp[]) >>
+  rpt strip_tac >> Cases_on `step t` >>
+  drule_all step_outcome_invariant >> simp[]
+QED
+
+Theorem call_state_rel_call_outcomes_ok:
+  call_state_rel tops runtime_bc am tx es /\
+  EVERY (\outcome.
+    contract_storage_well_formed
+      (initial_evaluation_context am.sources am.layouts tx NONE)
+      (initial_state (am with <| accounts := outcome.co_accounts;
+                                tStorage := outcome.co_tStorage |>) []))
+    (MAP SND (call_trace es)) ==>
+  call_outcomes_ok am tx (MAP SND (call_trace es))
+Proof
+  strip_tac >>
+  `wf_state es /\ balance_bounded (2 ** 256 - 1) es /\ returndata_bounded es` by
+    fs[call_state_rel_def] >>
+  drule_all call_trace_outcomes_bounded >>
+  qpat_x_assum `EVERY _ (MAP SND (call_trace es))` mp_tac >>
+  simp[call_outcomes_ok_def, listTheory.EVERY_MEM] >>
+  rpt strip_tac >> res_tac
+QED
 
 (* The source machine the next transaction starts from, after a transaction
    or deployment that ended in EVM state es' with source machine am': it
@@ -468,6 +580,35 @@ End
    source's: equal except at storage bytes the source leaves dead
    (accounts_agree, compileEnv). *)
 
+(* Primitive source/Venom result boundary at one observed storage horizon. *)
+Definition external_call_result_rel_def:
+  external_call_result_rel H tops ret tx (res, am', rqs) vres <=>
+    let cx = initial_evaluation_context am'.sources am'.layouts tx NONE in
+    case (res, vres) of
+      (INL v, Halt ss) =>
+        tx_return_bytes tops ret tx v ss.vs_returndata /\
+        accounts_agree H cx am'.accounts
+          (process_deletions ss.vs_pending_deletions ss.vs_accounts) /\
+        transient_agree H cx am'.tStorage ss.vs_transient /\
+        logs_correspond (compiled_event_info tops) (type_env tops)
+          tx.target am'.logs ss.vs_logs /\
+        LIST_REL (request_agree H cx) rqs ss.vs_requests
+    | (INR HaltException, Halt ss) =>
+        ss.vs_returndata = [] /\
+        accounts_agree H cx am'.accounts
+          (process_deletions ss.vs_pending_deletions ss.vs_accounts) /\
+        transient_agree H cx am'.tStorage ss.vs_transient /\
+        logs_correspond (compiled_event_info tops) (type_env tops)
+          tx.target am'.logs ss.vs_logs /\
+        LIST_REL (request_agree H cx) rqs ss.vs_requests
+    | (INR (AssertException s), Abort Revert_abort _) => T
+    | (INR (AssertException s), Abort ExHalt_abort _) => (s = "UNREACHABLE")
+    | (INR (Error (RevertData _)), Abort Revert_abort _) => T
+    | (INR (Error (RuntimeError m)), Abort _ _) => T
+    | (INR (Error e), Halt _) => unspecified_behaviour_exempt tops e
+    | _ => F
+End
+
 (* Fixed slots use distinct observations; absent slots must be irrelevant
    to the observation selected by run. *)
 Definition gas_readings_rel_def:
@@ -480,15 +621,15 @@ Definition gas_readings_rel_def:
 End
 
 Definition call_success_rel_def:
-  call_success_rel tops ret tx (v, am', rqs) es r es' <=>
+  call_success_rel H tops ret tx (v, am', rqs) es r es' <=>
     let cx = initial_evaluation_context am'.sources am'.layouts tx NONE in
     ?out.
       frame_outcome es r es' NONE out am'.logs /\
       tx_return_bytes tops ret tx v out /\
-      accounts_agree cx am'.accounts
+      accounts_agree H cx am'.accounts
         (process_deletions es'.rollback.toDelete es'.rollback.accounts) /\
-      transient_agree cx am'.tStorage es'.rollback.tStorage /\
-      LIST_REL (request_agree cx) rqs (call_requests es)
+      transient_agree H cx am'.tStorage es'.rollback.tStorage /\
+      LIST_REL (request_agree H cx) rqs (call_requests es)
 End
 
 Definition exception_outcome_rel_def:
@@ -520,17 +661,19 @@ QED
 (* Fixed-reading transport used by the compiler proof. *)
 Definition call_result_rel_at_def:
   call_result_rel_at gobs tops ret am tx es r es' <=>
+    let H = storage_trace_horizon
+      (source_storage_trace am tx (MAP SND (call_trace es)) gobs) in
     let (res, am', rqs) =
       call_external (SOME (MAP SND (call_trace es))) gobs am tx in
     case res of
-      INL v => call_success_rel tops ret tx (v, am', rqs) es r es'
+      INL v => call_success_rel H tops ret tx (v, am', rqs) es r es'
     | INR HaltException =>
         let cx = initial_evaluation_context am'.sources am'.layouts tx NONE in
           frame_outcome es r es' NONE [] am'.logs /\
-          accounts_agree cx am'.accounts
+          accounts_agree H cx am'.accounts
             (process_deletions es'.rollback.toDelete es'.rollback.accounts) /\
-          transient_agree cx am'.tStorage es'.rollback.tStorage /\
-          LIST_REL (request_agree cx) rqs (call_requests es)
+          transient_agree H cx am'.tStorage es'.rollback.tStorage /\
+          LIST_REL (request_agree H cx) rqs (call_requests es)
     | INR exc => exception_outcome_rel tops exc es r es'
 End
 
@@ -538,16 +681,7 @@ Definition call_result_rel_def:
   call_result_rel tops ret am tx es r es' <=>
     gas_readings_rel (gas_readings es)
       (\gobs.
-        let (res, am', rqs) =
-          call_external (SOME (MAP SND (call_trace es))) gobs am tx in
-        case res of
-          INL v => call_success_rel tops ret tx (v, am', rqs) es r es'
-        | INR HaltException =>
-            let cx = initial_evaluation_context am'.sources am'.layouts tx NONE in
-              frame_outcome es r es' NONE [] am'.logs /\
-              accounts_agree cx am'.accounts
-                (process_deletions es'.rollback.toDelete es'.rollback.accounts) /\
-              transient_agree cx am'.tStorage es'.rollback.tStorage /\
-              LIST_REL (request_agree cx) rqs (call_requests es)
-        | INR exc => exception_outcome_rel tops exc es r es') T
+        source_storage_ok am tx (MAP SND (call_trace es)) gobs ∧
+        call_outcomes_storage_ok am tx (MAP SND (call_trace es)) gobs ==>
+        call_result_rel_at gobs tops ret am tx es r es') T
 End

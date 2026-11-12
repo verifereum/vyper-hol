@@ -59,12 +59,12 @@ Theorem external_frame_ret_value_direct_run_mem:
        lower_value compile_expr cenv' ret e sa = (op, s1) /\
        fn_has_code sa sb func /\ fn_inst_ids_distinct func /\
        local_ptrs_reserved cenv' sa /\ ~block_is_terminated sa /\
-       stmt_state_rel unit.cu_context func cenv'
+       stmt_state_rel H unit.cu_context func cenv'
          (initial_evaluation_context am.sources am.layouts tx NONE) es s0 /\
        alloca_history func s0 /\ ~s0.vs_halted /\
        s0.vs_current_bb = sa.cs_current_bb /\
        s0.vs_inst_idx = LENGTH sa.cs_current_insts /\
-       expr_post unit.cu_context func cenv'
+       expr_post H unit.cu_context func cenv'
          (initial_evaluation_context am.sources am.layouts tx NONE)
          e es sa s1 s0 ee v op t /\
        (?gs ee'.
@@ -87,7 +87,7 @@ Proof
   rpt gen_tac >> disch_then (map_every assume_tac o CONJUNCTS) >>
   rpt gen_tac >> disch_then (map_every assume_tac o CONJUNCTS) >>
   drule_all external_package_frame_exit >> strip_tac >>
-  qmatch_asmsub_abbrev_tac `expr_post ctx func cenv' cx` >>
+  qmatch_asmsub_abbrev_tac `expr_post H ctx func cenv' cx` >>
   qpat_x_assum `?gs ee'. _` strip_assume_tac >>
   drule_all return_value_typed >> strip_tac >>
   `compile_external_return (SOME op) (is_word_type ret) cenv'.ce_raw_return
@@ -118,7 +118,7 @@ Resume external_frame_ret_value_direct_run_mem[dispatch]:
     (drule return_value_code_prefix >> disch_then drule >> strip_tac >>
      drule (cj 2 compile_expr_grows) >> strip_tac >>
      drule_all fn_has_code_split >> simp[]) >>
-  qpat_x_assum `expr_post _ _ _ _ _ _ _ _ _ _ _ _ _`
+  qpat_x_assum `expr_post _ _ _ _ _ _ _ _ _ _ _ _ _ _`
     (strip_assume_tac o REWRITE_RULE [expr_post_def]) >>
   Cases_on `cenv'.ce_raw_return`
   >- suspend "raw" >>
@@ -131,7 +131,7 @@ Resume external_frame_ret_value_direct_run_mem[word]:
   qpat_x_assum `compile_external_return _ _ _ _ _ _ _ _ _ _ = _` mp_tac >>
   qpat_x_assum `fn_has_code s1 sb func` mp_tac >>
   qpat_x_assum `!x. op = Var x ==> _` mp_tac >>
-  qpat_x_assum `stmt_state_rel ctx func cenv' cx ee t` mp_tac >>
+  qpat_x_assum `stmt_state_rel H ctx func cenv' cx ee t` mp_tac >>
   qpat_x_assum `expr_val_rel _ _ _ _ _` mp_tac >>
   qpat_x_assum `~t.vs_halted` mp_tac >>
   qpat_x_assum `t.vs_current_bb = _` mp_tac >>
@@ -168,7 +168,7 @@ Resume external_frame_ret_value_direct_run_mem[raw_leaf]:
   qpat_x_assum `compile_external_return _ _ _ _ _ _ _ _ _ _ = _` mp_tac >>
   qpat_x_assum `fn_has_code s1 sb func` mp_tac >>
   qpat_x_assum `!x. op = Var x ==> _` mp_tac >>
-  qpat_x_assum `stmt_state_rel ctx func cenv' cx ee t` mp_tac >>
+  qpat_x_assum `stmt_state_rel H ctx func cenv' cx ee t` mp_tac >>
   qpat_x_assum `expr_val_rel _ _ _ _ _` mp_tac >>
   qpat_x_assum `expr_val_at _ _ _ _ _ _ _ _ _` mp_tac >>
   qpat_x_assum `evaluate_type _ _ = SOME tv` mp_tac >>

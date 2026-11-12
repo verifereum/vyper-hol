@@ -1,6 +1,7 @@
 (* Pointer ghost boundaries for lowering fragments. *)
 Theory fragExecPtr
 Ancestors
+  sourceUnitExecution
   bodyPtrDefs ptrSafeRun ptrDiscipline vyperLoweringCorrect
   venomExecSemantics venomInstProofs contextCodegenRelProps
   venomInst venomState contextCodegenRel codegenRel memLocDefs

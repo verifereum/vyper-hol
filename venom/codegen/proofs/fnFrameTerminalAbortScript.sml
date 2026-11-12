@@ -203,7 +203,8 @@ QED
 Theorem abort_operands_frame_view:
   opaque_use_ok fn /\ MEM inst (fn_insts fn) /\
   MEM inst.inst_opcode
-    [REVERT; INVALID; ASSERT; ASSERT_UNREACHABLE; CREATE; CREATE2; RETURNDATACOPY] ==>
+    [REVERT; INVALID; ASSERT; ASSERT_UNREACHABLE; CREATE; CREATE2; RETURNDATACOPY;
+     SSTORE; TSTORE; SELFDESTRUCT; CALL] ==>
   eval_operands inst.inst_operands (frame_view fn ra vs with vs_memory := m) =
   eval_operands inst.inst_operands vs
 Proof
@@ -762,7 +763,8 @@ Finalise regular_abort_frame_prefix
 Theorem abort_frame_arranged_stack:
   inst_wf inst /\ opaque_use_ok fn /\ MEM inst (fn_insts fn) /\ 
   MEM inst.inst_opcode
-    [REVERT; INVALID; ASSERT; ASSERT_UNREACHABLE; CREATE; CREATE2; RETURNDATACOPY] /\
+    [REVERT; INVALID; ASSERT; ASSERT_UNREACHABLE; CREATE; CREATE2; RETURNDATACOPY;
+     SSTORE; TSTORE; SELFDESTRUCT; CALL] /\
   (!op. MEM op (compute_operands inst) ==>
     eval_operand op (frame_view fn ra vs) = operand_val (frame_view fn ra vs) lo op) /\
   EVERY (\op. op <> dead_stack_marker /\

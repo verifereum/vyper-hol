@@ -56,6 +56,13 @@ QED
  * readings the EVM run produced. The theorem does not claim agreement for
  * malformed constructors excluded by constructor_args_encode. There is no
  * nested-creation frame_outcome claim and no Some-root oracle hypothesis.
+ *
+ * A constructor that halts (selfdestruct) makes load_contract succeed without
+ * installing the source at tx.target, so that INL is told apart by
+ * ALOOKUP am'.sources tx.target = NONE (deploy_state_rel has it NONE at
+ * entry). Then the EVM frame halts with empty output and deposits no code, and
+ * the accounts after the pending deletions, transient storage and logs agree
+ * as in a halting call (call_result_rel_at).
  *)
 Theorem e2e_deploy_correctness_identity:
   !policy tops deploy_bc runtime_bc am tx es.
@@ -70,6 +77,18 @@ Theorem e2e_deploy_correctness_identity:
       (frame_resource_starved es r es' \/
        ?gobs. case load_contract NONE gobs am tx [(NONE, tops)] [] of
          INL (am', rqs) =>
+           if ALOOKUP am'.sources tx.target = NONE then
+             let cx = initial_evaluation_context
+                        ((tx.target, [(NONE, tops)]) :: am'.sources) am'.layouts tx NONE in
+             ?lgs.
+               frame_outcome es r es' NONE [] lgs /\
+               (lookup_account tx.target es'.rollback.accounts).code = [] /\
+               accounts_agree cx am'.accounts
+                 (process_deletions es'.rollback.toDelete es'.rollback.accounts) /\
+               transient_agree cx am'.tStorage es'.rollback.tStorage /\
+               logs_correspond (compiled_event_info tops) (type_env tops)
+                 tx.target am'.logs lgs
+           else
            let cx = initial_evaluation_context am'.sources am'.layouts tx NONE in
             ?section lgs.
               immutables_section_rel tops (account_immutables am' tx.target) section /\

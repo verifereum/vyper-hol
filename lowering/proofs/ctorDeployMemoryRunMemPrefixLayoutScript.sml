@@ -146,7 +146,7 @@ Theorem ctor_prefix_entry_value:
 Proof
   rpt strip_tac >>
   `tx.value < 2 ** 256` by
-    fs[deploy_source_ok_def, deploy_typing_ok_def, call_tx_well_typed_def] >>
+    fs[deploy_source_ok_def, deploy_typing_ok_constants_ready, call_tx_well_typed_def] >>
   `vs.vs_call_ctx.cc_callvalue = n2w tx.value` by
     (qpat_x_assum `gas_variant _ _` mp_tac >> simp[gas_variant_def] >>
      disch_then (mp_tac o Q.AP_TERM `\s. s.vs_call_ctx.cc_callvalue`) >>
@@ -163,48 +163,6 @@ Theorem ctor_prefix_env_return_pc[local]:
 Proof
   rpt strip_tac >> simp[build_compile_env_def] >>
   rpt (pairarg_tac >> gvs[])
-QED
-
-Theorem package_constructor_shape_ok[local]:
-  !tops use_trans nkey_map target cf cenv args pay nr nkey trans fbody ret.
-    supported_program tops /\
-    SND (SND (SND (classify_functions tops))) = SOME cf /\
-    set_constructor_package_target target
-      (package_constructor tops use_trans nkey_map cf) =
-      (cenv,args,pay,nr,nkey,trans,fbody,ret) ==>
-    cenv_static_ok cenv /\ cenv.ce_return_pc = NONE /\
-    ~supported_stmts_expr_exists expr_shape_root fbody
-Proof
-  rpt gen_tac >> PairCases_on `cf` >> strip_tac >>
-  drule classify_functions_ctor_mem >> strip_tac >>
-  drule_all supported_program_function >> strip_tac >>
-  drule supported_function_body_shape >> strip_tac >>
-  qspecl_then [`tops`, `Deploy`, `cf0`, `cf3`, `cf4`, `cf6`, `cf7`, `use_trans`]
-    (strip_assume_tac o SRULE [cenv_static_ok_def]) build_compile_env_static >>
-  gvs[package_constructor_def, set_constructor_package_target_def,
-      update_cenv_nonreentrant_def, ctor_prefix_env_return_pc] >>
-  simp[cenv_static_ok_def, ctor_prefix_env_return_pc] >>
-  rpt conj_tac >> first_assum ACCEPT_TAC
-QED
-
-Theorem package_internal_fn_ctor_shape_ok[local]:
-  !tops use_trans nkey_map imm target src.
-    supported_program tops /\
-    MEM src (FST (SND (classify_functions tops))) ==>
-    internal_fn_shape_ok
-      (set_internal_package_target target
-        (package_internal_fn tops use_trans nkey_map T imm src))
-Proof
-  rpt gen_tac >> PairCases_on `src` >> strip_tac >>
-  drule (iffLR MEM_classify_internal) >> strip_tac >>
-  drule_all supported_program_function >> strip_tac >>
-  drule supported_function_body_shape >> strip_tac >>
-  qspecl_then [`tops`, `Internal`, `src0`, `src3`, `src4`, `src6`, `src7`, `use_trans`]
-    (strip_assume_tac o SRULE [cenv_static_ok_def]) build_compile_env_static >>
-  simp[package_internal_fn_def, set_internal_package_target_def,
-       update_cenv_nonreentrant_def, internal_fn_shape_ok_def,
-       cenv_static_ok_def] >>
-  rpt conj_tac >> first_assum ACCEPT_TAC
 QED
 
 Theorem ctor_prefix_lowering_run[local]:
@@ -230,7 +188,7 @@ Proof
   Cases_on `ctor_fn` >> gvs[internal_fn_descriptors_def] >>
   rename1 `classify_functions tops = (ext_fns, int_fns, fb_fn, SOME cf)` >>
   `SND (SND (SND (classify_functions tops))) = SOME cf` by simp[] >>
-  drule_all package_constructor_shape_ok >> strip_tac >> simp[] >>
+  drule_all ctorDeployShapeTheory.package_constructor_shape_ok >> strip_tac >> simp[] >>
   `ALL_DISTINCT (MAP (\p. FST (SND (SND (SND p))))
                    (FST (SND (classify_functions tops))))`
     by metis_tac[classified_internal_names_distinct,
@@ -240,7 +198,7 @@ Proof
   gs[GSYM MAP_MAP_o, internal_fn_descriptors_set_internal_package_target,
      internal_fn_descriptors_MAP_package_internal_fn, EVERY_MAP] >>
   simp[EVERY_MEM] >> rpt strip_tac >>
-  irule package_internal_fn_ctor_shape_ok >> simp[]
+  irule ctorDeployShapeTheory.package_internal_fn_ctor_shape_ok >> simp[]
 QED
 
 Theorem ctor_prefix_entry_not_halted:

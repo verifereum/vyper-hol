@@ -936,7 +936,6 @@ Theorem gen_invoke_frame_sim_deep:
     Inv ctx fn inst vs /\ active_inst fn inst vs /\
     inst.inst_opcode = INVOKE /\
     inst.inst_operands = Label nm :: arg_ops /\
-    ~vs.vs_call_ctx.cc_static /\
     (!f inst callee_name args callee.
        MEM f ctx.ctx_functions /\ MEM f.fn_name (fcg_analyze ctx).fcg_reachable /\
        MEM inst (fn_insts f) /\
@@ -956,7 +955,6 @@ Theorem gen_invoke_frame_sim_deep:
        MEM callee.fn_name (fcg_analyze ctx).fcg_reachable /\
        (!l. FLOOKUP cvs.vs_labels l = OPTION_MAP n2w (FLOOKUP lo l)) /\
        fn_entry_inv Inv ctx callee cvs /\
-       ~cvs.vs_call_ctx.cc_static /\
        asm_block_at prog cas.as_pc (execute_plan cp.cp_initial_fmp rj.sr_plan) /\
        LENGTH (get_params (HD callee.fn_blocks).bb_instructions) < dimword (:256) /\
        fn_entry_state_rel cp callee cvs cas cra crest /\

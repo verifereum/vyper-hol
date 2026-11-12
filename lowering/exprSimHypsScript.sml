@@ -95,7 +95,7 @@
  *     or without default arguments, and the constructor: entryLocals;
  *     internal functions: package_internal_fn_prologue_ptrs in
  *     intCallCallee) and how the statement lowering declares
- *     locals; state_rel only relates the locals that are held so
+ *     locals; state_rel H only relates the locals that are held so
  *     (local_ptrs_rel), and compile_name_vv emits INVALID for a name it
  *     does not find.
  *   - The local types clause: the compile environment's type of a local
@@ -1169,7 +1169,7 @@ Proof
   Cases_on `int_literal_value e2` >> simp[]
 QED
 
-Theorem ifexp_arg_type_fits_refl[local]:
+Theorem ifexp_arg_type_fits_refl:
   !t. arg_type_fits t t
 Proof
   Induct >> simp[arg_type_fits_def]

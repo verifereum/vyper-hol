@@ -2,7 +2,7 @@
    ADMITTED until proved. *)
 Theory ctorDeployLoweringReturn
 Ancestors
-  valueEncodingDefs ctorDeployLoweringDefs ctorDeployDefs o1PassContract ctorReturnFrame
+  valueEncodingDefs ctorDeployLoweringDefs ctorDeployDefs immSectionDead o1PassContract ctorReturnFrame
   vyperInterpreter supportedDecls symbolResolve ctorDeployInitcodeAsm
   codegenEncodingWf ctorDeployShape o1PipelineCorrect asmToBytecodeProofs list rich_list venomPipelineData unitLabelMap venomFnScheduleRunner
   venomPipelineRunner venomPipelineDriver vyperCompiler compileVyper asmIR
@@ -189,7 +189,7 @@ Proof
   rpt gen_tac >> strip_tac >>
   `es0.immutables = am_c.immutables` by
     (drule_all deploy_ctor_start_immutables >> simp[]) >>
-  gvs[deploy_source_ok_def, e2eDeployDefsTheory.deploy_typing_ok_def,
+  gvs[deploy_source_ok_def, e2eDeployDefsTheory.deploy_typing_ok_constants_ready,
       deploy_ctor_start_def] >>
   `contract_namespaces_ok F [(NONE,tops)] /\
    runtime_art.cta_bare_globals =
@@ -301,7 +301,7 @@ Proof
   drule deploy_send_call_value_observations >>
   disch_then (qspecl_then [`[FEMPTY]`,`SOME outcomes`,`gs`] mp_tac) >>
   simp[deploy_initial_state_scopes] >> strip_tac >>
-  gvs[deploy_source_ok_def, e2eDeployDefsTheory.deploy_typing_ok_def] >>
+  gvs[deploy_source_ok_def, e2eDeployDefsTheory.deploy_typing_ok_constants_ready] >>
   `((es0 with <|scopes := [FEMPTY]; outcomes := SOME outcomes; gas_obs := gs|>)
       with scopes := [env]) =
     (es0 with <|gas_obs := gs; outcomes := SOME outcomes|>)` by
@@ -319,7 +319,7 @@ Theorem deploy_context_well_typed[local]:
   deploy_state_rel tops deploy_bc am tx es ==>
   context_well_typed (deploy_evaluation_context tops am tx)
 Proof
-  simp[deploy_source_ok_def, e2eDeployDefsTheory.deploy_typing_ok_def,
+  simp[deploy_source_ok_def, e2eDeployDefsTheory.deploy_typing_ok_constants_ready,
     call_tx_well_typed_def, vyperTypeInvariantsTheory.context_well_typed_def,
     e2eDeployDefsTheory.deploy_evaluation_context_def,
     initial_evaluation_context_def] >> metis_tac[]
@@ -423,7 +423,7 @@ Theorem deploy_source_variable_names_distinct[local]:
   deploy_source_ok tops am tx ==>
   ALL_DISTINCT (FLAT (MAP (vyperTypeContract$toplevel_vtype_keys_toplevel (NONE:num option)) tops))
 Proof
-  simp[deploy_source_ok_def, e2eDeployDefsTheory.deploy_typing_ok_def] >>
+  simp[deploy_source_ok_def, e2eDeployDefsTheory.deploy_typing_ok_constants_ready] >>
   rpt strip_tac >>
   qpat_x_assum `check_contract T _ _ _ = _` mp_tac >>
   simp[vyperTypeContractTheory.check_contract_def,
@@ -531,7 +531,7 @@ Theorem deploy_source_type_names_distinct[local]:
   deploy_source_ok tops am tx ==>
   ALL_DISTINCT (FLAT (MAP (type_def_keys_toplevel (NONE:num option)) tops))
 Proof
-  simp[deploy_source_ok_def, e2eDeployDefsTheory.deploy_typing_ok_def] >>
+  simp[deploy_source_ok_def, e2eDeployDefsTheory.deploy_typing_ok_constants_ready] >>
   rpt strip_tac >>
   qpat_x_assum `check_contract T _ _ _ = _` mp_tac >>
   simp[check_contract_def, contract_namespaces_ok_def, contract_keys_def,
@@ -575,7 +575,7 @@ Proof
 QED
 
 Theorem deploy_snapshot_observations[local]:
-  state_rel func cenv (deploy_evaluation_context tops am tx)
+  state_rel H func cenv (deploy_evaluation_context tops am tx)
     (st with scopes := []) before ==>
   (!a. a <> tx.target ==>
     lookup_account a before.vs_accounts = lookup_account a st.accounts) /\
@@ -598,7 +598,7 @@ Proof
   `log_entry_equiv cenv (deploy_evaluation_context tops am tx).txn.target = $=` by
     simp[FUN_EQ_THM, log_entry_equiv_def] >>
   `st.logs = before.vs_logs` by
-    (qpat_x_assum `state_rel _ _ _ _ _` mp_tac >>
+    (qpat_x_assum `state_rel _ _ _ _ _ _` mp_tac >>
      simp[state_rel_def, logs_rel_def, LIST_REL_eq] >> metis_tac[]) >>
   `log_entry_corresponds (compiled_event_info tops) (type_env tops) tx.target = $=` by
     simp[FUN_EQ_THM, e2eDefsTheory.log_entry_corresponds_concrete_event] >>
@@ -610,7 +610,7 @@ Proof
 QED
 
 Theorem deploy_snapshot_immutables[local]:
-  state_rel func cenv (deploy_evaluation_context tops am tx)
+  state_rel H func cenv (deploy_evaluation_context tops am tx)
     (st with scopes := []) before /\
   cenv.ce_module = NONE /\ cenv.ce_is_ctor ==>
   immutables_rel cenv tx.target NONE T (st with scopes := []) before
@@ -982,7 +982,7 @@ Theorem deploy_ctor_return:
     constructor_return_q func cenv (deploy_evaluation_context tops am tx) (LENGTH runtime_bc)
       (imm_len tops) nr nkey NoneV (st with scopes := []) (Halt final) /\
     final.vs_code = vs.vs_code /\ final.vs_labels = vs.vs_labels ==>
-    deploy_venom_result_rel tops runtime_bc tx
+    deploy_venom_result_rel HS tops runtime_bc tx
       (deploy_ctor_finish tops tx (deploy_evaluation_context tops am tx) nr mut am_c res st) (Halt final)
 Proof
   rpt gen_tac >> disch_then (map_every assume_tac o CONJUNCTS) >>
@@ -1016,7 +1016,7 @@ Proof
   qpat_x_assum `deploy_ctor_start _ _ _ _` kall_tac >>
   qpat_x_assum `eval_stmts _ _ _ = _` kall_tac >>
   qpat_x_assum `_ \/ _` kall_tac >>
-  qpat_x_assum `state_rel _ _ _ _ _` kall_tac >>
+  qpat_x_assum `state_rel _ _ _ _ _ _` kall_tac >>
   qpat_x_assum `immutables_rel _ _ _ _ _ _` kall_tac >>
   qpat_x_assum `!pre vis name ty slot post. _` kall_tac >>
   simp[deploy_venom_result_rel_def, abstract_machine_from_state_def,

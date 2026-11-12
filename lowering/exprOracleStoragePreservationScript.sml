@@ -151,7 +151,8 @@ Resume eval_expr_oracle_storage_mutual[Base_TopLevelNameTarget]:
   rpt gen_tac >>
   qpat_x_assum `eval_base_place _ _ _ = _` mp_tac >>
   pure_once_rewrite_tac [evaluate_def] >> strip_tac >>
-  imp_res_tac lookup_global_state >> gvs[runtime_storage_consistent_def]
+  imp_res_tac lookup_global_state >> gvs[runtime_storage_consistent_def] >>
+  qpat_x_assum `_ = _ with storage_trace := _` SUBST1_TAC >> simp[]
 QED
 
 Resume eval_expr_oracle_storage_mutual[Base_AttributeTarget]:
@@ -162,7 +163,8 @@ Resume eval_expr_oracle_storage_mutual[Base_AttributeTarget]:
   qpat_x_assum `eval_base_place _ _ _ = _` mp_tac >>
   simp[Once evaluate_def, bind_def, AllCaseEqs()] >> strip_tac >> gvs[] >>
   imp_res_tac extend_place_state >> gvs[] >>
-  first_x_assum drule_all >> simp[]
+  first_x_assum drule_all >> simp[] >>
+  qpat_x_assum `_ = _ with storage_trace := _` SUBST1_TAC >> simp[]
 QED
 
 Resume eval_expr_oracle_storage_mutual[Base_SubscriptTarget]:
@@ -196,7 +198,8 @@ Resume eval_expr_oracle_storage_mutual[Base_SubscriptTarget]:
           rename1 `read_result cx idx_value st2 = (value_res,value_st)` >>
           imp_res_tac read_result_state >> gvs[] >>
           Cases_on `value_res` >> gvs[return_def, raise_def] >>
-          rpt strip_tac >> imp_res_tac extend_place_state >> gvs[]) >>
+          rpt strip_tac >> imp_res_tac extend_place_state >> gvs[] >>
+          qpat_x_assum `_ = _ with storage_trace := _` SUBST1_TAC >> simp[]) >>
       rpt strip_tac >> gvs[]) >>
   rpt strip_tac >> gvs[]
 QED
@@ -296,7 +299,8 @@ Resume eval_expr_oracle_storage_mutual[Expr_TopLevelName]:
   rpt gen_tac >>
   qpat_x_assum `eval_expr _ _ _ = _` mp_tac >>
   simp[Once evaluate_def] >> strip_tac >>
-  imp_res_tac lookup_global_state >> gvs[runtime_storage_consistent_def]
+  imp_res_tac lookup_global_state >> gvs[runtime_storage_consistent_def] >>
+  qpat_x_assum `_ = _ with storage_trace := _` SUBST1_TAC >> simp[]
 QED
 
 Resume eval_expr_oracle_storage_mutual[Expr_FlagMember]:
@@ -325,7 +329,8 @@ Resume eval_expr_oracle_storage_mutual[Expr_Attribute]:
   Cases_on `base_res` >> gvs[bind_def, return_def, raise_def] >>
   rpt strip_tac >>
   imp_res_tac select_result_state >> gvs[] >>
-  gvs[Once well_typed_expr_def, AllCaseEqs()] >> metis_tac[]
+  gvs[Once well_typed_expr_def, AllCaseEqs()] >>
+  metis_tac[contract_storage_well_formed_storage_trace]
 QED
 
 Resume eval_expr_oracle_storage_mutual[Expr_Builtin]:
@@ -484,7 +489,8 @@ Resume eval_expr_oracle_storage_mutual[Expr_Subscript]:
           rename1 `read_result cx index_tv st2 = (value_res,st3)` >>
           `st3 = st2` by metis_tac[read_result_state] >> gvs[] >>
           Cases_on `value_res` >> gvs[return_def, raise_def] >>
-          rpt strip_tac >> imp_res_tac select_result_state >> gvs[]) >>
+          rpt strip_tac >> imp_res_tac select_result_state >> gvs[] >>
+          qpat_x_assum `_ = _ with storage_trace := _` SUBST1_TAC >> simp[]) >>
       strip_tac >> gvs[]) >>
   strip_tac >> gvs[]))
 QED

@@ -154,10 +154,11 @@ QED
 
 Theorem asm_selfdestruct_clears_old_return_data:
   !s.
+    ~s.as_call_ctx.cc_static ==>
     ?t.
       asm_selfdestruct
         (s with <|as_stack := [0w]; as_returndata := [1w]|>) = AsmHalt t /\
       t.as_returndata = []
 Proof
-  simp[asm_selfdestruct_def]
+  rpt strip_tac >> simp[asm_selfdestruct_def]
 QED

@@ -258,8 +258,8 @@ Theorem log_allocate_store_prepare_mem:
   compile_alloc_buffer outcap stored_st = (dst,prepared) /\
   fn_has_code source_st start func /\ fn_has_code stored_st prepared func /\
   ~block_is_terminated source_st /\ ~block_is_terminated stored_st /\
-  stmt_state_rel ctx func ce cx es before /\
-  stmt_state_rel ctx func ce cx es stored /\
+  stmt_state_rel H ctx func ce cx es before /\
+  stmt_state_rel H ctx func ce cx es stored /\
   fresh_vars_wrt source_st before /\ fresh_vars_wrt stored_st stored /\
   srccap < dimword (:256) /\ outcap < dimword (:256) /\
   run_inst_seq (emitted_insts source_st start) before = OK initial /\

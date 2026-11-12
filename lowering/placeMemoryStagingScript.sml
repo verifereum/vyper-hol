@@ -7,13 +7,13 @@ Ancestors
 
 Theorem compile_alloc_buffer_forward:
   compile_alloc_buffer n sa = (buf,sm) /\
-  stmt_state_rel ctx func cenv cx ee s /\ fn_inst_ids_distinct func /\
+  stmt_state_rel H ctx func cenv cx ee s /\ fn_inst_ids_distinct func /\
   local_ptrs_reserved cenv sa /\ n < dimword (:256) /\
   fn_has_code sa sm func /\ ~s.vs_halted /\
   s.vs_current_bb = sa.cs_current_bb /\
   s.vs_inst_idx = LENGTH sa.cs_current_insts ==>
   ?r tw. gas_marked_path F ctx func s 0 (OK r) /\
-    stmt_state_rel ctx func cenv cx ee r /\
+    stmt_state_rel H ctx func cenv cx ee r /\
     eval_operand buf.buf_operand r = SOME tw /\
     FLOOKUP r.vs_allocas sa.cs_next_id = SOME (w2n tw,n) /\
     w2n tw + n < dimword (:256) /\ r.vs_memory = s.vs_memory /\
@@ -92,7 +92,7 @@ Finalise compile_alloc_buffer_forward
 Theorem compile_staging_prefix_forward:
   compile_alloc_buffer n sa = (buf,sm) /\
   compile_copy_memory buf.buf_operand op n sm = ((),sn) /\
-  stmt_state_rel ctx func cenv cx ee s /\ fn_inst_ids_distinct func /\
+  stmt_state_rel H ctx func cenv cx ee s /\ fn_inst_ids_distinct func /\
   local_ptrs_reserved cenv sa /\ n < dimword (:256) /\
   fn_has_code sa sn func /\ ~s.vs_halted /\
   s.vs_current_bb = sa.cs_current_bb /\
@@ -104,7 +104,7 @@ Theorem compile_staging_prefix_forward:
   (!aid b sz. FLOOKUP s.vs_allocas aid = SOME (b,sz) /\
       sa.cs_next_id <= aid ==> w2n sw + n <= b \/ b + sz <= w2n sw) ==>
   ?r u tw. gas_marked_path F ctx func s 0 (OK r) /\
-    stmt_state_rel ctx func cenv cx ee r /\
+    stmt_state_rel H ctx func cenv cx ee r /\
     eval_operand buf.buf_operand r = SOME tw /\
     FLOOKUP r.vs_allocas sa.cs_next_id = SOME (w2n tw,n) /\
     w2n tw + n < dimword (:256) /\ r.vs_memory = s.vs_memory /\
@@ -167,7 +167,7 @@ Proof
      conj_tac >- simp[] >> qexistsl_tac [`w2n tw`, `s.vs_memory`, `n`] >>
      metis_tac[]) >>
   qexistsl_tac [`r`, `t`, `tw`] >> simp[] >>
-  rpt conj_tac >> rpt strip_tac >>
   gvs[regions_disjoint_def, eval_operand_def, lookup_var_def] >>
+  rpt conj_tac >> rpt strip_tac >>
   metis_tac[]
 QED

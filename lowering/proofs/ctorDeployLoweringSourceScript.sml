@@ -716,7 +716,7 @@ Theorem deploy_ctor_return_none:
     (es0 with <|gas_obs := gobs; outcomes := oc|>) =
       (INR (ReturnException v),st) ==> v = NoneV
 Proof
-  simp[ctorDeployDefsTheory.deploy_source_ok_def, deploy_typing_ok_def,
+  simp[ctorDeployDefsTheory.deploy_source_ok_def, deploy_typing_ok_constants_ready,
     deploy_ctor_start_def, Excl "lock_if_nr_def", Excl "is_view_mut_def"] >> rpt strip_tac >>
   `context_well_typed (deploy_evaluation_context tops am tx)` by
     (gvs[vyperTypeContractSoundnessTheory.call_tx_well_typed_def,

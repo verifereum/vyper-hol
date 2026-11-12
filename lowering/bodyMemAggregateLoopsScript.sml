@@ -34,14 +34,14 @@ Theorem aggregate_make_tuple_sim_mem:
        SOME (itv,iv) ==>
      regions_disjoint io (type_memory_size itv) (b+off)
        (type_memory_size_list tvs)) /\
-  stmt_state_rel ctx func ce cx es s0 /\ alloca_history func s0 /\ ~s0.vs_halted /\
+  stmt_state_rel H ctx func ce cx es s0 /\ alloca_history func s0 /\ ~s0.vs_halted /\
   s0.vs_current_bb = sa.cs_current_bb /\
   s0.vs_inst_idx = LENGTH sa.cs_current_insts ==>
   out = Var x /\
   gas_outcome T (cx_tops cx) (ctx,func) (eval_exprs cx args) (es,s0)
     (\res es' r. ?vs. res = INL vs /\ r.vs_current_bb = sb.cs_current_bb /\
       r.vs_inst_idx = LENGTH sb.cs_current_insts /\ expr_sim_inv ce cx env es' /\
-      stmt_state_rel ctx func ce cx es' r /\
+      stmt_state_rel H ctx func ce cx es' r /\
       tuple_in_memory vs tvs (b+off) r.vs_memory /\
       (!z w. not_fresh_at sa z /\ lookup_var z s0 = SOME w ==>
         lookup_var z r = SOME w) /\
@@ -97,7 +97,7 @@ Proof
   drule_all aggregate_tuple_child_outcome_mem >> strip_tac >>
   rewrite_tac[aggregate_tuple_eval_cons] >>
   match_mp_tac (Q.SPEC `\tv ee r.
-    vv_post ctx func ce cx h es sa sm s0 ee tv vv r /\
+    vv_post H ctx func ce cx h es sa sm s0 ee tv vv r /\
     vv_store_bound cx (expr_type h) (lowered_value_type ce h) ee tv vv r /\
     r.vs_current_bb = sm.cs_current_bb /\
     r.vs_inst_idx = LENGTH sm.cs_current_insts /\
@@ -132,7 +132,7 @@ Resume aggregate_make_tuple_sim_mem[child_success]:
    FLOOKUP t1.vs_allocas inst.inst_id = SOME (b,asz)` by
     (fs[vv_post_def] >> metis_tac[]) >>
   `not_fresh_at sm x` by metis_tac[not_fresh_at_mono, ci_mono_def] >>
-  `stmt_state_rel ctx func ce cx es1 t1` by fs[vv_post_def] >>
+  `stmt_state_rel H ctx func ce cx es1 t1` by fs[vv_post_def] >>
   `expr_sim_inv ce cx env es1` by gvs[] >>
   `not_local_ptr ce es1.scopes x` by metis_tac[] >>
   `alloca_inv t1` by fs[stmt_state_rel_def] >>
@@ -181,7 +181,7 @@ Resume aggregate_make_tuple_sim_mem[tail]:
   qpat_x_assum `!ce' cx' env' off' sa' out' sb' es' tvs' func' inst' x' b' asz' s0' ctx' tops'. _`
     (drule_at (Pat `compile_make_tuple _ _ _ _ _ _ = _`)) >>
   disch_then (drule_at (Pat `OPT_MMAP _ _ = _`)) >>
-  disch_then (drule_at (Pat `stmt_state_rel _ _ _ _ _ _`)) >>
+  disch_then (drule_at (Pat `stmt_state_rel _ _ _ _ _ _ _`)) >>
   disch_then (drule_at (Pat `lookup_var _ _ = _`)) >>
   disch_then (drule_at (Pat `FLOOKUP s.vs_allocas _ = _`)) >>
   disch_then (qspecl_then [`env`, `tops`] mp_tac) >>
@@ -257,7 +257,7 @@ Resume aggregate_make_tuple_sim_mem[slice_join]:
       asz + b <= lo \/ lo + sz <= b` by
     (`not_local_ptr ce es.scopes x` by simp[] >>
      `alloca_inv s0 /\ local_ptrs_rel func ce es.scopes s0` by
-       (qpat_assum `stmt_state_rel ctx func ce cx es s0` mp_tac >>
+       (qpat_assum `stmt_state_rel H ctx func ce cx es s0` mp_tac >>
         simp_tac std_ss [stmt_state_rel_def, state_rel_def] >>
         strip_tac >> asm_rewrite_tac[]) >>
      rpt strip_tac >> drule_all localPtrsPropsTheory.local_ptrs_rel_alloca_disjoint >>
@@ -266,14 +266,14 @@ Resume aggregate_make_tuple_sim_mem[slice_join]:
       asz + b <= lo \/ lo + sz <= b` by
     (`not_local_ptr ce es1.scopes x` by simp[] >>
      `alloca_inv t1 /\ local_ptrs_rel func ce es1.scopes t1` by
-       (qpat_assum `stmt_state_rel ctx func ce cx es1 t1` mp_tac >>
+       (qpat_assum `stmt_state_rel H ctx func ce cx es1 t1` mp_tac >>
         simp_tac std_ss [stmt_state_rel_def, state_rel_def] >>
         strip_tac >> asm_rewrite_tac[]) >>
      rpt strip_tac >> drule_all localPtrsPropsTheory.local_ptrs_rel_alloca_disjoint >>
      simp[regions_disjoint_def, arithmeticTheory.ADD_COMM]) >>
   `mem_bytes_at b asz t1.vs_memory = mem_bytes_at b asz s0.vs_memory` by
     (irule vv_post_old_buffer >>
-     goal_assum (drule_at (Pat `vv_post _ _ _ _ _ _ _ _ _ _ _ _ _`)) >>
+     goal_assum (drule_at (Pat `vv_post _ _ _ _ _ _ _ _ _ _ _ _ _ _`)) >>
      qexists_tac `inst.inst_id` >> simp[] >> rpt strip_tac >>
      metis_tac[]) >>
   `mem_bytes_at p n r.vs_memory = mem_bytes_at p n q.vs_memory` by
@@ -310,7 +310,7 @@ Resume aggregate_make_tuple_sim_mem[exterior_join]:
      metis_tac[]) >>
   `mem_bytes_at p n t1.vs_memory = mem_bytes_at p n s0.vs_memory` by
     (irule vv_post_old_buffer >>
-     goal_assum (drule_at (Pat `vv_post _ _ _ _ _ _ _ _ _ _ _ _ _`)) >>
+     goal_assum (drule_at (Pat `vv_post _ _ _ _ _ _ _ _ _ _ _ _ _ _`)) >>
      qexists_tac `aid` >> simp[] >> rpt strip_tac >> metis_tac[]) >>
   `FLOOKUP t1.vs_allocas aid = SOME (p,n)` by
     (fs[vv_post_def] >> metis_tac[]) >>
@@ -339,7 +339,7 @@ Resume aggregate_make_tuple_sim_mem[pure_join]:
       b + asz <= lb \/ lb + lsz <= b` by
     (`not_local_ptr ce es.scopes x` by simp[] >>
      `alloca_inv s0 /\ local_ptrs_rel func ce es.scopes s0` by
-       (qpat_assum `stmt_state_rel ctx func ce cx es s0` mp_tac >>
+       (qpat_assum `stmt_state_rel H ctx func ce cx es s0` mp_tac >>
         simp_tac std_ss [stmt_state_rel_def, state_rel_def] >>
         strip_tac >> asm_rewrite_tac[]) >>
      rpt strip_tac >> drule_all localPtrsPropsTheory.local_ptrs_rel_alloca_disjoint >>

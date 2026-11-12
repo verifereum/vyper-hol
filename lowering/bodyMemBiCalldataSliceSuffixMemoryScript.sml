@@ -181,7 +181,7 @@ Theorem calldata_slice_seq_mem:
   !func cenv cx es n start_op sa sb buf_op s ctx wa.
     compile_slice_calldata start_op (Lit (n2w n))
       (32 + 32 * word_size n) sa = (buf_op,sb) /\
-    stmt_state_rel ctx func cenv cx es s /\ fn_inst_ids_distinct func /\
+    stmt_state_rel H ctx func cenv cx es s /\ fn_inst_ids_distinct func /\
     local_ptrs_reserved cenv sa /\
     32 + 32 * word_size n < dimword (:256) /\ 0 < n /\
     eval_operand start_op s = SOME wa /\

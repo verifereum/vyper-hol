@@ -118,11 +118,12 @@ Proof
     (pop_assum (fn th => rewrite_tac [th]) >>
      BasicProvers.every_case_tac >> simp[]) >>
   `ptr_safe_step D lo n ctx fn [] G1 tn1 i1 t1` by
-    (simp[ptr_safe_step_def, ptr_inst_ok_def, access_ok_def, taint_ok_def,
+    (simp[ptr_safe_step_def, ptr_inst_ok_def] >>
+     simp[access_ok_def, taint_ok_def,
           allocas_from_def, source_memory_read_ranges_def,
           source_memory_write_ranges_def, sized_source_write_range_def,
-          mem_write_ops_def, mem_read_ops_def, eval_operand_def, op_taint_def,
-          Abbr `G1`, Abbr `tn1`, finite_mapTheory.FLOOKUP_UPDATE,
+          mem_write_ops_def, mem_read_ops_def, eval_operand_def, op_taint_def] >>
+     simp[Abbr `G1`, Abbr `tn1`, finite_mapTheory.FLOOKUP_UPDATE,
           finite_mapTheory.FLOOKUP_DEF] >>
      rw[] >~ [`Lit szword`] >- (Cases_on `op` >> gvs[]) >>
      gvs[entry_taint_def]) >>
@@ -186,7 +187,7 @@ Theorem deploy_no_ctor_run_ptr_safe:
     lookup_function "__deploy" dunit.cu_context.ctx_functions = SOME fn /\
     fn_entry_label fn = SOME lbl
     ==>
-    !fuel. ptr_safe_blocks (deploy_dead tops runtime_bc am tx) (imm_len tops)
+    !fuel. ptr_safe_blocks (deploy_dead HS tops runtime_bc am tx) (imm_len tops)
              fuel dunit.cu_context fn [] FEMPTY entry_taint
              (vs with <| vs_prev_bb := NONE; vs_current_bb := lbl;
                          vs_inst_idx := 0 |>)

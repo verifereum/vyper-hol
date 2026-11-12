@@ -54,7 +54,10 @@ Proof
        asm_step_context_def]
 QED
 
+(* A static frame's CALL with value faults with the stack unpopped, so the
+   forwarded gas shows there. *)
 Theorem asm_calls_ignore_forwarded_gas:
+  ~(s.as_call_ctx.cc_static /\ value <> 0w) ==>
   asm_exec_call is_static
     (s with as_stack := g1::addr::value::ao::asz::ro::rs::stk) =
   asm_exec_call is_static
@@ -64,6 +67,7 @@ Theorem asm_calls_ignore_forwarded_gas:
   asm_exec_staticcall
     (s with as_stack := g2::addr::ao::asz::ro::rs::stk)
 Proof
+  strip_tac >>
   simp[asm_exec_call_def, asm_exec_staticcall_def, asm_call_request_def,
        asm_consume_call_outcome_eq]
 QED

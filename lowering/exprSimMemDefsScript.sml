@@ -84,50 +84,54 @@ QED
 
 Definition expr_sim_mem_def:
   expr_sim_mem ctx func cenv cx ty e es <=>
-    !sa sb op s0.
+    !st0 sa sb op s0.
       lower_value compile_expr cenv ty e sa = (op, sb) /\
       fn_has_code sa sb func /\ fn_inst_ids_distinct func /\
       local_ptrs_reserved cenv sa /\
       gas_admissible (bind (eval_expr cx e) (read_result cx)) expr_res_ok es /\
-      stmt_state_rel ctx func cenv cx es s0 /\
+      (!H. valid_horizon cx st0 H es.storage_trace ==>
+        stmt_state_rel H ctx func cenv cx es s0 /\
+        storage_well_formed_on cx es (FST H)) /\
       alloca_history func s0 /\ ~s0.vs_halted /\
       s0.vs_current_bb = sa.cs_current_bb /\
       s0.vs_inst_idx = LENGTH sa.cs_current_insts ==>
-      gas_outcome T (cx_tops cx) (ctx, func)
+      gas_outcome T (cx_tops cx) (ctx, func) cx st0
         (bind (eval_expr cx e) (read_result cx)) (es, s0)
-        (\res ee t. ?v. res = INL v /\
-          expr_post ctx func cenv cx e es sa sb s0 ee v op t /\
+        (\H res ee t. ?v. res = INL v /\
+          expr_post H ctx func cenv cx e es sa sb s0 ee v op t /\
           expr_store_bound cx (expr_type e) v op t /\
           t.vs_current_bb = sb.cs_current_bb /\
           t.vs_inst_idx = LENGTH sb.cs_current_insts /\
           alloca_history func t /\ s0.vs_alloca_next <= t.vs_alloca_next)
-        (\res ee r. expr_exit res r)
+        (\H res ee r. expr_exit res r)
 End
 
 Definition expr_vv_sim_mem_def:
   expr_vv_sim_mem ctx func cenv cx ty e es <=>
-    !sa sb vv s0.
+    !st0 sa sb vv s0.
       compile_expr cenv ty e sa = (vv, sb) /\
       fn_has_code sa sb func /\ fn_inst_ids_distinct func /\
       local_ptrs_reserved cenv sa /\
       gas_admissible (eval_expr cx e) expr_vv_res_ok es /\
-      stmt_state_rel ctx func cenv cx es s0 /\
+      (!H. valid_horizon cx st0 H es.storage_trace ==>
+        stmt_state_rel H ctx func cenv cx es s0 /\
+        storage_well_formed_on cx es (FST H)) /\
       alloca_history func s0 /\ ~s0.vs_halted /\
       s0.vs_current_bb = sa.cs_current_bb /\
       s0.vs_inst_idx = LENGTH sa.cs_current_insts ==>
-      gas_outcome T (cx_tops cx) (ctx, func) (eval_expr cx e) (es, s0)
-        (\res ee t. ?tv. res = INL tv /\
-          vv_post ctx func cenv cx e es sa sb s0 ee tv vv t /\
+      gas_outcome T (cx_tops cx) (ctx, func) cx st0 (eval_expr cx e) (es, s0)
+        (\H res ee t. ?tv. res = INL tv /\
+          vv_post H ctx func cenv cx e es sa sb s0 ee tv vv t /\
           vv_store_bound cx (expr_type e) (lowered_value_type cenv e) ee tv vv t /\
           t.vs_current_bb = sb.cs_current_bb /\
           t.vs_inst_idx = LENGTH sb.cs_current_insts /\
           alloca_history func t /\ s0.vs_alloca_next <= t.vs_alloca_next)
-        (\res ee r. expr_exit res r)
+        (\H res ee r. expr_exit res r)
 End
 
 Theorem gas_outcome_post_mono:
-  gas_outcome m tops p src st Q R /\ (!res ee t. Q res ee t ==> Q' res ee t) ==>
-  gas_outcome m tops p src st Q' R
+  gas_outcome m tops p cx st0 src st Q R /\ (!H res ee t. Q H res ee t ==> Q' H res ee t) ==>
+  gas_outcome m tops p cx st0 src st Q' R
 Proof
   PairCases_on `p` >> PairCases_on `st` >>
   rw[gas_outcome_def, gasSummaryTheory.gas_summary_at_def] >>
@@ -138,14 +142,14 @@ QED
    judgment's other conjuncts suffices. *)
 Theorem expr_sim_mem_word_outcome:
   is_word_type (expr_type e) /\
-  gas_outcome m tops p src st
-    (\res ee t. ?v. res = INL v /\
-       expr_post ctx func cenv cx e es sa sb s0 ee v op t /\
+  gas_outcome m tops p cx st0 src st
+    (\H res ee t. ?v. res = INL v /\
+       expr_post H ctx func cenv cx e es sa sb s0 ee v op t /\
        t.vs_current_bb = bb /\ t.vs_inst_idx = n /\
        alloca_history func t /\ a <= t.vs_alloca_next) R ==>
-  gas_outcome m tops p src st
-    (\res ee t. ?v. res = INL v /\
-       expr_post ctx func cenv cx e es sa sb s0 ee v op t /\
+  gas_outcome m tops p cx st0 src st
+    (\H res ee t. ?v. res = INL v /\
+       expr_post H ctx func cenv cx e es sa sb s0 ee v op t /\
        expr_store_bound cx (expr_type e) v op t /\
        t.vs_current_bb = bb /\ t.vs_inst_idx = n /\
        alloca_history func t /\ a <= t.vs_alloca_next) R
@@ -158,7 +162,7 @@ QED
 (* A memory pointer with room below the frontier for its whole type bounds
    the value it points at, and a zero-size type needs no room. *)
 Theorem vv_store_bound_capacity:
-  vv_post ctx func cenv cx e es sa sb s0 es' tv (LocatedValue vt p) t /\
+  vv_post H ctx func cenv cx e es sa sb s0 es' tv (LocatedValue vt p) t /\
   vt = expr_type e /\ post_value_type cenv e = expr_type e /\
   evaluate_type (get_tenv cx) (expr_type e) = SOME ftv /\
   eval_operand p.ptr_operand t = SOME fw /\
@@ -171,7 +175,7 @@ Proof
 QED
 
 Theorem expr_store_bound_capacity:
-  expr_post ctx func cenv cx e es sa sb s0 es' v op t /\
+  expr_post H ctx func cenv cx e es sa sb s0 es' v op t /\
   post_value_type cenv e = expr_type e /\
   (!tv. evaluate_type (get_tenv cx) (expr_type e) = SOME tv /\
         ~is_word_type (expr_type e) ==>

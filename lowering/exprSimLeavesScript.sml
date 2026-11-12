@@ -39,7 +39,7 @@
  *   compile_toplevel_no_module_sim
  *
  * Unprovable as the definitions stand, to be fixed in the lowering, in
- * state_rel or in the judgment before their PRs:
+ * state_rel H or in the judgment before their PRs:
  *   compile_toplevel_immutable_sim — immutables and constants (row 3),
  *                              which lookup_global reads from the
  *                              immutables: nothing puts them in
@@ -257,7 +257,7 @@ Proof
    t.vs_gas_readings = s0.vs_gas_readings` by
     (qpat_x_assum `t = _ with vs_vars := _` (fn th => ONCE_REWRITE_TAC [th]) >>
      simp[]) >>
-  `stmt_state_rel ctx func cenv cx es t` by
+  `stmt_state_rel H ctx func cenv cx es t` by
     (qpat_x_assum `t = _ with vs_vars := _` (fn th => ONCE_REWRITE_TAC [th]) >>
      irule stmt_state_rel_vars_frame >> simp[] >> rpt strip_tac >>
      simp[lookup_var_def] >> first_x_assum irule >>

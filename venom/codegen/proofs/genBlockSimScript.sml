@@ -730,6 +730,7 @@ Theorem step_inst_selfdestruct_halt[local]:
     inst.inst_opcode = SELFDESTRUCT /\
     step_inst fuel ctx inst vs = Halt vs' ==>
     ?addr_op addr_val.
+      ~vs.vs_call_ctx.cc_static /\
       inst.inst_operands = [addr_op] /\
       eval_operand addr_op vs = SOME addr_val /\
       vs' = halt_state (set_returndata [] (vs with <|
@@ -752,7 +753,8 @@ Proof
   ONCE_REWRITE_TAC[step_inst_base_def] >>
   qpat_x_assum `inst.inst_opcode = SELFDESTRUCT`
     (fn th => PURE_REWRITE_TAC[th]) >>
-  every_case_tac >> gvs[halt_state_def, set_returndata_def, LET_THM]
+  every_case_tac >>
+  gvs[halt_state_def, set_returndata_def, LET_THM, eval_operands_def]
 QED
 
 (* What step_inst RETURNDATACOPY abort produces *)
@@ -986,7 +988,7 @@ Theorem terminal_selfdestruct_step[local]:
     asm_block_at prog st.as_pc [AsmOp "SELFDESTRUCT"] /\
     st.as_stack = addr_val :: rest_stk /\
     venom_asm_terminal_rel vs st /\
-    st.as_call_ctx = vs.vs_call_ctx /\
+    st.as_call_ctx = vs.vs_call_ctx /\ ~vs.vs_call_ctx.cc_static /\
     st.as_accounts = vs.vs_accounts ==>
     ?st'.
       asm_steps lo o2pc prog 1 st = AsmHalt st' /\
@@ -4925,10 +4927,30 @@ Proof
 QED
 
 (* LOG case of gen_inst_ok_sim: LOGn reads the memory range and topics off the stack and appends the log entry. *)
+(* Offset, size and topics evaluating means every LOG operand does. *)
+Theorem log_operands_some[local]:
+  !rest s off sz topics.
+    eval_operand (EL 0 (REVERSE rest)) s = SOME off /\
+    eval_operand (EL 1 (REVERSE rest)) s = SOME sz /\
+    eval_operands (DROP 2 (REVERSE rest)) s = SOME topics /\
+    2 <= LENGTH rest ==>
+    IS_SOME (eval_operands rest s)
+Proof
+  rpt strip_tac >> simp[venomStateTheory.eval_operands_IS_SOME_EVERY] >>
+  `EVERY (\op. IS_SOME (eval_operand op s)) (REVERSE rest)`
+    suffices_by simp[rich_listTheory.EVERY_REVERSE] >>
+  `2 <= LENGTH (REVERSE rest)` by simp[] >>
+  Cases_on `REVERSE rest` >> gvs[] >>
+  Cases_on `t` >> gvs[] >>
+  `IS_SOME (eval_operands t' s)` by simp[] >>
+  gvs[venomStateTheory.eval_operands_IS_SOME_EVERY]
+QED
+
 Theorem step_inst_log_ok:
   !fuel ctx inst vs vs'.
     inst.inst_opcode = LOG /\ step_inst fuel ctx inst vs = OK vs' ==>
     ?tc rest off sz topics.
+      ~vs.vs_call_ctx.cc_static /\
       inst.inst_operands = Lit tc :: rest /\
       LENGTH rest = w2n tc + 2 /\
       eval_operand (EL 0 (REVERSE rest)) vs = SOME off /\
@@ -4949,7 +4971,13 @@ Proof
     (fn th => PURE_REWRITE_TAC[th]) >>
   simp_tac (srw_ss()) [] >>
   simp[LET_THM, AllCaseEqs()] >>
-  strip_tac >> gvs[] >>
+  strip_tac >> gvs[]
+  (* the static guard can't have been skipped by a failing operand *)
+  >>~- ([`eval_operands (Lit _ :: _) _ = NONE`],
+         `IS_SOME (eval_operands rest vs)` by
+           (irule log_operands_some >> simp[] >> metis_tac[]) >>
+         gvs[optionTheory.IS_SOME_EXISTS, venomStateTheory.eval_operands_def,
+             eval_operand_def]) >>
   goal_assum (drule_at Any) >> simp[]
 QED
 
@@ -5003,7 +5031,8 @@ Theorem log_asm_rel[local]:
     st.as_stack = off :: sz :: (topics ++ tail) /\
     LENGTH topics = n /\
     (w2n sz = 0 \/ w2n off + w2n sz <= ps.ps_alloc.sa_spill_base \/
-     ps.ps_alloc.sa_next_offset <= w2n off) ==>
+     ps.ps_alloc.sa_next_offset <= w2n off) /\
+    ~vs.vs_call_ctx.cc_static ==>
     ?st'. asm_log n st = AsmOK st' /\
       venom_asm_rel lo
         (ps with ps_stack := stack_pop (n + 2) ps.ps_stack)
@@ -5042,6 +5071,7 @@ Proof
   `!logs op. operand_val (vs with vs_logs := logs) lo op =
              operand_val vs lo op` by
     (gen_tac >> Cases >> simp[operand_val_def]) >>
+  `~st.as_call_ctx.cc_static` by fs[venom_asm_rel_def] >>
   simp[asm_log_def, LET_THM, asm_next_def] >>
   gvs[venom_asm_rel_def, plan_stack_rel_def, plan_spill_rel_def,
       TAKE_APPEND1]
@@ -5054,6 +5084,7 @@ Theorem log_emit_step_rel:
     LENGTH topics = n /\ n <= 4 /\
     (w2n sz = 0 \/ w2n off + w2n sz <= ps.ps_alloc.sa_spill_base \/
      ps.ps_alloc.sa_next_offset <= w2n off) /\
+    ~vs.vs_call_ctx.cc_static /\
     asm_block_at prog st.as_pc
       [AsmOp ("LOG" ++ num_to_dec_string n)] ==>
     ?st'. asm_steps lo o2pc prog 1 st = AsmOK st' /\
@@ -5077,8 +5108,8 @@ Proof
             data := TAKE (w2n sz) (DROP (w2n off) vs.vs_memory ++
                                      REPLICATE (w2n sz) 0w) |>]) st' /\
     st'.as_pc = st.as_pc + 1` by
-    (irule log_asm_rel >> conj_tac
-     >- (qexists_tac `tail` >> simp[]) >> asm_rewrite_tac[]) >>
+    (irule log_asm_rel >> asm_rewrite_tac[] >>
+     qexists_tac `tail` >> simp[]) >>
   qexists_tac `st'` >> simp[] >> conj_tac
   >- (fs[asm_block_at_def] >>
       `st.as_pc < LENGTH prog` by decide_tac >>

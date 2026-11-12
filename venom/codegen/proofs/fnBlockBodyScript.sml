@@ -30,19 +30,6 @@ End
 
 (* ===== Facts from the codegen preconditions ===== *)
 
-Theorem codegen_ready_fn_inst[local]:
-  !fn inst.
-    codegen_ready_fn fn /\ MEM inst (fn_insts fn) ==> codegen_ready_inst inst
-Proof
-  simp[stackPlanGenTheory.codegen_ready_fn_def, venomInstTheory.fn_insts_def] >>
-  rpt strip_tac >>
-  qpat_x_assum `EVERY _ fn.fn_blocks` mp_tac >>
-  qpat_x_assum `MEM _ _` mp_tac >>
-  qspec_tac (`fn.fn_blocks`, `bbs`) >>
-  Induct >> simp[venomInstTheory.fn_insts_blocks_def] >>
-  rpt strip_tac >> gvs[listTheory.EVERY_MEM]
-QED
-
 (* DUP and SWAP reach 16 slots. *)
 Theorem body_operands_le_16[local]:
   !fn inst.
@@ -51,7 +38,7 @@ Theorem body_operands_le_16[local]:
     LENGTH (compute_operands inst) <= 16
 Proof
   rpt strip_tac >>
-  `codegen_ready_inst inst` by metis_tac[codegen_ready_fn_inst] >>
+  `codegen_ready_inst inst` by metis_tac[fnFrameDeepAbortTheory.codegen_ready_fn_inst] >>
   gvs[stackPlanGenTheory.codegen_ready_inst_def]
 QED
 
@@ -64,7 +51,7 @@ Theorem body_log_topics[local]:
      case inst.inst_operands of Lit tc :: _ => w2n tc <= 4 | _ => F)
 Proof
   rpt strip_tac >>
-  `codegen_ready_inst inst` by metis_tac[codegen_ready_fn_inst] >>
+  `codegen_ready_inst inst` by metis_tac[fnFrameDeepAbortTheory.codegen_ready_fn_inst] >>
   gvs[stackPlanGenTheory.codegen_ready_inst_def]
 QED
 
@@ -422,7 +409,6 @@ Theorem block_body_frame_sim:
        lookup_function callee_name ctx.ctx_functions = SOME callee ==>
        fn_has_retpc callee) /\
     (!l. FLOOKUP vs.vs_labels l = OPTION_MAP n2w (FLOOKUP lo l)) /\
-    ~vs.vs_call_ctx.cc_static /\
     codegen_context_obligations Inv ctx cp /\
     reachability_closed Inv ctx /\
     (!inst. active_inst fn inst vs ==> Inv ctx fn inst vs) /\

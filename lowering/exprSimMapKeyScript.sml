@@ -49,7 +49,7 @@ Proof
 QED
 
 Theorem expr_post_hashmap_bytestring:
-  expr_post ctx func cenv cx e es sa sm s0 es' kv op s /\
+  expr_post H ctx func cenv cx e es sa sm s0 es' kv op s /\
   expr_type e = kt /\ is_bytestring_type kt /\
   evaluate_type (get_tenv cx) kt = SOME tv /\ value_has_type tv kv ==>
   ?b bs. eval_operand op s = SOME (n2w b) /\
@@ -118,12 +118,12 @@ Theorem hash_alloc_capacity_mstore_frame:
   emit_void MSTORE [buf.buf_operand; val_op] sm = ((), sh) /\
   (!x. val_op = Var x ==> not_fresh_at sa x) /\
   eval_operand val_op s = SOME w /\
-  stmt_state_rel ctx func cenv cx es s /\ fn_inst_ids_distinct func /\
+  stmt_state_rel H ctx func cenv cx es s /\ fn_inst_ids_distinct func /\
   local_ptrs_reserved cenv sa /\
   MEM (mk_inst sa.cs_next_id ALLOCA [Lit (n2w cap)]
     [STRING #"%" (toString sa.cs_next_var)]) (fn_insts func) ==>
   ?t addr. run_inst_seq (emitted_insts sa sh) s = OK t /\
-    stmt_state_rel ctx func cenv cx es t /\
+    stmt_state_rel H ctx func cenv cx es t /\
     eval_operand buf.buf_operand t = SOME addr /\
     t.vs_memory = (mstore (w2n addr) w s).vs_memory /\
     t.vs_labels = s.vs_labels /\
@@ -159,7 +159,7 @@ Proof
      OK (mstore (w2n addr) w allocated)` by
     (irule literal_emit_mstore_run >>
      qexistsl_tac [`buf.buf_operand`, `val_op`] >> simp[]) >>
-  `stmt_state_rel ctx func cenv cx es (mstore (w2n addr) w allocated)` by
+  `stmt_state_rel H ctx func cenv cx es (mstore (w2n addr) w allocated)` by
     (irule literal_mstore_state_rel >> simp[] >>
      qexistsl_tac [`w2n addr`,
        `mk_inst sa.cs_next_id ALLOCA [Lit (n2w cap)]
@@ -236,12 +236,12 @@ Theorem hash_alloc_two_words_frame:
   (!x. op0 = Var x ==> not_fresh_at sa x) /\
   (!x. op1 = Var x ==> not_fresh_at sa x) /\
   eval_operand op0 s = SOME w0 /\ eval_operand op1 s = SOME w1 /\
-  stmt_state_rel ctx func cenv cx es s /\ fn_inst_ids_distinct func /\
+  stmt_state_rel H ctx func cenv cx es s /\ fn_inst_ids_distinct func /\
   local_ptrs_reserved cenv sa /\
   MEM (mk_inst sa.cs_next_id ALLOCA [Lit 64w]
     [STRING #"%" (toString sa.cs_next_var)]) (fn_insts func) ==>
   ?t addr. run_inst_seq (emitted_insts sa sb) s = OK t /\
-    stmt_state_rel ctx func cenv cx es t /\
+    stmt_state_rel H ctx func cenv cx es t /\
     eval_operand buf.buf_operand t = SOME addr /\
     mem_bytes_at (w2n addr) 64 t.vs_memory =
       word_to_bytes_be w0 ++ word_to_bytes_be w1 /\
@@ -290,9 +290,9 @@ Resume hash_alloc_two_words_frame[second_store]:
   `run_inst_seq (emitted_insts sp sb) s2 =
      OK (mstore (w2n addr + 32) w1 s2)` by
     (drule_all literal_emit_mstore_run >> simp[]) >>
-  `stmt_state_rel ctx func cenv cx es s2` by
+  `stmt_state_rel H ctx func cenv cx es s2` by
     (irule hash_readonly_state_rel >> goal_assum (drule_at Any) >> simp[]) >>
-  `stmt_state_rel ctx func cenv cx es (mstore (w2n addr + 32) w1 s2)` by
+  `stmt_state_rel H ctx func cenv cx es (mstore (w2n addr + 32) w1 s2)` by
     (irule literal_mstore_state_rel >> simp[] >>
      qexistsl_tac [`w2n addr`,
        `mk_inst sa.cs_next_id ALLOCA [Lit 64w]
@@ -681,7 +681,7 @@ Proof
 QED
 
 Theorem compile_hashmap_dynamic_key_frame:
-  expr_post ctx func cenv cx e es sa sm s0 es' kv key s /\
+  expr_post H ctx func cenv cx e es sa sm s0 es' kv key s /\
   expr_type e = kt /\ is_bytestring_type kt /\
   evaluate_type (get_tenv cx) kt = SOME tv /\ value_has_type tv kv /\
   compile_keccak256_key key F sm = (op,sb) /\
@@ -689,7 +689,7 @@ Theorem compile_hashmap_dynamic_key_frame:
   local_ptrs_reserved cenv sm ==>
   ?t. run_inst_seq (emitted_insts sm sb) s = OK t /\
     eval_operand op t = SOME (encode_hashmap_key kt kv) /\
-    stmt_state_rel ctx func cenv cx es' t /\
+    stmt_state_rel H ctx func cenv cx es' t /\
     (t with vs_vars := s.vs_vars) = s /\
     (!x. not_fresh_at sm x ==> lookup_var x t = lookup_var x s)
 Proof
@@ -705,13 +705,13 @@ Theorem compile_mapping_subscript_run:
   (!x. base_op = Var x ==> not_fresh_at sa x) /\
   (!x. key = Var x ==> not_fresh_at sa x) /\
   eval_operand base_op s = SOME w0 /\ eval_operand key s = SOME w1 /\
-  stmt_state_rel ctx func cenv cx es s /\ fn_inst_ids_distinct func /\
+  stmt_state_rel H ctx func cenv cx es s /\ fn_inst_ids_distinct func /\
   local_ptrs_reserved cenv sa /\
   MEM (mk_inst sa.cs_next_id ALLOCA [Lit 64w]
     [STRING #"%" (toString sa.cs_next_var)]) (fn_insts func) ==>
   ?t. run_inst_seq (emitted_insts sa sb) s = OK t /\
     eval_operand op t = SOME (hashmap_slot w0 w1) /\
-    stmt_state_rel ctx func cenv cx es t /\
+    stmt_state_rel H ctx func cenv cx es t /\
     (!x. not_fresh_at sa x ==> lookup_var x t = lookup_var x s) /\
     (!aid entry. FLOOKUP s.vs_allocas aid = SOME entry ==>
        FLOOKUP t.vs_allocas aid = SOME entry) /\
@@ -748,7 +748,7 @@ Proof
      simp[rich_listTheory.DROP_LENGTH_APPEND]) >>
   `local_ptrs_reserved cenv sq` by
     (irule local_ptrs_reserved_next_var >> goal_assum (drule_at Any) >> simp[]) >>
-  `stmt_state_rel ctx func cenv cx es t` by
+  `stmt_state_rel H ctx func cenv cx es t` by
     (irule hash_readonly_state_rel >> qexistsl_tac [`staged`, `sq`] >> simp[]) >>
   `run_inst_seq (emitted_insts sa sb) s = OK t` by
     (qpat_assum `run_inst_seq (emitted_insts sa sq) s = OK staged`
@@ -775,11 +775,11 @@ Theorem compile_mapping_subscript_frame:
   (!x. base_op = Var x ==> not_fresh_at sa x) /\
   (!x. key = Var x ==> not_fresh_at sa x) /\
   eval_operand base_op s = SOME w0 /\ eval_operand key s = SOME w1 /\
-  stmt_state_rel ctx func cenv cx es s /\ fn_inst_ids_distinct func /\
+  stmt_state_rel H ctx func cenv cx es s /\ fn_inst_ids_distinct func /\
   local_ptrs_reserved cenv sa /\ fn_has_code sa sb func ==>
   ?t. run_inst_seq (emitted_insts sa sb) s = OK t /\
     eval_operand op t = SOME (hashmap_slot w0 w1) /\
-    stmt_state_rel ctx func cenv cx es t /\ wb_frame cenv es es sa s t /\
+    stmt_state_rel H ctx func cenv cx es t /\ wb_frame cenv es es sa s t /\
     pure_frame cenv func es sa s t
 Proof
   strip_tac >> drule_all mapping_alloca_code >> strip_tac >>
@@ -791,7 +791,7 @@ Proof
 QED
 
 Theorem compile_hashmap_tail_run:
-  expr_post ctx func cenv cx e es sa sn s0 en kv key s /\
+  expr_post H ctx func cenv cx e es sa sn s0 en kv key s /\
   expr_type e = kt /\ hashmap_key_type kt /\
   evaluate_type (get_tenv cx) kt = SOME tv /\ value_has_type tv kv /\
   (if is_bytestring_type kt then compile_keccak256_key key F sn
@@ -804,15 +804,15 @@ Theorem compile_hashmap_tail_run:
   fn_has_code sp sb func ==>
   ?u. run_inst_seq (emitted_insts sn sb) s = OK u /\
     eval_operand slot u = SOME (hashmap_slot base_slot (encode_hashmap_key kt kv)) /\
-    stmt_state_rel ctx func cenv cx en u /\ wb_frame cenv en en sn s u /\
+    stmt_state_rel H ctx func cenv cx en u /\ wb_frame cenv en en sn s u /\
     pure_frame cenv func en sn s u
 Proof
   strip_tac >>
-  `stmt_state_rel ctx func cenv cx en s` by
+  `stmt_state_rel H ctx func cenv cx en s` by
     (drule exprSimWordArgsTheory.expr_post_state >> simp[]) >>
   `?t. run_inst_seq (emitted_insts sn sp) s = OK t /\
     eval_operand hashed t = SOME (encode_hashmap_key kt kv) /\
-    stmt_state_rel ctx func cenv cx en t /\
+    stmt_state_rel H ctx func cenv cx en t /\
     (t with vs_vars := s.vs_vars) = s /\
     (!x. not_fresh_at sn x ==> lookup_var x t = lookup_var x s)` by
     (Cases_on `is_bytestring_type kt`
@@ -916,14 +916,14 @@ Theorem compile_hashmap_tail_frag:
   (!x. base_op = Var x ==> not_fresh_at sn x) /\
   fn_inst_ids_distinct func /\ local_ptrs_reserved cenv sn /\
   fn_has_code sp sb func /\
-  stmt_state_rel ctx func cenv cx es s0 /\ local_ptrs_reserved cenv sa /\
+  stmt_state_rel H ctx func cenv cx es s0 /\ local_ptrs_reserved cenv sa /\
   MAP FDOM es.scopes = MAP FDOM en.scopes /\
   sa.cs_next_var <= sn.cs_next_var /\ sa.cs_next_id <= sn.cs_next_id ==>
   frag_exec ctx sn sb
-    (\s. expr_post ctx func cenv cx e es sa sn s0 en kv key s /\
+    (\s. expr_post H ctx func cenv cx e es sa sn s0 en kv key s /\
          eval_operand base_op s = SOME base_slot)
     (\u. eval_operand slot u = SOME (hashmap_slot base_slot (encode_hashmap_key kt kv)) /\
-         stmt_state_rel ctx func cenv cx en u /\ wb_frame cenv es en sa s0 u) R
+         stmt_state_rel H ctx func cenv cx en u /\ wb_frame cenv es en sa s0 u) R
 Proof
   strip_tac >> drule_all compile_hashmap_tail_shape >> strip_tac >>
   `EVERY (\i. i.inst_opcode <> INVOKE /\ ~is_terminator i.inst_opcode)
@@ -971,7 +971,7 @@ Proof
 QED
 
 Theorem compile_mapping_index_success_tail:
-  expr_post ctx func cenv cx idx em sm sn s1 en kv key t /\
+  expr_post H ctx func cenv cx idx em sm sn s1 en kv key t /\
   expr_type idx = kt /\ hashmap_key_type kt /\
   evaluate_type (get_tenv cx) kt = SOME tv /\ value_has_type tv kv /\
   (if is_bytestring_type kt then compile_keccak256_key key F sn
@@ -981,14 +981,14 @@ Theorem compile_mapping_index_success_tail:
   (!x. base_op = Var x ==> not_fresh_at sm x) /\ (!l. base_op <> Label l) /\
   eval_operand base_op s1 = SOME base_slot /\
   fn_inst_ids_distinct func /\ fn_has_code sp sb func /\ fn_has_code sn sb func /\
-  stmt_state_rel ctx func cenv cx em s1 /\ local_ptrs_reserved cenv sm /\
+  stmt_state_rel H ctx func cenv cx em s1 /\ local_ptrs_reserved cenv sm /\
   MAP FDOM em.scopes = MAP FDOM en.scopes /\
   sm.cs_next_var <= sn.cs_next_var /\ sm.cs_next_id <= sn.cs_next_id /\
   ~t.vs_halted /\ t.vs_current_bb = sn.cs_current_bb /\
   t.vs_inst_idx = LENGTH sn.cs_current_insts ==>
   ?u. gas_marked_path F ctx func t 0 (OK u) /\
       eval_operand slot u = SOME (hashmap_slot base_slot (encode_hashmap_key kt kv)) /\
-      stmt_state_rel ctx func cenv cx en u /\ wb_frame cenv em en sm s1 u /\
+      stmt_state_rel H ctx func cenv cx en u /\ wb_frame cenv em en sm s1 u /\
       (~expr_has_effect idx ==> pure_frame cenv func em sm s1 u) /\
       u.vs_current_bb = sb.cs_current_bb /\
       u.vs_inst_idx = LENGTH sb.cs_current_insts
@@ -1015,7 +1015,7 @@ Proof
   `~expr_has_effect idx ==> pure_frame cenv func em sm s1 u` by
     (strip_tac >>
      `pure_frame cenv func em sm s1 t` by
-       (qpat_assum `expr_post _ _ _ _ idx _ _ _ _ _ _ _ _`
+       (qpat_assum `expr_post H _ _ _ _ idx _ _ _ _ _ _ _ _`
           (mp_then Any mp_tac exprSimWordArgsTheory.expr_post_pure_frame) >>
         simp[]) >>
      `!aid b. FLOOKUP t.vs_allocas aid = SOME b ==>

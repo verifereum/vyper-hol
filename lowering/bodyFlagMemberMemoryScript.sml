@@ -15,10 +15,10 @@ Theorem body_flag_member_mem_prefix[local]:
   local_ptrs_reserved cenv sa /\
   gas_admissible (bind (eval_expr cx (FlagMember ann nsid mid)) (read_result cx))
     expr_res_ok es /\
-  stmt_state_rel ctx func cenv cx es s0 /\ alloca_history func s0 /\
+  stmt_state_rel H ctx func cenv cx es s0 /\ alloca_history func s0 /\
   ~s0.vs_halted /\ s0.vs_current_bb = sa.cs_current_bb /\
   s0.vs_inst_idx = LENGTH sa.cs_current_insts ==>
-  ?marks v ee t. gas_value_prefix T (ctx,func,cenv,cx)
+  ?marks v ee t. gas_value_prefix H T (ctx,func,cenv,cx)
     (ty,FlagMember ann nsid mid) (sa,sb,op) (es,s0) marks (v,ee,t)
 Proof
   strip_tac >> PairCases_on `nsid` >>
@@ -35,7 +35,7 @@ Proof
        comp_bind_def, comp_return_def, unwrap_value_def] >>
   conj_tac
   >- simp[gas_marked_exec_def, gas_marked_path_def, gas_path_mem_rules] >>
-  `stmt_state_rel ctx func cenv cx (es with gas_obs := []) s0` by
+  `stmt_state_rel H ctx func cenv cx (es with gas_obs := []) s0` by
     (drule msg_gas_state_frame >>
      disch_then (qspecl_then [`s0.vs_gas_readings`, `s0.vs_inst_idx`, `[]`] mp_tac) >>
      simp[NoAsms]) >>
@@ -88,7 +88,7 @@ Proof
   conj_tac
   >- (PairCases_on `nsid` >> rpt gen_tac >>
       simp[Once evaluate_def, lookup_flag_mem_def] >>
-      rpt (BasicProvers.TOP_CASE_TAC >> simp[raise_def, return_def]) >> rw[]) >>
+      rpt (BasicProvers.PURE_TOP_CASE_TAC >> simp[raise_def, return_def]) >> rw[]) >>
   irule compile_flag_member_body_sim_mem >> metis_tac[]
 QED
 

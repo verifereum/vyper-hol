@@ -8,7 +8,7 @@ Ancestors
   vyperInterpreter vyperState vyperValueOperation vyperContext vyperValue vyperAST
   supportedExprTraverse
   valueEncoding valueEncodingProofs vyperTypeSystem
-  venomExecSemantics venomInst venomState vyperLookupStorage vyperStorageBackend accountsRelProps supportedExprTraverse
+  venomExecSemantics venomInst venomState vyperLookupStorage vyperStorageBackend vyperStorageFootprint accountsRelProps supportedExprTraverse
   vyperEvalScopesProgress
 Libs
   monadsyntax
@@ -252,7 +252,7 @@ End
    val_footprint 0 and sits nowhere: the lowering hands out Lit 0w).
    An operator's proof needs this to keep a first operand's value through
    the second operand's fragment: an allocation of the first is below the
-   second's start counter and clear of the live locals, and expr_post
+   second's start counter and clear of the live locals, and expr_post H
    keeps such allocations' bytes;
    a local's region it keeps but for its dynamic arrays' length words
    (locals_kept), which the path keeps apart from a value with no dynamic
@@ -276,7 +276,7 @@ End
    all its bytes, dynamic array length words included (no pop runs), and so
    does every window clear of the allocations, in s, of the function's
    ALLOCAs with instruction id sa.cs_next_id or above: the expression's own,
-   which are the only memory it writes.  expr_post and vv_post carry it for
+   which are the only memory it writes.  expr_post H and vv_post H carry it for
    an expression with no call and no pop (expr_has_effect). *)
 Definition pure_frame_def:
   pure_frame cenv func es sa s0 s <=>
@@ -392,7 +392,7 @@ Definition expr_val_own_def:
            val_footprint tv v = 0)
 End
 
-(* The type at which expr_post and vv_post describe e's value: the type its
+(* The type at which expr_post H and vv_post H describe e's value: the type its
    lowered memory is laid out at.  An internal call's value is its callee's
    return buffer, laid out at the callee's declared return type
    (lowered_value_type), which a widening call site (a DynArray[Bytes[32], 2]
@@ -455,15 +455,16 @@ QED
      ALLOCA run again, in a loop body, returns its earlier buffer, which e
      then writes again;
    - those holding a live local: e can write a local (x.pop()), and
-     stmt_state_rel at es' says what the locals hold.
+     stmt_state_rel H at es' says what the locals hold.
    The rest are the buffers of the expressions lowered before e, so a
    value an earlier operand left in memory survives e's fragment.  And the
    live locals' regions kept but for their dynamic arrays' length words
    (locals_kept), so a value an earlier operand left in a local survives
    too, where it covers no such word (expr_val_at). *)
 Definition expr_post_def:
-  expr_post ctx func cenv cx e es sa sb s0 es' v op s <=>
-    stmt_state_rel ctx func cenv cx es' s /\
+  expr_post H ctx func cenv cx e es sa sb s0 es' v op s <=>
+    stmt_state_rel H ctx func cenv cx es' s ∧
+    storage_well_formed_on cx es' (FST H) ∧
     expr_val_rel cx (post_value_type cenv e) v op s /\
     expr_val_at cenv cx (post_value_type cenv e) sa sb es' v op s /\
     (post_value_type cenv e <> expr_type e ==>
@@ -570,7 +571,7 @@ Definition vv_holds_def:
          | LocCalldata => F)
 End
 
-(* Where a value in memory sits, as expr_val_at says for expr_post: for a
+(* Where a value in memory sits, as expr_val_at says for expr_post H: for a
    StackValue, expr_val_at itself; for a pointer into memory, the value's
    bytes inside one of the expression's own allocations or a live local's
    region, word types included, unless it occupies none.  In a local's
@@ -622,41 +623,46 @@ End
    slots it reads is dead but those its own type leaves dead
    (storage_read_live). *)
 Definition vv_storage_live_def[simp]:
-  (vv_storage_live cx (StackValue _ _) es s <=> T) /\
-  (vv_storage_live cx (LocatedValue t p) es s <=>
+  (vv_storage_live H cx (StackValue _ _) es s <=> T) /\
+  (vv_storage_live H cx (LocatedValue t p) es s <=>
      (p.ptr_location = LocStorage ==>
       !w tvt. eval_operand p.ptr_operand s = SOME w /\
         evaluate_type (get_tenv cx) t = SOME tvt ==>
-        storage_read_live cx F (get_storage cx es F) w tvt) /\
+        storage_read_live H F (get_storage cx es F) w tvt) /\
      (p.ptr_location = LocTransient ==>
       !w tvt. eval_operand p.ptr_operand s = SOME w /\
         evaluate_type (get_tenv cx) t = SOME tvt ==>
-        storage_read_live cx T (get_storage cx es T) w tvt))
+        storage_read_live H T (get_storage cx es T) w tvt))
 End
 
 Theorem vv_storage_live_gas_obs[simp]:
-  vv_storage_live cx vv (es with gas_obs := gs) s <=> vv_storage_live cx vv es s
+  !H.
+  vv_storage_live H cx vv (es with gas_obs := gs) s <=> vv_storage_live H cx vv es s
 Proof
+  gen_tac >>
   Cases_on `vv` >> simp[get_storage_def]
 QED
 
 Theorem vv_storage_live_inst_idx[simp]:
-  vv_storage_live cx vv es (s with vs_inst_idx := n) <=> vv_storage_live cx vv es s
+  !H.
+  vv_storage_live H cx vv es (s with vs_inst_idx := n) <=> vv_storage_live H cx vv es s
 Proof
+  gen_tac >>
   `!op. eval_operand op (s with vs_inst_idx := n) = eval_operand op s` by
     (Cases >> simp[eval_operand_def, lookup_var_def]) >>
   Cases_on `vv` >> simp[]
 QED
 
-(* expr_post with a value_vv in place of an operand. *)
+(* expr_post H with a value_vv in place of an operand. *)
 Definition vv_post_def:
-  vv_post ctx func cenv cx e es sa sb s0 es' tv vv s <=>
-    stmt_state_rel ctx func cenv cx es' s /\
+  vv_post H ctx func cenv cx e es sa sb s0 es' tv vv s <=>
+    stmt_state_rel H ctx func cenv cx es' s ∧
+    storage_well_formed_on cx es' (FST H) ∧
     vv_holds cenv cx (post_value_type cenv e) tv vv es' s /\
     vv_at cenv cx (post_value_type cenv e) sa sb es' tv vv s /\
     (post_value_type cenv e <> expr_type e ==>
      vv_own cenv cx (post_value_type cenv e) sa sb es' tv vv s) /\
-    (~expr_has_effect e ==> vv_storage_live cx vv es' s) /\
+    (~expr_has_effect e ==> vv_storage_live H cx vv es' s) /\
     (!x w. not_fresh_at sa x /\ lookup_var x s0 = SOME w ==>
            lookup_var x s = SOME w) /\
     (!aid b. FLOOKUP s0.vs_allocas aid = SOME b ==>
@@ -711,14 +717,15 @@ End
    es', with the source's place pv of type vt: the pointer r's operand is
    at pv, and r's place type is vt's.  The operand is not fresh at the
    fragment's end, so code lowered after it keeps it.  The frame is
-   vv_post's: the variables and allocations from before, the memory of the
+   vv_post H's: the variables and allocations from before, the memory of the
    allocations made before the fragment's start but those holding a local,
    and the live locals' memory but their dynamic arrays' length words
    (locals_kept), the root's and the nested ones'. *)
 Definition target_post_def:
-  target_post ctx func cenv cx es sa sb s0 es' pv vt
+  target_post H ctx func cenv cx es sa sb s0 es' pv vt
     (r : operand # data_location option # place_ty option) s <=>
-    stmt_state_rel ctx func cenv cx es' s /\
+    stmt_state_rel H ctx func cenv cx es' s ∧
+    storage_well_formed_on cx es' (FST H) ∧
     (?w. eval_operand (FST r) s = SOME w /\
          place_ptr_rel cenv cx s pv w (FST (SND r)) vt) /\
     SND (SND r) = SOME (value_type_place vt) /\
