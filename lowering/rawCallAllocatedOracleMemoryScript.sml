@@ -199,7 +199,13 @@ Resume raw_call_allocated_oracle_mem[endpoint]:
   `mem_bytes_at (if cap=0 then w2n w else w2n w+32)
     (LENGTH (TAKE cap outcome.co_returnData)) u.vs_memory = TAKE cap outcome.co_returnData` by
     (Cases_on `cap=0` >- fs[valueEncodingDefsTheory.mem_bytes_at_def] >>
-     `0 < cap` by decide_tac >> gs[]) >>
+     `0 < cap` by decide_tac >>
+     qpat_x_assum `0 < cap ==> w2n (w + 32w) = _` drule >> strip_tac >>
+     qpat_x_assum `u.vs_memory = r.vs_memory` SUBST1_TAC >>
+     qpat_x_assum `mem_bytes_at _ _ r.vs_memory = _` mp_tac >>
+     qpat_x_assum `~(cap = 0)` (fn th => REWRITE_TAC [th]) >>
+     qpat_x_assum `w2n (w + 32w) = _` (fn th => REWRITE_TAC [th]) >>
+     disch_then ACCEPT_TAC) >>
   qpat_x_assum `r.vs_memory = _` kall_tac >>
   qpat_x_assum `u.vs_memory = r.vs_memory` kall_tac >>
   qpat_x_assum `u = update_var _ _ r` kall_tac >>
