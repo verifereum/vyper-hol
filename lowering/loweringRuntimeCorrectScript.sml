@@ -242,9 +242,8 @@ QED
 (* ===== The body's end ===== *)
 
 (* Falling off the end of a body without a return type: the guarded body's
-   STOP halts with the body's effects, along a GAS-free pointer path.
-   STAGED: the proof steps the STOP that compile_guarded_body_end_ptr_safe
-   locates (fn_has_code_same_block) by gas_origin_ptr_path's exit rule. *)
+   STOP halts with the body's effects, along a GAS-free pointer path of
+   one exit edge. *)
 Theorem compile_guarded_body_stop_path:
   !E ctx cenv nkey ut iv stmts st st' sb func t.
     compile_guarded_body cenv F nkey ut iv stmts NONE st = ((), st') /\
@@ -264,7 +263,50 @@ Theorem compile_guarded_body_stop_path:
           gas_origin_ptr_path (cx_dead H cx, 0, E, ctx, func, [])
             (t, G, tn) [] (Halt ss, G', tn')
 Proof
-  cheat
+  rpt gen_tac >> strip_tac >>
+  `st'.cs_current_bb = sb.cs_current_bb /\
+   st'.cs_current_insts =
+     sb.cs_current_insts ++ [mk_inst sb.cs_next_id STOP [] []]` by
+    (qpat_x_assum `compile_guarded_body _ _ _ _ _ _ _ _ = _` mp_tac >>
+     simp[compile_guarded_body_def, comp_bind_def, comp_ignore_bind_def,
+          comp_return_def, comp_get_def, emitHelperTheory.emit_inst_def,
+          fresh_id_def, emit_def] >>
+     rpt strip_tac >> gvs[]) >>
+  drule_all fn_has_code_same_block >> strip_tac >>
+  first_x_assum (qspec_then `0` mp_tac) >> simp[] >> strip_tac >>
+  `!fuel. step_inst fuel ctx (mk_inst sb.cs_next_id STOP [] []) t =
+          Halt (halt_state (t with vs_returndata := []))` by
+    simp[step_inst_non_invoke, mk_inst_def, step_inst_base_opcode_eqs] >>
+  `!fuel. gas_count_step fuel ctx (mk_inst sb.cs_next_id STOP [] []) t = 0` by
+    simp[gas_count_step_def, mk_inst_def] >>
+  `!fuel. gas_events_step fuel ctx func.fn_name
+            (mk_inst sb.cs_next_id STOP [] []) t = []` by
+    metis_tac[cj 1 gas_events_length, LENGTH_NIL] >>
+  `!fuel. mem_safe_step fuel ctx (mk_inst sb.cs_next_id STOP [] []) t` by
+    simp[mem_safe_step_non_invoke, inst_mem_below_frontier_def,
+         inst_dload_in_section_def, source_memory_read_ranges_def,
+         codegenRelTheory.source_memory_write_ranges_def, mk_inst_def] >>
+  qexists_tac `halt_state (t with vs_returndata := [])` >>
+  rpt conj_tac >~ [`gas_origin_ptr_path`]
+  >- (rpt strip_tac >> qexistsl_tac [`G`, `tn`] >>
+      `!fuel. ptr_safe_step (cx_dead H cx) 0 fuel ctx func [] G tn
+                (mk_inst sb.cs_next_id STOP [] []) t` by
+        (gen_tac >> simp[ptr_safe_step_def, ptr_inst_ok_def] >>
+         gvs[access_ok_def, taint_ok_def, allocas_from_def,
+             source_memory_read_ranges_def,
+             codegenRelTheory.source_memory_write_ranges_def, mk_inst_def,
+             step_taint_def, store_taint_def, adopt_reset_def,
+             imm_taint_def, ret_taint_def, halt_state_def,
+             stor_taint_ok_def, cx_dead_def]) >>
+      irule (cj 3 gas_origin_ptr_path_rules) >>
+      simp[exit_result_def, gas_origin_ptr_edge_def] >> conj_tac
+      >- (simp[gas_origin_edge_def] >>
+          qexistsl_tac [`0`, `bb`, `mk_inst sb.cs_next_id STOP [] []`] >>
+          simp[]) >>
+      simp[gas_path_ptr_edge_def] >>
+      qexistsl_tac [`0`, `bb`, `mk_inst sb.cs_next_id STOP [] []`] >>
+      simp[]) >>
+  simp[halt_state_def]
 QED
 
 (* That halt is the source's success without a return value. *)
