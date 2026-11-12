@@ -515,6 +515,63 @@ Proof
   metis_tac[]
 QED
 
+Theorem typed_copy_origin_ptr_fields_path:
+  !cenv ctx dtys stys dtvs stvs vs xd xs doff soff dtotal stotal
+     sa sb lo explicit func PG s G tn dw sw.
+    LENGTH stys = LENGTH dtys /\ LENGTH dtvs = LENGTH dtys /\
+    LENGTH stvs = LENGTH dtys /\ LENGTH vs = LENGTH dtys /\
+    (!i. i < LENGTH dtys ==>
+      type_memory_bytes cenv (EL i dtys) = type_memory_size (EL i dtvs) /\
+      type_memory_bytes cenv (EL i stys) = type_memory_size (EL i stvs) /\
+      typed_copy_origin_ptr_entry cenv ctx (EL i dtys) (EL i stys)
+        (EL i dtvs) (EL i stvs) (EL i vs)) /\
+    tuple_val_wf vs stvs /\ tuple_val_wf vs dtvs /\
+    compile_typed_copy_fields cenv (Var xd) (Var xs)
+      dtys stys doff soff sa = ((),sb) /\
+    not_fresh_at sa xs /\ not_fresh_at sa xd /\
+    lookup_var xs s = SOME sw /\ lookup_var xd s = SOME dw /\
+    (!mem. mem_agree_outside tn.t_mem s.vs_memory mem ==>
+       tuple_in_memory vs stvs (w2n sw + soff) mem) /\
+    doff + type_memory_size_list dtvs <= dtotal /\
+    soff + type_memory_size_list stvs <= stotal /\
+    w2n sw + soff + type_memory_size_list stvs < dimword (:256) /\
+    w2n dw + doff + type_memory_size_list dtvs < dimword (:256) /\
+    (type_memory_size_list stvs = 0 \/
+     w2n sw + soff + type_memory_size_list stvs <= s.vs_alloca_next) /\
+    (type_memory_size_list dtvs = 0 \/
+     w2n dw + doff + type_memory_size_list dtvs <= s.vs_alloca_next) /\
+    (w2n sw + soff + type_memory_size_list stvs <= w2n dw + doff \/
+     w2n dw + doff + type_memory_size_list dtvs <= w2n sw + soff) /\
+    ptr_covers G tn xs s stotal /\ ptr_covers G tn xd s dtotal /\
+    allocas_from lo s /\ lo <= s.vs_alloca_next /\ ~ctx_has_dalloca ctx /\
+    fn_has_code sa sb func /\ fn_inst_ids_distinct func /\
+    ~s.vs_halted /\ s.vs_current_bb = sa.cs_current_bb /\
+    s.vs_inst_idx = LENGTH sa.cs_current_insts ==>
+    ?t Gf tnf.
+      gas_origin_ptr_path
+        (<| d_stor := K (K {}); d_trans := K (K {}); d_imm := K {};
+            d_ret := K {} |>,lo,explicit,ctx,func,PG)
+        (s,G,tn) [] (OK t,Gf,tnf) /\
+      tuple_in_memory vs dtvs (w2n dw + doff) t.vs_memory /\
+      typed_copy_state_frame sa (w2n dw + doff)
+        (type_memory_size_list dtvs) s t /\
+      ~t.vs_halted /\ t.vs_current_bb = sb.cs_current_bb /\
+      t.vs_inst_idx = LENGTH sb.cs_current_insts /\
+      tnf.t_imm = tn.t_imm /\ tnf.t_stor = tn.t_stor /\
+      tnf.t_trans = tn.t_trans /\
+      (!i. ~(w2n dw + doff <= i /\
+              i < w2n dw + doff + type_memory_size_list dtvs) ==>
+           (i IN tnf.t_mem <=> i IN tn.t_mem)) /\
+      (!mem. mem_agree_outside tnf.t_mem t.vs_memory mem ==>
+         tuple_in_memory vs dtvs (w2n dw + doff) mem) /\
+      (!p. not_fresh_at sa p ==>
+         FLOOKUP Gf p = FLOOKUP G p /\
+         op_taint tnf (Var p) = op_taint tn (Var p))
+Proof
+  MATCH_MP_TAC typed_copy_origin_ptr_fields_path_from_offset >>
+  ACCEPT_TAC typed_copy_origin_ptr_offset_path
+QED
+
 Theorem tuple_val_wf_LIST_REL:
   !tvs vs. LENGTH vs = LENGTH tvs ==>
     (tuple_val_wf vs tvs <=> LIST_REL val_wf tvs vs)
@@ -860,7 +917,8 @@ Theorem typed_copy_origin_ptr_tuple_entry:
       typed_copy_origin_ptr_entry cenv ctx cd cs cdt cst cv) ==>
     typed_copy_origin_ptr_entry cenv ctx (TupleT dtys) sty dtv stv v
 Proof
-  cheat
+  MATCH_MP_TAC typed_copy_origin_ptr_tuple_entry_from_fields >>
+  ACCEPT_TAC typed_copy_origin_ptr_fields_path
 QED
 
 Theorem typed_copy_origin_ptr_struct_entry:
@@ -885,5 +943,6 @@ Theorem typed_copy_origin_ptr_struct_entry:
       typed_copy_origin_ptr_entry cenv ctx cd cs cdt cst cv) ==>
     typed_copy_origin_ptr_entry cenv ctx (StructT name) sty dtv stv v
 Proof
-  cheat
+  MATCH_MP_TAC typed_copy_origin_ptr_struct_entry_from_fields >>
+  ACCEPT_TAC typed_copy_origin_ptr_fields_path
 QED
