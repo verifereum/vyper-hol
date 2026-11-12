@@ -18487,6 +18487,100 @@ Proof
   metis_tac[]
 QED
 
+Theorem mm_local_zero_stopping_cut[local]:
+  wf_ssa fn0 /\ fn_inst_wf fn0 /\ wf_function fn0 /\
+  ir_supply_covers_fn supply fn0 /\ index < LENGTH fn0.fn_blocks /\
+  bb = EL index fn0.fn_blocks /\ dfg = dfg_build_function fn0 /\
+  ALL_DISTINCT (MAP (\i. i.inst_id) bb.bb_instructions) /\
+  is = bb.bb_instructions /\ gs = (scan_block_memzero dfg bb).mz_flushed /\
+  h = phi_prefix_length is /\ h <= n /\ n < LENGTH is /\
+  lookup_block bb.bb_label fn.fn_blocks = SOME bb /\ eom < dimword (:256) /\
+  (!j. h <= j /\ j <= n ==>
+    (H j).vs_current_bb = bb.bb_label /\ (H j).vs_inst_idx = j /\
+    static_mem_ok eom ctx fn (EL j is) (H j) /\
+    (!v. MEM (Var v) (EL j is).inst_operands ==> v NOTIN excluded)) /\
+  (!j. h <= j /\ j < n ==>
+    ~is_terminator (EL j is).inst_opcode /\
+    ?u. step_inst fuel ctx (EL j is) (H j) = OK u /\
+      H (SUC j) = u with vs_inst_idx := SUC j) /\
+  (!j dst v len. h <= j /\ j < n /\
+    is_calldatasize_copy dfg (EL j is) /\
+    (EL j is).inst_operands = [Lit dst; Var v; Lit len] ==>
+    lookup_var v (H j) = SOME (n2w (LENGTH (H j).vs_call_ctx.cc_calldata)) /\
+    LENGTH (H j).vs_call_ctx.cc_calldata < dimword (:256)) /\
+  (!j. h <= j /\ j <= n ==>
+    LENGTH (H j).vs_call_ctx.cc_calldata < dimword (:256)) /\
+  (is_terminator (EL n is).inst_opcode \/
+    ~(?u. step_inst fuel ctx (EL n is) (H n) = OK u)) /\
+  state_equiv excluded (H h with vs_inst_idx := LENGTH pre) t0 /\
+  (!v. v NOTIN excluded ==> MEM v esh.irs_used_vars) /\
+  mm_flat_map_supply
+    (apply_memzero_inst_supply (nop_ids_of_groups dfg Mem2Mem is gs)
+      (rep_map_of_groups is gs)) supply (TAKE h is) = (pre,esh) /\
+  mm_flat_map_supply
+    (apply_memzero_inst_supply (nop_ids_of_groups dfg Mem2Mem is gs)
+      (rep_map_of_groups is gs)) esh (TAKE (n-h) (DROP h is)) = (out,esn) ==>
+  ?t. mm_local_exec_prefix fuel ctx out t0 t /\
+    mm_local_zero_cut dfg is gs H n excluded (LENGTH pre + LENGTH out) t /\
+    mm_flat_map_supply
+      (apply_memzero_inst_supply (nop_ids_of_groups dfg Mem2Mem is gs)
+        (rep_map_of_groups is gs)) supply (TAKE n is) = (pre ++ out,esn) /\
+    t.vs_inst_idx = LENGTH pre + LENGTH out
+Proof
+  strip_tac >>
+  `mm_local_zero_cut dfg is gs H h excluded (LENGTH pre) t0` by
+    metis_tac[mm_local_zero_cut_post_phi_init] >>
+  `h + (n-h) = n` by decide_tac >>
+  `?t. mm_local_exec_prefix fuel ctx out t0 t /\
+    mm_local_zero_cut dfg is gs H n excluded (LENGTH pre + LENGTH out) t` by
+    (mp_tac (Q.SPECL [`n-h`,`h`,`esh`,`t0`,`LENGTH (pre:instruction list)`,`out`,`esn`]
+      mm_local_zero_actual_interval) >>
+     (impl_tac >- (simp[] >> rpt strip_tac >> metis_tac[arithmeticTheory.LESS_IMP_LESS_OR_EQ])) >>
+     simp[]) >>
+  `TAKE h is ++ TAKE (n-h) (DROP h is) = TAKE n is` by
+    metis_tac[listTheory.TAKE_SUM] >>
+  `mm_flat_map_supply
+    (apply_memzero_inst_supply (nop_ids_of_groups dfg Mem2Mem is gs)
+      (rep_map_of_groups is gs)) supply (TAKE n is) = (pre ++ out,esn)` by
+    (drule_all mm_local_flat_map_supply_append >> simp[]) >>
+  qexists `t` >> fs[mm_local_zero_cut_def]
+QED
+
+Theorem mm_local_emitted_stopping_result[local]:
+  n < LENGTH is /\ t0.vs_inst_idx = LENGTH pre /\
+  mm_flat_map_supply f supply (TAKE n is) = (pre ++ out,esn) /\
+  (!es. f es (EL n is) = ([EL n is],es)) /\
+  mm_flat_map_supply f supply is = (bb'.bb_instructions,fin) /\
+  mm_local_exec_prefix fuel ctx out t0 t /\
+  ~(?err. dft_exec_suffix fuel ctx [EL n is] s = Error err) /\
+  (is_terminator (EL n is).inst_opcode \/
+    ~(?u. step_inst fuel ctx (EL n is) s = OK u)) /\
+  lift_result rok rhalt rabort
+    (dft_exec_suffix fuel ctx [EL n is] s)
+    (dft_exec_suffix fuel ctx [EL n is] t) ==>
+  lift_result rok rhalt rabort
+    (dft_exec_suffix fuel ctx [EL n is] s) (exec_block fuel ctx bb' t0)
+Proof
+  strip_tac >>
+  Cases_on `mm_flat_map_supply f esn (DROP (SUC n) is)` >>
+  rename1 `mm_flat_map_supply f esn (DROP (SUC n) is) = (tail,es')` >>
+  `mm_flat_map_supply f esn (DROP n is) = (EL n is :: tail,es')` by
+    (gvs[arithmeticTheory.ADD1] >>
+     simp[rich_listTheory.DROP_EL_CONS, mm_flat_map_supply_def]) >>
+  `mm_flat_map_supply f supply is = (pre ++ out ++ EL n is :: tail,es')` by
+    (drule_all mm_local_flat_map_supply_append >> simp[TAKE_DROP, APPEND_ASSOC]) >>
+  `bb'.bb_instructions = pre ++ out ++ EL n is :: tail` by metis_tac[pairTheory.PAIR_EQ] >>
+  `exec_block fuel ctx bb' t0 = dft_exec_suffix fuel ctx (out ++ EL n is :: tail) t0` by
+    (irule dft_exec_suffix_boundary >>
+     `LENGTH pre - (LENGTH out + LENGTH pre) = 0` by decide_tac >>
+     simp[listTheory.DROP_APPEND]) >>
+  drule mm_local_exec_prefix_suffix >>
+  disch_then (qspec_then `EL n is :: tail` assume_tac) >>
+  Cases_on `is_terminator (EL n is).inst_opcode` >- gvs[dft_exec_suffix_def] >>
+  Cases_on `step_inst fuel ctx (EL n is) s` >> gvs[dft_exec_suffix_def, lift_result_def] >>
+  Cases_on `step_inst fuel ctx (EL n is) t` >> gvs[dft_exec_suffix_def, lift_result_def]
+QED
+
 Theorem mm_local_stage_correct:
   !fn0 supply index k bb sk fn bb' sk' fn'.
   fn_inst_wf fn0 /\ wf_function fn0 /\ wf_ssa fn0 /\ all_reachable fn0 /\
