@@ -13,3 +13,4 @@ Ancestors
   vyperTypeSelectedEntrySoundness
   vyperTypeDeploymentSoundness
   vyperRuntimeImmutables
+  vyperCallFiniteStorage
