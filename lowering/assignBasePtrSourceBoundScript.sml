@@ -256,10 +256,8 @@ Theorem assign_base_ptr_source_bound_counterexample:
     off < type_memory_bytes cenv (lowered_value_type cenv e) /\
     ~(w2n w + off < dimword(:256))
 Proof
-  strip_assume_tac (INST
-    [``H : (bool # 256 word # type_value) list # num list`` |->
-     ``([] : (bool # 256 word # type_value) list, [] : num list)``]
-    assign_base_ptr_source_bound_state_exists) >>
+  strip_assume_tac (Q.SPEC `([],[])`
+    (GEN_ALL assign_base_ptr_source_bound_state_exists)) >>
   drule assign_base_ptr_source_bound_conditional >>
   impl_tac >- fs[storage_well_formed_on_def] >>
   strip_tac >> qexists_tac `([],[])` >> metis_tac[]

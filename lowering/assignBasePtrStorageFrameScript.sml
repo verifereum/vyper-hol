@@ -57,10 +57,10 @@ Proof
      irule encoded_storage_lookup_outside >>
      conj_tac >- decide_tac >>
      qexistsl_tac [`tv`, `v`] >>
-     qpat_x_assum `!slot' tv''. _` (qspecl_then [`k`, `tv`] mp_tac) >>
-     impl_tac >- (simp[] >> metis_tac[]) >>
-     simp[vyperStorageFrameTheory.ranges_disjoint_def]) >>
-  simp[] >> qexistsl_tac [`slot`, `tv'`] >> simp[]
+     qpat_x_assum `ranges_disjoint _ _ _ _` mp_tac >>
+     rewrite_tac[vyperStorageFrameTheory.ranges_disjoint_def] >>
+     rpt strip_tac >> gvs[] >> decide_tac) >>
+  simp[] >> qexistsl_tac [`slot`, `tv'`] >> gvs[]
 QED
 
 Theorem storage_dead_lookup_cong:
@@ -119,6 +119,8 @@ Proof
    dead_bytes st (w2n slot) tv' x b` by
     (irule (cj 1 dead_bytes_frame) >> rpt strip_tac >>
      first_x_assum irule >>
-     gvs[vyperStorageFrameTheory.ranges_disjoint_def] >> decide_tac) >>
-  simp[] >> qexistsl_tac [`slot`, `tv'`] >> simp[]
+     qpat_x_assum `ranges_disjoint _ _ _ _` mp_tac >>
+     rewrite_tac[vyperStorageFrameTheory.ranges_disjoint_def] >>
+     rpt strip_tac >> gvs[] >> decide_tac) >>
+  simp[] >> qexistsl_tac [`slot`, `tv'`] >> gvs[]
 QED
