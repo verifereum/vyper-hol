@@ -17,6 +17,8 @@ Theory fmpStageFmpSteps
 Ancestors
   fmpStageOpBase fmpStageControl fmpStageReclaimSound fmpStageRel
   fmpStageCallArity fmpStageRetStep
+  fmpStageFmpStepsRetpcControl fmpStageFmpStepsRetpcFrame
+  fmpStageFmpStepsRetpcPreservation fmpLowerDefs unitShapeDefs
   fmpStageFmpStepsEntryLayout fmpStageFmpStepsEntryInitialization
   ptrStaticDiscipline o1PassContract
   ptrDiscipline venomExecSemantics venomState venomInst finite_map words
@@ -77,7 +79,48 @@ Theorem fmp_stage_retpc_step:
       (step_prov PG G inst s1) (step_taint inst s s1 tn) fn
       (s1 with vs_inst_idx := SUC s.vs_inst_idx) lo t1 ts
 Proof
-  cheat
+  strip_tac >>
+  drule_all fmp_retpc_source_step >> strip_tac >>
+  drule_all fmp_stage_frame_facts >> strip_tac >>
+  qpat_assum `fmp_stage_rel _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _`
+    (strip_assume_tac o REWRITE_RULE [fmp_stage_rel_def]) >>
+  qpat_x_assum `fmp_frame_rel _ _ _ _ _ _ _ _ _ _ _ _ _ _`
+    (strip_assume_tac o SIMP_RULE (srw_ss()) [fmp_frame_rel_def, LET_THM]) >>
+  drule_all fmp_retpc_layout >> strip_tac >>
+  `t.vs_inst_idx = s.vs_inst_idx` by
+    (Cases_on `fn.fn_blocks` >- fs[split_fmp_entry_def] >>
+     `lookup_block s.vs_current_bb fn.fn_blocks = SOME h` by
+       simp[lookup_block_def, FIND_thm] >>
+     drule fmp_retpc_prefix_tidx >> gvs[] >> metis_tac[]) >>
+  `fmp_stage_root infos ctx fn <> NONE ==>
+     LENGTH users < LENGTH t.vs_params /\
+     EL (LENGTH users) t.vs_params = n2w lo` by
+    (strip_tac >> gvs[] >> fs[]) >>
+  `wf_function fn /\ fn_inst_wf fn /\ all_reachable fn /\ fn_defs_reach_uses fn` by
+    fs[o1_fn_shape_def, make_ssa_input_ok_def] >>
+  `retpc_var fn pc` by
+    (simp[retpc_var_def] >> irule copy_phi_var_seed >>
+     qexists_tac `inst` >> gvs[]) >>
+  `fmp_stage_root infos ctx fn <> NONE ==>
+    (!i. MEM i (fn_insts fn) ==> ~MEM runner i.inst_outputs) /\ pc <> runner` by
+    (strip_tac >> drule_all fmp_stage_witness_pin >> strip_tac >>
+     gvs[] >> first_x_assum (qspec_then `inst` mp_tac) >> simp[]) >>
+  `fmp_stage_tidx (fmp_stage_plan infos ctx fn) (fmp_stage_root infos ctx fn)
+      s.vs_current_bb
+      (case lookup_block s.vs_current_bb fn.fn_blocks of
+         SOME bb => bb.bb_instructions | NONE => []) (SUC s.vs_inst_idx) =
+    t.vs_inst_idx + (if fmp_stage_root infos ctx fn = NONE then 1 else 2)` by
+    (Cases_on `fn.fn_blocks` >- fs[split_fmp_entry_def] >>
+     `lookup_block s.vs_current_bb fn.fn_blocks = SOME h` by
+       simp[lookup_block_def, FIND_thm] >>
+     drule fmp_retpc_successor_tidx >> gvs[] >> metis_tac[]) >>
+  mp_tac fmp_retpc_target_run >>
+  (impl_tac >- gvs[]) >> strip_tac >>
+  qexistsl_tac [`update_var pc s.vs_return_pc_token s`, `n`, `t1`] >>
+  (conj_tac >- simp[] >>
+   conj_tac >- simp[] >> conj_tac >- simp[] >> conj_tac >- simp[] >>
+   irule fmp_retpc_preserves >> gvs[] >>
+   qexistsl_tac [`ctx`, `infos`, `runner`, `t`] >> gvs[] >> metis_tac[])
 QED
 
 Theorem fmp_stage_entry:
