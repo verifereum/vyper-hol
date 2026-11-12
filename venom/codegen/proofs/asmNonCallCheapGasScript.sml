@@ -160,3 +160,22 @@ Proof
       frame_gas_left_def, AllCaseEqs()] >> decide_tac
 QED
 
+Theorem step_inst_access_gas_budget:
+  MEM op [Balance; ExtCodeSize; ExtCodeHash] /\
+  es.contexts = (c,rb)::rest /\ wf_context c /\
+  2700 <= B /\ B <= c.msgParams.gasLimit - c.gasUsed /\
+  step_inst op es = (r,s') ==>
+  r <> INR (SOME OutOfGas) /\
+  frame_gas_left es <= frame_gas_left s' + B
+Proof
+  simp[listTheory.MEM] >> strip_tac >> gvs[step_inst_def] >>
+  gvs[step_balance_def, step_ext_code_size_def, step_ext_code_hash_def] >>
+  gvs[pop_stack_def, bind_def, ignore_bind_def, get_current_context_def,
+      set_current_context_def, assert_def, return_def, fail_def,
+      wf_context_def, AllCaseEqs()] >>
+  drule access_address_gas_observation >> strip_tac >>
+  gvs[consume_gas_def, push_stack_def, get_accounts_def,
+      bind_def, ignore_bind_def, get_current_context_def, return_def,
+      set_current_context_def, assert_def, fail_def, LET_THM,
+      frame_gas_left_def, AllCaseEqs()] >> decide_tac
+QED

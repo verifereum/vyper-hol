@@ -345,3 +345,17 @@ Proof
   strip_tac >> drule frame_next_reaches >> strip_tac >>
   irule frame_inst_at_prefix >> qexists_tac `es1` >> fs[frame_next_def]
 QED
+
+Theorem access_address_gas_observation:
+  access_address addr s = (r,t) ==>
+  t.contexts = s.contexts /\ r <> INR (SOME OutOfGas) /\
+  (!n. r = INL n ==> n <= 2600)
+Proof
+  Cases_on `s.msdomain` >>
+  simp[access_address_def, domain_check_def, set_domain_def,
+       bind_def, ignore_bind_def, return_def, fail_def, LET_THM] >>
+  rpt IF_CASES_TAC >>
+  gvs[vfmConstantsTheory.warm_access_cost_def,
+      vfmConstantsTheory.cold_access_cost_def] >>
+  strip_tac >> gvs[]
+QED
