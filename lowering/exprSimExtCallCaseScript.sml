@@ -1465,7 +1465,10 @@ Resume extcall_return_default[decode_at]:
         POP_ASSUM_LIST (K all_tac) >>
         metis_tac[ci_mono_compile_default_return_path, ci_mono_def, pairTheory.SND]) >>
      decide_tac) >>
-  conj_tac >- (gvs[] >> decide_tac) >>
+  conj_tac >-
+    (qpat_x_assum `d + type_memory_size rtv <= b + sz` mp_tac >>
+     qpat_x_assum `val_footprint rtv x <= type_memory_size rtv` mp_tac >>
+     POP_ASSUM_LIST (K all_tac) >> decide_tac) >>
   rpt strip_tac >>
   irule exprSimOperandsTheory.alloca_clear_of_locals >>
   qexistsl_tac [`cenv`, `ctx`, `cx`, `ee`, `func`, `inst`, `n`, `q`,
