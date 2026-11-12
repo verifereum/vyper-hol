@@ -1019,6 +1019,27 @@ Definition fn_bisim_fuel_def:
                        (run_blocks (f fuel) ctx fn' s)
 End
 
+Theorem fn_bisim_fuel_I_refl:
+  fn_bisim_fuel I fn fn
+Proof
+  simp[fn_bisim_fuel_def] >> rpt strip_tac >>
+  Cases_on `run_blocks fuel ctx fn s` >>
+  gvs[frame_result_rel_def, passSimulationDefsTheory.terminates_def,
+      run_blocks_not_OK]
+QED
+
+Theorem fn_bisim_fuel_I_trans:
+  fn_bisim_fuel I f g /\ fn_bisim_fuel I g h ==>
+  fn_bisim_fuel I f h
+Proof
+  simp[fn_bisim_fuel_def] >> rpt strip_tac >>
+  `fn_entry_state g s` by gvs[fn_entry_state_def] >>
+  `frame_result_rel (run_blocks fuel ctx f s) (run_blocks fuel ctx g s)` by
+    metis_tac[] >>
+  drule frame_result_rel_terminates >> strip_tac >>
+  metis_tac[frame_result_rel_trans]
+QED
+
 (* bounded_call_agree with the callee fuel in B a function g of A's. *)
 Definition bounded_call_agree_fuel_def:
   bounded_call_agree_fuel g n A B <=>
