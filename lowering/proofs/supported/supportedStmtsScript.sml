@@ -5,7 +5,7 @@
    supported_assert_reason, supported_raise_reason, supported_log. *)
 Theory supportedStmts
 Ancestors
-  vyperTypeContract
+  vyperTypeContract vyperEventArgCompat
   supportedStmtTraverse supportedExprs supportedExprForms supportedExprTraverse
   supportedTypes supportedDecls supportedTargets vyperTypeSystem exprLowering vyperAST list alist integer
 
