@@ -36,8 +36,12 @@ Proof
       drule_all ptr_source_ownership_prov_erases >>
       simp[ptr_ledger_erases_def] >> strip_tac >>
       qpat_x_assum `!v. ptr_owner_erases _ _ _ _` (qspec_then `v` mp_tac) >>
-      Cases_on `FLOOKUP TG v` >> simp[ptr_owner_erases_def] >> strip_tac
-      >- (disj2_tac >> metis_tac[]) >>
+      Cases_on `FLOOKUP TG v`
+      >- (disch_then (qspec_then `(b,sz)` mp_tac o
+            SIMP_RULE (srw_ss()) [ptr_owner_erases_def]) >>
+          (impl_tac >- simp[]) >> strip_tac >>
+          disj2_tac >> qexistsl [`ops`,`v`,`b`,`sz`] >> simp[]) >>
+      disch_then (assume_tac o SIMP_RULE (srw_ss()) [ptr_owner_erases_def]) >>
       disj1_tac >> PairCases_on `x` >>
       drule_all ptr_source_ownership_live_cache >>
       strip_tac >> metis_tac[]) >>
