@@ -119,6 +119,8 @@ Proof
   qpat_x_assum `gas_outcome_ptr _ _ _ _ _ _ _ _` kall_tac >> disch_tac >>
   ho_match_mp_tac code_slice_uint_outcome_ptr >> simp[] >>
   irule gas_outcome_ptr_conseq >> goal_assum (drule_at Any) >>
+  `post_value_type cenv e = expr_type e` by
+    simp[loweringPostsTheory.post_value_type_word, is_word_type_def] >>
   conj_tac >- (rpt strip_tac >> fs[] >> metis_tac[]) >> simp[]
 QED
 
