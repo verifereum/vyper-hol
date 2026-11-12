@@ -21,12 +21,6 @@ Theorem compile_append_storage_aggregate_stmt_frag_mem:
      es with storage_trace := es.storage_trace ++
        [StorageRoot tr offset (ArrayTV tv (Dynamic cap))]) /\
   declared_storage_region cx mid name [] = SOME (tr,slot,ArrayTV tv (Dynamic cap)) /\
-  w2n slot + type_slot_size (ArrayTV tv (Dynamic cap)) <= dimword (:256) /\
-  (!mid' n' subs' slot' tv'.
-    declared_storage_region cx mid' n' subs' = SOME (tr,slot',tv') /\
-    (slot',tv') <> (slot,ArrayTV tv (Dynamic cap)) ==>
-    ranges_disjoint (w2n slot) (type_slot_size (ArrayTV tv (Dynamic cap)))
-                    (w2n slot') (type_slot_size tv')) /\
   FLOOKUP cenv.ce_module_vars nid =
     SOME (if tr then TransientLoc slot else StorageLoc slot) /\
   cenv.ce_module_var_type nid = SOME (ArrayT elem (Dynamic cap)) /\
@@ -49,10 +43,7 @@ Theorem compile_append_storage_aggregate_stmt_frag_mem:
     (stmt_env cenv lctx ty (Append (TopLevelNameTarget nid) e))
     (eval_stmt cx (Append (TopLevelNameTarget nid) e)) es
 Proof
-  strip_tac >>
-  `well_formed_type_value (ArrayTV tv (Dynamic cap))` by
-    simp[vyperTypingTheory.well_formed_type_value_def] >>
-  simp[stmt_frag_mem_def] >> rpt gen_tac >> strip_tac >>
+  strip_tac >> simp[stmt_frag_mem_def] >> rpt gen_tac >> strip_tac >>
   drule_all append_storage_copy_code_parts >> strip_tac >> gvs[] >>
   rename1 `lower_value _ _ _ _ sa = (op,sB)` >>
   rename1 `compile_alloc_buffer _ sB = (buf,sc)` >>
@@ -134,6 +125,15 @@ Resume compile_append_storage_aggregate_stmt_frag_mem[suffix]:
        fs[valid_horizon_def] >>
      simp[] >> rpt strip_tac >>
      fs[regions_consistent_def] >> metis_tac[]) >>
+  `w2n slot + type_slot_size (ArrayTV tv (Dynamic (cenv.ce_module_dynarray_capacity nid))) <=
+     dimword (:256)` by
+    (`MEM (tr,slot,ArrayTV tv (Dynamic (cenv.ce_module_dynarray_capacity nid))) (FST H0)` by
+       metis_tac[] >>
+     qpat_assum `valid_horizon cx st0 H0 _`
+       (strip_assume_tac o REWRITE_RULE [valid_horizon_def]) >>
+     fs[regions_consistent_def] >> metis_tac[]) >>
+  `well_formed_type_value (ArrayTV tv (Dynamic (cenv.ce_module_dynarray_capacity nid)))` by
+    simp[vyperTypingTheory.well_formed_type_value_def] >>
   qpat_x_assum `expr_post H0 _ _ _ _ _ _ _ _ _ _ _ _ _` mp_tac >>
   qpat_x_assum `expr_store_bound _ _ _ _ _` mp_tac >>
   rpt strip_tac >>
