@@ -12,9 +12,17 @@ Ancestors
   bodySimFull gasShadowState gasShadow context exprLowering compileEnv
   vyperInterpreter vyperState
 
-(* The full twin of exprStackPtr's expr_vv_sim_stack_ptr. *)
+(* The full twin of exprStackPtr's expr_vv_sim_stack_ptr.  As in the memory
+   twin (exprSimMemoryStack's body_expr_vv_sim_mem_stack), a non-word stack
+   value's lowered type must take no memory: expr_sim_full bounds only the
+   value's footprint, and vv_store_bound also wants the whole lowered
+   type's region below the frontier. *)
 Theorem expr_vv_sim_stack_full:
   !DF lo d ctx shadow_ctx PG func shadow_func cenv cx ty e es.
+    (~is_word_type (expr_type e) ==>
+     !tvt. evaluate_type (get_tenv cx) (lowered_value_type cenv e) =
+             SOME tvt ==>
+           type_memory_size tvt = 0) /\
     expr_sim_full (DF, lo, d, ctx, shadow_ctx, PG, func, shadow_func)
       cenv cx ty e es /\
     (!sa. ?t op sb. compile_expr cenv ty e sa = (StackValue t op,sb)) /\
