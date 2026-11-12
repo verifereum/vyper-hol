@@ -2976,8 +2976,7 @@ QED
    on msg.gas, on the precompile builtins (ecrecover, sha256, ...) and on
    a pop of an unrelated root (a local array, a storage array); those
    preserve es.immutables, and the statement holds for them by an
-   immutable frame step, the counterpart of exprSimPopNestedStorageFrame's
-   storage_frame_expr.  Only an index that mutates the root immutable
+   immutable frame step.  Only an index that mutates the root immutable
    (src,id) itself, by popping it or by an internal call that does
    (functions_well_typed types callee bodies with
    bare_global_assignable_complete), falsifies it: such an index shortens
@@ -3001,8 +3000,8 @@ QED
    discharges this case.  Its discharge splits in two: (i) the immutable
    frame step above for indices that do not touch the root, and (ii) the
    shared target read/write overlap exclusion, the same one behind
-   pop_nested_storage_effectful_dead_case, targetLocalLive's
-   local_target_live and targetPlaceSimCases' target_subscript_case; it belongs in
+   targetLocalLive's local_target_live and targetPlaceSimCases'
+   target_subscript_case; it belongs in
    supported_program / target_pre, and in static target checking once
    supported_program is gone. *)
 Theorem pop_nested_immutable_deploy_impure_index_case:

@@ -602,7 +602,7 @@ QED
      inside that region (k + 32 <= type_memory_size);
    - errors: an empty array is RuntimeError "pop empty" in the source and
      a failing ASSERT in Venom, which expr_exit accepts;
-   - gas: as pop_nested_storage_pure_sim (gas_outcome split,
+   - gas: as pop_nested_storage_sim (gas_outcome split,
      gas_exempt_cert_error_place on the error branch).
    imm_target_walk is stated over eval_base_place; Pop evaluates with
    eval_target_place. *)

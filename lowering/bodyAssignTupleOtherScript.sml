@@ -120,8 +120,7 @@ Proof
 QED
 
 (* RESIDUAL: an element of a storage array or mapping whose index is not
-   pure, which may make an internal call between the stores (as
-   exprSimPopNested's pop_nested_storage_effectful_sim). *)
+   pure, which may make an internal call between the stores. *)
 Theorem tuple_assign_effectful_index:
   !cx gs e tops bindings ctx func cenv env env' ret_ty lctx RetQ es.
     (!s'' tv t s'3' v t'.
