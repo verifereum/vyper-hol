@@ -19,6 +19,43 @@
 Theory fmpStageReclaimSound
 Ancestors
   fmpStageRel ptrStaticDiscipline cfgWf venomWf livenessProofs
+  frameAllocationOwnership ptrDiscipline list
+
+Theorem fmp_sites_out[local]:
+  prov_sites P G /\ param_sites P PG /\
+  inst.inst_opcode <> ALLOCA /\
+  (inst.inst_opcode = DALLOCA ==>
+    !site. out_prov PG G inst s' = SOME site ==> P site) /\
+  out_prov PG G inst s' = SOME site ==> P site
+Proof
+  strip_tac >> Cases_on `inst.inst_opcode = DALLOCA`
+  >- metis_tac[] >>
+  qpat_x_assum `out_prov _ _ _ _ = _` mp_tac >>
+  simp[out_prov_def] >>
+  Cases_on `inst.inst_opcode = PARAM` >> simp[]
+  >- (gvs[AllCaseEqs(), param_sites_def] >> metis_tac[MEM_EL]) >>
+  Cases_on `inst.inst_opcode = ADD \/ inst.inst_opcode = SUB \/
+            inst.inst_opcode = ASSIGN` >> simp[] >>
+  metis_tac[prov_sites_first]
+QED
+
+Theorem fmp_sites_step[local]:
+  prov_sites P G /\ param_sites P PG /\
+  inst.inst_opcode <> ALLOCA /\
+  (inst.inst_opcode = DALLOCA ==>
+    !site. out_prov PG G inst s' = SOME site ==> P site) ==>
+  prov_sites P (step_prov PG G inst s')
+Proof
+  strip_tac >> simp[step_prov_def] >> irule prov_sites_set >>
+  simp[] >> metis_tac[fmp_sites_out]
+QED
+
+Theorem fmp_sites_params[local]:
+  prov_sites P G ==> param_sites P (MAP (op_prov G) ops)
+Proof
+  simp[param_sites_def, MEM_MAP] >> rpt strip_tac >>
+  metis_tac[prov_sites_op]
+QED
 
 Theorem fmp_stage_frame_sites:
   fmp_stage_ctx rpolicy D C C' vs vs' fmp eom /\
