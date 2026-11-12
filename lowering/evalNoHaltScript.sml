@@ -296,7 +296,7 @@ Proof
   rename1 `ArrayV av` >> Cases_on `av` >> gvs[return_def]
 QED
 
-Theorem pop_place_nh[local]:
+Theorem pop_place_nh:
   !cx p s s'. pop_place cx p s = (INR HaltException, s') ==> F
 Proof
   ho_match_mp_tac pop_place_ind >> rpt gen_tac >>

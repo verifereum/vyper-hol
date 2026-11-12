@@ -180,7 +180,8 @@ Theorem selfdestruct_tail_halt:
   !cx v a st.
     dest_AddressV v = SOME a /\ ~cx.txn.is_static /\
     ~selfdestruct_overflows cx a st.accounts ==>
-    selfdestruct_tail cx v st = (INR HaltException, selfdestruct_final cx a st)
+    selfdestruct_tail cx v st =
+      (INR HaltException : eval_result + exception, selfdestruct_final cx a st)
 Proof
   rw[selfdestruct_tail_def, selfdestruct_overflows_def, selfdestruct_final_def,
      vyperInterpreterTheory.transfer_value_def, vyperStateTheory.bind_def, vyperStateTheory.ignore_bind_def,

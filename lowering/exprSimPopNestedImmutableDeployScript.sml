@@ -881,7 +881,13 @@ Resume pop_nested_immutable_deploy_pure_sim[normal]:
        |> REWRITE_RULE [APPEND_NIL]) >>
       qpat_assum `gas_marked_exec _ _ (eval_target_place _ _) _ _ _ _ _`
         (irule_at Any) >> asm_rewrite_tac[]) >>
-  gvs[]
+  `pres <> INR HaltException` by
+    (strip_tac >>
+     qpat_x_assum `gas_marked_exec _ _ (pop_place _ _) _ _ _ _ _`
+       (mp_tac o CONJUNCT1 o REWRITE_RULE [gas_marked_exec_def]) >>
+     disch_then (qspec_then `[]` mp_tac) >>
+     gvs[evalNoHaltTheory.pop_place_nh]) >>
+  gvs[halt_exit_def]
 QED
 
 Finalise pop_nested_immutable_deploy_pure_sim

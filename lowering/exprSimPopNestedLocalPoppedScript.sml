@@ -93,7 +93,7 @@ Theorem pop_nested_local_popped_case:
                    (LocatedValue ann (mk_ptr q lc)) u /\
                  u.vs_current_bb = r.cs_current_bb /\
                  u.vs_inst_idx = LENGTH r.cs_current_insts) \/
-       exit_result r' /\ expr_exit res r')
+       exit_result r' /\ expr_exit res r' /\ halt_exit cx es_end res r')
 Proof
   cheat
 QED
