@@ -1,7 +1,7 @@
 (* Counted topic evaluation for the RawLog body case. *)
 Theory bodySimRawLogTopics
 Ancestors
-  bodySimRawLogTails bodySimRawLogBodySource bodySim exprSimHypsDefs
+  bodySimRawLogBodySource bodySim exprSimHypsDefs
   exprSimPrecompiles exprSimWordArgs exprSimHyps exprSimDefs gasOutcome
   exprLoweringProps vyperAST vyperValue compileEnv list
   gasSummary exprSimRawLog vyperState
