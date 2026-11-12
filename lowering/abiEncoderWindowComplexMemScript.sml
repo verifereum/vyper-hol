@@ -264,7 +264,7 @@ Proof
   qpat_x_assum `!inst b sz. _` drule_all >> simp_tac bool_ss []
 QED
 
-Theorem window_complex_dynamic_finish_mem[local]:
+Theorem window_complex_dynamic_finish_mem:
   window_phase ctx func st ready {st.cs_next_id} [] s u /\
   mem_cont_sim ctx func s u /\
   window_phase ctx func ready load

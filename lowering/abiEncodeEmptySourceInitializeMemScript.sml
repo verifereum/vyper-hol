@@ -163,7 +163,7 @@ Proof
   simp[Abbr `u`, mstore_mem_word_at_same]
 QED
 
-Theorem empty_source_initialization_code[local]:
+Theorem empty_source_initialization_code:
   fn_has_code st en func /\
   compile_alloc_buffer 32 st = (buf,mid) /\
   emit_void MSTORE [buf.buf_operand; Lit (n2w h)] mid = ((),ready) /\
