@@ -8,6 +8,8 @@
  *)
 Theory bodyFullCases
 Ancestors
+  bodyFullAssign bodyFullAssignTuple bodyFullAugAssign bodyFullAnnAssign
+  bodyFullAppend annAssignPtrFacts
   bodyFullPreds bodySimFull stmtSimZero stmtSimPass gasShadow bodySim
   exprSimHyps bodySimStmtCases bodyExprPreFacts supportedStmts
   supportedExprs supportedStmtTraverse supportedExprTraverse
@@ -36,7 +38,23 @@ Theorem body_annassign_case_full:
        body_expr_full_ok cx e) ==>
     body_stmt_full_ok cx (AnnAssign id typ e)
 Proof
-  cheat
+  rw[body_stmt_full_ok_def] >>
+  Cases_on `is_word_type typ`
+  >- (irule body_annassign_word_full >> metis_tac[]) >>
+  `0 < type_memory_bytes cenv typ` by
+    metis_tac[annassign_memory_bytes_pos_ptr] >>
+  Cases_on `expr_type e = typ \/ lowered_value_type cenv e = typ \/
+            is_bytestring_type typ \/
+            has_length_word typ /\ is_empty_value_expr e`
+  >- (Cases_on `(lowered_value_type cenv e = expr_type e \/
+     is_bytestring_type (expr_type e) /\
+     is_bytestring_type (lowered_value_type cenv e) /\
+     arg_type_fits (lowered_value_type cenv e) (expr_type e))`
+      >- (`lowered_value_type cenv e = typ \/ is_bytestring_type typ \/
+           has_length_word typ /\ is_empty_value_expr e` by metis_tac[] >>
+          irule body_annassign_memory_full >> fs[] >> metis_tac[]) >>
+      irule body_annassign_widened_full >> metis_tac[]) >>
+  irule body_annassign_other_full >> metis_tac[]
 QED
 
 (* Admitted: the joint twin of body_append_case_ptr_at (bodyPtrLogCases). *)
@@ -47,7 +65,10 @@ Theorem body_append_case_full:
     body_base_target_full_ok cx t ==>
     body_stmt_full_ok cx (Append t e)
 Proof
-  cheat
+  rpt strip_tac >> Cases_on `?nid. t = TopLevelNameTarget nid`
+  >- (gvs[] >> irule body_append_storage_full >> first_assum ACCEPT_TAC) >>
+  Cases_on `t` >> gvs[] >>
+  rw[body_stmt_full_ok_def, supported_stmt_def, supported_append_target_def]
 QED
 
 (* Admitted: the joint twin of body_assert_case_ptr_at (bodyPtrExitCases). *)
@@ -83,7 +104,47 @@ Theorem body_assign_case_full:
     body_expr_full_ok cx e ==>
     body_stmt_full_ok cx (Assign (BaseTarget t) e)
 Proof
-  cheat
+  rw[body_stmt_full_ok_def] >>
+  Cases_on `?id ty. t = NameTarget id /\ FLOOKUP env.var_types id = SOME ty /\
+                    is_word_type ty`
+  >- (gvs[] >> irule body_assign_local_word_full >> metis_tac[]) >>
+  Cases_on `?id ty. t = NameTarget id /\ FLOOKUP env.var_types id = SOME ty /\
+                    ~is_word_type ty /\
+                    (expr_type e = ty \/ lowered_value_type cenv e = ty \/
+                     is_bytestring_type ty \/
+                     has_length_word (expr_type e) /\ is_empty_value_expr e)`
+  >- (`!id ty. t = NameTarget id /\ FLOOKUP env.var_types id = SOME ty ==>
+              0 < type_memory_bytes cenv ty` by
+        (rpt strip_tac >> gvs[] >>
+         metis_tac[bodySimStmtCasesTheory.assign_local_memory_bytes_pos]) >>
+      Cases_on `(lowered_value_type cenv e = expr_type e \/
+     is_bytestring_type (expr_type e) /\
+     is_bytestring_type (lowered_value_type cenv e) /\
+     arg_type_fits (lowered_value_type cenv e) (expr_type e))`
+      >- (gvs[] >> irule body_assign_local_memory_full >> metis_tac[]) >>
+      gvs[] >> irule body_assign_local_widened_full >> metis_tac[]) >>
+  Cases_on `?nsid. t = TopLevelNameTarget nsid /\
+                   supported_scalar_target tops nsid`
+  >- (gvs[] >> irule body_assign_toplevel_word_full >> metis_tac[]) >>
+  Cases_on `?nsid mut ty slot.
+              t = TopLevelNameTarget nsid /\
+              supported_variable_decl tops nsid = SOME (Private, mut, ty, SOME slot) /\
+              (mut = Storage \/ mut = Transient) /\
+              ~is_word_type ty /\ (!elem n. ty <> ArrayT elem (Dynamic n)) /\
+              0 < type_memory_bytes cenv ty /\ expr_type e = ty`
+  >- (gvs[] >> irule body_assign_toplevel_copy_full >> metis_tac[]) >>
+  Cases_on `?id fld sid fty.
+              t = AttributeTarget (NameTarget id) fld /\
+              FLOOKUP env.var_types id = SOME (StructT sid) /\
+              attribute_type env.type_defs (StructT sid) fld = SOME fty /\
+              is_word_type fty`
+  >- (gvs[] >> irule body_assign_attr_local_full >> metis_tac[]) >>
+  Cases_on `?nsid fld fty.
+              t = AttributeTarget (TopLevelNameTarget nsid) fld /\
+              supported_storage_field_write tops nsid fld /\
+              type_place_target env t = SOME (Type fty) /\ is_word_type fty`
+  >- (gvs[] >> irule body_assign_attr_storage_full >> metis_tac[]) >>
+  irule body_assign_other_full >> simp[] >> metis_tac[]
 QED
 
 (* Admitted: the joint twin of body_assign_tuple_case_ptr_at (bodyPtrAssignCases). *)
@@ -94,7 +155,30 @@ Theorem body_assign_tuple_case_full:
        body_tuple_target_full_ok cx (TupleTarget gs) v) /\ body_expr_full_ok cx e ==>
     body_stmt_full_ok cx (Assign (TupleTarget gs) e)
 Proof
-  cheat
+  rw[body_stmt_full_ok_def] >>
+  reverse (Cases_on `lowered_value_type cenv e = expr_type e`)
+  >- (irule body_assign_tuple_widened_full >> metis_tac[]) >>
+  Cases_on `?ids. gs = MAP (BaseTarget o NameTarget) ids /\ ids <> [] /\
+                  EVERY (\id. ?ty. FLOOKUP env.var_types id = SOME ty) ids`
+  >- (gvs[] >> drule_all assign_tuple_locals_bytes_pos >> strip_tac >>
+      `EVERY (\id. ?ty. FLOOKUP env.var_types id = SOME ty /\
+                        0 < type_memory_bytes cenv ty) ids` by
+        (fs[EVERY_MEM] >> metis_tac[]) >>
+      irule body_assign_tuple_locals_full >> metis_tac[]) >>
+  Cases_on `EVERY (\g. (?id ty. g = BaseTarget (NameTarget id) /\
+                                FLOOKUP env.var_types id = SOME ty /\
+                                0 < type_memory_bytes cenv ty) \/
+                       (?nsid. g = BaseTarget (TopLevelNameTarget nsid) /\
+                               supported_scalar_target tops nsid) \/
+                       (?nsid fld fty.
+                          g = BaseTarget
+                                (AttributeTarget (TopLevelNameTarget nsid) fld) /\
+                          supported_storage_field_write tops nsid fld /\
+                          type_place_target env
+                            (AttributeTarget (TopLevelNameTarget nsid) fld) =
+                            SOME (Type fty) /\ is_word_type fty)) gs`
+  >- (irule body_assign_tuple_targets_full >> metis_tac[]) >>
+  irule body_assign_tuple_other_full >> metis_tac[]
 QED
 
 (* Admitted: the joint twin of body_attribute_case_ptr_at (bodyPtrExprCases). *)
@@ -114,7 +198,18 @@ Theorem body_augassign_case_full:
        body_expr_full_ok cx e) /\ body_base_target_full_ok cx t ==>
     body_stmt_full_ok cx (AugAssign ty t bop e)
 Proof
-  cheat
+  rw[body_stmt_full_ok_def] >>
+  Cases_on `?id. t = NameTarget id`
+  >- (gvs[] >> irule body_augassign_local_full >> metis_tac[]) >>
+  Cases_on `?nsid. t = TopLevelNameTarget nsid /\
+                   supported_scalar_target tops nsid`
+  >- (gvs[] >> irule body_augassign_toplevel_word_full >> metis_tac[]) >>
+  Cases_on `?id fld. t = AttributeTarget (NameTarget id) fld`
+  >- (gvs[] >> irule body_augassign_attr_local_full >> metis_tac[]) >>
+  Cases_on `?nsid fld. t = AttributeTarget (TopLevelNameTarget nsid) fld /\
+                       supported_storage_field_write tops nsid fld`
+  >- (gvs[] >> irule body_augassign_attr_storage_full >> metis_tac[]) >>
+  irule body_augassign_other_full >> metis_tac[]
 QED
 
 (* Admitted: the joint twin of body_break_case_ptr_at (bodyPtrCtrlCases). *)
