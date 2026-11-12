@@ -10330,6 +10330,186 @@ Proof
   irule mm_local_zero_capture_calldata >> metis_tac[]
 QED
 
+Theorem mm_local_zero_rep_index_eq[local]:
+  ALL_DISTINCT (MAP (\i. i.inst_id) bb.bb_instructions) /\
+  gs = (scan_block_memzero dfg bb).mz_flushed /\
+  j < LENGTH bb.bb_instructions /\ MEM g gs /\
+  MEM (EL j bb.bb_instructions).inst_id g.cg_inst_ids /\
+  r < LENGTH bb.bb_instructions /\
+  rep_of_group bb.bb_instructions g = SOME ((EL r bb.bb_instructions).inst_id,g) ==>
+  mm_local_rep_index bb.bb_instructions gs j = r
+Proof
+  strip_tac >>
+  `ALL_DISTINCT (FILTER (\x:num. T) (mm_local_group_ids gs))` by
+    gvs[mm_local_zero_scan_unique] >>
+  simp[mm_local_rep_index_def] >> SELECT_ELIM_TAC >>
+  (conj_tac >- metis_tac[]) >> rpt strip_tac >>
+  `g' = g` by
+    (irule mm_local_projected_owner >> qexistsl [`gs`,`(EL j bb.bb_instructions).inst_id`,`\x:num. T`] >> simp[]) >>
+  gvs[] >> metis_tac[mmCorrectnessProofsTheory.all_distinct_inst_id_idx]
+QED
+
+Theorem mm_local_zero_member_capture[local]:
+  ALL_DISTINCT (MAP (\i. i.inst_id) bb.bb_instructions) /\
+  MEM g (scan_block_memzero dfg bb).mz_flushed /\
+  j < n /\ j < LENGTH bb.bb_instructions /\
+  MEM (EL j bb.bb_instructions).inst_id g.cg_inst_ids ==>
+  (EL j bb.bb_instructions).inst_opcode IN {MSTORE; CALLDATACOPY} /\
+  ?d bs. mm_local_zero_capture dfg bb.bb_instructions n j = SOME (d,bs)
+Proof
+  strip_tac >>
+  SUBGOAL_THEN
+    ``is_zero_store (EL j bb.bb_instructions) \/
+      is_calldatasize_copy dfg (EL j bb.bb_instructions)`` assume_tac
+  >- (drule_all mm_local_memzero_group_roles >> strip_tac >>
+      `i = EL j bb.bb_instructions` by
+        metis_tac[mmWfProofsTheory.all_distinct_map_inv, EL_MEM] >> gvs[]) >>
+  conj_tac >- gvs[is_zero_store_def, is_calldatasize_copy_def] >>
+  simp[mm_local_zero_capture_def] >>
+  Cases_on `is_zero_store (EL j bb.bb_instructions)`
+  >- (fs[is_zero_store_def] >> rpt (CASE_TAC >> gvs[operand_lit_val_def])) >>
+  fs[is_calldatasize_copy_def] >>
+  rpt (CASE_TAC >> gvs[operand_lit_val_def, operand_var_name_def]) >>
+  gvs[oneline operand_lit_val_def, oneline operand_var_name_def, AllCaseEqs()]
+QED
+
+Theorem mm_local_zero_due_indices[local]:
+  ALL_DISTINCT (MAP (\i. i.inst_id) bb.bb_instructions) /\
+  gs = (scan_block_memzero dfg bb).mz_flushed /\
+  is = bb.bb_instructions /\ r < LENGTH is /\ MEM g gs /\
+  rep_of_group is g = SOME ((EL r is).inst_id,g) /\
+  due = FILTER (\j. mm_local_rep_index is gs j = r)
+    (mm_local_pending_indices is gs r) ==>
+  !j. MEM j due <=> j < r /\
+    (EL j is).inst_opcode IN {MSTORE; MCOPY; CALLDATACOPY; DLOADBYTES} /\
+    MEM (EL j is).inst_id g.cg_inst_ids
+Proof
+  strip_tac >>
+  `ALL_DISTINCT (FILTER (\x:num. T) (mm_local_group_ids gs))` by
+    gvs[mm_local_zero_scan_unique] >>
+  gen_tac >>
+  qpat_x_assum `due = _` SUBST1_TAC >>
+  pure_rewrite_tac[MEM_FILTER, mm_local_pending_indices_mem] >> eq_tac
+  >- (strip_tac >>
+      rename1 `rep_of_group is g' = SOME ((EL rr is).inst_id,g')` >>
+      `j < LENGTH is` by decide_tac >>
+      `mm_local_rep_index is gs j = rr` by
+        (qpat_assum `is = _` SUBST1_TAC >>
+         irule mm_local_zero_rep_index_eq >> metis_tac[]) >>
+      `rr = r` by metis_tac[] >>
+      `MEM (EL r is).inst_id g'.cg_inst_ids /\
+       MEM (EL r is).inst_id g.cg_inst_ids` by metis_tac[mm_local_rep_member] >>
+      `g' = g` by
+        (irule mm_local_projected_owner >>
+         qexistsl [`gs`,`(EL r is).inst_id`,`\x:num. T`] >> simp[]) >>
+      gvs[]) >>
+  strip_tac >>
+  `j < LENGTH is` by decide_tac >>
+  conj_tac
+  >- (qpat_assum `is = _` SUBST1_TAC >> BETA_TAC >>
+      irule mm_local_zero_rep_index_eq >> metis_tac[]) >>
+  simp[] >> qexistsl [`g`,`r`] >> gvs[]
+QED
+
+Theorem mm_local_zero_due_members[local]:
+  ALL_DISTINCT (MAP (\i. i.inst_id) bb.bb_instructions) /\
+  gs = (scan_block_memzero dfg bb).mz_flushed /\
+  is = bb.bb_instructions /\ r < LENGTH is /\ MEM g gs /\
+  rep_of_group is g = SOME ((EL r is).inst_id,g) /\
+  due = FILTER (\j. mm_local_rep_index is gs j = r)
+    (mm_local_pending_indices is gs r) ==>
+  (!j. MEM j (due ++ [r]) <=>
+    j < LENGTH is /\ MEM (EL j is).inst_id g.cg_inst_ids) /\
+  (!j. MEM j (due ++ [r]) ==>
+    ?d bs. mm_local_zero_capture dfg is (SUC r) j = SOME (d,bs))
+Proof
+  strip_tac >>
+  `!j. MEM j due <=> j < r /\
+    (EL j is).inst_opcode IN {MSTORE; MCOPY; CALLDATACOPY; DLOADBYTES} /\
+    MEM (EL j is).inst_id g.cg_inst_ids` by
+    (irule mm_local_zero_due_indices >> metis_tac[]) >>
+  `MEM (EL r is).inst_id g.cg_inst_ids` by metis_tac[mm_local_rep_member] >>
+  `!j. j < LENGTH is /\ MEM (EL j is).inst_id g.cg_inst_ids ==> j <= r` by
+    metis_tac[mm_local_rep_position_max] >>
+  `!j. j < LENGTH is /\ MEM (EL j is).inst_id g.cg_inst_ids ==>
+    (EL j is).inst_opcode IN {MSTORE; CALLDATACOPY} /\
+    ?d bs. mm_local_zero_capture dfg is (SUC r) j = SOME (d,bs)` by
+    (gen_tac >> strip_tac >> qpat_assum `is = _` SUBST1_TAC >>
+     irule mm_local_zero_member_capture >> simp[] >> metis_tac[arithmeticTheory.LESS_EQ_IFF_LESS_SUC]) >>
+  conj_asm1_tac
+  >- (gen_tac >> simp[MEM_APPEND] >> eq_tac
+      >- (strip_tac >> gvs[] >> res_tac >> decide_tac) >>
+      strip_tac >> Cases_on `j = r` >> simp[] >>
+      `j < r` by metis_tac[arithmeticTheory.LESS_OR_EQ] >>
+      first_x_assum (qspec_then `j` mp_tac) >>
+      simp[pred_setTheory.IN_INSERT, pred_setTheory.NOT_IN_EMPTY] >> metis_tac[]) >>
+  metis_tac[]
+QED
+
+Theorem mm_local_zero_block_endpoint[local]:
+  ALL_DISTINCT (MAP (\i. i.inst_id) bb.bb_instructions) ==>
+  EVERY (mm_local_group_endpoint bb.bb_instructions (LENGTH bb.bb_instructions)
+    (mm_local_zero_capture dfg bb.bb_instructions (LENGTH bb.bb_instructions)))
+    (scan_block_memzero dfg bb).mz_flushed
+Proof
+  strip_tac >>
+  mp_tac (Q.INST [`is` |-> `bb.bb_instructions`, `dfg` |-> `dfg`,
+    `n` |-> `LENGTH bb.bb_instructions`] mm_local_zero_prefix_endpoint) >>
+  simp[scan_block_memzero_def, memzero_barrier_def]
+QED
+
+Theorem mm_local_zero_representative_endpoint[local]:
+  ALL_DISTINCT (MAP (\i. i.inst_id) bb.bb_instructions) /\
+  MEM g (scan_block_memzero dfg bb).mz_flushed /\
+  r < LENGTH bb.bb_instructions /\
+  rep_of_group bb.bb_instructions g = SOME ((EL r bb.bb_instructions).inst_id,g) ==>
+  mm_local_group_endpoint bb.bb_instructions (SUC r)
+    (mm_local_zero_capture dfg bb.bb_instructions (SUC r)) g
+Proof
+  strip_tac >>
+  `mm_local_group_endpoint bb.bb_instructions (LENGTH bb.bb_instructions)
+    (mm_local_zero_capture dfg bb.bb_instructions (LENGTH bb.bb_instructions)) g` by
+    (drule mm_local_zero_block_endpoint >> simp[EVERY_MEM]) >>
+  `!j. j < LENGTH bb.bb_instructions /\
+      MEM (EL j bb.bb_instructions).inst_id g.cg_inst_ids ==> j < SUC r` by
+    (rpt strip_tac >>
+     `j <= r` by metis_tac[mm_local_rep_position_max] >> decide_tac) >>
+  `!j. j < LENGTH bb.bb_instructions /\
+      MEM (EL j bb.bb_instructions).inst_id g.cg_inst_ids ==>
+      mm_local_zero_capture dfg bb.bb_instructions (LENGTH bb.bb_instructions) j =
+      mm_local_zero_capture dfg bb.bb_instructions (SUC r) j` by
+    (rpt strip_tac >> irule mm_local_zero_capture_past >> simp[]) >>
+  fs[mm_local_group_endpoint_def] >> metis_tac[]
+QED
+
+Theorem mm_local_zero_due_records[local]:
+  ALL_DISTINCT (MAP (\i. i.inst_id) bb.bb_instructions) /\
+  gs = (scan_block_memzero dfg bb).mz_flushed /\
+  is = bb.bb_instructions /\ r < LENGTH is /\ MEM g gs /\
+  rep_of_group is g = SOME ((EL r is).inst_id,g) /\
+  due = FILTER (\j. mm_local_rep_index is gs j = r)
+    (mm_local_pending_indices is gs r) /\
+  cap = mm_local_zero_capture dfg is (SUC r) /\
+  ws = MAP (THE o cap) (due ++ [r]) ==>
+  !d bs. MEM (d,bs) ws <=>
+    ?j. j < LENGTH is /\ MEM (EL j is).inst_id g.cg_inst_ids /\ cap j = SOME (d,bs)
+Proof
+  strip_tac >>
+  `(!j. MEM j (due ++ [r]) <=>
+    j < LENGTH is /\ MEM (EL j is).inst_id g.cg_inst_ids) /\
+   (!j. MEM j (due ++ [r]) ==> ?d bs. cap j = SOME (d,bs))` by
+    (qpat_assum `cap = _` SUBST1_TAC >>
+     irule mm_local_zero_due_members >> metis_tac[]) >>
+  rpt gen_tac >> eq_tac
+  >- (strip_tac >>
+      `?j. MEM j (due ++ [r]) /\ (d,bs) = (THE o cap) j` by
+        (gvs[MEM_MAP] >> metis_tac[]) >>
+      `?a cs. cap j = SOME (a,cs)` by metis_tac[] >>
+      qexists `j` >> gvs[] >> metis_tac[]) >>
+  strip_tac >> qpat_x_assum `ws = _` SUBST1_TAC >>
+  simp[MEM_MAP] >> qexists `j` >> gvs[]
+QED
+
 Theorem mm_local_footprint_store_endpoint[local]:
   wf_ssa fn0 /\ fn_inst_wf fn0 /\ wf_function fn0 /\
   ir_supply_covers_fn supply fn0 /\ index < LENGTH fn0.fn_blocks /\
@@ -16848,8 +17028,8 @@ Theorem mm_local_zero_copy_fragment_exec[local]:
 Proof
   strip_tac >>
   simp[mm_local_exec_prefix_def, mk_memzero_calldatacopy_def,
-    venomInstTheory.is_terminator_def,
-    venomExecSemanticsTheory.step_inst_non_invoke,
+    venomInstTheory.is_terminator_def] >>
+  simp[venomExecSemanticsTheory.step_inst_non_invoke,
     venomExecSemanticsTheory.step_inst_base_def,
     venomExecSemanticsTheory.exec_read0_def,
     venomStateTheory.eval_operand_def, venomStateTheory.lookup_var_def,
