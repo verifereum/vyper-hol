@@ -28,8 +28,10 @@ Ancestors
   o1PassLift
   (* O1: the pipeline's request companion at an abort *)
   o1PipelineRequests
-  (* codegen and compiler units: frame simulation, stack planning, unit checks *)
+  (* codegen and compiler units: frame simulation, stack planning, unit checks,
+     codegen request prefix *)
   genFrameSim stackPlanGenCompute o1SourceUnitCheck unitMemInv
+  codegenRequestPrefix
   (* M7: closed-world producer of the callee-outcome storage guard *)
   e2eOutcomesProducer
   (* lowering: ABI correctness, target/place steps, typed copies and hashing,
