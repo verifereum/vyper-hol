@@ -7,7 +7,7 @@ Ancestors
   bodyPtrSignedConvertSourceFrame exprLowering
 
 Theorem cast_convert_success_post:
-  expr_post ctx fn cenv cx e es ca sa s0 ee v (Var src) s /\
+  expr_post H ctx fn cenv cx e es ca sa s0 ee v (Var src) s /\
   post_value_type cenv e = expr_type e /\
   is_bytestring_type (expr_type e) /\ is_bytestring_type dst /\
   ~is_word_type dst /\
@@ -19,19 +19,19 @@ Theorem cast_convert_success_post:
   lookup_var src s = SOME w /\ not_fresh_at sa src /\
   local_ptrs_reserved cenv sa /\
   ca.cs_next_var <= sa.cs_next_var /\ sa.cs_next_id <= sb.cs_next_id /\
-  ghost_inv d cenv cx ee H th (t with vs_inst_idx := j) /\
-  ghost_kept cenv ee sa G tn s H th /\
+  ghost_inv H d cenv cx ee HG th (t with vs_inst_idx := j) /\
+  ghost_kept cenv ee sa G tn s HG th /\
   ptr_buf_ok cenv e (Var src) G s /\
   type_memory_bytes cenv dst <= type_memory_bytes cenv (lowered_value_type cenv e) /\
-  ptr_covers H th src (t with vs_inst_idx := j) sz /\
+  ptr_covers HG th src (t with vs_inst_idx := j) sz /\
   type_memory_size tout <= sz /\
   (!m. mem_agree_outside th.t_mem t.vs_memory m ==> val_in_memory tout vout (w2n w) m) ==>
-  expr_post ctx fn cenv cx (TypeBuiltin dst Convert dst [e]) es ca sb s0
+  expr_post H ctx fn cenv cx (TypeBuiltin dst Convert dst [e]) es ca sb s0
     (ee with gas_obs := []) vout (Var src) (t with vs_inst_idx := j) /\
-  ghost_inv d cenv cx (ee with gas_obs := []) H th (t with vs_inst_idx := j) /\
+  ghost_inv H d cenv cx (ee with gas_obs := []) HG th (t with vs_inst_idx := j) /\
   ptr_val_ok cx (post_value_type cenv (TypeBuiltin dst Convert dst [e]))
-    vout (Var src) H th (t with vs_inst_idx := j) /\
-  ptr_buf_ok cenv (TypeBuiltin dst Convert dst [e]) (Var src) H (t with vs_inst_idx := j)
+    vout (Var src) HG th (t with vs_inst_idx := j) /\
+  ptr_buf_ok cenv (TypeBuiltin dst Convert dst [e]) (Var src) HG (t with vs_inst_idx := j)
 Proof
   strip_tac >>
   `lookup_var src (t with vs_inst_idx := j) = SOME w` by
@@ -64,11 +64,11 @@ Theorem cast_convert_modern_outcome_ptr:
   isPREFIX (emitted_insts sa sb) (DROP s.vs_inst_idx bb.bb_instructions) /\
   ptr_covers G tn src s sz /\ 32 <= sz /\ type_memory_size tout <= sz /\
   (!j. w2n w <= j /\ j < w2n w + 32 ==> j NOTIN tn.t_mem) /\
-  ghost_inv d cenv cx ee G tn s /\ local_ptrs_reserved cenv sa /\
+  ghost_inv H d cenv cx ee G tn s /\ local_ptrs_reserved cenv sa /\
   (!p z. cenv.ce_return_buf = SOME (PtrVar (Var p) z) ==> not_fresh_at sa p) /\
   (!p z. cenv.ce_return_pc = SOME (PtrVar (Var p) z) ==> not_fresh_at sa p) /\
   (!m. mem_agree_outside tn.t_mem s.vs_memory m ==> val_in_memory tv v (w2n w) m) /\
-  expr_post ctx fn cenv cx e es ca sa s0 ee v (Var src) s /\
+  expr_post H ctx fn cenv cx e es ca sa s0 ee v (Var src) s /\
   ptr_buf_ok cenv e (Var src) G s /\
   type_memory_bytes cenv dst <= type_memory_bytes cenv (lowered_value_type cenv e) /\
   ghost_kept cenv es ca G0 tn0 s0 G tn /\
@@ -77,14 +77,14 @@ Theorem cast_convert_modern_outcome_ptr:
   s.vs_inst_idx + LENGTH (emitted_insts sa sb) = LENGTH sb.cs_current_insts ==>
   gas_outcome_ptr D tops (ctx,fn) PG
     (\st. (convert_result cx (expr_type e) dst v,st)) (ee,s,G,tn)
-    (\res fin H th u. ?vout. res = INL vout /\
-      expr_post ctx fn cenv cx (TypeBuiltin dst Convert dst [e]) es ca sb s0 fin vout out u /\
+    (\res fin HG th u. ?vout. res = INL vout /\
+      expr_post H ctx fn cenv cx (TypeBuiltin dst Convert dst [e]) es ca sb s0 fin vout out u /\
       u.vs_current_bb = sb.cs_current_bb /\ u.vs_inst_idx = LENGTH sb.cs_current_insts /\
-      ghost_inv d cenv cx fin H th u /\
-      ptr_val_ok cx (post_value_type cenv (TypeBuiltin dst Convert dst [e])) vout out H th u /\
+      ghost_inv H d cenv cx fin HG th u /\
+      ptr_val_ok cx (post_value_type cenv (TypeBuiltin dst Convert dst [e])) vout out HG th u /\
       (~is_word_type (post_value_type cenv (TypeBuiltin dst Convert dst [e])) ==>
-        ptr_buf_ok cenv (TypeBuiltin dst Convert dst [e]) out H u) /\
-      ghost_kept cenv es ca G0 tn0 s0 H th)
+        ptr_buf_ok cenv (TypeBuiltin dst Convert dst [e]) out HG u) /\
+      ghost_kept cenv es ca G0 tn0 s0 HG th)
     (\res fin gt r. expr_exit res r)
 Proof
   disch_then (map_every assume_tac o CONJUNCTS) >>
@@ -94,7 +94,7 @@ Proof
   qexistsl_tac [`cenv`,`d`,`i`,`n`,`out`,`sa`,`sb`,`src`,`sz`,`w`] >>
   simp[arithmeticTheory.ADD_COMM] >>
   rpt gen_tac >> strip_tac >>
-  `ghost_kept cenv es ca G0 tn0 s0 H th` by
+  `ghost_kept cenv es ca G0 tn0 s0 HG th` by
     (irule ghost_kept_readonly_frame >>
      qexistsl_tac [`G`,`not_fresh_at sa`,`tn`] >> simp[] >>
      fs[ghost_kept_def, loweringStateRelDefsTheory.not_fresh_at_def] >> metis_tac[arithmeticTheory.LESS_EQ_TRANS]) >>

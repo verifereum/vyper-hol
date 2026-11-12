@@ -138,8 +138,8 @@ Resume subscript_array_framed_code_ptr[base_normal]:
   `local_ptrs_reserved cenv sm` by
     metis_tac[exprLoweringPropsTheory.local_ptrs_reserved_next_var] >>
   `fn_has_code sm st2 func` by metis_tac[fragExecTheory.fn_has_code_split] >>
-  `stmt_state_rel ctx func cenv cx es_end t` by
-    (qpat_x_assum `vv_post _ _ _ _ _ _ _ _ _ _ _ _ _`
+  `stmt_state_rel H ctx func cenv cx es_end t` by
+    (qpat_x_assum `vv_post _ _ _ _ _ _ _ _ _ _ _ _ _ _`
        (mp_tac o CONJUNCT1 o REWRITE_RULE [vv_post_def]) >>
      simp[exprLoweringPropsTheory.stmt_state_rel_def,
        loweringStateRelDefsTheory.state_rel_gas_obs, exprLoweringPropsTheory.immutable_alloca_sep_def] >>
@@ -182,7 +182,7 @@ Resume subscript_array_framed_code_ptr[base_suffix]:
   `vv_location bvv = SOME LocCode` by metis_tac[pairTheory.FST] >>
   `?p. bvv = LocatedValue (ArrayT et bd) p /\ p.ptr_location = LocCode` by
     (Cases_on `bvv` >> gvs[contextTheory.vv_location_def] >>
-     qpat_x_assum `vv_post _ _ _ _ _ _ _ _ _ _ _ _ _`
+     qpat_x_assum `vv_post _ _ _ _ _ _ _ _ _ _ _ _ _ _`
        (mp_tac o CONJUNCT1 o CONJUNCT2 o REWRITE_RULE [vv_post_def]) >>
      simp[vv_holds_def, compileEnvTheory.is_bytestring_type_def]) >>
   gvs[contextTheory.vv_location_def, contextTheory.vv_operand_def] >>
@@ -243,14 +243,14 @@ Resume subscript_array_framed_code_ptr[suffix_typed]:
 QED
 
 Resume subscript_array_framed_code_ptr[suffix_endpoint]:
-  `stmt_state_rel ctx func cenv cx (raw with gas_obs := []) u` by fs[expr_post_def] >>
-  `vv_post ctx func cenv cx (Subscript (ArrayT ann bd) e1 e2) es sa st2 s0
+  `stmt_state_rel H ctx func cenv cx (raw with gas_obs := []) u` by fs[expr_post_def] >>
+  `vv_post H ctx func cenv cx (Subscript (ArrayT ann bd) e1 e2) es sa st2 s0
     (raw with gas_obs := []) tv (LocatedValue (ArrayT ann bd) p) u` by
     (irule framed_array_base_endpoint >> simp[] >>
-     goal_assum (drule_at (Pat `vv_post _ _ _ _ _ _ _ _ _ _ _ _ _`)) >>
-     goal_assum (drule_at (Pat `expr_post _ _ _ _ _ _ _ _ _ _ _ _ _`)) >>
+     goal_assum (drule_at (Pat `vv_post _ _ _ _ _ _ _ _ _ _ _ _ _ _`)) >>
+     goal_assum (drule_at (Pat `expr_post _ _ _ _ _ _ _ _ _ _ _ _ _ _`)) >>
      simp[] >> qexists `env` >> simp[]) >>
-  drule_at (Pat `vv_post _ _ _ _ _ _ sa st2 _ _ _ _ _`)
+  drule_at (Pat `vv_post _ _ _ _ _ _ _ sa st2 _ _ _ _ _`)
     code_array_marked_post_view >>
   disch_then (qspecl_then [`es_end with gas_obs := []`,
     `gas_explicit marks s0.vs_gas_readings`,`env`] mp_tac) >>
@@ -291,14 +291,14 @@ Resume subscript_array_framed_code_ptr[suffix_finish]:
      simp[exprLoweringPropsTheory.ci_mono_compile_ptr_load]) >>
   `!q. (!x. not_fresh_at st2 x ==> lookup_var x q = lookup_var x u) /\
     q.vs_allocas = u.vs_allocas /\ q.vs_memory = u.vs_memory /\
-    stmt_state_rel ctx func cenv cx (raw with gas_obs := []) q ==>
-    vv_post ctx func cenv cx (Subscript (ArrayT ann bd) e1 e2) es sa sb s0
+    stmt_state_rel H ctx func cenv cx (raw with gas_obs := []) q ==>
+    vv_post H ctx func cenv cx (Subscript (ArrayT ann bd) e1 e2) es sa sb s0
       (raw with gas_obs := []) tv (LocatedValue (ArrayT ann bd) p) q` by
     (rpt strip_tac >>
-     qpat_x_assum `vv_post _ _ _ _ _ _ sa st2 _ _ _ _ _` kall_tac >>
+     qpat_x_assum `vv_post _ _ _ _ _ _ _ sa st2 _ _ _ _ _` kall_tac >>
      irule framed_array_base_endpoint >> simp[] >>
-     goal_assum (drule_at (Pat `vv_post _ _ _ _ _ _ _ _ _ _ _ _ _`)) >>
-     goal_assum (drule_at (Pat `expr_post _ _ _ _ _ _ _ _ _ _ _ _ _`)) >>
+     goal_assum (drule_at (Pat `vv_post _ _ _ _ _ _ _ _ _ _ _ _ _ _`)) >>
+     goal_assum (drule_at (Pat `expr_post _ _ _ _ _ _ _ _ _ _ _ _ _ _`)) >>
      simp[] >> qexists `env` >> simp[]) >>
   `type_memory_bytes cenv ann = type_memory_size etv` by
     (irule exprSimHypsTheory.expr_sim_inv_memory_size >>

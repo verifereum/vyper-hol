@@ -48,13 +48,13 @@ Theorem compile_raise_reason_path_frag_ptr:
          (type_memory_bytes cenv (expr_type r)) sm = ((),sb) /\
        fn_has_code sm sb func /\ fn_inst_ids_distinct func /\
        local_ptrs_reserved cenv sa /\ ~ctx_has_dalloca ctx /\ ~cenv.ce_is_ctor /\
-       vv_post ctx func cenv cx r es sa sm s0 ee tv vv t /\
-       ghost_inv d cenv cx ee G tn t /\
+       vv_post H ctx func cenv cx r es sa sm s0 ee tv vv t /\
+       ghost_inv H d cenv cx ee G tn t /\
        ptr_vv_ok cx (post_value_type cenv r) tv vv ee G tn t /\
        ~t.vs_halted /\ t.vs_current_bb = sm.cs_current_bb /\
        t.vs_inst_idx = LENGTH sm.cs_current_insts /\
        read_result cx tv ee = (INL (StringV str),ee) ==>
-       ?z Gf tnf. gas_path_ptr (cx_dead cx) 0 ctx func PG G tn t 0 Gf tnf
+       ?z Gf tnf. gas_path_ptr (cx_dead H cx) 0 ctx func PG G tn t 0 Gf tnf
          (Abort Revert_abort z)) ==>
     stmt_frag_ptr d ctx PG func cx lctx RetQ cenv
       (stmt_env cenv lctx ty (Raise (RaiseReason r)))

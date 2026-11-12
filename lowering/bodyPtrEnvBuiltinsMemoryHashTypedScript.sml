@@ -5,7 +5,7 @@ Ancestors bodyPtrEnvBuiltinsMemoryHashCompile bodyPtrEnvBuiltinsHashInput
   vyperAST vyperValue compileEnv venomState words finite_map list builtinHashing
 
 Theorem memory_hash_bytes_input:
-  expr_post ctx fn cenv cx e es sa sm s0 es' (BytesV bs) op s /\
+  expr_post H ctx fn cenv cx e es sa sm s0 es' (BytesV bs) op s /\
   ptr_val_ok cx (expr_type e) (BytesV bs) op G tn s /\
   expr_type e = BaseT (BytesT (Dynamic cap)) /\
   evaluate_type (get_tenv cx) (expr_type e) = SOME (BaseTV (BytesT (Dynamic cap))) ==>
@@ -32,7 +32,7 @@ Proof
 QED
 
 Theorem memory_hash_string_input:
-  expr_post ctx fn cenv cx e es sa sm s0 es' (StringV str) op s /\
+  expr_post H ctx fn cenv cx e es sa sm s0 es' (StringV str) op s /\
   ptr_val_ok cx (expr_type e) (StringV str) op G tn s /\
   expr_type e = BaseT (StringT cap) /\
   evaluate_type (get_tenv cx) (expr_type e) = SOME (BaseTV (StringT cap)) ==>
@@ -59,7 +59,7 @@ Proof
 QED
 
 Theorem memory_hash_typed_counted:
-  expr_post ctx fn cenv cx e es sa sm s0 es' v arg s /\
+  expr_post H ctx fn cenv cx e es sa sm s0 es' v arg s /\
   ptr_val_ok cx (expr_type e) v arg G tn s /\
   ((?cap bs. expr_type e = BaseT (BytesT (Dynamic cap)) /\ v = BytesV bs /\
       evaluate_type (get_tenv cx) (expr_type e) = SOME (BaseTV (BytesT (Dynamic cap)))) \/
@@ -67,7 +67,7 @@ Theorem memory_hash_typed_counted:
       evaluate_type (get_tenv cx) (expr_type e) = SOME (BaseTV (StringT cap)))) /\
   compile_method_id_hash (expr_type e) arg sm = (op,sh) /\
   (!x. arg = Var x ==> not_fresh_at sm x) /\ ~ctx_has_dalloca ctx /\
-  ghost_inv d cenv cx es' G tn s /\ local_ptrs_reserved cenv sm /\
+  ghost_inv H d cenv cx es' G tn s /\ local_ptrs_reserved cenv sm /\
   (!x sz. cenv.ce_return_buf = SOME (PtrVar (Var x) sz) ==> not_fresh_at sm x) /\
   (!x sz. cenv.ce_return_pc = SOME (PtrVar (Var x) sz) ==> not_fresh_at sm x) /\
   ~s.vs_halted /\ fn_has_code sm sh fn /\
@@ -76,7 +76,7 @@ Theorem memory_hash_typed_counted:
   ?G' tn'. gas_path_ptr D 0 ctx fn PG G tn s 0 G' tn'
     (OK (t with vs_inst_idx := LENGTH sh.cs_current_insts)) /\
     ptr_val_ok cx (BaseT (BytesT (Fixed 32))) result op G' tn' t /\
-    ghost_inv d cenv cx es' G' tn' t /\ ghost_kept cenv es' sm G tn s G' tn'
+    ghost_inv H d cenv cx es' G' tn' t /\ ghost_kept cenv es' sm G tn s G' tn'
 Proof
   strip_tac
   >- (gvs[] >> drule_at (Pat `expr_type _ = _`) memory_hash_bytes_input >>

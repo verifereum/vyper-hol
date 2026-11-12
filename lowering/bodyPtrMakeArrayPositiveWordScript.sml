@@ -13,8 +13,8 @@ Theorem literal_word_store_frames:
   local_ptrs_reserved ce sa /\ ~ce.ce_is_ctor /\
   z = (mstore (w2n a) w s) with vs_inst_idx := idx /\
   tm = tn with t_mem := tn.t_mem DIFF {i | w2n a <= i /\ i < w2n a+32} ==>
-  ghost_inv d ce cx es G tm z /\ ghost_kept ce es fr Gf tnf sf G tm /\
-  stmt_state_rel ctx func ce cx es z
+  ghost_inv H d ce cx es G tm z /\ ghost_kept ce es fr Gf tnf sf G tm /\
+  stmt_state_rel H ctx func ce cx es z
 Proof
   disch_then (map_every assume_tac o CONJUNCTS) >>
   drule_all literal_loop_store_ghost >> strip_tac >>
@@ -28,7 +28,7 @@ Proof
     ~(w2n a <= i /\ i < w2n a+32)` by
     (gvs[literal_loop_frame_def] >> rpt strip_tac >>
      `addr+capacity <= p \/ n+p <= addr` by metis_tac[] >> decide_tac) >>
-  `ghost_inv d ce cx es G tm z` by
+  `ghost_inv H d ce cx es G tm z` by
     (gvs[] >> simp[mstore_def] >> irule annassign_ghost_exterior_ptr >>
      reverse conj_tac >- metis_tac[literal_loop_frame_runtime] >>
      qexists `{i | addr+off <= i /\ i < addr+(off+32)}` >>
@@ -73,8 +73,8 @@ Proof
    get_instruction bb s.vs_inst_idx = SOME (mk_inst id MSTORE [Var dst;op] [])` by simp[] >>
   drule_all make_array_word_store_endpoint >>
   disch_then (qspecl_then [`PG`, `D`] strip_assume_tac) >>
-  rename1 `gas_path_ptr D 0 ctx func PG G tn s 0 H tm (OK z)` >>
-  qpat_x_assum `H = G` SUBST_ALL_TAC >>
+  rename1 `gas_path_ptr D 0 ctx func PG G tn s 0 HG tm (OK z)` >>
+  qpat_x_assum `HG = G` SUBST_ALL_TAC >>
   `tm = tn with t_mem := tn.t_mem DIFF {i | w2n a <= i /\ i < w2n a+32}` by
     simp[ptrDisciplineTheory.taint_component_equality] >>
   drule_all literal_word_store_frames >> strip_tac >>

@@ -157,10 +157,10 @@ Theorem raw_call_kwargs_execution_ptr:
   local_ptrs_reserved cenv sa /\ ~ctx_has_dalloca ctx /\ ~cenv.ce_is_ctor /\
   (!x sz. cenv.ce_return_buf = SOME (PtrVar (Var x) sz) ==> not_fresh_at sa x) /\
   (!x sz. cenv.ce_return_pc = SOME (PtrVar (Var x) sz) ==> not_fresh_at sa x) /\
-  stmt_state_rel ctx func cenv cx es s0 /\ ghost_inv dep cenv cx es G0 tn0 s0 /\
+  stmt_state_rel H ctx func cenv cx es s0 /\ ghost_inv H dep cenv cx es G0 tn0 s0 /\
   ~s0.vs_halted /\ s0.vs_current_bb = sa.cs_current_bb /\
   s0.vs_inst_idx = LENGTH sa.cs_current_insts ==>
-  gas_outcome_ptr (cx_dead cx) (cx_tops cx) (ctx,func) PG
+  gas_outcome_ptr (cx_dead H cx) (cx_tops cx) (ctx,func) PG
     (eval_exprs cx kws) (es,s0,G0,tn0)
     (\rr ee G tn t. ?vs xs. rr = INL vs /\
       typed_args_post ctx func cenv cx es sa s0 ee kws xs vs t /\
@@ -170,10 +170,10 @@ Theorem raw_call_kwargs_execution_ptr:
       EVERY (\x. op_taint tn x = {}) xs /\
       EVERY (\x. !v. x = Var v ==> not_fresh_at sb v) xs /\
       EVERY (\op. !l. op <> Label l) xs /\
-      stmt_state_rel ctx func cenv cx ee t /\ expr_sim_inv cenv cx env ee /\
+      stmt_state_rel H ctx func cenv cx ee t /\ expr_sim_inv cenv cx env ee /\
       t.vs_current_bb = sb.cs_current_bb /\
       t.vs_inst_idx = LENGTH sb.cs_current_insts /\ ~t.vs_halted /\
-      ghost_inv dep cenv cx ee G tn t /\
+      ghost_inv H dep cenv cx ee G tn t /\
       wb_frame cenv es ee sa s0 t /\ ghost_kept cenv es sa G0 tn0 s0 G tn /\
       sa.cs_next_id <= sb.cs_next_id)
     (\rr ee gt r. wb_args_exit rr r)
@@ -205,14 +205,14 @@ Proof
 QED
 
 Resume raw_call_kwargs_execution_ptr[posts]:
-  `gas_outcome_ptr (cx_dead cx) (cx_tops cx) (ctx,func) PG
+  `gas_outcome_ptr (cx_dead H cx) (cx_tops cx) (ctx,func) PG
     (eval_exprs cx kws) (es,s0,G0,tn0)
     (\rr ee G tn t. (?vs. rr = INL vs /\
       typed_args_post ctx func cenv cx es sa s0 ee kws xs vs t /\
       MAP FDOM es.scopes = MAP FDOM ee.scopes /\
       t.vs_current_bb = sb.cs_current_bb /\
       t.vs_inst_idx = LENGTH sb.cs_current_insts /\
-      ghost_inv dep cenv cx ee G tn t /\ EVERY (\x. op_taint tn x = {}) xs /\
+      ghost_inv H dep cenv cx ee G tn t /\ EVERY (\x. op_taint tn x = {}) xs /\
       ghost_kept cenv es sa G0 tn0 s0 G tn) /\
       expr_sim_inv cenv cx env ee /\ ~t.vs_halted)
     (\rr ee gt r. wb_args_exit rr r)` by
@@ -239,7 +239,7 @@ Theorem raw_call_kwargs_sim_ptr:
   local_ptrs_reserved cenv sa /\ ~ctx_has_dalloca ctx /\ ~cenv.ce_is_ctor /\
   (!z sz. cenv.ce_return_buf = SOME (PtrVar (Var z) sz) ==> not_fresh_at sa z) /\
   (!z sz. cenv.ce_return_pc = SOME (PtrVar (Var z) sz) ==> not_fresh_at sa z) /\
-  stmt_state_rel ctx func cenv cx es s0 /\ ghost_inv dep cenv cx es G0 tn0 s0 /\
+  stmt_state_rel H ctx func cenv cx es s0 /\ ghost_inv H dep cenv cx es G0 tn0 s0 /\
   ~s0.vs_halted /\ s0.vs_current_bb = sa.cs_current_bb /\
   s0.vs_inst_idx = LENGTH sa.cs_current_insts /\
   expr_val_at cenv cx (BaseT (BytesT (Dynamic n))) sd sa es
@@ -252,7 +252,7 @@ Theorem raw_call_kwargs_sim_ptr:
   (!i. b+32 <= i /\ i < b+32+LENGTH bs ==> i NOTIN tn0.t_mem) /\
   (!op. MEM op saved ==> (!z. op = Var z ==> not_fresh_at sa z) /\
     (!l. op <> Label l)) ==>
-  gas_outcome_ptr (cx_dead cx) (cx_tops cx) (ctx,func) PG
+  gas_outcome_ptr (cx_dead H cx) (cx_tops cx) (ctx,func) PG
     (eval_exprs cx kws) (es,s0,G0,tn0)
     (\rr ee G tn t. ?vs xs. rr = INL vs /\
       typed_args_post ctx func cenv cx es sa s0 ee kws xs vs t /\
@@ -262,10 +262,10 @@ Theorem raw_call_kwargs_sim_ptr:
       EVERY (\op. op_taint tn op = {}) xs /\
       EVERY (\op. !z. op = Var z ==> not_fresh_at sb z) xs /\
       EVERY (\op. !l. op <> Label l) xs /\
-      stmt_state_rel ctx func cenv cx ee t /\ expr_sim_inv cenv cx env ee /\
+      stmt_state_rel H ctx func cenv cx ee t /\ expr_sim_inv cenv cx env ee /\
       t.vs_current_bb = sb.cs_current_bb /\
       t.vs_inst_idx = LENGTH sb.cs_current_insts /\ ~t.vs_halted /\
-      ghost_inv dep cenv cx ee G tn t /\
+      ghost_inv H dep cenv cx ee G tn t /\
       wb_frame cenv es ee sa s0 t /\ ghost_kept cenv es sa G0 tn0 s0 G tn /\
       expr_val_at cenv cx (BaseT (BytesT (Dynamic n))) sd sb ee
         (BytesV bs) (Var x) t /\

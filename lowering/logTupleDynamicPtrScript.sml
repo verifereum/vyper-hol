@@ -41,7 +41,7 @@ Theorem compile_log_dynamic_tuple_seq_ptr:
   compile_abi_encode_to_buf (Var dst) (Var src) (AbiComplex infos) st = (out,end_st) /\
   EXISTS (\(_,_,_,dyn). dyn) infos /\
   EVERY (\(ei,asz,mz,dyn). log_scalar_enc_info ei) infos /\
-  fn_has_code st end_st func /\ stmt_state_rel ctx func ce cx es s /\
+  fn_has_code st end_st func /\ stmt_state_rel H ctx func ce cx es s /\
   fn_inst_ids_distinct func /\ local_ptrs_reserved ce st /\
   end_st.cs_next_var <= limit_st.cs_next_var /\ fresh_vars_wrt limit_st s /\
   ~ctx_has_dalloca ctx /\ srcid <> st.cs_next_id /\ dstid <> st.cs_next_id /\
@@ -57,13 +57,13 @@ Theorem compile_log_dynamic_tuple_seq_ptr:
       (abi_encoder_member_span infos) q) /\
   abi_encoder_member_span infos <= srcCap /\
   LENGTH (enc (Tuple tys) (ListV avs)) <= cap ==>
-  ?H tm t p.
+  ?HG tm t p.
     run_inst_seq (emitted_insts st end_st) s = OK t /\
-    inst_seq_ptr D 0 ctx func PG G tn (emitted_insts st end_st) s H tm /\
+    inst_seq_ptr D 0 ctx func PG G tn (emitted_insts st end_st) s HG tm /\
     inst_extends st end_st /\ fresh_vars_wrt limit_st t /\
     EVERY (\i. i.inst_opcode <> INVOKE /\ ~is_terminator i.inst_opcode) (emitted_insts st end_st) /\
     eval_operand out t = SOME (n2w (LENGTH (enc (Tuple tys) (ListV avs)))) /\
-    op_taint tm out = {} /\ op_prov H out = NONE /\
+    op_taint tm out = {} /\ op_prov HG out = NONE /\
     mem_bytes_at d (LENGTH (enc (Tuple tys) (ListV avs))) t.vs_memory =
       enc (Tuple tys) (ListV avs) /\
     (!i. d <= i /\ i < d+LENGTH (enc (Tuple tys) (ListV avs)) ==> i NOTIN tm.t_mem) /\
@@ -78,7 +78,7 @@ Theorem compile_log_dynamic_tuple_seq_ptr:
       (i IN tm.t_mem <=> i IN tn.t_mem)) /\
     tm.t_stor = tn.t_stor /\ tm.t_trans = tn.t_trans /\ tm.t_imm = tn.t_imm /\
     (!v. not_fresh_at st v ==>
-      lookup_var v t = lookup_var v s /\ FLOOKUP H v = FLOOKUP G v /\
+      lookup_var v t = lookup_var v s /\ FLOOKUP HG v = FLOOKUP G v /\
       op_taint tm (Var v) = op_taint tn (Var v))
 Proof
   disch_then (REPEAT_TCL CONJUNCTS_THEN assume_tac) >>
@@ -114,7 +114,7 @@ Resume compile_log_dynamic_tuple_seq_ptr[members]:
   impl_tac >-
     (asm_rewrite_tac[] >>
      gvs[Abbr `u1`, lookup_var_def, mload_def, fresh_vars_wrt_def]) >>
-  disch_then (qx_choose_then `H` (qx_choose_then `tm` (qx_choose_then `v`
+  disch_then (qx_choose_then `HG` (qx_choose_then `tm` (qx_choose_then `v`
     (REPEAT_TCL CONJUNCTS_THEN assume_tac)))) >>
   suspend "compose"
 QED
@@ -134,7 +134,7 @@ Resume compile_log_dynamic_tuple_seq_ptr[compose]:
     (qpat_x_assum `EVERY _ (emitted_insts st end_st)` mp_tac >>
      asm_rewrite_tac[EVERY_APPEND] >> simp[]) >>
   `run_inst_seq (emitted_insts st end_st) s = OK (v with vs_inst_idx := u.vs_inst_idx) /\
-   inst_seq_ptr D 0 ctx func PG G tn (emitted_insts st end_st) s H tm` by
+   inst_seq_ptr D 0 ctx func PG G tn (emitted_insts st end_st) s HG tm` by
     (qunabbrev_tac `u1` >> drule_all successful_seq_ptr_append >> asm_rewrite_tac[]) >>
   suspend "prefix"
 QED
@@ -183,7 +183,7 @@ Resume compile_log_dynamic_tuple_seq_ptr[post]:
     (qpat_x_assum `st.cs_next_var <= b.cs_next_var` mp_tac >>
      POP_ASSUM_LIST (K ALL_TAC) >> metis_tac[not_fresh_at_mono]) >>
   `!x. not_fresh_at st x ==>
-    lookup_var x v = lookup_var x s /\ FLOOKUP H x = FLOOKUP G x /\
+    lookup_var x v = lookup_var x s /\ FLOOKUP HG x = FLOOKUP G x /\
     op_taint tm (Var x) = op_taint tn (Var x)` by
     (gen_tac >> disch_tac >>
      `not_fresh_at b x` by metis_tac[] >>
@@ -191,7 +191,7 @@ Resume compile_log_dynamic_tuple_seq_ptr[post]:
      qpat_x_assum `!x. not_fresh_at st x ==> _ /\ _ /\ _`
        (qspec_then `x` mp_tac) >>
      simp[Abbr `u1`, lookup_var_def]) >>
-  qexistsl_tac [`H`,`tm`,`v with vs_inst_idx := u.vs_inst_idx`,`p`] >>
+  qexistsl_tac [`HG`,`tm`,`v with vs_inst_idx := u.vs_inst_idx`,`p`] >>
   asm_simp_tac bool_ss [] >>
   simp[eval_op_inst_idx, Abbr `u1`] >>
   suspend "frames"

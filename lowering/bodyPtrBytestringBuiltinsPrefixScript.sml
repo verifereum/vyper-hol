@@ -8,7 +8,7 @@ Libs monadsyntax
    target-side representation and frame facts, not source scope domains. *)
 Theorem operand_prefix_transport_inputs:
   lower_value compile_expr cenv cty e sa = (x,sm) /\
-  expr_post ctx func cenv cx e es sa sm s0 ee v x t /\
+  expr_post H ctx func cenv cx e es sa sm s0 ee v x t /\
   (do r <- eval_expr cx e; read_result cx r od) es = (res,ee) ==>
   wb_frame cenv es ee sa s0 t /\
   MAP FDOM es.scopes = MAP FDOM ee.scopes /\
@@ -21,7 +21,7 @@ QED
 
 Theorem operand_prefix_frame_inputs:
   lower_value compile_expr cenv cty e sa = (x,sm) /\
-  expr_post ctx func cenv cx e es sa sm s0 ee v x t /\
+  expr_post H ctx func cenv cx e es sa sm s0 ee v x t /\
   MAP FDOM es.scopes = MAP FDOM ee.scopes ==>
   wb_frame cenv es ee sa s0 t /\
   MAP FDOM es.scopes = MAP FDOM ee.scopes /\

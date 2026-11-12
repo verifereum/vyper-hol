@@ -26,15 +26,15 @@ Theorem raw_log_dynamic_frag_ptr:
   (!x sz. cenv.ce_return_pc = SOME (PtrVar (Var x) sz) ==> not_fresh_at sa x) /\
   gas_admissible (bind (eval_expr cx (Call ann RawLog args dflt)) (read_result cx))
     expr_res_ok es /\
-  stmt_state_rel ctx func cenv cx es s0 /\ ghost_inv d cenv cx es G0 tn0 s0 /\
+  stmt_state_rel H ctx func cenv cx es s0 /\ ghost_inv H d cenv cx es G0 tn0 s0 /\
   ~s0.vs_halted /\ s0.vs_current_bb = sa.cs_current_bb /\
   s0.vs_inst_idx = LENGTH sa.cs_current_insts ==>
-  gas_outcome_ptr (cx_dead cx) (cx_tops cx) (ctx,func) PG
+  gas_outcome_ptr (cx_dead H cx) (cx_tops cx) (ctx,func) PG
     (bind (eval_expr cx (Call ann RawLog args dflt)) (read_result cx)) (es,s0,G0,tn0)
     (\rr ee G tn t. ?v. rr = INL v /\
-      expr_post ctx func cenv cx (Call ann RawLog args dflt) es sa sb s0 ee v (Lit 0w) t /\
+      expr_post H ctx func cenv cx (Call ann RawLog args dflt) es sa sb s0 ee v (Lit 0w) t /\
       t.vs_current_bb = sb.cs_current_bb /\ t.vs_inst_idx = LENGTH sb.cs_current_insts /\
-      ghost_inv d cenv cx ee G tn t /\
+      ghost_inv H d cenv cx ee G tn t /\
       ptr_val_ok cx (expr_type (Call ann RawLog args dflt)) v (Lit 0w) G tn t /\
       (~is_word_type (expr_type (Call ann RawLog args dflt)) ==>
         ptr_buf_ok cenv (Call ann RawLog args dflt) (Lit 0w) G t) /\
@@ -142,7 +142,7 @@ QED
 Resume raw_log_dynamic_frag_ptr[data]:
   drule_all raw_log_topics_marked_post_ptr >> strip_tac >>
   drule_all raw_log_marked_data_ready_ptr >> strip_tac >>
-  `stmt_state_rel ctx func cenv cx (mid with gas_obs := []) t` by
+  `stmt_state_rel H ctx func cenv cx (mid with gas_obs := []) t` by
     fs[wb_args_post_def] >>
   `~t.vs_halted` by
     (drule gas_marked_exec_ptr_exec >> strip_tac >>
@@ -171,7 +171,7 @@ Resume raw_log_dynamic_frag_ptr[data]:
 QED
 
 Resume raw_log_dynamic_frag_ptr[tail]:
-  qmatch_goalsub_abbrev_tac `expr_post ctx func cenv cx call` >>
+  qmatch_goalsub_abbrev_tac `expr_post H ctx func cenv cx call` >>
   `expr_body_pre cenv cx env data (mid with gas_obs := gs)` by fs[] >>
   drule_all (SRULE [SF ETA_ss] expr_body_pre_base_result) >> strip_tac >>
   `?bs. v = BytesV bs` by
@@ -224,11 +224,11 @@ Resume raw_log_dynamic_frag_ptr[tail_ready]:
      simp[EVERY_MEM, not_fresh_at_def] >> metis_tac[arithmeticTheory.LESS_EQ_TRANS]) >>
   `LENGTH ops < dimword (:256)` by (simp[dimword_def] >> decide_tac) >>
   `~t'.vs_call_ctx.cc_static` by
-    (qpat_assum `expr_post _ _ _ _ data _ _ _ _ _ _ _ t'` mp_tac >>
+    (qpat_assum `expr_post _ _ _ _ _ data _ _ _ _ _ _ _ t'` mp_tac >>
      rewrite_tac[expr_post_def, stmt_state_rel_def, state_rel_def] >>
      strip_tac >> fs[]) >>
   `mem_word_at b t'.vs_memory = n2w (LENGTH bs)` by fs[valueEncodingPropsTheory.mem_word_at_eq_mload] >>
-  `stmt_state_rel ctx func cenv cx ee t'` by fs[expr_post_def] >>
+  `stmt_state_rel H ctx func cenv cx ee t'` by fs[expr_post_def] >>
   `!x sz. cenv.ce_return_buf = SOME (PtrVar (Var x) sz) ==> not_fresh_at sn x` by
     (rpt strip_tac >> irule stmtFragPtrTheory.not_fresh_at_mono >> qexists_tac `sa` >> simp[] >> metis_tac[]) >>
   `!x sz. cenv.ce_return_pc = SOME (PtrVar (Var x) sz) ==> not_fresh_at sn x` by
@@ -242,7 +242,7 @@ Resume raw_log_dynamic_frag_ptr[tail_ready]:
   qpat_assum `LENGTH ops = LENGTH topics` (fn th => pure_rewrite_tac[GSYM th]) >>
   strip_tac >>
   drule_all (SRULE [APPEND] rawLogPtrDynamicTailTheory.raw_log_dynamic_tail_ptr) >>
-  disch_then (qspecl_then [`cx_dead cx`, `PG`,
+  disch_then (qspecl_then [`cx_dead H cx`, `PG`,
     `ee.logs ++ [encode_raw_event_values cx.txn.target vs bs]`] strip_assume_tac) >>
   `expr_type call = NoneT` by simp[Abbr `call`, expr_type_def] >>
   `post_value_type cenv call = expr_type call` by simp[Abbr `call`] >>

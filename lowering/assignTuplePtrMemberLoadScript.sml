@@ -101,7 +101,7 @@ Theorem compile_tuple_member_load_path_ptr:
   a + type_memory_size tv <= b+sz /\ a + type_memory_size tv < dimword (:256) /\
   evaluate_type (get_tenv cx) ty = SOME tv /\ value_has_type tv v /\
   (!m. mem_agree_outside tn.t_mem s.vs_memory m ==> val_in_memory tv v a m) /\
-  stmt_state_rel ctx func cenv cx es s /\ ghost_inv d cenv cx es G tn s /\
+  stmt_state_rel H ctx func cenv cx es s /\ ghost_inv H d cenv cx es G tn s /\
   local_ptrs_reserved cenv sa /\
   (!x sz. cenv.ce_return_buf = SOME (PtrVar (Var x) sz) ==> not_fresh_at sa x) /\
   (!x sz. cenv.ce_return_pc = SOME (PtrVar (Var x) sz) ==> not_fresh_at sa x) ==>
@@ -119,7 +119,7 @@ Theorem compile_tuple_member_load_path_ptr:
       lookup_var p t = lookup_var p s /\ FLOOKUP G' p = FLOOKUP G p /\
       op_taint tn' (Var p) = op_taint tn (Var p)) /\
     ptr_val_ok cx ty v op G' tn' t /\
-    stmt_state_rel ctx func cenv cx es t /\ ghost_inv d cenv cx es G' tn' t /\
+    stmt_state_rel H ctx func cenv cx es t /\ ghost_inv H d cenv cx es G' tn' t /\
     (if is_word_type ty then lookup_var out t = SOME (typed_val_to_w256 tv v) /\
        op_prov G' (Var out) = NONE
      else lookup_var out t = SOME (n2w a) /\ FLOOKUP G' out = SOME (b,sz))

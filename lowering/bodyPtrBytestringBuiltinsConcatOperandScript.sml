@@ -7,7 +7,7 @@ Ancestors
   exprLowering valueEncoding valueEncodingDefs compileEnv words list venomState
 
 Theorem concat_operand_bytes_read:
-  expr_post ctx fn ce cx e es sa sb s0 ee v op s /\
+  expr_post H ctx fn ce cx e es sa sb s0 ee v op s /\
   ptr_val_ok cx (post_value_type ce e) v op G tn s /\
   is_bytestring_type (expr_type e) /\
   evaluate_type (get_tenv cx) (expr_type e) = SOME tv /\
@@ -28,7 +28,7 @@ Theorem concat_operand_bytes_read:
 Proof
   strip_tac >>
   `post_value_type ce e = expr_type e` by simp[] >>
-  `stmt_state_rel ctx fn ce cx ee s /\
+  `stmt_state_rel H ctx fn ce cx ee s /\
    expr_val_at ce cx (expr_type e) sa sb ee v op s /\
    expr_val_rel cx (expr_type e) v op s` by fs[expr_post_def] >>
   `?w. eval_operand op s = SOME w` by fs[expr_val_rel_def] >>

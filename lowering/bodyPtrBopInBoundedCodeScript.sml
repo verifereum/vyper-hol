@@ -10,7 +10,7 @@ Theorem membership_code_length_header_entry:
   compile_ptr_load F imm LocCode arr_op sa = (len,sb) /\ fn_has_code sa sb fn /\
   ~ctx_has_dalloca ctx /\ ~s.vs_halted /\
   s.vs_current_bb = sa.cs_current_bb /\ s.vs_inst_idx = LENGTH sa.cs_current_insts /\
-  stmt_state_rel ctx fn cenv cx es s /\ ~cenv.ce_is_ctor /\
+  stmt_state_rel H ctx fn cenv cx es s /\ ~cenv.ce_is_ctor /\
   immutable_holds cenv cx (ArrayT ety (Dynamic cap)) (Value (ArrayV av)) bw es s /\
   evaluate_type (get_tenv cx) ety = SOME tv /\
   value_has_type (ArrayTV tv (Dynamic cap)) (ArrayV av) /\
@@ -88,7 +88,7 @@ Theorem membership_bounded_code_array_element_source:
   membership_loop_registers sa i r G tn s /\
   s.vs_current_bb = fresh_label_output "in_body" (sa.cs_next_label+2) /\
   s.vs_inst_idx = 0 /\ (!x. arr_op = Var x ==> not_fresh_at early x) /\
-  stmt_state_rel ctx fn cenv cx es s0 /\ ~cenv.ce_is_ctor /\
+  stmt_state_rel H ctx fn cenv cx es s0 /\ ~cenv.ce_is_ctor /\
   immutable_holds cenv cx (ArrayT ety bd) (Value (ArrayV av)) bw es s0 /\
   eval_operand arr_op s0 = SOME bw /\ op_taint tn0 arr_op = {} /\
   is_word_type ety /\ evaluate_type (get_tenv cx) ety = SOME tv /\
@@ -143,7 +143,7 @@ Theorem membership_bounded_code_load_contract_source:
   (!x. arr_op = Var x ==> not_fresh_at early x) /\
   membership_loop_frame early G0 tn0 s0 Gh tnh sh /\
   (!x. not_fresh_at early x ==> not_fresh_at sa x) /\
-  stmt_state_rel ctx fn cenv cx es s0 /\ ~cenv.ce_is_ctor /\
+  stmt_state_rel H ctx fn cenv cx es s0 /\ ~cenv.ce_is_ctor /\
   vv_holds cenv cx (ArrayT ety (Dynamic cap)) (Value (ArrayV (DynArrayV vs)))
     (LocatedValue ann p) es s0 /\
   ptr_vv_ok cx (ArrayT ety (Dynamic cap)) (Value (ArrayV (DynArrayV vs)))
@@ -181,7 +181,7 @@ Theorem membership_bounded_code_prepare:
   fn_has_code early sa fn /\ fn_has_code sa sb fn /\
   ~ctx_has_dalloca ctx /\ ~s.vs_halted /\ ~cenv.ce_is_ctor /\
   s.vs_current_bb = early.cs_current_bb /\ s.vs_inst_idx = LENGTH early.cs_current_insts /\
-  stmt_state_rel ctx fn cenv cx es s /\
+  stmt_state_rel H ctx fn cenv cx es s /\
   vv_holds cenv cx (ArrayT ety (Dynamic cap)) (Value (ArrayV (DynArrayV vs)))
     (LocatedValue ann p) es s /\
   ptr_vv_ok cx (ArrayT ety (Dynamic cap)) (Value (ArrayV (DynArrayV vs)))

@@ -40,7 +40,7 @@ Theorem compile_bytestring_src_counted_frame:
       get_instruction bb (s.vs_inst_idx+j) = SOME (EL j (emitted_insts sb sc))) /\
     lookup_var src s = SOME a /\ ptr_covers G tn src s capacity /\ 32 <= capacity /\
     (!i. w2n a <= i /\ i < w2n a + 32 ==> i NOTIN tn.t_mem) /\
-    ghost_inv d cenv cx es G tn s /\
+    ghost_inv H d cenv cx es G tn s /\
     ghost_kept cenv es0 sa G0 tn0 s0 G tn /\
     (!name p sz. FLOOKUP cenv.ce_vars name = SOME (PtrVar (Var p) sz) ==>
       not_fresh_at sb p) /\
@@ -65,7 +65,7 @@ Theorem compile_bytestring_src_counted_frame:
         op_taint tn' (Var p) = op_taint tn (Var p)) /\
       (!n. 32 < capacity /\ 32+n <= capacity /\ w2n a+32 < dimword(:256) ==>
         ptr_covers G' tn' data t n) /\
-      ghost_inv d cenv cx es G' tn' t /\
+      ghost_inv H d cenv cx es G' tn' t /\
       ghost_kept cenv es0 sa G0 tn0 s0 G' tn'
 Proof
   rpt gen_tac >> strip_tac >>

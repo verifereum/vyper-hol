@@ -6,7 +6,7 @@ Ancestors
   finite_map typedCopyPtr venomInst
 
 Theorem ghost_inv_selective_frame:
-  ghost_inv d cenv cx es G tn s /\
+  ghost_inv H d cenv cx es G tn s /\
   (!x.
     ((?name entry sz. lookup_scopes name es.scopes = SOME entry /\
        FLOOKUP cenv.ce_vars name = SOME (PtrVar (Var x) sz)) \/
@@ -20,10 +20,10 @@ Theorem ghost_inv_selective_frame:
   s'.vs_call_ctx = s.vs_call_ctx /\
   tn'.t_stor = tn.t_stor /\ tn'.t_trans = tn.t_trans /\
   tn'.t_imm = tn.t_imm ==>
-  ghost_inv d cenv cx es G' tn' s'
+  ghost_inv H d cenv cx es G' tn' s'
 Proof
   strip_tac >> rewrite_tac[ghost_inv_def] >>
-  qpat_x_assum `ghost_inv _ _ _ _ _ _ _` mp_tac >>
+  qpat_x_assum `ghost_inv _ _ _ _ _ _ _ _` mp_tac >>
   rewrite_tac[ghost_inv_def] >> strip_tac >>
   rpt conj_tac
   >- (rpt strip_tac >>
@@ -48,7 +48,7 @@ Proof
 QED
 
 Theorem ghost_inv_update_var_pc:
-  ghost_inv d cenv cx es G tn s /\
+  ghost_inv H d cenv cx es G tn s /\
   (!name entry p sz. lookup_scopes name es.scopes = SOME entry /\
      FLOOKUP cenv.ce_vars name = SOME (PtrVar (Var p) sz) ==> p <> out) /\
   (!p sz. cenv.ce_return_buf = SOME (PtrVar (Var p) sz) ==> p <> out) /\
@@ -57,7 +57,7 @@ Theorem ghost_inv_update_var_pc:
      op_taint tn' (Var x) = op_taint tn (Var x)) /\
   tn'.t_mem = tn.t_mem /\ tn'.t_stor = tn.t_stor /\
   tn'.t_trans = tn.t_trans /\ tn'.t_imm = tn.t_imm ==>
-  ghost_inv d cenv cx es G' tn'
+  ghost_inv H d cenv cx es G' tn'
     (update_var out w s with vs_inst_idx := SUC s.vs_inst_idx)
 Proof
   strip_tac >> irule ghost_inv_selective_frame >>
@@ -68,12 +68,12 @@ Proof
 QED
 
 Theorem ghost_inv_fresh_add_pc:
-  ghost_inv d cenv cx es G tn s /\
+  ghost_inv H d cenv cx es G tn s /\
   (!name entry p sz. lookup_scopes name es.scopes = SOME entry /\
      FLOOKUP cenv.ce_vars name = SOME (PtrVar (Var p) sz) ==> p <> out) /\
   (!p sz. cenv.ce_return_buf = SOME (PtrVar (Var p) sz) ==> p <> out) /\
   (!p sz. cenv.ce_return_pc = SOME (PtrVar (Var p) sz) ==> p <> out) ==>
-  ghost_inv d cenv cx es
+  ghost_inv H d cenv cx es
     (step_prov PG G (mk_inst id ADD [left; right] [out]) (update_var out w s))
     (step_taint (mk_inst id ADD [left; right] [out]) s (update_var out w s) tn)
     (update_var out w s with vs_inst_idx := SUC s.vs_inst_idx)
@@ -87,14 +87,14 @@ Proof
 QED
 
 Theorem ghost_inv_clean_mload_pc:
-  ghost_inv d cenv cx es G tn s /\
+  ghost_inv H d cenv cx es G tn s /\
   (!name entry p sz. lookup_scopes name es.scopes = SOME entry /\
      FLOOKUP cenv.ce_vars name = SOME (PtrVar (Var p) sz) ==> p <> out) /\
   (!p sz. cenv.ce_return_buf = SOME (PtrVar (Var p) sz) ==> p <> out) /\
   (!p sz. cenv.ce_return_pc = SOME (PtrVar (Var p) sz) ==> p <> out) /\
   eval_operand src s = SOME a /\
   (!i. w2n a <= i /\ i < w2n a + 32 ==> i NOTIN tn.t_mem) ==>
-  ghost_inv d cenv cx es
+  ghost_inv H d cenv cx es
     (step_prov PG G (mk_inst id MLOAD [src] [out])
       (update_var out (mload (w2n a) s) s))
     (step_taint (mk_inst id MLOAD [src] [out]) s

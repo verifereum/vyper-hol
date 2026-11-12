@@ -3,13 +3,13 @@ Ancestors bodyPtrStructLitFreshGhost bodyPtrStructLitAlloc allocationPtr
   finite_map ptrDiscipline bodyPtrDefs venomState
 
 Theorem structlit_reused_alloca_ghost_inv:
-  ghost_inv d ce cx es G tn s /\
+  ghost_inv H d ce cx es G tn s /\
   FLOOKUP s.vs_allocas id = SOME (b,n) /\
   (!name entry p sz. lookup_scopes name es.scopes = SOME entry /\
      FLOOKUP ce.ce_vars name = SOME (PtrVar (Var p) sz) ==> p <> out) /\
   (!p sz. ce.ce_return_buf = SOME (PtrVar (Var p) sz) ==> p <> out) /\
   (!p sz. ce.ce_return_pc = SOME (PtrVar (Var p) sz) ==> p <> out) ==>
-  ghost_inv d ce cx es
+  ghost_inv H d ce cx es
     (step_prov PG G (mk_inst id ALLOCA [Lit (n2w n)] [out])
       (update_var out (n2w b) s))
     (step_taint (mk_inst id ALLOCA [Lit (n2w n)] [out]) s
@@ -23,7 +23,7 @@ Proof
 QED
 
 Theorem structlit_reused_alloca_entry:
-  ghost_inv d ce cx es G tn s /\
+  ghost_inv H d ce cx es G tn s /\
   FLOOKUP s.vs_allocas id = SOME (b,n) /\ b + n < dimword (:256) /\
   (!name entry p sz. lookup_scopes name es.scopes = SOME entry /\
      FLOOKUP ce.ce_vars name = SOME (PtrVar (Var p) sz) ==> p <> out) /\
@@ -39,7 +39,7 @@ Theorem structlit_reused_alloca_entry:
     (step_taint (mk_inst id ALLOCA [Lit (n2w n)] [out]) s
       (update_var out (n2w b) s) tn)
     (OK (update_var out (n2w b) s with vs_inst_idx := SUC s.vs_inst_idx)) /\
-  ghost_inv d ce cx es
+  ghost_inv H d ce cx es
     (step_prov PG G (mk_inst id ALLOCA [Lit (n2w n)] [out])
       (update_var out (n2w b) s))
     (step_taint (mk_inst id ALLOCA [Lit (n2w n)] [out]) s

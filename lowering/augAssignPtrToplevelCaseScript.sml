@@ -43,7 +43,7 @@ Proof
   drule_all augassign_toplevel_code_parts >> strip_tac >> gvs[] >>
   `storage_var_info cx src id = SOME (tr,slot,tvt)` by
     simp[storage_var_info_def] >>
-  `!st. storage_read_live cx tr st (n2w slot) tvt` by
+  `!st. storage_read_live H tr st (n2w slot) tvt` by
     (gen_tac >> irule declared_storage_region_read_live >>
      qexistsl [`src`, `id`, `[]`] >>
      irule declared_storage_region_ordinary >> simp[]) >>
@@ -61,7 +61,7 @@ Proof
   `?out. cur_op = Var out` by metis_tac[emitted_insts_emit_op_local] >> gvs[] >>
   `0 < type_slot_size tvt` by simp[] >>
   drule_all augassign_storage_load_clean_ptr >>
-  disch_then (qspecl_then [`PG`, `cx_dead cx`] strip_assume_tac) >>
+  disch_then (qspecl_then [`PG`, `cx_dead H cx`] strip_assume_tac) >>
   suspend "rhs_entry"
 QED
 
@@ -89,7 +89,7 @@ Resume compile_augassign_toplevel_case_ptr[rhs_entry]:
      qexists_tac `sa` >> fs[ret_pc_ok_def]) >>
   qpat_x_assum `expr_sim_ptr _ _ _ _ _ _ _ _ _`
     (mp_tac o REWRITE_RULE [expr_sim_ptr_def]) >>
-  disch_then (qspecl_then [`s1`, `s2`, `rhs_op`, `t`, `H`, `tm`] mp_tac) >>
+  disch_then (qspecl_then [`s1`, `s2`, `rhs_op`, `t`, `HG`, `tm`] mp_tac) >>
   (impl_tac >- simp[stmtFragPtrTheory.ghost_inv_gas_obs]) >>
   strip_tac >>
   qpat_x_assum `gas_outcome_ptr _ _ _ _ _ _ _ _`
@@ -180,7 +180,7 @@ Resume compile_augassign_toplevel_case_ptr[compiler_entry]:
   `type_bits ty MOD 8 = 0` by metis_tac[well_formed_type_bits] >>
   `not_fresh_at s2 out /\ local_ptrs_reserved cenv s2` by
     metis_tac[freshWritesTheory.not_fresh_at_mono, local_ptrs_reserved_next_var] >>
-  `stmt_state_rel ctx func cenv cx (es_end with gas_obs := []) t'` by
+  `stmt_state_rel H ctx func cenv cx (es_end with gas_obs := []) t'` by
     fs[expr_post_def] >>
   `~t'.vs_halted` by
     (qpat_assum `gas_marked_exec_ptr _ _ _ _ _ _ _ _ _ _ _`
@@ -233,7 +233,7 @@ Resume compile_augassign_toplevel_case_ptr[operator_entry]:
   disch_then (drule_at (Pat `eval_operand _ _ = _`)) >>
   disch_then (drule_at (Pat `eval_operand _ _ = _`)) >>
   disch_then drule_all >>
-  disch_then (qspecl_then [`PG`, `cx_dead cx`] strip_assume_tac)
+  disch_then (qspecl_then [`PG`, `cx_dead H cx`] strip_assume_tac)
   >- suspend "operator_normal" >>
   suspend "operator_abort"
 QED
@@ -260,8 +260,8 @@ Resume compile_augassign_toplevel_case_ptr[operator_normal]:
      simp[] >> disch_then drule_all >> simp[]) >>
   `declared_storage_region cx src id [] = SOME (tr,n2w slot,tvt)` by
     simp[declared_storage_region_def] >>
-  `!w st. storage_dead cx tr (update_storage (n2w slot) w st) =
-          storage_dead cx tr st` by
+  `!w st. storage_dead H tr (update_storage (n2w slot) w st) =
+          storage_dead H tr st` by
     (rpt gen_tac >> irule storage_dead_update_word_region >>
      qexistsl [`src`, `id`, `[]`, `tvt`] >> simp[]) >>
   `encode_value tvt result = SOME [(0,typed_val_to_w256 tvt result)]` by
@@ -276,10 +276,10 @@ QED
 
 Resume compile_augassign_toplevel_case_ptr[store_entry]:
   qmatch_asmsub_abbrev_tac
-    `stmt_state_rel ctx func cenv cx (es_end with gas_obs := []) u` >>
+    `stmt_state_rel H ctx func cenv cx (es_end with gas_obs := []) u` >>
   `eval_operand res_op u = SOME (typed_val_to_w256 tvt result)` by
     simp[Abbr `u`, typed_val_to_w256_word_value] >>
-  `stmt_state_rel ctx func cenv cx fin
+  `stmt_state_rel H ctx func cenv cx fin
      (if tr then tstore (n2w slot) (typed_val_to_w256 tvt result) u
       else sstore (n2w slot) (typed_val_to_w256 tvt result) u)` by
     (drule_at (Pat `write_storage_slot _ _ _ _ _ _ = _`)
@@ -304,7 +304,7 @@ Resume compile_augassign_toplevel_case_ptr[store_entry]:
    eval_operand (Lit (n2w slot)) u = SOME (n2w slot)` by
     simp[op_taint_def, eval_operand_def] >>
   drule_all emit_storage_store_path_ptr >>
-  disch_then (qspecl_then [`PG`, `H'`, `cx_dead cx`] assume_tac) >>
+  disch_then (qspecl_then [`PG`, `HG'`, `cx_dead H cx`] assume_tac) >>
   `fin.scopes = (es_end with gas_obs := []).scopes` by
     metis_tac[write_storage_slot_scopes] >>
   `u.vs_call_ctx.cc_address = cx.txn.target` by
@@ -313,10 +313,10 @@ Resume compile_augassign_toplevel_case_ptr[store_entry]:
 QED
 
 Resume compile_augassign_toplevel_case_ptr[store_ghost]:
-  `!k b. storage_dead cx tr
+  `!k b. storage_dead H tr
      (update_storage (n2w slot) (typed_val_to_w256 tvt result)
        (if tr then contract_transient u else contract_storage u)) k b =
-     storage_dead cx tr
+     storage_dead H tr
        (if tr then contract_transient u else contract_storage u) k b` by simp[] >>
   drule_at (Pat `u.vs_call_ctx.cc_address = _`)
     ghost_inv_storage_word_store >>
@@ -325,13 +325,13 @@ Resume compile_augassign_toplevel_case_ptr[store_ghost]:
   qabbrev_tac `store_tn =
     if tr then tm' with t_trans := key_update tm'.t_trans (n2w slot) {}
     else tm' with t_stor := key_update tm'.t_stor (n2w slot) {}` >>
-  `ghost_inv d cenv cx fin H' store_tn
+  `ghost_inv H d cenv cx fin HG' store_tn
       (last with vs_inst_idx := LENGTH sb.cs_current_insts)` by
     simp[Abbr `last`, Abbr `store_tn`] >>
-  `ghost_kept cenv (es with gas_obs := []) s1 H tm t H' store_tn` by
+  `ghost_kept cenv (es with gas_obs := []) s1 HG tm t HG' store_tn` by
     (simp[Abbr `store_tn`] >>
      irule ghost_kept_storage_word_store >> simp[]) >>
-  `gas_path_ptr (cx_dead cx) 0 ctx func PG G tn t' 0 H' store_tn
+  `gas_path_ptr (cx_dead H cx) 0 ctx func PG G tn t' 0 HG' store_tn
       (OK (last with vs_inst_idx := LENGTH sb.cs_current_insts))` by
     (drule_all gas_path_ptr_then >> simp[]) >>
   suspend "normal_compose"
@@ -357,13 +357,13 @@ Resume compile_augassign_toplevel_case_ptr[normal_compose]:
      `not_fresh_at s1 x /\ not_fresh_at s2 x` by simp[] >>
      `lookup_var x t = SOME w` by simp[] >>
      `lookup_var x t' = SOME w` by
-       (qpat_x_assum `expr_post _ _ _ _ _ _ _ _ _ _ _ _ _`
+       (qpat_x_assum `expr_post _ _ _ _ _ _ _ _ _ _ _ _ _ _`
           (mp_tac o cj 5 o REWRITE_RULE [expr_post_def]) >> simp[]) >>
      `lookup_var x u = SOME w` by
        (qpat_x_assum `!z w. not_fresh_at s2 z /\ _ ==> _` irule >> simp[]) >>
      Cases_on `tr` >> fs[lookup_var_def]) >>
   `!x. not_fresh_at sa x ==>
-       FLOOKUP H' x = FLOOKUP G0 x /\
+       FLOOKUP HG' x = FLOOKUP G0 x /\
        op_taint store_tn (Var x) = op_taint tn0 (Var x)` by
     metis_tac[ghost_kept_old_operand] >>
   suspend "normal_summary"
@@ -377,7 +377,7 @@ Resume compile_augassign_toplevel_case_ptr[normal_summary]:
      Cases_on `tr` >> Cases_on `s3.cs_current_insts` >>
      simp[block_is_terminated_def, rich_listTheory.LAST_APPEND, listTheory.LAST_CONS_cond, mk_inst_def,
           is_terminator_def]) >>
-  `stmt_state_rel ctx func cenv cx fin
+  `stmt_state_rel H ctx func cenv cx fin
       (last with vs_inst_idx := LENGTH sb.cs_current_insts)` by
     metis_tac[stmt_state_rel_inst_idx] >>
   simp[gas_outcome_ptr_def] >> qexists_tac `marks` >> disj1_tac >>

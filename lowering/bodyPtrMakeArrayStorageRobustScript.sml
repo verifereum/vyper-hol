@@ -40,14 +40,14 @@ QED
 Theorem copied_storage_robust_decode:
   !cx tr st rt a keys. well_formed_type_value tv /\ slots_in_range st (w2n a) tv /\
   decode_value st (w2n a) tv = SOME v /\
-  storage_read_live cx tr st a tv /\
-  storage_agree (storage_dead cx tr st) st rt /\
+  storage_read_live H tr st a tv /\
+  storage_agree (storage_dead H tr st) st rt /\
   (!i. i < type_slot_size tv ==>
     mem_word_at (b+32*i) mem = lookup_storage (a+n2w i) rt) /\
   (!i j. i < type_slot_size tv /\ j < 32 /\ b+32*i+j IN tainted ==>
     j IN key_taint keys (a+n2w i)) /\
   (!key j. j IN key_taint keys key ==>
-    storage_dead cx tr rt (w2n key) j) ==>
+    storage_dead H tr rt (w2n key) j) ==>
   !m. mem_agree_outside tainted mem m ==> val_in_memory tv v b m
 Proof
   rpt gen_tac >> strip_tac >>
@@ -56,10 +56,10 @@ Proof
   conj_tac
   >- (irule copied_storage_live_memory >> metis_tac[]) >>
   rpt strip_tac >>
-  `storage_dead cx tr rt (w2n (a+n2w i)) j` by
+  `storage_dead H tr rt (w2n (a+n2w i)) j` by
     metis_tac[arithmeticTheory.ADD_ASSOC] >>
   drule storage_agree_storage_dead >> disch_then (gvs o single) >>
-  `storage_dead cx tr st (w2n (a+n2w i)) j` by metis_tac[] >>
+  `storage_dead H tr st (w2n (a+n2w i)) j` by metis_tac[] >>
   qpat_x_assum `storage_read_live _ _ _ _ _` mp_tac >>
   pure_rewrite_tac[storage_read_live_def] >>
   disch_then drule >> strip_tac >>
@@ -70,9 +70,9 @@ Proof
 QED
 
 Theorem stor_taint_ok_key_dead:
-  stor_taint_ok cx tn s /\
+  stor_taint_ok H cx tn s /\
   j IN key_taint (if tr then tn.t_trans else tn.t_stor) key ==>
-  storage_dead cx tr
+  storage_dead H tr
     (if tr then contract_transient s else contract_storage s) (w2n key) j
 Proof
   Cases_on `tr` >>
@@ -91,11 +91,11 @@ QED
 Theorem copy_prefix_robust_decode:
   well_formed_type_value tv /\ slots_in_range st (w2n a) tv /\
   decode_value st (w2n a) tv = SOME v /\
-  storage_read_live cx tr st a tv /\
-  storage_agree (storage_dead cx tr st) st
+  storage_read_live H tr st a tv /\
+  storage_agree (storage_dead H tr st) st
     (if tr then contract_transient sbase else contract_storage sbase) /\
   copy_prefix (if tr then LocTransient else LocStorage) a b n sbase n sf /\
-  type_slot_size tv <= n /\ stor_taint_ok cx tnbase sbase /\
+  type_slot_size tv <= n /\ stor_taint_ok H cx tnbase sbase /\
   (!i j. i < n /\ j < 32 /\ b+32*i+j IN tnf.t_mem ==>
     j IN key_taint (if tr then tnbase.t_trans else tnbase.t_stor) (a+n2w i)) ==>
   !m. mem_agree_outside tnf.t_mem sf.vs_memory m ==> val_in_memory tv v b m

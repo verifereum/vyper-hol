@@ -7,8 +7,8 @@ Ancestors
 Theorem compile_alloc_buffer_vv_ordered_frame:
   !D d ctx fn PG G0 tn0 G tn cenv cx e es sa sb s0 es' tv vv s n buf sc.
     post_value_type cenv e = expr_type e /\
-    vv_post ctx fn cenv cx e es sa sb s0 es' tv vv s /\
-    ghost_inv d cenv cx es' G tn s /\ ghost_kept cenv es sa G0 tn0 s0 G tn /\
+    vv_post H ctx fn cenv cx e es sa sb s0 es' tv vv s /\
+    ghost_inv H d cenv cx es' G tn s /\ ghost_kept cenv es sa G0 tn0 s0 G tn /\
     local_ptrs_reserved cenv sa /\ MAP FDOM es.scopes = MAP FDOM es'.scopes /\
     sa.cs_next_var <= sb.cs_next_var /\ sa.cs_next_id <= sb.cs_next_id /\
     (!x sz. cenv.ce_return_buf = SOME (PtrVar (Var x) sz) ==> not_fresh_at sa x) /\
@@ -26,9 +26,9 @@ Theorem compile_alloc_buffer_vv_ordered_frame:
     ?out G1 tn1 t.
       buf.buf_operand = Var out /\
       gas_path_ptr D 0 ctx fn PG G tn s 0 G1 tn1 (OK t) /\
-      ptr_covers G1 tn1 out t n /\ ghost_inv d cenv cx es' G1 tn1 t /\
+      ptr_covers G1 tn1 out t n /\ ghost_inv H d cenv cx es' G1 tn1 t /\
       ghost_kept cenv es sa G0 tn0 s0 G1 tn1 /\
-      vv_post ctx fn cenv cx e es sa sc s0 es' tv vv t /\
+      vv_post H ctx fn cenv cx e es sa sc s0 es' tv vv t /\
       ptr_vv_ok cx (expr_type e) tv vv es' G1 tn1 t /\
       (!ty op. vv = StackValue ty op /\ ~is_word_type (expr_type e) ==>
           ptr_buf_ok cenv e op G1 t) /\
@@ -52,7 +52,7 @@ Proof
   rpt strip_tac >>
   drule_all compile_alloc_buffer_vv_source_frame >>
   disch_then (qspecl_then [`D`, `PG`] strip_assume_tac) >>
-  `stmt_state_rel ctx fn cenv cx es' s` by gvs[vv_post_def] >>
+  `stmt_state_rel H ctx fn cenv cx es' s` by gvs[vv_post_def] >>
   drule_all compile_alloc_buffer_raw_step >> strip_tac >> gvs[] >>
   `not_local_ptr cenv es'.scopes out` by
     (drule_all compile_alloc_buffer_frame_separation >> simp[]) >>

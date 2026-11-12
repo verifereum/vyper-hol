@@ -7,9 +7,9 @@ Ancestors
   valueEncoding words list finite_map fragExec gasSummaryComposePtr venomState
 
 Theorem extract32_tail_ptr_ready:
-  expr_post ctx func cenv cx src es sa sm s0 es1 (BytesV bs) srcop s1 /\
-  expr_post ctx func cenv cx off es1 sm sc s1 ee (IntV i) offop s /\
-  stmt_state_rel ctx func cenv cx es s0 /\
+  expr_post H ctx func cenv cx src es sa sm s0 es1 (BytesV bs) srcop s1 /\
+  expr_post H ctx func cenv cx off es1 sm sc s1 ee (IntV i) offop s /\
+  stmt_state_rel H ctx func cenv cx es s0 /\
   local_ptrs_reserved cenv sa /\ local_ptrs_reserved cenv sc /\
   MAP FDOM es.scopes = MAP FDOM es1.scopes /\
   sa.cs_next_var <= sm.cs_next_var /\ sm.cs_next_var <= sc.cs_next_var /\
@@ -37,21 +37,21 @@ Theorem extract32_tail_ptr_ready:
   fn_has_code sc se func /\ ee.gas_obs = [] /\
   ~s.vs_halted /\ ~ctx_has_dalloca ctx /\
   s.vs_current_bb = sc.cs_current_bb /\ s.vs_inst_idx = LENGTH sc.cs_current_insts /\
-  ghost_inv d cenv cx ee G tn s /\
+  ghost_inv H d cenv cx ee G tn s /\
   (!x sz. cenv.ce_return_buf = SOME (PtrVar (Var x) sz) ==> not_fresh_at sc x) /\
   (!x sz. cenv.ce_return_pc = SOME (PtrVar (Var x) sz) ==> not_fresh_at sc x) /\
   ghost_kept cenv es sa G0 tn0 s0 G tn ==>
   gas_outcome_ptr D (cx_tops cx) (ctx,func) PG
     (vyperState$bind (lift_sum (evaluate_extract32 bs (Num i) bt)) (\v. return (Value v)))
     (ee,s,G,tn)
-    (\res ef H th t. ?v. res = INL (Value v) /\
-      vv_post ctx func cenv cx (TypeBuiltin ann Extract32 (BaseT bt) [src;off])
+    (\res ef HG th t. ?v. res = INL (Value v) /\
+      vv_post H ctx func cenv cx (TypeBuiltin ann Extract32 (BaseT bt) [src;off])
         es sa se s0 ef (Value v) (StackValue ty op) t /\
       t.vs_current_bb = se.cs_current_bb /\ t.vs_inst_idx = LENGTH se.cs_current_insts /\
-      ghost_inv d cenv cx ef H th t /\
+      ghost_inv H d cenv cx ef HG th t /\
       ptr_vv_ok cx (post_value_type cenv (TypeBuiltin ann Extract32 (BaseT bt) [src;off]))
-        (Value v) (StackValue ty op) ef H th t /\
-      ghost_kept cenv es sa G0 tn0 s0 H th)
+        (Value v) (StackValue ty op) ef HG th t /\
+      ghost_kept cenv es sa G0 tn0 s0 HG th)
     (\res ef gt r. expr_exit res r)
 Proof
   strip_tac >>
@@ -63,7 +63,7 @@ Proof
   irule extract32_tail_outcome_of_runs_ptr >>
   qpat_assum `compile_extract32_load _ _ _ _ = _` (irule_at Any) >>
   qpat_assum `compile_clamp_basetype _ _ _ = _` (irule_at Any) >>
-  simp[] >> qexistsl_tac [`th`,`H`] >> reverse conj_tac
+  simp[] >> qexistsl_tac [`th`,`HG`] >> reverse conj_tac
   >- (`s with vs_inst_idx := s.vs_inst_idx = s` by simp[venom_state_component_equality] >>
       qpat_assum `!k. inst_seq_ptr _ _ _ _ _ _ _ _ _ _ _`
        (qspec_then `s.vs_inst_idx` mp_tac) >> metis_tac[]) >>
@@ -78,14 +78,14 @@ QED
 Resume extract32_tail_ptr_ready[endpoint]:
   conj_tac
   >- (irule extract32_tail_post_of_run >>
-      qpat_assum `expr_post _ _ _ _ off _ _ _ _ _ _ _ _` (irule_at Any) >>
-      qpat_assum `expr_post _ _ _ _ src _ _ _ _ _ _ _ _` (irule_at Any) >>
+      qpat_assum `expr_post _ _ _ _ _ off _ _ _ _ _ _ _ _` (irule_at Any) >>
+      qpat_assum `expr_post _ _ _ _ _ src _ _ _ _ _ _ _ _` (irule_at Any) >>
       simp[] >> goal_assum (drule_at Any) >> metis_tac[]) >>
   drule_all extract32_tail_run_path >> disch_then (qspec_then `ctx` strip_assume_tac) >>
   simp[] >>
   `sa.cs_next_var <= sc.cs_next_var` by decide_tac >>
-  `ghost_inv d cenv cx ee H th (t with vs_inst_idx := LENGTH se.cs_current_insts) /\
-   ghost_kept cenv es sa G0 tn0 s0 H th` by
+  `ghost_inv H d cenv cx ee HG th (t with vs_inst_idx := LENGTH se.cs_current_insts) /\
+   ghost_kept cenv es sa G0 tn0 s0 HG th` by
     (irule extract32_tail_ghost_frame >>
      qpat_assum `compile_extract32_load _ _ _ _ = _` (irule_at Any) >>
      qpat_assum `compile_clamp_basetype _ _ _ = _` (irule_at Any) >>

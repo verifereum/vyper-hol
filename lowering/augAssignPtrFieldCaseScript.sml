@@ -36,7 +36,7 @@ Proof
   `?dstv. dst = Var dstv` by metis_tac[emitted_insts_emit_op_local] >> gvs[] >>
   `?out. cur = Var out` by metis_tac[emitted_insts_emit_op_local] >> gvs[] >>
   drule_all augassign_field_load_clean_ptr >>
-  disch_then (qspecl_then [`PG`, `cx_dead cx`] strip_assume_tac) >>
+  disch_then (qspecl_then [`PG`, `cx_dead H cx`] strip_assume_tac) >>
   `expr_body_pre cenv cx env e (es with gas_obs := [])` by
     fs[expr_body_pre_def] >>
   `expr_sim_ptr d ctx PG func cenv cx ty e (es with gas_obs := [])` by
@@ -51,9 +51,9 @@ Proof
 QED
 
 Resume compile_augassign_attr_local_case_ptr[rhs_entry]:
-  `stmt_state_rel ctx func cenv cx (es with gas_obs := []) t` by
+  `stmt_state_rel H ctx func cenv cx (es with gas_obs := []) t` by
     simp[] >>
-  `ghost_inv d cenv cx (es with gas_obs := []) H tm t` by
+  `ghost_inv H d cenv cx (es with gas_obs := []) HG tm t` by
     simp[ghost_inv_gas_obs] >>
   `(!x sz. cenv.ce_return_pc = SOME (PtrVar (Var x) sz) ==>
        not_fresh_at s1 x) /\
@@ -69,7 +69,7 @@ Resume compile_augassign_attr_local_case_ptr[rhs_entry]:
      fs[ret_pc_ok_def]) >>
   qpat_x_assum `expr_sim_ptr _ _ _ _ _ _ _ _ _`
     (mp_tac o REWRITE_RULE [expr_sim_ptr_def]) >>
-  disch_then (qspecl_then [`s1`, `s2`, `rhs`, `t`, `H`, `tm`] mp_tac) >>
+  disch_then (qspecl_then [`s1`, `s2`, `rhs`, `t`, `HG`, `tm`] mp_tac) >>
   (impl_tac >- simp[]) >> disch_tac >>
   suspend "rhs_continuation"
 QED
@@ -87,9 +87,9 @@ QED
 Resume compile_augassign_attr_local_case_ptr[rhs_exception]:
   `?ex. res = INR ex` by
     (Cases_on `res` >> gvs[exprSimDefsTheory.expr_exit_def]) >> gvs[] >>
-  `gas_marked_exec_ptr (cx_dead cx) (ctx,func) PG
+  `gas_marked_exec_ptr (cx_dead H cx) (ctx,func) PG
      (bind (eval_expr cx e) (read_result cx))
-     (es with gas_obs := [],t,H,tm) marks (INR ex) es_end G tn r` by
+     (es with gas_obs := [],t,HG,tm) marks (INR ex) es_end G tn r` by
     simp[gas_marked_exec_ptr_def] >>
   drule_all augassign_attr_rhs_exception_exec_ptr >>
   disch_then (qspecl_then [`ty`, `bop`] assume_tac) >>
@@ -100,9 +100,9 @@ Resume compile_augassign_attr_local_case_ptr[rhs_exception]:
 QED
 
 Resume compile_augassign_attr_local_case_ptr[rhs_exempt]:
-  `gas_marked_exec_ptr (cx_dead cx) (ctx,func) PG
+  `gas_marked_exec_ptr (cx_dead H cx) (ctx,func) PG
      (eval_target_place cx (AttributeTarget (NameTarget id) fld))
-     (es,s0,G0,tn0) [] (INL (MemoryPlace id [AttrSubscript fld])) es H tm (OK t)` by
+     (es,s0,G0,tn0) [] (INL (MemoryPlace id [AttrSubscript fld])) es HG tm (OK t)` by
     (simp[gas_marked_exec_ptr_def, gas_explicit_def] >>
      gen_tac >> irule (cj 1 augassign_attr_place_reads_ptr) >>
      rpt (goal_assum (drule_at Any)) >> simp[]) >>
@@ -163,7 +163,7 @@ Resume compile_augassign_attr_local_case_ptr[operator_inputs]:
          fs[cs_extends_def]) >>
      irule local_ptrs_reserved_next_var >> qexists_tac `s1` >>
      fs[cs_extends_def]) >>
-  `stmt_state_rel ctx func cenv cx (es_end with gas_obs := []) t'` by
+  `stmt_state_rel H ctx func cenv cx (es_end with gas_obs := []) t'` by
     fs[expr_post_def] >>
   `~t'.vs_halted` by
     metis_tac[gas_path_ptr_erase, fragGasPathTheory.gas_path_normal] >>
@@ -200,7 +200,7 @@ Resume compile_augassign_attr_local_case_ptr[literal_inputs]:
   disch_then (drule_at (Pat `eval_operand _ _ = _`)) >>
   disch_then (drule_at (Pat `eval_operand _ _ = _`)) >>
   disch_then drule_all >>
-  disch_then (qspecl_then [`PG`, `cx_dead cx`] strip_assume_tac)
+  disch_then (qspecl_then [`PG`, `cx_dead H cx`] strip_assume_tac)
   >- suspend "operator_normal" >> suspend "operator_abort"
 QED
 Resume compile_augassign_attr_local_case_ptr[operator_abort]:
@@ -215,9 +215,9 @@ Resume compile_augassign_attr_local_case_ptr[operator_abort]:
       ftv bop fv v = INR (RuntimeError msg)` by
     (qpat_x_assum `bop_result _ _ _ _ _ _ _ = (case _ of INL z => _ | INR err => _)` mp_tac >>
      simp[CaseEq "sum"]) >>
-  `gas_marked_exec_ptr (cx_dead cx) (ctx,func) PG
+  `gas_marked_exec_ptr (cx_dead H cx) (ctx,func) PG
      (bind (eval_expr cx e) (read_result cx))
-     (es with gas_obs := [],t,H,tm) marks (INL v) es_end G tn (OK t')` by
+     (es with gas_obs := [],t,HG,tm) marks (INL v) es_end G tn (OK t')` by
     simp[gas_marked_exec_ptr_def] >>
   drule_all augassign_attr_error_continuation_exec_ptr >>
   disch_then (qspecl_then [`id`, `fld`, `es_end with gas_obs := []`, `cx`] assume_tac) >>
@@ -258,20 +258,20 @@ Resume compile_augassign_attr_local_case_ptr[operator_normal]:
   suspend "store_entry"
 QED
 Resume compile_augassign_attr_local_case_ptr[store_entry]:
-  qmatch_asmsub_abbrev_tac `gas_path_ptr (cx_dead cx) 0 ctx func PG G tn t' 0 H' tm' (OK u)` >>
+  qmatch_asmsub_abbrev_tac `gas_path_ptr (cx_dead H cx) 0 ctx func PG G tn t' 0 HG' tm' (OK u)` >>
   `!z w. not_fresh_at s1 z /\ lookup_var z t = SOME w ==>
       lookup_var z u = SOME w` by
     (rpt strip_tac >>
      `not_fresh_at s2 z` by metis_tac[] >>
      `lookup_var z t' = SOME w` by metis_tac[expr_post_def] >>
      metis_tac[]) >>
-  `ptr_covers H' tm' dstv u 32` by
+  `ptr_covers HG' tm' dstv u 32` by
     (fs[ptr_covers_def, ghost_kept_def] >> metis_tac[]) >>
   `lookup_var dstv u = SOME (a + n2w (struct_field_offset
       (get_struct_fields cenv.ce_struct_fields (nsid_to_string sid)) fld))` by
     metis_tac[] >>
-  `stmt_state_rel ctx func cenv cx es_end u /\
-   ghost_inv d cenv cx es_end H' tm' u` by
+  `stmt_state_rel H ctx func cenv cx es_end u /\
+   ghost_inv H d cenv cx es_end HG' tm' u` by
     (fs[Abbr `u`, ghost_inv_gas_obs, ghost_inv_jump_to]) >>
   suspend "field_store_inputs"
 QED
@@ -308,25 +308,25 @@ Resume compile_augassign_attr_local_case_ptr[field_store_inputs]:
    u.vs_inst_idx = LENGTH s3.cs_current_insts` by simp[Abbr `u`] >>
   `eval_operand res_op u = SOME (val_to_w256 result)` by simp[Abbr `u`] >>
   drule_all augassign_field_store_case_ptr >>
-  disch_then (qspecl_then [`PG`, `cx_dead cx`] strip_assume_tac) >>
+  disch_then (qspecl_then [`PG`, `cx_dead H cx`] strip_assume_tac) >>
   suspend "compose_store"
 QED
 Resume compile_augassign_attr_local_case_ptr[compose_store]:
-  `gas_path_ptr (cx_dead cx) 0 ctx func PG G tn t' 0 H' tnf (OK sf)` by
+  `gas_path_ptr (cx_dead H cx) 0 ctx func PG G tn t' 0 HG' tnf (OK sf)` by
     (qpat_assum `gas_path_ptr _ _ _ _ _ G tn t' _ _ _ _`
        (mp_then Any mp_tac gas_path_ptr_then) >>
      disch_then drule_all >> simp[]) >>
-  qmatch_asmsub_abbrev_tac `stmt_state_rel ctx func cenv cx fin0 sf` >>
-  `gas_marked_exec_ptr (cx_dead cx) (ctx,func) PG
+  qmatch_asmsub_abbrev_tac `stmt_state_rel H ctx func cenv cx fin0 sf` >>
+  `gas_marked_exec_ptr (cx_dead H cx) (ctx,func) PG
      (write_place cx (MemoryPlace id [AttrSubscript fld]) result)
      (es_end with gas_obs := [],t',G,tn) [] (INL ())
-     (fin0 with gas_obs := []) H' tnf (OK sf)` by
+     (fin0 with gas_obs := []) HG' tnf (OK sf)` by
     (simp[gas_marked_exec_ptr_def, gas_explicit_def, Abbr `fin0`] >>
      gen_tac >> simp[]) >>
   drule_all augassign_attr_store_continuation_exec_ptr >> disch_tac >>
-  `gas_marked_exec_ptr (cx_dead cx) (ctx,func) PG
+  `gas_marked_exec_ptr (cx_dead H cx) (ctx,func) PG
      (bind (eval_expr cx e) (read_result cx))
-     (es with gas_obs := [],t,H,tm) marks (INL v) es_end G tn (OK t')` by
+     (es with gas_obs := [],t,HG,tm) marks (INL v) es_end G tn (OK t')` by
     simp[gas_marked_exec_ptr_def] >>
   drule_all augassign_attr_rhs_normal_exec_ptr >> disch_tac >>
   suspend "field_frames"
@@ -344,11 +344,11 @@ Resume compile_augassign_attr_local_case_ptr[field_frames]:
       lookup_var x sf = SOME w` by
     (rpt strip_tac >>
      `lookup_var x t = SOME w` by metis_tac[] >> metis_tac[]) >>
-  `!x. not_fresh_at sa x ==> FLOOKUP H' x = FLOOKUP G0 x /\
+  `!x. not_fresh_at sa x ==> FLOOKUP HG' x = FLOOKUP G0 x /\
        op_taint tnf (Var x) = op_taint tn0 (Var x)` by
     (rpt strip_tac >>
      qpat_x_assum `ghost_kept cenv es sa _ _ _ _ _` mp_tac >>
-     qpat_x_assum `ghost_kept _ _ s1 _ _ _ H' tm'` mp_tac >>
+     qpat_x_assum `ghost_kept _ _ s1 _ _ _ HG' tm'` mp_tac >>
      simp[ghost_kept_def, op_taint_def] >> metis_tac[]) >>
   suspend "normal_outcome"
 QED

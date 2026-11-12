@@ -110,7 +110,7 @@ Proof
 QED
 
 Theorem complete_prefix_ghost_frame:
-  ghost_inv d cenv cx es G tn s /\
+  ghost_inv H d cenv cx es G tn s /\
   (!p sz. ((?name. FLOOKUP cenv.ce_vars name = SOME (PtrVar (Var p) sz)) \/
             cenv.ce_return_buf = SOME (PtrVar (Var p) sz) \/
             cenv.ce_return_pc = SOME (PtrVar (Var p) sz)) ==>
@@ -130,7 +130,7 @@ Theorem complete_prefix_ghost_frame:
   tn'.t_stor = tn.t_stor /\ tn'.t_trans = tn.t_trans /\ tn'.t_imm = tn.t_imm /\
   t.vs_call_ctx = s.vs_call_ctx /\ t.vs_accounts = s.vs_accounts /\
   t.vs_transient = s.vs_transient ==>
-  ghost_inv d cenv cx es G' tn' t
+  ghost_inv H d cenv cx es G' tn' t
 Proof
   strip_tac >> irule bodyPtrPrecompileBuiltinsSuffixGhostTheory.ghost_inv_exterior_frame >>
   qexistsl_tac [`G`, `s`, `tn`, `alloc1 UNION alloc2 UNION writes1 UNION writes2`] >>
@@ -178,7 +178,7 @@ QED
 
 Theorem emitted_allocation_spatial_frame:
   compile_alloc_buffer n sa = (buf,sb) /\
-  stmt_state_rel ctx fn cenv cx es s /\ fn_inst_ids_distinct fn /\
+  stmt_state_rel H ctx fn cenv cx es s /\ fn_inst_ids_distinct fn /\
   local_ptrs_reserved cenv sa /\ local_ptrs_rel fn cenv es.scopes s /\
   n < dimword(:256) /\
   MEM (mk_inst sa.cs_next_id ALLOCA [Lit (n2w n)]
@@ -216,7 +216,7 @@ QED
 Theorem complete_prefix_scope_exterior:
   compile_alloc_buffer insz sf = (ib,sa) /\
   compile_alloc_buffer outsz sp = (ob,sm) /\
-  stmt_state_rel ctx fn cenv cx es s0 /\ stmt_state_rel ctx fn cenv cx es s2 /\
+  stmt_state_rel H ctx fn cenv cx es s0 /\ stmt_state_rel H ctx fn cenv cx es s2 /\
   fn_inst_ids_distinct fn /\
   local_ptrs_reserved cenv sf /\ local_ptrs_reserved cenv sp /\
   local_ptrs_rel fn cenv es.scopes s0 /\ local_ptrs_rel fn cenv es.scopes s2 /\

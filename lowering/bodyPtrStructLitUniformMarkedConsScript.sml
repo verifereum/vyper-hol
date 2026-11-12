@@ -8,7 +8,7 @@ Ancestors bodyPtrStructLitUniformEndpoint bodyPtrMakeArrayConsSource
 Theorem structlit_uniform_marked_cons_outcome:
   literal_loop_frame pure ctx func ce cx d root aid addr capacity
     ees fr sf Gf tnf es si G0 tn0 s0 cells off /\
-  literal_prefix_ok cells tn0 s0 /\ stmt_state_rel ctx func ce cx ees sf /\
+  literal_prefix_ok cells tn0 s0 /\ stmt_state_rel H ctx func ce cx ees sf /\
   compile_expr ce (expr_type e) e si = (vv,sm) /\
   emit_op ADD [Var root; Lit (n2w off)] sm = (Var dst,sn) /\
   unwrap_value ce vv sn = (op,su) /\
@@ -21,21 +21,21 @@ Theorem structlit_uniform_marked_cons_outcome:
   expr_body_pre ce cx env e es /\ evaluate_type (get_tenv cx) (expr_type e) = SOME tv /\
   k = type_memory_bytes ce (expr_type e) /\ off+k <= capacity /\
   post_value_type ce e = expr_type e /\
-  gas_marked_exec_ptr (cx_dead cx) (ctx,func) PG (eval_expr cx e)
+  gas_marked_exec_ptr (cx_dead H cx) (ctx,func) PG (eval_expr cx e)
     (es,s0,G0,tn0) marks (INL raw) ee G tn (OK t) /\ ee.gas_obs = [] /\
-  vv_post ctx func ce cx e es si sm s0 ee raw vv t /\
+  vv_post H ctx func ce cx e es si sm s0 ee raw vv t /\
   t.vs_current_bb = sm.cs_current_bb /\ t.vs_inst_idx = LENGTH sm.cs_current_insts /\
-  ghost_inv d ce cx ee G tn t /\ ptr_vv_ok cx (expr_type e) raw vv ee G tn t /\
+  ghost_inv H d ce cx ee G tn t /\ ptr_vv_ok cx (expr_type e) raw vv ee G tn t /\
   (!tag arg. vv = StackValue tag arg /\ ~is_word_type (expr_type e) ==>
     ptr_buf_ok ce e arg G t) /\
   (!tag p. vv = LocatedValue tag p /\ p.ptr_location = LocMemory ==>
     ptr_buf_ok ce e p.ptr_operand G t) /\
   ghost_kept ce es si G0 tn0 s0 G tn /\ (pure ==> ~expr_has_effect e) ==>
-  gas_outcome_ptr (cx_dead cx) (cx_tops cx) (ctx,func) PG
+  gas_outcome_ptr (cx_dead H cx) (cx_tops cx) (ctx,func) PG
     (read_result cx raw) (ee,t,G,tn)
-    (\res ee H tm z. ?v. res = INL v /\ value_has_type tv v /\
+    (\res ee HG tm z. ?v. res = INL v /\ value_has_type tv v /\
       literal_loop_frame pure ctx func ce cx d root aid addr capacity
-        ees fr sf Gf tnf ee sb H tm z (cells ++ [(tv,v,addr+off,k)]) (off+k) /\
+        ees fr sf Gf tnf ee sb HG tm z (cells ++ [(tv,v,addr+off,k)]) (off+k) /\
       literal_prefix_ok (cells ++ [(tv,v,addr+off,k)]) tm z)
     (\res ee gt r. ?exc. res = INR exc /\ expr_exit (INR exc : eval_result + exception) r)
 Proof
@@ -66,8 +66,8 @@ Proof
   disch_then (drule_at (Pat `compile_store_memory _ _ _ _ _ _ = _`)) >>
   simp[] >> disch_then (drule_at (Pat `ptr_vv_ok _ _ _ _ _ _ _ _`)) >>
   simp[] >> disch_then (drule_at (Pat `expr_body_pre _ _ _ _ _`)) >> simp[] >>
-  disch_then (qspecl_then [`PG`, `cx_dead cx`] strip_assume_tac) >>
+  disch_then (qspecl_then [`PG`, `cx_dead H cx`] strip_assume_tac) >>
   simp[gas_outcome_ptr_def, gas_summary_ptr_at_def] >>
   qexists `[]` >> disj1_tac >>
-  qexistsl [`INL v`, `ee`, `H`, `tm`, `OK z`] >> gvs[]
+  qexistsl [`INL v`, `ee`, `HG`, `tm`, `OK z`] >> gvs[]
 QED

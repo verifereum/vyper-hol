@@ -10,7 +10,7 @@ Theorem code_array_marked_post_view:
   expr_type obj = ArrayT et bd /\
   (!tr slot vt. r <> PlaceR (StoragePlace tr slot vt)) /\
   ee.scopes = t.scopes /\ ee.immutables = t.immutables /\
-  vv_post ctx func cenv cx (Subscript (ArrayT et bd) obj idx) es sa sc s0 ee r
+  vv_post H ctx func cenv cx (Subscript (ArrayT et bd) obj idx) es sa sc s0 ee r
     (LocatedValue (ArrayT et bd) p) q /\
   (p.ptr_location = LocMemory \/ (~cenv.ce_is_ctor /\ p.ptr_location = LocCode)) ==>
   ?etv av w.
@@ -48,8 +48,8 @@ Theorem code_array_marked_suffix_ptr_summary:
     sgn (compile_imm_load_word F cenv.ce_imm_alloca) sc = (dst,sd) /\
   fn_has_code sc sd func /\ ~ctx_has_dalloca ctx /\ ~s.vs_halted /\
   s.vs_current_bb = sc.cs_current_bb /\ s.vs_inst_idx = LENGTH sc.cs_current_insts /\
-  stmt_state_rel ctx func cenv cx ee s /\
-  vv_post ctx func cenv cx (Subscript (ArrayT et bd) obj idx) es sa sc s0 ee r
+  stmt_state_rel H ctx func cenv cx ee s /\
+  vv_post H ctx func cenv cx (Subscript (ArrayT et bd) obj idx) es sa sc s0 ee r
     (LocatedValue (ArrayT et bd) p) s /\
   evaluate_type (get_tenv cx) et = SOME etv /\
   evaluate_type (get_tenv cx) (ArrayT et bd) = SOME (ArrayTV etv bd) /\
@@ -61,19 +61,19 @@ Theorem code_array_marked_suffix_ptr_summary:
   i = (if sgn then w2i iw else &(w2n iw)) /\
   array_length (ArrayTV etv bd) av < dimword (:256) /\
   (!al. av = SArrayV al ==> ?n. bd = Fixed n) /\
-  ghost_inv d cenv cx ee G tn s /\ ghost_kept cenv es sa Ginit tninit s0 G tn /\
+  ghost_inv H d cenv cx ee G tn s /\ ghost_kept cenv es sa Ginit tninit s0 G tn /\
   (!q. (!x. not_fresh_at sc x ==> lookup_var x q = lookup_var x s) /\
        q.vs_allocas = s.vs_allocas /\ q.vs_memory = s.vs_memory /\
-       stmt_state_rel ctx func cenv cx ee q ==>
-       vv_post ctx func cenv cx (Subscript (ArrayT et bd) obj idx) es sa sd s0 ee r
+       stmt_state_rel H ctx func cenv cx ee q ==>
+       vv_post H ctx func cenv cx (Subscript (ArrayT et bd) obj idx) es sa sd s0 ee r
          (LocatedValue (ArrayT et bd) p) q) ==>
   gas_summary_ptr_at D (ctx,func) PG []
     (select_result cx (ArrayT et bd) r (ValueSubscript (IntV i))) (ee,s,G,tn)
     (\res ee' Gf tnf q. ?child. res = INL child /\
-      vv_post ctx func cenv cx (Subscript et obj idx) es sa sd s0 ee' child
+      vv_post H ctx func cenv cx (Subscript et obj idx) es sa sd s0 ee' child
         (LocatedValue et (mk_ptr dst LocCode)) q /\
       q.vs_current_bb = sd.cs_current_bb /\ q.vs_inst_idx = LENGTH sd.cs_current_insts /\
-      ghost_inv d cenv cx ee' Gf tnf q /\
+      ghost_inv H d cenv cx ee' Gf tnf q /\
       ptr_vv_ok cx (post_value_type cenv (Subscript et obj idx)) child
         (LocatedValue et (mk_ptr dst LocCode)) ee' Gf tnf q /\
       ghost_kept cenv es sa Ginit tninit s0 Gf tnf)

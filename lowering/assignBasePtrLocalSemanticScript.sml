@@ -7,7 +7,7 @@ Ancestors typedMemoryCopy stmtSimAssignStore localMemoryStorePath
 
 Theorem assign_base_local_write_state_post:
   !ctx fn cenv cx es s t sa id p sz dst pre sc entry rest v n.
-    stmt_state_rel ctx fn cenv cx es s /\
+    stmt_state_rel H ctx fn cenv cx es s /\
     find_containing_scope id es.scopes = SOME (pre,sc,entry,rest) /\
     FLOOKUP cenv.ce_vars id = SOME (PtrVar (Var p) sz) /\
     lookup_var p s = SOME dst /\ local_ptrs_reserved cenv sa /\
@@ -17,7 +17,7 @@ Theorem assign_base_local_write_state_post:
     t.vs_current_bb = s.vs_current_bb /\ t.vs_prev_bb = s.vs_prev_bb /\
     val_wf entry.type v /\ value_has_type entry.type v /\
     val_in_memory entry.type v (w2n dst) t.vs_memory ==>
-    stmt_state_rel ctx fn cenv cx
+    stmt_state_rel H ctx fn cenv cx
       (es with scopes := pre ++ (sc |+ (id,entry with <|value := v; popped := []|>)) :: rest) t
 Proof
   rpt gen_tac >> strip_tac >>
@@ -33,7 +33,7 @@ Proof
      first_x_assum irule >> decide_tac) >>
   `immutables_rel cenv cx.txn.target cenv.ce_module cenv.ce_is_ctor es u` by
     (irule local_copy_immutables >>
-     goal_assum (drule_at (Pat `stmt_state_rel _ _ _ _ _ _`)) >>
+     goal_assum (drule_at (Pat `stmt_state_rel _ _ _ _ _ _ _`)) >>
      goal_assum (drule_at (Pat `local_region _ _ _ _ _ _`)) >> qexists_tac `n` >>
      fs[Abbr `u`, typed_copy_state_frame_def, typed_copy_frame_def,
         venom_state_component_equality] >> metis_tac[]) >>

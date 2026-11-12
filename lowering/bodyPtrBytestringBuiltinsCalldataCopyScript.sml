@@ -108,7 +108,7 @@ QED
 
 Theorem write_memory_ghost_inv:
   !d cenv cx es G tn s off bytes.
-    ghost_inv d cenv cx es G tn s /\
+    ghost_inv H d cenv cx es G tn s /\
     (!name entry p sz w.
        lookup_scopes name es.scopes = SOME entry /\
        FLOOKUP cenv.ce_vars name = SOME (PtrVar (Var p) sz) /\
@@ -116,7 +116,7 @@ Theorem write_memory_ghost_inv:
        val_wf entry.type entry.value /\
        (w2n w + val_footprint entry.type entry.value <= off \/
         off + LENGTH bytes <= w2n w)) ==>
-    ghost_inv d cenv cx es G
+    ghost_inv H d cenv cx es G
       (tn with t_mem := tn.t_mem DIFF {i | off <= i /\ i < off + LENGTH bytes})
       (write_memory_with_expansion off bytes s)
 Proof
@@ -185,11 +185,11 @@ QED
 
 Theorem write_memory_ghost_inv_local_regions:
   !d cenv cx es G tn s off bytes func.
-    ghost_inv d cenv cx es G tn s /\
+    ghost_inv H d cenv cx es G tn s /\
     local_ptrs_rel func cenv es.scopes s /\
     (!name lo sz. local_region cenv es.scopes s name lo sz ==>
        regions_disjoint lo sz off (LENGTH bytes)) ==>
-    ghost_inv d cenv cx es G
+    ghost_inv H d cenv cx es G
       (tn with t_mem := tn.t_mem DIFF {i | off <= i /\ i < off + LENGTH bytes})
       (write_memory_with_expansion off bytes s)
 Proof
@@ -206,14 +206,14 @@ QED
 
 Theorem write_memory_ghost_inv_alloca:
   !d cenv cx es G tn s off bytes func inst q b asz.
-    ghost_inv d cenv cx es G tn s /\
+    ghost_inv H d cenv cx es G tn s /\
     local_ptrs_rel func cenv es.scopes s /\
     alloca_inv s /\ fn_inst_ids_distinct func /\
     MEM inst (fn_insts func) /\ inst.inst_outputs = [q] /\
     not_local_ptr cenv es.scopes q /\
     FLOOKUP s.vs_allocas inst.inst_id = SOME (b,asz) /\
     b <= off /\ off + LENGTH bytes <= b + asz ==>
-    ghost_inv d cenv cx es G
+    ghost_inv H d cenv cx es G
       (tn with t_mem := tn.t_mem DIFF {i | off <= i /\ i < off + LENGTH bytes})
       (write_memory_with_expansion off bytes s)
 Proof
@@ -226,14 +226,14 @@ QED
 
 Theorem calldatacopy_ghost_inv_alloca:
   !rb cenv cx es G tn s d a n func inst q b asz.
-    ghost_inv rb cenv cx es G tn s /\
+    ghost_inv H rb cenv cx es G tn s /\
     local_ptrs_rel func cenv es.scopes s /\
     alloca_inv s /\ fn_inst_ids_distinct func /\
     MEM inst (fn_insts func) /\ inst.inst_outputs = [q] /\
     not_local_ptr cenv es.scopes q /\
     FLOOKUP s.vs_allocas inst.inst_id = SOME (b,asz) /\
     b <= w2n d /\ w2n d + w2n n <= b + asz ==>
-    ghost_inv rb cenv cx es G
+    ghost_inv H rb cenv cx es G
       (tn with t_mem := tn.t_mem DIFF
         {i | w2n d <= i /\ i < w2n d + w2n n})
       (write_memory_with_expansion (w2n d)

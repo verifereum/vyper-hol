@@ -12,7 +12,7 @@ Theorem saved_operand_footprint_window:
     evaluate_type (get_tenv cx) ty = SOME tv /\
     eval_operand op s = SOME w /\ expr_sim_inv cenv cx env es /\
     dynarray_free tv /\
-    expr_post ctx func cenv cx e es sb sc s es' v' op' s' /\
+    expr_post H ctx func cenv cx e es sb sc s es' v' op' s' /\
     ghost_kept cenv es sb G tn s G' tn' ==>
     mem_bytes_at (w2n w) (val_footprint tv v) s'.vs_memory =
       mem_bytes_at (w2n w) (val_footprint tv v) s.vs_memory /\
@@ -34,7 +34,7 @@ Proof
              w2n w + val_footprint tv v <= b + k \/ b + k + 32 <= w2n w` by
         (rpt strip_tac >> drule_all local_val_at_dynarray_apart >> decide_tac) >>
       conj_tac
-      >- (qpat_x_assum `expr_post _ _ _ _ _ _ _ _ _ _ _ _ _` mp_tac >>
+      >- (qpat_x_assum `expr_post _ _ _ _ _ _ _ _ _ _ _ _ _ _` mp_tac >>
           simp[expr_post_def] >> strip_tac >>
           qpat_x_assum `locals_kept _ _ _ _ _`
             (assume_tac o CONJUNCT1 o REWRITE_RULE [locals_kept_def]) >>
@@ -56,7 +56,7 @@ Theorem saved_ptr_mem_ok:
     (!tv. evaluate_type (get_tenv cx) ty = SOME tv ==> dynarray_free tv) /\
     expr_sim_inv cenv cx env es /\
     (!x. op = Var x ==> not_fresh_at sb x) /\ (!l. op <> Label l) /\
-    expr_post ctx func cenv cx e es sb sc s es' v' op' s' /\
+    expr_post H ctx func cenv cx e es sb sc s es' v' op' s' /\
     ghost_kept cenv es sb G tn s G' tn' ==>
     ptr_mem_ok cx ty v op G' tn' s'
 Proof

@@ -6,10 +6,10 @@ Ancestors bodyPtrPrecompileBuiltinsRecoveryContinuation
           ptrSafeRun codegenRel
 
 Theorem fresh_read_ordinary_frame:
-  stmt_state_rel ctx fn cenv cx es' q /\ wb_frame cenv es es' sf s q /\
+  stmt_state_rel H ctx fn cenv cx es' q /\ wb_frame cenv es es' sf s q /\
   local_ptrs_reserved cenv sm /\ sm.cs_next_var <= n /\
   sf.cs_next_var <= n ==>
-  stmt_state_rel ctx fn cenv cx es'
+  stmt_state_rel H ctx fn cenv cx es'
     (update_var (STRING #"%" (toString n)) w q) /\
   wb_frame cenv es es' sf s
     (update_var (STRING #"%" (toString n)) w q)
@@ -34,7 +34,7 @@ Theorem computed_load_suffix_ordinary_frame:
   precompile_result (venom_call_request s target 0w wi insz T).cr_target
     (venom_call_request s target 0w wi insz T).cr_data = SOME (SOME data) /\
   run_inst_seq (emitted_insts sm sl) s = OK q /\
-  stmt_state_rel ctx fn cenv cx es s /\ local_ptrs_reserved cenv sm /\
+  stmt_state_rel H ctx fn cenv cx es s /\ local_ptrs_reserved cenv sm /\
   sf.cs_next_var <= sm.cs_next_var /\ sf.cs_next_id <= sm.cs_next_id /\
   (!name b sz. local_region cenv es.scopes s name b sz ==>
      regions_disjoint (w2n wo) 32 b sz) /\
@@ -45,12 +45,12 @@ Theorem computed_load_suffix_ordinary_frame:
      FLOOKUP (case ALOOKUP es.immutables cx.txn.target of NONE => FEMPTY
        | SOME imms => get_source_immutables cenv.ce_module imms) name = SOME (tv,iv) ==>
      regions_disjoint (w2n wo) 32 off (type_memory_size tv)) ==>
-  stmt_state_rel ctx fn cenv cx
+  stmt_state_rel H ctx fn cenv cx
     (es with outcomes := SOME (DROP 1 s.vs_outcomes)) t /\
   wb_frame cenv es (es with outcomes := SOME (DROP 1 s.vs_outcomes)) sf s t
 Proof
   strip_tac >>
-  `stmt_state_rel ctx fn cenv cx
+  `stmt_state_rel H ctx fn cenv cx
      (es with outcomes := SOME (DROP 1 s.vs_outcomes)) q /\
      wb_frame cenv es (es with outcomes := SOME (DROP 1 s.vs_outcomes)) sf s q` by
     (qpat_assum `_ sm = (Var dst,sl)`
@@ -89,7 +89,7 @@ Proof
 QED
 
 Theorem ghost_inv_readonly_old_frame:
-  ghost_inv d cenv cx es G tn s /\ local_ptrs_reserved cenv sm /\
+  ghost_inv H d cenv cx es G tn s /\ local_ptrs_reserved cenv sm /\
   (!p sz. cenv.ce_return_buf = SOME (PtrVar (Var p) sz) ==> not_fresh_at sm p) /\
   (!p sz. cenv.ce_return_pc = SOME (PtrVar (Var p) sz) ==> not_fresh_at sm p) /\
   (!p. not_fresh_at sm p ==> FLOOKUP G' p = FLOOKUP G p /\
@@ -99,7 +99,7 @@ Theorem ghost_inv_readonly_old_frame:
   tn'.t_trans = tn.t_trans /\ tn'.t_imm = tn.t_imm /\
   t.vs_call_ctx = s.vs_call_ctx /\ t.vs_accounts = s.vs_accounts /\
   t.vs_transient = s.vs_transient ==>
-  ghost_inv d cenv cx es' G' tn' t
+  ghost_inv H d cenv cx es' G' tn' t
 Proof
   strip_tac >> fs[ghost_inv_def] >> conj_tac
   >- (rpt strip_tac >>
@@ -112,7 +112,7 @@ Proof
 QED
 
 Theorem fresh_read_ghost_frame:
-  ghost_inv d cenv cx es G tn q /\ local_ptrs_reserved cenv sm /\
+  ghost_inv H d cenv cx es G tn q /\ local_ptrs_reserved cenv sm /\
   (!p sz. cenv.ce_return_buf = SOME (PtrVar (Var p) sz) ==> not_fresh_at sm p) /\
   (!p sz. cenv.ce_return_pc = SOME (PtrVar (Var p) sz) ==> not_fresh_at sm p) /\
   sm.cs_next_var <= n /\ sf.cs_next_var <= sm.cs_next_var /\
@@ -120,7 +120,7 @@ Theorem fresh_read_ghost_frame:
   G' = step_prov PG G (mk_inst id MLOAD [src] [y]) (t with vs_inst_idx := k) /\
   tn' = step_taint (mk_inst id MLOAD [src] [y])
     (q with vs_inst_idx := k) (t with vs_inst_idx := k) tn ==>
-  ghost_inv d cenv cx es G' tn' t /\ ghost_kept cenv es sf G tn q G' tn'
+  ghost_inv H d cenv cx es G' tn' t /\ ghost_kept cenv es sf G tn q G' tn'
 Proof
   strip_tac >> drule_all fresh_read_taint_fields >> strip_tac >>
   `!p. not_fresh_at sm p ==> FLOOKUP G' p = FLOOKUP G p /\

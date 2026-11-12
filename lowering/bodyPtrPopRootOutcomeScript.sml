@@ -52,11 +52,11 @@ Resume compile_pop_storage_normalized_ptr[empty]:
   `?a s'. run_inst_seq (emitted_insts sa r) s0 = Abort a s'` by
     (simp[emitted_insts_def, DROP_LENGTH_APPEND] >>
      irule dynarray_pop_storage_run_empty >> simp[]) >>
-  `?Gf tnf. inst_seq_ptr (cx_dead cx) 0 ctx func PG G0 tn0
+  `?Gf tnf. inst_seq_ptr (cx_dead H cx) 0 ctx func PG G0 tn0
     (emitted_insts sa r) s0 Gf tnf` by
     (simp[emitted_insts_def, DROP_LENGTH_APPEND] >>
      irule_at Any (SRULE [APPEND] pop_root_slice_transfer_empty) >> simp[]) >>
-  `?j. gas_path_ptr (cx_dead cx) 0 ctx func PG G0 tn0 s0 0 Gf tnf
+  `?j. gas_path_ptr (cx_dead H cx) 0 ctx func PG G0 tn0 s0 0 Gf tnf
     (Abort a (s' with vs_inst_idx := j))` by
     (irule pop_root_abort_counted_zero >> simp[] >>
      goal_assum (drule_at Any) >> simp[] >> metis_tac[]) >>
@@ -77,8 +77,8 @@ Resume compile_pop_storage_normalized_ptr[positive]:
     simp[emitted_insts_def, DROP_LENGTH_APPEND] >>
   `ALL_DISTINCT [x0;x1;x2;x3;x4;x5;x6]` by simp[] >>
   drule_all pop_root_emitted_transfer_nonempty >>
-  disch_then (qspecl_then [`func`, `PG`, `G0`, `cx_dead cx`] strip_assume_tac) >>
-  `gas_path_ptr (cx_dead cx) 0 ctx func PG G0 tn0 s0 0 Gf tnf
+  disch_then (qspecl_then [`func`, `PG`, `G0`, `cx_dead H cx`] strip_assume_tac) >>
+  `gas_path_ptr (cx_dead H cx) 0 ctx func PG G0 tn0 s0 0 Gf tnf
     (OK (u with vs_inst_idx := s0.vs_inst_idx + 9))` by
     (irule pop_root_run_counted >> simp[] >>
      goal_assum (drule_at Any) >> simp[] >> metis_tac[]) >>
@@ -114,7 +114,7 @@ QED
 Resume compile_pop_storage_normalized_ptr[post]:
   qabbrev_tac `ee = set_storage cx es tr
     (apply_writes (n2w slot) [(0,n2w (len - 1))] (get_storage cx es tr)) with gas_obs := []` >>
-  `vv_post ctx func cenv cx (Pop ann (TopLevelNameTarget (src,id))) es sa r s0 ee
+  `vv_post H ctx func cenv cx (Pop ann (TopLevelNameTarget (src,id))) es sa r s0 ee
     (PlaceR (StoragePlace tr elem tv))
     (LocatedValue ann (mk_ptr (Var x6) (if tr then LocTransient else LocStorage))) u` by
     (simp[Abbr `ee`] >> irule pop_root_positive_post >>
@@ -127,9 +127,9 @@ Resume compile_pop_storage_normalized_ptr[post]:
   `lookup_storage (n2w slot) (if tr then contract_transient s0 else contract_storage s0) =
    lookup_storage (n2w slot) (get_storage cx es tr)` by
     (Cases_on `tr` >> fs[tload_def, sload_def, contract_transient_def, contract_storage_def]) >>
-  `ghost_inv d cenv cx ee Gf tnf u` by
+  `ghost_inv H d cenv cx ee Gf tnf u` by
     (irule pop_root_endpoint_ghost >>
-     goal_assum (drule_at (Pat `ghost_inv _ _ _ _ _ _ _`)) >>
+     goal_assum (drule_at (Pat `ghost_inv _ _ _ _ _ _ _ _`)) >>
      goal_assum (drule_at (Pat `declared_storage_region _ _ _ _ = _`)) >>
      goal_assum (drule_at (Pat `local_ptrs_reserved _ _`)) >> simp[] >>
      qexists_tac `xs ++ [x0;x1;x2;x3;x4;x5;x6]` >>
@@ -139,12 +139,12 @@ Resume compile_pop_storage_normalized_ptr[post]:
 QED
 
 Resume compile_pop_storage_normalized_ptr[returned]:
-  `stor_taint_ok cx tn0 s0` by fs[ghost_inv_def] >>
+  `stor_taint_ok H cx tn0 s0` by fs[ghost_inv_def] >>
   `ptr_vv_ok cx ann (PlaceR (StoragePlace tr elem tv))
     (LocatedValue ann (mk_ptr (Var x6) (if tr then LocTransient else LocStorage)))
     ee Gf tnf u` by
     (irule pop_declared_returned_place >> simp[] >>
-     goal_assum (drule_at (Pat `stmt_state_rel _ _ _ _ _ _`)) >>
+     goal_assum (drule_at (Pat `stmt_state_rel _ _ _ _ _ _ _`)) >>
      goal_assum (drule_at (Pat `declared_storage_region _ _ _ _ = _`)) >>
      simp[Abbr `len`, Abbr `elem`, eval_operand_def] >>
      qexistsl [`env`, `tn0`, `n2w (w2n (lookup_storage (n2w slot) (get_storage cx es tr)) - 1)`] >>
@@ -164,7 +164,7 @@ Resume compile_pop_storage_normalized_ptr[returned]:
   `ee with gas_obs := [] = ee` by simp[Abbr `ee`] >> simp[] >>
   conj_tac >- fs[contextTheory.mk_ptr_def] >>
   conj_tac
-  >- (qpat_x_assum `ghost_inv d cenv cx ee Gf tnf u` mp_tac >>
+  >- (qpat_x_assum `ghost_inv H d cenv cx ee Gf tnf u` mp_tac >>
       rpt (pop_assum kall_tac) >>
       simp[ghost_inv_def, ptr_covers_def, stor_taint_ok_def, lookup_var_def] >>
       Cases_on `d` >- (simp[return_buf_ptr_def] >> metis_tac[]) >>

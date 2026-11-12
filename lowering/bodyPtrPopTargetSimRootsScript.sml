@@ -22,7 +22,7 @@ Proof
   `?b. lookup_var p s0 = SOME b` by
     (fs[stmt_state_rel_def, state_rel_def, local_ptrs_rel_def] >> metis_tac[]) >>
   `not_fresh_at sa p` by metis_tac[local_ptrs_reserved_def] >>
-  `stmt_state_rel ctx func cenv cx (es with gas_obs := []) s0` by
+  `stmt_state_rel H ctx func cenv cx (es with gas_obs := []) s0` by
     (drule msg_gas_state_frame >>
      disch_then (qspecl_then [`s0.vs_gas_readings`, `s0.vs_inst_idx`, `[]`] mp_tac) >>
      simp[NoAsms]) >>
@@ -86,7 +86,7 @@ Resume target_toplevel_sim_ptr[storage]:
      (INL (PlaceR (StoragePlace tr (n2w slot) tv)),es with gas_obs := gs)` by
     (gen_tac >> asm_simp_tac (srw_ss()) [Once evaluate_def, lookup_global_def,
        bind_def, lift_option_type_def, return_def, LET_THM]) >>
-  `stmt_state_rel ctx func cenv cx (es with gas_obs := []) s0` by
+  `stmt_state_rel H ctx func cenv cx (es with gas_obs := []) s0` by
     (drule msg_gas_state_frame >>
      disch_then (qspecl_then [`s0.vs_gas_readings`, `s0.vs_inst_idx`, `[]`] mp_tac) >>
      simp[NoAsms]) >>
@@ -118,7 +118,7 @@ Resume target_toplevel_sim_ptr[mapping]:
      (INL (HashMapRef tr (n2w slot) kt vt'),es with gas_obs := gs)` by
     (gen_tac >> asm_simp_tac (srw_ss()) [Once evaluate_def, lookup_global_def,
        bind_def, lift_option_type_def, return_def, LET_THM]) >>
-  `stmt_state_rel ctx func cenv cx (es with gas_obs := []) s0` by
+  `stmt_state_rel H ctx func cenv cx (es with gas_obs := []) s0` by
     (drule msg_gas_state_frame >>
      disch_then (qspecl_then [`s0.vs_gas_readings`, `s0.vs_inst_idx`, `[]`] mp_tac) >>
      simp[NoAsms]) >>

@@ -130,8 +130,8 @@ Theorem concat_fixed_arm_ptr:
   fn_has_code sx sb func /\ ~t.vs_halted /\
   t.vs_current_bb = sx.cs_current_bb /\
   t.vs_inst_idx = LENGTH sx.cs_current_insts /\
-  local_ptrs_reserved cenv sx /\ stmt_state_rel ctx func cenv cx es t /\
-  ghost_inv d cenv cx es G tn t /\
+  local_ptrs_reserved cenv sx /\ stmt_state_rel H ctx func cenv cx es t /\
+  ghost_inv H d cenv cx es G tn t /\
   (!z sz. cenv.ce_return_buf = SOME (PtrVar (Var z) sz) ==> not_fresh_at sx z) /\
   (!z sz. cenv.ce_return_pc = SOME (PtrVar (Var z) sz) ==> not_fresh_at sx z) /\
   lookup_var dp t = SOME (n2w (B+32)) /\ lookup_var oq t = SOME ow /\
@@ -152,8 +152,8 @@ Theorem concat_fixed_arm_ptr:
   mload (w2n ow) t = n2w k /\ LENGTH bs = m /\ m <= 32 /\
   B+bsz < dimword (:256) /\ 32+k+32 <= bsz ==>
   ?u Gf tnf.
-    gas_path_ptr (cx_dead cx) 0 ctx func PG G tn t 0 Gf tnf (OK u) /\
-    stmt_state_rel ctx func cenv cx es u /\ ~u.vs_halted /\
+    gas_path_ptr (cx_dead H cx) 0 ctx func PG G tn t 0 Gf tnf (OK u) /\
+    stmt_state_rel H ctx func cenv cx es u /\ ~u.vs_halted /\
     u.vs_current_bb = sb.cs_current_bb /\ u.vs_inst_idx = LENGTH sb.cs_current_insts /\
     u.vs_allocas = t.vs_allocas /\
     (!z. not_fresh_at sx z ==> lookup_var z u = lookup_var z t) /\
@@ -161,14 +161,14 @@ Theorem concat_fixed_arm_ptr:
     mload (w2n ow) u = n2w (k+m) /\
     (!p n. (p+n <= B \/ B+bsz <= p) /\ (p+n <= w2n ow \/ w2n ow+64 <= p) ==>
       mem_bytes_at p n u.vs_memory = mem_bytes_at p n t.vs_memory) /\
-    ghost_inv d cenv cx es Gf tnf u /\ ghost_kept cenv es sx G tn t Gf tnf /\
+    ghost_inv H d cenv cx es Gf tnf u /\ ghost_kept cenv es sx G tn t Gf tnf /\
     ptr_covers Gf tnf dp u (bsz-32) /\ ptr_covers Gf tnf oq u 32 /\
     (!i. B+32 <= i /\ i < B+32+k+m ==> i NOTIN tnf.t_mem) /\
     (!i. w2n ow <= i /\ i < w2n ow+32 ==> i NOTIN tnf.t_mem)
 Proof
   disch_then (MAP_EVERY assume_tac o CONJUNCTS) >>
   drule_all concat_fixed_step_path_ptr >>
-  disch_then (qspecl_then [`PG`,`cx_dead cx`] strip_assume_tac) >>
+  disch_then (qspecl_then [`PG`,`cx_dead H cx`] strip_assume_tac) >>
   `w2n (n2w (B+32) + n2w k : 256 word) = B+32+k` by
     (simp[word_add_n2w] >> irule LESS_MOD >> fs[dimword_def]) >>
   qmatch_asmsub_abbrev_tac `gas_path_ptr _ _ _ _ _ _ _ _ _ _ _ (OK u)` >>
@@ -190,9 +190,9 @@ Resume concat_fixed_arm_ptr[ghost]:
   `ptr_covers Gf tnf dp u (bsz-32) /\ ptr_covers Gf tnf oq u 32` by
     (conj_tac >> irule annAssignPtrBytestringTheory.annassign_ptr_covers_frame_ptr >>
      qexistsl_tac [`G`,`t`,`tn`] >> simp[] >> metis_tac[]) >>
-  `stor_taint_ok cx tnf u` by
+  `stor_taint_ok H cx tnf u` by
     (fs[ghost_inv_def, stor_taint_ok_def] >> metis_tac[]) >>
-  `ghost_inv d cenv cx es Gf tnf u` by
+  `ghost_inv H d cenv cx es Gf tnf u` by
     (irule hash_ghost_inv_region_frame >> metis_tac[]) >>
   simp[] >> conj_tac >- metis_tac[ADD_COMM] >>
   gen_tac >> strip_tac >>
@@ -215,8 +215,8 @@ Theorem concat_bytes_arm_ptr:
   fn_has_code sx sb func /\ ~t.vs_halted /\
   t.vs_current_bb = sx.cs_current_bb /\
   t.vs_inst_idx = LENGTH sx.cs_current_insts /\
-  local_ptrs_reserved cenv sx /\ stmt_state_rel ctx func cenv cx es t /\
-  ghost_inv d cenv cx es G tn t /\
+  local_ptrs_reserved cenv sx /\ stmt_state_rel H ctx func cenv cx es t /\
+  ghost_inv H d cenv cx es G tn t /\
   (!z sz. cenv.ce_return_buf = SOME (PtrVar (Var z) sz) ==> not_fresh_at sx z) /\
   (!z sz. cenv.ce_return_pc = SOME (PtrVar (Var z) sz) ==> not_fresh_at sx z) /\
   lookup_var src t = SOME sw /\ lookup_var dp t = SOME (n2w (B+32)) /\
@@ -240,8 +240,8 @@ Theorem concat_bytes_arm_ptr:
   mload (w2n ow) t = n2w k /\ ~ctx_has_dalloca ctx /\
   B+bsz < dimword (:256) /\ 32+k+LENGTH bs <= bsz ==>
   ?u Gf tnf.
-    gas_path_ptr (cx_dead cx) 0 ctx func PG G tn t 0 Gf tnf (OK u) /\
-    stmt_state_rel ctx func cenv cx es u /\ ~u.vs_halted /\
+    gas_path_ptr (cx_dead H cx) 0 ctx func PG G tn t 0 Gf tnf (OK u) /\
+    stmt_state_rel H ctx func cenv cx es u /\ ~u.vs_halted /\
     u.vs_current_bb = sb.cs_current_bb /\ u.vs_inst_idx = LENGTH sb.cs_current_insts /\
     u.vs_allocas = t.vs_allocas /\
     (!z. not_fresh_at sx z ==> lookup_var z u = lookup_var z t) /\
@@ -250,14 +250,14 @@ Theorem concat_bytes_arm_ptr:
     mload (w2n ow) u = n2w (k+LENGTH bs) /\
     (!p n. (p+n <= B \/ B+bsz <= p) /\ (p+n <= w2n ow \/ w2n ow+64 <= p) ==>
       mem_bytes_at p n u.vs_memory = mem_bytes_at p n t.vs_memory) /\
-    ghost_inv d cenv cx es Gf tnf u /\ ghost_kept cenv es sx G tn t Gf tnf /\
+    ghost_inv H d cenv cx es Gf tnf u /\ ghost_kept cenv es sx G tn t Gf tnf /\
     ptr_covers Gf tnf dp u (bsz-32) /\ ptr_covers Gf tnf oq u 32 /\
     (!i. B+32 <= i /\ i < B+32+k+LENGTH bs ==> i NOTIN tnf.t_mem) /\
     (!i. w2n ow <= i /\ i < w2n ow+32 ==> i NOTIN tnf.t_mem)
 Proof
   disch_then (MAP_EVERY assume_tac o CONJUNCTS) >>
   drule_all concat_bytes_step_path_ptr >>
-  disch_then (qspecl_then [`PG`,`cx_dead cx`] strip_assume_tac) >>
+  disch_then (qspecl_then [`PG`,`cx_dead H cx`] strip_assume_tac) >>
   `w2n (n2w (B+32) + n2w k : 256 word) = B+32+k /\
    w2n (sw+32w) = w2n sw+32` by
     (simp[word_add_n2w, word_add_def] >> conj_tac >> irule LESS_MOD >> fs[dimword_def]) >>
@@ -280,9 +280,9 @@ Resume concat_bytes_arm_ptr[ghost]:
   `ptr_covers Gf tnf dp u (bsz-32) /\ ptr_covers Gf tnf oq u 32` by
     (conj_tac >> irule annAssignPtrBytestringTheory.annassign_ptr_covers_frame_ptr >>
      qexistsl_tac [`G`,`t`,`tn`] >> simp[] >> metis_tac[]) >>
-  `stor_taint_ok cx tnf u` by
+  `stor_taint_ok H cx tnf u` by
     (fs[ghost_inv_def, stor_taint_ok_def] >> metis_tac[]) >>
-  `ghost_inv d cenv cx es Gf tnf u` by
+  `ghost_inv H d cenv cx es Gf tnf u` by
     (irule hash_ghost_inv_region_frame >> metis_tac[]) >>
   simp[] >> conj_tac >- metis_tac[ADD_COMM] >>
   gen_tac >> strip_tac >> Cases_on `i < B+32+k`

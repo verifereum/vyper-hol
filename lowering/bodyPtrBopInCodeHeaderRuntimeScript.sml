@@ -15,7 +15,7 @@ Theorem membership_dynamic_code_header_runtime:
   fn_has_code early sa fn /\ fn_has_code sa sb fn /\
   ~ctx_has_dalloca ctx /\ ~s.vs_halted /\ ~cenv.ce_is_ctor /\
   s.vs_current_bb = early.cs_current_bb /\ s.vs_inst_idx = LENGTH early.cs_current_insts /\
-  stmt_state_rel ctx fn cenv cx es s /\
+  stmt_state_rel H ctx fn cenv cx es s /\
   vv_holds cenv cx (ArrayT ety (Dynamic cap)) (Value (ArrayV (DynArrayV vs)))
     (LocatedValue ann p) es s /\
   ptr_vv_ok cx (ArrayT ety (Dynamic cap)) (Value (ArrayV (DynArrayV vs)))

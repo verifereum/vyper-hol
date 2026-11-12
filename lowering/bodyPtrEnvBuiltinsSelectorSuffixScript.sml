@@ -9,7 +9,7 @@ Ancestors wordLoadStorePtr bodyPtrEnvBuiltinsSelectorBuffer bodyPtrEnvBuiltinsAl
 (* Allocation is size-parametric: selector buffers and fixed hash scratch use
    the same certificate, with their respective sizes 64 and 32. *)
 Theorem builtin_allocation_certificate:
-  stmt_state_rel ctx fn cenv cx es s /\ ghost_inv d cenv cx es G tn s /\
+  stmt_state_rel H ctx fn cenv cx es s /\ ghost_inv H d cenv cx es G tn s /\
   fn_inst_ids_distinct fn /\ n < dimword (:256) /\
   MEM (mk_inst ia ALLOCA [Lit (n2w n)] [p]) (fn_insts fn) /\
   ~ctx_has_dalloca ctx /\ local_ptrs_reserved cenv sa /\ ~not_fresh_at sa p /\
@@ -18,7 +18,7 @@ Theorem builtin_allocation_certificate:
   step_inst_base (mk_inst ia ALLOCA [Lit (n2w n)] [p]) s = OK s1 ==>
   ?G1 tn1 b.
     inst_seq_ptr D 0 ctx fn PG G tn [mk_inst ia ALLOCA [Lit (n2w n)] [p]] s G1 tn1 /\
-    stmt_state_rel ctx fn cenv cx es s1 /\ ghost_inv d cenv cx es G1 tn1 s1 /\
+    stmt_state_rel H ctx fn cenv cx es s1 /\ ghost_inv H d cenv cx es G1 tn1 s1 /\
     ghost_kept cenv es sa G tn s G1 tn1 /\ ptr_covers G1 tn1 p s1 n /\
     eval_operand (Var p) s1 = SOME (n2w b) /\ b+n < dimword (:256) /\
     (!name lb sz. local_region cenv es.scopes s1 name lb sz ==>
@@ -32,7 +32,7 @@ Proof
     `step_taint (mk_inst ia ALLOCA [Lit (n2w n)] [p]) s s1 tn`, `b`] >>
   conj_tac
   >- (simp[inst_seq_ptr_def] >> irule ptr_inst_ok_alloca >> simp[]) >>
-  `stmt_state_rel ctx fn cenv cx es s1` by suspend "state_rel" >>
+  `stmt_state_rel H ctx fn cenv cx es s1` by suspend "state_rel" >>
   conj_tac >- simp[] >> conj_tac
   >- (irule alloca_step_ghost_inv >> simp[] >> metis_tac[]) >>
   conj_tac
@@ -71,7 +71,7 @@ Theorem selector_store_tail_certificate[local]:
           mk_inst ip ADD [Var p; Lit 32w] [q];
           mk_inst iw MSTORE [Var q; value] []] /\
   ~ctx_has_dalloca ctx /\
-  local_ptrs_rel fn cenv es.scopes s /\ ghost_inv d cenv cx es G tn s /\
+  local_ptrs_rel fn cenv es.scopes s /\ ghost_inv H d cenv cx es G tn s /\
   ghost_kept cenv es sa G0 tn0 s0 G tn /\
   local_ptrs_reserved cenv sa /\ ~not_fresh_at sa q /\ p <> q /\
   (!x sz. cenv.ce_return_buf = SOME (PtrVar (Var x) sz) ==> not_fresh_at sa x) /\
@@ -85,7 +85,7 @@ Theorem selector_store_tail_certificate[local]:
   LENGTH bs = 4 /\ TAKE 4 (word_to_bytes w T) = bs /\
   run_inst_seq code s = OK t ==>
   ?G' tn'. inst_seq_ptr D 0 ctx fn PG G tn code (s with vs_inst_idx := k) G' tn' /\
-    ghost_inv d cenv cx es G' tn' t /\
+    ghost_inv H d cenv cx es G' tn' t /\
     ghost_kept cenv es sa G0 tn0 s0 G' tn' /\
     ptr_val_ok cx (BaseT (BytesT (Dynamic 4))) (BytesV bs) (Var p) G' tn' t /\
     ptr_buf_ok cenv (Builtin (BaseT (BytesT (Dynamic 4))) MethodId args) (Var p) G' t
@@ -191,11 +191,11 @@ Resume selector_store_tail_certificate[first_frame]:
 QED
 
 Resume selector_store_tail_certificate[ghost_inv]:
-  `ghost_inv d cenv cx es G tn1 s1` by
+  `ghost_inv H d cenv cx es G tn1 s1` by
     (simp[Abbr `s1`] >> irule ghost_inv_mstore_clean >> simp[] >>
      conj_tac >- (rpt strip_tac >> first_x_assum drule >> decide_tac) >>
      conj_tac >- metis_tac[] >> qexists_tac `tn` >> simp[]) >>
-  `ghost_inv d cenv cx es G2 tn2 s2` by
+  `ghost_inv H d cenv cx es G2 tn2 s2` by
     (simp[Abbr `G2`, Abbr `tn2`] >> irule single_output_ghost_inv >>
      simp[Abbr `s2`, copy_len_binop_ghost_frame, update_var_def] >>
      qexists_tac `sa` >> simp[] >> rpt strip_tac >>
@@ -292,7 +292,7 @@ Theorem selector_suffix_certificate:
           mk_inst il MSTORE [Var p; Lit 4w] [];
           mk_inst ip ADD [Var p; Lit 32w] [q];
           mk_inst iw MSTORE [Var q; value] []] /\
-  stmt_state_rel ctx fn cenv cx es s /\ ghost_inv d cenv cx es G tn s /\
+  stmt_state_rel H ctx fn cenv cx es s /\ ghost_inv H d cenv cx es G tn s /\
   fn_inst_ids_distinct fn /\
   MEM (mk_inst ia ALLOCA [Lit 64w] [p]) (fn_insts fn) /\
   ~ctx_has_dalloca ctx /\ local_ptrs_reserved cenv sa /\
@@ -304,7 +304,7 @@ Theorem selector_suffix_certificate:
   LENGTH bs = 4 /\ TAKE 4 (word_to_bytes w T) = bs /\
   run_inst_seq code s = OK t ==>
   ?G' tn'. inst_seq_ptr D 0 ctx fn PG G tn code s G' tn' /\
-    ghost_inv d cenv cx es G' tn' t /\
+    ghost_inv H d cenv cx es G' tn' t /\
     ghost_kept cenv es sa G tn s G' tn' /\
     ptr_val_ok cx (BaseT (BytesT (Dynamic 4))) (BytesV bs) (Var p) G' tn' t /\
     ptr_buf_ok cenv (Builtin (BaseT (BytesT (Dynamic 4))) MethodId args) (Var p) G' t
@@ -326,7 +326,7 @@ Proof
       mk_inst ip ADD [Var p; Lit 32w] [q];
       mk_inst iw MSTORE [Var q; value] []]
        (s1 with vs_inst_idx := SUC s.vs_inst_idx) G' tn' /\
-     ghost_inv d cenv cx es G' tn' t /\
+     ghost_inv H d cenv cx es G' tn' t /\
      ghost_kept cenv es sa G tn s G' tn' /\
      ptr_val_ok cx (BaseT (BytesT (Dynamic 4)))
        (BytesV (TAKE 4 (word_to_bytes w T))) (Var p) G' tn' t /\

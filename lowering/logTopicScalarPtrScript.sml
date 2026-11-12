@@ -34,7 +34,7 @@ Proof
 QED
 
 Theorem compile_encode_log_topic_scalar_seq_ptr:
-  stmt_state_rel ctx func cenv cx es s /\
+  stmt_state_rel H ctx func cenv cx es s /\
   log_arg_rel cenv cx sa sm es s (x,ty) v /\
   supported_scalar_type ty /\ evaluate_type (get_tenv cx) ty = SOME tv /\
   value_has_type tv v /\
@@ -80,14 +80,14 @@ QED
 Finalise compile_encode_log_topic_scalar_seq_ptr
 
 Theorem compile_encode_log_topic_scalar_seq_ptr_ghost:
-  stmt_state_rel ctx func cenv cx es s /\
+  stmt_state_rel H ctx func cenv cx es s /\
   log_arg_rel cenv cx sa sm es s (x,ty) v /\
   supported_scalar_type ty /\ evaluate_type (get_tenv cx) ty = SOME tv /\
   value_has_type tv v /\
   (!z. x = Var z ==> not_fresh_at sm z) /\
   compile_encode_log_topic x (is_bytestring_type ty) sm = (op,sb) /\
   ptr_val_ok cx ty v x G tn s /\ ~ctx_has_dalloca ctx /\
-  ghost_inv d cenv cx es G tn s /\ local_ptrs_reserved cenv sm /\
+  ghost_inv H d cenv cx es G tn s /\ local_ptrs_reserved cenv sm /\
   (!p sz. cenv.ce_return_buf = SOME (PtrVar (Var p) sz) ==> not_fresh_at sm p) /\
   (!p sz. cenv.ce_return_pc = SOME (PtrVar (Var p) sz) ==> not_fresh_at sm p) /\
   ghost_kept cenv es sa0 G0 tn0 s0 G tn /\ sa0.cs_next_var <= sm.cs_next_var ==>
@@ -101,7 +101,7 @@ Theorem compile_encode_log_topic_scalar_seq_ptr_ghost:
     (!p. not_fresh_at sm p ==>
       lookup_var p t = lookup_var p s /\ FLOOKUP Gf p = FLOOKUP G p /\
       op_taint tnf (Var p) = op_taint tn (Var p)) /\
-    ghost_inv d cenv cx es Gf tnf t /\
+    ghost_inv H d cenv cx es Gf tnf t /\
     ghost_kept cenv es sa0 G0 tn0 s0 Gf tnf
 Proof
   strip_tac >> drule_all compile_encode_log_topic_scalar_seq_ptr >>

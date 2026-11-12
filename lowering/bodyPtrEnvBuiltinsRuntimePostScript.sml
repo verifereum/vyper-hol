@@ -5,7 +5,7 @@ Ancestors exprSimHash exprSimVVFrame exprLowering exprLoweringProps
   context compileEnv loweringPosts vyperAST vyperValue venomState finite_map
 
 Theorem method_id_runtime_counted_endpoint_post:
-  expr_post ctx func cenv cx e es sa sm s0 es' v x s /\
+  expr_post H ctx func cenv cx e es sa sm s0 es' v x s /\
   expr_type e = BaseT bty /\ is_bytes_or_string_type (expr_type e) /\
   evaluate_type (get_tenv cx) (expr_type e) = SOME (BaseTV bty) /\
   value_has_type (BaseTV bty) v /\
@@ -18,7 +18,7 @@ Theorem method_id_runtime_counted_endpoint_post:
     builtin_result cx es'.accounts
       (BaseT (BytesT (if fixed then Fixed 4 else Dynamic 4)))
       MethodId [expr_type e] [v] = INL r /\
-    vv_post ctx func cenv cx
+    vv_post H ctx func cenv cx
       (Builtin (BaseT (BytesT (if fixed then Fixed 4 else Dynamic 4))) MethodId [e])
       es sa sb s0 es' (Value r)
       (if fixed then StackValue (BaseT (BytesT (Fixed 4))) op else

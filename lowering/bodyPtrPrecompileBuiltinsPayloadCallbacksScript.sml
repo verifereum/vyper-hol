@@ -111,7 +111,7 @@ Theorem recovery_payload_callback:
   eval_operand sig s = SOME ws /\
   (!x. MEM (Var x) [buf;h;v;r;sig] ==> not_fresh_at sa x) /\
   w2n p + 128 < dimword (:256) /\
-  stmt_state_rel ctx func cenv cx es s /\ local_ptrs_reserved cenv sa /\
+  stmt_state_rel H ctx func cenv cx es s /\ local_ptrs_reserved cenv sa /\
   sc.cs_next_var <= sa.cs_next_var /\ sc.cs_next_id <= sa.cs_next_id /\
   MEM inst (fn_insts func) /\ inst.inst_opcode = ALLOCA /\
   FLOOKUP s.vs_allocas inst.inst_id = SOME (w2n p,128) /\
@@ -121,7 +121,7 @@ Theorem recovery_payload_callback:
      FLOOKUP s.vs_allocas aid = SOME (b,sz) ==>
      regions_disjoint (w2n p) 128 b sz) ==>
   ?t. run_inst_seq (emitted_insts sa sb) s = OK t /\
-    stmt_state_rel ctx func cenv cx es t /\ wb_frame cenv es es sc s t /\
+    stmt_state_rel H ctx func cenv cx es t /\ wb_frame cenv es es sc s t /\
     (!x. not_fresh_at sa x ==> lookup_var x t = lookup_var x s) /\
     t.vs_allocas = s.vs_allocas /\ eval_operand buf t = SOME p /\
     mem_bytes_at (w2n p) 128 t.vs_memory =
@@ -140,7 +140,7 @@ Proof
      simp[mstore_mem_bytes_at_disjoint]) >>
   `LENGTH s.vs_memory <= LENGTH t.vs_memory` by
     (simp[immutable_mstore_capacity] >> decide_tac) >>
-  `stmt_state_rel ctx func cenv cx es t /\ wb_frame cenv es es sc s t` by
+  `stmt_state_rel H ctx func cenv cx es t /\ wb_frame cenv es es sc s t` by
     (irule scratch_memory_frame >> simp[] >>
      conj_tac >- metis_tac[] >> qexists `sa` >> simp[]) >>
   qexists `t` >> simp[] >>
@@ -308,7 +308,7 @@ Theorem mul_payload_callback:
   sa.cs_next_var <= sm.cs_next_var /\
   w2n p + 64 < dimword (:256) /\ w2n b + 96 < dimword (:256) /\
   expr_val_at cenv cx (ArrayT (BaseT (UintT 256)) (Fixed 2)) lo sf es v point s /\
-  stmt_state_rel ctx func cenv cx es s /\ local_ptrs_reserved cenv sa /\
+  stmt_state_rel H ctx func cenv cx es s /\ local_ptrs_reserved cenv sa /\
   sf.cs_next_var <= sa.cs_next_var /\ sf.cs_next_id <= sa.cs_next_id /\
   MEM inst (fn_insts func) /\ inst.inst_opcode = ALLOCA /\
   FLOOKUP s.vs_allocas inst.inst_id = SOME (w2n b,96) /\
@@ -318,7 +318,7 @@ Theorem mul_payload_callback:
      FLOOKUP s.vs_allocas aid = SOME (a,sz) ==>
      regions_disjoint (w2n b) 96 a sz) ==>
   ?t. run_inst_seq (emitted_insts sa sm ++ emitted_insts sm sb) s = OK t /\
-    stmt_state_rel ctx func cenv cx es t /\ wb_frame cenv es es sf s t /\
+    stmt_state_rel H ctx func cenv cx es t /\ wb_frame cenv es es sf s t /\
     (!x. not_fresh_at sa x ==> lookup_var x t = lookup_var x s) /\
     t.vs_allocas = s.vs_allocas /\ eval_operand buf t = SOME b /\
     mem_bytes_at (w2n b) 96 t.vs_memory =
@@ -343,7 +343,7 @@ Proof
      simp[mstore_mem_bytes_at_disjoint]) >>
   `LENGTH s.vs_memory <= LENGTH t.vs_memory` by
     (simp[immutable_mstore_capacity] >> decide_tac) >>
-  `stmt_state_rel ctx func cenv cx es t /\ wb_frame cenv es es sf s t` by
+  `stmt_state_rel H ctx func cenv cx es t /\ wb_frame cenv es es sf s t` by
     (irule scratch_memory_frame >> simp[] >>
      conj_tac >- metis_tac[] >> qexists `sa` >> simp[]) >>
   qexists `t` >> simp[] >> conj_tac
@@ -452,7 +452,7 @@ Theorem add_payload_callback:
   w2n b + 128 < dimword (:256) /\
   expr_val_at cenv cx (ArrayT (BaseT (UintT 256)) (Fixed 2)) lo sf es vp point s /\
   expr_val_at cenv cx (ArrayT (BaseT (UintT 256)) (Fixed 2)) lo sf es vq other s /\
-  stmt_state_rel ctx func cenv cx es s /\ local_ptrs_reserved cenv sa /\
+  stmt_state_rel H ctx func cenv cx es s /\ local_ptrs_reserved cenv sa /\
   sf.cs_next_var <= sa.cs_next_var /\ sf.cs_next_id <= sa.cs_next_id /\
   MEM inst (fn_insts func) /\ inst.inst_opcode = ALLOCA /\
   FLOOKUP s.vs_allocas inst.inst_id = SOME (w2n b,128) /\
@@ -462,7 +462,7 @@ Theorem add_payload_callback:
      FLOOKUP s.vs_allocas aid = SOME (a,sz) ==>
      regions_disjoint (w2n b) 128 a sz) ==>
   ?t. run_inst_seq (emitted_insts sa sm ++ emitted_insts sm sb) s = OK t /\
-    stmt_state_rel ctx func cenv cx es t /\ wb_frame cenv es es sf s t /\
+    stmt_state_rel H ctx func cenv cx es t /\ wb_frame cenv es es sf s t /\
     (!x. not_fresh_at sa x ==> lookup_var x t = lookup_var x s) /\
     t.vs_allocas = s.vs_allocas /\ eval_operand buf t = SOME b /\
     mem_bytes_at (w2n b) 128 t.vs_memory =
@@ -494,7 +494,7 @@ Proof
      simp[mstore_mem_bytes_at_disjoint]) >>
   `LENGTH s.vs_memory <= LENGTH t.vs_memory` by
     (simp[immutable_mstore_capacity] >> decide_tac) >>
-  `stmt_state_rel ctx func cenv cx es t /\ wb_frame cenv es es sf s t` by
+  `stmt_state_rel H ctx func cenv cx es t /\ wb_frame cenv es es sf s t` by
     (irule scratch_memory_frame >> simp[] >>
      conj_tac >- metis_tac[] >> qexists `sa` >> simp[]) >>
   qexists `t` >> simp[] >> conj_tac

@@ -5,7 +5,7 @@ Ancestors allocationPtr bodyPtrDefs loweringHalt ptrDiscipline ptrSafeRun
 
 Theorem reason_alloca_old_metadata:
   !ctx func cenv cx es s id n out s1 PG G tn p.
-    stmt_state_rel ctx func cenv cx es s /\
+    stmt_state_rel H ctx func cenv cx es s /\
     MEM (mk_inst id ALLOCA [Lit (n2w n)] [out]) (fn_insts func) /\
     n < dimword (:256) /\
     step_inst_base (mk_inst id ALLOCA [Lit (n2w n)] [out]) s = OK s1 /\

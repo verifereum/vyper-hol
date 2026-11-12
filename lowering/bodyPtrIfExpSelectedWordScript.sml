@@ -8,9 +8,9 @@ Theorem ifexp_selected_word_marked:
   gas_marked_exec_ptr D (ctx,fn) PG (eval_expr cx e) (es,s0,G0,tn0)
     marks (INL raw) ee G tn (OK s) /\
   gas_admissible (bind (eval_expr cx e) (conditional_result cx)) expr_vv_res_ok es /\
-  vv_post ctx fn cenv cx e es sa sm s0 (ee with gas_obs := []) raw vv s /\
+  vv_post H ctx fn cenv cx e es sa sm s0 (ee with gas_obs := []) raw vv s /\
   ptr_vv_ok cx (expr_type e) raw vv (ee with gas_obs := []) G tn s /\
-  ghost_inv d cenv cx (ee with gas_obs := []) G tn s /\
+  ghost_inv H d cenv cx (ee with gas_obs := []) G tn s /\
   ghost_kept cenv es sa G0 tn0 s0 G tn /\
   local_ptrs_reserved cenv sa /\ ~ctx_has_dalloca ctx /\ ~cenv.ce_is_ctor /\
   (!x sz. cenv.ce_return_buf = SOME (PtrVar (Var x) sz) ==> not_fresh_at sa x) /\
@@ -23,9 +23,9 @@ Theorem ifexp_selected_word_marked:
       (bind (eval_expr cx e) (conditional_result cx)) (es,s0,G0,tn0)
       marks (INL tv) ee G1 tn1 (OK u) /\
     read_result cx tv (ee with gas_obs := []) = (INL v,ee with gas_obs := []) /\
-    expr_post ctx fn cenv cx e es sa sb s0 (ee with gas_obs := []) v op u /\
+    expr_post H ctx fn cenv cx e es sa sb s0 (ee with gas_obs := []) v op u /\
     ptr_val_ok cx (expr_type e) v op G1 tn1 u /\
-    ghost_inv d cenv cx (ee with gas_obs := []) G1 tn1 u /\
+    ghost_inv H d cenv cx (ee with gas_obs := []) G1 tn1 u /\
     ghost_kept cenv es sa G0 tn0 s0 G1 tn1 /\
     u.vs_current_bb = sb.cs_current_bb /\
     u.vs_inst_idx = LENGTH sb.cs_current_insts

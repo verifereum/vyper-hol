@@ -76,9 +76,9 @@ Proof
   conj_tac
   >- (rpt strip_tac >> irule gas_exempt_cert_error_value >> simp[]) >>
   qexists_tac `\v ee G tn t.
-    expr_post ctx func cenv cx e es sa s1 s0 ee v x t /\
+    expr_post H ctx func cenv cx e es sa s1 s0 ee v x t /\
     t.vs_current_bb = s1.cs_current_bb /\ t.vs_inst_idx = LENGTH s1.cs_current_insts /\
-    ghost_inv d cenv cx ee G tn t /\ ptr_val_ok cx (expr_type e) v x G tn t /\
+    ghost_inv H d cenv cx ee G tn t /\ ptr_val_ok cx (expr_type e) v x G tn t /\
     ghost_kept cenv es sa G0 tn0 s0 G tn /\ ee.gas_obs = [] /\ ~t.vs_halted /\
     (?tv. evaluate_type (get_tenv cx) (expr_type e) = SOME tv /\ value_has_type tv v)` >>
   reverse conj_tac

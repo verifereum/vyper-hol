@@ -7,11 +7,11 @@ Ancestors
 
 Theorem unwrap_alloc_semantic_state:
   compile_alloc_buffer nb sa = (buf,sm) /\ fn_has_code sa sm func /\
-  stmt_state_rel ctx func cenv cx es s /\ fn_inst_ids_distinct func /\
+  stmt_state_rel H ctx func cenv cx es s /\ fn_inst_ids_distinct func /\
   local_ptrs_reserved cenv sa /\ nb < dimword (:256) /\
   buf.buf_operand = Var root /\
   step_inst_base (mk_inst sa.cs_next_id ALLOCA [Lit (n2w nb)] [root]) s = OK u ==>
-  stmt_state_rel ctx func cenv cx es (u with vs_inst_idx := k) /\
+  stmt_state_rel H ctx func cenv cx es (u with vs_inst_idx := k) /\
   ?w. lookup_var root u = SOME w /\
     FLOOKUP u.vs_allocas sa.cs_next_id = SOME (w2n w,nb)
 Proof
@@ -58,7 +58,7 @@ Proof
 QED
 
 Theorem unwrap_alloc_local_disjoint:
-  stmt_state_rel ctx func cenv cx es u /\ fn_inst_ids_distinct func /\
+  stmt_state_rel H ctx func cenv cx es u /\ fn_inst_ids_distinct func /\
   MEM (mk_inst aid ALLOCA [Lit n] [root]) (fn_insts func) /\
   not_local_ptr cenv es.scopes root /\
   FLOOKUP u.vs_allocas aid = SOME (dst,nb) ==>
@@ -76,12 +76,12 @@ QED
 
 Theorem unwrap_alloc_semantic_frames:
   compile_alloc_buffer nb sa = (buf,sm) /\ fn_has_code sa sm func /\
-  stmt_state_rel ctx func cenv cx es s /\ fn_inst_ids_distinct func /\
+  stmt_state_rel H ctx func cenv cx es s /\ fn_inst_ids_distinct func /\
   local_ptrs_reserved cenv sa /\ nb < dimword (:256) /\
   buf.buf_operand = Var root /\
   u = update_var root d (buffer_allocation_fields s sa.cs_next_id nb) /\
   step_inst_base (mk_inst sa.cs_next_id ALLOCA [Lit (n2w nb)] [root]) s = OK u ==>
-  stmt_state_rel ctx func cenv cx es u /\
+  stmt_state_rel H ctx func cenv cx es u /\
   FLOOKUP u.vs_allocas sa.cs_next_id = SOME (w2n d,nb) /\
   u.vs_memory = s.vs_memory /\
   (!x. not_fresh_at sa x ==> lookup_var x u = lookup_var x s) /\
@@ -112,7 +112,7 @@ Proof
   qpat_x_assum `u = update_var _ _ _` kall_tac >>
   qpat_x_assum `root = STRING _ _` kall_tac >>
   qpat_x_assum `out = STRING _ _` kall_tac >>
-  qpat_x_assum `stmt_state_rel _ _ _ _ _ (_ with vs_inst_idx := _)` mp_tac >>
+  qpat_x_assum `stmt_state_rel _ _ _ _ _ _ (_ with vs_inst_idx := _)` mp_tac >>
   simp[stmt_state_rel_inst_idx] >> strip_tac >>
   simp[] >> rpt conj_tac
   >- (rpt strip_tac >> irule unwrap_alloc_old_disjoint >>

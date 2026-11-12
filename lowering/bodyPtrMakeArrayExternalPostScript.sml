@@ -6,13 +6,13 @@ Ancestors
 
 Theorem copy_buffer_read_post_transport:
   post_value_type cenv e = expr_type e /\
-  vv_post ctx func cenv cx e es sa sm s0 es' raw vv s /\
+  vv_post H ctx func cenv cx e es sa sm s0 es' raw vv s /\
   read_result cx raw es' = (INL v,es') /\
   local_ptrs_reserved cenv sa /\
   MAP FDOM es.scopes = MAP FDOM es'.scopes /\
   sa.cs_next_var <= sm.cs_next_var /\ sm.cs_next_var <= mid.cs_next_var /\
   sa.cs_next_id <= sm.cs_next_id /\ sm.cs_next_id < sb.cs_next_id /\
-  stmt_state_rel ctx func cenv cx es' u /\
+  stmt_state_rel H ctx func cenv cx es' u /\
   u.vs_memory = s.vs_memory /\
   (!x. not_fresh_at sm x ==> lookup_var x u = lookup_var x s) /\
   (!aid entry. FLOOKUP s.vs_allocas aid = SOME entry ==>
@@ -34,10 +34,10 @@ Theorem copy_buffer_read_post_transport:
   evaluate_type (get_tenv cx) (expr_type e) = SOME tv /\
   val_wf tv v /\ val_in_memory tv v (w2n w) z.vs_memory /\
   val_footprint tv v <= sz /\ eval_operand op z = SOME w ==>
-  expr_post ctx func cenv cx e es sa sb s0 es' v op z
+  expr_post H ctx func cenv cx e es sa sb s0 es' v op z
 Proof
   strip_tac >>
-  `vv_post ctx func cenv cx e es sa sm s0 es' (Value v) vv s` by
+  `vv_post H ctx func cenv cx e es sa sm s0 es' (Value v) vv s` by
     metis_tac[vv_post_read_result] >>
   drule_all copy_buffer_post_transport >> simp[]
 QED

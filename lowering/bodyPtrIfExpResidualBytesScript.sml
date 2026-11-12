@@ -12,7 +12,7 @@ Theorem ifexp_allocating_arm_noncall:
    same_memory_layout ce (lowered_value_type ce arm) (expr_type arm)) /\
   post_value_type ce arm = expr_type arm /\
   compile_expr ce ret_ty arm sa = (vv,sb) /\
-  vv_post ctx fn ce cx arm es_arm sa sb s0 ee raw vv t /\
+  vv_post H ctx fn ce cx arm es_arm sa sb s0 ee raw vv t /\
   ~same_memory_layout ce (lowered_value_type ce arm) ty ==>
   ~(?ann fid args dret. arm = Call ann (IntCall fid) args dret)
 Proof
@@ -30,7 +30,7 @@ Theorem ifexp_allocating_arm_bytes_inputs:
    same_memory_layout ce (lowered_value_type ce arm) (expr_type arm)) /\
   post_value_type ce arm = expr_type arm /\
   compile_expr ce ret_ty arm sa = (vv,sb) /\
-  vv_post ctx fn ce cx arm es_arm sa sb s0 ee raw vv t /\
+  vv_post H ctx fn ce cx arm es_arm sa sb s0 ee raw vv t /\
   ~same_memory_layout ce (lowered_value_type ce arm) ty /\
   eval_expr cx arm es_arm = (INL raw,ee) /\ read_result cx raw ee = (INL v,er) ==>
   is_bytestring_type ty /\
@@ -55,7 +55,7 @@ Theorem ifexp_allocating_arm_bytes_code:
    same_memory_layout ce (lowered_value_type ce arm) (expr_type arm)) /\
   post_value_type ce arm = expr_type arm /\
   compile_expr ce (expr_type arm) arm sa = (vv,sb) /\
-  vv_post ctx fn ce cx arm es_arm sa sb s0 ee raw vv t /\
+  vv_post H ctx fn ce cx arm es_arm sa sb s0 ee raw vv t /\
   local_ptrs_reserved ce sa /\ eval_expr cx arm es_arm = (INL raw,ee) /\
   ~is_word_type ty /\ ~same_memory_layout ce (lowered_value_type ce arm) ty /\
   compile_ifexp_arm ce ty (lowered_value_type ce arm) vv sb = (op,sd) /\

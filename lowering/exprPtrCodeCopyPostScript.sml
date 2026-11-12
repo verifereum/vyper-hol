@@ -21,7 +21,7 @@ Theorem code_copy_same_endpoint_contents:
   copy_old_operand sa src /\ copy_old_operand sa dst /\
   eval_operand src s = SOME a /\ eval_operand dst s = SOME b /\
   copy_runtime_frame sa s sb z /\
-  stmt_state_rel ctx func cenv cx es s /\ ~cenv.ce_is_ctor /\
+  stmt_state_rel H ctx func cenv cx es s /\ ~cenv.ce_is_ctor /\
   immutable_holds cenv cx t (Value v) a es input /\
   evaluate_type (get_tenv cx) t = SOME ty /\
   w2n b + type_memory_size ty < dimword (:256) ==>
@@ -46,9 +46,9 @@ Theorem unwrap_code_same_endpoint_post:
   (!x. p.ptr_operand = Var x ==> not_fresh_at sm x) /\
   (!ty. evaluate_type (get_tenv cx) t = SOME ty ==>
     type_memory_bytes cenv t = type_memory_size ty) /\
-  vv_post ctx func cenv cx e es sa sm s0 ee (Value v) (LocatedValue t p) s /\
+  vv_post H ctx func cenv cx e es sa sm s0 ee (Value v) (LocatedValue t p) s /\
   run_inst_seq (emitted_insts sm sb) s = OK z ==>
-  expr_post ctx func cenv cx e es sa sb s0 ee v op z
+  expr_post H ctx func cenv cx e es sa sb s0 ee v op z
 Proof
   strip_tac >>
   `t = post_value_type cenv e` by gvs[vv_post_def, vv_holds_def] >>

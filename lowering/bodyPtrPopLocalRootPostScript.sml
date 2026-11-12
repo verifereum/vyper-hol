@@ -6,7 +6,7 @@ Ancestors
   finite_map pred_set words list
 
 Theorem pop_local_header_ghost:
-  ghost_inv d cenv cx es G tn s /\
+  ghost_inv H d cenv cx es G tn s /\
   local_ptrs_rel func cenv es.scopes s /\
   lookup_scopes id es.scopes = SOME entry /\
   FLOOKUP cenv.ce_vars id = SOME (PtrVar (Var p) sz) /\
@@ -16,7 +16,7 @@ Theorem pop_local_header_ghost:
   vs <> [] /\ elems_val_wf vs tv /\ LENGTH vs <= cap /\
   lookup_scopes id es'.scopes = SOME (pop_name_entry entry vs) /\
   (!name. name <> id ==> lookup_scopes name es'.scopes = lookup_scopes name es.scopes) ==>
-  ghost_inv d cenv cx es' G tn (mstore (w2n a) (n2w (LENGTH vs-1)) s)
+  ghost_inv H d cenv cx es' G tn (mstore (w2n a) (n2w (LENGTH vs-1)) s)
 Proof
   strip_tac >> drule_all pop_local_robust_layout >> strip_tac >>
   `tn.t_mem DIFF {i | w2n a <= i /\ i < w2n a+32} = tn.t_mem` by
@@ -34,7 +34,7 @@ Proof
 QED
 
 Theorem pop_local_endpoint_ghost:
-  ghost_inv d cenv cx es G tn s /\
+  ghost_inv H d cenv cx es G tn s /\
   local_ptrs_rel func cenv es.scopes s /\
   lookup_scopes id es.scopes = SOME entry /\
   FLOOKUP cenv.ce_vars id = SOME (PtrVar (Var p) sz) /\
@@ -54,7 +54,7 @@ Theorem pop_local_endpoint_ghost:
   t.vs_call_ctx = s.vs_call_ctx /\
   tn'.t_mem = tn.t_mem /\ tn'.t_stor = tn.t_stor /\
   tn'.t_trans = tn.t_trans /\ tn'.t_imm = tn.t_imm ==>
-  ghost_inv d cenv cx es' G' tn' t
+  ghost_inv H d cenv cx es' G' tn' t
 Proof
   strip_tac >> drule_all pop_local_header_ghost >> strip_tac >>
   irule ghost_inv_old_vars_frame_ptr >>

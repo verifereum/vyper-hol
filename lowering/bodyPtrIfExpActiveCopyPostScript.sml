@@ -7,7 +7,7 @@ Ancestors bodyPtrIfExpCopyPost bodyPtrIfExpAllocSource exprSimPrecompiles exprSi
    chosen semantic run.  The copy supplies its ordinary frame at that endpoint. *)
 Theorem ifexp_allocated_copy_post:
   post_value_type ce e = expr_type e /\
-  vv_post ctx fn ce cx e es sa sb s0 ee raw vv s /\
+  vv_post H ctx fn ce cx e es sa sb s0 ee raw vv s /\
   read_result cx raw ee = (INL v,ee) /\
   local_ptrs_reserved ce sa /\ MAP FDOM es.scopes = MAP FDOM ee.scopes /\
   sa.cs_next_var <= sb.cs_next_var /\ sa.cs_next_id <= sb.cs_next_id /\
@@ -26,10 +26,10 @@ Theorem ifexp_allocated_copy_post:
   evaluate_type (get_tenv cx) (expr_type e) = SOME ty /\
   val_wf ty v /\ val_in_memory ty v (w2n d) t.vs_memory /\
   val_footprint ty v <= sz /\ eval_operand op t = SOME d ==>
-  expr_post ctx fn ce cx e es sa sd s0 ee v op t
+  expr_post H ctx fn ce cx e es sa sd s0 ee v op t
 Proof
   strip_tac >>
-  `stmt_state_rel ctx fn ce cx ee s` by fs[vv_post_def] >>
+  `stmt_state_rel H ctx fn ce cx ee s` by fs[vv_post_def] >>
   `local_ptrs_reserved ce sb` by metis_tac[local_ptrs_reserved_next_var] >>
   drule_all compile_alloc_buffer_raw_resources >> strip_tac >>
   drule compile_alloc_buffer_parts >> strip_tac >>

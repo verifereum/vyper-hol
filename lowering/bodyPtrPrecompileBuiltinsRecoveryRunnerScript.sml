@@ -132,7 +132,7 @@ fun recovery_hash () = (
   `cs_extends s2 sb` by metis_tac[cs_extends_trans] >>
   `fn_has_code s1 s2 fn /\ fn_has_code s2 sb fn` by
     metis_tac[fragExecTheory.fn_has_code_split] >>
-  `stmt_state_rel ctx fn cenv cx ee t` by
+  `stmt_state_rel H ctx fn cenv cx ee t` by
     fs[loweringPostsTheory.expr_post_def] >>
   `!x sz. cenv.ce_return_buf = SOME (PtrVar (Var x) sz) ==>
      not_fresh_at s1 x` by metis_tac[stmtFragPtrTheory.not_fresh_at_mono] >>
@@ -161,7 +161,7 @@ fun recovery_v () = (
   `cs_extends s3 sb` by metis_tac[cs_extends_trans] >>
   `fn_has_code s2 s3 fn /\ fn_has_code s3 sb fn` by
     metis_tac[fragExecTheory.fn_has_code_split] >>
-  `stmt_state_rel ctx fn cenv cx ee' t'` by fs[loweringPostsTheory.expr_post_def] >>
+  `stmt_state_rel H ctx fn cenv cx ee' t'` by fs[loweringPostsTheory.expr_post_def] >>
   `!x sz. cenv.ce_return_buf = SOME (PtrVar (Var x) sz) ==>
      not_fresh_at s2 x` by metis_tac[stmtFragPtrTheory.not_fresh_at_mono] >>
   `!x sz. cenv.ce_return_pc = SOME (PtrVar (Var x) sz) ==>
@@ -188,7 +188,7 @@ fun recovery_r () = (
   `local_ptrs_reserved cenv s3` by metis_tac[local_ptrs_reserved_next_var] >>
   `fn_has_code s3 sm fn /\ fn_has_code sm sb fn` by
     metis_tac[fragExecTheory.fn_has_code_split] >>
-  `stmt_state_rel ctx fn cenv cx ee'' t''` by fs[loweringPostsTheory.expr_post_def] >>
+  `stmt_state_rel H ctx fn cenv cx ee'' t''` by fs[loweringPostsTheory.expr_post_def] >>
   `!x sz. cenv.ce_return_buf = SOME (PtrVar (Var x) sz) ==>
      not_fresh_at s3 x` by metis_tac[stmtFragPtrTheory.not_fresh_at_mono] >>
   `!x sz. cenv.ce_return_pc = SOME (PtrVar (Var x) sz) ==>
@@ -205,7 +205,7 @@ fun recovery_r () = (
 
 fun recovery_frame () = (
   `local_ptrs_reserved cenv sm` by metis_tac[local_ptrs_reserved_next_var] >>
-  `stmt_state_rel ctx fn cenv cx ee''' t'''` by fs[loweringPostsTheory.expr_post_def] >>
+  `stmt_state_rel H ctx fn cenv cx ee''' t'''` by fs[loweringPostsTheory.expr_post_def] >>
   `!x sz. cenv.ce_return_buf = SOME (PtrVar (Var x) sz) ==>
      not_fresh_at sm x` by metis_tac[stmtFragPtrTheory.not_fresh_at_mono] >>
   `!x sz. cenv.ce_return_pc = SOME (PtrVar (Var x) sz) ==>
@@ -255,7 +255,7 @@ fun recovery_word () = (
   `wb_frame cenv ee' ee'' s2 t' t''` by metis_tac[exprSimWordArgsTheory.expr_post_frame] >>
   `wb_frame cenv ee'' ee''' s3 t'' t'''` by metis_tac[exprSimWordArgsTheory.expr_post_frame] >>
   `eval_operand h t = SOME (typed_val_to_w256 (BaseTV (BytesT (Fixed 32))) v')` by
-    (qpat_x_assum `expr_post _ _ _ _ ah _ _ _ _ _ _ _ _` mp_tac >>
+    (qpat_x_assum `expr_post _ _ _ _ _ ah _ _ _ _ _ _ _ _` mp_tac >>
      simp[loweringPostsTheory.expr_post_def, loweringPostsTheory.expr_val_rel_def,
           vyperValueTheory.evaluate_type_def, is_word_type_def]) >>
   `eval_operand h t' = SOME (typed_val_to_w256 (BaseTV (BytesT (Fixed 32))) v') /\
@@ -285,17 +285,17 @@ fun recovery_word () = (
 fun recovery_other_words () = (
   `eval_operand v t' = SOME (typed_val_to_w256
      (THE (evaluate_type (get_tenv cx) (expr_type av))) v'')` by
-    (qpat_x_assum `expr_post _ _ _ _ av _ _ _ _ _ _ _ _` mp_tac >>
+    (qpat_x_assum `expr_post _ _ _ _ _ av _ _ _ _ _ _ _ _` mp_tac >>
      simp[loweringPostsTheory.expr_post_def, loweringPostsTheory.expr_val_rel_def,
           vyperValueTheory.evaluate_type_def, is_word_type_def]) >>
   `eval_operand r t'' = SOME (typed_val_to_w256
      (THE (evaluate_type (get_tenv cx) (expr_type ar))) v''')` by
-    (qpat_x_assum `expr_post _ _ _ _ ar _ _ _ _ _ _ _ _` mp_tac >>
+    (qpat_x_assum `expr_post _ _ _ _ _ ar _ _ _ _ _ _ _ _` mp_tac >>
      simp[loweringPostsTheory.expr_post_def, loweringPostsTheory.expr_val_rel_def,
           vyperValueTheory.evaluate_type_def, is_word_type_def]) >>
   `eval_operand q t''' = SOME (typed_val_to_w256
      (THE (evaluate_type (get_tenv cx) (expr_type aq))) v'''')` by
-    (qpat_x_assum `expr_post _ _ _ _ aq _ _ _ _ _ _ _ _` mp_tac >>
+    (qpat_x_assum `expr_post _ _ _ _ _ aq _ _ _ _ _ _ _ _` mp_tac >>
      simp[loweringPostsTheory.expr_post_def, loweringPostsTheory.expr_val_rel_def,
           vyperValueTheory.evaluate_type_def, is_word_type_def]) >>
   `eval_operand v t'' = SOME (typed_val_to_w256
@@ -334,7 +334,7 @@ fun recovery_typed_tail () = (
      (!x. op = Var x ==> not_fresh_at sm x)) [h;v;r;q]` by
     (fs[bodyPtrDefsTheory.ptr_val_ok_def] >> simp[] >> metis_tac[]) >>
   `allocas_from 0 t'''` by simp[ptrDisciplineTheory.allocas_from_def] >>
-  `stor_taint_ok cx tn''' t'''` by fs[bodyPtrDefsTheory.ghost_inv_def] >>
+  `stor_taint_ok H cx tn''' t'''` by fs[bodyPtrDefsTheory.ghost_inv_def] >>
   Cases_on `ec_source_tail cx (BaseT AddressT) ECRecover
      [expr_type ah;expr_type av;expr_type ar;expr_type aq]
      [v';v'';v''';v''''] ee'''` >>
@@ -347,12 +347,12 @@ fun recovery_tail_path () = (
   disch_then (fn th =>
     qpat_assum `compile_ecrecover _ _ _ _ _ = _`
       (mp_then Any (fn th =>
-        qpat_assum `stmt_state_rel _ _ _ _ ee''' t'''`
+        qpat_assum `stmt_state_rel _ _ _ _ _ ee''' t'''`
           (mp_then Any (fn th =>
-            qpat_assum `ghost_inv _ _ _ ee''' G''' tn''' t'''`
+            qpat_assum `ghost_inv _ _ _ _ ee''' G''' tn''' t'''`
               (mp_then Any mp_tac th)) th)) th)) >>
   simp[vyperValueTheory.evaluate_type_def] >>
-  disch_then (qspecl_then [`[ah;av;ar;aq]`,`PG`,`cx_dead cx`] mp_tac) >>
+  disch_then (qspecl_then [`[ah;av;ar;aq]`,`PG`,`cx_dead H cx`] mp_tac) >>
   (impl_tac >- gs[vyperValueTheory.evaluate_type_def,
                     bodyPtrDefsTheory.stor_taint_ok_def]) >> strip_tac);
 
@@ -439,7 +439,7 @@ fun recovery_final_rebase () = (
      rpt conj_tac >> TRY (first_assum ACCEPT_TAC) >> TRY decide_tac >>
      metis_tac[]) >>
   irule exprSimCalldataSliceTheory.vv_post_prefix_frame >>
-  qpat_assum `vv_post _ _ _ _ _ ee''' sm _ _ _ _ _ _` (irule_at Any) >>
+  qpat_assum `vv_post _ _ _ _ _ _ ee''' sm _ _ _ _ _ _` (irule_at Any) >>
   simp[] >> metis_tac[]);
 in
 

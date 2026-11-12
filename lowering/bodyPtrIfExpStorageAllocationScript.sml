@@ -5,8 +5,8 @@ Ancestors bodyPtrIfExpStorageStart bodyPtrIfExpStorageAllocBounds
   loweringPosts compileEnv venomState venomInst words arithmetic
 
 Theorem ifexp_copy_allocation_start:
-  vv_post ctx fn ce cx e es sa sb s0 ee raw vv s /\
-  ghost_inv rty ce cx ee G tn s /\ ghost_kept ce es sa G0 tn0 s0 G tn /\
+  vv_post H ctx fn ce cx e es sa sb s0 ee raw vv s /\
+  ghost_inv H rty ce cx ee G tn s /\ ghost_kept ce es sa G0 tn0 s0 G tn /\
   local_ptrs_reserved ce sa /\ MAP FDOM es.scopes = MAP FDOM ee.scopes /\
   sa.cs_next_var <= sb.cs_next_var /\
   (!x sz. ce.ce_return_buf = SOME (PtrVar (Var x) sz) ==> not_fresh_at sa x) /\
@@ -22,7 +22,7 @@ Theorem ifexp_copy_allocation_start:
     tn1 = step_taint (mk_inst sb.cs_next_id ALLOCA [Lit (n2w capacity)] [out]) s u tn /\
     gas_path_ptr D 0 ctx fn PG G tn s 0 G1 tn1 (OK (u with vs_inst_idx := SUC s.vs_inst_idx)) /\
     ptr_covers G1 tn1 out (u with vs_inst_idx := SUC s.vs_inst_idx) capacity /\
-    ghost_inv rty ce cx ee G1 tn1 (u with vs_inst_idx := SUC s.vs_inst_idx) /\
+    ghost_inv H rty ce cx ee G1 tn1 (u with vs_inst_idx := SUC s.vs_inst_idx) /\
     ghost_kept ce es sa G0 tn0 s0 G1 tn1 /\
     fresh_vars_wrt cs (u with vs_inst_idx := SUC s.vs_inst_idx) /\
     eval_operand src (u with vs_inst_idx := SUC s.vs_inst_idx) = SOME p /\
@@ -31,7 +31,7 @@ Theorem ifexp_copy_allocation_start:
     (u with vs_inst_idx := SUC s.vs_inst_idx).vs_inst_idx = LENGTH cs.cs_current_insts
 Proof
   strip_tac >>
-  `stmt_state_rel ctx fn ce cx ee s` by fs[vv_post_def] >>
+  `stmt_state_rel H ctx fn ce cx ee s` by fs[vv_post_def] >>
   drule_all compile_alloc_buffer_counted >>
   disch_then (qspecl_then [`D`, `PG`, `G`, `tn`] strip_assume_tac) >>
   drule_all compile_alloc_buffer_ghost_frame >>
@@ -48,8 +48,8 @@ Proof
 QED
 
 Theorem ifexp_copy_allocation_loop_bounds:
-  stmt_state_rel ctx fn ce cx es s0 /\
-  vv_post ctx fn ce cx e es sa sb s0 ee raw vv s /\
+  stmt_state_rel H ctx fn ce cx es s0 /\
+  vv_post H ctx fn ce cx e es sa sb s0 ee raw vv s /\
   local_ptrs_reserved ce sa /\ MAP FDOM es.scopes = MAP FDOM ee.scopes /\
   fn_inst_ids_distinct fn /\ sa.cs_next_var <= sb.cs_next_var /\ sa.cs_next_id <= sb.cs_next_id /\
   (!x sz. ce.ce_return_buf = SOME (PtrVar (Var x) sz) ==> not_fresh_at sa x) /\

@@ -5,7 +5,7 @@ Ancestors bodySim bodyPtrWordBuiltinsContext
 Theorem body_inv_stmt_state_rel_unit:
   !tops ctx cenv cx func es s0.
     body_inv tops ctx cenv cx /\
-    stmt_state_rel ctx func cenv cx es s0 ==>
+    stmt_state_rel H ctx func cenv cx es s0 ==>
     ?rpolicy unit.
       (if cx.in_deploy then
          ?rbc. lower_vyper_deploy_unit tops rpolicy rbc = SOME unit

@@ -27,14 +27,14 @@ Theorem compile_imm_load_word_runtime_counted:
     (!q. not_fresh_at sa q ==>
       lookup_var q sf = lookup_var q s /\ FLOOKUP Gf q = FLOOKUP G q /\
       op_taint tnf (Var q) = op_taint tn (Var q)) /\
-    (!cenv cx es. stmt_state_rel ctx func cenv cx es s /\
-      local_ptrs_reserved cenv sa ==> stmt_state_rel ctx func cenv cx es sf)
+    (!cenv cx es. stmt_state_rel H ctx func cenv cx es s /\
+      local_ptrs_reserved cenv sa ==> stmt_state_rel H ctx func cenv cx es sf)
 Proof
   simp[compile_imm_load_word_runtime] >> strip_tac >>
   drule_all emit_code_load_ptr_path >>
   disch_then (qspecl_then [`PG`, `G`, `D`] strip_assume_tac) >>
-  `!cenv cx es. stmt_state_rel ctx func cenv cx es s /\
-      local_ptrs_reserved cenv sa ==> stmt_state_rel ctx func cenv cx es u` by
+  `!cenv cx es. stmt_state_rel H ctx func cenv cx es s /\
+      local_ptrs_reserved cenv sa ==> stmt_state_rel H ctx func cenv cx es u` by
     (rpt strip_tac >>
      `u = update_var out (word_of_bytes T (0w:bytes32)
        (TAKE 32 (DROP (w2n a) s.vs_data_section ++ REPLICATE 32 0w))) s

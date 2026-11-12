@@ -6,7 +6,7 @@ Ancestors
   revertReasonLayout fragExec venomInst arithmetic exprLoweringProps
 
 Theorem revert_reason_prefix_checked_path:
-  stmt_state_rel ctx func cenv cx es s /\
+  stmt_state_rel H ctx func cenv cx es s /\
   MEM (mk_inst id ALLOCA [Lit (n2w (64+ms))]
     [STRING #"%" (toString v)]) (fn_insts func) /\
   64+ms < dimword(:256) /\ ~ctx_has_dalloca ctx /\

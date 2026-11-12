@@ -156,7 +156,7 @@ Theorem raise_reason_raw_string:
   (!tail. eval_expr cx r
     (es with gas_obs := gas_explicit marks s0.vs_gas_readings ++ tail) =
     (INL tv, ee with gas_obs := tail)) /\
-  vv_post ctx func cenv cx r es sa sm s0 (ee with gas_obs := []) tv vv t ==>
+  vv_post H ctx func cenv cx r es sa sm s0 (ee with gas_obs := []) tv vv t ==>
   ?str. read_result cx tv (ee with gas_obs := []) =
       (INL (StringV str), ee with gas_obs := []) /\
     !tail. (do v <- read_result cx tv;
@@ -191,14 +191,14 @@ Theorem compile_raise_reason_path_frag_ptr:
    compile_revert_with_reason cenv vv (expr_type r) (type_memory_bytes cenv (expr_type r)) sm = ((),sb) /\
    fn_has_code sm sb func /\ local_ptrs_reserved cenv sa /\
    ~ctx_has_dalloca ctx /\ ~cenv.ce_is_ctor /\ fn_inst_ids_distinct func /\
-   vv_post ctx func cenv cx r es sa sm s0 ee tv vv t /\
-   ghost_inv d cenv cx ee G tn t /\ ptr_vv_ok cx (post_value_type cenv r) tv vv ee G tn t /\
+   vv_post H ctx func cenv cx r es sa sm s0 ee tv vv t /\
+   ghost_inv H d cenv cx ee G tn t /\ ptr_vv_ok cx (post_value_type cenv r) tv vv ee G tn t /\
    read_result cx tv ee = (INL (StringV str),ee) /\
    (?gin gout. eval_expr cx r (es with gas_obs := gin) =
      (INL tv, ee with gas_obs := gout)) /\
    ~t.vs_halted /\ t.vs_current_bb = sm.cs_current_bb /\
    t.vs_inst_idx = LENGTH sm.cs_current_insts ==>
-   ?Gf tnf u. gas_path_ptr (cx_dead cx) 0 ctx func PG G tn t 0 Gf tnf (Abort Revert_abort u)) ==>
+   ?Gf tnf u. gas_path_ptr (cx_dead H cx) 0 ctx func PG G tn t 0 Gf tnf (Abort Revert_abort u)) ==>
  stmt_frag_ptr d ctx PG func cx lctx RetQ cenv
    (stmt_env cenv lctx ty (Raise (RaiseReason r)))
    (eval_stmt cx (Raise (RaiseReason r))) es

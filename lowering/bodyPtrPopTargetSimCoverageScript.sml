@@ -9,7 +9,7 @@ Ancestors
 (* Use an address bound, not a bound on the ghost site's end: a site's
    capacity may exceed the compiler local's reserved extent. *)
 Theorem target_local_header_coverage_ptr:
-  local_ptrs_rel func cenv es.scopes s /\ ghost_inv d cenv cx es G tn s /\
+  local_ptrs_rel func cenv es.scopes s /\ ghost_inv H d cenv cx es G tn s /\
   lookup_scopes id es.scopes = SOME entry /\
   FLOOKUP cenv.ce_vars id = SOME (PtrVar (Var p) sz) /\
   lookup_var p s = SOME w /\ s.vs_alloca_next < dimword(:256) /\
@@ -42,7 +42,7 @@ Theorem target_current_dynamic_header_ptr:
   evaluate_type (get_tenv cx) ty = SOME tv /\
   lookup_scopes id es.scopes = SOME entry /\
   FLOOKUP cenv.ce_vars id = SOME (PtrVar (Var p) sz) /\
-  lookup_var p s = SOME w /\ ghost_inv d cenv cx es G tn s /\
+  lookup_var p s = SOME w /\ ghost_inv H d cenv cx es G tn s /\
   local_ptrs_rel func cenv es.scopes s /\ s.vs_alloca_next < dimword(:256) /\
   mem_path_offset tv path = SOME (off,ArrayTV etv (Dynamic cap)) /\
   ISL (evaluate_subscripts entry.type entry.value path) /\
@@ -72,16 +72,16 @@ QED
 (* Transport only the saved address and its site.  The current source value
    is deliberately absent: index evaluation may have changed it. *)
 Theorem target_memory_index_frame_ptr:
-  target_post ctx func cenv cx es sa sm s0 ee
+  target_post H ctx func cenv cx es sa sm s0 ee
     (PlaceR (MemoryPlace id path)) vt rb s /\
   target_ptr_ok cenv (PlaceR (MemoryPlace id path)) rb G tn s /\
-  expr_post ctx func cenv cx e ee sm sb s ef v x u /\
-  ghost_kept cenv ee sm G tn s H un /\ local_ptrs_reserved cenv sm /\
-  ghost_inv d cenv cx ee G tn s ==>
+  expr_post H ctx func cenv cx e ee sm sb s ef v x u /\
+  ghost_kept cenv ee sm G tn s HG un /\ local_ptrs_reserved cenv sm /\
+  ghost_inv H d cenv cx ee G tn s ==>
   (?w. eval_operand (FST rb) u = SOME w /\
        place_ptr_rel cenv cx u (PlaceR (MemoryPlace id path)) w
          (FST (SND rb)) vt) /\
-  target_ptr_ok cenv (PlaceR (MemoryPlace id path)) rb H un u
+  target_ptr_ok cenv (PlaceR (MemoryPlace id path)) rb HG un u
 Proof
   strip_tac >>
   `!z w. not_fresh_at sm z /\ lookup_var z s = SOME w ==>
@@ -95,7 +95,7 @@ Proof
     (`?p sz. FLOOKUP cenv.ce_vars id = SOME (PtrVar (Var p) sz)` by
        (gvs[place_ptr_rel_def] >> metis_tac[]) >>
      `?entry. lookup_scopes id ee.scopes = SOME entry` by
-       (qpat_x_assum `target_post _ _ _ _ _ _ _ _ _ _ _ _ _` mp_tac >>
+       (qpat_x_assum `target_post _ _ _ _ _ _ _ _ _ _ _ _ _ _` mp_tac >>
         simp[target_post_def, place_readable_def, read_place_def,
              get_scopes_def, bind_def, lift_option_type_def,
              return_def, raise_def] >>
@@ -118,18 +118,18 @@ Proof
 QED
 
 Theorem target_index_dynamic_header_ptr:
-  target_post ctx func cenv cx es sa sm s0 ee
+  target_post H ctx func cenv cx es sa sm s0 ee
     (PlaceR (MemoryPlace id path)) (Type aty) rb s /\
   target_ptr_ok cenv (PlaceR (MemoryPlace id path)) rb G tn s /\
-  ghost_inv d cenv cx ee G tn s /\
-  expr_post ctx func cenv cx e ee sm sb s ef v x u /\
-  ghost_kept cenv ee sm G tn s H un /\ local_ptrs_reserved cenv sm /\
+  ghost_inv H d cenv cx ee G tn s /\
+  expr_post H ctx func cenv cx e ee sm sb s ef v x u /\
+  ghost_kept cenv ee sm G tn s HG un /\ local_ptrs_reserved cenv sm /\
   expr_sim_inv cenv cx env ef /\ FLOOKUP env.var_types id = SOME ty /\
   evaluate_type (get_tenv cx) aty = SOME (ArrayTV etv (Dynamic cap)) /\
-  ghost_inv d cenv cx ef H un u /\
+  ghost_inv H d cenv cx ef HG un u /\
   (!entry. lookup_scopes id ef.scopes = SOME entry ==>
      ISL (evaluate_subscripts entry.type entry.value path)) ==>
-  ?src a vs. FST rb = Var src /\ ptr_covers H un src u 32 /\
+  ?src a vs. FST rb = Var src /\ ptr_covers HG un src u 32 /\
     lookup_var src u = SOME a /\
     (?entry. lookup_scopes id ef.scopes = SOME entry /\
       evaluate_subscripts entry.type entry.value path = INL (ArrayV (DynArrayV vs))) /\
@@ -140,7 +140,7 @@ Proof
   strip_tac >> drule_all target_memory_index_frame_ptr >> strip_tac >>
   drule_all stmtSimAugAssignTheory.expr_sim_inv_local >> strip_tac >>
   `cenv.ce_var_type id = SOME ty` by (gvs[expr_sim_inv_def] >> metis_tac[]) >>
-  `stmt_state_rel ctx func cenv cx ef u` by (gvs[expr_post_def] >> metis_tac[]) >>
+  `stmt_state_rel H ctx func cenv cx ef u` by (gvs[expr_post_def] >> metis_tac[]) >>
   `local_ptrs_rel func cenv ef.scopes u /\ u.vs_alloca_next < dimword(:256)` by
     (gvs[exprLoweringPropsTheory.stmt_state_rel_def,
          loweringStateRelDefsTheory.state_rel_def, venomMemDefsTheory.alloca_inv_def,

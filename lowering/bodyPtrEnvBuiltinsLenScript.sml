@@ -128,14 +128,14 @@ QED
 
 Theorem load_builtin_update_ghosts:
   MEM opc [MLOAD; SLOAD; TLOAD; DLOAD] /\
-  ghost_inv d cenv cx es G tn s /\ local_ptrs_reserved cenv sa /\
+  ghost_inv H d cenv cx es G tn s /\ local_ptrs_reserved cenv sa /\
   ghost_kept cenv es0 sa G0 tn0 s0 G tn /\
   (!x sz. cenv.ce_return_buf = SOME (PtrVar (Var x) sz) ==>
           not_fresh_at sa x) /\
   (!x sz. cenv.ce_return_pc = SOME (PtrVar (Var x) sz) ==>
           not_fresh_at sa x) /\
   ~not_fresh_at sa out ==>
-  ghost_inv d cenv cx es
+  ghost_inv H d cenv cx es
     (step_prov PG G (mk_inst id opc [op] [out]) (update_var out w s))
     (step_taint (mk_inst id opc [op] [out]) s (update_var out w s) tn)
     (update_var out w s) /\
@@ -217,14 +217,14 @@ Theorem emit_load_builtin_run:
     s (update_var (STRING #"%" (toString sa.cs_next_var)) w s) tn)
     (Var (STRING #"%" (toString sa.cs_next_var))) = {} /\
   local_ptrs_reserved cenv sa /\ local_ptrs_reserved cenv ss /\
-  ghost_inv d cenv cx es G tn s /\
+  ghost_inv H d cenv cx es G tn s /\
   ghost_kept cenv es0 ss G0 tn0 s0 G tn /\
   ~not_fresh_at ss (STRING #"%" (toString sa.cs_next_var)) /\
   (!x sz. cenv.ce_return_buf = SOME (PtrVar (Var x) sz) ==>
           not_fresh_at ss x) /\
   (!x sz. cenv.ce_return_pc = SOME (PtrVar (Var x) sz) ==>
           not_fresh_at ss x) /\
-  stmt_state_rel ctx fn cenv cx es s /\ ~s.vs_halted /\
+  stmt_state_rel H ctx fn cenv cx es s /\ ~s.vs_halted /\
   s.vs_current_bb = sa.cs_current_bb /\
   s.vs_inst_idx = LENGTH sa.cs_current_insts /\
   step_inst_base (mk_inst sa.cs_next_id opc [src]
@@ -232,11 +232,11 @@ Theorem emit_load_builtin_run:
     OK (update_var (STRING #"%" (toString sa.cs_next_var)) w s) ==>
   ?G' tn' t.
     gas_path_ptr D 0 ctx fn PG G tn s 0 G' tn' (OK t) /\
-    ghost_inv d cenv cx es G' tn' t /\
+    ghost_inv H d cenv cx es G' tn' t /\
     ghost_kept cenv es0 ss G0 tn0 s0 G' tn' /\
     op_taint tn' op = {} /\ op_prov G' op = NONE /\
     eval_operand op t = SOME w /\
-    stmt_state_rel ctx fn cenv cx es t /\ ~t.vs_halted /\
+    stmt_state_rel H ctx fn cenv cx es t /\ ~t.vs_halted /\
     t.vs_current_bb = sb.cs_current_bb /\
     t.vs_inst_idx = LENGTH sb.cs_current_insts /\
     (!x. not_fresh_at sa x ==> lookup_var x t = lookup_var x s) /\
@@ -251,7 +251,7 @@ Proof
   disch_then (qspecl_then [`w`, `src`, `sa.cs_next_id`, `PG`] strip_assume_tac) >>
   `not_local_ptr cenv es.scopes (STRING #"%" (toString sa.cs_next_var))` by
     (irule local_ptrs_reserved_fresh >> qexists_tac `sa` >> simp[]) >>
-  `stmt_state_rel ctx fn cenv cx es
+  `stmt_state_rel H ctx fn cenv cx es
     (update_var (STRING #"%" (toString sa.cs_next_var)) w s)` by
     (irule stmt_state_rel_update_var >> simp[]) >>
   drule emitted_insts_emit_op >> strip_tac >>

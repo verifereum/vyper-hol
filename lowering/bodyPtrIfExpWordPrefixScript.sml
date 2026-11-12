@@ -22,7 +22,7 @@ Proof
 QED
 
 Theorem ifexp_jnz_path_ptr:
-  expr_post ctx fn cenv cx c es sa sc s0 mid (BoolV sel) cop u /\
+  expr_post H ctx fn cenv cx c es sa sc s0 mid (BoolV sel) cop u /\
   expr_type c = BaseT BoolT /\ ptr_val_ok cx (expr_type c) (BoolV sel) cop G tn u /\
   emit_inst JNZ [cop; Label tl; Label el] [] sj = ((),sn) /\
   fn_has_code sj sn fn /\ sj.cs_current_bb = sc.cs_current_bb /\

@@ -44,7 +44,7 @@ QED
 
 Theorem reason_encoder_original_local_region:
   !ctx func cenv cx e es sa sb s0 es' v op s n b sz.
-    expr_post ctx func cenv cx e es sa sb s0 es' v op s /\
+    expr_post H ctx func cenv cx e es sa sb s0 es' v op s /\
     local_ptrs_reserved cenv sa /\
     MAP FDOM es.scopes = MAP FDOM es'.scopes /\
     local_region cenv es.scopes s0 n b sz ==>
@@ -75,8 +75,8 @@ QED
 
 Theorem reason_encoder_readonly_post:
   !ctx func cenv cx e es sa sb s0 es' v op s t cc.
-    expr_post ctx func cenv cx e es sa sb s0 es' v op s /\
-    stmt_state_rel ctx func cenv cx es' t /\
+    expr_post H ctx func cenv cx e es sa sb s0 es' v op s /\
+    stmt_state_rel H ctx func cenv cx es' t /\
     sa.cs_next_var <= cc.cs_next_var /\
     eval_operand op t = eval_operand op s /\
     t.vs_memory = s.vs_memory /\
@@ -86,7 +86,7 @@ Theorem reason_encoder_readonly_post:
       FLOOKUP t.vs_allocas aid = SOME entry) /\
     (!n b sz. local_region cenv es'.scopes t n b sz <=>
       local_region cenv es'.scopes s n b sz) ==>
-    expr_post ctx func cenv cx e es sa sb s0 es' v op t
+    expr_post H ctx func cenv cx e es sa sb s0 es' v op t
 Proof
   rpt gen_tac >> strip_tac >>
   `expr_val_at cenv cx (post_value_type cenv e) sa sb es' v op t` by
@@ -114,13 +114,13 @@ QED
 
 Theorem reason_encoder_alloc_buffer_post:
   !ctx func cenv cx e es sa sb s0 es' v op s cc cd buf n.
-    expr_post ctx func cenv cx e es sa sb s0 es' v op s /\
+    expr_post H ctx func cenv cx e es sa sb s0 es' v op s /\
     compile_alloc_buffer n cc = (buf,cd) /\ fn_has_code cc cd func /\
     (!p. op = Var p ==> not_fresh_at cc p) /\ local_ptrs_reserved cenv cc /\
     fn_inst_ids_distinct func /\ n < dimword (:256) /\
     sa.cs_next_var <= cc.cs_next_var ==>
     ?t w. run_inst_seq (emitted_insts cc cd) s = OK t /\
-      expr_post ctx func cenv cx e es sa sb s0 es' v op t /\
+      expr_post H ctx func cenv cx e es sa sb s0 es' v op t /\
       step_inst_base (mk_inst cc.cs_next_id ALLOCA [Lit (n2w n)]
         [STRING #"%" (toString cc.cs_next_var)]) s = OK t /\
       local_ptrs_reserved cenv cd /\
@@ -135,7 +135,7 @@ Theorem reason_encoder_alloc_buffer_post:
         regions_disjoint (w2n w) n b len)
 Proof
   rpt gen_tac >> strip_tac >>
-  `stmt_state_rel ctx func cenv cx es' s` by gvs[expr_post_def] >>
+  `stmt_state_rel H ctx func cenv cx es' s` by gvs[expr_post_def] >>
   drule_all buffer_alloc_code >> strip_tac >>
   drule_all literal_alloc_buffer_run >> strip_tac >>
   `t.vs_labels = s.vs_labels` by
@@ -143,7 +143,7 @@ Proof
   `eval_operand op t = eval_operand op s` by suspend "operand" >>
   `!name b len. local_region cenv es'.scopes t name b len <=>
      local_region cenv es'.scopes s name b len` by suspend "locals" >>
-  `expr_post ctx func cenv cx e es sa sb s0 es' v op t` by
+  `expr_post H ctx func cenv cx e es sa sb s0 es' v op t` by
     (irule reason_encoder_readonly_post >>
      simp[] >> qexistsl_tac [`cc`, `s`] >> simp[]) >>
   `step_inst_base (mk_inst cc.cs_next_id ALLOCA [Lit (n2w n)]
@@ -177,7 +177,7 @@ Finalise reason_encoder_alloc_buffer_post
 Theorem reason_encoder_allocated_store_post:
   !ctx func cenv cx e es sa sb s0 es' v op s cc inst b sz a w.
     post_value_type cenv e = expr_type e /\
-    expr_post ctx func cenv cx e es sa sb s0 es' v op s /\
+    expr_post H ctx func cenv cx e es sa sb s0 es' v op s /\
     local_ptrs_reserved cenv sa /\
     MAP FDOM es.scopes = MAP FDOM es'.scopes /\
     sa.cs_next_id <= cc.cs_next_id /\
@@ -190,10 +190,10 @@ Theorem reason_encoder_allocated_store_post:
     (!name off len. local_region cenv es'.scopes s name off len ==>
       regions_disjoint b sz off len) /\
     expr_val_rel cx (expr_type e) v op (mstore a w s) ==>
-    expr_post ctx func cenv cx e es sa sb s0 es' v op (mstore a w s)
+    expr_post H ctx func cenv cx e es sa sb s0 es' v op (mstore a w s)
 Proof
   rpt gen_tac >> strip_tac >>
-  `stmt_state_rel ctx func cenv cx es' (mstore a w s)` by
+  `stmt_state_rel H ctx func cenv cx es' (mstore a w s)` by
     (irule literal_mstore_state_rel >> reverse conj_tac
      >- gvs[expr_post_def] >>
      qexistsl_tac [`b`, `inst`, `sz`] >>
@@ -261,7 +261,7 @@ Finalise reason_encoder_allocated_store_post
 Theorem reason_encoder_alloc_buffer_resources:
   !ctx func cenv cx e es sa sb s0 es' v op s cc cd buf n tv ow PG G tn.
     post_value_type cenv e = expr_type e /\
-    expr_post ctx func cenv cx e es sa sb s0 es' v op s /\
+    expr_post H ctx func cenv cx e es sa sb s0 es' v op s /\
     compile_alloc_buffer n cc = (buf,cd) /\ fn_has_code cc cd func /\
     (!p. op = Var p ==> not_fresh_at cc p) /\ local_ptrs_reserved cenv cc /\
     fn_inst_ids_distinct func /\ n < dimword (:256) /\
@@ -276,7 +276,7 @@ Theorem reason_encoder_alloc_buffer_resources:
       i = mk_inst cc.cs_next_id ALLOCA [Lit (n2w n)] [out] /\
       step_inst_base i s = OK t /\
       G1 = step_prov PG G i t /\ tn1 = step_taint i s t tn /\
-      expr_post ctx func cenv cx e es sa sb s0 es' v op t /\
+      expr_post H ctx func cenv cx e es sa sb s0 es' v op t /\
       local_ptrs_reserved cenv cd /\
       eval_operand op t = SOME ow /\
       eval_operand (Var out) t = SOME (n2w b) /\
@@ -293,14 +293,14 @@ Theorem reason_encoder_alloc_buffer_resources:
         val_in_memory tv v (w2n ow) m) /\
       (!p k. p <> out /\ ptr_covers G tn p s k ==> ptr_covers G1 tn1 p t k) /\
       MEM i (fn_insts func) /\ not_local_ptr cenv es'.scopes out /\
-      (stor_taint_ok cx tn s ==> stor_taint_ok cx tn1 t) /\
+      (stor_taint_ok H cx tn s ==> stor_taint_ok H cx tn1 t) /\
       (!p. p <> out ==> FLOOKUP G1 p = FLOOKUP G p /\
         op_taint tn1 (Var p) = op_taint tn (Var p))
 Proof
   rpt gen_tac >> strip_tac >>
   drule_all reason_encoder_alloc_buffer_post >> strip_tac >>
   drule_all buffer_alloc_code >> strip_tac >>
-  `stmt_state_rel ctx func cenv cx es' s` by gvs[expr_post_def] >>
+  `stmt_state_rel H ctx func cenv cx es' s` by gvs[expr_post_def] >>
   drule compile_alloc_buffer_parts >> strip_tac >>
   `expr_val_at cenv cx (expr_type e) sa sb es' v op s` by gvs[expr_post_def] >>
   `not_local_ptr cenv es'.scopes (STRING #"%" (toString cc.cs_next_var))` by
@@ -344,7 +344,7 @@ QED
 Resume reason_encoder_alloc_buffer_resources[robust]:
   drule_at (Pat `step_inst_base _ _ = _`) alloca_step_expr_robust_preserved >>
   disch_then (drule_at (Pat `expr_val_at _ _ _ _ _ _ _ _ _`)) >>
-  disch_then (drule_at (Pat `stmt_state_rel _ _ _ _ _ _`)) >>
+  disch_then (drule_at (Pat `stmt_state_rel _ _ _ _ _ _ _`)) >>
   simp[] >> disch_then (qspec_then `tn` mp_tac) >> simp[]
 QED
 
@@ -387,7 +387,7 @@ Theorem reason_encoder_allocated_store_resources:
   !ctx func cenv cx e es sa sb s0 es' v op s cc inst b sz
     dst value a addr u w tv ow tn id.
     post_value_type cenv e = expr_type e /\
-    expr_post ctx func cenv cx e es sa sb s0 es' v op s /\
+    expr_post H ctx func cenv cx e es sa sb s0 es' v op s /\
     local_ptrs_reserved cenv sa /\
     MAP FDOM es.scopes = MAP FDOM es'.scopes /\
     sa.cs_next_id <= cc.cs_next_id /\
@@ -408,7 +408,7 @@ Theorem reason_encoder_allocated_store_resources:
       ~(b <= i /\ i < b + sz)) /\
     (!m. mem_agree_outside tn.t_mem s.vs_memory m ==>
       val_in_memory tv v (w2n ow) m) ==>
-    expr_post ctx func cenv cx e es sa sb s0 es' v op u /\
+    expr_post H ctx func cenv cx e es sa sb s0 es' v op u /\
     (!m. mem_agree_outside
       (step_taint (mk_inst id MSTORE [Var dst; value] []) s u tn).t_mem
       u.vs_memory m ==>
@@ -433,7 +433,7 @@ QED
 Theorem reason_encoder_selector_resources:
   !ctx func cenv cx e es sa sb s0 es' v op s cc c1 c2 buf n tv ow PG G tn.
     post_value_type cenv e = expr_type e /\
-    expr_post ctx func cenv cx e es sa sb s0 es' v op s /\
+    expr_post H ctx func cenv cx e es sa sb s0 es' v op s /\
     compile_alloc_buffer n cc = (buf,c1) /\ fn_has_code cc c1 func /\
     emit_void MSTORE [buf.buf_operand; Lit 0x08c379a0w] c1 = ((),c2) /\
     (!p. op = Var p ==> not_fresh_at cc p) /\ local_ptrs_reserved cenv cc /\
@@ -457,7 +457,7 @@ Theorem reason_encoder_selector_resources:
       run_inst_seq (emitted_insts c1 c2) t = OK u /\
       step_inst_base (mk_inst c1.cs_next_id MSTORE [Var out; Lit 0x08c379a0w] []) t = OK u /\
       tn2 = step_taint (mk_inst c1.cs_next_id MSTORE [Var out; Lit 0x08c379a0w] []) t u tn1 /\
-      expr_post ctx func cenv cx e es sa sb s0 es' v op u /\
+      expr_post H ctx func cenv cx e es sa sb s0 es' v op u /\
       local_ptrs_reserved cenv c2 /\
       eval_operand op u = SOME ow /\
       step_prov PG G1 (mk_inst c1.cs_next_id MSTORE [Var out; Lit 0x08c379a0w] []) u = G1 /\
@@ -482,7 +482,7 @@ Proof
           (fn th => once_rewrite_tac[GSYM th]) >>
         irule step_MSTORE >> simp[eval_operand_def]) >>
      simp[run_inst_seq_def]) >>
-  `expr_post ctx func cenv cx e es sa sb s0 es' v op (mstore b 0x08c379a0w t) /\
+  `expr_post H ctx func cenv cx e es sa sb s0 es' v op (mstore b 0x08c379a0w t) /\
    (!m. mem_agree_outside
      (step_taint (mk_inst c1.cs_next_id MSTORE [Var out; Lit 0x08c379a0w] [])
        t (mstore b 0x08c379a0w t) tn1).t_mem
@@ -537,11 +537,11 @@ Finalise reason_encoder_selector_resources
 (* Read-only encoder arithmetic writes a fresh compiler temporary. *)
 Theorem reason_encoder_fresh_update_post:
   !ctx func cenv cx e es sa sb s0 es' v op s cc x w.
-    expr_post ctx func cenv cx e es sa sb s0 es' v op s /\
+    expr_post H ctx func cenv cx e es sa sb s0 es' v op s /\
     local_ptrs_reserved cenv cc /\ sa.cs_next_var <= cc.cs_next_var /\
     ~not_fresh_at cc x /\
     eval_operand op (update_var x w s) = eval_operand op s ==>
-    expr_post ctx func cenv cx e es sa sb s0 es' v op (update_var x w s)
+    expr_post H ctx func cenv cx e es sa sb s0 es' v op (update_var x w s)
 Proof
   rpt gen_tac >> strip_tac >>
   `not_local_ptr cenv es'.scopes x` by
@@ -561,7 +561,7 @@ QED
 
 Theorem reason_encoder_add_post:
   !ctx func cenv cx e es sa sb s0 es' v op s cc cd src result a d.
-    expr_post ctx func cenv cx e es sa sb s0 es' v op s /\
+    expr_post H ctx func cenv cx e es sa sb s0 es' v op s /\
     local_ptrs_reserved cenv cc /\ sa.cs_next_var <= cc.cs_next_var /\
     emit_op ADD [src; Lit d] cc = (result,cd) /\
     eval_operand src s = SOME a /\
@@ -573,7 +573,7 @@ Theorem reason_encoder_add_post:
       eval_operand result t = SOME (a + d) /\
       local_ptrs_reserved cenv cd /\
       eval_operand op t = eval_operand op s /\
-      expr_post ctx func cenv cx e es sa sb s0 es' v op t /\
+      expr_post H ctx func cenv cx e es sa sb s0 es' v op t /\
       t.vs_memory = s.vs_memory /\ t.vs_allocas = s.vs_allocas /\
       (!PG G tn.
         (step_taint (mk_inst cc.cs_next_id ADD [src; Lit d] [x]) s t tn).t_mem = tn.t_mem /\
@@ -602,7 +602,7 @@ Proof
       finite_mapTheory.FLOOKUP_UPDATE] >> metis_tac[]) >>
   `local_ptrs_reserved cenv cd` by
     (irule local_ptrs_reserved_next_var >> qexists_tac `cc` >> simp[]) >>
-  `expr_post ctx func cenv cx e es sa sb s0 es' v op
+  `expr_post H ctx func cenv cx e es sa sb s0 es' v op
      (update_var x (a + d) s)` by
     (irule reason_encoder_fresh_update_post >> simp[] >>
      qexists_tac `cc` >> simp[]) >>
@@ -645,7 +645,7 @@ QED
 Theorem reason_encoder_prefix_post:
   !ctx func cenv cx e es sa sb s0 es' v op s cc c1 c2 c3 c4 buf payload tuple n m tv ow PG G tn.
     post_value_type cenv e = expr_type e /\
-    expr_post ctx func cenv cx e es sa sb s0 es' v op s /\
+    expr_post H ctx func cenv cx e es sa sb s0 es' v op s /\
     compile_alloc_buffer n cc = (buf,c1) /\ fn_has_code cc c1 func /\
     emit_void MSTORE [buf.buf_operand; Lit 0x08c379a0w] c1 = ((),c2) /\
     emit_op ADD [buf.buf_operand; Lit 32w] c2 = (payload,c3) /\
@@ -682,7 +682,7 @@ Theorem reason_encoder_prefix_post:
       eval_operand tuple.buf_operand z = SOME (n2w b2) /\
       FLOOKUP z.vs_allocas c3.cs_next_id = SOME (b2,m) /\
       b2 + m < dimword (:256) /\
-      expr_post ctx func cenv cx e es sa sb s0 es' v op z /\
+      expr_post H ctx func cenv cx e es sa sb s0 es' v op z /\
       local_ptrs_reserved cenv c4 /\
       eval_operand op z = SOME ow /\
       G2 = step_prov PG G1 (mk_inst c2.cs_next_id ADD [buf.buf_operand; Lit 32w] [x]) r /\

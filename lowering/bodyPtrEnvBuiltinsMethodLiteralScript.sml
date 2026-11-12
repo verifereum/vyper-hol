@@ -37,8 +37,8 @@ Theorem method_literal_word_post:
   method_id_literal (Literal la l) = SOME bs /\
   lower_value compile_expr cenv ty
     (Builtin (BaseT (BytesT (Fixed 4))) MethodId [Literal la l]) sa = (op,sb) /\
-  stmt_state_rel ctx fn cenv cx es s ==>
-  expr_post ctx fn cenv cx
+  stmt_state_rel H ctx fn cenv cx es s ==>
+  expr_post H ctx fn cenv cx
     (Builtin (BaseT (BytesT (Fixed 4))) MethodId [Literal la l]) es sa sb s
     (es with gas_obs := []) (BytesV (TAKE 4 (Keccak_256_w64 bs))) op s
 Proof

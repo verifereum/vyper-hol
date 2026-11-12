@@ -29,19 +29,19 @@ Theorem optional_tuple_stage_run_ptr:
     (flag ==> type_memory_size_list tvs < dimword (:256)) /\
     fn_has_code sa sb func /\ local_ptrs_reserved cenv sa /\
     (!x. op = Var x ==> not_fresh_at sa x) /\
-    stmt_state_rel ctx func cenv cx es s /\ fn_inst_ids_distinct func /\
+    stmt_state_rel H ctx func cenv cx es s /\ fn_inst_ids_distinct func /\
     ~s.vs_halted /\ s.vs_current_bb = sa.cs_current_bb /\
     s.vs_inst_idx = LENGTH sa.cs_current_insts /\
     ~ctx_has_dalloca ctx /\ expr_type e = TupleT tys /\
     lowered_value_type cenv e = TupleT tys /\
     ptr_val_ok cx (TupleT tys) (ArrayV (TupleV vs)) op G tn s /\
-    ptr_buf_ok cenv e op G s /\ ghost_inv d cenv cx es G tn s /\
+    ptr_buf_ok cenv e op G s /\ ghost_inv H d cenv cx es G tn s /\
     (!x sz. cenv.ce_return_buf = SOME (PtrVar (Var x) sz) ==> not_fresh_at sa x) /\
     (!x sz. cenv.ce_return_pc = SOME (PtrVar (Var x) sz) ==> not_fresh_at sa x) ==>
     tuple_val_wf vs tvs /\ values_have_types tvs vs /\
     ?t w G' tn'. eval_operand staged t = SOME w /\
       tuple_in_memory vs tvs (w2n w) t.vs_memory /\
-      stmt_state_rel ctx func cenv cx es t /\
+      stmt_state_rel H ctx func cenv cx es t /\
       (!x. not_fresh_at sa x ==> lookup_var x t = lookup_var x s) /\
       (!aid entry. FLOOKUP s.vs_allocas aid = SOME entry ==>
         FLOOKUP t.vs_allocas aid = SOME entry) /\
@@ -53,7 +53,7 @@ Theorem optional_tuple_stage_run_ptr:
         ((?aid. FLOOKUP t.vs_allocas aid = SOME (b,sz)) \/
          (?name. local_region cenv es.scopes t name b sz))) /\
       gas_path_ptr D 0 ctx func PG G tn s 0 G' tn' (OK t) /\
-      ghost_inv d cenv cx es G' tn' t /\
+      ghost_inv H d cenv cx es G' tn' t /\
       ptr_val_ok cx (TupleT tys) (ArrayV (TupleV vs)) staged G' tn' t /\
       ptr_buf_ok cenv e staged G' t /\
       (!x. not_fresh_at sa x ==> FLOOKUP G' x = FLOOKUP G x /\
@@ -183,7 +183,7 @@ QED
 
 Resume optional_tuple_stage_run_ptr[frame]:
   `!x. not_fresh_at sa x ==> lookup_var x u = lookup_var x s` by metis_tac[] >>
-  qpat_assum `stmt_state_rel ctx func cenv cx es s`
+  qpat_assum `stmt_state_rel _ ctx func cenv cx es s`
     (mp_then (Pos hd) mp_tac stmtSimDefsTheory.alloca_frame_of_mem_frame) >>
   disch_then irule >> rpt conj_tac
   >- (rpt strip_tac >>
@@ -194,7 +194,7 @@ Resume optional_tuple_stage_run_ptr[frame]:
          simp[]) >>
       `aid <> sa.cs_next_id` by decide_tac >>
       `allocas_non_overlapping t` by
-        (qpat_x_assum `stmt_state_rel ctx func cenv cx es t` mp_tac >>
+        (qpat_x_assum `stmt_state_rel _ ctx func cenv cx es t` mp_tac >>
          simp[stmt_state_rel_def, venomMemDefsTheory.alloca_inv_def]) >>
       `off + asz <= b \/ b + type_memory_size_list tvs <= off` by
         (qpat_x_assum `allocas_non_overlapping t`

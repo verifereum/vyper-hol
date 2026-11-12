@@ -56,7 +56,7 @@ Theorem assign_base_widen_sequence_bound:
     compile_bytestring_widen_copy d x k sm = (op,sb) /\
     0 < k /\ d < dimword (:256) /\
     fn_has_code sm sb func /\ fn_inst_ids_distinct func /\
-    stmt_state_rel ctx func cenv cx es s /\ local_ptrs_reserved cenv sm /\
+    stmt_state_rel H ctx func cenv cx es s /\ local_ptrs_reserved cenv sm /\
     (!z. x = Var z ==> not_fresh_at sm z) /\
     eval_operand x s = SOME p ==>
     ?q w. run_inst_seq (emitted_insts sm sb) s = OK q /\
@@ -101,7 +101,7 @@ Theorem assign_base_widen_counted_bound:
     compile_bytestring_widen_copy d x k sm = (op,sb) /\
     0 < k /\ d < dimword (:256) /\
     fn_has_code sm sb func /\ fn_inst_ids_distinct func /\
-    stmt_state_rel ctx func cenv cx es s /\ local_ptrs_reserved cenv sm /\
+    stmt_state_rel H ctx func cenv cx es s /\ local_ptrs_reserved cenv sm /\
     (!z. x = Var z ==> not_fresh_at sm z) /\ eval_operand x s = SOME p /\
     s.vs_current_bb = sm.cs_current_bb /\
     s.vs_inst_idx = LENGTH sm.cs_current_insts /\

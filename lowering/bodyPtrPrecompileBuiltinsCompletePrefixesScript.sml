@@ -36,7 +36,7 @@ Theorem ecmul_complete_prefix_checked:
   run_inst_seq (emitted_insts sa sb ++ emitted_insts sb sc ++
     emitted_insts sc sp) s1 = OK s2 /\
   run_inst_seq (emitted_insts sp sm) s2 = OK s3 /\
-  stmt_state_rel ctx fn cenv cx es s0 /\ stmt_state_rel ctx fn cenv cx es s2 /\
+  stmt_state_rel H ctx fn cenv cx es s0 /\ stmt_state_rel H ctx fn cenv cx es s2 /\
   MEM (mk_inst sf.cs_next_id ALLOCA [Lit 96w]
     [STRING #"%" (toString sf.cs_next_var)]) (fn_insts fn) /\
   MEM (mk_inst sp.cs_next_id ALLOCA [Lit 64w]
@@ -169,7 +169,7 @@ Theorem ecadd_complete_prefix_checked:
   run_inst_seq (emitted_insts sa sb ++ emitted_insts sb sc ++
     emitted_insts sc sd ++ emitted_insts sd sp) s1 = OK s2 /\
   run_inst_seq (emitted_insts sp sm) s2 = OK s3 /\
-  stmt_state_rel ctx fn cenv cx es s0 /\ stmt_state_rel ctx fn cenv cx es s2 /\
+  stmt_state_rel H ctx fn cenv cx es s0 /\ stmt_state_rel H ctx fn cenv cx es s2 /\
   MEM (mk_inst sf.cs_next_id ALLOCA [Lit 128w]
     [STRING #"%" (toString sf.cs_next_var)]) (fn_insts fn) /\
   MEM (mk_inst sp.cs_next_id ALLOCA [Lit 64w]
@@ -304,7 +304,7 @@ Theorem recovery_complete_prefix_checked:
     emitted_insts sc sd ++ emitted_insts sd sp) s1 = OK s2 /\
   run_inst_seq (emitted_insts sp sm) s2 = OK s3 /\
   run_inst_seq (emitted_insts sm sz) s3 = OK s4 /\
-  stmt_state_rel ctx fn cenv cx es s0 /\ stmt_state_rel ctx fn cenv cx es s2 /\
+  stmt_state_rel H ctx fn cenv cx es s0 /\ stmt_state_rel H ctx fn cenv cx es s2 /\
   MEM (mk_inst sf.cs_next_id ALLOCA [Lit 128w]
     [STRING #"%" (toString sf.cs_next_var)]) (fn_insts fn) /\
   MEM (mk_inst sp.cs_next_id ALLOCA [Lit 32w]

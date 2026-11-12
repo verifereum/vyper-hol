@@ -10,14 +10,14 @@ Theorem method_id_mask_frame_transport:
   emit_op SHR [Lit 224w; hash] sh = (sel,sn) /\
   emit_op SHL [Lit 224w; sel] sn = (op,sb) /\
   eval_operand hash h = SOME w /\
-  stmt_state_rel ctx fn cenv cx es h /\ local_ptrs_reserved cenv sh /\
+  stmt_state_rel H ctx fn cenv cx es h /\ local_ptrs_reserved cenv sh /\
   wb_frame cenv es es' sa s0 h /\ local_ptrs_reserved cenv sa /\
   sa.cs_next_var <= sh.cs_next_var /\ sa.cs_next_id <= sh.cs_next_id ==>
   ?t. run_inst_seq (emitted_insts sh sb) h = OK t /\
     eval_operand op t = SOME
       (typed_val_to_w256 (BaseTV (BytesT (Fixed 4)))
         (BytesV (TAKE 4 (word_to_bytes w T)))) /\
-    stmt_state_rel ctx fn cenv cx es t /\ wb_frame cenv es es' sa s0 t /\
+    stmt_state_rel H ctx fn cenv cx es t /\ wb_frame cenv es es' sa s0 t /\
     (t with vs_vars := h.vs_vars) = h
 Proof
   strip_tac >> drule_all method_id_mask_frame >> strip_tac >>
@@ -43,7 +43,7 @@ Theorem method_id_fixed_hash_root_frame:
   (!x. arg = Var x ==> not_fresh_at sa x) /\
   eval_operand arg s = SOME w /\ LENGTH bs <= 32 /\
   TAKE (LENGTH bs) (word_to_bytes_be w) = bs /\
-  stmt_state_rel ctx fn cenv cx es s /\ fn_inst_ids_distinct fn /\
+  stmt_state_rel H ctx fn cenv cx es s /\ fn_inst_ids_distinct fn /\
   local_ptrs_reserved cenv sa /\
   MEM (mk_inst sa.cs_next_id ALLOCA [Lit 32w]
     [STRING #"%" (toString sa.cs_next_var)]) (fn_insts fn) /\
@@ -72,7 +72,7 @@ Proof
 QED
 
 Theorem method_id_fixed_typed_root_frame:
-  expr_post ctx fn cenv cx e es sa sm s0 es' (BytesV bs) arg s /\
+  expr_post H ctx fn cenv cx e es sa sm s0 es' (BytesV bs) arg s /\
   expr_type e = BaseT (BytesT (Fixed m)) /\
   evaluate_type (get_tenv cx) (expr_type e) = SOME (BaseTV (BytesT (Fixed m))) /\
   value_has_type (BaseTV (BytesT (Fixed m))) (BytesV bs) /\
@@ -85,7 +85,7 @@ Proof
   strip_tac >> `m <= 32` by gvs[evaluate_type_def, AllCaseEqs()] >>
   drule_at (Pat `expr_type _ = _`) hash_fixed_post_view >>
   disch_then drule_all >> strip_tac >>
-  `stmt_state_rel ctx fn cenv cx es' s` by fs[expr_post_def] >>
+  `stmt_state_rel H ctx fn cenv cx es' s` by fs[expr_post_def] >>
   gvs[compile_method_id_hash_def] >>
   `MEM (mk_inst sm.cs_next_id ALLOCA [Lit 32w]
     [STRING #"%" (toString sm.cs_next_var)]) (fn_insts fn)` by
@@ -95,7 +95,7 @@ Proof
 QED
 
 Theorem method_id_memory_typed_root_frame:
-  expr_post ctx fn cenv cx e es sa sm s0 es' v arg s /\
+  expr_post H ctx fn cenv cx e es sa sm s0 es' v arg s /\
   ((?cap bs. expr_type e = BaseT (BytesT (Dynamic cap)) /\ v = BytesV bs /\
       evaluate_type (get_tenv cx) (expr_type e) = SOME (BaseTV (BytesT (Dynamic cap)))) \/
    (?cap str. expr_type e = BaseT (StringT cap) /\ v = StringV str /\
@@ -119,7 +119,7 @@ Proof
 QED
 
 Theorem method_id_hash_typed_root_frame:
-  expr_post ctx fn cenv cx e es sa sm s0 es' v arg s /\
+  expr_post H ctx fn cenv cx e es sa sm s0 es' v arg s /\
   expr_type e = BaseT bty /\ is_bytes_or_string_type (expr_type e) /\
   evaluate_type (get_tenv cx) (expr_type e) = SOME (BaseTV bty) /\
   value_has_type (BaseTV bty) v /\
@@ -155,7 +155,7 @@ Proof
 QED
 
 Theorem method_id_hash_mask_semantics:
-  expr_post ctx fn cenv cx e es sa sm s0 es' v arg s /\
+  expr_post H ctx fn cenv cx e es sa sm s0 es' v arg s /\
   expr_type e = BaseT bty /\ is_bytes_or_string_type (expr_type e) /\
   evaluate_type (get_tenv cx) (expr_type e) = SOME (BaseTV bty) /\
   value_has_type (BaseTV bty) v /\
@@ -175,7 +175,7 @@ Theorem method_id_hash_mask_semantics:
       (typed_val_to_w256 (BaseTV (BytesT (Fixed 32))) (BytesV bs)) /\
     eval_operand op t = SOME
       (typed_val_to_w256 (BaseTV (BytesT (Fixed 4))) (BytesV (TAKE 4 bs))) /\
-    stmt_state_rel ctx fn cenv cx es' t /\ wb_frame cenv es' es' sm s t /\
+    stmt_state_rel H ctx fn cenv cx es' t /\ wb_frame cenv es' es' sm s t /\
     ~h.vs_halted /\ h.vs_current_bb = sh.cs_current_bb /\
     (t with vs_vars := h.vs_vars) = h /\
     (!ann. builtin_result cx es'.accounts ann MethodId [expr_type e] [v] =

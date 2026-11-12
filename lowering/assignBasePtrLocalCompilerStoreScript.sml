@@ -22,7 +22,7 @@ Theorem assign_base_local_store_memory_ptr:
     else type_memory_size entry.type) /\
   (!m. mem_agree_outside tn.t_mem s.vs_memory m ==>
     val_in_memory entry.type v (w2n sw) m) /\
-  ghost_inv d cenv cx es G tn s /\ stmt_state_rel ctx fn cenv cx es s /\
+  ghost_inv H d cenv cx es G tn s /\ stmt_state_rel H ctx fn cenv cx es s /\
   fn_has_code sa sb fn /\ ~ctx_has_dalloca ctx /\ ~s.vs_halted /\
   s.vs_current_bb = sa.cs_current_bb /\
   s.vs_inst_idx = LENGTH sa.cs_current_insts ==>
@@ -30,9 +30,9 @@ Theorem assign_base_local_store_memory_ptr:
     gas_path_ptr D 0 ctx fn PG G tn s 0 Gf tf (OK u) /\
     u.vs_current_bb = sb.cs_current_bb /\
     u.vs_inst_idx = LENGTH sb.cs_current_insts /\ ~u.vs_halted /\
-    stmt_state_rel ctx fn cenv cx
+    stmt_state_rel H ctx fn cenv cx
       (es with scopes := pre ++ (sc |+ (id,entry with <|value := v; popped := []|>)) :: rest) u /\
-    ghost_inv d cenv cx
+    ghost_inv H d cenv cx
       (es with scopes := pre ++ (sc |+ (id,entry with <|value := v; popped := []|>)) :: rest)
       Gf tf u /\
     (!x. not_fresh_at sa x ==>

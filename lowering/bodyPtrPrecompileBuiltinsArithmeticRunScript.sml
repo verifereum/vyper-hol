@@ -7,7 +7,7 @@ Ancestors bodyPtrPrecompileBuiltinsRecoveryRun wordArgsPtr
 
 Theorem expr_val_at_wb_frame:
   expr_val_at cenv cx ty lo sf es v op s /\
-  stmt_state_rel ctx fn cenv cx es s /\ local_ptrs_reserved cenv sf /\
+  stmt_state_rel H ctx fn cenv cx es s /\ local_ptrs_reserved cenv sf /\
   wb_frame cenv es es' sf s t /\ eval_operand op t = eval_operand op s ==>
   expr_val_at cenv cx ty lo sf es v op t
 Proof
@@ -22,14 +22,14 @@ QED
 
 Theorem allocation_point_operand:
   compile_alloc_buffer n sf = (ib,sa) /\
-  stmt_state_rel ctx fn cenv cx es s /\ fn_inst_ids_distinct fn /\
+  stmt_state_rel H ctx fn cenv cx es s /\ fn_inst_ids_distinct fn /\
   local_ptrs_reserved cenv sf /\ n < dimword(:256) /\
   MEM (mk_inst sf.cs_next_id ALLOCA [Lit (n2w n)]
     [STRING #"%" (toString sf.cs_next_var)]) (fn_insts fn) /\
   expr_val_at cenv cx ty lo sf es v op s /\
   (!x. op = Var x ==> not_fresh_at sf x) ==>
   ?t b. run_inst_seq (emitted_insts sf sa) s = OK t /\
-    stmt_state_rel ctx fn cenv cx es t /\
+    stmt_state_rel H ctx fn cenv cx es t /\
     eval_operand ib.buf_operand t = SOME b /\
     FLOOKUP t.vs_allocas sf.cs_next_id = SOME (w2n b,n) /\
     w2n b + n < dimword(:256) /\ t.vs_memory = s.vs_memory /\
@@ -81,7 +81,7 @@ Theorem ecmul_prefix_runtime:
   (do dst <- emit_op ADD [ib.buf_operand; Lit 64w];
       emit_void MSTORE [dst; scalar] od) smid = ((),sp) /\
   compile_alloc_buffer 64 sp = (ob,sm) /\
-  stmt_state_rel ctx fn cenv cx es s0 /\ fn_inst_ids_distinct fn /\
+  stmt_state_rel H ctx fn cenv cx es s0 /\ fn_inst_ids_distinct fn /\
   local_ptrs_reserved cenv sf /\ local_ptrs_reserved cenv sa /\
   local_ptrs_reserved cenv sp /\
   MEM (mk_inst sf.cs_next_id ALLOCA [Lit 96w]
@@ -96,9 +96,9 @@ Theorem ecmul_prefix_runtime:
     run_inst_seq (emitted_insts sf sa) s0 = OK s1 /\
     run_inst_seq (emitted_insts sa smid ++ emitted_insts smid sp) s1 = OK s2 /\
     run_inst_seq (emitted_insts sp sm) s2 = OK s3 /\
-    stmt_state_rel ctx fn cenv cx es s1 /\
-    stmt_state_rel ctx fn cenv cx es s2 /\
-    stmt_state_rel ctx fn cenv cx es s3 /\
+    stmt_state_rel H ctx fn cenv cx es s1 /\
+    stmt_state_rel H ctx fn cenv cx es s2 /\
+    stmt_state_rel H ctx fn cenv cx es s3 /\
     eval_operand ib.buf_operand s1 = SOME b /\
     eval_operand ib.buf_operand s2 = SOME b /\
     eval_operand ob.buf_operand s3 = SOME c /\
@@ -144,7 +144,7 @@ Proof
     (qpat_assum `(do src <- _; value <- _; dst <- _; _ od) sa = _`
        (mp_then Any strip_assume_tac point_payload_counters) >> decide_tac) >>
   `?s2. run_inst_seq (emitted_insts sa smid ++ emitted_insts smid sp) s1 = OK s2 /\
-    stmt_state_rel ctx fn cenv cx es s2 /\ wb_frame cenv es es sf s1 s2 /\
+    stmt_state_rel H ctx fn cenv cx es s2 /\ wb_frame cenv es es sf s1 s2 /\
     (!x. not_fresh_at sa x ==> lookup_var x s2 = lookup_var x s1) /\
     s2.vs_allocas = s1.vs_allocas /\ eval_operand ib.buf_operand s2 = SOME b /\
     mem_bytes_at (w2n b) 96 s2.vs_memory =
@@ -220,7 +220,7 @@ Theorem ecadd_prefix_runtime:
       dst <- emit_op ADD [ib.buf_operand; Lit 96w]; emit_void MSTORE [dst; value] od)
     smid = ((),sp) /\
   compile_alloc_buffer 64 sp = (ob,sm) /\
-  stmt_state_rel ctx fn cenv cx es s0 /\ fn_inst_ids_distinct fn /\
+  stmt_state_rel H ctx fn cenv cx es s0 /\ fn_inst_ids_distinct fn /\
   local_ptrs_reserved cenv sf /\ local_ptrs_reserved cenv sa /\
   local_ptrs_reserved cenv sp /\
   MEM (mk_inst sf.cs_next_id ALLOCA [Lit 128w]
@@ -236,9 +236,9 @@ Theorem ecadd_prefix_runtime:
     run_inst_seq (emitted_insts sf sa) s0 = OK s1 /\
     run_inst_seq (emitted_insts sa smid ++ emitted_insts smid sp) s1 = OK s2 /\
     run_inst_seq (emitted_insts sp sm) s2 = OK s3 /\
-    stmt_state_rel ctx fn cenv cx es s1 /\
-    stmt_state_rel ctx fn cenv cx es s2 /\
-    stmt_state_rel ctx fn cenv cx es s3 /\
+    stmt_state_rel H ctx fn cenv cx es s1 /\
+    stmt_state_rel H ctx fn cenv cx es s2 /\
+    stmt_state_rel H ctx fn cenv cx es s3 /\
     eval_operand ib.buf_operand s1 = SOME b /\
     eval_operand ib.buf_operand s2 = SOME b /\
     eval_operand ob.buf_operand s3 = SOME c /\
@@ -292,7 +292,7 @@ QED
 
 Resume ecadd_prefix_runtime[payload]:
   `?s2. run_inst_seq (emitted_insts sa smid ++ emitted_insts smid sp) s1 = OK s2 /\
-    stmt_state_rel ctx fn cenv cx es s2 /\ wb_frame cenv es es sf s1 s2 /\
+    stmt_state_rel H ctx fn cenv cx es s2 /\ wb_frame cenv es es sf s1 s2 /\
     (!x. not_fresh_at sa x ==> lookup_var x s2 = lookup_var x s1) /\
     s2.vs_allocas = s1.vs_allocas /\ eval_operand ib.buf_operand s2 = SOME b /\
     mem_bytes_at (w2n b) 128 s2.vs_memory =

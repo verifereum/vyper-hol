@@ -42,12 +42,12 @@ Theorem compile_storage_normalization_branch_path_ptr:
     (!x. ~(b <= x /\ x < b+32*n) ==>
       (x IN tn'.t_mem <=> x IN tn.t_mem)) /\
     (!cenv cx es inst.
-      stmt_state_rel ctx fn cenv cx es sbase /\ local_ptrs_reserved cenv sa /\
+      stmt_state_rel H ctx fn cenv cx es sbase /\ local_ptrs_reserved cenv sa /\
       MEM inst (fn_insts fn) /\ inst.inst_opcode = ALLOCA /\
       FLOOKUP sbase.vs_allocas inst.inst_id = SOME (b,32*n) /\
       (!name lb len. local_region cenv es.scopes sbase name lb len ==>
         regions_disjoint b (32*n) lb len) ==>
-      stmt_state_rel ctx fn cenv cx es t /\ t.vs_allocas = sbase.vs_allocas /\
+      stmt_state_rel H ctx fn cenv cx es t /\ t.vs_allocas = sbase.vs_allocas /\
       (!tr ty tv w. storage_holds cx tr ty tv w es sbase ==>
         storage_holds cx tr ty tv w es t) /\
       (!aid off len. aid <> inst.inst_id /\

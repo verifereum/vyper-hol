@@ -9,7 +9,7 @@ Theorem assign_base_allocated_copy_reader_path_ptr:
     sz pre buf initial cx cenv es words.
     compile_alloc_buffer sz pre = (buf,sa) /\
     buf.buf_operand = Var dst /\
-    stmt_state_rel ctx fn cenv cx es initial /\ fn_inst_ids_distinct fn /\
+    stmt_state_rel H ctx fn cenv cx es initial /\ fn_inst_ids_distinct fn /\
     local_ptrs_reserved cenv pre /\ sz < dimword (:256) /\
     MEM (mk_inst pre.cs_next_id ALLOCA [Lit (n2w sz)]
       [STRING #"%" (toString pre.cs_next_var)]) (fn_insts fn) /\

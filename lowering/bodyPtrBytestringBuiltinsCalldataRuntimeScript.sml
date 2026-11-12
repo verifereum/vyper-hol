@@ -59,11 +59,11 @@ QED
    witness to feed pointer replay, not an independently chosen execution. *)
 Theorem slice_buffer_allocation_runtime:
   compile_alloc_buffer N sa = (buf,sm) /\ fn_has_code sa sm fn /\
-  stmt_state_rel ctx fn cenv cx es s /\ fn_inst_ids_distinct fn /\
+  stmt_state_rel H ctx fn cenv cx es s /\ fn_inst_ids_distinct fn /\
   local_ptrs_reserved cenv sa /\ N < dimword (:256) ==>
   ?u w. step_inst_base (mk_inst sa.cs_next_id ALLOCA [Lit (n2w N)]
       [STRING #"%" (toString sa.cs_next_var)]) s = OK u /\
-    stmt_state_rel ctx fn cenv cx es u /\
+    stmt_state_rel H ctx fn cenv cx es u /\
     buf.buf_operand = Var (STRING #"%" (toString sa.cs_next_var)) /\
     eval_operand buf.buf_operand u = SOME w /\
     FLOOKUP u.vs_allocas sa.cs_next_id = SOME (w2n w,N) /\
@@ -128,7 +128,7 @@ QED
 
 Theorem compile_slice_calldata_runtime:
   compile_slice_calldata start (Lit (n2w n)) N sa = (out,sb) /\
-  fn_has_code sa sb fn /\ stmt_state_rel ctx fn cenv cx es s /\
+  fn_has_code sa sb fn /\ stmt_state_rel H ctx fn cenv cx es s /\
   fn_inst_ids_distinct fn /\ local_ptrs_reserved cenv sa /\
   32 <= N /\ N < dimword (:256) /\ n < dimword (:256) /\
   a < dimword (:256) /\ LENGTH s.vs_call_ctx.cc_calldata < dimword (:256) /\
@@ -150,7 +150,7 @@ Theorem compile_slice_calldata_runtime:
     lookup_var r u = SOME w /\
     FLOOKUP u.vs_allocas sa.cs_next_id = SOME (w2n w,N) /\
     w2n w + N < dimword (:256) /\ u.vs_memory = s.vs_memory /\
-    stmt_state_rel ctx fn cenv cx es u /\
+    stmt_state_rel H ctx fn cenv cx es u /\
     (!x. not_fresh_at sa x ==> lookup_var x u = lookup_var x s) /\
     (!aid entry. FLOOKUP s.vs_allocas aid = SOME entry ==>
       FLOOKUP u.vs_allocas aid = SOME entry) /\
@@ -161,7 +161,7 @@ Theorem compile_slice_calldata_runtime:
     t = ((update_var p (w + 32w) u) with vs_inst_idx := s.vs_inst_idx + 2) /\
     gas_path_ptr D 0 ctx fn PG G tn s 0 G2 tn2 (OK t) /\
     ptr_covers G2 tn2 r t N /\ ptr_covers G2 tn2 p t (N - 32) /\
-    stmt_state_rel ctx fn cenv cx es t /\ t.vs_memory = s.vs_memory /\
+    stmt_state_rel H ctx fn cenv cx es t /\ t.vs_memory = s.vs_memory /\
     t.vs_current_bb = s1.cs_current_bb /\
     t.vs_inst_idx = LENGTH s1.cs_current_insts /\ ~t.vs_halted /\
     (fresh_vars_wrt sa s ==> fresh_vars_wrt s1 t) /\
@@ -197,7 +197,7 @@ Resume compile_slice_calldata_runtime[allocation]:
   `cs_extends sa sm /\ cs_extends sm s1` by
     metis_tac[compile_alloc_buffer_extends, cs_appends_emit_helpers, cs_appends_def] >>
   `fn_has_code sa sm fn` by metis_tac[fn_has_code_split] >>
-  qpat_x_assum `stmt_state_rel ctx fn cenv cx es s` assume_tac >>
+  qpat_x_assum `stmt_state_rel H ctx fn cenv cx es s` assume_tac >>
   drule_all slice_buffer_allocation_runtime >> strip_tac >>
   `u' = u` by
     (drule compile_alloc_buffer_parts >> strip_tac >> gvs[]) >>

@@ -14,7 +14,7 @@ Ancestors
 Theorem alloc_buffer_source_robust:
   compile_alloc_buffer capacity sa = (buf,sm) /\ fn_has_code sa sm fn /\
   run_inst_seq (emitted_insts sa sm) s = OK t /\
-  stmt_state_rel ctx fn cenv cx es s /\ local_ptrs_reserved cenv sa /\
+  stmt_state_rel H ctx fn cenv cx es s /\ local_ptrs_reserved cenv sa /\
   fn_inst_ids_distinct fn /\ capacity < dimword(:256) /\
   expr_val_at cenv cx tsrc slo sa es v (Var src) s /\
   evaluate_type (get_tenv cx) tsrc = SOME tv /\ ~is_word_type tsrc /\
@@ -46,7 +46,7 @@ Theorem alloc_buffer_source_resources:
   compile_alloc_buffer capacity sa = (buf,sm) /\ fn_has_code sa sm fn /\
   run_inst_seq (emitted_insts sa sm) s = OK t /\
   inst_seq_ptr D 0 ctx fn PG G tn (emitted_insts sa sm) s G1 tn1 /\
-  stmt_state_rel ctx fn cenv cx es s /\ local_ptrs_reserved cenv sa /\
+  stmt_state_rel H ctx fn cenv cx es s /\ local_ptrs_reserved cenv sa /\
   fn_inst_ids_distinct fn /\ capacity < dimword(:256) /\ not_fresh_at sa src /\
   expr_val_at cenv cx tsrc slo sa es v (Var src) s /\
   evaluate_type (get_tenv cx) tsrc = SOME tv /\ ~is_word_type tsrc /\
@@ -64,7 +64,7 @@ Proof
     (mp_then Any mp_tac th)) >>
   disch_then (fn th => qpat_assum `run_inst_seq _ _ = OK _`
     (mp_then Any mp_tac th)) >>
-  disch_then (fn th => qpat_assum `stmt_state_rel _ _ _ _ _ _`
+  disch_then (fn th => qpat_assum `stmt_state_rel _ _ _ _ _ _ _`
     (mp_then Any mp_tac th)) >>
   simp[] >> disch_then (qspec_then `tn` assume_tac) >>
   `MEM (mk_inst sa.cs_next_id ALLOCA [Lit (n2w capacity)]
@@ -83,7 +83,7 @@ QED
 Theorem widen_copy_checked_certificate:
   compile_bytestring_widen_copy capacity (Var src) n sa = (op,sb) /\
   fn_has_code sa sb fn /\ run_inst_seq (emitted_insts sa sb) s0 = OK t /\
-  stmt_state_rel ctx fn cenv cx es s0 /\ local_ptrs_reserved cenv sa /\
+  stmt_state_rel H ctx fn cenv cx es s0 /\ local_ptrs_reserved cenv sa /\
   fn_inst_ids_distinct fn /\ capacity < dimword(:256) /\ n <= capacity /\
   ~ctx_has_dalloca ctx /\ not_fresh_at sa src /\
   (!p sz. cenv.ce_return_buf = SOME (PtrVar (Var p) sz) ==> not_fresh_at sa p) /\
@@ -91,11 +91,11 @@ Theorem widen_copy_checked_certificate:
   expr_val_at cenv cx tsrc slo sa es v (Var src) s0 /\
   evaluate_type (get_tenv cx) tsrc = SOME tv /\ ~is_word_type tsrc /\
   val_wf tv v /\ val_footprint tv v <= n /\ lookup_var src s0 = SOME a /\
-  ptr_covers G0 tn0 src s0 n /\ ghost_inv d cenv cx es G0 tn0 s0 /\
+  ptr_covers G0 tn0 src s0 n /\ ghost_inv H d cenv cx es G0 tn0 s0 /\
   (!m. mem_agree_outside tn0.t_mem s0.vs_memory m ==> val_in_memory tv v (w2n a) m) ==>
   ?dst b G th. op = Var dst /\ lookup_var dst t = SOME b /\
     inst_seq_ptr D 0 ctx fn PG G0 tn0 (emitted_insts sa sb) s0 G th /\
-    ptr_covers G th dst t capacity /\ ghost_inv d cenv cx es G th t /\
+    ptr_covers G th dst t capacity /\ ghost_inv H d cenv cx es G th t /\
     ghost_kept cenv es sa G0 tn0 s0 G th /\
     (!m. mem_agree_outside th.t_mem t.vs_memory m ==> val_in_memory tv v (w2n b) m)
 Proof

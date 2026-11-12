@@ -3,7 +3,7 @@
  * bodyPtrPreds's body_*_ptr_ok with the dead bytes D and the bound lo
  * quantified, over bodyPtrDefs's _at judgments (expr_sim_ptr_at,
  * expr_vv_sim_ptr_at, stmt_frag_ptr_at, frame_ret_ok_ptr_at), so one
- * induction covers runtime frames at (cx_dead cx, 0) and constructor
+ * induction covers runtime frames at (cx_dead H cx, 0) and constructor
  * frames at (deploy's dead bytes, imm_len tops).
  *
  * TOP-LEVEL:

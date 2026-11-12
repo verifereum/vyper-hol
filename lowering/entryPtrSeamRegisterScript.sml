@@ -3203,9 +3203,9 @@ Theorem register_positional_args_ptr:
     tn1.t_mem = {} /\ tn1.t_stor = {} /\ tn1.t_trans = {} /\
     tn1.t_imm = {} ==>
     ?s0 G0 tn0.
-      stmt_state_rel unit.cu_context efn cenv
+      stmt_state_rel H unit.cu_context efn cenv
         (initial_evaluation_context am.sources am.layouts tx NONE) es0 s0 /\
-      ghost_inv NONE cenv
+      ghost_inv H NONE cenv
         (initial_evaluation_context am.sources am.layouts tx NONE) es0
         G0 tn0 s0 /\
       ~s0.vs_halted /\ s0.vs_current_bb = sa.cs_current_bb /\

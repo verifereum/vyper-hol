@@ -36,10 +36,10 @@ QED
 
 Theorem old_operand_ghost_frame:
   (!x. not_fresh_at st x ==> lookup_var x t = lookup_var x s /\
-    FLOOKUP H x = FLOOKUP G x /\ op_taint u (Var x) = op_taint tn (Var x)) /\
+    FLOOKUP HG x = FLOOKUP G x /\ op_taint u (Var x) = op_taint tn (Var x)) /\
   t.vs_labels = s.vs_labels /\ (!x. op = Var x ==> not_fresh_at st x) ==>
   eval_operand op t = eval_operand op s /\
-  op_taint u op = op_taint tn op /\ op_prov H op = op_prov G op
+  op_taint u op = op_taint tn op /\ op_prov HG op = op_prov G op
 Proof
   Cases_on `op` >> simp[eval_operand_def, op_taint_def, op_prov_def] >>
   metis_tac[]
@@ -143,21 +143,21 @@ Theorem indexed_destination_endpoint_ptr_core:
     32 + j * stride + stride <= total /\
     d + 32 + j * stride < dimword (:256) /\ stride < dimword (:256) /\
     run_inst_seq (emitted_insts st ready) s = OK t ==>
-    ?H u child. out = Var child /\
-      ptr_covers H u child (t with vs_inst_idx := 3 + s.vs_inst_idx) stride /\
-      frag_exec_ptr cx ctx PG st ready
+    ?HG u child. out = Var child /\
+      ptr_covers HG u child (t with vs_inst_idx := 3 + s.vs_inst_idx) stride /\
+      frag_exec_ptr H cx ctx PG st ready
         (\g z v. g = G /\ z = tn /\ v = s)
-        (\g z v. g = H /\ z = u /\ v = (t with vs_inst_idx := 3 + s.vs_inst_idx)) R /\
+        (\g z v. g = HG /\ z = u /\ v = (t with vs_inst_idx := 3 + s.vs_inst_idx)) R /\
       t.vs_memory = s.vs_memory /\ t.vs_call_ctx = s.vs_call_ctx /\
       u.t_mem = tn.t_mem /\ u.t_stor = tn.t_stor /\ u.t_trans = tn.t_trans /\
       (!x. not_fresh_at st x ==> lookup_var x t = lookup_var x s /\
-        FLOOKUP H x = FLOOKUP G x /\ op_taint u (Var x) = op_taint tn (Var x)) /\
+        FLOOKUP HG x = FLOOKUP G x /\ op_taint u (Var x) = op_taint tn (Var x)) /\
       t.vs_allocas = s.vs_allocas /\ u.t_imm = tn.t_imm /\
       (!D lower ctx' func.
         fn_has_code st ready func /\ allocas_from lower s /\ ~ctx_has_dalloca ctx' /\
         s.vs_current_bb = st.cs_current_bb /\
         s.vs_inst_idx = LENGTH st.cs_current_insts /\
-        (!fuel. ptr_safe_run D lower fuel ctx' func PG H u
+        (!fuel. ptr_safe_run D lower fuel ctx' func PG HG u
           (t with vs_inst_idx := LENGTH ready.cs_current_insts)) ==>
         !fuel. ptr_safe_run D lower fuel ctx' func PG G tn s)
 Proof
@@ -180,7 +180,7 @@ Proof
     (simp[eval_operand_def, op_taint_def, op_prov_def, w2n_n2w] >> decide_tac) >>
   drule_all emit_ptr_offset_endpoint_ptr_core >>
   disch_then (qspecl_then [`cx`,`ctx`,`PG`,`R`] strip_assume_tac) >>
-  rename1 `frag_exec_ptr cx ctx PG st c1 _ (\g z v. g = H1 /\ z = u1 /\ v = _) R` >>
+  rename1 `frag_exec_ptr H cx ctx PG st c1 _ (\g z v. g = H1 /\ z = u1 /\ v = _) R` >>
   gvs[] >>
   `d < dimword (:256)` by decide_tac >>
   `st.cs_next_var <= c1.cs_next_var /\ c1.cs_next_var <= c2.cs_next_var` by
@@ -254,7 +254,7 @@ Proof
     fn_has_code st ready func /\ allocas_from lower s /\ ~ctx_has_dalloca ctx' /\
     s.vs_current_bb = st.cs_current_bb /\
     s.vs_inst_idx = LENGTH st.cs_current_insts /\
-    (!fuel. ptr_safe_run D lower fuel ctx' func PG H u
+    (!fuel. ptr_safe_run D lower fuel ctx' func PG HG u
       (t with vs_inst_idx := LENGTH ready.cs_current_insts)) ==>
     !fuel. ptr_safe_run D lower fuel ctx' func PG G tn s` by
    (rpt strip_tac >>
@@ -275,7 +275,7 @@ Proof
       gvs[allocas_from_def, same_blocks_def] >> metis_tac[]) >>
     qpat_x_assum `!D lower ctx' func. fn_has_code st c1 func /\ _ ==> _`
       (qspecl_then [`D`,`lower`,`ctx'`,`func`] mp_tac) >> simp[]) >>
-  qexistsl_tac [`H`,`u`] >> simp[ADD_COMM] >>
+  qexistsl_tac [`HG`,`u`] >> simp[ADD_COMM] >>
   conj_tac >-
     (irule frag_exec_ptr_seq >>
      qexistsl_tac [`(\g z v. g = H1 /\ z = u1 /\ v = s1 with vs_inst_idx := s.vs_inst_idx + 1)`, `c1`] >>
@@ -297,19 +297,19 @@ Theorem indexed_destination_endpoint_ptr:
     32 + j * stride + stride <= total /\
     d + 32 + j * stride < dimword (:256) /\ stride < dimword (:256) /\
     run_inst_seq (emitted_insts st ready) s = OK t ==>
-    ?H u child. out = Var child /\
-      ptr_covers H u child (t with vs_inst_idx := 3 + s.vs_inst_idx) stride /\
-      frag_exec_ptr cx ctx PG st ready
+    ?HG u child. out = Var child /\
+      ptr_covers HG u child (t with vs_inst_idx := 3 + s.vs_inst_idx) stride /\
+      frag_exec_ptr H cx ctx PG st ready
         (\g z v. g = G /\ z = tn /\ v = s)
-        (\g z v. g = H /\ z = u /\ v = (t with vs_inst_idx := 3 + s.vs_inst_idx)) R /\
+        (\g z v. g = HG /\ z = u /\ v = (t with vs_inst_idx := 3 + s.vs_inst_idx)) R /\
       t.vs_memory = s.vs_memory /\ t.vs_call_ctx = s.vs_call_ctx /\
       u.t_mem = tn.t_mem /\ u.t_stor = tn.t_stor /\ u.t_trans = tn.t_trans /\
       (!x. not_fresh_at st x ==> lookup_var x t = lookup_var x s /\
-        FLOOKUP H x = FLOOKUP G x /\ op_taint u (Var x) = op_taint tn (Var x))
+        FLOOKUP HG x = FLOOKUP G x /\ op_taint u (Var x) = op_taint tn (Var x))
 Proof
   rpt strip_tac >> drule_all indexed_destination_endpoint_ptr_core >>
   disch_then (qspecl_then [`cx`,`ctx`,`PG`,`R`] strip_assume_tac) >>
-  qexistsl_tac [`H`,`u`,`child`] >> simp[]
+  qexistsl_tac [`HG`,`u`,`child`] >> simp[]
 QED
 
 Theorem calldata_dynamic_element_source_endpoint_ptr_core:
@@ -321,25 +321,25 @@ Theorem calldata_dynamic_element_source_endpoint_ptr_core:
   op_taint tn head = {} /\ op_prov G head = NONE /\
   op_taint tn data = {} /\ op_prov G data = NONE /\
   run_inst_seq (emitted_insts st ready) s = OK t ==>
-  ?H u. (?v. eval_operand out t = SOME v) /\
+  ?HG u. (?v. eval_operand out t = SOME v) /\
     (!x. out = Var x ==> not_fresh_at ready x) /\
     t.vs_labels = s.vs_labels /\
-    op_taint u out = {} /\ op_prov H out = NONE /\
-    frag_exec_ptr cx ctx PG st ready
+    op_taint u out = {} /\ op_prov HG out = NONE /\
+    frag_exec_ptr H cx ctx PG st ready
       (\g z v. g = G /\ z = tn /\ v = s)
-      (\g z v. g = H /\ z = u /\
+      (\g z v. g = HG /\ z = u /\
         v = t with vs_inst_idx := LENGTH (emitted_insts st ready) + s.vs_inst_idx) R /\
     t.vs_memory = s.vs_memory /\ t.vs_call_ctx = s.vs_call_ctx /\
     u.t_mem = tn.t_mem /\ u.t_stor = tn.t_stor /\ u.t_trans = tn.t_trans /\
     (!x. not_fresh_at st x ==> lookup_var x t = lookup_var x s /\
-      FLOOKUP H x = FLOOKUP G x /\ op_taint u (Var x) = op_taint tn (Var x)) /\
+      FLOOKUP HG x = FLOOKUP G x /\ op_taint u (Var x) = op_taint tn (Var x)) /\
     t.vs_allocas = s.vs_allocas /\ u.t_imm = tn.t_imm /\
     t.vs_current_bb = s.vs_current_bb /\
     (!D lower ctx' func.
       fn_has_code st ready func /\ allocas_from lower s /\ ~ctx_has_dalloca ctx' /\
       s.vs_current_bb = st.cs_current_bb /\
       s.vs_inst_idx = LENGTH st.cs_current_insts /\
-      (!fuel. ptr_safe_run D lower fuel ctx' func PG H u
+      (!fuel. ptr_safe_run D lower fuel ctx' func PG HG u
         (t with vs_inst_idx := LENGTH ready.cs_current_insts)) ==>
       !fuel. ptr_safe_run D lower fuel ctx' func PG G tn s)
 Proof
@@ -411,7 +411,7 @@ Proof
     fn_has_code st ready func /\ allocas_from lower s /\ ~ctx_has_dalloca ctx' /\
     s.vs_current_bb = st.cs_current_bb /\
     s.vs_inst_idx = LENGTH st.cs_current_insts /\
-    (!fuel. ptr_safe_run D lower fuel ctx' func PG H u
+    (!fuel. ptr_safe_run D lower fuel ctx' func PG HG u
       (t with vs_inst_idx := LENGTH ready.cs_current_insts)) ==>
     !fuel. ptr_safe_run D lower fuel ctx' func PG G tn s` by
    (rpt strip_tac >>
@@ -426,7 +426,7 @@ Proof
       gvs[allocas_from_def, same_blocks_def] >> metis_tac[]) >>
     qpat_x_assum `!D lower ctx' func. fn_has_code st mid func /\ _ ==> _`
       (qspecl_then [`D`,`lower`,`ctx'`,`func`] mp_tac) >> simp[]) >>
-  qexistsl_tac [`H`,`u`] >> simp[] >>
+  qexistsl_tac [`HG`,`u`] >> simp[] >>
   irule frag_exec_ptr_seq >>
   qexistsl_tac [`(\g z v. g = H1 /\ z = u1 /\ v = m with vs_inst_idx := s.vs_inst_idx + 1)`,`mid`] >>
   simp[]
@@ -441,22 +441,22 @@ Theorem calldata_dynamic_element_source_endpoint_ptr:
   op_taint tn head = {} /\ op_prov G head = NONE /\
   op_taint tn data = {} /\ op_prov G data = NONE /\
   run_inst_seq (emitted_insts st ready) s = OK t ==>
-  ?H u. (?v. eval_operand out t = SOME v) /\
+  ?HG u. (?v. eval_operand out t = SOME v) /\
     (!x. out = Var x ==> not_fresh_at ready x) /\
     t.vs_labels = s.vs_labels /\
-    op_taint u out = {} /\ op_prov H out = NONE /\
-    frag_exec_ptr cx ctx PG st ready
+    op_taint u out = {} /\ op_prov HG out = NONE /\
+    frag_exec_ptr H cx ctx PG st ready
       (\g z v. g = G /\ z = tn /\ v = s)
-      (\g z v. g = H /\ z = u /\
+      (\g z v. g = HG /\ z = u /\
         v = t with vs_inst_idx := LENGTH (emitted_insts st ready) + s.vs_inst_idx) R /\
     t.vs_memory = s.vs_memory /\ t.vs_call_ctx = s.vs_call_ctx /\
     u.t_mem = tn.t_mem /\ u.t_stor = tn.t_stor /\ u.t_trans = tn.t_trans /\
     (!x. not_fresh_at st x ==> lookup_var x t = lookup_var x s /\
-      FLOOKUP H x = FLOOKUP G x /\ op_taint u (Var x) = op_taint tn (Var x))
+      FLOOKUP HG x = FLOOKUP G x /\ op_taint u (Var x) = op_taint tn (Var x))
 Proof
   rpt strip_tac >> drule_all calldata_dynamic_element_source_endpoint_ptr_core >>
   disch_then (qspecl_then [`cx`,`ctx`,`PG`,`R`] strip_assume_tac) >>
-  qexistsl_tac [`H`,`u`] >> simp[]
+  qexistsl_tac [`HG`,`u`] >> simp[]
 QED
 
 Theorem clean_scaled_source_prefix_endpoint_ptr_core:
@@ -470,28 +470,28 @@ Theorem clean_scaled_source_prefix_endpoint_ptr_core:
   op_taint tn src = {} /\ op_prov G src = NONE /\
   op_taint tn idx = {} /\ op_prov G idx = NONE /\
   run_inst_seq (emitted_insts st ready) s = OK t ==>
-  ?H u. eval_operand data t = SOME (a + 32w) /\
+  ?HG u. eval_operand data t = SOME (a + 32w) /\
     eval_operand head t = SOME (a + 32w + b * n2w stride) /\
     t.vs_labels = s.vs_labels /\
-    op_taint u head = {} /\ op_prov H head = NONE /\
-    op_taint u data = {} /\ op_prov H data = NONE /\
+    op_taint u head = {} /\ op_prov HG head = NONE /\
+    op_taint u data = {} /\ op_prov HG data = NONE /\
     (!x. data = Var x ==> not_fresh_at ready x) /\
     (!x. head = Var x ==> not_fresh_at ready x) /\
-    frag_exec_ptr cx ctx PG st ready
+    frag_exec_ptr H cx ctx PG st ready
       (\g z v. g = G /\ z = tn /\ v = s)
-      (\g z v. g = H /\ z = u /\
+      (\g z v. g = HG /\ z = u /\
         v = t with vs_inst_idx := LENGTH (emitted_insts st ready) + s.vs_inst_idx) R /\
     t.vs_memory = s.vs_memory /\ t.vs_call_ctx = s.vs_call_ctx /\
     u.t_mem = tn.t_mem /\ u.t_stor = tn.t_stor /\ u.t_trans = tn.t_trans /\
     (!x. not_fresh_at st x ==> lookup_var x t = lookup_var x s /\
-      FLOOKUP H x = FLOOKUP G x /\ op_taint u (Var x) = op_taint tn (Var x)) /\
+      FLOOKUP HG x = FLOOKUP G x /\ op_taint u (Var x) = op_taint tn (Var x)) /\
     t.vs_allocas = s.vs_allocas /\ u.t_imm = tn.t_imm /\
     t.vs_current_bb = s.vs_current_bb /\
     (!D lower ctx' func.
       fn_has_code st ready func /\ allocas_from lower s /\ ~ctx_has_dalloca ctx' /\
       s.vs_current_bb = st.cs_current_bb /\
       s.vs_inst_idx = LENGTH st.cs_current_insts /\
-      (!fuel. ptr_safe_run D lower fuel ctx' func PG H u
+      (!fuel. ptr_safe_run D lower fuel ctx' func PG HG u
         (t with vs_inst_idx := LENGTH ready.cs_current_insts)) ==>
       !fuel. ptr_safe_run D lower fuel ctx' func PG G tn s)
 Proof
@@ -559,7 +559,7 @@ Proof
   disch_then (qspecl_then [`cx`,`ctx`,`PG`,`R`] strip_assume_tac) >>
   `t.vs_labels = s2.vs_labels /\ t.vs_current_bb = s2.vs_current_bb` by
     (irule emit_op_run_control_frame >> goal_assum (drule_at Any) >> simp[] >> metis_tac[]) >>
-  `op_taint u data = {} /\ op_prov H data = NONE` by
+  `op_taint u data = {} /\ op_prov HG data = NONE` by
     (fs[Abbr `ss2`, cj 4 moduleLoweringPropsTheory.control_moves_keep_vars] >>
      qpat_assum `!q. not_fresh_at c2 q ==> _`
        (mp_then Any mp_tac old_operand_ghost_frame) >>
@@ -617,7 +617,7 @@ Proof
     fn_has_code st ready func /\ allocas_from lower s /\ ~ctx_has_dalloca ctx' /\
     s.vs_current_bb = st.cs_current_bb /\
     s.vs_inst_idx = LENGTH st.cs_current_insts /\
-    (!fuel. ptr_safe_run D lower fuel ctx' func PG H u
+    (!fuel. ptr_safe_run D lower fuel ctx' func PG HG u
       (t with vs_inst_idx := LENGTH ready.cs_current_insts)) ==>
     !fuel. ptr_safe_run D lower fuel ctx' func PG G tn s` by
    (rpt strip_tac >>
@@ -638,7 +638,7 @@ Proof
       gvs[allocas_from_def, same_blocks_def] >> metis_tac[]) >>
     qpat_x_assum `!D lower ctx' func. fn_has_code st c1 func /\ _ ==> _`
       (qspecl_then [`D`,`lower`,`ctx'`,`func`] mp_tac) >> simp[]) >>
-  qexistsl_tac [`H`,`u`] >> simp[] >>
+  qexistsl_tac [`HG`,`u`] >> simp[] >>
   irule frag_exec_ptr_seq >>
     qexistsl_tac [`(\g z v. g = H1 /\ z = u1 /\ v = s1 with vs_inst_idx := s.vs_inst_idx + 1)`,`c1`] >>
     simp[] >> (conj_tac >- metis_tac[cs_extends_trans]) >>
@@ -657,25 +657,25 @@ Theorem clean_scaled_source_prefix_endpoint_ptr:
   op_taint tn src = {} /\ op_prov G src = NONE /\
   op_taint tn idx = {} /\ op_prov G idx = NONE /\
   run_inst_seq (emitted_insts st ready) s = OK t ==>
-  ?H u. eval_operand data t = SOME (a + 32w) /\
+  ?HG u. eval_operand data t = SOME (a + 32w) /\
     eval_operand head t = SOME (a + 32w + b * n2w stride) /\
     t.vs_labels = s.vs_labels /\
-    op_taint u head = {} /\ op_prov H head = NONE /\
-    op_taint u data = {} /\ op_prov H data = NONE /\
+    op_taint u head = {} /\ op_prov HG head = NONE /\
+    op_taint u data = {} /\ op_prov HG data = NONE /\
     (!x. data = Var x ==> not_fresh_at ready x) /\
     (!x. head = Var x ==> not_fresh_at ready x) /\
-    frag_exec_ptr cx ctx PG st ready
+    frag_exec_ptr H cx ctx PG st ready
       (\g z v. g = G /\ z = tn /\ v = s)
-      (\g z v. g = H /\ z = u /\
+      (\g z v. g = HG /\ z = u /\
         v = t with vs_inst_idx := LENGTH (emitted_insts st ready) + s.vs_inst_idx) R /\
     t.vs_memory = s.vs_memory /\ t.vs_call_ctx = s.vs_call_ctx /\
     u.t_mem = tn.t_mem /\ u.t_stor = tn.t_stor /\ u.t_trans = tn.t_trans /\
     (!x. not_fresh_at st x ==> lookup_var x t = lookup_var x s /\
-      FLOOKUP H x = FLOOKUP G x /\ op_taint u (Var x) = op_taint tn (Var x))
+      FLOOKUP HG x = FLOOKUP G x /\ op_taint u (Var x) = op_taint tn (Var x))
 Proof
   rpt strip_tac >> drule_all clean_scaled_source_prefix_endpoint_ptr_core >>
   disch_then (qspecl_then [`cx`,`ctx`,`PG`,`R`] strip_assume_tac) >>
-  qexistsl_tac [`H`,`u`] >> simp[]
+  qexistsl_tac [`HG`,`u`] >> simp[]
 QED
 
 
@@ -695,24 +695,24 @@ Theorem calldata_array_element_setup_endpoint_ptr_core:
   d + 32 + j * mem_sz < dimword (:256) /\ mem_sz < dimword (:256) /\
   ~initial.vs_halted /\
   run_inst_seq (emitted_insts st ready) initial = OK t ==>
-  ?H u child. SND (SND ops) = Var child /\
-    ptr_covers H u child
+  ?HG u child. SND (SND ops) = Var child /\
+    ptr_covers HG u child
       (t with vs_inst_idx := LENGTH (emitted_insts st ready) + initial.vs_inst_idx) mem_sz /\
-    op_taint u (FST ops) = {} /\ op_prov H (FST ops) = NONE /\
-    op_taint u (FST (SND ops)) = {} /\ op_prov H (FST (SND ops)) = NONE /\
-    frag_exec_ptr cx ctx PG st ready
+    op_taint u (FST ops) = {} /\ op_prov HG (FST ops) = NONE /\
+    op_taint u (FST (SND ops)) = {} /\ op_prov HG (FST (SND ops)) = NONE /\
+    frag_exec_ptr H cx ctx PG st ready
       (\g z v. g = G /\ z = tn /\ v = initial)
-      (\g z v. g = H /\ z = u /\ v = (t with vs_inst_idx := LENGTH (emitted_insts st ready) + initial.vs_inst_idx)) R /\
+      (\g z v. g = HG /\ z = u /\ v = (t with vs_inst_idx := LENGTH (emitted_insts st ready) + initial.vs_inst_idx)) R /\
     t.vs_memory = initial.vs_memory /\
     u.t_mem = tn.t_mem /\ u.t_stor = tn.t_stor /\ u.t_trans = tn.t_trans /\
     (!x. not_fresh_at st x ==> lookup_var x t = lookup_var x initial /\
-      FLOOKUP H x = FLOOKUP G x /\ op_taint u (Var x) = op_taint tn (Var x)) /\
+      FLOOKUP HG x = FLOOKUP G x /\ op_taint u (Var x) = op_taint tn (Var x)) /\
     t.vs_allocas = initial.vs_allocas /\ u.t_imm = tn.t_imm /\
     (!D lower ctx' func.
       fn_has_code st ready func /\ allocas_from lower initial /\ ~ctx_has_dalloca ctx' /\
       initial.vs_current_bb = st.cs_current_bb /\
       initial.vs_inst_idx = LENGTH st.cs_current_insts /\
-      (!fuel. ptr_safe_run D lower fuel ctx' func PG H u
+      (!fuel. ptr_safe_run D lower fuel ctx' func PG HG u
         (t with vs_inst_idx := LENGTH ready.cs_current_insts)) ==>
       !fuel. ptr_safe_run D lower fuel ctx' func PG G tn initial)
 Proof
@@ -804,13 +804,13 @@ Resume calldata_array_element_setup_endpoint_ptr_core[load_and_source]:
      goal_assum (drule_at Any) >> metis_tac[]) >>
   `cs_extends st c0 /\ cs_extends c0 c3 /\ cs_extends c3 c4 /\ cs_extends c4 ready` by
     (rpt conj_tac >> irule cs_extends_same_block >> fs[inst_extends_def, same_blocks_def]) >>
-  `frag_exec_ptr cx ctx PG st c3
+  `frag_exec_ptr H cx ctx PG st c3
     (\g z v. g = G /\ z = tn /\ v = initial)
     (\g z v. g = H3 /\ z = u3 /\ v = r3 with vs_inst_idx := initial.vs_inst_idx + 4) R` by
     (irule frag_exec_ptr_seq >>
      qexistsl_tac [`(\g z v. g = H0 /\ z = u0 /\ v = r0 with vs_inst_idx := initial.vs_inst_idx + 1)`,`c0`] >>
      simp[] >>
-     qpat_x_assum `frag_exec_ptr _ _ _ c0 c3 _ _ _` mp_tac >>
+     qpat_x_assum `frag_exec_ptr _ _ _ _ c0 c3 _ _ _` mp_tac >>
      simp[]) >>
   `!x. not_fresh_at st x ==> lookup_var x r3 = lookup_var x initial /\
      FLOOKUP H3 x = FLOOKUP G x /\ op_taint u3 (Var x) = op_taint tn (Var x)` by metis_tac[] >>
@@ -822,8 +822,8 @@ Resume calldata_array_element_setup_endpoint_ptr_core[optional_and_destination]:
   qpat_x_assum `emit_op ADD [src; _] _ = _` kall_tac >>
   qpat_x_assum `emit_op MUL _ _ = _` kall_tac >>
   qpat_x_assum `emit_op ADD [data; _] _ = _` kall_tac >>
-  qpat_x_assum `frag_exec_ptr _ _ _ st c0 _ _ _` kall_tac >>
-  qpat_x_assum `frag_exec_ptr _ _ _ c0 c3 _ _ _` kall_tac >>
+  qpat_x_assum `frag_exec_ptr _ _ _ _ st c0 _ _ _` kall_tac >>
+  qpat_x_assum `frag_exec_ptr _ _ _ _ c0 c3 _ _ _` kall_tac >>
   qpat_x_assum `run_inst_seq (emitted_insts c0 c3) (r0 with vs_inst_idx := _) = _` kall_tac >>
   qabbrev_tac `s3 = r3 with vs_inst_idx := initial.vs_inst_idx + 4` >>
   `run_inst_seq (emitted_insts c3 c4) s3 = OK (r4 with vs_inst_idx := s3.vs_inst_idx)` by
@@ -831,7 +831,7 @@ Resume calldata_array_element_setup_endpoint_ptr_core[optional_and_destination]:
   `?H4 u4. (?v. eval_operand child_src r4 = SOME v) /\
     (!x. child_src = Var x ==> not_fresh_at c4 x) /\
     r4.vs_labels = r3.vs_labels /\ op_taint u4 child_src = {} /\ op_prov H4 child_src = NONE /\
-    frag_exec_ptr cx ctx PG c3 c4
+    frag_exec_ptr H cx ctx PG c3 c4
       (\g z v. g = H3 /\ z = u3 /\ v = s3)
       (\g z v. g = H4 /\ z = u4 /\ v = r4 with vs_inst_idx := LENGTH (emitted_insts c3 c4) + s3.vs_inst_idx) R /\
     r4.vs_memory = r3.vs_memory /\ r4.vs_call_ctx = r3.vs_call_ctx /\
@@ -878,7 +878,7 @@ Resume calldata_array_element_setup_endpoint_ptr_core[dynamic_source]:
   drule_all calldata_dynamic_element_source_endpoint_ptr_core >>
   disch_then (qspecl_then [`cx`,`ctx`,`PG`,`R`] strip_assume_tac) >>
   fs[Abbr `s3`, cj 4 moduleLoweringPropsTheory.control_moves_keep_vars] >>
-  qexistsl_tac [`H`,`u`] >> simp[]
+  qexistsl_tac [`HG`,`u`] >> simp[]
 QED
 
 Resume calldata_array_element_setup_endpoint_ptr_core[static_source]:
@@ -889,15 +889,15 @@ Resume calldata_array_element_setup_endpoint_ptr_core[static_source]:
 QED
 
 Resume calldata_array_element_setup_endpoint_ptr_core[compose]:
-  `op_taint u idx = {} /\ op_prov H idx = NONE` by
+  `op_taint u idx = {} /\ op_prov HG idx = NONE` by
     (Cases_on `idx` >> fs[op_taint_def, op_prov_def] >> metis_tac[]) >>
-  `op_taint u child_src = {} /\ op_prov H child_src = NONE` by
+  `op_taint u child_src = {} /\ op_prov HG child_src = NONE` by
     (Cases_on `child_src` >> fs[op_taint_def, op_prov_def] >> metis_tac[]) >>
   `!D lower ctx' func.
     fn_has_code st ready func /\ allocas_from lower initial /\ ~ctx_has_dalloca ctx' /\
     initial.vs_current_bb = st.cs_current_bb /\
     initial.vs_inst_idx = LENGTH st.cs_current_insts /\
-    (!fuel. ptr_safe_run D lower fuel ctx' func PG H u
+    (!fuel. ptr_safe_run D lower fuel ctx' func PG HG u
       (t with vs_inst_idx := LENGTH ready.cs_current_insts)) ==>
     !fuel. ptr_safe_run D lower fuel ctx' func PG G tn initial` by
    (rpt strip_tac >>
@@ -929,7 +929,7 @@ Resume calldata_array_element_setup_endpoint_ptr_core[compose]:
       gvs[allocas_from_def, same_blocks_def] >> metis_tac[]) >>
     qpat_x_assum `!D lower ctx' func. fn_has_code st c0 func /\ _ ==> _`
       (qspecl_then [`D`,`lower`,`ctx'`,`func`] mp_tac) >> simp[]) >>
-  qexistsl_tac [`H`,`u`] >> simp[] >>
+  qexistsl_tac [`HG`,`u`] >> simp[] >>
   irule frag_exec_ptr_seq >>
   qexistsl_tac [`(\g z v. g = H3 /\ z = u3 /\ v = r3 with vs_inst_idx := initial.vs_inst_idx + 4)`,`c3`] >>
   simp[] >> (conj_tac >- metis_tac[cs_extends_trans]) >>
@@ -956,22 +956,22 @@ Theorem calldata_array_element_setup_endpoint_ptr:
   d + 32 + j * mem_sz < dimword (:256) /\ mem_sz < dimword (:256) /\
   ~initial.vs_halted /\
   run_inst_seq (emitted_insts st ready) initial = OK t ==>
-  ?H u child. SND (SND ops) = Var child /\
-    ptr_covers H u child
+  ?HG u child. SND (SND ops) = Var child /\
+    ptr_covers HG u child
       (t with vs_inst_idx := LENGTH (emitted_insts st ready) + initial.vs_inst_idx) mem_sz /\
-    op_taint u (FST ops) = {} /\ op_prov H (FST ops) = NONE /\
-    op_taint u (FST (SND ops)) = {} /\ op_prov H (FST (SND ops)) = NONE /\
-    frag_exec_ptr cx ctx PG st ready
+    op_taint u (FST ops) = {} /\ op_prov HG (FST ops) = NONE /\
+    op_taint u (FST (SND ops)) = {} /\ op_prov HG (FST (SND ops)) = NONE /\
+    frag_exec_ptr H cx ctx PG st ready
       (\g z v. g = G /\ z = tn /\ v = initial)
-      (\g z v. g = H /\ z = u /\ v = (t with vs_inst_idx := LENGTH (emitted_insts st ready) + initial.vs_inst_idx)) R /\
+      (\g z v. g = HG /\ z = u /\ v = (t with vs_inst_idx := LENGTH (emitted_insts st ready) + initial.vs_inst_idx)) R /\
     t.vs_memory = initial.vs_memory /\
     u.t_mem = tn.t_mem /\ u.t_stor = tn.t_stor /\ u.t_trans = tn.t_trans /\
     (!x. not_fresh_at st x ==> lookup_var x t = lookup_var x initial /\
-      FLOOKUP H x = FLOOKUP G x /\ op_taint u (Var x) = op_taint tn (Var x))
+      FLOOKUP HG x = FLOOKUP G x /\ op_taint u (Var x) = op_taint tn (Var x))
 Proof
   rpt strip_tac >> drule_all calldata_array_element_setup_endpoint_ptr_core >>
   disch_then (qspecl_then [`cx`,`ctx`,`PG`,`R`] strip_assume_tac) >>
-  qexistsl_tac [`H`,`u`,`child`] >> simp[]
+  qexistsl_tac [`HG`,`u`,`child`] >> simp[]
 QED
 
 Theorem calldata_array_element_setup_original_pc_ptr:
@@ -993,24 +993,24 @@ Theorem calldata_array_element_setup_original_pc_ptr:
   fn_has_code st ready func /\ allocas_from lower initial /\ ~ctx_has_dalloca ctx' /\
   initial.vs_current_bb = st.cs_current_bb /\
   initial.vs_inst_idx = LENGTH st.cs_current_insts ==>
-  ?H u child. SND (SND ops) = Var child /\
-    ptr_covers H u child
+  ?HG u child. SND (SND ops) = Var child /\
+    ptr_covers HG u child
       (t with vs_inst_idx := LENGTH (emitted_insts st ready) + initial.vs_inst_idx) mem_sz /\
-    op_taint u (FST ops) = {} /\ op_prov H (FST ops) = NONE /\
-    op_taint u (FST (SND ops)) = {} /\ op_prov H (FST (SND ops)) = NONE /\
-    frag_exec_ptr cx ctx PG st ready
+    op_taint u (FST ops) = {} /\ op_prov HG (FST ops) = NONE /\
+    op_taint u (FST (SND ops)) = {} /\ op_prov HG (FST (SND ops)) = NONE /\
+    frag_exec_ptr H cx ctx PG st ready
       (\g z v. g = G /\ z = tn /\ v = initial)
-      (\g z v. g = H /\ z = u /\ v = (t with vs_inst_idx := LENGTH (emitted_insts st ready) + initial.vs_inst_idx)) R /\
+      (\g z v. g = HG /\ z = u /\ v = (t with vs_inst_idx := LENGTH (emitted_insts st ready) + initial.vs_inst_idx)) R /\
     t.vs_memory = initial.vs_memory /\
     u.t_mem = tn.t_mem /\ u.t_stor = tn.t_stor /\ u.t_trans = tn.t_trans /\
     (!x. not_fresh_at st x ==> lookup_var x t = lookup_var x initial /\
-      FLOOKUP H x = FLOOKUP G x /\ op_taint u (Var x) = op_taint tn (Var x)) /\
+      FLOOKUP HG x = FLOOKUP G x /\ op_taint u (Var x) = op_taint tn (Var x)) /\
     t.vs_allocas = initial.vs_allocas /\ u.t_imm = tn.t_imm /\
-    ((!fuel. ptr_safe_run D lower fuel ctx' func PG H u
+    ((!fuel. ptr_safe_run D lower fuel ctx' func PG HG u
         (t with vs_inst_idx := LENGTH ready.cs_current_insts)) ==>
       !fuel. ptr_safe_run D lower fuel ctx' func PG G tn initial)
 Proof
   rpt strip_tac >> drule_all calldata_array_element_setup_endpoint_ptr_core >>
   disch_then (qspecl_then [`cx`,`ctx`,`PG`,`R`] strip_assume_tac) >>
-  qexistsl_tac [`H`,`u`,`child`] >> simp[]
+  qexistsl_tac [`HG`,`u`,`child`] >> simp[]
 QED

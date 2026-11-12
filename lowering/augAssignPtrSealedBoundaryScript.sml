@@ -20,32 +20,32 @@ QED
 
 Theorem stmt_state_rel_function_unique:
   !ctx f g ce cx es s ce' cx' es' t.
-    stmt_state_rel ctx f ce cx es s /\
-    stmt_state_rel ctx g ce' cx' es' t /\
+    stmt_state_rel H ctx f ce cx es s /\
+    stmt_state_rel H ctx g ce' cx' es' t /\
     f.fn_name = g.fn_name ==> f = g
 Proof
   simp[stmt_state_rel_def] >> metis_tac[alloca_room_function_unique]
 QED
 
 Theorem gas_path_ptr_edge_none_at_block_end:
-  !D lo ctx fn PG G tn s n H tm r bb.
+  !D lo ctx fn PG G tn s n HG tm r bb.
     lookup_block s.vs_current_bb fn.fn_blocks = SOME bb /\
     s.vs_inst_idx = LENGTH bb.bb_instructions ==>
-    ~gas_path_ptr_edge D lo ctx fn PG G tn s n H tm r
+    ~gas_path_ptr_edge D lo ctx fn PG G tn s n HG tm r
 Proof
   rpt strip_tac >> gvs[gas_path_ptr_edge_def, get_instruction_def]
 QED
 
 Theorem gas_path_ptr_stopped_invariant:
-  !D lo ctx fn PG G tn s k H tm r.
-    gas_path_ptr D lo ctx fn PG G tn s k H tm r ==>
+  !D lo ctx fn PG G tn s k HG tm r.
+    gas_path_ptr D lo ctx fn PG G tn s k HG tm r ==>
     !E Inv.
-    (!s G tn n H tm r. E s ==>
-       ~gas_path_ptr_edge D lo ctx fn PG G tn s n H tm r) /\
-    (!s G tn n H tm u. ~E s /\ Inv s G tn /\
-       gas_path_ptr_edge D lo ctx fn PG G tn s n H tm (OK u) ==>
-       Inv u H tm) /\ Inv s G tn ==>
-    !t. r = OK t ==> Inv t H tm
+    (!s G tn n HG tm r. E s ==>
+       ~gas_path_ptr_edge D lo ctx fn PG G tn s n HG tm r) /\
+    (!s G tn n HG tm u. ~E s /\ Inv s G tn /\
+       gas_path_ptr_edge D lo ctx fn PG G tn s n HG tm (OK u) ==>
+       Inv u HG tm) /\ Inv s G tn ==>
+    !t. r = OK t ==> Inv t HG tm
 Proof
   ho_match_mp_tac gas_path_ptr_ind >>
   simp[exit_result_def] >> rpt strip_tac >> metis_tac[]

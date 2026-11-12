@@ -124,17 +124,17 @@ Proof
 QED
 
 Theorem for_range_literal_entry_ghost:
-  ghost_inv d cenv cx es G tn s /\
+  ghost_inv H d cenv cx es G tn s /\
   not_local_ptr cenv es.scopes cv /\ not_local_ptr cenv es.scopes ev /\
   (!q. cenv.ce_return_buf <> SOME (PtrVar (Var cv) q)) /\
   (!q. cenv.ce_return_buf <> SOME (PtrVar (Var ev) q)) ==>
-  ghost_inv d cenv cx es
+  ghost_inv H d cenv cx es
     (DRESTRICT (DRESTRICT G (COMPL {cv})) (COMPL {ev}))
     (tn with t_var := (tn.t_var |+ (cv,{})) |+ (ev,{}))
     (jump_to cond_lbl (update_var ev b (update_var cv a s)))
 Proof
   strip_tac >> pure_rewrite_tac[jump_to_def, ghost_inv_jump_to] >>
-  `ghost_inv d cenv cx es (DRESTRICT G (COMPL {cv}))
+  `ghost_inv H d cenv cx es (DRESTRICT G (COMPL {cv}))
      (tn with t_var := tn.t_var |+ (cv,{})) (update_var cv a s)` by
      (irule for_scalar_overwrite_ghost >> simp[]) >>
   simp[] >> irule (SRULE [] (Q.INST
@@ -164,11 +164,11 @@ QED
 (* S1's analogous state fact is local to stmtSimFor.  This public boundary
    specializes the existing allocation preservation and frame interfaces. *)
 Theorem for_range_alloca_state:
-  stmt_state_rel ctx fn cenv cx es s /\ fn_inst_ids_distinct fn /\
+  stmt_state_rel H ctx fn cenv cx es s /\ fn_inst_ids_distinct fn /\
   MEM (mk_inst id ALLOCA [Lit (n2w n)] [out]) (fn_insts fn) /\
   not_local_ptr cenv es.scopes out /\ n < dimword (:256) /\ ~s.vs_halted ==>
   ?u a. step_inst_base (mk_inst id ALLOCA [Lit (n2w n)] [out]) s = OK u /\
-    stmt_state_rel ctx fn cenv cx es u /\ lookup_var out u = SOME a /\
+    stmt_state_rel H ctx fn cenv cx es u /\ lookup_var out u = SOME a /\
     FLOOKUP u.vs_allocas id = SOME (w2n a,n) /\
     u.vs_current_bb = s.vs_current_bb /\ u.vs_inst_idx = s.vs_inst_idx /\
     ~u.vs_halted /\ (!x. x <> out ==> lookup_var x u = lookup_var x s) /\
@@ -180,7 +180,7 @@ Proof
     (Cases_on `FLOOKUP s.vs_allocas id` >- simp[exec_alloca_def, mk_inst_def] >>
      rename1 `FLOOKUP s.vs_allocas id = SOME site` >> PairCases_on `site` >>
      simp[exec_alloca_def, mk_inst_def]) >>
-  `stmt_state_rel ctx fn cenv cx es u /\
+  `stmt_state_rel H ctx fn cenv cx es u /\
     ?a. lookup_var out u = SOME a /\
         FLOOKUP u.vs_allocas id = SOME (w2n a,n)` by
     (drule_at (Pat `exec_alloca _ _ _ = _`) stmt_state_rel_exec_alloca >>
@@ -198,7 +198,7 @@ Proof
 QED
 
 Theorem for_range_alloca_entry_path_ptr:
-  stmt_state_rel ctx fn cenv cx es s /\ fn_inst_ids_distinct fn /\
+  stmt_state_rel H ctx fn cenv cx es s /\ fn_inst_ids_distinct fn /\
   MEM (mk_inst id ALLOCA [Lit (n2w n)] [out]) (fn_insts fn) /\
   not_local_ptr cenv es.scopes out /\ n < dimword (:256) /\
   ~ctx_has_dalloca ctx /\ ~s.vs_halted /\
@@ -207,7 +207,7 @@ Theorem for_range_alloca_entry_path_ptr:
     SOME (mk_inst id ALLOCA [Lit (n2w n)] [out]) ==>
   ?u a.
     step_inst_base (mk_inst id ALLOCA [Lit (n2w n)] [out]) s = OK u /\
-    stmt_state_rel ctx fn cenv cx es u /\ lookup_var out u = SOME a /\
+    stmt_state_rel H ctx fn cenv cx es u /\ lookup_var out u = SOME a /\
     FLOOKUP u.vs_allocas id = SOME (w2n a,n) /\
     u.vs_current_bb = s.vs_current_bb /\ u.vs_inst_idx = s.vs_inst_idx /\
     ~u.vs_halted /\

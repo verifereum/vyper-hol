@@ -20,8 +20,8 @@ Theorem computed_full_output_framed_paths:
     (s.vs_transient s.vs_call_ctx.cc_address) /\
   ~s.vs_halted /\ lookup_block s.vs_current_bb fn.fn_blocks = SOME bb /\
   isPREFIX (emitted_insts sm sl) (DROP s.vs_inst_idx bb.bb_instructions) /\
-  ghost_inv d cenv cx es G tn s /\ local_ptrs_rel fn cenv es.scopes s /\
-  stmt_state_rel ctx fn cenv cx es s /\
+  ghost_inv H d cenv cx es G tn s /\ local_ptrs_rel fn cenv es.scopes s /\
+  stmt_state_rel H ctx fn cenv cx es s /\
   local_ptrs_reserved cenv sm /\ sf.cs_next_var <= sm.cs_next_var /\
   sf.cs_next_id <= sm.cs_next_id /\
   (!p sz. cenv.ce_return_buf = SOME (PtrVar (Var p) sz) ==> not_fresh_at sm p) /\
@@ -48,9 +48,9 @@ Theorem computed_full_output_framed_paths:
         q.vs_memory = (write_memory_with_expansion (w2n wo) (TAKE (w2n outsz) data) s).vs_memory /\
         ptr_covers G2 tn2 dst q (w2n outsz) /\
         (!i. w2n wo <= i /\ i < w2n wo + w2n outsz ==> i NOTIN tn2.t_mem) /\
-        ghost_inv d cenv cx (es with outcomes := SOME (DROP 1 s.vs_outcomes)) G2 tn2 q /\
+        ghost_inv H d cenv cx (es with outcomes := SOME (DROP 1 s.vs_outcomes)) G2 tn2 q /\
         ghost_kept cenv es sf G tn s G2 tn2 /\
-        stmt_state_rel ctx fn cenv cx (es with outcomes := SOME (DROP 1 s.vs_outcomes)) q /\
+        stmt_state_rel H ctx fn cenv cx (es with outcomes := SOME (DROP 1 s.vs_outcomes)) q /\
         wb_frame cenv es (es with outcomes := SOME (DROP 1 s.vs_outcomes)) sf s q) /\
     ((precompile_result (venom_call_request s target 0w wi insz T).cr_target
         (venom_call_request s target 0w wi insz T).cr_data = SOME NONE \/

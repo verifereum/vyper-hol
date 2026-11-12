@@ -22,7 +22,7 @@ Theorem augassign_storage_place_pipeline_ptr:
   (bop = Exp ==> nonneg_int_literal e) /\
   (bop = ShL \/ bop = ShR ==> shift_amount_ok e) /\
   well_typed_binop ty bop ty (expr_type e) /\ bop <> In /\ bop <> NotIn /\
-  (!w st. storage_dead cx tr (update_storage slot w st) = storage_dead cx tr st) /\
+  (!w st. storage_dead H tr (update_storage slot w st) = storage_dead H tr st) /\
   lower_value compile_expr cenv ty e s1 = (rhs,s2) /\
   compile_binop bop cur rhs ty NONE
     (if bop = Exp then expr_int_literal e else NONE) s2 = (op,s3) /\
@@ -34,24 +34,24 @@ Theorem augassign_storage_place_pipeline_ptr:
   (!z sz. cenv.ce_return_pc = SOME (PtrVar (Var z) sz) ==> not_fresh_at s1 z) /\
   (!z sz. cenv.ce_return_buf = SOME (PtrVar (Var z) sz) ==> not_fresh_at s1 z) /\
   gas_admissible (eval_stmt cx (AugAssign ty tgt bop e)) (stmt_res_ok lctx) es /\
-  gas_path_ptr (cx_dead cx) 0 ctx func PG G0 tn0 s0 0 H tm (OK t) /\
-  stmt_state_rel ctx func cenv cx es t /\ ghost_inv d cenv cx es H tm t /\
-  ghost_kept cenv es sa G0 tn0 s0 H tm /\
+  gas_path_ptr (cx_dead H cx) 0 ctx func PG G0 tn0 s0 0 HG tm (OK t) /\
+  stmt_state_rel H ctx func cenv cx es t /\ ghost_inv H d cenv cx es HG tm t /\
+  ghost_kept cenv es sa G0 tn0 s0 HG tm /\
   ~t.vs_halted /\ t.vs_current_bb = s1.cs_current_bb /\
   t.vs_inst_idx = LENGTH s1.cs_current_insts /\
   eval_operand cur t = SOME (val_to_w256 v) /\ eval_operand dst t = SOME slot /\
   (!l. cur <> Label l /\ dst <> Label l) /\
-  op_prov H cur = NONE /\ op_taint tm cur = {} /\ op_taint tm dst = {} /\
+  op_prov HG cur = NONE /\ op_taint tm cur = {} /\ op_taint tm dst = {} /\
   (!z. cur = Var z ==> not_fresh_at s1 z) /\
   (!z. dst = Var z ==> not_fresh_at s1 z) /\
   (!z. not_fresh_at sa z ==> lookup_var z t = lookup_var z s0) ==>
-  gas_outcome_ptr (cx_dead cx) (cx_tops cx) (ctx,func) PG
+  gas_outcome_ptr (cx_dead H cx) (cx_tops cx) (ctx,func) PG
     (eval_stmt cx (AugAssign ty tgt bop e)) (es,s0,G0,tn0)
     (\res ee G tn u. ?cenv'.
       stmt_lands lctx sb res u /\ ~u.vs_halted /\
       (res = INL () ==> ~block_is_terminated sb /\ cenv' = cenv) /\
       cenv_top_ext cenv cenv' ee.scopes /\
-      stmt_state_rel ctx func cenv' cx ee u /\ ghost_inv d cenv' cx ee G tn u /\
+      stmt_state_rel H ctx func cenv' cx ee u /\ ghost_inv H d cenv' cx ee G tn u /\
       (!z w. not_fresh_at sa z /\ lookup_var z s0 = SOME w ==> lookup_var z u = SOME w) /\
       (!z. not_fresh_at sa z ==> FLOOKUP G z = FLOOKUP G0 z /\
         op_taint tn (Var z) = op_taint tn0 (Var z)))
@@ -73,13 +73,13 @@ Proof
      drule_all (REWRITE_RULE [ETA_AX] expr_body_pre_res_ok) >> simp[]) >>
   qpat_x_assum `expr_sim_ptr _ _ _ _ _ _ _ _ _`
     (mp_tac o REWRITE_RULE [expr_sim_ptr_def]) >>
-  disch_then (qspecl_then [`s1`,`s2`,`rhs`,`t`,`H`,`tm`] mp_tac) >>
+  disch_then (qspecl_then [`s1`,`s2`,`rhs`,`t`,`HG`,`tm`] mp_tac) >>
   (impl_tac >- simp[ghost_inv_gas_obs]) >> strip_tac >>
   qpat_x_assum `gas_outcome_ptr _ _ _ _ _ _ _ _`
     (strip_assume_tac o REWRITE_RULE [gas_outcome_ptr_def])
   >- suspend "summary" >>
-  `gas_marked_exec_ptr (cx_dead cx) (ctx,func) PG (eval_target_place cx tgt)
-     (es,s0,G0,tn0) [] (INL (StoragePlace tr slot tvt)) es H tm (OK t)` by
+  `gas_marked_exec_ptr (cx_dead H cx) (ctx,func) PG (eval_target_place cx tgt)
+     (es,s0,G0,tn0) [] (INL (StoragePlace tr slot tvt)) es HG tm (OK t)` by
     simp[gas_marked_exec_ptr_def, gas_explicit_def] >>
   drule_all augassign_storage_place_exempt_ptr >> disch_tac >>
   simp[gas_outcome_ptr_def] >> metis_tac[]
@@ -145,7 +145,7 @@ Resume augassign_storage_place_pipeline_ptr[continuation]:
   `type_bits ty MOD 8 = 0` by metis_tac[well_formed_type_bits] >>
   `local_ptrs_reserved cenv s2` by
     (irule local_ptrs_reserved_next_var >> qexists_tac `s1` >> simp[]) >>
-  `stmt_state_rel ctx func cenv cx (es_end with gas_obs := []) t'` by fs[expr_post_def] >>
+  `stmt_state_rel H ctx func cenv cx (es_end with gas_obs := []) t'` by fs[expr_post_def] >>
   `~t'.vs_halted` by
     (qpat_assum `gas_marked_exec_ptr _ _ _ _ _ _ _ _ _ _ _`
        (mp_tac o REWRITE_RULE [gas_marked_exec_ptr_def]) >>
@@ -176,7 +176,7 @@ Resume augassign_storage_place_pipeline_ptr[continuation]:
   disch_then (drule_at (Pat `eval_operand _ _ = _`)) >>
   disch_then (drule_at (Pat `eval_operand _ _ = _`)) >>
   disch_then drule_all >>
-  disch_then (qspecl_then [`PG`,`cx_dead cx`] strip_assume_tac)
+  disch_then (qspecl_then [`PG`,`cx_dead H cx`] strip_assume_tac)
   >- suspend "finish_normal" >> suspend "finish_abort"
 QED
 
@@ -191,10 +191,10 @@ Resume augassign_storage_place_pipeline_ptr[finish_normal]:
      `not_fresh_at s1 z /\ not_fresh_at s2 z` by simp[] >>
      `lookup_var z t = SOME w` by simp[] >>
      `lookup_var z t' = SOME w` by
-       (qpat_x_assum `expr_post _ _ _ _ _ _ _ _ _ _ _ _ _`
+       (qpat_x_assum `expr_post _ _ _ _ _ _ _ _ _ _ _ _ _ _`
           (mp_tac o cj 5 o REWRITE_RULE [expr_post_def]) >> simp[]) >>
      metis_tac[]) >>
-  `!z. not_fresh_at sa z ==> FLOOKUP H' z = FLOOKUP G0 z /\
+  `!z. not_fresh_at sa z ==> FLOOKUP HG' z = FLOOKUP G0 z /\
        op_taint tm' (Var z) = op_taint tn0 (Var z)` by
     (rpt strip_tac >>
      `not_fresh_at s1 z /\ not_fresh_at s2 z` by simp[] >>

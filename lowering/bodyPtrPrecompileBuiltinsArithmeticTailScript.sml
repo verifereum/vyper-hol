@@ -65,10 +65,10 @@ QED
 
 Theorem ecmul_source_tail_ptr_path:
   compile_ecmul_point point scalar sf = (res,sb) /\
-  stmt_state_rel ctx fn cenv cx es s /\ fn_inst_ids_distinct fn /\
+  stmt_state_rel H ctx fn cenv cx es s /\ fn_inst_ids_distinct fn /\
   local_ptrs_reserved cenv sf /\ ~ctx_has_dalloca ctx /\
   (!i. MEM i (emitted_insts sf sb) ==> MEM i (fn_insts fn)) /\
-  ghost_inv d cenv cx es G tn s /\
+  ghost_inv H d cenv cx es G tn s /\
   (!p sz. cenv.ce_return_buf = SOME (PtrVar (Var p) sz) ==> not_fresh_at sf p) /\
   (!p sz. cenv.ce_return_pc = SOME (PtrVar (Var p) sz) ==> not_fresh_at sf p) /\
   expr_val_at cenv cx (ArrayT (BaseT (UintT 256)) (Fixed 2)) lo sf es v point s /\
@@ -90,10 +90,10 @@ Theorem ecmul_source_tail_ptr_path:
   ec_source_tail cx ann ECMul tys [v;k] es = (r,es') ==>
   ?n result G' tn'. gas_path_ptr D 0 ctx fn PG G tn s n G' tn' result /\
    ((?t value. result = OK t /\ r = INL (Value value) /\
-      vv_post ctx fn cenv cx (Builtin (ArrayT (BaseT (UintT 256)) (Fixed 2)) ECMul args)
+      vv_post H ctx fn cenv cx (Builtin (ArrayT (BaseT (UintT 256)) (Fixed 2)) ECMul args)
         es sf sb s es' (Value value)
         (FST (as_ptr_val (ArrayT (BaseT (UintT 256)) (Fixed 2)) LocMemory (res,sb))) t /\
-      ghost_inv d cenv cx es' G' tn' t /\ ghost_kept cenv es sf G tn s G' tn' /\
+      ghost_inv H d cenv cx es' G' tn' t /\ ghost_kept cenv es sf G tn s G' tn' /\
       ptr_val_ok cx (ArrayT (BaseT (UintT 256)) (Fixed 2)) value res G' tn' t /\
       ptr_buf_ok cenv (Builtin (ArrayT (BaseT (UintT 256)) (Fixed 2)) ECMul args) res G' t /\
       ptr_vv_ok cx (ArrayT (BaseT (UintT 256)) (Fixed 2)) (Value value)
@@ -159,10 +159,10 @@ Finalise ecmul_source_tail_ptr_path
 
 Theorem ecadd_source_tail_ptr_path:
   compile_ecadd_points point other sf = (res,sb) /\
-  stmt_state_rel ctx fn cenv cx es s /\ fn_inst_ids_distinct fn /\
+  stmt_state_rel H ctx fn cenv cx es s /\ fn_inst_ids_distinct fn /\
   local_ptrs_reserved cenv sf /\ ~ctx_has_dalloca ctx /\
   (!i. MEM i (emitted_insts sf sb) ==> MEM i (fn_insts fn)) /\
-  ghost_inv d cenv cx es G tn s /\
+  ghost_inv H d cenv cx es G tn s /\
   (!p sz. cenv.ce_return_buf = SOME (PtrVar (Var p) sz) ==> not_fresh_at sf p) /\
   (!p sz. cenv.ce_return_pc = SOME (PtrVar (Var p) sz) ==> not_fresh_at sf p) /\
   expr_val_at cenv cx (ArrayT (BaseT (UintT 256)) (Fixed 2)) lo sf es vp point s /\
@@ -185,10 +185,10 @@ Theorem ecadd_source_tail_ptr_path:
   ec_source_tail cx ann ECAdd tys [vp;vq] es = (r,es') ==>
   ?n result G' tn'. gas_path_ptr D 0 ctx fn PG G tn s n G' tn' result /\
    ((?t value. result = OK t /\ r = INL (Value value) /\
-      vv_post ctx fn cenv cx (Builtin (ArrayT (BaseT (UintT 256)) (Fixed 2)) ECAdd args)
+      vv_post H ctx fn cenv cx (Builtin (ArrayT (BaseT (UintT 256)) (Fixed 2)) ECAdd args)
         es sf sb s es' (Value value)
         (FST (as_ptr_val (ArrayT (BaseT (UintT 256)) (Fixed 2)) LocMemory (res,sb))) t /\
-      ghost_inv d cenv cx es' G' tn' t /\ ghost_kept cenv es sf G tn s G' tn' /\
+      ghost_inv H d cenv cx es' G' tn' t /\ ghost_kept cenv es sf G tn s G' tn' /\
       ptr_val_ok cx (ArrayT (BaseT (UintT 256)) (Fixed 2)) value res G' tn' t /\
       ptr_buf_ok cenv (Builtin (ArrayT (BaseT (UintT 256)) (Fixed 2)) ECAdd args) res G' t /\
       ptr_vv_ok cx (ArrayT (BaseT (UintT 256)) (Fixed 2)) (Value value)

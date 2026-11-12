@@ -4,9 +4,9 @@ Ancestors
 
 Theorem pop_live_dynamic_element:
   !cx tr st w elem n k.
-    storage_read_live cx tr st w (ArrayTV elem (Dynamic n)) /\
+    storage_read_live H tr st w (ArrayTV elem (Dynamic n)) /\
     k < n /\ k < w2n (lookup_storage w st) ==>
-    storage_read_live cx tr st (w + n2w (k * type_slot_size elem + 1)) elem
+    storage_read_live H tr st (w + n2w (k * type_slot_size elem + 1)) elem
 Proof
   rpt gen_tac >> strip_tac >>
   `k * type_slot_size elem + type_slot_size elem <= n * type_slot_size elem` by
@@ -28,10 +28,8 @@ Proof
   gvs[Once dead_bytes_def] >>
   `w2n w + (i * type_slot_size elem + 1) <= j /\
    j < w2n w + ((i + 1) * type_slot_size elem + 1)` by
-    (Cases_on `i < w2n (lookup_storage w st)` >> gvs[]
-     >- (drule (cj 1 dead_bytes_range) >>
-         simp[RIGHT_ADD_DISTRIB] >> decide_tac) >>
-     gvs[MULT_COMM]) >>
+    (drule (cj 1 dead_bytes_range) >>
+     simp[RIGHT_ADD_DISTRIB] >> decide_tac) >>
   `i = k` suffices_by (strip_tac >> gvs[]) >>
   Cases_on `i < k`
   >- (`(i + 1) * type_slot_size elem <= k * type_slot_size elem` by

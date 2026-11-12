@@ -39,8 +39,8 @@ Proof
 QED
 
 Theorem prevhash_context_read:
-  stmt_state_rel ctx fn cenv cx es s /\
-  stmt_state_rel ctx fn cenv cx es t ==>
+  stmt_state_rel H ctx fn cenv cx es s /\
+  stmt_state_rel H ctx fn cenv cx es t ==>
   t.vs_block_ctx.bc_blockhash (w2n (s.vs_block_ctx.bc_number - 1w)) =
   s.vs_block_ctx.bc_blockhash (w2n (s.vs_block_ctx.bc_number - 1w))
 Proof
@@ -56,20 +56,20 @@ QED
 Theorem prevhash_counted_run:
   compile_env_var PrevHash sa = (op,sb) /\ fn_has_code sa sb fn /\
   local_ptrs_reserved cenv sa /\ ~ctx_has_dalloca ctx /\
-  ghost_inv d cenv cx es G tn s /\
+  ghost_inv H d cenv cx es G tn s /\
   (!x sz. cenv.ce_return_buf = SOME (PtrVar (Var x) sz) ==> not_fresh_at sa x) /\
   (!x sz. cenv.ce_return_pc = SOME (PtrVar (Var x) sz) ==> not_fresh_at sa x) /\
-  stmt_state_rel ctx fn cenv cx es s /\
+  stmt_state_rel H ctx fn cenv cx es s /\
   ~s.vs_halted /\ s.vs_current_bb = sa.cs_current_bb /\
   s.vs_inst_idx = LENGTH sa.cs_current_insts ==>
   ?G' tn' t.
     gas_path_ptr D 0 ctx fn PG G tn s 0 G' tn' (OK t) /\
-    ghost_inv d cenv cx es G' tn' t /\
+    ghost_inv H d cenv cx es G' tn' t /\
     ghost_kept cenv es sa G tn s G' tn' /\
     op_taint tn' op = {} /\ op_prov G' op = NONE /\
     eval_operand op t = SOME
       (s.vs_block_ctx.bc_blockhash (w2n (s.vs_block_ctx.bc_number - 1w))) /\
-    stmt_state_rel ctx fn cenv cx es t /\ ~t.vs_halted /\
+    stmt_state_rel H ctx fn cenv cx es t /\ ~t.vs_halted /\
     t.vs_current_bb = sb.cs_current_bb /\
     t.vs_inst_idx = LENGTH sb.cs_current_insts /\
     (!x. not_fresh_at sa x ==> lookup_var x t = lookup_var x s) /\
@@ -136,20 +136,20 @@ QED
 Theorem prevhash_counted_post:
   lower_value compile_expr cenv ty (Builtin (env_item_type PrevHash) (Env PrevHash) []) sa = (op,sb) /\
   fn_has_code sa sb fn /\ local_ptrs_reserved cenv sa /\ ~ctx_has_dalloca ctx /\
-  ghost_inv d cenv cx es G tn s /\
+  ghost_inv H d cenv cx es G tn s /\
   (!x sz. cenv.ce_return_buf = SOME (PtrVar (Var x) sz) ==> not_fresh_at sa x) /\
   (!x sz. cenv.ce_return_pc = SOME (PtrVar (Var x) sz) ==> not_fresh_at sa x) /\
-  stmt_state_rel ctx fn cenv cx es s /\
+  stmt_state_rel H ctx fn cenv cx es s /\
   ~s.vs_halted /\ s.vs_current_bb = sa.cs_current_bb /\
   s.vs_inst_idx = LENGTH sa.cs_current_insts ==>
   ?G' tn' t.
     gas_path_ptr D 0 ctx fn PG G tn s 0 G' tn' (OK t) /\
-    expr_post ctx fn cenv cx (Builtin (env_item_type PrevHash) (Env PrevHash) [])
+    expr_post H ctx fn cenv cx (Builtin (env_item_type PrevHash) (Env PrevHash) [])
       es sa sb s (es with gas_obs := [])
       (BytesV (word_to_bytes_be (EL 0 cx.txn.block_hashes))) op t /\
     t.vs_current_bb = sb.cs_current_bb /\
     t.vs_inst_idx = LENGTH sb.cs_current_insts /\
-    ghost_inv d cenv cx (es with gas_obs := []) G' tn' t /\
+    ghost_inv H d cenv cx (es with gas_obs := []) G' tn' t /\
     ptr_val_ok cx (env_item_type PrevHash)
       (BytesV (word_to_bytes_be (EL 0 cx.txn.block_hashes))) op G' tn' t /\
     ghost_kept cenv es sa G tn s G' tn'
@@ -176,7 +176,7 @@ Theorem compile_prevhash_sim_ptr:
 Proof
   rw[expr_sim_ptr_def] >>
   drule_all prevhash_counted_post >>
-  disch_then (qspecl_then [`PG`, `cx_dead cx`] strip_assume_tac) >>
+  disch_then (qspecl_then [`PG`, `cx_dead H cx`] strip_assume_tac) >>
   `tx_env_ok cx.txn` by
     gvs[stmt_state_rel_def, state_rel_def, call_ctx_rel_def] >>
   simp[gas_outcome_ptr_def] >> qexists_tac `[]` >> disj1_tac >>

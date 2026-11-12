@@ -6,7 +6,7 @@ Ancestors
 (* Keep the first operand at the second operand's exit.  Only its value
    footprint is retained; this deliberately asserts no buffer coverage. *)
 Theorem bop_pair_first_post_kept:
-  stmt_state_rel ctx func cenv cx es s /\
+  stmt_state_rel H ctx func cenv cx es s /\
   local_ptrs_reserved cenv sb /\
   MAP FDOM es.scopes = MAP FDOM es'.scopes /\
   sb.cs_next_id <= sc.cs_next_id /\ wb_frame cenv es ee sb s t /\
@@ -56,23 +56,23 @@ Theorem bop_operand_outcome_ptr:
   (!x sz. cenv.ce_return_pc = SOME (PtrVar (Var x) sz) ==>
           not_fresh_at sa x) /\
   gas_admissible (bind (eval_expr cx e) (read_result cx)) expr_res_ok es /\
-  stmt_state_rel ctx func cenv cx es s0 /\
-  ghost_inv d cenv cx es G0 tn0 s0 /\ ~s0.vs_halted /\
+  stmt_state_rel H ctx func cenv cx es s0 /\
+  ghost_inv H d cenv cx es G0 tn0 s0 /\ ~s0.vs_halted /\
   s0.vs_current_bb = sa.cs_current_bb /\
   s0.vs_inst_idx = LENGTH sa.cs_current_insts /\
   (!gs rr ee.
     bind (eval_expr cx e) (read_result cx) (es with gas_obs := gs) = (rr,ee)
     ==> P rr ee) /\
   (!v ee G tn t.
-    expr_post ctx func cenv cx e es sa sb s0 ee v op t /\
+    expr_post H ctx func cenv cx e es sa sb s0 ee v op t /\
     t.vs_current_bb = sb.cs_current_bb /\
     t.vs_inst_idx = LENGTH sb.cs_current_insts /\
-    ghost_inv d cenv cx ee G tn t /\
+    ghost_inv H d cenv cx ee G tn t /\
     ptr_val_ok cx (post_value_type cenv e) v op G tn t /\
     (~is_word_type (post_value_type cenv e) ==> ptr_buf_ok cenv e op G t) /\
     ghost_kept cenv es sa G0 tn0 s0 G tn /\
     P (INL v) ee /\ ee.gas_obs = [] /\ ~t.vs_halted ==>
-    gas_outcome_ptr (cx_dead cx) (cx_tops cx) (ctx,func) PG
+    gas_outcome_ptr (cx_dead H cx) (cx_tops cx) (ctx,func) PG
       (next v) (ee,t,G,tn) Q (\res ee gt r. expr_exit res r)) /\
   (!marks err ee leaf fstate.
     gas_exempt_cert F (cx_tops cx) (ctx,func)
@@ -92,7 +92,7 @@ Theorem bop_operand_outcome_ptr:
       (bind (bind (eval_expr cx e) (read_result cx))
         (\v. ignore_bind (next v) (return ())))
       (es,s0) (left ++ right) (err,ee) (leaf,fstate)) ==>
-  gas_outcome_ptr (cx_dead cx) (cx_tops cx) (ctx,func) PG
+  gas_outcome_ptr (cx_dead H cx) (cx_tops cx) (ctx,func) PG
     (bind (bind (eval_expr cx e) (read_result cx)) next)
     (es,s0,G0,tn0) Q (\res ee gt r. expr_exit res r)
 Proof
@@ -102,10 +102,10 @@ Proof
   irule gas_outcome_ptr_conseq >>
   qexistsl_tac
     [`\res ee G tn t. (?v. res = INL v /\
-       expr_post ctx func cenv cx e es sa sb s0 ee v op t /\
+       expr_post H ctx func cenv cx e es sa sb s0 ee v op t /\
        t.vs_current_bb = sb.cs_current_bb /\
        t.vs_inst_idx = LENGTH sb.cs_current_insts /\
-       ghost_inv d cenv cx ee G tn t /\
+       ghost_inv H d cenv cx ee G tn t /\
        ptr_val_ok cx (post_value_type cenv e) v op G tn t /\
        (~is_word_type (post_value_type cenv e) ==> ptr_buf_ok cenv e op G t) /\
        ghost_kept cenv es sa G0 tn0 s0 G tn) /\
@@ -127,8 +127,8 @@ QED
    frame survive the second evaluation.  The second operand keeps its own
    expr_post and buffer certificate, supplied separately by the caller. *)
 Theorem bop_pair_posts_kept:
-  expr_post ctx func cenv cx e1 es sa sb s0 es1 v1 x s1 /\
-  expr_post ctx func cenv cx e2 es1 sb sc s1 es2 v2 y s2 /\
+  expr_post H ctx func cenv cx e1 es sa sb s0 es1 v1 x s1 /\
+  expr_post H ctx func cenv cx e2 es1 sb sc s1 es2 v2 y s2 /\
   local_ptrs_reserved cenv sa /\ local_ptrs_reserved cenv sb /\
   MAP FDOM es.scopes = MAP FDOM es1.scopes /\
   MAP FDOM es1.scopes = MAP FDOM es2.scopes /\
@@ -142,7 +142,7 @@ Theorem bop_pair_posts_kept:
   eval_operand x s2 = eval_operand x s1 /\
   (~is_word_type (post_value_type cenv e1) ==>
     evaluate_type (get_tenv cx) (post_value_type cenv e1) = SOME tv) /\
-  stmt_state_rel ctx func cenv cx es s0 ==>
+  stmt_state_rel H ctx func cenv cx es s0 ==>
   log_arg_rel cenv cx sa sc es2 s2 (x,post_value_type cenv e1) v1 /\
   ptr_val_ok cx (post_value_type cenv e1) v1 x G2 tn2 s2 /\
   ghost_kept cenv es sa G0 tn0 s0 G2 tn2
@@ -150,7 +150,7 @@ Proof
   strip_tac >>
   `wb_frame cenv es es1 sa s0 s1` by metis_tac[exprSimWordArgsTheory.expr_post_frame] >>
   `wb_frame cenv es1 es2 sb s1 s2` by metis_tac[exprSimWordArgsTheory.expr_post_frame] >>
-  `stmt_state_rel ctx func cenv cx es1 s1` by
+  `stmt_state_rel H ctx func cenv cx es1 s1` by
     metis_tac[exprSimWordArgsTheory.expr_post_state] >>
   `log_arg_rel cenv cx sa sb es1 s1 (x,post_value_type cenv e1) v1` by
     fs[log_arg_rel_def, loweringPostsTheory.expr_post_def] >>

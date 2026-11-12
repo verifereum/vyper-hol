@@ -24,7 +24,7 @@ Theorem log_success_suffix_path_ptr:
   log_eval_view ce args sa xs sm /\
   compile_log_topic_ops (FST (split_log_ops xs flags)) sm = (ops,st) /\
   compile_stmt ce lctx ty (Log id args) sa = ((),sb) /\
-  stmt_state_rel ctx func ce cx es s /\ local_ptrs_reserved ce sm /\
+  stmt_state_rel H ctx func ce cx es s /\ local_ptrs_reserved ce sm /\
   fn_has_code sm sb func /\ fn_inst_ids_distinct func /\
   LENGTH flags = LENGTH xs /\ LENGTH (FILTER I flags) <= 3 /\
   EVERY (\p. (!z. FST p = Var z ==> not_fresh_at sm z) /\ (!l. FST p <> Label l)) xs /\
@@ -38,25 +38,25 @@ Theorem log_success_suffix_path_ptr:
   vyper_to_abi_list (get_tenv cx) (log_non_indexed_types flags (MAP SND xs))
     (log_non_indexed_values flags vs) = SOME avs /\
   LIST_REL (\arg v. ptr_val_ok cx (SND arg) v (FST arg) G tn s) xs vs /\
-  ghost_inv d ce cx es G tn s /\ ~ctx_has_dalloca ctx /\
+  ghost_inv H d ce cx es G tn s /\ ~ctx_has_dalloca ctx /\
   (!p sz. ce.ce_return_buf = SOME (PtrVar (Var p) sz) ==> not_fresh_at sm p) /\
   (!p sz. ce.ce_return_pc = SOME (PtrVar (Var p) sz) ==> not_fresh_at sm p) /\
   ~s.vs_halted /\ lookup_block s.vs_current_bb func.fn_blocks = SOME bb /\
   isPREFIX (emitted_insts sm sb) (DROP s.vs_inst_idx bb.bb_instructions) /\
   sb.cs_next_var <= limit_st.cs_next_var /\ fresh_vars_wrt limit_st s ==>
-  ?t H tm.
+  ?t HG tm.
     gas_path_ptr D 0 ctx func PG G tn s
-      (LENGTH (FILTER (\i. i.inst_opcode = GAS) (emitted_insts sm sb))) H tm (OK t) /\
+      (LENGTH (FILTER (\i. i.inst_opcode = GAS) (emitted_insts sm sb))) HG tm (OK t) /\
     fresh_vars_wrt limit_st t /\
-    stmt_state_rel ctx func ce cx
+    stmt_state_rel H ctx func ce cx
       (es with logs := es.logs ++ [<|logger := w2w cx.txn.target;
         topics := n2w h::topics; data := enc (Tuple (vyper_to_abi_types (get_tenv cx)
           (log_non_indexed_types flags (MAP SND xs)))) (ListV avs)|>]) t /\
-    ghost_inv d ce cx
+    ghost_inv H d ce cx
       (es with logs := es.logs ++ [<|logger := w2w cx.txn.target;
         topics := n2w h::topics; data := enc (Tuple (vyper_to_abi_types (get_tenv cx)
-          (log_non_indexed_types flags (MAP SND xs)))) (ListV avs)|>]) H tm t /\
-    ghost_kept ce es sm G tn s H tm /\ inst_extends sm sb /\
+          (log_non_indexed_types flags (MAP SND xs)))) (ListV avs)|>]) HG tm t /\
+    ghost_kept ce es sm G tn s HG tm /\ inst_extends sm sb /\
     ~t.vs_halted /\ t.vs_current_bb = s.vs_current_bb /\
     t.vs_inst_idx = s.vs_inst_idx + LENGTH (emitted_insts sm sb) /\
     (!x w. not_fresh_at sm x /\ lookup_var x s = SOME w ==> lookup_var x t = SOME w)
@@ -145,7 +145,7 @@ Resume log_success_suffix_path_ptr[post]:
       (fn th => once_rewrite_tac[GSYM th]) >> simp[]) >>
   `wb_frame ce es es sm s t` by
     (simp[wb_frame_def, exprSimPropsTheory.locals_kept_mem] >> metis_tac[]) >>
-  `ghost_kept ce es sm G tn s H tm` by
+  `ghost_kept ce es sm G tn s HG tm` by
     (drule_all (SIMP_RULE bool_ss [] (Q.INST [`es1` |-> `es`] ghost_kept_wb_trans)) >>
      simp[]) >>
   drule log_topics_opcode_shape >> strip_tac >>
@@ -155,7 +155,7 @@ Resume log_success_suffix_path_ptr[post]:
    LENGTH (FILTER (\i. i.inst_opcode = GAS) (emitted_insts st sb))` by
     (qpat_assum `emitted_insts sm sb = _` (fn th => once_rewrite_tac[th]) >>
      simp[FILTER_APPEND]) >>
-  qexistsl_tac [`t'`,`H`,`tm`] >>
+  qexistsl_tac [`t'`,`HG`,`tm`] >>
   qpat_x_assum `MAP SND (SND (split_log_ops xs flags)) = data_tys` SUBST_ALL_TAC >>
   full_simp_tac bool_ss [ADD, ADD_0] >>
   simp[LENGTH_APPEND] >> rpt strip_tac >>

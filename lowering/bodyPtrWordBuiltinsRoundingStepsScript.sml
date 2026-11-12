@@ -94,11 +94,11 @@ QED
 Theorem word_round_delta_output_ghost_inv:
   MEM inst.inst_opcode [ADD; SDIV] /\
   inst.inst_outputs = [x] /\ step_inst_base inst s = OK t /\
-  ghost_inv d cenv cx es G tn s /\
+  ghost_inv H d cenv cx es G tn s /\
   (!n p sz. FLOOKUP cenv.ce_vars n = SOME (PtrVar (Var p) sz) ==> p <> x) /\
   (!p sz. d <> NONE /\ cenv.ce_return_buf = SOME (PtrVar (Var p) sz) ==> p <> x) /\
   (!p sz. cenv.ce_return_pc = SOME (PtrVar (Var p) sz) ==> p <> x) ==>
-  ghost_inv d cenv cx es (step_prov PG G inst t) (step_taint inst s t tn) t
+  ghost_inv H d cenv cx es (step_prov PG G inst t) (step_taint inst s t tn) t
 Proof
   strip_tac >> drule_all word_round_delta_normal >> strip_tac >> gvs[] >>
   `new_site_bytes s (update_var x w s) = {}` by
@@ -162,11 +162,11 @@ QED
 Theorem word_round_output_ghost_inv:
   MEM inst.inst_opcode [SUB; SLT; XOR; MUL; ADD; SDIV] /\
   inst.inst_outputs = [x] /\ step_inst_base inst s = OK t /\
-  ghost_inv d cenv cx es G tn s /\
+  ghost_inv H d cenv cx es G tn s /\
   (!n p sz. FLOOKUP cenv.ce_vars n = SOME (PtrVar (Var p) sz) ==> p <> x) /\
   (!p sz. d <> NONE /\ cenv.ce_return_buf = SOME (PtrVar (Var p) sz) ==> p <> x) /\
   (!p sz. cenv.ce_return_pc = SOME (PtrVar (Var p) sz) ==> p <> x) ==>
-  ghost_inv d cenv cx es (step_prov PG G inst t) (step_taint inst s t tn) t
+  ghost_inv H d cenv cx es (step_prov PG G inst t) (step_taint inst s t tn) t
 Proof
   strip_tac >> Cases_on `MEM inst.inst_opcode [ADD; SDIV]`
   >- (irule word_round_delta_output_ghost_inv >> simp[] >> metis_tac[]) >>

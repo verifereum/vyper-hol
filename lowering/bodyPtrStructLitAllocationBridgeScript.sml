@@ -43,7 +43,7 @@ Proof
 QED
 
 Theorem structlit_local_footprint_bound:
-  stmt_state_rel ctx fn ce cx es s /\
+  stmt_state_rel H ctx fn ce cx es s /\
   lookup_scopes name es.scopes = SOME entry /\
   FLOOKUP ce.ce_vars name = SOME (PtrVar (Var p) sz) /\
   lookup_var p s = SOME w ==>
@@ -59,7 +59,7 @@ Proof
 QED
 
 Theorem structlit_alloc_buffer_ghost:
-  stmt_state_rel ctx fn ce cx es s /\ ghost_inv d ce cx es G tn s /\
+  stmt_state_rel H ctx fn ce cx es s /\ ghost_inv H d ce cx es G tn s /\
   local_ptrs_reserved ce sa /\
   (!p sz. ce.ce_return_buf = SOME (PtrVar (Var p) sz) ==> not_fresh_at sa p) /\
   (!p sz. ce.ce_return_pc = SOME (PtrVar (Var p) sz) ==> not_fresh_at sa p) /\
@@ -68,7 +68,7 @@ Theorem structlit_alloc_buffer_ghost:
   N < dimword (:256) /\
   step_inst_base (mk_inst sa.cs_next_id ALLOCA [Lit (n2w N)]
     [STRING #"%" (toString sa.cs_next_var)]) s = OK u ==>
-  ghost_inv d ce cx es
+  ghost_inv H d ce cx es
     (step_prov PG G (mk_inst sa.cs_next_id ALLOCA [Lit (n2w N)]
       [STRING #"%" (toString sa.cs_next_var)]) u)
     (step_taint (mk_inst sa.cs_next_id ALLOCA [Lit (n2w N)]
@@ -93,7 +93,7 @@ QED
 
 Theorem structlit_alloc_buffer_ptr_entry:
   compile_alloc_buffer N sa = (buf,sm) /\
-  stmt_state_rel ctx fn ce cx es s /\ ghost_inv d ce cx es G tn s /\
+  stmt_state_rel H ctx fn ce cx es s /\ ghost_inv H d ce cx es G tn s /\
   fn_has_code sa sm fn /\ fn_inst_ids_distinct fn /\
   local_ptrs_reserved ce sa /\ N < dimword (:256) /\
   ~ctx_has_dalloca ctx /\ ~s.vs_halted /\
@@ -108,7 +108,7 @@ Theorem structlit_alloc_buffer_ptr_entry:
     G1 = step_prov PG G (mk_inst sa.cs_next_id ALLOCA [Lit (n2w N)] [p]) u /\
     tn1 = step_taint (mk_inst sa.cs_next_id ALLOCA [Lit (n2w N)] [p]) s u tn /\
     gas_path_ptr_edge D 0 ctx fn PG G tn s 0 G1 tn1 (OK t) /\
-    stmt_state_rel ctx fn ce cx es t /\ ghost_inv d ce cx es G1 tn1 t /\
+    stmt_state_rel H ctx fn ce cx es t /\ ghost_inv H d ce cx es G1 tn1 t /\
     ptr_covers G1 tn1 p t N /\ eval_operand buf.buf_operand t = SOME w /\
     FLOOKUP t.vs_allocas sa.cs_next_id = SOME (w2n w,N) /\
     w2n w + N < dimword (:256) /\

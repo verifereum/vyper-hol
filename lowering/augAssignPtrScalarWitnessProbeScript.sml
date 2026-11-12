@@ -48,21 +48,21 @@ Theorem local_name_enriched_path:
   FLOOKUP cenv.ce_vars name = SOME (PtrVar (Var p) sz) /\
   is_word_type ty /\ lookup_scopes name es.scopes = SOME entry /\
   word_value entry.value /\ emit_op MLOAD [Var p] sa = (Var out,sb) /\
-  fn_has_code sa sb fn /\ stmt_state_rel ctx fn cenv cx es s /\
-  local_ptrs_reserved cenv sa /\ ghost_inv d cenv cx es G tn s /\
+  fn_has_code sa sb fn /\ stmt_state_rel H ctx fn cenv cx es s /\
+  local_ptrs_reserved cenv sa /\ ghost_inv H d cenv cx es G tn s /\
   (!x sz. cenv.ce_return_pc = SOME (PtrVar (Var x) sz) ==> not_fresh_at sa x) /\
   (!x sz. cenv.ce_return_buf = SOME (PtrVar (Var x) sz) ==> not_fresh_at sa x) /\
   ~ctx_has_dalloca ctx /\ ~s.vs_halted /\
   s.vs_current_bb = sa.cs_current_bb /\
   s.vs_inst_idx = LENGTH sa.cs_current_insts ==>
-  ?H tm t.
-    gas_path_ptr D 0 ctx fn PG G tn s 0 H tm (OK t) /\
-    expr_post ctx fn cenv cx (Name ty name) es sa sb s
+  ?HG tm t.
+    gas_path_ptr D 0 ctx fn PG G tn s 0 HG tm (OK t) /\
+    expr_post H ctx fn cenv cx (Name ty name) es sa sb s
       (es with gas_obs := []) entry.value (Var out) t /\
-    ghost_inv d cenv cx (es with gas_obs := []) H tm t /\
-    ghost_kept cenv es sa G tn s H tm /\ op_taint tm (Var out) = {} /\
+    ghost_inv H d cenv cx (es with gas_obs := []) HG tm t /\
+    ghost_kept cenv es sa G tn s HG tm /\ op_taint tm (Var out) = {} /\
     ~t.vs_halted /\ t.vs_current_bb = sb.cs_current_bb /\
-    t.vs_inst_idx = LENGTH sb.cs_current_insts /\ op_prov H (Var out) = NONE
+    t.vs_inst_idx = LENGTH sb.cs_current_insts /\ op_prov HG (Var out) = NONE
 Proof
   strip_tac >> drule_all ghost_inv_word_local_inputs >> strip_tac >>
   `!rp. not_fresh_at sa rp ==> rp <> out` by
@@ -71,20 +71,20 @@ Proof
      metis_tac[arithmeticTheory.LESS_EQ_REFL]) >>
   drule_all emit_mload_explicit_ghost_path >>
   disch_then (qspecl_then [`PG`, `D`] assume_tac) >>
-  qmatch_asmsub_abbrev_tac `gas_path_ptr D 0 ctx fn PG G tn s 0 H tm (OK t)` >>
+  qmatch_asmsub_abbrev_tac `gas_path_ptr D 0 ctx fn PG G tn s 0 HG tm (OK t)` >>
   mp_tac (Q.INST [`opc` |-> `MLOAD`, `id` |-> `sa.cs_next_id`,
     `arg` |-> `Var p`, `v` |-> `mload (w2n (a:256 word)) s`] load_ambient_frame) >>
   (impl_tac >- (simp[] >> metis_tac[])) >> strip_tac >>
   `!rp. not_fresh_at sa rp ==>
-     lookup_var rp t = lookup_var rp s /\ FLOOKUP H rp = FLOOKUP G rp /\
+     lookup_var rp t = lookup_var rp s /\ FLOOKUP HG rp = FLOOKUP G rp /\
      op_taint tm (Var rp) = op_taint tn (Var rp)` by
-    (simp[Abbr `H`, Abbr `tm`, Abbr `t`] >> rpt strip_tac >>
+    (simp[Abbr `HG`, Abbr `tm`, Abbr `t`] >> rpt strip_tac >>
      simp[update_var_def, lookup_var_def, FLOOKUP_UPDATE]) >>
-  qexistsl_tac [`H`, `tm`, `t`] >> simp[] >>
+  qexistsl_tac [`HG`, `tm`, `t`] >> simp[] >>
   conj_tac >- (simp[Abbr `t`] >> irule name_word_post >> simp[] >> metis_tac[]) >>
   conj_tac >- (simp[ghost_inv_gas_obs] >> irule ghost_inv_load_frame >>
     qexistsl_tac [`G`, `s`, `sa`, `tn`] >>
-    simp[Abbr `H`, Abbr `tm`, Abbr `t`, update_var_def, load_ambient_frame]) >>
+    simp[Abbr `HG`, Abbr `tm`, Abbr `t`, update_var_def, load_ambient_frame]) >>
   conj_tac >- (simp[ghost_kept_def, Abbr `tm`, load_ambient_frame] >> metis_tac[]) >>
   conj_tac >- (qpat_x_assum `mload _ _ = _` (fn th => rewrite_tac[GSYM th]) >>
     simp[Abbr `tm`, NoAsms] >>
@@ -92,7 +92,7 @@ Proof
   simp[Abbr `t`, update_var_def] >> conj_tac
   >- (gvs[emit_op_def, comp_bind_def, comp_ignore_bind_def, comp_return_def,
           fresh_var_def, fresh_id_def, emit_def]) >>
-  simp[Abbr `H`, load_result_has_no_provenance]
+  simp[Abbr `HG`, load_result_has_no_provenance]
 QED
 
 Theorem local_name_enriched_outcome:
@@ -100,22 +100,22 @@ Theorem local_name_enriched_outcome:
   is_word_type ann /\ lookup_scopes name es.scopes = SOME entry /\
   word_value entry.value /\
   lower_value compile_expr cenv ty (Name ann name) sa = (op,sb) /\
-  fn_has_code sa sb fn /\ stmt_state_rel ctx fn cenv cx es s /\
-  local_ptrs_reserved cenv sa /\ ghost_inv d cenv cx es G tn s /\
+  fn_has_code sa sb fn /\ stmt_state_rel H ctx fn cenv cx es s /\
+  local_ptrs_reserved cenv sa /\ ghost_inv H d cenv cx es G tn s /\
   (!x sz. cenv.ce_return_pc = SOME (PtrVar (Var x) sz) ==> not_fresh_at sa x) /\
   (!x sz. cenv.ce_return_buf = SOME (PtrVar (Var x) sz) ==> not_fresh_at sa x) /\
   ~ctx_has_dalloca ctx /\ ~s.vs_halted /\
   s.vs_current_bb = sa.cs_current_bb /\
   s.vs_inst_idx = LENGTH sa.cs_current_insts ==>
-  gas_outcome_ptr (cx_dead cx) (cx_tops cx) (ctx,fn) PG
+  gas_outcome_ptr (cx_dead H cx) (cx_tops cx) (ctx,fn) PG
     (bind (eval_expr cx (Name ann name)) (read_result cx)) (es,s,G,tn)
-    (\res ee H tm t. ?v. res = INL v /\
-      expr_post ctx fn cenv cx (Name ann name) es sa sb s ee v op t /\
+    (\res ee HG tm t. ?v. res = INL v /\
+      expr_post H ctx fn cenv cx (Name ann name) es sa sb s ee v op t /\
       t.vs_current_bb = sb.cs_current_bb /\
       t.vs_inst_idx = LENGTH sb.cs_current_insts /\
-      ghost_inv d cenv cx ee H tm t /\ ptr_val_ok cx ann v op H tm t /\
-      (~is_word_type ann ==> ptr_buf_ok cenv (Name ann name) op H t) /\
-      ghost_kept cenv es sa G tn s H tm /\ op_prov H op = NONE)
+      ghost_inv H d cenv cx ee HG tm t /\ ptr_val_ok cx ann v op HG tm t /\
+      (~is_word_type ann ==> ptr_buf_ok cenv (Name ann name) op HG t) /\
+      ghost_kept cenv es sa G tn s HG tm /\ op_prov HG op = NONE)
     (\res ee gt r. expr_exit res r)
 Proof
   strip_tac >> drule_all lower_value_name_word >> strip_tac >>
@@ -123,11 +123,11 @@ Proof
     (gvs[emit_op_def, comp_bind_def, comp_ignore_bind_def, comp_return_def,
          fresh_var_def, fresh_id_def, emit_def] >> metis_tac[]) >> gvs[] >>
   drule_all local_name_enriched_path >>
-  disch_then (qspecl_then [`PG`, `cx_dead cx`] strip_assume_tac) >>
+  disch_then (qspecl_then [`PG`, `cx_dead H cx`] strip_assume_tac) >>
   rewrite_tac[fragGasPathPtrTheory.gas_outcome_ptr_def] >>
   qexists_tac `[]` >> disj1_tac >>
   rewrite_tac[fragGasPathPtrTheory.gas_summary_ptr_at_def] >>
-  qexistsl_tac [`INL entry.value`, `es`, `H`, `tm`, `OK t`] >>
+  qexistsl_tac [`INL entry.value`, `es`, `HG`, `tm`, `OK t`] >>
   simp[gasSummaryTheory.gas_explicit_def, ptr_val_ok_def] >>
   gen_tac >>
   qspecl_then [`cx`, `ann`, `name`, `es with gas_obs := tail`, `entry`]

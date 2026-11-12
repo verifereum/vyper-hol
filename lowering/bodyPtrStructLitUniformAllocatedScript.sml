@@ -13,7 +13,7 @@ Theorem structlit_uniform_allocated_fields_outcome_ptr:
       SOME (expr_type e,type_memory_bytes ce (expr_type e))) fields /\
   OPT_MMAP (evaluate_type (get_tenv cx)) (MAP expr_type (MAP SND fields)) = SOME tvs /\
   expr_sim_inv ce cx env es /\
-  stmt_state_rel ctx func ce cx es s /\ ghost_inv d ce cx es G tn s /\
+  stmt_state_rel H ctx func ce cx es s /\ ghost_inv H d ce cx es G tn s /\
   fn_has_code sa sb func /\ fn_inst_ids_distinct func /\
   local_ptrs_reserved ce sa /\ type_memory_size_list tvs < dimword(:256) /\
   ~ctx_has_dalloca ctx /\ ~ce.ce_is_ctor /\ ~s.vs_halted /\
@@ -27,12 +27,12 @@ Theorem structlit_uniform_allocated_fields_outcome_ptr:
   (pure ==> ~EXISTS (expr_has_effect o SND) fields) ==>
   out = Var root /\
   ?addr. addr + type_memory_size_list tvs < dimword(:256) /\
-  gas_outcome_ptr (cx_dead cx) (cx_tops cx) (ctx,func) PG
+  gas_outcome_ptr (cx_dead H cx) (cx_tops cx) (ctx,func) PG
     (eval_exprs cx (MAP SND fields)) (es,s,G,tn)
-    (\res ee H tm z. ?vs cells. res = INL vs /\ expr_sim_inv ce cx env ee /\
+    (\res ee HG tm z. ?vs cells. res = INL vs /\ expr_sim_inv ce cx env ee /\
       LIST_REL value_has_type tvs vs /\
       literal_loop_frame pure ctx func ce cx d root sa.cs_next_id addr (type_memory_size_list tvs)
-        es sa s G tn ee sb H tm z cells (type_memory_size_list tvs) /\
+        es sa s G tn ee sb HG tm z cells (type_memory_size_list tvs) /\
       literal_prefix_ok cells tm z /\
       (!m. mem_agree_outside tm.t_mem z.vs_memory m ==>
         fields_in_memory (ZIP (MAP FST fields,vs)) (ZIP (MAP FST fields,tvs)) addr m))
@@ -43,7 +43,7 @@ Proof
     metis_tac[ci_mono_compile_struct_lit_cfn, compile_expr_ci_mono, pairTheory.SND] >>
   `ci_mono sa sm` by metis_tac[ci_mono_compile_alloc_buffer, pairTheory.SND] >>
   `cs_extends sm sb` by fs[ci_mono_def] >>
-  drule_all (Q.INST [`D` |-> `cx_dead cx`] (SPEC_ALL literal_allocated_loop_start)) >>
+  drule_all (Q.INST [`D` |-> `cx_dead H cx`] (SPEC_ALL literal_allocated_loop_start)) >>
   disch_then (strip_assume_tac o SPEC_ALL) >>
   `fn_has_code sm sb func` by metis_tac[fn_has_code_split, ci_mono_def] >>
   `local_ptrs_reserved ce sm` by metis_tac[local_ptrs_reserved_next_var, ci_mono_def] >>

@@ -101,7 +101,7 @@ Theorem augassign_storage_field_read_ptr:
     ?cur. read_storage_slot cx tr (n2w slot + n2w off) ftv es =
             (INL cur, es) /\
           !ctx func cenv s.
-            stmt_state_rel ctx func cenv cx es s ==>
+            stmt_state_rel H ctx func cenv cx es s ==>
             storage_holds cx tr ty (Value cur) (n2w slot + n2w off) es s
 Proof
   rpt strip_tac >>

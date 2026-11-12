@@ -6,13 +6,13 @@ Ancestors
 
 Theorem unwrap_stack_ptr_path:
   unwrap_value cenv (StackValue t op) sm = (result,sb) /\
-  vv_post ctx func cenv cx e es sa sm s0 ee tv (StackValue t op) s /\
+  vv_post H ctx func cenv cx e es sa sm s0 ee tv (StackValue t op) s /\
   read_result cx tv ee = (INL v,ee) /\
   ptr_vv_ok cx (expr_type e) tv (StackValue t op) ee G tn s /\
   ~s.vs_halted ==>
   sb = sm /\ result = op /\
   gas_path_ptr D 0 ctx func PG G tn s 0 G tn (OK s) /\
-  expr_post ctx func cenv cx e es sa sb s0 ee v result s /\
+  expr_post H ctx func cenv cx e es sa sb s0 ee v result s /\
   ptr_val_ok cx (expr_type e) v result G tn s
 Proof
   strip_tac >> gvs[unwrap_value_def, comp_return_def, ptr_vv_ok_def,
@@ -23,13 +23,13 @@ QED
 Theorem unwrap_memory_ptr_path:
   p.ptr_location = LocMemory /\ ~is_word_type t /\
   unwrap_value cenv (LocatedValue t p) sm = (result,sb) /\
-  vv_post ctx func cenv cx e es sa sm s0 ee tv (LocatedValue t p) s /\
+  vv_post H ctx func cenv cx e es sa sm s0 ee tv (LocatedValue t p) s /\
   read_result cx tv ee = (INL v,ee) /\
   ptr_vv_ok cx (expr_type e) tv (LocatedValue t p) ee G tn s /\
   ~s.vs_halted ==>
   sb = sm /\ result = p.ptr_operand /\
   gas_path_ptr D 0 ctx func PG G tn s 0 G tn (OK s) /\
-  expr_post ctx func cenv cx e es sa sb s0 ee v result s /\
+  expr_post H ctx func cenv cx e es sa sb s0 ee v result s /\
   ptr_val_ok cx (expr_type e) v result G tn s
 Proof
   strip_tac >> gvs[unwrap_value_def, comp_return_def, ptr_vv_ok_def,

@@ -160,7 +160,7 @@ Theorem for_array_element_install_checked:
   ptr_covers G tn dst s cap /\ ~ctx_has_dalloca ctx /\
   (!m. mem_agree_outside tn.t_mem s.vs_memory m ==>
     val_in_memory tv v (w2n a) m) /\
-  stmt_state_rel ctx func cenv cx es s /\ ghost_inv d cenv cx es G tn s /\
+  stmt_state_rel H ctx func cenv cx es s /\ ghost_inv H d cenv cx es G tn s /\
   fn_inst_ids_distinct func /\ MEM inst (fn_insts func) /\
   inst.inst_outputs = [dst] /\ not_local_ptr cenv es.scopes dst /\
   FLOOKUP s.vs_allocas inst.inst_id = SOME (w2n b,cap) /\
@@ -172,7 +172,7 @@ Theorem for_array_element_install_checked:
   ?gf tf sf.
     inst_seq_ptr D 0 ctx func PG G tn (emitted_insts sa sb) s gf tf /\
     run_inst_seq (emitted_insts sa sb) s = OK sf /\
-    ghost_inv d bc cx (es with scopes := (FEMPTY |+ (id,
+    ghost_inv H d bc cx (es with scopes := (FEMPTY |+ (id,
       <|assignable := F; type := tv; value := v; popped := []|>)) :: es.scopes)
       gf tf sf /\
     (!p. not_fresh_at sa p ==>
@@ -206,10 +206,10 @@ QED
 (* Address arithmetic gives its temporary pointer provenance. No live local
    or return-buffer pointer is changed by assigning that provenance. *)
 Theorem for_nonlocal_provenance_ghost:
-  ghost_inv d cenv cx es G tn s /\ not_local_ptr cenv es.scopes out /\
+  ghost_inv H d cenv cx es G tn s /\ not_local_ptr cenv es.scopes out /\
   (!sz. cenv.ce_return_buf <> SOME (PtrVar (Var out) sz)) /\
   (!x. x <> out ==> FLOOKUP Gf x = FLOOKUP G x) ==>
-  ghost_inv d cenv cx es Gf tn s
+  ghost_inv H d cenv cx es Gf tn s
 Proof
   strip_tac >> fs[ghost_inv_def, not_local_ptr_def] >> rpt conj_tac
   >- (rpt gen_tac >> strip_tac >> `p <> out` by metis_tac[] >>
@@ -222,20 +222,20 @@ Proof
 QED
 
 Theorem for_element_address_outer_ghost:
-  ghost_inv d cenv cx es G tn s /\
+  ghost_inv H d cenv cx es G tn s /\
   not_local_ptr cenv es.scopes ov /\ not_local_ptr cenv es.scopes ep /\
   (!sz. cenv.ce_return_buf <> SOME (PtrVar (Var ov) sz) /\
     cenv.ce_return_buf <> SOME (PtrVar (Var ep) sz)) ==>
-  ghost_inv d cenv cx es
+  ghost_inv H d cenv cx es
     (set_prov (DRESTRICT G (COMPL {ov})) [ep] prov)
     (tn with t_var := (tn.t_var |+ (ov,{})) |+ (ep,{}))
     ((update_var ep w (update_var ov delta s)) with vs_inst_idx := n)
 Proof
   strip_tac >>
-  `ghost_inv d cenv cx es (DRESTRICT G (COMPL {ov}))
+  `ghost_inv H d cenv cx es (DRESTRICT G (COMPL {ov}))
     (tn with t_var := tn.t_var |+ (ov,{})) (update_var ov delta s)` by
     (irule for_scalar_overwrite_ghost >> simp[]) >>
-  `ghost_inv d cenv cx es (DRESTRICT (DRESTRICT G (COMPL {ov})) (COMPL {ep}))
+  `ghost_inv H d cenv cx es (DRESTRICT (DRESTRICT G (COMPL {ov})) (COMPL {ep}))
     (tn with t_var := (tn.t_var |+ (ov,{})) |+ (ep,{}))
     (update_var ep w (update_var ov delta s))` by
     (irule (SRULE [] (Q.INST
@@ -263,7 +263,7 @@ Proof
 QED
 
 Theorem for_element_address_ready_ptr:
-  stmt_state_rel ctx func cenv cx es s /\ ghost_inv d cenv cx es G tn s /\
+  stmt_state_rel H ctx func cenv cx es s /\ ghost_inv H d cenv cx es G tn s /\
   not_local_ptr cenv es.scopes ov /\ not_local_ptr cenv es.scopes ep /\
   (!sz. cenv.ce_return_buf <> SOME (PtrVar (Var ov) sz) /\
     cenv.ce_return_buf <> SOME (PtrVar (Var ep) sz)) /\
@@ -283,7 +283,7 @@ Theorem for_element_address_ready_ptr:
   GA = set_prov (DRESTRICT G (COMPL {ov})) [ep] (FLOOKUP G bp) /\
   tA = (tn with t_var := (tn.t_var |+ (ov,{})) |+ (ep,{})) ==>
   gas_path_ptr D 0 ctx func PG G tn s 0 GA tA (OK sA) /\
-  stmt_state_rel ctx func cenv cx es sA /\ ghost_inv d cenv cx es GA tA sA /\
+  stmt_state_rel H ctx func cenv cx es sA /\ ghost_inv H d cenv cx es GA tA sA /\
   ptr_covers GA tA ep sA stride /\
   lookup_var ep sA = SOME (w + n2w k * n2w stride) /\
   sA.vs_memory = s.vs_memory /\ tA.t_mem = tn.t_mem /\
@@ -398,7 +398,7 @@ QED
 Theorem for_array_entry_copy_checked:
   array_entry_inputs ctx func cenv bc cx es s id p sz dst ainst tv v et tenv sa sb0
     idx (Var bp) arr_base k stride ov ep j3 j4 bb st /\
-  ghost_inv d cenv cx es G tn s /\ ~ctx_has_dalloca ctx /\
+  ghost_inv H d cenv cx es G tn s /\ ~ctx_has_dalloca ctx /\
   ptr_covers G tn bp s ((k+1)*stride) /\ ptr_covers G tn p s sz /\
   op_taint tn (Var idx) = {} /\
   (!m. mem_agree_outside tn.t_mem s.vs_memory m ==>
@@ -412,7 +412,7 @@ Theorem for_array_entry_copy_checked:
     gas_path_ptr D 0 ctx func PG G tn s 0 GA tA (OK sA) /\
     inst_seq_ptr D 0 ctx func PG GA tA (emitted_insts sa sb0) sA gf tf /\
     run_inst_seq (emitted_insts sa sb0) sA = OK sf /\
-    ghost_inv d bc cx (es with scopes := (FEMPTY |+ (id,
+    ghost_inv H d bc cx (es with scopes := (FEMPTY |+ (id,
       <|assignable := F; type := tv; value := v; popped := []|>)) :: es.scopes)
       gf tf sf /\
     (!x. not_fresh_at sa x /\ x <> ov /\ x <> ep ==>
@@ -425,7 +425,7 @@ Proof
   qabbrev_tac `GA = set_prov (DRESTRICT G (COMPL {ov})) [ep] (FLOOKUP G bp)` >>
   qabbrev_tac `tA = tn with t_var := (tn.t_var |+ (ov,{})) |+ (ep,{})` >>
   `gas_path_ptr D 0 ctx func PG G tn s 0 GA tA (OK sA) /\
-   stmt_state_rel ctx func cenv cx es sA /\ ghost_inv d cenv cx es GA tA sA /\
+   stmt_state_rel H ctx func cenv cx es sA /\ ghost_inv H d cenv cx es GA tA sA /\
    ptr_covers GA tA ep sA stride /\
    lookup_var ep sA = SOME (arr_base + n2w k * n2w stride) /\
    sA.vs_memory = s.vs_memory /\ tA.t_mem = tn.t_mem /\
@@ -542,7 +542,7 @@ QED
 Theorem for_array_round_prepare_ptr:
   array_entry_inputs ctx func cenv bc cx es s id p sz dst ainst tv v et tenv sa sb0
     idx (Var bp) arr_base k stride ov ep j3 j4 bb st /\
-  ghost_inv d cenv cx es G tn s /\ ~ctx_has_dalloca ctx /\
+  ghost_inv H d cenv cx es G tn s /\ ~ctx_has_dalloca ctx /\
   ptr_covers G tn bp s ((k+1)*stride) /\ ptr_covers G tn p s sz /\
   op_taint tn (Var idx) = {} /\
   (!m. mem_agree_outside tn.t_mem s.vs_memory m ==>
@@ -553,7 +553,7 @@ Theorem for_array_round_prepare_ptr:
   ?gf tf s2.
     gas_path_ptr D 0 ctx func PG G tn s 0 gf tf (OK s2) /\
     array_entry_ready ctx func bc cx es id tv v sb0 sa ov ep st s s2 /\
-    ghost_inv d bc cx (es with scopes := (FEMPTY |+ (id,
+    ghost_inv H d bc cx (es with scopes := (FEMPTY |+ (id,
       <|assignable := F; type := tv; value := v; popped := []|>)) :: es.scopes)
       gf tf s2 /\
     (!x. not_fresh_at sa x /\ x <> ov /\ x <> ep ==>

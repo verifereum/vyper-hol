@@ -30,8 +30,8 @@ Theorem code_array_elem_ptr_counted:
     (!q. not_fresh_at sa q ==>
       lookup_var q sf = lookup_var q s /\ FLOOKUP Gf q = FLOOKUP G q /\
       op_taint tnf (Var q) = op_taint tn (Var q)) /\
-    (!cenv cx es. stmt_state_rel ctx func cenv cx es s /\
-      local_ptrs_reserved cenv sa ==> stmt_state_rel ctx func cenv cx es sf)
+    (!cenv cx es. stmt_state_rel H ctx func cenv cx es s /\
+      local_ptrs_reserved cenv sa ==> stmt_state_rel H ctx func cenv cx es sf)
 Proof
   Cases_on `dyn` >> simp[array_elem_ptr_def, comp_bind_def, comp_return_def] >>
   rpt (pairarg_tac >> gvs[]) >> strip_tac >>
@@ -85,8 +85,8 @@ Theorem code_array_check_ptr_counted_ok:
     (!q. not_fresh_at sa q ==>
       lookup_var q sf = lookup_var q s /\ FLOOKUP Gf q = FLOOKUP G q /\
       op_taint tnf (Var q) = op_taint tn (Var q)) /\
-    (!cenv cx es. stmt_state_rel ctx func cenv cx es s /\
-      local_ptrs_reserved cenv sa ==> stmt_state_rel ctx func cenv cx es sf)
+    (!cenv cx es. stmt_state_rel H ctx func cenv cx es s /\
+      local_ptrs_reserved cenv sa ==> stmt_state_rel H ctx func cenv cx es sf)
 Proof
   simp[comp_ignore_bind_def, comp_bind_def] >> pairarg_tac >>
   gvs[oneTheory.one] >> strip_tac >>
@@ -166,8 +166,8 @@ Theorem runtime_code_selector_counted_ok:
     (!q. not_fresh_at sa q ==>
       lookup_var q sf = lookup_var q s /\ FLOOKUP Gf q = FLOOKUP G q /\
       op_taint tnf (Var q) = op_taint tn (Var q)) /\
-    (!cenv cx es. stmt_state_rel ctx func cenv cx es s /\
-      local_ptrs_reserved cenv sa ==> stmt_state_rel ctx func cenv cx es sf)
+    (!cenv cx es. stmt_state_rel H ctx func cenv cx es s /\
+      local_ptrs_reserved cenv sa ==> stmt_state_rel H ctx func cenv cx es sf)
 Proof
   simp[compile_array_subscript_split, comp_bind_def] >> pairarg_tac >>
   simp[] >> strip_tac >>
@@ -278,8 +278,8 @@ Theorem code_selector_counted_ok:
     (!q. not_fresh_at sa q ==>
       lookup_var q sf = lookup_var q s /\ FLOOKUP Gf q = FLOOKUP G q /\
       op_taint tnf (Var q) = op_taint tn (Var q)) /\
-    (!cenv cx es. stmt_state_rel ctx func cenv cx es s /\
-      local_ptrs_reserved cenv sa ==> stmt_state_rel ctx func cenv cx es sf)
+    (!cenv cx es. stmt_state_rel H ctx func cenv cx es s /\
+      local_ptrs_reserved cenv sa ==> stmt_state_rel H ctx func cenv cx es sf)
 Proof
   Cases_on `dyn` >> simp[]
   >- (strip_tac >> drule_all runtime_code_selector_counted_ok >> simp[]) >>

@@ -20,7 +20,7 @@ Theorem reason_tuple_copy_state_path_ptr:
   mload (w2n a) s = n2w len /\
   (!i. w2n a <= i /\ i < w2n a + 32 ==> i NOTIN tn.t_mem) /\
   (!p. p = src \/ p = dst ==> p <> v1 /\ p <> vm /\ p <> v2 /\ p <> v3 /\ p <> v4) /\
-  stmt_state_rel ctx func cenv cx es s /\
+  stmt_state_rel H ctx func cenv cx es s /\
   fn_inst_ids_distinct func /\ MEM inst (fn_insts func) /\
   inst.inst_opcode = ALLOCA /\ inst.inst_outputs = [dst] /\
   not_local_ptr cenv es.scopes dst /\ n <= capacity /\
@@ -29,7 +29,7 @@ Theorem reason_tuple_copy_state_path_ptr:
   v1 <> vm /\ v2 <> vm ==>
   ?Gf tnf sf.
     gas_path_ptr D 0 ctx func PG G tn s 0 Gf tnf (OK sf) /\
-    stmt_state_rel ctx func cenv cx es sf /\
+    stmt_state_rel H ctx func cenv cx es sf /\
     sf.vs_current_bb = sb.cs_current_bb /\
     sf.vs_inst_idx = LENGTH sb.cs_current_insts /\ ~sf.vs_halted /\
     sf.vs_allocas = s.vs_allocas /\
@@ -44,7 +44,7 @@ Theorem reason_tuple_copy_state_path_ptr:
 Proof
   strip_tac >> drule_all reason_tuple_copy_path_ptr >>
   disch_then (qspecl_then [`PG`,`D`] strip_assume_tac) >>
-  `stmt_state_rel ctx func cenv cx es sf` by
+  `stmt_state_rel H ctx func cenv cx es sf` by
     (`!q. ~MEM q [v1;vm;v2;v3;v4] ==> lookup_var q sf = lookup_var q s` by
        (simp[] >> metis_tac[]) >>
      drule_all reason_scratch_nonlocal_copy_state_rel >> simp[]) >>

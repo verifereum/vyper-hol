@@ -20,7 +20,7 @@ QED
 
 Theorem literal_alloc_buffer_ptr_run:
   compile_alloc_buffer sz sa = (buf,sm) /\
-  stmt_state_rel ctx func cenv cx es s /\ fn_inst_ids_distinct func /\
+  stmt_state_rel H ctx func cenv cx es s /\ fn_inst_ids_distinct func /\
   local_ptrs_reserved cenv sa /\ sz < dimword (:256) /\
   MEM (mk_inst sa.cs_next_id ALLOCA [Lit (n2w sz)]
     [STRING #"%" (toString sa.cs_next_var)]) (fn_insts func) /\
@@ -33,7 +33,7 @@ Theorem literal_alloc_buffer_ptr_run:
     tn1 = step_taint (mk_inst sa.cs_next_id ALLOCA [Lit (n2w sz)]
       [STRING #"%" (toString sa.cs_next_var)]) s u tn /\
     run_inst_seq (emitted_insts sa sm) s = OK u /\
-    stmt_state_rel ctx func cenv cx es u /\
+    stmt_state_rel H ctx func cenv cx es u /\
     eval_operand buf.buf_operand u = SOME w /\
     FLOOKUP u.vs_allocas sa.cs_next_id = SOME (w2n w,sz) /\
     w2n w + sz < dimword (:256) /\ u.vs_memory = s.vs_memory /\
@@ -85,7 +85,7 @@ Proof
 QED
 
 Theorem literal_alloca_root_bound:
-  stmt_state_rel ctx func cenv cx es s /\
+  stmt_state_rel H ctx func cenv cx es s /\
   MEM (mk_inst id ALLOCA [Lit (n2w n)] [out]) (fn_insts func) /\
   n < dimword (:256) /\
   step_inst_base (mk_inst id ALLOCA [Lit (n2w n)] [out]) s = OK u ==>
@@ -127,7 +127,7 @@ Proof
 QED
 
 Theorem literal_alloca_old_ghost:
-  stmt_state_rel ctx func cenv cx es s /\
+  stmt_state_rel H ctx func cenv cx es s /\
   MEM (mk_inst id ALLOCA [Lit (n2w n)] [out]) (fn_insts func) /\
   n < dimword (:256) /\
   step_inst_base (mk_inst id ALLOCA [Lit (n2w n)] [out]) s = OK u ==>
@@ -157,7 +157,7 @@ Proof
 QED
 
 Theorem literal_alloca_exterior_taint:
-  stmt_state_rel ctx func cenv cx es s /\
+  stmt_state_rel H ctx func cenv cx es s /\
   MEM (mk_inst id ALLOCA [Lit (n2w n)] [out]) (fn_insts func) /\
   n < dimword (:256) /\
   step_inst_base (mk_inst id ALLOCA [Lit (n2w n)] [out]) s = OK u /\

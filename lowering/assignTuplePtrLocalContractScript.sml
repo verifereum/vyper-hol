@@ -98,10 +98,10 @@ Theorem tuple_local_compatibility_callback_ptr:
   lookup_var src s = SOME sw /\ (is_word_type ty ==> sw = typed_val_to_w256 tv v) /\
   (~is_word_type ty ==> ptr_covers G tn src s (type_memory_size tv)) /\
   ptr_val_ok cx ty v (Var src) G tn s /\
-  stmt_state_rel ctx func cenv cx es s /\ ghost_inv d cenv cx es G tn s /\
+  stmt_state_rel H ctx func cenv cx es s /\ ghost_inv H d cenv cx es G tn s /\
   fn_has_code sa sb func /\ ~ctx_has_dalloca ctx /\ ~s.vs_halted /\
   s.vs_current_bb = sa.cs_current_bb /\ s.vs_inst_idx = LENGTH sa.cs_current_insts ==>
-  ?t G' tn'. stmt_state_rel ctx func cenv cx es' t /\ ghost_inv d cenv cx es' G' tn' t /\
+  ?t G' tn'. stmt_state_rel H ctx func cenv cx es' t /\ ghost_inv H d cenv cx es' G' tn' t /\
     ~t.vs_halted /\ t.vs_current_bb = sb.cs_current_bb /\
     t.vs_inst_idx = LENGTH sb.cs_current_insts /\
     (!x. not_fresh_at sa x ==> lookup_var x t = lookup_var x s /\

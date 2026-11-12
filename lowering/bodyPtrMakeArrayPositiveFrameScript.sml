@@ -76,13 +76,13 @@ Theorem literal_loop_store_endpoint:
   z.vs_allocas = s.vs_allocas /\ off+n <= capacity /\
   sa.cs_next_var <= sb.cs_next_var /\ sa.cs_next_id <= sb.cs_next_id /\
   z.vs_current_bb = sb.cs_current_bb /\ z.vs_inst_idx = LENGTH sb.cs_current_insts /\
-  ~z.vs_halted /\ stmt_state_rel ctx func ce cx es z /\
-  ghost_inv d ce cx es H tm z /\ ghost_kept ce es fr Gf tnf sf H tm /\
-  FLOOKUP H root = SOME (addr,capacity) /\ ptr_covers H tm root z capacity /\
+  ~z.vs_halted /\ stmt_state_rel H ctx func ce cx es z /\
+  ghost_inv H d ce cx es HG tm z /\ ghost_kept ce es fr Gf tnf sf HG tm /\
+  FLOOKUP HG root = SOME (addr,capacity) /\ ptr_covers HG tm root z capacity /\
   (!i. ~(addr+off <= i /\ i < addr+off+n) ==>
     mem_bytes_at i 1 z.vs_memory = mem_bytes_at i 1 s.vs_memory) ==>
   literal_loop_frame pure ctx func ce cx d root aid addr capacity
-    ees fr sf Gf tnf es sb H tm z cells off
+    ees fr sf Gf tnf es sb HG tm z cells off
 Proof
   disch_then (map_every assume_tac o CONJUNCTS) >>
   `!p k. addr+capacity <= p \/ p+k <= addr ==>
@@ -94,7 +94,7 @@ Proof
               local_region ce es.scopes s name p k` by
     (simp[loweringStateRelDefsTheory.local_region_def] >>
      metis_tac[local_ptrs_reserved_def]) >>
-  `ghost_kept ce ees fr Gf tnf sf H tm` by
+  `ghost_kept ce ees fr Gf tnf sf HG tm` by
     (gvs[literal_loop_frame_def, bodyPtrDefsTheory.ghost_kept_def] >>
      metis_tac[local_region_scopes_domain]) >>
   gvs[literal_loop_frame_def] >>

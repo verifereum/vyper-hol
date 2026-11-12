@@ -7,7 +7,7 @@ Ancestors
 
 Theorem scalar_unwrap_ptr_endpoint:
   unwrap_value ce vv sm = (op,sb) /\
-  vv_post ctx fn ce cx e es sa sm s0 es' tv vv s /\
+  vv_post H ctx fn ce cx e es sa sm s0 es' tv vv s /\
   expr_body_pre ce cx env e es /\
   eval_expr cx e es = (INL tv,es') /\
   read_result cx tv es' = (INL v,es') /\
@@ -20,7 +20,7 @@ Theorem scalar_unwrap_ptr_endpoint:
   ~ctx_has_dalloca ctx /\ ~ce.ce_is_ctor /\ ~s.vs_halted /\
   s.vs_current_bb = sm.cs_current_bb /\
   s.vs_inst_idx = LENGTH sm.cs_current_insts /\
-  ghost_inv d ce cx es' G tn s /\
+  ghost_inv H d ce cx es' G tn s /\
   ghost_kept ce es sa G0 tn0 s0 G tn /\
   (!name p sz. FLOOKUP ce.ce_vars name = SOME (PtrVar (Var p) sz) ==>
                not_fresh_at sm p) /\
@@ -30,11 +30,11 @@ Theorem scalar_unwrap_ptr_endpoint:
   ?ty Gf tnf sf.
     evaluate_type (get_tenv cx) (expr_type e) = SOME ty /\
     gas_path_ptr D 0 ctx fn PG G tn s 0 Gf tnf (OK sf) /\
-    expr_post ctx fn ce cx e es sa sb s0 es' v op sf /\
+    expr_post H ctx fn ce cx e es sa sb s0 es' v op sf /\
     eval_operand op sf = SOME (typed_val_to_w256 ty v) /\
     op_taint tnf op = {} /\
     ptr_val_ok cx (expr_type e) v op Gf tnf sf /\
-    ghost_inv d ce cx es' Gf tnf sf /\
+    ghost_inv H d ce cx es' Gf tnf sf /\
     ghost_kept ce es sa G0 tn0 s0 Gf tnf /\
     sf.vs_current_bb = sb.cs_current_bb /\
     sf.vs_inst_idx = LENGTH sb.cs_current_insts /\

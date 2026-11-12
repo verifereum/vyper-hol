@@ -213,7 +213,7 @@ QED
 (* Positive semantic reads are bounded by the actual allocation frontier. *)
 Theorem expr_val_at_read_bound:
   !ctx func cenv cx ty sa sb es v op s tv w n.
-    stmt_state_rel ctx func cenv cx es s /\
+    stmt_state_rel H ctx func cenv cx es s /\
     expr_val_at cenv cx ty sa sb es v op s /\
     evaluate_type (get_tenv cx) ty = SOME tv /\ ~is_word_type ty /\
     eval_operand op s = SOME w /\ 0 < n /\ n <= val_footprint tv v ==>
@@ -245,7 +245,7 @@ QED
 
 Theorem expr_val_at_raw_return_resources:
   !ctx func cenv cx ty sa sb es v op s tv w G tn n.
-    stmt_state_rel ctx func cenv cx es s /\
+    stmt_state_rel H ctx func cenv cx es s /\
     expr_val_at cenv cx ty sa sb es v op s /\
     ptr_val_ok cx ty v op G tn s /\
     evaluate_type (get_tenv cx) ty = SOME tv /\ ~is_word_type ty /\

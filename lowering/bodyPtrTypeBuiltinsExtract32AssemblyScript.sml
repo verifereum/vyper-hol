@@ -10,7 +10,7 @@ Ancestors
   exprSimDefs fragGasMode rich_list exprLoweringProps fragExec exprSimHash exprSimHashBoundary
 
 Theorem extract32_offset_scalar_view:
-  expr_post ctx func cenv cx off es sa sb s0 ee (IntV i) op s /\
+  expr_post H ctx func cenv cx off es sa sb s0 ee (IntV i) op s /\
   expr_type off = BaseT (UintT k) /\
   evaluate_type (get_tenv cx) (expr_type off) = SOME (BaseTV (UintT k)) /\
   0 <= i /\ ptr_val_ok cx (post_value_type cenv off) (IntV i) op G tn s ==>
@@ -32,10 +32,10 @@ QED
 (* The callback's natural p need not be canonical: use the word address
    preserved by the offset post, rather than assuming n2w is injective. *)
 Theorem extract32_saved_source_nonwrap:
-  expr_post ctx func cenv cx src es sa sm s0 es1 (BytesV bs) srcop s1 /\
+  expr_post H ctx func cenv cx src es sa sm s0 es1 (BytesV bs) srcop s1 /\
   expr_type src = BaseT (BytesT (Dynamic m)) /\
   evaluate_type (get_tenv cx) (expr_type src) = SOME (BaseTV (BytesT (Dynamic m))) /\
-  expr_post ctx func cenv cx off es1 sm sb s1 es2 v offop s2 /\
+  expr_post H ctx func cenv cx off es1 sm sb s1 es2 v offop s2 /\
   (!z. srcop = Var z ==> not_fresh_at sm z) /\ (!l. srcop <> Label l) /\
   eval_operand srcop s2 = SOME w ==>
   LENGTH bs < dimword(:256) /\ w2n w + 32 + LENGTH bs < dimword(:256)
@@ -51,16 +51,16 @@ Theorem extract32_tail_ghost_frame:
   compile_extract32_load len data offset sc = (raw,sd) /\
   compile_clamp_basetype raw typ sd = (result,se) /\
   run_inst_seq (emitted_insts sc se) s = OK t /\
-  ghost_inv d cenv cx ee G tn s /\ local_ptrs_reserved cenv sc /\
+  ghost_inv H d cenv cx ee G tn s /\ local_ptrs_reserved cenv sc /\
   (!x sz. cenv.ce_return_buf = SOME (PtrVar (Var x) sz) ==> not_fresh_at sc x) /\
   (!x sz. cenv.ce_return_pc = SOME (PtrVar (Var x) sz) ==> not_fresh_at sc x) /\
   ghost_kept cenv es sa G0 tn0 s0 G tn /\ sa.cs_next_var <= sc.cs_next_var /\
-  (!x. not_fresh_at sc x ==> FLOOKUP H x = FLOOKUP G x /\
+  (!x. not_fresh_at sc x ==> FLOOKUP HG x = FLOOKUP G x /\
     op_taint th (Var x) = op_taint tn (Var x)) /\
   th.t_mem = tn.t_mem /\ th.t_stor = tn.t_stor /\
   th.t_trans = tn.t_trans /\ th.t_imm = tn.t_imm ==>
-  ghost_inv d cenv cx ee H th (t with vs_inst_idx := j) /\
-  ghost_kept cenv es sa G0 tn0 s0 H th
+  ghost_inv H d cenv cx ee HG th (t with vs_inst_idx := j) /\
+  ghost_kept cenv es sa G0 tn0 s0 HG th
 Proof
   strip_tac >>
   `(t with vs_vars := s.vs_vars) = s /\
@@ -154,14 +154,14 @@ Theorem extract32_tail_ready_certificate:
   n < dimword(:256) /\ p+32+LENGTH bs < dimword(:256) /\
   (!span. 0 < LENGTH bs /\ span <= LENGTH bs ==> ptr_covers G tn data s span) /\
   ~ctx_has_dalloca ctx ==>
-  ?H th.
+  ?HG th.
     (!k. inst_seq_ptr D 0 ctx fn PG G tn (emitted_insts sa sb)
-      (s with vs_inst_idx := k) H th) /\
+      (s with vs_inst_idx := k) HG th) /\
     (!t. run_inst_seq (emitted_insts sa sb) s = OK t ==>
-      op_prov H result = NONE /\ op_taint th result = {}) /\
+      op_prov HG result = NONE /\ op_taint th result = {}) /\
     th.t_mem = tn.t_mem /\ th.t_stor = tn.t_stor /\
     th.t_trans = tn.t_trans /\ th.t_imm = tn.t_imm /\
-    (!x. not_fresh_at sa x ==> FLOOKUP H x = FLOOKUP G x /\
+    (!x. not_fresh_at sa x ==> FLOOKUP HG x = FLOOKUP G x /\
       op_taint th (Var x) = op_taint tn (Var x))
 Proof
   strip_tac >>
@@ -179,7 +179,7 @@ Proof
     simp[w2n_n2w, arithmeticTheory.LESS_MOD] >>
   drule_all extract32_tail_bounds_abort_certificate >>
   disch_then (qspecl_then [`fn`,`PG`,`D`] strip_assume_tac) >>
-  qexistsl_tac [`H`,`th`] >> simp[]
+  qexistsl_tac [`HG`,`th`] >> simp[]
 QED
 
 Resume extract32_tail_ready_certificate[inbounds]:
@@ -199,7 +199,7 @@ Resume extract32_tail_ready_certificate[inbounds]:
     simp[w2n_n2w, arithmeticTheory.LESS_MOD] >>
   drule_all extract32_tail_bounds_normal_certificate >>
   disch_then (qspecl_then [`fn`,`PG`,`D`] strip_assume_tac) >>
-  qexistsl_tac [`H`,`th`] >> simp[]
+  qexistsl_tac [`HG`,`th`] >> simp[]
 QED
 
 Finalise extract32_tail_ready_certificate
@@ -209,10 +209,10 @@ Theorem extract32_tail_outcome_of_runs_ptr:
   compile_clamp_basetype raw (BaseT bt) sm = (op,sb) /\
   fn_has_code sa sb func /\ ~s.vs_halted /\
   s.vs_current_bb = sa.cs_current_bb /\ s.vs_inst_idx = LENGTH sa.cs_current_insts /\
-  es.gas_obs = [] /\ inst_seq_ptr D 0 ctx func PG G tn (emitted_insts sa sb) s H th /\
+  es.gas_obs = [] /\ inst_seq_ptr D 0 ctx func PG G tn (emitted_insts sa sb) s HG th /\
   (case evaluate_extract32 bs n bt of
     INL v => ?t. run_inst_seq (emitted_insts sa sb) s = OK t /\
-      Q (INL (Value v)) es H th (t with vs_inst_idx := LENGTH sb.cs_current_insts)
+      Q (INL (Value v)) es HG th (t with vs_inst_idx := LENGTH sb.cs_current_insts)
   | INR err => ?msg t. err = RuntimeError msg /\
       run_inst_seq (emitted_insts sa sb) s = Abort Revert_abort t) ==>
   gas_outcome_ptr D (cx_tops cx) (ctx,func) PG
@@ -241,7 +241,7 @@ Resume extract32_tail_outcome_of_runs_ptr[success]:
   drule_all extract32_tail_normal_ptr_path >> strip_tac >>
   rewrite_tac[gas_outcome_ptr_def] >> qexists_tac `[]` >> disj1_tac >>
   rewrite_tac[gas_summary_ptr_at_def] >>
-  qexistsl_tac [`INL (Value x)`,`es`,`H`,`th`,
+  qexistsl_tac [`INL (Value x)`,`es`,`HG`,`th`,
     `OK (t with vs_inst_idx := LENGTH sb.cs_current_insts)`] >>
   simp[lift_sum_def, bind_def, return_def] >> gvs[]
 QED
@@ -253,7 +253,7 @@ Resume extract32_tail_outcome_of_runs_ptr[error]:
   drule_all extract32_tail_abort_ptr_path >> strip_tac >>
   rewrite_tac[gas_outcome_ptr_def] >> qexists_tac `REPLICATE n' F` >> disj1_tac >>
   rewrite_tac[gas_summary_ptr_at_def] >>
-  qexistsl_tac [`INR (Error (RuntimeError msg))`,`es`,`H`,`th`,
+  qexistsl_tac [`INR (Error (RuntimeError msg))`,`es`,`HG`,`th`,
     `Abort Revert_abort (t with vs_inst_idx := j)`] >>
   simp[lift_sum_def, bind_def, raise_def, expr_exit_def, exit_result_def]
 QED
@@ -261,19 +261,19 @@ QED
 Finalise extract32_tail_outcome_of_runs_ptr
 
 Theorem extract32_tail_post_of_run:
-  expr_post ctx func cenv cx src es sa sm s0 es1 (BytesV bs) srcop s1 /\
-  expr_post ctx func cenv cx off es1 sm sc s1 ee (IntV i) offop s /\
+  expr_post H ctx func cenv cx src es sa sm s0 es1 (BytesV bs) srcop s1 /\
+  expr_post H ctx func cenv cx off es1 sm sc s1 ee (IntV i) offop s /\
   compile_extract32_load len dp offop sc = (raw,sd) /\
   compile_clamp_basetype raw typ sd = (op,se) /\
   run_inst_seq (emitted_insts sc se) s = OK t /\
   eval_operand op t = SOME (typed_val_to_w256 tv v) /\
-  stmt_state_rel ctx func cenv cx es s0 /\
+  stmt_state_rel H ctx func cenv cx es s0 /\
   local_ptrs_reserved cenv sa /\ local_ptrs_reserved cenv sc /\
   MAP FDOM es.scopes = MAP FDOM es1.scopes /\
   sa.cs_next_var <= sm.cs_next_var /\ sm.cs_next_var <= sc.cs_next_var /\
   sa.cs_next_id <= sm.cs_next_id /\
   is_word_type ann /\ evaluate_type (get_tenv cx) ann = SOME tv ==>
-  vv_post ctx func cenv cx (TypeBuiltin ann Extract32 typ [src;off])
+  vv_post H ctx func cenv cx (TypeBuiltin ann Extract32 typ [src;off])
     es sa se s0 ee (Value v) (StackValue ty op) t
 Proof
   strip_tac >>
@@ -284,22 +284,22 @@ Proof
        (\r. compile_clamp_basetype r typ)`, `op`, `se`] >>
      simp[comp_bind_def] >> irule extract32_read_bind >>
      simp[extract32_read_load, extract32_read_clamp_basetype]) >>
-  `stmt_state_rel ctx func cenv cx ee t` by
+  `stmt_state_rel H ctx func cenv cx ee t` by
     (irule hash_readonly_state_rel >> qexistsl_tac [`s`,`sc`] >> gvs[expr_post_def]) >>
   `t.vs_memory = s.vs_memory /\ t.vs_allocas = s.vs_allocas` by
     (qpat_assum `_ with vs_vars := _ = _` mp_tac >>
      simp[venom_state_component_equality]) >>
   irule extract32_posts_to_vv_post_frame >>
-  qpat_assum `expr_post _ _ _ _ off _ _ _ _ _ _ _ _` (irule_at Any) >>
-  qpat_assum `expr_post _ _ _ _ src _ _ _ _ _ _ _ _` (irule_at Any) >>
+  qpat_assum `expr_post _ _ _ _ _ off _ _ _ _ _ _ _ _` (irule_at Any) >>
+  qpat_assum `expr_post _ _ _ _ _ src _ _ _ _ _ _ _ _` (irule_at Any) >>
   simp[] >> metis_tac[]
 QED
 
 Theorem extract32_saved_source_view:
-  expr_post ctx func cenv cx src es sa sm s0 es1 (BytesV bs) srcop s1 /\
+  expr_post H ctx func cenv cx src es sa sm s0 es1 (BytesV bs) srcop s1 /\
   expr_type src = BaseT (BytesT (Dynamic m)) /\
   evaluate_type (get_tenv cx) (expr_type src) = SOME (BaseTV (BytesT (Dynamic m))) /\
-  expr_post ctx func cenv cx off es1 sm sb s1 es2 v offop s2 /\
+  expr_post H ctx func cenv cx off es1 sm sb s1 es2 v offop s2 /\
   (!z. srcop = Var z ==> not_fresh_at sm z) /\ (!l. srcop <> Label l) /\
   ptr_mem_ok cx (expr_type src) (BytesV bs) srcop G tn s2 /\
   eval_operand srcop s2 = SOME (n2w p) /\

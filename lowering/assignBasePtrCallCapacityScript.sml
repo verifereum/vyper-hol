@@ -34,7 +34,7 @@ QED
 
 Theorem assign_base_call96_endpoint:
   !func cenv cx es s inst p u t ctx fuel label.
-    stmt_state_rel ctx func cenv cx es s /\ fn_inst_ids_distinct func /\
+    stmt_state_rel H ctx func cenv cx es s /\ fn_inst_ids_distinct func /\
     MEM inst (fn_insts func) /\ inst.inst_opcode = ALLOCA /\
     inst.inst_operands = [Lit 96w] /\ inst.inst_outputs = [p] /\
     not_local_ptr cenv es.scopes p /\ exec_alloca inst s (96w:bytes32) = OK u /\

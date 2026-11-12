@@ -14,7 +14,7 @@ Theorem ifexp_selected_body_word_outcome_ptr:
   body_inv tops ctx cenv cx /\ expr_body_pre cenv cx env (IfExp t c a b) es /\
   is_word_type t /\
   gas_admissible (eval_expr cx (IfExp t c a b)) expr_vv_res_ok es /\
-  gas_marked_exec_ptr (cx_dead cx) (ctx,fn) PG
+  gas_marked_exec_ptr (cx_dead H cx) (ctx,fn) PG
     (bind (eval_expr cx c) (read_result cx)) (es,s0,G0,tn0)
     marks (INL (BoolV sel)) mid G1 tn1 (OK u) /\
   compile_expr cenv ty (if sel then a else b) se = (vv,sm) /\
@@ -23,18 +23,18 @@ Theorem ifexp_selected_body_word_outcome_ptr:
   local_ptrs_reserved cenv se /\ ~ctx_has_dalloca ctx /\ ~cenv.ce_is_ctor /\
   (!x sz. cenv.ce_return_buf = SOME (PtrVar (Var x) sz) ==> not_fresh_at se x) /\
   (!x sz. cenv.ce_return_pc = SOME (PtrVar (Var x) sz) ==> not_fresh_at se x) /\
-  stmt_state_rel ctx fn cenv cx (mid with gas_obs := []) v0 /\
-  ghost_inv d cenv cx (mid with gas_obs := []) G1 tn1 v0 /\
+  stmt_state_rel H ctx fn cenv cx (mid with gas_obs := []) v0 /\
+  ghost_inv H d cenv cx (mid with gas_obs := []) G1 tn1 v0 /\
   ~v0.vs_halted /\ v0.vs_current_bb = se.cs_current_bb /\
   v0.vs_inst_idx = LENGTH se.cs_current_insts ==>
-  gas_outcome_ptr (cx_dead cx) (cx_tops cx) (ctx,fn) PG
+  gas_outcome_ptr (cx_dead H cx) (cx_tops cx) (ctx,fn) PG
     (bind (eval_expr cx (if sel then a else b)) (conditional_result cx))
     (mid with gas_obs := [],v0,G1,tn1)
     (\res ee G tn z. ?tv v. res = INL tv /\ read_result cx tv ee = (INL v,ee) /\
-      expr_post ctx fn cenv cx (if sel then a else b)
+      expr_post H ctx fn cenv cx (if sel then a else b)
         (mid with gas_obs := []) se sx v0 ee v op z /\
       ptr_val_ok cx (expr_type (if sel then a else b)) v op G tn z /\
-      ghost_inv d cenv cx ee G tn z /\
+      ghost_inv H d cenv cx ee G tn z /\
       ghost_kept cenv (mid with gas_obs := []) se G1 tn1 v0 G tn /\
       z.vs_current_bb = sx.cs_current_bb /\ z.vs_inst_idx = LENGTH sx.cs_current_insts)
     (\res ee gt r. expr_exit res r)
@@ -68,14 +68,14 @@ Theorem ifexp_word_normal_continuation_ptr:
   body_inv tops ctx cenv cx /\ expr_body_pre cenv cx env (IfExp t c a b) es /\
   is_word_type t /\ expr_type c = BaseT BoolT /\
   gas_admissible (eval_expr cx (IfExp t c a b)) expr_vv_res_ok es /\
-  gas_marked_exec_ptr (cx_dead cx) (ctx,fn) PG
+  gas_marked_exec_ptr (cx_dead H cx) (ctx,fn) PG
     (bind (eval_expr cx c) (read_result cx)) (es,s0,G0,tn0)
     marks (INL (BoolV sel)) mid G1 tn1 (OK u) /\
-  expr_post ctx fn cenv cx c es sa sc s0 (mid with gas_obs := []) (BoolV sel) cop u /\
+  expr_post H ctx fn cenv cx c es sa sc s0 (mid with gas_obs := []) (BoolV sel) cop u /\
   ptr_val_ok cx (expr_type c) (BoolV sel) cop G1 tn1 u /\
-  ghost_inv d cenv cx (mid with gas_obs := []) G1 tn1 u /\
+  ghost_inv H d cenv cx (mid with gas_obs := []) G1 tn1 u /\
   ghost_kept cenv es sa G0 tn0 s0 G1 tn1 /\
-  stmt_state_rel ctx fn cenv cx es s0 /\
+  stmt_state_rel H ctx fn cenv cx es s0 /\
   emit_inst JNZ [cop; Label tl; Label el] [] sj = ((),sn) /\
   sj.cs_current_bb = sc.cs_current_bb /\ sj.cs_current_insts = sc.cs_current_insts /\
   compile_expr cenv ty (if sel then a else b) se = (av,sm) /\
@@ -94,12 +94,12 @@ Theorem ifexp_word_normal_continuation_ptr:
   sx.cs_next_id <= sb.cs_next_id /\ (!x. not_fresh_at sa x ==> x <> rv) /\
   ~u.vs_halted /\ u.vs_current_bb = sc.cs_current_bb /\
   u.vs_inst_idx = LENGTH sc.cs_current_insts ==>
-  gas_outcome_ptr (cx_dead cx) (cx_tops cx) (ctx,fn) PG
+  gas_outcome_ptr (cx_dead H cx) (cx_tops cx) (ctx,fn) PG
     (eval_expr cx (IfExp t c a b)) (es,s0,G0,tn0)
     (\res ee G tn z. ?tv. res = INL tv /\
-      vv_post ctx fn cenv cx (IfExp t c a b) es sa sb s0 ee tv (StackValue t (Var rv)) z /\
+      vv_post H ctx fn cenv cx (IfExp t c a b) es sa sb s0 ee tv (StackValue t (Var rv)) z /\
       ptr_vv_ok cx t tv (StackValue t (Var rv)) ee G tn z /\
-      ghost_inv d cenv cx ee G tn z /\ ghost_kept cenv es sa G0 tn0 s0 G tn /\
+      ghost_inv H d cenv cx ee G tn z /\ ghost_kept cenv es sa G0 tn0 s0 G tn /\
       z.vs_current_bb = sb.cs_current_bb /\ z.vs_inst_idx = LENGTH sb.cs_current_insts)
     (\res ee gt r. expr_exit res r)
 Proof
@@ -128,7 +128,7 @@ Proof
   irule ifexp_selected_body_word_outcome_ptr >>
   goal_assum (drule_at Any) >> simp[] >>
   simp[jump_to_def, ghost_inv_jump_to, stmt_state_rel_jump_to] >>
-  `stmt_state_rel ctx fn cenv cx mid u` by fs[expr_post_def] >>
+  `stmt_state_rel H ctx fn cenv cx mid u` by fs[expr_post_def] >>
   `sa.cs_next_var <= se.cs_next_var /\ sa.cs_next_id <= se.cs_next_id` by decide_tac >>
   conj_tac >- metis_tac[not_fresh_at_mono] >>
   conj_tac >- metis_tac[not_fresh_at_mono] >>
@@ -184,7 +184,7 @@ Resume ifexp_word_framed_vv_ptr[normal]:
   irule gas_outcome_ptr_conseq >>
   irule_at Any ifexp_word_normal_continuation_ptr >>
   goal_assum (drule_at (Pat `gas_marked_exec_ptr _ _ _ _ _ _ _ _ _ _ _`)) >>
-  goal_assum (drule_at (Pat `expr_post _ _ _ _ _ _ _ _ _ _ _ _ _`)) >>
+  goal_assum (drule_at (Pat `expr_post _ _ _ _ _ _ _ _ _ _ _ _ _ _`)) >>
   goal_assum (drule_at (Pat `compile_expr _ _ _ _ = _`)) >> simp[] >>
   goal_assum (drule_at (Pat `emit_inst JNZ _ _ _ = _`)) >>
   goal_assum (drule_at (Pat `emit_inst ASSIGN _ _ _ = _`)) >>

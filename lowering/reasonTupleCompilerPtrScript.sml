@@ -20,7 +20,7 @@ Theorem reason_tuple_copy_compiler_ptr:
   32 <= n /\ n = 32 + 32 * word_size len /\ n < dimword (:256) /\
   mload (w2n a) s = n2w len /\
   (!i. w2n a <= i /\ i < w2n a + 32 ==> i NOTIN tn.t_mem) /\
-  stmt_state_rel ctx func cenv cx es s /\
+  stmt_state_rel H ctx func cenv cx es s /\
   fn_inst_ids_distinct func /\ MEM inst (fn_insts func) /\
   inst.inst_opcode = ALLOCA /\ inst.inst_outputs = [dst] /\
   not_local_ptr cenv es.scopes dst /\ n <= capacity /\
@@ -29,7 +29,7 @@ Theorem reason_tuple_copy_compiler_ptr:
   not_fresh_at sa src /\ not_fresh_at sa dst ==>
   ?Gf tnf sf.
     gas_path_ptr D 0 ctx func PG G tn s 0 Gf tnf (OK sf) /\
-    stmt_state_rel ctx func cenv cx es sf /\
+    stmt_state_rel H ctx func cenv cx es sf /\
     sf.vs_current_bb = sb.cs_current_bb /\
     sf.vs_inst_idx = LENGTH sb.cs_current_insts /\ ~sf.vs_halted /\
     local_ptrs_reserved cenv sb /\

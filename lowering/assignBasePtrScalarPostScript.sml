@@ -9,7 +9,7 @@ Ancestors wordLoadStorePtr assignBasePtrLocalStore assignBasePtrCleanStore assig
 
 Theorem assign_base_scalar_local_store_ghost:
   !d cenv cx es G tn s id pre sc entry rest p sz a value w v sa fn PG iid.
-    ghost_inv d cenv cx es G tn s /\
+    ghost_inv H d cenv cx es G tn s /\
     find_containing_scope id es.scopes = SOME (pre,sc,entry,rest) /\
     FLOOKUP cenv.ce_vars id = SOME (PtrVar (Var p) sz) /\
     lookup_var p s = SOME a /\ eval_operand value s = SOME w /\
@@ -20,7 +20,7 @@ Theorem assign_base_scalar_local_store_ghost:
     (!x cap. cenv.ce_return_pc = SOME (PtrVar (Var x) cap) ==> not_fresh_at sa x) /\
     val_wf entry.type v /\ val_footprint entry.type v <= 32 /\
     val_in_memory entry.type v (w2n a) (mstore (w2n a) w s).vs_memory ==>
-    ghost_inv d cenv cx
+    ghost_inv H d cenv cx
       (es with scopes := pre ++ (sc |+ (id,entry with <|value := v; popped := []|>)) :: rest)
       (step_prov PG G (mk_inst iid MSTORE [Var p; value] []) (mstore (w2n a) w s))
       (step_taint (mk_inst iid MSTORE [Var p; value] []) s (mstore (w2n a) w s) tn)
@@ -49,7 +49,7 @@ Proof
     mem_bytes_at i 1 (mstore (w2n a) w s).vs_memory = mem_bytes_at i 1 s.vs_memory /\
     (i IN tf.t_mem <=> i IN tn.t_mem)` by
     (rpt strip_tac >> simp[] >> irule mstore_mem_bytes_at_disjoint >> decide_tac) >>
-  `stor_taint_ok cx tf (mstore (w2n a) w s)` by
+  `stor_taint_ok H cx tf (mstore (w2n a) w s)` by
     (simp[Abbr `tf`] >> irule mstore_storage_taint_frame_ptr >>
      simp[] >> metis_tac[ghost_inv_def]) >>
   drule_all assign_base_local_scope_ghost_post >> simp[]

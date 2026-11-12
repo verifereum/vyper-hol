@@ -4,7 +4,7 @@ Ancestors exprSimPrecompiles exprLoweringProps localPtrsProps
           valueEncodingProps allocaFootprint exprSimProps loweringPosts
 
 Theorem registered_allocation_local_regions:
-  stmt_state_rel ctx fn cenv cx es s /\ fn_inst_ids_distinct fn /\
+  stmt_state_rel H ctx fn cenv cx es s /\ fn_inst_ids_distinct fn /\
   local_ptrs_rel fn cenv es.scopes s /\ MEM inst (fn_insts fn) /\
   inst.inst_outputs = [q] /\ not_local_ptr cenv es.scopes q /\
   FLOOKUP s.vs_allocas inst.inst_id = SOME (b,n) ==>
@@ -17,7 +17,7 @@ Proof
 QED
 
 Theorem registered_allocation_old_regions:
-  stmt_state_rel ctx fn cenv cx es s /\
+  stmt_state_rel H ctx fn cenv cx es s /\
   FLOOKUP s.vs_allocas id = SOME (b,n) /\ sf.cs_next_id <= id ==>
   !aid lo sz. aid < sf.cs_next_id /\
     FLOOKUP s.vs_allocas aid = SOME (lo,sz) ==>
@@ -31,12 +31,12 @@ QED
    interface: use precompile_alloca_immutable_disjoint directly. *)
 
 Theorem registered_word_store_state:
-  stmt_state_rel ctx fn cenv cx es s /\
+  stmt_state_rel H ctx fn cenv cx es s /\
   MEM inst (fn_insts fn) /\ inst.inst_opcode = ALLOCA /\
   FLOOKUP s.vs_allocas inst.inst_id = SOME (b,32) /\
   (!name lo sz. local_region cenv es.scopes s name lo sz ==>
      regions_disjoint b 32 lo sz) ==>
-  stmt_state_rel ctx fn cenv cx es (mstore b w s) /\
+  stmt_state_rel H ctx fn cenv cx es (mstore b w s) /\
   mem_word_at b (mstore b w s).vs_memory = w
 Proof
   strip_tac >> conj_tac
@@ -48,7 +48,7 @@ Proof
 QED
 
 Theorem registered_word_store_wb_frame:
-  stmt_state_rel ctx fn cenv cx es s /\
+  stmt_state_rel H ctx fn cenv cx es s /\
   FLOOKUP s.vs_allocas id = SOME (b,32) /\ sf.cs_next_id <= id /\
   (!name lo sz. local_region cenv es.scopes s name lo sz ==>
      regions_disjoint b 32 lo sz) ==>

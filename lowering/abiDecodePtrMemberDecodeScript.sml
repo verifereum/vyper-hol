@@ -19,13 +19,13 @@ Theorem abi_decode_member_decode_success:
   (!x. v = Var x ==> not_fresh_at sa x) /\
   (~dec_info_needs_offset ei ==> w = z+n2w off) /\
   run_inst_seq (emitted_insts sa sb) s = OK u ==>
-  ?H tf t m. t = u with vs_inst_idx := LENGTH sb.cs_current_insts /\
-    inst_seq_ptr D 0 ctx func PG G tn (emitted_insts sa sb) s H tf /\
-    abi_decode_member_live ret ctx func cenv cx es src b h dst d cap pos z hi sb H tf t /\
-    abi_decode_member_frame sa G tn s H tf t (w2n d+q) k /\
+  ?HG tf t m. t = u with vs_inst_idx := LENGTH sb.cs_current_insts /\
+    inst_seq_ptr D 0 ctx func PG G tn (emitted_insts sa sb) s HG tf /\
+    abi_decode_member_live ret ctx func cenv cx es src b h dst d cap pos z hi sb HG tf t /\
+    abi_decode_member_frame sa G tn s HG tf t (w2n d+q) k /\
     32 <= m /\ m <= k /\
     m = abi_decode_runtime_footprint ei (w2n d+q) t /\
-    abi_decode_ptr_window H tf t out (d+n2w q) m
+    abi_decode_ptr_window HG tf t out (d+n2w q) m
 Proof
   strip_tac >>
   drule abi_decode_member_live_resources >> strip_tac >>
@@ -64,22 +64,22 @@ Resume abi_decode_member_decode_success[word]:
      `((w2n z+off MOD dimword(:256)) MOD dimword(:256)) <=
        w2n z+off MOD dimword(:256)` by simp[MOD_LESS_EQ] >>
      `off MOD dimword(:256) <= off` by simp[MOD_LESS_EQ] >> decide_tac) >>
-  `?H tf. inst_seq_ptr D 0 ctx func PG G tn (emitted_insts sa sb) s H tf /\
-      ghost_inv ret cenv cx es H tf u /\ stmt_state_rel ctx func cenv cx es u /\
-      abi_decode_ptr_window H tf u out (d+n2w q) 32 /\
-      abi_decode_member_frame sa G tn s H tf u (w2n d+q) 32 /\
+  `?HG tf. inst_seq_ptr D 0 ctx func PG G tn (emitted_insts sa sb) s HG tf /\
+      ghost_inv H ret cenv cx es HG tf u /\ stmt_state_rel H ctx func cenv cx es u /\
+      abi_decode_ptr_window HG tf u out (d+n2w q) 32 /\
+      abi_decode_member_frame sa G tn s HG tf u (w2n d+q) 32 /\
       fresh_vars_wrt sb u` by
     (drule (abi_decode_word_success_framed |> Q.INST
        [`p` |-> `w2n (z+n2w off : bytes32)`] |> SRULE []) >>
-     disch_then (drule_at (Pat `ghost_inv _ _ _ _ _ _ _`)) >>
+     disch_then (drule_at (Pat `ghost_inv _ _ _ _ _ _ _ _`)) >>
      disch_then (drule_at (Pat `abi_decode_ptr_window _ _ _ _ _ _`)) >>
      disch_then (drule_at (Pat `lookup_var _ _ = _`)) >>
      disch_then (drule_at (Pat `run_inst_seq _ _ = _`)) >>
-     disch_then (drule_at (Pat `stmt_state_rel _ _ _ _ _ _`)) >>
+     disch_then (drule_at (Pat `stmt_state_rel _ _ _ _ _ _ _`)) >>
      disch_then (qspecl_then [`z`, `off`, `PG`, `D`] mp_tac) >>
      (impl_tac >- (simp[] >> metis_tac[])) >>
      strip_tac >>
-     qexistsl_tac [`H`, `tf`] >>
+     qexistsl_tac [`HG`, `tf`] >>
      simp[abi_decode_member_frame_def] >>
      gen_tac >> strip_tac >> conj_tac
      >- (first_x_assum irule >> decide_tac) >>
@@ -90,7 +90,7 @@ Resume abi_decode_member_decode_success[word]:
     (fs[abi_decode_member_frame_def] >>
      qpat_x_assum `(u with <|vs_memory := _; vs_vars := _; vs_inst_idx := _|>) = s` mp_tac >>
      simp[venom_state_component_equality]) >>
-  qexistsl_tac [`H`, `tf`] >> simp[] >>
+  qexistsl_tac [`HG`, `tf`] >> simp[] >>
   conj_tac
   >- (irule abi_decode_member_live_transport >>
       simp[ghost_inv_inst_idx, stmt_state_rel_inst_idx, fresh_vars_wrt_def] >>
@@ -101,7 +101,7 @@ Resume abi_decode_member_decode_success[word]:
   conj_tac
   >- (qpat_x_assum `abi_decode_member_frame _ _ _ _ _ _ _ _ _` mp_tac >>
       simp[abi_decode_member_frame_def, lookup_var_def] >> fs[lookup_var_def] >> metis_tac[]) >>
-  qpat_x_assum `abi_decode_ptr_window H tf u out _ _` mp_tac >>
+  qpat_x_assum `abi_decode_ptr_window HG tf u out _ _` mp_tac >>
   simp[abi_decode_ptr_window_def, lookup_var_def, ptr_covers_def] >>
   strip_tac >> gvs[] >> metis_tac[])
 QED
@@ -109,11 +109,11 @@ QED
 Resume abi_decode_member_decode_success[bytes]:
   markerLib.RESUME_TAC >>
   drule abi_decode_bytes_success_framed >>
-  disch_then (drule_at (Pat `ghost_inv _ _ _ _ _ _ _`)) >>
+  disch_then (drule_at (Pat `ghost_inv _ _ _ _ _ _ _ _`)) >>
   disch_then (drule_at (Pat `abi_decode_ptr_window _ _ _ _ _ _`)) >>
   disch_then (drule_at (Pat `lookup_var _ _ = _`)) >>
   disch_then (drule_at (Pat `run_inst_seq _ _ = _`)) >>
-  disch_then (drule_at (Pat `stmt_state_rel _ _ _ _ _ _`)) >>
+  disch_then (drule_at (Pat `stmt_state_rel _ _ _ _ _ _ _`)) >>
   disch_then (qspecl_then [`w2n w`, `32+contractABI$ceil32 n`, `PG`, `D`] mp_tac) >>
   (impl_tac >- (simp[w2n_lt] >> metis_tac[])) >>
   strip_tac >> suspend "bytes_finish"
@@ -123,7 +123,7 @@ Resume abi_decode_member_decode_success[bytes_finish]:
   markerLib.RESUME_TAC >> (
   drule_all abi_decode_bytes_runtime_frame >> strip_tac >>
   drule abi_decode_bytes_position_shape >> simp[abi_decode_source_opcode_def] >> strip_tac >>
-  `abi_decode_member_frame sa G tn s H tf u (w2n d+q) (32+contractABI$ceil32 n)` by
+  `abi_decode_member_frame sa G tn s HG tf u (w2n d+q) (32+contractABI$ceil32 n)` by
     (simp[abi_decode_member_frame_def] >>
      qpat_x_assum `(u with <|vs_vars := _; vs_memory := _|>) = s` mp_tac >>
      simp[venom_state_component_equality]) >>
@@ -146,7 +146,7 @@ Resume abi_decode_member_decode_success[bytes_finish]:
     (qpat_x_assum `mload _ u = _` mp_tac >> simp[mload_def] >> gvs[]) >>
   `contractABI$ceil32 (w2n (mload (w2n b+w2n w) s)) <= contractABI$ceil32 n` by
     (irule ceil32_mono >> simp[]) >>
-  qexistsl_tac [`H`, `tf`] >>
+  qexistsl_tac [`HG`, `tf`] >>
   simp[] >>
   conj_tac
   >- (irule abi_decode_member_live_transport >>
@@ -158,7 +158,7 @@ Resume abi_decode_member_decode_success[bytes_finish]:
   conj_tac
   >- (qpat_x_assum `abi_decode_member_frame _ _ _ _ _ _ _ _ _` mp_tac >>
       simp[abi_decode_member_frame_def, lookup_var_def] >> fs[lookup_var_def] >> metis_tac[]) >>
-  qpat_x_assum `abi_decode_ptr_window H tf u out _ _` mp_tac >>
+  qpat_x_assum `abi_decode_ptr_window HG tf u out _ _` mp_tac >>
   simp[abi_decode_ptr_window_def, lookup_var_def, ptr_covers_def] >>
   strip_tac >> fs[lookup_var_def])
 QED

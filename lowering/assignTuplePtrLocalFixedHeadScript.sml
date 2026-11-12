@@ -23,17 +23,17 @@ Theorem tuple_local_fixed_head_ptr:
   lookup_var src s = SOME sw /\ lookup_var p s = SOME dw /\
   ptr_covers G tn src s n /\
   ptr_val_ok cx ty v (Var src) G tn s /\
-  ghost_inv d cenv cx es G tn s /\
-  stmt_state_rel ctx func cenv cx es s /\
+  ghost_inv H d cenv cx es G tn s /\
+  stmt_state_rel H ctx func cenv cx es s /\
   run_inst_seq (emitted_insts sa sb) s = OK u /\
   fn_has_code sa sb func /\ ~ctx_has_dalloca ctx /\ ~s.vs_halted /\
   s.vs_current_bb = sa.cs_current_bb /\
   s.vs_inst_idx = LENGTH sa.cs_current_insts ==>
   ?tn'.
-    stmt_state_rel ctx func cenv cx
+    stmt_state_rel H ctx func cenv cx
       (es with scopes := pre ++
         (sc |+ (id,entry with <|value := v; popped := []|>)) :: rest) u /\
-    ghost_inv d cenv cx
+    ghost_inv H d cenv cx
       (es with scopes := pre ++
         (sc |+ (id,entry with <|value := v; popped := []|>)) :: rest) G tn' u /\
     gas_path_ptr D 0 ctx func PG G tn s 0 G tn'
@@ -73,7 +73,7 @@ Proof
   >- (fs[ghost_inv_def, stor_taint_ok_def] >>
       qpat_x_assum `u with <|vs_memory := _; vs_vars := _|> = s` mp_tac >>
       simp[venom_state_component_equality] >> strip_tac >> gvs[]) >>
-  qpat_assum `ghost_inv _ _ _ _ _ _ _` (irule_at Any) >>
+  qpat_assum `ghost_inv _ _ _ _ _ _ _ _` (irule_at Any) >>
   qexistsl_tac [`w2n sw`, `sa`, `type_memory_size entry.type`, `func`, `dw`] >>
   simp[val_footprint_le] >>
   conj_tac >- (rpt strip_tac >> simp[]) >>

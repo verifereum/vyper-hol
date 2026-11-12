@@ -7,7 +7,7 @@ Ancestors logDataFieldRunPtr logTopicFramePtr robustCopyTransportPtr
 Theorem ghost_kept_exterior_transport:
   ghost_kept ce es sa G0 tn0 s0 G tn /\ sa.cs_next_var <= sm.cs_next_var /\
   (!p. not_fresh_at sm p ==>
-    FLOOKUP H p = FLOOKUP G p /\ op_taint tm (Var p) = op_taint tn (Var p)) /\
+    FLOOKUP HG p = FLOOKUP G p /\ op_taint tm (Var p) = op_taint tn (Var p)) /\
   (!i. i NOTIN writes ==> (i IN tm.t_mem <=> i IN tn.t_mem)) /\
   (!aid off sz i.
     FLOOKUP s0.vs_allocas aid = SOME (off,sz) /\ aid < sa.cs_next_id /\
@@ -15,13 +15,13 @@ Theorem ghost_kept_exterior_transport:
       off+sz <= b \/ b+sz' <= off) /\ off <= i /\ i < off+sz ==> i NOTIN writes) /\
   (!n b sz i. local_region ce es.scopes s0 n b sz /\ b <= i /\ i < b+sz ==>
     i NOTIN writes) ==>
-  ghost_kept ce es sa G0 tn0 s0 H tm
+  ghost_kept ce es sa G0 tn0 s0 HG tm
 Proof
   rw[ghost_kept_def] >> metis_tac[not_fresh_at_mono]
 QED
 
 Theorem ghost_inv_exterior_transport:
-  ghost_inv d ce cx es G tn s /\ local_ptrs_rel func ce es.scopes s /\
+  ghost_inv H d ce cx es G tn s /\ local_ptrs_rel func ce es.scopes s /\
   local_ptrs_reserved ce sm /\
   (!p sz. ce.ce_return_buf = SOME (PtrVar (Var p) sz) ==> not_fresh_at sm p) /\
   (!p sz. ce.ce_return_pc = SOME (PtrVar (Var p) sz) ==> not_fresh_at sm p) /\
@@ -34,9 +34,9 @@ Theorem ghost_inv_exterior_transport:
   t.vs_call_ctx = s.vs_call_ctx /\ tm.t_stor = tn.t_stor /\
   tm.t_trans = tn.t_trans /\ tm.t_imm = tn.t_imm /\
   (!p. not_fresh_at sm p ==>
-    lookup_var p t = lookup_var p s /\ FLOOKUP H p = FLOOKUP G p /\
+    lookup_var p t = lookup_var p s /\ FLOOKUP HG p = FLOOKUP G p /\
     op_taint tm (Var p) = op_taint tn (Var p)) ==>
-  ghost_inv d ce cx es H tm t
+  ghost_inv H d ce cx es HG tm t
 Proof
   strip_tac >> simp[ghost_inv_def] >> conj_tac
   >- suspend "locals" >>

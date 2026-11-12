@@ -26,12 +26,12 @@ Proof
 QED
 
 Theorem gas_builtin_ghosts:
-  ghost_inv d cenv cx es G tn s /\ local_ptrs_reserved cenv sa /\
+  ghost_inv H d cenv cx es G tn s /\ local_ptrs_reserved cenv sa /\
   (!x sz. cenv.ce_return_buf = SOME (PtrVar (Var x) sz) ==> not_fresh_at sa x) /\
   (!x sz. cenv.ce_return_pc = SOME (PtrVar (Var x) sz) ==> not_fresh_at sa x) /\
   ~not_fresh_at sa out ==>
   !t. t = update_var out w (s with vs_gas_readings := gs) ==>
-  ghost_inv d cenv cx es
+  ghost_inv H d cenv cx es
     (step_prov PG G (mk_inst id GAS [] [out]) t)
     (step_taint (mk_inst id GAS [] [out]) s t tn) t /\
   ghost_kept cenv es sa G tn s
@@ -52,8 +52,8 @@ Proof
 QED
 
 Theorem ghost_inv_gas_readings[simp]:
-  ghost_inv d cenv cx es G tn (s with vs_gas_readings := gs) <=>
-  ghost_inv d cenv cx es G tn s
+  ghost_inv H d cenv cx es G tn (s with vs_gas_readings := gs) <=>
+  ghost_inv H d cenv cx es G tn s
 Proof
   Cases_on `d` >- simp[ghost_inv_def, ptr_covers_def, return_buf_ptr_def, stor_taint_ok_def,
                         lookup_var_def] >>
@@ -63,11 +63,11 @@ Proof
 QED
 
 Theorem gas_builtin_indexed_ghosts:
-  ghost_inv d cenv cx es G tn s /\ local_ptrs_reserved cenv sa /\
+  ghost_inv H d cenv cx es G tn s /\ local_ptrs_reserved cenv sa /\
   (!x sz. cenv.ce_return_buf = SOME (PtrVar (Var x) sz) ==> not_fresh_at sa x) /\
   (!x sz. cenv.ce_return_pc = SOME (PtrVar (Var x) sz) ==> not_fresh_at sa x) /\
   ~not_fresh_at sa out ==>
-  ghost_inv d cenv cx es
+  ghost_inv H d cenv cx es
     (step_prov PG G (mk_inst id GAS [] [out])
       (update_var out w (s with vs_gas_readings := gs)))
     (step_taint (mk_inst id GAS [] [out]) s
@@ -81,7 +81,7 @@ Theorem gas_builtin_indexed_ghosts:
 Proof
   strip_tac >>
   `!t. t = update_var out w (s with vs_gas_readings := gs) ==>
-    ghost_inv d cenv cx es (step_prov PG G (mk_inst id GAS [] [out]) t)
+    ghost_inv H d cenv cx es (step_prov PG G (mk_inst id GAS [] [out]) t)
       (step_taint (mk_inst id GAS [] [out]) s t tn) t /\
     ghost_kept cenv es sa G tn s (step_prov PG G (mk_inst id GAS [] [out]) t)
       (step_taint (mk_inst id GAS [] [out]) s t tn)` by
@@ -96,20 +96,20 @@ QED
 Theorem gas_builtin_counted_post:
   compile_env_var MsgGas sa = (op,sb) /\ fn_has_code sa sb fn /\
   local_ptrs_reserved cenv sa /\ ~ctx_has_dalloca ctx /\
-  ghost_inv d cenv cx es G tn s /\
+  ghost_inv H d cenv cx es G tn s /\
   (!x sz. cenv.ce_return_buf = SOME (PtrVar (Var x) sz) ==> not_fresh_at sa x) /\
   (!x sz. cenv.ce_return_pc = SOME (PtrVar (Var x) sz) ==> not_fresh_at sa x) /\
-  stmt_state_rel ctx fn cenv cx es s /\ ~s.vs_halted /\
+  stmt_state_rel H ctx fn cenv cx es s /\ ~s.vs_halted /\
   s.vs_current_bb = sa.cs_current_bb /\
   s.vs_inst_idx = LENGTH sa.cs_current_insts ==>
   ?w G' tn' t.
     gas_prefix 1 s.vs_gas_readings = [w] /\
     gas_path_ptr D 0 ctx fn PG G tn s 1 G' tn' (OK t) /\
-    expr_post ctx fn cenv cx (Builtin (env_item_type MsgGas) (Env MsgGas) [])
+    expr_post H ctx fn cenv cx (Builtin (env_item_type MsgGas) (Env MsgGas) [])
       es sa sb s (es with gas_obs := []) (IntV (&w2n w)) op t /\
     t.vs_current_bb = sb.cs_current_bb /\
     t.vs_inst_idx = LENGTH sb.cs_current_insts /\
-    ghost_inv d cenv cx (es with gas_obs := []) G' tn' t /\
+    ghost_inv H d cenv cx (es with gas_obs := []) G' tn' t /\
     ptr_val_ok cx (env_item_type MsgGas) (IntV (&w2n w)) op G' tn' t /\
     ghost_kept cenv es sa G tn s G' tn'
 Proof
@@ -132,7 +132,7 @@ Proof
   disch_then (qspecl_then [`tn`, `PG`, `G`, `D`] assume_tac) >>
   drule emitted_insts_emit_op >> strip_tac >>
   `SUC s.vs_inst_idx = LENGTH sb.cs_current_insts` by simp[] >>
-  `expr_post ctx fn cenv cx (Builtin (env_item_type MsgGas) (Env MsgGas) [])
+  `expr_post H ctx fn cenv cx (Builtin (env_item_type MsgGas) (Env MsgGas) [])
     es sa sb s (es with gas_obs := []) (IntV (&w2n w)) op
     (update_var (STRING #"%" (toString sa.cs_next_var)) w
       (s with <|vs_gas_readings := DROP 1 s.vs_gas_readings;
@@ -141,7 +141,7 @@ Proof
   drule gas_builtin_indexed_ghosts >> disch_then drule_all >>
   disch_then (qspecl_then [`w`, `LENGTH sb.cs_current_insts`, `sa.cs_next_id`,
     `DROP 1 s.vs_gas_readings`, `PG`] strip_assume_tac) >>
-  qpat_x_assum `ghost_inv _ _ _ _ _ _ (update_var _ _ _)` mp_tac >>
+  qpat_x_assum `ghost_inv _ _ _ _ _ _ _ (update_var _ _ _)` mp_tac >>
   `update_var (STRING #"%" (toString sa.cs_next_var)) w
      (s with <|vs_gas_readings := DROP 1 s.vs_gas_readings;
                vs_inst_idx := LENGTH sb.cs_current_insts|>) =
@@ -164,7 +164,7 @@ Proof
   rw[expr_sim_ptr_def] >>
   drule lower_value_env >> strip_tac >>
   drule_all gas_builtin_counted_post >>
-  disch_then (qspecl_then [`PG`, `cx_dead cx`] strip_assume_tac) >>
+  disch_then (qspecl_then [`PG`, `cx_dead H cx`] strip_assume_tac) >>
   simp[gas_outcome_ptr_def] >> qexists_tac `[T]` >> disj1_tac >>
   simp[gas_summary_ptr_at_def] >>
   qexistsl_tac [`INL (IntV (&w2n w))`, `es`, `G'`, `tn'`, `OK t`] >>

@@ -51,7 +51,7 @@ Theorem array_code_loop_counted_ptr:
          cenv.ce_return_pc = SOME (PtrVar (Var x) z) ==> not_fresh_at st x) ==>
     k <= LENGTH vs /\ P es /\
     gas_admissible (eval_for cx tv id stmts (MAP Value (DROP k vs))) (stmt_res_ok lctx) es ==>
-    gas_outcome_ptr (cx_dead cx) (cx_tops cx) (ctx,func) PG
+    gas_outcome_ptr (cx_dead H cx) (cx_tops cx) (ctx,func) PG
       (eval_for cx tv id stmts (MAP Value (DROP k vs))) (es,s,G,tn)
       (\res ee gf tf t. res = INL () /\
         for_array_done_ptr ctx func cenv cx exit_lbl st s0 G0 tn0 d ee gf tf t)
@@ -64,7 +64,7 @@ Proof
   qabbrev_tac `Done = for_array_done_ptr ctx func cenv cx exit_lbl st s0 G0 tn0 d` >>
   `!k es s G tn. k <= LENGTH vs /\ (Inv k es G tn s /\ P es) /\
     gas_admissible (eval_for cx tv id stmts (MAP Value (DROP k vs))) (stmt_res_ok lctx) es ==>
-    gas_outcome_ptr (cx_dead cx) (cx_tops cx) (ctx,func) PG
+    gas_outcome_ptr (cx_dead H cx) (cx_tops cx) (ctx,func) PG
       (eval_for cx tv id stmts (MAP Value (DROP k vs))) (es,s,G,tn)
       (\res ee gf tf t. res = INL () /\ Done ee gf tf t)
       (\res ee gt r. ?ex. res = INR ex /\

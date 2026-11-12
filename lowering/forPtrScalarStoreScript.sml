@@ -50,7 +50,7 @@ Proof
 QED
 
 Theorem scalar_mstore_outer_ghost:
-  ghost_inv d cenv cx es G tn s /\
+  ghost_inv H d cenv cx es G tn s /\
   lookup_var dst s = SOME a /\ eval_operand value s = SOME w /\
   op_taint tn value = {} /\
   (!name entry p sz.
@@ -60,14 +60,14 @@ Theorem scalar_mstore_outer_ghost:
     !b i. lookup_var p s = SOME b /\
       w2n b <= i /\ i < w2n b + val_footprint entry.type entry.value ==>
       i < w2n a \/ w2n a+32 <= i) ==>
-  ghost_inv d cenv cx es G
+  ghost_inv H d cenv cx es G
     (step_taint (mk_inst iid MSTORE [Var dst; value] []) s
       (mstore (w2n a) w s) tn) (mstore (w2n a) w s)
 Proof
   strip_tac >> drule_all mstore_ghost_frame >>
   disch_then (qspecl_then [`ARB`, `G`, `iid`] strip_assume_tac) >>
   irule ghost_inv_after_separated_write >>
-  goal_assum (drule_at (Pat `ghost_inv _ _ _ _ _ _ _`)) >>
+  goal_assum (drule_at (Pat `ghost_inv _ _ _ _ _ _ _ _`)) >>
   qexistsl_tac [`UNIV`, `{i | w2n a <= i /\ i < w2n a+32}`] >>
   simp[mstore_memory_frame, op_taint_def, mstore_def,
        write_memory_with_expansion_def, step_taint_nonmemory_frame, mk_inst_def] >>
@@ -106,7 +106,7 @@ Proof
 QED
 
 Theorem scalar_mstore_install_ghost:
-  ghost_inv d cenv cx es G tn s /\
+  ghost_inv H d cenv cx es G tn s /\
   lookup_var dst s = SOME a /\
   eval_operand value s = SOME (val_to_w256 entry.value) /\
   op_taint tn value = {} /\ ptr_covers G tn dst s sz /\
@@ -121,14 +121,14 @@ Theorem scalar_mstore_install_ghost:
     !b i. lookup_var p s = SOME b /\
       w2n b <= i /\ i < w2n b + val_footprint e.type e.value ==>
       i < w2n a \/ w2n a+32 <= i) ==>
-  ghost_inv d bc cx
+  ghost_inv H d bc cx
     (es with scopes := (FEMPTY |+ (id,entry)) :: es.scopes) G
     (step_taint (mk_inst iid MSTORE [Var dst; value] []) s
       (mstore (w2n a) (val_to_w256 entry.value) s) tn)
     (mstore (w2n a) (val_to_w256 entry.value) s)
 Proof
   strip_tac >>
-  (`ghost_inv d cenv cx es G
+  (`ghost_inv H d cenv cx es G
       (step_taint (mk_inst iid MSTORE [Var dst; value] []) s
         (mstore (w2n a) (val_to_w256 entry.value) s) tn)
       (mstore (w2n a) (val_to_w256 entry.value) s)` by

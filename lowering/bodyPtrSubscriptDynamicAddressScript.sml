@@ -30,8 +30,8 @@ Theorem mul_add_counted_read_only:
     (!q. not_fresh_at sa q ==>
       lookup_var q sf = lookup_var q s /\ FLOOKUP Gf q = FLOOKUP G q /\
       op_taint tnf (Var q) = op_taint tn (Var q)) /\
-    (!cenv cx es. stmt_state_rel ctx func cenv cx es s /\ local_ptrs_reserved cenv sa ==>
-      stmt_state_rel ctx func cenv cx es sf)
+    (!cenv cx es. stmt_state_rel H ctx func cenv cx es s /\ local_ptrs_reserved cenv sa ==>
+      stmt_state_rel H ctx func cenv cx es sf)
 Proof
   strip_tac >>
   `ci_mono sa sm /\ ci_mono sm sb` by metis_tac[ci_mono_emit_op, pairTheory.SND] >>
@@ -91,8 +91,8 @@ Theorem dynamic_address_counted_read_only:
     (!q. not_fresh_at sa q ==>
       lookup_var q sf = lookup_var q s /\ FLOOKUP Gf q = FLOOKUP G q /\
       op_taint tnf (Var q) = op_taint tn (Var q)) /\
-    (!cenv cx es. stmt_state_rel ctx func cenv cx es s /\ local_ptrs_reserved cenv sa ==>
-      stmt_state_rel ctx func cenv cx es sf)
+    (!cenv cx es. stmt_state_rel H ctx func cenv cx es s /\ local_ptrs_reserved cenv sa ==>
+      stmt_state_rel H ctx func cenv cx es sf)
 Proof
   strip_tac >>
   `ci_mono sa sm /\ ci_mono sm sn /\ ci_mono sn sb` by

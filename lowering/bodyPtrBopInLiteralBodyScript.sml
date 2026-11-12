@@ -85,7 +85,7 @@ Resume literal_expr_sim_ptr[normal]:
    (!x sz. cenv.ce_return_pc = SOME (PtrVar (Var x) sz) ==> not_fresh_at sm x)` by
     (metis_tac[not_fresh_at_mono]) >>
   `EVERY (\x. !z. x = Var z ==> not_fresh_at sm z) (needle::xs)` by simp[] >>
-  `stmt_state_rel ctx fn cenv cx (es_end with gas_obs := []) t` by simp[] >>
+  `stmt_state_rel H ctx fn cenv cx (es_end with gas_obs := []) t` by simp[] >>
   `~expr_has_effect (Builtin (BaseT BoolT) (Bop bop)
       [e1; Builtin (ArrayT (expr_type e1) n) (MakeArray (SOME (expr_type e1)) n) elems]) ==>
    pure_frame cenv fn es sa s0 t` by

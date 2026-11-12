@@ -21,9 +21,9 @@ Theorem pop_empty_memory_marked_ptr:
   find_containing_scope id es.scopes = SOME (pre,sc,entry,rest) /\
   entry.assignable /\
   evaluate_subscripts entry.type entry.value path = INL (ArrayV (DynArrayV [])) /\
-  gas_path_ptr D 0 ctx func PG G tn s 0 H tf r ==>
+  gas_path_ptr D 0 ctx func PG G tn s 0 HG tf r ==>
   gas_marked_exec_ptr D (ctx,func) PG (pop_place cx (MemoryPlace id path))
-    (es,s,G,tn) [] (INR (Error (RuntimeError "pop empty memory array"))) es H tf r
+    (es,s,G,tn) [] (INR (Error (RuntimeError "pop empty memory array"))) es HG tf r
 Proof
   strip_tac >> rewrite_tac[gas_marked_exec_ptr_def] >>
   simp[] >> gen_tac >> irule pop_memory_place_live_empty >> simp[]
@@ -36,14 +36,14 @@ Theorem pop_positive_memory_marked_ptr:
   vs <> [] /\
   assign_subscripts entry.type entry.value path
     (Replace (ArrayV (DynArrayV (FRONT vs)))) = INL updated /\
-  gas_path_ptr D 0 ctx func PG G tn s 0 H tf r ==>
+  gas_path_ptr D 0 ctx func PG G tn s 0 HG tf r ==>
   gas_marked_exec_ptr D (ctx,func) PG (pop_place cx (MemoryPlace id path))
     (es,s,G,tn) []
     (INL (PlaceR (MemoryPlace id (path ++ [ValueSubscript (IntV &(LENGTH vs-1))]))))
     (es with scopes := pre ++ sc |+ (id,entry with
       <|value := updated;
         popped := record_pop path (ArrayV (DynArrayV vs)) (LAST vs) entry.popped|>) :: rest)
-    H tf r
+    HG tf r
 Proof
   strip_tac >> rewrite_tac[gas_marked_exec_ptr_def] >> simp[] >>
   gen_tac >> irule pop_memory_place_live >> simp[]
@@ -62,16 +62,16 @@ Theorem pop_empty_memory_continuation:
   ptr_covers G tn src s 32 /\ lookup_var src s = SOME a /\
   (!i. w2n a <= i /\ i < w2n a+32 ==> i NOTIN tn.t_mem) /\
   mload (w2n a) s = 0w ==>
-  ?res fin H tf rr.
+  ?res fin HG tf rr.
     gas_marked_exec_ptr D (ctx,func) PG
       (bind (eval_target_place cx bt) (pop_place cx))
-      (es,s0,G0,tn0) marks res fin H tf rr /\
+      (es,s0,G0,tn0) marks res fin HG tf rr /\
     exit_result rr /\ expr_exit res rr
 Proof
   strip_tac >> drule_all pop_memory_suffix_empty_path >>
   disch_then (qspecl_then [`PG`, `D`] strip_assume_tac) >>
   qexistsl_tac [`INR (Error (RuntimeError "pop empty memory array"))`,
-    `mid with gas_obs := []`, `H`, `tf`,
+    `mid with gas_obs := []`, `HG`, `tf`,
     `Abort Revert_abort (revert_state (set_returndata [] t))`] >>
   conj_tac
   >- (irule (SRULE [listTheory.APPEND_NIL]
@@ -119,9 +119,9 @@ QED
 Theorem pop_positive_memory_suffix:
   expr_has_effect e /\
   expr_sim_inv cenv cx env es /\
-  stmt_state_rel ctx func cenv cx es s0 /\
-  stmt_state_rel ctx func cenv cx mid s /\ wb_frame cenv es mid sa s0 s /\
-  ghost_inv d cenv cx mid G tn s /\ ghost_kept cenv es sa G0 tn0 s0 G tn /\
+  stmt_state_rel H ctx func cenv cx es s0 /\
+  stmt_state_rel H ctx func cenv cx mid s /\ wb_frame cenv es mid sa s0 s /\
+  ghost_inv H d cenv cx mid G tn s /\ ghost_kept cenv es sa G0 tn0 s0 G tn /\
   local_ptrs_rel func cenv mid.scopes s /\
   local_ptrs_reserved cenv sa /\ local_ptrs_reserved cenv sm /\
   (!x sz. cenv.ce_return_buf = SOME (PtrVar (Var x) sz) ==> not_fresh_at sm x) /\
@@ -153,19 +153,19 @@ Theorem pop_positive_memory_suffix:
   32+(LENGTH vs-1)*type_memory_size etv+type_memory_size etv <= span /\
   w2n a+span < dimword(:256) /\
   type_memory_bytes cenv (lowered_value_type cenv e) <= type_memory_size etv ==>
-  ?result fin out t H tf.
+  ?result fin out t HG tf.
     dst = Var out /\ fin.gas_obs = mid.gas_obs /\
     t.vs_current_bb = sb.cs_current_bb /\
     t.vs_inst_idx = LENGTH sb.cs_current_insts /\
     gas_marked_exec_ptr D (ctx,func) PG (pop_place cx (MemoryPlace id path))
-      (mid,s,G,tn) [] (INL result) fin H tf (OK t) /\
-    vv_post ctx func cenv cx e es sa sb s0 fin result
+      (mid,s,G,tn) [] (INL result) fin HG tf (OK t) /\
+    vv_post H ctx func cenv cx e es sa sb s0 fin result
       (LocatedValue (expr_type e) (mk_ptr (Var out) LocMemory)) t /\
-    ghost_inv d cenv cx fin H tf t /\
+    ghost_inv H d cenv cx fin HG tf t /\
     ptr_vv_ok cx (expr_type e) result
-      (LocatedValue (expr_type e) (mk_ptr (Var out) LocMemory)) fin H tf t /\
-    ptr_buf_ok cenv e (Var out) H t /\
-    ghost_kept cenv es sa G0 tn0 s0 H tf
+      (LocatedValue (expr_type e) (mk_ptr (Var out) LocMemory)) fin HG tf t /\
+    ptr_buf_ok cenv e (Var out) HG t /\
+    ghost_kept cenv es sa G0 tn0 s0 HG tf
 Proof
   strip_tac >>
   `subscripts_type entry.type path = SOME (ArrayTV etv (Dynamic n))` by
@@ -180,17 +180,17 @@ Proof
   `w2n (n2w (w2n a+32+(LENGTH vs-1)*type_memory_size etv):bytes32) =
     w2n b+k+32+(LENGTH vs-1)*type_memory_size etv` by simp[] >>
   qmatch_asmsub_abbrev_tac `read_result cx result (mid with scopes := scopes')` >>
-  qexistsl_tac [`result`, `mid with scopes := scopes'`, `out`, `t`, `H`, `tf`] >>
+  qexistsl_tac [`result`, `mid with scopes := scopes'`, `out`, `t`, `HG`, `tf`] >>
   simp[] >> conj_tac
   >- (simp[Abbr `result`] >> irule pop_positive_memory_marked_ptr >>
       simp[] >> metis_tac[]) >>
-  `vv_post ctx func cenv cx e es sa sb s0 (mid with scopes := scopes') result
+  `vv_post H ctx func cenv cx e es sa sb s0 (mid with scopes := scopes') result
       (LocatedValue (expr_type e) (mk_ptr (Var out) LocMemory)) t /\
-   ghost_inv d cenv cx (mid with scopes := scopes') H tf t /\
+   ghost_inv H d cenv cx (mid with scopes := scopes') HG tf t /\
    ptr_vv_ok cx (expr_type e) result
       (LocatedValue (expr_type e) (mk_ptr (Var out) LocMemory))
-      (mid with scopes := scopes') H tf t /\
-   ptr_buf_ok cenv e (Var out) H t /\ ghost_kept cenv mid sm G tn s H tf` by
+      (mid with scopes := scopes') HG tf t /\
+   ptr_buf_ok cenv e (Var out) HG t /\ ghost_kept cenv mid sm G tn s HG tf` by
     (qpat_assum `local_place_at _ _ _ _ _ _`
        (assume_tac o SIMP_RULE (srw_ss()) []) >>
      match_mp_tac (Q.INST
@@ -210,30 +210,30 @@ Theorem pop_normal_target_continuation:
   ~ctx_has_dalloca ctx /\ ~cenv.ce_is_ctor /\
   (!x sz. cenv.ce_return_buf = SOME (PtrVar (Var x) sz) ==> not_fresh_at sa x) /\
   (!x sz. cenv.ce_return_pc = SOME (PtrVar (Var x) sz) ==> not_fresh_at sa x) /\
-  stmt_state_rel ctx func cenv cx es s0 /\
-  gas_marked_exec_ptr (cx_dead cx) (ctx,func) PG (eval_target_place cx bt)
+  stmt_state_rel H ctx func cenv cx es s0 /\
+  gas_marked_exec_ptr (cx_dead H cx) (ctx,func) PG (eval_target_place cx bt)
     (es,s0,G0,tn0) marks (INL p) tend G tn (OK s) /\
-  target_post ctx func cenv cx es sa sm s0 (tend with gas_obs := [])
+  target_post H ctx func cenv cx es sa sm s0 (tend with gas_obs := [])
     (PlaceR p) (Type (ArrayT ann (Dynamic cap))) (hdr,loc,pt) s /\
   s.vs_current_bb = sm.cs_current_bb /\ s.vs_inst_idx = LENGTH sm.cs_current_insts /\
-  ghost_inv d cenv cx (tend with gas_obs := []) G tn s /\
+  ghost_inv H d cenv cx (tend with gas_obs := []) G tn s /\
   target_ptr_ok cenv (PlaceR p) (hdr,loc,pt) G tn s /\
   ghost_kept cenv es sa G0 tn0 s0 G tn ==>
-  ?res fin H tf rr.
-    gas_marked_exec_ptr (cx_dead cx) (ctx,func) PG
+  ?res fin HG tf rr.
+    gas_marked_exec_ptr (cx_dead H cx) (ctx,func) PG
       (bind (eval_target_place cx bt) (pop_place cx))
-      (es,s0,G0,tn0) marks res fin H tf rr /\
+      (es,s0,G0,tn0) marks res fin HG tf rr /\
     ((?result t. rr = OK t /\ res = INL result /\
-      vv_post ctx func cenv cx (Pop ann bt) es sa sb s0
+      vv_post H ctx func cenv cx (Pop ann bt) es sa sb s0
         (fin with gas_obs := []) result vv t /\
       t.vs_current_bb = sb.cs_current_bb /\ t.vs_inst_idx = LENGTH sb.cs_current_insts /\
-      ghost_inv d cenv cx (fin with gas_obs := []) H tf t /\
-      ptr_vv_ok cx ann result vv (fin with gas_obs := []) H tf t /\
+      ghost_inv H d cenv cx (fin with gas_obs := []) HG tf t /\
+      ptr_vv_ok cx ann result vv (fin with gas_obs := []) HG tf t /\
       (!t' op. vv = StackValue t' op /\ ~is_word_type ann ==>
-        ptr_buf_ok cenv (Pop ann bt) op H t) /\
+        ptr_buf_ok cenv (Pop ann bt) op HG t) /\
       (!t' ptr. vv = LocatedValue t' ptr /\ ptr.ptr_location = LocMemory ==>
-        ptr_buf_ok cenv (Pop ann bt) ptr.ptr_operand H t) /\
-      ghost_kept cenv es sa G0 tn0 s0 H tf) \/
+        ptr_buf_ok cenv (Pop ann bt) ptr.ptr_operand HG t) /\
+      ghost_kept cenv es sa G0 tn0 s0 HG tf) \/
      (exit_result rr /\ expr_exit res rr))
 Proof
   strip_tac >>
@@ -304,7 +304,7 @@ Resume pop_normal_target_continuation[empty]:
      simp[type_memory_size_def]) >>
   `mload (w2n (b+n2w k)) s = 0w` by simp[] >>
   drule_all pop_empty_memory_continuation >> strip_tac >>
-  qexistsl_tac [`res`, `fin`, `H`, `tf`, `rr`] >> simp[]
+  qexistsl_tac [`res`, `fin`, `HG`, `tf`, `rr`] >> simp[]
 QED
 
 Resume pop_normal_target_continuation[positive]:
@@ -344,17 +344,17 @@ Resume pop_normal_target_continuation[positive]:
      rpt BasicProvers.VAR_EQ_TAC >> conj_tac >- REFL_TAC >> metis_tac[]) >>
   qpat_assum `local_place_at _ _ _ _ _ _`
     (assume_tac o SIMP_RULE (srw_ss()) []) >>
-  `?result fin out' t H tf.
+  `?result fin out' t HG tf.
      q = Var out' /\ fin.gas_obs = [] /\ t.vs_current_bb = r.cs_current_bb /\
      t.vs_inst_idx = LENGTH r.cs_current_insts /\
-     gas_marked_exec_ptr (cx_dead cx) (ctx,func) PG (pop_place cx (MemoryPlace id path))
-       (tend with gas_obs := [],s,G,tn) [] (INL result) fin H tf (OK t) /\
-     vv_post ctx func cenv cx (Pop ann bt) es sa r s0 fin result
+     gas_marked_exec_ptr (cx_dead H cx) (ctx,func) PG (pop_place cx (MemoryPlace id path))
+       (tend with gas_obs := [],s,G,tn) [] (INL result) fin HG tf (OK t) /\
+     vv_post H ctx func cenv cx (Pop ann bt) es sa r s0 fin result
        (LocatedValue ann (mk_ptr (Var out') LocMemory)) t /\
-     ghost_inv d cenv cx fin H tf t /\
-     ptr_vv_ok cx ann result (LocatedValue ann (mk_ptr (Var out') LocMemory)) fin H tf t /\
-     ptr_buf_ok cenv (Pop ann bt) (Var out') H t /\
-     ghost_kept cenv es sa G0 tn0 s0 H tf` by
+     ghost_inv H d cenv cx fin HG tf t /\
+     ptr_vv_ok cx ann result (LocatedValue ann (mk_ptr (Var out') LocMemory)) fin HG tf t /\
+     ptr_buf_ok cenv (Pop ann bt) (Var out') HG t /\
+     ghost_kept cenv es sa G0 tn0 s0 HG tf` by
     (irule (SRULE [expr_type_def, loweringPostsTheory.expr_has_effect_thm]
        (Q.INST [`e` |-> `Pop ann bt`, `mid` |-> `tend with gas_obs := []`]
          pop_positive_memory_suffix)) >>
@@ -374,7 +374,7 @@ QED
 Resume pop_normal_target_continuation[positive_bind]:
   `fin with gas_obs := [] = fin` by
     simp[evaluation_state_component_equality] >>
-  gvs[] >> qexistsl_tac [`INL result`, `fin`, `H`, `tf`, `OK t`] >>
+  gvs[] >> qexistsl_tac [`INL result`, `fin`, `HG`, `tf`, `OK t`] >>
   conj_tac
   >- (irule (SRULE [listTheory.APPEND_NIL]
         (Q.INST [`right` |-> `[]`] gas_marked_exec_ptr_bind_normal)) >>

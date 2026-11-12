@@ -51,9 +51,9 @@ Theorem membership_array_continuation_summary_ptr:
     (bind (read_result cx tvv) (\a. lift_sum (evaluate_binop u (ArrayTV tv bd) bop v a)))
     (ee,s,G,tn)
     (\res fin G' tn' t. ?b. res = INL (BoolV b) /\
-      expr_post ctx fn cenv cx (Builtin (BaseT BoolT) (Bop bop) [e1;e2])
+      expr_post H ctx fn cenv cx (Builtin (BaseT BoolT) (Bop bop) [e1;e2])
         es sa sb s0 fin (BoolV b) op t /\
-      ghost_inv d cenv cx fin G' tn' t /\
+      ghost_inv H d cenv cx fin G' tn' t /\
       ptr_val_ok cx (BaseT BoolT) (BoolV b) op G' tn' t /\
       ghost_kept cenv es sa G0 tn0 s0 G' tn' /\
       t.vs_current_bb = sb.cs_current_bb /\ t.vs_inst_idx = LENGTH sb.cs_current_insts)
@@ -80,7 +80,7 @@ Proof
      rewrite_tac[return_def]) >>
   drule_all membership_normalized_array_runtime >>
   disch_then (qspecl_then [`PG`,`D`] strip_assume_tac) >>
-  `stmt_state_rel ctx fn cenv cx ee s /\ ghost_inv d cenv cx ee G tn s` by
+  `stmt_state_rel H ctx fn cenv cx ee s /\ ghost_inv H d cenv cx ee G tn s` by
     fs[bodyPtrBopInVvContractTheory.membership_vv_post_def, vv_post_def] >>
   drule_all membership_runtime_readonly_frames >> strip_tac >>
   `ghost_kept cenv es sa G0 tn0 s0 G' tn'` by

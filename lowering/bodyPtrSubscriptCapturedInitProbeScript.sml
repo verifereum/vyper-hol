@@ -18,7 +18,7 @@ Proof
 QED
 
 Theorem captured_memory_post:
-  vv_post ctx func cenv cx e es sa sb s0 ee result (LocatedValue ty p) s /\
+  vv_post H ctx func cenv cx e es sa sb s0 ee result (LocatedValue ty p) s /\
   p.ptr_location = LocMemory /\ post_value_type cenv e = expr_type e /\
   ~is_bytestring_type (expr_type e) /\
   evaluate_type (get_tenv cx) (expr_type e) = SOME tv ==>

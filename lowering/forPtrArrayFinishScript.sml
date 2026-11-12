@@ -50,19 +50,19 @@ Theorem for_array_callback_contract_ptr:
   ~ctx_has_dalloca ctx /\ ~bc.ce_is_ctor /\ ret_pc_ok bc sb0 s0 /\
   (!x z. bc.ce_return_buf = SOME (PtrVar (Var x) z) ==> not_fresh_at sb0 x) /\
   gas_admissible (eval_stmts cx stmts) (stmt_res_ok (InLoop exit_lbl incr_lbl)) es /\
-  stmt_state_rel ctx func bc cx es s0 /\ ghost_inv d bc cx es G0 tn0 s0 /\
+  stmt_state_rel H ctx func bc cx es s0 /\ ghost_inv H d bc cx es G0 tn0 s0 /\
   ~s0.vs_halted /\ s0.vs_current_bb = sb0.cs_current_bb /\
   s0.vs_inst_idx = LENGTH sb0.cs_current_insts /\
   ptr_covers G0 tn0 p s0 sz /\ ptr_covers G0 tn0 bp s0 extent /\
   lookup_var idx s0 = SOME counter /\
   FLOOKUP G0 idx = NONE /\ op_taint tn0 (Var idx) = {} ==>
-  gas_outcome_ptr (cx_dead cx) (cx_tops cx) (ctx,func) PG (eval_stmts cx stmts)
+  gas_outcome_ptr (cx_dead H cx) (cx_tops cx) (ctx,func) PG (eval_stmts cx stmts)
     (es,s0,G0,tn0)
     (\res ee G tn t. ((?c3.
       stmt_lands (InLoop exit_lbl incr_lbl) sb1 res t /\ ~t.vs_halted /\
       (res = INL () ==> ~block_is_terminated sb1 /\ c3 = bc') /\
-      cenv_top_ext bc c3 ee.scopes /\ stmt_state_rel ctx func c3 cx ee t /\
-      ghost_inv d c3 cx ee G tn t /\
+      cenv_top_ext bc c3 ee.scopes /\ stmt_state_rel H ctx func c3 cx ee t /\
+      ghost_inv H d c3 cx ee G tn t /\
       (!x w. not_fresh_at sb0 x /\ lookup_var x s0 = SOME w ==> lookup_var x t = SOME w) /\
       (!x. not_fresh_at sb0 x ==> FLOOKUP G x = FLOOKUP G0 x /\
         op_taint tn (Var x) = op_taint tn0 (Var x))) /\
@@ -121,13 +121,13 @@ Theorem for_array_callback_outer_state_ptr:
   not_local_ptr bc (FEMPTY :: esk.scopes) p /\
   eval_stmts cx stmts (esk with scopes :=
     (FEMPTY |+ (id,entry)) :: esk.scopes) = (res,ee) /\
-  cenv_top_ext bc c3 ee.scopes /\ stmt_state_rel ctx func c3 cx ee t /\
-  ghost_inv d c3 cx ee G tn t /\
+  cenv_top_ext bc c3 ee.scopes /\ stmt_state_rel H ctx func c3 cx ee t /\
+  ghost_inv H d c3 cx ee G tn t /\
   FLOOKUP t.vs_allocas ainst.inst_id = SOME (w2n w,sz) ==>
   ?sc rest. ee.scopes = sc :: rest /\
     lookup_scopes id rest = NONE /\
-    stmt_state_rel ctx func cenv cx (ee with scopes := rest) t /\
-    ghost_inv d cenv cx (ee with scopes := rest) G tn t /\
+    stmt_state_rel H ctx func cenv cx (ee with scopes := rest) t /\
+    ghost_inv H d cenv cx (ee with scopes := rest) G tn t /\
     (!name lo z. local_region cenv rest t name lo z ==>
       regions_disjoint (w2n w) sz lo z)
 Proof
@@ -135,11 +135,11 @@ Proof
   qexistsl_tac [`sc`, `rest`] >> simp[] >>
   `cenv_top_ext cenv bc ((FEMPTY |+ (id,entry)) :: esk.scopes)` by
     (metis_tac[for_array_code_top_ext_ptr]) >>
-  `stmt_state_rel ctx func cenv cx (ee with scopes := rest) t` by
+  `stmt_state_rel H ctx func cenv cx (ee with scopes := rest) t` by
     (irule array_body_scope_projection >> conj_tac
      >- (qexists_tac `sc` >> simp[]) >>
      goal_assum (drule_at (Pat `eval_stmts _ _ _ = _`)) >> simp[] >> metis_tac[]) >>
-  `ghost_inv d cenv cx (ee with scopes := rest) G tn t` by
+  `ghost_inv H d cenv cx (ee with scopes := rest) G tn t` by
     (irule ghost_inv_body_scope_projection >> conj_tac
      >- (qexists_tac `sc` >> simp[]) >>
      goal_assum (drule_at (Pat `eval_stmts _ _ _ = _`)) >> simp[] >> metis_tac[]) >>
@@ -167,8 +167,8 @@ Theorem for_array_callback_landing_ptr:
   not_local_ptr bc (FEMPTY :: esk.scopes) p /\
   eval_stmts cx stmts (esk with scopes :=
     (FEMPTY |+ (id,entry)) :: esk.scopes) = (res,ee) /\
-  cenv_top_ext bc c3 ee.scopes /\ stmt_state_rel ctx func c3 cx ee s /\
-  ghost_inv d c3 cx ee G tn s /\
+  cenv_top_ext bc c3 ee.scopes /\ stmt_state_rel H ctx func c3 cx ee s /\
+  ghost_inv H d c3 cx ee G tn s /\
   FLOOKUP s.vs_allocas ainst.inst_id = SOME (w2n a,sz) /\
   ptr_covers G tn p s sz /\ ptr_covers G tn bp s extent /\
   stmt_lands (InLoop exit_lbl incr_lbl) sb1 res s /\ ~s.vs_halted /\
@@ -180,8 +180,8 @@ Theorem for_array_callback_landing_ptr:
     t.vs_inst_idx = 0 /\ ~t.vs_halted /\
     (res = INR BreakException ==> t.vs_current_bb = exit_lbl) /\
     (res <> INR BreakException ==> t.vs_current_bb = incr_lbl) /\
-    stmt_state_rel ctx func cenv cx (ee with scopes := rest) t /\
-    ghost_inv d cenv cx (ee with scopes := rest) G tn t /\
+    stmt_state_rel H ctx func cenv cx (ee with scopes := rest) t /\
+    ghost_inv H d cenv cx (ee with scopes := rest) G tn t /\
     ptr_covers G tn p t sz /\ ptr_covers G tn bp t extent /\
     t.vs_allocas = s.vs_allocas /\ (!x. lookup_var x t = lookup_var x s) /\
     (!name lo z. local_region cenv rest t name lo z ==>
@@ -241,7 +241,7 @@ Theorem for_array_backedge_restore_ptr:
     j1 j2 j3 j4 i1 i2 i3 sa sb0 sb1 sj /\
   s.vs_current_bb = incr_lbl /\ s.vs_inst_idx = 0 /\
   ~ctx_has_dalloca ctx /\ ~s.vs_halted /\
-  stmt_state_rel ctx func cenv cx es s /\ ghost_inv d cenv cx es G tn s /\
+  stmt_state_rel H ctx func cenv cx es s /\ ghost_inv H d cenv cx es G tn s /\
   lookup_scopes name es.scopes = SOME snapshot /\
   lookup_scopes id es.scopes = NONE /\ k < LENGTH vs /\
   lookup_var idx s = SOME (n2w k) /\ lookup_var bp s = SOME arr_base /\
@@ -274,8 +274,8 @@ Proof
   `gas_path_ptr D 0 ctx func PG G tn s 0 Gf tf (OK sf)` by
     (gvs[] >> irule (SRULE [] for_array_increment_block_path_ptr) >> simp[] >>
      metis_tac[array_for_code_increment]) >>
-  `stmt_state_rel ctx func cenv cx es sf /\
-   ghost_inv d cenv cx es Gf tf sf` by
+  `stmt_state_rel H ctx func cenv cx es sf /\
+   ghost_inv H d cenv cx es Gf tf sf` by
     (gvs[] >> irule (SRULE [] for_backedge_state_ghost_transport) >> simp[]) >>
   `ptr_covers Gf tf p sf sz /\ sf.vs_allocas = s.vs_allocas /\
    sf.vs_inst_idx = 0 /\ sf.vs_current_bb = cond_lbl /\
@@ -333,8 +333,8 @@ Theorem for_array_callback_finish_ptr:
   not_local_ptr bc (FEMPTY :: esk.scopes) p /\
   eval_stmts cx stmts (esk with scopes :=
     (FEMPTY |+ (id,entry)) :: esk.scopes) = (res,ee) /\
-  cenv_top_ext bc c3 ee.scopes /\ stmt_state_rel ctx func c3 cx ee s /\
-  ghost_inv d c3 cx ee G tn s /\
+  cenv_top_ext bc c3 ee.scopes /\ stmt_state_rel H ctx func c3 cx ee s /\
+  ghost_inv H d c3 cx ee G tn s /\
   FLOOKUP s.vs_allocas ainst.inst_id = SOME (w2n dst,sz) /\
   ptr_covers G tn p s sz /\ ptr_covers G tn bp s (LENGTH vs * type_memory_size tv) /\
   lookup_var idx s = SOME (n2w k) /\ lookup_var bp s = SOME arr_base /\

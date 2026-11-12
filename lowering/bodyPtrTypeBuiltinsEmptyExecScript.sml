@@ -65,14 +65,14 @@ Proof
 QED
 
 Theorem empty_buffer_checked_path:
-  !sz header sa sb buf func s t G tn H th D ctx PG.
+  !sz header sa sb buf func s t G tn HG th D ctx PG.
     compile_builtin_empty_complex sz header sa = (buf,sb) /\
     fn_has_code sa sb func /\ ~s.vs_halted /\
     s.vs_current_bb = sa.cs_current_bb /\
     s.vs_inst_idx = LENGTH sa.cs_current_insts /\
-    inst_seq_ptr D 0 ctx func PG G tn (emitted_insts sa sb) s H th /\
+    inst_seq_ptr D 0 ctx func PG G tn (emitted_insts sa sb) s HG th /\
     run_inst_seq (emitted_insts sa sb) s = OK t ==>
-    gas_path_ptr D 0 ctx func PG G tn s 0 H th
+    gas_path_ptr D 0 ctx func PG G tn s 0 HG th
       (OK (t with vs_inst_idx := LENGTH sb.cs_current_insts))
 Proof
   rpt gen_tac >> strip_tac >>
@@ -97,14 +97,14 @@ Finalise empty_buffer_checked_path
 (* Certify the suffix at the cursor actually reached by the prefix.  The
    successful whole run fixes its endpoint before any ghost is chosen. *)
 Theorem empty_buffer_prefixed_tail_certificate:
-  !header sz sa sb s u t i G tn H th p w D ctx func PG.
+  !header sz sa sb s u t i G tn HG th p w D ctx func PG.
     (if header then emit_void MSTORE [Var p; Lit 0w]
      else compile_zero_words (Var p) ((sz+31) DIV 32)) sa = ((),sb) /\
     step_inst_base i s = OK u /\
-    inst_seq_ptr D 0 ctx func PG G tn [i] s H th /\
+    inst_seq_ptr D 0 ctx func PG G tn [i] s HG th /\
     run_inst_seq (i::emitted_insts sa sb) s = OK t /\
     not_fresh_at sa p /\ lookup_var p u = SOME w /\
-    ptr_covers H th p u sz /\ w2n w+sz < dimword (:256) /\
+    ptr_covers HG th p u sz /\ w2n w+sz < dimword (:256) /\
     (if header then 32 <= sz else sz MOD 32 = 0) /\ ~ctx_has_dalloca ctx ==>
     ?K tk. inst_seq_ptr D 0 ctx func PG G tn
         (i::emitted_insts sa sb) s K tk /\
@@ -115,7 +115,7 @@ Theorem empty_buffer_prefixed_tail_certificate:
       t.vs_call_ctx = u.vs_call_ctx /\ t.vs_accounts = u.vs_accounts /\
       t.vs_transient = u.vs_transient /\
       (!q. not_fresh_at sa q ==> lookup_var q t = lookup_var q u /\
-        FLOOKUP K q = FLOOKUP H q /\ op_taint tk (Var q) = op_taint th (Var q))
+        FLOOKUP K q = FLOOKUP HG q /\ op_taint tk (Var q) = op_taint th (Var q))
 Proof
   rpt gen_tac >> strip_tac >>
   `EVERY (\j. ~is_terminator j.inst_opcode) (emitted_insts sa sb)` by
@@ -124,7 +124,7 @@ Proof
     gvs[run_inst_seq_def] >>
   `?v K tk. run_inst_seq (emitted_insts sa sb)
       (u with vs_inst_idx := SUC s.vs_inst_idx) = OK v /\
-    inst_seq_ptr D 0 ctx func PG H th (emitted_insts sa sb)
+    inst_seq_ptr D 0 ctx func PG HG th (emitted_insts sa sb)
       (u with vs_inst_idx := SUC s.vs_inst_idx) K tk /\
     lookup_var p v = SOME w /\ ptr_covers K tk p v sz /\
     tk.t_mem = th.t_mem DIFF
@@ -133,7 +133,7 @@ Proof
     v.vs_call_ctx = u.vs_call_ctx /\ v.vs_accounts = u.vs_accounts /\
     v.vs_transient = u.vs_transient /\
     (!q. not_fresh_at sa q ==> lookup_var q v = lookup_var q u /\
-      FLOOKUP K q = FLOOKUP H q /\ op_taint tk (Var q) = op_taint th (Var q))` by
+      FLOOKUP K q = FLOOKUP HG q /\ op_taint tk (Var q) = op_taint th (Var q))` by
     suspend "tail" >>
   `v = t with vs_inst_idx := SUC s.vs_inst_idx` by
     (drule run_inst_seq_inst_idx >>
@@ -154,12 +154,12 @@ QED
 Resume empty_buffer_prefixed_tail_certificate[tail]:
   `lookup_var p (u with vs_inst_idx := SUC s.vs_inst_idx) = SOME w` by
     fs[lookup_var_def] >>
-  `ptr_covers H th p (u with vs_inst_idx := SUC s.vs_inst_idx) sz` by simp[] >>
+  `ptr_covers HG th p (u with vs_inst_idx := SUC s.vs_inst_idx) sz` by simp[] >>
   qpat_x_assum `lookup_var p u = _` kall_tac >>
-  qpat_x_assum `ptr_covers H th p u sz` kall_tac >>
+  qpat_x_assum `ptr_covers HG th p u sz` kall_tac >>
   drule_all empty_buffer_tail_certificate >>
   disch_then (qspecl_then [`D`, `func`, `PG`] strip_assume_tac) >>
-  qexistsl_tac [`t'`, `H'`, `th'`] >>
+  qexistsl_tac [`t'`, `HG'`, `th'`] >>
   gvs[lookup_var_def, venom_state_component_equality]
 QED
 Finalise empty_buffer_prefixed_tail_certificate
@@ -208,14 +208,14 @@ Finalise empty_buffer_compile_prefix
 Theorem empty_buffer_run_certificate:
   !sz header sa sb buf func cenv cx es s t ctx D PG G tn.
     compile_builtin_empty_complex sz header sa = (buf,sb) /\
-    fn_has_code sa sb func /\ stmt_state_rel ctx func cenv cx es s /\
+    fn_has_code sa sb func /\ stmt_state_rel H ctx func cenv cx es s /\
     fn_inst_ids_distinct func /\ local_ptrs_reserved cenv sa /\
     sz < dimword (:256) /\
     (if header then 32 <= sz else sz MOD 32 = 0) /\
     ~ctx_has_dalloca ctx /\ run_inst_seq (emitted_insts sa sb) s = OK t ==>
-    ?p w H th. buf.buf_operand = Var p /\ lookup_var p t = SOME w /\
-      inst_seq_ptr D 0 ctx func PG G tn (emitted_insts sa sb) s H th /\
-      ptr_covers H th p t sz /\
+    ?p w HG th. buf.buf_operand = Var p /\ lookup_var p t = SOME w /\
+      inst_seq_ptr D 0 ctx func PG G tn (emitted_insts sa sb) s HG th /\
+      ptr_covers HG th p t sz /\
       (!a. w2n w <= a /\ a < w2n w+(if header then 32 else sz) ==>
         a NOTIN th.t_mem)
 Proof

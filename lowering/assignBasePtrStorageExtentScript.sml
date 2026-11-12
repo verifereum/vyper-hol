@@ -39,7 +39,7 @@ Theorem assign_base_storage_rhs_bound:
     supported_storage_type tops (expr_type e) /\ ~is_word_type (expr_type e) /\
     (!elem n. expr_type e <> ArrayT elem (Dynamic n)) /\
     evaluate_type (get_tenv cx) (expr_type e) = SOME tv /\
-    stmt_state_rel ctx func cenv cx es s /\
+    stmt_state_rel H ctx func cenv cx es s /\
     expr_val_at cenv cx (expr_type e) sa sb es v op s /\
     eval_operand op s = SOME w ==>
     w2n w + type_memory_bytes cenv (lowered_value_type cenv e) < dimword (:256)
@@ -58,7 +58,7 @@ Theorem assign_base_storage_rhs_last_start:
     supported_storage_type tops (expr_type e) /\ ~is_word_type (expr_type e) /\
     (!elem k. expr_type e <> ArrayT elem (Dynamic k)) /\
     evaluate_type (get_tenv cx) (expr_type e) = SOME tv /\
-    stmt_state_rel ctx func cenv cx es s /\
+    stmt_state_rel H ctx func cenv cx es s /\
     expr_val_at cenv cx (expr_type e) sa sb es v op s /\
     eval_operand op s = SOME w /\
     n = type_memory_bytes cenv (expr_type e) DIV 32 ==>

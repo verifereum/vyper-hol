@@ -20,7 +20,7 @@ Proof
 QED
 
 Theorem method_id_runtime_vv_suffix:
-  expr_post ctx fn cenv cx e es sa sm s0 es' v arg s /\
+  expr_post H ctx fn cenv cx e es sa sm s0 es' v arg s /\
   ptr_val_ok cx (expr_type e) v arg G tn s /\
   expr_type e = BaseT bty /\ is_bytes_or_string_type (expr_type e) /\
   evaluate_type (get_tenv cx) (expr_type e) = SOME (BaseTV bty) /\
@@ -28,9 +28,9 @@ Theorem method_id_runtime_vv_suffix:
   lower_value compile_expr cenv (expr_type e) e sa = (arg,sm) /\
   compile_method_id_runtime (expr_type e) arg fixed sm = (op,sb) /\
   (!x. arg = Var x ==> not_fresh_at sm x) /\ ~ctx_has_dalloca ctx /\
-  fn_inst_ids_distinct fn /\ ghost_inv d cenv cx es' G tn s /\
+  fn_inst_ids_distinct fn /\ ghost_inv H d cenv cx es' G tn s /\
   local_ptrs_reserved cenv sa /\ local_ptrs_reserved cenv sm /\
-  stmt_state_rel ctx fn cenv cx es s0 /\
+  stmt_state_rel H ctx fn cenv cx es s0 /\
   MAP FDOM es.scopes = MAP FDOM es'.scopes /\
   ghost_kept cenv es sa G0 tn0 s0 G tn /\
   (!x sz. cenv.ce_return_buf = SOME (PtrVar (Var x) sz) ==> not_fresh_at sm x) /\
@@ -41,7 +41,7 @@ Theorem method_id_runtime_vv_suffix:
     builtin_result cx es'.accounts
       (BaseT (BytesT (if fixed then Fixed 4 else Dynamic 4)))
       MethodId [expr_type e] [v] = INL r /\
-    vv_post ctx fn cenv cx
+    vv_post H ctx fn cenv cx
       (Builtin (BaseT (BytesT (if fixed then Fixed 4 else Dynamic 4))) MethodId [e])
       es sa sb s0 es' (Value r)
       (if fixed then StackValue (BaseT (BytesT (Fixed 4))) op else
@@ -55,7 +55,7 @@ Theorem method_id_runtime_vv_suffix:
     (~fixed ==> ptr_buf_ok cenv
       (Builtin (BaseT (BytesT (Dynamic 4))) MethodId [e]) op G' t) /\
     t.vs_current_bb = sb.cs_current_bb /\ t.vs_inst_idx = LENGTH sb.cs_current_insts /\
-    ghost_inv d cenv cx es' G' tn' t /\ ghost_kept cenv es sa G0 tn0 s0 G' tn'
+    ghost_inv H d cenv cx es' G' tn' t /\ ghost_kept cenv es sa G0 tn0 s0 G' tn'
 Proof
   strip_tac >> drule_all method_id_runtime_counted >>
   disch_then (qspecl_then [`PG`, `D`] strip_assume_tac) >>

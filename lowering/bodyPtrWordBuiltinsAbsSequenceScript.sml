@@ -40,11 +40,11 @@ QED
 Theorem word_abs_output_ghost_inv:
   MEM inst.inst_opcode [SUB; SLT; EQ; AND; ISZERO; XOR; MUL] /\
   inst.inst_outputs = [x] /\ step_inst_base inst s = OK t /\
-  ghost_inv d cenv cx es G tn s /\
+  ghost_inv H d cenv cx es G tn s /\
   (!n p sz. FLOOKUP cenv.ce_vars n = SOME (PtrVar (Var p) sz) ==> p <> x) /\
   (!p sz. d <> NONE /\ cenv.ce_return_buf = SOME (PtrVar (Var p) sz) ==> p <> x) /\
   (!p sz. cenv.ce_return_pc = SOME (PtrVar (Var p) sz) ==> p <> x) ==>
-  ghost_inv d cenv cx es (step_prov PG G inst t) (step_taint inst s t tn) t
+  ghost_inv H d cenv cx es (step_prov PG G inst t) (step_taint inst s t tn) t
 Proof
   strip_tac >> drule_all word_abs_arithmetic_normal >> strip_tac >> gvs[] >>
   `new_site_bytes s (update_var x w s) = {}` by
@@ -108,14 +108,14 @@ Theorem word_abs_step_ghost_inv:
   MEM inst.inst_opcode [SUB; SLT; EQ; AND; ISZERO; ASSERT; XOR; MUL] /\
   (inst.inst_opcode = ASSERT ==> ?v. inst.inst_operands = [v] /\ inst.inst_outputs = []) /\
   (inst.inst_opcode <> ASSERT ==> ?x. inst.inst_outputs = [x]) /\
-  step_inst_base inst s = OK t /\ ghost_inv d cenv cx es G tn s /\
+  step_inst_base inst s = OK t /\ ghost_inv H d cenv cx es G tn s /\
   (!x n p sz. MEM x inst.inst_outputs /\
      FLOOKUP cenv.ce_vars n = SOME (PtrVar (Var p) sz) ==> p <> x) /\
   (!x p sz. MEM x inst.inst_outputs /\ d <> NONE /\
      cenv.ce_return_buf = SOME (PtrVar (Var p) sz) ==> p <> x) /\
   (!x p sz. MEM x inst.inst_outputs /\
      cenv.ce_return_pc = SOME (PtrVar (Var p) sz) ==> p <> x) ==>
-  ghost_inv d cenv cx es (step_prov PG G inst t) (step_taint inst s t tn) t
+  ghost_inv H d cenv cx es (step_prov PG G inst t) (step_taint inst s t tn) t
 Proof
   strip_tac >> Cases_on `inst.inst_opcode = ASSERT`
   >- (gvs[] >> drule_all word_abs_assert_normal >> simp[] >> metis_tac[]) >>

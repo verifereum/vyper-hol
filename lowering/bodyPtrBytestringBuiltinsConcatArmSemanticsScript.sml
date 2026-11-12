@@ -6,7 +6,7 @@ Ancestors
   allocaFootprint abiDecodeStaticProps venomMemProps words arithmetic list finite_map
 
 Theorem concat_fixed_endpoint_state:
-  stmt_state_rel ctx func cenv cx es t /\ local_ptrs_reserved cenv sx /\
+  stmt_state_rel H ctx func cenv cx es t /\ local_ptrs_reserved cenv sx /\
   (!z. not_fresh_at sx z ==> FLOOKUP V z = FLOOKUP t.vs_vars z) /\
   MEM binst (fn_insts func) /\ binst.inst_opcode = ALLOCA /\
   FLOOKUP t.vs_allocas binst.inst_id = SOME (B,bsz) /\
@@ -17,13 +17,13 @@ Theorem concat_fixed_endpoint_state:
   32+k+32 <= bsz /\
   u = (mstore ob nw (mstore (B+32+k) wd t) with
     <|vs_vars := V; vs_inst_idx := j|>) ==>
-  stmt_state_rel ctx func cenv cx es u
+  stmt_state_rel H ctx func cenv cx es u
 Proof
   strip_tac >>
-  `stmt_state_rel ctx func cenv cx es (mstore (B+32+k) wd t)` by
+  `stmt_state_rel H ctx func cenv cx es (mstore (B+32+k) wd t)` by
     (irule literal_mstore_state_rel >> simp[] >>
      qexistsl_tac [`B`,`binst`,`bsz`] >> simp[] >> metis_tac[]) >>
-  `stmt_state_rel ctx func cenv cx es (mstore ob nw (mstore (B+32+k) wd t))` by
+  `stmt_state_rel H ctx func cenv cx es (mstore ob nw (mstore (B+32+k) wd t))` by
     (irule literal_mstore_state_rel >> simp[] >>
      qexistsl_tac [`ob`,`oinst`,`64`] >>
      simp[mstore_def, local_region_def, lookup_var_def] >>
@@ -85,7 +85,7 @@ Proof
 QED
 
 Theorem concat_bytes_endpoint_state:
-  stmt_state_rel ctx func cenv cx es t /\ local_ptrs_reserved cenv sx /\
+  stmt_state_rel H ctx func cenv cx es t /\ local_ptrs_reserved cenv sx /\
   (!z. not_fresh_at sx z ==> FLOOKUP V z = FLOOKUP t.vs_vars z) /\
   MEM binst (fn_insts func) /\ binst.inst_opcode = ALLOCA /\
   FLOOKUP t.vs_allocas binst.inst_id = SOME (B,bsz) /\
@@ -96,13 +96,13 @@ Theorem concat_bytes_endpoint_state:
   32+k+N <= bsz /\
   u = (mstore ob nw (mcopy (B+32+k) src N t) with
     <|vs_vars := V; vs_inst_idx := j|>) ==>
-  stmt_state_rel ctx func cenv cx es u
+  stmt_state_rel H ctx func cenv cx es u
 Proof
   strip_tac >>
-  `stmt_state_rel ctx func cenv cx es (mcopy (B+32+k) src N t)` by
+  `stmt_state_rel H ctx func cenv cx es (mcopy (B+32+k) src N t)` by
     (irule alloca_mcopy_state_rel >> simp[] >>
      qexistsl_tac [`B`,`binst`,`bsz`] >> simp[] >> metis_tac[]) >>
-  `stmt_state_rel ctx func cenv cx es (mstore ob nw (mcopy (B+32+k) src N t))` by
+  `stmt_state_rel H ctx func cenv cx es (mstore ob nw (mcopy (B+32+k) src N t))` by
     (irule literal_mstore_state_rel >> simp[] >>
      qexistsl_tac [`ob`,`oinst`,`64`] >>
      simp[mcopy_def, write_memory_with_expansion_def, local_region_def, lookup_var_def] >>

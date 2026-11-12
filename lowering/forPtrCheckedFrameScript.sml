@@ -31,11 +31,11 @@ Proof
 QED
 
 Theorem for_checked_outputs_ghost_frame:
-  ghost_inv d cenv cx es G tn s /\
+  ghost_inv H d cenv cx es G tn s /\
   (!x. MEM x outputs ==> not_local_ptr cenv es.scopes x /\
      (!sz. cenv.ce_return_buf <> SOME (PtrVar (Var x) sz))) /\
   (!x. ~MEM x outputs ==> lookup_var x (s with vs_vars := vs) = lookup_var x s) ==>
-  ghost_inv d cenv cx es (DRESTRICT G (COMPL (set outputs)))
+  ghost_inv H d cenv cx es (DRESTRICT G (COMPL (set outputs)))
     (tn with t_var := tn.t_var |++ MAP (\v. (v,{})) outputs)
     (jump_to lbl (s with vs_vars := vs))
 Proof
@@ -58,11 +58,11 @@ Proof
 QED
 
 Theorem for_checked_outputs_state_frame:
-  stmt_state_rel ctx fn cenv cx es s /\
+  stmt_state_rel H ctx fn cenv cx es s /\
   (!x. MEM x outputs ==> not_local_ptr cenv es.scopes x /\
     cenv.ce_imm_alloca <> SOME (Var x)) /\
   (!x. ~MEM x outputs ==> lookup_var x (s with vs_vars := vs) = lookup_var x s) ==>
-  stmt_state_rel ctx fn cenv cx es (jump_to lbl (s with vs_vars := vs))
+  stmt_state_rel H ctx fn cenv cx es (jump_to lbl (s with vs_vars := vs))
 Proof
   strip_tac >> simp[stmt_state_rel_jump_to] >>
   irule stmt_state_rel_vars_frame >> simp[] >> conj_tac
@@ -94,7 +94,7 @@ QED
    frame; outputs is [cv;rv;g1;z1;g2;z2;ev].  No property of its instructions
    is reopened here, and the allocated pointer p must not be overwritten. *)
 Theorem for_checked_entry_setup:
-  ghost_inv d cenv cx es G tn s /\ stmt_state_rel ctx fn cenv cx es s /\
+  ghost_inv H d cenv cx es G tn s /\ stmt_state_rel H ctx fn cenv cx es s /\
   ptr_covers G tn p s sz /\ ~MEM p outputs /\
   (!x. MEM x outputs ==> not_local_ptr cenv es.scopes x /\
      cenv.ce_imm_alloca <> SOME (Var x) /\
@@ -103,8 +103,8 @@ Theorem for_checked_entry_setup:
   sf = jump_to lbl (s with vs_vars := vs) /\
   Gf = DRESTRICT G (COMPL (set outputs)) /\
   tf = tn with t_var := tn.t_var |++ MAP (\v. (v,{})) outputs ==>
-  ghost_inv d cenv cx es Gf tf sf /\
-  stmt_state_rel ctx fn cenv cx es sf /\ ptr_covers Gf tf p sf sz /\
+  ghost_inv H d cenv cx es Gf tf sf /\
+  stmt_state_rel H ctx fn cenv cx es sf /\ ptr_covers Gf tf p sf sz /\
   sf.vs_current_bb = lbl /\ sf.vs_inst_idx = 0 /\
   sf.vs_allocas = s.vs_allocas /\ sf.vs_halted = s.vs_halted /\
   (!x. ~MEM x outputs ==> lookup_var x sf = lookup_var x s /\

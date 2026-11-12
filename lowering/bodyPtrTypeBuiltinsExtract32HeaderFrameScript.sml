@@ -5,14 +5,14 @@ Ancestors
   exprSimExtract32Read fragExec rich_list
 
 Theorem extract32_prepare_post_readonly:
-  expr_post ctx func cenv cx src es sa sm s0 ee (BytesV bs) op s /\
+  expr_post H ctx func cenv cx src es sa sm s0 ee (BytesV bs) op s /\
   expr_type src = BaseT (BytesT (Dynamic m)) /\
   local_ptrs_reserved cenv sm /\ sa.cs_next_var <= sm.cs_next_var /\
   sm.cs_next_id <= sb.cs_next_id /\
   t = s with <|vs_vars := t.vs_vars; vs_inst_idx := t.vs_inst_idx|> /\
   (!x. not_fresh_at sm x ==> lookup_var x t = lookup_var x s) /\
   eval_operand op t = eval_operand op s ==>
-  expr_post ctx func cenv cx src es sa sb s0 ee (BytesV bs) op t
+  expr_post H ctx func cenv cx src es sa sb s0 ee (BytesV bs) op t
 Proof
   strip_tac >>
   `post_value_type cenv src = expr_type src` by
@@ -23,7 +23,7 @@ Proof
       local_region cenv scopes s n b sz` by
     (rpt gen_tac >> irule copy_buffer_local_region_frame >>
      qexists_tac `sm` >> simp[]) >>
-  `stmt_state_rel ctx func cenv cx ee t` by
+  `stmt_state_rel H ctx func cenv cx ee t` by
     (irule stmt_state_rel_readonly_vars_pc >>
      qexistsl_tac [`s`,`sm`] >> gvs[expr_post_def]) >>
   `wb_frame cenv es ee sa s0 t` by

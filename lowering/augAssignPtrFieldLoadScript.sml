@@ -118,7 +118,7 @@ Proof
 QED
 
 Theorem ghost_inv_scalar_field_clean:
-  ghost_inv d cenv cx es G tn s /\
+  ghost_inv H d cenv cx es G tn s /\
   lookup_scopes name es.scopes = SOME entry /\
   FLOOKUP cenv.ce_vars name = SOME (PtrVar (Var p) sz) /\
   lookup_var p s = SOME a /\
@@ -194,7 +194,7 @@ Proof
 QED
 
 Theorem ghost_inv_struct_field_inputs:
-  stmt_state_rel ctx fn cenv cx es s /\ ghost_inv d cenv cx es G tn s /\
+  stmt_state_rel H ctx fn cenv cx es s /\ ghost_inv H d cenv cx es G tn s /\
   FLOOKUP cenv.ce_vars name = SOME (PtrVar (Var p) sz) /\
   lookup_var p s = SOME a /\ lookup_scopes name es.scopes = SOME entry /\
   entry.type = StructTV fs /\ entry.value = StructV vals /\
@@ -238,12 +238,12 @@ Theorem augassign_field_load_ptr:
   ptr_covers G tn src s span /\ lookup_var src s = SOME a /\
   off < span /\ off + 32 <= span /\ w2n a + off < dimword (:256) /\
   (!i. w2n (a + n2w off) <= i /\ i < w2n (a + n2w off) + 32 ==> i NOTIN tn.t_mem) /\
-  local_ptrs_reserved cenv sa /\ stmt_state_rel ctx fn cenv cx es s /\
-  ghost_inv d cenv cx es G tn s /\ ret_pc_ok cenv sa s /\
+  local_ptrs_reserved cenv sa /\ stmt_state_rel H ctx fn cenv cx es s /\
+  ghost_inv H d cenv cx es G tn s /\ ret_pc_ok cenv sa s /\
   (!x sz. cenv.ce_return_buf = SOME (PtrVar (Var x) sz) ==> not_fresh_at sa x) ==>
   ?Gf tnf sf.
     gas_path_ptr D 0 ctx fn PG G tn s 0 Gf tnf (OK sf) /\
-    stmt_state_rel ctx fn cenv cx es sf /\ ghost_inv d cenv cx es Gf tnf sf /\
+    stmt_state_rel H ctx fn cenv cx es sf /\ ghost_inv H d cenv cx es Gf tnf sf /\
     ghost_kept cenv es sa G tn s Gf tnf /\
     lookup_var dst sf = SOME (a + n2w off) /\ ptr_covers Gf tnf dst sf 32 /\
     lookup_var out sf = SOME (mload (w2n (a + n2w off)) s) /\

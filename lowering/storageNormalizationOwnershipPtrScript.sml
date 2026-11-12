@@ -8,14 +8,14 @@ Ancestors
 Theorem normalization_alloc_buffer_ownership:
   !func cenv cx es sa sm buf sz s ctx PG G tn.
     compile_alloc_buffer sz sa = (buf,sm) /\
-    stmt_state_rel ctx func cenv cx es s /\ fn_inst_ids_distinct func /\
+    stmt_state_rel H ctx func cenv cx es s /\ fn_inst_ids_distinct func /\
     local_ptrs_reserved cenv sa /\ sz < dimword(:256) /\
     MEM (mk_inst sa.cs_next_id ALLOCA [Lit (n2w sz)]
       [STRING #"%" (toString sa.cs_next_var)]) (fn_insts func) ==>
     ?t w p.
       buf.buf_operand = Var p /\
       step_inst_base (mk_inst sa.cs_next_id ALLOCA [Lit (n2w sz)] [p]) s = OK t /\
-      stmt_state_rel ctx func cenv cx es t /\
+      stmt_state_rel H ctx func cenv cx es t /\
       eval_operand (Var p) t = SOME w /\
       FLOOKUP t.vs_allocas sa.cs_next_id = SOME (w2n w,sz) /\
       w2n w + sz < dimword(:256) /\ t.vs_memory = s.vs_memory /\
@@ -87,7 +87,7 @@ QED
 
 Theorem normalization_alloca_located_storage:
   !ctx func cenv cx es s id n out s1 PG G tn ty tv p t'.
-    stmt_state_rel ctx func cenv cx es s /\
+    stmt_state_rel H ctx func cenv cx es s /\
     MEM (mk_inst id ALLOCA [Lit (n2w n)] [out]) (fn_insts func) /\
     n < dimword(:256) /\
     step_inst_base (mk_inst id ALLOCA [Lit (n2w n)] [out]) s = OK s1 /\
@@ -116,7 +116,7 @@ QED
    separate from the destination's representation/taint argument. *)
 Theorem normalization_copy_ownership_frame:
   !ctx func cenv cx es st s t inst b sz.
-    stmt_state_rel ctx func cenv cx es s /\
+    stmt_state_rel H ctx func cenv cx es s /\
     local_ptrs_reserved cenv st /\ copy_static t = copy_static s /\
     (!x. not_fresh_at st x ==> lookup_var x t = lookup_var x s) /\
     LENGTH s.vs_memory <= LENGTH t.vs_memory /\
@@ -126,7 +126,7 @@ Theorem normalization_copy_ownership_frame:
       regions_disjoint b sz lb len) /\
     (!off len. off + len <= b \/ b + sz <= off ==>
       mem_bytes_at off len t.vs_memory = mem_bytes_at off len s.vs_memory) ==>
-    stmt_state_rel ctx func cenv cx es t /\
+    stmt_state_rel H ctx func cenv cx es t /\
     t.vs_allocas = s.vs_allocas /\
     (!tr ty tv w. storage_holds cx tr ty tv w es s ==>
       storage_holds cx tr ty tv w es t) /\
@@ -136,7 +136,7 @@ Theorem normalization_copy_ownership_frame:
 Proof
   rpt gen_tac >> strip_tac >>
   drule exprSimStorageCopyTheory.copy_static_fields >> strip_tac >>
-  `stmt_state_rel ctx func cenv cx es t` by
+  `stmt_state_rel H ctx func cenv cx es t` by
     (irule copy_buffer_state_rel_frame >>
      qexistsl_tac [`b`, `inst`, `s`, `st`, `sz`] >>
      fs[loweringStateRelDefsTheory.regions_disjoint_def] >> metis_tac[]) >>
@@ -159,8 +159,8 @@ Theorem normalization_alloca_checked_endpoint:
     lookup_block s.vs_current_bb func.fn_blocks = SOME bb /\
     get_instruction bb s.vs_inst_idx =
       SOME (mk_inst id ALLOCA [Lit (n2w n)] [out]) /\
-    stmt_state_rel ctx func cenv cx es s /\
-    stmt_state_rel ctx func cenv cx es s1 /\
+    stmt_state_rel H ctx func cenv cx es s /\
+    stmt_state_rel H ctx func cenv cx es s1 /\
     MEM (mk_inst id ALLOCA [Lit (n2w n)] [out]) (fn_insts func) /\
     n < dimword(:256) /\
     step_inst_base (mk_inst id ALLOCA [Lit (n2w n)] [out]) s = OK s1 ==>
@@ -168,7 +168,7 @@ Theorem normalization_alloca_checked_endpoint:
       (step_prov PG G (mk_inst id ALLOCA [Lit (n2w n)] [out]) s1)
       (step_taint (mk_inst id ALLOCA [Lit (n2w n)] [out]) s s1 tn)
       (OK (s1 with vs_inst_idx := SUC s.vs_inst_idx)) /\
-    stmt_state_rel ctx func cenv cx es (s1 with vs_inst_idx := SUC s.vs_inst_idx)
+    stmt_state_rel H ctx func cenv cx es (s1 with vs_inst_idx := SUC s.vs_inst_idx)
 Proof
   rpt strip_tac
   >- (drule_all reason_buffer_alloca_path >> simp[]) >>
@@ -177,7 +177,7 @@ QED
 
 Theorem normalization_copy_protected_robust:
   !ctx func cenv cx es s t inst b sz aid off len tn tn' tv v p.
-    stmt_state_rel ctx func cenv cx es s /\
+    stmt_state_rel H ctx func cenv cx es s /\
     FLOOKUP s.vs_allocas inst.inst_id = SOME (b,sz) /\
     aid <> inst.inst_id /\ FLOOKUP s.vs_allocas aid = SOME (off,len) /\
     off <= p /\ p + val_footprint tv v <= off+len /\ val_wf tv v /\

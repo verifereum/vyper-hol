@@ -31,7 +31,7 @@ Proof
 QED
 
 Theorem blockhash_source_raw_outcome:
-  0 <= i /\ i < 2 ** 256 /\ stmt_state_rel ctx fn cenv cx ee s /\
+  0 <= i /\ i < 2 ** 256 /\ stmt_state_rel H ctx fn cenv cx ee s /\
   compile_blockhash arg sm = (op,sb) /\
   (!x. arg = Var x ==> not_fresh_at sm x) /\
   eval_operand arg s = SOME (typed_val_to_w256 (BaseTV (UintT 256)) (IntV i)) ==>

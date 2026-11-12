@@ -20,23 +20,23 @@ Theorem bytes_word_continuation_ptr:
   ~ctx_has_dalloca ctx /\ ~s.vs_halted /\
   s.vs_current_bb = sa.cs_current_bb /\ s.vs_inst_idx = LENGTH sa.cs_current_insts /\
   fn_has_code sa sb fn /\
-  expr_post ctx fn cenv cx e es ca sa s0 (ee with gas_obs := []) v x s /\
+  expr_post H ctx fn cenv cx e es ca sa s0 (ee with gas_obs := []) v x s /\
   ptr_val_ok cx (expr_type e) v x G tn s /\ ptr_buf_ok cenv e x G s /\
-  ghost_inv d cenv cx (ee with gas_obs := []) G tn s /\ ghost_kept cenv es ca G0 tn0 s0 G tn /\
+  ghost_inv H d cenv cx (ee with gas_obs := []) G tn s /\ ghost_kept cenv es ca G0 tn0 s0 G tn /\
   local_ptrs_reserved cenv sa /\ ca.cs_next_var <= sa.cs_next_var /\
   (!name p sz. FLOOKUP cenv.ce_vars name = SOME (PtrVar (Var p) sz) ==> not_fresh_at sa p) /\
   (!p sz. cenv.ce_return_buf = SOME (PtrVar (Var p) sz) ==> not_fresh_at sa p) /\
   (!p sz. cenv.ce_return_pc = SOME (PtrVar (Var p) sz) ==> not_fresh_at sa p) ==>
-  gas_outcome_ptr (cx_dead cx) tops (ctx,fn) PG
+  gas_outcome_ptr (cx_dead H cx) tops (ctx,fn) PG
     (\st. (convert_result cx (expr_type e) dst v,st)) (ee with gas_obs := [],s,G,tn)
-    (\res fin H th u. ?vout. res = INL vout /\
-      expr_post ctx fn cenv cx (TypeBuiltin dst Convert dst [e]) es ca sb s0 fin vout out u /\
+    (\res fin HG th u. ?vout. res = INL vout /\
+      expr_post H ctx fn cenv cx (TypeBuiltin dst Convert dst [e]) es ca sb s0 fin vout out u /\
       u.vs_current_bb = sb.cs_current_bb /\ u.vs_inst_idx = LENGTH sb.cs_current_insts /\
-      ghost_inv d cenv cx fin H th u /\
-      ptr_val_ok cx (post_value_type cenv (TypeBuiltin dst Convert dst [e])) vout out H th u /\
+      ghost_inv H d cenv cx fin HG th u /\
+      ptr_val_ok cx (post_value_type cenv (TypeBuiltin dst Convert dst [e])) vout out HG th u /\
       (~is_word_type (post_value_type cenv (TypeBuiltin dst Convert dst [e])) ==>
-        ptr_buf_ok cenv (TypeBuiltin dst Convert dst [e]) out H u) /\
-      ghost_kept cenv es ca G0 tn0 s0 H th)
+        ptr_buf_ok cenv (TypeBuiltin dst Convert dst [e]) out HG u) /\
+      ghost_kept cenv es ca G0 tn0 s0 HG th)
     (\res fin gt r. expr_exit res r)
 Proof
   disch_then (map_every assume_tac o CONJUNCTS) >>
@@ -61,5 +61,5 @@ Proof
    lowered_value_type cenv e <> BaseT (StringT 0)` by metis_tac[] >>
   `compile_type_convert x (mk_convert_op (expr_type e) dst) sa = (out,sb)` by fs[] >>
   drule_all bytes_word_nonzero_outcome_ptr >>
-  disch_then (qspecl_then [`PG`,`cx_dead cx`] mp_tac) >> simp[]
+  disch_then (qspecl_then [`PG`,`cx_dead H cx`] mp_tac) >> simp[]
 QED

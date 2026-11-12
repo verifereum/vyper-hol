@@ -23,7 +23,7 @@ Theorem abi_builtin_decode_phased_ready_ptr:
   mload (w2n w) s = n2w cnt /\ mn <= cnt /\ cnt <= mx /\
   mx < dimword (:256) /\ abi_decoder_operand_live sa.cs_next_var (Var p) /\
   ready.cs_next_var <= limit_st.cs_next_var /\ fresh_vars_wrt limit_st s /\
-  stmt_state_rel ctx func cenv cx es s /\ ghost_inv d cenv cx es G tn s /\
+  stmt_state_rel H ctx func cenv cx es s /\ ghost_inv H d cenv cx es G tn s /\
   local_ptrs_reserved cenv sa /\
   (!x sz. cenv.ce_return_buf = SOME (PtrVar (Var x) sz) ==> not_fresh_at sa x) /\
   (!x sz. cenv.ce_return_pc = SOME (PtrVar (Var x) sz) ==> not_fresh_at sa x) /\
@@ -33,7 +33,7 @@ Theorem abi_builtin_decode_phased_ready_ptr:
     gas_path_ptr D 0 ctx func PG G tn s 0 G2 tn2 (OK u) /\
     run_inst_seq (emitted_insts sa ready) s = OK (u with vs_inst_idx := s.vs_inst_idx) /\
     inst_seq_ptr D 0 ctx func PG G tn (emitted_insts sa ready) s G2 tn2 /\
-    stmt_state_rel ctx func cenv cx es u /\ ghost_inv d cenv cx es G2 tn2 u /\
+    stmt_state_rel H ctx func cenv cx es u /\ ghost_inv H d cenv cx es G2 tn2 u /\
     ptr_covers G2 tn2 out u outsz /\ lookup_var out u = SOME wout /\
     w2n wout+outsz < dimword (:256) /\
     ptr_covers G2 tn2 q u n /\ lookup_var q u = SOME (w+32w) /\
@@ -75,7 +75,7 @@ Proof
   `sh.cs_next_var <= limit_st.cs_next_var` by decide_tac >>
   drule_all abi_builtin_decode_header_frame_ptr >>
   disch_then (qspecl_then [`PG`, `D`] strip_assume_tac) >>
-  rename1 `gas_path_ptr D 0 ctx func PG G tn s 0 H tm (OK h)` >>
+  rename1 `gas_path_ptr D 0 ctx func PG G tn s 0 HG tm (OK h)` >>
   `local_ptrs_reserved cenv sh` by
     (irule local_ptrs_reserved_next_var >> qexists_tac `sa` >> simp[]) >>
   `(!x sz. cenv.ce_return_buf = SOME (PtrVar (Var x) sz) ==> not_fresh_at sh x) /\
@@ -115,15 +115,15 @@ Resume abi_builtin_decode_phased_ready_ptr[compose]:
   `lookup_var q t = SOME (w+32w) /\ eval_operand (Var r) t = SOME (n2w cnt) /\
    op_prov G1 (Var r) = NONE /\ op_taint tn1 (Var r) = {}` by
     (fs[ghost_kept_def, op_prov_def, eval_operand_def] >> simp[]) >>
-  `ghost_kept cenv es sa G tn s H tm` by
+  `ghost_kept cenv es sa G tn s HG tm` by
     (irule hash_ghost_kept_frame >> simp[] >> metis_tac[]) >>
   `ghost_kept cenv es sa G tn s G1 tn1` by
     (irule hash_ghost_kept_then >>
-     simp[] >> qexistsl_tac [`H`, `h`, `sh`, `tm`] >> simp[] >>
+     simp[] >> qexistsl_tac [`HG`, `h`, `sh`, `tm`] >> simp[] >>
      conj_tac
      >- (rpt strip_tac >> irule freshWritesTheory.not_fresh_at_mono >>
          qexists_tac `sa` >> simp[]) >>
-     qpat_x_assum `ghost_kept cenv es sh H tm h G1 tn1` mp_tac >> simp[]) >>
+     qpat_x_assum `ghost_kept cenv es sh HG tm h G1 tn1` mp_tac >> simp[]) >>
   qexistsl_tac [`t with vs_inst_idx := LENGTH ready.cs_current_insts`,
     `G1`, `tn1`, `p'`, `q`, `r`, `w'`] >>
   simp[stmt_state_rel_inst_idx, ghost_inv_inst_idx, ptr_covers_def,
@@ -133,10 +133,10 @@ QED
 
 Resume abi_builtin_decode_phased_ready_ptr[path]:
   qpat_x_assum `!D PG G tn. gas_path_ptr _ _ _ _ _ _ _ _ _ _ _ _`
-    (qspecl_then [`D`, `PG`, `H`, `tm`] mp_tac) >>
+    (qspecl_then [`D`, `PG`, `HG`, `tm`] mp_tac) >>
   simp[arithmeticTheory.ADD1] >> strip_tac >>
   conj_tac
-  >- (qpat_x_assum `gas_path_ptr D 0 ctx func PG G tn s 0 H tm (OK h)` mp_tac >>
+  >- (qpat_x_assum `gas_path_ptr D 0 ctx func PG G tn s 0 HG tm (OK h)` mp_tac >>
       qpat_x_assum `gas_path_ptr _ _ _ _ _ _ _ h _ _ _ _` mp_tac >>
       POP_ASSUM_LIST (K ALL_TAC) >>
       rpt strip_tac >> drule_all gas_path_ptr_then >> simp[]) >>
@@ -162,7 +162,7 @@ Resume abi_builtin_decode_phased_ready_ptr[path]:
 QED
 
 Resume abi_builtin_decode_phased_ready_ptr[immutable]:
-  qpat_x_assum `stmt_state_rel ctx func cenv cx es t` mp_tac >>
+  qpat_x_assum `stmt_state_rel H ctx func cenv cx es t` mp_tac >>
   simp_tac bool_ss [stmt_state_rel_def, immutable_alloca_sep_def] >>
   rpt strip_tac >>
   qpat_x_assum `cenv.ce_is_ctor ==> _` drule >> strip_tac >>
@@ -268,7 +268,7 @@ Resume abi_builtin_decode_phased_ready_ptr[sequence]:
   qpat_x_assum `emitted_insts sa ready = _` (fn th => pure_rewrite_tac[th]) >>
   irule bop_inst_seq_ptr_append >>
   conj_tac >- fs[EVERY_MEM] >>
-  qexistsl_tac [`H`, `h with vs_inst_idx := s.vs_inst_idx`, `tm`] >>
+  qexistsl_tac [`HG`, `h with vs_inst_idx := s.vs_inst_idx`, `tm`] >>
   simp[] >>
   `h with vs_inst_idx := LENGTH sh.cs_current_insts = h` by
     simp[venom_state_component_equality] >>

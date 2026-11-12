@@ -48,9 +48,9 @@ Theorem unwrap_value_noop_vv_source_frame:
              p.ptr_location = LocMemory)) /\
     unwrap_value cenv vv sc = (src,sn) /\
     ~s.vs_halted /\ ptr_covers G tn out s n /\
-    ghost_inv d cenv cx es' G tn s /\
+    ghost_inv H d cenv cx es' G tn s /\
     ghost_kept cenv es sa G0 tn0 s0 G tn /\
-    vv_post ctx fn cenv cx e es sa sc s0 es' tv vv s /\
+    vv_post H ctx fn cenv cx e es sa sc s0 es' tv vv s /\
     ptr_vv_ok cx (expr_type e) tv vv es' G tn s /\
     (!ty op. vv = StackValue ty op /\ ~is_word_type (expr_type e) ==>
         ptr_buf_ok cenv e op G s) /\
@@ -59,9 +59,9 @@ Theorem unwrap_value_noop_vv_source_frame:
     sn = sc /\ src = vv_operand vv /\
     gas_path_ptr D 0 ctx fn PG G tn s 0 G tn (OK s) /\
     ptr_covers G tn out s n /\
-    ghost_inv d cenv cx es' G tn s /\
+    ghost_inv H d cenv cx es' G tn s /\
     ghost_kept cenv es sa G0 tn0 s0 G tn /\
-    vv_post ctx fn cenv cx e es sa sn s0 es' tv vv s /\
+    vv_post H ctx fn cenv cx e es sa sn s0 es' tv vv s /\
     ptr_vv_ok cx (expr_type e) tv vv es' G tn s /\
     (!ty op. vv = StackValue ty op /\ ~is_word_type (expr_type e) ==>
         ptr_buf_ok cenv e op G s) /\

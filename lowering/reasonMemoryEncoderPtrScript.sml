@@ -41,7 +41,7 @@ Theorem reason_memory_encoder_path_ptr:
   compile_revert_with_reason cenv vv (expr_type e) m cc = ((),se) /\
   fn_has_code cc se func /\
   (!st. unwrap_value cenv vv st = (Var src,st)) /\
-  expr_post ctx func cenv cx e es sa sb s0 ee (StringV str) (Var src) s /\
+  expr_post H ctx func cenv cx e es sa sb s0 ee (StringV str) (Var src) s /\
   ptr_val_ok cx (expr_type e) (StringV str) (Var src) G tn s /\
   evaluate_type (get_tenv cx) (expr_type e) = SOME (BaseTV (StringT cap)) /\
   ~is_word_type (expr_type e) /\ val_wf (BaseTV (StringT cap)) (StringV str) /\
@@ -125,7 +125,7 @@ QED
 
 Resume reason_memory_encoder_path_ptr[compose]:
   `?ow. eval_operand (Var src) s = SOME ow` by
-    (qpat_x_assum `expr_post _ _ _ _ _ _ _ _ _ _ _ _ _` mp_tac >>
+    (qpat_x_assum `expr_post _ _ _ _ _ _ _ _ _ _ _ _ _ _` mp_tac >>
      simp[expr_post_def, expr_val_rel_def] >> metis_tac[]) >>
   `ptr_mem_ok cx (expr_type e) (StringV str) (Var src) G tn s /\
    op_taint tn (Var src) = {}` by fs[ptr_val_ok_def] >>
@@ -140,10 +140,10 @@ Resume reason_memory_encoder_path_ptr[compose]:
   qpat_x_assum `Var src = msg` (SUBST_ALL_TAC o SYM) >>
   qpat_x_assum `m = _` SUBST_ALL_TAC >>
   fs[] >>
-  `stmt_state_rel ctx func cenv cx ee t` by fs[expr_post_def] >>
+  `stmt_state_rel H ctx func cenv cx ee t` by fs[expr_post_def] >>
   drule_at (Pat `reason_encode_finish _ _ _ _ _ = _`)
     reason_memory_suffix_path_ptr_curried >>
-  disch_then (drule_at (Pat `stmt_state_rel _ _ _ _ _ _`)) >>
+  disch_then (drule_at (Pat `stmt_state_rel _ _ _ _ _ _ _`)) >>
   disch_then (drule_at (Pat `ptr_mem_ok _ _ _ _ _ _ _`)) >>
   disch_then (drule_at (Pat `not_fresh_at _ _`)) >>
   rpt (disch_then drule) >>

@@ -17,8 +17,8 @@ Theorem ghost_inv_readonly_frame:
     (!name p sz. FLOOKUP cenv.ce_vars name = SOME (PtrVar (Var p) sz) ==> P p) /\
     (!p sz. cenv.ce_return_buf = SOME (PtrVar (Var p) sz) ==> P p) /\
     (!p sz. cenv.ce_return_pc = SOME (PtrVar (Var p) sz) ==> P p) /\
-    ghost_inv d cenv cx es G tn s ==>
-    ghost_inv d cenv cx es G' tn' s'
+    ghost_inv H d cenv cx es G tn s ==>
+    ghost_inv H d cenv cx es G' tn' s'
 Proof
   rpt gen_tac >> strip_tac >>
   `!p sz. P p ==> (ptr_covers G' tn' p s' sz <=> ptr_covers G tn p s sz)` by
@@ -55,7 +55,7 @@ Theorem bytestring_source_prefix_ghost_frame:
     ALL_DISTINCT [src;len;data] /\ lookup_var src s = SOME a /\
     ptr_covers G tn src s capacity /\ 32 <= capacity /\
     (!i. w2n a <= i /\ i < w2n a + 32 ==> i NOTIN tn.t_mem) /\
-    ghost_inv d cenv cx es G tn s /\
+    ghost_inv H d cenv cx es G tn s /\
     ghost_kept cenv es0 sa G0 tn0 s0 G tn /\
     ~not_fresh_at sa len /\ ~not_fresh_at sa data /\
     (!name p sz. FLOOKUP cenv.ce_vars name = SOME (PtrVar (Var p) sz) ==>
@@ -81,7 +81,7 @@ Theorem bytestring_source_prefix_ghost_frame:
         op_taint tn' (Var p) = op_taint tn (Var p)) /\
       (!n. 32 < capacity /\ 32+n <= capacity /\ w2n a+32 < dimword(:256) ==>
         ptr_covers G' tn' data t n) /\
-      ghost_inv d cenv cx es G' tn' t /\
+      ghost_inv H d cenv cx es G' tn' t /\
       ghost_kept cenv es0 sa G0 tn0 s0 G' tn'
 Proof
   rpt gen_tac >> strip_tac >>
@@ -89,7 +89,7 @@ Proof
   disch_then (qspecl_then [`D`,`PG`]
     (qx_choose_then `G'` (qx_choose_then `tn'`
       (qx_choose_then `t` strip_assume_tac)))) >>
-  `ghost_inv d cenv cx es G' tn' t` by
+  `ghost_inv H d cenv cx es G' tn' t` by
     (irule ghost_inv_readonly_frame >>
      qexistsl_tac [`G`,`\p. p <> len /\ p <> data`,`s`,`tn`] >>
      simp[] >> metis_tac[]) >>
@@ -102,11 +102,11 @@ QED
 
 Theorem stmt_state_rel_readonly_vars_pc:
   !ctx fn cenv cx es s sb t.
-    stmt_state_rel ctx fn cenv cx es s /\ local_ptrs_reserved cenv sb /\
+    stmt_state_rel H ctx fn cenv cx es s /\ local_ptrs_reserved cenv sb /\
     t = s with <| vs_vars := t.vs_vars; vs_inst_idx := t.vs_inst_idx |> /\
     (!z w. not_fresh_at sb z /\ lookup_var z s = SOME w ==>
       lookup_var z t = SOME w) ==>
-    stmt_state_rel ctx fn cenv cx es t
+    stmt_state_rel H ctx fn cenv cx es t
 Proof
   rpt gen_tac >> strip_tac >>
   qpat_assum `t = _` (fn th => once_rewrite_tac[th]) >>

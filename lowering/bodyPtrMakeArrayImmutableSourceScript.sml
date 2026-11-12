@@ -5,7 +5,7 @@ Ancestors
   vyperStorageBackend vyperState context compileEnv
 
 Theorem make_array_immutable_consumer_read:
-  vv_post ctx func cenv cx e es sa sb s0 es' raw (LocatedValue ty p) s /\
+  vv_post H ctx func cenv cx e es sa sb s0 es' raw (LocatedValue ty p) s /\
   p.ptr_location = LocCode /\
   post_value_type cenv e = expr_type e ==>
   ?a tv v.

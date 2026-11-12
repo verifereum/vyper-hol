@@ -26,10 +26,10 @@ QED
 
 Theorem ecmul_framed_input:
   compile_ecmul_point point scalar sf = (res,sb) /\
-  stmt_state_rel ctx fn cenv cx es s /\ fn_inst_ids_distinct fn /\
+  stmt_state_rel H ctx fn cenv cx es s /\ fn_inst_ids_distinct fn /\
   local_ptrs_reserved cenv sf /\ ~ctx_has_dalloca ctx /\
   (!i. MEM i (emitted_insts sf sb) ==> MEM i (fn_insts fn)) /\
-  ghost_inv d cenv cx es G tn s /\
+  ghost_inv H d cenv cx es G tn s /\
   (!p sz. cenv.ce_return_buf = SOME (PtrVar (Var p) sz) ==> not_fresh_at sf p) /\
   (!p sz. cenv.ce_return_pc = SOME (PtrVar (Var p) sz) ==> not_fresh_at sf p) /\
   expr_val_at cenv cx (ArrayT (BaseT (UintT 256)) (Fixed 2)) lo sf es v point s /\
@@ -61,8 +61,8 @@ Theorem ecmul_framed_input:
     mem_bytes_at (w2n b) 96 t.vs_memory =
       word_to_bytes (mload (w2n a) s) T ++
       word_to_bytes (mload (w2n a+32) s) T ++ word_to_bytes w T /\
-    stmt_state_rel ctx fn cenv cx es t /\ wb_frame cenv es es sf s t /\
-    ghost_inv d cenv cx es Gf tnf t /\ ghost_kept cenv es sf G tn s Gf tnf /\
+    stmt_state_rel H ctx fn cenv cx es t /\ wb_frame cenv es es sf s t /\
+    ghost_inv H d cenv cx es Gf tnf t /\ ghost_kept cenv es sf G tn s Gf tnf /\
     (!name lo len. local_region cenv es.scopes t name lo len ==>
        regions_disjoint (w2n c) 64 lo len) /\
     (!aid lo len. aid < sf.cs_next_id /\
@@ -147,10 +147,10 @@ Finalise ecmul_framed_input
 
 Theorem ecadd_framed_input:
   compile_ecadd_points point other sf = (res,sb) /\
-  stmt_state_rel ctx fn cenv cx es s /\ fn_inst_ids_distinct fn /\
+  stmt_state_rel H ctx fn cenv cx es s /\ fn_inst_ids_distinct fn /\
   local_ptrs_reserved cenv sf /\ ~ctx_has_dalloca ctx /\
   (!i. MEM i (emitted_insts sf sb) ==> MEM i (fn_insts fn)) /\
-  ghost_inv d cenv cx es G tn s /\
+  ghost_inv H d cenv cx es G tn s /\
   (!p sz. cenv.ce_return_buf = SOME (PtrVar (Var p) sz) ==> not_fresh_at sf p) /\
   (!p sz. cenv.ce_return_pc = SOME (PtrVar (Var p) sz) ==> not_fresh_at sf p) /\
   expr_val_at cenv cx (ArrayT (BaseT (UintT 256)) (Fixed 2)) lo sf es vp point s /\
@@ -184,8 +184,8 @@ Theorem ecadd_framed_input:
     mem_bytes_at (w2n b) 128 t.vs_memory =
       word_to_bytes (mload (w2n a1) s) T ++ word_to_bytes (mload (w2n a1+32) s) T ++
       word_to_bytes (mload (w2n a2) s) T ++ word_to_bytes (mload (w2n a2+32) s) T /\
-    stmt_state_rel ctx fn cenv cx es t /\ wb_frame cenv es es sf s t /\
-    ghost_inv d cenv cx es Gf tnf t /\ ghost_kept cenv es sf G tn s Gf tnf /\
+    stmt_state_rel H ctx fn cenv cx es t /\ wb_frame cenv es es sf s t /\
+    ghost_inv H d cenv cx es Gf tnf t /\ ghost_kept cenv es sf G tn s Gf tnf /\
     (!name lo len. local_region cenv es.scopes t name lo len ==>
        regions_disjoint (w2n c) 64 lo len) /\
     (!aid lo len. aid < sf.cs_next_id /\

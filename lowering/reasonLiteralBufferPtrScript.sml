@@ -130,7 +130,7 @@ QED
 
 Theorem reason_literal_buffer_ptr_run:
   compile_bytelike_literal bs ml sa = (buf,sb) /\ LENGTH bs <= ml /\
-  stmt_state_rel ctx func cenv cx es s /\ fn_has_code sa sb func /\
+  stmt_state_rel H ctx func cenv cx es s /\ fn_has_code sa sb func /\
   fn_inst_ids_distinct func /\ local_ptrs_reserved cenv sa /\
   ~ctx_has_dalloca ctx /\ 32+32*word_size ml < dimword (:256) ==>
   ?u t b p sh G' tn' dirty.
@@ -138,7 +138,7 @@ Theorem reason_literal_buffer_ptr_run:
     (!x. not_fresh_at sa x ==> not_fresh_at sh x) /\
     run_inst_seq (emitted_insts sa sb) s = OK t /\
     inst_seq_ptr D 0 ctx fn PG G tn (emitted_insts sa sb) s G' tn' /\
-    stmt_state_rel ctx func cenv cx es u /\ u.vs_memory = s.vs_memory /\
+    stmt_state_rel H ctx func cenv cx es u /\ u.vs_memory = s.vs_memory /\
     FLOOKUP u.vs_allocas sa.cs_next_id = SOME (b,32+32*word_size ml) /\
     (!aid entry. FLOOKUP s.vs_allocas aid = SOME entry ==>
       FLOOKUP u.vs_allocas aid = SOME entry) /\

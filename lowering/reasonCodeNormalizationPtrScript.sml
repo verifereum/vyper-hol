@@ -55,7 +55,7 @@ Proof
 QED
 
 Theorem code_copy_state_rel_frame:
-  stmt_state_rel ctx func cenv cx es s /\ local_ptrs_reserved cenv st /\
+  stmt_state_rel H ctx func cenv cx es s /\ local_ptrs_reserved cenv st /\
   (t with <|vs_vars := s.vs_vars; vs_memory := s.vs_memory;
              vs_inst_idx := s.vs_inst_idx|>) = s /\
   (!x. not_fresh_at st x ==> lookup_var x t = lookup_var x s) /\
@@ -65,7 +65,7 @@ Theorem code_copy_state_rel_frame:
   FLOOKUP s.vs_allocas inst.inst_id = SOME (w2n b,32*n) /\
   (!name lb len. local_region cenv es.scopes s name lb len ==>
      regions_disjoint (w2n b) (32*n) lb len) ==>
-  stmt_state_rel ctx func cenv cx es t /\
+  stmt_state_rel H ctx func cenv cx es t /\
   (!aid off len. aid <> inst.inst_id /\
     FLOOKUP s.vs_allocas aid = SOME (off,len) ==>
     mem_bytes_at off len t.vs_memory = mem_bytes_at off len s.vs_memory)
@@ -87,7 +87,7 @@ Theorem code_reason_copy_resources_ptr:
   lookup_var root s = SOME b /\ ptr_covers G tn root s (32*n) /\
   (!p. src = Var p ==> not_fresh_at ca p) /\ not_fresh_at ca root /\
   w2n b + 32*n < dimword(:256) /\
-  stmt_state_rel ctx func cenv cx es s /\ local_ptrs_reserved cenv ca /\
+  stmt_state_rel H ctx func cenv cx es s /\ local_ptrs_reserved cenv ca /\
   MEM inst (fn_insts func) /\ inst.inst_opcode = ALLOCA /\
   FLOOKUP s.vs_allocas inst.inst_id = SOME (w2n b,32*n) /\
   (!name lb len. local_region cenv es.scopes s name lb len ==>
@@ -101,7 +101,7 @@ Theorem code_reason_copy_resources_ptr:
     gas_path_ptr D 0 ctx func PG G tn s 0 Gf tnf (OK t) /\
     t.vs_current_bb = cb.cs_current_bb /\
     t.vs_inst_idx = LENGTH cb.cs_current_insts /\ ~t.vs_halted /\
-    stmt_state_rel ctx func cenv cx es t /\
+    stmt_state_rel H ctx func cenv cx es t /\
     lookup_var root t = SOME b /\ ptr_covers Gf tnf root t (32*n) /\
     ptr_mem_ok cx ty (StringV str) (Var root) Gf tnf t /\
     32 + 32 * word_size (LENGTH str) <= 32*n /\
@@ -124,7 +124,7 @@ Proof
   first_x_assum (qspecl_then [`PG`, `D`] strip_assume_tac) >>
   `lookup_var root sf = SOME b /\ ptr_covers Gf tnf root sf (32*n)` by
     metis_tac[] >>
-  `stmt_state_rel ctx func cenv cx es sf /\
+  `stmt_state_rel H ctx func cenv cx es sf /\
    (!aid off len. aid <> inst.inst_id /\
      FLOOKUP s.vs_allocas aid = SOME (off,len) ==>
      mem_bytes_at off len sf.vs_memory = mem_bytes_at off len s.vs_memory)` by
@@ -147,7 +147,7 @@ Theorem code_reason_alloc_copy_path_ptr:
   buf.buf_operand = Var root /\
   compile_imm_copy_to_memory F imm src (Var root) n 0 ca = ((),cb) /\
   fn_has_code cc ca func /\ fn_has_code ca cb func /\
-  stmt_state_rel ctx func cenv cx es s /\ local_ptrs_reserved cenv cc /\
+  stmt_state_rel H ctx func cenv cx es s /\ local_ptrs_reserved cenv cc /\
   fn_inst_ids_distinct func /\ ~ctx_has_dalloca ctx /\
   s.vs_current_bb = cc.cs_current_bb /\
   s.vs_inst_idx = LENGTH cc.cs_current_insts /\ ~s.vs_halted /\
@@ -162,7 +162,7 @@ Theorem code_reason_alloc_copy_path_ptr:
     gas_path_ptr D 0 ctx func PG G tn s 0 Gf tnf (OK t) /\
     t.vs_current_bb = cb.cs_current_bb /\
     t.vs_inst_idx = LENGTH cb.cs_current_insts /\ ~t.vs_halted /\
-    stmt_state_rel ctx func cenv cx es t /\
+    stmt_state_rel H ctx func cenv cx es t /\
     lookup_var root t = SOME (n2w b) /\ ptr_covers Gf tnf root t (32*n) /\
     ptr_mem_ok cx ty (StringV str) (Var root) Gf tnf t /\
     32 + 32*word_size (LENGTH str) <= 32*n /\ b+32*n < dimword(:256) /\
@@ -207,7 +207,7 @@ Theorem code_reason_unwrap_path_ptr:
   ~is_word_type ann /\ p.ptr_location = LocCode /\ ~cenv.ce_is_ctor /\
   type_memory_bytes cenv ann = 32*n /\
   (type_memory_bytes cenv ann+31) DIV 32 = n /\
-  fn_has_code cc cb func /\ stmt_state_rel ctx func cenv cx es s /\
+  fn_has_code cc cb func /\ stmt_state_rel H ctx func cenv cx es s /\
   local_ptrs_reserved cenv cc /\ fn_inst_ids_distinct func /\
   ~ctx_has_dalloca ctx /\ s.vs_current_bb = cc.cs_current_bb /\
   s.vs_inst_idx = LENGTH cc.cs_current_insts /\ ~s.vs_halted /\
@@ -224,7 +224,7 @@ Theorem code_reason_unwrap_path_ptr:
     gas_path_ptr D 0 ctx func PG G tn s 0 Gf tnf (OK t) /\
     t.vs_current_bb = cb.cs_current_bb /\
     t.vs_inst_idx = LENGTH cb.cs_current_insts /\ ~t.vs_halted /\
-    stmt_state_rel ctx func cenv cx es t /\
+    stmt_state_rel H ctx func cenv cx es t /\
     lookup_var root t = SOME (n2w b) /\ ptr_covers Gf tnf root t (32*n) /\
     ptr_mem_ok cx ty (StringV str) (Var root) Gf tnf t /\
     32 + 32*word_size (LENGTH str) <= 32*n /\ b+32*n < dimword(:256) /\
@@ -254,7 +254,7 @@ Proof
   drule_at (Pat `compile_alloc_buffer _ _ = _`) code_reason_alloc_copy_path_ptr >>
   disch_then (drule_at_then (Pat `immutable_holds _ _ _ _ _ _ _`) mp_tac) >>
   disch_then (drule_at_then (Pat `compile_imm_copy_to_memory _ _ _ _ _ _ _ = _`) mp_tac) >>
-  disch_then (drule_at_then (Pat `stmt_state_rel _ _ _ _ _ _`) mp_tac) >>
+  disch_then (drule_at_then (Pat `stmt_state_rel _ _ _ _ _ _ _`) mp_tac) >>
   disch_then (drule_at_then (Pat `read_result _ _ _ = _`) mp_tac) >>
   disch_then (drule_at_then (Pat `op_taint _ _ = {}`) mp_tac) >>
   disch_then (qspec_then `max` mp_tac) >>

@@ -22,16 +22,16 @@ Theorem tuple_local_bytes_compatible_head_ptr:
   lookup_var src s = SOME sw /\ lookup_var p s = SOME dw /\
   ptr_covers G tn src s (type_memory_size tv) /\
   ptr_val_ok cx ty v (Var src) G tn s /\
-  ghost_inv d cenv cx es G tn s /\ stmt_state_rel ctx func cenv cx es s /\
+  ghost_inv H d cenv cx es G tn s /\ stmt_state_rel H ctx func cenv cx es s /\
   fn_has_code sa sb func /\ ~ctx_has_dalloca ctx /\ ~s.vs_halted /\
   s.vs_current_bb = sa.cs_current_bb /\
   s.vs_inst_idx = LENGTH sa.cs_current_insts ==>
   ?u G' tn' written.
     written <= type_memory_size tv /\ written <= type_memory_size entry.type /\
-    stmt_state_rel ctx func cenv cx
+    stmt_state_rel H ctx func cenv cx
       (es with scopes := pre ++
         (sc |+ (id,entry with <|value := v; popped := []|>)) :: rest) u /\
-    ghost_inv d cenv cx
+    ghost_inv H d cenv cx
       (es with scopes := pre ++
         (sc |+ (id,entry with <|value := v; popped := []|>)) :: rest) G' tn' u /\
     gas_path_ptr D 0 ctx func PG G tn s 0 G' tn'

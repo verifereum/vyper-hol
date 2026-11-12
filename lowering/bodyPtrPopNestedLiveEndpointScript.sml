@@ -7,7 +7,7 @@ Ancestors
   localPtrsProps compileEnv venomState finite_map pred_set
 
 Theorem pop_updated_local_ghost:
-  ghost_inv d cenv cx es G tn s /\
+  ghost_inv H d cenv cx es G tn s /\
   local_ptrs_rel func cenv es.scopes s /\
   lookup_scopes id es.scopes = SOME old /\
   FLOOKUP cenv.ce_vars id = SOME (PtrVar (Var root) cap) /\
@@ -21,11 +21,11 @@ Theorem pop_updated_local_ghost:
   (!x sz. cenv.ce_return_buf = SOME (PtrVar (Var x) sz) ==> not_fresh_at sa x) /\
   (!x sz. cenv.ce_return_pc = SOME (PtrVar (Var x) sz) ==> not_fresh_at sa x) /\
   (!x. not_fresh_at sa x ==> lookup_var x t = lookup_var x s /\
-    FLOOKUP H x = FLOOKUP G x /\ op_taint tf (Var x) = op_taint tn (Var x)) /\
+    FLOOKUP HG x = FLOOKUP G x /\ op_taint tf (Var x) = op_taint tn (Var x)) /\
   tf.t_mem = tn.t_mem /\
   t.vs_memory = (mstore (w2n b+k) wd s).vs_memory /\
-  stor_taint_ok cx tf t ==>
-  ghost_inv d cenv cx (es with scopes := scopes') H tf t
+  stor_taint_ok H cx tf t ==>
+  ghost_inv H d cenv cx (es with scopes := scopes') HG tf t
 Proof
   strip_tac >>
   irule pop_header_ghost_transport >>
@@ -89,10 +89,10 @@ Theorem pop_path_result_ptr_post:
   t.vs_memory = (mstore (locbase+k) (n2w (LENGTH vs-1)) s).vs_memory /\
   lookup_var out t = SOME w /\
   w2n w = locbase+k+32+(LENGTH vs-1)*type_memory_size etv /\
-  ptr_covers H tf out t (type_memory_size etv) /\
+  ptr_covers HG tf out t (type_memory_size etv) /\
   read_result cx result es' = (INL (LAST vs),es') /\
   evaluate_type (get_tenv cx) ty = SOME etv ==>
-  ptr_vv_ok cx ty result (LocatedValue ty (mk_ptr (Var out) LocMemory)) es' H tf t
+  ptr_vv_ok cx ty result (LocatedValue ty (mk_ptr (Var out) LocMemory)) es' HG tf t
 Proof
   strip_tac >>
   `val_in_memory tv a locbase s.vs_memory` by
@@ -111,7 +111,7 @@ Proof
 QED
 
 Theorem pop_live_path_ghost_post:
-  ghost_inv d cenv cx es G tn s /\
+  ghost_inv H d cenv cx es G tn s /\
   local_ptrs_rel func cenv es.scopes s /\
   lookup_scopes id es.scopes = SOME old /\
   FLOOKUP cenv.ce_vars id = SOME (PtrVar (Var root) cap) /\
@@ -130,11 +130,11 @@ Theorem pop_live_path_ghost_post:
   (!x sz. cenv.ce_return_buf = SOME (PtrVar (Var x) sz) ==> not_fresh_at sa x) /\
   (!x sz. cenv.ce_return_pc = SOME (PtrVar (Var x) sz) ==> not_fresh_at sa x) /\
   (!x. not_fresh_at sa x ==> lookup_var x t = lookup_var x s /\
-    FLOOKUP H x = FLOOKUP G x /\ op_taint tf (Var x) = op_taint tn (Var x)) /\
+    FLOOKUP HG x = FLOOKUP G x /\ op_taint tf (Var x) = op_taint tn (Var x)) /\
   tf.t_mem = tn.t_mem /\
   t.vs_memory = (mstore (w2n b+k) (n2w (LENGTH vs-1)) s).vs_memory /\
-  stor_taint_ok cx tf t ==>
-  ghost_inv d cenv cx (es with scopes := scopes') H tf t
+  stor_taint_ok H cx tf t ==>
+  ghost_inv H d cenv cx (es with scopes := scopes') HG tf t
 Proof
   strip_tac >>
   match_mp_tac (Q.INST [`wd` |-> `n2w (LENGTH (vs:value list)-1)`] pop_updated_local_ghost) >>

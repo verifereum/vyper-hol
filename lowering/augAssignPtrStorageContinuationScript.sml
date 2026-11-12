@@ -16,18 +16,18 @@ Theorem augassign_clean_storage_store_ptr:
   fn_has_code sa sb func /\ ~s.vs_halted /\ ~ctx_has_dalloca ctx /\
   s.vs_current_bb = sa.cs_current_bb /\
   s.vs_inst_idx = LENGTH sa.cs_current_insts /\
-  stmt_state_rel ctx func cenv cx es s /\ ghost_inv d cenv cx es G tn s /\
+  stmt_state_rel H ctx func cenv cx es s /\ ghost_inv H d cenv cx es G tn s /\
   ghost_kept cenv frame_es origin G0 tn0 s0 G tn /\
-  (!w st. storage_dead cx tr (update_storage slot w st) = storage_dead cx tr st) /\
+  (!w st. storage_dead H tr (update_storage slot w st) = storage_dead H tr st) /\
   encode_value tv result = SOME [(0,typed_val_to_w256 tv result)] /\
   eval_operand dst s = SOME slot /\
   eval_operand op s = SOME (typed_val_to_w256 tv result) /\
   op_taint tn dst = {} /\ op_taint tn op = {} ==>
-  ?fin H tm t.
+  ?fin HG tm t.
     write_storage_slot cx tr slot tv result es = (INL (),fin) /\
-    gas_path_ptr D 0 ctx func PG G tn s 0 H tm (OK t) /\
-    stmt_state_rel ctx func cenv cx fin t /\ ghost_inv d cenv cx fin H tm t /\
-    ghost_kept cenv frame_es origin G0 tn0 s0 H tm /\
+    gas_path_ptr D 0 ctx func PG G tn s 0 HG tm (OK t) /\
+    stmt_state_rel H ctx func cenv cx fin t /\ ghost_inv H d cenv cx fin HG tm t /\
+    ghost_kept cenv frame_es origin G0 tn0 s0 HG tm /\
     ~t.vs_halted /\ t.vs_current_bb = sb.cs_current_bb /\
     t.vs_inst_idx = LENGTH sb.cs_current_insts /\ ~block_is_terminated sb /\
     t.vs_allocas = s.vs_allocas /\
@@ -39,7 +39,7 @@ Proof
     fs[stmt_state_rel_def, state_rel_def, call_ctx_rel_def] >>
   `?fin. write_storage_slot cx tr slot tv result es = (INL (),fin)` by
     simp[write_storage_slot_eq] >>
-  `stmt_state_rel ctx func cenv cx fin
+  `stmt_state_rel H ctx func cenv cx fin
      (if tr then tstore slot (typed_val_to_w256 tv result) s
       else sstore slot (typed_val_to_w256 tv result) s)` by
     (drule_at (Pat `write_storage_slot _ _ _ _ _ _ = _`)
@@ -63,10 +63,10 @@ Proof
 QED
 
 Resume augassign_clean_storage_store_ptr[post]:
-  `!k b. storage_dead cx tr
+  `!k b. storage_dead H tr
      (update_storage slot (typed_val_to_w256 tv result)
        (if tr then contract_transient s else contract_storage s)) k b =
-     storage_dead cx tr
+     storage_dead H tr
        (if tr then contract_transient s else contract_storage s) k b` by simp[] >>
   drule_at (Pat `s.vs_call_ctx.cc_address = _`) ghost_inv_storage_word_store >>
   disch_then drule_all >>
@@ -74,7 +74,7 @@ Resume augassign_clean_storage_store_ptr[post]:
   qabbrev_tac `store_tn =
     if tr then tn with t_trans := key_update tn.t_trans slot {}
     else tn with t_stor := key_update tn.t_stor slot {}` >>
-  `ghost_inv d cenv cx fin G store_tn
+  `ghost_inv H d cenv cx fin G store_tn
       (last with vs_inst_idx := LENGTH sb.cs_current_insts)` by
     simp[Abbr `last`, Abbr `store_tn`] >>
   `ghost_kept cenv frame_es origin G0 tn0 s0 G store_tn` by
@@ -116,12 +116,12 @@ Theorem augassign_storage_clean_continuation_ptr:
   (!z. dst = Var z ==> not_fresh_at sa z) /\
   ~s.vs_halted /\ ~ctx_has_dalloca ctx /\
   s.vs_current_bb = sa.cs_current_bb /\ s.vs_inst_idx = LENGTH sa.cs_current_insts /\
-  local_ptrs_reserved cenv sa /\ stmt_state_rel ctx func cenv cx es s /\
-  ghost_inv d cenv cx es G tn s /\
+  local_ptrs_reserved cenv sa /\ stmt_state_rel H ctx func cenv cx es s /\
+  ghost_inv H d cenv cx es G tn s /\
   (!z sz. cenv.ce_return_pc = SOME (PtrVar (Var z) sz) ==> not_fresh_at sa z) /\
   (!z sz. cenv.ce_return_buf = SOME (PtrVar (Var z) sz) ==> not_fresh_at sa z) /\
-  (!w st. storage_dead cx tr (update_storage slot w st) = storage_dead cx tr st) ==>
-  (?result fin H tm t.
+  (!w st. storage_dead H tr (update_storage slot w st) = storage_dead H tr st) ==>
+  (?result fin HG tm t.
     evaluate_binop
       (case type_to_int_bound ty of SOME bound => bound | NONE => Unsigned 0)
       tv bop v v' = INL result /\
@@ -129,19 +129,19 @@ Theorem augassign_storage_clean_continuation_ptr:
       (bind (lift_sum (evaluate_binop
         (case type_to_int_bound ty of SOME bound => bound | NONE => Unsigned 0)
         tv bop v v')) (write_storage_slot cx tr slot tv))
-      (es,s,G,tn) [] (INL ()) fin H tm (OK t) /\
-    stmt_state_rel ctx func cenv cx fin t /\ ghost_inv d cenv cx fin H tm t /\
-    ghost_kept cenv es sa G tn s H tm /\
+      (es,s,G,tn) [] (INL ()) fin HG tm (OK t) /\
+    stmt_state_rel H ctx func cenv cx fin t /\ ghost_inv H d cenv cx fin HG tm t /\
+    ghost_kept cenv es sa G tn s HG tm /\
     ~t.vs_halted /\ t.vs_current_bb = sb.cs_current_bb /\
     t.vs_inst_idx = LENGTH sb.cs_current_insts /\ ~block_is_terminated sb /\
     (!aid b. FLOOKUP s.vs_allocas aid = SOME b ==> FLOOKUP t.vs_allocas aid = SOME b) /\
     (!z w. not_fresh_at sa z /\ lookup_var z s = SOME w ==> lookup_var z t = SOME w)) \/
-  (?msg H tm t.
+  (?msg HG tm t.
     gas_marked_exec_ptr D (ctx,func) PG
       (bind (lift_sum (evaluate_binop
         (case type_to_int_bound ty of SOME bound => bound | NONE => Unsigned 0)
         tv bop v v')) (write_storage_slot cx tr slot tv))
-      (es,s,G,tn) [] (INR (Error (RuntimeError msg))) es H tm
+      (es,s,G,tn) [] (INR (Error (RuntimeError msg))) es HG tm
       (Abort Revert_abort t))
 Proof
   strip_tac >>
@@ -171,7 +171,7 @@ Resume augassign_storage_clean_continuation_ptr[normal]:
      tv bop v v' = INL result` by
     (qpat_x_assum `bop_result _ _ _ _ _ _ _ = (case _ of INL z => _ | INR err => _)`
        mp_tac >> simp[CaseEq "sum"]) >>
-  qmatch_asmsub_abbrev_tac `stmt_state_rel ctx func cenv cx es u` >>
+  qmatch_asmsub_abbrev_tac `stmt_state_rel H ctx func cenv cx es u` >>
   `eval_operand dst u = SOME slot` by
     (Cases_on `dst` >> gvs[eval_operand_def] >> metis_tac[]) >>
   `op_taint tm dst = {}` by
@@ -199,14 +199,14 @@ Resume augassign_storage_clean_continuation_ptr[normal]:
 QED
 
 Resume augassign_storage_clean_continuation_ptr[compose]:
-  `gas_path_ptr D 0 ctx func PG G tn s 0 H' tm' (OK t')` by
+  `gas_path_ptr D 0 ctx func PG G tn s 0 HG' tm' (OK t')` by
     (drule_all gas_path_ptr_then >> simp[]) >>
   `bind (lift_sum (evaluate_binop
       (case type_to_int_bound ty of SOME bound => bound | NONE => Unsigned 0)
       tv bop v v')) (write_storage_slot cx tr slot tv) es = (INL (),fin)` by
     simp[lift_sum_def, bind_def, return_def] >>
   drule_all augassign_storage_continuation_exec_ptr >> strip_tac >>
-  disj1_tac >> qexistsl [`result`, `fin`, `H'`, `tm'`, `t'`] >> simp[] >>
+  disj1_tac >> qexistsl [`result`, `fin`, `HG'`, `tm'`, `t'`] >> simp[] >>
   simp[Abbr `u`]
 QED
 

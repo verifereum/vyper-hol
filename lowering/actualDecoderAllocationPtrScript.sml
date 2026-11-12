@@ -32,23 +32,23 @@ Theorem actual_alloca_endpoint_exact_ptr_core:
       s.vs_alloca_next + 32 < dimword (:256)) \/
    (?p. FLOOKUP s.vs_allocas sa.cs_next_id = SOME (p,32) /\
       p + 32 <= s.vs_alloca_next /\ s.vs_alloca_next < dimword (:256))) ==>
-  ?H u q p. ip = Var q /\ lookup_var q t = SOME (n2w p) /\
+  ?HG u q p. ip = Var q /\ lookup_var q t = SOME (n2w p) /\
     p + 32 < dimword (:256) /\
     (case FLOOKUP s.vs_allocas sa.cs_next_id of
        NONE => p = s.vs_alloca_next | SOME (slot,sz) => p = slot) /\
-    ptr_covers H u q (t with vs_inst_idx := SUC s.vs_inst_idx) 32 /\
-    frag_exec_ptr cx ctx PG sa sb
+    ptr_covers HG u q (t with vs_inst_idx := SUC s.vs_inst_idx) 32 /\
+    frag_exec_ptr H cx ctx PG sa sb
       (\g z v. g = G /\ z = tn /\ v = s)
-      (\g z v. g = H /\ z = u /\ v = (t with vs_inst_idx := SUC s.vs_inst_idx)) R /\
+      (\g z v. g = HG /\ z = u /\ v = (t with vs_inst_idx := SUC s.vs_inst_idx)) R /\
     u.t_stor = tn.t_stor /\ u.t_trans = tn.t_trans /\ u.t_imm = tn.t_imm /\
     u.t_mem DIFF {a | p <= a /\ a < p + 32} =
       tn.t_mem DIFF {a | p <= a /\ a < p + 32} /\
     (!x. not_fresh_at sa x ==> lookup_var x t = lookup_var x s /\
-      FLOOKUP H x = FLOOKUP G x /\ op_taint u (Var x) = op_taint tn (Var x)) /\
+      FLOOKUP HG x = FLOOKUP G x /\ op_taint u (Var x) = op_taint tn (Var x)) /\
     (!D lower ctx' func.
       fn_has_code sa sb func /\ allocas_from lower s /\ ~ctx_has_dalloca ctx' /\
       s.vs_current_bb = sa.cs_current_bb /\ s.vs_inst_idx = LENGTH sa.cs_current_insts /\
-      (!fuel. ptr_safe_run D lower fuel ctx' func PG H u
+      (!fuel. ptr_safe_run D lower fuel ctx' func PG HG u
         (t with vs_inst_idx := LENGTH sb.cs_current_insts)) ==>
       !fuel. ptr_safe_run D lower fuel ctx' func PG G tn s)
 Proof
@@ -61,7 +61,7 @@ Proof
     simp[abi_decoder_ids_def] >>
   drule_all budget_alloca_endpoint_exact_ptr_core >>
   disch_then (qspecl_then [`tn`,`cx`,`ctx`,`R`,`PG`,`G`] strip_assume_tac) >>
-  qexistsl_tac [`H`,`u`,`q`,`p`] >> simp[] >>
+  qexistsl_tac [`HG`,`u`,`q`,`p`] >> simp[] >>
   drule emitted_insts_emit_op >> strip_tac >> gvs[] >>
   qpat_x_assum `run_inst_seq _ _ = _` mp_tac >>
   simp[run_inst_seq_def] >>

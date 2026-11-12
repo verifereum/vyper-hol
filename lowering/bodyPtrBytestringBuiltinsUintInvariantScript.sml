@@ -10,7 +10,7 @@ Ancestors
    S1's u2s_safe and u2s_digits remain separate semantic predicates. *)
 Definition u2s_ptr_state_def:
   u2s_ptr_state d cenv cx es a G0 tn0 s0 p b sz n i G tn s <=>
-    ghost_inv d cenv cx es G tn s /\
+    ghost_inv H d cenv cx es G tn s /\
     ghost_kept cenv es a G0 tn0 s0 G tn /\
     FLOOKUP G p = SOME (b,sz) /\ lookup_var p s = SOME (n2w b) /\
     op_taint tn (Var p) = {} /\
@@ -22,7 +22,7 @@ End
 
 Theorem u2s_ptr_state_ambient:
   u2s_ptr_state d cenv cx es a G0 tn0 s0 p b sz n i G tn s ==>
-  ghost_inv d cenv cx es G tn s /\ ghost_kept cenv es a G0 tn0 s0 G tn
+  ghost_inv H d cenv cx es G tn s /\ ghost_kept cenv es a G0 tn0 s0 G tn
 Proof
   simp[u2s_ptr_state_def]
 QED
@@ -52,7 +52,7 @@ QED
 (* Fresh outputs may be pointers. Only agreement on older variables and
    unchanged non-variable taint is required for the ambient frame. *)
 Theorem u2s_fresh_update_frame:
-  ghost_inv d cenv cx es G tn s /\ ghost_kept cenv es a G0 tn0 s0 G tn /\
+  ghost_inv H d cenv cx es G tn s /\ ghost_kept cenv es a G0 tn0 s0 G tn /\
   local_ptrs_reserved cenv a /\
   (!p sz. cenv.ce_return_buf = SOME (PtrVar (Var p) sz) ==> not_fresh_at a p) /\
   (!p sz. cenv.ce_return_pc = SOME (PtrVar (Var p) sz) ==> not_fresh_at a p) /\
@@ -60,7 +60,7 @@ Theorem u2s_fresh_update_frame:
   tn'.t_trans = tn.t_trans /\ tn'.t_imm = tn.t_imm /\
   (!p. p <> u2s_var a k ==> FLOOKUP G' p = FLOOKUP G p /\
      op_taint tn' (Var p) = op_taint tn (Var p)) ==>
-  ghost_inv d cenv cx es G' tn'
+  ghost_inv H d cenv cx es G' tn'
     (update_var (u2s_var a k) w s with vs_inst_idx := idx) /\
   ghost_kept cenv es a G0 tn0 s0 G' tn'
 Proof
@@ -91,7 +91,7 @@ Theorem u2s_ptr_state_update:
 Proof
   strip_tac >>
   drule u2s_ptr_state_ambient >> strip_tac >>
-  `ghost_inv d cenv cx es G' tn'
+  `ghost_inv H d cenv cx es G' tn'
       (update_var (u2s_var a k) w s with vs_inst_idx := idx) /\
    ghost_kept cenv es a G0 tn0 s0 G' tn'` by
     (irule u2s_fresh_update_frame >> goal_assum (drule_at Any) >>

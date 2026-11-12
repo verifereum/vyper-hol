@@ -12,7 +12,7 @@ Definition for_array_inv_ptr_def:
   array_loop_inv ctx func cenv cx
     (\ei. lookup_scopes name ei.scopes = SOME snapshot)
     vs id idx (Var bp) arr_base p dst sz ainst cond_lbl st k es s /\
-  ghost_inv d cenv cx es G tn s /\ FLOOKUP G idx = NONE /\
+  ghost_inv H d cenv cx es G tn s /\ FLOOKUP G idx = NONE /\
   op_taint tn (Var idx) = {} /\ ptr_covers G tn p s sz /\
   ptr_covers G tn bp s (LENGTH vs * type_memory_size tv) /\
   (!nm lo z. local_region cenv es.scopes s nm lo z ==>
@@ -26,7 +26,7 @@ End
 Definition for_array_done_ptr_def:
   for_array_done_ptr ctx func cenv cx exit_lbl st s0 G0 tn0 d es G tn s <=>
   s.vs_current_bb = exit_lbl /\ s.vs_inst_idx = 0 /\ ~s.vs_halted /\
-  stmt_state_rel ctx func cenv cx es s /\ ghost_inv d cenv cx es G tn s /\
+  stmt_state_rel H ctx func cenv cx es s /\ ghost_inv H d cenv cx es G tn s /\
   (!x v. not_fresh_at st x /\ lookup_var x s0 = SOME v ==>
     lookup_var x s = SOME v) /\
   (!x. not_fresh_at st x ==> FLOOKUP G x = FLOOKUP G0 x /\
@@ -58,7 +58,7 @@ Theorem for_array_inv_header_ptr:
   for_array_inv_ptr ctx func cenv cx vs tv id idx bp arr_base p dst sz ainst
     cond_lbl st s0 G0 tn0 d name snapshot k es G tn s ==>
   s.vs_current_bb = cond_lbl /\ s.vs_inst_idx = 0 /\ ~s.vs_halted /\
-  stmt_state_rel ctx func cenv cx es s /\ ghost_inv d cenv cx es G tn s /\
+  stmt_state_rel H ctx func cenv cx es s /\ ghost_inv H d cenv cx es G tn s /\
   lookup_var idx s = SOME (n2w k) /\ FLOOKUP G idx = NONE /\
   op_taint tn (Var idx) = {} /\
   (!x v. not_fresh_at st x /\ lookup_var x s0 = SOME v ==>

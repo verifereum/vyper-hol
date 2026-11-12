@@ -17,11 +17,11 @@ Theorem loaded_word_suffix_counted:
   ~ctx_has_dalloca ctx /\ run_inst_seq (emitted_insts sa sb) s = OK t /\
   ~s.vs_halted /\ lookup_block s.vs_current_bb fn.fn_blocks = SOME bb /\
   isPREFIX (emitted_insts sa sb) (DROP s.vs_inst_idx bb.bb_instructions) ==>
-  ?H th.
-    gas_path_ptr D 0 ctx fn PG G tn s 0 H th
+  ?HG th.
+    gas_path_ptr D 0 ctx fn PG G tn s 0 HG th
       (OK (t with vs_inst_idx := s.vs_inst_idx + LENGTH (emitted_insts sa sb))) /\
-    op_prov H out = NONE /\ op_taint th out = {} /\
-    (!p. not_fresh_at sa p ==> FLOOKUP H p = FLOOKUP G p /\
+    op_prov HG out = NONE /\ op_taint th out = {} /\
+    (!p. not_fresh_at sa p ==> FLOOKUP HG p = FLOOKUP G p /\
       op_taint th (Var p) = op_taint tn (Var p)) /\
     th.t_mem = tn.t_mem /\ th.t_stor = tn.t_stor /\
     th.t_trans = tn.t_trans /\ th.t_imm = tn.t_imm
@@ -57,20 +57,20 @@ Theorem loaded_word_suffix_ghost:
   ~ctx_has_dalloca ctx /\ run_inst_seq (emitted_insts sa sb) s = OK t /\
   ~s.vs_halted /\ lookup_block s.vs_current_bb fn.fn_blocks = SOME bb /\
   isPREFIX (emitted_insts sa sb) (DROP s.vs_inst_idx bb.bb_instructions) /\
-  ghost_inv d cenv cx es G tn s /\ ghost_kept cenv es0 s0a G0 tn0 s0 G tn /\
+  ghost_inv H d cenv cx es G tn s /\ ghost_kept cenv es0 s0a G0 tn0 s0 G tn /\
   s0a.cs_next_var <= sa.cs_next_var /\
   (!name p sz. FLOOKUP cenv.ce_vars name = SOME (PtrVar (Var p) sz) ==> not_fresh_at sa p) /\
   (!p sz. cenv.ce_return_buf = SOME (PtrVar (Var p) sz) ==> not_fresh_at sa p) /\
   (!p sz. cenv.ce_return_pc = SOME (PtrVar (Var p) sz) ==> not_fresh_at sa p) ==>
-  ?H th.
-    gas_path_ptr D 0 ctx fn PG G tn s 0 H th
+  ?HG th.
+    gas_path_ptr D 0 ctx fn PG G tn s 0 HG th
       (OK (t with vs_inst_idx := s.vs_inst_idx + LENGTH (emitted_insts sa sb))) /\
-    op_prov H out = NONE /\ op_taint th out = {} /\
-    ghost_inv d cenv cx es H th
+    op_prov HG out = NONE /\ op_taint th out = {} /\
+    ghost_inv H d cenv cx es HG th
       (t with vs_inst_idx := s.vs_inst_idx + LENGTH (emitted_insts sa sb)) /\
-    ghost_kept cenv es0 s0a G0 tn0 s0 H th /\
+    ghost_kept cenv es0 s0a G0 tn0 s0 HG th /\
     (!p. not_fresh_at sa p ==> lookup_var p t = lookup_var p s /\
-      FLOOKUP H p = FLOOKUP G p /\ op_taint th (Var p) = op_taint tn (Var p)) /\
+      FLOOKUP HG p = FLOOKUP G p /\ op_taint th (Var p) = op_taint tn (Var p)) /\
     (t with vs_vars := s.vs_vars) = s
 Proof
   rpt gen_tac >> disch_then (map_every assume_tac o CONJUNCTS) >>
@@ -83,15 +83,15 @@ Proof
        map_every (fn q => mp_tac (Q.AP_TERM q eq))
          [`\v. v.vs_memory`,`\v. v.vs_call_ctx`,
           `\v. v.vs_accounts`,`\v. v.vs_transient`]) >> simp[]) >>
-  `ghost_inv d cenv cx es H th
+  `ghost_inv H d cenv cx es HG th
       (t with vs_inst_idx := s.vs_inst_idx + LENGTH (emitted_insts sa sb))` by
     (irule ghost_inv_readonly_frame >>
      qexistsl_tac [`G`,`not_fresh_at sa`,`s`,`tn`] >> simp[lookup_var_def] >> metis_tac[lookup_var_def]) >>
-  `ghost_kept cenv es0 s0a G0 tn0 s0 H th` by
+  `ghost_kept cenv es0 s0a G0 tn0 s0 HG th` by
     (irule ghost_kept_readonly_frame >>
      qexistsl_tac [`G`,`not_fresh_at sa`,`tn`] >> simp[] >>
      fs[not_fresh_at_def] >> metis_tac[LESS_EQ_TRANS]) >>
-  qexistsl_tac [`H`,`th`] >> simp[] >> metis_tac[]
+  qexistsl_tac [`HG`,`th`] >> simp[] >> metis_tac[]
 QED
 
 Theorem loaded_word_suffix_filter:

@@ -118,11 +118,11 @@ QED
 
 Theorem assign_base_ptr_alloca_endpoint:
   !func cenv cx es s inst p n t ctx.
-    stmt_state_rel ctx func cenv cx es s /\ fn_inst_ids_distinct func /\
+    stmt_state_rel H ctx func cenv cx es s /\ fn_inst_ids_distinct func /\
     MEM inst (fn_insts func) /\ inst.inst_opcode = ALLOCA /\
     inst.inst_operands = [Lit n] /\ inst.inst_outputs = [p] /\
     not_local_ptr cenv es.scopes p /\ exec_alloca inst s n = OK t ==>
-    stmt_state_rel ctx func cenv cx es t /\
+    stmt_state_rel H ctx func cenv cx es t /\
     ?w. lookup_var p t = SOME w /\
       FLOOKUP t.vs_allocas inst.inst_id = SOME (w2n w,w2n n) /\
       w2n w + w2n n < dimword (:256) /\ t.vs_memory = s.vs_memory /\
@@ -161,12 +161,12 @@ Theorem assign_base_ptr_one_byte_alloc_endpoint:
   !func cenv cx es sa buf sb s t ctx.
     compile_bytelike_literal [1w] 1 sa = (buf,sb) /\
     run_inst_seq (emitted_insts sa sb) s = OK t /\
-    stmt_state_rel ctx func cenv cx es s /\ fn_inst_ids_distinct func /\
+    stmt_state_rel H ctx func cenv cx es s /\ fn_inst_ids_distinct func /\
     local_ptrs_reserved cenv sa /\
     MEM (mk_inst sa.cs_next_id ALLOCA [Lit 64w]
       [STRING #"%" (toString sa.cs_next_var)]) (fn_insts func) ==>
     ?u a.
-      stmt_state_rel ctx func cenv cx es u /\
+      stmt_state_rel H ctx func cenv cx es u /\
       lookup_var (STRING #"%" (toString sa.cs_next_var)) u = SOME a /\
       FLOOKUP u.vs_allocas sa.cs_next_id = SOME (w2n a,64) /\
       w2n a + 64 < dimword (:256) /\ u.vs_memory = s.vs_memory /\
@@ -228,14 +228,14 @@ QED
 
 Theorem assign_base_ptr_one_byte_init_state_rel:
   !ctx func cenv cx es sa u t a.
-    stmt_state_rel ctx func cenv cx es u /\ local_ptrs_reserved cenv sa /\
+    stmt_state_rel H ctx func cenv cx es u /\ local_ptrs_reserved cenv sa /\
     ~cenv.ce_is_ctor /\ w2n a + 64 < dimword (:256) /\
     (!name b sz. local_region cenv es.scopes u name b sz ==>
       regions_disjoint (w2n a) 64 b sz) /\
     t = mstore (w2n (a + 32w)) (n2w (2 ** 248))
       (update_var (STRING #"%" (toString (sa.cs_next_var + 1))) (a + 32w)
         (mstore (w2n a) 1w u)) ==>
-    stmt_state_rel ctx func cenv cx es t
+    stmt_state_rel H ctx func cenv cx es t
 Proof
   rpt gen_tac >> strip_tac >>
   drule assign_base_ptr_one_byte_init_frame >> strip_tac >>
@@ -262,11 +262,11 @@ Theorem assign_base_ptr_one_byte_run_state_rel:
   !func cenv cx es sa buf sb s t ctx.
     compile_bytelike_literal [1w] 1 sa = (buf,sb) /\
     run_inst_seq (emitted_insts sa sb) s = OK t /\
-    stmt_state_rel ctx func cenv cx es s /\ fn_inst_ids_distinct func /\
+    stmt_state_rel H ctx func cenv cx es s /\ fn_inst_ids_distinct func /\
     local_ptrs_reserved cenv sa /\ ~cenv.ce_is_ctor /\
     MEM (mk_inst sa.cs_next_id ALLOCA [Lit 64w]
       [STRING #"%" (toString sa.cs_next_var)]) (fn_insts func) ==>
-    stmt_state_rel ctx func cenv cx es t
+    stmt_state_rel H ctx func cenv cx es t
 Proof
   rpt strip_tac >> drule_all assign_base_ptr_one_byte_alloc_endpoint >> strip_tac >>
   drule_all assign_base_ptr_one_byte_init_state_rel >> simp[]
@@ -297,7 +297,7 @@ Theorem assign_base_ptr_one_byte_run_frame:
   !func cenv cx es sa buf sb s t ctx.
     compile_bytelike_literal [1w] 1 sa = (buf,sb) /\
     run_inst_seq (emitted_insts sa sb) s = OK t /\
-    stmt_state_rel ctx func cenv cx es s /\ fn_inst_ids_distinct func /\
+    stmt_state_rel H ctx func cenv cx es s /\ fn_inst_ids_distinct func /\
     local_ptrs_reserved cenv sa /\
     MEM (mk_inst sa.cs_next_id ALLOCA [Lit 64w]
       [STRING #"%" (toString sa.cs_next_var)]) (fn_insts func) ==>
@@ -340,7 +340,7 @@ Theorem assign_base_ptr_one_byte_run_value:
   !func cenv cx es sa buf sb s t ctx.
     compile_bytelike_literal [1w] 1 sa = (buf,sb) /\
     run_inst_seq (emitted_insts sa sb) s = OK t /\
-    stmt_state_rel ctx func cenv cx es s /\ fn_inst_ids_distinct func /\
+    stmt_state_rel H ctx func cenv cx es s /\ fn_inst_ids_distinct func /\
     local_ptrs_reserved cenv sa /\
     MEM (mk_inst sa.cs_next_id ALLOCA [Lit 64w]
       [STRING #"%" (toString sa.cs_next_var)]) (fn_insts func) ==>
@@ -392,7 +392,7 @@ Theorem assign_base_ptr_one_byte_run_pure[local]:
   !func cenv cx es sa buf sb s t ctx.
     compile_bytelike_literal [1w] 1 sa = (buf,sb) /\
     run_inst_seq (emitted_insts sa sb) s = OK t /\
-    stmt_state_rel ctx func cenv cx es s /\ fn_inst_ids_distinct func /\
+    stmt_state_rel H ctx func cenv cx es s /\ fn_inst_ids_distinct func /\
     local_ptrs_reserved cenv sa /\
     MEM (mk_inst sa.cs_next_id ALLOCA [Lit 64w]
       [STRING #"%" (toString sa.cs_next_var)]) (fn_insts func) ==>
@@ -423,11 +423,11 @@ Theorem assign_base_ptr_one_byte_run_post:
   !func cenv cx es sa buf sb s t ctx.
     compile_bytelike_literal [1w] 1 sa = (buf,sb) /\
     run_inst_seq (emitted_insts sa sb) s = OK t /\
-    stmt_state_rel ctx func cenv cx es s /\ fn_inst_ids_distinct func /\
+    stmt_state_rel H ctx func cenv cx es s /\ fn_inst_ids_distinct func /\
     local_ptrs_reserved cenv sa /\ ~cenv.ce_is_ctor /\
     MEM (mk_inst sa.cs_next_id ALLOCA [Lit 64w]
       [STRING #"%" (toString sa.cs_next_var)]) (fn_insts func) ==>
-    expr_post ctx func cenv cx
+    expr_post H ctx func cenv cx
       (Literal (BaseT (BytesT (Dynamic 64))) (BytesL [1w]))
       es sa sb s es (BytesV [1w]) buf.buf_operand t
 Proof

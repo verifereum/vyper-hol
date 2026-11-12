@@ -64,7 +64,7 @@ Resume compile_assign_storage_stmt_frag_ptr[normal]:
   `encode_value tvt v = SOME [(0,typed_val_to_w256 etv v)]` by
     (qpat_x_assum `!gs v es1. _ ==> encode_value _ _ = _` irule >>
      fs[gas_marked_exec_def] >> metis_tac[]) >>
-  `stmt_state_rel ctx func cenv cx (es_end with gas_obs := []) t /\
+  `stmt_state_rel H ctx func cenv cx (es_end with gas_obs := []) t /\
    eval_operand op t = SOME (typed_val_to_w256 etv v)` by
     (fs[expr_post_def, expr_val_rel_def] >> metis_tac[]) >>
   `~t.vs_halted` by
@@ -89,8 +89,8 @@ Resume compile_assign_storage_stmt_frag_ptr[store]:
    op_taint tn (Lit (n2w slot)) = {}` by simp[eval_operand_def, op_taint_def] >>
   `~t.vs_call_ctx.cc_static` by fs[stmt_state_rel_def, state_rel_def] >>
   drule_all emit_storage_zero_path_ptr >>
-  disch_then (qspecl_then [`PG`, `G`, `cx_dead cx`] assume_tac) >>
-  `stmt_state_rel ctx func cenv cx (es_end with gas_obs := []) t` by simp[] >>
+  disch_then (qspecl_then [`PG`, `G`, `cx_dead H cx`] assume_tac) >>
+  `stmt_state_rel H ctx func cenv cx (es_end with gas_obs := []) t` by simp[] >>
 
   `sb.cs_current_bb = sb'.cs_current_bb /\
    LENGTH sb.cs_current_insts = SUC (LENGTH sb'.cs_current_insts)` by
@@ -112,9 +112,9 @@ Resume compile_assign_storage_stmt_frag_ptr[store]:
 QED
 
 Resume compile_assign_storage_stmt_frag_ptr[finish]:
-  `stmt_state_rel ctx func cenv cx ee u` by
+  `stmt_state_rel H ctx func cenv cx ee u` by
     (simp[Abbr `u`, stmt_state_rel_inst_idx]) >>
-  `ghost_inv d cenv cx ee G tf u` by
+  `ghost_inv H d cenv cx ee G tf u` by
     (simp[Abbr `u`, Abbr `tf`] >>
      irule (cj 2 storage_word_endpoint_inv_ptr) >>
      simp[] >> metis_tac[]) >>
@@ -128,7 +128,7 @@ Resume compile_assign_storage_stmt_frag_ptr[finish]:
        (Q.INST [`right` |-> `[]`] gas_marked_exec_ptr_bind_normal)) >>
       qexistsl_tac [`G`, `es_end`, `t`, `tn`, `v`] >>
       simp[gas_marked_exec_ptr_def]) >>
-  `ghost_inv d cenv cx (ee with gas_obs := []) G tf u` by
+  `ghost_inv H d cenv cx (ee with gas_obs := []) G tf u` by
     simp[ghost_inv_gas_obs] >>
   disj1_tac >> simp[stmt_lands_def, cenv_top_ext_refl] >>
   fs[expr_post_def, ghost_kept_def] >>

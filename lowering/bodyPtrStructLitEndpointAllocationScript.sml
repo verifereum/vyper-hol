@@ -13,7 +13,7 @@ Proof
 QED
 
 Theorem structlit_expr_post_allocated:
-  expr_post ctx fn ce cx e es sb su t ee v value s1 /\
+  expr_post H ctx fn ce cx e es sb su t ee v value s1 /\
   FLOOKUP t.vs_allocas aid = SOME (b,N) ==>
   FLOOKUP s1.vs_allocas aid = SOME (b,N)
 Proof
@@ -26,7 +26,7 @@ Theorem structlit_endpoint_allocation_disjoint:
   compile_alloc_buffer N sa = (buf,sb) /\ buf.buf_operand = Var root /\
   local_ptrs_reserved ce sa /\ fn_has_code sa sb fn /\
   fn_inst_ids_distinct fn /\
-  expr_post ctx fn ce cx e es sb su t ee v value s1 /\
+  expr_post H ctx fn ce cx e es sb su t ee v value s1 /\
   FLOOKUP t.vs_allocas sa.cs_next_id = SOME (b,N) /\
   local_region ce ee.scopes s1 name lo sz ==>
   regions_disjoint b N lo sz

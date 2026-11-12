@@ -21,21 +21,21 @@ Theorem extract32_operands_ptr_prefix:
   (!x sz. cenv.ce_return_buf = SOME (PtrVar (Var x) sz) ==> not_fresh_at sa x) /\
   (!x sz. cenv.ce_return_pc = SOME (PtrVar (Var x) sz) ==> not_fresh_at sa x) /\
   gas_admissible (eval_expr cx (TypeBuiltin ann Extract32 typ [src;off])) expr_vv_res_ok es /\
-  stmt_state_rel ctx func cenv cx es s0 /\ ghost_inv d cenv cx es G0 tn0 s0 /\
+  stmt_state_rel H ctx func cenv cx es s0 /\ ghost_inv H d cenv cx es G0 tn0 s0 /\
   ~s0.vs_halted /\ s0.vs_current_bb = sa.cs_current_bb /\
   s0.vs_inst_idx = LENGTH sa.cs_current_insts /\
-  (!left right bs i mid fin G tn t H th u J un v sv len data p.
-    gas_marked_exec_ptr (cx_dead cx) (ctx,func) PG
+  (!left right bs i mid fin G tn t HG th u J un v sv len data p.
+    gas_marked_exec_ptr (cx_dead H cx) (ctx,func) PG
       (vyperState$bind (eval_expr cx src) (read_result cx))
       (es,s0,G0,tn0) left (INL (BytesV bs)) mid G tn (OK t) /\
-    gas_path_ptr (cx_dead cx) 0 ctx func PG G tn t 0 H th (OK u) /\
-    gas_marked_exec_ptr (cx_dead cx) (ctx,func) PG
+    gas_path_ptr (cx_dead H cx) 0 ctx func PG G tn t 0 HG th (OK u) /\
+    gas_marked_exec_ptr (cx_dead H cx) (ctx,func) PG
       (vyperState$bind (eval_expr cx off) (read_result cx))
-      (mid with gas_obs := [],u,H,th) right (INL (IntV i)) fin J un (OK v) /\
+      (mid with gas_obs := [],u,HG,th) right (INL (IntV i)) fin J un (OK v) /\
     LENGTH bs <= m /\ 0 <= i /\
-    expr_post ctx func cenv cx src es sa sb s0
+    expr_post H ctx func cenv cx src es sa sb s0
       (mid with gas_obs := []) (BytesV bs) srcop u /\
-    expr_post ctx func cenv cx off (mid with gas_obs := []) sb sc u
+    expr_post H ctx func cenv cx off (mid with gas_obs := []) sb sc u
       (fin with gas_obs := []) (IntV i) offop v /\
     srcop = Var sv /\ lenop = Var len /\ dataop = Var data /\
     not_fresh_at sb sv /\ not_fresh_at sb len /\ not_fresh_at sb data /\
@@ -47,15 +47,15 @@ Theorem extract32_operands_ptr_prefix:
     op_prov J lenop = NONE /\
     (!n. 0 < LENGTH bs /\ n <= LENGTH bs ==> ptr_covers J un data v n) /\
     v.vs_current_bb = sc.cs_current_bb /\ v.vs_inst_idx = LENGTH sc.cs_current_insts /\
-    ghost_inv d cenv cx (fin with gas_obs := []) J un v /\
+    ghost_inv H d cenv cx (fin with gas_obs := []) J un v /\
     ptr_val_ok cx (post_value_type cenv off) (IntV i) offop J un v /\
     ghost_kept cenv es sa G0 tn0 s0 J un ==>
-    gas_outcome_ptr (cx_dead cx) (cx_tops cx) (ctx,func) PG
+    gas_outcome_ptr (cx_dead H cx) (cx_tops cx) (ctx,func) PG
       (vyperState$bind
         (lift_sum (evaluate_type_builtin cx Extract32 typ
           [expr_type src;expr_type off] [BytesV bs;IntV i])) (\w. return (Value w)))
       (fin with gas_obs := [],v,J,un) Q (\res ee gt r. expr_exit res r)) ==>
-  gas_outcome_ptr (cx_dead cx) (cx_tops cx) (ctx,func) PG
+  gas_outcome_ptr (cx_dead H cx) (cx_tops cx) (ctx,func) PG
     (eval_expr cx (TypeBuiltin ann Extract32 typ [src;off]))
     (es,s0,G0,tn0) Q (\res ee gt r. expr_exit res r)
 Proof
@@ -100,7 +100,7 @@ Resume extract32_operands_ptr_prefix[normal]:
     extract32_prepare_ptr_counted)) >>
   disch_then (drule_at (Pat `ghost_kept _ _ _ _ _ _ _ _`)) >>
   simp[] >> disch_then drule_all >>
-  disch_then (qspecl_then [`PG`,`cx_dead cx`] strip_assume_tac) >>
+  disch_then (qspecl_then [`PG`,`cx_dead H cx`] strip_assume_tac) >>
   irule gas_outcome_ptr_prefix >> goal_assum (drule_at Any) >>
   suspend "offset"
 QED
@@ -109,7 +109,7 @@ Resume extract32_operands_ptr_prefix[offset]:
   `gas_admissible (vyperState$bind (eval_expr cx off) (read_result cx)) expr_res_ok
      (mid with gas_obs := [])` by
     (irule expr_body_pre_gas_admissible >> qexistsl_tac [`cenv`,`env`] >> simp[]) >>
-  `stmt_state_rel ctx func cenv cx (mid with gas_obs := []) u` by
+  `stmt_state_rel H ctx func cenv cx (mid with gas_obs := []) u` by
     gvs[expr_post_def] >>
   `!x sz. cenv.ce_return_buf = SOME (PtrVar (Var x) sz) ==> not_fresh_at sb x` by
     metis_tac[not_fresh_at_mono, arithmeticTheory.LESS_EQ_TRANS] >>
@@ -124,23 +124,23 @@ QED
 
 Resume extract32_operands_ptr_prefix[suffix]:
   qpat_assum `expr_sim_ptr _ _ _ _ _ _ _ off _` (irule_at Any) >>
-  qpat_assum `expr_post _ _ _ _ src _ _ sb _ _ _ _ u` (irule_at Any) >>
+  qpat_assum `expr_post _ _ _ _ _ src _ _ sb _ _ _ _ u` (irule_at Any) >>
   simp[] >> qexistsl_tac [`p'`,`len`,`env`,`data`] >> simp[] >>
   reverse conj_tac >- gvs[exprSimWordArgsTheory.stmt_state_rel_gas_obs] >> rpt gen_tac >> strip_tac >>
   suspend "finish"
 QED
 
 Resume extract32_operands_ptr_prefix[finish]:
-  `ghost_kept cenv es sa G0 tn0 s0 H' th'` by
-    (qpat_assum `expr_post _ _ _ _ src es sa _ s0 _ _ _ u`
+  `ghost_kept cenv es sa G0 tn0 s0 HG' th'` by
+    (qpat_assum `expr_post _ _ _ _ _ src es sa _ s0 _ _ _ u`
        (assume_tac o MATCH_MP exprSimWordArgsTheory.expr_post_frame) >>
      `MAP FDOM es.scopes = MAP FDOM (mid with gas_obs := []).scopes` by
        (qpat_assum `gas_marked_exec_ptr _ _ _ _ (es,s0,G0,tn0) _ _ _ _ _ _`
           (mp_tac o MATCH_MP gas_marked_exec_ptr_exec) >>
         disch_then (mp_tac o MATCH_MP (CONV_RULE (DEPTH_CONV ETA_CONV) bop_marked_scopes_dom)) >> simp[]) >>
      irule wordOperandsPtrTheory.ghost_kept_trans >>
-     qpat_assum `ghost_kept cenv es sa G0 tn0 s0 H th` (irule_at Any) >>
-     qpat_assum `ghost_kept _ _ sb H th u H' th'` (irule_at Any) >>
+     qpat_assum `ghost_kept cenv es sa G0 tn0 s0 HG th` (irule_at Any) >>
+     qpat_assum `ghost_kept _ _ sb HG th u HG' th'` (irule_at Any) >>
      qpat_assum `wb_frame cenv es _ sa s0 u` (irule_at Any) >> simp[] >>
      qexists_tac `func` >> conj_tac
      >- gvs[stmt_state_rel_def, state_rel_def] >>
@@ -150,7 +150,7 @@ Resume extract32_operands_ptr_prefix[finish]:
      simp[ci_mono_def] >> strip_tac >> decide_tac) >>
   first_x_assum (irule o CONV_RULE (DEPTH_CONV ETA_CONV)) >>
   qpat_assum `gas_marked_exec_ptr _ _ _ _ (es,s0,G0,tn0) _ _ _ _ _ _` (irule_at Any) >>
-  qpat_assum `gas_marked_exec_ptr _ _ _ _ (_ ,u,H,th) _ _ _ _ _ _` (irule_at Any) >>
+  qpat_assum `gas_marked_exec_ptr _ _ _ _ (_ ,u,HG,th) _ _ _ _ _ _` (irule_at Any) >>
   simp[] >> qexists_tac `p'` >>
   `p' < dimword(:256) /\ p'+32 < dimword(:256)` by decide_tac >>
   simp[arithmeticTheory.LESS_MOD]

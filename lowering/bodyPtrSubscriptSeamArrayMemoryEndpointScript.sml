@@ -77,7 +77,7 @@ Proof
 QED
 
 Theorem fixed_array_child_endpoint:
-  vv_post ctx func cenv cx (Subscript (ArrayT et (Fixed n)) obj idx) es sa sb s0 ee r
+  vv_post H ctx func cenv cx (Subscript (ArrayT et (Fixed n)) obj idx) es sa sb s0 ee r
     (LocatedValue ann p) sf /\
   ptr_vv_ok cx (ArrayT et (Fixed n)) r (LocatedValue ann p) ee G tn s /\
   expr_type obj = ArrayT et (Fixed n) /\ post_value_type cenv obj = expr_type obj /\
@@ -101,7 +101,7 @@ Theorem fixed_array_child_endpoint:
   ptr_covers Gf tnf out sf (type_memory_size etv) /\
   type_memory_bytes cenv (lowered_value_type cenv (Subscript et obj idx)) <=
     type_memory_size etv ==>
-  vv_post ctx func cenv cx (Subscript et obj idx) es sa sb s0 ee child
+  vv_post H ctx func cenv cx (Subscript et obj idx) es sa sb s0 ee child
     (LocatedValue et (mk_ptr (Var out) LocMemory)) sf /\
   ptr_vv_ok cx et child (LocatedValue et (mk_ptr (Var out) LocMemory)) ee Gf tnf sf /\
   ptr_buf_ok cenv (Subscript et obj idx) (Var out) Gf sf

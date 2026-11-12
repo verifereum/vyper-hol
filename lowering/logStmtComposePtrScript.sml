@@ -96,7 +96,7 @@ Resume compile_log_ready_stmt_frag_ptr[success]:
   `LIST_REL (\ty v. ?tv. evaluate_type (get_tenv cx) ty = SOME tv /\
     value_has_type tv v) (MAP SND xs) vs` by metis_tac[] >>
   drule_all log_args_post_scalars >> disch_tac >>
-  `stmt_state_rel ctx func cenv cx (es_end with gas_obs := []) t` by
+  `stmt_state_rel H ctx func cenv cx (es_end with gas_obs := []) t` by
     metis_tac[log_args_post_state] >>
   `local_ptrs_reserved cenv sm` by
     (drule_all compile_log_eval_all_grows >> strip_tac >>
@@ -130,7 +130,7 @@ Resume compile_log_ready_stmt_frag_ptr[path]:
   `cenv.ce_event_info (nsid_to_string id) = SOME (h,MAP SND xs,flags)` by
     simp[Excl "enc_def"] >>
   drule_all log_success_suffix_path_ptr >>
-  disch_then (qspecl_then [`PG`,`cx_dead cx`] strip_assume_tac) >>
+  disch_then (qspecl_then [`PG`,`cx_dead H cx`] strip_assume_tac) >>
   suspend "bind"
 QED
 
@@ -142,16 +142,16 @@ Resume compile_log_ready_stmt_frag_ptr[bind]:
       (log_non_indexed_types flags (MAP expr_type args)))) (ListV avs)|>` >>
   `encode_source_event (get_tenv cx) cx.sources cx.txn.target id vs = SOME ev` by
     (simp[Abbr `ev`, Once contractABITheory.enc_def]) >>
-  `gas_marked_exec_ptr (cx_dead cx) (ctx,func) PG
+  `gas_marked_exec_ptr (cx_dead H cx) (ctx,func) PG
     (bind (lift_option (encode_source_event (get_tenv cx) cx.sources
       cx.txn.target id vs) "Log encode event") push_log)
     (es_end with gas_obs := [],t,G,tn) (REPLICATE n F) (INL ())
-    (es_end with logs := es_end.logs ++ [ev]) H tm (OK t')` by
+    (es_end with logs := es_end.logs ++ [ev]) HG tm (OK t')` by
     (irule gas_marked_exec_ptr_no_source_read >> simp[] >>
      simp[bind_def, lift_option_def, return_def, push_log_def,
           evaluation_state_component_equality]) >>
   qexists_tac `marks ++ REPLICATE n F` >> disj1_tac >>
-  qexistsl_tac [`INL ()`,`es_end with logs := es_end.logs ++ [ev]`,`H`,`tm`,`OK t'`] >>
+  qexistsl_tac [`INL ()`,`es_end with logs := es_end.logs ++ [ev]`,`HG`,`tm`,`OK t'`] >>
   conj_tac
   >- (irule gas_marked_exec_ptr_bind_normal >>
       goal_assum (drule_at Any) >>
@@ -173,16 +173,16 @@ Resume compile_log_ready_stmt_frag_ptr[post]:
   `!x w. not_fresh_at sa x /\ lookup_var x s0 = SOME w ==> lookup_var x t' = SOME w` by
     (rpt strip_tac >> `not_fresh_at sm x` by metis_tac[not_fresh_at_mono] >>
      fs[wb_frame_def] >> metis_tac[]) >>
-  `!x. not_fresh_at sa x ==> FLOOKUP H x = FLOOKUP G0 x /\
+  `!x. not_fresh_at sa x ==> FLOOKUP HG x = FLOOKUP G0 x /\
        op_taint tm (Var x) = op_taint tn0 (Var x)` by
     (rpt strip_tac >> `not_fresh_at sm x` by metis_tac[not_fresh_at_mono] >>
      fs[ghost_kept_def] >> metis_tac[]) >>
   simp[cenv_top_ext_refl] >>
-  qpat_x_assum `stmt_state_rel _ _ _ _ (_ with <|logs := _; gas_obs := _|>) t'` mp_tac >>
-  qpat_x_assum `ghost_inv _ _ _ (_ with <|logs := _; gas_obs := _|>) _ _ t'` mp_tac >>
+  qpat_x_assum `stmt_state_rel _ _ _ _ _ (_ with <|logs := _; gas_obs := _|>) t'` mp_tac >>
+  qpat_x_assum `ghost_inv _ _ _ _ (_ with <|logs := _; gas_obs := _|>) _ _ t'` mp_tac >>
   simp[Abbr `ev`, Excl "enc_def"] >> rpt strip_tac >>
-  qmatch_goalsub_abbrev_tac `stmt_state_rel ctx func cenv cx final t'` >>
-  `stmt_state_rel ctx func cenv cx (final with gas_obs := []) t'` by
+  qmatch_goalsub_abbrev_tac `stmt_state_rel H ctx func cenv cx final t'` >>
+  `stmt_state_rel H ctx func cenv cx (final with gas_obs := []) t'` by
     simp[Abbr `final`, Excl "stmt_state_rel_gas_obs", Excl "enc_def"] >>
   fs[stmt_state_rel_gas_obs]
 QED

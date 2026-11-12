@@ -11,7 +11,7 @@ Theorem declared_storage_field_live_ptr:
   lookup_var_slot_from_layout cx tr src id_str = SOME slot /\
   evaluate_type (get_tenv cx) (StructT sid) = SOME (StructTV fs) /\
   struct_field_slot fs fld = SOME (off,ftv) /\ storage_layout_safe cx ==>
-  !st. storage_read_live cx tr st (n2w slot + n2w off) ftv
+  !st. storage_read_live H tr st (n2w slot + n2w off) ftv
 Proof
   strip_tac >>
   `storage_var_info cx src id = SOME (tr,slot,StructTV fs)` by
@@ -29,7 +29,7 @@ Theorem declared_storage_field_clean_ptr:
   lookup_var_slot_from_layout cx tr src id_str = SOME slot /\
   evaluate_type (get_tenv cx) (StructT sid) = SOME (StructTV fs) /\
   struct_field_slot fs fld = SOME (off,ftv) /\ storage_layout_safe cx /\
-  0 < type_slot_size ftv /\ ghost_inv d cenv cx es G tn s ==>
+  0 < type_slot_size ftv /\ ghost_inv H d cenv cx es G tn s ==>
   key_taint (if tr then tn.t_trans else tn.t_stor) (n2w slot + n2w off) = {}
 Proof
   strip_tac >> drule_all declared_storage_field_live_ptr >> disch_tac >>

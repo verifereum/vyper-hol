@@ -6,7 +6,7 @@ Ancestors allocationPtr robustCopyTransportPtr localPtrsProps bodyPtrDefs
 
 Theorem alloca_step_frame_effects:
   !ctx fn cenv cx es s id n out s1 PG G tn.
-    stmt_state_rel ctx fn cenv cx es s /\
+    stmt_state_rel H ctx fn cenv cx es s /\
     MEM (mk_inst id ALLOCA [Lit (n2w n)] [out]) (fn_insts fn) /\
     n < dimword (:256) /\
     step_inst_base (mk_inst id ALLOCA [Lit (n2w n)] [out]) s = OK s1 ==>
@@ -36,7 +36,7 @@ QED
 
 Theorem alloca_step_local_robust:
   !ctx fn cenv cx es s id n out s1 tn name entry p sz w.
-    stmt_state_rel ctx fn cenv cx es s /\
+    stmt_state_rel H ctx fn cenv cx es s /\
     MEM (mk_inst id ALLOCA [Lit (n2w n)] [out]) (fn_insts fn) /\
     n < dimword (:256) /\
     step_inst_base (mk_inst id ALLOCA [Lit (n2w n)] [out]) s = OK s1 /\
@@ -67,7 +67,7 @@ QED
 
 Theorem alloca_step_ghost_kept:
   !ctx fn cenv cx es s id n out s1 sa PG G tn.
-    stmt_state_rel ctx fn cenv cx es s /\
+    stmt_state_rel H ctx fn cenv cx es s /\
     MEM (mk_inst id ALLOCA [Lit (n2w n)] [out]) (fn_insts fn) /\
     n < dimword (:256) /\
     step_inst_base (mk_inst id ALLOCA [Lit (n2w n)] [out]) s = OK s1 /\
@@ -94,20 +94,20 @@ QED
 
 Theorem alloca_step_ghost_inv:
   !ctx fn d cenv cx es s id n out s1 sa PG G tn.
-    stmt_state_rel ctx fn cenv cx es s /\ ghost_inv d cenv cx es G tn s /\
+    stmt_state_rel H ctx fn cenv cx es s /\ ghost_inv H d cenv cx es G tn s /\
     MEM (mk_inst id ALLOCA [Lit (n2w n)] [out]) (fn_insts fn) /\
     n < dimword (:256) /\
     step_inst_base (mk_inst id ALLOCA [Lit (n2w n)] [out]) s = OK s1 /\
     local_ptrs_reserved cenv sa /\ ~not_fresh_at sa out /\
     (!x sz. cenv.ce_return_buf = SOME (PtrVar (Var x) sz) ==> not_fresh_at sa x) /\
     (!x sz. cenv.ce_return_pc = SOME (PtrVar (Var x) sz) ==> not_fresh_at sa x) ==>
-    ghost_inv d cenv cx es
+    ghost_inv H d cenv cx es
       (step_prov PG G (mk_inst id ALLOCA [Lit (n2w n)] [out]) s1)
       (step_taint (mk_inst id ALLOCA [Lit (n2w n)] [out]) s s1 tn) s1
 Proof
   rpt gen_tac >> strip_tac >> drule_all alloca_step_frame_effects >>
   disch_then (qspecl_then [`PG`, `G`, `tn`] strip_assume_tac) >>
-  qpat_x_assum `ghost_inv _ _ _ _ _ _ _` mp_tac >>
+  qpat_x_assum `ghost_inv _ _ _ _ _ _ _ _` mp_tac >>
   pure_rewrite_tac[ghost_inv_def] >> strip_tac >> conj_tac
   >- suspend "locals" >>
   conj_tac >- suspend "return" >>
@@ -142,7 +142,7 @@ QED
 Finalise alloca_step_ghost_inv
 
 Theorem selector_alloca_local_disjoint:
-  stmt_state_rel ctx fn cenv cx es s /\ fn_inst_ids_distinct fn /\
+  stmt_state_rel H ctx fn cenv cx es s /\ fn_inst_ids_distinct fn /\
   MEM (mk_inst id ALLOCA [Lit (n2w n)] [out]) (fn_insts fn) /\
   not_local_ptr cenv es.scopes out /\ n < dimword (:256) /\
   step_inst_base (mk_inst id ALLOCA [Lit (n2w n)] [out]) s = OK s1 /\

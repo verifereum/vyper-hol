@@ -5,7 +5,7 @@ Ancestors bodyPtrPrecompileBuiltinsGhost exprSimAttributeFields exprSimProps
 
 Theorem ec_point_interval_clean_kept:
   post_value_type cenv e1 = expr_type e1 /\
-  expr_post ctx func cenv cx e1 es sa s1 s0 es1 v1 x t /\
+  expr_post H ctx func cenv cx e1 es sa s1 s0 es1 v1 x t /\
   expr_type e1 = ArrayT (BaseT (UintT 256)) (Fixed 2) /\
   expr_sim_inv cenv cx env es /\ eval_operand x t = SOME w /\
   ghost_kept cenv es1 s1 G0 tn0 t G tn /\
@@ -47,7 +47,7 @@ QED
 
 Theorem ec_point_clean_kept:
   post_value_type cenv e1 = expr_type e1 /\
-  expr_post ctx func cenv cx e1 es sa s1 s0 es1 v1 x t /\
+  expr_post H ctx func cenv cx e1 es sa s1 s0 es1 v1 x t /\
   expr_type e1 = ArrayT (BaseT (UintT 256)) (Fixed 2) /\
   expr_sim_inv cenv cx env es /\
   ptr_val_ok cx (expr_type e1) v1 x G0 tn0 t /\
@@ -75,7 +75,7 @@ Proof
 QED
 
 Theorem ec_point_covers_kept:
-  expr_post ctx func cenv cx e1 es sa s1 s0 es1 v1 x t /\
+  expr_post H ctx func cenv cx e1 es sa s1 s0 es1 v1 x t /\
   expr_type e1 = ArrayT (BaseT (UintT 256)) (Fixed 2) /\
   ptr_val_ok cx (expr_type e1) v1 x G0 tn0 t /\
   ghost_kept cenv es1 s1 G0 tn0 t G tn /\

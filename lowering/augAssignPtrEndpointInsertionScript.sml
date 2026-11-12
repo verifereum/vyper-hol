@@ -68,8 +68,8 @@ QED
 
 Theorem endpoint_insert_single_registration_obstruction:
   fn.fn_blocks = [bb] /\ bb.bb_label = lbl /\
-  stmt_state_rel ctx fn ce cx es s ==>
-  ~stmt_state_rel ctx (aug_endpoint_insert lbl k id fn) ce' cx' es' t
+  stmt_state_rel H ctx fn ce cx es s ==>
+  ~stmt_state_rel H ctx (aug_endpoint_insert lbl k id fn) ce' cx' es' t
 Proof
   strip_tac >> strip_tac >>
   `fn.fn_name = (aug_endpoint_insert lbl k id fn).fn_name` by

@@ -9,8 +9,8 @@ Ancestors
 
 Theorem mstore_storage_taint_frame_ptr:
   lookup_var dst s = SOME a /\ eval_operand value s = SOME w /\
-  op_taint tn value = {} /\ stor_taint_ok cx tn s ==>
-  stor_taint_ok cx
+  op_taint tn value = {} /\ stor_taint_ok H cx tn s ==>
+  stor_taint_ok H cx
     (step_taint (mk_inst iid MSTORE [Var dst; value] []) s
        (mstore (w2n a) w s) tn) (mstore (w2n a) w s)
 Proof
@@ -20,7 +20,7 @@ Proof
 QED
 
 Theorem local_mstore_ghost_update_ptr:
-  ghost_inv d cenv cx es G tn s /\
+  ghost_inv H d cenv cx es G tn s /\
   local_ptrs_rel func cenv es.scopes s /\
   find_containing_scope id es.scopes = SOME (pre,sc,entry,rest) /\
   FLOOKUP cenv.ce_vars id = SOME (PtrVar (Var p) sz) /\
@@ -30,7 +30,7 @@ Theorem local_mstore_ghost_update_ptr:
   (!m. mem_agree_outside (tn.t_mem DIFF {i | w2n a <= i /\ i < w2n a+32})
      (mstore (w2n a) word s).vs_memory m ==>
        val_in_memory entry.type v (w2n a) m) ==>
-  ghost_inv d cenv cx
+  ghost_inv H d cenv cx
     (es with scopes := pre ++
       (sc |+ (id,entry with <|value := v; popped := []|>)) :: rest)
     G (step_taint (mk_inst iid MSTORE [Var p; value] []) s
@@ -64,12 +64,12 @@ Theorem tuple_target_local_word_head_path_ptr:
     value_has_type tv v /\ val_wf tv v /\ is_word_type ty /\
     eval_operand op s = SOME (typed_val_to_w256 tv v) /\
     local_ptrs_reserved cenv st /\ (!x. op = Var x ==> not_fresh_at st x) /\
-    stmt_state_rel ctx func cenv cx es s /\ fn_has_code st sf func /\
+    stmt_state_rel H ctx func cenv cx es s /\ fn_has_code st sf func /\
     ~s.vs_halted /\ s.vs_current_bb = st.cs_current_bb /\
     s.vs_inst_idx = LENGTH st.cs_current_insts /\ ~ctx_has_dalloca ctx /\
-    ghost_inv d cenv cx es G tn s /\ ptr_val_ok cx ty v op G tn s ==>
+    ghost_inv H d cenv cx es G tn s /\ ptr_val_ok cx ty v op G tn s ==>
     ?t idp sz entry dw G' tn'.
-      stmt_state_rel ctx func cenv cx es' t /\
+      stmt_state_rel H ctx func cenv cx es' t /\
       ~t.vs_halted /\ t.vs_current_bb = sf.cs_current_bb /\
       t.vs_inst_idx = LENGTH sf.cs_current_insts /\
       (!x. not_fresh_at st x ==> lookup_var x t = lookup_var x s) /\
@@ -79,7 +79,7 @@ Theorem tuple_target_local_word_head_path_ptr:
       lookup_var idp s = SOME dw /\
       (!a len. a + len <= w2n dw \/ w2n dw + 32 <= a ==>
         mem_bytes_at a len t.vs_memory = mem_bytes_at a len s.vs_memory) /\
-      ghost_inv d cenv cx es' G' tn' t /\
+      ghost_inv H d cenv cx es' G' tn' t /\
       (!x. not_fresh_at st x ==> FLOOKUP G' x = FLOOKUP G x /\
         op_taint tn' (Var x) = op_taint tn (Var x)) /\
       gas_path_ptr D 0 ctx func PG G tn s 0 G' tn' (OK t) /\

@@ -56,7 +56,7 @@ Theorem revert_reason_prefix_at_compile_endpoint_core_ptr[local]:
   fn_has_code sa sm fn /\ sm.cs_current_bb = sa.cs_current_bb /\
   sm.cs_current_insts = sa.cs_current_insts ++
     revert_reason_prefix sa.cs_next_id sa.cs_next_var ms /\
-  stmt_state_rel ctx fn cenv cx es s /\ fn_inst_ids_distinct fn /\
+  stmt_state_rel H ctx fn cenv cx es s /\ fn_inst_ids_distinct fn /\
   (!k. k < 3 ==> not_local_ptr cenv es.scopes
     (STRING #"%" (toString (sa.cs_next_var+k)))) /\
   64+ms < dimword(:256) /\ ~ctx_has_dalloca ctx /\ ~s.vs_halted /\
@@ -71,7 +71,7 @@ Theorem revert_reason_prefix_at_compile_endpoint_core_ptr[local]:
     ~(t with vs_inst_idx := s.vs_inst_idx+4).vs_halted /\
     (t with vs_inst_idx := s.vs_inst_idx+4).vs_current_bb = sm.cs_current_bb /\
     (t with vs_inst_idx := s.vs_inst_idx+4).vs_inst_idx = LENGTH sm.cs_current_insts /\
-    stmt_state_rel ctx fn cenv cx es (t with vs_inst_idx := s.vs_inst_idx+4) /\
+    stmt_state_rel H ctx fn cenv cx es (t with vs_inst_idx := s.vs_inst_idx+4) /\
     ptr_covers Gf tnf (STRING #"%" (toString sa.cs_next_var))
       (t with vs_inst_idx := s.vs_inst_idx+4) (64+ms) /\
     ptr_covers Gf tnf (STRING #"%" (toString (sa.cs_next_var+1)))
@@ -100,7 +100,7 @@ Proof
 QED
 
 Theorem revert_reason_prefix_pointer_values[local]:
-  stmt_state_rel ctx fn cenv cx es s /\ fn_inst_ids_distinct fn /\
+  stmt_state_rel H ctx fn cenv cx es s /\ fn_inst_ids_distinct fn /\
   MEM (mk_inst id ALLOCA [Lit (n2w (64+ms))]
     [STRING #"%" (toString v)]) (fn_insts fn) /\
   MEM (mk_inst (id+3) ALLOCA [Lit (n2w ms)]
@@ -126,7 +126,7 @@ Proof
   drule_all alloca_step_site >> strip_tac >>
   `lookup_var (STRING #"%" (toString v)) s1 = SOME (n2w b)` by
     gvs[eval_operand_def] >>
-  `stmt_state_rel ctx fn cenv cx es s3` by
+  `stmt_state_rel H ctx fn cenv cx es s3` by
     (irule alloca_store_offset_state_rel >>
      simp[] >> qexistsl_tac [`id`,`ms+64`] >> simp[] >> metis_tac[]) >>
   `?c. FLOOKUP t.vs_allocas (id+3) = SOME (c,ms) /\
@@ -146,7 +146,7 @@ Proof
 QED
 
 Theorem revert_reason_prefix_pointer_resources:
-  stmt_state_rel ctx fn cenv cx es s /\ fn_inst_ids_distinct fn /\
+  stmt_state_rel H ctx fn cenv cx es s /\ fn_inst_ids_distinct fn /\
   MEM (mk_inst id ALLOCA [Lit (n2w (64+ms))]
     [STRING #"%" (toString v)]) (fn_insts fn) /\
   MEM (mk_inst (id+3) ALLOCA [Lit (n2w ms)]
@@ -191,7 +191,7 @@ Theorem revert_reason_prefix_at_compile_endpoint_ptr:
   fn_has_code sa sm fn /\ sm.cs_current_bb = sa.cs_current_bb /\
   sm.cs_current_insts = sa.cs_current_insts ++
     revert_reason_prefix sa.cs_next_id sa.cs_next_var ms /\
-  stmt_state_rel ctx fn cenv cx es s /\ fn_inst_ids_distinct fn /\
+  stmt_state_rel H ctx fn cenv cx es s /\ fn_inst_ids_distinct fn /\
   (!k. k < 3 ==> not_local_ptr cenv es.scopes
     (STRING #"%" (toString (sa.cs_next_var+k)))) /\
   64+ms < dimword(:256) /\ ~ctx_has_dalloca ctx /\ ~s.vs_halted /\
@@ -206,7 +206,7 @@ Theorem revert_reason_prefix_at_compile_endpoint_ptr:
     ~(t with vs_inst_idx := s.vs_inst_idx+4).vs_halted /\
     (t with vs_inst_idx := s.vs_inst_idx+4).vs_current_bb = sm.cs_current_bb /\
     (t with vs_inst_idx := s.vs_inst_idx+4).vs_inst_idx = LENGTH sm.cs_current_insts /\
-    stmt_state_rel ctx fn cenv cx es (t with vs_inst_idx := s.vs_inst_idx+4) /\
+    stmt_state_rel H ctx fn cenv cx es (t with vs_inst_idx := s.vs_inst_idx+4) /\
     ptr_covers Gf tnf (STRING #"%" (toString sa.cs_next_var))
       (t with vs_inst_idx := s.vs_inst_idx+4) (64+ms) /\
     ptr_covers Gf tnf (STRING #"%" (toString (sa.cs_next_var+1)))
@@ -244,7 +244,7 @@ QED
 (* This corollary intentionally retains the return-register freshness premise
    of the source ghost frame; the prefix resource boundary does not imply it. *)
 Theorem revert_reason_prefix_ghost_inv_at_index:
-  stmt_state_rel ctx fn cenv cx es s /\ fn_inst_ids_distinct fn /\
+  stmt_state_rel H ctx fn cenv cx es s /\ fn_inst_ids_distinct fn /\
   MEM (mk_inst id ALLOCA [Lit (n2w (64+ms))]
     [STRING #"%" (toString v)]) (fn_insts fn) /\
   MEM (mk_inst (id+3) ALLOCA [Lit (n2w ms)]
@@ -253,22 +253,22 @@ Theorem revert_reason_prefix_ghost_inv_at_index:
   (!x sz. cenv.ce_return_buf = SOME (PtrVar (Var x) sz) \/
      cenv.ce_return_pc = SOME (PtrVar (Var x) sz) ==>
      !k. k < 3 ==> x <> STRING #"%" (toString (v+k))) /\
-  64+ms < dimword(:256) /\ ghost_inv d cenv cx es G tn s /\
+  64+ms < dimword(:256) /\ ghost_inv H d cenv cx es G tn s /\
   run_inst_seq (revert_reason_prefix id v ms) s = OK t /\
   inst_seq_ptr D lo ctx fn PG G tn (revert_reason_prefix id v ms) s Gf tnf ==>
-  ghost_inv d cenv cx es Gf tnf (t with vs_inst_idx := ix)
+  ghost_inv H d cenv cx es Gf tnf (t with vs_inst_idx := ix)
 Proof
   strip_tac >> drule_all revert_reason_prefix_ghost_inv >> strip_tac >>
   Cases_on `d` >-
     (fs[ghost_inv_def, ptr_covers_def, return_buf_ptr_def, stor_taint_ok_def,
         lookup_var_def] >> metis_tac[]) >>
-  rename1 `ghost_inv (SOME bc)` >> PairCases_on `bc` >>
+  rename1 `ghost_inv H (SOME bc)` >> PairCases_on `bc` >>
   gvs[ghost_inv_def, return_buf_ptr_def, ptr_covers_def, stor_taint_ok_def,
       lookup_var_def] >> first_assum MATCH_ACCEPT_TAC
 QED
 
 Theorem revert_reason_prefix_memory_effects_at_index:
-  stmt_state_rel ctx fn cenv cx es s /\ fn_inst_ids_distinct fn /\
+  stmt_state_rel H ctx fn cenv cx es s /\ fn_inst_ids_distinct fn /\
   MEM (mk_inst id ALLOCA [Lit (n2w (64+ms))]
     [STRING #"%" (toString v)]) (fn_insts fn) /\
   MEM (mk_inst (id+3) ALLOCA [Lit (n2w ms)]

@@ -83,9 +83,9 @@ Proof
 QED
 
 Theorem log_ghost_frame:
-  ghost_inv d cenv cx (es with logs := logs) G tn
+  ghost_inv H d cenv cx (es with logs := logs) G tn
     ((s with vs_logs := vlogs) with vs_inst_idx := k) =
-    ghost_inv d cenv cx es G tn s
+    ghost_inv H d cenv cx es G tn s
 Proof
   simp[ghost_inv_def, ptr_covers_def, return_buf_ptr_def, stor_taint_ok_def,
     lookup_var_def, mem_agree_outside_def] >> Cases_on `d` >> simp[return_buf_ptr_def] >>

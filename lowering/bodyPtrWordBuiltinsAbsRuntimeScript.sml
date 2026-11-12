@@ -368,7 +368,7 @@ QED
 Theorem word_abs_runtime_state_rel:
   local_ptrs_rel word_abs_runtime_func word_abs_runtime_frame_cenv
     word_abs_runtime_es.scopes word_abs_runtime_s0 ==>
-  state_rel word_abs_runtime_func word_abs_runtime_frame_cenv
+  state_rel H word_abs_runtime_func word_abs_runtime_frame_cenv
     word_abs_runtime_cx word_abs_runtime_es word_abs_runtime_s0
 Proof
   rewrite_tac[loweringStateRelDefsTheory.state_rel_def, word_abs_runtime_call_ctx] >>
@@ -438,7 +438,7 @@ QED
 
 Theorem word_abs_runtime_ghost:
   FLOOKUP G "%11" = SOME (0,32) ==>
-  ghost_inv NONE word_abs_runtime_frame_cenv word_abs_runtime_cx
+  ghost_inv H NONE word_abs_runtime_frame_cenv word_abs_runtime_cx
     word_abs_runtime_es G entry_taint word_abs_runtime_s0
 Proof
   strip_tac >>
@@ -456,7 +456,7 @@ Proof
 QED
 
 Theorem word_abs_runtime_state:
-  state_rel word_abs_runtime_func word_abs_runtime_frame_cenv
+  state_rel H word_abs_runtime_func word_abs_runtime_frame_cenv
     word_abs_runtime_cx word_abs_runtime_es word_abs_runtime_s0
 Proof
   irule word_abs_runtime_state_rel >> irule word_abs_runtime_locals >>
@@ -613,7 +613,7 @@ Proof
 QED
 
 Theorem word_abs_runtime_stmt_state:
-  stmt_state_rel word_abs_runtime_unit.cu_context word_abs_runtime_func
+  stmt_state_rel H word_abs_runtime_unit.cu_context word_abs_runtime_func
     word_abs_runtime_frame_cenv word_abs_runtime_cx word_abs_runtime_es
     word_abs_runtime_s0
 Proof
@@ -685,10 +685,10 @@ Theorem word_abs_runtime_frame:
     ==> not_fresh_at word_abs_runtime_sa x) /\
   gas_admissible (bind (eval_expr word_abs_runtime_cx word_abs_runtime_expr)
     (read_result word_abs_runtime_cx)) expr_res_ok word_abs_runtime_es /\
-  stmt_state_rel word_abs_runtime_unit.cu_context word_abs_runtime_func
+  stmt_state_rel H word_abs_runtime_unit.cu_context word_abs_runtime_func
     word_abs_runtime_frame_cenv word_abs_runtime_cx word_abs_runtime_es
     word_abs_runtime_s0 /\
-  ghost_inv NONE word_abs_runtime_frame_cenv word_abs_runtime_cx
+  ghost_inv H NONE word_abs_runtime_frame_cenv word_abs_runtime_cx
     word_abs_runtime_es G entry_taint word_abs_runtime_s0 /\
   ~word_abs_runtime_s0.vs_halted /\
   word_abs_runtime_s0.vs_current_bb = word_abs_runtime_sa.cs_current_bb /\

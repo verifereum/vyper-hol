@@ -53,21 +53,21 @@ Theorem abi_decode_normal_callback:
   (!z sz. cenv.ce_return_buf = SOME (PtrVar (Var z) sz) ==> not_fresh_at sa z) /\
   (!z sz. cenv.ce_return_pc = SOME (PtrVar (Var z) sz) ==> not_fresh_at sa z) /\
   bind (eval_expr cx e) (read_result cx) (es with gas_obs := gs) = (INL v,ee) /\
-  ee.gas_obs = [] /\ expr_post ctx func cenv cx e es sa sm s0 ee v x s /\
+  ee.gas_obs = [] /\ expr_post H ctx func cenv cx e es sa sm s0 ee v x s /\
   ~s.vs_halted /\ s.vs_current_bb = sm.cs_current_bb /\
   s.vs_inst_idx = LENGTH sm.cs_current_insts /\
-  ghost_inv d cenv cx ee G tn s /\ ptr_val_ok cx (expr_type e) v x G tn s /\
+  ghost_inv H d cenv cx ee G tn s /\ ptr_val_ok cx (expr_type e) v x G tn s /\
   (~is_word_type (expr_type e) ==> ptr_buf_ok cenv e x G s) /\
   ghost_kept cenv es sa G0 tn0 s0 G tn /\
-  stmt_state_rel ctx func cenv cx es s0 ==>
-  (?marks. gas_summary_ptr_at (cx_dead cx) (ctx,func) PG marks
+  stmt_state_rel H ctx func cenv cx es s0 ==>
+  (?marks. gas_summary_ptr_at (cx_dead H cx) (ctx,func) PG marks
     (bind (lift_sum (evaluate_type_builtin cx (AbiDecode b) (TupleT tys) [expr_type e] [v]))
       (\w. return (Value w))) (ee,s,G,tn)
     (\res ef G' tn' t. ?tv. res = INL tv /\
-      vv_post ctx func cenv cx (TypeBuiltin (TupleT tys) (AbiDecode b) (TupleT tys) [e])
+      vv_post H ctx func cenv cx (TypeBuiltin (TupleT tys) (AbiDecode b) (TupleT tys) [e])
         es sa sb s0 ef tv vv t /\
       t.vs_current_bb = sb.cs_current_bb /\ t.vs_inst_idx = LENGTH sb.cs_current_insts /\
-      ghost_inv d cenv cx ef G' tn' t /\
+      ghost_inv H d cenv cx ef G' tn' t /\
       ptr_vv_ok cx (expr_type (TypeBuiltin (TupleT tys) (AbiDecode b) (TupleT tys) [e]))
         tv vv ef G' tn' t /\
       (!t' op. vv = StackValue t' op /\
@@ -101,7 +101,7 @@ Proof
   `type_memory_bytes cenv (TupleT tys) = SUM (MAP (type_memory_bytes cenv) tys)` by
     metis_tac[type_memory_bytes_def] >>
   `wb_frame cenv es ee sa s0 s` by
-    (qpat_assum `expr_post _ _ _ _ _ _ _ _ _ _ _ _ _`
+    (qpat_assum `expr_post _ _ _ _ _ _ _ _ _ _ _ _ _ _`
        (strip_assume_tac o REWRITE_RULE [expr_post_def]) >>
      rewrite_tac[wb_frame_def] >> rpt conj_tac >> first_assum ACCEPT_TAC) >>
   `MAP FDOM es.scopes = MAP FDOM ee.scopes` by
@@ -139,14 +139,14 @@ Resume abi_decode_normal_callback[success]:
     SUM (MAP (type_memory_bytes cenv) tys)` by simp[] >>
   qpat_assum `expr_type e = _`
     (fn th => drule_all (REWRITE_RULE [th] abi_decode_operand_success_posts)) >>
-  disch_then (qspecl_then [`PG`, `cx_dead cx`] strip_assume_tac) >>
-  `vv_post ctx func cenv cx
+  disch_then (qspecl_then [`PG`, `cx_dead H cx`] strip_assume_tac) >>
+  `vv_post H ctx func cenv cx
      (TypeBuiltin (TupleT tys) (AbiDecode b) (TupleT tys) [e])
      es sa sb s0 ee (Value (ArrayV (TupleV vs)))
      (LocatedValue (TupleT tys) (mk_ptr (Var dst) LocMemory)) v /\
    ptr_vv_ok cx (TupleT tys) (Value (ArrayV (TupleV vs)))
-     (LocatedValue (TupleT tys) (mk_ptr (Var dst) LocMemory)) ee H tf v /\
-   ptr_buf_ok cenv (TypeBuiltin (TupleT tys) (AbiDecode b) (TupleT tys) [e]) (Var dst) H v` by
+     (LocatedValue (TupleT tys) (mk_ptr (Var dst) LocMemory)) ee HG tf v /\
+   ptr_buf_ok cenv (TypeBuiltin (TupleT tys) (AbiDecode b) (TupleT tys) [e]) (Var dst) HG v` by
     (`~expr_has_effect e ==> pure_frame cenv func es sa s0 v` by
        (strip_tac >>
         qpat_x_assum `pure_frame _ _ _ _ _ _ ==> pure_frame _ _ _ _ _ _` irule >>
@@ -167,7 +167,7 @@ Resume abi_decode_normal_callback[success]:
   disj1_tac >>
   qexists_tac `REPLICATE (LENGTH (FILTER (\i. i.inst_opcode = GAS) (emitted_insts sm sb))) F` >>
   rewrite_tac[gas_summary_ptr_at_def] >>
-  qexistsl_tac [`INL (Value (ArrayV (TupleV vs)))`, `ee`, `H`, `tf`, `OK v`] >>
+  qexistsl_tac [`INL (Value (ArrayV (TupleV vs)))`, `ee`, `HG`, `tf`, `OK v`] >>
   `ee with gas_obs := [] = ee` by
     simp[evaluation_state_component_equality] >>
   qpat_assum `expr_type e = _` (fn th => fs[th]) >>
@@ -183,7 +183,7 @@ Resume abi_decode_normal_callback[reject]:
   `SUM (MAP (type_memory_bytes cenv) tys) = SUM (MAP (type_memory_bytes cenv) tys)` by simp[] >>
   qpat_assum `expr_type e = _`
     (fn th => drule_all (REWRITE_RULE [th] abiDecodePtrOutcomeTheory.abi_decode_operand_actual_reject_or_exempt)) >>
-  disch_then (qspecl_then [`PG`, `cx_dead cx`] mp_tac) >>
+  disch_then (qspecl_then [`PG`, `cx_dead H cx`] mp_tac) >>
   `evaluate_type_builtin cx (AbiDecode b) (TupleT tys) [expr_type e] [BytesV bs] =
     INR (RuntimeError y)` by
     (irule abiWrappedDecodePropsTheory.evaluate_type_builtin_abi_decode_unwrapped_error >>
@@ -210,11 +210,11 @@ Resume abi_decode_normal_callback[header]:
        abi_embedded_static_size_def] >>
      Induct_on `tys` >> simp[] >> gen_tac >> rpt IF_CASES_TAC >> simp[] >> decide_tac) >>
   `abi_static_size cenv.ce_struct_fields (TupleT tys) < dimword (:256)` by decide_tac >>
-  `?v K tk n j. gas_path_ptr (cx_dead cx) 0 ctx func PG G tn s n K tk
+  `?v K tk n j. gas_path_ptr (cx_dead H cx) 0 ctx func PG G tn s n K tk
      (Abort Revert_abort (v with vs_inst_idx := j))` by
     (irule abiDecodePtrOutcomeTheory.abi_decode_operand_header_reject >>
      asm_rewrite_tac[] >>
-     goal_assum (drule_at (Pat `expr_post _ _ _ _ _ _ _ _ _ _ _ _ _`)) >>
+     goal_assum (drule_at (Pat `expr_post _ _ _ _ _ _ _ _ _ _ _ _ _ _`)) >>
      goal_assum (drule_at (Pat `abi_builtin_decode_header _ _ _ _ = _`)) >>
      simp[] >> decide_tac) >>
   `~vyper_valid_enc (get_tenv cx) (TupleT tys) bs` by

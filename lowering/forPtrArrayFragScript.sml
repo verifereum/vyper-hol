@@ -79,15 +79,15 @@ Resume compile_for_array_frag_ptr[loop]:
   `ptr_covers G0 tn0 bp s0 (LENGTH vs * type_memory_size tv)` by
     (fs[bodyPtrDefsTheory.ptr_covers_def, IgnAsm `vs = _`] >> decide_tac) >>
   `type_memory_bytes cenv et < dimword (:256)` by decide_tac >>
-  `stmt_state_rel ctx func cenv cx (es with gas_obs := []) s0 /\
-   ghost_inv d cenv cx (es with gas_obs := []) G0 tn0 s0` by
+  `stmt_state_rel H ctx func cenv cx (es with gas_obs := []) s0 /\
+   ghost_inv H d cenv cx (es with gas_obs := []) G0 tn0 s0` by
     simp[ghost_inv_gas_obs, IgnAsm `vs = _`] >>
   `lookup_block s0.vs_current_bb func.fn_blocks = SOME
     <|bb_label := st.cs_current_bb; bb_instructions := st.cs_current_insts ++
       [ainst; mk_inst (st.cs_next_id + 1) JMP [Label entry'] []]|>` by
     simp[IgnAsm `vs = _`] >>
   drule_all for_array_code_initialize_ptr >>
-  disch_then (qspecl_then [`PG`, `cx_dead cx`] strip_assume_tac) >>
+  disch_then (qspecl_then [`PG`, `cx_dead H cx`] strip_assume_tac) >>
   suspend "counted"
 QED
 

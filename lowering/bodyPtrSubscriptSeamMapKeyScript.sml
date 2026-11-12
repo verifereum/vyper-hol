@@ -219,8 +219,8 @@ Theorem mapping_key_hash_ptr_frame:
     (!i. b <= i /\ i < b+32+LENGTH bs ==> i NOTIN tn.t_mem) /\
     mem_word_at b s.vs_memory = n2w (LENGTH bs) /\
     mem_bytes_at (b+32) (LENGTH bs) s.vs_memory = bs /\
-    stmt_state_rel ctx fn cenv cx es s /\ local_ptrs_reserved cenv sa /\
-    ghost_inv d cenv cx es G tn s /\
+    stmt_state_rel H ctx fn cenv cx es s /\ local_ptrs_reserved cenv sa /\
+    ghost_inv H d cenv cx es G tn s /\
     (!p k. cenv.ce_return_buf = SOME (PtrVar (Var p) k) ==> not_fresh_at sa p) /\
     (!p k. cenv.ce_return_pc = SOME (PtrVar (Var p) k) ==> not_fresh_at sa p) /\
     ~ctx_has_dalloca ctx /\ ~s.vs_halted /\
@@ -231,11 +231,11 @@ Theorem mapping_key_hash_ptr_frame:
       gas_path_ptr D 0 ctx fn PG G tn s 0 G' tn'
         (OK (t with vs_inst_idx := s.vs_inst_idx + LENGTH (emitted_insts sa sb))) /\
       eval_operand op t = SOME (word_of_bytes T (0w:bytes32) (Keccak_256_w64 bs)) /\
-      stmt_state_rel ctx fn cenv cx es t /\
-      ghost_inv d cenv cx es G' tn' t /\
+      stmt_state_rel H ctx fn cenv cx es t /\
+      ghost_inv H d cenv cx es G' tn' t /\
       ghost_kept cenv es sa G tn s G' tn' /\ op_taint tn' op = {} /\
       op_prov G' op = NONE /\
-      ghost_inv d cenv cx es G' tn'
+      ghost_inv H d cenv cx es G' tn'
         (t with vs_inst_idx := s.vs_inst_idx + LENGTH (emitted_insts sa sb)) /\
       (t with vs_vars := s.vs_vars) = s /\
       (!z. not_fresh_at sa z ==> lookup_var z t = lookup_var z s)
@@ -243,14 +243,14 @@ Proof
   rpt gen_tac >> strip_tac >>
   `!z. Var x = Var z ==> not_fresh_at sa z` by simp[] >>
   drule_all compile_keccak256_key_run >> strip_tac >>
-  `stmt_state_rel ctx fn cenv cx es t` by
+  `stmt_state_rel H ctx fn cenv cx es t` by
     (irule hash_readonly_state_rel >> goal_assum (drule_at Any) >> simp[]) >>
   `t.vs_current_bb = s.vs_current_bb` by
     (qpat_x_assum `t with vs_vars := _ = _` mp_tac >>
      simp[venom_state_component_equality]) >>
   drule_all mapping_key_hash_counted >>
   disch_then (qspecl_then [`D`, `PG`] strip_assume_tac) >>
-  `ghost_inv d cenv cx es G' tn' t` by
+  `ghost_inv H d cenv cx es G' tn' t` by
     (irule hash_readonly_ghost_inv >> qexistsl [`G`, `s`, `sa`, `tn`] >>
      simp[] >> metis_tac[]) >>
   `ghost_kept cenv es sa G tn s G' tn'` by
@@ -259,7 +259,7 @@ Proof
 QED
 
 Theorem mapping_key_bytestring_input:
-  expr_post ctx fn cenv cx e es sa sm s0 ee kv op s /\
+  expr_post H ctx fn cenv cx e es sa sm s0 ee kv op s /\
   is_bytestring_type (expr_type e) /\
   evaluate_type (get_tenv cx) (expr_type e) = SOME tv /\ value_has_type tv kv /\
   ptr_val_ok cx (expr_type e) kv op G tn s ==>

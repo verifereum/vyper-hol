@@ -56,7 +56,7 @@ QED
 (* Only the data section is framed between the source boundary and the
    copy start: fresh allocation may have expanded the destination memory. *)
 Theorem code_reason_snapshot_contents:
-  stmt_state_rel ctx func cenv cx es u /\ ~cenv.ce_is_ctor /\
+  stmt_state_rel H ctx func cenv cx es u /\ ~cenv.ce_is_ctor /\
   immutable_holds cenv cx ty tv a es u' /\
   read_result cx tv es = (INL (StringV str),es) /\
   evaluate_type (get_tenv cx) ty = SOME (BaseTV (StringT max)) /\
@@ -81,7 +81,7 @@ Proof
 QED
 
 Theorem code_reason_normalization_resources:
-  stmt_state_rel ctx func cenv cx es u /\ ~cenv.ce_is_ctor /\
+  stmt_state_rel H ctx func cenv cx es u /\ ~cenv.ce_is_ctor /\
   immutable_holds cenv cx ty tv a es u' /\
   read_result cx tv es = (INL (StringV str),es) /\
   evaluate_type (get_tenv cx) ty = SOME (BaseTV (StringT max)) /\

@@ -4,7 +4,7 @@ Theory bodyPtrSignedConvertFrame
 Ancestors stmtSimReturn exprSimTypedAlloc words arithmetic
 
 Theorem expr_val_at_payload_nonwrap:
-  stmt_state_rel ctx func cenv cx es s /\
+  stmt_state_rel H ctx func cenv cx es s /\
   expr_val_at cenv cx t sa sb es v op s /\
   evaluate_type (get_tenv cx) t = SOME tv /\ ~is_word_type t /\
   eval_operand op s = SOME w /\ 32 <= val_footprint tv v ==>

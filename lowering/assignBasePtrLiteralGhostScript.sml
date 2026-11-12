@@ -21,7 +21,7 @@ QED
    witness; no global containment of the new taint is assumed. *)
 Theorem assign_base_ptr_local_robust_frame:
   !func cenv cx es d G tn s tn' t writes name entry p sz w mem.
-    local_ptrs_rel func cenv es.scopes s /\ ghost_inv d cenv cx es G tn s /\
+    local_ptrs_rel func cenv es.scopes s /\ ghost_inv H d cenv cx es G tn s /\
     (!name b sz i. local_region cenv es.scopes s name b sz /\
       b <= i /\ i < b + sz ==> i NOTIN writes) /\
     (!i. i NOTIN writes ==> mem_bytes_at i 1 t.vs_memory = mem_bytes_at i 1 s.vs_memory) /\
@@ -49,12 +49,12 @@ QED
 
 Theorem assign_base_ptr_clean_mstore_inv:
   !func d cenv cx es PG G tn s id dst value a w.
-    local_ptrs_rel func cenv es.scopes s /\ ghost_inv d cenv cx es G tn s /\
+    local_ptrs_rel func cenv es.scopes s /\ ghost_inv H d cenv cx es G tn s /\
     lookup_var dst s = SOME a /\ eval_operand value s = SOME w /\
     op_taint tn value = {} /\
     (!name b sz. local_region cenv es.scopes s name b sz ==>
       regions_disjoint (w2n a) 32 b sz) ==>
-    ghost_inv d cenv cx es
+    ghost_inv H d cenv cx es
       (step_prov PG G (mk_inst id MSTORE [Var dst; value] []) (mstore (w2n a) w s))
       (step_taint (mk_inst id MSTORE [Var dst; value] []) s (mstore (w2n a) w s) tn)
       (mstore (w2n a) w s)
@@ -63,7 +63,7 @@ Proof
   drule_all mstore_ghost_frame >>
   disch_then (qspecl_then [`PG`, `G`, `id`] strip_assume_tac) >>
   asm_rewrite_tac[] >>
-  qmatch_goalsub_abbrev_tac `ghost_inv d cenv cx es G tn' t` >>
+  qmatch_goalsub_abbrev_tac `ghost_inv H d cenv cx es G tn' t` >>
   `tn'.t_imm = tn.t_imm` by simp[Abbr `tn'`, Abbr `t`, assign_base_ptr_mstore_imm_taint] >>
   `!x. op_taint tn' (Var x) = op_taint tn (Var x)` by
     simp[Abbr `tn'`, op_taint_def] >>
@@ -72,7 +72,7 @@ Proof
     simp[ptr_covers_def] >>
   rewrite_tac[ghost_inv_def] >> conj_tac
   >- suspend "locals" >>
-  qpat_x_assum `ghost_inv _ _ _ _ _ _ _` mp_tac >>
+  qpat_x_assum `ghost_inv _ _ _ _ _ _ _ _` mp_tac >>
   simp[ghost_inv_def] >> strip_tac >> conj_tac
   >- (Cases_on `d` >> simp[return_buf_ptr_def] >>
       PairCases_on `x` >> fs[return_buf_ptr_def] >> metis_tac[]) >>
@@ -105,7 +105,7 @@ Finalise assign_base_ptr_clean_mstore_inv
    allocated bytes. Re-executing a site introduces no new memory taint. *)
 Theorem assign_base_ptr_alloca_ghost_frame:
   !ctx func cenv cx es s id n out t PG G tn.
-    stmt_state_rel ctx func cenv cx es s /\
+    stmt_state_rel H ctx func cenv cx es s /\
     MEM (mk_inst id ALLOCA [Lit (n2w n)] [out]) (fn_insts func) /\
     n < dimword (:256) /\
     step_inst_base (mk_inst id ALLOCA [Lit (n2w n)] [out]) s = OK t ==>
@@ -133,7 +133,7 @@ QED
 
 Theorem assign_base_ptr_alloca_local_taint_frame:
   !ctx func cenv cx es s id n out t name b sz i.
-    stmt_state_rel ctx func cenv cx es s /\
+    stmt_state_rel H ctx func cenv cx es s /\
     MEM (mk_inst id ALLOCA [Lit (n2w n)] [out]) (fn_insts func) /\
     n < dimword (:256) /\
     step_inst_base (mk_inst id ALLOCA [Lit (n2w n)] [out]) s = OK t /\
@@ -156,26 +156,26 @@ QED
 
 Theorem assign_base_ptr_alloca_inv:
   !ctx func d cenv cx es s id n out t PG G tn.
-    stmt_state_rel ctx func cenv cx es s /\ ghost_inv d cenv cx es G tn s /\
+    stmt_state_rel H ctx func cenv cx es s /\ ghost_inv H d cenv cx es G tn s /\
     MEM (mk_inst id ALLOCA [Lit (n2w n)] [out]) (fn_insts func) /\
     n < dimword (:256) /\ not_local_ptr cenv es.scopes out /\
     (!x sz. cenv.ce_return_buf = SOME (PtrVar (Var x) sz) ==> x <> out) /\
     (!x sz. cenv.ce_return_pc = SOME (PtrVar (Var x) sz) ==> x <> out) /\
     step_inst_base (mk_inst id ALLOCA [Lit (n2w n)] [out]) s = OK t ==>
-    ghost_inv d cenv cx es
+    ghost_inv H d cenv cx es
       (step_prov PG G (mk_inst id ALLOCA [Lit (n2w n)] [out]) t)
       (step_taint (mk_inst id ALLOCA [Lit (n2w n)] [out]) s t tn) t
 Proof
   rpt gen_tac >> strip_tac >>
   drule_all assign_base_ptr_alloca_ghost_frame >>
   disch_then (qspecl_then [`PG`, `G`, `tn`] strip_assume_tac) >>
-  qmatch_goalsub_abbrev_tac `ghost_inv d cenv cx es G' tn' t` >>
+  qmatch_goalsub_abbrev_tac `ghost_inv H d cenv cx es G' tn' t` >>
   `!p sz. p <> out /\ ptr_covers G tn p s sz ==> ptr_covers G' tn' p t sz` by
     (rpt strip_tac >> simp[Abbr `G'`, Abbr `tn'`] >>
      irule alloca_step_old_ptr_covers >> metis_tac[]) >>
   `local_ptrs_rel func cenv es.scopes s` by fs[stmt_state_rel_def, state_rel_def] >>
   rewrite_tac[ghost_inv_def] >> conj_tac >- suspend "locals" >>
-  qpat_x_assum `ghost_inv _ _ _ _ _ _ _` mp_tac >>
+  qpat_x_assum `ghost_inv _ _ _ _ _ _ _ _` mp_tac >>
   simp[ghost_inv_def] >> strip_tac >> conj_tac
   >- (Cases_on `d` >> simp[return_buf_ptr_def] >> PairCases_on `x` >>
       fs[return_buf_ptr_def] >> metis_tac[]) >>
@@ -201,7 +201,7 @@ Finalise assign_base_ptr_alloca_inv
 
 Theorem assign_base_ptr_alloca_old_taint_frame:
   !ctx func cenv cx es s id n out t aid b sz i.
-    stmt_state_rel ctx func cenv cx es s /\
+    stmt_state_rel H ctx func cenv cx es s /\
     MEM (mk_inst id ALLOCA [Lit (n2w n)] [out]) (fn_insts func) /\
     n < dimword (:256) /\
     step_inst_base (mk_inst id ALLOCA [Lit (n2w n)] [out]) s = OK t /\
@@ -220,7 +220,7 @@ QED
 
 Theorem assign_base_ptr_alloca_kept:
   !ctx func cenv cx es s sa id n out t PG G tn.
-    stmt_state_rel ctx func cenv cx es s /\
+    stmt_state_rel H ctx func cenv cx es s /\
     MEM (mk_inst id ALLOCA [Lit (n2w n)] [out]) (fn_insts func) /\
     n < dimword (:256) /\ (!x. not_fresh_at sa x ==> x <> out) /\
     step_inst_base (mk_inst id ALLOCA [Lit (n2w n)] [out]) s = OK t ==>
@@ -269,18 +269,18 @@ QED
 
 Theorem assign_base_ptr_binop_inv:
   !d cenv cx es PG G tn s id opc left right out w.
-    ghost_inv d cenv cx es G tn s /\ (opc = ADD \/ opc = AND) /\
+    ghost_inv H d cenv cx es G tn s /\ (opc = ADD \/ opc = AND) /\
     not_local_ptr cenv es.scopes out /\
     (!x sz. cenv.ce_return_buf = SOME (PtrVar (Var x) sz) ==> x <> out) /\
     (!x sz. cenv.ce_return_pc = SOME (PtrVar (Var x) sz) ==> x <> out) ==>
-    ghost_inv d cenv cx es
+    ghost_inv H d cenv cx es
       (step_prov PG G (mk_inst id opc [left;right] [out]) (update_var out w s))
       (step_taint (mk_inst id opc [left;right] [out]) s (update_var out w s) tn)
       (update_var out w s)
 Proof
   rpt gen_tac >> strip_tac >> (
   `opc <> ISTORE` by gvs[] >>
-  qmatch_goalsub_abbrev_tac `ghost_inv d cenv cx es G' tn' t` >>
+  qmatch_goalsub_abbrev_tac `ghost_inv H d cenv cx es G' tn' t` >>
   `op_taint tn' (Var out) = {} /\ tn'.t_mem = tn.t_mem /\
    tn'.t_stor = tn.t_stor /\ tn'.t_trans = tn.t_trans /\
    (!p. p <> out ==> FLOOKUP G' p = FLOOKUP G p /\
@@ -453,7 +453,7 @@ QED
 Theorem assign_base_ptr_one_byte_init_inv:
   !D lo ctx func PG G tn s G' tn' p q a i j k d cenv cx es.
     p <> q /\ lookup_var p s = SOME a /\ w2n a + 64 < dimword (:256) /\
-    local_ptrs_rel func cenv es.scopes s /\ ghost_inv d cenv cx es G tn s /\
+    local_ptrs_rel func cenv es.scopes s /\ ghost_inv H d cenv cx es G tn s /\
     not_local_ptr cenv es.scopes q /\
     (!x sz. cenv.ce_return_buf = SOME (PtrVar (Var x) sz) ==> x <> q) /\
     (!x sz. cenv.ce_return_pc = SOME (PtrVar (Var x) sz) ==> x <> q) /\
@@ -463,7 +463,7 @@ Theorem assign_base_ptr_one_byte_init_inv:
       [mk_inst i MSTORE [Var p; Lit 1w] [];
        mk_inst j ADD [Var p; Lit 32w] [q];
        mk_inst k MSTORE [Var q; Lit (n2w (2 ** 248))] []] s G' tn' ==>
-    ghost_inv d cenv cx es G' tn'
+    ghost_inv H d cenv cx es G' tn'
       (mstore (w2n (a + 32w)) (n2w (2 ** 248))
         (update_var q (a + 32w) (mstore (w2n a) 1w s)))
 Proof
@@ -544,8 +544,8 @@ QED
    The caller supplies code-layout/fresh-output facts, not a second execution. *)
 Theorem assign_base_ptr_alloca_init_ghost:
   !D lo ctx func PG G tn s u t G' tn' p q i j k l d cenv cx es sa.
-    p <> q /\ stmt_state_rel ctx func cenv cx es s /\
-    fn_inst_ids_distinct func /\ ghost_inv d cenv cx es G tn s /\
+    p <> q /\ stmt_state_rel H ctx func cenv cx es s /\
+    fn_inst_ids_distinct func /\ ghost_inv H d cenv cx es G tn s /\
     MEM (mk_inst i ALLOCA [Lit 64w] [p]) (fn_insts func) /\
     not_local_ptr cenv es.scopes p /\ not_local_ptr cenv es.scopes q /\
     (!x sz. cenv.ce_return_buf = SOME (PtrVar (Var x) sz) ==> x <> p /\ x <> q) /\
@@ -562,7 +562,7 @@ Theorem assign_base_ptr_alloca_init_ghost:
       [mk_inst j MSTORE [Var p; Lit 1w] [];
        mk_inst k ADD [Var p; Lit 32w] [q];
        mk_inst l MSTORE [Var q; Lit (n2w (2 ** 248))] []] u G' tn' ==>
-    ghost_inv d cenv cx es G' tn' t /\
+    ghost_inv H d cenv cx es G' tn' t /\
     ghost_kept cenv es sa G tn s G' tn' /\
     ?a. lookup_var p t = SOME a /\ w2n a + 64 < dimword (:256) /\
       (!m. mem_agree_outside tn'.t_mem t.vs_memory m ==>
@@ -587,7 +587,7 @@ Proof
 QED
 
 Resume assign_base_ptr_alloca_init_ghost[invariant]:
-  `ghost_inv d cenv cx es
+  `ghost_inv H d cenv cx es
      (step_prov PG G (mk_inst i ALLOCA [Lit 64w] [p]) u)
      (step_taint (mk_inst i ALLOCA [Lit 64w] [p]) s u tn) u` by
     (irule assign_base_ptr_alloca_inv >>

@@ -83,7 +83,7 @@ Resume blockhash_singleton_sim_ptr[suffix]:
     gvs[ptr_val_ok_def, is_word_type_def] >>
   `local_ptrs_rel fn cenv es.scopes s0` by
     gvs[stmt_state_rel_def, state_rel_def] >>
-  `stmt_state_rel ctx fn cenv cx ee t` by gvs[expr_post_def] >>
+  `stmt_state_rel H ctx fn cenv cx ee t` by gvs[expr_post_def] >>
   fs[] >>
   `!z. x = Var z ==> not_fresh_at s1 z` by
     (qpat_assum `lower_value _ _ _ e _ = _`
@@ -97,7 +97,7 @@ Resume blockhash_singleton_sim_ptr[normal]:
   drule_at (Pat `bind _ _ _ = _`) operand_blockhash_suffix_run >>
   simp[expr_post_entry_gas_obs, ghost_kept_entry_gas_obs] >>
   disch_then drule_all >>
-  disch_then (qspecl_then [`PG`, `cx_dead cx`] strip_assume_tac) >>
+  disch_then (qspecl_then [`PG`, `cx_dead H cx`] strip_assume_tac) >>
   qexistsl_tac [`INL v`, `ee`, `G''`, `tn''`, `OK t'`] >>
   simp[unop_result_gas_obs, expr_type_def, is_word_type_def] >>
   conj_tac >- suspend "post" >>
@@ -105,7 +105,7 @@ Resume blockhash_singleton_sim_ptr[normal]:
 QED
 Resume blockhash_singleton_sim_ptr[abort]:
   drule_all blockhash_counted_abort >>
-  disch_then (qspecl_then [`PG`, `cx_dead cx`] strip_assume_tac) >>
+  disch_then (qspecl_then [`PG`, `cx_dead H cx`] strip_assume_tac) >>
   qexistsl_tac [`unop_result cx (BaseT (BytesT (Fixed 32))) BlockHash
     [BaseT (UintT 256)] (IntV i) ee`, `ee`, `G'`, `tn'`,
     `Abort Revert_abort (u with vs_inst_idx := j)`] >>

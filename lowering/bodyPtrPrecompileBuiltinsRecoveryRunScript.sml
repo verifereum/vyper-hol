@@ -67,7 +67,7 @@ Theorem recovery_prefix_runtime:
     sa = ((),sp) /\
   compile_alloc_buffer 32 sp = (ob,sm) /\
   emit_void MSTORE [ob.buf_operand; Lit 0w] sm = ((),sz) /\
-  stmt_state_rel ctx fn cenv cx es s0 /\ fn_inst_ids_distinct fn /\
+  stmt_state_rel H ctx fn cenv cx es s0 /\ fn_inst_ids_distinct fn /\
   local_ptrs_reserved cenv sf /\ local_ptrs_reserved cenv sa /\
   local_ptrs_reserved cenv sp /\
   MEM (mk_inst sf.cs_next_id ALLOCA [Lit 128w]
@@ -82,9 +82,9 @@ Theorem recovery_prefix_runtime:
     run_inst_seq (emitted_insts sa sp) s1 = OK s2 /\
     run_inst_seq (emitted_insts sp sm) s2 = OK s3 /\
     run_inst_seq (emitted_insts sm sz) s3 = OK s4 /\
-    stmt_state_rel ctx fn cenv cx es s1 /\
-    stmt_state_rel ctx fn cenv cx es s2 /\
-    stmt_state_rel ctx fn cenv cx es s3 /\
+    stmt_state_rel H ctx fn cenv cx es s1 /\
+    stmt_state_rel H ctx fn cenv cx es s2 /\
+    stmt_state_rel H ctx fn cenv cx es s3 /\
     eval_operand ib.buf_operand s1 = SOME b /\
     eval_operand ib.buf_operand s2 = SOME b /\
     eval_operand ob.buf_operand s3 = SOME c /\
@@ -102,7 +102,7 @@ Theorem recovery_prefix_runtime:
        regions_disjoint (w2n c) 32 lo len) /\
     (!aid entry. FLOOKUP s2.vs_allocas aid = SOME entry ==>
        FLOOKUP s3.vs_allocas aid = SOME entry) /\
-    stmt_state_rel ctx fn cenv cx es s4 /\
+    stmt_state_rel H ctx fn cenv cx es s4 /\
     mem_word_at (w2n c) s4.vs_memory = 0w /\
     FLOOKUP s4.vs_allocas sp.cs_next_id = SOME (w2n c,32) /\
     wb_frame cenv es es sp s3 s4 /\
@@ -146,7 +146,7 @@ Proof
      goal_assum (drule_at Any) >> goal_assum (drule_at Any) >>
      goal_assum (drule_at Any) >> simp[] >> decide_tac) >>
   `?s2. run_inst_seq (emitted_insts sa sp) s1 = OK s2 /\
-    stmt_state_rel ctx fn cenv cx es s2 /\ wb_frame cenv es es sf s1 s2 /\
+    stmt_state_rel H ctx fn cenv cx es s2 /\ wb_frame cenv es es sf s1 s2 /\
     (!x. not_fresh_at sa x ==> lookup_var x s2 = lookup_var x s1) /\
     s2.vs_allocas = s1.vs_allocas /\ eval_operand ib.buf_operand s2 = SOME b /\
     mem_bytes_at (w2n b) 128 s2.vs_memory =
@@ -173,7 +173,7 @@ Resume recovery_prefix_runtime[finish]:
   `eval_operand (Lit 0w) s3 = SOME 0w` by simp[eval_operand_def] >>
   drule_all bodyPtrPrecompileBuiltinsPayloadRunsTheory.direct_store_run >>
   strip_tac >>
-  `stmt_state_rel ctx fn cenv cx es (mstore (w2n c) 0w s3) /\
+  `stmt_state_rel H ctx fn cenv cx es (mstore (w2n c) 0w s3) /\
    mem_word_at (w2n c) (mstore (w2n c) 0w s3).vs_memory = 0w` by
     (irule registered_word_store_state >> goal_assum (drule_at Any) >>
      simp[] >>

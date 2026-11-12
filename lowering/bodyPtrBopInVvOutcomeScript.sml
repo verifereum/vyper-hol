@@ -16,17 +16,17 @@ Theorem membership_vv_operand_outcome_ptr:
   (!x sz. cenv.ce_return_pc = SOME (PtrVar (Var x) sz) ==>
           not_fresh_at sa x) /\
   gas_admissible (eval_expr cx e) expr_vv_res_ok es /\
-  stmt_state_rel ctx func cenv cx es s0 /\
-  ghost_inv d cenv cx es G0 tn0 s0 /\ ~s0.vs_halted /\
+  stmt_state_rel H ctx func cenv cx es s0 /\
+  ghost_inv H d cenv cx es G0 tn0 s0 /\ ~s0.vs_halted /\
   s0.vs_current_bb = sa.cs_current_bb /\
   s0.vs_inst_idx = LENGTH sa.cs_current_insts /\
   (!gs rr ee. eval_expr cx e (es with gas_obs := gs) = (rr,ee) ==>
     P rr ee) /\
   (!tv ee G tn t.
-    vv_post ctx func cenv cx e es sa sb s0 ee tv vv t /\
+    vv_post H ctx func cenv cx e es sa sb s0 ee tv vv t /\
     t.vs_current_bb = sb.cs_current_bb /\
     t.vs_inst_idx = LENGTH sb.cs_current_insts /\
-    ghost_inv d cenv cx ee G tn t /\
+    ghost_inv H d cenv cx ee G tn t /\
     ptr_vv_ok cx (expr_type e) tv vv ee G tn t /\
     (!t' op. vv = StackValue t' op /\ ~is_word_type (expr_type e) ==>
       ptr_buf_ok cenv e op G t) /\
@@ -34,7 +34,7 @@ Theorem membership_vv_operand_outcome_ptr:
       ptr_buf_ok cenv e p.ptr_operand G t) /\
     ghost_kept cenv es sa G0 tn0 s0 G tn /\
     P (INL tv) ee /\ ee.gas_obs = [] /\ ~t.vs_halted ==>
-    gas_outcome_ptr (cx_dead cx) (cx_tops cx) (ctx,func) PG
+    gas_outcome_ptr (cx_dead H cx) (cx_tops cx) (ctx,func) PG
       (next tv) (ee,t,G,tn) Q (\res ee gt r. expr_exit res r)) /\
   (!marks err ee leaf fstate.
     gas_exempt_cert F (cx_tops cx) (ctx,func)
@@ -52,7 +52,7 @@ Theorem membership_vv_operand_outcome_ptr:
     gas_exempt_cert F (cx_tops cx) (ctx,func)
       (bind (eval_expr cx e) (\tv. ignore_bind (next tv) (return ())))
       (es,s0) (left ++ right) (err,ee) (leaf,fstate)) ==>
-  gas_outcome_ptr (cx_dead cx) (cx_tops cx) (ctx,func) PG
+  gas_outcome_ptr (cx_dead H cx) (cx_tops cx) (ctx,func) PG
     (bind (eval_expr cx e) next) (es,s0,G0,tn0)
     Q (\res ee gt r. expr_exit res r)
 Proof
@@ -62,10 +62,10 @@ Proof
   irule gas_outcome_ptr_conseq >>
   qexistsl_tac
     [`\res ee G tn t. (?tv. res = INL tv /\
-       vv_post ctx func cenv cx e es sa sb s0 ee tv vv t /\
+       vv_post H ctx func cenv cx e es sa sb s0 ee tv vv t /\
        t.vs_current_bb = sb.cs_current_bb /\
        t.vs_inst_idx = LENGTH sb.cs_current_insts /\
-       ghost_inv d cenv cx ee G tn t /\
+       ghost_inv H d cenv cx ee G tn t /\
        ptr_vv_ok cx (expr_type e) tv vv ee G tn t /\
        (!t' op. vv = StackValue t' op /\ ~is_word_type (expr_type e) ==>
          ptr_buf_ok cenv e op G t) /\

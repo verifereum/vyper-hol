@@ -43,14 +43,14 @@ QED
 Theorem scalar_seq_ghost_inv:
   scalar_code A code /\
   (!v. v IN A ==> op_prov G (Var v) = NONE /\ op_taint tn (Var v) = {}) /\
-  inst_seq_ptr D 0 ctx fn PG G tn code s H tm /\
+  inst_seq_ptr D 0 ctx fn PG G tn code s HG tm /\
   run_inst_seq code s = OK t /\
-  ghost_inv d cenv cx es G tn s /\ local_ptrs_reserved cenv sa /\
+  ghost_inv H d cenv cx es G tn s /\ local_ptrs_reserved cenv sa /\
   (!x sz. cenv.ce_return_pc = SOME (PtrVar (Var x) sz) ==> not_fresh_at sa x) /\
   (!x sz. cenv.ce_return_buf = SOME (PtrVar (Var x) sz) ==> not_fresh_at sa x) /\
   (!x. not_fresh_at sa x ==>
        ~MEM x (FLAT (MAP (\i. i.inst_outputs) code))) ==>
-  ghost_inv d cenv cx es H tm t
+  ghost_inv H d cenv cx es HG tm t
 Proof
   strip_tac >> drule_all scalar_seq_concrete_frame >> strip_tac >>
   drule_all scalar_seq_metadata_frame >> strip_tac >>
@@ -63,11 +63,11 @@ QED
 Theorem scalar_seq_ghost_kept:
   scalar_code A code /\
   (!v. v IN A ==> op_prov G (Var v) = NONE /\ op_taint tn (Var v) = {}) /\
-  inst_seq_ptr D 0 ctx fn PG G tn code s H tm /\
+  inst_seq_ptr D 0 ctx fn PG G tn code s HG tm /\
   ghost_kept cenv es sa G0 tn0 s0 G tn /\
   (!x. not_fresh_at sa x ==>
        ~MEM x (FLAT (MAP (\i. i.inst_outputs) code))) ==>
-  ghost_kept cenv es sa G0 tn0 s0 H tm
+  ghost_kept cenv es sa G0 tn0 s0 HG tm
 Proof
   strip_tac >> drule_all scalar_seq_metadata_frame >> strip_tac >>
   gvs[ghost_kept_def] >> metis_tac[]

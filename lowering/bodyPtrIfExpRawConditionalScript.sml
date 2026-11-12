@@ -9,7 +9,7 @@ Ancestors
 Theorem ifexp_raw_marked_conditional:
   gas_marked_exec_ptr D (ctx,fn) PG (eval_expr cx e) (es,s0,G0,tn0)
     marks (INL raw) ee G tn (OK s) /\
-  vv_post ctx fn ce cx e es sa sb s0 (ee with gas_obs := []) raw vv s /\
+  vv_post H ctx fn ce cx e es sa sb s0 (ee with gas_obs := []) raw vv s /\
   gas_admissible (bind (eval_expr cx e) (conditional_result cx)) expr_vv_res_ok es ==>
   ?tv v.
     gas_marked_exec_ptr D (ctx,fn) PG

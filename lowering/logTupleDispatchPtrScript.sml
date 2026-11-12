@@ -43,7 +43,7 @@ QED
 
 Theorem compile_log_tuple_seq_ptr:
   compile_abi_encode_to_buf (Var dst) (Var src) ei st = (out,end_st) /\
-  fn_has_code st end_st func /\ stmt_state_rel ctx func ce cx es s /\
+  fn_has_code st end_st func /\ stmt_state_rel H ctx func ce cx es s /\
   fn_inst_ids_distinct func /\ local_ptrs_reserved ce st /\
   end_st.cs_next_var <= limit_st.cs_next_var /\ fresh_vars_wrt limit_st s /\
   ~ctx_has_dalloca ctx /\ srcid <> st.cs_next_id /\ dstid <> st.cs_next_id /\
@@ -60,22 +60,22 @@ Theorem compile_log_tuple_seq_ptr:
   ((?n. ei = AbiCopy n) \/
    (?infos. ei = AbiComplex infos /\ EXISTS (\(_,_,_,dyn). dyn) infos /\
     EVERY (\(child,asz,mz,dyn). log_scalar_enc_info child) infos)) ==>
-  ?H tm t.
+  ?HG tm t.
     run_inst_seq (emitted_insts st end_st) s = OK t /\
-    inst_seq_ptr D 0 ctx func PG G tn (emitted_insts st end_st) s H tm /\
+    inst_seq_ptr D 0 ctx func PG G tn (emitted_insts st end_st) s HG tm /\
     inst_extends st end_st /\ fresh_vars_wrt limit_st t /\
     EVERY (\i. i.inst_opcode <> INVOKE /\ ~is_terminator i.inst_opcode)
       (emitted_insts st end_st) /\
     eval_operand out t = SOME (n2w (LENGTH (enc (Tuple tys) (ListV avs)))) /\
-    op_taint tm out = {} /\ op_prov H out = NONE /\
+    op_taint tm out = {} /\ op_prov HG out = NONE /\
     mem_bytes_at d (LENGTH (enc (Tuple tys) (ListV avs))) t.vs_memory =
       enc (Tuple tys) (ListV avs) /\
     (!i. d <= i /\ i < d+LENGTH (enc (Tuple tys) (ListV avs)) ==> i NOTIN tm.t_mem) /\
     tm.t_stor = tn.t_stor /\ tm.t_trans = tn.t_trans /\ tm.t_imm = tn.t_imm /\
     (!v. not_fresh_at st v ==>
-      lookup_var v t = lookup_var v s /\ FLOOKUP H v = FLOOKUP G v /\
+      lookup_var v t = lookup_var v s /\ FLOOKUP HG v = FLOOKUP G v /\
       op_taint tm (Var v) = op_taint tn (Var v)) /\
-    ((H = G /\ abi_decode_footprint_frame [(d,cap)] s t /\
+    ((HG = G /\ abi_decode_footprint_frame [(d,cap)] s t /\
       t.vs_allocas = s.vs_allocas /\ t.vs_alloca_next = s.vs_alloca_next /\
       t.vs_halted = s.vs_halted /\
       (!i. ~(d <= i /\ i < d+cap) ==> (i IN tm.t_mem <=> i IN tn.t_mem))) \/
@@ -141,9 +141,9 @@ Resume compile_log_tuple_seq_ptr[dynamic]:
      qexists_tac `inputCap` >> first_x_assum irule >> simp[]) >>
   mp_tac (SPEC_ALL compile_log_dynamic_tuple_seq_ptr) >>
   impl_tac >- asm_simp_tac bool_ss [] >>
-  disch_then (qx_choose_then `H` (qx_choose_then `tm` (qx_choose_then `t`
+  disch_then (qx_choose_then `HG` (qx_choose_then `tm` (qx_choose_then `t`
     (qx_choose_then `p` (REPEAT_TCL CONJUNCTS_THEN assume_tac))))) >>
-  qexistsl_tac [`H`,`tm`,`t`] >> asm_simp_tac bool_ss [] >>
+  qexistsl_tac [`HG`,`tm`,`t`] >> asm_simp_tac bool_ss [] >>
   disj2_tac >> qexists_tac `p` >> asm_simp_tac bool_ss [] >>
   qexists_tac `infos` >> asm_simp_tac bool_ss []
 QED

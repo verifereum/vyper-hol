@@ -18,7 +18,7 @@ Theorem target_live_dynamic_memory_array_continue_ptr:
   ~ctx_has_dalloca ctx /\ ~s.vs_halted /\
   s.vs_current_bb = sn.cs_current_bb /\ s.vs_inst_idx = LENGTH sn.cs_current_insts /\
   wb_frame cenv es ef sa s0 s /\
-  stmt_state_rel ctx fn cenv cx ef s /\ ghost_inv d cenv cx ef G tn s /\
+  stmt_state_rel H ctx fn cenv cx ef s /\ ghost_inv H d cenv cx ef G tn s /\
   ghost_kept cenv es sa G0 tn0 s0 G tn /\
   local_ptrs_reserved cenv sn /\ sa.cs_next_var <= sn.cs_next_var /\
   (!x sz. cenv.ce_return_buf = SOME (PtrVar (Var x) sz) ==> not_fresh_at sn x) /\
@@ -34,17 +34,17 @@ Theorem target_live_dynamic_memory_array_continue_ptr:
   target_ptr_ok cenv (PlaceR (MemoryPlace id path)) (Var src,loc,SOME (ValPT (ArrayT et (Dynamic cap)))) G tn s ==>
   (extend_place cx (PlaceR (MemoryPlace id path)) (ValueSubscript iv) ef =
      (INL (PlaceR (MemoryPlace id (path ++ [ValueSubscript iv]))),ef) /\
-   ?t H un. gas_path_ptr D 0 ctx fn PG G tn s 0 H un (OK t) /\
-     target_post ctx fn cenv cx es sa sb s0 ef
+   ?t HG un. gas_path_ptr D 0 ctx fn PG G tn s 0 HG un (OK t) /\
+     target_post H ctx fn cenv cx es sa sb s0 ef
        (PlaceR (MemoryPlace id (path ++ [ValueSubscript iv]))) (Type et)
        (dst,loc,SOME (ValPT et)) t /\
-     ghost_inv d cenv cx ef H un t /\
+     ghost_inv H d cenv cx ef HG un t /\
      target_ptr_ok cenv (PlaceR (MemoryPlace id (path ++ [ValueSubscript iv])))
-       (dst,loc,SOME (ValPT et)) H un t /\ ghost_kept cenv es sa G0 tn0 s0 H un /\
+       (dst,loc,SOME (ValPT et)) HG un t /\ ghost_kept cenv es sa G0 tn0 s0 HG un /\
      t.vs_current_bb = s.vs_current_bb /\ t.vs_inst_idx = LENGTH sb.cs_current_insts) \/
   (extend_place cx (PlaceR (MemoryPlace id path)) (ValueSubscript iv) ef =
      (INR (Error (RuntimeError "evaluate_subscripts array_index")),ef) /\
-   ?t H un fuel pc. gas_path_ptr D 0 ctx fn PG G tn s fuel H un
+   ?t HG un fuel pc. gas_path_ptr D 0 ctx fn PG G tn s fuel HG un
      (Abort Revert_abort (t with vs_inst_idx := pc)))
 Proof
   strip_tac >>

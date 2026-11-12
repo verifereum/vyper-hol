@@ -4,7 +4,7 @@ Ancestors exprSimCopy exprSimPtrLiteralBuffer bodyPtrDefs
 (* The erased content theorem supplies only representation.  The counted
    copier must separately supply the destination's byte-cleanliness. *)
 Theorem ifexp_runtime_copy_robust:
-  stmt_state_rel ctx fn ce cx ee u /\ ~ce.ce_is_ctor /\
+  stmt_state_rel H ctx fn ce cx ee u /\ ~ce.ce_is_ctor /\
   immutable_holds ce cx ann (Value v) a ee s /\
   evaluate_type (get_tenv cx) ann = SOME ty /\
   w2n d + type_memory_size ty < dimword (:256) /\

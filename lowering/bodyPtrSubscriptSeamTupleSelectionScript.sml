@@ -13,12 +13,12 @@ Theorem tuple_selected_vv_post:
   expr_body_pre cenv cx env (Subscript ann obj idx) (es with gas_obs := gs) /\
   expr_type obj = TupleT tys /\ post_value_type cenv obj = TupleT tys /\
   eval_expr cx obj (es with gas_obs := gs) = (INL btv,ee) /\
-  vv_post ctx func cenv cx obj es sa sn s0 ee btv bvv q /\
+  vv_post H ctx func cenv cx obj es sa sn s0 ee btv bvv q /\
   eval_operand (vv_operand bvv) q = SOME w /\
   idx = Literal ity (IntL (&k)) /\
   eval_operand dst q = SOME (w + n2w (tuple_offset cenv tys (vv_loc bvv) k)) ==>
   ?tv'. select_result cx (TupleT tys) btv (ValueSubscript (IntV (&k))) ee = (INL tv',ee) /\
-    vv_post ctx func cenv cx (Subscript ann obj idx) es sa sn s0 ee tv'
+    vv_post H ctx func cenv cx (Subscript ann obj idx) es sa sn s0 ee tv'
       (LocatedValue ann (mk_ptr dst (vv_loc bvv))) q
 Proof
   strip_tac >> drule tuple_selected_source >>
@@ -33,7 +33,7 @@ Theorem tuple_selected_ptr:
   expr_body_pre cenv cx env (Subscript ann obj idx) (es with gas_obs := gs) /\
   expr_type obj = TupleT tys /\ post_value_type cenv obj = TupleT tys /\
   eval_expr cx obj (es with gas_obs := gs) = (INL btv,ee) /\
-  vv_post ctx func cenv cx obj es sa sm s0 ee btv bvv s /\
+  vv_post H ctx func cenv cx obj es sa sm s0 ee btv bvv s /\
   ptr_vv_ok cx (TupleT tys) btv bvv ee G tn s /\
   (vv_loc bvv = LocMemory ==> ptr_buf_ok cenv obj (vv_operand bvv) G s) /\
   idx = Literal ity (IntL (&k)) /\ eval_operand (vv_operand bvv) s = SOME w /\
@@ -41,16 +41,16 @@ Theorem tuple_selected_ptr:
   t.vs_memory = s.vs_memory /\ t.vs_accounts = s.vs_accounts /\
   t.vs_call_ctx = s.vs_call_ctx /\ t.vs_transient = s.vs_transient /\
   tn'.t_mem = tn.t_mem /\ tn'.t_stor = tn.t_stor /\ tn'.t_trans = tn.t_trans /\
-  op_taint tn' dst = {} /\ (vv_loc bvv = LocCode ==> op_prov H dst = NONE) /\
+  op_taint tn' dst = {} /\ (vv_loc bvv = LocCode ==> op_prov HG dst = NONE) /\
   (!x b sz. vv_operand bvv = Var x /\ FLOOKUP G x = SOME (b,sz) ==>
-    ?y. dst = Var y /\ FLOOKUP H y = SOME (b,sz)) ==>
+    ?y. dst = Var y /\ FLOOKUP HG y = SOME (b,sz)) ==>
   ?tv'. select_result cx (TupleT tys) btv (ValueSubscript (IntV (&k))) ee = (INL tv',ee) /\
-    ptr_vv_ok cx ann tv' (LocatedValue ann (mk_ptr dst (vv_loc bvv))) ee H tn' t /\
-    (vv_loc bvv = LocMemory ==> ptr_buf_ok cenv (Subscript ann obj idx) dst H t)
+    ptr_vv_ok cx ann tv' (LocatedValue ann (mk_ptr dst (vv_loc bvv))) ee HG tn' t /\
+    (vv_loc bvv = LocMemory ==> ptr_buf_ok cenv (Subscript ann obj idx) dst HG t)
 Proof
   strip_tac >> drule tuple_selected_source >>
   simp[vv_post_initial_gas] >> disch_then drule >> strip_tac >> gvs[] >>
-  `expr_sim_inv cenv cx env es /\ stmt_state_rel ctx func cenv cx ee s /\
+  `expr_sim_inv cenv cx env es /\ stmt_state_rel H ctx func cenv cx ee s /\
     vv_at cenv cx (TupleT tys) sa sm ee btv bvv s` by
     (fs[vv_post_def, expr_body_pre_def] >> gvs[]) >>
   `evaluate_type (get_tenv cx) (EL k tys) = SOME (EL k tvs)` by

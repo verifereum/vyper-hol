@@ -7,10 +7,11 @@ Ancestors assignBasePtrStorageSingle assignBasePtrStorageDirect
   words arithmetic finite_map
 
 Theorem assign_base_storage_direct_code:
-  ~is_bytestring_type ty ==>
+  ~is_bytestring_type ty /\ ~is_abi_dynamic cenv.ce_struct_fields ty /\
+  type_memory_bytes cenv ty = capacity ==>
   compile_assign_value cenv (Lit k) (if tr then LocTransient else LocStorage)
-    (Var root) F loc ty ty NONE capacity =
-  (if capacity <= 32 then
+    (Var root) F loc ty ty capacity =
+  (if capacity DIV 32 = 1 then
      do loaded <- emit_op MLOAD [Var root];
         emit_void (if tr then TSTORE else SSTORE) [Lit k;loaded]
      od
@@ -18,17 +19,19 @@ Theorem assign_base_storage_direct_code:
           (if tr then LocTransient else LocStorage) F; return () od)
 Proof
   strip_tac >> Cases_on `tr` >>
-  simp[FUN_EQ_THM, compile_assign_value_def, comp_bind_def,
+  simp[FUN_EQ_THM, compile_assign_value_def] >>
+  simp[Once compile_store_slots_def, LET_THM, comp_bind_def,
     comp_return_def, comp_ignore_bind_def, compile_memory_to_storage_def,
     compile_memory_to_transient_def] >>
-  gen_tac >> pairarg_tac >> simp[]
+  rpt (gen_tac ORELSE (pairarg_tac >> gvs[]))
 QED
 
 Theorem assign_base_storage_direct_counted:
   !tr root k n cenv ty loc sa z sb fn s G tn ctx D PG a.
     compile_assign_value cenv (Lit k) (if tr then LocTransient else LocStorage)
-      (Var root) F loc ty ty NONE (32*n) sa = (z,sb) /\
-    ~is_bytestring_type ty /\ fn_has_code sa sb fn /\ not_fresh_at sa root /\
+      (Var root) F loc ty ty (32*n) sa = (z,sb) /\
+    ~is_bytestring_type ty /\ ~is_abi_dynamic cenv.ce_struct_fields ty /\
+    type_memory_bytes cenv ty = 32*n /\ fn_has_code sa sb fn /\ not_fresh_at sa root /\
     ptr_covers G tn root s (32*n) /\ lookup_var root s = SOME a /\
     ~s.vs_halted /\ ~s.vs_call_ctx.cc_static /\ ~ctx_has_dalloca ctx /\
     s.vs_current_bb = sa.cs_current_bb /\ s.vs_inst_idx = LENGTH sa.cs_current_insts /\
@@ -45,12 +48,14 @@ Theorem assign_base_storage_direct_counted:
         FLOOKUP Gf x = FLOOKUP G x /\ op_taint tf (Var x) = op_taint tn (Var x))
 Proof
   rpt gen_tac >> strip_tac >>
-  drule assign_base_storage_direct_code >> strip_tac >>
-  Cases_on `32*n <= 32`
-  >- (`n=1` by decide_tac >> gvs[] >>
+  drule_all assign_base_storage_direct_code >> strip_tac >>
+  Cases_on `n = 1`
+  >- (gvs[] >>
       drule_all assign_base_storage_single_compiled_counted >>
       disch_then (qspecl_then [`D`, `PG`] mp_tac) >> simp[]) >>
-  qpat_x_assum `compile_assign_value _ _ _ _ _ _ _ _ _ _ _ = _` mp_tac >>
+  `(32 * n) DIV 32 <> 1` by
+    (once_rewrite_tac[MULT_COMM] >> simp[MULT_DIV]) >>
+  qpat_x_assum `compile_assign_value _ _ _ _ _ _ _ _ _ _ = _` mp_tac >>
   asm_rewrite_tac[] >> simp[comp_ignore_bind_def, comp_bind_def, comp_return_def] >>
   pairarg_tac >> strip_tac >> gvs[] >>
   `n < dimword (:256) /\ 32*n <= 32*n` by decide_tac >>
@@ -69,13 +74,14 @@ Theorem assign_base_storage_typed_counted:
     type_stmt env ret (Assign target e) = SOME env' /\
     supported_storage_type tops (expr_type e) /\ ~is_word_type (expr_type e) /\
     (!elem n. expr_type e <> ArrayT elem (Dynamic n)) /\
+    ~is_abi_dynamic cenv.ce_struct_fields (expr_type e) /\
     evaluate_type (get_tenv cx) (expr_type e) = SOME tv /\
-    stmt_state_rel ctx func cenv cx es s /\
+    stmt_state_rel H ctx func cenv cx es s /\
     expr_val_at cenv cx (expr_type e) sx sy es v (Var root) s /\
     lookup_var root s = SOME a /\
     ptr_covers G tn root s (type_memory_bytes cenv (lowered_value_type cenv e)) /\
     compile_assign_value cenv (Lit k) (if tr then LocTransient else LocStorage)
-      (Var root) F loc (expr_type e) (lowered_value_type cenv e) NONE
+      (Var root) F loc (expr_type e) (lowered_value_type cenv e)
       (type_memory_bytes cenv (expr_type e)) sa = (z,sb) /\
     fn_has_code sa sb fn /\ not_fresh_at sa root /\
     ~s.vs_halted /\ ~s.vs_call_ctx.cc_static /\ ~ctx_has_dalloca ctx /\
@@ -107,7 +113,7 @@ Proof
     (gvs[] >> decide_tac) >>
   `ptr_covers G tn root s (32 * type_slot_size tv)` by metis_tac[] >>
   `compile_assign_value cenv (Lit k) (if tr then LocTransient else LocStorage)
-     (Var root) F loc (expr_type e) (expr_type e) NONE
+     (Var root) F loc (expr_type e) (expr_type e)
      (32 * type_slot_size tv) sa = (z,sb)` by metis_tac[] >>
   drule_all assign_base_storage_direct_counted >>
   disch_then (qspecl_then [`D`, `PG`] mp_tac) >>

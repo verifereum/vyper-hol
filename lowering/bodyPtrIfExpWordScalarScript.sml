@@ -10,10 +10,10 @@ Ancestors
 Theorem ifexp_scalar_word_suffix[local]:
   MEM opc [SLOAD;TLOAD;DLOAD] /\
   emit_op opc [p.ptr_operand] sm = (op,sb) /\
-  vv_post ctx fn cenv cx e es sa sm s0 ee raw
+  vv_post H ctx fn cenv cx e es sa sm s0 ee raw
     (LocatedValue (expr_type e) p) s /\
   read_result cx raw ee = (INL v,ee) /\
-  ghost_inv d cenv cx ee G tn s /\
+  ghost_inv H d cenv cx ee G tn s /\
   ghost_kept cenv es sa G0 tn0 s0 G tn /\
   local_ptrs_reserved cenv sa /\ ~ctx_has_dalloca ctx /\
   (!x sz. cenv.ce_return_buf = SOME (PtrVar (Var x) sz) ==> not_fresh_at sa x) /\
@@ -33,9 +33,9 @@ Theorem ifexp_scalar_word_suffix[local]:
   (!tv. evaluate_type (get_tenv cx) (expr_type e) = SOME tv ==>
         w = typed_val_to_w256 tv v) /\ is_word_type (expr_type e) ==>
   ?u G1 tn1. gas_path_ptr D 0 ctx fn PG G tn s 0 G1 tn1 (OK u) /\
-    expr_post ctx fn cenv cx e es sa sb s0 ee v op u /\
+    expr_post H ctx fn cenv cx e es sa sb s0 ee v op u /\
     ptr_val_ok cx (expr_type e) v op G1 tn1 u /\
-    ghost_inv d cenv cx ee G1 tn1 u /\
+    ghost_inv H d cenv cx ee G1 tn1 u /\
     ghost_kept cenv es sa G0 tn0 s0 G1 tn1 /\
     u.vs_current_bb = sb.cs_current_bb /\
     u.vs_inst_idx = LENGTH sb.cs_current_insts
@@ -57,10 +57,10 @@ Resume ifexp_scalar_word_suffix[post]:
     metis_tac[not_fresh_at_mono] >>
   `not_local_ptr cenv ee.scopes out` by
     (gvs[not_local_ptr_def, local_ptrs_reserved_def] >> metis_tac[]) >>
-  `stmt_state_rel ctx fn cenv cx ee u` by
+  `stmt_state_rel H ctx fn cenv cx ee u` by
     (simp[Abbr `u`, stmt_state_rel_inst_idx] >>
      irule stmt_state_rel_update_var >> gvs[vv_post_def]) >>
-  `vv_post ctx fn cenv cx e es sa sm s0 ee (Value v)
+  `vv_post H ctx fn cenv cx e es sa sm s0 ee (Value v)
      (LocatedValue (expr_type e) p) s` by
     (drule vv_post_read_result >> disch_then (fn th => fs[th])) >>
   irule expr_post_of_vv_post_load >> goal_assum (drule_at Any) >>
@@ -86,11 +86,11 @@ Finalise ifexp_scalar_word_suffix
 Theorem ifexp_storage_word_suffix:
   is_word_type (expr_type e) /\
   compile_ptr_load F cenv.ce_imm_alloca p.ptr_location p.ptr_operand sm = (op,sb) /\
-  vv_post ctx fn cenv cx e es sa sm s0 ee raw
+  vv_post H ctx fn cenv cx e es sa sm s0 ee raw
     (LocatedValue (expr_type e) p) s /\
   read_result cx raw ee = (INL v,ee) /\
   ptr_vv_ok cx (expr_type e) raw (LocatedValue (expr_type e) p) ee G tn s /\
-  ghost_inv d cenv cx ee G tn s /\
+  ghost_inv H d cenv cx ee G tn s /\
   ghost_kept cenv es sa G0 tn0 s0 G tn /\
   evaluate_type (get_tenv cx) (expr_type e) = SOME tvt /\ value_has_type tvt v /\
   local_ptrs_reserved cenv sa /\ ~ctx_has_dalloca ctx /\ ~cenv.ce_is_ctor /\
@@ -104,15 +104,15 @@ Theorem ifexp_storage_word_suffix:
   s.vs_inst_idx = LENGTH sm.cs_current_insts /\
   p.ptr_location = (if tr then LocTransient else LocStorage) ==>
   ?u G1 tn1. gas_path_ptr D 0 ctx fn PG G tn s 0 G1 tn1 (OK u) /\
-    expr_post ctx fn cenv cx e es sa sb s0 ee v op u /\
+    expr_post H ctx fn cenv cx e es sa sb s0 ee v op u /\
     ptr_val_ok cx (expr_type e) v op G1 tn1 u /\
-    ghost_inv d cenv cx ee G1 tn1 u /\
+    ghost_inv H d cenv cx ee G1 tn1 u /\
     ghost_kept cenv es sa G0 tn0 s0 G1 tn1 /\
     u.vs_current_bb = sb.cs_current_bb /\
     u.vs_inst_idx = LENGTH sb.cs_current_insts
 Proof
   strip_tac >>
-  `vv_post ctx fn cenv cx e es sa sm s0 ee (Value v)
+  `vv_post H ctx fn cenv cx e es sa sm s0 ee (Value v)
      (LocatedValue (expr_type e) p) s` by
     (drule vv_post_read_result >> disch_then (fn th => fs[th])) >>
   `?a. eval_operand p.ptr_operand s = SOME a /\
@@ -135,11 +135,11 @@ QED
 Theorem ifexp_code_word_suffix:
   is_word_type (expr_type e) /\
   compile_ptr_load F cenv.ce_imm_alloca p.ptr_location p.ptr_operand sm = (op,sb) /\
-  vv_post ctx fn cenv cx e es sa sm s0 ee raw
+  vv_post H ctx fn cenv cx e es sa sm s0 ee raw
     (LocatedValue (expr_type e) p) s /\
   read_result cx raw ee = (INL v,ee) /\
   ptr_vv_ok cx (expr_type e) raw (LocatedValue (expr_type e) p) ee G tn s /\
-  ghost_inv d cenv cx ee G tn s /\
+  ghost_inv H d cenv cx ee G tn s /\
   ghost_kept cenv es sa G0 tn0 s0 G tn /\
   evaluate_type (get_tenv cx) (expr_type e) = SOME tvt /\ value_has_type tvt v /\
   local_ptrs_reserved cenv sa /\ ~ctx_has_dalloca ctx /\ ~cenv.ce_is_ctor /\
@@ -152,20 +152,20 @@ Theorem ifexp_code_word_suffix:
   ~s.vs_halted /\ s.vs_current_bb = sm.cs_current_bb /\
   s.vs_inst_idx = LENGTH sm.cs_current_insts /\ p.ptr_location = LocCode ==>
   ?u G1 tn1. gas_path_ptr D 0 ctx fn PG G tn s 0 G1 tn1 (OK u) /\
-    expr_post ctx fn cenv cx e es sa sb s0 ee v op u /\
+    expr_post H ctx fn cenv cx e es sa sb s0 ee v op u /\
     ptr_val_ok cx (expr_type e) v op G1 tn1 u /\
-    ghost_inv d cenv cx ee G1 tn1 u /\
+    ghost_inv H d cenv cx ee G1 tn1 u /\
     ghost_kept cenv es sa G0 tn0 s0 G1 tn1 /\
     u.vs_current_bb = sb.cs_current_bb /\
     u.vs_inst_idx = LENGTH sb.cs_current_insts
 Proof
   strip_tac >>
-  `vv_post ctx fn cenv cx e es sa sm s0 ee (Value v)
+  `vv_post H ctx fn cenv cx e es sa sm s0 ee (Value v)
      (LocatedValue (expr_type e) p) s` by
     (drule vv_post_read_result >> disch_then (fn th => fs[th])) >>
   `?a. eval_operand p.ptr_operand s = SOME a /\
        immutable_holds cenv cx (expr_type e) (Value v) a ee s /\
-       stmt_state_rel ctx fn cenv cx ee s` by
+       stmt_state_rel H ctx fn cenv cx ee s` by
     gvs[vv_post_def, vv_holds_def] >>
   drule_all immutable_holds_dload >> strip_tac >>
   `op_taint tn p.ptr_operand = {}` by gvs[ptr_vv_ok_def] >>

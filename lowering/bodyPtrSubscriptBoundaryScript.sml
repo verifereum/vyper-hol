@@ -4,7 +4,7 @@ Ancestors
   bodyPtrDefs bodyPtrSubscriptCoverage
 
 Theorem ghost_inv_local_representation:
-  ghost_inv d cenv cx es G tn s /\
+  ghost_inv H d cenv cx es G tn s /\
   lookup_scopes name es.scopes = SOME entry /\
   FLOOKUP cenv.ce_vars name = SOME (PtrVar (Var p) sz) /\
   lookup_var p s = SOME w /\

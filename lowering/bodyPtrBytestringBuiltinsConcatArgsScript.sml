@@ -109,7 +109,7 @@ Theorem concat_args_sim_ptr:
   (!e st. MEM e args /\ expr_sim_inv cenv cx env st ==> expr_body_pre cenv cx env e st) /\
   body_inv tops ctx cenv cx /\ body_exprs_ptr_ok cx args /\
   fn_has_code sa sb func /\ fn_inst_ids_distinct func /\ local_ptrs_reserved cenv sa /\
-  stmt_state_rel ctx func cenv cx es s0 /\ ~s0.vs_halted /\
+  stmt_state_rel H ctx func cenv cx es s0 /\ ~s0.vs_halted /\
   s0.vs_current_bb = sa.cs_current_bb /\ s0.vs_inst_idx = LENGTH sa.cs_current_insts /\
   lookup_var dv s0 = SOME (n2w (B+32)) /\ lookup_var ov s0 = SOME ow /\
   not_fresh_at sa dv /\ not_fresh_at sa ov /\
@@ -123,17 +123,17 @@ Theorem concat_args_sim_ptr:
   mload (w2n ow) s0 = n2w k /\ k <= P /\
   32+P+SUM (MAP concat_payload_capacity (MAP expr_type args)) <= bsz /\
   32+concat_data_bound P (MAP expr_type args) <= bsz /\
-  ghost_inv d cenv cx es G0 tn0 s0 /\
+  ghost_inv H d cenv cx es G0 tn0 s0 /\
   ptr_covers G0 tn0 dv s0 (bsz-32) /\ ptr_covers G0 tn0 ov s0 32 /\
   (!i. B+32 <= i /\ i < B+32+k ==> i NOTIN tn0.t_mem) /\
   (!i. w2n ow <= i /\ i < w2n ow+32 ==> i NOTIN tn0.t_mem) /\
   ~ctx_has_dalloca ctx /\ ~cenv.ce_is_ctor /\
   (!z sz. cenv.ce_return_buf = SOME (PtrVar (Var z) sz) ==> not_fresh_at sa z) /\
   (!z sz. cenv.ce_return_pc = SOME (PtrVar (Var z) sz) ==> not_fresh_at sa z) ==>
-  gas_outcome_ptr (cx_dead cx) (cx_tops cx) (ctx,func) PG (eval_exprs cx args) (es,s0,G0,tn0)
+  gas_outcome_ptr (cx_dead H cx) (cx_tops cx) (ctx,func) PG (eval_exprs cx args) (es,s0,G0,tn0)
     (\rr ee G tn t. ?vs. rr = INL vs /\
       t.vs_current_bb = sb.cs_current_bb /\ t.vs_inst_idx = LENGTH sb.cs_current_insts /\
-      expr_sim_inv cenv cx env ee /\ stmt_state_rel ctx func cenv cx ee t /\
+      expr_sim_inv cenv cx env ee /\ stmt_state_rel H ctx func cenv cx ee t /\
       LIST_REL (\e v. ?tv. evaluate_type (get_tenv cx) (expr_type e) = SOME tv /\ value_has_type tv v) args vs /\
       mem_bytes_at (B+32) (k+LENGTH (FLAT (MAP (\v. case v of BytesV bs => bs | StringV str => MAP (n2w o ORD) str | _ => []) vs))) t.vs_memory =
         mem_bytes_at (B+32) k s0.vs_memory ++ FLAT (MAP (\v. case v of BytesV bs => bs | StringV str => MAP (n2w o ORD) str | _ => []) vs) /\
@@ -155,7 +155,7 @@ Theorem concat_args_sim_ptr:
               regions_disjoint p n b sz) ==>
            mem_bytes_at p n t.vs_memory = mem_bytes_at p n s0.vs_memory) /\
       MAP FDOM es.scopes = MAP FDOM ee.scopes /\
-      ghost_inv d cenv cx ee G tn t /\ ghost_kept cenv es sa G0 tn0 s0 G tn /\
+      ghost_inv H d cenv cx ee G tn t /\ ghost_kept cenv es sa G0 tn0 s0 G tn /\
       ptr_covers G tn dv t (bsz-32) /\ ptr_covers G tn ov t 32 /\ ~t.vs_halted /\
       (!i. B+32 <= i /\ i < B+32+k+LENGTH (FLAT (MAP (\v. case v of BytesV bs => bs | StringV str => MAP (n2w o ORD) str | _ => []) vs)) ==> i NOTIN tn.t_mem) /\
       (!i. w2n ow <= i /\ i < w2n ow+32 ==> i NOTIN tn.t_mem))
@@ -236,8 +236,8 @@ Resume concat_args_sim_ptr[tail]:
     (irule_at (Pat `gas_outcome_ptr _ _ _ _ _ _ _ _`)) >>
   qpat_assum `compile_concat _ _ args _ _ _ s2 = _`
     (irule_at (Pat `compile_concat _ _ _ _ _ _ _ = _`)) >>
-  qpat_assum `ghost_inv d cenv cx ee Gf tnf t2`
-    (irule_at (Pat `ghost_inv _ _ _ _ _ _ _`)) >>
+  qpat_assum `ghost_inv H d cenv cx ee Gf tnf t2`
+    (irule_at (Pat `ghost_inv _ _ _ _ _ _ _ _`)) >>
   qpat_assum `mload (w2n ow) t2 = _`
     (irule_at (Pat `mload _ _ = _`)) >>
   qexistsl [`tops`, `oinst`, `env`, `bsz`, `binst`,
@@ -279,7 +279,7 @@ Resume concat_args_sim_ptr[compose]:
   rpt gen_tac >> strip_tac >>
   qpat_x_assum `res = INL vs` SUBST1_TAC >>
   qexists_tac `v::vs` >> simp[] >>
-  qpat_assum `expr_post _ _ _ _ _ _ _ _ _ _ _ _ _`
+  qpat_assum `expr_post _ _ _ _ _ _ _ _ _ _ _ _ _ _`
     (strip_assume_tac o REWRITE_RULE [expr_post_def]) >>
   conj_tac >- metis_tac[freshWritesTheory.not_fresh_at_mono, ci_mono_def] >>
   conj_tac >- metis_tac[] >>
@@ -292,7 +292,7 @@ Resume concat_args_sim_ptr[frames]:
   `!aid a. FLOOKUP s0.vs_allocas aid = SOME a ==> FLOOKUP t2.vs_allocas aid = SOME a` by
     metis_tac[] >>
   `local_ptrs_rel func cenv es.scopes s0` by
-    (qpat_assum `stmt_state_rel ctx func cenv cx es s0` mp_tac >>
+    (qpat_assum `stmt_state_rel H ctx func cenv cx es s0` mp_tac >>
      rpt (pop_assum kall_tac) >> simp[stmt_state_rel_def, state_rel_def]) >>
   `!n b sz. local_region cenv ee.scopes t2 n b sz <=>
              local_region cenv es.scopes s0 n b sz` by

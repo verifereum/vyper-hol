@@ -24,8 +24,8 @@ Theorem binop_typed_scalar_continuation:
   eval_operand y s = SOME (val_to_w256 v2) /\
   (!z. x = Var z ==> not_fresh_at sa z) /\
   (!z. y = Var z ==> not_fresh_at sa z) /\
-  local_ptrs_reserved cenv sa /\ stmt_state_rel ctx fn cenv cx es s /\
-  ghost_inv d cenv cx es G tn s /\
+  local_ptrs_reserved cenv sa /\ stmt_state_rel H ctx fn cenv cx es s /\
+  ghost_inv H d cenv cx es G tn s /\
   (!z sz. cenv.ce_return_pc = SOME (PtrVar (Var z) sz) ==> not_fresh_at sa z) /\
   (!z sz. cenv.ce_return_buf = SOME (PtrVar (Var z) sz) ==> not_fresh_at sa z) /\
   ghost_kept cenv frame_es origin G0 tn0 s0 G tn /\
@@ -33,22 +33,22 @@ Theorem binop_typed_scalar_continuation:
   scalar_available
     (A UNION BIGUNION (set (MAP (\i. set i.inst_outputs)
                                (emitted_insts sa sb)))) op ==>
-  (?v t H tm.
+  (?v t HG tm.
     bop_result cx ann bop tys v1 v2 es0 = INL v /\ word_value v /\
-    gas_path_ptr D 0 ctx fn PG G tn s 0 H tm
+    gas_path_ptr D 0 ctx fn PG G tn s 0 HG tm
       (OK (t with vs_inst_idx := LENGTH sb.cs_current_insts)) /\
-    stmt_state_rel ctx fn cenv cx es (t with vs_inst_idx := LENGTH sb.cs_current_insts) /\
+    stmt_state_rel H ctx fn cenv cx es (t with vs_inst_idx := LENGTH sb.cs_current_insts) /\
     eval_operand op (t with vs_inst_idx := LENGTH sb.cs_current_insts) = SOME (val_to_w256 v) /\
     (!z w. not_fresh_at sa z /\ lookup_var z s = SOME w ==>
        lookup_var z (t with vs_inst_idx := LENGTH sb.cs_current_insts) = SOME w) /\
     (!aid b. FLOOKUP s.vs_allocas aid = SOME b ==> FLOOKUP t.vs_allocas aid = SOME b) /\
     t.vs_memory = s.vs_memory /\ ~t.vs_halted /\ t.vs_current_bb = sb.cs_current_bb /\
-    ghost_inv d cenv cx es H tm (t with vs_inst_idx := LENGTH sb.cs_current_insts) /\
-    ghost_kept cenv frame_es origin G0 tn0 s0 H tm /\
-    op_prov H op = NONE /\ op_taint tm op = {}) \/
-  (?msg t j H tm.
+    ghost_inv H d cenv cx es HG tm (t with vs_inst_idx := LENGTH sb.cs_current_insts) /\
+    ghost_kept cenv frame_es origin G0 tn0 s0 HG tm /\
+    op_prov HG op = NONE /\ op_taint tm op = {}) \/
+  (?msg t j HG tm.
     bop_result cx ann bop tys v1 v2 es0 = INR (Error (RuntimeError msg)) /\
-    gas_path_ptr D 0 ctx fn PG G tn s 0 H tm
+    gas_path_ptr D 0 ctx fn PG G tn s 0 HG tm
       (Abort Revert_abort (t with vs_inst_idx := j)))
 Proof
   strip_tac >>

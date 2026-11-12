@@ -10,7 +10,7 @@ Theorem assign_base_widen_allocation:
     compile_bytestring_widen_copy d x k sm = (op,sb) /\
     0 < k /\ k <= d /\ d < dimword (:256) /\
     fn_has_code sm sb func /\ fn_inst_ids_distinct func /\
-    stmt_state_rel ctx func cenv cx es s /\ local_ptrs_reserved cenv sm /\
+    stmt_state_rel H ctx func cenv cx es s /\ local_ptrs_reserved cenv sm /\
     (!z. x = Var z ==> not_fresh_at sm z) /\
     eval_operand x s = SOME p /\ ~is_word_type (expr_type e) /\
     evaluate_type (get_tenv cx) (expr_type e) = SOME tv /\

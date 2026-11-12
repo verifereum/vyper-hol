@@ -22,7 +22,7 @@ Proof
 QED
 
 Theorem literal_store_runtime_frame:
-  stmt_state_rel ctx func ce cx es s /\ ~ce.ce_is_ctor /\
+  stmt_state_rel H ctx func ce cx es s /\ ~ce.ce_is_ctor /\
   local_ptrs_reserved ce sa /\
   (t with <|vs_vars := s.vs_vars; vs_memory := s.vs_memory;
     vs_inst_idx := s.vs_inst_idx|>) = s /\
@@ -32,13 +32,13 @@ Theorem literal_store_runtime_frame:
     p <= i /\ i < p+n ==> ~(b <= i /\ i < b+k)) /\
   (!i. ~(b <= i /\ i < b+k) ==>
     mem_bytes_at i 1 t.vs_memory = mem_bytes_at i 1 s.vs_memory) ==>
-  stmt_state_rel ctx func ce cx es t
+  stmt_state_rel H ctx func ce cx es t
 Proof
   disch_then (map_every assume_tac o CONJUNCTS) >>
   `!name p n. local_region ce es.scopes s name p n ==>
     mem_bytes_at p n t.vs_memory = mem_bytes_at p n s.vs_memory` by
     (metis_tac[literal_store_local_bytes]) >>
-  `stmt_state_rel ctx func ce cx es (t with vs_inst_idx := s.vs_inst_idx)`
+  `stmt_state_rel H ctx func ce cx es (t with vs_inst_idx := s.vs_inst_idx)`
     suffices_by simp[exprLoweringPropsTheory.stmt_state_rel_inst_idx] >>
   irule literal_state_memory_frame >> simp[] >>
   qexists `s` >> simp[local_ptrs_reserved_def] >>

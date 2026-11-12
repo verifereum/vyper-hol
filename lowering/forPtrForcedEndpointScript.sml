@@ -46,28 +46,28 @@ Theorem forced_endpoint_bind_outcome_ptr:
           not_fresh_at sa x) /\
   (!x sz. cenv.ce_return_pc = SOME (PtrVar (Var x) sz) ==>
           not_fresh_at sa x) /\
-  stmt_state_rel ctx func cenv cx es s0 /\
-  ghost_inv d cenv cx es G0 tn0 s0 /\ ~s0.vs_halted /\
+  stmt_state_rel H ctx func cenv cx es s0 /\
+  ghost_inv H d cenv cx es G0 tn0 s0 /\ ~s0.vs_halted /\
   s0.vs_current_bb = sa.cs_current_bb /\
   s0.vs_inst_idx = LENGTH sa.cs_current_insts /\
   gas_admissible (bind (bind (eval_expr cx e) (read_result cx)) next)
     (stmt_res_ok lctx) es /\
   (!marks v mid G tn t.
-    gas_marked_exec_ptr (cx_dead cx) (ctx,func) PG
+    gas_marked_exec_ptr (cx_dead H cx) (ctx,func) PG
       (bind (eval_expr cx e) (read_result cx))
       (es,s0,G0,tn0) marks (INL v) mid G tn (OK t) /\
-    expr_post ctx func cenv cx e es sa sb s0 mid v op t /\
+    expr_post H ctx func cenv cx e es sa sb s0 mid v op t /\
     t.vs_current_bb = sb.cs_current_bb /\
     t.vs_inst_idx = LENGTH sb.cs_current_insts /\
-    ghost_inv d cenv cx mid G tn t /\
+    ghost_inv H d cenv cx mid G tn t /\
     ptr_val_ok cx (post_value_type cenv e) v op G tn t /\
     (~is_word_type (post_value_type cenv e) ==> ptr_buf_ok cenv e op G t) /\
     ghost_kept cenv es sa G0 tn0 s0 G tn /\
     gas_admissible (next v) (stmt_res_ok lctx) (mid with gas_obs := []) ==>
-    gas_outcome_ptr (cx_dead cx) (cx_tops cx) (ctx,func) PG (next v)
+    gas_outcome_ptr (cx_dead H cx) (cx_tops cx) (ctx,func) PG (next v)
       (mid with gas_obs := [],t,G,tn) Post
       (\res ee gt r. !tail. stmt_exit_ptr RetQ (ee with gas_obs := tail) res gt r)) ==>
-  gas_outcome_ptr (cx_dead cx) (cx_tops cx) (ctx,func) PG
+  gas_outcome_ptr (cx_dead H cx) (cx_tops cx) (ctx,func) PG
     (bind (bind (eval_expr cx e) (read_result cx)) next)
     (es,s0,G0,tn0) Post
     (\res ee gt r. !tail. stmt_exit_ptr RetQ (ee with gas_obs := tail) res gt r)
@@ -90,7 +90,7 @@ Resume forced_endpoint_bind_outcome_ptr[normal]:
     (irule gas_admissible_bind_tail >> goal_assum (drule_at Any) >>
      qexists_tac `gas_explicit marks s0.vs_gas_readings` >>
      fs[gas_marked_exec_ptr_def]) >>
-  `gas_marked_exec_ptr (cx_dead cx) (ctx,func) PG
+  `gas_marked_exec_ptr (cx_dead H cx) (ctx,func) PG
      (bind (eval_expr cx e) (read_result cx)) (es,s0,G0,tn0)
      marks (INL v) (es_end with gas_obs := []) G tn (OK t)` by
     fs[gas_marked_exec_ptr_def] >>

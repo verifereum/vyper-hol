@@ -134,11 +134,11 @@ Resume compile_for_range_frag_ptr[allocation]:
   `!q. cenv.ce_return_buf <> SOME (PtrVar (Var p) q)` by metis_tac[] >>
   `?u a.
     step_inst_base A s0 = OK u /\
-    stmt_state_rel ctx func cenv cx es u /\ lookup_var p u = SOME a /\
+    stmt_state_rel H ctx func cenv cx es u /\ lookup_var p u = SOME a /\
     FLOOKUP u.vs_allocas sa.cs_next_id = SOME (w2n a,sz) /\
     u.vs_current_bb = s0.vs_current_bb /\ u.vs_inst_idx = s0.vs_inst_idx /\
     ~u.vs_halted /\
-    gas_path_ptr (cx_dead cx) 0 ctx func PG G0 tn0 s0 0
+    gas_path_ptr (cx_dead H cx) 0 ctx func PG G0 tn0 s0 0
       (step_prov PG G0 A u) (step_taint A s0 u tn0)
       (OK (u with vs_inst_idx := SUC s0.vs_inst_idx)) /\
     ptr_covers (step_prov PG G0 A u) (step_taint A s0 u tn0) p u sz /\
@@ -149,7 +149,7 @@ Resume compile_for_range_frag_ptr[allocation]:
       op_taint (step_taint A s0 u tn0) (Var x) = op_taint tn0 (Var x))` by
     (simp[NoAsms, Abbr `A`] >>
      irule for_range_alloca_entry_path_ptr >> simp[] >> metis_tac[]) >>
-  `ghost_inv d cenv cx es (step_prov PG G0 A u) (step_taint A s0 u tn0) u` by
+  `ghost_inv H d cenv cx es (step_prov PG G0 A u) (step_taint A s0 u tn0) u` by
     (simp[Abbr `A`] >> irule for_alloca_ghost_inv >> simp[] >> metis_tac[]) >>
   suspend "initialization"
 QED
@@ -161,24 +161,24 @@ Resume compile_for_range_frag_ptr[initialization]:
     (update_var ev (i2w n2) (update_var cv (i2w n1) (jump_to entry_lbl u)))` >>
   qabbrev_tac `Gc = DRESTRICT (DRESTRICT Ga (COMPL {cv})) (COMPL {ev})` >>
   qabbrev_tac `tc = ta with t_var := (ta.t_var |+ (cv,{})) |+ (ev,{})` >>
-  `gas_path_ptr (cx_dead cx) 0 ctx func PG Ga ta
+  `gas_path_ptr (cx_dead H cx) 0 ctx func PG Ga ta
     (u with vs_inst_idx := SUC s0.vs_inst_idx) 0 Ga ta
     (OK (jump_to entry_lbl u))` by
     (simp[NoAsms, jump_to_def] >> irule (SRULE [jump_to_def] (Q.INST
        [`s` |-> `u with vs_inst_idx := SUC s0.vs_inst_idx`]
        (SPEC_ALL for_range_jump_path_ptr))) >>
      simp[get_instruction_def, EL_APPEND_EQN, jump_to_def] >> metis_tac[]) >>
-  `gas_path_ptr (cx_dead cx) 0 ctx func PG Ga ta (jump_to entry_lbl u) 0 Gc tc
+  `gas_path_ptr (cx_dead H cx) 0 ctx func PG Ga ta (jump_to entry_lbl u) 0 Gc tc
     (OK cc)` by
     (simp[Abbr `cc`, Abbr `Gc`, Abbr `tc`] >>
      irule (SRULE [wordsTheory.WORD_SUB_ADD2]
        (Q.INST [`a` |-> `i2w n1`, `b` |-> `i2w n2 - i2w n1`]
          (SPEC_ALL for_range_literal_entry_path_ptr))) >>
      simp[jump_to_def] >> metis_tac[]) >>
-  `gas_path_ptr (cx_dead cx) 0 ctx func PG G0 tn0 s0 0 Gc tc (OK cc)` by
+  `gas_path_ptr (cx_dead H cx) 0 ctx func PG G0 tn0 s0 0 Gc tc (OK cc)` by
     (rev_dxrule gas_path_ptr_then >> disch_then dxrule >> simp[] >> strip_tac >>
      gvs[] >> dxrule gas_path_ptr_then >> disch_then drule >> simp[]) >>
-  `ghost_inv d cenv cx es Gc tc cc` by
+  `ghost_inv H d cenv cx es Gc tc cc` by
     (simp[NoAsms, Abbr `cc`, Abbr `Gc`, Abbr `tc`] >>
      irule (SRULE [] for_range_literal_entry_ghost) >>
      simp[stmtFragPtrTheory.ghost_inv_jump_to, jump_to_def] >> metis_tac[]) >>
@@ -186,7 +186,7 @@ Resume compile_for_range_frag_ptr[initialization]:
 QED
 
 Resume compile_for_range_frag_ptr[entry_state]:
-  `stmt_state_rel ctx func cenv cx es cc` by
+  `stmt_state_rel H ctx func cenv cx es cc` by
     (simp[Abbr `cc`, stmt_state_rel_jump_to] >>
      irule stmt_state_rel_update_var >> simp[] >>
      irule stmt_state_rel_update_var >> simp[stmt_state_rel_jump_to]) >>
@@ -227,7 +227,7 @@ Resume compile_for_range_frag_ptr[loop]:
   qabbrev_tac `Inv = \j ei G tn s.
     P ei /\ lookup_scopes id ei.scopes = NONE /\ j <= Num (n2-n1) /\
     s.vs_current_bb = cond_lbl /\ s.vs_inst_idx = 0 /\ ~s.vs_halted /\
-    stmt_state_rel ctx func cenv cx ei s /\ ghost_inv d cenv cx ei G tn s /\
+    stmt_state_rel H ctx func cenv cx ei s /\ ghost_inv H d cenv cx ei G tn s /\
     lookup_var cv s = SOME (i2w (n1 + &j)) /\
     lookup_var ev s = SOME (i2w n2) /\ lookup_var p s = SOME a /\
     FLOOKUP G cv = NONE /\ FLOOKUP G ev = NONE /\
@@ -242,7 +242,7 @@ Resume compile_for_range_frag_ptr[loop]:
       op_taint tn (Var x) = op_taint tn0 (Var x))` >>
   qabbrev_tac `Done = \ei G tn t.
     t.vs_current_bb = exit_lbl /\ t.vs_inst_idx = 0 /\ ~t.vs_halted /\
-    stmt_state_rel ctx func cenv cx ei t /\ ghost_inv d cenv cx ei G tn t /\
+    stmt_state_rel H ctx func cenv cx ei t /\ ghost_inv H d cenv cx ei G tn t /\
     (!x v. not_fresh_at sa x /\ lookup_var x s0 = SOME v ==>
       lookup_var x t = SOME v) /\
     (!x. not_fresh_at sa x ==> FLOOKUP G x = FLOOKUP G0 x /\

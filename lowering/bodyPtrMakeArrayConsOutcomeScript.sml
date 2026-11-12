@@ -50,7 +50,7 @@ QED
    ees = the literal expression's source input, sf = its target input, and
    fr = its compile_expr entry state before allocation.  These are the
    es,s0,sa quantified in expr_vv_sim_ptr_def, which supplies
-   stmt_state_rel ctx func ce cx ees sf independently of the current loop
+   stmt_state_rel H ctx func ce cx ees sf independently of the current loop
    endpoint.  literal_alloca_ghost_endpoint (AllocationFrame) consumes that
    same initial relation and returns ghost_kept relative to es,sa,s.
    Cons recursion must retain the initial relation as an explicit fixed
@@ -63,7 +63,7 @@ QED
 Theorem literal_cons_zero_endpoint:
   literal_loop_frame pure ctx func ce cx d root aid addr capacity
     ees fr sf Gf tnf esi si G0 tn0 s0 cells off /\
-  literal_prefix_ok cells tn0 s0 /\ stmt_state_rel ctx func ce cx ees sf /\
+  literal_prefix_ok cells tn0 s0 /\ stmt_state_rel H ctx func ce cx ees sf /\
   compile_expr ce (expr_type e) e si = (vv,sm) /\
   emit_op ADD [Var root; Lit (n2w off)] sm = (Var dst,sn) /\
   unwrap_value ce vv sn = (op,su) /\
@@ -79,22 +79,22 @@ Theorem literal_cons_zero_endpoint:
   ~is_word_type (expr_type e) /\ ~is_bytestring_type (expr_type e) /\
   s.vs_current_bb = sm.cs_current_bb /\ s.vs_inst_idx = LENGTH sm.cs_current_insts /\
   ~s.vs_halted /\ lookup_var root s = SOME a /\ op_taint tn (Var root) = {} /\
-  vv_post ctx func ce cx e esi si sm s0 es' raw vv s /\
+  vv_post H ctx func ce cx e esi si sm s0 es' raw vv s /\
   ptr_vv_ok cx (expr_type e) raw vv es' G tn s /\
   (!t op. vv = StackValue t op ==> ptr_buf_ok ce e op G s) /\
   (!t p. vv = LocatedValue t p /\ p.ptr_location = LocMemory ==>
     ptr_buf_ok ce e p.ptr_operand G s) /\
-  ghost_inv d ce cx es' G tn s /\ ghost_kept ce esi si G0 tn0 s0 G tn /\
+  ghost_inv H d ce cx es' G tn s /\ ghost_kept ce esi si G0 tn0 s0 G tn /\
   (pure ==> ~expr_has_effect e) ==>
-  ?z H tm.
-    gas_path_ptr D 0 ctx func PG G tn s 0 H tm (OK z) /\
+  ?z HG tm.
+    gas_path_ptr D 0 ctx func PG G tn s 0 HG tm (OK z) /\
     literal_loop_frame pure ctx func ce cx d root aid addr capacity
-      ees fr sf Gf tnf es' sb H tm z (cells ++ [(tv,v,addr+off,0)]) off /\
+      ees fr sf Gf tnf es' sb HG tm z (cells ++ [(tv,v,addr+off,0)]) off /\
     literal_prefix_ok (cells ++ [(tv,v,addr+off,0)]) tm z
 Proof
   disch_then (map_every assume_tac o CONJUNCTS) >>
   drule_all literal_cons_compiler_stages >> strip_tac >>
-  `stmt_state_rel ctx func ce cx esi s0` by metis_tac[literal_loop_frame_runtime] >>
+  `stmt_state_rel H ctx func ce cx esi s0` by metis_tac[literal_loop_frame_runtime] >>
   `si.cs_next_var <= sm.cs_next_var /\ si.cs_next_var <= sb.cs_next_var /\
    si.cs_next_id <= sb.cs_next_id` by gvs[ci_mono_def] >>
   drule_all literal_zero_child_materialize >>
@@ -106,7 +106,7 @@ Proof
     (irule loweringPostsTheory.post_value_type_lowered >> first_assum ACCEPT_TAC) >>
   `?a mem. val_in_memory tv v a mem` by
     (gvs[expr_post_def, expr_val_rel_def] >> metis_tac[]) >>
-  qexistsl [`z`, `H`, `tm`] >> simp[] >>
+  qexistsl [`z`, `HG`, `tm`] >> simp[] >>
   drule_all literal_zero_frame_extend >> simp[]
 QED
 
@@ -114,7 +114,7 @@ QED
 Theorem literal_cons_flat_endpoint:
   literal_loop_frame pure ctx func ce cx d root aid addr capacity
     ees fr sf Gf tnf esi si G0 tn0 s0 cells off /\
-  literal_prefix_ok cells tn0 s0 /\ stmt_state_rel ctx func ce cx ees sf /\
+  literal_prefix_ok cells tn0 s0 /\ stmt_state_rel H ctx func ce cx ees sf /\
   compile_expr ce (expr_type e) e si = (vv,sm) /\
   emit_op ADD [Var root; Lit (n2w off)] sm = (Var dst,sn) /\
   unwrap_value ce vv sn = (op,su) /\
@@ -131,17 +131,17 @@ Theorem literal_cons_flat_endpoint:
   s.vs_current_bb = sm.cs_current_bb /\ s.vs_inst_idx = LENGTH sm.cs_current_insts /\
   ~s.vs_halted /\ lookup_var root s = SOME (n2w addr) /\
   ptr_covers G tn root s capacity /\ FLOOKUP G root = SOME (addr,capacity) /\
-  vv_post ctx func ce cx e esi si sm s0 es' raw vv s /\
+  vv_post H ctx func ce cx e esi si sm s0 es' raw vv s /\
   ptr_vv_ok cx (expr_type e) raw vv es' G tn s /\
   (!t op. vv = StackValue t op ==> ptr_buf_ok ce e op G s) /\
   (!t p. vv = LocatedValue t p /\ p.ptr_location = LocMemory ==>
     ptr_buf_ok ce e p.ptr_operand G s) /\
-  ghost_inv d ce cx es' G tn s /\ ghost_kept ce esi si G0 tn0 s0 G tn /\
+  ghost_inv H d ce cx es' G tn s /\ ghost_kept ce esi si G0 tn0 s0 G tn /\
   (pure ==> ~expr_has_effect e) ==>
-  ?z H tm.
-    gas_path_ptr D 0 ctx func PG G tn s 0 H tm (OK z) /\
+  ?z HG tm.
+    gas_path_ptr D 0 ctx func PG G tn s 0 HG tm (OK z) /\
     literal_loop_frame pure ctx func ce cx d root aid addr capacity
-      ees fr sf Gf tnf es' sb H tm z (cells ++ [(tv,v,addr+off,k)]) (off+k) /\
+      ees fr sf Gf tnf es' sb HG tm z (cells ++ [(tv,v,addr+off,k)]) (off+k) /\
     literal_prefix_ok (cells ++ [(tv,v,addr+off,k)]) tm z
 Proof
   disch_then (map_every assume_tac o CONJUNCTS) >>
@@ -149,7 +149,7 @@ Proof
     (irule loweringPostsTheory.post_value_type_lowered >> first_assum ACCEPT_TAC) >>
   drule_all literal_cons_compiler_stages >> strip_tac >>
   drule literal_loop_frame_allocation >> strip_tac >>
-  `stmt_state_rel ctx func ce cx esi s0` by metis_tac[literal_loop_frame_runtime] >>
+  `stmt_state_rel H ctx func ce cx esi s0` by metis_tac[literal_loop_frame_runtime] >>
   `off < capacity /\ op_taint tn (Var root) = {}` by
     (gvs[bodyPtrDefsTheory.ptr_covers_def] >> decide_tac) >>
   `si.cs_next_var <= sm.cs_next_var /\ si.cs_next_var <= su.cs_next_var /\
@@ -164,7 +164,7 @@ Proof
   `w2n (n2w addr + n2w off : bytes32) = addr+off` by
     (simp[wordsTheory.word_add_n2w, wordsTheory.w2n_n2w] >>
      irule arithmeticTheory.LESS_MOD >> decide_tac) >>
-  `?src a. op = Var src /\ lookup_var src z = SOME a /\ ptr_covers H tm src z k` by
+  `?src a. op = Var src /\ lookup_var src z = SOME a /\ ptr_covers HG tm src z k` by
     (gvs[bodyPtrDefsTheory.ptr_buf_ok_def, expr_post_def, expr_val_rel_def,
          bodyPtrDefsTheory.ptr_val_ok_def, bodyPtrDefsTheory.ptr_covers_def,
          venomStateTheory.eval_operand_def] >> metis_tac[]) >>
@@ -174,7 +174,7 @@ Proof
   drule_at (Pat `compile_store_memory _ _ _ _ _ _ = _`) literal_flat_loop_store >>
   simp[] >> disch_then drule_all >>
   disch_then (qspecl_then [`PG`, `D`] strip_assume_tac) >>
-  qexistsl [`z'`, `H`, `tm'`] >> simp[] >>
+  qexistsl [`z'`, `HG`, `tm'`] >> simp[] >>
   metis_tac[gas_path_ptr_then, arithmeticTheory.ADD]
 QED
 
@@ -182,7 +182,7 @@ QED
 Theorem literal_cons_bytes_endpoint:
   literal_loop_frame pure ctx func ce cx d root aid addr capacity
     ees fr sf Gf tnf esi si G0 tn0 s0 cells off /\
-  literal_prefix_ok cells tn0 s0 /\ stmt_state_rel ctx func ce cx ees sf /\
+  literal_prefix_ok cells tn0 s0 /\ stmt_state_rel H ctx func ce cx ees sf /\
   compile_expr ce (expr_type e) e si = (vv,sm) /\
   emit_op ADD [Var root; Lit (n2w off)] sm = (Var dst,sn) /\
   unwrap_value ce vv sn = (op,su) /\
@@ -199,17 +199,17 @@ Theorem literal_cons_bytes_endpoint:
   s.vs_current_bb = sm.cs_current_bb /\ s.vs_inst_idx = LENGTH sm.cs_current_insts /\
   ~s.vs_halted /\ lookup_var root s = SOME (n2w addr) /\
   ptr_covers G tn root s capacity /\ FLOOKUP G root = SOME (addr,capacity) /\
-  vv_post ctx func ce cx e esi si sm s0 es' raw vv s /\
+  vv_post H ctx func ce cx e esi si sm s0 es' raw vv s /\
   ptr_vv_ok cx (expr_type e) raw vv es' G tn s /\
   (!t op. vv = StackValue t op ==> ptr_buf_ok ce e op G s) /\
   (!t p. vv = LocatedValue t p /\ p.ptr_location = LocMemory ==>
     ptr_buf_ok ce e p.ptr_operand G s) /\
-  ghost_inv d ce cx es' G tn s /\ ghost_kept ce esi si G0 tn0 s0 G tn /\
+  ghost_inv H d ce cx es' G tn s /\ ghost_kept ce esi si G0 tn0 s0 G tn /\
   (pure ==> ~expr_has_effect e) ==>
-  ?z H tm.
-    gas_path_ptr D 0 ctx func PG G tn s 0 H tm (OK z) /\
+  ?z HG tm.
+    gas_path_ptr D 0 ctx func PG G tn s 0 HG tm (OK z) /\
     literal_loop_frame pure ctx func ce cx d root aid addr capacity
-      ees fr sf Gf tnf es' sb H tm z (cells ++ [(tv,v,addr+off,k)]) (off+k) /\
+      ees fr sf Gf tnf es' sb HG tm z (cells ++ [(tv,v,addr+off,k)]) (off+k) /\
     literal_prefix_ok (cells ++ [(tv,v,addr+off,k)]) tm z
 Proof
   disch_then (map_every assume_tac o CONJUNCTS) >>
@@ -220,7 +220,7 @@ Proof
   qmatch_asmsub_abbrev_tac `val_store_size tv v = n` >>
   `0 < k /\ n <= k /\ n < dimword(:256)` by
     (gvs[Abbr `n`, wordsTheory.dimword_def] >> decide_tac) >>
-  `stmt_state_rel ctx func ce cx esi s0` by metis_tac[literal_loop_frame_runtime] >>
+  `stmt_state_rel H ctx func ce cx esi s0` by metis_tac[literal_loop_frame_runtime] >>
   `off < capacity /\ op_taint tn (Var root) = {}` by
     (gvs[bodyPtrDefsTheory.ptr_covers_def] >> decide_tac) >>
   `si.cs_next_var <= sm.cs_next_var /\ si.cs_next_var <= su.cs_next_var /\
@@ -235,9 +235,9 @@ Proof
      irule arithmeticTheory.LESS_MOD >> decide_tac) >>
   `?a. eval_operand op z = SOME a /\ op_taint tm op = {}` by
     (gvs[bodyPtrDefsTheory.ptr_val_ok_def, expr_post_def, expr_val_rel_def] >> metis_tac[]) >>
-  `ptr_mem_ok cx (expr_type e) v op H tm z` by
+  `ptr_mem_ok cx (expr_type e) v op HG tm z` by
     gvs[bodyPtrDefsTheory.ptr_val_ok_def] >>
-  `?src. op = Var src /\ ptr_covers H tm src z n` by
+  `?src. op = Var src /\ ptr_covers HG tm src z n` by
     (irule exprPtrUnwrapFactsTheory.ptr_mem_ok_read_covers >>
      simp[] >> qexistsl [`cx`, `expr_type e`, `tv`, `v`] >> simp[]) >>
   `lookup_var src z = SOME a` by gvs[venomStateTheory.eval_operand_def] >>
@@ -253,23 +253,23 @@ Proof
    (!p sz. ce.ce_return_pc = SOME (PtrVar (Var p) sz) ==> not_fresh_at su p)` by
     (gvs[not_fresh_at_def] >> metis_tac[arithmeticTheory.LESS_LESS_EQ_TRANS,
       arithmeticTheory.LESS_EQ_TRANS]) >>
-  `?z' H' tm'.
-    gas_path_ptr D 0 ctx func PG H tm z 0 H' tm' (OK z') /\
+  `?z' HG' tm'.
+    gas_path_ptr D 0 ctx func PG HG tm z 0 HG' tm' (OK z') /\
     literal_loop_frame pure ctx func ce cx d root aid addr capacity
-      ees fr sf Gf tnf es' sb H' tm' z' (cells ++ [(tv,v,addr+off,k)]) (off+k) /\
+      ees fr sf Gf tnf es' sb HG' tm' z' (cells ++ [(tv,v,addr+off,k)]) (off+k) /\
     literal_prefix_ok (cells ++ [(tv,v,addr+off,k)]) tm' z'` by
     (irule literal_bytes_loop_store >> simp[] >>
      qexistsl [`a`, `n2w addr + n2w off`, `dst`, `su`, `src`,
        `lowered_value_type ce e`, `expr_type e`] >> gvs[Abbr `n`]) >>
-  qexistsl [`z'`, `H'`, `tm'`] >> gvs[] >>
+  qexistsl [`z'`, `HG'`, `tm'`] >> gvs[] >>
   irule (Q.INST [`n` |-> `0`, `m` |-> `0`] gas_path_ptr_then |> SRULE []) >>
-  qexistsl [`H`, `z`, `tm`] >> simp[]
+  qexistsl [`HG`, `z`, `tm`] >> simp[]
 QED
 
 Theorem literal_cons_word_endpoint:
   literal_loop_frame pure ctx func ce cx d root aid addr capacity
     ees fr sf Gf tnf esi si G0 tn0 s0 cells off /\
-  literal_prefix_ok cells tn0 s0 /\ stmt_state_rel ctx func ce cx ees sf /\
+  literal_prefix_ok cells tn0 s0 /\ stmt_state_rel H ctx func ce cx ees sf /\
   compile_expr ce (expr_type e) e si = (vv,sm) /\
   emit_op ADD [Var root; Lit (n2w off)] sm = (Var dst,sn) /\
   unwrap_value ce vv sn = (op,su) /\
@@ -284,22 +284,22 @@ Theorem literal_cons_word_endpoint:
   s.vs_current_bb = sm.cs_current_bb /\ s.vs_inst_idx = LENGTH sm.cs_current_insts /\
   ~s.vs_halted /\ lookup_var root s = SOME (n2w addr) /\
   ptr_covers G tn root s capacity /\ FLOOKUP G root = SOME (addr,capacity) /\
-  vv_post ctx func ce cx e esi si sm s0 es' raw vv s /\
+  vv_post H ctx func ce cx e esi si sm s0 es' raw vv s /\
   ptr_vv_ok cx (expr_type e) raw vv es' G tn s /\
   (!t p. vv = LocatedValue t p /\ p.ptr_location = LocMemory ==>
     ptr_buf_ok ce e p.ptr_operand G s) /\
-  ghost_inv d ce cx es' G tn s /\ ghost_kept ce esi si G0 tn0 s0 G tn /\
+  ghost_inv H d ce cx es' G tn s /\ ghost_kept ce esi si G0 tn0 s0 G tn /\
   (pure ==> ~expr_has_effect e) ==>
-  ?z H tm.
-    gas_path_ptr D 0 ctx func PG G tn s 0 H tm (OK z) /\
+  ?z HG tm.
+    gas_path_ptr D 0 ctx func PG G tn s 0 HG tm (OK z) /\
     literal_loop_frame pure ctx func ce cx d root aid addr capacity
-      ees fr sf Gf tnf es' sb H tm z (cells ++ [(tv,v,addr+off,32)]) (off+32) /\
+      ees fr sf Gf tnf es' sb HG tm z (cells ++ [(tv,v,addr+off,32)]) (off+32) /\
     literal_prefix_ok (cells ++ [(tv,v,addr+off,32)]) tm z
 Proof
   disch_then (map_every assume_tac o CONJUNCTS) >>
   drule_all literal_cons_compiler_stages >> strip_tac >>
   drule literal_loop_frame_allocation >> strip_tac >>
-  `stmt_state_rel ctx func ce cx esi s0` by metis_tac[literal_loop_frame_runtime] >>
+  `stmt_state_rel H ctx func ce cx esi s0` by metis_tac[literal_loop_frame_runtime] >>
   `off < capacity /\ op_taint tn (Var root) = {}` by
     (gvs[bodyPtrDefsTheory.ptr_covers_def] >> decide_tac) >>
   `si.cs_next_var <= sm.cs_next_var /\ si.cs_next_var <= sn.cs_next_var /\
@@ -317,22 +317,22 @@ Proof
     (simp[wordsTheory.word_add_n2w, wordsTheory.w2n_n2w] >>
      irule arithmeticTheory.LESS_MOD >> decide_tac) >>
   `?z' tm'.
-    gas_path_ptr D 0 ctx func PG H tm z 0 H tm' (OK z') /\
+    gas_path_ptr D 0 ctx func PG HG tm z 0 HG tm' (OK z') /\
     literal_loop_frame pure ctx func ce cx d root aid addr capacity
-      ees fr sf Gf tnf es' sb H tm' z' (cells ++ [(tv,v,addr+off,32)]) (off+32) /\
+      ees fr sf Gf tnf es' sb HG tm' z' (cells ++ [(tv,v,addr+off,32)]) (off+32) /\
     literal_prefix_ok (cells ++ [(tv,v,addr+off,32)]) tm' z'` by
     (irule literal_scalar_loop_store >> simp[] >>
      qexistsl [`n2w addr + n2w off`, `dst`, `op`, `su`,
        `lowered_value_type ce e`, `expr_type e`] >> simp[]) >>
-  qexistsl [`z'`, `H`, `tm'`] >> gvs[] >>
+  qexistsl [`z'`, `HG`, `tm'`] >> gvs[] >>
   irule (Q.INST [`n` |-> `0`, `m` |-> `0`] gas_path_ptr_then |> SRULE []) >>
-  qexistsl [`H`, `z`, `tm`] >> simp[]
+  qexistsl [`HG`, `z`, `tm`] >> simp[]
 QED
 
 Theorem literal_cons_endpoint:
   literal_loop_frame pure ctx func ce cx d root aid addr capacity
     ees fr sf Gf tnf esi si G0 tn0 s0 cells off /\
-  literal_prefix_ok cells tn0 s0 /\ stmt_state_rel ctx func ce cx ees sf /\
+  literal_prefix_ok cells tn0 s0 /\ stmt_state_rel H ctx func ce cx ees sf /\
   compile_expr ce (expr_type e) e si = (vv,sm) /\
   emit_op ADD [Var root; Lit (n2w off)] sm = (Var dst,sn) /\
   unwrap_value ce vv sn = (op,su) /\
@@ -348,17 +348,17 @@ Theorem literal_cons_endpoint:
   s.vs_current_bb = sm.cs_current_bb /\ s.vs_inst_idx = LENGTH sm.cs_current_insts /\
   ~s.vs_halted /\ lookup_var root s = SOME (n2w addr) /\
   ptr_covers G tn root s capacity /\ FLOOKUP G root = SOME (addr,capacity) /\
-  vv_post ctx func ce cx e esi si sm s0 es' raw vv s /\
+  vv_post H ctx func ce cx e esi si sm s0 es' raw vv s /\
   ptr_vv_ok cx (expr_type e) raw vv es' G tn s /\
   (!t op. vv = StackValue t op /\ ~is_word_type (expr_type e) ==> ptr_buf_ok ce e op G s) /\
   (!t p. vv = LocatedValue t p /\ p.ptr_location = LocMemory ==>
     ptr_buf_ok ce e p.ptr_operand G s) /\
-  ghost_inv d ce cx es' G tn s /\ ghost_kept ce esi si G0 tn0 s0 G tn /\
+  ghost_inv H d ce cx es' G tn s /\ ghost_kept ce esi si G0 tn0 s0 G tn /\
   (pure ==> ~expr_has_effect e) ==>
-  ?z H tm.
-    gas_path_ptr D 0 ctx func PG G tn s 0 H tm (OK z) /\
+  ?z HG tm.
+    gas_path_ptr D 0 ctx func PG G tn s 0 HG tm (OK z) /\
     literal_loop_frame pure ctx func ce cx d root aid addr capacity
-      ees fr sf Gf tnf es' sb H tm z (cells ++ [(tv,v,addr+off,k)]) (off+k) /\
+      ees fr sf Gf tnf es' sb HG tm z (cells ++ [(tv,v,addr+off,k)]) (off+k) /\
     literal_prefix_ok (cells ++ [(tv,v,addr+off,k)]) tm z
 Proof
   disch_then (map_every assume_tac o CONJUNCTS) >>
@@ -384,7 +384,7 @@ Theorem literal_cons_outcome_ptr:
   expr_vv_sim_ptr d ctx PG func ce cx (expr_type e) e es /\
   literal_loop_frame pure ctx func ce cx d root aid addr capacity
     ees fr sf Gf tnf es si G0 tn0 s0 cells off /\
-  literal_prefix_ok cells tn0 s0 /\ stmt_state_rel ctx func ce cx ees sf /\
+  literal_prefix_ok cells tn0 s0 /\ stmt_state_rel H ctx func ce cx ees sf /\
   compile_expr ce (expr_type e) e si = (vv,sm) /\
   emit_op ADD [Var root; Lit (n2w off)] sm = (Var dst,sn) /\
   unwrap_value ce vv sn = (op,su) /\
@@ -398,11 +398,11 @@ Theorem literal_cons_outcome_ptr:
   k = type_memory_bytes ce (expr_type e) /\ off+k <= capacity /\
   (int_calls_expr e = [] \/ lowered_value_type ce e = expr_type e) /\
   (pure ==> ~expr_has_effect e) ==>
-  gas_outcome_ptr (cx_dead cx) (cx_tops cx) (ctx,func) PG
+  gas_outcome_ptr (cx_dead H cx) (cx_tops cx) (ctx,func) PG
     (bind (eval_expr cx e) (read_result cx)) (es,s0,G0,tn0)
-    (\res ee H tm z. ?v. res = INL v /\ value_has_type tv v /\
+    (\res ee HG tm z. ?v. res = INL v /\ value_has_type tv v /\
       literal_loop_frame pure ctx func ce cx d root aid addr capacity
-        ees fr sf Gf tnf ee sb H tm z (cells ++ [(tv,v,addr+off,k)]) (off+k) /\
+        ees fr sf Gf tnf ee sb HG tm z (cells ++ [(tv,v,addr+off,k)]) (off+k) /\
       literal_prefix_ok (cells ++ [(tv,v,addr+off,k)]) tm z)
     (\res ee gt r. ?exc. res = INR exc /\ expr_exit (INR exc : eval_result + exception) r)
 Proof
@@ -418,15 +418,15 @@ Proof
   rewrite_tac[bodyPtrDefsTheory.expr_vv_sim_ptr_def] >>
   disch_then drule_all >> strip_tac >>
   irule literal_result_bind_outcome_ptr >>
-  qexists `\raw ee H tm z.
-    vv_post ctx func ce cx e es si sm s0 ee raw vv z /\
+  qexists `\raw ee HG tm z.
+    vv_post H ctx func ce cx e es si sm s0 ee raw vv z /\
     z.vs_current_bb = sm.cs_current_bb /\ z.vs_inst_idx = LENGTH sm.cs_current_insts /\
-    ghost_inv d ce cx ee H tm z /\ ptr_vv_ok cx (expr_type e) raw vv ee H tm z /\
+    ghost_inv H d ce cx ee HG tm z /\ ptr_vv_ok cx (expr_type e) raw vv ee HG tm z /\
     (!t arg. vv = StackValue t arg /\ ~is_word_type (expr_type e) ==>
-      ptr_buf_ok ce e arg H z) /\
+      ptr_buf_ok ce e arg HG z) /\
     (!t p. vv = LocatedValue t p /\ p.ptr_location = LocMemory ==>
-      ptr_buf_ok ce e p.ptr_operand H z) /\
-    ghost_kept ce es si G0 tn0 s0 H tm` >>
+      ptr_buf_ok ce e p.ptr_operand HG z) /\
+    ghost_kept ce es si G0 tn0 s0 HG tm` >>
   conj_tac >- suspend "normal" >> suspend "child"
 QED
 
@@ -467,16 +467,16 @@ Resume literal_cons_outcome_ptr[normal]:
   simp[] >> disch_then (drule_at (Pat `ptr_vv_ok _ _ _ _ _ _ _ _`)) >>
   simp[] >> disch_then (drule_at (Pat `expr_body_pre _ _ _ _ _`)) >> simp[] >>
   disch_tac >>
-  `?z H tm. gas_path_ptr (cx_dead cx) 0 ctx func PG G tn t 0 H tm (OK z) /\
+  `?z HG tm. gas_path_ptr (cx_dead H cx) 0 ctx func PG G tn t 0 HG tm (OK z) /\
      literal_loop_frame pure ctx func ce cx d root aid addr capacity
-       ees fr sf Gf tnf ee sb H tm z
+       ees fr sf Gf tnf ee sb HG tm z
          (cells ++ [(tv,v',addr+off,type_memory_bytes ce (expr_type e))])
          (off+type_memory_bytes ce (expr_type e)) /\
      literal_prefix_ok (cells ++ [(tv,v',addr+off,type_memory_bytes ce (expr_type e))]) tm z` by
-    (qpat_x_assum `!pg dead. ?z H tm. gas_path_ptr dead 0 ctx func pg G tn t 0 H tm (OK z) /\ _`
+    (qpat_x_assum `!pg dead. ?z HG tm. gas_path_ptr dead 0 ctx func pg G tn t 0 HG tm (OK z) /\ _`
        (fn th => POP_ASSUM_LIST (K (simp[] >> metis_tac[th])))) >>
   simp[gas_outcome_ptr_def, gas_summary_ptr_at_def] >>
   qexists `[]` >> disj1_tac >>
-  qexistsl [`INL v'`, `ee`, `H`, `tm`, `OK z`] >> gvs[]
+  qexistsl [`INL v'`, `ee`, `HG`, `tm`, `OK z`] >> gvs[]
 QED
 Finalise literal_cons_outcome_ptr

@@ -112,20 +112,20 @@ Theorem bytes_uint_counted_success:
   tv <> BaseTV AddressT /\ (!k. tv <> BaseTV (BytesT (Fixed k))) /\
   LENGTH bs <= 32 /\ 64 <= type_memory_bytes cenv (lowered_value_type cenv e) /\
   w2n a+32 < dimword(:256) /\ run_inst_seq (emitted_insts sa sb) s = OK t /\
-  ghost_inv d cenv cx es G tn s /\ ghost_kept cenv es0 s0a G0 tn0 s0 G tn /\
+  ghost_inv H d cenv cx es G tn s /\ ghost_kept cenv es0 s0a G0 tn0 s0 G tn /\
   s0a.cs_next_var <= sa.cs_next_var /\
   (!name p sz. FLOOKUP cenv.ce_vars name = SOME (PtrVar (Var p) sz) ==> not_fresh_at sa p) /\
   (!p sz. cenv.ce_return_buf = SOME (PtrVar (Var p) sz) ==> not_fresh_at sa p) /\
   (!p sz. cenv.ce_return_pc = SOME (PtrVar (Var p) sz) ==> not_fresh_at sa p) ==>
-  ?H th.
-    gas_path_ptr D 0 ctx fn PG G tn s 0 H th
+  ?HG th.
+    gas_path_ptr D 0 ctx fn PG G tn s 0 HG th
       (OK (t with vs_inst_idx := LENGTH sb.cs_current_insts)) /\
     t.vs_current_bb = sb.cs_current_bb /\
-    op_prov H out = NONE /\ op_taint th out = {} /\
-    ghost_inv d cenv cx es H th (t with vs_inst_idx := LENGTH sb.cs_current_insts) /\
-    ghost_kept cenv es0 s0a G0 tn0 s0 H th /\
+    op_prov HG out = NONE /\ op_taint th out = {} /\
+    ghost_inv H d cenv cx es HG th (t with vs_inst_idx := LENGTH sb.cs_current_insts) /\
+    ghost_kept cenv es0 s0a G0 tn0 s0 HG th /\
     (!p. not_fresh_at sa p ==> lookup_var p t = lookup_var p s /\
-      FLOOKUP H p = FLOOKUP G p /\ op_taint th (Var p) = op_taint tn (Var p))
+      FLOOKUP HG p = FLOOKUP G p /\ op_taint th (Var p) = op_taint tn (Var p))
 Proof
   strip_tac >> drule_all uint_convert_parts >> strip_tac >>
   Cases_on `8*n > b` >> gvs[]
@@ -141,7 +141,7 @@ Proof
     (drule_all unsigned_loader_shape_fresh >> strip_tac >> simp[]) >>
   `LENGTH sb.cs_current_insts = s.vs_inst_idx+6` by
     (fs[inst_extends_def] >> metis_tac[LENGTH_APPEND]) >>
-  qexistsl_tac [`H`,`th`] >> simp[] >>
+  qexistsl_tac [`HG`,`th`] >> simp[] >>
   qpat_x_assum `t with vs_inst_idx := _ = _` mp_tac >>
   disch_then (mp_tac o Q.AP_TERM `\u. u.vs_current_bb`) >> gs[]
 QED
@@ -184,7 +184,7 @@ Resume bytes_uint_counted_success[clamp]:
   disch_then (qspecl_then [`PG`,`D`] strip_assume_tac) >>
   `LENGTH sb.cs_current_insts = s.vs_inst_idx+6+LENGTH (emitted_insts sm sb)` by
     (fs[inst_extends_def] >> metis_tac[LENGTH_APPEND]) >>
-  `gas_path_ptr D 0 ctx fn PG G tn s 0 H' th'
+  `gas_path_ptr D 0 ctx fn PG G tn s 0 HG' th'
      (OK (t with vs_inst_idx := LENGTH sb.cs_current_insts))` by
     (drule_all gas_path_ptr_then >> gs[]) >>
   suspend "frame"
@@ -198,15 +198,15 @@ Resume bytes_uint_counted_success[frame]:
    (!z. not_fresh_at sa z ==> FLOOKUP t.vs_vars z = FLOOKUP s.vs_vars z)` by
     (drule_all uint_convert_run_frame >> simp[]) >>
   `!p. not_fresh_at sa p ==> lookup_var p t = lookup_var p s /\
-    FLOOKUP H' p = FLOOKUP G p /\ op_taint th' (Var p) = op_taint tn (Var p)` by
+    FLOOKUP HG' p = FLOOKUP G p /\ op_taint th' (Var p) = op_taint tn (Var p)` by
     (rpt strip_tac >> fs[lookup_var_def] >> metis_tac[]) >>
-  `ghost_kept cenv es0 s0a G0 tn0 s0 H' th'` by
+  `ghost_kept cenv es0 s0a G0 tn0 s0 HG' th'` by
     (irule ghost_kept_readonly_frame >>
-     qexistsl_tac [`H`,`not_fresh_at sa`,`th`] >> simp[] >>
+     qexistsl_tac [`HG`,`not_fresh_at sa`,`th`] >> simp[] >>
      fs[not_fresh_at_def] >> metis_tac[LESS_EQ_TRANS]) >>
-  `ghost_inv d cenv cx es H' th' (t with vs_inst_idx := LENGTH sb.cs_current_insts)` by
+  `ghost_inv H d cenv cx es HG' th' (t with vs_inst_idx := LENGTH sb.cs_current_insts)` by
     (irule ghost_inv_readonly_frame >>
-     qexistsl_tac [`H`,`not_fresh_at sm`,
+     qexistsl_tac [`HG`,`not_fresh_at sm`,
        `u with vs_inst_idx := s.vs_inst_idx+6`,`th`] >>
      `(!p. not_fresh_at sm p ==>
        lookup_var p (t with vs_inst_idx := s.vs_inst_idx+6) =
@@ -222,7 +222,7 @@ Resume bytes_uint_counted_success[frame]:
            [`\v. v.vs_memory`,`\v. v.vs_call_ctx`,
             `\v. v.vs_accounts`,`\v. v.vs_transient`]) >> simp[]) >>
      gs[lookup_var_def] >> metis_tac[]) >>
-  qexistsl_tac [`H'`,`th'`] >> simp[] >>
+  qexistsl_tac [`HG'`,`th'`] >> simp[] >>
   qpat_x_assum `t = s with vs_vars := _` SUBST1_TAC >> simp[]
 QED
 
@@ -230,15 +230,15 @@ Finalise bytes_uint_counted_success
 
 (* No GAS instructions means the executed abort prefix has zero observations. *)
 Theorem no_gas_seq_abort_counted:
-  !code s t a G tn H th ctx fn bb.
+  !code s t a G tn HG th ctx fn bb.
     ~s.vs_halted /\
     lookup_block s.vs_current_bb fn.fn_blocks = SOME bb /\
     isPREFIX code (DROP s.vs_inst_idx bb.bb_instructions) /\
     EVERY (\i. i.inst_opcode <> INVOKE /\ ~is_terminator i.inst_opcode /\
                 i.inst_opcode <> GAS) code /\
-    inst_seq_ptr D lo ctx fn PG G tn code s H th /\
+    inst_seq_ptr D lo ctx fn PG G tn code s HG th /\
     run_inst_seq code s = Abort a t ==>
-    ?j. gas_path_ptr D lo ctx fn PG G tn s 0 H th
+    ?j. gas_path_ptr D lo ctx fn PG G tn s 0 HG th
           (Abort a (t with vs_inst_idx := j))
 Proof
   Induct >- simp[run_inst_seq_def] >>
@@ -253,7 +253,7 @@ Proof
       `EVERY (\i. ~is_terminator i.inst_opcode) code` by fs[EVERY_MEM] >>
       first_x_assum (qspecl_then [`u with vs_inst_idx := SUC s.vs_inst_idx`,
         `t with vs_inst_idx := SUC s.vs_inst_idx`, `a`, `step_prov PG G h u`,
-        `step_taint h s u tn`, `H`, `th`, `ctx`, `fn`, `bb`] mp_tac) >>
+        `step_taint h s u tn`, `HG`, `th`, `ctx`, `fn`, `bb`] mp_tac) >>
       simp[run_inst_seq_inst_idx, exec_result_map_def] >> strip_tac >>
       drule_at (Pat `gas_path_ptr _ _ _ _ _ _ _ _ _ _ _ _`) gas_path_ptr_step >>
       simp[] >> metis_tac[]) >>
@@ -267,7 +267,7 @@ Theorem int_clamp_abort_zero_counted:
   run_inst_seq (emitted_insts sa sb) s = Abort err t /\
   ~s.vs_halted /\ lookup_block s.vs_current_bb fn.fn_blocks = SOME bb /\
   isPREFIX (emitted_insts sa sb) (DROP s.vs_inst_idx bb.bb_instructions) ==>
-  ?H th j. gas_path_ptr D 0 ctx fn PG G tn s 0 H th
+  ?HG th j. gas_path_ptr D 0 ctx fn PG G tn s 0 HG th
     (Abort err (t with vs_inst_idx := j))
 Proof
   strip_tac >>
@@ -294,12 +294,12 @@ Theorem bytes_uint_counted_abort:
   tv <> BaseTV AddressT /\ (!k. tv <> BaseTV (BytesT (Fixed k))) /\
   LENGTH bs <= 32 /\ 64 <= type_memory_bytes cenv (lowered_value_type cenv e) /\
   w2n a+32 < dimword(:256) /\ run_inst_seq (emitted_insts sa sb) s = Abort err t /\
-  ghost_inv d cenv cx es G tn s /\ ghost_kept cenv es0 s0a G0 tn0 s0 G tn /\
+  ghost_inv H d cenv cx es G tn s /\ ghost_kept cenv es0 s0a G0 tn0 s0 G tn /\
   s0a.cs_next_var <= sa.cs_next_var /\
   (!name p sz. FLOOKUP cenv.ce_vars name = SOME (PtrVar (Var p) sz) ==> not_fresh_at sa p) /\
   (!p sz. cenv.ce_return_buf = SOME (PtrVar (Var p) sz) ==> not_fresh_at sa p) /\
   (!p sz. cenv.ce_return_pc = SOME (PtrVar (Var p) sz) ==> not_fresh_at sa p) ==>
-  ?H th j. gas_path_ptr D 0 ctx fn PG G tn s 0 H th
+  ?HG th j. gas_path_ptr D 0 ctx fn PG G tn s 0 HG th
     (Abort err (t with vs_inst_idx := j))
 Proof
   strip_tac >> drule_all uint_convert_parts >> strip_tac >>

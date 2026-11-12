@@ -41,7 +41,7 @@ Theorem for_array_callback_snapshot_ptr:
   FLOOKUP cenv.ce_vars name = SOME (PtrVar (Var p) sz) /\
   snapshot.type = ArrayTV tv (Fixed n) /\
   snapshot.value = ArrayV (SArrayV kvs) /\
-  ghost_inv d cenv cx ee G tn s ==>
+  ghost_inv H d cenv cx ee G tn s ==>
   lookup_scopes name ee.scopes = SOME snapshot /\
   ptr_covers G tn p s sz /\
   (!w k mem. lookup_var p s = SOME w /\ k < n /\
@@ -64,7 +64,7 @@ QED
 Theorem for_array_callback_recovery_ptr:
   cenv_top_ext cenv bc ei.scopes /\
   eval_stmts cx stmts ei = (res,ee) /\
-  cenv_top_ext bc c3 ee.scopes /\ ghost_inv d c3 cx ee G tn s /\
+  cenv_top_ext bc c3 ee.scopes /\ ghost_inv H d c3 cx ee G tn s /\
   ee.scopes = sc :: rest /\
   (!name. name IN FDOM sc ==> lookup_scopes name rest = NONE) /\
   not_fresh_at sa p /\ ptr_covers G0 tn0 p s0 sz /\
@@ -77,7 +77,7 @@ Theorem for_array_callback_recovery_ptr:
   caller.cs_next_var <= sa.cs_next_var /\
   (!x. not_fresh_at caller x ==> FLOOKUP G0 x = FLOOKUP Gc x /\
     op_taint tn0 (Var x) = op_taint tc (Var x)) ==>
-  ghost_inv d cenv cx (ee with scopes := rest) G tn s /\
+  ghost_inv H d cenv cx (ee with scopes := rest) G tn s /\
   ptr_covers G tn p s sz /\
   FLOOKUP s.vs_allocas aid = SOME region /\
   (!x. not_fresh_at caller x ==> FLOOKUP G x = FLOOKUP Gc x /\

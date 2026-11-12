@@ -30,8 +30,8 @@ QED
 
 Theorem vv_post_alloc_map_frame:
   post_value_type cenv e = expr_type e /\
-  vv_post ctx fn cenv cx e es sa sb s0 es' raw vv s /\
-  stmt_state_rel ctx fn cenv cx es' q /\
+  vv_post H ctx fn cenv cx e es sa sb s0 es' raw vv s /\
+  stmt_state_rel H ctx fn cenv cx es' q /\
   q.vs_memory = s.vs_memory /\
   contract_storage q = contract_storage s /\
   contract_transient q = contract_transient s /\
@@ -42,7 +42,7 @@ Theorem vv_post_alloc_map_frame:
   (!n b sz. local_region cenv es'.scopes q n b sz <=>
             local_region cenv es'.scopes s n b sz) /\
   sb.cs_next_id <= sc.cs_next_id ==>
-  vv_post ctx fn cenv cx e es sa sc s0 es' raw vv q
+  vv_post H ctx fn cenv cx e es sa sc s0 es' raw vv q
 Proof
   strip_tac >>
   `vv_holds cenv cx (expr_type e) raw vv es' q` by
@@ -82,12 +82,12 @@ QED
 
 Theorem compile_alloc_buffer_raw_resources:
   !ctx fn cenv cx es sb n buf sc s out u.
-    stmt_state_rel ctx fn cenv cx es s /\ fn_inst_ids_distinct fn /\
+    stmt_state_rel H ctx fn cenv cx es s /\ fn_inst_ids_distinct fn /\
     local_ptrs_reserved cenv sb /\
     compile_alloc_buffer n sb = (buf,sc) /\ fn_has_code sb sc fn /\
     buf.buf_operand = Var out /\ n < dimword (:256) /\
     step_inst_base (mk_inst sb.cs_next_id ALLOCA [Lit (n2w n)] [out]) s = OK u ==>
-    stmt_state_rel ctx fn cenv cx es u /\ u.vs_memory = s.vs_memory /\
+    stmt_state_rel H ctx fn cenv cx es u /\ u.vs_memory = s.vs_memory /\
     (!x. not_fresh_at sb x ==> lookup_var x u = lookup_var x s) /\
     (!aid entry. FLOOKUP s.vs_allocas aid = SOME entry ==>
                  FLOOKUP u.vs_allocas aid = SOME entry) /\
@@ -104,17 +104,17 @@ QED
 Theorem compile_alloc_buffer_vv_post:
   !ctx fn cenv cx e es sa sb s0 es' raw vv s n buf sc out u.
     post_value_type cenv e = expr_type e /\
-  vv_post ctx fn cenv cx e es sa sb s0 es' raw vv s /\
+  vv_post H ctx fn cenv cx e es sa sb s0 es' raw vv s /\
     fn_inst_ids_distinct fn /\ local_ptrs_reserved cenv sa /\
     sa.cs_next_var <= sb.cs_next_var /\
     (!x. vv_operand vv = Var x ==> not_fresh_at sb x) /\
     compile_alloc_buffer n sb = (buf,sc) /\ fn_has_code sb sc fn /\
     buf.buf_operand = Var out /\ n < dimword (:256) /\
     step_inst_base (mk_inst sb.cs_next_id ALLOCA [Lit (n2w n)] [out]) s = OK u ==>
-    vv_post ctx fn cenv cx e es sa sc s0 es' raw vv u
+    vv_post H ctx fn cenv cx e es sa sc s0 es' raw vv u
 Proof
   rpt strip_tac >>
-  `stmt_state_rel ctx fn cenv cx es' s` by gvs[vv_post_def] >>
+  `stmt_state_rel H ctx fn cenv cx es' s` by gvs[vv_post_def] >>
   `local_ptrs_reserved cenv sb` by
     (irule local_ptrs_reserved_next_var >> qexists_tac `sa` >> simp[]) >>
   drule_all compile_alloc_buffer_raw_resources >> strip_tac >>
@@ -140,7 +140,7 @@ QED
 
 Theorem vv_at_memory_footprint:
   !ctx fn cenv cx ty sa sb es raw vv s v tv w.
-    stmt_state_rel ctx fn cenv cx es s /\
+    stmt_state_rel H ctx fn cenv cx es s /\
     vv_at cenv cx ty sa sb es raw vv s /\
     (!t p. vv = LocatedValue t p ==> p.ptr_location = LocMemory) /\
     read_result cx raw es = (INL v,es) /\
@@ -201,7 +201,7 @@ Proof
 QED
 
 Theorem located_vv_at_memory_footprint:
-  stmt_state_rel ctx fn cenv cx es s /\
+  stmt_state_rel H ctx fn cenv cx es s /\
   vv_at cenv cx ty sa sb es raw (LocatedValue t p) s /\
   p.ptr_location = LocMemory /\ read_result cx raw es = (INL v,es) /\
   evaluate_type (get_tenv cx) ty = SOME tv /\
@@ -235,7 +235,7 @@ Proof
 QED
 
 Theorem alloca_step_source_vv:
-  stmt_state_rel ctx fn cenv cx es s /\
+  stmt_state_rel H ctx fn cenv cx es s /\
   vv_at cenv cx ty sa sb es raw vv s /\
   n < dimword (:256) /\
   step_inst_base (mk_inst id ALLOCA [Lit (n2w n)] [out]) s = OK u /\

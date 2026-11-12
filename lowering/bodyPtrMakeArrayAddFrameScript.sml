@@ -6,11 +6,11 @@ Ancestors
   finite_map venomExecSemantics
 
 Theorem emit_binop_vv_post:
-  vv_post ctx func cenv cx e es sa sm s0 es' tv vv s /\
+  vv_post H ctx func cenv cx e es sa sm s0 es' tv vv s /\
   local_ptrs_reserved cenv sa /\ sa.cs_next_var <= sm.cs_next_var /\
   (!z. vv_operand vv = Var z ==> not_fresh_at sm z) /\
   emit_op opc [left;right] sm = (Var out,sn) ==>
-  vv_post ctx func cenv cx e es sa sn s0 es' tv vv
+  vv_post H ctx func cenv cx e es sa sn s0 es' tv vv
     ((update_var out w s) with vs_inst_idx := SUC s.vs_inst_idx)
 Proof
   strip_tac >> simp[] >> irule vv_post_update_var >> simp[] >>
@@ -143,7 +143,7 @@ Proof
 QED
 
 Theorem emit_binop_ghost_inv:
-  ghost_inv d cenv cx es G tn s /\
+  ghost_inv H d cenv cx es G tn s /\
   local_ptrs_reserved cenv sm /\
   (!x sz. cenv.ce_return_buf = SOME (PtrVar (Var x) sz) ==>
           not_fresh_at sm x) /\
@@ -151,7 +151,7 @@ Theorem emit_binop_ghost_inv:
           not_fresh_at sm x) /\
   (opc = ADD \/ opc = AND) /\
   emit_op opc [left;right] sm = (Var out,sn) ==>
-  ghost_inv d cenv cx es
+  ghost_inv H d cenv cx es
     (step_prov PG G (mk_inst sm.cs_next_id opc [left;right] [out])
       (update_var out w s))
     (step_taint (mk_inst sm.cs_next_id opc [left;right] [out]) s

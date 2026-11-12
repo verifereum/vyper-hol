@@ -35,7 +35,7 @@ Theorem memory_hash_compile_counted:
   b <= w2n a + 32 /\ w2n a + 32 + w2n n <= b + sz /\
   w2n a + 32 < dimword(:256) /\ mload (w2n a) s = n /\ ~ctx_has_dalloca ctx /\
   (!i. w2n a <= i /\ i < w2n a + 32 + w2n n ==> i NOTIN tn.t_mem) /\
-  ghost_inv d cenv cx es G tn s /\ local_ptrs_reserved cenv sm /\
+  ghost_inv H d cenv cx es G tn s /\ local_ptrs_reserved cenv sm /\
   (!x sz. cenv.ce_return_buf = SOME (PtrVar (Var x) sz) ==> not_fresh_at sm x) /\
   (!x sz. cenv.ce_return_pc = SOME (PtrVar (Var x) sz) ==> not_fresh_at sm x) /\
   ~s.vs_halted /\ fn_has_code sm sh fn /\
@@ -44,7 +44,7 @@ Theorem memory_hash_compile_counted:
   ?G' tn'. gas_path_ptr D 0 ctx fn PG G tn s 0 G' tn'
     (OK (t with vs_inst_idx := LENGTH sh.cs_current_insts)) /\
     ptr_val_ok cx (BaseT (BytesT (Fixed 32))) result op G' tn' t /\
-    ghost_inv d cenv cx es G' tn' t /\
+    ghost_inv H d cenv cx es G' tn' t /\
     ghost_kept cenv es sm G tn s G' tn'
 Proof
   strip_tac >> drule_all memory_hash_compile_code >> strip_tac >>

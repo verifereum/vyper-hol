@@ -100,8 +100,8 @@ Theorem slt_counted_read_only:
     (!p. not_fresh_at sa p ==>
       lookup_var p sf = lookup_var p s /\ FLOOKUP Gf p = FLOOKUP G p /\
       op_taint tnf (Var p) = op_taint tn (Var p)) /\
-    (!cenv cx es. stmt_state_rel ctx func cenv cx es s /\ local_ptrs_reserved cenv sa ==>
-      stmt_state_rel ctx func cenv cx es sf)
+    (!cenv cx es. stmt_state_rel H ctx func cenv cx es s /\ local_ptrs_reserved cenv sa ==>
+      stmt_state_rel H ctx func cenv cx es sf)
 Proof
   strip_tac >> drule_all emit_slt_counted >>
   disch_then (qspecl_then [`PG`, `G`, `D`] strip_assume_tac) >>

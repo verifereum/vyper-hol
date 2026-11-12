@@ -6,7 +6,7 @@ Ancestors
 
 (* A header inside one local cannot affect any other local's representation. *)
 Theorem pop_header_other_local_robust:
-  ghost_inv d cenv cx es G tn s /\
+  ghost_inv H d cenv cx es G tn s /\
   local_ptrs_rel func cenv es.scopes s /\
   local_region cenv es.scopes s id locbase cap /\ k+32 <= cap /\
   name <> id /\ lookup_scopes name es.scopes = SOME entry /\
@@ -37,7 +37,7 @@ Proof
 QED
 
 Theorem pop_header_locals_robust:
-  ghost_inv d cenv cx es G tn s /\
+  ghost_inv H d cenv cx es G tn s /\
   local_ptrs_rel func cenv es.scopes s /\
   lookup_scopes id es.scopes = SOME old /\
   FLOOKUP cenv.ce_vars id = SOME (PtrVar (Var root) cap) /\
@@ -63,18 +63,18 @@ Proof
 QED
 
 Theorem pop_header_ghost_transport:
-  ghost_inv d cenv cx es G tn s /\ local_ptrs_reserved cenv sa /\
+  ghost_inv H d cenv cx es G tn s /\ local_ptrs_reserved cenv sa /\
   (!x sz. cenv.ce_return_buf = SOME (PtrVar (Var x) sz) ==> not_fresh_at sa x) /\
   (!x sz. cenv.ce_return_pc = SOME (PtrVar (Var x) sz) ==> not_fresh_at sa x) /\
   (!x. not_fresh_at sa x ==> lookup_var x t = lookup_var x s /\
-    FLOOKUP H x = FLOOKUP G x /\ op_taint tf (Var x) = op_taint tn (Var x)) /\
+    FLOOKUP HG x = FLOOKUP G x /\ op_taint tf (Var x) = op_taint tn (Var x)) /\
   (!name entry p sz. lookup_scopes name es'.scopes = SOME entry /\
     FLOOKUP cenv.ce_vars name = SOME (PtrVar (Var p) sz) ==>
     ptr_covers G tn p s sz /\
     !w mem. lookup_var p s = SOME w /\ mem_agree_outside tf.t_mem t.vs_memory mem ==>
       val_in_memory entry.type entry.value (w2n w) mem) /\
-  stor_taint_ok cx tf t ==>
-  ghost_inv d cenv cx es' H tf t
+  stor_taint_ok H cx tf t ==>
+  ghost_inv H d cenv cx es' HG tf t
 Proof
   strip_tac >> rewrite_tac[ghost_inv_def] >> conj_tac
   >- (rpt gen_tac >> strip_tac >>

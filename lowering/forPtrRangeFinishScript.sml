@@ -23,8 +23,8 @@ Theorem for_range_callback_finish_ptr:
     (FEMPTY |+ (id, <|assignable := F; type := tyv;
       value := IntV (n1 + &k); popped := []|>)) :: es.scopes;
     gas_obs := obs |>) = (res,ee) /\
-  cenv_top_ext bc c3 ee.scopes /\ stmt_state_rel ctx func c3 cx ee s /\
-  ghost_inv d c3 cx ee G tn s /\
+  cenv_top_ext bc c3 ee.scopes /\ stmt_state_rel H ctx func c3 cx ee s /\
+  ghost_inv H d c3 cx ee G tn s /\
   FLOOKUP s.vs_allocas ainst.inst_id = SOME (w2n a,sz) /\
   ptr_covers G tn p s sz /\ lookup_var p s = SOME a /\
   lookup_var cv s = SOME (i2w (n1 + &k)) /\
@@ -43,8 +43,8 @@ Theorem for_range_callback_finish_ptr:
     ee.scopes = sc :: rest /\
     gas_path_ptr D 0 ctx func PG G tn s 0 gf tf (OK t) /\
     t.vs_inst_idx = 0 /\ ~t.vs_halted /\
-    stmt_state_rel ctx func cenv cx (ee with scopes := rest) t /\
-    ghost_inv d cenv cx (ee with scopes := rest) gf tf t /\
+    stmt_state_rel H ctx func cenv cx (ee with scopes := rest) t /\
+    ghost_inv H d cenv cx (ee with scopes := rest) gf tf t /\
     (!x v. not_fresh_at st x /\ lookup_var x s0 = SOME v ==>
       lookup_var x t = SOME v) /\
     (!x. not_fresh_at st x ==> FLOOKUP gf x = FLOOKUP G0 x /\

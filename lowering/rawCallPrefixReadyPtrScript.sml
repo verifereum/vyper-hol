@@ -92,7 +92,7 @@ Proof
 QED
 
 Theorem raw_call_prefix_data_word_bounds:
-  stmt_state_rel ctx func cenv cx es s /\
+  stmt_state_rel H ctx func cenv cx es s /\
   expr_val_at cenv cx (BaseT (BytesT (Dynamic lim))) sd sa es (BytesV bs) data s /\
   evaluate_type (get_tenv cx) (BaseT (BytesT (Dynamic lim))) =
     SOME (BaseTV (BytesT (Dynamic lim))) /\

@@ -8,7 +8,7 @@ Ancestors
 Theorem operand_suffix_ghost_kept:
   lower_value compile_expr cenv ty e sa = (op,sb) /\
   bind (eval_expr cx e) (read_result cx) es = (INL v,ee) /\
-  expr_post ctx fn cenv cx e es sa sb s0 ee v op s1 /\
+  expr_post H ctx fn cenv cx e es sa sb s0 ee v op s1 /\
   ghost_kept cenv es sa G0 tn0 s0 G1 tn1 /\
   ghost_kept cenv ee sb G1 tn1 s1 G2 tn2 /\
   local_ptrs_rel fn cenv es.scopes s0 /\ local_ptrs_reserved cenv sa ==>

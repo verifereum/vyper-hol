@@ -21,7 +21,7 @@ Theorem attribute_nonmemory_endpoint_ptr:
   t.vs_accounts = s.vs_accounts /\ t.vs_call_ctx = s.vs_call_ctx /\
   t.vs_transient = s.vs_transient /\
   tn'.t_stor = tn.t_stor /\ tn'.t_trans = tn.t_trans /\
-  op_taint tn' dst = {} /\ (vv_loc bvv = LocCode ==> op_prov H dst = NONE) ==>
+  op_taint tn' dst = {} /\ (vv_loc bvv = LocCode ==> op_prov HG dst = NONE) ==>
   ptr_vv_ok cx ann tv' (LocatedValue ann (mk_ptr dst (vv_loc bvv))) ee' HG tn' t
 Proof
   strip_tac >> drule struct_field_slot_exists >> strip_tac >>
@@ -51,7 +51,7 @@ Theorem attribute_selected_ptr:
   t.vs_memory = s.vs_memory /\ t.vs_accounts = s.vs_accounts /\
   t.vs_call_ctx = s.vs_call_ctx /\ t.vs_transient = s.vs_transient /\
   tn'.t_mem = tn.t_mem /\ tn'.t_stor = tn.t_stor /\ tn'.t_trans = tn.t_trans /\
-  op_taint tn' dst = {} /\ (vv_loc bvv = LocCode ==> op_prov H dst = NONE) /\
+  op_taint tn' dst = {} /\ (vv_loc bvv = LocCode ==> op_prov HG dst = NONE) /\
   (!x b sz. vv_operand bvv = Var x /\ FLOOKUP G x = SOME (b,sz) ==>
      ?y. dst = Var y /\ FLOOKUP HG y = SOME (b,sz)) ==>
   ?tv'. select_result cx (expr_type obj) btv (AttrSubscript fld) ee = (INL tv',ee) /\

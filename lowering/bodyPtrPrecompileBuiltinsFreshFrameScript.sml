@@ -37,7 +37,7 @@ Proof
 QED
 
 Theorem fresh_scratch_ghost_frame:
-  ghost_inv d cenv cx es G tn s /\
+  ghost_inv H d cenv cx es G tn s /\
   local_ptrs_rel func cenv es.scopes s /\
   (!name b sz. local_region cenv es.scopes s name b sz ==>
      regions_disjoint off len b sz) /\
@@ -53,7 +53,7 @@ Theorem fresh_scratch_ghost_frame:
   tn'.t_stor = tn.t_stor /\ tn'.t_trans = tn.t_trans /\ tn'.t_imm = tn.t_imm /\
   t.vs_call_ctx = s.vs_call_ctx /\ t.vs_accounts = s.vs_accounts /\
   t.vs_transient = s.vs_transient ==>
-  ghost_inv d cenv cx es G' tn' t
+  ghost_inv H d cenv cx es G' tn' t
 Proof
   strip_tac >> irule ghost_inv_exterior_frame >>
   qexistsl_tac [`G`, `s`, `tn`, `{i | off <= i /\ i < off + len}`] >>

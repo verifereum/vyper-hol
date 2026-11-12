@@ -34,8 +34,8 @@ QED
 
 Theorem ec_point_operand_kept:
   post_value_type cenv e1 = expr_type e1 /\
-  expr_post ctx func cenv cx e1 es sa s1 s0 es1 v1 x t /\
-  expr_post ctx func cenv cx e2 es1 s1 s2 t es' v2 y u /\
+  expr_post H ctx func cenv cx e1 es sa s1 s0 es1 v1 x t /\
+  expr_post H ctx func cenv cx e2 es1 s1 s2 t es' v2 y u /\
   expr_type e1 = ArrayT (BaseT (UintT 256)) (Fixed 2) /\
   expr_sim_inv cenv cx env es /\
   (!w. eval_operand x t = SOME w ==> eval_operand x u = SOME w) /\
@@ -65,7 +65,7 @@ Proof
       gvs[expr_val_at_def, local_val_at_def, evaluate_type_def, is_word_type_def,
           type_slot_size_def, wordsTheory.dimword_def] >> metis_tac[]) >>
   conj_tac
-  >- (drule_at (Pat `expr_post _ _ _ _ _ _ _ _ _ _ _ _ _`)
+  >- (drule_at (Pat `expr_post _ _ _ _ _ _ _ _ _ _ _ _ _ _`)
         expr_post_operand_local_kept >>
       simp[is_word_type_def, evaluate_type_def,
            type_slot_size_def, wordsTheory.dimword_def] >>
@@ -88,8 +88,8 @@ QED
 
 Theorem ec_point_ptr_operand_kept:
   post_value_type cenv e1 = expr_type e1 /\
-  expr_post ctx func cenv cx e1 es sa s1 s0 es1 v1 x t /\
-  expr_post ctx func cenv cx e2 es1 s1 s2 t es' v2 y u /\
+  expr_post H ctx func cenv cx e1 es sa s1 s0 es1 v1 x t /\
+  expr_post H ctx func cenv cx e2 es1 s1 s2 t es' v2 y u /\
   expr_type e1 = ArrayT (BaseT (UintT 256)) (Fixed 2) /\
   expr_sim_inv cenv cx env es /\
   (!w. eval_operand x t = SOME w ==> eval_operand x u = SOME w) /\

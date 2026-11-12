@@ -17,8 +17,8 @@ Theorem emit_storage_address_load_clean_path_ptr:
   eval_operand addr s = SOME slot /\ op_prov G addr = NONE /\
   op_taint tn addr = {} /\
   key_taint (if tr then tn.t_trans else tn.t_stor) slot = {} ==>
-  ?H tm t.
-    gas_path_ptr D 0 ctx fn PG G tn s 0 H tm (OK t) /\
+  ?HG tm t.
+    gas_path_ptr D 0 ctx fn PG G tn s 0 HG tm (OK t) /\
     t = update_var out (if tr then tload slot s else sload slot s)
       (s with vs_inst_idx := LENGTH sb.cs_current_insts) /\
     lookup_var out t = SOME (if tr then tload slot s else sload slot s) /\
@@ -30,9 +30,9 @@ Theorem emit_storage_address_load_clean_path_ptr:
     t.vs_call_ctx = s.vs_call_ctx /\ t.vs_accounts = s.vs_accounts /\
     t.vs_transient = s.vs_transient /\
     (!p. not_fresh_at sa p ==>
-      lookup_var p t = lookup_var p s /\ FLOOKUP H p = FLOOKUP G p /\
+      lookup_var p t = lookup_var p s /\ FLOOKUP HG p = FLOOKUP G p /\
       op_taint tm (Var p) = op_taint tn (Var p)) /\
-    op_prov H (Var out) = NONE
+    op_prov HG (Var out) = NONE
 Proof
   strip_tac >>
   `sb.cs_blocks = sa.cs_blocks /\ sb.cs_current_bb = sa.cs_current_bb /\
@@ -74,27 +74,27 @@ Theorem augassign_storage_address_load_clean_ptr:
   s.vs_inst_idx = LENGTH sa.cs_current_insts /\
   eval_operand addr s = SOME slot /\ op_prov G addr = NONE /\
   op_taint tn addr = {} /\
-  local_ptrs_reserved cenv sa /\ stmt_state_rel ctx fn cenv cx es s /\
+  local_ptrs_reserved cenv sa /\ stmt_state_rel H ctx fn cenv cx es s /\
   is_word_type ty /\ storage_holds cx tr ty (Value v) slot es s /\
   evaluate_type (get_tenv cx) ty = SOME tvt /\
-  (!st. storage_read_live cx tr st slot tvt) /\ 0 < type_slot_size tvt /\
-  ghost_inv d cenv cx es G tn s /\ ret_pc_ok cenv sa s /\
+  (!st. storage_read_live H tr st slot tvt) /\ 0 < type_slot_size tvt /\
+  ghost_inv H d cenv cx es G tn s /\ ret_pc_ok cenv sa s /\
   (!x sz. cenv.ce_return_buf = SOME (PtrVar (Var x) sz) ==> not_fresh_at sa x) ==>
-  ?H tm t.
-    gas_path_ptr D 0 ctx fn PG G tn s 0 H tm (OK t) /\
+  ?HG tm t.
+    gas_path_ptr D 0 ctx fn PG G tn s 0 HG tm (OK t) /\
     eval_operand (Var out) t = SOME (typed_val_to_w256 tvt v) /\
-    stmt_state_rel ctx fn cenv cx es t /\
-    ghost_inv d cenv cx es H tm t /\
-    ghost_kept cenv es sa G tn s H tm /\ tm.t_mem = tn.t_mem /\
+    stmt_state_rel H ctx fn cenv cx es t /\
+    ghost_inv H d cenv cx es HG tm t /\
+    ghost_kept cenv es sa G tn s HG tm /\ tm.t_mem = tn.t_mem /\
     op_taint tm (Var out) = {} /\
     ~t.vs_halted /\ t.vs_current_bb = sb.cs_current_bb /\
     t.vs_inst_idx = LENGTH sb.cs_current_insts /\
     local_ptrs_reserved cenv sb /\ not_fresh_at sb out /\
     (!rp. not_fresh_at sa rp ==> lookup_var rp t = lookup_var rp s) /\
-    op_prov H (Var out) = NONE
+    op_prov HG (Var out) = NONE
 Proof
   strip_tac >>
-  `stor_taint_ok cx tn s` by gvs[ghost_inv_def] >>
+  `stor_taint_ok H cx tn s` by gvs[ghost_inv_def] >>
   drule_all live_storage_head_clean >> strip_tac >>
   drule_all emit_storage_address_load_clean_path_ptr >>
   disch_then (qspecl_then [`PG`, `D`] strip_assume_tac) >>
@@ -102,7 +102,7 @@ Proof
    out = STRCAT "%" (toString sa.cs_next_var)` by
     gvs[emit_op_def, comp_bind_def, comp_ignore_bind_def, comp_return_def,
         fresh_var_def, fresh_id_def, emit_def] >>
-  qexistsl [`H`, `tm`, `t`] >> simp[IgnAsm `t = _`] >>
+  qexistsl [`HG`, `tm`, `t`] >> simp[IgnAsm `t = _`] >>
   conj_tac
   >- (qpat_x_assum `t = _` kall_tac >>
       drule_all storage_holds_load >> strip_tac >> gvs[eval_operand_def]) >>
@@ -136,12 +136,12 @@ Theorem emit_literal_slot_add_path_ptr:
   fn_has_code sa sb fn /\ ~ctx_has_dalloca ctx /\ ~s.vs_halted /\
   s.vs_current_bb = sa.cs_current_bb /\
   s.vs_inst_idx = LENGTH sa.cs_current_insts ==>
-  ?H tm t.
-    gas_path_ptr D 0 ctx fn PG G tn s 0 H tm (OK t) /\
+  ?HG tm t.
+    gas_path_ptr D 0 ctx fn PG G tn s 0 HG tm (OK t) /\
     t = update_var out (a + b)
       (s with vs_inst_idx := LENGTH sb.cs_current_insts) /\
     lookup_var out t = SOME (a + b) /\
-    op_prov H (Var out) = NONE /\ op_taint tm (Var out) = {} /\
+    op_prov HG (Var out) = NONE /\ op_taint tm (Var out) = {} /\
     ~t.vs_halted /\ t.vs_current_bb = sb.cs_current_bb /\
     t.vs_inst_idx = LENGTH sb.cs_current_insts /\
     t.vs_memory = s.vs_memory /\ tm.t_mem = tn.t_mem /\
@@ -149,7 +149,7 @@ Theorem emit_literal_slot_add_path_ptr:
     t.vs_call_ctx = s.vs_call_ctx /\ t.vs_accounts = s.vs_accounts /\
     t.vs_transient = s.vs_transient /\
     (!p. not_fresh_at sa p ==>
-      lookup_var p t = lookup_var p s /\ FLOOKUP H p = FLOOKUP G p /\
+      lookup_var p t = lookup_var p s /\ FLOOKUP HG p = FLOOKUP G p /\
       op_taint tm (Var p) = op_taint tn (Var p))
 Proof
   strip_tac >>
@@ -182,15 +182,15 @@ Theorem augassign_storage_slot_add_clean_ptr:
   fn_has_code sa sb fn /\ ~ctx_has_dalloca ctx /\ ~s.vs_halted /\
   s.vs_current_bb = sa.cs_current_bb /\
   s.vs_inst_idx = LENGTH sa.cs_current_insts /\
-  local_ptrs_reserved cenv sa /\ stmt_state_rel ctx fn cenv cx es s /\
-  ghost_inv d cenv cx es G tn s /\ ret_pc_ok cenv sa s /\
+  local_ptrs_reserved cenv sa /\ stmt_state_rel H ctx fn cenv cx es s /\
+  ghost_inv H d cenv cx es G tn s /\ ret_pc_ok cenv sa s /\
   (!x sz. cenv.ce_return_buf = SOME (PtrVar (Var x) sz) ==> not_fresh_at sa x) ==>
-  ?H tm t.
-    gas_path_ptr D 0 ctx fn PG G tn s 0 H tm (OK t) /\
+  ?HG tm t.
+    gas_path_ptr D 0 ctx fn PG G tn s 0 HG tm (OK t) /\
     eval_operand (Var out) t = SOME (a + b) /\
-    stmt_state_rel ctx fn cenv cx es t /\ ghost_inv d cenv cx es H tm t /\
-    ghost_kept cenv es sa G tn s H tm /\ tm.t_mem = tn.t_mem /\
-    op_prov H (Var out) = NONE /\ op_taint tm (Var out) = {} /\
+    stmt_state_rel H ctx fn cenv cx es t /\ ghost_inv H d cenv cx es HG tm t /\
+    ghost_kept cenv es sa G tn s HG tm /\ tm.t_mem = tn.t_mem /\
+    op_prov HG (Var out) = NONE /\ op_taint tm (Var out) = {} /\
     ~t.vs_halted /\ t.vs_current_bb = sb.cs_current_bb /\
     t.vs_inst_idx = LENGTH sb.cs_current_insts /\
     local_ptrs_reserved cenv sb /\ not_fresh_at sb out /\
@@ -204,7 +204,7 @@ Proof
    out = STRCAT "%" (toString sa.cs_next_var)` by
     gvs[emit_op_def, comp_bind_def, comp_ignore_bind_def, comp_return_def,
         fresh_var_def, fresh_id_def, emit_def] >>
-  qexistsl [`H`, `tm`, `t`] >> simp[IgnAsm `t = _`, eval_operand_def] >>
+  qexistsl [`HG`, `tm`, `t`] >> simp[IgnAsm `t = _`, eval_operand_def] >>
   conj_tac
   >- (gvs[] >> simp[stmt_state_rel_inst_idx] >>
       irule stmt_state_rel_update_var >> simp[stmt_state_rel_inst_idx] >>
@@ -224,20 +224,20 @@ Theorem augassign_storage_field_load_clean_ptr:
   fn_has_code sa sb fn /\ ~ctx_has_dalloca ctx /\ ~s.vs_halted /\
   s.vs_current_bb = sa.cs_current_bb /\
   s.vs_inst_idx = LENGTH sa.cs_current_insts /\
-  local_ptrs_reserved cenv sa /\ stmt_state_rel ctx fn cenv cx es s /\
+  local_ptrs_reserved cenv sa /\ stmt_state_rel H ctx fn cenv cx es s /\
   is_word_type ty /\ storage_holds cx tr ty (Value v) (root_slot + off) es s /\
   evaluate_type (get_tenv cx) ty = SOME tvt /\
-  (!st. storage_read_live cx tr st (root_slot + off) tvt) /\ 0 < type_slot_size tvt /\
-  ghost_inv d cenv cx es G tn s /\ ret_pc_ok cenv sa s /\
+  (!st. storage_read_live H tr st (root_slot + off) tvt) /\ 0 < type_slot_size tvt /\
+  ghost_inv H d cenv cx es G tn s /\ ret_pc_ok cenv sa s /\
   (!x sz. cenv.ce_return_buf = SOME (PtrVar (Var x) sz) ==> not_fresh_at sa x) ==>
-  ?H tm t.
-    gas_path_ptr D 0 ctx fn PG G tn s 0 H tm (OK t) /\
+  ?HG tm t.
+    gas_path_ptr D 0 ctx fn PG G tn s 0 HG tm (OK t) /\
     eval_operand (Var dst) t = SOME (root_slot + off) /\
-    op_prov H (Var dst) = NONE /\ op_taint tm (Var dst) = {} /\
+    op_prov HG (Var dst) = NONE /\ op_taint tm (Var dst) = {} /\
     eval_operand (Var out) t = SOME (typed_val_to_w256 tvt v) /\
-    stmt_state_rel ctx fn cenv cx es t /\ ghost_inv d cenv cx es H tm t /\
-    ghost_kept cenv es sa G tn s H tm /\ tm.t_mem = tn.t_mem /\
-    op_prov H (Var out) = NONE /\ op_taint tm (Var out) = {} /\
+    stmt_state_rel H ctx fn cenv cx es t /\ ghost_inv H d cenv cx es HG tm t /\
+    ghost_kept cenv es sa G tn s HG tm /\ tm.t_mem = tn.t_mem /\
+    op_prov HG (Var out) = NONE /\ op_taint tm (Var out) = {} /\
     ~t.vs_halted /\ t.vs_current_bb = sb.cs_current_bb /\
     t.vs_inst_idx = LENGTH sb.cs_current_insts /\
     local_ptrs_reserved cenv sb /\ not_fresh_at sb dst /\ not_fresh_at sb out /\
@@ -261,11 +261,11 @@ Proof
   disch_then (qspecl_then [`PG`, `D`] strip_assume_tac) >>
   `!rp. not_fresh_at sa rp ==> not_fresh_at sm rp` by
     metis_tac[not_fresh_at_mono] >>
-  `op_prov H' (Var dst) = NONE /\ op_taint tm' (Var dst) = {}` by
+  `op_prov HG' (Var dst) = NONE /\ op_taint tm' (Var dst) = {}` by
     fs[ghost_kept_def, op_prov_def] >>
-  `ghost_kept cenv es sa G tn s H' tm'` by
+  `ghost_kept cenv es sa G tn s HG' tm'` by
     (fs[ghost_kept_def] >> metis_tac[]) >>
-  qexistsl [`H'`, `tm'`, `t'`] >> simp[] >>
+  qexistsl [`HG'`, `tm'`, `t'`] >> simp[] >>
   conj_tac >- (drule_all gas_path_ptr_then >> simp[]) >>
   conj_tac >- gvs[eval_operand_def] >>
   metis_tac[not_fresh_at_mono]

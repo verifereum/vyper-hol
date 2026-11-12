@@ -5,8 +5,8 @@ Ancestors
   exprSimDefs loweringPosts compileEnv loweringStateRelDefs venomState words finite_map
 
 Theorem ifexp_copy_allocation_bounds:
-  stmt_state_rel ctx fn ce cx es s0 /\
-  vv_post ctx fn ce cx e es sa sb s0 ee tv vv sArm /\
+  stmt_state_rel H ctx fn ce cx es s0 /\
+  vv_post H ctx fn ce cx e es sa sb s0 ee tv vv sArm /\
   local_ptrs_reserved ce sa /\ MAP FDOM es.scopes = MAP FDOM ee.scopes /\
   fn_inst_ids_distinct fn /\ sa.cs_next_var <= sb.cs_next_var /\
   sa.cs_next_id <= sb.cs_next_id /\
@@ -26,7 +26,7 @@ Theorem ifexp_copy_allocation_bounds:
     (w2n w+type_memory_size entry.type <= b \/ b+capacity <= w2n w))
 Proof
   strip_tac >>
-  `stmt_state_rel ctx fn ce cx ee sArm` by gvs[vv_post_def] >>
+  `stmt_state_rel H ctx fn ce cx ee sArm` by gvs[vv_post_def] >>
   drule_all compile_alloc_buffer_raw_step >> strip_tac >>
   drule_all compile_alloc_buffer_frame_separation >>
   disch_then (qspec_then `ee.scopes` strip_assume_tac) >>

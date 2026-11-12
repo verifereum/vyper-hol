@@ -28,8 +28,8 @@ Theorem array_bounds_check_counted_ok:
     (!q. not_fresh_at sa q ==>
       lookup_var q sf = lookup_var q s /\ FLOOKUP Gf q = FLOOKUP G q /\
       op_taint tnf (Var q) = op_taint tn (Var q)) /\
-    (!cenv cx es. stmt_state_rel ctx func cenv cx es s /\
-      local_ptrs_reserved cenv sa ==> stmt_state_rel ctx func cenv cx es sf)
+    (!cenv cx es. stmt_state_rel H ctx func cenv cx es s /\
+      local_ptrs_reserved cenv sa ==> stmt_state_rel H ctx func cenv cx es sf)
 Proof
   Cases_on `sgn` >>
   simp[array_bounds_check_def, array_bounds_valid_def, comp_bind_def,

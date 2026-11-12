@@ -25,7 +25,7 @@ Proof
 QED
 
 Theorem pop_local_path_robust:
-  ghost_inv d cenv cx es G tn s /\
+  ghost_inv H d cenv cx es G tn s /\
   lookup_scopes id es.scopes = SOME entry /\
   FLOOKUP cenv.ce_vars id = SOME (PtrVar (Var p) sz) /\
   lookup_var p s = SOME b /\
@@ -44,7 +44,7 @@ Proof
 QED
 
 Theorem pop_local_path_header_clean:
-  ghost_inv d cenv cx es G tn s /\
+  ghost_inv H d cenv cx es G tn s /\
   lookup_scopes id es.scopes = SOME entry /\
   FLOOKUP cenv.ce_vars id = SOME (PtrVar (Var p) sz) /\
   lookup_var p s = SOME b /\
@@ -65,9 +65,9 @@ Proof
 QED
 
 Theorem pop_memory_target_ptr_handoff:
-  target_post ctx func cenv cx es sa sb s0 mid
+  target_post H ctx func cenv cx es sa sb s0 mid
     (PlaceR (MemoryPlace id path)) (Type ty) (hdr,loc,pt) s /\
-  ghost_inv d cenv cx mid G tn s /\
+  ghost_inv H d cenv cx mid G tn s /\
   target_ptr_ok cenv (PlaceR (MemoryPlace id path)) (hdr,loc,pt) G tn s /\
   lookup_scopes id mid.scopes = SOME entry /\
   value_has_type entry.type entry.value /\

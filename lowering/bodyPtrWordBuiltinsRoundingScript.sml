@@ -80,17 +80,17 @@ Theorem word_round_sequence_checked:
   (if up then compile_ceil else compile_floor) v divisor sa = (op,sb) /\
   op_prov G v = NONE /\ op_taint tn v = {} /\
   allocas_from lo s /\ ~ctx_has_dalloca ctx /\
-  ghost_inv d cenv cx es G tn s /\ ghost_kept cenv e0 sc G0 tn0 s0 G tn /\
+  ghost_inv H d cenv cx es G tn s /\ ghost_kept cenv e0 sc G0 tn0 s0 G tn /\
   local_ptrs_reserved cenv sc /\ sc.cs_next_var <= sa.cs_next_var /\
   (!p sz. cenv.ce_return_buf = SOME (PtrVar (Var p) sz) ==> not_fresh_at sc p) /\
   (!p sz. cenv.ce_return_pc = SOME (PtrVar (Var p) sz) ==> not_fresh_at sc p) ==>
-  ?H th. inst_seq_ptr D lo ctx fn PG G tn (emitted_insts sa sb) s H th /\
+  ?HG th. inst_seq_ptr D lo ctx fn PG G tn (emitted_insts sa sb) s HG th /\
     (!t. run_inst_seq (emitted_insts sa sb) s = OK t ==>
       (!x. x IN {z | v = Var z} UNION
         set (FLAT (MAP (\i. i.inst_outputs) (emitted_insts sa sb))) ==>
-        FLOOKUP H x = NONE /\ op_taint th (Var x) = {}) /\
-      allocas_from lo t /\ ghost_inv d cenv cx es H th t /\
-      ghost_kept cenv e0 sc G0 tn0 s0 H th)
+        FLOOKUP HG x = NONE /\ op_taint th (Var x) = {}) /\
+      allocas_from lo t /\ ghost_inv H d cenv cx es HG th t /\
+      ghost_kept cenv e0 sc G0 tn0 s0 HG th)
 Proof
   strip_tac >> drule word_round_emitted_shape >> strip_tac >>
   drule word_round_emitted_dependency >> strip_tac >>
@@ -98,10 +98,10 @@ Proof
   disch_then (qspec_then `sc` mp_tac) >>
   strip_tac >>
   irule (word_scalar_sequence |> Q.INST
-    [`P` |-> `\B H th u.
-      (!x. x IN B ==> FLOOKUP H x = NONE /\ op_taint th (Var x) = {}) /\
-      allocas_from lo u /\ ghost_inv d cenv cx es H th u /\
-      ghost_kept cenv e0 sc G0 tn0 s0 H th`] |> BETA_RULE) >>
+    [`P` |-> `\B HG th u.
+      (!x. x IN B ==> FLOOKUP HG x = NONE /\ op_taint th (Var x) = {}) /\
+      allocas_from lo u /\ ghost_inv H d cenv cx es HG th u /\
+      ghost_kept cenv e0 sc G0 tn0 s0 HG th`] |> BETA_RULE) >>
   simp[] >>
   conj_tac >- simp[word_abs_allocas_index, word_interval_ghost_inv_index] >>
   conj_tac
@@ -127,19 +127,19 @@ Theorem word_round_emitted_checked:
   (if up then compile_ceil else compile_floor) v divisor sa = (op,sb) /\
   op_prov G v = NONE /\ op_taint tn v = {} /\
   allocas_from lo s /\ ~ctx_has_dalloca ctx /\
-  ghost_inv d cenv cx es G tn s /\ ghost_kept cenv e0 sc G0 tn0 s0 G tn /\
+  ghost_inv H d cenv cx es G tn s /\ ghost_kept cenv e0 sc G0 tn0 s0 G tn /\
   local_ptrs_reserved cenv sc /\ sc.cs_next_var <= sa.cs_next_var /\
   (!p sz. cenv.ce_return_buf = SOME (PtrVar (Var p) sz) ==> not_fresh_at sc p) /\
   (!p sz. cenv.ce_return_pc = SOME (PtrVar (Var p) sz) ==> not_fresh_at sc p) ==>
-  ?H th. inst_seq_ptr D lo ctx fn PG G tn (emitted_insts sa sb) s H th /\
+  ?HG th. inst_seq_ptr D lo ctx fn PG G tn (emitted_insts sa sb) s HG th /\
     (!t. run_inst_seq (emitted_insts sa sb) s = OK t ==>
-      allocas_from lo t /\ ghost_inv d cenv cx es H th t /\
-      ghost_kept cenv e0 sc G0 tn0 s0 H th /\
-      op_prov H op = NONE /\ op_taint th op = {})
+      allocas_from lo t /\ ghost_inv H d cenv cx es HG th t /\
+      ghost_kept cenv e0 sc G0 tn0 s0 HG th /\
+      op_prov HG op = NONE /\ op_taint th op = {})
 Proof
   strip_tac >> drule_all word_round_sequence_checked >>
   disch_then (qspecl_then [`fn`, `PG`, `D`] strip_assume_tac) >>
-  qexistsl_tac [`H`, `th`] >> simp[] >> rpt strip_tac >>
+  qexistsl_tac [`HG`, `th`] >> simp[] >> rpt strip_tac >>
   first_x_assum drule >> strip_tac >> simp[] >>
   drule word_round_emitted_insts >> strip_tac >> gvs[] >>
   simp[op_prov_def] >> first_x_assum irule >> simp[mk_inst_def]
@@ -176,15 +176,15 @@ Theorem word_round_counted_normal_post:
   run_inst_seq (emitted_insts sa sb) s = OK t /\
   op_prov G v = NONE /\ op_taint tn v = {} /\
   allocas_from lo s /\ ~ctx_has_dalloca ctx /\
-  ghost_inv d cenv cx es G tn s /\ ghost_kept cenv e0 sc G0 tn0 s0 G tn /\
+  ghost_inv H d cenv cx es G tn s /\ ghost_kept cenv e0 sc G0 tn0 s0 G tn /\
   local_ptrs_reserved cenv sc /\ sc.cs_next_var <= sa.cs_next_var /\
   (!p sz. cenv.ce_return_buf = SOME (PtrVar (Var p) sz) ==> not_fresh_at sc p) /\
   (!p sz. cenv.ce_return_pc = SOME (PtrVar (Var p) sz) ==> not_fresh_at sc p) ==>
-  ?H th. gas_path_ptr D lo ctx fn PG G tn s 0 H th
+  ?HG th. gas_path_ptr D lo ctx fn PG G tn s 0 HG th
       (OK (t with vs_inst_idx := s.vs_inst_idx + 6)) /\
-    allocas_from lo t /\ ghost_inv d cenv cx es H th t /\
-    ghost_kept cenv e0 sc G0 tn0 s0 H th /\
-    op_prov H op = NONE /\ op_taint th op = {}
+    allocas_from lo t /\ ghost_inv H d cenv cx es HG th t /\
+    ghost_kept cenv e0 sc G0 tn0 s0 HG th /\
+    op_prov HG op = NONE /\ op_taint th op = {}
 Proof
   strip_tac >> drule_all word_round_emitted_checked >>
   disch_then (qspecl_then [`fn`, `PG`, `D`] strip_assume_tac) >>
@@ -200,11 +200,11 @@ Theorem word_round_counted_abort:
   run_inst_seq (emitted_insts sa sb) s = Abort a t /\
   op_prov G v = NONE /\ op_taint tn v = {} /\
   allocas_from lo s /\ ~ctx_has_dalloca ctx /\
-  ghost_inv d cenv cx es G tn s /\ ghost_kept cenv e0 sc G0 tn0 s0 G tn /\
+  ghost_inv H d cenv cx es G tn s /\ ghost_kept cenv e0 sc G0 tn0 s0 G tn /\
   local_ptrs_reserved cenv sc /\ sc.cs_next_var <= sa.cs_next_var /\
   (!p sz. cenv.ce_return_buf = SOME (PtrVar (Var p) sz) ==> not_fresh_at sc p) /\
   (!p sz. cenv.ce_return_pc = SOME (PtrVar (Var p) sz) ==> not_fresh_at sc p) ==>
-  ?n j H th. gas_path_ptr D lo ctx fn PG G tn s n H th
+  ?n j HG th. gas_path_ptr D lo ctx fn PG G tn s n HG th
     (Abort a (t with vs_inst_idx := j))
 Proof
   strip_tac >> drule_all word_round_emitted_checked >>

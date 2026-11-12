@@ -17,15 +17,15 @@ Theorem bytes_word_abort_counted:
   ~ctx_has_dalloca ctx /\ ~s.vs_halted /\
   s.vs_current_bb = sa.cs_current_bb /\ s.vs_inst_idx = LENGTH sa.cs_current_insts /\
   fn_has_code sa sb fn /\
-  expr_post ctx fn cenv cx e es ca sa s0 ee v x s /\
+  expr_post H ctx fn cenv cx e es ca sa s0 ee v x s /\
   ptr_val_ok cx (expr_type e) v x G tn s /\ ptr_buf_ok cenv e x G s /\
-  ghost_inv d cenv cx ee G tn s /\ ghost_kept cenv es ca G0 tn0 s0 G tn /\
+  ghost_inv H d cenv cx ee G tn s /\ ghost_kept cenv es ca G0 tn0 s0 G tn /\
   ca.cs_next_var <= sa.cs_next_var /\
   (!name p sz. FLOOKUP cenv.ce_vars name = SOME (PtrVar (Var p) sz) ==> not_fresh_at sa p) /\
   (!p sz. cenv.ce_return_buf = SOME (PtrVar (Var p) sz) ==> not_fresh_at sa p) /\
   (!p sz. cenv.ce_return_pc = SOME (PtrVar (Var p) sz) ==> not_fresh_at sa p) /\
   run_inst_seq (emitted_insts sa sb) s = Abort err t ==>
-  ?H th j. gas_path_ptr D 0 ctx fn PG G tn s 0 H th
+  ?HG th j. gas_path_ptr D 0 ctx fn PG G tn s 0 HG th
     (Abort err (t with vs_inst_idx := j))
 Proof
   disch_then (map_every assume_tac o CONJUNCTS) >>

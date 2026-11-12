@@ -14,7 +14,7 @@ Theorem external_word_materialize_endpoint:
   step_inst_base (mk_inst id opc [src] [tmp]) s = OK (update_var tmp w s) /\
   (opc = SLOAD ==> key_taint tn.t_stor a = {}) /\
   (opc = TLOAD ==> key_taint tn.t_trans a = {}) /\
-  ghost_inv d cenv cx es' G tn s /\
+  ghost_inv H d cenv cx es' G tn s /\
   ghost_kept cenv es sa G0 tn0 s0 G tn /\
   (!x. not_fresh_at sa x ==> x <> tmp) /\
   (!name p sz. FLOOKUP cenv.ce_vars name = SOME (PtrVar (Var p) sz) ==> p <> tmp) /\
@@ -25,7 +25,7 @@ Theorem external_word_materialize_endpoint:
     sf = ((update_var tmp w s) with vs_inst_idx := SUC s.vs_inst_idx) /\
     eval_operand (Var tmp) sf = SOME w /\ op_taint tnf (Var tmp) = {} /\
     op_prov Gf (Var tmp) = NONE /\
-    ghost_inv d cenv cx es' Gf tnf sf /\
+    ghost_inv H d cenv cx es' Gf tnf sf /\
     ghost_kept cenv es sa G0 tn0 s0 Gf tnf /\
     sf.vs_memory = s.vs_memory /\
     tnf.t_mem = tn.t_mem /\ tnf.t_stor = tn.t_stor /\

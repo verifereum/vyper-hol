@@ -22,7 +22,7 @@ QED
 
 Theorem assign_base_local_staged_code:
   compile_assign_value ce dst LocMemory src F (SOME LocMemory)
-    dty sty info bytes sa = ((),sb) /\ fn_has_code sa sb fn /\
+    dty sty bytes sa = ((),sb) /\ fn_has_code sa sb fn /\
   (dty = sty \/ is_bytestring_type dty) ==>
   ?buf sm sn.
     compile_alloc_buffer (type_memory_bytes ce sty) sa = (buf,sm) /\
@@ -36,7 +36,7 @@ Proof
     compile_alloc_buffer (type_memory_bytes ce sty) sa = (buf,sm) /\
     compile_copy_memory buf.buf_operand src (type_memory_bytes ce sty) sm = ((),sn) /\
     compile_store_memory ce buf.buf_operand dst dty sty sn = ((),sb)` by
-    (qpat_x_assum `compile_assign_value _ _ _ _ _ _ _ _ _ _ _ = _` mp_tac >>
+    (qpat_x_assum `compile_assign_value _ _ _ _ _ _ _ _ _ _ = _` mp_tac >>
      simp[compile_assign_value_def, comp_bind_def, comp_ignore_bind_def, comp_return_def] >>
      rpt (pairarg_tac >> gvs[]) >> strip_tac >> metis_tac[pairTheory.PAIR]) >>
   `compile_store_memory ce buf.buf_operand dst dty dty sn = ((),sb)` by
@@ -74,16 +74,16 @@ Theorem assign_base_local_compatible_store_ptr:
   lookup_var src s = SOME sw /\ ptr_covers G tn src s (type_memory_size tv) /\
   (!m. mem_agree_outside tn.t_mem s.vs_memory m ==>
     val_in_memory tv v (w2n sw) m) /\
-  ghost_inv d cenv cx es G tn s /\ stmt_state_rel ctx fn cenv cx es s /\
+  ghost_inv H d cenv cx es G tn s /\ stmt_state_rel H ctx fn cenv cx es s /\
   fn_has_code sa sb fn /\ ~ctx_has_dalloca ctx /\ ~s.vs_halted /\
   s.vs_current_bb = sa.cs_current_bb /\ s.vs_inst_idx = LENGTH sa.cs_current_insts ==>
   ?Gf tf u.
     gas_path_ptr D 0 ctx fn PG G tn s 0 Gf tf (OK u) /\
     u.vs_current_bb = sb.cs_current_bb /\
     u.vs_inst_idx = LENGTH sb.cs_current_insts /\ ~u.vs_halted /\
-    stmt_state_rel ctx fn cenv cx
+    stmt_state_rel H ctx fn cenv cx
       (es with scopes := pre ++ (sc |+ (id,entry with <|value := v; popped := []|>)) :: rest) u /\
-    ghost_inv d cenv cx
+    ghost_inv H d cenv cx
       (es with scopes := pre ++ (sc |+ (id,entry with <|value := v; popped := []|>)) :: rest)
       Gf tf u /\
     (!x. not_fresh_at sa x ==>
@@ -111,7 +111,7 @@ QED
 
 Theorem assign_base_local_memory_assign_ptr:
   compile_assign_value cenv (Var p) LocMemory (Var src) F loc
-    dty sty info bytes sa = ((),sb) /\
+    dty sty bytes sa = ((),sb) /\
   (dty = sty \/ is_bytestring_type dty /\ is_bytestring_type sty) /\
   ~is_word_type dty /\ ~is_word_type sty /\
   evaluate_type (get_tenv cx) dty = SOME entry.type /\
@@ -130,7 +130,7 @@ Theorem assign_base_local_memory_assign_ptr:
   lookup_var src s = SOME sw /\ ptr_covers G tn src s (type_memory_size tv) /\
   (!m. mem_agree_outside tn.t_mem s.vs_memory m ==>
     val_in_memory tv v (w2n sw) m) /\
-  ghost_inv d cenv cx es G tn s /\ stmt_state_rel ctx fn cenv cx es s /\
+  ghost_inv H d cenv cx es G tn s /\ stmt_state_rel H ctx fn cenv cx es s /\
   fn_has_code sa sb fn /\ fn_inst_ids_distinct fn /\
   ~ctx_has_dalloca ctx /\ ~s.vs_halted /\
   s.vs_current_bb = sa.cs_current_bb /\ s.vs_inst_idx = LENGTH sa.cs_current_insts ==>
@@ -138,9 +138,9 @@ Theorem assign_base_local_memory_assign_ptr:
     gas_path_ptr D 0 ctx fn PG G tn s 0 Gf tf (OK u) /\
     u.vs_current_bb = sb.cs_current_bb /\
     u.vs_inst_idx = LENGTH sb.cs_current_insts /\ ~u.vs_halted /\
-    stmt_state_rel ctx fn cenv cx
+    stmt_state_rel H ctx fn cenv cx
       (es with scopes := pre ++ (sc |+ (id,entry with <|value := v; popped := []|>)) :: rest) u /\
-    ghost_inv d cenv cx
+    ghost_inv H d cenv cx
       (es with scopes := pre ++ (sc |+ (id,entry with <|value := v; popped := []|>)) :: rest)
       Gf tf u /\
     (!x. not_fresh_at sa x ==>
@@ -151,7 +151,7 @@ Proof
   Cases_on `loc = SOME LocMemory`
   >- suspend "staged" >>
   `compile_store_memory cenv (Var src) (Var p) dty dty sa = ((),sb)` by
-    (qpat_x_assum `compile_assign_value _ _ _ _ _ _ _ _ _ _ _ = _` mp_tac >>
+    (qpat_x_assum `compile_assign_value _ _ _ _ _ _ _ _ _ _ = _` mp_tac >>
      simp[compile_assign_value_def] >> metis_tac[compile_store_memory_bytestring_src]) >>
   irule assign_base_local_compatible_store_ptr >> simp[] >>
   goal_assum (drule_at (Pat `compile_store_memory _ _ _ _ _ _ = _`)) >> simp[] >>

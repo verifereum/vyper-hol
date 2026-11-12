@@ -110,7 +110,7 @@ Resume compile_assign_tuple_targets_stmt_frag_ptr[normal]:
     (qpat_assum `bind (eval_expr cx e) (read_result cx) (es with gas_obs := obs) = _`
        (mp_tac o MATCH_MP stmtSimDefsTheory.eval_read_preserves_scopes_dom) >> simp[]) >>
   drule_all assign_tuple_targets_suffix_ptr >>
-  disch_then (qspecl_then [`lctx`, `PG`, `cx_dead cx`] strip_assume_tac) >>
+  disch_then (qspecl_then [`lctx`, `PG`, `cx_dead H cx`] strip_assume_tac) >>
   suspend "finish"
 QED
 

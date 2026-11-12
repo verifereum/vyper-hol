@@ -11,9 +11,9 @@ Theorem checked_sequence_last_post[local]:
     EVERY (\i. ~is_terminator i.inst_opcode) (prefix ++ [last]) /\
     inst_seq_ptr D lo ctx fn PG G tn (prefix ++ [last]) s G' tn' /\
     run_inst_seq (prefix ++ [last]) s = OK t /\
-    (!u v H q. ptr_inst_ok D lo 0 ctx fn H q last u /\
+    (!u v HG q. ptr_inst_ok D lo 0 ctx fn HG q last u /\
        step_inst_base last u = OK v ==>
-       R (step_prov PG H last v) (step_taint last u v q)) ==>
+       R (step_prov PG HG last v) (step_taint last u v q)) ==>
     R G' tn'
 Proof
   Induct
@@ -60,7 +60,7 @@ Theorem blockhash_checked_output_clean:
 Proof
   strip_tac >> drule blockhash_compile_last >> strip_tac >> gvs[] >>
   irule (BETA_RULE (Q.INST
-    [`R` |-> `\H q. op_prov H (Var out) = NONE /\ op_taint q (Var out) = {}`,
+    [`R` |-> `\HG q. op_prov HG (Var out) = NONE /\ op_taint q (Var out) = {}`,
      `last` |-> `mk_inst id BLOCKHASH [arg] [out]`]
     (SPEC_ALL checked_sequence_last_post))) >>
   simp[] >> goal_assum (drule_at Any) >>
@@ -83,11 +83,11 @@ Theorem blockhash_checked_normal_ghosts:
   compile_blockhash arg sa = (op,sb) /\
   inst_seq_ptr D 0 ctx fn PG G tn (emitted_insts sa sb) s G' tn' /\
   run_inst_seq (emitted_insts sa sb) s = OK t /\
-  ghost_inv d cenv cx es G tn s /\ local_ptrs_reserved cenv sa /\
+  ghost_inv H d cenv cx es G tn s /\ local_ptrs_reserved cenv sa /\
   ghost_kept cenv es0 sa G0 tn0 s0 G tn /\
   (!x sz. cenv.ce_return_buf = SOME (PtrVar (Var x) sz) ==> not_fresh_at sa x) /\
   (!x sz. cenv.ce_return_pc = SOME (PtrVar (Var x) sz) ==> not_fresh_at sa x) ==>
-  ghost_inv d cenv cx es G' tn' t /\ ghost_kept cenv es0 sa G0 tn0 s0 G' tn'
+  ghost_inv H d cenv cx es G' tn' t /\ ghost_kept cenv es0 sa G0 tn0 s0 G' tn'
 Proof
   strip_tac >> drule_all blockhash_checked_ghost_frame >> strip_tac >>
   drule_all blockhash_raw_register_frame >> strip_tac >>
@@ -103,8 +103,8 @@ QED
 Theorem blockhash_checked_state_rel:
   compile_blockhash arg sa = (op,sb) /\
   run_inst_seq (emitted_insts sa sb) s = OK t /\
-  stmt_state_rel ctx fn cenv cx es s /\ local_ptrs_reserved cenv sa ==>
-  stmt_state_rel ctx fn cenv cx es t
+  stmt_state_rel H ctx fn cenv cx es s /\ local_ptrs_reserved cenv sa ==>
+  stmt_state_rel H ctx fn cenv cx es t
 Proof
   strip_tac >> drule_all blockhash_raw_register_frame >> strip_tac >>
   irule stmt_state_rel_reserved_frame >> qexistsl_tac [`s`, `sa`] >>
@@ -120,18 +120,18 @@ Theorem blockhash_counted_normal_post:
   op_taint tn arg = {} /\ op_prov G arg = NONE /\
   (!x. arg = Var x ==> not_fresh_at sa x) /\ ~ctx_has_dalloca ctx /\
   run_inst_seq (emitted_insts sa sb) s = OK t /\
-  ghost_inv d cenv cx es G tn s /\ local_ptrs_reserved cenv sa /\
+  ghost_inv H d cenv cx es G tn s /\ local_ptrs_reserved cenv sa /\
   ghost_kept cenv es0 sa G0 tn0 s0 G tn /\
   (!x sz. cenv.ce_return_buf = SOME (PtrVar (Var x) sz) ==> not_fresh_at sa x) /\
   (!x sz. cenv.ce_return_pc = SOME (PtrVar (Var x) sz) ==> not_fresh_at sa x) /\
-  stmt_state_rel ctx fn cenv cx es s ==>
+  stmt_state_rel H ctx fn cenv cx es s ==>
   ?G' tn'.
     gas_path_ptr D 0 ctx fn PG G tn s 0 G' tn'
       (OK (t with vs_inst_idx := LENGTH sb.cs_current_insts)) /\
-    ghost_inv d cenv cx es G' tn' t /\
+    ghost_inv H d cenv cx es G' tn' t /\
     ghost_kept cenv es0 sa G0 tn0 s0 G' tn' /\
     op_prov G' op = NONE /\ op_taint tn' op = {} /\
-    stmt_state_rel ctx fn cenv cx es t
+    stmt_state_rel H ctx fn cenv cx es t
 Proof
   strip_tac >> drule_all blockhash_suffix_code >> strip_tac >>
   `?G' tn'. inst_seq_ptr D 0 ctx fn PG G tn (emitted_insts sa sb) s G' tn'` by
@@ -155,18 +155,18 @@ Theorem blockhash_normal_suffix_run:
   op_taint tn arg = {} /\ op_prov G arg = NONE /\
   (!x. arg = Var x ==> not_fresh_at sa x) /\ ~ctx_has_dalloca ctx /\
   run_inst_seq (emitted_insts sa sb) s = OK u /\ eval_operand op u = SOME w /\
-  ghost_inv d cenv cx es G tn s /\ local_ptrs_reserved cenv sa /\
+  ghost_inv H d cenv cx es G tn s /\ local_ptrs_reserved cenv sa /\
   ghost_kept cenv es0 sa G0 tn0 s0 G tn /\
   (!x sz. cenv.ce_return_buf = SOME (PtrVar (Var x) sz) ==> not_fresh_at sa x) /\
   (!x sz. cenv.ce_return_pc = SOME (PtrVar (Var x) sz) ==> not_fresh_at sa x) /\
-  stmt_state_rel ctx fn cenv cx es s ==>
+  stmt_state_rel H ctx fn cenv cx es s ==>
   ?G' tn' t.
     gas_path_ptr D 0 ctx fn PG G tn s 0 G' tn' (OK t) /\
-    ghost_inv d cenv cx es G' tn' t /\
+    ghost_inv H d cenv cx es G' tn' t /\
     ghost_kept cenv es0 sa G0 tn0 s0 G' tn' /\
     op_prov G' op = NONE /\ op_taint tn' op = {} /\
     eval_operand op t = SOME w /\
-    stmt_state_rel ctx fn cenv cx es t /\ ~t.vs_halted /\
+    stmt_state_rel H ctx fn cenv cx es t /\ ~t.vs_halted /\
     t.vs_current_bb = sb.cs_current_bb /\
     t.vs_inst_idx = LENGTH sb.cs_current_insts /\
     (!x. not_fresh_at sa x ==> lookup_var x t = lookup_var x s) /\

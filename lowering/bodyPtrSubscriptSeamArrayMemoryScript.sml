@@ -101,7 +101,7 @@ Resume subscript_array_framed_memory_ptr[base_normal]:
     (strip_assume_tac o BETA_RULE) >> gvs[] >>
   `?p. bvv = LocatedValue (ArrayT ann (Fixed n)) p /\ p.ptr_location = LocMemory` by
     (Cases_on `bvv` >> gvs[vv_location_def] >>
-     qpat_x_assum `vv_post _ _ _ _ _ _ _ _ _ _ _ _ _` mp_tac >>
+     qpat_x_assum `vv_post _ _ _ _ _ _ _ _ _ _ _ _ _ _` mp_tac >>
      simp[loweringPostsTheory.vv_post_def, loweringPostsTheory.vv_holds_def,
           compileEnvTheory.is_bytestring_type_def] >> metis_tac[]) >>
   qpat_x_assum `bvv = _` SUBST_ALL_TAC >>
@@ -113,7 +113,7 @@ Resume subscript_array_framed_memory_ptr[base_normal]:
      (es_end with gas_obs := [])` by
     (simp[gas_admissible_def] >> rpt strip_tac >>
      metis_tac[expr_body_pre_gas_obs, expr_body_pre_res_ok]) >>
-  `stmt_state_rel ctx func cenv cx (es_end with gas_obs := []) t` by
+  `stmt_state_rel H ctx func cenv cx (es_end with gas_obs := []) t` by
     gvs[loweringPostsTheory.vv_post_def] >>
   `~t.vs_halted` by
     metis_tac[gas_marked_exec_ptr_def, gas_path_ptr_erase,

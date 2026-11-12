@@ -25,7 +25,7 @@ End
 
 Definition abi_decode_member_live_def:
   abi_decode_member_live ret ctx func cenv cx es src b h dst d cap pos z hi sa G tn s <=>
-    ghost_inv ret cenv cx es G tn s /\ stmt_state_rel ctx func cenv cx es s /\
+    ghost_inv H ret cenv cx es G tn s /\ stmt_state_rel H ctx func cenv cx es s /\
     ~ctx_has_dalloca ctx /\ ~s.vs_halted /\
     s.vs_current_bb = sa.cs_current_bb /\
     s.vs_inst_idx = LENGTH sa.cs_current_insts /\ fresh_vars_wrt sa s /\
@@ -52,11 +52,11 @@ Definition abi_decode_member_live_def:
 End
 
 Definition abi_decode_member_frame_def:
-  abi_decode_member_frame sa G tn s H tf t a k <=>
+  abi_decode_member_frame sa G tn s HG tf t a k <=>
     (t with <|vs_vars := s.vs_vars; vs_memory := s.vs_memory;
               vs_inst_idx := s.vs_inst_idx|>) = s /\
     (!x. not_fresh_at sa x ==> lookup_var x t = lookup_var x s /\
-      FLOOKUP H x = FLOOKUP G x /\ op_taint tf (Var x) = op_taint tn (Var x)) /\
+      FLOOKUP HG x = FLOOKUP G x /\ op_taint tf (Var x) = op_taint tn (Var x)) /\
     tf.t_stor = tn.t_stor /\ tf.t_trans = tn.t_trans /\ tf.t_imm = tn.t_imm /\
     (!i. ~(a <= i /\ i < a+k) ==>
       mem_bytes_at i 1 t.vs_memory = mem_bytes_at i 1 s.vs_memory /\
@@ -64,18 +64,18 @@ Definition abi_decode_member_frame_def:
 End
 
 Theorem abi_decode_member_frame_covers:
-  abi_decode_member_frame sa G tn s H tf t a k /\
+  abi_decode_member_frame sa G tn s HG tf t a k /\
   not_fresh_at sa x /\ ptr_covers G tn x s n ==>
-  ptr_covers H tf x t n
+  ptr_covers HG tf x t n
 Proof
   simp[abi_decode_member_frame_def, ptr_covers_def] >> metis_tac[]
 QED
 
 Theorem abi_decode_member_frame_window:
-  abi_decode_member_frame sa G tn s H tf t a k /\
+  abi_decode_member_frame sa G tn s HG tf t a k /\
   not_fresh_at sa x /\ abi_decode_ptr_window G tn s x b n /\
   (w2n b+n <= a \/ a+k <= w2n b) ==>
-  abi_decode_ptr_window H tf t x b n
+  abi_decode_ptr_window HG tf t x b n
 Proof
   strip_tac >> irule abi_decode_ptr_window_frame >>
   goal_assum (drule_at (Pat `abi_decode_ptr_window _ _ _ _ _ _`)) >>
@@ -85,7 +85,7 @@ QED
 
 Theorem abi_decode_member_live_resources:
   abi_decode_member_live ret ctx func cenv cx es src b h dst d cap pos z hi sa G tn s ==>
-  ghost_inv ret cenv cx es G tn s /\ stmt_state_rel ctx func cenv cx es s /\
+  ghost_inv H ret cenv cx es G tn s /\ stmt_state_rel H ctx func cenv cx es s /\
   abi_decode_ptr_window G tn s src b h /\ ptr_covers G tn dst s cap /\
   lookup_var dst s = SOME d /\ eval_operand pos s = SOME z /\
   eval_operand hi s = SOME (n2w h) /\
@@ -110,8 +110,8 @@ Proof
 QED
 
 Theorem abi_decode_member_frame_compose:
-  abi_decode_member_frame sa G tn s H tm t a1 k1 /\
-  abi_decode_member_frame sb H tm t J tf u a2 k2 /\
+  abi_decode_member_frame sa G tn s HG tm t a1 k1 /\
+  abi_decode_member_frame sb HG tm t J tf u a2 k2 /\
   sa.cs_next_var <= sb.cs_next_var /\
   a <= a1 /\ a1+k1 <= a+k /\ a <= a2 /\ a2+k2 <= a+k ==>
   abi_decode_member_frame sa G tn s J tf u a k
@@ -140,8 +140,8 @@ Theorem abi_decode_member_frame_readonly:
   t.vs_memory = s.vs_memory /\ tf.t_mem = tn.t_mem /\
   tf.t_stor = tn.t_stor /\ tf.t_trans = tn.t_trans /\ tf.t_imm = tn.t_imm /\
   (!x. not_fresh_at sa x ==> lookup_var x t = lookup_var x s /\
-    FLOOKUP H x = FLOOKUP G x /\ op_taint tf (Var x) = op_taint tn (Var x)) ==>
-  abi_decode_member_frame sa G tn s H tf t a k
+    FLOOKUP HG x = FLOOKUP G x /\ op_taint tf (Var x) = op_taint tn (Var x)) ==>
+  abi_decode_member_frame sa G tn s HG tf t a k
 Proof
   strip_tac >> simp[abi_decode_member_frame_def] >>
   qpat_x_assum `state_frame t = _` mp_tac >>
@@ -164,7 +164,7 @@ Proof
 QED
 
 Theorem abi_decode_member_frame_bytes:
-  abi_decode_member_frame sa G tn s H tf t a k /\
+  abi_decode_member_frame sa G tn s HG tf t a k /\
   (b+n <= a \/ a+k <= b) ==>
   mem_bytes_at b n t.vs_memory = mem_bytes_at b n s.vs_memory
 Proof
@@ -176,16 +176,16 @@ QED
 (* Restore original iteration operands after a framed member step. *)
 Theorem abi_decode_member_live_transport:
   abi_decode_member_live ret ctx func cenv cx es src b h dst d cap pos z hi sa G tn s /\
-  abi_decode_member_frame sa G tn s H tf t a k /\
+  abi_decode_member_frame sa G tn s HG tf t a k /\
   sa.cs_next_var <= sb.cs_next_var /\
   w2n d <= a /\ a+k <= w2n d+cap /\
-  ghost_inv ret cenv cx es H tf t /\ stmt_state_rel ctx func cenv cx es t /\
+  ghost_inv H ret cenv cx es HG tf t /\ stmt_state_rel H ctx func cenv cx es t /\
   fresh_vars_wrt sb t /\ t.vs_inst_idx = LENGTH sb.cs_current_insts /\
   t.vs_current_bb = sb.cs_current_bb ==>
-  abi_decode_member_live ret ctx func cenv cx es src b h dst d cap pos z hi sb H tf t
+  abi_decode_member_live ret ctx func cenv cx es src b h dst d cap pos z hi sb HG tf t
 Proof
   strip_tac >>
-  `abi_decode_ptr_window H tf t src b h /\ ptr_covers H tf dst t cap` by
+  `abi_decode_ptr_window HG tf t src b h /\ ptr_covers HG tf dst t cap` by
     (conj_tac
      >- (irule abi_decode_member_frame_window >>
          goal_assum (drule_at (Pat `abi_decode_member_frame _ _ _ _ _ _ _ _ _`)) >>
@@ -211,7 +211,7 @@ Resume abi_decode_member_live_transport[operands]:
   `eval_operand pos t = SOME z /\ eval_operand hi t = SOME (n2w h)` by
     (Cases_on `pos` >> Cases_on `hi` >>
      fs[eval_operand_def] >> metis_tac[]) >>
-  `op_prov H pos = NONE /\ op_prov H hi = NONE /\
+  `op_prov HG pos = NONE /\ op_prov HG hi = NONE /\
    op_taint tf pos = {} /\ op_taint tf hi = {}` by
     (Cases_on `pos` >> Cases_on `hi` >>
      fs[ptrDisciplineTheory.op_prov_def, ptrDisciplineTheory.op_taint_def] >> metis_tac[]) >>

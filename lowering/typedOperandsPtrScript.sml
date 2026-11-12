@@ -56,9 +56,9 @@ Proof
 QED
 
 Theorem typed_args_post_cons_ptr:
-  expr_post ctx func cenv cx e es sa s1 s0 es1 v x t /\
+  expr_post H ctx func cenv cx e es sa s1 s0 es1 v x t /\
   typed_args_post ctx func cenv cx es1 s1 t es' args xs vs u /\
-  stmt_state_rel ctx func cenv cx es s0 /\ local_ptrs_reserved cenv sa /\
+  stmt_state_rel H ctx func cenv cx es s0 /\ local_ptrs_reserved cenv sa /\
   MAP FDOM es.scopes = MAP FDOM es1.scopes /\
   sa.cs_next_var <= s1.cs_next_var /\ sa.cs_next_id <= s1.cs_next_id /\
   is_word_type (expr_type e) /\
@@ -83,18 +83,18 @@ Proof
 QED
 
 Theorem lower_typed_args_nil_sim_ptr:
-  stmt_state_rel ctx func cenv cx es s0 /\ ~s0.vs_halted /\
-  ghost_inv d cenv cx es G0 tn0 s0 /\
+  stmt_state_rel H ctx func cenv cx es s0 /\ ~s0.vs_halted /\
+  ghost_inv H d cenv cx es G0 tn0 s0 /\
   s0.vs_current_bb = sa.cs_current_bb /\
   s0.vs_inst_idx = LENGTH sa.cs_current_insts ==>
-  gas_outcome_ptr (cx_dead cx) (cx_tops cx) (ctx, func) PG
+  gas_outcome_ptr (cx_dead H cx) (cx_tops cx) (ctx, func) PG
     (eval_exprs cx []) (es, s0, G0, tn0)
     (\rr ee G tn t. ?vs. rr = INL vs /\
        typed_args_post ctx func cenv cx es sa s0 ee [] [] vs t /\
        MAP FDOM es.scopes = MAP FDOM ee.scopes /\
        t.vs_current_bb = sa.cs_current_bb /\
        t.vs_inst_idx = LENGTH sa.cs_current_insts /\
-       ghost_inv d cenv cx ee G tn t /\
+       ghost_inv H d cenv cx ee G tn t /\
        EVERY (\x. op_taint tn x = {}) [] /\
        ghost_kept cenv es sa G0 tn0 s0 G tn)
     (\rr ee gt r. wb_args_exit rr r)
@@ -193,21 +193,21 @@ Theorem lower_typed_args_sim_ptr:
     lower_word_args cenv arg_ty args sa = (xs,sb) /\
     fn_has_code sa sb func /\ fn_inst_ids_distinct func /\
     local_ptrs_reserved cenv sa /\
-    stmt_state_rel ctx func cenv cx es s0 /\ ~s0.vs_halted /\
+    stmt_state_rel H ctx func cenv cx es s0 /\ ~s0.vs_halted /\
     s0.vs_current_bb = sa.cs_current_bb /\
     s0.vs_inst_idx = LENGTH sa.cs_current_insts /\
-    ghost_inv d cenv cx es G0 tn0 s0 /\ ~ctx_has_dalloca ctx /\
+    ghost_inv H d cenv cx es G0 tn0 s0 /\ ~ctx_has_dalloca ctx /\
     ~cenv.ce_is_ctor /\
     (!x sz. cenv.ce_return_buf = SOME (PtrVar (Var x) sz) ==> not_fresh_at sa x) /\
     (!x sz. cenv.ce_return_pc = SOME (PtrVar (Var x) sz) ==> not_fresh_at sa x) ==>
-    gas_outcome_ptr (cx_dead cx) (cx_tops cx) (ctx,func) PG
+    gas_outcome_ptr (cx_dead H cx) (cx_tops cx) (ctx,func) PG
       (eval_exprs cx args) (es,s0,G0,tn0)
       (\rr ee G tn t. ?vs. rr = INL vs /\
         typed_args_post ctx func cenv cx es sa s0 ee args xs vs t /\
         MAP FDOM es.scopes = MAP FDOM ee.scopes /\
         t.vs_current_bb = sb.cs_current_bb /\
         t.vs_inst_idx = LENGTH sb.cs_current_insts /\
-        ghost_inv d cenv cx ee G tn t /\
+        ghost_inv H d cenv cx ee G tn t /\
         EVERY (\x. op_taint tn x = {}) xs /\
         ghost_kept cenv es sa G0 tn0 s0 G tn)
       (\rr ee gt r. wb_args_exit rr r)
@@ -252,7 +252,7 @@ QED
 Resume lower_typed_args_sim_ptr[tail]:
   rpt gen_tac >> strip_tac >> gvs[] >>
   qpat_x_assum `gas_outcome_ptr _ _ _ _ _ _ _ _` kall_tac >>
-  `stmt_state_rel ctx func cenv cx ee t` by
+  `stmt_state_rel H ctx func cenv cx ee t` by
     metis_tac[exprSimWordArgsTheory.expr_post_state] >>
   `local_ptrs_reserved cenv s1` by
     metis_tac[exprLoweringPropsTheory.local_ptrs_reserved_next_var] >>

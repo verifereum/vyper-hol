@@ -8,7 +8,7 @@ Ancestors
 
 Theorem log_buffer_seq_ptr:
   compile_alloc_buffer cap sa = (buf,sb) /\ fn_has_code sa sb func /\
-  stmt_state_rel ctx func ce cx es s /\ fn_inst_ids_distinct func /\
+  stmt_state_rel H ctx func ce cx es s /\ fn_inst_ids_distinct func /\
   local_ptrs_reserved ce sa /\ cap < dimword (:256) /\
   sb.cs_next_var <= limit_st.cs_next_var /\ fresh_vars_wrt limit_st s /\
   ~ctx_has_dalloca ctx ==>
@@ -19,7 +19,7 @@ Theorem log_buffer_seq_ptr:
     ptr_covers Gf tnf out t cap /\
     eval_operand buf.buf_operand t = SOME (n2w p) /\ p + cap < dimword (:256) /\
     FLOOKUP t.vs_allocas sa.cs_next_id = SOME (p,cap) /\
-    stmt_state_rel ctx func ce cx es t /\ fresh_vars_wrt limit_st t /\
+    stmt_state_rel H ctx func ce cx es t /\ fresh_vars_wrt limit_st t /\
     (!op. abi_decoder_operand_live sa.cs_next_var op ==>
       eval_operand op t = eval_operand op s) /\
     t.vs_memory = s.vs_memory /\
@@ -54,7 +54,7 @@ Finalise log_buffer_seq_ptr
 
 Theorem log_buffer_path_ptr:
   compile_alloc_buffer cap sa = (buf,sb) /\ fn_has_code sa sb func /\
-  stmt_state_rel ctx func ce cx es s /\ fn_inst_ids_distinct func /\
+  stmt_state_rel H ctx func ce cx es s /\ fn_inst_ids_distinct func /\
   local_ptrs_reserved ce sa /\ cap < dimword (:256) /\
   sb.cs_next_var <= limit_st.cs_next_var /\ fresh_vars_wrt limit_st s /\
   ~ctx_has_dalloca ctx /\ ~s.vs_halted /\
@@ -67,7 +67,7 @@ Theorem log_buffer_path_ptr:
     ptr_covers Gf tnf out (t with vs_inst_idx := s.vs_inst_idx + 1) cap /\
     eval_operand buf.buf_operand t = SOME (n2w p) /\ p + cap < dimword (:256) /\
     FLOOKUP t.vs_allocas sa.cs_next_id = SOME (p,cap) /\
-    stmt_state_rel ctx func ce cx es (t with vs_inst_idx := s.vs_inst_idx + 1) /\
+    stmt_state_rel H ctx func ce cx es (t with vs_inst_idx := s.vs_inst_idx + 1) /\
     fresh_vars_wrt limit_st t /\
     (!op. abi_decoder_operand_live sa.cs_next_var op ==>
       eval_operand op t = eval_operand op s) /\

@@ -40,7 +40,7 @@ Theorem alloca_counted_step_covers:
     get_instruction bb s.vs_inst_idx =
       SOME (mk_inst id ALLOCA [Lit (n2w n)] [out]) /\
     step_inst_base (mk_inst id ALLOCA [Lit (n2w n)] [out]) s = OK u /\
-    stmt_state_rel ctx fn cenv cx es s /\
+    stmt_state_rel H ctx fn cenv cx es s /\
     MEM (mk_inst id ALLOCA [Lit (n2w n)] [out]) (fn_insts fn) /\
     n < dimword (:256) ==>
     ?G1 tn1 t.

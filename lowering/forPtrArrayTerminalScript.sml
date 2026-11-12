@@ -16,13 +16,13 @@ Theorem for_array_terminal_ptr:
   (!x. not_fresh_at st x ==> x <> dv) /\
   (!x q. cenv.ce_return_buf = SOME (PtrVar (Var x) q) ==> not_fresh_at st x) ==>
   ?t gf tf.
-    gas_path_ptr (cx_dead cx) 0 ctx func PG G tn s 0 gf tf (OK t) /\
+    gas_path_ptr (cx_dead H cx) 0 ctx func PG G tn s 0 gf tf (OK t) /\
     for_array_done_ptr ctx func cenv cx exit_lbl st s0 G0 tn0 d
       (es with gas_obs := []) gf tf t
 Proof
   strip_tac >> drule for_array_inv_header_ptr >> strip_tac >>
   `!q. cenv.ce_return_buf <> SOME (PtrVar (Var dv) q)` by metis_tac[] >>
-  `gas_path_ptr (cx_dead cx) 0 ctx func PG G tn s 0
+  `gas_path_ptr (cx_dead H cx) 0 ctx func PG G tn s 0
     (DRESTRICT G (COMPL {dv})) (tn with t_var := tn.t_var |+ (dv,{}))
     (OK (jump_to exit_lbl (update_var dv 1w s)))` by
     (drule_all (SRULE [op_prov_def] for_array_header_test_path_ptr) >> simp[]) >>

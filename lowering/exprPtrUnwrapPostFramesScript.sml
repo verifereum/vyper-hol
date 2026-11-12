@@ -4,11 +4,11 @@ Ancestors
   bodyPtrDefs ptrDiscipline venomState finite_map
 
 Theorem copy_stor_taint_frame:
-  stor_taint_ok cx tn s /\
+  stor_taint_ok H cx tn s /\
   t.vs_accounts = s.vs_accounts /\ t.vs_transient = s.vs_transient /\
   t.vs_call_ctx = s.vs_call_ctx /\
   tm.t_stor = tn.t_stor /\ tm.t_trans = tn.t_trans /\ tm.t_imm = tn.t_imm ==>
-  stor_taint_ok cx tm t
+  stor_taint_ok H cx tm t
 Proof
   simp[stor_taint_ok_def]
 QED
@@ -18,7 +18,7 @@ QED
 Theorem copy_ghost_kept_transport:
   ghost_kept cenv es sa G0 tn0 s0 G tn /\
   (!x. not_fresh_at sa x ==>
-    FLOOKUP H x = FLOOKUP G x /\ op_taint tm (Var x) = op_taint tn (Var x)) /\
+    FLOOKUP HG x = FLOOKUP G x /\ op_taint tm (Var x) = op_taint tn (Var x)) /\
   (!aid off sz i.
     FLOOKUP s0.vs_allocas aid = SOME (off,sz) /\ aid < sa.cs_next_id /\
     (!n b sz'. local_region cenv es.scopes s0 n b sz' ==>
@@ -27,7 +27,7 @@ Theorem copy_ghost_kept_transport:
   (!n b sz i.
     local_region cenv es.scopes s0 n b sz /\ b <= i /\ i < b+sz /\
     i IN tm.t_mem ==> i IN tn.t_mem) ==>
-  ghost_kept cenv es sa G0 tn0 s0 H tm
+  ghost_kept cenv es sa G0 tn0 s0 HG tm
 Proof
   simp[ghost_kept_def] >> metis_tac[]
 QED

@@ -21,7 +21,7 @@ Theorem for_array_unequal_header_ptr:
   (!x. not_fresh_at st x ==> x <> dv) /\
   (!x q. cenv.ce_return_buf = SOME (PtrVar (Var x) q) \/
          cenv.ce_return_pc = SOME (PtrVar (Var x) q) ==> not_fresh_at st x) ==>
-  gas_path_ptr (cx_dead cx) 0 ctx func PG G tn s 0
+  gas_path_ptr (cx_dead H cx) 0 ctx func PG G tn s 0
     (DRESTRICT G (COMPL {dv})) (tn with t_var := tn.t_var |+ (dv,{}))
     (OK (jump_to stmts_lbl (update_var dv 0w s))) /\
   for_array_inv_ptr ctx func cenv cx vs tv id idx bp arr_base p dst sz ainst
@@ -35,12 +35,12 @@ Proof
   conj_tac
   >- (drule_all (SRULE [op_prov_def] for_array_header_test_path_ptr) >> simp[]) >>
   `!q. cenv.ce_return_buf <> SOME (PtrVar (Var dv) q)` by metis_tac[] >>
-  `ghost_inv d cenv cx es (DRESTRICT G (COMPL {dv}))
+  `ghost_inv H d cenv cx es (DRESTRICT G (COMPL {dv}))
     (tn with t_var := tn.t_var |+ (dv,{})) (update_var dv 0w s)` by
     (irule for_scalar_overwrite_ghost >> simp[]) >>
-  `stmt_state_rel ctx func cenv cx es (update_var dv 0w s)` by
+  `stmt_state_rel H ctx func cenv cx es (update_var dv 0w s)` by
     (irule stmt_state_rel_update_var >> simp[]) >>
-  `ghost_inv d cenv cx es (DRESTRICT G (COMPL {dv}))
+  `ghost_inv H d cenv cx es (DRESTRICT G (COMPL {dv}))
     (tn with t_var := tn.t_var |+ (dv,{}))
     (jump_to stmts_lbl (update_var dv 0w s))` by
     simp[jump_to_def, ghost_inv_jump_to] >>
@@ -129,9 +129,9 @@ Theorem for_array_prepare_from_inv_ptr:
          cenv.ce_return_pc = SOME (PtrVar (Var x) z) ==>
     not_fresh_at sa x /\ x <> ov /\ x <> ep) ==>
   ?gf tf s2.
-    gas_path_ptr (cx_dead cx) 0 ctx func PG G tn s 0 gf tf (OK s2) /\
+    gas_path_ptr (cx_dead H cx) 0 ctx func PG G tn s 0 gf tf (OK s2) /\
     array_entry_ready ctx func bc cx es id tv (EL k vs) sb0 sa ov ep sb0 s s2 /\
-    ghost_inv d bc cx (es with scopes := (FEMPTY |+ (id,
+    ghost_inv H d bc cx (es with scopes := (FEMPTY |+ (id,
       <|assignable := F; type := tv; value := EL k vs; popped := []|>)) :: es.scopes)
       gf tf s2 /\
     (!x. not_fresh_at sa x /\ x <> ov /\ x <> ep ==>
@@ -146,7 +146,7 @@ Proof
   fs[for_array_inv_ptr_def] >>
   drule for_array_round_prepare_ptr >>
   disch_then drule >> simp[arithmeticTheory.MULT_COMM] >>
-  disch_then (qspecl_then [`PG`, `cx_dead cx`] mp_tac) >>
+  disch_then (qspecl_then [`PG`, `cx_dead H cx`] mp_tac) >>
   disch_then irule >> first_assum ACCEPT_TAC
 QED
 
@@ -217,12 +217,12 @@ Theorem for_array_round_entry_ptr:
   (!x z. cenv.ce_return_buf = SOME (PtrVar (Var x) z) \/
          cenv.ce_return_pc = SOME (PtrVar (Var x) z) ==> not_fresh_at st x) ==>
   ?gf tf s2.
-    gas_path_ptr (cx_dead cx) 0 ctx func PG G tn s 0 gf tf (OK s2) /\
-    stmt_state_rel ctx func bc cx
+    gas_path_ptr (cx_dead H cx) 0 ctx func PG G tn s 0 gf tf (OK s2) /\
+    stmt_state_rel H ctx func bc cx
       (es with <|scopes := (FEMPTY |+ (id,
         <|assignable := F; type := tv; value := EL k vs; popped := []|>)) :: es.scopes;
         gas_obs := []|>) s2 /\
-    ghost_inv d bc cx
+    ghost_inv H d bc cx
       (es with <|scopes := (FEMPTY |+ (id,
         <|assignable := F; type := tv; value := EL k vs; popped := []|>)) :: es.scopes;
         gas_obs := []|>) gf tf s2 /\
@@ -263,7 +263,7 @@ Resume for_array_round_entry_ptr[control]:
    (!x z. cenv.ce_return_pc = SOME (PtrVar (Var x) z) ==>
      not_fresh_at sa x /\ x <> ov /\ x <> ep)` by metis_tac[] >>
   drule_all for_array_prepared_control_ptr >> strip_tac >>
-  `gas_path_ptr (cx_dead cx) 0 ctx func PG G tn s 0 gf tf (OK s2)` by
+  `gas_path_ptr (cx_dead H cx) 0 ctx func PG G tn s 0 gf tf (OK s2)` by
     (drule_all gas_path_ptr_then >> simp[IgnAsm `vs = _`]) >>
   qexistsl_tac [`gf`, `tf`, `s2`] >>
   simp[IgnAsm `vs = _`, stmt_state_rel_gas_obs, ghost_inv_gas_obs] >>
@@ -313,7 +313,7 @@ Theorem for_array_round_ptr:
   for_array_inv_ptr ctx func cenv cx vs tv id idx bp arr_base p dst sz ainst
     cond_lbl st s0 G0 tn0 d name snapshot k es G tn s /\
   gas_admissible (eval_for cx tv id stmts (MAP Value (DROP k vs))) (stmt_res_ok lctx) es ==>
-  gas_outcome_ptr (cx_dead cx) (cx_tops cx) (ctx,func) PG
+  gas_outcome_ptr (cx_dead H cx) (cx_tops cx) (ctx,func) PG
     (do push_scope_with_var id tv (EL k vs);
         finally (try (do eval_stmts cx stmts; return F od)
           handle_loop_exception) pop_scope od) (es,s,G,tn)
@@ -375,7 +375,7 @@ Resume for_array_round_ptr[outcome]:
      ee with <|gas_obs := tail; scopes := TL ee.scopes|>` by
       (Cases_on `ee` >> simp[]) >> asm_rewrite_tac[])) >>
   disch_tac >>
-  `gas_marked_exec_ptr (cx_dead cx) (ctx,func) PG
+  `gas_marked_exec_ptr (cx_dead H cx) (ctx,func) PG
     (push_scope_with_var id tv (EL k vs)) (es,s,G,tn) [] (INL ())
     (ei with gas_obs := es.gas_obs) gf tf (OK s2)` by
     (simp[gas_marked_exec_ptr_def, Abbr `ei`, IgnAsm `vs = _`,
@@ -413,7 +413,7 @@ Resume for_array_round_ptr[finish]:
     metis_tac[] >>
   drule_all (SRULE [] (Q.INST [`esk` |-> `es with gas_obs := obs`]
     for_array_callback_finish_ptr)) >>
-  disch_then (qspecl_then [`PG`, `cx_dead cx`] strip_assume_tac) >>
+  disch_then (qspecl_then [`PG`, `cx_dead H cx`] strip_assume_tac) >>
   `res = INL () \/ res = INR ContinueException \/ res = INR BreakException` by
     (qpat_x_assum `stmt_lands _ _ res t` mp_tac >>
      simp[stmt_lands_def, IgnAsm `vs = _`] >> metis_tac[]) >>

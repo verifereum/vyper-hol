@@ -36,8 +36,8 @@ Theorem bop_hash_compile_state_rel:
   compile_bytestring_hash (Var p) sc = (op,sd) /\ not_fresh_at sc p /\
   lookup_var p s = SOME w /\
   run_inst_seq (emitted_insts sc sd) s = OK t /\
-  stmt_state_rel ctx func cenv cx es s /\ local_ptrs_reserved cenv sc ==>
-  stmt_state_rel ctx func cenv cx es (t with vs_inst_idx := idx)
+  stmt_state_rel H ctx func cenv cx es s /\ local_ptrs_reserved cenv sc ==>
+  stmt_state_rel H ctx func cenv cx es (t with vs_inst_idx := idx)
 Proof
   strip_tac >> simp[stmt_state_rel_inst_idx] >>
   irule hash_readonly_state_rel >>
@@ -144,7 +144,7 @@ Theorem bop_hash_compile_ptr_cursor:
   compile_bytestring_hash (Var p) sc = (op,sd) /\ not_fresh_at sc p /\
   fn_has_code sc sd fn /\ s.vs_current_bb = sc.cs_current_bb /\ ~s.vs_halted /\
   ~ctx_has_dalloca ctx /\
-  stmt_state_rel ctx func cenv cx es (s with vs_inst_idx := LENGTH sc.cs_current_insts) /\
+  stmt_state_rel H ctx func cenv cx es (s with vs_inst_idx := LENGTH sc.cs_current_insts) /\
   expr_val_at cenv cx ty sa sb es v (Var p)
     (s with vs_inst_idx := LENGTH sc.cs_current_insts) /\
   ptr_val_ok cx ty v (Var p) G tn (s with vs_inst_idx := LENGTH sc.cs_current_insts) /\
@@ -178,7 +178,7 @@ Theorem bop_hash_pair_ptr:
   not_fresh_at sc p /\ not_fresh_at sc r /\ local_ptrs_reserved cenv sc /\
   fn_has_code sc se fn /\ s.vs_current_bb = sc.cs_current_bb /\
   s.vs_inst_idx = LENGTH sc.cs_current_insts /\ ~s.vs_halted /\
-  ~ctx_has_dalloca ctx /\ stmt_state_rel ctx func cenv cx es s /\
+  ~ctx_has_dalloca ctx /\ stmt_state_rel H ctx func cenv cx es s /\
   expr_val_at cenv cx ty1 sa1 sb1 es v1 (Var p) s /\
   expr_val_at cenv cx ty2 sa2 sb2 es v2 (Var r) s /\
   ptr_val_ok cx ty1 v1 (Var p) G tn s /\
@@ -207,7 +207,7 @@ Proof
   drule_all bop_hash_pair_run_split >> strip_tac >>
   drule_all bop_hash_compile_ptr >>
   disch_then (qspecl_then [`PG`, `D`] strip_assume_tac) >>
-  `stmt_state_rel ctx func cenv cx es
+  `stmt_state_rel H ctx func cenv cx es
     (u with vs_inst_idx := LENGTH sd.cs_current_insts)` by
     (irule bop_hash_compile_state_rel >> metis_tac[]) >>
   qpat_x_assum `expr_val_at _ _ ty1 _ _ _ _ _ _` kall_tac >>
@@ -227,7 +227,7 @@ Proof
      simp[venom_state_component_equality] >> metis_tac[]) >>
   qpat_x_assum `expr_val_at _ _ _ _ _ _ _ _ s` kall_tac >>
   qpat_x_assum `ptr_val_ok _ _ _ _ G tn s` kall_tac >>
-  qpat_x_assum `stmt_state_rel _ _ _ _ _ s` kall_tac >>
+  qpat_x_assum `stmt_state_rel _ _ _ _ _ _ s` kall_tac >>
   drule_all bop_hash_compile_ptr_cursor >>
   disch_then (qspecl_then [`PG`, `D`] strip_assume_tac) >>
   rule_assum_tac (SIMP_RULE (srw_ss()) []) >>

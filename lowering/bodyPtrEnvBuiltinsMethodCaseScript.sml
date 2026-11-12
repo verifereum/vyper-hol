@@ -86,7 +86,7 @@ Resume method_id_runtime_sim_ptr[normal]:
       RULE_ASSUM_TAC (REWRITE_RULE [TRANS th th2]))) >>
   drule method_id_runtime_vv_suffix >>
   simp[] >> disch_then drule_all >>
-  disch_then (qspecl_then [`PG`, `cx_dead cx`] strip_assume_tac) >>
+  disch_then (qspecl_then [`PG`, `cx_dead H cx`] strip_assume_tac) >>
   `builtin_result cx es_end.accounts
      (BaseT (BytesT (if fixed then Fixed 4 else Dynamic 4))) MethodId [expr_type e] [v] = INL r` by
     simp[] >>

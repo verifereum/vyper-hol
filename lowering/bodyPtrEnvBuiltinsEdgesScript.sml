@@ -25,7 +25,7 @@ Proof
 QED
 
 Theorem ghost_inv_register_transport:
-  ghost_inv d cenv cx es G tn s /\ local_ptrs_reserved cenv sa /\
+  ghost_inv H d cenv cx es G tn s /\ local_ptrs_reserved cenv sa /\
   (!x sz. cenv.ce_return_buf = SOME (PtrVar (Var x) sz) ==>
           not_fresh_at sa x) /\
   (!x sz. cenv.ce_return_pc = SOME (PtrVar (Var x) sz) ==>
@@ -38,7 +38,7 @@ Theorem ghost_inv_register_transport:
   t.vs_transient = s.vs_transient /\
   tn'.t_stor = tn.t_stor /\ tn'.t_trans = tn.t_trans /\
   tn'.t_imm = tn.t_imm ==>
-  ghost_inv d cenv cx es G' tn' t
+  ghost_inv H d cenv cx es G' tn' t
 Proof
   simp[ghost_inv_def, local_ptrs_reserved_def, stor_taint_ok_def] >>
   rpt strip_tac
@@ -163,7 +163,7 @@ Proof
 QED
 
 Theorem single_output_ghost_inv:
-  ghost_inv d cenv cx es G tn s /\ local_ptrs_reserved cenv sa /\
+  ghost_inv H d cenv cx es G tn s /\ local_ptrs_reserved cenv sa /\
   (!x sz. cenv.ce_return_buf = SOME (PtrVar (Var x) sz) ==>
           not_fresh_at sa x) /\
   (!x sz. cenv.ce_return_pc = SOME (PtrVar (Var x) sz) ==>
@@ -175,7 +175,7 @@ Theorem single_output_ghost_inv:
   t.vs_call_ctx = s.vs_call_ctx /\ t.vs_accounts = s.vs_accounts /\
   t.vs_transient = s.vs_transient /\
   opc <> CALL /\ opc <> SSTORE /\ opc <> TSTORE /\ opc <> ISTORE ==>
-  ghost_inv d cenv cx es (step_prov PG G (mk_inst id opc ops [out]) t)
+  ghost_inv H d cenv cx es (step_prov PG G (mk_inst id opc ops [out]) t)
     (step_taint (mk_inst id opc ops [out]) s t tn) t
 Proof
   strip_tac >> irule ghost_inv_register_transport >>
@@ -194,14 +194,14 @@ Theorem scalar_builtin_update_ghosts:
     GASPRICE; BLOCKHASH; CHAINID; COINBASE; GASLIMIT; BASEFEE; PREVRANDAO;
     ORIGIN; GAS; CALLDATASIZE; BALANCE; EXTCODESIZE; EXTCODEHASH;
     BLOBHASH; ISZERO; SUB; ADD; SHR; SHL] /\
-  ghost_inv d cenv cx es G tn s /\ local_ptrs_reserved cenv sa /\
+  ghost_inv H d cenv cx es G tn s /\ local_ptrs_reserved cenv sa /\
   ghost_kept cenv es0 sa G0 tn0 s0 G tn /\
   (!x sz. cenv.ce_return_buf = SOME (PtrVar (Var x) sz) ==>
           not_fresh_at sa x) /\
   (!x sz. cenv.ce_return_pc = SOME (PtrVar (Var x) sz) ==>
           not_fresh_at sa x) /\
   ~not_fresh_at sa out ==>
-  ghost_inv d cenv cx es
+  ghost_inv H d cenv cx es
     (step_prov PG G (mk_inst id opc ops [out]) (update_var out w s))
     (step_taint (mk_inst id opc ops [out]) s (update_var out w s) tn)
     (update_var out w s) /\

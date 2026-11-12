@@ -24,9 +24,9 @@ Proof
 QED
 
 Theorem uint256_convert_post:
-  expr_post ctx fn cenv cx e es sa sb s0 ee v op t /\
+  expr_post H ctx fn cenv cx e es sa sb s0 ee v op t /\
   expr_type e = BaseT (UintT 256) ==>
-  expr_post ctx fn cenv cx
+  expr_post H ctx fn cenv cx
     (TypeBuiltin (BaseT (UintT 256)) Convert (BaseT (UintT 256)) [e])
     es sa sb s0 ee v op t
 Proof
@@ -102,23 +102,23 @@ Theorem converted_local_enriched_path:
   lower_value compile_expr cenv ty
     (TypeBuiltin (BaseT (UintT 256)) Convert (BaseT (UintT 256))
       [Name (BaseT (UintT 256)) name]) sa = (op,sb) /\
-  fn_has_code sa sb fn /\ stmt_state_rel ctx fn cenv cx es s /\
-  local_ptrs_reserved cenv sa /\ ghost_inv d cenv cx es G tn s /\
+  fn_has_code sa sb fn /\ stmt_state_rel H ctx fn cenv cx es s /\
+  local_ptrs_reserved cenv sa /\ ghost_inv H d cenv cx es G tn s /\
   (!x sz. cenv.ce_return_pc = SOME (PtrVar (Var x) sz) ==> not_fresh_at sa x) /\
   (!x sz. cenv.ce_return_buf = SOME (PtrVar (Var x) sz) ==> not_fresh_at sa x) /\
   ~ctx_has_dalloca ctx /\ ~s.vs_halted /\
   s.vs_current_bb = sa.cs_current_bb /\
   s.vs_inst_idx = LENGTH sa.cs_current_insts ==>
-  ?H tm t.
-    gas_path_ptr D 0 ctx fn PG G tn s 0 H tm (OK t) /\
-    expr_post ctx fn cenv cx
+  ?HG tm t.
+    gas_path_ptr D 0 ctx fn PG G tn s 0 HG tm (OK t) /\
+    expr_post H ctx fn cenv cx
       (TypeBuiltin (BaseT (UintT 256)) Convert (BaseT (UintT 256))
         [Name (BaseT (UintT 256)) name]) es sa sb s
       (es with gas_obs := []) entry.value op t /\
-    ghost_inv d cenv cx (es with gas_obs := []) H tm t /\
-    ghost_kept cenv es sa G tn s H tm /\ op_taint tm op = {} /\
+    ghost_inv H d cenv cx (es with gas_obs := []) HG tm t /\
+    ghost_kept cenv es sa G tn s HG tm /\ op_taint tm op = {} /\
     ~t.vs_halted /\ t.vs_current_bb = sb.cs_current_bb /\
-    t.vs_inst_idx = LENGTH sb.cs_current_insts /\ op_prov H op = NONE
+    t.vs_inst_idx = LENGTH sb.cs_current_insts /\ op_prov HG op = NONE
 Proof
   strip_tac >> drule_at (Pat `lower_value _ _ _ _ _ = _`)
     lower_value_uint256_convert_child >>
@@ -132,7 +132,7 @@ Proof
   `word_value entry.value` by simp[word_value_def] >>
   drule_all local_name_enriched_path >>
   disch_then (qspecl_then [`PG`, `D`] strip_assume_tac) >>
-  qexistsl_tac [`H`, `tm`, `t`] >> simp[] >>
+  qexistsl_tac [`HG`, `tm`, `t`] >> simp[] >>
   irule uint256_convert_post >> gvs[expr_type_def]
 QED
 
@@ -143,37 +143,37 @@ Theorem converted_local_enriched_outcome:
   lower_value compile_expr cenv ty
     (TypeBuiltin (BaseT (UintT 256)) Convert (BaseT (UintT 256))
       [Name (BaseT (UintT 256)) name]) sa = (op,sb) /\
-  fn_has_code sa sb fn /\ stmt_state_rel ctx fn cenv cx es s /\
-  local_ptrs_reserved cenv sa /\ ghost_inv d cenv cx es G tn s /\
+  fn_has_code sa sb fn /\ stmt_state_rel H ctx fn cenv cx es s /\
+  local_ptrs_reserved cenv sa /\ ghost_inv H d cenv cx es G tn s /\
   (!x sz. cenv.ce_return_pc = SOME (PtrVar (Var x) sz) ==> not_fresh_at sa x) /\
   (!x sz. cenv.ce_return_buf = SOME (PtrVar (Var x) sz) ==> not_fresh_at sa x) /\
   ~ctx_has_dalloca ctx /\ ~s.vs_halted /\
   s.vs_current_bb = sa.cs_current_bb /\
   s.vs_inst_idx = LENGTH sa.cs_current_insts ==>
-  gas_outcome_ptr (cx_dead cx) (cx_tops cx) (ctx,fn) PG
+  gas_outcome_ptr (cx_dead H cx) (cx_tops cx) (ctx,fn) PG
     (bind (eval_expr cx
       (TypeBuiltin (BaseT (UintT 256)) Convert (BaseT (UintT 256))
         [Name (BaseT (UintT 256)) name])) (read_result cx)) (es,s,G,tn)
-    (\res ee H tm t. ?v. res = INL v /\
-      expr_post ctx fn cenv cx
+    (\res ee HG tm t. ?v. res = INL v /\
+      expr_post H ctx fn cenv cx
         (TypeBuiltin (BaseT (UintT 256)) Convert (BaseT (UintT 256))
           [Name (BaseT (UintT 256)) name]) es sa sb s ee v op t /\
       t.vs_current_bb = sb.cs_current_bb /\
       t.vs_inst_idx = LENGTH sb.cs_current_insts /\
-      ghost_inv d cenv cx ee H tm t /\
-      ptr_val_ok cx (BaseT (UintT 256)) v op H tm t /\
+      ghost_inv H d cenv cx ee HG tm t /\
+      ptr_val_ok cx (BaseT (UintT 256)) v op HG tm t /\
       (~is_word_type (BaseT (UintT 256)) ==>
         ptr_buf_ok cenv (TypeBuiltin (BaseT (UintT 256)) Convert
-          (BaseT (UintT 256)) [Name (BaseT (UintT 256)) name]) op H t) /\
-      ghost_kept cenv es sa G tn s H tm /\ op_prov H op = NONE)
+          (BaseT (UintT 256)) [Name (BaseT (UintT 256)) name]) op HG t) /\
+      ghost_kept cenv es sa G tn s HG tm /\ op_prov HG op = NONE)
     (\res ee gt r. expr_exit res r)
 Proof
   strip_tac >> drule_all converted_local_enriched_path >>
-  disch_then (qspecl_then [`PG`, `cx_dead cx`] strip_assume_tac) >>
+  disch_then (qspecl_then [`PG`, `cx_dead H cx`] strip_assume_tac) >>
   rewrite_tac[fragGasPathPtrTheory.gas_outcome_ptr_def] >>
   qexists_tac `[]` >> disj1_tac >>
   rewrite_tac[fragGasPathPtrTheory.gas_summary_ptr_at_def] >>
-  qexistsl_tac [`INL entry.value`, `es`, `H`, `tm`, `OK t`] >>
+  qexistsl_tac [`INL entry.value`, `es`, `HG`, `tm`, `OK t`] >>
   simp[gasSummaryTheory.gas_explicit_def, bodyPtrDefsTheory.ptr_val_ok_def,
        is_word_type_def] >> reverse conj_tac >- gvs[] >> gen_tac >>
   `eval_expr cx (TypeBuiltin (BaseT (UintT 256)) Convert (BaseT (UintT 256))
@@ -198,12 +198,12 @@ Proof
 QED
 
 Theorem bool_literal_post:
-  stmt_state_rel ctx fn cenv cx es s ==>
-  expr_post ctx fn cenv cx (Literal (BaseT BoolT) (BoolL b))
+  stmt_state_rel H ctx fn cenv cx es s ==>
+  expr_post H ctx fn cenv cx (Literal (BaseT BoolT) (BoolL b))
     es sa sa s (es with gas_obs := []) (BoolV b) (Lit (if b then 1w else 0w)) s
 Proof
   strip_tac >>
-  `stmt_state_rel ctx fn cenv cx (es with gas_obs := []) s` by
+  `stmt_state_rel H ctx fn cenv cx (es with gas_obs := []) s` by
     (drule exprLoweringPropsTheory.msg_gas_state_frame >>
      disch_then (qspecl_then [`s.vs_gas_readings`, `s.vs_inst_idx`, `[]`] mp_tac) >>
      simp[NoAsms]) >>
@@ -282,11 +282,11 @@ Proof
 QED
 
 Theorem scalar_join_ghost_inv:
-  ghost_inv d cenv cx es G tn s /\ local_ptrs_reserved cenv sa /\
+  ghost_inv H d cenv cx es G tn s /\ local_ptrs_reserved cenv sa /\
   (!x sz. cenv.ce_return_pc = SOME (PtrVar (Var x) sz) ==> not_fresh_at sa x) /\
   (!x sz. cenv.ce_return_buf = SOME (PtrVar (Var x) sz) ==> not_fresh_at sa x) /\
   (!x. not_fresh_at sa x ==> x <> out) ==>
-  ghost_inv d cenv cx es (DRESTRICT G (COMPL {out}))
+  ghost_inv H d cenv cx es (DRESTRICT G (COMPL {out}))
     (tn with t_var := tn.t_var |+ (out,{}))
     (jump_to lbl (update_var out w s with vs_inst_idx := k))
 Proof
@@ -314,17 +314,17 @@ Theorem scalar_join_complete_path:
   lookup_block s.vs_current_bb fn.fn_blocks = SOME bb1 /\
   get_instruction bb1 (SUC s.vs_inst_idx) = SOME (mk_inst jid JMP [Label lbl] []) /\
   op_prov G arg = NONE /\ op_taint tn arg = {} /\
-  ghost_inv d cenv cx es G tn s /\ local_ptrs_reserved cenv sa /\
+  ghost_inv H d cenv cx es G tn s /\ local_ptrs_reserved cenv sa /\
   (!x sz. cenv.ce_return_pc = SOME (PtrVar (Var x) sz) ==> not_fresh_at sa x) /\
   (!x sz. cenv.ce_return_buf = SOME (PtrVar (Var x) sz) ==> not_fresh_at sa x) /\
   (!x. not_fresh_at sa x ==> x <> out) ==>
-  ?H tm t.
-    gas_path_ptr D 0 ctx fn PG G tn s 0 H tm (OK t) /\
+  ?HG tm t.
+    gas_path_ptr D 0 ctx fn PG G tn s 0 HG tm (OK t) /\
     t = jump_to lbl (update_var out w s with vs_inst_idx := SUC s.vs_inst_idx) /\
-    ghost_inv d cenv cx es H tm t /\
-    op_prov H (Var out) = NONE /\ op_taint tm (Var out) = {} /\
+    ghost_inv H d cenv cx es HG tm t /\
+    op_prov HG (Var out) = NONE /\ op_taint tm (Var out) = {} /\
     (!G0 tn0 s0. ghost_kept cenv es sa G0 tn0 s0 G tn ==>
-      ghost_kept cenv es sa G0 tn0 s0 H tm)
+      ghost_kept cenv es sa G0 tn0 s0 HG tm)
 Proof
   strip_tac >>
   `step_inst_base (mk_inst id ASSIGN [arg] [out]) s = OK (update_var out w s)` by

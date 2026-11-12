@@ -25,22 +25,22 @@ Theorem type_builtin_unary_vv_sim_ptr_origin:
        not_fresh_at sa z) /\
     bind (eval_expr cx e) (read_result cx) (es with gas_obs := gs) = (INL v,ee) /\
     ee.gas_obs = [] /\
-    expr_post ctx func cenv cx e es sa sm s0 ee v x s /\ ~s.vs_halted /\
+    expr_post H ctx func cenv cx e es sa sm s0 ee v x s /\ ~s.vs_halted /\
     s.vs_current_bb = sm.cs_current_bb /\
     s.vs_inst_idx = LENGTH sm.cs_current_insts /\
-    ghost_inv d cenv cx ee G tn s /\
+    ghost_inv H d cenv cx ee G tn s /\
     ptr_val_ok cx (expr_type e) v x G tn s /\
     (~is_word_type (expr_type e) ==> ptr_buf_ok cenv e x G s) /\
     ghost_kept cenv es sa G0 tn0 s0 G tn /\
-    stmt_state_rel ctx func cenv cx es s0 ==>
-    (?marks. gas_summary_ptr_at (cx_dead cx) (ctx,func) PG marks
+    stmt_state_rel H ctx func cenv cx es s0 ==>
+    (?marks. gas_summary_ptr_at (cx_dead H cx) (ctx,func) PG marks
       (bind (lift_sum (evaluate_type_builtin cx tb typ [expr_type e] [v]))
         (\w. return (Value w))) (ee,s,G,tn)
       (\res ef G' tn' t. ?tv. res = INL tv /\
-        vv_post ctx func cenv cx (TypeBuiltin ann tb typ [e]) es sa sb s0 ef tv vv t /\
+        vv_post H ctx func cenv cx (TypeBuiltin ann tb typ [e]) es sa sb s0 ef tv vv t /\
         t.vs_current_bb = sb.cs_current_bb /\
         t.vs_inst_idx = LENGTH sb.cs_current_insts /\
-        ghost_inv d cenv cx ef G' tn' t /\
+        ghost_inv H d cenv cx ef G' tn' t /\
         ptr_vv_ok cx (expr_type (TypeBuiltin ann tb typ [e])) tv vv ef G' tn' t /\
         (!t' op. vv = StackValue t' op /\
           ~is_word_type (expr_type (TypeBuiltin ann tb typ [e])) ==>

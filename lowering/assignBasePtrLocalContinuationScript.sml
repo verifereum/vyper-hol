@@ -5,7 +5,7 @@ Ancestors assignBasePtrLocalLanding assignBasePtrLocalSemantic
   exprLoweringProps exprSimBufferStore valueEncoding venomState finite_map fragGasPathPtr
 
 Theorem assign_base_local_ghost_value[local]:
-  ghost_inv d cenv cx
+  ghost_inv H d cenv cx
     (es with scopes := pre ++ (sc |+ (id,entry with <|value := v; popped := []|>)) :: rest)
     G tn t /\
   find_containing_scope id es.scopes = SOME (pre,sc,entry,rest) /\
@@ -35,7 +35,7 @@ Theorem assign_base_flat_local_continuation_ptr:
     val_footprint entry.type v <= n /\
     (!m. mem_agree_outside tn.t_mem s.vs_memory m ==>
       val_in_memory entry.type v (w2n a) m) /\
-    ghost_inv d cenv cx es G tn s /\ stmt_state_rel ctx fn cenv cx es s /\
+    ghost_inv H d cenv cx es G tn s /\ stmt_state_rel H ctx fn cenv cx es s /\
     find_containing_scope id es.scopes = SOME (pre,sc,entry,rest) /\
     FLOOKUP cenv.ce_vars id = SOME (PtrVar (Var p) sz) /\
     local_ptrs_rel fn cenv es.scopes s /\ local_ptrs_reserved cenv sa /\
@@ -47,9 +47,9 @@ Theorem assign_base_flat_local_continuation_ptr:
       gas_path_ptr D 0 ctx fn PG G tn s 0 Gf tf (OK u) /\
       u.vs_current_bb = sb.cs_current_bb /\
       u.vs_inst_idx = LENGTH sb.cs_current_insts /\ ~u.vs_halted /\
-      stmt_state_rel ctx fn cenv cx
+      stmt_state_rel H ctx fn cenv cx
         (es with scopes := pre ++ (sc |+ (id,entry with <|value := v; popped := []|>)) :: rest) u /\
-      ghost_inv d cenv cx
+      ghost_inv H d cenv cx
         (es with scopes := pre ++ (sc |+ (id,entry with <|value := v; popped := []|>)) :: rest)
         Gf tf u /\
       (!x. not_fresh_at sa x ==>
@@ -87,7 +87,7 @@ Theorem assign_base_bytes_local_continuation_ptr:
     val_footprint entry.type v <= 32 + 32 * word_size len /\
     (!m. mem_agree_outside tn.t_mem s.vs_memory m ==>
       val_in_memory entry.type v (w2n a) m) /\
-    ghost_inv d cenv cx es G tn s /\ stmt_state_rel ctx fn cenv cx es s /\
+    ghost_inv H d cenv cx es G tn s /\ stmt_state_rel H ctx fn cenv cx es s /\
     find_containing_scope id es.scopes = SOME (pre,sc,entry,rest) /\
     FLOOKUP cenv.ce_vars id = SOME (PtrVar (Var p) sz) /\
     local_ptrs_rel fn cenv es.scopes s /\ local_ptrs_reserved cenv sa /\
@@ -100,9 +100,9 @@ Theorem assign_base_bytes_local_continuation_ptr:
       gas_path_ptr D 0 ctx fn PG G tn s 0 Gf tf (OK u) /\
       u.vs_current_bb = sb.cs_current_bb /\
       u.vs_inst_idx = LENGTH sb.cs_current_insts /\ ~u.vs_halted /\
-      stmt_state_rel ctx fn cenv cx
+      stmt_state_rel H ctx fn cenv cx
         (es with scopes := pre ++ (sc |+ (id,entry with <|value := v; popped := []|>)) :: rest) u /\
-      ghost_inv d cenv cx
+      ghost_inv H d cenv cx
         (es with scopes := pre ++ (sc |+ (id,entry with <|value := v; popped := []|>)) :: rest)
         Gf tf u /\
       (!x. not_fresh_at sa x ==>

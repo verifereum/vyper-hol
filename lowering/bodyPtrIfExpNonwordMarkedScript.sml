@@ -27,27 +27,27 @@ Theorem ifexp_raw_marked_nonword_suffix:
   compile_ifexp_arm ce ty (lowered_value_type ce arm) vv sm = (op,sd) /\
   gas_marked_exec_ptr D (ctx,fn) PG (eval_expr cx arm) (es,s0,G0,tn0)
     marks (INL raw) ee G tn (OK s) /\
-  stmt_state_rel ctx fn ce cx es s0 /\
-  vv_post ctx fn ce cx arm es sa sm s0 (ee with gas_obs := []) raw vv s /\
+  stmt_state_rel H ctx fn ce cx es s0 /\
+  vv_post H ctx fn ce cx arm es sa sm s0 (ee with gas_obs := []) raw vv s /\
   ptr_vv_ok cx (expr_type arm) raw vv (ee with gas_obs := []) G tn s /\
   (!tag src. vv = StackValue tag src /\ ~is_word_type (expr_type arm) ==>
     ptr_buf_ok ce arm src G s) /\
   (!tag p. vv = LocatedValue tag p /\ p.ptr_location = LocMemory ==>
     ptr_buf_ok ce arm p.ptr_operand G s) /\
-  ghost_inv d ce cx (ee with gas_obs := []) G tn s /\
+  ghost_inv H d ce cx (ee with gas_obs := []) G tn s /\
   ghost_kept ce es sa G0 tn0 s0 G tn /\ local_ptrs_reserved ce sa /\
   fn_has_code sm sd fn /\ fn_inst_ids_distinct fn /\
   (!x sz. ce.ce_return_buf = SOME (PtrVar (Var x) sz) ==> not_fresh_at sa x) /\
   (!x sz. ce.ce_return_pc = SOME (PtrVar (Var x) sz) ==> not_fresh_at sa x) /\
   ~ctx_has_dalloca ctx /\ s.vs_current_bb = sm.cs_current_bb /\
   s.vs_inst_idx = LENGTH sm.cs_current_insts ==>
-  ?v u H tt.
+  ?v u HG tt.
     read_result cx raw (ee with gas_obs := []) = (INL v,ee with gas_obs := []) /\
-    gas_path_ptr D 0 ctx fn PG G tn s 0 H tt (OK u) /\
-    expr_post ctx fn ce cx arm es sa sd s0 (ee with gas_obs := []) v op u /\
-    ptr_val_ok cx ty v op H tt u /\ ptr_buf_ok ce (IfExp ty c a b) op H u /\
-    ghost_inv d ce cx (ee with gas_obs := []) H tt u /\
-    ghost_kept ce es sa G0 tn0 s0 H tt /\
+    gas_path_ptr D 0 ctx fn PG G tn s 0 HG tt (OK u) /\
+    expr_post H ctx fn ce cx arm es sa sd s0 (ee with gas_obs := []) v op u /\
+    ptr_val_ok cx ty v op HG tt u /\ ptr_buf_ok ce (IfExp ty c a b) op HG u /\
+    ghost_inv H d ce cx (ee with gas_obs := []) HG tt u /\
+    ghost_kept ce es sa G0 tn0 s0 HG tt /\
     u.vs_current_bb = sd.cs_current_bb /\ u.vs_inst_idx = LENGTH sd.cs_current_insts /\
     (!tv. tv = raw \/ tv = Value v ==>
       vv_at ce cx ty sa sd (ee with gas_obs := []) tv
@@ -89,29 +89,29 @@ Theorem ifexp_selected_nonword_marked:
   gas_marked_exec_ptr D (ctx,fn) PG (eval_expr cx arm) (es,s0,G0,tn0)
     marks (INL raw) ee G tn (OK s) /\
   gas_admissible (bind (eval_expr cx arm) (conditional_result cx)) expr_vv_res_ok es /\
-  stmt_state_rel ctx fn ce cx es s0 /\
-  vv_post ctx fn ce cx arm es sa sm s0 (ee with gas_obs := []) raw vv s /\
+  stmt_state_rel H ctx fn ce cx es s0 /\
+  vv_post H ctx fn ce cx arm es sa sm s0 (ee with gas_obs := []) raw vv s /\
   ptr_vv_ok cx (expr_type arm) raw vv (ee with gas_obs := []) G tn s /\
   (!tag src. vv = StackValue tag src /\ ~is_word_type (expr_type arm) ==>
     ptr_buf_ok ce arm src G s) /\
   (!tag p. vv = LocatedValue tag p /\ p.ptr_location = LocMemory ==>
     ptr_buf_ok ce arm p.ptr_operand G s) /\
-  ghost_inv d ce cx (ee with gas_obs := []) G tn s /\
+  ghost_inv H d ce cx (ee with gas_obs := []) G tn s /\
   ghost_kept ce es sa G0 tn0 s0 G tn /\ local_ptrs_reserved ce sa /\
   fn_has_code sm sd fn /\ fn_inst_ids_distinct fn /\
   (!x sz. ce.ce_return_buf = SOME (PtrVar (Var x) sz) ==> not_fresh_at sa x) /\
   (!x sz. ce.ce_return_pc = SOME (PtrVar (Var x) sz) ==> not_fresh_at sa x) /\
   ~ctx_has_dalloca ctx /\ s.vs_current_bb = sm.cs_current_bb /\
   s.vs_inst_idx = LENGTH sm.cs_current_insts ==>
-  ?v tv u H tt.
+  ?v tv u HG tt.
     gas_marked_exec_ptr D (ctx,fn) PG
       (bind (eval_expr cx arm) (conditional_result cx)) (es,s0,G0,tn0)
-      marks (INL tv) ee H tt (OK u) /\
+      marks (INL tv) ee HG tt (OK u) /\
     read_result cx tv (ee with gas_obs := []) = (INL v,ee with gas_obs := []) /\
-    expr_post ctx fn ce cx arm es sa sd s0 (ee with gas_obs := []) v op u /\
-    ptr_val_ok cx ty v op H tt u /\ ptr_buf_ok ce (IfExp ty c a b) op H u /\
-    ghost_inv d ce cx (ee with gas_obs := []) H tt u /\
-    ghost_kept ce es sa G0 tn0 s0 H tt /\
+    expr_post H ctx fn ce cx arm es sa sd s0 (ee with gas_obs := []) v op u /\
+    ptr_val_ok cx ty v op HG tt u /\ ptr_buf_ok ce (IfExp ty c a b) op HG u /\
+    ghost_inv H d ce cx (ee with gas_obs := []) HG tt u /\
+    ghost_kept ce es sa G0 tn0 s0 HG tt /\
     u.vs_current_bb = sd.cs_current_bb /\ u.vs_inst_idx = LENGTH sd.cs_current_insts /\
     vv_at ce cx ty sa sd (ee with gas_obs := []) tv
       (LocatedValue ty (mk_ptr op LocMemory)) u
@@ -127,5 +127,5 @@ Proof
        (qspec_then `[]` assume_tac) >>
      drule ifexp_conditional_result_shape >> rpt strip_tac >>
      gvs[read_result_def, return_def]) >>
-  qexistsl_tac [`v`,`tv`,`u`,`H`,`tt`] >> simp[]
+  qexistsl_tac [`v`,`tv`,`u`,`HG`,`tt`] >> simp[]
 QED

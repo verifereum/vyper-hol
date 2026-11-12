@@ -12,15 +12,15 @@ Theorem ifexp_old_ensure_memory_storage_single:
   post_value_type ce e = expr_type e /\
   expr_body_pre ce cx env e es /\ eval_expr cx e es = (INL raw,ee) /\
   read_result cx raw ee = (INL v,ee) /\
-  stmt_state_rel ctx fn ce cx es s0 /\
-  vv_post ctx fn ce cx e es sa sb s0 ee raw (LocatedValue tag pp) s /\
+  stmt_state_rel H ctx fn ce cx es s0 /\
+  vv_post H ctx fn ce cx e es sa sb s0 ee raw (LocatedValue tag pp) s /\
   ptr_vv_ok cx (expr_type e) raw (LocatedValue tag pp) ee G tn s /\
   (pp.ptr_location = LocStorage \/ pp.ptr_location = LocTransient) /\
   (type_memory_bytes ce (expr_type e)+31) DIV 32 = 1 /\
   compile_ensure_in_memory pp.ptr_operand pp.ptr_location
     (type_memory_bytes ce (expr_type e)) 1 is_ctor imm sb = (dst,sd) /\
   fn_has_code sb sd fn /\
-  ghost_inv rty ce cx ee G tn s /\ ghost_kept ce es sa G0 tn0 s0 G tn /\
+  ghost_inv H rty ce cx ee G tn s /\ ghost_kept ce es sa G0 tn0 s0 G tn /\
   local_ptrs_reserved ce sa /\ MAP FDOM es.scopes = MAP FDOM ee.scopes /\
   fn_inst_ids_distinct fn /\ sa.cs_next_var <= sb.cs_next_var /\ sa.cs_next_id <= sb.cs_next_id /\
   (!x sz. ce.ce_return_buf = SOME (PtrVar (Var x) sz) ==> not_fresh_at sa x) /\
@@ -36,7 +36,7 @@ Theorem ifexp_old_ensure_memory_storage_single:
     t.vs_inst_idx = LENGTH sd.cs_current_insts /\ ~t.vs_halted /\
     (!m. mem_agree_outside tn'.t_mem t.vs_memory m ==> val_in_memory ty v (w2n d) m) /\
     ptr_covers G' tn' out t (type_memory_bytes ce (expr_type e)) /\
-    ghost_inv rty ce cx ee G' tn' t /\ ghost_kept ce es sa G0 tn0 s0 G' tn' /\
+    ghost_inv H rty ce cx ee G' tn' t /\ ghost_kept ce es sa G0 tn0 s0 G' tn' /\
     (!aid off sz. FLOOKUP s0.vs_allocas aid = SOME (off,sz) /\ aid < sa.cs_next_id ==>
       off+sz <= w2n d \/ w2n d+type_memory_bytes ce (expr_type e) <= off) /\
     (!name pos len. local_region ce es.scopes s0 name pos len ==>
@@ -49,10 +49,10 @@ Theorem ifexp_old_ensure_memory_storage_single:
     t.vs_accounts = s.vs_accounts /\ t.vs_call_ctx = s.vs_call_ctx /\
     t.vs_transient = s.vs_transient /\ t.vs_data_section = s.vs_data_section /\
     LENGTH s.vs_memory <= LENGTH t.vs_memory /\
-    (~is_word_type (expr_type e) ==> expr_post ctx fn ce cx e es sa sd s0 ee v dst t)
+    (~is_word_type (expr_type e) ==> expr_post H ctx fn ce cx e es sa sd s0 ee v dst t)
 Proof
   disch_then (map_every assume_tac o CONJUNCTS) >>
-  drule_at (Pat `vv_post _ _ _ _ _ _ _ _ _ _ _ _ _`) ifexp_storage_arm_source >>
+  drule_at (Pat `vv_post _ _ _ _ _ _ _ _ _ _ _ _ _ _`) ifexp_storage_arm_source >>
   simp[] >> disch_then drule_all >> strip_tac >>
   drule_at (Pat `compile_ensure_in_memory _ _ _ _ _ _ _ = _`) ifexp_storage_single_code >>
   simp[] >> disch_then drule >> strip_tac >>
@@ -111,7 +111,7 @@ Resume ifexp_old_ensure_memory_storage_single[frames]:
   `!x. not_fresh_at sa x ==> x <> out'` by
     (drule compile_alloc_buffer_parts >> strip_tac >>
      metis_tac[loweringShapeDefsTheory.not_fresh_at_mono, arithmeticTheory.LESS_EQ_TRANS]) >>
-  `ghost_inv rty ce cx ee Gb tb r` by simp[Abbr `r`] >>
+  `ghost_inv H rty ce cx ee Gb tb r` by simp[Abbr `r`] >>
   `eval_operand (Var out) s1 = SOME d` by
     (qpat_x_assum `s1 = _` SUBST1_TAC >>
      simp[venomStateTheory.eval_operand_def, venomStateTheory.lookup_var_def,
@@ -172,7 +172,7 @@ QED
 
 Resume ifexp_old_ensure_memory_storage_single[ordinary]:
   `local_ptrs_reserved ce sb` by metis_tac[exprLoweringPropsTheory.local_ptrs_reserved_next_var] >>
-  `stmt_state_rel ctx fn ce cx ee s` by fs[loweringPostsTheory.vv_post_def] >>
+  `stmt_state_rel H ctx fn ce cx ee s` by fs[loweringPostsTheory.vv_post_def] >>
   `!x. not_fresh_at sb x ==> x <> out'` by
     (drule compile_alloc_buffer_parts >> strip_tac >>
      metis_tac[loweringShapeDefsTheory.not_fresh_at_mono]) >>
@@ -200,7 +200,7 @@ Resume ifexp_old_ensure_memory_storage_single[ordinary]:
 QED
 
 Resume ifexp_old_ensure_memory_storage_single[package]:
-  `~is_word_type (expr_type e) ==> expr_post ctx fn ce cx e es sa sd s0 ee v (Var out)
+  `~is_word_type (expr_type e) ==> expr_post H ctx fn ce cx e es sa sd s0 ee v (Var out)
     (u' with vs_inst_idx := LENGTH sd.cs_current_insts)` by
     (strip_tac >>
      `val_in_memory tvt v (w2n d) (u' with vs_inst_idx := LENGTH sd.cs_current_insts).vs_memory` by
@@ -215,7 +215,7 @@ Resume ifexp_old_ensure_memory_storage_single[package]:
   conj_tac >- first_assum ACCEPT_TAC >>
   conj_tac >- first_assum ACCEPT_TAC >>
   conj_tac >- (qpat_x_assum `ptr_covers G2 tn2 out _ 32` mp_tac >> simp[NoAsms]) >>
-  conj_tac >- (qpat_x_assum `ghost_inv rty ce cx ee G2 tn2 _` mp_tac >> simp[NoAsms]) >>
+  conj_tac >- (qpat_x_assum `ghost_inv H rty ce cx ee G2 tn2 _` mp_tac >> simp[NoAsms]) >>
   conj_tac >- first_assum ACCEPT_TAC >>
   conj_tac >- first_assum ACCEPT_TAC >>
   conj_tac
@@ -223,7 +223,7 @@ Resume ifexp_old_ensure_memory_storage_single[package]:
       qpat_x_assum `!name pos len. local_region _ _ _ _ _ _ ==> _` drule_all >> decide_tac) >>
   rule_assum_tac (SIMP_RULE (srw_ss()) []) >>
   rpt conj_tac >> asm_rewrite_tac [] >>
-  qpat_x_assum `~is_word_type _ ==> expr_post _ _ _ _ _ _ _ _ _ _ _ _ _` mp_tac >> simp[]
+  qpat_x_assum `~is_word_type _ ==> expr_post _ _ _ _ _ _ _ _ _ _ _ _ _ _` mp_tac >> simp[]
 QED
 
 Finalise ifexp_old_ensure_memory_storage_single

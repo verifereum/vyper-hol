@@ -30,7 +30,7 @@ Theorem tuple_local_compatible_head_path_ptr:
   (!x cap. cenv.ce_return_buf = SOME (PtrVar (Var x) cap) ==> not_fresh_at sa x) /\
   (!x cap. cenv.ce_return_pc = SOME (PtrVar (Var x) cap) ==> not_fresh_at sa x) /\
   lookup_var src s = SOME sw /\
-  stmt_state_rel ctx func cenv cx es s /\ ghost_inv d cenv cx es G tn s /\
+  stmt_state_rel H ctx func cenv cx es s /\ ghost_inv H d cenv cx es G tn s /\
   fn_has_code sa sb func /\ ~ctx_has_dalloca ctx /\ ~s.vs_halted /\
   s.vs_current_bb = sa.cs_current_bb /\ s.vs_inst_idx = LENGTH sa.cs_current_insts ==>
   ?t G' tn' dw written.
@@ -38,10 +38,10 @@ Theorem tuple_local_compatible_head_path_ptr:
     local_region cenv es.scopes s id (w2n dw) sz /\
     written <= type_memory_size tv /\ written <= type_memory_size entry.type /\
     written <= sz /\
-    stmt_state_rel ctx func cenv cx
+    stmt_state_rel H ctx func cenv cx
       (es with scopes := pre ++
         (sc |+ (id,entry with <|value := v; popped := []|>)) :: rest) t /\
-    ghost_inv d cenv cx
+    ghost_inv H d cenv cx
       (es with scopes := pre ++
         (sc |+ (id,entry with <|value := v; popped := []|>)) :: rest) G' tn' t /\
     ~t.vs_halted /\ t.vs_current_bb = sb.cs_current_bb /\

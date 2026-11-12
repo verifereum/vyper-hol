@@ -348,7 +348,7 @@ Theorem pop_length_guard_ghost:
   s.vs_inst_idx = LENGTH sa.cs_current_insts /\
   eval_operand a s = SOME w /\ op_taint tn a = {} /\ op_prov G a = NONE /\
   (!v. a = Var v ==> not_fresh_at sa v) /\ w <> 0w /\
-  ghost_inv d cenv cx es G tn s /\ local_ptrs_reserved cenv sa /\
+  ghost_inv H d cenv cx es G tn s /\ local_ptrs_reserved cenv sa /\
   (!x sz. cenv.ce_return_buf = SOME (PtrVar (Var x) sz) ==> not_fresh_at sa x) /\
   (!x sz. cenv.ce_return_pc = SOME (PtrVar (Var x) sz) ==> not_fresh_at sa x) /\
   ghost_kept cenv es sa G0 tn0 s0 G tn ==>
@@ -357,7 +357,7 @@ Theorem pop_length_guard_ghost:
     op_taint tn' new_len = {} /\ op_prov G' new_len = NONE /\
     ~t.vs_halted /\ t.vs_current_bb = se.cs_current_bb /\
     t.vs_inst_idx = LENGTH se.cs_current_insts /\
-    ghost_inv d cenv cx es G' tn' t /\
+    ghost_inv H d cenv cx es G' tn' t /\
     ghost_kept cenv es sa G0 tn0 s0 G' tn'
 Proof
   strip_tac >> drule_all pop_length_guard_path >>

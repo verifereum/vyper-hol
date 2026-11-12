@@ -90,7 +90,7 @@ QED
 Theorem emitted_allocation_value_exterior:
   compile_alloc_buffer n sa = (buf,sb) /\
   run_inst_seq (emitted_insts sa sb) s = OK t /\
-  stmt_state_rel ctx fn cenv cx es s /\
+  stmt_state_rel H ctx fn cenv cx es s /\
   expr_val_at cenv cx ty lo sf es v op s /\
   evaluate_type (get_tenv cx) ty = SOME tv /\ ~is_word_type ty /\
   eval_operand op s = SOME w ==>
@@ -109,7 +109,7 @@ QED
 Theorem emitted_allocation_point_exterior:
   compile_alloc_buffer n sa = (buf,sb) /\
   run_inst_seq (emitted_insts sa sb) s = OK t /\
-  stmt_state_rel ctx fn cenv cx es s /\
+  stmt_state_rel H ctx fn cenv cx es s /\
   expr_val_at cenv cx (ArrayT (BaseT (UintT 256)) (Fixed 2)) lo sf es v op s /\
   eval_operand op s = SOME w ==>
   !i. w2n w <= i /\ i < w2n w + 64 ==> i NOTIN new_site_bytes s t

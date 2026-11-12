@@ -58,7 +58,7 @@ QED
 Theorem recovery_registered_input_transport:
   compile_alloc_buffer 32 sp = (ob,sm) /\
   run_inst_seq (emitted_insts sp sm) s2 = OK s3 /\
-  stmt_state_rel ctx fn cenv cx es s2 /\ fn_inst_ids_distinct fn /\
+  stmt_state_rel H ctx fn cenv cx es s2 /\ fn_inst_ids_distinct fn /\
   local_ptrs_reserved cenv sp /\
   MEM (mk_inst sp.cs_next_id ALLOCA [Lit 32w]
     [STRING #"%" (toString sp.cs_next_var)]) (fn_insts fn) /\
@@ -95,10 +95,10 @@ QED
 
 Theorem recovery_framed_input:
   compile_ecrecover h v r q sf = (res,sb) /\
-  stmt_state_rel ctx fn cenv cx es s /\ fn_inst_ids_distinct fn /\
+  stmt_state_rel H ctx fn cenv cx es s /\ fn_inst_ids_distinct fn /\
   local_ptrs_reserved cenv sf /\ ~ctx_has_dalloca ctx /\
   (!i. MEM i (emitted_insts sf sb) ==> MEM i (fn_insts fn)) /\
-  ghost_inv d cenv cx es G tn s /\
+  ghost_inv H d cenv cx es G tn s /\
   (!p sz. cenv.ce_return_buf = SOME (PtrVar (Var p) sz) ==> not_fresh_at sf p) /\
   (!p sz. cenv.ce_return_pc = SOME (PtrVar (Var p) sz) ==> not_fresh_at sf p) /\
   eval_operand h s = SOME wh /\ eval_operand v s = SOME wv /\
@@ -129,8 +129,8 @@ Theorem recovery_framed_input:
       word_to_bytes wh T ++ word_to_bytes wv T ++
       word_to_bytes wr T ++ word_to_bytes wq T /\
     mem_word_at (w2n c) t.vs_memory = 0w /\
-    stmt_state_rel ctx fn cenv cx es t /\ wb_frame cenv es es sf s t /\
-    ghost_inv d cenv cx es Gf tnf t /\ ghost_kept cenv es sf G tn s Gf tnf /\
+    stmt_state_rel H ctx fn cenv cx es t /\ wb_frame cenv es es sf s t /\
+    ghost_inv H d cenv cx es Gf tnf t /\ ghost_kept cenv es sf G tn s Gf tnf /\
     (!name lo len. local_region cenv es.scopes t name lo len ==>
        regions_disjoint (w2n c) 32 lo len) /\
     (!aid lo len. aid < sf.cs_next_id /\
@@ -169,7 +169,7 @@ QED
 Resume recovery_framed_input[transport]:
   `FLOOKUP s2'.vs_allocas sf.cs_next_id = SOME (w2n b,128)` by
     (`128 < dimword(:256)` by simp[wordsTheory.dimword_def] >>
-     qpat_assum `stmt_state_rel ctx fn cenv cx es s`
+     qpat_assum `stmt_state_rel H ctx fn cenv cx es s`
        (mp_then Any (drule_all_then strip_assume_tac)
          exprSimLiteralBufferTheory.alloc_buffer_frame_run) >> gvs[]) >>
   `sf.cs_next_id < sp.cs_next_id` by (simp[] >> decide_tac) >>
@@ -339,10 +339,10 @@ QED
 
 Theorem recovery_residual_success:
   compile_ecrecover h v r q sf = (res,sb) /\
-  stmt_state_rel ctx fn cenv cx es s /\ fn_inst_ids_distinct fn /\
+  stmt_state_rel H ctx fn cenv cx es s /\ fn_inst_ids_distinct fn /\
   local_ptrs_reserved cenv sf /\ ~ctx_has_dalloca ctx /\
   (!i. MEM i (emitted_insts sf sb) ==> MEM i (fn_insts fn)) /\
-  ghost_inv d cenv cx es G tn s /\
+  ghost_inv H d cenv cx es G tn s /\
   (!p sz. cenv.ce_return_buf = SOME (PtrVar (Var p) sz) ==> not_fresh_at sf p) /\
   (!p sz. cenv.ce_return_pc = SOME (PtrVar (Var p) sz) ==> not_fresh_at sf p) /\
   eval_operand h s = SOME wh /\ eval_operand v s = SOME wv /\
@@ -365,10 +365,10 @@ Theorem recovery_residual_success:
       (AddressV (case vfmExecution$ecrecover wh (w2n wv) (w2n wr) (w2n wq) of
         NONE => 0w | SOME addr => addr))) /\
     op_prov G' res = NONE /\ op_taint tn' res = {} /\
-    stmt_state_rel ctx fn cenv cx
+    stmt_state_rel H ctx fn cenv cx
       (es with outcomes := SOME (DROP 1 s.vs_outcomes)) t /\
     wb_frame cenv es (es with outcomes := SOME (DROP 1 s.vs_outcomes)) sf s t /\
-    ghost_inv d cenv cx (es with outcomes := SOME (DROP 1 s.vs_outcomes)) G' tn' t /\
+    ghost_inv H d cenv cx (es with outcomes := SOME (DROP 1 s.vs_outcomes)) G' tn' t /\
     ghost_kept cenv es sf G tn s G' tn' /\
     pure_frame cenv fn es sf s t
 Proof
@@ -396,8 +396,8 @@ Resume recovery_residual_success[suffix]:
   qabbrev_tac `u = t with vs_inst_idx := s.vs_inst_idx + LENGTH (emitted_insts sf sz)` >>
   `eval_operand (Var src) u = SOME b /\ eval_operand (Var dst) u = SOME c` by
     gvs[Abbr `u`, eval_operand_def, lookup_var_def] >>
-  `stmt_state_rel ctx fn cenv cx es u` by simp[Abbr `u`, stmt_state_rel_inst_idx] >>
-  `ghost_inv d cenv cx es Gf tnf u` by
+  `stmt_state_rel H ctx fn cenv cx es u` by simp[Abbr `u`, stmt_state_rel_inst_idx] >>
+  `ghost_inv H d cenv cx es Gf tnf u` by
     simp[Abbr `u`, SRULE [] (Q.INST [`gs` |-> `es.gas_obs`]
       literal_ptr_ghost_inv_normalize)] >>
   suspend "apply_suffix"
@@ -487,10 +487,10 @@ Finalise recovery_residual_success
 
 Theorem recovery_residual_oracle_failure:
   compile_ecrecover h v r q sf = (res,sb) /\
-  stmt_state_rel ctx fn cenv cx es s /\ fn_inst_ids_distinct fn /\
+  stmt_state_rel H ctx fn cenv cx es s /\ fn_inst_ids_distinct fn /\
   local_ptrs_reserved cenv sf /\ ~ctx_has_dalloca ctx /\
   (!i. MEM i (emitted_insts sf sb) ==> MEM i (fn_insts fn)) /\
-  ghost_inv d cenv cx es G tn s /\
+  ghost_inv H d cenv cx es G tn s /\
   (!p sz. cenv.ce_return_buf = SOME (PtrVar (Var p) sz) ==> not_fresh_at sf p) /\
   (!p sz. cenv.ce_return_pc = SOME (PtrVar (Var p) sz) ==> not_fresh_at sf p) /\
   eval_operand h s = SOME wh /\ eval_operand v s = SOME wv /\

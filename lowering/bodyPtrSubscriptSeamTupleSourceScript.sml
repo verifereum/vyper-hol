@@ -12,7 +12,7 @@ Theorem tuple_selected_source:
   expr_body_pre cenv cx env (Subscript ann obj idx) es /\
   expr_type obj = TupleT tys /\ post_value_type cenv obj = TupleT tys /\
   eval_expr cx obj es = (INL btv,es1) /\
-  vv_post ctx func cenv cx obj es sa sb s0 es1 btv bvv q ==>
+  vv_post H ctx func cenv cx obj es sa sb s0 es1 btv bvv q ==>
   ?ity k tvs vs tv'.
     idx = Literal ity (IntL (&k)) /\ ann = EL k tys /\ k < LENGTH tys /\
     evaluate_type (get_tenv cx) (TupleT tys) = SOME (TupleTV tvs) /\

@@ -19,10 +19,10 @@ Theorem compile_log_eval_all_gas_ptr:
     expr_sim_inv cenv cx env0 es0 /\ well_typed_exprs env args /\
     (!id t. FLOOKUP env.var_types id = SOME t ==>
        ?p sz. FLOOKUP cenv.ce_vars id = SOME (PtrVar (Var p) sz)) /\
-    stmt_state_rel ctx func cenv cx es s0 /\ ghost_inv d cenv cx es G0 tn0 s0 /\
+    stmt_state_rel H ctx func cenv cx es s0 /\ ghost_inv H d cenv cx es G0 tn0 s0 /\
     ~s0.vs_halted /\ s0.vs_current_bb = sa.cs_current_bb /\
     s0.vs_inst_idx = LENGTH sa.cs_current_insts ==>
-    gas_outcome_ptr (cx_dead cx) (cx_tops cx) (ctx,func) PG
+    gas_outcome_ptr (cx_dead H cx) (cx_tops cx) (ctx,func) PG
       (eval_exprs cx args) (es,s0,G0,tn0)
       (\res ee G tn t. ?vs. res = INL vs /\
          log_args_post ctx func cenv cx es sa sb s0 ee xs vs t /\
@@ -32,7 +32,7 @@ Theorem compile_log_eval_all_gas_ptr:
                                value_has_type tv v) (MAP expr_type args) vs /\
          EVERY (\p. (!z. FST p = Var z ==> not_fresh_at sb z) /\
                     (!lab. FST p <> Label lab)) xs /\
-         ghost_inv d cenv cx ee G tn t /\
+         ghost_inv H d cenv cx ee G tn t /\
          LIST_REL (\p v. ptr_val_ok cx (SND p) v (FST p) G tn t) xs vs /\
          LIST_REL (\e p. ~is_word_type (expr_type e) ==>
            ptr_buf_ok cenv e (FST p) G t) args xs /\

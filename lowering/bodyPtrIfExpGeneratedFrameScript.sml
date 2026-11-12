@@ -3,7 +3,7 @@ Ancestors bodySim exprLoweringProps
 
 Theorem ifexp_generated_caller_frame:
   !tops ctx ce cx fn es s.
-    body_inv tops ctx ce cx /\ stmt_state_rel ctx fn ce cx es s ==>
+    body_inv tops ctx ce cx /\ stmt_state_rel H ctx fn ce cx es s ==>
     lookup_function fn.fn_name ctx.ctx_functions = SOME fn /\
     (?rpolicy unit.
       (if cx.in_deploy then

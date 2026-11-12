@@ -8,15 +8,15 @@ Libs monadsyntax
 
 Theorem raw_call_scalar_suffix:
   return op sa = (result,sb) /\
-  stmt_state_rel ctx func cenv cx es s /\ ghost_inv dep cenv cx es G tn s /\
+  stmt_state_rel H ctx func cenv cx es s /\ ghost_inv H dep cenv cx es G tn s /\
   s.vs_current_bb = sa.cs_current_bb /\ s.vs_inst_idx = LENGTH sa.cs_current_insts /\
   ~s.vs_halted /\ is_word_type ty /\
   eval_operand op s = SOME (val_to_w256 v) /\
   op_taint tn op = {} /\ op_prov G op = NONE ==>
-  gas_path_ptr (cx_dead cx) 0 ctx func PG G tn s 0 G tn (OK s) /\
+  gas_path_ptr (cx_dead H cx) 0 ctx func PG G tn s 0 G tn (OK s) /\
   ptr_val_ok cx ty v result G tn s /\
   (~is_word_type ty ==> ptr_buf_ok cenv e result G s) /\
-  stmt_state_rel ctx func cenv cx es s /\ ghost_inv dep cenv cx es G tn s /\
+  stmt_state_rel H ctx func cenv cx es s /\ ghost_inv H dep cenv cx es G tn s /\
   ghost_kept cenv es protected G tn s G tn /\ wb_frame cenv es es protected s s /\
   s.vs_current_bb = sb.cs_current_bb /\ s.vs_inst_idx = LENGTH sb.cs_current_insts /\
   eval_operand result s = SOME (val_to_w256 v) /\ ~s.vs_halted
@@ -31,11 +31,11 @@ QED
    but its runtime result is a word, not a located memory buffer. *)
 Theorem raw_call_scalar_bool_layout[local]:
   return op sa = (result,sb) /\
-  stmt_state_rel ctx func cenv cx es s /\ ghost_inv dep cenv cx es G tn s /\
+  stmt_state_rel H ctx func cenv cx es s /\ ghost_inv H dep cenv cx es G tn s /\
   s.vs_current_bb = sa.cs_current_bb /\ s.vs_inst_idx = LENGTH sa.cs_current_insts /\
   ~s.vs_halted /\ eval_operand op s = SOME (val_to_w256 (BoolV flag)) /\
   op_taint tn op = {} /\ op_prov G op = NONE ==>
-  gas_path_ptr (cx_dead cx) 0 ctx func PG G tn s 0 G tn (OK s) /\
+  gas_path_ptr (cx_dead H cx) 0 ctx func PG G tn s 0 G tn (OK s) /\
   ptr_val_ok cx (BaseT BoolT) (BoolV flag) result G tn s /\
   (~is_word_type (expr_type (Call (BaseT BoolT) (RawCallTarget flags) args ann)) ==>
     ptr_buf_ok cenv (Call (BaseT BoolT) (RawCallTarget flags) args ann) result G s) /\
@@ -59,7 +59,7 @@ Theorem raw_call_success_bytes_suffix:
       cap <- compile_select cmp z (Lit (n2w n));
       emit_void MSTORE [Var dst;cap]; return (Var dst) od) sn = (result,sb) /\
   fn_has_code sa sj func /\ fn_has_code sn sb func /\
-  stmt_state_rel ctx func cenv cx es s /\ ghost_inv dep cenv cx es G tn s /\
+  stmt_state_rel H ctx func cenv cx es s /\ ghost_inv H dep cenv cx es G tn s /\
   local_ptrs_reserved cenv protected /\ ci_mono protected sn /\
   (!x sz. cenv.ce_return_buf = SOME (PtrVar (Var x) sz) ==> not_fresh_at protected x) /\
   (!x sz. cenv.ce_return_pc = SOME (PtrVar (Var x) sz) ==> not_fresh_at protected x) /\
@@ -79,11 +79,11 @@ Theorem raw_call_success_bytes_suffix:
     regions_disjoint (w2n a) 32 off len) /\
   (!aid off len. aid < protected.cs_next_id /\ FLOOKUP s.vs_allocas aid = SOME (off,len) ==>
     regions_disjoint (w2n a) 32 off len) ==>
-  ?H un t. gas_path_ptr (cx_dead cx) 0 ctx func PG G tn s 0 H un (OK t) /\
+  ?HG un t. gas_path_ptr (cx_dead H cx) 0 ctx func PG G tn s 0 HG un (OK t) /\
     result = Var dst /\ lookup_var dst t = SOME a /\ t.vs_allocas = s.vs_allocas /\
-    ptr_val_ok cx ty (BytesV bs) result H un t /\ ptr_buf_ok cenv e result H t /\
-    ghost_inv dep cenv cx es H un t /\ ghost_kept cenv es protected G tn s H un /\
-    stmt_state_rel ctx func cenv cx es t /\ wb_frame cenv es es protected s t /\
+    ptr_val_ok cx ty (BytesV bs) result HG un t /\ ptr_buf_ok cenv e result HG t /\
+    ghost_inv H dep cenv cx es HG un t /\ ghost_kept cenv es protected G tn s HG un /\
+    stmt_state_rel H ctx func cenv cx es t /\ wb_frame cenv es es protected s t /\
     t.vs_current_bb = sb.cs_current_bb /\ t.vs_inst_idx = LENGTH sb.cs_current_insts /\
     ~t.vs_halted /\ t.vs_returndata = s.vs_returndata
 Proof
@@ -94,10 +94,10 @@ Proof
       loweringPostsTheory.popped_kept_def,
       venomStateTheory.jump_to_def, venomStateTheory.lookup_var_def,
       loweringStateRelDefsTheory.local_region_def] >>
-  `?H un t. gas_path_ptr (cx_dead cx) 0 ctx func PG G tn (jump_to good s) 0 H un (OK t) /\
-    ptr_val_ok cx ty (BytesV bs) (Var dst) H un t /\ ptr_buf_ok cenv e (Var dst) H t /\
-    ghost_inv dep cenv cx es H un t /\ ghost_kept cenv es protected G tn (jump_to good s) H un /\
-    stmt_state_rel ctx func cenv cx es t /\ wb_frame cenv es es protected (jump_to good s) t /\
+  `?HG un t. gas_path_ptr (cx_dead H cx) 0 ctx func PG G tn (jump_to good s) 0 HG un (OK t) /\
+    ptr_val_ok cx ty (BytesV bs) (Var dst) HG un t /\ ptr_buf_ok cenv e (Var dst) HG t /\
+    ghost_inv H dep cenv cx es HG un t /\ ghost_kept cenv es protected G tn (jump_to good s) HG un /\
+    stmt_state_rel H ctx func cenv cx es t /\ wb_frame cenv es es protected (jump_to good s) t /\
     t.vs_current_bb = sb.cs_current_bb /\ t.vs_inst_idx = LENGTH sb.cs_current_insts /\
     ~t.vs_halted /\ t.vs_returndata = s.vs_returndata /\ result = Var dst /\
     lookup_var dst t = SOME a /\ t.vs_allocas = s.vs_allocas` by
@@ -105,13 +105,13 @@ Proof
      impl_tac >- (gvs[venomStateTheory.jump_to_def, venomStateTheory.lookup_var_def,
        bodyPtrDefsTheory.ptr_covers_def, loweringStateRelDefsTheory.local_region_def] >> metis_tac[]) >>
      strip_tac >>
-     qexistsl_tac [`H`, `un`, `t`] >> gvs[venomStateTheory.jump_to_def]) >>
+     qexistsl_tac [`HG`, `un`, `t`] >> gvs[venomStateTheory.jump_to_def]) >>
   `ci_mono protected protected` by simp[exprLoweringPropsTheory.ci_mono_refl] >>
-  `ghost_kept cenv es protected G tn s H un /\ wb_frame cenv es es protected s t` by
+  `ghost_kept cenv es protected G tn s HG un /\ wb_frame cenv es es protected s t` by
     (irule (oracle_suffix_frames_compose |> Q.INST
-      [`sa` |-> `protected`, `t` |-> `jump_to good s`, `H` |-> `G`, `un` |-> `tn`]) >>
+      [`sa` |-> `protected`, `t` |-> `jump_to good s`, `HG` |-> `G`, `un` |-> `tn`]) >>
      goal_assum (drule_at Any) >> simp[wordArgsPtrTheory.ghost_kept_refl] >> metis_tac[]) >>
-  qexistsl_tac [`H`, `un`, `t`] >> simp[] >>
+  qexistsl_tac [`HG`, `un`, `t`] >> simp[] >>
   drule_all gas_path_ptr_then >> gvs[]
 QED
 
@@ -119,15 +119,15 @@ Theorem raw_call_success_none_suffix:
   emit_inst JNZ [ok;Label good;Label bad] [] sa = ((),sj) /\
   new_block good sk = (blockname,sn) /\
   return (Lit 0w) sn = (result,sb) /\ fn_has_code sa sj func /\
-  stmt_state_rel ctx func cenv cx es s /\ ghost_inv dep cenv cx es G tn s /\
+  stmt_state_rel H ctx func cenv cx es s /\ ghost_inv H dep cenv cx es G tn s /\
   s.vs_current_bb = sa.cs_current_bb /\ s.vs_inst_idx = LENGTH sa.cs_current_insts /\
   ~s.vs_halted /\ ~ctx_has_dalloca ctx /\
   eval_operand ok s = SOME 1w /\ op_taint tn ok = {} /\
   type_memory_bytes cenv (lowered_value_type cenv e) = 0 ==>
-  ?t. gas_path_ptr (cx_dead cx) 0 ctx func PG G tn s 0 G tn (OK t) /\
+  ?t. gas_path_ptr (cx_dead H cx) 0 ctx func PG G tn s 0 G tn (OK t) /\
     result = Lit 0w /\
     ptr_val_ok cx NoneT NoneV result G tn t /\ ptr_buf_ok cenv e result G t /\
-    stmt_state_rel ctx func cenv cx es t /\ ghost_inv dep cenv cx es G tn t /\
+    stmt_state_rel H ctx func cenv cx es t /\ ghost_inv H dep cenv cx es G tn t /\
     ghost_kept cenv es protected G tn s G tn /\ wb_frame cenv es es protected s t /\
     t.vs_current_bb = sb.cs_current_bb /\ t.vs_inst_idx = LENGTH sb.cs_current_insts /\
     ~t.vs_halted /\ t.vs_returndata = s.vs_returndata
@@ -156,7 +156,7 @@ Theorem raw_call_nonrevert_suffix:
         emit_void MCOPY [dst;Var src;Lit (n2w ncopy)];
         return buf.buf_operand od
    else return (Var success)) sa = (result,sb) /\
-  stmt_state_rel ctx func cenv cx es s /\ ghost_inv dep cenv cx es G tn s /\
+  stmt_state_rel H ctx func cenv cx es s /\ ghost_inv H dep cenv cx es G tn s /\
   s.vs_current_bb = sa.cs_current_bb /\ s.vs_inst_idx = LENGTH sa.cs_current_insts /\
   ~s.vs_halted /\ eval_operand (Var success) s = SOME (val_to_w256 (BoolV flag)) /\
   op_taint tn (Var success) = {} /\ op_prov G (Var success) = NONE /\
@@ -187,7 +187,7 @@ Theorem raw_call_nonrevert_suffix:
     val_store_size (TupleTV [BaseTV BoolT;BaseTV (BytesT (Dynamic n))])
       (ArrayV (TupleV [BoolV flag;BytesV (TAKE n s.vs_returndata)])) <= 32+ncopy /\
     type_memory_bytes cenv (lowered_value_type cenv e) <= 32+ncopy) ==>
-  ?H un t. gas_path_ptr (cx_dead cx) 0 ctx func PG G tn s 0 H un (OK t) /\
+  ?HG un t. gas_path_ptr (cx_dead H cx) 0 ctx func PG G tn s 0 HG un (OK t) /\
     (n = 0 ==> eval_operand result t = SOME (val_to_w256 (BoolV flag))) /\
     (0 < n ==> ?x b ai. result = Var x /\ lookup_var x t = SOME (n2w b) /\
       FLOOKUP t.vs_allocas ai = SOME (b,32+ncopy) /\
@@ -195,10 +195,10 @@ Theorem raw_call_nonrevert_suffix:
       (!name off len. local_region cenv es.scopes t name off len ==>
         regions_disjoint b (32+ncopy) off len)) /\
     ptr_val_ok cx ty (if n = 0 then BoolV flag else
-      ArrayV (TupleV [BoolV flag;BytesV (TAKE n s.vs_returndata)])) result H un t /\
-    (~is_word_type ty ==> ptr_buf_ok cenv e result H t) /\
-    ghost_inv dep cenv cx es H un t /\ ghost_kept cenv es protected G tn s H un /\
-    stmt_state_rel ctx func cenv cx es t /\ wb_frame cenv es es protected s t /\
+      ArrayV (TupleV [BoolV flag;BytesV (TAKE n s.vs_returndata)])) result HG un t /\
+    (~is_word_type ty ==> ptr_buf_ok cenv e result HG t) /\
+    ghost_inv H dep cenv cx es HG un t /\ ghost_kept cenv es protected G tn s HG un /\
+    stmt_state_rel H ctx func cenv cx es t /\ wb_frame cenv es es protected s t /\
     t.vs_current_bb = sb.cs_current_bb /\ t.vs_inst_idx = LENGTH sb.cs_current_insts /\
     ~t.vs_halted /\ t.vs_returndata = s.vs_returndata
 Proof
@@ -210,7 +210,7 @@ Proof
   impl_tac >- (simp[] >> metis_tac[]) >>
   strip_tac >>
   rename1 `FLOOKUP t.vs_allocas ai = SOME (b,32+ncopy)` >>
-  qexistsl_tac [`H`, `un`, `t`] >> simp[] >>
+  qexistsl_tac [`HG`, `un`, `t`] >> simp[] >>
   qexistsl_tac [`b`, `ai`] >> simp[arithmeticTheory.ADD_COMM] >>
   metis_tac[arithmeticTheory.ADD_COMM]
 QED
@@ -230,7 +230,7 @@ Theorem raw_call_reverting_suffix:
         emit_void MSTORE [Var dst;cap]; return (Var dst) od
    else return (Lit 0w)) sn = (result,sb) /\
   fn_has_code sa sj func /\ fn_has_code sf sk func /\ fn_inst_ids_distinct func /\
-  stmt_state_rel ctx func cenv cx es s /\ ghost_inv dep cenv cx es G tn s /\
+  stmt_state_rel H ctx func cenv cx es s /\ ghost_inv H dep cenv cx es G tn s /\
   local_ptrs_reserved cenv sa /\
   (!x sz. cenv.ce_return_buf = SOME (PtrVar (Var x) sz) ==> not_fresh_at sa x) /\
   (!x sz. cenv.ce_return_pc = SOME (PtrVar (Var x) sz) ==> not_fresh_at sa x) /\
@@ -255,17 +255,17 @@ Theorem raw_call_reverting_suffix:
       regions_disjoint (w2n a) 32 off len) /\
     (!aid off len. aid < protected.cs_next_id /\ FLOOKUP s.vs_allocas aid = SOME (off,len) ==>
       regions_disjoint (w2n a) 32 off len)) ==>
-  ?H un t. gas_path_ptr (cx_dead cx) 0 ctx func PG G tn s 0 H un
+  ?HG un t. gas_path_ptr (cx_dead H cx) 0 ctx func PG G tn s 0 HG un
       (if flag then OK t else Abort Revert_abort t) /\
     t.vs_returndata = s.vs_returndata /\
     (if flag then
       (n = 0 ==> result = Lit 0w) /\
       (0 < n ==> result = Var dst /\ lookup_var dst t = SOME a /\
         t.vs_allocas = s.vs_allocas) /\
-      ptr_val_ok cx ty (if n = 0 then NoneV else BytesV (TAKE n s.vs_returndata)) result H un t /\
-      ptr_buf_ok cenv e result H t /\
-      ghost_inv dep cenv cx es H un t /\ ghost_kept cenv es protected G tn s H un /\
-      stmt_state_rel ctx func cenv cx es t /\ wb_frame cenv es es protected s t /\
+      ptr_val_ok cx ty (if n = 0 then NoneV else BytesV (TAKE n s.vs_returndata)) result HG un t /\
+      ptr_buf_ok cenv e result HG t /\
+      ghost_inv H dep cenv cx es HG un t /\ ghost_kept cenv es protected G tn s HG un /\
+      stmt_state_rel H ctx func cenv cx es t /\ wb_frame cenv es es protected s t /\
       t.vs_current_bb = sb.cs_current_bb /\ t.vs_inst_idx = LENGTH sb.cs_current_insts /\ ~t.vs_halted
      else t.vs_halted)
 Proof
@@ -277,8 +277,8 @@ Proof
       mp_tac (raw_call_success_bytes_suffix |> Q.INST
         [`bs` |-> `TAKE n s.vs_returndata`, `blockname` |-> `pb`]) >>
       impl_tac >- (simp[] >> metis_tac[]) >>
-      strip_tac >> qexistsl_tac [`H`, `un`, `t`] >> simp[]) >>
+      strip_tac >> qexistsl_tac [`HG`, `un`, `t`] >> simp[]) >>
   drule_all raw_call_failed_branch_stage >>
   disch_then (qspec_then `PG` strip_assume_tac) >>
-  qexistsl_tac [`H`, `un`, `t`] >> simp[]
+  qexistsl_tac [`HG`, `un`, `t`] >> simp[]
 QED

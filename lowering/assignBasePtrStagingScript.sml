@@ -19,7 +19,7 @@ Theorem assign_base_scratch_copy_framed_ptr:
     val_wf tv v /\ val_footprint tv v <= n /\
     (!m. mem_agree_outside tn.t_mem s.vs_memory m ==>
       val_in_memory tv v (w2n a) m) /\
-    local_ptrs_rel fn cenv es.scopes s /\ ghost_inv kind cenv cx es G tn s /\
+    local_ptrs_rel fn cenv es.scopes s /\ ghost_inv H kind cenv cx es G tn s /\
     (!name base sz. local_region cenv es.scopes s name base sz ==>
       regions_disjoint (w2n b) n base sz) /\
     (!aid off sz. FLOOKUP s.vs_allocas aid = SOME (off,sz) /\
@@ -34,7 +34,7 @@ Theorem assign_base_scratch_copy_framed_ptr:
       u.vs_prev_bb = s.vs_prev_bb /\ ptr_covers Gf tf dst u n /\
       (!m. mem_agree_outside tf.t_mem u.vs_memory m ==>
         val_in_memory tv v (w2n b) m) /\
-      ghost_inv kind cenv cx es Gf tf u /\
+      ghost_inv H kind cenv cx es Gf tf u /\
       ghost_kept cenv es frame_sa G tn s Gf tf /\
       u.vs_allocas = s.vs_allocas /\
       (!q. eval_operand q u = eval_operand q s) /\
@@ -75,12 +75,12 @@ Theorem assign_base_alloc_scratch_staging_ptr:
     compile_alloc_buffer n sa = (buf,sm) /\ buf.buf_operand = Var dst /\
     compile_copy_memory (Var dst) (Var src) n sm = ((),sb) /\
     fn_has_code sa sm fn /\ fn_has_code sm sb fn /\
-    stmt_state_rel ctx fn cenv cx es s /\ fn_inst_ids_distinct fn /\
+    stmt_state_rel H ctx fn cenv cx es s /\ fn_inst_ids_distinct fn /\
     local_ptrs_reserved cenv sa /\ n < dimword (:256) /\
     ~ctx_has_dalloca ctx /\ ~s.vs_halted /\
     s.vs_current_bb = sa.cs_current_bb /\
     s.vs_inst_idx = LENGTH sa.cs_current_insts /\
-    ghost_inv kind cenv cx es G tn s /\
+    ghost_inv H kind cenv cx es G tn s /\
     not_local_ptr cenv es.scopes (STRING #"%" (toString sa.cs_next_var)) /\
     (!x k. cenv.ce_return_buf = SOME (PtrVar (Var x) k) ==>
       x <> STRING #"%" (toString sa.cs_next_var)) /\
@@ -97,8 +97,8 @@ Theorem assign_base_alloc_scratch_staging_ptr:
       val_in_memory tv v (w2n w) m) ==>
     ?u a Gi ti t Gf tf.
       gas_path_ptr D 0 ctx fn PG G tn s 0 Gi ti (OK u) /\
-      stmt_state_rel ctx fn cenv cx es u /\
-      stmt_state_rel ctx fn cenv cx es t /\
+      stmt_state_rel H ctx fn cenv cx es u /\
+      stmt_state_rel H ctx fn cenv cx es t /\
       gas_path_ptr D 0 ctx fn PG Gi ti u 0 Gf tf (OK t) /\
       gas_path_ptr D 0 ctx fn PG G tn s 0 Gf tf (OK t) /\
       typed_copy_state_frame sm (w2n a) n u t /\
@@ -110,7 +110,7 @@ Theorem assign_base_alloc_scratch_staging_ptr:
       eval_operand (Var dst) t = SOME a /\ eval_operand (Var src) t = SOME w /\
       (!m. mem_agree_outside tf.t_mem t.vs_memory m ==>
         val_in_memory tv v (w2n a) m) /\
-      ghost_inv kind cenv cx es Gf tf t /\
+      ghost_inv H kind cenv cx es Gf tf t /\
       ghost_kept cenv es frame_sa G tn s Gf tf /\
       t.vs_allocas = u.vs_allocas /\
       (!aid site. FLOOKUP s.vs_allocas aid = SOME site ==>
@@ -139,7 +139,7 @@ Proof
   `MEM (mk_inst sa.cs_next_id ALLOCA [Lit (n2w n)]
       [STRING #"%" (toString sa.cs_next_var)]) (fn_insts fn)` by
     (drule_all buffer_alloc_code >> simp[]) >>
-  `stmt_state_rel ctx fn cenv cx es u'` by
+  `stmt_state_rel H ctx fn cenv cx es u'` by
     (Cases_on `n = 0` >> gvs[] >> simp[stmt_state_rel_inst_idx] >>
      irule stmt_state_rel_mcopy_alloca >> simp[] >>
      qexistsl_tac [`n`, `mk_inst sa.cs_next_id ALLOCA [Lit (n2w n)]

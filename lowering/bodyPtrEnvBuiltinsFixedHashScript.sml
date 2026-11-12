@@ -11,7 +11,7 @@ Ancestors wordLoadStorePtr bodyPtrEnvBuiltinsSelectorSuffix bodyPtrEnvBuiltinsMe
 Theorem fixed_hash_store_certificate:
   ptr_covers G tn p s 32 /\ lookup_var p s = SOME a /\
   eval_operand value s = SOME w /\ op_taint tn value = {} /\
-  ghost_inv d cenv cx es G tn s /\ local_ptrs_rel fn cenv es.scopes s /\
+  ghost_inv H d cenv cx es G tn s /\ local_ptrs_rel fn cenv es.scopes s /\
   ghost_kept cenv es0 sa G0 tn0 s0 G tn /\
   (!name b sz. local_region cenv es.scopes s name b sz ==>
      b+sz <= w2n a \/ w2n a+32 <= b) /\
@@ -19,7 +19,7 @@ Theorem fixed_hash_store_certificate:
   u = mstore (w2n a) w s /\
   tn1 = step_taint (mk_inst id MSTORE [Var p; value] []) s u tn ==>
   inst_seq_ptr D 0 ctx fn PG G tn [mk_inst id MSTORE [Var p; value] []] s G tn1 /\
-  ghost_inv d cenv cx es G tn1 u /\
+  ghost_inv H d cenv cx es G tn1 u /\
   ghost_kept cenv es0 sa G0 tn0 s0 G tn1 /\
   ptr_covers G tn1 p u 32 /\ lookup_var p u = SOME a /\
   (!i. w2n a <= i /\ i < w2n a+32 ==> i NOTIN tn1.t_mem)
@@ -52,7 +52,7 @@ Theorem fixed_hash_tail_certificate:
           mk_inst hid SHA3 [Var p; Lit (n2w m)] [out]] /\
   ptr_covers G tn p s 32 /\ lookup_var p s = SOME a /\ m <= 32 /\
   eval_operand value s = SOME w /\ op_taint tn value = {} /\
-  ghost_inv d cenv cx es G tn s /\ local_ptrs_rel fn cenv es.scopes s /\
+  ghost_inv H d cenv cx es G tn s /\ local_ptrs_rel fn cenv es.scopes s /\
   ghost_kept cenv es0 sa G0 tn0 s0 G tn /\
   (!name b sz. local_region cenv es.scopes s name b sz ==>
      b+sz <= w2n a \/ w2n a+32 <= b) /\
@@ -62,14 +62,14 @@ Theorem fixed_hash_tail_certificate:
   ~ctx_has_dalloca ctx /\ run_inst_seq code s = OK t ==>
   ?G' tn'. inst_seq_ptr D 0 ctx fn PG G tn code (s with vs_inst_idx := k) G' tn' /\
     ptr_val_ok cx (BaseT (BytesT (Fixed 32))) result (Var out) G' tn' t /\
-    ghost_inv d cenv cx es G' tn' t /\
+    ghost_inv H d cenv cx es G' tn' t /\
     ghost_kept cenv es0 sa G0 tn0 s0 G' tn'
 Proof
   strip_tac >>
   qabbrev_tac `u = mstore (w2n a) w s` >>
   qabbrev_tac `tn1 = step_taint (mk_inst sid MSTORE [Var p; value] []) s u tn` >>
   `inst_seq_ptr D 0 ctx fn PG G tn [mk_inst sid MSTORE [Var p; value] []] s G tn1 /\
-   ghost_inv d cenv cx es G tn1 u /\ ghost_kept cenv es0 sa G0 tn0 s0 G tn1 /\
+   ghost_inv H d cenv cx es G tn1 u /\ ghost_kept cenv es0 sa G0 tn0 s0 G tn1 /\
    ptr_covers G tn1 p u 32 /\ lookup_var p u = SOME a /\
    (!i. w2n a <= i /\ i < w2n a+32 ==> i NOTIN tn1.t_mem)` by
     (irule fixed_hash_store_certificate >> simp[Abbr `u`, Abbr `tn1`] >> metis_tac[]) >>
@@ -114,7 +114,7 @@ Theorem fixed_hash_prefix_certificate:
   code = [mk_inst ia ALLOCA [Lit 32w] [p];
           mk_inst sid MSTORE [Var p; value] [];
           mk_inst hid SHA3 [Var p; Lit (n2w m)] [out]] /\
-  stmt_state_rel ctx fn cenv cx es s /\ ghost_inv d cenv cx es G tn s /\
+  stmt_state_rel H ctx fn cenv cx es s /\ ghost_inv H d cenv cx es G tn s /\
   fn_inst_ids_distinct fn /\
   MEM (mk_inst ia ALLOCA [Lit 32w] [p]) (fn_insts fn) /\
   ~ctx_has_dalloca ctx /\ local_ptrs_reserved cenv sa /\
@@ -126,7 +126,7 @@ Theorem fixed_hash_prefix_certificate:
   run_inst_seq code s = OK t ==>
   ?G' tn'. inst_seq_ptr D 0 ctx fn PG G tn code s G' tn' /\
     ptr_val_ok cx (BaseT (BytesT (Fixed 32))) result (Var out) G' tn' t /\
-    ghost_inv d cenv cx es G' tn' t /\
+    ghost_inv H d cenv cx es G' tn' t /\
     ghost_kept cenv es sa G tn s G' tn'
 Proof
   strip_tac >> gvs[] >>
@@ -146,7 +146,7 @@ Proof
       mk_inst hid SHA3 [Var p; Lit (n2w m)] [out]]
      (s1 with vs_inst_idx := SUC s.vs_inst_idx) G' tn' /\
      ptr_val_ok cx (BaseT (BytesT (Fixed 32))) result (Var out) G' tn' t /\
-     ghost_inv d cenv cx es G' tn' t /\
+     ghost_inv H d cenv cx es G' tn' t /\
      ghost_kept cenv es sa G tn s G' tn'` by
     (drule_at (Pat `run_inst_seq _ _ = _`) fixed_hash_tail_certificate >>
      disch_then irule >> simp[eval_operand_def] >>
@@ -173,7 +173,7 @@ Theorem fixed_hash_prefix_counted:
   code = [mk_inst ia ALLOCA [Lit 32w] [p];
           mk_inst sid MSTORE [Var p; value] [];
           mk_inst hid SHA3 [Var p; Lit (n2w m)] [out]] /\
-  stmt_state_rel ctx fn cenv cx es s /\ ghost_inv d cenv cx es G tn s /\
+  stmt_state_rel H ctx fn cenv cx es s /\ ghost_inv H d cenv cx es G tn s /\
   fn_inst_ids_distinct fn /\
   MEM (mk_inst ia ALLOCA [Lit 32w] [p]) (fn_insts fn) /\
   ~ctx_has_dalloca ctx /\ local_ptrs_reserved cenv sa /\
@@ -188,7 +188,7 @@ Theorem fixed_hash_prefix_counted:
   ?G' tn'. gas_path_ptr D 0 ctx fn PG G tn s 0 G' tn'
     (OK (t with vs_inst_idx := s.vs_inst_idx + LENGTH code)) /\
     ptr_val_ok cx (BaseT (BytesT (Fixed 32))) result (Var out) G' tn' t /\
-    ghost_inv d cenv cx es G' tn' t /\ ghost_kept cenv es sa G tn s G' tn'
+    ghost_inv H d cenv cx es G' tn' t /\ ghost_kept cenv es sa G tn s G' tn'
 Proof
   strip_tac >>
   drule_at (Pat `_ = [_;_;_]`) fixed_hash_prefix_certificate >>

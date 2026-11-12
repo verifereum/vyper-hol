@@ -18,7 +18,7 @@ Theorem literal_flat_store_counted:
   s.vs_inst_idx = LENGTH sa.cs_current_insts /\
   lookup_var src s = SOME a /\ lookup_var dst s = SOME b /\
   ptr_covers G tn src s k /\ ptr_covers G tn dst s k /\
-  stmt_state_rel ctx func ce cx es s /\ ghost_inv d ce cx es G tn s /\
+  stmt_state_rel H ctx func ce cx es s /\ ghost_inv H d ce cx es G tn s /\
   local_ptrs_reserved ce sa /\
   ghost_kept ce es fr G0 tn0 s0 G tn /\
   (!name p n i. local_region ce es.scopes s name p n /\
@@ -32,7 +32,7 @@ Theorem literal_flat_store_counted:
     gas_path_ptr D 0 ctx func PG G tn s 0 G tf (OK sf) /\
     sf.vs_current_bb = sb.cs_current_bb /\
     sf.vs_inst_idx = LENGTH sb.cs_current_insts /\ ~sf.vs_halted /\
-    ghost_inv d ce cx es G tf sf /\ ghost_kept ce es fr G0 tn0 s0 G tf /\
+    ghost_inv H d ce cx es G tf sf /\ ghost_kept ce es fr G0 tn0 s0 G tf /\
     (!p n. ptr_covers G tn p s n ==> ptr_covers G tf p sf n) /\
     (!i. ~(w2n b <= i /\ i < w2n b+k) ==>
       mem_bytes_at i 1 sf.vs_memory = mem_bytes_at i 1 s.vs_memory /\
@@ -43,7 +43,7 @@ Theorem literal_flat_store_counted:
       vs_inst_idx := s.vs_inst_idx|>) = s /\
     sf.vs_allocas = s.vs_allocas /\ sf.vs_alloca_next = s.vs_alloca_next /\
     (!x. not_fresh_at sa x ==> lookup_var x sf = lookup_var x s) /\
-    (~ce.ce_is_ctor ==> stmt_state_rel ctx func ce cx es sf)
+    (~ce.ce_is_ctor ==> stmt_state_rel H ctx func ce cx es sf)
 Proof
   strip_tac >> gvs[compile_store_memory_def] >>
   `!m. mem_agree_outside tn.t_mem s.vs_memory m ==>
@@ -53,7 +53,7 @@ Proof
   disch_then (qspecl_then [`D`, `PG`] strip_assume_tac) >>
   drule annassign_state_restore_elim_ptr >> disch_tac >>
   drule annassign_taint_restore_elim_ptr >> disch_tac >>
-  `ghost_inv d ce cx es G tn' s'` by
+  `ghost_inv H d ce cx es G tn' s'` by
     (qpat_assum `s' = _` (fn th => once_rewrite_tac[th]) >>
      qpat_assum `tn' = _` (fn th => once_rewrite_tac[th]) >>
      qpat_x_assum `s'.vs_memory = _` kall_tac >>
@@ -65,7 +65,7 @@ Proof
     (irule annassign_ghost_kept_exterior_ptr >>
      qexistsl [`tn`, `{i | w2n b <= i /\ i < w2n b + type_memory_bytes ce ty}`] >>
      simp[] >> metis_tac[arithmeticTheory.ADD_COMM]) >>
-  `~ce.ce_is_ctor ==> stmt_state_rel ctx func ce cx es s'` by
+  `~ce.ce_is_ctor ==> stmt_state_rel H ctx func ce cx es s'` by
     (strip_tac >> irule literal_store_runtime_frame >> simp[] >>
      qexistsl [`w2n b`, `type_memory_bytes ce ty`, `s`, `sa`] >>
      simp[] >> conj_tac >- metis_tac[arithmeticTheory.ADD_COMM] >>

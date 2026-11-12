@@ -10,10 +10,10 @@ Theorem widen_convert_run_success_post:
   compile_bytestring_widen_copy capacity (Var src) n sa = (Var dst,sb) /\
   run_inst_seq (emitted_insts sa sb) s = OK t /\
   fn_has_code sa sb fn /\ 0 < n /\ n <= capacity /\ capacity < dimword(:256) /\
-  stmt_state_rel ctx fn cenv cx ee s /\ local_ptrs_reserved cenv sa /\
+  stmt_state_rel H ctx fn cenv cx ee s /\ local_ptrs_reserved cenv sa /\
   fn_inst_ids_distinct fn /\ not_fresh_at sa src /\ lookup_var src s = SOME a /\
-  expr_post ctx fn cenv cx e es ca sa s0 ee v (Var src) s /\
-  stmt_state_rel ctx fn cenv cx es s0 /\ local_ptrs_reserved cenv ca /\
+  expr_post H ctx fn cenv cx e es ca sa s0 ee v (Var src) s /\
+  stmt_state_rel H ctx fn cenv cx es s0 /\ local_ptrs_reserved cenv ca /\
   MAP FDOM es.scopes = MAP FDOM ee.scopes /\
   ca.cs_next_var <= sa.cs_next_var /\ ca.cs_next_id <= sa.cs_next_id /\
   is_bytestring_type (expr_type e) /\ is_bytestring_type target /\ ~is_word_type target /\
@@ -23,14 +23,14 @@ Theorem widen_convert_run_success_post:
   val_footprint tv v <= n /\
   lookup_var dst t = SOME b /\
   (!m. mem_agree_outside th.t_mem t.vs_memory m ==> val_in_memory tout vout (w2n b) m) ==>
-  expr_post ctx fn cenv cx (TypeBuiltin target Convert target [e]) es ca sb s0
+  expr_post H ctx fn cenv cx (TypeBuiltin target Convert target [e]) es ca sb s0
     (ee with gas_obs := []) vout (Var dst) (t with vs_inst_idx := j)
 Proof
   strip_tac >>
   `val_wf tout vout` by (irule convert_bytestring_wf >> metis_tac[]) >>
   `val_footprint tout vout <= capacity` by
     (drule_all convert_bytestring_memory >> strip_tac >> simp[]) >>
-  `expr_post ctx fn cenv cx (TypeBuiltin target Convert target [e]) ee sa sb s
+  `expr_post H ctx fn cenv cx (TypeBuiltin target Convert target [e]) ee sa sb s
     ee vout (Var dst) t` by
     (irule widen_copy_run_parent_post >>
      simp[post_value_type_not_int_call, vyperASTTheory.expr_type_def] >>

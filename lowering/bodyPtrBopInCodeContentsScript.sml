@@ -71,7 +71,7 @@ Proof
 QED
 
 Theorem membership_array_immutable_dload:
-  stmt_state_rel ctx fn cenv cx es s /\ ~cenv.ce_is_ctor /\
+  stmt_state_rel H ctx fn cenv cx es s /\ ~cenv.ce_is_ctor /\
   immutable_holds cenv cx (ArrayT ty bd) (Value (ArrayV av)) w es s /\
   is_word_type ty /\ evaluate_type (get_tenv cx) ty = SOME et /\
   value_has_type (ArrayTV et bd) (ArrayV av) /\

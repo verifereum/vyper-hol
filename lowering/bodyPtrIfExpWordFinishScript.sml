@@ -32,9 +32,9 @@ QED
 
 Theorem ifexp_word_vv_post_read[local]:
   is_word_type (expr_type e) /\
-  expr_post ctx fn cenv cx e es sa sb s0 ee v (Var rv) s /\
+  expr_post H ctx fn cenv cx e es sa sb s0 ee v (Var rv) s /\
   read_result cx tv ee = (INL v,ee) ==>
-  vv_post ctx fn cenv cx e es sa sb s0 ee tv (StackValue (expr_type e) (Var rv)) s
+  vv_post H ctx fn cenv cx e es sa sb s0 ee tv (StackValue (expr_type e) (Var rv)) s
 Proof
   rw[expr_post_def, vv_post_def] >>
   gvs[vv_holds_def, vv_at_def] >>
@@ -43,17 +43,17 @@ Proof
 QED
 
 Theorem ifexp_word_finish_post:
-  expr_post ctx fn cenv cx c es sa s1 s0 es1 v1 cop tt /\
-  expr_post ctx fn cenv cx e es1 sc sd (jump_to lbl tt) ee v op u /\
+  expr_post H ctx fn cenv cx c es sa s1 s0 es1 v1 cop tt /\
+  expr_post H ctx fn cenv cx e es1 sc sd (jump_to lbl tt) ee v op u /\
   read_result cx tv ee = (INL v,ee) /\ expr_type e = t /\ is_word_type t /\
   eval_operand op u = SOME w /\ (!x. not_fresh_at sa x ==> x <> rv) /\
-  local_ptrs_reserved cenv sa /\ stmt_state_rel ctx fn cenv cx es s0 /\
+  local_ptrs_reserved cenv sa /\ stmt_state_rel H ctx fn cenv cx es s0 /\
   MAP FDOM es.scopes = MAP FDOM es1.scopes /\
   sa.cs_next_var <= s1.cs_next_var /\ s1.cs_next_var <= sc.cs_next_var /\
   sa.cs_next_id <= s1.cs_next_id /\ s1.cs_next_id <= sc.cs_next_id /\
   (~expr_has_effect (IfExp t c a b) ==> ~expr_has_effect e) /\
   sd.cs_next_id <= sb.cs_next_id ==>
-  vv_post ctx fn cenv cx (IfExp t c a b) es sa sb s0 ee tv (StackValue t (Var rv))
+  vv_post H ctx fn cenv cx (IfExp t c a b) es sa sb s0 ee tv (StackValue t (Var rv))
     (jump_to xl (update_var rv w u with vs_inst_idx := k))
 Proof
   strip_tac >>
@@ -66,8 +66,8 @@ Proof
 QED
 
 Theorem ifexp_condition_arm_ghost_kept:
-  expr_post ctx fn cenv cx c es sa s1 s0 es1 v1 cop tt /\
-  stmt_state_rel ctx fn cenv cx es s0 /\ local_ptrs_reserved cenv sa /\
+  expr_post H ctx fn cenv cx c es sa s1 s0 es1 v1 cop tt /\
+  stmt_state_rel H ctx fn cenv cx es s0 /\ local_ptrs_reserved cenv sa /\
   MAP FDOM es.scopes = MAP FDOM es1.scopes /\
   sa.cs_next_var <= sc.cs_next_var /\ sa.cs_next_id <= sc.cs_next_id /\
   ghost_kept cenv es sa G0 tn0 s0 G1 tn1 /\
@@ -85,7 +85,7 @@ QED
 Theorem ifexp_word_suffix_ghost:
   is_word_type t /\ eval_operand op u = SOME w /\
   read_result cx tv ee = (INL v,ee) /\ ptr_val_ok cx t v op G tn u /\
-  ghost_inv d cenv cx ee G tn u /\ ghost_kept cenv es sa G0 tn0 s0 G tn /\
+  ghost_inv H d cenv cx ee G tn u /\ ghost_kept cenv es sa G0 tn0 s0 G tn /\
   (!x. not_fresh_at sa x ==> x <> rv) /\
   (!name x sz. FLOOKUP cenv.ce_vars name = SOME (PtrVar (Var x) sz) ==> x <> rv) /\
   (!x sz. cenv.ce_return_buf = SOME (PtrVar (Var x) sz) ==> x <> rv) /\
@@ -94,7 +94,7 @@ Theorem ifexp_word_suffix_ghost:
     (step_prov PG G (mk_inst id ASSIGN [op] [rv]) (update_var rv w u))
     (step_taint (mk_inst id ASSIGN [op] [rv]) u (update_var rv w u) tn)
     (jump_to xl (update_var rv w u with vs_inst_idx := k)) /\
-  ghost_inv d cenv cx ee
+  ghost_inv H d cenv cx ee
     (step_prov PG G (mk_inst id ASSIGN [op] [rv]) (update_var rv w u))
     (step_taint (mk_inst id ASSIGN [op] [rv]) u (update_var rv w u) tn)
     (jump_to xl (update_var rv w u with vs_inst_idx := k)) /\
@@ -134,9 +134,9 @@ Proof
 QED
 
 Theorem ifexp_word_arm_finish_ptr:
-  expr_post ctx fn cenv cx c es sa s1 s0 es1 v1 cop tt /\
+  expr_post H ctx fn cenv cx c es sa s1 s0 es1 v1 cop tt /\
   expr_type e = t /\ is_word_type t /\ (!x. not_fresh_at sa x ==> x <> rv) /\
-  local_ptrs_reserved cenv sa /\ stmt_state_rel ctx fn cenv cx es s0 /\
+  local_ptrs_reserved cenv sa /\ stmt_state_rel H ctx fn cenv cx es s0 /\
   (!x sz. cenv.ce_return_buf = SOME (PtrVar (Var x) sz) ==> not_fresh_at sa x) /\
   (!x sz. cenv.ce_return_pc = SOME (PtrVar (Var x) sz) ==> not_fresh_at sa x) /\
   ghost_kept cenv es sa G0 tn0 s0 G1 tn1 /\
@@ -150,15 +150,15 @@ Theorem ifexp_word_arm_finish_ptr:
   fn_has_code sd sy fn /\ fn_has_code sy sz fn /\ ~ctx_has_dalloca ctx /\
   gas_outcome_ptr D tops (ctx,fn) PG source (es1,jump_to lbl tt,G1,tn1)
     (\res ee G tn u. ?tv v. res = INL tv /\ read_result cx tv ee = (INL v,ee) /\
-      expr_post ctx fn cenv cx e es1 sc sd (jump_to lbl tt) ee v op u /\
-      ptr_val_ok cx (expr_type e) v op G tn u /\ ghost_inv d cenv cx ee G tn u /\
+      expr_post H ctx fn cenv cx e es1 sc sd (jump_to lbl tt) ee v op u /\
+      ptr_val_ok cx (expr_type e) v op G tn u /\ ghost_inv H d cenv cx ee G tn u /\
       ghost_kept cenv es1 sc G1 tn1 (jump_to lbl tt) G tn /\
       u.vs_current_bb = sd.cs_current_bb /\ u.vs_inst_idx = LENGTH sd.cs_current_insts) R ==>
   gas_outcome_ptr D tops (ctx,fn) PG source (es1,jump_to lbl tt,G1,tn1)
     (\res ee G tn u. ?tv. res = INL tv /\
-      vv_post ctx fn cenv cx (IfExp t c a b) es sa sb s0 ee tv (StackValue t (Var rv)) u /\
+      vv_post H ctx fn cenv cx (IfExp t c a b) es sa sb s0 ee tv (StackValue t (Var rv)) u /\
       ptr_vv_ok cx t tv (StackValue t (Var rv)) ee G tn u /\
-      ghost_inv d cenv cx ee G tn u /\ ghost_kept cenv es sa G0 tn0 s0 G tn /\
+      ghost_inv H d cenv cx ee G tn u /\ ghost_kept cenv es sa G0 tn0 s0 G tn /\
       u.vs_current_bb = sb.cs_current_bb /\ u.vs_inst_idx = LENGTH sb.cs_current_insts) R
 Proof
   strip_tac >>

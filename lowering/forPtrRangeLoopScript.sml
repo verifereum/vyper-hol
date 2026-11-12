@@ -17,7 +17,7 @@ Theorem for_range_loop_ptr:
   (!j ei G tn s. Inv j ei G tn s <=>
     P ei /\ lookup_scopes id ei.scopes = NONE /\ j <= Num (n2-n1) /\
     s.vs_current_bb = cond_lbl /\ s.vs_inst_idx = 0 /\ ~s.vs_halted /\
-    stmt_state_rel ctx func cenv cx ei s /\ ghost_inv d cenv cx ei G tn s /\
+    stmt_state_rel H ctx func cenv cx ei s /\ ghost_inv H d cenv cx ei G tn s /\
     lookup_var cv s = SOME (i2w (n1 + &j)) /\
     lookup_var ev s = SOME (i2w n2) /\ lookup_var p s = SOME a /\
     FLOOKUP G cv = NONE /\ FLOOKUP G ev = NONE /\
@@ -32,7 +32,7 @@ Theorem for_range_loop_ptr:
       op_taint tn (Var x) = op_taint tn0 (Var x))) /\
   (!ei G tn t. Done ei G tn t <=>
     t.vs_current_bb = exit_lbl /\ t.vs_inst_idx = 0 /\ ~t.vs_halted /\
-    stmt_state_rel ctx func cenv cx ei t /\ ghost_inv d cenv cx ei G tn t /\
+    stmt_state_rel H ctx func cenv cx ei t /\ ghost_inv H d cenv cx ei G tn t /\
     (!x v. not_fresh_at st x /\ lookup_var x s0 = SOME v ==>
       lookup_var x t = SOME v) /\
     (!x. not_fresh_at st x ==> FLOOKUP G x = FLOOKUP G0 x /\
@@ -56,7 +56,7 @@ Theorem for_range_loop_ptr:
   !k es s G tn.
     k <= LENGTH vs /\ Inv k es G tn s /\
     gas_admissible (eval_for cx tyv id stmts (MAP Value (DROP k vs))) (stmt_res_ok lctx) es ==>
-    gas_outcome_ptr (cx_dead cx) (cx_tops cx) (ctx,func) PG
+    gas_outcome_ptr (cx_dead H cx) (cx_tops cx) (ctx,func) PG
       (eval_for cx tyv id stmts (MAP Value (DROP k vs))) (es,s,G,tn)
       (\res ee gf tf t. res = INL () /\ Done ee gf tf t)
       (\res ee gt r. ?ex. res = INR ex /\

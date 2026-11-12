@@ -17,8 +17,8 @@ Theorem ifexp_residual_allocating_arm_ptr:
   eval_expr cx arm es = (INL raw,ee) /\ read_result cx raw ee = (INL v,er) /\
   ~is_word_type ty /\ ~same_memory_layout ce (lowered_value_type ce arm) ty /\
   compile_ifexp_arm ce ty (lowered_value_type ce arm) vv sb = (op,sd) /\
-  fn_has_code sb sd fn /\ vv_post ctx fn ce cx arm es sa sb s0 ee raw vv s /\
-  stmt_state_rel ctx fn ce cx es s0 /\ ghost_inv d ce cx ee G tn s /\
+  fn_has_code sb sd fn /\ vv_post H ctx fn ce cx arm es sa sb s0 ee raw vv s /\
+  stmt_state_rel H ctx fn ce cx es s0 /\ ghost_inv H d ce cx ee G tn s /\
   ghost_kept ce es sa G0 tn0 s0 G tn /\ local_ptrs_reserved ce sa /\
   (!x sz. ce.ce_return_buf = SOME (PtrVar (Var x) sz) ==> not_fresh_at sa x) /\
   (!x sz. ce.ce_return_pc = SOME (PtrVar (Var x) sz) ==> not_fresh_at sa x) /\
@@ -31,10 +31,10 @@ Theorem ifexp_residual_allocating_arm_ptr:
     ptr_buf_ok ce arm p.ptr_operand G s) ==>
   ?Gf tnf q.
     gas_path_ptr D 0 ctx fn PG G tn s 0 Gf tnf (OK q) /\
-    expr_post ctx fn ce cx (IfExp ty cond a b) es sa sd s0 ee v op q /\
+    expr_post H ctx fn ce cx (IfExp ty cond a b) es sa sd s0 ee v op q /\
     expr_val_own ce cx ty sa sd ee v op q /\
     (~expr_has_effect arm ==> pure_frame ce fn es sa s0 q) /\
-    ghost_inv d ce cx ee Gf tnf q /\ ghost_kept ce es sa G0 tn0 s0 Gf tnf /\
+    ghost_inv H d ce cx ee Gf tnf q /\ ghost_kept ce es sa G0 tn0 s0 Gf tnf /\
     ptr_val_ok cx ty v op Gf tnf q /\ ptr_buf_ok ce (IfExp ty cond a b) op Gf q /\
     q.vs_current_bb = sd.cs_current_bb /\ q.vs_inst_idx = LENGTH sd.cs_current_insts /\
     ~q.vs_halted

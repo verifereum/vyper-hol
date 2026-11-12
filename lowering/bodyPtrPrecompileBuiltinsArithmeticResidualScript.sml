@@ -62,10 +62,10 @@ QED
 
 Theorem ecmul_residual_success:
   compile_ecmul_point point scalar sf = (res,sb) /\
-  stmt_state_rel ctx fn cenv cx es s /\ fn_inst_ids_distinct fn /\
+  stmt_state_rel H ctx fn cenv cx es s /\ fn_inst_ids_distinct fn /\
   local_ptrs_reserved cenv sf /\ ~ctx_has_dalloca ctx /\
   (!i. MEM i (emitted_insts sf sb) ==> MEM i (fn_insts fn)) /\
-  ghost_inv d cenv cx es G tn s /\
+  ghost_inv H d cenv cx es G tn s /\
   (!p sz. cenv.ce_return_buf = SOME (PtrVar (Var p) sz) ==> not_fresh_at sf p) /\
   (!p sz. cenv.ce_return_pc = SOME (PtrVar (Var p) sz) ==> not_fresh_at sf p) /\
   expr_val_at cenv cx (ArrayT (BaseT (UintT 256)) (Fixed 2)) lo sf es v point s /\
@@ -91,13 +91,13 @@ Theorem ecmul_residual_success:
     sf.cs_next_id <= aid /\ aid < sb.cs_next_id /\
     mem_bytes_at (w2n out) 64 t.vs_memory =
       word_to_bytes (n2w x:bytes32) T ++ word_to_bytes (n2w y:bytes32) T /\
-    stmt_state_rel ctx fn cenv cx (es with outcomes := SOME (DROP 1 s.vs_outcomes)) t /\
+    stmt_state_rel H ctx fn cenv cx (es with outcomes := SOME (DROP 1 s.vs_outcomes)) t /\
     wb_frame cenv es (es with outcomes := SOME (DROP 1 s.vs_outcomes)) sf s t /\
-    ghost_inv d cenv cx (es with outcomes := SOME (DROP 1 s.vs_outcomes)) G' tn' t /\
+    ghost_inv H d cenv cx (es with outcomes := SOME (DROP 1 s.vs_outcomes)) G' tn' t /\
     ghost_kept cenv es sf G tn s G' tn' /\
     ptr_val_ok cx (ArrayT (BaseT (UintT 256)) (Fixed 2)) (mk_ec_result (x,y)) res G' tn' t /\
     ptr_buf_ok cenv (Builtin (ArrayT (BaseT (UintT 256)) (Fixed 2)) ECMul args) res G' t /\
-    vv_post ctx fn cenv cx (Builtin (ArrayT (BaseT (UintT 256)) (Fixed 2)) ECMul args)
+    vv_post H ctx fn cenv cx (Builtin (ArrayT (BaseT (UintT 256)) (Fixed 2)) ECMul args)
       es sf sb s (es with outcomes := SOME (DROP 1 s.vs_outcomes)) (Value (mk_ec_result (x,y)))
       (FST (as_ptr_val (ArrayT (BaseT (UintT 256)) (Fixed 2)) LocMemory (res,sb))) t /\
     ptr_vv_ok cx (ArrayT (BaseT (UintT 256)) (Fixed 2)) (Value (mk_ec_result (x,y)))
@@ -200,10 +200,10 @@ Finalise ecmul_residual_success
 
 Theorem ecadd_residual_success:
   compile_ecadd_points point other sf = (res,sb) /\
-  stmt_state_rel ctx fn cenv cx es s /\ fn_inst_ids_distinct fn /\
+  stmt_state_rel H ctx fn cenv cx es s /\ fn_inst_ids_distinct fn /\
   local_ptrs_reserved cenv sf /\ ~ctx_has_dalloca ctx /\
   (!i. MEM i (emitted_insts sf sb) ==> MEM i (fn_insts fn)) /\
-  ghost_inv d cenv cx es G tn s /\
+  ghost_inv H d cenv cx es G tn s /\
   (!p sz. cenv.ce_return_buf = SOME (PtrVar (Var p) sz) ==> not_fresh_at sf p) /\
   (!p sz. cenv.ce_return_pc = SOME (PtrVar (Var p) sz) ==> not_fresh_at sf p) /\
   expr_val_at cenv cx (ArrayT (BaseT (UintT 256)) (Fixed 2)) lo sf es vp point s /\
@@ -232,13 +232,13 @@ Theorem ecadd_residual_success:
     sf.cs_next_id <= aid /\ aid < sb.cs_next_id /\
     mem_bytes_at (w2n out) 64 t.vs_memory =
       word_to_bytes (n2w x:bytes32) T ++ word_to_bytes (n2w y:bytes32) T /\
-    stmt_state_rel ctx fn cenv cx (es with outcomes := SOME (DROP 1 s.vs_outcomes)) t /\
+    stmt_state_rel H ctx fn cenv cx (es with outcomes := SOME (DROP 1 s.vs_outcomes)) t /\
     wb_frame cenv es (es with outcomes := SOME (DROP 1 s.vs_outcomes)) sf s t /\
-    ghost_inv d cenv cx (es with outcomes := SOME (DROP 1 s.vs_outcomes)) G' tn' t /\
+    ghost_inv H d cenv cx (es with outcomes := SOME (DROP 1 s.vs_outcomes)) G' tn' t /\
     ghost_kept cenv es sf G tn s G' tn' /\
     ptr_val_ok cx (ArrayT (BaseT (UintT 256)) (Fixed 2)) (mk_ec_result (x,y)) res G' tn' t /\
     ptr_buf_ok cenv (Builtin (ArrayT (BaseT (UintT 256)) (Fixed 2)) ECAdd args) res G' t /\
-    vv_post ctx fn cenv cx (Builtin (ArrayT (BaseT (UintT 256)) (Fixed 2)) ECAdd args)
+    vv_post H ctx fn cenv cx (Builtin (ArrayT (BaseT (UintT 256)) (Fixed 2)) ECAdd args)
       es sf sb s (es with outcomes := SOME (DROP 1 s.vs_outcomes)) (Value (mk_ec_result (x,y)))
       (FST (as_ptr_val (ArrayT (BaseT (UintT 256)) (Fixed 2)) LocMemory (res,sb))) t /\
     ptr_vv_ok cx (ArrayT (BaseT (UintT 256)) (Fixed 2)) (Value (mk_ec_result (x,y)))
@@ -343,10 +343,10 @@ Finalise ecadd_residual_success
 (* Failed arithmetic and oracle calls both terminate with a checked revert. *)
 Theorem ecmul_residual_abort:
   compile_ecmul_point point scalar sf = (res,sb) /\
-  stmt_state_rel ctx fn cenv cx es s /\ fn_inst_ids_distinct fn /\
+  stmt_state_rel H ctx fn cenv cx es s /\ fn_inst_ids_distinct fn /\
   local_ptrs_reserved cenv sf /\ ~ctx_has_dalloca ctx /\
   (!i. MEM i (emitted_insts sf sb) ==> MEM i (fn_insts fn)) /\
-  ghost_inv d cenv cx es G tn s /\
+  ghost_inv H d cenv cx es G tn s /\
   (!p sz. cenv.ce_return_buf = SOME (PtrVar (Var p) sz) ==> not_fresh_at sf p) /\
   (!p sz. cenv.ce_return_pc = SOME (PtrVar (Var p) sz) ==> not_fresh_at sf p) /\
   expr_val_at cenv cx (ArrayT (BaseT (UintT 256)) (Fixed 2)) lo sf es v point s /\
@@ -417,10 +417,10 @@ Finalise ecmul_residual_abort
 
 Theorem ecadd_residual_abort:
   compile_ecadd_points point other sf = (res,sb) /\
-  stmt_state_rel ctx fn cenv cx es s /\ fn_inst_ids_distinct fn /\
+  stmt_state_rel H ctx fn cenv cx es s /\ fn_inst_ids_distinct fn /\
   local_ptrs_reserved cenv sf /\ ~ctx_has_dalloca ctx /\
   (!i. MEM i (emitted_insts sf sb) ==> MEM i (fn_insts fn)) /\
-  ghost_inv d cenv cx es G tn s /\
+  ghost_inv H d cenv cx es G tn s /\
   (!p sz. cenv.ce_return_buf = SOME (PtrVar (Var p) sz) ==> not_fresh_at sf p) /\
   (!p sz. cenv.ce_return_pc = SOME (PtrVar (Var p) sz) ==> not_fresh_at sf p) /\
   expr_val_at cenv cx (ArrayT (BaseT (UintT 256)) (Fixed 2)) lo sf es vp point s /\

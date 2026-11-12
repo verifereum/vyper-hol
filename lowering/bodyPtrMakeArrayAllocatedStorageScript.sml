@@ -10,7 +10,7 @@ Theorem allocated_storage_loop_endpoint_frame:
   compile_alloc_buffer (32*n) sa = (buf,sm) /\ buf.buf_operand = Var dst /\
   compile_word_copy_loop src (Var dst) n (if tr then LocTransient else LocStorage)
     LocMemory F sm = (u,sb) /\ fn_has_code sm sb func /\
-  stmt_state_rel ctx func cenv cx es s /\ fn_inst_ids_distinct func /\
+  stmt_state_rel H ctx func cenv cx es s /\ fn_inst_ids_distinct func /\
   local_ptrs_reserved cenv sa /\ 32*n < dimword(:256) /\
   MEM (mk_inst sa.cs_next_id ALLOCA [Lit (n2w (32*n))]
     [STRING #"%" (toString sa.cs_next_var)]) (fn_insts func) /\
@@ -26,20 +26,20 @@ Theorem allocated_storage_loop_endpoint_frame:
     j < 32 /\ j IN key_taint (if tr then tn.t_trans else tn.t_stor) k ==>
     dead_bytes (if tr then contract_transient s else contract_storage s)
       (w2n key) tv (w2n k) j) /\
-  ghost_inv d cenv cx es G tn s /\
+  ghost_inv H d cenv cx es G tn s /\
   (!x sz. cenv.ce_return_buf = SOME (PtrVar (Var x) sz) ==> not_fresh_at sa x) /\
   (!x sz. cenv.ce_return_pc = SOME (PtrVar (Var x) sz) ==> not_fresh_at sa x) ==>
-  ?z H tm b.
-    gas_path_ptr D 0 ctx func PG G tn s 0 H tm (OK z) /\
+  ?z HG tm b.
+    gas_path_ptr D 0 ctx func PG G tn s 0 HG tm (OK z) /\
     z.vs_current_bb = sb.cs_current_bb /\ z.vs_inst_idx = LENGTH sb.cs_current_insts /\
-    stmt_state_rel ctx func cenv cx es z /\
-    lookup_var dst z = SOME (n2w b) /\ ptr_covers H tm dst z (32*n) /\
+    stmt_state_rel H ctx func cenv cx es z /\
+    lookup_var dst z = SOME (n2w b) /\ ptr_covers HG tm dst z (32*n) /\
     (!m. mem_agree_outside tm.t_mem z.vs_memory m ==> val_in_memory tv v b m) /\
-    ghost_inv d cenv cx es H tm z /\ ghost_kept cenv es sa G tn s H tm /\
+    ghost_inv H d cenv cx es HG tm z /\ ghost_kept cenv es sa G tn s HG tm /\
     (!x. not_fresh_at sa x ==> lookup_var x z = lookup_var x s) /\
     (!esi si e raw vv base.
       post_value_type cenv e = expr_type e /\
-      vv_post ctx func cenv cx e esi si sa base es raw vv s /\
+      vv_post H ctx func cenv cx e esi si sa base es raw vv s /\
       read_result cx raw es = (INL v,es) /\
       MAP FDOM esi.scopes = MAP FDOM es.scopes /\
       local_ptrs_reserved cenv si /\
@@ -47,11 +47,11 @@ Theorem allocated_storage_loop_endpoint_frame:
       ~is_word_type (expr_type e) /\
       evaluate_type (get_tenv cx) (expr_type e) = SOME tv /\
       val_wf tv v /\ val_footprint tv v <= 32*n ==>
-      expr_post ctx func cenv cx e esi si sb base es v (Var dst) z /\
+      expr_post H ctx func cenv cx e esi si sb base es v (Var dst) z /\
       (type_memory_size tv <= 32*n /\
        type_memory_bytes cenv (lowered_value_type cenv e) <= 32*n ==>
-       ptr_val_ok cx (expr_type e) v (Var dst) H tm z /\
-       ptr_buf_ok cenv e (Var dst) H z))
+       ptr_val_ok cx (expr_type e) v (Var dst) HG tm z /\
+       ptr_buf_ok cenv e (Var dst) HG z))
 Proof
   strip_tac >>
   drule_all (SRULE [] literal_alloc_buffer_cursor_run) >>
@@ -62,7 +62,7 @@ Proof
        op_taint_def, lookup_var_def] >> metis_tac[]) >>
   `copy_old_operand sm src` by
     (fs[copy_old_operand_def] >> metis_tac[]) >>
-  `lookup_var dst a = SOME (n2w (w2n w)) /\ ptr_covers H tm dst a (32*n) /\
+  `lookup_var dst a = SOME (n2w (w2n w)) /\ ptr_covers HG tm dst a (32*n) /\
    not_fresh_at sm dst` by
     (gvs[eval_operand_def] >> metis_tac[wordsTheory.n2w_w2n]) >>
   `contract_storage a = contract_storage s /\
@@ -78,12 +78,12 @@ Proof
   `a.vs_current_bb = sm.cs_current_bb /\ a.vs_inst_idx = LENGTH sm.cs_current_insts` by simp[] >>
   drule_all storage_copy_robust_ptr_endpoint >>
   disch_then (qspecl_then [`PG`, `D`] strip_assume_tac) >>
-  rename1 `gas_path_ptr D 0 ctx func PG H tm a 0 H2 tm2 (OK z)` >>
+  rename1 `gas_path_ptr D 0 ctx func PG HG tm a 0 H2 tm2 (OK z)` >>
   suspend "post"
 QED
 
 Resume allocated_storage_loop_endpoint_frame[post]:
-  `stmt_state_rel ctx func cenv cx es z` by
+  `stmt_state_rel H ctx func cenv cx es z` by
     (irule literal_copy_window_stmt_state_rel >>
      qexistsl_tac [`sa.cs_next_id`, `w2n w`, `32*n`,
        `STRING #"%" (toString sa.cs_next_var)`, `sa`, `sm`, `a`] >>
@@ -111,7 +111,7 @@ Resume allocated_storage_loop_endpoint_frame[post]:
   `z.vs_call_ctx = s.vs_call_ctx /\ z.vs_accounts = s.vs_accounts /\
    z.vs_transient = s.vs_transient /\ tm2.t_stor = tn.t_stor /\
    tm2.t_trans = tn.t_trans /\ tm2.t_imm = tn.t_imm` by simp[] >>
-  `ghost_inv d cenv cx es H2 tm2 z /\ ghost_kept cenv es sa G tn s H2 tm2` by
+  `ghost_inv H d cenv cx es H2 tm2 z /\ ghost_kept cenv es sa G tn s H2 tm2` by
     (irule literal_allocated_copy_ghost_post >>
      simp[IgnAsm `tm2.t_mem = _`] >> conj_tac
      >- (qexistsl_tac [`w2n w`, `32*n`, `a`] >>
@@ -162,7 +162,7 @@ Theorem allocated_storage_loop_endpoint:
   compile_alloc_buffer (32*n) sa = (buf,sm) /\ buf.buf_operand = Var dst /\
   compile_word_copy_loop src (Var dst) n (if tr then LocTransient else LocStorage)
     LocMemory F sm = (u,sb) /\ fn_has_code sm sb func /\
-  stmt_state_rel ctx func cenv cx es s /\ fn_inst_ids_distinct func /\
+  stmt_state_rel H ctx func cenv cx es s /\ fn_inst_ids_distinct func /\
   local_ptrs_reserved cenv sa /\ 32*n < dimword(:256) /\
   MEM (mk_inst sa.cs_next_id ALLOCA [Lit (n2w (32*n))]
     [STRING #"%" (toString sa.cs_next_var)]) (fn_insts func) /\
@@ -178,16 +178,16 @@ Theorem allocated_storage_loop_endpoint:
     j < 32 /\ j IN key_taint (if tr then tn.t_trans else tn.t_stor) k ==>
     dead_bytes (if tr then contract_transient s else contract_storage s)
       (w2n key) tv (w2n k) j) /\
-  ghost_inv d cenv cx es G tn s /\
+  ghost_inv H d cenv cx es G tn s /\
   (!x sz. cenv.ce_return_buf = SOME (PtrVar (Var x) sz) ==> not_fresh_at sa x) /\
   (!x sz. cenv.ce_return_pc = SOME (PtrVar (Var x) sz) ==> not_fresh_at sa x) ==>
-  ?z H tm b.
-    gas_path_ptr D 0 ctx func PG G tn s 0 H tm (OK z) /\
+  ?z HG tm b.
+    gas_path_ptr D 0 ctx func PG G tn s 0 HG tm (OK z) /\
     z.vs_current_bb = sb.cs_current_bb /\ z.vs_inst_idx = LENGTH sb.cs_current_insts /\
-    stmt_state_rel ctx func cenv cx es z /\
-    lookup_var dst z = SOME (n2w b) /\ ptr_covers H tm dst z (32*n) /\
+    stmt_state_rel H ctx func cenv cx es z /\
+    lookup_var dst z = SOME (n2w b) /\ ptr_covers HG tm dst z (32*n) /\
     (!m. mem_agree_outside tm.t_mem z.vs_memory m ==> val_in_memory tv v b m) /\
-    ghost_inv d cenv cx es H tm z /\ ghost_kept cenv es sa G tn s H tm
+    ghost_inv H d cenv cx es HG tm z /\ ghost_kept cenv es sa G tn s HG tm
 Proof
   strip_tac >> drule_all allocated_storage_loop_endpoint_frame >> metis_tac[]
 QED

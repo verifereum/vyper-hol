@@ -150,7 +150,7 @@ Resume compile_for_range_checked_frag_active_ptr[first_end]:
       (mid with gas_obs := gs2) = (INL tv2,es2) ==>
       ?n2. tv2 = IntV n2 /\ value_has_type tyv (IntV n2) /\ P es2)` by
     (qpat_x_assum `!gs tv es1. _` (drule o SRULE [SF ETA_ss]) >> simp[SF ETA_ss]) >>
-  `stmt_state_rel ctx func cenv cx (mid with gas_obs := []) t` by
+  `stmt_state_rel H ctx func cenv cx (mid with gas_obs := []) t` by
     (simp[] >> drule expr_post_state >> simp[]) >>
   `~t.vs_halted` by
     (drule gas_path_ptr_erase >> strip_tac >> drule gas_path_normal >> simp[]) >>
@@ -182,8 +182,8 @@ Resume compile_for_range_checked_frag_active_ptr[second_end]:
     (qpat_x_assum `!gs2 tv2 es2. _` mp_tac >>
      qpat_x_assum `monad_bind _ _ _ = (INL v',_)` mp_tac >>
      rpt (pop_assum kall_tac) >> simp[SF ETA_ss] >> metis_tac[]) >>
-  `stmt_state_rel ctx func cenv cx (mid' with gas_obs := []) t'` by
-    (simp[] >> qpat_assum `expr_post _ _ _ _ e2 _ _ _ _ _ _ _ _`
+  `stmt_state_rel H ctx func cenv cx (mid' with gas_obs := []) t'` by
+    (simp[] >> qpat_assum `expr_post _ _ _ _ _ e2 _ _ _ _ _ _ _ _`
        (mp_then Any mp_tac expr_post_state) >> simp[]) >>
   `~t'.vs_halted` by
     (qpat_assum `gas_path_ptr _ _ _ _ _ _ _ t _ _ _ (OK t')`
@@ -194,14 +194,14 @@ QED
 
 Resume compile_for_range_checked_frag_active_ptr[operands]:
   `eval_operand op1 t = SOME (i2w n1)` by
-    (qpat_assum `expr_post _ _ _ _ e1 _ _ _ _ _ _ _ _`
+    (qpat_assum `expr_post _ _ _ _ _ e1 _ _ _ _ _ _ _ _`
        (mp_then Any mp_tac expr_post_word_operand) >>
      simp[word_value_def, val_to_w256_def]) >>
   `eval_operand op2 t' = SOME (i2w n2)` by
-    (qpat_assum `expr_post _ _ _ _ e2 _ _ _ _ _ _ _ _`
+    (qpat_assum `expr_post _ _ _ _ _ e2 _ _ _ _ _ _ _ _`
        (mp_then Any mp_tac expr_post_word_operand) >>
      simp[word_value_def, val_to_w256_def]) >>
-  qpat_assum `expr_post _ _ _ _ e2 _ _ _ _ _ _ _ _`
+  qpat_assum `expr_post _ _ _ _ _ e2 _ _ _ _ _ _ _ _`
     (assume_tac o MATCH_MP expr_post_frame) >>
   `eval_operand op1 t' = SOME (i2w n1) /\ op_taint tn' op1 = op_taint tn op1` by
     (qpat_assum `wb_frame cenv _ _ s1 t t'` mp_tac >>
@@ -232,7 +232,7 @@ Resume compile_for_range_checked_frag_active_ptr[tail_entry]:
      simp[]) >>
   `lookup_scopes id mid'.scopes = NONE` by
     metis_tac[vyperEvalPreservesScopesTheory.lookup_scopes_none_map_fdom] >>
-  qpat_assum `expr_post _ _ _ _ e1 _ _ _ _ _ _ _ _`
+  qpat_assum `expr_post _ _ _ _ _ e1 _ _ _ _ _ _ _ _`
     (assume_tac o MATCH_MP expr_post_frame) >>
   `ret_pc_ok cenv s1 t` by
     (irule ret_pc_ok_frame >> qexistsl_tac [`cenv`,`s0`,`sa`] >>
@@ -251,13 +251,13 @@ Resume compile_for_range_checked_frag_active_ptr[tail_apply]:
      qpat_assum `v = IntV n1` mp_tac >>
      qpat_assum `v' = IntV n2` mp_tac >>
      POP_ASSUM_LIST (K all_tac) >> simp[SF ETA_ss] >> metis_tac[]) >>
-  `ghost_inv d cenv cx (mid' with gas_obs := []) G' tn' t'` by
+  `ghost_inv H d cenv cx (mid' with gas_obs := []) G' tn' t'` by
     simp[ghost_inv_gas_obs] >>
   qpat_assum `for_range_checked_code _ _ _ _ _ _ _ _ _ _ = _`
     (mp_then Any mp_tac for_range_checked_tail_outcome_ptr) >>
   disch_then (drule_at (Pat `fn_has_code _ _ _`)) >>
-  disch_then (drule_at (Pat `stmt_state_rel _ _ _ _ _ _`)) >>
-  disch_then (drule_at (Pat `ghost_inv _ _ _ _ _ _ _`)) >>
+  disch_then (drule_at (Pat `stmt_state_rel _ _ _ _ _ _ _`)) >>
+  disch_then (drule_at (Pat `ghost_inv _ _ _ _ _ _ _ _`)) >>
   disch_then (drule_at (Pat `eval_operand op1 t' = _`)) >>
   disch_then (drule_at (Pat `eval_operand op2 t' = _`)) >>
   disch_then (mp_tac o Q.INST [`P` |-> `P`, `PG` |-> `PG`, `RetQ` |-> `RetQ`] o SPEC_ALL) >>

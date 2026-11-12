@@ -31,10 +31,10 @@ Proof
 QED
 
 Theorem clean_storage_stor_taint_ok_ptr:
-  stor_taint_ok cx tn s /\ eval_operand dst s = SOME slot /\
+  stor_taint_ok H cx tn s /\ eval_operand dst s = SOME slot /\
   op_taint tn value = {} /\
-  (!u mem. storage_dead cx tr (update_storage slot u mem) = storage_dead cx tr mem) ==>
-  stor_taint_ok cx
+  (!u mem. storage_dead H tr (update_storage slot u mem) = storage_dead H tr mem) ==>
+  stor_taint_ok H cx
     (step_taint (mk_inst iid (if tr then TSTORE else SSTORE) [dst;value] []) s
       (if tr then tstore slot w s else sstore slot w s) tn)
     (if tr then tstore slot w s else sstore slot w s)
@@ -52,16 +52,16 @@ Proof
 QED
 
 Theorem clean_storage_ghost_inv_ptr:
-  ghost_inv d cenv cx es G tn s /\ es'.scopes = es.scopes /\
+  ghost_inv H d cenv cx es G tn s /\ es'.scopes = es.scopes /\
   eval_operand dst s = SOME slot /\ op_taint tn value = {} /\
-  (!u mem. storage_dead cx tr (update_storage slot u mem) = storage_dead cx tr mem) ==>
-  ghost_inv d cenv cx es' G
+  (!u mem. storage_dead H tr (update_storage slot u mem) = storage_dead H tr mem) ==>
+  ghost_inv H d cenv cx es' G
     (step_taint (mk_inst iid (if tr then TSTORE else SSTORE) [dst;value] []) s
       (if tr then tstore slot w s else sstore slot w s) tn)
     (if tr then tstore slot w s else sstore slot w s)
 Proof
   strip_tac >>
-  `stor_taint_ok cx tn s` by gvs[ghost_inv_def] >>
+  `stor_taint_ok H cx tn s` by gvs[ghost_inv_def] >>
   drule_all clean_storage_stor_taint_ok_ptr >>
   disch_then (qspecl_then [`w`, `iid`] assume_tac) >>
   `(if tr then tstore slot w s else sstore slot w s).vs_allocas = s.vs_allocas /\
@@ -129,14 +129,14 @@ Proof
 QED
 
 Theorem storage_word_endpoint_inv_ptr:
-  stmt_state_rel ctx func cenv cx es s /\ ghost_inv d cenv cx es G tn s /\
+  stmt_state_rel H ctx func cenv cx es s /\ ghost_inv H d cenv cx es G tn s /\
   eval_operand dst s = SOME slot /\ op_taint tn value = {} /\
-  (!u mem. storage_dead cx tr (update_storage slot u mem) = storage_dead cx tr mem) /\
+  (!u mem. storage_dead H tr (update_storage slot u mem) = storage_dead H tr mem) /\
   write_storage_slot cx tr slot tv v es = (INL (),es') /\
   encode_value tv v = SOME [(0,w)] ==>
-  stmt_state_rel ctx func cenv cx es'
+  stmt_state_rel H ctx func cenv cx es'
     ((if tr then tstore slot w s else sstore slot w s) with vs_inst_idx := idx) /\
-  ghost_inv d cenv cx es' G
+  ghost_inv H d cenv cx es' G
     (step_taint (mk_inst iid (if tr then TSTORE else SSTORE) [dst;value] []) s
       (if tr then tstore slot w s else sstore slot w s) tn)
     ((if tr then tstore slot w s else sstore slot w s) with vs_inst_idx := idx)
@@ -155,16 +155,16 @@ Theorem tuple_storage_store_head_path_ptr:
     (SOME (if tr then LocTransient else LocStorage)) st = ((),st') /\
   eval_operand dst s = SOME slot /\
   eval_operand op s = SOME (typed_val_to_w256 tv v) /\
-  stmt_state_rel ctx func cenv cx es s /\ ghost_inv d cenv cx es G tn s /\
-  (!u mem. storage_dead cx tr (update_storage slot u mem) = storage_dead cx tr mem) /\
+  stmt_state_rel H ctx func cenv cx es s /\ ghost_inv H d cenv cx es G tn s /\
+  (!u mem. storage_dead H tr (update_storage slot u mem) = storage_dead H tr mem) /\
   write_storage_slot cx tr slot tv v es = (INL (),es') /\
   encode_value tv v = SOME [(0,typed_val_to_w256 tv v)] /\
   fn_has_code st st' func /\ ~s.vs_halted /\ ~ctx_has_dalloca ctx /\
   op_taint tn op = {} /\ op_taint tn dst = {} /\
   s.vs_current_bb = st.cs_current_bb /\
   s.vs_inst_idx = LENGTH st.cs_current_insts ==>
-  ?t tn'. stmt_state_rel ctx func cenv cx es' t /\
-    ghost_inv d cenv cx es' G tn' t /\
+  ?t tn'. stmt_state_rel H ctx func cenv cx es' t /\
+    ghost_inv H d cenv cx es' G tn' t /\
     t.vs_memory = s.vs_memory /\ ~t.vs_halted /\
     t.vs_current_bb = st'.cs_current_bb /\
     t.vs_inst_idx = LENGTH st'.cs_current_insts /\

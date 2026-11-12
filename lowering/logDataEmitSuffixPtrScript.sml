@@ -37,7 +37,7 @@ Theorem log_data_emit_suffix_path_ptr:
   abi_size_bound ce.ce_struct_fields (TupleT (MAP SND data_ops)) < dimword(:256) /\
   vyper_to_abi_list (get_tenv cx) (MAP SND data_ops)
     (log_non_indexed_values flags vs) = SOME avs /\
-  stmt_state_rel ctx func ce cx es s /\ ghost_inv d ce cx es G tn s /\
+  stmt_state_rel H ctx func ce cx es s /\ ghost_inv H d ce cx es G tn s /\
   local_ptrs_reserved ce st /\
   (!p sz. ce.ce_return_buf = SOME (PtrVar (Var p) sz) ==> not_fresh_at st p) /\
   (!p sz. ce.ce_return_pc = SOME (PtrVar (Var p) sz) ==> not_fresh_at st p) /\
@@ -45,19 +45,19 @@ Theorem log_data_emit_suffix_path_ptr:
   ~s.vs_halted /\ lookup_block s.vs_current_bb func.fn_blocks = SOME bb /\
   isPREFIX (emitted_insts st sb) (DROP s.vs_inst_idx bb.bb_instructions) /\
   sb.cs_next_var <= limit_st.cs_next_var /\ fresh_vars_wrt limit_st s ==>
-  ?t H tm.
+  ?t HG tm.
     gas_path_ptr D 0 ctx func PG G tn s
-      (LENGTH (FILTER (\i. i.inst_opcode = GAS) (emitted_insts st sb))) H tm (OK t) /\
+      (LENGTH (FILTER (\i. i.inst_opcode = GAS) (emitted_insts st sb))) HG tm (OK t) /\
     fresh_vars_wrt limit_st t /\
-    stmt_state_rel ctx func ce cx
+    stmt_state_rel H ctx func ce cx
       (es with logs := es.logs ++ [<|logger := w2w cx.txn.target;
         topics := n2w h::topics; data := enc
           (Tuple (vyper_to_abi_types (get_tenv cx) (MAP SND data_ops))) (ListV avs)|>]) t /\
-    ghost_inv d ce cx
+    ghost_inv H d ce cx
       (es with logs := es.logs ++ [<|logger := w2w cx.txn.target;
         topics := n2w h::topics; data := enc
-          (Tuple (vyper_to_abi_types (get_tenv cx) (MAP SND data_ops))) (ListV avs)|>]) H tm t /\
-    ghost_kept ce es st G tn s H tm /\ inst_extends st sb /\
+          (Tuple (vyper_to_abi_types (get_tenv cx) (MAP SND data_ops))) (ListV avs)|>]) HG tm t /\
+    ghost_kept ce es st G tn s HG tm /\ inst_extends st sb /\
     ~t.vs_halted /\ t.vs_current_bb = s.vs_current_bb /\
     t.vs_inst_idx = s.vs_inst_idx + LENGTH (emitted_insts st sb) /\
     (!x w. not_fresh_at st x /\ lookup_var x s = SOME w ==> lookup_var x t = SOME w)
@@ -145,12 +145,12 @@ Resume log_data_emit_suffix_path_ptr[data_emit]:
     (simp[dimword_def] >> decide_tac) >>
   qmatch_asmsub_abbrev_tac `mem_bytes_at db (LENGTH bytes) v.vs_memory = bytes` >>
   `LENGTH bytes < dimword(:256)` by decide_tac >>
-  `ptr_covers H tm dv v (LENGTH bytes) /\ op_taint tm dst.buf_operand = {}` by
+  `ptr_covers HG tm dv v (LENGTH bytes) /\ op_taint tm dst.buf_operand = {}` by
     (fs[ptr_covers_def, MAX_DEF] >> decide_tac) >>
   `EVERY (\op. op_taint tm op = {})
     (dst.buf_operand::len::Lit (n2w h)::ops)` by simp[op_taint_def] >>
   `w2n (n2w (LENGTH bytes):bytes32) <> 0 ==>
-    ?p. dst.buf_operand = Var p /\ ptr_covers H tm p v (w2n (n2w (LENGTH bytes):bytes32))` by
+    ?p. dst.buf_operand = Var p /\ ptr_covers HG tm p v (w2n (n2w (LENGTH bytes):bytes32))` by
     (simp[] >> metis_tac[]) >>
   `!i. w2n (n2w db:bytes32) <= i /\
     i < w2n (n2w db:bytes32) + w2n (n2w (LENGTH bytes):bytes32) ==> i NOTIN tm.t_mem` by
@@ -174,7 +174,7 @@ Resume log_data_emit_suffix_path_ptr[data_post]:
    LENGTH (FILTER (\i. i.inst_opcode = GAS) (emitted_insts s2 s4))` by
     (qpat_assum `emitted_insts st sb = _` (fn th => once_rewrite_tac[th]) >>
      simp[FILTER_APPEND, mk_inst_def] >> decide_tac) >>
-  qexistsl_tac [`t with vs_inst_idx := SUC v.vs_inst_idx`,`H`,`tm`] >>
+  qexistsl_tac [`t with vs_inst_idx := SUC v.vs_inst_idx`,`HG`,`tm`] >>
   qpat_x_assum `v.vs_inst_idx = _` SUBST_ALL_TAC >>
   full_simp_tac bool_ss [ADD_0] >>
   `t.vs_halted = v.vs_halted /\ t.vs_current_bb = v.vs_current_bb /\

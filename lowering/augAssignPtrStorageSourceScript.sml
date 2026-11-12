@@ -18,7 +18,7 @@ Theorem declared_storage_holds_value_ptr:
   evaluate_type (get_tenv cx) ty = SOME tvt /\
   read_storage_slot cx tr (n2w slot) tvt es = (INL v,es) /\
   contract_storage_well_formed cx es /\ storage_layout_safe cx /\
-  stmt_state_rel ctx func cenv cx es s ==>
+  stmt_state_rel H ctx func cenv cx es s ==>
   storage_holds cx tr ty (Value v) (n2w slot) es s
 Proof
   strip_tac >>
@@ -28,7 +28,7 @@ Proof
     simp[storage_var_info_def] >>
   `declared_storage_region cx src id [] = SOME (tr,n2w slot,tvt)` by
     (irule declared_storage_region_ordinary >> simp[]) >>
-  `!st. storage_read_live cx tr st (n2w slot) tvt` by
+  `!st. storage_read_live H tr st (n2w slot) tvt` by
     (gen_tac >> irule declared_storage_region_read_live >> metis_tac[]) >>
   `w2n ((n2w slot):bytes32) + type_slot_size tvt <= dimword (:256)` by
     (drule_all storage_layout_safe_region_nonoverflow >> simp[]) >>
@@ -46,10 +46,10 @@ Theorem augassign_toplevel_place_exec_ptr:
   find_var_decl_by_name id ts = SOME (StorageVarDecl tr typ,id_str) /\
   lookup_var_slot_from_layout cx tr src id_str = SOME slot /\
   evaluate_type (get_tenv cx) typ = SOME tvt /\
-  gas_path_ptr D 0 ctx func PG G tn s0 0 H tm (OK t) ==>
+  gas_path_ptr D 0 ctx func PG G tn s0 0 HG tm (OK t) ==>
   gas_marked_exec_ptr D (ctx,func) PG
     (eval_target_place cx (TopLevelNameTarget (src,id)))
-    (es,s0,G,tn) [] (INL (StoragePlace tr (n2w slot) tvt)) es H tm (OK t)
+    (es,s0,G,tn) [] (INL (StoragePlace tr (n2w slot) tvt)) es HG tm (OK t)
 Proof
   strip_tac >> simp[gas_marked_exec_ptr_def, gas_explicit_def] >>
   gen_tac >> irule (cj 1 eval_target_place_toplevel) >> metis_tac[]
@@ -60,7 +60,7 @@ Theorem augassign_toplevel_rhs_exempt_ptr:
   read_storage_slot cx tr slot tvt es = (INL v0,es) /\
   gas_marked_exec_ptr D (ctx,func) PG
     (eval_target_place cx (TopLevelNameTarget (src,id)))
-    (es,s0,G,tn) [] (INL (StoragePlace tr slot tvt)) es H tm (OK t) /\
+    (es,s0,G,tn) [] (INL (StoragePlace tr slot tvt)) es HG tm (OK t) /\
   ~t.vs_halted /\
   gas_exempt_cert F tops (ctx,func)
     (ignore_bind (bind (eval_expr cx e) (read_result cx)) (return ()))
@@ -133,10 +133,10 @@ Theorem augassign_toplevel_rhs_exception_exec_ptr:
   lookup_var_slot_from_layout cx tr src id_str = SOME slot /\
   evaluate_type (get_tenv cx) typ = SOME tvt /\
   read_storage_slot cx tr (n2w slot) tvt es = (INL v0,es) /\
-  gas_path_ptr D 0 ctx func PG G tn s0 0 H tm (OK t) /\
+  gas_path_ptr D 0 ctx func PG G tn s0 0 HG tm (OK t) /\
   gas_marked_exec_ptr D (ctx,func) PG
     (bind (eval_expr cx e) (read_result cx))
-    (es with gas_obs := [],t,H,tm) marks (INR ex) ee J un r ==>
+    (es with gas_obs := [],t,HG,tm) marks (INR ex) ee J un r ==>
   gas_marked_exec_ptr D (ctx,func) PG
     (eval_stmt cx (AugAssign ty (TopLevelNameTarget (src,id)) bop e))
     (es,s0,G,tn) marks (INR ex) ee J un r
@@ -156,10 +156,10 @@ Theorem augassign_toplevel_rhs_normal_exec_ptr:
   lookup_var_slot_from_layout cx tr src id_str = SOME slot /\
   evaluate_type (get_tenv cx) typ = SOME tvt /\
   read_storage_slot cx tr (n2w slot) tvt es = (INL v0,es) /\
-  gas_path_ptr D 0 ctx func PG G tn s0 0 H tm (OK t) /\
+  gas_path_ptr D 0 ctx func PG G tn s0 0 HG tm (OK t) /\
   gas_marked_exec_ptr D (ctx,func) PG
     (bind (eval_expr cx e) (read_result cx))
-    (es with gas_obs := [],t,H,tm) marks (INL v) ee J un (OK u) /\
+    (es with gas_obs := [],t,HG,tm) marks (INL v) ee J un (OK u) /\
   gas_marked_exec_ptr D (ctx,func) PG
     (bind (lift_sum (evaluate_binop
       (case type_to_int_bound ty of SOME b => b | NONE => Unsigned 0)
@@ -180,10 +180,10 @@ QED
 
 Theorem augassign_storage_continuation_exec_ptr:
   bind (lift_sum br) (write_storage_slot cx tr slot tvt) ee = (res,fin) /\
-  gas_path_ptr D 0 ctx func PG G tn u 0 H tm r ==>
+  gas_path_ptr D 0 ctx func PG G tn u 0 HG tm r ==>
   gas_marked_exec_ptr D (ctx,func) PG
     (bind (lift_sum br) (write_storage_slot cx tr slot tvt))
-    (ee,u,G,tn) [] res fin H tm r
+    (ee,u,G,tn) [] res fin HG tm r
 Proof
   Cases_on `br` >>
   simp[gas_marked_exec_ptr_def, lift_sum_def, bind_def, return_def, raise_def] >>

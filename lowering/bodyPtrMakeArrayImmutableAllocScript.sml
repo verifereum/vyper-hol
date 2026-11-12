@@ -8,7 +8,7 @@ Ancestors
 
 Theorem alloc_buffer_copy_start:
   compile_alloc_buffer sz sa = (buf,sm) /\
-  stmt_state_rel ctx func cenv cx es s /\ fn_inst_ids_distinct func /\
+  stmt_state_rel H ctx func cenv cx es s /\ fn_inst_ids_distinct func /\
   local_ptrs_reserved cenv sa /\ sz < dimword (:256) /\
   MEM (mk_inst sa.cs_next_id ALLOCA [Lit (n2w sz)]
     [STRING #"%" (toString sa.cs_next_var)]) (fn_insts func) /\
@@ -18,7 +18,7 @@ Theorem alloc_buffer_copy_start:
   copy_old_operand sa src /\ eval_operand src s = SOME a /\ op_taint tn src = {} ==>
   ?u root w G1 tn1.
     buf.buf_operand = Var root /\ not_fresh_at sm root /\
-    stmt_state_rel ctx func cenv cx es u /\
+    stmt_state_rel H ctx func cenv cx es u /\
     eval_operand src u = SOME a /\ lookup_var root u = SOME w /\
     op_taint tn1 src = {} /\ allocas_from 0 u /\
     ptr_covers G1 tn1 root u sz /\
@@ -112,7 +112,7 @@ QED
 Theorem immutable_allocated_buffer_ptr_path:
   compile_alloc_buffer (type_memory_size tv) sa = (buf,sm) /\
   compile_imm_copy_to_memory F imm src buf.buf_operand (type_slot_size tv) 0 sm = ((),sb) /\
-  stmt_state_rel ctx func cenv cx es s /\ fn_inst_ids_distinct func /\
+  stmt_state_rel H ctx func cenv cx es s /\ fn_inst_ids_distinct func /\
   local_ptrs_reserved cenv sa /\ type_memory_size tv < dimword (:256) /\
   MEM (mk_inst sa.cs_next_id ALLOCA [Lit (n2w (type_memory_size tv))]
     [STRING #"%" (toString sa.cs_next_var)]) (fn_insts func) /\

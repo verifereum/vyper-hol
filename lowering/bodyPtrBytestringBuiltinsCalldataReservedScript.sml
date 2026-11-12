@@ -40,11 +40,11 @@ Proof
 QED
 
 Theorem stmt_state_rel_reserved_vars_update:
-  stmt_state_rel ctx fn cenv cx es s /\ local_ptrs_reserved cenv sa /\
+  stmt_state_rel H ctx fn cenv cx es s /\ local_ptrs_reserved cenv sa /\
   t = s with vs_vars := t.vs_vars /\
   (!x w. not_fresh_at sa x /\ lookup_var x s = SOME w ==>
     lookup_var x t = SOME w) ==>
-  stmt_state_rel ctx fn cenv cx es t
+  stmt_state_rel H ctx fn cenv cx es t
 Proof
   strip_tac >>
   `state_frame t = state_frame s` by

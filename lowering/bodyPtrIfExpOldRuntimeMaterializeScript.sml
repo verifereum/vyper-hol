@@ -9,15 +9,15 @@ Theorem ifexp_old_ensure_memory_runtime:
   post_value_type ce e = expr_type e /\
   expr_body_pre ce cx env e es /\ eval_expr cx e es = (INL raw,ee) /\
   read_result cx raw ee = (INL v,ee) /\
-  stmt_state_rel ctx fn ce cx es s0 /\
-  vv_post ctx fn ce cx e es sa sb s0 ee raw (LocatedValue tag pp) s /\
+  stmt_state_rel H ctx fn ce cx es s0 /\
+  vv_post H ctx fn ce cx e es sa sb s0 ee raw (LocatedValue tag pp) s /\
   ptr_vv_ok cx (expr_type e) raw (LocatedValue tag pp) ee G tn s /\
   pp.ptr_location = LocCode /\ ~ce.ce_is_ctor /\
   n = (type_memory_bytes ce (expr_type e)+31) DIV 32 /\
   compile_ensure_in_memory pp.ptr_operand pp.ptr_location
     (type_memory_bytes ce (expr_type e)) n F imm sb = (dst,sd) /\
   fn_has_code sb sd fn /\
-  ghost_inv rty ce cx ee G tn s /\ ghost_kept ce es sa G0 tn0 s0 G tn /\
+  ghost_inv H rty ce cx ee G tn s /\ ghost_kept ce es sa G0 tn0 s0 G tn /\
   local_ptrs_reserved ce sa /\ MAP FDOM es.scopes = MAP FDOM ee.scopes /\
   fn_inst_ids_distinct fn /\ sa.cs_next_var <= sb.cs_next_var /\ sa.cs_next_id <= sb.cs_next_id /\
   (!x sz. ce.ce_return_buf = SOME (PtrVar (Var x) sz) ==> not_fresh_at sa x) /\
@@ -25,16 +25,16 @@ Theorem ifexp_old_ensure_memory_runtime:
   type_memory_bytes ce (expr_type e) < dimword (:256) /\ ~ctx_has_dalloca ctx /\ ~s.vs_halted /\
   s.vs_current_bb = sb.cs_current_bb /\ s.vs_inst_idx = LENGTH sb.cs_current_insts /\
   copy_old_operand sb pp.ptr_operand ==>
-  ?out d ty t H tt.
+  ?out d ty t HG tt.
     dst = Var out /\ eval_operand dst t = SOME d /\
     evaluate_type (get_tenv cx) (expr_type e) = SOME ty /\
-    gas_path_ptr D 0 ctx fn PG G tn s 0 H tt (OK t) /\
+    gas_path_ptr D 0 ctx fn PG G tn s 0 HG tt (OK t) /\
     t.vs_current_bb = sd.cs_current_bb /\
     t.vs_inst_idx = LENGTH sd.cs_current_insts /\ ~t.vs_halted /\
     (!m. mem_agree_outside tt.t_mem t.vs_memory m ==> val_in_memory ty v (w2n d) m) /\
-    ptr_covers H tt out t (type_memory_bytes ce (expr_type e)) /\
-    ghost_inv rty ce cx ee H tt t /\ ghost_kept ce es sa G0 tn0 s0 H tt /\
-    (~is_word_type (expr_type e) ==> expr_post ctx fn ce cx e es sa sd s0 ee v dst t)
+    ptr_covers HG tt out t (type_memory_bytes ce (expr_type e)) /\
+    ghost_inv H rty ce cx ee HG tt t /\ ghost_kept ce es sa G0 tn0 s0 HG tt /\
+    (~is_word_type (expr_type e) ==> expr_post H ctx fn ce cx e es sa sd s0 ee v dst t)
 Proof
   strip_tac >> drule_all ifexp_runtime_arm_source >> strip_tac >>
   `?buf cs. compile_alloc_buffer (type_memory_bytes ce (expr_type e)) sb = (buf,cs) /\
@@ -87,7 +87,7 @@ Resume ifexp_old_ensure_memory_runtime[semantic]:
 QED
 
 Resume ifexp_old_ensure_memory_runtime[post]:
-  `~is_word_type (expr_type e) ==> expr_post ctx fn ce cx e es sa sd s0 ee v dst t` by
+  `~is_word_type (expr_type e) ==> expr_post H ctx fn ce cx e es sa sd s0 ee v dst t` by
     (strip_tac >> irule ifexp_allocated_copy_post >> simp[] >>
      qexistsl_tac [`buf`, `cs`, `d`, `out`, `raw`, `s`, `sb`, `32*n`, `u`,
        `LocatedValue tag pp`] >>
@@ -103,7 +103,7 @@ Resume ifexp_old_ensure_memory_runtime[post]:
          qpat_x_assum `!x. not_fresh_at cs x ==> lookup_var x t = lookup_var x u`
            (qspec_then `out` mp_tac) >> gvs[lookup_var_def]) >>
      qpat_x_assum `val_in_memory ty v (w2n d) t.vs_memory` mp_tac >> simp[]) >>
-  qexistsl_tac [`out`, `d`, `ty`, `t`, `H`, `tt`] >>
+  qexistsl_tac [`out`, `d`, `ty`, `t`, `HG`, `tt`] >>
   simp[venomStateTheory.eval_operand_def] >> metis_tac[]
 QED
 

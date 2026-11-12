@@ -12,7 +12,7 @@ Theorem membership_fixed_memory_runtime:
   fn_has_code sa sb fn /\ ~ctx_has_dalloca ctx /\ ~cenv.ce_is_ctor /\
   p.ptr_location = LocMemory /\ p.ptr_operand = Var basesrc /\
   not_fresh_at sa basesrc /\
-  stmt_state_rel ctx fn cenv cx es s /\
+  stmt_state_rel H ctx fn cenv cx es s /\
   vv_at cenv cx (ArrayT ety (Fixed cap)) sc sd es tvv (LocatedValue ann p) s /\
   ptr_vv_ok cx (ArrayT ety (Fixed cap)) tvv (LocatedValue ann p) es G tn s /\
   read_result cx tvv es = (INL (ArrayV (SArrayV kvs)),es) /\
@@ -54,7 +54,7 @@ Theorem membership_dynamic_memory_runtime:
   fn_has_code sa sb fn /\ ~ctx_has_dalloca ctx /\ ~cenv.ce_is_ctor /\
   p.ptr_location = LocMemory /\ p.ptr_operand = Var basesrc /\
   not_fresh_at sa basesrc /\
-  stmt_state_rel ctx fn cenv cx es s /\
+  stmt_state_rel H ctx fn cenv cx es s /\
   vv_at cenv cx (ArrayT ety (Dynamic cap)) sc sd es tvv (LocatedValue ann p) s /\
   ptr_vv_ok cx (ArrayT ety (Dynamic cap)) tvv (LocatedValue ann p) es G tn s /\
   read_result cx tvv es = (INL (ArrayV (DynArrayV vs)),es) /\

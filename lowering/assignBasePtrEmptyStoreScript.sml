@@ -26,7 +26,7 @@ QED
 
 Theorem assign_base_empty_local_store_path:
   !d cenv cx es G tn s id pre sc entry rest p sz a sa sb fn ctx PG D ty tv.
-    ghost_inv d cenv cx es G tn s /\
+    ghost_inv H d cenv cx es G tn s /\
     find_containing_scope id es.scopes = SOME (pre,sc,entry,rest) /\
     FLOOKUP cenv.ce_vars id = SOME (PtrVar (Var p) sz) /\
     lookup_var p s = SOME a /\ entry.type = tv /\
@@ -41,7 +41,7 @@ Theorem assign_base_empty_local_store_path:
     s.vs_inst_idx = LENGTH sa.cs_current_insts ==>
     ?tf t. gas_path_ptr D 0 ctx fn PG G tn s 0 G tf (OK t) /\
       t = (mstore (w2n a) 0w s with vs_inst_idx := SUC s.vs_inst_idx) /\
-      ghost_inv d cenv cx
+      ghost_inv H d cenv cx
         (es with scopes := pre ++
           (sc |+ (id,entry with <|value := default_value tv; popped := []|>)) :: rest)
         G tf t /\
@@ -78,7 +78,7 @@ Resume assign_base_empty_local_store_path[ghost]:
       mem_bytes_at i 1 s.vs_memory /\ (i IN tf.t_mem <=> i IN tn.t_mem)` by
     (rpt strip_tac >> simp[] >>
      irule mstore_mem_bytes_at_disjoint >> decide_tac) >>
-  `stor_taint_ok cx tf (mstore (w2n a) 0w s)` by
+  `stor_taint_ok H cx tf (mstore (w2n a) 0w s)` by
     (simp[Abbr `tf`] >> irule mstore_storage_taint_frame_ptr >>
      simp[] >> metis_tac[ghost_inv_def]) >>
   drule_all assign_base_local_scope_ghost_post >> strip_tac >>

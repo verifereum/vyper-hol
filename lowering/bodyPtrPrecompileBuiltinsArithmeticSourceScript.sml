@@ -4,7 +4,7 @@ Ancestors exprSimHash exprSimHashBoundary exprSimProps loweringPosts valueEncodi
           vyperValueOperation vyperContext extCallOracle vfmExecution list
 
 Theorem ec_point_pointer_bound:
-  stmt_state_rel ctx fn cenv cx es s /\
+  stmt_state_rel H ctx fn cenv cx es s /\
   expr_val_at cenv cx (ArrayT (BaseT (UintT 256)) (Fixed 2)) lo hi es v p s /\
   eval_operand p s = SOME w ==>
   w2n w + 64 < dimword(:256)
@@ -18,7 +18,7 @@ Proof
 QED
 
 Theorem ec_point_eval_bound:
-  stmt_state_rel ctx fn cenv cx es s /\
+  stmt_state_rel H ctx fn cenv cx es s /\
   expr_val_at cenv cx (ArrayT (BaseT (UintT 256)) (Fixed 2)) lo hi es v p s ==>
   ?w. eval_operand p s = SOME w /\ w2n w + 64 < dimword(:256)
 Proof

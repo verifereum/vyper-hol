@@ -157,7 +157,7 @@ Proof
 QED
 
 Theorem raw_revert_post_path_ptr:
-  expr_post ctx fn cenv cx e es sa sm s0 ee (BytesV bs) data s /\
+  expr_post H ctx fn cenv cx e es sa sm s0 ee (BytesV bs) data s /\
   expr_type e = BaseT (BytesT (Dynamic bound)) /\
   evaluate_type (get_tenv cx) (expr_type e) =
     SOME (BaseTV (BytesT (Dynamic bound))) /\

@@ -4,7 +4,7 @@ Ancestors allocationPtr ptrDiscipline venomInst
 (* Exact extent is inherited from the framed site theorem, including reuse. *)
 Theorem ifexp_alloca_step_exact_provenance:
   !ctx func ce cx es s id n out u PG G.
-    stmt_state_rel ctx func ce cx es s /\
+    stmt_state_rel H ctx func ce cx es s /\
     MEM (mk_inst id ALLOCA [Lit (n2w n)] [out]) (fn_insts func) /\
     n < dimword (:256) /\
     step_inst_base (mk_inst id ALLOCA [Lit (n2w n)] [out]) s = OK u ==>

@@ -8,10 +8,10 @@ Ancestors
 Theorem pop_positive_framed_posts:
   expr_has_effect e /\
   expr_sim_inv cenv cx env es /\
-  stmt_state_rel ctx func cenv cx es s0 /\
-  stmt_state_rel ctx func cenv cx mid s /\
+  stmt_state_rel H ctx func cenv cx es s0 /\
+  stmt_state_rel H ctx func cenv cx mid s /\
   wb_frame cenv es mid sa s0 s /\
-  ghost_inv d cenv cx mid G tn s /\
+  ghost_inv H d cenv cx mid G tn s /\
   local_ptrs_rel func cenv mid.scopes s /\
   local_ptrs_reserved cenv sa /\ local_ptrs_reserved cenv sm /\
   (!x sz. cenv.ce_return_buf = SOME (PtrVar (Var x) sz) ==> not_fresh_at sm x) /\
@@ -42,7 +42,7 @@ Theorem pop_positive_framed_posts:
     vs_inst_idx := t.vs_inst_idx|> /\
   t.vs_memory = (mstore (w2n b+k) (n2w (LENGTH vs-1)) s).vs_memory /\
   (!x. not_fresh_at sm x ==> lookup_var x t = lookup_var x s /\
-    FLOOKUP H x = FLOOKUP G x /\ op_taint tf (Var x) = op_taint tn (Var x)) /\
+    FLOOKUP HG x = FLOOKUP G x /\ op_taint tf (Var x) = op_taint tn (Var x)) /\
   tf.t_mem = tn.t_mem /\ tf.t_stor = tn.t_stor /\
   tf.t_trans = tn.t_trans /\ tf.t_imm = tn.t_imm /\
   read_result cx result (mid with scopes := scopes') =
@@ -53,16 +53,16 @@ Theorem pop_positive_framed_posts:
   w2n w = w2n b+k+32+(LENGTH vs-1)*type_memory_size etv /\
   local_place_at cenv cx id (k + 32 + (LENGTH vs - 1) * type_memory_size etv)
     etv result /\
-  ptr_covers H tf out t (type_memory_size etv) /\
+  ptr_covers HG tf out t (type_memory_size etv) /\
   type_memory_bytes cenv (lowered_value_type cenv e) <= type_memory_size etv ==>
-  vv_post ctx func cenv cx e es sa sb s0 (mid with scopes := scopes') result
+  vv_post H ctx func cenv cx e es sa sb s0 (mid with scopes := scopes') result
     (LocatedValue (expr_type e) (mk_ptr (Var out) LocMemory)) t /\
-  ghost_inv d cenv cx (mid with scopes := scopes') H tf t /\
+  ghost_inv H d cenv cx (mid with scopes := scopes') HG tf t /\
   ptr_vv_ok cx (expr_type e) result
     (LocatedValue (expr_type e) (mk_ptr (Var out) LocMemory))
-    (mid with scopes := scopes') H tf t /\
-  ptr_buf_ok cenv e (Var out) H t /\
-  ghost_kept cenv mid sm G tn s H tf
+    (mid with scopes := scopes') HG tf t /\
+  ptr_buf_ok cenv e (Var out) HG t /\
+  ghost_kept cenv mid sm G tn s HG tf
 Proof
   strip_tac >>
   `!mem. mem_agree_outside tn.t_mem s.vs_memory mem ==>
@@ -73,7 +73,7 @@ Proof
   conj_tac
   >- (match_mp_tac pop_framed_memory_live_vv_post >>
       asm_simp_tac bool_ss [eval_operand_def] >> metis_tac[]) >>
-  `stor_taint_ok cx tf t` by
+  `stor_taint_ok H cx tf t` by
     (irule copy_stor_taint_frame >>
      qexistsl_tac [`s`, `tn`] >>
      qpat_x_assum `t = s with <|vs_vars := _; vs_memory := _; vs_inst_idx := _|>`

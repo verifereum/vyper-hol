@@ -20,21 +20,21 @@ Theorem cast_convert_suffix_outcome_ptr:
   isPREFIX (emitted_insts sa sb) (DROP s.vs_inst_idx bb.bb_instructions) /\
   ptr_covers G tn src s sz /\ 32 <= sz /\
   (!j. w2n w <= j /\ j < w2n w + 32 ==> j NOTIN tn.t_mem) /\
-  ghost_inv d cenv cx es G tn s /\ local_ptrs_reserved cenv sa /\
+  ghost_inv H d cenv cx es G tn s /\ local_ptrs_reserved cenv sa /\
   (!p z. cenv.ce_return_buf = SOME (PtrVar (Var p) z) ==> not_fresh_at sa p) /\
   (!p z. cenv.ce_return_pc = SOME (PtrVar (Var p) z) ==> not_fresh_at sa p) /\
   (!m. mem_agree_outside tn.t_mem s.vs_memory m ==> val_in_memory tv v (w2n w) m) /\
-  (!t vout H th. run_inst_seq (emitted_insts sa sb) s = OK t /\
+  (!t vout HG th. run_inst_seq (emitted_insts sa sb) s = OK t /\
     convert_result cx tsrc tdst v = INL vout /\ out = Var src /\
     (t with vs_vars := s.vs_vars) = s /\
     (!p. not_fresh_at sa p ==> lookup_var p t = lookup_var p s) /\
-    ghost_inv d cenv cx es H th
+    ghost_inv H d cenv cx es HG th
       (t with vs_inst_idx := s.vs_inst_idx + LENGTH (emitted_insts sa sb)) /\
-    ghost_kept cenv es sa G tn s H th /\
-    ptr_covers H th src (t with vs_inst_idx := s.vs_inst_idx + LENGTH (emitted_insts sa sb)) sz /\
+    ghost_kept cenv es sa G tn s HG th /\
+    ptr_covers HG th src (t with vs_inst_idx := s.vs_inst_idx + LENGTH (emitted_insts sa sb)) sz /\
     th.t_mem = tn.t_mem /\
     (!m. mem_agree_outside th.t_mem t.vs_memory m ==> val_in_memory tv2 vout (w2n w) m) ==>
-    Q (INL vout) (es with gas_obs := []) H th
+    Q (INL vout) (es with gas_obs := []) HG th
       (t with vs_inst_idx := s.vs_inst_idx + LENGTH (emitted_insts sa sb))) ==>
   gas_outcome_ptr D tops (ctx,fn) PG
     (\st. (convert_result cx tsrc tdst v,st)) (es,s,G,tn) Q
@@ -49,7 +49,7 @@ Proof
       disch_then (qspecl_then [`PG`,`D`] strip_assume_tac) >>
       simp[gas_outcome_ptr_def] >> qexists_tac `[]` >> disj1_tac >>
       simp[gas_summary_ptr_at_def] >>
-      qexistsl_tac [`INL x`,`es`,`H`,`th`,
+      qexistsl_tac [`INL x`,`es`,`HG`,`th`,
         `OK (t with vs_inst_idx := s.vs_inst_idx + LENGTH (emitted_insts sa sb))`] >>
       simp[] >> first_x_assum irule >> simp[] >>
       simp[SRULE [] (Q.INST [`gs` |-> `es.gas_obs`]
@@ -58,7 +58,7 @@ Proof
   disch_then (qspecl_then [`PG`,`D`] strip_assume_tac) >>
   simp[gas_outcome_ptr_def] >> qexists_tac `[]` >> disj1_tac >>
   simp[gas_summary_ptr_at_def] >>
-  qexistsl_tac [`INR (Error (RuntimeError msg))`,`es`,`H`,`th`,
+  qexistsl_tac [`INR (Error (RuntimeError msg))`,`es`,`HG`,`th`,
     `Abort Revert_abort (t with vs_inst_idx := j)`] >>
   simp[expr_exit_def, exit_result_def]
 QED

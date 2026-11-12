@@ -100,13 +100,13 @@ Resume account_singleton_sim_ptr[normal]:
     (gvs[expr_post_def, stmt_state_rel_def, state_rel_def]) >>
   `local_ptrs_rel fn cenv es.scopes s0` by
     gvs[stmt_state_rel_def, state_rel_def] >>
-  `stmt_state_rel ctx fn cenv cx ee t` by
+  `stmt_state_rel H ctx fn cenv cx ee t` by
     gvs[expr_post_def] >>
   fs[] >>
   drule_at (Pat `bind _ _ _ = _`) operand_account_suffix_run >>
   simp[expr_post_entry_gas_obs, ghost_kept_entry_gas_obs] >>
   disch_then drule_all >>
-  disch_then (qspecl_then [`PG`, `cx_dead cx`] strip_assume_tac) >>
+  disch_then (qspecl_then [`PG`, `cx_dead H cx`] strip_assume_tac) >>
   drule_all account_source_result >> strip_tac >>
   qexistsl_tac [`INL (evaluate_account_op item l
     (lookup_account (word_of_bytes_be l) ee.accounts))`, `ee`, `G''`, `tn''`, `t'`] >>

@@ -34,13 +34,13 @@ Theorem ghost_inv_exterior_frame:
       val_wf entry.type entry.value /\
       (!i. w2n w <= i /\ i < w2n w + val_footprint entry.type entry.value ==>
         i NOTIN writes)) /\
-    ghost_inv d cenv cx es G tn s ==>
-    ghost_inv d cenv cx es G' tn' s'
+    ghost_inv H d cenv cx es G tn s ==>
+    ghost_inv H d cenv cx es G' tn' s'
 Proof
   rpt gen_tac >> strip_tac >>
   `!p sz. P p ==> (ptr_covers G' tn' p s' sz <=> ptr_covers G tn p s sz)` by
     (rpt strip_tac >> simp[ptr_covers_def]) >>
-  qpat_x_assum `ghost_inv _ _ _ _ _ _ _` mp_tac >>
+  qpat_x_assum `ghost_inv _ _ _ _ _ _ _ _` mp_tac >>
   rewrite_tac[ghost_inv_def] >> strip_tac >> rpt conj_tac
   >- suspend "locals"
   >- (Cases_on `d` >> gvs[return_buf_ptr_def] >>

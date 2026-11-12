@@ -42,20 +42,20 @@ Theorem cast_check_success_certificate:
   ~ctx_has_dalloca ctx /\
   run_inst_seq [mk_inst id GT [Var len;Lit (n2w n)] [a];
     mk_inst (id+1) ISZERO [Var a] [b]; mk_inst (id+2) ASSERT [Var b] []] s = OK t /\
-  ghost_inv d cenv cx es G tn s /\ local_ptrs_reserved cenv sa /\
+  ghost_inv H d cenv cx es G tn s /\ local_ptrs_reserved cenv sa /\
   (!p sz. cenv.ce_return_buf = SOME (PtrVar (Var p) sz) ==> not_fresh_at sa p) /\
   (!p sz. cenv.ce_return_pc = SOME (PtrVar (Var p) sz) ==> not_fresh_at sa p) /\
   (!p. not_fresh_at sa p ==> p <> a /\ p <> b) ==>
-  !k. ?H th.
+  !k. ?HG th.
     inst_seq_ptr D 0 ctx fn PG G tn
       [mk_inst id GT [Var len;Lit (n2w n)] [a];
        mk_inst (id+1) ISZERO [Var a] [b]; mk_inst (id+2) ASSERT [Var b] []]
-      (s with vs_inst_idx := k) H th /\
-    ghost_inv d cenv cx es H th t /\ ghost_kept cenv es sa G tn s H th /\
+      (s with vs_inst_idx := k) HG th /\
+    ghost_inv H d cenv cx es HG th t /\ ghost_kept cenv es sa G tn s HG th /\
     (!p sz. p <> a /\ p <> b /\ ptr_covers G tn p s sz ==>
-       ptr_covers H th p t sz) /\
+       ptr_covers HG th p t sz) /\
     (!p. p <> a /\ p <> b ==> lookup_var p t = lookup_var p s /\
-       FLOOKUP H p = FLOOKUP G p /\ op_taint th (Var p) = op_taint tn (Var p)) /\
+       FLOOKUP HG p = FLOOKUP G p /\ op_taint th (Var p) = op_taint tn (Var p)) /\
     th.t_mem = tn.t_mem /\ th.t_stor = tn.t_stor /\
     th.t_trans = tn.t_trans /\ th.t_imm = tn.t_imm /\ t.vs_memory = s.vs_memory
 Proof
@@ -70,7 +70,7 @@ Proof
   drule_all (cj 1 (PURE_REWRITE_RULE
     [LEFT_AND_OVER_OR, DISJ_IMP_THM] scalar_checked_pair_uniform_certificate)) >>
   disch_then (qspecl_then [`fn`,`PG`,`D`,`k`] strip_assume_tac) >>
-  qexistsl_tac [`H`,`th`] >> simp[] >> conj_tac
+  qexistsl_tac [`HG`,`th`] >> simp[] >> conj_tac
   >- (irule ghost_inv_fresh_frame >> goal_assum (drule_at Any) >>
       simp[] >> gvs[venom_state_component_equality] >> metis_tac[]) >>
   conj_tac >- (simp[ghost_kept_def] >> metis_tac[]) >>
@@ -103,15 +103,15 @@ Theorem cast_narrow_success_path:
   ptr_covers G tn src s sz /\ 32 <= sz /\ lookup_var src s = SOME w /\
   src <> len /\ src <> a /\ src <> b /\
   (!j. w2n w <= j /\ j < w2n w + 32 ==> j NOTIN tn.t_mem) /\
-  ghost_inv d cenv cx es G tn s /\ local_ptrs_reserved cenv sa /\
+  ghost_inv H d cenv cx es G tn s /\ local_ptrs_reserved cenv sa /\
   (!p z. cenv.ce_return_buf = SOME (PtrVar (Var p) z) ==> not_fresh_at sa p) /\
   (!p z. cenv.ce_return_pc = SOME (PtrVar (Var p) z) ==> not_fresh_at sa p) /\
   (!p. not_fresh_at sa p ==> p <> len /\ p <> a /\ p <> b) ==>
-  ?H th.
-    gas_path_ptr D 0 ctx fn PG G tn s 0 H th
+  ?HG th.
+    gas_path_ptr D 0 ctx fn PG G tn s 0 HG th
       (OK (t with vs_inst_idx := s.vs_inst_idx+4)) /\
-    ghost_inv d cenv cx es H th t /\
-    ghost_kept cenv es sa G tn s H th /\ ptr_covers H th src t sz /\
+    ghost_inv H d cenv cx es HG th t /\
+    ghost_kept cenv es sa G tn s HG th /\ ptr_covers HG th src t sz /\
     t.vs_memory = s.vs_memory /\ th.t_mem = tn.t_mem
 Proof
   strip_tac >> qpat_x_assum `code = _` SUBST_ALL_TAC >>
@@ -153,11 +153,11 @@ Proof
     simp[mk_inst_def, is_terminator_def] >>
   drule_all run_inst_seq_gas_path_ptr >>
   simp[mk_inst_def, is_terminator_def] >> disch_tac >>
-  qexistsl_tac [`H`,`th`] >> conj_tac
+  qexistsl_tac [`HG`,`th`] >> conj_tac
   >- (rev_drule gas_path_ptr_then >> disch_then drule >>
       simp[mk_inst_def, ADD1]) >>
   conj_tac
-  >- (qpat_x_assum `ghost_inv _ _ _ _ H _ _` mp_tac >>
+  >- (qpat_x_assum `ghost_inv _ _ _ _ _ HG _ _` mp_tac >>
       simp[SRULE [] (Q.INST [`gs` |-> `es.gas_obs`]
         (SPEC_ALL literal_ptr_ghost_inv_normalize))]) >>
   conj_tac >- (simp[ghost_kept_def] >> metis_tac[]) >>
@@ -175,13 +175,13 @@ Theorem cast_narrow_abort_path:
   ptr_covers G tn src s sz /\ 32 <= sz /\ lookup_var src s = SOME w /\
   src <> len /\
   (!j. w2n w <= j /\ j < w2n w + 32 ==> j NOTIN tn.t_mem) /\
-  ghost_inv d cenv cx es G tn s /\ local_ptrs_reserved cenv sa /\
+  ghost_inv H d cenv cx es G tn s /\ local_ptrs_reserved cenv sa /\
   (!p z. cenv.ce_return_buf = SOME (PtrVar (Var p) z) ==> not_fresh_at sa p) /\
   (!p z. cenv.ce_return_pc = SOME (PtrVar (Var p) z) ==> not_fresh_at sa p) /\
   (!p. not_fresh_at sa p ==> p <> len /\ p <> a /\ p <> b) ==>
-  ?H th j.
-    gas_path_ptr D 0 ctx fn PG G tn s 0 H th
-      (Abort err (t with vs_inst_idx := j)) /\ ghost_kept cenv es sa G tn s H th
+  ?HG th j.
+    gas_path_ptr D 0 ctx fn PG G tn s 0 HG th
+      (Abort err (t with vs_inst_idx := j)) /\ ghost_kept cenv es sa G tn s HG th
 Proof
   strip_tac >> qpat_x_assum `code = _` SUBST_ALL_TAC >>
   `ptr_covers G tn src s 32` by
@@ -224,7 +224,7 @@ Proof
       mk_inst (id+2) ISZERO [Var a] [b]; mk_inst (id+3) ASSERT [Var b] []]` by
     simp[mk_inst_def, is_terminator_def] >>
   drule_all run_inst_seq_abort_zero_path_ptr >> strip_tac >>
-  qexistsl_tac [`H`,`th`,`j`] >> conj_tac
+  qexistsl_tac [`HG`,`th`,`j`] >> conj_tac
   >- (rev_drule gas_path_ptr_then >> disch_then drule >> simp[]) >>
   simp[ghost_kept_def] >> metis_tac[]
 QED
@@ -238,14 +238,14 @@ Theorem convert_cast_success_path:
   ptr_covers G tn src s sz /\ 32 <= sz /\ lookup_var src s = SOME w /\
   not_fresh_at sa src /\
   (!j. w2n w <= j /\ j < w2n w + 32 ==> j NOTIN tn.t_mem) /\
-  ghost_inv d cenv cx es G tn s /\ local_ptrs_reserved cenv sa /\
+  ghost_inv H d cenv cx es G tn s /\ local_ptrs_reserved cenv sa /\
   (!p z. cenv.ce_return_buf = SOME (PtrVar (Var p) z) ==> not_fresh_at sa p) /\
   (!p z. cenv.ce_return_pc = SOME (PtrVar (Var p) z) ==> not_fresh_at sa p) ==>
-  out = Var src /\ ?H th.
-    gas_path_ptr D 0 ctx fn PG G tn s 0 H th
+  out = Var src /\ ?HG th.
+    gas_path_ptr D 0 ctx fn PG G tn s 0 HG th
       (OK (t with vs_inst_idx := s.vs_inst_idx + LENGTH (emitted_insts sa sb))) /\
-    ghost_inv d cenv cx es H th t /\
-    ghost_kept cenv es sa G tn s H th /\ ptr_covers H th src t sz /\
+    ghost_inv H d cenv cx es HG th t /\
+    ghost_kept cenv es sa G tn s HG th /\ ptr_covers HG th src t sz /\
     t.vs_memory = s.vs_memory /\ th.t_mem = tn.t_mem
 Proof
   strip_tac >> drule convert_cast_emitted_shape >> strip_tac >> simp[] >>
@@ -265,12 +265,12 @@ Theorem convert_cast_abort_path:
   ptr_covers G tn src s sz /\ 32 <= sz /\ lookup_var src s = SOME w /\
   not_fresh_at sa src /\
   (!j. w2n w <= j /\ j < w2n w + 32 ==> j NOTIN tn.t_mem) /\
-  ghost_inv d cenv cx es G tn s /\ local_ptrs_reserved cenv sa /\
+  ghost_inv H d cenv cx es G tn s /\ local_ptrs_reserved cenv sa /\
   (!p z. cenv.ce_return_buf = SOME (PtrVar (Var p) z) ==> not_fresh_at sa p) /\
   (!p z. cenv.ce_return_pc = SOME (PtrVar (Var p) z) ==> not_fresh_at sa p) ==>
-  out = Var src /\ ?H th j.
-    gas_path_ptr D 0 ctx fn PG G tn s 0 H th
-      (Abort err (t with vs_inst_idx := j)) /\ ghost_kept cenv es sa G tn s H th
+  out = Var src /\ ?HG th j.
+    gas_path_ptr D 0 ctx fn PG G tn s 0 HG th
+      (Abort err (t with vs_inst_idx := j)) /\ ghost_kept cenv es sa G tn s HG th
 Proof
   strip_tac >> drule convert_cast_emitted_shape >> strip_tac >> simp[] >>
   Cases_on `n < i` >> fs[]

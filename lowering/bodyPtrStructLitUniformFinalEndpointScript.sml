@@ -17,7 +17,7 @@ Theorem structlit_uniform_endpoint_posts:
   (!m. mem_agree_outside tn.t_mem s.vs_memory m ==>
     fields_in_memory (ZIP (names,vs)) (ZIP (names,tvs)) addr m) /\
   (~expr_has_effect e ==> pure) ==>
-  vv_post ctx func ce cx e es sa sb s0 ee (Value (StructV (ZIP (names,vs))))
+  vv_post H ctx func ce cx e es sa sb s0 ee (Value (StructV (ZIP (names,vs))))
     (LocatedValue (expr_type e) (mk_ptr (Var root) LocMemory)) s /\
   ptr_vv_ok cx (expr_type e) (Value (StructV (ZIP (names,vs))))
     (LocatedValue (expr_type e) (mk_ptr (Var root) LocMemory)) ee G tn s /\
@@ -70,9 +70,9 @@ QED
 (* Buffer metadata is not part of either semantic pointer observation. *)
 Theorem structlit_uniform_pointer_posts_cong:
   p.ptr_operand = q.ptr_operand /\ p.ptr_location = q.ptr_location /\
-  vv_post ctx func ce cx e es sa sb s0 ee raw (LocatedValue ty p) s /\
+  vv_post H ctx func ce cx e es sa sb s0 ee raw (LocatedValue ty p) s /\
   ptr_vv_ok cx et raw (LocatedValue ty p) ee G tn s ==>
-  vv_post ctx func ce cx e es sa sb s0 ee raw (LocatedValue ty q) s /\
+  vv_post H ctx func ce cx e es sa sb s0 ee raw (LocatedValue ty q) s /\
   ptr_vv_ok cx et raw (LocatedValue ty q) ee G tn s
 Proof
   strip_tac >> conj_tac >- metis_tac[vv_post_pointer_cong] >>

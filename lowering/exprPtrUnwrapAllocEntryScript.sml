@@ -8,7 +8,7 @@ Ancestors
 
 Theorem unwrap_alloc_entry:
   compile_alloc_buffer nb sm = (buf,mid) /\ fn_has_code sm mid func /\
-  stmt_state_rel ctx func cenv cx es s /\ nb < dimword (:256) /\
+  stmt_state_rel H ctx func cenv cx es s /\ nb < dimword (:256) /\
   ~ctx_has_dalloca ctx /\ ~s.vs_halted /\
   s.vs_current_bb = sm.cs_current_bb /\
   s.vs_inst_idx = LENGTH sm.cs_current_insts ==>
@@ -61,7 +61,7 @@ QED
 
 Theorem unwrap_alloc_storage_source:
   compile_alloc_buffer nb sm = (buf,mid) /\ fn_has_code sm mid func /\
-  stmt_state_rel ctx func cenv cx es s /\ nb < dimword (:256) /\
+  stmt_state_rel H ctx func cenv cx es s /\ nb < dimword (:256) /\
   buf.buf_operand = Var out /\
   u = update_var out (n2w (buffer_allocation_base s sm.cs_next_id))
       (buffer_allocation_fields s sm.cs_next_id nb) /\

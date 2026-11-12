@@ -43,11 +43,11 @@ QED
 Theorem target_extension_outcome_ptr:
   (!res. source es = (res,es) ==>
     !tail. source (es with gas_obs := tail) = (res,es with gas_obs := tail)) /\
-  ((?pv t H un. source es = (INL pv,es) /\
-      gas_path_ptr D 0 ctx fn PG G tn s 0 H un (OK t) /\
-      Q (INL pv) (es with gas_obs := []) H un t) \/
-   (?msg t H un fuel pc. source es = (INR (Error (RuntimeError msg)),es) /\
-      gas_path_ptr D 0 ctx fn PG G tn s fuel H un
+  ((?pv t HG un. source es = (INL pv,es) /\
+      gas_path_ptr D 0 ctx fn PG G tn s 0 HG un (OK t) /\
+      Q (INL pv) (es with gas_obs := []) HG un t) \/
+   (?msg t HG un fuel pc. source es = (INR (Error (RuntimeError msg)),es) /\
+      gas_path_ptr D 0 ctx fn PG G tn s fuel HG un
         (Abort Revert_abort (t with vs_inst_idx := pc)))) ==>
   gas_outcome_ptr D tops (ctx,fn) PG source (es,s,G,tn) Q
     (\res ee gt r. expr_exit res r)
@@ -55,10 +55,10 @@ Proof
   strip_tac
   >- (simp[gas_outcome_ptr_def] >> qexists_tac `[]` >> disj1_tac >>
       simp[gas_summary_ptr_at_def] >>
-      qexistsl_tac [`INL pv`, `es`, `H`, `un`, `OK t`] >> simp[]) >>
+      qexistsl_tac [`INL pv`, `es`, `HG`, `un`, `OK t`] >> simp[]) >>
   simp[gas_outcome_ptr_def] >> qexists_tac `REPLICATE fuel F` >> disj1_tac >>
   simp[gas_summary_ptr_at_def] >>
-  qexistsl_tac [`INR (Error (RuntimeError msg))`, `es`, `H`, `un`,
+  qexistsl_tac [`INR (Error (RuntimeError msg))`, `es`, `HG`, `un`,
     `Abort Revert_abort (t with vs_inst_idx := pc)`] >>
   simp[fragExecTheory.exit_result_def, exprSimDefsTheory.expr_exit_def]
 QED
@@ -84,25 +84,25 @@ Theorem target_array_suffix_outcome_ptr:
   s.vs_current_bb = sb.cs_current_bb /\
   s.vs_inst_idx + LENGTH (emitted_insts sn sb) = LENGTH sb.cs_current_insts /\
   ef.gas_obs = [] /\
-  ((?pv' t H un.
+  ((?pv' t HG un.
       extend_place cx pv sub ef = (INL pv',ef) /\
-      gas_path_ptr D 0 ctx fn PG G tn s 0 H un (OK t) /\
-      target_post ctx fn cenv cx es sa sb s0 ef pv' vt rb t /\
-      ghost_inv d cenv cx ef H un t /\ target_ptr_ok cenv pv' rb H un t /\
-      ghost_kept cenv es sa G0 tn0 s0 H un /\
+      gas_path_ptr D 0 ctx fn PG G tn s 0 HG un (OK t) /\
+      target_post H ctx fn cenv cx es sa sb s0 ef pv' vt rb t /\
+      ghost_inv H d cenv cx ef HG un t /\ target_ptr_ok cenv pv' rb HG un t /\
+      ghost_kept cenv es sa G0 tn0 s0 HG un /\
       t.vs_current_bb = s.vs_current_bb /\
       t.vs_inst_idx = s.vs_inst_idx + LENGTH (emitted_insts sn sb)) \/
-   (?msg t H un fuel pc.
+   (?msg t HG un fuel pc.
       extend_place cx pv sub ef = (INR (Error (RuntimeError msg)),ef) /\
-      gas_path_ptr D 0 ctx fn PG G tn s fuel H un
+      gas_path_ptr D 0 ctx fn PG G tn s fuel HG un
         (Abort Revert_abort (t with vs_inst_idx := pc)))) ==>
   gas_outcome_ptr D tops (ctx,fn) PG (extend_place cx pv sub) (ef,s,G,tn)
-    (\res ee H un t. ?pv'. res = INL pv' /\
-      target_post ctx fn cenv cx es sa sb s0 ee pv' vt rb t /\
+    (\res ee HG un t. ?pv'. res = INL pv' /\
+      target_post H ctx fn cenv cx es sa sb s0 ee pv' vt rb t /\
       t.vs_current_bb = sb.cs_current_bb /\
       t.vs_inst_idx = LENGTH sb.cs_current_insts /\
-      ghost_inv d cenv cx ee H un t /\ target_ptr_ok cenv pv' rb H un t /\
-      ghost_kept cenv es sa G0 tn0 s0 H un)
+      ghost_inv H d cenv cx ee HG un t /\ target_ptr_ok cenv pv' rb HG un t /\
+      ghost_kept cenv es sa G0 tn0 s0 HG un)
     (\res ee gt r. expr_exit res r)
 Proof
   disch_tac >> irule target_extension_outcome_ptr >> conj_tac

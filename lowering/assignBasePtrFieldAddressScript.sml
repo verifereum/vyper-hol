@@ -9,17 +9,17 @@ Ancestors assignBasePtrFieldForce bodyPtrAttributeAdd bodyPtrAttributeCase
 Theorem assign_base_field_vv_update:
   ptr_vv_ok cx ty tv vv es G tn s /\
   (!x. vv_operand vv = Var x ==> x <> out) /\
-  (!x. x <> out ==> FLOOKUP H x = FLOOKUP G x /\
+  (!x. x <> out ==> FLOOKUP HG x = FLOOKUP G x /\
     op_taint tf (Var x) = op_taint tn (Var x)) /\
   tf.t_mem = tn.t_mem /\ tf.t_stor = tn.t_stor /\ tf.t_trans = tn.t_trans ==>
-  ptr_vv_ok cx ty tv vv es H tf
+  ptr_vv_ok cx ty tv vv es HG tf
     (update_var out w s with vs_inst_idx := n)
 Proof
   strip_tac >>
   `eval_operand (vv_operand vv) (update_var out w s with vs_inst_idx := n) =
    eval_operand (vv_operand vv) s /\
    op_taint tf (vv_operand vv) = op_taint tn (vv_operand vv) /\
-   op_prov H (vv_operand vv) = op_prov G (vv_operand vv)` by
+   op_prov HG (vv_operand vv) = op_prov G (vv_operand vv)` by
     (Cases_on `vv_operand vv` >>
      gvs[eval_operand_def, op_taint_def, op_prov_def, update_var_def,
          lookup_var_def, FLOOKUP_UPDATE]) >>
@@ -33,8 +33,8 @@ Theorem assign_base_field_add_vv_post:
   compile_expr cenv ty e sa = (vv,sm) /\ local_ptrs_reserved cenv sa /\
   sa.cs_next_var <= sm.cs_next_var /\
   emit_op ADD [bop; Lit (n2w off)] sm = (dst,sn) /\
-  vv_post ctx func cenv cx e es sa sm s0 ee tv vv s ==>
-  vv_post ctx func cenv cx e es sa sn s0 ee tv vv
+  vv_post H ctx func cenv cx e es sa sm s0 ee tv vv s ==>
+  vv_post H ctx func cenv cx e es sa sn s0 ee tv vv
     (update_var (STRING #"%" (toString sm.cs_next_var)) bw s
       with vs_inst_idx := n)
 Proof
@@ -48,22 +48,22 @@ Theorem assign_base_field_add_ptr_post:
   compile_expr cenv ty e sa = (vv,sm) /\ local_ptrs_reserved cenv sa /\
   sa.cs_next_var <= sm.cs_next_var /\
   emit_op ADD [bop; Lit (n2w off)] sm = (dst,sn) /\
-  vv_post ctx func cenv cx e es sa sm s0 ee tv vv s /\
+  vv_post H ctx func cenv cx e es sa sm s0 ee tv vv s /\
   ptr_vv_ok cx (expr_type e) tv vv ee G tn s /\
-  ghost_inv d cenv cx ee G tn s /\ ghost_kept cenv es sa Gi ti s0 G tn /\
+  ghost_inv H d cenv cx ee G tn s /\ ghost_kept cenv es sa Gi ti s0 G tn /\
   (!x sz. cenv.ce_return_buf = SOME (PtrVar (Var x) sz) ==> not_fresh_at sa x) /\
   (!x sz. cenv.ce_return_pc = SOME (PtrVar (Var x) sz) ==> not_fresh_at sa x) /\
   (!p. p <> STRING #"%" (toString sm.cs_next_var) ==>
-    FLOOKUP H p = FLOOKUP G p /\ op_taint tf (Var p) = op_taint tn (Var p)) /\
+    FLOOKUP HG p = FLOOKUP G p /\ op_taint tf (Var p) = op_taint tn (Var p)) /\
   tf.t_mem = tn.t_mem /\ tf.t_stor = tn.t_stor /\
   tf.t_trans = tn.t_trans /\ tf.t_imm = tn.t_imm ==>
-  vv_post ctx func cenv cx e es sa sn s0 ee tv vv
+  vv_post H ctx func cenv cx e es sa sn s0 ee tv vv
     (update_var (STRING #"%" (toString sm.cs_next_var)) bw s with vs_inst_idx := n) /\
-  ptr_vv_ok cx (expr_type e) tv vv ee H tf
+  ptr_vv_ok cx (expr_type e) tv vv ee HG tf
     (update_var (STRING #"%" (toString sm.cs_next_var)) bw s with vs_inst_idx := n) /\
-  ghost_inv d cenv cx ee H tf
+  ghost_inv H d cenv cx ee HG tf
     (update_var (STRING #"%" (toString sm.cs_next_var)) bw s with vs_inst_idx := n) /\
-  ghost_kept cenv es sa Gi ti s0 H tf
+  ghost_kept cenv es sa Gi ti s0 HG tf
 Proof
   strip_tac >> conj_tac
   >- (irule assign_base_field_add_vv_post >> goal_assum (drule_at Any) >>
@@ -86,20 +86,20 @@ Theorem assign_base_field_add_vv_path_ptr:
   fn_has_code sm sn func /\ ~ctx_has_dalloca ctx /\ ~s.vs_halted /\
   s.vs_current_bb = sm.cs_current_bb /\ s.vs_inst_idx = LENGTH sm.cs_current_insts /\
   eval_operand bop s = SOME bw /\ op_taint tn bop = {} /\
-  vv_post ctx func cenv cx e es sa sm s0 ee tv vv s /\
+  vv_post H ctx func cenv cx e es sa sm s0 ee tv vv s /\
   ptr_vv_ok cx (expr_type e) tv vv ee G tn s /\
-  ghost_inv d cenv cx ee G tn s /\ ghost_kept cenv es sa Gi ti s0 G tn /\
+  ghost_inv H d cenv cx ee G tn s /\ ghost_kept cenv es sa Gi ti s0 G tn /\
   (!x sz. cenv.ce_return_buf = SOME (PtrVar (Var x) sz) ==> not_fresh_at sa x) /\
   (!x sz. cenv.ce_return_pc = SOME (PtrVar (Var x) sz) ==> not_fresh_at sa x) ==>
-  ?out H tf q.
+  ?out HG tf q.
     dst = Var out /\
-    gas_path_ptr D 0 ctx func PG G tn s 0 H tf (OK q) /\
+    gas_path_ptr D 0 ctx func PG G tn s 0 HG tf (OK q) /\
     q = (update_var out (bw + n2w off) s with vs_inst_idx := SUC s.vs_inst_idx) /\
-    vv_post ctx func cenv cx e es sa sn s0 ee tv vv q /\
-    ptr_vv_ok cx (expr_type e) tv vv ee H tf q /\
-    ghost_inv d cenv cx ee H tf q /\ ghost_kept cenv es sa Gi ti s0 H tf /\
+    vv_post H ctx func cenv cx e es sa sn s0 ee tv vv q /\
+    ptr_vv_ok cx (expr_type e) tv vv ee HG tf q /\
+    ghost_inv H d cenv cx ee HG tf q /\ ghost_kept cenv es sa Gi ti s0 HG tf /\
     eval_operand dst q = SOME (bw + n2w off) /\
-    FLOOKUP H out = op_prov G bop /\ op_taint tf dst = {} /\
+    FLOOKUP HG out = op_prov G bop /\ op_taint tf dst = {} /\
     ~q.vs_halted /\ q.vs_current_bb = sn.cs_current_bb /\
     q.vs_inst_idx = LENGTH sn.cs_current_insts
 Proof
@@ -127,23 +127,23 @@ Theorem assign_base_field_rebased_word_read_ptr:
   fn_has_code sm sb func /\ ~ctx_has_dalloca ctx /\ ~cenv.ce_is_ctor /\
   evaluate_type (get_tenv cx) (expr_type e) = SOME rty /\
   (!v. read_result cx tv ee = (INL v,ee) ==> value_has_type rty v) /\
-  vv_post ctx func cenv cx e es sa sm s0 ee tv vv s /\
+  vv_post H ctx func cenv cx e es sa sm s0 ee tv vv s /\
   ~s.vs_halted /\ s.vs_current_bb = sm.cs_current_bb /\
   s.vs_inst_idx = LENGTH sm.cs_current_insts /\
-  ghost_inv d cenv cx ee G tn s /\
+  ghost_inv H d cenv cx ee G tn s /\
   ptr_vv_ok cx (expr_type e) tv vv ee G tn s /\
   (!x sz. cenv.ce_return_buf = SOME (PtrVar (Var x) sz) ==> not_fresh_at sa x) /\
   (!x sz. cenv.ce_return_pc = SOME (PtrVar (Var x) sz) ==> not_fresh_at sa x) ==>
-  ?v H tf z.
-    gas_marked_exec_ptr (cx_dead cx) (ctx,func) PG (read_result cx tv)
-      (ee,s,G,tn) [] (INL v) ee H tf (OK z) /\
-    expr_post ctx func cenv cx e ee (sa with cs_next_var := sm.cs_next_var)
+  ?v HG tf z.
+    gas_marked_exec_ptr (cx_dead H cx) (ctx,func) PG (read_result cx tv)
+      (ee,s,G,tn) [] (INL v) ee HG tf (OK z) /\
+    expr_post H ctx func cenv cx e ee (sa with cs_next_var := sm.cs_next_var)
       sb s ee v op z /\
     z.vs_current_bb = sb.cs_current_bb /\ z.vs_inst_idx = LENGTH sb.cs_current_insts /\
-    ghost_inv d cenv cx ee H tf z /\
-    ptr_val_ok cx (expr_type e) v op H tf z /\
-    (~is_word_type (expr_type e) ==> ptr_buf_ok cenv e op H z) /\
-    ghost_kept cenv ee (sa with cs_next_var := sm.cs_next_var) G tn s H tf
+    ghost_inv H d cenv cx ee HG tf z /\
+    ptr_val_ok cx (expr_type e) v op HG tf z /\
+    (~is_word_type (expr_type e) ==> ptr_buf_ok cenv e op HG z) /\
+    ghost_kept cenv ee (sa with cs_next_var := sm.cs_next_var) G tn s HG tf
 Proof
   strip_tac >>
   drule vv_post_rebase >> strip_tac >>
@@ -157,12 +157,12 @@ Proof
 QED
 
 Theorem assign_base_field_rebased_destination:
-  expr_post ctx func cenv cx e ee (sa with cs_next_var := sm.cs_next_var)
+  expr_post H ctx func cenv cx e ee (sa with cs_next_var := sm.cs_next_var)
     sb s ee v op z /\
-  ghost_kept cenv ee (sa with cs_next_var := sm.cs_next_var) G tn s H tf /\
+  ghost_kept cenv ee (sa with cs_next_var := sm.cs_next_var) G tn s HG tf /\
   not_fresh_at sm x /\ eval_operand (Var x) s = SOME w ==>
   eval_operand (Var x) z = SOME w /\
-  FLOOKUP H x = FLOOKUP G x /\ op_taint tf (Var x) = op_taint tn (Var x)
+  FLOOKUP HG x = FLOOKUP G x /\ op_taint tf (Var x) = op_taint tn (Var x)
 Proof
   simp[expr_post_def, ghost_kept_def, not_fresh_at_def, eval_operand_def] >>
   metis_tac[]
@@ -171,16 +171,16 @@ QED
 
 (* Compose the ordinary and ghost frames at the same post-ADD endpoint. *)
 Theorem assign_base_field_rebased_posts:
-  stmt_state_rel ctx func cenv cx es s0 /\ local_ptrs_reserved cenv sa /\
+  stmt_state_rel H ctx func cenv cx es s0 /\ local_ptrs_reserved cenv sa /\
   MAP FDOM es.scopes = MAP FDOM ee.scopes /\
   sa.cs_next_var <= sm.cs_next_var /\ is_word_type (expr_type e) /\
-  vv_post ctx func cenv cx e es sa sm s0 ee tv vv q /\
+  vv_post H ctx func cenv cx e es sa sm s0 ee tv vv q /\
   ghost_kept cenv es sa Gi ti s0 G tn /\
-  expr_post ctx func cenv cx e ee (sa with cs_next_var := sm.cs_next_var)
+  expr_post H ctx func cenv cx e ee (sa with cs_next_var := sm.cs_next_var)
     sb q ee v op z /\
-  ghost_kept cenv ee (sa with cs_next_var := sm.cs_next_var) G tn q H tf ==>
-  expr_post ctx func cenv cx e es sa sb s0 ee v op z /\
-  ghost_kept cenv es sa Gi ti s0 H tf
+  ghost_kept cenv ee (sa with cs_next_var := sm.cs_next_var) G tn q HG tf ==>
+  expr_post H ctx func cenv cx e es sa sb s0 ee v op z /\
+  ghost_kept cenv es sa Gi ti s0 HG tf
 Proof
   strip_tac >>
   `wb_frame cenv es ee sa s0 q` by
@@ -194,12 +194,12 @@ Proof
   `~expr_has_effect e ==> pure_frame cenv func es sa s0 z` by
     (strip_tac >>
      `pure_frame cenv func es sa s0 q` by
-       (qpat_x_assum `vv_post _ _ _ _ _ _ _ _ _ _ _ _ _`
+       (qpat_x_assum `vv_post _ _ _ _ _ _ _ _ _ _ _ _ _ _`
           (strip_assume_tac o REWRITE_RULE [vv_post_def]) >>
         qpat_x_assum `~expr_has_effect e ==> pure_frame _ _ _ _ _ _` irule >>
         first_assum ACCEPT_TAC) >>
      `pure_frame cenv func ee (sa with cs_next_var := sm.cs_next_var) q z` by
-       (qpat_assum `expr_post _ _ _ _ _ ee _ _ _ _ _ _ _`
+       (qpat_assum `expr_post _ _ _ _ _ _ ee _ _ _ _ _ _ _`
           (mp_then Any mp_tac exprSimWordArgsTheory.expr_post_pure_frame) >>
         disch_then irule >> first_assum ACCEPT_TAC) >>
      qpat_x_assum `wb_frame cenv ee ee _ q z`
@@ -224,7 +224,7 @@ QED
 Theorem assign_base_field_add_word_read_ptr:
   compile_expr cenv ty e sa = (vv,sm) /\ local_ptrs_reserved cenv sa /\
   sa.cs_next_var <= sm.cs_next_var /\
-  stmt_state_rel ctx func cenv cx es s0 /\
+  stmt_state_rel H ctx func cenv cx es s0 /\
   MAP FDOM es.scopes = MAP FDOM ee.scopes /\
   emit_op ADD [bop; Lit (n2w off)] sm = (dst,sn) /\
   unwrap_value cenv vv sn = (op,su) /\
@@ -235,24 +235,24 @@ Theorem assign_base_field_add_word_read_ptr:
   ~s.vs_halted /\ s.vs_current_bb = sm.cs_current_bb /\
   s.vs_inst_idx = LENGTH sm.cs_current_insts /\
   eval_operand bop s = SOME bw /\ op_taint tn bop = {} /\
-  vv_post ctx func cenv cx e es sa sm s0 ee tv vv s /\
+  vv_post H ctx func cenv cx e es sa sm s0 ee tv vv s /\
   ptr_vv_ok cx (expr_type e) tv vv ee G tn s /\
-  ghost_inv d cenv cx ee G tn s /\ ghost_kept cenv es sa Gi ti s0 G tn /\
+  ghost_inv H d cenv cx ee G tn s /\ ghost_kept cenv es sa Gi ti s0 G tn /\
   (!x sz. cenv.ce_return_buf = SOME (PtrVar (Var x) sz) ==> not_fresh_at sa x) /\
   (!x sz. cenv.ce_return_pc = SOME (PtrVar (Var x) sz) ==> not_fresh_at sa x) ==>
-  ?v H tf z.
-    gas_marked_exec_ptr (cx_dead cx) (ctx,func) PG (read_result cx tv)
-      (ee,s,G,tn) [] (INL v) ee H tf (OK z) /\
-    expr_post ctx func cenv cx e es sa su s0 ee v op z /\
-    ghost_kept cenv es sa Gi ti s0 H tf /\
-    ghost_inv d cenv cx ee H tf z /\ ptr_val_ok cx (expr_type e) v op H tf z /\
+  ?v HG tf z.
+    gas_marked_exec_ptr (cx_dead H cx) (ctx,func) PG (read_result cx tv)
+      (ee,s,G,tn) [] (INL v) ee HG tf (OK z) /\
+    expr_post H ctx func cenv cx e es sa su s0 ee v op z /\
+    ghost_kept cenv es sa Gi ti s0 HG tf /\
+    ghost_inv H d cenv cx ee HG tf z /\ ptr_val_ok cx (expr_type e) v op HG tf z /\
     eval_operand dst z = SOME (bw + n2w off) /\
-    op_prov H dst = op_prov G bop /\ op_taint tf dst = {} /\
+    op_prov HG dst = op_prov G bop /\ op_taint tf dst = {} /\
     z.vs_current_bb = su.cs_current_bb /\ z.vs_inst_idx = LENGTH su.cs_current_insts
 Proof
   strip_tac >>
   drule_all assign_base_field_add_vv_path_ptr >>
-  disch_then (qspecl_then [`PG`, `cx_dead cx`] strip_assume_tac) >>
+  disch_then (qspecl_then [`PG`, `cx_dead H cx`] strip_assume_tac) >>
   `sa.cs_next_var <= sn.cs_next_var` by
     (drule emitted_insts_emit_op >> simp[]) >>
   drule_all assign_base_field_rebased_word_read_ptr >>
@@ -262,7 +262,7 @@ Proof
     (drule emitted_insts_emit_op >> simp[not_fresh_at_def, toString_11]) >>
   qpat_x_assum `dst = Var out` SUBST_ALL_TAC >>
   drule_all assign_base_field_rebased_destination >> strip_tac >>
-  qexistsl_tac [`v`, `H'`, `tf'`, `z`] >>
+  qexistsl_tac [`v`, `HG'`, `tf'`, `z`] >>
   gvs[op_prov_def] >>
   qpat_x_assum `gas_marked_exec_ptr _ _ _ _ _ _ _ _ _ _ _` mp_tac >>
   simp[gasSummaryComposePtrTheory.gas_marked_exec_ptr_def] >> strip_tac >> simp[] >>
@@ -271,12 +271,12 @@ QED
 
 (* The numerical bound is address-specific, not a provenance-site bound. *)
 Theorem assign_base_field_destination_coverage:
-  !G tn p s total bw dst out z off H tf n.
+  !G tn p s total bw dst out z off HG tf n.
   ptr_covers G tn p s total /\ eval_operand (Var p) s = SOME bw /\
   dst = Var out /\ eval_operand dst z = SOME (bw + n2w off) /\
-  op_prov H dst = op_prov G (Var p) /\ op_taint tf dst = {} /\
+  op_prov HG dst = op_prov G (Var p) /\ op_taint tf dst = {} /\
   w2n bw + off < dimword(:256) /\ off + n <= total ==>
-  ptr_covers H tf out z n
+  ptr_covers HG tf out z n
 Proof
   rpt strip_tac >>
   `?b cap. FLOOKUP G p = SOME (b,cap)` by
@@ -289,9 +289,9 @@ QED
 
 Theorem assign_base_field_destination_storage:
   eval_operand dst z = SOME (slot + n2w off) /\
-  op_prov H dst = op_prov G (Lit slot) /\ op_taint tf dst = {} ==>
+  op_prov HG dst = op_prov G (Lit slot) /\ op_taint tf dst = {} ==>
   eval_operand dst z = SOME (slot + n2w off) /\
-  op_prov H dst = NONE /\ op_taint tf dst = {}
+  op_prov HG dst = NONE /\ op_taint tf dst = {}
 Proof
   simp[op_prov_def]
 QED

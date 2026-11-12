@@ -6,7 +6,7 @@ Ancestors
   vyperState exprLowering compileEnv
 
 Theorem code_array_after_base_ptr:
-  gas_marked_exec_ptr (cx_dead cx) (ctx,func) PG (eval_expr cx obj)
+  gas_marked_exec_ptr (cx_dead H cx) (ctx,func) PG (eval_expr cx obj)
     (es,s0,G0,tn0) left (INL captured) mid G1 tn1 (OK t) /\
   expr_sim_ptr d ctx PG func cenv cx ty idx (mid with gas_obs := []) /\
   lower_value compile_expr cenv ty idx sm = (iop,si) /\
@@ -16,25 +16,25 @@ Theorem code_array_after_base_ptr:
   (!x sz. cenv.ce_return_pc = SOME (PtrVar (Var x) sz) ==> not_fresh_at sm x) /\
   gas_admissible (bind (eval_expr cx idx) (read_result cx)) expr_res_ok
     (mid with gas_obs := []) /\
-  stmt_state_rel ctx func cenv cx (mid with gas_obs := []) t /\
-  ghost_inv d cenv cx (mid with gas_obs := []) G1 tn1 t /\
+  stmt_state_rel H ctx func cenv cx (mid with gas_obs := []) t /\
+  ghost_inv H d cenv cx (mid with gas_obs := []) G1 tn1 t /\
   ~t.vs_halted /\ t.vs_current_bb = sm.cs_current_bb /\
   t.vs_inst_idx = LENGTH sm.cs_current_insts /\
   (!imarks raw v Gi tni u.
-     gas_marked_exec_ptr (cx_dead cx) (ctx,func) PG
+     gas_marked_exec_ptr (cx_dead H cx) (ctx,func) PG
        (bind (eval_expr cx idx) (read_result cx))
        (mid with gas_obs := [],t,G1,tn1) imarks (INL v) raw Gi tni (OK u) /\
-     expr_post ctx func cenv cx idx (mid with gas_obs := []) sm si t
+     expr_post H ctx func cenv cx idx (mid with gas_obs := []) sm si t
        (raw with gas_obs := []) v iop u /\
      u.vs_current_bb = si.cs_current_bb /\ u.vs_inst_idx = LENGTH si.cs_current_insts /\
-     ghost_inv d cenv cx (raw with gas_obs := []) Gi tni u /\
+     ghost_inv H d cenv cx (raw with gas_obs := []) Gi tni u /\
      ptr_val_ok cx (post_value_type cenv idx) v iop Gi tni u /\
      (~is_word_type (post_value_type cenv idx) ==> ptr_buf_ok cenv idx iop Gi u) /\
      ghost_kept cenv (mid with gas_obs := []) sm G1 tn1 t Gi tni ==>
-     gas_summary_ptr_at (cx_dead cx) (ctx,func) PG []
+     gas_summary_ptr_at (cx_dead H cx) (ctx,func) PG []
        (select_result cx (expr_type obj) captured (ValueSubscript v))
        (raw with gas_obs := [],u,Gi,tni) Q (\res ee gt out. expr_exit res out)) ==>
-  gas_outcome_ptr (cx_dead cx) (cx_tops cx) (ctx,func) PG
+  gas_outcome_ptr (cx_dead H cx) (cx_tops cx) (ctx,func) PG
     (eval_expr cx (Subscript ann obj idx)) (es,s0,G0,tn0)
     Q (\res ee gt out. expr_exit res out)
 Proof
@@ -48,9 +48,9 @@ Proof
     (Q.GEN `k` array_index_outcome_compose_ptr))) >>
   goal_assum (drule_at Any) >> BETA_TAC >>
   qexists `\v ee Gi tni u.
-    expr_post ctx func cenv cx idx (mid with gas_obs := []) sm si t ee v iop u /\
+    expr_post H ctx func cenv cx idx (mid with gas_obs := []) sm si t ee v iop u /\
     u.vs_current_bb = si.cs_current_bb /\ u.vs_inst_idx = LENGTH si.cs_current_insts /\
-    ghost_inv d cenv cx ee Gi tni u /\
+    ghost_inv H d cenv cx ee Gi tni u /\
     ptr_val_ok cx (post_value_type cenv idx) v iop Gi tni u /\
     (~is_word_type (post_value_type cenv idx) ==> ptr_buf_ok cenv idx iop Gi u) /\
     ghost_kept cenv (mid with gas_obs := []) sm G1 tn1 t Gi tni` >> simp[] >>

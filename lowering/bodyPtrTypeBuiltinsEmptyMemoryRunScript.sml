@@ -9,7 +9,7 @@ Ancestors
 Theorem empty_buffer_framed_certificate:
   !sz header sa sb buf func cenv cx es s t ctx D PG G tn d.
     compile_builtin_empty_complex sz header sa = (buf,sb) /\
-    fn_has_code sa sb func /\ stmt_state_rel ctx func cenv cx es s /\
+    fn_has_code sa sb func /\ stmt_state_rel H ctx func cenv cx es s /\
     fn_inst_ids_distinct func /\ local_ptrs_reserved cenv sa /\
     (!p n. cenv.ce_return_buf = SOME (PtrVar (Var p) n) ==> not_fresh_at sa p) /\
     (!p n. cenv.ce_return_pc = SOME (PtrVar (Var p) n) ==> not_fresh_at sa p) /\
@@ -19,14 +19,14 @@ Theorem empty_buffer_framed_certificate:
     (!a n. a+n <= w2n (THE (eval_operand buf.buf_operand t)) \/
       w2n (THE (eval_operand buf.buf_operand t))+sz <= a ==>
       mem_bytes_at a n t.vs_memory = mem_bytes_at a n s.vs_memory) /\
-    ghost_inv d cenv cx es G tn s ==>
-    ?p w H th. buf.buf_operand = Var p /\ lookup_var p t = SOME w /\
-      inst_seq_ptr D 0 ctx func PG G tn (emitted_insts sa sb) s H th /\
-      ptr_covers H th p t sz /\
+    ghost_inv H d cenv cx es G tn s ==>
+    ?p w HG th. buf.buf_operand = Var p /\ lookup_var p t = SOME w /\
+      inst_seq_ptr D 0 ctx func PG G tn (emitted_insts sa sb) s HG th /\
+      ptr_covers HG th p t sz /\
       (!a. w2n w <= a /\ a < w2n w+(if header then 32 else sz) ==>
         a NOTIN th.t_mem) /\
-      ghost_inv d cenv cx es H th t /\
-      ghost_kept cenv es sa G tn s H th
+      ghost_inv H d cenv cx es HG th t /\
+      ghost_kept cenv es sa G tn s HG th
 Proof
   rpt gen_tac >> strip_tac >>
   drule_all empty_buffer_compile_prefix >> strip_tac >>
@@ -87,7 +87,7 @@ Finalise empty_buffer_framed_certificate
 Theorem empty_buffer_framed_path:
   !sz header sa sb buf func cenv cx es s t ctx D PG G tn d.
     compile_builtin_empty_complex sz header sa = (buf,sb) /\
-    fn_has_code sa sb func /\ stmt_state_rel ctx func cenv cx es s /\
+    fn_has_code sa sb func /\ stmt_state_rel H ctx func cenv cx es s /\
     fn_inst_ids_distinct func /\ local_ptrs_reserved cenv sa /\
     (!p n. cenv.ce_return_buf = SOME (PtrVar (Var p) n) ==> not_fresh_at sa p) /\
     (!p n. cenv.ce_return_pc = SOME (PtrVar (Var p) n) ==> not_fresh_at sa p) /\
@@ -97,21 +97,21 @@ Theorem empty_buffer_framed_path:
     (!a n. a+n <= w2n (THE (eval_operand buf.buf_operand t)) \/
       w2n (THE (eval_operand buf.buf_operand t))+sz <= a ==>
       mem_bytes_at a n t.vs_memory = mem_bytes_at a n s.vs_memory) /\
-    ghost_inv d cenv cx es G tn s /\ ~s.vs_halted /\
+    ghost_inv H d cenv cx es G tn s /\ ~s.vs_halted /\
     s.vs_current_bb = sa.cs_current_bb /\
     s.vs_inst_idx = LENGTH sa.cs_current_insts ==>
-    ?p w H th. buf.buf_operand = Var p /\ lookup_var p t = SOME w /\
-      gas_path_ptr D 0 ctx func PG G tn s 0 H th
+    ?p w HG th. buf.buf_operand = Var p /\ lookup_var p t = SOME w /\
+      gas_path_ptr D 0 ctx func PG G tn s 0 HG th
         (OK (t with vs_inst_idx := LENGTH sb.cs_current_insts)) /\
-      ptr_covers H th p t sz /\
+      ptr_covers HG th p t sz /\
       (!a. w2n w <= a /\ a < w2n w+(if header then 32 else sz) ==>
         a NOTIN th.t_mem) /\
-      ghost_inv d cenv cx es H th t /\
-      ghost_kept cenv es sa G tn s H th
+      ghost_inv H d cenv cx es HG th t /\
+      ghost_kept cenv es sa G tn s HG th
 Proof
   rpt gen_tac >> strip_tac >>
   drule_all empty_buffer_framed_certificate >>
   disch_then (qspecl_then [`D`, `PG`] strip_assume_tac) >>
   drule_all empty_buffer_checked_path >>
-  strip_tac >> qexistsl_tac [`p`, `w`, `H`, `th`] >> simp[]
+  strip_tac >> qexistsl_tac [`p`, `w`, `HG`, `th`] >> simp[]
 QED

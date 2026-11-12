@@ -30,8 +30,8 @@ Theorem emit_clean_add_counted:
     (!q. not_fresh_at sa q ==>
       lookup_var q sf = lookup_var q s /\ FLOOKUP Gf q = FLOOKUP G q /\
       op_taint tnf (Var q) = op_taint tn (Var q)) /\
-    (!cenv cx es. stmt_state_rel ctx func cenv cx es s /\
-      local_ptrs_reserved cenv sa ==> stmt_state_rel ctx func cenv cx es sf)
+    (!cenv cx es. stmt_state_rel H ctx func cenv cx es s /\
+      local_ptrs_reserved cenv sa ==> stmt_state_rel H ctx func cenv cx es sf)
 Proof
   strip_tac >>
   drule_all (attribute_emit_binop_path_ptr |>
@@ -42,8 +42,8 @@ Proof
   qmatch_asmsub_abbrev_tac `gas_path_ptr D 0 ctx func PG G tn s 0 Gf tnf (OK sf)` >>
   `op_prov Gf (Var out) = NONE` by
     (simp[Abbr `Gf`, op_prov_def] >> irule step_prov_add_none >> simp[mk_inst_def]) >>
-  `!cenv cx es. stmt_state_rel ctx func cenv cx es s /\ local_ptrs_reserved cenv sa ==>
-    stmt_state_rel ctx func cenv cx es sf` by
+  `!cenv cx es. stmt_state_rel H ctx func cenv cx es s /\ local_ptrs_reserved cenv sa ==>
+    stmt_state_rel H ctx func cenv cx es sf` by
     (rpt strip_tac >> simp[Abbr `sf`] >> irule fresh_add_stmt_state_rel >>
      simp[] >> qexists_tac `sa` >> simp[] >> metis_tac[]) >>
   `sb.cs_current_bb = sa.cs_current_bb /\
@@ -77,8 +77,8 @@ Theorem code_mul_add_counted:
     (!q. not_fresh_at sa q ==>
       lookup_var q sf = lookup_var q s /\ FLOOKUP Gf q = FLOOKUP G q /\
       op_taint tnf (Var q) = op_taint tn (Var q)) /\
-    (!cenv cx es. stmt_state_rel ctx func cenv cx es s /\
-      local_ptrs_reserved cenv sa ==> stmt_state_rel ctx func cenv cx es sf)
+    (!cenv cx es. stmt_state_rel H ctx func cenv cx es s /\
+      local_ptrs_reserved cenv sa ==> stmt_state_rel H ctx func cenv cx es sf)
 Proof
   strip_tac >>
   `ci_mono sa sm /\ ci_mono sm sb` by metis_tac[ci_mono_emit_op, pairTheory.SND] >>
@@ -133,8 +133,8 @@ Theorem code_dynamic_address_counted:
     (!q. not_fresh_at sa q ==>
       lookup_var q sf = lookup_var q s /\ FLOOKUP Gf q = FLOOKUP G q /\
       op_taint tnf (Var q) = op_taint tn (Var q)) /\
-    (!cenv cx es. stmt_state_rel ctx func cenv cx es s /\
-      local_ptrs_reserved cenv sa ==> stmt_state_rel ctx func cenv cx es sf)
+    (!cenv cx es. stmt_state_rel H ctx func cenv cx es s /\
+      local_ptrs_reserved cenv sa ==> stmt_state_rel H ctx func cenv cx es sf)
 Proof
   strip_tac >>
   `ci_mono sa sm /\ ci_mono sm sn /\ ci_mono sn sb` by

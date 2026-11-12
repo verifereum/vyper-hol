@@ -6,12 +6,12 @@ Ancestors
   bodyPtrMakeArrayAddFrame exprSimUnwrap context exprLowering
 
 Theorem located_child_after_add_not_calldata:
-  vv_post ctx func cenv cx e es sa sm s0 es' tv (LocatedValue ty p) s /\
+  vv_post H ctx func cenv cx e es sa sm s0 es' tv (LocatedValue ty p) s /\
   local_ptrs_reserved cenv sa /\ sa.cs_next_var <= sm.cs_next_var /\
   (!z. vv_operand (LocatedValue ty p) = Var z ==> not_fresh_at sm z) /\
   emit_op opc [left;right] sm = (Var out,sn) ==>
   p.ptr_location <> LocCalldata /\
-  vv_post ctx func cenv cx e es sa sn s0 es' tv (LocatedValue ty p)
+  vv_post H ctx func cenv cx e es sa sn s0 es' tv (LocatedValue ty p)
     ((update_var out w s) with vs_inst_idx := SUC s.vs_inst_idx)
 Proof
   strip_tac >> conj_tac

@@ -26,8 +26,8 @@ QED
 (* The allocation's dirty bytes are harmless to every pre-existing frame.
    This also covers allocation sites which are reused and add no dirty bytes. *)
 Theorem literal_allocation_ghost_post:
-  ghost_inv d cenv cx es G tn s /\
-  stmt_state_rel ctx func cenv cx es u /\ local_ptrs_reserved cenv sa /\
+  ghost_inv H d cenv cx es G tn s /\
+  stmt_state_rel H ctx func cenv cx es u /\ local_ptrs_reserved cenv sa /\
   (!x sz. cenv.ce_return_buf = SOME (PtrVar (Var x) sz) ==>
     not_fresh_at sa x) /\
   (!x sz. cenv.ce_return_pc = SOME (PtrVar (Var x) sz) ==>
@@ -45,7 +45,7 @@ Theorem literal_allocation_ghost_post:
   tn'.t_stor = tn.t_stor /\ tn'.t_trans = tn.t_trans /\ tn'.t_imm = tn.t_imm /\
   u.vs_call_ctx = s.vs_call_ctx /\ u.vs_accounts = s.vs_accounts /\
   u.vs_transient = s.vs_transient ==>
-  ghost_inv d cenv cx es G' tn' u /\ ghost_kept cenv es sa G tn s G' tn'
+  ghost_inv H d cenv cx es G' tn' u /\ ghost_kept cenv es sa G tn s G' tn'
 Proof
   strip_tac >>
   `!x. not_fresh_at sa x ==> lookup_var x u = lookup_var x s` by
@@ -72,11 +72,11 @@ QED
 
 Theorem literal_alloca_ghost_endpoint:
   step_inst_base (mk_inst id ALLOCA [Lit (n2w n)] [out]) s = OK u /\
-  stmt_state_rel ctx func cenv cx es s /\
-  stmt_state_rel ctx func cenv cx es u /\
+  stmt_state_rel H ctx func cenv cx es s /\
+  stmt_state_rel H ctx func cenv cx es u /\
   MEM (mk_inst id ALLOCA [Lit (n2w n)] [out]) (fn_insts func) /\
   n < dimword (:256) /\ FLOOKUP u.vs_allocas id = SOME (b,n) /\
-  ghost_inv d cenv cx es G tn s /\ local_ptrs_reserved cenv sa /\
+  ghost_inv H d cenv cx es G tn s /\ local_ptrs_reserved cenv sa /\
   ~not_fresh_at sa out /\
   (!x sz. cenv.ce_return_buf = SOME (PtrVar (Var x) sz) ==>
     not_fresh_at sa x) /\
@@ -86,7 +86,7 @@ Theorem literal_alloca_ghost_endpoint:
     aid < sa.cs_next_id ==> regions_disjoint b n a len) /\
   (!name a len. local_region cenv es.scopes u name a len ==>
     regions_disjoint b n a len) ==>
-  ghost_inv d cenv cx es
+  ghost_inv H d cenv cx es
     (step_prov PG G (mk_inst id ALLOCA [Lit (n2w n)] [out]) u)
     (step_taint (mk_inst id ALLOCA [Lit (n2w n)] [out]) s u tn) u /\
   ghost_kept cenv es sa G tn s

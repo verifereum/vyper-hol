@@ -39,14 +39,14 @@ QED
 
 Theorem selector_buffer_run:
   compile_alloc_buffer 64 sa = (buf,sm) /\ buf.buf_operand = Var p /\
-  stmt_state_rel ctx fn cenv cx es s /\ fn_inst_ids_distinct fn /\
+  stmt_state_rel H ctx fn cenv cx es s /\ fn_inst_ids_distinct fn /\
   local_ptrs_reserved cenv sa /\
   MEM (mk_inst sa.cs_next_id ALLOCA [Lit 64w]
     [STRING #"%" (toString sa.cs_next_var)]) (fn_insts fn) /\
   eval_operand value s = SOME w /\
   (!x. value = Var x ==> not_fresh_at sa x /\ x <> q) ==>
   ?u b. run_inst_seq (emitted_insts sa sm) s = OK u /\
-    stmt_state_rel ctx fn cenv cx es u /\
+    stmt_state_rel H ctx fn cenv cx es u /\
     lookup_var p u = SOME (n2w b) /\ b+64 < dimword (:256) /\
     eval_operand value u = SOME w /\
     run_inst_seq (emitted_insts sa sm ++
@@ -75,20 +75,20 @@ Proof
 QED
 
 Theorem selector_store_tail_state_rel:
-  stmt_state_rel ctx fn cenv cx es s /\
+  stmt_state_rel H ctx fn cenv cx es s /\
   MEM inst (fn_insts fn) /\ inst.inst_opcode = ALLOCA /\
   FLOOKUP s.vs_allocas inst.inst_id = SOME (b,64) /\
   not_local_ptr cenv es.scopes q /\
   (!name lb sz. local_region cenv es.scopes s name lb sz ==>
     b+64 <= lb \/ lb+sz <= b) ==>
-  stmt_state_rel ctx fn cenv cx es
+  stmt_state_rel H ctx fn cenv cx es
     (mstore (b+32) w (update_var q (n2w (b+32)) (mstore b 4w s)))
 Proof
   strip_tac >>
-  `stmt_state_rel ctx fn cenv cx es (mstore b 4w s)` by
+  `stmt_state_rel H ctx fn cenv cx es (mstore b 4w s)` by
     (irule literal_mstore_state_rel >> simp[] >>
      qexistsl_tac [`b`, `inst`, `64`] >> simp[] >> metis_tac[]) >>
-  `stmt_state_rel ctx fn cenv cx es
+  `stmt_state_rel H ctx fn cenv cx es
     (update_var q (n2w (b+32)) (mstore b 4w s))` by
     (irule stmt_state_rel_update_var >> simp[]) >>
   irule literal_mstore_state_rel >>
@@ -159,7 +159,7 @@ QED
 
 Theorem selector_buffer_run_frame:
   compile_alloc_buffer 64 sa = (buf,sm) /\ buf.buf_operand = Var p /\
-  stmt_state_rel ctx fn cenv cx es s /\ fn_inst_ids_distinct fn /\
+  stmt_state_rel H ctx fn cenv cx es s /\ fn_inst_ids_distinct fn /\
   local_ptrs_reserved cenv sa /\ ~not_fresh_at sa q /\ p <> q /\
   MEM (mk_inst sa.cs_next_id ALLOCA [Lit 64w]
     [STRING #"%" (toString sa.cs_next_var)]) (fn_insts fn) /\
@@ -169,7 +169,7 @@ Theorem selector_buffer_run_frame:
       [mk_inst il MSTORE [Var p; Lit 4w] [];
        mk_inst ip ADD [Var p; Lit 32w] [q];
        mk_inst iw MSTORE [Var q; value] []]) s = OK t /\
-    stmt_state_rel ctx fn cenv cx es t /\
+    stmt_state_rel H ctx fn cenv cx es t /\
     eval_operand (Var p) t = SOME (n2w b) /\
     FLOOKUP t.vs_allocas sa.cs_next_id = SOME (b,64) /\
     sa.cs_next_id < sm.cs_next_id /\ b+64 < dimword (:256) /\

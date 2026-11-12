@@ -8,7 +8,7 @@ Ancestors
   fragExec fragExecPtr fragGasPathPtr instIdxIndep finite_map words arithmetic
 
 Theorem reason_selector_store_resources:
-  stmt_state_rel ctx func cenv cx es s /\
+  stmt_state_rel H ctx func cenv cx es s /\
   lookup_var outer s = SOME (n2w b) /\ b+n < dimword(:256) /\ 32 <= n /\
   MEM inst (fn_insts func) /\ inst.inst_opcode = ALLOCA /\
   FLOOKUP s.vs_allocas inst.inst_id = SOME (b,n) /\
@@ -16,7 +16,7 @@ Theorem reason_selector_store_resources:
     regions_disjoint b n off len) ==>
   step_inst_base (mk_inst id MSTORE [Var outer; Lit 0x08c379a0w] []) s =
     OK (mstore b 0x08c379a0w s) /\
-  stmt_state_rel ctx func cenv cx es (mstore b 0x08c379a0w s) /\
+  stmt_state_rel H ctx func cenv cx es (mstore b 0x08c379a0w s) /\
   (!PG G. step_prov PG G (mk_inst id MSTORE [Var outer; Lit 0x08c379a0w] [])
     (mstore b 0x08c379a0w s) = G) /\
   (!G tn old k. ptr_covers G tn old s k ==>
@@ -71,7 +71,7 @@ Theorem reason_selector_payload_path_ptr:
   emit_void MSTORE [Var outer; Lit 0x08c379a0w] ca = ((),cb) /\
   emit_op ADD [Var outer; Lit 32w] cb = (Var payload,cd) /\
   fn_has_code ca cb func /\ fn_has_code cb cd func /\ ~ctx_has_dalloca ctx /\
-  stmt_state_rel ctx func cenv cx es s /\ local_ptrs_reserved cenv ca /\
+  stmt_state_rel H ctx func cenv cx es s /\ local_ptrs_reserved cenv ca /\
   s.vs_current_bb = ca.cs_current_bb /\
   s.vs_inst_idx = LENGTH ca.cs_current_insts /\ ~s.vs_halted /\
   lookup_var outer s = SOME (n2w b) /\ b+n < dimword(:256) /\ 32 <= n /\
@@ -84,7 +84,7 @@ Theorem reason_selector_payload_path_ptr:
     gas_path_ptr D 0 ctx func PG G tn s 0 Gf tnf (OK t) /\
     t.vs_current_bb = cd.cs_current_bb /\
     t.vs_inst_idx = LENGTH cd.cs_current_insts /\ ~t.vs_halted /\
-    stmt_state_rel ctx func cenv cx es t /\ local_ptrs_reserved cenv cd /\
+    stmt_state_rel H ctx func cenv cx es t /\ local_ptrs_reserved cenv cd /\
     lookup_var outer t = SOME (n2w b) /\
     lookup_var payload t = SOME (n2w b+32w) /\
     ptr_covers Gf tnf outer t n /\ ptr_covers Gf tnf payload t (n-32) /\

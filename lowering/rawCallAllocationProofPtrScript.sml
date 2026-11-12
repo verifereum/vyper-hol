@@ -106,7 +106,7 @@ QED
 
 Theorem raw_call_alloc_buffer_stage:
   compile_alloc_buffer n sa = (buf,sb) /\ fn_has_code sa sb func /\
-  stmt_state_rel ctx func cenv cx es s /\ fn_inst_ids_distinct func /\
+  stmt_state_rel H ctx func cenv cx es s /\ fn_inst_ids_distinct func /\
   local_ptrs_reserved cenv sa /\ n < dimword(:256) /\
   s.vs_current_bb = sa.cs_current_bb /\
   s.vs_inst_idx = LENGTH sa.cs_current_insts /\
@@ -114,7 +114,7 @@ Theorem raw_call_alloc_buffer_stage:
   ?u b dirty.
     step_inst_base (mk_inst sa.cs_next_id ALLOCA [Lit (n2w n)]
       [STRING #"%" (toString sa.cs_next_var)]) s = OK u /\
-    stmt_state_rel ctx func cenv cx es u /\ u.vs_memory = s.vs_memory /\
+    stmt_state_rel H ctx func cenv cx es u /\ u.vs_memory = s.vs_memory /\
     (!x. not_fresh_at sa x ==> lookup_var x u = lookup_var x s) /\
     (!aid entry. FLOOKUP s.vs_allocas aid = SOME entry ==>
       FLOOKUP u.vs_allocas aid = SOME entry) /\
@@ -178,8 +178,8 @@ Proof
 QED
 
 Theorem raw_call_alloc_dirty_inv:
-  ghost_inv d cenv cx es G tn s /\
-  stmt_state_rel ctx func cenv cx es s /\ local_ptrs_reserved cenv sa /\
+  ghost_inv H d cenv cx es G tn s /\
+  stmt_state_rel H ctx func cenv cx es s /\ local_ptrs_reserved cenv sa /\
   (!x sz. cenv.ce_return_buf = SOME (PtrVar (Var x) sz) ==> not_fresh_at sa x) /\
   (!x sz. cenv.ce_return_pc = SOME (PtrVar (Var x) sz) ==> not_fresh_at sa x) /\
   (!x. not_fresh_at sa x ==> lookup_var x u = lookup_var x s /\
@@ -191,7 +191,7 @@ Theorem raw_call_alloc_dirty_inv:
   tn'.t_stor = tn.t_stor /\ tn'.t_trans = tn.t_trans /\ tn'.t_imm = tn.t_imm /\
   u.vs_call_ctx = s.vs_call_ctx /\ u.vs_accounts = s.vs_accounts /\
   u.vs_transient = s.vs_transient ==>
-  ghost_inv d cenv cx es G' tn' u
+  ghost_inv H d cenv cx es G' tn' u
 Proof
   strip_tac >> irule literal_ghost_inv_frame >>
   qexistsl_tac [`G`, `s`, `sa`, `tn`, `{i | b <= i /\ i < b+n}`] >>
@@ -217,8 +217,8 @@ Proof
 QED
 
 Theorem raw_call_alloc_ghost_frame:
-  ghost_inv d cenv cx es G tn s /\
-  stmt_state_rel ctx func cenv cx es s /\ local_ptrs_reserved cenv sa /\
+  ghost_inv H d cenv cx es G tn s /\
+  stmt_state_rel H ctx func cenv cx es s /\ local_ptrs_reserved cenv sa /\
   (!x sz. cenv.ce_return_buf = SOME (PtrVar (Var x) sz) ==> not_fresh_at sa x) /\
   (!x sz. cenv.ce_return_pc = SOME (PtrVar (Var x) sz) ==> not_fresh_at sa x) /\
   (!x. not_fresh_at sa x ==> x <> out /\ lookup_var x u = lookup_var x s) /\
@@ -228,7 +228,7 @@ Theorem raw_call_alloc_ghost_frame:
     regions_disjoint b n a len) /\
   step_inst_base (mk_inst id ALLOCA [Lit nw] [out]) s = OK u /\
   dirty SUBSET {i | b <= i /\ i < b+n} ==>
-  ghost_inv d cenv cx es (G |+ (out,(b,n)))
+  ghost_inv H d cenv cx es (G |+ (out,(b,n)))
     (tn with <|t_var := tn.t_var |+ (out,{}); t_mem := tn.t_mem UNION dirty|>) u /\
   ghost_kept cenv es sa G tn s (G |+ (out,(b,n)))
     (tn with <|t_var := tn.t_var |+ (out,{}); t_mem := tn.t_mem UNION dirty|>)
@@ -256,21 +256,21 @@ QED
 
 Theorem raw_call_alloc_buffer_ghost_stage:
   compile_alloc_buffer n sa = (buf,sb) /\ fn_has_code sa sb func /\
-  stmt_state_rel ctx func cenv cx es s /\ fn_inst_ids_distinct func /\
-  ghost_inv dep cenv cx es G tn s /\ local_ptrs_reserved cenv sa /\
+  stmt_state_rel H ctx func cenv cx es s /\ fn_inst_ids_distinct func /\
+  ghost_inv H dep cenv cx es G tn s /\ local_ptrs_reserved cenv sa /\
   (!x sz. cenv.ce_return_buf = SOME (PtrVar (Var x) sz) ==> not_fresh_at sa x) /\
   (!x sz. cenv.ce_return_pc = SOME (PtrVar (Var x) sz) ==> not_fresh_at sa x) /\
   n < dimword(:256) /\ s.vs_current_bb = sa.cs_current_bb /\
   s.vs_inst_idx = LENGTH sa.cs_current_insts /\
   ~s.vs_halted /\ ~ctx_has_dalloca ctx ==>
-  ?u b H un.
-    gas_path_ptr D 0 ctx func PG G tn s 0 H un (OK u) /\
-    ghost_inv dep cenv cx es H un u /\ ghost_kept cenv es sa G tn s H un /\
-    stmt_state_rel ctx func cenv cx es u /\ wb_frame cenv es es sa s u /\
+  ?u b HG un.
+    gas_path_ptr D 0 ctx func PG G tn s 0 HG un (OK u) /\
+    ghost_inv H dep cenv cx es HG un u /\ ghost_kept cenv es sa G tn s HG un /\
+    stmt_state_rel H ctx func cenv cx es u /\ wb_frame cenv es es sa s u /\
     u.vs_inst_idx = LENGTH sb.cs_current_insts /\
     u.vs_current_bb = sb.cs_current_bb /\ ~u.vs_halted /\
     eval_operand buf.buf_operand u = SOME (n2w b) /\
-    op_prov H buf.buf_operand = SOME (b,n) /\
+    op_prov HG buf.buf_operand = SOME (b,n) /\
     op_taint un buf.buf_operand = {} /\ b+n < dimword(:256) /\
     u.vs_memory = s.vs_memory /\
     (!aid a len. aid < sa.cs_next_id /\ FLOOKUP s.vs_allocas aid = SOME (a,len) ==>
@@ -278,7 +278,7 @@ Theorem raw_call_alloc_buffer_ghost_stage:
     (!name a len. local_region cenv es.scopes s name a len ==>
       regions_disjoint b n a len) /\
     (!x. not_fresh_at sa x ==> lookup_var x u = lookup_var x s) /\
-    H = G |+ (STRING #"%" (toString sa.cs_next_var),(b,n)) /\
+    HG = G |+ (STRING #"%" (toString sa.cs_next_var),(b,n)) /\
     (?dirty. dirty SUBSET {i | b <= i /\ i < b+n} /\
       un = tn with <|t_var := tn.t_var |+ (STRING #"%" (toString sa.cs_next_var),{});
         t_mem := tn.t_mem UNION dirty|>) /\
@@ -288,7 +288,7 @@ Theorem raw_call_alloc_buffer_ghost_stage:
 Proof
   strip_tac >> drule_all raw_call_alloc_buffer_stage >>
   disch_then (qspecl_then [`tn`, `PG`, `G`, `D`] strip_assume_tac) >>
-  `ghost_inv dep cenv cx es
+  `ghost_inv H dep cenv cx es
     (G |+ (STRING #"%" (toString sa.cs_next_var),(b,n)))
     (tn with <|t_var := tn.t_var |+ (STRING #"%" (toString sa.cs_next_var),{});
       t_mem := tn.t_mem UNION dirty|>) u /\
@@ -334,8 +334,8 @@ QED
 
 Theorem raw_call_outbuf_add_stage:
   emit_op ADD [Var x; Lit 32w] sa = (Var dx,sb) /\ fn_has_code sa sb func /\
-  stmt_state_rel ctx func cenv cx es s /\
-  ghost_inv dep cenv cx es G tn s /\ local_ptrs_reserved cenv sa /\
+  stmt_state_rel H ctx func cenv cx es s /\
+  ghost_inv H dep cenv cx es G tn s /\ local_ptrs_reserved cenv sa /\
   (!z sz. cenv.ce_return_buf = SOME (PtrVar (Var z) sz) ==> not_fresh_at sa z) /\
   (!z sz. cenv.ce_return_pc = SOME (PtrVar (Var z) sz) ==> not_fresh_at sa z) /\
   s.vs_current_bb = sa.cs_current_bb /\
@@ -343,17 +343,17 @@ Theorem raw_call_outbuf_add_stage:
   ~s.vs_halted /\ ~ctx_has_dalloca ctx /\ not_fresh_at sa x /\
   lookup_var x s = SOME (n2w b) /\ FLOOKUP G x = SOME (b,n) /\
   op_taint tn (Var x) = {} /\ 32+cap <= n /\ b+n < dimword(:256) ==>
-  ?H un u. gas_path_ptr D 0 ctx func PG G tn s 0 H un (OK u) /\
-    ghost_inv dep cenv cx es H un u /\ ghost_kept cenv es sa G tn s H un /\
-    stmt_state_rel ctx func cenv cx es u /\ wb_frame cenv es es sa s u /\
+  ?HG un u. gas_path_ptr D 0 ctx func PG G tn s 0 HG un (OK u) /\
+    ghost_inv H dep cenv cx es HG un u /\ ghost_kept cenv es sa G tn s HG un /\
+    stmt_state_rel H ctx func cenv cx es u /\ wb_frame cenv es es sa s u /\
     u.vs_current_bb = sb.cs_current_bb /\
     u.vs_inst_idx = LENGTH sb.cs_current_insts /\ ~u.vs_halted /\
-    ptr_covers H un x u n /\ ptr_covers H un dx u cap /\
+    ptr_covers HG un x u n /\ ptr_covers HG un dx u cap /\
     eval_operand (Var dx) u = SOME (n2w (b+32)) /\
     u.vs_memory = s.vs_memory /\ un.t_mem = tn.t_mem /\
     u.vs_returndata = s.vs_returndata /\ u.vs_allocas = s.vs_allocas /\
     (!z. not_fresh_at sa z ==> lookup_var z u = lookup_var z s /\
-      FLOOKUP H z = FLOOKUP G z /\ op_taint un (Var z) = op_taint tn (Var z))
+      FLOOKUP HG z = FLOOKUP G z /\ op_taint un (Var z) = op_taint tn (Var z))
 Proof
   strip_tac >>
   `op_taint tn (Lit 32w) = {} /\ eval_operand (Lit 32w) s = SOME 32w /\
@@ -361,10 +361,10 @@ Proof
     simp[ptrDisciplineTheory.op_taint_def, venomStateTheory.eval_operand_def] >>
   drule_all rawCallDataHeaderPtrTheory.raw_call_emit_add_path_ptr >>
   disch_then (qspecl_then [`PG`, `G`, `D`] assume_tac) >>
-  qmatch_asmsub_abbrev_tac `gas_path_ptr _ _ _ _ _ _ _ _ _ H un (OK u)` >>
-  `ghost_inv dep cenv cx es H un u /\ ghost_kept cenv es sa G tn s H un` by
+  qmatch_asmsub_abbrev_tac `gas_path_ptr _ _ _ _ _ _ _ _ _ HG un (OK u)` >>
+  `ghost_inv H dep cenv cx es HG un u /\ ghost_kept cenv es sa G tn s HG un` by
     (qunabbrev_tac `u` >> irule rawCallHeaderFramePtrTheory.raw_call_emit_add_ghost_frame >>
-     goal_assum (drule_at Any) >> simp[Abbr `H`, Abbr `un`] >>
+     goal_assum (drule_at Any) >> simp[Abbr `HG`, Abbr `un`] >>
      qexistsl_tac [`PG`, `Var x`, `Lit 32w`] >> simp[]) >>
   `~not_fresh_at sa dx /\ sb.cs_current_bb = sa.cs_current_bb` by
     (qpat_x_assum `emit_op _ _ _ = _` mp_tac >>
@@ -372,14 +372,14 @@ Proof
        fresh_id_def, emit_def, comp_return_def] >> rpt strip_tac >> gvs[] >>
      fs[not_fresh_at_def]) >>
   `x <> dx` by metis_tac[] >>
-  `stmt_state_rel ctx func cenv cx es u /\ wb_frame cenv es es sa s u` by
+  `stmt_state_rel H ctx func cenv cx es u /\ wb_frame cenv es es sa s u` by
     (qunabbrev_tac `u` >> irule rawCallDataHeaderPtrTheory.raw_call_fresh_update_state_frame >>
      goal_assum (drule_at Any) >> simp[]) >>
-  `H = G |+ (dx,(b,n)) /\ un = tn with t_var := tn.t_var |+ (dx,{})` by
-    (simp[Abbr `H`, Abbr `un`] >>
+  `HG = G |+ (dx,(b,n)) /\ un = tn with t_var := tn.t_var |+ (dx,{})` by
+    (simp[Abbr `HG`, Abbr `un`] >>
      metis_tac[exprSimPtrLiteralOpsTheory.literal_add_ghost]) >>
-  qexistsl_tac [`H`, `un`, `u`] >> simp[] >>
-  simp[Abbr `u`, Abbr `H`, Abbr `un`, exprSimPtrLiteralOpsTheory.literal_add_ghost,
+  qexistsl_tac [`HG`, `un`, `u`] >> simp[] >>
+  simp[Abbr `u`, Abbr `HG`, Abbr `un`, exprSimPtrLiteralOpsTheory.literal_add_ghost,
     ptr_covers_def, ptrDisciplineTheory.op_taint_def, venomStateTheory.update_var_def,
     venomStateTheory.lookup_var_def, finite_mapTheory.FLOOKUP_UPDATE,
     venomStateTheory.eval_operand_def, GSYM wordsTheory.word_add_n2w,
@@ -431,8 +431,8 @@ QED
 
 Theorem raw_call_outbuf_positive_stage:
   0 < cap /\ compile_raw_call_outbuf cap sa = ((ov,op),sb) /\
-  fn_has_code sa sb func /\ stmt_state_rel ctx func cenv cx es s /\
-  fn_inst_ids_distinct func /\ ghost_inv dep cenv cx es G tn s /\
+  fn_has_code sa sb func /\ stmt_state_rel H ctx func cenv cx es s /\
+  fn_inst_ids_distinct func /\ ghost_inv H dep cenv cx es G tn s /\
   local_ptrs_reserved cenv sa /\
   (!x sz. cenv.ce_return_buf = SOME (PtrVar (Var x) sz) ==> not_fresh_at sa x) /\
   (!x sz. cenv.ce_return_pc = SOME (PtrVar (Var x) sz) ==> not_fresh_at sa x) /\
@@ -440,14 +440,14 @@ Theorem raw_call_outbuf_positive_stage:
   s.vs_current_bb = sa.cs_current_bb /\
   s.vs_inst_idx = LENGTH sa.cs_current_insts /\
   ~s.vs_halted /\ ~ctx_has_dalloca ctx ==>
-  ?H un u x dx. ov = Var x /\ op = Var dx /\
-    gas_path_ptr D 0 ctx func PG G tn s 0 H un (OK u) /\
-    ghost_inv dep cenv cx es H un u /\ ghost_kept cenv es sa G tn s H un /\
-    stmt_state_rel ctx func cenv cx es u /\ wb_frame cenv es es sa s u /\
+  ?HG un u x dx. ov = Var x /\ op = Var dx /\
+    gas_path_ptr D 0 ctx func PG G tn s 0 HG un (OK u) /\
+    ghost_inv H dep cenv cx es HG un u /\ ghost_kept cenv es sa G tn s HG un /\
+    stmt_state_rel H ctx func cenv cx es u /\ wb_frame cenv es es sa s u /\
     u.vs_current_bb = sb.cs_current_bb /\
     u.vs_inst_idx = LENGTH sb.cs_current_insts /\ ~u.vs_halted /\
-    ptr_covers H un x u (((cap+31) DIV 32)*32+32) /\
-    ptr_covers H un dx u cap /\ u.vs_memory = s.vs_memory /\
+    ptr_covers HG un x u (((cap+31) DIV 32)*32+32) /\
+    ptr_covers HG un dx u cap /\ u.vs_memory = s.vs_memory /\
     (!aid. aid < sa.cs_next_id ==> FLOOKUP u.vs_allocas aid = FLOOKUP s.vs_allocas aid) /\
     (!z. not_fresh_at sa z ==> lookup_var z u = lookup_var z s) /\
     (?dst. eval_operand op u = SOME (n2w dst) /\
@@ -488,7 +488,7 @@ Proof
   `32+cap <= 32*((cap+31) DIV 32)+32` by simp[raw_call_outbuf_capacity] >>
   drule_all raw_call_outbuf_add_stage >>
   disch_then (qspecl_then [`PG`, `D`] strip_assume_tac) >>
-  `gas_path_ptr D 0 ctx func PG G tn s 0 H un (OK u')` by
+  `gas_path_ptr D 0 ctx func PG G tn s 0 HG un (OK u')` by
     (drule_all fragGasPathPtrTheory.gas_path_ptr_then >> simp[]) >>
   `wb_frame cenv es es sa s u'` by
     (mp_tac (Q.SPECL [`func`, `cenv`, `cx`, `es`, `s`, `sa`, `es`, `es`, `sm`, `u`, `u'`, `ctx`]
@@ -510,7 +510,7 @@ Proof
     (qpat_x_assum `emit_op ADD _ _ = _` mp_tac >>
      simp[emit_op_def, comp_bind_def, comp_ignore_bind_def, fresh_var_def,
        fresh_id_def, emit_def, comp_return_def] >> strip_tac >> gvs[]) >>
-  qexistsl_tac [`H`, `un`, `u'`] >> simp[] >>
+  qexistsl_tac [`HG`, `un`, `u'`] >> simp[] >>
   gvs[ghost_kept_def, venomStateTheory.eval_operand_def] >>
   conj_tac >- metis_tac[] >>
   conj_tac >- (qexists_tac `b+32` >> simp[] >> metis_tac[]) >> metis_tac[]
@@ -518,20 +518,20 @@ QED
 
 Theorem raw_call_outbuf_zero_stage:
   compile_raw_call_outbuf 0 sa = ((ov,op),sb) /\ fn_has_code sa sb func /\
-  stmt_state_rel ctx func cenv cx es s /\ fn_inst_ids_distinct func /\
-  ghost_inv dep cenv cx es G tn s /\ local_ptrs_reserved cenv sa /\
+  stmt_state_rel H ctx func cenv cx es s /\ fn_inst_ids_distinct func /\
+  ghost_inv H dep cenv cx es G tn s /\ local_ptrs_reserved cenv sa /\
   (!x sz. cenv.ce_return_buf = SOME (PtrVar (Var x) sz) ==> not_fresh_at sa x) /\
   (!x sz. cenv.ce_return_pc = SOME (PtrVar (Var x) sz) ==> not_fresh_at sa x) /\
   s.vs_current_bb = sa.cs_current_bb /\
   s.vs_inst_idx = LENGTH sa.cs_current_insts /\
   ~s.vs_halted /\ ~ctx_has_dalloca ctx ==>
-  ?H un u x. ov = Var x /\ op = Var x /\
-    gas_path_ptr D 0 ctx func PG G tn s 0 H un (OK u) /\
-    ghost_inv dep cenv cx es H un u /\ ghost_kept cenv es sa G tn s H un /\
-    stmt_state_rel ctx func cenv cx es u /\ wb_frame cenv es es sa s u /\
+  ?HG un u x. ov = Var x /\ op = Var x /\
+    gas_path_ptr D 0 ctx func PG G tn s 0 HG un (OK u) /\
+    ghost_inv H dep cenv cx es HG un u /\ ghost_kept cenv es sa G tn s HG un /\
+    stmt_state_rel H ctx func cenv cx es u /\ wb_frame cenv es es sa s u /\
     u.vs_current_bb = sb.cs_current_bb /\
     u.vs_inst_idx = LENGTH sb.cs_current_insts /\ ~u.vs_halted /\
-    ptr_covers H un x u 0 /\ u.vs_memory = s.vs_memory /\
+    ptr_covers HG un x u 0 /\ u.vs_memory = s.vs_memory /\
     (!aid. aid < sa.cs_next_id ==> FLOOKUP u.vs_allocas aid = FLOOKUP s.vs_allocas aid) /\
     (!z. not_fresh_at sa z ==> lookup_var z u = lookup_var z s) /\
     (?dst. eval_operand op u = SOME (n2w dst) /\
@@ -553,29 +553,29 @@ Proof
   `0 < dimword(:256)` by simp[] >>
   drule_all raw_call_alloc_buffer_ghost_stage >>
   disch_then (qspecl_then [`PG`, `D`] strip_assume_tac) >>
-  qexistsl_tac [`H`, `un`, `u`, `x`] >> simp[] >>
+  qexistsl_tac [`HG`, `un`, `u`, `x`] >> simp[] >>
   gvs[ptr_covers_def, venomStateTheory.eval_operand_def, ptrDisciplineTheory.op_prov_def] >>
   conj_tac >- (qexists_tac `b` >> simp[] >> metis_tac[]) >> metis_tac[]
 QED
 
 Theorem raw_call_outbuf_stage:
   compile_raw_call_outbuf cap sa = ((ov,op),sb) /\ fn_has_code sa sb func /\
-  stmt_state_rel ctx func cenv cx es s /\ fn_inst_ids_distinct func /\
-  ghost_inv dep cenv cx es G tn s /\ local_ptrs_reserved cenv sa /\
+  stmt_state_rel H ctx func cenv cx es s /\ fn_inst_ids_distinct func /\
+  ghost_inv H dep cenv cx es G tn s /\ local_ptrs_reserved cenv sa /\
   (!x sz. cenv.ce_return_buf = SOME (PtrVar (Var x) sz) ==> not_fresh_at sa x) /\
   (!x sz. cenv.ce_return_pc = SOME (PtrVar (Var x) sz) ==> not_fresh_at sa x) /\
   (if cap = 0 then 0 else ((cap+31) DIV 32)*32+32) < dimword(:256) /\
   s.vs_current_bb = sa.cs_current_bb /\
   s.vs_inst_idx = LENGTH sa.cs_current_insts /\
   ~s.vs_halted /\ ~ctx_has_dalloca ctx ==>
-  ?H un u x dx. ov = Var x /\ op = Var dx /\
-    gas_path_ptr D 0 ctx func PG G tn s 0 H un (OK u) /\
-    ghost_inv dep cenv cx es H un u /\ ghost_kept cenv es sa G tn s H un /\
-    stmt_state_rel ctx func cenv cx es u /\ wb_frame cenv es es sa s u /\
+  ?HG un u x dx. ov = Var x /\ op = Var dx /\
+    gas_path_ptr D 0 ctx func PG G tn s 0 HG un (OK u) /\
+    ghost_inv H dep cenv cx es HG un u /\ ghost_kept cenv es sa G tn s HG un /\
+    stmt_state_rel H ctx func cenv cx es u /\ wb_frame cenv es es sa s u /\
     u.vs_current_bb = sb.cs_current_bb /\
     u.vs_inst_idx = LENGTH sb.cs_current_insts /\ ~u.vs_halted /\
-    ptr_covers H un x u (if cap = 0 then 0 else ((cap+31) DIV 32)*32+32) /\
-    ptr_covers H un dx u cap /\ u.vs_memory = s.vs_memory /\
+    ptr_covers HG un x u (if cap = 0 then 0 else ((cap+31) DIV 32)*32+32) /\
+    ptr_covers HG un dx u cap /\ u.vs_memory = s.vs_memory /\
     (!aid. aid < sa.cs_next_id ==> FLOOKUP u.vs_allocas aid = FLOOKUP s.vs_allocas aid) /\
     (!z. not_fresh_at sa z ==> lookup_var z u = lookup_var z s) /\
     (?dst. eval_operand op u = SOME (n2w dst) /\
@@ -598,7 +598,7 @@ Proof
   strip_tac >> Cases_on `cap = 0`
   >- (gvs[] >> drule_all raw_call_outbuf_zero_stage >>
       disch_then (qspecl_then [`PG`, `D`] strip_assume_tac) >>
-      qexistsl_tac [`H`, `un`, `u`, `x`, `x`] >> simp[] >>
+      qexistsl_tac [`HG`, `un`, `u`, `x`, `x`] >> simp[] >>
       conj_tac >- (qexists_tac `dst` >> simp[] >> metis_tac[]) >>
       gvs[wordsTheory.n2w_11] >> metis_tac[]) >>
   `0 < cap` by decide_tac >> gvs[] >>
@@ -606,14 +606,14 @@ Proof
   disch_then (qspecl_then [`PG`, `D`] strip_assume_tac) >>
   `ob+32 < dimword(:256)` by decide_tac >>
   `dst = ob+32` by fs[wordsTheory.n2w_11] >>
-  qexistsl_tac [`H`, `un`, `u`, `x`, `dx`] >> simp[] >>
+  qexistsl_tac [`HG`, `un`, `u`, `x`, `dx`] >> simp[] >>
   conj_tac >- (qexists_tac `dst` >> simp[] >> metis_tac[]) >> metis_tac[]
 QED
 
 Theorem raw_call_outbuf_ready_stage:
   compile_raw_call_outbuf cap sa = ((ov,op),sb) /\ fn_has_code sa sb func /\
-  stmt_state_rel ctx func cenv cx es s /\ fn_inst_ids_distinct func /\
-  ghost_inv dep cenv cx es G tn s /\ local_ptrs_reserved cenv sa /\
+  stmt_state_rel H ctx func cenv cx es s /\ fn_inst_ids_distinct func /\
+  ghost_inv H dep cenv cx es G tn s /\ local_ptrs_reserved cenv sa /\
   (!x sz. cenv.ce_return_buf = SOME (PtrVar (Var x) sz) ==> not_fresh_at sa x) /\
   (!x sz. cenv.ce_return_pc = SOME (PtrVar (Var x) sz) ==> not_fresh_at sa x) /\
   (if cap = 0 then 0 else ((cap+31) DIV 32)*32+32) < dimword(:256) /\
@@ -627,20 +627,20 @@ Theorem raw_call_outbuf_ready_stage:
   (!z. data_op = Var z ==> not_fresh_at sa z) /\
   op_prov G data_op = SOME (region_base,sz) /\
   (!i. b+32 <= i /\ i < b+32+LENGTH bs ==> i NOTIN tn.t_mem) ==>
-  ?H un u x dx. ov = Var x /\ op = Var dx /\
-    gas_path_ptr D 0 ctx func PG G tn s 0 H un (OK u) /\
-    ghost_inv dep cenv cx es H un u /\ ghost_kept cenv es sa G tn s H un /\
-    stmt_state_rel ctx func cenv cx es u /\ wb_frame cenv es es sa s u /\
+  ?HG un u x dx. ov = Var x /\ op = Var dx /\
+    gas_path_ptr D 0 ctx func PG G tn s 0 HG un (OK u) /\
+    ghost_inv H dep cenv cx es HG un u /\ ghost_kept cenv es sa G tn s HG un /\
+    stmt_state_rel H ctx func cenv cx es u /\ wb_frame cenv es es sa s u /\
     u.vs_current_bb = sb.cs_current_bb /\
     u.vs_inst_idx = LENGTH sb.cs_current_insts /\ ~u.vs_halted /\
-    ptr_covers H un x u (if cap = 0 then 0 else ((cap+31) DIV 32)*32+32) /\
-    ptr_covers H un dx u cap /\ u.vs_memory = s.vs_memory /\
+    ptr_covers HG un x u (if cap = 0 then 0 else ((cap+31) DIV 32)*32+32) /\
+    ptr_covers HG un dx u cap /\ u.vs_memory = s.vs_memory /\
     (!aid. aid < sa.cs_next_id ==> FLOOKUP u.vs_allocas aid = FLOOKUP s.vs_allocas aid) /\
-    op_prov H data_op = SOME (region_base,sz) /\
+    op_prov HG data_op = SOME (region_base,sz) /\
     (!i. b+32 <= i /\ i < b+32+LENGTH bs ==> i NOTIN un.t_mem) /\
     (!arg. (!z. arg = Var z ==> not_fresh_at sa z) /\ (!l. arg <> Label l) ==>
       eval_operand arg u = eval_operand arg s /\
-      op_prov H arg = op_prov G arg /\ op_taint un arg = op_taint tn arg) /\
+      op_prov HG arg = op_prov G arg /\ op_taint un arg = op_taint tn arg) /\
     (?dst. eval_operand op u = SOME (n2w dst) /\
       dst < dimword(:256) /\ dst+cap < dimword(:256) /\
       (!name a len. local_region cenv es.scopes s name a len ==>
@@ -662,16 +662,16 @@ Proof
   disch_then (qspecl_then [`PG`, `D`] strip_assume_tac) >>
   `!arg. (!z. arg = Var z ==> not_fresh_at sa z) /\ (!l. arg <> Label l) ==>
       eval_operand arg u = eval_operand arg s /\
-      op_prov H arg = op_prov G arg /\ op_taint un arg = op_taint tn arg` by
+      op_prov HG arg = op_prov G arg /\ op_taint un arg = op_taint tn arg` by
     (rpt strip_tac >> Cases_on `arg` >>
      fs[venomStateTheory.eval_operand_def, ptrDisciplineTheory.op_prov_def,
        ptrDisciplineTheory.op_taint_def, ghost_kept_def]) >>
-  `op_prov H data_op = SOME (region_base,sz)` by
+  `op_prov HG data_op = SOME (region_base,sz)` by
     (Cases_on `data_op` >> fs[ptrDisciplineTheory.op_prov_def, ghost_kept_def]) >>
   `(if cap = 0 then ob else ob+32) < dimword(:256)` by
     (Cases_on `cap = 0` >> gvs[] >> decide_tac) >>
   `dst = (if cap = 0 then ob else ob+32)` by fs[wordsTheory.n2w_11] >>
-  qexistsl_tac [`H`, `un`, `u`, `x`, `dx`] >> simp[] >>
+  qexistsl_tac [`HG`, `un`, `u`, `x`, `dx`] >> simp[] >>
   reverse conj_tac
   >- (conj_tac >- (qexists_tac `dst` >> simp[] >> metis_tac[]) >> gvs[] >> metis_tac[]) >>
   rpt strip_tac >> spose_not_then assume_tac >>
@@ -682,7 +682,7 @@ Proof
   first_assum (irule_at (Pat `expr_val_at _ _ _ _ _ _ _ _ _`)) >>
   simp[compileEnvTheory.is_word_type_def, loweringPostsTheory.val_footprint_def,
     wordsTheory.w2n_n2w] >>
-  qexistsl_tac [`un`, `G`, `H`] >> simp[] >>
+  qexistsl_tac [`un`, `G`, `HG`] >> simp[] >>
   irule stmtSimLogArgsTheory.log_arg_clear_base >> goal_assum (drule_at Any)
 QED
 
@@ -697,7 +697,7 @@ Theorem raw_call_outbuf_ready_outcome:
   ~ctx_has_dalloca ctx /\
   gas_outcome_ptr D tops (ctx,func) PG source (es,s0,G0,tn0) Q R /\
   (!rr ee G tn t. Q rr ee G tn t ==>
-    stmt_state_rel ctx func cenv cx ee t /\ ghost_inv dep cenv cx ee G tn t /\
+    stmt_state_rel H ctx func cenv cx ee t /\ ghost_inv H dep cenv cx ee G tn t /\
     t.vs_current_bb = sa.cs_current_bb /\
     t.vs_inst_idx = LENGTH sa.cs_current_insts /\ ~t.vs_halted /\
     expr_sim_inv cenv cx env ee /\
@@ -710,23 +710,23 @@ Theorem raw_call_outbuf_ready_outcome:
       op_prov G data_op = SOME (base,sz) /\
       (!i. b+32 <= i /\ i < b+32+LENGTH bs ==> i NOTIN tn.t_mem)) ==>
   gas_outcome_ptr D tops (ctx,func) PG source (es,s0,G0,tn0)
-    (\rr ee H un u. ?G tn t x dx base sz b bs sd lim.
+    (\rr ee HG un u. ?G tn t x dx base sz b bs sd lim.
       Q rr ee G tn t /\ ov = Var x /\ op = Var dx /\
       expr_val_at cenv cx (BaseT (BytesT (Dynamic lim))) sd sa ee (BytesV bs) data t /\
-      ghost_inv dep cenv cx ee H un u /\ ghost_kept cenv ee sa G tn t H un /\
-      stmt_state_rel ctx func cenv cx ee u /\ wb_frame cenv ee ee sa t u /\
+      ghost_inv H dep cenv cx ee HG un u /\ ghost_kept cenv ee sa G tn t HG un /\
+      stmt_state_rel H ctx func cenv cx ee u /\ wb_frame cenv ee ee sa t u /\
       u.vs_current_bb = sb.cs_current_bb /\
       u.vs_inst_idx = LENGTH sb.cs_current_insts /\ ~u.vs_halted /\
-      ptr_covers H un x u (if cap = 0 then 0 else ((cap+31) DIV 32)*32+32) /\
-      ptr_covers H un dx u cap /\ u.vs_memory = t.vs_memory /\
+      ptr_covers HG un x u (if cap = 0 then 0 else ((cap+31) DIV 32)*32+32) /\
+      ptr_covers HG un dx u cap /\ u.vs_memory = t.vs_memory /\
       (!aid. aid < sa.cs_next_id ==> FLOOKUP u.vs_allocas aid = FLOOKUP t.vs_allocas aid) /\
       eval_operand data t = SOME (n2w b) /\
-      op_prov G data_op = SOME (base,sz) /\ op_prov H data_op = SOME (base,sz) /\
+      op_prov G data_op = SOME (base,sz) /\ op_prov HG data_op = SOME (base,sz) /\
       (!i. b+32 <= i /\ i < b+32+LENGTH bs ==> i NOTIN tn.t_mem) /\
       (!i. b+32 <= i /\ i < b+32+LENGTH bs ==> i NOTIN un.t_mem) /\
       (!arg. (!z. arg = Var z ==> not_fresh_at sa z) /\ (!l. arg <> Label l) ==>
         eval_operand arg u = eval_operand arg t /\
-        op_prov H arg = op_prov G arg /\ op_taint un arg = op_taint tn arg) /\
+        op_prov HG arg = op_prov G arg /\ op_taint un arg = op_taint tn arg) /\
       (?dst. eval_operand op u = SOME (n2w dst) /\
         dst < dimword(:256) /\ dst+cap < dimword(:256) /\
         (!name a len. local_region cenv ee.scopes t name a len ==>
@@ -756,22 +756,22 @@ QED
 
 Resume raw_call_outbuf_ready_outcome[normal]:
   gvs[] >> first_assum drule >> strip_tac >>
-  `?H un u x dx. ov = Var x /\ op = Var dx /\
-    gas_path_ptr D 0 ctx func PG G tn t 0 H un (OK u) /\
-    ghost_inv dep cenv cx (es_end with gas_obs := []) H un u /\
-    ghost_kept cenv (es_end with gas_obs := []) sa G tn t H un /\
-    stmt_state_rel ctx func cenv cx (es_end with gas_obs := []) u /\
+  `?HG un u x dx. ov = Var x /\ op = Var dx /\
+    gas_path_ptr D 0 ctx func PG G tn t 0 HG un (OK u) /\
+    ghost_inv H dep cenv cx (es_end with gas_obs := []) HG un u /\
+    ghost_kept cenv (es_end with gas_obs := []) sa G tn t HG un /\
+    stmt_state_rel H ctx func cenv cx (es_end with gas_obs := []) u /\
     wb_frame cenv (es_end with gas_obs := []) (es_end with gas_obs := []) sa t u /\
     u.vs_current_bb = sb.cs_current_bb /\
     u.vs_inst_idx = LENGTH sb.cs_current_insts /\ ~u.vs_halted /\
-    ptr_covers H un x u (if cap = 0 then 0 else ((cap+31) DIV 32)*32+32) /\
-    ptr_covers H un dx u cap /\ u.vs_memory = t.vs_memory /\
+    ptr_covers HG un x u (if cap = 0 then 0 else ((cap+31) DIV 32)*32+32) /\
+    ptr_covers HG un dx u cap /\ u.vs_memory = t.vs_memory /\
       (!aid. aid < sa.cs_next_id ==> FLOOKUP u.vs_allocas aid = FLOOKUP t.vs_allocas aid) /\
-    op_prov H data_op = SOME (base',sz) /\
+    op_prov HG data_op = SOME (base',sz) /\
     (!i. b+32 <= i /\ i < b+32+LENGTH bs ==> i NOTIN un.t_mem) /\
     (!arg. (!z. arg = Var z ==> not_fresh_at sa z) /\ (!l. arg <> Label l) ==>
       eval_operand arg u = eval_operand arg t /\
-      op_prov H arg = op_prov G arg /\ op_taint un arg = op_taint tn arg) /\
+      op_prov HG arg = op_prov G arg /\ op_taint un arg = op_taint tn arg) /\
     (?dst. eval_operand op u = SOME (n2w dst) /\
       dst < dimword(:256) /\ dst+cap < dimword(:256) /\
       (!name a len. local_region cenv (es_end with gas_obs := []).scopes t name a len ==>
@@ -796,7 +796,7 @@ QED
 
 Resume raw_call_outbuf_ready_outcome[package]:
   qexists_tac `marks ++ REPLICATE 0 F` >> disj1_tac >>
-  qexistsl_tac [`res`, `es_end`, `H`, `un`, `OK u`] >> conj_tac
+  qexistsl_tac [`res`, `es_end`, `HG`, `un`, `OK u`] >> conj_tac
   >- (irule gas_marked_exec_ptr_implicit_suffix >>
       goal_assum (drule_at Any) >> goal_assum (drule_at Any)) >>
   disj1_tac >> qexists_tac `u` >> simp[] >>

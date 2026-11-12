@@ -26,13 +26,13 @@ Theorem log_source_store_encode_path_ptr:
   compile_abi_encode_to_buf dst.buf_operand buf.buf_operand
     (type_to_abi_enc_info ce.ce_struct_fields ce (TupleT (MAP SND xs))) prepared =
     (out,end_st) /\ fn_has_code prepared end_st func /\
-  stmt_state_rel ctx func ce cx es s /\ fn_inst_ids_distinct func /\
+  stmt_state_rel H ctx func ce cx es s /\ fn_inst_ids_distinct func /\
   local_ptrs_reserved ce st /\ cap < dimword(:256) /\
   outcap < dimword(:256) /\
   abi_size_bound ce.ce_struct_fields (TupleT (MAP SND xs)) <= outcap /\
   start.cs_next_var <= mid.cs_next_var /\
   mid.cs_next_var <= limit_st.cs_next_var /\ end_st.cs_next_var <= limit_st.cs_next_var /\
-  fresh_vars_wrt limit_st s /\ ~ctx_has_dalloca ctx /\ ghost_inv d ce cx es G tn s /\
+  fresh_vars_wrt limit_st s /\ ~ctx_has_dalloca ctx /\ ghost_inv H d ce cx es G tn s /\
   (!p sz. ce.ce_return_buf = SOME (PtrVar (Var p) sz) ==> not_fresh_at st p) /\
   (!p sz. ce.ce_return_pc = SOME (PtrVar (Var p) sz) ==> not_fresh_at st p) /\
   LIST_REL (\arg v. log_arg_rel ce cx sa st es s arg v /\
@@ -50,13 +50,13 @@ Theorem log_source_store_encode_path_ptr:
   isPREFIX (emitted_insts mid end_st)
     (DROP (s.vs_inst_idx + LENGTH (emitted_insts st start) +
       LENGTH (emitted_insts start mid)) bb.bb_instructions) ==>
-  ?avs v db H tm.
+  ?avs v db HG tm.
     vyper_to_abi_list (get_tenv cx) (MAP SND xs) vs = SOME avs /\
     gas_path_ptr D 0 ctx func PG G tn s
       (LENGTH (FILTER (\i. i.inst_opcode = GAS) (emitted_insts st start)) +
        LENGTH (FILTER (\i. i.inst_opcode = GAS) (emitted_insts start mid)) +
-       LENGTH (FILTER (\i. i.inst_opcode = GAS) (emitted_insts mid end_st))) H tm (OK v) /\
-    fresh_vars_wrt limit_st v /\ stmt_state_rel ctx func ce cx es v /\
+       LENGTH (FILTER (\i. i.inst_opcode = GAS) (emitted_insts mid end_st))) HG tm (OK v) /\
+    fresh_vars_wrt limit_st v /\ stmt_state_rel H ctx func ce cx es v /\
     eval_operand dst.buf_operand v = SOME (n2w db) /\ db < dimword(:256) /\
     mem_bytes_at db (LENGTH (enc (Tuple (vyper_to_abi_types (get_tenv cx) (MAP SND xs)))
       (ListV avs))) v.vs_memory =
@@ -65,12 +65,12 @@ Theorem log_source_store_encode_path_ptr:
       (ListV avs)) <= outcap /\
     eval_operand out v = SOME (n2w (LENGTH
       (enc (Tuple (vyper_to_abi_types (get_tenv cx) (MAP SND xs))) (ListV avs)))) /\
-    op_taint tm out = {} /\ op_prov H out = NONE /\
+    op_taint tm out = {} /\ op_prov HG out = NONE /\
     (!i. db <= i /\ i < db + LENGTH
       (enc (Tuple (vyper_to_abi_types (get_tenv cx) (MAP SND xs))) (ListV avs)) ==>
       i NOTIN tm.t_mem) /\
-    ghost_inv d ce cx es H tm v /\ ghost_kept ce es st G tn s H tm /\
-    (?dv. dst.buf_operand = Var dv /\ ptr_covers H tm dv v outcap) /\
+    ghost_inv H d ce cx es HG tm v /\ ghost_kept ce es st G tn s HG tm /\
+    (?dv. dst.buf_operand = Var dv /\ ptr_covers HG tm dv v outcap) /\
     (!op w. abi_decoder_operand_live st.cs_next_var op /\ eval_operand op s = SOME w ==>
       eval_operand op v = SOME w) /\
     (!p. not_fresh_at st p ==> op_taint tm (Var p) = op_taint tn (Var p)) /\
@@ -117,15 +117,15 @@ QED
 Resume log_source_store_encode_path_ptr[post]:
   markerLib.RESUME_TAC >>
   drule_all gas_path_ptr_then >> disch_tac >>
-  `ghost_kept ce es st G tn s H' tm'` by
+  `ghost_kept ce es st G tn s HG' tm'` by
     (irule ghost_kept_trans >>
-     qexistsl_tac [`H`,`es`,`t`,`mid`,`tm`] >> asm_simp_tac bool_ss [] >> decide_tac) >>
+     qexistsl_tac [`HG`,`es`,`t`,`mid`,`tm`] >> asm_simp_tac bool_ss [] >> decide_tac) >>
   `!p. not_fresh_at st p ==> not_fresh_at mid p` by
     metis_tac[not_fresh_at_mono] >>
   `!op. abi_decoder_operand_live st.cs_next_var op ==>
     abi_decoder_operand_live mid.cs_next_var op` by
     metis_tac[abiDecoderReentryTheory.abi_decoder_operand_live_mono] >>
-  qexistsl_tac [`avs`,`v`,`db`,`H'`,`tm'`] >>
+  qexistsl_tac [`avs`,`v`,`db`,`HG'`,`tm'`] >>
   asm_simp_tac bool_ss [] >>
   qexists_tac `dv` >> asm_rewrite_tac[]
 QED

@@ -135,8 +135,8 @@ Theorem uint_convert_stmt_frame:
   compile_type_convert op (mk_convert_op (BaseT (BytesT (Dynamic n)))
     (BaseT (UintT b))) sa = (r,sb) /\
   run_inst_seq (emitted_insts sa sb) ss = OK sf /\
-  local_ptrs_reserved cenv sa /\ stmt_state_rel ctx func cenv cx es ss ==>
-  stmt_state_rel ctx func cenv cx es sf
+  local_ptrs_reserved cenv sa /\ stmt_state_rel H ctx func cenv cx es ss ==>
+  stmt_state_rel H ctx func cenv cx es sf
 Proof
   strip_tac >> drule_all uint_convert_run_frame >> strip_tac >>
   qpat_x_assum `sf = _` SUBST1_TAC >>

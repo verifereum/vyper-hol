@@ -216,10 +216,10 @@ Proof
 QED
 
 Theorem u2s_scalar_ghost_inv:
-  ghost_inv d cenv cx es G tn s /\ local_ptrs_reserved cenv a /\
+  ghost_inv H d cenv cx es G tn s /\ local_ptrs_reserved cenv a /\
   (!p sz. cenv.ce_return_buf = SOME (PtrVar (Var p) sz) ==> not_fresh_at a p) /\
   (!p sz. cenv.ce_return_pc = SOME (PtrVar (Var p) sz) ==> not_fresh_at a p) ==>
-  ghost_inv d cenv cx es (DRESTRICT G (COMPL {u2s_var a k}))
+  ghost_inv H d cenv cx es (DRESTRICT G (COMPL {u2s_var a k}))
     (tn with t_var := tn.t_var |+ (u2s_var a k,{}))
     (update_var (u2s_var a k) w s with vs_inst_idx := idx)
 Proof

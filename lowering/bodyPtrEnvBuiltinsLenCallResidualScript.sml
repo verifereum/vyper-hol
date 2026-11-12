@@ -151,31 +151,31 @@ Theorem len_widened_path_ptr[local]:
     (!v. read_result cx r es' = (INL v,es') ==> value_has_type tv v) /\
     fn_has_code sm sb func /\ ~t.vs_halted /\
     t.vs_current_bb = sm.cs_current_bb /\ t.vs_inst_idx = LENGTH sm.cs_current_insts /\
-    vv_post ctx func cenv cx e es sa sm s0 es' r vv t /\
+    vv_post H ctx func cenv cx e es sa sm s0 es' r vv t /\
     ptr_vv_ok cx (post_value_type cenv e) r vv es' G tn t /\
-    ghost_inv d cenv cx es' G tn t /\ ghost_kept cenv es sa G0 tn0 s0 G tn /\
+    ghost_inv H d cenv cx es' G tn t /\ ghost_kept cenv es sa G0 tn0 s0 G tn /\
     (!x sz. cenv.ce_return_buf = SOME (PtrVar (Var x) sz) ==> not_fresh_at sa x) /\
     (!x sz. cenv.ce_return_pc = SOME (PtrVar (Var x) sz) ==> not_fresh_at sa x) ==>
     ?n t' G' tn'.
-      gas_path_ptr (cx_dead cx) 0 ctx func PG G tn t 0 G' tn' (OK t') /\
+      gas_path_ptr (cx_dead H cx) 0 ctx func PG G tn t 0 G' tn' (OK t') /\
       result_array_length cx r es' = (INL n,es') /\
-      vv_post ctx func cenv cx (Builtin (BaseT (UintT 256)) Len [e]) es
+      vv_post H ctx func cenv cx (Builtin (BaseT (UintT 256)) Len [e]) es
         sa sb s0 es' (Value (IntV (&n))) (StackValue (BaseT (UintT 256)) op) t' /\
       t'.vs_current_bb = sb.cs_current_bb /\ t'.vs_inst_idx = LENGTH sb.cs_current_insts /\
-      ghost_inv d cenv cx es' G' tn' t' /\
+      ghost_inv H d cenv cx es' G' tn' t' /\
       ptr_vv_ok cx (BaseT (UintT 256)) (Value (IntV (&n)))
         (StackValue (BaseT (UintT 256)) op) es' G' tn' t' /\
       ghost_kept cenv es sa G0 tn0 s0 G' tn'
 Proof
   rpt gen_tac >> strip_tac >>
-  `stmt_state_rel ctx func cenv cx es' t /\
+  `stmt_state_rel H ctx func cenv cx es' t /\
    vv_holds cenv cx (post_value_type cenv e) r vv es' t` by fs[vv_post_def] >>
   drule_all len_widened_operand_header >> strip_tac >>
   `?opc.
     compile_builtin_len F cenv.ce_imm_alloca (vv_operand vv) LocMemory =
       emit_op opc [vv_operand vv] /\
     MEM opc [MLOAD; SLOAD; TLOAD; DLOAD] /\
-    ptr_inst_ok (cx_dead cx) 0 0 ctx func G tn
+    ptr_inst_ok (cx_dead H cx) 0 0 ctx func G tn
       (mk_inst sm.cs_next_id opc [vv_operand vv] [STRING #"%" (toString sm.cs_next_var)]) t /\
     step_inst_base (mk_inst sm.cs_next_id opc [vv_operand vv]
       [STRING #"%" (toString sm.cs_next_var)]) t =

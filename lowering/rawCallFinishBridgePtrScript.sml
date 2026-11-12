@@ -56,9 +56,9 @@ Theorem oracle_call_suffix_ready:
     (TAKE cap t.vs_returndata) s).vs_memory /\
   lookup_var src s = SOME a /\ ptr_covers G tn src s capacity /\
   FLOOKUP s.vs_allocas aid = SOME (off,len) /\
-  H = step_prov PG G inst t /\ un = step_taint inst s t tn ==>
+  HG = step_prov PG G inst t /\ un = step_taint inst s t tn ==>
   lookup_var src (t with vs_inst_idx := pc) = SOME a /\
-  ptr_covers H un src (t with vs_inst_idx := pc) capacity /\
+  ptr_covers HG un src (t with vs_inst_idx := pc) capacity /\
   FLOOKUP (t with vs_inst_idx := pc).vs_allocas aid = SOME (off,len) /\
   mem_bytes_at (w2n a + 32) (LENGTH (TAKE cap t.vs_returndata))
     (t with vs_inst_idx := pc).vs_memory = TAKE cap t.vs_returndata /\
@@ -78,8 +78,8 @@ QED
 
 Theorem ghost_kept_scopes_cong:
   ee.scopes = es.scopes ==>
-  (ghost_kept cenv ee protected G tn s H un <=>
-   ghost_kept cenv es protected G tn s H un)
+  (ghost_kept cenv ee protected G tn s HG un <=>
+   ghost_kept cenv es protected G tn s HG un)
 Proof
   simp[bodyPtrDefsTheory.ghost_kept_def]
 QED
@@ -93,11 +93,11 @@ Proof
 QED
 
 Theorem oracle_suffix_frames_compose:
-  stmt_state_rel ctx func cenv cx es s /\ local_ptrs_reserved cenv protected /\
+  stmt_state_rel H ctx func cenv cx es s /\ local_ptrs_reserved cenv protected /\
   ee.scopes = es.scopes /\ ci_mono protected sa /\
-  ghost_kept cenv es protected G tn s H un /\
+  ghost_kept cenv es protected G tn s HG un /\
   wb_frame cenv es ee protected s t /\
-  ghost_kept cenv ee sa H un t J vn /\ wb_frame cenv ee es' sa t u ==>
+  ghost_kept cenv ee sa HG un t J vn /\ wb_frame cenv ee es' sa t u ==>
   ghost_kept cenv es protected G tn s J vn /\ wb_frame cenv es es' protected s u
 Proof
   strip_tac >>
@@ -115,10 +115,10 @@ QED
 
 Theorem oracle_taken_suffix_frames:
   take_call_outcome target data value_opt es = (INL (rq,outcome),es1) /\
-  stmt_state_rel ctx func cenv cx es s /\ local_ptrs_reserved cenv protected /\
-  ci_mono protected sa /\ ghost_kept cenv es protected G tn s H un /\
+  stmt_state_rel H ctx func cenv cx es s /\ local_ptrs_reserved cenv protected /\
+  ci_mono protected sa /\ ghost_kept cenv es protected G tn s HG un /\
   wb_frame cenv es (SND (adopt_call_outcome rq outcome es1)) protected s t /\
-  ghost_kept cenv (SND (adopt_call_outcome rq outcome es1)) sa H un t J vn /\
+  ghost_kept cenv (SND (adopt_call_outcome rq outcome es1)) sa HG un t J vn /\
   wb_frame cenv (SND (adopt_call_outcome rq outcome es1)) es' sa t u ==>
   ghost_kept cenv es protected G tn s J vn /\ wb_frame cenv es es' protected s u
 Proof

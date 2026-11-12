@@ -8,7 +8,7 @@ Ancestors
   finite_map words arithmetic
 
 Theorem normalization_alloc_buffer_path_ptr:
-  stmt_state_rel ctx func cenv cx es s /\
+  stmt_state_rel H ctx func cenv cx es s /\
   compile_alloc_buffer n cc = (buf,cd) /\ fn_has_code cc cd func /\
   local_ptrs_reserved cenv cc /\ fn_inst_ids_distinct func /\
   n < dimword(:256) /\ ~ctx_has_dalloca ctx /\
@@ -19,7 +19,7 @@ Theorem normalization_alloc_buffer_path_ptr:
     gas_path_ptr D 0 ctx func PG G tn s 0 G1 tn1 (OK u) /\
     u.vs_current_bb = cd.cs_current_bb /\
     u.vs_inst_idx = LENGTH cd.cs_current_insts /\ ~u.vs_halted /\
-    stmt_state_rel ctx func cenv cx es u /\ local_ptrs_reserved cenv cd /\
+    stmt_state_rel H ctx func cenv cx es u /\ local_ptrs_reserved cenv cd /\
     FLOOKUP u.vs_allocas cc.cs_next_id = SOME (b,n) /\
     b+n < dimword(:256) /\ lookup_var root u = SOME (n2w b) /\
     ptr_covers G1 tn1 root u n /\

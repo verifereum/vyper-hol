@@ -59,7 +59,7 @@ Proof
 QED
 
 Theorem copy_local_footprint_separation:
-  stmt_state_rel ctx fn cenv cx es s /\
+  stmt_state_rel H ctx fn cenv cx es s /\
   (!name off sz. local_region cenv es.scopes s name off sz ==>
     regions_disjoint b capacity off sz) /\ n <= capacity ==>
   !name entry p sz w.
@@ -87,12 +87,12 @@ Theorem copy_memory_ghost_inv:
   n < dimword(:256) /\ lookup_var src s = SOME a /\ lookup_var dst s = SOME b /\
   ptr_covers G tn src s n /\ ptr_covers G tn dst s n /\ ~ctx_has_dalloca ctx /\
   run_inst_seq (emitted_insts sa sb) s = OK t /\
-  stmt_state_rel ctx fn cenv cx es s /\ n <= capacity /\
+  stmt_state_rel H ctx fn cenv cx es s /\ n <= capacity /\
   (!name off sz. local_region cenv es.scopes s name off sz ==>
     regions_disjoint (w2n b) capacity off sz) /\
-  ghost_inv d cenv cx es G tn s ==>
+  ghost_inv H d cenv cx es G tn s ==>
   ?th. inst_seq_ptr D 0 ctx fn PG G tn (emitted_insts sa sb) s G th /\
-    ghost_inv d cenv cx es G th t /\
+    ghost_inv H d cenv cx es G th t /\
     (!p k. ptr_covers G th p t k <=> ptr_covers G tn p s k) /\
     th.t_var = tn.t_var /\ th.t_stor = tn.t_stor /\
     th.t_trans = tn.t_trans /\ th.t_imm = tn.t_imm /\
@@ -125,13 +125,13 @@ QED
 
 Theorem allocated_copy_separation:
   compile_alloc_buffer capacity sa = (buf,sm) /\
-  stmt_state_rel ctx fn cenv cx es s0 /\ fn_inst_ids_distinct fn /\
+  stmt_state_rel H ctx fn cenv cx es s0 /\ fn_inst_ids_distinct fn /\
   local_ptrs_reserved cenv sa /\ capacity < dimword(:256) /\
   MEM (mk_inst sa.cs_next_id ALLOCA [Lit (n2w capacity)]
     [STRING #"%" (toString sa.cs_next_var)]) (fn_insts fn) /\
   run_inst_seq (emitted_insts sa sm) s0 = OK s /\
   eval_operand buf.buf_operand s = SOME b ==>
-  stmt_state_rel ctx fn cenv cx es s /\
+  stmt_state_rel H ctx fn cenv cx es s /\
   (!name off sz. local_region cenv es.scopes s name off sz ==>
     regions_disjoint (w2n b) capacity off sz) /\
   (!aid off sz. FLOOKUP s0.vs_allocas aid = SOME (off,sz) /\ aid < sa.cs_next_id ==>
@@ -153,7 +153,7 @@ QED
 
 Theorem allocated_copy_ghost_frame:
   compile_alloc_buffer capacity sa = (buf,sm) /\
-  stmt_state_rel ctx fn cenv cx es s0 /\ fn_inst_ids_distinct fn /\
+  stmt_state_rel H ctx fn cenv cx es s0 /\ fn_inst_ids_distinct fn /\
   local_ptrs_reserved cenv sa /\ capacity < dimword(:256) /\
   MEM (mk_inst sa.cs_next_id ALLOCA [Lit (n2w capacity)]
     [STRING #"%" (toString sa.cs_next_var)]) (fn_insts fn) /\
@@ -162,9 +162,9 @@ Theorem allocated_copy_ghost_frame:
   compile_copy_memory (Var dst) (Var src) n sm = ((),sb) /\
   run_inst_seq (emitted_insts sm sb) s = OK t /\ n <= capacity /\
   ptr_covers G tn src s n /\ ptr_covers G tn dst s capacity /\ ~ctx_has_dalloca ctx /\
-  ghost_inv d cenv cx es G tn s /\ ghost_kept cenv es sa G0 tn0 s0 G tn ==>
+  ghost_inv H d cenv cx es G tn s /\ ghost_kept cenv es sa G0 tn0 s0 G tn ==>
   ?th. inst_seq_ptr D 0 ctx fn PG G tn (emitted_insts sm sb) s G th /\
-    ghost_inv d cenv cx es G th t /\ ghost_kept cenv es sa G0 tn0 s0 G th /\
+    ghost_inv H d cenv cx es G th t /\ ghost_kept cenv es sa G0 tn0 s0 G th /\
     (!p k. ptr_covers G th p t k <=> ptr_covers G tn p s k) /\
     ptr_covers G th dst t capacity /\
     th.t_var = tn.t_var /\ th.t_stor = tn.t_stor /\

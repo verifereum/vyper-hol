@@ -55,7 +55,7 @@ Theorem concat_prefix_args_ready:
   emit_void MSTORE [ob.buf_operand; Lit 0w] s3 = ((),s4) /\
   fn_has_code sa s4 fn /\ fn_inst_ids_distinct fn /\
   local_ptrs_reserved ce sa /\ 32 <= bsz /\ bsz < dimword (:256) /\
-  stmt_state_rel ctx fn ce cx es s /\ ghost_inv d ce cx es G tn s /\
+  stmt_state_rel H ctx fn ce cx es s /\ ghost_inv H d ce cx es G tn s /\
   (!x k. ce.ce_return_buf = SOME (PtrVar (Var x) k) ==> not_fresh_at sa x) /\
   (!x k. ce.ce_return_pc = SOME (PtrVar (Var x) k) ==> not_fresh_at sa x) /\
   ~ctx_has_dalloca ctx /\ ~s.vs_halted /\
@@ -64,7 +64,7 @@ Theorem concat_prefix_args_ready:
   ?r p off a ow Gf tnf t binst oinst.
     buf.buf_operand = Var r /\ data = Var p /\ ob.buf_operand = Var off /\
     gas_path_ptr D 0 ctx fn PG G tn s 0 Gf tnf (OK t) /\
-    stmt_state_rel ctx fn ce cx es t /\ ghost_inv d ce cx es Gf tnf t /\
+    stmt_state_rel H ctx fn ce cx es t /\ ghost_inv H d ce cx es Gf tnf t /\
     ghost_kept ce es sa G tn s Gf tnf /\
     ptr_covers Gf tnf r t bsz /\ ptr_covers Gf tnf p t (bsz-32) /\
     ptr_covers Gf tnf off t 32 /\

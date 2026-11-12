@@ -33,8 +33,8 @@ Theorem tuple_nonmemory_child_ptr:
   t.vs_accounts = s.vs_accounts /\ t.vs_call_ctx = s.vs_call_ctx /\
   t.vs_transient = s.vs_transient /\
   tn'.t_stor = tn.t_stor /\ tn'.t_trans = tn.t_trans /\
-  op_taint tn' dst = {} /\ (vv_loc vv = LocCode ==> op_prov H dst = NONE) ==>
-  ptr_vv_ok cx ct tv' (LocatedValue ann (mk_ptr dst (vv_loc vv))) ee' H tn' t
+  op_taint tn' dst = {} /\ (vv_loc vv = LocCode ==> op_prov HG dst = NONE) ==>
+  ptr_vv_ok cx ct tv' (LocatedValue ann (mk_ptr dst (vv_loc vv))) ee' HG tn' t
 Proof
   strip_tac >> irule ptr_vv_ok_nonmemory >>
   simp[mk_ptr_def] >> rpt strip_tac >> gvs[] >>
@@ -50,7 +50,7 @@ Proof
 QED
 
 Theorem tuple_nonmemory_selected_ptr:
-  vv_post ctx func cenv cx obj es sa sm s0 ee tv vv s /\
+  vv_post H ctx func cenv cx obj es sa sm s0 ee tv vv s /\
   post_value_type cenv obj = TupleT tys /\ expr_sim_inv cenv cx env es /\
   ptr_vv_ok cx (TupleT tys) tv vv ee G tn s /\ vv_loc vv <> LocMemory /\
   OPT_MMAP (evaluate_type (get_tenv cx)) tys = SOME tvs /\
@@ -61,8 +61,8 @@ Theorem tuple_nonmemory_selected_ptr:
   t.vs_accounts = s.vs_accounts /\ t.vs_call_ctx = s.vs_call_ctx /\
   t.vs_transient = s.vs_transient /\
   tn'.t_stor = tn.t_stor /\ tn'.t_trans = tn.t_trans /\
-  op_taint tn' dst = {} /\ (vv_loc vv = LocCode ==> op_prov H dst = NONE) ==>
-  ptr_vv_ok cx ct tv' (LocatedValue ann (mk_ptr dst (vv_loc vv))) ee' H tn' t
+  op_taint tn' dst = {} /\ (vv_loc vv = LocCode ==> op_prov HG dst = NONE) ==>
+  ptr_vv_ok cx ct tv' (LocatedValue ann (mk_ptr dst (vv_loc vv))) ee' HG tn' t
 Proof
   strip_tac >>
   `vv_holds cenv cx (TupleT tys) tv vv ee s` by gvs[vv_post_def] >>

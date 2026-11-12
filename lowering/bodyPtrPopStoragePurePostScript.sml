@@ -11,9 +11,9 @@ Theorem pop_storage_header_taint_dead_subset:
   declared_storage_region cx mid name subs = SOME (tr,root_slot,root) /\
   storage_subregion root path delta (ArrayTV tv (Dynamic cap)) /\
   w2n slot = w2n root_slot + delta /\
-  X SUBSET {(k,b) | storage_dead cx tr st (w2n k) b} ==>
+  X SUBSET {(k,b) | storage_dead H tr st (w2n k) b} ==>
   key_update X slot {} SUBSET
-    {(k,b) | storage_dead cx tr
+    {(k,b) | storage_dead H tr
       (update_storage slot (n2w (w2n (lookup_storage slot st)-1)) st) (w2n k) b}
 Proof
   strip_tac >> pure_rewrite_tac [SUBSET_DEF] >> Cases >>
@@ -24,7 +24,7 @@ Proof
 QED
 
 Theorem pop_storage_header_stor_taint_ok:
-  stor_taint_ok cx tn s /\ s.vs_call_ctx.cc_address = cx.txn.target /\
+  stor_taint_ok H cx tn s /\ s.vs_call_ctx.cc_address = cx.txn.target /\
   declared_storage_region cx mid name subs = SOME (tr,root_slot,root) /\
   storage_subregion root path delta (ArrayTV tv (Dynamic cap)) /\
   w2n slot = w2n root_slot + delta /\
@@ -33,12 +33,12 @@ Theorem pop_storage_header_stor_taint_ok:
   tn'.t_stor = (if tr then tn.t_stor else key_update tn.t_stor slot {}) /\
   tn'.t_trans = (if tr then key_update tn.t_trans slot {} else tn.t_trans) /\
   tn'.t_imm = tn.t_imm ==>
-  stor_taint_ok cx tn'
+  stor_taint_ok H cx tn'
     (if tr then tstore slot (n2w (len-1)) s else sstore slot (n2w (len-1)) s)
 Proof
   strip_tac >>
   `key_update (if tr then tn.t_trans else tn.t_stor) slot {} SUBSET
-    {(k,b) | storage_dead cx tr
+    {(k,b) | storage_dead H tr
       (update_storage slot (n2w (len-1))
         (if tr then contract_transient s else contract_storage s)) (w2n k) b}` by
     (gvs[] >> irule pop_storage_header_taint_dead_subset >>
@@ -52,7 +52,7 @@ Proof
 QED
 
 Theorem pop_storage_endpoint_ghost:
-  ghost_inv d cenv cx es G tn s /\ local_ptrs_reserved cenv sa /\
+  ghost_inv H d cenv cx es G tn s /\ local_ptrs_reserved cenv sa /\
   s.vs_call_ctx.cc_address = cx.txn.target /\
   declared_storage_region cx mid name subs = SOME (tr,root_slot,root) /\
   storage_subregion root path delta (ArrayTV tv (Dynamic cap)) /\
@@ -70,15 +70,15 @@ Theorem pop_storage_endpoint_ghost:
   ee.scopes = es.scopes /\ tnf.t_mem = tn.t_mem /\ tnf.t_imm = tn.t_imm /\
   tnf.t_stor = (if tr then tn.t_stor else key_update tn.t_stor hdr {}) /\
   tnf.t_trans = (if tr then key_update tn.t_trans hdr {} else tn.t_trans) ==>
-  ghost_inv d cenv cx ee Gf tnf sf
+  ghost_inv H d cenv cx ee Gf tnf sf
 Proof
   strip_tac >>
-  `stor_taint_ok cx tn s` by fs[ghost_inv_def] >>
-  `stor_taint_ok cx tnf
+  `stor_taint_ok H cx tn s` by fs[ghost_inv_def] >>
+  `stor_taint_ok H cx tnf
     (if tr then tstore hdr (n2w (len - 1)) s
      else sstore hdr (n2w (len - 1)) s)` by
     (irule pop_storage_header_stor_taint_ok >> simp[] >> metis_tac[]) >>
-  `stor_taint_ok cx tnf sf /\ sf.vs_memory = s.vs_memory` by
+  `stor_taint_ok H cx tnf sf /\ sf.vs_memory = s.vs_memory` by
     (qpat_x_assum `sf = _` (fn th => once_rewrite_tac[th]) >>
      Cases_on `tr` >> gvs[stor_taint_ok_def, sstore_def, tstore_def]) >>
   irule pop_ghost_inv_old_transport >> goal_assum (drule_at Any) >> simp[] >>
@@ -86,10 +86,10 @@ Proof
 QED
 
 Theorem pop_storage_returned_place:
-  stor_taint_ok cx tn s /\ s.vs_call_ctx.cc_address = cx.txn.target /\
+  stor_taint_ok H cx tn s /\ s.vs_call_ctx.cc_address = cx.txn.target /\
   raw = (if tr then s.vs_transient s.vs_call_ctx.cc_address
          else (s.vs_accounts s.vs_call_ctx.cc_address).storage) /\
-  storage_read_live cx tr raw hdr (ArrayTV tv (Dynamic cap)) /\
+  storage_read_live H tr raw hdr (ArrayTV tv (Dynamic cap)) /\
   len = w2n (lookup_storage hdr raw) /\ 0 < len /\ len <= cap /\
   elem = hdr + n2w (1 + (len - 1) * type_slot_size tv) /\
   (if tr then sf.vs_transient sf.vs_call_ctx.cc_address
@@ -105,7 +105,7 @@ Theorem pop_storage_returned_place:
 Proof
   strip_tac >> irule pop_returned_place_of_region >> simp[] >>
   `(if tr then tn.t_trans else tn.t_stor) SUBSET
-     {(k,b) | storage_dead cx tr raw (w2n k) b}` by
+     {(k,b) | storage_dead H tr raw (w2n k) b}` by
     (Cases_on `tr` >> gvs[stor_taint_ok_def, cx_dead_def]) >>
   irule pop_last_child_taint_header >>
   goal_assum (drule_at Any) >> simp[] >>

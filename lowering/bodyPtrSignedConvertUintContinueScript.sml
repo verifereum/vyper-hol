@@ -8,10 +8,10 @@ Ancestors bodyPtrSignedConvertSourceTyping bodyPtrSignedConvertFrame
 Libs monadsyntax
 
 Theorem zero_convert_child_post:
-  expr_post ctx func cenv cx e es sa s1 s0 ee v1 x s /\
+  expr_post H ctx func cenv cx e es sa s1 s0 ee v1 x s /\
   is_word_type ann /\ evaluate_type (get_tenv cx) ann = SOME tv /\
   typed_val_to_w256 tv v = 0w ==>
-  expr_post ctx func cenv cx (TypeBuiltin ann Convert ann [e]) es sa s1 s0
+  expr_post H ctx func cenv cx (TypeBuiltin ann Convert ann [e]) es sa s1 s0
     ee v (Lit 0w) s
 Proof
   simp[expr_post_def, expr_val_rel_def, expr_val_at_def,
@@ -20,26 +20,26 @@ QED
 
 (* Zero-capacity dispatch is independent of the scalar target's signedness. *)
 Theorem zero_scalar_continuation:
-  expr_post ctx func cenv cx e es sa s1 s0 (ee with gas_obs := []) v1 x t0 /\
+  expr_post H ctx func cenv cx e es sa s1 s0 (ee with gas_obs := []) v1 x t0 /\
   t0.vs_current_bb = s1.cs_current_bb /\
   t0.vs_inst_idx = LENGTH s1.cs_current_insts /\ ~t0.vs_halted /\
   is_bytestring_type (expr_type e) /\ is_word_type typ /\
   valid_conversion (expr_type e) typ /\ well_formed_type tenv typ /\
   evaluate_type (get_tenv cx) (expr_type e) = SOME stv /\
   value_has_type stv v1 /\ (v1 = BytesV [] \/ v1 = StringV []) /\
-  ghost_inv d cenv cx (ee with gas_obs := []) G tn t0 /\
+  ghost_inv H d cenv cx (ee with gas_obs := []) G tn t0 /\
   ghost_kept cenv es sa G0 tn0 s0 G tn ==>
-  gas_summary_ptr_at (cx_dead cx) (ctx,func) PG []
+  gas_summary_ptr_at (cx_dead H cx) (ctx,func) PG []
     (\vs. (convert_result cx (expr_type e) typ v1,vs))
     (ee with gas_obs := [],t0,G,tn)
-    (\res fin H th ss. ?v. res = INL v /\
-      expr_post ctx func cenv cx (TypeBuiltin typ Convert typ [e])
+    (\res fin HG th ss. ?v. res = INL v /\
+      expr_post H ctx func cenv cx (TypeBuiltin typ Convert typ [e])
         es sa s1 s0 fin v (Lit 0w) ss /\
       ss.vs_current_bb = s1.cs_current_bb /\
       ss.vs_inst_idx = LENGTH s1.cs_current_insts /\
-      ghost_inv d cenv cx fin H th ss /\
-      ptr_val_ok cx typ v (Lit 0w) H th ss /\
-      ghost_kept cenv es sa G0 tn0 s0 H th)
+      ghost_inv H d cenv cx fin HG th ss /\
+      ptr_val_ok cx typ v (Lit 0w) HG th ss /\
+      ghost_kept cenv es sa G0 tn0 s0 HG th)
     (\res fin gt out. expr_exit res out)
 Proof
   strip_tac >>
@@ -57,7 +57,7 @@ Proof
 QED
 
 Theorem zero_uint_continuation:
-  expr_post ctx func cenv cx e es sa s1 s0 (ee with gas_obs := []) v1 x t0 /\
+  expr_post H ctx func cenv cx e es sa s1 s0 (ee with gas_obs := []) v1 x t0 /\
   t0.vs_current_bb = s1.cs_current_bb /\
   t0.vs_inst_idx = LENGTH s1.cs_current_insts /\ ~t0.vs_halted /\
   expr_type e = BaseT (BytesT (Dynamic n)) /\
@@ -65,20 +65,20 @@ Theorem zero_uint_continuation:
   well_formed_type tenv (BaseT (UintT b)) /\
   evaluate_type (get_tenv cx) (expr_type e) = SOME stv /\
   value_has_type stv v1 /\ v1 = BytesV [] /\
-  ghost_inv d cenv cx (ee with gas_obs := []) G tn t0 /\
+  ghost_inv H d cenv cx (ee with gas_obs := []) G tn t0 /\
   ghost_kept cenv es sa G0 tn0 s0 G tn ==>
-  gas_summary_ptr_at (cx_dead cx) (ctx,func) PG []
+  gas_summary_ptr_at (cx_dead H cx) (ctx,func) PG []
     (\vs. (convert_result cx (expr_type e) (BaseT (UintT b)) v1,vs))
     (ee with gas_obs := [],t0,G,tn)
-    (\res fin H th ss. ?v. res = INL v /\
-      expr_post ctx func cenv cx
+    (\res fin HG th ss. ?v. res = INL v /\
+      expr_post H ctx func cenv cx
         (TypeBuiltin (BaseT (UintT b)) Convert (BaseT (UintT b)) [e])
         es sa s1 s0 fin v (Lit 0w) ss /\
       ss.vs_current_bb = s1.cs_current_bb /\
       ss.vs_inst_idx = LENGTH s1.cs_current_insts /\
-      ghost_inv d cenv cx fin H th ss /\
-      ptr_val_ok cx (BaseT (UintT b)) v (Lit 0w) H th ss /\
-      ghost_kept cenv es sa G0 tn0 s0 H th)
+      ghost_inv H d cenv cx fin HG th ss /\
+      ptr_val_ok cx (BaseT (UintT b)) v (Lit 0w) HG th ss /\
+      ghost_kept cenv es sa G0 tn0 s0 HG th)
     (\res fin gt out. expr_exit res out)
 Proof
   strip_tac >> irule zero_scalar_continuation >>
@@ -87,8 +87,8 @@ QED
 
 (* Semantic post transport for a memory-preserving scalar suffix. *)
 Theorem scalar_suffix_expr_post:
-  expr_post ctx func cenv cx e es sa s1 s0 ee v1 x t0 /\
-  stmt_state_rel ctx func cenv cx ee s /\
+  expr_post H ctx func cenv cx e es sa s1 s0 ee v1 x t0 /\
+  stmt_state_rel H ctx func cenv cx ee s /\
   evaluate_type (get_tenv cx) (expr_type eout) = SOME tv /\
   eval_operand op s = SOME (typed_val_to_w256 tv v) /\
   (!z w. not_fresh_at s1 z /\ lookup_var z t0 = SOME w ==>
@@ -96,7 +96,7 @@ Theorem scalar_suffix_expr_post:
   s.vs_allocas = t0.vs_allocas /\ s.vs_memory = t0.vs_memory /\
   is_word_type (expr_type eout) /\ sa.cs_next_var <= s1.cs_next_var /\
   (~expr_has_effect eout ==> pure_frame cenv func es sa s0 t0) ==>
-  expr_post ctx func cenv cx eout es sa sb s0 ee v op s
+  expr_post H ctx func cenv cx eout es sa sb s0 ee v op s
 Proof
   simp[expr_post_def] >> strip_tac >>
   `locals_kept cenv es ee s0 s` by

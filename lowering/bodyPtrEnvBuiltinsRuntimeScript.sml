@@ -8,7 +8,7 @@ Ancestors bodyPtrEnvBuiltinsRuntimeCompose bodyPtrEnvBuiltinsRuntimePost
   bodyPtrEnvBuiltinsSelectorCompile list loweringPosts
 
 Theorem method_id_runtime_fixed_counted:
-  expr_post ctx fn cenv cx e es sa sm s0 es' v arg s /\
+  expr_post H ctx fn cenv cx e es sa sm s0 es' v arg s /\
   ptr_val_ok cx (expr_type e) v arg G tn s /\
   expr_type e = BaseT bty /\ is_bytes_or_string_type (expr_type e) /\
   evaluate_type (get_tenv cx) (expr_type e) = SOME (BaseTV bty) /\
@@ -16,7 +16,7 @@ Theorem method_id_runtime_fixed_counted:
   lower_value compile_expr cenv (expr_type e) e sa = (arg,sm) /\
   compile_method_id_runtime (expr_type e) arg T sm = (op,sb) /\
   (!x. arg = Var x ==> not_fresh_at sm x) /\ ~ctx_has_dalloca ctx /\
-  fn_inst_ids_distinct fn /\ ghost_inv d cenv cx es' G tn s /\
+  fn_inst_ids_distinct fn /\ ghost_inv H d cenv cx es' G tn s /\
   local_ptrs_reserved cenv sa /\ local_ptrs_reserved cenv sm /\
   MAP FDOM es.scopes = MAP FDOM es'.scopes /\
   (!x sz. cenv.ce_return_buf = SOME (PtrVar (Var x) sz) ==> not_fresh_at sm x) /\
@@ -26,13 +26,13 @@ Theorem method_id_runtime_fixed_counted:
   ?t r G' tn'. run_inst_seq (emitted_insts sm sb) s = OK t /\
     builtin_result cx es'.accounts (BaseT (BytesT (Fixed 4)))
       MethodId [expr_type e] [v] = INL r /\
-    vv_post ctx fn cenv cx (Builtin (BaseT (BytesT (Fixed 4))) MethodId [e])
+    vv_post H ctx fn cenv cx (Builtin (BaseT (BytesT (Fixed 4))) MethodId [e])
       es sa sb s0 es' (Value r) (StackValue (BaseT (BytesT (Fixed 4))) op)
       (t with vs_inst_idx := LENGTH sb.cs_current_insts) /\
     gas_path_ptr D 0 ctx fn PG G tn s 0 G' tn'
       (OK (t with vs_inst_idx := LENGTH sb.cs_current_insts)) /\
     ptr_val_ok cx (BaseT (BytesT (Fixed 4))) r op G' tn' t /\
-    ghost_inv d cenv cx es' G' tn' t /\ ghost_kept cenv es' sm G tn s G' tn'
+    ghost_inv H d cenv cx es' G' tn' t /\ ghost_kept cenv es' sm G tn s G' tn'
 Proof
   strip_tac >>
   drule_all method_id_runtime_counted_endpoint_post >> simp[] >> strip_tac >>
@@ -55,7 +55,7 @@ Proof
 QED
 
 Theorem method_id_runtime_dynamic_counted:
-  expr_post ctx fn cenv cx e es sa sm s0 es' v arg s /\
+  expr_post H ctx fn cenv cx e es sa sm s0 es' v arg s /\
   ptr_val_ok cx (expr_type e) v arg G tn s /\
   expr_type e = BaseT bty /\ is_bytes_or_string_type (expr_type e) /\
   evaluate_type (get_tenv cx) (expr_type e) = SOME (BaseTV bty) /\
@@ -63,7 +63,7 @@ Theorem method_id_runtime_dynamic_counted:
   lower_value compile_expr cenv (expr_type e) e sa = (arg,sm) /\
   compile_method_id_runtime (expr_type e) arg F sm = (op,sb) /\
   (!x. arg = Var x ==> not_fresh_at sm x) /\ ~ctx_has_dalloca ctx /\
-  fn_inst_ids_distinct fn /\ ghost_inv d cenv cx es' G tn s /\
+  fn_inst_ids_distinct fn /\ ghost_inv H d cenv cx es' G tn s /\
   local_ptrs_reserved cenv sa /\ local_ptrs_reserved cenv sm /\
   MAP FDOM es.scopes = MAP FDOM es'.scopes /\
   (!x sz. cenv.ce_return_buf = SOME (PtrVar (Var x) sz) ==> not_fresh_at sm x) /\
@@ -73,7 +73,7 @@ Theorem method_id_runtime_dynamic_counted:
   ?t r G' tn'. run_inst_seq (emitted_insts sm sb) s = OK t /\
     builtin_result cx es'.accounts (BaseT (BytesT (Dynamic 4)))
       MethodId [expr_type e] [v] = INL r /\
-    vv_post ctx fn cenv cx (Builtin (BaseT (BytesT (Dynamic 4))) MethodId [e])
+    vv_post H ctx fn cenv cx (Builtin (BaseT (BytesT (Dynamic 4))) MethodId [e])
       es sa sb s0 es' (Value r)
       (LocatedValue (BaseT (BytesT (Dynamic 4)))
         <|ptr_location := LocMemory; ptr_operand := op|>)
@@ -82,7 +82,7 @@ Theorem method_id_runtime_dynamic_counted:
       (OK (t with vs_inst_idx := LENGTH sb.cs_current_insts)) /\
     ptr_val_ok cx (BaseT (BytesT (Dynamic 4))) r op G' tn' t /\
     ptr_buf_ok cenv (Builtin (BaseT (BytesT (Dynamic 4))) MethodId [e]) op G' t /\
-    ghost_inv d cenv cx es' G' tn' t /\ ghost_kept cenv es' sm G tn s G' tn'
+    ghost_inv H d cenv cx es' G' tn' t /\ ghost_kept cenv es' sm G tn s G' tn'
 Proof
   strip_tac >>
   drule_all method_id_runtime_counted_endpoint_post >> simp[] >> strip_tac >>
@@ -111,11 +111,11 @@ Proof
     metis_tac[run_inst_seq_append] >>
   `op_taint tn'' word = {}` by gvs[ptr_val_ok_def, is_word_type_def] >>
   drule_all method_id_selector_word_bytes >> strip_tac >>
-  `stmt_state_rel ctx fn cenv cx es' s` by gvs[expr_post_def] >>
+  `stmt_state_rel H ctx fn cenv cx es' s` by gvs[expr_post_def] >>
   gvs[] >>
   drule_at (Pat `compile_alloc_buffer _ _ = _`) method_id_selector_append_counted >>
   disch_then (drule_at (Pat `wb_frame _ _ _ _ _ _`)) >>
-  disch_then (drule_at (Pat `ghost_inv _ _ _ _ _ _ _`)) >>
+  disch_then (drule_at (Pat `ghost_inv _ _ _ _ _ _ _ _`)) >>
   disch_then (drule_at (Pat `emit_void MSTORE [_;_] _ = _`)) >>
   simp[] >> disch_then drule_all >>
   disch_then (qspec_then `[e]` strip_assume_tac) >>
@@ -123,7 +123,7 @@ Proof
 QED
 
 Theorem method_id_runtime_counted:
-  expr_post ctx fn cenv cx e es sa sm s0 es' v arg s /\
+  expr_post H ctx fn cenv cx e es sa sm s0 es' v arg s /\
   ptr_val_ok cx (expr_type e) v arg G tn s /\
   expr_type e = BaseT bty /\ is_bytes_or_string_type (expr_type e) /\
   evaluate_type (get_tenv cx) (expr_type e) = SOME (BaseTV bty) /\
@@ -131,7 +131,7 @@ Theorem method_id_runtime_counted:
   lower_value compile_expr cenv (expr_type e) e sa = (arg,sm) /\
   compile_method_id_runtime (expr_type e) arg fixed sm = (op,sb) /\
   (!x. arg = Var x ==> not_fresh_at sm x) /\ ~ctx_has_dalloca ctx /\
-  fn_inst_ids_distinct fn /\ ghost_inv d cenv cx es' G tn s /\
+  fn_inst_ids_distinct fn /\ ghost_inv H d cenv cx es' G tn s /\
   local_ptrs_reserved cenv sa /\ local_ptrs_reserved cenv sm /\
   MAP FDOM es.scopes = MAP FDOM es'.scopes /\
   (!x sz. cenv.ce_return_buf = SOME (PtrVar (Var x) sz) ==> not_fresh_at sm x) /\
@@ -142,7 +142,7 @@ Theorem method_id_runtime_counted:
     builtin_result cx es'.accounts
       (BaseT (BytesT (if fixed then Fixed 4 else Dynamic 4)))
       MethodId [expr_type e] [v] = INL r /\
-    vv_post ctx fn cenv cx
+    vv_post H ctx fn cenv cx
       (Builtin (BaseT (BytesT (if fixed then Fixed 4 else Dynamic 4))) MethodId [e])
       es sa sb s0 es' (Value r)
       (if fixed then StackValue (BaseT (BytesT (Fixed 4))) op else
@@ -154,7 +154,7 @@ Theorem method_id_runtime_counted:
     ptr_val_ok cx (BaseT (BytesT (if fixed then Fixed 4 else Dynamic 4))) r op G' tn' t /\
     (~fixed ==> ptr_buf_ok cenv
       (Builtin (BaseT (BytesT (Dynamic 4))) MethodId [e]) op G' t) /\
-    ghost_inv d cenv cx es' G' tn' t /\ ghost_kept cenv es' sm G tn s G' tn'
+    ghost_inv H d cenv cx es' G' tn' t /\ ghost_kept cenv es' sm G tn s G' tn'
 Proof
   Cases_on `fixed` >> simp[]
   >- (strip_tac >> drule_all method_id_runtime_fixed_counted >>

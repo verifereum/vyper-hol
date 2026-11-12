@@ -9,7 +9,7 @@ Theorem membership_memory_header_path:
   ~ctx_has_dalloca ctx /\ ~s.vs_halted /\
   lookup_block s.vs_current_bb fn.fn_blocks = SOME bb /\
   get_instruction bb s.vs_inst_idx = SOME (mk_inst id MLOAD [Var src] [out]) /\
-  stmt_state_rel ctx fn cenv cx es s /\
+  stmt_state_rel H ctx fn cenv cx es s /\
   vv_at cenv cx aty sc sd es tvv (LocatedValue ann p) s /\
   ptr_vv_ok cx aty tvv (LocatedValue ann p) es G tn s /\
   p.ptr_location = LocMemory /\ p.ptr_operand = Var src /\
@@ -64,7 +64,7 @@ Theorem membership_code_header_path:
   ~ctx_has_dalloca ctx /\ ~s.vs_halted /\
   lookup_block s.vs_current_bb fn.fn_blocks = SOME bb /\
   get_instruction bb s.vs_inst_idx = SOME (mk_inst id DLOAD [arr_op] [out]) /\
-  stmt_state_rel ctx fn cenv cx es s /\ ~cenv.ce_is_ctor /\
+  stmt_state_rel H ctx fn cenv cx es s /\ ~cenv.ce_is_ctor /\
   immutable_holds cenv cx (ArrayT ety (Dynamic cap)) (Value (ArrayV av)) bw es s /\
   evaluate_type (get_tenv cx) ety = SOME tv /\
   value_has_type (ArrayTV tv (Dynamic cap)) (ArrayV av) /\

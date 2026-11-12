@@ -42,13 +42,13 @@ Proof
 QED
 
 Theorem account_gt_update_ghosts:
-  ghost_inv d cenv cx es G tn s /\ local_ptrs_reserved cenv sa /\
+  ghost_inv H d cenv cx es G tn s /\ local_ptrs_reserved cenv sa /\
   ghost_kept cenv es0 sa G0 tn0 s0 G tn /\
   (!x sz. cenv.ce_return_buf = SOME (PtrVar (Var x) sz) ==>
           not_fresh_at sa x) /\
   (!x sz. cenv.ce_return_pc = SOME (PtrVar (Var x) sz) ==>
           not_fresh_at sa x) /\ ~not_fresh_at sa out ==>
-  ghost_inv d cenv cx es
+  ghost_inv H d cenv cx es
     (step_prov PG G (mk_inst id GT [arg; Lit lit] [out]) (update_var out w s))
     (step_taint (mk_inst id GT [arg; Lit lit] [out]) s (update_var out w s) tn)
     (update_var out w s) /\
@@ -120,13 +120,13 @@ Theorem emit_account_gt_run:
   emit_op GT [arg; Lit lit] sa = (op,sb) /\ fn_has_code sa sb fn /\
   op_taint tn arg = {} /\
   local_ptrs_reserved cenv sa /\ ~ctx_has_dalloca ctx /\
-  ghost_inv d cenv cx es G tn s /\
+  ghost_inv H d cenv cx es G tn s /\
   ghost_kept cenv es0 sa G0 tn0 s0 G tn /\
   (!x sz. cenv.ce_return_buf = SOME (PtrVar (Var x) sz) ==>
           not_fresh_at sa x) /\
   (!x sz. cenv.ce_return_pc = SOME (PtrVar (Var x) sz) ==>
           not_fresh_at sa x) /\
-  stmt_state_rel ctx fn cenv cx es s /\
+  stmt_state_rel H ctx fn cenv cx es s /\
   ~s.vs_halted /\ s.vs_current_bb = sa.cs_current_bb /\
   s.vs_inst_idx = LENGTH sa.cs_current_insts /\
   step_inst_base (mk_inst sa.cs_next_id GT [arg; Lit lit]
@@ -134,10 +134,10 @@ Theorem emit_account_gt_run:
       OK (update_var (STRING #"%" (toString sa.cs_next_var)) w s) ==>
   ?G' tn' t.
     gas_path_ptr D 0 ctx fn PG G tn s 0 G' tn' (OK t) /\
-    ghost_inv d cenv cx es G' tn' t /\
+    ghost_inv H d cenv cx es G' tn' t /\
     ghost_kept cenv es0 sa G0 tn0 s0 G' tn' /\
     op_taint tn' op = {} /\ op_prov G' op = NONE /\ eval_operand op t = SOME w /\
-    stmt_state_rel ctx fn cenv cx es t /\ ~t.vs_halted /\
+    stmt_state_rel H ctx fn cenv cx es t /\ ~t.vs_halted /\
     t.vs_current_bb = sb.cs_current_bb /\
     t.vs_inst_idx = LENGTH sb.cs_current_insts /\
     (!x. not_fresh_at sa x ==> lookup_var x t = lookup_var x s) /\
@@ -152,7 +152,7 @@ Proof
   disch_then (qspecl_then [`w`, `lit`, `sa.cs_next_id`, `arg`, `PG`] strip_assume_tac) >>
   `not_local_ptr cenv es.scopes (STRING #"%" (toString sa.cs_next_var))` by
     (irule local_ptrs_reserved_fresh >> qexists_tac `sa` >> simp[]) >>
-  `stmt_state_rel ctx fn cenv cx es
+  `stmt_state_rel H ctx fn cenv cx es
     (update_var (STRING #"%" (toString sa.cs_next_var)) w s)` by
     (irule stmt_state_rel_update_var >> simp[]) >>
   drule emitted_insts_emit_op >> strip_tac >>
@@ -179,22 +179,22 @@ Theorem account_read_counted_run:
   eval_operand arg s = SOME (typed_val_to_w256 (BaseTV AddressT) (BytesV bs)) /\
   evaluate_type (get_tenv cx) (account_item_type item) = SOME tv /\
   op_taint tn arg = {} /\ local_ptrs_reserved cenv sa /\ ~ctx_has_dalloca ctx /\
-  ghost_inv d cenv cx es G tn s /\
+  ghost_inv H d cenv cx es G tn s /\
   ghost_kept cenv es0 sa G0 tn0 s0 G tn /\
   (!x sz. cenv.ce_return_buf = SOME (PtrVar (Var x) sz) ==> not_fresh_at sa x) /\
   (!x sz. cenv.ce_return_pc = SOME (PtrVar (Var x) sz) ==> not_fresh_at sa x) /\
-  stmt_state_rel ctx fn cenv cx es s /\
+  stmt_state_rel H ctx fn cenv cx es s /\
   ~s.vs_halted /\ s.vs_current_bb = sa.cs_current_bb /\
   s.vs_inst_idx = LENGTH sa.cs_current_insts ==>
   ?G' tn' t.
     gas_path_ptr D 0 ctx fn PG G tn s 0 G' tn' (OK t) /\
-    ghost_inv d cenv cx es G' tn' t /\
+    ghost_inv H d cenv cx es G' tn' t /\
     ghost_kept cenv es0 sa G0 tn0 s0 G' tn' /\
     op_taint tn' op = {} /\ op_prov G' op = NONE /\
     eval_operand op t = SOME (typed_val_to_w256 tv
       (evaluate_account_op item bs
         (lookup_account (word_of_bytes_be bs) es.accounts))) /\
-    stmt_state_rel ctx fn cenv cx es t /\ ~t.vs_halted /\
+    stmt_state_rel H ctx fn cenv cx es t /\ ~t.vs_halted /\
     t.vs_current_bb = sb.cs_current_bb /\
     t.vs_inst_idx = LENGTH sb.cs_current_insts /\
     (!x. not_fresh_at sa x ==> lookup_var x t = lookup_var x s) /\
@@ -218,7 +218,7 @@ Theorem emit_account_gt_append:
   emit_op GT [arg; Lit lit] sm = (op,sb) /\ fn_has_code sm sb fn /\
   op_taint tn arg = {} /\
   gas_path_ptr D 0 ctx fn PG G0 tn0 s0 k G tn (OK s) /\
-  ghost_inv d cenv cx es G tn s /\
+  ghost_inv H d cenv cx es G tn s /\
   ghost_kept cenv es sa G0 tn0 s0 G tn /\
   cs_extends sa sm /\ sa.cs_next_var <= sm.cs_next_var /\
   sa.cs_next_id <= sm.cs_next_id /\
@@ -226,7 +226,7 @@ Theorem emit_account_gt_append:
   (!x sz. cenv.ce_return_buf = SOME (PtrVar (Var x) sz) ==> not_fresh_at sa x) /\
   (!x sz. cenv.ce_return_pc = SOME (PtrVar (Var x) sz) ==> not_fresh_at sa x) /\
   local_ptrs_rel fn cenv es.scopes s0 /\
-  stmt_state_rel ctx fn cenv cx es s /\ ~s.vs_halted /\
+  stmt_state_rel H ctx fn cenv cx es s /\ ~s.vs_halted /\
   s.vs_current_bb = sm.cs_current_bb /\
   s.vs_inst_idx = LENGTH sm.cs_current_insts /\
   (!x. not_fresh_at sa x ==> lookup_var x s = lookup_var x s0) /\
@@ -236,10 +236,10 @@ Theorem emit_account_gt_append:
     OK (update_var (STRING #"%" (toString sm.cs_next_var)) w s) ==>
   ?G' tn' t.
     gas_path_ptr D 0 ctx fn PG G0 tn0 s0 k G' tn' (OK t) /\
-    ghost_inv d cenv cx es G' tn' t /\
+    ghost_inv H d cenv cx es G' tn' t /\
     ghost_kept cenv es sa G0 tn0 s0 G' tn' /\
     op_taint tn' op = {} /\ op_prov G' op = NONE /\ eval_operand op t = SOME w /\
-    stmt_state_rel ctx fn cenv cx es t /\ ~t.vs_halted /\
+    stmt_state_rel H ctx fn cenv cx es t /\ ~t.vs_halted /\
     t.vs_current_bb = sb.cs_current_bb /\
     t.vs_inst_idx = LENGTH sb.cs_current_insts /\
     (!x. not_fresh_at sa x ==> lookup_var x t = lookup_var x s0) /\

@@ -14,8 +14,8 @@ Theorem dynamic_root_at_index_endpoint:
   expr_body_pre cenv cx env (Name (ArrayT et (Dynamic cap)) id) es /\
   expr_body_pre cenv cx env idx es /\
   vyperState$bind (eval_expr cx idx) (\result. read_result cx result) es = (INL iv,ee) /\
-  expr_post ctx func cenv cx idx es sa sb s0 ee iv iop s /\
-  ghost_inv d cenv cx ee G tn s ==>
+  expr_post H ctx func cenv cx idx es sa sb s0 ee iv iop s /\
+  ghost_inv H d cenv cx ee G tn s ==>
   ?entry p sz a tv vs.
     lookup_scopes id ee.scopes = SOME entry /\
     entry.type = ArrayTV tv (Dynamic cap) /\
@@ -39,7 +39,7 @@ Proof
      drule_all expr_body_pre_eval >> simp[]) >>
   `expr_body_pre cenv cx env (Name (ArrayT et (Dynamic cap)) id) ee` by
     fs[expr_body_pre_def] >>
-  `stmt_state_rel ctx func cenv cx ee s` by fs[expr_post_def] >>
+  `stmt_state_rel H ctx func cenv cx ee s` by fs[expr_post_def] >>
   drule_all named_root_preparation >> strip_tac >>
   `w2n a + sz < dimword (:256)` by
     (`local_ptrs_rel func cenv ee.scopes s /\ alloca_room ctx func s` by
@@ -93,7 +93,7 @@ QED
 
 Theorem integer_index_endpoint_operand:
   expr_body_pre cenv cx env idx es /\
-  expr_post ctx func cenv cx idx es sa sb s0 ee (IntV i) op s /\
+  expr_post H ctx func cenv cx idx es sa sb s0 ee (IntV i) op s /\
   ptr_val_ok cx (expr_type idx) (IntV i) op G tn s /\
   is_int_type (expr_type idx) /\ 0 <= i ==>
   eval_operand op s = SOME (n2w (Num i)) /\
@@ -142,8 +142,8 @@ Theorem dynamic_root_successful_index_endpoint:
   expr_body_pre cenv cx env (Name (ArrayT et (Dynamic cap)) id) es /\
   expr_body_pre cenv cx env idx es /\
   vyperState$bind (eval_expr cx idx) (\result. read_result cx result) es = (INL iv,ee) /\
-  expr_post ctx func cenv cx idx es sa sb s0 ee iv iop s /\
-  ghost_inv d cenv cx ee G tn s /\
+  expr_post H ctx func cenv cx idx es sa sb s0 ee iv iop s /\
+  ghost_inv H d cenv cx ee G tn s /\
   ptr_val_ok cx (expr_type idx) iv iop G tn s /\
   lower_value compile_expr cenv ty idx sa = (iop,sb) /\
   local_ptrs_reserved cenv sb /\

@@ -5,7 +5,7 @@ Ancestors
   exprSimMemorySource exprSimWordArgs stmtFragPtr bodyPtrDefs
 
 Theorem pop_local_vv_post_cursor:
-  stmt_state_rel ctx func cenv cx es s /\
+  stmt_state_rel H ctx func cenv cx es s /\
   local_ptrs_rel func cenv es.scopes s /\
   popped_keys_indexed es.scopes /\
   find_containing_scope id es.scopes = SOME (pre, envs, entry, rest) /\
@@ -30,7 +30,7 @@ Theorem pop_local_vv_post_cursor:
   evaluate_type (get_tenv cx) ann = SOME etv /\
   evaluate_type (get_tenv cx) (ArrayT ann (Dynamic n)) =
     SOME (ArrayTV etv (Dynamic n)) ==>
-  vv_post ctx func cenv cx (Pop ann (NameTarget id)) es sa sb s
+  vv_post H ctx func cenv cx (Pop ann (NameTarget id)) es sa sb s
     (es with scopes := pre ++ envs |+ (id, pop_name_entry entry vs) :: rest)
     (PlaceR (MemoryPlace id [ValueSubscript (IntV &(LENGTH vs - 1))]))
     (LocatedValue ann (mk_ptr (Var out) LocMemory)) t
@@ -63,9 +63,9 @@ Proof
 QED
 
 Theorem pop_local_memory_post_gas_obs:
-  vv_post ctx func cenv cx (Pop ann bt) es sa sb s0 ee tv
+  vv_post H ctx func cenv cx (Pop ann bt) es sa sb s0 ee tv
     (LocatedValue ann (mk_ptr op LocMemory)) t ==>
-  vv_post ctx func cenv cx (Pop ann bt) es sa sb s0 (ee with gas_obs := gs) tv
+  vv_post H ctx func cenv cx (Pop ann bt) es sa sb s0 (ee with gas_obs := gs) tv
     (LocatedValue ann (mk_ptr op LocMemory)) t
 Proof
   simp[vv_post_def, vv_holds_def, vv_at_def, mk_ptr_def,

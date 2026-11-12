@@ -17,8 +17,8 @@ QED
    alloca_room pins it to the unique lookup at its name. *)
 Theorem ifexp_frame_function_rigid:
   !ctx fn cut ce cx es s ce' cx' es' s'.
-    stmt_state_rel ctx fn ce cx es s /\
-    stmt_state_rel ctx cut ce' cx' es' s' /\
+    stmt_state_rel H ctx fn ce cx es s /\
+    stmt_state_rel H ctx cut ce' cx' es' s' /\
     cut.fn_name = fn.fn_name ==> cut = fn
 Proof
   rpt strip_tac >>

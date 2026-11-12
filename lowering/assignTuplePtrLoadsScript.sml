@@ -17,7 +17,7 @@ Theorem compile_tuple_load_all_offset_path_ptr:
   values_have_types tvs vals /\
   (!m. mem_agree_outside tn.t_mem s.vs_memory m ==>
        tuple_in_memory vals tvs (w2n w+off) m) /\
-  stmt_state_rel ctx func cenv cx es s /\ ghost_inv d cenv cx es G tn s /\
+  stmt_state_rel H ctx func cenv cx es s /\ ghost_inv H d cenv cx es G tn s /\
   local_ptrs_reserved cenv sa /\ fn_has_code sa sb func /\ ~ctx_has_dalloca ctx /\
   ~s.vs_halted /\ s.vs_current_bb = sa.cs_current_bb /\
   s.vs_inst_idx = LENGTH sa.cs_current_insts /\
@@ -27,7 +27,7 @@ Theorem compile_tuple_load_all_offset_path_ptr:
   EVERY (\op. !x. op = Var x ==> not_fresh_at sb x) elems /\
   local_ptrs_reserved cenv sb /\
   ?t G' tn'. gas_path_ptr D 0 ctx func PG G tn s 0 G' tn' (OK t) /\
-    stmt_state_rel ctx func cenv cx es t /\ ghost_inv d cenv cx es G' tn' t /\
+    stmt_state_rel H ctx func cenv cx es t /\ ghost_inv H d cenv cx es G' tn' t /\
     ~t.vs_halted /\ t.vs_current_bb = sb.cs_current_bb /\
     t.vs_inst_idx = LENGTH sb.cs_current_insts /\
     t.vs_memory = s.vs_memory /\ t.vs_allocas = s.vs_allocas /\
@@ -194,7 +194,7 @@ Theorem compile_tuple_load_all_typed_path_ptr:
   values_have_types tvs vals /\
   (!m. mem_agree_outside tn.t_mem s.vs_memory m ==>
        tuple_in_memory vals tvs (w2n w) m) /\
-  stmt_state_rel ctx func cenv cx es s /\ ghost_inv d cenv cx es G tn s /\
+  stmt_state_rel H ctx func cenv cx es s /\ ghost_inv H d cenv cx es G tn s /\
   local_ptrs_reserved cenv sa /\ fn_has_code sa sb func /\ ~ctx_has_dalloca ctx /\
   ~s.vs_halted /\ s.vs_current_bb = sa.cs_current_bb /\
   s.vs_inst_idx = LENGTH sa.cs_current_insts /\
@@ -205,7 +205,7 @@ Theorem compile_tuple_load_all_typed_path_ptr:
   local_ptrs_reserved cenv sb /\
   ?p b cap t G' tn'. bop = Var p /\ FLOOKUP G p = SOME (b,cap) /\
     gas_path_ptr D 0 ctx func PG G tn s 0 G' tn' (OK t) /\
-    stmt_state_rel ctx func cenv cx es t /\ ghost_inv d cenv cx es G' tn' t /\
+    stmt_state_rel H ctx func cenv cx es t /\ ghost_inv H d cenv cx es G' tn' t /\
     ~t.vs_halted /\ t.vs_current_bb = sb.cs_current_bb /\
     t.vs_inst_idx = LENGTH sb.cs_current_insts /\
     t.vs_memory = s.vs_memory /\ t.vs_allocas = s.vs_allocas /\

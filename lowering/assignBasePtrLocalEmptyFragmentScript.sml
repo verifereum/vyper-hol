@@ -45,7 +45,7 @@ Proof
     by metis_tac[ret_pc_ok_def] >>
   `emit_inst MSTORE [Var p; Lit 0w] [] sa = ((),sb)` by fs[emit_void_def, emit_inst_def] >>
   drule_all assign_base_empty_local_store_path >>
-  disch_then (qspecl_then [`PG`, `cx_dead cx`] strip_assume_tac) >>
+  disch_then (qspecl_then [`PG`, `cx_dead H cx`] strip_assume_tac) >>
   suspend "post"
 QED
 
@@ -83,11 +83,11 @@ Resume compile_assign_local_empty_stmt_frag_ptr[post]:
   `(mstore (w2n w) 0w s0).vs_current_bb = sa.cs_current_bb` by simp[mstore_def] >>
   disj1_tac >> simp[stmt_lands_def, cenv_top_ext_refl] >>
   conj_tac
-  >- (qpat_x_assum `stmt_state_rel _ _ _ _ _ (mstore _ _ _)` mp_tac >>
+  >- (qpat_x_assum `stmt_state_rel _ _ _ _ _ _ (mstore _ _ _)` mp_tac >>
       pure_once_rewrite_tac[GSYM stmt_state_rel_inst_idx] >>
       simp[]) >>
   conj_tac
-  >- (qpat_x_assum `ghost_inv _ _ _ (_ with scopes := _) _ _ t` mp_tac >>
+  >- (qpat_x_assum `ghost_inv _ _ _ _ (_ with scopes := _) _ _ t` mp_tac >>
       qabbrev_tac `scs = pre ++ (env |+ (id,entry with <|value := default_value tyv; popped := []|>)) :: rest` >>
       `es with <|scopes := scs; gas_obs := []|> =
        (es with scopes := scs) with gas_obs := []` by

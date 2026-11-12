@@ -167,7 +167,7 @@ QED
 Finalise map_scratch_store_hash_checked
 
 Theorem map_scratch_stores_ghost_inv:
-  local_ptrs_rel fn cenv es.scopes s /\ ghost_inv d cenv cx es G tn s /\
+  local_ptrs_rel fn cenv es.scopes s /\ ghost_inv H d cenv cx es G tn s /\
   local_ptrs_reserved cenv sa /\ ~not_fresh_at sa q /\
   (!x sz. cenv.ce_return_buf = SOME (PtrVar (Var x) sz) ==> not_fresh_at sa x) /\
   (!x sz. cenv.ce_return_pc = SOME (PtrVar (Var x) sz) ==> not_fresh_at sa x) /\
@@ -175,7 +175,7 @@ Theorem map_scratch_stores_ghost_inv:
      lb+sz <= b \/ b+64 <= lb) /\
   lookup_var p s = SOME (n2w b) /\ p <> q /\
   FLOOKUP G p = SOME (root,cap) /\ op_taint tn (Var p) = {} ==>
-  ghost_inv d cenv cx es (G |+ (q,(root,cap)))
+  ghost_inv H d cenv cx es (G |+ (q,(root,cap)))
     (tn with <|t_var := tn.t_var |+ (q,{});
       t_mem := (tn.t_mem DIFF {i | b <= i /\ i < b+32})
         DIFF {i | b+32 <= i /\ i < b+64}|>)
@@ -187,15 +187,15 @@ Proof
   qabbrev_tac `s2 = update_var q (n2w (b+32)) s1` >>
   qabbrev_tac `G2 = G |+ (q,(root,cap))` >>
   qabbrev_tac `tn2 = tn1 with t_var := tn1.t_var |+ (q,{})` >>
-  `ghost_inv d cenv cx es G tn1 s1` by
+  `ghost_inv H d cenv cx es G tn1 s1` by
     (simp[Abbr `s1`] >> irule ghost_inv_mstore_clean >>
      conj_tac >- (rpt strip_tac >> first_x_assum drule >> decide_tac) >>
      conj_tac >- metis_tac[] >> qexists_tac `tn` >> simp[Abbr `tn1`]) >>
-  `ghost_inv d cenv cx es G2 tn2 s2` by suspend "add_inv" >>
+  `ghost_inv H d cenv cx es G2 tn2 s2` by suspend "add_inv" >>
   `local_ptrs_rel fn cenv es.scopes s2` by suspend "locals" >>
   `!name lb sz. local_region cenv es.scopes s2 name lb sz ==>
      lb+sz <= b+32 \/ b+64 <= lb` by suspend "separation" >>
-  `ghost_inv d cenv cx es G2
+  `ghost_inv H d cenv cx es G2
     (tn2 with t_mem := tn2.t_mem DIFF {i | b+32 <= i /\ i < b+64})
     (mstore (b+32) w1 s2)` suffices_by
     simp[Abbr `G2`, Abbr `tn2`, Abbr `tn1`, Abbr `s2`, Abbr `s1`] >>
@@ -246,7 +246,7 @@ Theorem map_scratch_tail_certificate:
   lookup_var p s = SOME (n2w b) /\ FLOOKUP G p = SOME (root,cap) /\
   root <= b /\ b+64 <= root+cap /\ b+64 < dimword (:256) /\
   op_taint tn (Var p) = {} /\ ~ctx_has_dalloca ctx /\
-  local_ptrs_rel fn cenv es.scopes s /\ ghost_inv d cenv cx es G tn s /\
+  local_ptrs_rel fn cenv es.scopes s /\ ghost_inv H d cenv cx es G tn s /\
   local_ptrs_reserved cenv sa /\ ~not_fresh_at sa q /\ ~not_fresh_at sa h /\
   (!x sz. cenv.ce_return_buf = SOME (PtrVar (Var x) sz) ==> not_fresh_at sa x) /\
   (!x sz. cenv.ce_return_pc = SOME (PtrVar (Var x) sz) ==> not_fresh_at sa x) /\
@@ -259,7 +259,7 @@ Theorem map_scratch_tail_certificate:
     [mk_inst is MSTORE [Var p;slot] []; mk_inst ip ADD [Var p;Lit 32w] [q];
      mk_inst ik MSTORE [Var q;key] []; mk_inst ih SHA3 [Var p;Lit 64w] [h]]
       (s with vs_inst_idx := k) G' tn') /\
-    ghost_inv d cenv cx es G' tn' t /\
+    ghost_inv H d cenv cx es G' tn' t /\
     ghost_kept cenv es sa G tn s G' tn' /\
     tn'.t_mem SUBSET tn.t_mem /\ op_taint tn' (Var h) = {} /\ op_prov G' (Var h) = NONE /\
     (!x. not_fresh_at sa x ==> FLOOKUP G' x = FLOOKUP G x /\
@@ -275,7 +275,7 @@ Proof
       DIFF {i | b+32 <= i /\ i < b+64}|>` >>
   `t = update_var h (word_of_bytes T (0w:bytes32)
      (Keccak_256_w64 (mem_bytes_at b 64 z.vs_memory))) z` by suspend "endpoint" >>
-  `ghost_inv d cenv cx es G2 tn2 z` by
+  `ghost_inv H d cenv cx es G2 tn2 z` by
     (simp[Abbr `z`, Abbr `v`, Abbr `u`, Abbr `G2`, Abbr `tn2`] >>
      irule (SRULE [] map_scratch_stores_ghost_inv) >> simp[] >> metis_tac[]) >>
   qexistsl_tac [`DRESTRICT G2 (COMPL {h})`, `tn2 with t_var := tn2.t_var |+ (h,{})`] >>
@@ -339,7 +339,7 @@ Theorem map_scratch_prefix_certificate:
   (!x. key = Var x ==> x <> p /\ x <> q) /\
   eval_operand slot s = SOME w0 /\ eval_operand key s = SOME w1 /\
   op_taint tn slot = {} /\ op_taint tn key = {} /\
-  stmt_state_rel ctx fn cenv cx es s /\ ghost_inv d cenv cx es G tn s /\
+  stmt_state_rel H ctx fn cenv cx es s /\ ghost_inv H d cenv cx es G tn s /\
   fn_inst_ids_distinct fn /\ MEM (mk_inst ia ALLOCA [Lit 64w] [p]) (fn_insts fn) /\
   ~ctx_has_dalloca ctx /\ local_ptrs_reserved cenv sa /\
   ~not_fresh_at sa p /\ ~not_fresh_at sa q /\ ~not_fresh_at sa h /\
@@ -347,7 +347,7 @@ Theorem map_scratch_prefix_certificate:
   (!x sz. cenv.ce_return_pc = SOME (PtrVar (Var x) sz) ==> not_fresh_at sa x) /\
   run_inst_seq code s = OK t ==>
   ?G' tn'. inst_seq_ptr D 0 ctx fn PG G tn code s G' tn' /\
-    ghost_inv d cenv cx es G' tn' t /\ ghost_kept cenv es sa G tn s G' tn' /\
+    ghost_inv H d cenv cx es G' tn' t /\ ghost_kept cenv es sa G tn s G' tn' /\
     op_taint tn' (Var h) = {} /\ op_prov G' (Var h) = NONE /\
     (!x. not_fresh_at sa x ==> FLOOKUP G' x = FLOOKUP G x /\
       op_taint tn' (Var x) = op_taint tn (Var x))
@@ -402,21 +402,21 @@ Theorem map_scratch_ptr_frame:
   (!x. base_op = Var x ==> not_fresh_at sa x) /\
   (!x. key = Var x ==> not_fresh_at sa x) /\
   eval_operand base_op s = SOME w0 /\ eval_operand key s = SOME w1 /\
-  stmt_state_rel ctx func cenv cx es s /\ fn_inst_ids_distinct func /\
+  stmt_state_rel H ctx func cenv cx es s /\ fn_inst_ids_distinct func /\
   local_ptrs_reserved cenv sa /\ fn_has_code sa sb func /\
   op_taint tn base_op = {} /\ op_taint tn key = {} /\
-  ghost_inv d cenv cx es G tn s /\ ~ctx_has_dalloca ctx /\
+  ghost_inv H d cenv cx es G tn s /\ ~ctx_has_dalloca ctx /\
   (!x k. cenv.ce_return_buf = SOME (PtrVar (Var x) k) ==> not_fresh_at sa x) /\
   (!x k. cenv.ce_return_pc = SOME (PtrVar (Var x) k) ==> not_fresh_at sa x) /\
   ~s.vs_halted /\ lookup_block s.vs_current_bb func.fn_blocks = SOME bb /\
   isPREFIX (emitted_insts sa sb) (DROP s.vs_inst_idx bb.bb_instructions) ==>
   ?t G' tn'. run_inst_seq (emitted_insts sa sb) s = OK t /\
     eval_operand op t = SOME (hashmap_slot w0 w1) /\
-    stmt_state_rel ctx func cenv cx es t /\ wb_frame cenv es es sa s t /\
+    stmt_state_rel H ctx func cenv cx es t /\ wb_frame cenv es es sa s t /\
     gas_path_ptr D 0 ctx func PG G tn s 0 G' tn'
       (OK (t with vs_inst_idx := s.vs_inst_idx + LENGTH (emitted_insts sa sb))) /\
-    ghost_inv d cenv cx es G' tn' t /\
-    ghost_inv d cenv cx es G' tn'
+    ghost_inv H d cenv cx es G' tn' t /\
+    ghost_inv H d cenv cx es G' tn'
       (t with vs_inst_idx := s.vs_inst_idx + LENGTH (emitted_insts sa sb)) /\
     ghost_kept cenv es sa G tn s G' tn' /\
     op_taint tn' op = {} /\ op_prov G' op = NONE /\
@@ -431,7 +431,7 @@ Proof
    (!x. base_op = Var x ==> x <> p) /\
    (!x. key = Var x ==> x <> p /\ x <> q)` by metis_tac[] >>
   `?G' tn'. inst_seq_ptr D 0 ctx func PG G tn (emitted_insts sa sb) s G' tn' /\
-    ghost_inv d cenv cx es G' tn' t /\ ghost_kept cenv es sa G tn s G' tn' /\
+    ghost_inv H d cenv cx es G' tn' t /\ ghost_kept cenv es sa G tn s G' tn' /\
     op_taint tn' (Var h) = {} /\ op_prov G' (Var h) = NONE /\
     (!x. not_fresh_at sa x ==> FLOOKUP G' x = FLOOKUP G x /\
       op_taint tn' (Var x) = op_taint tn (Var x))` by

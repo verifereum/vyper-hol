@@ -10,7 +10,7 @@ Ancestors
    including memory, storage, transient and both immutable load modes. *)
 Theorem ifexp_allocated_unwrap_dispatch:
   !ctx fn cenv cx e es sa sc s0 es' tv ty p s.
-    vv_post ctx fn cenv cx e es sa sc s0 es' tv (LocatedValue ty p) s /\
+    vv_post H ctx fn cenv cx e es sa sc s0 es' tv (LocatedValue ty p) s /\
     post_value_type cenv e = expr_type e /\
     ~is_word_type (expr_type e) ==>
     ~is_word_type ty /\ p.ptr_location <> LocCalldata /\
@@ -54,10 +54,10 @@ QED
    unwrap_value cenv (LocatedValue ty p) sc = (src,sn) /\
    (p.ptr_location = LocStorage \/ p.ptr_location = LocTransient \/
     p.ptr_location = LocCode) /\ ~is_word_type ty /\
-   vv_post ctx fn cenv cx e es sa sc s0 es' raw (LocatedValue ty p) s /\
+   vv_post H ctx fn cenv cx e es sa sc s0 es' raw (LocatedValue ty p) s /\
    read_result cx raw es' = (INL v,es') /\
    ptr_vv_ok cx (expr_type e) raw (LocatedValue ty p) es' G tn s /\
-   ghost_inv d cenv cx es' G tn s /\
+   ghost_inv H d cenv cx es' G tn s /\
    ghost_kept cenv es sa G0 tn0 s0 G tn /\
    ptr_covers G tn out s n /\ not_fresh_at sc out /\
    local_ptrs_reserved cenv sa /\
@@ -73,9 +73,9 @@ QED
    s.vs_inst_idx = LENGTH sc.cs_current_insts ==>
    ?G1 tn1 t.
      gas_path_ptr D 0 ctx fn PG G tn s 0 G1 tn1 (OK t) /\
-     expr_post ctx fn cenv cx e es sa sn s0 es' v src t /\
+     expr_post H ctx fn cenv cx e es sa sn s0 es' v src t /\
      ptr_val_ok cx (expr_type e) v src G1 tn1 t /\
-     ghost_inv d cenv cx es' G1 tn1 t /\
+     ghost_inv H d cenv cx es' G1 tn1 t /\
      ghost_kept cenv es sa G0 tn0 s0 G1 tn1 /\
      ptr_covers G1 tn1 out t n /\ lookup_var out t = lookup_var out s /\
      (!w. eval_operand src t = SOME w ==>

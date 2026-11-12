@@ -34,13 +34,13 @@ Proof
 QED
 
 Theorem for_backedge_state_ghost_transport:
-  stmt_state_rel ctx func cenv cx es s /\ ghost_inv d cenv cx es G tn s /\
+  stmt_state_rel H ctx func cenv cx es s /\ ghost_inv H d cenv cx es G tn s /\
   not_local_ptr cenv es.scopes cv /\ not_local_ptr cenv es.scopes nv /\
   (!sz. cenv.ce_return_buf <> SOME (PtrVar (Var cv) sz)) /\
   (!sz. cenv.ce_return_buf <> SOME (PtrVar (Var nv) sz)) ==>
-  stmt_state_rel ctx func cenv cx es
+  stmt_state_rel H ctx func cenv cx es
     (jump_to lbl (update_var cv w (update_var nv w s))) /\
-  ghost_inv d cenv cx es
+  ghost_inv H d cenv cx es
     (DRESTRICT (DRESTRICT G (COMPL {nv})) (COMPL {cv}))
     (tn with t_var := (tn.t_var |+ (nv,{})) |+ (cv,{}))
     (jump_to lbl (update_var cv w (update_var nv w s)))
@@ -126,7 +126,7 @@ Theorem for_range_backedge_restore_ptr:
     cond_lbl exit_lbl body_lbl incr_lbl j1 j2 j3 bbb i1 i2 i3 sb0 sb1 sj /\
   s.vs_current_bb = incr_lbl /\ s.vs_inst_idx = 0 /\
   ~ctx_has_dalloca ctx /\ ~s.vs_halted /\
-  stmt_state_rel ctx func cenv cx es s /\ ghost_inv d cenv cx es G tn s /\
+  stmt_state_rel H ctx func cenv cx es s /\ ghost_inv H d cenv cx es G tn s /\
   P es /\ lookup_scopes id es.scopes = NONE /\ SUC k <= Num (n2 - n1) /\
   lookup_var cv s = SOME (i2w (n1 + &k)) /\
   lookup_var ev s = SOME (i2w n2) /\ lookup_var p s = SOME a /\
@@ -149,7 +149,7 @@ Theorem for_range_backedge_restore_ptr:
   gas_path_ptr D 0 ctx func PG G tn s 0 Gf tf (OK sf) /\
   P es /\ lookup_scopes id es.scopes = NONE /\ SUC k <= Num (n2 - n1) /\
   sf.vs_current_bb = cond_lbl /\ sf.vs_inst_idx = 0 /\ ~sf.vs_halted /\
-  stmt_state_rel ctx func cenv cx es sf /\ ghost_inv d cenv cx es Gf tf sf /\
+  stmt_state_rel H ctx func cenv cx es sf /\ ghost_inv H d cenv cx es Gf tf sf /\
   lookup_var cv sf = SOME (i2w (n1 + &(SUC k))) /\
   lookup_var ev sf = SOME (i2w n2) /\ lookup_var p sf = SOME a /\
   FLOOKUP Gf cv = NONE /\ FLOOKUP Gf ev = NONE /\
@@ -170,8 +170,8 @@ Proof
   `gas_path_ptr D 0 ctx func PG G tn s 0 Gf tf (OK sf)` by
     (gvs[] >> irule (SRULE [] for_increment_block_path_ptr) >>
      simp[] >> metis_tac[]) >>
-  `stmt_state_rel ctx func cenv cx es sf /\
-   ghost_inv d cenv cx es Gf tf sf` by
+  `stmt_state_rel H ctx func cenv cx es sf /\
+   ghost_inv H d cenv cx es Gf tf sf` by
     (gvs[] >> irule (SRULE [] for_backedge_state_ghost_transport) >> simp[]) >>
   `ptr_covers Gf tf p sf sz /\ sf.vs_allocas = s.vs_allocas /\
    sf.vs_inst_idx = 0 /\ sf.vs_current_bb = cond_lbl /\

@@ -7,7 +7,7 @@ Ancestors
   words arithmetic finite_map list pred_set allocaSiteResource
 
 Theorem revert_reason_prefix_head_exterior:
-  stmt_state_rel ctx fn cenv cx es s /\ fn_inst_ids_distinct fn /\
+  stmt_state_rel H ctx fn cenv cx es s /\ fn_inst_ids_distinct fn /\
   MEM (mk_inst id ALLOCA [Lit (n2w (64+ms))]
     [STRING #"%" (toString v)]) (fn_insts fn) /\
   MEM (mk_inst (id+3) ALLOCA [Lit (n2w ms)]
@@ -38,7 +38,7 @@ Proof
 QED
 
 Theorem revert_reason_prefix_head_frame:
-  stmt_state_rel ctx fn cenv cx es s /\ fn_inst_ids_distinct fn /\
+  stmt_state_rel H ctx fn cenv cx es s /\ fn_inst_ids_distinct fn /\
   MEM (mk_inst id ALLOCA [Lit (n2w (64+ms))]
     [STRING #"%" (toString v)]) (fn_insts fn) /\
   MEM (mk_inst (id+3) ALLOCA [Lit (n2w ms)]

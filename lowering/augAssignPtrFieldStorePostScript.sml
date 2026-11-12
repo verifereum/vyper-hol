@@ -29,7 +29,7 @@ Proof
 QED
 
 Theorem ghost_local_field_word_store:
-  ghost_inv d cenv cx es G tn s /\ local_ptrs_rel fn cenv es.scopes s /\
+  ghost_inv H d cenv cx es G tn s /\ local_ptrs_rel fn cenv es.scopes s /\
   lookup_scopes name es.scopes = SOME entry /\
   FLOOKUP cenv.ce_vars name = SOME (PtrVar (Var p) sz) /\
   lookup_var p s = SOME a /\
@@ -73,7 +73,7 @@ Proof
 QED
 
 Theorem ghost_inv_write_local_field_word:
-  ghost_inv d cenv cx es G tn s /\ local_ptrs_rel fn cenv es.scopes s /\
+  ghost_inv H d cenv cx es G tn s /\ local_ptrs_rel fn cenv es.scopes s /\
   find_containing_scope name es.scopes = SOME (pre, env, entry, rest) /\
   FLOOKUP cenv.ce_vars name = SOME (PtrVar (Var p) sz) /\
   lookup_var p s = SOME a /\ lookup_var dst s = SOME da /\
@@ -83,7 +83,7 @@ Theorem ghost_inv_write_local_field_word:
   ALOOKUP fs fld = SOME ftv /\ type_memory_size ftv = 32 /\ word_value v /\
   struct_field_offset flds fld + 32 <= sz /\
   eval_operand value s = SOME (val_to_w256 v) /\ op_taint tn value = {} ==>
-  ghost_inv d cenv cx
+  ghost_inv H d cenv cx
     (es with scopes := pre ++ (env |+ (name, entry with
       <|value := StructV (AFUPDKEY fld (K v) vals); popped := []|>)) :: rest)
     G (step_taint (mk_inst id MSTORE [Var dst; value] []) s

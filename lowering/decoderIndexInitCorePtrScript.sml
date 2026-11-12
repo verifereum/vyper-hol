@@ -11,21 +11,21 @@ Theorem abi_decode_index_init_endpoint_exact_ptr_core:
   abi_decoder_budget first last b cap s /\
   sa.cs_next_id IN abi_decoder_ids first last /\ ~s.vs_halted /\
   run_inst_seq (emitted_insts sa sb) s = OK t ==>
-  ?H u q p. ip = Var q /\ eval_operand ip t = SOME (n2w p) /\
+  ?HG u q p. ip = Var q /\ eval_operand ip t = SOME (n2w p) /\
     b <= p /\ p + 32 <= b + cap /\ mload p t = 0w /\
-    ptr_covers H u q (t with vs_inst_idx := LENGTH (emitted_insts sa sb) + s.vs_inst_idx) 32 /\
-    frag_exec_ptr cx ctx PG sa sb
+    ptr_covers HG u q (t with vs_inst_idx := LENGTH (emitted_insts sa sb) + s.vs_inst_idx) 32 /\
+    frag_exec_ptr H cx ctx PG sa sb
       (\g z v. g = G /\ z = tn /\ v = s)
-      (\g z v. g = H /\ z = u /\ v = (t with vs_inst_idx := LENGTH (emitted_insts sa sb) + s.vs_inst_idx)) R /\
+      (\g z v. g = HG /\ z = u /\ v = (t with vs_inst_idx := LENGTH (emitted_insts sa sb) + s.vs_inst_idx)) R /\
     u.t_stor = tn.t_stor /\ u.t_trans = tn.t_trans /\ u.t_imm = tn.t_imm /\
     u.t_mem = tn.t_mem DIFF {a | p <= a /\ a < p + 32} /\
     (!a. p <= a /\ a < p + 32 ==> a NOTIN u.t_mem) /\
     (!x. not_fresh_at sa x ==> lookup_var x t = lookup_var x s /\
-      FLOOKUP H x = FLOOKUP G x /\ op_taint u (Var x) = op_taint tn (Var x)) /\
+      FLOOKUP HG x = FLOOKUP G x /\ op_taint u (Var x) = op_taint tn (Var x)) /\
     (!D lower ctx' func.
       fn_has_code sa sb func /\ allocas_from lower s /\ lower <= s.vs_alloca_next /\ ~ctx_has_dalloca ctx' /\
       s.vs_current_bb = sa.cs_current_bb /\ s.vs_inst_idx = LENGTH sa.cs_current_insts /\
-      (!fuel. ptr_safe_run D lower fuel ctx' func PG H u
+      (!fuel. ptr_safe_run D lower fuel ctx' func PG HG u
         (t with vs_inst_idx := LENGTH sb.cs_current_insts)) ==>
       !fuel. ptr_safe_run D lower fuel ctx' func PG G tn s)
 Proof
@@ -56,21 +56,21 @@ Proof
   qabbrev_tac `v1 = v with vs_inst_idx := SUC s.vs_inst_idx` >>
   qabbrev_tac `ins = mk_inst allocation_st.cs_next_id MSTORE [Var q; Lit 0w] []` >>
   qabbrev_tac `u1 = step_taint ins v1 (mstore p 0w v1) u` >>
-  `step_prov PG H ins (mstore p 0w v1) = H /\
+  `step_prov PG HG ins (mstore p 0w v1) = HG /\
    u1.t_var = u.t_var /\ u1.t_stor = u.t_stor /\ u1.t_trans = u.t_trans /\
    u1.t_mem = u.t_mem DIFF {a | p <= a /\ a < p + 32}` by
     (mp_tac mstore_ghost_frame >>
-     disch_then (qspecl_then [`PG`,`H`,`u`,`v1`,`allocation_st.cs_next_id`,
+     disch_then (qspecl_then [`PG`,`HG`,`u`,`v1`,`allocation_st.cs_next_id`,
        `q`,`Lit 0w`,`n2w p`,`0w`] mp_tac) >>
      simp[Abbr `ins`, Abbr `u1`, Abbr `v1`, lookup_var_def,
           eval_operand_def, op_taint_def, w2n_n2w] >> gvs[lookup_var_def]) >>
   `u1.t_imm = tn.t_imm` by
     simp[Abbr `u1`, Abbr `ins`, step_taint_def, imm_taint_def, mk_inst_def] >>
-  `frag_exec_ptr cx ctx PG sa sb
+  `frag_exec_ptr H cx ctx PG sa sb
       (\g z v. g = G /\ z = tn /\ v = s)
-      (\g z v. g = H /\ z = u1 /\ v = (t with vs_inst_idx := LENGTH (emitted_insts sa sb) + s.vs_inst_idx)) R` by
+      (\g z v. g = HG /\ z = u1 /\ v = (t with vs_inst_idx := LENGTH (emitted_insts sa sb) + s.vs_inst_idx)) R` by
     (irule frag_exec_ptr_seq >>
-     qexistsl_tac [`\g z v. g = H /\ z = u /\ v = v1`, `allocation_st`] >>
+     qexistsl_tac [`\g z v. g = HG /\ z = u /\ v = v1`, `allocation_st`] >>
      simp[] >> conj_tac >-
        (drule emit_op_extends >> simp[same_blocks_def] >> strip_tac >>
         irule cs_extends_same_block >> simp[IS_PREFIX_APPEND]) >>
@@ -82,7 +82,7 @@ Proof
      simp[Abbr `ins`, op_taint_def] >> qexistsl_tac [`n2w p`,`0w`] >>
      simp[Abbr `v1`, lookup_var_def, eval_operand_def, w2n_n2w] >>
      gvs[lookup_var_def, mstore_def, ADD1, ADD_ASSOC]) >>
-  qexistsl_tac [`H`,`u1`,`q`,`p`] >>
+  qexistsl_tac [`HG`,`u1`,`q`,`p`] >>
   gvs[eval_operand_def] >>
   conj_tac >- simp[mload_mstore_same] >>
   conj_tac >- (fs[ptr_covers_def, Abbr `v1`, eval_operand_def, lookup_var_def] >>
@@ -111,13 +111,13 @@ Proof
      disch_then (qspecl_then [`tn`,`PG`,`G`] strip_assume_tac) >> simp[]) >>
   `allocation_st.cs_current_bb = sa.cs_current_bb` by
     metis_tac[emit_op_same_blocks, same_blocks_def] >>
-  `!fuel. ptr_safe_run D lower fuel ctx' func PG H u v1` suffices_by
+  `!fuel. ptr_safe_run D lower fuel ctx' func PG HG u v1` suffices_by
     (strip_tac >>
      qpat_x_assum `!D lower ctx' func. _`
        (qspecl_then [`D`,`lower`,`ctx'`,`func`] mp_tac) >>
      gvs[Abbr `v1`, ADD1]) >>
   irule setup_instruction_continuation >>
-  qexistsl_tac [`H`,`ins`,`allocation_st`,`sb`,`mstore p 0w v1`,`u1`] >>
+  qexistsl_tac [`HG`,`ins`,`allocation_st`,`sb`,`mstore p 0w v1`,`u1`] >>
   simp[Abbr `ins`, is_terminator_def] >>
   conj_tac >-
     gvs[Abbr `v1`, mstore_def] >>
