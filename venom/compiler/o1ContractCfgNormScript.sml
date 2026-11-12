@@ -1510,13 +1510,13 @@ Theorem cfg_norm_stage_mem_inv:
   ctx_pass_stage rpolicy (CFP_Simple VP_CFGNormalization) view C C' /\
   o1_ctx_shape C /\ EVERY wf_ssa C.ctx_functions /\
   vs.vs_vars = FEMPTY /\ ~vs.vs_halted /\
-  mem_inv (static_mem_ok eom) C vs ==>
-  mem_inv (static_mem_ok eom) C' vs
+  mem_corr_closed_rf M /\ mem_inv M C vs ==>
+  mem_inv M C' vs
 Proof
   strip_tac >>
   `ctx_bisim C C'` by (irule cfg_norm_stage_bisim >> metis_tac[]) >>
   drule cfg_norm_stage_functions >> strip_tac >>
-  irule frame_sim_rf_mem_inv >> simp[mem_corr_closed_rf_static_mem_ok] >>
+  irule frame_sim_rf_mem_inv >> simp[] >>
   qexists_tac `C` >> simp[] >>
   gvs[listTheory.LIST_REL_EL_EQN] >> rpt strip_tac >>
   first_x_assum drule >> strip_tac >>
@@ -1599,7 +1599,8 @@ Proof
       irule cfg_norm_stage_run_fuel >> metis_tac[]) >>
   qexists_tac `eom` >>
   conj_tac >- metis_tac[cfg_norm_stage_max_live_eom] >>
-  irule cfg_norm_stage_mem_inv >> metis_tac[]
+  irule cfg_norm_stage_mem_inv >>
+  metis_tac[mem_corr_closed_rf_lowered_mem_fact]
 QED
 
 Theorem o1_contract_cfg_normalization:

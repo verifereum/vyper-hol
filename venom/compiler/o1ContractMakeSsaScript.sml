@@ -240,7 +240,7 @@ Proof
   >- (gvs[o1_lowered_inv_def] >> qexists_tac `eom` >>
       conj_tac >- metis_tac[make_ssa_stage_max_live_eom] >>
       irule make_ssa_stage_mem_inv >>
-      metis_tac[mem_corr_closed_rf_static_mem_ok]) >>
+      metis_tac[mem_corr_closed_rf_lowered_mem_fact]) >>
   metis_tac[make_ssa_stage_wf_ssa]
 QED
 

@@ -267,9 +267,15 @@ Proof
                 `case max_live_eom out.po_unit.cu_context of
                    SOME eom => eom | NONE => 0`] >>
   rpt gen_tac >> strip_tac >>
-  mp_tac (Q.SPECL [`D`, `lo`, `rpolicy`, `unit`, `out`, `vs`]
+  `!eom. max_live_eom out.po_unit.cu_context = SOME eom ==>
+         eom <= w2n vs.vs_initial_fmp` by
+    metis_tac[generate_context_plan_eom_room] >>
+  mp_tac (Q.SPECL [`D`, `lo`, `rpolicy`, `unit`, `out`, `vs`,
+                   `vs.vs_initial_fmp`]
             run_venom_pipeline_fuel) >>
   impl_tac >- simp[] >> strip_tac >>
+  `gas_variant vs_in vs` by
+    metis_tac[raw_variant_gas_variant, o1_run_state_ok_def] >>
   qpat_x_assum `!vs_in. gas_variant vs_in vs ==> _`
     (qspec_then `vs_in` mp_tac) >>
   simp[] >> strip_tac >>

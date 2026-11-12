@@ -175,7 +175,7 @@ Theorem source_fmp_free:
   fmp_free_ctx unit.cu_context
 Proof
   rw[fmp_free_ctx_def, unit_fmp_unsealed_def, EVERY_MEM] >>
-  metis_tac[source_no_raw_fmp_ops]
+  metis_tac[source_pre_fmp_ops]
 QED
 
 Theorem fmp_free_ctx_prune:

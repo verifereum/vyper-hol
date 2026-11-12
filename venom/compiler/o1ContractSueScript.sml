@@ -992,13 +992,13 @@ Theorem sue_stage_mem_inv:
   o1_ctx_shape C /\ EVERY wf_ssa C.ctx_functions /\
   EVERY (o1_fn_row 6) C.ctx_functions /\
   vs.vs_vars = FEMPTY /\ ~vs.vs_halted /\
-  mem_inv (static_mem_ok eom) C vs ==>
-  mem_inv (static_mem_ok eom) C' vs
+  mem_corr_closed_rf M /\ mem_inv M C vs ==>
+  mem_inv M C' vs
 Proof
   strip_tac >>
   `ctx_bisim C C'` by (irule sue_stage_bisim >> metis_tac[]) >>
   drule sue_stage_functions >> strip_tac >>
-  irule frame_sim_rf_mem_inv >> simp[mem_corr_closed_rf_static_mem_ok] >>
+  irule frame_sim_rf_mem_inv >> simp[] >>
   qexists_tac `C` >> simp[] >>
   gvs[listTheory.LIST_REL_EL_EQN] >> rpt strip_tac >>
   first_x_assum drule >> strip_tac >>
@@ -1039,7 +1039,8 @@ Proof
   `EVERY wf_ssa C'.ctx_functions` by (irule sue_stage_wf_ssa >> metis_tac[]) >>
   simp[] >> qexists_tac `eom` >>
   conj_tac >- metis_tac[sue_stage_max_live_eom] >>
-  irule sue_stage_mem_inv >> metis_tac[]
+  irule sue_stage_mem_inv >>
+  metis_tac[mem_corr_closed_rf_lowered_mem_fact]
 QED
 
 Theorem o1_contract_sue:
