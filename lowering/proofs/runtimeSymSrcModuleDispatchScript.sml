@@ -264,16 +264,75 @@ Theorem runtime_sym_generate_runtime:
 Proof
   strip_tac >> rpt gen_tac >>
   simp[compile_generate_runtime_def, comp_bind_def, comp_ignore_bind_def] >>
-  rpt (pairarg_tac >> simp[]) >> strip_tac >> gvs[comp_return_def] >>
+  rpt (pairarg_tac >> pure_asm_rewrite_tac[] >>
+       CONV_TAC (DEPTH_CONV pairLib.PAIRED_BETA_CONV)) >>
+  strip_tac >> gvs[comp_return_def] >>
   imp_res_tac runtime_sym_fresh_label >>
   imp_res_tac runtime_sym_new_block_result >> gvs[] >>
   drule_at (Pat `compile_selector_dispatch_linear _ _ _ = _`)
     runtime_sym_selector_dispatch_linear >>
-  simp[EVERY_MAP, EVERY_MEM, FORALL_PROD] >> strip_tac >>
+  simp[EVERY_MAP, LAMBDA_PROD] >> strip_tac >>
   first_assum (drule_at (Pat `compile_external_fn_bodies _ _ = _`)) >>
   simp[] >> strip_tac >>
-  drule_at (Pat `(case fallback of NONE => _ | SOME _ => _) _ = _`)
-    runtime_sym_runtime_fallback >>
-  (impl_tac >- simp[]) >> simp[] >> strip_tac >>
+  Cases_on `fallback`
+  >- (gvs[] >>
+      qmatch_asmsub_rename_tac `emit_inst REVERT _ _ before = _` >>
+      drule_at (Pat `emit_inst _ _ _ _ = _`) runtime_sym_emit_inst >>
+      disch_then (qspec_then `0` mp_tac) >>
+      simp[runtime_sym_ordinary_inst, is_label_operand_def] >> strip_tac >>
+      first_assum (drule_at (Pat `compile_internal_fn_bodies _ _ = _`)) >> simp[]) >>
+  PairCases_on `x` >> gvs[] >>
+  first_assum (drule_at (Pat `compile_fallback_body _ _ _ _ _ _ _ _ _ = _`)) >>
+  simp[] >> strip_tac >>
+  first_assum (drule_at (Pat `compile_internal_fn_bodies _ _ = _`)) >> simp[]
+QED
+
+Theorem runtime_sym_generate_grouped_runtime:
+  (!mid s jobs s'. ~is_label_operand mid /\
+    EVERY (runtime_sym_group P Q D) groups /\
+    EVERY runtime_sym_inst (state_insts s) /\
+    compile_external_groups mid groups s = (jobs,s') ==>
+    EVERY runtime_sym_inst (state_insts s') /\ EVERY (runtime_sym_job P Q D) jobs) /\
+  (!jobs s u s'. EVERY (runtime_sym_job P Q D) jobs /\
+    EVERY runtime_sym_inst (state_insts s) /\
+    compile_external_jobs jobs s = (u,s') ==>
+    EVERY runtime_sym_inst (state_insts s')) /\
+  (!s u s'. EVERY runtime_sym_inst (state_insts s) /\
+    compile_internal_fn_bodies internal_fns s = (u,s') ==>
+    EVERY runtime_sym_inst (state_insts s')) /\
+  (!ce pay nr key tr view stmts ret s u s'.
+    fallback = SOME (ce,pay,nr,key,tr,view,stmts,ret) /\
+    EVERY runtime_sym_inst (state_insts s) /\
+    compile_fallback_body ce pay nr key tr view stmts ret s = (u,s') ==>
+    EVERY runtime_sym_inst (state_insts s')) ==>
+  !s u s'. EVERY (runtime_sym_group P Q D) groups /\
+    EVERY runtime_sym_inst (state_insts s) /\
+    compile_generate_grouped_runtime groups internal_fns fallback s = (u,s') ==>
+    EVERY runtime_sym_inst (state_insts s')
+Proof
+  strip_tac >> rpt gen_tac >>
+  simp[compile_generate_grouped_runtime_def, comp_bind_def, comp_ignore_bind_def] >>
+  rpt (pairarg_tac >> pure_asm_rewrite_tac[] >>
+       CONV_TAC (DEPTH_CONV pairLib.PAIRED_BETA_CONV)) >>
+  strip_tac >> gvs[comp_return_def] >>
+  imp_res_tac runtime_sym_fresh_label >>
+  imp_res_tac runtime_sym_new_block_result >> gvs[] >>
+  drule_at (Pat `compile_group_dispatch_linear _ _ _ = _`)
+    runtime_sym_group_dispatch_linear >>
+  disch_then (qspecl_then [`Q`,`P`,`D`] mp_tac) >>
+  simp[] >> (impl_tac >- first_assum ACCEPT_TAC) >> strip_tac >>
+  first_assum (drule_at (Pat `compile_external_jobs _ _ = _`)) >>
+  simp[] >> strip_tac >>
+  qpat_x_assum `!mid s jobs s'. _ /\ _ /\ compile_external_groups _ _ _ = _ ==> _` kall_tac >>
+  qpat_x_assum `!jobs s s'. _ /\ _ /\ compile_external_jobs _ _ = _ ==> _` kall_tac >>
+  Cases_on `fallback`
+  >- (gvs[] >>
+      drule_at (Pat `emit_inst _ _ _ _ = _`) runtime_sym_emit_inst >>
+      disch_then (qspec_then `0` mp_tac) >>
+      simp[runtime_sym_ordinary_inst, is_label_operand_def] >> strip_tac >>
+      first_assum (drule_at (Pat `compile_internal_fn_bodies _ _ = _`)) >> simp[]) >>
+  PairCases_on `x` >> gvs[] >>
+  first_assum (drule_at (Pat `compile_fallback_body _ _ _ _ _ _ _ _ _ = _`)) >>
+  simp[] >> strip_tac >>
   first_assum (drule_at (Pat `compile_internal_fn_bodies _ _ = _`)) >> simp[]
 QED
