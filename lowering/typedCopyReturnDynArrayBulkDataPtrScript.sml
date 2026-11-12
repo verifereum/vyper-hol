@@ -63,3 +63,104 @@ Proof
   disch_then (drule_at (Pat `ptr_inst_ok _ _ _ _ _ _ _ _ _`)) >>
   disch_then (drule_at (Pat `step_inst_base _ _ = _`)) >> simp[]
 QED
+
+Theorem typed_copy_robust_elements_transport[local]:
+  EVERY (val_wf tv) vs /\
+  mem_bytes_at dst (LENGTH vs * type_memory_size tv) target =
+    mem_bytes_at src (LENGTH vs * type_memory_size tv) original /\
+  (!i. i < LENGTH vs * type_memory_size tv ==>
+    (dst+i IN dirty' <=> src+i IN dirty)) /\
+  (!m. mem_agree_outside dirty original m ==> elems_in_memory vs src tv m) ==>
+  !m. mem_agree_outside dirty' target m ==> elems_in_memory vs dst tv m
+Proof
+  strip_tac >> simp[typed_copy_elems_indexed] >> rpt strip_tac >>
+  `val_wf tv (EL i vs)` by metis_tac[listTheory.EVERY_EL] >>
+  `val_footprint tv (EL i vs) <= type_memory_size tv` by
+    metis_tac[exprSimPropsTheory.val_footprint_le] >>
+  `i * type_memory_size tv + type_memory_size tv <=
+    LENGTH vs * type_memory_size tv` by
+    (`SUC i <= LENGTH (vs:value list)` by simp[] >>
+     metis_tac[arithmeticTheory.MULT_CLAUSES, arithmeticTheory.ADD_COMM,
+       arithmeticTheory.LESS_MONO_MULT]) >>
+  irule robustCopyTransportPtrTheory.robust_val_in_memory_copy_transport >>
+  simp[] >> qexistsl_tac [`original`,`target`,`type_memory_size tv`,
+    `src+i*type_memory_size tv`,`dirty`,`dirty'`] >> simp[] >>
+  conj_tac >- metis_tac[typed_copy_elems_indexed] >>
+  irule valueEncodingPropsTheory.mem_bytes_at_translated_window >> metis_tac[]
+QED
+
+Theorem typed_copy_dynarray_memory_transport[local]:
+  EVERY (val_wf tv) vs /\
+  mem_bytes_at (dst+32) (LENGTH vs * type_memory_size tv) target =
+    mem_bytes_at src (LENGTH vs * type_memory_size tv) original /\
+  (!i. i < LENGTH vs * type_memory_size tv ==>
+    (dst+32+i IN dirty' <=> src+i IN dirty)) /\
+  (!i. dst <= i /\ i < dst+32 ==>
+    mem_bytes_at i 1 target = mem_bytes_at i 1 original /\
+    (i IN dirty' <=> i IN dirty)) /\
+  (!m. mem_agree_outside dirty original m ==>
+    mem_word_at dst m = n2w (LENGTH vs)) /\
+  (!m. mem_agree_outside dirty original m ==> elems_in_memory vs src tv m) ==>
+  !m. mem_agree_outside dirty' target m ==>
+    val_in_memory (ArrayTV tv (Dynamic cap)) (ArrayV (DynArrayV vs)) dst m
+Proof
+  strip_tac >>
+  `!i. dst <= i /\ i < dst+32 ==> i NOTIN dirty` by
+    metis_tac[representationCleanPtrTheory.robust_mem_word_at_clean] >>
+  `!m. mem_agree_outside dirty' target m ==> elems_in_memory vs (dst+32) tv m` by
+    (rpt strip_tac >> irule typed_copy_robust_elements_transport >>
+     metis_tac[]) >>
+  rpt strip_tac >> simp[valueEncodingTheory.val_in_memory_def] >>
+  `mem_bytes_at dst 32 m = mem_bytes_at dst 32 original` by
+    (irule abiDecodeStaticPropsTheory.mem_bytes_at_bytewise >> rpt strip_tac >>
+     `i NOTIN dirty' /\ mem_bytes_at i 1 target = mem_bytes_at i 1 original` by
+       metis_tac[] >>
+     fs[bodyPtrDefsTheory.mem_agree_outside_def] >> metis_tac[]) >>
+  `mem_word_at dst original = n2w (LENGTH vs)` by
+    (first_x_assum irule >> simp[bodyPtrDefsTheory.mem_agree_outside_def]) >>
+  metis_tac[abiStaticAggregatePropsTheory.mem_word_at_bytes]
+QED
+
+Theorem typed_copy_dynarray_mcopy_post[local]:
+  eval_operand (Var dst) s = SOME b /\ eval_operand (Var src) s = SOME a /\
+  eval_operand count_op s = SOME (n2w n) /\
+  n = LENGTH vs * type_memory_size tv /\ n < dimword(:256) /\
+  w2n b = dbase+32 /\ EVERY (val_wf tv) vs /\
+  u = mcopy (w2n b) (w2n a) n s /\
+  tf = step_taint (mk_inst id MCOPY [Var dst;Var src;count_op] []) s u tn /\
+  (!m. mem_agree_outside tn.t_mem s.vs_memory m ==>
+    mem_word_at dbase m = n2w (LENGTH vs)) /\
+  (!m. mem_agree_outside tn.t_mem s.vs_memory m ==>
+    elems_in_memory vs (w2n a) tv m) ==>
+  step_prov PG G (mk_inst id MCOPY [Var dst;Var src;count_op] []) u = G /\
+  tf.t_var = tn.t_var /\ tf.t_stor = tn.t_stor /\ tf.t_trans = tn.t_trans /\
+  tf.t_imm = tn.t_imm /\
+  (!m. mem_agree_outside tf.t_mem u.vs_memory m ==>
+    val_in_memory (ArrayTV tv (Dynamic cap)) (ArrayV (DynArrayV vs)) dbase m) /\
+  (!i. i < w2n b \/ w2n b+n <= i ==>
+    mem_bytes_at i 1 u.vs_memory = mem_bytes_at i 1 s.vs_memory /\
+    (i IN tf.t_mem <=> i IN tn.t_mem))
+Proof
+  strip_tac >>
+  `w2n ((n2w n):256 word) = n` by simp[] >>
+  mp_tac (Q.SPECL [`PG`,`G`,`tn`,`s`,`id`]
+    typedCopyPtrTheory.mcopy_operand_ghost_frame) >>
+  disch_then (qspecl_then [`Var dst`,`Var src`,`count_op`] mp_tac) >>
+  disch_then (qspecl_then [`a`,`b`,`n2w n`] mp_tac) >>
+  simp[] >> strip_tac >>
+  `tf.t_imm = tn.t_imm` by
+    gvs[step_taint_def,mk_inst_def,imm_taint_def,adopt_reset_def,set_var_taint_def] >>
+  `!i. i < w2n b \/ w2n b+n <= i ==>
+    mem_bytes_at i 1 u.vs_memory = mem_bytes_at i 1 s.vs_memory /\
+    (i IN tf.t_mem <=> i IN tn.t_mem)` by
+    (gen_tac >> disch_tac >> conj_tac
+     >- (gvs[] >> irule valueEncodingPropsTheory.mcopy_mem_bytes_at_disjoint >> decide_tac) >>
+     gvs[] >> eq_tac >> strip_tac >> gvs[] >> decide_tac) >>
+  `!m. mem_agree_outside tf.t_mem u.vs_memory m ==>
+    val_in_memory (ArrayTV tv (Dynamic cap)) (ArrayV (DynArrayV vs)) dbase m` by
+    (rpt strip_tac >> irule (GEN_ALL typed_copy_dynarray_memory_transport) >>
+     simp[] >>
+     qexistsl_tac [`tn.t_mem`,`tf.t_mem`,`s.vs_memory`,`w2n a`,`u.vs_memory`] >>
+     simp[valueEncodingPropsTheory.mcopy_mem_bytes_at_same]) >>
+  gvs[] >> metis_tac[]
+QED
