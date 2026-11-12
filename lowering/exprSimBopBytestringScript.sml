@@ -420,16 +420,6 @@ QED
 
 Finalise comparison_operand_outcome_suffix
 
-Theorem valid_horizon_frame_prefix[local]:
-  !f st H. storage_trace_frame f ==>
-    valid_horizon cx st0 H (SND (f st)).storage_trace ==>
-    valid_horizon cx st0 H st.storage_trace
-Proof
-  rpt strip_tac >> Cases_on `f st` >>
-  drule_all storage_trace_frame_prefix >> strip_tac >>
-  fs[valid_horizon_def]
-QED
-
 Theorem compile_bop_bytestring_eqne_case:
   !nocalls ctx func cenv cx ann bop e1 e2.
     (bop = Eq \/ bop = NotEq) /\ is_bytestring_type (expr_type e1) ==>
