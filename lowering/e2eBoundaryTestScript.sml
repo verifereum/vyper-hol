@@ -95,7 +95,8 @@ QED
 Theorem deployed_main_module_exact:
   source_deployment_rel tops am tx <=>
   ALOOKUP am.sources tx.target = SOME [(NONE,tops)] /\
-  ALOOKUP am.exports tx.target = NONE /\ layouts_agree tops am tx
+  (ALOOKUP am.exports tx.target = NONE \/
+   ALOOKUP am.exports tx.target = SOME []) /\ layouts_agree tops am tx
 Proof
   simp[source_deployment_rel_def]
 QED

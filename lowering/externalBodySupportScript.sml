@@ -45,7 +45,10 @@ Proof
   `?raw. MEM (FunctionDecl External mut F raw tx.function_name args [] ret fbody) tops` by
     (irule lookup_function_external_decl >> simp[] >>
      qexists `tops` >> gvs[supported_program_def, supported_declaration_headers_def]) >>
-  gvs[source_typing_ok_def, source_deployment_rel_def] >>
+  `ALOOKUP am.sources tx.target = SOME [(NONE,tops)] /\
+   layouts_agree tops am tx` by fs[source_deployment_rel_def] >>
+  qpat_x_assum `source_deployment_rel _ _ _` kall_tac >>
+  gvs[source_typing_ok_def] >>
   `module_allocated am.layouts tx.target NONE tops` by
     (drule check_contract_main_module_allocated >> simp[]) >>
   `External <> Deploy` by simp[] >>
