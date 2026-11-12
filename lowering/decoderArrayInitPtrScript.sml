@@ -69,7 +69,7 @@ Proof
   rpt gen_tac >> strip_tac >>
   drule_all emit_count_comparison_endpoint_ptr_core >>
   disch_then (qspec_then `G` mp_tac) >>
-  disch_then (qspecl_then [`cx`,`ctx`,`PG`,`R`] strip_assume_tac) >>
+  disch_then (qspecl_then [`H`,`cx`,`ctx`,`PG`,`R`] strip_assume_tac) >>
   qexistsl_tac [`HG`,`u`] >> simp[] >> metis_tac[]
 QED
 
@@ -189,7 +189,7 @@ QED
 Resume calldata_count_guard_endpoint_ptr_core[guard_ghost]:
   drule_all emit_count_load_endpoint_ptr_core >>
   disch_then (qspec_then `G` mp_tac) >>
-  disch_then (qspecl_then [`cx`,`ctx`,`PG`,`R`] strip_assume_tac) >>
+  disch_then (qspecl_then [`H`,`cx`,`ctx`,`PG`,`R`] strip_assume_tac) >>
   rename1 `op_taint u1 cnt = {}` >>
   rename1 `op_prov H1 cnt = NONE` >>
   `?b. eval_operand cnt s1 = SOME b` by
@@ -207,7 +207,7 @@ Resume calldata_count_guard_endpoint_ptr_core[guard_ghost]:
   qpat_x_assum `run_inst_seq (emitted_insts c1 c2) s1 = _` kall_tac >>
   drule_all emit_count_comparison_endpoint_ptr_core >>
   disch_then (qspec_then `H1` mp_tac) >> simp[NoAsms] >>
-  disch_then (qspecl_then [`cx`,`ctx`,`PG`,`R`] strip_assume_tac) >>
+  disch_then (qspecl_then [`H`,`cx`,`ctx`,`PG`,`R`] strip_assume_tac) >>
   rename1 `op_taint u2 cmp = {}` >> rename1 `op_prov H2 cmp = NONE` >>
   `run_inst_seq (emitted_insts c2 c3)
     (s2 with vs_inst_idx := SUC (SUC s.vs_inst_idx)) =
@@ -509,7 +509,7 @@ Theorem calldata_array_header_endpoint_ptr:
       FLOOKUP HG x = FLOOKUP G x /\ op_taint u (Var x) = op_taint tn (Var x))
 Proof
   rpt gen_tac >> strip_tac >> drule_all calldata_array_header_endpoint_ptr_core >>
-  disch_then (qspecl_then [`cx`,`ctx`,`PG`,`R`] strip_assume_tac) >>
+  disch_then (qspecl_then [`H`,`cx`,`ctx`,`PG`,`R`] strip_assume_tac) >>
   qexistsl_tac [`HG`,`u`] >> simp[]
 QED
 
@@ -607,7 +607,7 @@ Proof
     ~(s1 with vs_inst_idx := s.vs_inst_idx + 4).vs_halted` by
     (gvs[ptr_covers_def, lookup_var_def]) >>
   drule_all calldata_array_header_endpoint_ptr_core >>
-  disch_then (qspecl_then [`cx`,`ctx`,`PG`,`R`] mp_tac) >>
+  disch_then (qspecl_then [`H`,`cx`,`ctx`,`PG`,`R`] mp_tac) >>
   simp[NoAsms] >> strip_tac >>
   suspend "joint_index"
 QED
