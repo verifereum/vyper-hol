@@ -196,3 +196,97 @@ Proof
       metis_tac[]) >>
   metis_tac[optionTheory.SOME_11]
 QED
+
+(* The adapter coordinates remain explicit: the evaluator join must supply
+   these actual coordinates before using the execution equation. *)
+Theorem inline_live_selected_return:
+  inliner_input_ok C /\ inline_annotated_origin C n root cert /\
+  inline_live_stack C cert root
+    ((q,ca,route,snap)::(p,pa,proute,psnap)::rest) frame /\
+  inline_call_incidence cert root p pa.ia_function l j call (InlineSelected u q e zipper) /\
+  inline_namespace_leaf_at cert p proute.ir_rename pa.ia_function /\
+  inline_namespace_leaf_at cert q route.ir_rename ca.ia_function /\
+  lookup_block rl ca.ia_function.fn_blocks = SOME rb /\ get_instruction rb ri = SOME ret /\
+  MEM ret.inst_opcode [RET; RETFMP] /\ ret.inst_operands = ops ++ [pc] /\
+  step_inst fuel C ret snap.ils_state = IntRet ir s' /\ ~frame.ipf_state.vs_halted /\
+  lookup_function nm C.ctx_functions = SOME ca.ia_function /\
+  setup_callee ca.ia_function args psnap.ils_state = SOME ca.ia_entry /\
+  run_blocks cfuel C ca.ia_function ca.ia_entry = IntRet ir s' /\
+  ~ca.ia_entry.vs_halted ==>
+  ?ml mj bb caller'.
+    let writes = FOLDL (\s (x,w). update_var x w s) frame.ipf_state
+          (ZIP (MAP proute.ir_rename call.inst_outputs,ir.iret_values));
+        target = jump_to (inline_path_rename zipper e.ise_return) writes;
+        resumed = adopt_return_fmp ir (merge_callee_state caller' s');
+        psnap' = psnap with <|ils_state := resumed;
+          ils_defined := set call.inst_outputs UNION psnap.ils_defined|> in
+    lookup_block ml root.fn_blocks = SOME bb /\
+    (frame.ipf_state.vs_current_bb = ml /\ frame.ipf_state.vs_inst_idx = mj ==>
+      exec_block tfuel Tctx bb frame.ipf_state = OK target) /\
+    bind_outputs call.inst_outputs ir.iret_values psnap.ils_state = SOME caller' /\
+    inline_live_stack C cert root ((p,pa,proute,psnap')::rest)
+      (frame with ipf_state := target) /\
+    target.vs_current_bb = inline_path_rename zipper e.ise_return /\
+    target.vs_prev_bb = SOME frame.ipf_state.vs_current_bb /\ target.vs_inst_idx = 0 /\
+    inline_parameter_boundary_path zipper e.ise_final e.ise_return 0 root
+      (inline_path_rename zipper e.ise_return) 0 /\
+    (?continuation. lookup_block (inline_path_rename zipper e.ise_return)
+      root.fn_blocks = SOME continuation)
+Proof
+  strip_tac >>
+  drule inline_live_stack_storage >> strip_tac >>
+  drule inline_live_stack_lifecycle >> strip_tac >>
+  drule inline_owner_storage_head >> strip_tac >>
+  drule inline_selected_return_execute >>
+  disch_then (drule_at (Pat `inline_call_incidence cert root p fn l j call outcome`)) >>
+  disch_then (drule_at (Pat `inline_owner_storage cert entries frame`)) >>
+  disch_then (drule_at (Pat `inline_tracked_snapshot child ca route snap frame`)) >>
+  pure_rewrite_tac[REFL_CLAUSE, AND_CLAUSES] >> disch_then drule_all >>
+  disch_then (qspecl_then [`tfuel`,`Tctx`] strip_assume_tac) >>
+  pop_assum mp_tac >> pure_rewrite_tac[LET_THM] >> BETA_TAC >> strip_tac >>
+  `raw_return_user_arity ret = SOME (LENGTH call.inst_outputs)` by
+    metis_tac[functionInlinerReturnRoutingTheory.inline_selected_return_arity, MEM] >>
+  `inline_shared_frame s' = inline_shared_frame frame.ipf_state` by
+    (drule_all functionInlinerReturnTransportTheory.inline_return_source >>
+     strip_tac >> gvs[] >> metis_tac[inline_live_stack_head_shared]) >>
+  `inline_caller_residual frame.ipf_state = inline_caller_residual psnap.ils_state` by
+    metis_tac[inline_live_stack_member_residual, MEM] >>
+  qexistsl [`ml`,`mj`,`bb`,`caller'`] >> simp[LET_THM] >>
+  qmatch_goalsub_abbrev_tac `jump_to dest writes` >>
+  `bind_outputs (MAP proute.ir_rename call.inst_outputs) ir.iret_values
+      frame.ipf_state = SOME writes` by
+    (qpat_x_assum `bind_outputs call.inst_outputs _ _ = _` mp_tac >>
+     simp[bind_outputs_def, Abbr `writes`] >> metis_tac[]) >>
+  `inline_shared_frame (adopt_return_fmp ir (merge_callee_state caller' s')) =
+      inline_shared_frame (jump_to dest writes)` by
+    (irule inline_source_return_shared_bind_jump >>
+     goal_assum (drule_at Any) >> goal_assum (drule_at Any) >>
+     goal_assum (drule_at Any) >> goal_assum (drule_at Any) >>
+     metis_tac[]) >>
+  `inline_shared_frame writes = inline_shared_frame frame.ipf_state` by
+    (irule venomInstProofs1Theory.bind_outputs_preserves >> simp[] >> goal_assum (drule_at Any)) >>
+  `writes.vs_fmp = frame.ipf_state.vs_fmp` by
+    (irule venomInstProofs1Theory.bind_outputs_preserves >> simp[update_var_def] >>
+     goal_assum (drule_at Any)) >>
+  `inline_caller_residual (jump_to dest writes) =
+      inline_caller_residual frame.ipf_state` by
+    (`inline_shared_frame (jump_to dest writes) =
+        inline_shared_frame frame.ipf_state` by
+       (qpat_x_assum `inline_shared_frame writes = _` (fn th =>
+          rewrite_tac[GSYM th]) >>
+        simp[inline_shared_frame_def, stateFrameTheory.execution_frame_def, jump_to_def]) >>
+     irule inline_caller_residual_shared >> goal_assum (drule_at Any)) >>
+  simp[inline_live_stack_def] >>
+  qpat_x_assum `inline_live_stack _ _ _ _ _` mp_tac >>
+  simp[inline_live_stack_def] >> strip_tac >>
+  `s'.vs_fmp = frame.ipf_state.vs_fmp` by
+    (qpat_x_assum `inline_shared_frame s' = _`
+       (mp_tac o AP_TERM ``\s:venom_state. s.vs_fmp``) >>
+     simp[inline_shared_frame_def, stateFrameTheory.execution_frame_def]) >>
+  `inline_caller_residual caller' = inline_caller_residual psnap.ils_state` by
+    (irule venomInstProofs1Theory.bind_outputs_preserves >>
+     simp[inline_caller_residual_def, update_var_def, merge_callee_state_def,
+          inline_shared_frame_def, stateFrameTheory.execution_frame_def] >>
+     metis_tac[]) >>
+  simp[jump_to_def]
+QED
