@@ -94,7 +94,7 @@ Theorem aug_place_storage_access_path:
     local_ptrs_reserved cenv sb /\ alloca_history func u /\
     (!rp. not_fresh_at sa rp ==> lookup_var rp u = lookup_var rp s) /\
     u.vs_allocas = s.vs_allocas /\ u.vs_alloca_next = s.vs_alloca_next /\
-    sa.cs_next_var <= sb.cs_next_var /\
+    u.vs_memory = s.vs_memory /\ sa.cs_next_var <= sb.cs_next_var /\
     (?out. op = Var out /\ not_fresh_at sb out)
 Proof
   rpt strip_tac >>
@@ -110,6 +110,8 @@ Proof
   disch_then (drule_at (Pat `stmt_state_rel _ _ _ _ _ _`)) >>
   disch_then drule >>
   (impl_tac >- (Cases_on `tr` >> simp[])) >> strip_tac >>
+  `t.vs_memory = s.vs_memory` by
+    (qpat_assum `t = _` SUBST1_TAC >> simp[update_var_def]) >>
   qexists_tac `t` >> simp[] >>
   `!x. arg = Var x ==> x <> STRING #"%" (toString sa.cs_next_var)` by
     (rpt strip_tac >>
@@ -144,7 +146,7 @@ Theorem aug_place_storage_read_path:
     local_ptrs_reserved cenv sb /\ alloca_history func u /\
     (!rp. not_fresh_at sp rp ==> lookup_var rp u = lookup_var rp s) /\
     u.vs_allocas = s.vs_allocas /\ u.vs_alloca_next = s.vs_alloca_next /\
-    sp.cs_next_var <= sb.cs_next_var /\
+    u.vs_memory = s.vs_memory /\ sp.cs_next_var <= sb.cs_next_var /\
     (?out. op = Var out /\ not_fresh_at sb out)
 Proof
   rpt strip_tac >>
