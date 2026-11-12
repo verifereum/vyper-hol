@@ -17,34 +17,11 @@ Ancestors
   frameAllocationEffects ctxLookupAgreeHelpers ptrDiscipline
   o1PassContract list
 
-Theorem fold_update_var_fmp[local]:
-  !s. (FOLDL (\s (x,v). update_var x v s) s xs).vs_fmp = s.vs_fmp
-Proof
-  Induct_on `xs` >> simp[] >> rpt gen_tac >>
-  rename1 `((\(x,v). update_var x v s) pair).vs_fmp = _` >>
-  PairCases_on `pair` >> simp[update_var_def]
-QED
-
-Theorem bind_outputs_fmp[local]:
-  bind_outputs outs vals s = SOME t ==> t.vs_fmp = s.vs_fmp
-Proof
-  simp[bind_outputs_def] >> strip_tac >>
-  gvs[AllCaseEqs(), fold_update_var_fmp]
-QED
-
-Theorem eval_phis_fmp[local]:
-  !s t. eval_phis s insts = OK t ==> t.vs_fmp = s.vs_fmp
-Proof
-  Induct_on `insts` >- simp[eval_phis_def] >>
-  qx_gen_tac `inst` >> rpt gen_tac >> simp[Once eval_phis_def] >>
-  Cases_on `inst.inst_opcode = PHI` >> simp[] >>
-  gvs[AllCaseEqs()] >> rpt strip_tac >> res_tac >> gvs[update_var_def]
-QED
-
 Theorem enters_block_fmp[local]:
   enters_block fn s t ==> t.vs_fmp = s.vs_fmp
 Proof
-  rw[enters_block_def] >> drule eval_phis_fmp >> simp[]
+  rw[enters_block_def] >> drule eval_phis_only_updates_vs_vars >>
+  disch_then (fn th => once_rewrite_tac[th]) >> simp[]
 QED
 
 Theorem step_inst_base_terminator_fmp[local]:
@@ -127,7 +104,9 @@ Proof
   `MEM callee_fn ctx.ctx_functions` by metis_tac[lookup_function_MEM] >>
   `pre_fmp_ops callee_fn` by gvs[EVERY_MEM] >>
   `ret.iret_adopt_fmp = NONE` by metis_tac[run_defs_adopt_fmp_none] >>
-  drule bind_outputs_fmp >> simp[adopt_return_fmp_def]
+  drule (SIMP_RULE (srw_ss()) [update_var_def]
+    (Q.SPEC `\s:venom_state. s.vs_fmp` bind_outputs_preserves)) >>
+  simp[adopt_return_fmp_def]
 QED
 
 Theorem raw_reachable_fmp_fixed:

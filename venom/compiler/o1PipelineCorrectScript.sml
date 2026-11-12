@@ -16,7 +16,7 @@ Ancestors
   venomPassSchedule o1PassContract o1PipelineCompose ctxLookupAgree
   ptrDiscipline contextPlanLayoutProps stepWriteFootprint
   contextCodegenRel stackPlanGen venomCompilerTypes venomState words
-  venomRunBounded rawReachableFmp
+  venomRunBounded rawReachableFmp ctxLookupAgreeHelpers list
 
 (* This is the compiler's existing O1 hook, with all three checks K T.
  * Naming it does not change compile_vyper or its literal pipeline hooks. *)
