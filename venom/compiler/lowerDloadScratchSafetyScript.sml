@@ -30,13 +30,22 @@ Proof
   simp[update_var_def, FLOOKUP_UPDATE]
 QED
 
+Theorem lower_dload_alloca_fmp[local]:
+  exec_alloca inst s sz = OK t ==>
+  t.vs_fmp = s.vs_fmp /\ t.vs_initial_fmp = s.vs_initial_fmp
+Proof
+  simp[exec_alloca_def, AllCaseEqs(), update_var_def] >>
+  rpt strip_tac >> gvs[]
+QED
+
 (* Only the concrete expansion opcodes are exposed at this boundary. *)
 Theorem lower_dload_pure_raw[local]:
   (inst.inst_opcode = ALLOCA \/ inst.inst_opcode = ADD) /\
-  s.vs_alloca_next < dimword(:256) ==>
+  s.vs_alloca_next < dimword(:256) /\
+  w2n s.vs_initial_fmp <= w2n s.vs_fmp ==>
   raw_mem_ok C fn inst s
 Proof
-  simp[raw_mem_ok_def, inst_mem_ok_in_fn_def,
+  simp[raw_mem_ok_def, inst_mem_ok_in_fn_def, dalloca_no_wrap_def,
        inst_mem_below_frontier_def] >> strip_tac >>
   simp[source_memory_read_ranges_def, source_memory_write_ranges_def]
 QED
@@ -45,6 +54,7 @@ Theorem lower_dload_add_preserves[local]:
   inst.inst_opcode = ADD /\ inst.inst_outputs = [z] /\
   step_inst 0 C inst s = OK t ==>
   t.vs_alloca_next = s.vs_alloca_next /\
+  t.vs_fmp = s.vs_fmp /\ t.vs_initial_fmp = s.vs_initial_fmp /\
   (!a. a <> z ==> FLOOKUP t.vs_vars a = FLOOKUP s.vs_vars a)
 Proof
   strip_tac >>
@@ -55,7 +65,8 @@ QED
 Theorem lower_dload_codecopy_preserves[local]:
   inst.inst_opcode = CODECOPY /\
   step_inst 0 C inst s = OK t ==>
-  t.vs_alloca_next = s.vs_alloca_next /\ t.vs_vars = s.vs_vars
+  t.vs_alloca_next = s.vs_alloca_next /\ t.vs_vars = s.vs_vars /\
+  t.vs_fmp = s.vs_fmp /\ t.vs_initial_fmp = s.vs_initial_fmp
 Proof
   strip_tac >>
   gvs[step_inst_non_invoke, step_inst_base_def,
@@ -67,13 +78,16 @@ Theorem lower_dload_scratch_access_raw[local]:
    (inst.inst_opcode = CODECOPY /\
     inst.inst_operands = [Var a; Var z; Lit 32w])) /\
   FLOOKUP s.vs_vars a = SOME (n2w c) /\
-  c + 32 <= s.vs_alloca_next /\ s.vs_alloca_next < dimword(:256) ==>
+  c + 32 <= s.vs_alloca_next /\ s.vs_alloca_next < dimword(:256) /\
+  w2n s.vs_initial_fmp <= w2n s.vs_fmp ==>
   raw_mem_ok C fn inst s
 Proof
   `dimindex (:256) = 256` by CONV_TAC fcpLib.INDEX_CONV >>
   strip_tac >>
   `c < dimword(:256)` by decide_tac >>
-  simp[raw_mem_ok_def, inst_mem_ok_in_fn_def] >> disj1_tac >>
+  `inst.inst_opcode <> DALLOCA` by (strip_tac >> fs[]) >>
+  simp[raw_mem_ok_def, inst_mem_ok_in_fn_def, dalloca_no_wrap_def] >>
+  disj1_tac >>
   simp[inst_mem_below_frontier_def, source_memory_read_ranges_def,
        source_memory_write_ranges_def, sized_source_write_range_def,
        eval_operand_def, lookup_var_def] >>
@@ -96,6 +110,7 @@ Theorem lower_dload_prefix_scratch[local]:
     n = 32 /\ b + 32 <= t0.vs_alloca_next) ==>
   !h t. ld_prefix C fn X p h t0 t ==>
     t.vs_alloca_next < dimword(:256) /\
+    t.vs_fmp = t0.vs_fmp /\ t.vs_initial_fmp = t0.vs_initial_fmp /\
     (0 < h ==> ?c. FLOOKUP t.vs_vars a = SOME(n2w c) /\
                        c + 32 <= t.vs_alloca_next)
 Proof
@@ -116,18 +131,18 @@ Proof
       qpat_x_assum `!v. v <> a ==> _` kall_tac >>
       qpat_x_assum `step_inst _ _ _ _ = _` mp_tac >>
       simp[step_inst_non_invoke, step_inst_base_def, eval_operand_def] >>
-      fs[] >> metis_tac[]) >>
+      fs[] >> metis_tac[lower_dload_alloca_fmp]) >>
   qpat_x_assum `!b n. _` kall_tac >>
   Cases_on `h = 1`
   >- (fs[] >>
       `(EL 1 X).inst_opcode = ADD /\ (EL 1 X).inst_outputs = [z]`
         by simp[] >>
       drule_all lower_dload_add_preserves >> strip_tac >>
-      conj_tac >- simp[] >> qexists_tac `c` >> simp[]) >>
+      rpt conj_tac >> TRY (simp[] >> NO_TAC) >> qexists_tac `c` >> simp[]) >>
   `h = 2` by decide_tac >> fs[] >>
   `(EL 2 X).inst_opcode = CODECOPY` by simp[] >>
   drule_all lower_dload_codecopy_preserves >> strip_tac >>
-  conj_tac >- simp[] >> qexists_tac `c` >> simp[]
+  rpt conj_tac >> TRY (simp[] >> NO_TAC) >> qexists_tac `c` >> simp[]
 QED
 
 Theorem lower_dload_expansion_prefix_raw:
@@ -140,6 +155,7 @@ Theorem lower_dload_expansion_prefix_raw:
        <|inst_id := mi; inst_opcode := MLOAD;
          inst_operands := [Var a]; inst_outputs := [out]|>] /\
   a <> z /\ t0.vs_alloca_next < dimword(:256) /\
+  w2n t0.vs_initial_fmp <= w2n t0.vs_fmp /\
   (FLOOKUP t0.vs_allocas ai = NONE ==>
     t0.vs_alloca_next + 32 < dimword(:256)) /\
   (!b n. FLOOKUP t0.vs_allocas ai = SOME(b,n) ==>
@@ -156,7 +172,7 @@ Proof
   >- (irule lower_dload_pure_raw >> fs[] >> simp[]) >>
   `0 < h` by decide_tac >> fs[] >>
   irule lower_dload_scratch_access_raw >>
-  conj_tac >- simp[] >>
+  conj_tac >- simp[] >> conj_tac >- simp[] >>
   qexistsl_tac [`a`, `c`, `z`] >>
   `h = 2 \/ h = 3` by decide_tac >> fs[] >> simp[]
 QED
@@ -166,6 +182,7 @@ Theorem lower_dload_supply_prefix_raw:
   inst.inst_opcode = DLOAD /\ inst.inst_operands = [off] /\
   inst.inst_outputs = [out] /\
   t0.vs_alloca_next < dimword(:256) /\
+  w2n t0.vs_initial_fmp <= w2n t0.vs_fmp /\
   (FLOOKUP t0.vs_allocas (HD X).inst_id = NONE ==>
     t0.vs_alloca_next + 32 < dimword(:256)) /\
   (!b n. FLOOKUP t0.vs_allocas (HD X).inst_id = SOME(b,n) ==>
@@ -174,6 +191,7 @@ Theorem lower_dload_supply_prefix_raw:
   raw_mem_ok C fn (EL h X) t
 Proof
   strip_tac >>
+  qpat_x_assum `w2n _ <= w2n _` (fn fmp =>
   qpat_x_assum `lower_dload_inst_supply _ _ = _` mp_tac >>
   simp[lower_dload_inst_supply_def] >>
   namedCases_on `fresh_ir_var u` ["a u1"] >>
@@ -197,5 +215,5 @@ Proof
      simp[NoAsms]) >>
   qpat_x_assum `[_;_;_;_] = X` kall_tac >>
   qpat_x_assum `X = [_;_;_;_]` kall_tac >>
-  asm_rewrite_tac [] >> metis_tac[]
+  asm_rewrite_tac [] >> metis_tac[fmp])
 QED
