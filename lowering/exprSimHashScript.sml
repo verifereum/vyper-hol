@@ -2340,11 +2340,11 @@ Proof
       `evaluate_type (get_tenv cx) t0 = SOME entry.type` by
         (fs[exprSimHypsDefsTheory.expr_sim_inv_def, env_consistent_def,
             env_scopes_consistent_def] >>
-         `?ty. FLOOKUP env.var_types id = SOME ty` by
+         `?ty1. FLOOKUP env.var_types id = SOME ty1` by
            (qpat_x_assum `!id entry. lookup_scopes _ _ = SOME _ ==> IS_SOME _`
               drule >> simp[optionTheory.IS_SOME_EXISTS]) >>
-         `cenv.ce_var_type id = SOME ty` by res_tac >>
-         `evaluate_type (get_tenv cx) ty = SOME entry.type` by res_tac >>
+         `cenv.ce_var_type id = SOME ty1` by res_tac >>
+         `evaluate_type (get_tenv cx) ty1 = SOME entry.type` by res_tac >>
          gvs[]) >>
       gvs[] >>
       drule exprSimPropsTheory.mem_path_offset_sound >> strip_tac >> gvs[] >>

@@ -808,7 +808,7 @@ Resume compile_pop_storage_normalized_sim[positive]:
              loweringPostsTheory.slot_loc_def, eval_operand_def]) >>
      irule pop_storage_vv_post >>
      rpt conj_tac
-     >~ [`stmt_state_rel`]
+     >~ [`stmt_state_rel _ _ _ _ (_ with gas_obs := _) _`]
      >- (irule pop_ssr_gas_obs >> irule pop_storage_updated_state_rel >>
          metis_tac[])
      >~ [`u.vs_memory = _`]
