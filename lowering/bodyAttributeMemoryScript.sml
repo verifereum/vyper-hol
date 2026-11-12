@@ -247,7 +247,32 @@ Proof
      (LocatedValue ann (mk_ptr dst (vv_loc bvv))) u` by
     (qpat_assum `!tail. select_result _ _ _ _ _ = _`
        (qspec_then `[]` (assume_tac o MATCH_MP select_result_memory_place)) >>
-     irule attr_vv_post >> simp[] >> qexists_tac `tv` >> gvs[]) >>
+     `expr_sim_inv cenv cx env ee /\
+      eval_result_typed (env,cx,ee) tv (Type (StructT sid))` by
+       (qpat_assum `expr_type obj = _` (fn th => rewrite_tac[GSYM th]) >>
+        qspecl_then [`cenv`,`cx`,`env`,`obj`,`es with gas_obs := gs`,`INL tv`,`ee`]
+          mp_tac exprSimSourceTheory.expr_body_pre_eval_result >>
+        impl_tac
+        >- (conj_tac >- (drule attr_pre_base >> strip_tac >> simp[]) >>
+            first_assum ACCEPT_TAC) >>
+        disch_then (fn th =>
+          conj_tac >- ACCEPT_TAC (CONJUNCT1 th) >>
+          irule (CONJUNCT2 (CONJUNCT2 th)) >> simp[])) >>
+     `!t' op. bvv = StackValue t' op ==> !pl. tv <> PlaceR pl` by
+       (rpt strip_tac >> gvs[vv_post_def, vv_at_def, is_word_type_def]) >>
+     `vv_place_ptr cenv cx ee u tv bvv` by fs[vv_post_def] >>
+     `select_result cx (StructT sid) tv (AttrSubscript fld) ee = (INL tv', ee)` by
+       (`ee with gas_obs := ee.gas_obs = ee` by
+          simp[evaluation_state_component_equality] >>
+        qpat_assum `!tail. select_result _ _ _ _ _ = _` (fn th =>
+          qpat_assum `ee with gas_obs := _ = ee` (fn eq =>
+            ACCEPT_TAC (REWRITE_RULE [eq] (Q.SPEC `ee.gas_obs` th))))) >>
+     `vv_place_ptr cenv cx ee u tv' (LocatedValue ann (mk_ptr dst (vv_loc bvv)))` by
+       (match_mp_tac attr_place_ptr >>
+        qexistsl_tac [`env`, `ee`, `tv`, `sid`, `fs`, `ftv`, `fld`, `ee`, `w`] >>
+        rpt conj_tac >> TRY (first_assum ACCEPT_TAC) >> gvs[]) >>
+     irule attr_vv_post >> simp[] >>
+     qexists_tac `tv` >> gvs[]) >>
   qexistsl_tac [`tv'`, `u`] >> simp[] >>
   qspecl_then [`ctx`, `func`, `cenv`, `cx`, `ann`, `obj`, `fld`, `es`, `sa`,
                `sb`, `s0`, `ee`, `tv'`, `dst`, `bvv`, `u`, `tv`, `sid`, `fs`,
