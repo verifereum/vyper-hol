@@ -1,0 +1,57 @@
+{
+  "producer": "pinned Python Vyper",
+  "vyper_commit": "577d2534356903076bb79b5b15ebd4d772994693",
+  "vyper_version": "0.1+commit.577d2534",
+  "python_version": "3.11.17",
+  "dependencies": {
+    "cbor2": "5.9.0",
+    "immutables": "0.21",
+    "lark": "1.1.9",
+    "packaging": "26.3",
+    "pycryptodome": "3.23.0",
+    "wheel": "0.48.0"
+  },
+  "settings": {
+    "experimental_codegen": true,
+    "optimization_level": "NONE",
+    "evm_version": "prague",
+    "bytecode_metadata": false
+  },
+  "sources": {
+    "n01_intcall_tuple_narrow_str.vy": "a298331d50196ac9d5b9ac5a87ba1f587bca1dea93d149f5205f3ac684dedbac",
+    "n02_intcall_dynarr_lit_narrow_str.vy": "670be4083dea2fb3d7fb8d0b1464bf7f99ac198fab8be39f6dd9b4b517e0f49e",
+    "n03_struct_lit_narrow_str.vy": "c8a5f036e78ed8e0705bd50afa543a10ad6e0155e3ab62b8e9149e0571916da8",
+    "n04_intcall_tuple_wider_str.vy": "b5e10ba88ee102b9b8a7b9eef3519015eccf3728f7a2dafac497a98ac92cd636",
+    "n05_intcall_dynarr_lit_wider_str.vy": "689650032422c3c01f5f7b53390be0123ff91152d2f1b46cb89cd63dd8f0dd6d",
+    "n06_struct_lit_wider_str.vy": "b3eb5a8eae17554d81eeeedc137a1cc7a21830ef63ac133fe9e52be5a75e7e7f",
+    "n07_intcall_str_arg_wider.vy": "be2db36522cd4fb1ec27f4ae6a35ceeda88d2acc7591d9e001d1447763e1f283",
+    "n08_annassign_tuple_lit_wider_str.vy": "5e624e98d5ee94eeed069956e6b47e2c5d06783713f9c9f34381234bd655b279",
+    "n09_intcall_two_str_args_wider.vy": "46f7730321fd85fb045b8f4c63ab4a6e431b3073b55fe90b114f6f8816c215c0",
+    "n10_intcall_dynarr_lit_wider_str_len.vy": "9f25855228a0785007bb3f7a92b36c56ab5ea1b9f55a586a2cdacab197063bd0",
+    "n11_intcall_dynarr_lit_same_str.vy": "106d5eea871870873909157bd0fb3287bd8418d37604011887fc093d5ee2be23"
+  },
+  "outputs": {
+    "n01_intcall_tuple_narrow_str.hex": "84f0edf7788fd693c511f23adb11a754ac11ba08fbded8f311ae19af83fa40e2",
+    "n01_intcall_tuple_narrow_str.json": "bab3e35e08706bd7886e4ede99110cd4ca03fe229ddbe925d66e388e3d0012d4",
+    "n02_intcall_dynarr_lit_narrow_str.hex": "b3f4bf4d0991d27c9b18b71bf510fe06001ded71372994418ce84924bde73e43",
+    "n02_intcall_dynarr_lit_narrow_str.json": "f6c7c85aef4dd469c2ec2a9dd4cee3ef72445b0e95dde6b484c51968cbc08c1a",
+    "n03_struct_lit_narrow_str.hex": "5e34524e3d969b4dd40f26c833a85c89247eb93ecb047ebdb6f311500ed5bf6a",
+    "n03_struct_lit_narrow_str.json": "cefbd84fbc65cfc5d69ca6362932be865762f5fdf02cd51a81d1311f7e41baf4",
+    "n04_intcall_tuple_wider_str.hex": "a866f13b0cb222bef708149d9a0382654a5377c0409652dc79dc5116bed8307a",
+    "n04_intcall_tuple_wider_str.json": "64339c01d80f92165db5d55a409685d677f577382007b5235ada40eaa0e68cde",
+    "n05_intcall_dynarr_lit_wider_str.hex": "a30eae1cc151e7e79a837b52376fbe062d2433203b28bf8f130677d80dc237b8",
+    "n05_intcall_dynarr_lit_wider_str.json": "dde6dbd8cf0b10f1f117503f6df900648de052069b00f1db680f3e552f6d83fd",
+    "n06_struct_lit_wider_str.hex": "054824011f6f937056d8d103e8a445d68fbe8d45559202d41381d9bf702fdb57",
+    "n06_struct_lit_wider_str.json": "359da1867ec0181f2f9ef6f742a70ab99f5f507dcb8765294f97430512698d5b",
+    "n07_intcall_str_arg_wider.hex": "e29768ad49e260019fcf0426be1a17946bd3382e5858e93290c2e6732a44d903",
+    "n07_intcall_str_arg_wider.json": "a162044590da0df65dd6235ab87c178e0fa49e6333439ab0c0d042b570ba12d9",
+    "n08_annassign_tuple_lit_wider_str.hex": "75a00533df6f684eae818bae929c9b8b6ae0c5db78a2a8444afc6baaf37ed1bf",
+    "n08_annassign_tuple_lit_wider_str.json": "cc4decedccc0a77a5b74916065593e6e1a56a1b3fcb3301a9719c461a1e3078f",
+    "n09_intcall_two_str_args_wider.hex": "b7bd577319a0db2e551d522538c6e0f6d203f51404ce13229f127371520341fc",
+    "n09_intcall_two_str_args_wider.json": "7e67916d1054e9bb39b9925c37a834fa78d95bfecd2a608202c40052b68ed25d",
+    "n10_intcall_dynarr_lit_wider_str_len.hex": "f76f34652df66436cc66843bbb8c74eb73ee03edad61e9f8a8eab95e193df17b",
+    "n10_intcall_dynarr_lit_wider_str_len.json": "9b5a183fe3190dcb79518a3cea720a01410409040bb30d31102d62e75f183ada",
+    "n11_intcall_dynarr_lit_same_str.hex": "a30eae1cc151e7e79a837b52376fbe062d2433203b28bf8f130677d80dc237b8",
+    "n11_intcall_dynarr_lit_same_str.json": "2f4a990edd02b247a0fb349258bb266d3fde5e36b9f53fecd2139601fe4c2bf1"
+  }
+}

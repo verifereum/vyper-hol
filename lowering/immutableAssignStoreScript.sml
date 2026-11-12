@@ -9,7 +9,7 @@ Ancestors
 Libs monadsyntax
 
 Theorem immutable_assign_direct_store:
-  compile_assign_value cenv dst LocCode src F src_loc dty sty da mem_size sa = ((),sb) /\
+  compile_assign_value cenv dst LocCode src F src_loc dty sty mem_size sa = ((),sb) /\
   cenv.ce_imm_alloca = imm /\
   dty = sty /\ ~is_bytestring_type dty /\
   copy_size = mem_size /\
@@ -55,7 +55,7 @@ Proof
 QED
 
 Theorem immutable_assign_word_store:
-  compile_assign_value cenv dst LocCode src T src_loc dty sty da mem_size sa = ((),sb) /\
+  compile_assign_value cenv dst LocCode src T src_loc dty sty mem_size sa = ((),sb) /\
   (!region. cenv.ce_imm_alloca = SOME region ==> eval_operand region s = SOME 0w) /\
   (!x. src = Var x ==> not_fresh_at sa x) /\
   eval_operand dst s = SOME (n2w off) /\
@@ -101,7 +101,7 @@ Proof
 QED
 
 Theorem immutable_assign_normalized_compile:
-  compile_assign_value cenv dst LocCode src F src_loc dty sty da mem_size sa = ((),sb) /\
+  compile_assign_value cenv dst LocCode src F src_loc dty sty mem_size sa = ((),sb) /\
   dty <> sty /\ ~is_bytestring_type dty ==>
   ?buf mid sm.
     compile_alloc_buffer mem_size sa = (buf,mid) /\
@@ -124,7 +124,7 @@ Proof
 QED
 
 Theorem immutable_assign_normalized_store:
-  compile_assign_value cenv dst LocCode src F src_loc dty sty da L sa = ((),sb) /\
+  compile_assign_value cenv dst LocCode src F src_loc dty sty L sa = ((),sb) /\
   dty <> sty /\ ~(is_bytestring_type dty /\ is_bytestring_type sty) /\
   fn_has_code sa sb func /\ fn_inst_ids_distinct func /\
   local_ptrs_reserved cenv sa /\
@@ -211,7 +211,7 @@ Proof
 QED
 
 Theorem immutable_assign_bytestring_store:
-  compile_assign_value cenv dst LocCode src F src_loc dty sty da mem_size sa = ((),sb) /\
+  compile_assign_value cenv dst LocCode src F src_loc dty sty mem_size sa = ((),sb) /\
   is_bytestring_type sty /\ is_bytestring_type dty /\
   evaluate_type tenv sty = SOME stv /\ evaluate_type tenv dty = SOME dtv /\
   value_has_type stv v /\ value_has_type dtv v /\
