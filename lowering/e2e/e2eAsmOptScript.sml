@@ -24,7 +24,8 @@ Ancestors
   contextPlanLayoutProps unitMemInv stepWriteFootprint o1PassContract
   contextRawReachable codegenEncodingWf spillWordBounds symbolResolve asmWf
   memSafeRun lowerDloadDefs
-  frameRel codegenRel
+  frameRel codegenRel o1SymStaticData o1SymStaticPipeline
+  venomPipelineDriverProps venomCompilerWf venomWf
 
 (* L1 for the optimizer: the runtime is the optimized assembly of the O1
    output's generated assembly. *)
@@ -259,7 +260,15 @@ Theorem o1_pipeline_sym_unit_static_ok:
    EXISTS (\ds. ds.ds_label = "runtime_begin") unit.cu_data_segment) ==>
   sym_unit_static_ok out.po_unit
 Proof
-  cheat
+  rpt gen_tac >> strip_tac >>
+  qspecl_then [`rpolicy`, `unit`, `out`] mp_tac
+    o1_pipeline_runtime_reference_reflects >>
+  impl_tac >- simp[] >> strip_tac >>
+  fs[o1PipelineCorrectTheory.o1_pipeline_def] >>
+  drule_all run_venom_pipeline_bytes_only >> strip_tac >>
+  drule run_venom_pipeline_success_unit_wf >> strip_tac >>
+  fs[sym_unit_static_ok_def, unit_wf_def, venom_wf_def] >>
+  metis_tac[]
 QED
 
 (* run_venom_pipeline_correct, also carrying the source's DLOAD offset
