@@ -109,7 +109,8 @@ Proof
     gvs[vyperStorageFootprintTheory.storage_well_formed_on_def] >>
   `w2n ((n2w slot):bytes32) + type_slot_size tvt <= dimword (:256)` by
     (gvs[vyperStorageFootprintTheory.valid_horizon_def,
-         vyperStorageFootprintTheory.regions_consistent_def] >> metis_tac[]) >>
+         vyperStorageFootprintTheory.regions_consistent_def] >>
+     qpat_x_assum `!b slot tv. MEM _ _ ==> _` (drule_then mp_tac) >> simp[]) >>
   `!st. storage_read_live H tr st (n2w slot) tvt` by
     metis_tac[observed_storage_region_read_live] >>
   `typ = ann` by
@@ -123,5 +124,10 @@ Proof
      (LocatedValue ann (mk_ptr (Lit (n2w slot))
         (if tr then LocTransient else LocStorage)),sa)` by
     (Cases_on `tr` >> gvs[compile_expr_def, vyperASTTheory.expr_type_def]) >>
-  gvs[] >> irule toplevel_storage_value_post >> simp[]
+  gvs[] >>
+  `es with <|gas_obs := []; storage_trace := es.storage_trace ++ [StorageRoot tr slot tvt]|> =
+   es with <|storage_trace := es.storage_trace ++ [StorageRoot tr slot tvt]; gas_obs := []|>` by
+    simp[evaluation_state_component_equality] >>
+  pop_assum SUBST1_TAC >>
+  irule toplevel_storage_value_post >> simp[]
 QED

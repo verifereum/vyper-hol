@@ -232,10 +232,13 @@ Resume compile_bop_typed_sim[right_normal]:
     (mp_tac o REWRITE_RULE [gas_marked_exec_def]) >>
   disch_then (mp_tac o CONJUNCT1) >>
   disch_then (qspec_then `[]` (strip_assume_tac o SIMP_RULE (srw_ss()) [])) >>
-  qpat_x_assum `!gs2 v2 es2. _` drule >> strip_tac >>
+  qpat_x_assum `!gs2 v2 es2. _` (drule o SIMP_RULE (srw_ss()) []) >> strip_tac >>
   `?H. valid_horizon cx st0 H es_end'.storage_trace` by metis_tac[] >>
   qexists_tac `marks ++ marks'` >> disj2_tac >> disj1_tac >>
-  drule_all (REWRITE_RULE [ETA_AX] bop_normal_prefix_summary) >> simp[]
+  drule_all (Q.INST [`mid` |-> `es_end`, `fin` |-> `es_end'`,
+                     `left` |-> `marks`, `right` |-> `marks'`]
+               (SIMP_RULE bool_ss [PULL_EXISTS]
+                 (REWRITE_RULE [ETA_AX] bop_normal_prefix_summary))) >> simp[]
 QED
 Resume compile_bop_typed_sim[right_exit]:
   Cases_on `res`
@@ -251,7 +254,7 @@ Resume compile_bop_typed_sim[right_exit]:
       irule gas_marked_exec_bind_normal >>
       qpat_assum `gas_marked_exec _ _ _ _ _ (INL v1) _ _` (irule_at Any) >>
       BETA_TAC >> irule gas_marked_exec_bind_exception >> first_assum ACCEPT_TAC) >>
-  disj2_tac >> gnvs[]
+  disj2_tac >> gnvs[] >> first_assum ACCEPT_TAC
 QED
 Resume compile_bop_typed_sim[right_exempt]:
   qexists_tac `marks ++ marks'` >> disj2_tac >> disj2_tac >>

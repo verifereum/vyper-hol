@@ -60,14 +60,16 @@ Resume aggregate_body_cons_outcome[normal]:
     (strip_assume_tac o REWRITE_RULE [gas_outcome_def])
   >- (rewrite_tac[gas_outcome_def] >> qexists_tac `marks ++ marks'` >>
       disj1_tac >> irule gas_bad_storage_at_bind_right >> simp[] >>
-      goal_assum (drule_at Any) >> simp[])
+      metis_tac[])
   >- (qpat_x_assum `gas_summary_at _ _ _ _ _ _ _`
         (strip_assume_tac o REWRITE_RULE [gas_summary_at_def]) >>
       rewrite_tac[gas_outcome_def] >> qexists_tac `marks ++ marks'` >>
       disj2_tac >> disj1_tac >> simp[gas_summary_at_def] >>
       qexistsl_tac [`res`, `es_end'`, `r`] >> simp[] >>
-      irule gas_marked_exec_bind_normal >> goal_assum (drule_at Any) >>
-      gvs[]) >>
+      (conj_tac
+       >- (irule gas_marked_exec_bind_normal >> goal_assum (drule_at Any) >>
+           gvs[])) >>
+      fs[]) >>
   rewrite_tac[gas_outcome_def] >> qexists_tac `marks ++ marks'` >>
   disj2_tac >> disj2_tac >> qexistsl_tac [`err`, `ee`, `leaf`, `finish'`] >>
   pure_rewrite_tac[ignore_bind_def, bind_assoc] >>
@@ -148,8 +150,6 @@ Resume aggregate_body_read_cons_outcome[normal]:
   disj2_tac >> disj1_tac >>
   rewrite_tac[gas_summary_at_def] >>
   qexistsl_tac [`INL (v::vs)`, `es_end`, `OK t'`] >> simp[] >>
-  reverse conj_tac
-  >- (rpt strip_tac >> first_x_assum drule >> strip_tac >> gvs[]) >>
   irule (SRULE [] (Q.INST [`left` |-> `[]`] (SPEC_ALL gas_marked_exec_bind_normal))) >>
   goal_assum (drule_at Any) >> simp[]
 QED
@@ -236,7 +236,7 @@ Resume gas_outcome_map_source_run[normal]:
   disj2_tac >> disj1_tac >>
   rewrite_tac[gas_summary_at_def] >>
   qexistsl_tac [`SUM_MAP f I res`, `es_end`, `OK t`] >> simp[] >>
-  metis_tac[]
+  disj1_tac >> fs[] >> metis_tac[]
 QED
 
 Resume gas_outcome_map_source_run[exit]:
@@ -249,7 +249,8 @@ Resume gas_outcome_map_source_run[exit]:
   rewrite_tac[gas_outcome_def] >> qexists_tac `marks` >>
   disj2_tac >> disj1_tac >>
   rewrite_tac[gas_summary_at_def] >>
-  qexistsl_tac [`SUM_MAP f I res`, `es_end`, `r`] >> simp[]
+  qexistsl_tac [`SUM_MAP f I res`, `es_end`, `r`] >> simp[] >>
+  disj2_tac >> fs[] >> metis_tac[]
 QED
 
 Resume gas_outcome_map_source_run[exempt]:
