@@ -1,6 +1,6 @@
 Theory concretizeLayoutStoreProduction
 Ancestors concretizeLayoutAccessGeometry concretizeLayoutLoadProduction concretizeLayoutPointerRanges frameActivationSeparation
-  frameJointDemand venomState byte
+  frameJointDemand frameDemandTaint venomState byte
   frameActivationCache frameRelocationBinding frameJointTrace frameJointTransition
   frameRelocationOpaque frameRelocationStoreValues frameRelocationStoreSteps frameRelocationWriteCoverage
   frameRelocationReachableSupport concretizeLayoutRelocation
@@ -31,7 +31,7 @@ Theorem joint_mstore_demand_address_coherence:
   joint_relocation_demand lo positions q0 es qs (SUC c) a z /\
   relocation_pair lo positions (EL c (q0::qs)) a w ==> z = w
 Proof
-  strip_tac >>
+  disch_then (map_every assume_tac o CONJUNCTS) >>
   drule_all joint_trace_edge_at >> strip_tac >>
   `!d owner aid site.
     activation_cache (EL c (q0::qs)) d owner aid site <=>

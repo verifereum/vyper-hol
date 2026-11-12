@@ -74,15 +74,15 @@ Proof
   disch_then (qspecl_then [`w`, `u`] mp_tac) >>
   (impl_tac >- (fs[] >> metis_tac[])) >> strip_tac >>
   PairCases_on `tu` >> PairCases_on `tw` >>
-  `((tu0,tu1):num # num) = (tw0,tw1)` by
-    (irule resolved_positive_site_tokens >> goal_assum (drule_at Any) >>
-     simp[] >> metis_tac[]) >> gvs[] >>
   `?d owner.
     activation_cache (JointConfig stk PG G tn fn inst s oms om hs h)
       d owner tu1 (b,sz) /\
     activation_lookup (0:num) (concretize_positions C') (birth::ids)
       (fn::MAP (\f. f.cf_fn) stk) (tu0,tu1) = concretize_positions C' owner tu1` by
     metis_tac[resolved_activation_lookup] >>
+  `((tu0,tu1):num # num) = (tw0,tw1)` by
+    (irule resolved_positive_site_tokens >> goal_assum (drule_at Any) >>
+     simp[] >> metis_tac[]) >> gvs[] >>
   `b+sz < dimword (:256)` by
     (drule_all joint_activation_cache_strict >> simp[]) >>
   drule_all concretize_positions_activation_numeric >> strip_tac >>
@@ -166,7 +166,7 @@ Proof
       b + sz <= w2n s.vs_initial_fmp) \/
    SND o_f rv = G` by
     (Cases_on `ctx_has_dalloca C`
-     >- (disj1_tac >> irule frame_reachable_caches_below >> metis_tac[]) >>
+     >- (disj1_tac >> rpt strip_tac >> irule frame_reachable_caches_below >> metis_tac[]) >>
      fs[]) >>
   `!u. FLOOKUP rv u <> NONE ==> u IN fn_pv P fn` by
     (drule resolved_config_current >> simp[] >> strip_tac >>
