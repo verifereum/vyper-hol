@@ -72,3 +72,28 @@ Proof
   `n + t.vs_inst_idx - SUC t.vs_inst_idx = n - 1` by decide_tac >>
   pop_assum SUBST1_TAC >> simp[]
 QED
+
+(* Coverage at an already related, active target endpoint. *)
+Theorem fmp_cov_endpoint_zero:
+  frame_reachable vs C stk PG G tn fn inst s /\
+  active_inst fn inst s /\ ~s.vs_halted /\
+  (restored ==> MEM inst.inst_opcode [DALLOCA; INVOKE] \/
+               is_terminator inst.inst_opcode) /\
+  fmp_stage_rel D C' sm (w2n vs'.vs_initial_fmp) (w2n fmp) eom restored
+    stk PG G tn fn s lo u ts /\
+  lookup_function fn.fn_name C'.ctx_functions = SOME fn' /\
+  fmp_cov_stack C' stk ts stk' /\
+  ALL_DISTINCT (fn_labels fn') /\ active_inst fn' ti' u ==>
+  fmp_cov D C C' vs vs' fmp eom stk' fn' u
+Proof
+  rpt strip_tac >>
+  drule_all lowerDloadPtrRawReachableTheory.active_inst_block_lookup >>
+  strip_tac >>
+  `u.vs_inst_idx < LENGTH bb.bb_instructions` by
+    fs[get_instruction_def] >>
+  simp[fmp_cov_def] >> disj1_tac >>
+  qexistsl_tac [`stk`, `PG`, `G`, `tn`, `fn`, `inst`, `s`, `sm`, `lo`,
+                 `u`, `ts`, `restored`] >>
+  simp[fmp_target_run_def, analysisSimDefsTheory.run_insts_def] >>
+  fs[]
+QED
