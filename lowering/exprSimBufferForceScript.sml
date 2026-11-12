@@ -56,8 +56,9 @@ Proof
             (assume_tac o SIMP_RULE (srw_ss()) []) >>
           `?v. read_result cx tv (es_end with gas_obs := []) =
                (INL v, es_end with gas_obs := [])` by
-            (qpat_x_assum `vv_post _ _ _ _ _ _ _ _ _ _ _ _ _ _` mp_tac >>
-             simp[vv_post_def, vv_holds_def] >> metis_tac[]) >>
+            (qpat_x_assum `vv_post _ _ _ _ _ _ _ _ _ _ _ _ _ _`
+               (strip_assume_tac o REWRITE_RULE [vv_post_def, vv_holds_def]) >>
+             metis_tac[]) >>
           qexistsl_tac [`INL v`, `es_end with gas_obs := []`, `OK t'`] >>
           simp[] >> conj_tac
           >- (drule read_result_gas_obs >> strip_tac >>
