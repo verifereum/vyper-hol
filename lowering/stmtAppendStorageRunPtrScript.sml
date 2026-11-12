@@ -187,7 +187,7 @@ Proof
     tn with t_var := tn.t_var |+ (STRING #"%" (toString st.cs_next_var),{})` by
     (simp[Abbr `i`] >> Cases_on `opc = ADD`
      >- (gvs[] >> irule scalar_add_taint >> simp[]) >>
-     gvs[] >> metis_tac[typed_copy_loop_arith_ghost]) >>
+     gvs[] >> irule (cj 2 typed_copy_loop_arith_ghost_clean) >> simp[] >> metis_tac[]) >>
   simp[op_taint_def, FLOOKUP_UPDATE] >> rpt strip_tac >>
   `x <> STRING #"%" (toString st.cs_next_var)` by
     (fs[not_fresh_at_def]) >>
