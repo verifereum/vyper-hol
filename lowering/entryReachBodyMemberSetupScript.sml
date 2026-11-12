@@ -105,8 +105,10 @@ Theorem entry_member_setup_endpoint_gas:
     u.vs_current_bb = mid.cs_current_bb /\ u.vs_inst_idx = LENGTH mid.cs_current_insts
 Proof
   strip_tac >>
-  `abi_decode_source_opcode CALLDATALOAD` by simp[abi_decode_source_opcode_def] >>
-  drule_all abi_decode_member_setup_reentry >> strip_tac >>
+  `abi_decode_source_opcode CALLDATALOAD /\ abi_decoder_operand_live st.cs_next_var (Lit 0w)` by
+    simp[abi_decode_source_opcode_def, abiDecoderReentryTheory.abi_decoder_operand_live_def] >>
+  drule_all (SIMP_RULE bool_ss [eval_operand_def, arithmeticTheory.ADD]
+    (Q.INST [`base_op` |-> `Lit 0w`, `B` |-> `0`] abi_decode_member_setup_reentry)) >> strip_tac >>
   drule_all member_setup_observation_code >> strip_tac >>
   drule_all entry_sequence_observations >> strip_tac >>
   drule_all run_inst_seq_preserves_entry_control >> strip_tac >>

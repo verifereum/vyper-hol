@@ -697,7 +697,7 @@ Resume owned_array_initializer_gas[pc_frame]:
      abi_encoder_registered_effect_def, entry_loop_fields_def,
      alloca_inv_def, allocas_non_overlapping_def, alloca_next_valid_def,
      abi_alloca_history_def, alloca_frontier_inv_def, eval_op_inst_idx, mload_def,
-     compileEnvTheory.fresh_vars_wrt_def] >>
+     loweringStateRelDefsTheory.fresh_vars_wrt_def] >>
   rpt conj_tac >> first_assum ACCEPT_TAC
 QED
 Finalise owned_array_initializer_gas
