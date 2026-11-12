@@ -3,6 +3,7 @@ Theory ctorCallFreeBodies
 Ancestors
   list pair compileEnv venomInst loweringShapeDefs emitHelper context exprLowering
   ctorCallFreeRules ctorCallFreeCallbacks exprBopLowering
+  ctorCallFreeExprBody ctorCallFreeBuiltinBody ctorCallFreeTypeBuiltinBody
 
 Theorem every_state_insts_addmod_names:
   (!ty name st. EVERY P (state_insts st) ==>
