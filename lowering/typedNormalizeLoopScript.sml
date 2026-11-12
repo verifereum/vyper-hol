@@ -471,7 +471,7 @@ Proof
   metis_tac[LESS_EQ_TRANS, LESS_EQ_REFL]
 QED
 
-Theorem typed_sarray_pointer_fresh[local]:
+Theorem typed_sarray_pointer_fresh:
   sc.cs_next_var = sa.cs_next_var+7 /\
   (!x. src = Var x \/ dst = Var x ==> not_fresh_at sa x) ==>
   let ctr = "%" ++ toString sa.cs_next_var;

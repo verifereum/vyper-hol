@@ -63,8 +63,9 @@ Proof
   drule_all expr_val_at_frontier >> strip_tac >> gvs[] >>
   `val_in_memory tv v (w2n w) s.vs_memory` by
     gvs[expr_val_rel_def] >>
-  `w2n w + val_footprint tv v < dimword (:256)` by
-    metis_tac[expr_val_at_bound] >>
+  `s.vs_alloca_next < dimword (:256)` by
+    (irule alloca_room_next_lt >> fs[stmt_state_rel_def] >> metis_tac[]) >>
+  `w2n w + val_footprint tv v < dimword (:256)` by decide_tac >>
   `w2n w + val_footprint tv v <= dimword (:256)` by decide_tac >>
   drule_all raw_return_value_read >> strip_tac >>
   `val_footprint tv v = 32 + LENGTH bs` by
