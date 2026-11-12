@@ -388,15 +388,13 @@ QED
 
 Theorem call_external_function_nonpayable_value[local]:
   mut <> Payable /\ cx.txn.value <> 0 /\ ~cx.in_deploy ==>
-  ?msg. call_external_function orc gobs am cx F mut ts all_mods args dflts vals
-          stmts ret = (INR (Error (RuntimeError msg)), am, [])
+  ?msg obs. call_external_function_trace orc gobs am cx F mut ts all_mods args
+              dflts vals stmts ret = (INR (Error (RuntimeError msg)), am, [], obs)
 Proof
   strip_tac >>
-  simp[call_external_function_def, call_external_function_trace_def,
-       bind_def, ignore_bind_def, return_def,
+  simp[call_external_function_trace_def, bind_def, ignore_bind_def, return_def,
        send_call_value_def, check_def, assert_def, LET_THM] >>
-  rpt (BasicProvers.TOP_CASE_TAC >> simp[]) >>
-  qpat_x_assum `(if _ then _ else _) = _` mp_tac >> rw[]
+  rpt (BasicProvers.TOP_CASE_TAC >> simp[]) >> rw[]
 QED
 
 (* Value sent to a nonpayable function: the source fails with a
@@ -411,12 +409,13 @@ Theorem call_external_nonpayable_value:
     ?msg. call_external orc gobs am tx = (INR (Error (RuntimeError msg)), am, [])
 Proof
   rw[source_deployment_rel_def] >>
-  simp[call_external_def, find_function_module_def,
+  simp[call_external_def, call_external_trace_def, find_function_module_def,
        lookup_exported_function_def, get_self_code_def, get_module_code_def,
        initial_evaluation_context_def] >>
-  qmatch_goalsub_abbrev_tac `call_external_function orc gobs am cx` >>
-  `?msg. call_external_function orc gobs am cx F mut tops [(NONE, tops)] args
-          dflts tx.args stmts ret = (INR (Error (RuntimeError msg)), am, [])` by
+  qmatch_goalsub_abbrev_tac `call_external_function_trace orc gobs am cx` >>
+  `?msg obs. call_external_function_trace orc gobs am cx F mut tops
+          [(NONE, tops)] args dflts tx.args stmts ret =
+        (INR (Error (RuntimeError msg)), am, [], obs)` by
     (irule call_external_function_nonpayable_value >> simp[Abbr `cx`]) >>
   simp[]
 QED
