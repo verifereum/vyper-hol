@@ -66,7 +66,7 @@ Proof
           simp[] >> conj_tac
           >- (drule read_result_gas_obs >> strip_tac >>
               gvs[gas_marked_exec_def, bind_def]) >>
-          rpt strip_tac >> irule expr_post_of_vv_post_memory >> simp[] >>
+          disj1_tac >> rpt strip_tac >> irule expr_post_of_vv_post_memory >> simp[] >>
           qexists_tac `t` >> simp[] >>
           irule vv_post_read_result >> simp[] >> metis_tac[]) >>
       qpat_x_assum `!H. valid_horizon _ _ H _ ==> _`
