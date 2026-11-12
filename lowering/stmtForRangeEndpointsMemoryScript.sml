@@ -79,12 +79,13 @@ Theorem for_expr_endpoint_outcome_mem:
       (k : value -> evaluation_state -> unit evaluation_result)) (es,s0) Q R
 Proof
   strip_tac >> irule for_endpoint_bind_outcome_mem >>
-  conj_tac >- simp[] >> qexists_tac `\v ee t.
+  qexistsl_tac [`\v ee t.
     expr_post ctx func cenv cx e es sa sb s0 ee v op t /\
     expr_store_bound cx (expr_type e) v op t /\
     t.vs_current_bb = sb.cs_current_bb /\
     t.vs_inst_idx = LENGTH sb.cs_current_insts /\
-    alloca_history func t /\ s0.vs_alloca_next <= t.vs_alloca_next` >>
+    alloca_history func t /\ s0.vs_alloca_next <= t.vs_alloca_next`, `cx`] >>
+  conj_tac >- simp[] >>
   simp[] >>
   qhdtm_x_assum `expr_sim_mem` mp_tac >>
   simp[expr_sim_mem_def] >> disch_then irule >> simp[]
