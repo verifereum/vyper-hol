@@ -21,7 +21,8 @@ Proof
   irule entry_action_bind >> simp[entry_action_emit_void] >>
   irule entry_action_bind >> simp[entry_action_emit_op] >> gen_tac >>
   irule entry_action_bind >> simp[entry_action_emit_op] >> gen_tac >>
-  simp[] >> irule entry_action_bind >> simp[entry_action_emit_op]
+  simp[] >> irule entry_action_bind >> simp[entry_action_emit_op] >> gen_tac >>
+  irule entry_action_bind >> simp[entry_action_emit_op]
 QED
 
 Theorem typed_copy_entry_family:
