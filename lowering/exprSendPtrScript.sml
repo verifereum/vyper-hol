@@ -521,7 +521,7 @@ Theorem send_tail_summary_ptr:
       ghost_inv d cenv cx ee G' tn' z /\
       ghost_kept cenv es sa G tn s G' tn' /\
       z.vs_current_bb = sb.cs_current_bb /\ z.vs_inst_idx = LENGTH sb.cs_current_insts)
-    (\res ee ghosts r. expr_exit res r)
+    (\res ee ghosts r. expr_exit res r /\ halt_exit cx ee res r)
 Proof
   strip_tac >>
   qabbrev_tac `src = do tv <- eval_send cx has_gas (to_v::amount_v::gas_vs);
@@ -537,11 +537,19 @@ Proof
         read_result cx tv od) es1 = (res,ee)` by fs[Abbr `src`] >>
   `ee with gas_obs := [] = ee` by
     (simp[vyperStateTheory.evaluation_state_component_equality]) >>
+  `res <> INR HaltException` by
+    (strip_tac >>
+     Cases_on `eval_send cx has_gas (to_v::amount_v::gas_vs) es1` >>
+     rename1 `eval_send _ _ _ _ = (rr, st1)` >>
+     Cases_on `rr` >> gvs[bind_def, evalNoHaltTheory.eval_send_nh] >>
+     drule exprSimSendTheory.eval_send_value >> strip_tac >>
+     gvs[vyperStateTheory.read_result_def, vyperStateTheory.return_def]) >>
   drule_all send_tail_path_ptr >>
   disch_then (qspec_then `PG` strip_assume_tac) >>
   simp[gas_summary_ptr_at_def] >>
   qexistsl_tac [`res`,`ee`,`G'`,`tn'`,`r`] >>
-  simp[gasSummaryTheory.gas_explicit_def]
+  simp[gasSummaryTheory.gas_explicit_def] >>
+  fs[exprSimDefsTheory.halt_exit_def]
 QED
 
 Theorem send_read_action_ptr:

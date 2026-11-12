@@ -66,6 +66,17 @@ Finalise framed_array_index_outcome_compose
 
 (* The suffix callback retains the static Code-or-Fixed provenance and
    captured-base post; neither is inferred from the runtime operand. *)
+Theorem value_exit_halt_eq[local]:
+  (?exc. res = (INR exc : value + exception) /\
+     expr_exit (INR exc : eval_result + exception) out /\
+     halt_exit cx ee (INR exc : eval_result + exception) out) <=>
+  expr_exit res out /\ halt_exit cx ee res out
+Proof
+  Cases_on `res` >> simp[] >> rename1 `INR exc` >>
+  qspec_then `Value` (mp_tac o REWRITE_RULE [FUN_EQ_THM]) expr_exit_success_map >>
+  disch_then (qspec_then `INR exc : value + exception` mp_tac) >> simp[]
+QED
+
 Theorem framed_array_after_base:
   gas_marked_exec F (ctx,func) (eval_expr cx obj)
     (es,s0) left (INL captured) mid (OK t) /\
@@ -87,16 +98,18 @@ Theorem framed_array_after_base:
      u.vs_inst_idx = LENGTH si.cs_current_insts ==>
      gas_summary_at F (ctx,func) []
        (select_result cx (expr_type obj) captured (ValueSubscript v))
-       (raw with gas_obs := [],u) Q (\res ee out. expr_exit res out)) ==>
+       (raw with gas_obs := [],u) Q (\res ee out. expr_exit res out /\ halt_exit cx ee res out)) ==>
   gas_outcome F (cx_tops cx) (ctx,func)
     (eval_expr cx (Subscript ann obj idx)) (es,s0)
-    Q (\res ee out. expr_exit res out)
+    Q (\res ee out. expr_exit res out /\ halt_exit cx ee res out)
 Proof
   strip_tac >>
   qpat_x_assum `expr_sim _ _ _ _ _ _ _`
     (mp_tac o REWRITE_RULE [expr_sim_def]) >>
   disch_then (qspecl_then [`sm`,`si`,`iop`,`t`] mp_tac) >>
   (impl_tac >- simp[]) >> strip_tac >>
+  qpat_x_assum `gas_outcome _ _ _ _ _ _ _`
+    (assume_tac o REWRITE_RULE [GSYM value_exit_halt_eq]) >>
   pure_once_rewrite_tac[eval_expr_subscript_bind] >>
   irule (BETA_RULE (Q.ISPEC `\r v. select_result cx (expr_type obj) r (ValueSubscript v)`
     (Q.GEN `k` framed_array_index_outcome_compose))) >>
@@ -105,12 +118,10 @@ Proof
     expr_post ctx func cenv cx idx (mid with gas_obs := []) sm si t ee v iop u /\
     u.vs_current_bb = si.cs_current_bb /\
     u.vs_inst_idx = LENGTH si.cs_current_insts` >> simp[] >>
-  `(!res out. (?exc. res = (INR exc : value + exception) /\
-        expr_exit (INR exc : eval_result + exception) out) = expr_exit res out)` by
-    (gen_tac >> Cases_on `res` >> simp[] >> rename1 `INR exc` >>
-     qspec_then `Value` (mp_tac o REWRITE_RULE [FUN_EQ_THM]) expr_exit_success_map >>
-     disch_then (qspec_then `INR exc : value + exception` mp_tac) >> simp[]) >>
-  simp[] >> first_assum ACCEPT_TAC
+  conj_tac
+  >- (qpat_x_assum `!imarks raw v u. _` mp_tac >> simp[]) >>
+  qpat_x_assum `gas_outcome _ _ _ (bind (eval_expr cx idx) _) _ _ _` mp_tac >>
+  simp[]
 QED
 
 (* Source observations are consumed by executions, but not by endpoint posts. *)

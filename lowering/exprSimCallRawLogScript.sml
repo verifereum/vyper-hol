@@ -708,7 +708,8 @@ Proof
        t.vs_inst_idx = LENGTH st1.cs_current_insts` >>
   reverse conj_tac
   >- (`(\(rr : value list + exception) (ee : evaluation_state) r.
-          ?exc. rr = INR exc /\ expr_exit (INR exc : value + exception) r) =
+          ?exc. rr = INR exc /\ expr_exit (INR exc : value + exception) r /\
+            halt_exit cx ee (INR exc : value + exception) r) =
        (\rr ee r. wb_args_exit rr r /\ halt_exit cx ee rr r)` by
         (simp[FUN_EQ_THM] >> Cases >> simp[wb_args_exit_def]) >>
       CONV_TAC (DEPTH_CONV BETA_CONV) >>
@@ -835,7 +836,8 @@ Proof
        t.vs_inst_idx = LENGTH st1.cs_current_insts` >>
   reverse conj_tac
   >- (`(\(rr : value list + exception) (ee : evaluation_state) r.
-          ?exc. rr = INR exc /\ expr_exit (INR exc : value + exception) r) =
+          ?exc. rr = INR exc /\ expr_exit (INR exc : value + exception) r /\
+            halt_exit cx ee (INR exc : value + exception) r) =
        (\rr ee r. wb_args_exit rr r /\ halt_exit cx ee rr r)` by
         (simp[FUN_EQ_THM] >> Cases >> simp[wb_args_exit_def]) >>
       CONV_TAC (DEPTH_CONV BETA_CONV) >>

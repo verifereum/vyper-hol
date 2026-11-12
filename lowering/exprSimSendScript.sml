@@ -720,7 +720,13 @@ Proof
               gas_explicit_replicate_false, APPEND] >>
   BETA_TAC >> pop_assum SUBST1_TAC >> conj_tac
   >- (conj_tac >- first_assum ACCEPT_TAC >> first_assum ACCEPT_TAC) >>
-  gvs[] >> metis_tac[]
+  `res <> INR HaltException` by
+    (strip_tac >>
+     Cases_on `eval_send cx has_gas (to_v::amount_v::gas_vs) es1` >>
+     rename1 `eval_send _ _ _ _ = (rr, st1)` >>
+     Cases_on `rr` >> gvs[bind_def, evalNoHaltTheory.eval_send_nh] >>
+     drule eval_send_value >> strip_tac >> gvs[read_result_def, return_def]) >>
+  gvs[halt_exit_def] >> metis_tac[]
 QED
 
 (* ===== send ===== *)

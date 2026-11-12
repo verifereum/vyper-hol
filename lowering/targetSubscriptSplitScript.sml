@@ -201,7 +201,8 @@ Proof
   once_rewrite_tac[evaluate_def] >>
   rewrite_tac[GSYM bind_assoc] >> simp[] >>
   disch_then (qspecl_then [`INR y`, `ee`] mp_tac) >>
-  gvs[bind_def, target_res_ok_def, expr_res_ok_def]
+  gvs[bind_def, target_res_ok_def, expr_res_ok_def] >>
+  rpt strip_tac >> gvs[]
 QED
 
 (* Internal-call defaults use the existing finally_set_scopes boundary
@@ -640,7 +641,10 @@ Theorem target_subscript_extend_summary_error:
   gas_summary_at F (ctx,func) [] (extend_place cx pv (ValueSubscript key))
     (es,s) Q (\res ee r. expr_exit res r /\ halt_exit cx ee res r)
 Proof
-  strip_tac >> drule extend_place_state >> strip_tac >> gvs[] >>
+  strip_tac >>
+  `err <> HaltException` by
+    (strip_tac >> gvs[] >> drule evalNoHaltTheory.extend_place_nh >> simp[]) >>
+  drule extend_place_state >> strip_tac >> gvs[] >>
   simp[gas_summary_at_def] >>
   qexistsl [`INR err`, `es`, `r`] >>
   simp[gas_marked_exec_def, target_subscript_extend_gas_obs] >>
@@ -744,7 +748,10 @@ Proof
   >- (gvs[] >>
       `?exc. res = INR exc` by (Cases_on `res` >> gvs[expr_exit_def]) >>
       gvs[] >> qexists `left` >> disj1_tac >>
-      metis_tac[target_subscript_base_exception]) >>
+      qexistsl [`INR exc`, `es_end`, `r`] >>
+      conj_tac
+      >- (irule target_subscript_base_exception >> first_assum ACCEPT_TAC) >>
+      disj2_tac >> rpt conj_tac >> fs[halt_exit_def]) >>
   qexists `left` >> disj2_tac >>
   metis_tac[target_subscript_base_exempt_cert]
 QED

@@ -1936,7 +1936,11 @@ Resume compile_convert_bytestring_frag_sim[normal]:
    >- (irule (Q.INST [`right` |-> `[]`] gas_marked_exec_bind_normal
               |> REWRITE_RULE [APPEND_NIL]) >>
        qexistsl_tac [`es_end`, `t'`, `v`] >> gvs[]) >>
-   gvs[])
+   gvs[] >>
+   qpat_x_assum `gas_marked_exec _ _ (\vs. _) _ _ _ _ _`
+     (strip_assume_tac o REWRITE_RULE [gas_marked_exec_def]) >>
+   first_x_assum (qspec_then `[]` mp_tac) >> simp[] >> strip_tac >>
+   gvs[halt_exit_def])
 QED
 
 Finalise compile_convert_bytestring_frag_sim

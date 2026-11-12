@@ -2320,10 +2320,13 @@ Proof
   qpat_assum `bt = ECAdd \/ bt = ECMul`
     (fn th => rewrite_tac[MATCH_MP ec_eval_bind th]) >>
   irule ec_outcome_then >>
-  conj_tac >- (BETA_TAC >> metis_tac[ec_expr_exit_INR_cast]) >>
-  qexists_tac `\v1 ee t. expr_post ctx func cenv cx a es sa s1 s0 ee v1 p t /\
+  qexistsl_tac [`\v1 ee t. expr_post ctx func cenv cx a es sa s1 s0 ee v1 p t /\
      t.vs_current_bb = s1.cs_current_bb /\
-     t.vs_inst_idx = LENGTH s1.cs_current_insts` >>
+     t.vs_inst_idx = LENGTH s1.cs_current_insts`, `cx`] >>
+  conj_tac
+  >- (BETA_TAC >> rpt strip_tac
+      >- metis_tac[ec_expr_exit_INR_cast] >>
+      fs[halt_exit_def]) >>
   BETA_TAC >> reverse conj_tac
   >- (irule exprSimWordArgsTheory.expr_sim_apply >>
       simp[] >> conj_tac >- metis_tac[expr_body_pre_gas_admissible] >>
@@ -2354,10 +2357,13 @@ Proof
             exprSimWordArgsTheory.forced_eval_expr_preserves_scopes_dom)) >>
      simp[]) >>
   irule ec_outcome_then >>
-  conj_tac >- (BETA_TAC >> metis_tac[ec_expr_exit_INR_cast]) >>
-  qexists_tac `\v2 ee u. expr_post ctx func cenv cx b es1 s1 sm t ee v2 q u /\
+  qexistsl_tac [`\v2 ee u. expr_post ctx func cenv cx b es1 s1 sm t ee v2 q u /\
      u.vs_current_bb = sm.cs_current_bb /\
-     u.vs_inst_idx = LENGTH sm.cs_current_insts` >>
+     u.vs_inst_idx = LENGTH sm.cs_current_insts`, `cx`] >>
+  conj_tac
+  >- (BETA_TAC >> rpt strip_tac
+      >- metis_tac[ec_expr_exit_INR_cast] >>
+      fs[halt_exit_def]) >>
   BETA_TAC >> reverse conj_tac
   >- (irule exprSimWordArgsTheory.expr_sim_apply >>
       simp[] >> conj_tac >- metis_tac[expr_body_pre_gas_admissible] >>

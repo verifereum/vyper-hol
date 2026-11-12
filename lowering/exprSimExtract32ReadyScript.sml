@@ -56,7 +56,8 @@ Proof
      t.vs_inst_idx = LENGTH st1.cs_current_insts` >>
   reverse conj_tac
   >- (`(\(res:value+exception) (ee:evaluation_state) r.
-          ?exc. res = INR exc /\ expr_exit (INR exc : eval_result+exception) r) =
+          ?exc. res = INR exc /\ expr_exit (INR exc : eval_result+exception) r /\
+            halt_exit cx ee (INR exc : eval_result+exception) r) =
         (\res ee r. expr_exit res r /\ halt_exit cx ee res r)` by
         (simp[FUN_EQ_THM] >> rpt gen_tac >> Cases_on `res`
          >- simp[] >>
@@ -102,7 +103,8 @@ Proof
     t.vs_current_bb = st3.cs_current_bb /\ t.vs_inst_idx = LENGTH st3.cs_current_insts` >>
   reverse conj_tac
   >- (`(\(res:value+exception) (ee:evaluation_state) r.
-          ?exc. res = INR exc /\ expr_exit (INR exc : eval_result+exception) r) =
+          ?exc. res = INR exc /\ expr_exit (INR exc : eval_result+exception) r /\
+            halt_exit cx ee (INR exc : eval_result+exception) r) =
         (\res ee r. expr_exit res r /\ halt_exit cx ee res r)` by
         (simp[FUN_EQ_THM] >> rpt gen_tac >> Cases_on `res`
          >- simp[] >> rename1 `INR exc` >>

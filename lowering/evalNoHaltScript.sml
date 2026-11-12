@@ -257,7 +257,7 @@ Proof
        nh_base)
 QED
 
-Theorem extend_place_nh[local]:
+Theorem extend_place_nh:
   extend_place cx pv sb s = (INR HaltException, s') ==> F
 Proof
   Cases_on `pv` >> simp[extend_place_def, raise_def]
@@ -359,7 +359,7 @@ Proof
        COND_RATOR, raise_def] @ nh_base)
 QED
 
-Theorem eval_send_nh[local]:
+Theorem eval_send_nh:
   eval_send cx has_gas vs s = (INR HaltException, s') ==> F
 Proof
   Cases_on `vs` >- simp[eval_send_def, raise_def] >>

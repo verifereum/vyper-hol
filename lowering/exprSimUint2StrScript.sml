@@ -2917,7 +2917,8 @@ Proof
   qexistsl_tac [`case builtin_result cx ee.accounts ann bt [expr_type e] [v] of
                    INL w => INL (Value w) | INR exc => INR exc`, `ee`, `r`] >>
   simp[expr_exit_success_map, halt_exit_success_map] >>
-  Cases_on `builtin_result cx ee.accounts ann bt [expr_type e] [v]` >> gvs[]
+  Cases_on `builtin_result cx ee.accounts ann bt [expr_type e] [v]` >> gvs[] >>
+  rpt strip_tac >> gvs[exprSimWordArgsTheory.builtin_result_not_halt]
 QED
 
 Theorem vv_post_prefix_frag:

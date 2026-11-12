@@ -214,7 +214,7 @@ Proof
               qexistsl_tac [`RuntimeError "transfer_value recipient overflow"`,
                             `es_end`, `func`, `t`] >>
               irule gas_exempt_cert_origin >>
-              simp[gas_exempt_origin_def] >> disj2_tac >>
+              simp[gas_exempt_origin_def] >>
               qexistsl_tac [`cenv`, `cx`, `ty`, `ann`, `e`, `dflt`, `sa`,
                             `sb`, `sm`, `vv`, `to_op`, `v`, `a`] >>
               fs[gas_value_prefix_def]) >>
