@@ -228,6 +228,72 @@ Proof
   simp[vv_post_def] >> rpt strip_tac >> metis_tac[]
 QED
 
+(* Concrete allocation boundary; the cursor update is deliberately separate
+   from execution of the instruction body. *)
+Theorem ifexp_widen_alloc_boundary:
+  compile_ifexp_arm cenv t src_ty vv sm = (op,sb) /\
+  compile_alloc_buffer n sm = (buf,sc) /\ buf.buf_operand = Var out /\
+  FLOOKUP s.vs_allocas sm.cs_next_id = NONE /\ n < dimword (:256) /\
+  step_inst_base (mk_inst sm.cs_next_id ALLOCA [Lit (n2w n)] [out]) s = OK az /\
+  q = az with vs_inst_idx := SUC s.vs_inst_idx /\
+  Ga = step_prov PG G (mk_inst sm.cs_next_id ALLOCA [Lit (n2w n)] [out]) az /\
+  ta = step_taint (mk_inst sm.cs_next_id ALLOCA [Lit (n2w n)] [out]) s az tn /\
+  (!x. vv_operand vv = Var x ==> not_fresh_at sm x) ==>
+  q.vs_memory = s.vs_memory /\ q.vs_accounts = s.vs_accounts /\
+  q.vs_call_ctx = s.vs_call_ctx /\ q.vs_transient = s.vs_transient /\
+  q.vs_immutables = s.vs_immutables /\ q.vs_labels = s.vs_labels /\
+  q.vs_current_bb = s.vs_current_bb /\ q.vs_halted = s.vs_halted /\
+  q.vs_inst_idx = SUC s.vs_inst_idx /\
+  q.vs_alloca_next = s.vs_alloca_next + n /\
+  s.vs_alloca_next <= q.vs_alloca_next /\
+  eval_operand (vv_operand vv) q = eval_operand (vv_operand vv) s /\
+  (!x. not_fresh_at sm x ==>
+    lookup_var x q = lookup_var x s /\ FLOOKUP Ga x = FLOOKUP G x /\
+    op_taint ta (Var x) = op_taint tn (Var x)) /\
+  ta.t_stor = tn.t_stor /\ ta.t_trans = tn.t_trans /\ ta.t_imm = tn.t_imm /\
+  (!i. i < s.vs_alloca_next ==> (i IN ta.t_mem <=> i IN tn.t_mem)) /\
+  Ga = G |+ (out,(s.vs_alloca_next,n)) /\
+  ta = tn with <|t_mem := tn.t_mem UNION
+      {i | s.vs_alloca_next <= i /\ i < s.vs_alloca_next+n};
+      t_var := tn.t_var |+ (out,{})|>
+Proof
+  strip_tac >>
+  `az = update_var out (n2w s.vs_alloca_next)
+    (s with <|vs_allocas := s.vs_allocas |+
+      (sm.cs_next_id,(s.vs_alloca_next,n));
+      vs_alloca_next := s.vs_alloca_next+n|>)` by
+    (drule_all step_alloca_fresh >> disch_then (qspec_then `out` mp_tac) >> gvs[]) >>
+  `new_site_bytes s az =
+      {i | s.vs_alloca_next <= i /\ i < s.vs_alloca_next+n}` by
+    (rw[new_site_bytes_def, update_var_def, FLOOKUP_UPDATE,
+        pred_setTheory.EXTENSION] >>
+     gvs[AllCaseEqs(), FLOOKUP_DEF] >> eq_tac
+     >- (strip_tac >> gvs[] >> decide_tac) >>
+     strip_tac >> qexistsl [`sm.cs_next_id`, `s.vs_alloca_next`, `n`] >> simp[]) >>
+  `Ga = G |+ (out,(s.vs_alloca_next,n)) /\
+   ta = tn with <|t_mem := tn.t_mem UNION
+      {i | s.vs_alloca_next <= i /\ i < s.vs_alloca_next+n};
+      t_var := tn.t_var |+ (out,{})|>` by
+    (simp[step_prov_def, out_prov_def, set_prov_def, mk_inst_def,
+       update_var_def, FLOOKUP_UPDATE, step_taint_def, mem_taint_def,
+       step_writes_def, codegenRelTheory.source_memory_write_ranges_def,
+       range_bytes_def, written_taint_def, set_var_taint_def, out_taint_def,
+       eval_operand_def, store_taint_def, imm_taint_def, adopt_reset_def] >>
+     simp[taint_component_equality]) >>
+  `!x. not_fresh_at sm x ==> x <> out` by
+    (qpat_x_assum `compile_alloc_buffer _ _ = _` mp_tac >>
+     simp[compile_alloc_buffer_def, emit_op_def, comp_bind_def, comp_return_def,
+       comp_ignore_bind_def, fresh_id_def, fresh_var_def, emit_def] >>
+     strip_tac >> gvs[not_fresh_at_def, ASCIInumbersTheory.toString_11] >>
+     metis_tac[arithmeticTheory.LESS_EQ_REFL]) >>
+  qpat_x_assum `Ga = step_prov _ _ _ _` kall_tac >>
+  qpat_x_assum `ta = step_taint _ _ _ _` kall_tac >>
+  gvs[update_var_def] >>
+  simp[lookup_var_def, FLOOKUP_UPDATE, op_taint_def] >>
+  Cases_on `vv_operand vv` >> simp[eval_operand_def, lookup_var_def, FLOOKUP_UPDATE] >>
+  metis_tac[]
+QED
+
 Theorem ifexp_widen_arm_step_full:
   (* The shared joint unwrap_value lemma on H (r8, family form), here a
      premise until it lands. *)
