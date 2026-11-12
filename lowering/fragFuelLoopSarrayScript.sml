@@ -559,6 +559,41 @@ Proof
   asm_simp_tac bool_ss [Abbr `mu`, sa_measure_bound, Abbr `H`, Abbr `Q`]
 QED
 
+(* The slow branch's frag_fuel: initialize, then at most 2 ** 256 rounds. *)
+Theorem sa_slow_frag_fuel[local]:
+  (!d s Wv E. fuel_ok Wv {} E
+    (compile_store_memory_typed ce d dt s st)) /\
+  ~(type_memory_bytes ce dt = type_memory_bytes ce st /\
+    ~is_abi_dynamic ce.ce_struct_fields dt) /\
+  compile_copy_sarray_typed ce dst dt src st n sa = ((),sz) ==>
+  ?Kc. frag_fuel {} {} {} sa sz Kc
+Proof
+  strip_tac >> drule_all sa_slow_semantics >> strip_tac >>
+  qexists_tac `1 + 2 ** 256 * (Kb + 2)` >>
+  rewrite_tac[frag_fuel_def, pred_setTheory.NOT_IN_EMPTY] >> rpt strip_tac >>
+  first_x_assum (qspecl_then [`G`, `ctx`, `fn`, `N`, `s`] mp_tac) >>
+  impl_tac >- asm_rewrite_tac[] >> strip_tac >>
+  mp_tac (INST [``r:venom_state`` |-> ``s:venom_state``,
+                ``Kr:num`` |-> ``Kb + 2``] sa_iterate_initialized) >>
+  impl_tac
+  >- (conj_tac
+      >- (irule fuel_outcome_weaken >>
+          qpat_x_assum `fuel_outcome _ _ _ _ 1 _` (irule_at Any) >>
+          BETA_TAC >> rpt strip_tac >> asm_rewrite_tac[] >>
+          qexists_tac `0` >> simp[]) >>
+      qx_gen_tac `u` >> strip_tac >>
+      qpat_x_assum `!s k. _` (qspecl_then [`u`, `k`] mp_tac) >>
+      impl_tac >- asm_rewrite_tac[] >> strip_tac >>
+      qexists_tac `j` >> asm_rewrite_tac[] >>
+      irule fuel_outcome_weaken >>
+      qpat_x_assum `fuel_outcome _ _ _ u j _` (irule_at Any) >>
+      BETA_TAC >> rpt strip_tac >> metis_tac[]) >>
+  strip_tac >> qexists_tac `j` >> asm_rewrite_tac[] >>
+  irule fuel_outcome_weaken >>
+  qpat_x_assum `fuel_outcome _ _ _ s j _` (irule_at Any) >>
+  BETA_TAC >> rpt strip_tac >> asm_rewrite_tac[]
+QED
+
 (* Given a bound for the element copy (the recursive call), the copy of a
    static array of n elements is bounded.  The slow path counts a fresh
    counter from 0 while it is below the literal n2w n; each round copies one
@@ -571,5 +606,16 @@ Theorem fuel_ok_compile_copy_sarray_typed:
     !Wv E. fuel_ok Wv {} E
              (compile_copy_sarray_typed cenv dst dst_elem src src_elem n)
 Proof
-  cheat
+  rpt gen_tac >> strip_tac >> rpt gen_tac >>
+  Cases_on `type_memory_bytes cenv dst_elem = type_memory_bytes cenv src_elem /\
+            ~is_abi_dynamic cenv.ce_struct_fields dst_elem`
+  >- (simp_tac std_ss [Once compile_store_memory_typed_def, LET_THM] >>
+      asm_rewrite_tac[] >> simp[fuel_ok_compile_copy_memory]) >>
+  simp_tac std_ss [fuel_ok_def] >> rpt gen_tac >> strip_tac >>
+  Cases_on `x` >>
+  drule_all sarray_slow_structure >> drule_all sa_slow_frag_fuel >>
+  rpt strip_tac >> asm_simp_tac std_ss [] >>
+  qexists_tac `Kc` >> irule frag_fuel_mono >>
+  qpat_x_assum `frag_fuel _ _ _ _ _ Kc` (irule_at Any) >>
+  simp[]
 QED
