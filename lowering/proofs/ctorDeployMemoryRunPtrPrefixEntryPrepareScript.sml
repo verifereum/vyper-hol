@@ -151,7 +151,7 @@ Proof
         tn with t_var := tn.t_var |+ (STRING #"%" (toString st.cs_next_var),{}))` by
     (rpt gen_tac >> drule emitted_insts_emit_op >> strip_tac >>
      drule prefix_register_address_emit_origin >> disch_then irule >>
-     gvs[is_terminator_def, prefix_prepare_callvalue_ptr,
+     gvs[is_terminator_def, run_inst_seq_mem_ok_def, prefix_prepare_callvalue_ptr,
          prefix_prepare_zero_ptr, prefix_iszero_ptr_step,
          prefix_prepare_callvalue_ghost, prefix_prepare_zero_ghost,
          prefix_prepare_iszero_ghost]) >>
