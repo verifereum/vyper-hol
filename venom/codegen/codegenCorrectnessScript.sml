@@ -345,7 +345,7 @@ Proof
   qspecl_then [`H`, `N`, `D`] strip_assume_tac asm_frame_gas_surplus >>
   qexists_tac `g` >> rpt gen_tac >> strip_tac >>
   qabbrev_tac `e = add_frame_gas g' es` >>
-  drule initial_ctx_codegen_asm_entry_rel >> strip_tac >>
+  drule codegenLabelDisciplinedTheory.initial_ctx_codegen_asm_entry_rel >> strip_tac >>
   `asm_run_bounded (SND (compute_label_offsets prog))
      (build_offset_to_pc prog) prog H N (entry_asm_state vs e)` by
     metis_tac[] >>
@@ -380,7 +380,7 @@ Proof
   rpt strip_tac >>
   drule_all codegen_entry_asm_bounded_run >>
   disch_then (qspecl_then [`fuel`, `M`] strip_assume_tac) >>
-  drule initial_ctx_codegen_asm_entry_rel >> strip_tac >>
+  drule codegenLabelDisciplinedTheory.initial_ctx_codegen_asm_entry_rel >> strip_tac >>
   `asm_run_bounded (SND (compute_label_offsets prog))
      (build_offset_to_pc prog) prog H N (entry_asm_state vs es)` by
     metis_tac[] >>
