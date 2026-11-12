@@ -32,7 +32,7 @@ Proof
 QED
 
 Theorem ptr_step_allocas_extend:
-  inst.inst_opcode <> DALLOCA /\ inst.inst_opcode <> INVOKE /\
+  inst.inst_opcode <> INVOKE /\
   step_inst fuel ctx inst s = OK s' ==>
   !aid p. FLOOKUP s.vs_allocas aid = SOME p ==>
     FLOOKUP s'.vs_allocas aid = SOME p

@@ -117,7 +117,7 @@ End
 
 Theorem ptr_table_source_step[local]:
   ptr_table_source fn s /\ MEM inst (fn_insts fn) /\
-  inst.inst_opcode <> DALLOCA /\ inst.inst_opcode <> INVOKE /\
+  inst.inst_opcode <> INVOKE /\
   step_inst fuel ctx inst s = OK s' ==> ptr_table_source fn s'
 Proof
   strip_tac >> Cases_on `inst.inst_opcode = ALLOCA`
@@ -136,7 +136,7 @@ QED
 Theorem ptr_frame_table_source:
   !vs ctx stk PG G tn fn inst s.
   frame_reachable vs ctx stk PG G tn fn inst s ==>
-  o1_run_state_ok vs /\ o1_ctx_shape ctx /\ ~ctx_has_dalloca ctx ==>
+  o1_run_state_ok vs /\ o1_ctx_shape ctx ==>
   MEM fn ctx.ctx_functions /\ ptr_table_source fn s /\
   EVERY (\f. MEM f.cf_fn ctx.ctx_functions /\ ptr_table_source f.cf_fn f.cf_state) stk
 Proof
@@ -150,8 +150,6 @@ Proof
       `MEM inst (fn_insts fn)` by
         (gvs[active_inst_def, fn_insts_def, fn_insts_blocks_flat, MEM_FLAT, MEM_MAP] >>
          metis_tac[MEM_EL]) >>
-      `inst.inst_opcode <> DALLOCA` by
-        (fs[ctx_has_dalloca_def, EVERY_MEM] >> metis_tac[]) >>
       drule_all ptr_table_source_step >> simp[ptr_table_source_def])
   >- (rpt gen_tac >> strip_tac >> strip_tac >>
       qpat_x_assum `_ ==> _` mp_tac >> simp[] >> strip_tac >>
@@ -175,7 +173,7 @@ Theorem ptr_frame_current_mems:
   ctx_pass_stage rpolicy (CFP_Simple VP_ConcretizeMemLoc)
     (o1_walk_view rpolicy 2) C C' /\
   EVERY (\f. f.fn_eom = NONE) C.ctx_functions /\
-  o1_ctx_shape C /\ o1_run_state_ok vs /\ ~ctx_has_dalloca C /\
+  o1_ctx_shape C /\ o1_run_state_ok vs /\
   frame_reachable vs C stk PG G tn fn inst s /\
   FLOOKUP s.vs_allocas aid = SOME (b,sz) ==>
   ?g p. lookup_function fn.fn_name C'.ctx_functions = SOME g /\
@@ -192,7 +190,7 @@ Theorem ptr_frame_saved_mems:
   ctx_pass_stage rpolicy (CFP_Simple VP_ConcretizeMemLoc)
     (o1_walk_view rpolicy 2) C C' /\
   EVERY (\f. f.fn_eom = NONE) C.ctx_functions /\
-  o1_ctx_shape C /\ o1_run_state_ok vs /\ ~ctx_has_dalloca C /\
+  o1_ctx_shape C /\ o1_run_state_ok vs /\
   frame_reachable vs C stk PG G tn fn inst s /\
   MEM f stk /\ FLOOKUP f.cf_state.vs_allocas aid = SOME (b,sz) ==>
   ?g p. lookup_function f.cf_fn.fn_name C'.ctx_functions = SOME g /\
@@ -211,7 +209,7 @@ Theorem ptr_frame_owning_callee_demand:
   ctx_pass_stage rpolicy (CFP_Simple VP_ConcretizeMemLoc)
     (o1_walk_view rpolicy 2) C C' /\
   EVERY (\f. f.fn_eom = NONE) C.ctx_functions /\
-  o1_ctx_shape C /\ o1_run_state_ok vs /\ ~ctx_has_dalloca C /\
+  o1_ctx_shape C /\ o1_run_state_ok vs /\
   frame_reachable vs C stk PG G tn fn inst s /\
   FLOOKUP s.vs_allocas aid = SOME (b,sz) /\
   o1_walk_view rpolicy 2 C' caller observed /\

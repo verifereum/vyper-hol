@@ -147,7 +147,7 @@ QED
 
 Theorem ptr_alloc_geometry_step:
   ptr_active_alloc_geometry (s::ss) /\ step_inst fuel ctx inst s = OK s' /\
-  inst.inst_opcode <> INVOKE /\ inst.inst_opcode <> DALLOCA ==>
+  inst.inst_opcode <> INVOKE ==>
   ptr_active_alloc_geometry (s'::ss)
 Proof
   strip_tac >> Cases_on `inst.inst_opcode = ALLOCA`
@@ -192,8 +192,7 @@ QED
 Theorem ptr_frame_alloc_geometry_invariant[local]:
   !vs0 ctx stk PG G tn fn inst s.
   frame_reachable vs0 ctx stk PG G tn fn inst s ==>
-  vs0.vs_allocas = FEMPTY /\
-  EVERY (\f. EVERY (\i. i.inst_opcode <> DALLOCA) (fn_insts f)) ctx.ctx_functions ==>
+  vs0.vs_allocas = FEMPTY ==>
   MEM fn ctx.ctx_functions /\ EVERY (\f. MEM f.cf_fn ctx.ctx_functions) stk /\
   ptr_active_alloc_geometry (s :: MAP (\f. f.cf_state) stk)
 Proof
@@ -202,34 +201,29 @@ Proof
       simp[ptr_active_alloc_geometry_def, ptr_alloc_table_ok_def] >>
       metis_tac[lookup_function_MEM])
   >- (rpt gen_tac >> strip_tac >> strip_tac >>
-      qpat_x_assum `_ /\ _ ==> _ /\ _ /\ ptr_active_alloc_geometry _` mp_tac >>
+      qpat_x_assum `_ ==> _ /\ _ /\ ptr_active_alloc_geometry _` mp_tac >>
       simp[] >> strip_tac >>
-      `MEM inst (fn_insts fn)` by
-        (gvs[contextCodegenRelTheory.active_inst_def, fn_insts_def,
-          venomWfPropsTheory.fn_insts_blocks_flat, MEM_FLAT, MEM_MAP] >>
-         metis_tac[MEM_EL]) >>
-      `inst.inst_opcode <> DALLOCA` by (fs[EVERY_MEM] >> metis_tac[]) >>
       `ptr_active_alloc_geometry (s' :: MAP (\f. f.cf_state) stk)` by
         metis_tac[ptr_alloc_geometry_step] >>
       simp[] >> irule (iffRL ptr_alloc_geometry_fields) >> qexists `s'` >> simp[])
   >- (rpt gen_tac >> strip_tac >> strip_tac >>
-      qpat_x_assum `_ /\ _ ==> _ /\ _ /\ ptr_active_alloc_geometry _` mp_tac >>
+      qpat_x_assum `_ ==> _ /\ _ /\ ptr_active_alloc_geometry _` mp_tac >>
       simp[] >> strip_tac >>
-      `inst.inst_opcode <> INVOKE /\ inst.inst_opcode <> DALLOCA` by
+      `inst.inst_opcode <> INVOKE` by
         (Cases_on `inst.inst_opcode` >> gvs[is_terminator_def]) >>
       drule ptr_alloc_enters_fields >> strip_tac >>
       `ptr_active_alloc_geometry (s' :: MAP (\f. f.cf_state) stk)` by
         metis_tac[ptr_alloc_geometry_step] >>
       metis_tac[ptr_alloc_geometry_fields])
   >- (rpt gen_tac >> strip_tac >> strip_tac >>
-      qpat_x_assum `_ /\ _ ==> _ /\ _ /\ ptr_active_alloc_geometry _` mp_tac >>
+      qpat_x_assum `_ ==> _ /\ _ /\ ptr_active_alloc_geometry _` mp_tac >>
       simp[] >> strip_tac >>
       drule ptr_alloc_setup_fields >> strip_tac >>
       drule ptr_alloc_enters_fields >> strip_tac >>
       gvs[ptr_active_alloc_geometry_def, ptr_alloc_table_ok_def, ptr_alloc_floor_def] >>
       metis_tac[lookup_function_MEM])
   >> rpt gen_tac >> strip_tac >> strip_tac >>
-  qpat_x_assum `_ /\ _ ==> _ /\ _ /\ ptr_active_alloc_geometry _` mp_tac >>
+  qpat_x_assum `_ ==> _ /\ _ /\ ptr_active_alloc_geometry _` mp_tac >>
   simp[] >> strip_tac >>
   drule ptr_alloc_return_fields >> strip_tac >>
   `ptr_active_alloc_geometry (f.cf_state :: MAP (\f. f.cf_state) stk)` by
@@ -238,8 +232,7 @@ Proof
 QED
 
 Theorem ptr_frame_alloc_geometry:
-  frame_reachable vs0 ctx stk PG G tn fn inst s /\ vs0.vs_allocas = FEMPTY /\
-  EVERY (\f. EVERY (\i. i.inst_opcode <> DALLOCA) (fn_insts f)) ctx.ctx_functions ==>
+  frame_reachable vs0 ctx stk PG G tn fn inst s /\ vs0.vs_allocas = FEMPTY ==>
   ptr_active_alloc_geometry (s :: MAP (\f. f.cf_state) stk)
 Proof
   metis_tac[ptr_frame_alloc_geometry_invariant]
