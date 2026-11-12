@@ -68,7 +68,26 @@ Theorem fmp_stage_back_fmp_ops:
   MEM inst.inst_opcode [DALLOCA; RETPC_PARAM] ==>
   terminates (step_inst k C inst s)
 Proof
-  cheat
+  strip_tac >>
+  drule_all fmp_stage_frame_facts >> strip_tac >>
+  `venomWf$inst_wf inst` by
+    (fs[o1_fn_shape_def, venomWfTheory.fn_inst_wf_def,
+        active_inst_def] >> metis_tac[MEM_EL]) >>
+  `unitShapeDefs$inst_shape_ok inst` by
+    (fs[o1_fn_shape_def, unitShapeDefsTheory.fn_shape_ok_def, EVERY_MEM] >>
+     metis_tac[]) >>
+  fs[MEM] >>
+  gvs[venomWfTheory.inst_wf_def, LENGTH_EQ_NUM_compute] >>
+  simp[step_inst_non_invoke, step_inst_base_def, terminates_def] >>
+  rename1 `inst.inst_operands = [size_op]` >>
+  Cases_on `size_op` >> simp[eval_operand_def] >>
+  gvs[unitShapeDefsTheory.inst_shape_ok_def,
+      unitShapeDefsTheory.label_positions_ok_def,
+      stackPlanTypesTheory.is_label_operand_def] >>
+  rename1 `inst.inst_operands = [Var v]` >>
+  `MEM (Var v) inst.inst_operands /\ inst.inst_opcode <> PHI` by simp[] >>
+  drule_all fmp_stage_src_defined >>
+  Cases_on `lookup_var v s` >> simp[]
 QED
 
 (* Why it holds: DJMP is banned by inst_shape_ok.  make_ssa_input_ok
