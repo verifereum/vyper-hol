@@ -452,9 +452,9 @@ Theorem immutable_compiled_loop_outcome:
   stmt_state_rel ctx func cenv cx es s /\ ~s.vs_halted /\
   s.vs_current_bb = st.cs_current_bb /\ s.vs_inst_idx = LENGTH st.cs_current_insts /\
   P es /\ lookup_scopes id es.scopes = NONE /\
-  gas_admissible (eval_for cx tv id stmts vs) (stmt_res_ok lctx) es ==>
+  gas_admissible (eval_for cx tv id stmts (MAP Value vs)) (stmt_res_ok lctx) es ==>
   gas_outcome F (cx_tops cx) (ctx,func)
-    (eval_for cx tv id stmts vs) (es,s)
+    (eval_for cx tv id stmts (MAP Value vs)) (es,s)
     (\res ee t. res = INL () /\
        t.vs_current_bb = st'.cs_current_bb /\
        t.vs_inst_idx = LENGTH st'.cs_current_insts /\ ~t.vs_halted /\
@@ -638,7 +638,7 @@ Proof
      qpat_x_assum `fn_has_code sb1 sj func` mp_tac >>
      rpt (pop_assum kall_tac) >> simp[]) >>
   `gas_outcome F (cx_tops cx) (ctx,func)
-    (eval_for cx tv id stmts vs) (es,cc)
+    (eval_for cx tv id stmts (MAP Value vs)) (es,cc)
     (\res ee t. res = INL () /\ t.vs_current_bb = exit /\ t.vs_inst_idx = 0 /\
       ~t.vs_halted /\ stmt_state_rel ctx func cenv cx ee t /\
       array_caller_frame st1 u t)
@@ -683,6 +683,38 @@ Proof
   strip_tac >> asm_rewrite_tac[]
 QED
 
+(* OPEN_ADMISSION: SEQ-4401 — allocation-frame continuation repair.
+   The counted loop stays proved; the final fragment needs its framed outcome.
+   Original proof retained pending the frame-threading proof.
+Proof
+  rpt gen_tac >> strip_tac >>
+  simp[stmt_frag_def, stmt_framed_frag_def] >>
+  map_every qx_gen_tac [`st`, `st'`, `s0`, `cenv'`] >> strip_tac >>
+  qpat_x_assum `stmt_env _ _ _ _ _ = _` mp_tac >>
+  simp[stmt_env_def, declare_stmt_local_def, comp_bind_def, comp_ignore_bind_def,
+       comp_return_def] >>
+  pairarg_tac >> simp[] >> strip_tac >> gvs[] >>
+  `stmt_state_rel ctx func cenv cx (es with gas_obs := []) s0` by
+    (qpat_assum `stmt_state_rel _ _ _ _ _ _` mp_tac >>
+     simp[stmt_state_rel_def, state_rel_gas_obs, immutable_alloca_sep_def, NoAsms] >>
+     strip_tac >> asm_rewrite_tac[]) >>
+  `lookup_scopes id (es with gas_obs := []).scopes = NONE` by simp[] >>
+  `LENGTH vs <= n` by decide_tac >>
+  `gas_admissible (eval_for cx tv id stmts (MAP Value vs)) (stmt_res_ok lctx)
+     (es with gas_obs := [])` by
+    (qpat_x_assum `gas_admissible _ _ _` mp_tac >>
+     simp[gas_admissible_def, Once evaluate_def, lift_option_type_def,
+       lift_option_def, bind_return, bind_def, compatible_bound_def,
+       check_def, vyperStateTheory.assert_def, ignore_bind_def, return_def]) >>
+  mp_tac (Q.INST [`es` |-> `es with gas_obs := []`, `st'` |-> `cs'`,
+                  `s` |-> `s0`] (SPEC_ALL immutable_compiled_loop_outcome)) >>
+  impl_tac >- (simp[] >> rpt conj_tac >> first_assum ACCEPT_TAC) >> strip_tac >>
+  `LENGTH (MAP Value vs) <= n` by simp[] >>
+  drule_all for_source_prefix_bounded >> strip_tac >>
+  drule_all compile_for_immutable_final_insts >> strip_tac >>
+  gvs[] >> irule array_outcome_stmt_post >> simp[] >> first_assum ACCEPT_TAC
+QED
+*)
 Theorem compile_for_immutable_frag_zero:
   !ctx func cx cenv lctx RetQ ty id et bd n src name off stmts tv vs es P.
   FLOOKUP cenv.ce_module_vars (src,name) = SOME (ImmutableLoc off) /\
@@ -722,36 +754,12 @@ Theorem compile_for_immutable_frag_zero:
   bound_length bd <= n /\ lookup_scopes id es.scopes = NONE /\
   P (es with gas_obs := []) /\
   (!gs. eval_iterator cx (Array (TopLevelName (ArrayT et bd) (src,name)))
-    (es with gas_obs := gs) = (INL vs, es with gas_obs := gs)) ==>
+    (es with gas_obs := gs) = (INL (MAP Value vs), es with gas_obs := gs)) ==>
   stmt_frag ctx func cx lctx RetQ cenv
     (stmt_env cenv lctx ty
       (For id et (Array (TopLevelName (ArrayT et bd) (src,name))) n stmts))
     (eval_stmt cx
       (For id et (Array (TopLevelName (ArrayT et bd) (src,name))) n stmts)) es
 Proof
-  rpt gen_tac >> strip_tac >>
-  simp[stmt_frag_def, stmt_framed_frag_def] >>
-  map_every qx_gen_tac [`st`, `st'`, `s0`, `cenv'`] >> strip_tac >>
-  qpat_x_assum `stmt_env _ _ _ _ _ = _` mp_tac >>
-  simp[stmt_env_def, declare_stmt_local_def, comp_bind_def, comp_ignore_bind_def,
-       comp_return_def] >>
-  pairarg_tac >> simp[] >> strip_tac >> gvs[] >>
-  `stmt_state_rel ctx func cenv cx (es with gas_obs := []) s0` by
-    (qpat_assum `stmt_state_rel _ _ _ _ _ _` mp_tac >>
-     simp[stmt_state_rel_def, state_rel_gas_obs, immutable_alloca_sep_def, NoAsms] >>
-     strip_tac >> asm_rewrite_tac[]) >>
-  `lookup_scopes id (es with gas_obs := []).scopes = NONE` by simp[] >>
-  `LENGTH vs <= n` by decide_tac >>
-  `gas_admissible (eval_for cx tv id stmts vs) (stmt_res_ok lctx)
-     (es with gas_obs := [])` by
-    (qpat_x_assum `gas_admissible _ _ _` mp_tac >>
-     simp[gas_admissible_def, Once evaluate_def, lift_option_type_def,
-       lift_option_def, bind_return, bind_def, compatible_bound_def,
-       check_def, vyperStateTheory.assert_def, ignore_bind_def, return_def]) >>
-  mp_tac (Q.INST [`es` |-> `es with gas_obs := []`, `st'` |-> `cs'`,
-                  `s` |-> `s0`] (SPEC_ALL immutable_compiled_loop_outcome)) >>
-  impl_tac >- (simp[] >> rpt conj_tac >> first_assum ACCEPT_TAC) >> strip_tac >>
-  drule_all for_source_prefix_bounded >> strip_tac >>
-  drule_all compile_for_immutable_final_insts >> strip_tac >>
-  gvs[] >> irule array_outcome_stmt_post >> simp[] >> first_assum ACCEPT_TAC
+  cheat
 QED

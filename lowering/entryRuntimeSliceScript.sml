@@ -2,6 +2,7 @@
 Theory entryRuntimeSlice
 Ancestors
   moduleLowering compileEnv list supportedDecls vyperInterpreter compileVyper
+  entryDispatchProps
 
 Theorem compile_external_fn_bodies_append[local]:
   !xs ys st.
@@ -45,33 +46,16 @@ QED
 Theorem supported_external_lookup_classified:
   !tops ambient name mut nr args dflts ret fbody.
     EVERY (supported_declaration_header ambient) tops /\
+    ALL_DISTINCT (FLAT (MAP (external_name_keys_toplevel (NONE:num option)) tops)) /\
     name <> "__default__" /\
     lookup_function NONE name External tops =
       SOME (mut, nr, args, dflts, ret, fbody) ==>
     MEM (mut, nr, lookup_raw_return_or_F (NONE : num option) name External tops,
          name, args, dflts, ret, fbody) (FST (classify_functions tops))
 Proof
-  Induct_on `tops` >- simp[lookup_function_def] >>
-  rpt gen_tac >>
-  `?exts ints fb ctor. FOLDR classify_function ([],[],NONE,NONE) tops =
-      (exts,ints,fb,ctor)` by metis_tac[pairTheory.ABS_PAIR_THM] >>
-  Cases_on `h`
-  >- (Cases_on `f` >>
-      simp[EVERY_DEF, lookup_function_def, lookup_raw_return_or_F_def,
-           lookup_raw_return_def, classify_functions_def, classify_function_def] >>
-      rpt strip_tac >> Cases_on `s = name` >>
-      Cases_on `s = "__default__"` >>
-      gvs[classify_functions_def, lookup_raw_return_or_F_def] >> metis_tac[])
-  >- (Cases_on `v` >>
-      simp[EVERY_DEF, supported_public_variables_rejected,
-           lookup_function_def, lookup_raw_return_or_F_def,
-           lookup_raw_return_def, classify_functions_def, classify_function_def] >>
-      fs[classify_functions_def, lookup_raw_return_or_F_def] >> metis_tac[])
-  >- (simp[EVERY_DEF, supported_hashmap_header_contract] >> strip_tac >>
-      gvs[lookup_function_def, lookup_raw_return_or_F_def,
-          lookup_raw_return_def, classify_functions_def, classify_function_def] >>
-      metis_tac[])
-  >> simp[EVERY_DEF, lookup_function_def, lookup_raw_return_or_F_def,
-          lookup_raw_return_def, classify_functions_def, classify_function_def] >>
-     fs[classify_functions_def, lookup_raw_return_or_F_def] >> metis_tac[]
+  rpt strip_tac >>
+  `module_consts_env tops [] = []` by
+    metis_tac[supported_headers_module_consts_env] >>
+  drule_all lookup_function_external_raw_member >>
+  simp[constSubstTheory.subst_consts_fn_empty]
 QED
