@@ -803,8 +803,9 @@ Proof
          finite_mapTheory.DRESTRICT_UNIV] >>
   qexists_tac `step_taint i s u tn` >>
   conj_tac
-  >- simp[Abbr `i`, step_taint_def, set_var_taint_def, mk_inst_def,
-          finite_mapTheory.DRESTRICT_UNIV] >>
+  >- (`i.inst_outputs = []` by simp[Abbr `i`, mk_inst_def] >>
+      simp[step_taint_def, set_var_taint_def, pred_setTheory.COMPL_EMPTY,
+           finite_mapTheory.DRESTRICT_UNIV]) >>
   conj_tac
   >- (`new_site_bytes s u = {}` by
         (simp[new_site_bytes_def, pred_setTheory.EXTENSION,
