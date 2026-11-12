@@ -4,7 +4,7 @@ Ancestors
   internalReturnCopyFwdAlias o1LowerDloadOccurrence ssaAvailablePred
   ptrDisciplineControl singleUseExpansionSupplySim o1FrameLockstep
   ptrDiscipline list finite_map venomWf venomWfProps venomInst o1PassContract
-  venomExecProofs venomExecSemantics rangeAnalysisProofs
+  venomExecProofs venomExecSemantics rangeAnalysisProofs contextCodegenRel venomInstProps
 
 Definition occurrence_alias_def:
   occurrence_alias fn a H v <=>
@@ -133,7 +133,7 @@ Proof
   `t.vs_current_bb = s.vs_current_bb` by metis_tac[enters_block_current_bb] >>
   simp[occurrence_alias_boundary_def] >> conj_tac
   >- (simp[fn_reachable_def] >> metis_tac[relationTheory.RTC_REFL]) >>
-  gvs[enters_block_def] >> goal_assum drule >>
+  gvs[enters_block_def] >>
   simp[boundary_pred_def] >> conj_tac
   >- metis_tac[dom_pred_entry, lookup_block_label] >>
   metis_tac[occurrence_alias_phi_prefix, lookup_block_MEM]
@@ -156,7 +156,7 @@ Theorem occurrence_alias_next:
   occurrence_alias_boundary fn (t with vs_inst_idx := SUC s.vs_inst_idx)
     a (occurrence_step a HP H inst t)
 Proof
-  rw[occurrence_alias_boundary_def, active_inst_def] >>
+  strip_tac >> fs[occurrence_alias_boundary_def, active_inst_def] >>
   `bb' = bb` by metis_tac[lookup_block_MEM, lookup_block_label, same_label_same_block] >>
   gvs[] >>
   `t.vs_current_bb = s.vs_current_bb` by metis_tac[step_preserves_control_flow] >>
@@ -195,4 +195,113 @@ Proof
   >- metis_tac[boundary_pred_def, prefix_pred_mono] >>
   rpt strip_tac >> irule occurrence_alias_other_output >> simp[] >>
   qexists_tac `inst` >> simp[]
+QED
+
+Theorem occurrence_alias_block:
+  wf_ssa fn /\ wf_function fn /\ fn_inst_wf fn /\
+  occurrence_alias_boundary fn s a H /\ active_inst fn inst s /\
+  is_terminator inst.inst_opcode /\ step_inst fuel C inst s = OK t /\
+  ~t.vs_halted /\ enters_block fn t s1 ==>
+  occurrence_alias_boundary fn s1 a (entry_prov fn t H)
+Proof
+  strip_tac >> fs[occurrence_alias_boundary_def, active_inst_def] >>
+  `bb' = bb` by metis_tac[lookup_block_MEM, lookup_block_label, same_label_same_block] >>
+  gvs[] >>
+  `MEM bb fn.fn_blocks` by metis_tac[lookup_block_MEM] >>
+  `bb.bb_label = s.vs_current_bb` by metis_tac[lookup_block_label] >>
+  `bb_well_formed bb` by gvs[wf_function_def] >>
+  `EVERY venomWf$inst_wf bb.bb_instructions` by metis_tac[fn_inst_wf_every_bb] >>
+  `fn_cfg_edge fn s.vs_current_bb t.vs_current_bb` by
+    metis_tac[sue_terminator_cfg_edge] >>
+  `s1.vs_current_bb = t.vs_current_bb` by metis_tac[enters_block_current_bb] >>
+  conj_tac >- metis_tac[fn_reachable_step] >>
+  `dom_pred fn t.vs_current_bb (occurrence_alias fn a H)` by
+    metis_tac[boundary_pred_exit] >>
+  gvs[enters_block_def] >>
+  irule occurrence_alias_block_entry >> metis_tac[wf_ssa_def, lookup_block_label]
+QED
+
+Theorem occurrence_alias_return:
+  ssa_form fn /\ wf_function fn /\ occurrence_alias_boundary fn s a H /\
+  active_inst fn inst s /\ inst.inst_opcode = INVOKE /\
+  bind_outputs inst.inst_outputs ret.iret_values
+    (adopt_return_fmp ret (merge_callee_state s e)) = SOME t ==>
+  occurrence_alias_boundary fn (t with vs_inst_idx := SUC s.vs_inst_idx) a
+    (DRESTRICT H (COMPL (set inst.inst_outputs)))
+Proof
+  strip_tac >> fs[occurrence_alias_boundary_def, active_inst_def] >>
+  `bb' = bb` by metis_tac[lookup_block_MEM, lookup_block_label, same_label_same_block] >>
+  gvs[] >>
+  `t.vs_current_bb = s.vs_current_bb` by metis_tac[bind_return_current_bb] >>
+  simp[] >> irule occurrence_alias_boundary_return >> metis_tac[lookup_block_MEM]
+QED
+
+Definition occurrence_alias_saved_def:
+  (occurrence_alias_saved [] stk <=> stk = []) /\
+  (occurrence_alias_saved (u::U) stk <=>
+    ?f fs. stk = f::fs /\ wf_ssa f.cf_fn /\ wf_function f.cf_fn /\ fn_inst_wf f.cf_fn /\
+      active_inst f.cf_fn f.cf_inst f.cf_state /\ f.cf_inst.inst_opcode = INVOKE /\
+      occurrence_alias_boundary f.cf_fn f.cf_state u.of_owner u.of_prov /\
+      occurrence_alias_saved U fs)
+End
+
+Theorem occurrence_alias_reachable:
+  !vs C stk PG G tn fn inst s n a U B HP H.
+    occ_frame_reachable vs C stk PG G tn fn inst s n a U B HP H ==>
+    EVERY wf_ssa C.ctx_functions /\ EVERY wf_function C.ctx_functions /\
+    EVERY fn_inst_wf C.ctx_functions ==>
+    wf_ssa fn /\ wf_function fn /\ fn_inst_wf fn /\
+    occurrence_alias_boundary fn s a H /\ occurrence_alias_saved U stk
+Proof
+  ho_match_mp_tac occ_frame_reachable_ind >> rpt conj_tac >>
+  rpt gen_tac >> strip_tac >> strip_tac
+  >- (simp[occurrence_alias_saved_def] >>
+      `wf_ssa fn /\ wf_function fn /\ fn_inst_wf fn` by
+        metis_tac[lookup_function_MEM, EVERY_MEM] >> simp[] >>
+      irule occurrence_alias_entry >> conj_tac >- gvs[wf_ssa_def] >>
+      goal_assum (drule_at Any) >> simp[])
+  >- metis_tac[occurrence_alias_next]
+  >- metis_tac[occurrence_alias_block]
+  >- (fs[] >> rename1 `lookup_function nm C.ctx_functions = SOME callee` >>
+      `wf_ssa callee /\ wf_function callee /\ fn_inst_wf callee` by
+        metis_tac[lookup_function_MEM, EVERY_MEM] >>
+      simp[occurrence_alias_saved_def] >>
+      irule occurrence_alias_call >> metis_tac[wf_ssa_def])
+  >> fs[occurrence_alias_saved_def] >>
+  metis_tac[occurrence_alias_return, wf_ssa_def]
+QED
+
+Theorem occurrence_alias_reachable_available:
+  occ_frame_reachable vs C stk PG G tn fn inst s n a U B HP H /\
+  EVERY wf_ssa C.ctx_functions /\ EVERY wf_function C.ctx_functions /\
+  EVERY fn_inst_wf C.ctx_functions /\
+  lookup_block s.vs_current_bb fn.fn_blocks = SOME bb /\
+  (!P. boundary_pred fn bb s.vs_inst_idx P ==> P v) /\
+  MEM ai (fn_insts fn) /\ ai.inst_opcode = ALLOCA /\
+  ai.inst_outputs = [root] /\ ai.inst_operands = [Lit sz] /\
+  ircf_alias fn root v ==> FLOOKUP H v = SOME (a,ai.inst_id)
+Proof
+  strip_tac >> drule occurrence_alias_reachable >> simp[] >> strip_tac >>
+  fs[occurrence_alias_boundary_def] >>
+  `occurrence_alias fn a H v` by metis_tac[optionTheory.SOME_11] >>
+  metis_tac[occurrence_alias_def]
+QED
+
+Theorem occurrence_alias_reachable_operand:
+  occ_frame_reachable vs C stk PG G tn fn inst s n a U B HP H /\
+  EVERY wf_ssa C.ctx_functions /\ EVERY wf_function C.ctx_functions /\
+  EVERY fn_inst_wf C.ctx_functions /\ vs.vs_allocas = FEMPTY /\
+  inst.inst_opcode <> PHI /\ MEM (Var v) inst.inst_operands /\
+  MEM ai (fn_insts fn) /\ ai.inst_opcode = ALLOCA /\
+  ai.inst_outputs = [root] /\ ai.inst_operands = [Lit sz] /\
+  ircf_alias fn root v ==> FLOOKUP H v = SOME (a,ai.inst_id)
+Proof
+  strip_tac >> drule occurrence_alias_reachable >> simp[] >> strip_tac >>
+  `active_inst fn inst s` by
+    gvs[Once occ_frame_reachable_cases] >>
+  fs[occurrence_alias_boundary_def, active_inst_def] >>
+  `bb' = bb` by metis_tac[lookup_block_MEM, lookup_block_label, same_label_same_block] >>
+  gvs[] >>
+  `occurrence_alias fn a H v` by metis_tac[boundary_pred_operand, lookup_block_MEM] >>
+  metis_tac[occurrence_alias_def]
 QED
