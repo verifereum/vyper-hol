@@ -106,6 +106,44 @@ Proof
   qexistsl_tac [`p`, `s`, `sm`, `post_value_type cenv e`] >> simp[]
 QED
 
+Theorem snapshot_ctor_word_readonly[local]:
+  !ctx func cenv cx e es sa sm sb s0 ee v t p op s.
+    unwrap_value cenv (LocatedValue t p) sm = (op, sb) /\
+    p.ptr_location = LocCode /\ cenv.ce_is_ctor /\ is_word_type t /\
+    local_ptrs_reserved cenv sm /\
+    sa.cs_next_var <= sm.cs_next_var /\ fn_has_code sm sb func /\
+    fn_inst_ids_distinct func /\
+    vv_post ctx func cenv cx e es sa sm s0 ee (Value v) (LocatedValue t p) s /\
+    alloca_history func s /\ ~s.vs_halted /\
+    s.vs_current_bb = sm.cs_current_bb /\
+    s.vs_inst_idx = LENGTH sm.cs_current_insts ==>
+    ?u. gas_path_mem ctx func s 0 (OK u) /\
+        expr_post ctx func cenv cx e es sa sb s0 ee v op u /\
+        u.vs_memory = s.vs_memory /\
+        u.vs_alloca_next = s.vs_alloca_next /\ alloca_history func u /\
+        u.vs_current_bb = sb.cs_current_bb /\
+        u.vs_inst_idx = LENGTH sb.cs_current_insts
+Proof
+  rpt gen_tac >> strip_tac >>
+  `t = post_value_type cenv e /\
+   ?w. eval_operand p.ptr_operand s = SOME w /\
+       immutable_holds cenv cx (post_value_type cenv e) (Value v) w ee s /\
+       stmt_state_rel ctx func cenv cx ee s` by
+    gvs[vv_post_def, vv_holds_def] >>
+  qpat_x_assum `t = _` SUBST_ALL_TAC >>
+  `w2n w + 32 <= s.vs_alloca_next` by
+    metis_tac[ctor_immutable_word_frontier] >>
+  drule_all immutable_holds_iload >> strip_tac >>
+  `compile_imm_load_word T cenv.ce_imm_alloca p.ptr_operand sm = (op, sb)` by
+    gvs[unwrap_value_def, contextTheory.compile_ptr_load_def] >>
+  drule compile_imm_load_word_ctor_path_mem >>
+  disch_then (qspecl_then [`ctx`, `func`, `cx`, `ee`, `s`, `w`] mp_tac) >>
+  impl_tac >- simp[] >>
+  strip_tac >> goal_assum drule >> simp[] >>
+  irule expr_post_of_vv_post_load_physical >> simp[] >>
+  qexistsl_tac [`p`, `s`, `sm`, `post_value_type cenv e`] >> simp[]
+QED
+
 Theorem snapshot_vv_counted_mem:
   !ctx func cenv cx e es sa sm sb s0 ee tv v vv saved s.
     post_value_type cenv e = expr_type e /\
