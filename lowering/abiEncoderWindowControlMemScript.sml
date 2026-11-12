@@ -30,11 +30,8 @@ Proof
   simp[Once mem_safe_block_def, get_instruction_def,
     abi_encode_array_header_insts_def, mem_safe_step_def,
     below_frontier_no_ranges, mk_inst_def, is_terminator_def] >>
-  Cases_on `eval_operand count_op (update_var iv (mload (w2n p) s) s)` >>
-  simp[eval_operand_def, lookup_var_def, update_var_def,
-    finite_mapTheory.FLOOKUP_UPDATE] >>
-  qmatch_goalsub_abbrev_tac `step_inst fuel ctx jnz st3` >>
-  Cases_on `step_inst fuel ctx jnz st3` >> simp[]
+  simp[eval_operand_def, lookup_var_update_var] >>
+  rpt CASE_TAC >> simp[]
 QED
 
 Theorem array_header_mem_cont:

@@ -141,7 +141,8 @@ Theorem body_inv_modules_aligned:
     body_inv tops ctx cenv cx ==>
     (!src. ALOOKUP cenv.ce_modules src = get_module_code cx src) /\
     (!src ts. get_module_code cx src = SOME ts ==>
-       ALL_DISTINCT (FLAT (MAP (toplevel_vtype_keys_toplevel src) ts)))
+       ALL_DISTINCT (FLAT (MAP (toplevel_vtype_keys_toplevel src) ts))) /\
+    ALL_DISTINCT (MAP FST cenv.ce_modules)
 Proof
   rw[body_inv_def, cenv_module_pins_def]
   >- (Cases_on `src` >> simp[] >>

@@ -14,18 +14,9 @@ QED
 
 Theorem append_dynamic_dead_bytes[local]:
   type_slot_size tv = 1 ==>
-  (dead_bytes st bs (ArrayTV tv (Dynamic cap)) j b <=>
-   bs + 1 + w2n (lookup_storage (n2w bs) st) <= j /\
-   j < bs + 1 + cap /\ b < 32)
+  ~dead_bytes st bs (ArrayTV tv (Dynamic cap)) j b
 Proof
-  strip_tac >> pure_rewrite_tac [dead_bytes_def] >>
-  eq_tac
-  >- (strip_tac >> rename1 `i < cap` >>
-      Cases_on `i < w2n (lookup_storage (n2w bs) st)` >>
-      gvs[append_dead_bytes_word] >> decide_tac) >>
-  strip_tac >> qexists_tac `j - (bs+1)` >>
-  `~(j - (bs+1) < w2n (lookup_storage (n2w bs) st))` by decide_tac >>
-  simp[] >> decide_tac
+  simp[dead_bytes_def, append_dead_bytes_word]
 QED
 
 Theorem append_root_dead_mono[local]:
@@ -37,15 +28,7 @@ Theorem append_root_dead_mono[local]:
     (update_storage (slot+n2w (1+len)) w st))
     (w2n slot) (ArrayTV tv (Dynamic cap)) j b
 Proof
-  strip_tac >>
-  `len + 1 < dimword (:256) /\ w2n slot + (1+len) < dimword (:256)` by
-    (gvs[type_slot_size_def] >> decide_tac) >>
-  `w2n (slot + n2w (1+len)) = w2n slot + (1+len)` by
-    simp[wordsTheory.word_add_def, wordsTheory.w2n_n2w,
-         arithmeticTheory.LESS_MOD] >>
-  gvs[append_dynamic_dead_bytes, lookup_storage_def, update_storage_def,
-      combinTheory.APPLY_UPDATE_THM, wordsTheory.w2n_n2w,
-      arithmeticTheory.LESS_MOD] >> decide_tac
+  simp[append_dynamic_dead_bytes]
 QED
 
 Theorem append_other_region_frame[local]:
