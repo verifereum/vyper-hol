@@ -17659,6 +17659,53 @@ Proof
   irule mm_local_zero_cut_erased_write_stutter >> metis_tac[]
 QED
 
+Theorem mm_local_zero_barrier_pending_empty[local]:
+  ALL_DISTINCT (MAP (\i. i.inst_id) bb.bb_instructions) /\
+  is = bb.bb_instructions /\ gs = (scan_block_memzero dfg bb).mz_flushed /\
+  n < LENGTH is /\ is_volatile_memory (EL n is) /\
+  ~is_zero_store (EL n is) /\ ~is_calldatasize_copy dfg (EL n is) /\
+  n <= m /\ m <= SUC n ==>
+  mm_local_pending_indices is gs m = []
+Proof
+  strip_tac >>
+  Cases_on `mm_local_pending_indices is gs m` >- simp[] >>
+  rename1 `mm_local_pending_indices is gs m = j::js` >>
+  `MEM j (mm_local_pending_indices is gs m)` by simp[] >>
+  qpat_x_assum `MEM j (mm_local_pending_indices _ _ _)`
+    (strip_assume_tac o REWRITE_RULE [mm_local_pending_indices_mem]) >>
+  `j <= n` by decide_tac >>
+  `j <> n` by
+    (strip_tac >> gnvs[] >> drule_all mm_local_memzero_group_roles >>
+     strip_tac >>
+     (`j < LENGTH bb.bb_instructions` by decide_tac >>
+      `i = EL j bb.bb_instructions` by
+        metis_tac[mmWfProofsTheory.all_distinct_map_inv, EL_MEM] >>
+      metis_tac[])) >>
+  `MEM (EL j is).inst_id (MAP (\i. i.inst_id) (TAKE n is))` by
+    (pure_rewrite_tac [MEM_MAP] >> qexists_tac `EL j is` >>
+     conj_tac >- simp[] >>
+     pure_rewrite_tac [MEM_EL] >> qexists_tac `j` >>
+     `j < n /\ n <= LENGTH bb.bb_instructions` by (gvs[] >> decide_tac) >>
+     simp[listTheory.LENGTH_TAKE, listTheory.EL_TAKE]) >>
+  `bb.bb_instructions = TAKE n is ++ [EL n is] ++ DROP (SUC n) is` by
+    gvs[rich_listTheory.TAKE_DROP_SUC] >>
+  drule mm_local_memzero_barrier_position >>
+  pop_assum kall_tac >>
+  disch_then (qspecl_then [`(EL j is).inst_id`,`dfg`,`g`] mp_tac) >>
+  impl_tac >- gvs[] >> strip_tac >>
+  gnvs[] >>
+  `n <= LENGTH bb.bb_instructions` by decide_tac >>
+  `k < LENGTH bb.bb_instructions` by
+    (fs[listTheory.LENGTH_TAKE] >> decide_tac) >>
+  `EL k (MAP (\i. i.inst_id) bb.bb_instructions) =
+   EL r (MAP (\i. i.inst_id) bb.bb_instructions)` by
+    (fs[EL_MAP]) >>
+  `k = r` by
+    (drule listTheory.ALL_DISTINCT_EL_IMP >>
+     disch_then (qspecl_then [`k`,`r`] mp_tac) >> simp[]) >>
+  fs[listTheory.LENGTH_TAKE] >> decide_tac
+QED
+
 Theorem mm_local_stage_correct:
   !fn0 supply index k bb sk fn bb' sk' fn'.
   fn_inst_wf fn0 /\ wf_function fn0 /\ wf_ssa fn0 /\ all_reachable fn0 /\
