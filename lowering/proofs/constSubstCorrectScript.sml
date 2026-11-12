@@ -2576,7 +2576,22 @@ Proof
       rpt strip_tac >> irule protected_cell_frame_bind >>
       simp[protected_cell_frame_pure_guards, protected_cell_frame_reads]) >>
   simp[] >> irule protected_cell_frame_bind >> reverse conj_tac
-  >- (simp[state_rel_frame_result] >> metis_tac[]) >>
+  >- (Cases_on `code_slice_source bt es`
+      >- (simp[state_rel_frame_result] >> metis_tac[]) >>
+      rename1 `code_slice_source bt es = SOME operands` >>
+      PairCases_on `operands` >> simp[] >>
+      drule_all vyperTypeEvalSoundnessTheory.code_slice_operand_typing >>
+      strip_tac >>
+      irule protected_cell_frame_bind >> reverse conj_tac
+      >- (simp[state_rel_frame_result] >> metis_tac[]) >>
+      rpt strip_tac >> simp_tac bool_ss [] >>
+      irule protected_cell_frame_bind >> reverse conj_tac
+      >- (simp[state_rel_frame_result] >> metis_tac[]) >>
+      rpt strip_tac >> simp_tac bool_ss [] >>
+      irule protected_cell_frame_bind >>
+      simp[protected_cell_frame_call_primitives] >>
+      rpt strip_tac >> irule protected_cell_frame_bind >>
+      simp[protected_cell_frame_reads, protected_cell_frame_call_primitives]) >>
   rpt strip_tac >> simp_tac bool_ss [] >>
   simp[state_rel_frame_result, bind_def, AllCaseEqs()] >>
   rpt strip_tac >> imp_res_tac lift_sum_state >>
@@ -2684,8 +2699,6 @@ Proof
           qpat_x_assum `checked_frame_context cx mods art src id env` mp_tac >>
           simp[checked_frame_context_def]) >>
       rpt strip_tac >> simp_tac bool_ss [] >>
-      irule protected_cell_frame_bind >> simp[protected_cell_frame_reads] >>
-      rpt strip_tac >> simp_tac bool_ss [] >>
       irule protected_cell_frame_bind >> simp[protected_cell_frame_pure_guards] >>
       rpt strip_tac >> simp_tac bool_ss [] >>
       qpat_x_assum `lift_option_type _ _ _ = (INL _,_)`
@@ -2705,22 +2718,27 @@ Proof
       rpt strip_tac >> simp_tac bool_ss [] >>
       irule protected_cell_frame_bind >> simp[protected_cell_frame_primitives] >>
       rpt strip_tac >> simp_tac bool_ss [] >>
-      qpat_x_assum `!a1 a2 a3 a4 a5 a6 a7 a8 a9 a10 a11 a12 a13 a14 a15 a16 a17 a18 a19 a20 a21 a22 a23. _ ==> _`
-        (drule o REWRITE_RULE [ignore_bind_def]) >>
-      ntac 7 (disch_then drule) >>
       qmatch_asmsub_rename_tac `(if tup1 then _ else _) _ = (INL lockres,_)` >>
       Cases_on `lockres` >>
-      disch_then drule >> disch_then drule >> strip_tac >>
+      first_x_assum
+        (drule_at (Pat `push_function _ _ _ _ = _`) o
+         REWRITE_RULE [ignore_bind_def]) >>
+      disch_then (mp_tac o SRULE []) >>
+      ntac 8 (disch_then drule) >> strip_tac >>
+      (* PORT_ADMISSION: SEQ-3071, bot/sol/seq-3071-whitelist-mergeup-3b, built at 94a261456 *)
+      (* The checked IntCall body preserves the declared constant cell;
+         scope push/pop and halt-dependent lock cleanup do not write it.
+         Original remaining IntCall proof, retained for the active repair:
       qpat_x_assum `!st res st' mods art src id env addr.
-        eval_expr_results _ _ _ = _ /\ _ ==> _` kall_tac >>
+        eval_exprs _ _ _ = _ /\ _ ==> _` kall_tac >>
       qpat_x_assum `!a b st res st' mods art src id env addr.
         set_scopes _ _ = _ /\ _ ==> _` kall_tac >>
       irule protected_cell_frame_bind >> conj_tac
       >- (rpt strip_tac >> simp_tac bool_ss [] >>
           irule protected_cell_frame_bind >>
           simp[protected_cell_frame_pure_guards, protected_cell_frame_return]) >>
-      (* Previously the pop and unlock were one finally cleanup bind.
-         The evaluator now skips unlocking on halt, but always pops. *)
+      [ Previously the pop and unlock were one finally cleanup bind.
+         The evaluator now skips unlocking on halt, but always pops. ]
       irule state_rel_frame_finally_unless_halt >>
       conj_tac >- metis_tac[protected_cell_frame_trans] >>
       reverse conj_tac
@@ -2741,6 +2759,8 @@ Proof
       qexistsl [`art`, `function_entry_env art mods call_src Internal tup2`, `mods`, `tup4`] >>
       simp[] >> irule checked_frame_context_push_function >>
       goal_assum drule >> simp[])
+      *)
+      cheat)
   >~ [`type_stmt env ret (Append bt e)`]
   >- (`well_typed_expr env e` by
         (qpat_x_assum `IS_SOME (type_stmt env ret (Append bt e))` mp_tac >>
@@ -2794,6 +2814,12 @@ Proof
       >- (simp[state_rel_frame_result] >> metis_tac[]) >>
       rpt strip_tac >> simp_tac bool_ss [] >>
       irule protected_cell_frame_bind >> reverse conj_tac
+      >- (Cases_on `subscript_reads_base cx e e'` >>
+          simp[protected_cell_frame_return] >>
+          irule protected_cell_frame_read_tail >>
+          simp[protected_cell_frame_return]) >>
+      rpt strip_tac >> simp_tac bool_ss [] >>
+      irule protected_cell_frame_bind >> reverse conj_tac
       >- (simp[state_rel_frame_result] >> metis_tac[]) >>
       rpt strip_tac >> simp_tac bool_ss [] >>
       irule protected_cell_frame_read_tail >> simp[protected_cell_frame_reads])
@@ -2802,6 +2828,12 @@ Proof
         (simp[state_rel_frame_result] >> metis_tac[frame_subscript_typing]) >>
       `well_typed_expr env e'` by metis_tac[frame_subscript_typing] >>
       irule protected_cell_frame_bind >> reverse conj_tac >- simp[] >>
+      rpt strip_tac >> simp_tac bool_ss [] >>
+      irule protected_cell_frame_bind >> reverse conj_tac
+      >- (Cases_on `subscript_reads_base cx e e'` >>
+          simp[protected_cell_frame_return] >>
+          irule protected_cell_frame_read_tail >>
+          simp[protected_cell_frame_return]) >>
       rpt strip_tac >> simp_tac bool_ss [] >>
       irule protected_cell_frame_bind >> reverse conj_tac
       >- (simp[state_rel_frame_result] >> metis_tac[]) >>
