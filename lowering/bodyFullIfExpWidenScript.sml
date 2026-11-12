@@ -228,6 +228,167 @@ Proof
   simp[vv_post_def] >> rpt strip_tac >> metis_tac[]
 QED
 
+Theorem ifexp_widen_alloc_resources_frame:
+  compile_ifexp_arm cenv t lt vv sm = (op,sb) /\
+  post_value_type cenv e = t /\ expr_type e = t /\ ~is_word_type t /\
+  evaluate_type (get_tenv cx) t = SOME rty /\
+  (!v. read_result cx tv ee = (INL v,ee) ==> value_has_type rty v) /\
+  ptr_vv_ok cx t tv vv ee G tn s /\
+  vv_store_bound cx t lt ee tv vv s /\
+  (!t' op0. vv = StackValue t' op0 /\ ~is_word_type t ==>
+     ptr_buf_ok cenv e op0 G s) /\
+  (!t' p. vv = LocatedValue t' p /\ p.ptr_location = LocMemory ==>
+     ptr_buf_ok cenv e p.ptr_operand G s) /\
+  (cenv.ce_is_ctor /\ vv_location vv = SOME LocCode ==>
+   ?val. read_result cx tv ee = (INL val,ee) /\
+     !rt w. evaluate_type (get_tenv cx) t = SOME rt /\
+            eval_operand (vv_operand vv) s = SOME w ==>
+       w2n w + type_memory_size rt <= lo /\
+       (!mem. mem_agree_outside tn.t_mem s.vs_memory mem ==>
+          val_in_memory rt val (w2n w) mem)) /\
+  eval_operand (vv_operand vv) q = eval_operand (vv_operand vv) s /\
+  op_taint tq (vv_operand vv) = op_taint tn (vv_operand vv) /\
+  op_prov Gq (vv_operand vv) = op_prov G (vv_operand vv) /\
+  (!x. vv_operand vv = Var x ==> FLOOKUP Gq x = FLOOKUP G x) /\
+  q.vs_memory = s.vs_memory /\ q.vs_accounts = s.vs_accounts /\
+  q.vs_call_ctx = s.vs_call_ctx /\ q.vs_transient = s.vs_transient /\
+  tq.t_stor = tn.t_stor /\ tq.t_trans = tn.t_trans /\
+  s.vs_alloca_next <= q.vs_alloca_next /\ lo <= s.vs_alloca_next /\
+  (!i. i < s.vs_alloca_next ==> (i IN tq.t_mem <=> i IN tn.t_mem)) ==>
+  ptr_vv_ok cx t tv vv ee Gq tq q /\
+  vv_store_bound cx t lt ee tv vv q /\
+  (!t' op0. vv = StackValue t' op0 /\ ~is_word_type t ==>
+     ptr_buf_ok cenv e op0 Gq q) /\
+  (!t' p. vv = LocatedValue t' p /\ p.ptr_location = LocMemory ==>
+     ptr_buf_ok cenv e p.ptr_operand Gq q) /\
+  (cenv.ce_is_ctor /\ vv_location vv = SOME LocCode ==>
+   ?val. read_result cx tv ee = (INL val,ee) /\
+     !rt w. evaluate_type (get_tenv cx) t = SOME rt /\
+            eval_operand (vv_operand vv) q = SOME w ==>
+       w2n w + type_memory_size rt <= lo /\
+       (!mem. mem_agree_outside tq.t_mem q.vs_memory mem ==>
+          val_in_memory rt val (w2n w) mem))
+Proof
+  strip_tac >>
+  `!v. read_result cx tv ee = (INL v,ee) ==> val_wf rty v` by
+    metis_tac[valueEncodingTypingTheory.value_has_type_val_wf] >>
+  `!v p. val_wf rty v /\
+      (val_store_size rty v = 0 \/ p + val_store_size rty v <= s.vs_alloca_next) /\
+      (!m. mem_agree_outside tn.t_mem s.vs_memory m ==> val_in_memory rty v p m) ==>
+      !m. mem_agree_outside tq.t_mem q.vs_memory m ==> val_in_memory rty v p m` by
+    (rpt gen_tac >> disch_then (map_every assume_tac o CONJUNCTS) >>
+     rpt gen_tac >> disch_tac >> irule robust_val_in_memory_exterior_frame >>
+     conj_tac >- simp[] >>
+     map_every qexists_tac [`s.vs_memory`, `q.vs_memory`, `tn.t_mem`, `tq.t_mem`,
+                   `{i | s.vs_alloca_next <= i}`] >>
+     simp[] >> rpt strip_tac >>
+     mp_tac (Q.SPECL [`rty`, `v`] val_footprint_le_store_size) >> decide_tac) >>
+  conj_tac >- suspend "pointer" >>
+  conj_tac >- suspend "bound" >>
+  conj_tac >- (rpt strip_tac >> Cases_on `vv` >> gvs[vv_operand_def, ptr_buf_ok_def] >> metis_tac[]) >>
+  conj_tac >- (rpt strip_tac >> Cases_on `vv` >> gvs[vv_operand_def, ptr_buf_ok_def] >> metis_tac[]) >>
+  suspend "ctor"
+QED
+
+Resume ifexp_widen_alloc_resources_frame[pointer]:
+  Cases_on `vv` >> gvs[vv_operand_def, ptr_vv_ok_def, ptr_val_ok_def] >>
+  TRY (rename1 `p.ptr_operand` >> Cases_on `p.ptr_location` >>
+       gvs[] >> NO_TAC) >>
+  gvs[ptr_mem_ok_def] >> rpt strip_tac >>
+  first_x_assum drule >> simp[] >> strip_tac >>
+  gvs[vv_store_bound_def] >> metis_tac[]
+QED
+Resume ifexp_widen_alloc_resources_frame[bound]:
+  qpat_x_assum `vv_store_bound _ _ _ _ _ _ _` mp_tac >>
+  qpat_x_assum `eval_operand _ q = _` mp_tac >>
+  qpat_x_assum `s.vs_alloca_next <= q.vs_alloca_next` mp_tac >>
+  POP_ASSUM_LIST (K ALL_TAC) >>
+  Cases_on `vv` >> simp[vv_operand_def, vv_store_bound_def] >>
+  metis_tac[arithmeticTheory.LESS_EQ_TRANS]
+QED
+Resume ifexp_widen_alloc_resources_frame[ctor]:
+  strip_tac >>
+  qpat_x_assum `cenv.ce_is_ctor /\ _ ==> _` mp_tac >>
+  simp[] >> strip_tac >> qexists_tac `val` >> simp[] >>
+  rpt gen_tac >> strip_tac >>
+  first_x_assum drule >> simp[] >> strip_tac >>
+  `val_wf rty val` by metis_tac[] >>
+  `val_footprint rty val <= type_memory_size rty` by
+    simp[val_footprint_le] >>
+  rpt strip_tac >> irule robust_val_in_memory_exterior_frame >>
+  conj_tac >- simp[] >>
+  map_every qexists_tac [`s.vs_memory`, `q.vs_memory`, `tn.t_mem`, `tq.t_mem`,
+                        `{i | s.vs_alloca_next <= i}`] >>
+  simp[] >> rpt strip_tac >> decide_tac
+QED
+Finalise ifexp_widen_alloc_resources_frame
+
+(* Concrete allocation boundary; the cursor update is deliberately separate
+   from execution of the instruction body. *)
+Theorem ifexp_widen_alloc_boundary:
+  compile_ifexp_arm cenv t src_ty vv sm = (op,sb) /\
+  compile_alloc_buffer n sm = (buf,sc) /\ buf.buf_operand = Var out /\
+  FLOOKUP s.vs_allocas sm.cs_next_id = NONE /\ n < dimword (:256) /\
+  step_inst_base (mk_inst sm.cs_next_id ALLOCA [Lit (n2w n)] [out]) s = OK az /\
+  q = az with vs_inst_idx := SUC s.vs_inst_idx /\
+  Ga = step_prov PG G (mk_inst sm.cs_next_id ALLOCA [Lit (n2w n)] [out]) az /\
+  ta = step_taint (mk_inst sm.cs_next_id ALLOCA [Lit (n2w n)] [out]) s az tn /\
+  (!x. vv_operand vv = Var x ==> not_fresh_at sm x) ==>
+  q.vs_memory = s.vs_memory /\ q.vs_accounts = s.vs_accounts /\
+  q.vs_call_ctx = s.vs_call_ctx /\ q.vs_transient = s.vs_transient /\
+  q.vs_immutables = s.vs_immutables /\ q.vs_labels = s.vs_labels /\
+  q.vs_current_bb = s.vs_current_bb /\ q.vs_halted = s.vs_halted /\
+  q.vs_inst_idx = SUC s.vs_inst_idx /\
+  q.vs_alloca_next = s.vs_alloca_next + n /\
+  s.vs_alloca_next <= q.vs_alloca_next /\
+  eval_operand (vv_operand vv) q = eval_operand (vv_operand vv) s /\
+  (!x. not_fresh_at sm x ==>
+    lookup_var x q = lookup_var x s /\ FLOOKUP Ga x = FLOOKUP G x /\
+    op_taint ta (Var x) = op_taint tn (Var x)) /\
+  ta.t_stor = tn.t_stor /\ ta.t_trans = tn.t_trans /\ ta.t_imm = tn.t_imm /\
+  (!i. i < s.vs_alloca_next ==> (i IN ta.t_mem <=> i IN tn.t_mem)) /\
+  Ga = G |+ (out,(s.vs_alloca_next,n)) /\
+  ta = tn with <|t_mem := tn.t_mem UNION
+      {i | s.vs_alloca_next <= i /\ i < s.vs_alloca_next+n};
+      t_var := tn.t_var |+ (out,{})|>
+Proof
+  strip_tac >>
+  `az = update_var out (n2w s.vs_alloca_next)
+    (s with <|vs_allocas := s.vs_allocas |+
+      (sm.cs_next_id,(s.vs_alloca_next,n));
+      vs_alloca_next := s.vs_alloca_next+n|>)` by
+    (drule_all step_alloca_fresh >> disch_then (qspec_then `out` mp_tac) >> gvs[]) >>
+  `new_site_bytes s az =
+      {i | s.vs_alloca_next <= i /\ i < s.vs_alloca_next+n}` by
+    (rw[new_site_bytes_def, update_var_def, FLOOKUP_UPDATE,
+        pred_setTheory.EXTENSION] >>
+     gvs[AllCaseEqs(), FLOOKUP_DEF] >> eq_tac
+     >- (strip_tac >> gvs[] >> decide_tac) >>
+     strip_tac >> qexistsl [`sm.cs_next_id`, `s.vs_alloca_next`, `n`] >> simp[]) >>
+  `Ga = G |+ (out,(s.vs_alloca_next,n)) /\
+   ta = tn with <|t_mem := tn.t_mem UNION
+      {i | s.vs_alloca_next <= i /\ i < s.vs_alloca_next+n};
+      t_var := tn.t_var |+ (out,{})|>` by
+    (simp[step_prov_def, out_prov_def, set_prov_def, mk_inst_def,
+       update_var_def, FLOOKUP_UPDATE, step_taint_def, mem_taint_def,
+       step_writes_def, codegenRelTheory.source_memory_write_ranges_def,
+       range_bytes_def, written_taint_def, set_var_taint_def, out_taint_def,
+       eval_operand_def, store_taint_def, imm_taint_def, adopt_reset_def] >>
+     simp[taint_component_equality]) >>
+  `!x. not_fresh_at sm x ==> x <> out` by
+    (qpat_x_assum `compile_alloc_buffer _ _ = _` mp_tac >>
+     simp[compile_alloc_buffer_def, emit_op_def, comp_bind_def, comp_return_def,
+       comp_ignore_bind_def, fresh_id_def, fresh_var_def, emit_def] >>
+     strip_tac >> gvs[not_fresh_at_def, ASCIInumbersTheory.toString_11] >>
+     metis_tac[arithmeticTheory.LESS_EQ_REFL]) >>
+  qpat_x_assum `Ga = step_prov _ _ _ _` kall_tac >>
+  qpat_x_assum `ta = step_taint _ _ _ _` kall_tac >>
+  gvs[update_var_def] >>
+  simp[lookup_var_def, FLOOKUP_UPDATE, op_taint_def] >>
+  Cases_on `vv_operand vv` >> simp[eval_operand_def, lookup_var_def, FLOOKUP_UPDATE] >>
+  metis_tac[]
+QED
+
 Theorem ifexp_widen_arm_step_full:
   (* The shared joint unwrap_value lemma on H (r8, family form), here a
      premise until it lands. *)
