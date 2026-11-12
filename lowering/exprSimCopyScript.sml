@@ -1438,7 +1438,7 @@ Resume unwrap_ctor_code_copy_base_sim[ctor_suffix]:
   `regions_disjoint (w2n a) (type_memory_size tv)
       (w2n w) (type_memory_size tv)` by
     (irule immutable_holds_alloca_disjoint >>
-     qexistsl_tac [`cenv`, `ctx`, `cx`, `es'`, `func`] >>
+     qexistsl_tac [`H`, `cenv`, `ctx`, `cx`, `es'`, `func`] >>
      goal_assum (drule_at Any) >> simp[mk_inst_def] >>
      qexistsl_tac [`t`, `u`, `v`] >> simp[]) >>
   qpat_assum `frag_exec ctx sm mid _ _ R` (mp_then Any mp_tac frag_exec_then) >>
