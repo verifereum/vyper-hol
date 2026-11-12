@@ -155,7 +155,9 @@ Theorem compile_internal_prologue_entry_ptr:
     LENGTH PG = LENGTH s0.vs_params /\
     intcall_entry_memory cenv params env (if has_rb then 1 else 0)
       PG (tn with t_var := FEMPTY) s0 /\
-    intcall_entry_return cenv has_rb d PG s0 /\ stor_taint_ok cx tn s0 ==>
+    intcall_entry_return cenv has_rb d PG s0 /\ stor_taint_ok cx tn s0 /\
+    (!name entry. FLOOKUP env name = SOME entry ==>
+      value_has_type entry.type entry.value) ==>
     ?s1 G1 tn1.
       ~s1.vs_halted /\ s1.vs_current_bb = st1.cs_current_bb /\
       s1.vs_inst_idx = LENGTH st1.cs_current_insts /\
@@ -214,7 +216,8 @@ Proof
      irule intcall_entry_captured_pending >>
      goal_assum (drule_at Any) >> simp[] >>
      goal_assum (drule_at Any) >> simp[] >>
-     goal_assum (drule_at Any) >> simp[] >> rpt strip_tac >>
+     goal_assum (drule_at Any) >> simp[] >> rpt strip_tac
+     >~ [`value_has_type _ _`] >- metis_tac[] >>
      qpat_x_assum `!i. i < LENGTH params ==> ?p. _` drule >>
      simp[arithmeticTheory.ADD_COMM]) >>
   `return_buf_ptr d ce H un t` by

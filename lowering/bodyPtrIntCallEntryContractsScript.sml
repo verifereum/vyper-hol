@@ -2,7 +2,7 @@ Theory bodyPtrIntCallEntryContracts
 Ancestors
   bodyPtrDefs intCallCallee ptrDiscipline finite_map words list
   valueEncoding compileEnv venomState
-  loweringStateRelDefs
+  loweringStateRelDefs memoryValueEncoding
 
 (* Values waiting to be materialized are not yet locals of ghost_inv.
    Robustness concerns the represented value, not padding in its allocation. *)
@@ -135,7 +135,9 @@ Theorem intcall_entry_captured_pending:
   tn'.t_mem = tn.t_mem /\
   (!name entry off sz. FLOOKUP src name = SOME entry /\
     FLOOKUP ce.ce_vars name = SOME (MemLoc off sz) ==>
-    val_footprint entry.type entry.value <= sz) ==>
+    val_footprint entry.type entry.value <= sz) /\
+  (!name entry. FLOOKUP src name = SOME entry ==>
+    value_has_type entry.type entry.value) ==>
   intcall_pending src ce1 caps G' tn' t
 Proof
   strip_tac >> simp[intcall_pending_def, EVERY_EL] >>
@@ -152,7 +154,7 @@ Proof
   qpat_x_assum `intcall_entry_memory _ _ _ _ _ _ _` mp_tac >>
   simp[intcall_entry_memory_def] >> strip_tac >>
   first_x_assum drule_all >> strip_tac >>
-  simp[ptr_covers_def] >> metis_tac[]
+  simp[ptr_covers_def] >> metis_tac[memory_value_rel_val_in_memory]
 QED
 
 Theorem intcall_entry_captured_return:

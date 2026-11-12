@@ -30,9 +30,10 @@ Theorem intcall_internal_argument_size_bound:
   MAX 32 (type_memory_bytes ce ty) < dimword (:256)
 Proof
   strip_tac >> drule_all body_inv_internal_allocs_ok >>
-  simp[fn_allocs_ok_def, EVERY_MEM] >> strip_tac >>
+  simp[fn_allocs_ok_def, subst_consts_fn_def, EVERY_MEM] >> strip_tac >>
   `ce.ce_struct_fields =
-   (build_compile_env tops Internal mut name args ret ss F).ce_struct_fields` by
+   (build_compile_env tops Internal mut name args ret
+      (subst_consts_stmts (module_consts_env tops []) ss) F).ce_struct_fields` by
     gvs[bodySimTheory.body_inv_def, build_compile_env_ce_struct_fields] >>
   drule type_memory_bytes_frame >> strip_tac >>
   `type_memory_bytes ce ty < 2 ** 64` by

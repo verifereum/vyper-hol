@@ -2,6 +2,7 @@
 Theory bodyPtrIntCallMargin
 Ancestors exprLoweringProps relation finite_map pred_set list arithmetic words
   bodySim exprSimHyps compileEnv compileVyper loweringShapeProps bodyIntCallSeams
+  constSubst
 
 Theorem alloca_room_call_margin:
   !ctx func s finish margin callee.
@@ -31,12 +32,16 @@ QED
 Theorem body_inv_internal_allocs_ok:
   body_inv tops ctx cenv cx /\
   MEM (FunctionDecl Internal mut nr rr name args dflts ret ss) tops ==>
-  fn_allocs_ok tops (mut,nr,rr,name,args,dflts,ret,ss)
+  fn_allocs_ok tops
+    (subst_consts_fn (module_consts_env tops [])
+       (mut,nr,rr,name,args,dflts,ret,ss))
 Proof
   rpt strip_tac >>
-  `MEM (mut,nr,rr,name,args,dflts,ret,ss)
+  `MEM (subst_consts_fn (module_consts_env tops [])
+          (mut,nr,rr,name,args,dflts,ret,ss))
      (FST (SND (classify_functions tops)))` by
-    simp[MEM_classify_internal] >>
+    (simp[subst_consts_fn_def, MEM_classify_internal] >>
+     qexistsl_tac [`dflts`, `ss`] >> simp[subst_consts_fn_def]) >>
   gvs[body_inv_def] >>
   Cases_on `classify_functions tops` >> PairCases_on `r` >> gvs[] >>
   Cases_on `cx.in_deploy` >> gvs[] >>
@@ -55,11 +60,12 @@ Theorem body_inv_internal_return_size:
 Proof
   rpt strip_tac >>
   drule_all body_inv_internal_allocs_ok >>
-  simp[fn_allocs_ok_def] >> strip_tac >>
+  simp[fn_allocs_ok_def, subst_consts_fn_def] >> strip_tac >>
   `type_memory_bytes cenv ret = type_memory_size tv` by
     metis_tac[expr_sim_inv_memory_size] >>
   `cenv.ce_struct_fields =
-   (build_compile_env tops Internal mut name args ret ss F).ce_struct_fields` by
+   (build_compile_env tops Internal mut name args ret
+      (subst_consts_stmts (module_consts_env tops []) ss) F).ce_struct_fields` by
     gvs[body_inv_def, build_compile_env_ce_struct_fields] >>
   drule type_memory_bytes_frame >> strip_tac >>
   gvs[] >> fs[dimword_def]
