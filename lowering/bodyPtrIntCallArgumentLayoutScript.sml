@@ -70,3 +70,26 @@ Proof
     metis_tac[intcall_internal_argument_size_bound] >>
   gvs[] >> simp[]
 QED
+
+(* The name-lookup form is the footprint obligation at PARAM capture. *)
+Theorem intcall_bound_argument_footprint:
+  body_inv tops ctx ce cx /\ expr_sim_inv ce cx tenv es /\
+  MEM (FunctionDecl Internal mut nr rr name args dflts ret ss) tops /\
+  ALL_DISTINCT (MAP FST args) /\
+  bind_arguments (get_tenv cx) args vs = SOME penv /\
+  FLOOKUP penv arg = SOME entry /\
+  FLOOKUP (build_compile_env tops Internal mut name args ret ss F).ce_vars
+    arg = SOME (MemLoc off sz) ==>
+  val_footprint entry.type entry.value <= sz
+Proof
+  strip_tac >>
+  drule_all bind_arguments_scope_lookup >> strip_tac >> gvs[] >>
+  `?i. i < LENGTH args /\ EL i args = (arg,typ)` by metis_tac[MEM_EL] >>
+  `type_memory_size entry.type = sz` by
+    (mp_tac intcall_bound_argument_layout >> simp[]) >>
+  drule bind_arguments_scope_well_typed_from_success >>
+  simp[vyperTypeInvariantsTheory.scope_well_typed_def] >> strip_tac >>
+  `value_has_type entry.type entry.value` by metis_tac[] >>
+  metis_tac[valueTypingMemoryPropsTheory.value_has_type_memory_wf,
+            exprSimPropsTheory.val_footprint_le]
+QED
