@@ -4,7 +4,7 @@ Ancestors
   fmpStageOpBase fmpStageReclaimSound fmpLowerDefs fmpLowerReclaimPlan
   o1FrameLockstep livenessProofs venomWfProps
   livenessDefs livenessTransferProofs o1PassContract unitShapeDefs
-  venomWf venomInst venomExecSemantics
+  venomWf venomInst venomExecSemantics venomState
   rich_list finite_map list
 
 Theorem fmp_entry_lowered_analysis:
@@ -74,4 +74,46 @@ Proof
   `MEM (Var u) phi.inst_operands` by
     metis_tac[venomExecProofsTheory.resolve_phi_MEM_el] >>
   gvs[retpc_var_def] >> metis_tac[copy_phi_var_phi]
+QED
+
+Theorem fmp_entry_jump_phis:
+  wf_function fn /\ fn_inst_wf fn /\ ssa_form fn /\
+  fmp_reclaim_states infos fn = SOME states /\
+  MEM sb.vs_current_bb (cfg_analyze fn).cfg_dfs_pre /\
+  MEM lbl (cfg_analyze fn).cfg_dfs_pre /\
+  MEM lbl (cfg_succs_of (cfg_analyze fn) sb.vs_current_bb) /\
+  lookup_block sb.vs_current_bb fn.fn_blocks = SOME pb /\
+  lookup_block lbl fn.fn_blocks = SOME bb /\
+  lookup_block lbl fn'.fn_blocks = SOME bb' /\
+  LENGTH pb.bb_instructions = SUC sb.vs_inst_idx /\
+  (!u. eval_phis u bb'.bb_instructions = eval_phis u bb.bb_instructions) /\
+  phi_prefix_length bb'.bb_instructions = phi_prefix_length bb.bb_instructions /\
+  fmp_env_rel sm fn (live_vars_at (liveness_analyze fn)
+    sb.vs_current_bb sb.vs_inst_idx) G tn.t_var sb tb /\
+  sb.vs_labels = tb.vs_labels /\ sb.vs_current_bb = tb.vs_current_bb /\
+  enters_block fn (jump_to lbl sb) s1 ==>
+  ?t1. enters_block fn' (jump_to lbl tb) t1 /\
+    fmp_env_rel sm fn (live_vars_at (liveness_analyze fn) lbl
+      (phi_prefix_length bb.bb_instructions))
+      (entry_prov fn (jump_to lbl sb) G)
+      (entry_taint_vars fn (jump_to lbl sb) tn).t_var s1 t1 /\
+    t1 = (jump_to lbl tb) with <|vs_vars := t1.vs_vars;
+      vs_inst_idx := phi_prefix_length bb.bb_instructions|> /\
+    (!v. (!i. MEM i bb.bb_instructions /\ i.inst_opcode = PHI ==>
+      ~MEM v i.inst_outputs) ==>
+      FLOOKUP t1.vs_vars v = FLOOKUP (jump_to lbl tb).vs_vars v)
+Proof
+  strip_tac >> irule fmp_entry_phis_transport >>
+  simp[jump_to_def] >>
+  qexists `live_vars_at (liveness_analyze fn)
+    sb.vs_current_bb sb.vs_inst_idx` >> reverse conj_tac
+  >- gvs[fmp_env_rel_def, jump_to_def] >>
+  rpt gen_tac >> strip_tac >> conj_tac
+  >- (`pb.bb_instructions <> []` by
+        (Cases_on `pb.bb_instructions` >> gvs[]) >>
+      qpat_x_assum `sb.vs_current_bb = tb.vs_current_bb`
+        (fn th => fs[GSYM th]) >>
+      drule_all fmp_entry_effect_live >> simp[]) >>
+  irule fmp_entry_effect_tracked >> goal_assum (drule_at Any) >>
+  metis_tac[lookup_block_mem]
 QED
