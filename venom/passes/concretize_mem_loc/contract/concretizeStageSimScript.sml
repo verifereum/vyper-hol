@@ -79,5 +79,6 @@ Theorem concretize_stage_sim_fuel:
   EVERY fn_defs_reach_uses C.ctx_functions ==>
   ctx_sim_fuel I D C C' vs vs
 Proof
-  cheat
+  simp[ctx_sim_fuel_def] >> rpt strip_tac >>
+  irule layout_stage_terminating_context_fuel >> metis_tac[]
 QED
