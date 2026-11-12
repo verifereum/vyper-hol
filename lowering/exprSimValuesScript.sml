@@ -69,7 +69,8 @@ Proof
       simp[] >> metis_tac[storage_trace_frame_preserves_bad_domain]) >>
   `valid_horizon cx st0 (storage_trace_horizon es.storage_trace)
      es.storage_trace` by fs[storage_trace_domain_def] >>
-  first_x_assum drule_all >> rpt strip_tac >>
+  first_x_assum (qspecl_then [`st0`, `sa`, `sb`, `op`, `s0`] mp_tac) >>
+  (impl_tac >- (simp[] >> metis_tac[])) >> strip_tac >>
   PURE_REWRITE_TAC[gas_outcome_def] >> qexists_tac `marks` >>
   disj2_tac >> disj1_tac >>
   PURE_REWRITE_TAC[gas_summary_at_def] >>

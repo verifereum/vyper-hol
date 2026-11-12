@@ -682,9 +682,11 @@ Proof
         (qspec_then `H` mp_tac) >>
       (impl_tac >- simp[]) >> strip_tac >>
       qpat_x_assum `!H. valid_horizon _ _ H mid.storage_trace ==> gas_value_prefix _ _ _ _ _ _ _ _`
-        (drule_then (strip_assume_tac o REWRITE_RULE [gas_value_prefix_def])) >>
+        (qspec_then `H` mp_tac) >> (impl_tac >- simp[]) >>
+      rewrite_tac[gas_value_prefix_def] >> strip_tac >>
       qpat_x_assum `!H. valid_horizon _ _ H fin.storage_trace ==> gas_value_prefix _ _ _ _ _ _ _ _`
-        (drule_then (strip_assume_tac o REWRITE_RULE [gas_value_prefix_def])) >>
+        (qspec_then `H` mp_tac) >> (impl_tac >- simp[]) >>
+      rewrite_tac[gas_value_prefix_def] >> strip_tac >>
       `MAP FDOM es.scopes = MAP FDOM (mid with gas_obs := []).scopes` by
         metis_tac[bop_marked_scopes_dom] >>
       qexists_tac `v` >> gvs[] >>

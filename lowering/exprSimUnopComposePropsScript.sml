@@ -113,7 +113,7 @@ Proof
       qexistsl_tac [`unop_result cx ann bi [expr_type e1] v1 ee`,`ee`,`r`] >>
       conj_tac
       >- (simp[gas_marked_exec_def, unop_result_gas_obs] >> metis_tac[]) >>
-      gvs[] >> rpt strip_tac >>
+      gvs[] >> disj1_tac >> rpt strip_tac >>
       qpat_x_assum `!H. valid_horizon _ _ H _ ==> stmt_state_rel H _ _ _ _ _ s /\ _`
         (drule_then strip_assume_tac) >>
       qpat_x_assum `!H. valid_horizon _ _ H _ ==> expr_post _ _ _ _ _ _ _ _ _ _ _ _ _ _`

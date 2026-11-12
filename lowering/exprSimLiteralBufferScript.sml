@@ -967,7 +967,7 @@ Resume compile_literal_other_vv_sim[bytes]:
   `!H. valid_horizon cx st0 H es.storage_trace ==>
        stmt_state_rel H ctx func cenv cx (es with gas_obs := []) s0 /\
        storage_well_formed_on cx (es with gas_obs := []) (FST H)` by
-    (rpt strip_tac >> first_x_assum drule >> strip_tac >>
+    (rpt gen_tac >> strip_tac >> first_x_assum drule >> strip_tac >>
      `(es with gas_obs := []).accounts = es.accounts /\
       (es with gas_obs := []).tStorage = es.tStorage` by simp[] >>
      conj_tac
@@ -1035,7 +1035,7 @@ Resume compile_literal_other_vv_sim[string]:
   `!H. valid_horizon cx st0 H es.storage_trace ==>
        stmt_state_rel H ctx func cenv cx (es with gas_obs := []) s0 /\
        storage_well_formed_on cx (es with gas_obs := []) (FST H)` by
-    (rpt strip_tac >> first_x_assum drule >> strip_tac >>
+    (rpt gen_tac >> strip_tac >> first_x_assum drule >> strip_tac >>
      `(es with gas_obs := []).accounts = es.accounts /\
       (es with gas_obs := []).tStorage = es.tStorage` by simp[] >>
      conj_tac
