@@ -505,6 +505,76 @@ Proof
   irule fuel_ok_emit_void_halt >> simp[]
 QED
 
+Theorem iter_compile_layout[local]:
+  !ce lc ty id fty arr_e bound body s r t.
+  compile_stmt ce lc ty (For id fty (Array arr_e) bound body) s = (r,t) ==>
+  r = () /\
+  ?bc arr loc lenop idx cl bl il xl p c0 c1 b0 b1 i0 i1.
+    (let arr_ty = expr_type arr_e in
+     let is_dynamic = (case arr_ty of ArrayT _ (Dynamic _) => T | _ => F) in
+     let count = (case arr_ty of ArrayT _ (Dynamic n) => n
+                               | ArrayT _ (Fixed n) => n | _ => 0) in
+     do arr_vv <- compile_expr ce arr_ty arr_e;
+        arr_op <- return (vv_operand arr_vv);
+        loc <- return (case vv_location arr_vv of SOME l => l | NONE => LocMemory);
+        len_op <- (if is_dynamic then
+          compile_ptr_load ce.ce_is_ctor ce.ce_imm_alloca loc arr_op
+          else return (Lit (n2w count)));
+        body_cenv <- declare_local ce id fty;
+        emit_local_alloca body_cenv id;
+        entry_lbl <- fresh_label "iter_entry";
+        cond_lbl <- fresh_label "iter_cond";
+        body_lbl <- fresh_label "iter_body";
+        incr_lbl <- fresh_label "iter_incr";
+        exit_lbl <- fresh_label "iter_exit";
+        emit_inst JMP [Label entry_lbl] [];
+        new_block entry_lbl;
+        idx_var <- fresh_var;
+        emit_inst ASSIGN [Lit 0w] [idx_var];
+        (if is_dynamic then
+          do invalid <- emit_op GT [len_op; Lit (n2w count)];
+             valid <- emit_op ISZERO [invalid]; emit_void ASSERT [valid] od
+         else return ());
+        return (body_cenv,arr_op,loc,len_op,idx_var,
+                cond_lbl,body_lbl,incr_lbl,exit_lbl)
+     od) s = ((bc,arr,loc,lenop,idx,cl,bl,il,xl),p) /\
+    (do emit_inst JMP [Label cl] []; new_block cl; return () od) p = ((),c0) /\
+    (do d <- emit_op EQ [Var idx;lenop];
+        emit_inst JNZ [d;Label xl;Label bl] [] od) c0 = ((),c1) /\
+    (do new_block bl; return () od) c1 = ((),b0) /\
+    (let arr_ty = expr_type arr_e in
+     let is_dynamic = (case arr_ty of ArrayT _ (Dynamic _) => T | _ => F) in
+     let arr_elem_ty = (case arr_ty of ArrayT et _ => et | _ => fty) in
+     do offset_base <- return (if is_dynamic then word_scale loc else 0);
+        idx_offset <- emit_op MUL [Var idx;
+          Lit (n2w (elem_size_in_location ce loc arr_elem_ty))];
+        total_offset <- (if offset_base > 0 then
+          emit_op ADD [Lit (n2w offset_base);idx_offset] else return idx_offset);
+        elem_ptr <- emit_op ADD [arr;total_offset];
+        (case FLOOKUP bc.ce_vars id of
+           SOME (MemLoc off _) =>
+             compile_iter_elem_copy ce elem_ptr (Lit (n2w off))
+               (elem_size_in_location ce loc arr_elem_ty)
+               loc (is_slot_addressed loc) fty arr_elem_ty
+         | SOME (PtrVar ptr_op _) =>
+             compile_iter_elem_copy ce elem_ptr ptr_op
+               (elem_size_in_location ce loc arr_elem_ty)
+               loc (is_slot_addressed loc) fty arr_elem_ty
+         | _ => emit_void INVALID []);
+        compile_stmts bc (InLoop xl il) ty body;
+        emit_jmp_if_not_terminated il od) b0 = ((),b1) /\
+    (do new_block il; return () od) b1 = ((),i0) /\
+    (do d <- emit_op ADD [Var idx;Lit 1w];
+        emit_inst ASSIGN [d] [idx];
+        emit_inst JMP [Label cl] [] od) i0 = ((),i1) /\
+    (do new_block xl; return () od) i1 = ((),t)
+Proof
+  rpt gen_tac >>
+  simp_tac std_ss [Once compile_stmt_def, LET_THM,
+    comp_bind_def, comp_ignore_bind_def, comp_return_def] >>
+  rpt (pairarg_tac >> gvs[])
+QED
+
 Theorem fuel_okS_compile_for_iter:
   !cenv lctx ty id fty arr_e bound body Wv E.
     (!c t e Wv' E'. fuel_ok Wv' {} E' (compile_expr c t e)) /\
