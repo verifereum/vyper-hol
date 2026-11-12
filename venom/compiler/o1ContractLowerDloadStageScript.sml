@@ -29,7 +29,8 @@ Ancestors
   contextRawReachable contextCodegenRel fcgDefs fcgBridge
   venomFnScheduleRunner o1ContractLowerDloadSim o1ContractLowerDloadMem
   o1ContractLowerDloadPtr o1ContractLowerDloadTaint lowerDloadMakeSsaInput
-  venomFnScheduleRunnerProps
+  venomFnScheduleRunnerProps lowerDloadRawCoverage lowerDloadTargetHeadroom
+  lowerDloadPtrStatic
 
 (* ===== Helpers for the shape and DLOAD-bound lemmas ===== *)
 
@@ -129,22 +130,9 @@ Proof
 QED
 
 (* And no DLOAD to need headroom for: the bound is raw_mem_ok's frontier
-   bound, and with DALLOCA the source's headroom, which covers every
-   DLOAD scratch site the output allocates.
-   TEMPORARILY CHEATED - P4b in progress: the DALLOCA conjunct needs the
-   revert-forwarding certificate of ld_raw_coverage_fixed to carry the
-   frontier bound.  The proof of the previous statement (premises
-   o1_ctx_shape C /\ mem_inv raw_mem_ok C' vs) was:
-Proof
-  rpt strip_tac >>
-  `ctx_dload_count C' = 0` by
-    (simp[ctx_dload_count_def, SUM_eq_0, MEM_MAP, PULL_EXISTS,
-          FILTER_EQ_NIL, EVERY_MEM] >>
-     metis_tac[lower_dload_stage_no_dload]) >>
-  irule mem_inv_mono >> qexists_tac `raw_mem_ok` >>
-  simp[raw_mem_ok_def, dload_headroom_ok_def]
-QED
-*)
+   bound, and with DALLOCA the frontier stays below the initial frame
+   pointer, from the source's headroom on owned states and from the
+   forwarding certificate on revert-forwarding ones. *)
 Theorem lower_dload_stage_headroom:
   !rpolicy D view C C' vs names.
     ctx_pass_stage rpolicy (CFP_Simple VP_LowerDload) view C C' /\
@@ -152,7 +140,36 @@ Theorem lower_dload_stage_headroom:
     o1_src_inv D C vs /\ callee_first names C.ctx_functions ==>
     mem_inv dload_headroom_ok C' vs
 Proof
-  cheat
+  rpt strip_tac >>
+  `ctx_dload_count C' = 0` by
+    (simp[ctx_dload_count_def, SUM_eq_0, MEM_MAP, PULL_EXISTS,
+          FILTER_EQ_NIL, EVERY_MEM] >>
+     metis_tac[lower_dload_stage_no_dload]) >>
+  `mem_inv raw_mem_ok C' vs` by metis_tac[lower_dload_stage_mem] >>
+  `ctx_has_dalloca C' ==> ctx_has_dalloca C` by
+    metis_tac[lower_dload_stage_no_dalloca] >>
+  drule_all lowerDloadStageAmbientTheory.ld_stage_ambient >> strip_tac >>
+  `mem_inv raw_mem_ok C vs` by fs[o1_src_inv_def] >>
+  RULE_ASSUM_TAC BETA_RULE >>
+  qpat_x_assum `mem_inv raw_mem_ok C' vs` mp_tac >>
+  rewrite_tac[mem_inv_raw_reachable] >> strip_tac >>
+  conj_tac >- metis_tac[] >>
+  rpt strip_tac >>
+  `raw_mem_ok C' fn inst s` by res_tac >>
+  pure_rewrite_tac[dload_headroom_ok_def, GSYM ctx_has_dalloca_def] >>
+  qpat_x_assum `ctx_dload_count C' = 0` (fn th => rewrite_tac[th]) >>
+  simp_tac (srw_ss()) [] >>
+  conj_tac >- fs[raw_mem_ok_def] >>
+  strip_tac >> `ctx_has_dalloca C` by res_tac >>
+  drule_all (BETA_RULE ld_raw_coverage_fixed) >> disch_then DISJ_CASES_TAC
+  >- (irule (BETA_RULE ld_owned_target_headroom) >>
+      goal_assum (drule_at Any) >>
+      drule_all (BETA_RULE ld_raw_fixed_ambient) >> strip_tac >>
+      qpat_x_assum `!fn. MEM fn C.ctx_functions ==> _` drule >>
+      simp[] >> strip_tac >> simp[] >>
+      qpat_x_assum `!fn. MEM fn C.ctx_functions ==> (_ /\ _) /\ _` drule >>
+      simp[] >> strip_tac >> simp[]) >>
+  fs[]
 QED
 
 (* ===== The cheap rows ===== *)

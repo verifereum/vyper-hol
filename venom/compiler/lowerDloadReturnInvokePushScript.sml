@@ -160,6 +160,18 @@ val _ = List.app (fn th => if null (hyp th) then ()
   [ld_setup_pair_effect, ld_setup_pair_vars, ld_setup_source_exists,
    ld_invoke_callee_ambient, ld_invoke_correlated_setup];
 
+(* Argument provenance read through the live ghosts against the selected
+   sites: the callee's parameters as INVOKE's call rule records them. *)
+Theorem ld_params_ok_arguments[local]:
+  ld_ghost_ok fl A H G ==>
+  ld_params_ok fl A (MAP (op_prov H) ops) (MAP (op_prov G) ops)
+Proof
+  rw[lowerDloadSafetyRelationTheory.ld_params_ok_def, EL_MAP] >>
+  Cases_on `EL k ops` >> simp[op_prov_def] >>
+  rename1 `FLOOKUP H v` >> Cases_on `FLOOKUP H v` >> simp[] >>
+  fs[lowerDloadSafetyRelationTheory.ld_ghost_ok_def] >> metis_tac[]
+QED
+
 (* Structural constructor: semantic entry/reachability is supplied separately. *)
 Theorem ld_sync_call_push:
   ld_sync lo P C vs0 stk PG G tn fn calli s t A (f::fs) N /\
@@ -174,9 +186,9 @@ Theorem ld_sync_call_push:
   MEM g.lf_fn C.ctx_functions /\
   g.lf_src.vs_alloca_next = f.lf_src.vs_alloca_next /\
   g.lf_tgt.vs_alloca_next = f.lf_tgt.vs_alloca_next /\
-  frame_reachable vs0 C (saved::stk)
-    (MAP (OPTION_MAP (ld_erase A)) g.lf_Q) (ld_erase A o_f g.lf_H)
+  frame_reachable vs0 C (saved::stk) PG' (ld_erase A o_f g.lf_H)
     tn1 g.lf_fn i g.lf_src /\
+  ld_params_ok (dyn_floor C vs0) A g.lf_Q PG' /\
   active_inst g.lf_fn i g.lf_src /\
   ld_envelope g.lf_supply g.lf_fn g.lf_src g.lf_src.vs_inst_idx X p /\
   g.lf_tgt.vs_inst_idx = p /\
@@ -184,8 +196,7 @@ Theorem ld_sync_call_push:
   ld_nonghost tn1 g.lf_src g.lf_tgt /\
   ld_dyn_agree (dyn_floor C vs0) tn1.t_mem g.lf_src.vs_memory
     g.lf_tgt.vs_memory ==>
-  ld_sync lo P C vs0 (saved::stk)
-    (MAP (OPTION_MAP (ld_erase A)) g.lf_Q) (ld_erase A o_f g.lf_H)
+  ld_sync lo P C vs0 (saved::stk) PG' (ld_erase A o_f g.lf_H)
     tn1 g.lf_fn i g.lf_src g.lf_tgt A (g::f::fs) (SUC N)
 Proof
   strip_tac >>
@@ -200,9 +211,6 @@ Proof
   qpat_x_assum `ld_sync _ _ _ _ _ _ _ _ _ _ _ _ _ _ _` mp_tac >>
   simp[ld_sync_def] >> strip_tac >>
   conj_tac >- simp[lowerDloadSafetyRelationTheory.ld_ghost_ok_erased] >>
-  conj_tac
-  >- (simp[lowerDloadSafetyRelationTheory.ld_params_ok_def, EL_MAP] >>
-      rw[] >> Cases_on `EL k g.lf_Q` >> simp[]) >>
   conj_tac
   >- (qpat_x_assum `EVERY _ fs` mp_tac >> rpt (pop_assum kall_tac) >>
       simp[EVERY_MEM, MEM_MAP] >> rpt strip_tac >>
@@ -323,7 +331,33 @@ Proof
   simp[setup_callee_def, AllCaseEqs()] >> rpt strip_tac >> gvs[]
 QED
 
-(* TEMPORARILY CHEATED - P4b in progress: call frames. ld_sync now relates G to the erased ghosts only by ld_ghost_ok, so the callee's parameter provenance is no longer MAP (OPTION_MAP (ld_erase A)) of the arguments ([reach]); the callee frame also needs its ld_dyn_agree for ld_sync_call_push ([sync])
+Theorem ld_setup_callee_memory[local]:
+  setup_callee fn args s = SOME cs ==> cs.vs_memory = s.vs_memory
+Proof
+  simp[setup_callee_def, AllCaseEqs()] >> rpt strip_tac >> gvs[]
+QED
+
+Theorem ld_invoke_active_push:
+  ^ld_covered_ambient lo C C' vs0 Sigma names fn fn' /\
+  ld_sync lo P C vs0 stk PG G tn fn inst s t A (f::fs) N /\
+  ^ld_probe_stable lo P Sigma names fs0 f0 A0 A (f::fs) /\
+  inst.inst_opcode = INVOKE /\ decode_invoke inst = SOME (nm,ops) /\
+  lookup_function nm C'.ctx_functions = SOME calleeT /\
+  eval_operands ops t = SOME argsT /\
+  setup_callee calleeT argsT t = SOME ct /\
+  enters_block calleeT ct tp /\ active_inst calleeT ti tp /\
+  lookup_block tp.vs_current_bb calleeT.fn_blocks = SOME bb ==>
+  ?callee argsS cs fc.
+    lookup_function nm C.ctx_functions = SOME callee /\
+    eval_operands ops s = SOME argsS /\ setup_callee callee argsS s = SOME cs /\
+    ^ld_covered_ambient lo C C' vs0 Sigma names callee calleeT /\
+    fc = <|lf_serial := N; lf_supply := Sigma nm; lf_fn := callee;
+      lf_src := cs; lf_tgt := ct; lf_H := FEMPTY;
+      lf_Q := MAP (op_prov f.lf_H) ops; lf_E := {}; lf_tv := FEMPTY|> /\
+    ^ld_probe_point lo P C C' vs0
+      (<|cf_fn := fn; cf_inst := inst; cf_state := s;
+         cf_params := PG; cf_prov := G; cf_tvar := tn.t_var|> :: stk)
+      callee calleeT cs (f::fs) fc A Sigma names bb tp
 Proof
   qabbrev_tac `Ambient = ^ld_covered_ambient` >>
   qabbrev_tac `Stable = ^ld_probe_stable` >>
@@ -365,18 +399,18 @@ Proof
   qabbrev_tac `saved = <|cf_fn := fn; cf_inst := inst; cf_state := s;
     cf_params := PG; cf_prov := G; cf_tvar := tn.t_var|>` >>
   `frame_reachable vs0 C (saved::stk)
-    (MAP (OPTION_MAP (ld_erase A)) fc.lf_Q) FEMPTY
+    (MAP (op_prov G) ops) FEMPTY
     (tn with t_var := FEMPTY) callee i cs` by
     suspend "reach" >>
   `ld_sync lo P C vs0 (saved::stk)
-    (MAP (OPTION_MAP (ld_erase A)) fc.lf_Q) FEMPTY
+    (MAP (op_prov G) ops) FEMPTY
     (tn with t_var := FEMPTY) callee i cs ct A (fc::f::fs) (SUC N)` by
     suspend "sync" >>
   `Stable lo P Sigma names (f::fs) fc A A (fc::f::fs)` by
     suspend "stable" >>
   `ld_return_cont C callee cs cs` by
     (irule ld_return_cont_entry >> simp[]) >>
-  qexistsl_tac [`MAP (OPTION_MAP (ld_erase A)) fc.lf_Q`,`FEMPTY`,
+  qexistsl_tac [`MAP (op_prov G) ops`,`FEMPTY`,
     `tn with t_var := FEMPTY`,`i`,`cs`,`ct`,`A`,`fc::f::fs`,
     `SUC N`,`X`,`ct.vs_inst_idx`,`0`] >>
   simp[NoAsms, lowerDloadSafetyKernelTheory.ld_prefix_zero] >>
@@ -385,8 +419,7 @@ Proof
 QED
 
 Resume ld_invoke_active_push[reach]:
-  drule ld_sync_ghosts >> simp[] >> strip_tac >>
-  simp[Abbr `fc`, Abbr `saved`, ld_arguments_erasure] >>
+  simp[Abbr `saved`] >>
   irule frame_reachable_call >>
   goal_assum (drule_at Any) >> simp[] >>
   metis_tac[ld_sync_source, ld_sync_ghosts]
@@ -394,7 +427,7 @@ QED
 
 Resume ld_invoke_active_push[sync]:
   `ld_sync lo P C vs0 (saved::stk)
-    (MAP (OPTION_MAP (ld_erase A)) fc.lf_Q) (ld_erase A o_f fc.lf_H)
+    (MAP (op_prov G) ops) (ld_erase A o_f fc.lf_H)
     (tn with t_var := FEMPTY) fc.lf_fn i fc.lf_src fc.lf_tgt
     A (fc::f::fs) (SUC N)` suffices_by simp[Abbr `fc`] >>
   irule ld_sync_call_push >>
@@ -403,9 +436,15 @@ Resume ld_invoke_active_push[sync]:
   conj_tac >-
     (qpat_assum `lookup_function nm C.ctx_functions = SOME callee` mp_tac >>
      rpt (pop_assum kall_tac) >> metis_tac[lookup_function_MEM]) >>
-  conj_tac >- (qexists_tac `X` >> fs[]) >>
-  conj_tac >- fs[] >>
-  qexistsl_tac [`t`,`tn`] >> simp[]
+  rpt conj_tac >>
+  FIRST [qexists_tac `X` >> fs[] >> NO_TAC,
+         (imp_res_tac ld_setup_callee_memory >> fs[] >>
+          qpat_assum `ld_sync _ _ _ _ stk _ _ _ _ _ _ _ _ (f::fs) _`
+            (mp_tac o MATCH_MP ld_sync_dyn_agree) >> simp[] >> NO_TAC),
+         (irule ld_params_ok_arguments >> drule ld_sync_ghosts >> simp[] >>
+          NO_TAC),
+         fs[] >> NO_TAC,
+         qexistsl_tac [`t`,`tn`] >> simp[] >> NO_TAC]
 QED
 
 Resume ld_invoke_active_push[stable]:
@@ -439,31 +478,6 @@ Resume ld_invoke_active_push[stable]:
 QED
 
 Finalise ld_invoke_active_push
-*)
-Theorem ld_invoke_active_push:
-  ^ld_covered_ambient lo C C' vs0 Sigma names fn fn' /\
-  ld_sync lo P C vs0 stk PG G tn fn inst s t A (f::fs) N /\
-  ^ld_probe_stable lo P Sigma names fs0 f0 A0 A (f::fs) /\
-  inst.inst_opcode = INVOKE /\ decode_invoke inst = SOME (nm,ops) /\
-  lookup_function nm C'.ctx_functions = SOME calleeT /\
-  eval_operands ops t = SOME argsT /\
-  setup_callee calleeT argsT t = SOME ct /\
-  enters_block calleeT ct tp /\ active_inst calleeT ti tp /\
-  lookup_block tp.vs_current_bb calleeT.fn_blocks = SOME bb ==>
-  ?callee argsS cs fc.
-    lookup_function nm C.ctx_functions = SOME callee /\
-    eval_operands ops s = SOME argsS /\ setup_callee callee argsS s = SOME cs /\
-    ^ld_covered_ambient lo C C' vs0 Sigma names callee calleeT /\
-    fc = <|lf_serial := N; lf_supply := Sigma nm; lf_fn := callee;
-      lf_src := cs; lf_tgt := ct; lf_H := FEMPTY;
-      lf_Q := MAP (op_prov f.lf_H) ops; lf_E := {}; lf_tv := FEMPTY|> /\
-    ^ld_probe_point lo P C C' vs0
-      (<|cf_fn := fn; cf_inst := inst; cf_state := s;
-         cf_params := PG; cf_prov := G; cf_tvar := tn.t_var|> :: stk)
-      callee calleeT cs (f::fs) fc A Sigma names bb tp
-Proof
-  cheat
-QED
 
 val _ = List.app (fn th => if null (hyp th) then ()
         else raise Fail "guarded call push has kernel hypotheses")
