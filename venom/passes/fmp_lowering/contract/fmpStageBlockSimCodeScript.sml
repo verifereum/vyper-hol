@@ -9,6 +9,7 @@
  *   exec_block_run_prefix    - exec_block skips a run of non-final insts
  *   fmp_target_run_exec_block - likewise for fmp_target_run
  *   fmp_stage_invoke_target  - a related INVOKE has a target instruction
+ *   active_inst_unique       - at most one instruction is active
  *)
 Theory fmpStageBlockSimCode
 Ancestors
@@ -250,3 +251,13 @@ Proof
   gvs[lookup_block_def] >>
   imp_res_tac stackPlanGenTheory.FIND_SOME_MEM >> gvs[]
 QED
+
+(* Why: an active instruction is the one at the state's block and index
+   (active_inst_lookup_distinct); with distinct labels there is one. *)
+Theorem active_inst_unique:
+  ALL_DISTINCT (fn_labels f) /\ active_inst f i1 st /\ active_inst f i2 st ==>
+  i1 = i2
+Proof
+  rpt strip_tac >> imp_res_tac dftGasToListReachBoundaryTheory.active_inst_lookup_distinct >> gvs[]
+QED
+

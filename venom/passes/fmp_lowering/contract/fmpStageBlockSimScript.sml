@@ -10,7 +10,7 @@
  *)
 Theory fmpStageBlockSim
 Ancestors
-  fmpStageOpSteps fmpStageFmpSteps fmpStageBlockSimCode fmpStageControl
+  fmpStageOpSteps fmpStageFmpSteps fmpStageRetStep fmpStageBlockSimCode fmpStageControl
   fmpStageOpBase fmpStageRel ptrStaticDiscipline o1PassContract ptrDiscipline
   contextCodegenRel fmpReclaimDefs fmpAnalysisDefs passSimulationDefs
   venomExecProofs venomInstProofs venomStepProps venomWf venomExecSemantics
@@ -34,16 +34,6 @@ Proof
 QED
 
 (* ===== Glue: one exec_block, block-local facts ===== *)
-
-Theorem active_inst_lookup[local]:
-  !f i st. ALL_DISTINCT (fn_labels f) /\ active_inst f i st ==>
-  ?b. lookup_block st.vs_current_bb f.fn_blocks = SOME b /\
-      get_instruction b st.vs_inst_idx = SOME i
-Proof
-  rw[active_inst_def] >> qexists_tac `bb` >>
-  simp[get_instruction_def] >>
-  irule venomExecProofsTheory.MEM_lookup_block >> gvs[fn_labels_def]
-QED
 
 Theorem lookup_get_active[local]:
   lookup_block st.vs_current_bb f.fn_blocks = SOME b /\
@@ -139,13 +129,6 @@ Proof
   first_x_assum (qspec_then `kf` assume_tac) >>
   `t1.vs_inst_idx = t.vs_inst_idx + n` by gvs[fmp_target_run_def] >>
   drule fmp_target_run_exec_block >> simp[]
-QED
-
-Theorem active_inst_unique[local]:
-  ALL_DISTINCT (fn_labels f) /\ active_inst f i1 st /\ active_inst f i2 st ==>
-  i1 = i2
-Proof
-  rpt strip_tac >> imp_res_tac active_inst_lookup >> gvs[]
 QED
 
 Theorem dead_result_stage_result[local]:
@@ -327,7 +310,7 @@ Proof
   `ALL_DISTINCT (fn_labels fn)` by gvs[o1_fn_shape_def, wf_function_def] >>
   drule_all fmp_stage_target_shape >> strip_tac >>
   `get_instruction bb s.vs_inst_idx = SOME inst` by
-    (drule_all active_inst_lookup >> strip_tac >> gvs[]) >>
+    (drule_all dftGasToListReachBoundaryTheory.active_inst_lookup_distinct >> strip_tac >> gvs[]) >>
   drule fmp_stage_rel_cur >> strip_tac >>
   `!s2 t2 sm2 lo2 G2 tn2 i2 r2.
      LENGTH bb.bb_instructions - s2.vs_inst_idx <
@@ -371,7 +354,7 @@ Proof
         (imp_res_tac venomExecProofsTheory.lookup_block_MEM >> gvs[EVERY_MEM]) >>
       qexists_tac `bb'` >> conj_tac >- first_assum ACCEPT_TAC >>
       `get_instruction bb' t1.vs_inst_idx = SOME inst` by
-        (qspecl_then [`fn'`, `inst`, `t1`] mp_tac active_inst_lookup >>
+        (qspecl_then [`fn'`, `inst`, `t1`] mp_tac dftGasToListReachBoundaryTheory.active_inst_lookup_distinct >>
          simp[] >> strip_tac >> gvs[]) >>
       Cases_on `MEM inst.inst_opcode [JMP; JNZ; DJMP]`
       >- (drule_all fmp_stage_jump_step >> strip_tac >>
@@ -502,7 +485,7 @@ Proof
         (imp_res_tac venomExecProofsTheory.lookup_block_MEM >> gvs[EVERY_MEM]) >>
       qexists_tac `bb'` >> conj_tac >- first_assum ACCEPT_TAC >>
       `get_instruction bb' t1.vs_inst_idx = SOME inv'` by
-        (qspecl_then [`fn'`, `inv'`, `t1`] mp_tac active_inst_lookup >>
+        (qspecl_then [`fn'`, `inv'`, `t1`] mp_tac dftGasToListReachBoundaryTheory.active_inst_lookup_distinct >>
          simp[] >> strip_tac >> gvs[]) >>
       `fmp_invoke_sim rpolicy D C C' vs vs' fmp eom k inst s` by simp[] >>
       qpat_x_assum `fmp_invoke_sim _ _ _ _ _ _ _ _ _ inst s`
@@ -549,7 +532,7 @@ Proof
       disch_then ACCEPT_TAC) >>
   (`~MEM inst.inst_opcode [INVOKE; DALLOCA; RETPC_PARAM; PHI]` by simp[] >>
       drule_all fmp_stage_op_step >> strip_tac >>
-      qspecl_then [`fn'`, `inst'`, `t`] mp_tac active_inst_lookup >>
+      qspecl_then [`fn'`, `inst'`, `t`] mp_tac dftGasToListReachBoundaryTheory.active_inst_lookup_distinct >>
       simp[] >> strip_tac >> rename1 `lookup_block _ fn'.fn_blocks = SOME bb'` >>
       `bb_well_formed bb'` by
         (imp_res_tac venomExecProofsTheory.lookup_block_MEM >> gvs[EVERY_MEM]) >>
