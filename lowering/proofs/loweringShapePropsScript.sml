@@ -14214,7 +14214,7 @@ Proof
   imp_res_tac supported_pure_shape >> res_tac >> fs[]
 QED
 
-Theorem supported_expr_shape[local]:
+Theorem supported_expr_shape:
   !tops e. supported_expr tops e ==>
     ~supported_expr_exists expr_shape_root e
 Proof

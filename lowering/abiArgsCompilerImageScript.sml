@@ -784,7 +784,7 @@ Proof
 QED
 
 Theorem abi_image_child_lower_label:
-  (!e ce ty s vv s'. expr_size e < bound /\
+  (!e ce ty s vv s'. expr_size e + cenv_defaults_size ce < bound /\
     f ce ty e s = (vv,s') /\ vv_operand vv = Label l ==>
     s'.cs_blocks = s.cs_blocks) /\
   lower_value (expr_child_callback bound f) ce ty e sa = (Label l,sb) ==>
@@ -795,7 +795,8 @@ Proof
        invalid_expr_call_def, unwrap_value_def, comp_return_def, LET_THM] >>
   rpt strip_tac >> rpt (pairarg_tac >> gvs[])
   >- (drule abi_image_unwrap_label >> strip_tac >> gvs[] >>
-      `expr_size e < bound` by decide_tac >> metis_tac[]) >>
+      `expr_size e + cenv_defaults_size ce < bound` by decide_tac >>
+      metis_tac[]) >>
   gvs[unwrap_value_def, comp_return_def]
 QED
 
@@ -844,7 +845,11 @@ Resume abi_image_compile_mutual[builtin]:
   CONV_TAC (DEPTH_CONV ETA_CONV) >> strip_tac >>
   drule_all abi_image_builtin_label >> strip_tac >>
   drule_at (Pat `lower_value`) abi_image_child_lower_label >>
-  (impl_tac >- metis_tac[]) >> simp[]
+  (impl_tac
+   >- (rpt strip_tac >>
+       `expr_size e + cenv_defaults_size ce' <
+        list_size expr_size args + cenv_defaults_size ce` by decide_tac >>
+       metis_tac[])) >> simp[]
 QED
 
 Resume abi_image_compile_mutual[type_builtin]:
@@ -853,7 +858,11 @@ Resume abi_image_compile_mutual[type_builtin]:
   drule_all abi_image_type_builtin_label >> strip_tac >>
   `sm.cs_blocks = sa.cs_blocks` suffices_by metis_tac[] >>
   drule_at (Pat `lower_value`) abi_image_child_lower_label >>
-  (impl_tac >- metis_tac[]) >> simp[]
+  (impl_tac
+   >- (rpt strip_tac >>
+       `expr_size e + cenv_defaults_size ce' <
+        list_size expr_size args + cenv_defaults_size ce` by decide_tac >>
+       metis_tac[])) >> simp[]
 QED
 
 Finalise abi_image_compile_mutual
