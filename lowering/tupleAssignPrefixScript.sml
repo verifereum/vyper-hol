@@ -243,6 +243,8 @@ Theorem compile_tuple_load_all_typed_path:
     (!x. MEM (Var x) elems ==> not_fresh_at sb x) /\
     local_ptrs_reserved cenv sb /\
     ?t. stmt_state_rel H ctx func cenv cx es t /\
+      (!H'. stmt_state_rel H' ctx func cenv cx es s ==>
+            stmt_state_rel H' ctx func cenv cx es t) /\
       gas_marked_path F ctx func s 0 (OK t) /\
       t.vs_current_bb = sb.cs_current_bb /\
       t.vs_inst_idx = LENGTH sb.cs_current_insts /\
@@ -274,6 +276,12 @@ Proof
       LENGTH (emitted_insts sa sb)` by metis_tac[LENGTH_APPEND] >>
   simp[gas_marked_path_def] >> strip_tac >>
   qexists `t with vs_inst_idx := LENGTH sb.cs_current_insts` >>
+  conj_tac >- first_assum ACCEPT_TAC >>
+  conj_tac
+  >- (rpt strip_tac >>
+      qspecl_then [`H'`, `ctx`, `func`, `cenv`, `cx`, `es`, `sa`, `sb`, `s`, `t`, `V`]
+        mp_tac tuple_load_run_lift >>
+      impl_tac >- (rpt conj_tac >> first_assum ACCEPT_TAC) >> simp[]) >>
   asm_rewrite_tac[] >> simp[same_blocks_def] >>
   conj_tac >- (rpt strip_tac >> gvs[lookup_var_def]) >>
   qx_gen_tac `i` >> strip_tac >>
