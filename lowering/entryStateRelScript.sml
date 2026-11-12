@@ -22,7 +22,7 @@ Ancestors
   e2eDefs vyperLoweringCorrect entryDecodePlanProps entryArgPtrs fragExec entryDispatchProps
   compileEnv loweringStateRelDefs compileVyper moduleLowering supportedProgram supportedNames
   supportedDecls immutableLocationProps immutableSectionRel immutableRelation
-  structFieldsProps
+  structFieldsProps externalBodySupport
   vyperTypeContract vyperTypeContractStaticMaps vyperTypeContractContext
   vyperTypeContractGetter
   vyperInterpreter vyperState vyperContext vyperAST vyperValue vyperTypeDefaults

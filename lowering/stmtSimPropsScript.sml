@@ -478,6 +478,5 @@ Theorem gas_marked_exec_valid_prefix:
 Proof
   rw[gasSummaryTheory.gas_marked_exec_def] >>
   first_x_assum (qspec_then `[]` assume_tac) >>
-  drule_at (Pos (el 2)) vyperStorageFootprintTheory.valid_horizon_frame >>
-  simp[]
+  drule_at (Pos (el 2)) vyperStorageFootprintTheory.valid_horizon_frame >> simp[]
 QED

@@ -231,6 +231,8 @@ Resume evaluate_unwritten_local[struct]:
 QED
 Resume evaluate_unwritten_local[subscript]:
   rpt strip_tac >> gvs[Once evaluate_def, bind_def, AllCaseEqs()] >>
+  Cases_on `subscript_reads_base cx e e'` >>
+  gvs[bind_def, return_def, AllCaseEqs()] >>
   imp_res_tac read_result_state >> imp_res_tac select_result_state >>
   trace_scopes_tac >> metis_tac[]
 QED

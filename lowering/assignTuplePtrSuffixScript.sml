@@ -13,8 +13,8 @@ Libs
   monadsyntax
 
 Theorem assign_tuple_targets_suffix_ptr:
-  expr_post ctx func cenv cx e es sa su s0 ee v op sv /\
-  stmt_state_rel ctx func cenv cx es s0 /\
+  expr_post H ctx func cenv cx e es sa su s0 ee v op sv /\
+  stmt_state_rel H ctx func cenv cx es s0 /\
   MAP FDOM ee.scopes = MAP FDOM es.scopes /\
   sv.vs_current_bb = su.cs_current_bb /\
   sv.vs_inst_idx = LENGTH su.cs_current_insts /\ ~sv.vs_halted /\
@@ -44,16 +44,16 @@ Theorem assign_tuple_targets_suffix_ptr:
   fn_has_code su sl func /\ fn_has_code sl ss func /\ fn_has_code ss sf func /\
   fn_inst_ids_distinct func /\ local_ptrs_reserved cenv sa /\
   ~ctx_has_dalloca ctx /\ ptr_val_ok cx (TupleT tys) v op G tn sv /\
-  ptr_buf_ok cenv e op G sv /\ ghost_inv d cenv cx ee G tn sv /\
+  ptr_buf_ok cenv e op G sv /\ ghost_inv H d cenv cx ee G tn sv /\
   (!x sz. cenv.ce_return_buf = SOME (PtrVar (Var x) sz) ==> not_fresh_at sa x) /\
   (!x sz. cenv.ce_return_pc = SOME (PtrVar (Var x) sz) ==> not_fresh_at sa x) ==>
   ?ee' t G' tn'.
     (!tail. assign_tuple_targets cx (TupleTarget gs) v (ee with gas_obs := tail) =
       (INL (),ee' with gas_obs := tail)) /\
     gas_path_ptr D 0 ctx func PG G tn sv 0 G' tn' (OK t) /\
-    stmt_post ctx func cx lctx cenv cenv sa sf es s0 (INL ())
+    stmt_post H ctx func cx lctx cenv cenv sa sf es s0 (INL ())
       (ee' with gas_obs := []) t /\
-    ghost_inv d cenv cx ee' G' tn' t /\
+    ghost_inv H d cenv cx ee' G' tn' t /\
     (!x. not_fresh_at sa x ==> FLOOKUP G' x = FLOOKUP G x /\
       op_taint tn' (Var x) = op_taint tn (Var x))
 Proof
@@ -102,7 +102,7 @@ Resume assign_tuple_targets_suffix_ptr[prefix]:
      disch_then (qspecl_then [`cenv`, `TupleT tys`, `e`, `sa`] mp_tac) >>
      simp[ci_mono_def]) >>
   drule_all expr_post_alloca_frame >> strip_tac >>
-  qpat_x_assum `expr_post _ _ _ _ _ _ _ _ _ _ _ _ _`
+  qpat_x_assum `expr_post _ _ _ _ _ _ _ _ _ _ _ _ _ _`
     (strip_assume_tac o REWRITE_RULE [expr_post_def]) >>
   `post_value_type cenv e = expr_type e` by simp[post_value_type_lowered] >>
   `expr_val_rel cx (TupleT tys) (ArrayV (TupleV vs)) op sv /\

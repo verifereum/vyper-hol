@@ -507,7 +507,7 @@ QED
    fits under the root's declared capacity, so storage_layout_safe and
    contract_storage_well_formed, both in expr_sim_inv, give slots_in_range
    (vyperPlaceStoragePreservation.storage_place_region_slots_in_range) and
-   liveness (accountsRelProps.storage_place_region_read_live).  No
+   liveness (accountsRelProps.storage_place_observed_read_live).  No
    slot-separation premise and no frame on the indices. *)
 Theorem aug_place_target_storage_ready[local]:
   storage_layout_safe cx /\ contract_storage_well_formed cx st /\
@@ -523,7 +523,7 @@ Proof
   conj_tac
   >- (drule_all vyperPlaceStoragePreservationTheory.storage_place_region_slots_in_range >>
       simp[]) >>
-  irule accountsRelPropsTheory.storage_place_region_read_live >> simp[]
+  irule accountsRelPropsTheory.storage_place_observed_read_live >> simp[]
 QED
 
 Theorem aug_place_storage_source_ready[local]:

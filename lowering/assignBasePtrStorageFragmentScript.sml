@@ -27,9 +27,6 @@ Theorem assign_base_storage_code_parts:
     compile_assign_value cenv (Lit slot)
       (if tr then LocTransient else LocStorage) op (is_word_type vtyp)
       (vv_location vv) vtyp (lowered_value_type cenv e)
-      (case vtyp of ArrayT elem (Dynamic _) =>
-         SOME ((type_memory_bytes cenv elem + 31) DIV 32,
-               type_memory_bytes cenv elem) | _ => NONE)
       (type_memory_bytes cenv vtyp) sB = ((),sf)
 Proof
   strip_tac >>
@@ -67,14 +64,15 @@ Proof
 QED
 
 Theorem assign_base_storage_suffix_open[local]:
-  ~is_bytestring_type ty /\ ~block_is_terminated sa /\
+  ~is_bytestring_type ty /\ ~is_abi_dynamic cenv.ce_struct_fields ty /\
+  type_memory_bytes cenv ty = capacity /\ ~block_is_terminated sa /\
   compile_assign_value cenv (Lit k) (if tr then LocTransient else LocStorage)
-    (Var root) F loc ty ty NONE capacity sa = (z,sb) ==>
+    (Var root) F loc ty ty capacity sa = (z,sb) ==>
   ~block_is_terminated sb
 Proof
-  strip_tac >> drule assign_base_storage_direct_code >> strip_tac >>
-  qpat_x_assum `compile_assign_value _ _ _ _ _ _ _ _ _ _ _ = _` mp_tac >>
-  asm_rewrite_tac[] >> Cases_on `capacity <= 32` >>
+  strip_tac >> drule_all assign_base_storage_direct_code >> strip_tac >>
+  qpat_x_assum `compile_assign_value _ _ _ _ _ _ _ _ _ _ = _` mp_tac >>
+  asm_rewrite_tac[] >> Cases_on `capacity DIV 32 = 1` >>
   simp[comp_bind_def, comp_ignore_bind_def, comp_return_def]
   >- (pairarg_tac >> simp[] >> strip_tac >> gvs[] >>
       drule emit_void_terminated >>
@@ -90,6 +88,7 @@ Theorem compile_assign_storage_copy_eq_frag_ptr:
   type_stmt env ret (Assign (BaseTarget (TopLevelNameTarget nid)) e) = SOME env' /\
   supported_storage_type tops (expr_type e) /\ ~is_word_type (expr_type e) /\
   (!elem n. expr_type e <> ArrayT elem (Dynamic n)) /\
+  ~is_abi_dynamic cenv.ce_struct_fields (expr_type e) /\
   evaluate_type (get_tenv cx) (expr_type e) = SOME tv /\
   well_formed_type_value tv /\
   (storage_vars_rel cenv cx /\ transient_vars_rel cenv cx ==>
@@ -180,16 +179,12 @@ Resume compile_assign_storage_copy_eq_frag_ptr[operand]:
   suspend "counted"
 QED
 Resume compile_assign_storage_copy_eq_frag_ptr[counted]:
-  `(case expr_type e of ArrayT elem (Dynamic _) =>
-      SOME ((type_memory_bytes cenv elem + 31) DIV 32,
-            type_memory_bytes cenv elem) | _ => NONE) = NONE` by
-    (Cases_on `expr_type e` >> simp[] >> Cases_on `b'` >> simp[] >> metis_tac[]) >>
-  qpat_x_assum `compile_assign_value _ _ _ _ _ _ _ _ _ _ _ = _` mp_tac >>
+  qpat_x_assum `compile_assign_value _ _ _ _ _ _ _ _ _ _ = _` mp_tac >>
   asm_rewrite_tac[] >> strip_tac >>
   `stmt_state_rel H ctx func cenv cx (es_end with gas_obs := []) t` by simp[] >>
   `compile_assign_value cenv (Lit k) (if tr then LocTransient else LocStorage)
      (Var root) F (vv_location vv) (expr_type e) (lowered_value_type cenv e)
-     NONE (type_memory_bytes cenv (expr_type e)) sB = ((),sb)` by metis_tac[] >>
+     (type_memory_bytes cenv (expr_type e)) sB = ((),sb)` by metis_tac[] >>
   drule_all assign_base_storage_typed_counted >>
   disch_then (qspecl_then [`cx_dead H cx`, `PG`] strip_assume_tac) >>
   suspend "post"
@@ -260,7 +255,7 @@ Resume compile_assign_storage_copy_eq_frag_ptr[open]:
   `~block_is_terminated sB` by metis_tac[unwrap_value_open] >>
   `~block_is_terminated sb` by
     (irule assign_base_storage_suffix_open >>
-     goal_assum (drule_at (Pat `compile_assign_value _ _ _ _ _ _ _ _ _ _ _ = _`)) >>
+     goal_assum (drule_at (Pat `compile_assign_value _ _ _ _ _ _ _ _ _ _ = _`)) >>
      simp[] >> metis_tac[assign_base_storage_not_bytestring]) >>
   suspend "finish"
 QED
@@ -294,6 +289,7 @@ Theorem compile_assign_storage_copy_stmt_frag_ptr:
   type_stmt env ret (Assign (BaseTarget (TopLevelNameTarget nid)) e) = SOME env' /\
   supported_storage_type tops (expr_type e) /\ ~is_word_type (expr_type e) /\
   (!elem n. expr_type e <> ArrayT elem (Dynamic n)) /\
+  ~is_abi_dynamic cenv.ce_struct_fields (expr_type e) /\
   evaluate_type (get_tenv cx) (expr_type e) = SOME tv /\
   well_formed_type_value tv /\
   (storage_vars_rel cenv cx /\ transient_vars_rel cenv cx ==>

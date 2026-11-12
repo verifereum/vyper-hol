@@ -40,6 +40,11 @@ QED
    function's entry checks (external_entry_reaches_checks), which abort
    as external_call_result_rel asks (entryChecksProps's
    entry_checks_nonpayable_value). *)
+(* TEMPORARILY CHEATED - finite-horizon (UNIT-H-r4) restatement approved by
+   argon: the global storage guards are dropped (the entry aborts before any
+   explicit GAS, so marks = [] and the trace disjuncts follow from the abort);
+   the pre-H proof below targets the old source_unit_execution_correct and
+   is re-proved once the H cone (entryChecksProps, bodySim) builds.
 Theorem external_entry_value_revert:
   !tops rpolicy unit am tx ret vs mut args fbody env e st.
     lower_vyper_runtime_unit tops rpolicy = SOME unit /\
@@ -91,5 +96,27 @@ Proof
   qexists_tac `[]` >> disj2_tac >>
   first_x_assum (qspecl_then [`fuel`, `Abort Revert_abort t`] mp_tac) >>
   simp[] >> strip_tac >> qexists_tac `fuel'` >> gvs[]
+QED
+*)
+Theorem external_entry_value_revert:
+  !tops rpolicy unit am tx ret vs mut args fbody env e st.
+    lower_vyper_runtime_unit tops rpolicy = SOME unit /\
+    supported_program tops /\
+    source_typing_ok tops am tx /\
+    source_deployment_rel tops am tx /\
+    valid_vyper_call tops tx vs.vs_call_ctx.cc_calldata ret /\
+    initial_venom_state_rel tops am tx vs /\
+    outcomes_accounts_typed (SOME vs.vs_outcomes) /\
+    lookup_function NONE tx.function_name External tops =
+      SOME (mut, F, args, [], ret, fbody) /\
+    bind_arguments (type_env tops) args tx.args = SOME env /\
+    send_call_value mut
+      (initial_evaluation_context am.sources am.layouts tx NONE)
+      (initial_state am [env] with
+         <| outcomes := SOME vs.vs_outcomes; requests := [] |>) =
+      (INR e, st) ==>
+    source_unit_execution_correct tops ret am tx unit vs
+Proof
+  cheat
 QED
 

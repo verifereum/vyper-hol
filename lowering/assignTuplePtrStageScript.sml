@@ -183,7 +183,7 @@ QED
 
 Resume optional_tuple_stage_run_ptr[frame]:
   `!x. not_fresh_at sa x ==> lookup_var x u = lookup_var x s` by metis_tac[] >>
-  qpat_assum `stmt_state_rel ctx func cenv cx es s`
+  qpat_assum `stmt_state_rel _ ctx func cenv cx es s`
     (mp_then (Pos hd) mp_tac stmtSimDefsTheory.alloca_frame_of_mem_frame) >>
   disch_then irule >> rpt conj_tac
   >- (rpt strip_tac >>
@@ -194,7 +194,7 @@ Resume optional_tuple_stage_run_ptr[frame]:
          simp[]) >>
       `aid <> sa.cs_next_id` by decide_tac >>
       `allocas_non_overlapping t` by
-        (qpat_x_assum `stmt_state_rel ctx func cenv cx es t` mp_tac >>
+        (qpat_x_assum `stmt_state_rel _ ctx func cenv cx es t` mp_tac >>
          simp[stmt_state_rel_def, venomMemDefsTheory.alloca_inv_def]) >>
       `off + asz <= b \/ b + type_memory_size_list tvs <= off` by
         (qpat_x_assum `allocas_non_overlapping t`

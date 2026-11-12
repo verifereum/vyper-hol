@@ -156,6 +156,12 @@ Theorem compile_annassign_relayout_stmt_frag:
 Proof
   rpt gen_tac >> disch_then (MAP_EVERY assume_tac o CONJUNCTS) >>
   simp[stmt_frag_def, stmt_framed_frag_def] >> rpt gen_tac >> strip_tac >>
+  reverse (Cases_on `storage_trace_domain cx st0 es.storage_trace`)
+  >- (rewrite_tac[gas_outcome_def] >> qexists_tac `[]` >> disj1_tac >>
+      irule gasStorageTheory.gas_bad_storage_at_initial >>
+      simp[vyperStorageTraceTheory.evaluate_storage_trace_frame]) >>
+  `?H0. valid_horizon cx st0 H0 es.storage_trace` by
+    metis_tac[vyperStorageFootprintTheory.storage_trace_domain_def] >>
   drule_all annassign_relayout_code_parts >>
   disch_then (qx_choosel_then [`st`, `sA`, `sV`, `sB`, `vv`, `op`, `p`] strip_assume_tac) >>
   rename1 `declare_local cenv id typ sa = (c,st)` >>
@@ -171,25 +177,26 @@ Proof
     (conj_tac >- metis_tac[type_memory_bytes_struct_fields] >>
      rpt strip_tac >> irule allocLimitsPropsTheory.lowered_value_type_frame >>
      conj_tac >> first_assum ACCEPT_TAC) >>
-  `stmt_state_rel ctx func c cx es s0` by
-    (irule stmt_state_rel_declare_local_entry >> metis_tac[]) >>
+  `!H. valid_horizon cx st0 H es.storage_trace ==>
+     stmt_state_rel H ctx func c cx es s0` by
+    (rpt strip_tac >> irule stmt_state_rel_declare_local_entry >> metis_tac[]) >>
   `not_local_ptr c es.scopes p` by metis_tac[local_ptrs_reserved_not_live] >>
   `s0.vs_current_bb = st.cs_current_bb /\
    s0.vs_inst_idx = LENGTH st.cs_current_insts` by
     (drule_all declare_local_ptr >> simp[] >> strip_tac >> gvs[]) >>
-  drule_all annassign_alloca_operand_framed_path >>
+  drule_all (SRULE [PULL_EXISTS] annassign_alloca_operand_framed_path) >>
   disch_then (qx_choosel_then [`salloc`, `w`] strip_assume_tac) >>
   `gas_admissible (bind (eval_expr cx e) (read_result cx)) expr_res_ok es` by
     (irule annassign_admissible_rhs >> metis_tac[]) >>
-  `gas_outcome F (cx_tops cx) (ctx,func)
+  `gas_outcome F (cx_tops cx) (ctx,func) cx st0
     (bind (eval_expr cx e) (read_result cx)) (es,salloc)
-    (\res ee t. ?v. res = INL v /\
-      expr_post ctx func c cx e es sA sB salloc ee v op t /\
+    (\H res ee t. ?v. res = INL v /\
+      expr_post H ctx func c cx e es sA sB salloc ee v op t /\
       t.vs_current_bb = sB.cs_current_bb /\
       t.vs_inst_idx = LENGTH sB.cs_current_insts)
-    (\res ee r. expr_exit res r)` by
+    (\H res ee r. expr_exit res r)` by
     (qpat_x_assum `expr_sim _ _ _ _ _ _ _` mp_tac >>
-     simp[expr_sim_def] >> disch_then irule >> gvs[]) >>
+     simp[expr_sim_def] >> disch_then irule >> gvs[] >> metis_tac[]) >>
   qmatch_asmsub_abbrev_tac `MEM ai (fn_insts func)` >>
   `ai.inst_opcode = ALLOCA /\ ai.inst_outputs = [p] /\
    FLOOKUP salloc.vs_allocas ai.inst_id =
@@ -220,7 +227,8 @@ Proof
     (drule_all declare_local_ptr >> strip_tac >>
      drule emit_inst_extends >> simp[Abbr `ai`, venomInstTheory.mk_inst_def] >>
      strip_tac >> gvs[]) >>
-  (irule annassign_outcome_entry_prefix >> simp[] >>
+  (irule annassign_outcome_entry_prefix >>
+  simp[vyperStorageTraceTheory.evaluate_storage_trace_frame] >>
   qexists_tac `salloc` >> simp[] >>
   irule annassign_relayout_rhs_outcome >>
   goal_assum (drule_at Any) >> simp[ci_mono_def] >>
