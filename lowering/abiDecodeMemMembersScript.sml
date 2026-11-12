@@ -1,7 +1,7 @@
 (* Conditional complex-member execution and endpoint-owned allocation frames. *)
 Theory abiDecodeMemMembers
 Ancestors
-  abiDecodeMemMemberPointer abiDecoderFrame abiDecoderEffect abiDecoderMemberSetup abiDecoderMemberCode
+  abiDecodeMemMemberPointer abiDecoderFrame abiDecoderEffect abiDecoderMemberSetup abiDecoderMemberCode abiDecoderMemberCons
   abiEncoder fragGasPathMem fragGasMode fragExec allocaHistory
   abiDecodeMemBytesGuards venomExecSemantics venomState
   finite_map pred_set list rich_list arithmetic words compileEnv emitHelper
@@ -130,3 +130,270 @@ Resume abi_decode_member_setup_path_mem[accept]:
   qexists_tac `t'` >> gvs[word_add_n2w] >> metis_tac[]
 QED
 Finalise abi_decode_member_setup_path_mem
+
+Theorem abi_decode_mem_members_anchored[local]:
+  !(K:num -> bool). let AS = (\xs. SUM (MAP (\(di,a,m). a) xs));
+      MS = (\xs. SUM (MAP (\(di,a,m). m) xs));
+      P = (\u. mem_bytes_at B H u.vs_memory = mem_bytes_at B H anchor.vs_memory /\
+                (!p. K p ==> mload p u = mload p anchor) /\
+                u.vs_call_ctx = anchor.vs_call_ctx /\
+                u.vs_data_section = anchor.vs_data_section);
+      E = (\q u. P u /\ fresh_vars_wrt q u /\ alloca_inv u /\
+                alloca_room ctx func u /\ alloca_history func u /\
+                ~u.vs_halted /\ u.vs_current_bb = q.cs_current_bb /\
+                u.vs_inst_idx = LENGTH q.cs_current_insts /\
+                B + H <= u.vs_alloca_next /\
+                eval_operand src u = SOME (n2w sb) /\
+                eval_operand dst u = SOME (n2w d) /\
+                eval_operand bop u = SOME (n2w B) /\
+                eval_operand hi u = SOME (n2w H));
+      R = (\q r out sz u v.
+                E r v /\ u.vs_alloca_next <= v.vs_alloca_next /\
+                (!op w. eval_operand op u = SOME w ==> eval_operand op v = SOME w) /\
+                (!id. id < q.cs_next_id \/ r.cs_next_id <= id ==>
+                   FLOOKUP v.vs_allocas id = FLOOKUP u.vs_allocas id) /\
+                ?fp. (!p n. MEM (p,n) fp <=>
+                        ?id. q.cs_next_id <= id /\ id < r.cs_next_id /\
+                             FLOOKUP v.vs_allocas id = SOME (p,n)) /\
+                     abi_decode_footprint_frame ((out,sz)::fp) u v);
+      Q = (\q r out sz u.
+                (?v. gas_path_mem ctx func u 0 (OK v) /\ R q r out sz u v) \/
+                (?v. gas_marked_path T ctx func u 0 (Abort Revert_abort v)))
+  in
+    compile_abi_decode_complex_elems dst src MLOAD bop hi elems ao vo st = ((),final) /\
+    hi <> Lit 0w /\ fn_has_code st final func /\ fn_inst_ids_distinct func /\
+    E st s /\ sb < dimword (:256) /\ B + H < dimword (:256) /\
+    sb + ao + AS elems <= H /\ d + vo + MS elems < dimword (:256) /\
+    d + vo + MS elems <= s.vs_alloca_next /\
+    EVERY (\(di,a,m). (dec_info_needs_offset di ==> 32 <= a) /\
+                          (!c. di = DecPrimWord c ==> 32 <= a)) elems /\
+    (!pre di a m post q r cs cd u.
+        elems = pre ++ (di,a,m)::post /\
+        st.cs_next_id <= q.cs_next_id /\ r.cs_next_id <= final.cs_next_id /\
+        compile_abi_decode_to_buf cd cs MLOAD bop hi di q = ((),r) /\
+        fn_has_code q r func /\ E q u /\
+        abi_decoder_operand_live q.cs_next_var cs /\
+        abi_decoder_operand_live q.cs_next_var cd /\
+        eval_operand cd u = SOME (n2w (d + vo + MS pre)) /\
+        (let off = if dec_info_needs_offset di
+                   then w2n (mload (B + sb + ao + AS pre) u)
+                   else ao + AS pre
+         in sb + off < dimword (:256) /\
+            eval_operand cs u = SOME (n2w (sb + off)))
+        ==> Q q r (d + vo + MS pre) m u)
+    ==> Q st final (d + vo) (MS elems) s
+Proof
+  map_every qid_spec_tac [`s`,`st`,`final`,`ao`,`vo`] >>
+  Induct_on `elems`
+  >- suspend "nil" >>
+  suspend "cons"
+QED
+Resume abi_decode_mem_members_anchored[nil]:
+  rpt gen_tac >> rpt BasicProvers.LET_ELIM_TAC >>
+  gvs[Once compile_abi_decode_to_buf_def, comp_return_def] >>
+  simp[Abbr `Q`, Abbr `R`] >> disj1_tac >>
+  qexists_tac `s` >> simp[] >>
+  conj_tac >- (irule (cj 1 gas_path_mem_rules) >> gvs[Abbr `E`]) >>
+  qexists_tac `[]` >> simp[abi_decode_footprint_frame_refl]
+QED
+Resume abi_decode_mem_members_anchored[cons]:
+  pop_assum (mk_asm "ih") >>
+  rpt gen_tac >> PairCases_on `h` >> rpt BasicProvers.LET_ELIM_TAC >>
+  qpat_x_assum `compile_abi_decode_complex_elems _ _ _ _ _ _ _ _ _ = _` mp_tac >>
+  pure_rewrite_tac[abi_decode_complex_member_phases] >>
+  simp_tac bool_ss [comp_bind_def, comp_ignore_bind_def, LET_THM] >>
+  pairarg_tac >> strip_tac >> gvs[] >> pairarg_tac >> gvs[] >>
+  `abi_decode_source_opcode MLOAD` by simp[abiDecoderContractTheory.abi_decode_source_opcode_def] >>
+  drule_all abi_decoder_member_cons_code >> strip_tac >>
+  `fn_has_code st cs' func` by metis_tac[fn_has_code_split] >>
+  `fresh_vars_wrt st s /\ alloca_inv s /\ alloca_history func s /\
+   ~s.vs_halted /\ s.vs_current_bb = st.cs_current_bb /\
+   s.vs_inst_idx = LENGTH st.cs_current_insts /\
+   eval_operand src s = SOME (n2w sb) /\
+   eval_operand dst s = SOME (n2w d) /\
+   eval_operand bop s = SOME (n2w B) /\ B+H <= s.vs_alloca_next` by
+    fs[Abbr `E`] >>
+  `B+sb+ao < dimword (:256) /\
+   (dec_info_needs_offset h0 ==> B+sb+ao+32 <= s.vs_alloca_next)` by
+    (Cases_on `dec_info_needs_offset h0` >> fs[Abbr `AS`] >> decide_tac) >>
+  `sb < dimword (:256)` by (fs[Abbr `AS`] >> decide_tac) >>
+  `(dec_info_needs_offset h0 ==> eval_operand bop s = SOME (n2w B) /\
+      B+sb+ao < dimword (:256) /\ B+sb+ao+32 <= s.vs_alloca_next)` by
+    metis_tac[] >>
+  drule_all abi_decode_member_setup_path_mem >>
+  disch_then (qspec_then `ctx` strip_assume_tac) >>
+  Cases_on `dec_info_needs_offset h0 /\
+    dimword (:256) <= sb + w2n (mload (B+sb+ao) s)`
+  >- (simp[Abbr `Q`] >> metis_tac[]) >>
+  `dec_info_needs_offset h0 ==>
+    sb + w2n (mload (B+sb+ao) s) < dimword (:256)` by
+      (strip_tac >> fs[]) >>
+  first_x_assum (drule_then strip_assume_tac) >>
+  suspend "child_entry"
+QED
+Resume abi_decode_mem_members_anchored[child_entry]:
+  `alloca_inv t` by metis_tac[localPtrsPropsTheory.alloca_inv_fields] >>
+  `alloca_room ctx func t` by
+    (irule alloca_room_fields >> qexists_tac `s` >> fs[Abbr `E`]) >>
+  `P t` by (fs[Abbr `P`, Abbr `E`] >> metis_tac[mload_def]) >>
+  `E cs' t` by (fs[Abbr `E`] >> metis_tac[]) >>
+  drule abi_decode_member_setup_counters >> strip_tac >>
+  `fn_has_code cs' cs'' func` by metis_tac[fn_has_code_split] >>
+  `Q cs' cs'' (d+vo) h2 t` by
+    (qpat_assum `!pre di a m post q r cs cd u off. _`
+      (qspec_then `[]` mp_tac) >>
+     simp_tac (srw_ss()) [Abbr `AS`, Abbr `MS`] >>
+     disch_then (drule_at (Pat `compile_abi_decode_to_buf _ _ _ _ _ _ _ = _`)) >>
+     disch_then (qspec_then `t` mp_tac) >>
+     simp[markerTheory.Abbrev_def, AC ADD_ASSOC ADD_COMM] >>
+     disch_then irule >>
+     Cases_on `dec_info_needs_offset h0` >> fs[mload_def] >> decide_tac) >>
+  qpat_x_assum `Q cs' cs'' _ _ t` mp_tac >>
+  qpat_assum `Abbrev (Q = _)`
+    (fn th => rewrite_tac [REWRITE_RULE [markerTheory.Abbrev_def] th]) >>
+  BETA_TAC >> strip_tac
+  >- suspend "child_success" >>
+  disj2_tac >>
+  fs[gas_marked_path_def] >>
+  metis_tac[gas_path_mem_then, arithmeticTheory.ADD_CLAUSES]
+QED
+Resume abi_decode_mem_members_anchored[child_success]:
+  rename1 `R cs' cs'' (d+vo) h2 t v` >>
+  `E cs'' v /\ s.vs_alloca_next <= v.vs_alloca_next` by
+    (fs[Abbr `R`] >> decide_tac) >>
+  `Q cs'' final (d+(h2+vo)) (MS elems) v` by
+    (asm "ih" (qspecl_then [`h2+vo`,`ao+h1`,`final`,`cs''`,`v`,`K'`] mp_tac) >>
+     simp_tac bool_ss [LET_THM] >>
+     impl_tac
+     >- suspend "tail_premises" >>
+     simp[Abbr `Q`, Abbr `R`, Abbr `E`, Abbr `P`]) >>
+  suspend "compose_endpoints"
+QED
+Resume abi_decode_mem_members_anchored[tail_premises]:
+  `sb + (ao+h1) + AS elems <= H /\
+   d + (h2+vo) + MS elems < dimword (:256) /\
+   d + (h2+vo) + MS elems <= v.vs_alloca_next` by
+    (fs[Abbr `AS`, Abbr `MS`] >> decide_tac) >>
+  simp[Abbr `E`, Abbr `P`] >>
+  conj_tac >- fs[] >>
+  suspend "tail_children"
+QED
+Resume abi_decode_mem_members_anchored[tail_children]:
+  rpt gen_tac >> strip_tac >>
+  qpat_x_assum `!pre di a m post q r cs cd u off. _`
+    (qspec_then `(h0,h1,h2)::pre` mp_tac) >>
+  simp_tac (srw_ss()) [markerTheory.Abbrev_def, Abbr `AS`, Abbr `MS`,
+    Abbr `Q`, Abbr `R`, AC ADD_ASSOC ADD_COMM] >>
+  disch_then (drule_at (Pat `compile_abi_decode_to_buf _ _ _ _ _ _ _ = _`)) >>
+  disch_then (qspecl_then [`a`,`m`,`post`,`u`] mp_tac) >>
+  fs[AC ADD_ASSOC ADD_COMM] >>
+  disch_then irule >> decide_tac
+QED
+Resume abi_decode_mem_members_anchored[compose_endpoints]:
+  qpat_x_assum `Q cs'' final _ _ v` mp_tac >>
+  simp[Abbr `Q`] >> strip_tac
+  >- suspend "compose_success" >>
+  disj2_tac >> fs[gas_marked_path_def] >>
+  `gas_path_mem ctx func s 0 (OK v)` by
+    metis_tac[gas_path_mem_then, arithmeticTheory.ADD_CLAUSES] >>
+  metis_tac[gas_path_mem_then, arithmeticTheory.ADD_CLAUSES]
+QED
+Resume abi_decode_mem_members_anchored[compose_success]:
+  rename1 `R cs'' final _ _ v z` >>
+  `gas_path_mem ctx func s 0 (OK z)` by
+    metis_tac[gas_path_mem_then, arithmeticTheory.ADD_CLAUSES] >>
+  disj1_tac >> qexists_tac `z` >> simp[] >>
+  qpat_x_assum `R cs' cs'' _ _ t v` mp_tac >>
+  qpat_x_assum `R cs'' final _ _ v z` mp_tac >>
+  simp[Abbr `R`] >> ntac 2 strip_tac >>
+  suspend "compose_resources"
+QED
+Resume abi_decode_mem_members_anchored[compose_resources]:
+  asm_x "ih" kall_tac >>
+  qpat_x_assum `!pre di a m post q r cs cd u off. _` kall_tac >>
+  conj_tac
+  >- (rpt strip_tac >>
+      `id < cs'.cs_next_id \/ cs''.cs_next_id <= id` by decide_tac >>
+      `id < cs''.cs_next_id \/ final.cs_next_id <= id` by decide_tac >>
+      metis_tac[]) >>
+  `?owned. (!p n. MEM (p,n) owned <=>
+      ?id. cs'.cs_next_id <= id /\ id < final.cs_next_id /\
+        FLOOKUP z.vs_allocas id = SOME (p,n)) /\
+    abi_decode_footprint_frame ((d+vo,MS ((h0,h1,h2)::elems))::owned) t z` by
+    (irule abi_decode_mem_owned_frames_compose >>
+     goal_assum (drule_at (Pat `abi_decode_footprint_frame _ _ _`)) >>
+     goal_assum (drule_at (Pat `abi_decode_footprint_frame _ _ _`)) >>
+     qexists_tac `cs''.cs_next_id` >>
+     simp[Abbr `MS`] >> rpt conj_tac >> simp[] >>
+     rpt strip_tac >> first_x_assum irule >> decide_tac) >>
+  suspend "setup_frame"
+QED
+Resume abi_decode_mem_members_anchored[setup_frame]:
+  qspecl_then [`st.cs_next_id`,`final.cs_next_id`,`z.vs_allocas`]
+    strip_assume_tac abi_decode_mem_owned_footprint_exists >>
+  qexists_tac `fp''` >> simp[] >>
+  `abi_decode_footprint_frame ((d+vo,MS ((h0,h1,h2)::elems))::fp'') t z` by
+    (irule abi_decode_mem_owned_frame_widen >>
+     goal_assum (drule_at (Pat `abi_decode_footprint_frame _ _ _`)) >>
+     goal_assum (drule_at Any) >>
+     qexistsl_tac [`final.cs_next_id`,`cs'.cs_next_id`] >> simp[] >>
+     metis_tac[arithmeticTheory.LESS_IMP_LESS_OR_EQ]) >>
+  fs[abi_decode_footprint_frame_def]
+QED
+Finalise abi_decode_mem_members_anchored
+
+
+Theorem abi_decode_mem_members:
+  !(K:num -> bool). let AS = (\xs. SUM (MAP (\(di,a,m). a) xs));
+      MS = (\xs. SUM (MAP (\(di,a,m). m) xs));
+      P = (\u. mem_bytes_at B H u.vs_memory = mem_bytes_at B H s.vs_memory /\
+                (!p. K p ==> mload p u = mload p s) /\
+                u.vs_call_ctx = s.vs_call_ctx /\
+                u.vs_data_section = s.vs_data_section);
+      E = (\q u. P u /\ fresh_vars_wrt q u /\ alloca_inv u /\
+                alloca_room ctx func u /\ alloca_history func u /\
+                ~u.vs_halted /\ u.vs_current_bb = q.cs_current_bb /\
+                u.vs_inst_idx = LENGTH q.cs_current_insts /\
+                B + H <= u.vs_alloca_next /\
+                eval_operand src u = SOME (n2w sb) /\
+                eval_operand dst u = SOME (n2w d) /\
+                eval_operand bop u = SOME (n2w B) /\
+                eval_operand hi u = SOME (n2w H));
+      R = (\q r out sz u v.
+                E r v /\ u.vs_alloca_next <= v.vs_alloca_next /\
+                (!op w. eval_operand op u = SOME w ==> eval_operand op v = SOME w) /\
+                (!id. id < q.cs_next_id \/ r.cs_next_id <= id ==>
+                   FLOOKUP v.vs_allocas id = FLOOKUP u.vs_allocas id) /\
+                ?fp. (!p n. MEM (p,n) fp <=>
+                        ?id. q.cs_next_id <= id /\ id < r.cs_next_id /\
+                             FLOOKUP v.vs_allocas id = SOME (p,n)) /\
+                     abi_decode_footprint_frame ((out,sz)::fp) u v);
+      Q = (\q r out sz u.
+                (?v. gas_path_mem ctx func u 0 (OK v) /\ R q r out sz u v) \/
+                (?v. gas_marked_path T ctx func u 0 (Abort Revert_abort v)))
+  in
+    compile_abi_decode_complex_elems dst src MLOAD bop hi elems ao vo st = ((),final) /\
+    hi <> Lit 0w /\ fn_has_code st final func /\ fn_inst_ids_distinct func /\
+    E st s /\ sb < dimword (:256) /\ B + H < dimword (:256) /\
+    sb + ao + AS elems <= H /\ d + vo + MS elems < dimword (:256) /\
+    d + vo + MS elems <= s.vs_alloca_next /\
+    EVERY (\(di,a,m). (dec_info_needs_offset di ==> 32 <= a) /\
+                          (!c. di = DecPrimWord c ==> 32 <= a)) elems /\
+    (!pre di a m post q r cs cd u.
+        elems = pre ++ (di,a,m)::post /\
+        st.cs_next_id <= q.cs_next_id /\ r.cs_next_id <= final.cs_next_id /\
+        compile_abi_decode_to_buf cd cs MLOAD bop hi di q = ((),r) /\
+        fn_has_code q r func /\ E q u /\
+        abi_decoder_operand_live q.cs_next_var cs /\
+        abi_decoder_operand_live q.cs_next_var cd /\
+        eval_operand cd u = SOME (n2w (d + vo + MS pre)) /\
+        (let off = if dec_info_needs_offset di
+                   then w2n (mload (B + sb + ao + AS pre) u)
+                   else ao + AS pre
+         in sb + off < dimword (:256) /\
+            eval_operand cs u = SOME (n2w (sb + off)))
+        ==> Q q r (d + vo + MS pre) m u)
+    ==> Q st final (d + vo) (MS elems) s
+Proof
+  irule abi_decode_mem_members_anchored
+QED
