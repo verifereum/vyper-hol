@@ -6,7 +6,8 @@ Ancestors
 
 Definition w_cx_def:
   w_cx = empty_evaluation_context with <|
-    sources := [(0w, [(NONE, [])])]; stk := [(NONE, "walk")] |>
+    sources := [(0w, [(NONE, [])])]; stk := [(NONE, "walk")];
+    txn := empty_call_txn with <| block_number := 1; block_hashes := [0w] |> |>
 End
 
 Definition w_cenv_def:
@@ -64,6 +65,7 @@ End
 Definition w_s0_def:
   w_s0 = (init_venom_state "entry") with <|
     vs_vars := FEMPTY |+ ("local", 1024w);
+    vs_block_ctx := empty_block_context with bc_number := 1w;
     vs_memory := REPLICATE 1024 0w ++ word_to_bytes (1w:bytes32) T ++ word_to_bytes (7w:bytes32) T;
     vs_alloca_next := 2048;
     vs_fmp := 4096w; vs_initial_fmp := 4096w;
