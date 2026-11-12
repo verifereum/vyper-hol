@@ -10,7 +10,7 @@
 Theory exprSimSelfDestructPtr
 Ancestors
   exprSimSelfDestruct exprSimSelfDestructMem selfdestructHalt gasExemptOrigin
-  bodyPtrDefs gasSummaryComposePtr fragGasSeqPtr fragGasPathPtr
+  bodyPtrDefs codegenRel gasSummaryComposePtr fragGasSeqPtr fragGasPathPtr
   ptrSafeRun ptrDiscipline exprSimMemorySource exprSimUnwrap
   exprSimSource exprSimHypsDefs exprSimDefs exprSimSend exprSimAccounts
   loweringPosts gasContext gasSummary gasOutcome gasSummaryCompose
