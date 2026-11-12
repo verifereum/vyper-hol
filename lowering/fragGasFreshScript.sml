@@ -93,12 +93,12 @@ QED
 
 Theorem straight_fresh_run_post:
   straight_fresh m /\ m sa = (op,sb) /\ local_ptrs_reserved cenv sa /\
-  stmt_state_rel ctx func cenv cx es s0 /\ ~s0.vs_halted /\
+  stmt_state_rel H ctx func cenv cx es s0 /\ ~s0.vs_halted /\
   s0.vs_current_bb = sa.cs_current_bb /\
   run_inst_seq (emitted_insts sa sb) (drop_fresh sa s0) = OK t0 /\
   eval_operand op t0 = SOME w /\
   run_inst_seq (emitted_insts sa sb) s0 = OK t /\ vars_ext t0 t ==>
-  stmt_state_rel ctx func cenv cx es (t with vs_inst_idx := LENGTH sb.cs_current_insts) /\
+  stmt_state_rel H ctx func cenv cx es (t with vs_inst_idx := LENGTH sb.cs_current_insts) /\
   eval_operand op (t with vs_inst_idx := LENGTH sb.cs_current_insts) = SOME w /\
   (!z v. not_fresh_at sa z /\ lookup_var z s0 = SOME v ==>
     lookup_var z (t with vs_inst_idx := LENGTH sb.cs_current_insts) = SOME v) /\
@@ -117,7 +117,7 @@ Proof
     (fs[vars_ext_def] >>
      qpat_x_assum `t = t0 with vs_vars := _` SUBST1_TAC >>
      simp[eval_operand_vars_ext]) >>
-  `stmt_state_rel ctx func cenv cx es (s0 with vs_vars := t.vs_vars)` by
+  `stmt_state_rel H ctx func cenv cx es (s0 with vs_vars := t.vs_vars)` by
     (irule stmt_state_rel_vars_frame >> simp[] >> rpt strip_tac >>
      `not_fresh_at sa p` by (fs[local_ptrs_reserved_def] >> metis_tac[]) >>
      simp[lookup_var_def]) >>
