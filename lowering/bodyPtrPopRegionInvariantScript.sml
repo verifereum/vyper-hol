@@ -14,16 +14,16 @@ Definition pop_region_taint_ok_def:
 End
 
 Theorem pop_region_taint_entry:
-  storage_read_live cx tr st w tv /\
-  (!k b. (k,b) IN X ==> storage_dead cx tr st (w2n k) b) ==>
+  storage_read_live H tr st w tv /\
+  (!k b. (k,b) IN X ==> storage_dead H tr st (w2n k) b) ==>
   pop_region_taint_ok st (w2n w) tv X
 Proof
   simp[pop_region_taint_ok_def, storage_read_live_def] >> metis_tac[]
 QED
 
 Theorem pop_region_taint_storage_entry:
-  stor_taint_ok cx tn s /\ s.vs_call_ctx.cc_address = cx.txn.target /\
-  storage_read_live cx F (s.vs_accounts cx.txn.target).storage w tv ==>
+  stor_taint_ok H cx tn s /\ s.vs_call_ctx.cc_address = cx.txn.target /\
+  storage_read_live H F (s.vs_accounts cx.txn.target).storage w tv ==>
   pop_region_taint_ok (s.vs_accounts cx.txn.target).storage
     (w2n w) tv tn.t_stor
 Proof
@@ -33,8 +33,8 @@ Proof
 QED
 
 Theorem pop_region_taint_transient_entry:
-  stor_taint_ok cx tn s /\ s.vs_call_ctx.cc_address = cx.txn.target /\
-  storage_read_live cx T (s.vs_transient cx.txn.target) w tv ==>
+  stor_taint_ok H cx tn s /\ s.vs_call_ctx.cc_address = cx.txn.target /\
+  storage_read_live H T (s.vs_transient cx.txn.target) w tv ==>
   pop_region_taint_ok (s.vs_transient cx.txn.target)
     (w2n w) tv tn.t_trans
 Proof

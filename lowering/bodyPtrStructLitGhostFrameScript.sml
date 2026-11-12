@@ -14,15 +14,15 @@ Theorem ghost_inv_from_parts:
   return_buf_ptr d cenv G tn s /\
   (!x sz. cenv.ce_return_pc = SOME (PtrVar (Var x) sz) ==>
           op_taint tn (Var x) = {}) /\
-  stor_taint_ok cx tn s ==>
-  ghost_inv d cenv cx es G tn s
+  stor_taint_ok H cx tn s ==>
+  ghost_inv H d cenv cx es G tn s
 Proof
   rewrite_tac[ghost_inv_def] >> strip_tac >> asm_rewrite_tac[]
 QED
 
 Theorem ghost_inv_pc:
-  ghost_inv d cenv cx es G tn s ==>
-  ghost_inv d cenv cx es G tn
+  ghost_inv H d cenv cx es G tn s ==>
+  ghost_inv H d cenv cx es G tn
     (s with <|vs_current_bb := lbl; vs_inst_idx := idx|>)
 Proof
   Cases_on `d` >-

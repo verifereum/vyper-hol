@@ -29,14 +29,14 @@ QED
 
 Theorem literal_capacity_revert_resources:
   compile_bytelike_literal bs mx sa = (buf,sb) /\ LENGTH bs <= mx /\
-  stmt_state_rel ctx fn cenv cx es s /\ fn_has_code sa sb fn /\
+  stmt_state_rel H ctx fn cenv cx es s /\ fn_has_code sa sb fn /\
   fn_inst_ids_distinct fn /\ local_ptrs_reserved cenv sa /\
   ~ctx_has_dalloca ctx /\ 32+32*word_size mx < dimword(:256) ==>
   ?t b p Gf tnf.
     buf.buf_operand = Var p /\
     run_inst_seq (emitted_insts sa sb) s = OK t /\
     inst_seq_ptr D 0 ctx fn PG G tn (emitted_insts sa sb) s Gf tnf /\
-    stmt_state_rel ctx fn cenv cx es t /\
+    stmt_state_rel H ctx fn cenv cx es t /\
     lookup_var p t = SOME (n2w b) /\
     ptr_covers Gf tnf p t (32+contractABI$ceil32 (LENGTH bs)) /\
     mload b t = n2w (LENGTH bs) /\
@@ -50,9 +50,9 @@ Proof
   drule_all literal_capacity_bytelike_alloca_mem >> strip_tac >>
   `word_size (LENGTH bs) <= word_size mx` by
     (simp[word_size_def] >> irule DIV_LE_MONOTONE >> decide_tac) >>
-  `stmt_state_rel ctx fn cenv cx es t` by
+  `stmt_state_rel H ctx fn cenv cx es t` by
     (irule literal_ptr_state_memory_frame >>
-     goal_assum (drule_at (Pat `stmt_state_rel _ _ _ _ _ _`)) >>
+     goal_assum (drule_at (Pat `stmt_state_rel _ _ _ _ _ _ _`)) >>
      goal_assum (drule_at (Pat `MEM _ (fn_insts _)`)) >>
      qexistsl [`b`,`sa`,`sh`] >> asm_rewrite_tac[] >>
      rpt gen_tac >> disch_tac >>
@@ -86,7 +86,7 @@ Theorem compile_literal_revert_path_ptr:
   compile_revert_with_reason cenv (LocatedValue msg_ty (base_ptr buf))
     mt ms sm = ((),sb) /\ ~is_word_type msg_ty /\
   fn_has_code sa sm fn /\ fn_has_code sm sb fn /\
-  stmt_state_rel ctx fn cenv cx es s /\ fn_inst_ids_distinct fn /\
+  stmt_state_rel H ctx fn cenv cx es s /\ fn_inst_ids_distinct fn /\
   local_ptrs_reserved cenv sa /\ ~ctx_has_dalloca ctx /\
   32+32*word_size mx < dimword(:256) /\
   32+contractABI$ceil32 (LENGTH bs) <= ms /\ LENGTH bs+63 < dimword(:256) /\

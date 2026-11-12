@@ -86,7 +86,7 @@ Theorem pop_storage_empty_summary:
   (if tr then tload slot s else sload slot s) = 0w /\
   lookup_storage slot (get_storage cx es tr) = 0w /\
   key_taint (if tr then tn.t_trans else tn.t_stor) slot = {} ==>
-  gas_summary_ptr_at (cx_dead cx) (ctx,func) PG []
+  gas_summary_ptr_at (cx_dead H cx) (ctx,func) PG []
     (pop_place cx (StoragePlace tr slot (ArrayTV tv (Dynamic cap))))
     (es,s,G,tn) Q (\res ee gt r. expr_exit res r)
 Proof
@@ -96,14 +96,14 @@ Proof
     (gvs[EVERY_MEM] >> metis_tac[MEM]) >>
   drule_all nested_pop_suffix_empty >>
   disch_then (qspecl_then [`sa.cs_next_id`, `esz`] strip_assume_tac) >>
-  `inst_seq_ptr (cx_dead cx) 0 ctx func PG G tn
+  `inst_seq_ptr (cx_dead H cx) 0 ctx func PG G tn
     (nested_pop_suffix hdr tr sa.cs_next_id esz x0 x1 x2 x3 x4 x5 x6) s
     (DRESTRICT (DRESTRICT (DRESTRICT G (COMPL {x0})) (COMPL {x1})) (COMPL {x2}))
     (tn with t_var := tn.t_var |+ (x0,{}) |+ (x1,{}) |+ (x2,{}))` by
     (simp[nested_pop_suffix_def] >>
      irule (SRULE [APPEND, GSYM arithmeticTheory.ADD_ASSOC]
        pop_storage_slice_transfer_empty) >> simp[]) >>
-  `?j. gas_path_ptr (cx_dead cx) 0 ctx func PG G tn s 0
+  `?j. gas_path_ptr (cx_dead H cx) 0 ctx func PG G tn s 0
     (DRESTRICT (DRESTRICT (DRESTRICT G (COMPL {x0})) (COMPL {x1})) (COMPL {x2}))
     (tn with t_var := tn.t_var |+ (x0,{}) |+ (x1,{}) |+ (x2,{}))
     (Abort a (s' with vs_inst_idx := j))` by
@@ -133,7 +133,7 @@ Proof
 QED
 
 Theorem pop_storage_positive_vv_post:
-  target_post ctx func cenv cx es0 sa sm s0 es
+  target_post H ctx func cenv cx es0 sa sm s0 es
     (PlaceR (StoragePlace tr slot (ArrayTV tv (Dynamic cap))))
     (Type (ArrayT ann (Dynamic cap))) (hdr,loc,pt) s /\
   ci_mono sa sm /\ local_ptrs_reserved cenv sa /\
@@ -149,7 +149,7 @@ Theorem pop_storage_positive_vv_post:
        else sstore slot (n2w (len-1)) s) with vs_vars := u.vs_vars /\
   (!x. not_fresh_at sm x ==> lookup_var x u = lookup_var x s) /\
   eval_operand op u = SOME (slot + n2w (1 + (len-1) * type_slot_size tv)) ==>
-  vv_post ctx func cenv cx (Pop ann bt) es0 sa sb s0
+  vv_post H ctx func cenv cx (Pop ann bt) es0 sa sb s0
     (set_storage cx es tr (apply_writes slot [(0,n2w (len-1))] (get_storage cx es tr)))
     (PlaceR (StoragePlace tr (slot + n2w (1 + (len-1) * type_slot_size tv)) tv))
     (LocatedValue ann (mk_ptr op (if tr then LocTransient else LocStorage))) u
@@ -158,7 +158,7 @@ Proof
   `!x. not_fresh_at sa x ==> lookup_var x u = lookup_var x s` by
     (rpt strip_tac >> first_x_assum irule >>
      gvs[ci_mono_def, not_fresh_at_def] >> decide_tac) >>
-  `stmt_state_rel ctx func cenv cx
+  `stmt_state_rel H ctx func cenv cx
     (set_storage cx es tr (apply_writes slot
       [(0,n2w (w2n (lookup_storage slot (get_storage cx es tr))-1))]
       (get_storage cx es tr))) u` by

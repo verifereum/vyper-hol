@@ -59,13 +59,13 @@ Proof
 QED
 
 Theorem word_not_output_frame:
-  MEM opc [ISZERO; NOT; XOR] /\ ghost_inv d cenv cx es G tn s /\
+  MEM opc [ISZERO; NOT; XOR] /\ ghost_inv H d cenv cx es G tn s /\
   ghost_kept cenv es0 sc G0 tn0 s0 G tn /\
   (!n p sz. FLOOKUP cenv.ce_vars n = SOME (PtrVar (Var p) sz) ==> p <> x) /\
   (!p sz. d <> NONE /\ cenv.ce_return_buf = SOME (PtrVar (Var p) sz) ==> p <> x) /\
   (!p sz. cenv.ce_return_pc = SOME (PtrVar (Var p) sz) ==> p <> x) /\
   (!p. not_fresh_at sc p ==> p <> x) ==>
-  ghost_inv d cenv cx es
+  ghost_inv H d cenv cx es
     (step_prov PG G (mk_inst id opc args [x]) (update_var x w s))
     (step_taint (mk_inst id opc args [x]) s (update_var x w s) tn)
     (update_var x w s) /\
@@ -144,14 +144,14 @@ Theorem word_not_counted_frame:
   lookup_block s.vs_current_bb fn.fn_blocks = SOME bb /\
   get_instruction bb s.vs_inst_idx = SOME (mk_inst id opc args [x]) /\
   step_inst_base (mk_inst id opc args [x]) s = OK t /\
-  ghost_inv d cenv cx es G tn s /\ ghost_kept cenv es0 sc G0 tn0 s0 G tn /\
+  ghost_inv H d cenv cx es G tn s /\ ghost_kept cenv es0 sc G0 tn0 s0 G tn /\
   (!n p sz. FLOOKUP cenv.ce_vars n = SOME (PtrVar (Var p) sz) ==> p <> x) /\
   (!p sz. d <> NONE /\ cenv.ce_return_buf = SOME (PtrVar (Var p) sz) ==> p <> x) /\
   (!p sz. cenv.ce_return_pc = SOME (PtrVar (Var p) sz) ==> p <> x) /\
   (!p. not_fresh_at sc p ==> p <> x) ==>
   ?G' tn'. gas_path_ptr D lo ctx fn PG G tn s 0 G' tn'
     (OK (t with vs_inst_idx := SUC s.vs_inst_idx)) /\
-    ghost_inv d cenv cx es G' tn' (t with vs_inst_idx := SUC s.vs_inst_idx) /\
+    ghost_inv H d cenv cx es G' tn' (t with vs_inst_idx := SUC s.vs_inst_idx) /\
     ghost_kept cenv es0 sc G0 tn0 s0 G' tn' /\ op_taint tn' (Var x) = {} /\
     op_prov G' (Var x) = NONE
 Proof
@@ -163,7 +163,7 @@ Proof
   simp[word_interval_ghost_inv_index] >> metis_tac[]
 QED
 
-(* H retains the semantic post on this very runtime endpoint; it is not
+(* HG retains the semantic post on this very runtime endpoint; it is not
    an erased-path witness.  A pure source suffix has no gas observations. *)
 Theorem word_not_step_outcome:
   MEM opc [ISZERO; NOT; XOR] /\
@@ -172,16 +172,16 @@ Theorem word_not_step_outcome:
   lookup_block s.vs_current_bb fn.fn_blocks = SOME bb /\
   get_instruction bb s.vs_inst_idx = SOME (mk_inst id opc args [x]) /\
   step_inst_base (mk_inst id opc args [x]) s = OK t /\
-  ghost_inv d cenv cx es G tn s /\ ghost_kept cenv es0 sc G0 tn0 s0 G tn /\
+  ghost_inv H d cenv cx es G tn s /\ ghost_kept cenv es0 sc G0 tn0 s0 G tn /\
   (!n p sz. FLOOKUP cenv.ce_vars n = SOME (PtrVar (Var p) sz) ==> p <> x) /\
   (!p sz. d <> NONE /\ cenv.ce_return_buf = SOME (PtrVar (Var p) sz) ==> p <> x) /\
   (!p sz. cenv.ce_return_pc = SOME (PtrVar (Var p) sz) ==> p <> x) /\
   (!p. not_fresh_at sc p ==> p <> x) /\
   (!tail. source (es with gas_obs := tail) = (res,es with gas_obs := tail)) /\
-  H res (es with gas_obs := []) (t with vs_inst_idx := SUC s.vs_inst_idx) ==>
+  HG res (es with gas_obs := []) (t with vs_inst_idx := SUC s.vs_inst_idx) ==>
   gas_outcome_ptr D tops (ctx,fn) PG source (es,s,G,tn)
-    (\r ee G' tn' u. H r ee u /\
-      ghost_inv d cenv cx es G' tn' u /\
+    (\r ee G' tn' u. HG r ee u /\
+      ghost_inv H d cenv cx es G' tn' u /\
       ghost_kept cenv es0 sc G0 tn0 s0 G' tn' /\ op_taint tn' (Var x) = {} /\
     op_prov G' (Var x) = NONE) R
 Proof
@@ -225,15 +225,15 @@ Theorem word_not_emit_outcome:
   allocas_from 0 s /\ ~ctx_has_dalloca ctx /\ ~s.vs_halted /\
   step_inst_base
     (mk_inst sa.cs_next_id opc args [STRING #"%" (toString sa.cs_next_var)]) s = OK t /\
-  ghost_inv d cenv cx es G tn s /\ ghost_kept cenv es0 sc G0 tn0 s0 G tn /\
+  ghost_inv H d cenv cx es G tn s /\ ghost_kept cenv es0 sc G0 tn0 s0 G tn /\
   local_ptrs_reserved cenv sc /\ sc.cs_next_var <= sa.cs_next_var /\
   (!p sz. cenv.ce_return_buf = SOME (PtrVar (Var p) sz) ==> not_fresh_at sc p) /\
   (!p sz. cenv.ce_return_pc = SOME (PtrVar (Var p) sz) ==> not_fresh_at sc p) /\
   (!tail. source (es with gas_obs := tail) = (res,es with gas_obs := tail)) /\
-  H res (es with gas_obs := []) (t with vs_inst_idx := LENGTH sb.cs_current_insts) ==>
+  HG res (es with gas_obs := []) (t with vs_inst_idx := LENGTH sb.cs_current_insts) ==>
   gas_outcome_ptr D tops (ctx,fn) PG source (es,s,G,tn)
-    (\r ee G' tn' u. H r ee u /\
-      ghost_inv d cenv cx es G' tn' u /\
+    (\r ee G' tn' u. HG r ee u /\
+      ghost_inv H d cenv cx es G' tn' u /\
       ghost_kept cenv es0 sc G0 tn0 s0 G' tn' /\ op_taint tn' op = {} /\
       op_prov G' op = NONE) R
 Proof

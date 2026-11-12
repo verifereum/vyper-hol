@@ -34,7 +34,7 @@ Resume pop_local_expr_vv_ptr[empty]:
   gvs[] >>
   `32 <= sz` by decide_tac >>
   drule_all pop_local_compile_empty_path >>
-  disch_then (qspecl_then [`PG`, `cx_dead cx`] strip_assume_tac) >>
+  disch_then (qspecl_then [`PG`, `cx_dead H cx`] strip_assume_tac) >>
   simp[gas_outcome_ptr_def] >> qexists_tac `[]` >> disj1_tac >>
   simp[gas_summary_ptr_at_def] >>
   qexistsl_tac [`INR (Error (RuntimeError "pop empty memory array"))`,
@@ -59,7 +59,7 @@ Resume pop_local_expr_vv_ptr[positive]:
        (irule alloca_room_next_lt >> fs[stmt_state_rel_def] >> metis_tac[]) >>
      decide_tac) >>
   drule_all pop_local_compile_nonempty_exact >>
-  disch_then (qspecl_then [`PG`, `cx_dead cx`] strip_assume_tac) >>
+  disch_then (qspecl_then [`PG`, `cx_dead H cx`] strip_assume_tac) >>
   suspend "posts"
 QED
 
@@ -80,7 +80,7 @@ Resume pop_local_expr_vv_ptr[posts]:
   `t.vs_memory = (mstore (w2n w) (n2w (LENGTH vs)-1w) s0).vs_memory` by
     simp[GSYM n2w_sub] >>
   `popped_keys_indexed es.scopes` by fs[expr_sim_pre_def, expr_sim_inv_def] >>
-  `vv_post ctx func cenv cx (Pop ann (NameTarget id)) es sa sc s0 ee
+  `vv_post H ctx func cenv cx (Pop ann (NameTarget id)) es sa sc s0 ee
     (PlaceR (MemoryPlace id [ValueSubscript (IntV &(LENGTH vs-1))]))
     (LocatedValue ann (mk_ptr (Var out) LocMemory)) t` by
     (simp[Abbr `ee`] >> irule pop_local_vv_post_cursor >>
@@ -92,7 +92,7 @@ Resume pop_local_expr_vv_ptr[posts]:
 QED
 
 Resume pop_local_expr_vv_ptr[package]:
-  `vv_post ctx func cenv cx (Pop ann (NameTarget id)) es sa sc s0
+  `vv_post H ctx func cenv cx (Pop ann (NameTarget id)) es sa sc s0
     (ee with gas_obs := [])
     (PlaceR (MemoryPlace id [ValueSubscript (IntV &(LENGTH vs-1))]))
     (LocatedValue ann (mk_ptr (Var out) LocMemory)) t` by

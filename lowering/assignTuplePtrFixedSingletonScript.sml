@@ -19,12 +19,12 @@ Theorem tuple_target_local_aggregate_head_path_ptr:
   (!x cap. cenv.ce_return_buf = SOME (PtrVar (Var x) cap) ==> not_fresh_at sa x) /\
   (!x cap. cenv.ce_return_pc = SOME (PtrVar (Var x) cap) ==> not_fresh_at sa x) /\
   lookup_var src s = SOME sw /\ ptr_covers G tn src s (type_memory_size tv) /\
-  ptr_val_ok cx ty v (Var src) G tn s /\ ghost_inv d cenv cx es G tn s /\
-  stmt_state_rel ctx func cenv cx es s /\ fn_has_code sa sb func /\
+  ptr_val_ok cx ty v (Var src) G tn s /\ ghost_inv H d cenv cx es G tn s /\
+  stmt_state_rel H ctx func cenv cx es s /\ fn_has_code sa sb func /\
   ~ctx_has_dalloca ctx /\ ~s.vs_halted /\
   s.vs_current_bb = sa.cs_current_bb /\ s.vs_inst_idx = LENGTH sa.cs_current_insts ==>
   ?t G' tn' p sz dw.
-    stmt_state_rel ctx func cenv cx es' t /\ ghost_inv d cenv cx es' G' tn' t /\
+    stmt_state_rel H ctx func cenv cx es' t /\ ghost_inv H d cenv cx es' G' tn' t /\
     ~t.vs_halted /\ t.vs_current_bb = sb.cs_current_bb /\
     t.vs_inst_idx = LENGTH sb.cs_current_insts /\
     (!x. not_fresh_at sa x ==> lookup_var x t = lookup_var x s /\

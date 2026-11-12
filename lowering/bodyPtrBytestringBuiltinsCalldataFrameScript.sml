@@ -23,13 +23,13 @@ Proof
 QED
 
 Theorem allocated_bytes_write_state_rel:
-  stmt_state_rel ctx fn cenv cx es s /\
+  stmt_state_rel H ctx fn cenv cx es s /\
   MEM inst (fn_insts fn) /\ inst.inst_opcode = ALLOCA /\
   FLOOKUP s.vs_allocas inst.inst_id = SOME (b,N) /\
   LENGTH data = n /\ 32 + n <= N /\
   (!name p len. local_region cenv es.scopes s name p len ==>
     regions_disjoint b N p len) ==>
-  stmt_state_rel ctx fn cenv cx es
+  stmt_state_rel H ctx fn cenv cx es
     (mstore b (n2w n)
       (write_memory_with_expansion (b + 32) data s))
 Proof
@@ -138,7 +138,7 @@ Theorem calldata_copy_store_semantic:
   eval_operand src s = SOME (n2w a) /\ eval_operand cnt s = SOME (n2w n) /\
   a < dimword (:256) /\ n < dimword (:256) /\
   a + n <= LENGTH s.vs_call_ctx.cc_calldata /\
-  stmt_state_rel ctx fn cenv cx es s /\
+  stmt_state_rel H ctx fn cenv cx es s /\
   MEM inst (fn_insts fn) /\ inst.inst_opcode = ALLOCA /\
   FLOOKUP s.vs_allocas inst.inst_id = SOME (b,N) /\ 32 + n <= N /\
   (!name p len. local_region cenv es.scopes s name p len ==>
@@ -146,7 +146,7 @@ Theorem calldata_copy_store_semantic:
   ?t. run_inst_seq (emitted_insts sa sb) s = OK t /\
     t = mstore b (n2w n) (write_memory_with_expansion (b + 32)
       (TAKE n (DROP a s.vs_call_ctx.cc_calldata)) s) /\
-    stmt_state_rel ctx fn cenv cx es t /\
+    stmt_state_rel H ctx fn cenv cx es t /\
     val_in_memory (BaseTV (BytesT (Dynamic bound)))
       (BytesV (TAKE n (DROP a s.vs_call_ctx.cc_calldata))) b t.vs_memory /\
     locals_kept cenv es es s t /\ t.vs_allocas = s.vs_allocas /\
@@ -169,7 +169,7 @@ QED
 Theorem calldata_size_bounds_semantic:
   emit_op CALLDATASIZE [] sa = (limit,sm) /\
   compile_assert_slice_bounds start (Lit (n2w n)) limit sm = ((),sb) /\
-  stmt_state_rel ctx fn cenv cx es s /\ local_ptrs_reserved cenv sa /\
+  stmt_state_rel H ctx fn cenv cx es s /\ local_ptrs_reserved cenv sa /\
   (!x. start = Var x ==> not_fresh_at sa x) /\
   eval_operand start s = SOME (n2w a) /\
   a < dimword (:256) /\ n < dimword (:256) /\
@@ -178,7 +178,7 @@ Theorem calldata_size_bounds_semantic:
   ?v q. run_inst_seq (emitted_insts sa sm) s = OK v /\
     run_inst_seq (emitted_insts sm sb) v = OK q /\
     q = s with vs_vars := q.vs_vars /\
-    stmt_state_rel ctx fn cenv cx es q /\
+    stmt_state_rel H ctx fn cenv cx es q /\
     (!x. not_fresh_at sa x ==> lookup_var x q = lookup_var x s)
 Proof
   strip_tac >>
@@ -212,7 +212,7 @@ Resume calldata_size_bounds_semantic[frame]:
        (irule freshWritesTheory.not_fresh_at_mono >> qexists_tac `sa` >> simp[]) >>
      qpat_assum `!x. not_fresh_at sm x ==> _` (qspec_then `x` mp_tac) >>
      qpat_assum `!x. not_fresh_at sa x ==> _` (qspec_then `x` mp_tac) >> simp[]) >>
-  `stmt_state_rel ctx fn cenv cx es p` by
+  `stmt_state_rel H ctx fn cenv cx es p` by
     (irule stmt_state_rel_reserved_vars_update >>
      qexistsl_tac [`s`,`sa`] >> simp[]) >>
   qexistsl_tac [`u`,`p`] >> simp[] >> first_assum ACCEPT_TAC
@@ -221,7 +221,7 @@ Finalise calldata_size_bounds_semantic
 
 Theorem compile_slice_calldata_semantic:
   compile_slice_calldata start (Lit (n2w n)) N sa = (out,sb) /\
-  fn_has_code sa sb fn /\ stmt_state_rel ctx fn cenv cx es s /\
+  fn_has_code sa sb fn /\ stmt_state_rel H ctx fn cenv cx es s /\
   fn_inst_ids_distinct fn /\ local_ptrs_reserved cenv sa /\
   32 + n <= N /\ N < dimword (:256) /\ n < dimword (:256) /\
   a < dimword (:256) /\ LENGTH s.vs_call_ctx.cc_calldata < dimword (:256) /\
@@ -257,7 +257,7 @@ Theorem compile_slice_calldata_semantic:
     q.vs_inst_idx = LENGTH s1.cs_current_insts /\
     z.vs_inst_idx = LENGTH s1.cs_current_insts /\
     zf = z with vs_inst_idx := LENGTH sb.cs_current_insts /\
-    stmt_state_rel ctx fn cenv cx es zf /\
+    stmt_state_rel H ctx fn cenv cx es zf /\
     val_in_memory (BaseTV (BytesT (Dynamic bound)))
       (BytesV (TAKE n (DROP a s.vs_call_ctx.cc_calldata))) (w2n w) zf.vs_memory /\
     eval_operand out zf = SOME w /\
@@ -305,7 +305,7 @@ QED
 Resume compile_slice_calldata_semantic[pure_frame]:
   `local_ptrs_reserved cenv s1` by
     (irule local_ptrs_reserved_next_var >> qexists_tac `sa` >> simp[]) >>
-  `stmt_state_rel ctx fn cenv cx es q` by
+  `stmt_state_rel H ctx fn cenv cx es q` by
     (irule stmt_state_rel_reserved_vars_update >>
      qexistsl_tac [`t`,`s1`] >> simp[]) >>
   `!x val. not_fresh_at sa x /\ lookup_var x s = SOME val ==>

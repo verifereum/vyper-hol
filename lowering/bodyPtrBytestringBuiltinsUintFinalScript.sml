@@ -23,7 +23,7 @@ Theorem u2s_final_invariant_ptr:
   s.vs_current_bb = u2s_label a 4 /\ s.vs_inst_idx = 0 ==>
   ?G' tn' t. gas_path_ptr D 0 ctx fn PG G tn s 0 G' tn' (OK t) /\
     u2s_safe ctx fn cenv cx es a (Var p) b (buf_size+n) inst sr t /\
-    ghost_inv d cenv cx es G' tn' t /\ ghost_kept cenv es a G0 tn0 s0 G' tn' /\
+    ghost_inv H d cenv cx es G' tn' t /\ ghost_kept cenv es a G0 tn0 s0 G' tn' /\
     ptr_covers G' tn' (u2s_var a 2) t buf_size /\
     lookup_var (u2s_var a 2) t = SOME (n2w (b+n-LENGTH str)) /\
     val_in_memory (BaseTV (StringT cap)) (StringV (num_to_dec_string X))

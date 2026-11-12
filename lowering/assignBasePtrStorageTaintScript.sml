@@ -75,7 +75,7 @@ Theorem declared_region_dead_storage_dead:
        ranges_disjoint (w2n k) (type_slot_size tv)
                        (w2n k') (type_slot_size tv')) /\
     dead_bytes final (w2n k) tv x b ==>
-    storage_dead cx tr final x b
+    storage_dead H tr final x b
 Proof
   rpt strip_tac >> simp[storage_dead_def] >>
   qexistsl_tac [`mid`, `n`, `subs`, `k`, `tv`] >> simp[] >>
@@ -101,7 +101,7 @@ Theorem robust_memory_storage_dead_at_endpoint:
        EL c (word_to_bytes (lookup_storage (n2w i)
          (apply_writes k writes st)) T)) /\
     j < type_slot_size tv /\ b < 32 /\ off + 32*j + b IN ta ==>
-    storage_dead cx tr final (w2n k+j) b
+    storage_dead H tr final (w2n k+j) b
 Proof
   rpt strip_tac >> simp[storage_dead_def] >>
   qexistsl_tac [`mid`, `n`, `subs`, `k`, `tv`] >> simp[] >>
@@ -132,7 +132,7 @@ Theorem declared_region_dead_at_endpoint:
        EL c (word_to_bytes (lookup_storage (n2w i) final) T) =
        EL c (word_to_bytes (lookup_storage (n2w i) canonical) T)) /\
     dead_bytes canonical (w2n k) tv x b ==>
-    storage_dead cx tr final x b
+    storage_dead H tr final x b
 Proof
   rpt strip_tac >>
   `dead_bytes final (w2n k) tv x b <=>
@@ -177,7 +177,7 @@ Theorem storage_copy_taint_at_endpoint:
     (!i. i < dimword (:256) /\
          ~(w2n k <= i /\ i < w2n k + type_slot_size tv) ==>
          lookup_storage (n2w i) final = lookup_storage (n2w i) st) /\
-    (!q b. (q,b) IN old ==> storage_dead cx tr st (w2n q) b) /\
+    (!q b. (q,b) IN old ==> storage_dead H tr st (w2n q) b) /\
     (!q b. (q,b) IN old /\ w2n k + count <= w2n q /\
        w2n q < w2n k + type_slot_size tv ==>
        dead_bytes final (w2n k) tv (w2n q) b) /\
@@ -185,7 +185,7 @@ Theorem storage_copy_taint_at_endpoint:
        ((q,b) IN old /\ ~(w2n k <= w2n q /\ w2n q < w2n k + count)) \/
        (?j. w2n q = w2n k+j /\ j < count /\ b < 32 /\
             off + 32*j + b IN ta)) ==>
-    !q b. (q,b) IN new ==> storage_dead cx tr final (w2n q) b
+    !q b. (q,b) IN new ==> storage_dead H tr final (w2n q) b
 Proof
   rpt gen_tac >> strip_tac >> rpt gen_tac >> strip_tac >>
   qpat_x_assum `!q b. (q,b) IN new ==> _` drule >> strip_tac
@@ -204,7 +204,7 @@ QED
    copied-byte theorem above supplies the selected-space implication. *)
 Theorem stor_taint_ok_selected_space:
   !cx tr tn s tn' s'.
-    stor_taint_ok cx tn s /\
+    stor_taint_ok H cx tn s /\
     s'.vs_call_ctx.cc_address = cx.txn.target /\
     s'.vs_call_ctx.cc_address = s.vs_call_ctx.cc_address /\
     tn'.t_imm = tn.t_imm /\
@@ -217,11 +217,11 @@ Theorem stor_taint_ok_selected_space:
        s'.vs_transient s'.vs_call_ctx.cc_address =
        s.vs_transient s.vs_call_ctx.cc_address) /\
     (!q b. (q,b) IN (if tr then tn'.t_trans else tn'.t_stor) ==>
-       storage_dead cx tr
+       storage_dead H tr
          (if tr then s'.vs_transient s'.vs_call_ctx.cc_address
           else (s'.vs_accounts s'.vs_call_ctx.cc_address).storage)
          (w2n q) b) ==>
-    stor_taint_ok cx tn' s'
+    stor_taint_ok H cx tn' s'
 Proof
   Cases_on `tr` >>
   simp[stor_taint_ok_def, cx_dead_def, SUBSET_DEF, pairTheory.FORALL_PROD] >>

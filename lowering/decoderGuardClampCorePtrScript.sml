@@ -13,7 +13,7 @@ Theorem clamp_scalar_frag_ptr:
   sb.cs_current_insts = sa.cs_current_insts ++ [mk_inst id opc ops outs] /\
   EVERY (\op. op_taint tn op = {} /\ op_prov G op = NONE) ops /\
   step_inst_base (mk_inst id opc ops outs) s = OK t ==>
-  frag_exec_ptr cx ctx PG sa sb
+  frag_exec_ptr H cx ctx PG sa sb
     (\g z v. g = G /\ z = tn /\ v = s)
     (\g z v. g = step_prov PG G (mk_inst id opc ops outs) t /\
       z = step_taint (mk_inst id opc ops outs) s t tn /\
@@ -27,7 +27,7 @@ Proof
   rpt strip_tac >> qexists_tac `t` >>
   simp[GSYM mk_inst_def] >> rpt strip_tac >>
   `allocas_from 0 s` by simp[allocas_from_def] >>
-  `ptr_safe_step (cx_dead cx) 0 fuel ctx fn PG G tn
+  `ptr_safe_step (cx_dead H cx) 0 fuel ctx fn PG G tn
      (mk_inst id opc ops outs) s` by
     (irule clamp_scalar_step_safe >> simp[step_inst_non_invoke, mk_inst_def] >>
      fs[MEM]) >>
@@ -39,20 +39,20 @@ Theorem emit_clamp_scalar_endpoint_ptr_core:
   MEM opc [SIGNEXTEND; SHR; SHL; EQ; ISZERO] /\
   EVERY (\op. op_taint tn op = {} /\ op_prov G op = NONE) ops /\
   run_inst_seq (emitted_insts sa sb) s = OK t ==>
-  ?H u. op_taint u out = {} /\ op_prov H out = NONE /\
-    frag_exec_ptr cx ctx PG sa sb
+  ?HG u. op_taint u out = {} /\ op_prov HG out = NONE /\
+    frag_exec_ptr H cx ctx PG sa sb
       (\g z v. g = G /\ z = tn /\ v = s)
-      (\g z v. g = H /\ z = u /\
+      (\g z v. g = HG /\ z = u /\
         v = (t with vs_inst_idx := SUC s.vs_inst_idx)) R /\
     u.t_mem = tn.t_mem /\ u.t_stor = tn.t_stor /\
     u.t_trans = tn.t_trans /\ u.t_imm = tn.t_imm /\
     (?vars. t = s with vs_vars := vars) /\
     (!x. not_fresh_at sa x ==> lookup_var x t = lookup_var x s /\
-      FLOOKUP H x = FLOOKUP G x /\ op_taint u (Var x) = op_taint tn (Var x)) /\
+      FLOOKUP HG x = FLOOKUP G x /\ op_taint u (Var x) = op_taint tn (Var x)) /\
     (!D lower ctx' func.
       fn_has_code sa sb func /\ allocas_from lower s /\ ~ctx_has_dalloca ctx' /\
       s.vs_current_bb = sa.cs_current_bb /\ s.vs_inst_idx = LENGTH sa.cs_current_insts /\
-      (!fuel. ptr_safe_run D lower fuel ctx' func PG H u
+      (!fuel. ptr_safe_run D lower fuel ctx' func PG HG u
         (t with vs_inst_idx := LENGTH sb.cs_current_insts)) ==>
       !fuel. ptr_safe_run D lower fuel ctx' func PG G tn s)
 Proof
@@ -109,7 +109,7 @@ Theorem emit_assert_endpoint_ptr_core:
   emit_void ASSERT [op] sa = ((),sb) /\
   op_taint tn op = {} /\ op_prov G op = NONE /\
   run_inst_seq (emitted_insts sa sb) s = OK t ==>
-  frag_exec_ptr cx ctx PG sa sb
+  frag_exec_ptr H cx ctx PG sa sb
     (\g z v. g = G /\ z = tn /\ v = s)
     (\g z v. g = G /\ z = tn /\
       v = (t with vs_inst_idx := SUC s.vs_inst_idx)) R /\ t = s /\

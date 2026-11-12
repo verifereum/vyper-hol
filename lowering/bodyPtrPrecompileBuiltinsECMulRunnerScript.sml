@@ -165,7 +165,7 @@ Resume ecmul_expr_vv_sim_ptr[point_continuation]:
     metis_tac[local_ptrs_reserved_next_var] >>
   `fn_has_code s1 sm fn /\ fn_has_code sm sb fn` by
     metis_tac[fragExecTheory.fn_has_code_split] >>
-  `stmt_state_rel ctx fn cenv cx ee t` by
+  `stmt_state_rel H ctx fn cenv cx ee t` by
     fs[loweringPostsTheory.expr_post_def] >>
   `!x sz. cenv.ce_return_buf = SOME (PtrVar (Var x) sz) ==>
      not_fresh_at s1 x` by metis_tac[stmtFragPtrTheory.not_fresh_at_mono] >>
@@ -227,7 +227,7 @@ QED
 
 Resume ecmul_expr_vv_sim_ptr[tail_frame]:
   `local_ptrs_reserved cenv sm` by metis_tac[local_ptrs_reserved_next_var] >>
-  `stmt_state_rel ctx fn cenv cx ee' t'` by fs[loweringPostsTheory.expr_post_def] >>
+  `stmt_state_rel H ctx fn cenv cx ee' t'` by fs[loweringPostsTheory.expr_post_def] >>
   `!x sz. cenv.ce_return_buf = SOME (PtrVar (Var x) sz) ==> not_fresh_at sm x` by
     metis_tac[stmtFragPtrTheory.not_fresh_at_mono] >>
   `!x sz. cenv.ce_return_pc = SOME (PtrVar (Var x) sz) ==> not_fresh_at sm x` by
@@ -255,7 +255,7 @@ Resume ecmul_expr_vv_sim_ptr[tail_frame]:
      fs[loweringPostsTheory.expr_post_def] >>
      qpat_x_assum `expr_val_rel _ (expr_type b) _ _ _` mp_tac >>
      qpat_assum `expr_type b = _` (fn th => rewrite_tac[th])) >>
-  `stor_taint_ok cx tn' t'` by fs[bodyPtrDefsTheory.ghost_inv_def] >>
+  `stor_taint_ok H cx tn' t'` by fs[bodyPtrDefsTheory.ghost_inv_def] >>
   fs[bodyPtrDefsTheory.stor_taint_ok_def] >>
   `expr_val_at cenv cx (ArrayT (BaseT (UintT 256)) (Fixed 2)) sa sm ee' v p t' /\
    ptr_val_ok cx (ArrayT (BaseT (UintT 256)) (Fixed 2)) v p G' tn' t' /\
@@ -267,16 +267,16 @@ QED
 Resume ecmul_expr_vv_sim_ptr[tail_path]:
   qpat_assum `compile_ecmul_point _ _ _ = _`
     (mp_then Any (fn th =>
-      qpat_assum `stmt_state_rel _ _ _ _ ee' t'`
+      qpat_assum `stmt_state_rel _ _ _ _ _ ee' t'`
         (mp_then Any (fn th =>
-          qpat_assum `ghost_inv _ _ _ ee' G' tn' t'`
+          qpat_assum `ghost_inv _ _ _ _ ee' G' tn' t'`
             (mp_then Any (fn th =>
               qpat_assum `expr_val_at _ _ (ArrayT _ _) sa sm ee' _ _ t'`
                 (mp_then Any (fn th =>
                   qpat_assum `ec_source_tail _ _ _ _ _ ee' = _`
                     (mp_then Any mp_tac th)) th)) th)) th))
       ecmul_source_tail_ptr_path) >>
-  disch_then (qspecl_then [`bb`,`[a;b]`,`PG`,`cx_dead cx`] mp_tac) >>
+  disch_then (qspecl_then [`bb`,`[a;b]`,`PG`,`cx_dead H cx`] mp_tac) >>
   simp[] >>
   (impl_tac >- first_assum ACCEPT_TAC) >> strip_tac >>
   suspend "tail_outcome"
@@ -323,7 +323,7 @@ Resume ecmul_expr_vv_sim_ptr[entry_rebase]:
      rpt conj_tac >> TRY (first_assum ACCEPT_TAC) >> decide_tac) >>
   fs[as_ptr_val_def, contextTheory.mk_ptr_def] >>
   irule exprSimCalldataSliceTheory.vv_post_prefix_frame >>
-  qpat_assum `vv_post _ _ _ _ _ ee' sm _ _ _ _ _ _` (irule_at Any) >>
+  qpat_assum `vv_post _ _ _ _ _ _ ee' sm _ _ _ _ _ _` (irule_at Any) >>
   simp[] >> metis_tac[]
 QED
 

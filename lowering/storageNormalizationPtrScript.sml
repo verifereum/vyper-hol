@@ -9,7 +9,7 @@ Ancestors
   context emitHelper compileEnv loweringStateRelDefs venomInst loweringPosts fragGasPathPtr exprSimCopy
 
 Theorem storage_normalization_endpoint_resources:
-  stmt_state_rel ctx func cenv cx es u /\
+  stmt_state_rel H ctx func cenv cx es u /\
   ptr_vv_ok cx ty tv (LocatedValue ann p) es G tn u /\
   p.ptr_location = (if tr then LocTransient else LocStorage) /\
   eval_operand p.ptr_operand u = SOME a /\
@@ -72,7 +72,7 @@ Theorem compile_storage_normalization_resources_path_ptr:
   n < dimword(:256) /\ b+32*n < dimword(:256) /\
   ~u.vs_halted /\ ~ctx_has_dalloca ctx /\
   u.vs_current_bb = sa.cs_current_bb /\ u.vs_inst_idx = LENGTH sa.cs_current_insts /\
-  stmt_state_rel ctx func cenv cx es u /\ local_ptrs_reserved cenv sa /\
+  stmt_state_rel H ctx func cenv cx es u /\ local_ptrs_reserved cenv sa /\
   MEM (mk_inst aid ALLOCA operands outputs) (fn_insts func) /\
   FLOOKUP u.vs_allocas aid = SOME (b,32*n) /\
   (!name lb len. local_region cenv es.scopes u name lb len ==>
@@ -86,7 +86,7 @@ Theorem compile_storage_normalization_resources_path_ptr:
     gas_path_ptr D 0 ctx func PG G tn u 0 Gf tnf (OK z) /\
     z.vs_current_bb = sb.cs_current_bb /\
     z.vs_inst_idx = LENGTH sb.cs_current_insts /\ ~z.vs_halted /\
-    stmt_state_rel ctx func cenv cx es z /\ z.vs_allocas = u.vs_allocas /\
+    stmt_state_rel H ctx func cenv cx es z /\ z.vs_allocas = u.vs_allocas /\
     lookup_var root z = SOME (n2w b) /\
     ptr_mem_ok cx ty (StringV str) (Var root) Gf tnf z /\
     val_wf (BaseTV (StringT max)) (StringV str) /\
@@ -109,7 +109,7 @@ Proof
   disch_then (qspecl_then [`PG`, `D`] strip_assume_tac) >>
   `not_fresh_at sa root` by metis_tac[] >>
   `lookup_var root t = SOME (n2w b)` by metis_tac[] >>
-  `stmt_state_rel ctx func cenv cx es t /\ t.vs_allocas = u.vs_allocas` by
+  `stmt_state_rel H ctx func cenv cx es t /\ t.vs_allocas = u.vs_allocas` by
     (first_x_assum (qspecl_then [`cenv`, `cx`, `es`, `mk_inst aid ALLOCA operands outputs`] mp_tac) >>
      simp[mk_inst_def] >> impl_tac >- first_assum ACCEPT_TAC >> simp[]) >>
   `b < dimword(:256)` by decide_tac >>
@@ -130,7 +130,7 @@ QED
 
 (* ALLOCA resources at the counted-path cursor, ready for either copy branch. *)
 Theorem storage_normalization_alloc_path_ptr:
-  stmt_state_rel ctx func cenv cx es s /\
+  stmt_state_rel H ctx func cenv cx es s /\
   compile_alloc_buffer n cc = (buf,cd) /\ fn_has_code cc cd func /\
   local_ptrs_reserved cenv cc /\ fn_inst_ids_distinct func /\
   n < dimword(:256) /\ ~ctx_has_dalloca ctx /\
@@ -144,7 +144,7 @@ Theorem storage_normalization_alloc_path_ptr:
     gas_path_ptr D 0 ctx func PG G tn s 0 G1 tn1 (OK u) /\
     u.vs_current_bb = cd.cs_current_bb /\
     u.vs_inst_idx = LENGTH cd.cs_current_insts /\ ~u.vs_halted /\
-    stmt_state_rel ctx func cenv cx es u /\ local_ptrs_reserved cenv cd /\
+    stmt_state_rel H ctx func cenv cx es u /\ local_ptrs_reserved cenv cd /\
     FLOOKUP u.vs_allocas cc.cs_next_id = SOME (b,n) /\
     b+n < dimword(:256) /\ lookup_var root u = SOME (n2w b) /\
     ptr_covers G1 tn1 root u n /\
@@ -237,7 +237,7 @@ Theorem storage_normalization_alloc_copy_path_ptr:
    else do compile_word_copy_loop p.ptr_operand (Var root) n p.ptr_location LocMemory F;
            return () od) ca = (result,cb) /\
   fn_has_code cc ca func /\ fn_has_code ca cb func /\
-  stmt_state_rel ctx func cenv cx es s /\ local_ptrs_reserved cenv cc /\
+  stmt_state_rel H ctx func cenv cx es s /\ local_ptrs_reserved cenv cc /\
   fn_inst_ids_distinct func /\ ~ctx_has_dalloca ctx /\
   32*n < dimword(:256) /\ n < dimword(:256) /\
   s.vs_current_bb = cc.cs_current_bb /\
@@ -252,7 +252,7 @@ Theorem storage_normalization_alloc_copy_path_ptr:
     gas_path_ptr D 0 ctx func PG G tn s 0 Gf tnf (OK z) /\
     z.vs_current_bb = cb.cs_current_bb /\
     z.vs_inst_idx = LENGTH cb.cs_current_insts /\ ~z.vs_halted /\
-    stmt_state_rel ctx func cenv cx es z /\
+    stmt_state_rel H ctx func cenv cx es z /\
     local_ptrs_reserved cenv cb /\
     (!old. not_fresh_at cc old \/ old = root ==> not_fresh_at cb old) /\
     cc.cs_next_id < cb.cs_next_id /\ b+32*n < dimword(:256) /\
@@ -378,7 +378,7 @@ Theorem storage_unwrap_resources_path_ptr:
   (type_memory_bytes cenv ann+31) DIV 32 = n /\
   unwrap_value cenv (LocatedValue ann p) cc = (op,cb) /\
   fn_has_code cc cb func /\
-  stmt_state_rel ctx func cenv cx es s /\ local_ptrs_reserved cenv cc /\
+  stmt_state_rel H ctx func cenv cx es s /\ local_ptrs_reserved cenv cc /\
   fn_inst_ids_distinct func /\ ~ctx_has_dalloca ctx /\
   32*n < dimword(:256) /\ n < dimword(:256) /\
   s.vs_current_bb = cc.cs_current_bb /\
@@ -395,7 +395,7 @@ Theorem storage_unwrap_resources_path_ptr:
     gas_path_ptr D 0 ctx func PG G tn s 0 Gf tnf (OK z) /\
     z.vs_current_bb = cb.cs_current_bb /\
     z.vs_inst_idx = LENGTH cb.cs_current_insts /\ ~z.vs_halted /\
-    stmt_state_rel ctx func cenv cx es z /\ local_ptrs_reserved cenv cb /\
+    stmt_state_rel H ctx func cenv cx es z /\ local_ptrs_reserved cenv cb /\
     (!old. not_fresh_at cc old \/ old = root ==> not_fresh_at cb old) /\
     cc.cs_next_id < cb.cs_next_id /\ b+32*n < dimword(:256) /\
     lookup_var root z = SOME (n2w b) /\

@@ -184,11 +184,11 @@ Resume compile_assign_tuple_locals_memory_stmt_frag_ptr[suffix]:
   drule_at (Pat `compile_tuple_store_all _ _ _ _ _ = _`) assign_tuple_locals_suffix_ptr >>
   disch_then (drule_at (Pat `compile_tuple_load_all _ _ _ _ _ = _`)) >>
   disch_then (drule_at (Pat `(if _ then _ else _) _ = _`)) >>
-  disch_then (drule_at (Pat `expr_post _ _ _ _ _ _ _ _ _ _ _ _ _`)) >>
+  disch_then (drule_at (Pat `expr_post _ _ _ _ _ _ _ _ _ _ _ _ _ _`)) >>
   disch_then (drule_at (Pat `ptr_val_ok _ _ _ _ _ _ _`)) >>
-  disch_then (drule_at (Pat `ghost_inv _ _ _ _ _ _ _`)) >>
+  disch_then (drule_at (Pat `ghost_inv _ _ _ _ _ _ _ _`)) >>
   simp[] >>
-  disch_then (qspecl_then [`lctx`, `PG`, `cx_dead cx`] mp_tac) >>
+  disch_then (qspecl_then [`lctx`, `PG`, `cx_dead H cx`] mp_tac) >>
   (impl_tac >- (rpt strip_tac >>
     qpat_assum `!i. i < LENGTH ids ==> ?id p sz vt entry. _` (qspec_then `i` mp_tac) >>
     (impl_tac >- simp[]) >> strip_tac >>
@@ -204,7 +204,7 @@ Resume compile_assign_tuple_locals_memory_stmt_frag_ptr[finish]:
       qexistsl_tac [`G`, `es_end`, `t`, `tn`, `ArrayV (TupleV vs)`] >>
       simp[gas_marked_exec_ptr_def]) >>
   disj1_tac >> simp[] >>
-  qpat_x_assum `stmt_post _ _ _ _ _ _ _ _ _ _ _ _` mp_tac >>
+  qpat_x_assum `stmt_post _ _ _ _ _ _ _ _ _ _ _ _ _` mp_tac >>
   simp[stmt_post_def, ghost_inv_gas_obs] >> strip_tac >>
   qpat_x_assum `ghost_kept _ _ _ _ _ _ _ _` mp_tac >>
   simp[ghost_kept_def]

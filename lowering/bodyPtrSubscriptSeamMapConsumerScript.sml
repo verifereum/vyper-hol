@@ -9,25 +9,25 @@ Theorem mapping_leaf_summary_ptr:
   (!tail. select_result cx (expr_type obj) captured (ValueSubscript kv)
      (ee with gas_obs := tail) =
      (INL (PlaceR (StoragePlace tr slot tv)),ee with gas_obs := tail)) /\
-  gas_path_ptr (cx_dead cx) 0 ctx fn PG Gi tni it 0 G tn (OK u) /\
+  gas_path_ptr (cx_dead H cx) 0 ctx fn PG Gi tni it 0 G tn (OK u) /\
   storage_mapping_region cx tr slot (Type ann) /\
   evaluate_type (get_tenv cx) ann = SOME tv /\
   contract_storage_well_formed cx (ee with gas_obs := []) /\ storage_layout_safe cx /\
-  stmt_state_rel ctx fn cenv cx (ee with gas_obs := []) u /\
-  ghost_inv d cenv cx (ee with gas_obs := []) G tn u /\
+  stmt_state_rel H ctx fn cenv cx (ee with gas_obs := []) u /\
+  ghost_inv H d cenv cx (ee with gas_obs := []) G tn u /\
   p.ptr_location = slot_loc tr /\ eval_operand p.ptr_operand u = SOME slot /\
   op_taint tn p.ptr_operand = {} /\ wb_frame cenv es (ee with gas_obs := []) sa s0 u /\
   (~expr_has_effect (Subscript ann obj idx) ==> pure_frame cenv fn es sa s0 u) /\
   ghost_kept cenv es sa G0 tn0 s0 G tn /\
   u.vs_current_bb = sb.cs_current_bb /\ u.vs_inst_idx = LENGTH sb.cs_current_insts ==>
-  gas_summary_ptr_at (cx_dead cx) (ctx,fn) PG []
+  gas_summary_ptr_at (cx_dead H cx) (ctx,fn) PG []
     (select_result cx (expr_type obj) captured (ValueSubscript kv))
     (ee with gas_obs := [],it,Gi,tni)
     (\res ef Gf tnf t. ?v. res = INL v /\
-      vv_post ctx fn cenv cx (Subscript ann obj idx) es sa sb s0 ef v
+      vv_post H ctx fn cenv cx (Subscript ann obj idx) es sa sb s0 ef v
         (LocatedValue ann p) t /\
       t.vs_current_bb = sb.cs_current_bb /\ t.vs_inst_idx = LENGTH sb.cs_current_insts /\
-      ghost_inv d cenv cx ef Gf tnf t /\
+      ghost_inv H d cenv cx ef Gf tnf t /\
       ptr_vv_ok cx (post_value_type cenv (Subscript ann obj idx)) v
         (LocatedValue ann p) ef Gf tnf t /\
       (!ty op. LocatedValue ann p = StackValue ty op /\
@@ -102,19 +102,19 @@ QED
 Theorem mapping_selection_summary_ptr:
   expr_body_pre cenv cx env (Subscript ann obj idx) es /\
   place_type cenv obj = MapPT kt vt /\
-  gas_marked_exec_ptr (cx_dead cx) (ctx,fn) PG (eval_expr cx obj)
+  gas_marked_exec_ptr (cx_dead H cx) (ctx,fn) PG (eval_expr cx obj)
     (es,s0,G0,tn0) left (INL (HashMapRef tr base_slot kt vt)) mid G1 tn1 (OK t) /\
-  gas_marked_exec_ptr (cx_dead cx) (ctx,fn) PG (bind (eval_expr cx idx) (read_result cx))
+  gas_marked_exec_ptr (cx_dead H cx) (ctx,fn) PG (bind (eval_expr cx idx) (read_result cx))
     (mid with gas_obs := [],t,G1,tn1) right (INL kv) fin Gi tni (OK it) /\
   storage_mapping_region cx tr base_slot (HashMapT kt vt) /\
   wb_frame cenv es (mid with gas_obs := []) sa s0 t /\ ghost_kept cenv es sa G0 tn0 s0 G1 tn1 /\
   (~expr_has_effect obj ==> pure_frame cenv fn es sa s0 t) /\
-  stmt_state_rel ctx fn cenv cx es s0 /\
-  stmt_state_rel ctx fn cenv cx (mid with gas_obs := []) t /\
-  expr_post ctx fn cenv cx idx (mid with gas_obs := []) sm sn t
+  stmt_state_rel H ctx fn cenv cx es s0 /\
+  stmt_state_rel H ctx fn cenv cx (mid with gas_obs := []) t /\
+  expr_post H ctx fn cenv cx idx (mid with gas_obs := []) sm sn t
     (fin with gas_obs := []) kv key it /\
   ptr_val_ok cx (post_value_type cenv idx) kv key Gi tni it /\
-  ghost_inv d cenv cx (fin with gas_obs := []) Gi tni it /\
+  ghost_inv H d cenv cx (fin with gas_obs := []) Gi tni it /\
   ghost_kept cenv (mid with gas_obs := []) sm G1 tn1 t Gi tni /\
   it.vs_current_bb = sn.cs_current_bb /\ it.vs_inst_idx = LENGTH sn.cs_current_insts /\
   lower_value compile_expr cenv (expr_type idx) idx sm = (key,sn) /\
@@ -130,14 +130,14 @@ Theorem mapping_selection_summary_ptr:
   (!z. slot = Var z ==> not_fresh_at sm z) /\ (!l. slot <> Label l) /\
   eval_operand slot t = SOME base_slot /\ op_taint tn1 slot = {} /\
   p.ptr_location = slot_loc tr /\ p.ptr_operand = out ==>
-  gas_summary_ptr_at (cx_dead cx) (ctx,fn) PG []
+  gas_summary_ptr_at (cx_dead H cx) (ctx,fn) PG []
     (select_result cx (expr_type obj) (HashMapRef tr base_slot kt vt) (ValueSubscript kv))
     (fin with gas_obs := [],it,Gi,tni)
     (\res ef Gf tnf u. ?v. res = INL v /\
-      vv_post ctx fn cenv cx (Subscript ann obj idx) es sa sb s0 ef v
+      vv_post H ctx fn cenv cx (Subscript ann obj idx) es sa sb s0 ef v
         (LocatedValue ann p) u /\
       u.vs_current_bb = sb.cs_current_bb /\ u.vs_inst_idx = LENGTH sb.cs_current_insts /\
-      ghost_inv d cenv cx ef Gf tnf u /\
+      ghost_inv H d cenv cx ef Gf tnf u /\
       ptr_vv_ok cx (post_value_type cenv (Subscript ann obj idx)) v
         (LocatedValue ann p) ef Gf tnf u /\
       (!ty op. LocatedValue ann p = StackValue ty op /\
@@ -161,7 +161,7 @@ Proof
   `!z. slot = Var z ==> not_fresh_at sn z` by
     metis_tac[freshWritesTheory.not_fresh_at_mono] >>
   gvs[] >> drule_all mapping_index_tail_ptr >>
-  disch_then (qspecl_then [`PG`, `cx_dead cx`] strip_assume_tac) >>
+  disch_then (qspecl_then [`PG`, `cx_dead H cx`] strip_assume_tac) >>
   `wb_frame cenv (mid with gas_obs := []) (fin with gas_obs := []) sm t it` by
     (gvs[loweringPostsTheory.expr_post_def, loweringPostsTheory.wb_frame_def] >>
      metis_tac[]) >>
@@ -175,7 +175,7 @@ Proof
        mp_tac exprSimWordArgsTheory.wb_frame_trans >> simp[]) >>
   `ghost_kept cenv (mid with gas_obs := []) sm G1 tn1 t Gu tnu` by
     (irule bodyPtrHashBuiltinsGhostComposeTheory.hash_expr_post_ghost_kept_compose >>
-     first_assum (irule_at (Pat `expr_post _ _ _ _ _ _ _ _ _ _ _ _ _`)) >>
+     first_assum (irule_at (Pat `expr_post _ _ _ _ _ _ _ _ _ _ _ _ _ _`)) >>
      simp[] >>
      metis_tac[freshWritesTheory.not_fresh_at_mono]) >>
   `ghost_kept cenv es sa G0 tn0 s0 Gu tnu` by
@@ -193,7 +193,7 @@ Proof
      `pure_frame cenv fn es sa s0 t` by
        (qpat_x_assum `~expr_has_effect obj ==> _` mp_tac >> simp[]) >>
      `pure_frame cenv fn (mid with gas_obs := []) sm t it` by
-       (qpat_assum `expr_post _ _ _ _ idx _ _ _ _ _ _ _ _`
+       (qpat_assum `expr_post _ _ _ _ _ idx _ _ _ _ _ _ _ _`
           (mp_then Any mp_tac exprSimWordArgsTheory.expr_post_pure_frame) >>
         disch_then irule >> first_assum ACCEPT_TAC) >>
      `pure_frame cenv fn (mid with gas_obs := []) sm t u` by
@@ -255,15 +255,15 @@ Theorem compile_mapping_subscript_outcome_ptr:
   (!x sz. cenv.ce_return_buf = SOME (PtrVar (Var x) sz) ==> not_fresh_at sa x) /\
   (!x sz. cenv.ce_return_pc = SOME (PtrVar (Var x) sz) ==> not_fresh_at sa x) /\
   gas_admissible (eval_expr cx (Subscript ann obj idx)) expr_vv_res_ok es /\
-  stmt_state_rel ctx fn cenv cx es s0 /\ ghost_inv d cenv cx es G0 tn0 s0 /\
+  stmt_state_rel H ctx fn cenv cx es s0 /\ ghost_inv H d cenv cx es G0 tn0 s0 /\
   ~s0.vs_halted /\ s0.vs_current_bb = sa.cs_current_bb /\
   s0.vs_inst_idx = LENGTH sa.cs_current_insts ==>
-  gas_outcome_ptr (cx_dead cx) (cx_tops cx) (ctx,fn) PG
+  gas_outcome_ptr (cx_dead H cx) (cx_tops cx) (ctx,fn) PG
     (eval_expr cx (Subscript ann obj idx)) (es,s0,G0,tn0)
     (\res ee G tn t. ?v. res = INL v /\
-      vv_post ctx fn cenv cx (Subscript ann obj idx) es sa sb s0 ee v vv t /\
+      vv_post H ctx fn cenv cx (Subscript ann obj idx) es sa sb s0 ee v vv t /\
       t.vs_current_bb = sb.cs_current_bb /\ t.vs_inst_idx = LENGTH sb.cs_current_insts /\
-      ghost_inv d cenv cx ee G tn t /\
+      ghost_inv H d cenv cx ee G tn t /\
       ptr_vv_ok cx (post_value_type cenv (Subscript ann obj idx)) v vv ee G tn t /\
       (!ty op. vv = StackValue ty op /\
         ~is_word_type (post_value_type cenv (Subscript ann obj idx)) ==>
@@ -363,7 +363,7 @@ Resume compile_mapping_subscript_outcome_ptr[selection]:
     |> SRULE [contextTheory.mk_ptr_def]) >>
   first_assum (irule_at (Pat `gas_marked_exec_ptr _ _ _ _ (es,_,_,_) _ _ _ _ _ _`)) >>
   first_assum (irule_at (Pat `gas_marked_exec_ptr _ _ _ _ (_,t,_,_) _ _ _ _ _ _`)) >>
-  first_assum (irule_at (Pat `expr_post _ _ _ _ _ _ _ _ _ _ _ _ _`)) >>
+  first_assum (irule_at (Pat `expr_post _ _ _ _ _ _ _ _ _ _ _ _ _ _`)) >>
   first_assum (irule_at (Pat `compile_mapping_subscript _ _ _ = _`)) >>
   simp[contextTheory.mk_ptr_def] >> gvs[] >> metis_tac[]
 QED

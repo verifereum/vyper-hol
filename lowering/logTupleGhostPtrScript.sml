@@ -8,9 +8,9 @@ Ancestors
 Theorem ghost_kept_no_new_memory_taint:
   ghost_kept ce es se G0 tn0 s0 G tn /\ se.cs_next_var <= sa.cs_next_var /\
   (!x. not_fresh_at sa x ==>
-    FLOOKUP H x = FLOOKUP G x /\ op_taint tm (Var x) = op_taint tn (Var x)) /\
+    FLOOKUP HG x = FLOOKUP G x /\ op_taint tm (Var x) = op_taint tn (Var x)) /\
   (!i. i IN tm.t_mem ==> i IN tn.t_mem) ==>
-  ghost_kept ce es se G0 tn0 s0 H tm
+  ghost_kept ce es se G0 tn0 s0 HG tm
 Proof
   rw[ghost_kept_def] >> metis_tac[not_fresh_at_mono]
 QED
@@ -30,7 +30,7 @@ Proof
 QED
 
 Theorem ghost_inv_footprint_transport:
-  ghost_inv d ce cx es G tn s /\ local_ptrs_rel func ce es.scopes s /\
+  ghost_inv H d ce cx es G tn s /\ local_ptrs_rel func ce es.scopes s /\
   local_ptrs_reserved ce sa /\
   (!p sz. ce.ce_return_buf = SOME (PtrVar (Var p) sz) ==> not_fresh_at sa p) /\
   (!p sz. ce.ce_return_pc = SOME (PtrVar (Var p) sz) ==> not_fresh_at sa p) /\
@@ -40,9 +40,9 @@ Theorem ghost_inv_footprint_transport:
   t.vs_accounts = s.vs_accounts /\ t.vs_transient = s.vs_transient /\
   tm.t_stor = tn.t_stor /\ tm.t_trans = tn.t_trans /\ tm.t_imm = tn.t_imm /\
   (!p. not_fresh_at sa p ==>
-    lookup_var p t = lookup_var p s /\ FLOOKUP H p = FLOOKUP G p /\
+    lookup_var p t = lookup_var p s /\ FLOOKUP HG p = FLOOKUP G p /\
     op_taint tm (Var p) = op_taint tn (Var p)) ==>
-  ghost_inv d ce cx es H tm t
+  ghost_inv H d ce cx es HG tm t
 Proof
   strip_tac >> irule ghost_inv_exterior_transport >>
   qexistsl_tac [`G`,`func`,`s`,`sa`,`tn`,
@@ -67,7 +67,7 @@ QED
 Theorem ghost_kept_footprint_transport:
   ghost_kept ce es se G0 tn0 s0 G tn /\ se.cs_next_var <= sa.cs_next_var /\
   (!p. not_fresh_at sa p ==>
-    FLOOKUP H p = FLOOKUP G p /\ op_taint tm (Var p) = op_taint tn (Var p)) /\
+    FLOOKUP HG p = FLOOKUP G p /\ op_taint tm (Var p) = op_taint tn (Var p)) /\
   (!i. abi_footprint_disjoint i 1 fp ==> (i IN tm.t_mem <=> i IN tn.t_mem)) /\
   (!aid off sz i.
     FLOOKUP s0.vs_allocas aid = SOME (off,sz) /\ aid < se.cs_next_id /\
@@ -76,7 +76,7 @@ Theorem ghost_kept_footprint_transport:
     abi_footprint_disjoint i 1 fp) /\
   (!n b sz i. local_region ce es.scopes s0 n b sz /\ b <= i /\ i < b+sz ==>
     abi_footprint_disjoint i 1 fp) ==>
-  ghost_kept ce es se G0 tn0 s0 H tm
+  ghost_kept ce es se G0 tn0 s0 HG tm
 Proof
   strip_tac >> irule ghost_kept_exterior_transport >>
   qexistsl_tac [`G`,`sa`,`tn`, `{i | ~abi_footprint_disjoint i 1 fp}`] >>

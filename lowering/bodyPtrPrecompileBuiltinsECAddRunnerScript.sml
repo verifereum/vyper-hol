@@ -92,7 +92,7 @@ fun ecadd_second () = (
   `local_ptrs_reserved cenv s1` by metis_tac[local_ptrs_reserved_next_var] >>
   `fn_has_code s1 sm fn /\ fn_has_code sm sb fn` by
     metis_tac[fragExecTheory.fn_has_code_split] >>
-  `stmt_state_rel ctx fn cenv cx ee t` by fs[loweringPostsTheory.expr_post_def] >>
+  `stmt_state_rel H ctx fn cenv cx ee t` by fs[loweringPostsTheory.expr_post_def] >>
   `!x sz. cenv.ce_return_buf = SOME (PtrVar (Var x) sz) ==>
      not_fresh_at s1 x` by metis_tac[stmtFragPtrTheory.not_fresh_at_mono] >>
   `!x sz. cenv.ce_return_pc = SOME (PtrVar (Var x) sz) ==>
@@ -149,7 +149,7 @@ QED
 
 Resume ecadd_expr_vv_sim_ptr[tail_frame]:
   `local_ptrs_reserved cenv sm` by metis_tac[local_ptrs_reserved_next_var] >>
-  `stmt_state_rel ctx fn cenv cx ee' t'` by fs[loweringPostsTheory.expr_post_def] >>
+  `stmt_state_rel H ctx fn cenv cx ee' t'` by fs[loweringPostsTheory.expr_post_def] >>
   `!x sz. cenv.ce_return_buf = SOME (PtrVar (Var x) sz) ==> not_fresh_at sm x` by
     metis_tac[stmtFragPtrTheory.not_fresh_at_mono] >>
   `!x sz. cenv.ce_return_pc = SOME (PtrVar (Var x) sz) ==> not_fresh_at sm x` by
@@ -162,7 +162,7 @@ Resume ecadd_expr_vv_sim_ptr[tail_frame]:
   drule_all precompile_tail_placement >> strip_tac >>
   `expr_val_rel cx (expr_type b) v' q t' /\
    expr_val_at cenv cx (expr_type b) s1 sm ee' v' q t'` by
-    (qpat_assum `expr_post _ _ _ _ b _ _ _ _ _ _ _ _` mp_tac >>
+    (qpat_assum `expr_post _ _ _ _ _ b _ _ _ _ _ _ _ _` mp_tac >>
      qpat_assum `post_value_type cenv b = _`
        (fn th => rewrite_tac[loweringPostsTheory.expr_post_def, th]) >>
      rpt strip_tac >> first_assum ACCEPT_TAC) >>
@@ -173,7 +173,7 @@ Resume ecadd_expr_vv_sim_ptr[tail_frame]:
    ptr_val_ok cx (expr_type a) v p G' tn' t' /\
    expr_val_rel cx (expr_type a) v p t' /\
    expr_val_rel cx (expr_type b) v' q t'` by fs[loweringPostsTheory.expr_post_def] >>
-  `stor_taint_ok cx tn' t'` by fs[bodyPtrDefsTheory.ghost_inv_def] >>
+  `stor_taint_ok H cx tn' t'` by fs[bodyPtrDefsTheory.ghost_inv_def] >>
   fs[bodyPtrDefsTheory.stor_taint_ok_def] >>
   Cases_on `ec_source_tail cx (ArrayT (BaseT (UintT 256)) (Fixed 2)) ECAdd
     [expr_type a;expr_type b] [v;v'] ee'` >>
@@ -186,13 +186,13 @@ Resume ecadd_expr_vv_sim_ptr[tail_path]:
     (mp_then Any mp_tac ecadd_source_tail_ptr_path) >>
   disch_then (fn th => qpat_assum `compile_ecadd_points _ _ _ = _`
     (mp_then Any mp_tac th)) >>
-  disch_then (fn th => qpat_assum `stmt_state_rel _ _ _ _ ee' t'`
+  disch_then (fn th => qpat_assum `stmt_state_rel _ _ _ _ _ ee' t'`
     (mp_then Any mp_tac th)) >>
-  disch_then (fn th => qpat_assum `ghost_inv _ _ _ ee' G' tn' t'`
+  disch_then (fn th => qpat_assum `ghost_inv _ _ _ _ ee' G' tn' t'`
     (mp_then Any mp_tac th)) >>
   disch_then (fn th => qpat_assum `expr_val_at _ _ _ sa sm ee' v _ t'`
     (mp_then Any mp_tac th)) >>
-  disch_then (qspecl_then [`bb`,`[a;b]`,`PG`,`cx_dead cx`] mp_tac) >>
+  disch_then (qspecl_then [`bb`,`[a;b]`,`PG`,`cx_dead H cx`] mp_tac) >>
   simp[] >>
   (impl_tac >- first_assum ACCEPT_TAC) >> strip_tac >>
   suspend "tail_outcome"
@@ -215,9 +215,9 @@ QED
 Resume ecadd_expr_vv_sim_ptr[entry_rebase]:
   fs[as_ptr_val_def, contextTheory.mk_ptr_def] >>
   irule precompile_two_operand_entry_rebase >>
-  qpat_assum `vv_post _ _ _ _ _ ee' sm _ _ _ _ _ _` (irule_at Any) >>
-  qpat_assum `expr_post _ _ _ _ b _ s1 sm _ _ _ _ _` (irule_at Any) >>
-  qpat_assum `expr_post _ _ _ _ a _ sa s1 _ _ _ _ _` (irule_at Any) >>
+  qpat_assum `vv_post _ _ _ _ _ _ ee' sm _ _ _ _ _ _` (irule_at Any) >>
+  qpat_assum `expr_post _ _ _ _ _ b _ s1 sm _ _ _ _ _` (irule_at Any) >>
+  qpat_assum `expr_post _ _ _ _ _ a _ sa s1 _ _ _ _ _` (irule_at Any) >>
   simp[loweringPostsTheory.expr_has_effect_thm] >> metis_tac[]
 QED
 

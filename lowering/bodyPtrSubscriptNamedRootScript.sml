@@ -10,7 +10,7 @@ Ancestors
 
 Theorem named_root_preparation:
   expr_body_pre cenv cx env (Name ann id) es /\
-  stmt_state_rel ctx func cenv cx es s /\ ghost_inv d cenv cx es G tn s ==>
+  stmt_state_rel H ctx func cenv cx es s /\ ghost_inv H d cenv cx es G tn s ==>
   ?entry p sz a.
     lookup_scopes id es.scopes = SOME entry /\
     evaluate_type (get_tenv cx) ann = SOME entry.type /\
@@ -53,11 +53,11 @@ QED
 Theorem named_root_execution:
   expr_body_pre cenv cx env (Name ann id) es /\
   compile_expr cenv ty (Name ann id) sa = (vv,sb) /\
-  stmt_state_rel ctx func cenv cx es s0 /\
-  ghost_inv d cenv cx es G0 tn0 s0 /\ ~s0.vs_halted /\
+  stmt_state_rel H ctx func cenv cx es s0 /\
+  ghost_inv H d cenv cx es G0 tn0 s0 /\ ~s0.vs_halted /\
   s0.vs_current_bb = sa.cs_current_bb /\
   s0.vs_inst_idx = LENGTH sa.cs_current_insts ==>
-  gas_outcome_ptr (cx_dead cx) (cx_tops cx) (ctx,func) PG
+  gas_outcome_ptr (cx_dead H cx) (cx_tops cx) (ctx,func) PG
     (eval_expr cx (Name ann id)) (es,s0,G0,tn0)
     (\res ee G tn t. ?entry p sz a.
       res = INL (PlaceR (MemoryPlace id [])) /\
@@ -71,18 +71,18 @@ Theorem named_root_execution:
       ptr_covers G tn p t sz /\
       (!mem. mem_agree_outside tn.t_mem t.vs_memory mem ==>
              val_in_memory entry.type entry.value (w2n a) mem) /\
-      vv_post ctx func cenv cx (Name ann id) es sa sb s0 ee
+      vv_post H ctx func cenv cx (Name ann id) es sa sb s0 ee
         (PlaceR (MemoryPlace id [])) vv t /\
       t.vs_current_bb = sb.cs_current_bb /\
       t.vs_inst_idx = LENGTH sb.cs_current_insts /\
-      ghost_inv d cenv cx ee G tn t /\
+      ghost_inv H d cenv cx ee G tn t /\
       ghost_kept cenv es sa G0 tn0 s0 G tn)
     (\res ee gt r. expr_exit res r)
 Proof
   strip_tac >> drule_all named_root_preparation >> strip_tac >>
   drule compile_name_value_ptr >>
   disch_then (qspecl_then [`ty`, `sa`, `ann`] assume_tac) >> gvs[] >>
-  `vv_post ctx func cenv cx (Name ann id) es sa sa s0
+  `vv_post H ctx func cenv cx (Name ann id) es sa sa s0
      (es with gas_obs := []) (PlaceR (MemoryPlace id []))
      (LocatedValue ann (mk_ptr (Var p) LocMemory)) s0` by
     (irule name_value_post >> simp[] >> goal_assum (drule_at Any) >> simp[]) >>

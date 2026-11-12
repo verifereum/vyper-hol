@@ -38,8 +38,8 @@ Theorem storage_dead_encoded_outside:
     w2n k + type_slot_size tv <= dimword (:256) /\
     encode_value tv v = SOME writes /\ value_has_type tv v /\
     ~(w2n k <= x /\ x < w2n k + type_slot_size tv) /\
-    storage_dead cx tr st x b ==>
-    storage_dead cx tr (apply_writes k writes st) x b
+    storage_dead H tr st x b ==>
+    storage_dead H tr (apply_writes k writes st) x b
 Proof
   rpt gen_tac >> strip_tac >>
   qpat_x_assum `storage_dead _ _ _ _ _` mp_tac >>
@@ -65,7 +65,7 @@ QED
 Theorem storage_dead_lookup_cong:
   !cx tr st final j b.
     (!i. lookup_storage (n2w i) final = lookup_storage (n2w i) st) ==>
-    (storage_dead cx tr final j b <=> storage_dead cx tr st j b)
+    (storage_dead H tr final j b <=> storage_dead H tr st j b)
 Proof
   rpt strip_tac >> simp[storage_dead_def] >>
   `!base tv. dead_bytes final base tv j b <=> dead_bytes st base tv j b` by
@@ -81,12 +81,12 @@ Theorem storage_dead_encoded_endpoint_outside:
     (!i. lookup_storage (n2w i) final =
          lookup_storage (n2w i) (apply_writes k writes st)) /\
     ~(w2n k <= x /\ x < w2n k + type_slot_size tv) /\
-    storage_dead cx tr st x b ==>
-    storage_dead cx tr final x b
+    storage_dead H tr st x b ==>
+    storage_dead H tr final x b
 Proof
   rpt strip_tac >>
-  `storage_dead cx tr final x b <=>
-   storage_dead cx tr (apply_writes k writes st) x b` by
+  `storage_dead H tr final x b <=>
+   storage_dead H tr (apply_writes k writes st) x b` by
     (irule storage_dead_lookup_cong >> simp[]) >>
   metis_tac[storage_dead_encoded_outside]
 QED
@@ -100,8 +100,8 @@ Theorem storage_dead_endpoint_outside:
          ~(w2n k <= i /\ i < w2n k + type_slot_size tv) ==>
          lookup_storage (n2w i) final = lookup_storage (n2w i) st) /\
     ~(w2n k <= x /\ x < w2n k + type_slot_size tv) /\
-    storage_dead cx tr st x b ==>
-    storage_dead cx tr final x b
+    storage_dead H tr st x b ==>
+    storage_dead H tr final x b
 Proof
   rpt gen_tac >> strip_tac >>
   qpat_x_assum `storage_dead _ _ _ _ _` mp_tac >>

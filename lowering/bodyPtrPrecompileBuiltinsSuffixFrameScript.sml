@@ -129,13 +129,13 @@ Theorem computed_suffix_ghost_frame:
     (EL 1 (emitted_insts sm sl)) v /\
   tn2 = step_taint (EL 1 (emitted_insts sm sl)) u v
     (step_taint (EL 0 (emitted_insts sm sl)) s u tn) /\
-  ghost_inv d cenv cx es G tn s /\ local_ptrs_rel fn cenv es.scopes s /\
+  ghost_inv H d cenv cx es G tn s /\ local_ptrs_rel fn cenv es.scopes s /\
   local_ptrs_reserved cenv sm /\ sf.cs_next_var <= sm.cs_next_var /\
   (!p sz. cenv.ce_return_buf = SOME (PtrVar (Var p) sz) ==> not_fresh_at sm p) /\
   (!p sz. cenv.ce_return_pc = SOME (PtrVar (Var p) sz) ==> not_fresh_at sm p) /\
   (!name b sz. local_region cenv es.scopes s name b sz ==>
      regions_disjoint (w2n wo) 32 b sz) ==>
-  ghost_inv d cenv cx (es with outcomes := SOME (DROP 1 s.vs_outcomes)) G2 tn2 q /\
+  ghost_inv H d cenv cx (es with outcomes := SOME (DROP 1 s.vs_outcomes)) G2 tn2 q /\
   ghost_kept cenv es sf G tn s G2 tn2
 Proof
   strip_tac >> drule_all computed_suffix_frame_effects >> strip_tac >>
@@ -147,7 +147,7 @@ Proof
     (rpt strip_tac >> `not_fresh_at sm p` by
       (gvs[local_ptrs_reserved_def] >> metis_tac[]) >> metis_tac[]) >>
   conj_tac
-  >- (`ghost_inv d cenv cx es G2 tn2 q` suffices_by (simp[NoAsms, ghost_inv_def] >> strip_tac >> first_assum ACCEPT_TAC) >>
+  >- (`ghost_inv H d cenv cx es G2 tn2 q` suffices_by (simp[NoAsms, ghost_inv_def] >> strip_tac >> first_assum ACCEPT_TAC) >>
       irule fresh_scratch_ghost_frame >>
       goal_assum (drule_at Any) >> goal_assum (drule_at Any) >>
       qexists `fn` >> simp[] >> first_assum ACCEPT_TAC) >>

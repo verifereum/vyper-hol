@@ -24,9 +24,9 @@ Theorem log_data_sources_ptr_kept:
   EVERY (\(op,ty). !x. op = Var x ==> not_fresh_at st x) xs /\
   log_write_frame st b cap s t /\
   (!p. not_fresh_at st p ==>
-    FLOOKUP H p = FLOOKUP G p /\ op_taint tm (Var p) = op_taint tn (Var p)) /\
+    FLOOKUP HG p = FLOOKUP G p /\ op_taint tm (Var p) = op_taint tn (Var p)) /\
   (!i. ~(b <= i /\ i < b+cap) ==> (i IN tm.t_mem <=> i IN tn.t_mem)) ==>
-  LIST_REL (\(op,ty) v. ptr_val_ok cx ty v op H tm t) xs vs
+  LIST_REL (\(op,ty) v. ptr_val_ok cx ty v op HG tm t) xs vs
 Proof
   Induct_on `xs` >- simp[] >>
   gen_tac >> PairCases_on `h` >> Cases_on `vs` >> simp[] >> strip_tac >>
@@ -159,9 +159,9 @@ Theorem compile_log_store_data_seq_ptr:
     ptr_covers G tn buf s cap /\
     off + SUM (MAP (type_memory_bytes ce) (MAP SND xs)) <= cap /\
     b+cap < dimword(:256) /\ ~ctx_has_dalloca ctx ==>
-    ?H tm t.
+    ?HG tm t.
       run_inst_seq (emitted_insts sa sb) s = OK t /\
-      inst_seq_ptr D 0 ctx fn PG G tn (emitted_insts sa sb) s H tm /\
+      inst_seq_ptr D 0 ctx fn PG G tn (emitted_insts sa sb) s HG tm /\
       (!m. mem_agree_outside tm.t_mem t.vs_memory m ==>
         log_data_layout cx (MAP SND xs) vs (b+off) m) /\
       log_write_frame sa (b+off)
@@ -171,7 +171,7 @@ Theorem compile_log_store_data_seq_ptr:
         (i IN tm.t_mem <=> i IN tn.t_mem)) /\
       tm.t_stor = tn.t_stor /\ tm.t_trans = tn.t_trans /\ tm.t_imm = tn.t_imm /\
       (!p. not_fresh_at sa p ==>
-        lookup_var p t = lookup_var p s /\ FLOOKUP H p = FLOOKUP G p /\
+        lookup_var p t = lookup_var p s /\ FLOOKUP HG p = FLOOKUP G p /\
         op_taint tm (Var p) = op_taint tn (Var p))
 Proof
   Induct_on `xs`
@@ -217,7 +217,7 @@ Resume compile_log_store_data_seq_ptr[tail_ready]:
   `off+type_memory_bytes ce h1 + SUM (MAP (type_memory_bytes ce) (MAP SND xs)) <= cap` by
     decide_tac >>
   qpat_x_assum `!vs off sa sb s G tn. _` drule_all >>
-  disch_then (qx_choose_then `H` (qx_choose_then `tm` (qx_choose_then `z` strip_assume_tac))) >>
+  disch_then (qx_choose_then `HG` (qx_choose_then `tm` (qx_choose_then `z` strip_assume_tac))) >>
   suspend "compose"
 QED
 Resume compile_log_store_data_seq_ptr[compose]:
@@ -238,9 +238,9 @@ Resume compile_log_store_data_seq_ptr[compose]:
   `EVERY (\i. ~is_terminator i.inst_opcode) (emitted_insts sn sb)` by
     (drule_all log_data_store_opcode_shape >> simp[EVERY_MEM]) >>
   `run_inst_seq (emitted_insts sa sb) s = OK (z with vs_inst_idx := sf.vs_inst_idx) /\
-   inst_seq_ptr D 0 ctx fn PG G tn (emitted_insts sa sb) s H tm` by
+   inst_seq_ptr D 0 ctx fn PG G tn (emitted_insts sa sb) s HG tm` by
     (qunabbrev_tac `u` >> drule_all successful_seq_ptr_append >> simp[]) >>
-  qexistsl_tac [`H`,`tm`,`z with vs_inst_idx := sf.vs_inst_idx`] >>
+  qexistsl_tac [`HG`,`tm`,`z with vs_inst_idx := sf.vs_inst_idx`] >>
   asm_rewrite_tac[] >> conj_tac >- suspend "layout" >>
   conj_tac >- suspend "write_frame" >>
   conj_tac >- suspend "exterior" >>
@@ -301,9 +301,9 @@ Theorem compile_log_store_data_path_ptr:
   b+cap < dimword(:256) /\ ~ctx_has_dalloca ctx /\ ~s.vs_halted /\
   lookup_block s.vs_current_bb fn.fn_blocks = SOME bb /\
   isPREFIX (emitted_insts sa sb) (DROP s.vs_inst_idx bb.bb_instructions) ==>
-  ?H tm t.
+  ?HG tm t.
     gas_path_ptr D 0 ctx fn PG G tn s
-      (LENGTH (FILTER (\i. i.inst_opcode = GAS) (emitted_insts sa sb))) H tm
+      (LENGTH (FILTER (\i. i.inst_opcode = GAS) (emitted_insts sa sb))) HG tm
       (OK (t with vs_inst_idx := s.vs_inst_idx + LENGTH (emitted_insts sa sb))) /\
     run_inst_seq (emitted_insts sa sb) s = OK t /\
     (!m. mem_agree_outside tm.t_mem t.vs_memory m ==>
@@ -315,7 +315,7 @@ Theorem compile_log_store_data_path_ptr:
       (i IN tm.t_mem <=> i IN tn.t_mem)) /\
     tm.t_stor = tn.t_stor /\ tm.t_trans = tn.t_trans /\ tm.t_imm = tn.t_imm /\
     (!p. not_fresh_at sa p ==>
-      lookup_var p t = lookup_var p s /\ FLOOKUP H p = FLOOKUP G p /\
+      lookup_var p t = lookup_var p s /\ FLOOKUP HG p = FLOOKUP G p /\
       op_taint tm (Var p) = op_taint tn (Var p))
 Proof
   strip_tac >> drule_all compile_log_store_data_seq_ptr >>
@@ -323,11 +323,11 @@ Proof
   `EVERY (supported_scalar_type o SND) xs` by metis_tac[log_data_sources_types] >>
   drule_all log_data_store_opcode_shape >> strip_tac >>
   drule_all fragGasSeqPtrTheory.run_inst_seq_gas_path_ptr >> strip_tac >>
-  qexistsl_tac [`H`,`tm`,`t`] >> simp[]
+  qexistsl_tac [`HG`,`tm`,`t`] >> simp[]
 QED
 
 Theorem log_data_write_ghost_inv:
-  ghost_inv d ce cx es G tn s /\ local_ptrs_rel fn ce es.scopes s /\
+  ghost_inv H d ce cx es G tn s /\ local_ptrs_rel fn ce es.scopes s /\
   local_ptrs_reserved ce sa /\
   (!p sz. ce.ce_return_buf = SOME (PtrVar (Var p) sz) ==> not_fresh_at sa p) /\
   (!p sz. ce.ce_return_pc = SOME (PtrVar (Var p) sz) ==> not_fresh_at sa p) /\
@@ -338,9 +338,9 @@ Theorem log_data_write_ghost_inv:
     (i IN tm.t_mem <=> i IN tn.t_mem)) /\
   tm.t_stor = tn.t_stor /\ tm.t_trans = tn.t_trans /\ tm.t_imm = tn.t_imm /\
   (!p. not_fresh_at sa p ==>
-    lookup_var p t = lookup_var p s /\ FLOOKUP H p = FLOOKUP G p /\
+    lookup_var p t = lookup_var p s /\ FLOOKUP HG p = FLOOKUP G p /\
     op_taint tm (Var p) = op_taint tn (Var p)) ==>
-  ghost_inv d ce cx es H tm t
+  ghost_inv H d ce cx es HG tm t
 Proof
   strip_tac >> irule ghost_inv_exterior_transport >>
   qexistsl_tac [`G`,`fn`,`s`,`sa`,`tn`,`{i | b <= i /\ i < b+n}`] >>
@@ -362,8 +362,8 @@ Theorem log_data_write_ghost_kept:
   (!name p sz. local_region ce es.scopes s0 name p sz ==> p+sz <= b \/ b+n <= p) /\
   (!i. ~(b <= i /\ i < b+n) ==> (i IN tm.t_mem <=> i IN tn.t_mem)) /\
   (!p. not_fresh_at sa p ==>
-    FLOOKUP H p = FLOOKUP G p /\ op_taint tm (Var p) = op_taint tn (Var p)) ==>
-  ghost_kept ce es se G0 tn0 s0 H tm
+    FLOOKUP HG p = FLOOKUP G p /\ op_taint tm (Var p) = op_taint tn (Var p)) ==>
+  ghost_kept ce es se G0 tn0 s0 HG tm
 Proof
   strip_tac >> irule ghost_kept_exterior_transport >>
   qexistsl_tac [`G`,`sa`,`tn`,`{i | b <= i /\ i < b+n}`] >> simp[] >>

@@ -39,21 +39,21 @@ Theorem named_root_index_execution:
           not_fresh_at sb x) /\
   gas_admissible (bind (eval_expr cx idx) (read_result cx)) expr_res_ok
     (es with gas_obs := []) /\
-  stmt_state_rel ctx func cenv cx es s0 /\
-  ghost_inv d cenv cx es G0 tn0 s0 /\ ~s0.vs_halted /\
+  stmt_state_rel H ctx func cenv cx es s0 /\
+  ghost_inv H d cenv cx es G0 tn0 s0 /\ ~s0.vs_halted /\
   s0.vs_current_bb = sa.cs_current_bb /\
   s0.vs_inst_idx = LENGTH sa.cs_current_insts ==>
-  gas_outcome_ptr (cx_dead cx) (cx_tops cx) (ctx,func) PG
+  gas_outcome_ptr (cx_dead H cx) (cx_tops cx) (ctx,func) PG
     (bind (eval_expr cx (Name ann id))
       (\base. bind (bind (eval_expr cx idx) (read_result cx))
         (\v. return (base,v)))) (es,s0,G0,tn0)
     (\res ee G tn t. ?p sz w v.
       res = INL (PlaceR (MemoryPlace id []),v) /\
       vv = LocatedValue ann (mk_ptr (Var p) LocMemory) /\
-      expr_post ctx func cenv cx idx (es with gas_obs := []) sb sk s0 ee v op t /\
+      expr_post H ctx func cenv cx idx (es with gas_obs := []) sb sk s0 ee v op t /\
       t.vs_current_bb = sk.cs_current_bb /\
       t.vs_inst_idx = LENGTH sk.cs_current_insts /\
-      ghost_inv d cenv cx ee G tn t /\
+      ghost_inv H d cenv cx ee G tn t /\
       ptr_val_ok cx (post_value_type cenv idx) v op G tn t /\
       (~is_word_type (post_value_type cenv idx) ==> ptr_buf_ok cenv idx op G t) /\
       ghost_kept cenv (es with gas_obs := []) sb G0 tn0 s0 G tn /\
@@ -69,11 +69,11 @@ Proof
   strip_tac >> drule_all named_root_preparation >> strip_tac >>
   drule compile_name_value_ptr >>
   disch_then (qspecl_then [`bty`, `sa`, `ann`] assume_tac) >> gvs[] >>
-  `stmt_state_rel ctx func cenv cx (es with gas_obs := []) s0` by
+  `stmt_state_rel H ctx func cenv cx (es with gas_obs := []) s0` by
     (drule msg_gas_state_frame >>
      disch_then (qspecl_then [`s0.vs_gas_readings`, `s0.vs_inst_idx`, `[]`] mp_tac) >>
      simp[]) >>
-  `ghost_inv d cenv cx (es with gas_obs := []) G0 tn0 s0` by
+  `ghost_inv H d cenv cx (es with gas_obs := []) G0 tn0 s0` by
     (gvs[ghost_inv_def] >> first_assum ACCEPT_TAC) >>
   irule named_prefix_counted >>
   conj_tac >- metis_tac[] >> simp[] >>

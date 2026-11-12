@@ -32,7 +32,7 @@ Theorem code_array_element_ptr_summary:
   read_result cx r ee = (INL (ArrayV av),ee) /\
   array_index (ArrayTV etv bd) av i = SOME v /\
   val_wf (ArrayTV etv bd) (ArrayV av) /\ val_wf etv v /\ value_has_type etv v /\
-  vv_post ctx func cenv cx (Subscript (ArrayT et bd) obj idx) es sa sd s0 ee r
+  vv_post H ctx func cenv cx (Subscript (ArrayT et bd) obj idx) es sa sd s0 ee r
     (LocatedValue ann p) q /\
   p.ptr_location = LocCode /\ eval_operand p.ptr_operand q = SOME w /\
   j = (case bd of Fixed _ => 0 | Dynamic _ => 32) + Num i * type_memory_size etv /\
@@ -40,14 +40,14 @@ Theorem code_array_element_ptr_summary:
   op_taint tn dst = {} /\ op_prov G dst = NONE /\
   gas_path_ptr D 0 ctx func PG G0 tn0 s 0 G tn (OK q) /\
   q.vs_current_bb = sd.cs_current_bb /\ q.vs_inst_idx = LENGTH sd.cs_current_insts /\
-  ghost_inv d cenv cx ee G tn q /\ ghost_kept cenv es sa Ginit tninit s0 G tn ==>
+  ghost_inv H d cenv cx ee G tn q /\ ghost_kept cenv es sa Ginit tninit s0 G tn ==>
   gas_summary_ptr_at D (ctx,func) PG []
     (select_result cx (ArrayT et bd) r (ValueSubscript (IntV i))) (ee,s,G0,tn0)
     (\res ee' G tn q. ?child. res = INL child /\
-      vv_post ctx func cenv cx (Subscript et obj idx) es sa sd s0 ee' child
+      vv_post H ctx func cenv cx (Subscript et obj idx) es sa sd s0 ee' child
         (LocatedValue et (mk_ptr dst LocCode)) q /\
       q.vs_current_bb = sd.cs_current_bb /\ q.vs_inst_idx = LENGTH sd.cs_current_insts /\
-      ghost_inv d cenv cx ee' G tn q /\
+      ghost_inv H d cenv cx ee' G tn q /\
       ptr_vv_ok cx (post_value_type cenv (Subscript et obj idx)) child
         (LocatedValue et (mk_ptr dst LocCode)) ee' G tn q /\
       ghost_kept cenv es sa Ginit tninit s0 G tn)
@@ -59,7 +59,7 @@ Proof
     (irule framed_array_select_read >> simp[] >> metis_tac[]) >>
   qpat_assum `select_result _ _ _ _ _ = _`
     (assume_tac o MATCH_MP exprSimPropsTheory.select_result_memory_place) >>
-  `vv_post ctx func cenv cx (Subscript et obj idx) es sa sd s0 ee child
+  `vv_post H ctx func cenv cx (Subscript et obj idx) es sa sd s0 ee child
      (LocatedValue et (mk_ptr dst p.ptr_location)) q` by
     (irule vv_post_array_element >> simp[] >>
      qexistsl [`ann`, `av`, `i`, `r`] >> simp[] >> metis_tac[]) >>
@@ -92,8 +92,8 @@ Proof
 QED
 
 Theorem code_array_bound_view:
-  stmt_state_rel ctx func cenv cx ee s /\ ~cenv.ce_is_ctor /\
-  vv_post ctx func cenv cx obj es sa sc s0 ee r (LocatedValue ann p) s /\
+  stmt_state_rel H ctx func cenv cx ee s /\ ~cenv.ce_is_ctor /\
+  vv_post H ctx func cenv cx obj es sa sc s0 ee r (LocatedValue ann p) s /\
   post_value_type cenv obj = ArrayT et bd /\ p.ptr_location = LocCode /\
   eval_operand p.ptr_operand s = SOME w /\
   evaluate_type (get_tenv cx) et = SOME etv /\

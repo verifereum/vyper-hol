@@ -5,9 +5,9 @@ Ancestors
   bodyPtrPrecompileBuiltinsGhost bodyPtrDefs loweringPosts
 
 Theorem captured_code_base_transport:
-  vv_post ctx func cenv cx obj es sa sb s0 t r
+  vv_post H ctx func cenv cx obj es sa sb s0 t r
     (LocatedValue (ArrayT et bd) p) u /\
-  expr_post ctx func cenv cx idx t sb sc u t' iv iop v /\
+  expr_post H ctx func cenv cx idx t sb sc u t' iv iop v /\
   expr_type obj = ArrayT et bd /\ ~cenv.ce_is_ctor /\
   p.ptr_location = LocCode /\
   ptr_vv_ok cx (ArrayT et bd) r (LocatedValue (ArrayT et bd) p) t G0 tn0 u /\

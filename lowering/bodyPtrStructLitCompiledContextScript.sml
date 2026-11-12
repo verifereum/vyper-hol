@@ -5,7 +5,7 @@ Ancestors
   bodySim exprLoweringProps
 
 Theorem body_frame_compiled_context:
-  body_inv tops ctx cenv cx /\ stmt_state_rel ctx func cenv cx es s ==>
+  body_inv tops ctx cenv cx /\ stmt_state_rel H ctx func cenv cx es s ==>
   lookup_function func.fn_name ctx.ctx_functions = SOME func /\
   ?rpolicy unit.
     (if cx.in_deploy then

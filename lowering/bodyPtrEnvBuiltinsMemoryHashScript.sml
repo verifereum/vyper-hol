@@ -178,12 +178,12 @@ Proof
 QED
 
 Theorem hash_update_ghosts:
-  ghost_inv d cenv cx es G tn s /\ local_ptrs_reserved cenv sa /\
+  ghost_inv H d cenv cx es G tn s /\ local_ptrs_reserved cenv sa /\
   ghost_kept cenv es0 sa G0 tn0 s0 G tn /\
   (!x sz. cenv.ce_return_buf = SOME (PtrVar (Var x) sz) ==> not_fresh_at sa x) /\
   (!x sz. cenv.ce_return_pc = SOME (PtrVar (Var x) sz) ==> not_fresh_at sa x) /\
   ~not_fresh_at sa out ==>
-  ghost_inv d cenv cx es
+  ghost_inv H d cenv cx es
     (step_prov PG G (mk_inst id SHA3 [src; len] [out]) (update_var out w s))
     (step_taint (mk_inst id SHA3 [src; len] [out]) s (update_var out w s) tn)
     (update_var out w s) /\
@@ -205,7 +205,7 @@ Proof
 QED
 
 Theorem memory_hash_ghosts:
-  ghost_inv d cenv cx es G tn s /\ local_ptrs_reserved cenv sa /\
+  ghost_inv H d cenv cx es G tn s /\ local_ptrs_reserved cenv sa /\
   ghost_kept cenv es0 sa G0 tn0 s0 G tn /\
   (!x sz. cenv.ce_return_buf = SOME (PtrVar (Var x) sz) ==> not_fresh_at sa x) /\
   (!x sz. cenv.ce_return_pc = SOME (PtrVar (Var x) sz) ==> not_fresh_at sa x) /\
@@ -215,7 +215,7 @@ Theorem memory_hash_ghosts:
   tn1 = step_taint (mk_inst lid MLOAD [src] [len]) s u tn /\
   G2 = step_prov PG G1 (mk_inst aid ADD [src; Lit 32w] [dst]) v /\
   tn2 = step_taint (mk_inst aid ADD [src; Lit 32w] [dst]) u v tn1 ==>
-  ghost_inv d cenv cx es
+  ghost_inv H d cenv cx es
     (step_prov PG G2 (mk_inst hid SHA3 [Var dst; Var len] [out]) t)
     (step_taint (mk_inst hid SHA3 [Var dst; Var len] [out]) v t tn2) t /\
   ghost_kept cenv es0 sa G0 tn0 s0
@@ -223,10 +223,10 @@ Theorem memory_hash_ghosts:
     (step_taint (mk_inst hid SHA3 [Var dst; Var len] [out]) v t tn2)
 Proof
   strip_tac >>
-  `ghost_inv d cenv cx es G1 tn1 u /\
+  `ghost_inv H d cenv cx es G1 tn1 u /\
    ghost_kept cenv es0 sa G0 tn0 s0 G1 tn1` by
     (simp[] >> irule load_builtin_update_ghosts >> simp[]) >>
-  `ghost_inv d cenv cx es G2 tn2 v /\
+  `ghost_inv H d cenv cx es G2 tn2 v /\
    ghost_kept cenv es0 sa G0 tn0 s0 G2 tn2` by
     (qpat_x_assum `G2 = _` SUBST1_TAC >> qpat_x_assum `tn2 = _` SUBST1_TAC >>
      qpat_x_assum `v = _` SUBST1_TAC >>
@@ -244,7 +244,7 @@ Theorem memory_hash_counted_path:
   w2n a + 32 < dimword(:256) /\ mload (w2n a) s = n /\
   root <> len /\ len <> dst /\ ~ctx_has_dalloca ctx /\
   (!i. w2n a <= i /\ i < w2n a + 32 + w2n n ==> i NOTIN tn.t_mem) /\
-  ghost_inv d cenv cx es G tn s /\ local_ptrs_reserved cenv sa /\
+  ghost_inv H d cenv cx es G tn s /\ local_ptrs_reserved cenv sa /\
   ghost_kept cenv es0 sa G0 tn0 s0 G tn /\
   (!x sz. cenv.ce_return_buf = SOME (PtrVar (Var x) sz) ==> not_fresh_at sa x) /\
   (!x sz. cenv.ce_return_pc = SOME (PtrVar (Var x) sz) ==> not_fresh_at sa x) /\
@@ -255,7 +255,7 @@ Theorem memory_hash_counted_path:
   ?G' tn'. gas_path_ptr D 0 ctx fn PG G tn s 0 G' tn'
     (OK (t with vs_inst_idx := s.vs_inst_idx + LENGTH code)) /\
     ptr_val_ok cx (BaseT (BytesT (Fixed 32))) result (Var out) G' tn' t /\
-    ghost_inv d cenv cx es G' tn' t /\
+    ghost_inv H d cenv cx es G' tn' t /\
     ghost_kept cenv es0 sa G0 tn0 s0 G' tn'
 Proof
   strip_tac >>

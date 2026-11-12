@@ -58,20 +58,20 @@ Theorem abi_decode_tuple_result_posts:
     (TupleT tys) (TupleTV tvs) /\
   val_wf (TupleTV tvs) (ArrayV (TupleV vs)) /\
   lookup_var dst t = SOME d /\
-  ptr_covers H tk dst t (type_memory_bytes cenv (TupleT tys)) /\
+  ptr_covers HG tk dst t (type_memory_bytes cenv (TupleT tys)) /\
   (!mem. mem_agree_outside tk.t_mem t.vs_memory mem ==>
     tuple_in_memory vs tvs (w2n d) mem) /\
-  stmt_state_rel ctx func cenv cx ee t /\ wb_frame cenv es ee sa s0 t /\
+  stmt_state_rel H ctx func cenv cx ee t /\ wb_frame cenv es ee sa s0 t /\
   (~expr_has_effect e ==> pure_frame cenv func es sa s0 t) /\
   FLOOKUP t.vs_allocas aid = SOME (w2n d,type_memory_bytes cenv (TupleT tys)) /\
   sa.cs_next_id <= aid /\ aid < sb.cs_next_id /\
   (!name b k. local_region cenv ee.scopes t name b k ==>
     regions_disjoint (w2n d) (type_memory_bytes cenv (TupleT tys)) b k) ==>
-  vv_post ctx func cenv cx e es sa sb s0 ee (Value (ArrayV (TupleV vs)))
+  vv_post H ctx func cenv cx e es sa sb s0 ee (Value (ArrayV (TupleV vs)))
     (LocatedValue (TupleT tys) (mk_ptr (Var dst) LocMemory)) t /\
   ptr_vv_ok cx (TupleT tys) (Value (ArrayV (TupleV vs)))
-    (LocatedValue (TupleT tys) (mk_ptr (Var dst) LocMemory)) ee H tk t /\
-  ptr_buf_ok cenv e (Var dst) H t
+    (LocatedValue (TupleT tys) (mk_ptr (Var dst) LocMemory)) ee HG tk t /\
+  ptr_buf_ok cenv e (Var dst) HG t
 Proof
   strip_tac >> drule abi_decoder_coherent_header >>
   simp[abi_decoder_header_def] >> strip_tac >>

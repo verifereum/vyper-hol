@@ -7,7 +7,7 @@ Ancestors
   valueEncoding compileEnv loweringStateRelDefs
 
 Theorem alloca_step_exterior_ghost_ptr:
-  stmt_state_rel ctx func cenv cx es s /\
+  stmt_state_rel H ctx func cenv cx es s /\
   MEM (mk_inst id ALLOCA [Lit (n2w n)] [out]) (fn_insts func) /\
   n < dimword(:256) /\
   step_inst_base (mk_inst id ALLOCA [Lit (n2w n)] [out]) s = OK s1 /\
@@ -37,11 +37,11 @@ Proof
 QED
 
 Theorem alloca_separated_ghost_inv_ptr:
-  stmt_state_rel ctx func cenv cx es s /\
+  stmt_state_rel H ctx func cenv cx es s /\
   MEM (mk_inst id ALLOCA [Lit (n2w n)] [out]) (fn_insts func) /\
   n < dimword(:256) /\
   step_inst_base (mk_inst id ALLOCA [Lit (n2w n)] [out]) s = OK s1 /\
-  FLOOKUP s1.vs_allocas id = SOME (b,n) /\ ghost_inv d cenv cx es G tn s /\
+  FLOOKUP s1.vs_allocas id = SOME (b,n) /\ ghost_inv H d cenv cx es G tn s /\
   (!name entry p sz. lookup_scopes name es.scopes = SOME entry /\
     FLOOKUP cenv.ce_vars name = SOME (PtrVar (Var p) sz) ==> p <> out) /\
   (!x sz. cenv.ce_return_buf = SOME (PtrVar (Var x) sz) ==> x <> out) /\
@@ -50,13 +50,13 @@ Theorem alloca_separated_ghost_inv_ptr:
     FLOOKUP cenv.ce_vars name = SOME (PtrVar (Var p) sz) /\
     lookup_var p s = SOME w ==>
     w2n w + val_footprint entry.type entry.value <= b \/ b+n <= w2n w) ==>
-  ghost_inv d cenv cx es
+  ghost_inv H d cenv cx es
     (step_prov PG G (mk_inst id ALLOCA [Lit (n2w n)] [out]) s1)
     (step_taint (mk_inst id ALLOCA [Lit (n2w n)] [out]) s s1 tn) s1
 Proof
   strip_tac >> drule_all alloca_step_exterior_ghost_ptr >>
   disch_then (qspecl_then [`tn`, `PG`, `G`] strip_assume_tac) >>
-  qmatch_goalsub_abbrev_tac `ghost_inv d cenv cx es G1 tf s1` >>
+  qmatch_goalsub_abbrev_tac `ghost_inv H d cenv cx es G1 tf s1` >>
   gvs[ghost_inv_def] >> conj_tac >- suspend "locals" >>
   conj_tac >- suspend "return_buffer" >>
   conj_tac >- suspend "return_pc" >>
@@ -100,7 +100,7 @@ Theorem emit_alloca_zero_path_ptr:
   fn_has_code sa sb func /\ ~ctx_has_dalloca ctx /\
   s.vs_current_bb = sa.cs_current_bb /\
   s.vs_inst_idx = LENGTH sa.cs_current_insts /\ ~s.vs_halted /\
-  stmt_state_rel ctx func cenv cx es s /\
+  stmt_state_rel H ctx func cenv cx es s /\
   MEM (mk_inst sa.cs_next_id ALLOCA [Lit (n2w n)] [out]) (fn_insts func) /\
   n < dimword(:256) /\
   step_inst_base (mk_inst sa.cs_next_id ALLOCA [Lit (n2w n)] [out]) s = OK s1 /\

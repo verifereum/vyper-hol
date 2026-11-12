@@ -107,7 +107,7 @@ Resume compile_assign_tuple_targets_stmt_frag_ptr[normal]:
   `ptr_buf_ok cenv e op G t` by fs[is_word_type_def] >>
   `(es_end with gas_obs := []).gas_obs = []` by simp[] >>
   drule_all assign_tuple_targets_suffix_ptr >>
-  disch_then (qspecl_then [`lctx`, `PG`, `cx_dead cx`] strip_assume_tac) >>
+  disch_then (qspecl_then [`lctx`, `PG`, `cx_dead H cx`] strip_assume_tac) >>
   suspend "finish"
 QED
 
@@ -118,7 +118,7 @@ Resume compile_assign_tuple_targets_stmt_frag_ptr[finish]:
       qexistsl_tac [`G`, `es_end`, `t`, `tn`, `v`] >>
       simp[gas_marked_exec_ptr_def]) >>
   disj1_tac >> simp[] >>
-  qpat_x_assum `stmt_post _ _ _ _ _ _ _ _ _ _ _ _` mp_tac >>
+  qpat_x_assum `stmt_post _ _ _ _ _ _ _ _ _ _ _ _ _` mp_tac >>
   simp[stmt_post_def, ghost_inv_gas_obs] >> strip_tac >>
   qpat_x_assum `ghost_kept _ _ _ _ _ _ _ _` mp_tac >>
   simp[ghost_kept_def]

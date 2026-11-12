@@ -70,7 +70,7 @@ Theorem assign_base_storage_typed_counted:
     supported_storage_type tops (expr_type e) /\ ~is_word_type (expr_type e) /\
     (!elem n. expr_type e <> ArrayT elem (Dynamic n)) /\
     evaluate_type (get_tenv cx) (expr_type e) = SOME tv /\
-    stmt_state_rel ctx func cenv cx es s /\
+    stmt_state_rel H ctx func cenv cx es s /\
     expr_val_at cenv cx (expr_type e) sx sy es v (Var root) s /\
     lookup_var root s = SOME a /\
     ptr_covers G tn root s (type_memory_bytes cenv (lowered_value_type cenv e)) /\

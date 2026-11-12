@@ -8,7 +8,7 @@ Ancestors assignTuplePtrLocalCopyGhost assignTuplePtrStoreWord assignTuplePtrCop
 Theorem assign_base_local_scope_ghost_post:
   !d cenv cx es G tn s id pre sc entry rest p sz dst n v
     sa t Gf tf func.
-    ghost_inv d cenv cx es G tn s /\
+    ghost_inv H d cenv cx es G tn s /\
     find_containing_scope id es.scopes = SOME (pre,sc,entry,rest) /\
     FLOOKUP cenv.ce_vars id = SOME (PtrVar (Var p) sz) /\
     lookup_var p s = SOME dst /\
@@ -24,8 +24,8 @@ Theorem assign_base_local_scope_ghost_post:
     (!i. ~(w2n dst <= i /\ i < w2n dst+n) ==>
       mem_bytes_at i 1 t.vs_memory = mem_bytes_at i 1 s.vs_memory /\
       (i IN tf.t_mem <=> i IN tn.t_mem)) /\
-    stor_taint_ok cx tf t ==>
-    ghost_inv d cenv cx
+    stor_taint_ok H cx tf t ==>
+    ghost_inv H d cenv cx
       (es with scopes := pre ++ (sc |+ (id,entry with <|value := v; popped := []|>)) :: rest)
       Gf tf t /\
     (!x. not_fresh_at sa x ==>

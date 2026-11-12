@@ -10,7 +10,7 @@ Ancestors
   exprSimCopy exprLoweringProps exprSimSubscriptArrayEndpoint
 
 Theorem memory_vv_post_readonly_tail:
-  vv_post ctx func cenv cx e es sa sc s0 ee r (LocatedValue ann p) s /\
+  vv_post H ctx func cenv cx e es sa sc s0 ee r (LocatedValue ann p) s /\
   post_value_type cenv e = expr_type e /\ p.ptr_location = LocMemory /\
   local_ptrs_reserved cenv sa /\ sa.cs_next_var <= sc.cs_next_var /\
   sc.cs_next_id <= sd.cs_next_id /\
@@ -20,8 +20,8 @@ Theorem memory_vv_post_readonly_tail:
                local_region cenv ee.scopes z name b sz) /\
   z.vs_allocas = s.vs_allocas /\ z.vs_memory = s.vs_memory /\
   contract_storage z = contract_storage s /\ contract_transient z = contract_transient s /\
-  stmt_state_rel ctx func cenv cx ee z ==>
-  vv_post ctx func cenv cx e es sa sd s0 ee r (LocatedValue ann p) z
+  stmt_state_rel H ctx func cenv cx ee z ==>
+  vv_post H ctx func cenv cx e es sa sd s0 ee r (LocatedValue ann p) z
 Proof
   strip_tac >>
   `wb_frame cenv es ee sa s0 s` by
@@ -81,7 +81,7 @@ Theorem fixed_array_represented_summary_ptr:
   eval_expr cx obj es = (INL r,t) /\
   (!tr slot vt. r <> PlaceR (StoragePlace tr slot vt)) /\
   ee.scopes = t.scopes /\ ee.immutables = t.immutables /\ ee.gas_obs = [] /\
-  vv_post ctx func cenv cx (Subscript (ArrayT et (Fixed n)) obj idx) es sa sc s0 ee r
+  vv_post H ctx func cenv cx (Subscript (ArrayT et (Fixed n)) obj idx) es sa sc s0 ee r
     (LocatedValue (ArrayT et (Fixed n)) p) q /\
   ptr_vv_ok cx (ArrayT et (Fixed n)) r (LocatedValue (ArrayT et (Fixed n)) p) ee G tn q /\
   ptr_buf_ok cenv obj p.ptr_operand G q /\ p.ptr_location = LocMemory /\
@@ -97,23 +97,23 @@ Theorem fixed_array_represented_summary_ptr:
   local_ptrs_reserved cenv sa /\ local_ptrs_reserved cenv sc /\ ci_mono sa sc /\
   (!x sz. cenv.ce_return_buf = SOME (PtrVar (Var x) sz) ==> not_fresh_at sc x) /\
   (!x sz. cenv.ce_return_pc = SOME (PtrVar (Var x) sz) ==> not_fresh_at sc x) /\
-  ghost_inv d cenv cx ee G tn q /\ ghost_kept cenv es sa G0 tn0 s0 G tn ==>
-  gas_summary_ptr_at (cx_dead cx) (ctx,func) PG []
+  ghost_inv H d cenv cx ee G tn q /\ ghost_kept cenv es sa G0 tn0 s0 G tn ==>
+  gas_summary_ptr_at (cx_dead H cx) (ctx,func) PG []
     (select_result cx (ArrayT et (Fixed n)) r (ValueSubscript (IntV i))) (ee,q,G,tn)
-    (\res ee' H tm z. ?child. res = INL child /\
-      vv_post ctx func cenv cx (Subscript et obj idx) es sa sd s0 ee' child
+    (\res ee' HG tm z. ?child. res = INL child /\
+      vv_post H ctx func cenv cx (Subscript et obj idx) es sa sd s0 ee' child
         (LocatedValue et (mk_ptr dst LocMemory)) z /\
       z.vs_current_bb = sd.cs_current_bb /\ z.vs_inst_idx = LENGTH sd.cs_current_insts /\
-      ghost_inv d cenv cx ee' H tm z /\
-      ptr_vv_ok cx et child (LocatedValue et (mk_ptr dst LocMemory)) ee' H tm z /\
-      ptr_buf_ok cenv (Subscript et obj idx) dst H z /\
-      ghost_kept cenv es sa G0 tn0 s0 H tm)
+      ghost_inv H d cenv cx ee' HG tm z /\
+      ptr_vv_ok cx et child (LocatedValue et (mk_ptr dst LocMemory)) ee' HG tm z /\
+      ptr_buf_ok cenv (Subscript et obj idx) dst HG z /\
+      ghost_kept cenv es sa G0 tn0 s0 HG tm)
     (\res ee' gt outcome. expr_exit res outcome)
 Proof
   disch_then (map_every assume_tac o CONJUNCTS) >>
   `expr_body_pre cenv cx env obj es` by
     metis_tac[exprSimSubscriptArraySourceTheory.expr_body_pre_array_subscript_base] >>
-  drule_at (Pat `vv_post _ _ _ _ _ _ _ _ _ _ _ _ _`) framed_array_post_view >>
+  drule_at (Pat `vv_post _ _ _ _ _ _ _ _ _ _ _ _ _ _`) framed_array_post_view >>
   disch_then (qspecl_then [`t`,`env`] mp_tac) >>
   (impl_tac >- simp[]) >> strip_tac >>
   `array_length (ArrayTV etv (Fixed n)) av = n` by
@@ -145,7 +145,7 @@ Resume fixed_array_represented_summary_ptr[valid]:
     metis_tac[valueTypingMemoryPropsTheory.value_has_type_memory_wf] >>
   `w2n w + val_footprint (ArrayTV etv (Fixed n)) (ArrayV av) < dimword (:256)` by
     (irule vv_post_memory_footprint_bound >>
-     goal_assum (drule_at (Pat `vv_post _ _ _ _ _ _ _ _ _ _ _ _ _`)) >>
+     goal_assum (drule_at (Pat `vv_post _ _ _ _ _ _ _ _ _ _ _ _ _ _`)) >>
      simp[vyperASTTheory.expr_type_def]) >>
   drule_all fixed_array_child_bounds >> strip_tac >>
   `0 < type_memory_size (ArrayTV etv (Fixed n))` by
@@ -183,10 +183,10 @@ Resume fixed_array_represented_summary_ptr[run]:
     metis_tac[venomStateTheory.eval_operand_def] >>
   `eval_operand iop q = SOME (n2w (Num i))` by metis_tac[] >>
   drule_all static_selector_counted >>
-  disch_then (qspecl_then [`PG`,`cx_dead cx`] strip_assume_tac) >>
-  `stmt_state_rel ctx func cenv cx ee q` by metis_tac[vv_post_def] >>
-  `stmt_state_rel ctx func cenv cx ee sf` by metis_tac[] >>
-  `ghost_inv d cenv cx ee Gf tnf sf` by
+  disch_then (qspecl_then [`PG`,`cx_dead H cx`] strip_assume_tac) >>
+  `stmt_state_rel H ctx func cenv cx ee q` by metis_tac[vv_post_def] >>
+  `stmt_state_rel H ctx func cenv cx ee sf` by metis_tac[] >>
+  `ghost_inv H d cenv cx ee Gf tnf sf` by
     (irule ghost_inv_register_transport >> goal_assum (drule_at Any) >> simp[] >>
      qexists_tac `sc` >> simp[] >> metis_tac[]) >>
   `ghost_kept cenv es sa G0 tn0 s0 Gf tnf` by
@@ -213,15 +213,15 @@ Resume fixed_array_represented_summary_ptr[endpoint]:
                local_region cenv ee.scopes sf name b sz` by
     (rpt gen_tac >> irule (GSYM copy_buffer_local_region_frame) >>
      qexists_tac `sc` >> simp[] >> metis_tac[]) >>
-  `vv_post ctx func cenv cx (Subscript (ArrayT et (Fixed n)) obj idx) es sa sd s0 ee r
+  `vv_post H ctx func cenv cx (Subscript (ArrayT et (Fixed n)) obj idx) es sa sd s0 ee r
      (LocatedValue (ArrayT et (Fixed n)) p) sf` by
-    (drule_at (Pat `vv_post _ _ _ _ _ _ _ _ _ _ _ _ _`) memory_vv_post_readonly_tail >>
+    (drule_at (Pat `vv_post _ _ _ _ _ _ _ _ _ _ _ _ _ _`) memory_vv_post_readonly_tail >>
      disch_then (qspecl_then [`sf`,`sd`] mp_tac) >>
      simp[] >> metis_tac[ci_mono_def, venomStateTheory.contract_storage_def,
                          venomStateTheory.contract_transient_def]) >>
   `eval_operand (Var out) sf = SOME (w + n2w (Num i * type_memory_size etv))` by
     metis_tac[venomStateTheory.eval_operand_def] >>
-  qpat_x_assum `vv_post _ _ _ _ _ _ sa sc _ _ _ _ _` kall_tac >>
+  qpat_x_assum `vv_post _ _ _ _ _ _ _ sa sc _ _ _ _ _` kall_tac >>
   `type_memory_bytes cenv (lowered_value_type cenv (Subscript et obj idx)) <=
      type_memory_size etv` by simp[] >>
   drule_all fixed_array_element_summary_ptr >>

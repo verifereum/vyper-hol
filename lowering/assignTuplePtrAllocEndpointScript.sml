@@ -9,7 +9,7 @@ Ancestors
 
 Theorem alloca_step_live_local_separated_ptr:
   !ctx func cenv cx es s id n out s1 b.
-  stmt_state_rel ctx func cenv cx es s /\ fn_inst_ids_distinct func /\
+  stmt_state_rel H ctx func cenv cx es s /\ fn_inst_ids_distinct func /\
   MEM (mk_inst id ALLOCA [Lit (n2w n)] [out]) (fn_insts func) /\
   not_local_ptr cenv es.scopes out /\ n < dimword(:256) /\
   step_inst_base (mk_inst id ALLOCA [Lit (n2w n)] [out]) s = OK s1 /\
@@ -48,16 +48,16 @@ QED
 Theorem emit_alloca_endpoint_ptr:
   !sx sm n p func ctx cenv cx es s d G tn D PG.
   emit_inst ALLOCA [Lit (n2w n)] [p] sx = ((),sm) /\
-  fn_has_code sx sm func /\ stmt_state_rel ctx func cenv cx es s /\
+  fn_has_code sx sm func /\ stmt_state_rel H ctx func cenv cx es s /\
   fn_inst_ids_distinct func /\ n < dimword(:256) /\ ~ctx_has_dalloca ctx /\
   s.vs_current_bb = sx.cs_current_bb /\
   s.vs_inst_idx = LENGTH sx.cs_current_insts /\ ~s.vs_halted /\
-  ghost_inv d cenv cx es G tn s /\ not_local_ptr cenv es.scopes p /\
+  ghost_inv H d cenv cx es G tn s /\ not_local_ptr cenv es.scopes p /\
   (!x sz. cenv.ce_return_buf = SOME (PtrVar (Var x) sz) ==> x <> p) /\
   (!x sz. cenv.ce_return_pc = SOME (PtrVar (Var x) sz) ==> x <> p) ==>
   ?t b G1 tn1.
     gas_path_ptr D 0 ctx func PG G tn s 0 G1 tn1 (OK t) /\
-    ghost_inv d cenv cx es G1 tn1 t /\ stmt_state_rel ctx func cenv cx es t /\
+    ghost_inv H d cenv cx es G1 tn1 t /\ stmt_state_rel H ctx func cenv cx es t /\
     ~t.vs_halted /\ t.vs_current_bb = sm.cs_current_bb /\
     t.vs_inst_idx = LENGTH sm.cs_current_insts /\
     FLOOKUP t.vs_allocas sx.cs_next_id = SOME (b,n) /\ b+n < dimword(:256) /\
@@ -95,7 +95,7 @@ Proof
     lookup_var q s = SOME w ==>
     w2n w + val_footprint entry.type entry.value <= b \/ b+n <= w2n w` by
     (rpt strip_tac >> first_x_assum irule >> simp[] >> metis_tac[]) >>
-  `ghost_inv d cenv cx es
+  `ghost_inv H d cenv cx es
      (step_prov PG G (mk_inst sx.cs_next_id ALLOCA [Lit (n2w n)] [p]) s1)
      (step_taint (mk_inst sx.cs_next_id ALLOCA [Lit (n2w n)] [p]) s s1 tn) s1` by
     (irule alloca_separated_ghost_inv_ptr >> simp[] >>
@@ -104,7 +104,7 @@ Proof
      qexistsl_tac [`ctx`, `func`] >> simp[]) >>
   drule_all emit_alloca_zero_path_ptr >>
   disch_then (qspecl_then [`tn`, `PG`, `G`, `D`] strip_assume_tac) >>
-  qmatch_asmsub_abbrev_tac `ghost_inv d cenv cx es G1 tn1 s1` >>
+  qmatch_asmsub_abbrev_tac `ghost_inv H d cenv cx es G1 tn1 s1` >>
   qexistsl_tac [`s1 with vs_inst_idx := SUC s.vs_inst_idx`, `b`, `G1`, `tn1`] >>
   simp[] >> suspend "post"
 QED
@@ -114,7 +114,7 @@ Resume emit_alloca_endpoint_ptr[post]:
     (qpat_x_assum `step_inst_base _ _ = _` mp_tac >>
      simp[step_inst_base_opcode_eqs, mk_inst_def, eval_operands_def, eval_operand_def] >>
      strip_tac >> first_assum ACCEPT_TAC) >>
-  `stmt_state_rel ctx func cenv cx es s1` by
+  `stmt_state_rel H ctx func cenv cx es s1` by
     (drule_at (Pat `exec_alloca _ _ _ = _`) stmt_state_rel_exec_alloca >>
      disch_then (mp_tac o cj 1) >>
      simp[GSYM mk_inst_def] >> metis_tac[]) >>
