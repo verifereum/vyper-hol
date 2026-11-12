@@ -41,8 +41,8 @@ Theorem terminal_inst_ptr_safe:
     lookup_block s.vs_current_bb fn.fn_blocks = SOME bb /\
     get_instruction bb s.vs_inst_idx = SOME (mk_inst id op [] []) /\
     (op = STOP \/ op = INVALID) /\ ~ctx_has_dalloca ctx /\
-    ~s.vs_halted /\ stor_taint_ok cx tn s ==>
-    !fuel. ptr_safe_run (cx_dead cx) 0 fuel ctx fn PG G tn s /\
+    ~s.vs_halted /\ stor_taint_ok H cx tn s ==>
+    !fuel. ptr_safe_run (cx_dead H cx) 0 fuel ctx fn PG G tn s /\
            (!e. run_from fuel ctx fn s <> Error e)
 Proof
   rpt gen_tac >> strip_tac >>
@@ -74,8 +74,8 @@ Theorem compile_guarded_body_end_ptr_safe:
     ~ctx_has_dalloca ctx /\ ~s.vs_halted /\
     s.vs_current_bb = sb.cs_current_bb /\
     s.vs_inst_idx = LENGTH sb.cs_current_insts /\
-    stor_taint_ok cx tn s ==>
-    !fuel. ptr_safe_run (cx_dead cx) 0 fuel ctx fn PG G tn s /\
+    stor_taint_ok H cx tn s ==>
+    !fuel. ptr_safe_run (cx_dead H cx) 0 fuel ctx fn PG G tn s /\
            (!e. run_from fuel ctx fn s <> Error e)
 Proof
   rpt gen_tac >> strip_tac >>
@@ -224,8 +224,8 @@ Proof
       drule gas_path_ptr_exec >> strip_tac >> gvs[exit_result_def]
       >- ((* it falls off its end *)
           gvs[stmt_lands_def] >>
-          `stor_taint_ok cx tn t` by fs[ghost_inv_def] >>
-          `ptr_safe_run (cx_dead cx) 0 0 unit.cu_context func [] G tn t /\
+          `stor_taint_ok H cx tn t` by fs[ghost_inv_def] >>
+          `ptr_safe_run (cx_dead H cx) 0 0 unit.cu_context func [] G tn t /\
            (!e. run_from 0 unit.cu_context func t <> Error e)` by
             (irule compile_guarded_body_end_ptr_safe >>
              qpat_assum `compile_guarded_body _ _ _ _ _ _ _ _ = _`

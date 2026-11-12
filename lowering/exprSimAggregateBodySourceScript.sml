@@ -22,8 +22,8 @@ Theorem aggregate_body_cons_outcome:
 Proof
   strip_tac >> once_rewrite_tac[evaluate_def] >>
   `!tv. storage_trace_frame
-          (\tv. bind (read_result cx tv)
-             (\v. bind (eval_exprs cx args) (\vs. return (v::vs)))) tv` by
+          (bind (read_result cx tv)
+             (\v. bind (eval_exprs cx args) (\vs. return (v::vs))))` by
     (rw[] >> irule storage_trace_frame_bind_all >>
      simp[storage_trace_frame_read_result] >> rw[] >>
      irule storage_trace_frame_bind_all >>
@@ -34,35 +34,42 @@ Proof
       irule gas_bad_storage_at_bind_left >> simp[])
   >- (qpat_x_assum `gas_summary_at _ _ _ _ _ _ _`
         (strip_assume_tac o REWRITE_RULE [gas_summary_at_def]) >>
-      Cases_on `storage_trace_domain cx st0 es_end.storage_trace`
-      >- (`valid_horizon cx st0 (storage_trace_horizon es_end.storage_trace)
-             es_end.storage_trace` by fs[storage_trace_domain_def]
-          >- suspend "normal"
-          >> suspend "exit") >>
-      rewrite_tac[gas_outcome_def] >> qexists_tac `marks` >> disj1_tac >>
-      irule gas_bad_storage_at_bind_left >> simp[] >>
-      irule gas_bad_storage_at_counted_prefix >> metis_tac[]) >>
+      (reverse (Cases_on `storage_trace_domain cx st0 es_end.storage_trace`)
+       >- (rewrite_tac[gas_outcome_def] >> qexists_tac `marks` >> disj1_tac >>
+           irule gas_bad_storage_at_bind_left >> simp[] >>
+           irule gas_bad_storage_at_counted_prefix >>
+           qexistsl_tac [`ctx`, `es_end`, `func`, `F`, `r`, `res`] >>
+           simp[])) >>
+      `valid_horizon cx st0 (storage_trace_horizon es_end.storage_trace)
+         es_end.storage_trace` by fs[storage_trace_domain_def]
+      >- suspend "normal"
+      >> suspend "exit") >>
   suspend "exempt"
 QED
 
 Resume aggregate_body_cons_outcome[normal]:
-  qpat_x_assum `(\res ee t. _) _ _ _` (assume_tac o BETA_RULE) >>
-  first_assum (drule_then strip_assume_tac o SIMP_RULE (srw_ss()) []) >>
-  gvs[] >> first_x_assum (drule_at (Pos (el 1))) >>
-  impl_tac >- (rpt strip_tac >> first_x_assum drule >> simp[]) >>
-  strip_tac >>
+  qpat_x_assum `(\res ee t. _) _ _ _` (assume_tac o SIMP_RULE (srw_ss()) []) >>
+  `?tv. res = INL tv` by
+    (first_assum (qspec_then `storage_trace_horizon es_end.storage_trace` mp_tac) >>
+     (impl_tac >- first_assum ACCEPT_TAC) >> strip_tac >> metis_tac[]) >>
+  gvs[] >>
+  qpat_x_assum `!marks tv mid t. _`
+    (qspecl_then [`marks`, `tv`, `es_end`, `t`] mp_tac) >>
+  (impl_tac >- simp[]) >> strip_tac >>
   qpat_x_assum `gas_outcome _ _ _ _ _ _ _ _ _`
     (strip_assume_tac o REWRITE_RULE [gas_outcome_def])
   >- (rewrite_tac[gas_outcome_def] >> qexists_tac `marks ++ marks'` >>
       disj1_tac >> irule gas_bad_storage_at_bind_right >> simp[] >>
-      goal_assum (drule_at Any) >> simp[])
+      metis_tac[])
   >- (qpat_x_assum `gas_summary_at _ _ _ _ _ _ _`
         (strip_assume_tac o REWRITE_RULE [gas_summary_at_def]) >>
       rewrite_tac[gas_outcome_def] >> qexists_tac `marks ++ marks'` >>
       disj2_tac >> disj1_tac >> simp[gas_summary_at_def] >>
       qexistsl_tac [`res`, `es_end'`, `r`] >> simp[] >>
-      irule gas_marked_exec_bind_normal >> goal_assum (drule_at Any) >>
-      gvs[]) >>
+      (conj_tac
+       >- (irule gas_marked_exec_bind_normal >> goal_assum (drule_at Any) >>
+           gvs[])) >>
+      fs[]) >>
   rewrite_tac[gas_outcome_def] >> qexists_tac `marks ++ marks'` >>
   disj2_tac >> disj2_tac >> qexistsl_tac [`err`, `ee`, `leaf`, `finish'`] >>
   pure_rewrite_tac[ignore_bind_def, bind_assoc] >>
@@ -112,18 +119,20 @@ Proof
       simp[storage_trace_frame_return])
   >- (qpat_x_assum `gas_summary_at _ _ _ _ _ _ _`
         (strip_assume_tac o REWRITE_RULE [gas_summary_at_def]) >>
-      Cases_on `storage_trace_domain cx st0 es_end.storage_trace`
-      >- (`valid_horizon cx st0 (storage_trace_horizon es_end.storage_trace)
-             es_end.storage_trace` by fs[storage_trace_domain_def]
-          >- suspend "normal"
-          >> suspend "exit") >>
-      rewrite_tac[gas_outcome_def] >> qexists_tac `marks` >> disj1_tac >>
-      irule (SRULE [] (Q.INST [`left` |-> `[]`]
-        (SPEC_ALL gas_bad_storage_at_bind_right))) >>
-      goal_assum (drule_at Any) >> simp[] >>
-      irule gas_bad_storage_at_bind_left >>
-      simp[storage_trace_frame_return] >>
-      irule gas_bad_storage_at_counted_prefix >> metis_tac[]) >>
+      (reverse (Cases_on `storage_trace_domain cx st0 es_end.storage_trace`)
+       >- (rewrite_tac[gas_outcome_def] >> qexists_tac `marks` >> disj1_tac >>
+           irule (SRULE [] (Q.INST [`left` |-> `[]`]
+             (SPEC_ALL gas_bad_storage_at_bind_right))) >>
+           goal_assum (drule_at Any) >> simp[] >>
+           irule gas_bad_storage_at_bind_left >>
+           simp[storage_trace_frame_return] >>
+           irule gas_bad_storage_at_counted_prefix >>
+           qexistsl_tac [`ctx`, `es_end`, `func`, `F`, `r`, `res`] >>
+           simp[])) >>
+      `valid_horizon cx st0 (storage_trace_horizon es_end.storage_trace)
+         es_end.storage_trace` by fs[storage_trace_domain_def]
+      >- suspend "normal"
+      >> suspend "exit") >>
   suspend "exempt"
 QED
 
@@ -141,8 +150,6 @@ Resume aggregate_body_read_cons_outcome[normal]:
   disj2_tac >> disj1_tac >>
   rewrite_tac[gas_summary_at_def] >>
   qexistsl_tac [`INL (v::vs)`, `es_end`, `OK t'`] >> simp[] >>
-  reverse conj_tac
-  >- (rpt strip_tac >> first_x_assum drule >> strip_tac >> gvs[]) >>
   irule (SRULE [] (Q.INST [`left` |-> `[]`] (SPEC_ALL gas_marked_exec_bind_normal))) >>
   goal_assum (drule_at Any) >> simp[]
 QED
@@ -229,7 +236,7 @@ Resume gas_outcome_map_source_run[normal]:
   disj2_tac >> disj1_tac >>
   rewrite_tac[gas_summary_at_def] >>
   qexistsl_tac [`SUM_MAP f I res`, `es_end`, `OK t`] >> simp[] >>
-  metis_tac[]
+  disj1_tac >> fs[] >> metis_tac[]
 QED
 
 Resume gas_outcome_map_source_run[exit]:
@@ -242,7 +249,8 @@ Resume gas_outcome_map_source_run[exit]:
   rewrite_tac[gas_outcome_def] >> qexists_tac `marks` >>
   disj2_tac >> disj1_tac >>
   rewrite_tac[gas_summary_at_def] >>
-  qexistsl_tac [`SUM_MAP f I res`, `es_end`, `r`] >> simp[]
+  qexistsl_tac [`SUM_MAP f I res`, `es_end`, `r`] >> simp[] >>
+  disj2_tac >> fs[] >> metis_tac[]
 QED
 
 Resume gas_outcome_map_source_run[exempt]:

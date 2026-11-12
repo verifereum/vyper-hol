@@ -14,19 +14,21 @@ End
 
 Definition target_sim_def:
   target_sim ctx func cenv cx env bt es <=>
-    !vt sa sb op s0.
+    !st0 vt sa sb op s0.
       type_place_target env bt = SOME vt /\
       compile_get_target_ptr compile_expr cenv bt sa = (op, sb) /\
       fn_has_code sa sb func /\ fn_inst_ids_distinct func /\
       local_ptrs_reserved cenv sa /\
       gas_admissible (eval_base_place cx bt) target_res_ok es /\
-      stmt_state_rel ctx func cenv cx es s0 /\ ~s0.vs_halted /\
+      (!H. valid_horizon cx st0 H es.storage_trace ==>
+        stmt_state_rel H ctx func cenv cx es s0 /\
+        storage_well_formed_on cx es (FST H)) /\ ~s0.vs_halted /\
       s0.vs_current_bb = sa.cs_current_bb /\
       s0.vs_inst_idx = LENGTH sa.cs_current_insts ==>
-      gas_outcome F (cx_tops cx) (ctx, func) (eval_base_place cx bt) (es, s0)
-        (\res ee t. ?pv. res = INL pv /\
-          target_post ctx func cenv cx es sa sb s0 ee pv vt op t /\
+      gas_outcome F (cx_tops cx) (ctx, func) cx st0 (eval_base_place cx bt) (es, s0)
+        (\H res ee t. ?pv. res = INL pv /\
+          target_post H ctx func cenv cx es sa sb s0 ee pv vt op t /\
           t.vs_current_bb = sb.cs_current_bb /\
           t.vs_inst_idx = LENGTH sb.cs_current_insts)
-        (\res ee r. expr_exit res r)
+        (\H res ee r. expr_exit res r)
 End

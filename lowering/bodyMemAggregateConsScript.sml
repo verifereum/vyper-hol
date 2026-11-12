@@ -20,7 +20,7 @@ Theorem aggregate_tuple_cons_continuation_mem_cursor:
   evaluate_type (get_tenv cx) (expr_type e) = SOME tv /\
   type_memory_bytes ce (expr_type e) = type_memory_size tv /\
   (int_calls_expr e = [] \/ lowered_value_type ce e = expr_type e) /\
-  vv_post ctx func ce cx e es sa sm s0 es' tvv vv r /\
+  vv_post H ctx func ce cx e es sa sm s0 es' tvv vv r /\
   vv_store_bound cx (expr_type e) (lowered_value_type ce e) es' tvv vv r /\
   alloca_history func r /\ alloca_inv r /\
   ~r.vs_halted /\ r.vs_current_bb = sm.cs_current_bb /\
@@ -49,7 +49,7 @@ Theorem aggregate_tuple_cons_continuation_mem_cursor:
     gas_marked_exec T (ctx,func) (read_result cx tvv) (es',r)
           [] (INL v) es' (OK q) /\
     val_in_memory tv v (b+off) q.vs_memory /\
-    stmt_state_rel ctx func ce cx es' q /\
+    stmt_state_rel H ctx func ce cx es' q /\
     (!z a. not_fresh_at sm z /\ lookup_var z r = SOME a ==>
       lookup_var z q = SOME a) /\
     (!i a. FLOOKUP r.vs_allocas i = SOME a ==> FLOOKUP q.vs_allocas i = SOME a) /\
@@ -77,7 +77,7 @@ Proof
   `sa.cs_next_var <= sm.cs_next_var` by fs[ci_mono_def] >>
   `eval_operand (Var x) r = SOME (n2w b)` by simp[eval_operand_def] >>
   drule_at (Pat `emit_op _ _ _ = _`) aggregate_tuple_add_marked_mem >>
-  disch_then (drule_at (Pat `vv_post _ _ _ _ _ _ _ _ _ _ _ _ _`)) >>
+  disch_then (drule_at (Pat `vv_post _ _ _ _ _ _ _ _ _ _ _ _ _ _`)) >>
   disch_then (qspec_then `n2w b` mp_tac) >>
   impl_tac >- simp[] >>
   strip_tac >>
@@ -108,7 +108,7 @@ Resume aggregate_tuple_cons_continuation_mem_cursor[store]:
     (drule_at (Pat `gas_marked_exec _ _ _ _ _ _ _ _`) aggregate_child_read_typed_mem >>
      disch_then (qspecl_then [`tv`, `env`, `ce`] mp_tac) >> simp[]) >>
   `well_typed_expr env e` by fs[expr_body_pre_def] >>
-  `stmt_state_rel ctx func ce cx es' tadd` by fs[vv_post_def] >>
+  `stmt_state_rel H ctx func ce cx es' tadd` by fs[vv_post_def] >>
   `alloca_inv tadd` by
     (irule aggregate_mem_path_alloca_inv >>
      qexistsl_tac [`ctx`, `func`, `0`, `r`] >> fs[gas_marked_path_def]) >>
@@ -128,7 +128,7 @@ Resume aggregate_tuple_cons_continuation_mem_cursor[apply]:
      qexistsl_tac [`sm`, `es'.scopes`, `tadd`] >> simp[]) >>
   drule_at (Pat `unwrap_value _ _ _ = _`) aggregate_unwrap_store_slice_mem_cursor >>
   disch_then (drule_at (Pat `compile_store_memory _ _ _ _ _ _ = _`)) >>
-  disch_then (drule_at (Pat `vv_post _ _ _ _ _ _ _ _ _ _ _ _ _`)) >>
+  disch_then (drule_at (Pat `vv_post _ _ _ _ _ _ _ _ _ _ _ _ _ _`)) >>
   disch_then (qspecl_then [`n2w (b+off)`, `tv`, `env`] mp_tac) >>
   impl_tac >- (simp[] >> pure_rewrite_tac[arithmeticTheory.ADD_ASSOC] >>
                 rpt conj_tac >> metis_tac[aggregate_mem_path_alloca_inv]) >>
@@ -200,7 +200,7 @@ Theorem aggregate_tuple_cons_continuation_mem:
   evaluate_type (get_tenv cx) (expr_type e) = SOME tv /\
   type_memory_bytes ce (expr_type e) = type_memory_size tv /\
   (int_calls_expr e = [] \/ lowered_value_type ce e = expr_type e) /\
-  vv_post ctx func ce cx e es sa sm s0 es' tvv vv r /\
+  vv_post H ctx func ce cx e es sa sm s0 es' tvv vv r /\
   vv_store_bound cx (expr_type e) (lowered_value_type ce e) es' tvv vv r /\
   alloca_history func r /\ alloca_inv r /\
   ~r.vs_halted /\ r.vs_current_bb = sm.cs_current_bb /\
@@ -218,7 +218,7 @@ Theorem aggregate_tuple_cons_continuation_mem:
   ?v q. gas_marked_exec T (ctx,func) (read_result cx tvv) (es',r)
           [] (INL v) es' (OK q) /\
     val_in_memory tv v (b+off) q.vs_memory /\
-    stmt_state_rel ctx func ce cx es' q /\
+    stmt_state_rel H ctx func ce cx es' q /\
     (!z a. not_fresh_at sm z /\ lookup_var z r = SOME a ==>
       lookup_var z q = SOME a) /\
     (!i a. FLOOKUP r.vs_allocas i = SOME a ==> FLOOKUP q.vs_allocas i = SOME a) /\
