@@ -2723,7 +2723,7 @@ Resume compile_typed_copy_shape[dyn_labels]:
       ho_match_mp_tac shape_step_fresh_label_sfx >> simp[shape_stable_conj, stmt_shape_stable_plain]) >>
   ho_match_mp_tac shape_step_fresh_label >> simp[shape_stable_conj, stmt_shape_stable_plain]
 QED
-Finalise compile_typed_copy_shape[local]
+Finalise compile_typed_copy_shape
 
 Theorem compile_store_memory_shape:
   !cenv src dst dst_ty src_ty internal.
@@ -10342,7 +10342,7 @@ QED
 
 Finalise compile_assign_value_shape[local]
 
-Theorem compile_store_immutable_bytestring_shape[local]:
+Theorem compile_store_immutable_bytestring_shape:
   !internal cenv src dst.
     shape_step internal compiler_label
       (\st. cenv_shape_ok st cenv /\ plain_operand st dst /\ plain_operand st src)

@@ -85,6 +85,8 @@ QED
 Resume compile_annassign_memory_widen_stmt_frag_ptr[rhs]:
  qpat_x_assum `!st0 c st1. _` kall_tac >>
  qpat_x_assum `!sa sb op. _` kall_tac >>
+ `post_value_type c e = expr_type e` by
+   metis_tac[post_value_type_lowered, post_value_type_bytestring] >>
  `gas_outcome_ptr (cx_dead cx) (cx_tops cx) (ctx,func) PG
    (vyperState$bind (eval_expr cx e) (read_result cx)) (es,s1,G1,tn1)
    (\res ee G tn t. ?v. res = INL v /\
@@ -136,7 +138,7 @@ Resume compile_annassign_memory_widen_stmt_frag_ptr[continue]:
  irule annassign_memory_concrete_rhs_outcome_ptr >>
  simp[] >>
  conj_tac >- metis_tac[] >>
- conj_tac >- metis_tac[] >>
+ conj_tac >- (qpat_assum `expr_type e = vtyp \/ _` strip_assume_tac >> simp[]) >>
  conj_tac >- metis_tac[] >>
  conj_tac >- metis_tac[] >>
  goal_assum (drule_at (Pat `lower_value _ _ _ _ _ = _`)) >> simp[] >>
