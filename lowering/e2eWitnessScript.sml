@@ -470,6 +470,39 @@ Proof
   ACCEPT_TAC p23_dso_eval
 QED
 
+Theorem gas_readings_rel_empty[local]:
+  (!gs. f gs = out) ==> gas_readings_rel [] f out
+Proof
+  strip_tac >> simp[gas_readings_rel_def] >>
+  qexists `[]` >> simp[]
+QED
+
+Theorem p23_deploy_result_from_immutables:
+  immutables_section_rel p23_tops
+    (account_immutables p23_am_dep_post p23_deploy_tx.target)
+    (word_to_bytes (42w:bytes32) T) ==>
+  deploy_call_result_rel p23_tops p23_runtime_bc initial_machine_state
+    p23_deploy_tx p23_es_dep (INR NONE) p23_es_dep_post
+Proof
+  strip_tac >> simp[deploy_call_result_rel_def, p23_dep_trace] >>
+  irule gas_readings_rel_empty >> simp[p23_load, deploy_result_rel_def] >>
+  rpt strip_tac >> qexists `word_to_bytes (42w:bytes32) T` >>
+  conj_tac >- simp[] >>
+  conj_tac >- (
+    simp[frame_outcome_def, p23_es_dep_def, p23_frame_def,
+         p23_es_dep_post_def, p23_am_dep_post_def] >>
+    EVAL_TAC >> simp[vfmContextTheory.transaction_parameters_component_equality]) >>
+  simp[loweringStateRelDefsTheory.storage_agree_def,
+       loweringStateRelDefsTheory.transient_agree_def,
+       p23_am_dep_post_def, p23_es_dep_post_def, p23_deploy_tx_def,
+       initial_evaluation_context_def, vfmStateTheory.lookup_account_def,
+       vfmStateTheory.empty_accounts_def, vfmStateTheory.empty_account_state_def,
+       vfmContextTheory.empty_transient_storage_def, combinTheory.APPLY_UPDATE_THM,
+       vfmStateTheory.account_state_component_equality] >>
+  EVAL_TAC >> simp[]
+QED
+
+(* Final assembly, owned by C1.5 once the shared section fact is integrated. *)
 Theorem p23_deploy_result:
   deploy_call_result_rel p23_tops p23_runtime_bc initial_machine_state
     p23_deploy_tx p23_es_dep (INR NONE) p23_es_dep_post
@@ -481,7 +514,22 @@ Theorem p23_call_result:
   call_result_rel p23_tops (BaseT (UintT 256)) p23_am_call p23_call_tx
     p23_es_call (INR NONE) p23_es_call_post
 Proof
-  cheat
+  simp[call_result_rel_def, p23_call_trace] >>
+  irule gas_readings_rel_empty >>
+  simp[p23_src_call_eval, call_success_rel_def] >>
+  qexists `word_to_bytes (42w:bytes32) T` >>
+  conj_tac >- (
+    simp[frame_outcome_def, p23_es_call_from_post, p23_es_call_of_def,
+         p23_frame_def, p23_es_call_post_def] >>
+    EVAL_TAC >> simp[vfmContextTheory.transaction_parameters_component_equality]) >>
+  conj_tac >- (EVAL_TAC >> simp[] >> EVAL_TAC) >>
+  simp[loweringStateRelDefsTheory.accounts_agree_def,
+       loweringStateRelDefsTheory.storage_agree_def,
+       loweringStateRelDefsTheory.transient_agree_def,
+       p23_es_call_post_def, vfmContextTheory.empty_transient_storage_def,
+       vfmStateTheory.empty_storage_def, call_requests_def, p23_call_trace] >>
+  simp[vfmExecutionTheory.process_deletions_def, initial_evaluation_context_def,
+       p23_call_tx_def, vfmStateTheory.account_state_component_equality]
 QED
 
 (* ===== The witness ===== *)
