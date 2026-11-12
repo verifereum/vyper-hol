@@ -15,7 +15,7 @@ Libs
 
 (* unwrap_memory_marked_read at every valid horizon, with one endpoint: the
    MLOAD address is the pointer operand's value in the start state. *)
-Theorem unwrap_memory_marked_read_horizons[local]:
+Theorem unwrap_memory_marked_read_horizons:
   unwrap_value cenv (LocatedValue t p) sm = (op,sb) /\
   p.ptr_location = LocMemory /\ fn_has_code sm sb func /\
   fn_inst_ids_distinct func /\ local_ptrs_reserved cenv sm /\
