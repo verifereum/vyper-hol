@@ -908,7 +908,10 @@ Resume aggregate_make_tuple_flat_sim[rest]:
 QED
 
 Resume aggregate_make_tuple_flat_sim[tuple_join]:
-  gnvs[] >>
+  qpat_x_assum `Abbrev (r = q)`
+    (SUBST_ALL_TAC o REWRITE_RULE [markerTheory.Abbrev_def]) >>
+  qpat_x_assum `rr = INL vs` SUBST_ALL_TAC >>
+  asm_simp_tac (srw_ss()) [] >>
   qpat_x_assum `q.vs_memory = t1.vs_memory` (fn th =>
     RULE_ASSUM_TAC (REWRITE_RULE [GSYM th]) >> assume_tac th) >>
   qpat_x_assum `q.vs_allocas = t1.vs_allocas` (fn th =>
@@ -932,7 +935,9 @@ Resume aggregate_make_tuple_flat_sim[head_encoding]:
         (qspecl_then [`b + off`, `type_memory_size dtv`] mp_tac) >>
       fs[type_memory_size_def] >> strip_tac >> gvs[]) >>
   qpat_x_assum `tuple_in_memory vs t' _ _` mp_tac >>
-  rpt (pop_assum kall_tac) >> pure_rewrite_tac[arithmeticTheory.ADD_ASSOC] >>
+  qpat_x_assum `type_memory_bytes ce mty = _` (fn th =>
+    rpt (pop_assum kall_tac) >>
+    pure_rewrite_tac[th, arithmeticTheory.ADD_ASSOC]) >>
   simp_tac bool_ss []
 QED
 
