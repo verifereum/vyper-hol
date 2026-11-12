@@ -189,7 +189,7 @@ Proof
   rpt gen_tac >> strip_tac >>
   `es0.immutables = am_c.immutables` by
     (drule_all deploy_ctor_start_immutables >> simp[]) >>
-  gvs[deploy_source_ok_def, e2eDeployDefsTheory.deploy_typing_ok_def,
+  gvs[deploy_source_ok_def, e2eDeployDefsTheory.deploy_typing_ok_constants_ready,
       deploy_ctor_start_def] >>
   `contract_namespaces_ok F [(NONE,tops)] /\
    runtime_art.cta_bare_globals =
@@ -301,7 +301,7 @@ Proof
   drule deploy_send_call_value_observations >>
   disch_then (qspecl_then [`[FEMPTY]`,`SOME outcomes`,`gs`] mp_tac) >>
   simp[deploy_initial_state_scopes] >> strip_tac >>
-  gvs[deploy_source_ok_def, e2eDeployDefsTheory.deploy_typing_ok_def] >>
+  gvs[deploy_source_ok_def, e2eDeployDefsTheory.deploy_typing_ok_constants_ready] >>
   `((es0 with <|scopes := [FEMPTY]; outcomes := SOME outcomes; gas_obs := gs|>)
       with scopes := [env]) =
     (es0 with <|gas_obs := gs; outcomes := SOME outcomes|>)` by
@@ -319,7 +319,7 @@ Theorem deploy_context_well_typed[local]:
   deploy_state_rel tops deploy_bc am tx es ==>
   context_well_typed (deploy_evaluation_context tops am tx)
 Proof
-  simp[deploy_source_ok_def, e2eDeployDefsTheory.deploy_typing_ok_def,
+  simp[deploy_source_ok_def, e2eDeployDefsTheory.deploy_typing_ok_constants_ready,
     call_tx_well_typed_def, vyperTypeInvariantsTheory.context_well_typed_def,
     e2eDeployDefsTheory.deploy_evaluation_context_def,
     initial_evaluation_context_def] >> metis_tac[]
@@ -423,7 +423,7 @@ Theorem deploy_source_variable_names_distinct[local]:
   deploy_source_ok tops am tx ==>
   ALL_DISTINCT (FLAT (MAP (vyperTypeContract$toplevel_vtype_keys_toplevel (NONE:num option)) tops))
 Proof
-  simp[deploy_source_ok_def, e2eDeployDefsTheory.deploy_typing_ok_def] >>
+  simp[deploy_source_ok_def, e2eDeployDefsTheory.deploy_typing_ok_constants_ready] >>
   rpt strip_tac >>
   qpat_x_assum `check_contract T _ _ _ = _` mp_tac >>
   simp[vyperTypeContractTheory.check_contract_def,
@@ -531,7 +531,7 @@ Theorem deploy_source_type_names_distinct[local]:
   deploy_source_ok tops am tx ==>
   ALL_DISTINCT (FLAT (MAP (type_def_keys_toplevel (NONE:num option)) tops))
 Proof
-  simp[deploy_source_ok_def, e2eDeployDefsTheory.deploy_typing_ok_def] >>
+  simp[deploy_source_ok_def, e2eDeployDefsTheory.deploy_typing_ok_constants_ready] >>
   rpt strip_tac >>
   qpat_x_assum `check_contract T _ _ _ = _` mp_tac >>
   simp[check_contract_def, contract_namespaces_ok_def, contract_keys_def,

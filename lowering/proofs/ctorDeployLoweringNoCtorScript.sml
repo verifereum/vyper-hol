@@ -2401,7 +2401,7 @@ Theorem no_ctor_initialized_zero_section:
 Proof
   strip_tac >>
   `?art. check_contract T am.layouts tx.target [(NONE,tops)] = SOME art` by
-    gvs[deploy_typing_ok_def] >>
+    gvs[deploy_typing_ok_constants_ready] >>
   pop_assum strip_assume_tac >>
   irule no_ctor_zero_section >> rpt gen_tac >> strip_tac >>
   `MEM (VariableDecl vis Immutable name ty slot) tops` by simp[] >>
@@ -2440,7 +2440,7 @@ Theorem no_ctor_constants_ready:
                   exports updated_by CONS (tx.target,[]) |>)
       tx.target [(NONE,tops)] = SOME am_c
 Proof
-  strip_tac >> gvs[deploy_typing_ok_def] >>
+  strip_tac >> gvs[deploy_typing_ok_constants_ready] >>
   drule vyperTypeEntryReadinessTheory.checked_deployment_constants_ready_setup >>
   metis_tac[]
 QED
