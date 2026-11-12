@@ -353,9 +353,10 @@ Proof
       simp[gas_marked_exec_def, gas_marked_path_def, Once evaluate_def,
            return_def, wb_frame_refl, stmt_state_rel_any_gas_obs]) >>
   rpt gen_tac >> strip_tac >>
-  gvs[logArgumentCompileTheory.compile_log_eval_all_cons] >>
+  gvs[expr_can_mutate_def, compile_log_eval_all_unsaved_cons] >>
   rename1 `lower_value compile_expr cenv (expr_type e) e sa = (x,sm)` >>
-  rename1 `compile_log_eval_all cenv args sm = (ys,sb)` >>
+  rename1 `compile_log_eval_all cenv args sm = (ops_tail,sb)` >>
+  qabbrev_tac `ys = ZIP (MAP FST ops_tail, MAP expr_type args)` >>
   `cs_extends sa sm /\ sa.cs_next_var <= sm.cs_next_var /\
    sa.cs_next_id <= sm.cs_next_id /\
    (!z. x = Var z ==> not_fresh_at sm z)` by
@@ -424,7 +425,7 @@ Resume compile_log_eval_all_pure_gas[head_value]:
     metis_tac[expr_post_state] >>
   qpat_x_assum `!ctx func cenv cx R. _`
     (qspecl_then [`ctx`, `func`, `cenv`, `cx`, `R`, `es_end with gas_obs := []`,
-                  `sm`, `ys`, `sb`, `t`, `env`, `env0`, `es0`] mp_tac) >>
+                  `sm`, `sb`, `t`, `env`, `env0`, `es0`, `ops_tail`] mp_tac) >>
   impl_tac >- asm_rewrite_tac[] >>
   simp[gas_outcome_def] >> strip_tac
   >- suspend "tail_summary" >>
