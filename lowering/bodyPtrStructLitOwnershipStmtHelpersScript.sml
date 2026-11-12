@@ -164,22 +164,51 @@ Proof
   simp[comp_return_def, alloc_run_def, alloc_frame_refl]
 QED
 
-Theorem alloc_run_compile_dynarray_to_storage:
-  alloc_run fresh_outputs
-    (compile_dynarray_to_storage src dst ew ems transient)
-    (\u s. fresh_outputs s)
+(* The sparse storage store allocates nothing: every step keeps the
+   fresh-output discipline, and the element loop's counter stays reserved. *)
+Theorem alloc_run_compile_store_slots:
+  (!cenv src slot ty tr.
+     alloc_run fresh_outputs (compile_store_slots cenv src slot ty tr)
+       (\u s. fresh_outputs s)) /\
+  (!cenv src slot members mem_off slot_off tr.
+     alloc_run fresh_outputs
+       (compile_store_slots_members cenv src slot members mem_off slot_off tr)
+       (\u s. fresh_outputs s)) /\
+  (!cenv src slot elem cnt tr.
+     alloc_run fresh_outputs
+       (compile_copy_elements_to_slots cenv src slot elem cnt tr)
+       (\u s. fresh_outputs s))
 Proof
-  simp[compile_dynarray_to_storage_def, comp_ignore_bind_def] >>
-  irule alloc_run_bind >> qexists `\v s. fresh_outputs s` >>
-  reverse conj_tac >- simp[alloc_run_emit_op_fresh] >> gen_tac >> simp[] >>
-  ntac 3 (irule alloc_run_bind >> qexists `\v s. fresh_outputs s` >>
-    reverse conj_tac >- simp[SF ETA_ss,
-      SRULE [SF ETA_ss] alloc_run_fresh_label_fresh] >> gen_tac >> simp[]) >>
+  ho_match_mp_tac compile_store_slots_ind >> rpt conj_tac >>
+  rpt gen_tac >> strip_tac >>
+  simp[Once compile_store_slots_def, LET_THM, comp_ignore_bind_def,
+       compile_bytestring_word_count_def, compile_word_copy_loop_op_def] >>
+  rpt (IF_CASES_TAC >> simp[comp_ignore_bind_def]) >>
+  TRY (CASE_TAC >> simp[comp_ignore_bind_def]) >>
+  TRY (CASE_TAC >> simp[comp_ignore_bind_def]) >>
+  rpt (irule alloc_run_bind >> qexists `\v s. fresh_outputs s` >>
+    reverse conj_tac
+    >- FIRST [
+        simp[SF ETA_ss, SRULE [SF ETA_ss] alloc_run_emit_op_fresh,
+          SRULE [SF ETA_ss] alloc_run_fresh_label_fresh,
+          SRULE [SF ETA_ss] alloc_run_compile_lit_byte_offset,
+          SRULE [SF ETA_ss] alloc_run_compile_memory_to_storage,
+          SRULE [SF ETA_ss] alloc_run_compile_memory_to_transient,
+          SRULE [SF ETA_ss] alloc_run_compile_word_copy_loop_base] >> NO_TAC,
+        simp[comp_return_def, alloc_run_def, alloc_frame_refl] >> NO_TAC,
+        irule alloc_run_conseq >> first_x_assum (irule_at Any) >>
+        simp[] >> NO_TAC] >>
+    gen_tac >> simp[comp_ignore_bind_def]) >>
+  TRY (simp[SF ETA_ss, SRULE [SF ETA_ss] alloc_run_emit_void_fresh,
+         SRULE [SF ETA_ss] alloc_run_emit_empty_fresh] >> NO_TAC) >>
+  TRY (simp[comp_return_def, alloc_run_def, alloc_frame_refl] >> NO_TAC) >>
+  TRY (irule alloc_run_conseq >> first_x_assum (irule_at Any) >>
+       simp[] >> NO_TAC) >>
+  (* element loop: the counter is fresh, so it stays reserved *)
   irule alloc_run_bind >>
   qexists `\x s. fresh_outputs s /\ not_fresh_at s x /\ ~alloc_owned s x` >>
   reverse conj_tac >- simp[SF ETA_ss, alloc_run_fresh_var_fresh] >>
   qx_gen_tac `counter` >> simp[comp_ignore_bind_def] >>
-  Cases_on `ew = 1` >> Cases_on `transient` >> simp[comp_ignore_bind_def] >>
   rpt (irule alloc_run_bind >>
     qexists `\v s. fresh_outputs s /\ not_fresh_at s counter /\
                       ~alloc_owned s counter` >>
@@ -189,10 +218,12 @@ Proof
         simp[SF ETA_ss, SRULE [SF ETA_ss] alloc_run_emit_op_fresh,
           SRULE [SF ETA_ss] alloc_run_emit_empty_fresh,
           SRULE [SF ETA_ss] alloc_run_emit_void_fresh,
-          SRULE [SF ETA_ss] alloc_run_new_block_fresh,
-          SRULE [SF ETA_ss] alloc_run_compile_word_copy_loop] >> NO_TAC] >>
+          SRULE [SF ETA_ss] alloc_run_new_block_fresh] >> NO_TAC,
+        ho_match_mp_tac alloc_run_frame_reserved >>
+        irule alloc_run_conseq >> first_x_assum (irule_at Any) >>
+        simp[] >> NO_TAC] >>
     gen_tac >> simp[comp_ignore_bind_def]) >>
-  irule alloc_run_conseq >> irule_at Any alloc_run_emit_void_fresh >> simp[]
+  simp[comp_return_def, alloc_run_def, alloc_frame_refl]
 QED
 
 Theorem alloc_run_compile_store_immutable_bytestring:
@@ -211,13 +242,13 @@ QED
 
 Theorem alloc_run_compile_assign_value:
   alloc_run fresh_outputs
-    (compile_assign_value ce dst loc src prim src_loc dt st da bytes)
+    (compile_assign_value ce dst loc src prim src_loc dt st bytes)
     (\u s. fresh_outputs s)
 Proof
   Cases_on `loc` >> Cases_on `prim` >>
   Cases_on `src_loc = SOME LocMemory` >> Cases_on `dt = st` >>
   Cases_on `is_bytestring_type dt` >> Cases_on `is_bytestring_type st` >>
-  Cases_on `da` >> simp[compile_assign_value_def, comp_ignore_bind_def,
+  simp[compile_assign_value_def, comp_ignore_bind_def,
     comp_bind_assoc] >>
   rpt (pairarg_tac >> simp[]) >>
   rpt IF_CASES_TAC >> simp[comp_ignore_bind_def, comp_bind_assoc] >>
@@ -235,15 +266,13 @@ Proof
     gen_tac >> simp[comp_ignore_bind_def, comp_bind_assoc] >>
     rpt IF_CASES_TAC >> simp[comp_ignore_bind_def, comp_bind_assoc]) >>
   simp[SF ETA_ss, SRULE [SF ETA_ss] alloc_run_compile_store_memory,
-    SRULE [SF ETA_ss] alloc_run_compile_dynarray_to_storage,
+    SRULE [SF ETA_ss] (cj 1 alloc_run_compile_store_slots),
     SRULE [SF ETA_ss] alloc_run_compile_imm_store_word,
     SRULE [SF ETA_ss] alloc_run_compile_imm_store_words,
     SRULE [SF ETA_ss] alloc_run_compile_store_immutable_bytestring,
     SRULE [SF ETA_ss] alloc_run_emit_void_fresh] >>
   TRY (rename1 `alloc_run _ (comp_return _) _` >>
-    simp[comp_return_def, alloc_run_def, alloc_frame_refl] >> NO_TAC) >>
-  PairCases_on `x` >>
-  simp[SF ETA_ss, SRULE [SF ETA_ss] alloc_run_compile_dynarray_to_storage]
+    simp[comp_return_def, alloc_run_def, alloc_frame_refl] >> NO_TAC)
 QED
 
 Theorem alloc_run_compile_tuple_load_all:

@@ -2251,7 +2251,11 @@ Theorem frag_relabel_base_abort:
     Abort a (t with <|vs_current_bb := b; vs_prev_bb := p|>)
 Proof
   Cases_on `inst.inst_opcode` >> simp[] >>
-  asm_simp_tac bool_ss [step_inst_base_opcode_eqs] >>
+  (* Resolve each goal's opcode equation against its case assumption, so
+     simp sees one unconditional rewrite instead of discharging every
+     conjunct of step_inst_base_opcode_eqs in all 99 goals. *)
+  IMP_RES_THEN (fn th => asm_simp_tac bool_ss [th])
+    step_inst_base_opcode_eqs >>
   simp[frag_pure1_control, frag_pure2_control, frag_pure3_control,
        frag_ext_call_control, frag_create_control, frag_delegatecall_control,
        frag_read0_control, frag_read1_control, frag_write2_control,
