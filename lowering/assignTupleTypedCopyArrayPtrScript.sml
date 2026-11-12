@@ -2,7 +2,7 @@
 Theory assignTupleTypedCopyArrayPtr
 Ancestors typedCopyLoopHeaderPtr typedCopyLoopBackedgePtr
   typedCopyLayoutPtr fragContinuationPtr venomExecSemantics venomInst venomState
-  words finite_map arithmetic
+  words finite_map arithmetic bodyPtrEnvBuiltinsGuards
 
 Theorem typed_copy_operand_loop_test_steps:
   !s ctr bound lt done id i n body_lbl exit_lbl.
@@ -138,6 +138,103 @@ Proof
      simp[Abbr `sj`] >> metis_tac[]) >>
   simp[Once ptrSafeRunTheory.ghost_blocks_def, Abbr `sj`] >>
   (Cases_on `target.bb_instructions`
+   >- simp[eval_phis_def] >>
+   Cases_on `h.inst_opcode = PHI` >>
+   gvs[phi_prefix_length_def, eval_phis_def])
+QED
+
+
+Theorem typed_copy_operand_loop_test_ptr_safe:
+  !D ctx fn PG G tn s ctr bound lt done id i n body_lbl exit_lbl bb target.
+    lookup_block s.vs_current_bb fn.fn_blocks = SOME bb /\
+    bb.bb_instructions =
+      [mk_inst id LT [Var ctr; bound] [lt];
+       mk_inst (id+1) ISZERO [Var lt] [done];
+       mk_inst (id+2) JNZ [Var done; Label exit_lbl; Label body_lbl] []] /\
+    lookup_block (if i < n then body_lbl else exit_lbl) fn.fn_blocks =
+      SOME target /\ phi_prefix_length target.bb_instructions = 0 /\
+    s.vs_inst_idx = 0 /\ ~s.vs_halted /\
+    lookup_var ctr s = SOME (n2w i) /\
+    eval_operand bound s = SOME (n2w n) /\
+    op_taint tn (Var ctr) = {} /\ op_taint tn bound = {} /\
+    op_prov G (Var ctr) = NONE /\ op_prov G bound = NONE /\
+    ~ctx_has_dalloca ctx /\
+    i <= n /\ n < dimword(:256) /\ ctr <> lt /\ ctr <> done ==>
+    !fuel.
+      ptr_safe_run D 0 fuel ctx fn PG
+        (DRESTRICT (DRESTRICT G (COMPL {lt})) (COMPL {done}))
+        (tn with t_var := (tn.t_var |+ (lt,{})) |+ (done,{}))
+        (jump_to (if i < n then body_lbl else exit_lbl)
+          (update_var done (bool_to_word (~(i < n)))
+            (update_var lt (bool_to_word (i < n)) s))) ==>
+      ptr_safe_run D 0 (SUC fuel) ctx fn PG G tn s
+Proof
+  rpt strip_tac >>
+  `i < dimword(:256)` by decide_tac >>
+  simp[ptrSafeRunTheory.ptr_safe_run_def,
+       Once ptrSafeRunTheory.ptr_safe_block_def, get_instruction_def,
+       ptrSafeRunTheory.ptr_safe_step_def,
+       ptrSafeRunTheory.ghost_step_def, step_inst_non_invoke] >>
+  PURE_ONCE_REWRITE_TAC[step_inst_base_def] >>
+  pure_rewrite_tac[mk_inst_def, instruction_accessors,
+    instruction_accfupds, combinTheory.K_THM, opcode_case_def] >>
+  simp[exec_pure2_def, eval_operand_def, w2n_n2w, LESS_MOD,
+       is_terminator_def,
+       SRULE [mk_inst_def] typed_copy_loop_arith_ghost_clean,
+       ptrDisciplineTheory.step_prov_def, ptrDisciplineTheory.set_prov_def,
+       ptrDisciplineTheory.out_prov_def] >>
+  conj_tac
+  >- (irule (SRULE [mk_inst_def] guard_compare_inst_ok) >>
+      simp[] >> rpt strip_tac >> gvs[]) >>
+  simp[update_var_def, SRULE [mk_inst_def] typed_copy_loop_arith_ghost_clean] >>
+  simp[Once ptrSafeRunTheory.ptr_safe_block_def, get_instruction_def,
+       ptrSafeRunTheory.ptr_safe_step_def,
+       ptrSafeRunTheory.ghost_step_def, step_inst_non_invoke] >>
+  PURE_ONCE_REWRITE_TAC[step_inst_base_def] >>
+  pure_rewrite_tac[mk_inst_def, instruction_accessors,
+    instruction_accfupds, combinTheory.K_THM, opcode_case_def] >>
+  simp[exec_pure1_def, eval_operand_def, lookup_var_def, update_var_def,
+       FLOOKUP_UPDATE, bool_to_word_def, is_terminator_def,
+       SRULE [mk_inst_def] typed_copy_loop_arith_ghost_clean,
+       ptrDisciplineTheory.step_prov_def, ptrDisciplineTheory.set_prov_def,
+       ptrDisciplineTheory.out_prov_def] >>
+  conj_tac
+  >- (irule (SRULE [mk_inst_def] typed_copy_loop_test_check) >>
+      simp[ptrDisciplineTheory.op_taint_def, FLOOKUP_UPDATE] >>
+      PURE_ONCE_REWRITE_TAC[step_inst_base_def] >>
+      pure_rewrite_tac[instruction_accessors, instruction_accfupds,
+        combinTheory.K_THM, opcode_case_def] >>
+      simp[exec_pure1_def, eval_operand_def, lookup_var_def,
+           FLOOKUP_UPDATE, update_var_def]) >>
+  simp[Once ptrSafeRunTheory.ptr_safe_block_def, get_instruction_def,
+       ptrSafeRunTheory.ptr_safe_step_def,
+       ptrSafeRunTheory.ghost_step_def, step_inst_non_invoke] >>
+  PURE_ONCE_REWRITE_TAC[step_inst_base_def] >>
+  pure_rewrite_tac[mk_inst_def, instruction_accessors,
+    instruction_accfupds, combinTheory.K_THM, opcode_case_def] >>
+  Cases_on `i < n` >>
+  simp[eval_operand_def, lookup_var_def, FLOOKUP_UPDATE,
+       bool_to_word_def, jump_to_def, is_terminator_def] >>
+  (conj_tac
+   >- (irule (SRULE [mk_inst_def] typed_copy_loop_test_check) >>
+       simp[ptrDisciplineTheory.op_taint_def, FLOOKUP_UPDATE] >>
+       conj_tac
+       >- (rpt strip_tac >> gvs[]) >>
+       PURE_ONCE_REWRITE_TAC[step_inst_base_def] >>
+       pure_rewrite_tac[instruction_accessors, instruction_accfupds,
+         combinTheory.K_THM, opcode_case_def] >>
+       simp[eval_operand_def, lookup_var_def, FLOOKUP_UPDATE,
+            jump_to_def]) >>
+   gvs[update_var_def, jump_to_def, finite_mapTheory.DRESTRICT_DRESTRICT] >>
+   qmatch_goalsub_abbrev_tac `entry_prov fn sj gg` >>
+   qmatch_goalsub_abbrev_tac `entry_taint_vars fn sj tt` >>
+   `entry_prov fn sj gg = gg /\ entry_taint_vars fn sj tt = tt` by
+     (irule typedCopyArrayPtrTheory.entry_ghost_no_phi >>
+      simp[Abbr `sj`] >> metis_tac[]) >>
+   simp[Once ptrSafeRunTheory.ptr_safe_blocks_def, Abbr `sj`] >>
+   qpat_x_assum `ptr_safe_run _ _ _ _ _ _ _ _ _` mp_tac >>
+   simp[ptrSafeRunTheory.ptr_safe_run_def] >>
+   Cases_on `target.bb_instructions`
    >- simp[eval_phis_def] >>
    Cases_on `h.inst_opcode = PHI` >>
    gvs[phi_prefix_length_def, eval_phis_def])
