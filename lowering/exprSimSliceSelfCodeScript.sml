@@ -32,7 +32,6 @@ Theorem compile_slice_self_code_case:
     is_self_code (HD args) /\ slice_extcode_case nocalls ctx func cenv cx args ==>
     expr_vv_case nocalls ctx func cenv cx (Builtin ann (Slice n) args)
 Proof
-  (* Admitted (SEQ-1248): the proof is being ported to the 0.5.0b1 adhoc
-     slice order, which allocates the output buffer after the bounds check. *)
+  (* PORT_ADMISSION: SEQ-1248, bot/opus/seq-1248-t16-pin, built at c66a72744 *)
   cheat
 QED

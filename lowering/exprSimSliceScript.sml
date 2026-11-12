@@ -30,10 +30,14 @@ Theorem compile_slice_nonself_case:
     slice_extcode_case nocalls ctx func cenv cx args ==>
     expr_vv_case nocalls ctx func cenv cx (Builtin ann (Slice n) args)
 Proof
-  (* Admitted (SEQ-1248): the x.code branch's proof is being ported to the
-     0.5.0b1 adhoc slice order, which allocates the output buffer after the
-     bounds check. *)
-  cheat
+  rpt strip_tac >> Cases_on `is_extcode (HD args)`
+  >- ((* PORT_ADMISSION: SEQ-1248, bot/opus/seq-1248-t16-pin, built at c66a72744 *)
+      cheat) >>
+  irule compile_slice_ordinary_case >> simp[] >>
+  first_x_assum irule >>
+  Cases_on `code_slice_source (Slice n) args` >> simp[] >>
+  PairCases_on `x` >>
+  gvs[vyperInterpreterTheory.code_slice_source_SOME, is_extcode_def]
 QED
 
 (* An operand list below the induction's size bound meets slice_extcode_case:
