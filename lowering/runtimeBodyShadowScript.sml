@@ -8,7 +8,7 @@ Ancestors
   moduleLowering vyperCompiler actualRegistrationCode
   actualDecoderPackaging rawEntryCode loweringShapeProps loweringShapeDefs
   loweringShapeRules compileEnv venomInst list gasShadowShape
-  gasShadowStmtEnv externalCallSelected supportedProgramProps supportedNames
+  gasShadowStmtEnv externalCallSelected supportedProgram supportedProgramProps supportedNames
   loweringShapeSource
 
 val _ = Parse.hide "body";
@@ -161,7 +161,8 @@ Proof
          package_external_fn tops T (K global_nonreentrant_slot)) exts)` by
        (simp_tac (srw_ss()) [EVERY_MAP, EVERY_MEM, combinTheory.o_DEF] >>
         rpt strip_tac >> irule package_external_fn_shape_ok >> gs[]) >>
-     metis_tac[]) >>
+     qpat_x_assum `EVERY external_fn_shape_ok (MAP _ _)` mp_tac >>
+     asm_rewrite_tac[] >> simp[]) >>
   `EVERY internal_fn_shape_ok
     (MAP (set_internal_package_target rpolicy.rpol_target o
       package_internal_fn tops T (K global_nonreentrant_slot) F 0) ints)` by
@@ -175,5 +176,25 @@ Proof
     (qpat_x_assum `run_lowering _ _ _ _ _ _ _ _ _ _ = _` mp_tac >>
      rw[run_lowering_def]) >>
   `rpolicy.rpol_frontend_dispatch = Linear` by fs[lowering_policy_ok_def] >>
-  FAIL_TAC "actual packaging prefix"
+  qpat_x_assum `rt = _` SUBST_ALL_TAC >>
+  rule_assum_tac (PURE_REWRITE_RULE [APPEND, APPEND_ASSOC]) >>
+  `EVERY (\d. internal_label_ok (FST d))
+     (internal_fn_descriptors
+       (MAP (set_internal_package_target rpolicy.rpol_target o
+         package_internal_fn tops T (K global_nonreentrant_slot) F 0) ints)) /\
+   ALL_DISTINCT (MAP FST (internal_fn_descriptors
+       (MAP (set_internal_package_target rpolicy.rpol_target o
+         package_internal_fn tops T (K global_nonreentrant_slot) F 0) ints)))` by
+    gvs[GSYM MAP_MAP_o, internal_fn_descriptors_set_internal_package_target,
+         internal_fn_descriptors_MAP_package_internal_fn] >>
+  rule_assum_tac (PURE_REWRITE_RULE [GSYM APPEND_ASSOC, APPEND]) >>
+  qpat_x_assum `(_,_) = fresh_label _ _` (assume_tac o SYM) >>
+  drule_all run_lowering_pinned_body_interval >> strip_tac >>
+  drule guarded_body_code >> strip_tac >>
+  `?cenv'. stmts_env cenv NoLoop ret fbody sa = (cenv',sb)` by
+    (irule guarded_body_stmts_env >>
+     metis_tac[]) >>
+  `fn_has_code sa sb func /\ fn_has_code sb st' func` by
+    metis_tac[fn_has_code_split] >>
+  FAIL_TAC "shadow replay"
 QED
