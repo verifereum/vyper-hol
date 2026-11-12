@@ -664,6 +664,9 @@ Resume eval_no_halt_every[IntCall]:
 QED
 
 Resume eval_no_halt_every[IntCallLive]:
+  `EVERY (\c. FST c = NONE /\ IS_SOME (supported_function_decl tops c Internal))
+     (int_calls_exprs (DROP (LENGTH tup3 - (LENGTH tup2 - LENGTH es)) tup3))` by
+    (irule int_calls_exprs_DROP_EVERY >> simp[]) >>
   `EVERY (\e. ~supported_expr_exists expr_evm_run_root e /\
      EVERY (\c. FST c = NONE /\ ?tops. supported_program tops /\
                 get_module_code (cx with stk updated_by CONS (NONE,fn)) NONE =

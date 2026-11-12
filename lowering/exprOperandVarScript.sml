@@ -726,9 +726,13 @@ Proof
   rename1 `compile_alloc_buffer _ _ = (buf,sm)` >>
   irule freshWritesTheory.not_fresh_at_mono >>
   qexists `sm` >> reverse conj_tac >- metis_tac[] >>
-  rename1 `compile_stage_intcall_args _ _ _ _ _ sm = (ops,sn)` >>
-  `sm.cs_next_var <= sn.cs_next_var` by
-    metis_tac[ci_mono_compile_stage_intcall_args, ci_mono_def, pairTheory.SND]
+  rename1 `compile_stage_intcall_args _ _ _ _ _ sm = (ops,sm1)` >>
+  rename1 `compile_stage_intcall_args _ _ _ _ _ sm1 = (dflt_ops,sn)` >>
+  `sm.cs_next_var <= sm1.cs_next_var` by
+    metis_tac[ci_mono_compile_stage_intcall_args, ci_mono_def, pairTheory.SND] >>
+  `sm1.cs_next_var <= sn.cs_next_var` by
+    metis_tac[ci_mono_compile_stage_intcall_args, ci_mono_def, pairTheory.SND] >>
+  `sm.cs_next_var <= sn.cs_next_var` by decide_tac
   >>~- ([`store_multi_results _ _ _ _ = _`],
      rename1 `emit_multi_op _ _ _ sn = (results,se)` >>
      `sn.cs_next_var <= se.cs_next_var` by

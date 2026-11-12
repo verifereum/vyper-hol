@@ -14374,14 +14374,27 @@ QED
 (* Internal calls compile the defaults of every non-external function. *)
 Definition runtime_bodies_shape_ok_def:
   runtime_bodies_shape_ok tops <=>
-    !mut nr rr name args dflts ret body.
+    (!mut nr rr name args dflts ret body.
       (MEM (mut,nr,rr,name,args,dflts,ret,body) (FST (classify_functions tops)) \/
        MEM (mut,nr,rr,name,args,dflts,ret,body) (FST (SND (classify_functions tops))) \/
        FST (SND (SND (classify_functions tops))) =
          SOME (mut,nr,rr,name,args,dflts,ret,body)) ==>
       ~supported_stmts_expr_exists expr_shape_root body /\
-      EVERY (\e. ~supported_expr_exists expr_shape_root e) dflts
+      EVERY (\e. ~supported_expr_exists expr_shape_root e) dflts) /\
+    (* The compile env carries each internal function's defaults as
+       declared, before classify_functions substitutes module constants. *)
+    EVERY (\nd. ~supported_exprs_exists expr_shape_root (SND nd))
+      (build_func_defaults tops)
 End
+
+Theorem build_func_defaults_MEM:
+  !tops nd. MEM nd (build_func_defaults tops) ==>
+    ?mut nr rr args ret body.
+      MEM (FunctionDecl Internal mut nr rr (FST nd) args (SND nd) ret body) tops
+Proof
+  Induct >> simp[compileVyperTheory.build_func_defaults_def] >>
+  rpt gen_tac >> CASE_TAC >> rw[] >> metis_tac[]
+QED
 
 
 Theorem runtime_bodies_shape_ok_func_defaults:
@@ -14389,11 +14402,7 @@ Theorem runtime_bodies_shape_ok_func_defaults:
     EVERY (\nd. ~supported_exprs_exists expr_shape_root (SND nd))
       (build_func_defaults tops)
 Proof
-  simp[runtime_bodies_shape_ok_def] >> Induct >>
-  simp[compileVyperTheory.build_func_defaults_def] >>
-  rpt strip_tac >> CASE_TAC >> gvs[] >>
-  rw[] >> gvs[supported_exprs_exists_every, NOT_EXISTS, combinTheory.o_DEF] >>
-  metis_tac[]
+  simp[runtime_bodies_shape_ok_def]
 QED
 
 Theorem add_module_var_locations_static:
@@ -14621,10 +14630,16 @@ Proof
      EVERY (\e. ~supported_expr_exists expr_shape_root e) dflts` by
     (rpt strip_tac
      >- metis_tac[supported_program_function, supported_function_body_shape] >>
-     drule_all supported_program_declaration >>
-     simp[supportedDeclsTheory.supported_declaration_header_def, NULL_EQ] >>
-     metis_tac[]) >>
-  rw[runtime_bodies_shape_ok_def]
+     drule_all supported_program_defaults >>
+     rw[EVERY_MEM, supported_default_expression_def] >>
+     metis_tac[supported_expr_shape]) >>
+  simp[runtime_bodies_shape_ok_def] >> reverse conj_tac
+  >- (simp[EVERY_MEM] >> qx_gen_tac `nd` >> strip_tac >>
+      drule build_func_defaults_MEM >> strip_tac >>
+      `EVERY (\e. ~supported_expr_exists expr_shape_root e) (SND nd)` by
+        metis_tac[function_visibility_distinct] >>
+      fs[supported_exprs_exists_every, NOT_EXISTS, combinTheory.o_DEF]) >>
+  rw[]
   >- (drule classify_functions_external_source >> strip_tac >> gvs[] >>
       metis_tac[public_getter_body_shape, function_visibility_distinct])
   >- (drule classify_functions_external_source >> strip_tac >> gvs[] >>

@@ -306,7 +306,7 @@ Theorem compile_call_intcall_shape:
                        (cenv.ce_func_param_types (nsid_to_string func_id))
                        cenv.ce_is_ctor) :: sup_ops ++ dflt_ops) st3 = (u, st') /\
            v = StackValue (cenv.ce_func_return_type (nsid_to_string func_id))
-         
+                        (Lit 0w))
 Proof
   rpt gen_tac >> strip_tac >>
   qpat_x_assum `compile_call _ _ _ _ _ _ _ _ = _` mp_tac >>

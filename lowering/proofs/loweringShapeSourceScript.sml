@@ -291,6 +291,23 @@ Proof
   metis_tac[type_stmt_raw_shape, well_typed_exprs_raw_shape]
 QED
 
+Theorem checked_runtime_function_defaults_shape:
+  !layouts addr tops art vis mut nr rr name args dflts ret body.
+  check_contract F layouts addr [(NONE, tops)] = SOME art /\
+  raw_shape_free_program tops /\
+  MEM (FunctionDecl vis mut nr rr name args dflts ret body) tops /\
+  vis <> Deploy ==>
+  EVERY (\e. ~supported_expr_exists expr_shape_root e) dflts
+Proof
+  rw[raw_shape_free_program_def] >>
+  first_x_assum drule_all >> strip_tac >>
+  drule check_contract_main_module_allocated >> simp[] >> strip_tac >>
+  drule check_contract_runtime_function_body_MEM >> simp[] >>
+  disch_then drule_all >>
+  simp[check_function_body_def] >> strip_tac >>
+  metis_tac[well_typed_exprs_raw_shape]
+QED
+
 Theorem check_contract_runtime_bodies_shape_ok:
   check_contract F layouts addr [(NONE, tops)] = SOME art /\
   raw_shape_free_program tops ==>
@@ -306,7 +323,14 @@ Proof
     MEM (FunctionDecl vis mut nr rr name args dflts ret body) tops /\ vis <> Deploy ==>
     ~supported_stmts_expr_exists expr_shape_root body` by
     metis_tac[checked_runtime_function_body_shape] >>
-  rw[runtime_bodies_shape_ok_def]
+  simp[runtime_bodies_shape_ok_def] >> reverse conj_tac
+  >- (simp[EVERY_MEM] >> qx_gen_tac `nd` >> strip_tac >>
+      drule build_func_defaults_MEM >> strip_tac >>
+      `EVERY (\e. ~supported_expr_exists expr_shape_root e) (SND nd)` by
+        metis_tac[checked_runtime_function_defaults_shape,
+                  function_visibility_distinct] >>
+      fs[supported_exprs_exists_every, NOT_EXISTS, combinTheory.o_DEF]) >>
+  rw[]
   >- (drule classify_functions_external_source >> strip_tac >>
       gvs[subst_consts_fn_def] >>
       irule (cj 2 subst_consts_stmt_shape) >> simp[] >>
