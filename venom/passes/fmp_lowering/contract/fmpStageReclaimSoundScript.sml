@@ -20,6 +20,7 @@ Theory fmpStageReclaimSound
 Ancestors
   fmpStageRel ptrStaticDiscipline cfgWf venomWf livenessProofs
   fnBlockPlanStaticOffsetLive fnPlanLineageLiveness fnBlockPlanStatic
+  fmpReclaimDefs basePtrProofs venomInst list
 
 Theorem fmp_stage_frame_sites:
   fmp_stage_ctx rpolicy D C C' vs vs' fmp eom /\
@@ -89,14 +90,50 @@ Theorem fmp_ready_nonphi_input[local]:
     (live_vars_at (liveness_analyze fn) lbl 0))
 Proof
   strip_tac >> irule input_vars_from_non_phi >> conj_tac
-  >- (drule live_vars_at_propagate_range >> simp[] >>
-      disch_then irule >>
-      qexists_tac `LENGTH (collect_phis bb.bb_instructions)` >>
-      simp[current_collect_phis_length] >> rpt strip_tac >>
-      drule collect_phis_index >> strip_tac >>
-      gvs[EVERY_MEM, inst_defs_def] >> metis_tac[EL_MEM]) >>
-  gvs[fmp_phi_ready_block_def, EVERY_MEM, inst_uses_def] >>
-  metis_tac[phi_pairs_mem_operand_vars]
+  >~ [`!inst. MEM inst (collect_phis bb.bb_instructions) ==> ~MEM v (MAP SND (phi_pairs inst.inst_operands))`]
+  >- (gvs[fmp_phi_ready_block_def, EVERY_MEM, inst_uses_def] >>
+      metis_tac[phi_pairs_mem_operand_vars]) >>
+  drule live_vars_at_propagate_range >> simp[] >>
+  disch_then irule >> simp[] >>
+  qexists_tac `LENGTH (collect_phis bb.bb_instructions)` >>
+  simp[current_collect_phis_length] >> rpt strip_tac >>
+  drule collect_phis_index >> strip_tac >>
+  gvs[EVERY_MEM, inst_defs_def] >> metis_tac[EL_MEM]
+QED
+
+Theorem fmp_input_at_terminator[local]:
+  wf_function fn /\ fn_inst_wf fn /\
+  MEM pl (cfg_analyze fn).cfg_dfs_pre /\
+  MEM sl (cfg_analyze fn).cfg_dfs_pre /\
+  MEM sl (cfg_succs_of (cfg_analyze fn) pl) /\
+  lookup_block pl fn.fn_blocks = SOME pbb /\
+  lookup_block sl fn.fn_blocks = SOME sbb /\
+  pbb.bb_instructions <> [] /\
+  MEM x (input_vars_from pl sbb.bb_instructions
+    (live_vars_at (liveness_analyze fn) sl 0)) ==>
+  MEM x (live_vars_at (liveness_analyze fn) pl
+    (PRE (LENGTH pbb.bb_instructions)))
+Proof
+  strip_tac >>
+  `cfg_reachable_of (cfg_analyze fn) pl` by
+    (drule cfgAnalysisPropsTheory.cfg_analyze_reachable_sets >>
+     simp[pred_setTheory.EXTENSION] >> metis_tac[]) >>
+  `MEM x (live_vars_at (liveness_analyze fn) pl
+     (LENGTH pbb.bb_instructions))` by
+    (drule_all analyzed_live_out_edge_subset >>
+     simp[pred_setTheory.SUBSET_DEF]) >>
+  `MEM pbb fn.fn_blocks` by
+    metis_tac[livenessTransferProofsTheory.lookup_block_mem] >>
+  `bb_well_formed pbb` by gvs[wf_function_def] >>
+  `inst_wf (LAST pbb.bb_instructions)` by
+    metis_tac[fn_inst_wf_def, rich_listTheory.MEM_LAST_NOT_NIL] >>
+  `(LAST pbb.bb_instructions).inst_outputs = []` by
+    metis_tac[venomExecProofsTheory.terminator_no_outputs, bb_well_formed_def] >>
+  drule live_vars_at_propagate >> simp[] >> disch_then irule >>
+  `0 < LENGTH pbb.bb_instructions` by
+    (Cases_on `pbb.bb_instructions` >> gvs[]) >>
+  `SUC (PRE (LENGTH pbb.bb_instructions)) = LENGTH pbb.bb_instructions` by decide_tac >>
+  simp[inst_defs_def, GSYM LAST_EL]
 QED
 
 Theorem fmp_stage_live_edge:
