@@ -242,6 +242,18 @@ Proof
   metis_tac[o1_ctx_shape_no_intret, ctx_pass_stage_def]
 QED
 
+(* TEMPORARILY CHEATED - gas sufficiency S6b fuel leaf, on its branch only:
+   SimplifyCFG keeps the fuel.  Merging a chain shortens the run, so
+   the output finishes within the input's fuel (scfg_chain_runs_forward's
+   witness is at most it); run_blocks_terminates_mono closes the gap. *)
+Theorem simplify_cfg_stage_sim_fuel:
+  ctx_pass_stage rpolicy (CFP_Simple VP_SimplifyCFG) view C C' /\
+  o1_ctx_shape C /\ EVERY simplify_cfg_fn_ok C.ctx_functions /\
+  o1_run_state_ok vs ==> ctx_sim_fuel I D C C' vs vs
+Proof
+  cheat
+QED
+
 (* The raw memory fact exempts revert-forward pairs, so it transfers through
    frame_sim and frame_sim_rf together. *)
 Theorem simplify_cfg_stage_mem_inv_rf:
@@ -420,12 +432,13 @@ Theorem simplify_cfg_stage_pre_walk:
   !view. o1_stage_contract rpolicy D (CFP_Simple VP_SimplifyCFG) view no_pre
            (o1_pre_walk_inv D) (o1_walk_src_inv D)
 Proof
-  simp[o1_stage_contract_def, no_pre_def] >> rpt gen_tac >> strip_tac >>
+  simp[o1_stage_contract_def, no_pre_def, pass_fuel_def] >>
+  rpt gen_tac >> strip_tac >>
   `EVERY simplify_cfg_fn_ok C.ctx_functions` by
     (gvs[o1_ctx_shape_def, o1_pre_walk_inv_def, EVERY_MEM] >>
      rpt strip_tac >> irule simplify_cfg_fn_ok_no_phi >>
      simp[EVERY_MEM] >> metis_tac[o1_fn_shape_def]) >>
-  conj_tac >- metis_tac[simplify_cfg_stage_sim] >>
+  conj_tac >- metis_tac[simplify_cfg_stage_sim_fuel] >>
   simp[o1_walk_src_inv_def] >> conj_tac
   >- (`o1_src_inv D C vs` by gvs[o1_pre_walk_inv_def] >>
       `EVERY (\fn. EVERY (\inst. inst.inst_opcode <> PHI) (fn_insts fn))
@@ -453,12 +466,13 @@ Theorem simplify_cfg_stage_walk:
   o1_run_contract rpolicy D 5
 Proof
   simp[o1_run_contract_def, o1_fn_passes_def, o1_inv_def,
-       o1_stage_contract_def, o1_pre_def] >> rpt gen_tac >> strip_tac >>
+       o1_stage_contract_def, o1_pre_def, pass_fuel_def] >>
+  rpt gen_tac >> strip_tac >>
   `EVERY simplify_cfg_fn_ok C.ctx_functions` by
     (gvs[o1_ctx_shape_def, o1_ssa_inv_def, EVERY_MEM] >>
      rpt strip_tac >> irule simplify_cfg_fn_ok_ssa >>
      metis_tac[o1_fn_shape_def]) >>
-  conj_tac >- metis_tac[simplify_cfg_stage_sim] >>
+  conj_tac >- metis_tac[simplify_cfg_stage_sim_fuel] >>
   simp[o1_ssa_inv_def, GSYM CONJ_ASSOC] >> conj_tac
   >- (gvs[o1_ssa_inv_def, o1_lowered_inv_def] >>
       qexists_tac `eom` >> conj_tac

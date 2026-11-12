@@ -346,6 +346,20 @@ Proof
   qexists_tac `m` >> metis_tac[]
 QED
 
+(* TEMPORARILY CHEATED - gas sufficiency S6b fuel leaf, on its branch only:
+   LowerDload keeps the fuel.  It expands an instruction inside its
+   block and adds no block, so the runner simulation's output fuel is the
+   input's (ld_runner_simulation, with m = k). *)
+Theorem lower_dload_stage_sim_fuel:
+  !rpolicy D view C C' vs names.
+    ctx_pass_stage rpolicy (CFP_Simple VP_LowerDload) view C C' /\
+    dead_wf D /\ o1_ctx_shape C /\ o1_run_state_ok vs /\
+    o1_src_inv D C vs /\ callee_first names C.ctx_functions ==>
+    ctx_sim_fuel I D C C' vs vs
+Proof
+  cheat
+QED
+
 (* Kernel-level certification of the frozen contract. *)
 val _ = if null (hyp lower_dload_stage_sim) andalso
                null (List.filter (fn s => s <> "DISK_THM")

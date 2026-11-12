@@ -230,7 +230,7 @@ Theorem dft_ctx_sim_gas:
   C'.ctx_entry = C.ctx_entry /\ C'.ctx_global_reserved = C.ctx_global_reserved /\
   o1_ctx_shape C /\
   ctx_labels_bound C vs'.vs_labels /\ o1_run_state_ok vs' ==>
-  ?vs. gas_variant vs vs' /\ ctx_sim D C C' vs vs' /\
+  ?vs. gas_variant vs vs' /\ ctx_sim_fuel I D C C' vs vs' /\
        (o1_lowered_inv C vs ==> o1_lowered_inv C' vs')
 Proof
   strip_tac >>
@@ -249,7 +249,7 @@ Proof
   qexists_tac `vs' with vs_gas_readings := rds` >>
   conj_tac >- simp[gas_variant_def, venom_state_component_equality] >>
   conj_tac
-  >- (rw[ctx_sim_def] >> qexists_tac `fuel` >>
+  >- (rw[ctx_sim_fuel_def] >>
       irule gas_dft_dead_result >>
       simp[run_context_not_ok, o1_ctx_shape_run_context_no_intret] >>
       qexistsl [`ev_context orc fuel C vs'`, `ev_context orc fuel C' vs'`] >>
