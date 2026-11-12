@@ -55,7 +55,7 @@ Proof
     fs[vyperTypeSystemTheory.well_typed_target_def] >>
   `gas_outcome F (cx_tops cx) (ctx,func) (eval_target_place cx bt) (es,s0)
     (\res ee t. ?p. res = INL p /\
-      target_post ctx func cenv cx es sp sa s0 ee (PlaceR p) (Type (EL i tys)) r t /\
+      target_post H ctx func cenv cx es sp sa s0 ee (PlaceR p) (Type (EL i tys)) r t /\
       t.vs_current_bb = sa.cs_current_bb /\ t.vs_inst_idx = LENGTH sa.cs_current_insts)
     (\res ee r. expr_exit res r)` by
     (irule target_place_sim >> simp[] >>
@@ -84,7 +84,7 @@ Proof
   goal_assum (drule_at Any) >> goal_assum (drule_at Any) >>
   first_x_assum irule >> simp[] >>
   qpat_assum `assign_tuple_targets _ _ _ _ = _` (irule_at Any) >>
-  qpat_x_assum `target_post _ _ _ _ _ _ _ _ _ _ _ _ _` mp_tac >>
+  qpat_x_assum `target_post _ _ _ _ _ _ _ _ _ _ _ _ _ _` mp_tac >>
   simp[loweringPostsTheory.target_post_def] >> strip_tac >>
   rpt strip_tac >>
   `not_fresh_at sa x` by

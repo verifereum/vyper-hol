@@ -5,7 +5,7 @@ Ancestors
 Libs monadsyntax
 
 Theorem flag_optional_stage_path[local]:
-  !ctx func cenv cx es flag tys ltys ltvs vs sa su sl staged op s sw.
+  !H ctx func cenv cx es flag tys ltys ltvs vs sa su sl staged op s sw.
     (if flag then
        do buf <- compile_alloc_buffer (type_memory_size_list ltvs);
           emit_void MCOPY [buf.buf_operand; op; Lit (n2w (type_memory_size_list ltvs))];
@@ -17,14 +17,14 @@ Theorem flag_optional_stage_path[local]:
     sa.cs_next_id <= su.cs_next_id /\
     fn_has_code su sl func /\ local_ptrs_reserved cenv su /\
     (!x. op = Var x ==> not_fresh_at su x) /\ eval_operand op s = SOME sw /\
-    stmt_state_rel ctx func cenv cx es s /\ fn_inst_ids_distinct func /\
+    stmt_state_rel H ctx func cenv cx es s /\ fn_inst_ids_distinct func /\
     ~s.vs_halted /\ s.vs_current_bb = su.cs_current_bb /\
     s.vs_inst_idx = LENGTH su.cs_current_insts ==>
     ?t w. eval_operand staged t = SOME w /\
       tuple_in_memory vs ltvs (w2n w) t.vs_memory /\
       w2n w + type_memory_size_list ltvs < dimword (:256) /\
       tuple_place_snapshot cenv cx es sa.cs_next_id sl.cs_next_id tys ltys ltvs w t /\
-      stmt_state_rel ctx func cenv cx es t /\
+      stmt_state_rel H ctx func cenv cx es t /\
       (!x. not_fresh_at su x ==> lookup_var x t = lookup_var x s) /\
       (!aid entry. FLOOKUP s.vs_allocas aid = SOME entry ==>
         FLOOKUP t.vs_allocas aid = SOME entry) /\
@@ -47,7 +47,7 @@ Proof
         (qx_choosel_then [`t`, `w`] strip_assume_tac)) >>
       `w2n w + type_memory_size_list ltvs < dimword (:256)` by
         (irule tupleTypedLoadTheory.tuple_container_bound >>
-         goal_assum (drule_at (Pat `stmt_state_rel _ _ _ _ _ _`)) >>
+         goal_assum (drule_at (Pat `stmt_state_rel _ _ _ _ _ _ _`)) >>
          disj1_tac >> qexists `su.cs_next_id` >> simp[]) >>
       qexistsl [`t`, `w`] >> gvs[valueEncodingDefsTheory.val_in_memory_def]) >>
   gvs[compileEnvTheory.comp_return_def] >> qexistsl [`s`, `sw`] >> simp[] >>
@@ -56,12 +56,12 @@ Proof
 QED
 
 Theorem flag_assignment_prefix_head[local]:
-  !ctx func cenv cx es es1 tys ltys ltvs vs sa su sl ss op staged elems sv s0 e flag.
+  !H ctx func cenv cx es es1 tys ltys ltvs vs sa su sl ss op staged elems sv s0 e flag.
     expr_type e = TupleT tys /\ lowered_value_type cenv e = TupleT ltys /\
     value_has_type (TupleTV ltvs) (ArrayV (TupleV vs)) /\
     evaluate_type (get_tenv cx) (TupleT ltys) = SOME (TupleTV ltvs) /\
     LIST_REL (\t tv. type_memory_bytes cenv t = type_memory_size tv) ltys ltvs /\
-    expr_post ctx func cenv cx e es sa su s0 es1 (ArrayV (TupleV vs)) op sv /\
+    expr_post H ctx func cenv cx e es sa su s0 es1 (ArrayV (TupleV vs)) op sv /\
     (!x. op = Var x ==> not_fresh_at su x) /\ sa.cs_next_id <= su.cs_next_id /\
     (if flag /\ EXISTS (\t. ~is_word_type t) ltys /\
         0 < type_memory_size_list ltvs then
@@ -113,12 +113,12 @@ Proof
     (irule exprLoweringPropsTheory.local_ptrs_reserved_next_var >> qexists `su` >> simp[]) >>
   fs[] >> drule flag_optional_stage_path >>
   disch_then (drule_at (Pat `tuple_place_snapshot _ _ _ _ _ _ _ _ _ _`)) >>
-  disch_then (drule_at (Pat `stmt_state_rel _ _ _ _ _ _`)) >>
+  disch_then (drule_at (Pat `stmt_state_rel _ _ _ _ _ _ _`)) >>
   simp[] >> disch_then (qspec_then `vs` mp_tac) >> simp[] >>
   disch_then (qx_choosel_then [`st`, `sw`] strip_assume_tac) >>
   drule tuplePlaceLoadTheory.tuple_place_load_snapshot_path >>
   disch_then (drule_at (Pat `tuple_place_snapshot _ _ _ _ _ _ _ _ _ _`)) >>
-  disch_then (drule_at (Pat `stmt_state_rel _ _ _ _ _ _`)) >>
+  disch_then (drule_at (Pat `stmt_state_rel _ _ _ _ _ _ _`)) >>
   simp[] >> disch_then (qspecl_then [`vs`, `get_tenv cx`] mp_tac) >>
   simp[] >> strip_tac >>
   `alloca_frame cenv es1 su sv cenv es1 t` by
@@ -142,7 +142,7 @@ Theorem tuple_place_compiler_flag_prefix_head:
   value_has_type (TupleTV ltvs) (ArrayV (TupleV vs)) /\
   evaluate_type (get_tenv cx) (TupleT ltys) = SOME (TupleTV ltvs) /\
   LIST_REL (\t tv. type_memory_bytes cenv t = type_memory_size tv) ltys ltvs /\
-  expr_post ctx func cenv cx e es sa su s0 es1 (ArrayV (TupleV vs)) op sv /\
+  expr_post H ctx func cenv cx e es sa su s0 es1 (ArrayV (TupleV vs)) op sv /\
   (!x. op = Var x ==> not_fresh_at su x) /\ sa.cs_next_id <= su.cs_next_id /\
   (EXISTS (\t. ~is_word_type t) ltys ==> cenv.ce_target CapMcopy) /\
   compile_tuple_unpack cenv (TupleT ltys) flag gs op su = ((),sf) /\

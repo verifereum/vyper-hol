@@ -40,10 +40,10 @@ Proof
 QED
 
 Theorem assign_tuple_targets_suffix[local]:
-  !ctx func cx lctx cenv gs e es ee v tys tvs sa su sl ss sf op staged elems sv s0 flag.
+  !H ctx func cx lctx cenv gs e es ee v tys tvs sa su sl ss sf op staged elems sv s0 flag.
     lowered_value_type cenv e = TupleT tys /\
-    expr_post ctx func cenv cx e es sa su s0 ee v op sv /\
-    stmt_state_rel ctx func cenv cx es s0 /\
+    expr_post H ctx func cenv cx e es sa su s0 ee v op sv /\
+    stmt_state_rel H ctx func cenv cx es s0 /\
     MAP FDOM ee.scopes = MAP FDOM es.scopes /\
     sv.vs_current_bb = su.cs_current_bb /\
     sv.vs_inst_idx = LENGTH su.cs_current_insts /\ ~sv.vs_halted /\
@@ -75,7 +75,7 @@ Theorem assign_tuple_targets_suffix[local]:
       (!tail. assign_tuple_targets cx (TupleTarget gs) v (ee with gas_obs := tail) =
         (INL (), ee' with gas_obs := tail)) /\
       gas_marked_path F ctx func sv 0 (OK t') /\
-      stmt_post ctx func cx lctx cenv cenv sa sf es s0 (INL ())
+      stmt_post H ctx func cx lctx cenv cenv sa sf es s0 (INL ())
         (ee' with gas_obs := []) t'
 Proof
   rpt gen_tac >> strip_tac >>
@@ -89,7 +89,7 @@ Proof
      qexistsl [`cenv`, `EL n tys`, `EL n vs`] >> simp[]) >>
   `LIST_REL value_has_type tvs vs` by simp[GSYM values_have_types_LIST_REL] >>
   `~cx.txn.is_static` by
-    (qpat_x_assum `expr_post _ _ _ _ _ _ _ _ _ _ _ _ _` mp_tac >>
+    (qpat_x_assum `expr_post _ _ _ _ _ _ _ _ _ _ _ _ _ _` mp_tac >>
      simp[expr_post_def, stmt_state_rel_def, state_rel_def]) >>
   drule_all assign_tuple_targets_safe >> strip_tac >>
   rename1 `assign_tuple_targets _ _ _ ee = (INL (),ee')` >>
@@ -123,7 +123,7 @@ Resume assign_tuple_targets_suffix[prefix]:
      disch_then (qspecl_then [`cenv`, `TupleT tys`, `e`, `sa`] mp_tac) >>
      simp[ci_mono_def]) >>
   drule_all expr_post_alloca_frame >> strip_tac >>
-  qpat_x_assum `expr_post _ _ _ _ _ _ _ _ _ _ _ _ _`
+  qpat_x_assum `expr_post _ _ _ _ _ _ _ _ _ _ _ _ _ _`
     (strip_assume_tac o REWRITE_RULE [expr_post_def]) >>
   `post_value_type cenv e = expr_type e` by simp[post_value_type_lowered] >>
   `expr_val_rel cx (TupleT tys) (ArrayV (TupleV vs)) op sv` by metis_tac[] >>
@@ -163,7 +163,7 @@ Resume assign_tuple_targets_suffix[stores]:
   drule_all (SIMP_RULE (srw_ss()) []
     (Q.SPECL [`gs`, `T`] tuple_store_targets_path)) >>
   disch_then (map_every assume_tac o CONJUNCTS) >>
-  qpat_x_assum `?t. stmt_state_rel ctx _ _ _ ee' _ /\ _`
+  qpat_x_assum `?t. stmt_state_rel H ctx _ _ _ ee' _ /\ _`
     (qx_choose_then `sfv` (map_every assume_tac o CONJUNCTS)) >>
   qexistsl [`ee'`, `sfv`] >> conj_tac
   >- (drule_all assign_tuple_target_list_gas_obs >>
@@ -226,7 +226,7 @@ Proof
   `fn_has_code sa su func` by metis_tac[fn_has_code_split] >>
   irule forced_then_stmt_outcome >>
   qexistsl [
-    `\v ee t. expr_post ctx func cenv cx e es sa su s0 ee v op t /\
+    `\v ee t. expr_post H ctx func cenv cx e es sa su s0 ee v op t /\
               t.vs_current_bb = su.cs_current_bb /\
               t.vs_inst_idx = LENGTH su.cs_current_insts`,
     `e`, `assign_tuple_targets cx (TupleTarget gs)`] >>
