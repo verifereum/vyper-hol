@@ -17,7 +17,9 @@ Theory fmpStageCoverMem
 Ancestors
   fmpStageOpBase fmpStageControl fmpStageRel o1PassContract ptrDiscipline
   contextCodegenRel unitMemInv venomExecSemantics venomState venomInst
-  finite_map words list
+  finite_map words list fmpStageCoverMemOperands lowerDloadRangeTransport
+  fmpStageCoverForwardAssemble fmpStageCoverForwardBoundary
+  fmpStageCoverMemAssemble fmpStageCoverMemRoot
 
 (* Each of these has no memory range and is neither a terminator nor an
    INVOKE. *)
@@ -41,7 +43,47 @@ Theorem fmp_stage_kept_mem:
   EVERY (\(off,len). len = 0 \/ off + len <= eom \/ fmp0 <= off)
     (inst_mem_ranges inst t)
 Proof
-  cheat
+  strip_tac >>
+  drule_all fmp_stage_frame_facts >> strip_tac >>
+  `inst.inst_opcode <> DRET /\ inst.inst_opcode <> PHI` by
+    (fs[pre_fmp_ops_def, pre_fmp_opcode_def, EVERY_MEM] >> metis_tac[]) >>
+  `!op y. MEM op inst.inst_operands /\ eval_operand op t = SOME y ==>
+     ?x. eval_operand op s = SOME x` by
+    (rpt strip_tac >> Cases_on `op`
+     >- simp[eval_operand_def]
+     >- (rename1 `MEM (Var v) inst.inst_operands` >>
+         drule_all fmp_stage_var_defined >>
+         Cases_on `lookup_var v s` >> simp[eval_operand_def]) >>
+     gvs[fmp_stage_rel_def, fmp_frame_rel_def, eval_operand_def]) >>
+  `!ops szop. (mem_read_ops inst = SOME ops \/ mem_write_ops inst = SOME ops) /\
+       ops.iao_max_size = SOME szop ==> eval_operand szop s = eval_operand szop t` by
+    metis_tac[fmp_stage_size_equal] >>
+  drule_all ld_single_access_range_transport >> strip_tac >>
+  simp[EVERY_MEM, pairTheory.FORALL_PROD] >>
+  map_every qx_gen_tac [`off`, `len`] >> strip_tac >>
+  `?ops x y.
+     eval_operand ops.iao_ofst s = SOME x /\ eval_operand ops.iao_ofst t = SOME y /\
+     off = w2n y /\
+     ((mem_read_ops inst = SOME ops /\
+       MEM (w2n x,len) (source_memory_read_ranges inst s)) \/
+      (mem_write_ops inst = SOME ops /\
+       MEM (w2n x,len) (source_memory_write_ranges inst s)))` by
+    (fs[inst_mem_ranges_def] >> metis_tac[]) >>
+  `fmp_value_rel sm (op_prov G ops.iao_ofst) {} x y` by
+    metis_tac[fmp_stage_offset_observation, optionTheory.SOME_11] >>
+  `fmp_sites_ok sm fmp0 raw0 lo s.vs_fmp /\ lo <= w2n s.vs_fmp` by
+    (fs[fmp_stage_rel_def, fmp_frame_rel_def] >>
+     metis_tac[fmpLowerSequenceExecTheory.fmp_frontier_rel_le]) >>
+  `len <> 0 /\ (eom < w2n x + len \/ op_prov G ops.iao_ofst <> NONE) ==>
+    ?b z. op_prov G ops.iao_ofst = SOME (b,z) /\
+          b <= w2n x /\ w2n x + len <= b+z` by
+    (gvs[access_ok_def] >> rpt strip_tac >>
+     `?v b z. ops.iao_ofst = Var v /\ FLOOKUP G v = SOME (b,z) /\
+               b <= w2n x /\ len + w2n x <= b+z` by metis_tac[] >>
+     gvs[op_prov_def]) >>
+  gvs[] >> drule fmp_value_range_covered >>
+  disch_then drule >> disch_then drule >>
+  disch_then (qspecl_then [`len`, `eom`] mp_tac) >> simp[]
 QED
 
 (* Why it holds: restores sit only at reclaim points (DALLOCA, jumps,
@@ -63,7 +105,9 @@ Theorem fmp_stage_forward_lift:
       (fmp_stage_tidx (fmp_stage_plan infos ctx fn)
          (fmp_stage_root infos ctx fn) lbl bb.bb_instructions j)
 Proof
-  cheat
+  mp_tac fmp_cover_forward_from_prefix >>
+  (impl_tac >- metis_tac[fmp_stage_copy_prefix_same_after]) >>
+  metis_tac[]
 QED
 
 (* Why it holds: target indices tidx idx .. tidx (SUC idx) - 1 hold
@@ -89,5 +133,12 @@ Theorem fmp_stage_inserted_at:
     i < LENGTH bb'.bb_instructions /\
     fmp_inserted_op (EL i bb'.bb_instructions).inst_opcode
 Proof
-  cheat
+  strip_tac >> irule fmp_cover_inserted_from_root >>
+  conj_tac >- (rpt gen_tac >> strip_tac >>
+    irule fmp_cover_root_middle >> metis_tac[]) >>
+  simp[fmp_inserted_op_def] >>
+  goal_assum (drule_at Any) >>
+  goal_assum (drule_at Any) >>
+  goal_assum (drule_at Any) >>
+  gvs[] >> metis_tac[]
 QED
