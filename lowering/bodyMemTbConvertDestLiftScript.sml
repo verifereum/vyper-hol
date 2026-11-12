@@ -72,7 +72,7 @@ Theorem bytestring_read_convert_summary[local]:
      lowered_value_type cenv e = expr_type e) /\
   eval_expr cx e (es with gas_obs := gs) = (INL tv,ee) /\ ee.gas_obs = [] /\
   gas_marked_exec T (ctx,func) (read_result cx tv) (ee,t) [] (INL v) ee (OK u) /\
-  expr_post ctx func cenv cx e es sa s1 s0 ee v x u /\
+  expr_post H ctx func cenv cx e es sa s1 s0 ee v x u /\
   alloca_history func u /\ s0.vs_alloca_next <= u.vs_alloca_next /\
   u.vs_current_bb = s1.cs_current_bb /\
   u.vs_inst_idx = LENGTH s1.cs_current_insts /\
@@ -85,14 +85,14 @@ Theorem bytestring_read_convert_summary[local]:
   (!z. x = Var z ==> not_fresh_at s1 z) /\ fn_has_code s1 sb func /\
   fn_inst_ids_distinct func /\ local_ptrs_reserved cenv sa /\
   local_ptrs_reserved cenv s1 /\ sa.cs_next_var <= s1.cs_next_var /\
-  sa.cs_next_id <= s1.cs_next_id /\ stmt_state_rel ctx func cenv cx es s0 /\
+  sa.cs_next_id <= s1.cs_next_id /\ stmt_state_rel H ctx func cenv cx es s0 /\
   type_memory_bytes cenv ann < dimword (:256) /\
   expr_res_ok (convert_result cx (expr_type e) ann v) ==>
   gas_summary_at T (ctx,func) []
     (bind (read_result cx tv) (\v ee. (convert_result cx (expr_type e) ann v,ee)))
     (ee,t)
     (\res fin ss. ?v. res = INL v /\
-      expr_post ctx func cenv cx (TypeBuiltin ann Convert ann [e]) es sa sb s0
+      expr_post H ctx func cenv cx (TypeBuiltin ann Convert ann [e]) es sa sb s0
         fin v op ss /\ ss.vs_current_bb = sb.cs_current_bb /\
       ss.vs_inst_idx = LENGTH sb.cs_current_insts /\
       alloca_history func ss /\ s0.vs_alloca_next <= ss.vs_alloca_next /\
@@ -113,7 +113,7 @@ Proof
     metis_tac[gas_marked_exec_def, gas_marked_path_exec, gas_path_normal] >>
   `alloca_inv u` by fs[expr_post_def, stmt_state_rel_def] >>
   qpat_assum `ee with gas_obs := [] = ee` (fn th =>
-    drule_at (Pat `expr_post _ _ _ _ _ _ _ _ _ _ _ _ _`)
+    drule_at (Pat `expr_post _ _ _ _ _ _ _ _ _ _ _ _ _ _`)
       (Q.INST [`e1` |-> `e`, `e` |-> `TypeBuiltin ann Convert ann [e]`, `ee` |-> `ee`]
         convert_bytestring_continuation_summary_mem
        |> REWRITE_RULE [th, vyperASTTheory.expr_type_def,
@@ -144,7 +144,7 @@ Theorem bytestring_vv_convert_summary[local]:
   unwrap_value cenv vv sm = (x,s1) /\ local_ptrs_reserved cenv sa /\
   sa.cs_next_var <= sm.cs_next_var /\ sa.cs_next_id <= sm.cs_next_id /\
   fn_has_code sm s1 func /\ fn_inst_ids_distinct func /\
-  vv_post ctx func cenv cx e es sa sm s0 ee tv vv t /\
+  vv_post H ctx func cenv cx e es sa sm s0 ee tv vv t /\
   vv_store_bound cx (expr_type e) (lowered_value_type cenv e) ee tv vv t /\
   alloca_history func t /\ s0.vs_alloca_next <= t.vs_alloca_next /\
   ~t.vs_halted /\ t.vs_current_bb = sm.cs_current_bb /\
@@ -156,7 +156,7 @@ Theorem bytestring_vv_convert_summary[local]:
    else compile_type_convert x (mk_convert_op (expr_type e) ann) s1) = (op,sb) /\
   (!z. x = Var z ==> not_fresh_at s1 z) /\ fn_has_code s1 sb func /\
   local_ptrs_reserved cenv s1 /\ sa.cs_next_var <= s1.cs_next_var /\
-  sa.cs_next_id <= s1.cs_next_id /\ stmt_state_rel ctx func cenv cx es s0 /\
+  sa.cs_next_id <= s1.cs_next_id /\ stmt_state_rel H ctx func cenv cx es s0 /\
   type_memory_bytes cenv ann < dimword (:256) /\
   (!v. read_result cx tv ee = (INL v,ee) ==>
        expr_res_ok (convert_result cx (expr_type e) ann v)) ==>
@@ -164,7 +164,7 @@ Theorem bytestring_vv_convert_summary[local]:
     (bind (read_result cx tv) (\v ee. (convert_result cx (expr_type e) ann v,ee)))
     (ee,t)
     (\res fin ss. ?v. res = INL v /\
-      expr_post ctx func cenv cx (TypeBuiltin ann Convert ann [e]) es sa sb s0
+      expr_post H ctx func cenv cx (TypeBuiltin ann Convert ann [e]) es sa sb s0
         fin v op ss /\ ss.vs_current_bb = sb.cs_current_bb /\
       ss.vs_inst_idx = LENGTH sb.cs_current_insts /\
       alloca_history func ss /\ s0.vs_alloca_next <= ss.vs_alloca_next /\
@@ -189,7 +189,7 @@ Proof
      simp[] >> disch_then irule >> metis_tac[is_bytestring_word_type]) >>
   drule_at (Pat `unwrap_value _ _ _ = _`)
     bodyMemTbConvertSourceUnwrapTheory.convert_unwrap_value_marked_read_mem_window >>
-  disch_then (drule_at (Pat `vv_post _ _ _ _ _ _ _ _ _ _ _ _ _`)) >>
+  disch_then (drule_at (Pat `vv_post _ _ _ _ _ _ _ _ _ _ _ _ _ _`)) >>
   disch_then (qspec_then `env` mp_tac) >>
   (impl_tac >- (simp[] >> metis_tac[])) >> strip_tac >>
   `ee with gas_obs := [] = ee` by simp[evaluation_state_component_equality] >>
@@ -197,7 +197,7 @@ Proof
     (qpat_x_assum `gas_marked_exec _ _ _ _ _ _ _ _` mp_tac >>
      simp[gas_marked_exec_def] >> metis_tac[]) >>
   drule_at (Pat `gas_marked_exec _ _ _ _ _ _ _ _`) bytestring_read_convert_summary >>
-  disch_then (drule_at (Pat `expr_post _ _ _ _ _ _ _ _ _ _ _ _ _`)) >>
+  disch_then (drule_at (Pat `expr_post _ _ _ _ _ _ _ _ _ _ _ _ _ _`)) >>
   disch_then (drule_at (Pat `expr_body_pre _ _ _ (TypeBuiltin _ _ _ _) _`)) >>
   disch_then (qspecl_then [`sb`, `op`, `gs`] mp_tac) >>
   (impl_tac >- (simp[] >> metis_tac[])) >> simp[]
@@ -213,13 +213,13 @@ Theorem bytestring_convert_capacity_outcome[local]:
   fn_has_code sa sb func /\ fn_inst_ids_distinct func /\
   local_ptrs_reserved cenv sa /\
   gas_admissible (bind (eval_expr cx (TypeBuiltin ann Convert ann [e])) (read_result cx))
-    expr_res_ok es /\ stmt_state_rel ctx func cenv cx es s0 /\
+    expr_res_ok es /\ stmt_state_rel H ctx func cenv cx es s0 /\
   alloca_history func s0 /\ ~s0.vs_halted /\
   s0.vs_current_bb = sa.cs_current_bb /\ s0.vs_inst_idx = LENGTH sa.cs_current_insts ==>
   gas_outcome T (cx_tops cx) (ctx,func)
     (bind (eval_expr cx (TypeBuiltin ann Convert ann [e])) (read_result cx)) (es,s0)
     (\res fin ss. ?v. res = INL v /\
-      expr_post ctx func cenv cx (TypeBuiltin ann Convert ann [e]) es sa sb s0
+      expr_post H ctx func cenv cx (TypeBuiltin ann Convert ann [e]) es sa sb s0
         fin v op ss /\ ss.vs_current_bb = sb.cs_current_bb /\
       ss.vs_inst_idx = LENGTH sb.cs_current_insts /\
       alloca_history func ss /\ s0.vs_alloca_next <= ss.vs_alloca_next /\
@@ -252,7 +252,7 @@ Proof
   conj_tac >- (rpt strip_tac >> BETA_TAC >>
     metis_tac[stmtSimPropsTheory.expr_exit_INR_type]) >>
   qexists_tac `\tv ee u.
-    vv_post ctx func cenv cx e es sa sm s0 ee tv vv u /\
+    vv_post H ctx func cenv cx e es sa sm s0 ee tv vv u /\
     vv_store_bound cx (expr_type e) (lowered_value_type cenv e) ee tv vv u /\
     u.vs_current_bb = sm.cs_current_bb /\
     u.vs_inst_idx = LENGTH sm.cs_current_insts /\
@@ -277,7 +277,7 @@ Resume bytestring_convert_capacity_outcome[continuation]:
      disch_then (qspec_then `gs` mp_tac) >>
      rewrite_tac[eval_expr_convert_action] >>
      simp[bind_def] >> disch_then irule >> simp[]) >>
-  drule_at (Pat `vv_post _ _ _ _ _ _ _ _ _ _ _ _ _`) bytestring_vv_convert_summary >>
+  drule_at (Pat `vv_post _ _ _ _ _ _ _ _ _ _ _ _ _ _`) bytestring_vv_convert_summary >>
   disch_then (drule_at (Pat `expr_body_pre _ _ _ (TypeBuiltin _ _ _ _) _`)) >>
   disch_then (drule_at (Pat `unwrap_value _ _ _ = _`)) >>
   disch_then (qspecl_then [`sb`, `op`, `gs`] mp_tac) >>
@@ -289,12 +289,12 @@ Finalise bytestring_convert_capacity_outcome
 
 Theorem bytestring_convert_capacity_posts:
   expr_body_pre cenv cx env (TypeBuiltin ann Convert ann [e]) es /\
-  expr_post ctx func cenv cx (TypeBuiltin ann Convert ann [e]) es sa sb s0
+  expr_post H ctx func cenv cx (TypeBuiltin ann Convert ann [e]) es sa sb s0
     fin v op ss /\
   (?w. eval_operand op ss = SOME w /\
        w2n w + type_memory_bytes cenv ann <= ss.vs_alloca_next) ==>
   expr_store_bound cx ann v op ss /\
-  vv_post ctx func cenv cx (TypeBuiltin ann Convert ann [e]) es sa sb s0
+  vv_post H ctx func cenv cx (TypeBuiltin ann Convert ann [e]) es sa sb s0
     fin (Value v) (StackValue t op) ss /\
   vv_store_bound cx ann ann fin (Value v) (StackValue t op) ss
 Proof
@@ -319,7 +319,7 @@ Theorem bytestring_convert_stack_outcome:
   gas_outcome T (cx_tops cx) (ctx,func)
     (bind (eval_expr cx (TypeBuiltin ann Convert ann [e])) (read_result cx)) (es,s0)
     (\res fin ss. ?v. res = INL v /\
-      expr_post ctx func cenv cx (TypeBuiltin ann Convert ann [e]) es sa sb s0
+      expr_post H ctx func cenv cx (TypeBuiltin ann Convert ann [e]) es sa sb s0
         fin v op ss /\ ss.vs_current_bb = sb.cs_current_bb /\
       ss.vs_inst_idx = LENGTH sb.cs_current_insts /\
       alloca_history func ss /\ s0.vs_alloca_next <= ss.vs_alloca_next /\
@@ -329,7 +329,7 @@ Theorem bytestring_convert_stack_outcome:
   gas_outcome T (cx_tops cx) (ctx,func)
     (eval_expr cx (TypeBuiltin ann Convert ann [e])) (es,s0)
     (\res fin ss. ?tv. res = INL tv /\
-      vv_post ctx func cenv cx (TypeBuiltin ann Convert ann [e]) es sa sb s0
+      vv_post H ctx func cenv cx (TypeBuiltin ann Convert ann [e]) es sa sb s0
         fin tv (StackValue t op) ss /\
       vv_store_bound cx ann ann fin tv (StackValue t op) ss /\
       ss.vs_current_bb = sb.cs_current_bb /\
@@ -369,7 +369,7 @@ Proof
   rw[expr_sim_mem_def] >>
   drule_at (Pat `lower_value _ _ _ _ _ = _`) bytestring_convert_capacity_outcome >>
   disch_then (drule_at (Pat `expr_body_pre _ _ _ (TypeBuiltin _ _ _ _) _`)) >>
-  disch_then (drule_at (Pat `stmt_state_rel _ _ _ _ _ _`)) >>
+  disch_then (drule_at (Pat `stmt_state_rel _ _ _ _ _ _ _`)) >>
   (impl_tac >- (simp[] >> metis_tac[])) >> strip_tac >>
   irule gas_outcome_post_mono >> goal_assum (drule_at Any) >>
   simp[] >> rpt strip_tac >> simp[vyperASTTheory.expr_type_def] >>

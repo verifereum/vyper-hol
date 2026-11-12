@@ -34,7 +34,7 @@ Theorem call_dynamic_vv_convert_summary:
   type_memory_bytes cenv (lowered_value_type cenv e) = type_memory_size ltv /\
   compile_expr cenv (expr_type e) e sa = (vv,sm) /\
   unwrap_value cenv vv sm = (x,s1) /\
-  vv_post ctx func cenv cx e es sa sm s0 ee tv vv t /\
+  vv_post H ctx func cenv cx e es sa sm s0 ee tv vv t /\
   vv_store_bound cx (expr_type e) (lowered_value_type cenv e) ee tv vv t /\
   alloca_history func t /\ s0.vs_alloca_next <= t.vs_alloca_next /\
   ~t.vs_halted /\ t.vs_current_bb = sm.cs_current_bb /\
@@ -51,7 +51,7 @@ Theorem call_dynamic_vv_convert_summary:
     (bind (read_result cx tv) (\v ee. (convert_result cx (expr_type e) ann v,ee)))
     (ee,t)
     (\res fin ss. ?v. res = INL v /\
-      expr_post ctx func cenv cx (TypeBuiltin ann Convert ann [e]) es sa sb s0
+      expr_post H ctx func cenv cx (TypeBuiltin ann Convert ann [e]) es sa sb s0
         fin v op ss /\ ss.vs_current_bb = sb.cs_current_bb /\
       ss.vs_inst_idx = LENGTH sb.cs_current_insts /\
       alloca_history func ss /\ s0.vs_alloca_next <= ss.vs_alloca_next)
@@ -78,7 +78,7 @@ Proof
     metis_tac[convert_call_read_zero_empty, expr_body_pre_gas_obs] >>
   irule call_read_summary_bind >> simp[] >> qexists_tac `v` >> simp[] >>
   qpat_assum `ee with gas_obs := [] = ee` (fn th =>
-    drule_at (Pat `expr_post _ _ _ _ _ _ _ _ _ _ _ _ _`)
+    drule_at (Pat `expr_post _ _ _ _ _ _ _ _ _ _ _ _ _ _`)
       (Q.INST [`t` |-> `ann`, `ee` |-> `ee`] dynamic_continuation_summary_mem
        |> REWRITE_RULE [th])) >>
   disch_then (drule_at (Pat `evaluate_type _ _ = SOME _`)) >>
@@ -98,7 +98,7 @@ Theorem call_bytestring_vv_convert_summary:
   type_memory_bytes cenv (lowered_value_type cenv e) = type_memory_size ltv /\
   compile_expr cenv (expr_type e) e sa = (vv,sm) /\
   unwrap_value cenv vv sm = (x,s1) /\
-  vv_post ctx func cenv cx e es sa sm s0 ee tv vv t /\
+  vv_post H ctx func cenv cx e es sa sm s0 ee tv vv t /\
   vv_store_bound cx (expr_type e) (lowered_value_type cenv e) ee tv vv t /\
   alloca_history func t /\ s0.vs_alloca_next <= t.vs_alloca_next /\
   ~t.vs_halted /\ t.vs_current_bb = sm.cs_current_bb /\
@@ -111,7 +111,7 @@ Theorem call_bytestring_vv_convert_summary:
   (!z. x = Var z ==> not_fresh_at s1 z) /\ fn_has_code s1 sb func /\
   fn_inst_ids_distinct func /\ local_ptrs_reserved cenv sa /\
   local_ptrs_reserved cenv s1 /\ sa.cs_next_var <= s1.cs_next_var /\
-  sa.cs_next_id <= s1.cs_next_id /\ stmt_state_rel ctx func cenv cx es s0 /\
+  sa.cs_next_id <= s1.cs_next_id /\ stmt_state_rel H ctx func cenv cx es s0 /\
   type_memory_bytes cenv ann < dimword (:256) /\
   (!v. read_result cx tv ee = (INL v,ee) ==>
        expr_res_ok (convert_result cx (expr_type e) ann v)) ==>
@@ -119,7 +119,7 @@ Theorem call_bytestring_vv_convert_summary:
     (bind (read_result cx tv) (\v ee. (convert_result cx (expr_type e) ann v,ee)))
     (ee,t)
     (\res fin ss. ?v. res = INL v /\
-      expr_post ctx func cenv cx (TypeBuiltin ann Convert ann [e]) es sa sb s0
+      expr_post H ctx func cenv cx (TypeBuiltin ann Convert ann [e]) es sa sb s0
         fin v op ss /\ ss.vs_current_bb = sb.cs_current_bb /\
       ss.vs_inst_idx = LENGTH sb.cs_current_insts /\
       alloca_history func ss /\ s0.vs_alloca_next <= ss.vs_alloca_next /\
@@ -153,7 +153,7 @@ Proof
   `alloca_inv t` by fs[expr_post_def, stmt_state_rel_def] >>
   irule call_read_summary_bind >> simp[] >> qexists_tac `v` >> simp[] >>
   qpat_assum `ee with gas_obs := [] = ee` (fn th =>
-    drule_at (Pat `expr_post _ _ _ _ _ _ _ _ _ _ _ _ _`)
+    drule_at (Pat `expr_post _ _ _ _ _ _ _ _ _ _ _ _ _ _`)
       (Q.INST [`e1` |-> `Call a (IntCall fid) args drv`,
                `e` |-> `TypeBuiltin ann Convert ann [Call a (IntCall fid) args drv]`,
                `ee` |-> `ee`] convert_bytestring_continuation_summary_mem

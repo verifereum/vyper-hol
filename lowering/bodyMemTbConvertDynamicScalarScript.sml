@@ -15,14 +15,14 @@ Theorem dynamic_scalar_counted_fragment_mem:
   fn_inst_ids_distinct func /\ alloca_history func s0 /\ alloca_inv s0 /\
   (!z. op = Var z ==> not_fresh_at sa z) /\
   (!a. eval_operand op s0 = SOME a ==> w2n a + 64 <= s0.vs_alloca_next) /\
-  stmt_state_rel ctx func cenv cx es s0 /\
+  stmt_state_rel H ctx func cenv cx es s0 /\
   expr_val_rel cx src v op s0 /\ expr_val_at cenv cx src sarg sa0 es v op s0 /\
   ~s0.vs_halted /\ s0.vs_current_bb = sa.cs_current_bb /\
   s0.vs_inst_idx = LENGTH sa.cs_current_insts ==>
   ?out. gas_marked_path T ctx func s0 0 out /\
     ((?s vout dtv. out = OK s /\ res = INL vout /\
        evaluate_type (get_tenv cx) dst = SOME dtv /\
-       stmt_state_rel ctx func cenv cx es s /\
+       stmt_state_rel H ctx func cenv cx es s /\
        eval_operand r s = SOME (typed_val_to_w256 dtv vout) /\
        s.vs_memory = s0.vs_memory /\ s.vs_allocas = s0.vs_allocas /\
        (!x w. not_fresh_at sa x /\ lookup_var x s0 = SOME w ==>
@@ -85,7 +85,7 @@ QED
 Finalise dynamic_scalar_counted_fragment_mem
 
 Theorem dynamic_continuation_summary_mem:
-  expr_post ctx func cenv cx e1 es sa s1 s0 (ee with gas_obs := []) v1 x t0 /\
+  expr_post H ctx func cenv cx e1 es sa s1 s0 (ee with gas_obs := []) v1 x t0 /\
   alloca_history func t0 /\ s0.vs_alloca_next <= t0.vs_alloca_next /\
   alloca_inv t0 /\ fn_inst_ids_distinct func /\
   t0.vs_current_bb = s1.cs_current_bb /\
@@ -108,7 +108,7 @@ Theorem dynamic_continuation_summary_mem:
     (\vs. (convert_result cx (expr_type e1) t v1,vs))
     (ee with gas_obs := [],t0)
     (\res fin ss. ?v. res = INL v /\
-      expr_post ctx func cenv cx (TypeBuiltin ann Convert t [e1]) es sa sb s0
+      expr_post H ctx func cenv cx (TypeBuiltin ann Convert t [e1]) es sa sb s0
         fin v op ss /\ ss.vs_current_bb = sb.cs_current_bb /\
       ss.vs_inst_idx = LENGTH sb.cs_current_insts /\
       alloca_history func ss /\ s0.vs_alloca_next <= ss.vs_alloca_next)
@@ -121,7 +121,7 @@ Proof
             lowered_value_type cenv e1 = BaseT (StringT 0)`
   >- suspend "empty" >>
   gvs[] >>
-  `stmt_state_rel ctx func cenv cx (ee with gas_obs := []) t0 /\
+  `stmt_state_rel H ctx func cenv cx (ee with gas_obs := []) t0 /\
    expr_val_rel cx (expr_type e1) v1 x t0 /\
    expr_val_at cenv cx (expr_type e1) sa s1 (ee with gas_obs := []) v1 x t0` by
     fs[expr_post_def] >>

@@ -12,7 +12,7 @@ Ancestors
 Theorem convert_call_vv_layout[local]:
   expr_body_pre cenv cx env (Call ann (IntCall fid) args drv) es /\
   eval_expr cx (Call ann (IntCall fid) args drv) (es with gas_obs := gs) = (INL tv,ee) /\
-  vv_post ctx func cenv cx (Call ann (IntCall fid) args drv) es sa sm s0 ee tv vv s ==>
+  vv_post H ctx func cenv cx (Call ann (IntCall fid) args drv) es sa sm s0 ee tv vv s ==>
   ?ltv.
     evaluate_type (get_tenv cx)
       (lowered_value_type cenv (Call ann (IntCall fid) args drv)) = SOME ltv /\
@@ -72,7 +72,7 @@ Proof
   conj_tac >- (rpt strip_tac >> BETA_TAC >>
     metis_tac[stmtSimPropsTheory.expr_exit_INR_type]) >>
   qexists_tac `\tv ee u.
-    vv_post ctx func cenv cx (Call a (IntCall fid) args drv) es sa sm s0 ee tv vv u /\
+    vv_post H ctx func cenv cx (Call a (IntCall fid) args drv) es sa sm s0 ee tv vv u /\
     vv_store_bound cx (expr_type (Call a (IntCall fid) args drv))
       (lowered_value_type cenv (Call a (IntCall fid) args drv)) ee tv vv u /\
     u.vs_current_bb = sm.cs_current_bb /\ u.vs_inst_idx = LENGTH sm.cs_current_insts /\
@@ -83,7 +83,7 @@ QED
 
 Resume call_dynamic_convert_sim_mem[continuation]:
   drule_all convert_call_vv_layout >> strip_tac >>
-  drule_at (Pat `vv_post _ _ _ _ _ _ _ _ _ _ _ _ _`)
+  drule_at (Pat `vv_post _ _ _ _ _ _ _ _ _ _ _ _ _ _`)
     call_dynamic_vv_convert_summary >>
   disch_then (drule_at (Pat `well_formed_type _ _`)) >>
   disch_then (drule_at (Pat `unwrap_value _ _ _ = _`)) >>
@@ -119,13 +119,13 @@ Theorem call_bytestring_convert_outcome[local]:
   lower_value compile_expr cenv ty (TypeBuiltin ann Convert ann [e]) sa = (op,sb) /\
   fn_has_code sa sb func /\ fn_inst_ids_distinct func /\ local_ptrs_reserved cenv sa /\
   gas_admissible (bind (eval_expr cx (TypeBuiltin ann Convert ann [e])) (read_result cx))
-    expr_res_ok es /\ stmt_state_rel ctx func cenv cx es s0 /\
+    expr_res_ok es /\ stmt_state_rel H ctx func cenv cx es s0 /\
   alloca_history func s0 /\ ~s0.vs_halted /\
   s0.vs_current_bb = sa.cs_current_bb /\ s0.vs_inst_idx = LENGTH sa.cs_current_insts ==>
   gas_outcome T (cx_tops cx) (ctx,func)
     (bind (eval_expr cx (TypeBuiltin ann Convert ann [e])) (read_result cx)) (es,s0)
     (\res fin ss. ?v. res = INL v /\
-      expr_post ctx func cenv cx (TypeBuiltin ann Convert ann [e]) es sa sb s0
+      expr_post H ctx func cenv cx (TypeBuiltin ann Convert ann [e]) es sa sb s0
         fin v op ss /\ ss.vs_current_bb = sb.cs_current_bb /\
       ss.vs_inst_idx = LENGTH sb.cs_current_insts /\
       alloca_history func ss /\ s0.vs_alloca_next <= ss.vs_alloca_next /\
@@ -161,7 +161,7 @@ Proof
   conj_tac >- (rpt strip_tac >> BETA_TAC >>
     metis_tac[stmtSimPropsTheory.expr_exit_INR_type]) >>
   qexists_tac `\tv ee u.
-    vv_post ctx func cenv cx (Call a (IntCall fid) args drv) es sa sm s0 ee tv vv u /\
+    vv_post H ctx func cenv cx (Call a (IntCall fid) args drv) es sa sm s0 ee tv vv u /\
     vv_store_bound cx (expr_type (Call a (IntCall fid) args drv))
       (lowered_value_type cenv (Call a (IntCall fid) args drv)) ee tv vv u /\
     u.vs_current_bb = sm.cs_current_bb /\ u.vs_inst_idx = LENGTH sm.cs_current_insts /\
@@ -187,7 +187,7 @@ Resume call_bytestring_convert_outcome[continuation]:
      disch_then (qspec_then `gs` mp_tac) >>
      rewrite_tac[bodyMemTbConvertComposeTheory.eval_expr_convert_action] >>
      simp[bind_def] >> disch_then irule >> simp[]) >>
-  drule_at (Pat `vv_post _ _ _ _ _ _ _ _ _ _ _ _ _`)
+  drule_at (Pat `vv_post _ _ _ _ _ _ _ _ _ _ _ _ _ _`)
     call_bytestring_vv_convert_summary >>
   disch_then (drule_at (Pat `expr_body_pre _ _ _ (TypeBuiltin _ _ _ _) _`)) >>
   disch_then (drule_at (Pat `unwrap_value _ _ _ = _`)) >>
@@ -208,7 +208,7 @@ Proof
   rw[expr_sim_mem_def] >>
   drule_at (Pat `lower_value _ _ _ _ _ = _`) call_bytestring_convert_outcome >>
   disch_then (drule_at (Pat `expr_body_pre _ _ _ (TypeBuiltin _ _ _ _) _`)) >>
-  disch_then (drule_at (Pat `stmt_state_rel _ _ _ _ _ _`)) >>
+  disch_then (drule_at (Pat `stmt_state_rel _ _ _ _ _ _ _`)) >>
   simp[] >> strip_tac >>
   irule gas_outcome_post_mono >> goal_assum (drule_at Any) >>
   simp[] >> rpt strip_tac >> simp[vyperASTTheory.expr_type_def] >>

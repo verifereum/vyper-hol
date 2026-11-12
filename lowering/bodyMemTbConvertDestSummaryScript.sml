@@ -15,14 +15,14 @@ Theorem convert_bytestring_counted_cont_mem:
   value_has_type tv1 v /\
   val_footprint tv1 v <= type_memory_bytes cenv (lowered_value_type cenv e1) /\
   type_memory_bytes cenv (expr_type e) < dimword (:256) /\
-  expr_post ctx func cenv cx e1 es sa sm s0 es1 v x s /\
+  expr_post H ctx func cenv cx e1 es sa sm s0 es1 v x s /\
   (if type_memory_bytes cenv (lowered_value_type cenv e1) <
       type_memory_bytes cenv (expr_type e) then
      compile_bytestring_widen_copy (type_memory_bytes cenv (expr_type e)) x
        (type_memory_bytes cenv (lowered_value_type cenv e1)) sm
    else compile_type_convert x (mk_convert_op (expr_type e1) (expr_type e)) sm) = (op,sb) /\
   fn_has_code sm sb func /\ fn_inst_ids_distinct func /\
-  stmt_state_rel ctx func cenv cx es s0 /\ local_ptrs_reserved cenv sa /\
+  stmt_state_rel H ctx func cenv cx es s0 /\ local_ptrs_reserved cenv sa /\
   local_ptrs_reserved cenv sm /\ sa.cs_next_var <= sm.cs_next_var /\
   sa.cs_next_id <= sm.cs_next_id /\ MAP FDOM es.scopes = MAP FDOM es1.scopes /\
   (!z. x = Var z ==> not_fresh_at sm z) /\ ~s.vs_halted /\
@@ -33,7 +33,7 @@ Theorem convert_bytestring_counted_cont_mem:
   s.vs_inst_idx = LENGTH sm.cs_current_insts ==>
   (?tt v'. gas_marked_path T ctx func s 0 (OK tt) /\
     convert_result cx (expr_type e1) (expr_type e) v = INL v' /\
-    expr_post ctx func cenv cx e es sa sb s0 es1 v' op tt /\
+    expr_post H ctx func cenv cx e es sa sb s0 es1 v' op tt /\
     tt.vs_current_bb = sb.cs_current_bb /\
     tt.vs_inst_idx = LENGTH sb.cs_current_insts /\
     alloca_history func tt /\ s.vs_alloca_next <= tt.vs_alloca_next /\
@@ -91,14 +91,14 @@ Theorem convert_bytestring_continuation_summary_mem:
   value_has_type tv1 v /\
   val_footprint tv1 v <= type_memory_bytes cenv (lowered_value_type cenv e1) /\
   type_memory_bytes cenv (expr_type e) < dimword (:256) /\
-  expr_post ctx func cenv cx e1 es sa sm s0 (ee with gas_obs := []) v x s /\
+  expr_post H ctx func cenv cx e1 es sa sm s0 (ee with gas_obs := []) v x s /\
   (if type_memory_bytes cenv (lowered_value_type cenv e1) <
       type_memory_bytes cenv (expr_type e) then
      compile_bytestring_widen_copy (type_memory_bytes cenv (expr_type e)) x
        (type_memory_bytes cenv (lowered_value_type cenv e1)) sm
    else compile_type_convert x (mk_convert_op (expr_type e1) (expr_type e)) sm) = (op,sb) /\
   fn_has_code sm sb func /\ fn_inst_ids_distinct func /\
-  stmt_state_rel ctx func cenv cx es s0 /\ local_ptrs_reserved cenv sa /\
+  stmt_state_rel H ctx func cenv cx es s0 /\ local_ptrs_reserved cenv sa /\
   local_ptrs_reserved cenv sm /\ sa.cs_next_var <= sm.cs_next_var /\
   sa.cs_next_id <= sm.cs_next_id /\ MAP FDOM es.scopes = MAP FDOM ee.scopes /\
   (!z. x = Var z ==> not_fresh_at sm z) /\ ~s.vs_halted /\
@@ -112,7 +112,7 @@ Theorem convert_bytestring_continuation_summary_mem:
     (\vs. (convert_result cx (expr_type e1) (expr_type e) v,vs))
     (ee with gas_obs := [],s)
     (\res fin tt. ?v'. res = INL v' /\
-      expr_post ctx func cenv cx e es sa sb s0 fin v' op tt /\
+      expr_post H ctx func cenv cx e es sa sb s0 fin v' op tt /\
       tt.vs_current_bb = sb.cs_current_bb /\
       tt.vs_inst_idx = LENGTH sb.cs_current_insts /\
       alloca_history func tt /\ s.vs_alloca_next <= tt.vs_alloca_next /\

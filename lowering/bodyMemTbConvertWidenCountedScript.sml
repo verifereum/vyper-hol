@@ -25,7 +25,7 @@ Theorem convert_widen_copy_run_capacity[local]:
   compile_bytestring_widen_copy d x k sm = (op,sb) /\
   0 < k /\ k <= d /\ d < dimword (:256) /\
   fn_has_code sm sb func /\ fn_inst_ids_distinct func /\
-  stmt_state_rel ctx func cenv cx es s /\ local_ptrs_reserved cenv sm /\
+  stmt_state_rel H ctx func cenv cx es s /\ local_ptrs_reserved cenv sm /\
   (!z. x = Var z ==> not_fresh_at sm z) /\ eval_operand x s = SOME p /\
   run_inst_seq (emitted_insts sm sb) s = OK u ==>
   ?w. eval_operand op u = SOME w /\
@@ -59,7 +59,7 @@ Theorem convert_widen_copy_mem_ok:
   compile_bytestring_widen_copy d x k sm = (op,sb) /\
   0 < k /\ k <= d /\ d < dimword (:256) /\
   fn_has_code sm sb func /\ fn_inst_ids_distinct func /\
-  stmt_state_rel ctx func cenv cx es s /\ local_ptrs_reserved cenv sm /\
+  stmt_state_rel H ctx func cenv cx es s /\ local_ptrs_reserved cenv sm /\
   (!z. x = Var z ==> not_fresh_at sm z) /\
   eval_operand x s = SOME p /\ w2n p + k <= s.vs_alloca_next ==>
   run_inst_seq_mem_ok (emitted_insts sm sb) s
@@ -99,7 +99,7 @@ Theorem convert_widen_copy_path_mem:
   compile_bytestring_widen_copy d x k sm = (op,sb) /\
   0 < k /\ k <= d /\ d < dimword (:256) /\
   fn_has_code sm sb func /\ fn_inst_ids_distinct func /\
-  stmt_state_rel ctx func cenv cx es s /\ local_ptrs_reserved cenv sm /\
+  stmt_state_rel H ctx func cenv cx es s /\ local_ptrs_reserved cenv sm /\
   alloca_history func s /\ alloca_inv s /\
   (!z. x = Var z ==> not_fresh_at sm z) /\
   eval_operand x s = SOME p /\ w2n p + k <= s.vs_alloca_next /\
@@ -140,7 +140,7 @@ Theorem convert_widen_copy_owned_mem:
   compile_bytestring_widen_copy d x k sm = (op,sb) /\
   0 < k /\ k <= d /\ d < dimword (:256) /\
   fn_has_code sm sb func /\ fn_inst_ids_distinct func /\
-  stmt_state_rel ctx func cenv cx es s /\ local_ptrs_reserved cenv sm /\
+  stmt_state_rel H ctx func cenv cx es s /\ local_ptrs_reserved cenv sm /\
   alloca_history func s /\ alloca_inv s /\
   (!z. x = Var z ==> not_fresh_at sm z) /\
   eval_operand x s = SOME p /\ w2n p + k <= s.vs_alloca_next /\
@@ -151,7 +151,7 @@ Theorem convert_widen_copy_owned_mem:
   s.vs_current_bb = sm.cs_current_bb /\
   s.vs_inst_idx = LENGTH sm.cs_current_insts ==>
   ?t. gas_marked_path T ctx func s 0 (OK t) /\
-    expr_post ctx func cenv cx e es sm sb s es v op t /\
+    expr_post H ctx func cenv cx e es sm sb s es v op t /\
     t.vs_current_bb = sb.cs_current_bb /\
     t.vs_inst_idx = LENGTH sb.cs_current_insts /\
     alloca_history func t /\ s.vs_alloca_next <= t.vs_alloca_next /\
@@ -171,7 +171,7 @@ Proof
      drule_all venomInstProofsTheory.step_preserves_control_flow >> simp[]) >>
   qexists_tac `t with vs_inst_idx := LENGTH sb.cs_current_insts` >>
   gvs[same_blocks_def] >>
-  qpat_x_assum `expr_post _ _ _ _ _ _ _ _ _ _ _ _ _` mp_tac >>
+  qpat_x_assum `expr_post _ _ _ _ _ _ _ _ _ _ _ _ _ _` mp_tac >>
   qpat_assum `post_value_type _ _ = _` (fn th =>
     simp[th, expr_post_def, expr_val_rel_def, expr_val_at_def,
          stmt_state_rel_inst_idx, lookup_var_def, local_region_def,
@@ -190,11 +190,11 @@ Theorem convert_widen_cont_mem:
   type_memory_bytes cenv (lowered_value_type cenv e1) <
     type_memory_bytes cenv (expr_type e) /\
   type_memory_bytes cenv (expr_type e) < dimword (:256) /\
-  expr_post ctx func cenv cx e1 es sa sm s0 es1 v x s /\
+  expr_post H ctx func cenv cx e1 es sa sm s0 es1 v x s /\
   compile_bytestring_widen_copy (type_memory_bytes cenv (expr_type e)) x
     (type_memory_bytes cenv (lowered_value_type cenv e1)) sm = (op,sb) /\
   fn_has_code sm sb func /\ fn_inst_ids_distinct func /\
-  stmt_state_rel ctx func cenv cx es s0 /\ local_ptrs_reserved cenv sa /\
+  stmt_state_rel H ctx func cenv cx es s0 /\ local_ptrs_reserved cenv sa /\
   local_ptrs_reserved cenv sm /\ sa.cs_next_var <= sm.cs_next_var /\
   sa.cs_next_id <= sm.cs_next_id /\ MAP FDOM es.scopes = MAP FDOM es1.scopes /\
   (!z. x = Var z ==> not_fresh_at sm z) /\ ~s.vs_halted /\
@@ -205,7 +205,7 @@ Theorem convert_widen_cont_mem:
   s.vs_inst_idx = LENGTH sm.cs_current_insts ==>
   ?tt v'. gas_marked_path T ctx func s 0 (OK tt) /\
     convert_result cx (expr_type e1) (expr_type e) v = INL v' /\
-    expr_post ctx func cenv cx e es sa sb s0 es1 v' op tt /\
+    expr_post H ctx func cenv cx e es sa sb s0 es1 v' op tt /\
     tt.vs_current_bb = sb.cs_current_bb /\
     tt.vs_inst_idx = LENGTH sb.cs_current_insts /\
     alloca_history func tt /\ s.vs_alloca_next <= tt.vs_alloca_next /\
@@ -230,7 +230,7 @@ Proof
     gvs[bytestring_type_cases, is_word_type_def] >>
   `0 < type_memory_bytes cenv (lowered_value_type cenv e1)` by
     metis_tac[bytestring_memory_bytes_positive] >>
-  `stmt_state_rel ctx func cenv cx es1 s` by gvs[expr_post_def] >>
+  `stmt_state_rel H ctx func cenv cx es1 s` by gvs[expr_post_def] >>
   `type_memory_bytes cenv (lowered_value_type cenv e1) <=
      type_memory_bytes cenv (expr_type e)` by decide_tac >>
   `val_in_memory tv2 v' (w2n p) s.vs_memory` by metis_tac[] >>
@@ -239,7 +239,7 @@ Proof
     metis_tac[] >>
   drule_all convert_widen_copy_owned_mem >> strip_tac >>
   qexistsl_tac [`t`, `v'`] >> simp[] >>
-  qpat_assum `expr_post _ _ _ _ e1 _ _ _ _ _ _ _ _`
+  qpat_assum `expr_post _ _ _ _ _ e1 _ _ _ _ _ _ _ _`
     (mp_then Any mp_tac convert_expr_post_compose) >>
   disch_then drule_all >> simp[]
 QED

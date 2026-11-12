@@ -57,12 +57,12 @@ Proof
 QED
 
 Theorem convert_continuation_summary_mem:
-  expr_post ctx func cenv cx e1 es sa s1 s0 (ee with gas_obs := []) v1 x t0 /\
+  expr_post H ctx func cenv cx e1 es sa s1 s0 (ee with gas_obs := []) v1 x t0 /\
   alloca_history func t0 /\ s0.vs_alloca_next <= t0.vs_alloca_next /\
   t0.vs_current_bb = s1.cs_current_bb /\
   t0.vs_inst_idx = LENGTH s1.cs_current_insts /\ ~t0.vs_halted /\
   evaluate_type (get_tenv cx) (expr_type e1) = SOME tv1 /\
-  unop_frag_mem ctx func cenv cx f (typed_val_to_w256 tv1 v1) ann
+  unop_frag_mem H ctx func cenv cx f (typed_val_to_w256 tv1 v1) ann
     (convert_result cx (expr_type e1) t v1) (ee with gas_obs := []) /\
   expr_res_ok (convert_result cx (expr_type e1) t v1) /\
   f x s1 = (op,sb) /\ (!z. x = Var z ==> not_fresh_at s1 z) /\
@@ -73,7 +73,7 @@ Theorem convert_continuation_summary_mem:
     (\vs. (convert_result cx (expr_type e1) t v1,vs))
     (ee with gas_obs := [],t0)
     (\res fin t'. ?v. res = INL v /\
-      expr_post ctx func cenv cx (TypeBuiltin ann Convert t [e1]) es sa sb s0
+      expr_post H ctx func cenv cx (TypeBuiltin ann Convert t [e1]) es sa sb s0
         fin v op t' /\
       t'.vs_current_bb = sb.cs_current_bb /\
       t'.vs_inst_idx = LENGTH sb.cs_current_insts /\
@@ -83,10 +83,10 @@ Proof
   strip_tac >>
   `post_value_type cenv e1 = expr_type e1` by
     (irule post_value_type_word >> first_assum ACCEPT_TAC) >>
-  `stmt_state_rel ctx func cenv cx (ee with gas_obs := []) t0 /\
+  `stmt_state_rel H ctx func cenv cx (ee with gas_obs := []) t0 /\
    eval_operand x t0 = SOME (typed_val_to_w256 tv1 v1)` by
     gvs[expr_post_def, expr_val_rel_def] >>
-  qpat_x_assum `unop_frag_mem _ _ _ _ _ _ _ _ _`
+  qpat_x_assum `unop_frag_mem _ _ _ _ _ _ _ _ _ _`
     (mp_tac o REWRITE_RULE [unop_frag_mem_def]) >>
   disch_then (qspecl_then [`s1`,`sb`,`x`,`op`,`t0`] mp_tac) >>
   (impl_tac >- simp[]) >> strip_tac
@@ -118,7 +118,7 @@ Theorem compile_convert_frag_sim_mem:
     (!gs1 v1 es1. (do r <- eval_expr cx e1; read_result cx r od)
         (es with gas_obs := gs1) = (INL v1,es1) ==>
        ?tv1. evaluate_type (get_tenv cx) (expr_type e1) = SOME tv1 /\
-         unop_frag_mem ctx func cenv cx f (typed_val_to_w256 tv1 v1) ann
+         unop_frag_mem H ctx func cenv cx f (typed_val_to_w256 tv1 v1) ann
            (convert_result cx (expr_type e1) t v1) es1) ==>
     expr_sim_mem ctx func cenv cx ty (TypeBuiltin ann Convert t [e1]) es
 Proof

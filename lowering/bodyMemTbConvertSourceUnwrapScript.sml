@@ -72,13 +72,13 @@ Theorem convert_unwrap_value_path_mem_window:
     (!tvt. evaluate_type (get_tenv cx) (expr_type e) = SOME tvt ==>
            type_memory_bytes cenv (expr_type e) = type_memory_size tvt /\
            type_memory_size tvt < 2 ** 64) /\
-    vv_post ctx func cenv cx e es sa sm s0 es' (Value v) vv s /\
+    vv_post H ctx func cenv cx e es sa sm s0 es' (Value v) vv s /\
     vv_store_bound cx (expr_type e) (lowered_value_type cenv e) es' (Value v) vv s /\
     alloca_history func s /\ s0.vs_alloca_next <= s.vs_alloca_next /\
     ~s.vs_halted /\ s.vs_current_bb = sm.cs_current_bb /\
     s.vs_inst_idx = LENGTH sm.cs_current_insts ==>
     ?u. gas_path_mem ctx func s 0 (OK u) /\
-        expr_post ctx func cenv cx e es sa sb s0 es' v op u /\
+        expr_post H ctx func cenv cx e es sa sb s0 es' v op u /\
         expr_store_bound cx (expr_type e) v op u /\
         (!sw. eval_operand op u = SOME sw ==>
           w2n sw + type_memory_bytes cenv (lowered_value_type cenv e) <= u.vs_alloca_next) /\
@@ -104,7 +104,7 @@ Proof
   `t = expr_type e` by
     (Cases_on `p.ptr_location` >> gvs[vv_post_def, vv_holds_def]) >>
   `?u w tv. gas_path_mem ctx func s 0 (OK u) /\
-      expr_post ctx func cenv cx e es sa sb s0 es' v op u /\
+      expr_post H ctx func cenv cx e es sa sb s0 es' v op u /\
       evaluate_type (get_tenv cx) t = SOME tv /\
       eval_operand op u = SOME w /\
       w2n w + type_memory_size tv <= u.vs_alloca_next /\
@@ -152,7 +152,7 @@ QED
 Resume convert_unwrap_value_path_mem_window[memory]:
   `~is_word_type t` by
     (strip_tac >>
-     qpat_assum `vv_post _ _ _ _ _ _ _ _ _ _ _ _ _` mp_tac >>
+     qpat_assum `vv_post _ _ _ _ _ _ _ _ _ _ _ _ _ _` mp_tac >>
      qpat_assum `post_value_type cenv e = _`
        (fn th => rewrite_tac[vv_post_def, vv_holds_def, th]) >>
      strip_tac >> gvs[is_bytestring_word_type]) >>
@@ -184,14 +184,14 @@ Theorem convert_unwrap_value_marked_read_mem_window:
     (!tvt. evaluate_type (get_tenv cx) (expr_type e) = SOME tvt ==>
            type_memory_bytes cenv (expr_type e) = type_memory_size tvt /\
            type_memory_size tvt < 2 ** 64) /\
-    vv_post ctx func cenv cx e es sa sm s0 ee tv vv s /\
+    vv_post H ctx func cenv cx e es sa sm s0 ee tv vv s /\
     vv_store_bound cx (expr_type e) (lowered_value_type cenv e) ee tv vv s /\
     alloca_history func s /\ s0.vs_alloca_next <= s.vs_alloca_next /\
     ~s.vs_halted /\ s.vs_current_bb = sm.cs_current_bb /\
     s.vs_inst_idx = LENGTH sm.cs_current_insts ==>
     ?v u. gas_marked_exec T (ctx,func) (read_result cx tv) (ee,s)
             [] (INL v) ee (OK u) /\
-      expr_post ctx func cenv cx e es sa sb s0 ee v op u /\
+      expr_post H ctx func cenv cx e es sa sb s0 ee v op u /\
       expr_store_bound cx (expr_type e) v op u /\
       (!sw. eval_operand op u = SOME sw ==>
         w2n sw + type_memory_bytes cenv (lowered_value_type cenv e) <= u.vs_alloca_next) /\
@@ -214,7 +214,7 @@ Proof
      rpt strip_tac >> first_x_assum irule >> metis_tac[]) >>
   drule_all vv_post_read_result >> strip_tac >>
   drule_at (Pat `unwrap_value _ _ _ = _`) convert_unwrap_value_path_mem_window >>
-  disch_then (drule_at (Pat `vv_post _ _ _ _ _ _ _ _ _ _ _ _ _`)) >>
+  disch_then (drule_at (Pat `vv_post _ _ _ _ _ _ _ _ _ _ _ _ _ _`)) >>
   disch_then (qspec_then `env` mp_tac) >>
   impl_tac >- (simp[] >> metis_tac[]) >> strip_tac >>
   qexistsl_tac [`v`, `u`] >> simp[] >>
