@@ -69,6 +69,7 @@ Proof
   qpat_x_assum `!src id ty. _ ==> ?ts. _ /\ FLOOKUP art.cta_toplevel_vtypes (src,id) = SOME (Type ty) /\ _`
     (qspecl_then [`NONE`,`id`,`bare_ty`] mp_tac) >>
   simp[] >> strip_tac >> gvs[] >>
+  rpt strip_tac >>
   qpat_x_assum `!src id ty. _ ==> ?tv v. _` drule >>
   strip_tac >> gvs[]
 QED
