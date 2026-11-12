@@ -9,6 +9,7 @@ Ancestors
   loweringSlice exprLoweringProps exprLowering context vyperInterpreter
   vyperState vyperValue vyperValueOperation vyperAST venomInst venomState venomExecSemantics venomMemDefs
   fragExec fragExecMem instMemFrontier freshWrites
+  gasStorage vyperStorageTrace vyperStorageFootprint
   words arithmetic list rich_list finite_map
 Libs
   monadsyntax
@@ -76,7 +77,7 @@ QED
 
 (* A site's region has the size its ALLOCA asks for. *)
 Theorem state_rel_site_size:
-  !ctx func cenv cx es s id n outs.
+  !H ctx func cenv cx es s id n outs.
     stmt_state_rel H ctx func cenv cx es s /\
     MEM (mk_inst id ALLOCA [Lit (n2w n)] outs) (fn_insts func) /\
     n < dimword (:256) ==>
@@ -91,7 +92,7 @@ QED
 (* A site other than the literal's keeps its region through the literal's
    code, of the size its ALLOCA asks for. *)
 Theorem other_site_size[local]:
-  !ctx func cenv cx es s0 t1 b id n outs.
+  !H ctx func cenv cx es s0 t1 b id n outs.
     stmt_state_rel H ctx func cenv cx es s0 /\
     (!a. a <> b ==> FLOOKUP t1.vs_allocas a = FLOOKUP s0.vs_allocas a) /\
     b < id /\
@@ -119,7 +120,7 @@ QED
 (* The literal's buffer and the reason encoder after it run, from a state
    at the start of that code, to the encoder's REVERT below the frontier. *)
 Theorem lit_reason_revert_path_mem:
-  !ctx func cenv cx es s0 str ml mt sa buf sm sb.
+  !H ctx func cenv cx es s0 str ml mt sa buf sm sb.
     compile_bytelike_literal (MAP (n2w o ORD) str) ml sa = (buf, sm) /\
     compile_revert_with_reason cenv
       (LocatedValue (BaseT (StringT (LENGTH str))) (base_ptr buf)) mt
@@ -174,7 +175,7 @@ Proof
     REWRITE_RULE [markerTheory.Abbrev_def]) >>
   `!x. FLOOKUP s0.vs_allocas sa.cs_next_id = SOME x ==>
        SND x = 32 + ((ml + 31) DIV 32) * 32` by
-    (qspecl_then [`ctx`, `func`, `cenv`, `cx`, `es`, `s0`, `sa.cs_next_id`,
+    (qspecl_then [`H`, `ctx`, `func`, `cenv`, `cx`, `es`, `s0`, `sa.cs_next_id`,
                   `32 + ((ml + 31) DIV 32) * 32`,
                   `[STRING #"%" (toString sa.cs_next_var)]`] mp_tac
        state_rel_site_size >>
@@ -221,7 +222,7 @@ Proof
       >- first_assum ACCEPT_TAC
       >- first_assum ACCEPT_TAC
       >- (gen_tac >> strip_tac >>
-          qspecl_then [`ctx`, `func`, `cenv`, `cx`, `es`, `s0`, `t1`,
+          qspecl_then [`H`, `ctx`, `func`, `cenv`, `cx`, `es`, `s0`, `t1`,
                        `sa.cs_next_id`, `id0`, `64 + Z`,
                        `["%" ++ toString v0]`] mp_tac other_site_size >>
           impl_tac >- simp[Abbr `id0`] >>
@@ -232,13 +233,13 @@ Proof
                                       `x0`, `x1`] mp_tac) >>
           simp[])
       >- (gen_tac >> strip_tac >>
-          qspecl_then [`ctx`, `func`, `cenv`, `cx`, `es`, `s0`, `t1`,
+          qspecl_then [`H`, `ctx`, `func`, `cenv`, `cx`, `es`, `s0`, `t1`,
                        `sa.cs_next_id`, `id0 + 3`, `Z`,
                        `["%" ++ toString (v0 + 2)]`] mp_tac other_site_size >>
           impl_tac >- simp[Abbr `id0`] >>
           disch_then drule >> simp[])
       >- (gen_tac >> strip_tac >>
-          qspecl_then [`ctx`, `func`, `cenv`, `cx`, `es`, `s0`, `t1`,
+          qspecl_then [`H`, `ctx`, `func`, `cenv`, `cx`, `es`, `s0`, `t1`,
                        `sa.cs_next_id`, `id0 + 4 + 6`, `32`,
                        `["%" ++ toString (v0 + 3 + 5)]`] mp_tac
             other_site_size >>
@@ -246,7 +247,7 @@ Proof
           disch_then drule >> strip_tac >> simp[] >>
           gen_tac >> strip_tac >>
           `SND y = Z` by
-            (qspecl_then [`ctx`, `func`, `cenv`, `cx`, `es`, `s0`, `id0 + 3`,
+            (qspecl_then [`H`, `ctx`, `func`, `cenv`, `cx`, `es`, `s0`, `id0 + 3`,
                           `Z`, `["%" ++ toString (v0 + 2)]`] mp_tac
                state_rel_site_size >>
              impl_tac >- simp[] >> disch_then drule >> simp[]) >>
@@ -299,6 +300,20 @@ Proof
   pop_assum mp_tac >> simp_tac (srw_ss()) [gas_marked_path_def]
 QED
 
+(* A start outside the storage domain is a bad-storage outcome for any
+   trace-framed source. *)
+Theorem gas_outcome_bad_domain_mem[local]:
+  storage_trace_frame src /\ ~storage_trace_domain cx st0 es.storage_trace ==>
+  gas_outcome m tops p cx st0 src (es,s0) Q R
+Proof
+  rw[gas_outcome_def] >> qexists_tac `[]` >> disj1_tac >>
+  rw[gas_bad_storage_at_def] >>
+  qmatch_goalsub_abbrev_tac `src st1` >>
+  `~storage_trace_domain cx st0 st1.storage_trace` by simp[Abbr `st1`] >>
+  Cases_on `src st1` >> simp[] >>
+  metis_tac[storage_trace_frame_preserves_bad_domain]
+QED
+
 Theorem compile_raise_reason_lit_frag_mem:
   !d ctx func cx lctx RetQ cenv ty ml str es.
     LENGTH str <= ml /\
@@ -328,11 +343,17 @@ Proof
   qpat_x_assum `Abbrev (MS = _)` kall_tac >>
   qpat_x_assum `MS = _` SUBST_ALL_TAC >>
   qunabbrev_tac `VV` >>
-  qspecl_then [`ctx`, `func`, `cenv`, `cx`, `es`, `s0`, `str`, `ml`, `MT`,
+  reverse (Cases_on `storage_trace_domain cx st0 es.storage_trace`)
+  >- (irule gas_outcome_bad_domain_mem >> simp[evaluate_storage_trace_frame]) >>
+  qabbrev_tac `H = storage_trace_horizon es.storage_trace` >>
+  `valid_horizon cx st0 H es.storage_trace` by
+    fs[storage_trace_domain_def, Abbr `H`] >>
+  `stmt_state_rel H ctx func cenv cx es s0` by metis_tac[] >>
+  qspecl_then [`H`, `ctx`, `func`, `cenv`, `cx`, `es`, `s0`, `str`, `ml`, `MT`,
                `sa`, `buf`, `sm`, `sb`] mp_tac lit_reason_revert_path_mem >>
   impl_tac >- (rpt conj_tac >> first_assum ACCEPT_TAC) >>
   disch_then (qx_choose_then `t` assume_tac) >>
-  rewrite_tac[gas_outcome_def] >> qexists_tac `[]` >> disj1_tac >>
+  rewrite_tac[gas_outcome_def] >> qexists_tac `[]` >> disj2_tac >> disj1_tac >>
   simp_tac (srw_ss()) [gas_summary_at_def, gas_marked_exec_def,
                        gas_marked_path_def] >>
   qexistsl_tac [`INR (AssertException str)`, `es`, `Abort Revert_abort t`] >>
