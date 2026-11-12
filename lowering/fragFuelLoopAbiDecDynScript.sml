@@ -10,6 +10,7 @@ Ancestors
   fragFuel fragFuelContextBase abiEncoder compileEnv emitHelper context
   exprSimAbiEncodeObliviousCode exprSimAbiEncodeObliviousContext fragExec
   fragFuelLoopAbiDecDynSteps exprSimAbiGasBridge exprLoweringProps list sorting
+  fnBlockBodyHelpers
   venomInst venomMemProps venomInstProps venomExecSemantics venomEffects venomState
 Libs
   fragFuelLib
@@ -548,15 +549,15 @@ QED
 Theorem abi_dyn_decode_code[local]:
   (!dst src lop base hi info.
     lop <> INVOKE /\ lop <> PHI ==>
-    code_action (\opc. opc <> INVOKE /\ opc <> PHI)
+    code_action (\opc. opc <> INVOKE /\ opc <> PHI /\ (lop <> DJMP ==> opc <> DJMP))
       (compile_abi_decode_to_buf dst src lop base hi info)) /\
   (!dst src lop base hi elems ao vo.
     lop <> INVOKE /\ lop <> PHI ==>
-    code_action (\opc. opc <> INVOKE /\ opc <> PHI)
+    code_action (\opc. opc <> INVOKE /\ opc <> PHI /\ (lop <> DJMP ==> opc <> DJMP))
       (compile_abi_decode_complex_elems dst src lop base hi elems ao vo)) /\
   (!dst src lop base hi info asz msz ip cnt.
     lop <> INVOKE /\ lop <> PHI ==>
-    code_action (\opc. opc <> INVOKE /\ opc <> PHI)
+    code_action (\opc. opc <> INVOKE /\ opc <> PHI /\ (lop <> DJMP ==> opc <> DJMP))
       (compile_abi_decode_dyn_loop dst src lop base hi info asz msz ip cnt))
 Proof
   ho_match_mp_tac compile_abi_decode_to_buf_ind >>
@@ -1929,7 +1930,7 @@ val dyn_middle = ``\dst src lop base hi info asz msz i.
 Theorem abi_dyn_middle_code[local]:
   !dst src lop base hi info asz msz i.
     lop <> INVOKE /\ lop <> PHI ==>
-    code_action (\opc. opc <> INVOKE /\ opc <> PHI)
+    code_action (\opc. opc <> INVOKE /\ opc <> PHI /\ (lop <> DJMP ==> opc <> DJMP))
       ((^dyn_middle) dst src lop base hi info asz msz i)
 Proof
   rpt strip_tac >> simp_tac std_ss [compile_abi_decode_dyn_elem_ptr_def,
@@ -2908,6 +2909,104 @@ Proof
   rule_assum_tac BETA_RULE >>
   qpat_x_assum `?suffix k. _` strip_assume_tac >>
   metis_tac[BETA_RULE abi_dyn_interval_excludes_old]
+QED
+
+Theorem abi_dyn_middle_terminator_target[local]:
+  !dst src lop base hi info asz msz i sa sb inst s t.
+    (^dyn_middle) dst src lop base hi info asz msz i sa = ((),sb) /\
+    ~is_terminator lop /\ lop <> INVOKE /\ lop <> PHI /\ (^dyn_Old) sa /\
+    MEM inst (frag_code sa sb) /\ is_terminator inst.inst_opcode /\
+    step_inst_base inst s = OK t ==>
+    t.vs_current_bb IN (^dyn_B) sa sb /\
+    t.vs_current_bb <> sa.cs_current_bb
+Proof
+  rpt gen_tac >> strip_tac >> rule_assum_tac BETA_RULE >>
+  `lop <> DJMP /\ lop <> JMP /\ lop <> JNZ` by metis_tac[is_terminator_def] >>
+  drule_all (SRULE [code_action_def, code_step_def] abi_dyn_middle_code) >>
+  strip_tac >>
+  `inst.inst_opcode <> INVOKE /\ inst.inst_opcode <> DJMP` by
+    (gvs[EVERY_MEM] >> metis_tac[]) >>
+  `step_inst 0 ARB inst s = OK t` by simp[step_inst_non_invoke] >>
+  `MEM inst.inst_opcode [JMP; JNZ]` by
+    metis_tac[fnBlockBodyHelpersTheory.step_ok_terminator_jump, MEM] >>
+  metis_tac[BETA_RULE abi_dyn_middle_jump_target]
+QED
+
+Theorem abi_dyn_region_jump[local]:
+  !sa sb fn t. fn_has_code sa sb fn /\
+    EVERY (\b. (^dyn_T) b.bb_instructions) (emitted_blocks sa sb) /\
+    t.vs_current_bb IN (^dyn_B) sa sb /\
+    t.vs_current_bb <> sa.cs_current_bb ==>
+    (?tb. lookup_block t.vs_current_bb fn.fn_blocks = SOME tb) /\
+    (^dyn_R) sa sb (t with vs_inst_idx := 0)
+Proof
+  rpt gen_tac >> simp_tac std_ss [] >> strip_tac >>
+  `?tb. lookup_block t.vs_current_bb fn.fn_blocks = SOME tb` by
+    (gvs[fn_has_code_def] >> metis_tac[]) >>
+  conj_tac >- metis_tac[] >>
+  simp_tac std_ss [venom_state_accfupds, venom_state_accessors] >>
+  conj_tac >- simp[] >>
+  gvs[EVERY_MEM] >> metis_tac[listTheory.LENGTH_NIL, arithmeticTheory.NOT_ZERO_LT_ZERO]
+QED
+
+Theorem abi_dyn_region_target_phi[local]:
+  !sa sb fn id lbl.
+    fn_has_code sa sb fn /\ no_phi_fn fn /\
+    (lbl = sb.cs_current_bb ==>
+      EVERY (\i. i.inst_opcode <> PHI) sb.cs_current_insts) /\
+    lbl IN (^dyn_B) sa sb ==>
+    ?tb tob. lookup_block lbl fn.fn_blocks = SOME tb /\
+      lookup_block lbl (frag_observer sa sb fn id).fn_blocks = SOME tob /\
+      phi_prefix_length tb.bb_instructions = 0 /\
+      phi_prefix_length tob.bb_instructions = 0
+Proof
+  rpt gen_tac >> strip_tac >>
+  `?tb. lookup_block lbl fn.fn_blocks = SOME tb` by
+    (gvs[fn_has_code_def] >> metis_tac[]) >>
+  `phi_prefix_length tb.bb_instructions = 0` by
+    (drule venomExecProofsTheory.lookup_block_MEM >>
+     gvs[no_phi_fn_def, EVERY_MEM] >> metis_tac[]) >>
+  Cases_on `lbl = sb.cs_current_bb`
+  >- (gvs[] >>
+      qexists_tac `<|bb_label := sb.cs_current_bb;
+        bb_instructions := sb.cs_current_insts ++ [mk_inst id STOP [] []]|>` >>
+      simp[frag_observer_cut_lookup] >>
+      Cases_on `sb.cs_current_insts` >> gvs[phi_prefix_length_def, mk_inst_def]) >>
+  `lookup_block lbl (frag_observer sa sb fn id).fn_blocks = SOME tb` by
+    (simp[frag_observer_def, lookup_block_def, FIND_thm] >>
+     rewrite_tac[GSYM lookup_block_def] >> irule abi_dyn_lookup_filter >>
+     simp[] >> gvs[fn_has_code_def] >> metis_tac[optionTheory.SOME_11]) >>
+  metis_tac[]
+QED
+
+Theorem abi_dyn_middle_jump[local]:
+  !dst src lop base hi info asz msz i sa sb fn id s inst t.
+    (^dyn_middle) dst src lop base hi info asz msz i sa = ((),sb) /\
+    ~is_terminator lop /\ lop <> INVOKE /\ lop <> PHI /\ (^dyn_Old) sa /\
+    fn_has_code sa sb fn /\ no_phi_fn fn /\
+    MEM inst (frag_code sa sb) /\ is_terminator inst.inst_opcode /\
+    step_inst_base inst s = OK t ==>
+    ?tb tob. lookup_block t.vs_current_bb fn.fn_blocks = SOME tb /\
+      lookup_block t.vs_current_bb (frag_observer sa sb fn id).fn_blocks = SOME tob /\
+      phi_prefix_length tb.bb_instructions = 0 /\
+      phi_prefix_length tob.bb_instructions = 0 /\
+      (^dyn_R) sa sb (t with vs_inst_idx := 0)
+Proof
+  rpt gen_tac >> strip_tac >> rule_assum_tac BETA_RULE >>
+  drule_all (BETA_RULE abi_dyn_middle_terminator_target) >> strip_tac >>
+  drule_all (BETA_RULE abi_dyn_middle_terminal) >> strip_tac >>
+  `(^dyn_R) sa sb (t with vs_inst_idx := 0)` by
+    metis_tac[BETA_RULE abi_dyn_region_jump] >>
+  Cases_on `sb.cs_current_bb = sa.cs_current_bb`
+  >- (`t.vs_current_bb <> sb.cs_current_bb` by metis_tac[] >>
+      metis_tac[BETA_RULE abi_dyn_region_target_phi]) >>
+  `emitted_blocks sa sb <> []` by
+    (strip_tac >> drule entry_shape_extends >> strip_tac >>
+     drule frag_extends_emitted_shape >> gvs[]) >>
+  drule_all (SRULE [code_action_def, code_step_def] abi_dyn_middle_code) >> strip_tac >>
+  `EVERY (\i. i.inst_opcode <> PHI) sb.cs_current_insts` by
+    (gvs[frag_code_def, NULL_EQ, EVERY_APPEND, EVERY_MEM] >> metis_tac[]) >>
+  metis_tac[BETA_RULE abi_dyn_region_target_phi]
 QED
 
 Theorem abi_dyn_region_cut_instruction[local]:
