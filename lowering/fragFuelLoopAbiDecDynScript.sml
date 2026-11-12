@@ -1378,6 +1378,63 @@ Resume abi_dyn_decode_closed[loop]:
 QED
 Finalise abi_dyn_decode_closed
 
+(* Label provenance, with previously allocated labels carried ambiently. *)
+val dyn_I = ``\lo hi. {l | ?suffix k. lo <= k /\ k < hi /\
+  l = fresh_label_output suffix k}``;
+val dyn_span = ``\A a b. entry_shape a b /\
+  a.cs_next_label <= b.cs_next_label /\
+  (^dyn_B) a b SUBSET ({a.cs_current_bb} UNION A UNION
+    (^dyn_I) a.cs_next_label b.cs_next_label)``;
+val dyn_prov = ``\A m. !a r b. m a = (r,b) ==> (^dyn_span) A a b``;
+
+Theorem abi_dyn_interval_mono[local]:
+  !lo hi lo' hi'. lo' <= lo /\ hi <= hi' ==>
+    (^dyn_I) lo hi SUBSET (^dyn_I) lo' hi'
+Proof
+  simp[pred_setTheory.SUBSET_DEF] >> rpt strip_tac >>
+  qexistsl_tac [`suffix`, `k`] >> simp[]
+QED
+
+Theorem abi_dyn_available_cover[local]:
+  !a b c. entry_shape a b /\ entry_shape b c ==>
+    (^dyn_B) a c SUBSET ((^dyn_B) a b UNION (^dyn_B) b c)
+Proof
+  rpt gen_tac >> strip_tac >>
+  `cs_extends a b /\ cs_extends b c` by metis_tac[entry_shape_extends] >>
+  drule_all abi_dyn_emitted_compose >> strip_tac >>
+  simp[pred_setTheory.SUBSET_DEF, MEM_APPEND] >> metis_tac[]
+QED
+
+Theorem abi_dyn_span_compose[local]:
+  !A a b c. (^dyn_span) A a b /\ (^dyn_span) A b c ==>
+    (^dyn_span) A a c
+Proof
+  simp_tac std_ss [] >> rpt gen_tac >> strip_tac >>
+  `entry_shape a c` by metis_tac[entry_shape_trans] >>
+  `a.cs_next_label <= c.cs_next_label` by decide_tac >>
+  `(^dyn_B) a c SUBSET ((^dyn_B) a b UNION (^dyn_B) b c)`
+    by (BETA_TAC >> irule (BETA_RULE abi_dyn_available_cover) >> simp[]) >>
+  `(^dyn_I) a.cs_next_label b.cs_next_label SUBSET
+     (^dyn_I) a.cs_next_label c.cs_next_label`
+    by (BETA_TAC >> irule (BETA_RULE abi_dyn_interval_mono) >> simp[]) >>
+  `(^dyn_I) b.cs_next_label c.cs_next_label SUBSET
+     (^dyn_I) a.cs_next_label c.cs_next_label`
+    by (BETA_TAC >> irule (BETA_RULE abi_dyn_interval_mono) >> simp[]) >>
+  `b.cs_current_bb IN (^dyn_B) a b` by simp[] >>
+  RULE_ASSUM_TAC BETA_RULE >>
+  qmatch_asmsub_abbrev_tac `xx SUBSET ({a.cs_current_bb} UNION A UNION ii)` >>
+  qmatch_asmsub_abbrev_tac `yy SUBSET ({b.cs_current_bb} UNION A UNION jj)` >>
+  qmatch_goalsub_abbrev_tac `zz SUBSET ({a.cs_current_bb} UNION A UNION kk)` >>
+  simp_tac std_ss [] >>
+  qpat_x_assum `Abbrev (xx = _)` kall_tac >>
+  qpat_x_assum `Abbrev (yy = _)` kall_tac >>
+  qpat_x_assum `Abbrev (zz = _)` kall_tac >>
+  qpat_x_assum `Abbrev (ii = _)` kall_tac >>
+  qpat_x_assum `Abbrev (jj = _)` kall_tac >>
+  qpat_x_assum `Abbrev (kk = _)` kall_tac >>
+  ASM_SET_TAC []
+QED
+
 (* Quantitative cutoff diagnostic interface (implementation belongs to the
    subsequent transfer component).
 
