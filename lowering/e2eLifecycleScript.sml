@@ -19,7 +19,7 @@ Ancestors
   vyperStorageFootprint vyperStorageBackend vyperLookupStorage vyperStorage
   immutableSectionRel
   vfmState vfmExecution vfmExecutionProp vfmRunCall vfmTotalBalance
-  vfmAccountFrame
+  vfmAccountFrame While
   e2eCodeFrame vyperRuntimeImmutables storageLiveAgree
 
 (* ===== The premises a later call needs from the machine ===== *)
@@ -59,7 +59,7 @@ Proof
   rpt strip_tac >> gvs[run_call_def] >>
   `(\p. wf_state (SND p) /\ balance_bounded B (SND p)) (r, es')`
     suffices_by simp[] >>
-  irule (MP_CANON whileTheory.OWHILE_INV_IND) >>
+  irule (MP_CANON WhileTheory.OWHILE_INV_IND) >>
   goal_assum $ drule_at Any >> simp[] >>
   qx_gen_tac `p` >> PairCases_on `p` >> simp[] >> strip_tac >>
   simp[step_preserves_wf_state] >>
