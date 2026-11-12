@@ -22,9 +22,9 @@ Proof
 QED
 
 Theorem return_prefix_post_weaken[local]:
-  gas_outcome F tops (ctx,func) source start P R /\
-  (!res ee t. P res ee t ==> Q res ee t) ==>
-  gas_outcome F tops (ctx,func) source start Q R
+  gas_outcome F tops (ctx,func) cx st0 source start P R /\
+  (!H res ee t. P H res ee t ==> Q H res ee t) ==>
+  gas_outcome F tops (ctx,func) cx st0 source start Q R
 Proof
   Cases_on `start` >>
   simp[gas_outcome_def, gas_summary_at_def] >> metis_tac[]
@@ -37,12 +37,14 @@ Theorem return_selected_forced_prefix:
   local_ptrs_reserved ce sa /\
   expr_sim ctx func ce cx ct e es /\ expr_vv_sim ctx func ce cx ct e es /\
   gas_admissible (eval_stmt cx (Return (SOME e))) (stmt_res_ok lctx) es /\
-  stmt_state_rel H ctx func ce cx es s0 /\ ~s0.vs_halted /\
+  (!H. valid_horizon cx st0 H es.storage_trace ==>
+     stmt_state_rel H ctx func ce cx es s0 /\
+     storage_well_formed_on cx es (FST H)) /\ ~s0.vs_halted /\
   s0.vs_current_bb = sa.cs_current_bb /\
   s0.vs_inst_idx = LENGTH sa.cs_current_insts ==>
-  gas_outcome F (cx_tops cx) (ctx,func)
+  gas_outcome F (cx_tops cx) (ctx,func) cx st0
     (bind (eval_expr cx e) (read_result cx)) (es,s0)
-    (\res ee s. ?v. res = INL v /\
+    (\H res ee s. ?v. res = INL v /\
       expr_post H ctx func ce cx e es sa sb s0 ee v op s /\
       s.vs_current_bb = sb.cs_current_bb /\
       s.vs_inst_idx = LENGTH sb.cs_current_insts /\
@@ -50,7 +52,7 @@ Theorem return_selected_forced_prefix:
        (?ann fid args drv. e = Call ann (IntCall fid) args drv) \/
        (?ann fid args drv pvs. e = Call ann (IntCall fid) args drv /\
           ce.ce_func_info (nsid_to_string fid) = (0,0,pvs) /\ op = Lit 0w)))
-    (\res ee r. expr_exit res r)
+    (\H res ee r. expr_exit res r)
 Proof
   strip_tac >>
   Cases_on `?ann fid args drv. e = Call ann (IntCall fid) args drv`
