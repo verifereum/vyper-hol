@@ -106,7 +106,7 @@ Proof
   strip_tac >> drule_all log_buffer_allocate >> strip_tac >>
   `LIST_REL (log_data_source cx p cap t) xs vs` by
     (irule log_allocated_data_sources >> simp[] >>
-     qexistsl_tac [`buf`,`ce`,`ctx`,`es`,`func`,`s`,`sa`,`source_st`,`start`] >> simp[]) >>
+     qexistsl_tac [`H`,`buf`,`ce`,`ctx`,`es`,`func`,`s`,`sa`,`source_st`,`start`] >> simp[]) >>
   drule abi_builtin_alloc_buffer_shape >> strip_tac >>
   drule emitted_insts_emit_op >> strip_tac >>
   qexistsl_tac [`t`,`p`] >> gvs[] >>

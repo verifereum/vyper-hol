@@ -110,8 +110,7 @@ Theorem log_store_data_stmt:
   eval_operand buf s = SOME (n2w b) /\
   off + SUM (MAP (type_memory_bytes ce) (MAP SND xs)) <= cap /\
   b + cap < dimword (:256) /\
-  stmt_state_rel (H : (bool # bytes32 # type_value) list # num list)
-    ctx func ce cx es s /\ local_ptrs_reserved ce sa /\
+  stmt_state_rel H ctx func ce cx es s /\ local_ptrs_reserved ce sa /\
   (!name lo sz. local_region ce es.scopes s name lo sz ==>
     lo+sz <= b+off \/ b+off+SUM (MAP (type_memory_bytes ce) (MAP SND xs)) <= lo) /\
   (ce.ce_is_ctor ==> !name tv v p.
@@ -139,8 +138,7 @@ Proof
   drule log_data_sources_types >> strip_tac >>
   `LENGTH s.vs_memory <= LENGTH t.vs_memory` by
     (drule_all log_store_data_memory_mono >> simp[]) >>
-  `stmt_state_rel H ctx func ce cx es t` by
-    (drule_all log_write_frame_stmt >> simp[]) >>
+  drule_all log_write_frame_stmt >> strip_tac >>
   gvs[vyper_to_abi_type_def] >> rpt strip_tac >>
   drule_all log_write_frame_operand >> simp[]
 QED
