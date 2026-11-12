@@ -488,7 +488,8 @@ Proof
        (mp_tac o CONJUNCT1 o REWRITE_RULE [gas_marked_exec_def]) >>
      disch_then (qspec_then `[]` mp_tac) >>
      gvs[evalNoHaltTheory.select_result_nh]) >>
-  qexistsl_tac [`res`, `es_end`, `r`] >> gvs[halt_exit_def]
+  qpat_assum `gas_marked_exec _ _ _ _ _ _ _ _` (irule_at Any) >>
+  gvs[halt_exit_def]
 QED
 
 Theorem framed_array_suffix_summary:

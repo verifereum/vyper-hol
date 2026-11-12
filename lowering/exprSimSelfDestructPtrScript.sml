@@ -266,7 +266,9 @@ Proof
       rewrite_tac[eval_selfdestruct_action] >>
       simp[gas_summary_ptr_at_marked] >>
       qexistsl_tac [`INR y`, `es_end`, `G`, `tn`, `r`] >> simp[] >>
-      irule gas_marked_exec_ptr_bind_exception >> simp[]) >>
+      rpt conj_tac
+      >- (irule gas_marked_exec_ptr_bind_exception >> simp[]) >>
+      metis_tac[stmtSimPropsTheory.expr_exit_INR_type]) >>
   qexists_tac `marks` >> disj2_tac >>
   qexistsl_tac [`err`, `ee`, `leaf`, `finish'`] >>
   rewrite_tac[eval_selfdestruct_action, ignore_bind_bind_unit] >>
