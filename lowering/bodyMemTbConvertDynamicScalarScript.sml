@@ -4,6 +4,7 @@ Ancestors
   bodyMemTbConvertReadSuffix allocaHistoryFragment exprSimConvertFromBytes
   varsExt freshWrites fragGasMode fragGasPathMem fragExec exprSimDefs loweringPosts gasSummary
   exprLoweringProps compileEnv venomState venomExecSemantics rich_list list
+  gasStorage vyperStorageTrace vyperStorageFootprint
 
 Theorem dynamic_scalar_counted_fragment_mem:
   is_bytestring_type src /\ ~is_bytestring_type dst /\
@@ -25,6 +26,8 @@ Theorem dynamic_scalar_counted_fragment_mem:
        stmt_state_rel H ctx func cenv cx es s /\
        eval_operand r s = SOME (typed_val_to_w256 dtv vout) /\
        s.vs_memory = s0.vs_memory /\ s.vs_allocas = s0.vs_allocas /\
+       s.vs_accounts = s0.vs_accounts /\ s.vs_transient = s0.vs_transient /\
+       s.vs_requests = s0.vs_requests /\ s.vs_call_ctx = s0.vs_call_ctx /\
        (!x w. not_fresh_at sa x /\ lookup_var x s0 = SOME w ==>
               lookup_var x s = SOME w) /\
        ~s.vs_halted /\ s.vs_current_bb = sb.cs_current_bb /\
@@ -85,7 +88,9 @@ QED
 Finalise dynamic_scalar_counted_fragment_mem
 
 Theorem dynamic_continuation_summary_mem:
-  expr_post H ctx func cenv cx e1 es sa s1 s0 (ee with gas_obs := []) v1 x t0 /\
+  (!H. valid_horizon cx st0 H ee.storage_trace ==>
+     expr_post H ctx func cenv cx e1 es sa s1 s0 (ee with gas_obs := []) v1 x t0) /\
+  (?H. valid_horizon cx st0 H ee.storage_trace) /\
   alloca_history func t0 /\ s0.vs_alloca_next <= t0.vs_alloca_next /\
   alloca_inv t0 /\ fn_inst_ids_distinct func /\
   t0.vs_current_bb = s1.cs_current_bb /\
@@ -107,24 +112,33 @@ Theorem dynamic_continuation_summary_mem:
   gas_summary_at T (ctx,func) []
     (\vs. (convert_result cx (expr_type e1) t v1,vs))
     (ee with gas_obs := [],t0)
-    (\res fin ss. ?v. res = INL v /\
+    (\res fin ss. !H. valid_horizon cx st0 H fin.storage_trace ==>
+      ?v. res = INL v /\
       expr_post H ctx func cenv cx (TypeBuiltin ann Convert t [e1]) es sa sb s0
         fin v op ss /\ ss.vs_current_bb = sb.cs_current_bb /\
       ss.vs_inst_idx = LENGTH sb.cs_current_insts /\
       alloca_history func ss /\ s0.vs_alloca_next <= ss.vs_alloca_next)
-    (\res fin out. expr_exit res out)
+    (\res fin out. !H. valid_horizon cx st0 H fin.storage_trace ==>
+      expr_exit res out)
 Proof
   strip_tac >>
+  rename1 `valid_horizon cx st0 H0 ee.storage_trace` >>
   `post_value_type cenv e1 = expr_type e1` by
     (irule post_value_type_bytestring >> first_assum ACCEPT_TAC) >>
   Cases_on `lowered_value_type cenv e1 = BaseT (BytesT (Dynamic 0)) \/
             lowered_value_type cenv e1 = BaseT (StringT 0)`
   >- suspend "empty" >>
   gvs[] >>
-  `stmt_state_rel H ctx func cenv cx (ee with gas_obs := []) t0 /\
-   expr_val_rel cx (expr_type e1) v1 x t0 /\
-   expr_val_at cenv cx (expr_type e1) sa s1 (ee with gas_obs := []) v1 x t0` by
-    fs[expr_post_def] >>
+  `!H. valid_horizon cx st0 H ee.storage_trace ==>
+     stmt_state_rel H ctx func cenv cx (ee with gas_obs := []) t0 /\
+     expr_val_rel cx (expr_type e1) v1 x t0 /\
+     expr_val_at cenv cx (expr_type e1) sa s1 (ee with gas_obs := []) v1 x t0` by
+    (rpt strip_tac >>
+     qpat_assum `!H. valid_horizon _ _ H _ ==> expr_post _ _ _ _ _ _ _ _ _ _ _ _ _ _`
+       (drule_then strip_assume_tac) >>
+     gvs[expr_post_def]) >>
+  qpat_assum `!H. valid_horizon _ _ H _ ==> stmt_state_rel _ _ _ _ _ _ _ /\ _ /\ _`
+    (drule_then strip_assume_tac) >>
   drule_all (Q.INST
     [`src` |-> `expr_type e1`, `dst` |-> `ann`, `v` |-> `v1`,
      `res` |-> `convert_result cx (expr_type e1) ann v1`]
@@ -141,9 +155,12 @@ Resume dynamic_continuation_summary_mem[empty]:
   gvs[] >> simp[gas_summary_at_def] >>
   qexistsl_tac [`INL vout`,`ee`,`OK t0`] >>
   simp[gas_marked_exec_def, gas_marked_path_def, gas_path_mem_rules] >>
-  (irule dynamic_expr_post_convert >> simp[eval_operand_def] >>
-   conj_tac >- fs[expr_post_def] >>
-   qexistsl_tac [`s1`,`t0`] >> simp[] >> metis_tac[])
+  rpt strip_tac >>
+  qpat_assum `!H. valid_horizon _ _ H _ ==> expr_post _ _ _ _ _ _ _ _ _ _ _ _ _ _`
+    (drule_then strip_assume_tac) >>
+  irule dynamic_expr_post_convert >> simp[eval_operand_def] >>
+  conj_tac >- fs[expr_post_def] >>
+  qexistsl_tac [`s1`,`t0`] >> simp[] >> metis_tac[]
 QED
 
 Resume dynamic_continuation_summary_mem[success]:
@@ -151,6 +168,12 @@ Resume dynamic_continuation_summary_mem[success]:
   qexistsl_tac [`INL vout`,`ee`,`OK s`] >>
   simp[gas_marked_exec_def] >>
   conj_tac >- metis_tac[] >>
+  rpt strip_tac >>
+  qpat_assum `!H. valid_horizon _ _ H _ ==> expr_post _ _ _ _ _ _ _ _ _ _ _ _ _ _`
+    (drule_then strip_assume_tac) >>
+  `stmt_state_rel H ctx func cenv cx (ee with gas_obs := []) s` by
+    (irule stmt_state_rel_fields_transport >>
+     qexistsl_tac [`H0`,`t0`] >> gvs[expr_post_def]) >>
   irule dynamic_expr_post_convert >> simp[] >>
   qexistsl_tac [`s1`,`t0`] >> simp[] >> metis_tac[]
 QED
@@ -158,7 +181,7 @@ QED
 Resume dynamic_continuation_summary_mem[abort]:
   simp[gas_summary_at_def] >>
   qexistsl_tac [`convert_result cx (expr_type e1) ann v1`,`ee`,`out`] >>
-  simp[gas_marked_exec_def]
+  simp[gas_marked_exec_def] >> metis_tac[]
 QED
 
 Finalise dynamic_continuation_summary_mem

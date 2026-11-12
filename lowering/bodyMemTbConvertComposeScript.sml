@@ -2,6 +2,7 @@
 Theory bodyMemTbConvertCompose
 Ancestors
   bodyUnopFragMemory exprSimConvert gasExemptCert gasSummary gasOutcome
+  gasStorage vyperStorageTrace vyperStorageFootprint
   gasContext exprSimDefs loweringPosts exprSimMemDefs fragExec
   exprLoweringProps fragGasMode fragGasPath gasSummaryCompose list
   vyperInterpreter vyperState vyperValue vyperAST
