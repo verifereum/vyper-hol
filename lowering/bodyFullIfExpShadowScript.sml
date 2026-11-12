@@ -6,6 +6,29 @@ Ancestors
   gasShadow gasShadowState exprSimIfExp exprLoweringProps exprLowering
   fragExec compileEnv loweringPosts vyperAST
 
+Theorem lowered_value_type_gas_shadow[local]:
+  lowered_value_type ce (gas_shadow_expr e) = lowered_value_type ce e
+Proof
+  Cases_on `e` >> simp[gas_shadow_expr_def, lowered_value_type_def,
+    gas_shadow_builtin_def, expr_type_def, listTheory.MAP_MAP_o, combinTheory.o_DEF] >>
+  rpt (CASE_TAC >> gvs[lowered_value_type_def, expr_type_def,
+    listTheory.MAP_MAP_o, combinTheory.o_DEF])
+  >- (Cases_on `b` >> gvs[lowered_value_type_def, expr_type_def,
+        listTheory.MAP_MAP_o, combinTheory.o_DEF])
+  >- (Cases_on `t0` >> gvs[lowered_value_type_def, expr_type_def,
+        listTheory.MAP_MAP_o, combinTheory.o_DEF] >>
+      Cases_on `l` >> simp[ETA_THM])
+  >> Cases_on `c` >> simp[lowered_value_type_def, expr_type_def]
+QED
+
+Theorem gas_shadow_call[local]:
+  gas_shadow_compiles f g /\ gas_shadow_state s ss /\
+  f s = (v,u) /\ g ss = (w,su) ==>
+  w = v /\ gas_shadow_state u su
+Proof
+  simp[gas_shadow_compiles_def] >> metis_tac[pairTheory.FST, pairTheory.SND]
+QED
+
 (* The three spine premises are instances of gasShadowCompile's
    gas_shadow_compile_expr, gas_shadow_compiles_lower_value and the
    arm helpers' shadow compilation (alloc buffer, unwrap, store). *)
@@ -54,5 +77,75 @@ Theorem ifexp_shadow_code_layout:
     se.cs_next_var <= sea.cs_next_var /\ se.cs_next_id <= sea.cs_next_id /\
     sx.cs_next_id <= st'.cs_next_id /\ (!x. not_fresh_at st x ==> x <> rv)
 Proof
-  cheat
+  strip_tac >>
+  qpat_assum `compile_expr _ _ (IfExp _ _ _ _) st = _`
+    (mp_then (Pos hd) mp_tac compile_expr_ifexp_states) >>
+  (impl_tac >- metis_tac[CONJUNCT2 compile_expr_grows]) >> strip_tac >>
+  qpat_assum `compile_expr _ _ (gas_shadow_expr _) _ = _`
+  (fn th => mp_then Any (qx_choosel_then
+    [`hc`,`h1`,`hr`,`h2`,`ht`,`h3`,`he`,`h4`,`hx`,`h5`,`h6`,`hu6`,
+     `h7`,`hv`,`h7a`,`hop`,`h8`,`h9`,`h10`,`hu10`,`h11`,`hw`,`h11a`,
+     `hbp`,`h12`,`h13`,`h14`,`hu14`] strip_assume_tac) compile_expr_ifexp
+      (SRULE[gas_shadow_expr_def] th)) >>
+  `hc = cond_op /\ gas_shadow_state s1 h1` by metis_tac[gas_shadow_call] >>
+  `hr = rv /\ gas_shadow_state s2 h2` by
+    metis_tac[gas_shadow_call, gas_shadow_compiles_fresh_var] >>
+  `ht = tl /\ gas_shadow_state s3 h3` by
+    metis_tac[gas_shadow_call, gas_shadow_compiles_fresh_label] >>
+  `he = el /\ gas_shadow_state s4 h4` by
+    metis_tac[gas_shadow_call, gas_shadow_compiles_fresh_label] >>
+  `hx = xl /\ gas_shadow_state s5 h5` by
+    metis_tac[gas_shadow_call, gas_shadow_compiles_fresh_label] >>
+  `gas_shadow_state s6 h6` by
+    metis_tac[gas_shadow_call, gas_shadow_compiles_emit_inst] >>
+  `gas_shadow_state s7 h7` by
+    metis_tac[gas_shadow_call, gas_shadow_compiles_new_block] >>
+  `hv = av /\ gas_shadow_state s7a h7a` by metis_tac[gas_shadow_call] >>
+  fs[lowered_value_type_gas_shadow] >>
+  `hop = aop /\ gas_shadow_state s8 h8` by metis_tac[gas_shadow_call] >>
+  `gas_shadow_state s9 h9` by
+    metis_tac[gas_shadow_call, gas_shadow_compiles_emit_inst] >>
+  `gas_shadow_state s10 h10` by
+    metis_tac[gas_shadow_call, gas_shadow_compiles_emit_inst] >>
+  `gas_shadow_state s11 h11` by
+    metis_tac[gas_shadow_call, gas_shadow_compiles_new_block] >>
+  `hw = bv /\ gas_shadow_state s11a h11a` by metis_tac[gas_shadow_call] >>
+  imp_res_tac (CONJUNCT1 compile_expr_grows) >>
+  imp_res_tac (CONJUNCT2 compile_expr_grows) >>
+  `cs_extends s7a s8 /\ cs_extends s11a s12` by
+    metis_tac[ci_mono_compile_ifexp_arm, ci_mono_def, pairTheory.SND] >>
+  `cs_extends s5 s6 /\ cs_extends s8 s9 /\ cs_extends s9 s10 /\
+   cs_extends s12 s13 /\ cs_extends s13 s14` by
+    metis_tac[cs_appends_emit_helpers, cs_appends_def] >>
+  `cs_extends s6 s7 /\ cs_extends s10 s11 /\ cs_extends s14 st'` by
+    metis_tac[cs_extends_new_block] >>
+  `fn_has_code st s1 func /\ fn_has_code s5 s6 func /\
+   fn_has_code s7 s7a func /\ fn_has_code s7a s8 func /\
+   fn_has_code s8 s9 func /\ fn_has_code s9 s10 func /\
+   fn_has_code s11 s11a func /\ fn_has_code s11a s12 func /\
+   fn_has_code s12 s13 func /\ fn_has_code s13 s14 func` by
+    metis_tac[fn_has_code_mid, fn_has_code_split, cs_extends_trans] >>
+  `local_ptrs_reserved cenv s7 /\ local_ptrs_reserved cenv s11` by
+    metis_tac[local_ptrs_reserved_next_var, arithmeticTheory.LESS_EQ_TRANS] >>
+  `cs_extends h1 h2 /\ cs_extends h2 h3 /\ cs_extends h3 h4 /\
+   cs_extends h4 h5` by
+    metis_tac[cs_extends_fresh_var, cs_extends_fresh_label] >>
+  `cs_extends h5 h6 /\ cs_extends h8 h9 /\ cs_extends h9 h10 /\
+   cs_extends h12 h13 /\ cs_extends h13 h14` by
+    metis_tac[cs_appends_emit_helpers, cs_appends_def] >>
+  `cs_extends h6 h7 /\ cs_extends h10 h11 /\ cs_extends h14 shadow_st'` by
+    metis_tac[cs_extends_new_block] >>
+  `cs_extends h7a h8 /\ cs_extends h11a h12` by
+    metis_tac[ci_mono_compile_ifexp_arm, ci_mono_def, pairTheory.SND] >>
+  `cs_extends h11 shadow_st'` by metis_tac[cs_extends_trans] >>
+  `cs_extends h7 shadow_st'` by metis_tac[cs_extends_trans] >>
+  `cs_extends h1 shadow_st'` by metis_tac[cs_extends_trans] >>
+  `fn_has_code shadow_st h1 shadow_func /\
+   fn_has_code h7 h7a shadow_func /\ fn_has_code h11 h11a shadow_func` by
+    metis_tac[fn_has_code_mid, fn_has_code_split, cs_extends_trans] >>
+  Cases_on `sel`
+  >- (qexistsl_tac [`s5`,`s6`,`tl`,`el`,`rv`,`s7`,`h7`,`av`,`s7a`,
+        `h7a`,`aop`,`s8`,`s9`,`s10`] >> simp[]) >>
+  qexistsl_tac [`s5`,`s6`,`tl`,`el`,`rv`,`s11`,`h11`,`bv`,`s11a`,
+        `h11a`,`bop`,`s12`,`s13`,`s14`] >> simp[]
 QED

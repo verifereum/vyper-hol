@@ -1534,7 +1534,11 @@ Theorem compile_expr_ifexp_states:
        cs_extends sa sb /\ sa.cs_next_var <= sb.cs_next_var /\
        sa.cs_next_id <= sb.cs_next_id) ==>
     ?cond_op s1 rv tl el xl s5 s6 x6 s7 av s7a aop s8 s9 s10 x10 s11 bv s11a bop s12 s13
-     s14 x14.
+     s14 x14 s2 s3 s4.
+      fresh_var s1 = (rv,s2) /\
+      fresh_label "then" s2 = (tl,s3) /\
+      fresh_label "else" s3 = (el,s4) /\
+      fresh_label "exit" s4 = (xl,s5) /\
       lower_value compile_expr cenv (BaseT BoolT) c st = (cond_op, s1) /\
       emit_inst JNZ [cond_op; Label tl; Label el] [] s5 = ((), s6) /\
       new_block tl s6 = (x6, s7) /\
@@ -1592,8 +1596,9 @@ Proof
    s2.cs_next_var = s1.cs_next_var + 1 /\ s2.cs_next_id = s1.cs_next_id /\
    s2.cs_current_bb = s1.cs_current_bb /\
    s2.cs_current_insts = s1.cs_current_insts /\ s2.cs_blocks = s1.cs_blocks` by
-    (qpat_x_assum `fresh_var s1 = _` mp_tac >>
-     simp[fresh_var_def, markerTheory.Abbrev_def] >> strip_tac >> gvs[]) >>
+    (qpat_assum `fresh_var s1 = _` mp_tac >>
+     pure_rewrite_tac[fresh_var_def, pairTheory.PAIR_EQ] >>
+     strip_tac >> gvs[markerTheory.Abbrev_def]) >>
   `!x. not_fresh_at st x ==> x <> rv` by
     (fs[markerTheory.Abbrev_def] >> rw[not_fresh_at_def] >>
      first_x_assum (qspec_then `s1.cs_next_var` mp_tac) >> simp[]) >>
@@ -1607,7 +1612,7 @@ Proof
   `cs_extends s1 s5 /\ cs_extends s7 s11 /\ cs_extends s11 st'` by
     metis_tac[cs_extends_trans] >>
   `cs_extends s1 st'` by metis_tac[cs_extends_trans] >>
-  qexistsl_tac [`rv`, `s5`, `s6`, `x6`,
+  qexistsl_tac [`s6`, `x6`,
                 `s7`, `av`, `s7a`, `aop`, `s8`, `s9`, `s10`, `x10`, `s11`, `bv`, `s11a`, `bop`, `s12`,
                 `s13`, `s14`, `x14`] >>
   simp[] >>
