@@ -236,6 +236,72 @@ Proof
   metis_tac[typed_copy_origin_ptr_emit_op_path]
 QED
 
+Theorem typed_copy_origin_ptr_binop_ghost_frame:
+  (opc = MUL \/ opc = ADD) ==>
+  op_taint (step_taint (mk_inst id opc [left;right] [out]) s
+    (update_var out w s) tn) (Var out) = {} /\
+  (step_taint (mk_inst id opc [left;right] [out]) s
+    (update_var out w s) tn).t_mem = tn.t_mem /\
+  (step_taint (mk_inst id opc [left;right] [out]) s
+    (update_var out w s) tn).t_imm = tn.t_imm /\
+  (step_taint (mk_inst id opc [left;right] [out]) s
+    (update_var out w s) tn).t_stor = tn.t_stor /\
+  (step_taint (mk_inst id opc [left;right] [out]) s
+    (update_var out w s) tn).t_trans = tn.t_trans /\
+  (!p. p <> out ==>
+    FLOOKUP (step_prov PG G (mk_inst id opc [left;right] [out])
+      (update_var out w s)) p = FLOOKUP G p /\
+    op_taint (step_taint (mk_inst id opc [left;right] [out]) s
+      (update_var out w s) tn) (Var p) = op_taint tn (Var p)) /\
+  (opc = MUL ==>
+    FLOOKUP (step_prov PG G (mk_inst id opc [left;right] [out])
+      (update_var out w s)) out = NONE)
+Proof
+  strip_tac >>
+  `new_site_bytes s (update_var out w s) = {}` by
+    simp[ptrDisciplineTheory.new_site_bytes_def, venomStateTheory.update_var_def,
+         finite_mapTheory.FLOOKUP_DEF, pred_setTheory.EXTENSION, SF CONJ_ss] >>
+  gvs[] >> Cases_on `eval_operand left s` >>
+  Cases_on `first_prov G [left;right]` >>
+  simp[ptrDisciplineTheory.step_prov_def, ptrDisciplineTheory.set_prov_def,
+       ptrDisciplineTheory.out_prov_def, ptrDisciplineTheory.step_taint_def,
+       venomInstTheory.mk_inst_def, ptrDisciplineTheory.set_var_taint_def,
+       ptrDisciplineTheory.out_taint_def, ptrDisciplineTheory.op_taint_def,
+       ptrDisciplineTheory.store_taint_def, ptrDisciplineTheory.adopt_reset_def,
+       ptrDisciplineTheory.mem_taint_def, ptrDisciplineTheory.step_writes_def,
+       codegenRelTheory.source_memory_write_ranges_def,
+       ptrDisciplineTheory.written_taint_def, ptrDisciplineTheory.range_bytes_def,
+       ptrDisciplineTheory.imm_taint_def,
+       finite_mapTheory.FLOOKUP_DRESTRICT, finite_mapTheory.FLOOKUP_UPDATE]
+QED
+
+Theorem typed_copy_origin_ptr_offset_covers:
+  !PG G tn s root offset out id a off total n.
+  lookup_var root s = SOME a /\
+  eval_operand offset s = SOME (n2w off) /\
+  ptr_covers G tn root s total /\ off + n <= total /\
+  w2n a + off < dimword(:256) /\ root <> out ==>
+  ptr_covers
+    (step_prov PG G (mk_inst id ADD [Var root;offset] [out])
+      (update_var out (a + n2w off) s))
+    (step_taint (mk_inst id ADD [Var root;offset] [out]) s
+      (update_var out (a + n2w off) s) tn)
+    out (update_var out (a + n2w off) s) n
+Proof
+  rpt gen_tac >> strip_tac >>
+  `op_taint (step_taint (mk_inst id ADD [Var root;offset] [out]) s
+    (update_var out (a + n2w off) s) tn) (Var out) = {}` by
+    simp[typed_copy_origin_ptr_binop_ghost_frame] >>
+  gvs[bodyPtrDefsTheory.ptr_covers_def] >>
+  `off < dimword(:256)` by decide_tac >>
+  simp[ptrDisciplineTheory.step_prov_def, ptrDisciplineTheory.set_prov_def,
+       ptrDisciplineTheory.out_prov_def, ptrDisciplineTheory.first_prov_def,
+       ptrDisciplineTheory.op_prov_def, venomInstTheory.mk_inst_def,
+       finite_mapTheory.FLOOKUP_UPDATE, venomStateTheory.lookup_var_def,
+       venomStateTheory.update_var_def, wordsTheory.w2n_add_2,
+       wordsTheory.w2n_n2w, arithmeticTheory.LESS_MOD] >> decide_tac
+QED
+
 (* Finite iteration is independent of the concrete header invariant. *)
 Theorem typed_copy_origin_ptr_counted_path:
   (!j q G tn. j < N /\ H j q G tn ==>
