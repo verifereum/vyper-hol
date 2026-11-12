@@ -985,7 +985,7 @@ Theorem target_subscript_typed_summary[local]:
       target_post ctx func cenv cx es0 sa sb s0 es' pv' vt op u /\
       u.vs_current_bb = sb.cs_current_bb /\
       u.vs_inst_idx = LENGTH sb.cs_current_insts)
-    (\res es' r. expr_exit res r)
+    (\res es' r. expr_exit res r /\ halt_exit cx es' res r)
 Proof
   strip_tac >>
   Cases_on `extend_place cx pv (ValueSubscript key) es` >>

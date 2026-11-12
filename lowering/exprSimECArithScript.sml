@@ -1474,6 +1474,17 @@ Proof
   simp[vyperStateTheory.return_def, vyperStateTheory.raise_def]
 QED
 
+Theorem ec_source_tail_not_halt[local]:
+  (bt = ECAdd \/ bt = ECMul) ==>
+  ec_source_tail cx ann bt tys vs es <> (INR HaltException, es')
+Proof
+  strip_tac >> simp[ec_source_tail_def] >>
+  Cases_on `builtin_result cx es.accounts ann bt tys vs` >> simp[] >>
+  rw[vyperStateTheory.ignore_bind_def, vyperStateTheory.bind_def,
+     ec_source_outcome_step] >>
+  gvs[AllCaseEqs(), vyperStateTheory.return_def, vyperStateTheory.raise_def]
+QED
+
 Theorem eval_expr_ec_cases[local]:
   (bt = ECAdd \/ bt = ECMul) /\ LENGTH args = 2 /\
   eval_expr cx (Builtin ann bt args) es = (res,es') ==>
@@ -2430,7 +2441,8 @@ Proof
   qpat_assum `gas_marked_exec _ _ _ _ _ _ _ _` (fn th => rewrite_tac[th]) >>
   BETA_TAC >>
   qpat_x_assum `es' with gas_obs := [] = es'` SUBST1_TAC >>
-  FIRST [disj2_tac >> simp[] >> NO_TAC,
+  FIRST [disj2_tac >> simp[] >> strip_tac >> gvs[] >>
+         metis_tac[ec_source_tail_not_halt],
          disj1_tac >> simp[] >>
          irule exprSimCalldataSliceTheory.vv_post_prefix_frame >>
          first_assum (irule_at (Pat `vv_post _ _ _ _ _ _ _ _ _ _ _ _ _`)) >>

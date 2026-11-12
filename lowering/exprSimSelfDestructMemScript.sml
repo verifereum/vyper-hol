@@ -141,7 +141,7 @@ Proof
               fs[gas_value_prefix_def]) >>
           (* the halt *)
           `state_rel func cenv cx (es_end with gas_obs := []) t` by
-            fs[stmt_state_rel_def] >>
+            fs[stmt_state_rel_def, state_rel_gas_obs] >>
           `halt_rel cx (es_end with gas_obs := []) t` by
             metis_tac[state_rel_halt_rel] >>
           `t.vs_call_ctx.cc_address = cx.txn.target /\

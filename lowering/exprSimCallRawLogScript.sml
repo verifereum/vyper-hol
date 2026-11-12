@@ -466,7 +466,7 @@ Theorem raw_log_dynamic_tail_summary[local]:
     (\rr ee t. ?v. rr = INL v /\
       expr_post ctx func cenv cx e es sa sb s0 ee v (Lit 0w) t /\
       t.vs_current_bb = sb.cs_current_bb /\
-      t.vs_inst_idx = LENGTH sb.cs_current_insts) (\rr ee r. expr_exit rr r)
+      t.vs_inst_idx = LENGTH sb.cs_current_insts) (\rr ee r. expr_exit rr r /\ halt_exit cx ee rr r)
 Proof
   strip_tac >> drule_all raw_log_dynamic_data_view >> strip_tac >>
   `stmt_state_rel ctx func cenv cx es2 s` by metis_tac[expr_post_state] >>
@@ -544,7 +544,7 @@ Theorem raw_log_fixed_tail_summary[local]:
     (\rr ee t. ?v. rr = INL v /\
       expr_post ctx func cenv cx e es sa sb s0 ee v (Lit 0w) t /\
       t.vs_current_bb = sb.cs_current_bb /\
-      t.vs_inst_idx = LENGTH sb.cs_current_insts) (\rr ee r. expr_exit rr r)
+      t.vs_inst_idx = LENGTH sb.cs_current_insts) (\rr ee r. expr_exit rr r /\ halt_exit cx ee rr r)
 Proof
   strip_tac >> drule hash_fixed_post_view >> simp[] >> strip_tac >>
   `stmt_state_rel ctx func cenv cx es2 s` by metis_tac[expr_post_state] >>
