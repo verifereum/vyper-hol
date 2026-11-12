@@ -117,7 +117,8 @@ Definition declaration_abi_decode_target_def:
   declaration_abi_decode_target target (StructDecl name fields) = F /\
   declaration_abi_decode_target target (EventDecl name fields) = F /\
   declaration_abi_decode_target target (InterfaceDecl name methods) = F /\
-  declaration_abi_decode_target target (FlagDecl name members) = F
+  declaration_abi_decode_target target (FlagDecl name members) = F /\
+  declaration_abi_decode_target target (ErrorDecl name args) = F
 End
 
 Definition occurs_abi_decode_target_def:
