@@ -6,6 +6,7 @@ Ancestors
   bodyIntCallCompilerCreatePipeline bodyIntCallCompilerStaging
   bodyIntCallCompilerUniversal bodyIntCallCompilerContext
   bodyIntCallCompilerFloor bodyIntCallCompilerEmit bodyIntCallCompilerInterval
+  compilerFirstEmission
   exprLowering compileEnv
 
 (* RESTATED (train 17): 0.5.0b1 per-argument staging *)
@@ -19,9 +20,7 @@ Proof
   strip_tac >> Cases_on `ce.ce_func_info (nsid_to_string fid)` >>
   rename1 `(_, finfo)` >> PairCases_on `finfo` >>
   simp[compile_call_def] >> rpt IF_CASES_TAC >> simp[] >>
-  `!f m s. UNCURRY f (m s) = comp_bind m f s` by
-    (rw[comp_bind_def] >> Cases_on `m s` >> simp[]) >>
-  pop_assum (fn th => PURE_REWRITE_TAC [th]) >>
+  PURE_REWRITE_TAC [compilerFirstEmissionTheory.state_pair_let_bind] >>
   rpt (rpt strip_tac >> rpt CASE_TAC >>
        irule intcall_interval_bind_floor >>
        simp[intcall_interval_alloc_buffer, intcall_interval_stage_intcall_args,
