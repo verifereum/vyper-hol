@@ -59,7 +59,7 @@ Ancestors
   compileEnv loweringStateRelDefs vyperState vyperCallOutcome extCallOracle vyperStoragePlaceRegion
   vyperPlaceStoragePreservation
   venomState venomCallOracleDefs vfmExecution vfmState vyperStorageLayoutSafety
-  vyperStorageFootprint
+  vyperStorageFootprint vyperStoragePlaceObserved
 Libs
   markerLib
 
@@ -1124,8 +1124,8 @@ Theorem storage_subregion_read_live:
   storage_subregion root path delta leaf /\
   w2n slot = w2n root_slot + delta /\
   w2n root_slot + type_slot_size root <= dimword(:256) /\
-  storage_read_live cx tr raw root_slot root ==>
-  storage_read_live cx tr raw slot leaf
+  storage_read_live H tr raw root_slot root ==>
+  storage_read_live H tr raw slot leaf
 Proof
   strip_tac >> drule storage_subregion_bounds >> strip_tac >>
   fs[storage_read_live_def] >> rpt gen_tac >> strip_tac >>
@@ -1139,17 +1139,28 @@ Proof
   goal_assum (drule_at Any) >> simp[] >> metis_tac[]
 QED
 
-Theorem storage_place_region_read_live:
-  storage_layout_safe cx /\
-  storage_place_region cx (StoragePlace tr slot leaf) /\
+(* A storage place inside a root the horizon observed is read live. *)
+Theorem storage_place_observed_read_live:
+  storage_place_observed H (StoragePlace tr slot leaf) /\
   0 < type_slot_size leaf ==>
-  storage_read_live cx tr raw slot leaf
+  storage_read_live H tr raw slot leaf
 Proof
-  strip_tac >> drule_all storage_place_region_numeric >> strip_tac >>
-  drule declared_storage_region_read_live >>
-  disch_then (qspec_then `raw` assume_tac) >>
-  irule storage_subregion_read_live >>
-  goal_assum (drule_at Any) >> simp[] >> metis_tac[]
+  rw[storage_place_observed_def] >>
+  drule storage_subregion_bounds >> strip_tac >>
+  drule_then (qspec_then `raw` assume_tac) observed_storage_region_read_live >>
+  simp_tac bool_ss [storage_read_live_def] >> rpt gen_tac >> strip_tac >>
+  `w2n root + type_slot_size tv <= dimword (:256)` by
+    (qpat_x_assum `storage_read_live _ _ _ _ _` mp_tac >>
+     simp_tac bool_ss [storage_read_live_def] >>
+     disch_then drule >> simp[]) >>
+  `w2n (root + n2w delta) = w2n root + delta` by
+    (`delta < dimword (:256) /\ w2n root + delta < dimword (:256)` by
+       decide_tac >>
+     simp[wordsTheory.word_add_def, wordsTheory.w2n_n2w]) >>
+  `storage_read_live H tr raw (root + n2w delta) leaf` by
+    (irule storage_subregion_read_live >> metis_tac[]) >>
+  pop_assum mp_tac >> simp_tac bool_ss [storage_read_live_def] >>
+  disch_then drule >> simp[]
 QED
 
 Theorem storage_read_live_field:
