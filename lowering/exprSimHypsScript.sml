@@ -1169,16 +1169,6 @@ Proof
   Cases_on `int_literal_value e2` >> simp[]
 QED
 
-Theorem ifexp_arg_type_fits_refl:
-  !t. arg_type_fits t t
-Proof
-  Induct >> simp[arg_type_fits_def]
-  >- (Cases >> simp[arg_type_fits_def] >>
-      rename1 `BytesT bd` >> Cases_on `bd` >> simp[arg_type_fits_def])
-  >- (Induct_on `l` >> simp[arg_type_fits_def]) >>
-  Cases >> simp[arg_type_fits_def]
-QED
-
 (* Physical return facts used by the revised IfExp layout alternative. *)
 Theorem ifexp_body_pre_intcall_physical:
   expr_body_pre ce cx env (Call ty (IntCall fid) args drv) es ==>
@@ -1192,7 +1182,7 @@ Proof
   `env_context_consistent env cx` by gvs[env_consistent_def] >>
   drule_all signature_return_evaluates >> strip_tac >>
   first_x_assum drule >> disch_then SUBST1_TAC >>
-  gvs[type_widens_to_def, ifexp_arg_type_fits_refl]
+  gvs[type_widens_to_def]
 QED
 
 (* Typed IfExp adapters read an aggregate call at its physical return type. *)
