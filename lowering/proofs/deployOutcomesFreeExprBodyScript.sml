@@ -90,16 +90,20 @@ Theorem outcomes_free_subscript:
       (compile_ptr_load ce.ce_is_ctor ce.ce_imm_alloca loc) s))) /\ Q s ==>
   Q (SND (compile_subscript f ce rt ty base_e idx_e s))
 Proof
-  strip_tac >> simp[compile_subscript_def, comp_bind_def] >>
+  strip_tac >>
+  `!ity st. Q st ==> Q (SND (lower_value f ce ity idx_e st))`
+    by (rpt strip_tac >> irule outcomes_free_lower_value >> simp[]) >>
+  simp[compile_subscript_def, comp_bind_def] >>
   pairarg_tac >> simp[] >>
   rename1 `f ce ty base_e s = (vv,s1)` >>
   `Q s1` by metis_tac[pairTheory.SND] >>
   Cases_on `place_type ce base_e`
   >- (simp[comp_bind_def, comp_return_def] >>
-      rpt pairarg_tac >> simp[] >>
-      metis_tac[outcomes_free_lower_value, pairTheory.SND]) >>
+      rpt (pairarg_tac >> simp[]) >>
+      Cases_on `is_bytestring_type t` >> gvs[comp_return_def] >>
+      metis_tac[pairTheory.SND]) >>
   rename1 `ValPT bt` >> Cases_on `bt` >>
   simp[comp_bind_def, comp_return_def] >>
-  rpt pairarg_tac >> simp[] >>
-  metis_tac[outcomes_free_lower_value, pairTheory.SND]
+  rpt (pairarg_tac >> simp[]) >>
+  metis_tac[pairTheory.SND]
 QED
