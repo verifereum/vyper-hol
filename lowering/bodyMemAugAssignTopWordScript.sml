@@ -204,7 +204,7 @@ Theorem declared_storage_holds_value_mem_src[local]:
   evaluate_type (get_tenv cx) ty = SOME tvt /\
   read_storage_slot cx tr (n2w slot) tvt es = (INL v, es) /\
   contract_storage_well_formed cx es /\ storage_layout_safe cx /\
-  stmt_state_rel ctx func cenv cx es s ==>
+  stmt_state_rel H ctx func cenv cx es s ==>
   storage_holds cx tr ty (Value v) (n2w slot) es s
 Proof
   strip_tac >>
@@ -212,7 +212,7 @@ Proof
     (irule toplevel_storage_slots_in_range >> metis_tac[]) >>
   `declared_storage_region cx src id [] = SOME (tr,n2w slot,tvt)` by
     simp[declared_storage_region_def] >>
-  `!st. storage_read_live cx tr st (n2w slot) tvt` by
+  `!st. storage_read_live H tr st (n2w slot) tvt` by
     (gen_tac >> irule declared_storage_region_read_live >> metis_tac[]) >>
   `w2n ((n2w slot):bytes32) + type_slot_size tvt <= dimword (:256)` by
     (drule_all storage_layout_safe_region_nonoverflow >> simp[]) >>
@@ -411,13 +411,13 @@ Theorem augassign_storage_load_frame_mem[local]:
   fn_has_code sa sb func /\ fn_inst_ids_distinct func /\ ~s0.vs_halted /\
   s0.vs_current_bb = sa.cs_current_bb /\
   s0.vs_inst_idx = LENGTH sa.cs_current_insts /\
-  local_ptrs_reserved cenv sa /\ stmt_state_rel ctx func cenv cx es s0 /\
+  local_ptrs_reserved cenv sa /\ stmt_state_rel H ctx func cenv cx es s0 /\
   alloca_history func s0 /\
   is_word_type ty /\ storage_holds cx tr ty (Value v) slot es s0 /\
   evaluate_type (get_tenv cx) ty = SOME tvt ==>
   ?t. gas_marked_path T ctx func s0 0 (OK t) /\
     eval_operand op t = SOME (typed_val_to_w256 tvt v) /\
-    stmt_state_rel ctx func cenv cx es t /\
+    stmt_state_rel H ctx func cenv cx es t /\
     ~t.vs_halted /\ t.vs_current_bb = sb.cs_current_bb /\
     t.vs_inst_idx = LENGTH sb.cs_current_insts /\
     local_ptrs_reserved cenv sb /\ alloca_history func t /\
@@ -459,7 +459,7 @@ Proof
      qexists_tac `sa` >> simp[]) >>
   `local_ptrs_reserved cenv sb` by
     (irule local_ptrs_reserved_next_var >> qexists_tac `sa` >> simp[]) >>
-  `stmt_state_rel ctx func cenv cx es (update_var out w s0)` by
+  `stmt_state_rel H ctx func cenv cx es (update_var out w s0)` by
     (irule stmt_state_rel_update_var >> simp[]) >>
   qexists_tac `update_var out w s0 with vs_inst_idx := LENGTH sb.cs_current_insts` >>
   simp[gas_marked_path_def, stmt_state_rel_inst_idx, eval_operand_def] >>
@@ -525,7 +525,7 @@ Resume compile_augassign_toplevel_mem[load]:
   `gas_admissible (bind (eval_expr cx e) (read_result cx)) expr_res_ok
     (es with gas_obs := [])` by
     (simp[] >> irule augassign_toplevel_rhs_admissible_mem_src >> metis_tac[]) >>
-  `stmt_state_rel ctx func cenv cx (es with gas_obs := []) t` by simp[] >>
+  `stmt_state_rel H ctx func cenv cx (es with gas_obs := []) t` by simp[] >>
   qpat_x_assum `!gs. expr_sim_mem _ _ _ _ _ _ _`
     (qspec_then `[]` (mp_tac o REWRITE_RULE [expr_sim_mem_def])) >>
   disch_then (qspecl_then [`s1`, `s2`, `rhs_op`, `t`] mp_tac) >>
@@ -556,7 +556,7 @@ QED
 
 Resume compile_augassign_toplevel_mem[rhs_normal]:
   gvs[] >>
-  rename1 `expr_post ctx func cenv cx e _ s1 s2 t (ee with gas_obs := []) v rhs_op u` >>
+  rename1 `expr_post H ctx func cenv cx e _ s1 s2 t (ee with gas_obs := []) v rhs_op u` >>
   `bind (eval_expr cx e) (read_result cx)
     (es with gas_obs := gas_explicit marks t.vs_gas_readings) =
       (INL v, ee with gas_obs := [])` by
@@ -609,7 +609,7 @@ Resume compile_augassign_toplevel_mem[binop]:
      qexistsl_tac [`s1`, `t`] >> gvs[expr_post_def]) >>
   `not_fresh_at s2 out /\ local_ptrs_reserved cenv s2` by
     metis_tac[freshWritesTheory.not_fresh_at_mono, local_ptrs_reserved_next_var] >>
-  `stmt_state_rel ctx func cenv cx (ee with gas_obs := []) u` by
+  `stmt_state_rel H ctx func cenv cx (ee with gas_obs := []) u` by
     fs[expr_post_def] >>
   `~u.vs_halted` by
     metis_tac[gas_marked_exec_def, gas_marked_path_exec, gas_path_normal] >>
@@ -646,8 +646,8 @@ Resume compile_augassign_toplevel_mem[operator_normal]:
     metis_tac[encode_value_word_typed] >>
   `declared_storage_region cx src id [] = SOME (tr, n2w slot, tvt)` by
     simp[declared_storage_region_def] >>
-  `!u' sto. storage_dead cx tr (update_storage (n2w slot) u' sto) =
-            storage_dead cx tr sto` by
+  `!u' sto. storage_dead H tr (update_storage (n2w slot) u' sto) =
+            storage_dead H tr sto` by
     metis_tac[storage_dead_update_word_region] >>
   Cases_on `write_storage_slot cx tr (n2w slot) tvt result
     (ee with gas_obs := [])` >>
@@ -709,14 +709,14 @@ Resume compile_augassign_toplevel_mem[post]:
        metis_tac[freshWritesTheory.not_fresh_at_mono,
                  arithmeticTheory.LESS_EQ_TRANS] >>
      `lookup_var x u = SOME w` by
-       (qpat_x_assum `expr_post _ _ _ _ e _ _ _ _ _ _ _ _` mp_tac >>
+       (qpat_x_assum `expr_post _ _ _ _ _ e _ _ _ _ _ _ _ _` mp_tac >>
         simp[expr_post_def]) >>
      metis_tac[]) >>
   `!aid b. FLOOKUP s0.vs_allocas aid = SOME b ==>
            FLOOKUP s.vs_allocas aid = SOME b` by
     (rpt strip_tac >>
      `FLOOKUP u.vs_allocas aid = SOME b` by
-       (qpat_x_assum `expr_post _ _ _ _ e _ _ _ _ _ _ _ _` mp_tac >>
+       (qpat_x_assum `expr_post _ _ _ _ _ e _ _ _ _ _ _ _ _` mp_tac >>
         simp[expr_post_def] >> metis_tac[]) >>
      metis_tac[]) >>
   simp[stmt_lands_def, cenv_top_ext_refl] >>

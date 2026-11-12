@@ -67,7 +67,7 @@ Theorem normalized_arm_join_outcome[local]:
   (~expr_has_effect (IfExp ann c a b) ==> ~expr_has_effect (IfExp ann nc na nb)) /\
   gas_outcome F tops (ctx,func) source (es1,jump_to lbl tt)
     (\res ee u. ?tv v. res = INL tv /\ read_result cx tv ee = (INL v,ee) /\
-      expr_post ctx func ce cx (IfExp ann nc na nb) es1 sc sd
+      expr_post H ctx func ce cx (IfExp ann nc na nb) es1 sc sd
         (jump_to lbl tt) ee v op u /\
       (~is_word_type ann ==> vv_at ce cx ann sc sd ee tv
         (LocatedValue ann (mk_ptr op LocMemory)) u) /\
@@ -78,16 +78,16 @@ Theorem normalized_arm_join_outcome[local]:
   emit_inst JMP [Label xl] [] se = ((),sf) /\
   fn_has_code sd se func /\ fn_has_code se sf func /\
   sb.cs_current_bb = xl /\ sb.cs_current_insts = [] /\
-  expr_post ctx func ce cx c es sa s1 s0 es1 cv cop tt /\
+  expr_post H ctx func ce cx c es sa s1 s0 es1 cv cop tt /\
   (!x. not_fresh_at sa x ==> x <> rv) /\
-  local_ptrs_reserved ce sa /\ stmt_state_rel ctx func ce cx es s0 /\
+  local_ptrs_reserved ce sa /\ stmt_state_rel H ctx func ce cx es s0 /\
   MAP FDOM es.scopes = MAP FDOM es1.scopes /\
   sa.cs_next_var <= s1.cs_next_var /\ s1.cs_next_var <= sc.cs_next_var /\
   sa.cs_next_id <= s1.cs_next_id /\ s1.cs_next_id <= sc.cs_next_id /\
   sd.cs_next_id <= sb.cs_next_id ==>
   gas_outcome F tops (ctx,func) source (es1,jump_to lbl tt)
     (\res ee u. ?tv. res = INL tv /\
-      vv_post ctx func ce cx (IfExp ann c a b) es sa sb s0 ee tv
+      vv_post H ctx func ce cx (IfExp ann c a b) es sa sb s0 ee tv
         (if is_word_type ann then StackValue ann (Var rv)
          else LocatedValue ann (mk_ptr (Var rv) LocMemory)) u /\
       u.vs_current_bb = sb.cs_current_bb /\
@@ -182,7 +182,7 @@ Resume widened_ifexp_vv_sim[condition_outcome]:
     (fs[gas_marked_exec_def, gas_marked_path_def] >>
      metis_tac[cj 1 gas_path_normal]) >>
   `eval_operand cond_op t = SOME (if sel then 1w else 0w)` by
-    (qpat_x_assum `expr_post _ _ _ _ c _ _ _ _ _ _ _ _` mp_tac >>
+    (qpat_x_assum `expr_post H _ _ _ _ c _ _ _ _ _ _ _ _` mp_tac >>
      `post_value_type ce c = BaseT BoolT` by
        metis_tac[post_value_type_word, is_word_type_def] >>
      simp[expr_post_def, expr_val_rel_def, is_word_type_def,
@@ -201,7 +201,7 @@ Resume widened_ifexp_vv_sim[condition_outcome]:
     metis_tac[] >>
   `MAP FDOM es.scopes = MAP FDOM (mid with gas_obs := []).scopes` by
     (drule (SRULE [SF ETA_ss] forced_eval_expr_preserves_scopes_dom) >> simp[]) >>
-  `stmt_state_rel ctx func ce cx (mid with gas_obs := []) t` by
+  `stmt_state_rel H ctx func ce cx (mid with gas_obs := []) t` by
     metis_tac[expr_post_state] >>
   suspend "selected_branch"
 QED
@@ -213,7 +213,7 @@ Resume widened_ifexp_vv_sim[selected_branch]:
   simp[] >>
   disch_then assume_tac >>
   `!lbl. local_ptrs_rel func ce mid.scopes (jump_to lbl t)` by
-    (gen_tac >> `stmt_state_rel ctx func ce cx mid (jump_to lbl t)` by
+    (gen_tac >> `stmt_state_rel H ctx func ce cx mid (jump_to lbl t)` by
       simp[stmt_state_rel_jump_to] >>
      fs[stmt_state_rel_def, state_rel_def]) >>
   qmatch_asmsub_rename_tac `gas_marked_path F ctx func t 0 (OK (jump_to lbl t))` >>
@@ -229,7 +229,7 @@ Resume widened_ifexp_vv_sim[selected_branch]:
   irule normalized_arm_join_outcome >>
   simp[] >>
   goal_assum (drule_at (Pat `gas_outcome _ _ _ _ _ _ _`)) >>
-  goal_assum (drule_at (Pat `expr_post _ _ _ _ _ _ _ _ _ _ _ _ _`)) >>
+  goal_assum (drule_at (Pat `expr_post H _ _ _ _ _ _ _ _ _ _ _ _ _`)) >>
   simp[] >> metis_tac[]
 QED
 
