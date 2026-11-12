@@ -20,7 +20,7 @@ QED
 
 Theorem ptr_frame_write_byte_origin:
   frame_reachable vs0 ctx stk PG G tn fn inst s /\
-  EVERY (\f. EVERY (\i. i.inst_opcode <> DALLOCA) (fn_insts f)) ctx.ctx_functions /\
+  ptr_discipline lo' ctx vs0 /\
   fn_ptr_ok P fn /\ wf_function fn /\ all_reachable fn /\ ssa_form fn /\
   EVERY inst_wf (fn_insts fn) /\ MEM inst (fn_insts fn) /\
   access_ok lo G fn inst s /\ ~in_revert_forward fn s /\
@@ -33,11 +33,17 @@ Theorem ptr_frame_write_byte_origin:
      (?i idx r. MEM i (fn_insts fn) /\ i.inst_opcode = PARAM /\
        i.inst_operands = [Lit idx] /\ MEM r i.inst_outputs /\
        w2n idx < LENGTH PG /\ EL (w2n idx) PG = SOME (b,sz) /\
+       v IN pointer_derived_vars fn {r}) \/
+     (?i r. MEM i (fn_insts fn) /\ i.inst_opcode = DALLOCA /\
+       MEM r i.inst_outputs /\ w2n vs0.vs_initial_fmp <= b /\
        v IN pointer_derived_vars fn {r}))
 Proof
   strip_tac >> drule_all ptr_write_byte_selected_site >> strip_tac >>
   qexistsl [`v`, `b`, `sz`] >> simp[] >>
-  irule ptr_frame_write_selected_origin >> simp[] >> metis_tac[]
+  mp_tac (Q.INST [`site` |-> `(b,sz)`, `lo` |-> `lo'`]
+            (SPEC_ALL ptr_frame_write_selected_origin)) >>
+  impl_tac >- gvs[] >>
+  simp[]
 QED
 
 (* The history byte witness does not yet supply the observation's PG/G or
