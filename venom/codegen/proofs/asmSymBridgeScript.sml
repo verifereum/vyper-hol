@@ -155,7 +155,7 @@ Proof
   gvs[AllCaseEqs()] >> decide_tac
 QED
 
-Theorem cleared_labels_lookup[local]:
+Theorem cleared_labels_lookup:
   FLOOKUP (mem_labels_clear labs P) i =
     if P i then NONE else FLOOKUP labs i
 Proof

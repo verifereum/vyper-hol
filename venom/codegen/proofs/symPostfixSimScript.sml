@@ -1,6 +1,7 @@
 (* Symbolic output metadata and postfix execution boundaries. *)
 Theory symPostfixSim
 Ancestors
+  fnFrameStepsRevertForward
   symInstKinds symShuffleSim regularPostfixSim fnPlanPrefix
   doSwapSim deepDupCallerSim planWf codegenEncodingWf rich_list
   stackPlanOps stackPlanGen stackModel planExec prefixExec prefixSim
@@ -14,43 +15,6 @@ Theorem sym_kinds_ok_inventory_mono:
   sym_kinds_ok cplan fn ret srest qs ss
 Proof
   simp[sym_kinds_ok_def] >> metis_tac[]
-QED
-
-Theorem release_spill_fold_cons_lookup[local]:
-  (!ps op off.
-    FLOOKUP (FOLDL (\p (at, slot).
-      p with <| ps_spilled := p.ps_spilled \\ at;
-                ps_alloc := free_spill_slot slot p.ps_alloc |>) ps xs).ps_spilled
-      op = SOME off ==> FLOOKUP ps.ps_spilled op = SOME off) ==>
-  FLOOKUP (FOLDL (\p (at, slot).
-    p with <| ps_spilled := p.ps_spilled \\ at;
-              ps_alloc := free_spill_slot slot p.ps_alloc |>)
-    (ps with <| ps_spilled := ps.ps_spilled \\ at;
-                ps_alloc := free_spill_slot slot ps.ps_alloc |>) xs).ps_spilled
-    op = SOME off ==> FLOOKUP ps.ps_spilled op = SOME off
-Proof
-  rpt strip_tac >> first_x_assum drule >>
-  simp[DOMSUB_FLOOKUP_THM, AllCaseEqs()] >> metis_tac[]
-QED
-
-Theorem release_spill_fold_lookup[local]:
-  !xs ps op off.
-  FLOOKUP (FOLDL (\p (at, slot).
-    p with <| ps_spilled := p.ps_spilled \\ at;
-              ps_alloc := free_spill_slot slot p.ps_alloc |>) ps xs).ps_spilled
-    op = SOME off ==>
-  FLOOKUP ps.ps_spilled op = SOME off
-Proof
-  Induct_on `xs` >- simp[] >>
-  Cases >> simp[] >> metis_tac[release_spill_fold_cons_lookup]
-QED
-
-Theorem release_dead_spills_lookup:
-  FLOOKUP (release_dead_spills nl ps).ps_spilled op = SOME off ==>
-  FLOOKUP ps.ps_spilled op = SOME off
-Proof
-  simp[release_dead_spills_def] >>
-  metis_tac[release_spill_fold_lookup]
 QED
 
 Theorem release_spill_fold_inventory_cong[local]:
@@ -82,7 +46,7 @@ Theorem sym_kinds_ok_release_dead_spills:
 Proof
   strip_tac >> irule sym_kinds_ok_inventory_mono >>
   qexists `ps` >> simp[release_dead_spills_stack] >>
-  MATCH_ACCEPT_TAC release_dead_spills_lookup
+  MATCH_ACCEPT_TAC fnFrameStepsRevertForwardTheory.rf_release_spill_lookup
 QED
 
 Theorem sym_kinds_ok_stack_replace:
@@ -363,22 +327,6 @@ Proof
   irule sym_kinds_ok_poke >> simp[] >> metis_tac[phi_var_output_kind]
 QED
 
-Theorem mem_sval_at_range_cong:
-  (!b. in_mem_range off 32 b ==> FLOOKUP labs' b = FLOOKUP labs b) ==>
-  (mem_sval_at labs' off sv <=> mem_sval_at labs off sv)
-Proof
-  strip_tac >> Cases_on `sv` >>
-  simp[mem_sval_at_def, mem_label_at_def] >>
-  `FLOOKUP labs' off = FLOOKUP labs off` by
-    (first_x_assum irule >> simp[in_mem_range_def]) >>
-  simp[] >>
-  `!i. MEM i (COUNT_LIST 32) ==>
-       FLOOKUP labs' (off + i) = FLOOKUP labs (off + i)` by
-    (rpt strip_tac >> first_x_assum irule >>
-     gvs[in_mem_range_def, MEM_COUNT_LIST]) >>
-  simp[EVERY_MEM, GSYM (cj 1 flookup_thm)] >> gvs[]
-QED
-
 Theorem temporary_spill_ranges_avoid_inventory:
   spill_alloc_layout_wf al sp /\
   MEM tmp (FST (spill_alloc_n [] al items)) /\
@@ -406,7 +354,7 @@ Theorem sym_kinds_ok_retained_spills:
   sym_kinds_ok cplan fn ret srest qs ss'
 Proof
   simp[sym_kinds_ok_def] >> rpt strip_tac >>
-  metis_tac[mem_sval_at_range_cong]
+  metis_tac[mem_sval_at_cong]
 QED
 
 Theorem do_dup_spill_inventory_untouched:
@@ -473,41 +421,6 @@ Definition scratch_mem_ok_def:
       ?sv. op_kind_ok fn ret op sv /\ mem_sval_at labs off sv
 End
 
-Definition scratch_store_labels_def:
-  scratch_store_labels labs off (Val w) =
-    mem_labels_clear labs (in_mem_range off 32) /\
-  scratch_store_labels labs off (Lab l d) =
-    labs |++ GENLIST (\i. (off + i, (l,d,i))) 32
-End
-
-Theorem scratch_store_labels_outside:
-  ~in_mem_range off 32 b ==>
-  FLOOKUP (scratch_store_labels labs off sv) b = FLOOKUP labs b
-Proof
-  Cases_on `sv` >> pure_rewrite_tac[scratch_store_labels_def,
-    asmSymBridgeTheory.mstore_labels_lookup] >>
-  simp[mem_labels_clear_def, FLOOKUP_DRESTRICT, in_mem_range_def]
-QED
-
-Theorem scratch_store_labels_at:
-  mem_sval_at (scratch_store_labels labs off sv) off sv
-Proof
-  Cases_on `sv` >> pure_rewrite_tac[scratch_store_labels_def,
-    mem_sval_at_def, mem_label_at_def,
-    asmSymBridgeTheory.mstore_labels_lookup] >>
-  simp[mem_labels_clear_def, FDOM_DRESTRICT, in_mem_range_def,
-       EVERY_MEM, MEM_COUNT_LIST]
-QED
-
-Theorem scratch_store_labels_retains:
-  (off + 32 <= old \/ old + 32 <= off) /\ mem_sval_at labs old sv ==>
-  mem_sval_at (scratch_store_labels labs off value) old sv
-Proof
-  strip_tac >> irule (iffRL mem_sval_at_range_cong) >>
-  qexists `labs` >> simp[] >> rpt strip_tac >>
-  irule scratch_store_labels_outside >> gvs[in_mem_range_def] >> decide_tac
-QED
-
 Theorem scratch_mem_ok_store:
   scratch_mem_ok fn ret slots labs /\ op_kind_ok fn ret op sv /\
   (!old at. FLOOKUP slots old = SOME at /\ old <> off ==>
@@ -518,7 +431,7 @@ Proof
   simp[scratch_mem_ok_def, FLOOKUP_UPDATE] >> rpt strip_tac >>
   Cases_on `off = off'` >> gvs[]
   >- metis_tac[scratch_store_labels_at] >>
-  metis_tac[scratch_store_labels_retains]
+  metis_tac[scratch_store_labels_preserves_saved]
 QED
 
 Theorem scratch_mem_ok_restore:
@@ -641,7 +554,7 @@ Theorem scratch_store_retains_inventory:
     off + 32 <= old \/ old + 32 <= off) ==>
   scratch_mem_ok fn ret inventory (scratch_store_labels labs off sv)
 Proof
-  simp[scratch_mem_ok_def] >> metis_tac[scratch_store_labels_retains]
+  simp[scratch_mem_ok_def] >> metis_tac[scratch_store_labels_preserves_saved]
 QED
 
 Theorem scratch_two_label_cells_readable[local]:
@@ -654,7 +567,8 @@ Theorem scratch_two_label_cells_readable[local]:
       b (Lab other delta)) b = SOME (other,delta)
 Proof
   strip_tac >> rewrite_tac[GSYM mem_sval_at_def] >> conj_tac
-  >- (irule scratch_store_labels_retains >> simp[scratch_store_labels_at]) >>
+  >- (irule (iffRL scratch_store_labels_preserves_saved) >>
+      simp[scratch_store_labels_at]) >>
   simp[scratch_store_labels_at]
 QED
 
@@ -817,30 +731,6 @@ Proof
   qexists `ss'` >> simp[] >> metis_tac[APPEND, listTheory.LIST_REL_def]
 QED
 
-
-Theorem sym_step_dup_name:
-  0 < n /\ n <= 16 ==>
-  sym_step p env (AsmOp (dup_name n)) ss = sym_dup (n-1) ss
-Proof
-  strip_tac >>
-  `n < SUC (SUC (SUC (SUC (SUC (SUC (SUC (SUC (SUC (SUC (SUC (SUC (SUC (SUC (SUC (SUC (SUC 0))))))))))))))))` by decide_tac >>
-  pop_assum mp_tac >>
-  pure_rewrite_tac[prim_recTheory.LESS_THM, prim_recTheory.NOT_LESS_0] >>
-  strip_tac >> gvs[] >> simp[dup_name_def] >>
-  simp[sym_step_def, sym_step_op_def, dup_table_def]
-QED
-
-Theorem sym_step_swap_name:
-  0 < n /\ n <= 16 ==>
-  sym_step p env (AsmOp (swap_name n)) ss = sym_swap n ss
-Proof
-  strip_tac >>
-  `n < SUC (SUC (SUC (SUC (SUC (SUC (SUC (SUC (SUC (SUC (SUC (SUC (SUC (SUC (SUC (SUC (SUC 0))))))))))))))))` by decide_tac >>
-  pop_assum mp_tac >>
-  pure_rewrite_tac[prim_recTheory.LESS_THM, prim_recTheory.NOT_LESS_0] >>
-  strip_tac >> gvs[] >> simp[swap_name_def] >>
-  simp[sym_step_def, sym_step_op_def, dup_table_def, swap_table_def]
-QED
 
 Theorem scratch_state_dup_run:
   scratch_state_ok cplan fn ret srest g slots ss /\

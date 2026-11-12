@@ -40,20 +40,6 @@ Proof
   rpt strip_tac >> drule_all code_end_var_def_inst >> simp[]
 QED
 
-Theorem phi_retpc_kind:
-  retpc_shape_ok fn /\ MEM inst (fn_insts fn) /\
-  inst.inst_opcode = PHI /\ MEM x inst.inst_outputs /\
-  MEM (Var y) inst.inst_operands ==>
-  (retpc_var fn x <=> retpc_var fn y)
-Proof
-  strip_tac >> eq_tac
-  >- (strip_tac >>
-      drule (cj 3 (iffLR retpc_shape_ok_def)) >>
-      disch_then drule_all >> simp[] >> metis_tac[]) >>
-  simp[retpc_var_def] >> strip_tac >>
-  irule (cj 3 copy_phi_var_rules) >> metis_tac[]
-QED
-
 Theorem phi_operand_kind_transport:
   MEM fn ctx.ctx_functions /\ label_flow_ok ctx /\
   ssa_form fn /\ retpc_shape_ok fn /\
@@ -65,7 +51,7 @@ Proof
   strip_tac >>
   drule_all phi_input_not_code_end >> strip_tac >>
   drule_all phi_output_not_code_end >> strip_tac >>
-  drule_all phi_retpc_kind >> strip_tac >>
+  drule_all frameViewFactsTheory.phi_output_retpc >> strip_tac >>
   gvs[op_kind_ok_def, stackPlanGenTheory.dead_stack_marker_def]
 QED
 
@@ -147,18 +133,6 @@ Proof
   simp[mem_sval_at_def, sym_mload_def]
 QED
 
-Theorem mem_sval_at_cong:
-  !labs labs' off sv.
-  (!i. in_mem_range off 32 i ==> FLOOKUP labs' i = FLOOKUP labs i) ==>
-  (mem_sval_at labs' off sv <=> mem_sval_at labs off sv)
-Proof
-  rpt gen_tac >> simp[in_mem_range_def] >> strip_tac >> Cases_on `sv`
-  >- (simp[mem_sval_at_def, in_mem_range_def] >>
-      metis_tac[finite_mapTheory.FLOOKUP_DEF, optionTheory.NOT_NONE_SOME]) >>
-  simp[mem_sval_at_def, mem_label_at_def,
-       listTheory.EVERY_MEM, rich_listTheory.MEM_COUNT_LIST]
-QED
-
 Theorem mem_sval_at_clear_value:
   !labs off w.
   mem_sval_at (mem_labels_clear labs (in_mem_range off 32)) off (Val w)
@@ -199,18 +173,11 @@ Proof
        GSYM pred_setTheory.UNIV_DEF, finite_mapTheory.DRESTRICT_UNIV]
 QED
 
-Definition scratch_labels_write_def:
-  scratch_labels_write labs off (Val w) =
-    mem_labels_clear labs (in_mem_range off 32) /\
-  scratch_labels_write labs off (Lab l d) =
-    labs |++ GENLIST (\i. (off+i,(l,d,i))) 32
-End
-
 Theorem sym_mstore_scratch_write:
   !ss off sv stk.
   ss.sym_stack = Val off :: sv :: stk ==>
   ?ss'. sym_mstore ss = SymOK ss' /\ ss'.sym_stack = stk /\
-    ss'.sym_mem_labels = scratch_labels_write ss.sym_mem_labels (w2n off) sv /\
+    ss'.sym_mem_labels = scratch_store_labels ss.sym_mem_labels (w2n off) sv /\
     ss'.sym_base.as_pc = ss.sym_base.as_pc + 1
 Proof
   rpt gen_tac >> Cases_on `sv` >> strip_tac >>
@@ -221,42 +188,13 @@ Proof
        asmSemTheory.asm_step_compare_def, asmSemTheory.asm_step_bitwise_def,
        asmSemTheory.asm_step_memory_def,
        asmSemTheory.asm_mstore_def, asmSemTheory.asm_next_def,
-       scratch_labels_write_def, Excl "GENLIST_NUMERALS"]
-QED
-
-Theorem scratch_labels_write_saved:
-  !labs off sv. mem_sval_at (scratch_labels_write labs off sv) off sv
-Proof
-  Cases_on `sv` >>
-  rewrite_tac[scratch_labels_write_def, mem_sval_at_clear_value,
-       mem_sval_at_store_label]
-QED
-
-Theorem scratch_labels_write_outside:
-  !labs off sv i. ~in_mem_range off 32 i ==>
-    FLOOKUP (scratch_labels_write labs off sv) i = FLOOKUP labs i
-Proof
-  Cases_on `sv` >>
-  rewrite_tac[scratch_labels_write_def, mem_labels_clear_def,
-       finite_mapTheory.FLOOKUP_DRESTRICT, mstore_labels_lookup] >>
-  simp[in_mem_range_def]
-QED
-
-Theorem scratch_labels_write_preserves_saved:
-  !labs off sv old saved.
-    old + 32 <= off \/ off + 32 <= old ==>
-    (mem_sval_at (scratch_labels_write labs off sv) old saved <=>
-     mem_sval_at labs old saved)
-Proof
-  rpt strip_tac >> irule mem_sval_at_cong >>
-  rpt strip_tac >> irule scratch_labels_write_outside >>
-  gvs[in_mem_range_def]
+       scratch_store_labels_def, Excl "GENLIST_NUMERALS"]
 QED
 
 Definition scratch_labels_store_def:
   scratch_labels_store labs [] = labs /\
   scratch_labels_store labs ((off,sv)::xs) =
-    scratch_labels_store (scratch_labels_write labs off sv) xs
+    scratch_labels_store (scratch_store_labels labs off sv) xs
 End
 
 Theorem scratch_labels_store_outside:
@@ -266,7 +204,7 @@ Theorem scratch_labels_store_outside:
 Proof
   Induct >> simp[scratch_labels_store_def] >>
   Cases_on `h` >> simp[scratch_labels_store_def] >>
-  metis_tac[scratch_labels_write_outside]
+  metis_tac[scratch_store_labels_outside]
 QED
 
 Theorem scratch_labels_store_preserves_saved:
@@ -277,7 +215,7 @@ Theorem scratch_labels_store_preserves_saved:
 Proof
   Induct >> simp[scratch_labels_store_def] >>
   Cases_on `h` >> simp[scratch_labels_store_def] >>
-  metis_tac[scratch_labels_write_preserves_saved]
+  metis_tac[scratch_store_labels_preserves_saved]
 QED
 
 Theorem scratch_labels_store_saved:
@@ -294,7 +232,7 @@ Proof
       `EVERY (\p. off + 32 <= FST p \/ FST p + 32 <= off) xs` by
         (simp[listTheory.EVERY_MEM] >>
          metis_tac[listTheory.MEM_MAP, pairTheory.FST]) >>
-      metis_tac[scratch_labels_store_preserves_saved, scratch_labels_write_saved]) >>
+      metis_tac[scratch_labels_store_preserves_saved, scratch_store_labels_at]) >>
   first_x_assum irule >> simp[] >> metis_tac[]
 QED
 
@@ -306,8 +244,8 @@ Theorem sym_mstore_label_scratch:
     (!i. ~in_mem_range (w2n off) 32 i ==>
       FLOOKUP ss'.sym_mem_labels i = FLOOKUP ss.sym_mem_labels i)
 Proof
-  metis_tac[sym_mstore_scratch_write, scratch_labels_write_saved,
-            scratch_labels_write_outside]
+  metis_tac[sym_mstore_scratch_write, scratch_store_labels_at,
+            scratch_store_labels_outside]
 QED
 
 Theorem sym_mstore_value_scratch:
@@ -318,8 +256,8 @@ Theorem sym_mstore_value_scratch:
     (!i. ~in_mem_range (w2n off) 32 i ==>
       FLOOKUP ss'.sym_mem_labels i = FLOOKUP ss.sym_mem_labels i)
 Proof
-  metis_tac[sym_mstore_scratch_write, scratch_labels_write_saved,
-            scratch_labels_write_outside]
+  metis_tac[sym_mstore_scratch_write, scratch_store_labels_at,
+            scratch_store_labels_outside]
 QED
 
 Theorem sym_step_push_bytes:
@@ -381,7 +319,7 @@ Theorem sym_pushed_mstore:
       sym_stack := Val (n2w off) :: ss.sym_stack |> ==>
     ?out. sym_step p env (AsmOp "MSTORE") pushed = SymOK out /\
       out.sym_stack = stk /\
-      out.sym_mem_labels = scratch_labels_write ss.sym_mem_labels off sv /\
+      out.sym_mem_labels = scratch_store_labels ss.sym_mem_labels off sv /\
       out.sym_base.as_pc = ss.sym_base.as_pc + 2
 Proof
   rpt strip_tac >>
@@ -396,7 +334,7 @@ Theorem sym_spill_offset_steps:
       [AsmPush (encode_num_bytes off); AsmOp "MSTORE"] ==>
     ?ss'. sym_steps p env 2 ss = SymOK ss' /\
       ss'.sym_stack = stk /\
-      ss'.sym_mem_labels = scratch_labels_write ss.sym_mem_labels off sv /\
+      ss'.sym_mem_labels = scratch_store_labels ss.sym_mem_labels off sv /\
       ss'.sym_base.as_pc = ss.sym_base.as_pc + 2
 Proof
   rpt strip_tac >> metis_tac[sym_pushed_mstore, sym_push_offset_then]
@@ -446,13 +384,19 @@ Theorem sym_restore_offset_steps:
       out.sym_mem_labels = ss.sym_mem_labels /\
       out.sym_base.as_pc = ss.sym_base.as_pc + 2
 Proof
-  rpt strip_tac >> metis_tac[sym_pushed_mload, sym_push_offset_then]
+  rpt strip_tac >>
+  qspecl_then [`p`, `env`, `ss`, `off`, `sv`] mp_tac sym_pushed_mload >>
+  simp[] >> strip_tac >>
+  qexistsl_tac [`out`, `sv'`] >> simp[] >>
+  qspecl_then [`p`, `env`, `ss`, `off`, `AsmOp "MLOAD"`] mp_tac
+    sym_push_offset_then >>
+  simp[]
 QED
 
 Theorem sym_spill_offsets_cons_result:
   !p env ss mid out off sv xs stk.
     sym_steps p env 2 ss = SymOK mid /\
-    mid.sym_mem_labels = scratch_labels_write ss.sym_mem_labels off sv /\
+    mid.sym_mem_labels = scratch_store_labels ss.sym_mem_labels off sv /\
     mid.sym_base.as_pc = ss.sym_base.as_pc + 2 /\
     sym_steps p env (2 * LENGTH xs) mid = SymOK out /\
     out.sym_stack = stk /\

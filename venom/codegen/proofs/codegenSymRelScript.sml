@@ -286,17 +286,109 @@ Proof
   simp[mstore_labels_lookup, in_mem_range_def]
 QED
 
-Theorem mem_labels_clear_lookup:
-  FLOOKUP (mem_labels_clear labs P) b = if P b then NONE else FLOOKUP labs b
-Proof
-  Cases_on `P b` >> simp[mem_labels_clear_def, finite_mapTheory.FLOOKUP_DRESTRICT]
-QED
-
 Theorem mem_sval_at_clear:
   mem_sval_at (mem_labels_clear labs (in_mem_range off 32)) off (Val w)
 Proof
   simp[mem_sval_at_def, mem_labels_clear_def,
        finite_mapTheory.FDOM_DRESTRICT, pred_setTheory.IN_APP]
+QED
+
+Theorem mem_sval_at_cong:
+  !labs labs' off sv.
+  (!i. in_mem_range off 32 i ==> FLOOKUP labs' i = FLOOKUP labs i) ==>
+  (mem_sval_at labs' off sv <=> mem_sval_at labs off sv)
+Proof
+  rpt gen_tac >> strip_tac >>
+  `!i. in_mem_range off 32 i ==> (i IN FDOM labs' <=> i IN FDOM labs)` by
+    metis_tac[finite_mapTheory.FLOOKUP_DEF, optionTheory.NOT_SOME_NONE] >>
+  `FLOOKUP labs' off = FLOOKUP labs off` by
+    (first_x_assum irule >> simp[in_mem_range_def]) >>
+  Cases_on `sv` >>
+  simp[mem_sval_at_def, mem_label_at_def, listTheory.EVERY_MEM,
+       rich_listTheory.MEM_COUNT_LIST] >>
+  gvs[in_mem_range_def]
+QED
+
+Theorem sym_steps_single:
+  asm_block_at p ss.sym_base.as_pc [inst] ==>
+  sym_steps p env 1 ss = sym_step p env inst ss
+Proof
+  simp[asm_block_at_def, sym_steps_compute] >>
+  Cases_on `sym_step p env inst ss` >>
+  simp[sym_steps_compute]
+QED
+
+Theorem sym_step_dup_name:
+  0 < n /\ n <= 16 ==>
+  sym_step p env (AsmOp (dup_name n)) ss = sym_dup (n-1) ss
+Proof
+  strip_tac >>
+  `n < SUC (SUC (SUC (SUC (SUC (SUC (SUC (SUC (SUC (SUC (SUC (SUC (SUC (SUC (SUC (SUC (SUC 0))))))))))))))))` by decide_tac >>
+  pop_assum mp_tac >>
+  pure_rewrite_tac[prim_recTheory.LESS_THM, prim_recTheory.NOT_LESS_0] >>
+  strip_tac >> gvs[] >> simp[planExecTheory.dup_name_def] >>
+  simp[sym_step_def, sym_step_op_def, dup_table_def]
+QED
+
+Theorem sym_step_swap_name:
+  0 < n /\ n <= 16 ==>
+  sym_step p env (AsmOp (swap_name n)) ss = sym_swap n ss
+Proof
+  strip_tac >>
+  `n < SUC (SUC (SUC (SUC (SUC (SUC (SUC (SUC (SUC (SUC (SUC (SUC (SUC (SUC (SUC (SUC (SUC 0))))))))))))))))` by decide_tac >>
+  pop_assum mp_tac >>
+  pure_rewrite_tac[prim_recTheory.LESS_THM, prim_recTheory.NOT_LESS_0] >>
+  strip_tac >> gvs[] >> simp[planExecTheory.swap_name_def] >>
+  simp[sym_step_def, sym_step_op_def, dup_table_def, swap_table_def]
+QED
+
+Theorem sym_scratch_push:
+  off < dimword (:256) ==>
+  sym_step p env (AsmPush (encode_num_bytes off)) ss =
+  SymOK (ss with <| sym_base := asm_next (ss.sym_base with as_stack := []);
+                   sym_stack := Val (n2w off) :: ss.sym_stack |>)
+Proof
+  strip_tac >>
+  `word_of_bytes F (0w:bytes32) (REVERSE (encode_num_bytes off)) = n2w off` by
+    (mp_tac (Q.SPEC `n2w off` (GEN_ALL strongPrefixSimTheory.push_encode_roundtrip)) >> simp[]) >>
+  simp[sym_step_def, stackOpAsmSimTheory.asm_step_push_ok, sym_lift_def,
+       asm_next_def, sym_state_component_equality]
+QED
+
+(* The memory labels after a 32-byte store of sv at off. *)
+Definition scratch_store_labels_def:
+  scratch_store_labels labs off (Val w) =
+    mem_labels_clear labs (in_mem_range off 32) /\
+  scratch_store_labels labs off (Lab l d) =
+    labs |++ GENLIST (\i. (off + i, (l,d,i))) 32
+End
+
+Theorem scratch_store_labels_outside:
+  ~in_mem_range off 32 b ==>
+  FLOOKUP (scratch_store_labels labs off sv) b = FLOOKUP labs b
+Proof
+  Cases_on `sv` >> pure_rewrite_tac[scratch_store_labels_def,
+    mstore_labels_lookup] >>
+  simp[mem_labels_clear_def, finite_mapTheory.FLOOKUP_DRESTRICT,
+       in_mem_range_def]
+QED
+
+Theorem scratch_store_labels_at:
+  mem_sval_at (scratch_store_labels labs off sv) off sv
+Proof
+  Cases_on `sv` >>
+  rewrite_tac[scratch_store_labels_def, mem_sval_at_clear,
+              mem_sval_at_store_label]
+QED
+
+Theorem scratch_store_labels_preserves_saved:
+  old + 32 <= off \/ off + 32 <= old ==>
+  (mem_sval_at (scratch_store_labels labs off sv) old saved <=>
+   mem_sval_at labs old saved)
+Proof
+  strip_tac >> irule mem_sval_at_cong >>
+  rpt strip_tac >> irule scratch_store_labels_outside >>
+  gvs[in_mem_range_def]
 QED
 
 (* A run of n steps that ends ends the run with more fuel. *)
