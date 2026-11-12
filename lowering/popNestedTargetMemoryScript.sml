@@ -3,7 +3,7 @@ Theory popNestedTargetMemory
 Ancestors
   bodyMemoryPreds targetPlaceSimMem targetSubscriptSplit
   targetPlaceSim targetPlaceSimCasesBase
-  exprSimMemDefs
+  exprSimMemDefs popNestedTargetRootsMemory
 
 Theorem pop_nested_subscript_index_mem:
   body_inv tops ctx cenv cx /\
