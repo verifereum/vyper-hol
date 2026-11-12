@@ -7,7 +7,6 @@
  *   compile_ptr_store_memory_correct  — MSTORE writes value to memory
  *   compile_ptr_store_storage_correct — SSTORE writes value to storage
  *   compile_load_storage_prim_correct — compile_load_storage primitive case
- *   compile_store_storage_prim_correct— compile_store_storage primitive case
  *   compile_nonreentrant_lock_correct — lock sets storage slot (persistent)
  *   compile_nonreentrant_lock_revert  — locked slot causes revert
  *   compile_nonreentrant_lock_view    — view lock checks but doesn't write
@@ -162,30 +161,6 @@ Proof
   rpt strip_tac >> gvs[compile_load_storage_def] >>
   drule_all emit_op_SLOAD_correct >> strip_tac >>
   goal_assum drule >> simp[]
-QED
-
-(* compile_store_storage with is_prim_word=T emits SSTORE [slot; val].
-   Result state = sstore slot_w w ss.
-   compile_store_storage val slot T word_count = emit_void SSTORE [slot; val]. *)
-Theorem compile_store_storage_prim_correct:
-  ∀ val_op slot_op st st' ss w slot_w word_count.
-    compile_store_storage val_op slot_op T word_count st = ((), st') ∧
-    eval_operand val_op ss = SOME w ∧
-    eval_operand slot_op ss = SOME slot_w ∧
-    fresh_vars_wrt st ss ∧
-    ¬ss.vs_call_ctx.cc_static
-    ⇒
-    ∃ ss'.
-      run_inst_seq (emitted_insts st st') ss = OK ss' ∧
-      ss' = sstore slot_w w ss ∧
-      same_blocks st st' ∧
-      fresh_vars_wrt st' ss' ∧
-      (∀ op v. eval_operand op ss = SOME v ⇒
-               eval_operand op ss' = SOME v) ∧
-      ss'.vs_memory = ss.vs_memory
-Proof
-  rpt strip_tac >> gvs[compile_store_storage_def] >>
-  drule_all emit_void_SSTORE_correct >> simp[]
 QED
 
 (* ===== Nonreentrant Lock ===== *)

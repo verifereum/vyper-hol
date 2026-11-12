@@ -59,7 +59,7 @@ Theorem external_entry_reaches_body_ptr:
       local_ptrs_reserved cenv sa /\ ~block_is_terminated sa /\
       stmt_state_rel unit.cu_context func cenv
         (initial_evaluation_context am.sources am.layouts tx NONE) es0 s0 /\
-      ghost_inv NONE cenv
+      ghost_inv H NONE cenv
         (initial_evaluation_context am.sources am.layouts tx NONE) es0
         G0 tn0 s0 /\
       ~s0.vs_halted /\ s0.vs_gas_readings = vs.vs_gas_readings /\

@@ -21,7 +21,7 @@ Theorem immutable_assign_normalize_prefix:
   type_widens_to tenv sty dty /\
   evaluate_type tenv sty = SOME stv /\ evaluate_type tenv dty = SOME dtv /\
   value_has_type stv v /\ value_has_type dtv v /\ val_wf stv v /\ val_wf dtv v /\
-  stmt_state_rel ctx func ce cx es s /\
+  stmt_state_rel H ctx func ce cx es s /\
   eval_operand src s = SOME sw /\ val_in_memory stv v (w2n sw) s.vs_memory /\
   type_memory_size dtv < dimword (:256) /\
   w2n sw + type_memory_size stv < dimword (:256) /\
@@ -31,7 +31,7 @@ Theorem immutable_assign_normalize_prefix:
   ~s.vs_halted /\ s.vs_current_bb = sa.cs_current_bb /\
   s.vs_inst_idx = LENGTH sa.cs_current_insts ==>
   ?r pw. gas_marked_path F ctx func s 0 (OK r) /\
-    stmt_state_rel ctx func ce cx es r /\
+    stmt_state_rel H ctx func ce cx es r /\
     val_in_memory dtv v (w2n pw) r.vs_memory /\
     eval_operand buf.buf_operand r = SOME pw /\
     FLOOKUP r.vs_allocas sa.cs_next_id = SOME (w2n pw,type_memory_size dtv) /\
@@ -53,9 +53,9 @@ Proof
   drule compile_alloc_buffer_parts >> strip_tac >>
   `w2n sw + type_memory_size stv <= w2n w \/
    w2n w + type_memory_size dtv <= w2n sw` by
-    (qpat_x_assum `stmt_state_rel _ _ _ _ _ u` kall_tac >>
+    (qpat_x_assum `stmt_state_rel _ _ _ _ _ _ u` kall_tac >>
      irule place_alloca_source_disjoint >> simp[] >>
-     goal_assum (drule_at (Pat `stmt_state_rel _ _ _ _ _ _`)) >>
+     goal_assum (drule_at (Pat `stmt_state_rel _ _ _ _ _ _ _`)) >>
      qexistsl_tac [
        `mk_inst sa.cs_next_id ALLOCA [Lit (n2w (type_memory_size dtv))]
          [STRING #"%" (toString sa.cs_next_var)]`,
@@ -79,7 +79,7 @@ Proof
   drule_all buffer_alloc_code >> strip_tac >>
   `local_ptrs_reserved ce mid` by
     (irule local_ptrs_reserved_next_var >> qexists_tac `sa` >> simp[]) >>
-  `stmt_state_rel ctx func ce cx es t` by
+  `stmt_state_rel H ctx func ce cx es t` by
     (irule place_typed_copy_alloca_state_frame >>
      goal_assum (drule_at (Pat `typed_copy_state_frame _ _ _ _ _`)) >>
      qexistsl_tac [`type_memory_size dtv`,
