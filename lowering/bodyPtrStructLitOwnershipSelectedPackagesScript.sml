@@ -76,7 +76,7 @@ Proof
     cenv_static_ok ce /\ ce.ce_return_pc = NONE /\ ce.ce_alloca_locals)
     (set_constructor_package_target target
       (package_constructor tops tr nk (mut,nr,rr,name,args,defaults,ret,fbody)))`
-    by (irule structlit_constructor_package_environment) >>
+    by (irule structlit_constructor_package_environment >> simp[]) >>
   drule_all structlit_constructor_package_body >>
   disch_then (qspecl_then [`tr`, `nk`, `target`] mp_tac) >>
   Cases_on `set_constructor_package_target target

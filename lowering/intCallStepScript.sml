@@ -21,7 +21,8 @@
  *                              monotonicity, from venomExecProofs' fuel_mono)
  *   frag_exec_invoke_intret  — frag_exec_invoke from the callee's IntRet
  *   compile_call_intcall_shape — compile_call's IntCall case: return
- *                              buffer, then each argument lowered and
+ *                              buffer, then each supplied argument and
+ *                              then each omitted default lowered and
  *                              staged, then the INVOKE,
  *                              and the value it returns.  The buffer is
  *                              32 * returns_count bytes for stack returns,
@@ -254,10 +255,21 @@ Theorem compile_call_intcall_shape:
     compile_call cfn cenv ret_ty ty (IntCall func_id) args dret st =
       (v, st') /\
     cenv.ce_func_info (nsid_to_string func_id) = (ret_count, rbs, pvs) ==>
-    ?st2 invoke_args st3.
+    ?st2 sup_ops st2a dflt_ops st3.
       compile_stage_intcall_args cfn cenv args pvs
-        (TAKE (LENGTH args) (cenv.ce_func_param_types (nsid_to_string func_id)))
-        st2 = (invoke_args, st3) /\
+        (TAKE (LENGTH args +
+               LENGTH (omitted_defaults cenv (nsid_to_string func_id) (LENGTH args)))
+           (cenv.ce_func_param_types (nsid_to_string func_id)))
+        st2 = (sup_ops, st2a) /\
+      compile_stage_intcall_args cfn
+        (cenv_without_defaults cenv (nsid_to_string func_id))
+        (omitted_defaults cenv (nsid_to_string func_id) (LENGTH args))
+        (DROP (LENGTH args) pvs)
+        (DROP (LENGTH args)
+           (TAKE (LENGTH args +
+                  LENGTH (omitted_defaults cenv (nsid_to_string func_id) (LENGTH args)))
+              (cenv.ce_func_param_types (nsid_to_string func_id))))
+        st2a = (dflt_ops, st3) /\
       (0 < ret_count ==>
        ?rbuf results st4 u.
          compile_alloc_buffer (32 * ret_count) st = (rbuf, st2) /\
@@ -266,7 +278,7 @@ Theorem compile_call_intcall_shape:
                      (cenv.ce_func_ids (nsid_to_string func_id))
                      (nsid_to_string func_id)
                      (cenv.ce_func_param_types (nsid_to_string func_id))
-                     cenv.ce_is_ctor) :: invoke_args) ret_count st3 =
+                     cenv.ce_is_ctor) :: sup_ops ++ dflt_ops) ret_count st3 =
            (results, st4) /\
          store_multi_results rbuf.buf_operand results 0 st4 = (u, st') /\
          v = LocatedValue (cenv.ce_func_return_type (nsid_to_string func_id))
@@ -280,7 +292,7 @@ Theorem compile_call_intcall_shape:
                      (cenv.ce_func_ids (nsid_to_string func_id))
                      (nsid_to_string func_id)
                      (cenv.ce_func_param_types (nsid_to_string func_id))
-                     cenv.ce_is_ctor) :: rbuf.buf_operand :: invoke_args)
+                     cenv.ce_is_ctor) :: rbuf.buf_operand :: sup_ops ++ dflt_ops)
            st3 = (u, st') /\
          v = LocatedValue (cenv.ce_func_return_type (nsid_to_string func_id))
                          (base_ptr rbuf)) /\
@@ -292,26 +304,26 @@ Theorem compile_call_intcall_shape:
                        (cenv.ce_func_ids (nsid_to_string func_id))
                        (nsid_to_string func_id)
                        (cenv.ce_func_param_types (nsid_to_string func_id))
-                       cenv.ce_is_ctor) :: invoke_args) st3 = (u, st') /\
+                       cenv.ce_is_ctor) :: sup_ops ++ dflt_ops) st3 = (u, st') /\
            v = StackValue (cenv.ce_func_return_type (nsid_to_string func_id))
-                        (Lit 0w))
+         
 Proof
   rpt gen_tac >> strip_tac >>
   qpat_x_assum `compile_call _ _ _ _ _ _ _ _ = _` mp_tac >>
   simp[compile_call_def] >>
   rpt (pairarg_tac >> gvs[]) >> strip_tac >>
-  Cases_on `0 < ret_count` >> gvs[]
-  >- (qmatch_asmsub_rename_tac
-        `compile_stage_intcall_args _ _ _ _ _ s2 = (ia, s3)` >>
-      qmatch_asmsub_rename_tac `emit_multi_op INVOKE _ _ s3 = (res, s4)` >>
-      Cases_on `store_multi_results rbuf.buf_operand res 0 s4` >> gvs[] >>
-      qexistsl_tac [`s2`, `ia`, `s3`] >> simp[] >>
-      qexistsl_tac [`res`, `s4`] >> simp[]) >>
   qmatch_asmsub_rename_tac
-    `compile_stage_intcall_args _ _ _ _ _ s2 = (ia, s3)` >>
+    `compile_stage_intcall_args _ _ _ _ (TAKE _ _) s2 = (sa, s2a)` >>
+  qmatch_asmsub_rename_tac
+    `compile_stage_intcall_args _ _ _ _ (DROP _ _) _ = (da, s3)` >>
+  Cases_on `0 < ret_count` >> gvs[]
+  >- (qmatch_asmsub_rename_tac `emit_multi_op INVOKE _ _ s3 = (res, s4)` >>
+      Cases_on `store_multi_results rbuf.buf_operand res 0 s4` >> gvs[] >>
+      qexistsl_tac [`s2`, `sa`, `s2a`, `da`, `s3`] >> simp[] >>
+      qexistsl_tac [`res`, `s4`] >> simp[]) >>
   Cases_on `cenv.ce_func_return_type (nsid_to_string func_id) = NoneT` >>
   gvs[] >>
-  qexistsl_tac [`s2`, `ia`, `s3`] >> simp[]
+  qexistsl_tac [`s2`, `sa`, `s2a`, `da`, `s3`] >> simp[]
 QED
 
 val () =

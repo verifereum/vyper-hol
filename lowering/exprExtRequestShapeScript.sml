@@ -205,14 +205,15 @@ Theorem extrequest_compile_expr_extcall:
   compile_call compile_expr cenv ann ty
     (ExtCall stat skip (fname,ats,rt) opts) args dflt sa
 Proof
-  `expr_callbacks_agree
-     (expr_child_callback
-       (expr_size (Call ann (ExtCall stat skip (fname,ats,rt) opts) args dflt))
-       compile_expr) compile_expr cenv (call_callback_children args dflt)` by
-    (irule expr_child_callback_agrees >>
-     metis_tac[call_callback_child_bound]) >>
-  simp[Once compile_expr_def, expr_type_def] >>
-  irule compile_extcall_callback_contract >> gvs[expr_size_def]
+  simp[Once (CONJUNCT1 compile_expr_raw_def), compile_expr_body_def,
+       expr_type_def] >>
+  CONV_TAC (DEPTH_CONV ETA_CONV) >>
+  irule compile_call_callback_contract >> rpt strip_tac >>
+  irule expr_child_callback_agrees >> rpt strip_tac
+  >- (drule omitted_default_bound >> simp[]) >>
+  drule call_callback_child_bound >>
+  disch_then (qspecl_then [`ExtCall stat skip (fname,ats,rt) opts`, `ann`]
+    mp_tac) >> simp[]
 QED
 
 Theorem extrequest_body_pre_arg:

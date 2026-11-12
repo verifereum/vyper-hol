@@ -4436,7 +4436,7 @@ Proof
 QED
 
 Theorem ci_mono_expr_child_callback:
-  (∀ce ty e st. expr_size e < bound ⇒
+  (∀ce ty e st. expr_size e + cenv_defaults_size ce < bound ⇒
     ci_mono st (SND (f ce ty e st))) ⇒
   (∀ce ty e st.
     ci_mono st (SND (expr_child_callback bound f ce ty e st)))
@@ -4446,7 +4446,7 @@ Proof
 QED
 
 Theorem ci_mono_builtin_child_callback[local]:
-  (∀ce ret_ty ty bi args st. list_size expr_size args < bound ⇒
+  (∀ce ret_ty ty bi args st. list_size expr_size args + cenv_defaults_size ce < bound ⇒
     ci_mono st (SND (f ce ret_ty ty bi args st))) ⇒
   (∀ce ret_ty ty bi args st.
     ci_mono st (SND (builtin_child_callback bound f ce ret_ty ty bi args st)))
@@ -4456,7 +4456,7 @@ Proof
 QED
 
 Theorem ci_mono_type_child_callback[local]:
-  (∀ce vv_ty ty tb ret_ty args st. list_size expr_size args < bound ⇒
+  (∀ce vv_ty ty tb ret_ty args st. list_size expr_size args + cenv_defaults_size ce < bound ⇒
     ci_mono st (SND (f ce vv_ty ty tb ret_ty args st))) ⇒
   (∀ce vv_ty ty tb ret_ty args st.
     ci_mono st (SND (type_child_callback bound f ce vv_ty ty tb ret_ty args st)))

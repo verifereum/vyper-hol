@@ -23,8 +23,8 @@ Theorem intcall_seam3_nonreentrant:
     body_inv tops ctx cenv cx /\
     expr_body_pre cenv cx tenv (Call ann (IntCall (NONE,name)) es dflt) es0 /\
     lookup_callable_function cx.in_deploy name tops =
-      SOME (mut,T,args,[],ret,ss) /\
-    MEM (FunctionDecl Internal mut T rr name args [] ret ss) tops /\
+      SOME (mut,T,args,dflts,ret,ss) /\
+    MEM (FunctionDecl Internal mut T rr name args dflts ret ss) tops /\
     compile_expr cenv ty (Call ann (IntCall (NONE,name)) es dflt) sa =
       (vv,sb) /\
     fn_has_code sa sb func /\ fn_inst_ids_distinct func /\
@@ -69,8 +69,8 @@ Theorem intcall_return_restore_F:
     body_inv tops ctx cenv cx /\
     expr_body_pre cenv cx tenv (Call ann (IntCall (NONE,name)) es dflt) es0 /\
     lookup_callable_function cx.in_deploy name tops =
-      SOME (mut,F,args,[],ret,ss) /\
-    MEM (FunctionDecl Internal mut F rr name args [] ret ss) tops /\
+      SOME (mut,F,args,dflts,ret,ss) /\
+    MEM (FunctionDecl Internal mut F rr name args dflts ret ss) tops /\
     compile_expr cenv ty (Call ann (IntCall (NONE,name)) es dflt) sa =
       (vv,sb) /\
     fn_has_code sa sb func /\ fn_inst_ids_distinct func /\
@@ -193,8 +193,8 @@ Theorem intcall_return_restore:
     body_inv tops ctx cenv cx /\
     expr_body_pre cenv cx tenv (Call ann (IntCall (NONE,name)) es dflt) es0 /\
     lookup_callable_function cx.in_deploy name tops =
-      SOME (mut,nr,args,[],ret,ss) /\
-    MEM (FunctionDecl Internal mut nr rr name args [] ret ss) tops /\
+      SOME (mut,nr,args,dflts,ret,ss) /\
+    MEM (FunctionDecl Internal mut nr rr name args dflts ret ss) tops /\
     compile_expr cenv ty (Call ann (IntCall (NONE,name)) es dflt) sa =
       (vv,sb) /\
     fn_has_code sa sb func /\ fn_inst_ids_distinct func /\
@@ -239,8 +239,8 @@ Theorem widened_call_return_type[local]:
   body_inv tops ctx cenv cx /\
   expr_body_pre cenv cx env (Call ann (IntCall (NONE,name)) es dflt) st /\
   lookup_callable_function cx.in_deploy name tops =
-    SOME (mut,F,args,[],ret,ss) /\
-  MEM (FunctionDecl Internal mut F rr name args [] ret ss) tops ==>
+    SOME (mut,F,args,dflts,ret,ss) /\
+  MEM (FunctionDecl Internal mut F rr name args dflts ret ss) tops ==>
   cenv.ce_func_return_type (nsid_to_string (NONE,name)) = ret /\
   type_widens_to (get_tenv cx) ret ann
 Proof
@@ -272,8 +272,8 @@ Theorem intcall_return_widened_F:
     body_inv tops ctx cenv cx /\
     expr_body_pre cenv cx tenv (Call ann (IntCall (NONE,name)) es dflt) es0 /\
     lookup_callable_function cx.in_deploy name tops =
-      SOME (mut,F,args,[],ret,ss) /\
-    MEM (FunctionDecl Internal mut F rr name args [] ret ss) tops /\
+      SOME (mut,F,args,dflts,ret,ss) /\
+    MEM (FunctionDecl Internal mut F rr name args dflts ret ss) tops /\
     compile_expr cenv ty (Call ann (IntCall (NONE,name)) es dflt) sa =
       (vv,sb) /\
     fn_has_code sa sb func /\ fn_inst_ids_distinct func /\
@@ -438,8 +438,8 @@ Theorem intcall_return_widened:
     body_inv tops ctx cenv cx /\
     expr_body_pre cenv cx tenv (Call ann (IntCall (NONE,name)) es dflt) es0 /\
     lookup_callable_function cx.in_deploy name tops =
-      SOME (mut,nr,args,[],ret,ss) /\
-    MEM (FunctionDecl Internal mut nr rr name args [] ret ss) tops /\
+      SOME (mut,nr,args,dflts,ret,ss) /\
+    MEM (FunctionDecl Internal mut nr rr name args dflts ret ss) tops /\
     compile_expr cenv ty (Call ann (IntCall (NONE,name)) es dflt) sa =
       (vv,sb) /\
     fn_has_code sa sb func /\ fn_inst_ids_distinct func /\

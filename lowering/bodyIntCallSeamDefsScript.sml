@@ -74,11 +74,14 @@ End
    state s0.  t is at the INVOKE, es1 is the source state push_function
    leaves, prev the caller's scopes it saved, penv the parameters' scope
    and rtv the evaluated return type.
-   - Source: the arguments evaluated to the values penv binds;
+   - Source: the supplied arguments evaluated, then the omitted ones'
+     defaults evaluated in the callee's context, to the values penv binds;
      the callee's body is call-safe at the pushed context.
    - Code: the call's code as compile_call_intcall_shape gives it: the
-     return buffer rbuf if any (sa to st2), each argument lowered and
-     staged at the callee's declared parameter type (st2 to st3),
+     return buffer rbuf if any (sa to st2), each supplied argument
+     lowered and staged at the callee's declared parameter type (st2 to
+     st2a), then each omitted default, compiled without the callee's own
+     defaults (st2a to st3),
      the INVOKE of the callee's label at st3
      with the buffer's pointer first when the callee returns through it,
      and after it the results' store into rbuf, up to sb; vv is rbuf's
@@ -104,9 +107,14 @@ Definition intcall_entry_def:
   intcall_entry tops ctx func cenv cx tenv name es sa sb vv s0 es0
                 (mut,nr,args,ret,ss,rr) prev penv rtv es1 t <=>
     ~MEM (NONE,name) cx.stk /\
-    (?s1 vs t1 s3 u t3.
+    (?dflts s1 vs t1 sd dvs td s3 u t3.
+       lookup_callable_function cx.in_deploy name tops =
+         SOME (mut,nr,args,dflts,ret,ss) /\
        eval_exprs cx es s1 = (INL vs,t1) /\
-       bind_arguments (get_tenv cx) args vs = SOME penv /\
+       eval_exprs (cx with stk updated_by CONS (NONE,name))
+         (DROP (LENGTH dflts - (LENGTH args - LENGTH es)) dflts)
+         (sd with scopes := [FEMPTY]) = (INL dvs,td) /\
+       bind_arguments (get_tenv cx) args (vs ++ dvs) = SOME penv /\
        lock_if_nr cx nr (is_view_mut mut) s3 = (INL u,t3)) /\
     evaluate_type (get_tenv cx) ret = SOME rtv /\
     call_evaluation_safe (cx with stk updated_by CONS (NONE,name))
@@ -130,11 +138,26 @@ Definition intcall_entry_def:
        FLOOKUP t.vs_allocas aid = SOME (off,asz) /\
        sa.cs_next_id <= aid /\ aid < sb.cs_next_id ==>
        regions_disjoint lo sz off asz) /\
-    ?st2 invoke_args st3 rc rbs pvs lbl arg_ops bb inst argv.
+    ?st2 sup_ops st2a dflt_ops invoke_args st3 rc rbs pvs lbl arg_ops bb
+     inst argv.
       cenv.ce_func_info (nsid_to_string (NONE,name)) = (rc,rbs,pvs) /\
       compile_stage_intcall_args compile_expr cenv es pvs
-        (TAKE (LENGTH es) (cenv.ce_func_param_types (nsid_to_string (NONE,name))))
-        st2 = (invoke_args,st3) /\
+        (TAKE (LENGTH es +
+               LENGTH (omitted_defaults cenv (nsid_to_string (NONE,name))
+                         (LENGTH es)))
+           (cenv.ce_func_param_types (nsid_to_string (NONE,name))))
+        st2 = (sup_ops,st2a) /\
+      compile_stage_intcall_args compile_expr
+        (cenv_without_defaults cenv (nsid_to_string (NONE,name)))
+        (omitted_defaults cenv (nsid_to_string (NONE,name)) (LENGTH es))
+        (DROP (LENGTH es) pvs)
+        (DROP (LENGTH es)
+           (TAKE (LENGTH es +
+                  LENGTH (omitted_defaults cenv (nsid_to_string (NONE,name))
+                            (LENGTH es)))
+              (cenv.ce_func_param_types (nsid_to_string (NONE,name)))))
+        st2a = (dflt_ops,st3) /\
+      invoke_args = sup_ops ++ dflt_ops /\
       lbl = internal_fn_label (cenv.ce_func_ids (nsid_to_string (NONE,name)))
               (nsid_to_string (NONE,name))
               (cenv.ce_func_param_types (nsid_to_string (NONE,name)))
@@ -283,9 +306,14 @@ Theorem intcall_entry_source:
     (mut,nr,args,ret,ss,rr) prev penv rtv es1 t ==>
   ~MEM (NONE,name) cx.stk /\
   evaluate_type (get_tenv cx) ret = SOME rtv /\
-  ?s1 vs t1 s3 u t3.
+  ?dflts s1 vs t1 sd dvs td s3 u t3.
+    lookup_callable_function cx.in_deploy name tops =
+      SOME (mut,nr,args,dflts,ret,ss) /\
     eval_exprs cx es s1 = (INL vs,t1) /\
-    bind_arguments (get_tenv cx) args vs = SOME penv /\
+    eval_exprs (cx with stk updated_by CONS (NONE,name))
+      (DROP (LENGTH dflts - (LENGTH args - LENGTH es)) dflts)
+      (sd with scopes := [FEMPTY]) = (INL dvs,td) /\
+    bind_arguments (get_tenv cx) args (vs ++ dvs) = SOME penv /\
     lock_if_nr cx nr (is_view_mut mut) s3 = (INL u,t3)
 Proof
   rw[intcall_entry_def] >> metis_tac[]

@@ -1737,10 +1737,21 @@ Proof
   qexists `ce` >> simp[]
 QED
 
+(* An internal call compiles its omitted defaults in the env without the
+   callee's defaults table, which reserves the same locals. *)
+Theorem local_ptrs_reserved_without_defaults[simp]:
+  local_ptrs_reserved (cenv_without_defaults ce n) s <=> local_ptrs_reserved ce s
+Proof
+  simp[local_ptrs_reserved_def, cenv_without_defaults_def]
+QED
+
 (* HELD (train 17): 0.5.0b1 arg snapshot re-proof *)
 Theorem compiler_intcall_reserved_cong:
   (!ce ty e s. ci_mono s (SND (f ce ty e s))) /\
   (!ty e s. local_ptrs_reserved ce s ==> f ce ty e s = g ce ty e s) /\
+  (!n ty e s. local_ptrs_reserved ce s ==>
+     f (cenv_without_defaults ce n) ty e s =
+     g (cenv_without_defaults ce n) ty e s) /\
   local_ptrs_reserved ce sa ==>
   compile_call f ce rt ty (IntCall id) args dr sa =
   compile_call g ce rt ty (IntCall id) args dr sa
@@ -2173,6 +2184,9 @@ QED
 Theorem compiler_call_reserved_cong:
   (!ce ty e s. ci_mono s (SND (f ce ty e s))) /\
   (!ty e s. local_ptrs_reserved ce s ==> f ce ty e s = g ce ty e s) /\
+  (!n ty e s. local_ptrs_reserved ce s ==>
+     f (cenv_without_defaults ce n) ty e s =
+     g (cenv_without_defaults ce n) ty e s) /\
   local_ptrs_reserved ce sa ==>
   compile_call f ce rt ty target args dr sa =
   compile_call g ce rt ty target args dr sa
@@ -2407,6 +2421,9 @@ QED
 Theorem compiler_expr_body_reserved_cong:
   (!ce ty e s. ci_mono s (SND (f ce ty e s))) /\
   (!ty e s. local_ptrs_reserved ce s ==> f ce ty e s = g ce ty e s) /\
+  (!n ty e s. local_ptrs_reserved ce s ==>
+     f (cenv_without_defaults ce n) ty e s =
+     g (cenv_without_defaults ce n) ty e s) /\
   (!rt ty bi args s. local_ptrs_reserved ce s ==>
      bf ce rt ty bi args s = bg ce rt ty bi args s) /\
   (!vt ty tb rt args s. local_ptrs_reserved ce s ==>
@@ -2686,7 +2703,7 @@ Resume compiler_compile_var[builtin]:
   `!ce ty e s vv sb. local_ptrs_reserved ce s /\ f ce ty e s = (vv,sb) ==>
      !x. vv_operand vv = Var x ==> not_fresh_at sb x` by
     (simp[Abbr `f`, exprCallBoundsTheory.expr_child_callback_def] >>
-     rpt gen_tac >> IF_CASES_TAC >- metis_tac[] >>
+     rpt gen_tac >> IF_CASES_TAC >- metis_tac[arithmeticTheory.ADD_COMM] >>
      simp[exprCallBoundsTheory.invalid_expr_call_def, LET_THM] >>
      pairarg_tac >> rpt strip_tac >> gvs[contextTheory.vv_operand_def]) >>
   qabbrev_tac `cb_result = compile_builtin_dispatch_body f ce rt ty bi args sa` >>
@@ -2715,7 +2732,7 @@ Resume compiler_compile_var[type_builtin]:
   `!ce ty e s vv sb. local_ptrs_reserved ce s /\ f ce ty e s = (vv,sb) ==>
      !x. vv_operand vv = Var x ==> not_fresh_at sb x` by
     (simp[Abbr `f`, exprCallBoundsTheory.expr_child_callback_def] >>
-     rpt gen_tac >> IF_CASES_TAC >- metis_tac[] >>
+     rpt gen_tac >> IF_CASES_TAC >- metis_tac[arithmeticTheory.ADD_COMM] >>
      simp[exprCallBoundsTheory.invalid_expr_call_def, LET_THM] >>
      pairarg_tac >> rpt strip_tac >> gvs[contextTheory.vv_operand_def]) >>
   qabbrev_tac `cb_result = compile_type_builtin_dispatch_body f ce vt ty tb rt args sa` >>
@@ -2744,21 +2761,21 @@ Resume compiler_compile_var[expr]:
   `!ce ty e s vv sb. local_ptrs_reserved ce s /\ f ce ty e s = (vv,sb) ==>
      !x. vv_operand vv = Var x ==> not_fresh_at sb x` by
     (simp[Abbr `f`, exprCallBoundsTheory.expr_child_callback_def] >>
-     rpt gen_tac >> IF_CASES_TAC >- metis_tac[] >>
+     rpt gen_tac >> IF_CASES_TAC >- metis_tac[arithmeticTheory.ADD_COMM] >>
      simp[exprCallBoundsTheory.invalid_expr_call_def, LET_THM] >>
      pairarg_tac >> rpt strip_tac >> gvs[contextTheory.vv_operand_def]) >>
   `!ce rt ty bi args s vv sb. local_ptrs_reserved ce s /\
      bf ce rt ty bi args s = (vv,sb) ==>
      !x. vv_operand vv = Var x ==> not_fresh_at sb x` by
     (simp[Abbr `bf`, exprCallBoundsTheory.builtin_child_callback_def] >>
-     rpt gen_tac >> IF_CASES_TAC >- metis_tac[] >>
+     rpt gen_tac >> IF_CASES_TAC >- metis_tac[arithmeticTheory.ADD_COMM] >>
      simp[exprCallBoundsTheory.invalid_expr_call_def, LET_THM] >>
      pairarg_tac >> rpt strip_tac >> gvs[contextTheory.vv_operand_def]) >>
   `!ce vt ty tb rt args s vv sb. local_ptrs_reserved ce s /\
      tf ce vt ty tb rt args s = (vv,sb) ==>
      !x. vv_operand vv = Var x ==> not_fresh_at sb x` by
     (simp[Abbr `tf`, exprCallBoundsTheory.type_child_callback_def] >>
-     rpt gen_tac >> IF_CASES_TAC >- metis_tac[] >>
+     rpt gen_tac >> IF_CASES_TAC >- metis_tac[arithmeticTheory.ADD_COMM] >>
      simp[exprCallBoundsTheory.invalid_expr_call_def, LET_THM] >>
      pairarg_tac >> rpt strip_tac >> gvs[contextTheory.vv_operand_def]) >>
   qabbrev_tac `gf = \ce ty e s. if local_ptrs_reserved ce s then f ce ty e s

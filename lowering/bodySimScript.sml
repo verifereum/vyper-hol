@@ -73,7 +73,9 @@ End
    function ids, parameter types and calling conventions (so compile_call
    gives an internal call the label package_internal_fn gave the callee:
    compile_call_intcall_label) and return types (the type compile_call
-   gives an internal call's result), the program's events, and its locals in
+   gives an internal call's result), and the program's defaults for every
+   function not on the call stack (compile_call compiles a callee's
+   omitted defaults without the callee's own), the program's events, and its locals in
    allocas, as build_compile_env makes every body's, and the source finds
    its functions in tops.  tops's module variables have distinct names, as
    the type checker gives (source_typing_ok_vtype_keys_distinct), and cenv
@@ -104,6 +106,9 @@ Definition body_inv_def:
     cenv.ce_func_info =
       build_func_info (get_struct_fields (make_struct_fields_map tops)) tops /\
     cenv.ce_func_return_type = build_func_return_type tops /\
+    (!fn. ~MEM (NONE,fn) cx.stk ==>
+          ALOOKUP cenv.ce_func_defaults fn =
+          ALOOKUP (build_func_defaults tops) fn) /\
     acyclic_struct_metadata cenv.ce_struct_fields /\
     cenv.ce_event_info = build_event_info (type_env tops) tops (K NONE) /\
     cenv.ce_struct_fields = make_struct_fields_map tops /\

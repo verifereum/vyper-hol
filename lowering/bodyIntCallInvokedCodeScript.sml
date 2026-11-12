@@ -5,7 +5,7 @@ Ancestors
 
 Theorem body_inv_invoked_internal_code:
   body_inv tops ctx cenv cx /\
-  MEM (FunctionDecl Internal mut F rr name args [] ret ss) tops /\
+  MEM (FunctionDecl Internal mut F rr name args dflts ret ss) tops /\
   intcall_entry tops ctx func cenv cx tenv name es sa sb vv s0 es0
     (mut,F,args,ret,ss,rr) prev penv rtv es1 t /\
   gas_invoke_entry (ctx,func) t callee entered /\

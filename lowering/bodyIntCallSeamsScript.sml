@@ -47,8 +47,8 @@ Theorem intcall_callee_body_sim_F[local]:
     body_inv tops ctx cenv cx /\
     cenv_module_pins tops cenv /\
     lookup_callable_function cx.in_deploy name tops =
-      SOME (mut,F,args,[],ret,ss) /\
-    MEM (FunctionDecl Internal mut F rr name args [] ret ss) tops /\
+      SOME (mut,F,args,dflts,ret,ss) /\
+    MEM (FunctionDecl Internal mut F rr name args dflts ret ss) tops /\
     body_stmts_ok (cx with stk updated_by CONS (NONE,name)) ss /\
     intcall_entry tops ctx func cenv cx tenv name es sa sb vv s0 es0
       (mut,F,args,ret,ss,rr) prev penv rtv es1 t /\
@@ -89,8 +89,8 @@ Theorem intcall_seam2_nonreentrant:
     body_inv tops ctx cenv cx /\
     cenv_module_pins tops cenv /\
     lookup_callable_function cx.in_deploy name tops =
-      SOME (mut,T,args,[],ret,ss) /\
-    MEM (FunctionDecl Internal mut T rr name args [] ret ss) tops /\
+      SOME (mut,T,args,dflts,ret,ss) /\
+    MEM (FunctionDecl Internal mut T rr name args dflts ret ss) tops /\
     body_stmts_ok (cx with stk updated_by CONS (NONE,name)) ss /\
     intcall_entry tops ctx func cenv cx tenv name es sa sb vv s0 es0
       (mut,T,args,ret,ss,rr) prev penv rtv es1 t /\
@@ -118,8 +118,8 @@ Theorem intcall_callee_body_sim:
     body_inv tops ctx cenv cx /\
     cenv_module_pins tops cenv /\
     lookup_callable_function cx.in_deploy name tops =
-      SOME (mut,nr,args,[],ret,ss) /\
-    MEM (FunctionDecl Internal mut nr rr name args [] ret ss) tops /\
+      SOME (mut,nr,args,dflts,ret,ss) /\
+    MEM (FunctionDecl Internal mut nr rr name args dflts ret ss) tops /\
     body_stmts_ok (cx with stk updated_by CONS (NONE,name)) ss /\
     intcall_entry tops ctx func cenv cx tenv name es sa sb vv s0 es0
       (mut,nr,args,ret,ss,rr) prev penv rtv es1 t /\
