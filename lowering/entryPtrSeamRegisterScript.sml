@@ -3157,7 +3157,7 @@ Proof
      drule_all registration_actual_endpoint_relations >> simp[]) >> simp[]
 QED
 
-(* SEAM (cheated; proved by its own alan run).  This is the largest seam:
+(* Registration seam, proved at the shared owned endpoint:
    it owns the caller side of the decoder contract.
    Hints (not binding):
    - Per argument, the decode is the is_prim word path (ADD, CALLDATALOAD,
@@ -3226,5 +3226,8 @@ Theorem register_positional_args_ptr:
       !D. (!fuel. ptr_safe_run D 0 fuel unit.cu_context efn [] G0 tn0 s0) ==>
           !fuel. ptr_safe_run D 0 fuel unit.cu_context efn [] G1 tn1 s1
 Proof
-  cheat
+  rpt gen_tac >> strip_tac >>
+  `~ctx_has_dalloca unit.cu_context` by
+    (drule_all registration_supported_no_dalloca >> simp[]) >>
+  drule_all registration_positional_args_ptr_no_dalloca >> simp[]
 QED
