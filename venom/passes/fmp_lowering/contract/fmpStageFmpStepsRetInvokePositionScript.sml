@@ -75,6 +75,42 @@ Proof
   AP_THM_TAC >> AP_TERM_TAC >> simp[FUN_EQ_THM] >> metis_tac[]
 QED
 
+Theorem fmp_return_indexed_position_cert:
+  !insts k s restores code leftover s' i.
+  fmp_lower_indexed infos ctx runner lbl k s restores insts =
+    SOME (code,leftover,s') /\ i < LENGTH insts /\
+  (EL i insts).inst_opcode = INVOKE /\
+  (!j. j < LENGTH insts ==>
+    LENGTH (FILTER (\r. FST r = (lbl,k+j)) restores) =
+      if (lbl,k+j) IN FDOM (plan:fmp_reclaim_plan) then 1 else 0) ==>
+  ?pre j post.
+    code = pre ++ [j] ++ post /\
+    j.inst_opcode = INVOKE /\ j.inst_id = (EL i insts).inst_id /\
+    LENGTH pre =
+      SUM (GENLIST (\n. (if (lbl,k+n) IN FDOM plan then 1 else 0) +
+        (if (EL n insts).inst_opcode = DALLOCA then 4 else 1)) i) +
+      (if (lbl,k+i) IN FDOM plan then 1 else 0) /\
+    (?sp sp'. fmp_lower_inst infos ctx runner sp (EL i insts) = SOME ([j],sp'))
+Proof
+  Induct >- simp[] >> rpt gen_tac >>
+  simp[fmp_lower_indexed_cons] >> rpt strip_tac >> gvs[] >>
+  drule fmp_return_select_length >> strip_tac >>
+  drule fmp_return_emit_length >> strip_tac >>
+  drule fmp_return_inst_length >> strip_tac >>
+  Cases_on `i`
+  >- (gvs[] >> drule_all fmp_return_invoke_head >> strip_tac >>
+      qexistsl_tac [`prefix`,`j`,`tail`] >> simp[] >>
+      first_x_assum (qspec_then `0` mp_tac) >> simp[] >> metis_tac[]) >>
+  qpat_x_assum `!k s restores code leftover s' i. _` drule >>
+  disch_then (qspec_then `n` mp_tac) >>
+  impl_tac >- (rpt strip_tac >> gvs[] >>
+    first_x_assum (qspec_then `SUC j` mp_tac) >> simp[ADD_CLAUSES]) >>
+  strip_tac >> qexistsl_tac [`prefix ++ head ++ pre`,`j`,`post`] >>
+  simp[Once GENLIST_CONS, ADD_CLAUSES, combinTheory.o_DEF] >>
+  reverse conj_tac >- metis_tac[] >>
+  first_x_assum (qspec_then `0` mp_tac) >> simp[] >> decide_tac
+QED
+
 Theorem fmp_return_indexed_position:
   !insts k s restores code leftover s' i.
   fmp_lower_indexed infos ctx runner lbl k s restores insts =
@@ -91,22 +127,8 @@ Theorem fmp_return_indexed_position:
         (if (EL n insts).inst_opcode = DALLOCA then 4 else 1)) i) +
       (if (lbl,k+i) IN FDOM plan then 1 else 0)
 Proof
-  Induct >- simp[] >> rpt gen_tac >>
-  simp[fmp_lower_indexed_cons] >> rpt strip_tac >> gvs[] >>
-  drule fmp_return_select_length >> strip_tac >>
-  drule fmp_return_emit_length >> strip_tac >>
-  drule fmp_return_inst_length >> strip_tac >>
-  Cases_on `i`
-  >- (gvs[] >> drule_all fmp_return_invoke_head >> strip_tac >>
-      qexistsl_tac [`prefix`,`j`,`tail`] >> simp[] >>
-      first_x_assum (qspec_then `0` mp_tac) >> simp[]) >>
-  qpat_x_assum `!k s restores code leftover s' i. _` drule >>
-  disch_then (qspec_then `n` mp_tac) >>
-  impl_tac >- (rpt strip_tac >> gvs[] >>
-    first_x_assum (qspec_then `SUC j` mp_tac) >> simp[ADD_CLAUSES]) >>
-  strip_tac >> qexistsl_tac [`prefix ++ head ++ pre`,`j`,`post`] >>
-  simp[Once GENLIST_CONS, ADD_CLAUSES, combinTheory.o_DEF] >>
-  first_x_assum (qspec_then `0` mp_tac) >> simp[] >> decide_tac
+  rpt strip_tac >> drule_all fmp_return_indexed_position_cert >>
+  strip_tac >> qexistsl_tac [`pre`,`j`,`post`] >> simp[]
 QED
 
 Theorem fmp_return_plan_restore_exact:
@@ -127,6 +149,29 @@ Proof
   `LENGTH xs <> 0` by metis_tac[LENGTH_NIL] >> decide_tac
 QED
 
+Theorem fmp_return_indexed_at_cert:
+  fmp_lower_indexed infos ctx runner lbl 0 s restores insts =
+    SOME (code,leftover,s') /\ i < LENGTH insts /\
+  (EL i insts).inst_opcode = INVOKE /\
+  (!j. j < LENGTH insts ==>
+    LENGTH (FILTER (\r. FST r = (lbl,j)) restores) =
+      if (lbl,j) IN FDOM plan then 1 else 0) ==>
+  ?j sp sp'.
+    fmp_lower_inst infos ctx runner sp (EL i insts) = SOME ([j],sp') /\
+    j.inst_opcode = INVOKE /\ j.inst_id = (EL i insts).inst_id /\
+    fmp_stage_tidx plan NONE lbl insts i +
+      (if (lbl,i) IN FDOM plan then 1 else 0) < LENGTH code /\
+    EL (fmp_stage_tidx plan NONE lbl insts i +
+      (if (lbl,i) IN FDOM plan then 1 else 0)) code = j
+Proof
+  strip_tac >> drule fmp_return_indexed_position_cert >>
+  disch_then (qspecl_then [`plan`,`i`] mp_tac) >> simp[] >> strip_tac >>
+  gvs[fmp_stage_tidx_def] >>
+  qexistsl_tac [`sp`,`sp'`] >>
+  qpat_assum `LENGTH pre = _` (fn th => rewrite_tac[GSYM th]) >>
+  simp[EL_APPEND_EQN, EL_CONS] >> decide_tac
+QED
+
 Theorem fmp_return_indexed_at:
   fmp_lower_indexed infos ctx runner lbl 0 s restores insts =
     SOME (code,leftover,s') /\ i < LENGTH insts /\
@@ -140,10 +185,8 @@ Theorem fmp_return_indexed_at:
     EL (fmp_stage_tidx plan NONE lbl insts i +
       (if (lbl,i) IN FDOM plan then 1 else 0)) code = j
 Proof
-  strip_tac >> drule fmp_return_indexed_position >>
-  disch_then (qspecl_then [`plan`,`i`] mp_tac) >> simp[] >> strip_tac >>
-  gvs[fmp_stage_tidx_def] >>
-  simp[EL_APPEND_EQN, EL_CONS] >> decide_tac
+  strip_tac >> drule_all fmp_return_indexed_at_cert >>
+  strip_tac >> qexists `j` >> simp[]
 QED
 
 Theorem fmp_return_indexed_other_count:
@@ -284,6 +327,29 @@ Proof
   metis_tac[fmp_return_install_at]
 QED
 
+Theorem fmp_return_blocks_invoke_at_cert:
+  fmp_lower_blocks infos ctx runner s (fmp_plan_to_alist fn plan) fn.fn_blocks =
+    SOME (FmpBlocksResult out leftover s') /\
+  ALL_DISTINCT (MAP (\b. b.bb_label) fn.fn_blocks) /\
+  fmp_reclaim_input fn plan /\ lookup_block lbl fn.fn_blocks = SOME bb /\
+  i < LENGTH bb.bb_instructions /\ (EL i bb.bb_instructions).inst_opcode = INVOKE ==>
+  ?bb' j sp sp'. lookup_block lbl out = SOME bb' /\
+    fmp_lower_inst infos ctx runner sp (EL i bb.bb_instructions) = SOME ([j],sp') /\
+    j.inst_opcode = INVOKE /\ j.inst_id = (EL i bb.bb_instructions).inst_id /\
+    fmp_stage_tidx plan NONE lbl bb.bb_instructions i +
+      (if (lbl,i) IN FDOM plan then 1 else 0) < LENGTH bb'.bb_instructions /\
+    EL (fmp_stage_tidx plan NONE lbl bb.bb_instructions i +
+      (if (lbl,i) IN FDOM plan then 1 else 0)) bb'.bb_instructions = j
+Proof
+  strip_tac >> drule fmp_return_blocks_at >>
+  disch_then (qspecl_then [`plan`,`lbl`,`bb`] mp_tac) >>
+  impl_tac >- (simp[] >> rpt strip_tac >>
+    irule fmp_return_plan_restore_exact >> simp[]) >>
+  strip_tac >> drule fmp_return_indexed_at_cert >>
+  disch_then (qspecl_then [`plan`,`i`] mp_tac) >>
+  simp[] >> metis_tac[]
+QED
+
 Theorem fmp_return_blocks_invoke_at:
   fmp_lower_blocks infos ctx runner s (fmp_plan_to_alist fn plan) fn.fn_blocks =
     SOME (FmpBlocksResult out leftover s') /\
@@ -297,13 +363,8 @@ Theorem fmp_return_blocks_invoke_at:
     EL (fmp_stage_tidx plan NONE lbl bb.bb_instructions i +
       (if (lbl,i) IN FDOM plan then 1 else 0)) bb'.bb_instructions = j
 Proof
-  strip_tac >> drule fmp_return_blocks_at >>
-  disch_then (qspecl_then [`plan`,`lbl`,`bb`] mp_tac) >>
-  impl_tac >- (simp[] >> rpt strip_tac >>
-    irule fmp_return_plan_restore_exact >> simp[]) >>
-  strip_tac >> drule fmp_return_indexed_at >>
-  disch_then (qspecl_then [`plan`,`i`] mp_tac) >>
-  simp[] >> metis_tac[]
+  strip_tac >> drule_all fmp_return_blocks_invoke_at_cert >>
+  strip_tac >> qexistsl_tac [`bb'`,`j`] >> simp[]
 QED
 
 Theorem fmp_return_root_offset:
@@ -331,6 +392,36 @@ Proof
       fmp_stage_tidx_def, AllCaseEqs(), callLayoutDefsTheory.OPTION_TO_LIST_def]
 QED
 
+Theorem fmp_return_full_blocks_at_cert:
+  fn.fn_fmp_signature = NONE /\ FLOOKUP infos fn.fn_name = SOME info /\
+  split_fmp_entry fn = SOME (FmpEntryLayout users oldpc suffix) /\
+  fn.fn_blocks = entry::rest /\
+  analyze_fmp_reclaims infos ctx fn = SOME plan /\
+  fmp_reclaim_input fn plan /\
+  ALL_DISTINCT (MAP (\b. b.bb_label) fn.fn_blocks) /\
+  fmp_make_root_layout ctx fn info runner s0 =
+    SOME (FmpRootLayout n root newpc s1) /\
+  fmp_lower_blocks infos ctx runner s1 (fmp_plan_to_alist fn plan) fn.fn_blocks =
+    SOME (FmpBlocksResult blocks leftover s2) /\
+  fmp_install_root ctx fn (FmpRootLayout n root newpc s2) blocks = SOME (out,s3) /\
+  lookup_block lbl fn.fn_blocks = SOME bb /\ i < LENGTH bb.bb_instructions /\
+  (EL i bb.bb_instructions).inst_opcode = INVOKE ==>
+  ?bb' j sp sp'. lookup_block lbl out = SOME bb' /\
+    fmp_lower_inst infos ctx runner sp (EL i bb.bb_instructions) = SOME ([j],sp') /\
+    j.inst_opcode = INVOKE /\ j.inst_id = (EL i bb.bb_instructions).inst_id /\
+    fmp_stage_tidx plan (fmp_stage_root infos ctx fn) lbl bb.bb_instructions i +
+      (if (lbl,i) IN FDOM plan then 1 else 0) < LENGTH bb'.bb_instructions /\
+    EL (fmp_stage_tidx plan (fmp_stage_root infos ctx fn) lbl bb.bb_instructions i +
+      (if (lbl,i) IN FDOM plan then 1 else 0)) bb'.bb_instructions = j
+Proof
+  strip_tac >>
+  drule_all fmp_return_blocks_invoke_at_cert >> strip_tac >>
+  drule_all fmp_return_install_checked_at >> strip_tac >>
+  drule_all fmp_lower_blocks_preserves_labels >> strip_tac >>
+  drule_all fmp_return_root_offset >> strip_tac >>
+  gvs[] >> qexistsl_tac [`sp`,`sp'`] >> simp[]
+QED
+
 Theorem fmp_return_full_blocks_at:
   fn.fn_fmp_signature = NONE /\ FLOOKUP infos fn.fn_name = SOME info /\
   split_fmp_entry fn = SOME (FmpEntryLayout users oldpc suffix) /\
@@ -352,15 +443,11 @@ Theorem fmp_return_full_blocks_at:
     EL (fmp_stage_tidx plan (fmp_stage_root infos ctx fn) lbl bb.bb_instructions i +
       (if (lbl,i) IN FDOM plan then 1 else 0)) bb'.bb_instructions = j
 Proof
-  strip_tac >>
-  drule_all fmp_return_blocks_invoke_at >> strip_tac >>
-  drule_all fmp_return_install_checked_at >> strip_tac >>
-  drule_all fmp_lower_blocks_preserves_labels >> strip_tac >>
-  drule_all fmp_return_root_offset >> strip_tac >>
-  gvs[] >> metis_tac[ADD_ASSOC, ADD_COMM]
+  strip_tac >> drule_all fmp_return_full_blocks_at_cert >>
+  strip_tac >> qexistsl_tac [`bb'`,`j`] >> simp[]
 QED
 
-Theorem fmp_return_lowered_full_at:
+Theorem fmp_return_lowered_full_at_cert:
   fmp_stage_lowered infos ctx runner fn fn' /\
   fn.fn_fmp_signature = NONE /\
   (?info. FLOOKUP infos fn.fn_name = SOME info /\
@@ -368,7 +455,8 @@ Theorem fmp_return_lowered_full_at:
   ALL_DISTINCT (MAP (\b. b.bb_label) fn.fn_blocks) /\
   lookup_block lbl fn.fn_blocks = SOME bb /\ i < LENGTH bb.bb_instructions /\
   (EL i bb.bb_instructions).inst_opcode = INVOKE ==>
-  ?bb' j. lookup_block lbl fn'.fn_blocks = SOME bb' /\
+  ?bb' j sp sp'. lookup_block lbl fn'.fn_blocks = SOME bb' /\
+    fmp_lower_inst infos ctx runner sp (EL i bb.bb_instructions) = SOME ([j],sp') /\
     j.inst_opcode = INVOKE /\ j.inst_id = (EL i bb.bb_instructions).inst_id /\
     fmp_stage_tidx (fmp_stage_plan infos ctx fn) (fmp_stage_root infos ctx fn)
       lbl bb.bb_instructions i +
@@ -390,10 +478,35 @@ Proof
   `fn'.fn_blocks = blocks'` by
     gvs[fmp_checked_seal_def, fmp_seal_def, AllCaseEqs()] >>
   gvs[fmp_stage_plan_def] >>
-  drule fmp_return_full_blocks_at >> simp[] >>
+  drule fmp_return_full_blocks_at_cert >> simp[] >>
   disch_then irule >> goal_assum (drule_at Any) >> simp[] >>
   goal_assum (drule_at Any) >> simp[] >>
   goal_assum (drule_at Any) >> simp[] >> metis_tac[]
+QED
+
+Theorem fmp_return_lowered_full_at:
+  fmp_stage_lowered infos ctx runner fn fn' /\
+  fn.fn_fmp_signature = NONE /\
+  (?info. FLOOKUP infos fn.fn_name = SOME info /\
+    (info.fi_needs_fmp \/ info.fi_publishes_fmp)) /\
+  ALL_DISTINCT (MAP (\b. b.bb_label) fn.fn_blocks) /\
+  lookup_block lbl fn.fn_blocks = SOME bb /\ i < LENGTH bb.bb_instructions /\
+  (EL i bb.bb_instructions).inst_opcode = INVOKE ==>
+  ?bb' j. lookup_block lbl fn'.fn_blocks = SOME bb' /\
+    j.inst_opcode = INVOKE /\ j.inst_id = (EL i bb.bb_instructions).inst_id /\
+    fmp_stage_tidx (fmp_stage_plan infos ctx fn) (fmp_stage_root infos ctx fn)
+      lbl bb.bb_instructions i +
+      (if (lbl,i) IN FDOM (fmp_stage_plan infos ctx fn) then 1 else 0)
+      < LENGTH bb'.bb_instructions /\
+    EL (fmp_stage_tidx (fmp_stage_plan infos ctx fn) (fmp_stage_root infos ctx fn)
+      lbl bb.bb_instructions i +
+      (if (lbl,i) IN FDOM (fmp_stage_plan infos ctx fn) then 1 else 0))
+      bb'.bb_instructions = j
+Proof
+  strip_tac >> (drule fmp_return_lowered_full_at_cert >>
+    disch_then (qspecl_then [`lbl`,`i`,`bb`] mp_tac) >>
+    (impl_tac >- (simp[] >> metis_tac[])) >>
+    strip_tac >> qexistsl_tac [`bb'`,`j`] >> simp[])
 QED
 
 Theorem fmp_return_tidx_empty:

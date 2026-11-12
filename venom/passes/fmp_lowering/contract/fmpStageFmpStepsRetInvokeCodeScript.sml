@@ -102,3 +102,55 @@ Proof
      gvs[o1_fn_shape_def, wf_function_def, fn_labels_def]) >>
   metis_tac[fmp_return_root_excluded]
 QED
+
+Theorem fmp_return_invoke_local_nonclearing[local]:
+  inst.inst_opcode = INVOKE /\
+  fmp_lower_inst infos ctx runner sp inst = SOME ([j],sp') /\
+  LENGTH j.inst_outputs = LENGTH inst.inst_outputs ==>
+  ~fmp_clears_marks infos inst
+Proof
+  simp[fmp_lower_inst_def, AllCaseEqs()] >> rpt strip_tac >> gvs[] >>
+  drule fmp_resolve_invoke_some >> strip_tac >>
+  gvs[fmpReclaimDefsTheory.fmp_clears_marks_def,
+      fmpReclaimDefsTheory.fmp_callee_info_def,
+      fmpAnalysisDefsTheory.fmp_invoke_target_def] >>
+  Cases_on `info.fi_publishes_fmp` >> gvs[]
+QED
+
+Theorem fmp_return_saved_invoke_nonclearing:
+  fmp_stage_lowered infos ctx runner fn fn' /\
+  fmp_stage_root infos ctx fn = SOME (rl,rp) /\
+  ALL_DISTINCT (MAP (\b. b.bb_label) fn.fn_blocks) /\
+  lookup_block lbl fn.fn_blocks = SOME bb /\
+  idx < LENGTH bb.bb_instructions /\ EL idx bb.bb_instructions = inst /\
+  inst.inst_opcode = INVOKE /\ t.vs_current_bb = lbl /\
+  t.vs_inst_idx = fmp_stage_tidx (fmp_stage_plan infos ctx fn)
+    (fmp_stage_root infos ctx fn) lbl bb.bb_instructions idx +
+    (if (lbl,idx) IN FDOM (fmp_stage_plan infos ctx fn) then 1 else 0) /\
+  active_inst fn' j t /\ j.inst_outputs = inst.inst_outputs ==>
+  ~fmp_clears_marks infos inst
+Proof
+  strip_tac >>
+  `fn.fn_fmp_signature = NONE /\
+   ?info. FLOOKUP infos fn.fn_name = SOME info /\
+     (info.fi_needs_fmp \/ info.fi_publishes_fmp)` by
+    (gvs[fmp_stage_root_def, AllCaseEqs()] >>
+     Cases_on `FLOOKUP infos fn.fn_name` >> gvs[]) >>
+  drule fmp_return_lowered_full_at_cert >>
+  disch_then (qspecl_then [`lbl`,`idx`,`bb`] mp_tac) >>
+  impl_tac >- (simp[] >> metis_tac[]) >> strip_tac >>
+  `fn_labels fn' = fn_labels fn` by
+    (qpat_x_assum `fmp_stage_lowered _ _ _ _ _` mp_tac >>
+     simp[fmp_stage_lowered_def, fmp_lower_function_with_info_def, AllCaseEqs()] >>
+     rpt strip_tac >> gvs[] >> drule fmp_checked_seal_some >> strip_tac >>
+     gvs[fmp_seal_def, fn_labels_def] >>
+     drule fmpStepLayoutTheory.fmp_install_root_preserves_labels >>
+     drule fmpStepLayoutTheory.fmp_lower_blocks_preserves_labels >> simp[]) >>
+  gvs[active_inst_def] >> rename1 `MEM active_bb fn'.fn_blocks` >>
+  `lookup_block t.vs_current_bb fn'.fn_blocks = SOME active_bb` by
+    (irule venomExecPropsTheory.MEM_lookup_block >>
+     gvs[fn_labels_def]) >>
+  gvs[] >>
+  irule fmp_return_invoke_local_nonclearing >>
+  goal_assum (drule_at Any) >> simp[] >> metis_tac[]
+QED
