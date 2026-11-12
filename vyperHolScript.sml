@@ -48,3 +48,5 @@ Ancestors
   e2eCorrectness
   (* deployment: the constructor frame and deploy correctness *)
   e2eDeployCorrectness
+  (* body induction: custom-error rows, admitted until the gate admits them *)
+  bodyCustomErrorCases

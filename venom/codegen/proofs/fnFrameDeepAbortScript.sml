@@ -614,10 +614,59 @@ QED
 
 Finalise regular_abort_frame_prefix_deep
 
+(* In a static frame a state write Aborts only at the static check: its
+   operands are defined, and a CALL's value is nonzero. *)
+Theorem step_inst_static_abort[local]:
+  vs.vs_call_ctx.cc_static /\
+  MEM inst.inst_opcode [SSTORE; TSTORE; SELFDESTRUCT; CALL; CREATE; CREATE2] /\
+  step_inst fuel ctx inst vs = Abort a vs' ==>
+  a = ExHalt_abort /\ vs' = halt_state (set_returndata [] vs) /\
+  ?vals. eval_operands inst.inst_operands vs = SOME vals /\
+    (inst.inst_opcode = CALL ==> EL 2 vals <> 0w)
+Proof
+  rpt strip_tac >>
+  qpat_x_assum `step_inst _ _ _ _ = _` mp_tac >>
+  Cases_on `eval_operands inst.inst_operands vs` >>
+  gvs[step_inst_non_invoke, step_inst_base_opcode_eqs, exec_write2_def,
+      exec_create_def, exec_ext_call_def, eval_operands_def, AllCaseEqs()] >>
+  rpt strip_tac >> gvs[venomStateTheory.eval_operands_def]
+QED
+
+(* The asm instruction a static frame's state write is emitted as faults. *)
+Theorem static_write_fault_step[local]:
+  !lo o2pc prog st name vals rest vs.
+    asm_block_at prog st.as_pc [AsmOp name] /\
+    st.as_stack = vals ++ rest /\ st.as_call_ctx.cc_static /\
+    MEM (name, LENGTH vals)
+      [("SSTORE",2); ("TSTORE",2); ("SELFDESTRUCT",1); ("CREATE",3);
+       ("CREATE2",4); ("CALL",7)] /\
+    (name = "CALL" ==> EL 2 vals <> 0w) /\
+    venom_asm_terminal_rel vs st ==>
+    ?st'. asm_steps lo o2pc prog 1 st = AsmFault st' /\
+      venom_asm_terminal_rel (halt_state (set_returndata [] vs)) st'
+Proof
+  rpt strip_tac >>
+  fs[asm_block_at_def] >>
+  `asm_step lo o2pc (AsmOp name) st =
+   AsmFault (st with as_returndata := [])` by
+    (gvs[LENGTH_EQ_NUM_compute] >>
+     simp[asm_step_def, asm_step_op_def,
+          asm_step_arith_def, asm_step_compare_def,
+          asm_step_bitwise_def, asm_step_memory_def,
+          asm_step_control_def, asm_step_extcall_def,
+          asm_sstore_def, asm_tstore_def, asm_selfdestruct_def,
+          asm_exec_call_def, asm_exec_create_def, asm_exec_create2_def]) >>
+  `1 = SUC 0` by simp[] >>
+  pop_assum SUBST1_TAC >>
+  simp[Once asm_steps_def, asm_steps_def] >>
+  gvs[venom_asm_terminal_rel_def, halt_state_def, set_returndata_def]
+QED
+
 Theorem gen_inst_ext_fault_frame_sim_deep:
   !inst cplan vs fn r final base ps nl lo ra dfg ops ctx rest mem0 st
     lv cfg halting term label prog fuel a vs' o2pc.
-  MEM inst.inst_opcode [CREATE; CREATE2; RETURNDATACOPY] /\
+  MEM inst.inst_opcode
+    [CREATE; CREATE2; RETURNDATACOPY; SSTORE; TSTORE; SELFDESTRUCT; CALL] /\
   opaque_use_ok fn /\ MEM inst (fn_insts fn) /\ inst_wf inst /\
   MEM r cplan.cp_regions /\
   r.sr_spill_base <= final.ps_alloc.sa_spill_base /\
@@ -643,7 +692,6 @@ Theorem gen_inst_ext_fault_frame_sim_deep:
   fn_frame_inv ctx cplan lo fn ra rest mem0 ps vs st /\
   generate_inst_plan lv dfg cfg fn inst nl halting term label ps = SOME (ops, final) /\
   asm_block_at prog st.as_pc (execute_plan cplan.cp_initial_fmp ops) /\
-  ~vs.vs_call_ctx.cc_static /\
   step_inst fuel ctx inst vs = Abort a vs' ==>
   ?n out. a = ExHalt_abort /\ asm_steps lo o2pc prog n st = AsmFault out /\
     venom_asm_terminal_rel vs' out
@@ -663,11 +711,49 @@ Proof
   `?out. a = ExHalt_abort /\
     asm_steps lo o2pc prog 1 (mid with as_stack := mid.as_stack ++ rest) = AsmFault out /\
     venom_asm_terminal_rel vs' out` by
-    (Cases_on `inst.inst_opcode = CREATE` >- suspend "create" >>
-     Cases_on `inst.inst_opcode = CREATE2` >- suspend "create2" >>
+    (Cases_on `vs.vs_call_ctx.cc_static /\
+       MEM inst.inst_opcode [SSTORE; TSTORE; SELFDESTRUCT; CALL; CREATE; CREATE2]`
+     >- suspend "static" >>
+     (* outside the static case only CREATE/CREATE2 (oversize, non-static)
+        and RETURNDATACOPY abort *)
+     Cases_on `inst.inst_opcode = CREATE` >- (gvs[] >> suspend "create") >>
+     Cases_on `inst.inst_opcode = CREATE2` >- (gvs[] >> suspend "create2") >>
+     `inst.inst_opcode = RETURNDATACOPY` by
+       (qpat_x_assum `step_inst _ _ _ _ = Abort _ _`
+          (strip_assume_tac o MATCH_MP step_inst_abort_opcodes) >> gvs[]) >>
      suspend "returndatacopy") >>
   qexistsl_tac [`LENGTH (execute_plan cplan.cp_initial_fmp pre) + 1`, `out`] >>
   simp[] >> irule asm_steps_compose_fault >> goal_assum (drule_at Any) >> simp[]
+QED
+
+Resume gen_inst_ext_fault_frame_sim_deep[static]:
+  drule_at (Pat `step_inst _ _ _ _ = Abort _ _`) step_inst_static_abort >>
+  impl_tac >- simp[] >> strip_tac >>
+  `MEM inst.inst_opcode [REVERT; INVALID; ASSERT; ASSERT_UNREACHABLE; CREATE;
+     CREATE2; RETURNDATACOPY; SSTORE; TSTORE; SELFDESTRUCT; CALL]` by fs[] >>
+  `mid.as_stack = vals ++ DROP (LENGTH inst.inst_operands) mid.as_stack` by
+    (irule abort_frame_arranged_stack >> rpt conj_tac >> TRY (first_assum ACCEPT_TAC)
+     >- (qexists `dfg` >> gvs[]) >>
+     goal_assum (drule_at (Pat `venom_asm_rel _ _ _ _`)) >> gvs[] >> metis_tac[]) >>
+  `LENGTH vals = LENGTH inst.inst_operands` by metis_tac[logEmitSimTheory.eval_operands_length] >>
+  `mid.as_call_ctx = vs.vs_call_ctx` by fs[venom_asm_rel_def, frame_view_def] >>
+  qspecl_then [`lo`, `o2pc`, `prog`, `mid with as_stack := mid.as_stack ++ rest`,
+    `name`, `vals`, `DROP (LENGTH inst.inst_operands) mid.as_stack ++ rest`, `vs`]
+    mp_tac static_write_fault_step >>
+  impl_tac
+  >- (rpt conj_tac
+      >- fs[]
+      >- (simp[] >>
+          qpat_assum `mid.as_stack = _`
+            (fn th => CONV_TAC (LHS_CONV (ONCE_REWRITE_CONV [th]))) >>
+          simp[])
+      >- fs[]
+      >- gvs[venom_to_evm_name_def, inst_wf_def]
+      >- (strip_tac >>
+          qpat_x_assum `vs.vs_call_ctx.cc_static /\ _` strip_assume_tac >>
+          gvs[venom_to_evm_name_def]) >>
+      fs[]) >>
+  strip_tac >> gvs[]
 QED
 
 Resume gen_inst_ext_fault_frame_sim_deep[create]:
@@ -699,7 +785,6 @@ Resume gen_inst_ext_fault_frame_sim_deep[create2]:
 QED
 
 Resume gen_inst_ext_fault_frame_sim_deep[returndatacopy]:
-  `inst.inst_opcode = RETURNDATACOPY` by gvs[] >>
   drule_all step_inst_returndatacopy_abort >> strip_tac >>
   `mid.as_stack = [dest_val; src_val; sz_val] ++ DROP (LENGTH inst.inst_operands) mid.as_stack` by
     (irule abort_frame_arranged_stack >> simp[] >> conj_tac
@@ -715,6 +800,158 @@ QED
 
 Finalise gen_inst_ext_fault_frame_sim_deep
 
+(* A LOG step Aborts only at the static check. *)
+Theorem step_inst_log_abort[local]:
+  inst.inst_opcode = LOG /\ inst_wf inst /\
+  step_inst fuel ctx inst vs = Abort a vs' ==>
+  a = ExHalt_abort /\ vs' = halt_state (set_returndata [] vs) /\
+  vs.vs_call_ctx.cc_static
+Proof
+  strip_tac >> gvs[inst_wf_def] >>
+  qpat_x_assum `step_inst _ _ _ _ = _` mp_tac >>
+  simp[step_inst_non_invoke] >>
+  ONCE_REWRITE_TAC[step_inst_base_def] >>
+  qpat_assum `inst.inst_opcode = LOG` (fn th => PURE_REWRITE_TAC[th]) >>
+  simp[LET_THM] >> rw[] >> gvs[AllCaseEqs()]
+QED
+
+(* The LOGn a static frame's LOG is emitted as faults. *)
+Theorem static_log_fault_step[local]:
+  !lo o2pc prog st n vs.
+    asm_block_at prog st.as_pc [AsmOp ("LOG" ++ num_to_dec_string n)] /\
+    n <= 4 /\ n + 2 <= LENGTH st.as_stack /\ st.as_call_ctx.cc_static /\
+    venom_asm_terminal_rel vs st ==>
+    ?st'. asm_steps lo o2pc prog 1 st = AsmFault st' /\
+      venom_asm_terminal_rel (halt_state (set_returndata [] vs)) st'
+Proof
+  rpt strip_tac >>
+  qexists_tac `st with as_returndata := []` >>
+  conj_tac
+  >- (rewrite_tac [DECIDE ``1 = SUC 0``] >> simp[asm_steps_def] >>
+      fs[asm_block_at_def] >>
+      simp[SIMP_RULE (srw_ss()) [] logEmitSimTheory.asm_step_log, asm_log_def]) >>
+  fs[venom_asm_terminal_rel_def, halt_state_def, set_returndata_def]
+QED
+
+Theorem codegen_ready_fn_inst:
+  !fn inst.
+    codegen_ready_fn fn /\ MEM inst (fn_insts fn) ==> codegen_ready_inst inst
+Proof
+  simp[stackPlanGenTheory.codegen_ready_fn_def, venomInstTheory.fn_insts_def] >>
+  rpt strip_tac >>
+  qpat_x_assum `EVERY _ fn.fn_blocks` mp_tac >>
+  qpat_x_assum `MEM _ _` mp_tac >>
+  qspec_tac (`fn.fn_blocks`, `bbs`) >>
+  Induct >> simp[venomInstTheory.fn_insts_blocks_def] >>
+  rpt strip_tac >> gvs[listTheory.EVERY_MEM]
+QED
+
+(* A LOG in a static frame: the operand prefix runs, then LOGn faults. *)
+Theorem gen_inst_log_static_frame_sim_deep[local]:
+  !inst cplan vs fn r final base ps nl lo ra dfg ops ctx rest mem0 st
+    lv cfg halting term label prog fuel a vs' o2pc.
+  inst.inst_opcode = LOG /\ codegen_ready_inst inst /\
+  opaque_use_ok fn /\ MEM inst (fn_insts fn) /\ inst_wf inst /\
+  MEM r cplan.cp_regions /\
+  r.sr_spill_base <= final.ps_alloc.sa_spill_base /\
+  final.ps_alloc.sa_next_offset <= r.sr_spill_end /\
+  generated_plan_state_wf_marked base ps /\
+  LENGTH (compute_operands inst) <= 16 /\
+  LENGTH (compute_operands inst) <= LENGTH (SND
+    (emit_input_plan inst.inst_opcode (compute_operands inst) nl ps)).ps_stack /\
+  (!op. MEM op (compute_operands inst) /\ is_var_operand op ==>
+    IS_SOME (stack_get_depth op ps.ps_stack) \/
+    IS_SOME (FLOOKUP ps.ps_spilled op)) /\
+  (!l. MEM (Label l) (compute_operands inst) ==> IS_SOME (FLOOKUP lo l)) /\
+  (!op at. MEM op (compute_operands inst) /\
+    (MEM at ps.ps_stack \/ at IN FDOM ps.ps_spilled \/ MEM at (compute_operands inst)) /\
+    operand_equiv dfg op at ==>
+    operand_val (frame_view fn ra vs) lo op = operand_val (frame_view fn ra vs) lo at) /\
+  EVERY (\op. op <> dead_stack_marker /\
+    !at. operand_equiv dfg op at ==> at <> dead_stack_marker) (compute_operands inst) /\
+  EVERY (\s. case s of SOSpill off => off < dimword(:256)
+    | SORestore off => off < dimword(:256) | _ => T) ops /\
+  fn_frame_inv ctx cplan lo fn ra rest mem0 ps vs st /\
+  generate_inst_plan lv dfg cfg fn inst nl halting term label ps = SOME (ops, final) /\
+  asm_block_at prog st.as_pc (execute_plan cplan.cp_initial_fmp ops) /\
+  step_inst fuel ctx inst vs = Abort a vs' ==>
+  ?n out. a = ExHalt_abort /\ asm_steps lo o2pc prog n st = AsmFault out /\
+    venom_asm_terminal_rel vs' out
+Proof
+  rpt gen_tac >> strip_tac >>
+  drule_all step_inst_log_abort >> strip_tac >>
+  qpat_x_assum `a = _` SUBST_ALL_TAC >>
+  qpat_x_assum `vs' = _` SUBST_ALL_TAC >>
+  `?tc lops. inst.inst_operands = Lit tc :: lops /\ LENGTH lops = w2n tc + 2` by
+    gvs[inst_wf_def] >>
+  `w2n tc <= 4` by gvs[codegen_ready_inst_def] >>
+  `compute_operands inst = lops` by simp[compute_operands_def] >>
+  drule_all log_inst_plan_decompose >> strip_tac >>
+  qpat_x_assum `compute_operands inst = lops` (fn th => fs[th]) >>
+  `r.sr_spill_base <= ps4.ps_alloc.sa_spill_base /\
+   ps4.ps_alloc.sa_next_offset <= r.sr_spill_end` by
+    gvs[release_dead_spills_spill_base, release_dead_spills_next_offset] >>
+  suspend "decomposed"
+QED
+
+Resume gen_inst_log_static_frame_sim_deep[decomposed]:
+  rename1 `generated_plan_state_wf_marked spillbase ps` >>
+  `plan_state_residual_wf_marked spillbase lops (LENGTH lops) ps4 /\
+   ps4.ps_stack = stack_pop (LENGTH lops) ps4.ps_stack ++ lops /\
+   ?mid. asm_steps lo o2pc prog
+     (LENGTH (execute_plan cplan.cp_initial_fmp (input_ops ++ reorder_ops))) st =
+       AsmOK (mid with as_stack := mid.as_stack ++ rest) /\
+     venom_asm_rel lo ps4
+       (frame_view fn ra vs with vs_memory := st.as_memory) mid /\
+     context_memory_rel cplan vs.vs_memory mid.as_memory /\
+     mid.as_pc = st.as_pc +
+       LENGTH (execute_plan cplan.cp_initial_fmp (input_ops ++ reorder_ops)) /\
+     venom_asm_terminal_rel vs (mid with as_stack := mid.as_stack ++ rest)` by
+    (irule frame_entry_selected_prefix_sim_marked >>
+     simp[] >> rpt conj_tac
+     >- (qexistsl_tac [`ps4`, `r`] >> simp[])
+     >~ [`asm_block_at`]
+     >- (qexists `[SOEmit ("LOG" ++ num_to_dec_string (w2n tc))]` >>
+         gvs[EVERY_APPEND]) >>
+     goal_assum (drule_at (Pat `reorder_plan _ _ _ = _`)) >>
+     goal_assum (drule_at (Pat `emit_input_plan _ _ _ _ = _`)) >>
+     goal_assum (drule_at (Pat `fn_frame_inv _ _ _ _ _ _ _ _ _ _`)) >>
+     simp[sortingTheory.PERM_REFL] >> gvs[] >> metis_tac[]) >>
+  suspend "prepared"
+QED
+
+Resume gen_inst_log_static_frame_sim_deep[prepared]:
+  `LENGTH mid.as_stack = LENGTH ps4.ps_stack` by
+    (fs[venom_asm_rel_def] >> imp_res_tac plan_stack_rel_length >> simp[]) >>
+  `LENGTH lops <= LENGTH ps4.ps_stack` by
+    (qpat_x_assum `ps4.ps_stack = _` (fn th => mp_tac (Q.AP_TERM `LENGTH` th)) >>
+     rewrite_tac[LENGTH_APPEND] >> decide_tac) >>
+  (* ps4.ps_stack = stack_pop _ ps4.ps_stack ++ _ would make fs loop *)
+  qpat_x_assum `ps4.ps_stack = _` kall_tac >>
+  `w2n tc + 2 <= LENGTH (mid.as_stack ++ rest)` by
+    (simp[LENGTH_APPEND] >>
+     qpat_x_assum `LENGTH lops <= _` mp_tac >>
+     qpat_x_assum `LENGTH mid.as_stack = _` mp_tac >>
+     qpat_x_assum `LENGTH lops = _` mp_tac >>
+     simp_tac arith_ss []) >>
+  `mid.as_call_ctx = vs.vs_call_ctx` by fs[venom_asm_rel_def, frame_view_def] >>
+  `asm_block_at prog mid.as_pc [AsmOp ("LOG" ++ num_to_dec_string (w2n tc))]` by
+    (qpat_x_assum `mid.as_pc = _` (fn th => rewrite_tac[th]) >>
+     qpat_x_assum `asm_block_at prog st.as_pc _` mp_tac >>
+     gvs[execute_plan_append, execute_plan_def, exec_stack_op_def,
+         asm_block_at_append]) >>
+  qspecl_then [`lo`, `o2pc`, `prog`, `mid with as_stack := mid.as_stack ++ rest`,
+    `w2n tc`, `vs`] mp_tac static_log_fault_step >>
+  qpat_x_assum `mid.as_pc = _` kall_tac >>
+  impl_tac >- fs[] >>
+  strip_tac >>
+  qexistsl_tac [`LENGTH (execute_plan cplan.cp_initial_fmp (input_ops ++ reorder_ops)) + 1`,
+    `st'`] >>
+  simp[] >> irule asm_steps_compose_fault >> goal_assum (drule_at Any) >> simp[]
+QED
+
+Finalise gen_inst_log_static_frame_sim_deep
+
 (* gen_inst_abort_frame_sim with any-depth ownership, generated_plan_state_wf_marked and an
    address bound on spill and restore offsets. *)
 Theorem gen_inst_abort_frame_sim_deep:
@@ -723,7 +960,6 @@ Theorem gen_inst_abort_frame_sim_deep:
     lo = SND (compute_label_offsets prog) /\
     o2pc = build_offset_to_pc prog /\
     inst.inst_opcode <> INVOKE /\
-    ~vs.vs_call_ctx.cc_static /\
     source_memory_reads_disjoint cp inst vs /\
     opaque_use_ok fn /\
     ~is_param_opcode inst.inst_opcode /\
@@ -800,7 +1036,13 @@ Proof
   >- (drule_all gen_inst_invalid_frame_sim_deep >>
       disch_then (qspec_then `o2pc` strip_assume_tac) >>
       qexistsl_tac [`n`, `out`] >> simp[]) >>
-  `MEM inst.inst_opcode [CREATE; CREATE2; RETURNDATACOPY]` by
+  Cases_on `inst.inst_opcode = LOG`
+  >- (`codegen_ready_inst inst` by metis_tac[codegen_ready_fn_inst] >>
+      drule_all gen_inst_log_static_frame_sim_deep >>
+      disch_then (qspec_then `o2pc` strip_assume_tac) >>
+      qexistsl_tac [`n`, `out`] >> simp[]) >>
+  `MEM inst.inst_opcode
+     [CREATE; CREATE2; RETURNDATACOPY; SSTORE; TSTORE; SELFDESTRUCT; CALL]` by
     (drule step_inst_abort_opcodes >> simp[] >> metis_tac[]) >>
   drule_all gen_inst_ext_fault_frame_sim_deep >>
   disch_then (qspec_then `o2pc` strip_assume_tac) >>
