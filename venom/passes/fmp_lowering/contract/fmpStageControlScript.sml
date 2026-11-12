@@ -28,7 +28,7 @@ QED
 (* Why: the step proofs read the target's code at the control map's index
    off the lowering's own walk; a point's restores come first, then its
    expansion. *)
-Theorem fmp_control_tidx_code_unique:
+Theorem fmp_stage_tidx_code:
   fmp_stage_lowered infos ctx runner fn fn' /\ MEM bb fn.fn_blocks /\
   fn.fn_fmp_signature = NONE /\
   (?info. FLOOKUP infos fn.fn_name = SOME info /\
@@ -105,33 +105,6 @@ Proof
   Cases_on `oldpc` >> simp[callLayoutDefsTheory.OPTION_TO_LIST_def]
 QED
 
-Theorem fmp_stage_tidx_code:
-  fmp_stage_lowered infos ctx runner fn fn' /\ MEM bb fn.fn_blocks /\
-  fn.fn_fmp_signature = NONE /\
-  (?info. FLOOKUP infos fn.fn_name = SOME info /\
-          (info.fi_needs_fmp \/ info.fi_publishes_fmp)) /\
-  idx <= LENGTH bb.bb_instructions /\
-  (!rl rp. fmp_stage_root infos ctx fn = SOME (rl,rp) /\
-           bb.bb_label = rl ==> rp <= idx) ==>
-  ?bb' restores sp code leftover sp'.
-    lookup_block bb.bb_label fn'.fn_blocks = SOME bb' /\
-    (!j b. MEM ((bb.bb_label,j),b) restores <=>
-           idx <= j /\
-           FLOOKUP (fmp_stage_plan infos ctx fn) (bb.bb_label,j) = SOME b) /\
-    fmp_lower_indexed infos ctx runner bb.bb_label idx sp restores
-      (DROP idx bb.bb_instructions) = SOME (code,leftover,sp') /\
-    DROP (fmp_stage_tidx (fmp_stage_plan infos ctx fn)
-            (fmp_stage_root infos ctx fn) bb.bb_label
-            bb.bb_instructions idx)
-         bb'.bb_instructions = code /\
-    MEM runner sp.irs_used_vars /\
-    list_subset (fn_ir_vars fn) sp.irs_used_vars
-Proof
-  disch_then (fn th => map_every assume_tac (CONJUNCTS th)) >>
-  drule_all fmp_control_tidx_code_unique >> strip_tac >>
-  qexistsl [`bb'`, `restores`, `sp`, `code`, `leftover`, `sp'`] >> simp[]
-QED
-
 (* Why: the other branches of the lowering keep the blocks (a sealed
    function, or one that neither takes nor publishes the FMP, whose plan
    must be empty); there the control map is the identity. *)
@@ -182,7 +155,7 @@ Proof
   gvs[fmp_reclaim_step_def, fmp_pop_at_def, fmp_pop_target_def]
 QED
 
-Theorem fmp_control_width_one:
+Theorem fmp_control_width_one[local]:
   (!j. j < n ==> ~((lbl,j) IN FDOM plan) /\
     (EL j xs).inst_opcode <> DALLOCA) ==>
   SUM (GENLIST (\j. (if (lbl,j) IN FDOM plan then 1 else 0) +
@@ -197,7 +170,7 @@ Proof
   gvs[]
 QED
 
-Theorem fmp_control_unlowered_no_raw:
+Theorem fmp_control_unlowered_no_raw[local]:
   fmp_stage_lowered infos ctx runner fn fn' /\
   ~(fn.fn_fmp_signature = NONE /\
     ?info. FLOOKUP infos fn.fn_name = SOME info /\
@@ -209,7 +182,7 @@ Proof
   irule fmp_no_need_input_no_raw >> metis_tac[]
 QED
 
-Theorem fmp_control_kept_prefix:
+Theorem fmp_control_kept_prefix[local]:
   fmp_stage_lowered infos ctx runner fn fn' /\
   fn.fn_fmp_signature = NONE /\
   FLOOKUP infos fn.fn_name = SOME info /\
@@ -277,7 +250,7 @@ Theorem fmp_control_kept_suffix[local]:
 Proof
   disch_then (fn th => map_every assume_tac (CONJUNCTS th)) >>
   `idx <= LENGTH bb.bb_instructions` by decide_tac >>
-  drule_all fmp_control_tidx_code_unique >> strip_tac >>
+  drule_all fmp_stage_tidx_code >> strip_tac >>
   `DROP idx bb.bb_instructions =
     EL idx bb.bb_instructions :: DROP (SUC idx) bb.bb_instructions` by
     simp[DROP_CONS_EL] >>
