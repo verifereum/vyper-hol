@@ -125,7 +125,7 @@ Proof
   Cases_on `st` >> simp[push_scope_def, return_def, evaluation_state_fn_updates]
 QED
 
-Theorem storage_observations_ok_root[local]:
+Theorem storage_observations_ok_root:
   storage_observations_ok cx H observations /\
   MEM (StorageRoot b offset tv) observations ==>
   MEM (b,n2w offset,tv) (FST H)
@@ -378,7 +378,7 @@ Proof
   gvs[] >> simp[word_add_def, w2n_n2w, arithmeticTheory.MOD_LESS]
 QED
 
-Theorem write_place_preserves_storage_well_formed_on[local]:
+Theorem write_place_preserves_storage_well_formed_on:
   regions_consistent (FST H) /\ storage_well_formed_on cx st (FST H) /\
   storage_observations_ok cx H observations /\
   (!b slot leaf. p = StoragePlace b slot leaf ==>
