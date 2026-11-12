@@ -1141,6 +1141,73 @@ val () = check_rejects
          [Append (TopLevelNameTarget (NONE,"arr")) (Name ^s20 "t")]])]
     : (num option # toplevel list) list``
 
+(* A narrower String, Bytes or DynArray is accepted as an internal-call
+   argument, a tuple- or DynArray-literal element passed to a wider parameter,
+   and a struct-literal field, as pinned Vyper accepts it (compare_type);
+   a wider or mismatched element is rejected, as Vyper rejects it. *)
+val s5 = ``BaseT (StringT 5)``
+(* An internal function g with parameter type pty, called from an external
+   function f taking (x : xty) with argument arg. *)
+fun intcall_modules pty xty arg =
+  ``[(NONE,
+      [FunctionDecl Internal Pure F F "g" [("p",^pty)] [] ^u256
+         [Return (SOME (Literal ^u256 (IntL 1)))];
+       FunctionDecl External Pure F F "f" [("x",^xty)] [] ^u256
+         [Return (SOME (Call ^u256 (IntCall (NONE,"g")) [^arg] NONE))]])]
+    : (num option # toplevel list) list``
+(* A tuple literal typed tty (Vyper types it by its context) holding
+   x : sty. *)
+fun tuple_lit tty sty =
+  ``Builtin (TupleT [^tty; ^u256]) (MakeArray NONE (Fixed 2))
+      [Name ^sty "x"; Literal ^u256 (IntL 1)]``
+fun tuple_arg sty = tuple_lit sty sty
+fun dyn_arg elem xty =
+  ``Builtin (ArrayT ^elem (Dynamic 2)) (MakeArray (SOME ^elem) (Dynamic 2))
+      [Name ^xty "x"]``
+(* A struct P with fields s : fty and n : uint256, built from x : xty. *)
+fun struct_modules fty xty =
+  ``[(NONE,
+      [StructDecl "P" [("s",^fty); ("n",^u256)];
+       FunctionDecl External Pure F F "f" [("x",^xty)] [] ^u256
+         [AnnAssign "p" (StructT (NONE,"P"))
+            (StructLit (StructT (NONE,"P")) (NONE,"P")
+               [("s",Name ^xty "x"); ("n",Literal ^u256 (IntL 1))]);
+          Return (SOME (Literal ^u256 (IntL 1)))]])]
+    : (num option # toplevel list) list``
+val b5 = ``BaseT (BytesT (Dynamic 5))``
+val b10 = ``BaseT (BytesT (Dynamic 10))``
+fun dyn_u256 n = ``ArrayT ^u256 (Dynamic ^(numSyntax.term_of_int n))``
+val s40 = ``BaseT (StringT 40)``
+val () = List.app (fn (label, mods) =>
+    check_accepts label false empty_layouts mods)
+  [("narrower internal-call argument", intcall_modules s10 s5 ``Name ^s5 "x"``),
+   ("narrower tuple-literal argument",
+    intcall_modules ``TupleT [^s10; ^u256]`` s5 (tuple_arg s5)),
+   ("narrower tuple-literal argument, String[40]",
+    intcall_modules ``TupleT [^s40; ^u256]`` s5 (tuple_arg s5)),
+   ("context-typed tuple literal",
+    intcall_modules ``TupleT [^s10; ^u256]`` s5 (tuple_lit s10 s5)),
+   ("narrower DynArray-literal element",
+    intcall_modules ``ArrayT ^s10 (Dynamic 2)`` s5 (dyn_arg s10 s5)),
+   ("narrower DynArray-literal Bytes element",
+    intcall_modules ``ArrayT ^b10 (Dynamic 2)`` b5 (dyn_arg b10 b5)),
+   ("narrower DynArray-literal DynArray element",
+    intcall_modules ``ArrayT ^(dyn_u256 4) (Dynamic 2)`` (dyn_u256 2)
+      (dyn_arg (dyn_u256 4) (dyn_u256 2))),
+   ("narrower struct-literal field", struct_modules s10 s5),
+   ("narrower struct-literal field, String[40]", struct_modules s40 s5)]
+val () = List.app (check_rejects empty_layouts)
+  [intcall_modules s5 s10 ``Name ^s10 "x"``,
+   intcall_modules ``TupleT [^s5; ^u256]`` s10 (tuple_arg s10),
+   intcall_modules ``TupleT [^s5; ^u256]`` s10 (tuple_lit s5 s10),
+   intcall_modules ``ArrayT ^s5 (Dynamic 2)`` s10 (dyn_arg s5 s10),
+   intcall_modules ``ArrayT ^u256 (Dynamic 2)`` ``BaseT AddressT``
+     (dyn_arg u256 ``BaseT AddressT``),
+   intcall_modules ``ArrayT ^(dyn_u256 2) (Dynamic 2)`` (dyn_u256 4)
+     (dyn_arg (dyn_u256 2) (dyn_u256 4)),
+   struct_modules s5 s10,
+   struct_modules s10 b5]
+
 (* A main-module constant initialized from an imported module's constant: the
    imports' constants are folded first (constants_order). *)
 val import_constant_modules =

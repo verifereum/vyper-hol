@@ -34,6 +34,7 @@ val () = holbuild_extra_deps
    "../internal-labels/oracle",
    "../memory-stores/oracle",
    "../name-collisions/oracle",
+   "../narrow-elems/oracle",
    "../phi-pointers/oracle",
    "../raw-calls/oracle",
    "../slice-buffers/oracle"];
@@ -228,6 +229,13 @@ val suite_fixtures = [
     "t07_tuple_assign_string_elems", "t08_tuple_assign_ret_type_mismatch",
     "t11_tuple_onew_decode_mem", "tup_nested_ret",
     "w01_return_intcall_dynarray_bytes_widen"]),
+  ("narrow-elems", [
+    "n01_intcall_tuple_narrow_str", "n02_intcall_dynarr_lit_narrow_str",
+    "n03_struct_lit_narrow_str", "n04_intcall_tuple_wider_str",
+    "n05_intcall_dynarr_lit_wider_str", "n06_struct_lit_wider_str",
+    "n07_intcall_str_arg_wider", "n08_annassign_tuple_lit_wider_str",
+    "n09_intcall_two_str_args_wider", "n10_intcall_dynarr_lit_wider_str_len",
+    "n11_intcall_dynarr_lit_same_str"]),
   ("name-collisions", [
     "ctl_local_internal", "nm_arg_return_pc", "nm_arg_storage",
     "nm_ext_arg_return_pc", "nm_local_return_buf", "nm_local_storage_types",

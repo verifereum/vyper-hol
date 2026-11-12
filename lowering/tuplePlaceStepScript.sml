@@ -706,7 +706,8 @@ Proof
       simp[] >> metis_tac[]) >>
   gvs[] >>
   Cases_on `loc = LocMemory`
-  >- (gvs[] >> irule tuple_place_equal_memory_head_step >> metis_tac[]) >>
+  >- (gvs[] >> irule tuple_place_equal_memory_head_step >>
+      metis_tac[vyperTypeSystemTheory.arg_type_fits_refl]) >>
   `loc = LocStorage \/ loc = LocTransient` by
     (Cases_on `p` >> fs[loweringPostsTheory.place_ptr_rel_def] >>
      Cases_on `b'` >> fs[loweringPostsTheory.slot_loc_def]) >>
