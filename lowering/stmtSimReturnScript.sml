@@ -57,16 +57,16 @@ End
    precisely its optional unlock, not an arbitrary state with selected
    effects equal.  No guard cases are excluded. *)
 Definition intret_q_def:
-  intret_q func cenv cx ret_tv v (es : evaluation_state) r <=>
+  intret_q H func cenv cx ret_tv v (es : evaluation_state) r <=>
     ?ir s. r = IntRet ir (return_unlock_state cenv s) /\
            LENGTH ir.iret_values = cenv.ce_returns_count /\
-           result_rel func ret_tv cenv cx (INR (ReturnException v), es)
+           result_rel H func ret_tv cenv cx (INR (ReturnException v), es)
              (IntRet ir s)
 End
 
 Theorem intret_q_gas_obs:
-  intret_q func cenv cx ret_tv v (es with gas_obs := readings) r =
-  intret_q func cenv cx ret_tv v es r
+  intret_q H func cenv cx ret_tv v (es with gas_obs := readings) r =
+  intret_q H func cenv cx ret_tv v es r
 Proof
   simp[intret_q_def, result_rel_gas_obs]
 QED
@@ -271,18 +271,18 @@ QED
 
 (* No scope holds a local once the frame is left. *)
 Theorem state_rel_scopes_nil:
-  !func cenv cx es s.
-    state_rel func cenv cx es s ==>
-    state_rel func cenv cx (es with scopes := []) s
+  !H func cenv cx es s.
+    state_rel H func cenv cx es s ==>
+    state_rel H func cenv cx (es with scopes := []) s
 Proof
   rw[state_rel_def, storage_rel_def, transient_rel_def, immutables_rel_def,
      logs_rel_def, local_ptrs_rel_def, local_region_def, lookup_scopes_def]
 QED
 
 Theorem state_rel_return_index[local,simp]:
-  !func cenv cx es s n.
-    state_rel func cenv cx es (s with vs_inst_idx := n) <=>
-    state_rel func cenv cx es s
+  !H func cenv cx es s n.
+    state_rel H func cenv cx es (s with vs_inst_idx := n) <=>
+    state_rel H func cenv cx es s
 Proof
   simp[state_rel_def, local_ptrs_rel_inst_idx, storage_rel_def,
        transient_rel_def, immutables_rel_def, logs_rel_def,
@@ -294,20 +294,26 @@ QED
    remain covered by the main exact VM contract; the source release primitive
    only writes transient storage, so no persistent/source parity is claimed. *)
 Theorem intret_q_source_epilogue:
-  !func cenv cx ret_tv v es r nr key iv.
+  !H func cenv cx ret_tv v es r nr key iv.
     cenv.ce_nonreentrant = (nr,key,T,iv) /\
-    intret_q func cenv cx ret_tv v es r ==>
+    intret_q H func cenv cx ret_tv v es r ==>
     ?es'.
       (if nr /\ ~iv then release_nonreentrant_lock cx.txn.target key
        else vyperState$return ()) es = (INL (),es') /\
-      result_rel func ret_tv cenv cx (INR (ReturnException v),es') r
+      result_rel H func ret_tv cenv cx (INR (ReturnException v),es') r
 Proof
   rpt gen_tac >> strip_tac >>
-  qpat_x_assum `intret_q _ _ _ _ _ _ _`
+  qpat_x_assum `intret_q _ _ _ _ _ _ _ _`
     (strip_assume_tac o REWRITE_RULE [intret_q_def]) >>
   Cases_on `nr` >> Cases_on `iv` >>
   gvs[return_unlock_state_def, result_rel_def, vyperStateTheory.return_def,
       release_nonreentrant_lock_execution] >>
+  qmatch_goalsub_abbrev_tac `state_rel H func cenv cx vs1 _` >>
+  `vs1 = (es with tStorage := (cx.txn.target =+ update_storage (n2w key) 0w
+            (es.tStorage cx.txn.target)) es.tStorage)
+         with storage_trace := vs1.storage_trace` by
+    simp[Abbr `vs1`, evaluation_state_component_equality] >>
+  pop_assum SUBST1_TAC >> PURE_REWRITE_TAC[state_rel_storage_trace] >>
   irule state_rel_transient_update >> simp[] >>
   metis_tac[storage_dead_update_zero]
 QED
@@ -316,14 +322,14 @@ QED
    a held transient guard, rather than merely difficult for metis. *)
 
 Theorem return_unlock_changes_source_relation:
-  !func cenv cx es s key.
-    nonreentrant_slot_separated cx /\ cx.nonreentrant_slot = SOME key /\
+  !H func cenv cx es s key.
+    MEM key (SND H) /\ key < dimword (:256) /\
     cenv.ce_nonreentrant = (T,key,T,F) /\
-    state_rel func cenv cx es s /\ tload (n2w key) s <> 0w ==>
-    ~state_rel func cenv cx es (return_unlock_state cenv s)
+    state_rel H func cenv cx es s /\ tload (n2w key) s <> 0w ==>
+    ~state_rel H func cenv cx es (return_unlock_state cenv s)
 Proof
   rpt gen_tac >> strip_tac >>
-  `storage_read_live cx T (es.tStorage cx.txn.target) (n2w key)
+  `storage_read_live H T (es.tStorage cx.txn.target) (n2w key)
      (BaseTV (UintT 256))` by
     (irule nonreentrant_slot_read_live >> simp[]) >>
   drule_all state_rel_transient_lookup >> strip_tac >>
