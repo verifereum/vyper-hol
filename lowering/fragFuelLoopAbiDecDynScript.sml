@@ -8,6 +8,7 @@
 Theory fragFuelLoopAbiDecDyn
 Ancestors
   fragFuel fragFuelContextBase abiEncoder compileEnv emitHelper context
+  exprSimAbiEncodeObliviousCode
   venomInst venomMemProps venomInstProps venomExecSemantics venomEffects venomState
 Libs
   fragFuelLib
@@ -527,6 +528,117 @@ Proof
   fuel_auto [fuel_ok_emit_op, fuel_ok_emit_void, fuel_ok_emit_inst_jmp,
     fuel_ok_emit_inst_jnz] >> simp[is_terminator_def]
 QED
+
+Theorem abi_dyn_code_if[local]:
+  !P b m n. code_action P m /\ code_action P n ==>
+    code_action P (if b then m else n)
+Proof
+  Cases_on `b` >> simp[]
+QED
+
+Theorem abi_dyn_code_copy_case[local]:
+  !P opc m n p.
+    code_action P m /\ code_action P n /\ code_action P p ==>
+    code_action P (case opc of CALLDATALOAD => m | DLOAD => n | _ => p)
+Proof
+  Cases_on `opc` >> simp[]
+QED
+
+Theorem abi_dyn_decode_code[local]:
+  (!dst src lop base hi info.
+    lop <> INVOKE /\ lop <> PHI ==>
+    code_action (\opc. opc <> INVOKE /\ opc <> PHI)
+      (compile_abi_decode_to_buf dst src lop base hi info)) /\
+  (!dst src lop base hi elems ao vo.
+    lop <> INVOKE /\ lop <> PHI ==>
+    code_action (\opc. opc <> INVOKE /\ opc <> PHI)
+      (compile_abi_decode_complex_elems dst src lop base hi elems ao vo)) /\
+  (!dst src lop base hi info asz msz ip cnt.
+    lop <> INVOKE /\ lop <> PHI ==>
+    code_action (\opc. opc <> INVOKE /\ opc <> PHI)
+      (compile_abi_decode_dyn_loop dst src lop base hi info asz msz ip cnt))
+Proof
+  ho_match_mp_tac compile_abi_decode_to_buf_ind >>
+  rpt strip_tac >>
+  simp_tac std_ss [Once compile_abi_decode_to_buf_def,
+    compile_abi_dec_addr_def, compile_abi_decode_static_def,
+    compile_abi_clamp_basetype_def, compile_abi_int_clamp_def,
+    compile_abi_bytes_clamp_def, compile_abi_decode_range_check_def,
+    compile_getelemptr_abi_def, compile_abi_decode_dyn_elem_ptr_def] >>
+  ASM_SIMP_TAC std_ss [code_action_bind, code_action_ignore_bind, code_action_return,
+    code_action_emit_op, code_action_emit_void, code_action_emit_inst,
+    code_action_fresh_label, code_action_new_block, code_action_alloc_buffer]
+  >- suspend "word"
+  >- suspend "bytes"
+  >- suspend "array"
+  >- suspend "complex"
+  >- suspend "cons"
+  >> suspend "loop"
+QED
+
+Resume abi_dyn_decode_code[word]:
+  Cases_on `base' = Lit 0w` >> simp[] >>
+  irule code_action_bind >> simp[code_action_emit_op, code_action_return] >>
+  gen_tac >> irule code_action_bind >> simp[code_action_emit_op] >>
+  gen_tac >> Cases_on `clamp_info` >>
+  simp[compile_abi_clamp_basetype_def, compile_abi_int_clamp_def,
+    compile_abi_bytes_clamp_def] >>
+  rpt IF_CASES_TAC >>
+  simp[code_action_bind, code_action_ignore_bind, code_action_emit_op,
+    code_action_emit_void, code_action_return]
+QED
+
+Resume abi_dyn_decode_code[bytes]:
+  rpt (FIRST [
+    CHANGED_TAC (ASM_SIMP_TAC std_ss
+      [code_action_return, code_action_emit_op, code_action_emit_void]),
+    irule code_action_bind, irule code_action_ignore_bind,
+    irule abi_dyn_code_if, irule abi_dyn_code_copy_case,
+    irule code_action_emit_op, irule code_action_emit_void,
+    gen_tac, conj_tac]) >> simp[] >>
+  Cases_on `lop` >> simp[code_action_emit_void]
+QED
+Resume abi_dyn_decode_code[array]:
+  Cases_on `~elem_is_dyn /\ ~dec_info_needs_clamp info` >>
+  rpt (FIRST [
+    CHANGED_TAC (ASM_SIMP_TAC std_ss
+      [LET_THM, code_action_return, code_action_alloc_buffer]),
+    irule code_action_bind, irule code_action_ignore_bind,
+    irule abi_dyn_code_if,
+    irule code_action_emit_op, irule code_action_emit_void,
+    gen_tac, conj_tac]) >> simp[]
+  >- (Cases_on `lop` >> simp[code_action_emit_void]) >>
+  gvs[] >> irule code_action_alloc_buffer >> simp[]
+QED
+Resume abi_dyn_decode_code[complex]:
+  Cases_on `hi = Lit 0w` >> gvs[LET_THM] >>
+  rpt (FIRST [
+    CHANGED_TAC (ASM_SIMP_TAC std_ss [code_action_return]),
+    irule code_action_bind, irule code_action_ignore_bind,
+    irule code_action_emit_op, irule code_action_emit_void,
+    gen_tac, conj_tac]) >> gvs[]
+QED
+Resume abi_dyn_decode_code[cons]:
+  gvs[LET_THM] >>
+  rpt (FIRST [
+    CHANGED_TAC (ASM_SIMP_TAC std_ss [code_action_return]),
+    irule code_action_bind, irule code_action_ignore_bind,
+    irule abi_dyn_code_if,
+    irule code_action_emit_op, irule code_action_emit_void,
+    gen_tac, conj_tac]) >> simp[]
+QED
+Resume abi_dyn_decode_code[loop]:
+  gvs[LET_THM] >>
+  rpt (FIRST [
+    CHANGED_TAC (ASM_SIMP_TAC std_ss [code_action_return,
+      code_action_fresh_label, code_action_new_block]),
+    irule code_action_bind, irule code_action_ignore_bind,
+    irule abi_dyn_code_if,
+    irule code_action_emit_op, irule code_action_emit_void,
+    irule code_action_emit_inst,
+    gen_tac, conj_tac]) >> simp[]
+QED
+Finalise abi_dyn_decode_code
 
 (* Quantitative cutoff diagnostic interface (implementation belongs to the
    subsequent transfer component).
