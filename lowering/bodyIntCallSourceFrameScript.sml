@@ -234,7 +234,6 @@ QED
 
 Finalise builtin_snapshot_frame
 
-(* HELD (train 17): 0.5.0b1 arg snapshot re-proof *)
 Theorem outcomes_frame_builtin[local]:
   (!cx s r t. eval_exprs cx es s = (r,t) ==>
     t = s with <|outcomes := t.outcomes; gas_obs := t.gas_obs|>) /\
