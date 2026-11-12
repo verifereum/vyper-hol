@@ -251,10 +251,11 @@ Proof
                   (INR HaltException,
                    selfdestruct_final cx a es_end with gas_obs := tail)` by
             (gen_tac >>
-             qpat_assum `~selfdestruct_overflows _ _ _` mp_tac >>
              qspecl_then [`cx`, `v`, `a`, `es_end with gas_obs := tail`]
                mp_tac selfdestruct_tail_halt >>
-             simp[]) >>
+             impl_tac
+             >- (simp_tac (srw_ss()) [] >> rpt conj_tac >> first_assum ACCEPT_TAC) >>
+             simp_tac (srw_ss()) []) >>
           `gas_marked_exec F (ctx,func)
              (vyperState$bind
                 (vyperState$bind (eval_expr cx e) (read_result cx))

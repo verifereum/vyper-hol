@@ -2441,7 +2441,7 @@ Proof
   qpat_assum `gas_marked_exec _ _ _ _ _ _ _ _` (fn th => rewrite_tac[th]) >>
   BETA_TAC >>
   qpat_x_assum `es' with gas_obs := [] = es'` SUBST1_TAC >>
-  FIRST [disj2_tac >> simp[] >> strip_tac >> gvs[] >>
+  FIRST [disj2_tac >> simp[halt_exit_def] >> strip_tac >> gvs[] >>
          qpat_x_assum `ec_source_tail _ _ _ _ _ _ = _` mp_tac >>
          simp[ec_source_tail_not_halt] >> NO_TAC,
          disj1_tac >> simp[] >>

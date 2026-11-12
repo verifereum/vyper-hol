@@ -2048,7 +2048,7 @@ Proof
        (mp_tac o REWRITE_RULE [gas_admissible_def]) >>
      disch_then (qspec_then `gas_explicit marks s0.vs_gas_readings ++ gs` mp_tac) >>
      simp[Once bind_def] >> simp[Once bind_def] >>
-     gvs[target_res_ok_def, expr_res_ok_def]) >>
+     gvs[target_res_ok_def, expr_res_ok_def] >> rpt strip_tac >> simp[]) >>
   `!exc r. expr_exit (INR exc : value + exception) r =
       expr_exit (INR exc : eval_result + exception) r` by
     (Cases >> Cases >> simp[expr_exit_def] >>
