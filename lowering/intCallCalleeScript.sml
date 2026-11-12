@@ -290,7 +290,7 @@ End
 
 (* ===== The prologue's code ===== *)
 
-Theorem compile_internal_param_decls_shape[local]:
+Theorem compile_internal_param_decls_shape:
   !ps idx st r st'.
     compile_internal_param_decls ps idx st = (r, st') ==>
     SND r = idx + LENGTH ps /\
@@ -378,7 +378,7 @@ Proof
   simp[lookup_var_def, update_var_def, FLOOKUP_UPDATE]
 QED
 
-Theorem materialize_internal_params_shape[local]:
+Theorem materialize_internal_params_shape:
   !caps cenv st cenv' st'.
     materialize_internal_params cenv caps st = (cenv', st') ==>
     st'.cs_blocks = st.cs_blocks /\ st'.cs_current_bb = st.cs_current_bb /\
@@ -854,7 +854,7 @@ Proof
   qexists_tac `sz` >> simp[]
 QED
 
-Theorem mat_tail_stack_size[local]:
+Theorem mat_tail_stack_size:
   !caps cenv name loc.
     ~MEM name (MAP FST caps) ==>
     internal_stack_size (cenv with ce_vars updated_by (\m. m |+ (name, loc)))
@@ -1001,7 +1001,7 @@ Proof
   simp[update_var_def] >> qexistsl_tac [`f0`, `sz'`] >> simp[]
 QED
 
-Theorem materialize_stack_split[local]:
+Theorem materialize_stack_split:
   !cenv name off sz p caps st cenv' st'.
     FLOOKUP cenv.ce_vars name = SOME (MemLoc off sz) /\
     materialize_internal_params cenv ((name,T,Var p)::caps) st = (cenv',st') ==>
@@ -1164,7 +1164,7 @@ Resume materialize_run_compact[stack]:
   simp[internal_stack_size_def] >> irule mat_frame_trans >>
   qexistsl_tac [`mid`, `t`] >> simp[not_fresh_at_def]
 QED
-Finalise materialize_run_compact[local]
+Finalise materialize_run_compact
 
 Theorem internal_args_local_memloc[local]:
   !cenv params env idx args frontier mem name entry.
@@ -1416,7 +1416,7 @@ Proof
 QED
 
 (* ===== The callee's entry ===== *)
-Theorem internal_capture_materialization_entry[local]:
+Theorem internal_capture_materialization_entry:
   !has_rb st0 rb stb params caps next stp rpc stc cenv cenv1
    env args caller func s0.
     (if has_rb then
@@ -1850,7 +1850,7 @@ Proof
   simp[]
 QED
 
-Theorem compile_internal_prologue_shape[local]:
+Theorem compile_internal_prologue_shape:
   !cenv params has_rb ret_type st cenv' rpc st'.
     compile_internal_prologue cenv params has_rb ret_type st = ((cenv',rpc),st') ==>
     st'.cs_blocks = st.cs_blocks /\ st'.cs_current_bb = st.cs_current_bb /\
@@ -1937,7 +1937,7 @@ Proof
       comp_ignore_bind_def, fresh_id_def, fresh_var_def, emit_def]
 QED
 
-Theorem internal_prologue_stages[local]:
+Theorem internal_prologue_stages:
   !cenv params has_rb ret_type st0 cenv2 rpc st1.
     compile_internal_prologue cenv params has_rb ret_type st0 =
       ((cenv2,rpc),st1) ==>
@@ -1969,7 +1969,7 @@ Proof
   metis_tac[pairTheory.PAIR]
 QED
 
-Theorem internal_prologue_stage_shapes[local]:
+Theorem internal_prologue_stage_shapes:
   !has_rb st0 rb stb params caps next stp rpc sc ce cenv2 sm cenv ret_type st1.
     (if has_rb then
        do p <- emit_op PARAM [Lit 0w]; return (SOME p) od
@@ -2359,7 +2359,7 @@ Resume internal_prologue_run[separation]:
        _ /\ _ /\ _ /\ _ /\ _ /\ evaluate_type _ _ = _ ==> _` irule >>
     simp[] >> metis_tac[]])
 QED
-Finalise internal_prologue_run[local]
+Finalise internal_prologue_run
 
 
 (* Running the prologue of an internal function func, compiled in cenv from
