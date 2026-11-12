@@ -58,7 +58,8 @@ Resume body_struct_lit_widened_flat_mem[fields]:
   gvs[] >>
   drule_at (Pat `compile_struct_lit _ _ _ _ _ _ _ = _`)
     aggregate_struct_fields_body_sim_mem >>
-  simp[] >> disch_then drule >>
+  simp[] >> disch_then drule >> disch_then drule >> disch_then drule >>
+  disch_then (drule_at (Pat `OPT_MMAP _ _ = _`)) >>
   disch_then (drule_at (Pat `lookup_var _ _ = _`)) >>
   disch_then (drule_at (Pat `MEM _ (fn_insts _)`)) >>
   simp[] >>
@@ -167,7 +168,7 @@ Resume body_struct_lit_widened_flat_mem[buffer_post]:
        venomStateTheory.eval_operand_def] >>
   metis_tac[]
 QED
-Finalise body_struct_lit_widened_call_elem_mem
+Finalise body_struct_lit_widened_flat_mem
 
 (* HELD, the twin of bodyMemAggregateLoops' aggregate_make_tuple_nested_sim_mem:
    a field whose declared type it widens to other than as a bytestring (a
