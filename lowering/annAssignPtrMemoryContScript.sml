@@ -24,7 +24,7 @@ QED
 
 Theorem annassign_memory_normal_continuation_ptr:
  !ctx func old c cx lctx id typ tyv e es etv ltv sa0 st sa sb sf salloc
-   marks v ee s op p sz w inst loc info bytes fr d PG Ga tna G tn.
+   marks v ee s op p sz w inst loc bytes fr d PG Ga tna G tn.
  declare_local old id typ sa0 = (c,st) /\ old.ce_alloca_locals /\
  (!l. FLOOKUP old.ce_vars id = SOME l ==> ?q z. l = PtrVar q z) /\
  gas_admissible (eval_stmt cx (AnnAssign id typ e)) (stmt_res_ok lctx) es /\
@@ -50,7 +50,7 @@ Theorem annassign_memory_normal_continuation_ptr:
  fr.cs_next_id <= sa.cs_next_id /\ fr.cs_next_id <= inst.inst_id /\
  lower_value compile_expr c (expr_type e) e sa = (op,sb) /\
  compile_assign_value c (Var p) LocMemory op F loc typ
-   (lowered_value_type c e) info bytes sb = ((),sf) /\
+   (lowered_value_type c e) bytes sb = ((),sf) /\
  fn_has_code sb sf func /\ fn_inst_ids_distinct func /\ ~ctx_has_dalloca ctx /\
  FLOOKUP c.ce_vars id = SOME (PtrVar (Var p) sz) /\ not_fresh_at sa p /\
  lookup_var p salloc = SOME w /\ ptr_covers Ga tna p salloc sz /\
@@ -128,7 +128,7 @@ Resume annassign_memory_normal_continuation_ptr[copy]:
   (!x n. c.ce_return_pc = SOME (PtrVar (Var x) n) ==> not_fresh_at sb x)` by
    metis_tac[stmtFragPtrTheory.not_fresh_at_mono] >>
  `~block_is_terminated sf` by
-   (qpat_assum `compile_assign_value _ _ _ _ _ _ _ _ _ _ _ = _`
+   (qpat_assum `compile_assign_value _ _ _ _ _ _ _ _ _ _ = _`
       (mp_then Any mp_tac compile_assign_value_memory_widen_open) >>
     metis_tac[bytestring_memory_bytes_positive]) >>
  `?u Gf tnf.
@@ -152,7 +152,7 @@ Resume annassign_memory_normal_continuation_ptr[endpoint]:
  simp[] >> conj_tac
  >- (qexists `inst` >> simp[]) >>
  goal_assum (drule_at Any) >> simp[] >>
- goal_assum (drule_at (Pat `compile_assign_value _ _ _ _ _ _ _ _ _ _ _ = _`)) >>
+ goal_assum (drule_at (Pat `compile_assign_value _ _ _ _ _ _ _ _ _ _ = _`)) >>
  goal_assum (drule_at (Pat `expr_val_at _ _ _ _ _ _ _ _ _`)) >>
  simp[] >> metis_tac[]
 QED
@@ -190,7 +190,7 @@ Finalise annassign_memory_normal_continuation_ptr
 
 Theorem annassign_memory_concrete_rhs_outcome_ptr:
  !ctx func old c cx lctx RetQ id typ tyv e es etv ltv sa0 st sa sb sf salloc
-   op p sz w inst loc info bytes fr d PG Ga tna.
+   op p sz w inst loc bytes fr d PG Ga tna.
  declare_local old id typ sa0 = (c,st) /\ old.ce_alloca_locals /\
  (!l. FLOOKUP old.ce_vars id = SOME l ==> ?q z. l = PtrVar q z) /\
  gas_admissible (eval_stmt cx (AnnAssign id typ e)) (stmt_res_ok lctx) es /\
@@ -216,7 +216,7 @@ Theorem annassign_memory_concrete_rhs_outcome_ptr:
  fr.cs_next_id <= sa.cs_next_id /\ fr.cs_next_id <= inst.inst_id /\
  lower_value compile_expr c (expr_type e) e sa = (op,sb) /\
  compile_assign_value c (Var p) LocMemory op F loc typ
-   (lowered_value_type c e) info bytes sb = ((),sf) /\
+   (lowered_value_type c e) bytes sb = ((),sf) /\
  fn_has_code sb sf func /\ fn_inst_ids_distinct func /\ ~ctx_has_dalloca ctx /\
  FLOOKUP c.ce_vars id = SOME (PtrVar (Var p) sz) /\ not_fresh_at sa p /\
  lookup_var p salloc = SOME w /\ ptr_covers Ga tna p salloc sz /\

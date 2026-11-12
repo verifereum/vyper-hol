@@ -20,10 +20,10 @@ Proof
 QED
 
 Theorem annassign_memory_assignment_declaration_ptr:
- !ctx func cenv cx es sa sb p cap w aid src a sty dty info bytes
+ !ctx func cenv cx es sa sb p cap w aid src a sty dty bytes
   s0 d PG G0 tn0 t ea eb tv dtv stv v inst sc rest id fr.
  compile_assign_value cenv (Var p) LocMemory (Var src) F (SOME LocMemory)
-   dty sty info bytes sa = ((),sb) /\
+   dty sty bytes sa = ((),sb) /\
  (sty = dty \/ is_bytestring_type dty) /\
  0 < type_memory_bytes cenv sty /\ type_memory_bytes cenv sty < dimword (:256) /\
  fn_has_code sa sb func /\ fn_inst_ids_distinct func /\
