@@ -1751,7 +1751,7 @@ Proof
   rpt gen_tac >> rewrite_tac[gas_marked_exec_def] >> strip_tac >>
   first_x_assum (qspec_then `[]` assume_tac) >>
   `valid_horizon cx st0 H (ee with gas_obs := []).storage_trace` by simp[] >>
-  drule_all valid_horizon_frame_prefix >> simp[]
+  drule_all vyperStorageFootprintTheory.valid_horizon_frame >> simp[]
 QED
 
 Theorem ifexp_root_cont_frame[local]:
