@@ -2,7 +2,7 @@
 Theory deployOutcomesFreeEntry
 Ancestors
   vyperCompiler list venomInst deployOutcomesFreeArgs deployOutcomesFreeScaffold
-  ctorGeneratorShape moduleLowering deployOutcomesFreeLowering loweringShapeDefs
+  ctorUnitShape ctorGeneratorShape ctorShapeProps loweringShapeProps supportedStmtTraverse moduleLowering deployOutcomesFreeLowering loweringShapeDefs
   context emitHelper compileEnv
 Libs
   monadsyntax
@@ -88,4 +88,99 @@ Proof
        emit_op_def, emit_void_def, emit_inst_def, fresh_id_def, fresh_var_def,
        emit_def, comp_bind_def, comp_ignore_bind_def, comp_return_def,
        outcomes_free_state_insts, mk_inst_def]
+QED
+
+Theorem compile_generate_deploy_prefix_split:
+  compile_generate_deploy has rt imm args sz ifns env ss pay nr key trans =
+  comp_ignore_bind
+    (compile_generate_deploy has rt imm args sz [] env ss pay nr key trans)
+    (if has then compile_internal_fn_bodies ifns else comp_return ())
+Proof
+  Cases_on `has` >>
+  simp[compile_generate_deploy_def, compile_internal_fn_bodies_def,
+       comp_ignore_bind_def, comp_bind_assoc] >>
+  simp[FUN_EQ_THM, comp_bind_def, comp_return_def] >>
+  rpt gen_tac >> rpt pairarg_tac >> gvs[]
+QED
+
+Theorem compile_generate_deploy_entry_package:
+  compile_generate_deploy has rt imm args sz [] env ss pay nr key trans
+    (initial_compile_state "__deploy") = ((),prefix_st) /\
+  compile_generate_deploy has rt imm args sz ifns env ss pay nr key trans
+    (initial_compile_state "__deploy") = ((),st) /\
+  (has ==> cenv_static_ok env /\ env.ce_return_pc = NONE /\
+    ~supported_stmts_expr_exists expr_shape_root ss) /\
+  (~has ==> ifns = []) /\
+  EVERY internal_fn_shape_ok ifns /\
+  EVERY (\d. internal_label_ok (FST d)) (internal_fn_descriptors ifns) /\
+  ALL_DISTINCT (MAP FST (internal_fn_descriptors ifns)) ==>
+  ?fs. package_internal_blocks (internal_fn_descriptors ifns) (all_blocks st) =
+    SOME (all_blocks prefix_st,fs)
+Proof
+  rpt strip_tac >>
+  qpat_assum `compile_generate_deploy _ _ _ _ _ [] _ _ _ _ _ _ _ = _`
+    (mp_then Any mp_tac compile_generate_deploy_shape) >>
+  simp[internal_fn_descriptors_def] >> strip_tac >> gvs[] >>
+  qpat_x_assum `compile_generate_deploy _ _ _ _ _ ifns _ _ _ _ _ _ _ = _` mp_tac >>
+  once_rewrite_tac[compile_generate_deploy_prefix_split] >>
+  simp[comp_ignore_bind_def, comp_bind_def] >>
+  Cases_on `has` >> gvs[compile_internal_fn_bodies_def, comp_return_def,
+    internal_fn_descriptors_def, package_internal_blocks_def] >>
+  strip_tac >> drule_all compile_internal_fn_bodies_shape >> strip_tac >>
+  asm_rewrite_tac [] >> irule_at Any package_internal_blocks_segments >> simp[] >>
+  REWRITE_TAC[EVERY_MEM] >> rpt strip_tac >> BETA_TAC >>
+  irule deploy_internal_label_separate >> gvs[EVERY_MEM]
+QED
+
+Theorem run_deploy_lowering_entry_excludes_outcomes:
+  (!env s.
+    EVERY (\bb. EVERY (\i. ~MEM i.inst_opcode
+      [CALL; STATICCALL; DELEGATECALL; CREATE; CREATE2; INVOKE])
+      bb.bb_instructions) (all_blocks s) ==>
+    EVERY (\bb. EVERY (\i. ~MEM i.inst_opcode
+      [CALL; STATICCALL; DELEGATECALL; CREATE; CREATE2; INVOKE])
+      bb.bb_instructions)
+      (all_blocks (SND (compile_stmts env NoLoop NoneT ss s)))) /\
+  run_deploy_lowering has rp bc imm args sz ifns env ss pay nr key trans
+    "__deploy" = SOME u /\
+  (has ==> cenv_static_ok env /\ env.ce_return_pc = NONE /\
+    ~supported_stmts_expr_exists expr_shape_root ss) /\
+  (~has ==> ifns = []) /\
+  EVERY internal_fn_shape_ok ifns /\
+  EVERY (\d. internal_label_ok (FST d)) (internal_fn_descriptors ifns) /\
+  ALL_DISTINCT (MAP FST (internal_fn_descriptors ifns)) ==>
+  ?name fn. u.cu_context.ctx_entry = SOME name /\
+    lookup_function name u.cu_context.ctx_functions = SOME fn /\
+    EVERY (\i. ~MEM i.inst_opcode
+      [CALL; STATICCALL; DELEGATECALL; CREATE; CREATE2; INVOKE]) (fn_insts fn)
+Proof
+  rpt strip_tac >>
+  `!s. EVERY (\bb. EVERY (\i. ~MEM i.inst_opcode
+      [CALL; STATICCALL; DELEGATECALL; CREATE; CREATE2; INVOKE])
+      bb.bb_instructions) (all_blocks s) ==>
+    EVERY (\bb. EVERY (\i. ~MEM i.inst_opcode
+      [CALL; STATICCALL; DELEGATECALL; CREATE; CREATE2; INVOKE])
+      bb.bb_instructions)
+      (all_blocks (SND (compile_generate_deploy has (LENGTH bc) imm args sz [] env ss
+        pay nr key trans s)))` by
+    (rpt strip_tac >> irule compile_generate_deploy_prefix_excludes_outcomes >> simp[]) >>
+  pop_assum (qspec_then `initial_compile_state "__deploy"` mp_tac) >>
+  (impl_tac >- simp[all_blocks_def, initial_compile_state_def]) >> strip_tac >>
+  Cases_on `compile_generate_deploy has (LENGTH bc) imm args sz [] env ss
+    pay nr key trans (initial_compile_state "__deploy")` >>
+  rename1 `_ = (pr,prefix_st)` >> Cases_on `pr` >>
+  Cases_on `compile_generate_deploy has (LENGTH bc) imm args sz ifns env ss
+    pay nr key trans (initial_compile_state "__deploy")` >>
+  rename1 `compile_generate_deploy _ _ _ _ _ ifns _ _ _ _ _ _ _ = (rv,st)` >>
+  Cases_on `rv` >>
+  drule_all compile_generate_deploy_entry_package >> strip_tac >>
+  qpat_x_assum `run_deploy_lowering _ _ _ _ _ _ _ _ _ _ _ _ _ _ = _` mp_tac >>
+  simp[run_deploy_lowering_def, AllCaseEqs()] >> rpt strip_tac >> gvs[] >>
+  `?fn. ctx.ctx_entry = SOME "__deploy" /\
+    lookup_function "__deploy" ctx.ctx_functions = SOME fn /\
+    EVERY (\i. ~MEM i.inst_opcode
+      [CALL; STATICCALL; DELEGATECALL; CREATE; CREATE2; INVOKE]) (fn_insts fn)` by
+    (drule extract_context_entry_every >> disch_then irule >>
+     gvs[all_blocks_def]) >>
+  gvs[install_immutable_reservation_def] >> metis_tac[]
 QED
