@@ -318,3 +318,61 @@ Proof
   simp[step_inst_non_invoke, step_inst_base_opcode_eqs, read_memory_def] >>
   gvs[read_memory_def, REVERSE_APPEND]
 QED
+
+Theorem fmp_mem_effect_defined[local]:
+  fmp_stage_ctx rpolicy D C C' vs vs' fmp eom /\
+  frame_reachable vs C stk PG G tn fn inst s /\ active_inst fn inst s /\
+  fmp_stage_rel D C' sm fmp0 raw0 eom restored stk PG G tn fn s lo t ts /\
+  MEM inst.inst_opcode [SLOAD;TLOAD;SSTORE;TSTORE;ISTORE;LOG] /\
+  IS_SOME (eval_operands inst.inst_operands s) ==>
+  IS_SOME (eval_operands inst.inst_operands t)
+Proof
+  strip_tac >> fs[eval_operands_IS_SOME_EVERY, EVERY_MEM] >> rpt strip_tac >>
+  rename1 `MEM op inst.inst_operands` >>
+  `?x. eval_operand op s = SOME x` by metis_tac[optionTheory.IS_SOME_EXISTS] >>
+  `inst.inst_opcode <> PHI /\ (!v. ~retpc_use_ok inst v)` by gvs[retpc_use_ok_def] >>
+  `!v. op = Var v ==> ~retpc_var fn v` by metis_tac[fmp_mem_operand_non_retpc] >>
+  drule_all fmp_stage_operand >> strip_tac >> simp[]
+QED
+
+Theorem fmp_mem_effect_outputs[local]:
+  fmp_stage_ctx rpolicy D C C' vs vs' fmp eom /\
+  frame_reachable vs C stk PG G tn fn inst s /\ active_inst fn inst s /\
+  MEM inst.inst_opcode [SSTORE;TSTORE;ISTORE;LOG] ==> inst.inst_outputs = []
+Proof
+  strip_tac >>
+  `o1_fn_shape C fn /\ MEM inst (fn_insts fn)` by
+    metis_tac[fmp_stage_frame_facts] >>
+  `inst_wf inst` by
+    (fs[o1_fn_shape_def, fn_inst_wf_def, fn_insts_def, fn_insts_blocks_MEM] >> metis_tac[]) >>
+  fs[] >> gvs[inst_wf_def]
+QED
+
+Theorem fmp_mem_effect_result[local]:
+  MEM inst.inst_opcode [SLOAD;TLOAD;SSTORE;TSTORE;ISTORE;LOG] /\
+  step_inst k C inst s = r /\ terminates r ==>
+  (?s1. r = OK s1) \/
+  (?se. r = Abort ExHalt_abort se /\ s.vs_call_ctx.cc_static /\
+     IS_SOME (eval_operands inst.inst_operands s) /\
+     MEM inst.inst_opcode [SSTORE;TSTORE;LOG])
+Proof
+  strip_tac >> qpat_x_assum `step_inst _ _ _ _ = _` mp_tac >> fs[] >>
+  simp[step_inst_non_invoke, step_inst_base_opcode_eqs, exec_read1_def, exec_write2_def] >>
+  gvs[AllCaseEqs(), passSimulationDefsTheory.terminates_def] >>
+  rpt strip_tac >> gvs[]
+QED
+
+Theorem fmp_mem_effect_abort[local]:
+  fmp_stage_ctx rpolicy D C C' vs vs' fmp eom /\
+  frame_reachable vs C stk PG G tn fn inst s /\ active_inst fn inst s /\
+  fmp_stage_rel D C' sm fmp0 raw0 eom restored stk PG G tn fn s lo t ts /\
+  MEM inst.inst_opcode [SSTORE;TSTORE;LOG] /\ s.vs_call_ctx.cc_static /\
+  IS_SOME (eval_operands inst.inst_operands s) ==>
+  step_inst k C' inst t = Abort ExHalt_abort (halt_state (set_returndata [] t))
+Proof
+  strip_tac >>
+  `IS_SOME (eval_operands inst.inst_operands t)` by
+    (irule fmp_mem_effect_defined >> fs[] >> metis_tac[]) >>
+  `s.vs_call_ctx = t.vs_call_ctx` by fs[fmp_stage_rel_def, fmp_frame_rel_def] >>
+  fs[] >> simp[step_inst_non_invoke, step_inst_base_opcode_eqs]
+QED
