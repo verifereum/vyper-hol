@@ -173,7 +173,8 @@ Proof
             simp[NoAsms, ld_joint_local_fields_def, venomStateTheory.update_var_def]),
          ld_on_head "ld_joint_control"
            (qpat_x_assum `ld_joint_control _ _ _ (_ with vs_inst_idx := _) _` mp_tac >>
-            simp[NoAsms, ld_joint_control_def, venomStateTheory.update_var_def]),
+            simp[NoAsms, ld_joint_control_def, venomStateTheory.update_var_def] >>
+            rpt strip_tac >> metis_tac[]),
          ld_on_head "ld_joint_allocas"
            (qpat_x_assum `ld_joint_allocas _ _ _ _ t` mp_tac >>
             simp[NoAsms, ld_joint_allocas_def, venomStateTheory.update_var_def]),
