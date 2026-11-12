@@ -9,8 +9,10 @@
  * TOP-LEVEL:
  *   gas_path_ptr_edge, gas_path_ptr -- the edges and paths, with the ghost
  *     before and after
- *   gas_summary_ptr_at, gas_outcome_ptr -- gas_summary_at and gas_outcome
- *     over gas_path_ptr; Q and R see the ghost where the path stops
+ *   gas_summary_ptr_lo, gas_outcome_ptr_lo -- gas_summary_at and gas_outcome
+ *     over gas_path_ptr D lo; Q and R see the ghost where the path stops
+ *   gas_summary_ptr_at, gas_outcome_ptr -- their instances at lo = 0, the
+ *     runtime's
  *   gas_path_ptr_erase, gas_path_ptr_then -- dropping the check, and
  *     sequencing
  *)
@@ -62,9 +64,46 @@ Inductive gas_path_ptr:
      gas_path_ptr D lo ctx fn PG G tn s n G' tn' r)
 End
 
-(* gas_summary_at over gas_path_ptr from the ghost (G0, tn0) at s0: Q sees
-   the ghost where the path continues, R the ghost where it stops. *)
-Definition gas_summary_ptr_at_def:
+(* gas_summary_at over gas_path_ptr from the ghost (G0, tn0) at s0, in the
+   dead bytes D and above the bound lo: Q sees the ghost where the path
+   continues, R the ghost where it stops. *)
+Definition gas_summary_ptr_lo_def:
+  gas_summary_ptr_lo D lo (ctx, func) PG marks source (es, s0, G0, tn0) Q R <=>
+    ?res es_end G tn r.
+      (!tail.
+         source (es with gas_obs :=
+                   gas_explicit marks s0.vs_gas_readings ++ tail) =
+           (res, es_end with gas_obs := tail)) /\
+      gas_path_ptr D lo ctx func PG G0 tn0 s0 (LENGTH marks) G tn r /\
+      ((?t. r = OK t /\ Q res (es_end with gas_obs := []) G tn t) \/
+       (exit_result r /\ R res (es_end with gas_obs := []) (G, tn) r))
+End
+
+(* gas_outcome with the pointer check on the completed path.  An exempt
+   execution claims nothing about pointers: the entry's composition rules
+   it out with ~source_exempt. *)
+Definition gas_outcome_ptr_lo_def:
+  gas_outcome_ptr_lo D lo tops (ctx, func) PG source (es, s0, G0, tn0) Q R <=>
+    ?marks.
+      gas_summary_ptr_lo D lo (ctx, func) PG marks source (es, s0, G0, tn0)
+        Q R \/
+      ?err ee leaf finish.
+        gas_exempt_cert F tops (ctx, func) (ignore_bind source (return ()))
+          (es, s0) marks (err, ee) (leaf, finish)
+End
+
+(* The runtime instances, at lo = 0: every access is checked. *)
+Definition gas_summary_ptr_at_zero:
+  gas_summary_ptr_at D cf PG marks source st Q R <=>
+    gas_summary_ptr_lo D 0 cf PG marks source st Q R
+End
+
+Definition gas_outcome_ptr_zero:
+  gas_outcome_ptr D tops cf PG source st Q R <=>
+    gas_outcome_ptr_lo D 0 tops cf PG source st Q R
+End
+
+Theorem gas_summary_ptr_at_def:
   gas_summary_ptr_at D (ctx, func) PG marks source (es, s0, G0, tn0) Q R <=>
     ?res es_end G tn r.
       (!tail.
@@ -74,19 +113,20 @@ Definition gas_summary_ptr_at_def:
       gas_path_ptr D 0 ctx func PG G0 tn0 s0 (LENGTH marks) G tn r /\
       ((?t. r = OK t /\ Q res (es_end with gas_obs := []) G tn t) \/
        (exit_result r /\ R res (es_end with gas_obs := []) (G, tn) r))
-End
+Proof
+  simp[gas_summary_ptr_at_zero, gas_summary_ptr_lo_def]
+QED
 
-(* gas_outcome with the pointer check on the completed path.  An exempt
-   execution claims nothing about pointers: the entry's composition rules
-   it out with ~source_exempt. *)
-Definition gas_outcome_ptr_def:
+Theorem gas_outcome_ptr_def:
   gas_outcome_ptr D tops (ctx, func) PG source (es, s0, G0, tn0) Q R <=>
     ?marks.
       gas_summary_ptr_at D (ctx, func) PG marks source (es, s0, G0, tn0) Q R \/
       ?err ee leaf finish.
         gas_exempt_cert F tops (ctx, func) (ignore_bind source (return ()))
           (es, s0) marks (err, ee) (leaf, finish)
-End
+Proof
+  simp[gas_outcome_ptr_zero, gas_outcome_ptr_lo_def, gas_summary_ptr_at_zero]
+QED
 
 Theorem gas_path_ptr_edge_erase:
   gas_path_ptr_edge D lo ctx fn PG G tn s n G' tn' r ==>
