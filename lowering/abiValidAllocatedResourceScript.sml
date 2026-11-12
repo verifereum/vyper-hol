@@ -7,8 +7,7 @@ Ancestors
   localPtrsProps loweringSlice exprLoweringProps compileEnv loweringStateRelDefs venomState
   finite_map words list arithmetic
 
-(* HELD (train 17, stage-tower branch only): fails after the 0.5.0b1
-   staging and train 16 merge; owned from s1c-t17 *)
+(* HELD (train 17): 0.5.0b1 arg snapshot re-proof *)
 Theorem abi_valid_allocated_scratch_free_resource:
   stmt_state_rel ctx func cenv cx es s /\ local_ptrs_reserved cenv st /\
   fn_inst_ids_distinct func /\

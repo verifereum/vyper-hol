@@ -5,6 +5,7 @@ Ancestors
   exprExtRequestPathFields localPtrsProps loweringSlice compileEnv loweringStateRelDefs
   abiEncoderRegisteredEffect abiEncoderWindowContract exprLoweringProps
   exprSimProps exprExtRequestEncoderWitness venomState
+  fragGasPath fragGasMode venomExecProofs memSafeRun
 
 Theorem extrequest_encoder_local_ptrs:
   compile_abi_encode_to_buf dst src ei st = (out,en) /\
@@ -29,8 +30,28 @@ Proof
   >- fs[window_alloca_growth_def] >> first_assum ACCEPT_TAC
 QED
 
-(* HELD (train 17, stage-tower branch only): fails after the 0.5.0b1
-   staging and train 16 merge; owned from s1c-t17 *)
+Theorem gas_path_edge_code[local]:
+  gas_path_edge ctx fn s n (OK t) ==> t.vs_code = s.vs_code
+Proof
+  rw[gas_path_edge_def] >>
+  gvs[fragExecTheory.exit_result_def, jump_to_def] >>
+  imp_res_tac eval_phis_only_updates_vs_vars >>
+  imp_res_tac memSafeRunTheory.step_inst_ok_code_data >>
+  gvs[]
+  >- (qpat_x_assum `entered = _` SUBST1_TAC >> simp[]) >>
+  metis_tac[step_inst_ok_code_data]
+QED
+
+Theorem gas_path_code[local]:
+  !ctx fn s n r. gas_path ctx fn s n r ==>
+    !t. r = OK t ==> t.vs_code = s.vs_code
+Proof
+  ho_match_mp_tac gas_path_ind >> rpt conj_tac
+  >- simp[]
+  >- (rpt strip_tac >> gvs[] >> metis_tac[gas_path_edge_code]) >>
+  rpt strip_tac >> gvs[fragExecTheory.exit_result_def]
+QED
+
 Theorem extrequest_encoder_state_rel:
   compile_abi_encode_to_buf dst src ei st = (out,en) /\
   fn_has_code st en func /\ fn_inst_ids_distinct func /\
@@ -52,7 +73,6 @@ Theorem extrequest_encoder_state_rel:
     EVERY (\r. venomMemDefs$regions_disjoint (q,type_memory_size tv) r) outs) ==>
   state_rel func ce cx es t
 Proof
-  (* original proof, kept while held:
   strip_tac >>
   `alloca_inv s /\ local_ptrs_rel func ce es.scopes s /\
    immutable_alloca_sep func ce cx es s /\
@@ -63,11 +83,11 @@ Proof
   `immutables_rel ce cx.txn.target ce.ce_module ce.ce_is_ctor es t` by
     (irule immutables_rel_mem_agree >> qexists_tac `s` >> simp[] >>
      rpt strip_tac >> metis_tac[extrequest_encoder_immutable_window]) >>
+  `t.vs_code = s.vs_code` by
+    (fs[gas_marked_path_def] >> metis_tac[gas_path_code]) >>
   drule extrequest_path_contexts >> strip_tac >>
   irule state_rel_frame >> conj_tac >- first_assum ACCEPT_TAC >>
   qexistsl_tac [`es`, `s`] >> fs[abi_encoder_registered_effect_def]
-  *)
-  cheat
 QED
 
 Theorem extrequest_encoder_stmt_resources:

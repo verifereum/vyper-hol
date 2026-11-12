@@ -30,7 +30,7 @@ Proof
      qpat_x_assum `well_typed_expr _ (Subscript _ _ _)` mp_tac >>
      simp[Once vyperTypeSystemTheory.well_typed_expr_def] >>
      strip_tac >> gvs[] >>
-     drule placeTypingPropsTheory.type_place_expr_vtype_annotation >>
+     drule vyperTypeSystemTheory.type_place_expr_vtype_annotation >>
      Cases_on `vt` >>
      gvs[vyperTypeSystemTheory.vtype_annotation_ok_def] >> strip_tac >>
      irule type_place_expr_context_value_typed >>

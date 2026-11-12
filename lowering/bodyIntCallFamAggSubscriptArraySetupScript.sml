@@ -51,7 +51,7 @@ Proof
   strip_tac >>
   `ann = et /\ is_int_type (expr_type idx)` by
     (gvs[vyperTypeSystemTheory.subscript_type_ok_def] >>
-     drule placeTypingPropsTheory.type_place_expr_vtype_annotation >> simp[] >>
+     drule vyperTypeSystemTheory.type_place_expr_vtype_annotation >> simp[] >>
      strip_tac >> Cases_on `vt` >>
      gvs[vyperTypeSystemTheory.vtype_annotation_ok_def,
          vyperTypeSystemTheory.subscript_vtype_def]) >>

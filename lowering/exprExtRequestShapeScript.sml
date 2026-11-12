@@ -124,8 +124,6 @@ Proof
   rpt strip_tac >> goal_assum (drule_at Any) >> simp[]
 QED
 
-(* HELD (train 17, stage-tower branch only): fails after the 0.5.0b1
-   staging and train 16 merge; owned from s1c-t17 *)
 Theorem extrequest_compile_call_split:
   !cfn cenv ann ty is_static skip fname arg_types ret_type opts addr rest dflt
    sa vv sb.
@@ -134,8 +132,9 @@ Theorem extrequest_compile_call_split:
       (addr::rest) dflt sa = (vv,sb) ==>
     ?addr_op s1 arg_vals s2 value_opt gas_opt default_opt s3 gas_op s4 result_op.
       lower_value cfn cenv (BaseT AddressT) addr sa = (addr_op,s1) /\
-      compile_multi_vvs cfn cenv (TAKE (LENGTH arg_types) rest) s1 =
-        (arg_vals,s2) /\
+      compile_ext_call_args cfn cenv (DROP (LENGTH arg_types) rest)
+        (MAP (lowered_value_type cenv) (TAKE (LENGTH arg_types) rest))
+        (TAKE (LENGTH arg_types) rest) s1 = (arg_vals,s2) /\
       compile_ext_call_kwargs cfn cenv ret_type opts
         (DROP (LENGTH arg_types) rest) s2 = ((value_opt,gas_opt,default_opt),s3) /\
       (case gas_opt of SOME g => (g,s3) | NONE => emit_op GAS [] s3) =
@@ -162,7 +161,6 @@ Theorem extrequest_compile_call_split:
       vv = (if ret_type = NoneT then StackValue ann result_op
             else LocatedValue ann (mk_ptr result_op LocMemory))
 Proof
-  (* original proof, kept while held:
   rpt gen_tac >> simp[Once compile_call_def] >>
   pairarg_tac >> gvs[] >>
   pairarg_tac >> gvs[] >>
@@ -175,8 +173,6 @@ Proof
   goal_assum (drule_at Any) >> simp[] >>
   goal_assum (drule_at Any) >> simp[] >>
   goal_assum (drule_at Any) >> simp[]
-  *)
-  cheat
 QED
 
 Theorem extrequest_body_typed:
