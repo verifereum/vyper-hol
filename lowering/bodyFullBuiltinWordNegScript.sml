@@ -4,6 +4,7 @@ Ancestors
   bodyFullGhostFrame bodyFullShared bodyFullPreds bodySimFull
   gasOutcomeFullCompose gasOutcomeFullStmts fragGasSeqPtr fragGasEmitCtrl
   exprSimWordBuiltins exprSimUnopProps exprSimSource
+  fragExecMem unitTransformDefs memSafeRun
   ptrSafeRun ptrDiscipline exprLowering emitHelper emitHelperProps
   exprLoweringProps compileEnv venomExecSemantics venomInst venomState
   list rich_list finite_map codegenRel contextCodegenRel
@@ -127,4 +128,46 @@ Proof
     (mk_inst (sa.cs_next_id+2) SUB [Lit 0w; x]
       [STRING #"%" (toString (sa.cs_next_var+1))]) s2` >>
   simp[inst_seq_ptr_def, mk_inst_def]
+QED
+
+Theorem word_neg_memory_safe:
+  compile_neg x ty sa = (op,sb) ==>
+  run_inst_seq_mem_ok (emitted_insts sa sb) s
+Proof
+  strip_tac >> drule word_neg_emission >> strip_tac >>
+  asm_rewrite_tac[] >> irule run_inst_seq_mem_ok_every >>
+  simp[mk_inst_def, inst_mem_below_frontier_def,
+    source_memory_read_ranges_def, source_memory_write_ranges_def,
+    inst_dload_in_section_def]
+QED
+
+Theorem word_neg_success_origin:
+  compile_neg x ty sa = (op,sb) /\ fresh_vars_wrt sa s /\
+  eval_operand x s = SOME w /\
+  w2i (FST (type_bounds ty)) < w2i w /\
+  op_taint tn x = {} /\ allocas_from lo s /\
+  (ctx_has_dalloca ctx ==> allocas_below_fmp s) /\
+  ~s.vs_halted /\
+  lookup_block s.vs_current_bb func.fn_blocks = SOME bb /\
+  isPREFIX (emitted_insts sa sb) (DROP s.vs_inst_idx bb.bb_instructions) ==>
+  ?t G' tn'.
+    run_inst_seq (emitted_insts sa sb) s = OK t /\
+    eval_operand op t = SOME (0w - w) /\
+    !D. gas_origin_ptr_path (D,lo,explicit,ctx,func,PG) (s,G,tn) []
+      (OK (t with vs_inst_idx := s.vs_inst_idx + LENGTH (emitted_insts sa sb)),
+       G',tn')
+Proof
+  strip_tac >> drule_all compile_neg_run >> simp[] >> strip_tac >>
+  drule_all word_neg_inst_seq_ptr >>
+  disch_then (qspecl_then [`func`, `PG`, `G`] strip_assume_tac) >>
+  qexistsl [`ss'`, `G'`, `tn'`] >> simp[] >> gen_tac >>
+  `EVERY (\i. i.inst_opcode <> INVOKE /\ ~is_terminator i.inst_opcode)
+      (emitted_insts sa sb) /\
+   FILTER (\i. i.inst_opcode = GAS) (emitted_insts sa sb) = []` by
+    (drule word_neg_emission >> strip_tac >>
+     simp[mk_inst_def, is_terminator_def]) >>
+  drule word_neg_memory_safe >> strip_tac >>
+  `inst_seq_ptr D lo ctx func PG G tn (emitted_insts sa sb) s G' tn'` by simp[] >>
+  `run_inst_seq_mem_ok (emitted_insts sa sb) s` by simp[] >>
+  drule_all run_inst_seq_gas_origin_ptr_path >> simp[]
 QED
