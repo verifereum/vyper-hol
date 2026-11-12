@@ -1,6 +1,7 @@
 (* Ghost boundary facts for SimplifyCFG source-frame transport. *)
 Theory o1ContractSimplifyCfgSrcFrame
 Ancestors
+  o1SafeUpto
   o1PassContract ptrDiscipline simplifyCfgPhiSemantics simplifyCfgShape
   simplifyCfgDefs venomInst list contextCodegenRel codegenRel memLocDefs
   stateFrame venomState simplifyCfgBypassExec relation venomExecSemantics
@@ -4158,23 +4159,42 @@ Proof
   simp[ret_taint_def]
 QED
 
+Theorem scfg_data_agree_gas_cut:
+  gas_cut n vs t /\ scfg_data_agree s t ==> gas_cut n vs s
+Proof
+  rewrite_tac[scfg_data_agree_def] >> strip_tac >>
+  irule gas_cut_execution_frame >> qexists `t` >> asm_rewrite_tac[]
+QED
+
+(* A halting step of the output, matched by the input's halting step of
+   the same instruction from a state that agrees on the data. *)
+Theorem scfg_context_trace_halt_back:
+  scfg_context_trace C C' /\ vs.vs_vars = FEMPTY /\ ~vs.vs_halted /\
+  frame_reachable vs C' stk PG G T0 g j t /\ j.inst_opcode <> INVOKE /\
+  step_inst fuel C' j t = Halt t_h ==>
+  ?fs f s s_h.
+    frame_reachable vs C fs PG G T0 f j s /\ active_inst f j s /\
+    step_inst fuel C j s = Halt s_h /\
+    scfg_data_agree s t /\ scfg_data_agree s_h t_h /\
+    step_taint j s s_h T0 = step_taint j t t_h T0 /\
+    ret_taint T0 j s = ret_taint T0 j t
+Proof
+  strip_tac >>
+  drule_all scfg_context_trace_live_frame_back >> strip_tac >>
+  drule_all scfg_live_position_halt_back >>
+  disch_then (qspec_then `C` strip_assume_tac) >> gvs[] >>
+  metis_tac[scfg_frame_reachable_active, scfg_data_agree_step_taint,
+            scfg_data_agree_ret_taint]
+QED
+
 Theorem scfg_context_trace_final_taint_back:
   scfg_context_trace C C' /\ vs.vs_vars = FEMPTY /\ ~vs.vs_halted /\
   final_taint vs C' t_h tn R ==>
   ?s_h. final_taint vs C s_h tn R /\ scfg_data_agree s_h t_h
 Proof
   simp[final_taint_def] >> strip_tac >>
-  drule_all scfg_context_trace_live_frame_back >> strip_tac >>
-  drule_all scfg_live_position_halt_back >>
-  disch_then (qspec_then `C` strip_assume_tac) >>
-  gvs[] >>
-  rename1 `frame_reachable vs C fs PG G T0 f i src` >>
-  rename1 `step_inst fuel C i src = Halt out` >>
-  qexists_tac `out` >> simp[] >>
-  qexistsl_tac [`fs`, `PG`, `G`, `T0`, `f`, `i`, `src`, `fuel`] >>
-  simp[] >>
-  metis_tac[scfg_frame_reachable_active, scfg_data_agree_step_taint,
-            scfg_data_agree_ret_taint]
+  drule_all scfg_context_trace_halt_back >> strip_tac >>
+  qexists_tac `s_h` >> simp[] >> metis_tac[]
 QED
 
 Theorem scfg_function_edge_entry:
@@ -4373,6 +4393,23 @@ Proof
        allocas_below_fmp_def]
 QED
 
+(* The pointer rows of the output's reachable states before the cut, from
+   the input's. *)
+Theorem scfg_context_trace_frame_rows_upto:
+  scfg_context_trace C C' /\ vs.vs_vars = FEMPTY /\ ~vs.vs_halted /\
+  ptr_discipline_upto lo n C vs /\ ~ctx_has_dalloca C' /\
+  frame_reachable vs C' stk PG G tn g j t /\ gas_cut n vs t ==>
+  access_ok lo G g j t /\ taint_ok g tn j t /\ allocas_from lo t /\
+  (ctx_has_dalloca C' ==> allocas_below_fmp t)
+Proof
+  strip_tac >> drule_all scfg_context_trace_live_frame_back >> strip_tac >>
+  drule_all scfg_data_agree_gas_cut >> strip_tac >>
+  `access_ok lo G f i s /\ taint_ok f tn i s /\ allocas_from lo s` by
+    metis_tac[ptr_discipline_upto_def] >>
+  metis_tac[scfg_live_position_access_ok, scfg_live_position_trace_taint,
+            scfg_data_agree_allocas]
+QED
+
 Theorem scfg_context_trace_frame_rows:
   scfg_context_trace C C' /\ vs.vs_vars = FEMPTY /\ ~vs.vs_halted /\
   ptr_discipline lo C vs /\ ~ctx_has_dalloca C' /\
@@ -4380,11 +4417,10 @@ Theorem scfg_context_trace_frame_rows:
   access_ok lo G g j t /\ taint_ok g tn j t /\ allocas_from lo t /\
   (ctx_has_dalloca C' ==> allocas_below_fmp t)
 Proof
-  strip_tac >> drule_all scfg_context_trace_live_frame_back >> strip_tac >>
-  `access_ok lo G f i s /\ taint_ok f tn i s /\ allocas_from lo s` by
-    metis_tac[ptr_discipline_def] >>
-  metis_tac[scfg_live_position_access_ok, scfg_live_position_trace_taint,
-            scfg_data_agree_allocas]
+  strip_tac >>
+  irule (Q.INST [`n` |-> `SUC (LENGTH vs.vs_gas_readings)`]
+           scfg_context_trace_frame_rows_upto) >>
+  simp[] >> metis_tac[ptr_discipline_upto_whole]
 QED
 
 Theorem scfg_simplify_cfg_no_dalloca:
@@ -4414,26 +4450,40 @@ Proof
   metis_tac[scfg_context_trace_simplify_cfg, scfg_simplify_cfg_no_dalloca]
 QED
 
-Theorem scfg_context_trace_taint_within:
+(* The taint bound before the cut: the output's requests and halts are
+   the input's, from states that agree on the data. *)
+Theorem scfg_context_trace_taint_within_upto:
   scfg_context_trace C C' /\ vs.vs_vars = FEMPTY /\ ~vs.vs_halted /\
-  taint_within D C vs ==> taint_within D C' vs
+  taint_within_upto D n C vs ==> taint_within_upto D n C' vs
 Proof
-  strip_tac >> simp[taint_within_def] >> conj_tac
+  strip_tac >> simp[taint_within_upto_def] >> conj_tac
   >- (rpt strip_tac >>
       drule_all scfg_context_trace_live_frame_back >> strip_tac >>
       drule_all scfg_live_position_request_back >>
       disch_then (qspec_then `C` strip_assume_tac) >>
       rename1 `frame_reachable vs C fs PG G tn f i src` >>
       `active_inst f i src` by metis_tac[scfg_frame_reachable_active] >>
-      fs[taint_within_def] >>
+      drule_all scfg_data_agree_gas_cut >> strip_tac >>
+      fs[taint_within_upto_def] >>
       first_x_assum drule_all >>
       fs[scfg_data_agree_def, execution_frame_def,
          venom_state_component_equality] >>
       metis_tac[]) >>
-  rpt strip_tac >> drule_all scfg_context_trace_final_taint_back >> strip_tac >>
-  fs[taint_within_def] >>
-  qpat_x_assum `!s_h tn R. _` drule >>
-  fs[scfg_data_agree_def, execution_frame_def]
+  rpt strip_tac >> drule_all scfg_context_trace_halt_back >> strip_tac >>
+  drule_all scfg_data_agree_gas_cut >> strip_tac >>
+  fs[taint_within_upto_def] >>
+  first_x_assum drule_all >>
+  fs[scfg_data_agree_def, execution_frame_def,
+     venom_state_component_equality]
+QED
+
+Theorem scfg_context_trace_taint_within:
+  scfg_context_trace C C' /\ vs.vs_vars = FEMPTY /\ ~vs.vs_halted /\
+  taint_within D C vs ==> taint_within D C' vs
+Proof
+  strip_tac >> irule taint_within_upto_all >>
+  irule scfg_context_trace_taint_within_upto >>
+  metis_tac[taint_within_upto_whole]
 QED
 
 Theorem scfg_payload_dload_offset_ok:
@@ -4470,6 +4520,41 @@ Proof
   rpt strip_tac >>
   Cases_on `inst.inst_opcode = DLOAD \/ inst.inst_opcode = DLOADBYTES`
   >- (drule_all scfg_raw_dload_payload >> strip_tac >>
+      metis_tac[scfg_payload_dload_offset_ok]) >>
+  fs[dload_offset_ok_def]
+QED
+
+Theorem scfg_payload_gas_cut:
+  gas_cut n vs t /\ scfg_payload s t ==> gas_cut n vs s
+Proof
+  strip_tac >>
+  `t.vs_gas_readings = s.vs_gas_readings` by
+    (qpat_x_assum `scfg_payload s t` mp_tac >>
+     simp[scfg_payload_def, scfg_ctrl_def] >>
+     disch_then SUBST1_TAC >> simp[]) >>
+  fs[gas_cut_def]
+QED
+
+(* The DLOAD offset bound before the cut. *)
+Theorem scfg_trace_dload_offset_upto:
+  ctx_bisim C C' /\
+  (!nm f g. lookup_function nm C.ctx_functions = SOME f /\
+             lookup_function nm C'.ctx_functions = SOME g ==>
+             scfg_function_trace f g) /\
+  LIST_REL (\f g. g.fn_name = f.fn_name /\
+                    fn_entry_label g = fn_entry_label f /\
+                    frame_sim vs.vs_labels C C' f g)
+    C.ctx_functions C'.ctx_functions /\
+  C'.ctx_entry = C.ctx_entry /\ vs.vs_vars = FEMPTY /\ ~vs.vs_halted /\
+  (!fn inst s. raw_reachable vs C fn inst s /\ gas_cut n vs s ==>
+     dload_offset_ok C fn inst s) ==>
+  !fn inst s. raw_reachable vs C' fn inst s /\ gas_cut n vs s ==>
+    dload_offset_ok C' fn inst s
+Proof
+  rpt strip_tac >>
+  Cases_on `inst.inst_opcode = DLOAD \/ inst.inst_opcode = DLOADBYTES`
+  >- (drule_all scfg_raw_dload_payload >> strip_tac >>
+      drule_all scfg_payload_gas_cut >> strip_tac >>
       metis_tac[scfg_payload_dload_offset_ok]) >>
   fs[dload_offset_ok_def]
 QED
