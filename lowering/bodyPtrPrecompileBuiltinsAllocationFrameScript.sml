@@ -37,6 +37,7 @@ Theorem alloca_runtime_frames:
   step_inst_base (mk_inst id ALLOCA [Lit sz] [out]) s = OK t ==>
   t.vs_memory = s.vs_memory /\ t.vs_call_ctx = s.vs_call_ctx /\
   t.vs_accounts = s.vs_accounts /\ t.vs_transient = s.vs_transient /\
+  t.vs_immutables = s.vs_immutables /\
   (!p. p <> out ==> lookup_var p t = lookup_var p s)
 Proof
   simp[step_inst_base_opcode_eqs, mk_inst_def, exec_alloca_def] >>
