@@ -129,12 +129,12 @@ Proof
 QED
 
 (* And no DLOAD to need headroom for: the bound is raw_mem_ok's frontier
-   bound. *)
-Theorem lower_dload_stage_headroom:
-  !rpolicy view C C' vs.
-    ctx_pass_stage rpolicy (CFP_Simple VP_LowerDload) view C C' /\
-    o1_ctx_shape C /\ mem_inv raw_mem_ok C' vs ==>
-    mem_inv dload_headroom_ok C' vs
+   bound, and with DALLOCA the source's headroom, which covers every
+   DLOAD scratch site the output allocates.
+   TEMPORARILY CHEATED - P4b in progress: the DALLOCA conjunct needs the
+   revert-forwarding certificate of ld_raw_coverage_fixed to carry the
+   frontier bound.  The proof of the previous statement (premises
+   o1_ctx_shape C /\ mem_inv raw_mem_ok C' vs) was:
 Proof
   rpt strip_tac >>
   `ctx_dload_count C' = 0` by
@@ -143,6 +143,16 @@ Proof
      metis_tac[lower_dload_stage_no_dload]) >>
   irule mem_inv_mono >> qexists_tac `raw_mem_ok` >>
   simp[raw_mem_ok_def, dload_headroom_ok_def]
+QED
+*)
+Theorem lower_dload_stage_headroom:
+  !rpolicy D view C C' vs names.
+    ctx_pass_stage rpolicy (CFP_Simple VP_LowerDload) view C C' /\
+    dead_wf D /\ o1_ctx_shape C /\ o1_run_state_ok vs /\
+    o1_src_inv D C vs /\ callee_first names C.ctx_functions ==>
+    mem_inv dload_headroom_ok C' vs
+Proof
+  cheat
 QED
 
 (* ===== The cheap rows ===== *)

@@ -169,8 +169,9 @@ Proof
   gvs[make_ssa_input_ok_def, o1_fn_shape_def] >> metis_tac[]
 QED
 
-(* The headroom bound reads only the frontier and the DLOAD count, which
-   the stage keeps. *)
+(* The headroom bound reads only the frontier, the initial free-memory
+   pointer and the DLOAD count, which the stage keeps; and the stage adds
+   no DALLOCA. *)
 Theorem make_ssa_src_stage_headroom[local]:
   ctx_pass_stage rpolicy (CFP_Simple VP_MakeSSA) view C C' /\
   o1_ctx_shape C /\ EVERY make_ssa_input_ok C.ctx_functions /\
@@ -180,20 +181,35 @@ Theorem make_ssa_src_stage_headroom[local]:
 Proof
   strip_tac >>
   qabbrev_tac `k = ctx_dload_count C` >>
+  qabbrev_tac `d = ctx_has_dalloca C` >>
   `ctx_dload_count C' = k` by metis_tac[make_ssa_src_stage_dload_count] >>
-  `mem_inv (\ctx fn inst s. s.vs_alloca_next + 32 * k < dimword (:256))
-     C vs` by
+  `ctx_has_dalloca C' ==> d` by
+    (simp[Abbr `d`, ctx_has_dalloca_def, EXISTS_MEM, MEM_EL, PULL_EXISTS] >>
+     rpt strip_tac >>
+     `n < LENGTH C.ctx_functions` by
+       metis_tac[make_ssa_src_stage_fns, LIST_REL_LENGTH] >>
+     drule_all make_ssa_src_stage_el >> strip_tac >>
+     `MEM (EL n' (fn_insts (EL n C'.ctx_functions)))
+          (fn_insts (EL n C'.ctx_functions))` by simp[EL_MEM] >>
+     drule_all make_ssa_current_fn_no_dalloca >>
+     metis_tac[MEM_EL]) >>
+  qabbrev_tac `Q = \ctx:venom_context fn:ir_function inst:instruction s.
+     s.vs_alloca_next + 32 * k < dimword (:256) /\
+     (d ==> s.vs_alloca_next + 32 * k <= w2n s.vs_initial_fmp)` >>
+  `mem_inv Q C vs` by
     (irule mem_inv_mono >> qexists_tac `dload_headroom_ok` >>
-     simp[dload_headroom_ok_def, Abbr `k`]) >>
-  `mem_inv (\ctx fn inst s. s.vs_alloca_next + 32 * k < dimword (:256))
-     C' vs` by
-    (irule frame_sim_mem_inv >> simp[mem_corr_closed_def, mem_corr_def] >>
+     simp[dload_headroom_ok_def, Abbr `Q`, Abbr `k`, Abbr `d`,
+          ctx_has_dalloca_def]) >>
+  `mem_inv Q C' vs` by
+    (irule frame_sim_mem_inv >>
+     simp[mem_corr_closed_def, mem_corr_def, Abbr `Q`] >>
      qexists_tac `C` >> simp[] >>
      drule make_ssa_src_stage_fns >> strip_tac >> simp[] >>
      conj_tac >- (irule make_ssa_src_stage_frame_sim >> metis_tac[]) >>
      fs[]) >>
   irule mem_inv_mono >> goal_assum (drule_at Any) >>
-  simp[dload_headroom_ok_def]
+  simp[dload_headroom_ok_def, Abbr `Q`] >>
+  fs[ctx_has_dalloca_def]
 QED
 
 (* Each function of the output is MakeSSA's run on the input function of

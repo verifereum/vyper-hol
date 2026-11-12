@@ -135,7 +135,7 @@ Proof
      qexists_tac `f` >> asm_rewrite_tac[] >>
      rpt (pop_assum kall_tac) >> simp[]) >>
   simp[NoAsms, Abbr `Goal`] >>
-  qexistsl_tac [`stk`,`PG`,`ld_erase A o_f H'`,
+  qexistsl_tac [`stk`,`PG`,`G'`,
     `entry_taint_vars fn (jump_to lbl s) tn`,`fn`,`ni`,`s1`,`t1`,
     `A`,`g::fs`,`N`,`X`,`t1.vs_inst_idx`,`0`] >>
   qpat_x_assum `MEM inst.inst_opcode [JMP; JNZ; DJMP]` kall_tac >>

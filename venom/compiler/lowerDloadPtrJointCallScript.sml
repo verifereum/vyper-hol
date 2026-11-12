@@ -27,7 +27,7 @@ Theorem dload_joint_call_closed:
   EVERY (fn_ptr_ok P) C.ctx_functions /\
   ((?cs PG G tn f i s q emitted n pfuel t0 H0 un0 fs.
     frame_reachable vs C cs PG G tn f i s /\
-    dload_boundary_core lo fs
+    dload_boundary_core fl lo fs
       (set (fn_ir_vars f) DIFF {v | retpc_var f v})
       (MAP (\c. set (fn_ir_vars c.cf_fn) DIFF {v | retpc_var c.cf_fn v}) cs)
       PG PH G H0 tn un0 s t0 cs ds /\
@@ -70,7 +70,7 @@ Theorem dload_joint_call_closed:
   enters_block gc u t1 /\ active_inst gc j t1 ==>
   (?cs PG G tn f i s q emitted n pfuel t0 H0 un0 fs.
     frame_reachable vs C cs PG G tn f i s /\
-    dload_boundary_core lo fs
+    dload_boundary_core fl lo fs
       (set (fn_ir_vars f) DIFF {v | retpc_var f v})
       (MAP (\c. set (fn_ir_vars c.cf_fn) DIFF {v | retpc_var c.cf_fn v}) cs)
       PG (MAP (op_prov H) ops) G H0 tn un0 s t0 cs
@@ -166,7 +166,7 @@ Resume dload_joint_call_closed[normal]:
 QED
 
 Resume dload_joint_call_closed[push]:
-  drule_at (Pat `dload_boundary_core _ _ _ _ _ _ _ _ _ _ _ _ _ _`)
+  drule_at (Pat `dload_boundary_core _ _ _ _ _ _ _ _ _ _ _ _ _ _ _`)
     dload_normal_invoke_call >> disch_then drule >>
   disch_then (drule_at (Pat `dload_control_match _ _ _ _ _ _ _ _`)) >>
   disch_then (drule_at (Pat `lookup_function _ _ = _`)) >>

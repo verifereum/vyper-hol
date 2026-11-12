@@ -100,7 +100,7 @@ Proof
      drule ld_phis_only_vars >> disch_then SUBST1_TAC >>
      simp[NoAsms] >> asm_rewrite_tac[]) >>
   qunabbrev_tac `Point` >> simp[NoAsms] >>
-  qexistsl_tac [`PG`,`ld_erase A o_f H'`,`entry_taint_vars fn (jump_to lbl s) tn`,
+  qexistsl_tac [`PG`,`G'`,`entry_taint_vars fn (jump_to lbl s) tn`,
     `ni`,`s1`,`tentry`,`A`,`g::fs`,`N`,`X'`,`tentry.vs_inst_idx`,`0`] >>
   qpat_x_assum `^ld_probe_stable _ _ _ _ _ _ _ _ (g::fs)` mp_tac >>
   qpat_x_assum `ld_sync _ _ _ _ _ _ _ _ _ _ s1 tentry _ _ _` mp_tac >>

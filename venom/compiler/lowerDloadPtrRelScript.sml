@@ -118,6 +118,17 @@ Proof
   simp[dload_pointer_word_def] >> metis_tac[]
 QED
 
+Theorem dload_live_site_below_floor:
+  dload_live_layout lo sf tf fs /\ tf <= fl /\
+  dload_live_site fs owner id b c n ==>
+  b + n <= fl /\ c + n <= fl
+Proof
+  strip_tac >> drule_all dload_live_site_bounds >> strip_tac >>
+  `sf <= tf` by fs[dload_live_layout_def] >> decide_tac
+QED
+
+(* Below the floor a nonempty site is a live site, relocated; at or above it,
+   a DALLOCA site, the same on both sides. *)
 Theorem dload_pointer_word_interval:
   dload_live_layout lo sf tf fs /\
   dload_pointer_word fs (b,n) (c,n) x y /\
@@ -140,31 +151,57 @@ Proof
   simp[word_add_n2w, arithmeticTheory.ADD_COMM]
 QED
 
+(* A pointer names a live allocation site, relocated, or a DALLOCA site
+   at or above the floor fl, the same word on both sides. *)
 Definition dload_value_word_def:
-  dload_value_word fs mask p q (x:bytes32) y <=>
+  dload_value_word fl fs mask p q (x:bytes32) y <=>
     case (p,q) of
       (NONE,NONE) => word_agree_except mask x y
-    | (SOME a,SOME b) => dload_pointer_word fs a b x y
+    | (SOME a,SOME b) =>
+        dload_pointer_word fs a b x y \/
+        (a = b /\ fl <= FST a /\ FST a + SND a < dimword (:256) /\
+         word_agree_except mask x y)
     | _ => F
 End
 
 (* Only original variables are quantified: generated temporaries have their
    own phase-local obligations and may be present in the target map. *)
+Theorem dload_value_word_site_cases:
+  dload_live_layout lo sf tf fs /\ tf <= fl /\ 0 < n /\
+  dload_value_word fl fs mask (SOME (b,n)) q x y ==>
+  (?c. q = SOME (c,n) /\ dload_pointer_word fs (b,n) (c,n) x y /\
+       b + n <= fl) \/
+  (q = SOME (b,n) /\ fl <= b /\ b + n < dimword (:256) /\
+   word_agree_except mask x y)
+Proof
+  rpt strip_tac >>
+  Cases_on `q` >- gvs[dload_value_word_def] >>
+  rename1 `SOME qq` >> PairCases_on `qq` >>
+  qpat_x_assum `dload_value_word _ _ _ _ _ _ _` mp_tac >>
+  simp[dload_value_word_def] >> strip_tac
+  >- (disj1_tac >>
+      drule dload_pointer_word_resolves >> strip_tac >> gvs[] >>
+      drule_all dload_live_site_below_floor >> simp[]) >>
+  gvs[]
+QED
+
 Definition dload_vars_match_def:
-  dload_vars_match fs V G H tn un s t <=>
+  dload_vars_match fl fs V G H tn un s t <=>
     (!v. v IN V ==>
        FLOOKUP tn.t_var v = FLOOKUP un.t_var v /\
        (lookup_var v s = NONE <=> lookup_var v t = NONE) /\
        (!x y. lookup_var v s = SOME x /\ lookup_var v t = SOME y ==>
-          dload_value_word fs (op_taint tn (Var v))
+          dload_value_word fl fs (op_taint tn (Var v))
             (FLOOKUP G v) (FLOOKUP H v) x y))
 End
 
-(* Agreement is required only on fixed memory and simultaneously live
-   original allocations.  Target scratch and returned-callee garbage are
-   deliberately not constrained here. *)
+(* Agreement is required only on fixed memory, simultaneously live
+   original allocations and the dynamic region from the floor fl up, where
+   DALLOCA pointers are the same word on both sides; the target frontier,
+   and so every live site, lies below the floor.  Target scratch and
+   returned-callee garbage are deliberately not constrained here. *)
 Definition dload_memory_match_def:
-  dload_memory_match lo fs tn un s t <=>
+  dload_memory_match fl lo fs tn un s t <=>
     (!i. i < lo ==>
        (i IN tn.t_mem <=> i IN un.t_mem) /\
        (i NOTIN tn.t_mem ==>
@@ -173,31 +210,35 @@ Definition dload_memory_match_def:
        dload_live_site fs owner id b c n /\ k < n ==>
        (b+k IN tn.t_mem <=> c+k IN un.t_mem) /\
        (b+k NOTIN tn.t_mem ==>
-          read_byte (b+k) s.vs_memory = read_byte (c+k) t.vs_memory))
+          read_byte (b+k) s.vs_memory = read_byte (c+k) t.vs_memory)) /\
+    (!i. fl <= i /\ i < dimword (:256) ==>
+       (i IN tn.t_mem <=> i IN un.t_mem)) /\
+    ld_dyn_agree fl tn.t_mem s.vs_memory t.vs_memory /\
+    t.vs_alloca_next <= fl
 End
 
 Theorem dload_vars_match_empty_provenance:
-  dload_vars_match fs V FEMPTY FEMPTY tn tn s s
+  dload_vars_match fl fs V FEMPTY FEMPTY tn tn s s
 Proof
   simp[dload_vars_match_def, dload_value_word_def, word_agree_except_def] >>
   rpt strip_tac >> gvs[]
 QED
 
 Theorem dload_memory_match_empty:
-  (!f. MEM f fs ==> f.dr_source = FEMPTY) ==>
-  dload_memory_match lo fs tn tn s s
+  (!f. MEM f fs ==> f.dr_source = FEMPTY) /\ s.vs_alloca_next <= fl ==>
+  dload_memory_match fl lo fs tn tn s s
 Proof
-  simp[dload_memory_match_def, dload_live_site_def] >>
+  simp[dload_memory_match_def, dload_live_site_def, ld_dyn_agree_def] >>
   rpt strip_tac >>
   `MEM (EL owner fs) fs` by simp[EL_MEM] >>
   first_x_assum drule >> strip_tac >> gvs[]
 QED
 
 Theorem dload_matched_operand:
-  dload_vars_match fs V G H tn un s t /\ s.vs_labels = t.vs_labels /\
+  dload_vars_match fl fs V G H tn un s t /\ s.vs_labels = t.vs_labels /\
   (!v. op = Var v ==> v IN V) /\
   eval_operand op s = SOME x /\ eval_operand op t = SOME y ==>
-  dload_value_word fs (op_taint tn op) (op_prov G op) (op_prov H op) x y
+  dload_value_word fl fs (op_taint tn op) (op_prov G op) (op_prov H op) x y
 Proof
   Cases_on `op`
   >- (simp[eval_operand_def, op_prov_def, op_taint_def,
@@ -211,7 +252,7 @@ Proof
 QED
 
 Theorem dload_matched_operand_defined:
-  dload_vars_match fs V G H tn un s t /\ s.vs_labels = t.vs_labels /\
+  dload_vars_match fl fs V G H tn un s t /\ s.vs_labels = t.vs_labels /\
   (!v. op = Var v ==> v IN V) ==>
   (eval_operand op s = NONE <=> eval_operand op t = NONE)
 Proof
@@ -345,14 +386,14 @@ Proof
 QED
 
 Theorem dload_initial_components:
-  o1_run_state_ok vs ==>
+  o1_run_state_ok vs /\ vs.vs_alloca_next <= fl ==>
   dload_table_stack
     [<|dr_source := FEMPTY; dr_target := FEMPTY; dr_scratch := {}|>]
     [vs] [vs] /\
-  dload_vars_match
+  dload_vars_match fl
     [<|dr_source := FEMPTY; dr_target := FEMPTY; dr_scratch := {}|>]
     V FEMPTY FEMPTY entry_taint entry_taint vs vs /\
-  dload_memory_match lo
+  dload_memory_match fl lo
     [<|dr_source := FEMPTY; dr_target := FEMPTY; dr_scratch := {}|>]
     entry_taint entry_taint vs vs
 Proof
@@ -364,7 +405,7 @@ Proof
 QED
 
 Theorem scalar_operand_equal:
-  dload_vars_match fs V G H tn un s t /\ s.vs_labels = t.vs_labels /\
+  dload_vars_match fl fs V G H tn un s t /\ s.vs_labels = t.vs_labels /\
   (!v. op = Var v ==> v IN V) /\
   op_prov G op = NONE /\ op_taint tn op = {} /\
   (eval_operand op s = NONE <=> eval_operand op t = NONE) ==>
@@ -372,7 +413,7 @@ Theorem scalar_operand_equal:
 Proof
   strip_tac >> Cases_on `eval_operand op s` >- gvs[] >>
   Cases_on `eval_operand op t` >- gvs[] >>
-  `dload_value_word fs (op_taint tn op) (op_prov G op) (op_prov H op) x x'` by
+  `dload_value_word fl fs (op_taint tn op) (op_prov G op) (op_prov H op) x x'` by
     (irule dload_matched_operand >> qexistsl [`V`,`s`,`t`,`un`] >> simp[]) >>
   Cases_on `op_prov H op` >>
   gvs[dload_value_word_def, word_agree_except_bits] >>
@@ -380,7 +421,7 @@ Proof
 QED
 
 Theorem dload_value_access_containment:
-  dload_live_layout lo sf tf fs /\ dload_value_word fs {} p q x y /\ rz <> 0 /\
+  dload_live_layout lo sf tf fs /\ dload_value_word fl fs {} p q x y /\ rz <> 0 /\
   ((lo < w2n x + rz \/ p <> NONE) ==>
     ?b n. p = SOME (b,n) /\ b <= w2n x /\ w2n x + rz <= b+n) ==>
   ((lo < w2n y + rz \/ q <> NONE) ==>

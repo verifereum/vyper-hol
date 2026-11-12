@@ -41,12 +41,12 @@ Proof
     (drule ld_sync_source >> strip_tac >>
      drule_all ld_frame_reachable_certificate >> simp[]) >>
   `MEM inst (fn_insts fn)` by metis_tac[ld_active_inst_member] >>
-  `no_raw_fmp_ops fn` by fs[fmp_free_ctx_def, EVERY_MEM] >>
+  `pre_fmp_opcode inst.inst_opcode` by
+    (fs[fmp_free_ctx_def, o1PassContractTheory.pre_fmp_ops_def, EVERY_MEM] >>
+     metis_tac[]) >>
   `inst.inst_opcode = RET` by
-    (`~is_raw_fmp_opcode inst.inst_opcode` by
-       fs[no_raw_fmp_ops_def, EVERY_MEM] >>
-     drule step_inst_base_intret_opcodes >> strip_tac >>
-     gvs[is_raw_fmp_opcode_def]) >>
+    (drule step_inst_base_intret_opcodes >> strip_tac >>
+     gvs[o1PassContractTheory.pre_fmp_opcode_def]) >>
   `ptr_discipline lo C vs0` by fs[] >>
   drule_all ld_sync_ret_effect >> strip_tac >>
   irule ld_return_terminal_package >> goal_assum (drule_at Any) >>

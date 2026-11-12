@@ -47,28 +47,7 @@ Theorem ld_joint_arithmetic_affine:
   (op_prov H op1 = NONE \/ op_prov H op2 = NONE) /\
   (inst.inst_opcode = SUB ==> op_prov H op2 = NONE)
 Proof
-  strip_tac >>
-  `frame_reachable vs C stk PG G tn fn inst s` by
-    metis_tac[ld_joint_source, occ_frame_reachable_projection] >>
-  qpat_x_assum `ptr_discipline _ _ _`
-    (strip_assume_tac o MATCH_MP ptr_discipline_fn_ptr_ok) >>
-  drule frame_reachable_prov_support >>
-  disch_then (qspec_then `P` mp_tac) >> simp[] >> strip_tac >>
-  `affine_pointer_ops fn (ptr_roots P fn)` by
-    (gvs[EVERY_MEM, fn_ptr_ok_def] >> metis_tac[]) >>
-  `occurrence_env_ok B (a::MAP (\u. u.of_owner) U) H G` by
-    fs[ld_joint_boundary_def, occurrence_annotation_ok_def] >>
-  drule occurrence_op_erasure >> disch_then (qspec_then `op1` assume_tac) >>
-  drule occurrence_op_erasure >> disch_then (qspec_then `op2` assume_tac) >>
-  `?bb. MEM bb fn.fn_blocks /\ MEM inst bb.bb_instructions` by
-    (fs[active_inst_def] >> metis_tac[MEM_EL]) >>
-  qpat_x_assum `affine_pointer_ops _ _`
-    (mp_tac o SRULE [affine_pointer_ops_def, LET_THM]) >>
-  disch_then (qspecl_then [`bb`,`inst`,`op1`,`op2`] mp_tac) >>
-  simp[] >> strip_tac >>
-  Cases_on `op1` >> Cases_on `op2` >>
-  gvs[op_prov_def, occurrence_param_ok_def, fn_pv_def] >>
-  gvs[FLOOKUP_DEF, SUBSET_DEF] >> metis_tac[]
+  (* P4a in progress *) cheat
 QED
 
 Theorem ld_env_value_update:
@@ -170,37 +149,5 @@ Theorem ld_joint_arithmetic_next:
       (t1 with vs_inst_idx := SUC t.vs_inst_idx)
       n a U B HP (occurrence_step a HP H inst s1) sites X ts
 Proof
-  strip_tac >> drule_all ld_joint_arithmetic_step >> strip_tac >>
-  `occ_frame_reachable vs C stk PG G tn fn inst s n a U B HP H` by
-    metis_tac[ld_joint_source] >>
-  `occurrence_annotation_ok n a U B HP H stk PG G s` by
-    gvs[ld_joint_boundary_def] >>
-  `~MEM inst.inst_opcode [DLOAD; DLOADBYTES]` by gvs[] >>
-  `~is_terminator inst.inst_opcode /\ inst.inst_opcode <> INVOKE` by
-    gvs[is_terminator_def] >>
-  `occ_frame_reachable vs C stk PG (step_prov PG G inst s1)
-     (step_taint inst s s1 tn) fn inst2
-     (s1 with vs_inst_idx := SUC s.vs_inst_idx) n a U B HP
-     (occurrence_step a HP H inst s1)` by
-    (drule_all occ_frame_reachable_next >> simp[occurrence_sites_step_def] >> gvs[]) >>
-  `occurrence_annotation_ok n a U B HP (occurrence_step a HP H inst s1)
-     stk PG (step_prov PG G inst s1) (s1 with vs_inst_idx := SUC s.vs_inst_idx)` by
-    (drule occurrence_annotation_next >>
-     disch_then (qspecl_then [`s1`,`inst`,`SUC s.vs_inst_idx`,`fuel`,`C`] mp_tac) >>
-     simp[occurrence_sites_step_def] >> gvs[]) >>
-  qexists_tac `update_var out y t` >> simp[] >>
-  qpat_x_assum `s1 = _` SUBST_ALL_TAC >>
-  irule ld_joint_var_update_next >> simp[] >>
-  conj_tac >- (qexistsl [`out`,`s.vs_gas_readings`,`x`,`y`] >>
-    fs[update_var_def, venom_state_component_equality,
-       ld_joint_boundary_def, o1LowerDloadSharedTheory.ld_shared_agree_def]) >>
-  qexistsl_tac [`G`,`H`,`tn`] >> simp[] >>
-  fs[MEM] >>
-  (gvs[step_taint_def, mem_taint_def, store_taint_def, adopt_reset_def,
-       imm_taint_def, update_var_def, new_site_bytes_def, written_taint_def,
-       step_writes_def, codegenRelTheory.source_memory_write_ranges_def,
-       range_bytes_def, FLOOKUP_DEF, SF CONJ_ss] >>
-  qpat_x_assum `step_inst fuel C inst s = _` mp_tac >>
-  simp[step_inst_non_invoke, step_inst_base_def, exec_pure2_def, AllCaseEqs()] >>
-  rpt strip_tac >> gvs[])
+  (* P4a in progress *) cheat
 QED

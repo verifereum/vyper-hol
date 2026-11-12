@@ -13,7 +13,7 @@ Theorem dload_joint_block_closed:
   EVERY (fn_ptr_ok P) C.ctx_functions /\
   ((?cs PG G tn f i s q emitted n pfuel t0 H0 un0 fs.
     frame_reachable vs C cs PG G tn f i s /\
-    dload_boundary_core lo fs
+    dload_boundary_core fl lo fs
       (set (fn_ir_vars f) DIFF {v | retpc_var f v})
       (MAP (\c. set (fn_ir_vars c.cf_fn) DIFF {v | retpc_var c.cf_fn v}) cs)
       PG PH G H0 tn un0 s t0 cs ds /\
@@ -54,7 +54,7 @@ Theorem dload_joint_block_closed:
   enters_block g t1 t2 /\ active_inst g j' t2 ==>
   (?cs PG G tn f i s q emitted n pfuel t0 H0 un0 fs.
     frame_reachable vs C cs PG G tn f i s /\
-    dload_boundary_core lo fs
+    dload_boundary_core fl lo fs
       (set (fn_ir_vars f) DIFF {v | retpc_var f v})
       (MAP (\c. set (fn_ir_vars c.cf_fn) DIFF {v | retpc_var c.cf_fn v}) cs)
       PG PH G H0 tn un0 s t0 cs ds /\
@@ -130,7 +130,7 @@ Resume dload_joint_block_closed[normal]:
     resolve_phi lbl a.inst_operands = SOME op /\ op = Var w ==>
     w IN (set (fn_ir_vars f) DIFF {v | retpc_var f v})` by
     (rpt strip_tac >> metis_tac[dload_original_phi_input_tracked]) >>
-  drule_at (Pat `dload_boundary_core _ _ _ _ _ _ _ _ _ _ _ _ _ _`)
+  drule_at (Pat `dload_boundary_core _ _ _ _ _ _ _ _ _ _ _ _ _ _ _`)
     dload_normal_branch_block >> disch_then drule >>
   disch_then (drule_at (Pat `dload_control_match _ _ _ _ _ _ _ _`)) >>
   disch_then (drule_at (Pat `step_inst _ _ _ _ = _`)) >>
