@@ -292,7 +292,7 @@ Proof
 QED
 
 Theorem body_name_store_memory_mem_ok:
-  expr_sim_pre ce cx env (Name ann id) es /\ stmt_state_rel ctx func ce cx es s /\
+  expr_sim_pre ce cx env (Name ann id) es /\ stmt_state_rel H ctx func ce cx es s /\
   lookup_scopes id es.scopes = SOME entry /\
   FLOOKUP ce.ce_vars id = SOME (PtrVar (Var p) sz) /\
   ~is_word_type ann /\
@@ -375,7 +375,7 @@ QED
 
 Theorem assign_name_scratch_run[local]:
   expr_sim_pre ce cx env (Name ann id) es /\
-  stmt_state_rel ctx func ce cx es s /\
+  stmt_state_rel H ctx func ce cx es s /\
   lookup_scopes id es.scopes = SOME entry /\
   FLOOKUP ce.ce_vars id = SOME (PtrVar (Var p) sz) /\
   type_memory_bytes ce ann = type_memory_size entry.type /\
@@ -388,7 +388,7 @@ Theorem assign_name_scratch_run[local]:
     run_inst_seq_mem_ok (emitted_insts sa sm) s /\
     run_inst_seq_mem_ok (emitted_insts sm sn) a /\
     run_inst_seq (emitted_insts sa sm) s = OK a /\
-    stmt_state_rel ctx func ce cx es a /\
+    stmt_state_rel H ctx func ce cx es a /\
     run_inst_seq (emitted_insts sm sn) a = OK t /\
     eval_operand buf.buf_operand t = SOME w /\
     val_in_memory entry.type entry.value (w2n w) t.vs_memory /\
@@ -410,7 +410,7 @@ Proof
   drule_all literal_alloc_buffer_run >> strip_tac >>
   rename1 `run_inst_seq (emitted_insts sa sm) s = OK a` >>
   `w2n w' + type_memory_size entry.type <= a.vs_alloca_next` by
-    (qpat_x_assum `stmt_state_rel ctx func ce cx es a` mp_tac >>
+    (qpat_x_assum `stmt_state_rel H ctx func ce cx es a` mp_tac >>
      simp_tac (srw_ss()) [stmt_state_rel_def, alloca_inv_def, alloca_next_valid_def] >>
      strip_tac >> qpat_x_assum `!aid base sz. FLOOKUP a.vs_allocas aid = _ ==> _` drule >>
      asm_simp_tac (srw_ss()) []) >>
@@ -444,7 +444,7 @@ Proof
      simp[run_inst_seq_mem_ok_last] >>
      irule below_frontier_no_ranges >> simp[mk_inst_def]) >>
   `run_inst_seq_mem_ok (emitted_insts sm sn) a` by
-    (qpat_x_assum `stmt_state_rel ctx func ce cx es s` kall_tac >>
+    (qpat_x_assum `stmt_state_rel H ctx func ce cx es s` kall_tac >>
      drule_all body_name_source_region >> strip_tac >> gvs[] >>
      irule compile_copy_memory_body_mem_ok >>
      qexistsl_tac [`w'`, `Var p'`, `type_memory_size entry.type`, `Var p`, `w`] >>
@@ -464,7 +464,7 @@ QED
 (* Actual assignment prefix, stopping immediately before the typed scratch store. *)
 Theorem compile_assign_value_name_staging_prefix_mem_ok:
   expr_sim_pre ce cx env (Name ann id) es /\
-  stmt_state_rel ctx func ce cx es s /\
+  stmt_state_rel H ctx func ce cx es s /\
   lookup_scopes id es.scopes = SOME entry /\
   FLOOKUP ce.ce_vars id = SOME (PtrVar (Var p) sz) /\
   type_memory_bytes ce ann = type_memory_size entry.type /\
@@ -480,7 +480,7 @@ Theorem compile_assign_value_name_staging_prefix_mem_ok:
     fn_has_code sn sb func /\ cs_extends sn sb /\
     run_inst_seq_mem_ok (emitted_insts sa sm ++ emitted_insts sm sn) s /\
     run_inst_seq (emitted_insts sa sm ++ emitted_insts sm sn) s = OK t /\
-    stmt_state_rel ctx func ce cx es a /\
+    stmt_state_rel H ctx func ce cx es a /\
     eval_operand buf.buf_operand t = SOME w /\
     val_in_memory entry.type entry.value (w2n w) t.vs_memory /\
     val_wf entry.type entry.value /\
@@ -538,7 +538,7 @@ QED
 
 Theorem compile_assign_value_name_staged_mem_ok:
   expr_sim_pre ce cx env (Name ann id) es /\
-  stmt_state_rel ctx func ce cx es s /\
+  stmt_state_rel H ctx func ce cx es s /\
   lookup_scopes id es.scopes = SOME entry /\
   FLOOKUP ce.ce_vars id = SOME (PtrVar (Var p) sz) /\
   ~is_word_type ann /\
@@ -587,7 +587,7 @@ QED
 
 Theorem assign_name_staged_run[local]:
   expr_sim_pre ce cx env (Name ann id) es /\
-  stmt_state_rel ctx func ce cx es s /\
+  stmt_state_rel H ctx func ce cx es s /\
   lookup_scopes id es.scopes = SOME entry /\
   FLOOKUP ce.ce_vars id = SOME (PtrVar (Var p) sz) /\
   ~is_word_type ann /\
@@ -726,7 +726,7 @@ Theorem compile_assign_value_name_staged_body_frag_mem:
   local_ptrs_reserved ce sa /\ ~block_is_terminated sa /\
   (!x. Var p = Var x \/ dst = Var x ==> not_fresh_at sa x) ==>
   frag_exec_mem ctx sa sb
-    (\s. s = s0 /\ stmt_state_rel ctx func ce cx es s /\
+    (\s. s = s0 /\ stmt_state_rel H ctx func ce cx es s /\
       alloca_history func s /\ eval_operand dst s = SOME d /\
       w2n d + type_memory_size entry.type <= s.vs_alloca_next)
     (\t. val_in_memory entry.type entry.value (w2n d) t.vs_memory /\

@@ -69,7 +69,9 @@ Proof
 QED
 
 Theorem unop_continuation_summary:
-  expr_post ctx func cenv cx e1 es sa s1 s0 (ee with gas_obs := []) v1 x t0 /\
+  (!H. valid_horizon cx st0 H ee.storage_trace ==>
+     expr_post H ctx func cenv cx e1 es sa s1 s0 (ee with gas_obs := []) v1 x t0) /\
+  (?H. valid_horizon cx st0 H ee.storage_trace) /\
   t0.vs_current_bb = s1.cs_current_bb /\
   t0.vs_inst_idx = LENGTH s1.cs_current_insts /\ ~t0.vs_halted /\
   evaluate_type (get_tenv cx) (expr_type e1) = SOME tv1 /\
@@ -83,25 +85,40 @@ Theorem unop_continuation_summary:
   gas_summary_at F (ctx,func) []
     (\vs. (unop_result cx ann bi [expr_type e1] v1 vs,vs))
     (ee with gas_obs := [],t0)
-    (\res fin t. ?v. res = INL v /\
-      expr_post ctx func cenv cx (Builtin ann bi [e1]) es sa sb s0 fin v op t /\
+    (\res fin t. !H. valid_horizon cx st0 H fin.storage_trace ==>
+      ?v. res = INL v /\
+      expr_post H ctx func cenv cx (Builtin ann bi [e1]) es sa sb s0 fin v op t /\
       t.vs_current_bb = sb.cs_current_bb /\
       t.vs_inst_idx = LENGTH sb.cs_current_insts)
-    (\res fin r. expr_exit res r)
+    (\res fin r. !H. valid_horizon cx st0 H fin.storage_trace ==>
+      expr_exit res r)
 Proof
   strip_tac >>
-  `stmt_state_rel ctx func cenv cx (ee with gas_obs := []) t0 /\
-   eval_operand x t0 = SOME (typed_val_to_w256 tv1 v1)` by
-    gvs[expr_post_def, expr_val_rel_def] >>
+  `!H. valid_horizon cx st0 H ee.storage_trace ==>
+     stmt_state_rel H ctx func cenv cx (ee with gas_obs := []) t0 /\
+     storage_well_formed_on cx (ee with gas_obs := []) (FST H)` by
+    (rpt strip_tac >>
+     qpat_assum `!H. valid_horizon _ _ H _ ==> expr_post _ _ _ _ _ _ _ _ _ _ _ _ _ _`
+       (drule_then strip_assume_tac) >>
+     gvs[expr_post_def]) >>
+  `eval_operand x t0 = SOME (typed_val_to_w256 tv1 v1)` by
+    (qpat_assum `!H. valid_horizon _ _ H _ ==> expr_post _ _ _ _ _ _ _ _ _ _ _ _ _ _`
+       (drule_then strip_assume_tac) >>
+     gvs[expr_post_def, expr_val_rel_def]) >>
   qpat_x_assum `unop_frag _ _ _ _ _ _ _ _ _`
     (mp_tac o REWRITE_RULE [unop_frag_def]) >>
-  disch_then (qspecl_then [`s1`,`sb`,`x`,`op`,`t0`] mp_tac) >>
+  disch_then (qspecl_then [`st0`,`s1`,`sb`,`x`,`op`,`t0`] mp_tac) >>
   (impl_tac >- simp[]) >> strip_tac
   >- (simp[gas_summary_at_def] >>
       qexistsl_tac [`unop_result cx ann bi [expr_type e1] v1 ee`,`ee`,`r`] >>
       conj_tac
       >- (simp[gas_marked_exec_def, unop_result_gas_obs] >> metis_tac[]) >>
-      gvs[] >> irule expr_post_unop >> simp[] >>
+      gvs[] >> disj1_tac >> rpt strip_tac >>
+      qpat_x_assum `!H. valid_horizon _ _ H _ ==> stmt_state_rel H _ _ _ _ _ s /\ _`
+        (drule_then strip_assume_tac) >>
+      qpat_x_assum `!H. valid_horizon _ _ H _ ==> expr_post _ _ _ _ _ _ _ _ _ _ _ _ _ _`
+        (drule_then strip_assume_tac) >>
+      irule expr_post_unop >> simp[] >>
       qexistsl_tac [`s1`,`t0`,`v1`,`x`] >> simp[]) >>
   simp[gas_summary_at_def] >>
   qexistsl_tac [`unop_result cx ann bi [expr_type e1] v1 ee`,`ee`,`r`] >>
