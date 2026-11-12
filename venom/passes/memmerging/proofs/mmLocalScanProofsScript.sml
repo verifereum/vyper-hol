@@ -18306,6 +18306,99 @@ Proof
   drule_all mm_local_zero_nonvolatile_transition >> simp[arithmeticTheory.ADD1]
 QED
 
+Theorem mm_local_zero_actual_interval[local]:
+  !m n es t pc out es'.
+  wf_ssa fn0 /\ fn_inst_wf fn0 /\ wf_function fn0 /\
+  ir_supply_covers_fn supply fn0 /\ index < LENGTH fn0.fn_blocks /\
+  bb = EL index fn0.fn_blocks /\ dfg = dfg_build_function fn0 /\
+  ALL_DISTINCT (MAP (\i. i.inst_id) bb.bb_instructions) /\
+  is = bb.bb_instructions /\ gs = (scan_block_memzero dfg bb).mz_flushed /\
+  h = phi_prefix_length is /\ h <= n /\ n + m <= LENGTH is /\
+  lookup_block bb.bb_label fn.fn_blocks = SOME bb /\ eom < dimword (:256) /\
+  (!j. h <= j /\ j < n + m ==>
+    (H j).vs_current_bb = bb.bb_label /\ (H j).vs_inst_idx = j /\
+    static_mem_ok eom ctx fn (EL j is) (H j) /\
+    ~is_terminator (EL j is).inst_opcode /\
+    (!v. MEM (Var v) (EL j is).inst_operands ==> v NOTIN excluded) /\
+    ?u. step_inst fuel ctx (EL j is) (H j) = OK u /\
+      H (SUC j) = u with vs_inst_idx := SUC j) /\
+  (!j dst v len. h <= j /\ j < n + m /\
+    is_calldatasize_copy dfg (EL j is) /\
+    (EL j is).inst_operands = [Lit dst; Var v; Lit len] ==>
+    lookup_var v (H j) = SOME (n2w (LENGTH (H j).vs_call_ctx.cc_calldata)) /\
+    LENGTH (H j).vs_call_ctx.cc_calldata < dimword (:256)) /\
+  (!j. n <= j /\ j <= n + m ==>
+    LENGTH (H j).vs_call_ctx.cc_calldata < dimword (:256)) /\
+  mm_local_zero_cut dfg is gs H n excluded pc t /\
+  (!v. v NOTIN excluded ==> MEM v es.irs_used_vars) /\
+  mm_flat_map_supply
+    (apply_memzero_inst_supply (nop_ids_of_groups dfg Mem2Mem is gs)
+      (rep_map_of_groups is gs)) es (TAKE m (DROP n is)) = (out,es') ==>
+  ?t'. mm_local_exec_prefix fuel ctx out t t' /\
+    mm_local_zero_cut dfg is gs H (n + m) excluded (pc + LENGTH out) t'
+Proof
+  Induct_on `m`
+  >- (simp[mm_flat_map_supply_def, mm_local_exec_prefix_def] >>
+      rpt strip_tac >> gvs[]) >>
+  rpt gen_tac >> strip_tac >>
+  `n < LENGTH is` by decide_tac >>
+  `TAKE (SUC m) (DROP n is) = EL n is :: TAKE m (DROP (SUC n) is)` by
+    simp[rich_listTheory.DROP_CONS_EL] >>
+  Cases_on `apply_memzero_inst_supply (nop_ids_of_groups dfg Mem2Mem is gs)
+    (rep_map_of_groups is gs) es (EL n is)` >>
+  rename1 `apply_memzero_inst_supply _ _ es (EL n is) = (chunk,es1)` >>
+  Cases_on `mm_flat_map_supply
+    (apply_memzero_inst_supply (nop_ids_of_groups dfg Mem2Mem is gs)
+      (rep_map_of_groups is gs)) es1 (TAKE m (DROP (SUC n) is))` >>
+  rename1 `mm_flat_map_supply _ es1 _ = (tail,es2)` >>
+  `out = chunk ++ tail /\ es' = es2` by
+    gvs[mm_flat_map_supply_def] >>
+  `?u. step_inst fuel ctx (EL n is) (H n) = OK u /\
+    H (SUC n) = u with vs_inst_idx := SUC n` by
+    (first_x_assum (qspec_then `n` mp_tac) >> simp[]) >>
+  `(H n).vs_current_bb = bb.bb_label /\ (H n).vs_inst_idx = n /\
+    static_mem_ok eom ctx fn (EL n is) (H n) /\
+    ~is_terminator (EL n is).inst_opcode /\
+    (!v. MEM (Var v) (EL n is).inst_operands ==> v NOTIN excluded)` by
+    (qpat_x_assum `!j. h <= j /\ j < n + SUC m ==> _`
+       (qspec_then `n` mp_tac) >> simp[]) >>
+  `LENGTH t.vs_call_ctx.cc_calldata < dimword (:256)` by
+    (fs[mm_local_zero_cut_def, mm_local_nonmemory_frame_def] >>
+     metis_tac[arithmeticTheory.LE_REFL, arithmeticTheory.LE_ADD]) >>
+  `!j d bs. mm_local_zero_capture dfg is (SUC n) j = SOME (d,bs) ==>
+    (H j).vs_current_bb = bb.bb_label /\ (H j).vs_inst_idx = j /\
+    static_mem_ok eom ctx fn (EL j is) (H j) /\
+    ?u. step_inst fuel ctx (EL j is) (H j) = OK u` by
+    (rpt strip_tac >>
+     `h <= j /\ j < n + SUC m` by
+       (drule mm_local_zero_capture_cases >>
+        drule mm_local_zero_capture_after_phis >> gvs[] >> decide_tac) >>
+     metis_tac[]) >>
+  `!dst v len. is_calldatasize_copy dfg (EL n is) /\
+    (EL n is).inst_operands = [Lit dst; Var v; Lit len] ==>
+    lookup_var v (H n) = SOME (n2w (LENGTH (H n).vs_call_ctx.cc_calldata)) /\
+    LENGTH (H n).vs_call_ctx.cc_calldata < dimword (:256)` by
+    (rpt strip_tac >>
+     qpat_x_assum `!j dst v len. _` (qspec_then `n` mp_tac) >> simp[]) >>
+  `?t1. mm_local_exec_prefix fuel ctx chunk t t1 /\
+    mm_local_zero_cut dfg is gs H (SUC n) excluded (pc + LENGTH chunk) t1` by
+    (drule_all mm_local_zero_actual_transition >> simp[]) >>
+  `!v. v NOTIN excluded ==> MEM v es1.irs_used_vars` by
+    (drule_at (Pat `apply_memzero_inst_supply _ _ _ _ = _`)
+       mm_local_memzero_old_use >> strip_tac >> metis_tac[]) >>
+  qpat_x_assum `!n es t pc out es'. _`
+    (qspecl_then [`SUC n`,`es1`,`t1`,`pc + LENGTH chunk`,`tail`,`es2`] mp_tac) >>
+  (impl_tac >- (gvs[arithmeticTheory.ADD_CLAUSES, arithmeticTheory.ADD_COMM] >>
+    rpt strip_tac >> metis_tac[])) >>
+  strip_tac >> qexists `t'` >>
+  conj_tac
+  >- (asm_rewrite_tac[] >> rewrite_tac[mm_local_exec_prefix_append] >>
+      qexists `t1` >> simp[]) >>
+  `n + SUC m = SUC n + m` by decide_tac >>
+  `pc + LENGTH out = pc + LENGTH chunk + LENGTH tail` by simp[] >>
+  metis_tac[]
+QED
+
 Theorem mm_local_zero_noninvoke_stop[local]:
   mm_local_zero_cut dfg is gs H n excluded pc t /\
   (!v. MEM (Var v) i.inst_operands ==> v NOTIN excluded) /\
