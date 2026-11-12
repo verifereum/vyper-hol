@@ -362,14 +362,24 @@ Proof
   simp[] >> disch_then drule_all >> simp[]
 QED
 
+Theorem subscript_base_read_state[local]:
+  (if b then bind (read_result cx r) (\v. return (Value v)) else return r) s =
+  (res, t) ==> t = s
+Proof
+  Cases_on `b` >> simp[bind_def, return_def, AllCaseEqs()] >> rpt strip_tac >>
+  imp_res_tac read_result_state >> gvs[]
+QED
+
 Theorem evaluate_immutable_subscript_case[local]:
   ^(immutable_constructor_case "Subscript")
 Proof
   BETA_TAC >> rpt strip_tac >>
   gvs[Once evaluate_def, bind_def, AllCaseEqs(), accesses_expr_def,
       int_calls_expr_def] >>
+  imp_res_tac subscript_base_read_state >>
   imp_res_tac read_result_state >> imp_res_tac select_result_state >>
   gvs[DISJ_IMP_THM, FORALL_AND_THM] >>
+  last_x_assum (drule_then (drule_then assume_tac)) >>
   rpt (qpat_x_assum `!s r t. eval_expr _ _ _ = _ ==> _` drule_all >> strip_tac) >>
   rpt (qpat_x_assum `!A R st res st'. _` (qspecl_then [`A`,`R`] mp_tac) >>
     simp[] >> disch_then drule_all >> strip_tac) >>
@@ -782,10 +792,13 @@ Theorem evaluate_immutable_range_iterator_case[local]:
   ^(immutable_stmt_case "Range")
 Proof
   BETA_TAC >> rpt strip_tac >>
-  gvs[Once evaluate_def, bind_def, return_def, raise_def, AllCaseEqs(),
-      accesses_iterator_def, int_calls_iterator_def] >>
+  fs[accesses_iterator_def, int_calls_iterator_def, DISJ_IMP_THM,
+     FORALL_AND_THM] >>
+  qpat_x_assum `eval_iterator _ _ _ = _` mp_tac >>
+  simp[Once evaluate_def, bind_def, return_def, raise_def, AllCaseEqs()] >>
+  strip_tac >> rpt BasicProvers.VAR_EQ_TAC >>
   imp_res_tac read_result_state >> imp_res_tac lift_sum_state >>
-  gvs[DISJ_IMP_THM, FORALL_AND_THM] >>
+  rpt BasicProvers.VAR_EQ_TAC >>
   rpt (qpat_x_assum `!a b c d e f. _` drule_all >> strip_tac) >>
   rpt (qpat_x_assum `!A R st res st'. _` (qspecl_then [`A`,`R`] mp_tac) >>
     simp[] >> disch_then drule_all >> strip_tac) >>
@@ -909,6 +922,18 @@ Theorem immutable_results_frame_rule[local]:
   ^im_results cx es /\ ^callable_closed cx A R /\
   ^safe_accesses A R (accesses_exprs es) (int_calls_exprs es) ==>
   !st res st'. eval_expr_results cx es st = (res,st') ==>
+    ^immutable_frame cx A st st'
+Proof
+  BETA_TAC >> strip_tac >> gvs[] >>
+  qpat_x_assum `!A R st res st'. _` (qspecl_then [`A`,`R`] mp_tac) >>
+  simp[] >> disch_tac >> rpt strip_tac >>
+  first_x_assum irule >> simp[] >> first_assum ACCEPT_TAC
+QED
+
+Theorem immutable_exprs_frame_rule[local]:
+  ^im_exprs cx es /\ ^callable_closed cx A R /\
+  ^safe_accesses A R (accesses_exprs es) (int_calls_exprs es) ==>
+  !st res st'. eval_exprs cx es st = (res,st') ==>
     ^immutable_frame cx A st st'
 Proof
   BETA_TAC >> strip_tac >> gvs[] >>
@@ -1365,21 +1390,20 @@ Theorem evaluate_immutable_intcall_case[local]:
   !cx src fn es ty drv.
   (!ts mut nr args dflts ret body.
     ^immutable_intcall_prefix cx src fn es ts mut nr args dflts ret body ==>
-    ^im_results cx es) /\
-  (!ts mut nr args dflts ret body s results t.
+    ^im_exprs cx es) /\
+  (!ts mut nr args dflts ret body s vs t.
     ^immutable_intcall_prefix cx src fn es ts mut nr args dflts ret body /\
-    eval_expr_results cx es s = (INL results,t) ==>
+    eval_exprs cx es s = (INL vs,t) ==>
     ^im_exprs (cx with stk updated_by CONS (src,fn))
       (DROP (LENGTH dflts - (LENGTH args - LENGTH es)) dflts)) /\
-  (!ts mut nr args dflts ret body s results t sd prev dvs td sr vs tr env rtv sl x tl.
+  (!ts mut nr args dflts ret body s vs t sd prev dvs td env rtv sl x tl.
     ^immutable_intcall_prefix cx src fn es ts mut nr args dflts ret body /\
-    eval_expr_results cx es s = (INL results,t) /\
+    eval_exprs cx es s = (INL vs,t) /\
     finally
       (ignore_bind (set_scopes [FEMPTY])
         (eval_exprs (cx with stk updated_by CONS (src,fn))
           (DROP (LENGTH dflts - (LENGTH args - LENGTH es)) dflts)))
       (set_scopes prev) sd = (INL dvs,td) /\
-    read_results cx results sr = (INL vs,tr) /\
     bind_arguments (get_tenv cx) args (vs ++ dvs) = SOME env /\
     evaluate_type (get_tenv cx) ret = SOME rtv /\
     lock_if_nr cx nr (is_view_mut mut) sl = (INL x,tl) ==>
@@ -1409,15 +1433,15 @@ Proof
       disch_then (mk_asm "args_frame") >>
       `^safe_accesses A R (accesses_exprs es) (int_calls_exprs es)` by
         gvs[accesses_expr_def, int_calls_expr_def] >>
-      `^im_results cx es` by (asm "args_frame" mp_tac >> simp[]) >>
+      `^im_exprs cx es` by (asm "args_frame" mp_tac >> simp[]) >>
       rule_assum_tac BETA_RULE >>
-      drule (BETA_RULE immutable_results_frame_rule) >>
+      drule (BETA_RULE immutable_exprs_frame_rule) >>
       disch_then (qspecl_then [`R`,`A`] mp_tac) >> simp[] >>
       disch_then (mk_asm "args_run") >>
-      Cases_on `eval_expr_results cx es st` >>
-      rename1 `eval_expr_results cx es st = (ar,sa)` >>
+      Cases_on `eval_exprs cx es st` >>
+      rename1 `eval_exprs cx es st = (ar,sa)` >>
       Cases_on `ar`
-      >- (rename1 `eval_expr_results cx es st = (INL avs,sa)` >>
+      >- (rename1 `eval_exprs cx es st = (INL vs,sa)` >>
           qpat_x_assum `eval_expr cx _ st = _` mp_tac >>
           simp[Once evaluate_def, type_check_def, assert_def,
             lift_option_type_def, ignore_bind_def, bind_def, return_def,
@@ -1481,12 +1505,6 @@ Proof
           >- (rename1 `finally df dc sa = (INL dvs,sd)` >>
               asm_x "run" mp_tac >> simp[Excl "lock_if_nr_def", Excl "unlock_if_nr_def"] >>
               disch_then (mk_asm "run") >>
-              Cases_on `read_results cx avs sd` >>
-              rename1 `read_results cx avs sd = (rr,sr)` >>
-              `sr = sd` by metis_tac[read_results_state] >>
-              qpat_x_assum `sr = sd` SUBST_ALL_TAC >>
-              Cases_on `rr`
-              >- (rename1 `read_results cx avs sd = (INL vs,sd)` >>
                   Cases_on `bind_arguments (get_tenv cx) args (vs ++ dvs)`
                   >- (asm_x "run" mp_tac >> simp[raise_def] >>
                       strip_tac >> qpat_x_assum `sd = st'` SUBST_ALL_TAC >>
@@ -1523,8 +1541,6 @@ Proof
                           qpat_x_assum `finally _ _ sa = (INL dvs,sd)`
                             (assume_tac o SRULE [th, GSYM ignore_bind_def])) >>
                       asm_x "guarded_body" (drule_at (Pat `finally _ _ _ = _`)) >>
-                      simp[Excl "lock_if_nr_def"] >>
-                      disch_then (drule_at (Pat `read_results _ _ _ = _`)) >>
                       simp[Excl "lock_if_nr_def"] >>
                       Cases_on `lx` >>
                       disch_then (drule_at (Pat `lock_if_nr _ _ _ _ = _`)) >>
@@ -1580,10 +1596,6 @@ Proof
                   simp[Excl "lock_if_nr_def", Excl "unlock_if_nr_def"] >>
                   strip_tac >> qpat_x_assum `sl = st'` SUBST_ALL_TAC >>
                   asm "locked_frame" (ACCEPT_TAC o BETA_RULE)) >>
-              asm_x "run" mp_tac >>
-              simp[Excl "lock_if_nr_def", Excl "unlock_if_nr_def"] >>
-              strip_tac >> qpat_x_assum `sd = st'` SUBST_ALL_TAC >>
-              asm "prefix_frame" (ACCEPT_TAC o BETA_RULE)) >>
           asm_x "run" mp_tac >>
           simp[Excl "lock_if_nr_def", Excl "unlock_if_nr_def"] >>
           strip_tac >> qpat_x_assum `sd = st'` SUBST_ALL_TAC >>
@@ -1608,7 +1620,7 @@ in valOf c end;
 val intcall_predicate_subst = map (fn (n,t) =>
   (valOf (List.find (fn v => fst (dest_var v) = n)
     (free_vars intcall_ind_premise))) |-> t)
-  [("P1",im_stmts),("P4",im_expr),("P5",im_exprs),("P10",im_results)];
+  [("P1",im_stmts),("P4",im_expr),("P5",im_exprs)];
 val intcall_normalization = INST intcall_predicate_subst
   (SIMP_CONV (srw_ss())
     [type_check_def, assert_def, lift_option_type_def, get_scopes_def,

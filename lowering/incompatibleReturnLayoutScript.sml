@@ -5,6 +5,7 @@ Ancestors
   valueEncoding exprLowering vyperTypeSystem vyperTypeArgFits vyperValue
   abiTypeBoundProps vyperABI exprSimSource exprSafeOperand
   exprSimHypsDefs exprSimHyps externalReturnSiteSemantics vyperTypeInvariants vyperAST
+  exprSimIfExpCompat
 
 Theorem nonzero_internal_call_located:
   !cfn ce ret ty fid args dret sa vv sb ret_count rbs pvs.
@@ -35,34 +36,6 @@ Theorem literal_bytes_layout:
 Proof
   simp[well_typed_expr_def, well_typed_literal_def, lowered_value_type_def,
        is_bytestring_type_def, arg_type_fits_def, compatible_bound_def]
-QED
-
-Theorem abi_encode_layout:
-  well_typed_expr env (TypeBuiltin ann (AbiEncode ensure mid) target args) /\
-  sfields_tenv_consistent ce.ce_struct_fields env.type_defs /\
-  EVERY (\t. IS_SOME (evaluate_type env.type_defs t)) (MAP expr_type args) ==>
-  is_bytestring_type ann /\
-  is_bytestring_type (lowered_value_type ce (TypeBuiltin ann (AbiEncode ensure mid) target args)) /\
-  arg_type_fits (lowered_value_type ce (TypeBuiltin ann (AbiEncode ensure mid) target args)) ann
-Proof
-  strip_tac >> drule_all abi_size_bound_tuple_typed >> strip_tac >>
-  gvs[well_typed_expr_def, type_builtin_result_ok_def,
-      abi_encode_size_ok_def, lowered_value_type_def,
-      is_bytestring_type_def, arg_type_fits_def] >>
-  Cases_on `args`
-  >- gvs[well_typed_type_builtin_args_def] >>
-  Cases_on `t` >> gvs[]
-  >- (Cases_on `ensure` >> gvs[]
-      >- (Cases_on `mid` >>
-          gvs[well_typed_type_builtin_args_def, abi_encode_method_id_size_def,
-              vyperASTTheory.abi_encode_method_id_bytes_def]) >>
-      gvs[optionTheory.IS_SOME_EXISTS] >> drule_all abi_props_vyper_typed >>
-      strip_tac >> Cases_on `mid` >>
-      gvs[well_typed_type_builtin_args_def, abi_encode_method_id_size_def,
-          vyperASTTheory.abi_encode_method_id_bytes_def]) >>
-  Cases_on `mid` >>
-  gvs[well_typed_type_builtin_args_def, abi_encode_method_id_size_def,
-      vyperASTTheory.abi_encode_method_id_bytes_def]
 QED
 
 Theorem expr_sim_inv_args_evaluate:
@@ -111,12 +84,18 @@ Proof
           well_typed_literal_def, arg_type_fits_def, compatible_bound_def])
   >>~- ([`TypeBuiltin ann tb target xs`],
       Cases_on `tb` >> gvs[lowered_value_type_def, expr_type_def] >>
-      `well_typed_exprs env xs` by
-        fs[well_typed_expr_def, well_typed_type_builtin_args_def] >>
-      drule_all expr_sim_inv_args_evaluate >> strip_tac >>
-      `sfields_tenv_consistent ce.ce_struct_fields env.type_defs` by
+      `env_consistent env cx es` by fs[expr_sim_inv_def] >>
+      `env.type_defs = get_tenv cx` by
+        fs[env_consistent_def, env_context_consistent_def] >>
+      `!id ty. FLOOKUP env.var_types id = SOME ty ==>
+               well_formed_type env.type_defs ty` by
+        (rpt strip_tac >> simp[well_formed_type_def] >>
+         metis_tac[env_consistent_var_type_evaluates]) >>
+      `sfields_tenv_consistent ce.ce_struct_fields env.type_defs /\
+       (!fid sig. FLOOKUP env.fn_sigs fid = SOME sig ==>
+          ce.ce_func_return_type (nsid_to_string fid) = sig.ret_ty)` by
         fs[expr_sim_inv_def, env_consistent_def, env_context_consistent_def] >>
-      drule_all abi_encode_layout >>
+      drule_all ifexp_lowered_type_classify >>
       gvs[lowered_value_type_def, expr_type_def])
   >>~- ([`Builtin bt bi xs`],
       Cases_on `bi` >> gvs[lowered_value_type_def, expr_type_def] >>
