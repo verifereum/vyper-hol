@@ -140,7 +140,7 @@ Proof
   Cases_on `h.inst_opcode = PHI` >> simp[] >>
   drule ptr_owner_phi_projection >>
   disch_then (qspecl_then [`prev`,`h`] strip_assume_tac) >>
-  first_x_assum irule >> irule ptr_owner_set_projection >> metis_tac[]
+  irule ptr_owner_set_projection >> simp[]
 QED
 
 Theorem ptr_owner_entry_projection:
