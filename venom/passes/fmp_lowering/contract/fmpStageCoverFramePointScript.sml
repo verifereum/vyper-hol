@@ -2,6 +2,7 @@
    Restoring at a control point is a zero-step normalization. *)
 Theory fmpStageCoverFramePoint
 Ancestors
+  fmpCoverInvokeIndex
   fmpStageCoverInv fmpStageCoverMem fmpStageFmpSteps fmpStageOpBase
   fmpStageControl fmpStageRel lowerDloadPtrRawReachable
   o1ContractSimplifyCfgSrcFrame o1PassLift o1PassContract ptrDiscipline

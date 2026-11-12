@@ -85,7 +85,7 @@ Proof
   Cases_on `fn.fn_blocks` >> Cases_on `lowered.fn_blocks` >> gvs[fn_labels_def]
 QED
 
-Theorem fmp_cover_back_make_ssa_structure:
+Theorem fmp_cover_back_make_ssa_structure[local]:
   ALL_DISTINCT (fn_labels fn) /\ fn.fn_blocks <> [] /\
   EVERY bb_well_formed fn.fn_blocks /\ EVERY inst_wf (fn_insts fn) /\
   EVERY inst_shape_ok (fn_insts fn) /\ first_block_no_preds fn /\

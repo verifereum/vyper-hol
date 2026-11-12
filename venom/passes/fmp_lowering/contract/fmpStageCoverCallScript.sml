@@ -11,7 +11,7 @@
  *)
 Theory fmpStageCoverCall
 Ancestors
-  fmpStageCoverBack fmpCoverInvokeIndex fmpCoverSavedOutputs
+  fmpStageCoverBack fmpCoverSavedOutputs
   fnFrameBoundaryInvoke
   fmpStageOpBase fmpStageRel o1PassContract ptrDiscipline contextCodegenRel
   unitTransformDefs passSimulationDefs venomExecSemantics venomState venomInst
@@ -46,7 +46,7 @@ Proof
 QED
 
 (* Saved INVOKE control survives the return merge and output assignment. *)
-Theorem fmp_back_saved_continuation:
+Theorem fmp_back_saved_continuation[local]:
   fmp_stage_ctx rpolicy D C C' vs vs' fmp eom /\
   frame_reachable vs C (f::stk) PG G tn fn rinst s /\
   bind_outputs f.cf_inst.inst_outputs ret.iret_values
@@ -195,9 +195,7 @@ Theorem fmp_stage_back_ret:
 Proof
   strip_tac >>
   `ivk'.inst_outputs = f.cf_inst.inst_outputs` by
-    (irule fmp_cover_saved_outputs >>
-     conj_tac >- metis_tac[fmp_cover_invoke_index] >>
-     metis_tac[]) >>
+    (irule fmp_cover_saved_outputs >> metis_tac[]) >>
   `s.vs_labels = t.vs_labels` by
     (fs[fmp_stage_rel_def, fmp_frame_rel_def] >> metis_tac[]) >>
   `rinst.inst_opcode <> PHI` by simp[] >>

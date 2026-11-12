@@ -48,7 +48,7 @@ Proof
   asm_rewrite_tac[FILTER, REVERSE_DEF, CONS_11] >> simp[]
 QED
 
-Theorem fmp_stage_operand_back:
+Theorem fmp_stage_operand_back[local]:
   fmp_stage_ctx rpolicy D C C' vs vs' fmp eom /\
   frame_reachable vs C stk PG G tn fn inst s /\ active_inst fn inst s /\
   fmp_stage_rel D C' sm fmp0 raw0 eom restored stk PG G tn fn s lo t ts /\

@@ -1,7 +1,7 @@
 (* Saved call outputs: separate control identity from actual nonpublication. *)
 Theory fmpCoverSavedOutputs
 Ancestors
-  fmpCoverObservedPublish fmpCoverInvokeOrigin fmpStageRel fmpLowerProps
+  fmpCoverInvokeIndex fmpCoverObservedPublish fmpCoverInvokeOrigin fmpStageRel fmpLowerProps
   fmpStepLayout fmpLowerDefs
   o1PassContract ptrDiscipline concretizePtrOwnerPath
   o1ContractSimplifyCfgSrcFrame lowerDloadPtrRawReachable
@@ -9,17 +9,6 @@ Ancestors
   mem2varProofs venomFnInstsProofs finite_map list
 
 Theorem fmp_cover_saved_outputs:
-  (!infos ctx runner fn fn' lbl bb idx i.
-    fmp_stage_lowered infos ctx runner fn fn' /\
-    lookup_block lbl fn.fn_blocks = SOME bb /\
-    idx < LENGTH bb.bb_instructions /\ i = EL idx bb.bb_instructions /\
-    i.inst_opcode = INVOKE ==>
-    ?bb' j. lookup_block lbl fn'.fn_blocks = SOME bb' /\
-      let p = fmp_stage_tidx (fmp_stage_plan infos ctx fn)
-                (fmp_stage_root infos ctx fn) lbl bb.bb_instructions idx +
-              (if (lbl,idx) IN FDOM (fmp_stage_plan infos ctx fn) then 1 else 0)
-      in p < LENGTH bb'.bb_instructions /\ j = EL p bb'.bb_instructions /\
-         j.inst_opcode = INVOKE /\ j.inst_id = i.inst_id) /\
   fmp_stage_ctx rpolicy D C C' vs vs' fmp eom /\
   frame_reachable vs C (f::stk) PG G tn fn rinst s /\
   fmp_stage_rel D C' sm fmp0 raw0 eom T (f::stk) PG G tn fn s lo t
@@ -52,8 +41,9 @@ Proof
   `f.cf_state.vs_inst_idx < LENGTH bb.bb_instructions /\
    f.cf_inst = EL f.cf_state.vs_inst_idx bb.bb_instructions` by
     fs[get_instruction_def] >>
-  first_x_assum (drule_at (Pat `fmp_stage_lowered _ _ _ _ _`)) >>
-  disch_then drule_all >> simp[] >> strip_tac >>
+  `(EL f.cf_state.vs_inst_idx bb.bb_instructions).inst_opcode = INVOKE` by
+    metis_tac[] >>
+  drule_all fmp_stage_invoke_inst >> strip_tac >>
   `ALL_DISTINCT (fn_labels fc')` by
     (`?sp sp'. fmp_lower_function ctx sp f.cf_fn = SOME (fc',sp')` by
        (fs[fmp_stage_lowered_def, fmp_lower_function_def] >> metis_tac[]) >>

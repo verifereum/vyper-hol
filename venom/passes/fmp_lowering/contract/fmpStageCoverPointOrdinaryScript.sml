@@ -1,6 +1,7 @@
 (* Progress over kept instructions, including revert-forward tails. *)
 Theory fmpStageCoverPointOrdinary
 Ancestors
+  fmpCoverInvokeIndex
   fmpStageCoverInv fmpStageCoverBack fmpStageCoverMem
   fmpStageOpSteps fmpStageOpBase fmpStageControl fmpStageRel
   o1PassContract ptrDiscipline contextCodegenRel lowerDloadPtrRawReachable

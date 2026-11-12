@@ -88,14 +88,6 @@ Proof
   Cases_on `s.vs_gas_readings` >> simp[terminates_def]
 QED
 
-Theorem kept_operands[local]:
-  (!op. MEM op ops /\ IS_SOME (eval_operand op t) ==>
-        IS_SOME (eval_operand op s)) /\ IS_SOME (eval_operands ops t) ==>
-  IS_SOME (eval_operands ops s)
-Proof
-  simp[eval_operands_IS_SOME_EVERY, EVERY_MEM] >> metis_tac[]
-QED
-
 Theorem kept_write2_defined[local]:
   LENGTH inst.inst_operands = 2 /\ IS_SOME (eval_operands inst.inst_operands s) ==>
   terminates (exec_write2 f inst s)

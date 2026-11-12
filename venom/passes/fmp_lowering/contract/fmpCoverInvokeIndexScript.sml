@@ -25,19 +25,30 @@ Proof
   simp[EL_APPEND_EQN]
 QED
 
-Theorem fmp_cover_invoke_index:
+(* Why: the lowering rewrites an INVOKE into one INVOKE with the same
+   inst_id (with the runner appended to its arguments and outputs when the
+   callee takes or publishes the FMP), at the control map's index past its
+   restore. *)
+Theorem fmp_stage_invoke_inst:
   fmp_stage_lowered infos ctx runner fn fn' /\
   lookup_block lbl fn.fn_blocks = SOME bb /\
-  idx < LENGTH bb.bb_instructions /\ i = EL idx bb.bb_instructions /\
-  i.inst_opcode = INVOKE ==>
-  ?bb' j. lookup_block lbl fn'.fn_blocks = SOME bb' /\
-    let p = fmp_stage_tidx (fmp_stage_plan infos ctx fn)
-              (fmp_stage_root infos ctx fn) lbl bb.bb_instructions idx +
-            (if (lbl,idx) IN FDOM (fmp_stage_plan infos ctx fn) then 1 else 0)
-    in p < LENGTH bb'.bb_instructions /\ j = EL p bb'.bb_instructions /\
-       j.inst_opcode = INVOKE /\ j.inst_id = i.inst_id
+  idx < LENGTH bb.bb_instructions /\
+  (EL idx bb.bb_instructions).inst_opcode = INVOKE ==>
+  ?bb'. lookup_block lbl fn'.fn_blocks = SOME bb' /\
+    fmp_stage_tidx (fmp_stage_plan infos ctx fn)
+      (fmp_stage_root infos ctx fn) lbl bb.bb_instructions idx +
+    (if (lbl,idx) IN FDOM (fmp_stage_plan infos ctx fn) then 1 else 0) <
+      LENGTH bb'.bb_instructions /\
+    (EL (fmp_stage_tidx (fmp_stage_plan infos ctx fn)
+           (fmp_stage_root infos ctx fn) lbl bb.bb_instructions idx +
+         (if (lbl,idx) IN FDOM (fmp_stage_plan infos ctx fn) then 1 else 0))
+       bb'.bb_instructions).inst_opcode = INVOKE /\
+    (EL (fmp_stage_tidx (fmp_stage_plan infos ctx fn)
+           (fmp_stage_root infos ctx fn) lbl bb.bb_instructions idx +
+         (if (lbl,idx) IN FDOM (fmp_stage_plan infos ctx fn) then 1 else 0))
+       bb'.bb_instructions).inst_id = (EL idx bb.bb_instructions).inst_id
 Proof
-  rpt strip_tac >> gvs[] >>
+  rpt strip_tac >>
   `MEM bb fn.fn_blocks /\ bb.bb_label = lbl` by
     (fs[lookup_block_def] >> imp_res_tac stackPlanGenTheory.FIND_SOME_MEM >> gvs[]) >>
   Cases_on `fn.fn_fmp_signature = NONE /\

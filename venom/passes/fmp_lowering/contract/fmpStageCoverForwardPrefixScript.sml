@@ -197,16 +197,6 @@ Proof
   metis_tac[MEM_TAKE, EVERY_TAKE]
 QED
 
-Theorem fmp_prefix_blocks_vars[local]:
-  !bbs s rs out left s'.
-  fmp_lower_blocks infos ctx runner s rs bbs = SOME (FmpBlocksResult out left s') ==>
-  !v. MEM v s.irs_used_vars ==> MEM v s'.irs_used_vars
-Proof
-  Induct >> simp[fmp_lower_blocks_def, AllCaseEqs()] >> rpt strip_tac >> gvs[] >>
-  drule fmp_prefix_indexed_vars_mono >> strip_tac >>
-  first_x_assum drule >> metis_tac[]
-QED
-
 Theorem fmp_prefix_blocks_walk[local]:
   !bbs s rs out left s' lbl bb.
   fmp_lower_blocks infos ctx runner s rs bbs = SOME (FmpBlocksResult out left s') /\
@@ -225,20 +215,6 @@ Proof
   simp[lookup_block_def] >> strip_tac >>
   qexistsl [`code`, `s0`, `rs0`, `l0`, `s1`] >> simp[FIND_thm] >>
   metis_tac[fmp_prefix_indexed_vars_mono]
-QED
-
-Theorem fmp_prefix_header_replace[local]:
-  EVERY (\i. i.inst_opcode <> ASSIGN) header /\
-  LENGTH header <= p /\ p < LENGTH (header ++ suffix) /\
-  same_after_assigns (REVERSE (TAKE p (header ++ suffix))) a b ==>
-  same_after_assigns
-    (REVERSE (TAKE (LENGTH newheader + (p - LENGTH header)) (newheader ++ suffix))) a b
-Proof
-  strip_tac >>
-  simp[TAKE_APPEND, TAKE_LENGTH_TOO_LONG, REVERSE_APPEND] >>
-  gvs[TAKE_APPEND, TAKE_LENGTH_TOO_LONG, REVERSE_APPEND] >>
-  irule scfg_same_after_assigns_replace >>
-  goal_assum (drule_at Any) >> simp[EVERY_REVERSE]
 QED
 
 Theorem fmp_prefix_unique_position[local]:

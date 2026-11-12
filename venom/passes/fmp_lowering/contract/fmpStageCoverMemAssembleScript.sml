@@ -6,7 +6,7 @@ Ancestors
   fmpLowerProps fmpReclaimDefs fmpWfDefs venomInst venomWf
   list rich_list finite_map
 
-Theorem fmp_cover_walk_interval:
+Theorem fmp_cover_walk_interval[local]:
   fmp_lower_indexed infos ctx runner lbl 0 s rs xs = SOME (out,left,s') /\
   ALL_DISTINCT (MAP FST rs) /\
   (!j b. MEM ((lbl,j),b) rs <=> FLOOKUP plan (lbl,j) = SOME b) /\

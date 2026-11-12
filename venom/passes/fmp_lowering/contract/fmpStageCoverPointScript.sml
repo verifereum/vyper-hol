@@ -1,6 +1,7 @@
 (* Progress of coverage from a related source point. *)
 Theory fmpStageCoverPoint
 Ancestors
+  fmpCoverInvokeIndex
   fmpStageCoverPointBase fmpStageCoverRestore fmpStageCoverPointAlloc
   fmpStageCoverPointRetpc fmpStageCoverPointOrdinary
   fmpStageCoverInv fmpStageCoverBack fmpStageCoverMem
