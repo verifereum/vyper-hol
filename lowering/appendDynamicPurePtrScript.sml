@@ -87,12 +87,12 @@ Proof
   irule ptr_fragment_step >> simp[] >>
   reverse conj_tac >- gvs[is_terminator_def] >>
   rpt strip_tac >> first_x_assum drule >> strip_tac >>
-  qexists_tac `update_var tmp (f a b) s` >> conj_tac >-
-    (gvs[] >> asm_simp_tac bool_ss [step_inst_base_opcode_eqs, mk_inst_def,
-       instruction_accessors, instruction_accfupds, combinTheory.K_THM,
-       opcode_case_def] >> simp[exec_pure2_def]) >>
-  asm_rewrite_tac[] >> simp[update_var_def] >> rpt strip_tac >>
-  irule dynamic_binop_ok >> simp[] >> metis_tac[]
+  `right = Lit b` by gvs[eval_operand_def] >>
+  qpat_x_assum `eval_operand right s = SOME b` kall_tac >>
+  qpat_x_assum `op_taint tn right = {}` kall_tac >>
+  drule_all dynamic_binop_step_ptr >>
+  disch_then (qspecl_then [`G`, `id`, `b`, `tmp`, `PG`] strip_assume_tac) >>
+  qexists_tac `u` >> gvs[update_var_def]
 QED
 
 Theorem emit_dynamic_binop_clean_ptr:
@@ -206,10 +206,9 @@ Proof
   rpt gen_tac >> disch_then (map_every assume_tac o CONJUNCTS) >>
   irule ptr_fragment_step >> simp[is_terminator_def] >>
   rpt strip_tac >> first_x_assum drule >> strip_tac >>
-  qexists_tac `update_var out (bool_to_word (a = 0w)) s` >> conj_tac >-
-    simp[step_inst_base_opcode_eqs, mk_inst_def, exec_pure1_def] >>
-  asm_rewrite_tac[] >> simp[update_var_def] >> rpt strip_tac >>
-  irule dynamic_unary_ok >> simp[]
+  drule_all dynamic_iszero_step_ptr >>
+  disch_then (qspecl_then [`G`, `id`, `out`, `PG`] strip_assume_tac) >>
+  qexists_tac `u` >> gvs[update_var_def]
 QED
 
 Theorem emit_dynamic_iszero_clean_ptr:
@@ -287,18 +286,8 @@ Proof
      [mk_inst sa.cs_next_id ASSERT [arg] []]` by
     gvs[emit_void_def, comp_bind_def, comp_ignore_bind_def,
         fresh_id_def, emit_def, comp_return_def] >>
+  drule_all dynamic_assert_true_step_ptr >>
+  disch_then (qspecl_then [`G`, `sa.cs_next_id`, `PG`] strip_assume_tac) >>
   irule ptr_fragment_step >> simp[is_terminator_def] >>
-  rpt strip_tac >> qexists_tac `s` >>
-  conj_tac >- simp[step_inst_base_opcode_eqs, mk_inst_def] >>
-  simp[] >> conj_tac >-
-    simp[dynamic_unary_ok] >>
-  `new_site_bytes s s = {}` by
-    simp[new_site_bytes_def, FLOOKUP_DEF, pred_setTheory.EXTENSION,
-         SF CONJ_ss] >>
-  simp[step_prov_def, set_prov_def, out_prov_def, step_taint_def,
-       mk_inst_def, set_var_taint_def, out_taint_def, op_taint_def,
-       store_taint_def, adopt_reset_def, mem_taint_def, imm_taint_def,
-       step_writes_def, source_memory_write_ranges_def, written_taint_def,
-       range_bytes_def, DRESTRICT_UNIV] >>
-  simp[taint_component_equality]
+  rpt strip_tac >> qexists_tac `s` >> simp[]
 QED
