@@ -180,12 +180,13 @@ Resume ec_mem_operands_then[first_success]:
        (mp_tac o REWRITE_RULE [gas_marked_exec_def]) >>
      strip_tac >> first_x_assum (qspec_then `[]` mp_tac) >>
      simp[]) >>
-  `?obs. es1.storage_trace = es.storage_trace ++ obs` by
-    (qpat_assum `bind (eval_expr cx a) _ _ = _`
-       (mp_then (Pos last) mp_tac storage_trace_frame_prefix) >>
-     simp[]) >>
   `!H. valid_horizon cx st0 H es1.storage_trace ==>
-       valid_horizon cx st0 H es.storage_trace` by simp[valid_horizon_def] >>
+       valid_horizon cx st0 H es.storage_trace` by
+    (`?obs. es1.storage_trace = es.storage_trace ++ obs` by
+       (qpat_assum `bind (eval_expr cx a) _ _ = _`
+          (mp_then (Pos last) mp_tac storage_trace_frame_prefix) >>
+        simp[]) >>
+     simp[valid_horizon_def]) >>
   qspecl_then [`cenv`, `cx`, `env`, `a`, `es with gas_obs := gs1`, `INL v1`, `es1`]
     mp_tac (CONV_RULE (DEPTH_CONV ETA_CONV) expr_body_pre_eval) >>
   (impl_tac >- simp[]) >> strip_tac >>
@@ -245,12 +246,13 @@ Resume ec_mem_operands_then[second_success]:
        (mp_tac o REWRITE_RULE [gas_marked_exec_def]) >>
      strip_tac >> first_x_assum (qspec_then `[]` mp_tac) >>
      simp[]) >>
-  `?obs. es2.storage_trace = es1.storage_trace ++ obs` by
-    (qpat_assum `bind (eval_expr cx b) _ _ = _`
-       (mp_then (Pos last) mp_tac storage_trace_frame_prefix) >>
-     simp[]) >>
   `!H. valid_horizon cx st0 H es2.storage_trace ==>
-       valid_horizon cx st0 H es1.storage_trace` by simp[valid_horizon_def] >>
+       valid_horizon cx st0 H es1.storage_trace` by
+    (`?obs. es2.storage_trace = es1.storage_trace ++ obs` by
+       (qpat_assum `bind (eval_expr cx b) _ _ = _`
+          (mp_then (Pos last) mp_tac storage_trace_frame_prefix) >>
+        simp[]) >>
+     simp[valid_horizon_def]) >>
   qspecl_then [`cenv`, `cx`, `env`, `b`, `es1 with gas_obs := gs2`, `INL v2`, `es2`]
     mp_tac (CONV_RULE (DEPTH_CONV ETA_CONV) expr_body_pre_eval) >>
   (impl_tac >- simp[]) >> strip_tac >>
