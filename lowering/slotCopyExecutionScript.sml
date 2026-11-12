@@ -33,7 +33,8 @@ Definition slot_copy_body_result_def:
     in jump_to (slot_copy_cond cs) s7
 End
 
-val _ = export_rewrites ["emitHelperProps.slot_copy_operand_update"];
+
+val _ = augment_srw_ss [rewrites [slot_copy_operand_update]];
 
 Theorem slot_copy_load_update[simp]:
   slot_copy_word load (update_var name value s) key = slot_copy_word load s key
@@ -426,8 +427,9 @@ Proof
   (* Unfold the step and the EQ case in separate steps: together they are
      too slow for one step. *)
   simp[Once exec_block_def, get_instruction_def, slot_copy_cond_insts_def,
-       mk_inst_def, Once step_inst_def] >>
-  simp[step_inst_base_opcode_eqs, exec_pure2_def, eval_operand_def] >>
+       mk_inst_def] >>
+  simp[Once step_inst_def, step_inst_base_opcode_eqs, exec_pure2_def,
+       eval_operand_def] >>
   simp[Once exec_block_def, get_instruction_def, slot_copy_cond_insts_def,
        mk_inst_def, Once step_inst_def, step_inst_base_opcode_eqs,
        eval_operand_def, lookup_var_def, update_var_def,

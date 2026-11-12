@@ -25,7 +25,7 @@ Theorem fmp_lowering_run_contract_gas:
 Proof
   `EL 3 o1_fn_passes = CFP_Simple VP_FmpLowering` by EVAL_TAC >>
   simp[o1_run_contract_gas_def, o1_stage_contract_gas_def,
-       fmp_variant_def] >>
+       fmp_variant_def, pass_fuel_def] >>
   rpt gen_tac >> strip_tac >>
   qexists_tac `vs' with <| vs_fmp := fmp; vs_initial_fmp := fmp |>` >>
   conj_tac

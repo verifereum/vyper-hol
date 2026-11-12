@@ -236,9 +236,24 @@ End
 
 val () = cv_auto_trans abi_head_word_def;
 
+(* Vyper's minimum ABI encoding size (Python's ABIType.static_size): the head
+   section, where each dynamic component is a 32-byte offset. A dynamic
+   Bytes, String or dynamic array has no head of its own. *)
+Definition abi_static_length_def:
+  abi_static_length (Tuple ts) = head_lengths ts 0 ∧
+  abi_static_length (Array (SOME n) t) =
+    n * (if is_dynamic t then 32 else static_length t) ∧
+  abi_static_length (Array NONE _) = 0 ∧
+  abi_static_length (Bytes NONE) = 0 ∧
+  abi_static_length String = 0 ∧
+  abi_static_length t = static_length t
+End
+
+val () = cv_auto_trans abi_static_length_def;
+
 Definition vyper_strict_enc_def:
   vyper_strict_enc env t bs =
-    (static_length (vyper_to_abi_type env t) ≤ LENGTH bs ∧
+    (abi_static_length (vyper_to_abi_type env t) ≤ LENGTH bs ∧
      LENGTH bs ≤ vyper_abi_size_bound env t)
 End
 
@@ -372,7 +387,7 @@ val () = cv_auto_trans evaluate_abi_decode_def;
 Definition vyper_valid_enc_returndata_def:
   vyper_valid_enc_returndata env t bs ⇔
     (vyper_decode_valid_enc (vyper_to_abi_type env t) bs ∧
-     static_length (vyper_to_abi_type env t) ≤ LENGTH bs)
+     abi_static_length (vyper_to_abi_type env t) ≤ LENGTH bs)
 End
 
 val () = cv_auto_trans vyper_valid_enc_returndata_def;

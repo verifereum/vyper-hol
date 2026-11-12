@@ -40,6 +40,11 @@
  * runs are matched; gas_variant is the hook the oracle instantiates,
  * equality until then.
  *
+ * The stage part fixes the output's fuel as a function of the input's
+ * (ctx_sim_fuel, pass_fuel): every pass but CFGNormalization keeps it, and
+ * CFGNormalization's split blocks multiply it by at most cfg_norm_fuel, so
+ * the pipeline's output fuel bound is a function of the input's alone.
+ *
  * The eleven contract theorems, one planned admission per pass run, are in
  * o1ContractTheorems.
  *)
@@ -50,7 +55,7 @@ Ancestors
   venomExecSemantics venomInst irSupply contextCodegenRel stackPlanGen
   lowerDloadDefs ptrDiscipline ptrStaticDiscipline staticLayoutDefs venomState stateEquiv
   passSimulationDefs vfmState extCallOracle finite_map cfgWf dretDesugarDefs
-  fcgDefs list
+  fcgDefs list rich_list
 
 (* ===== Equivalence up to dead bytes ===== *)
 
@@ -161,6 +166,60 @@ Definition ctx_sim_def:
     !fuel. terminates (run_context fuel ctx s) ==>
       ?fuel'. dead_result_rel D (run_context fuel ctx s)
                                 (run_context fuel' ctx' s')
+End
+
+(* ctx_sim with the output fuel a fixed function f of the input fuel. *)
+Definition ctx_sim_fuel_def:
+  ctx_sim_fuel f D ctx ctx' s s' <=>
+    !fuel. terminates (run_context fuel ctx s) ==>
+      dead_result_rel D (run_context fuel ctx s) (run_context (f fuel) ctx' s')
+End
+
+Theorem ctx_sim_fuel_imp_ctx_sim:
+  ctx_sim_fuel f D ctx ctx' s s' ==> ctx_sim D ctx ctx' s s'
+Proof
+  rw[ctx_sim_fuel_def, ctx_sim_def] >> metis_tac[]
+QED
+
+Theorem ctx_sim_fuel_trans:
+  dead_wf D /\ ctx_sim_fuel f D C1 C2 s1 s2 /\
+  ctx_sim_fuel g D C2 C3 s2 s3 ==>
+  ctx_sim_fuel (g o f) D C1 C3 s1 s3
+Proof
+  rw[ctx_sim_fuel_def] >> first_x_assum drule >> strip_tac >>
+  `terminates (run_context (f fuel) C2 s2)` by
+    metis_tac[dead_result_rel_terminates] >>
+  first_x_assum drule >> strip_tac >>
+  metis_tac[dead_result_rel_trans]
+QED
+
+(* A per-function fuel map f lifted through calls: a callee runs on the
+   fuel its caller has left, so n units of caller fuel become
+   lift_fuel f n (o1PassLift's fn_bisim_fuel_run_context). *)
+Definition lift_fuel_def:
+  lift_fuel f 0 = 0 /\
+  lift_fuel f (SUC n) = f (SUC (lift_fuel f n))
+End
+
+Theorem lift_fuel_I:
+  lift_fuel I = I
+Proof
+  simp[FUN_EQ_THM] >> Induct >> simp[lift_fuel_def]
+QED
+
+(* CFGNormalization's fuel map on its output C': each split block at most
+   doubles a function's fuel, and a function gains at most as many blocks
+   as the largest function of C' has. *)
+Definition cfg_norm_fuel_def:
+  cfg_norm_fuel C' =
+    lift_fuel (\n. 2 ** MAX_LIST (MAP (\fn. LENGTH fn.fn_blocks)
+                                    C'.ctx_functions) * n)
+End
+
+(* The output fuel map of one pass run, on its output context C'. *)
+Definition pass_fuel_def:
+  pass_fuel pass C' =
+    if pass = CFP_Simple VP_CFGNormalization then cfg_norm_fuel C' else I
 End
 
 Theorem ctx_transform_correct_ctx_sim:
@@ -606,7 +665,7 @@ Definition o1_stage_contract_def:
     !C C' vs.
       ctx_pass_stage rpolicy pass view C C' /\ pre C C' /\ dead_wf D /\
       o1_ctx_shape C /\ o1_run_state_ok vs /\ I C vs ==>
-      ctx_sim D C C' vs vs /\ I' C' vs
+      ctx_sim_fuel (pass_fuel pass C') D C C' vs vs /\ I' C' vs
 End
 
 (* How a stage run's input state may differ from its output state: in the
@@ -635,7 +694,7 @@ Definition o1_stage_contract_gas_def:
       o1_ctx_shape C /\ o1_run_state_ok vs' ==>
       ?vs. fmp_variant fo vs vs' /\
            (I C vs /\ fmp_variant_room fo C' vs' ==>
-            ctx_sim D C C' vs vs' /\ I' C' vs')
+            ctx_sim_fuel (pass_fuel pass C') D C C' vs vs' /\ I' C' vs')
 End
 
 Theorem gas_variant_run_state_ok:

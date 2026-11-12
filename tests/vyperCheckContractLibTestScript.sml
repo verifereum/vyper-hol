@@ -1002,6 +1002,62 @@ val () = app (fn (params, expression) => check_rejects empty_layouts
         [Name (BaseT (BytesT (Dynamic 33))) "b";
          Literal (BaseT (IntT 256)) (IntL (-1))]``)]
 
+(* This annotation previously passed despite disagreeing with Vyper's
+   inferred slice capacity. *)
+val () = check_rejects empty_layouts
+  (builtin_modules ``Pure`` ``[("b", BaseT (BytesT (Dynamic 2)))]``
+    ``BaseT (BytesT (Dynamic 1))``
+    ``Builtin (BaseT (BytesT (Dynamic 1))) (Slice 1)
+        [Name (BaseT (BytesT (Dynamic 2))) "b";
+         Literal (BaseT (UintT 256)) (IntL 0);
+         Literal (BaseT (UintT 256)) (IntL 2)]``)
+
+(* Result capacities may exceed both literal lengths and source capacities. *)
+val slice_params =
+  ``[("b", BaseT (BytesT (Dynamic 2))); ("n", BaseT (UintT 256))]``
+fun slice_expression bound start len =
+  ``Builtin (BaseT (BytesT (Dynamic ^bound))) (Slice ^bound)
+      [Name (BaseT (BytesT (Dynamic 2))) "b"; ^start; ^len]``
+val slice_zero = ``Literal (BaseT (UintT 256)) (IntL 0)``
+val slice_one = ``Literal (BaseT (UintT 256)) (IntL 1)``
+val slice_two = ``Literal (BaseT (UintT 256)) (IntL 2)``
+val slice_length = ``Name (BaseT (UintT 256)) "n"``
+val () = app (fn (bound, start, len) => check_rejects empty_layouts
+  (builtin_modules ``Pure`` slice_params
+    ``BaseT (BytesT (Dynamic ^bound))`` (slice_expression bound start len)))
+  [(``1 : num``, slice_zero, slice_length),
+   (``1 : num``, slice_zero, slice_zero)]
+val () = app (fn (bound, start, len) => check_accepts "slice inferred capacity"
+  false empty_layouts (builtin_modules ``Pure`` slice_params
+    ``BaseT (BytesT (Dynamic ^bound))`` (slice_expression bound start len)))
+  [(``2 : num``, slice_zero, slice_length),
+   (``1 : num``, slice_one, slice_one),
+   (``2 : num``, slice_one, slice_two),
+   (``2 : num``, ``Literal (BaseT (UintT 256)) (IntL 3)``, slice_length)]
+val () = app (fn len => check_accepts "slice widened annotation" false empty_layouts
+  (builtin_modules ``Pure``
+    ``[("b", BaseT (BytesT (Dynamic 50))); ("n", BaseT (UintT 256))]``
+    ``BaseT (BytesT (Dynamic 100))``
+    ``Builtin (BaseT (BytesT (Dynamic 100))) (Slice 100)
+        [Name (BaseT (BytesT (Dynamic 50))) "b"; ^slice_zero; ^len]``))
+  [slice_two, slice_length]
+
+val code_source = ``Builtin (BaseT (BytesT (Dynamic 24576))) (Acc Code)
+  [Name (BaseT AddressT) "a"]``
+val code_params = ``[("a", BaseT AddressT); ("n", BaseT (UintT 256))]``
+fun code_slice bound len =
+  ``Builtin (BaseT (BytesT (Dynamic ^bound))) (Slice ^bound)
+      [^code_source; ^slice_zero; ^len]``
+val () = check_accepts "code slice has unbounded source capacity" false empty_layouts
+  (builtin_modules ``View`` code_params ``BaseT (BytesT (Dynamic 30000))``
+    (code_slice ``30000 : num`` ``Literal (BaseT (UintT 256)) (IntL 30000)``))
+val () = check_accepts "code slice widened annotation" false empty_layouts
+  (builtin_modules ``View`` code_params ``BaseT (BytesT (Dynamic 100))``
+    (code_slice ``100 : num`` slice_two))
+val () = check_rejects empty_layouts
+  (builtin_modules ``View`` code_params ``BaseT (BytesT (Dynamic 24576))``
+    (code_slice ``24576 : num`` slice_length))
+
 val s10 = ``BaseT (StringT 10)``
 val s20 = ``BaseT (StringT 20)``
 val () = check_rejects empty_layouts
@@ -1141,6 +1197,73 @@ val () = check_rejects
          [Append (TopLevelNameTarget (NONE,"arr")) (Name ^s20 "t")]])]
     : (num option # toplevel list) list``
 
+(* A narrower String, Bytes or DynArray is accepted as an internal-call
+   argument, a tuple- or DynArray-literal element passed to a wider parameter,
+   and a struct-literal field, as pinned Vyper accepts it (compare_type);
+   a wider or mismatched element is rejected, as Vyper rejects it. *)
+val s5 = ``BaseT (StringT 5)``
+(* An internal function g with parameter type pty, called from an external
+   function f taking (x : xty) with argument arg. *)
+fun intcall_modules pty xty arg =
+  ``[(NONE,
+      [FunctionDecl Internal Pure F F "g" [("p",^pty)] [] ^u256
+         [Return (SOME (Literal ^u256 (IntL 1)))];
+       FunctionDecl External Pure F F "f" [("x",^xty)] [] ^u256
+         [Return (SOME (Call ^u256 (IntCall (NONE,"g")) [^arg] NONE))]])]
+    : (num option # toplevel list) list``
+(* A tuple literal typed tty (Vyper types it by its context) holding
+   x : sty. *)
+fun tuple_lit tty sty =
+  ``Builtin (TupleT [^tty; ^u256]) (MakeArray NONE (Fixed 2))
+      [Name ^sty "x"; Literal ^u256 (IntL 1)]``
+fun tuple_arg sty = tuple_lit sty sty
+fun dyn_arg elem xty =
+  ``Builtin (ArrayT ^elem (Dynamic 2)) (MakeArray (SOME ^elem) (Dynamic 2))
+      [Name ^xty "x"]``
+(* A struct P with fields s : fty and n : uint256, built from x : xty. *)
+fun struct_modules fty xty =
+  ``[(NONE,
+      [StructDecl "P" [("s",^fty); ("n",^u256)];
+       FunctionDecl External Pure F F "f" [("x",^xty)] [] ^u256
+         [AnnAssign "p" (StructT (NONE,"P"))
+            (StructLit (StructT (NONE,"P")) (NONE,"P")
+               [("s",Name ^xty "x"); ("n",Literal ^u256 (IntL 1))]);
+          Return (SOME (Literal ^u256 (IntL 1)))]])]
+    : (num option # toplevel list) list``
+val b5 = ``BaseT (BytesT (Dynamic 5))``
+val b10 = ``BaseT (BytesT (Dynamic 10))``
+fun dyn_u256 n = ``ArrayT ^u256 (Dynamic ^(numSyntax.term_of_int n))``
+val s40 = ``BaseT (StringT 40)``
+val () = List.app (fn (label, mods) =>
+    check_accepts label false empty_layouts mods)
+  [("narrower internal-call argument", intcall_modules s10 s5 ``Name ^s5 "x"``),
+   ("narrower tuple-literal argument",
+    intcall_modules ``TupleT [^s10; ^u256]`` s5 (tuple_arg s5)),
+   ("narrower tuple-literal argument, String[40]",
+    intcall_modules ``TupleT [^s40; ^u256]`` s5 (tuple_arg s5)),
+   ("context-typed tuple literal",
+    intcall_modules ``TupleT [^s10; ^u256]`` s5 (tuple_lit s10 s5)),
+   ("narrower DynArray-literal element",
+    intcall_modules ``ArrayT ^s10 (Dynamic 2)`` s5 (dyn_arg s10 s5)),
+   ("narrower DynArray-literal Bytes element",
+    intcall_modules ``ArrayT ^b10 (Dynamic 2)`` b5 (dyn_arg b10 b5)),
+   ("narrower DynArray-literal DynArray element",
+    intcall_modules ``ArrayT ^(dyn_u256 4) (Dynamic 2)`` (dyn_u256 2)
+      (dyn_arg (dyn_u256 4) (dyn_u256 2))),
+   ("narrower struct-literal field", struct_modules s10 s5),
+   ("narrower struct-literal field, String[40]", struct_modules s40 s5)]
+val () = List.app (check_rejects empty_layouts)
+  [intcall_modules s5 s10 ``Name ^s10 "x"``,
+   intcall_modules ``TupleT [^s5; ^u256]`` s10 (tuple_arg s10),
+   intcall_modules ``TupleT [^s5; ^u256]`` s10 (tuple_lit s5 s10),
+   intcall_modules ``ArrayT ^s5 (Dynamic 2)`` s10 (dyn_arg s5 s10),
+   intcall_modules ``ArrayT ^u256 (Dynamic 2)`` ``BaseT AddressT``
+     (dyn_arg u256 ``BaseT AddressT``),
+   intcall_modules ``ArrayT ^(dyn_u256 2) (Dynamic 2)`` (dyn_u256 4)
+     (dyn_arg (dyn_u256 2) (dyn_u256 4)),
+   struct_modules s5 s10,
+   struct_modules s10 b5]
+
 (* A main-module constant initialized from an imported module's constant: the
    imports' constants are folded first (constants_order). *)
 val import_constant_modules =
@@ -1219,7 +1342,7 @@ fun mutability_modules vis mut nr dflts ret body =
        EventDecl "E" [];
        ^(helper ``Pure`` "pure_h"); ^(helper ``View`` "view_h");
        ^(helper ``Nonpayable`` "np_h"); ^(helper ``Payable`` "pay_h");
-       FunctionDecl ^vis ^mut ^nr F "f"
+       FunctionDecl ^vis ^mut ^nr F ^(if aconv vis ``Deploy`` then ``"__init__"`` else ``"f"``)
          [("a", BaseT AddressT); ("n", BaseT (UintT 256))] ^dflts ^ret
          ^body])] : (num option # toplevel list) list``
 
@@ -1780,6 +1903,29 @@ val () = List.app (fn deploy =>
    assert_some (literal_range_check deploy ``BaseT (IntT 8)`` (~128) 127 255)))
   [false,true]
 
+(* Array loops use the type's maximum bound, including when a dynamic array
+   currently contains fewer elements. *)
+fun array_bound_check in_deploy bd count = let
+  val arr = ``ArrayT ^u256 ^bd``
+in
+  check_selector_decls in_deploy empty_layouts
+    ``[FunctionDecl ^(if in_deploy then ``Deploy`` else ``External``)
+         Nonpayable F F ^(if in_deploy then ``"__init__"`` else ``"f"``)
+         [] [] NoneT
+         [AnnAssign "xs" ^arr
+            (Builtin ^arr (MakeArray (SOME ^u256) ^bd)
+               [^(const_lit 1); ^(const_lit 2)]);
+          For "i" ^u256 (Array (Name ^arr "xs"))
+            ^(numSyntax.term_of_int count) [Pass]]]``
+end
+
+val () = List.app (fn deploy => List.app (fn (bd, count) =>
+  (assert_some (array_bound_check deploy bd count);
+   List.app (fn mismatch =>
+     assert_none (array_bound_check deploy bd mismatch))
+     [0, count - 1, count + 1]))
+  [(``Fixed 2``, 2), (``Dynamic 3``, 3)]) [false,true]
+
 (* A valid lock layout must not make a guarded constructor legal. Headers
    are checked in runtime mode too, when the constructor body is inactive. *)
 val () = List.app (fn deploy => List.app (fn layouts =>
@@ -1821,7 +1967,8 @@ val () = List.app (fn in_deploy =>
 
 (* Vyper reports NamespaceCollision for repeated self members, independently
    of function visibility, variable visibility, declaration order or mode.
-   Renaming only the second member makes each control acceptable. *)
+   Renaming only the second member makes each control acceptable. A `@deploy`
+   function is always `__init__`, so deploy visibility is not varied here. *)
 fun self_member_function vis name =
   ``FunctionDecl ^vis Nonpayable F F ^name [] [] NoneT []``
 
@@ -1853,7 +2000,7 @@ val () = List.app (fn in_deploy =>
        (self_member_function vis, variable))
        [self_member_variable ``Private``, self_member_variable ``Public F``,
         self_member_hashmap ``Private``, self_member_hashmap ``Public F``])
-       [``Internal``, ``External``, ``Deploy``]))) [false, true]
+       [``Internal``, ``External``]))) [false, true]
 
 val () = cv_auto_trans contract_namespaces_ok_def;
 

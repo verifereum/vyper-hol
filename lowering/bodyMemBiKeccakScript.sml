@@ -13,7 +13,8 @@ Theorem body_builtin_keccak256_mem:
     body_expr_mem_ok cx (Builtin ty Keccak256 es)
 Proof
   rpt gen_tac >> strip_tac >>
-  rewrite_tac[body_expr_mem_ok_def] >> rpt gen_tac >> strip_tac >>
+  (rpt gen_tac >> match_mp_tac body_expr_mem_ok_intro >>
+   conj_tac >- (rpt strip_tac >> gvs[])) >> rpt gen_tac >> strip_tac >>
   `builtin_args_length_ok Keccak256 (LENGTH es)` by
     (gvs[expr_body_pre_def, well_typed_expr_def,
          well_typed_builtin_app_def, builtin_args_length_ok_def]) >>
