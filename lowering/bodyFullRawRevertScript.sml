@@ -12,8 +12,9 @@
  *)
 Theory bodyFullRawRevert
 Ancestors
-  bodyFullPreds bodySimFull gasShadowState gasShadow exprLowering
-  vyperAST list
+  bodyFullRawRevertCompiledTail bodyFullRawRevertValue
+  bodyFullRawRevertPackaging bodyFullPreds bodySimFull
+  gasShadowState gasShadow exprLowering vyperAST list
 
 val _ = Parse.hide "body";
 
@@ -25,5 +26,12 @@ Theorem raw_revert_expr_full_ok:
     body_exprs_full_ok cx es ==>
     body_expr_full_ok cx (Call ann RawRevert es dflt)
 Proof
-  cheat
+  mp_tac raw_revert_body_full_from_value >>
+  (impl_tac >-
+    (mp_tac raw_revert_value_full_from_tail >>
+     (impl_tac >-
+       (rpt gen_tac >> strip_tac >>
+        drule_all raw_revert_compiled_tail_joint >> simp[])) >>
+     simp[])) >>
+  simp[]
 QED
