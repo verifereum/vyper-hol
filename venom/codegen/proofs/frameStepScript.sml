@@ -40,6 +40,31 @@ Definition frame_gas_left_def:
     | [] => 0
 End
 
+Theorem consume_gas_frame_gas:
+  consume_gas k es = (r,s') /\ 0 < frame_gas_left es /\
+  k <= frame_gas_left es ==>
+  r <> INR (SOME OutOfGas) /\
+  frame_gas_left es = frame_gas_left s' + k
+Proof
+  namedCases_on `es.contexts` ["", "head tail"] >>
+  simp[frame_gas_left_def] >> PairCases_on `head` >>
+  simp[consume_gas_def, get_current_context_def, set_current_context_def,
+       bind_def, ignore_bind_def, assert_def, return_def, fail_def,
+       frame_gas_left_def] >>
+  rpt strip_tac >> gvs[AllCaseEqs(), frame_gas_left_def] >> decide_tac
+QED
+
+Theorem assert_not_static_frame_gas:
+  assert_not_static es = (r,s') ==>
+  r <> INR (SOME OutOfGas) /\
+  frame_gas_left s' = frame_gas_left es
+Proof
+  namedCases_on `es.contexts` ["", "head tail"] >>
+  simp[assert_not_static_def, get_static_def, get_current_context_def,
+       bind_def, assert_def, return_def, fail_def] >>
+  rpt strip_tac >> gvs[AllCaseEqs()]
+QED
+
 Theorem write_storage_frame_gas:
   write_storage address key value es = (r,s') ==>
   r <> INR (SOME OutOfGas) /\
