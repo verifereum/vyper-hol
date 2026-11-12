@@ -233,6 +233,10 @@ Theorem inline_selected_source_segment:
   ?k bres ss ml bb tb snap ts.
     cfuel = SUC k /\
     exec_block k C entry (ss (LENGTH params)) = bres /\
+    (ss (LENGTH params)).vs_inst_idx = LENGTH params /\
+    phi_prefix_length entry.bb_instructions <= (ss (LENGTH params)).vs_inst_idx /\
+    (no_param_insts tail ==>
+      no_param_insts (DROP (ss (LENGTH params)).vs_inst_idx entry.bb_instructions)) /\
     (!err. bres <> Error err) /\
     res = (case bres of
       OK z => if z.vs_halted then Halt z else run_blocks k C ca.ia_function z
@@ -253,7 +257,7 @@ Theorem inline_selected_source_segment:
 Proof
   strip_tac >> drule_all inline_live_selected_source_entry_trace >>
   disch_then (qspecl_then [`0`, `Tctx`] strip_assume_tac) >>
-  qexistsl [`k`, `bres`, `ss`, `ml`, `bb`, `tb`, `snap`, `ts`] >> simp[] >>
+  qexistsl [`k`, `bres`, `ss`, `ml`, `bb`, `tb`, `snap`, `ts`] >> simp[listTheory.DROP_APPEND2] >>
   irule inline_segment_entry_trace >> simp[] >>
   gvs[venomStateTheory.jump_to_def]
 QED
@@ -405,7 +409,7 @@ Theorem inline_boundary_keep_fetch[local]:
   ?ml mj tb ti.
     inline_keep_boundary e l j = (ml,mj) /\
     lookup_block ml e.ise_final.fn_blocks = SOME tb /\
-    get_instruction tb mj = SOME ti /\ ti.inst_opcode <> INVOKE /\
+    get_instruction tb mj = SOME ti /\ ti.inst_opcode = inst.inst_opcode /\
     inline_choice_location (InlineKeep e)
       <|il_block := l; il_phase := InlineAtInstruction j; il_counter := k|> =
       SOME <|il_block := ml; il_phase := InlineAtInstruction mj; il_counter := k|>
@@ -576,4 +580,144 @@ Proof
   strip_tac >> drule_all inline_noninvoke_boundary_location >> strip_tac >>
   irule inline_activation_return_here >>
   simp[functionInlinerLiveInvariantTheory.inline_live_location_def] >> metis_tac[]
+QED
+
+Theorem inline_keep_boundary_ordinary_suc[local]:
+  inline_site_edit_valid e /\
+  lookup_block e.ise_block e.ise_caller.fn_blocks = SOME source_bb /\
+  e.ise_index < LENGTH source_bb.bb_instructions /\
+  (EL e.ise_index source_bb.bb_instructions).inst_opcode = INVOKE /\
+  ~MEM e.ise_return (fn_labels e.ise_caller) /\
+  lookup_block l e.ise_caller.fn_blocks = SOME sb /\
+  get_instruction sb j = SOME inst /\ inst.inst_opcode <> INVOKE /\
+  inline_parameter_boundary (InlineKeep e) e.ise_caller l j e.ise_final ml mj ==>
+  inline_parameter_boundary (InlineKeep e) e.ise_caller l (SUC j)
+    e.ise_final ml (SUC mj)
+Proof
+  strip_tac >>
+  `j < LENGTH sb.bb_instructions` by gvs[venomInstTheory.get_instruction_def] >>
+  `l = e.ise_block ==> j <> e.ise_index` by
+    (strip_tac >> gvs[venomInstTheory.get_instruction_def] >> metis_tac[]) >>
+  `inline_keep_boundary e l (SUC j) = (ml,SUC mj)` by
+    (Cases_on `l = e.ise_block` >>
+     Cases_on `e.ise_index < j` >>
+     gvs[inline_parameter_boundary_def, inline_keep_boundary_def]) >>
+  `SUC j <= LENGTH sb.bb_instructions` by decide_tac >>
+  drule_all inline_keep_boundary_produce >> simp[]
+QED
+
+Theorem inline_enter_boundary_ordinary_suc[local]:
+  inline_site_edit_valid e /\
+  lookup_block e.ise_block e.ise_caller.fn_blocks = SOME bb /\
+  lookup_block l e.ise_callee.fn_blocks = SOME cb /\
+  ~MEM e.ise_return (fn_labels e.ise_caller) /\
+  ~MEM (STRCAT e.ise_prefix l) (fn_labels e.ise_caller) /\
+  STRCAT e.ise_prefix l <> e.ise_return /\
+  get_instruction cb j = SOME inst /\
+  ~MEM inst.inst_opcode [PARAM; FMP_PARAM; RETPC_PARAM; RET; RETFMP] /\
+  inline_parameter_boundary (InlineEnter e) e.ise_callee l j e.ise_final ml mj ==>
+  inline_parameter_boundary (InlineEnter e) e.ise_callee l (SUC j)
+    e.ise_final ml (SUC mj)
+Proof
+  strip_tac >>
+  `SUC j <= LENGTH cb.bb_instructions` by
+    gvs[venomInstTheory.get_instruction_def] >>
+  drule_all functionInlinerReachableCutsTheory.inline_cell_prefix_singleton_suc >>
+  disch_then (qspecl_then [`e`,`bb`] strip_assume_tac) >>
+  `inline_parameter_boundary (InlineEnter e) e.ise_callee l (SUC j) e.ise_final
+    (STRCAT e.ise_prefix l) (LENGTH (FST (inline_cell_prefix e bb cb (SUC j))))` by
+    (irule inline_enter_boundary_produce >> metis_tac[]) >>
+  gvs[inline_parameter_boundary_def]
+QED
+
+Theorem inline_enter_boundary_ordinary_fetch[local]:
+  inline_site_edit_valid e /\
+  lookup_block e.ise_block e.ise_caller.fn_blocks = SOME bb /\
+  lookup_block l e.ise_callee.fn_blocks = SOME cb /\
+  ~MEM e.ise_return (fn_labels e.ise_caller) /\
+  ~MEM (STRCAT e.ise_prefix l) (fn_labels e.ise_caller) /\
+  STRCAT e.ise_prefix l <> e.ise_return /\
+  get_instruction cb j = SOME inst /\
+  ~MEM inst.inst_opcode [PARAM; FMP_PARAM; RETPC_PARAM; RET; RETFMP] ==>
+  ?tb ti. lookup_block (STRCAT e.ise_prefix l) e.ise_final.fn_blocks = SOME tb /\
+    get_instruction tb (LENGTH (FST (inline_cell_prefix e bb cb j))) = SOME ti /\
+    ti.inst_opcode = inst.inst_opcode
+Proof
+  strip_tac >>
+  `j < LENGTH cb.bb_instructions /\ inst = EL j cb.bb_instructions` by
+    gvs[venomInstTheory.get_instruction_def] >>
+  drule_all functionInlinerReachableCutsTheory.inline_cell_focus_singleton >>
+  disch_then (qspecl_then [`e`,`bb`] assume_tac) >>
+  drule_all inline_edit_enter_focus_fetch >>
+  simp[LET_THM] >> disch_then (qspec_then `0` mp_tac) >>
+  gvs[functionInlinerReachableCutsTheory.inline_cell_focus_def,
+      functionInlinerReachableCutsTheory.inline_cell_prefix_def] >>
+  simp[inline_fetched_fields_def, inline_inst_fields_def,
+       inline_boundary_repair_opcode, functionInlinerDefsTheory.clone_instruction_def] >>
+  metis_tac[]
+QED
+
+Theorem inline_boundary_choice_ordinary_suc[local]:
+  inline_annotated_origin C e.ise_state.is_inline_count e.ise_caller a /\
+  inline_annotated_origin C e.ise_state.is_inline_count e.ise_callee b /\
+  inline_site_edit_valid e /\
+  ((choice = InlineKeep e /\ fn = e.ise_caller) \/
+   (choice = InlineEnter e /\ fn = e.ise_callee)) /\
+  lookup_block l fn.fn_blocks = SOME sb /\ get_instruction sb j = SOME inst /\
+  ~MEM inst.inst_opcode [INVOKE; PARAM; FMP_PARAM; RETPC_PARAM; RET; RETFMP; PHI] /\
+  inline_parameter_boundary choice fn l j root ml mj ==>
+  inline_parameter_boundary choice fn l (SUC j) root ml (SUC mj) /\
+  ?tb ti. lookup_block ml root.fn_blocks = SOME tb /\
+    get_instruction tb mj = SOME ti /\ ti.inst_opcode = inst.inst_opcode
+Proof
+  strip_tac >>
+  drule_all functionInlinerOccurrencesTheory.inline_annotated_edit_fetch_facts >>
+  strip_tac
+  >- (gvs[] >>
+      `root = e.ise_final` by gvs[inline_parameter_boundary_def] >>
+      `ALL_DISTINCT (fn_labels e.ise_caller)` by
+        metis_tac[functionInlinerOccurrencesTheory.inline_annotated_origin_labels] >>
+      `?bb. lookup_block e.ise_block e.ise_caller.fn_blocks = SOME bb /\
+        e.ise_index < LENGTH bb.bb_instructions /\
+        (EL e.ise_index bb.bb_instructions).inst_opcode = INVOKE` by
+        (irule functionInlinerWfTheory.find_invoke_site_lookup >>
+         gvs[inline_site_edit_valid_def] >> metis_tac[]) >>
+      gvs[] >> conj_tac >- (irule inline_keep_boundary_ordinary_suc >> metis_tac[]) >>
+      drule_all inline_boundary_keep_fetch >>
+      disch_then (qspec_then `0` strip_assume_tac) >>
+      gvs[inline_parameter_boundary_def] >> metis_tac[pairTheory.PAIR_EQ]) >>
+  gvs[] >>
+  `MEM l (fn_labels e.ise_callee)` by
+    metis_tac[venomExecPropsTheory.lookup_block_label,
+      venomExecPropsTheory.lookup_block_MEM, venomInstTheory.fn_labels_def, listTheory.MEM_MAP] >>
+  `~MEM (STRCAT e.ise_prefix l) (fn_labels e.ise_caller) /\
+   STRCAT e.ise_prefix l <> e.ise_return` by metis_tac[] >>
+  `root = e.ise_final` by gvs[inline_parameter_boundary_def] >>
+  gvs[] >> conj_tac >- (irule inline_enter_boundary_ordinary_suc >> simp[] >> metis_tac[]) >>
+  `~MEM inst.inst_opcode [PARAM; FMP_PARAM; RETPC_PARAM; RET; RETFMP]` by simp[] >>
+  drule inline_enter_boundary_ordinary_fetch >>
+  disch_then drule >> disch_then drule >>
+  disch_then (qspec_then `j` mp_tac) >>
+  simp[] >>
+  gvs[inline_parameter_boundary_def] >> metis_tac[]
+QED
+
+Theorem inline_boundary_path_ordinary_suc:
+  !path fn root l j sb inst ml mj.
+    inline_annotated_choice_path C path fn root /\
+    lookup_block l fn.fn_blocks = SOME sb /\ get_instruction sb j = SOME inst /\
+    ~MEM inst.inst_opcode [INVOKE; PARAM; FMP_PARAM; RETPC_PARAM; RET; RETFMP; PHI] /\
+    inline_parameter_boundary_path path fn l j root ml mj ==>
+    inline_parameter_boundary_path path fn l (SUC j) root ml (SUC mj)
+Proof
+  Induct >>
+  simp[functionInlinerParameterPropagationTheory.inline_annotated_choice_path_def,
+       inline_parameter_boundary_path_def] >> rpt strip_tac >>
+  rename1 `inline_parameter_boundary h fn l j mid il ij` >>
+  `mid = e.ise_final` by gvs[inline_parameter_boundary_def] >>
+  `inline_parameter_boundary h fn l (SUC j) mid il (SUC ij) /\
+   ?tb ti. lookup_block il mid.fn_blocks = SOME tb /\
+     get_instruction tb ij = SOME ti /\ ti.inst_opcode = inst.inst_opcode` by
+    (irule inline_boundary_choice_ordinary_suc >> simp[] >> metis_tac[]) >>
+  gvs[] >> first_x_assum drule >> simp[] >> metis_tac[]
 QED
