@@ -38,6 +38,7 @@
  *   sym_step, sym_run          — single step and fuel-based run
  *   asm_static_wf              — static label and data-layout well-formedness
  *   label_disciplined          — no label misuse from a start state
+ *   sym_run_within             — a run's step and per-step bound
  *   asm_refines                — the contract between two programs
  *   finalizer_correct          — a finalizer's outputs refine its inputs
  *)
@@ -419,6 +420,51 @@ Definition label_disciplined_def:
     ∀fuel msg. sym_run p env fuel (sym_init s) ≠ SymBad msg
 End
 
+(* ===== Bounded runs ===== *)
+
+(* The run from ss ends, or reaches an instruction Q stops at, within k
+   steps, with no error or label misuse, and P holds of each instruction it
+   runs before that, with the stack it runs it on. The sufficient-gas
+   proof needs this, not just a terminal result, to carry one step and
+   memory bound for a whole family of runs from p to its finalized
+   version (P bounds an instruction's memory, Q is RETURNDATACOPY). *)
+Definition sym_run_within_def:
+  (sym_run_within P Q p env 0 ss ⇔ F) ∧
+  (sym_run_within P Q p env (SUC k) ss ⇔
+     ss.sym_base.as_pc < LENGTH p ∧
+     (Q (EL ss.sym_base.as_pc p) ∨
+      P (EL ss.sym_base.as_pc p) ss.sym_stack ∧
+      case sym_step p env (EL ss.sym_base.as_pc p) ss of
+        SymOK ss' => sym_run_within P Q p env k ss'
+      | SymError _ => F
+      | SymBad _ => F
+      | _ => T))
+End
+
+(* Instructions that touch no memory, call, create or self-destruct: the
+   ones a finalizer may run where its input runs others (stack shuffles,
+   jumps, pushes, labels, ISZERO and arithmetic). *)
+Definition asm_plain_inst_def:
+  asm_plain_inst inst ⇔
+    ¬is_data_inst inst ∧
+    ∀name. inst = AsmOp name ⇒
+      ¬MEM name ["MLOAD"; "MSTORE"; "MSTORE8"; "SHA3"; "RETURN"; "REVERT";
+                 "LOG0"; "LOG1"; "LOG2"; "LOG3"; "LOG4"; "CALLDATACOPY";
+                 "CODECOPY"; "RETURNDATACOPY"; "EXTCODECOPY"; "MCOPY";
+                 "CALL"; "CALLCODE"; "STATICCALL"; "DELEGATECALL";
+                 "CREATE"; "CREATE2"; "SELFDESTRUCT"]
+End
+
+(* The bounds a finalizer keeps: P holds of plain instructions, and Q stops
+   at none. P sees only which stack items are words, and their values, not
+   which labels the others are: the optimizer renames labels. *)
+Definition sym_within_ok_def:
+  sym_within_ok P Q ⇔
+    (∀inst stk. asm_plain_inst inst ⇒ P inst stk ∧ ¬Q inst) ∧
+    ∀inst stk stk'.
+      MAP sval_val stk = MAP sval_val stk' ⇒ (P inst stk ⇔ P inst stk')
+End
+
 Definition sym_terminal_def:
   sym_terminal (SymHalt _) = T ∧
   sym_terminal (SymRevert _) = T ∧
@@ -445,16 +491,23 @@ End
    data environment where p's symbolic run ends without error, p''s ends the
    same way. The environment stands for the bytes from each data header on;
    since p' has the same data section, one environment serves both programs.
+   And p' takes at most c times p's steps, for one c over all runs, with the
+   same bounds on what each step does (sym_run_within, sym_within_ok): one
+   step and memory bound then covers a whole family of runs of p', as the
+   sufficient-gas theorems need.
    The optimizer's rules are each proved against this. *)
 Definition asm_refines_def:
   asm_refines p p' ⇔
     asm_static_wf p ⇒
     asm_static_wf p' ∧
     FILTER is_data_inst p' = FILTER is_data_inst p ∧
-    ∀env s fuel.
-      sym_terminal (sym_run p env fuel (sym_init s)) ⇒
-      ∃fuel'. sym_result_rel (sym_run p env fuel (sym_init s))
-                             (sym_run p' env fuel' (sym_init s))
+    (∀env s fuel.
+       sym_terminal (sym_run p env fuel (sym_init s)) ⇒
+       ∃fuel'. sym_result_rel (sym_run p env fuel (sym_init s))
+                              (sym_run p' env fuel' (sym_init s))) ∧
+    ∃c. ∀P Q env s k.
+      sym_within_ok P Q ∧ sym_run_within P Q p env k (sym_init s) ⇒
+      sym_run_within P Q p' env (c * k) (sym_init s)
 End
 
 Definition finalizer_correct_def:

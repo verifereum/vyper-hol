@@ -23,6 +23,11 @@ Proof
    EL (LENGTH pfx) (pfx ++ [AsmLabel l] ++ sfx) = AsmLabel l`
     by simp[listTheory.EL_APPEND_EQN] >>
   qexistsl_tac [`1`, `0`] >>
+  reverse (rpt conj_tac)
+  >- (rpt strip_tac >> irule window_bounded_plain >>
+      simp[sym_steps_pos, sym_steps_def, sym_step_def, sym_lift_def,
+           asm_step_def, asm_next_def, sym_steps_ok_one, sym_steps_ok_def,
+           asm_plain_inst_def, is_data_inst_def]) >>
   simp[sym_steps_pos, sym_steps_def, sym_step_def, sym_lift_def,
        asm_step_def, asm_next_def, sym_terminal_def] >>
   simp[splice_pc_def, sym_with_pc_def, sym_state_component_equality,

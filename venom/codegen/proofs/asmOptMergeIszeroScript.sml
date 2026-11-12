@@ -121,7 +121,43 @@ Proof
    LENGTH pfx + 2 < LENGTH p ∧ EL (LENGTH pfx + 2) p = AsmOp "ISZERO" ∧
    LENGTH pfx < LENGTH q ∧ EL (LENGTH pfx) q = x`
     by simp[Abbr `p`, Abbr `q`, listTheory.EL_APPEND_EQN] >>
-  qexistsl_tac [`3`, `1`] >> simp[sym_steps_pos] >>
+  qexistsl_tac [`3`, `1`] >>
+  conj_tac >- simp[] >> conj_tac >- simp[] >>
+  CONV_TAC (REWR_CONV CONJ_ASSOC) >> reverse conj_tac
+  >- (rpt strip_tac >>
+      `0 < k` by (Cases_on `k` >> gvs[sym_run_within_def]) >>
+      Cases_on `Q x`
+      >- (disj1_tac >>
+          `∃n. 2 * k = SUC n` by (qexists_tac `2 * k - 1` >> simp[]) >>
+          simp[sym_run_within_def]) >>
+      reverse (Cases_on `∃s1. sym_step q env x ss = SymOK s1`)
+      >- (disj1_tac >> irule within_same_halting_step >>
+          first_assum (irule_at Any) >> gvs[]) >>
+      disj2_tac >> pop_assum (qx_choose_then `s1` assume_tac) >>
+      `sym_step p env x ss = SymOK s1` by simp[] >>
+      drule_all sym_step_zero_or_one >>
+      disch_then (qx_choosel_then [`w`, `stk`] (CONJUNCTS_THEN assume_tac)) >>
+      `s1.sym_base.as_pc = LENGTH pfx + 1`
+        by (drule_at (Pos last) sym_step_pc_next >> simp[]) >>
+      drule_then (qspecl_then [`p`, `env`] assume_tac) sym_step_iszero_val >>
+      qmatch_asmsub_abbrev_tac `sym_step p env (AsmOp "ISZERO") s1 = SymOK s2` >>
+      `s2.sym_stack = Val (b2w (w = 0w)) :: stk ∧
+       s2.sym_base.as_pc = LENGTH pfx + 2`
+        by simp[Abbr `s2`, asmSemTheory.asm_next_def] >>
+      drule_then (qspecl_then [`p`, `env`] assume_tac) sym_step_iszero_val >>
+      qmatch_asmsub_abbrev_tac `sym_step p env (AsmOp "ISZERO") s2 = SymOK s3` >>
+      `asm_plain_inst (AsmOp "ISZERO")`
+        by simp[asm_plain_inst_def, is_data_inst_def] >>
+      `¬Q (AsmOp "ISZERO")` by gvs[sym_within_ok_def] >>
+      `sym_steps p env 3 ss = SymOK s3`
+        by simp[sym_steps_pos, sym_steps_def] >>
+      `sym_steps_ok (λi stk. T) Q p env 3 ss`
+        by simp[sym_steps_ok_pos, sym_steps_ok_def] >>
+      drule_all sym_run_within_steps >> strip_tac >>
+      simp[sym_steps_ok_one] >>
+      qpat_x_assum `sym_steps_ok P Q p env 3 ss` mp_tac >>
+      simp[sym_steps_ok_pos]) >>
+  simp[sym_steps_pos] >>
   Cases_on `sym_step q env x ss` >>
   simp[sym_terminal_def, sym_result_rel_refl] >>
   rename1 `sym_step q env x ss = SymOK s1` >>
@@ -214,11 +250,21 @@ Proof
                         `sfx` |-> `AsmPushLabel l :: AsmOp "JUMPI" :: rest`]
                   splice_index_of_label) >>
         simp[Abbr `p`, Abbr `q`]) >>
-  qexistsl_tac [`4`, `2`] >> simp[] >>
+  qexistsl_tac [`4`, `2`] >>
+  conj_tac >- simp[] >> conj_tac >- simp[] >>
+  CONV_TAC (REWR_CONV CONJ_ASSOC) >>
   qspecl_then [`ss`, `p`, `env`] strip_assume_tac
     (GEN_ALL sym_step_iszero_cases)
-  >~ [`SymError`] >- simp[sym_steps_pos, sym_terminal_def]
-  >~ [`SymBad`] >- simp[sym_steps_pos, sym_terminal_def] >>
+  >~ [`SymError`] >- (reverse conj_tac
+      >- (rpt strip_tac >> irule window_bounded_cases >>
+          simp[sym_steps_pos, sym_terminal_def, sym_steps_ok_one,
+               sym_steps_ok_pos, asm_plain_inst_def, is_data_inst_def]) >>
+      simp[sym_steps_pos, sym_terminal_def])
+  >~ [`SymBad`] >- (reverse conj_tac
+      >- (rpt strip_tac >> irule window_bounded_cases >>
+          simp[sym_steps_pos, sym_terminal_def, sym_steps_ok_one,
+               sym_steps_ok_pos, asm_plain_inst_def, is_data_inst_def]) >>
+      simp[sym_steps_pos, sym_terminal_def]) >>
   drule_then (qspecl_then [`p`, `env`] assume_tac) sym_step_iszero_val >>
   qmatch_asmsub_abbrev_tac `sym_step p env (AsmOp "ISZERO") ss = SymOK s1` >>
   `s1.sym_stack = Val (b2w (w = 0w)) :: stk ∧
@@ -246,6 +292,12 @@ Proof
    t1.sym_base.as_pc = LENGTH pfx + 1`
     by simp[Abbr `t1`, asmSemTheory.asm_next_def] >>
   drule_then (qspecl_then [`q`, `env`] assume_tac) sym_step_jumpi_label >>
+  reverse conj_tac
+  >- (rpt strip_tac >> irule window_bounded_cases >>
+      Cases_on `w = 0w` >> Cases_on `INDEX_OF (AsmLabel l) p` >>
+      simp[sym_steps_pos, sym_steps_def, b2w_b2w_eq_zero, sym_terminal_def,
+           sym_steps_ok_pos, sym_steps_ok_def, asm_plain_inst_def,
+           is_data_inst_def]) >>
   simp[sym_steps_pos, sym_steps_def, b2w_b2w_eq_zero] >>
   IF_CASES_TAC >> simp[sym_terminal_def]
   >- simp[Abbr `s1`, Abbr `s2`, Abbr `s3`, Abbr `t1`,
