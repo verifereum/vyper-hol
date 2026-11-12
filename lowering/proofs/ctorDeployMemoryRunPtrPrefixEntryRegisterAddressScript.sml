@@ -273,7 +273,11 @@ Proof
  conj_tac >- metis_tac[abi_encoder_registered_effect_trans] >>
  conj_tac >- (rpt strip_tac >> fs[op_taint_def]) >>
  conj_tac >- metis_tac[abi_decode_sim_trans] >>
- conj_tac >- (rpt strip_tac >> metis_tac[gas_origin_ptr_path_trans]) >>
+ conj_tac >- (
+    qpat_x_assum `checked ==> !D explicit. gas_origin_ptr_path _ (initial,_,_) _ _` mp_tac >>
+    qpat_x_assum `checked ==> !D explicit. gas_origin_ptr_path _ (p1,_,_) _ _` mp_tac >>
+    qpat_x_assum `checked ==> !D explicit. gas_origin_ptr_path _ (p2,_,_) _ _` mp_tac >>
+    rpt (pop_assum kall_tac) >> metis_tac[gas_origin_ptr_path_trans]) >>
  strip_tac >>
  `gas_path_mem ctx func initial 0 (OK p2)` by
    (irule (SRULE [ADD] (Q.INST [`n` |-> `0`, `m` |-> `0`] gas_path_mem_then)) >>

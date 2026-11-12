@@ -96,8 +96,8 @@ val PreparedOriginsMode = ``\checked.
     (checked ==> !D explicit. gas_origin_ptr_path (D, (imm_len tops), explicit, ctx, func, []) (t, G, tn) [] (OK actual, H, qt)) /\
     (checked ==> gas_path_mem ctx func t 0 (OK actual) /\ alloca_history func actual)``;
 
-(* TEMPORARILY CHEATED - RULE F interface: the statement gained the forward
-   joint gas-origin pointer path; the original proof below proves the rest.
+Theorem deploy_ptr_entry_register_prepared_origins_coverage_mode:
+  !checked. (^PreparedOriginsMode) checked
 Proof
   gen_tac >> BETA_TAC >> strip_tac >>
   mp_tac (prefix_entry_register_suffix_origins_coverage_mode |> Q.SPEC `checked` |> BETA_RULE |> Q.ISPEC `fargs:(string # type) list` |>
@@ -113,12 +113,6 @@ Proof
   (conj_tac >- first_assum ACCEPT_TAC) >> asm_rewrite_tac[] >>
   (conj_tac >- (drule prefix_entry_frontier_all_sites >> simp[])) >>
   fs[]
-QED
-*)
-Theorem deploy_ptr_entry_register_prepared_origins_coverage_mode:
-  !checked. (^PreparedOriginsMode) checked
-Proof
-  cheat
 QED
 
 

@@ -211,7 +211,10 @@ Proof
  conj_tac >- suspend "scratch" >>
  `checked ==> !D explicit. gas_origin_ptr_path (D, lo, explicit, ctx, func, PG)
     (initial, G, tn) [] (OK actual, H, qt)` by
-   (rpt strip_tac >> metis_tac[gas_origin_ptr_path_trans]) >>
+   (
+    qpat_x_assum `checked ==> !D explicit. gas_origin_ptr_path _ (initial,_,_) _ _` mp_tac >>
+    qpat_x_assum `checked ==> !D explicit. gas_origin_ptr_path _ (prepared,_,_) _ _` mp_tac >>
+    rpt (pop_assum kall_tac) >> metis_tac[gas_origin_ptr_path_trans]) >>
  metis_tac[abi_decode_sim_trans]
 QED
 
@@ -424,7 +427,10 @@ Resume prefix_entry_register_one_slot_sizes_coverage_mode[finish]:
   conj_tac >- suspend "ghost" >>
   `checked ==> !D explicit. gas_origin_ptr_path (D, lo, explicit, ctx, func, PG)
      (initial, G, tn) [] (OK actual, H, qt)` by
-    (rpt strip_tac >> metis_tac[gas_origin_ptr_path_trans]) >>
+    (
+     qpat_x_assum `checked ==> !D explicit. gas_origin_ptr_path _ (initial,_,_) _ _` mp_tac >>
+     qpat_x_assum `checked ==> !D explicit. gas_origin_ptr_path _ (a,_,_) _ _` mp_tac >>
+     rpt (pop_assum kall_tac) >> metis_tac[gas_origin_ptr_path_trans]) >>
   metis_tac[]
 QED
 

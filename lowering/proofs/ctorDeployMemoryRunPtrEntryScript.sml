@@ -27,7 +27,7 @@ Ancestors
   contextCodegenRel arithmetic finite_map venomMemDefs
   vyperInterpreter vyperState vyperContext ctorDeployInitcode compileVyper
   ctorDeployMemoryRunPtrPrefixEntryPrepare
-  ctorDeployMemoryRunPtrPrefixEntryRegisterList
+  ctorDeployMemoryRunPtrPrefixEntryRegisterList fragGasOriginPtrLoop
   ctorDeployMemoryRunPtrPrefixEntryPrepared
   abiEncoderRegisteredEffect
   ctorDeployLoweringEntrySourceFrame
@@ -248,8 +248,8 @@ val SourceEntryMode = ``\checked.
         (!mem. (!a. a IN B ==> mem_bytes_at a 1 mem = mem_bytes_at a 1 actual.vs_memory) ==>
           val_in_memory entry.type entry.value d mem))``;
 
-(* TEMPORARILY CHEATED - RULE F interface: the statement gained the forward
-   joint gas-origin pointer path; the original proof below proves the rest.
+Theorem deploy_ptr_entry_prefix_source_mode:
+  !checked. (^SourceEntryMode) checked
 Proof
   gen_tac >> BETA_TAC >> strip_tac >>
   drule_all deploy_ptr_entry_normalized >> simp_tac bool_ss [LET_THM] >> strip_tac >>
@@ -357,6 +357,8 @@ Proof
   `local_ptrs_rel fn (cenv1 with ce_ctor_exit_label := SOME exit) [scope'] end_state` by
     (qpat_x_assum `local_ptrs_rel fn cenv1 _ end_state` mp_tac >>
      simp[local_ptrs_rel_def, local_region_def]) >>
+  (conj_tac >- (strip_tac >> simp[Abbr `initial`] >>
+    metis_tac[gas_origin_ptr_path_trans])) >>
   (conj_tac >- (strip_tac >> conj_tac
     >- (simp[Abbr `initial`] >> metis_tac[fragGasPathMemTheory.gas_path_mem_then, ADD_0]) >>
     asm_rewrite_tac[] >>
@@ -411,16 +413,38 @@ Proof
   rpt strip_tac >> qpat_x_assum `imm = Var _` (fn th => rewrite_tac[GSYM th]) >>
   first_assum ACCEPT_TAC
 QED
-*)
-Theorem deploy_ptr_entry_prefix_source_mode:
-  !checked. (^SourceEntryMode) checked
-Proof
-  cheat
-QED
 
 
-(* TEMPORARILY CHEATED - RULE F interface: the statement gained the forward
-   joint gas-origin pointer path; the original proof below proves the rest.
+Theorem deploy_ptr_entry_prefix_related_checked:
+  deploy_phases policy tops (deploy_bc,runtime_bc) (rp,unit,dout,prog,cplan) /\
+  deploy_source_ok tops am tx /\ deploy_state_rel tops deploy_bc am tx es /\
+  gas_variant vs (deploy_entry_state prog cplan tops es) /\
+  deploy_ctor_code tops rp runtime_bc unit
+    (body,ce,nr,key,ut,imm,exit,sa,sb,sj,se,sp,sf,func) /\
+  deploy_ctor_start tops am tx (mut,nr,body,am_c,es0) /\
+  lookup_function "__deploy" unit.cu_context.ctx_functions = SOME fn /\
+  fn_entry_label fn = SOME lbl ==>
+  ?actual H qt.
+    (!D explicit. gas_origin_ptr_path (D, (imm_len tops), explicit, unit.cu_context, func, []) ((vs with <|vs_prev_bb := NONE; vs_current_bb := lbl; vs_inst_idx := 0|>), FEMPTY, entry_taint) [] (OK actual, H, qt)) /\
+    gas_path_mem unit.cu_context func
+      (vs with <|vs_prev_bb := NONE; vs_current_bb := lbl; vs_inst_idx := 0|>) 0 (OK actual) /\
+    alloca_history func actual /\
+    actual.vs_code = vs.vs_code /\ actual.vs_labels = vs.vs_labels /\
+    ghost_inv_at (deploy_dead HS tops runtime_bc am tx) (imm_len tops) NONE ce
+      (deploy_evaluation_context tops am tx)
+      (es0 with outcomes := SOME vs.vs_outcomes) H qt actual /\
+    return_buf_frame NONE ce sa actual /\
+    stmt_state_rel HS unit.cu_context func ce (deploy_evaluation_context tops am tx)
+      (es0 with outcomes := SOME vs.vs_outcomes) actual /\
+    ~actual.vs_halted /\ actual.vs_current_bb = sa.cs_current_bb /\
+    actual.vs_inst_idx = LENGTH sa.cs_current_insts /\
+    actual.vs_gas_readings = vs.vs_gas_readings /\
+    deploy_ptr_inv HS tops runtime_bc am tx imm H qt actual /\
+    ((!fuel. ptr_safe_run (deploy_dead HS tops runtime_bc am tx) (imm_len tops)
+        fuel unit.cu_context func [] H qt actual) ==>
+      !fuel. ptr_safe_run (deploy_dead HS tops runtime_bc am tx) (imm_len tops)
+        fuel unit.cu_context func [] FEMPTY entry_taint
+        (vs with <|vs_prev_bb := NONE; vs_current_bb := lbl; vs_inst_idx := 0|>))
 Proof
   strip_tac >> drule_all (SIMP_RULE bool_ss [] (Q.SPEC `T` deploy_ptr_entry_prefix_source_mode)) >> strip_tac >> gvs[] >>
   drule deploy_ptr_ctor_environment >> strip_tac >>
@@ -495,40 +519,6 @@ Proof
   `return_buf_frame NONE ce sa actual` by
     (drule ctor_checked_code_return_buf >> simp[loweringPostsTheory.return_buf_frame_def]) >>
   qexistsl [`actual`,`H`,`qt`] >> simp[stmt_state_rel_def] >> first_assum ACCEPT_TAC
-QED
-*)
-Theorem deploy_ptr_entry_prefix_related_checked:
-  deploy_phases policy tops (deploy_bc,runtime_bc) (rp,unit,dout,prog,cplan) /\
-  deploy_source_ok tops am tx /\ deploy_state_rel tops deploy_bc am tx es /\
-  gas_variant vs (deploy_entry_state prog cplan tops es) /\
-  deploy_ctor_code tops rp runtime_bc unit
-    (body,ce,nr,key,ut,imm,exit,sa,sb,sj,se,sp,sf,func) /\
-  deploy_ctor_start tops am tx (mut,nr,body,am_c,es0) /\
-  lookup_function "__deploy" unit.cu_context.ctx_functions = SOME fn /\
-  fn_entry_label fn = SOME lbl ==>
-  ?actual H qt.
-    (!D explicit. gas_origin_ptr_path (D, (imm_len tops), explicit, unit.cu_context, func, []) ((vs with <|vs_prev_bb := NONE; vs_current_bb := lbl; vs_inst_idx := 0|>), FEMPTY, entry_taint) [] (OK actual, H, qt)) /\
-    gas_path_mem unit.cu_context func
-      (vs with <|vs_prev_bb := NONE; vs_current_bb := lbl; vs_inst_idx := 0|>) 0 (OK actual) /\
-    alloca_history func actual /\
-    actual.vs_code = vs.vs_code /\ actual.vs_labels = vs.vs_labels /\
-    ghost_inv_at (deploy_dead HS tops runtime_bc am tx) (imm_len tops) NONE ce
-      (deploy_evaluation_context tops am tx)
-      (es0 with outcomes := SOME vs.vs_outcomes) H qt actual /\
-    return_buf_frame NONE ce sa actual /\
-    stmt_state_rel HS unit.cu_context func ce (deploy_evaluation_context tops am tx)
-      (es0 with outcomes := SOME vs.vs_outcomes) actual /\
-    ~actual.vs_halted /\ actual.vs_current_bb = sa.cs_current_bb /\
-    actual.vs_inst_idx = LENGTH sa.cs_current_insts /\
-    actual.vs_gas_readings = vs.vs_gas_readings /\
-    deploy_ptr_inv HS tops runtime_bc am tx imm H qt actual /\
-    ((!fuel. ptr_safe_run (deploy_dead HS tops runtime_bc am tx) (imm_len tops)
-        fuel unit.cu_context func [] H qt actual) ==>
-      !fuel. ptr_safe_run (deploy_dead HS tops runtime_bc am tx) (imm_len tops)
-        fuel unit.cu_context func [] FEMPTY entry_taint
-        (vs with <|vs_prev_bb := NONE; vs_current_bb := lbl; vs_inst_idx := 0|>))
-Proof
-  cheat
 QED
 
 Theorem deploy_ptr_entry_prefix_related:
