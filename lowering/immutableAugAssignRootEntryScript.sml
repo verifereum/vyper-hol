@@ -92,6 +92,7 @@ Theorem immutable_augassign_root_entry:
     (!z. cur = Var z ==> not_fresh_at s1 z) /\
     (!z. not_fresh_at sa z ==> lookup_var z u = lookup_var z s) /\
     u.vs_allocas = s.vs_allocas /\ u.vs_alloca_next = s.vs_alloca_next /\
+    u.vs_memory = s.vs_memory /\
     ~u.vs_halted /\ u.vs_current_bb = s1.cs_current_bb /\
     u.vs_inst_idx = LENGTH s1.cs_current_insts /\ (!l. cur <> Label l)
 Proof

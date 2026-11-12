@@ -8,8 +8,7 @@ Ancestors
   bodyMemoryPreds targetPlaceSim immutableWordReadMemory immutablePathReplace
   immutableWriteReplay immutableWordStoreFrame immutableWordStoreMemory
   immutableAugAssignContinuation bodyAugPlaceTarget immutableAugAssignRootEntry
-  immutableAugAssignRootWrite immutableAugAssignSuffixMemory
-  immutableAugAssignSourceOutcome
+  immutableAugAssignRootWrite immutableAugAssignScalarAssembly
 
 (* RESIDUAL (held): as its S1 twin immutable_deploy_assign_case, which is
    admitted on this base. *)
@@ -94,7 +93,7 @@ Theorem body_augassign_immutable_deploy_mem:
 Proof
   rpt strip_tac >> Cases_on `t`
   >- gvs[]
-  >- cheat
+  >- (irule immutable_augassign_scalar_assembly >> metis_tac[])
   >> metis_tac[aug_place_supported_stmt_target_info,
                aug_place_supported_root_not_immutable]
 QED
