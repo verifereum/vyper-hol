@@ -202,6 +202,22 @@ Proof
   simp[EXTENSION, FLOOKUP_DEF] >> metis_tac[]
 QED
 
+(* Discharges one hypothesis of a range-transport lemma for a single
+   operand case: a fact, an arithmetic bound, or one disjunct of the
+   fixed / site / dynamic-region alternatives. *)
+val ld_range_case_tac =
+  let
+    val leaf = FIRST [simp[] >> NO_TAC, decide_tac,
+                      res_tac >> decide_tac, metis_tac[]]
+  in
+    rpt conj_tac >>
+    FIRST [leaf,
+           disj1_tac >> rpt conj_tac >> leaf,
+           disj2_tac >> rpt conj_tac >> leaf,
+           disj2_tac >> disj1_tac >> rpt conj_tac >> leaf,
+           disj2_tac >> disj2_tac >> rpt conj_tac >> leaf]
+  end
+
 Theorem ld_joint_mcopy_step:
   ld_joint_boundary vs C C' lo D stk PG G tn fn inst s t
     n a U B HP H sites X ts /\ ptr_discipline lo C vs /\
@@ -250,18 +266,14 @@ Proof
     `l <> 0w` by (strip_tac >> gvs[]) >>
     qpat_x_assum `eval_operand dop t = SOME d' /\ _` strip_assume_tac >>
     gvs[] >>
-    `w2n d = w2n d' \/
-     (w2n d+w2n l <= dyn_floor C vs /\ w2n d'+w2n l <= dyn_floor C vs)` by
-      (TRY (disj1_tac >> simp[] >> NO_TAC) >> disj2_tac >>
-       res_tac >> decide_tac) >>
     pure_rewrite_tac[mcopy_def, GSYM read_memory_def, LET_THM] >> BETA_TAC >>
     rpt conj_tac >>
     FIRST [
       drule_at (Pat `ld_joint_geometry _ _ _ _`)
         (Q.INST [`fl` |-> `dyn_floor C vs`] ld_memory_agree_snapshot_copy) >>
-      disch_then irule >> simp[] >> metis_tac[] >> NO_TAC,
+      disch_then irule >> ld_range_case_tac >> NO_TAC,
       drule_at (Pat `ld_memory_agree _ _ _ _ _`) ld_dyn_agree_snapshot_copy >>
-      disch_then irule >> simp[] >> metis_tac[] >> NO_TAC]]
+      disch_then irule >> ld_range_case_tac >> NO_TAC]]
 QED
 
 Theorem ld_joint_mcopy_next:
