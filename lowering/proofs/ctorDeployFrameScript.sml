@@ -210,9 +210,9 @@ Theorem deploy_frame_gas_sufficient:
         (deploy_entry_state prog cplan tops (add_frame_gas g' es)) /\
       venom_run_bounded fuel M dout.po_unit.cu_context
         (deploy_entry_state prog cplan tops (add_frame_gas g' es)) /\
-      (?src vfuel.
+      (?H src vfuel.
          ~deploy_source_exempt tops src /\
-         deploy_venom_result_rel tops runtime_bc tx src
+         deploy_venom_result_rel H tops runtime_bc tx src
            (run_context vfuel dout.po_unit.cu_context
               (deploy_entry_state prog cplan tops (add_frame_gas g' es))))
       ==>
