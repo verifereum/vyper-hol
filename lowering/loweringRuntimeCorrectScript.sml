@@ -25,7 +25,7 @@
 Theory loweringRuntimeCorrect
 Ancestors
   sourceUnitExecution e2eDefs compileVyper vyperInterpreter vyperState
-  vyperStorageFootprint gasShadowUnit
+  vyperStorageFootprint gasShadowUnit vyperTypeSelectedEntrySoundness
 
 val _ = Parse.hide "body";
 
