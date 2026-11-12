@@ -61,8 +61,29 @@ Proof
     (drule compile_lower_value_var >>
      fs[intcall_expr_res_def]) >>
   drule_all intcall_forced_post_outcome >> strip_tac >>
-  irule intcall_mapping_key_outcome >>
-  goal_assum (drule_at Any) >> simp[] >>
-  qpat_x_assum `gas_marked_exec _ _ _ _ _ _ _ _` mp_tac >>
-  simp[gas_marked_exec_def] >> metis_tac[]
+  `!tail. eval_expr fp.jc_cx obj
+      (es with gas_obs := gas_explicit marks s0.vs_gas_readings ++ tail) =
+      (INL (HashMapRef tr slot kt vt), (mid with gas_obs := []) with gas_obs := tail)` by
+    (qpat_x_assum `gas_marked_exec _ _ _ _ _ _ _ _` mp_tac >>
+     simp[gas_marked_exec_def]) >>
+  irule stmtSimForcedTheory.forced_then_outcome >>
+  conj_tac >- metis_tac[stmtSimPropsTheory.expr_exit_INR_type] >>
+  qexists_tac `\kv en s.
+    expr_post fp.jc_ctx fp.jc_func ce fp.jc_cx idx
+      (mid with gas_obs := []) sm sn t en kv key s /\
+    intcall_expr_cont fp ce env (mid with gas_obs := []) sm t en sn s` >>
+  simp[] >> rpt gen_tac >> strip_tac >>
+  `eval_expr fp.jc_cx obj
+      (es with gas_obs := gas_explicit marks s0.vs_gas_readings ++ gs) =
+      (INL (HashMapRef tr slot kt vt), (mid with gas_obs := []) with gas_obs := gs)` by
+    simp[] >>
+  `bind (eval_expr fp.jc_cx idx) (read_result fp.jc_cx)
+      ((mid with gas_obs := []) with gas_obs := gs) = (INL v,ee)` by simp[] >>
+  drule_all bodyIntCallFamAggSubscriptKeyLandingTheory.intcall_mapping_key_landing_framed >>
+  disch_then (qspec_then `tr` strip_assume_tac) >>
+  qexistsl_tac [`INL selected`, `ee`, `OK out`] >> simp[] >>
+  qexists_tac `v` >> simp[] >>
+  `ee with gas_obs := [] = ee` by
+    (Cases_on `ee` >>
+     gvs[vyperStateTheory.recordtype_evaluation_state_seldef_gas_obs_fupd_def]) >> simp[]
 QED
