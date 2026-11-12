@@ -299,4 +299,49 @@ Proof
     (mp_tac o PURE_ONCE_REWRITE_RULE [run_blocks_def]) >> simp[]
 QED
 
+Theorem finite_invoke_exit_fuel_inv:
+  i.inst_opcode = INVOKE /\ decode_invoke i = SOME (name,ops) /\
+  lookup_function name C.ctx_functions = SOME fn /\
+  eval_operands ops s = SOME args /\ setup_callee fn args s = SOME cs /\
+  finite_run C fn cs r /\
+  ((?post. r = Halt post) \/ (?a post. r = Abort a post)) /\
+  step_inst k C i s = r ==> run_blocks k C fn cs = r
+Proof
+  strip_tac >>
+  `!e. run_blocks k C fn cs <> Error e` by
+    (spose_not_then strip_assume_tac >> gvs[Once step_inst_def]) >>
+  drule (cj 3 finite_execution_complete) >> strip_tac >>
+  metis_tac[finite_run_deterministic]
+QED
+
+Theorem finite_block_step_fuel_inv:
+  get_instruction bb s.vs_inst_idx = SOME i /\ finite_step C i s rs /\
+  exec_block k C bb s = r /\ (!e. r <> Error e) ==>
+  step_inst k C i s = rs
+Proof
+  strip_tac >>
+  `!e. step_inst k C i s <> Error e` by
+    (spose_not_then strip_assume_tac >> gvs[Once exec_block_def]) >>
+  drule (cj 1 finite_execution_complete) >> strip_tac >>
+  metis_tac[finite_step_deterministic]
+QED
+
+Theorem finite_run_block_fuel_inv:
+  lookup_block s.vs_current_bb fn.fn_blocks = SOME bb /\
+  eval_phis s bb.bb_instructions = OK phi /\
+  finite_block C bb
+    (phi with vs_inst_idx := phi_prefix_length bb.bb_instructions) rb /\
+  run_blocks k C fn s = r /\ (!e. r <> Error e) ==>
+  ?h. k = SUC h /\ exec_block h C bb
+    (phi with vs_inst_idx := phi_prefix_length bb.bb_instructions) = rb
+Proof
+  strip_tac >> Cases_on `k` >- gvs[Once run_blocks_def] >>
+  simp[] >>
+  `!e. exec_block n C bb
+      (phi with vs_inst_idx := phi_prefix_length bb.bb_instructions) <> Error e` by
+    (spose_not_then strip_assume_tac >> gvs[Once run_blocks_def]) >>
+  drule (cj 2 finite_execution_complete) >> strip_tac >>
+  metis_tac[finite_block_deterministic]
+QED
+
 val _ = export_theory();

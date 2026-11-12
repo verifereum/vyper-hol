@@ -1,5 +1,6 @@
 Theory frameSelectedSimulation
-Ancestors frameSelectedDecoration frameFiniteJointDecoration list arithmetic
+Ancestors frameSelectedDecoration frameFiniteJointDecoration frameFiniteExecution
+  venomExecSemantics venomState list arithmetic
 
 (* Outcomes retain the exact source endpoints and absolute cursors. *)
 Definition selected_step_match_def:
@@ -512,5 +513,210 @@ Definition selected_simulation_contract_fuel_def:
     selected_run_halt_certificate_fuel C C' q0 path EB ER OB OutR /\
     selected_run_exit_certificate_fuel C C' q0 path EB ER OB OutR
 End
+
+Theorem selected_simulation_induction_fuel:
+  (!C i s r q n w qe d. decorated_step C i s r q n w qe d ==>
+    !k C' q0 path ES EB ER OS OB OutR j t.
+      selected_simulation_contract_fuel C C' q0 path ES EB ER OS OB OutR /\
+      step_inst k C i s = r /\
+      selected_segment C q0 path n q w qe /\ ES q n i s j t ==>
+      selected_step_match_fuel k C' OS q n w qe i s j t r) /\
+  (!C bb s r q n w qe d. decorated_block C bb s r q n w qe d ==>
+    !k C' q0 path ES EB ER OS OB OutR bb' t.
+      selected_simulation_contract_fuel C C' q0 path ES EB ER OS OB OutR /\
+      exec_block k C bb s = r /\
+      selected_segment C q0 path n q w qe /\ EB q n bb s bb' t ==>
+      selected_block_match_fuel k C' OB q n w qe bb s bb' t r) /\
+  (!C fn s r q n w qe d. decorated_run C fn s r q n w qe d ==>
+    !k C' q0 path ES EB ER OS OB OutR fn' t.
+      selected_simulation_contract_fuel C C' q0 path ES EB ER OS OB OutR /\
+      run_blocks k C fn s = r /\
+      selected_segment C q0 path n q w qe /\ ER q n fn s fn' t ==>
+      selected_run_match_fuel k C' OutR q n w qe fn s fn' t r)
+Proof
+  ho_match_mp_tac decorated_step_strongind >> rpt conj_tac
+  >- suspend "base"
+  >- suspend "invoke_return"
+  >- suspend "invoke_exit"
+  >- suspend "block_term"
+  >- suspend "block_next"
+  >- suspend "block_exit"
+  >- suspend "run_next"
+  >- suspend "run_halt"
+  >> suspend "run_exit"
+QED
+
+Resume selected_simulation_induction_fuel[base]:
+  rpt strip_tac >> fs[selected_simulation_contract_fuel_def] >>
+  qpat_x_assum `selected_base_certificate_fuel _ _ _ _ _ _` mp_tac >>
+  pure_rewrite_tac[selected_base_certificate_fuel_def] >>
+  disch_then drule_all >> simp[]
+QED
+Resume selected_simulation_induction_fuel[invoke_return]:
+  rpt strip_tac >> rename1 `setup_callee fn args s = SOME cs` >>
+  `finite_run C fn cs (IntRet ret send)` by
+    metis_tac[cj 3 decorated_execution_erases] >>
+  `run_blocks k C fn cs = IntRet ret send` by
+    (irule finite_invoke_return_fuel_inv >> metis_tac[]) >>
+  qpat_assum `selected_simulation_contract_fuel _ _ _ _ _ _ _ _ _ _` mp_tac >>
+  pure_rewrite_tac[selected_simulation_contract_fuel_def] >> strip_tac >>
+  qpat_x_assum `selected_call_return_certificate_fuel _ _ _ _ _ _ _ _` mp_tac >>
+  pure_rewrite_tac[selected_call_return_certificate_fuel_def] >>
+  disch_then drule_all >> strip_tac >>
+  `joint_segment C q' w qe` by metis_tac[cj 3 decorated_execution_segment] >>
+  `selected_segment C q0 path (n+1) q' w qe` by
+    (`selected_segment C q0 path n q [(NONE,q')] q' /\
+      selected_segment C q0 path (n+LENGTH ([(NONE,q')]:(origin_event option # joint_config) list)) q' w qe` by
+       (irule selected_segment_parts >> gvs[joint_segment_def]) >> fs[]) >>
+  first_x_assum drule_all >>
+  simp[selected_run_match_fuel_def] >> strip_tac >>
+  first_x_assum drule_all >> simp[]
+QED
+Resume selected_simulation_induction_fuel[invoke_exit]:
+  rpt gen_tac >> disch_then (map_every assume_tac o CONJUNCTS) >>
+  rpt gen_tac >> strip_tac >> rename1 `setup_callee fn args s = SOME cs` >>
+  `finite_run C fn cs r` by metis_tac[cj 3 decorated_execution_erases] >>
+  `run_blocks k C fn cs = r` by
+    (irule finite_invoke_exit_fuel_inv >> metis_tac[]) >>
+  qpat_assum `selected_simulation_contract_fuel _ _ _ _ _ _ _ _ _ _` mp_tac >>
+  pure_rewrite_tac[selected_simulation_contract_fuel_def] >> strip_tac >>
+  qpat_x_assum `selected_call_exit_certificate_fuel _ _ _ _ _ _ _ _` mp_tac >>
+  pure_rewrite_tac[selected_call_exit_certificate_fuel_def] >>
+  disch_then drule_all >> strip_tac >>
+  `joint_segment C q' w qe` by metis_tac[cj 3 decorated_execution_segment] >>
+  `selected_segment C q0 path (n+1) q' w qe` by
+    (`selected_segment C q0 path n q [(NONE,q')] q' /\
+      selected_segment C q0 path
+        (n+LENGTH ([(NONE,q')]:(origin_event option # joint_config) list)) q' w qe` by
+       (irule selected_segment_parts >> gvs[joint_segment_def]) >> fs[]) >>
+  first_x_assum drule_all >>
+  simp[selected_run_match_fuel_def] >> strip_tac >>
+  first_x_assum drule_all >> simp[]
+QED
+Resume selected_simulation_induction_fuel[block_term]:
+  rpt strip_tac >>
+  `finite_step C i s (OK post)` by metis_tac[cj 1 decorated_execution_erases] >>
+  `step_inst k C i s = OK post` by
+    (irule finite_block_step_fuel_inv >>
+     reverse conj_tac >- simp[] >>
+     qexistsl [`bb`, `if post.vs_halted then Halt post else OK post`] >>
+     Cases_on `post.vs_halted` >> simp[]) >>
+  qpat_assum `selected_simulation_contract_fuel _ _ _ _ _ _ _ _ _ _` mp_tac >>
+  pure_rewrite_tac[selected_simulation_contract_fuel_def] >> strip_tac >>
+  qpat_x_assum `selected_term_certificate_fuel _ _ _ _ _ _ _ _` mp_tac >>
+  pure_rewrite_tac[selected_term_certificate_fuel_def] >>
+  disch_then drule_all >> strip_tac >>
+  first_x_assum drule_all >> simp[selected_step_match_fuel_def] >> strip_tac >>
+  first_x_assum drule_all >> simp[]
+QED
+Resume selected_simulation_induction_fuel[block_next]:
+  rpt strip_tac >>
+  `finite_step C i s (OK post)` by metis_tac[cj 1 decorated_execution_erases] >>
+  `finite_block C bb (post with vs_inst_idx := SUC s.vs_inst_idx) r` by
+    metis_tac[cj 2 decorated_execution_erases] >>
+  `!e. r <> Error e` by metis_tac[cj 2 finite_execution_nonerror] >>
+  `step_inst k C i s = OK post` by
+    (irule finite_block_step_fuel_inv >> metis_tac[]) >>
+  `exec_block k C bb (post with vs_inst_idx := SUC s.vs_inst_idx) = r` by
+    (qpat_x_assum `exec_block k C bb s = r` mp_tac >> simp[Once exec_block_def]) >>
+  qpat_assum `selected_simulation_contract_fuel _ _ _ _ _ _ _ _ _ _` mp_tac >>
+  pure_rewrite_tac[selected_simulation_contract_fuel_def] >> strip_tac >>
+  qpat_x_assum `selected_next_certificate_fuel _ _ _ _ _ _ _ _` mp_tac >>
+  pure_rewrite_tac[selected_next_certificate_fuel_def] >>
+  disch_then drule_all >> strip_tac >>
+  `joint_segment C q w qe` by metis_tac[cj 1 decorated_execution_segment] >>
+  `joint_segment C q' w' qe'` by metis_tac[cj 2 decorated_execution_segment] >>
+  `joint_transition C qe ev q'` by fs[decoration_consumes_def] >>
+  rule_assum_tac (PURE_REWRITE_RULE [GSYM APPEND_ASSOC]) >>
+  drule_all selected_segment_edge >> strip_tac >>
+  qpat_x_assum `!k C' q0 path ES EB ER OS OB OutR j t. _` drule_all >>
+  pure_rewrite_tac[selected_step_match_fuel_def] >> strip_tac >>
+  first_x_assum drule_all >> strip_tac >>
+  qpat_x_assum `!k C' q0 path ES EB ER OS OB OutR bb' t. _` drule_all >>
+  pure_rewrite_tac[selected_block_match_fuel_def] >> strip_tac >>
+  first_x_assum drule_all >> simp[selected_block_match_fuel_def]
+QED
+Resume selected_simulation_induction_fuel[block_exit]:
+  rpt strip_tac >>
+  `finite_step C i s r` by metis_tac[cj 1 decorated_execution_erases] >>
+  `!e. r <> Error e` by metis_tac[cj 1 finite_execution_nonerror] >>
+  `step_inst k C i s = r` by
+    (irule finite_block_step_fuel_inv >> metis_tac[]) >>
+  qpat_assum `selected_simulation_contract_fuel _ _ _ _ _ _ _ _ _ _` mp_tac >>
+  pure_rewrite_tac[selected_simulation_contract_fuel_def] >> strip_tac >>
+  qpat_x_assum `selected_block_exit_certificate_fuel _ _ _ _ _ _ _ _` mp_tac >>
+  pure_rewrite_tac[selected_block_exit_certificate_fuel_def] >>
+  disch_then drule_all >> strip_tac >>
+  first_x_assum drule_all >> pure_rewrite_tac[selected_step_match_fuel_def] >> strip_tac >>
+  first_x_assum drule_all >> simp[]
+QED
+Resume selected_simulation_induction_fuel[run_next]:
+  rpt gen_tac >> disch_then (map_every assume_tac o CONJUNCTS) >>
+  rpt gen_tac >> strip_tac >> rename1 `local_pending C qe (OK post)` >>
+  `finite_block C bb (phi with vs_inst_idx := phi_prefix_length bb.bb_instructions) (OK post)` by
+    metis_tac[cj 2 decorated_execution_erases] >>
+  `finite_run C fn post r` by metis_tac[cj 3 decorated_execution_erases] >>
+  `!e. r <> Error e` by metis_tac[cj 3 finite_execution_nonerror] >>
+  Cases_on `k`
+  >- (qpat_x_assum `run_blocks 0 C fn s = r` mp_tac >>
+      simp[Once run_blocks_def] >> metis_tac[]) >>
+  drule_all finite_run_next_fuel_inv >> strip_tac >>
+  qpat_assum `selected_simulation_contract_fuel _ _ _ _ _ _ _ _ _ _` mp_tac >>
+  pure_rewrite_tac[selected_simulation_contract_fuel_def] >> strip_tac >>
+  qpat_x_assum `selected_run_next_certificate_fuel _ _ _ _ _ _ _ _` mp_tac >>
+  pure_rewrite_tac[selected_run_next_certificate_fuel_def] >>
+  disch_then drule_all >> strip_tac >>
+  `joint_segment C q w qe` by metis_tac[cj 2 decorated_execution_segment] >>
+  `joint_segment C q' w' qe'` by metis_tac[cj 3 decorated_execution_segment] >>
+  rule_assum_tac (PURE_REWRITE_RULE [GSYM APPEND_ASSOC]) >>
+  drule_all selected_segment_edge >> strip_tac >>
+  qpat_x_assum `!k C' q0 path ES EB ER OS OB OutR bb' t. _` drule_all >>
+  pure_rewrite_tac[selected_block_match_fuel_def] >> strip_tac >>
+  first_x_assum drule_all >> strip_tac >>
+  qpat_x_assum `!k C' q0 path ES EB ER OS OB OutR fn' t. _` drule_all >>
+  pure_rewrite_tac[selected_run_match_fuel_def] >> strip_tac >>
+  first_x_assum drule_all >> simp[selected_run_match_fuel_def]
+QED
+Resume selected_simulation_induction_fuel[run_halt]:
+  rpt strip_tac >>
+  `finite_block C bb (phi with vs_inst_idx := phi_prefix_length bb.bb_instructions) (OK post)` by
+    metis_tac[cj 2 decorated_execution_erases] >>
+  `!e. Halt post <> Error e` by simp[] >>
+  drule_all finite_run_block_fuel_inv >> strip_tac >>
+  qpat_x_assum `k = SUC h` SUBST_ALL_TAC >>
+  qpat_assum `selected_simulation_contract_fuel _ _ _ _ _ _ _ _ _ _` mp_tac >>
+  pure_rewrite_tac[selected_simulation_contract_fuel_def] >> strip_tac >>
+  qpat_x_assum `selected_run_halt_certificate_fuel _ _ _ _ _ _ _ _` mp_tac >>
+  pure_rewrite_tac[selected_run_halt_certificate_fuel_def] >>
+  disch_then drule_all >> strip_tac >>
+  first_x_assum drule_all >> pure_rewrite_tac[selected_block_match_fuel_def] >> strip_tac >>
+  first_x_assum drule_all >> simp[]
+QED
+Resume selected_simulation_induction_fuel[run_exit]:
+  rpt strip_tac >>
+  `finite_block C bb (phi with vs_inst_idx := phi_prefix_length bb.bb_instructions) r` by
+    metis_tac[cj 2 decorated_execution_erases] >>
+  `!e. r <> Error e` by metis_tac[cj 2 finite_execution_nonerror] >>
+  drule_all finite_run_block_fuel_inv >> strip_tac >>
+  qpat_x_assum `k = SUC h` SUBST_ALL_TAC >>
+  qpat_assum `selected_simulation_contract_fuel _ _ _ _ _ _ _ _ _ _` mp_tac >>
+  pure_rewrite_tac[selected_simulation_contract_fuel_def] >> strip_tac >>
+  qpat_x_assum `selected_run_exit_certificate_fuel _ _ _ _ _ _ _ _` mp_tac >>
+  pure_rewrite_tac[selected_run_exit_certificate_fuel_def] >>
+  disch_then drule_all >> strip_tac >>
+  first_x_assum drule_all >> pure_rewrite_tac[selected_block_match_fuel_def] >> strip_tac >>
+  first_x_assum drule_all >> simp[]
+QED
+Finalise selected_simulation_induction_fuel
+
+Theorem selected_run_simulation_fuel:
+  decorated_run C fn s r q n w qe d /\
+  selected_simulation_contract_fuel C C' q0 path ES EB ER OS OB OutR /\
+  run_blocks k C fn s = r /\
+  selected_segment C q0 path n q w qe /\ ER q n fn s fn' t ==>
+  selected_run_match_fuel k C' OutR q n w qe fn s fn' t r
+Proof
+  metis_tac[cj 3 selected_simulation_induction_fuel]
+QED
 
 val _ = export_theory();
