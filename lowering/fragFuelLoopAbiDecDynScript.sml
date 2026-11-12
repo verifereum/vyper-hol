@@ -3441,6 +3441,190 @@ Proof
   `j <= f+j /\ j <= G+j` by simp[] >> metis_tac[]
 QED
 
+Theorem abi_dyn_add_one_outcome[local]:
+  !a sa op sb G N ctx fn s w.
+    emit_op ADD [a; Lit 1w] sa = (op, sb) /\
+    N <= sa.cs_next_var /\ callees_stable G ctx fn /\
+    fn_has_code sa sb fn /\ at_point sa s /\ eval_operand a s = SOME w ==>
+    fuel_outcome G ctx fn s 0
+      (\t. at_point sb t /\ vars_kept N {} s t /\
+        t.vs_memory = s.vs_memory /\ t.vs_labels = s.vs_labels /\
+        eval_operand op t = SOME (w + 1w))
+Proof
+  rpt strip_tac >>
+  `~is_terminator ADD` by simp[is_terminator_def] >>
+  drule_all abi_dyn_emit_op_outcome >> strip_tac >>
+  irule fuel_outcome_weaken >> goal_assum (drule_at Any) >>
+  simp[] >> rpt strip_tac >>
+  `op = Var (STRING #"%" (toString sa.cs_next_var))` by
+    gvs[emit_op_def, comp_bind_def, comp_ignore_bind_def,
+        comp_return_def, fresh_id_def, fresh_var_def, emit_def] >>
+  gvs[step_inst_non_invoke, mk_inst_def, step_inst_base_opcode_eqs,
+      exec_pure2_def, eval_operands_def, eval_operand_def, update_var_def,
+      lookup_var_def, finite_mapTheory.FLOOKUP_UPDATE, AllCaseEqs()]
+QED
+
+Theorem abi_dyn_mstore_outcome[local]:
+  !ptr value sa sb G N ctx fn s p w.
+    emit_void MSTORE [ptr; value] sa = ((), sb) /\
+    callees_stable G ctx fn /\ fn_has_code sa sb fn /\ at_point sa s /\
+    eval_operand ptr s = SOME p /\ eval_operand value s = SOME w ==>
+    fuel_outcome G ctx fn s 0
+      (\t. at_point sb t /\ vars_kept N {} s t /\
+        t.vs_labels = s.vs_labels /\ mload (w2n p) t = w)
+Proof
+  rpt strip_tac >> rename1 `emit_void MSTORE [ptr_op; value] sa = ((), sb)` >>
+  `sb.cs_current_bb = sa.cs_current_bb /\
+   sb.cs_current_insts = sa.cs_current_insts ++
+     [mk_inst sa.cs_next_id MSTORE [ptr_op; value] []]` by
+    gvs[emit_void_def, emit_inst_def, comp_bind_def, comp_ignore_bind_def,
+        comp_return_def, fresh_id_def, emit_def] >>
+  drule_all fragExecTheory.fn_has_code_same_block >> strip_tac >>
+  first_x_assum (qspec_then `0` mp_tac) >> simp[] >> strip_tac >>
+  drule_then (qspecl_then [`s`, `bb`,
+    `mk_inst sa.cs_next_id MSTORE [ptr_op; value] []`] mp_tac)
+    run_from_nonterm_stable >>
+  simp[mk_inst_def, is_terminator_def] >>
+  (impl_tac >- gvs[at_point_def, mk_inst_def]) >> strip_tac
+  >- (simp[fuel_outcome_def] >> disj1_tac >>
+      qexists_tac `s1 with vs_inst_idx := SUC s.vs_inst_idx` >> simp[] >>
+      gvs[at_point_def, vars_kept_def, step_inst_non_invoke,
+          mk_inst_def, step_inst_base_opcode_eqs, exec_write2_def,
+          eval_operands_def, lookup_var_def] >>
+      `mload (w2n p) (mstore (w2n p) w s with vs_inst_idx := SUC (LENGTH sa.cs_current_insts)) =
+       mload (w2n p) (mstore (w2n p) w s)` by simp[mload_def] >>
+      conj_tac >- simp[mstore_def] >>
+      simp[venomMemPropsTheory.mload_mstore_same]) >>
+  simp[fuel_outcome_def]
+QED
+
+Theorem abi_dyn_jmp_outcome[local]:
+  !sa sb hdr G N ctx fn s.
+    emit_inst JMP [Label hdr] [] sa = ((),sb) /\
+    no_phi_fn fn /\ fn_has_code sa sb fn /\ at_point sa s ==>
+    fuel_outcome G ctx fn s 1
+      (\t. vars_kept N {} s t /\ t.vs_memory = s.vs_memory /\
+        t.vs_labels = s.vs_labels /\ t.vs_current_bb = hdr /\ t.vs_inst_idx = 0)
+Proof
+  rpt strip_tac >>
+  `sb.cs_current_bb = sa.cs_current_bb /\
+   sb.cs_current_insts = sa.cs_current_insts ++
+      [mk_inst sa.cs_next_id JMP [Label hdr] []]` by
+    gvs[emit_inst_def, comp_bind_def, comp_ignore_bind_def,
+        comp_return_def, fresh_id_def, emit_def] >>
+  drule_all fragExecTheory.fn_has_code_same_block >> strip_tac >>
+  first_x_assum (qspec_then `0` mp_tac) >> simp[] >> strip_tac >>
+  irule fuel_outcome_jump >> simp[] >>
+  qexistsl_tac [`bb`, `mk_inst sa.cs_next_id JMP [Label hdr] []`, `hdr`] >>
+  simp[mk_inst_def, is_terminator_def] >> conj_tac
+  >- (simp[step_inst_base_opcode_eqs, eval_operands_def, eval_operand_def, jump_to_def]) >>
+  gvs[jump_to_def, vars_kept_def, lookup_var_def, at_point_def, mk_inst_def]
+QED
+
+Theorem abi_dyn_body_suffix_outcome[local]:
+  !a ptr_op sa new_i sm sn sb hdr G N ctx fn s p w.
+    emit_op ADD [a; Lit 1w] sa = (new_i,sm) /\
+    emit_void MSTORE [ptr_op; new_i] sm = ((),sn) /\
+    emit_inst JMP [Label hdr] [] sn = ((),sb) /\
+    N <= sa.cs_next_var /\ (!x. ptr_op = Var x ==> var_below N x) /\
+    callees_stable G ctx fn /\ no_phi_fn fn /\
+    fn_has_code sa sm fn /\ fn_has_code sm sn fn /\ fn_has_code sn sb fn /\
+    at_point sa s /\ eval_operand ptr_op s = SOME p /\ eval_operand a s = SOME w ==>
+    ?j. j <= 1 /\ fuel_outcome G ctx fn s j
+      (\t. vars_kept N {} s t /\ t.vs_labels = s.vs_labels /\
+        eval_operand ptr_op t = SOME p /\ mload (w2n p) t = w + 1w /\
+        t.vs_current_bb = hdr /\ t.vs_inst_idx = 0)
+Proof
+  rpt strip_tac >>
+  qmatch_goalsub_abbrev_tac `fuel_outcome G ctx fn s _ Q` >>
+  drule_all abi_dyn_add_one_outcome >> strip_tac >>
+  drule fuel_outcome_compose >>
+  disch_then (qspecl_then [`Q`, `1`] mp_tac) >> impl_tac
+  >- (simp[] >> rpt strip_tac >>
+      `eval_operand ptr_op t = SOME p` by
+        (drule_all abi_dyn_eval_operand_kept >> simp[]) >>
+      `fuel_outcome G ctx fn t 0
+        (\u. at_point sn u /\ vars_kept N {} t u /\
+          u.vs_labels = t.vs_labels /\ mload (w2n p) u = w + 1w)` by
+        (irule abi_dyn_mstore_outcome >>
+         qpat_assum `emit_void MSTORE _ _ = _` (irule_at Any) >> simp[]) >>
+      drule fuel_outcome_compose >>
+      disch_then (qspecl_then [`Q`, `1`] mp_tac) >> impl_tac
+      >- (simp[] >> rpt strip_tac >>
+          `fuel_outcome G ctx fn t' 1
+            (\u. vars_kept N {} t' u /\ u.vs_memory = t'.vs_memory /\
+              u.vs_labels = t'.vs_labels /\ u.vs_current_bb = hdr /\ u.vs_inst_idx = 0)` by
+            (irule abi_dyn_jmp_outcome >>
+             qpat_assum `emit_inst JMP _ _ _ = _` (irule_at Any) >> simp[]) >>
+          qexists_tac `1` >> simp[] >>
+          irule fuel_outcome_weaken >> goal_assum (drule_at Any) >>
+          simp[Abbr `Q`] >> qx_gen_tac `u` >> strip_tac >>
+          `vars_kept N {} s u` by metis_tac[vars_kept_trans] >>
+          `eval_operand ptr_op u = SOME p` by
+            (drule_all abi_dyn_eval_operand_kept >> simp[]) >>
+          gvs[mload_def]) >> simp[]) >> simp[]
+QED
+
+Theorem abi_dyn_body_outcome[local]:
+  !dst src lop bop hi info asz msz ptr_op sa saved sm sn new_i sp sq sb hdr N.
+    emit_op MLOAD [ptr_op] sa = (saved,sm) /\
+    (^dyn_middle) dst src lop bop hi info asz msz saved sm = ((),sn) /\
+    emit_op ADD [saved; Lit 1w] sn = (new_i,sp) /\
+    emit_void MSTORE [ptr_op; new_i] sp = ((),sq) /\
+    emit_inst JMP [Label hdr] [] sq = ((),sb) /\
+    ~is_terminator lop /\ lop <> PHI /\ lop <> INVOKE /\ (^dyn_Old) sm /\
+    (!d s Wv E. fuel_ok Wv {} E (compile_abi_decode_to_buf d s lop bop hi info)) /\
+    N <= sa.cs_next_var /\ sm.cs_next_var <= sn.cs_next_var /\
+    (!x. ptr_op = Var x ==> var_below N x) ==>
+    ?Kbody. !G ctx fn s p.
+      callees_stable G ctx fn /\ no_phi_fn fn /\
+      fn_has_code sa sm fn /\ fn_has_code sm sn fn /\
+      fn_has_code sn sp fn /\ fn_has_code sp sq fn /\ fn_has_code sq sb fn /\
+      at_point sa s /\ eval_operand ptr_op s = SOME p ==>
+      ?j. j <= Kbody /\ fuel_outcome G ctx fn s j
+        (\t. vars_kept N {} s t /\ t.vs_labels = s.vs_labels /\
+          eval_operand ptr_op t = SOME p /\
+          mload (w2n p) t = mload (w2n p) s + 1w /\
+          t.vs_current_bb = hdr /\ t.vs_inst_idx = 0)
+Proof
+  rpt gen_tac >> strip_tac >>
+  rule_assum_tac BETA_RULE >>
+  drule_all (BETA_RULE abi_dyn_middle_framed_bound) >>
+  disch_then (qx_choose_then `Km` assume_tac) >>
+  qexists_tac `Km+1` >> rpt gen_tac >> strip_tac >>
+  `N <= sm.cs_next_var /\
+   saved = Var (STRING #"%" (toString sa.cs_next_var)) /\
+   var_below sm.cs_next_var (STRING #"%" (toString sa.cs_next_var))` by
+    gvs[emit_op_def, comp_bind_def, comp_ignore_bind_def, comp_return_def,
+        fresh_id_def, fresh_var_def, emit_def, var_below_def] >>
+  qmatch_goalsub_abbrev_tac `fuel_outcome G ctx fn s _ Q` >>
+  drule_all abi_dyn_mload_outcome >> strip_tac >>
+  drule fuel_outcome_compose >>
+  disch_then (qspecl_then [`Q`, `Km+1`] mp_tac) >> impl_tac
+  >- (simp[] >> rpt strip_tac >>
+      qpat_x_assum `!G N ctx fn s. _`
+        (qspecl_then [`G`, `sm.cs_next_var`, `ctx`, `fn`, `t`] mp_tac) >>
+      simp[] >> strip_tac >>
+      drule fuel_outcome_compose >>
+      disch_then (qspecl_then [`Q`, `1`] mp_tac) >> impl_tac
+      >- (simp[] >> rpt strip_tac >>
+          `eval_operand saved t' = SOME (mload (w2n p) s)` by
+            (gvs[vars_kept_def, eval_operand_def] >> metis_tac[]) >>
+          `vars_kept N {} t t'` by
+            (gvs[vars_kept_def, var_below_def] >>
+             metis_tac[arithmeticTheory.LESS_EQ_TRANS]) >>
+          `vars_kept N {} s t'` by metis_tac[vars_kept_trans] >>
+          `eval_operand ptr_op t' = SOME p` by
+            (drule_all abi_dyn_eval_operand_kept >> simp[]) >>
+          `N <= sn.cs_next_var` by decide_tac >>
+          drule_all abi_dyn_body_suffix_outcome >> strip_tac >>
+          qexists_tac `j'` >> simp[] >>
+          irule fuel_outcome_weaken >> goal_assum (drule_at Any) >>
+          simp[Abbr `Q`] >> rpt strip_tac >> metis_tac[vars_kept_trans]) >>
+      simp[] >> strip_tac >> qexists_tac `j'` >> simp[] >> decide_tac) >>
+  simp[]
+QED
+
 Theorem abi_dyn_emit_op_footprint[local]:
   !opc ops st out st'.
     emit_op opc ops st = (out,st') ==>
