@@ -65,7 +65,7 @@ Definition external_getter_tuple_def:
   external_getter_tuple _ _ = NONE
 End
 
-Theorem lookup_function_External_cases[local]:
+Theorem lookup_function_External_cases:
   lookup_function src fn External ts = SOME (mut,nr,args,dflts,ret,body) ==>
   (?raw. MEM (FunctionDecl External mut nr raw fn args dflts ret body) ts) \/
   (?decl. MEM decl ts /\ is_public_getter_decl fn decl /\
@@ -968,7 +968,7 @@ Proof
   metis_tac[build_getter_args_no_current_name, PAIR]
 QED
 
-Theorem build_getter_ret_checked[local]:
+Theorem build_getter_ret_checked:
   !e kt vt n args ret exp tenv.
     build_getter e kt vt n = (args,ret,exp) /\
     check_value_type tenv vt ==>
@@ -986,7 +986,7 @@ Proof
       assignable_type_def, well_formed_type_def]
 QED
 
-Theorem check_value_type_ArrayT_type[local]:
+Theorem check_value_type_ArrayT_type:
   is_ArrayT typ /\
   check_value_type tenv (Type typ) ==>
   check_value_type tenv (Type (ArrayT_type typ))
@@ -994,6 +994,26 @@ Proof
   Cases_on `typ` >>
   gvs[is_ArrayT_def, ArrayT_type_def, check_value_type_def,
       assignable_type_def, well_formed_type_def]
+QED
+
+Theorem build_getter_args_assignable:
+  !e kt vt n args ret exp tenv.
+    build_getter e kt vt n = (args,ret,exp) /\
+    assignable_type tenv kt /\ check_value_type tenv vt ==>
+    EVERY (assignable_type tenv o SND) args
+Proof
+  recInduct build_getter_ind >> rpt strip_tac >>
+  qpat_x_assum `build_getter _ _ _ _ = _` mp_tac >>
+  simp[Once build_getter_def] >>
+  Cases_on `is_ArrayT vt` >> simp[] >>
+  rpt (pairarg_tac >> gvs[]) >> rw[] >> gvs[]
+  >~ [`check_value_type tenv (Type typ)`]
+  >- (first_x_assum irule >>
+      Cases_on `typ` >>
+      gvs[is_ArrayT_def, ArrayT_type_def, check_value_type_def,
+          assignable_type_def, well_formed_type_def, evaluate_type_def]) >>
+  first_x_assum irule >> gvs[check_value_type_def] >>
+  Cases_on `typ` >> gvs[hashmap_key_type_def, assignable_type_def]
 QED
 
 Theorem function_entry_env_args_lookup_package[local]:
@@ -1157,6 +1177,45 @@ Proof
   simp[function_entry_env_def, artifact_env_def,
        FOLDL_extend_local_args_static, well_typed_expr_def,
        subscript_vtype_def, vtype_annotation_ok_def]
+QED
+
+Theorem checked_public_getter_params_ok:
+  check_contract F
+    (layouts:(address # (storage_layout # storage_layout)) list)
+    (addr:160 word) mods = SOME art /\
+  ALOOKUP mods src = SOME ts /\ module_allocated layouts addr src ts /\
+  MEM decl ts /\ is_public_getter_decl fn decl /\
+  external_getter_tuple src decl = SOME (mut,nr,args,dflts,ret,body) ==>
+  params_ok (type_env_all_modules mods) args
+Proof
+  strip_tac >>
+  drule_all checked_public_getter_body_typing_package >> strip_tac >>
+  simp[params_ok_def] >>
+  `check_toplevel_decl mods art src decl` by
+    metis_tac[check_contract_toplevel_decl_MEM] >>
+  Cases_on `decl` >>
+  gvs[is_public_getter_decl_def, external_getter_tuple_def]
+  >~ [`check_toplevel_decl _ _ _ (VariableDecl vis vmut id typ slot)`]
+  >- (Cases_on `vis` >> gvs[external_getter_tuple_def] >>
+      Cases_on `is_ArrayT typ` >> gvs[getter_def] >>
+      rpt (pairarg_tac >> gvs[]) >>
+      `check_value_type (type_env_all_modules mods)
+         (Type (ArrayT_type typ))` by
+        (irule check_value_type_ArrayT_type >> simp[] >>
+         Cases_on `vmut` >> gvs[check_toplevel_decl_def, check_value_type_def]) >>
+      `assignable_type (type_env_all_modules mods) (BaseT (UintT 256))` by
+        simp[assignable_type_def, well_formed_type_def, evaluate_type_def] >>
+      drule_all build_getter_args_assignable >>
+      simp[combinTheory.o_DEF, pairTheory.LAMBDA_PROD]) >>
+  rename1 `check_toplevel_decl _ _ _ (HashMapDecl vis tr id kt vt slot)` >>
+  Cases_on `vis` >> gvs[external_getter_tuple_def, getter_def] >>
+  rpt (pairarg_tac >> gvs[]) >>
+  `assignable_type (type_env_all_modules mods) kt /\
+   check_value_type (type_env_all_modules mods) vt` by
+    (gvs[check_toplevel_decl_def] >>
+     Cases_on `kt` >> gvs[hashmap_key_type_def, assignable_type_def]) >>
+  drule_all build_getter_args_assignable >>
+      simp[combinTheory.o_DEF, pairTheory.LAMBDA_PROD]
 QED
 
 val () = export_theory();

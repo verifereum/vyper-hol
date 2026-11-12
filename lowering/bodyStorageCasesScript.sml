@@ -21,23 +21,20 @@ Ancestors
   vyperTypeContractStaticMaps supportedDecls supportedStmts supportedExprs
   supportedTargets supportedStmtTraverse list
 
+(* The callee of a runtime internal call is a declared Internal function, so
+   the lookup finds it, never the constructor or the synthetic fallback. *)
 Theorem supported_callable_body_contract:
   supported_program tops /\
+  IS_SOME (supported_function_decl tops (NONE,name) Internal) /\
   lookup_callable_function deploy name tops =
     SOME (mut,nr,args,defaults,ret,stmts) ==>
   defaults = [] /\ ?bindings. supported_stmts tops bindings stmts
 Proof
-  strip_tac >>
-  reverse (Cases_on `deploy`)
-  >- (drule lookup_callable_function_F_SOME_MEM >> strip_tac >>
-      drule_all supported_program_declaration >>
-      simp[supported_declaration_header_def, supported_declaration_body_def,
-           supported_function_body_def, NULL_EQ] >> metis_tac[]) >>
-  drule lookup_callable_function_T_SOME_cases >> strip_tac
-  >- (drule_all supported_program_declaration >>
-      simp[supported_declaration_header_def, supported_declaration_body_def,
-           supported_function_body_def, NULL_EQ] >> metis_tac[])
-  >- gvs[supported_stmt_def] >>
+  strip_tac >> gvs[optionTheory.IS_SOME_EXISTS] >>
+  rename1 `supported_function_decl _ _ _ = SOME decl` >> PairCases_on `decl` >>
+  drule supported_internal_lookup >> strip_tac >>
+  gvs[lookup_callable_function_def] >>
+  drule lookup_function_Internal_SOME_MEM >> strip_tac >>
   drule_all supported_program_declaration >>
   simp[supported_declaration_header_def, supported_declaration_body_def,
        supported_function_body_def, NULL_EQ] >> metis_tac[]
@@ -45,13 +42,17 @@ QED
 
 Theorem supported_pure_main_calls:
   (!tops e. supported_pure_expr tops e ==>
-    EVERY (\c. FST c = NONE) (int_calls_expr e)) /\
+    EVERY (\c. FST c = NONE /\
+               IS_SOME (supported_function_decl tops c Internal)) (int_calls_expr e)) /\
   (!tops es. supported_pure_exprs tops es ==>
-    EVERY (\c. FST c = NONE) (int_calls_exprs es)) /\
+    EVERY (\c. FST c = NONE /\
+               IS_SOME (supported_function_decl tops c Internal)) (int_calls_exprs es)) /\
   (!tops fields. supported_pure_fields tops fields ==>
-    EVERY (\c. FST c = NONE) (int_calls_named_exprs fields)) /\
+    EVERY (\c. FST c = NONE /\
+               IS_SOME (supported_function_decl tops c Internal)) (int_calls_named_exprs fields)) /\
   (!tops e. supported_place_expr tops e ==>
-    EVERY (\c. FST c = NONE) (int_calls_expr e))
+    EVERY (\c. FST c = NONE /\
+               IS_SOME (supported_function_decl tops c Internal)) (int_calls_expr e))
 Proof
   ho_match_mp_tac supported_pure_expr_ind >>
   simp[supported_pure_expr_def, int_calls_expr_def, EVERY_APPEND] >>
@@ -69,9 +70,11 @@ QED
 
 Theorem supported_effect_main_calls:
   (!tops e. supported_effect_expr tops e ==>
-    EVERY (\c. FST c = NONE) (int_calls_expr e)) /\
+    EVERY (\c. FST c = NONE /\
+               IS_SOME (supported_function_decl tops c Internal)) (int_calls_expr e)) /\
   (!tops e. supported_effect_place_expr tops e ==>
-    EVERY (\c. FST c = NONE) (int_calls_expr e))
+    EVERY (\c. FST c = NONE /\
+               IS_SOME (supported_function_decl tops c Internal)) (int_calls_expr e))
 Proof
   ho_match_mp_tac supported_effect_expr_ind >>
   simp[supported_effect_expr_def, int_calls_expr_def, EVERY_APPEND] >>
@@ -80,7 +83,8 @@ Proof
 QED
 
 Theorem supported_expr_main_calls:
-  supported_expr tops e ==> EVERY (\c. FST c = NONE) (int_calls_expr e)
+  supported_expr tops e ==> EVERY (\c. FST c = NONE /\
+               IS_SOME (supported_function_decl tops c Internal)) (int_calls_expr e)
 Proof
   simp[supported_expr_def] >>
   metis_tac[supported_pure_main_calls, supported_effect_main_calls]
@@ -90,40 +94,47 @@ Theorem supported_target_info_storage_syntax:
   !tops bindings target.
     IS_SOME (supported_target_info tops bindings target) ==>
     ~supported_target_exists expr_evm_run_root target /\
-    EVERY (\c. FST c = NONE) (int_calls_target target)
+    ~supported_target_exists call_operands_effect_root target /\
+    EVERY (\c. FST c = NONE /\
+               IS_SOME (supported_function_decl tops c Internal)) (int_calls_target target)
 Proof
   rpt gen_tac >>
   map_every qid_spec_tac [`bindings`, `tops`, `target`] >>
   measureInduct_on `base_assignment_target_size target` >>
   Cases_on `target` >>
-  simp[supported_target_info_def, supported_expr_exists_def,
+  simp[supported_target_info_def, supported_expr_exists_def, call_operands_effect_root_def,
        int_calls_expr_def, EVERY_APPEND] >>
   rpt gen_tac >>
   simp[optionTheory.IS_SOME_EXISTS] >> strip_tac >>
   gvs[AllCaseEqs(), expr_size_def] >>
   qmatch_goalsub_rename_tac `int_calls_target tgt` >>
   first_x_assum (qspec_then `tgt` mp_tac) >> simp[] >>
+  simp[GSYM optionTheory.IS_SOME_EXISTS] >>
   metis_tac[supported_expr_no_evm_run, expr_has_evm_run_def,
-            supported_expr_main_calls, optionTheory.IS_SOME_EXISTS]
+            supported_expr_main_calls, supported_expr_no_call_operand_effects, optionTheory.IS_SOME_EXISTS]
 QED
 
 Theorem supported_target_storage_syntax:
   supported_target tops bindings target ==>
   ~supported_target_exists expr_evm_run_root target /\
-  EVERY (\c. FST c = NONE) (int_calls_target target)
+  ~supported_target_exists call_operands_effect_root target /\
+  EVERY (\c. FST c = NONE /\
+               IS_SOME (supported_function_decl tops c Internal)) (int_calls_target target)
 Proof
   Cases_on `target` >>
-  simp[supported_target_def, supported_expr_exists_def, int_calls_expr_def] >>
+  simp[supported_target_def, supported_expr_exists_def, call_operands_effect_root_def, int_calls_expr_def] >>
   qmatch_goalsub_rename_tac `supported_target_exists _ tgt` >> Cases_on `tgt` >>
-  simp[supported_expr_exists_def, int_calls_expr_def] >>
+  simp[supported_expr_exists_def, call_operands_effect_root_def, int_calls_expr_def] >>
   metis_tac[supported_expr_no_evm_run, expr_has_evm_run_def,
-            supported_expr_main_calls]
+            supported_expr_main_calls, supported_expr_no_call_operand_effects]
 QED
 
 Theorem supported_assignment_storage_syntax:
   supported_assignment tops bindings tgt e ==>
   ~supported_assignment_exists expr_evm_run_root tgt /\
-  EVERY (\c. FST c = NONE) (int_calls_atarget tgt)
+  ~supported_assignment_exists call_operands_effect_root tgt /\
+  EVERY (\c. FST c = NONE /\
+               IS_SOME (supported_function_decl tops c Internal)) (int_calls_atarget tgt)
 Proof
   Cases_on `tgt`
   >- (qmatch_goalsub_rename_tac `BaseTarget btgt` >>
@@ -131,9 +142,9 @@ Proof
            int_calls_atarget_def] >> strip_tac >>
       gvs[AllCaseEqs()]
       >- (irule supported_target_storage_syntax >>
-          qexistsl [`bindings`, `tops`] >> simp[]) >>
+          qexists_tac `bindings` >> simp[]) >>
       irule supported_target_info_storage_syntax >>
-      qexistsl [`bindings`, `tops`] >>
+      qexists_tac `bindings` >>
       Cases_on `supported_target_info tops bindings btgt` >> gvs[]) >>
   simp[supported_assignment_def] >> strip_tac >>
   qpat_x_assum `EVERY _ _` mp_tac >>
@@ -150,21 +161,30 @@ QED
 Theorem supported_iterator_storage_syntax:
   supported_iterator tops ty iter n ==>
   ~supported_iterator_exists expr_evm_run_root iter /\
-  EVERY (\c. FST c = NONE) (int_calls_iterator iter)
+  ~supported_iterator_exists call_operands_effect_root iter /\
+  EVERY (\c. FST c = NONE /\
+               IS_SOME (supported_function_decl tops c Internal)) (int_calls_iterator iter)
 Proof
   Cases_on `iter`
-  >- (simp[supported_iterator_def, supported_iterator_exists_def,
-           int_calls_iterator_def] >>
+  >- (simp[supported_iterator_exists_def, int_calls_iterator_def] >>
       qmatch_goalsub_rename_tac `int_calls_expr arr` >>
-      Cases_on `arr` >> simp[] >>
-      BasicProvers.EVERY_CASE_TAC >>
-      simp[supported_expr_exists_def, expr_evm_run_root_def, int_calls_expr_def]) >>
+      Cases_on `arr`
+      >~ [`Name _ _`]
+      >- simp[supported_expr_exists_def, call_operands_effect_root_def,
+              expr_evm_run_root_def, int_calls_expr_def]
+      >~ [`TopLevelName _ _`]
+      >- simp[supported_expr_exists_def, call_operands_effect_root_def,
+              expr_evm_run_root_def, int_calls_expr_def] >>
+      simp[supported_iterator_def] >> strip_tac >>
+      metis_tac[supported_expr_main_calls, supported_expr_no_evm_run,
+                supported_expr_no_call_operand_effects, expr_has_evm_run_def]) >>
   simp[supported_iterator_def, supported_iterator_exists_def,
        int_calls_iterator_def, EVERY_APPEND] >>
   qmatch_goalsub_rename_tac `~supported_expr_exists _ lo /\ ~supported_expr_exists _ hi` >>
   strip_tac >>
   `supported_pure_expr tops lo /\ supported_pure_expr tops hi` suffices_by
     metis_tac[supported_pure_main_calls, supported_expr_no_evm_run,
+              supported_expr_no_call_operand_effects,
               supported_expr_def, expr_has_evm_run_def] >>
   BasicProvers.EVERY_CASE_TAC >> simp[supported_pure_expr_def]
 QED
@@ -172,11 +192,14 @@ QED
 Theorem supported_string_reason_storage_syntax:
   supported_string_reason tops e ==>
   ~supported_expr_exists expr_evm_run_root e /\
-  EVERY (\c. FST c = NONE) (int_calls_expr e)
+  ~supported_expr_exists call_operands_effect_root e /\
+  EVERY (\c. FST c = NONE /\
+               IS_SOME (supported_function_decl tops c Internal)) (int_calls_expr e)
 Proof
   strip_tac >>
   `supported_pure_expr tops e` suffices_by
     metis_tac[supported_pure_main_calls, supported_expr_no_evm_run,
+              supported_expr_no_call_operand_effects,
               supported_expr_def, expr_has_evm_run_def] >>
   Cases_on `e` >> gvs[supported_string_reason_def] >>
   rename1 `Literal _ lit` >> Cases_on `lit` >>
@@ -186,10 +209,14 @@ QED
 Theorem supported_reasons_storage_syntax:
   (!tops reason. supported_assert_reason tops reason ==>
     ~supported_assert_exists expr_evm_run_root reason /\
-    EVERY (\c. FST c = NONE) (int_calls_assert_reason reason)) /\
+    ~supported_assert_exists call_operands_effect_root reason /\
+    EVERY (\c. FST c = NONE /\
+               IS_SOME (supported_function_decl tops c Internal)) (int_calls_assert_reason reason)) /\
   (!tops reason. supported_raise_reason tops reason ==>
     ~supported_raise_exists expr_evm_run_root reason /\
-    EVERY (\c. FST c = NONE) (int_calls_raise_reason reason))
+    ~supported_raise_exists call_operands_effect_root reason /\
+    EVERY (\c. FST c = NONE /\
+               IS_SOME (supported_function_decl tops c Internal)) (int_calls_raise_reason reason))
 Proof
   conj_tac >> rpt gen_tac >> Cases_on `reason` >>
   simp[supported_assert_reason_def, supported_raise_reason_def,
@@ -201,31 +228,38 @@ QED
 Theorem supported_pure_exprs_storage_syntax:
   supported_pure_exprs tops es ==>
   ~supported_exprs_exists expr_evm_run_root es /\
-  EVERY (\c. FST c = NONE) (int_calls_exprs es)
+  ~supported_exprs_exists call_operands_effect_root es /\
+  EVERY (\c. FST c = NONE /\
+               IS_SOME (supported_function_decl tops c Internal)) (int_calls_exprs es)
 Proof
   Induct_on `es` >>
-  simp[supported_pure_expr_def, supported_expr_exists_def,
+  simp[supported_pure_expr_def, supported_expr_exists_def, call_operands_effect_root_def,
        int_calls_expr_def, EVERY_APPEND] >>
   metis_tac[supported_expr_no_evm_run, supported_expr_def,
-            expr_has_evm_run_def, supported_pure_main_calls]
+            expr_has_evm_run_def, supported_pure_main_calls,
+            supported_expr_no_call_operand_effects]
 QED
 
 Theorem supported_append_target_storage_syntax:
   supported_append_target tops tgt ==>
   ~supported_target_exists expr_evm_run_root tgt /\
-  EVERY (\c. FST c = NONE) (int_calls_target tgt)
+  ~supported_target_exists call_operands_effect_root tgt /\
+  EVERY (\c. FST c = NONE /\
+               IS_SOME (supported_function_decl tops c Internal)) (int_calls_target tgt)
 Proof
   Cases_on `tgt` >>
-  simp[supported_append_target_def, supported_expr_exists_def, int_calls_expr_def]
+  simp[supported_append_target_def, supported_expr_exists_def, call_operands_effect_root_def, int_calls_expr_def]
 QED
 
 Theorem supported_aug_target_storage_syntax:
   supported_aug_target tops bindings tgt ==>
   ~supported_target_exists expr_evm_run_root tgt /\
-  EVERY (\c. FST c = NONE) (int_calls_target tgt)
+  ~supported_target_exists call_operands_effect_root tgt /\
+  EVERY (\c. FST c = NONE /\
+               IS_SOME (supported_function_decl tops c Internal)) (int_calls_target tgt)
 Proof
   strip_tac >> irule supported_target_info_storage_syntax >>
-  qexistsl [`bindings`, `tops`] >>
+  qexists_tac `bindings` >>
   qpat_x_assum `supported_aug_target _ _ _` mp_tac >>
   Cases_on `supported_target_info tops bindings tgt` >>
   simp[supported_aug_target_def]
@@ -234,14 +268,18 @@ QED
 Theorem supported_stmts_storage_syntax:
   (!tops bindings s. supported_stmt tops bindings s ==>
     ~supported_stmt_expr_exists expr_evm_run_root s /\
-    EVERY (\c. FST c = NONE) (int_calls_stmt s)) /\
+    ~supported_stmt_expr_exists call_operands_effect_root s /\
+    EVERY (\c. FST c = NONE /\
+               IS_SOME (supported_function_decl tops c Internal)) (int_calls_stmt s)) /\
   (!tops bindings ss. supported_stmts tops bindings ss ==>
     ~supported_stmts_expr_exists expr_evm_run_root ss /\
-    EVERY (\c. FST c = NONE) (int_calls_stmts ss))
+    ~supported_stmts_expr_exists call_operands_effect_root ss /\
+    EVERY (\c. FST c = NONE /\
+               IS_SOME (supported_function_decl tops c Internal)) (int_calls_stmts ss))
 Proof
   ho_match_mp_tac supported_stmt_ind >>
   simp[supported_stmt_def, supported_stmt_expr_exists_def,
-       supported_expr_exists_def, int_calls_expr_def,
+       supported_expr_exists_def, call_operands_effect_root_def, int_calls_expr_def,
        int_calls_stmt_def, EVERY_APPEND] >>
   rpt conj_tac >> rpt gen_tac >> rpt strip_tac >>
   imp_res_tac supported_assignment_def >>
@@ -249,6 +287,7 @@ Proof
   imp_res_tac (REWRITE_RULE [DISJ_IMP_THM] (iffRL supported_expr_def)) >>
   imp_res_tac supportedExprTraverseTheory.supported_expr_no_evm_run >>
   imp_res_tac supported_expr_main_calls >>
+  imp_res_tac supported_expr_no_call_operand_effects >>
   imp_res_tac supported_assignment_storage_syntax >>
   imp_res_tac supported_target_storage_syntax >>
   imp_res_tac supported_aug_target_storage_syntax >>
@@ -261,11 +300,14 @@ QED
 
 Theorem supported_callable_storage_syntax:
   supported_program tops /\
+  IS_SOME (supported_function_decl tops (NONE,name) Internal) /\
   lookup_callable_function deploy name tops =
     SOME (mut,nr,args,defaults,ret,stmts) ==>
   defaults = [] /\
   ~supported_stmts_expr_exists expr_evm_run_root stmts /\
-  EVERY (\c. FST c = NONE) (int_calls_stmts stmts)
+  EVERY (\c. FST c = NONE /\
+             IS_SOME (supported_function_decl tops c Internal))
+    (int_calls_stmts stmts)
 Proof
   strip_tac >> drule_all supported_callable_body_contract >> strip_tac >>
   drule (CONJUNCT2 supported_stmts_storage_syntax) >> simp[]
@@ -988,7 +1030,7 @@ Theorem body_oracle_pop_case:
     supported_program tops /\ get_module_code cx NONE = SOME tops /\
     well_typed_target env bt ty /\ runtime_storage_consistent env cx st /\
     functions_well_typed cx /\ call_evaluation_safe cx (int_calls_target bt) /\
-    EVERY (\c. FST c = NONE) (int_calls_target bt) /\
+    EVERY (\c. FST c = NONE /\ IS_SOME (supported_function_decl tops c Internal)) (int_calls_target bt) /\
     ~supported_target_exists expr_evm_run_root bt /\
     IS_SOME st.outcomes /\ oracle_storage_ok cx st /\
     eval_target_place cx bt st = (res,st') ==> contract_storage_well_formed cx st') ==>
@@ -996,7 +1038,7 @@ Theorem body_oracle_pop_case:
     supported_program tops /\ get_module_code cx NONE = SOME tops /\
     runtime_storage_consistent env cx st /\ functions_well_typed cx /\
     call_evaluation_safe cx (int_calls_expr (Pop ty bt)) /\
-    EVERY (\c. FST c = NONE) (int_calls_expr (Pop ty bt)) /\
+    EVERY (\c. FST c = NONE /\ IS_SOME (supported_function_decl tops c Internal)) (int_calls_expr (Pop ty bt)) /\
     ~supported_expr_exists expr_evm_run_root (Pop ty bt) /\
     IS_SOME st.outcomes /\ oracle_storage_ok cx st /\
     eval_expr cx (Pop ty bt) st = (res,st') ==>
@@ -1734,7 +1776,7 @@ Theorem body_assign_base_consumer:
       well_typed_target env bt ty /\ supported_program tops /\
       get_module_code cx NONE = SOME tops /\
       ~supported_target_exists expr_evm_run_root bt /\
-      EVERY (\c. FST c = NONE) (int_calls_target bt) /\
+      EVERY (\c. FST c = NONE /\ IS_SOME (supported_function_decl tops c Internal)) (int_calls_target bt) /\
       runtime_storage_consistent env cx st /\ functions_well_typed cx /\
       call_evaluation_safe cx (int_calls_target bt) /\
       IS_SOME st.outcomes /\ oracle_storage_ok cx st /\
@@ -1742,7 +1784,7 @@ Theorem body_assign_base_consumer:
       contract_storage_well_formed cx st') /\
   (!tops env st res st'.
       supported_program tops /\ get_module_code cx NONE = SOME tops /\
-      ~expr_has_evm_run e /\ EVERY (\c. FST c = NONE) (int_calls_expr e) /\
+      ~expr_has_evm_run e /\ EVERY (\c. FST c = NONE /\ IS_SOME (supported_function_decl tops c Internal)) (int_calls_expr e) /\
       runtime_storage_consistent env cx st /\ functions_well_typed cx /\
       call_evaluation_safe cx (int_calls_expr e) /\
       IS_SOME st.outcomes /\ oracle_storage_ok cx st /\
@@ -1753,7 +1795,7 @@ Theorem body_assign_base_consumer:
     type_stmt env ret_ty (Assign (BaseTarget bt) e) = SOME env' /\
     supported_program tops /\ get_module_code cx NONE = SOME tops /\
     ~supported_stmt_expr_exists expr_evm_run_root (Assign (BaseTarget bt) e) /\
-    EVERY (\c. FST c = NONE) (int_calls_stmt (Assign (BaseTarget bt) e)) /\
+    EVERY (\c. FST c = NONE /\ IS_SOME (supported_function_decl tops c Internal)) (int_calls_stmt (Assign (BaseTarget bt) e)) /\
     runtime_storage_consistent env cx st /\ functions_well_typed cx /\
     call_evaluation_safe cx (int_calls_stmt (Assign (BaseTarget bt) e)) /\
     IS_SOME st.outcomes /\ oracle_storage_ok cx st /\
@@ -1789,7 +1831,7 @@ Theorem body_if_consumer:
       type_stmts env ret_ty ss1 = SOME env' /\
       supported_program tops /\ get_module_code cx NONE = SOME tops /\
       ~supported_stmts_expr_exists expr_evm_run_root ss1 /\
-      EVERY (\c. FST c = NONE) (int_calls_stmts ss1) /\
+      EVERY (\c. FST c = NONE /\ IS_SOME (supported_function_decl tops c Internal)) (int_calls_stmts ss1) /\
       runtime_storage_consistent env cx st /\ functions_well_typed cx /\
       call_evaluation_safe cx (int_calls_stmts ss1) /\
       IS_SOME st.outcomes /\ oracle_storage_ok cx st /\
@@ -1800,14 +1842,14 @@ Theorem body_if_consumer:
       type_stmts env ret_ty ss2 = SOME env' /\
       supported_program tops /\ get_module_code cx NONE = SOME tops /\
       ~supported_stmts_expr_exists expr_evm_run_root ss2 /\
-      EVERY (\c. FST c = NONE) (int_calls_stmts ss2) /\
+      EVERY (\c. FST c = NONE /\ IS_SOME (supported_function_decl tops c Internal)) (int_calls_stmts ss2) /\
       runtime_storage_consistent env cx st /\ functions_well_typed cx /\
       call_evaluation_safe cx (int_calls_stmts ss2) /\
       IS_SOME st.outcomes /\ oracle_storage_ok cx st /\
       eval_stmts cx ss2 st = (res,st') ==> contract_storage_well_formed cx st') /\
   (!tops env st res st'.
       supported_program tops /\ get_module_code cx NONE = SOME tops /\
-      ~expr_has_evm_run e /\ EVERY (\c. FST c = NONE) (int_calls_expr e) /\
+      ~expr_has_evm_run e /\ EVERY (\c. FST c = NONE /\ IS_SOME (supported_function_decl tops c Internal)) (int_calls_expr e) /\
       runtime_storage_consistent env cx st /\ functions_well_typed cx /\
       call_evaluation_safe cx (int_calls_expr e) /\
       IS_SOME st.outcomes /\ oracle_storage_ok cx st /\
@@ -1818,7 +1860,7 @@ Theorem body_if_consumer:
     type_stmt env ret_ty (If e ss1 ss2) = SOME env' /\
     supported_program tops /\ get_module_code cx NONE = SOME tops /\
     ~supported_stmt_expr_exists expr_evm_run_root (If e ss1 ss2) /\
-    EVERY (\c. FST c = NONE) (int_calls_stmt (If e ss1 ss2)) /\
+    EVERY (\c. FST c = NONE /\ IS_SOME (supported_function_decl tops c Internal)) (int_calls_stmt (If e ss1 ss2)) /\
     runtime_storage_consistent env cx st /\ functions_well_typed cx /\
     call_evaluation_safe cx (int_calls_stmt (If e ss1 ss2)) /\
     IS_SOME st.outcomes /\ oracle_storage_ok cx st /\
@@ -1950,7 +1992,7 @@ Theorem body_append_consumer:
   (!s0 p s1. eval_target_place cx bt s0 = (INL p,s1) ==>
     !tops env st res st'.
       supported_program tops /\ get_module_code cx NONE = SOME tops /\
-      ~expr_has_evm_run e /\ EVERY (\c. FST c = NONE) (int_calls_expr e) /\
+      ~expr_has_evm_run e /\ EVERY (\c. FST c = NONE /\ IS_SOME (supported_function_decl tops c Internal)) (int_calls_expr e) /\
       runtime_storage_consistent env cx st /\ functions_well_typed cx /\
       call_evaluation_safe cx (int_calls_expr e) /\
       IS_SOME st.outcomes /\ oracle_storage_ok cx st /\
@@ -1961,7 +2003,7 @@ Theorem body_append_consumer:
       well_typed_target env bt ty /\ supported_program tops /\
       get_module_code cx NONE = SOME tops /\
       ~supported_target_exists expr_evm_run_root bt /\
-      EVERY (\c. FST c = NONE) (int_calls_target bt) /\
+      EVERY (\c. FST c = NONE /\ IS_SOME (supported_function_decl tops c Internal)) (int_calls_target bt) /\
       runtime_storage_consistent env cx st /\ functions_well_typed cx /\
       call_evaluation_safe cx (int_calls_target bt) /\
       IS_SOME st.outcomes /\ oracle_storage_ok cx st /\
@@ -1971,7 +2013,7 @@ Theorem body_append_consumer:
     type_stmt env ret_ty (Append bt e) = SOME env' /\
     supported_program tops /\ get_module_code cx NONE = SOME tops /\
     ~supported_stmt_expr_exists expr_evm_run_root (Append bt e) /\
-    EVERY (\c. FST c = NONE) (int_calls_stmt (Append bt e)) /\
+    EVERY (\c. FST c = NONE /\ IS_SOME (supported_function_decl tops c Internal)) (int_calls_stmt (Append bt e)) /\
     runtime_storage_consistent env cx st /\ functions_well_typed cx /\
     call_evaluation_safe cx (int_calls_stmt (Append bt e)) /\
     IS_SOME st.outcomes /\ oracle_storage_ok cx st /\
@@ -2105,7 +2147,7 @@ Theorem body_augassign_consumer:
     read_place cx p s2 = (INL cur,s3) /\ place_type_value cx p s4 = (INL ptv,s5) ==>
     !tops env st res st'.
       supported_program tops /\ get_module_code cx NONE = SOME tops /\
-      ~expr_has_evm_run e /\ EVERY (\c. FST c = NONE) (int_calls_expr e) /\
+      ~expr_has_evm_run e /\ EVERY (\c. FST c = NONE /\ IS_SOME (supported_function_decl tops c Internal)) (int_calls_expr e) /\
       runtime_storage_consistent env cx st /\ functions_well_typed cx /\
       call_evaluation_safe cx (int_calls_expr e) /\
       IS_SOME st.outcomes /\ oracle_storage_ok cx st /\
@@ -2116,7 +2158,7 @@ Theorem body_augassign_consumer:
       well_typed_target env bt ty /\ supported_program tops /\
       get_module_code cx NONE = SOME tops /\
       ~supported_target_exists expr_evm_run_root bt /\
-      EVERY (\c. FST c = NONE) (int_calls_target bt) /\
+      EVERY (\c. FST c = NONE /\ IS_SOME (supported_function_decl tops c Internal)) (int_calls_target bt) /\
       runtime_storage_consistent env cx st /\ functions_well_typed cx /\
       call_evaluation_safe cx (int_calls_target bt) /\
       IS_SOME st.outcomes /\ oracle_storage_ok cx st /\
@@ -2126,7 +2168,7 @@ Theorem body_augassign_consumer:
     type_stmt env ret_ty (AugAssign ty bt bop e) = SOME env' /\
     supported_program tops /\ get_module_code cx NONE = SOME tops /\
     ~supported_stmt_expr_exists expr_evm_run_root (AugAssign ty bt bop e) /\
-    EVERY (\c. FST c = NONE) (int_calls_stmt (AugAssign ty bt bop e)) /\
+    EVERY (\c. FST c = NONE /\ IS_SOME (supported_function_decl tops c Internal)) (int_calls_stmt (AugAssign ty bt bop e)) /\
     runtime_storage_consistent env cx st /\ functions_well_typed cx /\
     call_evaluation_safe cx (int_calls_stmt (AugAssign ty bt bop e)) /\
     IS_SOME st.outcomes /\ oracle_storage_ok cx st /\
@@ -2182,17 +2224,17 @@ Proof
 QED
 
 Theorem body_exprs_main_calls_every:
-  EVERY (\c. FST c = NONE) (int_calls_exprs es) <=>
-  EVERY (\e. EVERY (\c. FST c = NONE) (int_calls_expr e)) es
+  !P es. EVERY P (int_calls_exprs es) <=>
+         EVERY (\e. EVERY P (int_calls_expr e)) es
 Proof
   Induct_on `es` >> simp[int_calls_expr_def]
 QED
 
 Theorem body_exprs_syntax_perm:
   PERM xs ys /\ ~supported_exprs_exists expr_evm_run_root xs /\
-  EVERY (\c. FST c = NONE) (int_calls_exprs xs) ==>
+  EVERY (\c. FST c = NONE /\ IS_SOME (supported_function_decl tops c Internal)) (int_calls_exprs xs) ==>
   ~supported_exprs_exists expr_evm_run_root ys /\
-  EVERY (\c. FST c = NONE) (int_calls_exprs ys)
+  EVERY (\c. FST c = NONE /\ IS_SOME (supported_function_decl tops c Internal)) (int_calls_exprs ys)
 Proof
   pure_rewrite_tac[supported_exprs_exists_every, body_exprs_main_calls_every,
                    EXISTS_MEM, EVERY_MEM] >>
@@ -2210,7 +2252,7 @@ Theorem body_raise_custom_consumer:
       well_typed_exprs env es /\ supported_program tops /\
       get_module_code cx NONE = SOME tops /\
       ~supported_exprs_exists expr_evm_run_root es /\
-      EVERY (\c. FST c = NONE) (int_calls_exprs es) /\
+      EVERY (\c. FST c = NONE /\ IS_SOME (supported_function_decl tops c Internal)) (int_calls_exprs es) /\
       runtime_storage_consistent env cx st /\ functions_well_typed cx /\
       call_evaluation_safe cx (int_calls_exprs es) /\
       IS_SOME st.outcomes /\ oracle_storage_ok cx st /\
@@ -2219,7 +2261,7 @@ Theorem body_raise_custom_consumer:
     type_stmt env ret_ty (Raise (RaiseCustomError err)) = SOME env' /\
     supported_program tops /\ get_module_code cx NONE = SOME tops /\
     ~supported_stmt_expr_exists expr_evm_run_root (Raise (RaiseCustomError err)) /\
-    EVERY (\c. FST c = NONE) (int_calls_stmt (Raise (RaiseCustomError err))) /\
+    EVERY (\c. FST c = NONE /\ IS_SOME (supported_function_decl tops c Internal)) (int_calls_stmt (Raise (RaiseCustomError err))) /\
     runtime_storage_consistent env cx st /\ functions_well_typed cx /\
     call_evaluation_safe cx (int_calls_stmt (Raise (RaiseCustomError err))) /\
     IS_SOME st.outcomes /\ oracle_storage_ok cx st /\
@@ -2293,14 +2335,14 @@ Theorem body_assert_custom_consumer:
       well_typed_exprs env es /\ supported_program tops /\
       get_module_code cx NONE = SOME tops /\
       ~supported_exprs_exists expr_evm_run_root es /\
-      EVERY (\c. FST c = NONE) (int_calls_exprs es) /\
+      EVERY (\c. FST c = NONE /\ IS_SOME (supported_function_decl tops c Internal)) (int_calls_exprs es) /\
       runtime_storage_consistent env cx st /\ functions_well_typed cx /\
       call_evaluation_safe cx (int_calls_exprs es) /\
       IS_SOME st.outcomes /\ oracle_storage_ok cx st /\
       eval_exprs cx es st = (res,st') ==> contract_storage_well_formed cx st') /\
   (!tops env st res st'.
       supported_program tops /\ get_module_code cx NONE = SOME tops /\
-      ~expr_has_evm_run e /\ EVERY (\c. FST c = NONE) (int_calls_expr e) /\
+      ~expr_has_evm_run e /\ EVERY (\c. FST c = NONE /\ IS_SOME (supported_function_decl tops c Internal)) (int_calls_expr e) /\
       runtime_storage_consistent env cx st /\ functions_well_typed cx /\
       call_evaluation_safe cx (int_calls_expr e) /\
       IS_SOME st.outcomes /\ oracle_storage_ok cx st /\
@@ -2311,7 +2353,7 @@ Theorem body_assert_custom_consumer:
     type_stmt env ret_ty (Assert e (AssertCustomError err)) = SOME env' /\
     supported_program tops /\ get_module_code cx NONE = SOME tops /\
     ~supported_stmt_expr_exists expr_evm_run_root (Assert e (AssertCustomError err)) /\
-    EVERY (\c. FST c = NONE) (int_calls_stmt (Assert e (AssertCustomError err))) /\
+    EVERY (\c. FST c = NONE /\ IS_SOME (supported_function_decl tops c Internal)) (int_calls_stmt (Assert e (AssertCustomError err))) /\
     runtime_storage_consistent env cx st /\ functions_well_typed cx /\
     call_evaluation_safe cx (int_calls_stmt (Assert e (AssertCustomError err))) /\
     IS_SOME st.outcomes /\ oracle_storage_ok cx st /\
@@ -2415,7 +2457,7 @@ Theorem body_for_entry_consumer:
       type_stmts (extend_local env id ty F) ret_ty body_stmts = SOME env_after /\
       supported_program tops /\ get_module_code cx NONE = SOME tops /\
       ~supported_stmts_expr_exists expr_evm_run_root body_stmts /\
-      EVERY (\c. FST c = NONE) (int_calls_stmts body_stmts) /\
+      EVERY (\c. FST c = NONE /\ IS_SOME (supported_function_decl tops c Internal)) (int_calls_stmts body_stmts) /\
       runtime_storage_consistent env cx st /\ functions_well_typed cx /\
       call_evaluation_safe cx (int_calls_stmts body_stmts) /\
       IS_SOME st.outcomes /\ oracle_storage_ok cx st /\
@@ -2427,7 +2469,7 @@ Theorem body_for_entry_consumer:
       well_typed_iterator env ty it /\ supported_program tops /\
       get_module_code cx NONE = SOME tops /\
       ~supported_iterator_exists expr_evm_run_root it /\
-      EVERY (\c. FST c = NONE) (int_calls_iterator it) /\
+      EVERY (\c. FST c = NONE /\ IS_SOME (supported_function_decl tops c Internal)) (int_calls_iterator it) /\
       runtime_storage_consistent env cx st /\ functions_well_typed cx /\
       call_evaluation_safe cx (int_calls_iterator it) /\
       IS_SOME st.outcomes /\ oracle_storage_ok cx st /\
@@ -2436,7 +2478,7 @@ Theorem body_for_entry_consumer:
     type_stmt env ret_ty (For id ty it n body_stmts) = SOME env' /\
     supported_program tops /\ get_module_code cx NONE = SOME tops /\
     ~supported_stmt_expr_exists expr_evm_run_root (For id ty it n body_stmts) /\
-    EVERY (\c. FST c = NONE) (int_calls_stmt (For id ty it n body_stmts)) /\
+    EVERY (\c. FST c = NONE /\ IS_SOME (supported_function_decl tops c Internal)) (int_calls_stmt (For id ty it n body_stmts)) /\
     runtime_storage_consistent env cx st /\ functions_well_typed cx /\
     call_evaluation_safe cx (int_calls_stmt (For id ty it n body_stmts)) /\
     IS_SOME st.outcomes /\ oracle_storage_ok cx st /\
@@ -2570,7 +2612,7 @@ Theorem body_for_cons_consumer:
       type_stmts (extend_local env id ty F) ret_ty body_stmts = SOME env_after /\
       supported_program tops /\ get_module_code cx NONE = SOME tops /\
       ~supported_stmts_expr_exists expr_evm_run_root body_stmts /\
-      EVERY (\c. FST c = NONE) (int_calls_stmts body_stmts) /\
+      EVERY (\c. FST c = NONE /\ IS_SOME (supported_function_decl tops c Internal)) (int_calls_stmts body_stmts) /\
       runtime_storage_consistent env cx st /\ functions_well_typed cx /\
       call_evaluation_safe cx (int_calls_stmts body_stmts) /\
       IS_SOME st.outcomes /\ oracle_storage_ok cx st /\
@@ -2581,7 +2623,7 @@ Theorem body_for_cons_consumer:
       type_stmts env ret_ty body_stmts = SOME env_after /\
       supported_program tops /\ get_module_code cx NONE = SOME tops /\
       ~supported_stmts_expr_exists expr_evm_run_root body_stmts /\
-      EVERY (\c. FST c = NONE) (int_calls_stmts body_stmts) /\
+      EVERY (\c. FST c = NONE /\ IS_SOME (supported_function_decl tops c Internal)) (int_calls_stmts body_stmts) /\
       runtime_storage_consistent env cx st /\ functions_well_typed cx /\
       call_evaluation_safe cx (int_calls_stmts body_stmts) /\
       IS_SOME st.outcomes /\ oracle_storage_ok cx st /\
@@ -2592,7 +2634,7 @@ Theorem body_for_cons_consumer:
     type_stmts (extend_local env id ty F) ret_ty body_stmts = SOME env_after /\
     supported_program tops /\ get_module_code cx NONE = SOME tops /\
     ~supported_stmts_expr_exists expr_evm_run_root body_stmts /\
-    EVERY (\c. FST c = NONE) (int_calls_stmts body_stmts) /\
+    EVERY (\c. FST c = NONE /\ IS_SOME (supported_function_decl tops c Internal)) (int_calls_stmts body_stmts) /\
     runtime_storage_consistent env cx st /\ functions_well_typed cx /\
     call_evaluation_safe cx (int_calls_stmts body_stmts) /\
     IS_SOME st.outcomes /\ oracle_storage_ok cx st /\
@@ -2647,7 +2689,7 @@ Theorem body_stmts_cons_consumer:
       type_stmts env ret_ty ss = SOME env_after /\
       supported_program tops /\ get_module_code cx NONE = SOME tops /\
       ~supported_stmts_expr_exists expr_evm_run_root ss /\
-      EVERY (\c. FST c = NONE) (int_calls_stmts ss) /\
+      EVERY (\c. FST c = NONE /\ IS_SOME (supported_function_decl tops c Internal)) (int_calls_stmts ss) /\
       runtime_storage_consistent env cx st /\ functions_well_typed cx /\
       call_evaluation_safe cx (int_calls_stmts ss) /\
       IS_SOME st.outcomes /\ oracle_storage_ok cx st /\
@@ -2656,7 +2698,7 @@ Theorem body_stmts_cons_consumer:
       type_stmt env ret_ty stmt = SOME env_after /\
       supported_program tops /\ get_module_code cx NONE = SOME tops /\
       ~supported_stmt_expr_exists expr_evm_run_root stmt /\
-      EVERY (\c. FST c = NONE) (int_calls_stmt stmt) /\
+      EVERY (\c. FST c = NONE /\ IS_SOME (supported_function_decl tops c Internal)) (int_calls_stmt stmt) /\
       runtime_storage_consistent env cx st /\ functions_well_typed cx /\
       call_evaluation_safe cx (int_calls_stmt stmt) /\
       IS_SOME st.outcomes /\ oracle_storage_ok cx st /\
@@ -2665,7 +2707,7 @@ Theorem body_stmts_cons_consumer:
     type_stmts env ret_ty (stmt::ss) = SOME env_after /\
     supported_program tops /\ get_module_code cx NONE = SOME tops /\
     ~supported_stmts_expr_exists expr_evm_run_root (stmt::ss) /\
-    EVERY (\c. FST c = NONE) (int_calls_stmts (stmt::ss)) /\
+    EVERY (\c. FST c = NONE /\ IS_SOME (supported_function_decl tops c Internal)) (int_calls_stmts (stmt::ss)) /\
     runtime_storage_consistent env cx st /\ functions_well_typed cx /\
     call_evaluation_safe cx (int_calls_stmts (stmt::ss)) /\
     IS_SOME st.outcomes /\ oracle_storage_ok cx st /\
@@ -2689,7 +2731,7 @@ QED
 Theorem body_single_expr_stmt_consumer:
   (!tops env st res st'.
     supported_program tops /\ get_module_code cx NONE = SOME tops /\
-    ~expr_has_evm_run e /\ EVERY (\c. FST c = NONE) (int_calls_expr e) /\
+    ~expr_has_evm_run e /\ EVERY (\c. FST c = NONE /\ IS_SOME (supported_function_decl tops c Internal)) (int_calls_expr e) /\
     runtime_storage_consistent env cx st /\ functions_well_typed cx /\
     call_evaluation_safe cx (int_calls_expr e) /\
     IS_SOME st.outcomes /\ oracle_storage_ok cx st /\
@@ -2702,7 +2744,7 @@ Theorem body_single_expr_stmt_consumer:
     type_stmt env ret_ty s = SOME env' /\
     supported_program tops /\ get_module_code cx NONE = SOME tops /\
     ~supported_stmt_expr_exists expr_evm_run_root s /\
-    EVERY (\c. FST c = NONE) (int_calls_stmt s) /\
+    EVERY (\c. FST c = NONE /\ IS_SOME (supported_function_decl tops c Internal)) (int_calls_stmt s) /\
     runtime_storage_consistent env cx st /\ functions_well_typed cx /\
     call_evaluation_safe cx (int_calls_stmt s) /\
     IS_SOME st.outcomes /\ oracle_storage_ok cx st /\
@@ -2724,7 +2766,7 @@ Theorem body_annassign_consumer:
     lift_option_type (evaluate_type tenv typ) "AnnAssign evaluate_type" s0 = (INL tyv,t) ==>
     !tops env st res st'.
       supported_program tops /\ get_module_code cx NONE = SOME tops /\
-      ~expr_has_evm_run e /\ EVERY (\c. FST c = NONE) (int_calls_expr e) /\
+      ~expr_has_evm_run e /\ EVERY (\c. FST c = NONE /\ IS_SOME (supported_function_decl tops c Internal)) (int_calls_expr e) /\
       runtime_storage_consistent env cx st /\ functions_well_typed cx /\
       call_evaluation_safe cx (int_calls_expr e) /\
       IS_SOME st.outcomes /\ oracle_storage_ok cx st /\
@@ -2735,7 +2777,7 @@ Theorem body_annassign_consumer:
     type_stmt env ret_ty (AnnAssign id typ e) = SOME env' /\
     supported_program tops /\ get_module_code cx NONE = SOME tops /\
     ~supported_stmt_expr_exists expr_evm_run_root (AnnAssign id typ e) /\
-    EVERY (\c. FST c = NONE) (int_calls_stmt (AnnAssign id typ e)) /\
+    EVERY (\c. FST c = NONE /\ IS_SOME (supported_function_decl tops c Internal)) (int_calls_stmt (AnnAssign id typ e)) /\
     runtime_storage_consistent env cx st /\ functions_well_typed cx /\
     call_evaluation_safe cx (int_calls_stmt (AnnAssign id typ e)) /\
     IS_SOME st.outcomes /\ oracle_storage_ok cx st /\
@@ -2756,7 +2798,7 @@ Theorem body_log_consumer:
   (!tops env st res st'.
     well_typed_exprs env es /\ supported_program tops /\ get_module_code cx NONE = SOME tops /\
     ~supported_exprs_exists expr_evm_run_root es /\
-    EVERY (\c. FST c = NONE) (int_calls_exprs es) /\
+    EVERY (\c. FST c = NONE /\ IS_SOME (supported_function_decl tops c Internal)) (int_calls_exprs es) /\
     runtime_storage_consistent env cx st /\ functions_well_typed cx /\
     call_evaluation_safe cx (int_calls_exprs es) /\
     IS_SOME st.outcomes /\ oracle_storage_ok cx st /\
@@ -2765,7 +2807,7 @@ Theorem body_log_consumer:
     type_stmt env ret_ty (Log id es) = SOME env' /\
     supported_program tops /\ get_module_code cx NONE = SOME tops /\
     ~supported_stmt_expr_exists expr_evm_run_root (Log id es) /\
-    EVERY (\c. FST c = NONE) (int_calls_stmt (Log id es)) /\
+    EVERY (\c. FST c = NONE /\ IS_SOME (supported_function_decl tops c Internal)) (int_calls_stmt (Log id es)) /\
     runtime_storage_consistent env cx st /\ functions_well_typed cx /\
     call_evaluation_safe cx (int_calls_stmt (Log id es)) /\
     IS_SOME st.outcomes /\ oracle_storage_ok cx st /\
@@ -2798,7 +2840,7 @@ QED
 Theorem body_array_iterator_consumer:
   (!tops env st res st'.
     supported_program tops /\ get_module_code cx NONE = SOME tops /\
-    ~expr_has_evm_run e /\ EVERY (\c. FST c = NONE) (int_calls_expr e) /\
+    ~expr_has_evm_run e /\ EVERY (\c. FST c = NONE /\ IS_SOME (supported_function_decl tops c Internal)) (int_calls_expr e) /\
     runtime_storage_consistent env cx st /\ functions_well_typed cx /\
     call_evaluation_safe cx (int_calls_expr e) /\
     IS_SOME st.outcomes /\ oracle_storage_ok cx st /\
@@ -2809,7 +2851,7 @@ Theorem body_array_iterator_consumer:
     well_typed_iterator env ty (Array e) /\ supported_program tops /\
     get_module_code cx NONE = SOME tops /\
     ~supported_iterator_exists expr_evm_run_root (Array e) /\
-    EVERY (\c. FST c = NONE) (int_calls_iterator (Array e)) /\
+    EVERY (\c. FST c = NONE /\ IS_SOME (supported_function_decl tops c Internal)) (int_calls_iterator (Array e)) /\
     runtime_storage_consistent env cx st /\ functions_well_typed cx /\
     call_evaluation_safe cx (int_calls_iterator (Array e)) /\
     IS_SOME st.outcomes /\ oracle_storage_ok cx st /\
@@ -2829,7 +2871,7 @@ Theorem body_range_iterator_consumer:
     read_result cx tv1 sread = (INL v1,s2) ==>
     !tops env st res st'.
       supported_program tops /\ get_module_code cx NONE = SOME tops /\
-      ~expr_has_evm_run e2 /\ EVERY (\c. FST c = NONE) (int_calls_expr e2) /\
+      ~expr_has_evm_run e2 /\ EVERY (\c. FST c = NONE /\ IS_SOME (supported_function_decl tops c Internal)) (int_calls_expr e2) /\
       runtime_storage_consistent env cx st /\ functions_well_typed cx /\
       call_evaluation_safe cx (int_calls_expr e2) /\
       IS_SOME st.outcomes /\ oracle_storage_ok cx st /\
@@ -2838,7 +2880,7 @@ Theorem body_range_iterator_consumer:
       (!vt. type_place_expr env e2 = SOME vt ==> contract_storage_well_formed cx st')) /\
   (!tops env st res st'.
     supported_program tops /\ get_module_code cx NONE = SOME tops /\
-    ~expr_has_evm_run e1 /\ EVERY (\c. FST c = NONE) (int_calls_expr e1) /\
+    ~expr_has_evm_run e1 /\ EVERY (\c. FST c = NONE /\ IS_SOME (supported_function_decl tops c Internal)) (int_calls_expr e1) /\
     runtime_storage_consistent env cx st /\ functions_well_typed cx /\
     call_evaluation_safe cx (int_calls_expr e1) /\
     IS_SOME st.outcomes /\ oracle_storage_ok cx st /\
@@ -2849,7 +2891,7 @@ Theorem body_range_iterator_consumer:
     well_typed_iterator env ty (Range e1 e2) /\ supported_program tops /\
     get_module_code cx NONE = SOME tops /\
     ~supported_iterator_exists expr_evm_run_root (Range e1 e2) /\
-    EVERY (\c. FST c = NONE) (int_calls_iterator (Range e1 e2)) /\
+    EVERY (\c. FST c = NONE /\ IS_SOME (supported_function_decl tops c Internal)) (int_calls_iterator (Range e1 e2)) /\
     runtime_storage_consistent env cx st /\ functions_well_typed cx /\
     call_evaluation_safe cx (int_calls_iterator (Range e1 e2)) /\
     IS_SOME st.outcomes /\ oracle_storage_ok cx st /\
@@ -2872,7 +2914,7 @@ Theorem body_assert_reason_consumer:
   (!s0 tv s1. eval_expr cx e s0 = (INL tv,s1) ==>
     !tops env st res st'.
       supported_program tops /\ get_module_code cx NONE = SOME tops /\
-      ~expr_has_evm_run se /\ EVERY (\c. FST c = NONE) (int_calls_expr se) /\
+      ~expr_has_evm_run se /\ EVERY (\c. FST c = NONE /\ IS_SOME (supported_function_decl tops c Internal)) (int_calls_expr se) /\
       runtime_storage_consistent env cx st /\ functions_well_typed cx /\
       call_evaluation_safe cx (int_calls_expr se) /\
       IS_SOME st.outcomes /\ oracle_storage_ok cx st /\
@@ -2881,7 +2923,7 @@ Theorem body_assert_reason_consumer:
       (!vt. type_place_expr env se = SOME vt ==> contract_storage_well_formed cx st')) /\
   (!tops env st res st'.
     supported_program tops /\ get_module_code cx NONE = SOME tops /\
-    ~expr_has_evm_run e /\ EVERY (\c. FST c = NONE) (int_calls_expr e) /\
+    ~expr_has_evm_run e /\ EVERY (\c. FST c = NONE /\ IS_SOME (supported_function_decl tops c Internal)) (int_calls_expr e) /\
     runtime_storage_consistent env cx st /\ functions_well_typed cx /\
     call_evaluation_safe cx (int_calls_expr e) /\
     IS_SOME st.outcomes /\ oracle_storage_ok cx st /\
@@ -2892,7 +2934,7 @@ Theorem body_assert_reason_consumer:
     type_stmt env ret_ty (Assert e (AssertReason se)) = SOME env' /\
     supported_program tops /\ get_module_code cx NONE = SOME tops /\
     ~supported_stmt_expr_exists expr_evm_run_root (Assert e (AssertReason se)) /\
-    EVERY (\c. FST c = NONE) (int_calls_stmt (Assert e (AssertReason se))) /\
+    EVERY (\c. FST c = NONE /\ IS_SOME (supported_function_decl tops c Internal)) (int_calls_stmt (Assert e (AssertReason se))) /\
     runtime_storage_consistent env cx st /\ functions_well_typed cx /\
     call_evaluation_safe cx (int_calls_stmt (Assert e (AssertReason se))) /\
     IS_SOME st.outcomes /\ oracle_storage_ok cx st /\
@@ -2918,7 +2960,7 @@ Theorem body_tuple_base_consumer:
     well_typed_target env bt ty /\ supported_program tops /\
     get_module_code cx NONE = SOME tops /\
     ~supported_target_exists expr_evm_run_root bt /\
-    EVERY (\c. FST c = NONE) (int_calls_target bt) /\
+    EVERY (\c. FST c = NONE /\ IS_SOME (supported_function_decl tops c Internal)) (int_calls_target bt) /\
     runtime_storage_consistent env cx st /\ functions_well_typed cx /\
     call_evaluation_safe cx (int_calls_target bt) /\
     IS_SOME st.outcomes /\ oracle_storage_ok cx st /\
@@ -2927,7 +2969,7 @@ Theorem body_tuple_base_consumer:
     well_typed_atarget env (BaseTarget bt) ty /\ value_runtime_typed env ty v /\
     supported_program tops /\ get_module_code cx NONE = SOME tops /\
     ~supported_assignment_exists expr_evm_run_root (BaseTarget bt) /\
-    EVERY (\c. FST c = NONE) (int_calls_atarget (BaseTarget bt)) /\
+    EVERY (\c. FST c = NONE /\ IS_SOME (supported_function_decl tops c Internal)) (int_calls_atarget (BaseTarget bt)) /\
     runtime_storage_consistent env cx st /\ functions_well_typed cx /\
     call_evaluation_safe cx (int_calls_atarget (BaseTarget bt)) /\
     IS_SOME st.outcomes /\ oracle_storage_ok cx st /\
@@ -2949,7 +2991,7 @@ Theorem body_tuple_nested_consumer:
     LIST_REL (value_runtime_typed env) tys vs /\
     supported_program tops /\ get_module_code cx NONE = SOME tops /\
     ~supported_assignments_exists expr_evm_run_root gs /\
-    EVERY (\c. FST c = NONE) (int_calls_atargets gs) /\
+    EVERY (\c. FST c = NONE /\ IS_SOME (supported_function_decl tops c Internal)) (int_calls_atargets gs) /\
     runtime_storage_consistent env cx st /\ functions_well_typed cx /\
     call_evaluation_safe cx (int_calls_atargets gs) /\
     IS_SOME st.outcomes /\ oracle_storage_ok cx st /\
@@ -2958,7 +3000,7 @@ Theorem body_tuple_nested_consumer:
     well_typed_atarget env (TupleTarget gs) ty /\ value_runtime_typed env ty v /\
     supported_program tops /\ get_module_code cx NONE = SOME tops /\
     ~supported_assignment_exists expr_evm_run_root (TupleTarget gs) /\
-    EVERY (\c. FST c = NONE) (int_calls_atarget (TupleTarget gs)) /\
+    EVERY (\c. FST c = NONE /\ IS_SOME (supported_function_decl tops c Internal)) (int_calls_atarget (TupleTarget gs)) /\
     runtime_storage_consistent env cx st /\ functions_well_typed cx /\
     call_evaluation_safe cx (int_calls_atarget (TupleTarget gs)) /\
     IS_SOME st.outcomes /\ oracle_storage_ok cx st /\
@@ -2979,7 +3021,7 @@ Theorem body_tuple_list_cons_consumer:
       LIST_REL (value_runtime_typed env) tys vs /\
       supported_program tops /\ get_module_code cx NONE = SOME tops /\
       ~supported_assignments_exists expr_evm_run_root gs /\
-      EVERY (\c. FST c = NONE) (int_calls_atargets gs) /\
+      EVERY (\c. FST c = NONE /\ IS_SOME (supported_function_decl tops c Internal)) (int_calls_atargets gs) /\
       runtime_storage_consistent env cx st /\ functions_well_typed cx /\
       call_evaluation_safe cx (int_calls_atargets gs) /\
       IS_SOME st.outcomes /\ oracle_storage_ok cx st /\
@@ -2988,7 +3030,7 @@ Theorem body_tuple_list_cons_consumer:
     well_typed_atarget env g ty /\ value_runtime_typed env ty v /\
     supported_program tops /\ get_module_code cx NONE = SOME tops /\
     ~supported_assignment_exists expr_evm_run_root g /\
-    EVERY (\c. FST c = NONE) (int_calls_atarget g) /\
+    EVERY (\c. FST c = NONE /\ IS_SOME (supported_function_decl tops c Internal)) (int_calls_atarget g) /\
     runtime_storage_consistent env cx st /\ functions_well_typed cx /\
     call_evaluation_safe cx (int_calls_atarget g) /\
     IS_SOME st.outcomes /\ oracle_storage_ok cx st /\
@@ -2998,7 +3040,7 @@ Theorem body_tuple_list_cons_consumer:
     LIST_REL (value_runtime_typed env) tys (v::vs) /\
     supported_program tops /\ get_module_code cx NONE = SOME tops /\
     ~supported_assignments_exists expr_evm_run_root (g::gs) /\
-    EVERY (\c. FST c = NONE) (int_calls_atargets (g::gs)) /\
+    EVERY (\c. FST c = NONE /\ IS_SOME (supported_function_decl tops c Internal)) (int_calls_atargets (g::gs)) /\
     runtime_storage_consistent env cx st /\ functions_well_typed cx /\
     call_evaluation_safe cx (int_calls_atargets (g::gs)) /\
     IS_SOME st.outcomes /\ oracle_storage_ok cx st /\
@@ -3026,7 +3068,7 @@ Theorem body_assign_tuple_consumer:
       well_typed_atarget env (TupleTarget gs) ty /\ value_runtime_typed env ty v /\
       supported_program tops /\ get_module_code cx NONE = SOME tops /\
       ~supported_assignment_exists expr_evm_run_root (TupleTarget gs) /\
-      EVERY (\c. FST c = NONE) (int_calls_atarget (TupleTarget gs)) /\
+      EVERY (\c. FST c = NONE /\ IS_SOME (supported_function_decl tops c Internal)) (int_calls_atarget (TupleTarget gs)) /\
       runtime_storage_consistent env cx st /\ functions_well_typed cx /\
       call_evaluation_safe cx (int_calls_atarget (TupleTarget gs)) /\
       IS_SOME st.outcomes /\ oracle_storage_ok cx st /\
@@ -3034,7 +3076,7 @@ Theorem body_assign_tuple_consumer:
       contract_storage_well_formed cx st') /\
   (!tops env st res st'.
     supported_program tops /\ get_module_code cx NONE = SOME tops /\
-    ~expr_has_evm_run e /\ EVERY (\c. FST c = NONE) (int_calls_expr e) /\
+    ~expr_has_evm_run e /\ EVERY (\c. FST c = NONE /\ IS_SOME (supported_function_decl tops c Internal)) (int_calls_expr e) /\
     runtime_storage_consistent env cx st /\ functions_well_typed cx /\
     call_evaluation_safe cx (int_calls_expr e) /\
     IS_SOME st.outcomes /\ oracle_storage_ok cx st /\
@@ -3045,7 +3087,7 @@ Theorem body_assign_tuple_consumer:
     type_stmt env ret_ty (Assign (TupleTarget gs) e) = SOME env' /\
     supported_program tops /\ get_module_code cx NONE = SOME tops /\
     ~supported_stmt_expr_exists expr_evm_run_root (Assign (TupleTarget gs) e) /\
-    EVERY (\c. FST c = NONE) (int_calls_stmt (Assign (TupleTarget gs) e)) /\
+    EVERY (\c. FST c = NONE /\ IS_SOME (supported_function_decl tops c Internal)) (int_calls_stmt (Assign (TupleTarget gs) e)) /\
     runtime_storage_consistent env cx st /\ functions_well_typed cx /\
     call_evaluation_safe cx (int_calls_stmt (Assign (TupleTarget gs) e)) /\
     IS_SOME st.outcomes /\ oracle_storage_ok cx st /\
@@ -3132,6 +3174,8 @@ Theorem body_intcall_guard_apply:
     push_function (NONE,fn) call_env cx s6 = (INL cxf,t6) ==> (!tops env ret_ty env' st res st'.
       type_stmts env ret_ty ss = SOME env' /\
       supported_program tops /\ get_module_code cxf NONE = SOME tops /\
+      EVERY (\c. FST c = NONE /\ IS_SOME (supported_function_decl tops c Internal))
+        (int_calls_stmts ss) /\
       runtime_storage_consistent env cxf st /\ functions_well_typed cxf /\
       call_evaluation_safe cxf (int_calls_stmts ss) /\
       IS_SOME st.outcomes /\ oracle_storage_ok cxf st /\
@@ -3143,6 +3187,8 @@ Theorem body_intcall_guard_apply:
   push_function (NONE,fn) call_env cx lock_st = (INL cxf,body_st) ==> (!tops env ret_ty env' st res st'.
       type_stmts env ret_ty ss = SOME env' /\
       supported_program tops /\ get_module_code cxf NONE = SOME tops /\
+      EVERY (\c. FST c = NONE /\ IS_SOME (supported_function_decl tops c Internal))
+        (int_calls_stmts ss) /\
       runtime_storage_consistent env cxf st /\ functions_well_typed cxf /\
       call_evaluation_safe cxf (int_calls_stmts ss) /\
       IS_SOME st.outcomes /\ oracle_storage_ok cxf st /\

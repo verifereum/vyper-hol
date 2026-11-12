@@ -393,7 +393,7 @@ Proof
     (qpat_x_assum `expr_body_pre _ _ _ _ _` mp_tac >>
      simp[expr_body_pre_def, Once well_typed_expr_def] >>
      strip_tac >> gvs[] >>
-     drule type_place_expr_vtype_annotation >> simp[] >>
+     drule vyperTypeSystemTheory.type_place_expr_vtype_annotation >> simp[] >>
      Cases_on `vt` >> gvs[vtype_annotation_ok_def] >>
      strip_tac >> gvs[] >>
      irule type_place_expr_context_value_typed >>

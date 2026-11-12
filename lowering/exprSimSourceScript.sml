@@ -67,6 +67,11 @@ Proof
       `?tops. supported_program tops /\ get_module_code cx NONE = SOME tops`
         by (Cases_on `int_calls_expr e` >> gvs[expr_body_pre_def] >>
             metis_tac[]) >>
+      `EVERY (\c. FST c = NONE /\
+                  IS_SOME (supported_function_decl tops c Internal))
+         (int_calls_expr e)` by
+        (gvs[expr_body_pre_def, listTheory.EVERY_MEM] >>
+         rpt strip_tac >> res_tac >> gvs[]) >>
       irule eval_expr_body_oracle_storage >>
       gvs[expr_body_pre_def, expr_sim_inv_def, listTheory.EVERY_CONJ,
           runtime_storage_consistent_def, runtime_consistent_def] >>
@@ -375,7 +380,8 @@ Theorem eval_expr_calls_no_halt:
   eval_expr cx e st <> (INR HaltException, st')
 Proof
   strip_tac >> irule (cj 1 eval_no_halt) >> fs[expr_has_evm_run_def] >>
-  Cases_on `int_calls_expr e` >> fs[] >> fs[EVERY_MEM]
+  Cases_on `int_calls_expr e` >> fs[] >> fs[EVERY_MEM] >>
+  metis_tac[optionTheory.SOME_11]
 QED
 
 Theorem expr_body_pre_res_ok:

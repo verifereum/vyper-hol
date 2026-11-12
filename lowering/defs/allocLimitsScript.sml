@@ -350,8 +350,8 @@ Definition log_alloc_ok_def:
   log_alloc_ok cenv id es ⇔
     case cenv.ce_event_info (nsid_to_string id) of
       NONE => T
-    | SOME (_, _, flags) =>
-        let tys = log_non_indexed_types flags (MAP expr_type es) in
+    | SOME (_, arg_types, flags) =>
+        let tys = log_non_indexed_types flags arg_types in
           SUM (MAP (type_memory_bytes cenv) tys) < 2 ** 64 ∧
           abi_size_bound cenv.ce_struct_fields (TupleT tys) < 2 ** 64
 End
