@@ -35,9 +35,9 @@ Proof
  disch_then (qx_choosel_then [`st`,`sA`,`sB`,`vv`,`p`] strip_assume_tac) >>
  rename1 `declare_local cenv id vtyp sa = (c,st)` >>
  qpat_x_assum `!st0 c st1. _ ==> _ /\ _` drule >> strip_tac >>
- `stmt_state_rel ctx func c cx es s0` by
+ `stmt_state_rel H ctx func c cx es s0` by
    (irule stmt_state_rel_declare_local_entry >> metis_tac[]) >>
- `ghost_inv d c cx es G0 tn0 s0` by
+ `ghost_inv H d c cx es G0 tn0 s0` by
    (irule annassign_ghost_declare_local_entry_ptr >> metis_tac[]) >>
  `not_local_ptr c es.scopes p` by metis_tac[local_ptrs_reserved_not_live] >>
  `s0.vs_current_bb = st.cs_current_bb /\
@@ -71,16 +71,13 @@ QED
 Resume compile_annassign_empty_stmt_frag_ptr[rhs]:
  qpat_x_assum `!st0 c st1. _` kall_tac >>
  qpat_x_assum `!sa sb vv. _` kall_tac >>
- `post_value_type c e = expr_type e` by
-   (irule post_value_type_not_int_call >> rpt strip_tac >>
-    gvs[is_empty_value_expr_def]) >>
- `gas_outcome_ptr (cx_dead cx) (cx_tops cx) (ctx,func) PG
+ `gas_outcome_ptr (cx_dead H cx) (cx_tops cx) (ctx,func) PG
    (eval_expr cx e) (es,s1,G1,tn1)
    (\res ee G tn t. ?tv. res = INL tv /\
-     vv_post ctx func c cx e es sA sB s1 ee tv vv t /\
+     vv_post H ctx func c cx e es sA sB s1 ee tv vv t /\
      t.vs_current_bb = sB.cs_current_bb /\
      t.vs_inst_idx = LENGTH sB.cs_current_insts /\
-     ghost_inv d c cx ee G tn t /\
+     ghost_inv H d c cx ee G tn t /\
      ptr_vv_ok cx (expr_type e) tv vv ee G tn t /\
      (!t' op. vv = StackValue t' op /\ ~is_word_type (expr_type e) ==>
        ptr_buf_ok c e op G t) /\
@@ -122,11 +119,11 @@ Resume compile_annassign_empty_stmt_frag_ptr[compose]:
  drule_at (Pat `gas_marked_exec_ptr _ _ _ _ _ _ _ _ _ _ _`)
    annassign_empty_normal_continuation_ptr >>
  disch_then drule >>
- disch_then (drule_at (Pat `vv_post _ _ _ _ _ _ _ _ _ _ _ _ _`)) >>
+ disch_then (drule_at (Pat `vv_post _ _ _ _ _ _ _ _ _ _ _ _ _ _`)) >>
  disch_then (drule_at (Pat `emit_void _ _ _ = _`)) >>
  simp[] >>
  disch_then (drule_at (Pat `gas_admissible _ _ _`)) >>
- disch_then (drule_at (Pat `ghost_inv _ _ _ _ _ _ _`)) >>
+ disch_then (drule_at (Pat `ghost_inv _ _ _ _ _ _ _ _`)) >>
  disch_then (qspecl_then [`w`,`ai`] mp_tac) >>
  impl_tac >- (gvs[] >> first_assum MATCH_ACCEPT_TAC) >>
  disch_then (qx_choosel_then [`ff`,`tfin`,`tnf`] strip_assume_tac) >>

@@ -49,9 +49,9 @@ Proof
  rename1 `declare_local cenv id vtyp sa = (c,st)` >>
  qpat_x_assum `!st0 c st1. _ ==> _ /\ _` drule >> strip_tac >>
  drule_all annassign_declared_memory_types_ptr >> strip_tac >>
- `stmt_state_rel ctx func c cx es s0` by
+ `stmt_state_rel H ctx func c cx es s0` by
    (irule stmt_state_rel_declare_local_entry >> metis_tac[]) >>
- `ghost_inv d c cx es G0 tn0 s0` by
+ `ghost_inv H d c cx es G0 tn0 s0` by
    (irule annassign_ghost_declare_local_entry_ptr >> metis_tac[]) >>
  `not_local_ptr c es.scopes p` by metis_tac[local_ptrs_reserved_not_live] >>
  `s0.vs_current_bb = st.cs_current_bb /\
@@ -85,15 +85,13 @@ QED
 Resume compile_annassign_memory_widen_stmt_frag_ptr[rhs]:
  qpat_x_assum `!st0 c st1. _` kall_tac >>
  qpat_x_assum `!sa sb op. _` kall_tac >>
- `post_value_type c e = expr_type e` by
-   metis_tac[post_value_type_lowered, post_value_type_bytestring] >>
- `gas_outcome_ptr (cx_dead cx) (cx_tops cx) (ctx,func) PG
+ `gas_outcome_ptr (cx_dead H cx) (cx_tops cx) (ctx,func) PG
    (vyperState$bind (eval_expr cx e) (read_result cx)) (es,s1,G1,tn1)
    (\res ee G tn t. ?v. res = INL v /\
-     expr_post ctx func c cx e es sA sB s1 ee v op t /\
+     expr_post H ctx func c cx e es sA sB s1 ee v op t /\
      t.vs_current_bb = sB.cs_current_bb /\
      t.vs_inst_idx = LENGTH sB.cs_current_insts /\
-     ghost_inv d c cx ee G tn t /\ ptr_val_ok cx (expr_type e) v op G tn t /\
+     ghost_inv H d c cx ee G tn t /\ ptr_val_ok cx (expr_type e) v op G tn t /\
      (~is_word_type (expr_type e) ==> ptr_buf_ok c e op G t) /\
      ghost_kept c es sA G1 tn1 s1 G tn)
    (\res ee gt r. expr_exit res r)` by
@@ -138,7 +136,7 @@ Resume compile_annassign_memory_widen_stmt_frag_ptr[continue]:
  irule annassign_memory_concrete_rhs_outcome_ptr >>
  simp[] >>
  conj_tac >- metis_tac[] >>
- conj_tac >- (qpat_assum `expr_type e = vtyp \/ _` strip_assume_tac >> simp[]) >>
+ conj_tac >- metis_tac[] >>
  conj_tac >- metis_tac[] >>
  conj_tac >- metis_tac[] >>
  goal_assum (drule_at (Pat `lower_value _ _ _ _ _ = _`)) >> simp[] >>
