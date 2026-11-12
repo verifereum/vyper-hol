@@ -205,6 +205,12 @@ QED
 (* Discharges one hypothesis of a range-transport lemma for a single
    operand case: a fact, an arithmetic bound, or one disjunct of the
    fixed / site / dynamic-region alternatives. *)
+(* Runs tac on a goal whose conclusion is headed by the constant name,
+   and leaves any other goal alone. *)
+fun ld_on_head name tac (g as (_, w)) =
+  if (#1 (dest_const (#1 (strip_comb w))) = name handle HOL_ERR _ => false)
+  then tac g else ALL_TAC g
+
 val ld_range_case_tac =
   let
     val leaf = FIRST [simp[] >> NO_TAC, decide_tac,
@@ -270,12 +276,13 @@ Proof
     rpt (qpat_x_assum `l = 0w` (fn th => fs[th])) >>
     pure_rewrite_tac[mcopy_def, GSYM read_memory_def, LET_THM] >> BETA_TAC >>
     rpt conj_tac >>
-    FIRST [
-      drule_at (Pat `ld_joint_geometry _ _ _ _`)
-        (Q.INST [`fl` |-> `dyn_floor C vs`] ld_memory_agree_snapshot_copy) >>
-      disch_then irule >> ld_range_case_tac >> NO_TAC,
-      drule_at (Pat `ld_memory_agree _ _ _ _ _`) ld_dyn_agree_snapshot_copy >>
-      disch_then irule >> ld_range_case_tac >> NO_TAC]]
+    ld_on_head "ld_memory_agree"
+      (drule_at (Pat `ld_joint_geometry _ _ _ _`)
+         (Q.INST [`fl` |-> `dyn_floor C vs`] ld_memory_agree_snapshot_copy) >>
+       disch_then irule >> ld_range_case_tac) >>
+    ld_on_head "ld_dyn_agree"
+      (drule_at (Pat `ld_memory_agree _ _ _ _ _`) ld_dyn_agree_snapshot_copy >>
+       disch_then irule >> ld_range_case_tac)]
 QED
 
 Theorem ld_joint_mcopy_next:
