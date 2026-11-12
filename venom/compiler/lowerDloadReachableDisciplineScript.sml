@@ -23,7 +23,7 @@ QED
 Theorem ld_taint_operand_clean:
   taint_ok fn tn i s /\ MEM op i.inst_operands /\
   i.inst_opcode <> ASSIGN /\
-  ~MEM i.inst_opcode [SHL;SHR;SAR;MSTORE;SSTORE;TSTORE;ISTORE] ==>
+  ~MEM i.inst_opcode [MUL;SHL;SHR;SAR;MSTORE;SSTORE;TSTORE;ISTORE] ==>
   op_taint tn op = {}
 Proof
   simp[taint_ok_def, MEM] >> metis_tac[]

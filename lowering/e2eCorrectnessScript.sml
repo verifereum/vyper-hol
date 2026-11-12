@@ -748,19 +748,19 @@ QED
 
 *)
 
-Theorem gas_variant_outcomes[local]:
+Theorem gas_variant_outcomes:
   gas_variant si so ==> si.vs_outcomes = so.vs_outcomes
 Proof
   rw[gas_variant_def] >> pop_assum SUBST1_TAC >> simp[]
 QED
 
-Theorem gas_variant_call_ctx[local]:
+Theorem gas_variant_call_ctx:
   gas_variant si so ==> si.vs_call_ctx = so.vs_call_ctx
 Proof
   rw[gas_variant_def] >> pop_assum SUBST1_TAC >> simp[]
 QED
 
-Theorem gas_variant_initial_venom_state_rel[local]:
+Theorem gas_variant_initial_venom_state_rel:
   gas_variant si so /\ initial_venom_state_rel tops am tx so ==>
   initial_venom_state_rel tops am tx si
 Proof
@@ -770,13 +770,12 @@ Proof
 QED
 
 (* ===== PLAN §2.1 call theorem: seven stage leaves, raw O1 source domain ===== *)
-(* The raw O1 shape theorems no longer need immutable_free_program; it
-   remains in this statement, which is unchanged. *)
+(* The widened gate supplies the real stages' remaining source restrictions. *)
 
 Theorem vyper_call_correct_identity:
   !policy tops deploy_bc runtime_bc am tx ret es.
     compile_vyper (K SOME) policy tops = SOME (deploy_bc, runtime_bc) /\
-    supported_program tops /\ immutable_free_program tops /\
+    supported_program tops /\
     source_typing_ok tops am tx /\
     source_storage_ok tops am tx /\
     call_state_rel tops runtime_bc am tx es /\
@@ -799,7 +798,7 @@ Proof
     metis_tac[source_typing_ok_def] >>
   drule_all lower_vyper_runtime_unit_source_unit_ok >> strip_tac >>
   drule_all lower_vyper_runtime_unit_o1_shape_extras >> strip_tac >>
-  drule_all lower_vyper_runtime_unit_defs_reach_uses >> strip_tac >>
+  drule lower_vyper_runtime_unit_defs_reach_uses >> strip_tac >>
   drule_all run_venom_pipeline_output_shape >> strip_tac >>
   drule_all entry_venom_state_initial_venom_state_rel >>
   disch_then (qspec_then `cplan` assume_tac) >>
@@ -926,7 +925,7 @@ Theorem vyper_call_correct_asm_opt:
     source_storage_ok tops am tx /\
     call_state_rel tops runtime_bc am tx es /\
     valid_vyper_call tops tx (buffer_to_list (FST (HD es.contexts)).msgParams.data) ret /\
-    call_outcomes_ok am tx (MAP SND (call_trace es))
+    call_outcomes_storage_ok am tx (MAP SND (call_trace es))
     ==>
     ?r es'.
       run_call es = SOME (r, es') /\
@@ -1100,7 +1099,7 @@ Theorem vyper_call_correct:
     source_storage_ok tops am tx /\
     call_state_rel tops runtime_bc am tx es /\
     valid_vyper_call tops tx (buffer_to_list (FST (HD es.contexts)).msgParams.data) ret /\
-    call_outcomes_ok am tx (MAP SND (call_trace es))
+    call_outcomes_storage_ok am tx (MAP SND (call_trace es))
     ==>
     ?r es'.
       run_call es = SOME (r, es') /\
