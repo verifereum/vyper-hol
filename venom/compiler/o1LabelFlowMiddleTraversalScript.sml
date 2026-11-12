@@ -3,7 +3,8 @@ Ancestors
   o1LabelFlowMiddleRenameLocal o1MakeSsaEventFrames o1MakeSsaActualNames
   o1MakeSsaOwnership o1MakeSsaTraversalFrames o1MakeSsaVisitTrace
   o1LabelFlowMiddleOperandOwners o1LabelFlowMiddlePhiOwners
-  makeSsaDefs makeSsaCurrentLockstepShape codegenSymRel
+  o1LabelFlowMiddleLive
+  makeSsaDefs makeSsaCurrentLockstepShape codegenSymRel o1PassContract
   venomInst list rich_list pair
 
 Theorem indexed_patch_frame_adjacent:
@@ -429,4 +430,129 @@ Proof
   first_x_assum (qspecl_then [`f`,`H`] mp_tac) >>
   (impl_tac >- metis_tac[]) >> strip_tac >>
   `inst.inst_opcode = CODECOPY` by metis_tac[MEM] >> gvs[]
+QED
+
+Theorem visit_blocks_owned_inst:
+  visit_blocks path s rs f.fn_blocks sm tree = ((ct,t,final),events) /\
+  ALL_DISTINCT (dom_tree_postorder tree) /\
+  ALL_DISTINCT (MAP (\bb. bb.bb_label) f.fn_blocks) /\
+  (!q. MEM q (dom_tree_postorder tree) ==> IS_SOME (lookup_block q f.fn_blocks)) /\
+  current_name_owner V H u /\
+  (!e. MEM e events ==> current_stack_owner V H (SND e.sve_in) /\
+    LIST_REL (\i j. LIST_REL (\v n. (n,v) IN H)
+      i.inst_outputs j.inst_outputs) e.sve_before e.sve_after) /\
+  (!bb i v. MEM bb f.fn_blocks /\ MEM i bb.bb_instructions ==>
+    (MEM (Var v) i.inst_operands \/ MEM v i.inst_outputs ==> v IN V)) ==>
+  !j. MEM j (fn_insts (f with fn_blocks := final)) ==>
+    ?i. MEM i (fn_insts f) /\ j.inst_opcode = i.inst_opcode /\
+      LIST_REL (\v n. (n,v) IN H) i.inst_outputs j.inst_outputs /\
+      (i.inst_opcode <> PHI ==>
+        LIST_REL (\a b. case a of Var v => ?n. b = Var n /\ (n,v) IN H
+                         | _ => b = a) i.inst_operands j.inst_operands)
+Proof
+  strip_tac >> gen_tac >>
+  simp[fn_insts_def, fn_insts_blocks_MEM] >> strip_tac >>
+  `rename_current_blocks s rs f.fn_blocks sm tree = (ct,t,final)` by
+    metis_tac[visit_erasure, FST] >>
+  drule (cj 1 makeSsaCurrentPropsTheory.rename_current_blocks_labels) >>
+  strip_tac >>
+  `ALL_DISTINCT (MAP (\bb. bb.bb_label) final)` by metis_tac[] >>
+  `lookup_block bb.bb_label final = SOME bb` by
+    metis_tac[venomExecProofsTheory.MEM_lookup_block] >>
+  qpat_x_assum `MEM j bb.bb_instructions`
+    (strip_assume_tac o REWRITE_RULE [MEM_EL]) >>
+  drule visit_blocks_owned_origin >> simp[] >>
+  disch_then (qspecl_then [`u`,`bb.bb_label`,`bb`,`n`,`V`,`H`] mp_tac) >>
+  (impl_tac >- metis_tac[]) >> strip_tac >>
+  qexists `EL n bb'.bb_instructions` >> simp[] >>
+  metis_tac[livenessTransferProofsTheory.lookup_block_mem, EL_MEM]
+QED
+
+Theorem visit_blocks_codecopy_seed_at:
+  visit_blocks path s rs bbs sm tree = ((ct,t,final),events) /\
+  ALL_DISTINCT (dom_tree_postorder tree) /\
+  (!q. MEM q (dom_tree_postorder tree) ==> IS_SOME (lookup_block q bbs)) /\
+  lookup_block q bbs = SOME bb /\ lookup_block q final = SOME out /\
+  ALL_DISTINCT (MAP (\j. j.inst_id) bb.bb_instructions) /\
+  k < LENGTH bb.bb_instructions /\
+  bb.bb_instructions = pre ++ [d; EL k bb.bb_instructions] ++ post /\
+  d.inst_opcode = ADD /\ d.inst_operands = [op; Label "code_end"] /\
+  d.inst_outputs = [x] /\
+  (EL k bb.bb_instructions).inst_opcode = CODECOPY /\
+  (EL k bb.bb_instructions).inst_operands = [dst; Var x; sz] ==>
+  ?dst' n sz'. (EL k out.bb_instructions).inst_operands = [dst'; Var n; sz'] /\
+    code_end_var (f with fn_blocks := final) n
+Proof
+  strip_tac >>
+  `k = LENGTH pre + 1` by metis_tac[distinct_adjacent_read_index] >>
+  `bb.bb_instructions = pre ++ d::EL k bb.bb_instructions::post` by
+    simp[GSYM APPEND_ASSOC] >>
+  drule visit_blocks_code_end_pair >>
+  disch_then (qspecl_then [`x`,`sz`,`q`,`pre`,`post`,`op`,
+    `EL k bb.bb_instructions`,`dst`,`d`,`bb`] mp_tac) >>
+  (impl_tac >- simp[]) >> strip_tac >> gvs[] >>
+  `EL (LENGTH pre + 1) out.bb_instructions = j'` by
+    simp[EL_APPEND_EQN] >>
+  qexistsl [`b`,`n`,`c`] >> conj_tac >- metis_tac[] >>
+  irule (cj 1 code_end_var_rules) >>
+  qexistsl [`d'`,`a`] >> simp[fn_insts_def, fn_insts_blocks_MEM] >>
+  qexists `out` >> simp[] >>
+  metis_tac[livenessTransferProofsTheory.lookup_block_mem]
+QED
+
+Theorem owned_codecopy_runtime:
+  LIST_REL (\a b. case a of Var v => ?m. b = Var m /\ (m,v) IN H
+                   | _ => b = a) [dst; Label "runtime_begin"; sz] ops ==>
+  ?a b. ops = [a; Label "runtime_begin"; b]
+Proof
+  Cases_on `ops` >> simp[] >> Cases_on `t` >> simp[] >>
+  Cases_on `t'` >> simp[] >> Cases_on `t` >> simp[]
+QED
+
+Theorem visit_blocks_codecopy_sources:
+  visit_blocks path s rs f.fn_blocks sm tree = ((ct,t,final),events) /\
+  ALL_DISTINCT (dom_tree_postorder tree) /\
+  ALL_DISTINCT (MAP (\bb. bb.bb_label) f.fn_blocks) /\
+  (!q. MEM q (dom_tree_postorder tree) ==> IS_SOME (lookup_block q f.fn_blocks)) /\
+  current_name_owner V H u /\
+  (!e. MEM e events ==> current_stack_owner V H (SND e.sve_in) /\
+    LIST_REL (\i j. LIST_REL (\v n. (n,v) IN H)
+      i.inst_outputs j.inst_outputs) e.sve_before e.sve_after) /\
+  (!bb i v. MEM bb f.fn_blocks /\ MEM i bb.bb_instructions ==>
+    (MEM (Var v) i.inst_operands \/ MEM v i.inst_outputs ==> v IN V)) /\
+  wf_function f /\ label_flow_ok (ctx with ctx_functions := [f]) /\
+  (!x. code_end_var f x ==> ?d op.
+    d.inst_opcode = ADD /\ d.inst_operands = [op; Label "code_end"] /\
+    d.inst_outputs = [x] /\
+    !bb j. MEM bb f.fn_blocks /\ MEM j bb.bb_instructions /\
+      MEM (Var x) j.inst_operands ==>
+      ?pre post. bb.bb_instructions = pre ++ [d;j] ++ post) ==>
+  !q out k. lookup_block q final = SOME out /\ k < LENGTH out.bb_instructions /\
+    (EL k out.bb_instructions).inst_opcode = CODECOPY ==>
+    ?dst src sz. (EL k out.bb_instructions).inst_operands = [dst;src;sz] /\
+      (src = Label "runtime_begin" \/
+       ?n. src = Var n /\ code_end_var (f with fn_blocks := final) n)
+Proof
+  strip_tac >> rpt gen_tac >> strip_tac >>
+  drule visit_blocks_owned_origin >> simp[] >>
+  disch_then (qspecl_then [`u`,`q`,`out`,`k`,`V`,`H`] mp_tac) >>
+  (impl_tac >- metis_tac[]) >> strip_tac >>
+  `MEM bb f.fn_blocks /\ MEM (EL k bb.bb_instructions) (fn_insts f)` by
+    (simp[fn_insts_def, fn_insts_blocks_MEM] >>
+     metis_tac[livenessTransferProofsTheory.lookup_block_mem, EL_MEM]) >>
+  `?dst src sz. (EL k bb.bb_instructions).inst_operands = [dst;src;sz] /\
+     (src = Label "runtime_begin" \/ ?x. src = Var x /\ code_end_var f x)` by
+    (gvs[label_flow_ok_def] >> metis_tac[]) >>
+  `(EL k bb.bb_instructions).inst_opcode <> PHI` by gvs[] >>
+  first_x_assum drule >> strip_tac
+  >- (metis_tac[owned_codecopy_runtime]) >>
+  qpat_x_assum `!x. code_end_var f x ==> _` drule >> strip_tac >>
+  `?pre post. bb.bb_instructions = pre ++ [d;EL k bb.bb_instructions] ++ post` by
+    metis_tac[EL_MEM, MEM] >>
+  `ALL_DISTINCT (MAP (\j. j.inst_id) bb.bb_instructions)` by
+    metis_tac[dftWfTheory.wf_fn_block_inst_ids_distinct] >>
+  `?dst' n sz'. (EL k out.bb_instructions).inst_operands = [dst'; Var n; sz'] /\
+     code_end_var (f with fn_blocks := final) n` by
+    (irule visit_blocks_codecopy_seed_at >> metis_tac[]) >>
+  metis_tac[]
 QED
