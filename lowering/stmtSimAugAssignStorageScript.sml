@@ -680,7 +680,7 @@ Proof
 QED
 
 (* An observed region of a well-formed backend decodes. *)
-Theorem observed_region_read[local]:
+Theorem observed_region_read:
   storage_well_formed_on cx es regions /\ MEM (tr,slot,tvt) regions /\
   well_formed_type_value tvt ==>
   ?v. read_storage_slot cx tr slot tvt es = (INL v, es)

@@ -2393,7 +2393,7 @@ Proof
   `body_expr_ok cx e` by
     (drule_all augassign_attr_storage_place >> strip_tac >>
      first_x_assum irule >> metis_tac[]) >>
-  `expr_sim ctx func cenv cx ty e es` by metis_tac[body_expr_ok_def] >>
+  `expr_sim_case F ctx func cenv cx e` by metis_tac[body_expr_ok_case] >>
   `(bop = Exp ==> nonneg_int_literal e) /\
    (bop = ShL \/ bop = ShR ==> shift_amount_ok e)` by
     metis_tac[augassign_operand_ok_operands] >>
