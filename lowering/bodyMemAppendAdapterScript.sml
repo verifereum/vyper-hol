@@ -3,7 +3,7 @@ Theory bodyMemAppendAdapter
 Ancestors
   bodyMemAppendCompose bodyAppendStorageAdapter bodyMemoryPreds
   bodyAppendStorageFacts bodyExprPreFacts stmtSimDefs exprSimMemDefs
-  exprSimSource exprSimHypsDefs stmtSimAssignStorageFacts bodySim exprSimHyps
+  exprSimSource exprSimHypsDefs stmtSimAssignStorageFacts bodySim
   supportedStmts supportedStmtTraverse vyperStorageLayoutSafety
   vyperTypeSystem vyperTypeValues compileEnv loweringStateRelDefs vyperTypeCallGraph vyperState
   vyperInterpreter vyperTypeInvariants vyperTypeExprSoundness
@@ -78,12 +78,14 @@ Proof
   irule compile_append_storage_word_stmt_frag_mem >> simp[] >>
   qexistsl_tac [`src`, `id`] >>
   simp[declared_storage_region_def, evaluate_type_def] >>
+  qexists_tac `slot` >> simp[] >>
   rpt strip_tac >>
   qmatch_asmsub_abbrev_tac
     `bind (eval_expr cx e) (read_result cx) start = (INL v,es1)` >>
-  `expr_body_pre cenv cx env e start` by simp[Abbr `start`] >>
-  conj_tac >- metis_tac[body_append_word_encoding] >>
-  drule_all expr_body_pre_eval >> strip_tac >>
+  `expr_body_pre cenv cx env e start` by simp[Abbr `start`]
+  >~ [`encode_value _ _ = _`] >- metis_tac[body_append_word_encoding] >>
+  qspecl_then [`cenv`, `cx`, `env`, `e`, `start`, `INL v`, `es1`]
+    mp_tac (REWRITE_RULE [ETA_AX] expr_body_pre_eval) >> simp[] >> strip_tac >>
   `env.type_defs = get_tenv cx` by
     fs[expr_body_pre_def, expr_sim_inv_def, env_consistent_def,
        env_context_consistent_def] >>
