@@ -318,7 +318,54 @@ Resume raw_log_topics_suffix_full_under_compose[continue]:
      qexistsl_tac [`ann`,`data`,`dflt`,`env`,`n`,`pre ++ [e]`] >>
      pure_rewrite_tac [GSYM APPEND_ASSOC, APPEND] >>
      metis_tac[]) >>
-  FAIL_TAC "return map"
+  qmatch_assum_abbrev_tac `gas_outcome_full _ _ _ _ (eval_exprs cx rest) _ tailQ tailR` >>
+  irule gas_outcome_full_bind_all >>
+  rpt conj_tac
+  >~ [`gas_marked_exec _ _ _ _ _ _ _`]
+  >- (rpt strip_tac >> BETA_TAC >> irule gasExemptCertTheory.gas_exempt_cert_bind_values >>
+      qexistsl_tac [`mid'`,`t`,`v'`] >> fs[])
+  >~ [`gas_exempt_cert _ _ _ _ _ _ _`]
+  >- (rpt strip_tac >> BETA_TAC >> irule gasExemptCertTheory.gas_exempt_cert_error_values >> simp[])
+  >~ [`storage_trace_frame _`]
+  >- simp[vyperStorageTraceTheory.storage_trace_frame_return] >>
+  qexists_tac `\H res ee G tn t. tailQ H res ee G tn t /\ ~t.vs_halted /\ ee.gas_obs = []` >>
+  conj_tac
+  >~ [`storage_trace_domain _ _ _`]
+  >- suspend "return_cons" >>
+  irule gas_outcome_full_post_source >>
+  qpat_assum `gas_outcome_full _ _ _ _ (eval_exprs cx rest) _ _ _` (irule_at Any) >>
+  conj_tac >- simp[] >>
+  simp[Abbr `tailR`] >> rpt strip_tac >>
+  Cases_on `res` >> fs[exprSimDefsTheory.expr_exit_def] >>
+  metis_tac[expr_exit_INR_type]
+QED
+
+Resume raw_log_topics_suffix_full_under_compose[return_cons]:
+  qx_genl_tac [`tailmarks`,`tailres`,`ee`,`G2`,`tn2`,`t`] >>
+  BETA_TAC >> strip_tac >>
+  `valid_horizon cx st0 (storage_trace_horizon ee.storage_trace) ee.storage_trace` by
+    fs[vyperStorageFootprintTheory.storage_trace_domain_def] >>
+  qpat_assum `!H. valid_horizon _ _ H ee.storage_trace ==> _`
+    (qspec_then `storage_trace_horizon ee.storage_trace` mp_tac) >>
+  (impl_tac >- first_assum ACCEPT_TAC) >>
+  qpat_assum `Abbrev (tailQ = _)`
+    (fn th => pure_rewrite_tac[REWRITE_RULE [markerTheory.Abbrev_def] th]) >>
+  BETA_TAC >> strip_tac >>
+  qpat_x_assum `tailres = INL _` SUBST_ALL_TAC >>
+  disj1_tac >> qexists_tac `vs` >> simp[] >>
+  irule gas_outcome_full_pure >>
+  qexistsl_tac [`G2`,`ee`,`INL (v::vs)`,`t`,`tn2`] >>
+  conj_tac >- simp[return_def] >>
+  gen_tac >> strip_tac >>
+  conj_tac >- simp[gas_origin_ptr_path_rules] >>
+  BETA_TAC >>
+  `ee with gas_obs := [] = ee` by simp[evaluation_state_component_equality] >>
+  pop_assum SUBST1_TAC >>
+  qpat_assum `LENGTH rest = LENGTH vs` (fn th => once_rewrite_tac[GSYM th]) >>
+  qpat_assum `op::tailops = ops` (fn th => rewrite_tac[GSYM th]) >>
+  simp_tac (srw_ss()) [] >>
+  last_x_assum (mp_tac o SIMP_RULE (srw_ss()) []) >>
+  FAIL_TAC "normalized contract"
 QED
 
 Finalise raw_log_topics_suffix_full_under_compose
