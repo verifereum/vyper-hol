@@ -196,8 +196,8 @@ Proof
         (call_external (SOME vi.vs_outcomes)
            (gas_explicit marks vi.vs_gas_readings) am tx)` by simp[] >>
      `code_layout_valid vi` by
-       (fs[gas_variant_def] >>
-        qpat_x_assum `vs = _` SUBST_ALL_TAC >> fs[code_layout_valid_def]) >>
+       (irule gas_variant_code_layout_valid >> qexists_tac `vs` >>
+        fs[o1_run_state_ok_def]) >>
      drule_all lower_vyper_runtime_unit_memory_ok >> strip_tac >>
      `mem_inv dload_offset_ok unit.cu_context vi` by
        (irule lower_vyper_runtime_unit_dload_offset_ok >> simp[] >>
