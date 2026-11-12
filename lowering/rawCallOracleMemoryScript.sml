@@ -189,7 +189,7 @@ Proof
   strip_tac >>
   `alloca_inv s` by fs[stmt_state_rel_def] >>
   `w2n (n2w cap : bytes32) = cap` by simp[wordsTheory.w2n_n2w] >>
-  drule_at (Pat `stmt_state_rel _ _ _ _ _ _`) raw_call_oracle_emit_run_aged >>
+  drule_at (Pat `stmt_state_rel _ _ _ _ _ _ _`) raw_call_oracle_emit_run_aged >>
   disch_then (drule_at (Pat `emit_op _ _ _ = _`)) >>
   disch_then (drule_at (Pat `take_call_outcome _ _ _ _ = _`)) >>
   disch_then (qspecl_then [`val_word`,`ro`,`gas`,`aw`] mp_tac) >>
