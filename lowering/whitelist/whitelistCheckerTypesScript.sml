@@ -385,7 +385,9 @@ QED
    types or at an array of their common type, so supported_literal_elements
    reduces to the element-type parts. *)
 Theorem well_typed_make_array_literal_elements:
-  well_typed_builtin_app ty (MakeArray eo bd) (MAP expr_type es) ==>
+  well_typed_builtin_app ty (MakeArray eo bd) (MAP expr_type es) /\
+  (!t b. ty = ArrayT t b ==>
+    EVERY (\e. supported_copy_types t (expr_type e)) es) ==>
   (supported_literal_elements tops ty es <=>
    supported_place_type tops ty /\
    (!tys. ty = TupleT tys ==> supported_tuple_type ty))
