@@ -28,12 +28,6 @@ Proof
   goal_assum $ drule_at Any >> gvs[]
 QED
 
-Theorem gas_variant_code_layout_valid[local]:
-  gas_variant si so /\ code_layout_valid so ==> code_layout_valid si
-Proof
-  rw[gas_variant_def] >> qpat_x_assum `so = _` SUBST_ALL_TAC >>
-  fs[code_layout_valid_def]
-QED
 
 (* TOP-LEVEL: PLAN 5.11, D28, section 9. Proved from the deployment pieces
  * (ctorDeploy* theories) and the generic O1 pipeline and codegen stages.

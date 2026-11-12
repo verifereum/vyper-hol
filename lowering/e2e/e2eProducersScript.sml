@@ -13,7 +13,7 @@
  *)
 Theory e2eProducers
 Ancestors
-  compilePhasesProps e2eDefs o1PipelineCorrect
+  compilePhasesProps e2eDefs o1PipelineCorrect o1PassContract lowerDloadDefs
   compileVyper codegen vyperContext finite_map
   e2eEntry vyperLoweringCorrect codegenCorrectness
   unitShapeDefs unitTransformDefs contextCodegenRel contextPlanLayoutProps
@@ -144,4 +144,34 @@ Theorem type_env_all_modules_single:
   type_env_all_modules [(NONE, tops)] = type_env tops
 Proof
   simp[type_env_all_modules_def, type_env_def, FUNION_FEMPTY_2]
+QED
+
+(* Gas-only entry-state changes preserve the source and layout interfaces.
+   Moved from the call/deploy consumers so both share these boundaries. *)
+Theorem gas_variant_outcomes:
+  gas_variant si so ==> si.vs_outcomes = so.vs_outcomes
+Proof
+  rw[gas_variant_def] >> pop_assum SUBST1_TAC >> simp[]
+QED
+
+Theorem gas_variant_call_ctx:
+  gas_variant si so ==> si.vs_call_ctx = so.vs_call_ctx
+Proof
+  rw[gas_variant_def] >> pop_assum SUBST1_TAC >> simp[]
+QED
+
+Theorem gas_variant_initial_venom_state_rel:
+  gas_variant si so /\ initial_venom_state_rel tops am tx so ==>
+  initial_venom_state_rel tops am tx si
+Proof
+  rw[gas_variant_def] >>
+  qpat_x_assum `so = _` SUBST_ALL_TAC >>
+  gvs[initial_venom_state_rel_def, venom_env_rel_def]
+QED
+
+Theorem gas_variant_code_layout_valid:
+  gas_variant si so /\ code_layout_valid so ==> code_layout_valid si
+Proof
+  rw[gas_variant_def] >> qpat_x_assum `so = _` SUBST_ALL_TAC >>
+  fs[code_layout_valid_def]
 QED
