@@ -19,7 +19,7 @@
 Theory asmFrameRel
 Ancestors
   codegenEntryRel asmDataSuffixProps codegenRel asmSem asmWf symbolResolve
-  frameOutcome callTrace vfmExecution vfmExecutionProp
+  frameOutcome callTrace vfmExecution vfmExecutionProp asmEncodeParse rich_list
 
 (* Well-formed instruction encodings, with data confined to the suffix. *)
 Definition asm_frame_prog_ok_def:
@@ -118,4 +118,28 @@ Proof
      asm_evm_rel_def, entry_asm_state_def, msg_ctx_rel_def, tx_ctx_rel_def,
      block_ctx_rel_def, blockhash_rel_def, data_suffix_assemble] >>
   gvs[asm_pc_to_offset_def, CONJ_ASSOC]
+QED
+
+Theorem asm_frame_decode_setup:
+  asm_frame_prog_ok prog /\ asm_evm_rel (prog ++ [AsmDataItem data]) a es /\
+  a.as_pc < LENGTH prog /\ ~is_data_inst (EL a.as_pc prog) ==>
+  es.contexts <> [] /\
+  (FST (HD es.contexts)).pc < LENGTH (FST (HD es.contexts)).msgParams.code /\
+  ?op. next_opcode (FST (HD es.contexts)) = SOME op /\
+       opcode op = encode_inst (SND (compute_label_offsets (prog ++ [AsmDataItem data])))
+                     (EL a.as_pc prog) /\ wf_opname op
+Proof
+  strip_tac >>
+  `asm_encoding_wf (prog ++ [AsmDataItem data])` by
+    gvs[asm_frame_prog_ok_def, data_suffix_encoding_wf] >>
+  `!j. j <= a.as_pc ==> ~is_data_inst (EL j (prog ++ [AsmDataItem data]))` by
+    (rpt strip_tac >> `j < LENGTH prog` by decide_tac >>
+     gvs[EL_APPEND1, asm_frame_prog_ok_def] >> metis_tac[]) >>
+  `asm_pc_to_offset (prog ++ [AsmDataItem data]) a.as_pc <
+     LENGTH (assemble (prog ++ [AsmDataItem data]))` by
+    (irule offset_in_bounds >> simp[]) >>
+  `a.as_pc < LENGTH (prog ++ [AsmDataItem data])` by simp[] >>
+  drule_all assemble_parse_exact >> strip_tac >>
+  Cases_on `es.contexts` >> gvs[asm_evm_rel_def] >>
+  PairCases_on `h` >> gvs[asm_evm_rel_def, next_opcode_def, EL_APPEND1]
 QED

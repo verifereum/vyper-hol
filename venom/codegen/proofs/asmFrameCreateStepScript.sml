@@ -2,7 +2,7 @@
    creator nonce update on failure and the created address on success. *)
 Theory asmFrameCreateStep
 Ancestors
-  asmFrameRel asmFrameCallStep frameObsStep asmCallOracleProps asmDataSuffixProps
+  asmFrameRel asmFrameCallStep frameObsStep frameStep asmCallOracleProps asmDataSuffixProps
   codegenRel asmSem asmWf symbolResolve extCallOracle callTrace frameOutcome
   vfmExecution vfmExecutionProp frameCreationGuard
 
@@ -553,9 +553,16 @@ Theorem asm_frame_create_effects_step_ok:
     (LENGTH a.as_pending_deletions) :: MAP SND (call_trace t) /\
   gas_readings t = gas_readings s /\
   call_requests s = request_of s :: call_requests t ==>
-  asm_frame_step_ok prog data es0 a s
+  asm_frame_step_ok prog data es0 a s /\
+  ?a1. asm_step (SND (compute_label_offsets prog)) (build_offset_to_pc prog)
+    (EL a.as_pc prog) a = AsmOK a1 /\ asm_frame_rel prog data es0 a1 t
 Proof
   strip_tac >>
+  `?a1. asm_step (SND (compute_label_offsets prog)) (build_offset_to_pc prog)
+    (EL a.as_pc prog) a = AsmOK a1 /\ asm_frame_rel prog data es0 a1 t`
+    suffices_by
+    (strip_tac >> conj_tac >- (simp[asm_frame_step_ok_def] >> metis_tac[]) >>
+     metis_tac[]) >>
   `asm_evm_rel (prog ++ [AsmDataItem data]) a s` by fs[asm_frame_rel_def] >>
   `EL a.as_pc prog = AsmOp "CREATE" \/ EL a.as_pc prog = AsmOp "CREATE2"` by
     (Cases_on `salt_opt` >> gvs[]) >>
@@ -583,8 +590,7 @@ Proof
      drule asmEncodeParseTheory.asm_pc_to_offset_suc >>
      Cases_on `salt_opt` >>
      simp[arithmeticTheory.ADD1, rich_listTheory.EL_APPEND1, asm_inst_size_def]) >>
-  pure_rewrite_tac[asm_frame_step_ok_def] >> disj2_tac >>
-  asm_rewrite_tac[] >> simp[] >> qexists_tac `t` >> simp[] >>
+  asm_rewrite_tac[] >> simp[] >>
   qpat_x_assum `asm_frame_rel _ _ _ _ _` mp_tac >>
   rewrite_tac[asm_frame_rel_def] >> strip_tac >> gvs[] >>
   simp[asm_frame_rel_def, Abbr `prepared`, asm_next_def] >>
@@ -630,7 +636,10 @@ Theorem asm_frame_create_same_depth_step_ok:
   s.contexts = (c,rb)::rest /\
   step_create (IS_SOME salt_opt) s = (INL (),t) /\
   LENGTH t.contexts = LENGTH s.contexts ==>
-  asm_frame_step_ok prog data es0 a s
+  asm_frame_step_ok prog data es0 a s /\
+  ?a1 t1. asm_step (SND (compute_label_offsets prog)) (build_offset_to_pc prog)
+    (EL a.as_pc prog) a = AsmOK a1 /\ frame_next s t1 /\
+    asm_frame_rel prog data es0 a1 t1
 Proof
   strip_tac >>
   `wf_state s /\ (?d. s.msdomain = Collect d) /\ ~c.msgParams.static /\
@@ -672,6 +681,12 @@ Proof
     (mp_tac (Q.INST [`d` |-> `LENGTH s.contexts`, `B` |-> `s.rollback`,
                     `s` |-> `s`, `t` |-> `t`, `x` |-> `()`]
        vfmRunCallTheory.step_continuing_collision_current) >> simp[]) >>
+  `frame_next s t` by
+    (simp[frame_next_def] >> metis_tac[]) >>
+  `asm_frame_step_ok prog data es0 a s /\
+   ?a1. asm_step (SND (compute_label_offsets prog)) (build_offset_to_pc prog)
+     (EL a.as_pc prog) a = AsmOK a1 /\ asm_frame_rel prog data es0 a1 t`
+    suffices_by metis_tac[] >>
   drule_at_then (Pat `t.contexts = _`) irule asm_frame_create_effects_step_ok >>
   goal_assum (drule_at Any) >> simp[] >>
   qexists_tac `salt_opt` >>
@@ -687,7 +702,10 @@ Theorem asm_frame_create_child_step_ok:
   s.contexts = (c,rb)::rest /\
   step_create (IS_SOME salt_opt) s = (INL (),v) /\
   LENGTH v.contexts = SUC (LENGTH s.contexts) ==>
-  asm_frame_step_ok prog data es0 a s
+  asm_frame_step_ok prog data es0 a s /\
+  ?a1 t1. asm_step (SND (compute_label_offsets prog)) (build_offset_to_pc prog)
+    (EL a.as_pc prog) a = AsmOK a1 /\ frame_next s t1 /\
+    asm_frame_rel prog data es0 a1 t1
 Proof
   strip_tac >>
   `wf_state s /\ (?d. s.msdomain = Collect d) /\ ~c.msgParams.static /\
@@ -735,6 +753,12 @@ Proof
        `t` |-> `t`, `self` |-> `c.msgParams.callee`,
        `created` |-> `a.as_call_ctx.cc_created_in_tx`]
        step_run_call_creation_guard) >> gvs[asm_frame_rel_def] >> metis_tac[]) >>
+  `frame_next s t` by
+    (simp[frame_next_def] >> metis_tac[]) >>
+  `asm_frame_step_ok prog data es0 a s /\
+   ?a1. asm_step (SND (compute_label_offsets prog)) (build_offset_to_pc prog)
+     (EL a.as_pc prog) a = AsmOK a1 /\ asm_frame_rel prog data es0 a1 t`
+    suffices_by metis_tac[] >>
   drule_at_then (Pat `t.contexts = _`) irule asm_frame_create_effects_step_ok >>
   goal_assum (drule_at Any) >> simp[] >>
   qexistsl_tac [`address`, `salt_opt`] >>
@@ -749,7 +773,10 @@ Theorem asm_frame_create_normal_step_ok:
     (case salt_opt of NONE => stk | SOME salt => salt::stk) /\
   s.contexts = (c,rb)::rest /\
   step_create (IS_SOME salt_opt) s = (INL (),v) ==>
-  asm_frame_step_ok prog data es0 a s
+  asm_frame_step_ok prog data es0 a s /\
+  ?a1 t1. asm_step (SND (compute_label_offsets prog)) (build_offset_to_pc prog)
+    (EL a.as_pc prog) a = AsmOK a1 /\ frame_next s t1 /\
+    asm_frame_rel prog data es0 a1 t1
 Proof
   strip_tac >>
   `wf_state s /\ (?d. s.msdomain = Collect d) /\ ~c.msgParams.static /\
@@ -795,6 +822,7 @@ Theorem asm_frame_create_failure_starved:
     (case salt_opt of NONE => stk | SOME salt => salt::stk) /\
   s.contexts = (c,rb)::rest /\
   step_create (IS_SOME salt_opt) s = (INR e,u) ==>
+  frame_last s /\
   ?r t. run_call s = SOME (r,t) /\ frame_resource_starved es0 r t /\
         call_requests s = []
 Proof
@@ -830,13 +858,15 @@ Proof
     (irule asm_create_step_terminal >> metis_tac[]) >>
   `!address. c.msgParams.outputTo <> Code address` by
     gvs[asm_evm_rel_def] >>
-  `?r t. run_call s = SOME (r,t) /\ frame_resource_starved s r t /\
+  `frame_last s /\ ?r t. run_call s = SOME (r,t) /\ frame_resource_starved s r t /\
          call_requests s = []` by
     (Cases_on `rest`
      >- (drule_all asm_handle_step_oog_singleton >> disch_tac >>
          `step s = (INR (SOME OutOfGas), u with contexts :=
            [(p with <|gasUsed := p.msgParams.gasLimit; returnData := []|>,rb)])` by
            metis_tac[] >>
+         conj_tac
+         >- (simp[frame_last_def] >> rpt strip_tac >> gvs[]) >>
          `call_trace s = []` by
            (drule frame_obs_terminal >> asm_simp_tac (srw_ss()) []) >>
          drule asm_run_call_stops_after_step >> simp[] >> strip_tac >>
@@ -856,11 +886,14 @@ Proof
        (h0 with <|pc := SUC h0.pc; stack := 0w::h0.stack; returnData := [];
          memory := buffer_write mr.offset [] h0.memory|>,h1)::saved; rollback := rb|>)` by
        simp[vfmExecutionTheory.vfm_abort_def] >>
+     conj_tac
+     >- (simp[frame_last_def] >> rpt strip_tac >> gvs[] >> simp[]) >>
      `call_trace s = []` by
        (drule frame_obs_terminal >> asm_simp_tac (srw_ss()) []) >>
      drule asm_run_call_stops_after_step >> simp[] >> strip_tac >>
      simp[frame_resource_starved_def, frame_outcome_def, call_requests_def] >>
      metis_tac[]) >>
+  conj_tac >- first_assum ACCEPT_TAC >>
   goal_assum (drule_at Any) >> simp[] >>
   qpat_x_assum `asm_frame_rel _ _ _ _ _` mp_tac >>
   simp[asm_frame_rel_def] >> strip_tac >>
@@ -872,7 +905,13 @@ Theorem asm_frame_create_step:
   as.as_pc < LENGTH prog /\
   (EL as.as_pc prog = AsmOp "CREATE" \/
    EL as.as_pc prog = AsmOp "CREATE2") ==>
-  asm_frame_step_ok prog data es0 as es
+  asm_frame_step_ok prog data es0 as es /\
+  ((!e. asm_step (SND (compute_label_offsets prog)) (build_offset_to_pc prog)
+      (EL as.as_pc prog) as <> AsmError e) ==>
+   frame_last es \/ ?as1 es1.
+     asm_step (SND (compute_label_offsets prog)) (build_offset_to_pc prog)
+       (EL as.as_pc prog) as = AsmOK as1 /\
+     frame_next es es1 /\ asm_frame_rel prog data es0 as1 es1)
 Proof
   pure_rewrite_tac[GSYM AND_IMP_INTRO] >> ntac 4 disch_tac >>
   `?c rb rest. es.contexts = (c,rb)::rest` by
@@ -881,13 +920,19 @@ Proof
      EL as.as_pc prog = AsmOp (case salt_opt of NONE => "CREATE" | SOME salt => "CREATE2") /\
      as.as_stack = value::off::sz::
        (case salt_opt of NONE => stk | SOME salt => salt::stk) ==>
-     asm_frame_step_ok prog data es0 as es` by
+     asm_frame_step_ok prog data es0 as es /\
+     ((!e. asm_step (SND (compute_label_offsets prog)) (build_offset_to_pc prog)
+         (EL as.as_pc prog) as <> AsmError e) ==>
+      frame_last es \/ ?as1 es1.
+        asm_step (SND (compute_label_offsets prog)) (build_offset_to_pc prog)
+          (EL as.as_pc prog) as = AsmOK as1 /\
+        frame_next es es1 /\ asm_frame_rel prog data es0 as1 es1)` by
     (rpt gen_tac >> strip_tac >>
      Cases_on `step_create (IS_SOME salt_opt) es` >>
      rename1 `step_create _ es = (res,mid)` >> Cases_on `res`
      >- (Cases_on `x` >>
-         drule_at_then (Pat `step_create _ _ = _`) irule asm_frame_create_normal_step_ok >>
-         goal_assum (drule_at Any) >> simp[] >> metis_tac[]) >>
+         drule_at (Pat `step_create _ _ = _`) asm_frame_create_normal_step_ok >>
+         simp[] >> metis_tac[]) >>
      drule_at (Pat `step_create _ _ = _`) asm_frame_create_failure_starved >>
      simp[] >> strip_tac >>
      simp[asm_frame_step_ok_def] >> metis_tac[]) >>

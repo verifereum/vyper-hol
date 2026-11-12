@@ -8,7 +8,7 @@
  *)
 Theory frameGas
 Ancestors
-  vfmExecution vfmExecutionProp vfmContext list rich_list pair
+  callTrace vfmExecution vfmExecutionProp vfmContext list rich_list pair
 
 (* es with g more gas for our (top) frame.  Every frame on the stack gets
    g more gas limit and every caller g more gas used, so the callers'
@@ -111,4 +111,32 @@ Theorem add_frame_gas_calldata:
          (FST (HD es.contexts)).msgParams.data
 Proof
   rw[add_frame_gas_def] >> CASE_TAC >> simp[] >> CASE_TAC >> simp[]
+QED
+
+Theorem frame_inst_at_unique:
+  frame_inst_at es s op /\ frame_inst_at es s op' ==> op = op'
+Proof
+  rw[frame_inst_at_def] >> gvs[] >>
+  Cases_on `FLOOKUP ctxt.msgParams.parsed ctxt.pc` >> gvs[] >>
+  Cases_on `LENGTH ctxt.msgParams.code <= ctxt.pc` >> gvs[]
+QED
+
+Theorem frame_inst_at_self:
+  es.contexts <> [] /\
+  (FST (HD es.contexts)).pc < LENGTH (FST (HD es.contexts)).msgParams.code /\
+  next_opcode (FST (HD es.contexts)) = SOME op ==>
+  frame_inst_at es es op
+Proof
+  Cases_on `es.contexts` >> simp[] >> PairCases_on `h` >>
+  simp[frame_inst_at_def, next_opcode_def] >>
+  strip_tac >> gvs[]
+QED
+
+Theorem frame_inst_at_prefix:
+  RTC (\a b. LENGTH a.contexts >= LENGTH es.contexts /\
+             step a = (INL (),b)) es es1 /\
+  LENGTH es1.contexts = LENGTH es.contexts /\
+  frame_inst_at es1 s op ==> frame_inst_at es s op
+Proof
+  rw[frame_inst_at_def] >> metis_tac[relationTheory.RTC_TRANS]
 QED
