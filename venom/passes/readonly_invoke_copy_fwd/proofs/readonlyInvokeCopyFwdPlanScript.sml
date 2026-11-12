@@ -951,6 +951,50 @@ Proof
   metis_tac[ricf_function_trace_edit, ricf_function_trace_outputs]
 QED
 
+(* ALLOCA definitions are unchanged even when other definitions lose outputs. *)
+Theorem ricf_function_edit_alloca_defs:
+  ricf_function_edit fn cur /\
+  LIST_REL ricf_outputs_edit (fn_insts fn) (fn_insts cur) /\ ssa_form fn ==>
+  !inst v. inst.inst_opcode = ALLOCA ==>
+    (dfg_get_def (dfg_build_function fn) v = SOME inst <=>
+     dfg_get_def (dfg_build_function cur) v = SOME inst)
+Proof
+  strip_tac >>
+  `!inst. inst.inst_opcode = ALLOCA ==>
+     (MEM inst (fn_insts fn) <=> MEM inst (fn_insts cur))` by
+    (drule ricf_function_edit_insts >>
+     simp[LIST_REL_EL_EQN] >> strip_tac >> rpt strip_tac >>
+     simp[MEM_EL] >> eq_tac >> strip_tac >>
+     qexists_tac `n` >> simp[] >>
+     first_x_assum (qspec_then `n` mp_tac) >>
+     simp[ricf_inst_edit_def] >> gvs[]) >>
+  rpt gen_tac >> strip_tac >> eq_tac >> strip_tac
+  >- (drule dfg_build_function_correct >> strip_tac >>
+      `MEM inst (fn_insts cur)` by metis_tac[] >>
+      drule_all dfg_build_function_defs_complete >> strip_tac >>
+      drule dfg_build_function_correct >> strip_tac >>
+      drule_all ricf_function_output_origin >> strip_tac >>
+      `old = inst` by (irule ssa_unique_output >> metis_tac[]) >>
+      gvs[ricf_inst_edit_def]) >>
+  drule dfg_build_function_correct >> strip_tac >>
+  `MEM inst (fn_insts fn)` by metis_tac[] >>
+  drule_all dfg_build_function_defs_complete >> strip_tac >>
+  drule dfg_build_function_correct >> strip_tac >>
+  `inst' = inst` by (irule ssa_unique_output >> metis_tac[]) >>
+  gvs[]
+QED
+
+Theorem ricf_function_trace_alloca_defs:
+  ricf_function_trace ctx0 fn cur /\ ssa_form fn /\
+  ALL_DISTINCT (MAP (\inst. inst.inst_id) (fn_insts fn)) ==>
+  !inst v. inst.inst_opcode = ALLOCA ==>
+    (dfg_get_def (dfg_build_function fn) v = SOME inst <=>
+     dfg_get_def (dfg_build_function cur) v = SOME inst)
+Proof
+  rpt strip_tac >> irule ricf_function_edit_alloca_defs >> simp[] >>
+  metis_tac[ricf_function_trace_edit, ricf_function_trace_outputs]
+QED
+
 Theorem ricf_function_trace_assign_predecessor:
   ricf_function_trace ctx0 fn cur /\ ssa_form fn /\
   ALL_DISTINCT (MAP (\inst. inst.inst_id) (fn_insts fn)) ==>
