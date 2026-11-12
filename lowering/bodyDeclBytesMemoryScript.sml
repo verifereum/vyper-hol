@@ -13,7 +13,8 @@ Ancestors
   loweringSlice exprLoweringProps exprOperandVar localPtrsProps freshWrites
   valueTypingMemoryProps valueCopyBytes bodySim exprSimHypsDefs emitHelper emitHelperProps fragExec
   venomInst venomState exprLowering stmtLowering context compileEnv loweringStateRelDefs
-  vyperInterpreter vyperState list rich_list finite_map
+  vyperInterpreter vyperState gasStorage vyperStorageTrace
+  vyperStorageFootprint exprSimWordArgs list rich_list finite_map
 Libs
   monadsyntax
 
@@ -119,7 +120,9 @@ Theorem annassign_memory_assign_widen_body_path:
       return_buf_frame d cenv sb t /\
       (!x. not_fresh_at sa x ==> lookup_var x t = lookup_var x s) /\
       (!aid b. FLOOKUP s.vs_allocas aid = SOME b ==>
-               FLOOKUP t.vs_allocas aid = SOME b)
+               FLOOKUP t.vs_allocas aid = SOME b) /\
+      t.vs_accounts = s.vs_accounts /\ t.vs_transient = s.vs_transient /\
+      t.vs_requests = s.vs_requests /\ t.vs_call_ctx = s.vs_call_ctx
 Proof
   rpt gen_tac >> strip_tac >>
   drule_all assign_memory_widen_body_code >> strip_tac >>
@@ -180,9 +183,12 @@ QED
    through a buffer is read at its lowered type's size, which the premise
    on a memory-located value bounds. *)
 Theorem annassign_bytes_post_path_mem:
-  !ctx func cenv cx e es es1 s0 s sa sb sf op id p sz w inst v tyv etv ltv
-   vtyp sc rest a loc bytes d.
-    expr_post H ctx func cenv cx e es sa sb s0 es1 v op s /\
+  !ctx func cenv cx e es ee s0 s sa sb sf op id p sz w inst v tyv etv ltv
+   vtyp sc rest a loc bytes d st0 H0.
+    (!H. valid_horizon cx st0 H ee.storage_trace ==>
+         expr_post H ctx func cenv cx e es sa sb s0
+           (ee with gas_obs := []) v op s) /\
+    valid_horizon cx st0 H0 ee.storage_trace /\
     expr_store_bound cx (expr_type e) v op s /\
     (loc = SOME LocMemory ==>
      !sw. eval_operand op s = SOME sw ==>
@@ -205,9 +211,9 @@ Theorem annassign_bytes_post_path_mem:
     alloca_history func s /\ return_buf_frame d cenv sb s /\
     ~s.vs_halted /\ s.vs_current_bb = sb.cs_current_bb /\
     s.vs_inst_idx = LENGTH sb.cs_current_insts /\
-    es1.scopes = sc :: rest /\ lookup_scopes id es1.scopes = NONE /\
+    ee.scopes = sc :: rest /\ lookup_scopes id ee.scopes = NONE /\
     FLOOKUP cenv.ce_vars id = SOME (PtrVar (Var p) sz) /\
-    not_local_ptr cenv es1.scopes p /\ not_fresh_at sa p /\
+    not_local_ptr cenv ee.scopes p /\ not_fresh_at sa p /\
     lookup_var p s = SOME w /\
     MEM inst (fn_insts func) /\ inst.inst_opcode = ALLOCA /\
     inst.inst_outputs = [p] /\
@@ -216,10 +222,11 @@ Theorem annassign_bytes_post_path_mem:
     ?t. gas_path_mem ctx func s 0 (OK t) /\ ~t.vs_halted /\
       t.vs_current_bb = sf.cs_current_bb /\
       t.vs_inst_idx = LENGTH sf.cs_current_insts /\
-      stmt_state_rel H ctx func cenv cx
-        (es1 with scopes :=
-          (sc |+ (id, <|assignable := a; type := tyv; value := v;
-                        popped := []|>)) :: rest) t /\
+      (!H. valid_horizon cx st0 H ee.storage_trace ==>
+         stmt_state_rel H ctx func cenv cx
+           (ee with scopes :=
+             (sc |+ (id, <|assignable := a; type := tyv; value := v;
+                           popped := []|>)) :: rest) t) /\
       alloca_history func t /\ s.vs_alloca_next <= t.vs_alloca_next /\
       return_buf_frame d cenv sf t /\
       (!x. not_fresh_at sb x ==> lookup_var x t = lookup_var x s) /\
@@ -229,6 +236,22 @@ Proof
   rpt gen_tac >> strip_tac >>
   `!x. op = Var x ==> not_fresh_at sb x` by
     (rpt strip_tac >> drule_all (GEN_ALL compile_lower_value_var) >> simp[]) >>
+  `!H. valid_horizon cx st0 H ee.storage_trace ==>
+       stmt_state_rel H ctx func cenv cx ee s` by
+    (rpt strip_tac >>
+     qpat_assum `!H. valid_horizon cx st0 H ee.storage_trace ==>
+                     expr_post _ _ _ _ _ _ _ _ _ _ _ _ _ _`
+       (qspec_then `H` mp_tac) >>
+     impl_tac >- first_assum ACCEPT_TAC >>
+     disch_then (mp_tac o MATCH_MP exprSimWordArgsTheory.expr_post_state) >>
+     simp[]) >>
+  `expr_post H0 ctx func cenv cx e es sa sb s0 (ee with gas_obs := []) v op s` by
+    (qpat_assum `!H. valid_horizon cx st0 H ee.storage_trace ==>
+                     expr_post _ _ _ _ _ _ _ _ _ _ _ _ _ _`
+       (qspec_then `H0` mp_tac) >>
+     impl_tac >- first_assum ACCEPT_TAC >> simp[]) >>
+  qpat_x_assum `!H. valid_horizon cx st0 H ee.storage_trace ==>
+                    expr_post _ _ _ _ _ _ _ _ _ _ _ _ _ _` kall_tac >>
   qpat_x_assum `expr_post _ _ _ _ _ _ _ _ _ _ _ _ _ _` mp_tac >>
   simp[expr_post_def] >> strip_tac >>
   `~is_word_type (expr_type e) /\ ~is_word_type vtyp` by
@@ -253,20 +276,77 @@ Proof
     (irule not_fresh_at_mono >> qexists_tac `sa` >> simp[]) >>
   `local_ptrs_reserved cenv sb` by
     (irule local_ptrs_reserved_next_var >> qexists_tac `sa` >> simp[]) >>
-  Cases_on `loc = SOME LocMemory`
-  >- (gvs[] >>
-      drule annassign_memory_assign_widen_body_path >>
-      disch_then (qspecl_then [`ctx`, `func`, `cx`, `es1`, `s`, `id`, `sz`,
-        `w`, `inst`, `v`, `tyv`, `ltv`, `sc`, `rest`, `a`, `sw`, `d`] mp_tac) >>
-      simp[]) >>
-  `compile_store_memory cenv op (Var p) vtyp vtyp sb = ((),sf)` by
-    (qpat_x_assum `compile_assign_value _ _ _ _ _ _ _ _ _ _ = _` mp_tac >>
-     simp[compile_assign_value_def] >>
-     metis_tac[compile_store_memory_bytestring_src]) >>
-  drule annassign_memory_store_body_path >>
-  disch_then (qspecl_then [`ctx`, `func`, `cx`, `es1`, `s`, `id`, `sz`,
-    `w`, `inst`, `v`, `tyv`, `sc`, `rest`, `a`, `sw`, `d`] mp_tac) >>
-  simp[]
+  (* The declaration's stores at one horizon. *)
+  `!H. stmt_state_rel H ctx func cenv cx ee s ==>
+       ?t. gas_path_mem ctx func s 0 (OK t) /\ ~t.vs_halted /\
+         t.vs_current_bb = sf.cs_current_bb /\
+         t.vs_inst_idx = LENGTH sf.cs_current_insts /\
+         stmt_state_rel H ctx func cenv cx
+           (ee with scopes :=
+             (sc |+ (id, <|assignable := a; type := tyv; value := v;
+                           popped := []|>)) :: rest) t /\
+         alloca_history func t /\ s.vs_alloca_next <= t.vs_alloca_next /\
+         return_buf_frame d cenv sf t /\
+         (!x. not_fresh_at sb x ==> lookup_var x t = lookup_var x s) /\
+         (!aid b. FLOOKUP s.vs_allocas aid = SOME b ==>
+                  FLOOKUP t.vs_allocas aid = SOME b) /\
+         t.vs_accounts = s.vs_accounts /\ t.vs_transient = s.vs_transient /\
+         t.vs_requests = s.vs_requests /\ t.vs_call_ctx = s.vs_call_ctx` by
+    (rpt strip_tac >>
+     Cases_on `loc = SOME LocMemory`
+     >- (gvs[] >>
+         drule annassign_memory_assign_widen_body_path >>
+         disch_then (qspecl_then [`ctx`, `func`, `cx`, `ee`, `s`, `id`, `sz`,
+           `w`, `inst`, `v`, `tyv`, `ltv`, `sc`, `rest`, `a`, `sw`, `d`] mp_tac) >>
+         simp[]) >>
+     `compile_store_memory cenv op (Var p) vtyp vtyp sb = ((),sf)` by
+       (qpat_x_assum `compile_assign_value _ _ _ _ _ _ _ _ _ _ = _` mp_tac >>
+        simp[compile_assign_value_def] >>
+        metis_tac[compile_store_memory_bytestring_src]) >>
+     drule annassign_memory_store_body_path >>
+     disch_then (qspecl_then [`ctx`, `func`, `cx`, `ee`, `s`, `id`, `sz`,
+       `w`, `inst`, `v`, `tyv`, `sc`, `rest`, `a`, `sw`, `d`] mp_tac) >>
+     simp[]) >>
+  `!H. valid_horizon cx st0 H ee.storage_trace ==>
+       ?t. gas_path_mem ctx func s 0 (OK t) /\ ~t.vs_halted /\
+         t.vs_current_bb = sf.cs_current_bb /\
+         t.vs_inst_idx = LENGTH sf.cs_current_insts /\
+         stmt_state_rel H ctx func cenv cx
+           (ee with scopes :=
+             (sc |+ (id, <|assignable := a; type := tyv; value := v;
+                           popped := []|>)) :: rest) t /\
+         alloca_history func t /\ s.vs_alloca_next <= t.vs_alloca_next /\
+         return_buf_frame d cenv sf t /\
+         (!x. not_fresh_at sb x ==> lookup_var x t = lookup_var x s) /\
+         (!aid b. FLOOKUP s.vs_allocas aid = SOME b ==>
+                  FLOOKUP t.vs_allocas aid = SOME b) /\
+         t.vs_accounts = s.vs_accounts /\ t.vs_transient = s.vs_transient /\
+         t.vs_requests = s.vs_requests /\ t.vs_call_ctx = s.vs_call_ctx` by
+    metis_tac[] >>
+  qpat_assum `!H. valid_horizon cx st0 H ee.storage_trace ==> ?t. _`
+    (qspec_then `H0` mp_tac) >>
+  impl_tac >- first_assum ACCEPT_TAC >>
+  disch_then (qx_choose_then `t0` strip_assume_tac) >>
+  `!H. valid_horizon cx st0 H ee.storage_trace ==>
+       stmt_state_rel H ctx func cenv cx
+         (ee with scopes :=
+           (sc |+ (id, <|assignable := a; type := tyv; value := v;
+                         popped := []|>)) :: rest) t0` by
+    (mp_tac (Q.SPECL [`cx`, `st0`, `ee.storage_trace`, `ctx`, `func`, `cenv`,
+       `ee with scopes :=
+          (sc |+ (id, <|assignable := a; type := tyv; value := v;
+                        popped := []|>)) :: rest`, `s`, `t0`, `H0`]
+       stmt_state_rel_lift_family) >>
+     impl_tac
+     >- (rpt conj_tac
+         >- (rpt strip_tac >>
+             qpat_x_assum `!H. valid_horizon cx st0 H ee.storage_trace ==>
+                             ?t. _`
+               (qspec_then `H` mp_tac) >>
+             impl_tac >- first_assum ACCEPT_TAC >> strip_tac >> metis_tac[])
+         >> first_assum ACCEPT_TAC) >>
+     disch_then ACCEPT_TAC) >>
+  qexists_tac `t0` >> rpt conj_tac >> first_assum ACCEPT_TAC
 QED
 
 (* x: T = e for a bytestring type T, where e has a bytestring type and is
@@ -297,19 +377,21 @@ Theorem compile_annassign_bytes_stmt_frag_mem:
          (INL v, es1) ==>
        value_has_type tyv v /\ value_has_type etv v /\ value_has_type ltv v) /\
     (!st0 c st1. declare_local cenv id vtyp st0 = (c, st1) ==>
-       !sa sV sb vv op s0.
+       !tst sa sV sb vv op s0.
          compile_expr c (expr_type e) e sa = (vv, sV) /\
          unwrap_value c vv sV = (op, sb) /\
          fn_has_code sa sb func /\ fn_inst_ids_distinct func /\
          local_ptrs_reserved c sa /\
          gas_admissible (bind (eval_expr cx e) (read_result cx)) expr_res_ok es /\
-         stmt_state_rel H ctx func c cx es s0 /\
+         (!H. valid_horizon cx tst H es.storage_trace ==>
+           stmt_state_rel H ctx func c cx es s0 /\
+           storage_well_formed_on cx es (FST H)) /\
          alloca_history func s0 /\ ~s0.vs_halted /\
          s0.vs_current_bb = sa.cs_current_bb /\
          s0.vs_inst_idx = LENGTH sa.cs_current_insts ==>
-         gas_outcome T (cx_tops cx) (ctx, func)
+         gas_outcome T (cx_tops cx) (ctx, func) cx tst
            (bind (eval_expr cx e) (read_result cx)) (es, s0)
-           (\res ee t. ?v. res = INL v /\
+           (\H res ee t. ?v. res = INL v /\
              expr_post H ctx func c cx e es sa sb s0 ee v op t /\
              expr_store_bound cx (expr_type e) v op t /\
              (vv_location vv = SOME LocMemory ==>
@@ -318,13 +400,20 @@ Theorem compile_annassign_bytes_stmt_frag_mem:
              t.vs_current_bb = sb.cs_current_bb /\
              t.vs_inst_idx = LENGTH sb.cs_current_insts /\
              alloca_history func t /\ s0.vs_alloca_next <= t.vs_alloca_next)
-           (\res ee r. expr_exit res r)) ==>
+           (\H res ee r. expr_exit res r)) ==>
     stmt_frag_mem d ctx func cx lctx RetQ cenv
       (stmt_env cenv lctx ty (AnnAssign id vtyp e))
       (eval_stmt cx (AnnAssign id vtyp e)) es
 Proof
   rpt gen_tac >> strip_tac >>
   simp[stmt_frag_mem_def] >> rpt gen_tac >> strip_tac >>
+  reverse (Cases_on `storage_trace_domain cx st0 es.storage_trace`)
+  >- (rewrite_tac[gas_outcome_def] >> qexists_tac `[]` >> disj1_tac >>
+      irule gasStorageTheory.gas_bad_storage_at_initial >>
+      simp[vyperStorageTraceTheory.evaluate_storage_trace_frame]) >>
+  `?H0. valid_horizon cx st0 H0 es.storage_trace` by
+    metis_tac[vyperStorageFootprintTheory.storage_trace_domain_def] >>
+  pop_assum (qx_choose_then `H0` assume_tac) >>
   drule stmt_env_annassign >> strip_tac >>
   rename1 `declare_local cenv id vtyp sa = (c, st)` >>
   qpat_x_assum `!st0 c st1. declare_local _ _ _ _ = _ ==> !sa sV. _` drule >>
@@ -360,28 +449,59 @@ Proof
   `STRING #"%" (toString sa.cs_next_var) = STRING #"%" (toString sa.cs_next_var)` by
     simp[] >>
   `type_memory_bytes cenv vtyp < dimword (:256)` by decide_tac >>
+  `!H. valid_horizon cx st0 H es.storage_trace ==>
+       stmt_state_rel H ctx func cenv cx es s0` by metis_tac[] >>
+  `!H. valid_horizon cx st0 H es.storage_trace ==>
+       ?u. stmt_state_rel H ctx func c cx es u /\
+           u.vs_accounts = s0.vs_accounts /\ u.vs_transient = s0.vs_transient /\
+           u.vs_requests = s0.vs_requests /\ u.vs_call_ctx = s0.vs_call_ctx` by
+    (rpt strip_tac >>
+     `stmt_state_rel H ctx func cenv cx es s0` by metis_tac[] >>
+     drule_all annassign_setup_body_gas_path_mem >> strip_tac >> metis_tac[]) >>
+  `stmt_state_rel H0 ctx func cenv cx es s0` by metis_tac[] >>
   drule_all annassign_setup_body_gas_path_mem >>
   disch_then (qx_choose_then `salloc` strip_assume_tac) >>
+  `!H. valid_horizon cx st0 H es.storage_trace ==>
+       stmt_state_rel H ctx func c cx es salloc` by
+    (mp_tac (Q.SPECL [`cx`, `st0`, `es.storage_trace`, `ctx`, `func`, `c`,
+        `es`, `s0`, `salloc`, `H0`] stmt_state_rel_lift_family) >>
+     impl_tac >- (rpt conj_tac >> first_assum ACCEPT_TAC) >>
+     disch_then ACCEPT_TAC) >>
   qabbrev_tac `p = STRING #"%" (toString sa.cs_next_var)` >>
   drule annassign_admissible_type >> strip_tac >>
   `tyv' = tyv` by metis_tac[optionTheory.SOME_11] >>
   qpat_x_assum `tyv' = tyv` SUBST_ALL_TAC >>
   `gas_admissible (bind (eval_expr cx e) (read_result cx)) expr_res_ok es` by
     (irule annassign_admissible_rhs >> metis_tac[]) >>
-  qpat_x_assum `!sa sV sb vv op s0. _`
-    (qspecl_then [`sA`, `sV`, `sB`, `vv`, `op`, `salloc`] mp_tac) >>
-  impl_tac >- simp[] >> strip_tac >>
+  qpat_x_assum `!tst sa sV sb vv op s0. _`
+    (qspecl_then [`st0`, `sA`, `sV`, `sB`, `vv`, `op`, `salloc`] mp_tac) >>
+  impl_tac >- (simp[] >> metis_tac[]) >> strip_tac >>
   `~block_is_terminated sb` by
     (drule_at (Pos last) compile_assign_value_memory_widen_open >> simp[]) >>
   `!x. not_fresh_at sa x ==> not_fresh_at sA x` by
     (rpt strip_tac >> irule not_fresh_at_mono >> qexists_tac `sa` >>
      drule emit_inst_extends >> simp[]) >>
   irule annassign_rhs_outcome_mem >>
-  goal_assum (drule_at (Pat `gas_outcome _ _ _ _ _ _ _`)) >>
+  goal_assum (drule_at (Pat `gas_outcome _ _ _ _ _ _ _ _ _`)) >>
   qexists_tac `tyv` >>
   qpat_assum `evaluate_type (get_tenv cx) vtyp = SOME tyv`
     (fn th => simp[PULL_EXISTS, th]) >>
   rpt gen_tac >> strip_tac >>
+  rename1 `valid_horizon cx st0 H1 ee.storage_trace` >>
+  `!H. valid_horizon cx st0 H ee.storage_trace ==>
+       expr_post H ctx func c cx e es sA sB salloc (ee with gas_obs := []) v op t /\
+       expr_store_bound cx (expr_type e) v op t /\
+       (vv_location vv = SOME LocMemory ==>
+        !sw. eval_operand op t = SOME sw ==>
+             w2n sw + type_memory_size ltv <= t.vs_alloca_next) /\
+       t.vs_current_bb = sB.cs_current_bb /\
+       t.vs_inst_idx = LENGTH sB.cs_current_insts /\
+       alloca_history func t /\ salloc.vs_alloca_next <= t.vs_alloca_next` by
+    (rpt strip_tac >> res_tac >> gvs[]) >>
+  qpat_assum `!H. valid_horizon cx st0 H ee.storage_trace ==>
+                  expr_post _ _ _ _ _ _ _ _ _ _ _ _ _ _ /\ _`
+    (qspec_then `H1` mp_tac) >>
+  impl_tac >- first_assum ACCEPT_TAC >> strip_tac >>
   `!tail. bind (eval_expr cx e) (read_result cx)
     (es with gas_obs := gas_explicit marks salloc.vs_gas_readings ++ tail) =
       (INL v, ee with gas_obs := tail)` by fs[gas_marked_exec_def] >>
@@ -417,10 +537,13 @@ Proof
   qpat_x_assum `compile_assign_value _ _ _ _ _ _ _ _ _ _ = _` mp_tac >>
   qpat_assum `type_memory_bytes cenv vtyp = _` (fn th => rewrite_tac[th]) >>
   strip_tac >>
+  `!H. valid_horizon cx st0 H ee.storage_trace ==>
+       expr_post H ctx func c cx e es sA sB salloc (ee with gas_obs := []) v op t` by
+    metis_tac[] >>
   drule annassign_bytes_post_path_mem >>
   disch_then (qspecl_then [`sb`, `id`, `p`, `type_memory_size tyv`, `w`,
     `ai`, `tyv`, `etv`, `ltv`, `vtyp`, `sc`, `rest`, `T`, `vv_location vv`,
-    `type_memory_size tyv`, `d`] mp_tac) >>
+    `type_memory_size tyv`, `d`, `H1`] mp_tac) >>
   impl_tac
   >- (simp[] >> fs[]) >>
   disch_then (qx_choose_then `tf:venom_state` strip_assume_tac) >>
@@ -447,13 +570,25 @@ Proof
      qexistsl_tac [`id`, `sa`, `st`, `vtyp`] >>
      gvs[lookup_scopes_def, AllCaseEqs()]) >>
   `return_buf_frame d c sb tf` by simp[] >>
-  `stmt_state_rel H ctx func c cx ee' tf` by
-    (qunabbrev_tac `ee'` >>
-     qmatch_goalsub_abbrev_tac `stmt_state_rel _ _ _ _ _ (ee with scopes := scs) _` >>
-     `ee with <|scopes := scs; gas_obs := []|> =
-      (ee with scopes := scs) with gas_obs := []`
-       by simp[evaluation_state_component_equality] >>
-     metis_tac[exprSimWordArgsTheory.stmt_state_rel_gas_obs]) >>
+  qx_gen_tac `HH` >> strip_tac >>
+  `valid_horizon cx st0 HH ee.storage_trace` by
+    (qpat_x_assum `valid_horizon cx st0 HH ee'.storage_trace` mp_tac >>
+     simp[Abbr `ee'`]) >>
+  qpat_assum `!H. valid_horizon cx st0 H ee.storage_trace ==>
+                  expr_post _ _ _ _ _ _ _ _ _ _ _ _ _ _ /\ _`
+    (qspec_then `HH` mp_tac) >>
+  impl_tac >- first_assum ACCEPT_TAC >>
+  disch_then (strip_assume_tac o REWRITE_RULE [expr_post_def] o CONJUNCT1) >>
+  `stmt_state_rel HH ctx func c cx ee' tf` by
+    (qpat_x_assum `!H. valid_horizon cx st0 H ee.storage_trace ==>
+                       stmt_state_rel H ctx func c cx _ tf`
+       (qspec_then `HH` mp_tac) >>
+     impl_tac >- first_assum ACCEPT_TAC >> simp[Abbr `ee'`]) >>
+  `storage_well_formed_on cx (ee' with gas_obs := []) (FST HH)` by
+    (`(ee' with gas_obs := []).accounts = (ee with gas_obs := []).accounts /\
+      (ee' with gas_obs := []).tStorage = (ee with gas_obs := []).tStorage` by
+       simp[Abbr `ee'`] >>
+     metis_tac[vyperStorageFootprintTheory.storage_well_formed_on_backends]) >>
   simp[stmt_lands_def]
 QED
 
@@ -473,19 +608,21 @@ Theorem annassign_bytes_rhs_located_mem:
     type_memory_size etv < 2 ** 64 /\
     0 < type_memory_size ltv /\
     type_memory_size ltv <= type_memory_size etv ==>
-    !sa sV sb vv op s0.
+    !st0 sa sV sb vv op s0.
       compile_expr c (expr_type e) e sa = (vv, sV) /\
       unwrap_value c vv sV = (op, sb) /\
       fn_has_code sa sb func /\ fn_inst_ids_distinct func /\
       local_ptrs_reserved c sa /\
       gas_admissible (bind (eval_expr cx e) (read_result cx)) expr_res_ok es /\
-      stmt_state_rel H ctx func c cx es s0 /\
+      (!H. valid_horizon cx st0 H es.storage_trace ==>
+        stmt_state_rel H ctx func c cx es s0 /\
+        storage_well_formed_on cx es (FST H)) /\
       alloca_history func s0 /\ ~s0.vs_halted /\
       s0.vs_current_bb = sa.cs_current_bb /\
       s0.vs_inst_idx = LENGTH sa.cs_current_insts ==>
-      gas_outcome T (cx_tops cx) (ctx, func)
+      gas_outcome T (cx_tops cx) (ctx, func) cx st0
         (bind (eval_expr cx e) (read_result cx)) (es, s0)
-        (\res ee t. ?v. res = INL v /\
+        (\H res ee t. ?v. res = INL v /\
           expr_post H ctx func c cx e es sa sb s0 ee v op t /\
           expr_store_bound cx (expr_type e) v op t /\
           (vv_location vv = SOME LocMemory ==>
@@ -494,7 +631,7 @@ Theorem annassign_bytes_rhs_located_mem:
           t.vs_current_bb = sb.cs_current_bb /\
           t.vs_inst_idx = LENGTH sb.cs_current_insts /\
           alloca_history func t /\ s0.vs_alloca_next <= t.vs_alloca_next)
-        (\res ee r. expr_exit res r)
+        (\H res ee r. expr_exit res r)
 Proof
   rpt gen_tac >> strip_tac >> rpt gen_tac >> strip_tac >>
   `expr_vv_sim_mem ctx func c cx (expr_type e) e es` by
@@ -503,7 +640,7 @@ Proof
   mp_tac (Q.SPECL [`ctx`, `func`, `c`, `cx`, `expr_type e`, `e`, `es`]
             expr_sim_mem_room) >>
   impl_tac >- (rpt strip_tac >> gvs[]) >>
-  disch_then (qspecl_then [`sa`, `sV`, `sb`, `vv`, `op`, `s0`] mp_tac) >>
+  disch_then (qspecl_then [`st0`, `sa`, `sV`, `sb`, `vv`, `op`, `s0`] mp_tac) >>
   impl_tac >- simp[] >> strip_tac >>
   irule gas_outcome_post_mono >>
   first_x_assum (irule_at (Pos last)) >>
