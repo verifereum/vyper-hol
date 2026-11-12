@@ -1,14 +1,16 @@
-(* Boundary audit for the custom-error S1 argument loop.
-   This is a diagnostic, not a new simulation contract.  The reusable
-   interfaces are aggregate_materialised_child_{typed,wf},
-   aggregate_mem_store_lowered_elem, and expr_post's pure_frame. *)
+(* Custom-error argument typing/frame audit and evaluated-value encoder
+   handoff. The store loop supplies value typing, ABI conversion and
+   val_in_memory; the invariant bridge supplies layout and byte bounds.
+   Encoder admissibility is independently unconditional by
+   abi_encoder_translation_admissible. *)
 Theory bodyCustomErrorHandoff
 Ancestors
   exprSimAggregateSource bodyMemAggregateStore bodyExprPreFacts
   supportedExprTraverse exprSimHypsDefs loweringPosts abiEncoderAdmissible
   abiEncoderWindow abiEncoderSourceAggregate abiTypeBoundProps vyperABIValid
   exprLowering compileEnv contractABI valueEncodingDefs
-  vyperABI vyperValue vyperTyping
+  vyperABI vyperValue vyperTyping bodyCustomErrorSourceRep
+  bodyCustomErrorWindowBounds finite_map
 
 Theorem custom_error_argument_handoff_audit[local]:
   supported_pure_expr tops e /\ expr_body_pre ce cx env e es /\
@@ -89,4 +91,42 @@ Proof
   rpt strip_tac >> gvs[vyper_to_abi_def] >>
   qexists_tac `ListV []` >>
   simp[abiEncoderOpenInputTheory.abi_encoder_open_complex_nil]
+QED
+
+(* The argument-store loop supplies the evaluated tuple value and its actual
+   memory representation.  All compiler layout and encoding bounds below
+   come from the unchanged body/expression invariants. *)
+Theorem custom_error_invariant_encoder_handoff:
+  body_inv tops ctx ce cx /\ expr_sim_inv ce cx env es /\
+  evaluate_type (get_tenv cx) ty = SOME tv /\ value_has_type tv v /\
+  vyper_to_abi (get_tenv cx) ty v = SOME av /\ val_in_memory tv v p mem ==>
+  ?at rv.
+    abi_encoder_window_input (type_to_abi_enc_info ce.ce_struct_fields ce ty)
+      at rv p (type_memory_size tv) mem /\
+    enc at rv = enc (vyper_to_abi_type (get_tenv cx) ty) av /\
+    LENGTH (enc at rv) <= abi_size_bound ce.ce_struct_fields ty
+Proof
+  strip_tac >> drule_all custom_error_invariant_layout >> strip_tac >>
+  `?at. source_rep (get_tenv cx) ty
+     (type_to_abi_enc_info ce.ce_struct_fields ce ty) at` by
+    (irule custom_error_evaluated_source_rep >> simp[] >>
+     qexists_tac `get_tenv cx` >> simp[]) >>
+  metis_tac[custom_error_source_rep_window_bound]
+QED
+
+Theorem custom_error_tuple_encoder_handoff:
+  body_inv tops ctx ce cx /\ expr_sim_inv ce cx env es /\
+  evaluate_type (get_tenv cx) (TupleT (MAP SND params)) = SOME tv /\
+  value_has_type tv v /\
+  vyper_to_abi (get_tenv cx) (TupleT (MAP SND params)) v = SOME av /\
+  val_in_memory tv v p mem ==>
+  ?at rv.
+    abi_encoder_window_input
+      (type_to_abi_enc_info ce.ce_struct_fields ce (TupleT (MAP SND params)))
+      at rv p (type_memory_bytes ce (TupleT (MAP SND params))) mem /\
+    enc at rv = enc (vyper_to_abi_type (get_tenv cx) (TupleT (MAP SND params))) av /\
+    LENGTH (enc at rv) <= abi_size_bound ce.ce_struct_fields (TupleT (MAP SND params))
+Proof
+  strip_tac >> drule_all custom_error_invariant_encoder_handoff >> strip_tac >>
+  drule_all custom_error_expr_inv_memory_size >> strip_tac >> metis_tac[]
 QED
