@@ -385,8 +385,10 @@ Resume body_oracle_storage_mutual[builtin_slice_tail]:
   simp[int_calls_expr_def] >> strip_tac >>
   `~supported_exprs_exists expr_evm_run_root (TL es) /\
    ~supported_expr_exists expr_evm_run_root ca /\
-   EVERY (\c. FST c = NONE) (int_calls_exprs (TL es)) /\
-   EVERY (\c. FST c = NONE) (int_calls_expr ca)` by (
+   EVERY (\c. FST c = NONE /\ IS_SOME (supported_function_decl tops c Internal))
+     (int_calls_exprs (TL es)) /\
+   EVERY (\c. FST c = NONE /\ IS_SOME (supported_function_decl tops c Internal))
+     (int_calls_expr ca)` by (
     qpat_x_assum `code_slice_source _ _ = SOME _` mp_tac >>
     qpat_x_assum `~supported_exprs_exists _ es` mp_tac >>
     qpat_x_assum `EVERY _ (int_calls_exprs es)` mp_tac >>
@@ -412,8 +414,10 @@ Resume body_oracle_storage_mutual[builtin_slice_addr]:
   simp[int_calls_expr_def] >> strip_tac >>
   `~supported_exprs_exists expr_evm_run_root (TL es) /\
    ~supported_expr_exists expr_evm_run_root ca /\
-   EVERY (\c. FST c = NONE) (int_calls_exprs (TL es)) /\
-   EVERY (\c. FST c = NONE) (int_calls_expr ca)` by (
+   EVERY (\c. FST c = NONE /\ IS_SOME (supported_function_decl tops c Internal))
+     (int_calls_exprs (TL es)) /\
+   EVERY (\c. FST c = NONE /\ IS_SOME (supported_function_decl tops c Internal))
+     (int_calls_expr ca)` by (
     qpat_x_assum `code_slice_source _ _ = SOME _` mp_tac >>
     qpat_x_assum `~supported_exprs_exists _ es` mp_tac >>
     qpat_x_assum `EVERY _ (int_calls_exprs es)` mp_tac >>

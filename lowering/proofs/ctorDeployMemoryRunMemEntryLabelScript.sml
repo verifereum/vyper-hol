@@ -59,7 +59,7 @@ QED
 
 Theorem ctor_checked_constructor_shape[local]:
   !tops use_trans nkey_map target cf cenv args pay nr nkey trans ss ret.
-    supported_program tops /\
+    supported_program tops /\ supported_program_deploy tops /\
     SND (SND (SND (classify_functions tops))) = SOME cf /\
     set_constructor_package_target target
       (package_constructor tops use_trans nkey_map cf) =
@@ -68,8 +68,14 @@ Theorem ctor_checked_constructor_shape[local]:
     ~supported_stmts_expr_exists expr_shape_root ss
 Proof
   rpt gen_tac >> PairCases_on `cf` >> strip_tac >>
-  drule classify_functions_ctor_mem >> strip_tac >>
-  drule_all supported_program_function >> strip_tac >>
+  `MEM (FunctionDecl Deploy cf0 cf1 cf2 cf3 cf4 cf5 cf6 cf7) tops` by
+    (drule classify_functions_ctor_mem >> strip_tac >>
+     `module_consts_env tops [] = []` by
+       metis_tac[supported_program_def,
+         supportedDeclsTheory.supported_declaration_headers_def,
+         supportedDeclsTheory.supported_headers_module_consts_env] >>
+     gvs[constSubstTheory.subst_consts_fn_empty]) >>
+  drule_all supported_program_deploy_function >> strip_tac >>
   drule supported_function_body_shape >> strip_tac >>
   gvs[package_constructor_def, set_constructor_package_target_def,
       update_cenv_nonreentrant_def, ctor_checked_non_internal_return_pc] >>
@@ -89,6 +95,12 @@ Theorem ctor_checked_internal_shape[local]:
 Proof
   rpt gen_tac >> PairCases_on `src` >> strip_tac >>
   drule (iffLR MEM_classify_internal) >> strip_tac >>
+  `module_consts_env tops [] = []` by
+    metis_tac[supported_program_def,
+      supportedDeclsTheory.supported_declaration_headers_def,
+      supportedDeclsTheory.supported_headers_module_consts_env] >>
+  gvs[constSubstTheory.subst_consts_fn_empty] >>
+  `Internal <> Deploy` by simp[] >>
   drule_all supported_program_function >> strip_tac >>
   drule supported_function_body_shape >> strip_tac >>
   simp[package_internal_fn_def, set_internal_package_target_def,
@@ -101,7 +113,7 @@ QED
 Theorem ctor_checked_source_run:
   !tops rpolicy runtime_bc unit.
     lower_vyper_deploy_unit tops rpolicy runtime_bc = SOME unit /\
-    supported_program tops ==>
+    supported_program tops /\ supported_program_deploy tops ==>
     ?has_constructor imm args internals cenv ss pay nr nkey trans.
       run_deploy_lowering has_constructor rpolicy runtime_bc imm args 0
         internals cenv ss pay nr nkey trans "__deploy" = SOME unit /\
@@ -134,7 +146,7 @@ QED
 Theorem ctor_checked_deploy_entry_label:
   !tops rpolicy runtime_bc dunit fn lbl.
   lower_vyper_deploy_unit tops rpolicy runtime_bc = SOME dunit /\
-  supported_program tops /\
+  supported_program tops /\ supported_program_deploy tops /\
   lookup_function "__deploy" dunit.cu_context.ctx_functions = SOME fn /\
   fn_entry_label fn = SOME lbl ==> lbl = "__deploy"
 Proof
