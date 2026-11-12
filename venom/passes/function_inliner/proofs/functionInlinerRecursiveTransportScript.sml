@@ -896,3 +896,115 @@ Proof
   irule inline_parameter_boundary_path_append >>
   qexistsl [`e.ise_callee`, `LENGTH params`, `entry.bb_label`] >> simp[]
 QED
+
+Theorem inline_phi_prefix_at[local]:
+  j < phi_prefix_length xs ==>
+  j < LENGTH xs /\ (EL j xs).inst_opcode = PHI
+Proof
+  strip_tac >>
+  qspec_then `xs` mp_tac analysisSimProofsBaseTheory.phi_prefix_all_phi >>
+  simp[listTheory.EVERY_EL, listTheory.LENGTH_TAKE, venomExecProofsTheory.phi_prefix_length_le] >>
+  metis_tac[listTheory.EL_TAKE, venomExecProofsTheory.phi_prefix_length_le,
+    arithmeticTheory.LESS_LESS_EQ_TRANS]
+QED
+
+Theorem inline_phi_cell_prefix_length[local]:
+  !j. j <= phi_prefix_length cb.bb_instructions ==>
+    LENGTH (FST (inline_cell_prefix e bb cb j)) = j
+Proof
+  Induct >- simp[] >> strip_tac >>
+  `j < LENGTH cb.bb_instructions /\
+   (EL j cb.bb_instructions).inst_opcode = PHI` by
+    (irule inline_phi_prefix_at >> decide_tac) >>
+  `get_instruction cb j = SOME (EL j cb.bb_instructions)` by
+    simp[venomInstTheory.get_instruction_def] >>
+  drule functionInlinerReachableCutsTheory.inline_cell_prefix_singleton_suc >> simp[]
+QED
+
+Theorem inline_routed_phi_prefix_boundary:
+  !cert root p fn path. inline_routed_leaf cert root p fn path ==>
+  !C n l sb.
+    inline_annotated_origin C n root cert /\
+    lookup_block l fn.fn_blocks = SOME sb ==>
+    ?tb. lookup_block (inline_path_rename path l) root.fn_blocks = SOME tb /\
+      phi_prefix_length tb.bb_instructions = phi_prefix_length sb.bb_instructions /\
+      inline_parameter_boundary_path path fn l (phi_prefix_length sb.bb_instructions)
+        root (inline_path_rename path l) (phi_prefix_length tb.bb_instructions)
+Proof
+  ho_match_mp_tac functionInlinerRoutedProvenanceTheory.inline_routed_leaf_strongind >> rpt conj_tac
+  >- simp[inline_parameter_boundary_path_def, functionInlinerRoutedProvenanceTheory.inline_path_rename_def] >>
+  rpt gen_tac >> strip_tac >> rpt gen_tac >> strip_tac >>
+  drule functionInlinerOccurrencesTheory.inline_annotated_origin_edit_elim >>
+  simp[] >> strip_tac >>
+  first_x_assum (drule_then (drule_then assume_tac)) >>
+  gvs[] >>
+  drule_all functionInlinerOccurrencesTheory.inline_annotated_edit_fetch_facts >>
+  strip_tac >>
+  `wf_function e.ise_caller /\ inliner_phi_labels_closed e.ise_callee` by
+    metis_tac[functionInlinerEnvelopesTheory.inline_annotated_origin_erasure,
+      functionInlinerOriginTheory.qualified_origin_erasure,
+      functionInlinerOriginTheory.inliner_fn_origin_structure,
+      functionInlinerOriginTheory.qualified_origin_phi_labels_closed] >>
+  `ALL_DISTINCT (fn_labels e.ise_caller) /\ fn_succs_closed e.ise_caller` by
+    gvs[venomWfTheory.wf_function_def] >>
+  rename1 `lookup_block e.ise_block e.ise_caller.fn_blocks = SOME source_bb` >>
+  `!z. MEM z (bb_succs <|bb_label := e.ise_return;
+       bb_instructions := DROP (e.ise_index+1) source_bb.bb_instructions|>) ==>
+      MEM z (fn_labels e.ise_caller)` by
+    (Cases_on `e.ise_index+1 < LENGTH source_bb.bb_instructions`
+     >- metis_tac[functionInlinerSimulationTheory.inline_saved_suffix_succs_closed] >>
+     simp[listTheory.DROP_LENGTH_TOO_LONG, venomInstTheory.bb_succs_def])
+  >- (qpat_assum `lookup_block _ e.ise_caller.fn_blocks = SOME tb`
+     (mp_then (Pat `lookup_block l e.ise_caller.fn_blocks = SOME bb`)
+       mp_tac functionInlinerReachableCutsTheory.inline_edit_keep_phi_prefix_fields) >>
+   disch_then (qspec_then `source_bb` mp_tac) >> simp[] >> strip_tac >>
+   `phi_prefix_length sb.bb_instructions <= LENGTH tb.bb_instructions` by
+     metis_tac[venomExecProofsTheory.phi_prefix_length_le] >>
+   `phi_prefix_length tb'.bb_instructions = phi_prefix_length sb.bb_instructions` by
+     (qpat_x_assum `MAP _ _ = MAP _ _` (mp_tac o Q.AP_TERM `LENGTH`) >>
+      simp[listTheory.LENGTH_TAKE, venomExecProofsTheory.phi_prefix_length_le]) >>
+   `inline_path_rename path l = e.ise_block ==>
+      phi_prefix_length sb.bb_instructions <= e.ise_index` by
+     (strip_tac >> gvs[] >>
+      `(EL e.ise_index source_bb.bb_instructions).inst_opcode = INVOKE` by
+        (gvs[inline_site_edit_valid_def] >>
+         drule_all functionInlinerWfTheory.find_invoke_site_lookup >> simp[]) >>
+      spose_not_then assume_tac >>
+      `e.ise_index < phi_prefix_length source_bb.bb_instructions` by decide_tac >>
+      drule inline_phi_prefix_at >> simp[]) >>
+   simp[functionInlinerRoutedProvenanceTheory.inline_path_rename_append,
+     functionInlinerRoutedProvenanceTheory.inline_path_rename_def,
+     functionInlinerActivationTheory.inline_choice_rename_def, combinTheory.o_DEF] >>
+   irule functionInlinerSelectedContinuationTheory.inline_parameter_boundary_path_append >>
+   qexistsl [`e.ise_caller`, `phi_prefix_length sb.bb_instructions`,
+     `inline_path_rename path l`] >>
+   simp[inline_parameter_boundary_path_def, inline_parameter_boundary_def,
+     inline_keep_boundary_def] >>
+   conj_tac
+   >- (IF_CASES_TAC >> gvs[] >> decide_tac) >>
+   metis_tac[venomExecProofsTheory.phi_prefix_length_le]) >>
+  `MEM (inline_path_rename path l) (fn_labels e.ise_callee)` by
+    metis_tac[venomExecPropsTheory.lookup_block_label,
+      venomExecPropsTheory.lookup_block_MEM, venomInstTheory.fn_labels_def,
+      listTheory.MEM_MAP] >>
+  qpat_assum `lookup_block _ e.ise_callee.fn_blocks = SOME tb`
+    (mp_then (Pat `lookup_block l e.ise_callee.fn_blocks = SOME bb`)
+      mp_tac functionInlinerReachableCutsTheory.inline_edit_enter_phi_prefix_fields) >>
+  disch_then (qspec_then `source_bb` mp_tac) >> simp[] >> strip_tac >>
+  `phi_prefix_length sb.bb_instructions <= LENGTH tb.bb_instructions` by
+    metis_tac[venomExecProofsTheory.phi_prefix_length_le] >>
+  `phi_prefix_length tb'.bb_instructions = phi_prefix_length sb.bb_instructions` by
+    (qpat_x_assum `MAP _ _ = MAP _ _` (mp_tac o Q.AP_TERM `LENGTH`) >>
+     simp[listTheory.LENGTH_TAKE, venomExecProofsTheory.phi_prefix_length_le]) >>
+  `LENGTH (FST (inline_cell_prefix e source_bb tb
+       (phi_prefix_length sb.bb_instructions))) = phi_prefix_length sb.bb_instructions` by
+    (irule inline_phi_cell_prefix_length >> simp[]) >>
+  simp[functionInlinerRoutedProvenanceTheory.inline_path_rename_append,
+    functionInlinerRoutedProvenanceTheory.inline_path_rename_def,
+    functionInlinerActivationTheory.inline_choice_rename_def, combinTheory.o_DEF] >>
+  irule functionInlinerSelectedContinuationTheory.inline_parameter_boundary_path_append >>
+  qexistsl [`e.ise_callee`, `phi_prefix_length sb.bb_instructions`,
+    `inline_path_rename path l`] >>
+  simp[inline_parameter_boundary_path_def, inline_parameter_boundary_def] >>
+  metis_tac[venomExecProofsTheory.phi_prefix_length_le]
+QED
