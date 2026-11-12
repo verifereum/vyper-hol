@@ -112,9 +112,7 @@ Theorem widened_target_store_gas_outcome:
     ((dst,SOME loc,SOME (ValPT dty)),st) /\
   compile_assign_value cenv dst loc (vv_operand vv) (is_word_type dty)
     (vv_location vv) dty sty
-    (case dty of ArrayT et (Dynamic _) =>
-       SOME ((type_memory_bytes cenv et + 31) DIV 32, type_memory_bytes cenv et)
-     | _ => NONE) (type_memory_bytes cenv dty) st = ((),sf) /\
+    (type_memory_bytes cenv dty) st = ((),sf) /\
   ci_mono sa sv /\ ci_mono sv st /\
   stmt_state_rel ctx func cenv cx es s0 /\ local_ptrs_reserved cenv sa /\
   local_ptrs_reserved cenv sv /\ local_ptrs_reserved cenv st /\

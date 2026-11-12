@@ -511,15 +511,12 @@ Definition sub_layout_def:
 End
 
 (* w points k bytes into the data of an immutable of the module being
-   lowered, and tv is the value of type t that sits there: either inside
-   the immutable's value at es (sub_layout), where immutables_rel says the
-   Venom state keeps it, or, in the constructor, in the staged immutables
-   buffer of s within the immutable's bytes.  The second form is for an
-   element popped from an array inside the immutable: it is past the
-   array's new length, so no longer part of the immutable's value, but the
-   pop leaves its bytes in the buffer, as storage's pop leaves its dead
-   slots (storage_holds).  The immutable's bytes end below 2 ** 256, so a
-   load reads at off + k itself.  No invariant gives that bound yet:
+   lowered, and tv is the value of type t that sits there, inside the
+   immutable's value at es (sub_layout), where immutables_rel says the
+   Venom state keeps it.  It does not read s: a pop() of an immutable's
+   member, whose element would be left past the array's new length, is
+   rejected (allocLimits' target_in_immutables).  The immutable's bytes
+   end below 2 ** 256, so a load reads at off + k itself.  No invariant gives that bound yet:
    immutables_rel at runtime bounds the offset only by the data section's
    length, so a producer of a code pointer needs a compile-env clause
    bounding ImmutableLoc offsets. *)
@@ -535,9 +532,7 @@ Definition immutable_holds_def:
                | SOME imms => get_source_immutables cenv.ce_module imms)
               name = SOME (itv, iv) /\
       evaluate_type (get_tenv cx) t = SOME tvt /\
-      (sub_layout itv iv k tvt v \/
-       cenv.ce_is_ctor /\ k + type_memory_size tvt <= type_memory_size itv /\
-       val_in_memory tvt v (off + k) s.vs_memory) /\
+      sub_layout itv iv k tvt v /\
       value_has_type tvt v /\
       read_result cx tv es = (INL v, es)
 End
