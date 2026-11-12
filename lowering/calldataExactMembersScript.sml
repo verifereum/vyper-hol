@@ -1,6 +1,6 @@
 Theory calldataExactMembers
 Ancestors
-  calldataMembers calldataExactMemberFrame abiEncoderInput exprLoweringProps abiDecoderAppend emitHelperProps abiEncoder compileEnv fragExec fragExecMem list rich_list arithmetic
+  calldataExactAggregateSource calldataReconstruction typedCopyTuplePtr exprSimAggregateEncoding exprSimAggregateLoops calldataMembers calldataExactMemberFrame abiEncoderInput exprLoweringProps abiDecoderAppend emitHelperProps abiEncoder compileEnv fragExec fragExecMem list rich_list arithmetic
 
 Theorem calldata_members_fixed_fn_bad_invariant_rule:
   !ctx fn dst src I Bad.
@@ -582,3 +582,87 @@ Resume calldata_members_owned_bad_intervals_tail[back_chain]:
 QED
 
 Finalise calldata_members_owned_bad_intervals_tail
+
+Definition exact_aggregate_pack_def:
+  exact_aggregate_pack TV ts member_ptrs cd root_addr build <=>
+  type_memory_size TV = SUM (MAP type_memory_size ts) /\
+  (!i. i < LENGTH ts /\ cd_decode F cd (EL i ts) (member_ptrs i) = NONE ==>
+    cd_decode F cd TV root_addr = NONE) /\
+  (!vs d mem. LENGTH vs = LENGTH ts /\
+    (!i. i < LENGTH ts ==>
+      cd_decode F cd (EL i ts) (member_ptrs i) = SOME (EL i vs) /\
+      value_has_type (EL i ts) (EL i vs) /\ val_wf (EL i ts) (EL i vs) /\
+      val_in_memory (EL i ts) (EL i vs)
+        (d + SUM (MAP type_memory_size (TAKE i ts))) mem) ==>
+    cd_decode F cd TV root_addr = SOME (build vs) /\
+    value_has_type TV (build vs) /\ val_wf TV (build vs) /\
+    val_in_memory TV (build vs) d mem)
+End
+
+Theorem exact_aggregate_pack_tuple:
+  exact_aggregate_pack (TupleTV ts) ts
+    (\i. cd_member_ptr F cd (EL i ts) root_addr (SUM (MAP tv_abi_size (TAKE i ts))))
+    cd root_addr (\vs. ArrayV (TupleV vs))
+Proof
+  rewrite_tac[exact_aggregate_pack_def] >> BETA_TAC >> conj_tac
+  >- simp[valueEncodingTheory.type_memory_size_def, valueEncodingProofsTheory.type_memory_size_list_sum] >>
+  conj_tac
+  >- (rpt strip_tac >> irule calldata_exact_tuple_source_none >> metis_tac[]) >>
+  rpt strip_tac
+  >- (irule calldata_exact_tuple_source_some >> metis_tac[]) >>
+  `LIST_REL value_has_type ts vs /\ tuple_in_memory vs ts d mem` by
+    (conj_tac
+     >- (simp[LIST_REL_EL_EQN] >> metis_tac[]) >>
+     irule tuple_in_memory_from_elements >> metis_tac[]) >>
+  drule_all calldata_tuple_values_typed_memory >> simp[]
+QED
+
+Theorem exact_aggregate_pack_fixed:
+  exact_aggregate_pack (ArrayTV tv (Fixed n)) (REPLICATE n tv)
+    (\i. cd_member_ptr F cd tv root_addr (i * tv_abi_size tv))
+    cd root_addr (\vs. ArrayV (make_array_value tv (Fixed n) vs))
+Proof
+  rewrite_tac[exact_aggregate_pack_def] >> BETA_TAC >> conj_tac
+  >- simp[valueEncodingTheory.type_memory_size_def, map_replicate, SUM_REPLICATE] >>
+  conj_tac
+  >- (rpt strip_tac >> gvs[EL_REPLICATE] >>
+      irule calldata_exact_fixed_source_none >> metis_tac[]) >>
+  simp[LENGTH_REPLICATE, EL_REPLICATE] >> rpt strip_tac
+  >- (irule calldata_exact_fixed_source_some >> metis_tac[]) >>
+  `EVERY (value_has_type tv) vs /\ elems_in_memory vs d tv mem` by
+    (conj_tac
+     >- (simp[EVERY_EL] >> metis_tac[]) >>
+     irule elems_in_memory_intro >> rpt strip_tac >>
+     first_x_assum (qspec_then `i` mp_tac) >>
+     `TAKE i (REPLICATE n tv) = REPLICATE i tv` by
+       simp[REPLICATE_GENLIST, TAKE_GENLIST, MIN_DEF] >>
+     simp[map_replicate, SUM_REPLICATE]) >>
+  drule_all calldata_fixed_values_typed_memory >> simp[]
+QED
+
+Theorem exact_aggregate_pack_struct:
+  exact_aggregate_pack (StructTV fs) (MAP SND fs)
+    (\i. cd_member_ptr F cd (EL i (MAP SND fs)) root_addr
+      (SUM (MAP tv_abi_size (TAKE i (MAP SND fs)))))
+    cd root_addr (\vs. StructV (ZIP (MAP FST fs,vs)))
+Proof
+  rewrite_tac[exact_aggregate_pack_def] >> BETA_TAC >> conj_tac
+  >- (simp[valueEncodingTheory.type_memory_size_def] >>
+      Induct_on `fs` >> simp[valueEncodingTheory.type_memory_size_def] >>
+      gen_tac >> PairCases_on `h` >> simp[valueEncodingTheory.type_memory_size_def]) >>
+  conj_tac
+  >- (rpt strip_tac >> gvs[EL_MAP] >>
+      irule calldata_exact_struct_source_none >> metis_tac[]) >>
+  simp[EL_MAP] >> rpt strip_tac >> gvs[EL_MAP]
+  >- (irule calldata_exact_struct_source_some >> metis_tac[]) >>
+  `tuple_in_memory vs (MAP SND fs) d mem` by
+    (irule tuple_in_memory_from_elements >> simp[EL_MAP] >> metis_tac[]) >>
+  `fields_in_memory (ZIP (MAP FST fs,vs)) fs d mem` by
+    (qspecl_then [`MAP FST fs`, `MAP SND fs`, `vs`, `d`, `mem`] mp_tac
+      struct_tuple_memory_post >> simp[GSYM UNZIP_MAP, listTheory.ZIP_UNZIP]) >>
+  `LIST_REL (\nt nv. FST nt = FST nv /\ value_has_type (SND nt) (SND nv))
+    fs (ZIP (MAP FST fs,vs))` by
+    (simp[LIST_REL_EL_EQN, EL_ZIP, EL_MAP] >> metis_tac[]) >>
+  drule_all calldata_struct_values_typed_memory >> simp[]
+QED
+
