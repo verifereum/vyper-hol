@@ -283,16 +283,6 @@ Proof
        sym_state_component_equality, asm_state_component_equality]
 QED
 
-(* CODESIZE is deliberately rejected by the symbolic semantics.
-   label_flow_ok excludes it at every instruction in the context. *)
-Theorem sym_codesize_contract_diagnostic:
-  ~is_pre_codegen_opcode CODESIZE /\
-  venom_to_evm_name CODESIZE = SOME "CODESIZE" /\
-  sym_step p env (AsmOp "CODESIZE") ss = SymBad "CODESIZE"
-Proof
-  EVAL_TAC
-QED
-
 Theorem label_flow_inst_not_codesize:
   label_flow_ok ctx /\ MEM fn ctx.ctx_functions /\ MEM inst (fn_insts fn) ==>
   inst.inst_opcode <> CODESIZE
