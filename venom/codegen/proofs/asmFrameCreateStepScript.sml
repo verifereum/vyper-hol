@@ -515,7 +515,7 @@ Theorem asm_frame_create_consume[local]:
   a.as_stack = value::off::sz::
     (case salt_opt of NONE => stk | SOME salt => salt::stk) /\
   EL a.as_pc prog = AsmOp (case salt_opt of NONE => "CREATE" | SOME salt => "CREATE2") /\
-  w2n sz <= 2 * max_code_size ==>
+  w2n sz <= 2 * max_code_size /\ ~a.as_call_ctx.cc_static ==>
   asm_step (SND (compute_label_offsets prog)) (build_offset_to_pc prog)
     (EL a.as_pc prog) a =
   asm_consume_create_outcome (request_of s) stk
@@ -562,6 +562,8 @@ Proof
   `next_opcode c = SOME (case salt_opt of NONE => Create | SOME salt => Create2)` by
     (drule_at (Pat `asm_evm_rel _ _ _`) asm_frame_create_decode >> simp[] >>
      Cases_on `salt_opt` >> gvs[]) >>
+  `~a.as_call_ctx.cc_static` by
+    (drule_all evmStepSimTheory.asm_evm_rel_static >> gvs[asm_frame_rel_def]) >>
   drule_all asm_frame_create_consume >> disch_tac >>
   `(request_of s).cr_kind <> MessageCall /\
    (request_of s).cr_kind <> DelegateMessageCall /\ ~(request_of s).cr_static` by
@@ -793,7 +795,8 @@ Theorem asm_frame_create_failure_starved:
     (case salt_opt of NONE => stk | SOME salt => salt::stk) /\
   s.contexts = (c,rb)::rest /\
   step_create (IS_SOME salt_opt) s = (INR e,u) ==>
-  ?r t. run_call s = SOME (r,t) /\ frame_resource_starved es0 r t
+  ?r t. run_call s = SOME (r,t) /\ frame_resource_starved es0 r t /\
+        call_requests s = []
 Proof
   strip_tac >>
   `wf_state s /\ (?d. s.msdomain = Collect d) /\ ~c.msgParams.static /\
@@ -827,14 +830,17 @@ Proof
     (irule asm_create_step_terminal >> metis_tac[]) >>
   `!address. c.msgParams.outputTo <> Code address` by
     gvs[asm_evm_rel_def] >>
-  `?r t. run_call s = SOME (r,t) /\ frame_resource_starved s r t` by
+  `?r t. run_call s = SOME (r,t) /\ frame_resource_starved s r t /\
+         call_requests s = []` by
     (Cases_on `rest`
      >- (drule_all asm_handle_step_oog_singleton >> disch_tac >>
          `step s = (INR (SOME OutOfGas), u with contexts :=
            [(p with <|gasUsed := p.msgParams.gasLimit; returnData := []|>,rb)])` by
            metis_tac[] >>
+         `call_trace s = []` by
+           (drule frame_obs_terminal >> asm_simp_tac (srw_ss()) []) >>
          drule asm_run_call_stops_after_step >> simp[] >> strip_tac >>
-         simp[frame_resource_starved_def, frame_outcome_def] >>
+         simp[frame_resource_starved_def, frame_outcome_def, call_requests_def] >>
          qexistsl_tac [`OutOfGas`, `[]`, `[]`] >> simp[]) >>
      PairCases_on `h` >> rename1 `s.contexts = (c,rb)::(h0,h1)::saved` >>
      `?mr. c.msgParams.outputTo = Memory mr` by
@@ -850,8 +856,11 @@ Proof
        (h0 with <|pc := SUC h0.pc; stack := 0w::h0.stack; returnData := [];
          memory := buffer_write mr.offset [] h0.memory|>,h1)::saved; rollback := rb|>)` by
        simp[vfmExecutionTheory.vfm_abort_def] >>
+     `call_trace s = []` by
+       (drule frame_obs_terminal >> asm_simp_tac (srw_ss()) []) >>
      drule asm_run_call_stops_after_step >> simp[] >> strip_tac >>
-     simp[frame_resource_starved_def, frame_outcome_def] >> metis_tac[]) >>
+     simp[frame_resource_starved_def, frame_outcome_def, call_requests_def] >>
+     metis_tac[]) >>
   goal_assum (drule_at Any) >> simp[] >>
   qpat_x_assum `asm_frame_rel _ _ _ _ _` mp_tac >>
   simp[asm_frame_rel_def] >> strip_tac >>

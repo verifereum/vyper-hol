@@ -18,13 +18,27 @@ Ancestors
   allocLimits compileVyper compileEnv supportedExprTraverse
   supportedStmtTraverse vyperAST list
 
+Theorem alloc_limits_expr_not_extcode:
+  alloc_limits_expr cenv e ==> ~is_extcode e
+Proof
+  Cases_on `e` >> simp[exprLoweringTheory.is_extcode_def] >>
+  rename1 `Builtin ty bi es` >> Cases_on `bi` >>
+  simp[exprLoweringTheory.is_extcode_def, Once alloc_limits_expr_def] >>
+  rename1 `Acc item` >> Cases_on `item` >>
+  simp[exprLoweringTheory.is_extcode_def, Once alloc_limits_expr_def]
+QED
+
 Theorem lowered_value_type_struct_fields:
   !c e c'. c'.ce_struct_fields = c.ce_struct_fields /\
               c'.ce_func_return_type = c.ce_func_return_type ==>
            lowered_value_type c' e = lowered_value_type c e
 Proof
   ho_match_mp_tac exprLoweringTheory.lowered_value_type_ind >> rpt strip_tac >>
-  gvs[exprLoweringTheory.lowered_value_type_def]
+  gvs[exprLoweringTheory.lowered_value_type_def] >>
+  Cases_on `LENGTH args = 1 /\ ~ensure` >> gvs[] >>
+  `MAP (lowered_value_type c') args = MAP (lowered_value_type c) args` by
+    (irule MAP_CONG >> rw[] >> metis_tac[]) >>
+  CONV_TAC (DEPTH_CONV ETA_CONV) >> gvs[]
 QED
 
 Theorem ext_call_alloc_ok_struct_fields:
@@ -61,38 +75,44 @@ Theorem alloc_limits_struct_fields:
               c'.ce_func_return_type = c.ce_func_return_type /\
               c'.ce_modules = c.ce_modules /\ c'.ce_var_type = c.ce_var_type /\
               c'.ce_hashmap_info = c.ce_hashmap_info /\
-              c'.ce_module_var_type = c.ce_module_var_type ==>
+              c'.ce_module_var_type = c.ce_module_var_type /\
+              c'.ce_module_vars = c.ce_module_vars ==>
             alloc_limits_expr c' e = alloc_limits_expr c e) /\
   (!c tgt c'. c'.ce_struct_fields = c.ce_struct_fields /\
               c'.ce_func_return_type = c.ce_func_return_type /\
               c'.ce_modules = c.ce_modules /\ c'.ce_var_type = c.ce_var_type /\
               c'.ce_hashmap_info = c.ce_hashmap_info /\
-              c'.ce_module_var_type = c.ce_module_var_type ==>
+              c'.ce_module_var_type = c.ce_module_var_type /\
+              c'.ce_module_vars = c.ce_module_vars ==>
               alloc_limits_target c' tgt = alloc_limits_target c tgt) /\
   (!c es c'. c'.ce_struct_fields = c.ce_struct_fields /\
               c'.ce_func_return_type = c.ce_func_return_type /\
               c'.ce_modules = c.ce_modules /\ c'.ce_var_type = c.ce_var_type /\
               c'.ce_hashmap_info = c.ce_hashmap_info /\
-              c'.ce_module_var_type = c.ce_module_var_type ==>
+              c'.ce_module_var_type = c.ce_module_var_type /\
+              c'.ce_module_vars = c.ce_module_vars ==>
              alloc_limits_exprs c' es = alloc_limits_exprs c es) /\
   (!c opt c'. c'.ce_struct_fields = c.ce_struct_fields /\
               c'.ce_func_return_type = c.ce_func_return_type /\
               c'.ce_modules = c.ce_modules /\ c'.ce_var_type = c.ce_var_type /\
               c'.ce_hashmap_info = c.ce_hashmap_info /\
-              c'.ce_module_var_type = c.ce_module_var_type ==>
+              c'.ce_module_var_type = c.ce_module_var_type /\
+              c'.ce_module_vars = c.ce_module_vars ==>
               alloc_limits_opt c' opt = alloc_limits_opt c opt) /\
   (!c kes c'. c'.ce_struct_fields = c.ce_struct_fields /\
               c'.ce_func_return_type = c.ce_func_return_type /\
               c'.ce_modules = c.ce_modules /\ c'.ce_var_type = c.ce_var_type /\
               c'.ce_hashmap_info = c.ce_hashmap_info /\
-              c'.ce_module_var_type = c.ce_module_var_type ==>
+              c'.ce_module_var_type = c.ce_module_var_type /\
+              c'.ce_module_vars = c.ce_module_vars ==>
               alloc_limits_named_exprs c' kes = alloc_limits_named_exprs c kes)
 Proof
   ho_match_mp_tac alloc_limits_expr_ind >> rpt conj_tac >> rpt gen_tac >>
   rpt strip_tac >> drule type_memory_bytes_frame >> strip_tac >>
   drule ext_call_alloc_ok_struct_fields >> strip_tac >>
   drule_all target_subscript_overlap_frame >> strip_tac >>
-  simp[alloc_limits_expr_def, type_alloc_ok_def]
+  simp[alloc_limits_expr_def, type_alloc_ok_def,
+       exprLoweringTheory.copies_subscript_base_def]
 QED
 
 (* A slice's .code source, which the check skips for its address, is
@@ -190,19 +210,21 @@ Proof
   imp_res_tac alloc_limits_raise_exists >> simp[]
 QED
 
-(* The other checks read only the struct sizes too. *)
+(* The other checks read only the struct sizes and the modules too. *)
 Theorem alloc_limits_assignment_struct_fields:
   (!c g c'. c'.ce_struct_fields = c.ce_struct_fields /\
               c'.ce_func_return_type = c.ce_func_return_type /\
               c'.ce_modules = c.ce_modules /\ c'.ce_var_type = c.ce_var_type /\
               c'.ce_hashmap_info = c.ce_hashmap_info /\
-              c'.ce_module_var_type = c.ce_module_var_type ==>
+              c'.ce_module_var_type = c.ce_module_var_type /\
+              c'.ce_module_vars = c.ce_module_vars ==>
             alloc_limits_assignment c' g = alloc_limits_assignment c g) /\
   (!c gs c'. c'.ce_struct_fields = c.ce_struct_fields /\
               c'.ce_func_return_type = c.ce_func_return_type /\
               c'.ce_modules = c.ce_modules /\ c'.ce_var_type = c.ce_var_type /\
               c'.ce_hashmap_info = c.ce_hashmap_info /\
-              c'.ce_module_var_type = c.ce_module_var_type ==>
+              c'.ce_module_var_type = c.ce_module_var_type /\
+              c'.ce_module_vars = c.ce_module_vars ==>
              alloc_limits_assignments c' gs = alloc_limits_assignments c gs)
 Proof
   ho_match_mp_tac alloc_limits_assignment_ind >> rpt conj_tac >>
@@ -215,7 +237,8 @@ Theorem alloc_limits_frame:
               c'.ce_func_return_type = c.ce_func_return_type /\
               c'.ce_modules = c.ce_modules /\ c'.ce_var_type = c.ce_var_type /\
               c'.ce_hashmap_info = c.ce_hashmap_info /\
-              c'.ce_module_var_type = c.ce_module_var_type ==>
+              c'.ce_module_var_type = c.ce_module_var_type /\
+              c'.ce_module_vars = c.ce_module_vars ==>
     type_memory_bytes c' = type_memory_bytes c /\
     alloc_limits_expr c' = alloc_limits_expr c /\
     alloc_limits_target c' = alloc_limits_target c /\
@@ -247,6 +270,7 @@ Definition alloc_env_agree_def:
   alloc_env_agree c c' <=>
     c'.ce_struct_fields = c.ce_struct_fields /\
     c'.ce_event_info = c.ce_event_info /\
+    c'.ce_error_info = c.ce_error_info /\
     c'.ce_module_vars = c.ce_module_vars /\
     c'.ce_hashmap_info = c.ce_hashmap_info /\
     c'.ce_module_var_type = c.ce_module_var_type /\
@@ -255,6 +279,14 @@ Definition alloc_env_agree_def:
     c'.ce_var_type = c.ce_var_type /\
     c'.ce_func_mutability = c.ce_func_mutability
 End
+
+Theorem custom_error_alloc_ok_frame:
+  !c c' err. alloc_env_agree c c' ==>
+    custom_error_alloc_ok c' err = custom_error_alloc_ok c err
+Proof
+  rw[alloc_env_agree_def] >> drule type_memory_bytes_frame >> strip_tac >>
+  Cases_on `err` >> simp[custom_error_alloc_ok_def]
+QED
 
 Theorem alloc_env_agree_var_type:
   !c c' f. alloc_env_agree c c' ==>
@@ -313,8 +345,7 @@ Theorem lowered_value_type_frame:
            c'.ce_func_return_type = c.ce_func_return_type ==>
            lowered_value_type c' e = lowered_value_type c e
 Proof
-  recInduct exprLoweringTheory.lowered_value_type_ind >>
-  simp[exprLoweringTheory.lowered_value_type_def]
+  metis_tac[lowered_value_type_struct_fields]
 QED
 
 Theorem assign_alloc_ok_frame:
@@ -343,6 +374,7 @@ Proof
   ho_match_mp_tac alloc_limits_stmt_ind >> rpt conj_tac >> rpt gen_tac >>
   rpt strip_tac >> rename1 `alloc_env_agree c0 c1` >>
   drule assign_alloc_ok_frame >> strip_tac >>
+  drule custom_error_alloc_ok_frame >> strip_tac >>
   `!s. alloc_env_agree (decl_var_type c0 s) (decl_var_type c1 s)` by
     metis_tac[alloc_env_agree_decl_var_type] >>
   `!f. alloc_env_agree (c0 with ce_var_type updated_by f)
@@ -356,6 +388,7 @@ Proof
    c1.ce_modules = c0.ce_modules /\ c1.ce_var_type = c0.ce_var_type /\
    c1.ce_hashmap_info = c0.ce_hashmap_info /\
    c1.ce_module_var_type = c0.ce_module_var_type /\
+   c1.ce_module_vars = c0.ce_module_vars /\
    c1.ce_event_info = c0.ce_event_info` by gvs[alloc_env_agree_def] >>
   drule_all alloc_limits_frame >> strip_tac >>
   gvs[alloc_limits_stmt_def, log_alloc_ok_def] >> metis_tac[]
@@ -421,7 +454,8 @@ Proof
    cenv.ce_func_return_type = c.ce_func_return_type /\
    cenv.ce_modules = c.ce_modules /\ cenv.ce_var_type = c.ce_var_type /\
    cenv.ce_hashmap_info = c.ce_hashmap_info /\
-   cenv.ce_module_var_type = c.ce_module_var_type` by gvs[alloc_env_agree_def] >>
+   cenv.ce_module_var_type = c.ce_module_var_type /\
+   cenv.ce_module_vars = c.ce_module_vars` by gvs[alloc_env_agree_def] >>
   drule_all alloc_limits_frame >> strip_tac >>
   `alloc_limits_stmts cenv ss` by
     metis_tac[alloc_limits_stmt_struct_fields] >>

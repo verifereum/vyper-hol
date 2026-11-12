@@ -31,7 +31,7 @@
  *   eval_expr_tuple_subscript, base_vv_holds_loc, base_vv_at_mem,
  *   tuple_elem_ptr, tuple_vv_at_elem, sub_layout_tuple_elem,
  *   immutable_holds_tuple_elem, tuple_slots_in_range_el,
- *   tuple_elem_slots_in_range, tuple_prefix_el_bound, dead_bytes_list_el,
+ *   tuple_elem_slots_in_range, tuple_prefix_el_bound,
  *   storage_range_agree_tuple_elem, tuple_vv_holds_elem, tuple_base_read,
  *   tuple_vv_post, lookup_scopes_popped_keys_indexed,
  *   tuple_memory_no_snapshot
@@ -112,6 +112,7 @@ End
 Theorem compile_expr_tuple_subscript[local]:
   !cenv ty ann obj idx tys st vv st'.
     compile_expr cenv ty (Subscript ann obj idx) st = (vv, st') /\
+    expr_type obj = TupleT tys /\
     place_type cenv obj = ValPT (TupleT tys) ==>
     ?bvv st1 p.
       compile_expr cenv ty obj st = (bvv, st1) /\
@@ -121,6 +122,9 @@ Theorem compile_expr_tuple_subscript[local]:
       vv = LocatedValue ann (mk_ptr p (vv_loc bvv))
 Proof
   rpt gen_tac >> strip_tac >>
+  `~copies_subscript_base cenv obj idx` by
+    simp[exprLoweringTheory.copies_subscript_base_def,
+         vyperSubscriptOverlapTheory.subscript_overlap_def] >>
   qpat_x_assum `compile_expr _ _ (Subscript _ _ _) _ = _` mp_tac >>
   simp[Once (CONJUNCT1 compile_expr_raw_def), compile_expr_body_def,
        compile_subscript_def, compile_tuple_subscript_def, comp_bind_def,
@@ -477,7 +481,7 @@ Proof
     (qpat_x_assum `expr_body_pre _ _ _ _ _` mp_tac >>
      simp[expr_body_pre_def, Once well_typed_expr_def] >>
      rpt strip_tac >> gvs[] >>
-     drule type_place_expr_vtype_annotation >>
+     drule vyperTypeSystemTheory.type_place_expr_vtype_annotation >>
      Cases_on `vt` >> TRY (rename1 `Type t` >> Cases_on `t`) >>
      gvs[subscript_vtype_def, vtype_annotation_ok_def]) >>
   `?ity k. idx = Literal ity (IntL (&k)) /\ k < LENGTH tys /\ EL k tys = ann` by
@@ -504,7 +508,18 @@ Theorem eval_expr_tuple_subscript[local]:
         select_result cx (expr_type obj) r (ValueSubscript (IntV (&k))) od)
       es
 Proof
-  rpt gen_tac >> simp[Once evaluate_def, bind_def] >>
+  rpt gen_tac >>
+  `~subscript_reads_base cx obj (Literal ity (IntL (&k)))` by
+    (`!vs. ~any_written vs []` by
+       (Induct >> simp[vyperSubscriptOverlapTheory.any_written_def]) >>
+     simp[vyperInterpreterTheory.subscript_reads_base_def,
+          vyperSubscriptOverlapTheory.subscript_overlap_def,
+          vyperSubscriptOverlapTheory.expr_accesses_def,
+          vyperSubscriptOverlapTheory.accesses_expr_def,
+          vyperSubscriptOverlapTheory.reached_functions_def,
+          vyperTypeCallGraphTheory.int_calls_expr_def]) >>
+  qpat_assum `~subscript_reads_base _ _ _` (fn th =>
+    simp[th, Once evaluate_def, bind_def, return_def]) >>
   Cases_on `eval_expr cx obj es` >> rename1 `_ = (rr, es1)` >>
   Cases_on `rr` >> simp[] >>
   simp[Once evaluate_def, evaluate_literal_def, return_def, read_result_def]
@@ -762,22 +777,6 @@ Proof
   simp[vyperValueTheory.type_slot_size_def]
 QED
 
-Theorem dead_bytes_list_el[local]:
-  !tvs k st base j b.
-    dead_bytes_list st base tvs j b /\ k < LENGTH tvs /\
-    base + tuple_prefix_slot_size k tvs <= j /\
-    j < base + tuple_prefix_slot_size k tvs + type_slot_size (EL k tvs) ==>
-    dead_bytes st (base + tuple_prefix_slot_size k tvs) (EL k tvs) j b
-Proof
-  Induct >> simp[] >> rpt gen_tac >> strip_tac >>
-  qpat_x_assum `dead_bytes_list _ _ _ _ _` mp_tac >>
-  simp[Once dead_bytes_def] >> strip_tac >>
-  Cases_on `k` >> gvs[tuple_prefix_slot_size_def] >>
-  imp_res_tac (cj 1 accountsRelPropsTheory.dead_bytes_range) >>
-  imp_res_tac (cj 2 accountsRelPropsTheory.dead_bytes_range) >> gvs[] >>
-  first_x_assum drule >> disch_then (qspec_then `n` mp_tac) >>
-  impl_tac >- decide_tac >> rewrite_tac[arithmeticTheory.ADD_ASSOC]
-QED
 
 (* A tuple element of a value whose slots agree has its slots agree. *)
 Theorem storage_range_agree_tuple_elem[local]:
@@ -807,7 +806,7 @@ Proof
   `dead_bytes_list st (w2n w) tvs (w2n k) b` by
     (qpat_x_assum `dead_bytes _ _ (TupleTV _) _ _` mp_tac >>
      simp[Once dead_bytes_def]) >>
-  drule dead_bytes_list_el >>
+  drule accountsRelPropsTheory.dead_bytes_list_el >>
   disch_then (qspec_then `i` mp_tac) >> simp[]
 QED
 
@@ -837,7 +836,7 @@ Proof
   `dead_bytes_list st (w2n w) tvs j b` by
     (qpat_x_assum `_ ==> dead_bytes _ _ _ _ _` mp_tac >>
      simp[Once dead_bytes_def]) >>
-  drule dead_bytes_list_el >>
+  drule accountsRelPropsTheory.dead_bytes_list_el >>
   disch_then (qspec_then `i` mp_tac) >> simp[]
 QED
 

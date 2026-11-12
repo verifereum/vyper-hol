@@ -4,7 +4,7 @@ Theory localMemoryStorePath
 Ancestors
   stmtSimProps exprSimProps stmtSimDefs exprSimDefs loweringPosts
   list rich_list finite_map pred_set fragExec localPtrsProps loweringSlice
-  stmtSimDeclStore stmtSimDecl stmtSimDeclMem stmtSimAssignStore stmtSimAssign
+  stmtSimDeclStore stmtSimDecl stmtSimAssignStore stmtSimAssign
   valueCopy valueCopySource valueCopyBytes exprOperandVar freshWrites
   exprLowering stmtLowering emitHelper emitHelperProps exprLoweringProps
   compileEnv loweringStateRelDefs valueEncoding vyperInterpreter vyperState vyperValue vyperLookup
@@ -104,6 +104,9 @@ Theorem local_memory_store_path:
         (!a len. a + len <= w2n dw \/
            w2n dw + MIN (type_memory_size stv) (type_memory_size tyv) <= a ==>
            mem_bytes_at a len t.vs_memory = mem_bytes_at a len s.vs_memory) /\
+        alloca_frame cenv es sa s cenv
+          (es with scopes :=
+             pre ++ (env |+ (id, entry with <|value := v; popped := []|>)) :: rest) t /\
         gas_marked_path F ctx func s 0 (OK t)
 Proof
   rpt gen_tac >> disch_then (map_every assume_tac o CONJUNCTS) >>
@@ -159,12 +162,111 @@ Proof
   `gas_path ctx func s 0
     (OK (t with vs_inst_idx := LENGTH sb.cs_current_insts))` by
     (drule_all tuple_run_inst_seq_gas_path >> simp[]) >>
+  `MAP FDOM es1.scopes = MAP FDOM es.scopes` by
+    (drule find_containing_scope_structure >> strip_tac >>
+     simp[Abbr `es1`, FDOM_FUPDATE] >>
+     gvs[FLOOKUP_DEF, pred_setTheory.ABSORPTION_RWT]) >>
+  `alloca_frame cenv es sa s cenv es1 t` by
+    (irule alloca_frame_local_store >>
+     simp[] >> conj_tac >- metis_tac[] >>
+     qexistsl_tac [`w2n w`, `es`, `id`, `type_memory_size entry.type`, `s`, `sz`] >>
+     simp[alloca_frame_def] >>
+     rpt strip_tac >> fs[local_ptrs_reserved_def] >> metis_tac[]) >>
   qexistsl_tac [`w`, `t with vs_inst_idx := LENGTH sb.cs_current_insts`] >>
   simp[stmt_state_rel_inst_idx, lookup_var_def, gas_marked_path_def] >>
   qpat_x_assum `t with <|vs_vars := _; vs_memory := _|> = s` mp_tac >>
   simp[venom_state_component_equality] >>
   strip_tac >> gvs[same_blocks_def, lookup_var_def] >>
+  conj_tac >- first_assum ACCEPT_TAC >>
+  irule alloca_frame_same_state >> goal_assum (drule_at Any) >> simp[]
+QED
+
+Theorem alloc_copy_memory_framed_bounded_path:
+  !ctx func cenv cx es sa sm sb s0 p src sz sw tv v.
+    emit_inst ALLOCA [Lit (n2w sz)] [p] sa = ((), sm) /\
+    emit_void MCOPY [Var p; src; Lit (n2w sz)] sm = ((), sb) /\
+    stmt_state_rel ctx func cenv cx es s0 /\ fn_inst_ids_distinct func /\
+    MEM (mk_inst sa.cs_next_id ALLOCA [Lit (n2w sz)] [p]) (fn_insts func) /\
+    not_local_ptr cenv es.scopes p /\ sz < dimword (:256) /\
+    src <> Var p /\ eval_operand src s0 = SOME sw /\
+    val_in_memory tv v (w2n sw) s0.vs_memory /\ val_wf tv v /\
+    val_footprint tv v <= sz /\
+    fn_has_code sa sm func /\ fn_has_code sm sb func /\ ~s0.vs_halted /\
+    s0.vs_current_bb = sa.cs_current_bb /\
+    s0.vs_inst_idx = LENGTH sa.cs_current_insts ==>
+    ?s2 w. lookup_var p s2 = SOME w /\
+      FLOOKUP s2.vs_allocas sa.cs_next_id = SOME (w2n w, sz) /\
+      stmt_state_rel ctx func cenv cx es s2 /\
+      val_in_memory tv v (w2n w) s2.vs_memory /\
+      (!ad len. ad + len <= w2n w \/ w2n w + sz <= ad ==>
+         mem_bytes_at ad len s2.vs_memory = mem_bytes_at ad len s0.vs_memory) /\
+      (!x. x <> p ==> lookup_var x s2 = lookup_var x s0) /\
+      (!aid entry. FLOOKUP s0.vs_allocas aid = SOME entry ==>
+                   FLOOKUP s2.vs_allocas aid = SOME entry) /\
+      ~s2.vs_halted /\ s2.vs_current_bb = sb.cs_current_bb /\
+      s2.vs_inst_idx = LENGTH sb.cs_current_insts /\
+      gas_marked_path F ctx func s0 0 (OK s2) /\
+      w2n w + sz < dimword (:256)
+Proof
+  rpt strip_tac >> drule_all annassign_alloca_operand_framed_path >>
+  disch_then (qx_choosel_then [`s1`, `w`] strip_assume_tac) >>
+  `w2n w + sz < dimword (:256)` by
+    (`alloca_room ctx func s1 /\ alloca_next_valid s1` by
+       gvs[stmt_state_rel_def, venomMemDefsTheory.alloca_inv_def] >>
+     drule alloca_room_next_lt >>
+     fs[venomMemDefsTheory.alloca_next_valid_def] >>
+     first_x_assum (drule_then assume_tac) >> decide_tac) >>
+  `eval_operand src s1 = SOME sw` by simp[] >>
+  `val_in_memory tv v (w2n sw) s1.vs_memory` by simp[] >>
+  qabbrev_tac `inst = mk_inst sa.cs_next_id ALLOCA [Lit (n2w sz)] [p]` >>
+  `inst.inst_opcode = ALLOCA /\ inst.inst_outputs = [p] /\
+   inst.inst_id = sa.cs_next_id` by simp[Abbr `inst`, mk_inst_def] >>
+  `stmt_state_rel ctx func cenv cx es (mcopy (w2n w) (w2n sw) sz s1)` by
+    (irule stmt_state_rel_mcopy_alloca >> simp[] >>
+     qexistsl_tac [`sz`, `inst`, `p`] >> simp[]) >>
+  `val_in_memory tv v (w2n w) (mcopy (w2n w) (w2n sw) sz s1).vs_memory` by
+    (irule mcopy_val_in_memory >> simp[]) >>
+  `gas_marked_path F ctx func s1 0
+     (OK (mcopy (w2n w) (w2n sw) sz s1 with vs_inst_idx := SUC s1.vs_inst_idx))` by
+    (irule emit_inst_zero_marked_path >> simp[] >>
+     qexistsl_tac [`[Var p; src; Lit (n2w sz)]`, `MCOPY`, `[]`, `sm`, `sb`] >>
+     gvs[emit_void_def, emit_inst_def, step_inst_base_opcode_eqs, mk_inst_def, eval_operand_def,
+         is_terminator_def, wordsTheory.w2n_n2w]) >>
+  `sb.cs_current_bb = sm.cs_current_bb /\
+   LENGTH sb.cs_current_insts = SUC (LENGTH sm.cs_current_insts)` by
+    gvs[emit_void_def, comp_bind_def, fresh_id_def, comp_return_def, emit_def] >>
+  `gas_marked_path F ctx func s0 0
+     (OK (mcopy (w2n w) (w2n sw) sz s1 with vs_inst_idx := SUC s1.vs_inst_idx))` by
+    (drule_all gas_marked_path_then >> simp[]) >>
+  `!ad len. ad + len <= w2n w \/ w2n w + sz <= ad ==>
+     mem_bytes_at ad len (mcopy (w2n w) (w2n sw) sz s1).vs_memory =
+     mem_bytes_at ad len s0.vs_memory` by
+    (rpt strip_tac >> simp[valueEncodingPropsTheory.mcopy_mem_bytes_at_disjoint]) >>
+  qexistsl_tac [`mcopy (w2n w) (w2n sw) sz s1 with vs_inst_idx := SUC s1.vs_inst_idx`, `w`] >>
+  simp[stmt_state_rel_inst_idx] >>
+  gvs[mcopy_def, write_memory_with_expansion_def, LET_THM, lookup_var_def] >>
   first_assum ACCEPT_TAC
+QED
+
+Theorem alloca_frame_owned_copy:
+  stmt_state_rel ctx func cenv cx es s /\ local_ptrs_reserved cenv sa /\
+  (!x w. not_fresh_at sa x /\ lookup_var x s = SOME w ==>
+         lookup_var x t = SOME w) /\
+  venomMemDefs$allocas_non_overlapping t /\
+  (!aid entry. FLOOKUP s.vs_allocas aid = SOME entry ==>
+               FLOOKUP t.vs_allocas aid = SOME entry) /\
+  FLOOKUP t.vs_allocas bid = SOME (b,z) /\ sa.cs_next_id <= bid /\
+  (!ad len. ad + len <= b \/ b + z <= ad ==>
+     mem_bytes_at ad len t.vs_memory = mem_bytes_at ad len s.vs_memory) ==>
+  alloca_frame cenv es sa s cenv es t
+Proof
+  strip_tac >> irule alloca_frame_of_mem_frame >>
+  goal_assum (drule_at Any) >> simp[] >>
+  reverse conj_tac >- metis_tac[] >> rpt strip_tac >>
+  first_x_assum irule >>
+  `FLOOKUP t.vs_allocas aid = SOME (off,sz)` by metis_tac[] >>
+  `aid <> bid` by decide_tac >>
+  fs[venomMemDefsTheory.allocas_non_overlapping_def] >> metis_tac[]
 QED
 
 Theorem alloc_copy_memory_framed_path:
@@ -190,31 +292,7 @@ Theorem alloc_copy_memory_framed_path:
       s2.vs_inst_idx = LENGTH sb.cs_current_insts /\
       gas_marked_path F ctx func s0 0 (OK s2)
 Proof
-  rpt strip_tac >> drule_all annassign_alloca_operand_framed_path >>
-  disch_then (qx_choosel_then [`s1`, `w`] strip_assume_tac) >>
-  `eval_operand src s1 = SOME sw` by simp[] >>
-  `val_in_memory tv v (w2n sw) s1.vs_memory` by simp[] >>
-  qabbrev_tac `inst = mk_inst sa.cs_next_id ALLOCA [Lit (n2w sz)] [p]` >>
-  `inst.inst_opcode = ALLOCA /\ inst.inst_outputs = [p] /\
-   inst.inst_id = sa.cs_next_id` by simp[Abbr `inst`, mk_inst_def] >>
-  `stmt_state_rel ctx func cenv cx es (mcopy (w2n w) (w2n sw) sz s1)` by
-    (irule stmt_state_rel_mcopy_alloca >> simp[] >>
-     qexistsl_tac [`sz`, `inst`, `p`] >> simp[]) >>
-  `val_in_memory tv v (w2n w) (mcopy (w2n w) (w2n sw) sz s1).vs_memory` by
-    (irule mcopy_val_in_memory >> simp[]) >>
-  `gas_marked_path F ctx func s1 0
-     (OK (mcopy (w2n w) (w2n sw) sz s1 with vs_inst_idx := SUC s1.vs_inst_idx))` by
-    (irule emit_inst_zero_marked_path >> simp[] >>
-     qexistsl_tac [`[Var p; src; Lit (n2w sz)]`, `MCOPY`, `[]`, `sm`, `sb`] >>
-     gvs[emit_void_def, emit_inst_def, step_inst_base_opcode_eqs, mk_inst_def, eval_operand_def,
-         is_terminator_def, wordsTheory.w2n_n2w]) >>
-  `sb.cs_current_bb = sm.cs_current_bb /\
-   LENGTH sb.cs_current_insts = SUC (LENGTH sm.cs_current_insts)` by
-    gvs[emit_void_def, comp_bind_def, fresh_id_def, comp_return_def, emit_def] >>
-  `gas_marked_path F ctx func s0 0
-     (OK (mcopy (w2n w) (w2n sw) sz s1 with vs_inst_idx := SUC s1.vs_inst_idx))` by
-    (drule_all gas_marked_path_then >> simp[]) >>
-  qexistsl_tac [`mcopy (w2n w) (w2n sw) sz s1 with vs_inst_idx := SUC s1.vs_inst_idx`, `w`] >>
-  simp[stmt_state_rel_inst_idx] >>
-  fs[mcopy_def, write_memory_with_expansion_def, LET_THM, lookup_var_def]
+  rpt strip_tac >> drule_all alloc_copy_memory_framed_bounded_path >>
+  disch_then (qx_choosel_then [`s2`, `w`] strip_assume_tac) >>
+  qexistsl_tac [`s2`, `w`] >> simp[]
 QED

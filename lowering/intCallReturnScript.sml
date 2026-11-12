@@ -47,8 +47,7 @@ Theorem eval_expr_intcall_return:
     lookup_callable_function cx.in_deploy fn ts =
       SOME (mut, F, ps, dflts, ret, body) /\
     LENGTH es_args = LENGTH ps /\
-    (do rs <- eval_expr_results cx es_args; read_results cx rs od) st =
-      (INL vs, es) /\
+    eval_exprs cx es_args st = (INL vs, es) /\
     bind_arguments (get_tenv cx) ps vs = SOME env /\
     evaluate_type (get_tenv cx) ret = SOME tv /\
     eval_stmts (cx with stk updated_by CONS (src,fn)) body
@@ -58,11 +57,6 @@ Theorem eval_expr_intcall_return:
       (INL (Value v), es2 with scopes := es.scopes)
 Proof
   rpt strip_tac >>
-  qpat_x_assum `(do rs <- _; _ od) _ = _` mp_tac >>
-  simp[bind_def] >>
-  Cases_on `eval_expr_results cx es_args st` >>
-  rename1 `_ = (raw, st1)` >> Cases_on `raw` >> simp[] >> strip_tac >>
-  imp_res_tac read_results_state >> gvs[] >>
   drule_all eval_expr_intcall_unfold >>
   disch_then (fn th => simp[th]) >>
   drule safe_cast_well_typed >>

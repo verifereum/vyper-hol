@@ -64,7 +64,8 @@ End
 (* The concrete state cs against the symbolic state ss of program p: the
    same pc and everything else but the stack, memory and code; stacks of
    the same values; memory equal except at label bytes, which hold the
-   label's concrete bytes; and env matching the concrete code. *)
+   label's concrete bytes; the own code bytes the concrete code; and env
+   matching the concrete code. *)
 Definition asm_sym_rel_def:
   asm_sym_rel p env cs ss ⇔
     LIST_REL (λsv w. sval_conc (SND (compute_label_offsets p)) sv = SOME w)
@@ -78,6 +79,7 @@ Definition asm_sym_rel_def:
          i < LENGTH cs.as_memory ∧ j < 32 ∧
          ∃w. sval_conc (SND (compute_label_offsets p)) (Lab l d) = SOME w ∧
              EL i cs.as_memory = EL j (word_to_bytes w T)) ∧
+    ss.sym_own_code = cs.as_code ∧
     asm_data_env_ok p env cs.as_code
 End
 
@@ -516,6 +518,7 @@ Theorem sym_step_create_sim[local]:
     (asm_step_op otp name cs)
 Proof
   strip_tac >> gvs[MEM] >>
+  `ss.sym_base.as_call_ctx = cs.as_call_ctx` by gvs[asm_sym_rel_def] >>
   irule sym_step_concrete_good >> simp[concrete_underflow] >>
   simp[create_arities] >> rpt strip_tac >>
   Cases_on `cs.as_stack` >> gvs[] >>
@@ -530,7 +533,8 @@ Proof
       simp[asm_step_op_create, asm_exec_create_def, asm_op_mem_writes_def,
            mem_labels_clear_def, GSYM pred_setTheory.UNIV_DEF,
            finite_mapTheory.DRESTRICT_UNIV] >>
-      (* an oversized initcode faults before the create on both sides *)
+      (* a static frame or an oversized initcode faults before the create
+         on both sides *)
       IF_CASES_TAC
       >- (gvs[asm_sym_rel_def] >>
           simp[sym_lift_def, asm_sym_step_rel_def, sym_obs_def, sym_init_def]) >>
@@ -546,7 +550,8 @@ Proof
   simp[asm_step_op_create, asm_exec_create2_def, asm_op_mem_writes_def,
        mem_labels_clear_def, GSYM pred_setTheory.UNIV_DEF,
        finite_mapTheory.DRESTRICT_UNIV] >>
-  (* an oversized initcode faults before the create on both sides *)
+  (* a static frame or an oversized initcode faults before the create on
+     both sides *)
   IF_CASES_TAC
   >- (gvs[asm_sym_rel_def] >>
       simp[sym_lift_def, asm_sym_step_rel_def, sym_obs_def, sym_init_def]) >>
@@ -591,6 +596,11 @@ Proof
   simp[asm_step_op_call, asm_exec_call_def, asm_op_mem_writes_def,
        mem_labels_clear_def, GSYM pred_setTheory.UNIV_DEF,
        finite_mapTheory.DRESTRICT_UNIV] >>
+  (* a static frame's CALL with value faults on both sides *)
+  IF_CASES_TAC
+  >- (gvs[asm_sym_rel_def] >>
+      simp[sym_lift_def, asm_sym_step_rel_def, sym_obs_def, sym_init_def]) >>
+  rewrite_tac[COND_CLAUSES] >>
   irule related_call_completion >> simp[] >>
   gvs[asm_op_mem_reads_def, log_table_def, mem_labels_hit_def, in_mem_range_def] >>
   metis_tac[]
@@ -847,10 +857,12 @@ Proof
   gvs[MEM] >> simp[asm_step_op_def, asm_step_arith_def] >>
   simp[asm_step_compare_def, asm_step_bitwise_def, asm_step_memory_def] >>
   gvs[asm_sym_rel_def] >>
+  (* a static frame faults on both sides, closed by the simp *)
+  Cases_on `cs.as_call_ctx.cc_static` >>
   simp[asm_sstore_def, asm_tstore_def, sym_lift_def, asm_next_def,
        asm_op_mem_writes_def, mem_labels_clear_def,
        GSYM pred_setTheory.UNIV_DEF, finite_mapTheory.DRESTRICT_UNIV,
-       asm_sym_step_rel_def, asm_sym_rel_def] >>
+       asm_sym_step_rel_def, asm_sym_rel_def, sym_obs_def, sym_init_def] >>
   conj_tac >- (qexists_tac `m` >> simp[]) >> metis_tac[]
 QED
 
@@ -903,6 +915,7 @@ Proof
   simp[asm_step_op_def, asm_step_arith_def, asm_step_compare_def] >>
   simp[asm_step_bitwise_def, asm_step_memory_def, asm_step_control_def] >>
   simp[asm_step_extcall_def] >> gvs[asm_sym_rel_def] >>
+  Cases_on `cs.as_call_ctx.cc_static` >>
   simp[asm_selfdestruct_def, sym_lift_def, asm_sym_step_rel_def,
        sym_obs_def, sym_init_def]
 QED
@@ -1240,6 +1253,11 @@ Proof
   drule_all related_memory_read >>
   disch_then (qspec_then `w2n off + w2n sz` assume_tac) >>
   `ss.sym_base.as_call_ctx = cs.as_call_ctx` by gvs[asm_sym_rel_def] >>
+  (* a static frame faults on both sides *)
+  Cases_on `cs.as_call_ctx.cc_static`
+  >- (gvs[asm_sym_rel_def] >>
+      simp[asm_log_def, sym_lift_def, asm_sym_step_rel_def, sym_obs_def,
+           sym_init_def]) >>
   simp[asm_log_def, listTheory.DROP_TAKE, listTheory.TAKE_TAKE_MIN] >>
   simp[mem_labels_clear_def, GSYM pred_setTheory.UNIV_DEF,
        finite_mapTheory.DRESTRICT_UNIV] >>
@@ -1303,7 +1321,7 @@ QED
 
 (* ===== One step: the opcodes with label cases ===== *)
 
-Theorem asm_sym_rel_pc[local]:
+Theorem asm_sym_rel_pc:
   asm_sym_rel p env cs ss ⇒
   ss.sym_base.as_pc = cs.as_pc ∧ LENGTH ss.sym_stack = LENGTH cs.as_stack
 Proof
@@ -1730,7 +1748,16 @@ Proof
       simp[sym_codecopy_def, asm_copy_to_mem_def, asm_sym_step_rel_def]) >>
   rename1 `ss.sym_stack = a::b::c::stk` >>
   Cases_on `a` >> Cases_on `b` >> Cases_on `c` >>
-  gvs[sym_codecopy_def, asm_sym_step_rel_def] >>
+  gvs[sym_codecopy_def, asm_sym_step_rel_def]
+  >~ [`asm_copy_to_mem (DROP (w2n src) ss.sym_own_code)`]
+  >- (`ss.sym_own_code = cs.as_code` by fs[asm_sym_rel_def] >>
+      gvs[sval_conc_def] >>
+      irule sym_copy_preserves >> simp[] >>
+      qmatch_goalsub_rename_tac `TAKE (w2n sz) (if sz = 0w then DROP (w2n src) _ else _)` >>
+      Cases_on `sz = 0w` >- simp[] >>
+      mp_tac (Q.INST [`n` |-> `w2n (sz:bytes32)`, `a` |-> `w2n (src:bytes32)`,
+                      `xs` |-> `cs.as_code`] sym_codecopy_slice) >>
+      simp[]) >>
   reverse IF_CASES_TAC >- simp[asm_sym_step_rel_def] >>
   `asm_data_env_ok p env cs.as_code` by fs[asm_sym_rel_def] >>
   drule_all sym_codecopy_address >> strip_tac >>
@@ -1766,7 +1793,7 @@ Proof
 QED
 
 (* A code label's offset fits a PUSH2 and maps back to the label. *)
-Theorem asm_static_wf_code_label[local]:
+Theorem asm_static_wf_code_label:
   asm_static_wf p ∧ INDEX_OF (AsmLabel l) p = SOME i ⇒
   ∃off. FLOOKUP (SND (compute_label_offsets p)) l = SOME off ∧
         off < 65536 ∧ FLOOKUP (build_offset_to_pc p) off = SOME i
@@ -1885,6 +1912,22 @@ Proof
   irule asm_sym_rel_next >> simp[]
 QED
 
+Theorem sym_codesize_sim[local]:
+  asm_sym_rel p env cs ss ⇒
+  asm_sym_step_rel p env (sym_step_op p env "CODESIZE" ss)
+    (asm_step_op otp "CODESIZE" cs)
+Proof
+  strip_tac >>
+  `LIST_REL (λsv w. sval_conc (SND (compute_label_offsets p)) sv = SOME w)
+     ss.sym_stack cs.as_stack ∧ ss.sym_own_code = cs.as_code`
+    by fs[asm_sym_rel_def] >>
+  simp[sym_step_op_def, asm_step_op_def, asm_step_arith_def,
+       asm_step_compare_def, asm_step_bitwise_def, asm_step_memory_def,
+       asm_step_control_def, asm_step_extcall_def, asm_step_copy_def,
+       asm_step_context_def, asm_push_val_def] >>
+  irule asm_sym_rel_next >> simp[sval_conc_def]
+QED
+
 Theorem sym_dup_sim[local]:
   asm_sym_rel p env cs ss ∧ ALOOKUP dup_table name = SOME n ⇒
   asm_sym_step_rel p env (sym_dup n ss) (asm_step_op otp name cs)
@@ -1900,7 +1943,7 @@ Proof
   irule asm_sym_rel_next >> simp[]
 QED
 
-Theorem LIST_REL_swap[local]:
+Theorem LIST_REL_swap:
   LIST_REL R l1 l2 ∧ n < LENGTH l1 ∧ 0 < n ⇒
   LIST_REL R (LUPDATE (HD l1) n (LUPDATE (EL n l1) 0 l1))
              (LUPDATE (HD l2) n (LUPDATE (EL n l2) 0 l2))
@@ -1946,7 +1989,7 @@ Proof
   Cases_on `name = "CODECOPY"`
   >- (simp[sym_step_op_def] >> irule sym_codecopy_sim >> simp[]) >>
   Cases_on `name = "CODESIZE"`
-  >- simp[sym_step_op_def, asm_sym_step_rel_def] >>
+  >- (gvs[] >> irule sym_codesize_sim >> simp[]) >>
   simp[sym_step_op_def] >>
   Cases_on `ALOOKUP dup_table name` >> simp[]
   >- (Cases_on `ALOOKUP swap_table name` >> simp[]
@@ -2023,7 +2066,7 @@ QED
 
 (* ===== Runs ===== *)
 
-Theorem asm_sym_rel_init[local]:
+Theorem asm_sym_rel_init:
   s.as_pc = 0 ∧ asm_data_env_ok p env s.as_code ⇒
   asm_sym_rel p env s (sym_init s)
 Proof

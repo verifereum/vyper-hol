@@ -2,7 +2,7 @@
 Theory annAssignPtrMemoryLayout
 Ancestors
  annAssignPtrFacts loweringSlice stmtSimProps stmtSimDefs
- stmtSimDeclMem stmtSimDecl exprLoweringProps
+ stmtSimDeclMem stmtSimDecl exprLoweringProps allocLimitsProps
  stmtLowering exprLowering emitHelper emitHelperProps context compileEnv
  loweringPosts fragExec venomInst venomState list rich_list finite_map
 Libs monadsyntax
@@ -20,7 +20,8 @@ Proof
    (qpat_x_assum `c with <|ce_vars := _; ce_var_type := _;
       ce_dynarray_capacity := _|> = cenv` mp_tac >>
     simp[compile_env_component_equality]) >>
- simp[type_memory_bytes_frame, oneline lowered_value_type_def]
+ conj_tac >- simp[type_memory_bytes_frame] >>
+ gen_tac >> irule allocLimitsPropsTheory.lowered_value_type_frame >> gvs[]
 QED
 
 Theorem annassign_memory_lowering_parts_ptr:
@@ -35,9 +36,6 @@ Theorem annassign_memory_lowering_parts_ptr:
  lower_value compile_expr cenv (expr_type e) e sA = (op,sB) /\
  compile_assign_value cenv (Var p) LocMemory op F (vv_location vv)
   vtyp (lowered_value_type cenv e)
-  (case vtyp of ArrayT elem_ty (Dynamic _) =>
-    SOME ((type_memory_bytes cenv elem_ty + 31) DIV 32,
-          type_memory_bytes cenv elem_ty) | _ => NONE)
   (type_memory_bytes cenv vtyp) sB = ((),sf)
 Proof
  rpt gen_tac >> strip_tac >>
@@ -68,9 +66,6 @@ Theorem annassign_memory_code_parts_ptr:
  lower_value compile_expr c (expr_type e) e sA = (op,sB) /\
  compile_assign_value c (Var p) LocMemory op F (vv_location vv) vtyp
   (lowered_value_type cenv e)
-  (case vtyp of ArrayT elem_ty (Dynamic _) =>
-    SOME ((type_memory_bytes c elem_ty + 31) DIV 32,
-          type_memory_bytes c elem_ty) | _ => NONE)
   (type_memory_bytes c vtyp) sB = ((),sf) /\
  local_ptrs_reserved c st /\ local_ptrs_reserved c sA /\ not_fresh_at sA p /\
  cs_extends st sA /\ cs_extends sA sB /\ cs_extends sB sf /\
@@ -93,5 +88,5 @@ Proof
   metis_tac[fn_has_code_split] >>
  qexistsl [`st`,`sA`,`sV`,`sB`,`vv`,`op`,
    `STRING #"%" (toString sa.cs_next_var)`] >> simp[] >>
- qpat_x_assum `compile_assign_value _ _ _ _ _ _ _ _ _ _ _ = _` mp_tac >> simp[]
+ qpat_x_assum `compile_assign_value _ _ _ _ _ _ _ _ _ _ = _` mp_tac >> simp[]
 QED

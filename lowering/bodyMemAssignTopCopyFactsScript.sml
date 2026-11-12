@@ -1,6 +1,7 @@
 (* Proof-only typing and layout boundaries for aggregate storage assignment. *)
 Theory bodyMemAssignTopCopyFacts
 Ancestors
+  supportedExprTraverse allocLimits allocLimitsProps
   bodyMemAssignTopWord bodySimStmtCases exprSimHyps
   vyperTypeEnv vyperStorageLayoutSafety supportedProgram
   supportedTypes supportedExprs supportedStmts supportedStmtTraverse
@@ -17,6 +18,7 @@ Libs
 
 Theorem topcopy_rhs_pre:
   !tops ctx cenv cx e env es ret_ty nsid env'.
+    body_stmt_safe tops (Assign (BaseTarget (TopLevelNameTarget nsid)) e) /\
     body_inv tops ctx cenv cx /\
     (!target. supported_stmt_expr_exists (expr_abi_decode_target_root target)
        (Assign (BaseTarget (TopLevelNameTarget nsid)) e) ==>
@@ -32,7 +34,19 @@ Proof
   rpt strip_tac >>
   `well_typed_expr env e` by
     gvs[type_stmt_def, atarget_accepts_def, AllCaseEqs()] >>
-  drule_then strip_assume_tac supported_expr_body_calls >>
+  qpat_assum `body_stmt_safe _ _` (strip_assume_tac o
+    SIMP_RULE std_ss [body_stmt_safe_def, supported_stmt_expr_exists_def,
+      supported_assignment_exists_def, supported_iterator_exists_def,
+      supported_assert_exists_def, supported_raise_exists_def,
+      supported_expr_exists_def, int_calls_stmt_def, int_calls_atarget_def,
+      int_calls_iterator_def, int_calls_assert_reason_def, int_calls_raise_reason_def,
+      listTheory.EVERY_APPEND, listTheory.EVERY_CONJ,
+      DE_MORGAN_THM, GSYM expr_has_evm_run_def]) >>
+  qpat_assum `stmt_exprs_ok _ _` (strip_assume_tac o
+    SIMP_RULE std_ss [stmt_exprs_ok_def, alloc_limits_stmt_def,
+      alloc_limits_iterator_def, alloc_limits_assert_def, alloc_limits_raise_def,
+      alloc_limits_expr_def]) >>
+  imp_res_tac alloc_limits_expr_not_extcode >>
   `supported_program tops /\ get_module_code cx NONE = SOME tops` by
     gvs[body_inv_def] >>
   `cx_tops cx = tops` by
@@ -133,28 +147,6 @@ Proof
   metis_tac[])
 QED
 
-Theorem topcopy_not_bytestring:
-  !tops t. supported_storage_type tops t ==> ~is_bytestring_type t
-Proof
-  Cases_on `t` >> simp[is_bytestring_type_def] >>
-  rename1 `BaseT bt` >> Cases_on `bt` >>
-  simp[is_bytestring_type_def, supported_storage_type_def,
-       Once supported_nested_type_def, supported_full_word_type_def] >>
-  rename1 `BytesT bd` >> Cases_on `bd` >>
-  simp[is_bytestring_type_def, supported_storage_type_def,
-       Once supported_nested_type_def, supported_full_word_type_def]
-QED
-
-Theorem topcopy_no_length_word:
-  !tops t. supported_storage_type tops t /\
-    (!elem n. t <> ArrayT elem (Dynamic n)) ==> ~has_length_word t
-Proof
-  rpt gen_tac >> strip_tac >>
-  drule topcopy_not_bytestring >>
-  Cases_on `t` >> simp[has_length_word_def, is_bytestring_type_def] >>
-  Cases_on `b` >> gvs[has_length_word_def, is_bytestring_type_def]
-QED
-
 Theorem topcopy_scalar_fit_equal[local]:
   !tops fuel t u.
     supported_scalar_type t /\
@@ -228,7 +220,7 @@ Proof
       drule topcopy_not_bytestring >>
       gvs[vyperTypeSystemTheory.well_typed_builtin_app_def,
           is_bytestring_type_def])
-  >- (rpt gen_tac >> strip_tac >>
+  >- (rpt gen_tac >> rpt strip_tac >>
       qpat_x_assum `expr_body_pre _ _ _ _ _` mp_tac >>
       simp[expr_body_pre_def, well_typed_expr_def,
            type_builtin_result_ok_def, expr_type_def] >> strip_tac >>
