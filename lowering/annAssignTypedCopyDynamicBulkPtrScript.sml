@@ -220,3 +220,35 @@ Proof
     comp_return_def, comp_bind_def, ADD_ASSOC, APPEND_ASSOC] >>
   strip_tac >> gvs[] >> simp[DROP_APPEND, DROP_DROP, ADD_ASSOC]
 QED
+
+Theorem annassign_dynamic_fast_payload_locations:
+  compile_copy_dynarray_typed ce dst ty cap src ty sa = ((),sb) /\
+  fn_has_code sa sb fn ==>
+  ?bb. lookup_block sa.cs_current_bb fn.fn_blocks = SOME bb /\
+    get_instruction bb (LENGTH sa.cs_current_insts+7) =
+      SOME (mk_inst (sa.cs_next_id+7) MUL
+        [Var ("%" ++ toString sa.cs_next_var);Lit (n2w (type_memory_bytes ce ty))]
+        ["%" ++ toString (sa.cs_next_var+5)]) /\
+    get_instruction bb (LENGTH sa.cs_current_insts+8) =
+      SOME (mk_inst (sa.cs_next_id+8) MCOPY
+        [Var ("%" ++ toString (sa.cs_next_var+4));
+         Var ("%" ++ toString (sa.cs_next_var+3));
+         Var ("%" ++ toString (sa.cs_next_var+5))] [])
+Proof
+  strip_tac >> drule annassign_dynamic_fast_compiler_suffix >> strip_tac >>
+  `EL (LENGTH sa.cs_current_insts+7) sb.cs_current_insts =
+    mk_inst (sa.cs_next_id+7) MUL
+      [Var ("%" ++ toString sa.cs_next_var);Lit (n2w (type_memory_bytes ce ty))]
+      ["%" ++ toString (sa.cs_next_var+5)]` by
+    (qpat_x_assum `DROP _ _ = _` (mp_tac o Q.AP_TERM `EL 0`) >>
+     simp[listTheory.EL_DROP]) >>
+  `EL (LENGTH sa.cs_current_insts+8) sb.cs_current_insts =
+    mk_inst (sa.cs_next_id+8) MCOPY
+      [Var ("%" ++ toString (sa.cs_next_var+4));
+       Var ("%" ++ toString (sa.cs_next_var+3));
+       Var ("%" ++ toString (sa.cs_next_var+5))] []` by
+    (qpat_x_assum `DROP _ _ = _` (mp_tac o Q.AP_TERM `EL 1`) >>
+     simp[listTheory.EL_DROP, ADD_ASSOC]) >>
+  gvs[fn_has_code_def, IS_PREFIX_APPEND] >>
+  simp[get_instruction_def, EL_APPEND1]
+QED
