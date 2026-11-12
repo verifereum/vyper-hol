@@ -4,7 +4,9 @@
  *)
 Theory o1LowerDloadRequestSimulation
 Ancestors
-  o1LowerDloadRequestRunner o1ContractLowerDloadSim o1RequestContract
+  o1LowerDloadRequestRunner o1LowerDloadRequestControl
+  o1LowerDloadRequestExec o1LowerDloadRequestEndpoints
+  o1LowerDloadRequestForward o1ContractLowerDloadSim o1RequestContract
   o1PassContract o1LowerDloadJointRelation o1LowerDloadRootEntry
   ptrDiscipline passSimulationDefs venomExecSemantics venomState
   venomExecProps venomInst o1LowerDloadSourceEntry list
@@ -42,4 +44,20 @@ Proof
   gvs[ld_request_result_rel_abort] >>
   qexists_tac `m` >> simp[] >>
   irule LIST_REL_imp_request_prefix_rel >> simp[]
+QED
+
+(* All recursive clauses retain the strengthened terminal observation. *)
+val ldRequestConclusion = snd (dest_imp (concl ld_request_runner_induction));
+
+Theorem ld_request_runner_simulation:
+  ^ldRequestConclusion
+Proof
+  MATCH_MP_TAC ld_request_runner_induction >>
+  conj_tac >- MATCH_ACCEPT_TAC ld_request_runner_step_clause >>
+  conj_tac
+  >- (MATCH_MP_TAC ld_request_runner_exec_conditional >> conj_tac
+      >- (rpt strip_tac >> drule_all ld_runner_abort_endpoint_requests >>
+          metis_tac[]) >>
+      MATCH_ACCEPT_TAC ld_runner_forward_endpoint_requests) >>
+  MATCH_ACCEPT_TAC ld_request_runner_run_clause
 QED

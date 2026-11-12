@@ -6,7 +6,7 @@
  *)
 Theory o1LowerDloadRequests
 Ancestors
-  o1ContractLowerDloadSim o1RequestContract o1PassContract ptrDiscipline
+  o1LowerDloadRequestSimulation o1RequestContract o1PassContract ptrDiscipline
   venomPassSchedule venomExecSemantics venomState list
 
 Theorem lower_dload_stage_abort_rq:
@@ -16,5 +16,6 @@ Theorem lower_dload_stage_abort_rq:
     o1_src_inv D C vs /\ callee_first names C.ctx_functions ==>
     ctx_abort_rq D C C' vs vs
 Proof
-  cheat
+  MATCH_MP_TAC lower_dload_stage_abort_rq_conditional >>
+  rpt gen_tac >> MATCH_ACCEPT_TAC (cj 3 ld_request_runner_simulation)
 QED
