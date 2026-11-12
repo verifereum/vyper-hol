@@ -5,24 +5,17 @@ Ancestors
   venomState venomInst venomWf venomWfProps fmpAnalysisDefs
   rich_list list arithmetic finite_map
 
-Theorem fmp_ledger_prefix:
-  !ps ks top. fmp_ledger_ok insts env s top (ps ++ ks) ==>
-    fmp_ledger_ok insts env s top ps
-Proof
-  Induct >> simp[fmp_ledger_ok_def] >> metis_tac[]
-QED
-
-Theorem fmp_ledger_prefix_frame:
+Theorem fmp_ledger_prefix_frame[local]:
   fmp_ledger_ok insts env s top regions /\
   (!r. MEM r (TAKE n regions) ==>
     lookup_var r.fr_mark t = lookup_var r.fr_mark s) ==>
   fmp_ledger_ok insts env t top (TAKE n regions)
 Proof
   strip_tac >> irule fmp_ledger_frame >> qexists `s` >> simp[] >>
-  irule fmp_ledger_prefix >> qexists `DROP n regions` >> simp[]
+  irule fmpLowerReclaimPlanTheory.fmp_ledger_prefix >> qexists `DROP n regions` >> simp[]
 QED
 
-Theorem fmp_ledger_link_prefix:
+Theorem fmp_ledger_link_prefix[local]:
   fmp_ledger_ok insts env s lo (ps ++ ks) /\
   fmp_ledger_link sm eb lo (ps ++ ks) /\
   fmp_sites_ok sm fmp0 raw0 lo raw_fmp ==>
@@ -67,7 +60,7 @@ Proof
   gvs[] >> res_tac >> decide_tac
 QED
 
-Theorem fmp_ledger_link_take:
+Theorem fmp_ledger_link_take[local]:
   fmp_ledger_ok insts env s lo regions /\
   fmp_ledger_link sm eb lo regions /\
   fmp_sites_ok sm fmp0 raw0 lo raw_fmp ==>
@@ -78,7 +71,7 @@ Proof
   qexistsl [`env`,`insts`,`DROP n regions`,`s`] >> simp[]
 QED
 
-Theorem fmp_transfer_phi_stack:
+Theorem fmp_transfer_phi_stack[local]:
   inst.inst_opcode = PHI ==>
   ?st'. fmp_transfer infos fn live env p inst (SOME st) = SOME st' /\
         st'.frs_stack = st.frs_stack
@@ -88,7 +81,7 @@ Proof
        fmp_callee_info_def, fmp_invoke_target_def, fmp_apply_effect_def]
 QED
 
-Theorem fmp_analysis_phi_stack:
+Theorem fmp_analysis_phi_stack[local]:
   !k st. fmp_reclaim_states infos fn = SOME states /\
   fmp_base_analyze (fn_insts fn) = SOME env /\ wf_function fn /\
   MEM bb fn.fn_blocks /\ k <= LENGTH bb.bb_instructions /\
@@ -112,7 +105,7 @@ Proof
   irule fmp_transfer_phi_stack >> simp[]
 QED
 
-Theorem fmp_transfer_jump_stack:
+Theorem fmp_transfer_jump_stack[local]:
   MEM inst.inst_opcode [JMP; JNZ; DJMP] ==>
   ?st'. fmp_transfer infos fn live env p inst (SOME st) = SOME st' /\
     st'.frs_stack = SND (fmp_pop_at infos fn live env p inst st)
@@ -156,7 +149,7 @@ Proof
   metis_tac[]
 QED
 
-Theorem fmp_dalloca_not_phi_output:
+Theorem fmp_dalloca_not_phi_output[local]:
   ssa_form fn /\ fmp_dalloca_output fn v /\
   MEM phi (fn_insts fn) /\ phi.inst_opcode = PHI ==>
   ~MEM v phi.inst_outputs

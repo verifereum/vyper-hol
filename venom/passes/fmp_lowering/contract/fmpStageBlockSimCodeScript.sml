@@ -71,7 +71,7 @@ Proof
   simp[arithmeticTheory.ADD_CLAUSES]
 QED
 
-Theorem exec_block_run_prefix:
+Theorem exec_block_run_prefix[local]:
   !n fuel ctx bb s s1.
     bb_well_formed bb /\ s.vs_inst_idx + n < LENGTH bb.bb_instructions /\
     run_insts fuel ctx (TAKE n (DROP s.vs_inst_idx bb.bb_instructions)) s =

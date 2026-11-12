@@ -8,7 +8,7 @@ Ancestors
   venomWf venomInst venomExecSemantics venomState
   rich_list finite_map list
 
-Theorem fmp_entry_lowered_analysis:
+Theorem fmp_entry_lowered_analysis[local]:
   fmp_stage_lowered infos ctx runner fn fn' /\
   fn.fn_fmp_signature = NONE ==>
   ?states. fmp_reclaim_states infos fn = SOME states
@@ -18,7 +18,7 @@ Proof
   metis_tac[analyze_fmp_reclaims_candidate]
 QED
 
-Theorem fmp_entry_effect_cases:
+Theorem fmp_entry_effect_cases[local]:
   !ins prev v u. phi_eff (SOME prev) v ins = SOME (Var u) ==>
     (u = v /\ EVERY (\q. ~MEM v q.inst_outputs) (collect_phis ins)) \/
     (?phi. MEM phi (collect_phis ins) /\ MEM v phi.inst_outputs /\
@@ -34,7 +34,7 @@ Proof
   metis_tac[]
 QED
 
-Theorem fmp_entry_effect_live:
+Theorem fmp_entry_effect_live[local]:
   wf_function fn /\ fn_inst_wf fn /\ ssa_form fn /\
   fmp_reclaim_states infos fn = SOME states /\
   MEM pl (cfg_analyze fn).cfg_dfs_pre /\
@@ -62,7 +62,7 @@ Proof
   gvs[EVERY_MEM] >> metis_tac[]
 QED
 
-Theorem fmp_entry_effect_tracked:
+Theorem fmp_entry_effect_tracked[local]:
   MEM bb fn.fn_blocks /\ ~retpc_var fn v /\
   phi_eff (SOME pl) v bb.bb_instructions = SOME (Var u) ==>
   ~retpc_var fn u
@@ -77,7 +77,7 @@ Proof
   gvs[retpc_var_def] >> metis_tac[copy_phi_var_phi]
 QED
 
-Theorem fmp_entry_jump_phis:
+Theorem fmp_entry_jump_phis[local]:
   wf_function fn /\ fn_inst_wf fn /\ ssa_form fn /\
   fmp_reclaim_states infos fn = SOME states /\
   MEM sb.vs_current_bb (cfg_analyze fn).cfg_dfs_pre /\
@@ -119,7 +119,7 @@ Proof
   metis_tac[lookup_block_mem]
 QED
 
-Theorem fmp_entry_jump_past_root:
+Theorem fmp_entry_jump_past_root[local]:
   fmp_stage_lowered infos ctx runner fn fn' /\
   fmp_stage_root infos ctx fn = SOME (rl,rp) /\
   lookup_block rl fn.fn_blocks = SOME bb /\
@@ -144,7 +144,7 @@ Proof
   decide_tac
 QED
 
-Theorem fmp_entry_jump_ledger:
+Theorem fmp_entry_jump_ledger[local]:
   wf_function fn /\ ssa_form fn /\
   fmp_reclaim_states infos fn = SOME states /\
   fmp_base_analyze (fn_insts fn) = SOME env /\
@@ -190,7 +190,7 @@ Proof
   metis_tac[fmp_analysis_stack_not_phi_output]
 QED
 
-Theorem fmp_entry_state_frame:
+Theorem fmp_entry_state_frame[local]:
   lookup_block s.vs_current_bb fn.fn_blocks = SOME bb /\
   enters_block fn s s1 ==>
   s1 = s with <|vs_vars := s1.vs_vars;
@@ -201,7 +201,7 @@ Proof
   disch_then (fn th => once_rewrite_tac[th]) >> simp[]
 QED
 
-Theorem fmp_entry_frame_from_geometry:
+Theorem fmp_entry_frame_from_geometry[local]:
   wf_function fn /\ fn_inst_wf fn /\ ssa_form fn /\
   fn.fn_fmp_signature = NONE /\
   lookup_block sb.vs_current_bb fn.fn_blocks = SOME pb /\

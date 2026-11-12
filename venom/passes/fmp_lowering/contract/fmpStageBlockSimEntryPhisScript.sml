@@ -4,7 +4,7 @@ Ancestors
   venomExecProofs venomExecSemantics venomState ptrDiscipline
   o1LowerDloadRelocationKernel finite_map list
 
-Theorem fmp_entry_operand_defined:
+Theorem fmp_entry_operand_defined[local]:
   fmp_env_rel sm fn live G tv s t /\ s.vs_labels = t.vs_labels /\
   eval_operand op s = SOME x ==>
   ?y. eval_operand op t = SOME y
@@ -13,7 +13,7 @@ Proof
   simp[eval_operand_def, lookup_var_def, fmp_env_rel_def] >> metis_tac[]
 QED
 
-Theorem fmp_entry_phis_defined:
+Theorem fmp_entry_phis_defined[local]:
   !ins s t s1.
   fmp_env_rel sm fn live G tv s t /\
   s.vs_labels = t.vs_labels /\ s.vs_prev_bb = t.vs_prev_bb /\
@@ -34,7 +34,7 @@ Proof
   simp[Once eval_phis_def, eval_one_phi_def]
 QED
 
-Theorem fmp_entry_operand_value:
+Theorem fmp_entry_operand_value[local]:
   fmp_env_rel sm fn live G tn.t_var s t /\ s.vs_labels = t.vs_labels /\
   (!v. op = Var v ==> MEM v live /\ ~retpc_var fn v) /\
   eval_operand op s = SOME x /\ eval_operand op t = SOME y ==>
@@ -50,7 +50,7 @@ Proof
   simp[fmp_value_rel_def, ld_value_agree_def, word_agree_except_def]
 QED
 
-Theorem fmp_entry_phis_env:
+Theorem fmp_entry_phis_env[local]:
   fmp_env_rel sm fn live G tn.t_var s t /\
   s.vs_labels = t.vs_labels /\ s.vs_prev_bb = t.vs_prev_bb /\
   (!v u. MEM v next /\ ~retpc_var fn v /\

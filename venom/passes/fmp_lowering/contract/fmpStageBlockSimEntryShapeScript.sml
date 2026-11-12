@@ -4,7 +4,7 @@ Ancestors
   cfgWf cfgHelpers livenessProofs fmpStepRewrite makeSsaCurrentLiveTransport
   venomExecSemantics venomState venomInst frameCfgBoundary list
 
-Theorem fmp_entry_jump_successor:
+Theorem fmp_entry_jump_successor[local]:
   MEM bi.inst_opcode [JMP; JNZ; DJMP] /\
   step_inst k C bi s = OK (jump_to lbl s) ==>
   MEM lbl (get_successors bi)
@@ -55,7 +55,7 @@ Proof
   metis_tac[]
 QED
 
-Theorem fmp_entry_indexed_phis:
+Theorem fmp_entry_indexed_phis[local]:
   !insts k s restores out leftover s'.
   fmp_lower_indexed infos ctx runner label k s restores insts =
     SOME (out,leftover,s') /\
@@ -100,7 +100,7 @@ Proof
   rpt strip_tac >> gvs[]
 QED
 
-Theorem fmp_entry_phi_plan_absent:
+Theorem fmp_entry_phi_plan_absent[local]:
   lookup_block lbl fn.fn_blocks = SOME bb /\
   n < phi_prefix_length bb.bb_instructions ==>
   ~((lbl,n) IN FDOM (fmp_stage_plan infos ctx fn))
