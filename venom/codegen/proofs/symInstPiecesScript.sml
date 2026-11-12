@@ -105,7 +105,10 @@ Theorem sym_phi_dead_cleanup_sim:
     ss'.sym_base.as_pc = ss.sym_base.as_pc + LENGTH (execute_plan initial_fmp (SOPoke d (Var x) :: ops)) /\
     (!b. ~R b ==> FLOOKUP ss'.sym_mem_labels b = FLOOKUP ss.sym_mem_labels b)
 Proof
-  simp[execute_plan_def, exec_stack_op_def] >> strip_tac >>
+  `execute_plan initial_fmp (SOPoke d (Var x) :: ops) =
+   execute_plan initial_fmp ops` by
+    simp[execute_plan_def, exec_stack_op_def] >>
+  pop_assum (fn th => rewrite_tac[th]) >> strip_tac >>
   `sym_kinds_ok cplan fn ret srest
     (ps with ps_stack := stack_poke d (Var x) ps.ps_stack) ss` by
     metis_tac[sym_phi_rename] >>
