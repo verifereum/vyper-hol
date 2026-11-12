@@ -253,8 +253,7 @@ Proof
   gvs[fmp_reclaim_analyze_fuel_def, AllCaseEqs()] >> metis_tac[]
 QED
 
-(* Every block of an accepted analysis is stable: processing it again
-   leaves the states as they are. *)
+(* An accepted analysis passed the PHI-readiness guard on every block. *)
 Theorem fmp_reclaim_states_phi_ready:
   fmp_reclaim_states infos fn = SOME states ==>
   EVERY (fmp_phi_ready_block (liveness_analyze fn)) fn.fn_blocks
@@ -262,6 +261,8 @@ Proof
   rw[fmp_reclaim_states_def] >> gvs[AllCaseEqs()]
 QED
 
+(* Every block of an accepted analysis is stable: processing it again
+   leaves the states as they are. *)
 Theorem fmp_reclaim_states_stable:
   fmp_reclaim_states infos fn = SOME states /\
   fmp_base_analyze (fn_insts fn) = SOME env /\
