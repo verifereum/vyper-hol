@@ -1193,7 +1193,7 @@ Proof
      POP_ASSUM_LIST (K ALL_TAC) >>
      simp[stmt_post_def, stmt_state_rel_def, state_rel_gas_obs, immutable_alloca_sep_def,
           alloca_frame_def] >>
-     metis_tac[]) >>
+     strip_tac >> rpt conj_tac >> first_assum ACCEPT_TAC) >>
   irule annassign_memory_normal_continuation >>
   qpat_assum `expr_post _ _ _ _ _ _ _ _ _ _ _ _ _` (irule_at Any) >>
   qpat_assum `declare_local _ _ _ _ = _` (irule_at Any) >>

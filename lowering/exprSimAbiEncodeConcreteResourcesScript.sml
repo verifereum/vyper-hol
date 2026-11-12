@@ -37,7 +37,9 @@ Proof
   `alloca_inv actual /\ alloca_room ctx func actual` by
     metis_tac[abi_window_setup_alloca_inv, abi_window_setup_room] >>
   `eval_operand src actual = SOME (n2w sb)` by
-    (fs[abi_builtin_encode_setup_frame_def] >> metis_tac[]) >>
+    (qpat_assum `abi_builtin_encode_setup_frame _ _ _ _ _ _ _`
+       (mp_tac o CONJUNCT1 o REWRITE_RULE [abi_builtin_encode_setup_frame_def]) >>
+     disch_then match_mp_tac >> conj_tac >> first_assum ACCEPT_TAC) >>
   pure_rewrite_tac[abi_encoder_window_pre_def] >>
   pure_asm_rewrite_tac[] >> metis_tac[]
 QED
