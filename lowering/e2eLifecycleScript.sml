@@ -91,7 +91,7 @@ QED
 Theorem call_external_function_trace_runtime_static_fields[local]:
   ~cx.in_deploy /\
   call_external_function_trace orc gobs am cx nr mut ts all_mods args dflts
-    vals body ret = (outcome, am_out, rqs, obs) ==>
+    vals fbody ret = (outcome, am_out, rqs, obs) ==>
   am_out.sources = am.sources /\ am_out.exports = am.exports /\
   am_out.layouts = am.layouts
 Proof
