@@ -15,6 +15,8 @@
  *)
 Theory fmpStageOpSimMem
 Ancestors
+  fmpStageOpSimMemReads fmpStageOpSimMemWrites fmpStageOpSimMemCopies
+  fmpStageOpSimMemEffects fmpStageOpSimMemCalls fmpStageOpSimMemCreates
   fmpStageOpBase fmpStageRel o1LowerDloadRelocationKernel o1LowerDloadShared
   ptrStaticDiscipline ptrDiscipline o1PassContract contextCodegenRel
   venomExecSemantics venomState venomInst
@@ -70,7 +72,13 @@ Theorem fmp_stage_sim_memory:
     | Abort ab se => dead_result_rel D r r'
     | _ => F
 Proof
-  cheat
+  strip_tac >>
+  Cases_on `MEM inst.inst_opcode [MLOAD; ILOAD; SHA3]`
+  >- (irule fmp_mem_reads_sim >> metis_tac[]) >>
+  Cases_on `MEM inst.inst_opcode [MSTORE; MSTORE8]`
+  >- (irule fmp_mem_writes_sim >> metis_tac[]) >>
+  irule fmp_mem_copies_sim >>
+  simp[] >> metis_tac[listTheory.MEM]
 QED
 
 (* Why: storage, transient storage and immutables agree up to their
@@ -121,7 +129,7 @@ Theorem fmp_stage_sim_effects:
     | Abort ab se => dead_result_rel D r r'
     | _ => F
 Proof
-  cheat
+  strip_tac >> irule fmp_mem_effects_sim >> metis_tac[]
 QED
 
 (* Why: an external call sees the same arguments (untainted scalars,
@@ -174,5 +182,8 @@ Theorem fmp_stage_sim_call:
     | Abort ab se => dead_result_rel D r r'
     | _ => F
 Proof
-  cheat
+  strip_tac >>
+  Cases_on `MEM inst.inst_opcode [CALL; STATICCALL; DELEGATECALL]`
+  >- (irule fmp_mem_calls_sim >> metis_tac[]) >>
+  irule fmp_mem_creates_sim >> simp[] >> metis_tac[listTheory.MEM]
 QED
