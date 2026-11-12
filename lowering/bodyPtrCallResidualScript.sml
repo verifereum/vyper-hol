@@ -2,11 +2,11 @@
  * The raw_log, raw_revert and extcall cases of bodyPtrCallCases, held as
  * residuals.
  *
- * compile_call still lowers RawLog and RawRevert to a bare INVALID here, so
- * neither case holds as defined: the source raw_log returns, the source
- * raw_revert raises RuntimeError "raw_revert", and INVALID matches neither.
- * The lowering is being ported on the S1 branch; once it lands, these are
- * proved like the other call cases.
+ * raw_revert is proved: compile_raw_revert evaluates the bytes operand and
+ * REVERTs with its payload, and rawRevertPtr lifts the operand's pointer
+ * simulation through that tail.  raw_log is proved the same way: rawLogPtr
+ * lifts the topics' and data operand's pointer simulations through
+ * compile_raw_log's fixed and dynamic LOG tails.
  *
  * extcall is false here twice over.  The lowering sends the arguments'
  * bound-sized encoding (abi_size_bound) where the source sends the exact
@@ -25,25 +25,35 @@
 Theory bodyPtrCallResidual
 Ancestors
   bodyPtrPreds vyperAST vyperInterpreter list
+  rawLogPtr rawRevertPtr exprSimRawRevertCore
 
 val _ = Parse.hide "body";
 
-(* RESIDUAL: false while RawLog lowers to INVALID; waits on the lowering
-   port. *)
+(* Proved via rawLogPtr: the operands' pointer simulations lift through
+   compile_raw_log. *)
 Theorem raw_log_case_ptr_residual:
   !cx v20 es v21.
     body_exprs_ptr_ok cx es ==> body_expr_ptr_ok cx (Call v20 RawLog es v21)
 Proof
-  cheat
+  rpt strip_tac >> simp[body_expr_ptr_ok_def] >>
+  rpt strip_tac >> drule_all raw_log_body_sim_ptr >> simp[]
 QED
 
-(* RESIDUAL: false while RawRevert lowers to INVALID; waits on the
-   lowering port. *)
+(* Proved via rawRevertPtr: the operand's pointer simulation lifts through
+   compile_raw_revert. *)
 Theorem raw_revert_case_ptr_residual:
   !cx v22 es v23.
     body_exprs_ptr_ok cx es ==> body_expr_ptr_ok cx (Call v22 RawRevert es v23)
 Proof
-  cheat
+  rpt gen_tac >> strip_tac >>
+  simp[Once body_expr_ptr_ok_def] >> rpt gen_tac >> strip_tac >>
+  drule raw_revert_pre_arg >> strip_tac >> gvs[] >>
+  qpat_x_assum `body_exprs_ptr_ok _ _`
+    (strip_assume_tac o REWRITE_RULE [body_exprs_ptr_ok_def]) >>
+  qpat_x_assum `body_expr_ptr_ok _ _`
+    (strip_assume_tac o ONCE_REWRITE_RULE [body_expr_ptr_ok_def]) >>
+  `expr_sim_ptr d ctx PG func cenv cx (expr_type e) e es'` by metis_tac[] >>
+  metis_tac[raw_revert_sim_ptr, raw_revert_vv_sim_ptr]
 QED
 
 (* RESIDUAL: false while extcall's calldata is bound-sized and the return
