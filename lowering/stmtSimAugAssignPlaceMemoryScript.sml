@@ -1010,7 +1010,7 @@ Proof
   Cases_on `q` >> simp[bind_def] >> strip_tac >> simp[]
 QED
 
-Theorem aug_place_completed_value_prefix[local]:
+Theorem aug_place_completed_value_prefix:
   gas_marked_exec memory (ctx,func)
     (a : evaluation_state -> value evaluation_result)
     (es,s0) left (INL v) mid (OK t) /\
