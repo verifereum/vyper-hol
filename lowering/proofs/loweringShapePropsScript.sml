@@ -14471,9 +14471,8 @@ Proof
        (package_external_fn tops trans nkeys src))` by
     (irule package_external_fn_shape_ok >> simp[]) >>
   PairCases_on `src` >>
-  drule classify_functions_external_source >> strip_tac >>
   `EVERY (\e. ~supported_expr_exists expr_shape_root e) src5` by
-    (fs[runtime_bodies_shape_ok_def] >> first_x_assum drule >> simp[]) >>
+    (fs[runtime_bodies_shape_ok_def] >> metis_tac[]) >>
   simp[package_external_group_def] >> IF_CASES_TAC >> simp[]
   >- (fs[external_group_shape_ok_def, compute_selector_def, IS_PREFIX_APPEND]) >>
   qmatch_asmsub_abbrev_tac `external_fn_shape_ok pkg` >>
