@@ -216,7 +216,7 @@ Theorem literal_make_array_action:
 Proof
   strip_tac >>
   `MakeArray (SOME et) n <> Len /\ MakeArray (SOME et) n <> Env MsgGas /\
-   ~precompile_builtin (MakeArray (SOME et) n) /\
+   ~precompile_builtin (MakeArray (SOME et) n) /\ code_slice_source (MakeArray (SOME et) n) elems = NONE /\
    MakeArray (SOME et) n <> Bop In /\ MakeArray (SOME et) n <> Bop NotIn /\
    builtin_args_length_ok (MakeArray (SOME et) n) (LENGTH elems)` by
     simp[precompile_builtin_def, builtin_args_length_ok_def] >>

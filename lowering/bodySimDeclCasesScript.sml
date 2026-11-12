@@ -100,6 +100,7 @@ Proof
    c.ce_hashmap_info = cenv.ce_hashmap_info /\
    c.ce_module_var_type = cenv.ce_module_var_type /\
    c.ce_module = cenv.ce_module /\
+   c.ce_modules = cenv.ce_modules /\
    c.ce_module_vars = cenv.ce_module_vars /\
    c.ce_func_return_type = cenv.ce_func_return_type /\
    c.ce_is_ctor = cenv.ce_is_ctor /\

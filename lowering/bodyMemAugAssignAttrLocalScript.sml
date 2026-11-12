@@ -700,7 +700,7 @@ Proof
        exec_pure2_def, eval_operand_def, wordsTheory.WORD_ADD_COMM]
 QED
 
-Theorem augassign_field_read_path_mem[local]:
+Theorem augassign_field_read_path_mem:
   emit_op MLOAD [dst] sa = (cur,sb) /\
   eval_operand dst s0 = SOME addr /\ w2n addr + 32 <= s0.vs_alloca_next /\
   fn_has_code sa sb func /\ fn_inst_ids_distinct func /\ ~s0.vs_halted /\
@@ -1048,6 +1048,9 @@ Resume compile_augassign_attr_local_mem[operator]:
   `word_value fv` by metis_tac[word_value_type_typed] >>
   `eval_operand (Var out) t = SOME (val_to_w256 fv)` by
     simp[exprSimPropsTheory.typed_val_to_w256_word_value] >>
+  `post_value_type cenv e = expr_type e` by
+    (irule loweringPostsTheory.post_value_type_word >>
+     metis_tac[word_value_type_word]) >>
   `eval_operand rhs u = SOME (val_to_w256 v)` by
     (irule expr_val_rel_word >> fs[expr_post_def] >>
      goal_assum (drule_at Any) >> simp[word_value_type_word]) >>
@@ -2140,7 +2143,7 @@ Proof
   conj_tac
   >- (gen_tac >>
       qpat_x_assum `body_expr_mem_ok cx e`
-        (mp_tac o REWRITE_RULE [body_expr_mem_ok_def]) >>
+        (mp_tac o CONJUNCT1 o REWRITE_RULE [body_expr_mem_ok_def]) >>
       disch_then (qspecl_then [`tops`, `ctx`, `func`, `cenv`, `env`, `ty`,
         `es with gas_obs := gs`] mp_tac) >> simp[body_inv_def]) >>
   conj_tac >- metis_tac[] >>

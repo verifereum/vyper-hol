@@ -38,10 +38,14 @@ End
    with the constructor's compile env; every immutable has its
    declared type in ce_module_var_type, where compile_get_target_ptr
    reads a place type; and distinct immutables' regions are disjoint,
-   as the section layout places them. *)
+   as the section layout places them.  The compile env's modules are the
+   source's, each listed once (so the overlap analysis and its call graph,
+   which scans every entry, see the source's code), and each module's
+   top-level names are distinct. *)
 Definition bare_globals_layout_def:
   bare_globals_layout is_ctor module_var_type
-      (module_vars:nsid |-> var_location) cx
+      (module_vars:nsid |-> var_location)
+      (modules:(num option # toplevel list) list) cx
       (globals:nsid |-> type) (assignable:nsid |-> type) <=>
     (!src id off. FLOOKUP module_vars (src,id) = SOME (ImmutableLoc off) ==>
        ?ty. FLOOKUP globals (src,id) = SOME ty) /\
@@ -58,7 +62,11 @@ Definition bare_globals_layout_def:
        evaluate_type (get_tenv cx) ty1 = SOME tv1 /\
        evaluate_type (get_tenv cx) ty2 = SOME tv2 ==>
        loweringStateRelDefs$regions_disjoint off1 (type_memory_size tv1)
-         off2 (type_memory_size tv2))
+         off2 (type_memory_size tv2)) /\
+    (!src. ALOOKUP modules src = get_module_code cx src) /\
+    (!src ts. get_module_code cx src = SOME ts ==>
+       ALL_DISTINCT (FLAT (MAP (toplevel_vtype_keys_toplevel src) ts))) /\
+    ALL_DISTINCT (MAP FST modules)
 End
 
 (* A constant of the main module: classify_functions substitutes every
@@ -129,7 +137,8 @@ Definition expr_sim_inv_def:
              !tv. evaluate_type (get_tenv cx) ty = SOME tv ==>
                   off + type_memory_size tv < dimword (:256)) /\
     bare_globals_layout cenv.ce_is_ctor cenv.ce_module_var_type
-      cenv.ce_module_vars cx env.bare_globals env.bare_global_assignable
+      cenv.ce_module_vars cenv.ce_modules cx env.bare_globals
+      env.bare_global_assignable
 End
 
 Theorem extend_local_bare_globals[simp]:

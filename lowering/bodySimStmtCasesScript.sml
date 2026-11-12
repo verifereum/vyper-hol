@@ -1326,7 +1326,7 @@ Proof
       strip_tac >> gvs[expr_type_def] >>
       drule storage_not_bytestring >>
       gvs[well_typed_builtin_app_def, is_bytestring_type_def])
-  >- (rpt gen_tac >> strip_tac >>
+  >- (rpt gen_tac >> rpt strip_tac >>
       qpat_x_assum `expr_body_pre _ _ _ _ _` mp_tac >>
       simp[expr_body_pre_def, well_typed_expr_def,
            type_builtin_result_ok_def, expr_type_def] >> strip_tac >>
@@ -2283,10 +2283,6 @@ Proof
   Cases_on `EXISTS (\g. ?nsid. g = BaseTarget (TopLevelNameTarget nsid) /\
     cx.in_deploy /\ IS_SOME (supported_immutable_type tops nsid)) gs`
   >- (irule immutable_deploy_tuple_assign >> metis_tac[]) >>
-  Cases_on `EXISTS (\g. ?nsid key.
-    g = BaseTarget (SubscriptTarget (TopLevelNameTarget nsid) key) /\
-    ~supported_pure_expr tops key) gs`
-  >- (irule tuple_assign_effectful_index >> metis_tac[]) >>
   `expr_body_pre cenv cx env e es` by
     (irule body_assign_tuple_rhs_pre >> metis_tac[]) >>
   drule_all tuple_places_typing >> strip_tac >>
@@ -2298,14 +2294,9 @@ Proof
     (drule_all body_expr_ok_case >>
      disch_then (qspec_then `func` strip_assume_tac) >>
      gvs[expr_sim_case_def] >> metis_tac[]) >>
-  `EVERY (\g. ?bt. g = BaseTarget bt /\ supported_target_pure tops bt /\
-    target_case F ctx func cenv cx bt /\ ~immutable_root cx bt /\
-    target_indices_pre cenv cx env bt) gs` by
-    (rw[EVERY_MEM] >>
-     drule_all tuple_places_member >> strip_tac >> gvs[] >>
-     conj_tac >- metis_tac[tuple_places_target_case] >>
-     metis_tac[tuple_places_indices_pre]) >>
+  drule_all tuple_places_targets_ready >> strip_tac >>
   irule compile_assign_tuple_places_stmt_frag >> simp[] >>
+  conj_tac >- first_assum ACCEPT_TAC >>
   qexistsl_tac [`env`, `tops`] >> simp[] >>
   metis_tac[tuple_places_component_bound, tuple_widened_component_bound]
 QED

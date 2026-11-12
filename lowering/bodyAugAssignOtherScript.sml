@@ -121,30 +121,6 @@ Proof
   ACCEPT_TAC immutable_deploy_augassign_frag
 QED
 
-(* ADMITTED: x op= e at a storage place whose indices have effects, as
-   targetPlaceSimCases' pop_nested_storage_effectful_sim. *)
-Theorem augassign_place_effectful_index_case:
-  !ctx func cx lctx RetQ cenv ret_ty env env' tops bindings ty bt bop e es.
-    (!id. target_root bt <> NameTarget id) /\ ~supported_target_pure tops bt /\
-    ((?b fld. bt = AttributeTarget b fld) \/ (?b k. bt = SubscriptTarget b k)) /\
-    body_inv tops ctx cenv cx /\
-    supported_stmt tops bindings (AugAssign ty bt bop e) /\
-    type_stmt env ret_ty (AugAssign ty bt bop e) = SOME env' /\
-    target_case F ctx func cenv cx bt /\
-    ~immutable_root cx bt /\ target_indices_pre cenv cx env bt /\
-    ((?s p s1 s2 cur s3 s4 ptv s5.
-        eval_target_place cx bt s = (INL p,s1) /\
-        read_place cx p s2 = (INL cur,s3) /\
-        place_type_value cx p s4 = (INL ptv,s5)) ==>
-     expr_sim_case F ctx func cenv cx e) /\
-    expr_body_pre cenv cx env e es ==>
-    stmt_frag ctx func cx lctx RetQ cenv
-      (stmt_env cenv lctx ret_ty (AugAssign ty bt bop e))
-      (eval_stmt cx (AugAssign ty bt bop e)) es
-Proof
-  cheat
-QED
-
 Theorem aug_storage_decl_some[local]:
   !ts vis mut id ty init.
     MEM (VariableDecl vis mut id ty init) ts /\
@@ -164,7 +140,7 @@ Proof
   first_x_assum drule >> strip_tac >> simp[]
 QED
 
-Theorem augassign_rhs_pre[local]:
+Theorem augassign_rhs_pre:
   body_inv tops ctx cenv cx /\ supported_expr tops e /\
   expr_sim_inv cenv cx env es /\
   type_stmt env ret_ty (AugAssign ty t bop e) = SOME env' /\
@@ -214,7 +190,7 @@ Proof
   metis_tac[body_expr_ok_case]
 QED
 
-Theorem augassign_toplevel_metadata[local]:
+Theorem augassign_toplevel_metadata:
   body_inv tops ctx cenv cx /\
   supported_aug_target tops bindings (TopLevelNameTarget (src,id)) /\
   expr_sim_inv cenv cx env es /\
@@ -285,7 +261,7 @@ Proof
             aug_place_supported_root_not_immutable]
 QED
 
-Theorem augassign_target_pre[local]:
+Theorem augassign_target_pre:
   body_inv tops ctx cenv cx /\
   supported_stmt tops bindings (AugAssign ty t bop e) /\
   ((?b fld. t = AttributeTarget b fld) \/ (?b k. t = SubscriptTarget b k)) /\
@@ -316,7 +292,7 @@ Proof
             optionTheory.IS_SOME_EXISTS]
 QED
 
-Theorem augassign_toplevel_success[local]:
+Theorem augassign_toplevel_success:
   body_inv tops ctx cenv cx /\
   supported_aug_target tops bindings (TopLevelNameTarget (src,id)) /\
   expr_sim_inv cenv cx env es /\
@@ -380,9 +356,8 @@ QED
    has no assignable type at runtime (augassign_immutable_runtime_untyped)
    and is immutable_deploy_augassign_case in the constructor; a field or
    element of a local (compile_augassign_place_memory_case); and a field or
-   element of a storage or transient variable, with pure indices
-   (compile_augassign_place_storage_case) or not
-   (augassign_place_effectful_index_case). *)
+   element of a storage or transient variable, any indices
+   (compile_augassign_place_storage_case). *)
 Theorem body_augassign_other_leaf:
   !cx ty t bop e tops bindings ctx func cenv env env' ret_ty lctx RetQ es.
     body_stmt_safe tops (AugAssign ty t bop e) /\
@@ -439,7 +414,5 @@ Proof
   `target_indices_pre cenv cx env bt` by metis_tac[augassign_target_pre] >>
   Cases_on `?id. target_root bt = NameTarget id`
   >- (irule compile_augassign_place_memory_case >> metis_tac[]) >>
-  Cases_on `supported_target_pure tops bt`
-  >- (irule compile_augassign_place_storage_case >> metis_tac[]) >>
-  irule augassign_place_effectful_index_case >> simp[] >> metis_tac[]))
+  irule compile_augassign_place_storage_case >> metis_tac[]))
 QED

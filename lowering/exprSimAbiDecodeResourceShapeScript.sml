@@ -1,7 +1,7 @@
 Theory exprSimAbiDecodeResourceShape
 Ancestors
   exprSimAbiDecodeResourceMutual exprSimAbiDecodeFramed exprSimAbiDecodeResourcePrims
-  exprSimAbiDecodeResource exprSimAbiDecodeShape exprSimAbiDecodeShapeProbe
+  exprSimAbiDecodeResource exprSimAbiDecodeShape exprSimAbiDecodeTraceSafe
   exprSimAbiDecodeTrace exprSimAbiGasBridge builtinAbi abiEncoder compileEnv
   emitHelper context venomInst pred_set sorting list fragExec
 

@@ -18,9 +18,11 @@ Theorem tuple_place_flag_unpack_outcome_open:
   sv.vs_inst_idx = LENGTH su.cs_current_insts /\
   expr_sim_inv cenv cx env ee /\
   LIST_REL (\g t. well_typed_atarget env g t) gs tys /\
-  EVERY (\g. ?bt. g = BaseTarget bt /\ supported_target_pure tops bt /\
-    target_case F ctx func cenv cx bt /\ ~immutable_root cx bt /\
-    target_indices_pre cenv cx env bt /\ call_evaluation_safe cx (int_calls_target bt)) gs /\
+  EVERY (\g. ?bt. g = BaseTarget bt /\ EVERY (supported_expr tops) (target_indices bt) /\
+    (body_base_target_ok cx bt ==> target_case F ctx func cenv cx bt) /\
+    ~immutable_root cx bt /\ target_indices_pre cenv cx env bt /\
+    call_evaluation_safe cx (int_calls_target bt)) gs /\
+  body_tuple_targets_ok cx gs vs /\
   assignable_type (get_tenv cx) (TupleT tys) /\ arg_types_fit ltys tys /\
   evaluate_type (get_tenv cx) (TupleT tys) = SOME (TupleTV tvs) /\
   (!j. j < LENGTH tys /\ ~is_word_type (EL j tys) ==>

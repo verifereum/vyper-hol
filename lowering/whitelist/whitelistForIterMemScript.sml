@@ -46,8 +46,94 @@ Ancestors
   whitelistForIterDynFrag stmtSimForArrayFrame exprSimSubscriptMap exprSimDefs loweringPosts
   stmtSimDefs gasOutcome gasSummary supportedStmts supportedExprTraverse vyperTypeSystem vyperState
   vyperInterpreter valueEncoding valueEncodingDefs valueEncodingProps valueEncodingProofs
-  stmtLowering exprLowering venomState exprSimPopImmutableTarget
+  stmtLowering exprLowering venomState
+  exprSimPopNestedLocalMemory vyperTargetPlaceWrite compileVyper vyperTypeInvariants vyperTypeContract vyperPureExpr abiEncoderMemory immutableValue immutableEncoding immutableEncodingProofs exprSimTopLevelImmutable gasSummary fragGasPath fragGasMode exprSimArrayIndex immutableCopyExecution varsExt freshWrites fragGasSeq fragGasSeqAbort exprOperandVar exprSimWordArgs exprBopSimProps bodySim targetPlaceSim targetPlaceSimCasesBase targetPlaceSimCases targetPlaceSimDefs exprSimHypsDefs exprSimDefs loweringPosts gasOutcome gasContext exprLowering exprLoweringProps compileEnv loweringStateRelDefs vyperAST vyperState vyperInterpreter vyperTypeSystem vyperTypeCallGraph venomState
   compileEnv loweringStateRelDefs exprLoweringProps list finite_map arithmetic words bodySimAugPlaceMemory
+
+(* Moved from exprSimPopImmutableTarget, deleted on the combined head:
+   a typed subscript path into a value in memory. *)
+Theorem imm_typed_step_memory[local]:
+  !tv v sub d ptv pv b mem.
+    value_has_type tv v /\ well_formed_type_value tv /\
+    mem_path_offset tv [sub] = SOME (d,ptv) /\
+    evaluate_subscripts tv v [sub] = INL pv /\
+    val_in_memory tv v b mem ==>
+    val_in_memory ptv pv (b+d) mem
+Proof
+  rpt gen_tac >> strip_tac >> Cases_on `sub`
+  >- ((rename1 `ValueSubscript idx` >> Cases_on `idx` >>
+       Cases_on `tv` >>
+       gvs[mem_path_offset_def, mem_step_offset_def, AllCaseEqs()] >>
+       Cases_on `v` >> gvs[vyperTypingTheory.value_has_type_def] >>
+       rename1 `ArrayV av` >> Cases_on `av` >>
+       gvs[vyperTypingTheory.value_has_type_def, evaluate_subscripts_def,
+           vyperValueOperationTheory.array_index_def, AllCaseEqs()])
+      >- (gvs[valueEncodingPropsTheory.val_in_memory_tuple] >>
+          `LENGTH l' = LENGTH l` by
+            metis_tac[vyperTypingTheory.values_have_types_length] >>
+          `!xs. type_memory_size_list xs = SUM (MAP type_memory_size xs)` by
+            (Induct >> simp[valueEncodingTheory.type_memory_size_def]) >>
+          gvs[listTheory.oEL_EQ_EL] >>
+          irule tupleMemoryLayoutTheory.tuple_in_memory_element >> simp[])
+      >- (Cases_on `b'` >>
+           gvs[vyperTypingTheory.value_has_type_def, mem_step_offset_def,
+               valueEncodingPropsTheory.val_in_memory_dynarray,
+               listTheory.oEL_EQ_EL] >>
+           drule exprSimAggregateEncodingTheory.elems_in_memory_EL >>
+           disch_then (qspec_then `Num i` mp_tac) >>
+           simp[AC arithmeticTheory.ADD_ASSOC arithmeticTheory.ADD_COMM])
+       >- (gvs[mem_step_offset_def,
+               valueEncodingPropsTheory.val_in_memory_sarray]) >>
+      gvs[mem_step_offset_def, valueEncodingPropsTheory.val_in_memory_sarray] >>
+      metis_tac[valueEncodingProofsTheory.kvs_in_memory_lookup]) >>
+  Cases_on `tv` >>
+  gvs[mem_path_offset_def, mem_step_offset_def, AllCaseEqs()] >>
+  Cases_on `v` >>
+  gvs[vyperTypingTheory.value_has_type_def, evaluate_subscripts_def,
+      valueEncodingPropsTheory.val_in_memory_struct, AllCaseEqs()] >>
+  qpat_x_assum `well_formed_type_value _` kall_tac >>
+  rpt (pop_assum mp_tac) >>
+  map_every qid_spec_tac [`b`, `pv`, `ptv`, `d`, `s`, `l'`, `l`] >>
+  Induct >> Cases_on `l'` >>
+  simp[vyperTypingTheory.value_has_type_def, mem_field_offset_def] >>
+  rpt gen_tac >> PairCases_on `h` >> PairCases_on `h'` >>
+  simp[vyperTypingTheory.value_has_type_def, mem_field_offset_def,
+       valueEncodingDefsTheory.val_in_memory_def] >>
+  rpt gen_tac >> strip_tac >>
+  Cases_on `h0 = s` >> gvs[AllCaseEqs()] >>
+  rpt strip_tac >> PairCases_on `z` >> gvs[] >>
+  first_x_assum drule_all >>
+  simp[AC arithmeticTheory.ADD_ASSOC arithmeticTheory.ADD_COMM]
+QED
+
+Theorem imm_typed_path_memory[local]:
+  !path tv v k ptv pv b mem.
+    value_has_type tv v /\ well_formed_type_value tv /\
+    mem_path_offset tv path = SOME (k,ptv) /\
+    evaluate_subscripts tv v path = INL pv /\
+    val_in_memory tv v b mem ==>
+    val_in_memory ptv pv (b+k) mem
+Proof
+  Induct >> rpt gen_tac >> strip_tac
+  >- gvs[mem_path_offset_def, evaluate_subscripts_def] >>
+  gvs[mem_path_offset_def, AllCaseEqs(), pairTheory.EXISTS_PROD] >>
+  `mem_path_offset tv [h] = SOME (p_1,p_2)` by
+    simp[mem_path_offset_def] >>
+  drule exprSimPropsTheory.mem_path_offset_sound >>
+  simp[vyperStateTheory.subscripts_type_def] >> strip_tac >>
+  gvs[AllCaseEqs()] >>
+  drule vyperPlaceStatePreservationTheory.evaluate_subscripts_cons_typed >>
+  disch_then (qspecl_then [`path`, `v`] mp_tac) >>
+  gvs[AllCaseEqs()] >> strip_tac >>
+  `val_in_memory p_2 v' (b + p_1) mem` by
+    (irule imm_typed_step_memory >> goal_assum (drule_at Any) >> simp[]) >>
+  `value_has_type p_2 v' /\ well_formed_type_value p_2` by
+    (metis_tac[vyperPlaceStatePreservationTheory.evaluate_subscripts_type,
+       vyperPlaceStatePreservationTheory.subscripts_type_well_formed,
+       exprSimPropsTheory.mem_path_offset_sound]) >>
+  first_x_assum drule_all >>
+  rewrite_tac[arithmeticTheory.ADD_ASSOC]
+QED
 
 (* A statement fragment as stmt_frag says, that also keeps Q: started in a
    state where Q holds, it ends where Q holds.  stmt_frag_keep (K T) is

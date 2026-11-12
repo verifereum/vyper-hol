@@ -11,7 +11,7 @@
  *)
 Theory ctorDeployShape
 Ancestors
-  list ctorDeployDefs o1PassContract unitShapeDefs staticLayoutDefs
+  list ctorDeployDefs immSectionDead o1PassContract unitShapeDefs staticLayoutDefs
   ctorUnitShape deployUnitProducers loweringShapeProps loweringShapeSource
   supportedProgram supportedNames compileVyper vyperCompiler
   o1PipelineCorrect o1ComposeSupport fcgPruning stackPlanGen
@@ -31,7 +31,7 @@ Proof
   rpt (pairarg_tac >> gvs[])
 QED
 
-Theorem package_constructor_shape_ok[local]:
+Theorem package_constructor_shape_ok:
   !tops use_trans nkey_map target cf cenv args pay nr nkey trans body ret.
     supported_program tops /\ supported_program_deploy tops /\
     SND (SND (SND (classify_functions tops))) = SOME cf /\
@@ -55,7 +55,7 @@ Proof
   metis_tac[build_compile_env_static, cenv_static_ok_def]
 QED
 
-Theorem package_internal_fn_ctor_shape_ok[local]:
+Theorem package_internal_fn_ctor_shape_ok:
   !tops use_trans nkey_map imm target src.
     supported_program tops /\
     MEM src (FST (SND (classify_functions tops))) ==>

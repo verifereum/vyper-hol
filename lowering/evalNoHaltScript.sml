@@ -541,6 +541,11 @@ Proof
   >~ [`Assert _ AssertUnreachable`] >- switch_tac
   >~ [`Assert _ (AssertReason _)`] >- switch_tac
   >~ [`IfExp _ _ _ _`] >- switch_tac
+  >~ [`Subscript _ _ _`]
+  >- (rpt strip_tac >> pop_assum mp_tac >>
+      simp([Once evaluate_def] @ case_ss) >> gvs(syn_ss @ case_ss) >>
+      Cases_on `subscript_reads_base cx e e'` >> gvs(bind_def :: case_ss) >>
+      gvs(AllCaseEqs() :: case_ss) >> metis_tac[])
   >> generic_tac
 QED
 
@@ -597,7 +602,10 @@ Resume eval_no_halt_every[Builtin]:
   simp([Once evaluate_def, COND_RATOR] @ case_ss) >>
   gvs(syn_ss @ case_ss) >> rpt strip_tac >>
   gvs[builtin_args_length_ok_def, LENGTH_EQ_NUM_compute] >>
-  gvs(syn_ss @ case_ss) >> metis_tac[]
+  gvs(syn_ss @ case_ss) >>
+  Cases_on `code_slice_source bt es` >- (gvs[] >> metis_tac[]) >>
+  rename1 `code_slice_source bt es = SOME p` >> PairCases_on `p` >>
+  gvs([code_slice_source_SOME] @ syn_ss @ case_ss) >> metis_tac[]
 QED
 
 Resume eval_no_halt_every[ExtCall]:

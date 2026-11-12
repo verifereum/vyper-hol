@@ -1050,6 +1050,9 @@ Theorem external_package_struct_fields:
       fty = SOME tv ==> sz = type_memory_size tv) fields
 Proof
   strip_tac >>
+  `ALOOKUP am.sources tx.target = SOME [(NONE,tops)] /\
+   layouts_agree tops am tx` by fs[source_deployment_rel_def] >>
+  qpat_x_assum `source_deployment_rel _ _ _` kall_tac >>
   `ALL_DISTINCT (FLAT (MAP (type_def_keys_toplevel (NONE:num option)) tops))`
     by metis_tac[source_typing_ok_type_def_keys_distinct] >>
   `!name args. MEM (StructDecl name args) tops ==>
@@ -1063,7 +1066,7 @@ Proof
   Cases_on `ret = NoneT` >>
   gvs[update_cenv_nonreentrant_def, update_cenv_ret_abi_def,
       build_compile_env_ce_struct_fields] >>
-  gvs[source_deployment_rel_def, get_tenv_def,
+  gvs[get_tenv_def,
       initial_evaluation_context_def, get_module_code_def,
       type_env_all_modules_def, GSYM type_env_def] >>
   irule make_struct_fields_map_fields >> metis_tac[]
@@ -1377,6 +1380,11 @@ Proof
       qpat_x_assum `!src id ty. FLOOKUP art.cta_bare_globals (src,id) = SOME ty ==> _`
         drule >> simp[]) >>
   simp[bare_globals_layout_def] >> rpt conj_tac
+  >~ [`ALOOKUP cenv.ce_modules`] >- metis_tac[body_inv_modules_aligned]
+  >~ [`ALL_DISTINCT (MAP FST cenv.ce_modules)`]
+  >- metis_tac[body_inv_modules_aligned]
+  >~ [`ALL_DISTINCT (FLAT (MAP (toplevel_vtype_keys_toplevel _) _))`]
+  >- metis_tac[body_inv_modules_aligned]
   >- (rpt strip_tac >>
       `cenv_module_pins tops cenv` by fs[body_inv_def] >>
       `get_module_code (initial_evaluation_context am.sources am.layouts tx NONE)

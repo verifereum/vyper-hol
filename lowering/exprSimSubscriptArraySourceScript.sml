@@ -31,13 +31,17 @@ Proof
   >> simp[read_result_def, raise_def]
 QED
 
+(* Without an overlap the source does not read the base before the index
+   (subscript_reads_base). *)
 Theorem eval_expr_subscript_bind:
+  ~subscript_reads_base cx obj idx ==>
   eval_expr cx (Subscript ann obj idx) =
   bind (eval_expr cx obj) (\r.
     bind (bind (eval_expr cx idx) (read_result cx)) (\v.
       select_result cx (expr_type obj) r (ValueSubscript v)))
 Proof
-  simp[Once evaluate_def, bind_assoc]
+  strip_tac >> simp[Once evaluate_def, bind_assoc] >>
+  simp[FUN_EQ_THM, bind_def, return_def]
 QED
 
 Theorem lookup_scopes_popped_keys_indexed:

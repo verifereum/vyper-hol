@@ -1,7 +1,7 @@
 (* Producer boundaries for the actual external Return normalization branch. *)
 Theory externalNormalizePremises
 Ancestors
-  externalReturnBounds typedNormalizeProducer valueEncodingTyping
+  externalReturnBounds typedMemoryCopy typedNormalizeProducer valueEncodingTyping
   typedNormalizeStaticRigidity valueCopyBytes vyperTypeSystem
   exprSimDefs exprSimProps loweringPosts vyperTyping vyperValue compileEnv valueEncoding
   externalReturnNormalizeMem allocaSiteResource exprLoweringProps
@@ -302,7 +302,7 @@ Theorem normalize_external_frame_resources:
     SOME (mut,nr,args,defaults,ret,fbody) /\
   set_external_package_target rpolicy.rpol_target
     (package_external_fn tops use_trans keys
-      (mut,nr,rr,tx.function_name,args,defaults,ret,fbody)) =
+      (mut,nr,rr,tx.function_name,args,pkg_defaults,ret,fbody)) =
     (lbl,cenv0,pos_args,min_cds,payable,nr',key,ut,iv,fbody',rt) /\
   compile_register_positional_args cenv0 pos_args off st = (cenv,sa) /\
   same_frame cenv c ==>

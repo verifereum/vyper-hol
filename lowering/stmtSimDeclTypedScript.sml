@@ -30,7 +30,7 @@ Theorem annassign_typed_store_post_path:
   type_memory_bytes cenv (expr_type e) = type_memory_size stv /\
   type_memory_size stv < dimword (:256) /\ type_memory_size dtv <= sz /\
   compile_assign_value cenv (Var p) LocMemory op F loc dty (expr_type e)
-    info bytes sb = ((),sf) /\
+    bytes sb = ((),sf) /\
   fn_has_code sb sf func /\ fn_inst_ids_distinct func /\
   ~s.vs_halted /\ s.vs_current_bb = sb.cs_current_bb /\
   s.vs_inst_idx = LENGTH sb.cs_current_insts /\
@@ -116,7 +116,7 @@ Theorem annassign_typed_normal_continuation:
   (!l. op <> Label l) /\
   lower_value compile_expr c (expr_type e) e sa = (op,sb) /\
   compile_assign_value c (Var p) LocMemory op F loc typ (expr_type e)
-    info bytes sb = ((),sf) /\
+    bytes sb = ((),sf) /\
   fn_has_code sb sf func /\ fn_inst_ids_distinct func /\
   FLOOKUP c.ce_vars id = SOME (PtrVar (Var p) sz) /\ not_fresh_at sa p /\
   lookup_var p salloc = SOME w /\

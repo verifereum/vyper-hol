@@ -235,7 +235,7 @@ Proof
 QED
 
 (* An operand keeps its representation when only a bytestring bound changes. *)
-Theorem expr_val_rel_compatible[local]:
+Theorem expr_val_rel_compatible:
   !cx sty dty stv dtv v op s.
     (dty = sty \/ is_bytestring_type dty /\ is_bytestring_type sty) /\
     evaluate_type (get_tenv cx) sty = SOME stv /\
@@ -481,7 +481,7 @@ Proof
   PairCases_on `start` >> simp[gas_marked_exec_def]
 QED
 
-Theorem aggregate_tuple_gas_outcome_mono[local]:
+Theorem aggregate_tuple_gas_outcome_mono:
   gas_outcome memory tops (ctx,func) source start Q R ==>
   (!res ee r. Q res ee r ==> Q' res ee r) ==>
   (!res ee r. R res ee r ==> R' res ee r) ==>
