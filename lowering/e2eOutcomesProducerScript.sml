@@ -17,7 +17,7 @@
  *)
 Theory e2eOutcomesProducer
 Ancestors
-  e2eDefs vyperLoweringCorrect gasSummary compileVyper loweringShapeProps
+  e2eDefs sourceUnitExecution vyperLoweringCorrect gasSummary compileVyper loweringShapeProps
   supportedProgram callTrace frameOutcome extCallOracle vyperStorageFootprint
   vyperRuntimeAccounts vyperInterpreter venomExecSemantics vyperRequestTrace
   vfmAccountFrame vfmExecution
@@ -35,10 +35,10 @@ Definition vyper_call_staging_def:
 End
 
 (* The S1 request-prefix companion.  One gas marking, chosen without the
-   storage guard on callee outcomes, serves both conjuncts: S1 under its
-   storage guards, and agreement of the first i source requests with the
-   lowered run's wherever the source trace up to the i-th recorded outcome
-   is a valid horizon for H. *)
+   storage guard on callee outcomes, serves both conjuncts: S1's selected-run
+   certificate (whose storage guards are inside it), and agreement of the
+   first i source requests with the lowered run's wherever the source trace
+   up to the i-th recorded outcome is a valid horizon for H. *)
 Definition s1_request_prefix_def:
   s1_request_prefix tops <=>
     !rpolicy unit am tx ret vs.
@@ -50,12 +50,7 @@ Definition s1_request_prefix_def:
       EVERY (\oc. LENGTH oc.co_returnData < dimword(:256) /\
                   accounts_runtime_well_typed oc.co_accounts) vs.vs_outcomes ==>
       ?marks.
-        (source_storage_ok am tx vs.vs_outcomes
-           (gas_explicit marks vs.vs_gas_readings) /\
-         call_outcomes_storage_ok am tx vs.vs_outcomes
-           (gas_explicit marks vs.vs_gas_readings) ==>
-         source_unit_execution_correct_at (gas_explicit marks vs.vs_gas_readings)
-           tops ret am tx unit vs) /\
+        source_unit_execution_correct_at marks tops ret am tx unit vs /\
         !fuel ss res am' rqs obs obs_pre sfx H.
           (run_context fuel unit.cu_context vs = Halt ss \/
            ?a. run_context fuel unit.cu_context vs = Abort a ss) /\
