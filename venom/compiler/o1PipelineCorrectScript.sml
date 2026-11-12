@@ -16,7 +16,7 @@ Ancestors
   venomPassSchedule o1PassContract o1PipelineCompose ctxLookupAgree
   ptrDiscipline contextPlanLayoutProps stepWriteFootprint
   contextCodegenRel stackPlanGen venomCompilerTypes venomState words
-  venomRunBounded
+  venomRunBounded rawReachableFmp ctxLookupAgreeHelpers list
 
 (* This is the compiler's existing O1 hook, with all three checks K T.
  * Naming it does not change compile_vyper or its literal pipeline hooks. *)
@@ -89,21 +89,42 @@ Theorem run_venom_pipeline_fuel:
 Proof
   rpt strip_tac >>
   `fmp_free_ctx unit.cu_context` by (irule source_fmp_free >> fs[]) >>
-  `!vi. raw_unit_memory_ok unit.cu_context vi /\
+  `EVERY pre_fmp_ops unit.cu_context.ctx_functions /\
+   ~ctx_has_dalloca unit.cu_context` by
+    (simp[EVERY_MEM] >>
+     metis_tac[source_pre_fmp_ops, o1_source_unit_ok_no_dalloca]) >>
+  (* At an input state whose free-memory pointer is its initial one, no
+     reachable state moves it: the raw phase's FMP facts hold. *)
+  `!vi. vi.vs_fmp = vi.vs_initial_fmp /\
+        raw_unit_memory_ok unit.cu_context vi /\
         ptr_discipline lo unit.cu_context vi /\
         taint_within D unit.cu_context vi /\
         mem_inv dload_offset_ok unit.cu_context vi /\
         mem_inv dload_headroom_ok unit.cu_context vi ==>
         o1_pre_walk_inv D unit.cu_context vi` by
     (rpt strip_tac >>
+     `mem_inv raw_mem_ok unit.cu_context vi` by
+       (simp[raw_unit_memory_ok_mem_inv] >> rpt gen_tac >> strip_tac >>
+        drule raw_reachable_fmp_fixed >> simp[] >> strip_tac >>
+        drule raw_reachable_initial_fmp >> strip_tac >>
+        `inst.inst_opcode <> DALLOCA` by
+          (`EVERY (\i. i.inst_opcode <> DALLOCA) (fn_insts fn)` by
+             (gvs[ctx_has_dalloca_def, EVERY_MEM, EXISTS_MEM] >>
+              metis_tac[]) >>
+           imp_res_tac EVERY_active_inst >> gvs[]) >>
+        simp[dalloca_no_wrap_def]) >>
      `o1_src_inv D unit.cu_context vi` by
-       (fs[o1_src_inv_def, raw_unit_memory_ok_mem_inv,
-           o1_source_unit_ok_no_dalloca] >> metis_tac[]) >>
+       (fs[o1_src_inv_def] >> metis_tac[]) >>
      irule o1_source_pre_walk_inv >> simp[]) >>
   fs[o1_pipeline_def] >>
   drule_all o1_pipeline_stage_facts >> strip_tac >>
   first_x_assum (qspecl_then [`D`, `fmp`, `vs_out`] mp_tac) >>
-  simp[fmp_variant_room_def] >> metis_tac[]
+  simp[fmp_variant_room_def] >> strip_tac >>
+  qexists_tac `vs_in` >> simp[] >> strip_tac >>
+  `vs_in.vs_fmp = vs_in.vs_initial_fmp` by
+    fs[raw_variant_def, gas_variant_def,
+       venomStateTheory.venom_state_component_equality] >>
+  metis_tac[]
 QED
 
 (* At the real state's own pointer the raw variant is a GAS variant. *)
