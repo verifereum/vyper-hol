@@ -1386,36 +1386,8 @@ Theorem ctor_compile_stmt_first_emission:
      (!fn. fn_has_code a b fn ==> ?bb i. lookup_block a.cs_current_bb fn.fn_blocks = SOME bb /\
        isPREFIX (a.cs_current_insts ++ [i]) bb.bb_instructions /\ i.inst_opcode <> PHI))
 Proof
-  ntac 3 gen_tac >> Cases >>
-  FIRST [
-    MATCH_ACCEPT_TAC ctor_pass_stmt_first_emission,
-    MATCH_ACCEPT_TAC ctor_continue_stmt_first_emission,
-    MATCH_ACCEPT_TAC ctor_break_stmt_first_emission,
-    MATCH_ACCEPT_TAC ctor_expr_stmt_first_emission,
-    MATCH_ACCEPT_TAC ctor_if_stmt_first_emission,
-    MATCH_ACCEPT_TAC ctor_assert_stmt_first_emission,
-    MATCH_ACCEPT_TAC ctor_log_stmt_first_emission,
-    MATCH_ACCEPT_TAC ctor_augassign_stmt_first_emission,
-    MATCH_ACCEPT_TAC ctor_annassign_stmt_first_emission,
-    MATCH_ACCEPT_TAC ctor_baseassign_stmt_first_emission,
-    MATCH_ACCEPT_TAC ctor_tupleassign_stmt_first_emission,
-    MATCH_ACCEPT_TAC ctor_append_stmt_first_emission,
-    (qmatch_goalsub_rename_tac `Assign target value` >> Cases_on `target` >>
-      metis_tac[ctor_baseassign_stmt_first_emission, ctor_tupleassign_stmt_first_emission]),
-    (qmatch_goalsub_rename_tac `For ident ftype iterator lim stmts` >> Cases_on `iterator` >>
-      metis_tac[ctor_range_stmt_first_emission, ctor_array_stmt_first_emission]),
-    (rename1 `compile_stmt ce lc ty (Return opt)` >> Cases_on `opt` >>
-      metis_tac[ctor_return_none_stmt_first_emission, ctor_return_some_stmt_first_emission]),
-    (rename1 `compile_stmt ce lc ty (Raise why)` >> Cases_on `why` >>
-      FIRST [MATCH_ACCEPT_TAC ctor_raise_bare_stmt_first_emission,
-             MATCH_ACCEPT_TAC ctor_raise_unreachable_stmt_first_emission,
-             MATCH_ACCEPT_TAC ctor_raise_reason_stmt_first_emission,
-             (simp_tac bool_ss [compile_stmt_def] >>
-              ho_match_mp_tac first_emission_strong >>
-              ho_match_mp_tac first_emission_strong_ignore_bind >> conj_tac
-              >- (mp_tac (cj 1 first_emission_emit_helpers |> Q.SPEC `INVALID`) >> simp[] >> metis_tac[]) >>
-              simp[comp_return_def, cs_extends_refl])])]
-
+  rpt gen_tac >>
+  MATCH_ACCEPT_TAC (cj 1 entryReachBodyFirstEmissionStmtTheory.first_emission_compile_stmt)
 QED
 
 Theorem ctor_compile_stmts_first_emission:
@@ -1425,7 +1397,6 @@ Theorem ctor_compile_stmts_first_emission:
      (!fn. fn_has_code a b fn ==> ?bb i. lookup_block a.cs_current_bb fn.fn_blocks = SOME bb /\
        isPREFIX (a.cs_current_insts ++ [i]) bb.bb_instructions /\ i.inst_opcode <> PHI))
 Proof
-  mp_tac ctor_stmts_first_emission_lift >>
-  (impl_tac >- metis_tac[ctor_compile_stmt_first_emission]) >>
-  simp[]
+  rpt gen_tac >>
+  MATCH_ACCEPT_TAC (cj 2 entryReachBodyFirstEmissionStmtTheory.first_emission_compile_stmt)
 QED
