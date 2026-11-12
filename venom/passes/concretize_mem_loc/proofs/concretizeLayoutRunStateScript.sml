@@ -24,6 +24,9 @@ Proof
   `post.vs_allocas = s.vs_allocas` by
     (gvs[step_inst_non_invoke] >> metis_tac[step_inst_base_preserves_allocas]) >>
   `s1.vs_allocas = s.vs_allocas` by metis_tac[enters_block_allocas] >>
+  `s1.vs_initial_fmp = s.vs_initial_fmp` by
+    metis_tac[ctxLookupAgreeHelpersTheory.enters_block_initial_fmp,
+              ctxLookupAgreeHelpersTheory.step_inst_initial_fmp] >>
   simp[] >> metis_tac[resolved_frame_entry]
 QED
 

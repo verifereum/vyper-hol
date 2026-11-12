@@ -59,7 +59,8 @@ Proof
     (simp[origin_out_def, resolved_out_def, resolve_tag_def,
        resolved_parameter_entry_def, EL_MAP] >>
      Cases_on `w2n idx < LENGTH rp` >> simp[] >>
-     Cases_on `EL (w2n idx) rp` >> simp[] >> PairCases_on `x` >> simp[]) >>
+     Cases_on `EL (w2n idx) PG` >> Cases_on `EL (w2n idx) rp` >> simp[] >>
+     res_tac >> gvs[]) >>
   `step_inst fuel C inst s = OK post` by simp[step_inst_non_invoke] >>
   `?k. k.lop_pending /\ k.lop_cursor = SUC g.lop_cursor /\
     k.lop_target_taint = step_taint inst t tpost g.lop_target_taint /\
