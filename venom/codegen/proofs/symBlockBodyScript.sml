@@ -452,7 +452,10 @@ Proof
     sym_invoke_frame_sim_deep) >>
   gvs[] >>
   (impl_tac >- first_assum ACCEPT_TAC) >>
-  (impl_tac >- first_assum ACCEPT_TAC) >>
+  (impl_tac >-
+     (rpt gen_tac >> strip_tac >>
+      qpat_x_assum `!j cvs cas cra crest cpc. _` drule_all >>
+      disch_then ACCEPT_TAC)) >>
   (impl_tac >- first_assum ACCEPT_TAC) >>
   strip_tac >> simp[sym_body_result_def]
 QED
@@ -786,6 +789,7 @@ Theorem sym_body_jump_continue:
     growth spill_base lbl_ctr fn_ops ps_end bb ps_l h promised ps_dfs
     block_ops ps_dfs_after ps_after prefix_ops rest_ops k ps pc0 vs as Inv
     ra pc_ret rest mem0 /\
+  ~vs.vs_call_ctx.cc_static /\
   k < LENGTH bb.bb_instructions /\ EL k bb.bb_instructions = inst /\
   is_terminator inst.inst_opcode /\
   step_inst fuel ctx inst vs = OK vs1 /\ vs1 = jump_to t vs /\
@@ -817,6 +821,8 @@ Proof
   disch_then (fn th => leaf_matches 4 irule (anchored_leaf_core false
     ["sym_frame_inv", "fn_frame_inv", "generate_block_plan", "lineage_entry"] th)) >>
   qhdtm_assum `body_inv` (strip_assume_tac o REWRITE_RULE [body_inv_def]) >>
+  `~vs1.vs_call_ctx.cc_static` by
+    (qpat_x_assum `vs1 = _` SUBST1_TAC >> simp[venomStateTheory.jump_to_def]) >>
   metis_tac[]
 QED
 
@@ -1014,6 +1020,7 @@ Theorem sym_body_jmp_step:
     growth spill_base lbl_ctr fn_ops ps_end bb ps_l h promised ps_dfs
     block_ops ps_dfs_after ps_after prefix_ops rest_ops k ps pc0 vs as Inv
     ra pc_ret rest mem0 /\
+  ~vs.vs_call_ctx.cc_static /\
   k < LENGTH bb.bb_instructions /\ EL k bb.bb_instructions = inst /\
   inst.inst_opcode = JMP /\ step_inst fuel ctx inst vs = OK vs1 /\
   label_flow_ok ctx /\ code_end_offset_ok Inv ctx /\
@@ -1034,6 +1041,7 @@ Theorem sym_body_jnz_step:
     growth spill_base lbl_ctr fn_ops ps_end bb ps_l h promised ps_dfs
     block_ops ps_dfs_after ps_after prefix_ops rest_ops k ps pc0 vs as Inv
     ra pc_ret rest mem0 /\
+  ~vs.vs_call_ctx.cc_static /\
   k < LENGTH bb.bb_instructions /\ EL k bb.bb_instructions = inst /\
   inst.inst_opcode = JNZ /\ step_inst fuel ctx inst vs = OK vs1 /\
   label_flow_ok ctx /\ code_end_offset_ok Inv ctx /\
@@ -1128,6 +1136,7 @@ Theorem sym_body_terminator:
     growth spill_base lbl_ctr fn_ops ps_end bb ps_l h promised ps_dfs
     block_ops ps_dfs_after ps_after prefix_ops rest_ops k ps pc0 vs as Inv
     ra pc_ret rest mem0 /\
+  ~vs.vs_call_ctx.cc_static /\
   k < LENGTH bb.bb_instructions /\ EL k bb.bb_instructions = inst /\
   is_terminator inst.inst_opcode /\ step_inst fuel ctx inst vs = OK vs1 /\
   label_flow_ok ctx /\ code_end_offset_ok Inv ctx /\
