@@ -38,8 +38,8 @@ Proof
       simp[raise_def, bind_def, set_scopes_def] >>
       Cases_on `nr` >> simp[return_def] >>
       Cases_on `cx.nonreentrant_slot` >> simp[raise_def, bind_def] >>
-      simp[acquire_nonreentrant_lock_def, bind_def, get_transient_storage_def,
-           LET_THM] >>
+      simp[acquire_nonreentrant_lock_def, bind_def, ignore_bind_def,
+           record_storage_event_def, get_transient_storage_def, LET_THM] >>
       rw[raise_def, return_def, update_transient_def] >>
       Cases_on `cx.txn.is_static` >> simp[]) >>
   drule send_call_value_error >> simp[]
