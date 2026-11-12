@@ -41,7 +41,7 @@ Proof
 QED
 
 Theorem toplevel_ghost_inv_memory_frame:
-  ghost_inv d cenv cx es G tn s /\ local_ptrs_reserved cenv sa /\
+  ghost_inv H d cenv cx es G tn s /\ local_ptrs_reserved cenv sa /\
   (!x sz. cenv.ce_return_buf = SOME (PtrVar (Var x) sz) ==> not_fresh_at sa x) /\
   (!x sz. cenv.ce_return_pc = SOME (PtrVar (Var x) sz) ==> not_fresh_at sa x) /\
   (!x. not_fresh_at sa x ==>
@@ -60,7 +60,7 @@ Theorem toplevel_ghost_inv_memory_frame:
   tn'.t_stor = tn.t_stor /\ tn'.t_trans = tn.t_trans /\ tn'.t_imm = tn.t_imm /\
   s'.vs_call_ctx = s.vs_call_ctx /\ s'.vs_accounts = s.vs_accounts /\
   s'.vs_transient = s.vs_transient ==>
-  ghost_inv d cenv cx es' G' tn' s'
+  ghost_inv H d cenv cx es' G' tn' s'
 Proof
   strip_tac >>
   `!x sz. not_fresh_at sa x /\ ptr_covers G tn x s sz ==>
@@ -99,7 +99,7 @@ Proof
 QED
 
 Theorem toplevel_local_footprint_disjoint:
-  stmt_state_rel ctx func cenv cx es s /\
+  stmt_state_rel H ctx func cenv cx es s /\
   (!name b sz i. local_region cenv es.scopes s name b sz /\
     b <= i /\ i < b+sz ==> i NOTIN writes) ==>
   !name entry p sz w.

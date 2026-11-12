@@ -1,7 +1,7 @@
 (* Runtime immutable-copy layout and counted pointer boundaries. *)
 Theory exprSimPtrTopLevelImmutableCopy
 Ancestors
-  exprSimPtrTopLevelCopy immutableCopyExecution compileEnv loweringStateRelDefs emitHelper
+  wordLoadStorePtr exprSimPtrTopLevelCopy immutableCopyExecution compileEnv loweringStateRelDefs emitHelper
   fragGasSeqPtr context exprLoweringProps emitHelperProps venomInst list
   bodyPtrDefs typedCopyPtr ptrDiscipline ptrSafeRun venomState words
   venomExecSemantics exprSimCopy finite_map pred_set memLocDefs codegenRel

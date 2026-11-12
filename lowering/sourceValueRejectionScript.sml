@@ -22,3 +22,11 @@ Theorem send_call_value_reject_condition:
 Proof
   metis_tac[send_call_value_reject_iff]
 QED
+
+Theorem send_call_value_success_condition:
+  send_call_value mut cx s = (INL (),s') ==>
+  (mut = Payable \/ cx.txn.value = 0)
+Proof
+  Cases_on `cx.txn.value = 0` >> Cases_on `mut = Payable` >>
+  simp[send_call_value_def, bind_def, ignore_bind_def, check_def, assert_def]
+QED

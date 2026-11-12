@@ -19,7 +19,7 @@ QED
 
 Theorem annassign_expr_pointer_frame_ptr:
   !ctx func cenv cx e es sa sb s0 es' v op s G0 tn0 G tn p sz aid b.
-    expr_post ctx func cenv cx e es sa sb s0 es' v op s /\
+    expr_post H ctx func cenv cx e es sa sb s0 es' v op s /\
     ghost_kept cenv es sa G0 tn0 s0 G tn /\ not_fresh_at sa p /\
     ptr_covers G0 tn0 p s0 sz /\
     FLOOKUP s0.vs_allocas aid = SOME (b,sz) ==>
@@ -30,7 +30,7 @@ QED
 
 Theorem annassign_vv_pointer_frame_ptr:
   !ctx func cenv cx e es sa sb s0 es' tv vv s G0 tn0 G tn p sz aid b.
-    vv_post ctx func cenv cx e es sa sb s0 es' tv vv s /\
+    vv_post H ctx func cenv cx e es sa sb s0 es' tv vv s /\
     ghost_kept cenv es sa G0 tn0 s0 G tn /\ not_fresh_at sa p /\
     ptr_covers G0 tn0 p s0 sz /\
     FLOOKUP s0.vs_allocas aid = SOME (b,sz) ==>
@@ -63,7 +63,7 @@ Theorem annassign_alloca_path_ptr:
     lookup_block s.vs_current_bb func.fn_blocks = SOME bb /\
     get_instruction bb s.vs_inst_idx =
       SOME (mk_inst id ALLOCA [Lit (n2w n)] [p]) /\
-    stmt_state_rel ctx func cenv cx es s /\
+    stmt_state_rel H ctx func cenv cx es s /\
     MEM (mk_inst id ALLOCA [Lit (n2w n)] [p]) (fn_insts func) /\
     n < dimword (:256) /\
     step_inst_base (mk_inst id ALLOCA [Lit (n2w n)] [p]) s = OK u ==>
@@ -100,8 +100,8 @@ QED
 Theorem annassign_ghost_declare_local_entry_ptr:
   !d cenv cx es G tn s id ty st c st1.
     declare_local cenv id ty st = (c,st1) /\ cenv.ce_alloca_locals /\
-    lookup_scopes id es.scopes = NONE /\ ghost_inv d cenv cx es G tn s ==>
-    ghost_inv d c cx es G tn s
+    lookup_scopes id es.scopes = NONE /\ ghost_inv H d cenv cx es G tn s ==>
+    ghost_inv H d c cx es G tn s
 Proof
   rpt gen_tac >> strip_tac >>
   drule_all declare_local_ptr >> strip_tac >>
@@ -136,8 +136,8 @@ QED
 
 Theorem annassign_ghost_inst_idx_ptr:
  !d cenv cx es G tn s i.
- ghost_inv d cenv cx es G tn (s with vs_inst_idx := i) <=>
- ghost_inv d cenv cx es G tn s
+ ghost_inv H d cenv cx es G tn (s with vs_inst_idx := i) <=>
+ ghost_inv H d cenv cx es G tn s
 Proof
  rpt gen_tac >> Cases_on `d`
  >- simp[ghost_inv_def, return_buf_ptr_def, ptr_covers_def,
@@ -150,7 +150,7 @@ QED
 Theorem annassign_setup_ptr:
  !ctx func cenv cx es st st1 p sz s0 sa d PG G0 tn0.
  emit_inst ALLOCA [Lit (n2w sz)] [p] st = ((),st1) /\
- stmt_state_rel ctx func cenv cx es s0 /\ fn_inst_ids_distinct func /\
+ stmt_state_rel H ctx func cenv cx es s0 /\ fn_inst_ids_distinct func /\
  MEM (mk_inst st.cs_next_id ALLOCA [Lit (n2w sz)] [p]) (fn_insts func) /\
  not_local_ptr cenv es.scopes p /\ sz < dimword (:256) /\
  ~not_fresh_at sa p /\
@@ -159,11 +159,11 @@ Theorem annassign_setup_ptr:
  fn_has_code st st1 func /\ ~s0.vs_halted /\ ~ctx_has_dalloca ctx /\
  s0.vs_current_bb = st.cs_current_bb /\
  s0.vs_inst_idx = LENGTH st.cs_current_insts /\
- ghost_inv d cenv cx es G0 tn0 s0 ==>
+ ghost_inv H d cenv cx es G0 tn0 s0 ==>
  ?s1 w G1 tn1.
- gas_path_ptr (cx_dead cx) 0 ctx func PG G0 tn0 s0 0 G1 tn1 (OK s1) /\
- stmt_state_rel ctx func cenv cx es s1 /\
- ghost_inv d cenv cx es G1 tn1 s1 /\
+ gas_path_ptr (cx_dead H cx) 0 ctx func PG G0 tn0 s0 0 G1 tn1 (OK s1) /\
+ stmt_state_rel H ctx func cenv cx es s1 /\
+ ghost_inv H d cenv cx es G1 tn1 s1 /\
  ghost_kept cenv es sa G0 tn0 s0 G1 tn1 /\
  ptr_covers G1 tn1 p s1 sz /\
  lookup_var p s1 = SOME w /\
@@ -189,17 +189,18 @@ Proof
     rename1 `FLOOKUP s0.vs_allocas st.cs_next_id = SOME entry` >>
     PairCases_on `entry` >> simp[exec_alloca_def, mk_inst_def]) >>
  `step_inst_base (mk_inst st.cs_next_id ALLOCA [Lit (n2w sz)] [p]) s0 = OK u` by
-   (PURE_ONCE_REWRITE_TAC[step_inst_base_def] >>
-    simp[mk_inst_def, eval_operand_def] >> simp[GSYM mk_inst_def]) >>
+   (simp[venomExecSemanticsTheory.step_inst_base_opcode_eqs, mk_inst_def,
+         instruction_accessors, eval_operand_def] >>
+    gvs[mk_inst_def]) >>
  drule_all annassign_emit_instruction_ptr >> strip_tac >>
  `lookup_block s0.vs_current_bb func.fn_blocks = SOME bb /\
   get_instruction bb s0.vs_inst_idx =
     SOME (mk_inst st.cs_next_id ALLOCA [Lit (n2w sz)] [p])` by simp[] >>
  drule_all annassign_alloca_path_ptr >>
- disch_then (qspecl_then [`cx_dead cx`, `PG`, `G0`, `tn0`] strip_assume_tac) >>
+ disch_then (qspecl_then [`cx_dead H cx`, `PG`, `G0`, `tn0`] strip_assume_tac) >>
  drule_all annassign_alloca_ghost_frame_ptr >>
  disch_then (qspec_then `PG` strip_assume_tac) >>
- `stmt_state_rel ctx func cenv cx es u` by
+ `stmt_state_rel H ctx func cenv cx es u` by
    (irule (cj 1 stmt_state_rel_exec_alloca) >>
     conj_tac >- simp[] >>
     qexistsl [`mk_inst st.cs_next_id ALLOCA [Lit (n2w sz)] [p]`,
