@@ -466,6 +466,89 @@ Proof
        finite_mapTheory.FLOOKUP_DRESTRICT, finite_mapTheory.FLOOKUP_UPDATE]
 QED
 
+Theorem typed_copy_origin_ptr_counter_backedge_path:
+  emit_op ADD [Var counter;Lit 1w] a = (inc,b) /\
+  emit_inst ASSIGN [inc] [counter] b = ((),c) /\
+  emit_inst JMP [Label hdr] [] c = ((),d) /\
+  not_fresh_at a counter /\
+  lookup_var counter s = SOME (n2w k) /\ FLOOKUP G counter = NONE /\
+  op_taint tn (Var counter) = {} /\ k < N /\ N < dimword (:256) /\
+  fn_has_code a d func /\ ~s.vs_halted /\
+  s.vs_current_bb = a.cs_current_bb /\
+  s.vs_inst_idx = LENGTH a.cs_current_insts /\
+  ~ctx_has_dalloca ctx /\ allocas_from lo s ==>
+  ?out t Gf tnf.
+    inc = Var out /\ out <> counter /\ k + 1 < dimword (:256) /\
+    gas_origin_ptr_path (D,lo,explicit,ctx,func,PG) (s,G,tn) [] (OK t,Gf,tnf) /\
+    t = jump_to hdr (update_var counter (n2w (k+1))
+      (update_var out (n2w (k+1)) s)) /\
+    Gf = DRESTRICT (DRESTRICT G (COMPL {out})) (COMPL {counter}) /\
+    tnf = (tn with t_var := (tn.t_var |+ (out,{})) |+ (counter,{})) /\
+    lookup_var counter t = SOME (n2w (k+1)) /\ FLOOKUP Gf counter = NONE /\
+    op_taint tnf (Var counter) = {} /\
+    t.vs_memory = s.vs_memory /\ ~t.vs_halted /\
+    t.vs_current_bb = hdr /\ t.vs_inst_idx = 0 /\
+    (!p. p <> counter /\ p <> out ==> lookup_var p t = lookup_var p s /\
+      FLOOKUP Gf p = FLOOKUP G p /\ op_taint tnf (Var p) = op_taint tn (Var p))
+Proof
+  strip_tac >>
+  `cs_extends a b /\ cs_extends b c /\ cs_extends c d` by
+    metis_tac[typed_copy_emit_op_mono, exprLoweringPropsTheory.ci_mono_def,
+      cs_extends_emit_inst] >>
+  `fn_has_code a b func /\ fn_has_code b c func /\ fn_has_code c d func` by
+    metis_tac[fn_has_code_split, compileEnvTheory.cs_extends_trans] >>
+  `eval_operand (Var counter) s = SOME (n2w k) /\
+   eval_operand (Lit 1w) s = SOME 1w /\ op_taint tn (Lit 1w) = {}` by
+    simp[eval_operand_def, op_taint_def] >>
+  drule_all (typed_copy_origin_ptr_binop_path |> Q.INST
+    [`opc` |-> `ADD`, `w` |-> `x + y`] |> SRULE []) >>
+  disch_then (qspecl_then [`0`,`0`,`explicit`,`PG`,`G`,`D`] strip_assume_tac) >>
+  gvs[wordsTheory.word_add_n2w] >>
+  `out <> counter` by
+    (drule emitted_insts_emit_op >> strip_tac >>
+     gvs[loweringStateRelDefsTheory.not_fresh_at_def] >>
+     metis_tac[arithmeticTheory.LESS_EQ_REFL]) >>
+  `new_site_bytes s (update_var out (n2w (k+1)) s) = {}` by
+    simp[new_site_bytes_def, update_var_def, FLOOKUP_DEF,
+         pred_setTheory.EXTENSION, SF CONJ_ss] >>
+  gvs[step_prov_def, out_prov_def, first_prov_def, op_prov_def, set_prov_def,
+      step_taint_def, set_var_taint_def, out_taint_def, mem_taint_def,
+      written_taint_def, step_writes_def, store_taint_def, imm_taint_def,
+      adopt_reset_def, range_bytes_def, source_memory_write_ranges_def, mk_inst_def] >>
+  qmatch_asmsub_abbrev_tac `gas_origin_ptr_path _ _ [] (OK q,G1,tn1)` >>
+  `eval_operand (Var out) q = SOME (n2w (k+1)) /\
+   op_prov G1 (Var out) = NONE /\ op_taint tn1 (Var out) = {} /\
+   allocas_from lo q /\ ~q.vs_halted /\
+   q.vs_current_bb = b.cs_current_bb /\ q.vs_inst_idx = LENGTH b.cs_current_insts` by
+    (simp[Abbr `q`, Abbr `G1`, Abbr `tn1`, eval_operand_def, lookup_var_def,
+          update_var_def, op_prov_def, op_taint_def, FLOOKUP_DRESTRICT,
+          FLOOKUP_UPDATE, allocas_from_def] >>
+     gvs[allocas_from_def]) >>
+  drule_all typed_copy_origin_ptr_assign_path >> strip_tac >>
+  first_x_assum (qspecl_then [`explicit`,`PG`,`D`] strip_assume_tac) >>
+  `allocas_from lo t` by (gvs[allocas_from_def, update_var_def] >> metis_tac[]) >>
+  drule_all emit_jmp_origin_ptr >>
+  disch_then (qspecl_then [`tnf`,`explicit`,`PG`,`Gf`,`D`] strip_assume_tac) >>
+  `gas_origin_ptr_path (D,lo,explicit,ctx,func,PG) (q,G1,tn1) []
+     (OK (jump_to hdr t),Gf,tnf)` by
+    (qpat_assum `gas_origin_ptr_path _ (q,G1,tn1) _ _`
+       (mp_then Any mp_tac gas_origin_ptr_path_append) >>
+     disch_then (qspecl_then [`t`,`Gf`,`tnf`,`[]`,`OK (jump_to hdr t)`,`Gf`,`tnf`] mp_tac) >>
+     simp[]) >>
+  `gas_origin_ptr_path (D,lo,explicit,ctx,func,PG) (s,G,tn) []
+     (OK (jump_to hdr t),Gf,tnf)` by
+    (qpat_assum `gas_origin_ptr_path _ (s,G,tn) _ _`
+       (mp_then Any mp_tac gas_origin_ptr_path_append) >>
+     disch_then (qspecl_then [`q`,`G1`,`tn1`,`[]`,`OK (jump_to hdr t)`,`Gf`,`tnf`] mp_tac) >>
+     simp[]) >>
+  pop_assum $ mk_asm "full" >>
+  gvs[Abbr `q`, Abbr `G1`, Abbr `tn1`, jump_to_def, update_var_def,
+      lookup_var_def, FLOOKUP_DRESTRICT, FLOOKUP_UPDATE, op_taint_def] >>
+  asm "full" mp_tac >> Cases_on `tn` >>
+  simp[jump_to_def, taint_accessors, taint_accfupds] >>
+  rpt (pop_assum kall_tac) >> FAIL_TAC "difference"
+QED
+
 Theorem typed_copy_origin_ptr_offset_covers:
   !PG G tn s root offset out id a off total n.
   lookup_var root s = SOME a /\
