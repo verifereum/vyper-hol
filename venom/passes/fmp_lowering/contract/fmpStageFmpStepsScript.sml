@@ -126,7 +126,7 @@ Theorem fmp_stage_invoke_call:
   lookup_function fn.fn_name C'.ctx_functions = SOME fn' /\
   active_inst fn' ivk' t ==>
   ?ops' callee' args' cs' t1.
-    decode_invoke ivk' = SOME (nm,ops') /\
+    ivk'.inst_opcode = INVOKE /\ decode_invoke ivk' = SOME (nm,ops') /\
     lookup_function nm C'.ctx_functions = SOME callee' /\
     eval_operands ops' t = SOME args' /\
     setup_callee callee' args' t = SOME cs' /\
