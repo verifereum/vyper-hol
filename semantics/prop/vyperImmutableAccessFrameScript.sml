@@ -69,11 +69,11 @@ Proof
   Cases_on `p`
   >- (rpt strip_tac >> drule write_storage_place_immutables >> simp[])
   >- (rpt strip_tac >> drule write_memory_place_immutables >> simp[]) >>
-  simp[write_place_def, get_immutables_def, get_address_immutables_def,
-       bind_def, lift_option_type_def, lift_sum_def, return_def, raise_def,
-       AllCaseEqs()] >>
-  rpt (BasicProvers.FULL_CASE_TAC >> gvs[return_def, raise_def]) >>
+  simp[write_place_def, bind_def, AllCaseEqs()] >>
   rpt strip_tac >> gvs[] >>
+  imp_res_tac get_immutables_state >>
+  imp_res_tac lift_option_type_state >>
+  imp_res_tac lift_sum_state >> gvs[] >>
   drule set_immutable_key_frame >> simp[]
 QED
 
@@ -525,6 +525,7 @@ Proof
   gvs[Once evaluate_def, type_check_def, assert_def, bind_def,
       ignore_bind_def, return_def, raise_def, AllCaseEqs(),
       accesses_expr_def, risky_call_target_def, int_calls_expr_def] >>
+  imp_res_tac lift_option_type_state >> gvs[] >>
   qpat_x_assum `!A R st res st'. _` (qspecl_then [`A`,`R`] mp_tac) >>
   simp[] >> disch_then drule_all >> simp[]
 QED
@@ -550,7 +551,8 @@ Proof
       ignore_bind_def, return_def, raise_def, AllCaseEqs(),
       accesses_expr_def, risky_call_target_def, int_calls_expr_def,
       lift_option_type_def, vyperMiscTheory.option_CASE_rator,
-      check_not_static_def, check_def, get_accounts_def] >>
+      check_not_static_def, check_def, get_accounts_def,
+      COND_RATOR, update_accounts_def, update_pending_deletions_def] >>
   imp_res_tac transfer_value_immutables >> gvs[] >>
   qpat_x_assum `!A R st res st'. _` (qspecl_then [`A`,`R`] mp_tac) >>
   simp[] >> disch_then drule_all >> simp[]
@@ -725,7 +727,7 @@ Proof
   gvs[Once evaluate_def, bind_def, lift_option_type_def,
       vyperMiscTheory.option_CASE_rator, return_def, raise_def, AllCaseEqs(),
       accesses_iterator_def, int_calls_iterator_def] >>
-  imp_res_tac read_result_state >> gvs[] >>
+  imp_res_tac array_iterator_results_state >> gvs[] >>
   qpat_x_assum `!A R st res st'. _` (qspecl_then [`A`,`R`] mp_tac) >>
   simp[] >> disch_then drule_all >> simp[]
 QED
@@ -1148,9 +1150,19 @@ Theorem evaluate_immutable_for_cons_case[local]:
   ^(List.nth (immutable_stmt_cases "eval_for",1))
 Proof
   BETA_TAC >> rpt strip_tac >>
-  qpat_x_assum `!s x t. push_scope_with_var _ _ _ _ = _ ==> _` mp_tac >>
+  Cases_on `read_result cx r st` >>
+  rename1 `read_result cx r st = (rr,rs_st)` >>
+  imp_res_tac read_result_state >> gvs[] >>
+  reverse (Cases_on `rr`)
+  >- (gvs[Once evaluate_def, bind_def, raise_def]) >>
+  rename1 `read_result cx r st = (INL v,st)` >>
+  qpat_x_assum `!s v t s1 t1. read_result _ _ _ = _ /\ _ ==> _`
+    (qspecl_then [`st`,`v`,`st`] mp_tac) >> simp[] >> disch_tac >>
+  qpat_x_assum `!s v t s1 t1 s2 t2. read_result _ _ _ = _ /\ _ ==> _`
+    (qspecl_then [`st`,`v`,`st`] mp_tac) >> simp[] >> disch_tac >>
+  qpat_x_assum `!s t. push_scope_with_var _ _ _ _ = _ ==> _` mp_tac >>
   simp[push_scope_with_var_def, return_def] >> disch_tac >>
-  qpat_x_assum `!s x t s1 broke t1. push_scope_with_var _ _ _ _ = _ /\ _ ==> _` mp_tac >>
+  qpat_x_assum `!s t s1 t1. push_scope_with_var _ _ _ _ = _ /\ _ ==> _` mp_tac >>
   simp[push_scope_with_var_def, return_def] >> disch_tac >>
   qpat_x_assum `!A R st res st'. _` (qspecl_then [`A`,`R`] mp_tac) >>
   simp[] >> disch_tac >>
@@ -1283,6 +1295,20 @@ Proof
   simp[pop_function_def, set_scopes_def, ignore_bind_def, bind_def,
        return_def, Excl "unlock_if_nr_def"] >>
   strip_tac >> drule unlock_if_nr_immutables >> simp[]
+QED
+
+Theorem immutable_finally_unless_halt_unlock_frame[local]:
+  (!r t. f st = (r,t) ==> ^immutable_frame cx A st t) /\
+  finally_unless_halt f (unlock_if_nr cx nr view) st = (res,st') ==>
+  ^immutable_frame cx A st st'
+Proof
+  Cases_on `f st` >> Cases_on `q` >>
+  TRY (rename1 `INR ex` >> Cases_on `ex`) >>
+  simp[finally_unless_halt_def, ignore_bind_def, bind_def,
+       return_def, raise_def, Excl "unlock_if_nr_def", AllCaseEqs()] >>
+  rpt strip_tac >> gvs[Excl "unlock_if_nr_def"] >>
+  imp_res_tac unlock_if_nr_immutables >>
+  gvs[Excl "unlock_if_nr_def"] >> metis_tac[]
 QED
 
 val immutable_intcall_prefix = ``\cx src fn (es:expr list) ts mut nr args dflts ret body.
@@ -1470,10 +1496,14 @@ Proof
                          first_assum (ACCEPT_TAC o SRULE [MEM_APPEND])) >>
                       pop_assum (mk_asm "body_exec") >>
                       asm_x "run" (mk_asm "run" o PURE_REWRITE_RULE [GSYM ignore_bind_def]) >>
-                      qmatch_asmsub_abbrev_tac `finally bf bc (sl with scopes := [argenv])` >>
-                      `!r t. finally bf bc (sl with scopes := [argenv]) = (r,t) ==>
+                      qmatch_asmsub_abbrev_tac `finally_unless_halt (finally bf bc) uc (sl with scopes := [argenv])` >>
+                      `!r t. finally_unless_halt (finally bf bc) uc (sl with scopes := [argenv]) = (r,t) ==>
                          ^immutable_frame cx A (sl with scopes := [argenv]) t` by
-                        (BETA_TAC >> rpt strip_tac >>
+                        (BETA_TAC >> rpt strip_tac >> qunabbrev_tac `uc` >>
+                         drule_at (Pat `finally_unless_halt _ _ _ = _`)
+                           (BETA_RULE immutable_finally_unless_halt_unlock_frame) >>
+                         disch_then (qspecl_then [`A`] mp_tac) >>
+                         disch_then irule >> rpt strip_tac >>
                          drule_at (Pat `finally _ _ _ = _`) (BETA_RULE immutable_frame_finally) >>
                          disch_then (qspecl_then [`cx`,`A`] mp_tac) >>
                          disch_then irule >> reverse conj_tac
@@ -1485,10 +1515,12 @@ Proof
                              asm "body_exec" (mp_tac o BETA_RULE) >> simp[])
                          >> rpt strip_tac >>
                          qunabbrev_tac `bc` >>
-                         metis_tac[BETA_RULE immutable_intcall_cleanup_frame]) >>
+                         qpat_x_assum `pop_function _ _ = _` mp_tac >>
+                         simp[pop_function_def, set_scopes_def, return_def] >>
+                         strip_tac >> rpt BasicProvers.VAR_EQ_TAC >> simp[]) >>
                       pop_assum (mk_asm "finished_body") >>
-                      Cases_on `finally bf bc (sl with scopes := [argenv])` >>
-                      rename1 `finally bf bc (sl with scopes := [argenv]) = (br,sb)` >>
+                      Cases_on `finally_unless_halt (finally bf bc) uc (sl with scopes := [argenv])` >>
+                      rename1 `finally_unless_halt (finally bf bc) uc (sl with scopes := [argenv]) = (br,sb)` >>
                       asm_x "finished_body" (mp_tac o BETA_RULE) >> simp[NoAsms] >>
                       disch_then (mk_asm "body_frame") >>
                       asm_x "run" mp_tac >>
