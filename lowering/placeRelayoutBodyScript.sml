@@ -107,7 +107,7 @@ Proof
   `~(has_length_word (expr_type e) /\ is_empty_value_expr e)` by
     (Cases_on `e` >>
      gvs[stmtLoweringTheory.is_empty_value_expr_def,
-       oneline exprLoweringTheory.lowered_value_type_def, vyperASTTheory.expr_type_def]) >>
+       exprLoweringTheory.lowered_value_type_def, vyperASTTheory.expr_type_def]) >>
   `post_value_type cenv e <> expr_type e /\
    ~is_word_type (post_value_type cenv e)` by fs[] >>
   rewrite_tac[stmt_frag_def, stmt_framed_frag_def] >>

@@ -14,6 +14,18 @@ Proof
     rpt gen_tac >> BETA_TAC) >> simp[]
 QED
 
+(* One step per branch of the sparse compile_store_slots; a single loop over
+   every branch exceeds the step limit. *)
+val store_slots_code_tac =
+  rpt (FIRST [CHANGED_TAC (simp[entry_code_emit_op, entry_code_emit_void,
+      entry_code_emit_inst, entry_code_fresh_label, entry_code_fresh_var,
+      entry_code_new_block, entry_code_return, entry_code_lit_byte_offset,
+      entry_code_memory_to_storage, entry_code_memory_to_transient,
+      entry_code_word_copy_loop_op, compile_bytestring_word_count_def]),
+    gen_tac, strip_tac, irule entry_code_bind, conj_tac, IF_CASES_TAC,
+    CASE_TAC]) >>
+  gvs[];
+
 Theorem entry_code_store_slots:
   (!cenv src slot ty transient.
      entry_preserves_code (\i. i.inst_opcode <> DALLOCA)
@@ -27,15 +39,15 @@ Theorem entry_code_store_slots:
        (compile_copy_elements_to_slots cenv src slot elem count_op transient))
 Proof
   ho_match_mp_tac compile_store_slots_ind >> rpt strip_tac >>
-  simp[Once compile_store_slots_def, LET_THM, comp_ignore_bind_def] >>
-  rpt (FIRST [CHANGED_TAC (simp[entry_code_emit_op, entry_code_emit_void,
-      entry_code_emit_inst, entry_code_fresh_label, entry_code_fresh_var,
-      entry_code_new_block, entry_code_return, entry_code_lit_byte_offset,
-      entry_code_memory_to_storage, entry_code_memory_to_transient,
-      entry_code_word_copy_loop_op, compile_bytestring_word_count_def]),
-    gen_tac, strip_tac, irule entry_code_bind, conj_tac, IF_CASES_TAC,
-    CASE_TAC]) >>
-  gvs[]
+  simp[Once compile_store_slots_def, LET_THM, comp_ignore_bind_def]
+  >- (IF_CASES_TAC >- store_slots_code_tac >>
+      IF_CASES_TAC >- store_slots_code_tac >>
+      IF_CASES_TAC >- store_slots_code_tac >>
+      Cases_on `ty` >> simp[entry_code_emit_void]
+      >- store_slots_code_tac
+      >- (CASE_TAC >- store_slots_code_tac >> store_slots_code_tac) >>
+      store_slots_code_tac) >>
+  store_slots_code_tac
 QED
 Theorem entry_code_store_at_loc:
   entry_preserves_code (\i. i.inst_opcode <> DALLOCA)

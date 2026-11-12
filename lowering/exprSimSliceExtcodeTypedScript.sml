@@ -187,7 +187,7 @@ Resume slice_extcode_typed_entry[address]:
     (qpat_assum `lower_value _ _ _ len _ = _`
        (mp_then Any mp_tac expr_body_pre_lower_value_word_shape) >>
      simp[compileEnvTheory.is_word_type_def] >> metis_tac[]) >>
-  `(!z. addr_op = Var z ==> not_fresh_at st4 z)` by
+  `(!z. addr_op = Var z ==> not_fresh_at st3 z)` by
     (qpat_assum `lower_value _ _ _ a _ = _`
        (mp_then Any mp_tac expr_body_pre_lower_value_word_shape) >>
      simp[compileEnvTheory.is_word_type_def] >> metis_tac[]) >>
@@ -202,13 +202,13 @@ Resume slice_extcode_typed_entry[address]:
     (?w. op = Lit w) \/ (?x. op = Var x /\ not_fresh_at st2 x)` by
     (Cases_on `start_op` >> Cases_on `len_op` >> gvs[] >>
      metis_tac[freshWritesTheory.not_fresh_at_mono, ci_mono_def]) >>
-  Cases_on `compile_slice_extcode addr_op start_op len_op out_buf out_data st4` >>
+  Cases_on `compile_slice_extcode addr_op start_op len_op
+    (type_memory_bytes cenv (BaseT (BytesT (Dynamic n)))) st3` >>
   gvs[as_ptr_val_def] >>
   suspend "finish"
 QED
 
 Resume slice_extcode_typed_entry[finish]:
-  `q = out_buf` by metis_tac[slice_extcode_shape] >> gvs[] >>
   `fn_has_code st2 r func` by
     (irule fragExecTheory.fn_has_code_mid >>
      fs[ci_mono_def] >>
@@ -220,7 +220,7 @@ Resume slice_extcode_typed_entry[finish]:
       vv_post ctx func cenv cx
         (Builtin (BaseT (BytesT (Dynamic n))) (Slice n) [Builtin ct (Acc Code) [a];start;len])
         (mid' with gas_obs := []) st2 r t' ee tv
-        (LocatedValue (BaseT (BytesT (Dynamic n))) (mk_ptr out_buf LocMemory)) z /\
+        (LocatedValue (BaseT (BytesT (Dynamic n))) (mk_ptr q LocMemory)) z /\
       z.vs_current_bb = r.cs_current_bb /\ z.vs_inst_idx = LENGTH r.cs_current_insts`,
     `\res ee rr. expr_exit res rr`] >>
   simp[] >> conj_tac
@@ -237,8 +237,7 @@ Resume slice_extcode_typed_entry[finish]:
   goal_assum (drule_at Any) >> goal_assum (drule_at Any) >>
   goal_assum (drule_at Any) >> simp[] >>
   conj_tac
-  >- (qpat_assum `compile_slice_out_buf _ _ = _` (irule_at Any) >>
-      qpat_assum `compile_slice_extcode _ _ _ _ _ _ = _` (irule_at Any) >>
+  >- (qpat_assum `compile_slice_extcode _ _ _ _ _ = _` (irule_at Any) >>
       qpat_assum `lower_value _ _ _ a _ = _` (irule_at Any) >> simp[] >> metis_tac[]) >>
   conj_tac >- (qexists_tac `env` >> simp[]) >>
   qexists_tac `nocalls` >> simp[]
