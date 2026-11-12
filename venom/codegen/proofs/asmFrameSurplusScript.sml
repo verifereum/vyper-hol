@@ -10,9 +10,51 @@
 
 Theory asmFrameSurplus
 Ancestors
-  asmFrameNext asmFrameGas asmFrameLocalStep frameStep asmRunBounded
-  asmFrameRel frameGas asmSem asmWf symbolResolve vfmExecution
-  vfmExecutionProp vfmContext callTrace list finite_map
+  asmFrameNext asmFrameGas asmFrameLocalStep asmFrameCallStep frameStep
+  asmRunBounded asmFrameRel frameGas asmSem asmWf asmEncodeParse codegenRel
+  symbolResolve vfmExecution vfmExecutionProp vfmOperation vfmContext
+  callTrace list finite_map relation arithmetic
+
+Theorem asm_frame_before_copy[local]:
+  asm_frame_prog_ok prog /\ asm_frame_rel prog data es0 a e /\
+  a.as_pc < LENGTH prog /\ ~is_data_inst (EL a.as_pc prog) /\
+  frame_inst_at e s op /\
+  (!t. frame_inst_at e t ReturnDataCopy ==>
+       ~RTC (\x y. LENGTH x.contexts >= LENGTH s.contexts /\
+                   step x = (INL (),y)) t s) ==>
+  EL a.as_pc prog <> AsmOp "RETURNDATACOPY"
+Proof
+  strip_tac >> strip_tac >>
+  `asm_evm_rel (prog ++ [AsmDataItem data]) a e` by fs[asm_frame_rel_def] >>
+  drule_all asm_frame_decode_setup >> strip_tac >>
+  `next_opcode (FST (HD e.contexts)) = SOME ReturnDataCopy` by
+    (irule asm_frame_opcode_decode >> simp[wf_opname_def] >>
+     qexistsl_tac [`a`, `data`, `prog`] >>
+     simp[encode_inst_def, evm_opcode_byte_def, evm_opcode_table_def,
+          opcode_def]) >>
+  `frame_inst_at e e ReturnDataCopy` by (irule frame_inst_at_self >> simp[]) >>
+  fs[frame_inst_at_def] >> gvs[]
+QED
+
+Theorem asm_frame_current_gas[local]:
+  asm_frame_prog_ok prog /\ asm_frame_rel prog data es0 a e /\
+  a.as_pc < LENGTH prog /\ ~is_data_inst (EL a.as_pc prog) /\
+  EL a.as_pc prog <> AsmOp "RETURNDATACOPY" /\
+  asm_inst_gas_ok H (EL a.as_pc prog) a.as_stack /\
+  frame_op_gas H + D <= frame_gas_left e /\ frame_inst_at e e op /\
+  step_inst op e = (r,s') /\ LENGTH s'.contexts = LENGTH e.contexts ==>
+  r <> INR (SOME OutOfGas) /\ D <= frame_gas_left s'
+Proof
+  strip_tac >>
+  `asm_evm_rel (prog ++ [AsmDataItem data]) a e` by fs[asm_frame_rel_def] >>
+  drule_all asm_frame_decode_setup >> strip_tac >>
+  `op = op'` by
+    (irule frame_inst_at_unique >> qexistsl_tac [`e`, `e`] >>
+     simp[] >> irule frame_inst_at_self >> simp[]) >>
+  `frame_op_gas H <= frame_gas_left e` by decide_tac >>
+  drule_all asm_frame_gas_step >> strip_tac >>
+  gvs[]
+QED
 
 (* Why it should hold.  Induction on N along the frame's own states:
    asm_frame_step_next steps the assembly and the frame together
@@ -38,7 +80,37 @@ Theorem asm_frame_gas_surplus:
     ==>
     r <> INR (SOME OutOfGas) /\ D <= frame_gas_left s'
 Proof
-  cheat
+  gen_tac >> Induct >> gen_tac
+  >- simp[asm_run_bounded_def] >>
+  first_x_assum (qspec_then `D` (qx_choose_then `b` assume_tac)) >>
+  qexists_tac `64 * b + frame_op_gas H + D` >>
+  rpt gen_tac >> strip_tac >>
+  drule asm_run_bounded_step >> strip_tac >>
+  `EL a.as_pc prog <> AsmOp "RETURNDATACOPY"` by
+    (irule asm_frame_before_copy >> metis_tac[]) >>
+  fs[] >>
+  `frame_op_gas H + D <= frame_gas_left e` by decide_tac >>
+  Cases_on `s = e`
+  >- (gvs[] >>
+      `frame_op_gas H + D <= frame_gas_left e` by decide_tac >>
+      drule_all asm_frame_current_gas >> simp[]) >>
+  drule_all asm_frame_step_next >> strip_tac
+  >- (fs[frame_inst_at_def] >> metis_tac[frame_reaches_last]) >>
+  drule_all frame_next_inst_at >> simp[] >> strip_tac >>
+  `frame_op_gas H <= frame_gas_left e` by decide_tac >>
+  drule_all asm_frame_gas_step >> strip_tac >>
+  qpat_x_assum `!es1. frame_next e es1 ==> _` drule >> strip_tac >>
+  `b <= (frame_gas_left e - frame_op_gas H) DIV 64` by
+    (simp[X_LE_DIV] >> decide_tac) >>
+  `b <= frame_gas_left es1` by
+    (Cases_on `EL a.as_pc prog = AsmOp "CALL" \/
+               EL a.as_pc prog = AsmOp "STATICCALL"` >> fs[] >> decide_tac) >>
+  `wf_state es1` by fs[asm_frame_rel_def] >>
+  `!t. frame_inst_at es1 t ReturnDataCopy ==>
+       ~RTC (\x y. LENGTH x.contexts >= LENGTH s.contexts /\
+                   step x = (INL (),y)) t s` by
+    (rpt strip_tac >> drule_all frame_next_inst_at_prefix >> metis_tac[]) >>
+  metis_tac[]
 QED
 
 Theorem asm_frame_current_no_returndatacopy[local]:

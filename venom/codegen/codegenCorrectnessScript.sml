@@ -339,7 +339,26 @@ Theorem codegen_gas_surplus:
       ==>
       r <> INR (SOME OutOfGas) /\ D <= frame_gas_left s'
 Proof
-  cheat
+  rpt gen_tac >> strip_tac >>
+  drule_all codegen_entry_asm_bounded_run >>
+  disch_then (qspecl_then [`fuel`, `M`] strip_assume_tac) >>
+  qspecl_then [`H`, `N`, `D`] strip_assume_tac asm_frame_gas_surplus >>
+  qexists_tac `g` >> rpt gen_tac >> strip_tac >>
+  qabbrev_tac `e = add_frame_gas g' es` >>
+  drule initial_ctx_codegen_asm_entry_rel >> strip_tac >>
+  `asm_run_bounded (SND (compute_label_offsets prog))
+     (build_offset_to_pc prog) prog H N (entry_asm_state vs e)` by
+    metis_tac[] >>
+  drule_all codegen_assembly_frame_prog_ok >> strip_tac >>
+  `assemble prog <> []` by metis_tac[codegen_assembly_nonempty] >>
+  `vs.vs_call_ctx.cc_created_in_tx \/ account_already_created
+     (lookup_account (FST (HD e.contexts)).msgParams.callee
+       e.rollback.accounts)` by
+    (gvs[initial_ctx_rel_def] >> metis_tac[]) >>
+  `asm_frame_rel prog vs.vs_data_section e (entry_asm_state vs e) e` by
+    (irule asm_frame_rel_entry >> simp[] >> metis_tac[]) >>
+  `g <= frame_gas_left e` by decide_tac >>
+  metis_tac[]
 QED
 
 (* Lockstep corollary: our frame runs only instructions of prog (or STOP

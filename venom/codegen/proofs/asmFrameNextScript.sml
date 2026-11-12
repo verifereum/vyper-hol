@@ -39,5 +39,6 @@ Theorem asm_frame_step_next:
         (EL as.as_pc prog) as = AsmOK as1 /\
       frame_next es es1 /\ asm_frame_rel prog data es0 as1 es1
 Proof
-  cheat
+  rpt strip_tac >>
+  drule_all (cj 2 asm_frame_step) >> simp[]
 QED
