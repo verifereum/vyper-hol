@@ -27,6 +27,12 @@ Ancestors
   codegenRel contextCodegenRel venomInst venomState venomExecSemantics
   venomExecProofs stmtIfPtr exprSimSource supportedExprTraverse
 
+(* stmt_expr_body_pre's const-name premise, discharged from body_inv. *)
+fun irule_body_pre th =
+  TRY (drule_then assume_tac (cj 1 bodySimTheory.body_inv_const_name_free)) >> irule th >>
+  TRY (qpat_x_assum `!e. ~supported_expr_exists (const_name_root _) e`
+         (fn a => PURE_REWRITE_TAC [a, NOT_CLAUSES, AND_CLAUSES]));
+
 val _ = Parse.hide "body";
 
 Theorem frame_ret_ok_ptr_same_frame[local]:
@@ -235,7 +241,7 @@ Proof
       is_dynamic (vyper_to_abi_type (type_env tops) target)` by
     gvs[body_inv_def] >>
   `expr_body_pre cenv cx env e es` by
-    (irule stmt_expr_body_pre_alloc >> fs[allocLimitsTheory.alloc_limits_stmt_def] >>
+    (irule_body_pre stmt_expr_body_pre_alloc >> fs[allocLimitsTheory.alloc_limits_stmt_def] >>
      qexists_tac `int_calls_stmts ss1 ++ int_calls_stmts ss2` >> simp[]) >>
   `!ty. expr_sim_ptr d ctx PG func cenv cx ty e es /\
         expr_vv_sim_ptr d ctx PG func cenv cx ty e es` by
@@ -309,7 +315,7 @@ Proof
     gvs[body_inv_def] >>
   `expr_body_pre cenv cx env e es` by
     (`cx_tops cx = tops` by metis_tac[cx_tops_module] >>
-     irule stmt_expr_body_pre >> fs[body_inv_def] >>
+     irule_body_pre stmt_expr_body_pre >> fs[body_inv_def] >>
      qexists_tac `[]` >> simp[]) >>
   `expr_vv_sim_ptr d ctx PG func cenv cx (expr_type e) e es` by
     (qpat_x_assum `body_expr_ptr_ok _ _`

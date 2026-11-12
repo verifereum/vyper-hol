@@ -5,7 +5,7 @@ Ancestors
   exprLowering compileEnv vyperAST vyperInterpreter vyperState vyperTypeSystem
   vyperTypeCallGraph vyperTypeInvariants vyperRuntimeAccounts vyperPlaceInvariants
   vyperStorageLayoutSafety vyperTypeStoragePreservation supportedExprTraverse
-  supportedProgram placeTypingProps allocLimits selectorDispatch
+  supportedProgram placeTypingProps allocLimits selectorDispatch constSubst
 
 Definition outcomes_accounts_typed_def:
   outcomes_accounts_typed (oos : call_outcome list option) <=>
@@ -61,6 +61,19 @@ Definition bare_globals_layout_def:
          off2 (type_memory_size tv2))
 End
 
+(* A constant of the main module: classify_functions substitutes every
+   reference to it (module_consts_env), so no lowered TopLevelName names
+   it, and build_compile_env gives it no ce_module_vars location. *)
+Definition cx_const_name_def:
+  cx_const_name cx ((src:num option),id) <=>
+    src = NONE /\ MEM id (MAP FST (module_consts_env (cx_tops cx) []))
+End
+
+Definition const_name_root_def:
+  const_name_root cx (TopLevelName ty nsid) = cx_const_name cx nsid /\
+  const_name_root cx _ = F
+End
+
 Definition expr_sim_inv_def:
   expr_sim_inv cenv cx env (es:evaluation_state) <=>
     env_consistent env cx es /\ state_well_typed es /\
@@ -108,7 +121,9 @@ Definition expr_sim_inv_def:
     place_map_tables_agree_on_defined cenv env /\
     (!nsid ty. FLOOKUP env.bare_globals nsid = SOME ty ==>
                cenv.ce_hashmap_info nsid = NONE) /\
-    (!src id ty. FLOOKUP env.bare_globals (src,id) = SOME ty ==>
+    (!src id ty. FLOOKUP env.bare_globals (src,id) = SOME ty /\
+       (~cx_const_name cx (src,id) \/
+        IS_SOME (FLOOKUP env.bare_global_assignable (src,id))) ==>
        src = cenv.ce_module /\
        ?off. FLOOKUP cenv.ce_module_vars (src,id) = SOME (ImmutableLoc off) /\
              !tv. evaluate_type (get_tenv cx) ty = SOME tv ==>
@@ -195,6 +210,7 @@ Definition expr_sim_pre_def:
     int_calls_expr e = [] /\ call_evaluation_safe cx (int_calls_expr e) /\
     ~expr_has_evm_run e /\
     ~supported_expr_exists call_operands_effect_root e /\
+    ~supported_expr_exists (const_name_root cx) e /\
     (!target. supported_expr_exists (expr_abi_decode_target_root target) e ==>
               occurs_abi_decode_target target (cx_tops cx)) /\
     (!target. is_dynamic (vyper_to_abi_type (get_tenv cx) target) ==>
@@ -207,6 +223,7 @@ Definition expr_body_pre_def:
     byte_widths_expr e /\ alloc_limits_expr cenv e /\
     call_evaluation_safe cx (int_calls_expr e) /\ ~expr_has_evm_run e /\
     ~supported_expr_exists call_operands_effect_root e /\
+    ~supported_expr_exists (const_name_root cx) e /\
     EVERY (\c. FST c = NONE /\
                ?tops. supported_program tops /\
                       get_module_code cx NONE = SOME tops /\

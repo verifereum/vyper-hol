@@ -800,7 +800,8 @@ Proof
      fs[expr_body_pre_def, byte_widths_expr_def, alloc_limits_expr_def,
         int_calls_expr_def, expr_has_evm_run_def, supported_expr_exists_def,
         expr_abi_decode_target_root_def, expr_evm_run_root_def,
-        call_operands_effect_root_def]) >>
+        call_operands_effect_root_def,
+        exprSimHypsDefsTheory.const_name_root_def]) >>
   rewrite_tac[expr_vv_sim_def] >> rpt gen_tac >> strip_tac >>
   Cases_on `compile_get_target_ptr compile_expr cenv bt sa` >>
   PairCases_on `q` >>

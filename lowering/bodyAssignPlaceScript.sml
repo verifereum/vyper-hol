@@ -43,6 +43,12 @@ Ancestors
      supported_target_exists for the keys, and the ABI coverage premise
      with cx_tops_module.
    - CapMcopy: bodySimStmtCases' [local] body_inv_mcopy's proof;
+
+(* stmt_expr_body_pre's const-name premise, discharged from body_inv. *)
+fun irule_body_pre th =
+  TRY (drule_then assume_tac (cj 1 bodySimTheory.body_inv_const_name_free)) >> irule th >>
+  TRY (qpat_x_assum `!e. ~supported_expr_exists (const_name_root _) e`
+         (fn a => PURE_REWRITE_TAC [a, NOT_CLAUSES, AND_CLAUSES]));
      acyclic_struct_metadata: body_inv_def. *)
 Theorem assign_place_typing[local]:
   type_stmt env ret_ty (Assign (BaseTarget t) e) = SOME env' ==>
@@ -133,7 +139,7 @@ Proof
      is_dynamic (vyper_to_abi_type (type_env tops) target))` by
     gvs[body_inv_def] >>
   `cx_tops cx = tops` by metis_tac[cx_tops_module] >>
-  irule stmt_expr_body_pre >>
+  irule_body_pre stmt_expr_body_pre >>
   gvs[stmt_exprs_ok_flat, supported_stmt_expr_exists_def, int_calls_stmt_def] >>
   qexists_tac `[]` >> simp[] >>
   metis_tac[call_evaluation_safe_append_right]
@@ -194,7 +200,7 @@ Proof
   imp_res_tac supported_attribute_target_shape >>
   gvs[Once well_typed_expr_def, AllCaseEqs()]
   >>~- ([`expr_body_pre _ _ _ _ _`],
-        irule stmt_expr_body_pre >> simp[expr_has_evm_run_def] >>
+        irule_body_pre stmt_expr_body_pre >> simp[expr_has_evm_run_def] >>
         rpt conj_tac >>
         TRY (strip_tac >> qexists_tac `tops` >> simp[] >> NO_TAC) >>
         qexists_tac `[]` >> simp[] >>

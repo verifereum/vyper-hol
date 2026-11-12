@@ -37,6 +37,12 @@ Ancestors
 Libs
   monadsyntax
 
+(* stmt_expr_body_pre's const-name premise, discharged from body_inv. *)
+fun irule_body_pre th =
+  TRY (drule_then assume_tac (cj 1 bodySimTheory.body_inv_const_name_free)) >> irule th >>
+  TRY (qpat_x_assum `!e. ~supported_expr_exists (const_name_root _) e`
+         (fn a => PURE_REWRITE_TAC [a, NOT_CLAUSES, AND_CLAUSES]));
+
 Theorem aug_place_body_target_idx:
   !t cx tops ctx func cenv.
     body_base_target_ok cx t /\ body_inv tops ctx cenv cx ==>
@@ -189,7 +195,7 @@ Resume aug_place_target_indices_pre[subscript]:
   rpt strip_tac
   >- (first_x_assum irule >> simp[] >>
       metis_tac[call_evaluation_safe_append_left]) >>
-  irule stmt_expr_body_pre >>
+  irule_body_pre stmt_expr_body_pre >>
   simp[gasContextTheory.cx_tops_def] >>
   metis_tac[call_evaluation_safe_append_right, APPEND_NIL]
 QED

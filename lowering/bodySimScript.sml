@@ -131,6 +131,36 @@ Proof
   simp[]
 QED
 
+Theorem supported_exists_never[local]:
+  (!p e. (!x. ~p x) ==> ~supported_expr_exists p e) /\
+  (!p bt. (!x. ~p x) ==> ~supported_target_exists p bt) /\
+  (!p es. (!x. ~p x) ==> ~supported_exprs_exists p es) /\
+  (!p opt. (!x. ~p x) ==> ~supported_opt_exists p opt) /\
+  (!p fs. (!x. ~p x) ==> ~supported_fields_exists p fs)
+Proof
+  ho_match_mp_tac supported_expr_exists_ind >>
+  rw[supported_expr_exists_def]
+QED
+
+(* A supported program declares no constant, so a body's expressions name
+   none (cx_const_name). *)
+Theorem body_inv_const_name_free:
+  body_inv tops ctx cenv cx ==>
+  ~supported_expr_exists (const_name_root cx) e /\
+  ~supported_target_exists (const_name_root cx) bt
+Proof
+  strip_tac >>
+  `!x. ~const_name_root cx x` suffices_by metis_tac[supported_exists_never] >>
+  `cx_tops cx = tops /\ module_consts_env tops [] = []` by
+    (gvs[body_inv_def, supported_program_def,
+          supportedDeclsTheory.supported_declaration_headers_def] >>
+     metis_tac[gasContextTheory.cx_tops_module,
+                supportedDeclsTheory.supported_headers_module_consts_env]) >>
+  Cases >> simp[const_name_root_def] >>
+  rename1 `cx_const_name cx nsid` >> PairCases_on `nsid` >>
+  simp[cx_const_name_def]
+QED
+
 (* The compile env binds no local the typing does not know: every name
    ce_vars binds is a local of the type environment.  build_compile_env
    binds the parameters, and each declaration binds its name as the typing

@@ -22,6 +22,12 @@ Ancestors
    immutable assigned in the constructor, an element of a storage array or
    mapping, or a storage struct field that is not a word.  A local's size is
    positive since its type is a tuple element's, which is assignable; an
+
+(* stmt_expr_body_pre's const-name premise, discharged from body_inv. *)
+fun irule_body_pre th =
+  TRY (drule_then assume_tac (cj 1 bodySimTheory.body_inv_const_name_free)) >> irule th >>
+  TRY (qpat_x_assum `!e. ~supported_expr_exists (const_name_root _) e`
+         (fn a => PURE_REWRITE_TAC [a, NOT_CLAUSES, AND_CLAUSES]));
    immutable is no assignable place outside the constructor. *)
 Theorem assign_tuple_other_shapes:
   !cx gs e tops bindings cenv env ret_ty env' es.
@@ -425,7 +431,7 @@ Proof
     (gvs[stmt_exprs_ok_flat] >> metis_tac[tuple_places_key_occurs]) >>
   `cx_tops cx = tops` by
     (irule cx_tops_module >> gvs[body_inv_def]) >>
-  irule stmt_expr_body_pre >> simp[] >>
+  irule_body_pre stmt_expr_body_pre >> simp[] >>
   conj_tac >- gvs[body_inv_def] >>
   conj_tac >- metis_tac[tuple_places_key_occurs] >>
   conj_tac >- metis_tac[supported_expr_no_call_operand_effects] >>

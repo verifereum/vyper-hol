@@ -272,6 +272,79 @@ Proof
   metis_tac[]
 QED
 
+Theorem module_consts_env_acc_prefix[local]:
+  !ts acc. ?l. module_consts_env ts acc = acc ++ l
+Proof
+  Induct >> simp[constSubstTheory.module_consts_env_def] >> Cases >>
+  simp[constSubstTheory.module_consts_env_def] >>
+  rename1 `VariableDecl _ mut _ _ _` >> Cases_on `mut` >>
+  simp[constSubstTheory.module_consts_env_def] >>
+  metis_tac[APPEND_ASSOC]
+QED
+
+Theorem bare_global_variable_decl:
+  !ts id. is_bare_global_decl id ts ==>
+    ?vis mut ty slot. MEM (VariableDecl vis mut id ty slot) ts
+Proof
+  Induct >> simp[is_bare_global_decl_def] >> Cases >>
+  simp[is_bare_global_decl_def] >>
+  rename1 `VariableDecl dvis dmut dname dty dslot` >>
+  Cases_on `dmut` >> rw[is_bare_global_decl_def] >> metis_tac[]
+QED
+
+(* A bare global outside the constants' substitution map is an
+   immutable: is_bare_global_decl covers only immutables and constants. *)
+Theorem bare_global_not_const_immutable[local]:
+  !ts acc id.
+    is_bare_global_decl id ts /\
+    ~MEM id (MAP FST (module_consts_env ts acc)) ==>
+    ?vis ty slot. MEM (VariableDecl vis Immutable id ty slot) ts
+Proof
+  Induct >> simp[is_bare_global_decl_def] >> rpt gen_tac >>
+  Cases_on `h` >> simp[is_bare_global_decl_def, constSubstTheory.module_consts_env_def]
+  >- metis_tac[] >>
+  rename1 `VariableDecl dvis dmut dname dty dslot` >>
+  Cases_on `dmut` >>
+  simp[is_bare_global_decl_def, constSubstTheory.module_consts_env_def] >>
+  TRY (metis_tac[]) >>
+  rename1 `Constant ce` >> strip_tac >>
+  Cases_on `dname = id`
+  >- (gvs[] >>
+      qspecl_then [`ts`, `acc ++ [(id, fold_const_expr (subst_consts_expr acc ce))]`]
+        strip_assume_tac module_consts_env_acc_prefix >> gvs[]) >>
+  gvs[] >> metis_tac[]
+QED
+
+Theorem is_immutable_decl_variable_decl[local]:
+  !ts id. is_immutable_decl id ts ==>
+    ?vis ty slot. MEM (VariableDecl vis Immutable id ty slot) ts
+Proof
+  Induct >> rw[vyperInterpreterTheory.is_immutable_decl_def] >>
+  Cases_on `h` >> gvs[vyperInterpreterTheory.is_immutable_decl_def] >>
+  Cases_on `v0` >> gvs[vyperInterpreterTheory.is_immutable_decl_def] >>
+  metis_tac[]
+QED
+
+(* The names expr_sim_inv's immutable clause covers, a bare global that
+   is no constant or is assignable, are immutables of the module. *)
+Theorem bare_global_clause_immutable:
+  !env cx es tops id.
+    env_consistent env cx es /\ get_module_code cx NONE = SOME tops /\
+    is_bare_global_decl id tops /\
+    (~cx_const_name cx (NONE,id) \/
+     IS_SOME (FLOOKUP env.bare_global_assignable (NONE,id))) ==>
+    ?vis ty slot. MEM (VariableDecl vis Immutable id ty slot) tops
+Proof
+  rpt strip_tac
+  >- (irule bare_global_not_const_immutable >> qexists `[]` >>
+      `cx_tops cx = tops` by metis_tac[gasContextTheory.cx_tops_module] >>
+      gvs[exprSimHypsDefsTheory.cx_const_name_def]) >>
+  `?ts. get_module_code cx NONE = SOME ts /\ is_immutable_decl id ts` by
+    (gvs[IS_SOME_EXISTS, env_consistent_def, env_context_consistent_def] >>
+     metis_tac[]) >>
+  gvs[] >> metis_tac[is_immutable_decl_variable_decl]
+QED
+
 (* expr_sim_inv's immutable clause at a body's entry: build_compile_env
    places every immutable of a supported single-module program, and the
    installed immutables section, whose length is below 2 ** 256, holds
@@ -279,13 +352,15 @@ QED
 Theorem build_compile_env_bare_globals:
   !tops vis mut fname args ret body locks cenv cx env es imms section.
     cenv = build_compile_env tops vis mut fname args ret body locks /\
-    supported_program tops /\ get_module_code cx NONE = SOME tops /\
+    get_module_code cx NONE = SOME tops /\
     (!src ts. get_module_code cx src = SOME ts ==> src = NONE) /\
     env_consistent env cx es /\
     ALOOKUP es.immutables cx.txn.target = SOME imms /\
     immutables_section_rel tops imms section /\
     LENGTH section < dimword (:256) ==>
-    !src id ty. FLOOKUP env.bare_globals (src,id) = SOME ty ==>
+    !src id ty. FLOOKUP env.bare_globals (src,id) = SOME ty /\
+      (~cx_const_name cx (src,id) \/
+       IS_SOME (FLOOKUP env.bare_global_assignable (src,id))) ==>
       src = cenv.ce_module /\
       ?off. FLOOKUP cenv.ce_module_vars (src,id) = SOME (ImmutableLoc off) /\
             !tv. evaluate_type (get_tenv cx) ty = SOME tv ==>
@@ -295,7 +370,7 @@ Proof
   drule_all env_consistent_bare_global_find_NONE >> strip_tac >>
   `src = NONE` by metis_tac[] >> gvs[build_compile_env_module_vars] >>
   `?dvis dty dslot. MEM (VariableDecl dvis Immutable id dty dslot) tops` by
-    metis_tac[supported_bare_global_immutable, supported_program_def] >>
+    metis_tac[bare_global_clause_immutable] >>
   drule immutable_build_compile_env_declared >>
   disch_then (strip_assume_tac o SPEC_ALL) >>
   gvs[build_compile_env_module_vars] >>

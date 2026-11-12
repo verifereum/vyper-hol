@@ -69,6 +69,7 @@ Definition expr_map_pre_def:
     byte_widths_expr e /\ alloc_limits_expr cenv e /\
     call_evaluation_safe cx (int_calls_expr e) /\ ~expr_has_evm_run e /\
     ~supported_expr_exists call_operands_effect_root e /\
+    ~supported_expr_exists (const_name_root cx) e /\
     EVERY (\c. FST c = NONE /\
                ?tops. supported_program tops /\
                       get_module_code cx NONE = SOME tops /\

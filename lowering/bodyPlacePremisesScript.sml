@@ -8,6 +8,12 @@ Ancestors
   vyperCompiler compileVyper stmtLowering exprLowering allocLimits
   vyperTypeCallGraph vyperTypeCallStackSoundness
 
+(* stmt_expr_body_pre's const-name premise, discharged from body_inv. *)
+fun irule_body_pre th =
+  TRY (drule_then assume_tac (cj 1 bodySimTheory.body_inv_const_name_free)) >> irule th >>
+  TRY (qpat_x_assum `!e. ~supported_expr_exists (const_name_root _) e`
+         (fn a => PURE_REWRITE_TAC [a, NOT_CLAUSES, AND_CLAUSES]));
+
 Theorem legacy_storage_root_not_immutable[local]:
   body_inv tops ctx cenv cx /\
   (supported_scalar_target tops (src,id) \/
@@ -85,7 +91,7 @@ Resume body_assignment_place_premises[rhs]:
    (!target. is_dynamic (vyper_to_abi_type (get_tenv cx) target) ==>
      is_dynamic (vyper_to_abi_type (type_env tops) target))` by gvs[body_inv_def] >>
   `cx_tops cx = tops` by metis_tac[cx_tops_module] >>
-  irule stmt_expr_body_pre >>
+  irule_body_pre stmt_expr_body_pre >>
   gvs[stmt_exprs_ok_flat, supported_stmt_expr_exists_def, int_calls_stmt_def] >>
   qexists_tac `[]` >> simp[] >> metis_tac[call_evaluation_safe_append_right]
 QED
@@ -120,7 +126,7 @@ Resume body_assignment_place_premises[legacy_index]:
   `well_typed_expr env k` by fs[Once well_typed_expr_def, AllCaseEqs()] >>
   drule_then strip_assume_tac supported_expr_body_calls >>
   `cx_tops cx = tops` by metis_tac[cx_tops_module] >>
-  irule stmt_expr_body_pre >>
+  irule_body_pre stmt_expr_body_pre >>
   gvs[stmt_exprs_ok_flat, supported_stmt_expr_exists_def,
       supported_assignment_exists_def, supported_expr_exists_def,
       int_calls_stmt_def, int_calls_atarget_def, int_calls_expr_def] >>
