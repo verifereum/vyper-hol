@@ -1188,6 +1188,8 @@ Proof
   `cs_extends sc sd` by
     (drule compile_copy_memory_extends >> strip_tac >>
      gvs[same_blocks_def] >> irule cs_extends_same_block >> simp[IS_PREFIX_APPEND]) >>
+  `ci_mono sB sc /\ ci_mono sc sd` by
+    metis_tac[ci_mono_compile_alloc_buffer, ci_mono_compile_copy_memory, pairTheory.SND] >>
   `cs_extends sd sb` by metis_tac[compile_dynarray_append_labels, pairTheory.SND] >>
   `fn_has_code sa sB func /\ fn_has_code sB sd func /\ fn_has_code sd sb func` by
     metis_tac[fn_has_code_split, cs_extends_trans] >>
@@ -1197,7 +1199,7 @@ Proof
   `gas_admissible (bind (eval_expr cx e) (read_result cx)) expr_res_ok es_rhs` by
     (simp[Abbr `es_rhs`] >> metis_tac[append_forced_admissible]) >>
   `!x. raw = Var x ==> not_fresh_at sB x` by metis_tac[compile_lower_value_var] >>
-  `sa.cs_next_var <= sB.cs_next_var` by
+  `sa.cs_next_var <= sB.cs_next_var /\ sa.cs_next_id <= sB.cs_next_id` by
     (drule (cj 2 compile_expr_grows) >> simp[]) >>
   `local_ptrs_reserved cenv sB` by metis_tac[local_ptrs_reserved_next_var] >>
   qpat_x_assum `eval_stmt _ _ = _` SUBST1_TAC >>
@@ -1305,10 +1307,7 @@ Resume compile_append_storage_aggregate_stmt_frag[stored]:
           wordsTheory.WORD_ADD_ASSOC]) >>
   `local_ptrs_reserved cenv sd` by
     (irule local_ptrs_reserved_next_var >> qexists_tac `sB` >>
-     simp[] >>
-     `ci_mono sB sc /\ ci_mono sc sd` by
-       metis_tac[ci_mono_compile_alloc_buffer, ci_mono_compile_copy_memory, pairTheory.SND] >>
-     fs[ci_mono_def]) >>
+     simp[] >> fs[ci_mono_def]) >>
   `!H. valid_horizon cx st0 H es_end.storage_trace ==>
        res1 = INL () /\ stmt_state_rel H ctx func cenv cx ee1 fin /\
        storage_well_formed_on cx ee1 (FST H)` by
@@ -1360,7 +1359,7 @@ Resume compile_append_storage_aggregate_stmt_frag[stored]:
   `alloca_frame cenv es_end sB t cenv ee1 fin` by
     (irule alloca_frame_trans >>
      qexistsl_tac [`cenv`, `es_end`, `staged`, `sd`] >>
-     simp[] >> fs[cs_extends_def]) >>
+     simp[] >> fs[ci_mono_def]) >>
   `MAP FDOM es_end.scopes = MAP FDOM es.scopes` by
     (drule stmtSimDefsTheory.eval_read_preserves_scopes_dom >> simp[Abbr `es_rhs`]) >>
   `valid_horizon cx st0 H es.storage_trace` by
@@ -1370,7 +1369,7 @@ Resume compile_append_storage_aggregate_stmt_frag[stored]:
   `alloca_frame cenv es sa s0 cenv ee1 fin` by
     (irule (INST_TYPE [alpha |-> ``:256``] alloca_frame_expr_prefix) >>
      qexistsl_tac [`H`, `ctx`, `func`, `cx`, `es_end`, `sB`, `t`] >>
-     simp[Abbr `es_rhs`] >> fs[cs_extends_def]) >>
+     simp[Abbr `es_rhs`]) >>
   simp[stmt_post_def, stmt_lands_def, cenv_top_ext_refl] >>
   conj_tac
   >- (qpat_x_assum `compile_dynarray_append _ _ _ _ _ _ _ _ _ _ _ _ = _` mp_tac >>
