@@ -14,7 +14,7 @@ Theory o1SafeUpto
 Ancestors
   o1PassContract memSafeRun contextRawReachable contextCodegenRel unitMemInv
   ptrDiscipline lowerDloadDefs staticLayoutDefs venomExecSemantics
-  venomExecProofs venomState stateFrame list
+  venomExecProofs venomState stateFrame frameRawProjection list
 
 Definition gas_cut_def:
   gas_cut n (vs:venom_state) (s:venom_state) <=>
@@ -206,4 +206,38 @@ Theorem taint_within_upto_all:
 Proof
   rw[taint_within_def, taint_within_upto_def, final_taint_def] >>
   metis_tac[]
+QED
+
+(* The alloca frontier fits a word at every frame-reachable state before the
+   cut.  ConcretizeMemLoc's layout chain needs it (cache entries stay below
+   dimword); LowerDload's output provides it on the lowered context. *)
+Definition alloca_frontier_upto_def:
+  alloca_frontier_upto n C vs <=>
+    !stk PG G tn fn inst s.
+      frame_reachable vs C stk PG G tn fn inst s /\ gas_cut n vs s ==>
+      s.vs_alloca_next < dimword (:256)
+End
+
+Theorem alloca_frontier_upto_mono:
+  m <= n /\ alloca_frontier_upto n C vs ==> alloca_frontier_upto m C vs
+Proof
+  rw[alloca_frontier_upto_def] >> metis_tac[gas_cut_mono]
+QED
+
+Theorem mem_inv_raw_alloca_frontier_upto:
+  EVERY wf_function C.ctx_functions /\ mem_inv raw_mem_ok C vs ==>
+  !n. alloca_frontier_upto n C vs
+Proof
+  rw[alloca_frontier_upto_def, mem_inv_raw_reachable] >>
+  drule_all frame_reachable_raw >> strip_tac >>
+  first_x_assum drule >> simp[raw_mem_ok_def]
+QED
+
+Theorem o1_safe_upto_alloca_frontier:
+  EVERY wf_function C.ctx_functions /\ o1_safe_upto D lo n C vs ==>
+  alloca_frontier_upto n C vs
+Proof
+  rw[alloca_frontier_upto_def, o1_safe_upto_def] >>
+  drule_all frame_reachable_raw >> strip_tac >>
+  first_x_assum (drule_all_then strip_assume_tac) >> fs[raw_mem_ok_def]
 QED
