@@ -2111,6 +2111,153 @@ Proof
       `[mk_inst a.cs_next_id opc ops outs]`] >> simp[]
 QED
 
+Theorem abi_dyn_terminal_switch_cont[local]:
+  !opc ops outs l n. is_terminator opc /\ (^dyn_terminal) n ==>
+    (^dyn_terminal)
+      (do emit_inst opc ops outs; new_block l; n od)
+Proof
+  rpt gen_tac >> strip_tac >>
+  `do emit_inst opc ops outs; new_block l; n od =
+   comp_ignore_bind (do emit_inst opc ops outs; new_block l od) n`
+    by simp[comp_ignore_bind_def, comp_bind_assoc] >>
+  pop_assum SUBST1_TAC >> BETA_TAC >> rule_assum_tac BETA_RULE >>
+  MATCH_MP_TAC (BETA_RULE abi_dyn_terminal_ignore_bind) >> simp[] >>
+  MATCH_MP_TAC (BETA_RULE abi_dyn_terminal_switch) >> simp[]
+QED
+
+Theorem abi_dyn_terminal_if[local]:
+  !p m n. (^dyn_terminal) m /\ (^dyn_terminal) n ==>
+    (^dyn_terminal) (if p then m else n)
+Proof
+  Cases_on `p` >> simp[]
+QED
+
+Theorem abi_dyn_terminal_copy_case[local]:
+  !opc m n p. (^dyn_terminal) m /\ (^dyn_terminal) n /\ (^dyn_terminal) p ==>
+    (^dyn_terminal) (case opc of CALLDATALOAD => m | DLOAD => n | _ => p)
+Proof
+  rpt gen_tac >> qmatch_goalsub_abbrev_tac `P m` >>
+  Cases_on `opc` >> pure_rewrite_tac[opcode_case_def] >> metis_tac[]
+QED
+
+Theorem abi_dyn_decode_terminal[local]:
+  (!dst src lop base hi info.
+    (^(inst [alpha |-> ``:unit``] dyn_terminal))
+      (compile_abi_decode_to_buf dst src lop base hi info)) /\
+  (!dst src lop base hi elems ao vo.
+    (^(inst [alpha |-> ``:unit``] dyn_terminal))
+      (compile_abi_decode_complex_elems dst src lop base hi elems ao vo)) /\
+  (!dst src lop base hi info asz msz ip cnt.
+    (^(inst [alpha |-> ``:unit``] dyn_terminal))
+      (compile_abi_decode_dyn_loop dst src lop base hi info asz msz ip cnt))
+Proof
+  qabbrev_tac `U = ^(inst [alpha |-> ``:unit``] dyn_terminal)` >>
+  qabbrev_tac `FrO = ^(inst [alpha |-> ``:operand``] dyn_terminal)` >>
+  qabbrev_tac `B = ^(inst [alpha |-> ``:buffer``] dyn_terminal)` >>
+  qabbrev_tac `L = ^(inst [alpha |-> ``:string``] dyn_terminal)` >>
+  `(!m f. FrO m /\ (!x. U (f x)) ==> U (comp_bind m f)) /\
+   (!m f. FrO m /\ (!x. FrO (f x)) ==> FrO (comp_bind m f)) /\
+   (!m f. FrO m /\ (!x. B (f x)) ==> B (comp_bind m f)) /\
+   (!m f. B m /\ (!x. U (f x)) ==> U (comp_bind m f)) /\
+   (!m f. L m /\ (!x. U (f x)) ==> U (comp_bind m f)) /\
+   (!m f. U m /\ (!x. U (f x)) ==> U (comp_bind m f))`
+    by (rpt conj_tac >> simp_tac std_ss [Abbr `U`, Abbr `FrO`, Abbr `B`, Abbr `L`] >>
+        MATCH_ACCEPT_TAC (BETA_RULE abi_dyn_terminal_bind)) >>
+  `(!m n. U m /\ U n ==> U (comp_ignore_bind m n)) /\
+   (!m n. U m /\ FrO n ==> FrO (comp_ignore_bind m n)) /\
+   (!m n. L m /\ U n ==> U (comp_ignore_bind m n))`
+    by (rpt conj_tac >> simp_tac std_ss [Abbr `U`, Abbr `FrO`, Abbr `L`] >>
+        MATCH_ACCEPT_TAC (BETA_RULE abi_dyn_terminal_ignore_bind)) >>
+  `(!opc ops. FrO (emit_op opc ops)) /\
+   (!opc ops. U (emit_void opc ops)) /\
+   (!l. L (fresh_label l)) /\ (!sz. B (compile_alloc_buffer sz)) /\
+   (!v. U (comp_return v)) /\ (!v. FrO (comp_return v)) /\
+   (!v. B (comp_return v)) /\ (!v. L (comp_return v))`
+    by (rpt conj_tac >> simp_tac std_ss [Abbr `U`, Abbr `FrO`, Abbr `B`, Abbr `L`] >>
+        FIRST (map (MATCH_ACCEPT_TAC o BETA_RULE)
+          [abi_dyn_terminal_emit_op, abi_dyn_terminal_emit_void,
+           abi_dyn_terminal_label, abi_dyn_terminal_alloc, abi_dyn_terminal_return])) >>
+  `(!p m n. U m /\ U n ==> U (if p then m else n)) /\
+   (!p m n. FrO m /\ FrO n ==> FrO (if p then m else n))`
+    by (rpt conj_tac >> simp_tac std_ss [Abbr `U`, Abbr `FrO`] >>
+        MATCH_ACCEPT_TAC (BETA_RULE abi_dyn_terminal_if)) >>
+  `!opc m n p. U m /\ U n /\ U p ==>
+    U (case opc of CALLDATALOAD => m | DLOAD => n | _ => p)`
+    by (simp_tac std_ss [Abbr `U`] >>
+        MATCH_ACCEPT_TAC (BETA_RULE abi_dyn_terminal_copy_case)) >>
+  `(!ops outs l n. U n ==>
+      U (do emit_inst JMP ops outs; new_block l; n od)) /\
+   (!ops outs l n. U n ==>
+      U (do emit_inst JNZ ops outs; new_block l; n od))`
+    by (conj_tac >> rpt gen_tac >> strip_tac >>
+        simp_tac std_ss [Abbr `U`] >>
+        BETA_TAC >> rule_assum_tac BETA_RULE >>
+        MATCH_MP_TAC (BETA_RULE abi_dyn_terminal_switch_cont) >> simp[is_terminator_def]) >>
+  qpat_x_assum `Abbrev (U = _)` kall_tac >>
+  qpat_x_assum `Abbrev (FrO = _)` kall_tac >>
+  qpat_x_assum `Abbrev (B = _)` kall_tac >>
+  qpat_x_assum `Abbrev (L = _)` kall_tac >>
+  ho_match_mp_tac compile_abi_decode_to_buf_ind >> rpt strip_tac >>
+  simp_tac std_ss [Once compile_abi_decode_to_buf_def,
+    compile_abi_dec_addr_def, compile_abi_decode_static_def,
+    compile_abi_clamp_basetype_def, compile_abi_int_clamp_def,
+    compile_abi_bytes_clamp_def, compile_abi_decode_range_check_def,
+    compile_getelemptr_abi_def, compile_abi_decode_dyn_elem_ptr_def] >>
+  ASM_SIMP_TAC std_ss []
+  >- suspend "word"
+  >- suspend "bytes"
+  >- suspend "array"
+  >- suspend "complex"
+  >- suspend "cons"
+  >> suspend "loop"
+QED
+Resume abi_dyn_decode_terminal[word]:
+  Cases_on `clamp_info` >>
+  simp_tac std_ss [compile_abi_clamp_basetype_def, compile_abi_int_clamp_def,
+    compile_abi_bytes_clamp_def] >> simp[] >> dyn_certificate_tac
+QED
+Resume abi_dyn_decode_terminal[bytes]:
+  dyn_certificate_tac
+QED
+Resume abi_dyn_decode_terminal[array]:
+  Cases_on `~elem_is_dyn /\ ~dec_info_needs_clamp info`
+  >- (ASM_SIMP_TAC std_ss [LET_THM] >> dyn_certificate_tac) >>
+  `elem_is_dyn \/ dec_info_needs_clamp info` by metis_tac[] >>
+  qpat_x_assum `!can_bulk_copy ip i_ptr_alloc cnt. _` mp_tac >>
+  ASM_SIMP_TAC std_ss [LET_THM] >> disch_tac >> dyn_certificate_tac
+QED
+Resume abi_dyn_decode_terminal[complex]:
+  Cases_on `hi = Lit 0w` >>
+  FULL_SIMP_TAC std_ss [LET_THM] >> dyn_certificate_tac
+QED
+Resume abi_dyn_decode_terminal[cons]:
+  qpat_x_assum `!is_dyn dst src. _` (qspec_then `dec_info_needs_offset info` mp_tac) >>
+  ASM_SIMP_TAC std_ss [] >> disch_tac >>
+  qpat_x_assum `!is_dyn. _` (qspec_then `dec_info_needs_offset info` mp_tac) >>
+  ASM_SIMP_TAC std_ss [LET_THM] >> disch_tac >> dyn_certificate_tac
+QED
+Resume abi_dyn_decode_terminal[loop]:
+  qpat_x_assum `!is_dyn_elem dst src. _` (qspec_then `dec_info_needs_offset info` mp_tac) >>
+  ASM_SIMP_TAC std_ss [] >> disch_tac >> dyn_certificate_tac
+QED
+Finalise abi_dyn_decode_terminal
+
+Theorem abi_dyn_middle_terminal[local]:
+  !dst src lop base hi info asz msz i.
+    (^(inst [alpha |-> ``:unit``] dyn_terminal))
+      ((^dyn_middle) dst src lop base hi info asz msz i)
+Proof
+  rpt gen_tac >> simp_tac std_ss [compile_abi_decode_dyn_elem_ptr_def,
+    compile_abi_dec_addr_def, compile_abi_decode_range_check_def] >>
+  rpt (FIRST [MATCH_ACCEPT_TAC (BETA_RULE (CONJUNCT1 abi_dyn_decode_terminal)),
+    MATCH_ACCEPT_TAC (BETA_RULE abi_dyn_terminal_return),
+    MATCH_ACCEPT_TAC (BETA_RULE abi_dyn_terminal_emit_op),
+    MATCH_ACCEPT_TAC (BETA_RULE abi_dyn_terminal_emit_void),
+    ho_match_mp_tac (BETA_RULE abi_dyn_terminal_bind),
+    ho_match_mp_tac (BETA_RULE abi_dyn_terminal_ignore_bind),
+    IF_CASES_TAC, gen_tac, conj_tac])
+QED
+
 (* Bounded emitted-code region.  Upper bounds rule out spurious off-cut
    states past the last instruction of either sort of block. *)
 val dyn_R = ``\sa sb s.
