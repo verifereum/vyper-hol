@@ -14,8 +14,9 @@
  *)
 Theory fmpStageBlockSimCode
 Ancestors
-  fmpStageOpBase fmpStageControl fmpStageRel runInstsProps venomWf
-  o1PassContract ptrDiscipline contextCodegenRel analysisSimDefs
+  fmpStageOpBaseActual fmpStepStructural fmpStepLayout fmpLowerDefs
+  fmpStageOpBase fmpStageControl fmpStageRel passSharedProps runInstsProps
+  venomWf o1PassContract ptrDiscipline contextCodegenRel analysisSimDefs
   venomExecSemantics venomState venomInst finite_map list
 
 (* Why: the block simulation reads the target's next instruction off the
@@ -26,12 +27,49 @@ Theorem fmp_stage_target_shape:
   lookup_function fn.fn_name C'.ctx_functions = SOME fn' ==>
   ALL_DISTINCT (fn_labels fn') /\ EVERY bb_well_formed fn'.fn_blocks
 Proof
-  cheat
+  strip_tac >>
+  drule_all fmp_stage_actual_witness >> strip_tac >>
+  `o1_fn_shape C fn` by gvs[fmp_stage_ctx_def, o1_ctx_shape_def, EVERY_MEM] >>
+  `wf_function fn /\ first_block_no_phi fn` by gvs[o1_fn_shape_def] >>
+  gvs[fmp_stage_lowered_def] >>
+  `fmp_lower_function ctx0 sp fn = SOME (fn',sp')` by
+    simp[fmp_lower_function_def] >>
+  drule_all fmp_lower_function_structure >>
+  drule fmp_lower_function_preserves_labels >>
+  gvs[wf_function_def]
 QED
 
 (* Why: the restores, DALLOCA's expansion and the root run straight-line
    (run_insts); when an instruction of the block follows them, none of
    them is the block's terminator, so exec_block runs them the same way. *)
+Theorem exec_block_run_prefix_gen[local]:
+  !n fuel ctx bb j s s1.
+    bb_well_formed bb /\ j + n < LENGTH bb.bb_instructions /\
+    run_insts fuel ctx (TAKE n (DROP j bb.bb_instructions)) s = OK s1 ==>
+    exec_block fuel ctx bb (s with vs_inst_idx := j) =
+    exec_block fuel ctx bb (s1 with vs_inst_idx := j + n)
+Proof
+  Induct >- simp[run_insts_def] >>
+  rpt strip_tac >>
+  `j < LENGTH bb.bb_instructions` by simp[] >>
+  `DROP j bb.bb_instructions =
+   EL j bb.bb_instructions :: DROP (SUC j) bb.bb_instructions` by
+    (qspecl_then [`bb.bb_instructions`,`j`] mp_tac
+       rich_listTheory.DROP_EL_CONS >>
+     impl_tac >- simp[] >> simp[arithmeticTheory.ADD1]) >>
+  gvs[run_insts_def, AllCaseEqs()] >>
+  rename1 `step_inst _ _ _ s = OK s2` >>
+  `~is_terminator (EL j bb.bb_instructions).inst_opcode` by
+    (strip_tac >> gvs[bb_well_formed_def] >> res_tac >> simp[]) >>
+  drule_then (qspecl_then [`fuel`,`ctx`,`s`,`j`] mp_tac)
+    step_inst_non_term_idx >>
+  simp[] >> strip_tac >>
+  CONV_TAC (LAND_CONV (ONCE_REWRITE_CONV [exec_block_def])) >>
+  simp[get_instruction_def] >>
+  first_x_assum (qspecl_then [`fuel`,`ctx`,`bb`,`SUC j`,`s2`,`s1`] mp_tac) >>
+  simp[arithmeticTheory.ADD_CLAUSES]
+QED
+
 Theorem exec_block_run_prefix:
   !n fuel ctx bb s s1.
     bb_well_formed bb /\ s.vs_inst_idx + n < LENGTH bb.bb_instructions /\
@@ -40,7 +78,10 @@ Theorem exec_block_run_prefix:
     exec_block fuel ctx bb s =
     exec_block fuel ctx bb (s1 with vs_inst_idx := s.vs_inst_idx + n)
 Proof
-  cheat
+  rpt strip_tac >>
+  qspecl_then [`n`,`fuel`,`ctx`,`bb`,`s.vs_inst_idx`,`s`,`s1`] mp_tac
+    exec_block_run_prefix_gen >>
+  simp[]
 QED
 
 Theorem fmp_target_run_exec_block:
@@ -51,7 +92,13 @@ Theorem fmp_target_run_exec_block:
   t.vs_inst_idx + n < LENGTH bb'.bb_instructions ==>
   exec_block fuel C' bb' t = exec_block fuel C' bb' t1
 Proof
-  cheat
+  rw[fmp_target_run_def] >> gvs[] >>
+  `!lbl bbs bb. lookup_block lbl bbs = SOME bb ==> MEM bb bbs` by
+    (Induct_on `bbs` >> rw[lookup_block_def, FIND_thm] >>
+     gvs[lookup_block_def] >> res_tac >> simp[]) >>
+  `bb_well_formed bb'` by (res_tac >> gvs[EVERY_MEM]) >>
+  `t.vs_inst_idx + n < LENGTH bb'.bb_instructions` by simp[] >>
+  drule_all exec_block_run_prefix >> simp[]
 QED
 
 (* Why: fmp_invoke_sim takes the target INVOKE as given; at a related
