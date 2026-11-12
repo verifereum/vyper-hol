@@ -138,7 +138,7 @@ QED
 Theorem sym_codecopy_shape[local]:
   (∀e. sym_codecopy p env ss ≠ SymError e) ∧
   (∀m. sym_codecopy p env ss ≠ SymBad m) ⇒
-  ∃dst src sz t. ss.sym_stack = Val dst :: src :: Val sz :: t
+  ∃dst l d sz t. ss.sym_stack = Val dst :: Lab l d :: Val sz :: t
 Proof
   simp[sym_codecopy_def] >> BasicProvers.every_case_tac >> fs[]
 QED
