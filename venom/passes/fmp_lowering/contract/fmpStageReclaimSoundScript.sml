@@ -19,6 +19,7 @@
 Theory fmpStageReclaimSound
 Ancestors
   fmpStageRel ptrStaticDiscipline cfgWf venomWf livenessProofs
+  fnBlockPlanStaticOffsetLive fnPlanLineageLiveness fnBlockPlanStatic
 
 Theorem fmp_stage_frame_sites:
   fmp_stage_ctx rpolicy D C C' vs vs' fmp eom /\
@@ -74,6 +75,28 @@ Theorem fmp_stage_covers_phis:
   fmp_frame_covers sm env eb lo (entry_prov fn s G)
 Proof
   cheat
+QED
+
+Theorem fmp_ready_nonphi_input[local]:
+  wf_function fn /\
+  MEM lbl (cfg_analyze fn).cfg_dfs_pre /\
+  lookup_block lbl fn.fn_blocks = SOME bb /\
+  bb.bb_label = lbl /\ fmp_phi_ready_block (liveness_analyze fn) bb /\
+  MEM v (live_vars_at (liveness_analyze fn) lbl
+    (LENGTH (collect_phis bb.bb_instructions))) /\
+  EVERY (\q. ~MEM v q.inst_outputs) (collect_phis bb.bb_instructions) ==>
+  MEM v (input_vars_from pred bb.bb_instructions
+    (live_vars_at (liveness_analyze fn) lbl 0))
+Proof
+  strip_tac >> irule input_vars_from_non_phi >> conj_tac
+  >- (drule live_vars_at_propagate_range >> simp[] >>
+      disch_then irule >>
+      qexists_tac `LENGTH (collect_phis bb.bb_instructions)` >>
+      simp[current_collect_phis_length] >> rpt strip_tac >>
+      drule collect_phis_index >> strip_tac >>
+      gvs[EVERY_MEM, inst_defs_def] >> metis_tac[EL_MEM]) >>
+  gvs[fmp_phi_ready_block_def, EVERY_MEM, inst_uses_def] >>
+  metis_tac[phi_pairs_mem_operand_vars]
 QED
 
 Theorem fmp_stage_live_edge:
