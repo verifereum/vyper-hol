@@ -1230,7 +1230,8 @@ Proof
   rpt strip_tac >>
   `valid_horizon cx st0 (storage_trace_horizon mid.storage_trace)
      mid.storage_trace` by fs[storage_trace_domain_def] >>
-  first_assum (drule_then strip_assume_tac) >> gvs[] >>
+  qpat_assum `!H. valid_horizon cx st0 H mid.storage_trace ==> _`
+    (drule_then strip_assume_tac) >> gvs[] >>
   disj1_tac >> qexists_tac `v` >> simp[] >>
   qabbrev_tac `H0 = storage_trace_horizon mid.storage_trace` >>
   `eval_operand shadow_op t = SOME (typed_val_to_w256 tv v)` by
