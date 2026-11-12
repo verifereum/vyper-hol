@@ -43,7 +43,7 @@ Proof
   `slots_in_range (get_storage cx es tr) (w2n ((n2w slot):bytes32)) tvt` by
     gvs[vyperStorageFootprintTheory.storage_well_formed_on_def] >>
   `F` suffices_by simp[] >>
-  drule evaluate_type_well_formed_type_value >> strip_tac >>
+  drule vyperTypeValuesTheory.evaluate_type_well_formed_type_value >> strip_tac >>
   drule_all decode_value_from_slots_in_range >> strip_tac >>
   `read_storage_slot cx tr (n2w slot) tvt es = (INL v, es)` by
     simp[read_storage_slot_def, vyperStorageBackendTheory.get_storage_backend_eq,

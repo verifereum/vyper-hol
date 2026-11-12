@@ -47,7 +47,9 @@ Proof
       disch_then (DISJ_CASES_THEN (strip_assume_tac o BETA_RULE)) >>
       qexists_tac `marks` >> disj2_tac >> disj1_tac >>
       rewrite_tac[gas_summary_at_def] >> BETA_TAC
-      >- (qpat_assum `!H. valid_horizon _ _ H es_end.storage_trace ==> _`
+      >- (qpat_x_assum `!H. valid_horizon _ _ H _ ==> ?tv. _`
+            (assume_tac o SIMP_RULE (srw_ss()) []) >>
+          qpat_assum `!H. valid_horizon _ _ H es_end.storage_trace ==> _`
             (drule_then (qx_choose_then `tv` strip_assume_tac)) >>
           qpat_x_assum `res = INL tv` SUBST_ALL_TAC >>
           qpat_x_assum `!H. valid_horizon _ _ H es_end.storage_trace ==> _`
