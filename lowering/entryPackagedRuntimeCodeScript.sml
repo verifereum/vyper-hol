@@ -30,9 +30,9 @@ Proof
 QED
 
 Theorem entry_code_public_getter_body[local]:
-  public_getter top = SOME (mut,nr,rr,name,args,defaults,ret,body) ==>
+  public_getter top = SOME (mut,nr,rr,name,args,defaults,ret,gbody) ==>
   !ce lc rt. entry_preserves_code (\i. i.inst_opcode <> DALLOCA)
-    (compile_stmts ce lc rt body)
+    (compile_stmts ce lc rt gbody)
 Proof
   rw[oneline public_getter_def, AllCaseEqs()] >> gvs[getter_def] >>
   rpt (pairarg_tac >> gvs[]) >>
