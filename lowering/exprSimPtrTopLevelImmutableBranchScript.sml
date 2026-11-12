@@ -41,7 +41,7 @@ QED
 Theorem toplevel_immutable_copy_memory_frame:
   compile_imm_copy_to_memory F imm (Lit a) (Var root) (type_slot_size tv) 0 sa = ((),sb) /\
   not_fresh_at sa root /\ lookup_var root s = SOME w /\
-  immutable_copy_ghost_frame sa s G tn sb t H tm 0 (32*type_slot_size tv) w /\
+  immutable_copy_ghost_frame sa s G tn sb t HG tm 0 (32*type_slot_size tv) w /\
   w2n a + type_memory_size tv < dimword (:256) /\
   w2n w + type_memory_size tv < dimword (:256) ==>
   LENGTH s.vs_memory <= LENGTH t.vs_memory /\
@@ -64,8 +64,8 @@ Theorem toplevel_immutable_branch_value_post:
   FLOOKUP (get_source_immutables src imms) id = SOME (tv,v) /\
   evaluate_type (get_tenv cx) ann = SOME tv /\ value_has_type tv v /\
   off+type_memory_size tv < dimword (:256) /\
-  stmt_state_rel ctx fn cenv cx es s ==>
-  vv_post ctx fn cenv cx (TopLevelName ann (src,id)) es sa sa s
+  stmt_state_rel H ctx fn cenv cx es s ==>
+  vv_post H ctx fn cenv cx (TopLevelName ann (src,id)) es sa sa s
     (es with gas_obs := []) (Value v)
     (LocatedValue ann (mk_ptr (Lit (n2w off)) LocCode)) s
 Proof
@@ -82,8 +82,8 @@ Proof
 QED
 
 Theorem toplevel_immutable_expr_post_inst_idx[local,simp]:
-  expr_post ctx fn ce cx e es sa sb s0 es' v op (s with vs_inst_idx := k) <=>
-  expr_post ctx fn ce cx e es sa sb s0 es' v op s
+  expr_post H ctx fn ce cx e es sa sb s0 es' v op (s with vs_inst_idx := k) <=>
+  expr_post H ctx fn ce cx e es sa sb s0 es' v op s
 Proof
   simp[expr_post_def, expr_val_own_def, expr_val_rel_def, expr_val_at_def, lookup_var_def,
        stmt_state_rel_inst_idx, local_region_def]
@@ -100,9 +100,9 @@ Theorem toplevel_immutable_run_expr_post:
   (!x. p.ptr_operand = Var x ==> not_fresh_at sm x) /\
   (!tv. evaluate_type (get_tenv cx) ann = SOME tv ==>
         type_memory_bytes cenv ann = type_memory_size tv) /\
-  vv_post ctx fn cenv cx e es sa sm s0 es' (Value v) (LocatedValue ann p) s /\
+  vv_post H ctx fn cenv cx e es sa sm s0 es' (Value v) (LocatedValue ann p) s /\
   run_inst_seq (emitted_insts sm sb) (s with vs_inst_idx := k) = OK t ==>
-  expr_post ctx fn cenv cx e es sa sb s0 es' v op t
+  expr_post H ctx fn cenv cx e es sa sb s0 es' v op t
 Proof
   strip_tac >> drule_all runtime_code_copy_run_post >> strip_tac >>
   `code = emitted_insts sm sb` by gvs[emitted_insts_def, DROP_LENGTH_APPEND] >>
@@ -118,7 +118,7 @@ Theorem toplevel_immutable_alloc_copy_sequence:
   compile_alloc_buffer nb sa = (buf,sm) /\
   run_inst_seq (emitted_insts sa sm) s = OK u /\
   immutable_copy_ghost_frame sm (u with vs_inst_idx := k)
-    (Ga:(string,num # num) fmap) ta sb t H tm off nb (w:bytes32) ==>
+    (Ga:(string,num # num) fmap) ta sb t HG tm off nb (w:bytes32) ==>
   run_inst_seq (emitted_insts sa sb) (s with vs_inst_idx := k) = OK t
 Proof
   strip_tac >> drule storage_copy_alloc_layout >> strip_tac >>
@@ -151,7 +151,7 @@ QED
 
 Theorem toplevel_immutable_alloc_endpoint_bound:
   compile_alloc_buffer nb sa = (buf,sm) /\ fn_has_code sa sm fn /\
-  stmt_state_rel ctx fn cenv cx es s /\ fn_inst_ids_distinct fn /\
+  stmt_state_rel H ctx fn cenv cx es s /\ fn_inst_ids_distinct fn /\
   local_ptrs_reserved cenv sa /\ nb < dimword (:256) /\
   run_inst_seq (emitted_insts sa sm) s = OK u /\
   eval_operand buf.buf_operand u = SOME w ==>
@@ -169,16 +169,16 @@ Theorem toplevel_immutable_endpoint_value_post[local]:
   fn_has_code sa sb fn /\ fn_inst_ids_distinct fn /\
   evaluate_type (get_tenv cx) ann = SOME tv /\
   type_memory_bytes cenv ann = type_memory_size tv /\
-  vv_post ctx fn cenv cx (TopLevelName ann nsid) es sa sa s0
+  vv_post H ctx fn cenv cx (TopLevelName ann nsid) es sa sa s0
     (es with gas_obs := []) (Value v) (LocatedValue ann (mk_ptr (Lit a) LocCode)) s0 /\
   run_inst_seq (emitted_insts sa sb) (s0 with vs_inst_idx := k) = OK t /\
   lookup_var p t = SOME w ==>
-  expr_post ctx fn cenv cx (TopLevelName ann nsid) es sa sb s0
+  expr_post H ctx fn cenv cx (TopLevelName ann nsid) es sa sb s0
     (es with gas_obs := []) v (Var p) t /\
   val_wf tv v /\ val_in_memory tv v (w2n w) t.vs_memory
 Proof
   strip_tac >>
-  `expr_post ctx fn cenv cx (TopLevelName ann nsid) es sa sb s0
+  `expr_post H ctx fn cenv cx (TopLevelName ann nsid) es sa sb s0
      (es with gas_obs := []) v (Var p) t` by
     (irule toplevel_immutable_run_expr_post >>
      conj_tac >- simp[] >>
@@ -200,8 +200,8 @@ Proof
 QED
 
 Theorem toplevel_immutable_ghost_cursor[local,simp]:
-  ghost_inv d ce cx es G tn (s with vs_inst_idx := k) <=>
-  ghost_inv d ce cx es G tn s
+  ghost_inv H d ce cx es G tn (s with vs_inst_idx := k) <=>
+  ghost_inv H d ce cx es G tn s
 Proof
   simp[bodyPtrDefsTheory.ghost_inv_def, bodyPtrDefsTheory.ptr_covers_def,
        bodyPtrDefsTheory.stor_taint_ok_def, lookup_var_def]
@@ -259,7 +259,7 @@ Theorem compile_toplevel_immutable_aggregate_sim_ptr:
   expr_sim_ptr d ctx PG fn cenv cx ty (TopLevelName ann (src,id)) es
 Proof
   strip_tac >> rw[bodyPtrDefsTheory.expr_sim_ptr_def] >>
-  `vv_post ctx fn cenv cx (TopLevelName ann (cenv.ce_module,id)) es sa sa s0
+  `vv_post H ctx fn cenv cx (TopLevelName ann (cenv.ce_module,id)) es sa sa s0
     (es with gas_obs := []) (Value v)
     (LocatedValue ann (mk_ptr (Lit (n2w off)) LocCode)) s0` by
     (irule toplevel_immutable_branch_value_post >> simp[] >> metis_tac[]) >>
@@ -268,7 +268,7 @@ Proof
   `compile_alloc_buffer (32*type_slot_size tv) sa = (buf,sm) /\
    32*type_slot_size tv < dimword (:256)` by metis_tac[] >>
   drule_all toplevel_immutable_alloc_copy_run >>
-  disch_then (qspecl_then [`tn0`,`PG`,`G0`,`cx_dead cx`] strip_assume_tac) >>
+  disch_then (qspecl_then [`tn0`,`PG`,`G0`,`cx_dead H cx`] strip_assume_tac) >>
   `unwrap_value cenv (LocatedValue ann (mk_ptr (Lit (n2w off)) LocCode)) sa =
      (Var p,sb)` by
     (drule compile_toplevel_immutable_ptr >>
@@ -283,9 +283,9 @@ Proof
   qpat_x_assum `type_memory_bytes cenv ann = type_memory_size tv` kall_tac >>
   `val_store_size tv v <= 32*type_slot_size tv` by
     (drule val_store_size_le >> decide_tac) >>
-  `ptr_val_ok cx ann v (Var p) H tm t /\
-   ptr_vv_ok cx ann (Value v) (StackValue ann (Var p)) es H tm t /\
-   ptr_buf_ok cenv (TopLevelName ann (cenv.ce_module,id)) (Var p) H t` by
+  `ptr_val_ok cx ann v (Var p) HG tm t /\
+   ptr_vv_ok cx ann (Value v) (StackValue ann (Var p)) es HG tm t /\
+   ptr_buf_ok cenv (TopLevelName ann (cenv.ce_module,id)) (Var p) HG t` by
     (irule toplevel_immutable_clean_pointer_post >>
      rpt (goal_assum (drule_at Any)) >> simp[]) >>
   `eval_operand buf.buf_operand u = SOME w` by simp[eval_operand_def] >>
@@ -311,17 +311,17 @@ Resume compile_toplevel_immutable_aggregate_sim_ptr[immutable_endpoint_finish]:
       mem_bytes_at i 1 t.vs_memory = mem_bytes_at i 1 s0.vs_memory` by
     (rpt strip_tac >> `i+1 <= w2n w \/ w2n w+type_memory_size tv <= i` by
        (gvs[] >> decide_tac) >> metis_tac[]) >>
-  `ghost_inv d cenv cx (es with gas_obs := []) H tm t` by
+  `ghost_inv H d cenv cx (es with gas_obs := []) HG tm t` by
     (irule (INST_TYPE [alpha |-> ``:256``] toplevel_immutable_alloc_copy_ghost_inv) >>
      rpt (goal_assum (drule_at Any)) >> simp[] >>
      qexistsl [`32*type_slot_size tv`,`w`] >>
      simp[] >> metis_tac[arithmeticTheory.ADD_COMM]) >>
-  `ghost_kept cenv es sa G0 tn0 s0 H tm` by
+  `ghost_kept cenv es sa G0 tn0 s0 HG tm` by
     (irule exprSimPtrLiteralBufferTheory.literal_ghost_kept >> simp[] >> metis_tac[]) >>
   rewrite_tac[fragGasPathPtrTheory.gas_outcome_ptr_def] >>
   qexists_tac `[]` >> disj1_tac >>
   rewrite_tac[fragGasPathPtrTheory.gas_summary_ptr_at_def] >>
-  qexistsl_tac [`INL v`,`es`,`H`,`tm`,
+  qexistsl_tac [`INL v`,`es`,`HG`,`tm`,
     `OK (t with vs_inst_idx := LENGTH sb.cs_current_insts)`] >>
   simp[] >> conj_tac
   >- (simp[Once evaluate_def, lookup_global_def, bind_def, lift_option_type_def,

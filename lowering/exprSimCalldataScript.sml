@@ -113,7 +113,7 @@ Proof
   `stmt_state_rel H0 ctx func cenv cx es s0` by metis_tac[] >> gvs[lower_value_calldata_len] >>
   `!out. step_inst_base (mk_inst sa.cs_next_id CALLDATASIZE [] [out]) s0 =
      OK (update_var out (val_to_w256 (IntV &LENGTH cx.txn.calldata)) s0)` by
-    (qpat_x_assum `!H. valid_horizon _ _ H _ ==> _` kall_tac >>
+    (qpat_x_assum `!H. valid_horizon _ _ H _ ==> _` (drule_then strip_assume_tac) >>
      simp[step_inst_base_opcode_eqs, exec_read0_def, mk_inst_def] >>
      fs[stmt_state_rel_def, state_rel_def, call_ctx_rel_def,
         val_to_w256_def, integer_wordTheory.i2w_def]) >>

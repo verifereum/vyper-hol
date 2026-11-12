@@ -7,7 +7,7 @@ Ancestors
   gasShadow fragExec loweringPosts bodySim supportedStmts compileVyper
   moduleLowering vyperCompiler actualRegistrationCode
   actualDecoderPackaging rawEntryCode loweringShapeProps loweringShapeDefs
-  loweringShapeRules compileEnv venomInst list
+  loweringShapeRules compileEnv venomInst list gasShadowShape
 
 val _ = Parse.hide "body";
 

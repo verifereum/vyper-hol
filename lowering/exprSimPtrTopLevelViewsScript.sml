@@ -12,8 +12,8 @@ Ancestors
 
 Theorem toplevel_live_storage_taint:
   !tr cx tn s w tv k b.
-  stor_taint_ok cx tn s /\
-  storage_read_live cx tr
+  stor_taint_ok H cx tn s /\
+  storage_read_live H tr
     (if tr then s.vs_transient s.vs_call_ctx.cc_address
      else (s.vs_accounts s.vs_call_ctx.cc_address).storage) w tv /\
   (k,b) IN (if tr then tn.t_trans else tn.t_stor) /\
@@ -32,9 +32,9 @@ QED
 
 Theorem toplevel_live_ptr_vv_ok:
   !cx tn s tr w t tv es G.
-  stor_taint_ok cx tn s /\
+  stor_taint_ok H cx tn s /\
   (!ty. evaluate_type (get_tenv cx) t = SOME ty ==>
-    storage_read_live cx tr
+    storage_read_live H tr
       (if tr then s.vs_transient s.vs_call_ctx.cc_address
        else (s.vs_accounts s.vs_call_ctx.cc_address).storage) w ty) ==>
   ptr_vv_ok cx t tv
@@ -110,7 +110,7 @@ Proof
   `storage_vars_rel cenv cx /\ transient_vars_rel cenv cx` by
     gvs[stmt_state_rel_def, state_rel_def] >>
   fs[] >> drule_all toplevel_storage_ce_vars >> strip_tac >>
-  `!st. storage_read_live cx tr st (n2w slot) tvt` by
+  `!st. storage_read_live H tr st (n2w slot) tvt` by
     (gen_tac >> irule declared_storage_region_read_live >>
      qexistsl [`src`, `id`, `[]`] >> simp[declared_storage_region_def]) >>
   `compile_expr cenv ty (TopLevelName ann (src,id)) sa =

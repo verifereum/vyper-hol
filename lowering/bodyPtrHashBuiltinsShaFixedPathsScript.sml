@@ -29,8 +29,8 @@ Theorem hash_sha256_bytesm_abort_path:
   compile_sha256_bytesm value m sa = (op,sb) /\ m <= 32 /\
   (!x. value = Var x ==> not_fresh_at sa x) /\
   eval_operand value s = SOME v /\ op_taint tn value = {} /\
-  stmt_state_rel ctx fn cenv cx es s /\ fn_inst_ids_distinct fn /\
-  local_ptrs_reserved cenv sa /\ ghost_inv d cenv cx es G tn s /\
+  stmt_state_rel H ctx fn cenv cx es s /\ fn_inst_ids_distinct fn /\
+  local_ptrs_reserved cenv sa /\ ghost_inv H d cenv cx es G tn s /\
   (!x k. cenv.ce_return_buf = SOME (PtrVar (Var x) k) ==> not_fresh_at sa x) /\
   (!x k. cenv.ce_return_pc = SOME (PtrVar (Var x) k) ==> not_fresh_at sa x) /\
   MEM (mk_inst sa.cs_next_id ALLOCA [Lit 32w]
@@ -105,8 +105,8 @@ Theorem hash_sha256_bytesm_success_path:
   compile_sha256_bytesm value m sa = (op,sb) /\ m <= 32 /\
   (!x. value = Var x ==> not_fresh_at sa x) /\
   eval_operand value s = SOME v /\ op_taint tn value = {} /\
-  stmt_state_rel ctx fn cenv cx es s /\ fn_inst_ids_distinct fn /\
-  local_ptrs_reserved cenv sa /\ ghost_inv d cenv cx es G tn s /\
+  stmt_state_rel H ctx fn cenv cx es s /\ fn_inst_ids_distinct fn /\
+  local_ptrs_reserved cenv sa /\ ghost_inv H d cenv cx es G tn s /\
   (!x k. cenv.ce_return_buf = SOME (PtrVar (Var x) k) ==> not_fresh_at sa x) /\
   (!x k. cenv.ce_return_pc = SOME (PtrVar (Var x) k) ==> not_fresh_at sa x) /\
   MEM (mk_inst sa.cs_next_id ALLOCA [Lit 32w]
@@ -122,7 +122,7 @@ Theorem hash_sha256_bytesm_success_path:
     gas_path_ptr D 0 ctx fn PG G tn s 1 Gf tf
       (OK (t with vs_inst_idx := s.vs_inst_idx+7)) /\
     eval_operand op t = SOME (SHA_256_bytes bs) /\
-    ghost_inv d cenv cx (es with outcomes := SOME rest) Gf tf
+    ghost_inv H d cenv cx (es with outcomes := SOME rest) Gf tf
       (t with vs_inst_idx := s.vs_inst_idx+7) /\
     ghost_kept cenv es sa G tn s Gf tf /\ op_taint tf op = {} /\
     op_prov Gf op = NONE
@@ -187,7 +187,7 @@ Resume hash_sha256_bytesm_success_path[compose]:
       disch_then (qspec_then `emitted_insts sm sb` mp_tac) >> simp[]) >>
   conj_tac >- (drule_all gas_path_ptr_then >> simp[]) >>
   qpat_x_assum `eval_operand op (_ with vs_inst_idx := _) = _` mp_tac >>
-  qpat_x_assum `ghost_inv d cenv cx (es with outcomes := SOME rest) Gf tf _` mp_tac >>
+  qpat_x_assum `ghost_inv H d cenv cx (es with outcomes := SOME rest) Gf tf _` mp_tac >>
   simp[hash_eval_operand_inst_idx, hash_ghost_inv_inst_idx]
 QED
 Finalise hash_sha256_bytesm_success_path
@@ -197,8 +197,8 @@ Theorem hash_sha256_word_abort_path:
   compile_sha256_word value sa = (op,sb) /\
   (!x. value = Var x ==> not_fresh_at sa x) /\
   eval_operand value s = SOME v /\ op_taint tn value = {} /\
-  stmt_state_rel ctx fn cenv cx es s /\ fn_inst_ids_distinct fn /\
-  local_ptrs_reserved cenv sa /\ ghost_inv d cenv cx es G tn s /\
+  stmt_state_rel H ctx fn cenv cx es s /\ fn_inst_ids_distinct fn /\
+  local_ptrs_reserved cenv sa /\ ghost_inv H d cenv cx es G tn s /\
   (!x k. cenv.ce_return_buf = SOME (PtrVar (Var x) k) ==> not_fresh_at sa x) /\
   (!x k. cenv.ce_return_pc = SOME (PtrVar (Var x) k) ==> not_fresh_at sa x) /\
   MEM (mk_inst sa.cs_next_id ALLOCA [Lit 32w]
@@ -225,8 +225,8 @@ Theorem hash_sha256_word_success_path:
   compile_sha256_word value sa = (op,sb) /\
   (!x. value = Var x ==> not_fresh_at sa x) /\
   eval_operand value s = SOME v /\ op_taint tn value = {} /\
-  stmt_state_rel ctx fn cenv cx es s /\ fn_inst_ids_distinct fn /\
-  local_ptrs_reserved cenv sa /\ ghost_inv d cenv cx es G tn s /\
+  stmt_state_rel H ctx fn cenv cx es s /\ fn_inst_ids_distinct fn /\
+  local_ptrs_reserved cenv sa /\ ghost_inv H d cenv cx es G tn s /\
   (!x k. cenv.ce_return_buf = SOME (PtrVar (Var x) k) ==> not_fresh_at sa x) /\
   (!x k. cenv.ce_return_pc = SOME (PtrVar (Var x) k) ==> not_fresh_at sa x) /\
   MEM (mk_inst sa.cs_next_id ALLOCA [Lit 32w]
@@ -242,7 +242,7 @@ Theorem hash_sha256_word_success_path:
     gas_path_ptr D 0 ctx fn PG G tn s 1 Gf tf
       (OK (t with vs_inst_idx := s.vs_inst_idx+7)) /\
     eval_operand op t = SOME (SHA_256_bytes bs) /\
-    ghost_inv d cenv cx (es with outcomes := SOME rest) Gf tf
+    ghost_inv H d cenv cx (es with outcomes := SOME rest) Gf tf
       (t with vs_inst_idx := s.vs_inst_idx+7) /\
     ghost_kept cenv es sa G tn s Gf tf /\ op_taint tf op = {} /\
     op_prov Gf op = NONE

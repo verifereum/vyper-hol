@@ -5,7 +5,7 @@
  * call's storage trace, the pointer-safety lift, the pointer ghost and the
  * statement state relation.  The endpoint is chosen before any horizon.
  *
- * The statement is fixed; its proof is open (cheat) and is being done on
+ * r3: st is pinned by runtime_selected_body_start.  The statement is fixed; its proof is open (cheat) and is being done on
  * the canonical registration path.
  *
  * TOP-LEVEL:
@@ -13,9 +13,11 @@
  *)
 Theory externalEntryJoint
 Ancestors
-  externalEntryReachesBody extEntryReachesBodyPtr bodyPtrDefs
-  vyperStorageFootprint fragGasPath fragGasPathMem allocaHistory
-  loweringPosts ptrSafeRun exprLoweringProps
+  compileVyper moduleLowering compileEnv context supportedProgram e2eDefs
+  vyperLoweringCorrect vyperInterpreter venomWf venomInst venomExecSemantics
+  fragExec fragGasPath fragGasPathMem allocaHistory loweringStateRelDefs
+  loweringPosts exprLoweringProps vyperStorageFootprint ptrSafeRun
+  ptrDiscipline bodyPtrDefs runtimeBodyStartDefs
 
 Theorem external_entry_joint:
   !tops rpolicy unit am tx ret vs mut args fbody env es0.
@@ -42,6 +44,8 @@ Theorem external_entry_joint:
             tx.function_name, args, [], ret, fbody)) =
         (lbl, cenv0, pos_args, min_cds, is_payable, F, nkey, ut', iv, fbody,
          rt) /\
+      runtime_selected_body_start tops rpolicy
+        (lbl, cenv0, pos_args, min_cds, is_payable, F, nkey, ut', iv, fbody, rt) st /\
       compile_register_positional_args cenv0 pos_args 4 st = (cenv, sa) /\
       compile_guarded_body cenv F nkey ut' iv fbody rt sa = ((), st') /\
       fn_has_code sa st' func /\ fn_inst_ids_distinct func /\
