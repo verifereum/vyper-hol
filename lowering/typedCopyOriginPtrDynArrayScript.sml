@@ -122,6 +122,105 @@ Proof
   rpt (goal_assum (drule_at Any)) >> gvs[]
 QED
 
+Theorem typed_copy_origin_ptr_dyn_check_path:
+  emit_op GT [Var lv; Lit (n2w C)] a = (too_long,b) /\
+  emit_op ISZERO [too_long] b = (ok,c) /\
+  emit_void ASSERT [ok] c = ((),d) /\
+  not_fresh_at a lv /\ eval_operand (Var lv) s = SOME (n2w N) /\
+  FLOOKUP G lv = NONE /\ op_taint tn (Var lv) = {} /\
+  N <= C /\ C < dimword (:256) /\
+  allocas_from lo s /\ lo <= s.vs_alloca_next /\ ~ctx_has_dalloca ctx /\
+  fn_has_code a d func /\ fn_inst_ids_distinct func /\ ~s.vs_halted /\
+  s.vs_current_bb = a.cs_current_bb /\
+  s.vs_inst_idx = LENGTH a.cs_current_insts ==>
+  ?t Gf tnf.
+    gas_origin_ptr_path
+      (<| d_stor := K (K {}); d_trans := K (K {}); d_imm := K {};
+          d_ret := K {} |>,lo,explicit,ctx,func,PG)
+      (s,G,tn) [] (OK t,Gf,tnf) /\
+    typed_copy_state_frame a off len s t /\
+    t.vs_memory = s.vs_memory /\ tnf.t_mem = tn.t_mem /\
+    tnf.t_imm = tn.t_imm /\ tnf.t_stor = tn.t_stor /\ tnf.t_trans = tn.t_trans /\
+    t.vs_alloca_next = s.vs_alloca_next /\
+    ~t.vs_halted /\ t.vs_current_bb = d.cs_current_bb /\
+    t.vs_inst_idx = LENGTH d.cs_current_insts /\
+    (!p. not_fresh_at a p ==>
+      lookup_var p t = lookup_var p s /\ FLOOKUP Gf p = FLOOKUP G p /\
+      op_taint tnf (Var p) = op_taint tn (Var p)) /\
+    (!p sz. not_fresh_at a p /\ ptr_covers G tn p s sz ==>
+      ptr_covers Gf tnf p t sz) /\
+    eval_operand (Var lv) t = SOME (n2w N) /\
+    FLOOKUP Gf lv = NONE /\ op_taint tnf (Var lv) = {}
+Proof
+  strip_tac >>
+  qpat_assum `emit_op GT _ _ = _`
+    (mp_tac o MATCH_MP emitHelperPropsTheory.emitted_insts_emit_op) >> strip_tac >>
+  qpat_assum `emit_op ISZERO _ _ = _`
+    (mp_tac o MATCH_MP emitHelperPropsTheory.emitted_insts_emit_op) >> strip_tac >>
+  `N < dimword (:256)` by decide_tac >>
+  `b.cs_current_bb = a.cs_current_bb /\ c.cs_current_bb = b.cs_current_bb /\
+   d.cs_current_bb = c.cs_current_bb` by
+    metis_tac[exprLoweringPropsTheory.emit_op_same_blocks,
+      exprLoweringPropsTheory.emit_void_same_blocks, exprLoweringPropsTheory.same_blocks_def] >>
+  drule emitHelperPropsTheory.emitted_insts_emit_void >> strip_tac >>
+  qabbrev_tac `v1 = STRING #"%" (toString a.cs_next_var)` >>
+  qabbrev_tac `v2 = STRING #"%" (toString b.cs_next_var)` >>
+  `lv <> v1 /\ lv <> v2 /\ v1 <> v2` by
+    (gvs[Abbr `v1`, Abbr `v2`, loweringStateRelDefsTheory.not_fresh_at_def] >>
+     metis_tac[DECIDE ``~(n < n) /\ ~(n < n + 1)``]) >>
+  qabbrev_tac `i1 = mk_inst a.cs_next_id GT [Var lv; Lit (n2w C)] [v1]` >>
+  qabbrev_tac `i2 = mk_inst b.cs_next_id ISZERO [Var v1] [v2]` >>
+  qabbrev_tac `i3 = mk_inst c.cs_next_id ASSERT [Var v2] []` >>
+  qabbrev_tac `u = update_var v2 1w (update_var v1 0w s)` >>
+  `run_inst_seq [i1;i2;i3] s = OK u` by
+    (simp[Abbr `i1`, Abbr `i2`, Abbr `i3`, Abbr `u`,
+       exprLoweringPropsTheory.run_inst_seq_def, venomExecSemanticsTheory.step_inst_base_opcode_eqs,
+       venomInstTheory.mk_inst_def, venomExecSemanticsTheory.exec_pure1_def,
+       venomExecSemanticsTheory.exec_pure2_def, venomStateTheory.eval_operand_def,
+       emitHelperPropsTheory.lookup_var_update_var, wordsTheory.w2n_n2w,
+       arithmeticTheory.LESS_MOD, venomExecSemanticsTheory.bool_to_word_def,
+       arithmeticTheory.NOT_LESS]) >>
+  qabbrev_tac `Gf = DRESTRICT (DRESTRICT G (COMPL {v1})) (COMPL {v2})` >>
+  qabbrev_tac `tnf = tn with t_var := tn.t_var |+ (v1,{}) |+ (v2,{})` >>
+  `inst_seq_ptr
+      (<| d_stor := K (K {}); d_trans := K (K {}); d_imm := K {};
+          d_ret := K {} |>) lo ctx func PG G tn [i1;i2;i3] s Gf tnf` by
+    (simp[inst_seq_ptr_def, Abbr `i1`, Abbr `i2`, Abbr `i3`,
+      venomExecSemanticsTheory.step_inst_base_opcode_eqs, venomInstTheory.mk_inst_def,
+      venomExecSemanticsTheory.exec_pure1_def, venomExecSemanticsTheory.exec_pure2_def,
+      venomStateTheory.eval_operand_def, emitHelperPropsTheory.lookup_var_update_var,
+      wordsTheory.w2n_n2w, arithmeticTheory.LESS_MOD,
+      venomExecSemanticsTheory.bool_to_word_def, arithmeticTheory.NOT_LESS] >>
+     simp[step_prov_def, set_prov_def, out_prov_def] >>
+     simp[step_taint_def, set_var_taint_def, out_taint_def] >>
+     simp[mem_taint_def, new_site_bytes_def, step_writes_def, written_taint_def,
+       range_bytes_def, store_taint_def, adopt_reset_def, imm_taint_def,
+       contextCodegenRelTheory.source_memory_read_ranges_def,
+       codegenRelTheory.source_memory_write_ranges_def,
+       venomStateTheory.update_var_def] >>
+     simp[finite_mapTheory.FLOOKUP_DEF, venomStateTheory.eval_operand_def,
+       venomStateTheory.lookup_var_def, finite_mapTheory.FLOOKUP_UPDATE,
+       Abbr `tnf`, taint_component_equality] >>
+     simp[ptr_inst_ok_def, access_ok_def, taint_ok_def,
+       contextCodegenRelTheory.source_memory_read_ranges_def,
+       codegenRelTheory.source_memory_write_ranges_def, op_taint_def,
+       finite_mapTheory.FLOOKUP_UPDATE, allocas_from_def] >>
+     simp[venomExecSemanticsTheory.step_inst_non_invoke,
+       venomExecSemanticsTheory.step_inst_base_opcode_eqs,
+       venomExecSemanticsTheory.exec_pure1_def, venomExecSemanticsTheory.exec_pure2_def,
+       venomStateTheory.eval_operand_def, venomStateTheory.lookup_var_def,
+       finite_mapTheory.FLOOKUP_UPDATE, wordsTheory.w2n_n2w,
+       arithmeticTheory.LESS_MOD, venomExecSemanticsTheory.bool_to_word_def,
+       arithmeticTheory.NOT_LESS, venomStateTheory.update_var_def] >>
+     gvs[op_taint_def, allocas_from_def] >>
+     simp[finite_mapTheory.DRESTRICT_UNIV, SF CONJ_ss] >>
+     reverse conj_tac >- metis_tac[] >>
+     gen_tac >> Cases_on `op = Var lv` >>
+     simp[] >> Cases_on `op = Lit (n2w C)` >> gvs[]) >>
+  FAIL_TAC "endpoint"
+
+QED
+
 Theorem typed_copy_origin_ptr_dynarray_entry:
   !cenv tenv ctx de cap sty dtv stv v.
     acyclic_struct_metadata cenv.ce_struct_fields /\
