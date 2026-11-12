@@ -7,7 +7,7 @@
  *)
 Theory frameOutcome
 Ancestors
-  vfmExecution vfmRunCall
+  vfmExecution vfmRunCall frameGas
 
 (* ===== Frame outcomes ===== *)
 
@@ -40,10 +40,17 @@ Definition frame_outcome_def:
             (exc <> NONE ==> es'.rollback = rb)
 End
 
+(* Our frame ran out of gas or stack.  In a nested frame frame_outcome
+   only tells failure from success, so a call frame must also show the
+   instruction that raised exc.  A creation frame is exempt: its code
+   deposit raises OutOfGas after RETURN, outside step_inst, and
+   frame_outcome holds for it only as a single frame, where r = INR exc. *)
 Definition frame_resource_starved_def:
   frame_resource_starved es r es' <=>
     ?exc out lgs. (exc = OutOfGas \/ exc = StackOverflow) /\
-                  frame_outcome es r es' (SOME exc) out lgs
+                  frame_outcome es r es' (SOME exc) out lgs /\
+                  ((!a. (FST (HD es.contexts)).msgParams.outputTo <> Code a) ==>
+                   ?op. frame_inst_raises es exc op)
 End
 
 (* ===== Single-frame bridge ===== *)

@@ -14,7 +14,7 @@ Proof
 QED
 
 Theorem deploy_exception_out_of_gas[local]:
-  s.contexts = [(c,rb)] /\
+  s.contexts = [(c,rb)] /\ c.msgParams.outputTo = Code target /\
   t.contexts = [(d,rb')] /\ t.txParams = s.txParams /\
   handle_exception (SOME OutOfGas) t = (r,u) ==>
   frame_resource_starved s r u

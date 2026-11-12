@@ -22,7 +22,8 @@ Proof
 QED
 
 Theorem frame_resource_starved_single_transfer[local]:
-  es.contexts = [(c0,rb0)] /\ mid.contexts = [(c1,rb1)] /\
+  es.contexts = [(c0,rb0)] /\ c0.msgParams.outputTo = Code a /\
+  mid.contexts = [(c1,rb1)] /\
   mid.txParams = es.txParams /\ frame_resource_starved mid r es' ==>
   frame_resource_starved es r es'
 Proof
