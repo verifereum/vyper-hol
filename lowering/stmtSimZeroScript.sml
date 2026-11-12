@@ -16,7 +16,7 @@ Theorem stmt_post_nil[local]:
   stmt_state_rel ctx func cenv cx es s /\ ~s.vs_halted /\
   ~block_is_terminated sa /\ s.vs_current_bb = sa.cs_current_bb /\
   s.vs_inst_idx = LENGTH sa.cs_current_insts ==>
-  stmt_post ctx func cx lctx cenv cenv sa sa s (INL ())
+  stmt_post ctx func cx lctx cenv cenv sa sa es s (INL ())
     (es with gas_obs := []) s
 Proof
   strip_tac >>
@@ -25,7 +25,8 @@ Proof
      disch_then (qspecl_then [`s.vs_gas_readings`, `s.vs_inst_idx`, `[]`] mp_tac) >>
      simp[stmt_state_rel_inst_idx]) >>
   pure_rewrite_tac[stmt_post_def] >> qexists_tac `cenv` >>
-  simp[stmt_lands_def, cenv_top_ext_def, compile_env_component_equality]
+  simp[stmt_lands_def, cenv_top_ext_def, compile_env_component_equality,
+       alloca_frame_same]
 QED
 
 Theorem stmt_frag_nil:
@@ -56,7 +57,7 @@ Proof
   >- simp[gas_marked_exec_def, gas_marked_path_def, gas_path_mem_rules,
           Once evaluate_def, return_def] >>
   simp[fragExecTheory.exit_result_def] >>
-  `stmt_post ctx func cx lctx cenv cenv sa sa s0 (INL ())
+  `stmt_post ctx func cx lctx cenv cenv sa sa es s0 (INL ())
      (es with gas_obs := []) s0` by (irule stmt_post_nil >> simp[]) >>
   gvs[stmt_post_def] >> qexists_tac `cenv` >> simp[]
 QED

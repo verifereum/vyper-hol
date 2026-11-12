@@ -641,8 +641,9 @@ QED
 
    Gas is existential: there exists a gas bound such that with enough
    gas, EVM execution produces the correct result. *)
-(* TASK049 original theorem statement/proof retained verbatim:
-Theorem vyper_call_correct:
+(* TASK049's original statement and proof of the legacy wrapper
+   (vyper_call_correct_legacy below), kept as text, not compiled:
+Theorem vyper_call_correct_legacy:
   !tops pipeline finalizer policy rpolicy unit out prog deploy_bc runtime_bc
    cp name i r fn off Inv cenv am tx tenv ret ctxt rb rest es vs R_ok R_term.
     resolve_o1_policy policy = SOME rpolicy /\
@@ -692,9 +693,10 @@ QED
 
 *)
 
-(* Preserved legacy public wrapper, STAGE-ADMITTED. Its existing admitted
-   dependencies remain classified as such; NOT a new-boundary certificate. *)
-Theorem vyper_call_correct:
+(* Preserved legacy wrapper, STAGE-ADMITTED. Its existing admitted
+   dependencies remain classified as such; NOT a new-boundary certificate.
+   Not the top theorem: that is vyper_call_correct at the end. *)
+Theorem vyper_call_correct_legacy:
   !tops pipeline finalizer policy rpolicy unit out prog deploy_bc runtime_bc
    cp name i r fn off Inv cenv am tx tenv ret ctxt rb rest es vs R_ok R_term.
     resolve_o1_policy policy = SOME rpolicy /\
@@ -779,7 +781,7 @@ Theorem vyper_call_correct_identity:
     source_storage_ok tops am tx /\
     call_state_rel tops runtime_bc am tx es /\
     valid_vyper_call tops tx (buffer_to_list (FST (HD es.contexts)).msgParams.data) ret /\
-    call_outcomes_ok am tx (MAP SND (call_trace es))
+    call_outcomes_storage_ok am tx (MAP SND (call_trace es))
     ==>
     ?r es'.
       run_call es = SOME (r, es') /\
@@ -787,6 +789,8 @@ Theorem vyper_call_correct_identity:
        call_result_rel tops ret am tx es r es')
 Proof
   rpt strip_tac >>
+  drule_all call_state_rel_call_outcomes_ok >> strip_tac >>
+  qpat_x_assum `call_outcomes_storage_ok _ _ _` kall_tac >>
   drule compile_vyper_runtime_phases >> strip_tac >>
   rename1 `generate_context_plan out.po_unit.cu_context = SOME cplan` >>
   qpat_x_assum `runtime_bc = assemble _` SUBST_ALL_TAC >>
@@ -923,7 +927,7 @@ Theorem vyper_call_correct_asm_opt:
     source_storage_ok tops am tx /\
     call_state_rel tops runtime_bc am tx es /\
     valid_vyper_call tops tx (buffer_to_list (FST (HD es.contexts)).msgParams.data) ret /\
-    call_outcomes_ok am tx (MAP SND (call_trace es))
+    call_outcomes_storage_ok am tx (MAP SND (call_trace es))
     ==>
     ?r es'.
       run_call es = SOME (r, es') /\
@@ -946,7 +950,7 @@ Theorem vyper_call_correct:
     source_storage_ok tops am tx /\
     call_state_rel tops runtime_bc am tx es /\
     valid_vyper_call tops tx (buffer_to_list (FST (HD es.contexts)).msgParams.data) ret /\
-    call_outcomes_ok am tx (MAP SND (call_trace es))
+    call_outcomes_storage_ok am tx (MAP SND (call_trace es))
     ==>
     ?r es'.
       run_call es = SOME (r, es') /\

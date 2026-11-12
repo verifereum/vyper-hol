@@ -1,4 +1,6 @@
-(* Sufficient gas, the companion to vyper_call_correct.
+(* Sufficient gas for the identity finalizer: the cases from which the
+ * sufficient-gas companions of vyper_call_correct and e2e_deploy_correctness
+ * are joined.  The companions themselves are stated separately.
  *
  * vyper_call_correct holds for any gas, so it lets the frame run out of gas.
  * Here: some amount of gas is enough.  With at least that much more gas,
@@ -8,13 +10,9 @@
  * 1/64 of our gas can return more data than the rest pays to copy, or
  * leave us too little for the REVERT after the copy.
  *
- * TOP-LEVEL:
- *   vyper_call_gas_sufficient -- the companion theorem, over the accepted
- *     finalizers; vyper_call_gas_sufficient_identity and
- *     vyper_call_gas_sufficient_asm_opt are its two cases
- *   e2e_deploy_gas_sufficient -- its deployment twin, the companion of
- *     e2e_deploy_correctness; e2e_deploy_gas_sufficient_identity and
- *     e2e_deploy_gas_sufficient_asm_opt are its two cases
+ * Contents:
+ *   vyper_call_gas_sufficient_identity -- the call case, identity finalizer
+ *   e2e_deploy_gas_sufficient_identity -- the deployment case
  *   call_state_rel_add_frame_gas -- call_state_rel ignores the frame's gas
  *
  * Only gas starvation is ruled out: a StackOverflow outcome, which
@@ -22,9 +20,7 @@
  *
  * The identity finalizer's case is composed from three planned
  * admissions: S1b (lower_vyper_runtime_unit_run_bounded), S6b
- * (run_venom_pipeline_run_bounded) and S7g (codegen_gas_sufficient).  The
- * final assembly optimizer's case is a planned admission, as it is for
- * vyper_call_correct.
+ * (run_venom_pipeline_run_bounded) and S7g (codegen_gas_sufficient).
  *
  * Deployment runs in one creation frame and the constructor makes no calls,
  * so there is no RETURNDATACOPY exemption: with enough gas the creation
@@ -68,7 +64,7 @@ QED
 Theorem deploy_state_rel_add_frame_gas:
   !tops bc am tx g es.
     deploy_state_rel tops bc am tx es /\
-    call_outcomes_ok am tx (MAP SND (call_trace (add_frame_gas g es))) /\
+    call_outcomes_storage_ok am tx (MAP SND (call_trace (add_frame_gas g es))) /\
     EVERY (\co. contract_storage_well_formed (deploy_evaluation_context tops am tx)
                   (initial_state (am with <|accounts := co.co_accounts;
                                             tStorage := co.co_tStorage|>) []))
@@ -85,7 +81,7 @@ Proof
   fs[add_frame_gas_wf_state, add_frame_gas_fields]
 QED
 
-(* ===== The companion theorem ===== *)
+(* ===== The call cases ===== *)
 
 (* vyper_call_correct's hypotheses.  The two that range over the call
    trace, and so over what the callees do with the gas they get, are
@@ -106,7 +102,7 @@ Theorem vyper_call_gas_sufficient_identity:
     ==>
     ?g. !g'.
       g <= g' /\
-      call_outcomes_ok am tx (MAP SND (call_trace (add_frame_gas g' es))) /\
+      call_outcomes_storage_ok am tx (MAP SND (call_trace (add_frame_gas g' es))) /\
       (!obs. ~source_exempt tops
          (call_external (SOME (MAP SND (call_trace (add_frame_gas g' es))))
             obs am tx))
@@ -151,6 +147,8 @@ Proof
   (* the entry state at the new gas, as in vyper_call_correct *)
   `call_state_rel tops (assemble prog) am tx (add_frame_gas g' es)` by
     simp[call_state_rel_add_frame_gas] >>
+  `call_outcomes_ok am tx (MAP SND (call_trace (add_frame_gas g' es)))` by
+    metis_tac[call_state_rel_call_outcomes_ok] >>
   `wf_state es` by fs[call_state_rel_def] >>
   qpat_x_assum `call_state_rel _ _ _ _ es` kall_tac >>
   qpat_x_assum `valid_vyper_call _ _ _ _` mp_tac >>
@@ -198,8 +196,8 @@ Proof
         (call_external (SOME vi.vs_outcomes)
            (gas_explicit marks vi.vs_gas_readings) am tx)` by simp[] >>
      `code_layout_valid vi` by
-       (fs[gas_variant_def] >>
-        qpat_x_assum `vs = _` SUBST_ALL_TAC >> fs[code_layout_valid_def]) >>
+       (irule gas_variant_code_layout_valid >> qexists_tac `vs` >>
+        fs[o1_run_state_ok_def]) >>
      drule_all lower_vyper_runtime_unit_memory_ok >> strip_tac >>
      `mem_inv dload_offset_ok unit.cu_context vi` by
        (irule lower_vyper_runtime_unit_dload_offset_ok >> simp[] >>
@@ -226,70 +224,8 @@ Proof
   qexistsl_tac [`Inv`, `vs`] >> simp[]
 QED
 
-(* The final assembly optimizer's case, under the same hypotheses plus the
-   temporary exclusion of programs that read their own code, as for
-   vyper_call_correct_asm_opt.  PLANNED ADMISSION. *)
-Theorem vyper_call_gas_sufficient_asm_opt:
-  !policy tops deploy_bc runtime_bc am tx ret es.
-    compile_vyper asm_opt_finalizer policy tops = SOME (deploy_bc, runtime_bc) /\
-    ~program_reads_self_code tops /\
-    supported_program tops /\ immutable_free_program tops /\
-    source_typing_ok tops am tx /\
-    source_storage_ok tops am tx /\
-    call_state_rel tops runtime_bc am tx es /\
-    valid_vyper_call tops tx
-      (buffer_to_list (FST (HD es.contexts)).msgParams.data) ret
-    ==>
-    ?g. !g'.
-      g <= g' /\
-      call_outcomes_ok am tx (MAP SND (call_trace (add_frame_gas g' es))) /\
-      (!obs. ~source_exempt tops
-         (call_external (SOME (MAP SND (call_trace (add_frame_gas g' es))))
-            obs am tx))
-      ==>
-      ?r es'.
-        run_call (add_frame_gas g' es) = SOME (r, es') /\
-        ((?op. frame_inst_raises (add_frame_gas g' es) OutOfGas op) ==>
-         ?s. frame_inst_at (add_frame_gas g' es) s ReturnDataCopy)
-Proof
-  cheat
-QED
 
-(* TOP-LEVEL: one theorem over the accepted finalizers, with
-   vyper_call_correct's finalizer premises. *)
-Theorem vyper_call_gas_sufficient:
-  !fin policy tops deploy_bc runtime_bc am tx ret es.
-    fin IN accepted_finalizers /\
-    (fin = asm_opt_finalizer ==> ~program_reads_self_code tops) /\
-    compile_vyper fin policy tops = SOME (deploy_bc, runtime_bc) /\
-    supported_program tops /\ immutable_free_program tops /\
-    source_typing_ok tops am tx /\
-    source_storage_ok tops am tx /\
-    call_state_rel tops runtime_bc am tx es /\
-    valid_vyper_call tops tx
-      (buffer_to_list (FST (HD es.contexts)).msgParams.data) ret
-    ==>
-    ?g. !g'.
-      g <= g' /\
-      call_outcomes_ok am tx (MAP SND (call_trace (add_frame_gas g' es))) /\
-      (!obs. ~source_exempt tops
-         (call_external (SOME (MAP SND (call_trace (add_frame_gas g' es))))
-            obs am tx))
-      ==>
-      ?r es'.
-        run_call (add_frame_gas g' es) = SOME (r, es') /\
-        ((?op. frame_inst_raises (add_frame_gas g' es) OutOfGas op) ==>
-         ?s. frame_inst_at (add_frame_gas g' es) s ReturnDataCopy)
-Proof
-  rpt gen_tac >> strip_tac >>
-  `fin = K SOME \/ fin = asm_opt_finalizer` by fs[accepted_finalizers_def] >>
-  pop_assum strip_assume_tac >> pop_assum SUBST_ALL_TAC
-  >- (drule_all vyper_call_gas_sufficient_identity >> simp[])
-  >> `~program_reads_self_code tops` by fs[] >>
-  drule_all vyper_call_gas_sufficient_asm_opt >> simp[]
-QED
-
-(* ===== The deployment twin ===== *)
+(* ===== The deployment cases ===== *)
 
 (* e2e_deploy_correctness's hypotheses.  The two clauses of the creation
    frame's relation that range over the call trace, and so over what the run
@@ -306,7 +242,7 @@ Theorem e2e_deploy_gas_sufficient_identity:
     ==>
     ?g. !g'.
       g <= g' /\
-      call_outcomes_ok am tx (MAP SND (call_trace (add_frame_gas g' es))) /\
+      call_outcomes_storage_ok am tx (MAP SND (call_trace (add_frame_gas g' es))) /\
       EVERY (\co. contract_storage_well_formed (deploy_evaluation_context tops am tx)
                     (initial_state (am with <|accounts := co.co_accounts;
                                               tStorage := co.co_tStorage|>) []))
@@ -419,69 +355,4 @@ Proof
                        am tx [(NONE, tops)] []`, `vfuel`] >>
       fs[]) >>
   simp[]
-QED
-
-(* The final assembly optimizer's case, under the same hypotheses plus the
-   temporary exclusion of programs that read their own code, as for
-   e2e_deploy_correctness_asm_opt.  PLANNED ADMISSION. *)
-Theorem e2e_deploy_gas_sufficient_asm_opt:
-  !policy tops deploy_bc runtime_bc am tx es.
-    compile_vyper asm_opt_finalizer policy tops = SOME (deploy_bc, runtime_bc) /\
-    ~program_reads_self_code tops /\
-    supported_program tops /\ constructor_call_free tops /\
-    deploy_typing_ok tops am tx /\ deploy_storage_ok tops am tx /\
-    deploy_state_rel tops deploy_bc am tx es /\
-    ~(?t. runtime_bc = 0xEFw :: t)
-    ==>
-    ?g. !g'.
-      g <= g' /\
-      call_outcomes_ok am tx (MAP SND (call_trace (add_frame_gas g' es))) /\
-      EVERY (\co. contract_storage_well_formed (deploy_evaluation_context tops am tx)
-                    (initial_state (am with <|accounts := co.co_accounts;
-                                              tStorage := co.co_tStorage|>) []))
-        (MAP SND (call_trace (add_frame_gas g' es))) /\
-      (!obs. ~deploy_source_exempt tops
-         (load_contract NONE obs am tx [(NONE, tops)] []))
-      ==>
-      ?r es'.
-        run_call (add_frame_gas g' es) = SOME (r, es') /\
-        (r = INR (SOME OutOfGas) ==>
-         max_code_size < LENGTH runtime_bc + imm_len tops)
-Proof
-  cheat
-QED
-
-(* TOP-LEVEL: one theorem over the accepted finalizers, with
-   e2e_deploy_correctness's finalizer premises. *)
-Theorem e2e_deploy_gas_sufficient:
-  !fin policy tops deploy_bc runtime_bc am tx es.
-    fin IN accepted_finalizers /\
-    (fin = asm_opt_finalizer ==> ~program_reads_self_code tops) /\
-    compile_vyper fin policy tops = SOME (deploy_bc, runtime_bc) /\
-    supported_program tops /\ constructor_call_free tops /\
-    deploy_typing_ok tops am tx /\ deploy_storage_ok tops am tx /\
-    deploy_state_rel tops deploy_bc am tx es /\
-    ~(?t. runtime_bc = 0xEFw :: t)
-    ==>
-    ?g. !g'.
-      g <= g' /\
-      call_outcomes_ok am tx (MAP SND (call_trace (add_frame_gas g' es))) /\
-      EVERY (\co. contract_storage_well_formed (deploy_evaluation_context tops am tx)
-                    (initial_state (am with <|accounts := co.co_accounts;
-                                              tStorage := co.co_tStorage|>) []))
-        (MAP SND (call_trace (add_frame_gas g' es))) /\
-      (!obs. ~deploy_source_exempt tops
-         (load_contract NONE obs am tx [(NONE, tops)] []))
-      ==>
-      ?r es'.
-        run_call (add_frame_gas g' es) = SOME (r, es') /\
-        (r = INR (SOME OutOfGas) ==>
-         max_code_size < LENGTH runtime_bc + imm_len tops)
-Proof
-  rpt gen_tac >> strip_tac >>
-  `fin = K SOME \/ fin = asm_opt_finalizer` by fs[accepted_finalizers_def] >>
-  pop_assum strip_assume_tac >> pop_assum SUBST_ALL_TAC
-  >- (drule_all e2e_deploy_gas_sufficient_identity >> simp[])
-  >> `~program_reads_self_code tops` by fs[] >>
-  drule_all e2e_deploy_gas_sufficient_asm_opt >> simp[]
 QED
