@@ -32,6 +32,6 @@ Theorem compile_slice_self_code_case:
     is_self_code (HD args) /\ slice_extcode_case nocalls ctx func cenv cx args ==>
     expr_vv_case nocalls ctx func cenv cx (Builtin ann (Slice n) args)
 Proof
-  (* PORT_ADMISSION: SEQ-1248, bot/opus/seq-1248-t16-pin, built at c66a72744 *)
+  (* PORT_ADMISSION: SEQ-1248, bot/opus/seq-692-s1-builtins-aggregates, built at af8abced4 *)
   cheat
 QED

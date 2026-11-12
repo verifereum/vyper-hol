@@ -31,7 +31,7 @@ Theorem compile_slice_nonself_case:
     expr_vv_case nocalls ctx func cenv cx (Builtin ann (Slice n) args)
 Proof
   rpt strip_tac >> Cases_on `is_extcode (HD args)`
-  >- ((* PORT_ADMISSION: SEQ-1248, bot/opus/seq-1248-t16-pin, built at c66a72744 *)
+  >- ((* PORT_ADMISSION: SEQ-1248, bot/opus/seq-692-s1-builtins-aggregates, built at af8abced4 *)
       cheat) >>
   irule compile_slice_ordinary_case >> simp[] >>
   first_x_assum irule >>
