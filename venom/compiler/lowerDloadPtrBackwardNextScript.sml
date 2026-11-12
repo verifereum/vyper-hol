@@ -59,7 +59,7 @@ Finalise dloadbytes_supply_definedness_control
 (* General implementations; the historical interfaces below are compatibility
    corollaries. V tracks relational values, U tracks lookup definedness. *)
 Theorem dload_tracked_backward_next_fresh:
-  dload_boundary_core lo (r::rs) V Ws PG PH G H tn un s t cs ds /\
+  dload_boundary_core fl lo (r::rs) V Ws PG PH G H tn un s t cs ds /\
   r.dr_scratch = FDOM t.vs_allocas DIFF orig /\
   FDOM s.vs_allocas SUBSET orig /\ (EL 0 xs).inst_id NOTIN orig /\
   (FLOOKUP t.vs_allocas (EL 0 xs).inst_id = NONE ==> t.vs_alloca_next + 32 < dimword (:256)) /\
@@ -80,7 +80,7 @@ Theorem dload_tracked_backward_next_fresh:
     step_inst fuel C i s = OK s1 /\
     r1.dr_source = r.dr_source /\
     r1.dr_scratch = (EL 0 xs).inst_id INSERT r.dr_scratch /\
-    dload_boundary_core lo (r1::rs) V Ws PG PH
+    dload_boundary_core fl lo (r1::rs) V Ws PG PH
       (step_prov PG G i s1) H4 (step_taint i s s1 tn) un4
       (s1 with vs_inst_idx := SUC s.vs_inst_idx) t4 cs ds /\
     frame_reachable vs C cs PG (step_prov PG G i s1) (step_taint i s s1 tn)
@@ -105,7 +105,7 @@ Proof
 QED
 
 Theorem dload_tracked_backward_next:
-  dload_boundary_core lo (r::rs) V Ws PG PH G H tn un s t cs ds /\
+  dload_boundary_core fl lo (r::rs) V Ws PG PH G H tn un s t cs ds /\
   r.dr_scratch = FDOM t.vs_allocas DIFF orig /\
   FDOM s.vs_allocas SUBSET orig /\ (EL 0 xs).inst_id NOTIN orig /\
   t.vs_alloca_next + 32 < dimword (:256) /\
@@ -126,7 +126,7 @@ Theorem dload_tracked_backward_next:
     step_inst fuel C i s = OK s1 /\
     r1.dr_source = r.dr_source /\
     r1.dr_scratch = (EL 0 xs).inst_id INSERT r.dr_scratch /\
-    dload_boundary_core lo (r1::rs) V Ws PG PH
+    dload_boundary_core fl lo (r1::rs) V Ws PG PH
       (step_prov PG G i s1) H4 (step_taint i s s1 tn) un4
       (s1 with vs_inst_idx := SUC s.vs_inst_idx) t4 cs ds /\
     frame_reachable vs C cs PG (step_prov PG G i s1) (step_taint i s s1 tn)
@@ -143,7 +143,7 @@ QED
 Theorem dloadbytes_tracked_next:
   lower_dload_inst_supply supply i = (xs,next) /\
   fresh_ir_var supply = (cv,supply1) /\
-  dload_boundary_core lo fs V Ws PG PH G H tn un s t cs ds /\
+  dload_boundary_core fl lo fs V Ws PG PH G H tn un s t cs ds /\
   i.inst_opcode = DLOADBYTES /\ i.inst_operands = [dst;off;sz] /\ i.inst_outputs = [] /\
   cv NOTIN V /\ dst <> Var cv /\ sz <> Var cv /\
   (!v. MEM (Var v) i.inst_operands ==> v IN V) /\
@@ -162,7 +162,7 @@ Theorem dloadbytes_tracked_next:
       f i' (s1 with vs_inst_idx := SUC s.vs_inst_idx) /\
     dload_control_match q f g (s1 with vs_inst_idx := SUC s.vs_inst_idx)
       t2 i' emitted' 0 /\ j = HD emitted' /\
-    dload_boundary_core lo fs V Ws PG PH
+    dload_boundary_core fl lo fs V Ws PG PH
       (step_prov PG G i s1) H2 (step_taint i s s1 tn) un2
       (s1 with vs_inst_idx := SUC s.vs_inst_idx) t2 cs ds /\
     (!v. lookup_var v s1 = lookup_var v s) /\
@@ -185,7 +185,7 @@ Proof
 QED
 
 Theorem dload_actual_backward_dload_next:
-  dload_boundary_core lo (r::rs) {v | ~retpc_var f v} Ws PG PH G H tn un s t cs ds /\
+  dload_boundary_core fl lo (r::rs) {v | ~retpc_var f v} Ws PG PH G H tn un s t cs ds /\
   r.dr_scratch = FDOM t.vs_allocas DIFF orig /\
   FDOM s.vs_allocas SUBSET orig /\ (EL 0 xs).inst_id NOTIN orig /\
   t.vs_alloca_next + 32 < dimword (:256) /\
@@ -208,7 +208,7 @@ Theorem dload_actual_backward_dload_next:
     step_inst fuel C i s = OK s1 /\
     r1.dr_source = r.dr_source /\
     r1.dr_scratch = (EL 0 xs).inst_id INSERT r.dr_scratch /\
-    dload_boundary_core lo (r1::rs) {v | ~retpc_var f v} Ws PG PH
+    dload_boundary_core fl lo (r1::rs) {v | ~retpc_var f v} Ws PG PH
       (step_prov PG G i s1) H4 (step_taint i s s1 tn) un4
       (s1 with vs_inst_idx := SUC s.vs_inst_idx) t4 cs ds /\
     frame_reachable vs C cs PG (step_prov PG G i s1) (step_taint i s s1 tn)
@@ -225,7 +225,7 @@ QED
 Theorem dload_actual_dloadbytes_next:
   lower_dload_inst_supply supply i = (xs,next) /\
   fresh_ir_var supply = (cv,supply1) /\
-  dload_boundary_core lo fs {v | ~retpc_var f v} Ws PG PH G H tn un s t cs ds /\
+  dload_boundary_core fl lo fs {v | ~retpc_var f v} Ws PG PH G H tn un s t cs ds /\
   i.inst_opcode = DLOADBYTES /\ i.inst_operands = [dst;off;sz] /\ i.inst_outputs = [] /\
   cv NOTIN {v | ~retpc_var f v} /\ dst <> Var cv /\ sz <> Var cv /\
   (!v. MEM (Var v) i.inst_operands ==> v IN {v | ~retpc_var f v}) /\
@@ -245,7 +245,7 @@ Theorem dload_actual_dloadbytes_next:
       f i' (s1 with vs_inst_idx := SUC s.vs_inst_idx) /\
     dload_control_match q f g (s1 with vs_inst_idx := SUC s.vs_inst_idx)
       t2 i' emitted' 0 /\ j = HD emitted' /\
-    dload_boundary_core lo fs {v | ~retpc_var f v} Ws PG PH
+    dload_boundary_core fl lo fs {v | ~retpc_var f v} Ws PG PH
       (step_prov PG G i s1) H2 (step_taint i s s1 tn) un2
       (s1 with vs_inst_idx := SUC s.vs_inst_idx) t2 cs ds /\
     (!v. lookup_var v s1 = lookup_var v s) /\

@@ -40,7 +40,7 @@ Theorem dload_actual_alloca_next:
   active_inst g j (t1 with vs_inst_idx := SUC t.vs_inst_idx) /\
   dload_table_stack (r::rs) (s::ss) (t::ts) /\ dload_frame_sites r /\
   dload_live_layout lo s.vs_alloca_next t.vs_alloca_next (r::rs) /\
-  dload_memory_match lo (r::rs) tn un s t /\
+  dload_memory_match fl lo (r::rs) tn un s t /\
   r.dr_scratch = FDOM t.vs_allocas DIFF {ci.inst_id | MEM ci (fn_insts f)} /\
   o1_ctx_shape C /\ o1_src_inv D C vs /\
   SUM (MAP (\r. CARD r.dr_scratch) (r::rs)) <= ctx_dload_count C ==>
@@ -55,7 +55,7 @@ Theorem dload_actual_alloca_next:
     dload_table_stack (r1::rs) (s1::ss) (t1::ts) /\ dload_frame_sites r1 /\
     r1.dr_scratch = r.dr_scratch /\
     r1.dr_scratch = FDOM t1.vs_allocas DIFF {ci.inst_id | MEM ci (fn_insts f)} /\
-    dload_memory_match lo (r1::rs)
+    dload_memory_match fl lo (r1::rs)
       (step_taint i s s1 tn) (step_taint i t t1 un) s1 t1 /\
     t1.vs_alloca_next < dimword (:256)
 Proof
@@ -139,7 +139,7 @@ Theorem dload_actual_alloca_boundary_next:
   ALL_DISTINCT (MAP (\bb. bb.bb_label) g.fn_blocks) /\
   i.inst_opcode = ALLOCA /\ step_inst fuel C' i t = OK t1 /\
   active_inst g j (t1 with vs_inst_idx := SUC t.vs_inst_idx) /\
-  dload_boundary_core lo (r::rs) V Ws PG PH G H tn un s t cs ds /\
+  dload_boundary_core fl lo (r::rs) V Ws PG PH G H tn un s t cs ds /\
   r.dr_scratch = FDOM t.vs_allocas DIFF {ci.inst_id | MEM ci (fn_insts f)} /\
   o1_ctx_shape C /\ o1_src_inv D C vs /\
   SUM (MAP (\r. CARD r.dr_scratch) (r::rs)) <= ctx_dload_count C ==>
@@ -151,7 +151,7 @@ Theorem dload_actual_alloca_boundary_next:
       (s1 with vs_inst_idx := SUC s.vs_inst_idx)
       (t1 with vs_inst_idx := SUC t.vs_inst_idx) i' emitted' 0 /\
     j = HD emitted' /\
-    dload_boundary_core lo (r1::rs) V Ws PG PH
+    dload_boundary_core fl lo (r1::rs) V Ws PG PH
       (step_prov PG G i s1) (step_prov PH H i t1)
       (step_taint i s s1 tn) (step_taint i t t1 un)
       (s1 with vs_inst_idx := SUC s.vs_inst_idx)

@@ -8,7 +8,7 @@ Ancestors
   finite_map list rich_list pred_set arithmetic words
 
 Theorem dload_memory_clean_slice:
-  dload_memory_match lo fs tn un s t /\
+  dload_memory_match fl lo fs tn un s t /\
   ((a=z /\ a+len<=lo) \/
    (?owner id b c n d. dload_live_site fs owner id b c n /\
       a=b+d /\ z=c+d /\ d+len<=n)) /\
@@ -64,8 +64,8 @@ Theorem dload_sha3_slice[local]:
   eval_operand a s = SOME x /\ eval_operand sz s = SOME z /\
   access_ok lo G f i s /\ ~in_revert_forward f s /\
   taint_ok f tn i s /\ ~about_to_revert f i s /\
-  dload_live_layout lo sf tf fs /\ dload_memory_match lo fs tn un s t /\
-  dload_value_word fs {} (op_prov G a) q x y ==>
+  dload_live_layout lo sf tf fs /\ dload_memory_match fl lo fs tn un s t /\
+  dload_value_word fl fs {} (op_prov G a) q x y ==>
   TAKE (w2n z) (DROP (w2n x) s.vs_memory ++ REPLICATE (w2n z) 0w) =
   TAKE (w2n z) (DROP (w2n y) t.vs_memory ++ REPLICATE (w2n z) 0w)
 Proof
@@ -113,11 +113,11 @@ Theorem dload_boundary_core_sha3:
   ~about_to_revert f i s /\ s.vs_labels = t.vs_labels /\
   (!v. MEM (Var v) i.inst_operands ==> v IN V /\ v IN U) /\
   (!v. v IN U ==> (lookup_var v s = NONE <=> lookup_var v t = NONE)) /\
-  dload_boundary_core lo fs V Ws PG PH G H tn un s t cs ds /\
+  dload_boundary_core fl lo fs V Ws PG PH G H tn un s t cs ds /\
   step_inst fuel Ct i t = OK t' ==>
   ?s'. step_inst fuel Cs i s = OK s' /\
     (!v. v IN U ==> (lookup_var v s' = NONE <=> lookup_var v t' = NONE)) /\
-    dload_boundary_core lo fs V Ws PG PH
+    dload_boundary_core fl lo fs V Ws PG PH
       (step_prov PG G i s') (step_prov PH H i t')
       (step_taint i s s' tn) (step_taint i t t' un) s' t' cs ds /\
     s' = s with vs_vars := s'.vs_vars /\ t' = t with vs_vars := t'.vs_vars
@@ -135,17 +135,17 @@ Proof
   Cases_on `eval_operand sz s` >- gvs[] >>
   rename1 `eval_operand a s = SOME xs` >>
   rename1 `eval_operand sz s = SOME zs` >>
-  `dload_vars_match fs V G H tn un s t` by metis_tac[dload_boundary_vars] >>
+  `dload_vars_match fl fs V G H tn un s t` by metis_tac[dload_boundary_vars] >>
   `op_prov G sz = NONE /\ op_taint tn a = {} /\ op_taint tn sz = {}` by
     metis_tac[dload_sha3_size_clean] >>
   `eval_operand sz s = eval_operand sz t` by
     (irule scalar_operand_equal >> metis_tac[MEM]) >>
   `zs = z` by gvs[] >> gvs[] >>
-  `dload_value_word fs (op_taint tn a) (op_prov G a) (op_prov H a) xs x` by
+  `dload_value_word fl fs (op_taint tn a) (op_prov G a) (op_prov H a) xs x` by
     (irule dload_matched_operand >>
      qexistsl [`V`,`s`,`t`,`un`] >> simp[] >> metis_tac[]) >>
   `dload_live_layout lo s.vs_alloca_next t.vs_alloca_next fs /\
-   dload_memory_match lo fs tn un s t` by metis_tac[dload_boundary_core_def] >>
+   dload_memory_match fl lo fs tn un s t` by metis_tac[dload_boundary_core_def] >>
   `TAKE (w2n z) (DROP (w2n xs) s.vs_memory ++ REPLICATE (w2n z) 0w) =
    TAKE (w2n z) (DROP (w2n x) t.vs_memory ++ REPLICATE (w2n z) 0w)` by
     (irule dload_sha3_slice >> simp[] >> metis_tac[]) >>
@@ -166,7 +166,7 @@ Resume dload_boundary_core_sha3[sha3_finish]:
      un with t_var := set_var_taint un.t_var [out] {}` by
     (irule dload_sha3_ghosts >> simp[]) >>
   simp[update_var_def] >>
-  `dload_vars_match fs V (set_prov G [out] NONE) (set_prov H [out] NONE)
+  `dload_vars_match fl fs V (set_prov G [out] NONE) (set_prov H [out] NONE)
     (tn with t_var := set_var_taint tn.t_var [out] {})
     (un with t_var := set_var_taint un.t_var [out] {})
     (s with <|vs_vars := (update_var out hash s).vs_vars; vs_inst_idx := s.vs_inst_idx|>)
@@ -187,7 +187,7 @@ Theorem dload_actual_sha3_next:
   ~about_to_revert f i s /\
   (!v. MEM (Var v) i.inst_operands ==> ~retpc_var f v) /\
   ALL_DISTINCT (MAP (\bb. bb.bb_label) g.fn_blocks) /\
-  dload_boundary_core lo fs {v | ~retpc_var f v} Ws PG PH G H tn un s t cs ds /\
+  dload_boundary_core fl lo fs {v | ~retpc_var f v} Ws PG PH G H tn un s t cs ds /\
   (!v. v IN set (fn_ir_vars f) ==>
     (lookup_var v s = NONE <=> lookup_var v t = NONE)) /\
   step_inst fuel C' i t = OK t1 /\
@@ -200,7 +200,7 @@ Theorem dload_actual_sha3_next:
       (s1 with vs_inst_idx := SUC s.vs_inst_idx)
       (t1 with vs_inst_idx := SUC t.vs_inst_idx) i' emitted' 0 /\
     j = HD emitted' /\
-    dload_boundary_core lo fs {v | ~retpc_var f v} Ws PG PH
+    dload_boundary_core fl lo fs {v | ~retpc_var f v} Ws PG PH
       (step_prov PG G i s1) (step_prov PH H i t1)
       (step_taint i s s1 tn) (step_taint i t t1 un)
       (s1 with vs_inst_idx := SUC s.vs_inst_idx)

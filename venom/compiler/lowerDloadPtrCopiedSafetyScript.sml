@@ -9,7 +9,7 @@ Ancestors lowerDloadPtrRegion lowerDloadPtrRel lowerDloadPtrCompare lowerDloadPt
   unitShapeDefs venomWf
 
 Theorem dload_matched_defined_provenance:
-  dload_vars_match fs V G H tn un s t /\ s.vs_labels = t.vs_labels /\
+  dload_vars_match fl fs V G H tn un s t /\ s.vs_labels = t.vs_labels /\
   (!v. op = Var v ==> v IN V) /\ eval_operand op t <> NONE ==>
   (op_prov G op = NONE <=> op_prov H op = NONE)
 Proof
@@ -22,7 +22,7 @@ Proof
 QED
 
 Theorem dload_copied_compare_access:
-  dload_vars_match fs V G H tn un s t /\ s.vs_labels = t.vs_labels /\
+  dload_vars_match fl fs V G H tn un s t /\ s.vs_labels = t.vs_labels /\
   dload_live_layout lo sf tf fs /\ access_ok lo G f i s /\
   (!v. MEM (Var v) i.inst_operands ==> v IN V) /\
   (!v. v IN FDOM H ==> lookup_var v t <> NONE) /\
@@ -53,9 +53,9 @@ Proof
   Cases_on `eval_operand (Var w) t` >> gvs[] >>
   rename1 `eval_operand (Var u) t = SOME xu` >>
   rename1 `eval_operand (Var w) t = SOME yw` >>
-  `dload_value_word fs (op_taint tn (Var u))
+  `dload_value_word fl fs (op_taint tn (Var u))
     (FLOOKUP G u) (FLOOKUP H u) x xu /\
-   dload_value_word fs (op_taint tn (Var w))
+   dload_value_word fl fs (op_taint tn (Var w))
     (FLOOKUP G w) (FLOOKUP H w) y yw` by
     (gvs[dload_vars_match_def, eval_operand_def] >> metis_tac[]) >>
   Cases_on `FLOOKUP H u` >> Cases_on `FLOOKUP H w` >>
@@ -68,7 +68,7 @@ QED
 
 Theorem dload_copied_fixed_read_range[local]:
   (i.inst_opcode = MLOAD \/ i.inst_opcode = ILOAD) /\
-  dload_vars_match fs V G H tn un s t /\ s.vs_labels = t.vs_labels /\
+  dload_vars_match fl fs V G H tn un s t /\ s.vs_labels = t.vs_labels /\
   dload_live_layout lo sf tf fs /\
   (!v. MEM (Var v) i.inst_operands ==> v IN V) /\
   access_ok lo G f i s /\ taint_ok f tn i s /\ ~in_revert_forward f s /\
@@ -95,7 +95,7 @@ Proof
   rename1 `eval_operand off s = SOME xs` >>
   `op_taint tn off = {}` by
     (gvs[taint_ok_def] >> metis_tac[]) >>
-  `dload_value_word fs {} (op_prov G off) (op_prov H off) xs yt` by
+  `dload_value_word fl fs {} (op_prov G off) (op_prov H off) xs yt` by
     (drule dload_matched_operand >>
      disch_then (qspecl_then [`yt`,`xs`,`off`] mp_tac) >> simp[] >> metis_tac[]) >>
   `((lo < w2n xs + 32 \/ op_prov G off <> NONE) ==>
@@ -138,7 +138,7 @@ Theorem dload_copied_pair_read_range[local]:
   (i.inst_opcode = RETURN \/ i.inst_opcode = REVERT \/ i.inst_opcode = SHA3) /\
   i.inst_operands = [off;sz] /\ MEM i (fn_insts f) /\
   fn_ptr_ok P f /\ FDOM G SUBSET fn_pv P f /\
-  dload_vars_match fs V G H tn un s t /\ s.vs_labels = t.vs_labels /\
+  dload_vars_match fl fs V G H tn un s t /\ s.vs_labels = t.vs_labels /\
   dload_live_layout lo sf tf fs /\
   (!v. MEM (Var v) i.inst_operands ==> v IN V) /\
   access_ok lo G f i s /\ taint_ok f tn i s /\ ~in_revert_forward f s /\
@@ -171,7 +171,7 @@ Proof
       disch_then (qspec_then `off` mp_tac) >> simp[] >> metis_tac[]) >>
    Cases_on `eval_operand off s` >> gvs[] >>
    rename1 `eval_operand off s = SOME xs` >>
-   `dload_value_word fs {} (op_prov G off) (op_prov H off) xs yt` by
+   `dload_value_word fl fs {} (op_prov G off) (op_prov H off) xs yt` by
      (drule dload_matched_operand >>
       disch_then (qspecl_then [`yt`,`xs`,`off`] mp_tac) >> simp[] >> metis_tac[]) >>
    rename1 `eval_operand sz t = SOME amount` >>
@@ -198,7 +198,7 @@ QED
 Theorem dload_copied_mcopy_read_range[local]:
   i.inst_opcode = MCOPY /\ i.inst_operands = [dst;src;sz] /\
   MEM i (fn_insts f) /\ fn_ptr_ok P f /\ FDOM G SUBSET fn_pv P f /\
-  dload_vars_match fs V G H tn un s t /\ s.vs_labels = t.vs_labels /\
+  dload_vars_match fl fs V G H tn un s t /\ s.vs_labels = t.vs_labels /\
   dload_live_layout lo sf tf fs /\
   (!v. MEM (Var v) i.inst_operands ==> v IN V) /\
   access_ok lo G f i s /\ taint_ok f tn i s /\ ~in_revert_forward f s /\
@@ -235,7 +235,7 @@ Proof
   rename1 `eval_operand src t = SOME yt` >>
   rename1 `eval_operand src s = SOME xs` >>
   rename1 `eval_operand sz t = SOME amount` >>
-  `dload_value_word fs {} (op_prov G src) (op_prov H src) xs yt` by
+  `dload_value_word fl fs {} (op_prov G src) (op_prov H src) xs yt` by
     (drule dload_matched_operand >>
      disch_then (qspecl_then [`yt`,`xs`,`src`] mp_tac) >> simp[] >> metis_tac[MEM]) >>
   `((lo < w2n xs + w2n amount \/ op_prov G src <> NONE) ==>
@@ -257,7 +257,7 @@ Proof
 QED
 
 Theorem dload_matched_operands_defined:
-  dload_vars_match fs V G H tn un s t /\ s.vs_labels = t.vs_labels /\
+  dload_vars_match fl fs V G H tn un s t /\ s.vs_labels = t.vs_labels /\
   (!v. MEM (Var v) ops ==> v IN V) ==>
   (eval_operands ops s = NONE <=> eval_operands ops t = NONE)
 Proof
@@ -276,7 +276,7 @@ Theorem dload_copied_log_read_range[local]:
   i.inst_opcode = LOG /\ i.inst_operands = Lit tc::REVERSE (off::sz::ops) /\
   LENGTH ops = w2n tc /\
   MEM i (fn_insts f) /\ fn_ptr_ok P f /\ FDOM G SUBSET fn_pv P f /\
-  dload_vars_match fs V G H tn un s t /\ s.vs_labels = t.vs_labels /\
+  dload_vars_match fl fs V G H tn un s t /\ s.vs_labels = t.vs_labels /\
   dload_live_layout lo sf tf fs /\
   (!v. MEM (Var v) i.inst_operands ==> v IN V) /\
   access_ok lo G f i s /\ taint_ok f tn i s /\ ~in_revert_forward f s /\
@@ -313,7 +313,7 @@ Proof
   rename1 `eval_operand off t = SOME yt` >>
   rename1 `eval_operand off s = SOME xs` >>
   rename1 `eval_operand sz t = SOME amount` >>
-  `dload_value_word fs {} (op_prov G off) (op_prov H off) xs yt` by
+  `dload_value_word fl fs {} (op_prov G off) (op_prov H off) xs yt` by
     (drule dload_matched_operand >>
      disch_then (qspecl_then [`yt`,`xs`,`off`] mp_tac) >> simp[] >> metis_tac[MEM, MEM_REVERSE]) >>
   `((lo < w2n xs + w2n amount \/ op_prov G off <> NONE) ==>
@@ -341,7 +341,7 @@ Theorem dload_copied_call_read_range[local]:
    (i.inst_opcode = STATICCALL /\ i.inst_operands = [gas;addr;off;sz;r;rs]) \/
    (i.inst_opcode = DELEGATECALL /\ i.inst_operands = [gas;addr;off;sz;r;rs])) /\
   MEM i (fn_insts f) /\ fn_ptr_ok P f /\ FDOM G SUBSET fn_pv P f /\
-  dload_vars_match fs V G H tn un s t /\ s.vs_labels = t.vs_labels /\
+  dload_vars_match fl fs V G H tn un s t /\ s.vs_labels = t.vs_labels /\
   dload_live_layout lo sf tf fs /\
   (!v. MEM (Var v) i.inst_operands ==> v IN V) /\
   access_ok lo G f i s /\ taint_ok f tn i s /\ ~in_revert_forward f s /\
@@ -397,7 +397,7 @@ Proof
   rename1 `eval_operand off t = SOME yt` >>
   rename1 `eval_operand off s = SOME xs` >>
   rename1 `eval_operand sz t = SOME amount` >>
-  `dload_value_word fs {} (op_prov G off) (op_prov H off) xs yt` by
+  `dload_value_word fl fs {} (op_prov G off) (op_prov H off) xs yt` by
     (drule dload_matched_operand >>
      disch_then (qspecl_then [`yt`,`xs`,`off`] mp_tac) >> simp[] >> metis_tac[MEM]) >>
   `((lo < w2n xs + w2n amount \/ op_prov G off <> NONE) ==>
@@ -424,7 +424,7 @@ Theorem dload_copied_create_read_range[local]:
   ((i.inst_opcode = CREATE /\ i.inst_operands = [value;off;sz]) \/
    (i.inst_opcode = CREATE2 /\ i.inst_operands = [value;off;sz;salt])) /\
   MEM i (fn_insts f) /\ fn_ptr_ok P f /\ FDOM G SUBSET fn_pv P f /\
-  dload_vars_match fs V G H tn un s t /\ s.vs_labels = t.vs_labels /\
+  dload_vars_match fl fs V G H tn un s t /\ s.vs_labels = t.vs_labels /\
   dload_live_layout lo sf tf fs /\
   (!v. MEM (Var v) i.inst_operands ==> v IN V) /\
   access_ok lo G f i s /\ taint_ok f tn i s /\ ~in_revert_forward f s /\
@@ -469,7 +469,7 @@ Proof
    rename1 `eval_operand off t = SOME yt` >>
    rename1 `eval_operand off s = SOME xs` >>
    rename1 `eval_operand sz t = SOME amount` >>
-   `dload_value_word fs {} (op_prov G off) (op_prov H off) xs yt` by
+   `dload_value_word fl fs {} (op_prov G off) (op_prov H off) xs yt` by
      (drule dload_matched_operand >>
       disch_then (qspecl_then [`yt`,`xs`,`off`] mp_tac) >> simp[] >> metis_tac[MEM]) >>
    `((lo < w2n xs + w2n amount \/ op_prov G off <> NONE) ==>
@@ -496,7 +496,7 @@ QED
 Theorem dload_copied_read_range:
   MEM i (fn_insts f) /\ fn_ptr_ok P f /\ FDOM G SUBSET fn_pv P f /\
   i.inst_opcode <> DRET /\
-  dload_vars_match fs V G H tn un s t /\ s.vs_labels = t.vs_labels /\
+  dload_vars_match fl fs V G H tn un s t /\ s.vs_labels = t.vs_labels /\
   dload_live_layout lo sf tf fs /\
   (!v. MEM (Var v) i.inst_operands ==> v IN V) /\
   access_ok lo G f i s /\ taint_ok f tn i s /\ ~in_revert_forward f s /\
@@ -593,7 +593,7 @@ QED
 
 Theorem dload_copied_fixed_write_range[local]:
   (i.inst_opcode = MSTORE \/ i.inst_opcode = MSTORE8 \/ i.inst_opcode = ISTORE) /\
-  dload_vars_match fs V G H tn un s t /\ s.vs_labels = t.vs_labels /\
+  dload_vars_match fl fs V G H tn un s t /\ s.vs_labels = t.vs_labels /\
   dload_live_layout lo sf tf fs /\
   (!v. MEM (Var v) i.inst_operands ==> v IN V) /\
   access_ok lo G f i s /\ taint_ok f tn i s /\ ~in_revert_forward f s /\
@@ -625,7 +625,7 @@ Proof
    Cases_on `eval_operand off s` >> Cases_on `eval_operand value s` >> gvs[] >>
    rename1 `eval_operand off s = SOME xs` >>
    `op_taint tn off = {}` by (gvs[taint_ok_def] >> metis_tac[]) >>
-   `dload_value_word fs {} (op_prov G off) (op_prov H off) xs yt` by
+   `dload_value_word fl fs {} (op_prov G off) (op_prov H off) xs yt` by
      (drule dload_matched_operand >>
       disch_then (qspecl_then [`yt`,`xs`,`off`] mp_tac) >> simp[] >> metis_tac[]) >>
    `((lo < w2n xs + (if i.inst_opcode = MSTORE8 then 1 else 32) \/ op_prov G off <> NONE) ==>
@@ -648,7 +648,7 @@ QED
 Theorem dload_copied_mcopy_write_range[local]:
   i.inst_opcode = MCOPY /\ i.inst_operands = [dst;src;sz] /\
   MEM i (fn_insts f) /\ fn_ptr_ok P f /\ FDOM G SUBSET fn_pv P f /\
-  dload_vars_match fs V G H tn un s t /\ s.vs_labels = t.vs_labels /\
+  dload_vars_match fl fs V G H tn un s t /\ s.vs_labels = t.vs_labels /\
   dload_live_layout lo sf tf fs /\
   (!v. MEM (Var v) i.inst_operands ==> v IN V) /\
   access_ok lo G f i s /\ taint_ok f tn i s /\ ~in_revert_forward f s /\
@@ -685,7 +685,7 @@ Proof
   rename1 `eval_operand dst t = SOME yt` >>
   rename1 `eval_operand dst s = SOME xs` >>
   rename1 `eval_operand sz t = SOME amount` >>
-  `dload_value_word fs {} (op_prov G dst) (op_prov H dst) xs yt` by
+  `dload_value_word fl fs {} (op_prov G dst) (op_prov H dst) xs yt` by
     (drule dload_matched_operand >>
      disch_then (qspecl_then [`yt`,`xs`,`dst`] mp_tac) >> simp[] >> metis_tac[MEM]) >>
   `((lo < w2n xs + w2n amount \/ op_prov G dst <> NONE) ==>
@@ -710,7 +710,7 @@ Theorem dload_copied_external_write_range[local]:
   MEM i.inst_opcode [CODECOPY;CALLDATACOPY;RETURNDATACOPY;EXTCODECOPY;DLOADBYTES] /\
   i.inst_operands = (if i.inst_opcode = EXTCODECOPY then [addr;dst;off;sz] else [dst;off;sz]) /\
   MEM i (fn_insts f) /\ fn_ptr_ok P f /\ FDOM G SUBSET fn_pv P f /\
-  dload_vars_match fs V G H tn un s t /\ s.vs_labels = t.vs_labels /\
+  dload_vars_match fl fs V G H tn un s t /\ s.vs_labels = t.vs_labels /\
   dload_live_layout lo sf tf fs /\
   (!v. MEM (Var v) i.inst_operands ==> v IN V) /\
   access_ok lo G f i s /\ taint_ok f tn i s /\ ~in_revert_forward f s /\
@@ -757,7 +757,7 @@ Proof
    (rename1 `eval_operand dst t = SOME yt` >>
    rename1 `eval_operand dst s = SOME xs` >>
    rename1 `eval_operand sz t = SOME amount` >>
-   `dload_value_word fs {} (op_prov G dst) (op_prov H dst) xs yt` by
+   `dload_value_word fl fs {} (op_prov G dst) (op_prov H dst) xs yt` by
      (drule dload_matched_operand >>
       disch_then (qspecl_then [`yt`,`xs`,`dst`] mp_tac) >> simp[] >> metis_tac[MEM]) >>
    `((lo < w2n xs + w2n amount \/ op_prov G dst <> NONE) ==>
@@ -783,7 +783,7 @@ Theorem dload_copied_call_write_range[local]:
    (i.inst_opcode = STATICCALL /\ i.inst_operands = [gas;addr;off;sz;r;rs]) \/
    (i.inst_opcode = DELEGATECALL /\ i.inst_operands = [gas;addr;off;sz;r;rs])) /\
   MEM i (fn_insts f) /\ fn_ptr_ok P f /\ FDOM G SUBSET fn_pv P f /\
-  dload_vars_match fs V G H tn un s t /\ s.vs_labels = t.vs_labels /\
+  dload_vars_match fl fs V G H tn un s t /\ s.vs_labels = t.vs_labels /\
   dload_live_layout lo sf tf fs /\
   (!v. MEM (Var v) i.inst_operands ==> v IN V) /\
   access_ok lo G f i s /\ taint_ok f tn i s /\ ~in_revert_forward f s /\
@@ -839,7 +839,7 @@ Proof
   rename1 `eval_operand r t = SOME yt` >>
   rename1 `eval_operand r s = SOME xs` >>
   rename1 `eval_operand rs t = SOME amount` >>
-  `dload_value_word fs {} (op_prov G r) (op_prov H r) xs yt` by
+  `dload_value_word fl fs {} (op_prov G r) (op_prov H r) xs yt` by
     (drule dload_matched_operand >>
      disch_then (qspecl_then [`yt`,`xs`,`r`] mp_tac) >> simp[] >> metis_tac[MEM]) >>
   `((lo < w2n xs + w2n amount \/ op_prov G r <> NONE) ==>
@@ -864,7 +864,7 @@ QED
 Theorem dload_copied_write_range:
   MEM i (fn_insts f) /\ fn_ptr_ok P f /\ FDOM G SUBSET fn_pv P f /\
   i.inst_opcode <> DRET /\
-  dload_vars_match fs V G H tn un s t /\ s.vs_labels = t.vs_labels /\
+  dload_vars_match fl fs V G H tn un s t /\ s.vs_labels = t.vs_labels /\
   dload_live_layout lo sf tf fs /\
   (!v. MEM (Var v) i.inst_operands ==> v IN V) /\
   access_ok lo G f i s /\ taint_ok f tn i s /\ ~in_revert_forward f s /\
@@ -1016,7 +1016,7 @@ Theorem dload_normal_copied_safety:
   EVERY (fn_ptr_ok P) C.ctx_functions /\
   frame_reachable vs C cs PG G tn f i s /\
   frame_reachable vs C' ds PH H un g i t /\
-  dload_boundary_core lo fs
+  dload_boundary_core fl lo fs
     (set (fn_ir_vars f) DIFF {v | retpc_var f v})
     (MAP (\c. set (fn_ir_vars c.cf_fn) DIFF {v | retpc_var c.cf_fn v}) cs)
     PG PH G H tn un s t cs ds /\

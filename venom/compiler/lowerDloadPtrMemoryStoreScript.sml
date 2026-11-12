@@ -88,10 +88,10 @@ Proof
 QED
 
 Theorem dload_mstore_reconstruct[local]:
-  dload_boundary_core lo fs V Ws PG PH G H tn un s t cs ds /\
-  dload_memory_match lo fs (tn with t_mem := A) (un with t_mem := B)
+  dload_boundary_core fl lo fs V Ws PG PH G H tn un s t cs ds /\
+  dload_memory_match fl lo fs (tn with t_mem := A) (un with t_mem := B)
     (mstore a x s) (mstore b y t) ==>
-  dload_boundary_core lo fs V Ws PG PH G H
+  dload_boundary_core fl lo fs V Ws PG PH G H
     (tn with t_mem := A) (un with t_mem := B)
     (mstore a x s) (mstore b y t) cs ds
 Proof
@@ -109,11 +109,11 @@ Proof
 QED
 
 Theorem dload_istore_reconstruct[local]:
-  dload_boundary_core lo fs V Ws PG PH G H tn un s t cs ds /\
+  dload_boundary_core fl lo fs V Ws PG PH G H tn un s t cs ds /\
   word_agree_except m x y /\ m SUBSET {k | k < 32} /\
-  dload_memory_match lo fs (tn with t_mem := A) (un with t_mem := B)
+  dload_memory_match fl lo fs (tn with t_mem := A) (un with t_mem := B)
     (mstore key x s) (mstore key y t) ==>
-  dload_boundary_core lo fs V Ws PG PH G H
+  dload_boundary_core fl lo fs V Ws PG PH G H
     (tn with <|t_mem := A; t_imm := key_update tn.t_imm key m|>)
     (un with <|t_mem := B; t_imm := key_update un.t_imm key m|>)
     (istore key x s) (istore key y t) cs ds
@@ -147,11 +147,11 @@ Theorem dload_boundary_core_mstore:
   (!v. MEM (Var v) i.inst_operands ==> v IN V /\ v IN U) /\
   (!v. v IN U ==> (lookup_var v s = NONE <=> lookup_var v t = NONE)) /\
   (!op. MEM op i.inst_operands ==> op_taint tn op SUBSET {k | k < 32}) /\
-  dload_boundary_core lo fs V Ws PG PH G H tn un s t cs ds /\
+  dload_boundary_core fl lo fs V Ws PG PH G H tn un s t cs ds /\
   step_inst fuel Ct i t = OK t' ==>
   ?s'. step_inst fuel Cs i s = OK s' /\
     (!v. v IN U ==> (lookup_var v s' = NONE <=> lookup_var v t' = NONE)) /\
-    dload_boundary_core lo fs V Ws PG PH
+    dload_boundary_core fl lo fs V Ws PG PH
       (step_prov PG G i s') (step_prov PH H i t')
       (step_taint i s s' tn) (step_taint i t t' un) s' t' cs ds /\
     s'.vs_current_bb = s.vs_current_bb /\ s'.vs_prev_bb = s.vs_prev_bb /\
@@ -175,15 +175,15 @@ Proof
   Cases_on `eval_operand v s` >- gvs[] >>
   rename1 `eval_operand a s = SOME xs` >>
   rename1 `eval_operand v s = SOME ys` >>
-  `dload_vars_match fs V G H tn un s t` by
+  `dload_vars_match fl fs V G H tn un s t` by
     metis_tac[dload_boundary_vars] >>
   `op_taint tn a = {}` by (gvs[taint_ok_def] >> metis_tac[]) >>
-  `dload_value_word fs (op_taint tn a) (op_prov G a) (op_prov H a) xs x /\
-   dload_value_word fs (op_taint tn v) (op_prov G v) (op_prov H v) ys y` by
+  `dload_value_word fl fs (op_taint tn a) (op_prov G a) (op_prov H a) xs x /\
+   dload_value_word fl fs (op_taint tn v) (op_prov G v) (op_prov H v) ys y` by
     (conj_tac >> irule dload_matched_operand >>
      qexistsl [`V`,`s`,`t`,`un`] >> simp[] >> metis_tac[]) >>
   `dload_live_layout lo s.vs_alloca_next t.vs_alloca_next fs /\
-   dload_memory_match lo fs tn un s t` by
+   dload_memory_match fl lo fs tn un s t` by
     metis_tac[dload_boundary_core_def] >>
   `op_prov G v = NONE` by (irule dload_store_payload >> metis_tac[]) >>
   `word_agree_except (op_taint tn v) ys y /\
@@ -191,13 +191,13 @@ Proof
     (conj_tac
      >- (Cases_on `op_prov H v` >> gvs[dload_value_word_def]) >>
      Cases_on `v` >> gvs[op_taint_def, dload_vars_match_def] >> metis_tac[]) >>
-  `dload_value_word fs {} (op_prov G a) (op_prov H a) xs x` by metis_tac[] >>
+  `dload_value_word fl fs {} (op_prov G a) (op_prov H a) xs x` by metis_tac[] >>
   Q.SUBGOAL_THEN
    `(w2n xs = w2n x /\ w2n xs + 32 <= lo) \/
     (?owner id b c n d. dload_live_site fs owner id b c n /\
       w2n xs = b+d /\ w2n x = c+d /\ d+32 <= n)` assume_tac
   >- (irule dload_store_region >> metis_tac[]) >>
-  `dload_memory_match lo fs
+  `dload_memory_match fl lo fs
     (tn with t_mem := (tn.t_mem DIFF {p | w2n xs <= p /\ p < w2n xs+32})
       UNION {w2n xs+k | k IN op_taint tn v})
     (un with t_mem := (un.t_mem DIFF {p | w2n x <= p /\ p < w2n x+32})
@@ -267,7 +267,7 @@ Theorem dload_actual_mstore_next:
   (!v. MEM (Var v) i.inst_operands ==> ~retpc_var f v) /\
   (!op. MEM op i.inst_operands ==> op_taint tn op SUBSET {k | k < 32}) /\
   ALL_DISTINCT (MAP (\bb. bb.bb_label) g.fn_blocks) /\
-  dload_boundary_core lo fs {v | ~retpc_var f v} Ws PG PH G H tn un s t cs ds /\
+  dload_boundary_core fl lo fs {v | ~retpc_var f v} Ws PG PH G H tn un s t cs ds /\
   (!v. v IN set (fn_ir_vars f) ==>
     (lookup_var v s = NONE <=> lookup_var v t = NONE)) /\
   step_inst fuel C' i t = OK t1 /\
@@ -280,7 +280,7 @@ Theorem dload_actual_mstore_next:
       (s1 with vs_inst_idx := SUC s.vs_inst_idx)
       (t1 with vs_inst_idx := SUC t.vs_inst_idx) i' emitted' 0 /\
     j = HD emitted' /\
-    dload_boundary_core lo fs {v | ~retpc_var f v} Ws PG PH
+    dload_boundary_core fl lo fs {v | ~retpc_var f v} Ws PG PH
       (step_prov PG G i s1) (step_prov PH H i t1)
       (step_taint i s s1 tn) (step_taint i t t1 un)
       (s1 with vs_inst_idx := SUC s.vs_inst_idx)

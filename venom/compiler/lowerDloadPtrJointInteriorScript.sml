@@ -13,7 +13,7 @@ Theorem dload_joint_interior_next_closed:
   EVERY (fn_ptr_ok P) C.ctx_functions /\
   (?cs PG G tn f i s q emitted n pfuel t0 H0 un0 fs.
     frame_reachable vs C cs PG G tn f i s /\
-    dload_boundary_core lo fs
+    dload_boundary_core fl lo fs
       (set (fn_ir_vars f) DIFF {v | retpc_var f v})
       (MAP (\c. set (fn_ir_vars c.cf_fn) DIFF {v | retpc_var c.cf_fn v}) cs)
       PG PH G H0 tn un0 s t0 cs ds /\
@@ -54,7 +54,7 @@ Theorem dload_joint_interior_next_closed:
   active_inst g next (v with vs_inst_idx := SUC t.vs_inst_idx) ==>
   ?cs PG G tn f i s q emitted n pfuel t0 H0 un0 fs.
     frame_reachable vs C cs PG G tn f i s /\
-    dload_boundary_core lo fs
+    dload_boundary_core fl lo fs
       (set (fn_ir_vars f) DIFF {v | retpc_var f v})
       (MAP (\c. set (fn_ir_vars c.cf_fn) DIFF {v | retpc_var c.cf_fn v}) cs)
       PG PH G H0 tn un0 s t0 cs ds /\
@@ -102,7 +102,7 @@ Proof
   `ALL_DISTINCT (MAP (\bb. bb.bb_label) g.fn_blocks)` by
     (drule lower_dload_function_supply_labels >>
      fs[o1_fn_shape_def, fn_shape_ok_def, wf_function_def, fn_labels_def]) >>
-  `dload_phase_core pfuel C' q f g i emitted n lo fs
+  `dload_phase_core fl pfuel C' q f g i emitted n lo fs
     (set (fn_ir_vars f) DIFF {v | retpc_var f v})
     (MAP (\c. set (fn_ir_vars c.cf_fn) DIFF {v | retpc_var c.cf_fn v}) cs)
     PG PH G tn s t H un cs ds` by

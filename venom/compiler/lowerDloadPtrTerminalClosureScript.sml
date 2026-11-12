@@ -28,7 +28,7 @@ Definition dload_terminal_mode_def:
     FDOM G SUBSET fn_pv P f /\ s.vs_labels = t.vs_labels /\
     (!v. v IN set (fn_ir_vars f) ==>
        (lookup_var v s = NONE <=> lookup_var v t = NONE)) /\
-    dload_vars_match fs (set (fn_ir_vars f) DIFF {v | retpc_var f v})
+    dload_vars_match (dyn_floor C vs) fs (set (fn_ir_vars f) DIFF {v | retpc_var f v})
        G H tn un s t /\
     dload_live_layout lo s.vs_alloca_next t.vs_alloca_next fs /\
     dload_table_stack fs (s::MAP (\c. c.cf_state) cs)
@@ -61,7 +61,7 @@ Theorem dload_actual_copy_terminal_mode:
   ALL_DISTINCT (MAP (\bb. bb.bb_label) g.fn_blocks) /\
   i.inst_opcode = RETURNDATACOPY /\ i.inst_operands = [dst;off;sz] /\
   FDOM G SUBSET fn_pv P f /\
-  dload_boundary_core lo fs
+  dload_boundary_core fl lo fs
     (set (fn_ir_vars f) DIFF {v | retpc_var f v}) Ws
     PG PH G H tn un s t cs ds /\
   (!v. v IN set (fn_ir_vars f) ==>

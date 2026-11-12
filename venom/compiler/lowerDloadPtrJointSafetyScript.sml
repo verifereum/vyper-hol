@@ -25,7 +25,7 @@ Proof
 QED
 
 Theorem dload_boundary_allocas_from:
-  dload_boundary_core lo fs V Ws PG PH G H tn un s t cs ds ==>
+  dload_boundary_core fl lo fs V Ws PG PH G H tn un s t cs ds ==>
   allocas_from lo t /\ lo <= t.vs_alloca_next
 Proof
   strip_tac >>
@@ -94,7 +94,7 @@ Proof
 QED
 
 Theorem dload_supply_prefix_allocas_from:
-  dload_boundary_core lo fs V Ws PG PH G H0 tn un0 s t0 cs ds /\
+  dload_boundary_core fl lo fs V Ws PG PH G H0 tn un0 s t0 cs ds /\
   lower_dload_inst_supply supply i = (xs,next) /\
   dload_prefix_match fuel Ct PH xs n t0 H0 un0 t H un /\
   n < LENGTH xs ==> allocas_from lo t
@@ -111,7 +111,7 @@ Proof
 QED
 
 Theorem dload_boundary_cached_scratch_bounds[local]:
-  dload_boundary_core lo (r::rs) V Ws PG PH G H0 tn un0 s t0 cs ds /\
+  dload_boundary_core fl lo (r::rs) V Ws PG PH G H0 tn un0 s t0 cs ds /\
   id IN r.dr_scratch /\ FLOOKUP t0.vs_allocas id = SOME (bb,sz) ==>
   sz = 32 /\ bb + 32 < dimword (:256)
 Proof
@@ -134,7 +134,7 @@ Theorem dload_normal_later_dload_safety:
   EVERY (fn_ptr_ok P) C.ctx_functions /\
   frame_reachable vs C cs PG G tn f i s /\
   frame_reachable vs C' ds PH H un g j t /\
-  dload_boundary_core lo fs
+  dload_boundary_core fl lo fs
     (set (fn_ir_vars f) DIFF {v | retpc_var f v})
     (MAP (\c. set (fn_ir_vars c.cf_fn) DIFF {v | retpc_var c.cf_fn v}) cs)
     PG PH G H0 tn un0 s t0 cs ds /\
@@ -279,7 +279,7 @@ Theorem dload_normal_dloadbytes_safety:
   o1_ctx_shape C /\ ptr_discipline lo C vs /\
   EVERY (fn_ptr_ok P) C.ctx_functions /\
   frame_reachable vs C cs PG G tn f i s /\
-  dload_boundary_core lo fs
+  dload_boundary_core fl lo fs
     (set (fn_ir_vars f) DIFF {v | retpc_var f v})
     (MAP (\c. set (fn_ir_vars c.cf_fn) DIFF {v | retpc_var c.cf_fn v}) cs)
     PG PH G H0 tn un0 s t0 cs ds /\
@@ -364,7 +364,7 @@ Resume dload_normal_dloadbytes_safety[forward]:
 QED
 
 Resume dload_normal_dloadbytes_safety[phases]:
-  `dload_vars_match fs (set (fn_ir_vars f) DIFF {v | retpc_var f v})
+  `dload_vars_match fl fs (set (fn_ir_vars f) DIFF {v | retpc_var f v})
     G H0 tn un0 s t0` by metis_tac[dload_boundary_vars] >>
   `s.vs_labels = t0.vs_labels` by
     (drule dload_boundary_environment >>
@@ -393,18 +393,18 @@ Resume dload_normal_dloadbytes_safety[phases]:
   `step_inst_base a t0 = OK v` by
     (qpat_x_assum `step_inst _ _ _ _ = _` mp_tac >>
      simp[step_inst_non_invoke, Abbr `a`]) >>
-  `dload_boundary_core lo fs
+  `dload_boundary_core fl lo fs
     (set (fn_ir_vars f) DIFF {v | retpc_var f v})
     (MAP (\c. set (fn_ir_vars c.cf_fn) DIFF {v | retpc_var c.cf_fn v}) cs)
     PG PH G (step_prov PH H0 a v) tn (step_taint a t0 v un0) s v cs ds` by
     (irule dload_boundary_core_add_temporary >> simp[Abbr `a`] >> metis_tac[]) >>
   qmatch_goalsub_abbrev_tac `access_ok lo H1 g c t1` >>
   qmatch_goalsub_abbrev_tac `taint_ok g un1 c t1` >>
-  `dload_boundary_core lo fs
+  `dload_boundary_core fl lo fs
     (set (fn_ir_vars f) DIFF {v | retpc_var f v})
     (MAP (\c. set (fn_ir_vars c.cf_fn) DIFF {v | retpc_var c.cf_fn v}) cs)
     PG PH G H1 tn un1 s t1 cs ds` by
-    (qpat_assum `dload_boundary_core _ _ _ _ _ _ _ _ _ _ s v _ _`
+    (qpat_assum `dload_boundary_core _ _ _ _ _ _ _ _ _ _ _ s v _ _`
       (mp_then Any mp_tac dload_boundary_core_index_update) >>
      disch_then (qspecl_then [`SUC t0.vs_inst_idx`,`s.vs_inst_idx`] mp_tac) >>
      simp[Abbr `H1`, Abbr `un1`, Abbr `t1`]) >>
@@ -413,7 +413,7 @@ Resume dload_normal_dloadbytes_safety[phases]:
   drule dload_boundary_vars >> strip_tac >>
   drule dload_boundary_layout >> strip_tac >>
   `s.vs_labels = t1.vs_labels` by
-    (qpat_assum `dload_boundary_core _ _ _ _ _ _ _ _ _ _ s t1 _ _`
+    (qpat_assum `dload_boundary_core _ _ _ _ _ _ _ _ _ _ _ s t1 _ _`
       (mp_then Any mp_tac dload_boundary_environment) >>
      simp[dload_equal_environment_def, venom_state_component_equality]) >>
   irule dloadbytes_codecopy_safety >>
@@ -448,7 +448,7 @@ Finalise dload_normal_dloadbytes_safety
 val normal = ``\ds PH H un g j t.
   ?cs PG G tn f i s q emitted n pfuel t0 H0 un0 fs.
     frame_reachable vs C cs PG G tn f i s /\
-    dload_boundary_core lo fs
+    dload_boundary_core (dyn_floor C vs) lo fs
       (set (fn_ir_vars f) DIFF {v | retpc_var f v})
       (MAP (\c. set (fn_ir_vars c.cf_fn) DIFF {v | retpc_var c.cf_fn v}) cs)
       PG PH G H0 tn un0 s t0 cs ds /\

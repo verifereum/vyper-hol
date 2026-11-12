@@ -140,31 +140,37 @@ Proof
   simp[word_add_n2w, arithmeticTheory.ADD_COMM]
 QED
 
+(* A pointer names a live allocation site, relocated, or a DALLOCA site
+   at or above the floor fl, the same word on both sides. *)
 Definition dload_value_word_def:
-  dload_value_word fs mask p q (x:bytes32) y <=>
+  dload_value_word fl fs mask p q (x:bytes32) y <=>
     case (p,q) of
       (NONE,NONE) => word_agree_except mask x y
-    | (SOME a,SOME b) => dload_pointer_word fs a b x y
+    | (SOME a,SOME b) =>
+        dload_pointer_word fs a b x y \/
+        (a = b /\ fl <= FST a /\ FST a + SND a < dimword (:256) /\
+         word_agree_except mask x y)
     | _ => F
 End
 
 (* Only original variables are quantified: generated temporaries have their
    own phase-local obligations and may be present in the target map. *)
 Definition dload_vars_match_def:
-  dload_vars_match fs V G H tn un s t <=>
+  dload_vars_match fl fs V G H tn un s t <=>
     (!v. v IN V ==>
        FLOOKUP tn.t_var v = FLOOKUP un.t_var v /\
        (lookup_var v s = NONE <=> lookup_var v t = NONE) /\
        (!x y. lookup_var v s = SOME x /\ lookup_var v t = SOME y ==>
-          dload_value_word fs (op_taint tn (Var v))
+          dload_value_word fl fs (op_taint tn (Var v))
             (FLOOKUP G v) (FLOOKUP H v) x y))
 End
 
-(* Agreement is required only on fixed memory and simultaneously live
-   original allocations.  Target scratch and returned-callee garbage are
-   deliberately not constrained here. *)
+(* Agreement is required only on fixed memory, simultaneously live
+   original allocations and the dynamic region from the floor fl up, where
+   DALLOCA pointers are the same word on both sides.  Target scratch and
+   returned-callee garbage are deliberately not constrained here. *)
 Definition dload_memory_match_def:
-  dload_memory_match lo fs tn un s t <=>
+  dload_memory_match fl lo fs tn un s t <=>
     (!i. i < lo ==>
        (i IN tn.t_mem <=> i IN un.t_mem) /\
        (i NOTIN tn.t_mem ==>
@@ -173,11 +179,14 @@ Definition dload_memory_match_def:
        dload_live_site fs owner id b c n /\ k < n ==>
        (b+k IN tn.t_mem <=> c+k IN un.t_mem) /\
        (b+k NOTIN tn.t_mem ==>
-          read_byte (b+k) s.vs_memory = read_byte (c+k) t.vs_memory))
+          read_byte (b+k) s.vs_memory = read_byte (c+k) t.vs_memory)) /\
+    (!i. fl <= i /\ i < dimword (:256) ==>
+       (i IN tn.t_mem <=> i IN un.t_mem)) /\
+    ld_dyn_agree fl tn.t_mem s.vs_memory t.vs_memory
 End
 
 Theorem dload_vars_match_empty_provenance:
-  dload_vars_match fs V FEMPTY FEMPTY tn tn s s
+  dload_vars_match fl fs V FEMPTY FEMPTY tn tn s s
 Proof
   simp[dload_vars_match_def, dload_value_word_def, word_agree_except_def] >>
   rpt strip_tac >> gvs[]
@@ -185,19 +194,19 @@ QED
 
 Theorem dload_memory_match_empty:
   (!f. MEM f fs ==> f.dr_source = FEMPTY) ==>
-  dload_memory_match lo fs tn tn s s
+  dload_memory_match fl lo fs tn tn s s
 Proof
-  simp[dload_memory_match_def, dload_live_site_def] >>
+  simp[dload_memory_match_def, dload_live_site_def, ld_dyn_agree_def] >>
   rpt strip_tac >>
   `MEM (EL owner fs) fs` by simp[EL_MEM] >>
   first_x_assum drule >> strip_tac >> gvs[]
 QED
 
 Theorem dload_matched_operand:
-  dload_vars_match fs V G H tn un s t /\ s.vs_labels = t.vs_labels /\
+  dload_vars_match fl fs V G H tn un s t /\ s.vs_labels = t.vs_labels /\
   (!v. op = Var v ==> v IN V) /\
   eval_operand op s = SOME x /\ eval_operand op t = SOME y ==>
-  dload_value_word fs (op_taint tn op) (op_prov G op) (op_prov H op) x y
+  dload_value_word fl fs (op_taint tn op) (op_prov G op) (op_prov H op) x y
 Proof
   Cases_on `op`
   >- (simp[eval_operand_def, op_prov_def, op_taint_def,
@@ -211,7 +220,7 @@ Proof
 QED
 
 Theorem dload_matched_operand_defined:
-  dload_vars_match fs V G H tn un s t /\ s.vs_labels = t.vs_labels /\
+  dload_vars_match fl fs V G H tn un s t /\ s.vs_labels = t.vs_labels /\
   (!v. op = Var v ==> v IN V) ==>
   (eval_operand op s = NONE <=> eval_operand op t = NONE)
 Proof
@@ -349,10 +358,10 @@ Theorem dload_initial_components:
   dload_table_stack
     [<|dr_source := FEMPTY; dr_target := FEMPTY; dr_scratch := {}|>]
     [vs] [vs] /\
-  dload_vars_match
+  dload_vars_match fl
     [<|dr_source := FEMPTY; dr_target := FEMPTY; dr_scratch := {}|>]
     V FEMPTY FEMPTY entry_taint entry_taint vs vs /\
-  dload_memory_match lo
+  dload_memory_match fl lo
     [<|dr_source := FEMPTY; dr_target := FEMPTY; dr_scratch := {}|>]
     entry_taint entry_taint vs vs
 Proof
@@ -364,7 +373,7 @@ Proof
 QED
 
 Theorem scalar_operand_equal:
-  dload_vars_match fs V G H tn un s t /\ s.vs_labels = t.vs_labels /\
+  dload_vars_match fl fs V G H tn un s t /\ s.vs_labels = t.vs_labels /\
   (!v. op = Var v ==> v IN V) /\
   op_prov G op = NONE /\ op_taint tn op = {} /\
   (eval_operand op s = NONE <=> eval_operand op t = NONE) ==>
@@ -372,7 +381,7 @@ Theorem scalar_operand_equal:
 Proof
   strip_tac >> Cases_on `eval_operand op s` >- gvs[] >>
   Cases_on `eval_operand op t` >- gvs[] >>
-  `dload_value_word fs (op_taint tn op) (op_prov G op) (op_prov H op) x x'` by
+  `dload_value_word fl fs (op_taint tn op) (op_prov G op) (op_prov H op) x x'` by
     (irule dload_matched_operand >> qexistsl [`V`,`s`,`t`,`un`] >> simp[]) >>
   Cases_on `op_prov H op` >>
   gvs[dload_value_word_def, word_agree_except_bits] >>
@@ -380,7 +389,7 @@ Proof
 QED
 
 Theorem dload_value_access_containment:
-  dload_live_layout lo sf tf fs /\ dload_value_word fs {} p q x y /\ rz <> 0 /\
+  dload_live_layout lo sf tf fs /\ dload_value_word fl fs {} p q x y /\ rz <> 0 /\
   ((lo < w2n x + rz \/ p <> NONE) ==>
     ?b n. p = SOME (b,n) /\ b <= w2n x /\ w2n x + rz <= b+n) ==>
   ((lo < w2n y + rz \/ q <> NONE) ==>

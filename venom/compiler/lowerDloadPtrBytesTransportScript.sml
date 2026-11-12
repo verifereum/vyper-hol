@@ -13,7 +13,7 @@ Theorem dloadbytes_destination_region:
   eval_operand sz s = SOME z /\
   access_ok lo G fn i s /\ ~in_revert_forward fn s /\
   dload_live_layout lo sf tf fs /\
-  dload_value_word fs {} (op_prov G dst) q x y ==>
+  dload_value_word fl fs {} (op_prov G dst) q x y ==>
   w2n z = 0 \/
   (w2n x = w2n y /\ w2n x + w2n z <= lo) \/
   (?owner id b c n d.
@@ -55,9 +55,9 @@ Theorem dloadbytes_memory_match_clean_write:
   eval_operand sz s = SOME z /\
   access_ok lo G fn i s /\ ~in_revert_forward fn s /\
   dload_live_layout lo sf tf fs /\
-  dload_value_word fs {} (op_prov G dst) q x y /\
-  dload_memory_match lo fs tn un s t /\ LENGTH bs = w2n z ==>
-  dload_memory_match lo fs
+  dload_value_word fl fs {} (op_prov G dst) q x y /\
+  dload_memory_match fl lo fs tn un s t /\ LENGTH bs = w2n z ==>
+  dload_memory_match fl lo fs
     (tn with t_mem := tn.t_mem DIFF {p | w2n x <= p /\ p < w2n x + LENGTH bs})
     (un with t_mem := un.t_mem DIFF {r | w2n y <= r /\ r < w2n y + LENGTH bs})
     (write_memory_with_expansion (w2n x) bs s)
@@ -97,7 +97,7 @@ QED
 Theorem dloadbytes_scalar_equal:
   i.inst_opcode = DLOADBYTES /\ i.inst_operands = [dst;off;sz] /\
   MEM i (fn_insts fn) /\ fn_ptr_ok P fn /\ FDOM G SUBSET fn_pv P fn /\
-  taint_ok fn tn i s /\ dload_vars_match fs V G H tn un s t /\
+  taint_ok fn tn i s /\ dload_vars_match fl fs V G H tn un s t /\
   s.vs_labels = t.vs_labels /\
   (!v. off = Var v ==> v IN V) /\ (!v. sz = Var v ==> v IN V) /\
   (eval_operand off s = NONE <=> eval_operand off t = NONE) /\
@@ -116,7 +116,7 @@ Theorem dloadbytes_codecopy_safety:
   c.inst_operands = [dst;src;sz] /\ c.inst_outputs = [] /\
   MEM i (fn_insts f) /\ fn_ptr_ok P f /\ FDOM G SUBSET fn_pv P f /\
   access_ok lo G f i s /\ ~in_revert_forward f s /\ taint_ok f tn i s /\
-  dload_live_layout lo sf tf fs /\ dload_vars_match fs V G H tn un s t /\
+  dload_live_layout lo sf tf fs /\ dload_vars_match fl fs V G H tn un s t /\
   s.vs_labels = t.vs_labels /\
   (!v. MEM (Var v) i.inst_operands ==> v IN V) /\
   op_taint un src = {} /\
@@ -151,7 +151,7 @@ Proof
       rename1 `eval_operand dst s = SOME sx` >>
       rename1 `eval_operand dst t = SOME ty` >>
       rename1 `eval_operand sz t = SOME zz` >>
-      `dload_value_word fs {} (op_prov G dst) (op_prov H dst) sx ty` by
+      `dload_value_word fl fs {} (op_prov G dst) (op_prov H dst) sx ty` by
         (metis_tac[dload_matched_operand]) >>
       rpt strip_tac >>
       `w2n zz <> 0` by simp[] >>
@@ -166,7 +166,7 @@ Proof
       `?b n. op_prov H dst = SOME (b,n) /\
          b <= w2n ty /\ w2n ty + w2n zz <= b+n` by
         (qpat_x_assum `dload_live_layout _ _ _ _` mp_tac >>
-         qpat_x_assum `dload_value_word _ _ _ _ _ _` mp_tac >>
+         qpat_x_assum `dload_value_word _ _ _ _ _ _ _` mp_tac >>
          qpat_x_assum `lo < _ \/ _ <> NONE ==> _` mp_tac >>
          qpat_x_assum `op_prov H dst = NONE ==> _` mp_tac >>
          qpat_x_assum `w2n zz <> 0` mp_tac >>
@@ -181,7 +181,7 @@ QED
 Theorem dloadbytes_common_payload:
   i.inst_opcode = DLOADBYTES /\ i.inst_operands = [dst;off;sz] /\
   MEM i (fn_insts fn) /\ fn_ptr_ok P fn /\ FDOM G SUBSET fn_pv P fn /\
-  taint_ok fn tn i s /\ dload_vars_match fs V G H tn un s t /\
+  taint_ok fn tn i s /\ dload_vars_match fl fs V G H tn un s t /\
   s.vs_labels = t.vs_labels /\
   (!v. off = Var v ==> v IN V) /\ (!v. sz = Var v ==> v IN V) /\
   (eval_operand off s = NONE <=> eval_operand off t = NONE) /\
@@ -222,7 +222,7 @@ Proof
 QED
 
 Theorem dloadbytes_codecopy_boundary:
-  dload_boundary_core lo fs V Ws PG PH G H tn un s t cs ds /\
+  dload_boundary_core fl lo fs V Ws PG PH G H tn un s t cs ds /\
   i.inst_opcode = DLOADBYTES /\ i.inst_operands = [dst;off;sz] /\
   i.inst_outputs = [] /\ eval_operand dst s = SOME x /\
   eval_operand off s = SOME a /\ eval_operand sz s = SOME z /\
@@ -231,11 +231,11 @@ Theorem dloadbytes_codecopy_boundary:
   c.inst_outputs = [] /\ eval_operand tdst t = SOME y /\
   eval_operand src t = SOME b /\ eval_operand tsz t = SOME z /\
   step_inst_base c t = OK t1 /\
-  dload_value_word fs {} (op_prov G dst) (op_prov H tdst) x y /\
+  dload_value_word fl fs {} (op_prov G dst) (op_prov H tdst) x y /\
   bs = TAKE (w2n z) (DROP (w2n a) s.vs_data_section ++ REPLICATE (w2n z) 0w) /\
   bs = TAKE (w2n z) (DROP (w2n b) t.vs_code ++ REPLICATE (w2n z) 0w) ==>
   ?s1. step_inst_base i s = OK s1 /\
-    dload_boundary_core lo fs V Ws PG PH (step_prov PG G i s1)
+    dload_boundary_core fl lo fs V Ws PG PH (step_prov PG G i s1)
       (step_prov PH H c t1) (step_taint i s s1 tn)
       (step_taint c t t1 un) s1 t1 cs ds
 Proof
@@ -246,7 +246,7 @@ Proof
   qexists_tac `write_memory_with_expansion (w2n x) bs s` >>
   conj_tac >- metis_tac[] >>
   `LENGTH bs = w2n z` by simp[LENGTH_TAKE_EQ] >>
-  `dload_memory_match lo fs
+  `dload_memory_match fl lo fs
     (tn with t_mem := tn.t_mem DIFF {p | w2n x <= p /\ p < w2n x + LENGTH bs})
     (un with t_mem := un.t_mem DIFF {p | w2n y <= p /\ p < w2n y + LENGTH bs})
     (write_memory_with_expansion (w2n x) bs s)
@@ -256,8 +256,8 @@ Proof
      conj_tac >- metis_tac[dload_boundary_memory] >>
      goal_assum (drule_at Any) >> simp[] >> metis_tac[]) >>
   gvs[] >>
-  qpat_x_assum `dload_boundary_core _ _ _ _ _ _ _ _ _ _ _ _ _ _` mp_tac >>
-  qpat_x_assum `dload_memory_match _ _ _ _ (write_memory_with_expansion _ _ _) _` mp_tac >>
+  qpat_x_assum `dload_boundary_core _ _ _ _ _ _ _ _ _ _ _ _ _ _ _` mp_tac >>
+  qpat_x_assum `dload_memory_match _ _ _ _ _ (write_memory_with_expansion _ _ _) _` mp_tac >>
   rpt (pop_assum kall_tac) >> strip_tac >> strip_tac >>
   qmatch_goalsub_abbrev_tac `write_memory_with_expansion (w2n x) payload s` >>
   fs[dload_boundary_core_def] >>
@@ -274,7 +274,7 @@ Proof
 QED
 
 Theorem dloadbytes_two_step_boundary:
-  dload_boundary_core lo fs V Ws PG PH G H tn un s t cs ds /\
+  dload_boundary_core fl lo fs V Ws PG PH G H tn un s t cs ds /\
   i.inst_opcode = DLOADBYTES /\ i.inst_operands = [dst;off;sz] /\ i.inst_outputs = [] /\
   a.inst_opcode = ADD /\ a.inst_operands = [off;Label "code_end"] /\ a.inst_outputs = [cv] /\
   c.inst_opcode = CODECOPY /\ c.inst_operands = [dst;Var cv;sz] /\ c.inst_outputs = [] /\
@@ -285,7 +285,7 @@ Theorem dloadbytes_two_step_boundary:
   code_layout_valid s /\ dload_offset_ok C fn i s /\
   dload_prefix_match fuel Ct PH [a;c] 2 t H un t2 H2 un2 ==>
   ?s1. step_inst fuel C i s = OK s1 /\
-    dload_boundary_core lo fs V Ws PG PH (step_prov PG G i s1) H2
+    dload_boundary_core fl lo fs V Ws PG PH (step_prov PG G i s1) H2
       (step_taint i s s1 tn) un2 (s1 with vs_inst_idx := SUC s.vs_inst_idx) t2 cs ds
 Proof
   strip_tac >>
@@ -322,7 +322,7 @@ Proof
 QED
 
 Resume dloadbytes_two_step_boundary[scalar_inputs]:
-  `dload_vars_match fs V G H tn un s t` by metis_tac[dload_boundary_vars] >>
+  `dload_vars_match fl fs V G H tn un s t` by metis_tac[dload_boundary_vars] >>
   `s.vs_labels = t.vs_labels /\ s.vs_data_section = t.vs_data_section /\
    code_layout_valid t` by
     (qpat_x_assum `code_layout_valid s` mp_tac >>
@@ -356,11 +356,11 @@ Resume dloadbytes_two_step_boundary[scalar_inputs]:
      simp[dload_equal_environment_def, venom_state_component_equality,
           dload_offset_ok_def, code_layout_valid_def, eval_operand_def] >>
      rpt strip_tac >> gvs[] >> fs[dimword_def, LESS_MOD] >> metis_tac[]) >>
-  `dload_boundary_core lo fs V Ws PG PH G H1 tn un1 s v1 cs ds` by
+  `dload_boundary_core fl lo fs V Ws PG PH G H1 tn un1 s v1 cs ds` by
     (qpat_assum `H1 = _` SUBST1_TAC >> qpat_assum `un1 = _` SUBST1_TAC >>
      irule dload_boundary_core_add_temporary >> metis_tac[]) >>
-  `dload_boundary_core lo fs V Ws PG PH G H1 tn un1 s t1 cs ds` by
-    (qpat_assum `dload_boundary_core _ _ _ _ _ _ _ _ _ _ s v1 _ _`
+  `dload_boundary_core fl lo fs V Ws PG PH G H1 tn un1 s t1 cs ds` by
+    (qpat_assum `dload_boundary_core _ _ _ _ _ _ _ _ _ _ _ s v1 _ _`
       (mp_then Any mp_tac dload_boundary_core_index_update) >>
      disch_then (qspecl_then [`SUC t.vs_inst_idx`,`s.vs_inst_idx`] mp_tac) >> simp[]) >>
   suspend "paired_copy"
@@ -375,13 +375,13 @@ Resume dloadbytes_two_step_boundary[paired_copy]:
     (qpat_x_assum `taint_ok _ _ _ _` mp_tac >>
      simp[taint_ok_def] >> strip_tac >>
      first_x_assum (qspec_then `dst` mp_tac) >> simp[]) >>
-  `dload_vars_match fs V G H1 tn un1 s t1` by metis_tac[dload_boundary_vars] >>
+  `dload_vars_match fl fs V G H1 tn un1 s t1` by metis_tac[dload_boundary_vars] >>
   `s.vs_labels = t1.vs_labels` by
-    (qpat_assum `dload_boundary_core _ _ _ _ _ _ _ _ _ _ s t1 _ _`
+    (qpat_assum `dload_boundary_core _ _ _ _ _ _ _ _ _ _ _ s t1 _ _`
       (mp_then Any mp_tac dload_boundary_environment) >>
      simp[dload_equal_environment_def, venom_state_component_equality]) >>
   `!v. dst = Var v ==> v IN V` by (gvs[] >> metis_tac[]) >>
-  `dload_value_word fs {} (op_prov G dst) (op_prov H1 dst) x y` by
+  `dload_value_word fl fs {} (op_prov G dst) (op_prov H1 dst) x y` by
     (qpat_assum `op_taint tn dst = {}` (fn th =>
        once_rewrite_tac[GSYM th]) >>
      irule dload_matched_operand >> simp[] >>
@@ -399,7 +399,7 @@ QED
 Resume dloadbytes_two_step_boundary[indexed_finish]:
   qexists_tac `s1` >>
   conj_tac >- simp[step_inst_non_invoke] >>
-  qpat_x_assum `dload_boundary_core _ _ _ _ _ _ _ _ _ _ s1 v2 _ _`
+  qpat_x_assum `dload_boundary_core _ _ _ _ _ _ _ _ _ _ _ s1 v2 _ _`
     (mp_then Any mp_tac dload_boundary_core_index_update) >>
   disch_then (qspecl_then [`SUC t1.vs_inst_idx`,`SUC s.vs_inst_idx`] mp_tac) >>
   qpat_x_assum `H2 = _` SUBST1_TAC >>
@@ -434,7 +434,7 @@ QED
 Theorem dloadbytes_supply_boundary:
   lower_dload_inst_supply supply i = (xs,next) /\
   fresh_ir_var supply = (cv,supply1) /\
-  dload_boundary_core lo fs V Ws PG PH G H tn un s t cs ds /\
+  dload_boundary_core fl lo fs V Ws PG PH G H tn un s t cs ds /\
   i.inst_opcode = DLOADBYTES /\ i.inst_operands = [dst;off;sz] /\ i.inst_outputs = [] /\
   cv NOTIN V /\ dst <> Var cv /\ sz <> Var cv /\
   (!v. MEM (Var v) i.inst_operands ==> v IN V) /\
@@ -443,7 +443,7 @@ Theorem dloadbytes_supply_boundary:
   code_layout_valid s /\ dload_offset_ok C fn i s /\
   dload_prefix_match fuel Ct PH xs 2 t H un t2 H2 un2 ==>
   ?s1. step_inst fuel C i s = OK s1 /\
-    dload_boundary_core lo fs V Ws PG PH (step_prov PG G i s1) H2
+    dload_boundary_core fl lo fs V Ws PG PH (step_prov PG G i s1) H2
       (step_taint i s s1 tn) un2 (s1 with vs_inst_idx := SUC s.vs_inst_idx) t2 cs ds /\
     (!v. lookup_var v s1 = lookup_var v s) /\
     (!v. v <> cv ==> lookup_var v t2 = lookup_var v t)

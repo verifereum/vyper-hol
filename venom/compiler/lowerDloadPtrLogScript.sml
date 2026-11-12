@@ -103,8 +103,8 @@ Theorem dload_log_slice[local]:
   eval_operand a s = SOME x /\ eval_operand sz s = SOME z /\
   access_ok lo G f i s /\ ~in_revert_forward f s /\
   taint_ok f tn i s /\ ~about_to_revert f i s /\
-  dload_live_layout lo sf tf fs /\ dload_memory_match lo fs tn un s t /\
-  dload_value_word fs {} (op_prov G a) q x y ==>
+  dload_live_layout lo sf tf fs /\ dload_memory_match fl lo fs tn un s t /\
+  dload_value_word fl fs {} (op_prov G a) q x y ==>
   TAKE (w2n z) (DROP (w2n x) s.vs_memory ++ REPLICATE (w2n z) 0w) =
   TAKE (w2n z) (DROP (w2n y) t.vs_memory ++ REPLICATE (w2n z) 0w)
 Proof
@@ -146,8 +146,8 @@ Proof
 QED
 
 Theorem dload_boundary_core_logs[local]:
-  dload_boundary_core lo fs V Ws PG PH G H tn un s t cs ds ==>
-  dload_boundary_core lo fs V Ws PG PH G H tn un
+  dload_boundary_core fl lo fs V Ws PG PH G H tn un s t cs ds ==>
+  dload_boundary_core fl lo fs V Ws PG PH G H tn un
     (s with vs_logs := logs) (t with vs_logs := logs) cs ds
 Proof
   rewrite_tac[dload_boundary_core_def] >> strip_tac >>
@@ -169,11 +169,11 @@ Theorem dload_boundary_core_log:
   ~about_to_revert f i s /\ s.vs_labels = t.vs_labels /\
   (!v. MEM (Var v) i.inst_operands ==> v IN V /\ v IN U) /\
   (!v. v IN U ==> (lookup_var v s = NONE <=> lookup_var v t = NONE)) /\
-  dload_boundary_core lo fs V Ws PG PH G H tn un s t cs ds /\
+  dload_boundary_core fl lo fs V Ws PG PH G H tn un s t cs ds /\
   step_inst fuel Ct i t = OK t' ==>
   ?s'. step_inst fuel Cs i s = OK s' /\
     (!v. v IN U ==> (lookup_var v s' = NONE <=> lookup_var v t' = NONE)) /\
-    dload_boundary_core lo fs V Ws PG PH
+    dload_boundary_core fl lo fs V Ws PG PH
       (step_prov PG G i s') (step_prov PH H i t')
       (step_taint i s s' tn) (step_taint i t t' un) s' t' cs ds /\
     s' = s with vs_logs := s'.vs_logs /\ t' = t with vs_logs := t'.vs_logs
@@ -190,7 +190,7 @@ Proof
   Cases_on `eval_operand sz s` >- gvs[] >>
   rename1 `eval_operand a s = SOME xs` >>
   rename1 `eval_operand sz s = SOME zs` >>
-  `dload_vars_match fs V G H tn un s t` by metis_tac[dload_boundary_vars] >>
+  `dload_vars_match fl fs V G H tn un s t` by metis_tac[dload_boundary_vars] >>
   `(!op. MEM op i.inst_operands ==> op_taint tn op = {}) /\
    (!op. MEM op (sz::ops) ==> op_prov G op = NONE)` by
     (irule dload_log_scalar_clean >> simp[] >> metis_tac[]) >>
@@ -202,11 +202,11 @@ Proof
   `zs = z` by (gvs[] >> metis_tac[MEM]) >> gnvs[] >>
   `eval_operands ops s = eval_operands ops t` by
     (irule dload_eval_operands_cong >> metis_tac[MEM]) >>
-  `dload_value_word fs (op_taint tn a) (op_prov G a) (op_prov H a) xs x` by
+  `dload_value_word fl fs (op_taint tn a) (op_prov G a) (op_prov H a) xs x` by
     (irule dload_matched_operand >>
      qexistsl [`V`,`s`,`t`,`un`] >> simp[] >> metis_tac[MEM_REVERSE]) >>
   `dload_live_layout lo s.vs_alloca_next t.vs_alloca_next fs /\
-   dload_memory_match lo fs tn un s t` by metis_tac[dload_boundary_core_def] >>
+   dload_memory_match fl lo fs tn un s t` by metis_tac[dload_boundary_core_def] >>
   `TAKE (w2n z) (DROP (w2n xs) s.vs_memory ++ REPLICATE (w2n z) 0w) =
    TAKE (w2n z) (DROP (w2n x) t.vs_memory ++ REPLICATE (w2n z) 0w)` by
     (irule dload_log_slice >> simp[] >> metis_tac[]) >>

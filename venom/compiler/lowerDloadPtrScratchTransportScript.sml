@@ -36,7 +36,7 @@ Proof
 QED
 
 Theorem scratch_boundary_assemble[local]:
-  dload_boundary_core lo (r::rs) V Ws PG PH G H tn un s t cs ds /\
+  dload_boundary_core fl lo (r::rs) V Ws PG PH G H tn un s t cs ds /\
   a.inst_opcode = ALLOCA /\ a.inst_outputs = [tmp] /\ tmp NOTIN V /\
   exec_alloca a t (32w:bytes32) = OK t1 /\
   dload_live_layout lo s.vs_alloca_next t1.vs_alloca_next (r1::rs) /\
@@ -47,27 +47,27 @@ Theorem scratch_boundary_assemble[local]:
   (!x. x < lo ==> x NOTIN new_site_bytes t t1) /\
   (!owner id b c n k. dload_live_site (r::rs) owner id b c n /\ k < n ==>
      c+k NOTIN new_site_bytes t t1) ==>
-  dload_boundary_core lo (r1::rs) V Ws PG PH G (step_prov PH H a t1)
+  dload_boundary_core fl lo (r1::rs) V Ws PG PH G (step_prov PH H a t1)
     tn (step_taint a t t1 un) s t1 cs ds
 Proof
   strip_tac >> drule_all scratch_alloca_fields >>
   disch_then (qspecl_then [`un`,`PH`,`H`] strip_assume_tac) >>
-  `dload_vars_match (r1::rs) V G (step_prov PH H a t1)
+  `dload_vars_match fl (r1::rs) V G (step_prov PH H a t1)
     tn (step_taint a t t1 un) s t1` by
     (drule dload_boundary_vars >>
      simp[dload_vars_match_def] >> strip_tac >> gen_tac >> strip_tac >>
      `v <> tmp` by metis_tac[] >> simp[] >>
-     `!mask p q x y. dload_value_word (r1::rs) mask p q x y <=>
-                    dload_value_word (r::rs) mask p q x y` by
+     `!mask p q x y. dload_value_word fl (r1::rs) mask p q x y <=>
+                    dload_value_word fl (r::rs) mask p q x y` by
        (rpt gen_tac >> Cases_on `p` >> Cases_on `q` >>
         simp[dload_value_word_def] >> rename1 `dload_pointer_word _ pp qq` >>
         PairCases_on `pp` >> PairCases_on `qq` >>
         simp[dload_pointer_word_def]) >>
      gvs[]) >>
-  `dload_param_values (r1::rs) PG PH s.vs_params t1.vs_params` by
+  `dload_param_values fl (r1::rs) PG PH s.vs_params t1.vs_params` by
     (irule dload_param_values_sites_mono >> qexists_tac `r::rs` >> simp[] >>
      drule dload_boundary_params >> simp[]) >>
-  `dload_memory_match lo (r1::rs) tn (step_taint a t t1 un) s t1` by
+  `dload_memory_match fl lo (r1::rs) tn (step_taint a t t1 un) s t1` by
     (drule dload_boundary_memory >> simp[dload_memory_match_def] >>
      strip_tac >> rpt strip_tac >> metis_tac[]) >>
   drule dload_boundary_environment >> strip_tac >>
@@ -78,13 +78,13 @@ Proof
 QED
 
 Theorem dload_boundary_core_scratch_alloca:
-  dload_boundary_core lo (r::rs) V Ws PG PH G H tn un s t cs ds /\
+  dload_boundary_core fl lo (r::rs) V Ws PG PH G H tn un s t cs ds /\
   r.dr_scratch = FDOM t.vs_allocas DIFF orig /\
   FDOM s.vs_allocas SUBSET orig /\ a.inst_id NOTIN orig /\
   a.inst_opcode = ALLOCA /\ a.inst_outputs = [tmp] /\ tmp NOTIN V /\
   exec_alloca a t (32w:bytes32) = OK t1 /\
   t1.vs_alloca_next < dimword (:256) ==>
-  ?r1. dload_boundary_core lo (r1::rs) V Ws PG PH G (step_prov PH H a t1)
+  ?r1. dload_boundary_core fl lo (r1::rs) V Ws PG PH G (step_prov PH H a t1)
          tn (step_taint a t t1 un) s t1 cs ds /\
     r1.dr_source = r.dr_source /\ r1.dr_target = t1.vs_allocas /\
     r1.dr_scratch = a.inst_id INSERT r.dr_scratch /\

@@ -170,7 +170,7 @@ Theorem dload_actual_joint_entry:
     ir_supply_covers_fn q f /\ lower_dload_function_supply q f = (g,q') /\
     dload_control_match q f g s t i emitted 0 /\ j = HD emitted /\
     k < LENGTH C.ctx_functions /\ EL k C.ctx_functions = f /\
-    dload_boundary_core lo
+    dload_boundary_core fl lo
       [<|dr_source := FEMPTY; dr_target := FEMPTY; dr_scratch := {}|>]
       {v | ~retpc_var f v} [] [] [] FEMPTY FEMPTY entry_taint entry_taint s t [] [] /\
     (!v. lookup_var v s = lookup_var v t) /\
@@ -241,7 +241,7 @@ Theorem dload_actual_joint_entry_tracked:
     ir_supply_covers_fn q f /\ lower_dload_function_supply q f = (g,q') /\
     dload_control_match q f g s t i emitted 0 /\ j = HD emitted /\
     k < LENGTH C.ctx_functions /\ EL k C.ctx_functions = f /\
-    dload_boundary_core lo
+    dload_boundary_core fl lo
       [<|dr_source := FEMPTY; dr_target := FEMPTY; dr_scratch := {}|>]
       ({v | ?ci. MEM ci (fn_insts f) /\
           (MEM v ci.inst_outputs \/ MEM (Var v) ci.inst_operands)}

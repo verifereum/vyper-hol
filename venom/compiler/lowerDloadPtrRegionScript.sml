@@ -4,7 +4,7 @@ Ancestors
 
 Theorem dload_value_contained_region:
   dload_live_layout lo sf tf fs /\
-  dload_value_word fs {} p q x y /\
+  dload_value_word fl fs {} p q x y /\
   ((lo < w2n x + len \/ p <> NONE) ==>
     ?b n. p = SOME (b,n) /\ b <= w2n x /\ w2n x + len <= b+n) ==>
   (w2n x = w2n y /\ w2n x + len <= lo) \/

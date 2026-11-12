@@ -19,12 +19,12 @@ Proof
 QED
 
 Theorem dload_memory_match_clean_write:
-  dload_memory_match lo fs tn un s t /\
+  dload_memory_match fl lo fs tn un s t /\
   (!p q. ((p = q /\ p < lo) \/
     (?owner id b c n k. dload_live_site fs owner id b c n /\ k < n /\ p = b+k /\ q = c+k)) ==>
     ((a <= p /\ p < a + LENGTH bs) <=> (z <= q /\ q < z + LENGTH bs)) /\
     ((a <= p /\ p < a + LENGTH bs) ==> p-a = q-z)) ==>
-  dload_memory_match lo fs
+  dload_memory_match fl lo fs
     (tn with t_mem := tn.t_mem DIFF {p | a <= p /\ p < a + LENGTH bs})
     (un with t_mem := un.t_mem DIFF {q | z <= q /\ q < z + LENGTH bs})
     (write_memory_with_expansion a bs s)
@@ -81,13 +81,13 @@ Proof
 QED
 
 Theorem dload_memory_match_clean_write_region:
-  dload_memory_match lo fs tn un s t /\
+  dload_memory_match fl lo fs tn un s t /\
   dload_live_layout lo sf tf fs /\
   ((a = z /\ a + LENGTH bs <= lo) \/
    (?owner id b c n d.
       dload_live_site fs owner id b c n /\
       a = b+d /\ z = c+d /\ d+LENGTH bs <= n)) ==>
-  dload_memory_match lo fs
+  dload_memory_match fl lo fs
     (tn with t_mem := tn.t_mem DIFF {p | a <= p /\ p < a + LENGTH bs})
     (un with t_mem := un.t_mem DIFF {q | z <= q /\ q < z + LENGTH bs})
     (write_memory_with_expansion a bs s)
@@ -127,14 +127,14 @@ Proof
 QED
 
 Theorem dload_memory_match_masked_write_region:
-  dload_memory_match lo fs tn un s t /\
+  dload_memory_match fl lo fs tn un s t /\
   dload_live_layout lo sf tf fs /\
   LENGTH bs = LENGTH bt /\ M SUBSET {k | k < LENGTH bs} /\
   (!k. k < LENGTH bs /\ k NOTIN M ==> EL k bs = EL k bt) /\
   ((a = z /\ a + LENGTH bs <= lo) \/
    (?owner id b c n d. dload_live_site fs owner id b c n /\
      a = b+d /\ z = c+d /\ d+LENGTH bs <= n)) ==>
-  dload_memory_match lo fs
+  dload_memory_match fl lo fs
     (tn with t_mem := (tn.t_mem DIFF {p | a <= p /\ p < a+LENGTH bs}) UNION {a+k | k IN M})
     (un with t_mem := (un.t_mem DIFF {p | z <= p /\ p < z+LENGTH bt}) UNION {z+k | k IN M})
     (write_memory_with_expansion a bs s) (write_memory_with_expansion z bt t)
@@ -159,13 +159,13 @@ Proof
 QED
 
 Theorem dload_memory_match_mstore_region:
-  dload_memory_match lo fs tn un s t /\
+  dload_memory_match fl lo fs tn un s t /\
   dload_live_layout lo sf tf fs /\
   M SUBSET {k | k < 32} /\ word_agree_except M x y /\
   ((a = z /\ a + 32 <= lo) \/
    (?owner id b c n d. dload_live_site fs owner id b c n /\
      a = b+d /\ z = c+d /\ d+32 <= n)) ==>
-  dload_memory_match lo fs
+  dload_memory_match fl lo fs
     (tn with t_mem := (tn.t_mem DIFF {p | a <= p /\ p < a+32}) UNION {a+k | k IN M})
     (un with t_mem := (un.t_mem DIFF {p | z <= p /\ p < z+32}) UNION {z+k | k IN M})
     (mstore a x s) (mstore z y t)

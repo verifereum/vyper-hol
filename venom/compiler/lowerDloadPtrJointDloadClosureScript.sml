@@ -18,7 +18,7 @@ Theorem dload_joint_tracked_dload_complete_next:
   EVERY (fn_ptr_ok P) C.ctx_functions /\
   (?cs PG G tn f i s q emitted n pfuel t0 H0 un0 fs.
     frame_reachable vs C cs PG G tn f i s /\
-    dload_boundary_core lo fs
+    dload_boundary_core fl lo fs
       (set (fn_ir_vars f) DIFF {v | retpc_var f v})
       (MAP (\c. set (fn_ir_vars c.cf_fn) DIFF {v | retpc_var c.cf_fn v}) cs)
       PG PH G H0 tn un0 s t0 cs ds /\
@@ -60,7 +60,7 @@ Theorem dload_joint_tracked_dload_complete_next:
   active_inst g next (t1 with vs_inst_idx := SUC t.vs_inst_idx) ==>
   ?cs PG G tn f i s q emitted n pfuel t0 H0 un0 fs.
     frame_reachable vs C cs PG G tn f i s /\
-    dload_boundary_core lo fs
+    dload_boundary_core fl lo fs
       (set (fn_ir_vars f) DIFF {v | retpc_var f v})
       (MAP (\c. set (fn_ir_vars c.cf_fn) DIFF {v | retpc_var c.cf_fn v}) cs)
       PG PH G H0 tn un0 s t0 cs ds /\
@@ -157,7 +157,7 @@ Proof
   `ALL_DISTINCT (MAP (\bb. bb.bb_label) g.fn_blocks)` by
     (drule lower_dload_function_supply_labels >>
      fs[o1_fn_shape_def, fn_shape_ok_def, wf_function_def, fn_labels_def]) >>
-  qpat_assum `dload_boundary_core _ _ _ _ _ _ _ _ _ _ _ _ _ _`
+  qpat_assum `dload_boundary_core _ _ _ _ _ _ _ _ _ _ _ _ _ _ _`
     (mp_then Any mp_tac dload_tracked_backward_next_fresh) >>
   disch_then (drule_at (Pat `frame_reachable`)) >>
   disch_then (drule_at (Pat `dload_prefix_match _ _ _ _ 4 _ _ _ _ _ _`)) >>
@@ -175,7 +175,7 @@ Proof
     {ci.inst_id | MEM ci (fn_insts f)}` by suspend "target_domain" >>
   `(s1 with vs_inst_idx := SUC s.vs_inst_idx).vs_call_ctx.cc_address =
     s.vs_call_ctx.cc_address` by (drule_all dload_source_step_call_context >> simp[]) >>
-  qpat_x_assum `dload_boundary_core _ (r::rs) _ _ _ _ _ _ _ _ _ _ _ _` kall_tac >>
+  qpat_x_assum `dload_boundary_core _ _ (r::rs) _ _ _ _ _ _ _ _ _ _ _ _` kall_tac >>
   drule_at (Pat `dload_boundary_core`) dload_normal_changed_head_successor >>
   disch_then (drule_at (Pat `frame_reachable`)) >>
   disch_then (drule_at (Pat `dload_control_match`)) >>

@@ -29,8 +29,8 @@ QED
 Theorem dload_value_word_sites_mono:
   (!owner id b c n. dload_live_site fs owner id b c n ==>
                     dload_live_site gs owner id b c n) /\
-  dload_value_word fs mask p q x y ==>
-  dload_value_word gs mask p q x y
+  dload_value_word fl fs mask p q x y ==>
+  dload_value_word fl gs mask p q x y
 Proof
   Cases_on `p` >> Cases_on `q` >>
   simp[dload_value_word_def] >> metis_tac[dload_pointer_word_sites_mono]
@@ -39,8 +39,8 @@ QED
 Theorem dload_vars_match_sites_mono:
   (!owner id b c n. dload_live_site fs owner id b c n ==>
                     dload_live_site gs owner id b c n) /\
-  dload_vars_match fs V G H tn un s t ==>
-  dload_vars_match gs V G H tn un s t
+  dload_vars_match fl fs V G H tn un s t ==>
+  dload_vars_match fl gs V G H tn un s t
 Proof
   simp[dload_vars_match_def] >> rpt strip_tac >>
   metis_tac[dload_value_word_sites_mono]
@@ -49,8 +49,8 @@ QED
 Theorem dload_param_values_sites_mono:
   (!owner id b c n. dload_live_site fs owner id b c n ==>
                     dload_live_site gs owner id b c n) /\
-  dload_param_values fs PG PH xs ys ==>
-  dload_param_values gs PG PH xs ys
+  dload_param_values fl fs PG PH xs ys ==>
+  dload_param_values fl gs PG PH xs ys
 Proof
   simp[dload_param_values_def, LIST_REL_EL_EQN, EL_GENLIST] >>
   rpt strip_tac >> gvs[] >> metis_tac[dload_value_word_sites_mono]
@@ -58,9 +58,9 @@ QED
 
 Theorem dload_saved_metadata_head_replace:
   (!k. k < LENGTH cs ==>
-    dload_saved_metadata (DROP (SUC k) (f::fs)) (EL k Ws) (EL k cs) (EL k ds)) <=>
+    dload_saved_metadata fl (DROP (SUC k) (f::fs)) (EL k Ws) (EL k cs) (EL k ds)) <=>
   (!k. k < LENGTH cs ==>
-    dload_saved_metadata (DROP (SUC k) (g::fs)) (EL k Ws) (EL k cs) (EL k ds))
+    dload_saved_metadata fl (DROP (SUC k) (g::fs)) (EL k Ws) (EL k cs) (EL k ds))
 Proof
   simp[]
 QED
@@ -127,11 +127,11 @@ QED
 
 Theorem dload_memory_original_insert[local]:
   dload_live_layout lo sf tf (f::fs) /\
-  dload_memory_match lo (f::fs) tn un s t /\
+  dload_memory_match fl lo (f::fs) tn un s t /\
   s'.vs_memory = s.vs_memory /\ t'.vs_memory = t.vs_memory /\
   tn'.t_mem = tn.t_mem UNION {i | sf <= i /\ i < sf+n} /\
   un'.t_mem = un.t_mem UNION {i | tf <= i /\ i < tf+n} ==>
-  dload_memory_match lo
+  dload_memory_match fl lo
     ((f with <|dr_source := f.dr_source |+ (id,(sf,n));
                dr_target := f.dr_target |+ (id,(tf,n))|>)::fs)
     tn' un' s' t'
@@ -154,8 +154,8 @@ Theorem dload_alloca_fresh_memory:
   FLOOKUP t.vs_allocas inst.inst_id = NONE /\
   exec_alloca inst s amount = OK s' /\ exec_alloca inst t amount = OK t' /\
   dload_live_layout lo s.vs_alloca_next t.vs_alloca_next (f::fs) /\
-  dload_memory_match lo (f::fs) tn un s t ==>
-  dload_memory_match lo
+  dload_memory_match fl lo (f::fs) tn un s t ==>
+  dload_memory_match fl lo
     ((f with <|dr_source := f.dr_source |+
                  (inst.inst_id,(s.vs_alloca_next,w2n amount));
                dr_target := f.dr_target |+
@@ -174,8 +174,8 @@ Theorem dload_alloca_repeated_memory:
   FLOOKUP s.vs_allocas inst.inst_id = SOME (b,n) /\
   FLOOKUP t.vs_allocas inst.inst_id = SOME (c,n) /\
   exec_alloca inst s amount = OK s' /\ exec_alloca inst t amount = OK t' /\
-  dload_memory_match lo fs tn un s t ==>
-  dload_memory_match lo fs
+  dload_memory_match fl lo fs tn un s t ==>
+  dload_memory_match fl lo fs
     (step_taint inst s s' tn) (step_taint inst t t' un) s' t'
 Proof
   strip_tac >>
@@ -269,13 +269,13 @@ QED
 Theorem dload_alloca_vars_transport:
   i.inst_opcode = ALLOCA /\ i.inst_outputs = [out] /\
   exec_alloca i s amount = OK s1 /\ exec_alloca i t amount = OK t1 /\
-  dload_vars_match fs V G H tn un s t /\
+  dload_vars_match fl fs V G H tn un s t /\
   (!owner id b c n. dload_live_site fs owner id b c n ==>
                      dload_live_site gs owner id b c n) /\
   FLOOKUP s1.vs_allocas i.inst_id = SOME (b,n) /\
   FLOOKUP t1.vs_allocas i.inst_id = SOME (c,n) /\
   dload_live_site gs owner i.inst_id b c n ==>
-  dload_vars_match gs V
+  dload_vars_match fl gs V
     (step_prov PG G i s1) (step_prov PH H i t1)
     (step_taint i s s1 tn) (step_taint i t t1 un) s1 t1
 Proof
@@ -284,7 +284,7 @@ Proof
     (irule exec_alloca_post_vars >> metis_tac[]) >>
   `t1.vs_vars = t.vs_vars |+ (out,n2w c)` by
     (irule exec_alloca_post_vars >> metis_tac[]) >>
-  `dload_vars_match gs V G H tn un s t` by
+  `dload_vars_match fl gs V G H tn un s t` by
     (irule dload_vars_match_sites_mono >> metis_tac[]) >>
   `dload_pointer_word gs (b,n) (c,n) (n2w b) (n2w c)` by
     (simp[dload_pointer_word_def, WORD_SUB_REFL, WORD_ADD_0] >> metis_tac[]) >>
@@ -298,7 +298,7 @@ Proof
   Cases_on `v = out`
   >- (gvs[lookup_var_def, set_prov_def, set_var_taint_def,
           FLOOKUP_UPDATE, op_taint_def, dload_value_word_def]) >>
-  qpat_x_assum `dload_vars_match gs _ _ _ _ _ _ _` mp_tac >>
+  qpat_x_assum `dload_vars_match fl gs _ _ _ _ _ _ _` mp_tac >>
   simp[dload_vars_match_def] >> disch_then (qspec_then `v` mp_tac) >>
   simp[lookup_var_def, set_prov_def, set_var_taint_def,
        FLOOKUP_UPDATE, op_taint_def] >> strip_tac >> gvs[]
@@ -337,28 +337,28 @@ QED
 Theorem dload_boundary_alloca_assemble[local]:
   i.inst_opcode = ALLOCA /\ i.inst_outputs = [out] /\
   exec_alloca i s amount = OK s1 /\ exec_alloca i t amount = OK t1 /\
-  dload_boundary_core lo (r::rs) V Ws PG PH G H tn un s t cs ds /\
+  dload_boundary_core fl lo (r::rs) V Ws PG PH G H tn un s t cs ds /\
   dload_live_layout lo s1.vs_alloca_next t1.vs_alloca_next (r1::rs) /\
   dload_table_stack (r1::rs) (s1::MAP (\c. c.cf_state) cs)
     (t1::MAP (\d. d.cf_state) ds) /\
-  dload_memory_match lo (r1::rs)
+  dload_memory_match fl lo (r1::rs)
     (step_taint i s s1 tn) (step_taint i t t1 un) s1 t1 /\
   (!owner id b c n. dload_live_site (r::rs) owner id b c n ==>
                    dload_live_site (r1::rs) owner id b c n) /\
   FLOOKUP s1.vs_allocas i.inst_id = SOME (b,n) /\
   FLOOKUP t1.vs_allocas i.inst_id = SOME (c,n) /\
   dload_live_site (r1::rs) owner i.inst_id b c n ==>
-  dload_boundary_core lo (r1::rs) V Ws PG PH
+  dload_boundary_core fl lo (r1::rs) V Ws PG PH
     (step_prov PG G i s1) (step_prov PH H i t1)
     (step_taint i s s1 tn) (step_taint i t t1 un) s1 t1 cs ds
 Proof
   strip_tac >>
-  `dload_vars_match (r::rs) V G H tn un s t` by
+  `dload_vars_match fl (r::rs) V G H tn un s t` by
     (drule dload_boundary_vars >> simp[]) >>
-  `dload_vars_match (r1::rs) V (step_prov PG G i s1) (step_prov PH H i t1)
+  `dload_vars_match fl (r1::rs) V (step_prov PG G i s1) (step_prov PH H i t1)
     (step_taint i s s1 tn) (step_taint i t t1 un) s1 t1` by
     (drule_all dload_alloca_vars_transport >> simp[]) >>
-  `dload_param_values (r1::rs) PG PH s.vs_params t.vs_params` by
+  `dload_param_values fl (r1::rs) PG PH s.vs_params t.vs_params` by
     (irule dload_param_values_sites_mono >>
      qexists_tac `r::rs` >> simp[] >> drule dload_boundary_params >> simp[]) >>
   drule dload_boundary_environment >> strip_tac >>
@@ -371,13 +371,13 @@ Theorem dload_boundary_core_alloca:
   i.inst_opcode = ALLOCA /\ i.inst_outputs = [out] /\
   i.inst_id NOTIN r.dr_scratch /\
   exec_alloca i s amount = OK s1 /\ exec_alloca i t amount = OK t1 /\
-  dload_boundary_core lo (r::rs) V Ws PG PH G H tn un s t cs ds /\
+  dload_boundary_core fl lo (r::rs) V Ws PG PH G H tn un s t cs ds /\
   t1.vs_alloca_next < dimword (:256) ==>
   ?r1. r1 = (if FLOOKUP s.vs_allocas i.inst_id = NONE then
     r with <|dr_source := r.dr_source |+ (i.inst_id,(s.vs_alloca_next,w2n amount));
              dr_target := r.dr_target |+ (i.inst_id,(t.vs_alloca_next,w2n amount))|>
     else r) /\
-    dload_boundary_core lo (r1::rs) V Ws PG PH
+    dload_boundary_core fl lo (r1::rs) V Ws PG PH
       (step_prov PG G i s1) (step_prov PH H i t1)
       (step_taint i s s1 tn) (step_taint i t t1 un) s1 t1 cs ds
 Proof

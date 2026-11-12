@@ -34,8 +34,8 @@ QED
 
 Theorem dload_value_word_pointer_comparisons:
   dload_live_layout lo sf tf fs /\ 0 < n /\
-  dload_value_word fs mask (SOME (b,n)) (SOME (c,m)) x x' /\
-  dload_value_word fs mask' (SOME (b,n)) (SOME (d,k)) y y' /\
+  dload_value_word fl fs mask (SOME (b,n)) (SOME (c,m)) x x' /\
+  dload_value_word fl fs mask' (SOME (b,n)) (SOME (d,k)) y y' /\
   b <= w2n x /\ w2n x <= b+n /\
   b <= w2n y /\ w2n y <= b+n ==>
   c = d /\ m = n /\ k = n /\

@@ -47,10 +47,10 @@ Proof
 QED
 
 Theorem dload_affine_value[local]:
-  dload_value_word fs {} p p' x x' /\
-  dload_value_word fs {} q q' y y' /\
+  dload_value_word fl fs {} p p' x x' /\
+  dload_value_word fl fs {} q q' y y' /\
   (p = NONE \/ q = NONE) /\ (~isadd ==> q = NONE) ==>
-  dload_value_word fs {}
+  dload_value_word fl fs {}
     (case p of NONE => q | SOME site => SOME site)
     (case p' of NONE => q' | SOME site => SOME site)
     (if isadd then x+y else x-y) (if isadd then x'+y' else x'-y')
@@ -68,21 +68,21 @@ Theorem affine_operand_result[local]:
   (i.inst_opcode = ADD \/ i.inst_opcode = SUB) /\
   MEM i (fn_insts f) /\ fn_ptr_ok P f /\ FDOM G SUBSET fn_pv P f /\
   taint_ok f tn i s /\ i.inst_operands = [a;b] /\
-  dload_vars_match fs V G H tn un s t /\ s.vs_labels = t.vs_labels /\
+  dload_vars_match fl fs V G H tn un s t /\ s.vs_labels = t.vs_labels /\
   (!v. MEM (Var v) [a;b] ==> v IN V) /\
   eval_operand a s = SOME x /\ eval_operand a t = SOME x' /\
   eval_operand b s = SOME y /\ eval_operand b t = SOME y' ==>
-  dload_value_word fs {} (first_prov G [a;b]) (first_prov H [a;b])
+  dload_value_word fl fs {} (first_prov G [a;b]) (first_prov H [a;b])
     (if i.inst_opcode = ADD then x+y else x-y)
     (if i.inst_opcode = ADD then x'+y' else x'-y')
 Proof
   disch_then (map_every assume_tac o CONJUNCTS) >>
   `op_taint tn a = {} /\ op_taint tn b = {}` by
     (gvs[taint_ok_def] >> metis_tac[MEM]) >>
-  `dload_value_word fs (op_taint tn a) (op_prov G a) (op_prov H a) x x'` by
+  `dload_value_word fl fs (op_taint tn a) (op_prov G a) (op_prov H a) x x'` by
     (irule dload_matched_operand >>
      qexistsl [`V`,`s`,`t`,`un`] >> simp[] >> metis_tac[MEM]) >>
-  `dload_value_word fs (op_taint tn b) (op_prov G b) (op_prov H b) y y'` by
+  `dload_value_word fl fs (op_taint tn b) (op_prov G b) (op_prov H b) y y'` by
     (irule dload_matched_operand >>
      qexistsl [`V`,`s`,`t`,`un`] >> simp[] >> metis_tac[MEM]) >>
   drule_all affine_provenance_exclusions >> disch_then assume_tac >>
@@ -116,11 +116,11 @@ Theorem dload_boundary_core_affine:
   s.vs_labels = t.vs_labels /\
   (!v. MEM (Var v) i.inst_operands ==> v IN V /\ v IN U) /\
   (!v. v IN U ==> (lookup_var v s = NONE <=> lookup_var v t = NONE)) /\
-  dload_boundary_core lo fs V Ws PG PH G H tn un s t cs ds /\
+  dload_boundary_core fl lo fs V Ws PG PH G H tn un s t cs ds /\
   step_inst fuel Ct i t = OK t' ==>
   ?s'. step_inst fuel Cs i s = OK s' /\
     (!v. v IN U ==> (lookup_var v s' = NONE <=> lookup_var v t' = NONE)) /\
-    dload_boundary_core lo fs V Ws PG PH
+    dload_boundary_core fl lo fs V Ws PG PH
       (step_prov PG G i s') (step_prov PH H i t')
       (step_taint i s s' tn) (step_taint i t t' un) s' t' cs ds /\
     s' = s with vs_vars := s'.vs_vars /\
@@ -142,13 +142,13 @@ Proof
   Cases_on `eval_operand b s` >- gvs[] >>
   rename1 `eval_operand a s = SOME xs` >>
   rename1 `eval_operand b s = SOME ys` >>
-  `dload_vars_match fs V G H tn un s t` by
+  `dload_vars_match fl fs V G H tn un s t` by
     metis_tac[dload_boundary_vars] >>
-  `dload_value_word fs {} (first_prov G [a;b]) (first_prov H [a;b])
+  `dload_value_word fl fs {} (first_prov G [a;b]) (first_prov H [a;b])
      (if i.inst_opcode = ADD then xs+ys else xs-ys)
      (if i.inst_opcode = ADD then x+y else x-y)` by
     (irule affine_operand_result >> simp[] >>
-     goal_assum (drule_at (Pat `dload_vars_match _ _ _ _ _ _ _ _`)) >> simp[] >> metis_tac[MEM]) >>
+     goal_assum (drule_at (Pat `dload_vars_match _ _ _ _ _ _ _ _ _`)) >> simp[] >> metis_tac[MEM]) >>
   qmatch_goalsub_abbrev_tac `update_var out z t` >>
   qabbrev_tac `w = if i.inst_opcode = ADD then xs+ys else xs-ys` >>
   qexists `update_var out w s` >>
@@ -167,7 +167,7 @@ Proof
      un with t_var := set_var_taint un.t_var [out] {}` by
     (irule affine_ghost_updates >> metis_tac[]) >>
   simp[update_var_def] >>
-  `dload_vars_match fs V
+  `dload_vars_match fl fs V
     (set_prov G [out] (first_prov G [a;b])) (set_prov H [out] (first_prov H [a;b]))
     (tn with t_var := set_var_taint tn.t_var [out] {})
     (un with t_var := set_var_taint un.t_var [out] {})
@@ -186,7 +186,7 @@ Theorem dload_actual_affine_next:
   access_ok lo G f i s /\ taint_ok f tn i s /\
   (!v. MEM (Var v) i.inst_operands ==> ~retpc_var f v) /\
   ALL_DISTINCT (MAP (\bb. bb.bb_label) g.fn_blocks) /\
-  dload_boundary_core lo fs {v | ~retpc_var f v} Ws PG PH G H tn un s t cs ds /\
+  dload_boundary_core fl lo fs {v | ~retpc_var f v} Ws PG PH G H tn un s t cs ds /\
   (!v. v IN set (fn_ir_vars f) ==>
     (lookup_var v s = NONE <=> lookup_var v t = NONE)) /\
   step_inst fuel C' i t = OK t1 /\
@@ -199,7 +199,7 @@ Theorem dload_actual_affine_next:
       (s1 with vs_inst_idx := SUC s.vs_inst_idx)
       (t1 with vs_inst_idx := SUC t.vs_inst_idx) i' emitted' 0 /\
     j = HD emitted' /\
-    dload_boundary_core lo fs {v | ~retpc_var f v} Ws PG PH
+    dload_boundary_core fl lo fs {v | ~retpc_var f v} Ws PG PH
       (step_prov PG G i s1) (step_prov PH H i t1)
       (step_taint i s s1 tn) (step_taint i t t1 un)
       (s1 with vs_inst_idx := SUC s.vs_inst_idx)
