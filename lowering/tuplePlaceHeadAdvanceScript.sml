@@ -33,7 +33,7 @@ Proof
 QED
 
 Theorem tuple_place_head_advance:
-  tuple_place_head ctx func cenv cx es lo sp tys ltys ltvs vs elems w i s /\
+  tuple_place_head ctx func cenv cx st0 es lo sp tys ltys ltvs vs elems w i s /\
   i < LENGTH ltys /\ sp.cs_next_var <= sb.cs_next_var /\
   sp.cs_next_id <= sb.cs_next_id /\
   (!aid entry. FLOOKUP s.vs_allocas aid = SOME entry ==>
@@ -47,7 +47,7 @@ Theorem tuple_place_head_advance:
   (!j. SUC i <= j /\ j < LENGTH ltys /\ ~is_word_type (EL j ltys) ==>
     val_in_memory (EL j ltvs) (EL j vs)
       (w2n w + SUM (MAP type_memory_size (TAKE j ltvs))) t.vs_memory) ==>
-  tuple_place_head ctx func cenv cx ff lo sb tys ltys ltvs vs elems w (SUC i) t
+  tuple_place_head ctx func cenv cx st0 ff lo sb tys ltys ltvs vs elems w (SUC i) t
 Proof
   strip_tac >>
   `tuple_place_snapshot cenv cx ff lo sb.cs_next_id tys ltys ltvs w t` by

@@ -5,7 +5,7 @@ Ancestors
   tuplePlaceEqualMemory tuplePlaceBorrowStore
 
 Theorem tuple_place_pointer_word_store:
-  tuple_place_head ctx func cenv cx es lo sp tys ltys ltvs vs elems w i s0 /\
+  tuple_place_head ctx func cenv cx st0 es lo sp tys ltys ltvs vs elems w i s0 /\
   target_pre cenv cx env bt es /\ EVERY (supported_expr tops) (target_indices bt) /\
   eval_base_place cx bt es = (INL (PlaceR p),ee) /\
   target_post H ctx func cenv cx es sp sa s0 ee (PlaceR p) (Type (EL i tys)) r s /\
@@ -65,7 +65,7 @@ Proof
 QED
 
 Theorem tuple_place_pointer_equal_memory_store:
-  tuple_place_head ctx func cenv cx es lo sp tys tys tvs vs elems w i s0 /\
+  tuple_place_head ctx func cenv cx st0 es lo sp tys tys tvs vs elems w i s0 /\
   target_pre cenv cx env bt es /\ EVERY (supported_expr tops) (target_indices bt) /\
   eval_base_place cx bt es = (INL (PlaceR p),ee) /\
   target_post H ctx func cenv cx es sp sa s0 ee (PlaceR p) (Type (EL i tys)) r s /\
@@ -131,7 +131,7 @@ Proof
 QED
 
 Theorem tuple_place_pointer_equal_storage_store:
-  tuple_place_head ctx func cenv cx es lo sp tys tys tvs vs elems w i s0 /\
+  tuple_place_head ctx func cenv cx st0 es lo sp tys tys tvs vs elems w i s0 /\
   target_pre cenv cx env bt es /\ EVERY (supported_expr tops) (target_indices bt) /\
   eval_base_place cx bt es = (INL (PlaceR p),ee) /\
   target_post H ctx func cenv cx es sp sa s0 ee (PlaceR p) (Type (EL i tys)) r s /\
@@ -192,7 +192,7 @@ Proof
 QED
 
 Theorem tuple_place_pointer_owned_store:
-  tuple_place_head ctx func cenv cx es lo sp tys ltys ltvs vs elems w i s0 /\
+  tuple_place_head ctx func cenv cx st0 es lo sp tys ltys ltvs vs elems w i s0 /\
   target_pre cenv cx env bt es /\ EVERY (supported_expr tops) (target_indices bt) /\
   eval_base_place cx bt es = (INL (PlaceR p),ee) /\
   target_post H ctx func cenv cx es sp sa s0 ee (PlaceR p) (Type (EL i tys)) r s /\

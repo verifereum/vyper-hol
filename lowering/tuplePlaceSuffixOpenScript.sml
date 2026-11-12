@@ -25,14 +25,14 @@ Theorem tuple_place_suffix_run_open:
   acyclic_struct_metadata cenv.ce_struct_fields /\ fn_inst_ids_distinct func ==>
   !i es sp sf s0.
     i <= LENGTH tys /\ expr_sim_inv cenv cx env es /\ ~block_is_terminated sp /\
-    tuple_place_head ctx func cenv cx es lo sp tys ltys ltvs vs elems w i s0 /\
+    tuple_place_head ctx func cenv cx st0 es lo sp tys ltys ltvs vs elems w i s0 /\
     body_tuple_targets_ok cx (DROP i gs) (DROP i vs) /\
     compile_tuple_store_all cenv (DROP i ltys) (DROP i gs) (DROP i elems) sp = ((),sf) /\
     fn_has_code sp sf func ==>
     gas_outcome F (cx_tops cx) (ctx,func)
       (assign_tuple_target_list cx (DROP i gs) (DROP i vs)) (es,s0)
       (\res ff t. res = INL () /\ expr_sim_inv cenv cx env ff /\ ~block_is_terminated sf /\
-        tuple_place_head ctx func cenv cx ff lo sf tys ltys ltvs vs elems w (LENGTH tys) t /\
+        tuple_place_head ctx func cenv cx st0 ff lo sf tys ltys ltvs vs elems w (LENGTH tys) t /\
         (!x v. not_fresh_at sp x /\ lookup_var x s0 = SOME v ==> lookup_var x t = SOME v) /\
         (!id entry. FLOOKUP s0.vs_allocas id = SOME entry ==>
           FLOOKUP t.vs_allocas id = SOME entry) /\
@@ -86,7 +86,7 @@ Proof
   irule (SRULE [ignore_bind_def] tuple_place_head_gas_continuation_open) >>
   simp[] >>
   conj_tac >- metis_tac[] >>
-  qpat_assum `tuple_place_head _ _ _ _ _ _ _ _ _ _ _ _ _ _ _`
+  qpat_assum `tuple_place_head _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _`
     (irule_at Any) >>
   simp[] >> qexistsl [`sb`,`env`] >>
   `local_ptrs_reserved cenv sa` by
@@ -98,9 +98,9 @@ Proof
   qpat_x_assum `!y. _ ==> _` (qspec_then `SUC i` mp_tac) >>
   simp[] >>
   disch_then (qspecl_then [`ff with gas_obs := []`,`sb`,`sf`,`t`] mp_tac) >>
-  `tuple_place_head ctx func cenv cx (ff with gas_obs := []) lo sb
+  `tuple_place_head ctx func cenv cx st0 (ff with gas_obs := []) lo sb
     tys ltys ltvs vs elems w (SUC i) t` by
-    (qpat_x_assum `tuple_place_head _ _ _ _ ff _ _ _ _ _ _ _ _ _ _` mp_tac >>
+    (qpat_x_assum `tuple_place_head _ _ _ _ _ ff _ _ _ _ _ _ _ _ _ _` mp_tac >>
      simp[tuple_place_head_def, tuplePlacePrefixCertTheory.tuple_place_snapshot_def,
           exprSimWordArgsTheory.stmt_state_rel_gas_obs]) >>
   simp[] >> disch_tac >>

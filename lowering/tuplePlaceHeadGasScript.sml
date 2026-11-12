@@ -72,9 +72,9 @@ Proof
 QED
 
 Theorem tuple_place_head_gas_obs[simp]:
-  tuple_place_head ctx func cenv cx (es with gas_obs := gs)
+  tuple_place_head ctx func cenv cx st0 (es with gas_obs := gs)
     lo cs tys ltys ltvs vs elems w i s =
-  tuple_place_head ctx func cenv cx es lo cs tys ltys ltvs vs elems w i s
+  tuple_place_head ctx func cenv cx st0 es lo cs tys ltys ltvs vs elems w i s
 Proof
   simp[tuplePlaceHeadTheory.tuple_place_head_def,
        tuplePlacePrefixCertTheory.tuple_place_snapshot_def]
@@ -92,7 +92,7 @@ QED
 
 (* Replay is the only source of the concrete pointer endpoint used below. *)
 Theorem tuple_place_marked_head_step:
-  tuple_place_head ctx func cenv cx es lo sp tys ltys ltvs vs elems w i s0 /\
+  tuple_place_head ctx func cenv cx st0 es lo sp tys ltys ltvs vs elems w i s0 /\
   target_pre cenv cx env bt es /\ EVERY (supported_expr tops) (target_indices bt) /\
   well_typed_target env bt (EL i tys) /\
   call_evaluation_safe cx (int_calls_target bt) /\ ~immutable_root cx bt /\
@@ -125,7 +125,7 @@ Theorem tuple_place_marked_head_step:
   ?ff t. write_place cx p (EL i vs) (mid with gas_obs := []) = (INL (),ff) /\
     expr_sim_inv cenv cx env ff /\
     gas_marked_path F ctx func s 0 (OK t) /\
-    tuple_place_head ctx func cenv cx ff lo sb tys ltys ltvs vs elems w (SUC i) t /\
+    tuple_place_head ctx func cenv cx st0 ff lo sb tys ltys ltvs vs elems w (SUC i) t /\
     (!x. not_fresh_at sa x ==> lookup_var x t = lookup_var x s) /\
     (!id entry. FLOOKUP s.vs_allocas id = SOME entry ==>
       FLOOKUP t.vs_allocas id = SOME entry) /\
@@ -158,7 +158,7 @@ Proof
      qpat_assum `eval_target_place _ _ _ = _` (irule_at Any) >>
      simp[] >> metis_tac[]) >>
   drule tuple_place_target_base_inversion >> strip_tac >>
-  `tuple_place_head ctx func cenv cx
+  `tuple_place_head ctx func cenv cx st0
     (es with gas_obs := gas_explicit marks s0.vs_gas_readings)
     lo sp tys ltys ltvs vs elems w i s0` by simp[] >>
   `target_post H ctx func cenv cx
@@ -167,7 +167,7 @@ Proof
     (fs[loweringPostsTheory.target_post_def, loweringPostsTheory.locals_kept_def,
         loweringPostsTheory.popped_kept_def] >> metis_tac[]) >>
   `?t. gas_marked_path F ctx func s 0 (OK t) /\
-    tuple_place_head ctx func cenv cx ff lo sb tys ltys ltvs vs elems w (SUC i) t /\
+    tuple_place_head ctx func cenv cx st0 ff lo sb tys ltys ltvs vs elems w (SUC i) t /\
     (!x. not_fresh_at sa x ==> lookup_var x t = lookup_var x s) /\
     (!id entry. FLOOKUP s.vs_allocas id = SOME entry ==>
       FLOOKUP t.vs_allocas id = SOME entry) /\
@@ -214,7 +214,7 @@ Proof
 QED
 
 Theorem tuple_place_head_gas_continuation:
-  tuple_place_head ctx func cenv cx es lo sp tys ltys ltvs vs elems w i s0 /\
+  tuple_place_head ctx func cenv cx st0 es lo sp tys ltys ltvs vs elems w i s0 /\
   target_pre cenv cx env bt es /\ EVERY (supported_expr tops) (target_indices bt) /\
   target_sim ctx func cenv cx env bt es /\
   well_typed_target env bt (EL i tys) /\
@@ -241,7 +241,7 @@ Theorem tuple_place_head_gas_continuation:
   fn_has_code sp sa func /\ fn_has_code sa sb func /\ fn_inst_ids_distinct func /\
   sp.cs_next_var <= sa.cs_next_var /\
   (!ff t. expr_sim_inv cenv cx env ff /\
-    tuple_place_head ctx func cenv cx ff lo sb tys ltys ltvs vs elems w (SUC i) t /\
+    tuple_place_head ctx func cenv cx st0 ff lo sb tys ltys ltvs vs elems w (SUC i) t /\
     (!x v. not_fresh_at sp x /\ lookup_var x s0 = SOME v ==> lookup_var x t = SOME v) /\
     (!id entry. FLOOKUP s0.vs_allocas id = SOME entry ==>
       FLOOKUP t.vs_allocas id = SOME entry) ==>

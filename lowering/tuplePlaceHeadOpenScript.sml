@@ -5,7 +5,7 @@ Ancestors
   tuplePlaceTargetGas targetPlaceSimCases gasSummary fragGasMode fragGasPath
 
 Theorem tuple_place_head_gas_continuation_open:
-  tuple_place_head ctx func cenv cx es lo sp tys ltys ltvs vs elems w i s0 /\
+  tuple_place_head ctx func cenv cx st0 es lo sp tys ltys ltvs vs elems w i s0 /\
   ~block_is_terminated sp /\
   target_pre cenv cx env bt es /\ EVERY (supported_expr tops) (target_indices bt) /\
   target_sim ctx func cenv cx env bt es /\
@@ -33,7 +33,7 @@ Theorem tuple_place_head_gas_continuation_open:
   fn_has_code sp sa func /\ fn_has_code sa sb func /\ fn_inst_ids_distinct func /\
   sp.cs_next_var <= sa.cs_next_var /\
   (!ff t. ~block_is_terminated sb /\ expr_sim_inv cenv cx env ff /\
-    tuple_place_head ctx func cenv cx ff lo sb tys ltys ltvs vs elems w (SUC i) t /\
+    tuple_place_head ctx func cenv cx st0 ff lo sb tys ltys ltvs vs elems w (SUC i) t /\
     (!x v. not_fresh_at sp x /\ lookup_var x s0 = SOME v ==> lookup_var x t = SOME v) /\
     (!id entry. FLOOKUP s0.vs_allocas id = SOME entry ==>
       FLOOKUP t.vs_allocas id = SOME entry) /\

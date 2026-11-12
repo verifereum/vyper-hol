@@ -64,7 +64,7 @@ Proof
   `gas_outcome F (cx_tops cx) (ctx,func)
      (assign_tuple_target_list cx gs vs) (ee,t)
      (\res ff q. res = INL () /\ expr_sim_inv cenv cx env ff /\ ~block_is_terminated sf /\
-       tuple_place_head ctx func cenv cx ff sa.cs_next_id sf
+       tuple_place_head ctx func cenv cx st0 ff sa.cs_next_id sf
          tys ltys ltvs vs elems w (LENGTH tys) q /\
        (!x v. not_fresh_at ss x /\ lookup_var x t = SOME v ==> lookup_var x q = SOME v) /\
        (!aid entry. FLOOKUP t.vs_allocas aid = SOME entry ==>

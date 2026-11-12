@@ -75,7 +75,7 @@ Theorem flag_assignment_prefix_head[local]:
     fn_inst_ids_distinct func /\ local_ptrs_reserved cenv su /\
     ~sv.vs_halted /\ sv.vs_current_bb = su.cs_current_bb /\
     sv.vs_inst_idx = LENGTH su.cs_current_insts ==>
-    ?t w. tuple_place_head ctx func cenv cx es1 sa.cs_next_id ss
+    ?t w. tuple_place_head ctx func cenv cx st0 es1 sa.cs_next_id ss
       tys ltys ltvs vs elems w 0 t /\
       (!x. not_fresh_at su x ==> lookup_var x t = lookup_var x sv) /\
       (!aid entry. FLOOKUP sv.vs_allocas aid = SOME entry ==>
@@ -161,7 +161,7 @@ Theorem tuple_place_compiler_flag_prefix_head:
     compile_tuple_store_all cenv ltys gs elems ss = ((),sf) /\
     cs_extends su sl /\ cs_extends sl ss /\ cs_extends ss sf /\
     fn_has_code su sl func /\ fn_has_code sl ss func /\ fn_has_code ss sf func /\
-    tuple_place_head ctx func cenv cx es1 sa.cs_next_id ss
+    tuple_place_head ctx func cenv cx st0 es1 sa.cs_next_id ss
       tys ltys ltvs vs elems w 0 t /\
     (!x. not_fresh_at su x ==> lookup_var x t = lookup_var x sv) /\
     (!aid entry. FLOOKUP sv.vs_allocas aid = SOME entry ==>
