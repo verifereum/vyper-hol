@@ -3,6 +3,11 @@ Ancestors
   runtimeSymSrcContextTypedBase runtimeSymSrcContext runtimeSymSrcEmission context compileEnv emitHelper loweringShapeDefs
   venomInst stackPlanTypes list
 
+(* Pending assembly obligation, preserved for C1.1.3.2.2.4 (L0050).
+   This import shell publishes no mutual-preservation theorem. The owner
+   restores and proves the exact statement below after the independently
+   checked Branches and Arrays theories integrate (coordinated G0004).
+
 Theorem runtime_sym_store_memory_typed_all:
   (!ce dst dty src sty s u s'.
     ~is_label_operand dst /\ ~is_label_operand src /\
@@ -84,3 +89,4 @@ Resume runtime_sym_store_memory_typed_all[struct]:
   FAIL_TAC "struct"
 QED
 Finalise runtime_sym_store_memory_typed_all
+*)
