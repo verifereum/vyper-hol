@@ -259,8 +259,9 @@ Theorem compile_call_intcall_shape:
         (omitted_defaults cenv (nsid_to_string func_id) (LENGTH args)) st0 =
         (dflt_vals, st1) /\
       compile_stage_intcall_args cenv (sup_vals ++ dflt_vals) pvs
-        (MAP expr_type
-           (args ++ omitted_defaults cenv (nsid_to_string func_id) (LENGTH args)))
+        (TAKE (LENGTH args +
+               LENGTH (omitted_defaults cenv (nsid_to_string func_id) (LENGTH args)))
+           (cenv.ce_func_param_types (nsid_to_string func_id)))
         st2 = (invoke_args, st3) /\
       (0 < ret_count ==>
        ?rbuf results st4 u.

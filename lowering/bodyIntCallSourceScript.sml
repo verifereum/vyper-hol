@@ -87,7 +87,8 @@ Theorem typed_intcall_source_signature:
       SOME (mut,nr,args,dflts,ret,ss) /\
     LENGTH es <= LENGTH args /\
     LENGTH args - LENGTH dflts <= LENGTH es /\
-    MAP expr_type es = TAKE (LENGTH es) (MAP SND args) /\
+    LIST_REL (type_widens_to env.type_defs) (MAP expr_type es)
+      (TAKE (LENGTH es) (MAP SND args)) /\
     type_widens_to env.type_defs ret ty
 Proof
   simp[vyperTypeSystemTheory.well_typed_expr_def] >> strip_tac >>
@@ -104,7 +105,8 @@ Theorem expr_body_pre_intcall_signature:
       SOME (mut,nr,args,dflts,ret,ss) /\
     LENGTH es <= LENGTH args /\
     LENGTH args - LENGTH dflts <= LENGTH es /\
-    MAP expr_type es = TAKE (LENGTH es) (MAP SND args) /\
+    LIST_REL (type_widens_to env.type_defs) (MAP expr_type es)
+      (TAKE (LENGTH es) (MAP SND args)) /\
     type_widens_to env.type_defs ret ty
 Proof
   strip_tac >>
@@ -127,7 +129,8 @@ Theorem body_intcall_source_selection:
       SOME (mut,nr,args,dflts,ret,ss) /\
     LENGTH es <= LENGTH args /\
     LENGTH args - LENGTH dflts <= LENGTH es /\
-    MAP expr_type es = TAKE (LENGTH es) (MAP SND args) /\
+    LIST_REL (type_widens_to env.type_defs) (MAP expr_type es)
+      (TAKE (LENGTH es) (MAP SND args)) /\
     type_widens_to env.type_defs ret ty /\
     (?rr. MEM (FunctionDecl Internal mut nr rr name args dflts ret ss) tops) /\
     supported_pure_exprs tops dflts /\

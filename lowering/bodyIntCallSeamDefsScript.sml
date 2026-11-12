@@ -80,7 +80,8 @@ End
    - Code: the call's code as compile_call_intcall_shape gives it: the
      supplied arguments (sa to st0), the omitted defaults compiled without
      the callee's own defaults (st0 to st1), the return buffer rbuf if any (st1 to st2),
-     the staging (st2 to st3), the INVOKE of the callee's label at st3
+     the staging at the callee's declared parameter types (st2 to st3),
+     the INVOKE of the callee's label at st3
      with the buffer's pointer first when the callee returns through it,
      and after it the results' store into rbuf, up to sb; vv is rbuf's
      located value, or the void call's literal.
@@ -147,9 +148,10 @@ Definition intcall_entry_def:
         (dflt_vals,st1) /\
       arg_vals = sup_vals ++ dflt_vals /\
       compile_stage_intcall_args cenv arg_vals pvs
-        (MAP expr_type
-           (es ++ omitted_defaults cenv (nsid_to_string (NONE,name))
-                    (LENGTH es))) st2 =
+        (TAKE (LENGTH es +
+               LENGTH (omitted_defaults cenv (nsid_to_string (NONE,name))
+                         (LENGTH es)))
+           (cenv.ce_func_param_types (nsid_to_string (NONE,name)))) st2 =
         (invoke_args,st3) /\
       lbl = internal_fn_label (cenv.ce_func_ids (nsid_to_string (NONE,name)))
               (nsid_to_string (NONE,name))

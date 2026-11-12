@@ -69,6 +69,24 @@ val _ = app (fn shortcut => check_bool_call "interface shortcut before self"
 val _ = check_bool_call "near shortcut name"
   (call_attr self_name ``"__at"`` ``SOME "interface"``)
   (internal_call ``SOME 9`` ``"__at"``);
+(* A tuple literal takes its type from the node's annotation (Vyper types it
+   by its context, so a member may be wider than its element), and falls back
+   to the element types when the annotation is missing or doesn't fit. *)
+fun check_tuple_type label ty expected = let
+  val translated = bossLib.EVAL
+    ``expr_type (translate_expr ^call_ctx
+        (JE_Tuple [JE_Str 1 "x"; JE_Int 1 (JT_Integer 256 F)] ^ty))``
+in
+  if aconv (rhs (concl translated)) expected then ()
+  else raise Fail ("tuple literal type: " ^ label)
+end;
+val _ = check_tuple_type "annotated"
+  ``JT_Tuple [JT_String 10; JT_Integer 256 F]``
+  ``TupleT [BaseT (StringT 10); BaseT (UintT 256)]``;
+val _ = check_tuple_type "missing annotation" ``JT_None``
+  ``TupleT [BaseT (StringT 1); BaseT (UintT 256)]``;
+val _ = check_tuple_type "wrong arity" ``JT_Tuple [JT_String 10]``
+  ``TupleT [BaseT (StringT 1); BaseT (UintT 256)]``;
 fun pop_call base = call_attr base ``"pop"`` ``SOME "interface"``;
 fun check_pop label base expected = let
   val func = pop_call base
@@ -216,7 +234,7 @@ fun tuple_return_fn decs aliases bound =
       (JTA_Tuple [JTA_String (JE_Int (&^bound) (JT_Integer 256 F));
         JTA_Integer 256 F])
       [JS_Return (SOME (JE_Tuple [JE_Str 1 "x";
-        JE_Int 1 (JT_Integer 256 F)]))]``;
+        JE_Int 1 (JT_Integer 256 F)] JT_None))]``;
 val tuple_abstract = tuple_return_fn ``["abstract"]`` ``[] : string list`` ``10``;
 val tuple_override = tuple_return_fn ``["override"]`` ``["base"]`` ``5``;
 val _ = assert_translation "covariant tuple return" true
@@ -364,6 +382,25 @@ val _ = assert_modules "stub-only interfaces are removed"
   ``[(NONE, [])] : (num option # toplevel list) list``
   (prepare_ast (repeated_interface_ast ``[^interface_stub]``
     ``[^interface_stub]``));
+(* Called directly, as by callers that skip prepare_translated_input,
+   remove_interface_sources returns one listing per source ID. Listings of
+   one module that differ only in their nonreentrancy default both survive
+   translation, with equal translated sources. *)
+val twice_listed_ast =
+  ``JAnnotatedAST (JModule 0 F [])
+      [JImportedModule 1 "IPing.vyi" "utils/IPing.vyi" F ^interface_event;
+       JImportedModule 1 "IPing.vyi" "utils/IPing.vyi" T ^interface_event]``;
+val twice_listed_translation = optionSyntax.dest_some
+  (rhs (concl (bossLib.EVAL ``translate_annotated_ast ^twice_listed_ast``)));
+fun source_ids translated =
+  map (fst o pairSyntax.dest_pair)
+    (fst (listSyntax.dest_list (fst (pairSyntax.dest_pair translated))));
+val _ = if length (source_ids twice_listed_translation) = 3 then ()
+  else raise Fail "twice-listed interface: translation no longer repeats it";
+val _ = if length (source_ids
+    (vyperCheckContractFrontendLib.remove_interface_sources twice_listed_ast
+       twice_listed_translation)) = 2 then ()
+  else raise Fail "remove_interface_sources kept a repeated source ID";
 val builtin_interfaces =
   ``JAnnotatedAST (JModule 0 F [])
       [JImportedModule (-2) "IERC20.vyi" "builtin/IERC20.vyi" F
