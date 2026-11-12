@@ -18,7 +18,7 @@ Theorem ptr_historical_write_classification:
     (o1_walk_view rpolicy 2) C C' /\
   EVERY (\f. f.fn_eom = NONE) C.ctx_functions /\ o1_ctx_shape C /\
   ctx_inst_ids_distinct C /\ callee_first names C.ctx_functions /\
-  o1_run_state_ok vs /\
+  o1_run_state_ok vs /\ ptr_discipline lo C vs /\
   ptr_stage_placements C' positions /\
   ptr_structural_transcript R vs C Ct h a ht at done tokens registry births PT TG saved entries H /\
   j < LENGTH h /\ EL j H = (tsj,rj,bj,PTj,TGj,sj,ej) /\
