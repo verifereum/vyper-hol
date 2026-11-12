@@ -181,6 +181,15 @@ Proof
      simp[lifetime_step_def] >>
      disch_then (qspec_then `SUC a.lop_cursor::birth::ids` mp_tac) >>
      simp[] >> gvs[]) >>
+  `~ctx_has_dalloca C ==> resolved_complete (EL (SUC b.lop_cursor) (q0::qs))
+     ((rp,DRESTRICT rv (COMPL (set call.inst_outputs)))::anns)` by
+    (qpat_x_assum `layout_ordinary_trace _ _ _ _ _ _ b _` mp_tac >>
+     simp[layout_ordinary_trace_def] >> rpt strip_tac >>
+     qpat_x_assum `!k. k < LENGTH path ==> _` kall_tac >>
+     qpat_x_assum `resolved_annotation_edge _ _ _ (SOME _) _ _ _ _ _` mp_tac >>
+     simp[resolved_annotation_edge_def] >> strip_tac >>
+     drule_at (Pat `resolved_annotation_update _ _ _ _ _`)
+       resolved_annotation_complete >> gvs[]) >>
   gvs[layout_ordinary_trace_def]
 QED
 

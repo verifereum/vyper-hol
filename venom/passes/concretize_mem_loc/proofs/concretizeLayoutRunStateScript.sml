@@ -88,6 +88,12 @@ Proof
      fs[venom_state_component_equality]) >>
   drule_all layout_run_block_annotations >> strip_tac >>
   drule_all lifetime_transition >> simp[lifetime_step_def] >> strip_tac >>
+  `~ctx_has_dalloca C ==>
+   resolved_complete (JointConfig stk PG G' tn' fn inst' sentry oms om' hs h')
+     ((rp,resolved_entry fn post rv)::saved)` by
+    (strip_tac >> drule_at (Pat `joint_transition _ _ _ _`)
+       frameResolvedCoherentTheory.resolved_complete_block >>
+     disch_then drule >> fs[]) >>
   `LENGTH es = LENGTH qs` by metis_tac[joint_trace_def, joint_chain_length] >>
   qexistsl [`tentry`, `a with <|lop_pending := F;
     lop_cursor := SUC a.lop_cursor; lop_bound := SUC a.lop_bound;

@@ -3,11 +3,37 @@ Ancestors
   concretizeLayoutOwnerPairs concretizeLayoutPositions frameRelocationBinding frameDemandTaint
   frameActivationCache frameJointTrace frameJointDemand frameJointTaint
   frameJointTransition ptrDiscipline o1PassContract o1ScheduleDecomp
-  unitTransformDefs venomInst venomWf cfgWf finite_map list pred_set arithmetic
+  unitTransformDefs venomInst venomWf cfgWf frameWriteOwnership frameDemandOwnership
+  frameOriginHistory frameOriginReachable finite_map list pred_set arithmetic
 
 (* This is numerical noncollision only. The cache-to-metadata bridge is
  * explicit, and is not a premise added to either frozen stage theorem.
  * Semantic coverage of transformed writes remains a separate obligation. *)
+(* Without DALLOCA every written byte at or above lo lies in a live cache. *)
+Theorem joint_write_cached[local]:
+  joint_trace vs0 C q0 es qs q /\ ptr_discipline lo C vs0 /\
+  ~ctx_has_dalloca C /\ n < LENGTH es /\
+  ~joint_read_exempt (EL n (q0::qs)) /\
+  byte IN joint_writes (EL n (q0::qs)) (EL n es) /\ lo <= byte ==>
+  ?d owner aid b sz. activation_cache (EL n (q0::qs)) d owner aid (b,sz) /\
+    b <= byte /\ byte < b + sz
+Proof
+  strip_tac >> drule_all joint_trace_edge_at >> strip_tac >>
+  `?stk PG G tn fn inst s oms om hs h.
+     EL n (q0::qs) = JointConfig stk PG G tn fn inst s oms om hs h` by
+    (Cases_on `EL n (q0::qs)` >> simp[]) >>
+  gvs[joint_read_exempt_def] >>
+  `frame_reachable vs0 C stk PG G tn fn inst s` by
+    (gvs[joint_config_reachable_def] >>
+     metis_tac[joint_origin_history_erasure, origin_frame_erasure]) >>
+  `access_ok lo G fn inst s` by metis_tac[ptr_discipline_def] >>
+  `byte IN range_bytes (source_memory_write_ranges inst s)` by
+    (drule joint_writes_source_subset >> metis_tac[SUBSET_DEF]) >>
+  drule_all access_ok_write_site >> strip_tac >>
+  drule_all joint_provenance_activation_owner >> strip_tac >>
+  metis_tac[]
+QED
+
 Theorem concretize_relocation_write_demand_noncollision:
   ctx_pass_stage rpolicy (CFP_Simple VP_ConcretizeMemLoc)
     (o1_walk_view rpolicy 2) C C' /\ o1_ctx_shape C /\
@@ -29,11 +55,18 @@ Proof
   disch_then (map_every assume_tac o CONJUNCTS) >>
   `~joint_read_exempt (EL n (q0::qs))` by
     (irule joint_relocation_demand_nonrevert >> metis_tac[]) >>
+  `vs0.vs_allocas = FEMPTY` by gvs[o1_run_state_ok_def, o1_initial_state_ok_def] >>
   qpat_x_assum `joint_relocation_demand _ _ _ _ _ _ _ _` mp_tac >>
-  simp[joint_relocation_demand_def] >> strip_tac >>
-  qpat_x_assum `relocation_pair _ _ (EL j _) _ _` mp_tac >>
-  qpat_x_assum `relocation_pair _ _ _ byte w` mp_tac >>
-  simp[relocation_pair_def] >>
+  simp[joint_relocation_demand_def] >>
+  disch_then (qx_choose_then `j` (map_every assume_tac o CONJUNCTS)) >>
+  qpat_x_assum `relocation_pair _ _ _ byte w`
+    (mp_tac o MATCH_MP relocation_pair_covered) >>
+  impl_tac >- (strip_tac >> irule joint_write_cached >> metis_tac[]) >>
+  disch_then assume_tac >>
+  qpat_x_assum `relocation_pair _ _ (EL j _) _ _`
+    (mp_tac o MATCH_MP relocation_pair_covered) >>
+  impl_tac >- (strip_tac >> irule joint_observed_read_cached >> metis_tac[]) >>
+  qpat_x_assum `_ \/ (lo <= byte /\ _)` mp_tac >>
   disch_then strip_assume_tac >> disch_then strip_assume_tac
   >- metis_tac[]
   >- (qpat_x_assum `!k d owner aid base size. _`
@@ -42,7 +75,6 @@ Proof
   >- (qpat_x_assum `!k d owner aid base size. _`
         (qspec_then `n` mp_tac) >> simp[] >> disch_then drule >>
       strip_tac >> decide_tac) >>
-  `vs0.vs_allocas = FEMPTY` by gvs[o1_run_state_ok_def, o1_initial_state_ok_def] >>
   `activation_cache (EL n (q0::qs)) d' owner' aid' (b',sz')` by
     (irule (cj 2 joint_untainted_demand_cache) >>
      goal_assum (drule_at (Pat `joint_trace _ _ _ _ _ _`)) >>
