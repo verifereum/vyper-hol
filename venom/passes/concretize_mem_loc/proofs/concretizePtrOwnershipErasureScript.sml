@@ -180,11 +180,15 @@ Proof
       `LENGTH PG = LENGTH PT` by
         (gvs[ptr_params_erases_def] >> metis_tac[LIST_REL_LENGTH]) >>
       Cases_on `w2n c < LENGTH PT` >> simp[ptr_owner_erases_def] >>
-      drule_all ptr_owner_param_projection >> simp[]) >>
-  simp[out_prov_def] >>
-  Cases_on `inst.inst_opcode = ADD \/ inst.inst_opcode = SUB \/ inst.inst_opcode = ASSIGN` >>
-  simp[ptr_owner_erases_def] >>
-  irule ptr_owner_first_projection >> metis_tac[]
+      drule_all ptr_owner_param_projection >> simp[ptr_owner_erases_def]) >>
+  Cases_on `inst.inst_opcode = ADD \/ inst.inst_opcode = SUB \/ inst.inst_opcode = ASSIGN`
+  >- (`ptr_owner_erases dyn births (first_prov tagged inst.inst_operands)
+         (first_prov numerical inst.inst_operands) /\
+       (!owner. first_prov tagged inst.inst_operands = SOME owner ==>
+          owner IN FDOM births)` by
+        (irule ptr_owner_first_projection >> metis_tac[]) >>
+      gvs[out_prov_def]) >>
+  gvs[out_prov_def, ptr_owner_erases_def]
 QED
 
 Theorem ptr_owner_step_projection:
