@@ -85,7 +85,7 @@ Proof
   `expr_body_pre cenv cx env e start` by simp[Abbr `start`]
   >~ [`encode_value _ _ = _`] >- metis_tac[body_append_word_encoding] >>
   qspecl_then [`cenv`, `cx`, `env`, `e`, `start`, `INL v`, `es1`]
-    mp_tac expr_body_pre_eval >> simp[] >> strip_tac >>
+    mp_tac (REWRITE_RULE [ETA_AX] expr_body_pre_eval) >> simp[] >> strip_tac >>
   `env.type_defs = get_tenv cx` by
     fs[expr_body_pre_def, expr_sim_inv_def, env_consistent_def,
        env_context_consistent_def] >>
