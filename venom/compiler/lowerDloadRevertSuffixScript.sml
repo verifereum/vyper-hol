@@ -482,9 +482,11 @@ Proof
    EVERY (\v. MEM v q.irs_used_vars) (venomInst$operand_vars [p']) /\
    EVERY (\v. MEM v q.irs_used_vars) (venomInst$operand_vars [rds'])` by
     (fs[inst_ir_vars_def, inst_uses_def] >>
-     Cases_on `p` >> Cases_on `src` >> Cases_on `rds` >>
-     Cases_on `p'` >> Cases_on `rds'` >>
-     gvs[venomInstTheory.operand_vars_def, venomInstTheory.operand_var_def]) >>
+     `!x y ys. venomInst$operand_vars (x::y::ys) =
+        venomInst$operand_vars [x] ++ venomInst$operand_vars (y::ys)` by
+       (rpt gen_tac >> Cases_on `x` >>
+        simp[venomInstTheory.operand_vars_def, venomInstTheory.operand_var_def]) >>
+     gvs[EVERY_APPEND]) >>
   `EVERY (\v. MEM v q.irs_used_vars)
       (venomInst$operand_vars [resolve_block_assigns (REVERSE mid) p']) /\
    EVERY (\v. MEM v q.irs_used_vars)
