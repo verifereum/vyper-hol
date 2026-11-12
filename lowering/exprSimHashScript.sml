@@ -4,7 +4,7 @@
  * keccak256, sha256 and method_id read a bytestring operand through its
  * pointer and hash it into a buffer of their own: SHA3, a STATICCALL to
  * the sha256 precompile, or keccak then a SHR/SHL by 224 for method_id.
- * The code runs, keeps stmt_state_rel and changes no memory but its own
+ * The code runs, keeps stmt_state_rel H and changes no memory but its own
  * buffers.  A literal method_id signature is folded to a bytes literal.
  *
  * Composing the operand's fragment with that code needs its operand to
@@ -209,11 +209,11 @@ Theorem compile_keccak256_bytes_frame:
   mem_word_at b s.vs_memory = n2w (LENGTH bs) /\
   mem_bytes_at (b + 32) (LENGTH bs) s.vs_memory = bs /\
   b + 32 < dimword (:256) /\ LENGTH bs < dimword (:256) /\
-  stmt_state_rel ctx func cenv cx es s /\ local_ptrs_reserved cenv sa ==>
+  stmt_state_rel H ctx func cenv cx es s /\ local_ptrs_reserved cenv sa ==>
   ?t. run_inst_seq (emitted_insts sa sb) s = OK t /\
     eval_operand op t = SOME
       (word_of_bytes T (0w:bytes32) (Keccak_256_w64 bs)) /\
-    stmt_state_rel ctx func cenv cx es t /\
+    stmt_state_rel H ctx func cenv cx es t /\
     (t with vs_vars := s.vs_vars) = s /\
     (!x. not_fresh_at sa x ==> lookup_var x t = lookup_var x s)
 Proof
@@ -260,12 +260,12 @@ Theorem hash_alloc_mstore_frame:
   emit_void MSTORE [buf.buf_operand; val_op] sm = ((), sh) /\
   (!x. val_op = Var x ==> not_fresh_at sa x) /\
   eval_operand val_op s = SOME w /\
-  stmt_state_rel ctx func cenv cx es s /\ fn_inst_ids_distinct func /\
+  stmt_state_rel H ctx func cenv cx es s /\ fn_inst_ids_distinct func /\
   local_ptrs_reserved cenv sa /\
   MEM (mk_inst sa.cs_next_id ALLOCA [Lit 32w]
     [STRING #"%" (toString sa.cs_next_var)]) (fn_insts func) ==>
   ?t addr. run_inst_seq (emitted_insts sa sh) s = OK t /\
-    stmt_state_rel ctx func cenv cx es t /\
+    stmt_state_rel H ctx func cenv cx es t /\
     eval_operand buf.buf_operand t = SOME addr /\
     t.vs_memory = (mstore (w2n addr) w s).vs_memory /\
     (!x. not_fresh_at sa x ==> lookup_var x t = lookup_var x s) /\
@@ -295,7 +295,7 @@ Proof
      OK (mstore (w2n addr) w allocated)` by
     (irule literal_emit_mstore_run >>
      qexistsl_tac [`buf.buf_operand`, `val_op`] >> simp[]) >>
-  `stmt_state_rel ctx func cenv cx es (mstore (w2n addr) w allocated)` by
+  `stmt_state_rel H ctx func cenv cx es (mstore (w2n addr) w allocated)` by
     (irule literal_mstore_state_rel >> simp[] >>
      qexistsl_tac [`w2n addr`,
        `mk_inst sa.cs_next_id ALLOCA [Lit 32w]
@@ -374,14 +374,14 @@ Theorem compile_keccak256_bytesm_frame:
   (!x. val_op = Var x ==> not_fresh_at sa x) /\
   eval_operand val_op s = SOME w /\
   LENGTH bs <= 32 /\ TAKE (LENGTH bs) (word_to_bytes_be w) = bs /\
-  stmt_state_rel ctx func cenv cx es s /\ fn_inst_ids_distinct func /\
+  stmt_state_rel H ctx func cenv cx es s /\ fn_inst_ids_distinct func /\
   local_ptrs_reserved cenv sa /\
   MEM (mk_inst sa.cs_next_id ALLOCA [Lit 32w]
     [STRING #"%" (toString sa.cs_next_var)]) (fn_insts func) ==>
   ?t. run_inst_seq (emitted_insts sa sb) s = OK t /\
     eval_operand op t = SOME
       (word_of_bytes T (0w:bytes32) (Keccak_256_w64 bs)) /\
-    stmt_state_rel ctx func cenv cx es t /\
+    stmt_state_rel H ctx func cenv cx es t /\
     (!x. not_fresh_at sa x ==> lookup_var x t = lookup_var x s) /\
     (!aid entry. FLOOKUP s.vs_allocas aid = SOME entry ==>
        FLOOKUP t.vs_allocas aid = SOME entry) /\
@@ -412,7 +412,7 @@ Proof
     (simp[] >> irule hash_mstore_prefix >> simp[]) >>
   drule_all emit_SHA3_bytes_frame >> strip_tac >>
   rename1 `run_inst_seq (emitted_insts sh sb) staged = OK final` >>
-  `stmt_state_rel ctx func cenv cx es final` by
+  `stmt_state_rel H ctx func cenv cx es final` by
     (irule hash_readonly_state_rel >> goal_assum drule >> simp[]) >>
   `final.vs_memory = staged.vs_memory /\ final.vs_allocas = staged.vs_allocas` by
     (qpat_x_assum `final with vs_vars := _ = _`
@@ -562,8 +562,8 @@ Proof
 QED
 
 Theorem hash_returndata_state_rel:
-  stmt_state_rel ctx func cenv cx es (s with vs_returndata := data) <=>
-  stmt_state_rel ctx func cenv cx es s
+  stmt_state_rel H ctx func cenv cx es (s with vs_returndata := data) <=>
+  stmt_state_rel H ctx func cenv cx es s
 Proof
   `fmp_room ctx func (s with vs_returndata := data) <=>
    fmp_room ctx func s` by
@@ -588,8 +588,8 @@ Proof
 QED
 
 Theorem hash_gas_readings_state_rel:
-  stmt_state_rel ctx func cenv cx es (s with vs_gas_readings := rs) <=>
-  stmt_state_rel ctx func cenv cx es s
+  stmt_state_rel H ctx func cenv cx es (s with vs_gas_readings := rs) <=>
+  stmt_state_rel H ctx func cenv cx es s
 Proof
   `fmp_room ctx func (s with vs_gas_readings := rs) <=>
    fmp_room ctx func s` by
@@ -656,8 +656,8 @@ Proof
 QED
 
 Theorem hash_outcomes_state_rel:
-  stmt_state_rel ctx func cenv cx es s ==>
-  stmt_state_rel ctx func cenv cx
+  stmt_state_rel H ctx func cenv cx es s ==>
+  stmt_state_rel H ctx func cenv cx
     (es with outcomes := SOME (DROP 1 s.vs_outcomes))
     (s with vs_outcomes := DROP 1 s.vs_outcomes)
 Proof
@@ -810,7 +810,7 @@ Theorem sha256_tail_frame:
   (!x. ret_op = Var x ==> x <> success_var) /\
   mem_bytes_at (w2n p) (w2n n) s.vs_memory = bs /\
   s.vs_outcomes = outcome::rest /\ outcome.co_success /\
-  stmt_state_rel ctx func cenv cx es s /\ local_ptrs_reserved cenv sa /\
+  stmt_state_rel H ctx func cenv cx es s /\ local_ptrs_reserved cenv sa /\
   (!x. not_fresh_at sa x ==> x <> gas_var /\ x <> success_var /\ x <> out) /\
   (!name b sz. local_region cenv es.scopes s name b sz ==>
      b + sz <= w2n r \/ w2n r + 32 <= b) /\
@@ -828,7 +828,7 @@ Theorem sha256_tail_frame:
      mk_inst i2 ASSERT [Var success_var] [];
      mk_inst i3 MLOAD [ret_op] [out]] s = OK t /\
     eval_operand (Var out) t = SOME (SHA_256_bytes bs) /\
-    stmt_state_rel ctx func cenv cx (es with outcomes := SOME rest) t /\
+    stmt_state_rel H ctx func cenv cx (es with outcomes := SOME rest) t /\
     (!x. not_fresh_at sa x ==> lookup_var x t = lookup_var x s) /\
     t.vs_allocas = s.vs_allocas /\
     (!b len. b + len <= w2n r \/ w2n r + 32 <= b ==>
@@ -851,10 +851,10 @@ Proof
     simp[Abbr `final`, eval_operand_def, lookup_var_update_var] >>
   simp[] >> reverse conj_tac
   >- (rpt strip_tac >> irule hash_write_memory_disjoint >> simp[]) >>
-  `stmt_state_rel ctx func cenv cx (es with outcomes := SOME rest)
+  `stmt_state_rel H ctx func cenv cx (es with outcomes := SOME rest)
      (s with vs_outcomes := rest)` by
     (drule hash_outcomes_state_rel >> simp[]) >>
-  `stmt_state_rel ctx func cenv cx (es with outcomes := SOME rest)
+  `stmt_state_rel H ctx func cenv cx (es with outcomes := SOME rest)
      (final with <| vs_returndata := s.vs_returndata;
                     vs_gas_readings := s.vs_gas_readings |>)` suffices_by
     (simp[hash_returndata_state_rel, hash_gas_readings_state_rel]) >>
@@ -945,7 +945,7 @@ Theorem emit_sha256_tail_frame:
   (!x. ptr_op = Var x \/ len_op = Var x \/ ret_op = Var x ==> not_fresh_at sa x) /\
   mem_bytes_at (w2n p) (w2n n) s.vs_memory = bs /\
   s.vs_outcomes = outcome::rest /\ outcome.co_success /\
-  stmt_state_rel ctx func cenv cx es s /\ local_ptrs_reserved cenv sa /\
+  stmt_state_rel H ctx func cenv cx es s /\ local_ptrs_reserved cenv sa /\
   (!name b sz. local_region cenv es.scopes s name b sz ==>
      b + sz <= w2n r \/ w2n r + 32 <= b) /\
   (cenv.ce_is_ctor ==> !name tv v off.
@@ -957,7 +957,7 @@ Theorem emit_sha256_tail_frame:
      regions_disjoint off (type_memory_size tv) (w2n r) 32) ==>
   ?t. run_inst_seq (emitted_insts sa sb) s = OK t /\
     eval_operand op t = SOME (SHA_256_bytes bs) /\
-    stmt_state_rel ctx func cenv cx (es with outcomes := SOME rest) t /\
+    stmt_state_rel H ctx func cenv cx (es with outcomes := SOME rest) t /\
     (!x. not_fresh_at sa x ==> lookup_var x t = lookup_var x s) /\
     t.vs_allocas = s.vs_allocas /\
     (!b len. b + len <= w2n r \/ w2n r + 32 <= b ==>
@@ -987,7 +987,7 @@ Theorem hash_alloc_sha256_tail_fail:
   eval_operand ptr_op s = SOME p /\ eval_operand len_op s = SOME n /\
   (!x. ptr_op = Var x \/ len_op = Var x ==> not_fresh_at sa x) /\
   ~(?outcome rest. s.vs_outcomes = outcome::rest /\ outcome.co_success) /\
-  stmt_state_rel ctx func cenv cx es s /\ fn_inst_ids_distinct func /\
+  stmt_state_rel H ctx func cenv cx es s /\ fn_inst_ids_distinct func /\
   local_ptrs_reserved cenv sa /\
   MEM (mk_inst sa.cs_next_id ALLOCA [Lit 32w]
     [STRING #"%" (toString sa.cs_next_var)]) (fn_insts func) ==>
@@ -1036,13 +1036,13 @@ Theorem hash_alloc_sha256_tail_frame:
   (!x. ptr_op = Var x \/ len_op = Var x ==> not_fresh_at sa x) /\
   mem_bytes_at (w2n p) (w2n n) s.vs_memory = bs /\
   s.vs_outcomes = outcome::rest /\ outcome.co_success /\
-  stmt_state_rel ctx func cenv cx es s /\ fn_inst_ids_distinct func /\
+  stmt_state_rel H ctx func cenv cx es s /\ fn_inst_ids_distinct func /\
   local_ptrs_reserved cenv sa /\
   MEM (mk_inst sa.cs_next_id ALLOCA [Lit 32w]
     [STRING #"%" (toString sa.cs_next_var)]) (fn_insts func) ==>
   ?t. run_inst_seq (emitted_insts sa sb) s = OK t /\
     eval_operand op t = SOME (SHA_256_bytes bs) /\
-    stmt_state_rel ctx func cenv cx (es with outcomes := SOME rest) t /\
+    stmt_state_rel H ctx func cenv cx (es with outcomes := SOME rest) t /\
     (!x. not_fresh_at sa x ==> lookup_var x t = lookup_var x s) /\
     (!aid entry. FLOOKUP s.vs_allocas aid = SOME entry ==>
        FLOOKUP t.vs_allocas aid = SOME entry) /\
@@ -1089,7 +1089,7 @@ Proof
        SOME (tv,v) ==>
      regions_disjoint off (type_memory_size tv) (w2n w) 32)` by
     (rpt strip_tac >>
-     qpat_assum `stmt_state_rel ctx func cenv cx es allocated` mp_tac >>
+     qpat_assum `stmt_state_rel H ctx func cenv cx es allocated` mp_tac >>
      pure_rewrite_tac[stmt_state_rel_def, immutable_alloca_sep_def] >> strip_tac >>
      qpat_x_assum `cenv.ce_is_ctor ==> _` drule >>
      disch_then drule_all >> strip_tac >>
@@ -1191,7 +1191,7 @@ Theorem compile_sha256_bytes_fail:
   eval_operand ptr_op s = SOME (n2w b) /\
   mem_word_at b s.vs_memory = n2w len /\ b < dimword (:256) /\
   ~(?outcome rest. s.vs_outcomes = outcome::rest /\ outcome.co_success) /\
-  stmt_state_rel ctx func cenv cx es s /\ fn_inst_ids_distinct func /\
+  stmt_state_rel H ctx func cenv cx es s /\ fn_inst_ids_distinct func /\
   local_ptrs_reserved cenv sa /\
   MEM (mk_inst (sa.cs_next_id + 2) ALLOCA [Lit 32w]
     [STRING #"%" (toString (sa.cs_next_var + 2))]) (fn_insts func) ==>
@@ -1212,7 +1212,7 @@ Proof
   rename1 `emit_void ASSERT [success_op] sc = (u, sh)` >> Cases_on `u` >>
   drule_all hash_data_prefix_run >> strip_tac >>
   rename1 `run_inst_seq (emitted_insts sa sm) s = OK prefix` >>
-  `stmt_state_rel ctx func cenv cx es prefix` by
+  `stmt_state_rel H ctx func cenv cx es prefix` by
     (irule hash_readonly_state_rel >> goal_assum drule >> simp[]) >>
   `local_ptrs_reserved cenv sm` by
     (irule local_ptrs_reserved_next_var >> qexists_tac `sa` >> simp[]) >>
@@ -1248,13 +1248,13 @@ Theorem compile_sha256_bytes_frame:
   mem_bytes_at (b + 32) (LENGTH bs) s.vs_memory = bs /\
   b + 32 < dimword (:256) /\ LENGTH bs < dimword (:256) /\
   s.vs_outcomes = outcome::rest /\ outcome.co_success /\
-  stmt_state_rel ctx func cenv cx es s /\ fn_inst_ids_distinct func /\
+  stmt_state_rel H ctx func cenv cx es s /\ fn_inst_ids_distinct func /\
   local_ptrs_reserved cenv sa /\
   MEM (mk_inst (sa.cs_next_id + 2) ALLOCA [Lit 32w]
     [STRING #"%" (toString (sa.cs_next_var + 2))]) (fn_insts func) ==>
   ?t. run_inst_seq (emitted_insts sa sb) s = OK t /\
     eval_operand op t = SOME (SHA_256_bytes bs) /\
-    stmt_state_rel ctx func cenv cx (es with outcomes := SOME rest) t /\
+    stmt_state_rel H ctx func cenv cx (es with outcomes := SOME rest) t /\
     (!x. not_fresh_at sa x ==> lookup_var x t = lookup_var x s) /\
     (!aid entry. FLOOKUP s.vs_allocas aid = SOME entry ==>
        FLOOKUP t.vs_allocas aid = SOME entry) /\
@@ -1283,7 +1283,7 @@ Proof
         fcpTheory.index_one, fcpTheory.finite_one] >>
   drule_all hash_data_prefix_run >> strip_tac >>
   rename1 `run_inst_seq (emitted_insts sa sm) s = OK prefix` >>
-  `stmt_state_rel ctx func cenv cx es prefix` by
+  `stmt_state_rel H ctx func cenv cx es prefix` by
     (irule hash_readonly_state_rel >> goal_assum drule >> simp[]) >>
   `local_ptrs_reserved cenv sm` by
     (irule local_ptrs_reserved_next_var >> qexists_tac `sa` >> simp[]) >>
@@ -1328,7 +1328,7 @@ Theorem compile_sha256_bytesm_fail:
   (!x. val_op = Var x ==> not_fresh_at sa x) /\
   eval_operand val_op s = SOME w /\
   ~(?outcome rest. s.vs_outcomes = outcome::rest /\ outcome.co_success) /\
-  stmt_state_rel ctx func cenv cx es s /\ fn_inst_ids_distinct func /\
+  stmt_state_rel H ctx func cenv cx es s /\ fn_inst_ids_distinct func /\
   local_ptrs_reserved cenv sa /\
   MEM (mk_inst sa.cs_next_id ALLOCA [Lit 32w]
     [STRING #"%" (toString sa.cs_next_var)]) (fn_insts func) /\
@@ -1383,7 +1383,7 @@ Theorem compile_sha256_bytesm_frame:
   eval_operand val_op s = SOME w /\
   LENGTH bs <= 32 /\ TAKE (LENGTH bs) (word_to_bytes_be w) = bs /\
   s.vs_outcomes = outcome::rest /\ outcome.co_success /\
-  stmt_state_rel ctx func cenv cx es s /\ fn_inst_ids_distinct func /\
+  stmt_state_rel H ctx func cenv cx es s /\ fn_inst_ids_distinct func /\
   local_ptrs_reserved cenv sa /\
   MEM (mk_inst sa.cs_next_id ALLOCA [Lit 32w]
     [STRING #"%" (toString sa.cs_next_var)]) (fn_insts func) /\
@@ -1391,7 +1391,7 @@ Theorem compile_sha256_bytesm_frame:
     [STRING #"%" (toString (sa.cs_next_var + 1))]) (fn_insts func) ==>
   ?t. run_inst_seq (emitted_insts sa sb) s = OK t /\
     eval_operand op t = SOME (SHA_256_bytes bs) /\
-    stmt_state_rel ctx func cenv cx (es with outcomes := SOME rest) t /\
+    stmt_state_rel H ctx func cenv cx (es with outcomes := SOME rest) t /\
     (!x. not_fresh_at sa x ==> lookup_var x t = lookup_var x s) /\
     (!aid entry. FLOOKUP s.vs_allocas aid = SOME entry ==>
        FLOOKUP t.vs_allocas aid = SOME entry) /\
@@ -1524,12 +1524,12 @@ Theorem method_id_mask_frame:
   emit_op SHR [Lit 224w; hash_op] sa = (sel_op, sm) /\
   emit_op SHL [Lit 224w; sel_op] sm = (word_op, sb) /\
   eval_operand hash_op s = SOME w /\
-  stmt_state_rel ctx func cenv cx es s /\ local_ptrs_reserved cenv sa ==>
+  stmt_state_rel H ctx func cenv cx es s /\ local_ptrs_reserved cenv sa ==>
   ?t. run_inst_seq (emitted_insts sa sb) s = OK t /\
     eval_operand word_op t = SOME
       (typed_val_to_w256 (BaseTV (BytesT (Fixed 4)))
         (BytesV (TAKE 4 (word_to_bytes w T)))) /\
-    stmt_state_rel ctx func cenv cx es t /\
+    stmt_state_rel H ctx func cenv cx es t /\
     (t with vs_vars := s.vs_vars) = s /\
     (!x. not_fresh_at sa x ==> lookup_var x t = lookup_var x s)
 Proof
@@ -1587,7 +1587,7 @@ Theorem hash_single_word_buffer_frame:
   emit_void MSTORE [data_ptr; val_op] sd = ((), sb) /\
   eval_operand ptr_op s = SOME (n2w b) /\ eval_operand val_op s = SOME v /\
   (!x. val_op = Var x ==> not_fresh_at sa x) /\ b + 32 < dimword (:256) /\
-  stmt_state_rel ctx func cenv cx es s /\ local_ptrs_reserved cenv sa /\
+  stmt_state_rel H ctx func cenv cx es s /\ local_ptrs_reserved cenv sa /\
   (!name off len. local_region cenv es.scopes s name off len ==>
      regions_disjoint b 64 off len) /\
   (cenv.ce_is_ctor ==> !name tv iv off.
@@ -1598,7 +1598,7 @@ Theorem hash_single_word_buffer_frame:
        SOME (tv,iv) ==>
      regions_disjoint b 64 off (type_memory_size tv)) ==>
   ?t. run_inst_seq (emitted_insts sa sb) s = OK t /\
-    stmt_state_rel ctx func cenv cx es t /\
+    stmt_state_rel H ctx func cenv cx es t /\
     t.vs_memory = (mstore (b + 32) v (mstore b (n2w n) s)).vs_memory /\
     (t with <|vs_vars := s.vs_vars; vs_memory := s.vs_memory|>) = s /\
     (!x. not_fresh_at sa x ==> lookup_var x t = lookup_var x s) /\
@@ -1655,12 +1655,12 @@ Theorem hash_alloc_single_word_buffer_frame:
   eval_operand val_op s = SOME v /\
   (!x. val_op = Var x ==> not_fresh_at sa x) /\
   LENGTH bs <= 32 /\ TAKE (LENGTH bs) (word_to_bytes_be v) = bs /\
-  stmt_state_rel ctx func cenv cx es s /\ fn_inst_ids_distinct func /\
+  stmt_state_rel H ctx func cenv cx es s /\ fn_inst_ids_distinct func /\
   local_ptrs_reserved cenv sa /\
   MEM (mk_inst sa.cs_next_id ALLOCA [Lit 64w]
     [STRING #"%" (toString sa.cs_next_var)]) (fn_insts func) ==>
   ?t p. run_inst_seq (emitted_insts sa sb) s = OK t /\
-    stmt_state_rel ctx func cenv cx es t /\
+    stmt_state_rel H ctx func cenv cx es t /\
     eval_operand buf.buf_operand t = SOME p /\
     FLOOKUP t.vs_allocas sa.cs_next_id = SOME (w2n p, 64) /\
     w2n p + 64 < dimword (:256) /\
@@ -1713,7 +1713,7 @@ Proof
        SOME (tv,iv) ==>
      regions_disjoint (w2n addr) 64 off (type_memory_size tv))` by
     (rpt strip_tac >>
-     qpat_assum `stmt_state_rel ctx func cenv cx es allocated` mp_tac >>
+     qpat_assum `stmt_state_rel H ctx func cenv cx es allocated` mp_tac >>
      pure_rewrite_tac[stmt_state_rel_def, immutable_alloca_sep_def] >> strip_tac >>
      qpat_x_assum `cenv.ce_is_ctor ==> _` drule >>
      disch_then drule_all >> strip_tac >>
@@ -1798,12 +1798,12 @@ Theorem method_id_dynamic_suffix_frame:
   emit_op ADD [buf.buf_operand; Lit 32w] sh = (data_ptr, sd) /\
   emit_void MSTORE [data_ptr; word_op] sd = ((), sb) /\
   eval_operand hash_op s = SOME w /\
-  stmt_state_rel ctx func cenv cx es s /\ fn_inst_ids_distinct func /\
+  stmt_state_rel H ctx func cenv cx es s /\ fn_inst_ids_distinct func /\
   local_ptrs_reserved cenv sa /\
   MEM (mk_inst sn.cs_next_id ALLOCA [Lit 64w]
     [STRING #"%" (toString sn.cs_next_var)]) (fn_insts func) ==>
   ?t p. run_inst_seq (emitted_insts sa sb) s = OK t /\
-    stmt_state_rel ctx func cenv cx es t /\
+    stmt_state_rel H ctx func cenv cx es t /\
     eval_operand buf.buf_operand t = SOME p /\
     FLOOKUP t.vs_allocas sn.cs_next_id = SOME (w2n p,64) /\
     w2n p + 64 < dimword (:256) /\
@@ -1970,9 +1970,9 @@ Proof
         compile_expr cenv ty lit st` by
     gvs[compile_expr_method_id_literal, compile_expr_def, Abbr `lit`,
         expr_type_def] >>
-  `vv_post ctx func cenv cx
+  `vv_post H ctx func cenv cx
      (Builtin (BaseT (BytesT (Dynamic 4))) MethodId [Literal la l]) =
-   vv_post ctx func cenv cx lit` by
+   vv_post H ctx func cenv cx lit` by
     simp[FUN_EQ_THM, vv_post_def, Abbr `lit`, expr_type_def,
          supportedExprTraverseTheory.expr_has_effect_def,
          supportedExprTraverseTheory.supported_expr_exists_def,
@@ -1982,7 +1982,7 @@ QED
 
 (* Typed postconditions expose the representation needed by hash suffixes. *)
 Theorem hash_fixed_post_view:
-  expr_post ctx func cenv cx e es sa sm s0 es' (BytesV bs) op s /\
+  expr_post H ctx func cenv cx e es sa sm s0 es' (BytesV bs) op s /\
   expr_type e = BaseT (BytesT (Fixed m)) /\
   value_has_type (BaseTV (BytesT (Fixed m))) (BytesV bs) /\ m <= 32 ==>
   ?w. eval_operand op s = SOME w /\ LENGTH bs = m /\
@@ -2283,25 +2283,25 @@ QED
 
 Theorem vv_post_frame_intro:
   post_value_type cenv e = expr_type e /\
-  stmt_state_rel ctx func cenv cx es' t /\
+  stmt_state_rel H ctx func cenv cx es' t /\
   vv_holds cenv cx (expr_type e) tv vv es' t /\
   vv_at cenv cx (expr_type e) sa sb es' tv vv t /\
-  (~expr_has_effect e ==> vv_storage_live cx vv es' t) /\
+  (~expr_has_effect e ==> vv_storage_live H cx vv es' t) /\
   wb_frame cenv es es' sa s0 t /\
   (~expr_has_effect e ==> pure_frame cenv func es sa s0 t) ==>
-  vv_post ctx func cenv cx e es sa sb s0 es' tv vv t
+  vv_post H ctx func cenv cx e es sa sb s0 es' tv vv t
 Proof
   simp[vv_post_def, wb_frame_def] >> metis_tac[]
 QED
 
 Theorem vv_post_word_intro:
-  stmt_state_rel ctx func cenv cx es' s /\ is_word_type (expr_type e) /\
+  stmt_state_rel H ctx func cenv cx es' s /\ is_word_type (expr_type e) /\
   (?w. eval_operand op s = SOME w /\
     !tv. evaluate_type (get_tenv cx) (expr_type e) = SOME tv ==>
          w = typed_val_to_w256 tv v) /\
   wb_frame cenv es es' sa s0 s /\
   (~expr_has_effect e ==> pure_frame cenv func es sa s0 s) ==>
-  vv_post ctx func cenv cx e es sa sb s0 es' (Value v) (StackValue ty op) s
+  vv_post H ctx func cenv cx e es sa sb s0 es' (Value v) (StackValue ty op) s
 Proof
   strip_tac >> irule vv_post_frame_intro >>
   simp[post_value_type_word, vv_holds_def, vv_at_def, expr_val_rel_def, expr_val_at_def,
@@ -2342,7 +2342,7 @@ Theorem vv_post_allocated_memory_intro:
   ~is_word_type (expr_type e) /\
   evaluate_type (get_tenv cx) (expr_type e) = SOME tv /\
   val_wf tv v /\ val_in_memory tv v (w2n w) s.vs_memory /\
-  stmt_state_rel ctx func cenv cx es' s /\
+  stmt_state_rel H ctx func cenv cx es' s /\
   p.ptr_location = LocMemory /\ eval_operand p.ptr_operand s = SOME w /\
   FLOOKUP s.vs_allocas aid = SOME (b,sz) /\
   sa.cs_next_id <= aid /\ aid < sb.cs_next_id /\
@@ -2351,7 +2351,7 @@ Theorem vv_post_allocated_memory_intro:
      b + sz <= lb \/ lb + lsz <= b) /\
   wb_frame cenv es es' sa s0 s /\
   (~expr_has_effect e ==> pure_frame cenv func es sa s0 s) ==>
-  vv_post ctx func cenv cx e es sa sb s0 es' (Value v)
+  vv_post H ctx func cenv cx e es sa sb s0 es' (Value v)
     (LocatedValue (expr_type e) p) s
 Proof
   strip_tac >> irule vv_post_frame_intro >>
@@ -2520,7 +2520,7 @@ Theorem compile_typed_unary_builtin_vv_sim:
     ?x sm. lower_value compile_expr cenv (expr_type e) e sa = (x,sm) /\
       code x sm = (vv,sb)) /\
   (!x. cs_appends (code x)) /\
-  (!sa sm sb x vv s0 v gs es' s.
+  (!st0 sa sm sb x vv s0 v gs es' s.
     lower_value compile_expr cenv (expr_type e) e sa = (x,sm) /\
     code x sm = (vv,sb) /\ fn_has_code sm sb func /\
     fn_inst_ids_distinct func /\ local_ptrs_reserved cenv sa /\
@@ -2529,14 +2529,17 @@ Theorem compile_typed_unary_builtin_vv_sim:
       (INL v,es') /\
     value_has_type (BaseTV bty) v /\ expr_sim_inv cenv cx env es' /\
     expr_res_ok (builtin_result cx es'.accounts ann bt [expr_type e] [v]) /\
-    expr_post ctx func cenv cx e es sa sm s0 es' v x s /\ ~s.vs_halted /\
+    (!H. valid_horizon cx st0 H es'.storage_trace ==>
+       expr_post H ctx func cenv cx e es sa sm s0 es' v x s) /\
+    (?H. valid_horizon cx st0 H es'.storage_trace) /\ ~s.vs_halted /\
     s.vs_current_bb = sm.cs_current_bb /\
     s.vs_inst_idx = LENGTH sm.cs_current_insts ==>
     ?n r. gas_marked_path F ctx func s n r /\
       ((?t rv. r = OK t /\
           builtin_result cx es'.accounts ann bt [expr_type e] [v] = INL rv /\
-          vv_post ctx func cenv cx (Builtin ann bt [e]) es sa sb s0 es'
-            (Value rv) vv t /\
+          (!H. valid_horizon cx st0 H es'.storage_trace ==>
+             vv_post H ctx func cenv cx (Builtin ann bt [e]) es sa sb s0 es'
+               (Value rv) vv t) /\
           t.vs_current_bb = sb.cs_current_bb /\
           t.vs_inst_idx = LENGTH sb.cs_current_insts) \/
        (exit_result r /\
@@ -2564,7 +2567,7 @@ Proof
   irule expr_sim_suffix >>
   first_assum (irule_at (Pat `expr_sim _ _ _ _ _ _ _`)) >>
   first_assum (irule_at (Pat `lower_value _ _ _ _ _ = _`)) >>
-  simp[] >> conj_tac
+  simp[storage_trace_frame_def] >> conj_tac
   >- (rpt strip_tac >> irule expr_exit_INR_cast >> simp[]) >>
   rpt strip_tac >>
   drule_at (Pat `bind _ _ _ = _`)
@@ -2575,7 +2578,8 @@ Proof
     (qpat_x_assum `!gs res ee. _` (qspec_then `gs` mp_tac) >> simp[bind_def] >>
      Cases_on `builtin_result cx ee.accounts ann bt [expr_type e] [v]` >>
      gvs[expr_vv_res_ok_def, expr_res_ok_def]) >>
-  qpat_x_assum `!sa sm sb x vv s0 v gs es' s. _` drule_all >> strip_tac >>
+  qpat_x_assum `!st0 sa sm sb x vv s0 v gs es' s. _`
+    (drule_all o SIMP_RULE bool_ss [PULL_EXISTS]) >> strip_tac >>
   `ee with gas_obs := [] = ee` by
     simp[evaluation_state_component_equality] >>
   qexists_tac `REPLICATE n F` >>
@@ -2584,6 +2588,21 @@ Proof
                    INL w => INL (Value w) | INR exc => INR exc`, `ee`, `r`] >>
   simp[expr_exit_success_map] >>
   Cases_on `builtin_result cx ee.accounts ann bt [expr_type e] [v]` >> gvs[]
+QED
+
+Theorem sha256_continuation_frame[local]:
+  storage_trace_frame (\es1.
+    case builtin_result cx es1.accounts ann Sha256 [ty] [v] of
+      INR exc => (INR exc, es1)
+    | INL w => (do precompile_call_success Sha256; return (Value w) od) es1)
+Proof
+  `!w. storage_trace_frame
+         (do precompile_call_success Sha256; return (Value w) od)` by
+    simp[storage_trace_frame_ignore_bind, storage_trace_frame_return,
+         storage_trace_frame_precompile_call_success] >>
+  simp[storage_trace_frame_def] >> rpt gen_tac >>
+  Cases_on `builtin_result cx st.accounts ann Sha256 [ty] [v]` >> simp[] >>
+  fs[storage_trace_frame_def]
 QED
 
 (* The sha256 composition: the operand, then the digest's precompile call,
@@ -2595,7 +2614,7 @@ Theorem compile_typed_sha256_unary_vv_sim:
     ?x sm. lower_value compile_expr cenv (expr_type e) e sa = (x,sm) /\
       code x sm = (vv,sb)) /\
   (!x. cs_appends (code x)) /\
-  (!sa sm sb x vv s0 v gs es1 s res es2.
+  (!st0 sa sm sb x vv s0 v gs es1 s res es2.
     lower_value compile_expr cenv (expr_type e) e sa = (x,sm) /\
     code x sm = (vv,sb) /\ fn_has_code sm sb func /\
     fn_inst_ids_distinct func /\ local_ptrs_reserved cenv sa /\
@@ -2608,13 +2627,16 @@ Theorem compile_typed_sha256_unary_vv_sim:
        INR exc => (INR exc,es1)
      | INL w => (do precompile_call_success Sha256; return (Value w) od) es1) =
        (res,es2) /\
-    expr_post ctx func cenv cx e es sa sm s0 es1 v x s /\ ~s.vs_halted /\
+    (!H. valid_horizon cx st0 H es1.storage_trace ==>
+       expr_post H ctx func cenv cx e es sa sm s0 es1 v x s) /\
+    (?H. valid_horizon cx st0 H es1.storage_trace) /\ ~s.vs_halted /\
     s.vs_current_bb = sm.cs_current_bb /\
     s.vs_inst_idx = LENGTH sm.cs_current_insts ==>
     ?n r. gas_marked_path F ctx func s n r /\
       ((?t rv. r = OK t /\ res = INL rv /\
-          vv_post ctx func cenv cx (Builtin ann Sha256 [e]) es sa sb s0 es2
-            rv vv t /\
+          (!H. valid_horizon cx st0 H es2.storage_trace ==>
+             vv_post H ctx func cenv cx (Builtin ann Sha256 [e]) es sa sb s0 es2
+               rv vv t) /\
           t.vs_current_bb = sb.cs_current_bb /\
           t.vs_inst_idx = LENGTH sb.cs_current_insts) \/
        (exit_result r /\ expr_exit res r))) ==>
@@ -2637,6 +2659,7 @@ Proof
   first_assum (irule_at (Pat `lower_value _ _ _ _ _ = _`)) >>
   simp[] >> conj_tac
   >- (rpt strip_tac >> irule expr_exit_INR_cast >> simp[]) >>
+  conj_tac >- simp[sha256_continuation_frame] >>
   rpt strip_tac >>
   drule_at (Pat `bind _ _ _ = _`)
     (CONV_RULE (DEPTH_CONV ETA_CONV) expr_body_pre_base_result) >>
@@ -2650,7 +2673,8 @@ Proof
   `expr_vv_res_ok res` by
     (qpat_x_assum `!gs res ee. _` (qspec_then `gs` mp_tac) >> simp[bind_def] >>
      disch_then irule >> gvs[]) >>
-  qpat_x_assum `!sa sm sb x vv s0 v gs es1 s res es2. _` drule_all >> strip_tac >>
+  qpat_x_assum `!st0 sa sm sb x vv s0 v gs es1 s res es2. _`
+    (drule_all o SIMP_RULE bool_ss [PULL_EXISTS]) >> strip_tac >>
   drule sha256_continuation_gas_obs >> strip_tac >>
   `es2 with gas_obs := [] = es2` by
     (first_x_assum (qspec_then `[]` mp_tac) >>
@@ -2704,11 +2728,11 @@ Proof
 QED
 
 Theorem keccak_word_vv_post:
-  stmt_state_rel ctx func cenv cx es' s /\
+  stmt_state_rel H ctx func cenv cx es' s /\
   eval_operand op s = SOME (word_of_bytes T (0w:bytes32) (Keccak_256_w64 bs)) /\
   wb_frame cenv es es' sa s0 s /\
   (~expr_has_effect e ==> pure_frame cenv func es sa s0 s) ==>
-  vv_post ctx func cenv cx (Builtin (BaseT (BytesT (Fixed 32))) bt [e])
+  vv_post H ctx func cenv cx (Builtin (BaseT (BytesT (Fixed 32))) bt [e])
     es sa sb s0 es' (Value (BytesV (Keccak_256_w64 bs)))
     (StackValue (BaseT (BytesT (Fixed 32))) op) s
 Proof
@@ -2721,7 +2745,7 @@ Proof
 QED
 
 Theorem keccak_fixed_post_run:
-  expr_post ctx func cenv cx e es sa sm s0 es' (BytesV bs) x s /\
+  expr_post H ctx func cenv cx e es sa sm s0 es' (BytesV bs) x s /\
   expr_type e = BaseT (BytesT (Fixed m)) /\
   value_has_type (BaseTV (BytesT (Fixed m))) (BytesV bs) /\ m <= 32 /\
   lower_value compile_expr cenv (expr_type e) e sa = (x,sm) /\
@@ -2730,14 +2754,14 @@ Theorem keccak_fixed_post_run:
   local_ptrs_reserved cenv sa /\ local_ptrs_reserved cenv sm /\
   MAP FDOM es.scopes = MAP FDOM es'.scopes ==>
   ?t. run_inst_seq (emitted_insts sm sb) s = OK t /\
-    vv_post ctx func cenv cx (Builtin (BaseT (BytesT (Fixed 32))) Keccak256 [e])
+    vv_post H ctx func cenv cx (Builtin (BaseT (BytesT (Fixed 32))) Keccak256 [e])
       es sa sb s0 es' (Value (BytesV (Keccak_256_w64 bs)))
       (StackValue (BaseT (BytesT (Fixed 32))) op) t
 Proof
   strip_tac >> drule_all hash_fixed_post_view >> strip_tac >>
   `!z. x = Var z ==> not_fresh_at sm z` by
     (drule_at (Pos hd) compile_lower_value_var >> simp[]) >>
-  `stmt_state_rel ctx func cenv cx es' s` by metis_tac[expr_post_state] >>
+  `stmt_state_rel H ctx func cenv cx es' s` by metis_tac[expr_post_state] >>
   `MEM (mk_inst sm.cs_next_id ALLOCA [Lit 32w]
     [STRING #"%" (toString sm.cs_next_var)]) (fn_insts func)` by
     (irule (SRULE [] (Q.INST [`sha` |-> `F`] hash_fixed_alloca_code)) >>
@@ -2760,7 +2784,7 @@ Proof
 QED
 
 Theorem keccak_memory_post_run:
-  expr_post ctx func cenv cx e es sa sm s0 es' v x s /\
+  expr_post H ctx func cenv cx e es sa sm s0 es' v x s /\
   lower_value compile_expr cenv (expr_type e) e sa = (x,sm) /\
   compile_keccak256_bytes x sm = (op,sb) /\
   eval_operand x s = SOME (n2w b) /\
@@ -2769,14 +2793,14 @@ Theorem keccak_memory_post_run:
   b + 32 < dimword (:256) /\ LENGTH bs < dimword (:256) /\
   local_ptrs_reserved cenv sa /\ local_ptrs_reserved cenv sm ==>
   ?t. run_inst_seq (emitted_insts sm sb) s = OK t /\
-    vv_post ctx func cenv cx (Builtin (BaseT (BytesT (Fixed 32))) Keccak256 [e])
+    vv_post H ctx func cenv cx (Builtin (BaseT (BytesT (Fixed 32))) Keccak256 [e])
       es sa sb s0 es' (Value (BytesV (Keccak_256_w64 bs)))
       (StackValue (BaseT (BytesT (Fixed 32))) op) t
 Proof
   strip_tac >>
   `!z. x = Var z ==> not_fresh_at sm z` by
     (drule_at (Pos hd) compile_lower_value_var >> simp[]) >>
-  `stmt_state_rel ctx func cenv cx es' s` by metis_tac[expr_post_state] >>
+  `stmt_state_rel H ctx func cenv cx es' s` by metis_tac[expr_post_state] >>
   drule_at (Pos hd) compile_keccak256_bytes_frame >> simp[] >>
   disch_then (drule_at (Pos hd)) >> simp[] >>
   disch_then (drule_at (Pat `mem_bytes_at _ _ _ = _`)) >> simp[] >>
@@ -2797,7 +2821,7 @@ Proof
 QED
 
 Theorem keccak_typed_post_run:
-  expr_post ctx func cenv cx e es sa sm s0 es' v x s /\
+  expr_post H ctx func cenv cx e es sa sm s0 es' v x s /\
   expr_type e = BaseT bty /\ is_bytes_or_string_type (expr_type e) /\
   evaluate_type (get_tenv cx) (expr_type e) = SOME (BaseTV bty) /\
   value_has_type (BaseTV bty) v /\
@@ -2812,7 +2836,7 @@ Theorem keccak_typed_post_run:
   ?t. run_inst_seq (emitted_insts sm sb) s = OK t /\
     ?r. builtin_result cx es'.accounts (BaseT (BytesT (Fixed 32)))
       Keccak256 [expr_type e] [v] = INL r /\
-    vv_post ctx func cenv cx (Builtin (BaseT (BytesT (Fixed 32))) Keccak256 [e])
+    vv_post H ctx func cenv cx (Builtin (BaseT (BytesT (Fixed 32))) Keccak256 [e])
       es sa sb s0 es' (Value r) (StackValue (BaseT (BytesT (Fixed 32))) op) t
 Proof
   strip_tac >> Cases_on `bty` >>
@@ -2877,17 +2901,17 @@ Theorem compile_typed_stack_unary_builtin_vv_sim:
      sb.cs_current_insts = sm.cs_current_insts ++ emitted_insts sm sb /\
      EVERY (\i. i.inst_opcode <> INVOKE /\ ~is_terminator i.inst_opcode)
        (emitted_insts sm sb)) /\
-  (!sa sm sb x op s0 v es' s.
+  (!H sa sm sb x op s0 v es' s.
      lower_value compile_expr cenv (expr_type e) e sa = (x,sm) /\
      code x sm = (op,sb) /\ fn_has_code sm sb func /\
      fn_inst_ids_distinct func /\ local_ptrs_reserved cenv sa /\
      local_ptrs_reserved cenv sm /\ value_has_type (BaseTV bty) v /\
      evaluate_type (get_tenv cx) (expr_type e) = SOME (BaseTV bty) /\
-     expr_post ctx func cenv cx e es sa sm s0 es' v x s /\
+     expr_post H ctx func cenv cx e es sa sm s0 es' v x s /\
      MAP FDOM es.scopes = MAP FDOM es'.scopes ==>
      ?t. run_inst_seq (emitted_insts sm sb) s = OK t /\
        ?r. builtin_result cx es'.accounts ann bt [expr_type e] [v] = INL r /\
-       vv_post ctx func cenv cx (Builtin ann bt [e]) es sa sb s0 es' (Value r)
+       vv_post H ctx func cenv cx (Builtin ann bt [e]) es sa sb s0 es' (Value r)
          (StackValue ann op) t) ==>
   expr_vv_sim ctx func cenv cx ty (Builtin ann bt [e]) es
 Proof
@@ -2912,14 +2936,19 @@ Proof
   drule (CONV_RULE (DEPTH_CONV ETA_CONV)
     exprSimWordArgsTheory.forced_eval_expr_preserves_scopes_dom) >>
   simp[] >> strip_tac >>
-  qpat_x_assum `!sa sm sb x op s0 v es' s. _` drule_all >>
+  qpat_assum `!H. valid_horizon _ _ H _ ==> expr_post _ _ _ _ _ _ _ _ _ _ _ _ _ _`
+    (drule_then assume_tac) >>
+  qpat_assum `!H sa sm sb x op s0 v es' s. _` drule_all >>
   simp[] >> strip_tac >>
   qpat_x_assum `!x sm op sb. _` drule >> strip_tac >>
   qpat_x_assum `same_blocks _ _`
     (strip_assume_tac o REWRITE_RULE [same_blocks_def]) >>
   drule_all hash_run_path >>
   disch_then (qspec_then `ctx` strip_assume_tac) >>
-  goal_assum drule >> gvs[]
+  goal_assum drule >> gvs[] >> rpt strip_tac >>
+  qpat_x_assum `!H. valid_horizon _ _ H _ ==> expr_post _ _ _ _ _ _ _ _ _ _ _ _ _ _`
+    drule >> strip_tac >>
+  qpat_x_assum `!H sa sm sb x op s0 v es' s. _` drule_all >> strip_tac >> gvs[]
 QED
 
 Theorem compile_keccak256_typed_vv_sim:
@@ -2959,11 +2988,11 @@ Proof
 QED
 
 Theorem hash_digest_word_vv_post:
-  stmt_state_rel ctx func cenv cx es' s /\
+  stmt_state_rel H ctx func cenv cx es' s /\
   eval_operand op s = SOME w /\
   wb_frame cenv es es' sa s0 s /\
   (~expr_has_effect e ==> pure_frame cenv func es sa s0 s) ==>
-  vv_post ctx func cenv cx (Builtin (BaseT (BytesT (Fixed 32))) bt [e])
+  vv_post H ctx func cenv cx (Builtin (BaseT (BytesT (Fixed 32))) bt [e])
     es sa sb s0 es' (Value (BytesV (word_to_bytes w T)))
     (StackValue (BaseT (BytesT (Fixed 32))) op) s
 Proof
@@ -2983,7 +3012,7 @@ Theorem sha256_fixed_fail_frag:
     (emitted_insts sa sb) /\
   (!z. x = Var z ==> not_fresh_at sa z) /\ eval_operand x s = SOME w /\
   ~(?outcome rest. s.vs_outcomes = outcome::rest /\ outcome.co_success) /\
-  stmt_state_rel ctx func cenv cx es s /\ fn_inst_ids_distinct func /\
+  stmt_state_rel H ctx func cenv cx es s /\ fn_inst_ids_distinct func /\
   local_ptrs_reserved cenv sa /\
   MEM (mk_inst sa.cs_next_id ALLOCA [Lit 32w]
     [STRING #"%" (toString sa.cs_next_var)]) (fn_insts func) /\
@@ -3006,7 +3035,7 @@ Theorem sha256_memory_fail_frag:
   eval_operand x s = SOME (n2w b) /\
   mem_word_at b s.vs_memory = n2w len /\ b < dimword (:256) /\
   ~(?outcome rest. s.vs_outcomes = outcome::rest /\ outcome.co_success) /\
-  stmt_state_rel ctx func cenv cx es s /\ fn_inst_ids_distinct func /\
+  stmt_state_rel H ctx func cenv cx es s /\ fn_inst_ids_distinct func /\
   local_ptrs_reserved cenv sa /\
   MEM (mk_inst (sa.cs_next_id + 2) ALLOCA [Lit 32w]
     [STRING #"%" (toString (sa.cs_next_var + 2))]) (fn_insts func) ==>
@@ -3019,7 +3048,7 @@ QED
 
 Theorem sha256_fixed_post_run:
   s.vs_outcomes = outcome::rest /\ outcome.co_success /\
-  expr_post ctx func cenv cx e es sa sm s0 es' (BytesV bs) x s /\
+  expr_post H ctx func cenv cx e es sa sm s0 es' (BytesV bs) x s /\
   expr_type e = BaseT (BytesT (Fixed m)) /\
   value_has_type (BaseTV (BytesT (Fixed m))) (BytesV bs) /\ m <= 32 /\
   lower_value compile_expr cenv (expr_type e) e sa = (x,sm) /\
@@ -3028,7 +3057,7 @@ Theorem sha256_fixed_post_run:
   local_ptrs_reserved cenv sa /\ local_ptrs_reserved cenv sm /\
   MAP FDOM es.scopes = MAP FDOM es'.scopes ==>
   ?t. run_inst_seq (emitted_insts sm sb) s = OK t /\
-    vv_post ctx func cenv cx (Builtin (BaseT (BytesT (Fixed 32))) Sha256 [e])
+    vv_post H ctx func cenv cx (Builtin (BaseT (BytesT (Fixed 32))) Sha256 [e])
       es sa sb s0 (es' with outcomes := SOME rest)
       (Value (BytesV (word_to_bytes (SHA_256_bytes bs) T)))
       (StackValue (BaseT (BytesT (Fixed 32))) op) t
@@ -3036,7 +3065,7 @@ Proof
   strip_tac >> drule_all hash_fixed_post_view >> strip_tac >>
   `!z. x = Var z ==> not_fresh_at sm z` by
     (drule_at (Pos hd) compile_lower_value_var >> simp[]) >>
-  `stmt_state_rel ctx func cenv cx es' s` by metis_tac[expr_post_state] >>
+  `stmt_state_rel H ctx func cenv cx es' s` by metis_tac[expr_post_state] >>
   drule_all (SRULE [] (Q.INST [`sha` |-> `T`] hash_fixed_alloca_code)) >>
   strip_tac >>
   qpat_x_assum `LENGTH bs = m` (SUBST_ALL_TAC o SYM) >>
@@ -3060,7 +3089,7 @@ QED
 
 Theorem sha256_memory_post_run:
   s.vs_outcomes = outcome::rest /\ outcome.co_success /\
-  expr_post ctx func cenv cx e es sa sm s0 es' v x s /\
+  expr_post H ctx func cenv cx e es sa sm s0 es' v x s /\
   lower_value compile_expr cenv (expr_type e) e sa = (x,sm) /\
   compile_sha256_bytes x sm = (op,sb) /\ fn_has_code sm sb func /\
   fn_inst_ids_distinct func /\
@@ -3071,7 +3100,7 @@ Theorem sha256_memory_post_run:
   local_ptrs_reserved cenv sa /\ local_ptrs_reserved cenv sm /\
   MAP FDOM es.scopes = MAP FDOM es'.scopes ==>
   ?t. run_inst_seq (emitted_insts sm sb) s = OK t /\
-    vv_post ctx func cenv cx (Builtin (BaseT (BytesT (Fixed 32))) Sha256 [e])
+    vv_post H ctx func cenv cx (Builtin (BaseT (BytesT (Fixed 32))) Sha256 [e])
       es sa sb s0 (es' with outcomes := SOME rest)
       (Value (BytesV (word_to_bytes (SHA_256_bytes bs) T)))
       (StackValue (BaseT (BytesT (Fixed 32))) op) t
@@ -3079,7 +3108,7 @@ Proof
   strip_tac >>
   `!z. x = Var z ==> not_fresh_at sm z` by
     (drule_at (Pos hd) compile_lower_value_var >> simp[]) >>
-  `stmt_state_rel ctx func cenv cx es' s` by metis_tac[expr_post_state] >>
+  `stmt_state_rel H ctx func cenv cx es' s` by metis_tac[expr_post_state] >>
   drule_all hash_sha256_memory_alloca_code >> strip_tac >>
   drule_at (Pos hd) compile_sha256_bytes_frame >> simp[] >>
   disch_then (drule_at (Pos hd)) >> simp[] >>
@@ -3102,7 +3131,7 @@ QED
 
 Theorem sha256_typed_post_run:
   s.vs_outcomes = outcome::rest /\ outcome.co_success /\
-  expr_post ctx func cenv cx e es sa sm s0 es' v x s /\
+  expr_post H ctx func cenv cx e es sa sm s0 es' v x s /\
   expr_type e = BaseT bty /\ is_bytes_or_string_type (expr_type e) /\
   evaluate_type (get_tenv cx) (expr_type e) = SOME (BaseTV bty) /\
   value_has_type (BaseTV bty) v /\
@@ -3117,7 +3146,7 @@ Theorem sha256_typed_post_run:
   ?t. run_inst_seq (emitted_insts sm sb) s = OK t /\
     ?r. builtin_result cx es'.accounts (BaseT (BytesT (Fixed 32)))
       Sha256 [expr_type e] [v] = INL r /\
-    vv_post ctx func cenv cx (Builtin (BaseT (BytesT (Fixed 32))) Sha256 [e])
+    vv_post H ctx func cenv cx (Builtin (BaseT (BytesT (Fixed 32))) Sha256 [e])
       es sa sb s0 (es' with outcomes := SOME rest)
       (Value r) (StackValue (BaseT (BytesT (Fixed 32))) op) t
 Proof
@@ -3162,7 +3191,7 @@ QED
 
 Theorem sha256_typed_fail_frag:
   ~(?outcome rest. s.vs_outcomes = outcome::rest /\ outcome.co_success) /\
-  expr_post ctx func cenv cx e es sa sm s0 es' v x s /\
+  expr_post H ctx func cenv cx e es sa sm s0 es' v x s /\
   expr_type e = BaseT bty /\ is_bytes_or_string_type (expr_type e) /\
   evaluate_type (get_tenv cx) (expr_type e) = SOME (BaseTV bty) /\
   value_has_type (BaseTV bty) v /\
@@ -3181,7 +3210,7 @@ Proof
   drule_all sha256_typed_suffix_shape >> strip_tac >>
   `!z. x = Var z ==> not_fresh_at sm z` by
     (drule_at (Pos hd) compile_lower_value_var >> simp[]) >>
-  `stmt_state_rel ctx func cenv cx es' s` by metis_tac[expr_post_state] >>
+  `stmt_state_rel H ctx func cenv cx es' s` by metis_tac[expr_post_state] >>
   Cases_on `bty` >> gvs[is_bytes_or_string_type_def] >>
   Cases_on `v` >> gvs[vyperTypingTheory.value_has_type_def]
   >~ [`expr_type e = BaseT (BytesT bd)`]
@@ -3206,7 +3235,7 @@ Proof
 QED
 
 Theorem sha256_typed_effectful_suffix:
-  expr_post ctx func cenv cx e es sa sm s0 es1 v x s /\
+  expr_post H ctx func cenv cx e es sa sm s0 es1 v x s /\
   expr_type e = BaseT bty /\ is_bytes_or_string_type (expr_type e) /\
   evaluate_type (get_tenv cx) (expr_type e) = SOME (BaseTV bty) /\
   value_has_type (BaseTV bty) v /\
@@ -3223,7 +3252,7 @@ Theorem sha256_typed_effectful_suffix:
     Sha256 [expr_type e] [v] = INL r ==>
   frag_exec ctx sm sb (\t. t = s)
     (\t. ?rv. res = INL rv /\
-      vv_post ctx func cenv cx (Builtin (BaseT (BytesT (Fixed 32))) Sha256 [e])
+      vv_post H ctx func cenv cx (Builtin (BaseT (BytesT (Fixed 32))) Sha256 [e])
         es sa sb s0 es2 rv (StackValue (BaseT (BytesT (Fixed 32))) op) t)
     (expr_exit res)
 Proof
@@ -3233,22 +3262,22 @@ Proof
   Cases_on `s.vs_outcomes`
   >- (gvs[ignore_bind_def, bind_def, sha256_source_outcome_step] >>
       irule sha256_typed_fail_frag >> simp[] >>
-      first_assum (irule_at (Pat `expr_post _ _ _ _ _ _ _ _ _ _ _ _ _`)) >>
+      first_assum (irule_at (Pat `expr_post H _ _ _ _ _ _ _ _ _ _ _ _ _`)) >>
       simp[]) >>
   rename1 `s.vs_outcomes = outcome::rest` >>
   Cases_on `outcome.co_success` >>
   gvs[ignore_bind_def, bind_def, sha256_source_outcome_step, return_def]
-  >- (drule_at (Pat `expr_post _ _ _ _ _ _ _ _ _ _ _ _ _`) sha256_typed_post_run >>
+  >- (drule_at (Pat `expr_post H _ _ _ _ _ _ _ _ _ _ _ _ _`) sha256_typed_post_run >>
       simp[] >> strip_tac >> gvs[] >>
       drule_at (Pos hd) sha256_typed_suffix_shape >> simp[] >> strip_tac >>
       irule hash_run_frag >> simp[] >> metis_tac[]) >>
   irule sha256_typed_fail_frag >> simp[] >>
-  first_assum (irule_at (Pat `expr_post _ _ _ _ _ _ _ _ _ _ _ _ _`)) >> simp[]
+  first_assum (irule_at (Pat `expr_post H _ _ _ _ _ _ _ _ _ _ _ _ _`)) >> simp[]
 QED
 
 Theorem sha256_typed_fail_run:
   ~(?outcome rest. s.vs_outcomes = outcome::rest /\ outcome.co_success) /\
-  expr_post ctx func cenv cx e es sa sm s0 es' v x s /\
+  expr_post H ctx func cenv cx e es sa sm s0 es' v x s /\
   expr_type e = BaseT bty /\ is_bytes_or_string_type (expr_type e) /\
   evaluate_type (get_tenv cx) (expr_type e) = SOME (BaseTV bty) /\
   value_has_type (BaseTV bty) v /\
@@ -3265,7 +3294,7 @@ Proof
   strip_tac >>
   `!z. x = Var z ==> not_fresh_at sm z` by
     (drule_at (Pos hd) compile_lower_value_var >> simp[]) >>
-  `stmt_state_rel ctx func cenv cx es' s` by metis_tac[expr_post_state] >>
+  `stmt_state_rel H ctx func cenv cx es' s` by metis_tac[expr_post_state] >>
   Cases_on `bty` >> gvs[is_bytes_or_string_type_def] >>
   Cases_on `v` >> gvs[vyperTypingTheory.value_has_type_def]
   >~ [`expr_type e = BaseT (BytesT bd)`]
@@ -3294,7 +3323,7 @@ QED
 
 Theorem sha256_typed_fail_path:
   ~(?outcome rest. s.vs_outcomes = outcome::rest /\ outcome.co_success) /\
-  expr_post ctx func cenv cx e es sa sm s0 es' v x s /\
+  expr_post H ctx func cenv cx e es sa sm s0 es' v x s /\
   expr_type e = BaseT bty /\ is_bytes_or_string_type (expr_type e) /\
   evaluate_type (get_tenv cx) (expr_type e) = SOME (BaseTV bty) /\
   value_has_type (BaseTV bty) v /\
@@ -3320,7 +3349,7 @@ QED
 (* The digest suffix as an actual counted path: its one GAS site, then the
    precompile call whose outcome the source consumes. *)
 Theorem sha256_typed_effectful_path:
-  expr_post ctx func cenv cx e es sa sm s0 es1 v x s /\
+  expr_post H ctx func cenv cx e es sa sm s0 es1 v x s /\
   expr_type e = BaseT bty /\ is_bytes_or_string_type (expr_type e) /\
   evaluate_type (get_tenv cx) (expr_type e) = SOME (BaseTV bty) /\
   value_has_type (BaseTV bty) v /\
@@ -3339,7 +3368,7 @@ Theorem sha256_typed_effectful_path:
   s.vs_inst_idx = LENGTH sm.cs_current_insts ==>
   ?n rr. gas_marked_path F ctx func s n rr /\
     ((?t rv. rr = OK t /\ res = INL rv /\
-        vv_post ctx func cenv cx (Builtin (BaseT (BytesT (Fixed 32))) Sha256 [e])
+        vv_post H ctx func cenv cx (Builtin (BaseT (BytesT (Fixed 32))) Sha256 [e])
           es sa sb s0 es2 rv (StackValue (BaseT (BytesT (Fixed 32))) op) t /\
         t.vs_current_bb = sb.cs_current_bb /\
         t.vs_inst_idx = LENGTH sb.cs_current_insts) \/
@@ -3350,13 +3379,13 @@ Proof
     (drule expr_post_state >> simp[stmt_state_rel_def, state_rel_def]) >>
   Cases_on `s.vs_outcomes`
   >- (gvs[ignore_bind_def, bind_def, sha256_source_outcome_step] >>
-      drule_at (Pat `expr_post _ _ _ _ _ _ _ _ _ _ _ _ _`) sha256_typed_fail_path >>
+      drule_at (Pat `expr_post H _ _ _ _ _ _ _ _ _ _ _ _ _`) sha256_typed_fail_path >>
       simp[] >> strip_tac >> goal_assum drule >>
       simp[exit_result_def, expr_exit_def]) >>
   rename1 `s.vs_outcomes = outcome::rest` >>
   Cases_on `outcome.co_success` >>
   gvs[ignore_bind_def, bind_def, sha256_source_outcome_step, return_def]
-  >- (drule_at (Pat `expr_post _ _ _ _ _ _ _ _ _ _ _ _ _`) sha256_typed_post_run >>
+  >- (drule_at (Pat `expr_post H _ _ _ _ _ _ _ _ _ _ _ _ _`) sha256_typed_post_run >>
       simp[] >> strip_tac >> gvs[] >>
       drule_at (Pos hd) sha256_typed_suffix_shape >> simp[] >> strip_tac >>
       pop_assum drule >> strip_tac >>
@@ -3365,7 +3394,7 @@ Proof
       drule_all hash_run_path >>
       disch_then (qspec_then `ctx` strip_assume_tac) >>
       goal_assum drule >> gvs[]) >>
-  drule_at (Pat `expr_post _ _ _ _ _ _ _ _ _ _ _ _ _`) sha256_typed_fail_path >>
+  drule_at (Pat `expr_post H _ _ _ _ _ _ _ _ _ _ _ _ _`) sha256_typed_fail_path >>
   simp[] >> strip_tac >> goal_assum drule >>
   simp[exit_result_def, expr_exit_def]
 QED
@@ -3420,7 +3449,7 @@ Proof
   disch_then (qspecl_then [`v`, `cx`, `es1.accounts`] mp_tac) >>
   simp[] >> strip_tac >> gvs[] >>
   irule sha256_typed_effectful_path >>
-  first_assum (irule_at (Pat `expr_post _ _ _ _ _ _ _ _ _ _ _ _ _`)) >> simp[] >>
+  first_assum (irule_at (Pat `expr_post H _ _ _ _ _ _ _ _ _ _ _ _ _`)) >> simp[] >>
   metis_tac[]
 QED
 
@@ -3429,11 +3458,11 @@ Theorem method_id_fixed_post_run:
   emit_op SHR [Lit 224w; hash] sm = (sel,sn) /\
   emit_op SHL [Lit 224w; sel] sn = (op,sb) /\
   eval_operand hash s = SOME w /\
-  stmt_state_rel ctx func cenv cx es' s /\ local_ptrs_reserved cenv sm /\
+  stmt_state_rel H ctx func cenv cx es' s /\ local_ptrs_reserved cenv sm /\
   sa.cs_next_var <= sm.cs_next_var /\ wb_frame cenv es es' sa s0 s /\
   (~expr_has_effect e ==> pure_frame cenv func es sa s0 s) ==>
   ?t. run_inst_seq (emitted_insts sm sb) s = OK t /\
-    vv_post ctx func cenv cx (Builtin (BaseT (BytesT (Fixed 4))) MethodId [e])
+    vv_post H ctx func cenv cx (Builtin (BaseT (BytesT (Fixed 4))) MethodId [e])
       es sa sb s0 es' (Value (BytesV (TAKE 4 (word_to_bytes w T))))
       (StackValue (BaseT (BytesT (Fixed 4))) op) t
 Proof
@@ -3457,14 +3486,14 @@ Theorem method_id_dynamic_post_run:
   emit_op ADD [buf.buf_operand; Lit 32w] st = (data,sd) /\
   emit_void MSTORE [data; word] sd = ((),sb) /\
   eval_operand hash s = SOME w /\
-  stmt_state_rel ctx func cenv cx es' s /\ fn_inst_ids_distinct func /\
+  stmt_state_rel H ctx func cenv cx es' s /\ fn_inst_ids_distinct func /\
   local_ptrs_reserved cenv sm /\ fn_has_code sm sb func /\
   sa.cs_next_var <= sm.cs_next_var /\ sa.cs_next_id <= sm.cs_next_id /\
   wb_frame cenv es es' sa s0 s /\ local_ptrs_reserved cenv sa /\
   MAP FDOM es.scopes = MAP FDOM es'.scopes /\
   (~expr_has_effect e ==> pure_frame cenv func es sa s0 s) ==>
   ?t. run_inst_seq (emitted_insts sm sb) s = OK t /\
-    vv_post ctx func cenv cx (Builtin (BaseT (BytesT (Dynamic 4))) MethodId [e])
+    vv_post H ctx func cenv cx (Builtin (BaseT (BytesT (Dynamic 4))) MethodId [e])
       es sa sb s0 es' (Value (BytesV (TAKE 4 (word_to_bytes w T))))
       (LocatedValue (BaseT (BytesT (Dynamic 4)))
         <|ptr_location := LocMemory; ptr_operand := buf.buf_operand|>) t
@@ -3544,7 +3573,7 @@ QED
 
 (* method_id hashes as keccak256 does; only the use of the word differs. *)
 Theorem method_id_hash_typed_post_run:
-  expr_post ctx func cenv cx e es sa sm s0 es' v x s /\
+  expr_post H ctx func cenv cx e es sa sm s0 es' v x s /\
   expr_type e = BaseT bty /\ is_bytes_or_string_type (expr_type e) /\
   evaluate_type (get_tenv cx) (expr_type e) = SOME (BaseTV bty) /\
   value_has_type (BaseTV bty) v /\
@@ -3557,7 +3586,7 @@ Theorem method_id_hash_typed_post_run:
     LENGTH bs = 32 /\
     eval_operand hash t = SOME
       (typed_val_to_w256 (BaseTV (BytesT (Fixed 32))) (BytesV bs)) /\
-    stmt_state_rel ctx func cenv cx es' t /\ wb_frame cenv es es' sa s0 t /\
+    stmt_state_rel H ctx func cenv cx es' t /\ wb_frame cenv es es' sa s0 t /\
     (~expr_has_effect e ==> pure_frame cenv func es sa s0 t) /\
     !ann. builtin_result cx es'.accounts ann MethodId [expr_type e] [v] =
       INL (BytesV (TAKE 4 bs))
@@ -3608,7 +3637,7 @@ Proof
 QED
 
 Theorem method_id_runtime_typed_post_run:
-  expr_post ctx func cenv cx e es sa sm s0 es' v x s /\
+  expr_post H ctx func cenv cx e es sa sm s0 es' v x s /\
   expr_type e = BaseT bty /\ is_bytes_or_string_type (expr_type e) /\
   evaluate_type (get_tenv cx) (expr_type e) = SOME (BaseTV bty) /\
   value_has_type (BaseTV bty) v /\
@@ -3621,7 +3650,7 @@ Theorem method_id_runtime_typed_post_run:
     builtin_result cx es'.accounts
       (BaseT (BytesT (if fixed then Fixed 4 else Dynamic 4)))
       MethodId [expr_type e] [v] = INL r /\
-    vv_post ctx func cenv cx
+    vv_post H ctx func cenv cx
       (Builtin (BaseT (BytesT (if fixed then Fixed 4 else Dynamic 4))) MethodId [e])
       es sa sb s0 es' (Value r)
       (if fixed then StackValue (BaseT (BytesT (Fixed 4))) op else
@@ -3685,11 +3714,11 @@ QED
 
 Theorem vv_post_pointer_cong:
   p.ptr_operand = q.ptr_operand /\ p.ptr_location = q.ptr_location /\
-  vv_post ctx func cenv cx e es sa sb s0 es' r (LocatedValue ty p) t ==>
-  vv_post ctx func cenv cx e es sa sb s0 es' r (LocatedValue ty q) t
+  vv_post H ctx func cenv cx e es sa sb s0 es' r (LocatedValue ty p) t ==>
+  vv_post H ctx func cenv cx e es sa sb s0 es' r (LocatedValue ty q) t
 Proof
   strip_tac >>
-  qpat_x_assum `vv_post ctx _ _ _ _ _ _ _ _ _ _ _ _` mp_tac >>
+  qpat_x_assum `vv_post H ctx _ _ _ _ _ _ _ _ _ _ _ _` mp_tac >>
   asm_rewrite_tac[vv_post_def, vv_holds_def, vv_at_def, vv_own_def,
                   vv_storage_live_def]
 QED
@@ -3752,6 +3781,8 @@ Resume compile_method_id_runtime_typed_vv_sim[continuation]:
   drule (CONV_RULE (DEPTH_CONV ETA_CONV)
     exprSimWordArgsTheory.forced_eval_expr_preserves_scopes_dom) >>
   simp[] >> strip_tac >>
+  qpat_assum `!H. valid_horizon _ _ H _ ==> expr_post _ _ _ _ _ _ _ _ _ _ _ _ _ _`
+    (drule_then assume_tac) >>
   drule_at (Pos hd) method_id_runtime_typed_post_run >> simp[] >>
   disch_then drule_all >> strip_tac >>
   drule_at (Pos hd) method_id_typed_suffix_shape >> simp[] >>
@@ -3760,7 +3791,11 @@ Resume compile_method_id_runtime_typed_vv_sim[continuation]:
     (strip_assume_tac o REWRITE_RULE [same_blocks_def]) >>
   drule_all hash_run_path >>
   disch_then (qspec_then `ctx` strip_assume_tac) >>
-  goal_assum drule >> simp[] >>
+  goal_assum drule >> simp[] >> rpt strip_tac >>
+  qpat_x_assum `!H. valid_horizon _ _ H _ ==> expr_post _ _ _ _ _ _ _ _ _ _ _ _ _ _`
+    drule >> strip_tac >>
+  drule_at (Pos hd) method_id_runtime_typed_post_run >> simp[] >>
+  disch_then drule_all >> strip_tac >> gvs[] >>
   Cases_on `fixed` >> gvs[contextTheory.mk_ptr_def] >>
   irule vv_post_pointer_cong >> goal_assum (drule_at Any) >> simp[]
 QED

@@ -30,13 +30,13 @@ Theorem word_builtin_mem_success:
       EVERY (\x. !z. x = Var z ==> not_fresh_at sa z) xs /\
       fn_has_code sa sb func /\ fn_inst_ids_distinct func /\
       local_ptrs_reserved cenv sa /\
-      stmt_state_rel ctx func cenv cx es0 s0 /\ alloca_history func s0 /\
+      stmt_state_rel H ctx func cenv cx es0 s0 /\ alloca_history func s0 /\
       LIST_REL (\x v. eval_operand x s0 = SOME (val_to_w256 v)) xs vs /\
       ~s0.vs_halted /\ s0.vs_current_bb = sa.cs_current_bb /\
       s0.vs_inst_idx = LENGTH sa.cs_current_insts ==>
       ?r. gas_marked_path T ctx func s0 0 r /\
         ((?s v. r = OK s /\ res = INL v /\ word_value v /\
-                stmt_state_rel ctx func cenv cx es0 s /\
+                stmt_state_rel H ctx func cenv cx es0 s /\
                 eval_operand op s = SOME (val_to_w256 v) /\
                 (!z w. not_fresh_at sa z /\ lookup_var z s0 = SOME w ==>
                        lookup_var z s = SOME w) /\
@@ -102,13 +102,13 @@ Theorem word_builtin_mem_revert:
       EVERY (\x. !z. x = Var z ==> not_fresh_at sa z) xs /\
       fn_has_code sa sb func /\ fn_inst_ids_distinct func /\
       local_ptrs_reserved cenv sa /\
-      stmt_state_rel ctx func cenv cx es0 s0 /\ alloca_history func s0 /\
+      stmt_state_rel H ctx func cenv cx es0 s0 /\ alloca_history func s0 /\
       LIST_REL (\x v. eval_operand x s0 = SOME (val_to_w256 v)) xs vs /\
       ~s0.vs_halted /\ s0.vs_current_bb = sa.cs_current_bb /\
       s0.vs_inst_idx = LENGTH sa.cs_current_insts ==>
       ?r. gas_marked_path T ctx func s0 0 r /\
         ((?s v. r = OK s /\ res = INL v /\ word_value v /\
-                stmt_state_rel ctx func cenv cx es0 s /\
+                stmt_state_rel H ctx func cenv cx es0 s /\
                 eval_operand op s = SOME (val_to_w256 v) /\
                 (!z w. not_fresh_at sa z /\ lookup_var z s0 = SOME w ==>
                        lookup_var z s = SOME w) /\
@@ -161,7 +161,7 @@ Theorem compile_pow_mod256_word_frag_mem:
       EVERY (\x. !z. x = Var z ==> not_fresh_at sa z) xs /\
       fn_has_code sa sb func /\ fn_inst_ids_distinct func /\
       local_ptrs_reserved cenv sa /\
-      stmt_state_rel ctx func cenv cx es s0 /\ alloca_history func s0 /\
+      stmt_state_rel H ctx func cenv cx es s0 /\ alloca_history func s0 /\
       LIST_REL (\x v. eval_operand x s0 = SOME (val_to_w256 v)) xs
         [IntV (&w2n a); IntV (&w2n b)] /\
       ~s0.vs_halted /\ s0.vs_current_bb = sa.cs_current_bb /\
@@ -170,7 +170,7 @@ Theorem compile_pow_mod256_word_frag_mem:
         ((?s v. r = OK s /\
                 builtin_result cx es.accounts ann PowMod256 ts
                   [IntV (&w2n a); IntV (&w2n b)] = INL v /\ word_value v /\
-                stmt_state_rel ctx func cenv cx es s /\
+                stmt_state_rel H ctx func cenv cx es s /\
                 eval_operand op s = SOME (val_to_w256 v) /\
                 (!z w. not_fresh_at sa z /\ lookup_var z s0 = SOME w ==>
                        lookup_var z s = SOME w) /\
@@ -202,14 +202,14 @@ Theorem compile_pow_mod256_typed_frag_mem:
       EVERY (\x. !z. x = Var z ==> not_fresh_at sa z) xs /\
       fn_has_code sa sb func /\ fn_inst_ids_distinct func /\
       local_ptrs_reserved cenv sa /\
-      stmt_state_rel ctx func cenv cx es s0 /\ alloca_history func s0 /\
+      stmt_state_rel H ctx func cenv cx es s0 /\ alloca_history func s0 /\
       LIST_REL (\x v. eval_operand x s0 = SOME (val_to_w256 v)) xs [v1; v2] /\
       ~s0.vs_halted /\ s0.vs_current_bb = sa.cs_current_bb /\
       s0.vs_inst_idx = LENGTH sa.cs_current_insts ==>
       ?r. gas_marked_path T ctx func s0 0 r /\
         ((?s v. r = OK s /\
                 builtin_result cx es.accounts ann PowMod256 ts [v1; v2] = INL v /\
-                word_value v /\ stmt_state_rel ctx func cenv cx es s /\
+                word_value v /\ stmt_state_rel H ctx func cenv cx es s /\
                 eval_operand op s = SOME (val_to_w256 v) /\
                 (!z w. not_fresh_at sa z /\ lookup_var z s0 = SOME w ==>
                        lookup_var z s = SOME w) /\
@@ -240,7 +240,7 @@ Theorem compile_modular_word_frag_mem:
         [IntV (&w2n a); IntV (&w2n b); IntV (&w2n c)]) /\
       EVERY (\x. !z. x = Var z ==> not_fresh_at sa z) xs /\
       fn_has_code sa sb func /\ fn_inst_ids_distinct func /\
-      local_ptrs_reserved cenv sa /\ stmt_state_rel ctx func cenv cx es s0 /\
+      local_ptrs_reserved cenv sa /\ stmt_state_rel H ctx func cenv cx es s0 /\
       alloca_history func s0 /\
       LIST_REL (\x v. eval_operand x s0 = SOME (val_to_w256 v)) xs
         [IntV (&w2n a); IntV (&w2n b); IntV (&w2n c)] /\
@@ -250,7 +250,7 @@ Theorem compile_modular_word_frag_mem:
         ((?s v. r = OK s /\
           builtin_result cx es.accounts ann (if is_mul then MulMod else AddMod) ts
             [IntV (&w2n a); IntV (&w2n b); IntV (&w2n c)] = INL v /\
-          word_value v /\ stmt_state_rel ctx func cenv cx es s /\
+          word_value v /\ stmt_state_rel H ctx func cenv cx es s /\
           eval_operand op s = SOME (val_to_w256 v) /\
           (!z w. not_fresh_at sa z /\ lookup_var z s0 = SOME w ==> lookup_var z s = SOME w) /\
           (!aid b. FLOOKUP s0.vs_allocas aid = SOME b ==> FLOOKUP s.vs_allocas aid = SOME b) /\
@@ -292,7 +292,7 @@ Theorem compile_modular_typed_frag_mem:
       expr_res_ok (builtin_result cx es.accounts ann (if is_mul then MulMod else AddMod) ts [v1;v2;v3]) /\
       EVERY (\x. !z. x = Var z ==> not_fresh_at sa z) xs /\
       fn_has_code sa sb func /\ fn_inst_ids_distinct func /\
-      local_ptrs_reserved cenv sa /\ stmt_state_rel ctx func cenv cx es s0 /\
+      local_ptrs_reserved cenv sa /\ stmt_state_rel H ctx func cenv cx es s0 /\
       alloca_history func s0 /\
       LIST_REL (\x v. eval_operand x s0 = SOME (val_to_w256 v)) xs [v1;v2;v3] /\
       ~s0.vs_halted /\ s0.vs_current_bb = sa.cs_current_bb /\
@@ -300,7 +300,7 @@ Theorem compile_modular_typed_frag_mem:
       ?r. gas_marked_path T ctx func s0 0 r /\
         ((?s v. r = OK s /\
           builtin_result cx es.accounts ann (if is_mul then MulMod else AddMod) ts [v1;v2;v3] = INL v /\
-          word_value v /\ stmt_state_rel ctx func cenv cx es s /\
+          word_value v /\ stmt_state_rel H ctx func cenv cx es s /\
           eval_operand op s = SOME (val_to_w256 v) /\
           (!z w. not_fresh_at sa z /\ lookup_var z s0 = SOME w ==> lookup_var z s = SOME w) /\
           (!aid b. FLOOKUP s0.vs_allocas aid = SOME b ==> FLOOKUP s.vs_allocas aid = SOME b) /\
@@ -329,14 +329,14 @@ Theorem compile_floor_word_frag_mem:
       expr_res_ok (builtin_result cx es.accounts ann Floor ts [DecimalV i]) /\
       EVERY (\x. !z. x = Var z ==> not_fresh_at sa z) xs /\
       fn_has_code sa sb func /\ fn_inst_ids_distinct func /\
-      local_ptrs_reserved cenv sa /\ stmt_state_rel ctx func cenv cx es s0 /\
+      local_ptrs_reserved cenv sa /\ stmt_state_rel H ctx func cenv cx es s0 /\
       alloca_history func s0 /\
       LIST_REL (\x v. eval_operand x s0 = SOME (val_to_w256 v)) xs [DecimalV i] /\
       ~s0.vs_halted /\ s0.vs_current_bb = sa.cs_current_bb /\
       s0.vs_inst_idx = LENGTH sa.cs_current_insts ==>
       ?r. gas_marked_path T ctx func s0 0 r /\
         ((?s v. r = OK s /\ builtin_result cx es.accounts ann Floor ts [DecimalV i] = INL v /\
-          word_value v /\ stmt_state_rel ctx func cenv cx es s /\
+          word_value v /\ stmt_state_rel H ctx func cenv cx es s /\
           eval_operand op s = SOME (val_to_w256 v) /\
           (!z w. not_fresh_at sa z /\ lookup_var z s0 = SOME w ==> lookup_var z s = SOME w) /\
           (!aid b. FLOOKUP s0.vs_allocas aid = SOME b ==> FLOOKUP s.vs_allocas aid = SOME b) /\
@@ -361,7 +361,7 @@ Theorem compile_as_wei_value_word_frag_mem:
       expr_res_ok (builtin_result cx es.accounts ann (AsWeiValue d) ts [IntV (&w2n a)]) /\
       EVERY (\x. !z. x = Var z ==> not_fresh_at sa z) xs /\
       fn_has_code sa sb func /\ fn_inst_ids_distinct func /\
-      local_ptrs_reserved cenv sa /\ stmt_state_rel ctx func cenv cx es s0 /\
+      local_ptrs_reserved cenv sa /\ stmt_state_rel H ctx func cenv cx es s0 /\
       alloca_history func s0 /\
       LIST_REL (\x v. eval_operand x s0 = SOME (val_to_w256 v)) xs [IntV (&w2n a)] /\
       ~s0.vs_halted /\ s0.vs_current_bb = sa.cs_current_bb /\
@@ -369,7 +369,7 @@ Theorem compile_as_wei_value_word_frag_mem:
       ?r. gas_marked_path T ctx func s0 0 r /\
         ((?s v. r = OK s /\
           builtin_result cx es.accounts ann (AsWeiValue d) ts [IntV (&w2n a)] = INL v /\
-          word_value v /\ stmt_state_rel ctx func cenv cx es s /\
+          word_value v /\ stmt_state_rel H ctx func cenv cx es s /\
           eval_operand op s = SOME (val_to_w256 v) /\
           (!z w. not_fresh_at sa z /\ lookup_var z s0 = SOME w ==> lookup_var z s = SOME w) /\
           (!aid b. FLOOKUP s0.vs_allocas aid = SOME b ==> FLOOKUP s.vs_allocas aid = SOME b) /\
