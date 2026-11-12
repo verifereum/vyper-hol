@@ -7,7 +7,6 @@ Ancestors
   bodyIntCallJointContract exprLoweringProps exprSimHypsDefs loweringPosts
   bodyIntCallFamAggSubscriptArraySetup
 
-(* HELD (train 15): obj-level vv_post past idx is false; Subscript-level restatement (train 17) *)
 Theorem intcall_framed_array_child_suffix:
   ((?ty. vv_location (FST (compile_expr ce ty obj sa)) = SOME LocCode) \/
    (?n. bd = Fixed n)) /\
@@ -78,7 +77,6 @@ Theorem intcall_framed_array_child_suffix:
       intcall_expr_cont fp ce env es sa s0 ee' sd q)
     (\res ee' outcome. expr_exit res outcome)
 Proof
-  (* original proof, kept while held:
   disch_then (map_every assume_tac o CONJUNCTS) >>
   drule_all_then assume_tac expr_body_pre_array_subscript_base >>
   drule_all_then assume_tac expr_body_pre_array_subscript_index_after_base >>
@@ -139,6 +137,4 @@ Proof
   rpt strip_tac >>
   qpat_x_assum `!x. p.ptr_operand = Var x ==> _` drule >>
   simp[loweringStateRelDefsTheory.not_fresh_at_def]
-  *)
-  cheat
 QED
