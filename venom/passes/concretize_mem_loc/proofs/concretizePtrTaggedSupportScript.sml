@@ -31,6 +31,9 @@ Proof
   simp[ptr_ledger_erases_def] >> strip_tac >>
   `tag IN FDOM births` by metis_tac[] >>
   `?site. FLOOKUP births tag = SOME site` by metis_tac[FLOOKUP_DEF] >>
+  `FLOOKUP a.po_prov v = SOME site` by
+    (qpat_x_assum `!v. ptr_owner_erases _ _ _ _` (qspec_then `v` mp_tac) >>
+     gvs[ptr_owner_erases_def]) >>
   gvs[ptr_static_support_def] >> metis_tac[]
 QED
 
