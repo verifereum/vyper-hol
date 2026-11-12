@@ -341,10 +341,7 @@ Proof
       first_x_assum (qspecl_then [`fn`, `se`, `ns1`, `ninst`, `stk`, `PG`,
         `nG`, `ntn`, `nsm`, `nlo`, `te`, `nt1`, `nt1`, `ts`, `fn'`, `nbb`]
         mp_tac) >>
-      impl_tac >- fs[] >> strip_tac >>
-      qpat_assum `fmp_stage_result _ _ _ _ _ _ _ _ _ _ _ (run_blocks _ _ _ _) _`
-        (strip_assume_tac o MATCH_MP fmp_result_shape) >>
-      simp[]) >>
+      impl_tac >- fs[] >> simp[]) >>
   Cases_on `exec_block k C' bb' t1` >> gvs[]
 QED
 
