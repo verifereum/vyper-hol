@@ -6045,6 +6045,144 @@ Proof
   simp[] >> strip_tac >> simp[] >> decide_tac
 QED
 
+Theorem asm_step_call_budget_reserve:
+  s.contexts = (c,rb)::rest /\ s.msdomain = Collect d /\
+  ~c.msgParams.static /\ (name = "CALL" \/ name = "STATICCALL") /\
+  op = (if name = "CALL" then Call else StaticCall) /\
+  asm_inst_gas_ok H (AsmOp name) c.stack /\
+  B = 50000 + 8 * H + memory_cost H /\
+  B <= c.msgParams.gasLimit - c.gasUsed /\ wf_state s /\
+  next_opcode c = SOME op /\ step s = (INL (),v) /\
+  LENGTH t.contexts = LENGTH s.contexts /\
+  (t = v \/ LENGTH v.contexts = SUC (LENGTH s.contexts) /\
+    run_call v = SOME (INL (),t)) ==>
+  (c.msgParams.gasLimit - c.gasUsed - B) DIV 64 <=
+    (FST (HD t.contexts)).msgParams.gasLimit - (FST (HD t.contexts)).gasUsed
+Proof
+  pure_rewrite_tac[GSYM AND_IMP_INTRO] >> rpt disch_tac >>
+  Q.SUBGOAL_THEN `op = Call \/ op = StaticCall \/ op = DelegateCall` assume_tac
+  >- (Cases_on `name = "CALL"` >> gvs[]) >>
+  Cases_on `6 + (if call_has_value op then 1 else 0) <= LENGTH c.stack`
+  >- suspend "adequate" >>
+  `LENGTH c.stack < 6 + (if call_has_value op then 1 else 0)` by
+    wordsLib.WORD_DECIDE_TAC >>
+  drule_all asm_pop_stack_underflow >> disch_tac >>
+  `step_call op s = (INR (SOME StackUnderflow),s)` by
+    gvs[asm_step_call_factor, asm_call_prepare_def, bind_def, LET_THM] >>
+  drule_all asm_call_step_terminal >> disch_tac >>
+  `s.contexts <> []` by simp[] >>
+  `handle_step (SOME StackUnderflow) s = (INL (),v)` by metis_tac[] >>
+  drule_all vfmRunCallTheory.handle_step_inl_pops >>
+  strip_tac >> gvs[]
+QED
+
+Resume asm_step_call_budget_reserve[adequate]:
+  Cases_on `asm_call_prepare op s` >> rename1 `asm_call_prepare op s = (res,u)` >>
+  Cases_on `res`
+  >- (PairCases_on `x` >>
+      rename1 `asm_call_prepare op s =
+        (INL (sender,address,value,ao,az,code,stipend,ro,rs,accounts),u)` >>
+      drule_all asm_call_prepare_budget_success >> strip_tac >>
+      Q.SUBGOAL_THEN `op = Call \/ op = StaticCall` assume_tac
+      >- (Cases_on `name = "CALL"` >> gvs[]) >>
+      `EVERY (wf_context o FST) s.contexts` by fs[wf_state_def] >>
+      drule_all asm_call_prepare_stack_room >> disch_tac >>
+      `LENGTH p.stack < stack_limit` by
+        (qpat_x_assum `LENGTH (FST (HD u.contexts)).stack < _` mp_tac >> simp[]) >>
+      `stipend <= p.gasUsed` by decide_tac >>
+      suspend "finish") >>
+  drule_all asm_call_prepare_budget_no_failure >> simp[]
+QED
+
+Resume asm_step_call_budget_reserve[finish]:
+  Cases_on `asm_call_finish op (sender,address,value,ao,az,code,stipend,ro,rs,accounts) u` >>
+  rename1 `asm_call_finish op _ u = (res,w)` >>
+  `step_call op s = (res,w)` by
+    (rewrite_tac[asm_step_call_factor, bind_def] >>
+     qpat_assum `asm_call_prepare _ _ = _` (fn th => rewrite_tac[th]) >>
+     simp_tac (srw_ss()) [] >> asm_rewrite_tac[]) >>
+  Cases_on `(lookup_account sender accounts).balance < value`
+  >- suspend "balance" >>
+  `value <= (lookup_account sender accounts).balance` by decide_tac >>
+  Cases_on `1024 < LENGTH u.contexts`
+  >- suspend "depth" >>
+  `LENGTH u.contexts <= 1024` by decide_tac >>
+  drule_all asm_call_finish_proceed >> disch_tac >>
+  suspend "proceed"
+QED
+
+Resume asm_step_call_budget_reserve[balance]:
+  drule_all asm_call_finish_balance >> disch_tac >>
+  qpat_x_assum `asm_call_finish _ _ _ = (res,w)` mp_tac >>
+  asm_rewrite_tac[] >> simp_tac (srw_ss()) [] >> strip_tac >>
+  `step s = (INL (),w)` by (irule asm_call_step_success >> metis_tac[]) >>
+  gvs[] >> simp[] >> decide_tac
+QED
+
+Resume asm_step_call_budget_reserve[depth]:
+  drule_all asm_call_finish_depth >> disch_tac >>
+  qpat_x_assum `asm_call_finish _ _ _ = (res,w)` mp_tac >>
+  asm_rewrite_tac[] >> simp_tac (srw_ss()) [] >> strip_tac >>
+  `step s = (INL (),w)` by (irule asm_call_step_success >> metis_tac[]) >>
+  gvs[] >> simp[] >> decide_tac
+QED
+
+Resume asm_step_call_budget_reserve[proceed]:
+  qpat_x_assum `asm_call_finish _ _ _ = (res,w)` mp_tac >>
+  asm_rewrite_tac[] >>
+  qmatch_goalsub_abbrev_tac `proceed_call _ _ _ _ _ _ _ _ _ paid` >> disch_tac >>
+  `paid.contexts = (p with returnData := [],rb)::rest` by simp[Abbr `paid`] >>
+  `stipend <= (p with returnData := []).gasUsed` by simp[] >>
+  drule_all asm_proceed_call_memory_boundary >> strip_tac >>
+  `(c.msgParams.gasLimit - c.gasUsed - B) DIV 64 <=
+    (p with returnData := []).msgParams.gasLimit -
+    (p with returnData := []).gasUsed` by
+    (qpat_x_assum `_ DIV 64 <= p.msgParams.gasLimit - p.gasUsed` mp_tac >> simp[]) >>
+  Cases_on `res`
+  >- suspend "child" >>
+  rename1 `step_call op s = (INR ex,w)` >>
+  drule_all asm_call_step_terminal >> disch_tac >>
+  `handle_step ex w = (INL (),v)` by metis_tac[] >>
+  `~vfm_abort ex` by
+    (Cases_on `vfm_abort ex` >> gvs[handle_step_def, reraise_def]) >>
+  suspend "inline"
+QED
+
+Resume asm_step_call_budget_reserve[child]:
+  Cases_on `x` >>
+  `step s = (INL (),w)` by (irule asm_call_step_success >> metis_tac[]) >>
+  `w = v` by
+    (qpat_x_assum `step s = (INL (),w)` mp_tac >>
+     qpat_assum `step s = (INL (),v)` (fn th => rewrite_tac[th]) >> simp[]) >>
+  `wf_state v` by (drule_all step_preserves_wf_state >> simp[]) >>
+  `?d. v.msdomain = Collect d` by
+    (drule_at (Pat `step _ = _`) step_preserves_collect >> simp[]) >>
+  qpat_x_assum `t = v \/ _` strip_assume_tac
+  >- gvs[] >>
+  `v.contexts = (child,child_rb)::(p with returnData := [],rb)::rest` by metis_tac[] >>
+  `LENGTH t.contexts = SUC (LENGTH rest)` by metis_tac[LENGTH] >>
+  metis_tac[asm_call_run_memory_reserve]
+QED
+
+Resume asm_step_call_budget_reserve[inline]:
+  `step_inner s = (INR ex,w)` by
+    (qpat_x_assum `next_opcode c = _` mp_tac >>
+     simp[next_opcode_def] >> IF_CASES_TAC >> simp[] >> strip_tac >>
+     simp[step_inner_def, get_current_context_def, bind_def, ignore_bind_def,
+       return_def] >>
+     qpat_x_assum `op = Call \/ op = StaticCall` strip_assume_tac >>
+     gvs[step_inst_def]) >>
+  drule_all asm_call_step_inner_pop_invariants >> strip_tac >>
+  qpat_x_assum `t = v \/ _` strip_assume_tac
+  >- (qpat_x_assum `t = v` SUBST_ALL_TAC >>
+      drule_at (Pat `handle_step _ _ = _`) asm_call_handle_memory_reserve >>
+      simp[] >> disch_then irule >> gvs[]) >>
+  `w.contexts <> []` by simp[] >>
+  drule_all vfmRunCallTheory.handle_step_inl_pops >> strip_tac >> gvs[]
+QED
+
+Finalise asm_step_call_budget_reserve
+
 Theorem asm_call_returned_message_adoption:
   (rq.cr_kind = MessageCall \/ rq.cr_kind = DelegateMessageCall) /\
   t.contexts = (c,rb)::rest /\
