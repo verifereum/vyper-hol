@@ -408,3 +408,146 @@ Resume empty_source_dynamic_member_run[advance]:
 QED
 
 Finalise empty_source_dynamic_member_run
+
+(* Syntax-only abbreviations for the expanded invariant and child interface.
+   These introduce no HOL constants. *)
+val empty_member_inv = ``
+  (abi_encoder_admissible (AbiComplex infos) /\
+   abi_encoder_window_input (AbiComplex infos) at (ListV avs) sb 0 s.vs_memory /\
+   eval_operand src s = SOME (n2w sb) /\ eval_operand dst s = SOME (n2w d) /\
+   (!x. src = Var x \/ dst = Var x ==> not_fresh_at st x) /\
+   fn_has_code st en func /\ fn_inst_ids_distinct func /\
+   alloca_inv s /\ alloca_room ctx func s /\
+   d + LENGTH (enc at (ListV avs)) <= s.vs_alloca_next /\
+   venomMemDefs$regions_disjoint (sb,0) (d,LENGTH (enc at (ListV avs))) /\
+   (!inst b sz. MEM inst (fn_insts func) /\ inst.inst_opcode = ALLOCA /\
+     inst.inst_id IN frag_ids st en /\ FLOOKUP s.vs_allocas inst.inst_id = SOME (b,sz) ==>
+     sz = 32 /\ venomMemDefs$regions_disjoint (sb,0) (b,sz) /\
+     venomMemDefs$regions_disjoint (d,LENGTH (enc at (ListV avs))) (b,sz)) /\
+   ~s.vs_halted /\ s.vs_current_bb = st.cs_current_bb /\
+   s.vs_inst_idx = LENGTH st.cs_current_insts) /\
+  abi_encoder_tuple_type at ats /\ LIST_REL abi_encoder_structural_valid ats avs /\
+  window_member_head_size infos = head_lengths ats 0 /\
+  window_member_prefix infos ats avs k d s.vs_memory /\
+  window_member_cursor infos dp site slot sb 0 d (LENGTH (enc at (ListV avs))) st s /\
+  (EXISTS (\(_,_,_,dyn). dyn) infos ==>
+    mem_word_at slot s.vs_memory = n2w (window_member_tail infos ats avs k))``;
+val empty_child_contract = ``
+  !dst src st out st' ctx func s at av sb d.
+    compile_abi_encode_to_buf dst src ei st = (out,st') /\
+    abi_encoder_admissible ei /\
+    abi_encoder_window_input ei at av sb 0 s.vs_memory /\
+    eval_operand src s = SOME (n2w sb) /\ eval_operand dst s = SOME (n2w d) /\
+    (!x. src = Var x \/ dst = Var x ==> not_fresh_at st x) /\
+    fn_has_code st st' func /\ fn_inst_ids_distinct func /\
+    alloca_inv s /\ alloca_room ctx func s /\
+    d + LENGTH (enc at av) <= s.vs_alloca_next /\
+    venomMemDefs$regions_disjoint (sb,0) (d,LENGTH (enc at av)) /\
+    (!inst b sz. MEM inst (fn_insts func) /\ inst.inst_opcode = ALLOCA /\
+      inst.inst_id IN frag_ids st st' /\ FLOOKUP s.vs_allocas inst.inst_id = SOME (b,sz) ==>
+      sz = 32 /\ venomMemDefs$regions_disjoint (sb,0) (b,sz) /\
+      venomMemDefs$regions_disjoint (d,LENGTH (enc at av)) (b,sz)) /\
+    ~s.vs_halted /\ s.vs_current_bb = st.cs_current_bb /\
+    s.vs_inst_idx = LENGTH st.cs_current_insts ==>
+    ?t. window_strong_result ctx func st st' out at av d s t /\
+      mem_cont_sim ctx func s t /\ window_mem_frame ctx func s t``;
+
+Theorem empty_source_member_step_envelope[local]:
+  ^empty_member_inv /\ k < LENGTH infos /\
+  EL k infos = (ei,az,ms,dyn) /\ abi_encoder_admissible ei /\
+  ^empty_child_contract /\
+  compile_abi_encode_child dst child_src ei dyn
+    (SUM (MAP abi_member_head_size (TAKE k ats))) dp st = (out,mid) /\
+  eval_operand child_src s = SOME (n2w (sb+abi_encoder_member_span (TAKE k infos))) /\
+  (!x. child_src = Var x ==> not_fresh_at st x) /\
+  fn_has_code st mid func /\ fn_has_code mid en func /\
+  st.cs_next_var <= mid.cs_next_var /\ st.cs_next_id <= mid.cs_next_id /\
+  mid.cs_next_id <= en.cs_next_id /\
+  window_alloca_sites func (frag_ids st mid) SUBSET window_alloca_sites func (frag_ids st en) /\
+  DISJOINT (window_alloca_sites func (frag_ids st mid))
+    (window_alloca_sites func (frag_ids mid en)) /\
+  (EXISTS (\(_,_,_,dyn). dyn) infos ==>
+    site NOTIN window_alloca_sites func (frag_ids st mid) /\
+    DISJOINT (window_alloca_sites func (frag_ids st mid) UNION {site})
+      (window_alloca_sites func (frag_ids mid en))) ==>
+  ?t ids outs. ^(Term.subst [``s:venom_state`` |-> ``t:venom_state``,
+      ``st:compile_state`` |-> ``mid:compile_state``, ``k:num`` |-> ``SUC k``] empty_member_inv) /\
+    window_phase ctx func st mid ids outs s t /\
+    ids SUBSET (window_alloca_sites func (frag_ids st en) UNION
+      (if EXISTS (\(_,_,_,dyn). dyn) infos then {site} else {})) /\
+    EVERY (\(b,n). d <= b /\ b+n <= d+LENGTH (enc at (ListV avs))) outs /\
+    (!R. (!i b sz. i IN R /\ FLOOKUP s.vs_allocas i = SOME (b,sz) ==> sz = 32) ==>
+         !i b sz. i IN R /\ FLOOKUP t.vs_allocas i = SOME (b,sz) ==> sz = 32) /\
+    mem_cont_sim ctx func s t /\ window_mem_frame ctx func s t
+Proof
+  strip_tac >>
+  drule_all empty_source_members_restrict_end >> strip_tac >>
+  reverse (Cases_on `dyn`)
+  >- (`EXISTS (\(_,_,_,dyn). dyn) infos ==>
+         site NOTIN window_alloca_sites func (frag_ids st mid) /\
+         mem_word_at slot s.vs_memory = n2w (window_member_tail infos ats avs k)` by metis_tac[] >>
+      drule_all empty_source_static_member_run >> strip_tac >>
+      suspend "static") >>
+  `EXISTS (\(_,_,_,dyn). dyn) infos` by
+    (simp[NoAsms, EXISTS_MEM] >> qexists_tac `(ei,az,ms,T)` >>
+     simp_tac (srw_ss()) [] >> metis_tac[MEM_EL]) >>
+  `EXISTS (\(_,_,_,dyn). dyn) infos ==>
+     site NOTIN window_alloca_sites func (frag_ids st mid) /\
+     mem_word_at slot s.vs_memory = n2w (window_member_tail infos ats avs k)` by metis_tac[] >>
+  drule_all empty_source_dynamic_member_run >> strip_tac >>
+  suspend "dynamic"
+QED
+
+Resume empty_source_member_step_envelope[static]:
+  qpat_x_assum `!dst src st out st' ctx func s at av sb d. _` kall_tac >>
+  `!R. (!i b sz. i IN R /\ FLOOKUP s.vs_allocas i = SOME (b,sz) ==> sz = 32) ==>
+       !i b sz. i IN R /\ FLOOKUP t.vs_allocas i = SOME (b,sz) ==> sz = 32` by
+    (gen_tac >> disch_tac >> drule window_phase_effect >> strip_tac >>
+     drule window_registered_sizes_transport >>
+     disch_then (qspec_then `R` mp_tac) >> asm_rewrite_tac[]) >>
+  drule_all empty_source_members_phase_advance >> strip_tac >>
+  qexistsl_tac [`t`, `window_alloca_sites func (frag_ids st mid)`,
+    `[(d+SUM (MAP abi_member_head_size (TAKE k ats)),LENGTH (enc (EL k ats) (EL k avs)))]`] >>
+  asm_rewrite_tac[] >>
+  (conj_tac >- metis_tac[SUBSET_UNION, SUBSET_TRANS]) >>
+  drule_all empty_source_complex_child >> strip_tac >>
+  `ats' = ats` by metis_tac[abi_encoder_tuple_type_unique] >>
+  qpat_x_assum `ats' = ats` SUBST_ALL_TAC >>
+  `LENGTH ats = LENGTH avs /\ k < LENGTH ats` by decide_tac >>
+  drule_all empty_source_member_output_bounds >> strip_tac >>
+  drule_all empty_source_member_total_bounds >> strip_tac >>
+  `~is_dynamic (EL k ats)` by metis_tac[] >>
+  simp_tac (srw_ss()) [NoAsms, EVERY_DEF] >>
+  qpat_x_assum `~is_dynamic _ ==> _` drule >> decide_tac
+QED
+
+Resume empty_source_member_step_envelope[dynamic]:
+  qpat_x_assum `!dst src st out st' ctx func s at av sb d. _` kall_tac >>
+  `!R. (!i b sz. i IN R /\ FLOOKUP s.vs_allocas i = SOME (b,sz) ==> sz = 32) ==>
+       !i b sz. i IN R /\ FLOOKUP t.vs_allocas i = SOME (b,sz) ==> sz = 32` by
+    (gen_tac >> disch_tac >> drule window_phase_effect >> strip_tac >>
+     drule window_registered_sizes_transport >>
+     disch_then (qspec_then `R` mp_tac) >> asm_rewrite_tac[]) >>
+  `DISJOINT (window_alloca_sites func (frag_ids st mid) UNION {site})
+     (window_alloca_sites func (frag_ids mid en))` by metis_tac[] >>
+  `EXISTS (\(_,_,_,dyn). dyn) infos ==>
+     mem_word_at slot t.vs_memory = n2w (window_member_tail infos ats avs (SUC k))` by
+    (disch_tac >> first_assum ACCEPT_TAC) >>
+  drule_all empty_source_members_phase_advance >> strip_tac >>
+  qexistsl_tac [`t`, `window_alloca_sites func (frag_ids st mid) UNION {site}`,
+    `[(d+SUM (MAP abi_member_head_size (TAKE k ats)),32);
+      (d+window_member_tail infos ats avs k,LENGTH (enc (EL k ats) (EL k avs)))]`] >>
+  asm_rewrite_tac[] >>
+  (conj_tac >- metis_tac[SUBSET_UNION, SUBSET_TRANS, UNION_SUBSET, SUBSET_REFL]) >>
+  drule_all empty_source_complex_child >> strip_tac >>
+  `ats' = ats` by metis_tac[abi_encoder_tuple_type_unique] >>
+  qpat_x_assum `ats' = ats` SUBST_ALL_TAC >>
+  `LENGTH ats = LENGTH avs /\ k < LENGTH ats` by decide_tac >>
+  drule_all empty_source_member_output_bounds >> strip_tac >>
+  drule_all empty_source_member_total_bounds >> strip_tac >>
+  `is_dynamic (EL k ats)` by metis_tac[] >>
+  simp_tac (srw_ss()) [NoAsms, EVERY_DEF] >>
+  qpat_x_assum `is_dynamic _ ==> _` drule >> strip_tac >> decide_tac
+QED
+
+Finalise empty_source_member_step_envelope
