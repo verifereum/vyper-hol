@@ -206,6 +206,22 @@ Proof
             cs_extends_refl]
 QED
 
+(* The continuation after the condition only appends storage observations. *)
+val lit_assert_cont_frame_tac =
+  simp[vyperStorageTraceTheory.storage_trace_frame_cond,
+       vyperStorageTraceTheory.storage_trace_frame_return,
+       vyperStorageTraceTheory.storage_trace_frame_raise];
+
+(* The condition left the storage domain: the whole Assert is a bad-storage
+   run under the condition's marks. *)
+val lit_assert_out_of_domain_tac =
+  rewrite_tac[eval_assert_lit_bind] >>
+  irule gasStorageTheory.gas_bad_storage_at_bind_left >>
+  lit_assert_cont_frame_tac >>
+  irule gasStorageTheory.gas_bad_storage_at_counted_prefix >>
+  qpat_assum `gas_marked_exec _ _ (bind _ _) _ _ _ _ _` (irule_at Any) >>
+  simp[];
+
 Theorem compile_assert_reason_lit_frag_mem:
   !d ctx func cx lctx RetQ cenv ty e ml str es.
     expr_type e = BaseT BoolT /\
@@ -239,22 +255,29 @@ Proof
     metis_tac[assert_lit_expr_admissible] >>
   qpat_x_assum `expr_sim_mem _ _ _ _ _ _ _`
     (mp_tac o REWRITE_RULE [expr_sim_mem_def]) >>
-  disch_then drule >> simp[] >>
-  disch_then (qspec_then `s0` mp_tac) >> simp[] >>
-  simp[gas_outcome_def, gas_summary_at_def] >>
-  disch_then (qx_choose_then `marks` (DISJ_CASES_THEN assume_tac))
-  >- (qexists_tac `marks` >> disj1_tac >>
-      qpat_x_assum `?res es_end r. _` strip_assume_tac >> gvs[]
-      >- suspend "normal"
-      >> suspend "exception") >>
-  qexists_tac `marks` >> disj2_tac >>
-  pop_assum strip_assume_tac >>
-  qexistsl_tac [`err`, `ee`, `leaf`, `finish'`] >>
-  irule assert_lit_expr_exempt >> simp[]
+  disch_then (qspecl_then [`st0`, `sa`, `s1`, `op`, `s0`] mp_tac) >>
+  impl_tac >- simp[] >>
+  rewrite_tac[gas_outcome_def, gas_summary_at_def] >> BETA_TAC >>
+  disch_then (qx_choose_then `marks` strip_assume_tac) >>
+  qexists_tac `marks`
+  >- (disj1_tac >> rewrite_tac[eval_assert_lit_bind] >>
+      irule gasStorageTheory.gas_bad_storage_at_bind_left >>
+      lit_assert_cont_frame_tac >> first_assum ACCEPT_TAC)
+  >- (reverse (Cases_on `storage_trace_domain cx st0 es_end.storage_trace`)
+      >- (disj1_tac >> lit_assert_out_of_domain_tac) >>
+      disj2_tac >> disj1_tac >> suspend "normal")
+  >- (reverse (Cases_on `storage_trace_domain cx st0 es_end.storage_trace`)
+      >- (disj1_tac >> lit_assert_out_of_domain_tac) >>
+      disj2_tac >> disj1_tac >> suspend "exception") >>
+  disj2_tac >> disj2_tac >> metis_tac[assert_lit_expr_exempt]
 QED
 
 Resume compile_assert_reason_lit_frag_mem[normal]:
   markerLib.RESUME_TAC >>
+  `?H0. valid_horizon cx st0 H0 es_end.storage_trace` by
+    metis_tac[vyperStorageFootprintTheory.storage_trace_domain_def] >>
+  qpat_assum `!H. valid_horizon _ _ H _ ==> ?v. _` (qspec_then `H0` mp_tac) >>
+  (impl_tac >- simp[]) >> strip_tac >> gvs[] >>
   qpat_x_assum `gas_marked_exec _ _ _ _ _ _ _ _` mp_tac >>
   simp[gas_marked_exec_def, gas_marked_path_def] >> strip_tac >>
   `~t.vs_halted` by metis_tac[gas_path_mem_exec, gas_path_normal] >>
@@ -268,8 +291,9 @@ Resume compile_assert_reason_lit_frag_mem[normal]:
      qpat_x_assum `!tail. _ = _` (qspec_then `[]` assume_tac) >>
      gvs[bind_def]) >>
   `eval_operand op t = SOME (if b then 1w else 0w)` by
-    gvs[expr_post_def, expr_val_rel_def, evaluate_type_def, is_word_type_def,
-        typed_val_to_w256_def, val_to_w256_def] >>
+    (gvs[expr_post_def, expr_val_rel_def, evaluate_type_def, is_word_type_def,
+         typed_val_to_w256_def, val_to_w256_def] >>
+     metis_tac[]) >>
   `gas_path_mem ctx func t 0
      (OK (jump_to (if b then sb.cs_current_bb else s5.cs_current_bb) t))` by
     (imp_res_tac emit_inst_extends >>
@@ -284,15 +308,21 @@ QED
 
 Resume compile_assert_reason_lit_frag_mem[exception]:
   markerLib.RESUME_TAC >>
-  Cases_on `res` >- fs[expr_exit_def] >>
+  `?H0. valid_horizon cx st0 H0 es_end.storage_trace` by
+    metis_tac[vyperStorageFootprintTheory.storage_trace_domain_def] >>
+  Cases_on `res`
+  >- (qpat_x_assum `!H. valid_horizon _ _ H _ ==> expr_exit _ _`
+        (qspec_then `H0` mp_tac) >> simp[expr_exit_def]) >>
   qexistsl_tac [`INR y`, `es_end`, `r`] >>
   conj_tac
   >- (qpat_x_assum `gas_marked_exec _ _ _ _ _ _ _ _` mp_tac >>
       simp[gas_marked_exec_def] >> strip_tac >> simp[] >>
       gen_tac >> asm_simp_tac (srw_ss()) [eval_assert_lit_bind] >>
       simp[Once bind_def]) >>
-  disj2_tac >> simp[stmt_exit_def] >>
-  metis_tac[expr_exit_INR_type]
+  disj2_tac >> simp[stmt_exit_def] >> rpt strip_tac >>
+  qpat_x_assum `!H. valid_horizon _ _ H _ ==> expr_exit _ _`
+    (qspec_then `H` mp_tac) >>
+  simp[] >> metis_tac[expr_exit_INR_type]
 QED
 
 Resume compile_assert_reason_lit_frag_mem[true]:
@@ -305,20 +335,23 @@ Resume compile_assert_reason_lit_frag_mem[true]:
           asm_simp_tac (srw_ss()) [eval_assert_lit_bind] >>
           simp[Once bind_def, return_def]) >>
       metis_tac[gas_path_mem_then, arithmeticTheory.ADD_CLAUSES]) >>
-  disj1_tac >>
+  disj1_tac >> simp[] >> rpt strip_tac >>
+  `expr_post H ctx func cenv cx e es sa s1 s0 (es_end with gas_obs := [])
+     (BoolV T) op t` by metis_tac[] >>
   drule_all assert_success_post_mem >> simp[]
 QED
 
 Resume compile_assert_reason_lit_frag_mem[false]:
   markerLib.RESUME_TAC >>
   gvs[] >>
-  `?EE. stmt_state_rel H ctx func cenv cx EE (jump_to s5.cs_current_bb t)` by
-    (qpat_assum `expr_post _ _ _ _ _ _ _ _ _ _ _ _ _ _`
-       (strip_assume_tac o REWRITE_RULE [expr_post_def]) >>
+  `?EE. stmt_state_rel H0 ctx func cenv cx EE (jump_to s5.cs_current_bb t)` by
+    (`expr_post H0 ctx func cenv cx e es sa s1 s0 (es_end with gas_obs := [])
+        (BoolV F) op t` by metis_tac[] >>
+     pop_assum (strip_assume_tac o REWRITE_RULE [expr_post_def]) >>
      rewrite_tac[stmt_state_rel_jump_to] >> metis_tac[]) >>
   `?u. gas_path_mem ctx func (jump_to s5.cs_current_bb t) 0
          (Abort Revert_abort u)` by
-    (qspecl_then [`ctx`, `func`, `cenv`, `cx`, `EE`,
+    (qspecl_then [`H0`, `ctx`, `func`, `cenv`, `cx`, `EE`,
                   `jump_to s5.cs_current_bb t`, `str`, `ml`,
                   `BaseT (StringT ml)`, `s5`, `buf`, `sm`, `s6`] mp_tac
        lit_reason_revert_path_mem >>

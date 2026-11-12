@@ -22,7 +22,7 @@ Proof
 QED
 
 Theorem log_write_frame_stmt:
-  stmt_state_rel ctx func ce cx es s /\ log_write_frame st b n s t /\
+  stmt_state_rel H ctx func ce cx es s /\ log_write_frame st b n s t /\
   local_ptrs_reserved ce st /\ LENGTH s.vs_memory <= LENGTH t.vs_memory /\
   (!name lo sz. local_region ce es.scopes s name lo sz ==>
     lo+sz <= b \/ b+n <= lo) /\
@@ -31,7 +31,7 @@ Theorem log_write_frame_stmt:
     FLOOKUP (case ALOOKUP es.immutables cx.txn.target of NONE => FEMPTY
       | SOME imms => get_source_immutables ce.ce_module imms) name = SOME (tv,v) ==>
     off+type_memory_size tv <= b \/ b+n <= off) ==>
-  stmt_state_rel ctx func ce cx es t
+  stmt_state_rel H ctx func ce cx es t
 Proof
   disch_then (MAP_EVERY assume_tac o CONJUNCTS) >>
   drule log_write_frame_fields >> strip_tac >>
@@ -110,7 +110,7 @@ Theorem log_store_data_stmt:
   eval_operand buf s = SOME (n2w b) /\
   off + SUM (MAP (type_memory_bytes ce) (MAP SND xs)) <= cap /\
   b + cap < dimword (:256) /\
-  stmt_state_rel ctx func ce cx es s /\ local_ptrs_reserved ce sa /\
+  stmt_state_rel H ctx func ce cx es s /\ local_ptrs_reserved ce sa /\
   (!name lo sz. local_region ce es.scopes s name lo sz ==>
     lo+sz <= b+off \/ b+off+SUM (MAP (type_memory_bytes ce) (MAP SND xs)) <= lo) /\
   (ce.ce_is_ctor ==> !name tv v p.
@@ -121,7 +121,7 @@ Theorem log_store_data_stmt:
     b+off+SUM (MAP (type_memory_bytes ce) (MAP SND xs)) <= p) ==>
   inst_extends sa sb /\ sa.cs_next_var <= sb.cs_next_var /\
   ?t avs. run_inst_seq (emitted_insts sa sb) s = OK t /\
-    stmt_state_rel ctx func ce cx es t /\
+    stmt_state_rel H ctx func ce cx es t /\
     vyper_to_abi_list (get_tenv cx) (MAP SND xs) vs = SOME avs /\
     abi_encoder_input (type_to_abi_enc_info sf ce (TupleT (MAP SND xs)))
       (vyper_to_abi_type (get_tenv cx) (TupleT (MAP SND xs))) (ListV avs)
@@ -138,7 +138,7 @@ Proof
   drule log_data_sources_types >> strip_tac >>
   `LENGTH s.vs_memory <= LENGTH t.vs_memory` by
     (drule_all log_store_data_memory_mono >> simp[]) >>
-  `stmt_state_rel ctx func ce cx es t` by
+  `stmt_state_rel H ctx func ce cx es t` by
     (drule_all log_write_frame_stmt >> simp[]) >>
   gvs[vyper_to_abi_type_def] >> rpt strip_tac >>
   drule_all log_write_frame_operand >> simp[]
