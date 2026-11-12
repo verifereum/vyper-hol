@@ -3,6 +3,7 @@
    the checked superset even before getter lowering is enabled. *)
 Theory checkedSelectorTableProps
 Ancestors
+  publicGetterProps
   selectorCompilerProps compileVyper moduleLowering vyperTypeContract
   vyperABIEntries vyperContext finite_map list rich_list
 Libs
@@ -27,6 +28,67 @@ Proof
   every_case_tac >> simp[]
 QED
 
+Theorem signature_subst_consts[local]:
+  (\(mut,nr,rr,name,args,dflts,ret,stmts).
+    abi_function_signatures name args dflts) (subst_consts_fn env fn) =
+  (\(mut,nr,rr,name,args,dflts,ret,stmts).
+    abi_function_signatures name args dflts) fn
+Proof
+  `!es. LENGTH (subst_consts_exprs env es) = LENGTH es` by
+    (Induct >> simp[constSubstTheory.subst_consts_expr_def]) >>
+  PairCases_on `fn` >>
+  simp[constSubstTheory.subst_consts_fn_def, abi_function_signatures_def,
+       abi_entries_def]
+QED
+
+Theorem fold_external_signatures[local]:
+  FLAT (MAP (\(mut,nr,rr,name,args,dflts,ret,stmts).
+    abi_function_signatures name args dflts)
+    (FST (FOLDR classify_function ([],[],NONE,NONE) tops))) =
+  FLAT (MAP abi_decl_signatures (FILTER explicit_external_decl tops))
+Proof
+  Induct_on `tops` >> simp[] >> gen_tac >>
+  simp[classify_function_external_component] >>
+  Cases_on `h` >> simp[explicit_external_decl_def, abi_decl_signatures_def] >>
+  every_case_tac >> gvs[explicit_external_decl_def, abi_decl_signatures_def]
+QED
+
+Theorem public_getter_present[local]:
+  IS_SOME (public_getter top) =
+  (case top of
+     VariableDecl (Public nr) mut name ty slot => T
+   | HashMapDecl (Public nr) tr name kt vt slot => T
+   | _ => F)
+Proof
+  Cases_on `top` >> simp[public_getter_def] >>
+  Cases_on `v` >> simp[public_getter_def] >>
+  rpt (pairarg_tac >> gvs[]) >>
+  rpt IF_CASES_TAC >> simp[] >> rpt (pairarg_tac >> gvs[])
+QED
+Theorem getter_signature_component[local]:
+  FLAT (MAP (\(mut,nr,rr,name,args,dflts,ret,stmts).
+    abi_function_signatures name args dflts)
+    (case public_getter top of NONE => [] | SOME g => [g])) =
+  if IS_SOME (public_getter top) then abi_decl_signatures top else []
+Proof
+  Cases_on `public_getter top` >>
+  qpat_assum `public_getter _ = _` (mp_tac o Q.AP_TERM `IS_SOME`) >>
+  simp[public_getter_present] >> strip_tac >> gvs[] >>
+  rename1 `public_getter top = SOME g` >> PairCases_on `g` >>
+  drule public_getter_signature >> drule public_getter_defaults >>
+  simp[abi_function_signatures_def]
+QED
+
+Theorem getter_external_signatures[local]:
+  FLAT (MAP (\(mut,nr,rr,name,args,dflts,ret,stmts).
+    abi_function_signatures name args dflts) (public_getters tops)) =
+  FLAT (MAP abi_decl_signatures (FILTER (IS_SOME o public_getter) tops))
+Proof
+  Induct_on `tops` >> simp[public_getters_def] >> qx_gen_tac `top` >>
+  rewrite_tac[getter_signature_component] >>
+  simp[combinTheory.o_DEF, public_getter_present] >>
+  rpt CASE_TAC >> simp[]
+QED
 Theorem classify_external_signatures:
   FLAT (MAP (\(mut,nr,rr,name,args,dflts,ret,stmts).
       abi_function_signatures name args dflts)
@@ -34,13 +96,12 @@ Theorem classify_external_signatures:
   FLAT (MAP abi_decl_signatures (FILTER explicit_external_decl tops)) ++
   FLAT (MAP abi_decl_signatures (FILTER (IS_SOME o public_getter) tops))
 Proof
-  Induct_on `tops` >> simp[classify_functions_def] >> qx_gen_tac `top` >>
-  Cases_on `top` >>
-  simp[classify_functions_def, classify_function_external_component,
-       explicit_external_decl_def, abi_decl_signatures_def] >>
-  every_case_tac >>
-  gvs[explicit_external_decl_def, abi_decl_signatures_def,
-      GSYM classify_functions_def]
+  simp[classify_functions_def] >>
+  rpt (pairarg_tac >> gvs[]) >>
+  simp[MAP_MAP_o, combinTheory.o_DEF, signature_subst_consts, SF ETA_ss] >>
+  mp_tac fold_external_signatures >>
+  asm_rewrite_tac[] >> disch_then (fn th => rewrite_tac[th]) >>
+  simp[getter_external_signatures, combinTheory.o_DEF, public_getter_present]
 QED
 
 Theorem mem_flat_map_filter:
@@ -79,9 +140,34 @@ Proof
     classify_external_signatures) >>
   fs[grouped_selectors_def, listTheory.MAP_FLAT, MAP_MAP_o,
        combinTheory.o_DEF] >> strip_tac >>
-  qpat_x_assum `FLAT _ = FLAT _`
+  qpat_x_assum `FLAT _ = _ ++ _`
     (fn th => CONV_TAC (RAND_CONV (REWR_CONV (SYM th)))) >>
   AP_TERM_TAC >> irule MAP_CONG >> simp[pairTheory.FORALL_PROD]
+QED
+
+Theorem abi_signature_partition[local]:
+  PERM (FLAT (MAP abi_decl_signatures (FILTER explicit_external_decl tops)) ++
+        FLAT (MAP abi_decl_signatures (FILTER (IS_SOME o public_getter) tops)))
+       (abi_external_signatures tops)
+Proof
+  Induct_on `tops` >> simp[abi_external_signatures_def] >> qx_gen_tac `top` >>
+  Cases_on `top`
+  >- (Cases_on `f` >>
+      Cases_on `s = "__default__"` >>
+      gvs[explicit_external_decl_def, public_getter_present, combinTheory.o_DEF,
+          abi_decl_signatures_def, abi_external_signatures_def] >>
+      pure_rewrite_tac[GSYM APPEND_ASSOC, sortingTheory.PERM_APPEND_IFF] >>
+      asm_rewrite_tac[]) >>
+  simp[explicit_external_decl_def, public_getter_present, combinTheory.o_DEF,
+       abi_decl_signatures_def] >>
+  every_case_tac >> gvs[explicit_external_decl_def, abi_decl_signatures_def,
+                       public_getter_present, combinTheory.o_DEF,
+                       abi_external_signatures_def] >>
+  pure_rewrite_tac[GSYM APPEND_ASSOC, sortingTheory.PERM_APPEND_IFF] >>
+  asm_rewrite_tac[] >>
+  once_rewrite_tac[sortingTheory.PERM_SYM] >>
+  irule sortingTheory.CONS_PERM >>
+  metis_tac[sortingTheory.PERM_SYM]
 QED
 
 Theorem grouped_selectors_distinct:
@@ -91,9 +177,11 @@ Theorem grouped_selectors_distinct:
       (FST (classify_functions tops)))))
 Proof
   strip_tac >> simp[grouped_selector_method_ids] >>
-  irule all_distinct_flat_map_filter >>
-  gvs[abi_external_method_ids_def, abi_external_signatures_def,
-      listTheory.MAP_FLAT, MAP_MAP_o, combinTheory.o_DEF]
+  mp_tac (Q.ISPEC `\(name,tys). abi_method_id (type_env tops) name tys`
+    (MATCH_MP sortingTheory.PERM_MAP abi_signature_partition)) >>
+  disch_then (mp_tac o MATCH_MP sortingTheory.ALL_DISTINCT_PERM) >>
+  gvs[abi_external_method_ids_def, listTheory.MAP_FLAT, MAP_MAP_o,
+      combinTheory.o_DEF, public_getter_present]
 QED
 
 Theorem check_contract_grouped_selectors_distinct:
