@@ -357,6 +357,10 @@ Proof
   >- (match_mp_tac pending_frame_bind_guarded >> conj_tac
       >- (rewrite_tac[state_rel_frame_result] >> metis_tac[]) >>
       rpt strip_tac >> BETA_TAC >>
+      match_mp_tac pending_frame_bind_guarded >> conj_tac
+      >- (IF_CASES_TAC >>
+          simp[pending_frame_bind, pending_frame_reads, pending_frame_primitives]) >>
+      rpt strip_tac >> BETA_TAC >>
       match_mp_tac pending_frame_bind >> conj_tac
       >- (rewrite_tac[state_rel_frame_result] >> metis_tac[]) >>
       simp[pending_frame_bind, pending_frame_reads])
@@ -379,11 +383,32 @@ Proof
           simp[pending_frame_bind, pending_frame_expression_reads, pending_frame_primitives]) >>
       Cases_on `bt = Env MsgGas`
       >- gvs[pending_frame_scope_handlers] >>
-      gvs[] >> IF_CASES_TAC >>
-      match_mp_tac pending_frame_bind >> conj_tac
-      >- (rewrite_tac[state_rel_frame_result] >> metis_tac[])
-      >- simp[pending_frame_bind, pending_frame_control]
-      >- (rewrite_tac[state_rel_frame_result] >> metis_tac[]) >>
+      Cases_on `bt = Bop In \/ bt = Bop NotIn`
+      >- (gvs[] >>
+          (match_mp_tac pending_frame_bind >> conj_tac
+           >- (rewrite_tac[state_rel_frame_result] >> metis_tac[]) >>
+           simp[pending_frame_bind, pending_frame_expression_reads, pending_frame_control,
+                pending_frame_scope_handlers, pending_frame_primitives])) >>
+      gvs[] >> match_mp_tac pending_frame_bind >> conj_tac
+      >- (Cases_on `code_slice_source bt es`
+          >- (gvs[] >> rewrite_tac[state_rel_frame_result] >> metis_tac[]) >>
+          rename1 `code_slice_source bt es = SOME csa` >> PairCases_on `csa` >>
+          `~supported_exprs_exists constructor_call_root (TL es) /\
+           ~supported_exprs_exists constructor_call_root [csa1] /\
+           ~supported_expr_exists constructor_call_root csa1` by
+            (qpat_x_assum `code_slice_source _ _ = SOME _` mp_tac >>
+             qpat_x_assum `~supported_exprs_exists _ es` mp_tac >>
+             rpt (pop_assum kall_tac) >> rw[code_slice_source_SOME] >>
+             gvs[supported_expr_exists_def, constructor_call_root_def]) >>
+          gvs[] >>
+          match_mp_tac pending_frame_bind_guarded >> conj_tac
+          >- (rewrite_tac[state_rel_frame_result] >> metis_tac[]) >>
+          rpt strip_tac >> BETA_TAC >>
+          match_mp_tac pending_frame_bind >> conj_tac
+          >- (rewrite_tac[state_rel_frame_result] >> metis_tac[]) >>
+          gen_tac >> BETA_TAC >>
+          simp[pending_frame_bind, pending_frame_expression_reads,
+               pending_frame_control, pending_frame_primitives]) >>
       simp[pending_frame_bind, pending_frame_expression_reads, pending_frame_control,
            pending_frame_scope_handlers, pending_frame_primitives]) >>
   simp[pending_frame_primitives])

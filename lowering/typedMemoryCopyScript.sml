@@ -885,7 +885,7 @@ Theorem typed_copy_entries_lengths:
 Proof
   Induct >> simp[typed_copy_entries_def] >>
   Cases_on `stys` >> Cases_on `dtvs` >> Cases_on `stvs` >> Cases_on `vs` >>
-  simp[typed_copy_entries_def] >> metis_tac[]
+  simp[typed_copy_entries_def] >> rpt strip_tac >> res_tac >> simp[]
 QED
 
 Theorem typed_copy_state_frame_mono:
@@ -3010,10 +3010,10 @@ Resume typed_copy_dynarray_frag[slow_data]:
   qpat_assum `fresh_label "typed_dyn_cond" _ = _`
     (mp_then (Pat `fresh_label "typed_dyn_cond" _ = _`) mp_tac
       (GEN_ALL typed_copy_dynarray_slow_data_sizes_frag)) >>
-  disch_then (drule_at (Pat `fresh_label "typed_dyn_body" _ = _`)) >>
-  disch_then (drule_at (Pat `fresh_label "typed_dyn_exit" _ = _`)) >>
-  disch_then (drule_at (Pat `fresh_var _ = _`)) >>
-  disch_then (drule_at (Pat `emit_inst ASSIGN [Lit 0w] _ _ = _`)) >>
+  disch_then (qpat_assum `fresh_label "typed_dyn_body" _ = _` o mp_then (Pat `fresh_label "typed_dyn_body" _ = _`) mp_tac) >>
+  disch_then (qpat_assum `fresh_label "typed_dyn_exit" _ = _` o mp_then (Pat `fresh_label "typed_dyn_exit" _ = _`) mp_tac) >>
+  disch_then (qpat_assum `fresh_var _ = _` o mp_then (Pat `fresh_var _ = _`) mp_tac) >>
+  disch_then (qpat_assum `emit_inst ASSIGN [Lit 0w] _ _ = _` o mp_then (Pat `emit_inst ASSIGN [Lit 0w] _ _ = _`) mp_tac) >>
   disch_then (drule_at (Pat `emit_inst JMP _ _ _ = _`)) >>
   disch_then (drule_at (Pat `new_block _ _ = _`)) >>
   disch_then (drule_at (Pat `emit_op LT _ _ = _`)) >>

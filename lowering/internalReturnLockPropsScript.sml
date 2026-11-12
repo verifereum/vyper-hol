@@ -94,7 +94,7 @@ Proof
   Cases_on `eval_operands right ss` >> simp[]
 QED
 
-Theorem step_RET_values[local]:
+Theorem step_RET_values:
   !values ss words rpc pc id.
   eval_operands values ss = SOME words /\ eval_operand rpc ss = SOME pc ==>
   step_inst_base (mk_inst id RET (values ++ [rpc]) []) ss =
