@@ -23,7 +23,7 @@ Proof
   qpat_x_assum `!n. next <= n ==> _` (qspec_then `next` mp_tac) >> simp[]
 QED
 
-Theorem abi_decoder_alloca32_registers[local]:
+Theorem abi_decoder_alloca32_registers:
   exec_alloca inst s (32w:bytes32) = OK t /\ inst.inst_outputs = [out] /\
   lookup_var out t = SOME w ==>
   t.vs_vars = s.vs_vars |+ (out,w) /\ t.vs_labels = s.vs_labels /\
