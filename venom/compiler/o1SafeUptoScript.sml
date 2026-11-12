@@ -14,7 +14,7 @@ Theory o1SafeUpto
 Ancestors
   o1PassContract memSafeRun contextRawReachable contextCodegenRel unitMemInv
   ptrDiscipline lowerDloadDefs staticLayoutDefs venomExecSemantics
-  venomExecProofs venomState list
+  venomExecProofs venomState stateFrame list
 
 Definition gas_cut_def:
   gas_cut n (vs:venom_state) (s:venom_state) <=>
@@ -171,4 +171,39 @@ Proof
   `dimword (:256) DIV 2 < dimword (:256)` by
     (irule arithmeticTheory.DIV_LESS >> simp[wordsTheory.ZERO_LT_dimword]) >>
   decide_tac
+QED
+
+(* At n past every reading the cut holds of every state. *)
+Theorem gas_cut_whole[simp]:
+  gas_cut (SUC (LENGTH vs.vs_gas_readings)) vs s
+Proof
+  simp[gas_cut_def]
+QED
+
+(* States with the same execution frame have popped the same readings. *)
+Theorem gas_cut_execution_frame:
+  gas_cut n vs s' /\ execution_frame s' = execution_frame s ==>
+  gas_cut n vs s
+Proof
+  strip_tac >>
+  `s'.vs_gas_readings = s.vs_gas_readings` by
+    (qpat_x_assum `execution_frame _ = _` mp_tac >>
+     simp[execution_frame_def, venom_state_component_equality]) >>
+  fs[gas_cut_def]
+QED
+
+(* The whole-run facts are the guarded ones at that n. *)
+Theorem ptr_discipline_upto_all:
+  ptr_discipline_upto lo (SUC (LENGTH vs.vs_gas_readings)) ctx vs ==>
+  ptr_discipline lo ctx vs
+Proof
+  rw[ptr_discipline_def, ptr_discipline_upto_def] >> metis_tac[]
+QED
+
+Theorem taint_within_upto_all:
+  taint_within_upto D (SUC (LENGTH vs.vs_gas_readings)) ctx vs ==>
+  taint_within D ctx vs
+Proof
+  rw[taint_within_def, taint_within_upto_def, final_taint_def] >>
+  metis_tac[]
 QED
