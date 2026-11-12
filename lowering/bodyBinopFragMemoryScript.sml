@@ -23,15 +23,17 @@ Libs
    operands x and y holding w1 and w2 runs memory-safely and keeps the
    allocation history. *)
 Definition binop_frag_mem_def:
-  binop_frag_mem H ctx func cenv cx bop ty ann bl el tys v1 v2 w1 w2 es0 <=>
-    !sa sb x y op s0.
+  binop_frag_mem ctx func cenv cx bop ty ann bl el tys v1 v2 w1 w2 es0 <=>
+    !st0 sa sb x y op s0.
       compile_binop bop x y ty bl el sa = (op, sb) /\
       expr_res_ok (bop_result cx ann bop tys v1 v2 es0) /\
       (!z. x = Var z ==> not_fresh_at sa z) /\
       (!z. y = Var z ==> not_fresh_at sa z) /\
       fn_has_code sa sb func /\ fn_inst_ids_distinct func /\
       local_ptrs_reserved cenv sa /\
-      stmt_state_rel H ctx func cenv cx es0 s0 /\ alloca_history func s0 /\
+      (!H. valid_horizon cx st0 H es0.storage_trace ==>
+        stmt_state_rel H ctx func cenv cx es0 s0 /\
+        storage_well_formed_on cx es0 (FST H)) /\ alloca_history func s0 /\
       eval_operand x s0 = SOME w1 /\ eval_operand y s0 = SOME w2 /\
       ~s0.vs_halted /\ s0.vs_current_bb = sa.cs_current_bb /\
       s0.vs_inst_idx = LENGTH sa.cs_current_insts ==>
@@ -39,7 +41,9 @@ Definition binop_frag_mem_def:
         ((?s v. r = OK s /\
                  bop_result cx ann bop tys v1 v2 es0 = INL v /\
                  word_value v /\
-                 stmt_state_rel H ctx func cenv cx es0 s /\
+                 (!H. valid_horizon cx st0 H es0.storage_trace ==>
+                   stmt_state_rel H ctx func cenv cx es0 s /\
+                   storage_well_formed_on cx es0 (FST H)) /\
                  eval_operand op s = SOME (val_to_w256 v) /\
                  (!z w. not_fresh_at sa z /\ lookup_var z s0 = SOME w ==>
                         lookup_var z s = SOME w) /\

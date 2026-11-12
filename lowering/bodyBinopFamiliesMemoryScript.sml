@@ -28,8 +28,8 @@ Libs
 (* binop_frag (exprBopSimDefs) on the memory-checked path: the operands
    held in their plain words. *)
 Definition binop_frag_val_mem_def:
-  binop_frag_val_mem H ctx func cenv cx bop ty ann bl el tys v1 v2 es0 <=>
-    binop_frag_mem H ctx func cenv cx bop ty ann bl el tys v1 v2
+  binop_frag_val_mem ctx func cenv cx bop ty ann bl el tys v1 v2 es0 <=>
+    binop_frag_mem ctx func cenv cx bop ty ann bl el tys v1 v2
       (val_to_w256 v1) (val_to_w256 v2) es0
 End
 
