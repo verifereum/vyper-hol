@@ -1,4 +1,5 @@
-(* Shared boundary between coverage and control-transfer simulation. *)
+(* Shared boundary between coverage and control-transfer simulation.
+   Restoring at a control point is a zero-step normalization. *)
 Theory fmpStageCoverFramePoint
 Ancestors
   fmpStageCoverInv fmpStageCoverMem fmpStageFmpSteps fmpStageOpBase
