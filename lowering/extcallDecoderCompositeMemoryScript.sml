@@ -112,7 +112,8 @@ Theorem extcall_decoder_complex_guard_success:
   isPREFIX (emitted_insts st fin) (DROP s.vs_inst_idx bb.bb_instructions) ==>
   ?k t. gas_path_mem ctx fn s k
       (OK (t with vs_inst_idx := s.vs_inst_idx + LENGTH (emitted_insts st fin))) /\
-    fresh_vars_wrt limit t /\ abi_decoder_address_frame st.cs_next_var s t
+    fresh_vars_wrt limit t /\ abi_decoder_address_frame st.cs_next_var s t /\
+    t.vs_current_bb = s.vs_current_bb
 Proof
   strip_tac >>
   Q.SUBGOAL_THEN `hi = Lit 0w \/ ?hb. eval_operand hi s = SOME (n2w hb) /\
@@ -124,6 +125,8 @@ Proof
     (emitted_insts st fin)` by gvs[EVERY_CONJ, EVERY_MEM] >>
   `run_inst_seq_mem_ok (emitted_insts st fin) s` by
     metis_tac[extcall_decoder_complex_guard_mem_ok] >>
+  `actual.vs_current_bb = s.vs_current_bb` by
+    (drule_all fragExecTheory.exec_block_run_inst_seq >> simp[]) >>
   drule_all run_inst_seq_gas_path_mem >> strip_tac >>
   qexistsl_tac [`LENGTH (FILTER (\i. i.inst_opcode = GAS) (emitted_insts st fin))`,
     `actual`] >> simp[ADD_COMM]
@@ -805,3 +808,183 @@ Resume extcall_decoder_remaining_members[compose_tail]:
 QED
 
 Finalise extcall_decoder_remaining_members
+
+
+(* One guarded traversal, shared by the concrete aggregate constructors. *)
+Theorem extcall_decoder_complex_members[local]:
+  let ao = \j. SUM (MAP abi_member_head_size
+        (MAP (vyper_to_abi_type env) (TAKE j tys)));
+      mo = \j. SUM (MAP (type_memory_bytes ce) (TAKE j tys));
+      raw = DROP sb (TAKE H snap);
+      good = \ty tv child_sb v.
+        child_sb <= H /\
+        vyper_decode_valid_enc (vyper_to_abi_type env ty) (DROP child_sb (TAKE H snap)) /\
+        (is_dynamic (vyper_to_abi_type env ty) \/
+          static_length (vyper_to_abi_type env ty) <= LENGTH (DROP child_sb (TAKE H snap))) /\
+        abi_to_vyper env ty (dec (vyper_to_abi_type env ty)
+          (DROP child_sb (TAKE H snap))) = SOME v /\ value_has_type tv v;
+      child_entry = \ty tv dst src a z u child_sb child_d.
+        abi_decoder_coherent ce env sf ty tv /\
+        compile_abi_decode_to_buf dst src MLOAD base_op hi
+          (type_to_abi_dec_info sf ce ty) a = ((),z) /\
+        fn_has_code a z func /\ fn_inst_ids_distinct func /\
+        eval_operand base_op u = SOME (n2w B) /\
+        eval_operand src u = SOME (n2w child_sb) /\
+        eval_operand dst u = SOME (n2w child_d) /\ eval_operand hi u = SOME (n2w H) /\
+        hi <> Lit 0w /\ base_op <> Lit 0w /\
+        H <= P /\ B+P < dimword(:256) /\ B+P <= u.vs_alloca_next /\
+        child_sb < dimword(:256) /\ child_d+type_memory_bytes ce ty < dimword(:256) /\
+        child_d+type_memory_bytes ce ty <= u.vs_alloca_next /\
+        LENGTH snap = P /\ mem_bytes_at B P u.vs_memory = snap /\
+        (!clamp. type_to_abi_dec_info sf ce ty = DecPrimWord clamp ==> child_sb+32 <= H) /\
+        abi_footprint_disjoint B P ((child_d,type_memory_bytes ce ty)::
+          abi_decoder_child_scratch (abi_decoder_ids first last) b cap u) /\
+        abi_footprint_disjoint child_d (type_memory_bytes ce ty)
+          (abi_decoder_child_scratch (abi_decoder_ids first last) b cap u) /\
+        (!id p n. FLOOKUP u.vs_allocas id = SOME (p,n) ==> p+n <= u.vs_alloca_next) /\
+        abi_decoder_budget first last b cap u /\ first <= abi_decoder_entry_floor a /\
+        z.cs_next_id <= last /\ z.cs_next_var <= limit.cs_next_var /\ fresh_vars_wrt limit u /\
+        b+cap < dimword(:256) /\ u.vs_alloca_next <= b+cap /\
+        EVERY (abi_decoder_operand_live a.cs_next_var) [src;dst;base_op;hi] /\
+        ~u.vs_halted /\ u.vs_current_bb = a.cs_current_bb /\
+        u.vs_inst_idx = LENGTH a.cs_current_insts;
+      observed = \i v.
+        let at = vyper_to_abi_type env (EL i tys);
+            tail = DROP (ao i) raw;
+            xs = if is_dynamic at then DROP (abi_head_word tail) raw else tail in
+        vyper_decode_valid_enc at xs /\ (is_dynamic at \/ static_length at <= LENGTH xs) /\
+        abi_to_vyper env (EL i tys) (dec at xs) = SOME v
+  in
+  LIST_REL (abi_decoder_coherent ce env sf) tys tvs /\
+  MAP type_memory_size tvs = MAP (type_memory_bytes ce) tys /\
+  (!i child_dst child_src a z u child_sb child_d.
+    i < LENGTH tys /\ child_entry (EL i tys) (EL i tvs)
+      child_dst child_src a z u child_sb child_d ==>
+    ?k r. gas_path_mem ctx func u k r /\
+      ((?t v. r = OK t /\ good (EL i tys) (EL i tvs) child_sb v /\
+        val_in_memory (EL i tvs) v child_d t.vs_memory /\
+        abi_scratch_effect first last a.cs_next_id z.cs_next_id a.cs_next_var limit
+          child_d (type_memory_bytes ce (EL i tys)) b cap u t /\
+        mem_bytes_at B P t.vs_memory = snap /\
+        (!id p n. FLOOKUP t.vs_allocas id = SOME (p,n) ==> p+n <= t.vs_alloca_next) /\
+        t.vs_current_bb = z.cs_current_bb /\ t.vs_inst_idx = LENGTH z.cs_current_insts /\
+        ~t.vs_halted) \/
+       (?t. r = Abort Revert_abort t /\ ~(?v. good (EL i tys) (EL i tvs) child_sb v)))) /\
+  H <= P /\ LENGTH snap = P /\ B+P < dimword(:256) /\ sb < dimword(:256) /\
+  d+mo (LENGTH tys) < dimword(:256) /\ b+cap < dimword(:256) /\
+  hi <> Lit 0w /\ base_op <> Lit 0w /\
+  compile_abi_decode_to_buf dst src MLOAD base_op hi
+    (DecComplex dyn (abi_decoder_member_infos sf ce tys)) st = ((),fin) /\
+  fn_has_code st fin func /\ fn_inst_ids_distinct func /\
+  fin.cs_next_id <= last /\ fin.cs_next_var <= limit.cs_next_var /\
+  mem_bytes_at B P s.vs_memory = snap /\
+  (!id p n. FLOOKUP s.vs_allocas id = SOME (p,n) ==> p+n <= s.vs_alloca_next) /\
+  abi_decoder_budget first last b cap s /\ first <= abi_decoder_entry_floor st /\
+  fresh_vars_wrt limit s /\ s.vs_alloca_next <= b+cap /\
+  B+P <= s.vs_alloca_next /\ d+mo (LENGTH tys) <= s.vs_alloca_next /\
+  abi_footprint_disjoint B P ((d,mo (LENGTH tys))::
+    abi_decoder_child_scratch (abi_decoder_ids first last) b cap s) /\
+  abi_footprint_disjoint d (mo (LENGTH tys))
+    (abi_decoder_child_scratch (abi_decoder_ids first last) b cap s) /\
+  eval_operand src s = SOME (n2w sb) /\ eval_operand dst s = SOME (n2w d) /\
+  eval_operand base_op s = SOME (n2w B) /\ eval_operand hi s = SOME (n2w H) /\
+  EVERY (abi_decoder_operand_live st.cs_next_var) [src;dst;base_op;hi] /\
+  ~s.vs_halted /\ s.vs_current_bb = st.cs_current_bb /\
+  s.vs_inst_idx = LENGTH st.cs_current_insts ==>
+  ?k r. gas_path_mem ctx func s k r /\
+    ((?t vs. r = OK t /\ sb <= H /\ LENGTH vs = LENGTH tys /\
+       (!i. i < LENGTH tys ==> observed i (EL i vs) /\
+          value_has_type (EL i tvs) (EL i vs) /\
+          val_in_memory (EL i tvs) (EL i vs) (d+mo i) t.vs_memory) /\
+       abi_scratch_effect first last st.cs_next_id fin.cs_next_id st.cs_next_var limit
+         d (mo (LENGTH tys)) b cap s t /\
+       mem_bytes_at B P t.vs_memory = snap /\
+       (!id p n. FLOOKUP t.vs_allocas id = SOME (p,n) ==> p+n <= t.vs_alloca_next) /\
+       t.vs_current_bb = fin.cs_current_bb /\ t.vs_inst_idx = LENGTH fin.cs_current_insts /\
+       ~t.vs_halted) \/
+     (?t. r = Abort Revert_abort t /\
+       ~(?vs. sb <= H /\ vyper_decode_valid_enc_tuple (MAP (vyper_to_abi_type env) tys) raw raw /\
+         abi_to_vyper_list env tys
+           (abi_decode_members (MAP (vyper_to_abi_type env) tys) raw raw) = SOME vs)))
+Proof
+  rpt BasicProvers.LET_ELIM_TAC >>
+  drule abiDecoderMemberInfosTheory.abi_decoder_member_infos_layout >> strip_tac >>
+  qpat_x_assum `compile_abi_decode_to_buf _ _ _ _ _ _ _ = _` mp_tac >>
+  simp[abi_decode_complex_phases, comp_bind_def, comp_ignore_bind_def] >>
+  pairarg_tac >> strip_tac >> gvs[] >>
+  rename1 `abi_decode_complex_head_guard src hi _ st = ((),mid)` >>
+  `SUM (MAP abi_member_head_size (MAP (vyper_to_abi_type env) tys)) < dimword(:256)` by
+    (drule extcall_decoder_members_head_bound >> simp[] >> strip_tac >>
+     fs[Abbr `mo`] >> decide_tac) >>
+  drule abi_decode_complex_head_guard_shape >> strip_tac >>
+  `abi_decode_source_opcode MLOAD` by simp[abi_decode_source_opcode_def] >>
+  drule_all abiDecoderComplexExecuteTheory.abi_decoder_complex_code >> strip_tac >>
+  drule abi_decoder_complex_guard_code >> strip_tac >>
+  `?bb. lookup_block s.vs_current_bb func.fn_blocks = SOME bb /\
+    isPREFIX (emitted_insts st mid) (DROP s.vs_inst_idx bb.bb_instructions)` by
+    (irule exprSimConcatPathTheory.concat_code_prefix >> simp[] >>
+     fs[IS_PREFIX_APPEND] >> simp[emitted_insts_def, DROP_LENGTH_APPEND]) >>
+  `abi_decoder_operand_live st.cs_next_var src /\
+   abi_decoder_operand_live st.cs_next_var hi` by fs[] >>
+  Cases_on `sb+ao (LENGTH tys) <= H`
+  >- suspend "guard_success" >>
+  suspend "guard_reject"
+QED
+
+Resume extcall_decoder_complex_members[guard_reject]:
+  `H < dimword(:256) /\ H < sb + SUM (MAP abi_member_head_size
+      (MAP (vyper_to_abi_type env) tys))` by (fs[Abbr `ao`] >> decide_tac) >>
+  drule_all extcall_decoder_complex_guard_reject >>
+  disch_then (qspec_then `ctx` strip_assume_tac) >>
+  qexistsl_tac [`k`, `Abort Revert_abort t`] >> simp[] >>
+  rpt strip_tac >> spose_not_then strip_assume_tac >>
+  drule abiValidMembersTheory.abi_valid_members_view >>
+  simp[Abbr `raw`, LENGTH_DROP, LENGTH_TAKE] >> decide_tac
+QED
+
+Resume extcall_decoder_complex_members[guard_success]:
+  `H < dimword(:256) /\ sb <= H /\
+   sb + SUM (MAP abi_member_head_size (MAP (vyper_to_abi_type env) tys)) <= H /\
+   mid.cs_next_var <= limit.cs_next_var` by (fs[Abbr `ao`] >> gvs[]) >>
+  drule_all extcall_decoder_complex_guard_success >>
+  disch_then (qspec_then `ctx` strip_assume_tac) >>
+  qmatch_asmsub_abbrev_tac `gas_path_mem ctx func s k (OK ready)` >>
+  `abi_decoder_address_frame st.cs_next_var s ready /\ fresh_vars_wrt limit ready` by
+    (fs[Abbr `ready`, abi_decoder_address_frame_def, fresh_vars_wrt_def]) >>
+  `abi_scratch_effect first last st.cs_next_id mid.cs_next_id st.cs_next_var limit
+     d (mo (LENGTH tys)) b cap s ready` by
+    (irule abi_scratch_address_effect >> simp[]) >>
+  drule_all abi_scratch_address >>
+  disch_then (qspecl_then [`abi_decoder_ids first last`, `[]`] strip_assume_tac) >>
+  mp_tac (Q.INST [`j` |-> `0`, `ps` |-> `[]`, `c0` |-> `st`,
+    `s0` |-> `s`, `st` |-> `mid`, `s` |-> `ready`, `P` |-> `LENGTH snap`]
+    extcall_decoder_remaining_members) >>
+  rpt BasicProvers.LET_ELIM_TAC >>
+  qpat_x_assum `_ ==> ?k r. gas_path_mem ctx func ready k r /\ _` mp_tac >>
+  impl_tac >- suspend "traversal_initial" >>
+  suspend "traversal_result"
+QED
+
+Resume extcall_decoder_complex_members[traversal_initial]:
+  `child_entry' = child_entry /\ good' = good` by
+    (simp[Abbr `child_entry'`, Abbr `child_entry`, Abbr `good'`, Abbr `good`, ADD_COMM]) >>
+  simp[Abbr `ao'`, Abbr `mo'`, Abbr `ao`, Abbr `mo`] >>
+  simp[Abbr `inv'`] >>
+  `first <= abi_decoder_entry_floor mid` by
+    (fs[abiDecoderTypedContractTheory.abi_decoder_entry_floor_def] >> decide_tac) >>
+  fs[abi_decoder_address_frame_def] >>
+  simp[Abbr `ready`, abi_decoder_operand_live_mono] >>
+  conj_tac >- first_assum ACCEPT_TAC >>
+  conj_tac >- first_assum ACCEPT_TAC >>
+  conj_tac >- metis_tac[abi_decoder_operand_live_mono, DECIDE ``n <= n+6``] >>
+  fs[IS_PREFIX_APPEND, emitted_insts_def]
+QED
+
+Resume extcall_decoder_complex_members[traversal_result]:
+  strip_tac >>
+  qexistsl_tac [`k+k'`, `r`] >>
+  (conj_tac >- (irule gas_path_mem_then >> metis_tac[])) >>
+  gvs[Abbr `inv'`] >> metis_tac[]
+QED
+
+Finalise extcall_decoder_complex_members
