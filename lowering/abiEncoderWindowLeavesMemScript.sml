@@ -26,12 +26,12 @@ Proof
   rpt strip_tac >> first_x_assum drule >> simp[] >> metis_tac[]
 QED
 
-Theorem window_copy_contract_mem:
+Theorem window_copy_contract_mem_growth:
   !dst src st out st' ctx func s at av sb cap d.
   compile_abi_encode_to_buf dst src (AbiCopy sz) st = (out,st') /\
   abi_encoder_window_pre ctx func st st' dst src (AbiCopy sz) at av sb cap d s ==>
   ?t. window_strong_result ctx func st st' out at av d s t /\ mem_cont_sim ctx func s t /\
-      window_mem_frame ctx func s t
+      window_mem_frame ctx func s t /\ LENGTH s.vs_memory <= LENGTH t.vs_memory
 Proof
   rpt gen_tac >> strip_tac >>
   `!i b n. i IN window_alloca_sites func (frag_ids st st') /\
@@ -73,12 +73,25 @@ Proof
     metis_tac[window_seq_mem_cont] >>
   qexists_tac `(mcopy d sb sz s) with vs_inst_idx := LENGTH st'.cs_current_insts` >>
   asm_rewrite_tac[] >>
+  reverse conj_tac
+  >- simp[mcopy_def, venomMemPropsTheory.write_memory_with_expansion_nondecreasing] >>
   simp_tac bool_ss [window_strong_result_def, abi_encoder_window_result_def] >>
   simp[eval_operand_def, mcopy_mem_bytes_at_same, abi_encoder_extend_sim_sim] >>
   mp_tac (Q.INST [`d` |-> `d`, `sb` |-> `sb`, `n` |-> `sz`,
     `ix` |-> `LENGTH st'.cs_current_insts`] window_copy_state_resources) >>
   simp[] >> strip_tac >> conj_tac >- asm "sizes" ACCEPT_TAC >>
   simp[mcopy_def, write_memory_with_expansion_def]
+QED
+
+Theorem window_copy_contract_mem:
+  !dst src st out st' ctx func s at av sb cap d.
+  compile_abi_encode_to_buf dst src (AbiCopy sz) st = (out,st') /\
+  abi_encoder_window_pre ctx func st st' dst src (AbiCopy sz) at av sb cap d s ==>
+  ?t. window_strong_result ctx func st st' out at av d s t /\ mem_cont_sim ctx func s t /\
+      window_mem_frame ctx func s t
+Proof
+  rpt gen_tac >> strip_tac >> drule_all window_copy_contract_mem_growth >>
+  strip_tac >> qexists `t` >> asm_rewrite_tac[]
 QED
 
 Theorem window_word_mem_checks[local]:
