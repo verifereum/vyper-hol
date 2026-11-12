@@ -214,6 +214,29 @@ Proof
   simp[] >> qexists `b` >> simp[]
 QED
 
+Theorem inline_parameter_trace_control[local]:
+  !N. (!i. i < N ==> ?inst u.
+    is_param_opcode inst.inst_opcode /\
+    step_inst fuel C inst (ss i) = OK u /\
+    ss (SUC i) = u with vs_inst_idx := SUC (ss i).vs_inst_idx) ==>
+    (ss N).vs_current_bb = (ss 0).vs_current_bb /\
+    (ss N).vs_prev_bb = (ss 0).vs_prev_bb /\
+    (ss N).vs_halted = (ss 0).vs_halted
+Proof
+  Induct >> simp[] >> strip_tac >>
+  `((ss N).vs_current_bb = (ss 0).vs_current_bb) /\
+   ((ss N).vs_prev_bb = (ss 0).vs_prev_bb) /\
+   ((ss N).vs_halted = (ss 0).vs_halted)` by
+    (first_x_assum irule >> rpt strip_tac >> first_x_assum irule >> decide_tac) >>
+  first_x_assum (qspec_then `N` strip_assume_tac) >> gvs[] >>
+  `~is_terminator inst.inst_opcode /\ ~is_alloca_op inst.inst_opcode /\
+   ~is_ext_call_op inst.inst_opcode /\ inst.inst_opcode <> INVOKE` by
+    (Cases_on `inst.inst_opcode` >>
+     gvs[venomInstTheory.is_param_opcode_def, venomInstTheory.is_terminator_def,
+         venomInstTheory.is_alloca_op_def, venomInstTheory.is_ext_call_op_def]) >>
+  drule_all passSharedFieldTheory.step_inst_preserves_all >> simp[]
+QED
+
 Theorem inline_selected_source_segment:
   inliner_input_ok C /\ inline_annotated_origin C n root cert /\
   inline_live_stack C cert root ((p,pa,proute,psnap)::entries) frame /\
@@ -234,6 +257,9 @@ Theorem inline_selected_source_segment:
     cfuel = SUC k /\
     exec_block k C entry (ss (LENGTH params)) = bres /\
     (ss (LENGTH params)).vs_inst_idx = LENGTH params /\
+    (ss (LENGTH params)).vs_current_bb = entry.bb_label /\
+    (ss (LENGTH params)).vs_prev_bb = NONE /\
+    ~(ss (LENGTH params)).vs_halted /\
     phi_prefix_length entry.bb_instructions <= (ss (LENGTH params)).vs_inst_idx /\
     (no_param_insts tail ==>
       no_param_insts (DROP (ss (LENGTH params)).vs_inst_idx entry.bb_instructions)) /\
@@ -257,6 +283,20 @@ Theorem inline_selected_source_segment:
 Proof
   strip_tac >> drule_all inline_live_selected_source_entry_trace >>
   disch_then (qspecl_then [`0`, `Tctx`] strip_assume_tac) >>
+  `((ss (LENGTH params)).vs_current_bb = (ss 0).vs_current_bb) /\
+   ((ss (LENGTH params)).vs_prev_bb = (ss 0).vs_prev_bb) /\
+   ((ss (LENGTH params)).vs_halted = (ss 0).vs_halted)` by
+    (irule inline_parameter_trace_control >>
+     qexistsl [`C`,`k`] >> rpt strip_tac >>
+     `is_param_opcode (EL i params).inst_opcode` by
+       (drule_all callLayoutDefsTheory.param_insts_from_el >>
+        simp[callLayoutDefsTheory.param_inst_at_def]) >> metis_tac[]) >>
+  `ca.ia_entry.vs_current_bb = entry.bb_label /\
+   ca.ia_entry.vs_prev_bb = NONE /\ ~ca.ia_entry.vs_halted` by
+    (qpat_x_assum `inline_original_child _ _ _ _ _ _ _ _ _` mp_tac >>
+     rewrite_tac[inline_original_child_def] >> strip_tac >>
+     qpat_x_assum `setup_callee _ _ _ = SOME _` mp_tac >>
+     simp[setup_callee_def] >> disch_then (fn th => rewrite_tac[GSYM th]) >> simp[]) >>
   qexistsl [`k`, `bres`, `ss`, `ml`, `bb`, `tb`, `snap`, `ts`] >> simp[listTheory.DROP_APPEND2] >>
   irule inline_segment_entry_trace >> simp[] >>
   gvs[venomStateTheory.jump_to_def]
@@ -762,6 +802,9 @@ Theorem inline_selected_source_body_cut:
     no_param_insts tail /\ cfuel = SUC k /\
     exec_block k C entry (ss (LENGTH params)) = bres /\
     (ss (LENGTH params)).vs_inst_idx = LENGTH params /\
+    (ss (LENGTH params)).vs_current_bb = entry.bb_label /\
+    (ss (LENGTH params)).vs_prev_bb = NONE /\
+    ~(ss (LENGTH params)).vs_halted /\
     phi_prefix_length entry.bb_instructions <= (ss (LENGTH params)).vs_inst_idx /\
     no_param_insts (DROP (ss (LENGTH params)).vs_inst_idx entry.bb_instructions) /\
     (!err. bres <> Error err) /\
@@ -788,3 +831,4 @@ Proof
   qexistsl [`entry`,`rest`,`params`,`tail`,`k`,`bres`,`ss`,`ml`,`bb`,`tb`,`snap`,`ts`] >>
   simp[]
 QED
+
