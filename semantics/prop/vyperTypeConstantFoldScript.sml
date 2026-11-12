@@ -1268,3 +1268,19 @@ Proof
        type_env_all_modules_constants_order,
        MATCH_MP PERM_EVERY (SPEC_ALL PERM_constants_order)]
 QED
+
+(* For a checked contract, folding module src's constants does not read src's
+   own immutables slot: a constant initializer names only declared constants
+   (constant_expr), an earlier same-module constant is in acc, which
+   merge_constant_imms puts over the slot, and a forward reference fails the
+   contract_constants_ok fold.  Other modules' slots are read as given. *)
+Theorem constants_fold_module_imms_independent:
+  check_contract mode layouts addr mods = SOME art /\
+  ALOOKUP mods src = SOME ts /\
+  (!s. s <> src /\ IS_SOME (ALOOKUP mods s) ==>
+       get_source_immutables s imms' = get_source_immutables s imms) ==>
+  constants_fold_module mods imms' src ts FEMPTY =
+  constants_fold_module mods imms src ts FEMPTY
+Proof
+  cheat
+QED

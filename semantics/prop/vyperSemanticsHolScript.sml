@@ -14,3 +14,4 @@ Ancestors
   vyperTypeDeploymentSoundness
   vyperRuntimeImmutables
   vyperCallFiniteStorage
+  vyperDeployConstantsFold
