@@ -16,6 +16,7 @@ Ancestors
   unitTransformDefs passSimulationDefs venomExecSemantics venomState venomInst
   simplifyCfgAvailability o1ContractSimplifyCfgSrcFrame
   o1LowerDloadReadiness venomInstProofs1 concretizePtrOwnerPath
+  venomWf
   finite_map words list
 
 (* Saved INVOKE control survives the return merge and output assignment. *)
@@ -54,7 +55,25 @@ Theorem fmp_stage_back_entry:
                   vs_inst_idx := 0 |>) s1 /\
     active_inst fn inst s1
 Proof
-  cheat
+  strip_tac >>
+  `MEM fn C.ctx_functions` by metis_tac[lookup_function_MEM] >>
+  `wf_function fn /\ first_block_no_phi fn` by
+    (fs[fmp_stage_ctx_def, o1_ctx_shape_def, EVERY_MEM, o1_fn_shape_def] >>
+     metis_tac[]) >>
+  Cases_on `fn.fn_blocks` >>
+  gvs[fn_entry_label_def, entry_block_def] >>
+  rename1 `fn.fn_blocks = bb::bbs` >>
+  `bb.bb_instructions <> []` by
+    metis_tac[wf_function_def, bb_well_formed_def, MEM] >>
+  Cases_on `bb.bb_instructions` >> gvs[] >>
+  rename1 `bb.bb_instructions = inst::rest` >>
+  `inst.inst_opcode <> PHI` by fs[first_block_no_phi_def] >>
+  qexistsl_tac
+    [`vs with <|vs_prev_bb := NONE; vs_current_bb := bb.bb_label; vs_inst_idx := 0|>`,
+     `inst`] >>
+  simp[enters_block_def, active_inst_def, get_instruction_def,
+       lookup_block_def, FIND_thm, eval_phis_def, phi_prefix_length_def] >>
+  qexists_tac `bb` >> simp[]
 QED
 
 (* Why it holds: callee_first (o1PassContract) orders callees strictly
