@@ -2015,6 +2015,102 @@ Proof
   qexists_tac `inst` >> gvs[EVERY_MEM] >> metis_tac[]
 QED
 
+(* Terminal layout: only a terminator/switch pair may close a block. *)
+val dyn_T = ``\xs:instruction list. xs <> [] /\
+  is_terminator (LAST xs).inst_opcode``;
+val dyn_terminal_span = ``\a b. entry_shape a b /\
+  EVERY (\bb. (^dyn_T) bb.bb_instructions) (emitted_blocks a b)``;
+val dyn_terminal = ``\m. !a r b. m a = (r,b) ==> (^dyn_terminal_span) a b``;
+
+Theorem abi_dyn_terminal_compose[local]:
+  !a b c. (^dyn_terminal_span) a b /\ (^dyn_terminal_span) b c ==>
+    (^dyn_terminal_span) a c
+Proof
+  simp_tac std_ss [] >> rpt gen_tac >> strip_tac >>
+  `entry_shape a c` by metis_tac[entry_shape_trans] >>
+  `cs_extends a b /\ cs_extends b c` by metis_tac[entry_shape_extends] >>
+  drule_all abi_dyn_emitted_compose >> simp[EVERY_APPEND]
+QED
+
+Theorem abi_dyn_terminal_bind[local]:
+  !m f. (^dyn_terminal) m /\
+    (!x. (^(inst [alpha |-> beta] dyn_terminal)) (f x)) ==>
+    (^(inst [alpha |-> beta] dyn_terminal)) (comp_bind m f)
+Proof
+  simp_tac std_ss [comp_bind_def] >> rpt gen_tac >> strip_tac >>
+  rpt gen_tac >> strip_tac >> Cases_on `m a` >> gvs[] >>
+  first_x_assum drule >> strip_tac >> first_x_assum drule >> strip_tac >>
+  irule (BETA_RULE abi_dyn_terminal_compose) >> qexists_tac `r'` >> simp[]
+QED
+
+Theorem abi_dyn_terminal_ignore_bind[local]:
+  !m n. (^dyn_terminal) m /\
+    (^(inst [alpha |-> beta] dyn_terminal)) n ==>
+    (^(inst [alpha |-> beta] dyn_terminal)) (comp_ignore_bind m n)
+Proof
+  simp_tac std_ss [comp_ignore_bind_def] >> rpt gen_tac >> strip_tac >>
+  ho_match_mp_tac (BETA_RULE abi_dyn_terminal_bind) >> simp[]
+QED
+
+Theorem abi_dyn_terminal_return[local]:
+  !v. (^dyn_terminal) (comp_return v)
+Proof
+  simp[comp_return_def, entry_shape_refl, emitted_blocks_def]
+QED
+
+Theorem abi_dyn_terminal_emit_op[local]:
+  !opc ops. (^(inst [alpha |-> ``:operand``] dyn_terminal)) (emit_op opc ops)
+Proof
+  simp_tac std_ss [emit_op_def, comp_bind_def, comp_ignore_bind_def,
+    comp_return_def, fresh_var_def, fresh_id_def, emit_def] >>
+  rpt strip_tac >> gvs[] >> simp[entry_shape_def, emitted_blocks_def] >>
+  qexists_tac `[mk_inst a.cs_next_id opc ops
+    [STRING #"%" (toString a.cs_next_var)]]` >> simp[]
+QED
+
+Theorem abi_dyn_terminal_emit_inst[local]:
+  !opc ops outs. (^(inst [alpha |-> ``:unit``] dyn_terminal)) (emit_inst opc ops outs)
+Proof
+  simp_tac std_ss [emit_inst_def, comp_bind_def, fresh_id_def, emit_def] >>
+  rpt strip_tac >> gvs[] >> simp[entry_shape_def, emitted_blocks_def] >>
+  qexists_tac `[mk_inst a.cs_next_id opc ops outs]` >> simp[]
+QED
+
+Theorem abi_dyn_terminal_emit_void[local]:
+  !opc ops. (^(inst [alpha |-> ``:unit``] dyn_terminal)) (emit_void opc ops)
+Proof
+  simp_tac std_ss [emit_void_def, GSYM emit_inst_def] >>
+  MATCH_ACCEPT_TAC (BETA_RULE abi_dyn_terminal_emit_inst)
+QED
+
+Theorem abi_dyn_terminal_label[local]:
+  !suffix. (^(inst [alpha |-> ``:string``] dyn_terminal)) (fresh_label suffix)
+Proof
+  simp[fresh_label_def, entry_shape_def, emitted_blocks_def]
+QED
+
+Theorem abi_dyn_terminal_alloc[local]:
+  !size. (^(inst [alpha |-> ``:buffer``] dyn_terminal)) (compile_alloc_buffer size)
+Proof
+  gen_tac >> simp_tac std_ss [compile_alloc_buffer_def] >>
+  MATCH_MP_TAC (BETA_RULE abi_dyn_terminal_bind) >> conj_tac
+  >- MATCH_ACCEPT_TAC (BETA_RULE abi_dyn_terminal_emit_op) >>
+  gen_tac >> BETA_TAC >> MATCH_ACCEPT_TAC (BETA_RULE abi_dyn_terminal_return)
+QED
+
+Theorem abi_dyn_terminal_switch[local]:
+  !opc ops outs l. is_terminator opc ==>
+    (^(inst [alpha |-> ``:string``] dyn_terminal))
+      (do emit_inst opc ops outs; new_block l od)
+Proof
+  simp_tac std_ss [emit_inst_def, comp_bind_def, comp_ignore_bind_def,
+    fresh_id_def, emit_def, new_block_def] >>
+  rpt strip_tac >> gvs[] >>
+  simp[entry_shape_def, emitted_blocks_def, rich_listTheory.LAST_APPEND,
+    mk_inst_def] >> disj2_tac >> qexistsl_tac [`[]`,
+      `[mk_inst a.cs_next_id opc ops outs]`] >> simp[]
+QED
+
 (* Bounded emitted-code region.  Upper bounds rule out spurious off-cut
    states past the last instruction of either sort of block. *)
 val dyn_R = ``\sa sb s.
