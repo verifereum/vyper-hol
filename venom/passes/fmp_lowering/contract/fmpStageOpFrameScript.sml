@@ -324,5 +324,35 @@ Theorem fmp_stage_op_frame:
     (s1 with vs_inst_idx := SUC s.vs_inst_idx) lo
     (t1 with vs_inst_idx := SUC t.vs_inst_idx) ts
 Proof
-  cheat
+  strip_tac >> drule_all fmp_stage_frame_facts >> strip_tac >>
+  `!v. MEM v (live_vars_at (liveness_analyze fn) s.vs_current_bb
+      (SUC s.vs_inst_idx)) /\ ~MEM v inst.inst_outputs ==>
+      MEM v (live_vars_at (liveness_analyze fn) s.vs_current_bb s.vs_inst_idx)` by
+    metis_tac[fmp_live_ordinary_suc] >>
+  fs[fmp_stage_rel_def] >>
+  reverse (rpt conj_tac)
+  >- gvs[o1LowerDloadSharedTheory.ld_shared_agree_def]
+  >- (fs[fmp_frame_rel_def] >>
+      qexistsl_tac [`infos`, `ctx`, `runner`] >>
+      `fmp_stage_tidx (fmp_stage_plan infos ctx fn) (fmp_stage_root infos ctx fn)
+        s.vs_current_bb (case lookup_block s.vs_current_bb fn.fn_blocks of
+          NONE => [] | SOME bb => bb.bb_instructions) (SUC s.vs_inst_idx) =
+        SUC t.vs_inst_idx` by
+        (drule_all (SRULE [] fmp_ordinary_control_suc) >> simp[] >> metis_tac[]) >>
+      `fmp_env_rel sm fn
+        (live_vars_at (liveness_analyze fn) s.vs_current_bb (SUC s.vs_inst_idx))
+        (step_prov PG G inst s1) (step_taint inst s s1 tn).t_var
+        (s1 with vs_inst_idx := SUC s.vs_inst_idx)
+        (t1 with vs_inst_idx := SUC t.vs_inst_idx)` by
+        (irule fmp_env_rel_step >> metis_tac[]) >>
+      gvs[fmp_params_rel_def] >> conj_tac >- metis_tac[] >>
+      qpat_x_assum `s.vs_current_bb = t.vs_current_bb` (SUBST_ALL_TAC o SYM) >>
+      Cases_on `fmp_stage_root infos ctx fn` >- gvs[] >>
+      PairCases_on `x` >> fs[] >>
+      `!v. ~MEM v inst.inst_outputs ==>
+        FLOOKUP t1.vs_vars v = FLOOKUP t.vs_vars v` by metis_tac[] >>
+      drule_all (SRULE [] fmp_ordinary_root_transport) >>
+      disch_then (qspec_then `SUC t.vs_inst_idx` strip_assume_tac) >>
+      gvs[]) >>
+  gvs[]
 QED
