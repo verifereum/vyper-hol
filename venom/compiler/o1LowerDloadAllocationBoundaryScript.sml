@@ -41,7 +41,38 @@ Theorem ld_joint_alloca_fresh_metadata:
     t1.vs_alloca_next = s1.vs_alloca_next +
       32 * CARD {id | id IN FDOM X /\ MEM (FST id) (a::MAP (\f. f.of_owner) U)}
 Proof
-  (* P4a in progress *) cheat
+  rpt gen_tac >> strip_tac >> simp_tac (srw_ss()) [LET_THM] >>
+  `occ_frame_reachable vs C stk PG G tn fn inst s n a U B HP H` by
+    metis_tac[ld_joint_source] >>
+  `s1.vs_alloca_next + 32 * ctx_dload_count C < dimword (:256)` by
+    (irule ld_occurrence_shape_alloca_headroom >> metis_tac[]) >>
+  drule_all ld_joint_scratch_count >> strip_tac >>
+  drule ld_joint_boundary_site_frontiers >> strip_tac >>
+  drule ld_joint_boundary_scratch_frontier >> strip_tac >>
+  `FLOOKUP t.vs_allocas inst.inst_id = NONE` by
+    metis_tac[ld_joint_original_lookup] >>
+  `exec_alloca inst s amount = OK s1` by
+    metis_tac[lower_dload_step_alloca] >>
+  qhdtm_x_assum `ld_joint_boundary` mp_tac >>
+  simp_tac bool_ss [ld_joint_boundary_def, ld_joint_frame_def] >> strip_tac >>
+  `(a,inst.inst_id) NOTIN FDOM sites` by
+    (`FLOOKUP B (a,inst.inst_id) = NONE` by
+       (fs[occurrence_annotation_ok_def, occurrence_allocas_ok_def]) >>
+     fs[ld_joint_erasure_def, FLOOKUP_DEF]) >>
+  drule_all (Q.ISPEC `amount:bytes32`
+    (Q.GEN `z` (SPEC_ALL lower_dload_paired_alloca_fresh))) >>
+  disch_then (qspec_then `amount` strip_assume_tac) >>
+  gvs[] >>
+  `t1.vs_alloca_next < dimword (:256)` by decide_tac >>
+  qexists_tac `t1` >> rpt conj_tac
+  >- metis_tac[lower_dload_step_alloca]
+  >- (gvs[ld_joint_erasure_def, FLOOKUP_UPDATE] >>
+      rpt gen_tac >> Cases_on `(a,inst.inst_id) = id` >> simp[] >> metis_tac[])
+  >- (`lo <= t.vs_alloca_next /\
+       s.vs_alloca_next + w2n amount < dimword (:256)` by decide_tac >>
+      irule ld_joint_geometry_extend_frontiers >> simp[] >> metis_tac[])
+  >- (irule ld_allocas_fresh_site >> metis_tac[])
+  >> simp[]
 QED
 
 Theorem ld_joint_saved_extend:

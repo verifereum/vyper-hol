@@ -72,7 +72,8 @@ Theorem ld_memory_agree_return_buffer:
   ld_joint_geometry sites X lo owners /\
   (k=0 \/ (p=q /\ p+k<=lo) \/
    (?id b c z j. FLOOKUP sites id = SOME (b,c,z) /\ j+k<=z /\
-                 p=b+j /\ q=c+j)) ==>
+                 p=b+j /\ q=c+j) \/
+   (p=q /\ fl<=p /\ ld_dyn_floor_ok fl lo sites X)) ==>
   ld_memory_agree sites lo (mask DIFF {i | p<=i /\ i<p+k})
     (write_memory_with_expansion p (TAKE rs bs) s).vs_memory
     (write_memory_with_expansion q (TAKE rs bs) t).vs_memory
@@ -86,8 +87,37 @@ Proof
   >- (`TAKE rs bs = []` by metis_tac[LENGTH_NIL] >>
       gvs[] >> irule ld_memory_agree_empty_write >> simp[]) >>
   qpat_assum `LENGTH (TAKE rs bs) = _` (fn th => once_rewrite_tac[GSYM th]) >>
+  Cases_on `p=q /\ fl<=p /\ ld_dyn_floor_ok fl lo sites X`
+  >- (pop_assum strip_assume_tac >>
+      qpat_x_assum `p = q` (SUBST_ALL_TAC o SYM) >>
+      drule_at (Pat `ld_dyn_floor_ok _ _ _ _`) ld_memory_agree_clean_write_dyn >>
+          disch_then irule >> metis_tac[]) >>
   drule_at (Pat `ld_joint_geometry _ _ _ _`) ld_memory_agree_clean_write >>
   disch_then irule >> simp[] >> metis_tac[]
+QED
+
+(* The return buffer keeps the dynamic-region agreement when both sides
+   write it at the same address, or both write it below the floor. *)
+Theorem ld_dyn_agree_return_buffer:
+  k = MIN rs (LENGTH bs) /\
+  ld_dyn_agree fl mask s.vs_memory t.vs_memory /\
+  (k=0 \/ p=q \/ (p+k<=fl /\ q+k<=fl)) ==>
+  ld_dyn_agree fl (mask DIFF {i | p<=i /\ i<p+k})
+    (write_memory_with_expansion p (TAKE rs bs) s).vs_memory
+    (write_memory_with_expansion q (TAKE rs bs) t).vs_memory
+Proof
+  rpt gen_tac >>
+  disch_then (CONJUNCTS_THEN2 assume_tac (CONJUNCTS_THEN2 assume_tac assume_tac)) >>
+  `LENGTH (TAKE rs bs) = k` by
+    (Cases_on `rs <= LENGTH bs` >> gvs[LENGTH_TAKE_EQ, arithmeticTheory.MIN_DEF]) >>
+  qpat_assum `LENGTH (TAKE rs bs) = _` (fn th => once_rewrite_tac[GSYM th]) >>
+  qpat_x_assum `_ \/ _` strip_assume_tac
+  >- (`TAKE rs bs = []` by metis_tac[LENGTH_NIL] >>
+      fs[ptrDisciplineTheory.ld_dyn_agree_def,
+         regularCallEmitSimTheory.read_byte_write_memory_with_expansion])
+  >- (qpat_x_assum `p = q` (SUBST_ALL_TAC o SYM) >>
+      irule ld_dyn_agree_clean_write_same >> simp[]) >>
+  irule ld_dyn_agree_clean_write_below >> simp[]
 QED
 
 (* Exact CREATE requests select the same created address and adopted fields.
