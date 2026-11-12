@@ -12,12 +12,14 @@
  *   alloc_limits_stmt(s) -- the same for every expression of a statement,
  *                           every local it declares, and a log's buffers
  *
- * alloc_limits_expr also carries two more codegen-time rejections, checked
- * up front the same way, both Python's "risky overlap" panic:
+ * alloc_limits_expr also carries more codegen-time rejections, checked
+ * up front the same way: two are Python's "risky overlap" panic,
  * pop_subscript_overlap for a subscript of a pop() result
  * (vyperlang/vyper#5350), and target_subscript_overlap for a target
  * subscript whose base passes through a dynamic-array element
- * (vyperlang/vyper#5280).
+ * (vyperlang/vyper#5280); target_in_immutables rejects a pop() of, and
+ * (in alloc_limits_stmt) an append() to, an immutable's member, where
+ * Python's Venom codegen panics.
  *)
 Theory allocLimits
 Ancestors
@@ -159,6 +161,30 @@ Definition target_subscript_overlap_def:
         any_written reads idx_as \/ MEM RiskyAcc idx_as
 End
 
+(* Whether the target lies in an immutable: its root is a module variable
+   that mvars (a compile env's ce_module_vars) places at an ImmutableLoc,
+   which compile_get_target_ptr gives LocCode.  A pop() of, or an
+   append() to, such a target is rejected.  A local root is never in one: compile_get_target_ptr's
+   ImmutableLoc case for a NameTarget is unreachable, since every
+   producer of ce_vars (allocate_args, declare_local, the parameter and
+   kwarg registrations) binds a MemLoc or PtrVar.
+   Mirrors Python: expr.py _lower_dynarray_pop and
+   _lower_dynarray_append, whose length load
+   builder.load(darray_ptr, data_loc) raises CompilerPanic ("Cannot load
+   from location: immutables", venom/builder.py) for an array in
+   IMMUTABLES *)
+Definition target_in_immutables_def:
+  target_in_immutables mvars (NameTarget _) = F /\
+  target_in_immutables mvars (TopLevelNameTarget nsid) =
+    (case FLOOKUP mvars nsid of
+       SOME (ImmutableLoc _) => T
+     | _ => F) /\
+  target_in_immutables mvars (SubscriptTarget bt _) =
+    target_in_immutables mvars bt /\
+  target_in_immutables mvars (AttributeTarget bt _) =
+    target_in_immutables mvars bt
+End
+
 (* Every static buffer the lowering allocates for a node of the expression
    is below Python's allocation limit, 2 ** 64 bytes: the buffers of bytes
    and string literals, struct and array literals, empty(T) of a type that
@@ -224,7 +250,8 @@ Definition alloc_limits_expr_def:
       | _ => T) /\
      alloc_limits_exprs cenv es) /\
   alloc_limits_expr cenv (Pop t tgt) =
-    (type_alloc_ok cenv t /\ alloc_limits_target cenv tgt) /\
+    (type_alloc_ok cenv t /\ alloc_limits_target cenv tgt /\
+     ~target_in_immutables cenv.ce_module_vars tgt) /\
   alloc_limits_expr cenv (Call t ct es dflt) =
     (type_alloc_ok cenv t /\ ext_call_alloc_ok cenv ct es /\
      alloc_limits_exprs cenv es /\ alloc_limits_opt cenv dflt) /\
@@ -434,7 +461,8 @@ Definition alloc_limits_stmt_def:
   alloc_limits_stmt cenv (AugAssign ty tgt op e) =
     (alloc_limits_target cenv tgt ∧ alloc_limits_expr cenv e) ∧
   alloc_limits_stmt cenv (Append tgt e) =
-    (alloc_limits_target cenv tgt ∧ alloc_limits_expr cenv e) ∧
+    (alloc_limits_target cenv tgt ∧ alloc_limits_expr cenv e ∧
+     ¬target_in_immutables cenv.ce_module_vars tgt) ∧
   alloc_limits_stmt cenv (Log id es) =
     (alloc_limits_exprs cenv es ∧ log_alloc_ok cenv id es) ∧
   alloc_limits_stmt cenv (Assert c reason) =

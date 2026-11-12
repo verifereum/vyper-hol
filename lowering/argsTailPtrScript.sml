@@ -36,8 +36,8 @@ Proof
 QED
 
 Theorem lower_typed_args_cons_tail_ptr:
-  expr_post ctx func cenv cx e es sa s1 s0 es1 v x t /\
-  stmt_state_rel ctx func cenv cx es s0 /\ local_ptrs_reserved cenv sa /\
+  expr_post H ctx func cenv cx e es sa s1 s0 es1 v x t /\
+  stmt_state_rel H ctx func cenv cx es s0 /\ local_ptrs_reserved cenv sa /\
   local_ptrs_reserved cenv s1 /\
   MAP FDOM es.scopes = MAP FDOM es1.scopes /\
   sa.cs_next_var <= s1.cs_next_var /\ sa.cs_next_id <= s1.cs_next_id /\

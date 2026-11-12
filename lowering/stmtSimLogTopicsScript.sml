@@ -123,7 +123,7 @@ Proof
 QED
 
 Theorem log_arg_footprint_bound:
-  stmt_state_rel ctx func cenv cx es s /\
+  stmt_state_rel H ctx func cenv cx es s /\
   log_arg_rel cenv cx sa sb es s (op,ty) v /\
   evaluate_type (get_tenv cx) ty = SOME tv /\
   ~is_word_type ty /\ eval_operand op s = SOME p ==>
@@ -157,7 +157,7 @@ Proof
 QED
 
 Theorem log_bytestring_arg_view:
-  stmt_state_rel ctx func cenv cx es s /\
+  stmt_state_rel H ctx func cenv cx es s /\
   log_arg_rel cenv cx sa sb es s (op,ty) v /\
   supported_scalar_type ty /\ is_bytestring_type ty /\
   evaluate_type (get_tenv cx) ty = SOME tv /\ value_has_type tv v ==>
@@ -231,7 +231,7 @@ Proof
 QED
 
 Theorem compile_encode_log_topic_scalar_run:
-  stmt_state_rel ctx func cenv cx es s /\
+  stmt_state_rel H ctx func cenv cx es s /\
   log_arg_rel cenv cx sa sm es s (x,ty) v /\
   supported_scalar_type ty /\ evaluate_type (get_tenv cx) ty = SOME tv /\
   value_has_type tv v /\
@@ -289,7 +289,7 @@ Proof
 QED
 
 Theorem log_readonly_arg:
-  stmt_state_rel ctx func cenv cx es s /\ local_ptrs_reserved cenv sm /\
+  stmt_state_rel H ctx func cenv cx es s /\ local_ptrs_reserved cenv sm /\
   sm.cs_next_id <= sb.cs_next_id /\
   (t with vs_vars := s.vs_vars) = s /\
   (!z. not_fresh_at sm z ==> lookup_var z t = lookup_var z s) /\
@@ -335,7 +335,7 @@ QED
 
 Theorem log_readonly_args:
   !xs vs.
-  stmt_state_rel ctx func cenv cx es s /\ local_ptrs_reserved cenv sm /\
+  stmt_state_rel H ctx func cenv cx es s /\ local_ptrs_reserved cenv sm /\
   sm.cs_next_id <= sb.cs_next_id /\
   (t with vs_vars := s.vs_vars) = s /\
   (!z. not_fresh_at sm z ==> lookup_var z t = lookup_var z s) /\
@@ -376,7 +376,7 @@ QED
 
 Theorem compile_log_topic_ops_run:
   !xs vs sm ops sb s topics.
-  stmt_state_rel ctx func cenv cx es s /\ local_ptrs_reserved cenv sm /\
+  stmt_state_rel H ctx func cenv cx es s /\ local_ptrs_reserved cenv sm /\
   compile_log_topic_ops (MAP (\p. (FST p,is_bytestring_type (SND p))) xs) sm = (ops,sb) /\
   EVERY (\p. (!z. FST p = Var z ==> not_fresh_at sm z) /\
               (!l. FST p <> Label l)) xs /\
@@ -407,7 +407,7 @@ Resume compile_log_topic_ops_run[compose]:
   qpat_x_assum `encode_indexed_event_topics (T::_) _ _ = _` mp_tac >>
   simp[Once encode_indexed_event_topics_def] >>
   simp[AllCaseEqs()] >> strip_tac >> gvs[] >>
-  `stmt_state_rel ctx func cenv cx es u` by
+  `stmt_state_rel H ctx func cenv cx es u` by
     (irule hash_readonly_state_rel >> goal_assum (drule_at Any) >> simp[]) >>
   `local_ptrs_reserved cenv sc` by
     (irule local_ptrs_reserved_next_var >> goal_assum (drule_at Any) >> simp[]) >>
@@ -475,7 +475,7 @@ Proof
 QED
 
 Theorem compile_split_log_topics_run:
-  stmt_state_rel ctx func cenv cx es s /\ local_ptrs_reserved cenv sm /\
+  stmt_state_rel H ctx func cenv cx es s /\ local_ptrs_reserved cenv sm /\
   LENGTH flags = LENGTH xs /\
   compile_log_topic_ops (FST (split_log_ops xs flags)) sm = (ops,sb) /\
   EVERY (\p. (!z. FST p = Var z ==> not_fresh_at sm z) /\
@@ -486,7 +486,7 @@ Theorem compile_split_log_topics_run:
   encode_indexed_event_topics flags (MAP SND xs) vs = SOME topics ==>
   ?t. run_inst_seq (emitted_insts sm sb) s = OK t /\
     LIST_REL (\op w. eval_operand op t = SOME w) ops topics /\
-    stmt_state_rel ctx func cenv cx es t /\
+    stmt_state_rel H ctx func cenv cx es t /\
     LIST_REL (log_arg_rel cenv cx sa sb es t)
       (SND (split_log_ops xs flags)) (log_non_indexed_values flags vs) /\
     wb_frame cenv es es sm s t /\

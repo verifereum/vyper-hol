@@ -39,7 +39,7 @@ QED
 
 Theorem tuple_place_equal_memory_forward:
   ~is_word_type ty /\
-  compile_assign_value cenv dst LocMemory op F src_loc ty ty arr
+  compile_assign_value cenv dst LocMemory op F src_loc ty ty
     (type_memory_bytes cenv ty) sa = ((),sb) /\
   eval_operand dst s = SOME w /\
   place_ptr_rel cenv cx s (PlaceR p) w (SOME LocMemory) (Type ty) /\
@@ -244,7 +244,7 @@ Finalise tuple_place_equal_memory_forward
 (* Correctness and byte preservation share the forward runner's endpoint. *)
 Theorem tuple_place_equal_memory_run_frame:
   ~is_word_type ty /\
-  compile_assign_value cenv dst LocMemory op F src_loc ty ty arr
+  compile_assign_value cenv dst LocMemory op F src_loc ty ty
     (type_memory_bytes cenv ty) sa = ((),sb) /\
   eval_operand dst s = SOME w /\
   place_ptr_rel cenv cx s (PlaceR p) w (SOME LocMemory) (Type ty) /\
