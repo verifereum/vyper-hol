@@ -310,10 +310,12 @@ Theorem external_call_result_rel_frame_success:
   venom_frame_rel es r es' (Halt ss) ==>
   call_result_rel_at gobs tops ret am tx es r es'
 Proof
+  `log_entry_corresponds (compiled_event_info tops) (type_env tops) tx.target = $=` by
+    simp[FUN_EQ_THM, log_entry_corresponds_def] >>
   simp[external_call_result_rel_def, venom_frame_rel_def,
        call_result_rel_at_def, call_success_rel_def, exception_outcome_rel_def, LET_THM] >>
   rpt strip_tac >> qexists_tac `ss.vs_returndata` >>
-  gvs[logs_correspond_def, log_entry_corresponds_def]
+  gvs[logs_correspond_def, LIST_REL_eq]
 QED
 
 Theorem external_call_result_rel_frame_assertion:
@@ -341,9 +343,11 @@ Theorem external_call_result_rel_frame_halt:
   venom_frame_rel es r es' (Halt ss) ==>
   call_result_rel_at gobs tops ret am tx es r es'
 Proof
+  `log_entry_corresponds (compiled_event_info tops) (type_env tops) tx.target = $=` by
+    simp[FUN_EQ_THM, log_entry_corresponds_def] >>
   simp[external_call_result_rel_def, venom_frame_rel_def,
        call_result_rel_at_def, call_success_rel_def, exception_outcome_rel_def, LET_THM] >>
-  rpt strip_tac >> gvs[logs_correspond_def, log_entry_corresponds_def]
+  rpt strip_tac >> gvs[logs_correspond_def, LIST_REL_eq]
 QED
 
 Theorem external_call_result_rel_frame_runtime:
