@@ -242,10 +242,20 @@ Proof
   metis_tac[o1_ctx_shape_no_intret, ctx_pass_stage_def]
 QED
 
-(* TEMPORARILY CHEATED - gas sufficiency S6b fuel leaf, on its branch only:
-   SimplifyCFG keeps the fuel.  Merging a chain shortens the run, so
-   the output finishes within the input's fuel (scfg_chain_runs_forward's
-   witness is at most it); run_blocks_terminates_mono closes the gap. *)
+(* Gas sufficiency S6b fuel leaf: SimplifyCFG keeps the fuel.
+   No transform of the pass adds a block step or an INVOKE: unreachable
+   block removal and label substitution keep the steps, fix_all_phis and
+   canon_jnz act inside a block, a chain merge and a jump bypass each drop
+   a step.  So the output finishes within the input's fuel, and
+   run_blocks_terminates_mono / exec_block_terminates_mono lift a run that
+   finishes earlier (an INVOKE in a merged tail sees more callee fuel) to
+   the same fuel.  The existing forward chain (scfg_chain_runs_forward,
+   the restriction / fix-phis / bypass / round lemmas, scfg_bstep_continue
+   with SUC (MAX k n)) only gives an existential output fuel, so it needs
+   a bound k <= n carried through; scfg_bprefix_cancel_bounded already has
+   that shape.  The per-function target is fn_bisim_fuel I fn
+   (simplify_cfg_fn fn); the stage then follows as sue_stage_sim_fuel
+   does, via fn_bisim_fuel_run_context and lift_fuel_I. *)
 Theorem simplify_cfg_stage_sim_fuel:
   ctx_pass_stage rpolicy (CFP_Simple VP_SimplifyCFG) view C C' /\
   o1_ctx_shape C /\ EVERY simplify_cfg_fn_ok C.ctx_functions /\
