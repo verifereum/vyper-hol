@@ -8,6 +8,8 @@ Ancestors
   moduleLowering vyperCompiler actualRegistrationCode
   actualDecoderPackaging rawEntryCode loweringShapeProps loweringShapeDefs
   loweringShapeRules compileEnv venomInst list gasShadowShape
+  gasShadowStmtEnv externalCallSelected supportedProgramProps supportedNames
+  loweringShapeSource
 
 val _ = Parse.hide "body";
 
@@ -134,5 +136,41 @@ Theorem runtime_selected_body_shadow:
       fn_has_code sa sb func /\ fn_has_code sb st' func /\
       fn_has_code shadow_sa shadow_sb shadow_func
 Proof
-  cheat
+  rpt gen_tac >> strip_tac >>
+  `runtime_bodies_shape_ok tops` by
+    metis_tac[supported_program_runtime_bodies_shape_ok] >>
+  `ALL_DISTINCT (MAP (\p. FST (SND (SND (SND p))))
+    (FST (SND (classify_functions tops))))` by
+    (irule supported_names_internal_names_distinct >>
+     fs[supported_program_def, supported_declaration_names_def]) >>
+  fs[runtime_selected_body_start_def] >>
+  `~EXISTS external_has_defaults exts` by
+    (drule supported_program_no_external_defaults >> simp[]) >>
+  qpat_x_assum `lower_vyper_runtime_unit _ _ = _` mp_tac >>
+  simp[lower_vyper_runtime_unit_def] >> strip_tac >>
+  qspecl_then [`tops`, `F`] mp_tac internal_descriptors_ok >>
+  impl_tac >- fs[] >>
+  rewrite_tac[pairTheory.FST, pairTheory.SND] >> strip_tac >>
+  `EVERY (\(sel,lbl,z). isPREFIX "fn_" lbl)
+    (build_selectors (type_env tops) exts)` by
+    rewrite_tac[build_selectors_fn_labels] >>
+  `EVERY external_fn_shape_ok
+    (pre ++ (lbl,ce,pos,mincd,pay,F,key,ut,iv,fbody,rt)::post)` by
+    (qpat_x_assum `MAP _ exts = _` (SUBST1_TAC o SYM) >>
+     simp[EVERY_MAP, EVERY_MEM] >> rpt strip_tac >>
+     irule package_external_fn_shape_ok >> gs[]) >>
+  `EVERY internal_fn_shape_ok
+    (MAP (set_internal_package_target rpolicy.rpol_target o
+      package_internal_fn tops T (K global_nonreentrant_slot) F 0) ints)` by
+    (simp[EVERY_MAP, EVERY_MEM] >> rpt strip_tac >>
+     irule package_internal_fn_shape_ok >> gs[]) >>
+  `fallback_shape_ok (set_fallback_package_target rpolicy.rpol_target
+    (package_fallback_fn tops T (K global_nonreentrant_slot) fb))` by
+    (qspecl_then [`tops`, `T`, `K global_nonreentrant_slot`,
+       `rpolicy.rpol_target`] mp_tac package_fallback_fn_shape_ok >> gs[]) >>
+  `lowering_policy_ok rpolicy` by
+    (qpat_x_assum `run_lowering _ _ _ _ _ _ _ _ _ _ = _` mp_tac >>
+     rw[run_lowering_def]) >>
+  `rpolicy.rpol_frontend_dispatch = Linear` by fs[lowering_policy_ok_def] >>
+  FAIL_TAC "actual packaging prefix"
 QED
