@@ -275,6 +275,7 @@ Theorem inline_selected_source_segment:
       e.ise_callee entry.bb_label (LENGTH params) root ml (LENGTH params) /\
     (ts (LENGTH params)).vs_current_bb = ml /\
     (ts (LENGTH params)).vs_inst_idx = LENGTH params /\
+    ~(ts (LENGTH params)).vs_halted /\
     inline_live_stack C cert root
       ((q,ca,route,snap with <|ils_state := ss (LENGTH params);
         ils_defined := set (FLAT (MAP (\i. i.inst_outputs) params))|>)::
@@ -297,6 +298,11 @@ Proof
      rewrite_tac[inline_original_child_def] >> strip_tac >>
      qpat_x_assum `setup_callee _ _ _ = SOME _` mp_tac >>
      simp[setup_callee_def] >> disch_then (fn th => rewrite_tac[GSYM th]) >> simp[]) >>
+  `~(ts (LENGTH params)).vs_halted` by
+    (drule functionInlinerLiveInvariantTheory.inline_live_stack_head_shared >>
+     disch_then (mp_tac o Q.AP_TERM `\s. s.vs_halted`) >>
+     simp[functionInlinerFrameTheory.inline_shared_frame_def,
+          stateFrameTheory.execution_frame_def]) >>
   qexistsl [`k`, `bres`, `ss`, `ml`, `bb`, `tb`, `snap`, `ts`] >> simp[listTheory.DROP_APPEND2] >>
   irule inline_segment_entry_trace >> simp[] >>
   gvs[venomStateTheory.jump_to_def]
@@ -819,6 +825,7 @@ Theorem inline_selected_source_body_cut:
       e.ise_callee entry.bb_label (LENGTH params) root ml (LENGTH params) /\
     (ts (LENGTH params)).vs_current_bb = ml /\
     (ts (LENGTH params)).vs_inst_idx = LENGTH params /\
+    ~(ts (LENGTH params)).vs_halted /\
     inline_live_stack C cert root
       ((q,ca,route,snap with <|ils_state := ss (LENGTH params);
         ils_defined := set (FLAT (MAP (\i. i.inst_outputs) params))|>)::
