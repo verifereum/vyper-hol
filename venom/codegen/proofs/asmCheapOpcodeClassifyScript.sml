@@ -1,6 +1,6 @@
 (* Pure decoding boundary for the cheap instruction complement. *)
 Theory asmCheapOpcodeClassify
-Ancestors asmEncodeParse asmToBytecodeProofs symbolResolve vfmOperation asmWf
+Ancestors asmEncodeParse asmToBytecodeProofs symbolResolve vfmOperation asmWf vfmExecution
 
 Theorem cheap_asmop_classify:
   wf_opname op /\ opcode op = encode_inst offsets (AsmOp name) /\
@@ -79,4 +79,21 @@ Proof
     fs[symbol_size_def] >> metis_tac[]) >>
   `op = Push 2 payload` suffices_by metis_tac[] >>
   irule opcode_wf_inj >> simp[opcode_def, wordsTheory.word_add_n2w]
+QED
+
+Theorem encoded_call_inst_cases:
+  encoding_wf_inst inst offsets /\ ~is_data_inst inst /\ wf_opname op /\
+  opcode op = encode_inst offsets inst /\ is_call op ==>
+  ?name. inst = AsmOp name /\
+    MEM name ["CREATE";"CREATE2";"DELEGATECALL";"CALL";"STATICCALL"]
+Proof
+  strip_tac >> Cases_on `?name. inst = AsmOp name`
+  >- (pop_assum strip_assume_tac >> gvs[] >>
+      Cases_on `op` >> gvs[is_call_def] >>
+      gvs[encode_inst_def, opcode_def, evm_opcode_byte_def, AllCaseEqs()] >>
+      drule alistTheory.ALOOKUP_MEM >>
+      simp[evm_opcode_table_def, listTheory.MEM, wordsTheory.dimword_def,
+        wordsTheory.dimindex_8] >> metis_tac[]) >>
+  drule cheap_non_asmop_classify >> disch_then (qspec_then `op` mp_tac) >>
+  (impl_tac >- gvs[]) >> strip_tac >> gvs[is_call_def]
 QED

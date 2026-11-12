@@ -15,7 +15,8 @@ Theory asmFrameGas
 Ancestors
   asmFrameRel asmRunBounded frameStep callTrace asmSem asmWf symbolResolve
   vfmExecution vfmExecutionProp asmCallGasArithmetic asmFrameCallStep codegenRel
-  vfmState
+  vfmState vfmOperation asmNonCallCheapGas asmNonCallStorageGas asmNonCallMemoryGas
+  asmNonCallCopyGas asmFrameLocalStep
 
 (* At least the gas of any instruction asm_inst_gas_ok H allows: static
    and access costs (a value-carrying CALL to a new account costs 36700),
@@ -95,6 +96,73 @@ Resume asm_frame_gas_step_call[handled]:
 QED
 
 Finalise asm_frame_gas_step_call
+
+Theorem asm_frame_gas_step_noncall:
+  !prog data es0 a es H.
+    asm_frame_prog_ok prog /\ asm_frame_rel prog data es0 a es /\
+    a.as_pc < LENGTH prog /\ ~is_data_inst (EL a.as_pc prog) /\
+    EL a.as_pc prog <> AsmOp "RETURNDATACOPY" /\
+    asm_inst_gas_ok H (EL a.as_pc prog) a.as_stack /\
+    frame_op_gas H <= frame_gas_left es /\
+    EL a.as_pc prog <> AsmOp "CALL" /\
+    EL a.as_pc prog <> AsmOp "STATICCALL" ==>
+    (!op r s'.
+       next_opcode (FST (HD es.contexts)) = SOME op /\
+       step_inst op es = (r,s') /\
+       LENGTH s'.contexts = LENGTH es.contexts ==>
+       r <> INR (SOME OutOfGas) /\
+       frame_gas_left es <= frame_gas_left s' + frame_op_gas H) /\
+    (!es1. frame_next es es1 ==>
+       frame_gas_left es <= frame_gas_left es1 + frame_op_gas H)
+Proof
+  rpt gen_tac >> strip_tac >>
+  conj_asm1_tac >- suspend "raw" >> suspend "handled"
+QED
+
+Resume asm_frame_gas_step_noncall[raw]:
+  pure_rewrite_tac[frame_op_gas_def] >>
+  rule_assum_tac (PURE_REWRITE_RULE [frame_op_gas_def]) >>
+  rpt gen_tac >> strip_tac >>
+  Cases_on `?name. EL a.as_pc prog = AsmOp name /\
+    MEM name ["SLOAD";"SSTORE";"TLOAD";"TSTORE"]`
+  >- (irule asm_noncall_storage_gas >> simp[GSYM frame_op_gas_def] >>
+      metis_tac[listTheory.MEM]) >>
+  Cases_on `?name. EL a.as_pc prog = AsmOp name /\
+    MEM name ["MLOAD";"MSTORE";"MSTORE8";"SHA3";"RETURN";"REVERT"]`
+  >- (irule asm_frame_memory_raw_gas >> simp[GSYM frame_op_gas_def] >>
+      metis_tac[listTheory.MEM]) >>
+  Cases_on `?name. EL a.as_pc prog = AsmOp name /\
+    MEM name ["CALLDATACOPY";"CODECOPY";"EXTCODECOPY";"MCOPY";
+      "LOG0";"LOG1";"LOG2";"LOG3";"LOG4"]`
+  >- (irule asm_frame_copy_raw_gas >> simp[GSYM frame_op_gas_def] >>
+      metis_tac[listTheory.MEM]) >>
+  irule asm_noncall_cheap_gas >> simp[GSYM frame_op_gas_def] >>
+  gvs[listTheory.MEM] >> metis_tac[]
+QED
+
+Resume asm_frame_gas_step_noncall[handled]:
+  gen_tac >> disch_tac >>
+  qpat_assum `asm_frame_rel _ _ _ _ _`
+    (strip_assume_tac o REWRITE_RULE [asm_frame_rel_def]) >>
+  `wf_context c` by gvs[wf_state_def] >>
+  drule frame_next_opcode >> disch_then drule >> disch_then drule >>
+  simp[] >> strip_tac >>
+  `encoding_wf_inst (EL a.as_pc prog)
+     (SND (compute_label_offsets (prog ++ [AsmDataItem data])))` by
+    (mp_tac (Q.SPECL [`prog ++ [AsmDataItem data]`,`a.as_pc`]
+       asmToBytecodeProofsTheory.asm_encoding_wf_el) >>
+     simp[asmDataSuffixPropsTheory.data_suffix_encoding_wf,
+       listTheory.EL_APPEND_EQN] >> gvs[asm_frame_prog_ok_def]) >>
+  `~is_call op` by
+    (spose_not_then assume_tac >>
+     drule_all asmCheapOpcodeClassifyTheory.encoded_call_inst_cases >>
+     strip_tac >> gvs[listTheory.MEM, asm_inst_gas_ok_def]) >>
+  irule frame_next_noncall_gas_bound >>
+  conj_tac >- (qexistsl_tac [`c`,`op`,`rb`,`rest`] >> simp[] >> metis_tac[]) >>
+  simp[]
+QED
+
+Finalise asm_frame_gas_step_noncall
 
 (* The frame's step at es, an instruction of prog that is
    asm_inst_gas_ok H and not RETURNDATACOPY, with frame_op_gas H gas left:
