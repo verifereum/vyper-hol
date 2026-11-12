@@ -13,6 +13,41 @@ Ancestors
   o1PassContract venomExecSemantics venomState venomInst
   decoderGhostFramePtr venomFnInstsProofs fmpStepAnalysis fmpStepStack
   list venomWf fmpReclaimDefs fmpAnalysisDefs fmpStepReclaim contextCodegenRel
+  frameHistoryCfg simplifyCfgPhiSemantics venomWfProps
+
+Theorem frame_reachable_dfs[local]:
+  EVERY wf_function C.ctx_functions /\
+  frame_reachable vs C stk PG G tn fn inst s ==>
+  MEM s.vs_current_bb (cfg_analyze fn).cfg_dfs_pre
+Proof
+  strip_tac >> drule_all frame_reachable_cfg_histories >> strip_tac >>
+  drule frame_history_cfg_invariant >> simp[] >> strip_tac >>
+  `wf_function fn` by gvs[EVERY_MEM] >>
+  gvs[frame_history_cfg_def] >>
+  irule fn_reachable_in_cfg_dfs_pre >> simp[] >>
+  irule scfg_path_member_reachable >>
+  qexists_tac `history_visits h` >>
+  simp[] >> metis_tac[rich_listTheory.MEM_LAST_NOT_NIL]
+QED
+
+Theorem fmp_live_ordinary_suc[local]:
+  fmp_stage_ctx rpolicy D C C' vs vs' fmp eom /\
+  frame_reachable vs C stk PG G tn fn inst s /\ active_inst fn inst s /\
+  MEM v (live_vars_at (liveness_analyze fn) s.vs_current_bb
+    (SUC s.vs_inst_idx)) /\ ~MEM v inst.inst_outputs ==>
+  MEM v (live_vars_at (liveness_analyze fn) s.vs_current_bb s.vs_inst_idx)
+Proof
+  strip_tac >> drule_all fmp_stage_frame_facts >> strip_tac >>
+  `EVERY wf_function C.ctx_functions` by
+    gvs[fmp_stage_ctx_def, o1_ctx_shape_def, o1_fn_shape_def, EVERY_MEM] >>
+  drule_all frame_reachable_dfs >> strip_tac >>
+  `wf_function fn` by gvs[o1_fn_shape_def] >>
+  gvs[active_inst_def] >>
+  `lookup_block s.vs_current_bb fn.fn_blocks = SOME bb` by
+    metis_tac[venomExecProofsTheory.wf_lookup_block] >>
+  drule live_vars_at_propagate >> simp[inst_defs_def] >>
+  disch_then irule >> simp[] >> metis_tac[]
+QED
 
 Theorem fmp_ordinary_not_reclaim[local]:
   ~is_terminator inst.inst_opcode /\
