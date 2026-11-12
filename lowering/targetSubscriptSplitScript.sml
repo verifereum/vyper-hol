@@ -1254,9 +1254,13 @@ Proof
   simp[] >> reverse conj_tac >- metis_tac[] >>
   irule lower_compile_expr_not_label >>
   goal_assum (drule_at (Pat `lower_value`)) >>
-  qexists_tac `env` >> conj_tac >- fs[expr_body_pre_def] >>
-  qpat_x_assum `expr_sim_inv _ _ env _` mp_tac >>
-  simp[expr_sim_inv_def] >> metis_tac[]
+  qexists_tac `env` >>
+  `!id t. FLOOKUP env.var_types id = SOME t ==>
+          ?p sz. FLOOKUP cenv.ce_vars id = SOME (PtrVar (Var p) sz)` by
+    (qpat_x_assum `expr_sim_inv _ _ env _`
+       (strip_assume_tac o REWRITE_RULE[expr_sim_inv_def]) >>
+     first_assum ACCEPT_TAC) >>
+  simp[] >> fs[expr_body_pre_def]
 QED
 
 Theorem target_subscript_base_continuation:

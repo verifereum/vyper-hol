@@ -158,7 +158,8 @@ Proof
        metis_tac[] >> NO_TAC) >>
   TRY (fs[listTheory.EVERY_MEM] >> metis_tac[] >> NO_TAC) >>
   TRY (strip_tac >>
-       qpat_x_assum `~supported_expr_exists _ (StructLit _ _ _)` mp_tac >>
+       qpat_x_assum `~supported_expr_exists call_operands_effect_root (StructLit _ _ _)`
+         mp_tac >>
        simp[supportedExprTraverseTheory.supported_expr_exists_def,
             supportedExprTraverseTheory.supported_fields_exists_every,
             listTheory.EXISTS_MEM] >>

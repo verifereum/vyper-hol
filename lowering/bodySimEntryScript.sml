@@ -307,7 +307,7 @@ Proof
   Cases_on `dmut` >>
   simp[is_bare_global_decl_def, constSubstTheory.module_consts_env_def] >>
   TRY (metis_tac[]) >>
-  rename1 `Constant ce` >> strip_tac >>
+  rename1 `subst_consts_expr acc ce` >> strip_tac >>
   Cases_on `dname = id`
   >- (gvs[] >>
       qspecl_then [`ts`, `acc ++ [(id, fold_const_expr (subst_consts_expr acc ce))]`]

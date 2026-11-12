@@ -109,7 +109,8 @@ Proof
       alloc_limits_expr_def] >>
   Cases_on `expr_type obj` >> gvs[attribute_type_def] >>
   rpt strip_tac >>
-  TRY (qpat_x_assum `~supported_expr_exists _ (Attribute _ _ _)` mp_tac >>
+  TRY (qpat_x_assum `~supported_expr_exists call_operands_effect_root (Attribute _ _ _)`
+         mp_tac >>
        simp[supportedExprTraverseTheory.supported_expr_exists_def] >> NO_TAC) >>
   TRY (qpat_x_assum `~supported_expr_exists (const_name_root _) (Attribute _ _ _)`
          mp_tac >>
