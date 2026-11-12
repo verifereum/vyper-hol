@@ -894,7 +894,7 @@ Proof
        vs_inst_idx := SUC s.vs_inst_idx)` by
     (irule alloca_frame_local_store >>
      simp[] >>
-     conj_tac >- metis_tac[] >>
+     reverse conj_tac >- metis_tac[] >>
      qexistsl [`w2n w`, `es`, `id`, `32`, `s`, `sz`] >>
      `!q ix. lookup_var q (mstore (w2n w) (typed_val_to_w256 etv v) s with
           vs_inst_idx := ix) = lookup_var q s` by
@@ -908,12 +908,13 @@ Proof
      gvs[pred_setTheory.ABSORPTION_RWT]) >>
   qexists_tac `mstore (w2n w) (typed_val_to_w256 etv v) s with
                 vs_inst_idx := SUC s.vs_inst_idx` >>
-  conj_tac >- first_assum ACCEPT_TAC >>
+  conj_tac >- simp[] >>
   rpt strip_tac >>
   `stmt_state_rel H ctx func cenv cx
      (es with scopes :=
         pre ++ (env |+ (id, entry with <|value := v; popped := []|>)) :: rest)
-     (mstore (w2n w) (typed_val_to_w256 etv v) s)` by metis_tac[] >>
+     (mstore (w2n w) (typed_val_to_w256 etv v) s)` by
+    (irule stmt_state_rel_write_local_store >> simp[] >> metis_tac[]) >>
   `storage_well_formed_on cx
      (es with scopes :=
         pre ++ (env |+ (id, entry with <|value := v; popped := []|>)) :: rest)
@@ -1080,7 +1081,7 @@ Resume compile_augassign_local_case[code_and_outcome]:
          vyperStorageTraceTheory.evaluate_storage_trace_frame]) >>
   pop_assum strip_assume_tac >>
   `stmt_state_rel H0 ctx func cenv cx es s0` by metis_tac[] >>
-  drule_all augassign_local_load >> strip_tac >> gvs[] >>
+  drule_all (INST_TYPE [beta |-> ``:256``] augassign_local_load) >> strip_tac >> gvs[] >>
   `gas_marked_path F ctx func s0 0 (OK t)` by
     (qpat_x_assum `gas_marked_exec _ _ (eval_target_place _ _) _ _ _ _ _`
        mp_tac >> simp[gas_marked_exec_def]) >>
@@ -1104,14 +1105,18 @@ Resume compile_augassign_local_case[rhs_outcome]:
   disch_then (qspecl_then [`st0`, `s1`, `s2`, `rhs_op`, `t`] mp_tac) >>
   impl_tac
   >- (simp[] >> rpt strip_tac >>
-      qpat_x_assum `!H. valid_horizon _ _ H es.storage_trace ==> expr_post _ _ _ _ _ _ _ _ _ _ _ _ _ _`
-        (drule_then mp_tac) >>
-      simp[expr_post_def]) >>
+      qpat_x_assum `!H. valid_horizon _ _ H es.storage_trace ==> expr_post H _ _ _ _ _ _ _ _ _ _ _ _ _`
+        (qspec_then `H` mp_tac) >>
+      (impl_tac >- first_assum ACCEPT_TAC) >>
+      strip_tac >>
+      qpat_x_assum `expr_post H _ _ _ _ _ _ _ _ _ _ _ _ _`
+        (strip_assume_tac o REWRITE_RULE [expr_post_def]) >>
+      fs[stmt_state_rel_start_gas_obs]) >>
   rewrite_tac[gasOutcomeTheory.gas_outcome_def] >> strip_tac
   >- (qexists_tac `marks` >> disj1_tac >>
       irule augassign_rhs_bad_storage >> conj_tac
       >- (qexists_tac `entry` >> simp[]) >>
-      qexists_tac `t` >> simp[])
+      qexistsl_tac [`ctx`, `func`, `t`] >> simp[])
   >- suspend "rhs_summary" >>
   qexists_tac `marks` >> disj2_tac >> disj2_tac >>
   qexistsl_tac [`err`, `ee`, `leaf`, `finish'`] >>
@@ -1126,7 +1131,7 @@ Resume compile_augassign_local_case[rhs_summary]:
               (es with gas_obs := []) t marks`
   >- (disj1_tac >> irule augassign_rhs_bad_storage >> conj_tac
       >- (qexists_tac `entry` >> simp[]) >>
-      qexists_tac `t` >> simp[]) >>
+      qexistsl_tac [`ctx`, `func`, `t`] >> simp[]) >>
   disj2_tac >> disj1_tac >>
   qpat_x_assum `gasSummary$gas_summary_at _ _ _ _ _ _ _`
     (strip_assume_tac o BETA_RULE o REWRITE_RULE [gas_summary_at_def]) >>
@@ -1243,8 +1248,11 @@ Resume compile_augassign_local_case[write_safe]:
   `?current. lookup_scopes id (ee with gas_obs := []).scopes = SOME current` by
     metis_tac[expr_sim_inv_local] >>
   `stmt_state_rel H1 ctx func cenv cx (ee with gas_obs := []) s` by
-    metis_tac[] >>
-  `?ptr. lookup_var p s = SOME ptr` by
+    (qpat_assum `!H. valid_horizon _ _ H ee.storage_trace ==>
+                   stmt_state_rel H _ _ _ _ _ _ /\ _` (qspec_then `H1` mp_tac) >>
+     impl_tac >- first_assum ACCEPT_TAC >>
+     simp[stmt_state_rel_start_gas_obs]) >>
+  `?pw. lookup_var p s = SOME pw` by
     (`lookup_scopes id ee.scopes = SOME current` by fs[] >>
      metis_tac[local_word_pointer_live]) >>
   `!current. lookup_scopes id (ee with gas_obs := []).scopes = SOME current ==>
@@ -1255,9 +1263,10 @@ Resume compile_augassign_local_case[write_safe]:
   `local_ptrs_reserved cenv s3` by
     metis_tac[local_ptrs_reserved_next_var] >>
   qspecl_then [`H1`, `ctx`, `func`, `cenv`, `cx`, `lctx`,
-               `ee with gas_obs := []`, `s`, `id`, `p`, `sz`, `ptr`, `result`,
+               `ee with gas_obs := []`, `s`, `id`, `p`, `sz`, `pw`, `result`,
                `entry.type`, `INL ()`, `fin`, `res_op`, `s3`, `sb`, `s3`, `s`,
-               `ee with gas_obs := []`] mp_tac local_word_store_post_path >>
+               `ee with gas_obs := []`] mp_tac
+    (INST_TYPE [alpha |-> ``:256``, beta |-> ``:256``] local_word_store_post_path) >>
   impl_tac
   >- (simp[alloca_frame_same] >> metis_tac[]) >>
   disch_then (qx_choose_then `last` strip_assume_tac) >>
@@ -1267,8 +1276,13 @@ QED
 Resume compile_augassign_local_case[store_post]:
   `alloca_frame cenv (ee with gas_obs := []) s2 u cenv
       (ee with gas_obs := []) s` by
-    (irule alloca_frame_of_mem_frame >> simp[] >>
-     metis_tac[]) >>
+    (irule (INST_TYPE [alpha |-> ``:256``] alloca_frame_of_mem_frame) >> simp[] >>
+     qexistsl_tac [`H1`, `ctx`, `cx`, `func`] >>
+     qpat_assum `!H. valid_horizon _ _ H ee.storage_trace ==>
+                   expr_post H _ _ _ _ e _ _ _ _ _ _ _ _`
+       (qspec_then `H1` mp_tac) >>
+     impl_tac >- first_assum ACCEPT_TAC >>
+     strip_tac >> fs[expr_post_def, stmt_state_rel_start_gas_obs]) >>
   `MAP FDOM ee.scopes = MAP FDOM es.scopes` by
     (drule eval_read_preserves_scopes_dom >> simp[]) >>
   `gas_marked_path F ctx func u 0 (OK last)` by
@@ -1279,18 +1293,41 @@ Resume compile_augassign_local_case[store_post]:
       `valid_horizon cx st0 H ee.storage_trace` by
         (`fin.storage_trace = ee.storage_trace` suffices_by
            (strip_tac >> fs[]) >>
-         qpat_x_assum `write_place _ _ _ ee = _` mp_tac >>
-         drule_then strip_assume_tac write_place_local >> simp[]) >>
-      `valid_horizon cx st0 H es.storage_trace` by metis_tac[] >>
+         qpat_x_assum `write_place _ (MemoryPlace _ _) _ _ = _` assume_tac >>
+         drule write_place_local >> simp[] >> strip_tac >> simp[]) >>
+      `valid_horizon cx st0 H es.storage_trace` by
+        (qpat_assum `!H. valid_horizon _ _ H ee.storage_trace ==>
+                       valid_horizon _ _ H es.storage_trace`
+           (qspec_then `H` mp_tac) >>
+         impl_tac >- first_assum ACCEPT_TAC >> simp[]) >>
+      `stmt_state_rel H ctx func cenv cx es s0 /\
+       storage_well_formed_on cx es (FST H)` by
+        (qpat_assum `!H. valid_horizon _ _ H es.storage_trace ==>
+                       stmt_state_rel H _ _ _ _ es s0 /\ _`
+           (qspec_then `H` mp_tac) >>
+         impl_tac >- first_assum ACCEPT_TAC >> simp[]) >>
       `stmt_state_rel H ctx func cenv cx (ee with gas_obs := []) s /\
        storage_well_formed_on cx (ee with gas_obs := []) (FST H)` by
-        metis_tac[] >>
+        (qpat_assum `!H. valid_horizon _ _ H ee.storage_trace ==>
+                       stmt_state_rel H _ _ _ _ ee s /\ _`
+           (qspec_then `H` mp_tac) >>
+         impl_tac >- first_assum ACCEPT_TAC >>
+         simp[stmt_state_rel_start_gas_obs]) >>
       `stmt_post H ctx func cx lctx cenv cenv s3 sb (ee with gas_obs := []) s
-         (INL ()) fin last` by metis_tac[] >>
+         (INL ()) fin last` by
+        (qpat_assum `!(H:(bool # 256 word # type_value) list # num list). _ ==> stmt_post H _ _ _ _ _ _ s3 _ _ _ _ _ _` irule >>
+         rpt conj_tac >> first_assum ACCEPT_TAC) >>
       `expr_post H ctx func cenv cx (Name ty id) es sa s1 s0
          (es with gas_obs := []) entry.value (Var out) t /\
        expr_post H ctx func cenv cx e (es with gas_obs := []) s1 s2 t
-         (ee with gas_obs := []) v rhs_op u` by metis_tac[] >>
+         (ee with gas_obs := []) v rhs_op u` by
+        (conj_tac
+         >- (qpat_assum `!(H:(bool # 256 word # type_value) list # num list). _ ==> expr_post H _ _ _ _ (Name _ _) _ _ _ _ _ _ _ _`
+               irule >>
+             rpt conj_tac >> first_assum ACCEPT_TAC) >>
+         qpat_assum `!H. valid_horizon _ _ H ee.storage_trace ==>
+                       expr_post H _ _ _ _ e _ _ _ _ _ _ _ _` irule >>
+         first_assum ACCEPT_TAC) >>
       `stmt_post H ctx func cx lctx cenv cenv s2 sb (ee with gas_obs := []) u
          (INL ()) fin last` by
         (irule stmt_post_entry_frame >>
@@ -1305,13 +1342,14 @@ Resume compile_augassign_local_case[store_post]:
          conj_tac >- first_assum ACCEPT_TAC >>
          qexistsl [`e`, `ee with gas_obs := []`, `rhs_op`, `s2`, `u`, `v`] >>
          simp[]) >>
-      `stmt_state_rel H ctx func cenv cx es s0` by metis_tac[] >>
       irule stmt_post_expr_entry_frame >>
       conj_tac >- first_assum ACCEPT_TAC >>
       conj_tac >- first_assum ACCEPT_TAC >>
       qexistsl [`Name ty id`, `es with gas_obs := []`, `Var out`, `s1`, `t`,
                 `entry.value`] >>
-      simp[] >> drule emitted_insts_emit_op >> simp[]) >>
+      simp[] >> drule emitted_insts_emit_op >> strip_tac >>
+      qpat_x_assum `fin = fin with gas_obs := []` (fn th => ONCE_REWRITE_TAC [GSYM th]) >>
+      simp[]) >>
   irule augassign_rhs_normal_exec >>
   goal_assum (drule_at Any) >> goal_assum (drule_at Any) >>
   goal_assum (drule_at Any) >> simp[] >>

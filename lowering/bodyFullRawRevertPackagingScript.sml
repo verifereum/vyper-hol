@@ -30,7 +30,13 @@ Proof
       cenv cx ty (Call ann RawRevert es dflt) es'` by metis_tac[] >>
   conj_tac >- first_assum ACCEPT_TAC >>
   irule expr_vv_sim_stack_full >> simp[] >>
-  reverse conj_tac >- metis_tac[raw_revert_no_success] >>
+  reverse conj_tac
+  >- (conj_tac >- metis_tac[raw_revert_no_success] >>
+      drule raw_revert_source_pre >> strip_tac >> gvs[] >>
+      simp[vyperASTTheory.expr_type_def,
+           exprLoweringTheory.lowered_value_type_def,
+           vyperValueTheory.evaluate_type_def,
+           valueEncodingTheory.type_memory_size_def]) >>
   drule raw_revert_source_pre >> strip_tac >> gvs[] >>
   gen_tac >>
   simp[Once compile_expr_def, compile_call_def] >>

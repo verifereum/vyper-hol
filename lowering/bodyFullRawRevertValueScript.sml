@@ -110,6 +110,10 @@ Resume raw_revert_value_full_from_tail[bind]:
       qexistsl [`mid`, `t`, `v`] >> fs[]) 
   >~ [`gas_exempt_cert _ _ _ _ _ _ _`]
   >- (rpt strip_tac >> irule gas_exempt_cert_error_value >> simp[]) 
+  >~ [`storage_trace_frame (bind (eval_expr _ _) _)`]
+  >- (irule vyperStorageTraceTheory.storage_trace_frame_bind_all >>
+      simp[vyperStorageTraceTheory.evaluate_storage_trace_frame,
+           vyperStorageTraceTheory.storage_trace_frame_read_result])
   >~ [`storage_trace_frame _`]
   >- (gen_tac >> simp[bind_assoc] >>
       irule vyperStorageTraceTheory.storage_trace_frame_bind_all >>
@@ -195,6 +199,7 @@ Resume raw_revert_value_full_from_tail[tail]:
      disch_then (qspecl_then [`gas_explicit_sites ctx shadow_ctx`, `PG`] mp_tac) >>
      simp[]) >>
   irule gas_outcome_full_exit >>
+  reverse conj_tac >- simp[] >>
   qexistsl [`G2`, `mid`, `Abort Revert_abort w`,
     `INR (Error (RevertData bs'))`, `tn2`] >>
   simp[lift_option_type_def, vyperValueTheory.dest_BytesV_def,
