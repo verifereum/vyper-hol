@@ -11,7 +11,7 @@ Ancestors
   vyperContext vyperMisc vyperValue vyperCallOutcome vyperCallOutcomeProps
   vyperStatePreservation vyperExprNoControl vyperCall vyperTypeCallGraph
   supportedExprTraverse supportedStmtTraverse supportedDecls supportedProgram
-  bodyStorageCases
+  bodyStorageCases vyperGetter vyperTypeContractGetter vyperTypeContractSoundness
 Libs
   pairLib monadsyntax
 
@@ -730,6 +730,46 @@ Proof
   TRY (Cases_on `v`) >> gvs[lookup_function_def] >> metis_tac[]
 QED
 
+Theorem build_getter_no_evm_run[local]:
+  !e kt vt n args ret exp.
+    build_getter e kt vt n = (args,ret,exp) /\
+    ~supported_expr_exists expr_evm_run_root e ==>
+    ~supported_expr_exists expr_evm_run_root exp
+Proof
+  recInduct build_getter_ind >> rpt conj_tac >> rpt gen_tac >>
+  TRY disch_tac >> rpt gen_tac >>
+  simp[Once build_getter_def] >> rw[] >> gvs[] >>
+  rpt (pairarg_tac >> gvs[]) >>
+  gvs[supported_expr_exists_def, expr_evm_run_root_def] >>
+  first_x_assum irule >> simp[supported_expr_exists_def, expr_evm_run_root_def]
+QED
+
+Theorem selected_public_getter_body_no_evm_run[local]:
+  is_public_getter_decl fn decl /\
+  external_getter_tuple src decl = SOME (mut,nr,args,dflts,ret,gbody) ==>
+  ~supported_stmts_expr_exists expr_evm_run_root gbody
+Proof
+  Cases_on `decl` >>
+  gvs[is_public_getter_decl_def, external_getter_tuple_def]
+  >- (Cases_on `v` >> gvs[] >>
+      Cases_on `is_ArrayT t` >> gvs[]
+      >- (rpt strip_tac >>
+          drule_all array_public_getter_tuple_shape >> strip_tac >> gvs[] >>
+          `~supported_expr_exists expr_evm_run_root exp` by
+            (irule build_getter_no_evm_run >> goal_assum (drule_at Any) >>
+             simp[supported_expr_exists_def, expr_evm_run_root_def]) >>
+          gvs[supported_stmt_expr_exists_def, supported_expr_exists_def]) >>
+      rpt strip_tac >>
+      gvs[external_getter_tuple_def, supported_stmt_expr_exists_def, supported_expr_exists_def,
+          expr_evm_run_root_def]) >>
+  Cases_on `v` >> gvs[is_public_getter_decl_def] >> rpt strip_tac >>
+  drule_all hashmap_public_getter_tuple_shape >> strip_tac >> gvs[] >>
+  `~supported_expr_exists expr_evm_run_root exp` by
+    (irule build_getter_no_evm_run >> goal_assum (drule_at Any) >>
+     simp[supported_expr_exists_def, expr_evm_run_root_def]) >>
+  gvs[supported_stmt_expr_exists_def, supported_expr_exists_def]
+QED
+
 (* The body an external entry runs never halts in a supported program. *)
 Theorem external_body_no_halt:
   supported_program tops /\ get_module_code cx NONE = SOME tops /\
@@ -737,16 +777,16 @@ Theorem external_body_no_halt:
     SOME (mut,nr,args,dflts,ret,fbody) ==>
   eval_stmts cx fbody st <> (INR HaltException, st')
 Proof
-  strip_tac >> drule lookup_external_MEM >> strip_tac
+  strip_tac >> drule lookup_function_External_cases >> strip_tac
   >- (drule_all (SRULE [] (Q.INST [`vis` |-> `External`] supported_program_function)) >>
       simp[supported_function_body_def] >> strip_tac >>
       drule (cj 2 supported_stmts_storage_syntax) >> strip_tac >>
       irule (cj 4 eval_no_halt) >> metis_tac[]) >>
-  qpat_x_assum `supported_program _` mp_tac >>
-  simp[supported_program_def, supported_declaration_headers_def, EVERY_MEM] >>
-  strip_tac >>
-  qpat_x_assum `!e. MEM e tops ==> supported_declaration_header tops e`
-    drule >> simp[supported_declaration_header_def]
+  irule (cj 4 eval_no_halt) >>
+  conj_tac
+  >- (drule_all selected_public_getter_body_no_evm_run >> simp[]) >>
+  disj1_tac >>
+  drule_all selected_public_getter_body_int_calls_empty >> simp[]
 QED
 
 (* The constructor body (declared, or the synthetic empty one) never halts
