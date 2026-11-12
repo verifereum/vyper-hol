@@ -16,7 +16,7 @@ Ancestors
   exprSimProps
   stmtSimDefs
   exprSimDefs
-  loweringPosts exprSimTypedAlloc
+  loweringPosts exprSimTypedAlloc exprSimPrecompiles
   gasContext gasExemptCert
   bodySimFull bodySim bodyPtrDefs gasOutcomeFullCompose gasOutcomeFull
   fragGasOriginPtr fragGasOriginPtrExec fragGasSeqPtr gasShadowState
