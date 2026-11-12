@@ -98,7 +98,7 @@ Proof
   irule (METIS_PROVE [] ``!A B. (A \/ B) /\ ~B ==> A``) >>
   qexists `w2n vs.vs_initial_fmp <= x` >> conj_tac >- simp[] >>
   irule ptr_owner_write_byte_seed >> simp[] >> rpt conj_tac >>
-  TRY (qexists_tac `lo` >> simp[] >> rpt conj_tac) >>
+  TRY (qexistsl_tac [`C`,`P`,`lo`] >> simp[] >> rpt conj_tac) >>
   TRY (fs[ptr_chrono_write_def] >> NO_TAC) >>
   TRY (drule (REWRITE_RULE [pred_setTheory.SUBSET_DEF] ptr_step_writes_subset) >>
        simp[] >> NO_TAC) >>
@@ -170,7 +170,7 @@ Proof
   irule (METIS_PROVE [] ``!A B. (A \/ B) /\ ~B ==> A``) >>
   qexists `w2n vs.vs_initial_fmp <= x` >> conj_tac >- simp[] >>
   irule ptr_owner_write_byte_seed >> simp[] >> rpt conj_tac >>
-  TRY (qexists_tac `lo` >> simp[] >> rpt conj_tac) >>
+  TRY (qexistsl_tac [`C`,`P`,`lo`] >> simp[] >> rpt conj_tac) >>
   TRY (fs[ptr_chrono_write_def] >> NO_TAC) >>
   TRY (drule (REWRITE_RULE [pred_setTheory.SUBSET_DEF] ptr_step_writes_subset) >>
        simp[] >> NO_TAC) >>

@@ -1041,7 +1041,7 @@ Resume ptr_create_family_delegate_write_certificate[classify]:
     FLOOKUP (EL (LENGTH h - 1) h).po_prov dv = SOME (db,sb) /\
     FLOOKUP positions (Allocation bid) = SOME (pb,sb) /\ db <= w2n r /\
     w2n r + w2n rz <= db+sb /\ pb+sb < dimword(:256))` by
-    (irule (Q.INST [`ops` |-> `ops`] (SPEC_ALL ptr_historical_write_classification)) >>
+    (irule (Q.INST [`ops` |-> `ops`] (SPEC_ALL ptr_historical_write_classification_static)) >>
      simp[Abbr `ops`, mem_write_ops_def, codegenRelTheory.source_memory_write_ranges_def] >>
      conj_tac >- (Cases_on `rz = 0w` >> gvs[]) >>
      conj_tac >- (qexists_tac `a.po_fn` >> simp[]) >>
@@ -1077,8 +1077,8 @@ Resume ptr_create_family_delegate_write_certificate[owned]:
   `MEM token tokens` by
     (drule_all ptr_source_ownership_live_prov >> simp[]) >>
   `FLOOKUP births (token,bid) = SOME (db,sb)` by
-    (drule_all ptr_source_ownership_prov_erases >>
-     simp[ptr_ledger_erases_def] >> strip_tac >>
+    (drule_all ptr_source_ownership_static_prov_erases >>
+     simp[ptr_ledger_erases_every_dyn] >> strip_tac >>
      first_x_assum (qspec_then `dv` mp_tac) >> gvs[]) >>
   `ro = r - n2w db + n2w pb` by
     gvs[ptr_lookup_transport_def, ptr_value_transport_def, op_prov_def] >>

@@ -179,7 +179,8 @@ QED
 
 Theorem ptr_buffer_copy_range_owner[local]:
   ptr_source_ownership vs C h a tokens registry births PT TG saved /\
-  EVERY (\fn. EVERY (\i. i.inst_opcode <> DALLOCA) (fn_insts fn)) C.ctx_functions /\
+  ~ctx_has_dalloca C /\ ptr_discipline lo C vs /\
+  EVERY (\fn. EVERY inst_wf (fn_insts fn)) C.ctx_functions /\
   access_ok lo a.po_prov a.po_fn a.po_inst a.po_state /\
   ~in_revert_forward a.po_fn a.po_state /\
   mem_write_ops a.po_inst = SOME ops /\
@@ -194,20 +195,22 @@ Proof
   strip_tac >>
   simp[ptr_paired_write_owner_def] >> gen_tac >> strip_tac >>
   `len <> 0` by decide_tac >>
-  `ptr_ledger_erases births TG a.po_prov` by
-    (irule ptr_source_ownership_prov_erases >> metis_tac[]) >>
-  drule_all ptr_source_write_owner_cases >> strip_tac
+  `!dyn. ptr_ledger_erases dyn births TG a.po_prov` by
+    (irule ptr_source_ownership_static_prov_erases >> metis_tac[]) >>
+  `ptr_ledger_erases 0 births TG a.po_prov` by simp[] >>
+  drule_all ptr_source_write_owner_cases >> strip_tac >>
+  TRY (gvs[ptr_ledger_erases_every_dyn] >> NO_TAC)
   >- (`op_prov TG ops.iao_ofst = NONE` by
         (drule ptr_owner_op_projection >>
          disch_then (qspec_then `ops.iao_ofst` strip_assume_tac) >>
          Cases_on `op_prov TG ops.iao_ofst` >>
-         gvs[ptr_owner_project_def] >>
+         gvs[ptr_owner_erases_def] >>
          fs[finite_mapTheory.FLOOKUP_DEF]) >>
       gvs[ptr_value_transport_scalar_empty] >> disj1_tac >> decide_tac) >>
   fs[] >>
   `MEM token tokens` by (irule ptr_source_ownership_live_prov >> metis_tac[]) >>
   `FLOOKUP births (token,aid) = SOME (b,sz)` by
-    (fs[ptr_ledger_erases_def] >>
+    (fs[ptr_ledger_erases_every_dyn] >>
      qpat_x_assum `!v. FLOOKUP a.po_prov v = _`
        (qspec_then `v` mp_tac) >> simp[]) >>
   qpat_x_assum `ops' = ops` SUBST_ALL_TAC >>
@@ -223,7 +226,8 @@ QED
 
 Theorem ptr_buffer_copy_write_event[local]:
   ptr_source_ownership vs C h a tokens registry births PT TG saved /\
-  EVERY (\fn. EVERY (\i. i.inst_opcode <> DALLOCA) (fn_insts fn)) C.ctx_functions /\
+  ~ctx_has_dalloca C /\ ptr_discipline lo C vs /\
+  EVERY (\fn. EVERY inst_wf (fn_insts fn)) C.ctx_functions /\
   access_ok lo a.po_prov a.po_fn a.po_inst a.po_state /\
   ~in_revert_forward a.po_fn a.po_state /\
   ptr_chrono_step C a z /\ ptr_chrono_step Ct at zt /\
@@ -457,8 +461,9 @@ Proof
   `access_ok lo a.po_prov a.po_fn a.po_inst a.po_state /\
    taint_ok a.po_fn a.po_taint a.po_inst a.po_state` by
     (fs[ptr_discipline_def] >> metis_tac[]) >>
-  `EVERY (\fn. EVERY (\i. i.inst_opcode <> DALLOCA) (fn_insts fn)) C.ctx_functions` by
-    (fs[ctx_has_dalloca_def, EVERY_MEM, EXISTS_MEM] >> metis_tac[]) >>
+  `EVERY (\f. EVERY inst_wf (fn_insts f)) C.ctx_functions` by
+    (fs[o1_ctx_shape_def, o1_fn_shape_def, wf_function_def,
+        EVERY_MEM, fn_inst_wf_def, fn_insts_MEM] >> metis_tac[]) >>
   `op_taint a.po_taint dop = {}` by
     (qpat_x_assum `taint_ok _ _ _ _` mp_tac >> simp[taint_ok_def] >> metis_tac[]) >>
   `ptr_value_transport births positions (op_prov TG dop) {} d dt` by
