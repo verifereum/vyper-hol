@@ -721,3 +721,70 @@ Proof
     (irule inline_boundary_choice_ordinary_suc >> simp[] >> metis_tac[]) >>
   gvs[] >> first_x_assum drule >> simp[] >> metis_tac[]
 QED
+
+Theorem inline_canonical_body_prefix:
+  canonical_param_prefix fn ==>
+  ?entry rest params tail.
+    fn.fn_blocks = entry::rest /\
+    entry.bb_instructions = params ++ tail /\ param_insts_from 0 params /\
+    no_param_insts tail /\
+    (!j. LENGTH params <= j ==>
+      no_param_insts (DROP j entry.bb_instructions)) /\
+    EVERY (\bb. no_param_insts bb.bb_instructions) rest
+Proof
+  simp[callLayoutDefsTheory.canonical_param_prefix_iff] >> rpt strip_tac >>
+  rename1 `no_param_insts tailcode` >>
+  qexistsl [`entry`,`rest`,`users ++ fmp ++ retpc`,`tailcode`] >>
+  simp[listTheory.APPEND_ASSOC] >> rpt strip_tac >>
+  simp[listTheory.DROP_APPEND2] >>
+  gvs[callLayoutDefsTheory.no_param_insts_def] >>
+  metis_tac[rich_listTheory.EVERY_DROP]
+QED
+
+Theorem inline_selected_source_body_cut:
+  inliner_input_ok C /\ inline_annotated_origin C n root cert /\
+  inline_live_stack C cert root ((p,pa,proute,psnap)::entries) frame /\
+  inline_original_child C cfuel pa.ia_id occurrence orig psnap.ils_state r ca res /\
+  inline_call_incidence cert root p pa.ia_function l j orig
+    (InlineSelected u q e zipper) /\
+  inline_namespace_leaf_at cert q route.ir_rename ca.ia_function /\
+  canonical_param_prefix ca.ia_function /\
+  inline_cell_frame (SelectedJump e) c mid /\
+  (clone_function e.ise_prefix e.ise_callee).fn_blocks = eb::blocks /\
+  inline_cell_zipper mid frames d /\ d.ic_function = root /\
+  MAP (\(tag,next). inline_cell_choice tag) frames = zipper /\
+  EVERY (\(tag,next). !e. tag <> SelectedJump e) frames /\
+  frame.ipf_state.vs_current_bb = d.ic_block /\
+  frame.ipf_state.vs_inst_idx = d.ic_index /\ ~frame.ipf_state.vs_halted ==>
+  ?entry rest params tail k bres ss ml bb tb snap ts.
+    ca.ia_function.fn_blocks = entry::rest /\
+    entry.bb_instructions = params ++ tail /\ param_insts_from 0 params /\
+    no_param_insts tail /\ cfuel = SUC k /\
+    exec_block k C entry (ss (LENGTH params)) = bres /\
+    (ss (LENGTH params)).vs_inst_idx = LENGTH params /\
+    phi_prefix_length entry.bb_instructions <= (ss (LENGTH params)).vs_inst_idx /\
+    no_param_insts (DROP (ss (LENGTH params)).vs_inst_idx entry.bb_instructions) /\
+    (!err. bres <> Error err) /\
+    res = (case bres of
+      OK z => if z.vs_halted then Halt z else run_blocks k C ca.ia_function z
+    | IntRet ir z => IntRet ir z | other => other) /\
+    lookup_block d.ic_block root.fn_blocks = SOME tb /\
+    lookup_block ml root.fn_blocks = SOME bb /\
+    inline_segment Tctx root 0 1 (InlineBody tb frame.ipf_state)
+      (InlineBody bb (ts (LENGTH params))) /\
+    inline_parameter_boundary_path (InlineEnter e::zipper)
+      e.ise_callee entry.bb_label (LENGTH params) root ml (LENGTH params) /\
+    (ts (LENGTH params)).vs_current_bb = ml /\
+    (ts (LENGTH params)).vs_inst_idx = LENGTH params /\
+    inline_live_stack C cert root
+      ((q,ca,route,snap with <|ils_state := ss (LENGTH params);
+        ils_defined := set (FLAT (MAP (\i. i.inst_outputs) params))|>)::
+       (p,pa,proute,psnap)::entries)
+      (frame with ipf_state := ts (LENGTH params))
+Proof
+  strip_tac >> drule inline_canonical_body_prefix >> strip_tac >>
+  drule_all inline_selected_source_segment >>
+  disch_then (qspec_then `Tctx` strip_assume_tac) >>
+  qexistsl [`entry`,`rest`,`params`,`tail`,`k`,`bres`,`ss`,`ml`,`bb`,`tb`,`snap`,`ts`] >>
+  simp[]
+QED
