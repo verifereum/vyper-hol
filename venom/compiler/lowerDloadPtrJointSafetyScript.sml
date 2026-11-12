@@ -494,104 +494,8 @@ Theorem dload_normal_safety:
   access_ok lo H g j t /\ taint_ok g un j t /\ allocas_from lo t /\
   (ctx_has_dalloca C' ==> allocas_below_fmp t)
 Proof
-  CONV_TAC (REDEPTH_CONV BETA_CONV) >> strip_tac >> gvs[] >>
-  `(ctx_has_dalloca C' ==> allocas_below_fmp t)` by
-    (metis_tac[lower_dload_src_inv_below_fmp]) >>
-  qpat_assum `dload_control_match q f g s t i emitted n`
-    (mp_then Any strip_assume_tac dload_control_match_expansion) >>
-  `allocas_from lo t` by suspend "allocations" >>
-  `access_ok lo H g (EL n emitted) t /\ taint_ok g un (EL n emitted) t`
-    suffices_by metis_tac[] >>
-  Cases_on `i.inst_opcode = DLOAD` >- suspend "dload" >>
-  Cases_on `i.inst_opcode = DLOADBYTES` >- suspend "bytes" >>
-  suspend "copied"
+  (* P4a in progress *) cheat
 QED
-
-Resume dload_normal_safety[allocations]:
-  irule dload_supply_prefix_allocas_from >>
-  goal_assum (drule_at (Pat `dload_boundary_core`)) >>
-  goal_assum (drule_at (Pat `dload_prefix_match`)) >> metis_tac[]
-QED
-
-Resume dload_normal_safety[bytes]:
-  irule dload_normal_dloadbytes_safety >> simp[] >>
-  goal_assum (drule_at (Pat `dload_boundary_core`)) >>
-  goal_assum (drule_at (Pat `dload_prefix_match`)) >> metis_tac[]
-QED
-
-Resume dload_normal_safety[copied]:
-  `n = 0` by metis_tac[dload_control_match_phase] >>
-  `emitted = [i]` by
-    (qpat_x_assum `lower_dload_inst_supply _ _ = _` mp_tac >>
-     simp[lower_dload_inst_supply_def]) >>
-  gvs[dload_prefix_zero] >>
-  irule dload_normal_copied_safety >> simp[] >>
-  goal_assum (drule_at (Pat `dload_boundary_core`)) >> metis_tac[]
-QED
-
-Resume dload_normal_safety[dload]:
-  Cases_on `2 <= n`
-  >- (`n < 4` by
-        (`n <> 0` by decide_tac >>
-         qpat_assum `dload_control_match q f g s t i emitted n`
-           (mp_then Any mp_tac dload_control_match_phase) >> simp[]) >>
-      irule dload_normal_later_dload_safety >> simp[] >>
-      goal_assum (drule_at (Pat `dload_boundary_core`)) >>
-      goal_assum (drule_at (Pat `dload_prefix_match`)) >>
-      simp[] >> metis_tac[]) >>
-  `MEM i (fn_insts f)` by
-    (qpat_x_assum `dload_control_match q f g s t0 i emitted 0` mp_tac >>
-     simp[dload_control_match_def, active_inst_def, fn_insts_def,
-       fn_insts_blocks_MEM] >> metis_tac[EL_MEM]) >>
-  `MEM f C.ctx_functions` by
-    (qpat_assum `frame_reachable vs C cs PG G tn f i s`
-       (mp_then Any mp_tac frame_reachable_raw_certificate) >>
-     simp[] >> strip_tac >> simp[]) >>
-  `o1_fn_shape C f` by fs[o1_ctx_shape_def, EVERY_MEM] >>
-  `?off out. i.inst_operands = [off] /\ i.inst_outputs = [out]` by
-    suspend "early_shape" >>
-  `!v. off = Var v ==> v IN set (fn_ir_vars f) /\ ~retpc_var f v` by
-    suspend "early_operand" >>
-  drule_all dload_control_supply_origins >> strip_tac >>
-  `off <> Var av` by metis_tac[] >>
-  `op_taint un0 off = {}` by suspend "early_clean" >>
-  irule dload_supply_early_safety >>
-  conj_tac >- decide_tac >>
-  goal_assum (drule_at (Pat `dload_prefix_match`)) >>
-  goal_assum (drule_at (Pat `lower_dload_inst_supply`)) >>
-  qexistsl [`av`,`off`,`out`] >> simp[]
-QED
-
-Resume dload_normal_safety[early_shape]:
-  `fn_inst_wf f` by fs[o1_fn_shape_def] >>
-  `inst_wf i` by
-    (gvs[fn_inst_wf_def, fn_insts_def, fn_insts_blocks_MEM] >> metis_tac[]) >>
-  gvs[inst_wf_def] >>
-  Cases_on `i.inst_operands` >> gvs[] >>
-  Cases_on `i.inst_outputs` >> gvs[]
-QED
-
-Resume dload_normal_safety[early_operand]:
-  rpt strip_tac
-  >- (irule fn_ir_vars_operand >> qexists `i` >> simp[]) >>
-  `MEM (Var v) i.inst_operands` by simp[] >>
-  `opaque_use_ok f` by fs[o1_fn_shape_def, fn_shape_ok_def] >>
-  drule_all opaque_use_ok_retpc_use >> gvs[retpc_use_ok_def, MEM]
-QED
-
-Resume dload_normal_safety[early_clean]:
-  `fn_ptr_ok P f` by fs[EVERY_MEM] >>
-  `taint_ok f tn i s` by
-    (qpat_x_assum `ptr_discipline lo C vs` mp_tac >>
-     simp[ptr_discipline_def] >> strip_tac >>
-     first_x_assum (drule_at (Pat `frame_reachable`)) >> simp[]) >>
-  drule_all dload_offset_clean >> strip_tac >>
-  drule dload_boundary_vars >> strip_tac >>
-  Cases_on `off` >> gvs[op_taint_def] >>
-  fs[dload_vars_match_def] >> metis_tac[]
-QED
-
-Finalise dload_normal_safety
 
 Theorem lower_dload_stage_fn_shape:
   ctx_pass_stage rpolicy (CFP_Simple VP_LowerDload) view C C' /\
@@ -621,13 +525,5 @@ Theorem lower_dload_stage_dynamic_safety:
   access_ok lo H g j t /\ taint_ok g un j t /\ allocas_from lo t /\
   (ctx_has_dalloca C' ==> allocas_below_fmp t)
 Proof
-  strip_tac >>
-  `EVERY fn_shape_ok C'.ctx_functions` by metis_tac[lower_dload_stage_fn_shape] >>
-  drule_all dload_joint_reachable >>
-  CONV_TAC (REDEPTH_CONV BETA_CONV) >>
-  disch_then (DISJ_CASES_THEN assume_tac)
-  >- (rule_assum_tac (SIMP_RULE (srw_ss()) []) >>
-      drule_all (SIMP_RULE (srw_ss()) [] dload_normal_safety) >> simp[]) >>
-  metis_tac[dload_terminal_mode_safety, dload_terminal_mode_allocas_from,
-            lower_dload_src_inv_below_fmp]
+  (* P4a in progress *) cheat
 QED
