@@ -427,7 +427,8 @@ Resume compile_log_ready_stmt_frag[post]:
       `eval_operand (Var x) u = SOME w` by
         (qpat_x_assum `!op w. _ /\ _ /\ eval_operand op t = SOME w ==> _`
            irule >>
-         simp[venomStateTheory.eval_operand_def]) >>
+         rpt conj_tac >> simp[venomStateTheory.eval_operand_def] >>
+         first_assum ACCEPT_TAC) >>
       pop_assum mp_tac >>
       simp[venomStateTheory.eval_operand_def, venomStateTheory.lookup_var_def])
   >> irule alloca_frame_same_state >> qexists_tac `u` >> simp[] >>
