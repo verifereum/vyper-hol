@@ -1164,7 +1164,7 @@ Resume materialize_run_compact[stack]:
   simp[internal_stack_size_def] >> irule mat_frame_trans >>
   qexistsl_tac [`mid`, `t`] >> simp[not_fresh_at_def]
 QED
-Finalise materialize_run_compact[local]
+Finalise materialize_run_compact
 
 Theorem internal_args_local_memloc[local]:
   !cenv params env idx args frontier mem name entry.
@@ -1416,7 +1416,7 @@ Proof
 QED
 
 (* ===== The callee's entry ===== *)
-Theorem internal_capture_materialization_entry[local]:
+Theorem internal_capture_materialization_entry:
   !has_rb st0 rb stb params caps next stp rpc stc cenv cenv1
    env args caller func s0.
     (if has_rb then
@@ -2063,7 +2063,7 @@ Proof
             step_inst_base_preserves_alloca_next]
 QED
 
-Theorem run_inst_seq_alloca_room[local]:
+Theorem run_inst_seq_alloca_room:
   !is func s t ctx.
     run_inst_seq is s = OK t /\
     EVERY (\i. MEM i (fn_insts func) /\ i.inst_opcode <> INVOKE) is /\
@@ -2358,7 +2358,7 @@ Resume internal_prologue_run[separation]:
        _ /\ _ /\ _ /\ _ /\ _ /\ evaluate_type _ _ = _ ==> _` irule >>
     simp[] >> metis_tac[]])
 QED
-Finalise internal_prologue_run[local]
+Finalise internal_prologue_run
 
 
 (* Running the prologue of an internal function func, compiled in cenv from
