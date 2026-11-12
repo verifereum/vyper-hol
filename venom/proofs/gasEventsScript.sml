@@ -89,3 +89,38 @@ Proof
   simp[Once gas_events_defs, Once gas_count_defs] >>
   BasicProvers.every_case_tac >> gvs[]
 QED
+
+Theorem gas_events_block_nonterminator:
+  get_instruction bb s.vs_inst_idx = SOME inst /\
+  step_inst fuel C inst s = OK u /\
+  ~is_terminator inst.inst_opcode ==>
+  gas_events_block fuel C owner bb s =
+    gas_events_step fuel C owner inst s ++
+    gas_events_block fuel C owner bb
+      (u with vs_inst_idx := SUC s.vs_inst_idx)
+Proof
+  strip_tac >> CONV_TAC (LHS_CONV (REWR_CONV gas_events_block_def)) >> simp[]
+QED
+
+Theorem gas_events_block_silent_finite_continuation:
+  !es f.
+    (!j. j < LENGTH es ==>
+      get_instruction bb (f j).vs_inst_idx = SOME (EL j es) /\
+      ~is_terminator (EL j es).inst_opcode /\
+      (EL j es).inst_opcode <> GAS /\
+      (EL j es).inst_opcode <> INVOKE /\
+      ?u. step_inst fuel C (EL j es) (f j) = OK u /\
+          f (SUC j) = u with vs_inst_idx := SUC (f j).vs_inst_idx) ==>
+    gas_events_block fuel C owner bb (f 0) =
+    gas_events_block fuel C owner bb (f (LENGTH es))
+Proof
+  Induct >> simp[] >> rpt gen_tac >> strip_tac >>
+  qpat_assum `!j. j < SUC _ ==> _` (qspec_then `0` mp_tac) >>
+  disch_then (strip_assume_tac o SIMP_RULE (srw_ss()) []) >>
+  CONV_TAC (LHS_CONV (REWR_CONV gas_events_block_def)) >>
+  simp[gas_events_step_def] >>
+  first_x_assum (qspec_then `\j. f (SUC j)` mp_tac) >>
+  simp[] >> disch_then irule >>
+  gen_tac >> strip_tac >>
+  first_x_assum (qspec_then `SUC j` mp_tac) >> simp[]
+QED
