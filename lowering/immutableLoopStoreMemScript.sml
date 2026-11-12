@@ -3,7 +3,7 @@ Theory immutableLoopStoreMem
 Ancestors
   immutableAssignStoreMem immutableCopyExecution immutableWordExecution fragGasSeqMem
   placeCopyControlPath stmtForRangeMemoryParts fragGasPathMem
-  bytestringCopyExecution fragExec
+  bytestringCopyExecution fragExec memContinuation
   instMemFrontier memSafeRun fragExecMem
   context compileEnv emitHelper emitHelperProps loweringStateRelDefs
   exprLoweringProps venomExecSemantics venomState venomInst
@@ -319,6 +319,13 @@ QED
 
 Finalise immutable_loop_iterate_mem
 
+Theorem immutable_loop_path_mem_cont[local]:
+  gas_path_mem ctx func s n (OK t) ==> mem_cont_sim ctx func s t
+Proof
+  strip_tac >> drule gas_path_mem_exec >>
+  simp[mem_cont_sim_def, fragExecTheory.exit_result_def]
+QED
+
 Theorem compile_imm_store_loop_mem_path:
   compile_word_copy_loop_base src dst cnt LocMemory LocCode T
     (SOME region) sa = (u,sb) /\
@@ -332,6 +339,8 @@ Theorem compile_imm_store_loop_mem_path:
   ~s.vs_halted /\ s.vs_current_bb = sa.cs_current_bb /\
   s.vs_inst_idx = LENGTH sa.cs_current_insts ==>
   ?t. gas_path_mem ctx func s 0 (OK t) /\
+      mem_cont_sim ctx func s t /\
+      t.vs_allocas = s.vs_allocas /\ t.vs_alloca_next = s.vs_alloca_next /\
       (!x. not_fresh_at sa x ==> lookup_var x t = lookup_var x s) /\
       (t with <|vs_vars := s.vs_vars;
                 vs_current_bb := s.vs_current_bb;
@@ -354,8 +363,12 @@ Proof
     (`eval_operand (Var cv) r = SOME (n2w 0) /\ 0 <= n` by simp[] >>
      drule_all immutable_loop_iterate_mem >>
      disch_then (qspec_then `ctx` mp_tac) >> simp[]) >>
-  qexists_tac `t` >>
-  conj_tac >- (drule_all gas_path_mem_then >> simp[]) >>
+  `gas_path_mem ctx func s 0 (OK t)` by
+    (drule_all gas_path_mem_then >> simp[]) >>
+  `mem_cont_sim ctx func s t` by metis_tac[immutable_loop_path_mem_cont] >>
+  `t.vs_allocas = s.vs_allocas /\ t.vs_alloca_next = s.vs_alloca_next` by
+    metis_tac[immutable_loop_allocation_frame] >>
+  qexists_tac `t` >> simp[] >>
   `t.vs_labels = s.vs_labels` by metis_tac[immutable_loop_frame_shared] >>
   fs[immutable_loop_frame_def, stmtSimStoreCopyTheory.store_copy_normalize_def] >>
   metis_tac[immutable_loop_operand_frame]
@@ -471,6 +484,8 @@ Theorem compile_store_immutable_bytestring_mem_path:
   ~s.vs_halted /\ s.vs_current_bb = sa.cs_current_bb /\
   s.vs_inst_idx = LENGTH sa.cs_current_insts ==>
   ?t. gas_path_mem ctx func s 0 (OK t) /\
+      mem_cont_sim ctx func s t /\
+      t.vs_allocas = s.vs_allocas /\ t.vs_alloca_next = s.vs_alloca_next /\
       (!x. not_fresh_at sa x ==> lookup_var x t = lookup_var x s) /\
       (t with <|vs_vars := s.vs_vars;
                 vs_current_bb := s.vs_current_bb;
@@ -522,7 +537,7 @@ Resume compile_store_immutable_bytestring_mem_path[execute]:
   disch_then (qspec_then `ctx` strip_assume_tac) >>
   rename1 `gas_path_mem ctx func s 0 (OK r)` >>
   `r.vs_labels = s.vs_labels /\ stmtSimStoreCopy$store_copy_normalize s r = s /\
-   r.vs_alloca_next = s.vs_alloca_next` by
+   r.vs_alloca_next = s.vs_alloca_next /\ r.vs_allocas = s.vs_allocas` by
     (fs[venom_state_component_equality,
         stmtSimStoreCopyTheory.store_copy_normalize_def]) >>
   `!p. (!x. p = Var x ==> not_fresh_at sa x) ==>
@@ -537,10 +552,10 @@ Resume compile_store_immutable_bytestring_mem_path[execute]:
        w2n (b+n2w (32*j)) + 32 <= r.vs_alloca_next` by simp[] >>
   drule_all compile_imm_store_loop_mem_path >>
   disch_then (qspec_then `ctx` strip_assume_tac) >>
-  qexists_tac `t` >>
-  conj_tac >- (drule_all gas_path_mem_then >> simp[]) >>
-  conj_tac >- metis_tac[] >>
-  simp[] >>
+  `gas_path_mem ctx func s 0 (OK t)` by
+    (drule_all gas_path_mem_then >> simp[]) >>
+  `mem_cont_sim ctx func s t` by metis_tac[immutable_loop_path_mem_cont] >>
+  qexists_tac `t` >> simp[] >>
   qpat_x_assum `(t with <|vs_vars := r.vs_vars; vs_current_bb := r.vs_current_bb;
       vs_prev_bb := r.vs_prev_bb; vs_inst_idx := r.vs_inst_idx|>) = _`
     (mp_tac o AP_TERM ``stmtSimStoreCopy$store_copy_normalize s``) >>
