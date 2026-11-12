@@ -58,6 +58,17 @@ Proof
   simp[raise_def]
 QED
 
+Theorem outcomes_replace_record_storage[simp]:
+  record_storage_event ob (s with outcomes := oc) =
+    (FST (record_storage_event ob s),
+     SND (record_storage_event ob s) with outcomes := oc) /\
+  record_storage_backend (s with outcomes := oc) =
+    (FST (record_storage_backend s),
+     SND (record_storage_backend s) with outcomes := oc)
+Proof
+  simp[record_storage_event_def, record_storage_backend_def, return_def]
+QED
+
 Theorem outcomes_replace_finally:
   (!s oc. f (s with outcomes := oc) =
     (FST (f s), SND (f s) with outcomes := oc)) /\
@@ -441,7 +452,9 @@ Proof
       BasicProvers.TOP_CASE_TAC >> simp[return_def, raise_def]) >>
   rename1 `SOME decl` >> PairCases_on `decl` >> Cases_on `decl0` >> simp[] >>
   irule outcomes_replace_bind >> simp[outcomes_replace_lifts, return_def] >>
-  gen_tac >> irule outcomes_replace_bind >> simp[outcomes_replace_lifts, return_def]
+  gen_tac >> irule outcomes_replace_bind >> simp[outcomes_replace_lifts, return_def]>>
+  gen_tac >> rewrite_tac[ignore_bind_def] >>
+  irule outcomes_replace_bind >> simp[return_def]
 QED
 
 Theorem outcomes_replace_result_array_length:

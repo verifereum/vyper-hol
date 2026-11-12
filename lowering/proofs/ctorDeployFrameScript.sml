@@ -109,7 +109,7 @@ Theorem logs_correspond_eq[local]:
 Proof
   `log_entry_corresponds info tenv addr = $=` by
     simp[FUN_EQ_THM, e2eDefsTheory.log_entry_corresponds_concrete_event] >>
-  simp[e2eDefsTheory.logs_correspond_def, LIST_REL_eq]
+  simp[e2eDefsTheory.logs_correspond_def, listTheory.LIST_REL_eq]
 QED
 
 (* The shadow run records the real frame's call requests. *)
