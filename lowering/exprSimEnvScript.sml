@@ -70,7 +70,8 @@ Proof
     ~is_terminator opc /\
     !out. step_inst_base (mk_inst sa.cs_next_id opc [] [out]) s0 =
           OK (update_var out (val_to_w256 v) s0)` by
-    (Cases_on `item` >>
+    (qpat_x_assum `!H. valid_horizon _ _ H _ ==> _` kall_tac >>
+     Cases_on `item` >>
      gvs[compile_env_var_def, evaluate_builtin_def] >>
      goal_assum (drule_at Any) >>
      simp[is_terminator_def, step_inst_base_opcode_eqs, exec_read0_def,
