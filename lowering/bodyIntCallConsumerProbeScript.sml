@@ -1,7 +1,7 @@
 (* Consumer probes use actual ALLOCA sites, not interval-id budgets. *)
 Theory bodyIntCallConsumerProbe
 Ancestors
-  bodyIntCallReserveProbe bodyIntCallCapacityProbe bodyIntCallHeldArgs loweringPosts context exprLowering
+  bodyIntCallReserveProbe bodyIntCallHeldArgs loweringPosts context exprLowering
   compileEnv emitHelper venomInst words list exprSimStorageCopy loweringHalt fragExec
 Libs
   monadsyntax
