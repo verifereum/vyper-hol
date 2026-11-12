@@ -1,13 +1,13 @@
 (*
  * FmpLowering's stage simulation: every terminating run of the raw input
  * context C, started at its own free-memory pointer fmp, is matched by a
- * run of the lowered context C' from the real state, up to the dead bytes
- * D.  The raw run never reclaims and places its dynamic allocations from
- * fmp up; the lowered run threads a runner through BUMP and INVOKE and
- * reclaims at the restores.  Row 3's pointer facts (o1_static_inv) keep
- * DALLOCA pointers to address uses within their site, so the relocation
- * is not observable; fmp_variant_room puts the real initial fmp between
- * the static layout's end and fmp.
+ * run of the lowered context C' from the real state on the same fuel, up
+ * to the dead bytes D.  The raw run never reclaims and places its dynamic
+ * allocations from fmp up; the lowered run threads a runner through BUMP
+ * and INVOKE and reclaims at the restores.  Row 3's pointer facts
+ * (o1_static_inv) keep DALLOCA pointers to address uses within their
+ * site, so the relocation is not observable; fmp_variant_room puts the
+ * real initial fmp between the static layout's end and fmp.
  *
  * The proof is one induction on fuel (fmp_runner_sim) of two facts at
  * once: the INVOKE step (fmp_invoke_sim) and a block run entered at a
@@ -17,8 +17,9 @@
  * fmp_stage_entry starts the context entry's run past its root.
  *
  * fmp_stage_invoke_sim is the INVOKE case of the same simulation (the
- * step_inst half of fmp_runner_sim's induction), exported on its own because the coverage
- * proof (fmpStageCoverage) closes its invariant over INVOKE steps.
+ * step_inst half of fmp_runner_sim's induction), exported on its own
+ * because the coverage proof (fmpStageCoverage) closes its invariant over
+ * INVOKE steps.
  *
  * TOP-LEVEL:
  *   fmp_lowering_stage_sim
@@ -117,19 +118,6 @@ Proof
   qexists_tac `bb` >> rw[] >>
   CONV_TAC (LAND_CONV (ONCE_REWRITE_CONV [run_blocks_def])) >>
   simp[] >> CASE_TAC >> simp[]
-QED
-
-Theorem fmp_fuel_max[local]:
-  exec_block k1 C' bb t = OK te /\ terminates (run_blocks k2 C' fn te) ==>
-  exec_block (MAX k1 k2) C' bb t = OK te /\
-  run_blocks (MAX k1 k2) C' fn te = run_blocks k2 C' fn te
-Proof
-  strip_tac >> conj_tac
-  >- (`exec_block (MAX k1 k2) C' bb t = exec_block k1 C' bb t`
-        suffices_by simp[] >>
-      irule exec_block_terminates_mono >>
-      simp[terminates_def, arithmeticTheory.MAX_DEF]) >>
-  irule run_blocks_terminates_mono >> simp[arithmeticTheory.MAX_DEF]
 QED
 
 (* Why: the OK case of a block run is a jump (fmp_stage_jump_step); its
@@ -295,8 +283,8 @@ Theorem fmp_runner_sim[local]:
       t1.vs_current_bb = t0.vs_current_bb /\
       (!m. exec_block m C' bb' tp = exec_block m C' bb' t1) /\
       terminates (run_blocks k C fn s0) ==>
-      ?m. fmp_stage_result D C C' vs (w2n vs'.vs_initial_fmp) (w2n fmp) eom
-            stk PG fn ts (run_blocks k C fn s0) (run_blocks m C' fn' t0)
+      fmp_stage_result D C C' vs (w2n vs'.vs_initial_fmp) (w2n fmp) eom
+        stk PG fn ts (run_blocks k C fn s0) (run_blocks k C' fn' t0)
 Proof
   Induct
   >- (conj_tac
@@ -313,7 +301,8 @@ Proof
       drule_all fmp_runner_call >> strip_tac >> gvs[] >>
       qpat_x_assum
         `!fn s0 s1 inst stk PG G tn sm lo t0 tp t1 ts fn' bb'.
-           _ ==> ?m. _ (run_blocks (SUC k) C fn s0) _`
+           _ ==> fmp_stage_result _ _ _ _ _ _ _ _ _ _ _
+                   (run_blocks (SUC k) C fn s0) _`
         (qspecl_then [`callee`, `cs`, `cs1`, `cinst`,
            `<| cf_fn := fn; cf_inst := ivk; cf_state := s; cf_params := PG;
                cf_prov := G; cf_tvar := tn.t_var |> :: stk`,
@@ -323,13 +312,13 @@ Proof
       simp[] >> strip_tac >> gvs[]
       >~ [`run_blocks _ _ _ _ = IntRet _ _`]
       >- (drule_all fmp_runner_return >> strip_tac >>
-          qexists_tac `m` >>
-          `step_inst m C' inv' t = OK t1` by simp[Once step_inst_def] >>
+          `step_inst (SUC k) C' inv' t = OK t1` by
+            simp[Once step_inst_def] >>
           simp[] >> metis_tac[]) >>
       qpat_x_assum `fmp_stage_result _ _ _ _ _ _ _ _ _ _ _ _ _` mp_tac >>
-      Cases_on `run_blocks m C' callee' cs'` >>
+      Cases_on `run_blocks (SUC k) C' callee' cs'` >>
       simp[fmp_stage_result_def, dead_result_rel_def] >> strip_tac >>
-      qexists_tac `m` >> simp[Once step_inst_def, dead_result_rel_def]) >>
+      simp[Once step_inst_def, dead_result_rel_def]) >>
   rpt strip_tac >>
   `~vs.vs_halted` by metis_tac[fmp_stage_ctx_live] >>
   `~s1.vs_halted` by metis_tac[fmp_frame_reachable_not_halted] >>
@@ -345,7 +334,7 @@ Proof
   drule fmp_result_shape >> strip_tac >>
   Cases_on `exec_block k C bb s1` >> gvs[terminates_def]
   >~ [`exec_block k C bb s1 = OK se`]
-  >- (`?te. exec_block k' C' bb' t1 = OK te` by metis_tac[] >>
+  >- (`?te. exec_block k C' bb' t1 = OK te` by metis_tac[] >>
       `~se.vs_halted /\ ~te.vs_halted` by metis_tac[] >> gvs[] >>
       `terminates (run_blocks k C fn se)` by fs[terminates_def] >>
       drule_all fmp_runner_jump >> strip_tac >>
@@ -355,10 +344,8 @@ Proof
       impl_tac >- fs[] >> strip_tac >>
       qpat_assum `fmp_stage_result _ _ _ _ _ _ _ _ _ _ _ (run_blocks _ _ _ _) _`
         (strip_assume_tac o MATCH_MP fmp_result_shape) >>
-      drule_all fmp_fuel_max >> strip_tac >>
-      qexists_tac `SUC (MAX k' m)` >> simp[]) >>
-  qexists_tac `SUC k'` >> simp[] >>
-  Cases_on `exec_block k' C' bb' t1` >> gvs[]
+      simp[]) >>
+  Cases_on `exec_block k C' bb' t1` >> gvs[]
 QED
 
 (* Why: the target's root is a straight-line prefix of its entry block
@@ -397,7 +384,7 @@ QED
 Theorem fmp_runner_entry[local]:
   fmp_stage_ctx rpolicy D C C' vs vs' fmp eom /\
   terminates (run_context fuel C vs) ==>
-  ?fuel'. dead_result_rel D (run_context fuel C vs) (run_context fuel' C' vs')
+  dead_result_rel D (run_context fuel C vs) (run_context fuel C' vs')
 Proof
   strip_tac >>
   `?name. C.ctx_entry = SOME name` by
@@ -449,7 +436,7 @@ Proof
     `entry_taint`, `FEMPTY`, `w2n vs'.vs_initial_fmp`, `t0`, `t0`, `t1`,
     `[]`, `fn'`, `bb`] mp_tac) >>
   impl_tac >- gvs[] >>
-  strip_tac >> qexists_tac `m` >> simp[] >>
+  strip_tac >> simp[] >>
   qpat_x_assum `fmp_stage_result _ _ _ _ _ _ _ _ _ _ _ _ _` mp_tac >>
   Cases_on `run_blocks fuel C fn s1` >>
   gvs[terminates_def, run_blocks_not_OK, fmp_stage_result_def] >>
@@ -467,6 +454,7 @@ Theorem fmp_lowering_stage_sim:
   ctx_sim D C C' (vs' with <| vs_fmp := fmp; vs_initial_fmp := fmp |>) vs'
 Proof
   rpt strip_tac >> simp[ctx_sim_def] >> rpt strip_tac >>
+  qexists_tac `fuel` >>
   `?eom. max_live_eom C = SOME eom` by
     (qpat_x_assum `o1_inv D 3 C _` mp_tac >>
      simp[o1_inv_def, o1_static_inv_def] >> metis_tac[]) >>
