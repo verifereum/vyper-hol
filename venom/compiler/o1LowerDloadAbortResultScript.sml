@@ -3,7 +3,7 @@ Theory o1LowerDloadAbortResult
 Ancestors
   o1LowerDloadForwardAbort o1LowerDloadJointScalar o1LowerDloadJointRelation
   ptrDiscipline o1PassContract venomExecSemantics venomState venomInst
-  list option
+  list option gasEvents
 
 Theorem ld_joint_forward_abort_result:
   ld_joint_boundary vs C C' lo D stk PG G tn fn inst s t
@@ -15,6 +15,8 @@ Theorem ld_joint_forward_abort_result:
   ?fn' bb' t1. lookup_function fn.fn_name C'.ctx_functions = SOME fn' /\
     lookup_block t.vs_current_bb fn'.fn_blocks = SOME bb' /\
     exec_block fuel C' bb' t = Abort reason t1 /\
+    gas_events_block fuel C fn.fn_name bb s = [] /\
+    gas_events_block fuel C' fn'.fn_name bb' t = [] /\
     dead_result_rel D (Abort reason s1) (Abort reason t1)
 Proof
   strip_tac >> drule_all ld_joint_forward_abort >>
