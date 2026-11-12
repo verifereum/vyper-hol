@@ -424,3 +424,18 @@ Proof
   `0 < z /\ 0 < w` by decide_tac >>
   drule_all occurrence_geometry_sites_disjoint >> decide_tac
 QED
+
+(* Positive natural geometry makes erasure injective at a live site.  This
+   does not invert numeric provenance without an occurrence annotation. *)
+Theorem occurrence_geometry_op_positive_key:
+  occurrence_natural_geometry lo a U B stk s /\
+  occurrence_env_ok B owners H G /\
+  FLOOKUP B id = SOME (b,z) /\ 0 < z /\
+  op_prov G op = SOME (b,z) ==>
+  op_prov H op = SOME id
+Proof
+  strip_tac >> drule occurrence_op_erasure >>
+  disch_then (qspec_then `op` mp_tac) >>
+  simp[occurrence_param_ok_def] >> strip_tac >>
+  metis_tac[occurrence_geometry_positive_site_unique]
+QED
