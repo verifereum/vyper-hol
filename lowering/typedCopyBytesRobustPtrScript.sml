@@ -22,7 +22,7 @@ Theorem compile_store_bytestring_robust_frag_ptr:
     (!m. mem_agree_outside tn.t_mem s.vs_memory m ==>
          val_in_memory stv v (w2n a) m) ==>
     ?Gf tnf sf.
-      frag_exec_ptr cx ctx PG sa sb
+      frag_exec_ptr H cx ctx PG sa sb
         (\g t v. g = G /\ t = tn /\ v = s)
         (\g t v. g = Gf /\ t = tnf /\ v = sf) R /\
       sf.vs_memory = (mcopy (w2n b) (w2n a) n s).vs_memory /\
