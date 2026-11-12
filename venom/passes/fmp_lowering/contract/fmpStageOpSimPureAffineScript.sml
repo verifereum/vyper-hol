@@ -8,9 +8,9 @@ Ancestors
 
 Theorem fmp_value_rel_add[local]:
   fmp_value_rel sm h1 {} x1 y1 /\ fmp_value_rel sm h2 {} x2 y2 /\
-  (h1 = NONE \/ h2 = NONE) ==>
-  fmp_value_rel sm (case h1 of NONE => h2 | SOME id => h1) {}
-    (x1 + x2) (y1 + y2)
+  (h1 = NONE \/ h2 = NONE) /\
+  h = (case h1 of NONE => h2 | SOME id => h1) ==>
+  fmp_value_rel sm h {} (x1 + x2) (y1 + y2)
 Proof
   Cases_on `h1` >> Cases_on `h2` >>
   simp[fmp_value_rel_def] >> rpt strip_tac >>
@@ -72,3 +72,52 @@ Proof
   drule_all fmp_stage_operand >> simp[]
 QED
 
+
+Theorem fmp_affine_step[local]:
+  fmp_stage_ctx rpolicy D C C' vs vs' fmp eom /\
+  frame_reachable vs C stk PG G tn fn inst s /\ active_inst fn inst s /\
+  fmp_stage_rel D C' sm fmp0 raw0 eom restored stk PG G tn fn s lo t ts /\
+  MEM inst.inst_opcode [ADD; SUB] /\ step_inst k C inst s = OK s1 ==>
+  ?out x y. inst.inst_outputs = [out] /\ s1 = update_var out x s /\
+    step_inst k C' inst t = OK (update_var out y t) /\
+    fmp_value_rel sm (out_prov PG G inst s1) {} x y
+Proof
+  strip_tac >> drule_all fmp_stage_frame_facts >> strip_tac >>
+  drule fmp_stage_prov_support >>
+  disch_then (qspec_then `P` mp_tac) >> simp[] >> strip_tac >>
+  `fn_static_ptr_ok P fn` by metis_tac[EVERY_MEM] >>
+  qpat_x_assum `step_inst _ _ _ _ = _` mp_tac >> fs[MEM] >>
+  (gvs[step_inst_non_invoke, step_inst_base_def, exec_pure2_def, AllCaseEqs()] >>
+   strip_tac >> gvs[] >>
+   rename1 `eval_operand op1 s = SOME x1` >>
+   rename1 `eval_operand op2 s = SOME x2` >>
+   `?y1. eval_operand op1 t = SOME y1 /\
+     fmp_value_rel sm (op_prov G op1) {} x1 y1` by
+     metis_tac[fmp_affine_operand, MEM] >>
+   `?y2. eval_operand op2 t = SOME y2 /\
+     fmp_value_rel sm (op_prov G op2) {} x2 y2` by
+     metis_tac[fmp_affine_operand, MEM] >>
+   `(op_prov G op1 = NONE \/ op_prov G op2 = NONE) /\
+    (inst.inst_opcode = SUB ==> op_prov G op2 = NONE)` by
+     metis_tac[fmp_affine_provenance, MEM] >>
+   qmatch_goalsub_abbrev_tac `update_var out value s` >>
+   qexistsl [`value`,
+     `if inst.inst_opcode = ADD then y1 + y2 else y1 - y2`] >>
+   simp[out_prov_def, first_prov_def, Abbr `value`]) >>
+  (Cases_on `inst.inst_opcode = ADD`
+   >- (irule fmp_value_rel_add >>
+       qexistsl [`op_prov G op1`,`op_prov G op2`] >>
+       Cases_on `op_prov G op1` >> Cases_on `op_prov G op2` >> gvs[]) >>
+   gvs[] >> Cases_on `op_prov G op1` >> gvs[] >>
+   rewrite_tac[WORD_SUB_INTRO] >> irule fmp_value_rel_sub >> simp[])
+QED
+
+Theorem fmp_affine_terminating_result[local]:
+  MEM inst.inst_opcode [ADD; SUB] /\
+  step_inst k C inst s = r /\ terminates r ==>
+  ?s1. r = OK s1
+Proof
+  strip_tac >> fs[MEM] >>
+  gvs[step_inst_non_invoke, step_inst_base_def, exec_pure2_def,
+      AllCaseEqs(), passSimulationDefsTheory.terminates_def]
+QED
