@@ -793,6 +793,19 @@ Proof
   rpt strip_tac >> gvs[AllCaseEqs()]
 QED
 
+Theorem pop_storage_place_not_halt[local]:
+  pop_place cx (StoragePlace tr slot (ArrayTV tv (Dynamic n))) es <>
+    (INR HaltException, es')
+Proof
+  Cases_on `tr` >>
+  simp[pop_place_def, vyperStorageBackendTheory.get_storage_backend_eq,
+       bind_def, ignore_bind_def, check_def, assert_def, return_def, raise_def,
+       vyperStorageBackendTheory.write_storage_slot_eq,
+       vyperStorageBackendTheory.get_storage_def,
+       vyperStorageBackendTheory.set_storage_def] >>
+  rpt strip_tac >> gvs[AllCaseEqs()]
+QED
+
 Theorem nested_pop_target_admissible:
   gas_admissible (eval_expr cx (Pop ann bt)) expr_vv_res_ok es ==>
   gas_admissible (eval_target_place cx bt) target_place_res_ok es
@@ -1171,7 +1184,13 @@ Resume pop_nested_storage_pure_sim[normal]:
       qpat_assum `gas_marked_exec _ _ (eval_target_place _ _) _ _ _ _ _`
         (irule_at Any) >>
       asm_rewrite_tac[]) >>
-  gvs[]
+  `pres' <> INR HaltException` by
+    (strip_tac >>
+     qpat_x_assum `gas_marked_exec _ _ (pop_place _ _) _ _ _ _ _`
+       (mp_tac o CONJUNCT1 o REWRITE_RULE [gas_marked_exec_def]) >>
+     disch_then (qspec_then `[]` mp_tac) >>
+     gvs[pop_storage_place_not_halt]) >>
+  gvs[halt_exit_def]
 QED
 
 Finalise pop_nested_storage_pure_sim

@@ -232,7 +232,7 @@ Proof
           drule_all selfdestruct_tail_path_ptr >>
           disch_then (qspecl_then [`PG`, `G`] strip_assume_tac) >>
           `!tail. selfdestruct_tail cx v (es_end with gas_obs := tail) =
-                  (INR HaltException,
+                  (INR HaltException : eval_result + exception,
                    selfdestruct_final cx a es_end with gas_obs := tail)` by
             (gen_tac >>
              qspecl_then [`cx`, `v`, `a`, `es_end with gas_obs := tail`]
@@ -244,7 +244,7 @@ Proof
              (vyperState$bind
                 (vyperState$bind (eval_expr cx e) (read_result cx))
                 (selfdestruct_tail cx))
-             (es,s0,G0,tn0) marks (INR HaltException)
+             (es,s0,G0,tn0) marks (INR HaltException : eval_result + exception)
              (selfdestruct_final cx a es_end) G tn (Halt s')` by
             (irule (Q.INST [`right` |-> `[]`] gas_marked_exec_ptr_bind_normal
                     |> REWRITE_RULE [APPEND_NIL]) >>
@@ -259,7 +259,7 @@ Proof
                         `Halt s'`] >>
           qpat_assum `gas_marked_exec_ptr _ _ _ (vyperState$bind (vyperState$bind _ _) _) _ _ (INR _) _ _ _ _`
             (fn th => rewrite_tac[th]) >>
-          simp[exit_result_def, expr_exit_def, halt_exit_def]) >>
+          gvs[exit_result_def, expr_exit_def, halt_exit_def]) >>
       (* the operand exits *)
       Cases_on `res` >> gvs[] >>
       qexists_tac `marks` >> disj1_tac >>

@@ -2386,10 +2386,12 @@ Proof
     t.vs_inst_idx = LENGTH sb.cs_current_insts` >>
   reverse conj_tac
   >- (`(\(res:eval_result + exception) ee r.
-          ?exc. res = INR exc /\ expr_exit (INR exc : place + exception) r) =
-        (\res (ee:evaluation_state) r. expr_exit res r)` by
+          ?exc. res = INR exc /\ expr_exit (INR exc : place + exception) r /\
+                halt_exit cx ee (INR exc : place + exception) r) =
+        (\res (ee:evaluation_state) r.
+          expr_exit res r /\ halt_exit cx ee res r)` by
         (simp[FUN_EQ_THM] >> Cases >>
-         simp[stmtSimPropsTheory.expr_exit_INR_type]) >>
+         simp[stmtSimPropsTheory.expr_exit_INR_type, halt_exit_def]) >>
       BETA_TAC >> pop_assum SUBST1_TAC >> first_assum ACCEPT_TAC) >>
   rpt gen_tac >> strip_tac >> gvs[] >>
   `~t.vs_halted` by
