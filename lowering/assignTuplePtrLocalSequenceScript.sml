@@ -47,7 +47,9 @@ Theorem tuple_local_store_sequence_path_ptr:
     (!x. not_fresh_at st x ==> lookup_var x t = lookup_var x s /\
       FLOOKUP G' x = FLOOKUP G x /\ op_taint tn' (Var x) = op_taint tn (Var x)) /\
     (!aid bs. FLOOKUP s.vs_allocas aid = SOME bs ==> FLOOKUP t.vs_allocas aid = SOME bs) /\
-    gas_path_ptr D 0 ctx func PG G tn s 0 G' tn' (OK t)
+    gas_path_ptr D 0 ctx func PG G tn s 0 G' tn' (OK t) /\
+    (!c0 e0 sa0 s0. alloca_frame c0 e0 sa0 s0 cenv es s ==>
+      alloca_frame c0 e0 sa0 s0 cenv es' t)
 Proof
   strip_tac >>
   irule tuple_store_sequential_path_ptr >> simp[] >>
@@ -62,7 +64,7 @@ Proof
         type_memory_bytes cenv ty = type_memory_size tv /\
         type_memory_bytes cenv vt = type_memory_size entry.type /\
         0 < type_memory_size entry.type /\ type_memory_size entry.type + 64 < dimword(:256))` >>
-  qexistsl_tac [`addr`, `b`, `es`, `gs`, `ops`, `sz`, `tvs`, `tys`, `vs`] >>
+  qexistsl_tac [`addr`, `b`, `gs`, `ops`, `sz`, `tvs`, `tys`, `vs`] >>
   simp[] >>
   (rpt conj_tac
    >- (rpt gen_tac >> strip_tac >> gvs[] >>

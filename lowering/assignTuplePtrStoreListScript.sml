@@ -2,7 +2,7 @@
    original tuple. All operands are loaded before this phase. *)
 Theory assignTuplePtrStoreList
 Ancestors
-  assignTuplePtrMixedHead assignTuplePtrUnread assignTuplePtrUnreadBounds
+  assignTuplePtrMixedHead assignTuplePtrSequential assignTuplePtrUnread assignTuplePtrUnreadBounds
   vyperTypeDefaults valueEncodingProofs tupleTargetStoreRun tupleTargetStoreProps
   tupleMemoryFrame tupleMemoryLayout bodyPtrDefs fragGasPathPtr
   exprLoweringProps stmtLoweringMono exprSimProps stmtSimDefs tupleAssignParts fragExec
@@ -47,7 +47,9 @@ Theorem tuple_store_targets_path_ptr:
       (!x. not_fresh_at st x ==> lookup_var x t = lookup_var x s /\
         FLOOKUP G' x = FLOOKUP G x /\ op_taint tn' (Var x) = op_taint tn (Var x)) /\
       (!aid bs. FLOOKUP s.vs_allocas aid = SOME bs ==> FLOOKUP t.vs_allocas aid = SOME bs) /\
-      gas_path_ptr D 0 ctx func PG G tn s 0 G' tn' (OK t)
+      gas_path_ptr D 0 ctx func PG G tn s 0 G' tn' (OK t) /\
+      (!c0 e0 sa0 s0. alloca_frame c0 e0 sa0 s0 cenv es s ==>
+        alloca_frame c0 e0 sa0 s0 cenv es' t)
 Proof
   Induct
   >- (rpt gen_tac >> disch_then (map_every assume_tac o CONJUNCTS) >>
@@ -207,6 +209,20 @@ Resume tuple_store_targets_path_ptr[compose]:
   qpat_x_assum `?t' G'' tn''. _`
     (qx_choose_then `sf` (qx_choose_then `Gf` (qx_choose_then `tnf`
       (map_every assume_tac o CONJUNCTS)))) >>
+  `!c0 e0 sa0 s0. alloca_frame c0 e0 sa0 s0 cenv es s ==>
+     alloca_frame c0 e0 sa0 s0 cenv es1 t` by
+    (rpt strip_tac >>
+     mp_tac (Q.SPECL [`c0`, `e0`, `sa0`, `s0`, `cenv`, `es`, `es1`, `s`, `t`, `st`]
+       tuple_head_alloca_frame_ptr) >>
+     impl_tac >- (rpt conj_tac
+       >- first_assum ACCEPT_TAC
+       >- first_assum ACCEPT_TAC
+       >- first_assum ACCEPT_TAC
+       >- (qpat_x_assum `!x. not_fresh_at st x ==> lookup_var x t = _ /\ _` mp_tac >>
+           rpt (pop_assum kall_tac) >> metis_tac[])
+       >> qpat_x_assum `(t.vs_memory = s.vs_memory /\ _) \/ _` mp_tac >>
+          rpt (pop_assum kall_tac) >> metis_tac[]) >>
+     disch_then ACCEPT_TAC) >>
   qexistsl_tac [`sf`, `Gf`, `tnf`] >> asm_rewrite_tac [] >>
   conj_tac
   >- (rpt strip_tac >>
@@ -214,8 +230,13 @@ Resume tuple_store_targets_path_ptr[compose]:
         (irule not_fresh_at_mono >> qexists `st` >> simp[]) >>
       metis_tac[]) >>
   conj_tac >- metis_tac[] >>
-  irule (gas_path_ptr_then |> Q.INST [`n` |-> `0`, `m` |-> `0`] |> SRULE []) >>
-  first_assum (irule_at Any) >> simp[]
+  conj_tac
+  >- (irule (gas_path_ptr_then |> Q.INST [`n` |-> `0`, `m` |-> `0`] |> SRULE []) >>
+      first_assum (irule_at Any) >> simp[]) >>
+  rpt strip_tac >>
+  qpat_x_assum `!c0 e0 sa0 s0. _ ==> alloca_frame _ _ _ _ _ es' sf` irule >>
+  qpat_x_assum `!c0 e0 sa0 s0. _ ==> alloca_frame _ _ _ _ _ es1 t` irule >>
+  first_assum ACCEPT_TAC
 QED
 
 Finalise tuple_store_targets_path_ptr
