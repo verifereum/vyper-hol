@@ -207,6 +207,118 @@ Proof
   simp[fuel_outcome_def] >> disj2_tac >> metis_tac[]
 QED
 
+Theorem uint2str_body_outcome[local]:
+  no_phi_fn fn /\
+  lookup_block s.vs_current_bb fn.fn_blocks = SOME bb /\
+  bb.bb_instructions = u2s_body a buf n /\ s.vs_inst_idx = 0 /\
+  eval_operand (Var (u2s_var a 0)) s = SOME xw /\
+  (!x. var_below N x /\ x NOTIN Wv ==>
+       EVERY (\i. ~MEM x i.inst_outputs) (TAKE 9 (u2s_body a buf n))) ==>
+  fuel_outcome G ctx fn s 1
+    (\t. (t.vs_current_bb = u2s_label a 1 /\ t.vs_inst_idx = 0 /\
+         eval_operand (Var (u2s_var a 0)) t = SOME (safe_div xw 10w)) /\
+         vars_kept N Wv s t)
+Proof
+  strip_tac >>
+  ho_match_mp_tac (Q.INST [`is` |-> `TAKE 9 (u2s_body a buf n)`,
+                          `inst` |-> `LAST (u2s_body a buf n)`]
+                         uint2str_block_outcome) >>
+  simp[u2s_body_def, u2s_inst_def, mk_inst_def, is_terminator_def] >>
+  rpt strip_tac >>
+  drule_all (SRULE [u2s_body_def, u2s_inst_def, mk_inst_def]
+                  uint2str_body_quotient) >>
+  strip_tac >> qexists_tac `u2s_label a 1` >>
+  simp[venomExecSemanticsTheory.step_inst_base_def,
+       venomStateTheory.jump_to_def]
+QED
+
+Theorem uint2str_cond_outcome[local]:
+  no_phi_fn fn /\
+  lookup_block s.vs_current_bb fn.fn_blocks = SOME bb /\
+  bb.bb_instructions = u2s_cond a /\ s.vs_inst_idx = 0 /\
+  lookup_var (u2s_var a 0) s = SOME (n2w x) /\ x < dimword (:256) /\
+  (!v. var_below N v /\ v NOTIN Wv ==> v <> u2s_var a 4) ==>
+  fuel_outcome G ctx fn s 1
+    (\t. (t.vs_current_bb = u2s_label a (if x = 0 then 4 else 2) /\
+          t.vs_inst_idx = 0 /\ lookup_var (u2s_var a 0) t = SOME (n2w x)) /\
+         vars_kept N Wv s t)
+Proof
+  strip_tac >>
+  ho_match_mp_tac (Q.INST [`is` |-> `TAKE 1 (u2s_cond a)`,
+                          `inst` |-> `LAST (u2s_cond a)`]
+                         uint2str_block_outcome) >>
+  simp[u2s_cond_def, u2s_inst_def, mk_inst_def, is_terminator_def] >>
+  rpt strip_tac >>
+  drule_all (SRULE [] (Q.INST [`t` |-> `update_var (u2s_var a 4) (bool_to_word (x = 0)) s`]
+                   u2s_cond_run)) >>
+  simp[u2s_cond_def, u2s_inst_def, mk_inst_def] >> strip_tac >>
+  gvs[] >> qexists_tac `u2s_label a (if x = 0 then 4 else 2)` >>
+  Cases_on `x = 0` >>
+  gvs[venomStateTheory.lookup_var_def] >>
+  simp[Q.INST [`cond` |-> `1w`]
+              (SPEC_ALL venomExecPropsTheory.step_jnz_behavior),
+       Q.INST [`cond` |-> `0w`]
+              (SPEC_ALL venomExecPropsTheory.step_jnz_behavior),
+       venomStateTheory.jump_to_def, venomStateTheory.update_var_def,
+       venomStateTheory.lookup_var_def, venomStateTheory.eval_operand_def,
+       finite_mapTheory.FLOOKUP_UPDATE, u2s_var_injective,
+       arithmeticPropsTheory.bool_to_word_T, arithmeticPropsTheory.bool_to_word_F]
+QED
+
+Theorem uint2str_round[local]:
+  no_phi_fn fn /\
+  lookup_block (u2s_label a 1) fn.fn_blocks = SOME cb /\
+  cb.bb_instructions = u2s_cond a /\
+  lookup_block (u2s_label a 2) fn.fn_blocks = SOME bb /\
+  bb.bb_instructions = u2s_body a buf n /\
+  (!v. var_below N v /\ v NOTIN Wv ==>
+       v <> u2s_var a 4 /\
+       EVERY (\i. ~MEM v i.inst_outputs) (TAKE 9 (u2s_body a buf n))) /\
+  H = (\s. s.vs_current_bb = u2s_label a 1 /\ s.vs_inst_idx = 0 /\
+           (?w. lookup_var (u2s_var a 0) s = SOME w) /\ vars_kept N Wv s0 s) /\
+  Q = (\s. s.vs_current_bb = u2s_label a 4 /\ s.vs_inst_idx = 0 /\
+           vars_kept N Wv s0 s) /\
+  mu = (\s. w2n (THE (lookup_var (u2s_var a 0) s))) ==>
+  !s. H s ==> ?j. j <= 2 /\
+    fuel_outcome G ctx fn s j (\t. Q t \/ (H t /\ mu t < mu s))
+Proof
+  strip_tac >> gen_tac >> strip_tac >>
+  `?w. lookup_var (u2s_var a 0) s = SOME w` by gvs[] >>
+  `w2n w < dimword (:256)` by simp[wordsTheory.w2n_lt] >>
+  `lookup_var (u2s_var a 0) s = SOME (n2w (w2n w))` by simp[] >>
+  `fuel_outcome G ctx fn s 1
+     (\t. (t.vs_current_bb = u2s_label a (if w2n w = 0 then 4 else 2) /\
+           t.vs_inst_idx = 0 /\ lookup_var (u2s_var a 0) t = SOME (n2w (w2n w))) /\
+          vars_kept N Wv s t)` by
+    (irule uint2str_cond_outcome >> gvs[] >> metis_tac[]) >>
+  `2 = 1 + 1` by simp[] >> pop_assum SUBST1_TAC >>
+  irule fuel_outcome_compose >> goal_assum (drule_at Any) >>
+  rpt strip_tac >>
+  Cases_on `w2n w = 0`
+  >- (qexists_tac `0` >> simp[] >> irule fuel_outcome_refl >>
+      gvs[] >> metis_tac[vars_kept_trans]) >>
+  `eval_operand (Var (u2s_var a 0)) t = SOME w` by
+    gvs[venomStateTheory.eval_operand_def] >>
+  `fuel_outcome G ctx fn t 1
+     (\u. (u.vs_current_bb = u2s_label a 1 /\ u.vs_inst_idx = 0 /\
+           eval_operand (Var (u2s_var a 0)) u = SOME (safe_div w 10w)) /\
+          vars_kept N Wv t u)` by
+    (irule uint2str_body_outcome >> gvs[] >> metis_tac[]) >>
+  qexists_tac `1` >> simp[] >>
+  irule fuel_outcome_weaken >> goal_assum (drule_at Any) >>
+  rpt strip_tac >>
+  `w2n (safe_div w 10w) < w2n w` by
+    (`w2n w DIV 10 < dimword (:256)` by
+       (irule arithmeticTheory.LESS_EQ_LESS_TRANS >>
+        qexists_tac `w2n w` >> simp[arithmeticTheory.DIV_LESS_EQ]) >>
+     simp[venomExecSemanticsTheory.safe_div_def, wordsTheory.word_div_def,
+          wordsTheory.w2n_n2w, wordsTheory.dimword_def,
+          venomLayoutTheory.dimindex_256] >>
+     irule arithmeticTheory.DIV_LESS >> simp[]) >>
+  gvs[venomStateTheory.eval_operand_def] >>
+  metis_tac[vars_kept_trans]
+QED
+
 (* The loop works on a fresh copy val_var of val_op, made before the loop
    (so no precondition on val_op is needed), and on a fresh counter i_var
    from 0.  Each round (cond -> body -> cond) runs straight-line code, sets
