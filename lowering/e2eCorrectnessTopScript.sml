@@ -37,10 +37,10 @@ Theorem vyper_call_correct_top:
     valid_vyper_call tops tx (buffer_to_list (FST (HD es.contexts)).msgParams.data) ret /\
     call_outcomes_storage_ok am tx (MAP SND (call_trace es))
     ==>
-    ?r es'.
-      run_call es = SOME (r, es') /\
-      (frame_resource_starved es r es' \/
-       call_result_rel tops ret am tx es r es')
+    ?result es'.
+      run_call es = SOME (result, es') /\
+      (frame_resource_starved es result es' \/
+       call_result_rel tops ret am tx es result es')
 Proof
   rpt strip_tac >>
   `source_deployment_rel tops am tx` by fs[call_state_rel_def] >>
