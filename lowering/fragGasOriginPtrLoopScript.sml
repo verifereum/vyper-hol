@@ -7,7 +7,7 @@ Theory fragGasOriginPtrLoop
 Ancestors
   fragGasOriginPtr fragGasSeqPtr fragGasOrigin fragGasPathPtr ptrSafeRun
   ptrDiscipline venomExecSemantics venomExecProps venomInst venomInstProps venomState
-  memSafeRun unitTransformDefs gasEvents relation list rich_list pair
+  memSafeRun unitTransformDefs gasEvents gasCount fragExecMem relation list rich_list pair
   arithmetic
 
 (* Zero-mark paths chain through an OK midpoint. *)
@@ -59,11 +59,10 @@ Theorem prefix_trace_origin_ptr_indexed[local]:
     ~(u 0).vs_halted /\
     EVERY (\i. i.inst_opcode <> INVOKE /\ ~is_terminator i.inst_opcode /\
                i.inst_opcode <> GAS) xs /\
+    run_inst_seq_mem_ok xs ((u 0) with vs_inst_idx := k) /\
     (!j. j < LENGTH xs ==>
       step_inst 0 ctx (EL j xs) ((u j) with vs_inst_idx := k + j) =
         OK ((u (SUC j)) with vs_inst_idx := k + j) /\
-      inst_mem_below_frontier (EL j xs) ((u j) with vs_inst_idx := k + j) /\
-      inst_dload_in_section (EL j xs) ((u j) with vs_inst_idx := k + j) /\
       ptr_safe_step D lo 0 ctx func PG (g j) (q j) (EL j xs)
         ((u j) with vs_inst_idx := k + j) /\
       ghost_step 0 ctx PG (g j) (q j) (EL j xs)
@@ -80,6 +79,14 @@ Proof
   qpat_assum `!j. j < LENGTH _ ==> _`
     (qspec_then `0` (strip_assume_tac o SRULE [])) >>
   fs[EVERY_DEF] >>
+  `EVERY (\i. ~is_terminator i.inst_opcode) xs` by fs[EVERY_MEM] >>
+  `step_inst_base h ((u 0) with vs_inst_idx := k) =
+     OK ((u 1) with vs_inst_idx := k)` by gvs[step_inst_non_invoke] >>
+  `inst_mem_below_frontier h ((u 0) with vs_inst_idx := k) /\
+   inst_dload_in_section h ((u 0) with vs_inst_idx := k) /\
+   run_inst_seq_mem_ok xs ((u 1) with vs_inst_idx := SUC k)` by
+    (qpat_x_assum `run_inst_seq_mem_ok (_::_) _` mp_tac >>
+     simp[run_inst_seq_mem_ok_def]) >>
   `get_instruction bb k = SOME h /\ isPREFIX xs (DROP (SUC k) bb.bb_instructions)` by
     (Cases_on `DROP k bb.bb_instructions` >> gvs[] >>
      `k < LENGTH bb.bb_instructions` by
@@ -114,8 +121,8 @@ Proof
   simp[]
 QED
 
-(* The forward twin of prefix_trace_ptr_safe_block: a checked trace of
-   non-GAS straight-line instructions is one zero-mark joint path. *)
+(* The forward twin of prefix_trace_ptr_safe_block: a memory-checked trace
+   of non-GAS straight-line instructions is one zero-mark joint path. *)
 Theorem prefix_trace_origin_ptr_path:
   !xs bb s G tn u g q.
     ~s.vs_halted /\ lookup_block s.vs_current_bb func.fn_blocks = SOME bb /\
@@ -123,13 +130,10 @@ Theorem prefix_trace_origin_ptr_path:
     u 0 = s /\ g 0 = G /\ q 0 = tn /\
     EVERY (\i. i.inst_opcode <> INVOKE /\ ~is_terminator i.inst_opcode /\
                i.inst_opcode <> GAS) xs /\
+    run_inst_seq_mem_ok xs s /\
     (!j. j < LENGTH xs ==>
       step_inst 0 ctx (EL j xs) ((u j) with vs_inst_idx := s.vs_inst_idx + j) =
         OK ((u (SUC j)) with vs_inst_idx := s.vs_inst_idx + j) /\
-      inst_mem_below_frontier (EL j xs)
-        ((u j) with vs_inst_idx := s.vs_inst_idx + j) /\
-      inst_dload_in_section (EL j xs)
-        ((u j) with vs_inst_idx := s.vs_inst_idx + j) /\
       ptr_safe_step D lo 0 ctx func PG (g j) (q j) (EL j xs)
         ((u j) with vs_inst_idx := s.vs_inst_idx + j) /\
       ghost_step 0 ctx PG (g j) (q j) (EL j xs)
@@ -146,8 +150,74 @@ Proof
   gvs[]
 QED
 
-(* A JMP keeps the ghost and lands on the jump target, as in
+(* The joint twin of ctor_checked_emitted_endpoint: code emitted in place
+   between two codegen states runs as one zero-mark joint path. *)
+Theorem emitted_origin_ptr_path:
+  fn_has_code st st' func /\ inst_extends st st' /\
+  st'.cs_current_bb = st.cs_current_bb /\
+  ~s.vs_halted /\ s.vs_current_bb = st.cs_current_bb /\
+  s.vs_inst_idx = LENGTH st.cs_current_insts /\
+  EVERY (\i. i.inst_opcode <> INVOKE /\ ~is_terminator i.inst_opcode /\
+             i.inst_opcode <> GAS) (emitted_insts st st') /\
+  run_inst_seq_mem_ok (emitted_insts st st') s /\
+  inst_seq_ptr D lo ctx func PG G tn (emitted_insts st st') s H qt /\
+  run_inst_seq (emitted_insts st st') s = OK t ==>
+  gas_origin_ptr_path (D, lo, explicit, ctx, func, PG) (s, G, tn) []
+    (OK (t with vs_inst_idx := LENGTH st'.cs_current_insts), H, qt)
+Proof
+  strip_tac >>
+  `?bb. lookup_block st.cs_current_bb func.fn_blocks = SOME bb /\
+        isPREFIX st'.cs_current_insts bb.bb_instructions` by
+    (gvs[fn_has_code_def, inst_extends_def] >> metis_tac[]) >>
+  `?code. st'.cs_current_insts = st.cs_current_insts ++ code /\
+          emitted_insts st st' = code` by
+    (fs[inst_extends_def, IS_PREFIX_APPEND] >>
+     simp[emitted_insts_def, DROP_LENGTH_APPEND]) >>
+  `isPREFIX code (DROP s.vs_inst_idx bb.bb_instructions)` by
+    (qpat_x_assum `isPREFIX st'.cs_current_insts _` mp_tac >>
+     simp[IS_PREFIX_APPEND] >> strip_tac >> simp[IS_PREFIX_APPEND] >>
+     rewrite_tac[GSYM APPEND_ASSOC, DROP_LENGTH_APPEND] >> metis_tac[]) >>
+  qpat_x_assum `emitted_insts st st' = code` (fn th => fs[th]) >>
+  `FILTER (\i. i.inst_opcode = GAS) code = []` by fs[FILTER_EQ_NIL, EVERY_MEM] >>
+  `EVERY (\i. i.inst_opcode <> INVOKE /\ ~is_terminator i.inst_opcode) code` by
+    fs[EVERY_MEM] >>
+  `lookup_block s.vs_current_bb func.fn_blocks = SOME bb` by simp[] >>
+  mp_tac (Q.SPECL [`code`, `s`, `t`, `G`, `tn`, `H`, `qt`, `ctx`, `func`, `bb`]
+    run_inst_seq_gas_origin_ptr_path) >>
+  simp[]
+QED
+
+(* A non-INVOKE terminator that lands on jump_to keeps the ghost, as in
    emit_jump_path_ptr. *)
+Theorem jump_origin_ptr_path:
+  lookup_block s.vs_current_bb func.fn_blocks = SOME bb /\
+  get_instruction bb s.vs_inst_idx = SOME i /\
+  is_terminator i.inst_opcode /\ i.inst_opcode <> INVOKE /\
+  i.inst_opcode <> GAS /\
+  inst_mem_below_frontier i s /\ inst_dload_in_section i s /\
+  ptr_safe_step D lo 0 ctx func PG G tn i s /\
+  step_inst_base i s = OK (jump_to lbl s) /\ ~s.vs_halted ==>
+  gas_origin_ptr_path (D, lo, explicit, ctx, func, PG) (s, G, tn) []
+    (OK (jump_to lbl s), G, tn)
+Proof
+  strip_tac >>
+  `step_inst 0 ctx i s = OK (jump_to lbl s)` by simp[step_inst_non_invoke] >>
+  `gas_origin_ptr_edge (D, lo, explicit, ctx, func, PG) (s, G, tn) []
+     (OK (jump_to lbl s), G, tn)` by
+    (PURE_REWRITE_TAC[gas_origin_ptr_edge_def] >> conj_tac
+     >- (rewrite_tac[gas_origin_edge_def] >> conj_tac >- simp[] >>
+         qexistsl_tac [`0`, `bb`, `i`, `OK (jump_to lbl s)`] >>
+         simp[gas_events_step_def, mem_safe_step_non_invoke] >>
+         metis_tac[]) >>
+     rewrite_tac[gas_path_ptr_edge_def] >> conj_tac >- simp[] >>
+     qexistsl_tac [`0`, `bb`, `i`, `OK (jump_to lbl s)`] >>
+     simp[gas_count_step_def] >> metis_tac[]) >>
+  `~(jump_to lbl s).vs_halted` by simp[jump_to_def] >>
+  `gas_origin_ptr_path (D, lo, explicit, ctx, func, PG) (jump_to lbl s, G, tn)
+     [] (OK (jump_to lbl s), G, tn)` by simp[gas_origin_ptr_path_rules] >>
+  drule_all (cj 2 gas_origin_ptr_path_rules) >> simp[]
+QED
+
 Theorem jmp_origin_ptr_path:
   lookup_block s.vs_current_bb func.fn_blocks = SOME bb /\
   get_instruction bb s.vs_inst_idx = SOME (mk_inst iid JMP [Label lbl] []) /\
@@ -156,33 +226,51 @@ Theorem jmp_origin_ptr_path:
     (OK (jump_to lbl s), G, tn)
 Proof
   strip_tac >>
+  `step_inst_base (mk_inst iid JMP [Label lbl] []) s = OK (jump_to lbl s)` by
+    simp[mk_inst_def, step_jmp_behavior] >>
   `ptr_safe_step D lo 0 ctx func PG G tn (mk_inst iid JMP [Label lbl] []) s` by
     (simp[ptr_safe_step_def, ptr_inst_ok_def, access_ok_def, taint_ok_def,
           mk_inst_def, source_memory_write_ranges_def,
           source_memory_read_ranges_def, op_taint_def] >>
      simp[GSYM mk_inst_def, step_inst_non_invoke] >>
      simp[mk_inst_def, step_jmp_behavior, jump_to_def]) >>
-  `gas_origin_ptr_edge (D, lo, explicit, ctx, func, PG) (s, G, tn) []
-     (OK (jump_to lbl s), G, tn)` by
-    (PURE_REWRITE_TAC[gas_origin_ptr_edge_def] >> conj_tac
-     >- (rewrite_tac[gas_origin_edge_def] >> conj_tac >- simp[] >>
-         qexistsl_tac [`0`, `bb`, `mk_inst iid JMP [Label lbl] []`,
-                       `OK (jump_to lbl s)`] >>
-         simp[step_inst_non_invoke, mk_inst_def, step_jmp_behavior,
-              gas_events_step_def, is_terminator_def,
-              mem_safe_step_non_invoke, inst_mem_below_frontier_def,
-              inst_dload_in_section_def, source_memory_read_ranges_def,
-              source_memory_write_ranges_def] >>
-         metis_tac[]) >>
-     rewrite_tac[gas_path_ptr_edge_def] >> simp[] >>
-     qexists_tac `0:num` >>
-     simp[step_inst_non_invoke, mk_inst_def, gas_count_step_def,
-          step_jmp_behavior, is_terminator_def] >>
-     fs[mk_inst_def] >> metis_tac[]) >>
-  `~(jump_to lbl s).vs_halted` by simp[jump_to_def] >>
-  `gas_origin_ptr_path (D, lo, explicit, ctx, func, PG) (jump_to lbl s, G, tn)
-     [] (OK (jump_to lbl s), G, tn)` by simp[gas_origin_ptr_path_rules] >>
-  drule_all (cj 2 gas_origin_ptr_path_rules) >> simp[]
+  mp_tac (Q.INST [`i` |-> `mk_inst iid JMP [Label lbl] []`]
+    jump_origin_ptr_path) >>
+  simp[] >>
+  simp[mk_inst_def, is_terminator_def, inst_mem_below_frontier_def,
+       inst_dload_in_section_def, source_memory_read_ranges_def,
+       source_memory_write_ranges_def]
+QED
+
+(* A JNZ on an untainted condition keeps the ghost and lands on the taken
+   label. *)
+Theorem jnz_origin_ptr_path:
+  lookup_block s.vs_current_bb func.fn_blocks = SOME bb /\
+  get_instruction bb s.vs_inst_idx =
+    SOME (mk_inst iid JNZ [cond; Label l1; Label l2] []) /\
+  eval_operand cond s = SOME w /\ op_taint tn cond = {} /\
+  ~s.vs_halted /\ ~ctx_has_dalloca ctx /\ allocas_from lo s ==>
+  gas_origin_ptr_path (D, lo, explicit, ctx, func, PG) (s, G, tn) []
+    (OK (jump_to (if w <> 0w then l1 else l2) s), G, tn)
+Proof
+  strip_tac >>
+  `step_inst_base (mk_inst iid JNZ [cond; Label l1; Label l2] []) s =
+     OK (jump_to (if w <> 0w then l1 else l2) s)` by
+    (simp[mk_inst_def] >> drule step_jnz_behavior >> rw[]) >>
+  `ptr_safe_step D lo 0 ctx func PG G tn
+     (mk_inst iid JNZ [cond; Label l1; Label l2] []) s` by
+    (simp[ptr_safe_step_def, ptr_inst_ok_def, access_ok_def, taint_ok_def,
+          mk_inst_def, source_memory_write_ranges_def,
+          source_memory_read_ranges_def, op_taint_def] >>
+     simp[GSYM mk_inst_def, step_inst_non_invoke] >>
+     rw[jump_to_def]) >>
+  mp_tac (Q.INST [`i` |-> `mk_inst iid JNZ [cond; Label l1; Label l2] []`,
+                  `lbl` |-> `if w <> 0w then l1 else l2`]
+    jump_origin_ptr_path) >>
+  simp[] >>
+  simp[mk_inst_def, is_terminator_def, inst_mem_below_frontier_def,
+       inst_dload_in_section_def, source_memory_read_ranges_def,
+       source_memory_write_ranges_def]
 QED
 
 (* A loop whose every non-exit state P reaches a smaller P state by a
