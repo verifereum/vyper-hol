@@ -2,7 +2,7 @@
 Theory bodyIntCallFamCallExt
 Ancestors
   bodyIntCallJointContract bodyIntCallFamCallExtAudit bodyIntCallFamCallExtSource
-  bodyIntCallFamCallExtValue
+  bodyIntCallFamCallExtValue bodyIntCallFamCallExtSendFrame
 
 Theorem intcall_extcall_step:
   (!e'. expr_size e' < expr_size e ==>
