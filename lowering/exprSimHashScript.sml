@@ -34,7 +34,7 @@ Ancestors
   exprSimDefs
   loweringPosts
   exprSimAlloc
-  allocLimits
+  allocLimits vyperStorageTrace
   list rich_list byte words fragExec ASCIInumbers
   venomExecSemantics venomInst venomState emitHelper emitHelperProps
   builtinHashing exprLoweringProps compileEnv loweringStateRelDefs
@@ -1970,7 +1970,7 @@ Proof
         compile_expr cenv ty lit st` by
     gvs[compile_expr_method_id_literal, compile_expr_def, Abbr `lit`,
         expr_type_def] >>
-  `vv_post H ctx func cenv cx
+  `!(H : (bool # bytes32 # type_value) list # num list). vv_post H ctx func cenv cx
      (Builtin (BaseT (BytesT (Dynamic 4))) MethodId [Literal la l]) =
    vv_post H ctx func cenv cx lit` by
     simp[FUN_EQ_THM, vv_post_def, Abbr `lit`, expr_type_def,
@@ -2284,6 +2284,7 @@ QED
 Theorem vv_post_frame_intro:
   post_value_type cenv e = expr_type e /\
   stmt_state_rel H ctx func cenv cx es' t /\
+  storage_well_formed_on cx es' (FST H) /\
   vv_holds cenv cx (expr_type e) tv vv es' t /\
   vv_at cenv cx (expr_type e) sa sb es' tv vv t /\
   (~expr_has_effect e ==> vv_storage_live H cx vv es' t) /\
@@ -2296,6 +2297,7 @@ QED
 
 Theorem vv_post_word_intro:
   stmt_state_rel H ctx func cenv cx es' s /\ is_word_type (expr_type e) /\
+  storage_well_formed_on cx es' (FST H) /\
   (?w. eval_operand op s = SOME w /\
     !tv. evaluate_type (get_tenv cx) (expr_type e) = SOME tv ==>
          w = typed_val_to_w256 tv v) /\
@@ -2343,6 +2345,7 @@ Theorem vv_post_allocated_memory_intro:
   evaluate_type (get_tenv cx) (expr_type e) = SOME tv /\
   val_wf tv v /\ val_in_memory tv v (w2n w) s.vs_memory /\
   stmt_state_rel H ctx func cenv cx es' s /\
+  storage_well_formed_on cx es' (FST H) /\
   p.ptr_location = LocMemory /\ eval_operand p.ptr_operand s = SOME w /\
   FLOOKUP s.vs_allocas aid = SOME (b,sz) /\
   sa.cs_next_id <= aid /\ aid < sb.cs_next_id /\
@@ -2567,7 +2570,7 @@ Proof
   irule expr_sim_suffix >>
   first_assum (irule_at (Pat `expr_sim _ _ _ _ _ _ _`)) >>
   first_assum (irule_at (Pat `lower_value _ _ _ _ _ = _`)) >>
-  simp[storage_trace_frame_def] >> conj_tac
+  simp[vyperStorageTraceTheory.storage_trace_frame_def] >> conj_tac
   >- (rpt strip_tac >> irule expr_exit_INR_cast >> simp[]) >>
   rpt strip_tac >>
   drule_at (Pat `bind _ _ _ = _`)
@@ -2602,7 +2605,10 @@ Proof
          storage_trace_frame_precompile_call_success] >>
   simp[storage_trace_frame_def] >> rpt gen_tac >>
   Cases_on `builtin_result cx st.accounts ann Sha256 [ty] [v]` >> simp[] >>
-  fs[storage_trace_frame_def]
+  qpat_x_assum `!w. storage_trace_frame _` (qspec_then `x` mp_tac) >>
+  disch_then (mp_tac o Q.SPECL [`st`, `observations`] o
+              PURE_ONCE_REWRITE_RULE [storage_trace_frame_def]) >>
+  simp[]
 QED
 
 (* The sha256 composition: the operand, then the digest's precompile call,
@@ -2729,6 +2735,7 @@ QED
 
 Theorem keccak_word_vv_post:
   stmt_state_rel H ctx func cenv cx es' s /\
+  storage_well_formed_on cx es' (FST H) /\
   eval_operand op s = SOME (word_of_bytes T (0w:bytes32) (Keccak_256_w64 bs)) /\
   wb_frame cenv es es' sa s0 s /\
   (~expr_has_effect e ==> pure_frame cenv func es sa s0 s) ==>
@@ -2762,6 +2769,7 @@ Proof
   `!z. x = Var z ==> not_fresh_at sm z` by
     (drule_at (Pos hd) compile_lower_value_var >> simp[]) >>
   `stmt_state_rel H ctx func cenv cx es' s` by metis_tac[expr_post_state] >>
+  `storage_well_formed_on cx es' (FST H)` by fs[expr_post_def] >>
   `MEM (mk_inst sm.cs_next_id ALLOCA [Lit 32w]
     [STRING #"%" (toString sm.cs_next_var)]) (fn_insts func)` by
     (irule (SRULE [] (Q.INST [`sha` |-> `F`] hash_fixed_alloca_code)) >>
@@ -2801,6 +2809,7 @@ Proof
   `!z. x = Var z ==> not_fresh_at sm z` by
     (drule_at (Pos hd) compile_lower_value_var >> simp[]) >>
   `stmt_state_rel H ctx func cenv cx es' s` by metis_tac[expr_post_state] >>
+  `storage_well_formed_on cx es' (FST H)` by fs[expr_post_def] >>
   drule_at (Pos hd) compile_keccak256_bytes_frame >> simp[] >>
   disch_then (drule_at (Pos hd)) >> simp[] >>
   disch_then (drule_at (Pat `mem_bytes_at _ _ _ = _`)) >> simp[] >>
@@ -2901,7 +2910,7 @@ Theorem compile_typed_stack_unary_builtin_vv_sim:
      sb.cs_current_insts = sm.cs_current_insts ++ emitted_insts sm sb /\
      EVERY (\i. i.inst_opcode <> INVOKE /\ ~is_terminator i.inst_opcode)
        (emitted_insts sm sb)) /\
-  (!H sa sm sb x op s0 v es' s.
+  (!(H : (bool # bytes32 # type_value) list # num list) sa sm sb x op s0 v es' s.
      lower_value compile_expr cenv (expr_type e) e sa = (x,sm) /\
      code x sm = (op,sb) /\ fn_has_code sm sb func /\
      fn_inst_ids_distinct func /\ local_ptrs_reserved cenv sa /\
@@ -2917,9 +2926,9 @@ Theorem compile_typed_stack_unary_builtin_vv_sim:
 Proof
   strip_tac >> irule compile_typed_unary_builtin_vv_sim >> simp[] >>
   qexistsl [`\x sm. as_stack_val ann (code x sm)`, `env`] >> simp[] >>
+  conj_tac >- metis_tac[] >>
   reverse conj_tac
-  >- (conj_tac >- metis_tac[] >>
-      gen_tac >> ho_match_mp_tac cs_appends_stack_value >> simp[SF ETA_ss]) >>
+  >- (gen_tac >> ho_match_mp_tac cs_appends_stack_value >> simp[SF ETA_ss]) >>
   rpt strip_tac >>
   qpat_x_assum `as_stack_val _ _ = _` mp_tac >>
   Cases_on `code x sm` >> simp[as_stack_val_def] >> strip_tac >> gvs[] >>
@@ -2938,9 +2947,8 @@ Proof
   simp[] >> strip_tac >>
   qpat_assum `!H. valid_horizon _ _ H _ ==> expr_post _ _ _ _ _ _ _ _ _ _ _ _ _ _`
     (drule_then assume_tac) >>
-  qpat_assum `!H sa sm sb x op s0 v es' s. _` drule_all >>
-  simp[] >> strip_tac >>
-  qpat_x_assum `!x sm op sb. _` drule >> strip_tac >>
+  qpat_assum `!H sa sm sb x op s0 v es' s. _` (drule_all_then strip_assume_tac) >>
+  qpat_x_assum `!x sm op sb. code x sm = (op,sb) ==> _` drule >> strip_tac >>
   qpat_x_assum `same_blocks _ _`
     (strip_assume_tac o REWRITE_RULE [same_blocks_def]) >>
   drule_all hash_run_path >>
@@ -2948,7 +2956,10 @@ Proof
   goal_assum drule >> gvs[] >> rpt strip_tac >>
   qpat_x_assum `!H. valid_horizon _ _ H _ ==> expr_post _ _ _ _ _ _ _ _ _ _ _ _ _ _`
     drule >> strip_tac >>
-  qpat_x_assum `!H sa sm sb x op s0 v es' s. _` drule_all >> strip_tac >> gvs[]
+  qpat_x_assum `!H sa sm sb x op s0 v es' s. _`
+    (qspecl_then [`H'`, `sa`, `sm`, `r`, `x`, `q`, `s0`, `v`, `es'`, `s`] mp_tac) >>
+  impl_tac >- (rpt conj_tac >> TRY (first_assum ACCEPT_TAC) >> simp[]) >>
+  strip_tac >> gvs[]
 QED
 
 Theorem compile_keccak256_typed_vv_sim:
@@ -2971,13 +2982,14 @@ Proof
      else case expr_type e of
        BaseT (BytesT (Fixed m)) => compile_keccak256_bytesm x m sm
      | _ => compile_keccak256_word x sm)` >> simp[] >>
-  conj_tac
-  >- (rpt strip_tac >> drule_at (Pos hd) keccak_typed_post_run >> simp[]) >>
-  conj_tac
+  rpt conj_tac
+  >~ [`vv_post`]
+  >- (rpt strip_tac >> drule_at (Pos hd) keccak_typed_post_run >> simp[])
+  >~ [`compile_expr cenv ty (Builtin _ _ _) _`]
   >- (rpt strip_tac >>
       qpat_x_assum `compile_expr _ _ _ _ = _` mp_tac >>
-      simp[compile_hash_singleton] >> pairarg_tac >> simp[] >> metis_tac[]) >>
-  conj_tac
+      simp[compile_hash_singleton] >> pairarg_tac >> simp[] >> metis_tac[])
+  >~ [`same_blocks`]
   >- (rpt gen_tac >> strip_tac >>
       drule_at (Pos hd) keccak_typed_suffix_shape >> simp[] >>
       disch_then drule >> simp[]) >>
@@ -2989,6 +3001,7 @@ QED
 
 Theorem hash_digest_word_vv_post:
   stmt_state_rel H ctx func cenv cx es' s /\
+  storage_well_formed_on cx es' (FST H) /\
   eval_operand op s = SOME w /\
   wb_frame cenv es es' sa s0 s /\
   (~expr_has_effect e ==> pure_frame cenv func es sa s0 s) ==>
@@ -3066,6 +3079,7 @@ Proof
   `!z. x = Var z ==> not_fresh_at sm z` by
     (drule_at (Pos hd) compile_lower_value_var >> simp[]) >>
   `stmt_state_rel H ctx func cenv cx es' s` by metis_tac[expr_post_state] >>
+  `storage_well_formed_on cx es' (FST H)` by fs[expr_post_def] >>
   drule_all (SRULE [] (Q.INST [`sha` |-> `T`] hash_fixed_alloca_code)) >>
   strip_tac >>
   qpat_x_assum `LENGTH bs = m` (SUBST_ALL_TAC o SYM) >>
@@ -3078,6 +3092,10 @@ Proof
      match_mp_tac pure_frame_trans >>
      qexistsl_tac [`es'`, `sm`, `s`] >> simp[] >>
      drule expr_post_frame >> simp[wb_frame_def]) >>
+  `storage_well_formed_on cx (es' with outcomes := SOME rest) (FST H)` by
+    (`(es' with outcomes := SOME rest).accounts = es'.accounts /\
+      (es' with outcomes := SOME rest).tStorage = es'.tStorage` by simp[] >>
+     metis_tac[vyperStorageFootprintTheory.storage_well_formed_on_backends]) >>
   qexists `t` >> simp[] >> irule hash_digest_word_vv_post >> simp[] >>
   drule (cj 2 compile_expr_grows) >> strip_tac >>
   irule wb_frame_allocating_tail >> simp[] >>
@@ -3109,6 +3127,7 @@ Proof
   `!z. x = Var z ==> not_fresh_at sm z` by
     (drule_at (Pos hd) compile_lower_value_var >> simp[]) >>
   `stmt_state_rel H ctx func cenv cx es' s` by metis_tac[expr_post_state] >>
+  `storage_well_formed_on cx es' (FST H)` by fs[expr_post_def] >>
   drule_all hash_sha256_memory_alloca_code >> strip_tac >>
   drule_at (Pos hd) compile_sha256_bytes_frame >> simp[] >>
   disch_then (drule_at (Pos hd)) >> simp[] >>
@@ -3120,6 +3139,10 @@ Proof
      match_mp_tac pure_frame_trans >>
      qexistsl_tac [`es'`, `sm`, `s`] >> simp[] >>
      drule expr_post_frame >> simp[wb_frame_def]) >>
+  `storage_well_formed_on cx (es' with outcomes := SOME rest) (FST H)` by
+    (`(es' with outcomes := SOME rest).accounts = es'.accounts /\
+      (es' with outcomes := SOME rest).tStorage = es'.tStorage` by simp[] >>
+     metis_tac[vyperStorageFootprintTheory.storage_well_formed_on_backends]) >>
   qexists `t` >> simp[] >> irule hash_digest_word_vv_post >> simp[] >>
   drule (cj 2 compile_expr_grows) >> strip_tac >>
   irule wb_frame_allocating_tail >> simp[] >>
@@ -3211,6 +3234,7 @@ Proof
   `!z. x = Var z ==> not_fresh_at sm z` by
     (drule_at (Pos hd) compile_lower_value_var >> simp[]) >>
   `stmt_state_rel H ctx func cenv cx es' s` by metis_tac[expr_post_state] >>
+  `storage_well_formed_on cx es' (FST H)` by fs[expr_post_def] >>
   Cases_on `bty` >> gvs[is_bytes_or_string_type_def] >>
   Cases_on `v` >> gvs[vyperTypingTheory.value_has_type_def]
   >~ [`expr_type e = BaseT (BytesT bd)`]
@@ -3295,6 +3319,7 @@ Proof
   `!z. x = Var z ==> not_fresh_at sm z` by
     (drule_at (Pos hd) compile_lower_value_var >> simp[]) >>
   `stmt_state_rel H ctx func cenv cx es' s` by metis_tac[expr_post_state] >>
+  `storage_well_formed_on cx es' (FST H)` by fs[expr_post_def] >>
   Cases_on `bty` >> gvs[is_bytes_or_string_type_def] >>
   Cases_on `v` >> gvs[vyperTypingTheory.value_has_type_def]
   >~ [`expr_type e = BaseT (BytesT bd)`]
@@ -3349,7 +3374,9 @@ QED
 (* The digest suffix as an actual counted path: its one GAS site, then the
    precompile call whose outcome the source consumes. *)
 Theorem sha256_typed_effectful_path:
-  expr_post H ctx func cenv cx e es sa sm s0 es1 v x s /\
+  (!H. valid_horizon cx st0 H es1.storage_trace ==>
+     expr_post H ctx func cenv cx e es sa sm s0 es1 v x s) /\
+  valid_horizon cx st0 H es1.storage_trace /\
   expr_type e = BaseT bty /\ is_bytes_or_string_type (expr_type e) /\
   evaluate_type (get_tenv cx) (expr_type e) = SOME (BaseTV bty) /\
   value_has_type (BaseTV bty) v /\
@@ -3368,24 +3395,28 @@ Theorem sha256_typed_effectful_path:
   s.vs_inst_idx = LENGTH sm.cs_current_insts ==>
   ?n rr. gas_marked_path F ctx func s n rr /\
     ((?t rv. rr = OK t /\ res = INL rv /\
-        vv_post H ctx func cenv cx (Builtin (BaseT (BytesT (Fixed 32))) Sha256 [e])
-          es sa sb s0 es2 rv (StackValue (BaseT (BytesT (Fixed 32))) op) t /\
+        (!H. valid_horizon cx st0 H es2.storage_trace ==>
+           vv_post H ctx func cenv cx (Builtin (BaseT (BytesT (Fixed 32))) Sha256 [e])
+             es sa sb s0 es2 rv (StackValue (BaseT (BytesT (Fixed 32))) op) t) /\
         t.vs_current_bb = sb.cs_current_bb /\
         t.vs_inst_idx = LENGTH sb.cs_current_insts) \/
      (exit_result rr /\ expr_exit res rr))
 Proof
   strip_tac >>
+  qpat_assum `!H. valid_horizon _ _ H _ ==> _` (drule_then assume_tac) >>
   `es1.outcomes = SOME s.vs_outcomes` by
     (drule expr_post_state >> simp[stmt_state_rel_def, state_rel_def]) >>
   Cases_on `s.vs_outcomes`
   >- (gvs[ignore_bind_def, bind_def, sha256_source_outcome_step] >>
-      drule_at (Pat `expr_post H _ _ _ _ _ _ _ _ _ _ _ _ _`) sha256_typed_fail_path >>
+      qpat_assum `!H. valid_horizon _ _ H _ ==> _` (drule_then assume_tac) >>
+      drule_at (Pat `expr_post _ _ _ _ _ _ _ _ _ _ _ _ _ _`) sha256_typed_fail_path >>
       simp[] >> strip_tac >> goal_assum drule >>
       simp[exit_result_def, expr_exit_def]) >>
   rename1 `s.vs_outcomes = outcome::rest` >>
   Cases_on `outcome.co_success` >>
   gvs[ignore_bind_def, bind_def, sha256_source_outcome_step, return_def]
-  >- (drule_at (Pat `expr_post H _ _ _ _ _ _ _ _ _ _ _ _ _`) sha256_typed_post_run >>
+  >- (qpat_assum `!H. valid_horizon _ _ H _ ==> _` (drule_then assume_tac) >>
+      drule_at (Pat `expr_post _ _ _ _ _ _ _ _ _ _ _ _ _ _`) sha256_typed_post_run >>
       simp[] >> strip_tac >> gvs[] >>
       drule_at (Pos hd) sha256_typed_suffix_shape >> simp[] >> strip_tac >>
       pop_assum drule >> strip_tac >>
@@ -3393,8 +3424,13 @@ Proof
         (strip_assume_tac o REWRITE_RULE [same_blocks_def]) >>
       drule_all hash_run_path >>
       disch_then (qspec_then `ctx` strip_assume_tac) >>
-      goal_assum drule >> gvs[]) >>
-  drule_at (Pat `expr_post H _ _ _ _ _ _ _ _ _ _ _ _ _`) sha256_typed_fail_path >>
+      goal_assum drule >> gvs[] >>
+      rpt strip_tac >>
+      qpat_x_assum `!H. valid_horizon _ _ H _ ==> _` drule >> strip_tac >>
+      drule_at (Pat `expr_post _ _ _ _ _ _ _ _ _ _ _ _ _ _`) sha256_typed_post_run >>
+      simp[] >> strip_tac >> gvs[]) >>
+  qpat_assum `!H. valid_horizon _ _ H _ ==> _` (drule_then assume_tac) >>
+  drule_at (Pat `expr_post _ _ _ _ _ _ _ _ _ _ _ _ _ _`) sha256_typed_fail_path >>
   simp[] >> strip_tac >> goal_assum drule >>
   simp[exit_result_def, expr_exit_def]
 QED
@@ -3417,18 +3453,19 @@ Proof
      else case expr_type e of
        BaseT (BytesT (Fixed m)) => compile_sha256_bytesm x m sm
      | _ => compile_sha256_word x sm)`, `env`] >> simp[] >>
-  reverse conj_tac
-  >- (conj_tac
-      >- (rpt strip_tac >>
-          qpat_x_assum `compile_expr _ _ _ _ = _` mp_tac >>
-          simp[compile_hash_singleton] >> pairarg_tac >> simp[] >> metis_tac[]) >>
-      conj_tac >- (gen_tac >> ho_match_mp_tac cs_appends_stack_value >> simp[SF ETA_ss] >>
+  rpt conj_tac
+  >~ [`compile_expr cenv ty (Builtin _ _ _) _`]
+  >- (rpt strip_tac >>
+      qpat_x_assum `compile_expr _ _ _ _ = _` mp_tac >>
+      simp[compile_hash_singleton] >> pairarg_tac >> simp[] >> metis_tac[])
+  >~ [`cs_appends`]
+  >- (gen_tac >> ho_match_mp_tac cs_appends_stack_value >> simp[SF ETA_ss] >>
       Cases_on `bty` >> gvs[is_bytes_or_string_type_def,
         is_bytestring_type_def, hash_suffix_appends, SF ETA_ss] >>
       rename1 `expr_type e = BaseT (BytesT bd)` >>
-      Cases_on `bd` >> gvs[is_bytestring_type_def, hash_suffix_appends, SF ETA_ss]) >>
-      gvs[]) >>
-  rpt strip_tac >>
+      Cases_on `bd` >> gvs[is_bytestring_type_def, hash_suffix_appends, SF ETA_ss])
+  >~ [`gas_marked_path`]
+  >- (rpt strip_tac >>
   qpat_x_assum `as_stack_val _ _ = _` mp_tac >>
   qmatch_goalsub_abbrev_tac `as_stack_val _ compiled` >>
   Cases_on `compiled` >> simp[as_stack_val_def] >> strip_tac >>
@@ -3448,9 +3485,9 @@ Proof
   drule_at (Pos hd) sha256_typed_builtin_result >> simp[] >>
   disch_then (qspecl_then [`v`, `cx`, `es1.accounts`] mp_tac) >>
   simp[] >> strip_tac >> gvs[] >>
-  irule sha256_typed_effectful_path >>
-  first_assum (irule_at (Pat `expr_post H _ _ _ _ _ _ _ _ _ _ _ _ _`)) >> simp[] >>
-  metis_tac[]
+  irule sha256_typed_effectful_path >> simp[] >>
+  metis_tac[]) >>
+  gvs[]
 QED
 
 (* The selector's word representation is independent of the hash producer. *)
@@ -3459,6 +3496,7 @@ Theorem method_id_fixed_post_run:
   emit_op SHL [Lit 224w; sel] sn = (op,sb) /\
   eval_operand hash s = SOME w /\
   stmt_state_rel H ctx func cenv cx es' s /\ local_ptrs_reserved cenv sm /\
+  storage_well_formed_on cx es' (FST H) /\
   sa.cs_next_var <= sm.cs_next_var /\ wb_frame cenv es es' sa s0 s /\
   (~expr_has_effect e ==> pure_frame cenv func es sa s0 s) ==>
   ?t. run_inst_seq (emitted_insts sm sb) s = OK t /\
@@ -3487,6 +3525,7 @@ Theorem method_id_dynamic_post_run:
   emit_void MSTORE [data; word] sd = ((),sb) /\
   eval_operand hash s = SOME w /\
   stmt_state_rel H ctx func cenv cx es' s /\ fn_inst_ids_distinct func /\
+  storage_well_formed_on cx es' (FST H) /\
   local_ptrs_reserved cenv sm /\ fn_has_code sm sb func /\
   sa.cs_next_var <= sm.cs_next_var /\ sa.cs_next_id <= sm.cs_next_id /\
   wb_frame cenv es es' sa s0 s /\ local_ptrs_reserved cenv sa /\
@@ -3661,6 +3700,7 @@ Proof
   drule_all hash_method_id_hash_cut >> strip_tac >>
   drule_all method_id_hash_typed_post_run >> strip_tac >>
   rename1 `run_inst_seq (emitted_insts sm sm') s = OK hashed` >>
+  `storage_well_formed_on cx es' (FST H)` by fs[expr_post_def] >>
   `sa.cs_next_var <= sm'.cs_next_var /\ sa.cs_next_id <= sm'.cs_next_id` by
     (drule (cj 2 compile_expr_grows) >> strip_tac >>
      drule_all method_id_hash_grows >> strip_tac >> decide_tac) >>
@@ -3745,9 +3785,11 @@ Proof
       compile_method_id_runtime (expr_type e) x fixed sm in
       ((if fixed then StackValue ann op else
         LocatedValue ann (mk_ptr op LocMemory)),sb)`, `env`] >> simp[] >>
-  reverse conj_tac
-  >- (conj_tac >- suspend "compile" >> suspend "appends") >>
-  suspend "continuation"
+  rpt conj_tac
+  >~ [`compile_expr cenv ty (Builtin _ _ _) _`] >- suspend "compile"
+  >~ [`cs_appends`] >- suspend "appends"
+  >~ [`gas_marked_path`] >- suspend "continuation" >>
+  gvs[]
 QED
 
 Resume compile_method_id_runtime_typed_vv_sim[compile]:
@@ -3761,7 +3803,6 @@ Resume compile_method_id_runtime_typed_vv_sim[compile]:
 QED
 
 Resume compile_method_id_runtime_typed_vv_sim[appends]:
-  reverse conj_tac >- gvs[] >>
   gen_tac >> simp[cs_appends_def] >> rpt gen_tac >>
   pairarg_tac >> simp[] >> strip_tac >> gvs[] >>
   drule (SRULE [cs_appends_def] (cj 5 hash_suffix_appends)) >> simp[]
