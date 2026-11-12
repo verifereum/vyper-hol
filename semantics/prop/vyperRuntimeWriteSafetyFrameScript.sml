@@ -32,8 +32,15 @@ val imms_frame_net =
     val log_leaf =
       (``state_rel_frame ^imms_relation (push_log lg)``,
        simp[state_rel_frame_def] >> metis_tac[push_log_immutables])
+    val acquire_leaf =
+      (``state_rel_frame ^imms_relation (acquire_nonreentrant_lock addr slot is_view)``,
+       simp[state_rel_frame_def] >> metis_tac[acquire_nonreentrant_lock_immutables])
+    val release_leaf =
+      (``state_rel_frame ^imms_relation (release_nonreentrant_lock addr slot)``,
+       simp[state_rel_frame_def] >> metis_tac[release_nonreentrant_lock_immutables])
   in evalWalkLib.walk_net (map SPEC_ALL rules)
-       (log_leaf :: map leaf (List.concat (map (CONJUNCTS o SPEC_ALL) leaves))) end;
+       (log_leaf :: acquire_leaf :: release_leaf ::
+        map leaf (List.concat (map (CONJUNCTS o SPEC_ALL) leaves))) end;
 
 val imms_frame_result = BETA_RULE
   (ISPEC imms_relation (Q.GEN `R` state_rel_frame_result));
@@ -42,13 +49,35 @@ val IMMS_IH_TAC =
   evalWalkLib.IH_TAC {stop = K false, normalise = SIMP_RULE bool_ss
     [oneTheory.one, ignore_bind_def, FST, SND, pair_case_thm, UNCURRY,
      lock_if_nr_def, unlock_if_nr_def]};
-val IMMS_STEP = evalWalkLib.STEP {net = imms_frame_net, at = RAND_CONV,
+fun IMMS_STEP_WITH extra = evalWalkLib.STEP {net = imms_frame_net, at = RAND_CONV,
   unfolds = [switch_BoolV_def, ignore_bind_def],
-  intros = [CONV_TAC (HO_REWR_CONV FORALL_PROD), gen_tac, strip_tac, conj_tac,
+  intros = extra @ [CONV_TAC (HO_REWR_CONV FORALL_PROD), gen_tac, strip_tac, conj_tac,
     CONV_TAC (RAND_CONV ETA_CONV),
     CHANGED_TAC (fn (asl,w) => simp_tac bool_ss
       (List.filter (is_eq o concl) (map (BETA_RULE o ASSUME) asl)) (asl,w))],
   fallbacks = [IMMS_IH_TAC, evalWalkLib.NORMALISE_IH_TAC IMMS_IH_TAC]};
+(* Consume guarded IHs in execution order, before matching their result.
+   In particular lookup fixes the tuple before defaults aliases are used. *)
+fun IMMS_FORWARD_IH_TAC (asl,w) =
+  let
+    val norm = SIMP_RULE (srw_ss())
+      [oneTheory.one, FST, SND, lock_if_nr_def, is_view_mut_def, ignore_bind_def]
+    val facts = List.concat (map (CONJUNCTS o norm o ASSUME)
+      (List.filter (not o is_forall) asl))
+    fun consume raw g =
+      let val th = SPEC_ALL (PURE_REWRITE_RULE [GSYM AND_IMP_INTRO] (norm raw))
+      in
+        if not (is_imp (concl th)) then MATCH_ACCEPT_TAC th g
+        else
+          let val guard = fst (dest_imp (concl th))
+              val refs = if is_eq guard then
+                [REFL (rhs guard), REFL (lhs guard)] else []
+              val next = List.mapPartial (total (MATCH_MP th)) (facts @ refs)
+          in FIRST (map consume next) g end
+      end
+  in FIRST (map (consume o ASSUME) (List.filter is_forall asl)) (asl,w) end;
+val IMMS_STEP = IMMS_STEP_WITH [];
+val IMMS_INT_STEP = IMMS_STEP_WITH [CHANGED_TAC (simp_tac (srw_ss()) [])];
 val IMMS_CASE = evalWalkLib.EVAL_CASE all_tac IMMS_STEP;
 val IMMS_WRITE =
   qmatch_goalsub_rename_tac `write_place cx pl value` >>
@@ -254,12 +283,108 @@ Proof
   >~ [`eval_expr cx (Call _ RawRevert _ _)`] >- (IMMS_CASE >> metis_tac[])
   >~ [`eval_expr cx (Call _ RawLog _ _)`]
   >- (simp_tac bool_ss [Once evaluate_def] >>
-      irule state_rel_frame_bind_guarded >> conj_tac
+      MATCH_MP_TAC state_rel_frame_bind_guarded >> conj_tac
       >- simp[] >> conj_tac
       >- metis_tac[] >> rpt gen_tac >> strip_tac >>
       simp[imms_frame_result, bind_def, ignore_bind_def, type_check_def,
         assert_def, check_def, return_def, raise_def, lift_option_type_def,
         lift_option_def, check_not_static_def, push_log_def, AllCaseEqs()] >>
-      rpt strip_tac >> gvs[])
+      rpt strip_tac >>
+      Cases_on `dest_ArrayV (HD v)` >>
+      gvs[return_def, raise_def] >>
+      Cases_on `dest_BytesV (EL 1 v)` >> gvs[return_def, raise_def])
+  >~ [`eval_expr cx (Call _ SelfDestructTarget _ _)`]
+  >- (IMMS_CASE >- metis_tac[]
+      >- (simp[imms_frame_result] >> metis_tac[transfer_value_immutables])
+      >- simp[imms_frame_result, update_accounts_def, return_def] >>
+      simp[imms_frame_result, update_pending_deletions_def, return_def])
+  >~ [`eval_expr cx (Call _ (CreateTarget _ _ _ _) _ _)`]
+  >- (IMMS_CASE
+      >>~- ([`state_rel_frame _ (eval_create _ _ _ _ _ _ _)`],
+        simp[imms_frame_result] >>
+          metis_tac[eval_create_preserves_scopes_immutables]) >>
+      metis_tac[rich_listTheory.EVERY_TAKE, rich_listTheory.EVERY_DROP])
+  >~ [`eval_expr cx (Call _ (IntCall _) _ _)`]
+  >- (simp_tac bool_ss [Once evaluate_def] >>
+      ntac 25 IMMS_INT_STEP >> rpt gen_tac >> strip_tac >>
+      simp_tac bool_ss [LET_THM, FST, SND] >>
+      rename1 `INL (imut,inr,iargs,idflts,iretty,ibody)` >>
+      qmatch_asmsub_rename_tac `lookup_callable_function cx.in_deploy fn ts` >>
+      `get_module_code cx src_id_opt = SOME ts` by
+        (qpat_x_assum `lift_option_type (get_module_code _ _) _ _ = _` mp_tac >>
+         Cases_on `get_module_code cx src_id_opt` >>
+         simp[lift_option_type_def, return_def, raise_def]) >>
+      `lookup_callable_function F fn ts = SOME (imut,inr,iargs,idflts,iretty,ibody)` by
+        (qpat_x_assum `lift_option_type (lookup_callable_function _ _ _) _ _ = _` mp_tac >>
+         Cases_on `lookup_callable_function F fn ts` >>
+         simp[lift_option_type_def, return_def, raise_def]) >>
+      `EVERY (expr_writes_ok (runtime_write_root R)) idflts /\
+       stmts_writes_ok (runtime_write_root R) ibody` by
+        (qpat_x_assum `runtime_callable_writes_ok _ _` mp_tac >>
+         simp_tac bool_ss [runtime_callable_writes_ok_def] >>
+         metis_tac[]) >>
+      ntac 5 IMMS_INT_STEP >> strip_tac >>
+      IMMS_INT_STEP >- simp[]
+      >- (qpat_x_assum `!s x t. _` (mp_tac o SIMP_RULE (srw_ss()) []) >>
+          disch_then irule >> simp[] >> metis_tac[]) >>
+      ntac 18 IMMS_INT_STEP
+      >- (strip_tac >>
+          `~(cx with stk updated_by CONS (src_id_opt,fn)).in_deploy /\
+           runtime_write_roots_resolve (cx with stk updated_by CONS (src_id_opt,fn)) R /\
+           runtime_callable_writes_ok
+             (get_module_code (cx with stk updated_by CONS (src_id_opt,fn))) R /\
+           EVERY (expr_writes_ok (runtime_write_root R))
+             (DROP (LENGTH idflts - (LENGTH iargs - LENGTH es)) idflts)` by
+            (qpat_x_assum `runtime_write_roots_resolve cx R` mp_tac >>
+             qpat_x_assum `runtime_callable_writes_ok (get_module_code cx) R` mp_tac >>
+             simp[runtime_write_roots_resolve_def,
+                  runtime_callable_writes_ok_def, get_module_code_def] >>
+             rpt strip_tac >> metis_tac[rich_listTheory.EVERY_DROP]) >>
+          IMMS_FORWARD_IH_TAC) >>
+      ntac 12 IMMS_INT_STEP >>
+      simp[] >>
+      IMMS_INT_STEP >>
+      ntac 8 IMMS_INT_STEP >- IMMS_INT_STEP >>
+      IMMS_INT_STEP
+      >- (simp_tac bool_ss [ignore_bind_def] >>
+          MATCH_MP_TAC state_rel_frame_bind_guarded >> conj_tac
+          >- simp[] >> conj_tac
+          >- (simp[imms_frame_result] >> metis_tac[acquire_nonreentrant_lock_immutables]) >>
+          rpt gen_tac >> strip_tac >>
+          Cases_on `imut = View \/ imut = Pure` >>
+          simp[imms_frame_result, check_not_static_def, type_check_def,
+               assert_def, check_def, return_def, raise_def, AllCaseEqs()] >>
+          rpt strip_tac >> gvs[]) >>
+      ntac 4 IMMS_INT_STEP >> gen_tac >> strip_tac >>
+      qmatch_asmsub_rename_tac `push_function (src_id_opt,fn) env cx ps = (INL cxf,pt)` >>
+      `cxf = cx with stk updated_by CONS (src_id_opt,fn)` by
+        (qpat_x_assum `push_function _ _ _ _ = _` mp_tac >>
+         simp[push_function_def, return_def]) >>
+      `~cxf.in_deploy /\ runtime_write_roots_resolve cxf R /\
+       runtime_callable_writes_ok (get_module_code cxf) R` by
+        (qpat_x_assum `cxf = _` (fn th => rewrite_tac[th]) >>
+         qpat_x_assum `runtime_write_roots_resolve cx R` mp_tac >>
+         qpat_x_assum `runtime_callable_writes_ok (get_module_code cx) R` mp_tac >>
+         simp[runtime_write_roots_resolve_def, runtime_callable_writes_ok_def,
+              get_module_code_def] >> rpt disch_tac >> first_assum MATCH_ACCEPT_TAC) >>
+      `state_rel_frame (\s t. t.immutables = s.immutables)
+         (eval_stmts cxf ibody)` by IMMS_FORWARD_IH_TAC >>
+      qpat_x_assum `state_rel_frame _ (eval_stmts _ _)`
+        (fn th => POP_ASSUM_LIST (K all_tac) >> assume_tac th) >>
+      rpt IMMS_INT_STEP >> simp[imms_frame_result] >>
+      metis_tac[release_nonreentrant_lock_immutables])
+  >>~- ([`eval_target_place cx t st = (res,st')`],
+    fs[] >>
+    qpat_x_assum `eval_target_place _ _ _ = _` mp_tac >>
+    simp_tac bool_ss [Once evaluate_def] >>
+    Cases_on `eval_base_place cx t st` >>
+    rename1 `eval_base_place cx t st = (answer,mid)` >>
+    first_x_assum drule >> strip_tac >>
+    Cases_on `answer` >>
+    simp[bind_def, raise_def, get_place_def, return_def, AllCaseEqs()] >>
+    rpt strip_tac >> gvs[] >>
+    rename1 `get_place operand mid = _` >> Cases_on `operand` >>
+    gvs[get_place_def, return_def, raise_def])
+  >~ [`assign_tuple_target_list cx (_::_) []`] >- IMMS_CASE
   >> FAIL_TAC "ordinary frames"
 QED
