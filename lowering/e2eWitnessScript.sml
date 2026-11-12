@@ -661,6 +661,21 @@ QED
 val p23_dep_sources_eval =
   EVAL ``ALOOKUP p23_am_dep_post.sources p23_deploy_tx.target``;
 
+(* The deployment's committed state, at ML top level: the tactic budget is
+   too small to compute it inside a proof. *)
+val p23_dep_code_eval = EVAL
+  ``p23_runtime_bc ++ word_to_bytes (42w : bytes32) T =
+    (lookup_account p23_deploy_tx.target p23_es_dep_post.rollback.accounts).code``;
+val p23_dep_evm_accts = EVAL
+  ``process_deletions p23_es_dep_post.rollback.toDelete
+      (update_account p23_deploy_tx.target
+         (lookup_account p23_deploy_tx.target p23_es_dep_post.rollback.accounts with
+            code := (lookup_account p23_deploy_tx.target p23_am_dep_post.accounts).code)
+         p23_es_dep_post.rollback.accounts)``;
+val p23_dep_src_accts = EVAL ``p23_am_dep_post.accounts``;
+val p23_dep_src_ts = EVAL ``p23_am_dep_post.tStorage``;
+val p23_dep_evm_ts = EVAL ``p23_es_dep_post.rollback.tStorage``;
+
 Theorem p23_deploy_result:
   deploy_call_result_rel p23_tops p23_runtime_bc initial_machine_state
     p23_deploy_tx p23_es_dep (INR NONE) p23_es_dep_post
@@ -675,16 +690,12 @@ Proof
     simp[frame_outcome_def, p23_es_dep_def, p23_frame_def,
          p23_es_dep_post_def, p23_am_dep_post_def] >>
     EVAL_TAC >> simp[vfmContextTheory.transaction_parameters_component_equality]) >>
+  rewrite_tac[p23_dep_code_eval, p23_dep_evm_accts] >>
+  rewrite_tac[p23_dep_src_accts, p23_dep_src_ts, p23_dep_evm_ts] >>
   simp[loweringStateRelDefsTheory.accounts_agree_def,
        loweringStateRelDefsTheory.storage_agree_def,
        loweringStateRelDefsTheory.transient_agree_def,
-       vfmStateTheory.update_account_def,
-       p23_am_dep_post_def, p23_es_dep_post_def, p23_deploy_tx_def,
-       initial_evaluation_context_def, vfmStateTheory.lookup_account_def,
-       vfmStateTheory.empty_accounts_def, vfmStateTheory.empty_account_state_def,
-       vfmContextTheory.empty_transient_storage_def, combinTheory.APPLY_UPDATE_THM,
-       vfmStateTheory.account_state_component_equality] >>
-  EVAL_TAC >> simp[]
+       call_requests_def, p23_dep_trace]
 QED
 
 Theorem p23_call_result:
