@@ -945,7 +945,9 @@ Proof
        else mk_inst (iid+2) ISZERO [Var y] [z]` >>
      qabbrev_tac `G1 = DRESTRICT G (COMPL {x})` >>
      qabbrev_tac `G2 = DRESTRICT G1 (COMPL {y})` >>
-     `dst <> x /\ dst <> y /\ dst <> z` by (rpt strip_tac >> gvs[]) >>
+     `dst <> x /\ dst <> y /\ dst <> z` by
+       (qpat_x_assum `x <> dst` mp_tac >> qpat_x_assum `y <> dst` mp_tac >>
+        qpat_x_assum `z <> dst` mp_tac >> rpt (pop_assum kall_tac) >> metis_tac[]) >>
      `s with vs_inst_idx := s.vs_inst_idx = s /\
       l with vs_inst_idx := s.vs_inst_idx = l` by
        simp[Abbr `l`, update_var_def, venom_state_component_equality] >>
