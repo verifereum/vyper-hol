@@ -910,10 +910,12 @@ Proof
   simp[deploy_ctor_finish_def, unlock_if_nr_def,
     release_nonreentrant_lock_def, update_transient_def,
     ignore_bind_def, bind_def, record_storage_event_def,
-    return_def, raise_def, abstract_machine_from_state_def] >>
+    return_def, raise_def, abstract_machine_from_state_def,
+    Excl "outcomes_replace_record_storage"] >>
   Cases_on `mut` >>
   simp[bind_def, get_transient_storage_def, update_transient_def,
-    return_def, abstract_machine_from_state_def]
+    record_storage_event_def, return_def, abstract_machine_from_state_def,
+    Excl "outcomes_replace_record_storage"]
 QED
 
 Theorem outcomes_replace_evaluate_call_free:
