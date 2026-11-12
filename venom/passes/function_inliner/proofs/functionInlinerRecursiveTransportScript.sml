@@ -255,3 +255,93 @@ Proof
   irule inline_segment_entry_trace >> simp[] >>
   gvs[venomStateTheory.jump_to_def]
 QED
+
+(* An activation stops before its own return.  The invoking proof branch,
+   not the physical root evaluator, owns the selected return continuation. *)
+Definition inline_return_frontier_def:
+  inline_return_frontier C Tctx cert root p a route rest frame cut ir u <=>
+    ?b delta snap t rb ret path counter rf fuel.
+      inline_segment Tctx root b delta cut (InlineBody rb t) /\
+      inline_live_stack C cert root ((p,a,route,snap)::rest)
+        (frame with ipf_state := t) /\ ~t.vs_halted /\
+      lookup_block snap.ils_state.vs_current_bb a.ia_function.fn_blocks = SOME rf /\
+      get_instruction rf snap.ils_state.vs_inst_idx = SOME ret /\
+      step_inst fuel C ret snap.ils_state = IntRet ir u /\
+      ret.inst_opcode <> INVOKE /\
+      lookup_block t.vs_current_bb root.fn_blocks = SOME rb /\
+      inline_live_location cert root p a path
+        (InlineAtInstruction snap.ils_state.vs_inst_idx)
+        (InlineAtInstruction t.vs_inst_idx) counter snap.ils_state t
+End
+
+Definition inline_activation_outcome_def:
+  inline_activation_outcome C Tctx cert root p a route rest frame cut result <=>
+    case result of
+      IntRet ir u => inline_return_frontier C Tctx cert root p a route rest frame cut ir u
+    | Halt u => ?b v. inline_terminal Tctx root b cut (Halt v) /\
+        inline_shared_frame u = inline_shared_frame v
+    | Abort reason u => ?b v. inline_terminal Tctx root b cut (Abort reason v) /\
+        inline_shared_frame u = inline_shared_frame v
+    | other => F
+End
+
+Theorem inline_activation_return_here:
+  inline_live_stack C cert root ((p,a,route,snap)::rest) frame /\
+  ~frame.ipf_state.vs_halted /\
+  lookup_block snap.ils_state.vs_current_bb a.ia_function.fn_blocks = SOME rf /\
+  get_instruction rf snap.ils_state.vs_inst_idx = SOME ret /\
+  step_inst fuel C ret snap.ils_state = IntRet ir u /\ ret.inst_opcode <> INVOKE /\
+  lookup_block frame.ipf_state.vs_current_bb root.fn_blocks = SOME rb /\
+  inline_live_location cert root p a path
+    (InlineAtInstruction snap.ils_state.vs_inst_idx)
+    (InlineAtInstruction frame.ipf_state.vs_inst_idx) counter snap.ils_state frame.ipf_state ==>
+  inline_activation_outcome C Tctx cert root p a route rest frame
+    (InlineBody rb frame.ipf_state) (IntRet ir u)
+Proof
+  simp[inline_activation_outcome_def, inline_return_frontier_def] >> strip_tac >>
+  qexistsl [`0`, `0`, `snap`, `frame.ipf_state`, `rb`, `ret`, `path`, `counter`, `rf`, `fuel`] >>
+  simp[inline_segment_refl]
+QED
+
+Theorem inline_activation_outcome_segment:
+  inline_segment Tctx root b delta cut mid /\
+  inline_activation_outcome C Tctx cert root p a route rest frame mid result ==>
+  inline_activation_outcome C Tctx cert root p a route rest frame cut result
+Proof
+  Cases_on `result` >>
+  simp[inline_activation_outcome_def, inline_return_frontier_def] >> strip_tac
+  >- (drule_all inline_segment_terminal_transport >> metis_tac[])
+  >- (drule_all inline_segment_terminal_transport >> metis_tac[]) >>
+  drule_all inline_segment_compose >> metis_tac[]
+QED
+
+Theorem inline_activation_halt_here:
+  exec_block b Tctx bb t = Halt v /\ inline_shared_frame u = inline_shared_frame v ==>
+  inline_activation_outcome C Tctx cert root p a route rest frame
+    (InlineBody bb t) (Halt u)
+Proof
+  simp[inline_activation_outcome_def] >> strip_tac >> qexistsl [`b`, `v`] >>
+  simp[] >> irule inline_terminal_body_at >> simp[]
+QED
+
+Theorem inline_activation_abort_here:
+  exec_block b Tctx bb t = Abort reason v /\
+  inline_shared_frame u = inline_shared_frame v ==>
+  inline_activation_outcome C Tctx cert root p a route rest frame
+    (InlineBody bb t) (Abort reason u)
+Proof
+  simp[inline_activation_outcome_def] >> strip_tac >> qexistsl [`b`, `v`] >>
+  simp[] >> irule inline_terminal_body_at >> simp[]
+QED
+
+Theorem inline_activation_entry_body:
+  lookup_block t.vs_current_bb root.fn_blocks = SOME bb /\
+  eval_phis t bb.bb_instructions = OK post /\
+  inline_activation_outcome C Tctx cert root p a route rest frame
+    (InlineBody bb (post with vs_inst_idx := phi_prefix_length bb.bb_instructions)) result ==>
+  inline_activation_outcome C Tctx cert root p a route rest frame (InlineEntry t) result
+Proof
+  strip_tac >> irule inline_activation_outcome_segment >>
+  goal_assum (drule_at Any) >> qexistsl [`0`, `1`] >>
+  irule inline_segment_entry_body >> simp[]
+QED
