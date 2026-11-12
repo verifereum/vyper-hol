@@ -1318,7 +1318,7 @@ Theorem storage_unwrap_typed_suffix_path[local]:
 Proof
   rpt gen_tac >> strip_tac >>
   irule storage_unwrap_suffix_value_path >> simp[] >>
-  qexistsl_tac [`a`, `cenv`, `cx`, `es`, `loc`, `src`, `t`] >>
+  qexistsl_tac [`H`, `a`, `cenv`, `cx`, `es`, `loc`, `src`, `t`] >>
   simp[] >> first_assum ACCEPT_TAC
 QED
 
@@ -1502,7 +1502,7 @@ Proof
     val_footprint tv v <= type_memory_size tv /\
     eval_operand buf.buf_operand z = SOME w` by
     (irule storage_unwrap_typed_suffix_path >>
-     simp[] >> qexistsl_tac [`a`, `cenv`, `cx`, `es'`, `p.ptr_location`,
+     simp[] >> qexistsl_tac [`H`, `a`, `cenv`, `cx`, `es'`, `p.ptr_location`,
                             `p.ptr_operand`, `t`] >>
      simp[] >> conj_tac
      >- (qpat_x_assum `!x. p.ptr_operand = Var x \/ buf.buf_operand = Var x ==> _`
