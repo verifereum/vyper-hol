@@ -44,7 +44,7 @@
 
 Theory vyperLoweringCorrect
 Ancestors
-  vyperCompiler gasSummary
+  vyperCompiler gasSummary sourceUnitExecution
   ptrOkCheck
   selectorDispatch
   moduleLoweringProps
@@ -125,13 +125,14 @@ End
 (* ===== PLAN 5.7 oracle-mode boundary ===== *)
 
 (* No gas-reading/oracle equality is invented here: cc_gas, outcomes,
-   code/labels and frame-pointer fields are deliberately free at entry. *)
+   labels and frame-pointer fields are deliberately free at entry. *)
 Definition venom_env_rel_def:
   venom_env_rel tx vs <=>
     loweringStateRelDefs$call_ctx_rel tx vs.vs_call_ctx vs.vs_tx_ctx vs.vs_block_ctx /\
     ~vs.vs_call_ctx.cc_static /\
     ~tx.is_static /\
-    vs.vs_prev_hashes = tx.block_hashes
+    vs.vs_prev_hashes = tx.block_hashes /\
+    vs.vs_code = tx.code
 End
 
 (* tx_env_ok is also a conjunct of venom_env_rel, through call_ctx_rel; it
@@ -180,56 +181,8 @@ QED
    request's snapshot, agree with the source's except at bytes past a
    bytestring's (or nested DynArray's) length, which the lowering's
    full-capacity copy may overwrite and nothing reads.  The declared regions
-   are those of tx.target in am'. *)
-Definition external_call_result_rel_def:
-  external_call_result_rel tops ret tx (res, am', rqs) vres <=>
-    let cx = initial_evaluation_context am'.sources am'.layouts tx NONE in
-    case (res, vres) of
-      (INL v, Halt ss) =>
-        tx_return_bytes tops ret tx v ss.vs_returndata /\
-        accounts_agree cx am'.accounts
-          (process_deletions ss.vs_pending_deletions ss.vs_accounts) /\
-        transient_agree cx am'.tStorage ss.vs_transient /\
-        logs_correspond (compiled_event_info tops) (type_env tops)
-          tx.target am'.logs ss.vs_logs /\
-        LIST_REL (request_agree cx) rqs ss.vs_requests
-    | (INR HaltException, Halt ss) =>
-        ss.vs_returndata = [] /\
-        accounts_agree cx am'.accounts
-          (process_deletions ss.vs_pending_deletions ss.vs_accounts) /\
-        transient_agree cx am'.tStorage ss.vs_transient /\
-        logs_correspond (compiled_event_info tops) (type_env tops)
-          tx.target am'.logs ss.vs_logs /\
-        LIST_REL (request_agree cx) rqs ss.vs_requests
-    | (INR (AssertException s), Abort Revert_abort _) => T
-    | (INR (AssertException s), Abort ExHalt_abort _) => (s = "UNREACHABLE")
-    | (INR (Error (RevertData _)), Abort Revert_abort _) => T
-    | (INR (Error (RuntimeError m)), Abort _ _) => T
-    | (INR (Error e), Halt _) => unspecified_behaviour_exempt tops e
-    | _ => F
-End
-
-(* The source call at gas observations gobs either fails with an
-   exempt error or relates to a run of the lowered unit.  The lowered
-   run reads GAS from vs.vs_gas_readings, so the source call that
-   matches it reads the observations the run's GAS reads produce. *)
-Definition source_unit_execution_correct_at_def:
-  source_unit_execution_correct_at gobs tops ret am tx unit vs <=>
-    source_exempt tops (call_external (SOME vs.vs_outcomes) gobs am tx) \/
-    ?fuel. external_call_result_rel tops ret tx
-             (call_external (SOME vs.vs_outcomes) gobs am tx)
-             (run_context fuel unit.cu_context vs)
-End
-
-(* The observations are those some of the run's GAS reads produce
-   (gas_explicit), so a lowered unit cannot pass with readings of its own
-   choosing. *)
-Definition source_unit_execution_correct_def:
-  source_unit_execution_correct tops ret am tx unit vs <=>
-    ?marks. source_unit_execution_correct_at
-              (gas_explicit marks vs.vs_gas_readings)
-              tops ret am tx unit vs
-End
+   are the finite observations in H. *)
+(* Selected-run unit certificates are owned by sourceUnitExecution. *)
 
 (* ===== S1 halt bridge (#640) ===== *)
 
@@ -266,7 +219,7 @@ QED
    a local's word at its own type, which agrees with this one when the two
    types do. *)
 Theorem external_return_prim_unlock_result_rel:
-  !ctx op ei msz nr nkey ut iv st x st' func cenv cx es es' tenv ret tv v0 v
+  !H ctx op ei msz nr nkey ut iv st x st' func cenv cx es es' tenv ret tv v0 v
      tops tx srcs exps layouts Q.
     ~lookup_raw_return_or_F (NONE : num option) tx.function_name External tops /\
     cx.sources = srcs /\ cx.layouts = layouts /\ cx.txn.target = tx.target /\
@@ -278,16 +231,16 @@ Theorem external_return_prim_unlock_result_rel:
     evaluate_type tenv ret = SOME tv /\ safe_cast tv v0 = SOME v /\
     is_word_type ret ==>
     frag_exec ctx st st'
-      (\s. state_rel func cenv cx es s /\
+      (\s. state_rel H func cenv cx es s /\
            eval_operand op s = SOME (typed_val_to_w256 tv v0))
       Q
-      (external_call_result_rel tops ret tx
+      (external_call_result_rel H tops ret tx
          (INL v, finalize_pending_deletions
                    (abstract_machine_from_state srcs exps layouts es'),
           es'.requests))
 Proof
   rpt strip_tac >>
-  `!s. state_rel func cenv cx es s ==> ~s.vs_call_ctx.cc_static` by
+  `!s. state_rel H func cenv cx es s ==> ~s.vs_call_ctx.cc_static` by
     simp[state_rel_def] >>
   qspecl_then [`tops`, `tenv`, `ret`, `tv`, `v0`, `v`] mp_tac
     return_bytes_prim_value >>
@@ -296,7 +249,7 @@ Proof
                `x`, `st'`, `typed_val_to_w256 tv v0`] mp_tac
     compile_external_return_word_unlock_frag >>
   simp[] >> disch_then irule >> simp[] >> rpt strip_tac >>
-  qspecl_then [`func`, `cenv`, `cx`, `es`, `es'`, `s`, `ss`, `nr`, `nkey`,
+  qspecl_then [`H`, `func`, `cenv`, `cx`, `es`, `es'`, `s`, `ss`, `nr`, `nkey`,
                `iv`, `tops`, `tx`, `srcs`, `exps`, `layouts`] mp_tac
     external_halt_success_unlock >>
   impl_tac >- gvs[] >>
@@ -305,7 +258,7 @@ QED
 
 (* Its case for the values word_value covers, whose word is val_to_w256. *)
 Theorem external_return_word_unlock_result_rel:
-  !ctx op ei msz nr nkey ut iv st x st' func cenv cx es es' tenv ret tv v0 v
+  !H ctx op ei msz nr nkey ut iv st x st' func cenv cx es es' tenv ret tv v0 v
      tops tx srcs exps layouts Q.
     ~lookup_raw_return_or_F (NONE : num option) tx.function_name External tops /\
     cx.sources = srcs /\ cx.layouts = layouts /\ cx.txn.target = tx.target /\
@@ -317,10 +270,10 @@ Theorem external_return_word_unlock_result_rel:
     evaluate_type tenv ret = SOME tv /\ safe_cast tv v0 = SOME v /\
     word_value v0 ==>
     frag_exec ctx st st'
-      (\s. state_rel func cenv cx es s /\
+      (\s. state_rel H func cenv cx es s /\
            eval_operand op s = SOME (val_to_w256 v0))
       Q
-      (external_call_result_rel tops ret tx
+      (external_call_result_rel H tops ret tx
          (INL v, finalize_pending_deletions
                    (abstract_machine_from_state srcs exps layouts es'),
           es'.requests))
@@ -328,7 +281,7 @@ Proof
   rpt strip_tac >>
   drule_all word_value_prim >> strip_tac >>
   qpat_x_assum `typed_val_to_w256 _ _ = _` (REWRITE_TAC o single o GSYM) >>
-  qspecl_then [`ctx`, `op`, `ei`, `msz`, `nr`, `nkey`, `ut`, `iv`, `st`,
+  qspecl_then [`H`, `ctx`, `op`, `ei`, `msz`, `nr`, `nkey`, `ut`, `iv`, `st`,
                `x`, `st'`, `func`, `cenv`, `cx`, `es`, `es'`, `tenv`, `ret`,
                `tv`, `v0`, `v`, `tops`, `tx`, `srcs`, `exps`, `layouts`, `Q`]
     mp_tac external_return_prim_unlock_result_rel >>
@@ -337,7 +290,7 @@ QED
 
 (* A return without a value. *)
 Theorem external_return_none_unlock_result_rel:
-  !ctx cenv lctx ty st x st' nr nkey ut iv func cx es es' tops tx srcs exps
+  !H ctx cenv lctx ty st x st' nr nkey ut iv func cx es es' tops tx srcs exps
      layouts Q.
     ~lookup_raw_return_or_F (NONE : num option) tx.function_name External tops /\
     cx.sources = srcs /\ cx.layouts = layouts /\ cx.txn.target = tx.target /\
@@ -348,20 +301,20 @@ Theorem external_return_none_unlock_result_rel:
     (if nr /\ ~iv then release_nonreentrant_lock cx.txn.target nkey
      else vyperState$return ()) es = (INL (), es') ==>
     frag_exec ctx st st'
-      (\s. state_rel func cenv cx es s)
+      (\s. state_rel H func cenv cx es s)
       Q
-      (external_call_result_rel tops NoneT tx
+      (external_call_result_rel H tops NoneT tx
          (INL NoneV, finalize_pending_deletions
                        (abstract_machine_from_state srcs exps layouts es'),
           es'.requests))
 Proof
   rpt strip_tac >>
-  `!s. state_rel func cenv cx es s ==> ~s.vs_call_ctx.cc_static` by
+  `!s. state_rel H func cenv cx es s ==> ~s.vs_call_ctx.cc_static` by
     simp[state_rel_def] >>
   qspecl_then [`ctx`, `cenv`, `lctx`, `ty`, `st`, `x`, `st'`, `nr`, `nkey`,
                `ut`, `iv`] mp_tac compile_return_none_external_unlock_frag >>
   simp[] >> disch_then irule >> simp[] >> rpt strip_tac >>
-  qspecl_then [`func`, `cenv`, `cx`, `es`, `es'`, `s`, `ss`, `nr`, `nkey`,
+  qspecl_then [`H`, `func`, `cenv`, `cx`, `es`, `es'`, `s`, `ss`, `nr`, `nkey`,
                `iv`, `tops`, `tx`, `srcs`, `exps`, `layouts`] mp_tac
     external_halt_success_unlock >>
   impl_tac >- gvs[] >>
@@ -371,7 +324,7 @@ QED
 (* Falling off the end of a function without a return type: from the end
    sb of the body's code, when it does not end its block. *)
 Theorem external_fallthrough_unlock_result_rel:
-  !ctx cenv nr nkey ut iv stmts st x st' sa sb func cx es es' tops tx srcs
+  !H ctx cenv nr nkey ut iv stmts st x st' sa sb func cx es es' tops tx srcs
      exps layouts Q.
     ~lookup_raw_return_or_F (NONE : num option) tx.function_name External tops /\
     cx.sources = srcs /\ cx.layouts = layouts /\ cx.txn.target = tx.target /\
@@ -384,21 +337,21 @@ Theorem external_fallthrough_unlock_result_rel:
     (if nr /\ ~iv then release_nonreentrant_lock cx.txn.target nkey
      else vyperState$return ()) es = (INL (), es') ==>
     frag_exec ctx sb st'
-      (\s. state_rel func cenv cx es s)
+      (\s. state_rel H func cenv cx es s)
       Q
-      (external_call_result_rel tops NoneT tx
+      (external_call_result_rel H tops NoneT tx
          (INL NoneV, finalize_pending_deletions
                        (abstract_machine_from_state srcs exps layouts es'),
           es'.requests))
 Proof
   rpt strip_tac >>
-  `!s. state_rel func cenv cx es s ==> ~s.vs_call_ctx.cc_static` by
+  `!s. state_rel H func cenv cx es s ==> ~s.vs_call_ctx.cc_static` by
     simp[state_rel_def] >>
   qspecl_then [`ctx`, `cenv`, `nr`, `nkey`, `ut`, `iv`, `stmts`, `st`, `x`,
                `st'`, `sa`, `sb`] mp_tac
     compile_guarded_body_stop_unlock_frag >>
   simp[] >> disch_then irule >> simp[] >> rpt strip_tac >>
-  qspecl_then [`func`, `cenv`, `cx`, `es`, `es'`, `s`, `ss`, `nr`, `nkey`,
+  qspecl_then [`H`, `func`, `cenv`, `cx`, `es`, `es'`, `s`, `ss`, `nr`, `nkey`,
                `iv`, `tops`, `tx`, `srcs`, `exps`, `layouts`] mp_tac
     external_halt_success_unlock >>
   impl_tac >- gvs[] >>
@@ -407,7 +360,7 @@ QED
 
 (* The same four with no release (nr ==> iv). *)
 Theorem external_return_prim_result_rel:
-  !ctx op ei msz nr nkey ut iv st x st' func cenv cx es tenv ret tv v0 v
+  !H ctx op ei msz nr nkey ut iv st x st' func cenv cx es tenv ret tv v0 v
      tops tx srcs exps layouts Q.
     ~lookup_raw_return_or_F (NONE : num option) tx.function_name External tops /\
     cx.sources = srcs /\ cx.layouts = layouts /\ cx.txn.target = tx.target /\
@@ -417,16 +370,16 @@ Theorem external_return_prim_result_rel:
     evaluate_type tenv ret = SOME tv /\ safe_cast tv v0 = SOME v /\
     is_word_type ret ==>
     frag_exec ctx st st'
-      (\s. state_rel func cenv cx es s /\
+      (\s. state_rel H func cenv cx es s /\
            eval_operand op s = SOME (typed_val_to_w256 tv v0))
       Q
-      (external_call_result_rel tops ret tx
+      (external_call_result_rel H tops ret tx
          (INL v, finalize_pending_deletions
                    (abstract_machine_from_state srcs exps layouts es),
           es.requests))
 Proof
   rpt strip_tac >>
-  qspecl_then [`ctx`, `op`, `ei`, `msz`, `nr`, `nkey`, `ut`, `iv`, `st`,
+  qspecl_then [`H`, `ctx`, `op`, `ei`, `msz`, `nr`, `nkey`, `ut`, `iv`, `st`,
                `x`, `st'`, `func`, `cenv`, `cx`, `es`, `es`, `tenv`, `ret`,
                `tv`, `v0`, `v`, `tops`, `tx`, `srcs`, `exps`, `layouts`, `Q`]
     mp_tac external_return_prim_unlock_result_rel >>
@@ -436,7 +389,7 @@ Proof
 QED
 
 Theorem external_return_word_result_rel:
-  !ctx op ei msz nr nkey ut iv st x st' func cenv cx es tenv ret tv v0 v
+  !H ctx op ei msz nr nkey ut iv st x st' func cenv cx es tenv ret tv v0 v
      tops tx srcs exps layouts Q.
     ~lookup_raw_return_or_F (NONE : num option) tx.function_name External tops /\
     cx.sources = srcs /\ cx.layouts = layouts /\ cx.txn.target = tx.target /\
@@ -446,16 +399,16 @@ Theorem external_return_word_result_rel:
     evaluate_type tenv ret = SOME tv /\ safe_cast tv v0 = SOME v /\
     word_value v0 ==>
     frag_exec ctx st st'
-      (\s. state_rel func cenv cx es s /\
+      (\s. state_rel H func cenv cx es s /\
            eval_operand op s = SOME (val_to_w256 v0))
       Q
-      (external_call_result_rel tops ret tx
+      (external_call_result_rel H tops ret tx
          (INL v, finalize_pending_deletions
                    (abstract_machine_from_state srcs exps layouts es),
           es.requests))
 Proof
   rpt strip_tac >>
-  qspecl_then [`ctx`, `op`, `ei`, `msz`, `nr`, `nkey`, `ut`, `iv`, `st`,
+  qspecl_then [`H`, `ctx`, `op`, `ei`, `msz`, `nr`, `nkey`, `ut`, `iv`, `st`,
                `x`, `st'`, `func`, `cenv`, `cx`, `es`, `es`, `tenv`, `ret`,
                `tv`, `v0`, `v`, `tops`, `tx`, `srcs`, `exps`, `layouts`, `Q`]
     mp_tac external_return_word_unlock_result_rel >>
@@ -465,7 +418,7 @@ Proof
 QED
 
 Theorem external_return_none_result_rel:
-  !ctx cenv lctx ty st x st' nr nkey ut iv func cx es tops tx srcs exps
+  !H ctx cenv lctx ty st x st' nr nkey ut iv func cx es tops tx srcs exps
      layouts Q.
     ~lookup_raw_return_or_F (NONE : num option) tx.function_name External tops /\
     cx.sources = srcs /\ cx.layouts = layouts /\ cx.txn.target = tx.target /\
@@ -474,15 +427,15 @@ Theorem external_return_none_result_rel:
     cenv.ce_ctor_exit_label = NONE /\
     cenv.ce_nonreentrant = (nr, nkey, ut, iv) /\ (nr ==> iv) ==>
     frag_exec ctx st st'
-      (\s. state_rel func cenv cx es s)
+      (\s. state_rel H func cenv cx es s)
       Q
-      (external_call_result_rel tops NoneT tx
+      (external_call_result_rel H tops NoneT tx
          (INL NoneV, finalize_pending_deletions
                        (abstract_machine_from_state srcs exps layouts es),
           es.requests))
 Proof
   rpt strip_tac >>
-  qspecl_then [`ctx`, `cenv`, `lctx`, `ty`, `st`, `x`, `st'`, `nr`, `nkey`,
+  qspecl_then [`H`, `ctx`, `cenv`, `lctx`, `ty`, `st`, `x`, `st'`, `nr`, `nkey`,
                `ut`, `iv`, `func`, `cx`, `es`, `es`, `tops`, `tx`, `srcs`,
                `exps`, `layouts`, `Q`]
     mp_tac external_return_none_unlock_result_rel >>
@@ -492,7 +445,7 @@ Proof
 QED
 
 Theorem external_fallthrough_result_rel:
-  !ctx cenv nr nkey ut iv stmts st x st' sa sb func cx es tops tx srcs exps
+  !H ctx cenv nr nkey ut iv stmts st x st' sa sb func cx es tops tx srcs exps
      layouts Q.
     ~lookup_raw_return_or_F (NONE : num option) tx.function_name External tops /\
     cx.sources = srcs /\ cx.layouts = layouts /\ cx.txn.target = tx.target /\
@@ -503,15 +456,15 @@ Theorem external_fallthrough_result_rel:
     compile_stmts cenv NoLoop (BaseT BoolT) stmts sa = ((), sb) /\
     ~block_is_terminated sb ==>
     frag_exec ctx sb st'
-      (\s. state_rel func cenv cx es s)
+      (\s. state_rel H func cenv cx es s)
       Q
-      (external_call_result_rel tops NoneT tx
+      (external_call_result_rel H tops NoneT tx
          (INL NoneV, finalize_pending_deletions
                        (abstract_machine_from_state srcs exps layouts es),
           es.requests))
 Proof
   rpt strip_tac >>
-  qspecl_then [`ctx`, `cenv`, `nr`, `nkey`, `ut`, `iv`, `stmts`, `st`, `x`,
+  qspecl_then [`H`, `ctx`, `cenv`, `nr`, `nkey`, `ut`, `iv`, `stmts`, `st`, `x`,
                `st'`, `sa`, `sb`, `func`, `cx`, `es`, `es`, `tops`, `tx`,
                `srcs`, `exps`, `layouts`, `Q`]
     mp_tac external_fallthrough_unlock_result_rel >>
@@ -527,7 +480,7 @@ QED
    wrap; nothing in the lowering bounds it (vyper rejects allocations of
    2^64 bytes or more). *)
 Theorem external_return_static_unlock_result_rel:
-  !ctx op m msz nr nkey ut iv st x st' func cenv cx es es' ret tv v0 v
+  !H ctx op m msz nr nkey ut iv st x st' func cenv cx es es' ret tv v0 v
      tops tx srcs exps layouts Q.
     ~lookup_raw_return_or_F (NONE : num option) tx.function_name External tops /\
     cx.sources = srcs /\ cx.layouts = layouts /\ cx.txn.target = tx.target /\
@@ -540,17 +493,17 @@ Theorem external_return_static_unlock_result_rel:
     ~is_dynamic (vyper_to_abi_type (type_env tops) ret) /\
     m = type_memory_size tv /\ m < dimword(:256) ==>
     frag_exec ctx st st'
-      (\s. state_rel func cenv cx es s /\
+      (\s. state_rel H func cenv cx es s /\
            (?p. eval_operand op s = SOME p /\
                 val_in_memory tv v0 (w2n p) s.vs_memory))
       Q
-      (external_call_result_rel tops ret tx
+      (external_call_result_rel H tops ret tx
          (INL v, finalize_pending_deletions
                    (abstract_machine_from_state srcs exps layouts es'),
           es'.requests))
 Proof
   rpt strip_tac >>
-  `!s. state_rel func cenv cx es s ==> ~s.vs_call_ctx.cc_static` by
+  `!s. state_rel H func cenv cx es s ==> ~s.vs_call_ctx.cc_static` by
     simp[state_rel_def] >>
   qspecl_then [`ctx`, `op`, `m`, `msz`, `nr`, `nkey`, `ut`, `iv`, `st`,
                `x`, `st'`] mp_tac compile_external_return_copy_unlock_frag >>
@@ -559,7 +512,7 @@ Proof
   qspecl_then [`tops`, `ret`, `tv`, `v0`, `v`, `w2n p`, `s.vs_memory`]
     mp_tac return_bytes_static_value >>
   impl_tac >- asm_rewrite_tac[] >> strip_tac >>
-  qspecl_then [`func`, `cenv`, `cx`, `es`, `es'`, `s`, `ss`, `nr`, `nkey`,
+  qspecl_then [`H`, `func`, `cenv`, `cx`, `es`, `es'`, `s`, `ss`, `nr`, `nkey`,
                `iv`, `tops`, `tx`, `srcs`, `exps`, `layouts`] mp_tac
     external_halt_success_unlock >>
   impl_tac >- gvs[] >>
@@ -568,7 +521,7 @@ QED
 
 (* Its case with no release (nr ==> iv). *)
 Theorem external_return_static_result_rel:
-  !ctx op m msz nr nkey ut iv st x st' func cenv cx es ret tv v0 v
+  !H ctx op m msz nr nkey ut iv st x st' func cenv cx es ret tv v0 v
      tops tx srcs exps layouts Q.
     ~lookup_raw_return_or_F (NONE : num option) tx.function_name External tops /\
     cx.sources = srcs /\ cx.layouts = layouts /\ cx.txn.target = tx.target /\
@@ -579,17 +532,17 @@ Theorem external_return_static_result_rel:
     ~is_dynamic (vyper_to_abi_type (type_env tops) ret) /\
     m = type_memory_size tv /\ m < dimword(:256) ==>
     frag_exec ctx st st'
-      (\s. state_rel func cenv cx es s /\
+      (\s. state_rel H func cenv cx es s /\
            (?p. eval_operand op s = SOME p /\
                 val_in_memory tv v0 (w2n p) s.vs_memory))
       Q
-      (external_call_result_rel tops ret tx
+      (external_call_result_rel H tops ret tx
          (INL v, finalize_pending_deletions
                    (abstract_machine_from_state srcs exps layouts es),
           es.requests))
 Proof
   rpt strip_tac >>
-  qspecl_then [`ctx`, `op`, `m`, `msz`, `nr`, `nkey`, `ut`, `iv`, `st`,
+  qspecl_then [`H`, `ctx`, `op`, `m`, `msz`, `nr`, `nkey`, `ut`, `iv`, `st`,
                `x`, `st'`, `func`, `cenv`, `cx`, `es`, `es`, `ret`, `tv`,
                `v0`, `v`, `tops`, `tx`, `srcs`, `exps`, `layouts`, `Q`]
     mp_tac external_return_static_unlock_result_rel >>
@@ -604,7 +557,7 @@ QED
    unit that lowers has it for each external function with a valued
    return (lower_vyper_runtime_unit_return_buffer_ok). *)
 Theorem external_return_static_cenv_unlock_result_rel:
-  !ctx op m nr nkey ut iv st x st' func cenv cx es es' ret tv v0 v
+  !H ctx op m nr nkey ut iv st x st' func cenv cx es es' ret tv v0 v
      tops tx srcs exps layouts Q.
     ~lookup_raw_return_or_F (NONE : num option) tx.function_name External tops /\
     cx.sources = srcs /\ cx.layouts = layouts /\ cx.txn.target = tx.target /\
@@ -618,11 +571,11 @@ Theorem external_return_static_cenv_unlock_result_rel:
     ~is_dynamic (vyper_to_abi_type (type_env tops) ret) /\
     m = type_memory_size tv ==>
     frag_exec ctx st st'
-      (\s. state_rel func cenv cx es s /\
+      (\s. state_rel H func cenv cx es s /\
            (?p. eval_operand op s = SOME p /\
                 val_in_memory tv v0 (w2n p) s.vs_memory))
       Q
-      (external_call_result_rel tops ret tx
+      (external_call_result_rel H tops ret tx
          (INL v, finalize_pending_deletions
                    (abstract_machine_from_state srcs exps layouts es'),
           es'.requests))
@@ -644,7 +597,7 @@ QED
 
 (* Its case with no release (nr ==> iv). *)
 Theorem external_return_static_cenv_result_rel:
-  !ctx op m nr nkey ut iv st x st' func cenv cx es ret tv v0 v
+  !H ctx op m nr nkey ut iv st x st' func cenv cx es ret tv v0 v
      tops tx srcs exps layouts Q.
     ~lookup_raw_return_or_F (NONE : num option) tx.function_name External tops /\
     cx.sources = srcs /\ cx.layouts = layouts /\ cx.txn.target = tx.target /\
@@ -656,17 +609,17 @@ Theorem external_return_static_cenv_result_rel:
     ~is_dynamic (vyper_to_abi_type (type_env tops) ret) /\
     m = type_memory_size tv ==>
     frag_exec ctx st st'
-      (\s. state_rel func cenv cx es s /\
+      (\s. state_rel H func cenv cx es s /\
            (?p. eval_operand op s = SOME p /\
                 val_in_memory tv v0 (w2n p) s.vs_memory))
       Q
-      (external_call_result_rel tops ret tx
+      (external_call_result_rel H tops ret tx
          (INL v, finalize_pending_deletions
                    (abstract_machine_from_state srcs exps layouts es),
           es.requests))
 Proof
   rpt strip_tac >>
-  qspecl_then [`ctx`, `op`, `m`, `nr`, `nkey`, `ut`, `iv`, `st`, `x`, `st'`,
+  qspecl_then [`H`, `ctx`, `op`, `m`, `nr`, `nkey`, `ut`, `iv`, `st`, `x`, `st'`,
                `func`, `cenv`, `cx`, `es`, `es`, `ret`, `tv`, `v0`, `v`,
                `tops`, `tx`, `srcs`, `exps`, `layouts`, `Q`]
     mp_tac external_return_static_cenv_unlock_result_rel >>
@@ -769,7 +722,7 @@ QED
    external_return_abi_cenv_result_rel discharges the plan and the bound
    for the ei and msz update_cenv_ret_abi builds. *)
 Theorem external_return_abi_unlock_result_rel:
-  !ctx op ei msz nr nkey ut iv st x st' func cenv cx es es' ret tv v0 v
+  !H ctx op ei msz nr nkey ut iv st x st' func cenv cx es es' ret tv v0 v
      tops tx srcs exps layouts Q.
     ~lookup_raw_return_or_F (NONE : num option) tx.function_name External tops /\
     cx.sources = srcs /\ cx.layouts = layouts /\ cx.txn.target = tx.target /\
@@ -788,7 +741,7 @@ Theorem external_return_abi_unlock_result_rel:
           is_dynamic (vyper_to_abi_type (type_env tops) ret)
        then TupleT [ret] else ret) <= msz ==>
     frag_exec ctx st st'
-      (\s. state_rel func cenv cx es s /\
+      (\s. state_rel H func cenv cx es s /\
            (?p. eval_operand op s = SOME p /\
                 val_in_memory tv v0 (w2n p) s.vs_memory /\
                 w2n p + type_memory_size tv <= s.vs_alloca_next) /\
@@ -797,13 +750,13 @@ Theorem external_return_abi_unlock_result_rel:
            s.vs_alloca_next + msz + 32 * (st'.cs_next_id - st.cs_next_id) <
              dimword (:256))
       Q
-      (external_call_result_rel tops ret tx
+      (external_call_result_rel H tops ret tx
          (INL v, finalize_pending_deletions
                    (abstract_machine_from_state srcs exps layouts es'),
           es'.requests))
 Proof
   rpt strip_tac >>
-  `!s. state_rel func cenv cx es s ==> ~s.vs_call_ctx.cc_static` by
+  `!s. state_rel H func cenv cx es s ==> ~s.vs_call_ctx.cc_static` by
     simp[state_rel_def] >>
   drule_all return_abi_value_package >>
   disch_then (qspec_then
@@ -822,7 +775,7 @@ Proof
       rpt strip_tac >>
       `return_bytes tops ret v ss.vs_returndata` by
         (gvs[] >> drule chosen_return_abi_bytes >> simp[]) >>
-      qspecl_then [`func`, `cenv`, `cx`, `es`, `es'`, `s`, `ss`, `nr`,
+      qspecl_then [`H`, `func`, `cenv`, `cx`, `es`, `es'`, `s`, `ss`, `nr`,
                    `nkey`, `iv`, `tops`, `tx`, `srcs`, `exps`, `layouts`]
         mp_tac external_halt_success_unlock >>
       impl_tac >- simp[] >>
@@ -832,7 +785,7 @@ QED
 
 (* Its case with no release (nr ==> iv). *)
 Theorem external_return_abi_result_rel:
-  !ctx op ei msz nr nkey ut iv st x st' func cenv cx es ret tv v0 v
+  !H ctx op ei msz nr nkey ut iv st x st' func cenv cx es ret tv v0 v
      tops tx srcs exps layouts Q.
     ~lookup_raw_return_or_F (NONE : num option) tx.function_name External tops /\
     cx.sources = srcs /\ cx.layouts = layouts /\ cx.txn.target = tx.target /\
@@ -849,7 +802,7 @@ Theorem external_return_abi_result_rel:
           is_dynamic (vyper_to_abi_type (type_env tops) ret)
        then TupleT [ret] else ret) <= msz ==>
     frag_exec ctx st st'
-      (\s. state_rel func cenv cx es s /\
+      (\s. state_rel H func cenv cx es s /\
            (?p. eval_operand op s = SOME p /\
                 val_in_memory tv v0 (w2n p) s.vs_memory /\
                 w2n p + type_memory_size tv <= s.vs_alloca_next) /\
@@ -858,13 +811,13 @@ Theorem external_return_abi_result_rel:
            s.vs_alloca_next + msz + 32 * (st'.cs_next_id - st.cs_next_id) <
              dimword (:256))
       Q
-      (external_call_result_rel tops ret tx
+      (external_call_result_rel H tops ret tx
          (INL v, finalize_pending_deletions
                    (abstract_machine_from_state srcs exps layouts es),
           es.requests))
 Proof
   rpt strip_tac >>
-  qspecl_then [`ctx`, `op`, `ei`, `msz`, `nr`, `nkey`, `ut`, `iv`, `st`,
+  qspecl_then [`H`, `ctx`, `op`, `ei`, `msz`, `nr`, `nkey`, `ut`, `iv`, `st`,
                `x`, `st'`, `func`, `cenv`, `cx`, `es`, `es`, `ret`, `tv`,
                `v0`, `v`, `tops`, `tx`, `srcs`, `exps`, `layouts`, `Q`]
     mp_tac external_return_abi_unlock_result_rel >>
@@ -876,10 +829,10 @@ QED
 (* The same, for the plan and buffer size update_cenv_ret_abi builds from a
    compile env with the program's struct map (as build_compile_env's is), for
    a return type with no NoneT in it (retAbiPlanProps).  Accounts remain raw
-   at the return; external_call_result_rel processes pending deletions only
+   at the return; external_call_result_rel H processes pending deletions only
    at the success boundary, as in external_return_abi_result_rel. *)
 Theorem external_return_abi_cenv_result_rel:
-  !ctx op nr nkey ut iv st x st' func cenv cenv0 cx es ret tv v0 v
+  !H ctx op nr nkey ut iv st x st' func cenv cenv0 cx es ret tv v0 v
      tops tx srcs exps layouts Q.
     ~lookup_raw_return_or_F (NONE : num option) tx.function_name External tops /\
     cx.sources = srcs /\ cx.layouts = layouts /\ cx.txn.target = tx.target /\
@@ -894,7 +847,7 @@ Theorem external_return_abi_cenv_result_rel:
     (nr ==> iv) /\ (!y. op = Var y ==> not_fresh_at st y) /\
     evaluate_type (type_env tops) ret = SOME tv /\ safe_cast tv v0 = SOME v ==>
     frag_exec ctx st st'
-      (\s. state_rel func cenv cx es s /\
+      (\s. state_rel H func cenv cx es s /\
            (?p. eval_operand op s = SOME p /\
                 val_in_memory tv v0 (w2n p) s.vs_memory /\
                 w2n p + type_memory_size tv <= s.vs_alloca_next) /\
@@ -903,7 +856,7 @@ Theorem external_return_abi_cenv_result_rel:
            s.vs_alloca_next + cenv.ce_max_return_size +
              32 * (st'.cs_next_id - st.cs_next_id) < dimword (:256))
       Q
-      (external_call_result_rel tops ret tx
+      (external_call_result_rel H tops ret tx
          (INL v, finalize_pending_deletions
                    (abstract_machine_from_state srcs exps layouts es),
           es.requests))
@@ -1127,20 +1080,19 @@ Proof
 QED
 
 (* The dead bytes of a source call's result: those storage_dead gives in
-   the running contract's storage and transient storage, by the layout the
+   the running contract's storage and transient storage, at the finite H the
    success case of external_call_result_rel compares with.  The pipeline
    may change them (o1PassContract's dead_result_rel), and the source
    relation already ignores them.  S3 bounds by them what a call request
    or the result may read from moved memory (taint_within). *)
 Definition external_call_dead_def:
-  external_call_dead tx ((res : value + exception), am',
+  external_call_dead H tx ((res : value + exception), am',
                       (rqs : call_request list)) =
-    let cx = initial_evaluation_context am'.sources am'.layouts tx NONE in
     <| d_stor := (\a st. if a = tx.target
-                         then {(k,b) | storage_dead cx F st (w2n k) b}
+                         then {(k,b) | storage_dead H F st (w2n k) b}
                          else {});
        d_trans := (\a st. if a = tx.target
-                          then {(k,b) | storage_dead cx T st (w2n k) b}
+                          then {(k,b) | storage_dead H T st (w2n k) b}
                           else {});
        d_imm := K {}; d_ret := K {} |>
 End

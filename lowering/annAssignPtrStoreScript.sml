@@ -2,7 +2,7 @@
    its buffer. Word stores and memory copies share this ghost boundary. *)
 Theory annAssignPtrStore
 Ancestors
-  bodyPtrDefs vyperState finite_map stmtSimDeclStore typedCopyPtr
+  wordLoadStorePtr bodyPtrDefs vyperState finite_map stmtSimDeclStore typedCopyPtr
   annAssignPtrSetup fragGasSeqPtr fragGasPathPtr fragExecPtr
   venomInst venomInstProofs venomExecSemantics venomState emitHelperProps
   representationCleanPtr valueEncodingProps valueEncoding list pred_set
@@ -13,13 +13,13 @@ Ancestors
 Theorem annassign_ghost_scope_update_ptr:
  !d cenv cx es G tn s sc rest id entry p sz.
  es.scopes = sc :: rest /\
- ghost_inv d cenv cx es G tn s /\
+ ghost_inv H d cenv cx es G tn s /\
  FLOOKUP cenv.ce_vars id = SOME (PtrVar (Var p) sz) /\
  ptr_covers G tn p s sz /\
  (!w mem. lookup_var p s = SOME w /\
            mem_agree_outside tn.t_mem s.vs_memory mem ==>
            val_in_memory entry.type entry.value (w2n w) mem) ==>
- ghost_inv d cenv cx
+ ghost_inv H d cenv cx
    (es with scopes := (sc |+ (id,entry)) :: rest) G tn s
 Proof
  rpt gen_tac >> strip_tac >> fs[ghost_inv_def] >>
@@ -123,12 +123,12 @@ QED
 
 Theorem annassign_alloca_mstore_ghost_ptr:
  !ctx func cenv cx es d G tn s p sz a inst wd.
- stmt_state_rel ctx func cenv cx es s /\ fn_inst_ids_distinct func /\
- ghost_inv d cenv cx es G tn s /\ not_local_ptr cenv es.scopes p /\
+ stmt_state_rel H ctx func cenv cx es s /\ fn_inst_ids_distinct func /\
+ ghost_inv H d cenv cx es G tn s /\ not_local_ptr cenv es.scopes p /\
  lookup_var p s = SOME a /\ MEM inst (fn_insts func) /\
  inst.inst_opcode = ALLOCA /\ inst.inst_outputs = [p] /\
  FLOOKUP s.vs_allocas inst.inst_id = SOME (w2n a,sz) /\ 32 <= sz ==>
- ghost_inv d cenv cx es G
+ ghost_inv H d cenv cx es G
    (tn with t_mem := tn.t_mem DIFF {i | w2n a <= i /\ i < w2n a + 32})
    (mstore (w2n a) wd s)
 Proof
@@ -181,7 +181,7 @@ Theorem annassign_declare_store_ptr:
  fn_has_code st st' func /\ fn_inst_ids_distinct func /\
  ~ctx_has_dalloca ctx /\ ~s.vs_halted /\
  s.vs_current_bb = st.cs_current_bb /\ s.vs_inst_idx = LENGTH st.cs_current_insts /\
- stmt_state_rel ctx func cenv cx es s /\ ghost_inv d cenv cx es G tn s /\
+ stmt_state_rel H ctx func cenv cx es s /\ ghost_inv H d cenv cx es G tn s /\
  ghost_kept cenv es sa G0 tn0 s0 G tn /\
  es.scopes = sc::rest /\ lookup_scopes id es.scopes = NONE /\
  FLOOKUP cenv.ce_vars id = SOME (PtrVar (Var p) sz) /\
@@ -193,10 +193,10 @@ Theorem annassign_declare_store_ptr:
  (!u. val_in_memory ty v (w2n a) (mstore (w2n a) wd u).vs_memory) /\
  (!u. memory_value_rel ty v (w2n a) (mstore (w2n a) wd u).vs_memory) ==>
  ?s' tn'.
- gas_path_ptr (cx_dead cx) 0 ctx func PG G tn s 0 G tn' (OK s') /\
- stmt_state_rel ctx func cenv cx
+ gas_path_ptr (cx_dead H cx) 0 ctx func PG G tn s 0 G tn' (OK s') /\
+ stmt_state_rel H ctx func cenv cx
    (es with scopes := (sc |+ (id,<|assignable := assign; type := ty; value := v; popped := []|>))::rest) s' /\
- ghost_inv d cenv cx
+ ghost_inv H d cenv cx
    (es with scopes := (sc |+ (id,<|assignable := assign; type := ty; value := v; popped := []|>))::rest) G tn' s' /\
  ghost_kept cenv es sa G0 tn0 s0 G tn' /\
  tn' = (tn with t_mem := tn.t_mem DIFF {i | w2n a <= i /\ i < w2n a + 32}) /\
@@ -215,7 +215,7 @@ Proof
   get_instruction bb s.vs_inst_idx =
     SOME (mk_inst st.cs_next_id MSTORE [Var p; value] [])` by simp[] >>
  drule_all annassign_mstore_path_ptr >>
- disch_then (qspecl_then [`cx_dead cx`, `PG`] assume_tac) >>
+ disch_then (qspecl_then [`cx_dead H cx`, `PG`] assume_tac) >>
  drule_all annassign_store_ghost_normalize_ptr >> strip_tac >>
  `st'.cs_current_bb = st.cs_current_bb /\
   LENGTH st'.cs_current_insts = SUC (LENGTH st.cs_current_insts)` by

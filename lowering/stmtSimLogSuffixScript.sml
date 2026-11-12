@@ -16,9 +16,9 @@ Theorem log_emit_continuation:
   eval_operand ptr_op s = SOME off /\ eval_operand len_op s = SOME sz /\
   eval_operands topic_ops s = SOME topics /\
   mem_bytes_at (w2n off) (w2n sz) s.vs_memory = data /\
-  stmt_state_rel ctx func ce cx es s /\ fresh_vars_wrt limit_st s ==>
+  stmt_state_rel H ctx func ce cx es s /\ fresh_vars_wrt limit_st s ==>
   ?t. run_inst_seq (emitted_insts sa sb) s = OK t /\
-    stmt_state_rel ctx func ce cx
+    stmt_state_rel H ctx func ce cx
       (es with logs := es.logs ++
         [<|logger := w2w cx.txn.target; topics := topics; data := data |>]) t /\
     fresh_vars_wrt limit_st t /\ inst_extends sa sb /\
@@ -44,9 +44,9 @@ Theorem log_emit_empty_suffix:
     (Lit (n2w (LENGTH topic_ops)) :: REVERSE topic_ops ++ [Lit 0w;Lit 0w]) [] sa =
       ((),sb) /\ LENGTH topic_ops < dimword (:256) /\
   eval_operands topic_ops s = SOME topics /\
-  stmt_state_rel ctx func ce cx es s /\ fresh_vars_wrt limit_st s ==>
+  stmt_state_rel H ctx func ce cx es s /\ fresh_vars_wrt limit_st s ==>
   ?t. run_inst_seq (emitted_insts sa sb) s = OK t /\
-    stmt_state_rel ctx func ce cx
+    stmt_state_rel H ctx func ce cx
       (es with logs := es.logs ++
         [<|logger := w2w cx.txn.target; topics := topics; data := [] |>]) t /\
     fresh_vars_wrt limit_st t /\ inst_extends sa sb /\
@@ -67,9 +67,9 @@ Theorem log_emit_encoded_suffix:
   b < dimword (:256) /\ LENGTH data < dimword (:256) /\
   mem_bytes_at b (LENGTH data) s.vs_memory = data /\
   eval_operands topic_ops s = SOME topics /\
-  stmt_state_rel ctx func ce cx es s /\ fresh_vars_wrt limit_st s ==>
+  stmt_state_rel H ctx func ce cx es s /\ fresh_vars_wrt limit_st s ==>
   ?t. run_inst_seq (emitted_insts sa sb) s = OK t /\
-    stmt_state_rel ctx func ce cx
+    stmt_state_rel H ctx func ce cx
       (es with logs := es.logs ++
         [<|logger := w2w cx.txn.target; topics := topics; data := data |>]) t /\
     fresh_vars_wrt limit_st t /\ inst_extends sa sb /\
@@ -81,7 +81,7 @@ Proof
   gvs[w2n_n2w]
 QED
 
-Theorem log_operands_values[local]:
+Theorem log_operands_values:
   !ops ws. LIST_REL (\op w. eval_operand op s = SOME w) ops ws ==>
     eval_operands ops s = SOME ws
 Proof
@@ -94,14 +94,14 @@ Theorem log_empty_suffix_finish[local]:
   run_inst_seq (emitted_insts sm st) s = OK u /\
   wb_frame ce es es sm s u /\ u.vs_memory = s.vs_memory /\
   LIST_REL (\op w. eval_operand op u = SOME w) ops topics /\
-  stmt_state_rel ctx func ce cx es u /\ fresh_vars_wrt limit_st s /\
+  stmt_state_rel H ctx func ce cx es u /\ fresh_vars_wrt limit_st s /\
   sb.cs_next_var <= limit_st.cs_next_var /\
   emit_inst LOG
     (Lit (n2w (LENGTH (Lit (n2w h)::ops))) ::
       REVERSE (Lit (n2w h)::ops) ++ [Lit 0w;Lit 0w]) [] st = ((),sb) /\
   LENGTH (Lit (n2w h)::ops) < dimword (:256) ==>
   ?t. run_inst_seq (emitted_insts sm sb) s = OK t /\
-    stmt_state_rel ctx func ce cx
+    stmt_state_rel H ctx func ce cx
       (es with logs := es.logs ++
         [<|logger := w2w cx.txn.target; topics := n2w h::topics; data := [] |>]) t /\
     fresh_vars_wrt limit_st t /\ inst_extends sm sb /\
@@ -134,7 +134,7 @@ Theorem log_success_empty_run[local]:
   compile_log_topic_ops (FST (split_log_ops xs flags)) sm = (ops,st) /\
   SND (split_log_ops xs flags) = [] /\
   compile_stmt ce lctx ty (Log id args) sa = ((),sb) /\
-  stmt_state_rel ctx func ce cx es s /\ local_ptrs_reserved ce sm /\
+  stmt_state_rel H ctx func ce cx es s /\ local_ptrs_reserved ce sm /\
   fresh_vars_wrt limit_st s /\ sb.cs_next_var <= limit_st.cs_next_var /\
   LENGTH flags = LENGTH xs /\ LENGTH (FILTER I flags) <= 3 /\
   EVERY (\p. (!z. FST p = Var z ==> not_fresh_at sm z) /\ (!l. FST p <> Label l)) xs /\
@@ -143,7 +143,7 @@ Theorem log_success_empty_run[local]:
     ?tv. evaluate_type (get_tenv cx) (SND arg) = SOME tv /\ value_has_type tv v) xs vs /\
   encode_indexed_event_topics flags (MAP SND xs) vs = SOME topics ==>
   ?t. run_inst_seq (emitted_insts sm sb) s = OK t /\
-    stmt_state_rel ctx func ce cx
+    stmt_state_rel H ctx func ce cx
       (es with logs := es.logs ++
         [<|logger := w2w cx.txn.target; topics := n2w h::topics; data := [] |>]) t /\
     fresh_vars_wrt limit_st t /\ inst_extends sm sb /\
@@ -178,7 +178,7 @@ Theorem log_data_prepare_run[local]:
   fn_has_code stored_st prepared func /\
   compile_abi_encode_to_buf dst.buf_operand srcbuf.buf_operand ei prepared = (out,end_st) /\
   fn_has_code prepared end_st func /\
-  stmt_state_rel ctx func ce cx es s /\ fn_inst_ids_distinct func /\
+  stmt_state_rel H ctx func ce cx es s /\ fn_inst_ids_distinct func /\
   local_ptrs_reserved ce source_st /\
   fresh_vars_wrt limit_st s /\ end_st.cs_next_var <= limit_st.cs_next_var /\
   LIST_REL (\arg v. log_arg_rel ce cx sa source_st es s arg v /\
@@ -195,7 +195,7 @@ Theorem log_data_prepare_run[local]:
     mem_bytes_at db (LENGTH (enc (Tuple (vyper_to_abi_types (get_tenv cx) (MAP SND xs))) (ListV avs))) actual.vs_memory =
       enc (Tuple (vyper_to_abi_types (get_tenv cx) (MAP SND xs))) (ListV avs) /\
     eval_operand out actual = SOME (n2w (LENGTH (enc (Tuple (vyper_to_abi_types (get_tenv cx) (MAP SND xs))) (ListV avs)))) /\
-    stmt_state_rel ctx func ce cx es actual /\
+    stmt_state_rel H ctx func ce cx es actual /\
     db < dimword (:256) /\
     LENGTH (enc (Tuple (vyper_to_abi_types (get_tenv cx) (MAP SND xs))) (ListV avs)) < dimword (:256) /\
     (!op w. abi_decoder_operand_live source_st.cs_next_var op /\
@@ -267,7 +267,7 @@ Theorem log_data_emit_run[local]:
   fn_has_code stored_st prepared func /\
   compile_abi_encode_to_buf dst.buf_operand srcbuf.buf_operand ei prepared = (out,end_st) /\
   fn_has_code prepared end_st func /\
-  stmt_state_rel ctx func ce cx es s /\ fn_inst_ids_distinct func /\
+  stmt_state_rel H ctx func ce cx es s /\ fn_inst_ids_distinct func /\
   local_ptrs_reserved ce source_st /\
   fresh_vars_wrt limit_st s /\ end_st.cs_next_var <= limit_st.cs_next_var /\
   LIST_REL (\arg v. log_arg_rel ce cx sa source_st es s arg v /\
@@ -284,7 +284,7 @@ Theorem log_data_emit_run[local]:
   ?avs t.
     vyper_to_abi_list (get_tenv cx) (MAP SND xs) vs = SOME avs /\
     run_inst_seq (emitted_insts source_st final) s = OK t /\
-    stmt_state_rel ctx func ce cx
+    stmt_state_rel H ctx func ce cx
       (es with logs := es.logs ++ [<|logger := w2w cx.txn.target;
         topics := topics; data := enc (Tuple (vyper_to_abi_types (get_tenv cx)
           (MAP SND xs))) (ListV avs) |>]) t /\
@@ -404,7 +404,7 @@ Theorem log_success_suffix_run:
   log_eval_view ce args sa xs sm /\
   compile_log_topic_ops (FST (split_log_ops xs flags)) sm = (ops,st) /\
   compile_stmt ce lctx ty (Log id args) sa = ((),sb) /\
-  stmt_state_rel ctx func ce cx es s /\ local_ptrs_reserved ce sm /\
+  stmt_state_rel H ctx func ce cx es s /\ local_ptrs_reserved ce sm /\
   fresh_vars_wrt limit_st s /\ sb.cs_next_var <= limit_st.cs_next_var /\
   fn_has_code sm sb func /\ fn_inst_ids_distinct func /\
   LENGTH flags = LENGTH xs /\ LENGTH (FILTER I flags) <= 3 /\
@@ -418,7 +418,7 @@ Theorem log_success_suffix_run:
   vyper_to_abi_list (get_tenv cx) (log_non_indexed_types flags (MAP SND xs))
     (log_non_indexed_values flags vs) = SOME avs ==>
   ?t. run_inst_seq (emitted_insts sm sb) s = OK t /\
-    stmt_state_rel ctx func ce cx
+    stmt_state_rel H ctx func ce cx
       (es with logs := es.logs ++ [<|logger := w2w cx.txn.target;
         topics := n2w h::topics; data := enc (Tuple (vyper_to_abi_types (get_tenv cx)
           (log_non_indexed_types flags (MAP SND xs)))) (ListV avs) |>]) t /\

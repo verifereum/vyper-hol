@@ -116,17 +116,6 @@ Proof
   qexistsl_tac [`es`,`s`] >> asm_simp_tac (srw_ss()) []
 QED
 
-Theorem log_encode_local_region_frame[local]:
-  (!name entry p sz. lookup_scopes name scopes = SOME entry /\
-    FLOOKUP ce.ce_vars name = SOME (PtrVar (Var p) sz) ==>
-    lookup_var p t = lookup_var p s) ==>
-  (local_region ce scopes t name lo sz <=> local_region ce scopes s name lo sz)
-Proof
-  strip_tac >> simp[local_region_def] >>
-  eq_tac >> strip_tac >> qexistsl_tac [`entry`,`p`,`w`] >>
-  asm_simp_tac bool_ss [] >> metis_tac[]
-QED
-
 Theorem log_encode_immutable_sep_frame[local]:
   immutable_alloca_sep func ce cx es s /\
   (!name lo sz. local_region ce es.scopes t name lo sz ==>
@@ -171,7 +160,7 @@ Proof
 QED
 
 Theorem log_encode_allocate_sizes[local]:
-  stmt_state_rel ctx func ce cx es s /\ fn_inst_ids_distinct func /\
+  stmt_state_rel H ctx func ce cx es s /\ fn_inst_ids_distinct func /\
   MEM inst (fn_insts func) /\ inst.inst_opcode = ALLOCA /\
   inst.inst_operands = [Lit (n2w n)] /\ n < dimword (:256) ==>
   !i v b sz. MEM i (fn_insts func) /\ i.inst_opcode = ALLOCA /\
@@ -190,14 +179,14 @@ Proof
 QED
 
 Theorem log_encode_allocation_frame[local]:
-  stmt_state_rel ctx func ce cx es s /\ state_rel func ce cx es t /\
+  stmt_state_rel H ctx func ce cx es s /\ state_rel func ce cx es t /\
   immutable_alloca_sep func ce cx es t /\ fn_inst_ids_distinct func /\
   MEM inst (fn_insts func) /\ inst.inst_opcode = ALLOCA /\
   inst.inst_operands = [Lit (n2w n)] /\ n < dimword (:256) /\
   t.vs_allocas = (abi_builtin_allocate_state inst.inst_id n s).vs_allocas /\
   t.vs_alloca_next = (abi_builtin_allocate_state inst.inst_id n s).vs_alloca_next /\
   t.vs_fmp = s.vs_fmp /\ immutable_base_zero ce t ==>
-  stmt_state_rel ctx func ce cx es t
+  stmt_state_rel H ctx func ce cx es t
 Proof
   disch_then (MAP_EVERY assume_tac o CONJUNCTS) >>
   `alloca_inv s /\ alloca_room ctx func s /\ fmp_room ctx func s` by
@@ -224,7 +213,7 @@ Proof
 QED
 
 Theorem log_encode_continuation:
-  stmt_state_rel ctx func ce cx es s /\
+  stmt_state_rel H ctx func ce cx es s /\
   log_encode_external t = log_encode_external s /\
   (!name entry p sz. lookup_scopes name es.scopes = SOME entry /\
     FLOOKUP ce.ce_vars name = SOME (PtrVar (Var p) sz) ==>
@@ -243,7 +232,7 @@ Theorem log_encode_continuation:
   (dyn ==> fn_inst_ids_distinct func /\
     ?inst. MEM inst (fn_insts func) /\ inst.inst_opcode = ALLOCA /\
       inst.inst_operands = [Lit (n2w n)] /\ inst.inst_id = site /\ n < dimword (:256)) ==>
-  stmt_state_rel ctx func ce cx es t
+  stmt_state_rel H ctx func ce cx es t
 Proof
   disch_then (MAP_EVERY assume_tac o CONJUNCTS) >>
   `(!aid r. FLOOKUP s.vs_allocas aid = SOME r ==> FLOOKUP t.vs_allocas aid = SOME r) /\
@@ -265,7 +254,7 @@ Proof
      qpat_x_assum `t.vs_alloca_next = _` kall_tac >>
      `!name lo sz. local_region ce es.scopes t name lo sz ==>
        local_region ce es.scopes s name lo sz` by
-       (drule log_encode_local_region_frame >> metis_tac[]) >>
+       (drule local_region_lookup_cong >> metis_tac[]) >>
      irule log_encode_immutable_sep_frame >> qexists_tac `s` >>
      asm_simp_tac bool_ss [] >> rpt conj_tac >> first_assum ACCEPT_TAC) >>
   `immutable_base_zero ce t` by
@@ -289,7 +278,7 @@ Proof
 QED
 
 Theorem log_encode_local_operands[local]:
-  stmt_state_rel ctx func ce cx es s /\
+  stmt_state_rel H ctx func ce cx es s /\
   (!name entry p sz. lookup_scopes name es.scopes = SOME entry /\
     FLOOKUP ce.ce_vars name = SOME (PtrVar (Var p) sz) ==>
     abi_decoder_operand_live nv (Var p)) /\
@@ -326,7 +315,7 @@ Theorem log_scalar_tuple_continue:
       FLOOKUP initial.vs_allocas st.cs_next_id = SOME (p,32)) /\
     p < dimword (:256) /\ (sb+cap <= p \/ p+32 <= sb) /\
     (db+outcap <= p \/ p+32 <= db)) /\
-  stmt_state_rel ctx func ce cx es initial /\
+  stmt_state_rel H ctx func ce cx es initial /\
   (!name entry v sz. lookup_scopes name es.scopes = SOME entry /\
     FLOOKUP ce.ce_vars name = SOME (PtrVar (Var v) sz) ==>
     abi_decoder_operand_live st.cs_next_var (Var v)) /\
@@ -351,7 +340,7 @@ Theorem log_scalar_tuple_continue:
     eval_operand out actual = SOME (n2w (LENGTH (enc (Tuple ats) (ListV avs)))) /\
     abi_decode_footprint_frame
       ((db,outcap)::(if (?infos. ei = AbiComplex infos) then [(p,32)] else [])) initial actual /\
-    stmt_state_rel ctx func ce cx es actual /\
+    stmt_state_rel H ctx func ce cx es actual /\
     (!op w. abi_decoder_operand_live st.cs_next_var op /\
       eval_operand op initial = SOME w ==> eval_operand op actual = SOME w)
 Proof

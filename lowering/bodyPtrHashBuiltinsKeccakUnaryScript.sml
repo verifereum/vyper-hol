@@ -19,7 +19,7 @@ fun hash_keccak_word_summary_tac g = (
       (SPEC_ALL hash_word_endpoint_summary))) >>
   first_assum (irule_at (Pat `gas_path_ptr _ _ _ _ _ _ _ _ _ _ _ _`)) >>
   simp[] >>
-  qpat_assum `vv_post _ _ _ _ _ _ _ _ _ _ _ _ _` (irule_at (Pat `vv_post _ _ _ _ _ _ _ _ _ _ _ _ _`)) >>
+  qpat_assum `vv_post _ _ _ _ _ _ _ _ _ _ _ _ _ _` (irule_at (Pat `vv_post _ _ _ _ _ _ _ _ _ _ _ _ _ _`)) >>
   simp[vyperStateTheory.read_result_def, vyperStateTheory.return_def, same_blocks_def] >>
   `sm.cs_current_bb = sb.cs_current_bb` by fs[same_blocks_def] >>
   `LENGTH sb.cs_current_insts = LENGTH sm.cs_current_insts +
@@ -89,7 +89,7 @@ Resume hash_compile_typed_keccak256_unary_vv_sim_ptr[suffix]:
   >- (Cases_on `v` >> gvs[value_has_type_def] >>
       drule_at (Pos hd) hash_string_keccak_ptr_post >> simp[] >>
       disch_then (drule_all_then
-        (qspecl_then [`PG`, `cx_dead cx`] strip_assume_tac)) >>
+        (qspecl_then [`PG`, `cx_dead H cx`] strip_assume_tac)) >>
       hash_keccak_word_summary_tac)
   >- (`n <= 32` by gvs[vyperValueTheory.evaluate_type_def] >>
       Cases_on `v` >> gvs[value_has_type_def] >>
@@ -98,12 +98,12 @@ Resume hash_compile_typed_keccak256_unary_vv_sim_ptr[suffix]:
       drule_at (Pos hd) hash_fixed_keccak_ptr_post >>
       simp[value_has_type_def] >>
       disch_then (drule_all_then
-        (qspecl_then [`PG`, `cx_dead cx`] strip_assume_tac)) >>
+        (qspecl_then [`PG`, `cx_dead H cx`] strip_assume_tac)) >>
       hash_keccak_word_summary_tac) >>
   Cases_on `v` >> gvs[value_has_type_def] >>
   drule_at (Pos hd) hash_dynamic_keccak_ptr_post >> simp[] >>
   disch_then (drule_all_then
-    (qspecl_then [`PG`, `cx_dead cx`] strip_assume_tac)) >>
+    (qspecl_then [`PG`, `cx_dead H cx`] strip_assume_tac)) >>
   hash_keccak_word_summary_tac
 QED
 

@@ -95,6 +95,17 @@ Definition target_root_def:
   target_root (SubscriptTarget t e) = target_root t
 End
 
+(* The type checker's access root of a place (vyperTypeSystem) is its root. *)
+Theorem place_access_root:
+  !tgt attrs. FST (place_access tgt attrs) = target_root tgt
+Proof
+  `(!e:expr. T) /\
+   !tgt attrs. FST (place_access tgt attrs) = target_root tgt`
+    suffices_by simp[] >>
+  ho_match_mp_tac (TypeBase.induction_of ``:base_assignment_target``) >>
+  simp[vyperTypeSystemTheory.place_access_def, target_root_def]
+QED
+
 (* The target is inside an immutable or a constant: a module name with no
    storage declaration. *)
 Definition immutable_root_def:
@@ -184,14 +195,15 @@ QED
 
 (* No code, and the post at the start state. *)
 Theorem target_post_refl[local]:
-  !ctx func cenv cx es sa s pv vt r.
-    stmt_state_rel ctx func cenv cx es s /\
+  !H ctx func cenv cx es sa s pv vt r.
+    stmt_state_rel H ctx func cenv cx es s /\
+    storage_well_formed_on cx es (FST H) /\
     (?w. eval_operand (FST r) s = SOME w /\
          place_ptr_rel cenv cx s pv w (FST (SND r)) vt) /\
     SND (SND r) = SOME (value_type_place vt) /\
     (!x. FST r = Var x ==> not_fresh_at sa x) /\
     place_readable cx es pv ==>
-    target_post ctx func cenv cx es sa sa s es pv vt r s
+    target_post H ctx func cenv cx es sa sa s es pv vt r s
 Proof
   rw[target_post_def] >> metis_tac[]
 QED
@@ -208,22 +220,24 @@ Proof
   `cenv.ce_var_type id = SOME ty` by fs[expr_sim_inv_def] >>
   qpat_x_assum `compile_get_target_ptr _ _ _ _ = _` mp_tac >>
   simp[compile_get_target_ptr_def, comp_return_def] >> strip_tac >> gvs[] >>
-  `stmt_state_rel ctx func cenv cx (es with gas_obs := []) s0` by
-    (drule msg_gas_state_frame >>
-     disch_then (qspecl_then [`s0.vs_gas_readings`, `s0.vs_inst_idx`, `[]`] mp_tac) >>
-     simp[NoAsms]) >>
-  simp[gasOutcomeTheory.gas_outcome_def, gasSummaryTheory.gas_summary_at_def] >> qexists_tac `[]` >> disj1_tac >>
+  simp[gasOutcomeTheory.gas_outcome_def, gasSummaryTheory.gas_summary_at_def] >> qexists_tac `[]` >> disj2_tac >> disj1_tac >>
   qexistsl_tac [`INL (PlaceR (MemoryPlace id []))`, `es`, `OK s0`] >>
   conj_tac
   >- simp[gasSummaryTheory.gas_marked_exec_def, fragGasModeTheory.gas_marked_path_def, fragGasPathTheory.gas_path_rules,
           Once evaluate_def, bind_def, ignore_bind_def, get_scopes_def,
           type_check_def, assert_def, return_def] >>
-  simp[exit_result_def] >>
+  simp[exit_result_def] >> gen_tac >> strip_tac >>
+  `stmt_state_rel H ctx func cenv cx es s0 /\
+   storage_well_formed_on cx es (FST H)` by metis_tac[] >>
+  `storage_well_formed_on cx (es with gas_obs := []) (FST H)` by
+    (fs[vyperStorageFootprintTheory.storage_well_formed_on_def] >>
+     rpt strip_tac >> res_tac >>
+     Cases_on `b` >> fs[vyperStorageBackendTheory.get_storage_def]) >>
   `?b. lookup_var p s0 = SOME b` by
     (fs[stmt_state_rel_def, state_rel_def, local_ptrs_rel_def] >>
      metis_tac[]) >>
   `not_fresh_at sa p` by metis_tac[local_ptrs_reserved_def] >>
-  simp[target_post_def, value_type_place_def] >>
+  simp[target_post_def, value_type_place_def, stmt_state_rel_start_gas_obs] >>
   simp[eval_operand_def, place_ptr_rel_def, mem_path_offset_def,
        place_readable_def, read_place_def, bind_def, get_scopes_def,
        lift_option_type_def, return_def, lift_sum_def, read_memory_path_def,
@@ -332,30 +346,38 @@ Resume target_toplevel_case[storage]:
   `cenv.ce_hashmap_info (src,id) = NONE /\
    cenv.ce_module_var_type (src,id) = SOME ty` by
     metis_tac[toplevel_target_env] >>
-  reverse (Cases_on `storage_vars_rel cenv cx /\ transient_vars_rel cenv cx`)
-  >- gvs[stmt_state_rel_def, state_rel_def] >>
+  simp[gasOutcomeTheory.gas_outcome_def, gasSummaryTheory.gas_summary_at_def] >>
+  qexists_tac `[]` >> disj2_tac >> disj1_tac >>
+  qabbrev_tac `es1 = es with storage_trace :=
+                 es.storage_trace ++ [StorageRoot tr slot tv]` >>
+  qexistsl_tac [`INL (PlaceR (StoragePlace tr (n2w slot) tv))`, `es1`, `OK s0`] >>
+  conj_tac
+  >- (`!gs. eval_base_place cx (TopLevelNameTarget (src,id)) (es with gas_obs := gs) =
+            (INL (PlaceR (StoragePlace tr (n2w slot) tv)), es1 with gas_obs := gs)` by
+        (gen_tac >> asm_simp_tac (srw_ss()) [Once evaluate_def, lookup_global_def,
+           bind_def, ignore_bind_def, record_storage_event_def,
+           lift_option_type_def, return_def, LET_THM, Abbr `es1`]) >>
+      simp[gasSummaryTheory.gas_marked_exec_def, fragGasModeTheory.gas_marked_path_def,
+           fragGasPathTheory.gas_path_rules]) >>
+  simp[exit_result_def] >> gen_tac >> strip_tac >>
+  `valid_horizon cx st0 H es.storage_trace` by
+    fs[Abbr `es1`, vyperStorageFootprintTheory.valid_horizon_def] >>
+  `stmt_state_rel H ctx func cenv cx es s0 /\
+   storage_well_formed_on cx es (FST H)` by metis_tac[] >>
+  `storage_well_formed_on cx (es1 with gas_obs := []) (FST H)` by
+    (fs[Abbr `es1`, vyperStorageFootprintTheory.storage_well_formed_on_def] >>
+     rpt strip_tac >> res_tac >>
+     Cases_on `b` >> fs[vyperStorageBackendTheory.get_storage_def]) >>
+  `storage_vars_rel cenv cx /\ transient_vars_rel cenv cx` by
+    gvs[stmt_state_rel_def, state_rel_def] >>
   qspecl_then [`cenv`, `cx`, `src`, `id`, `ts`, `StorageVarDecl tr ty`,
                `id_str`, `tr`, `slot`] mp_tac toplevel_decl_ce_vars >>
   simp[var_decl_transient_def] >> strip_tac >>
-  `stmt_state_rel ctx func cenv cx (es with gas_obs := []) s0` by
-    (drule msg_gas_state_frame >>
-     disch_then (qspecl_then [`s0.vs_gas_readings`, `s0.vs_inst_idx`, `[]`] mp_tac) >>
-     simp[NoAsms]) >>
-  simp[gasOutcomeTheory.gas_outcome_def, gasSummaryTheory.gas_summary_at_def] >>
-  qexists_tac `[]` >> disj1_tac >>
-  qexistsl_tac [`INL (PlaceR (StoragePlace tr (n2w slot) tv))`, `es`, `OK s0`] >>
-  conj_tac
-  >- (`!gs. eval_base_place cx (TopLevelNameTarget (src,id)) (es with gas_obs := gs) =
-            (INL (PlaceR (StoragePlace tr (n2w slot) tv)), es with gas_obs := gs)` by
-        (gen_tac >> asm_simp_tac (srw_ss()) [Once evaluate_def, lookup_global_def,
-           bind_def, lift_option_type_def, return_def, LET_THM]) >>
-      simp[gasSummaryTheory.gas_marked_exec_def, fragGasModeTheory.gas_marked_path_def,
-           fragGasPathTheory.gas_path_rules]) >>
   qpat_x_assum `compile_get_target_ptr _ _ _ _ = _` mp_tac >>
   Cases_on `tr` >>
   simp[compile_get_target_ptr_def, comp_return_def, LET_THM] >>
   strip_tac >> gvs[] >>
-  simp[exit_result_def, target_post_def] >>
+  simp[target_post_def, stmt_state_rel_start_gas_obs, Abbr `es1`] >>
   simp[eval_operand_def, place_ptr_rel_def, slot_loc_def,
        value_type_place_def, place_readable_def]
 QED
@@ -363,17 +385,8 @@ QED
 Resume target_toplevel_case[mapping]:
   `?tr'. cenv.ce_hashmap_info (src,id) = SOME (tr',kt,vt')` by
     metis_tac[toplevel_target_env] >>
-  reverse (Cases_on `storage_vars_rel cenv cx /\ transient_vars_rel cenv cx`)
-  >- gvs[stmt_state_rel_def, state_rel_def] >>
-  qspecl_then [`cenv`, `cx`, `src`, `id`, `ts`, `HashMapVarDecl tr kt vt'`,
-               `id_str`, `tr`, `slot`] mp_tac toplevel_decl_ce_vars >>
-  simp[var_decl_transient_def] >> strip_tac >>
-  `stmt_state_rel ctx func cenv cx (es with gas_obs := []) s0` by
-    (drule msg_gas_state_frame >>
-     disch_then (qspecl_then [`s0.vs_gas_readings`, `s0.vs_inst_idx`, `[]`] mp_tac) >>
-     simp[NoAsms]) >>
   simp[gasOutcomeTheory.gas_outcome_def, gasSummaryTheory.gas_summary_at_def] >>
-  qexists_tac `[]` >> disj1_tac >>
+  qexists_tac `[]` >> disj2_tac >> disj1_tac >>
   qexistsl_tac [`INL (HashMapRef tr (n2w slot) kt vt')`, `es`, `OK s0`] >>
   conj_tac
   >- (`!gs. eval_base_place cx (TopLevelNameTarget (src,id)) (es with gas_obs := gs) =
@@ -382,11 +395,23 @@ Resume target_toplevel_case[mapping]:
            bind_def, lift_option_type_def, return_def, LET_THM]) >>
       simp[gasSummaryTheory.gas_marked_exec_def, fragGasModeTheory.gas_marked_path_def,
            fragGasPathTheory.gas_path_rules]) >>
+  simp[exit_result_def] >> gen_tac >> strip_tac >>
+  `stmt_state_rel H ctx func cenv cx es s0 /\
+   storage_well_formed_on cx es (FST H)` by metis_tac[] >>
+  `storage_well_formed_on cx (es with gas_obs := []) (FST H)` by
+    (fs[vyperStorageFootprintTheory.storage_well_formed_on_def] >>
+     rpt strip_tac >> res_tac >>
+     Cases_on `b` >> fs[vyperStorageBackendTheory.get_storage_def]) >>
+  `storage_vars_rel cenv cx /\ transient_vars_rel cenv cx` by
+    gvs[stmt_state_rel_def, state_rel_def] >>
+  qspecl_then [`cenv`, `cx`, `src`, `id`, `ts`, `HashMapVarDecl tr kt vt'`,
+               `id_str`, `tr`, `slot`] mp_tac toplevel_decl_ce_vars >>
+  simp[var_decl_transient_def] >> strip_tac >>
   qpat_x_assum `compile_get_target_ptr _ _ _ _ = _` mp_tac >>
   Cases_on `tr` >>
   simp[compile_get_target_ptr_def, comp_return_def, LET_THM] >>
   strip_tac >> gvs[] >>
-  simp[exit_result_def, target_post_def] >>
+  simp[target_post_def, stmt_state_rel_start_gas_obs] >>
   simp[eval_operand_def, place_ptr_rel_def, slot_loc_def,
        value_type_place_def, place_readable_def]
 QED

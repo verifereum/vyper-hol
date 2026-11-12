@@ -27,7 +27,7 @@ Theorem annassign_memory_assignment_declaration_ptr:
  (sty = dty \/ is_bytestring_type dty) /\
  0 < type_memory_bytes cenv sty /\ type_memory_bytes cenv sty < dimword (:256) /\
  fn_has_code sa sb func /\ fn_inst_ids_distinct func /\
- stmt_state_rel ctx func cenv cx es s0 /\ ghost_inv d cenv cx es G0 tn0 s0 /\
+ stmt_state_rel H ctx func cenv cx es s0 /\ ghost_inv H d cenv cx es G0 tn0 s0 /\
  local_ptrs_reserved cenv sa /\ not_fresh_at sa p /\ not_fresh_at sa src /\
  (!x n. cenv.ce_return_buf = SOME (PtrVar (Var x) n) ==> not_fresh_at sa x) /\
  (!x n. cenv.ce_return_pc = SOME (PtrVar (Var x) n) ==> not_fresh_at sa x) /\
@@ -56,13 +56,13 @@ Theorem annassign_memory_assignment_declaration_ptr:
  type_memory_size stv = type_memory_bytes cenv sty /\
  type_memory_size dtv = type_memory_bytes cenv dty /\ type_memory_size dtv <= cap ==>
  ?sf Gf tnf.
- gas_path_ptr (cx_dead cx) 0 ctx func PG G0 tn0 s0 0 Gf tnf (OK sf) /\
+ gas_path_ptr (cx_dead H cx) 0 ctx func PG G0 tn0 s0 0 Gf tnf (OK sf) /\
  sf.vs_current_bb = sb.cs_current_bb /\ sf.vs_inst_idx = LENGTH sb.cs_current_insts /\
  ~sf.vs_halted /\
- stmt_state_rel ctx func cenv cx
+ stmt_state_rel H ctx func cenv cx
    (es with scopes := (sc |+ (id,<|assignable := T; type := dtv;
                                  value := v; popped := []|>)) :: rest) sf /\
- ghost_inv d cenv cx
+ ghost_inv H d cenv cx
    (es with scopes := (sc |+ (id,<|assignable := T; type := dtv;
                                  value := v; popped := []|>)) :: rest) Gf tnf sf /\
  ghost_kept cenv es fr G0 tn0 s0 Gf tnf /\

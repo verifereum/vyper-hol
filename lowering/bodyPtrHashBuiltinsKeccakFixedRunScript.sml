@@ -39,7 +39,7 @@ Finalise hash_store_sha3_seq_ptr
 
 Theorem hash_alloc_store_sha3_seq_ptr:
   !D ctx fn PG G tn s aid sid hid p value out m t v cenv cx es.
-    stmt_state_rel ctx fn cenv cx es s /\
+    stmt_state_rel H ctx fn cenv cx es s /\
     MEM (mk_inst aid ALLOCA [Lit 32w] [p]) (fn_insts fn) /\
     step_inst_base (mk_inst aid ALLOCA [Lit 32w] [p]) s = OK t /\
     eval_operand value t = SOME v /\
@@ -86,7 +86,7 @@ QED
 
 Theorem hash_alloc_store_sha3_counted:
   !D ctx fn PG G tn s aid sid hid p value out m t v cenv cx es u bb.
-    stmt_state_rel ctx fn cenv cx es s /\
+    stmt_state_rel H ctx fn cenv cx es s /\
     MEM (mk_inst aid ALLOCA [Lit 32w] [p]) (fn_insts fn) /\
     step_inst_base (mk_inst aid ALLOCA [Lit 32w] [p]) s = OK t /\
     eval_operand value t = SOME v /\

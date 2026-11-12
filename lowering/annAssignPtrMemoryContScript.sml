@@ -56,29 +56,28 @@ Theorem annassign_memory_normal_continuation_ptr:
  lookup_var p salloc = SOME w /\ ptr_covers Ga tna p salloc sz /\
  MEM inst (fn_insts func) /\ inst.inst_opcode = ALLOCA /\ inst.inst_outputs = [p] /\
  FLOOKUP salloc.vs_allocas inst.inst_id = SOME (w2n w,sz) /\
- gas_marked_exec_ptr (cx_dead cx) (ctx,func) PG
+ gas_marked_exec_ptr (cx_dead H cx) (ctx,func) PG
    (bind (eval_expr cx e) (read_result cx)) (es,salloc,Ga,tna)
    marks (INL v) ee G tn (OK s) /\
- expr_post ctx func c cx e es sa sb salloc (ee with gas_obs := []) v op s /\
+ expr_post H ctx func c cx e es sa sb salloc (ee with gas_obs := []) v op s /\
  s.vs_current_bb = sb.cs_current_bb /\ s.vs_inst_idx = LENGTH sb.cs_current_insts /\
- ghost_inv d c cx (ee with gas_obs := []) G tn s /\
+ ghost_inv H d c cx (ee with gas_obs := []) G tn s /\
  ghost_kept c es sa Ga tna salloc G tn /\
  ptr_val_ok cx (expr_type e) v op G tn s /\ ptr_buf_ok c e op G s ==>
  ?ff u Gf tnf.
- gas_marked_exec_ptr (cx_dead cx) (ctx,func) PG (new_variable id tyv v)
+ gas_marked_exec_ptr (cx_dead H cx) (ctx,func) PG (new_variable id tyv v)
    (ee with gas_obs := [],s,G,tn) [] (INL ()) ff Gf tnf (OK u) /\
  (?cenv''. stmt_lands lctx sf (INL ()) u /\ ~u.vs_halted /\
    (~block_is_terminated sf /\ cenv'' = c) /\
    cenv_top_ext old cenv'' ff.scopes /\
-   stmt_state_rel ctx func cenv'' cx ff u /\ ghost_inv d cenv'' cx ff Gf tnf u /\
+   stmt_state_rel H ctx func cenv'' cx ff u /\ ghost_inv H d cenv'' cx ff Gf tnf u /\
    (!x z. not_fresh_at fr x /\ lookup_var x salloc = SOME z ==> lookup_var x u = SOME z) /\
    (!x. not_fresh_at fr x ==> FLOOKUP Gf x = FLOOKUP Ga x /\
       op_taint tnf (Var x) = op_taint tna (Var x)))
 Proof
  rpt gen_tac >> disch_then (map_every assume_tac o CONJUNCTS) >>
  `post_value_type c e = expr_type e` by
-   metis_tac[loweringPostsTheory.post_value_type_lowered,
-             loweringPostsTheory.post_value_type_bytestring] >>
+   metis_tac[post_value_type_lowered, post_value_type_bytestring] >>
  `!tail. bind (eval_expr cx e) (read_result cx)
    (es with gas_obs := gas_explicit marks salloc.vs_gas_readings ++ tail) =
      (INL v,ee with gas_obs := tail)` by fs[gas_marked_exec_ptr_def] >>
@@ -108,7 +107,7 @@ Resume annassign_memory_normal_continuation_ptr[copy]:
    (asm_rewrite_tac[] >> irule annassign_memory_source_footprint_ptr >> metis_tac[]) >>
  `lookup_var p s = SOME w /\
   FLOOKUP s.vs_allocas inst.inst_id = SOME (w2n w,sz) /\
-  stmt_state_rel ctx func c cx (ee with gas_obs := []) s /\
+  stmt_state_rel H ctx func c cx (ee with gas_obs := []) s /\
   expr_val_at c cx (expr_type e) sa sb (ee with gas_obs := []) v (Var src) s` by
    (fs[expr_post_def] >> metis_tac[]) >>
  `FLOOKUP G p = FLOOKUP Ga p /\ op_taint tn (Var p) = op_taint tna (Var p)` by
@@ -132,13 +131,13 @@ Resume annassign_memory_normal_continuation_ptr[copy]:
       (mp_then Any mp_tac compile_assign_value_memory_widen_open) >>
     metis_tac[bytestring_memory_bytes_positive]) >>
  `?u Gf tnf.
-  gas_path_ptr (cx_dead cx) 0 ctx func PG G tn s 0 Gf tnf (OK u) /\
+  gas_path_ptr (cx_dead H cx) 0 ctx func PG G tn s 0 Gf tnf (OK u) /\
   u.vs_current_bb = sf.cs_current_bb /\ u.vs_inst_idx = LENGTH sf.cs_current_insts /\
   ~u.vs_halted /\
-  stmt_state_rel ctx func c cx
+  stmt_state_rel H ctx func c cx
    ((ee with gas_obs := []) with scopes :=
     (sc |+ (id,<|assignable := T; type := tyv; value := v; popped := []|>)) :: rest) u /\
-  ghost_inv d c cx
+  ghost_inv H d c cx
    ((ee with gas_obs := []) with scopes :=
     (sc |+ (id,<|assignable := T; type := tyv; value := v; popped := []|>)) :: rest) Gf tnf u /\
   ghost_kept c (ee with gas_obs := []) fr G tn s Gf tnf /\
@@ -159,14 +158,14 @@ QED
 
 Resume annassign_memory_normal_continuation_ptr[post]:
  markerLib.RESUME_TAC >>
- qmatch_asmsub_abbrev_tac `stmt_state_rel ctx func c cx
+ qmatch_asmsub_abbrev_tac `stmt_state_rel H ctx func c cx
    (ee with <|scopes := scs; gas_obs := []|>) u` >>
  `ee with <|scopes := scs; gas_obs := []|> =
   (ee with scopes := scs) with gas_obs := []` by
    simp[evaluation_state_component_equality] >>
- `stmt_state_rel ctx func c cx (ee with scopes := scs) u` by
+ `stmt_state_rel H ctx func c cx (ee with scopes := scs) u` by
    metis_tac[stmt_state_rel_gas_obs] >>
- `ghost_inv d c cx (ee with scopes := scs) Gf tnf u` by
+ `ghost_inv H d c cx (ee with scopes := scs) Gf tnf u` by
    metis_tac[ghost_inv_gas_obs] >>
  qpat_x_assum `ee with <|scopes := scs; gas_obs := []|> = _` kall_tac >>
  unabbrev_all_tac >>
@@ -177,7 +176,7 @@ Resume annassign_memory_normal_continuation_ptr[post]:
  qexists `c` >>
  gns[stmt_lands_def, stmt_state_rel_gas_obs, ghost_inv_gas_obs] >>
  conj_tac
- >- (qpat_x_assum `expr_post _ _ _ _ _ _ _ _ _ _ _ _ _`
+ >- (qpat_x_assum `expr_post _ _ _ _ _ _ _ _ _ _ _ _ _ _`
        (strip_assume_tac o REWRITE_RULE [expr_post_def]) >> metis_tac[]) >>
  qpat_x_assum `ghost_kept c es sa Ga tna salloc G tn`
    (strip_assume_tac o REWRITE_RULE [ghost_kept_def]) >>
@@ -222,22 +221,22 @@ Theorem annassign_memory_concrete_rhs_outcome_ptr:
  lookup_var p salloc = SOME w /\ ptr_covers Ga tna p salloc sz /\
  MEM inst (fn_insts func) /\ inst.inst_opcode = ALLOCA /\ inst.inst_outputs = [p] /\
  FLOOKUP salloc.vs_allocas inst.inst_id = SOME (w2n w,sz) /\
- gas_outcome_ptr (cx_dead cx) (cx_tops cx) (ctx,func) PG
+ gas_outcome_ptr (cx_dead H cx) (cx_tops cx) (ctx,func) PG
    (bind (eval_expr cx e) (read_result cx)) (es,salloc,Ga,tna)
    (\res ee G tn s. ?v. res = INL v /\
-     expr_post ctx func c cx e es sa sb salloc ee v op s /\
+     expr_post H ctx func c cx e es sa sb salloc ee v op s /\
      s.vs_current_bb = sb.cs_current_bb /\ s.vs_inst_idx = LENGTH sb.cs_current_insts /\
-     ghost_inv d c cx ee G tn s /\ ptr_val_ok cx (expr_type e) v op G tn s /\
+     ghost_inv H d c cx ee G tn s /\ ptr_val_ok cx (expr_type e) v op G tn s /\
      (~is_word_type (expr_type e) ==> ptr_buf_ok c e op G s) /\
      ghost_kept c es sa Ga tna salloc G tn)
    (\res ee gt r. expr_exit res r) ==>
- gas_outcome_ptr (cx_dead cx) (cx_tops cx) (ctx,func) PG
+ gas_outcome_ptr (cx_dead H cx) (cx_tops cx) (ctx,func) PG
    (eval_stmt cx (AnnAssign id typ e)) (es,salloc,Ga,tna)
    (\res ee G tn s. ?cenv''.
      stmt_lands lctx sf res s /\ ~s.vs_halted /\
      (res = INL () ==> ~block_is_terminated sf /\ cenv'' = c) /\
      cenv_top_ext old cenv'' ee.scopes /\
-     stmt_state_rel ctx func cenv'' cx ee s /\ ghost_inv d cenv'' cx ee G tn s /\
+     stmt_state_rel H ctx func cenv'' cx ee s /\ ghost_inv H d cenv'' cx ee G tn s /\
      (!x z. not_fresh_at fr x /\ lookup_var x salloc = SOME z ==> lookup_var x s = SOME z) /\
      (!x. not_fresh_at fr x ==> FLOOKUP G x = FLOOKUP Ga x /\
        op_taint tn (Var x) = op_taint tna (Var x)))

@@ -213,6 +213,26 @@ Proof
   ho_match_mp_tac scfg_iprefix_ind >> simp[] >> rpt strip_tac >> decide_tac
 QED
 
+Theorem scfg_iprefix_continue_same_fuel:
+  !C bb s t. scfg_iprefix C bb s t ==>
+  !n r.
+  (!j i. s.vs_inst_idx <= j /\ j < t.vs_inst_idx /\
+    get_instruction bb j = SOME i ==> i.inst_opcode <> INVOKE) /\
+  exec_block n C bb t = r ==>
+  exec_block n C bb s = r
+Proof
+  ho_match_mp_tac scfg_iprefix_strongind >> rpt strip_tac >>
+  `SUC s.vs_inst_idx <= t.vs_inst_idx` by
+    (drule scfg_iprefix_index >> simp[]) >>
+  `i.inst_opcode <> INVOKE` by
+    (first_x_assum irule >> qexists_tac `s.vs_inst_idx` >> simp[]) >>
+  `step_inst n C i s = OK u` by metis_tac[step_inst_non_invoke] >>
+  `exec_block n C bb (u with vs_inst_idx := SUC s.vs_inst_idx) = r` by
+    (first_x_assum irule >> simp[] >> rpt strip_tac >>
+     first_x_assum irule >> simp[] >> metis_tac[arithmeticTheory.LESS_EQ_TRANS, arithmeticTheory.LESS_EQ_SUC_REFL]) >>
+  simp[Once exec_block_def]
+QED
+
 Theorem scfg_iprefix_same_index:
   scfg_iprefix C bb a b /\ a.vs_inst_idx = b.vs_inst_idx ==> a = b
 Proof

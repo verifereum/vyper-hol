@@ -11,7 +11,7 @@ Theorem compile_typed_copy_fields_frag_ptr:
        compile_with_byte_offset src soff b = (sp,c) /\
        compile_store_memory_typed cenv dp dt sp st c = ((),d) ==>
        cs_extends a d /\
-       frag_exec_ptr cx ctx PG a d
+       frag_exec_ptr H cx ctx PG a d
          (I (dt::ds) (st::ss) doff soff a)
          (I ds ss (doff + type_memory_bytes cenv dt)
                   (soff + type_memory_bytes cenv st) d) R) ==>
@@ -19,7 +19,7 @@ Theorem compile_typed_copy_fields_frag_ptr:
       LENGTH dts = LENGTH sts /\
       compile_typed_copy_fields cenv dst src dts sts doff soff a = ((),z) ==>
       cs_extends a z /\
-      frag_exec_ptr cx ctx PG a z (I dts sts doff soff a)
+      frag_exec_ptr H cx ctx PG a z (I dts sts doff soff a)
         (I [] [] (doff + SUM (MAP (type_memory_bytes cenv) dts))
                  (soff + SUM (MAP (type_memory_bytes cenv) sts)) z) R
 Proof
@@ -43,7 +43,7 @@ Proof
   qpat_x_assum `!dt ds st ss doff soff a b c d dp sp. _` drule_all >>
   disch_then (qspecl_then [`dts`, `t`] strip_assume_tac) >>
   conj_tac >- metis_tac[cs_extends_trans] >>
-  qpat_x_assum `frag_exec_ptr _ _ _ sd z _ _ _` mp_tac >>
+  qpat_x_assum `frag_exec_ptr _ _ _ _ sd z _ _ _` mp_tac >>
   asm_simp_tac bool_ss [AC arithmeticTheory.ADD_ASSOC arithmeticTheory.ADD_COMM] >>
   strip_tac >>
   metis_tac[frag_exec_ptr_seq]

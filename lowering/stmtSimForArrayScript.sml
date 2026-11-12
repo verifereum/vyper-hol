@@ -11,9 +11,10 @@ Ancestors
   exprSimHypsDefs exprSimProps
 
 Theorem array_for_hypotheses:
-  !tops bindings id ty e n body env ret_ty env'.
+  !tops bindings id ty e n body env ret_ty env' m arr.
   supported_stmt tops bindings (For id ty (Array e) n body) /\
-  type_stmt env ret_ty (For id ty (Array e) n body) = SOME env' ==>
+  type_stmt env ret_ty (For id ty (Array e) n body) = SOME env' /\
+  e = Name (ArrayT ty (Fixed m)) arr ==>
   ?name env_b.
     e = Name (ArrayT ty (Fixed n)) name /\ env' = env /\
     well_typed_expr env (Name (ArrayT ty (Fixed n)) name) /\
@@ -25,8 +26,7 @@ Theorem array_for_hypotheses:
 Proof
   rpt gen_tac >> strip_tac >>
   `?name. e = Name (ArrayT ty (Fixed n)) name` by
-    (irule supported_array_iterator_shape >>
-     gvs[supported_stmt_def] >> metis_tac[]) >>
+    gvs[supported_stmt_def, supported_iterator_def] >>
   gvs[type_stmt_def, supported_stmt_def, well_typed_iterator_def,
       expr_type_def, optionTheory.IS_SOME_EXISTS, AllCaseEqs()]
 QED
@@ -256,8 +256,8 @@ QED
 
 (* An allocation-local copy preserves the constructor's immutable snapshot. *)
 Theorem array_iter_copy_immutables:
-  !func cenv cx es s t inst b sz bytes.
-    stmt_state_rel ctx func cenv cx es s /\
+  !H func cenv cx es s t inst b sz bytes.
+    stmt_state_rel H ctx func cenv cx es s /\
     MEM inst (fn_insts func) /\ inst.inst_opcode = ALLOCA /\
     FLOOKUP s.vs_allocas inst.inst_id = SOME (b,sz) /\ bytes <= sz /\
     t.vs_data_section = s.vs_data_section /\
@@ -271,7 +271,7 @@ Proof
     fs[stmt_state_rel_def, state_rel_def] >>
   irule immutables_rel_mem_agree >> qexists_tac `s` >> simp[] >>
   rpt strip_tac >>
-  qpat_x_assum `stmt_state_rel _ _ _ _ _ _` mp_tac >>
+  qpat_x_assum `stmt_state_rel _ _ _ _ _ _ _` mp_tac >>
   pure_rewrite_tac[stmt_state_rel_def, immutable_alloca_sep_def] >>
   strip_tac >> qpat_x_assum `cenv.ce_is_ctor ==> _` drule >>
   disch_then drule_all >> strip_tac >>
@@ -280,8 +280,8 @@ Proof
 QED
 
 Theorem array_iter_copy_declare_rel:
-  !ctx func cenv cx es s t id p sz w inst v tv sc rest a sa.
-    stmt_state_rel ctx func cenv cx es s /\ fn_inst_ids_distinct func /\
+  !H ctx func cenv cx es s t id p sz w inst v tv sc rest a sa.
+    stmt_state_rel H ctx func cenv cx es s /\ fn_inst_ids_distinct func /\
     es.scopes = sc :: rest /\ lookup_scopes id es.scopes = NONE /\
     FLOOKUP cenv.ce_vars id = SOME (PtrVar (Var p) sz) /\
     not_local_ptr cenv es.scopes p /\ lookup_var p s = SOME w /\
@@ -296,7 +296,7 @@ Theorem array_iter_copy_declare_rel:
     LENGTH s.vs_memory <= LENGTH t.vs_memory /\
     type_memory_size tv <= sz /\ val_wf tv v /\ value_has_type tv v /\
     val_in_memory tv v (w2n w) t.vs_memory ==>
-    stmt_state_rel ctx func cenv cx
+    stmt_state_rel H ctx func cenv cx
       (es with scopes :=
         (sc |+ (id, <|assignable := a; type := tv; value := v; popped := []|>)) :: rest) t
 Proof
@@ -341,13 +341,13 @@ Proof
 QED
 
 Theorem array_snapshot_memory:
-  !name ei entry tv n al cenv ptr sz ctx func cx s.
+  !H name ei entry tv n al cenv ptr sz ctx func cx s.
   lookup_scopes name ei.scopes = SOME entry /\
   entry.type = ArrayTV tv (Fixed n) /\
   entry.value = ArrayV (SArrayV al) /\
   value_has_type (ArrayTV tv (Fixed n)) (ArrayV (SArrayV al)) /\
   FLOOKUP cenv.ce_vars name = SOME (PtrVar (Var ptr) sz) /\
-  stmt_state_rel ctx func cenv cx ei s ==>
+  stmt_state_rel H ctx func cenv cx ei s ==>
   ?base. eval_operand (Var ptr) s = SOME base /\
     (!k. k < n ==>
       val_in_memory tv

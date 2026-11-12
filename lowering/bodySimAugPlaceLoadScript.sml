@@ -270,8 +270,8 @@ Proof
 QED
 
 Theorem aug_place_memory_word:
-  !ctx func cenv cx es s id p sz w entry path off ptv v ty.
-    stmt_state_rel ctx func cenv cx es s /\
+  !H ctx func cenv cx es s id p sz w entry path off ptv v ty.
+    stmt_state_rel H ctx func cenv cx es s /\
     FLOOKUP cenv.ce_vars id = SOME (PtrVar (Var p) sz) /\
     lookup_var p s = SOME w /\ lookup_scopes id es.scopes = SOME entry /\
     value_has_type entry.type entry.value /\ well_formed_type_value entry.type /\
@@ -317,7 +317,7 @@ Theorem aug_place_memory_load:
   supported_target_info tops bindings t = SOME info /\
   eval_target_place cx t es = (INL (MemoryPlace id path),st) /\
   read_place cx (MemoryPlace id path) st = (INL cur,st') /\
-  stmt_state_rel ctx func cenv cx st s /\
+  stmt_state_rel H ctx func cenv cx st s /\
   place_ptr_rel cenv cx s (PlaceR (MemoryPlace id path)) w loc (Type ty) /\
   is_word_type ty ==>
   ?tv. evaluate_type (get_tenv cx) ty = SOME tv /\
