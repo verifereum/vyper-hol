@@ -2661,8 +2661,8 @@ Resume evaluate_finite_frame[expr_ifexp]:
   imp_res_tac conditional_result_state >> gvs[] >>
   gvs[switch_BoolV_def, bind_def, AllCaseEqs()] >>
   imp_res_tac read_result_state >>
-  gvs[COND_RATOR, AllCaseEqs(), return_def, raise_def] >>
-  FIRST [asm "prefix" (ACCEPT_TAC o SRULE []),
+  gvs[COND_RATOR, AllCaseEqs(), return_def, raise_def]
+  >>~- ([`read_result _ _ _ = (INL (BoolV _),_)`],
     (qspecl_then [`cx`,`e`] (drule_all o CONJUNCT1)
        (cj 5 eval_scc_type_sound_results_mutual) >> strip_tac >> gvs[] >>
      FIRST [
@@ -2679,7 +2679,8 @@ Resume evaluate_finite_frame[expr_ifexp]:
      goal_assum (drule_at Any) >> simp[] >>
      (conj_tac >- (qexists_tac `R` >> simp[] >>
        asm "closure" (ACCEPT_TAC o SRULE []))) >>
-     qexists_tac `env` >> simp[])]
+     qexists_tac `env` >> simp[])) >>
+  asm "prefix" (ACCEPT_TAC o SRULE [])
 QED
 
 Resume evaluate_finite_frame[expr_subscript]:
