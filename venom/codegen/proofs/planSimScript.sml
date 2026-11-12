@@ -49,10 +49,11 @@ Proof
   Cases_on `t` >> fs[]
 QED
 
-(* SELFDESTRUCT: produces AsmHalt, needs stack >= 1 *)
+(* SELFDESTRUCT: produces AsmHalt, needs stack >= 1 and a non-static
+   frame *)
 Theorem asm_step_selfdestruct:
   !lo o2pc st.
-    LENGTH st.as_stack >= 1 ==>
+    LENGTH st.as_stack >= 1 /\ ~st.as_call_ctx.cc_static ==>
     ?st'. asm_step lo o2pc (AsmOp "SELFDESTRUCT") st = AsmHalt st'
 Proof
   rpt strip_tac >>
