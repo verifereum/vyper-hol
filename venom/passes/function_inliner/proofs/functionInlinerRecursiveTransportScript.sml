@@ -839,3 +839,60 @@ Proof
   simp[]
 QED
 
+
+Theorem inline_parameter_prefix_boundary[local]:
+  inline_annotated_choice_path C path fn root /\
+  inline_path_rename path = I /\
+  lookup_block l fn.fn_blocks = SOME bb /\
+  bb.bb_instructions = params ++ tail /\ param_insts_from 0 params ==>
+  inline_parameter_boundary_path path fn l (LENGTH params)
+    root l (LENGTH params)
+Proof
+  strip_tac >>
+  `inline_parameter_interval fn l 0 (LENGTH params)` by
+    (simp[inline_parameter_interval_def] >>
+     rpt strip_tac >> disj1_tac >>
+     drule_all callLayoutDefsTheory.param_insts_from_el >>
+     simp[callLayoutDefsTheory.param_inst_at_def, listTheory.EL_APPEND_EQN]) >>
+  drule_all inline_parameter_interval_transport >> strip_tac >>
+  drule functionInlinerEntryHandoffTheory.inline_parameter_boundary_path_zero >>
+  simp[] >> strip_tac >> gvs[]
+QED
+
+Theorem inline_selected_body_routed_boundary:
+  inline_annotated_origin C n root cert /\
+  inline_call_incidence cert root p fn l j orig (InlineSelected u q e zipper) /\
+  inline_namespace_leaf_at cert q sigma child /\
+  child.fn_blocks = entry::rest /\
+  entry.bb_instructions = params ++ tail /\ param_insts_from 0 params /\
+  inline_parameter_boundary_path (InlineEnter e::zipper)
+    e.ise_callee entry.bb_label (LENGTH params) root ml mj ==>
+  ?path. inline_routed_leaf cert root q child path /\
+    inline_parameter_boundary_path path child entry.bb_label (LENGTH params)
+      root ml mj
+Proof
+  strip_tac >>
+  drule functionInlinerPairedSelectionTheory.inline_selected_paired_separation >>
+  simp[] >> disch_then drule >> strip_tac >>
+  drule functionInlinerOccurrencesTheory.inline_annotated_entry_route >> strip_tac >>
+  qpat_x_assum `!prefix. inline_routed_leaf _ _ _ _ _ ==> _` drule >> strip_tac >>
+  `child = inline_entry_function b` by
+    (drule functionInlinerRoutedProvenanceTheory.inline_routed_leaf_namespace >>
+     strip_tac >>
+     gvs[functionInlinerEnvelopesTheory.inline_namespace_leaf_at_def] >>
+     imp_res_tac functionInlinerSelectedParameterDescriptorsTheory.inline_namespace_node_same_address >>
+     qpat_x_assum `InlineNamespaceLeaf child = InlineNamespaceLeaf (inline_entry_function b)` mp_tac >>
+     simp[NoAsms]) >>
+  qpat_assum `inline_routed_leaf b e.ise_callee _ _ _`
+    (mp_then Any mp_tac functionInlinerReturnRoutingTheory.inline_routed_leaf_annotated_path) >>
+  disch_then drule >> strip_tac >>
+  `lookup_block entry.bb_label child.fn_blocks = SOME entry` by
+    (gvs[venomInstTheory.lookup_block_def, listTheory.FIND_thm]) >>
+  qpat_x_assum `child = inline_entry_function b` (fn th => fs[GSYM th]) >>
+  drule_all inline_parameter_prefix_boundary >> strip_tac >>
+  qexists `path' ++ [InlineEnter e] ++ zipper` >>
+  conj_tac >- metis_tac[] >>
+  pure_rewrite_tac[GSYM listTheory.APPEND_ASSOC] >>
+  irule inline_parameter_boundary_path_append >>
+  qexistsl [`e.ise_callee`, `LENGTH params`, `entry.bb_label`] >> simp[]
+QED
