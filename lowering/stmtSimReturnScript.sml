@@ -835,8 +835,8 @@ Proof
     (fn th => RULE_ASSUM_TAC (REWRITE_RULE [th])) >>
   irule (REWRITE_RULE [APPEND] (Q.INST [`left` |-> `[]`, `right` |-> `[]`]
            (SPEC_ALL (cj 2 gas_origin_ptr_path_rules)))) >>
-  qexistsl_tac [`u with vs_inst_idx := SUC (LENGTH sa.cs_current_insts)`,
-                `G`, `step_taint i s u tn`] >>
+  qexistsl_tac [`G`, `u with vs_inst_idx := SUC (LENGTH sa.cs_current_insts)`,
+                `step_taint i s u tn`] >>
   simp[] >> irule (cj 1 gas_origin_ptr_path_rules) >> simp[])
 QED
 
