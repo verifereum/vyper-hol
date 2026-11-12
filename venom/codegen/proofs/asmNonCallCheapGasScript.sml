@@ -2,7 +2,7 @@
 Theory asmNonCallCheapGas
 Ancestors
   asmFrameRel asmRunBounded frameStep asmFrameLocalStep asmCallGasArithmetic
-  vfmExecution vfmExecutionProp vfmOperation
+  vfmExecution vfmExecutionProp vfmOperation asmCheapOpcodeClassify asmDataSuffixProps
 
 Theorem step_inst_fixed_arithmetic_gas_budget:
   MEM op [Add; Mul; Sub; Div; SDiv; Mod; SMod; AddMod; MulMod;
@@ -179,3 +179,116 @@ Proof
       set_current_context_def, assert_def, fail_def, LET_THM,
       frame_gas_left_def, AllCaseEqs()] >> decide_tac
 QED
+
+Theorem asm_noncall_cheap_gas_conditional:
+  (!op es c rb rest B r s'.
+    MEM op [Balance; ExtCodeSize; ExtCodeHash] /\
+    es.contexts = (c,rb)::rest /\ wf_context c /\
+    2700 <= B /\ B <= c.msgParams.gasLimit - c.gasUsed /\
+    step_inst op es = (r,s') ==>
+    r <> INR (SOME OutOfGas) /\
+    frame_gas_left es <= frame_gas_left s' + B) ==>
+  !prog data es0 a es H.
+    asm_frame_prog_ok prog /\ asm_frame_rel prog data es0 a es /\
+    a.as_pc < LENGTH prog /\ ~is_data_inst (EL a.as_pc prog) /\
+    EL a.as_pc prog <> AsmOp "RETURNDATACOPY" /\
+    asm_inst_gas_ok H (EL a.as_pc prog) a.as_stack /\
+    50000 + 8 * H + memory_cost H <= frame_gas_left es /\
+    EL a.as_pc prog <> AsmOp "CALL" /\
+    EL a.as_pc prog <> AsmOp "STATICCALL" /\
+    ~(?name. EL a.as_pc prog = AsmOp name /\
+       MEM name ["SLOAD";"SSTORE";"TLOAD";"TSTORE";"MLOAD";"MSTORE";
+         "MSTORE8";"SHA3";"RETURN";"REVERT";"CALLDATACOPY";"CODECOPY";
+         "EXTCODECOPY";"MCOPY";"LOG0";"LOG1";"LOG2";"LOG3";"LOG4"]) ==>
+    !op r s'.
+      next_opcode (FST (HD es.contexts)) = SOME op /\
+      step_inst op es = (r,s') /\
+      LENGTH s'.contexts = LENGTH es.contexts ==>
+      r <> INR (SOME OutOfGas) /\
+      frame_gas_left es <= frame_gas_left s' +
+        (50000 + 8 * H + memory_cost H)
+Proof
+  disch_tac >> rpt gen_tac >> strip_tac >>
+  fs[asm_frame_rel_def] >>
+  `wf_context c` by gvs[wf_state_def] >>
+  drule frame_next_opcode >>
+  disch_then drule >> disch_then drule >>
+  simp[] >> strip_tac >> rpt gen_tac >> strip_tac >>
+  gvs[] >>
+  `encoding_wf_inst (EL a.as_pc prog) (SND (compute_label_offsets prog))` by
+    (irule asmToBytecodeProofsTheory.asm_encoding_wf_el >>
+     gvs[asm_frame_prog_ok_def]) >>
+  `c.gasUsed <= c.msgParams.gasLimit` by gvs[wf_context_def] >>
+  `50000 + 8 * H + memory_cost H <= c.msgParams.gasLimit - c.gasUsed` by
+    gvs[frame_gas_left_def] >>
+  `8 <= 50000 + 8 * H + memory_cost H /\
+   3 <= 50000 + 8 * H + memory_cost H /\
+   10 <= 50000 + 8 * H + memory_cost H /\
+   20 <= 50000 + 8 * H + memory_cost H /\
+   1610 <= 50000 + 8 * H + memory_cost H /\
+   2700 <= 50000 + 8 * H + memory_cost H` by decide_tac >>
+  Cases_on `?name. EL a.as_pc prog = AsmOp name`
+  >- suspend "asmop" >>
+  suspend "non_asmop"
+QED
+
+Resume asm_noncall_cheap_gas_conditional[asmop]:
+      pop_assum strip_assume_tac >> gvs[] >>
+      drule cheap_asmop_classify >>
+      disch_then (qspecl_then
+        [`SND (compute_label_offsets (prog ++ [AsmDataItem data]))`,`name`] mp_tac) >>
+      (impl_tac >- gvs[asmToBytecodeProofsTheory.encoding_wf_inst_def,
+          asm_inst_gas_ok_def, listTheory.MEM]) >>
+      strip_tac >>
+      `r <> INR (SOME OutOfGas) /\ frame_gas_left es <=
+        frame_gas_left s' + (50000 + 8 * H + memory_cost H)` suffices_by
+        simp_tac bool_ss [AC arithmeticTheory.ADD_ASSOC arithmeticTheory.ADD_COMM] >> all_tac
+      >~ [`MEM op [Add; Mul; Sub; Div; SDiv; Mod; SMod; AddMod; MulMod;
+        SignExtend; LT; GT; SLT; SGT; Eq; IsZero; And; Or; XOr; Not; Byte;
+        ShL; ShR; SAR; CLZ]`] >-
+        (irule step_inst_fixed_arithmetic_gas_budget >> simp[] >> qexists_tac `op` >>
+         simp[Excl "MEM"] >> qpat_x_assum `MEM op _` mp_tac >> simp[listTheory.MEM]) 
+      >~ [`MEM op [Address; Origin; Caller; CallValue; CallDataSize; CodeSize;
+        GasPrice; ReturnDataSize; CoinBase; TimeStamp; Number; PrevRandao;
+        GasLimit; ChainId; BaseFee; BlobBaseFee; PC; MSize; Gas]`] >-
+        (irule step_inst_environment_gas_budget >> simp[] >> qexists_tac `op` >>
+         simp[Excl "MEM"] >> qpat_x_assum `MEM op _` mp_tac >> simp[listTheory.MEM])
+      >~ [`MEM op [Jump; JumpI; JumpDest; Stop; Invalid]`] >-
+        (irule step_inst_control_gas_budget >> simp[] >> qexists_tac `op` >>
+         simp[Excl "MEM"] >> qpat_x_assum `MEM op _` mp_tac >> simp[listTheory.MEM])
+      >~ [`MEM op [CallDataLoad; BlockHash; BlobHash; SelfBalance]`] >-
+        (irule step_inst_load_gas_budget >> simp[] >> qexists_tac `op` >>
+         simp[Excl "MEM"] >> qpat_x_assum `MEM op _` mp_tac >> simp[listTheory.MEM])
+      >~ [`MEM op [Balance; ExtCodeSize; ExtCodeHash]`] >-
+        (CONV_TAC (RAND_CONV (RAND_CONV (REWR_CONV arithmeticTheory.ADD_COMM))) >>
+         first_x_assum irule >> simp[] >> qexists_tac `op` >>
+         qpat_x_assum `MEM op _` mp_tac >> simp[listTheory.MEM]) >>
+      all_tac >~ [`op = Exp`] >- (
+        qpat_x_assum `op = Exp` SUBST_ALL_TAC >>
+        irule step_exp_gas_budget >> simp[GSYM step_inst_def]) >>
+      irule step_inst_stack_gas_budget >> simp[] >>
+      qexists_tac `op` >> simp[]
+QED
+
+Resume asm_noncall_cheap_gas_conditional[non_asmop]:
+  `encoding_wf_inst (EL a.as_pc prog)
+     (SND (compute_label_offsets (prog ++ [AsmDataItem data])))` by
+    (mp_tac (Q.SPECL [`prog ++ [AsmDataItem data]`,`a.as_pc`]
+       asmToBytecodeProofsTheory.asm_encoding_wf_el) >>
+     simp[data_suffix_encoding_wf, listTheory.EL_APPEND_EQN] >>
+     gvs[asm_frame_prog_ok_def]) >>
+  drule cheap_non_asmop_classify >>
+  disch_then (qspec_then `op` mp_tac) >>
+  (impl_tac >- gvs[]) >> strip_tac >>
+  `r <> INR (SOME OutOfGas) /\ frame_gas_left es <=
+    frame_gas_left s' + (50000 + 8 * H + memory_cost H)` suffices_by
+    simp_tac bool_ss [AC arithmeticTheory.ADD_ASSOC arithmeticTheory.ADD_COMM] >>
+  all_tac
+  >~ [`op = Push n ws`] >-
+    (irule step_inst_stack_gas_budget >> simp[] >>
+     conj_tac >- gvs[] >> qexists_tac `op` >> simp[]) >>
+  irule step_inst_control_gas_budget >> simp[] >>
+  conj_tac >- gvs[] >> qexists_tac `op` >> simp[]
+QED
+
+Finalise asm_noncall_cheap_gas_conditional
