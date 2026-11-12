@@ -2,7 +2,7 @@
    ADMITTED until proved. *)
 Theory ctorDeployLoweringReturn
 Ancestors
-  valueEncodingDefs ctorDeployLoweringDefs ctorDeployDefs o1PassContract ctorReturnFrame
+  valueEncodingDefs ctorDeployLoweringDefs ctorDeployDefs immSectionDead o1PassContract ctorReturnFrame
   vyperInterpreter supportedDecls symbolResolve ctorDeployInitcodeAsm
   codegenEncodingWf ctorDeployShape o1PipelineCorrect asmToBytecodeProofs list rich_list venomPipelineData unitLabelMap venomFnScheduleRunner
   venomPipelineRunner venomPipelineDriver vyperCompiler compileVyper asmIR
@@ -982,7 +982,7 @@ Theorem deploy_ctor_return:
     constructor_return_q func cenv (deploy_evaluation_context tops am tx) (LENGTH runtime_bc)
       (imm_len tops) nr nkey NoneV (st with scopes := []) (Halt final) /\
     final.vs_code = vs.vs_code /\ final.vs_labels = vs.vs_labels ==>
-    deploy_venom_result_rel tops runtime_bc tx
+    deploy_venom_result_rel HS tops runtime_bc tx
       (deploy_ctor_finish tops tx (deploy_evaluation_context tops am tx) nr mut am_c res st) (Halt final)
 Proof
   rpt gen_tac >> disch_then (map_every assume_tac o CONJUNCTS) >>

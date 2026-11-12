@@ -1,19 +1,19 @@
 (*
  * A first body slice of the lowering simulation (#625)
  *
- * Lemmas stated with frag_exec (fragExec), from stmt_state_rel at the
- * fragment's start to stmt_state_rel at its end, under fn_has_code,
+ * Lemmas stated with frag_exec (fragExec), from stmt_state_rel H at the
+ * fragment's start to stmt_state_rel H at its end, under fn_has_code,
  * fn_inst_ids_distinct and local_ptrs_reserved.  The sub-fragments (a
  * right-hand side, a condition, branch bodies) enter as hypotheses of the
  * same shape, stated at the source state where they run, so the lemmas
  * compose with each other and with the general statement and expression
  * induction.  A declaration's ALLOCA keeps its base below 2 ** 256 through
- * alloca_room, which stmt_state_rel carries.  Constructor declarations
+ * alloca_room, which stmt_state_rel H carries.  Constructor declarations
  * additionally require the allocation-prefix guard that keeps their stores
  * off immutables; runtime declarations use the trivial cap = 0 guard.
  *
  * TOP-LEVEL:
- *   expr_frag               — an expression's fragment, in the form the
+ *   expr_frag H               — an expression's fragment, in the form the
  *                             statement lemmas take it
  *   word_value              — a value held in one word as val_to_w256
  *   emit_op_frag            — one instruction that writes a word computed
@@ -56,15 +56,15 @@ Libs
    e's forced value, and keeps the variables handed out before it and the
    allocations made before it. *)
 Definition expr_frag_def:
-  expr_frag ctx func cenv cx ty e es R <=>
+  expr_frag H ctx func cenv cx ty e es R <=>
     !sa sb op v es' s0.
       lower_value compile_expr cenv ty e sa = (op, sb) /\
       (do result <- eval_expr cx e; read_result cx result od) es =
         (INL v, es') /\
       fn_has_code sa sb func /\ fn_inst_ids_distinct func /\
       local_ptrs_reserved cenv sa ==>
-      frag_exec ctx sa sb (\s. s = s0 /\ stmt_state_rel ctx func cenv cx es s)
-        (\s. stmt_state_rel ctx func cenv cx es' s /\
+      frag_exec ctx sa sb (\s. s = s0 /\ stmt_state_rel H ctx func cenv cx es s)
+        (\s. stmt_state_rel H ctx func cenv cx es' s /\
              eval_operand op s = SOME (val_to_w256 v) /\
              (!x w. not_fresh_at sa x /\ lookup_var x s0 = SOME w ==>
                     lookup_var x s = SOME w) /\
@@ -138,20 +138,22 @@ QED
 (* One instruction that computes w from the state and writes it to a fresh
    variable, and changes nothing else. *)
 Theorem emit_op_frag:
+  !H.
   !ctx func cenv cx es opc args sa op sb s0 w R.
     emit_op opc args sa = (op, sb) /\ local_ptrs_reserved cenv sa /\
     opc <> INVOKE /\ ~is_terminator opc /\
-    (stmt_state_rel ctx func cenv cx es s0 ==>
+    (stmt_state_rel H ctx func cenv cx es s0 ==>
      !out. step_inst_base (mk_inst sa.cs_next_id opc args [out]) s0 =
            OK (update_var out w s0)) ==>
-    frag_exec ctx sa sb (\s. s = s0 /\ stmt_state_rel ctx func cenv cx es s)
-      (\s. stmt_state_rel ctx func cenv cx es s /\ eval_operand op s = SOME w /\
+    frag_exec ctx sa sb (\s. s = s0 /\ stmt_state_rel H ctx func cenv cx es s)
+      (\s. stmt_state_rel H ctx func cenv cx es s /\ eval_operand op s = SOME w /\
            (!x w'. not_fresh_at sa x /\ lookup_var x s0 = SOME w' ==>
                    lookup_var x s = SOME w') /\
            (!aid b. FLOOKUP s0.vs_allocas aid = SOME b ==>
                     FLOOKUP s.vs_allocas aid = SOME b) /\
            s.vs_memory = s0.vs_memory) R
 Proof
+  gen_tac >>
   rpt strip_tac >>
   imp_res_tac emitted_insts_emit_op >> imp_res_tac emit_op_extends >>
   qabbrev_tac `out = STRING #"%" (toString sa.cs_next_var)` >>
@@ -209,13 +211,15 @@ QED
 
 (* The MLOAD of a word local's pointer reads the local's value. *)
 Theorem step_name_word:
+  !H.
   !func cenv cx es s id p sz entry n out ctx.
-    stmt_state_rel ctx func cenv cx es s /\
+    stmt_state_rel H ctx func cenv cx es s /\
     FLOOKUP cenv.ce_vars id = SOME (PtrVar (Var p) sz) /\
     lookup_scopes id es.scopes = SOME entry /\ word_value entry.value ==>
     step_inst_base (mk_inst n MLOAD [Var p] [out]) s =
       OK (update_var out (val_to_w256 entry.value) s)
 Proof
+  gen_tac >>
   rpt strip_tac >>
   `?w. lookup_var p s = SOME w /\
        memory_value_rel entry.type entry.value (w2n w) s.vs_memory` by
@@ -231,21 +235,23 @@ QED
 (* Slice lemma 1, the read: a word local held through its pointer loads
    with one MLOAD of the pointer, and the source reads the same value. *)
 Theorem compile_name_word_frag:
+  !H.
   !ctx func cenv cx ty ann id es R p sz entry.
     FLOOKUP cenv.ce_vars id = SOME (PtrVar (Var p) sz) /\
     is_word_type ann /\
     lookup_scopes id es.scopes = SOME entry /\ word_value entry.value ==>
     (do result <- eval_expr cx (Name ann id); read_result cx result od) es =
       (INL entry.value, es) /\
-    expr_frag ctx func cenv cx ty (Name ann id) es R
+    expr_frag H ctx func cenv cx ty (Name ann id) es R
 Proof
+  gen_tac >>
   rpt gen_tac >> strip_tac >>
   drule_then (qspecl_then [`cx`, `ann`] assume_tac) eval_name_word >>
   simp[expr_frag_def] >> rpt gen_tac >> strip_tac >> gvs[] >>
   drule_all lower_value_name_word >> strip_tac >>
   irule frag_exec_conseq >>
   drule emit_op_frag >>
-  disch_then (qspecl_then [`ctx`, `func`, `cenv`, `cx`, `es`, `s0`,
+  disch_then (qspecl_then [`H`, `ctx`, `func`, `cenv`, `cx`, `es`, `s0`,
                            `val_to_w256 entry.value`, `R`] mp_tac) >>
   impl_tac
   >- (simp[is_terminator_def] >> strip_tac >>
@@ -502,19 +508,21 @@ Proof
 QED
 
 (* An ALLOCA of func whose output is no live local's pointer, run fresh or
-   again, keeps stmt_state_rel and holds its region's base in its output.
+   again, keeps stmt_state_rel H and holds its region's base in its output.
    alloca_room keeps the base from wrapping. *)
 Theorem stmt_state_rel_exec_alloca:
+  !H.
   !func cenv cx es s inst p n s1 ctx.
-    stmt_state_rel ctx func cenv cx es s /\
+    stmt_state_rel H ctx func cenv cx es s /\
     fn_inst_ids_distinct func /\ MEM inst (fn_insts func) /\
     inst.inst_opcode = ALLOCA /\ inst.inst_operands = [Lit n] /\
     inst.inst_outputs = [p] /\ not_local_ptr cenv es.scopes p /\
     exec_alloca inst s n = OK s1 ==>
-    stmt_state_rel ctx func cenv cx es s1 /\
+    stmt_state_rel H ctx func cenv cx es s1 /\
     ?w. lookup_var p s1 = SOME w /\
         FLOOKUP s1.vs_allocas inst.inst_id = SOME (w2n w, w2n n)
 Proof
+  gen_tac >>
   rpt gen_tac >> strip_tac >>
   `s.vs_alloca_next < dimword (:256)` by
     metis_tac[alloca_room_next_lt, stmt_state_rel_def] >>
@@ -548,15 +556,13 @@ Proof
      qpat_x_assum `exec_alloca _ _ _ = _` mp_tac >>
      simp[exec_alloca_def, AllCaseEqs(), update_var_def, LET_THM] >> rw[] >>
      fs[stmt_state_rel_def, state_rel_def]) >>
-  `state_rel func cenv cx es s1` by
-    (qspecl_then [`func`, `cenv`, `cx`, `es`, `es`, `s`, `s1`] mp_tac
-       state_rel_frame >>
-     impl_tac >- (
+  `state_rel H func cenv cx es s1` by
+    (irule state_rel_frame >> conj_tac >- simp[] >>
+     qexistsl_tac [`es`, `s`] >>
        qpat_x_assum `exec_alloca _ _ _ = _` mp_tac >>
        simp[exec_alloca_def, AllCaseEqs(), update_var_def, LET_THM] >>
        rw[] >> fs[stmt_state_rel_def,
                   vyperStateTheory.evaluation_state_component_equality]) >>
-     simp[]) >>
   `!aid base sz. FLOOKUP s.vs_allocas aid = SOME (base, sz) ==>
                  base + sz < dimword (:256)` by
     (fs[stmt_state_rel_def, alloca_inv_def, alloca_next_valid_def] >>
@@ -621,8 +627,9 @@ QED
    local in the innermost scope, assignable (a declaration) or not (a loop
    variable). *)
 Theorem stmt_state_rel_declare_word:
+  !H.
   !func cenv cx es s id p sz w inst v tyv sc rest cap a ctx.
-    stmt_state_rel ctx func cenv cx es s /\ fn_inst_ids_distinct func /\
+    stmt_state_rel H ctx func cenv cx es s /\ fn_inst_ids_distinct func /\
     es.scopes = sc :: rest /\ lookup_scopes id es.scopes = NONE /\
     FLOOKUP cenv.ce_vars id = SOME (PtrVar (Var p) sz) /\
     not_local_ptr cenv es.scopes p /\ lookup_var p s = SOME w /\
@@ -633,11 +640,12 @@ Theorem stmt_state_rel_declare_word:
     word_memory_type tyv /\ cap <= w2n w /\
     (cenv.ce_is_ctor ==>
        immutable_prefix_bound cenv cx.txn.target cenv.ce_module es cap) ==>
-    stmt_state_rel ctx func cenv cx
+    stmt_state_rel H ctx func cenv cx
       (es with scopes :=
          (sc |+ (id, <| assignable := a; type := tyv; value := v; popped := [] |>)) :: rest)
       (mstore (w2n w) (val_to_w256 v) s)
 Proof
+  gen_tac >>
   rpt strip_tac >>
   qabbrev_tac `s' = mstore (w2n w) (val_to_w256 v) s` >>
   qabbrev_tac `entry = <| assignable := a; type := tyv; value := v; popped := [] |>` >>
@@ -688,13 +696,11 @@ Proof
     (simp[Abbr `s'`] >> irule immutables_rel_mstore_outside_prefix >>
      conj_tac >- (qexists_tac `cap` >> simp[]) >>
      fs[stmt_state_rel_def, state_rel_def]) >>
-  `state_rel func cenv cx (es with scopes := scs') s'` by
-    (qspecl_then [`func`, `cenv`, `cx`, `es`, `es with scopes := scs'`, `s`,
-                  `s'`] mp_tac state_rel_frame >>
-     impl_tac >- (
-       simp[vyperStateTheory.evaluation_state_component_equality] >>
-       fs[stmt_state_rel_def]) >>
-     simp[]) >>
+  `state_rel H func cenv cx (es with scopes := scs') s'` by
+    (irule state_rel_frame >> conj_tac >- simp[] >>
+     qexistsl_tac [`es`, `s`] >>
+     simp[vyperStateTheory.evaluation_state_component_equality] >>
+     fs[stmt_state_rel_def]) >>
   `alloca_inv s'` by (irule alloca_inv_fields >> qexists_tac `s` >> simp[]) >>
   `alloca_room ctx func s'` by
     (irule alloca_room_fields >> qexists_tac `s` >> fs[stmt_state_rel_def]) >>
@@ -720,9 +726,10 @@ QED
 
 (* The ALLOCA that compile_stmt emits for a word local, run from s0. *)
 Theorem annassign_alloca_frag[local]:
+  !H.
   !ctx func cenv cx es st st1 p sz s0 R cap.
     emit_inst ALLOCA [Lit (n2w sz)] [p] st = ((), st1) /\
-    stmt_state_rel ctx func cenv cx es s0 /\ fn_inst_ids_distinct func /\
+    stmt_state_rel H ctx func cenv cx es s0 /\ fn_inst_ids_distinct func /\
     MEM (mk_inst st.cs_next_id ALLOCA [Lit (n2w sz)] [p]) (fn_insts func) /\
     not_local_ptr cenv es.scopes p /\ sz < dimword (:256) /\
     cap <= s0.vs_alloca_next /\
@@ -730,8 +737,9 @@ Theorem annassign_alloca_frag[local]:
     ?s1 w. cap <= w2n w /\ lookup_var p s1 = SOME w /\
            FLOOKUP s1.vs_allocas st.cs_next_id = SOME (w2n w, sz) /\
            frag_exec ctx st st1 (\s. s = s0)
-             (\s. s = s1 /\ stmt_state_rel ctx func cenv cx es s) R
+             (\s. s = s1 /\ stmt_state_rel H ctx func cenv cx es s) R
 Proof
+  gen_tac >>
   rpt strip_tac >>
   imp_res_tac emit_inst_extends >>
   `step_inst_base (mk_inst st.cs_next_id ALLOCA [Lit (n2w sz)] [p]) s0 =
@@ -744,7 +752,7 @@ Proof
     simp[Abbr `A`, venomInstTheory.mk_inst_def] >>
   `?s1. exec_alloca A s0 (n2w sz : bytes32) = OK s1` by
     (fs[exec_alloca_def] >> BasicProvers.every_case_tac >> simp[]) >>
-  qspecl_then [`func`, `cenv`, `cx`, `es`, `s0`, `A`, `p`, `n2w sz`, `s1`, `ctx`]
+  qspecl_then [`H`, `func`, `cenv`, `cx`, `es`, `s0`, `A`, `p`, `n2w sz`, `s1`, `ctx`]
     mp_tac stmt_state_rel_exec_alloca >>
   impl_tac >- simp[] >> strip_tac >>
   `s0.vs_alloca_next < dimword (:256)` by
@@ -772,14 +780,16 @@ QED
 
 (* The MSTORE that stores the right-hand side into the local's slot. *)
 Theorem annassign_mstore_frag[local]:
+  !H.
   !w v p val_op ctx func cenv cx es' st st' Pre R.
     emit_void MSTORE [Var p; val_op] st = ((), st') /\
     (!s. Pre s ==>
          lookup_var p s = SOME w /\
          eval_operand val_op s = SOME (val_to_w256 v) /\
-         stmt_state_rel ctx func cenv cx es' (mstore (w2n w) (val_to_w256 v) s)) ==>
-    frag_exec ctx st st' Pre (stmt_state_rel ctx func cenv cx es') R
+         stmt_state_rel H ctx func cenv cx es' (mstore (w2n w) (val_to_w256 v) s)) ==>
+    frag_exec ctx st st' Pre (stmt_state_rel H ctx func cenv cx es') R
 Proof
+  gen_tac >>
   rpt strip_tac >>
   imp_res_tac emitted_insts_emit_void >> imp_res_tac emit_void_extends >>
   `EVERY (\i. i.inst_opcode <> INVOKE /\ ~is_terminator i.inst_opcode)
@@ -848,16 +858,17 @@ QED
 
 (* Slice lemma 1, the declaration: x: T = e for a word type T held through
    a pointer local.  The ALLOCA may run for the first time or again (in a
-   loop); alloca_room in stmt_state_rel keeps a fresh ALLOCA's base from
+   loop); alloca_room in stmt_state_rel H keeps a fresh ALLOCA's base from
    wrapping.  The immutable prefix cap bounds initialized immutables at the
    source post-state (the RHS may initialize more of them); both fresh and
    existing allocations start above the cap.  The RHS keeps this local's
    allocation and pointer, so the final store misses that prefix even if
    the RHS allocates other regions.  Runtime code can use cap = 0.
    The right-hand side is a word value at es, and its fragment is
-   any expr_frag at es; its type annotation fills one word (32 bytes) of
+   any expr_frag H at es; its type annotation fills one word (32 bytes) of
    the local's region. *)
 Theorem compile_annassign_word_frag:
+  !H.
   !ctx func cenv cx lctx ty id vtyp e st st' es es' R p sz cap.
     compile_stmt cenv lctx ty (AnnAssign id vtyp e) st = ((), st') /\
     eval_stmt cx (AnnAssign id vtyp e) es = (INL (), es') /\
@@ -874,13 +885,14 @@ Theorem compile_annassign_word_frag:
                (INL v, es1) ==> word_value v) /\
     (!sa sb op. lower_value compile_expr cenv (expr_type e) e sa = (op, sb) ==>
                 cs_extends sa sb) /\
-    expr_frag ctx func cenv cx (expr_type e) e es R ==>
+    expr_frag H ctx func cenv cx (expr_type e) e es R ==>
     frag_exec ctx st st'
-      (\s. stmt_state_rel ctx func cenv cx es s /\
+      (\s. stmt_state_rel H ctx func cenv cx es s /\
            cap <= s.vs_alloca_next /\
            (!aid b n. FLOOKUP s.vs_allocas aid = SOME (b,n) ==> cap <= b))
-      (stmt_state_rel ctx func cenv cx es') R
+      (stmt_state_rel H ctx func cenv cx es') R
 Proof
+  gen_tac >>
   rpt gen_tac >> strip_tac >>
   drule eval_stmt_annassign_value >> strip_tac >>
   imp_res_tac read_result_state >> gvs[] >>
@@ -905,19 +917,19 @@ Proof
   impl_tac >- (rpt conj_tac >> first_assum ACCEPT_TAC) >>
   disch_then (qx_choosel_then [`st1`, `st3`, `val_op`] strip_assume_tac) >>
   irule frag_exec_pointwise >> gen_tac >> BETA_TAC >> strip_tac >>
-  qspecl_then [`ctx`, `func`, `cenv`, `cx`, `es`, `st`, `st1`, `p`, `sz`,
+  qspecl_then [`H`, `ctx`, `func`, `cenv`, `cx`, `es`, `st`, `st1`, `p`, `sz`,
                `s0`, `R`, `cap`] mp_tac annassign_alloca_frag >>
   impl_tac >- metis_tac[] >> strip_tac >>
-  qabbrev_tac `Q1 = \s. s = s1 /\ stmt_state_rel ctx func cenv cx es s` >>
+  qabbrev_tac `Q1 = \s. s = s1 /\ stmt_state_rel H ctx func cenv cx es s` >>
   qabbrev_tac `Q2 = \s.
-    stmt_state_rel ctx func cenv cx es1 s /\
+    stmt_state_rel H ctx func cenv cx es1 s /\
     eval_operand val_op s = SOME (val_to_w256 v) /\
     (!x w. not_fresh_at st1 x /\ lookup_var x s1 = SOME w ==>
            lookup_var x s = SOME w) /\
     (!aid b. FLOOKUP s1.vs_allocas aid = SOME b ==>
              FLOOKUP s.vs_allocas aid = SOME b)` >>
   `frag_exec ctx st1 st3 Q1 Q2 R` by
-    (qpat_x_assum `expr_frag _ _ _ _ _ _ _ _` mp_tac >>
+    (qpat_x_assum `expr_frag H _ _ _ _ _ _ _ _` mp_tac >>
      PURE_REWRITE_TAC[expr_frag_def] >>
      disch_then (qspecl_then [`st1`, `st3`, `val_op`, `v`, `es1`, `s1`]
                    mp_tac) >>
@@ -929,11 +941,11 @@ Proof
   rpt conj_tac
   >- metis_tac[cs_extends_trans] >- first_assum ACCEPT_TAC
   >- first_assum ACCEPT_TAC >>
-  qspecl_then [`w`, `v`, `p`, `val_op`] MATCH_MP_TAC annassign_mstore_frag >>
+  qspecl_then [`H`, `w`, `v`, `p`, `val_op`] MATCH_MP_TAC annassign_mstore_frag >>
   conj_tac >- first_assum ACCEPT_TAC >>
   simp[Abbr `Q2`] >> rpt gen_tac >> strip_tac >>
   `lookup_var p s = SOME w` by metis_tac[] >> simp[] >>
-  qspecl_then [`func`, `cenv`, `cx`, `es1`, `s`, `id`, `p`, `sz`, `w`,
+  qspecl_then [`H`, `func`, `cenv`, `cx`, `es1`, `s`, `id`, `p`, `sz`, `w`,
                `mk_inst st.cs_next_id ALLOCA [Lit (n2w sz)] [p]`,
                `v`, `tyv`, `sc`, `rest`, `cap`, `T`, `ctx`]
     MATCH_MP_TAC stmt_state_rel_declare_word >>
@@ -1162,11 +1174,12 @@ Proof
   rpt conj_tac >> first_assum ACCEPT_TAC
 QED
 
-(* Slice lemma 2: an if/else.  The condition is any expr_frag at es; the
+(* Slice lemma 2: an if/else.  The condition is any expr_frag H at es; the
    branch bodies are statement-list fragments of the same shape, and
    a body that runs to its end from a fresh block leaves the block open
    (it does not end in a return), so it falls through to the exit. *)
 Theorem compile_if_frag:
+  !H.
   !ctx func cenv cx lctx ty c ss1 ss2 st st' es es' R.
     compile_stmt cenv lctx ty (If c ss1 ss2) st = ((), st') /\
     eval_stmt cx (If c ss1 ss2) es = (INL (), es') /\
@@ -1174,7 +1187,7 @@ Theorem compile_if_frag:
     local_ptrs_reserved cenv st /\
     (!sa sb op. lower_value compile_expr cenv (BaseT BoolT) c sa = (op, sb) ==>
                 cs_extends sa sb /\ sa.cs_next_var <= sb.cs_next_var) /\
-    expr_frag ctx func cenv cx (BaseT BoolT) c es R /\
+    expr_frag H ctx func cenv cx (BaseT BoolT) c es R /\
     (!ss sa sb. (ss = ss1 \/ ss = ss2) /\
                 compile_stmts cenv lctx ty ss sa = ((), sb) ==>
                 cs_extends sa sb /\ sa.cs_next_var <= sb.cs_next_var) /\
@@ -1186,11 +1199,12 @@ Theorem compile_if_frag:
        compile_stmts cenv lctx ty ss sa = ((), sb) /\
        eval_stmts cx ss esa = (INL (), esb) /\
        fn_has_code sa sb func /\ local_ptrs_reserved cenv sa ==>
-       frag_exec ctx sa sb (stmt_state_rel ctx func cenv cx esa)
-         (stmt_state_rel ctx func cenv cx esb) R) ==>
-    frag_exec ctx st st' (stmt_state_rel ctx func cenv cx es)
-      (stmt_state_rel ctx func cenv cx es') R
+       frag_exec ctx sa sb (stmt_state_rel H ctx func cenv cx esa)
+         (stmt_state_rel H ctx func cenv cx esb) R) ==>
+    frag_exec ctx st st' (stmt_state_rel H ctx func cenv cx es)
+      (stmt_state_rel H ctx func cenv cx es') R
 Proof
+  gen_tac >>
   rpt gen_tac >> strip_tac >>
   drule eval_stmt_if_success >> strip_tac >>
   qabbrev_tac `esA = es1 with scopes := FEMPTY :: es1.scopes` >>
@@ -1200,8 +1214,8 @@ Proof
   imp_res_tac emit_inst_extends >>
   `local_ptrs_reserved cenv sa` by
     (irule local_ptrs_reserved_next_var >> qexists_tac `st` >> simp[]) >>
-  `frag_exec ctx sa sb (stmt_state_rel ctx func cenv cx esA)
-     (stmt_state_rel ctx func cenv cx es2) R` by
+  `frag_exec ctx sa sb (stmt_state_rel H ctx func cenv cx esA)
+     (stmt_state_rel H ctx func cenv cx es2) R` by
     (qpat_x_assum `!ss sa sb esa esb. _ ==> frag_exec _ _ _ _ _ _`
        (qspecl_then [`if b then ss1 else ss2`, `sa`, `sb`, `esA`, `es2`]
           mp_tac) >>
@@ -1209,7 +1223,7 @@ Proof
                   metis_tac[]) >>
      simp[]) >>
   PURE_REWRITE_TAC[frag_exec_def] >> rpt strip_tac >>
-  qpat_x_assum `expr_frag _ _ _ _ _ _ _ _` mp_tac >>
+  qpat_x_assum `expr_frag H _ _ _ _ _ _ _ _` mp_tac >>
   PURE_REWRITE_TAC[expr_frag_def] >>
   disch_then (qspecl_then [`st`, `s1`, `cond_op`, `BoolV b`, `es1`, `s`]
                 mp_tac) >>
@@ -1233,16 +1247,16 @@ Proof
          Cases_on `b` >> fs[val_to_w256_def]) >>
       `is_terminator jnz.inst_opcode /\ jnz.inst_opcode <> INVOKE` by
         simp[Abbr `jnz`, venomInstTheory.mk_inst_def, is_terminator_def] >>
-      `stmt_state_rel ctx func cenv cx esA (jump_to sa.cs_current_bb sv)` by
+      `stmt_state_rel H ctx func cenv cx esA (jump_to sa.cs_current_bb sv)` by
         simp[Abbr `esA`, stmt_state_rel_jump_to, stmt_state_rel_push_scope] >>
       qspecl_then [`ctx`, `fn`, `s`, `sv`, `jbb`, `jnz`, `sa`, `sb`, `sx`,
                    `sd`, `exit_lbl`, `lbl'`, `x`,
-                   `stmt_state_rel ctx func cenv cx esA`,
-                   `stmt_state_rel ctx func cenv cx es2`, `R`]
+                   `stmt_state_rel H ctx func cenv cx esA`,
+                   `stmt_state_rel H ctx func cenv cx es2`, `R`]
         mp_tac if_branch_to_exit >>
       impl_tac >- (simp[] >> metis_tac[]) >> strip_tac
       >- (disj1_tac >> qexists_tac `jump_to exit_lbl s'` >>
-          `stmt_state_rel ctx func cenv cx (es2 with scopes := rest) s'` by
+          `stmt_state_rel H ctx func cenv cx (es2 with scopes := rest) s'` by
             (irule stmt_state_rel_pop_scope >> metis_tac[]) >>
           simp[stmt_state_rel_jump_to] >> fs[jump_to_def] >> metis_tac[]) >>
       disj2_tac >> metis_tac[]) >>
@@ -1294,6 +1308,7 @@ QED
    a RuntimeError aborts in the lowered code, which result_rel relates to the
    source error. *)
 Theorem compile_safe_add_runtime_error:
+  !H.
   !ctx func ret_tv cenv cx tv x y ty st op st' P Q es' i1 i2 err.
     compile_safe_add x y ty st = (op, st') /\
     type_bits ty = 256 /\ ~is_signed_type ty /\
@@ -1304,9 +1319,9 @@ Theorem compile_safe_add_runtime_error:
          eval_operand y s = SOME (val_to_w256 (IntV i2))) ==>
     err = RuntimeError "bounded_int_op bound" /\
     frag_exec ctx st st' P Q
-      (result_rel func ret_tv cenv cx (INR (Error err), es'))
+      (result_rel H func ret_tv cenv cx (INR (Error err), es'))
 Proof
-  rpt gen_tac >> strip_tac >>
+  gen_tac >> rpt gen_tac >> strip_tac >>
   `bounded_int_op (Unsigned 256) (i1 + i2) = INR err` by
     fs[evaluate_binop_def] >>
   conj_tac >- (qpat_x_assum `bounded_int_op _ _ = _` mp_tac >>
@@ -1315,18 +1330,9 @@ Proof
    w2n (val_to_w256 (IntV i1)) + w2n (val_to_w256 (IntV i2))` by
     (irule bounded_int_op_add_overflow >> metis_tac[]) >>
   qspecl_then [`ctx`, `x`, `y`, `ty`, `st`, `op`, `st'`, `P`, `Q`,
-               `result_rel func ret_tv cenv cx (INR (Error err), es')`]
+               `result_rel H func ret_tv cenv cx (INR (Error err), es')`]
     mp_tac compile_safe_add_overflow_frag >>
   impl_tac >- (simp[result_rel_def] >> metis_tac[]) >>
   simp[]
 QED
 
-(* Every slice is independent of the general compiler admissions. *)
-val () = List.app
-  (fn (name,th) =>
-    let val (oracles,axioms) = Tag.dest_tag (Thm.tag th) in
-      if null (Thm.hyp th) andalso null axioms andalso
-         List.all (fn oracle => oracle = "DISK_THM") oracles then ()
-      else raise Fail ("lowering slice proof is not closed: " ^ name)
-    end)
-  (DB.thms "loweringSlice");

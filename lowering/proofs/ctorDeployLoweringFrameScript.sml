@@ -3,7 +3,7 @@
 Theory ctorDeployLoweringFrame
 Ancestors
   ctorDeployLoweringDefs ctorDeployImmBudget o1PassContract bodySim e2eDefs callTrace
-  ctorDeployLoweringFramePayload ctorDeployDefs e2eDeployDefs e2eEntry
+  ctorDeployLoweringFramePayload ctorDeployDefs immSectionDead e2eDeployDefs e2eEntry
   vyperTypeStoragePreservation list supportedDecls supportedProgram
   compileEnv loweringStateRelDefs compileVyper moduleLowering entryLocals ctorEntryLocals bodySimEntry
   exprLoweringProps context finite_map stmtLoweringMono freshWrites fragExec vyperScopePreservation
@@ -678,6 +678,7 @@ Theorem deploy_frame_register_static_fields:
     cenv'.ce_module = cenv.ce_module /\
     cenv'.ce_modules = cenv.ce_modules /\
     cenv'.ce_event_info = cenv.ce_event_info /\
+    cenv'.ce_error_info = cenv.ce_error_info /\
     cenv'.ce_is_external = cenv.ce_is_external
 Proof
   Induct >- simp[compile_register_constructor_args_def, comp_return_def] >>
@@ -708,6 +709,7 @@ Theorem deploy_ctor_static_tables:
       cenv.ce_module_var_type = build_var_type_map tops /\
       cenv.ce_module = NONE /\
       cenv.ce_event_info = build_event_info (type_env tops) tops (K NONE) /\
+      cenv.ce_error_info = (\name. lookup_custom_error_args_in name tops) /\
       ~cenv.ce_is_external
 Proof
   rpt gen_tac >> simp[deploy_ctor_code_def] >> strip_tac >>
