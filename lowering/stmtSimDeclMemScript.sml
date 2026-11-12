@@ -31,7 +31,7 @@ Ancestors
   exprSimDefs
   loweringPosts
   list rich_list finite_map pred_set
-  fragExec localPtrsProps  loweringSlice  stmtSimDeclStore
+  fragExec localPtrsProps  loweringSlice  stmtSimDeclStore allocLimitsProps
   stmtSimDecl stmtSimDeclCompose stmtSimDeclPath stmtSimDeclSource
   gasSummary gasContext
   fragGasSeq fragGasPath fragGasMode
@@ -65,7 +65,7 @@ Proof
       ho_match_mp_tac type_memory_bytes_ind >>
       rw[type_memory_bytes_def] >>
       AP_TERM_TAC >> irule MAP_CONG >> simp[]) >>
-  gen_tac >> gvs[oneline lowered_value_type_def]
+  rpt strip_tac >> irule allocLimitsPropsTheory.lowered_value_type_frame >> simp[]
 QED
 
 Theorem compile_assign_memory_appends:
