@@ -153,6 +153,82 @@ Proof
            EVERY_MEM] >> metis_tac[]) >> simp[]
 QED
 
+Theorem reclaim_arithmetic_member[local]:
+  (!v id. MEM id (fmp_bases env v) ==> v IN fn_pv P fn) /\
+  affine_pointer_ops fn (ptr_roots P fn) /\ MEM inst (fn_insts fn) /\
+  (inst.inst_opcode = ADD \/ inst.inst_opcode = SUB) /\
+  inst.inst_operands = [lhs;rhs] /\
+  MEM id (fmp_operand_bases env lhs) ==>
+  MEM id (fmp_generated_bases env inst)
+Proof
+  strip_tac >>
+  `fmp_operand_bases env rhs = []` by
+    (spose_not_then assume_tac >>
+     `?j. MEM j (fmp_operand_bases env rhs)` by simp[MEMBER_NOT_EMPTY] >>
+     Cases_on `lhs` >> gvs[fmp_operand_bases_def] >>
+     Cases_on `rhs` >> gvs[fmp_operand_bases_def] >>
+     gvs[affine_pointer_ops_def, fn_pv_def, fn_insts_def,
+         fn_insts_blocks_MEM] >> metis_tac[]) >>
+  gvs[fmp_generated_bases_def, fmp_arithmetic_bases_def] >>
+  metis_tac[MEM]
+QED
+
+Theorem reclaim_first_bases[local]:
+  (!v id. MEM id (fmp_bases env v) ==> v IN fn_pv P fn) /\
+  affine_pointer_ops fn (ptr_roots P fn) /\ MEM inst (fn_insts fn) /\
+  inst_wf inst /\
+  (inst.inst_opcode = ASSIGN \/ inst.inst_opcode = ADD \/ inst.inst_opcode = SUB) /\
+  first_prov G inst.inst_operands = SOME site /\
+  (!u. FLOOKUP G u = SOME site ==> MEM id (fmp_bases env u)) ==>
+  MEM id (fmp_generated_bases env inst)
+Proof
+  strip_tac
+  >- (gvs[inst_wf_def] >>
+      `?op. inst.inst_operands = [op]` by gvs[LENGTH_EQ_NUM_compute] >>
+      gvs[first_prov_def, fmp_generated_bases_def] >>
+      Cases_on `op` >> gvs[op_prov_def, fmp_operand_bases_def, AllCaseEqs()])
+  >> (gvs[inst_wf_def, LENGTH_EQ_NUM_compute] >>
+      rename1 `inst.inst_operands = [lhs;rhs]` >>
+      Cases_on `op_prov G lhs`
+      >- (gvs[first_prov_def] >>
+          `MEM id (fmp_operand_bases env rhs)` by
+            (Cases_on `rhs` >> gvs[op_prov_def, fmp_operand_bases_def,
+                                  AllCaseEqs()]) >>
+          `fmp_operand_bases env lhs = []` by
+            (spose_not_then assume_tac >>
+             `?j. MEM j (fmp_operand_bases env lhs)` by simp[MEMBER_NOT_EMPTY] >>
+             Cases_on `lhs` >> Cases_on `rhs` >>
+             gvs[fmp_operand_bases_def, affine_pointer_ops_def, fn_pv_def,
+                 fn_insts_def, fn_insts_blocks_MEM] >> metis_tac[]) >>
+          `inst.inst_opcode = ADD` by
+            (Cases_on `rhs` >>
+             gvs[fmp_operand_bases_def, affine_pointer_ops_def, fn_pv_def,
+                 fn_insts_def, fn_insts_blocks_MEM] >> metis_tac[]) >>
+          gvs[fmp_generated_bases_def, fmp_arithmetic_bases_def] >>
+          metis_tac[MEM]) >>
+      `MEM id (fmp_operand_bases env lhs)` by
+        (Cases_on `lhs` >>
+         gvs[first_prov_def, op_prov_def, fmp_operand_bases_def] >> metis_tac[]) >>
+      irule reclaim_arithmetic_member >>
+      metis_tac[])
+QED
+
+Theorem reclaim_set_covers[local]:
+  fmp_frame_covers sm env eb lo G /\
+  (!out b z c id. outs = [out] /\ p = SOME (b,z) /\
+    FLOOKUP sm (b,z) = SOME (c,id) /\ eb <= b /\ c < lo ==>
+    MEM id (fmp_bases env out)) ==>
+  fmp_frame_covers sm env eb lo (set_prov G outs p)
+Proof
+  strip_tac >>
+  Cases_on `outs` >> Cases_on `p` >>
+  gvs[set_prov_def, fmp_frame_covers_def, FLOOKUP_DRESTRICT] >>
+  qmatch_goalsub_rename_tac `case rest of [] => _ | _ => _` >>
+  Cases_on `rest` >>
+  gvs[set_prov_def, fmp_frame_covers_def, FLOOKUP_DRESTRICT,
+      FLOOKUP_UPDATE, AllCaseEqs()] >> metis_tac[]
+QED
+
 Theorem fmp_stage_covers_step:
   fmp_base_analyze (fn_insts fn) = SOME env /\ fn_static_ptr_ok P fn /\
   fn_inst_wf fn /\ EVERY (\inst. inst.inst_opcode <> ALLOCA) (fn_insts fn) /\
@@ -166,7 +242,33 @@ Theorem fmp_stage_covers_step:
   EVERY (\h. !b z. h = SOME (b,z) /\ 0 < z ==> b < eb) PG ==>
   fmp_frame_covers sm env eb lo (step_prov PG G inst s1)
 Proof
-  cheat
+  strip_tac >>
+  `MEM inst (fn_insts fn)` by
+    (gvs[contextCodegenRelTheory.active_inst_def, fn_insts_def,
+         fn_insts_blocks_MEM] >> metis_tac[MEM_EL]) >>
+  `inst.inst_opcode <> ALLOCA` by gvs[EVERY_MEM] >>
+  `inst_wf inst` by
+    (gvs[fn_inst_wf_def, fn_insts_def, fn_insts_blocks_MEM] >> metis_tac[]) >>
+  `!v id. MEM id (fmp_bases env v) ==> v IN fn_pv P fn` by
+    metis_tac[reclaim_analyze_support] >>
+  simp[step_prov_def] >> irule reclaim_set_covers >> simp[] >>
+  rpt gen_tac >> strip_tac >>
+  Cases_on `inst.inst_opcode = PARAM`
+  >- (gvs[out_prov_def, AllCaseEqs()] >>
+      rename1 `inst.inst_operands = [Lit idx]` >>
+      `0 < z` by metis_tac[] >>
+      qpat_x_assum `EVERY _ PG` mp_tac >> simp[EVERY_EL] >>
+      disch_then (qspec_then `w2n idx` mp_tac) >> simp[]) >>
+  `first_prov G inst.inst_operands = SOME (b,z) /\
+   (inst.inst_opcode = ASSIGN \/ inst.inst_opcode = ADD \/ inst.inst_opcode = SUB)` by
+    (gvs[out_prov_def, AllCaseEqs()] >> metis_tac[]) >>
+  (irule fmp_base_analyze_propagates >>
+  qexistsl [`inst`, `fn_insts fn`] >>
+  simp[fmp_base_output_def, fmp_single_output_def] >>
+  irule reclaim_first_bases >> simp[] >> conj_tac
+  >- (qexistsl [`G`, `(b,z)`] >> simp[] >>
+      gvs[fmp_frame_covers_def] >> metis_tac[]) >>
+  qexistsl [`P`, `fn`] >> gvs[fn_static_ptr_ok_def] >> gvs[])
 QED
 
 Theorem fmp_stage_covers_dalloca:
