@@ -7,7 +7,8 @@ Ancestors
   stmtForRangeMemoryRound stmtLoweringMono
   stmtSimForParts stmtSimProps stmtSimForLoop loweringSlice loweringPosts vyperValue
   exprLoweringProps stmtSimDeclPath venomExecSemantics venomInst
-  venomState finite_map list fragExec
+  venomState finite_map list fragExec gasStorage vyperStorageFootprint vyperStorageTrace
+  gasOutcome
 
 Theorem compile_for_range_lit_frag_mem:
   !P d ctx func cx lctx RetQ cenv ty id fty a1 n1 a2 n2 bound stmts es tyv.
@@ -54,6 +55,12 @@ Proof
        bind_def, ignore_bind_def, lift_option_type_def, lift_option_def,
        return_def, check_def, assert_def, compatible_bound_def]) >>
   rw[stmt_frag_mem_def] >>
+  reverse (Cases_on `storage_trace_domain cx st0 es.storage_trace`)
+  >- (rewrite_tac[gas_outcome_def] >> qexists_tac `[]` >> disj1_tac >>
+      irule gas_bad_storage_at_initial >> simp[evaluate_storage_trace_frame]) >>
+  `?H0. valid_horizon cx st0 H0 es.storage_trace` by
+    metis_tac[storage_trace_domain_def] >>
+  `stmt_state_rel H0 ctx func cenv cx es s0` by metis_tac[] >>
   fs[stmt_env_def, declare_stmt_local_def, comp_bind_def, comp_ignore_bind_def,
      comp_return_def, pairTheory.pair_case_eq] >>
   Cases_on `compile_stmt cenv lctx ty
@@ -79,7 +86,9 @@ Proof
      irule local_ptrs_reserved_fresh >> qexists_tac `sa` >> simp[]) >>
   `?cc w. gas_path_mem ctx func s0 0 (OK cc) /\
      cc.vs_current_bb = cond_lbl /\ cc.vs_inst_idx = 0 /\ ~cc.vs_halted /\
-     stmt_state_rel H ctx func cenv cx es cc /\
+     stmt_state_rel H0 ctx func cenv cx es cc /\
+     (!(H':(bool # bytes32 # type_value) list # num list). stmt_state_rel H' ctx func cenv cx es s0 ==>
+           stmt_state_rel H' ctx func cenv cx es cc) /\
      lookup_var cv cc = SOME (i2w n1) /\ lookup_var ev cc = SOME (i2w n2) /\
      lookup_var p cc = SOME w /\
      FLOOKUP cc.vs_allocas sa.cs_next_id = SOME (w2n w,type_memory_bytes cenv fty) /\
@@ -130,19 +139,23 @@ Resume compile_for_range_lit_frag_mem[loop]:
           value := IntV (n1 + &j); popped := []|>)) :: ei.scopes)` by
     (rpt strip_tac >> first_x_assum irule >> simp[] >>
      qexistsl_tac [`sa`, `sa with cs_next_var := sa.cs_next_var + 1`] >> simp[]) >>
-  `gas_outcome T (cx_tops cx) (ctx,func)
+  `!H. valid_horizon cx st0 H es.storage_trace ==>
+     stmt_state_rel H ctx func cenv cx es cc /\
+     storage_well_formed_on cx es (FST H)` by metis_tac[] >>
+  `gas_outcome T (cx_tops cx) (ctx,func) cx st0
      (eval_for cx tyv id stmts (GENLIST (\j. Value (IntV (n1 + &(0 + j)))) (Num (n2-n1)))) (es,cc)
-     (\res ee s. res = INL () /\ s.vs_current_bb = exit_lbl /\
+     (\H res ee s. res = INL () /\ s.vs_current_bb = exit_lbl /\
        s.vs_inst_idx = 0 /\ ~s.vs_halted /\ stmt_state_rel H ctx func cenv cx ee s /\
+       storage_well_formed_on cx ee (FST H) /\
        return_buf_frame d cenv sa s /\ alloca_history func s /\
        cc.vs_alloca_next <= s.vs_alloca_next /\
        (!x v. not_fresh_at sa x /\ lookup_var x cc = SOME v ==> lookup_var x s = SOME v) /\
        (!a b. FLOOKUP cc.vs_allocas a = SOME b ==> FLOOKUP s.vs_allocas a = SOME b))
-     (\res ee r. !tail. stmt_exit RetQ (ee with gas_obs := tail) res r)` by
+     (\H res ee r. !tail. stmt_exit (RetQ H) (ee with gas_obs := tail) res r)` by
     (irule for_loop_mem >>
-     ntac 4 (conj_tac >- simp[]) >>
+     ntac 5 (conj_tac >- simp[]) >>
      conj_tac >- (qexists_tac `lctx` >> simp[]) >>
-     ntac 3 (conj_tac >- simp[]) >>
+     ntac 2 (conj_tac >- simp[]) >>
      qexists_tac `P` >> qhdtm_assum `for_code` (irule_at Any) >>
      qexistsl_tac [`w`, `n2`] >> simp[Abbr `aa`, mk_inst_def] >>
      rpt strip_tac >>
@@ -152,7 +165,7 @@ Resume compile_for_range_lit_frag_mem[loop]:
 QED
 
 Resume compile_for_range_lit_frag_mem[finish]:
-  qpat_x_assum `gas_outcome T _ _ _ _ _ _` mp_tac >> simp[] >>
+  qpat_x_assum `gas_outcome T _ _ _ _ _ _ _ _` mp_tac >> simp[] >>
   disch_then (mp_then Any mp_tac for_outcome_zero_prefix_mem) >>
   disch_then (qspec_then `s0` mp_tac) >> simp[] >>
   disch_then (mp_then Any mp_tac for_outcome_consequence_mem) >>
