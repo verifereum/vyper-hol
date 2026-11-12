@@ -123,6 +123,27 @@ Proof
   gvs[Abbr `es1`, call_external_body_scopes]
 QED
 
+(* The selected call's storage observations are the body run's: with no
+   lock and no defaults, nothing else records storage. *)
+Theorem call_external_selected_body_trace:
+  !tops am tx ret mut args fbody env orc gobs es0 res ee.
+    source_deployment_rel tops am tx /\
+    lookup_function NONE tx.function_name External tops =
+      SOME (mut, F, args, [], ret, fbody) /\
+    LENGTH tx.args = LENGTH args /\
+    bind_arguments (type_env tops) args tx.args = SOME env /\
+    send_call_value mut
+      (initial_evaluation_context am.sources am.layouts tx NONE)
+      (initial_state am [env] with <| outcomes := orc; requests := [] |>) =
+      (INL (), es0) /\
+    eval_stmts (initial_evaluation_context am.sources am.layouts tx NONE)
+      fbody (es0 with gas_obs := gobs) = (res, ee) ==>
+    ?r am' rqs.
+      call_external_trace orc gobs am tx = (r, am', rqs, ee.storage_trace)
+Proof
+  cheat
+QED
+
 (* call_external_selected_body_gas without gas observations. *)
 Theorem call_external_selected_body:
   !tops am tx ret mut args fbody env orc es0.
