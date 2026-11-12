@@ -19,6 +19,8 @@ Theorem for_range_alloca_start_mem:
     ?ee w. gas_path_mem ctx func s0 0 (OK ee) /\
       ee.vs_current_bb = entry_lbl /\ ee.vs_inst_idx = 0 /\ ~ee.vs_halted /\
       stmt_state_rel H ctx func cenv cx es ee /\
+      (!(H':(bool # bytes32 # type_value) list # num list). stmt_state_rel H' ctx func cenv cx es s0 ==>
+            stmt_state_rel H' ctx func cenv cx es ee) /\
       lookup_var p ee = SOME w /\ FLOOKUP ee.vs_allocas aid = SOME (w2n w,sz) /\
       return_buf_frame d cenv sa ee /\ ret_pc_ok cenv sa ee /\
       alloca_history func ee /\ s0.vs_alloca_next <= ee.vs_alloca_next /\
@@ -36,6 +38,11 @@ Proof
    ?w. lookup_var p s1 = SOME w /\
        FLOOKUP s1.vs_allocas aid = SOME (w2n w,sz)` by
     (drule stmt_state_rel_exec_alloca >>
+     disch_then (qspecl_then [`aa`, `p`, `n2w sz`, `s1`] mp_tac) >>
+     impl_tac >- simp[mk_inst_def] >> simp[mk_inst_def]) >>
+  `!(H':(bool # bytes32 # type_value) list # num list). stmt_state_rel H' ctx func cenv cx es s0 ==>
+        stmt_state_rel H' ctx func cenv cx es s1` by
+    (rpt strip_tac >> drule stmt_state_rel_exec_alloca >>
      disch_then (qspecl_then [`aa`, `p`, `n2w sz`, `s1`] mp_tac) >>
      impl_tac >- simp[mk_inst_def] >> simp[mk_inst_def]) >>
   `s1.vs_current_bb = s0.vs_current_bb /\ ~s1.vs_halted` by
@@ -117,6 +124,8 @@ Theorem for_range_lit_start_mem:
     ?cc w. gas_path_mem ctx func s0 0 (OK cc) /\
       cc.vs_current_bb = cond_lbl /\ cc.vs_inst_idx = 0 /\ ~cc.vs_halted /\
       stmt_state_rel H ctx func cenv cx es cc /\
+      (!(H':(bool # bytes32 # type_value) list # num list). stmt_state_rel H' ctx func cenv cx es s0 ==>
+            stmt_state_rel H' ctx func cenv cx es cc) /\
       lookup_var cv cc = SOME a /\ lookup_var ev cc = SOME b /\
       lookup_var p cc = SOME w /\ FLOOKUP cc.vs_allocas aid = SOME (w2n w,sz) /\
       return_buf_frame d cenv sa cc /\ ret_pc_ok cenv sa cc /\
@@ -128,6 +137,8 @@ Proof
   `?ee w. gas_path_mem ctx func s0 0 (OK ee) /\
       ee.vs_current_bb = entry_lbl /\ ee.vs_inst_idx = 0 /\ ~ee.vs_halted /\
       stmt_state_rel H ctx func cenv cx es ee /\
+      (!(H':(bool # bytes32 # type_value) list # num list). stmt_state_rel H' ctx func cenv cx es s0 ==>
+            stmt_state_rel H' ctx func cenv cx es ee) /\
       lookup_var p ee = SOME w /\ FLOOKUP ee.vs_allocas aid = SOME (w2n w,sz) /\
       return_buf_frame d cenv sa ee /\ ret_pc_ok cenv sa ee /\
       alloca_history func ee /\ s0.vs_alloca_next <= ee.vs_alloca_next /\
@@ -145,6 +156,11 @@ Proof
   qabbrev_tac `cc = jump_to cond_lbl (update_var ev b (update_var cv a ee))` >>
   `gas_path_mem ctx func s0 0 (OK cc)` by
     (drule_all gas_path_mem_then >> simp[Abbr `cc`]) >>
+  `!(H':(bool # bytes32 # type_value) list # num list). stmt_state_rel H' ctx func cenv cx es ee ==>
+        stmt_state_rel H' ctx func cenv cx es cc` by
+    (rpt strip_tac >> simp[Abbr `cc`, stmt_state_rel_jump_to] >>
+     irule stmt_state_rel_update_var >> simp[] >>
+     irule stmt_state_rel_update_var >> simp[]) >>
   `stmt_state_rel H ctx func cenv cx es cc` by
     (simp[Abbr `cc`, stmt_state_rel_jump_to] >>
      irule stmt_state_rel_update_var >> simp[] >>
@@ -168,6 +184,8 @@ Proof
     (irule return_buf_frame_frame >> qexistsl_tac [`cenv`, `s0`, `sa`] >> simp[]) >>
   `ret_pc_ok cenv sa cc` by
     (irule ret_pc_ok_frame >> qexistsl_tac [`cenv`, `s0`, `sa`] >> simp[]) >>
+  `!(H':(bool # bytes32 # type_value) list # num list). stmt_state_rel H' ctx func cenv cx es s0 ==>
+        stmt_state_rel H' ctx func cenv cx es cc` by metis_tac[] >>
   qexistsl_tac [`cc`, `w`] >>
   gvs[Abbr `cc`, jump_to_def, update_var_def, lookup_var_def, FLOOKUP_UPDATE]
 QED
