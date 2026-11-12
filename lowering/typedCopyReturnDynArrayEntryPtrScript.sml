@@ -115,15 +115,16 @@ Proof
 QED
 
 Theorem typed_copy_dynarray_store_length[local]:
+  (!m. mem_agree_outside tn.t_mem s.vs_memory m ==> val_in_memory tv v p m) ==>
+  ptr_covers G tn dst s 32 ==>
   emit_void MSTORE [Var dst; Var len] sa = ((),sb) /\
   fn_has_code sa sb fn /\ ~ctx_has_dalloca ctx /\ ~s.vs_halted /\
   s.vs_current_bb = sa.cs_current_bb /\
   s.vs_inst_idx = LENGTH sa.cs_current_insts /\
-  ptr_covers G tn dst s 32 /\ lookup_var dst s = SOME b /\
+  lookup_var dst s = SOME b /\
   lookup_var len s = SOME (n2w n) /\ op_taint tn (Var len) = {} /\
   val_wf tv v /\
-  (p + type_memory_size tv <= w2n b \/ w2n b+32 <= p) /\
-  (!m. mem_agree_outside tn.t_mem s.vs_memory m ==> val_in_memory tv v p m) ==>
+  (p + type_memory_size tv <= w2n b \/ w2n b+32 <= p) ==>
   ?tm t.
     gas_path_ptr D 0 ctx fn PG G tn s 0 G tm (OK t) /\
     t = (mstore (w2n b) (n2w n) s) with vs_inst_idx := SUC s.vs_inst_idx /\
@@ -140,7 +141,7 @@ Theorem typed_copy_dynarray_store_length[local]:
       mem_bytes_at i 1 t.vs_memory = mem_bytes_at i 1 s.vs_memory /\
       (i IN tm.t_mem <=> i IN tn.t_mem))
 Proof
-  strip_tac >> (
+  ntac 3 strip_tac >> (
   `eval_operand (Var len) s = SOME (n2w n)` by simp[eval_operand_def] >>
   drule_all emit_scratch_word_counted >>
   disch_then (qspecl_then [`D`,`PG`] strip_assume_tac) >>
@@ -198,3 +199,80 @@ Proof
   simp[update_var_def]
 QED
 
+
+Theorem typed_copy_dynarray_header_counted[local]:
+  emit_op MLOAD [Var src] sa = (Var len,sb) /\
+  emit_op GT [Var len; Lit (n2w cap)] sb = (flag,sc) /\
+  emit_op ISZERO [flag] sc = (valid,sd) /\
+  emit_inst ASSERT [valid] [] sd = ((),se) /\
+  emit_void MSTORE [Var dst; Var len] se = ((),sf) /\
+  fn_has_code sa sb fn /\ fn_has_code sb se fn /\ fn_has_code se sf fn /\
+  ~ctx_has_dalloca ctx /\ ~s.vs_halted /\
+  s.vs_current_bb = sa.cs_current_bb /\ s.vs_inst_idx = LENGTH sa.cs_current_insts /\
+  not_fresh_at sa src /\ not_fresh_at sa dst /\
+  ptr_covers G tn src s (32+sn) /\ ptr_covers G tn dst s (32+dn) /\
+  lookup_var src s = SOME a /\ lookup_var dst s = SOME b /\
+  LENGTH vs <= cap /\ cap < dimword(:256) /\
+  val_wf (ArrayTV tv (Dynamic oldcap)) (ArrayV (DynArrayV vs)) /\
+  (w2n a + type_memory_size (ArrayTV tv (Dynamic oldcap)) <= w2n b \/
+    w2n b+32 <= w2n a) /\
+  (!mem. mem_agree_outside tn.t_mem s.vs_memory mem ==>
+    val_in_memory (ArrayTV tv (Dynamic oldcap)) (ArrayV (DynArrayV vs)) (w2n a) mem) ==>
+  ?H tm t.
+    gas_path_ptr D 0 ctx fn PG G tn s 0 H tm (OK t) /\
+    t.vs_current_bb = sf.cs_current_bb /\ t.vs_inst_idx = LENGTH sf.cs_current_insts /\
+    ~t.vs_halted /\ lookup_var len t = SOME (n2w (LENGTH vs)) /\
+    op_taint tm (Var len) = {} /\
+    t = (mstore (w2n b) (n2w (LENGTH vs)) s) with
+      <|vs_vars := t.vs_vars; vs_inst_idx := t.vs_inst_idx|> /\
+    tm.t_mem = tn.t_mem DIFF {i | w2n b <= i /\ i < w2n b+32} /\
+    tm.t_stor = tn.t_stor /\ tm.t_trans = tn.t_trans /\ tm.t_imm = tn.t_imm /\
+    (!root span. not_fresh_at sa root /\ ptr_covers G tn root s span ==>
+      ptr_covers H tm root t span) /\
+    (!mem. mem_agree_outside tm.t_mem t.vs_memory mem ==>
+      mem_word_at (w2n b) mem = n2w (LENGTH vs)) /\
+    (!mem. mem_agree_outside tm.t_mem t.vs_memory mem ==>
+      val_in_memory (ArrayTV tv (Dynamic oldcap)) (ArrayV (DynArrayV vs)) (w2n a) mem) /\
+    (!i. ~(w2n b <= i /\ i < w2n b+32) ==>
+      mem_bytes_at i 1 t.vs_memory = mem_bytes_at i 1 s.vs_memory /\
+      (i IN tm.t_mem <=> i IN tn.t_mem)) /\
+    (!p. not_fresh_at sa p ==> lookup_var p t = lookup_var p s /\
+      FLOOKUP H p = FLOOKUP G p /\ op_taint tm (Var p) = op_taint tn (Var p))
+Proof
+  strip_tac >> (
+  `32 <= 32+sn /\ ptr_covers G tn dst s 32` by
+    (gvs[ptr_covers_def] >> metis_tac[arithmeticTheory.LESS_EQ_TRANS,
+      arithmeticTheory.LESS_EQ_ADD]) >>
+  drule_all typed_copy_dynarray_checked_length >>
+  disch_then (qspecl_then [`PG`,`D`] strip_assume_tac) >>
+  `ptr_covers H tm dst t 32 /\ lookup_var dst t = SOME b` by
+    (gvs[ptr_covers_def] >> metis_tac[]) >>
+  `!mem. mem_agree_outside tm.t_mem t.vs_memory mem ==>
+    val_in_memory (ArrayTV tv (Dynamic oldcap)) (ArrayV (DynArrayV vs)) (w2n a) mem` by
+    (qpat_x_assum `t = _` SUBST1_TAC >> simp[]) >>
+  drule typed_copy_dynarray_store_length >>
+  disch_then drule >>
+  disch_then (drule_at (Pat `emit_void _ _ _ = _`)) >>
+  disch_then (drule_at (Pat `lookup_var len t = SOME _`)) >>
+  disch_then (drule_at (Pat `lookup_var dst t = SOME _`)) >>
+  disch_then (drule_at (Pat `fn_has_code _ _ _`)) >>
+  disch_then (drule_at (Pat `~ctx_has_dalloca _`)) >>
+  disch_then (qspecl_then [`PG`,`D`] mp_tac) >>
+  (impl_tac >- simp[]) >> strip_tac >>
+  qexistsl_tac [`H`,`tm'`,`t'`] >>
+  conj_tac >- (drule_all gas_path_ptr_then >> simp[]) >>
+  simp[] >>
+  conj_tac >- gvs[mstore_def,lookup_var_def] >>
+  conj_tac >- gvs[op_taint_def] >>
+  conj_tac >- (qpat_x_assum `t' = _` SUBST1_TAC >>
+    qpat_x_assum `t = _` SUBST1_TAC >> simp[mstore_def] >>
+    gvs[emit_void_def,emit_inst_def,emit_def,comp_bind_def,
+      comp_ignore_bind_def,comp_return_def,fresh_id_def,arithmeticTheory.ADD1]) >>
+  conj_tac >- (rpt strip_tac >>
+    `ptr_covers H tm root t span` by (gvs[ptr_covers_def] >> metis_tac[]) >>
+    gvs[ptr_covers_def,mstore_def] >> metis_tac[]) >>
+  conj_tac >- (qpat_x_assum `t = _` SUBST_ALL_TAC >> simp[]) >>
+  rpt strip_tac >> simp[op_taint_def] >>
+  qpat_x_assum `t' = _` SUBST1_TAC >> simp[mstore_def,lookup_var_def] >>
+  fs[lookup_var_def,op_taint_def] >> metis_tac[])
+QED
