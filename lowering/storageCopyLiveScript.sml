@@ -1204,7 +1204,7 @@ Proof
   gvs[lookup_storage_def, update_storage_def, combinTheory.APPLY_UPDATE_THM]
 QED
 
-Theorem copy_fold_region[local]:
+Theorem copy_fold_region:
   !k n q ws st.
     w2n k+n <= dimword (:256) ==>
     lookup_storage q
@@ -1236,7 +1236,7 @@ Proof
   asm_rewrite_tac[]
 QED
 
-Theorem copy_encoded_outside[local]:
+Theorem copy_encoded_outside:
   !tv v writes k st x.
     encode_value tv v = SOME writes /\ value_has_type tv v /\
     w2n k + type_slot_size tv <= dimword (:256) /\

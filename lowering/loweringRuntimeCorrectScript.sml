@@ -22,6 +22,8 @@
  *
  * TOP-LEVEL:
  *   lower_vyper_runtime_unit_correct -- S1
+ *   lower_vyper_runtime_unit_run_bounded -- S1b (sufficient gas), a
+ *     planned admission
  *   external_fallthrough_result_rel_any -- the fall-through halt, with
  *     state_rel at any compile env
  *
@@ -60,7 +62,7 @@ Ancestors
   venomState venomExecSemantics venomWf
   gasContext gasSummary gasOutcome gasExemptCert fragGasPath fragGasMode
   externalBodySourceOk externalEntryValueRevert externalEntryReachesBody externalBodyFrame externalFrameRetOk stmtsEnvRetTy
-  externalCallSelected
+  externalCallSelected fragFuelUnit passSimulationDefs
 
 val _ = Parse.hide "body";
 
@@ -384,4 +386,53 @@ Proof
   rename1 `_ = (sres, es0)` >> Cases_on `sres`
   >- (rename1 `INL u` >> Cases_on `u` >> irule lower_vyper_runtime_unit_body >> metis_tac[]) >>
   irule external_entry_value_revert >> metis_tac[]
+QED
+
+(* A related run does not fail. *)
+Theorem external_call_result_rel_terminates[local]:
+  !tops ret tx r vres.
+    external_call_result_rel tops ret tx r vres ==> terminates vres
+Proof
+  rpt gen_tac >> PairCases_on `r` >> Cases_on `vres` >>
+  simp[terminates_def, external_call_result_rel_def] >>
+  BasicProvers.EVERY_CASE_TAC >> simp[]
+QED
+
+(* S1b, sufficient gas.  The lowered run ends within a fuel that does not
+   depend on the entry state, in particular not on the external-call
+   outcomes.  Every function of the unit is fuel-stable once its callees
+   are (fragFuelUnit), so from some fuel G on every run of the unit gives
+   the same result, and a run that ends at any fuel ends at G.  S1 says the
+   run ends at some fuel. *)
+Theorem lower_vyper_runtime_unit_run_bounded:
+  !tops rpolicy unit am tx ret.
+    lower_vyper_runtime_unit tops rpolicy = SOME unit /\
+    supported_program tops /\
+    source_typing_ok tops am tx /\
+    source_storage_ok tops am tx /\
+    source_deployment_rel tops am tx
+    ==>
+    ?fuel. !vs.
+      valid_vyper_call tops tx vs.vs_call_ctx.cc_calldata ret /\
+      initial_venom_state_rel tops am tx vs /\
+      call_outcomes_ok am tx vs.vs_outcomes /\
+      (!marks. ~source_exempt tops
+         (call_external (SOME vs.vs_outcomes)
+            (gas_explicit marks vs.vs_gas_readings) am tx))
+      ==>
+      terminates (run_context fuel unit.cu_context vs)
+Proof
+  rpt strip_tac >>
+  drule lower_vyper_runtime_unit_context_entry >> strip_tac >>
+  qspecl_then [`tops`, `rpolicy`, `unit`] mp_tac
+    lower_vyper_runtime_unit_fns_stable >>
+  impl_tac >- simp[] >> strip_tac >>
+  drule_all run_context_terminates_uniform >> strip_tac >>
+  qexists_tac `G` >> rpt strip_tac >> first_x_assum irule >>
+  qspecl_then [`tops`, `rpolicy`, `unit`, `am`, `tx`, `ret`, `vs`] mp_tac
+    lower_vyper_runtime_unit_correct >>
+  simp[source_unit_execution_correct_def,
+       source_unit_execution_correct_at_def] >>
+  strip_tac >>
+  metis_tac[external_call_result_rel_terminates]
 QED

@@ -19,6 +19,6 @@ Proof
      goal_assum (drule_at Any) >> simp[expr_size_def]) >>
   irule (cj 2 (SPEC_ALL compile_extcall_case)) >> rpt conj_tac >>
   rpt strip_tac >>
-  FIRST [irule exprs_case_every_ok, irule results_case_every_ok] >>
+  irule exprs_case_every_ok >>
   fs[EVERY_MEM] >> metis_tac[MEM_TAKE, MEM_DROP_IMP]
 QED

@@ -890,7 +890,7 @@ Proof
       lookup_var_def] >> metis_tac[]
 QED
 
-Theorem compile_store_copy_path[local]:
+Theorem compile_store_copy_path:
   !ctx func loc src dst n sa u sb sbase b k.
     (loc = LocStorage \/ loc = LocTransient) /\
     compile_word_copy_loop src dst n LocMemory loc F sa = (u,sb) /\

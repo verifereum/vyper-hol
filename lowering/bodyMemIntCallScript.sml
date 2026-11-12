@@ -1,8 +1,10 @@
 (* Memory case of the body induction (bodyMemory's body_mem_mutual): internal
-   call. *)
+   call, from the call step (bodyMemIntCallStep's intcall_mem_call_step, held)
+   and the internal frame's return producer (bodyMemIntCallFrameRet's
+   internal_frame_ret_ok_mem, a leaf). *)
 Theory bodyMemIntCall
 Ancestors
-  bodyMemoryPreds
+  bodyMemoryPreds bodyMemIntCallStep bodyMemIntCallFrameRet
 
 Theorem body_intcall_mem_case:
   !cx v16 src_id_opt fn es v17.
@@ -73,5 +75,5 @@ Theorem body_intcall_mem_case:
        body_results_mem_ok cx es) ==>
     body_expr_mem_ok cx (Call v16 (IntCall (src_id_opt,fn)) es v17)
 Proof
-  cheat
+  ACCEPT_TAC (MATCH_MP intcall_mem_call_step internal_frame_ret_ok_mem)
 QED

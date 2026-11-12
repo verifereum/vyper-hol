@@ -74,7 +74,7 @@ Proof
   Cases_on `(fix_phi_inst actual_preds h).inst_opcode = PHI` >> simp[]
 QED
 
-Theorem scfg_fix_phis_run_snapshot[local]:
+Theorem scfg_fix_phis_run_snapshot_same_fuel:
   bb.bb_instructions = ps ++ tail /\
   EVERY (\i. i.inst_opcode = PHI) ps /\
   EVERY (\i. i.inst_opcode <> PHI) tail /\
@@ -86,7 +86,7 @@ Theorem scfg_fix_phis_run_snapshot[local]:
     (v with vs_inst_idx := LENGTH rs)
     (u with vs_inst_idx := LENGTH rs + LENGTH cs) /\
   run_block n C bb s = r /\ (!e. r <> Error e) ==>
-  ?m. run_block m C (fix_phis_in_block actual_preds bb) s = r
+  run_block n C (fix_phis_in_block actual_preds bb) s = r
 Proof
   strip_tac >>
   `EVERY (\i. i.inst_opcode = PHI) (MAP (fix_phi_inst actual_preds) rs) /\
@@ -104,10 +104,34 @@ Proof
      (u with vs_inst_idx := LENGTH rs + LENGTH cs) = r` by
     (simp[] >> dep_rewrite.DEP_REWRITE_TAC[scfg_fix_phis_exec_tail] >>
      simp[] >> metis_tac[]) >>
-  drule_all scfg_iprefix_continue >> strip_tac >>
-  qexists_tac `m` >>
+  `exec_block n C (fix_phis_in_block actual_preds bb)
+     (v with vs_inst_idx := LENGTH rs) = r` by
+    (drule scfg_iprefix_continue_same_fuel >> disch_then irule >>
+     simp[] >> metis_tac[scfg_fix_phis_interval_non_invoke]) >>
   qpat_x_assum `rs = _` kall_tac >> qpat_x_assum `cs = _` kall_tac >>
   simp[Excl "APPEND_ASSOC", run_block_def, scfg_eval_phis_append, scfg_phi_prefix_append]
+QED
+
+
+Theorem scfg_fn_fix_phis_run_block_same_fuel:
+  wf_function fn /\ fn_inst_wf fn /\ simplify_cfg_fn_ok fn /\
+  MEM bb fn.fn_blocks /\ fn_reachable fn bb.bb_label /\
+  ps = TAKE (phi_prefix_length bb.bb_instructions) bb.bb_instructions /\
+  bb.bb_instructions = ps ++ tail /\ EVERY (\i. i.inst_opcode <> PHI) tail /\
+  rs = FILTER (\i. (fix_phi_inst (pred_labels fn bb.bb_label) i).inst_opcode = PHI) ps /\
+  cs = FILTER (\i. (fix_phi_inst (pred_labels fn bb.bb_label) i).inst_opcode <> PHI) ps /\
+  MEM pb fn.fn_blocks /\ fn_cfg_edge fn pb.bb_label bb.bb_label /\
+  s.vs_prev_bb = SOME pb.bb_label /\
+  scfg_path_defined fn path pb (LENGTH pb.bb_instructions) s /\
+  (!qb. MEM qb fn.fn_blocks /\ MEM bb.bb_label (bb_succs qb) ==>
+    fn_reachable fn qb.bb_label) /\
+  run_block n C bb s = r /\ (!e. r <> Error e) ==>
+  run_block n C (fix_phis_in_block (pred_labels fn bb.bb_label) bb) s = r
+Proof
+  strip_tac >>
+  `EVERY (\i. i.inst_opcode = PHI) ps` by metis_tac[phi_prefix_all_phi] >>
+  drule_all scfg_fn_fix_phis_block >> strip_tac >>
+  irule scfg_fix_phis_run_snapshot_same_fuel >> metis_tac[]
 QED
 
 Theorem scfg_fn_fix_phis_run_block:
@@ -125,10 +149,8 @@ Theorem scfg_fn_fix_phis_run_block:
   run_block n C bb s = r /\ (!e. r <> Error e) ==>
   ?m. run_block m C (fix_phis_in_block (pred_labels fn bb.bb_label) bb) s = r
 Proof
-  strip_tac >>
-  `EVERY (\i. i.inst_opcode = PHI) ps` by metis_tac[phi_prefix_all_phi] >>
-  drule_all scfg_fn_fix_phis_block >> strip_tac >>
-  irule scfg_fix_phis_run_snapshot >> metis_tac[]
+  strip_tac >> qexists_tac `n` >>
+  irule scfg_fn_fix_phis_run_block_same_fuel >> metis_tac[]
 QED
 
 Theorem scfg_fix_phis_run_no_phi:
@@ -208,6 +230,28 @@ Proof
   rpt strip_tac >> gvs[]
 QED
 
+Theorem scfg_rooted_fix_phis_run_block_same_fuel:
+  wf_function fn /\ fn_inst_wf fn /\ simplify_cfg_fn_ok fn /\
+  (!b. MEM b fn.fn_blocks ==> fn_reachable fn b.bb_label) /\
+  fn_entry_state fn s0 /\ scfg_bprefix C fn s0 s /\
+  lookup_block s.vs_current_bb fn.fn_blocks = SOME bb /\
+  (!e. r <> Error e) /\ run_block n C bb s = r ==>
+  run_block n C (fix_phis_in_block (pred_labels fn bb.bb_label) bb) s = r
+Proof
+  rpt strip_tac >> drule_all scfg_bprefix_incoming >> strip_tac
+  >- (gvs[] >> drule_all scfg_entry_block_no_phi >> strip_tac >>
+      simp[scfg_fix_phis_run_no_phi]) >>
+  `MEM bb fn.fn_blocks` by metis_tac[lookup_block_MEM] >>
+  qabbrev_tac `ps = TAKE (phi_prefix_length bb.bb_instructions) bb.bb_instructions` >>
+  qabbrev_tac `tail = DROP (phi_prefix_length bb.bb_instructions) bb.bb_instructions` >>
+  `bb.bb_instructions = ps ++ tail` by simp[Abbr `ps`, Abbr `tail`] >>
+  `EVERY (\i. i.inst_opcode <> PHI) tail` by
+    (irule (cj 2 scfg_fn_fix_phis_parts) >>
+     simp[Abbr `ps`, Abbr `tail`] >> metis_tac[]) >>
+  irule scfg_fn_fix_phis_run_block_same_fuel >>
+  simp[] >> metis_tac[]
+QED
+
 Theorem scfg_rooted_fix_phis_run_block:
   wf_function fn /\ fn_inst_wf fn /\ simplify_cfg_fn_ok fn /\
   (!b. MEM b fn.fn_blocks ==> fn_reachable fn b.bb_label) /\
@@ -216,18 +260,7 @@ Theorem scfg_rooted_fix_phis_run_block:
   (!e. r <> Error e) /\ run_block n C bb s = r ==>
   ?m. run_block m C (fix_phis_in_block (pred_labels fn bb.bb_label) bb) s = r
 Proof
-  rpt strip_tac >> drule_all scfg_bprefix_incoming >> strip_tac
-  >- (gvs[] >> drule_all scfg_entry_block_no_phi >> strip_tac >>
-      qexists_tac `n` >> simp[scfg_fix_phis_run_no_phi]) >>
-  `MEM bb fn.fn_blocks` by metis_tac[lookup_block_MEM] >>
-  qabbrev_tac `ps = TAKE (phi_prefix_length bb.bb_instructions) bb.bb_instructions` >>
-  qabbrev_tac `tail = DROP (phi_prefix_length bb.bb_instructions) bb.bb_instructions` >>
-  `bb.bb_instructions = ps ++ tail` by simp[Abbr `ps`, Abbr `tail`] >>
-  `EVERY (\i. i.inst_opcode <> PHI) tail` by
-    (irule (cj 2 scfg_fn_fix_phis_parts) >>
-     simp[Abbr `ps`, Abbr `tail`] >> metis_tac[]) >>
-  irule scfg_fn_fix_phis_run_block >>
-  simp[] >> metis_tac[]
+  metis_tac[scfg_rooted_fix_phis_run_block_same_fuel]
 QED
 
 Theorem scfg_rooted_fix_phis_run_block_back:

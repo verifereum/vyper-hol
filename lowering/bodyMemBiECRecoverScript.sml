@@ -17,7 +17,8 @@ Theorem body_builtin_ecrecover_mem:
 Proof
   rpt gen_tac >> strip_tac >>
   rename1 `Builtin ann ECRecover args` >>
-  rewrite_tac[body_expr_mem_ok_def] >> rpt gen_tac >> strip_tac >>
+  (rpt gen_tac >> match_mp_tac body_expr_mem_ok_intro >>
+   conj_tac >- (rpt strip_tac >> gvs[])) >> rpt gen_tac >> strip_tac >>
   drule ecrecover_pre_types >> strip_tac >>
   `body_exprs_mem_ok cx args` by
     (first_x_assum irule >> simp[builtin_args_length_ok_def]) >>
