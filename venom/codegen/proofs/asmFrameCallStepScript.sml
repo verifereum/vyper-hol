@@ -1201,6 +1201,31 @@ Proof
   drule_all asm_handle_exception_memory_exception >> simp[]
 QED
 
+(* A raw equal-depth finish is precisely one of the two refund branches.
+   In particular, terminal precompiles still have their child frame here. *)
+Theorem asm_call_finish_same_depth_refund:
+  s.contexts = (c,rb)::rest /\ LENGTH c.stack < stack_limit /\
+  stipend <= c.gasUsed /\
+  asm_call_finish op (sender,address,value,ao,az,code,stipend,ro,rs,accounts) s = (r,t) /\
+  LENGTH t.contexts = LENGTH s.contexts ==>
+  r = INL () /\
+  (FST (HD t.contexts)).msgParams.gasLimit = c.msgParams.gasLimit /\
+  (FST (HD t.contexts)).gasUsed = c.gasUsed - stipend
+Proof
+  strip_tac >>
+  Cases_on `(lookup_account sender accounts).balance < value`
+  >- (drule_all asm_call_finish_balance >> strip_tac >> gvs[]) >>
+  `value <= (lookup_account sender accounts).balance` by decide_tac >>
+  Cases_on `1024 < LENGTH s.contexts`
+  >- (drule_all asm_call_finish_depth >> strip_tac >> gvs[]) >>
+  `LENGTH s.contexts <= 1024` by decide_tac >>
+  drule_all asm_call_finish_proceed >> disch_then (fn th => fs[th]) >>
+  qmatch_asmsub_abbrev_tac `proceed_call _ _ _ _ _ _ _ _ _ u` >>
+  `u.contexts = (c with returnData := [],rb)::rest` by simp[Abbr `u`] >>
+  `stipend <= (c with returnData := []).gasUsed` by simp[] >>
+  drule_all asm_proceed_call_memory_boundary >> strip_tac >> gvs[]
+QED
+
 Theorem asm_call_step_memory_success:
   s.contexts = (c,rb)::outer /\
   next_opcode c = SOME op /\ (op = Call \/ op = StaticCall) /\
@@ -5846,6 +5871,7 @@ Theorem asm_call_memory_pop_selectors:
   handle_exception ex u = (INL (),t) ==>
   ?c. t.contexts = (c,prb)::rest /\ c.msgParams = parent.msgParams /\
     c.pc = SUC parent.pc /\ c.stack = b2w (ex = NONE)::parent.stack /\
+    c.gasUsed <= parent.gasUsed /\
     c.returnData = (if ex = NONE \/ ex = SOME Reverted then child.returnData else []) /\
     c.memory = buffer_write mr.offset (TAKE mr.size c.returnData) parent.memory
 Proof
@@ -5863,6 +5889,19 @@ Proof
   drule_all asm_handle_exception_memory_exception >> strip_tac >> gvs[]
 QED
 
+Theorem asm_call_handle_memory_reserve:
+  s.contexts = (child,crb)::(parent,prb)::rest /\
+  child.msgParams.outputTo = Memory mr /\
+  EVERY (wf_context o FST) s.contexts /\ stack_room_ok s /\ gas_stack_ok s /\
+  ~vfm_abort ex /\ handle_step ex s = (INL (),t) /\
+  R <= parent.msgParams.gasLimit - parent.gasUsed ==>
+  R <= (FST (HD t.contexts)).msgParams.gasLimit - (FST (HD t.contexts)).gasUsed
+Proof
+  strip_tac >> drule_all asm_handle_step_memory >> simp[] >> strip_tac >>
+  `handle_exception ex s = (INL (),t)` by metis_tac[] >>
+  drule_all asm_call_memory_pop_selectors >> strip_tac >> simp[] >> decide_tac
+QED
+
 Theorem asm_call_run_memory_selectors:
   wf_state s /\ (?d. s.msdomain = Collect d) /\
   s.contexts = (child,crb)::(parent,prb)::rest /\
@@ -5874,6 +5913,7 @@ Theorem asm_call_run_memory_selectors:
     handle_exception ex u = (INL (),t) /\
     t.contexts = (c,prb)::rest /\ c.msgParams = parent.msgParams /\
     c.pc = SUC parent.pc /\ c.stack = b2w (ex = NONE)::parent.stack /\
+    c.gasUsed <= parent.gasUsed /\
     c.returnData = (if ex = NONE \/ ex = SOME Reverted then raw.returnData else []) /\
     c.memory = buffer_write mr.offset (TAKE mr.size c.returnData) parent.memory
 Proof
@@ -5883,6 +5923,19 @@ Proof
   `c.msgParams.outputTo = Memory mr` by simp[] >>
   drule_all asm_call_memory_pop_selectors >> strip_tac >>
   qexistsl_tac [`ex`,`u`,`c`,`rb`,`c'`] >> simp[]
+QED
+
+(* The caller's already retained reserve cannot be spent by a child run. *)
+Theorem asm_call_run_memory_reserve:
+  wf_state s /\ (?d. s.msdomain = Collect d) /\
+  s.contexts = (child,crb)::(parent,prb)::rest /\
+  child.msgParams.outputTo = Memory mr /\
+  run_call s = SOME (INL (),t) /\ LENGTH t.contexts = SUC (LENGTH rest) /\
+  R <= parent.msgParams.gasLimit - parent.gasUsed ==>
+  R <= (FST (HD t.contexts)).msgParams.gasLimit - (FST (HD t.contexts)).gasUsed
+Proof
+  strip_tac >> drule_at (Pat `run_call _ = _`) asm_call_run_memory_selectors >>
+  simp[] >> strip_tac >> simp[] >> decide_tac
 QED
 
 Theorem asm_call_returned_message_adoption:
