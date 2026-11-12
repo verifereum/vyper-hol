@@ -219,10 +219,10 @@ QED
 (* ADMITTED (out-of-packet key, allowed by the plan session): a For over a
    memory iterable, an array that is not rooted at a top-level name, has no
    ternary in it (#1254) and whose lowered value has the annotated type (no
-   widened internal call, #767): a temporary or a projection of a local.  compile_for_mem_frag
-   proves the loop against a keep hook; discharging it needs stmt_post's
-   alloca_frame (temporaries) and vv_at's local_place_at (places), which this
-   base doesn't have yet. *)
+   widened internal call, #767): a temporary or a projection of a local. The unused keep-hook compilation
+   bridge was deleted; the real proof must also derive the iterator's source
+   place classification, alongside stmt_post's alloca_frame and vv_at's
+   local_place_at. *)
 Theorem body_for_memory_iterable:
   !cx id typ it n body tops bindings ctx func cenv env env' ret_ty lctx RetQ
    es.
