@@ -5,7 +5,7 @@
 
 Theory bodyPopNestedTargetFrag
 Ancestors
-  exprSimPopNestedBase popTargetPre
+  exprSimPopNestedBase popTargetPre targetPlaceSimCasesBase exprSimHypsDefs
   loweringPosts bodySim
   list fragExec exprSimDefs exprSimProps exprSimHyps exprSimPop exprSimPopStorage
   targetPlaceSim targetPlaceSimCases vyperTypeEnv vyperTypeInvariants

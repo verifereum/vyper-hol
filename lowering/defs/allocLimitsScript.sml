@@ -17,8 +17,9 @@
  * pop_subscript_overlap for a subscript of a pop() result
  * (vyperlang/vyper#5350), and target_subscript_overlap for a target
  * subscript whose base passes through a dynamic-array element
- * (vyperlang/vyper#5280); target_in_immutables rejects a pop() of an
- * immutable's member, where Python's Venom codegen panics.
+ * (vyperlang/vyper#5280); target_in_immutables rejects a pop() of, and
+ * (in alloc_limits_stmt) an append() to, an immutable's member, where
+ * Python's Venom codegen panics.
  *)
 Theory allocLimits
 Ancestors
@@ -162,12 +163,13 @@ End
 
 (* Whether the target lies in an immutable: its root is a module variable
    that mvars (a compile env's ce_module_vars) places at an ImmutableLoc,
-   which compile_get_target_ptr gives LocCode.  A pop() of such a target
-   is rejected.  A local root is never in one: compile_get_target_ptr's
+   which compile_get_target_ptr gives LocCode.  A pop() of, or an
+   append() to, such a target is rejected.  A local root is never in one: compile_get_target_ptr's
    ImmutableLoc case for a NameTarget is unreachable, since every
    producer of ce_vars (allocate_args, declare_local, the parameter and
    kwarg registrations) binds a MemLoc or PtrVar.
-   Mirrors Python: expr.py _lower_dynarray_pop, whose length load
+   Mirrors Python: expr.py _lower_dynarray_pop and
+   _lower_dynarray_append, whose length load
    builder.load(darray_ptr, data_loc) raises CompilerPanic ("Cannot load
    from location: immutables", venom/builder.py) for an array in
    IMMUTABLES *)
@@ -443,7 +445,8 @@ Definition alloc_limits_stmt_def:
   alloc_limits_stmt cenv (AugAssign ty tgt op e) =
     (alloc_limits_target cenv tgt ∧ alloc_limits_expr cenv e) ∧
   alloc_limits_stmt cenv (Append tgt e) =
-    (alloc_limits_target cenv tgt ∧ alloc_limits_expr cenv e) ∧
+    (alloc_limits_target cenv tgt ∧ alloc_limits_expr cenv e ∧
+     ¬target_in_immutables cenv.ce_module_vars tgt) ∧
   alloc_limits_stmt cenv (Log id es) =
     (alloc_limits_exprs cenv es ∧ log_alloc_ok cenv id es) ∧
   alloc_limits_stmt cenv (Assert c reason) =

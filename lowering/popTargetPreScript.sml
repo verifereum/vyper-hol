@@ -78,7 +78,7 @@ Proof
     suffices_by simp[] >>
   ho_match_mp_tac (TypeBase.induction_of ``:base_assignment_target``) >>
   rw[target_root_def, target_in_immutables_def] >>
-  every_case_tac >> simp[]
+  BasicProvers.every_case_tac >> simp[]
 QED
 
 Theorem target_root_untyped:
