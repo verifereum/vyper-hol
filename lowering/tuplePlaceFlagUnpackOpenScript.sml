@@ -9,7 +9,7 @@ Theorem tuple_place_flag_unpack_outcome_open:
   value_has_type (TupleTV ltvs) (ArrayV (TupleV vs)) /\
   evaluate_type (get_tenv cx) (TupleT ltys) = SOME (TupleTV ltvs) /\
   LIST_REL (\t tv. type_memory_bytes cenv t = type_memory_size tv) ltys ltvs /\
-  expr_post ctx func cenv cx e es sa su s0 ee (ArrayV (TupleV vs)) op sv /\
+  expr_post H ctx func cenv cx e es sa su s0 ee (ArrayV (TupleV vs)) op sv /\
   (!x. op = Var x ==> not_fresh_at su x) /\ sa.cs_next_id <= su.cs_next_id /\
   (EXISTS (\t. ~is_word_type t) ltys ==> cenv.ce_target CapMcopy) /\
   compile_tuple_unpack cenv (TupleT ltys) flag gs op su = ((),sf) /\
@@ -32,7 +32,7 @@ Theorem tuple_place_flag_unpack_outcome_open:
   gas_outcome F (cx_tops cx) (ctx,func)
     (assign_tuple_targets cx (TupleTarget gs) (ArrayV (TupleV vs))) (ee,sv)
     (\res ff t. res = INL () /\ expr_sim_inv cenv cx env ff /\ ~block_is_terminated sf /\
-      stmt_state_rel ctx func cenv cx ff t /\ ~t.vs_halted /\
+      stmt_state_rel H ctx func cenv cx ff t /\ ~t.vs_halted /\
       t.vs_current_bb = sf.cs_current_bb /\
       t.vs_inst_idx = LENGTH sf.cs_current_insts /\
       (!x v. not_fresh_at su x /\ lookup_var x sv = SOME v ==> lookup_var x t = SOME v) /\

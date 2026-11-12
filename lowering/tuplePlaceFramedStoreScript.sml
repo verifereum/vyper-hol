@@ -7,7 +7,7 @@ Ancestors
   stmtSimDefs exprSimProps emitHelper exprLoweringProps compileEnv loweringStateRelDefs
 
 Theorem tuple_place_word_run_frame:
-  !ctx func cenv cx env ee ff s p w loc dst_op op dty dtv v sa sb a n.
+  !H ctx func cenv cx env ee ff s p w loc dst_op op dty dtv v sa sb a n.
     emit_void (case loc of LocStorage => SSTORE | LocTransient => TSTORE
                          | _ => MSTORE) [dst_op; op] sa = ((), sb) /\
     eval_operand dst_op s = SOME w /\
@@ -22,14 +22,14 @@ Theorem tuple_place_word_run_frame:
        cenv.ce_var_type id = SOME t0 ==>
        evaluate_type (get_tenv cx) t0 = SOME entry.type) /\
     evaluate_type (get_tenv cx) dty = SOME dtv /\ value_has_type dtv v /\
-    stmt_state_rel ctx func cenv cx ee s /\
+    stmt_state_rel H ctx func cenv cx ee s /\
     write_place cx p v ee = (INL (), ff) /\
     fn_has_code sa sb func /\ fn_inst_ids_distinct func /\
     ~s.vs_halted /\ s.vs_current_bb = sa.cs_current_bb /\
     s.vs_inst_idx = LENGTH sa.cs_current_insts /\
     (loc = LocMemory ==> a+n <= w2n w \/ w2n w+type_memory_size dtv <= a) ==>
     ?t. gas_marked_path F ctx func s 0 (OK t) /\
-        stmt_state_rel ctx func cenv cx ff t /\
+        stmt_state_rel H ctx func cenv cx ff t /\
         (!x. not_fresh_at sa x ==> lookup_var x t = lookup_var x s) /\
         (!aid b. FLOOKUP s.vs_allocas aid = SOME b ==>
                  FLOOKUP t.vs_allocas aid = SOME b) /\
@@ -46,7 +46,7 @@ Proof
   qabbrev_tac `u = (case loc of LocStorage => sstore w (typed_val_to_w256 dtv v) s
                   | LocTransient => tstore w (typed_val_to_w256 dtv v) s
                   | _ => mstore (w2n w) (typed_val_to_w256 dtv v) s)` >>
-  `stmt_state_rel ctx func cenv cx ff u` by
+  `stmt_state_rel H ctx func cenv cx ff u` by
     (Cases_on `p`
      >- (gvs[place_ptr_rel_def, Abbr `u`, slot_loc_def] >>
          drule_all place_store_word_backend_state >> Cases_on `b` >> gvs[])

@@ -81,10 +81,10 @@ Proof
 QED
 
 Theorem tuple_place_target_post_gas_obs[simp]:
-  (target_post ctx func cenv cx (es with gas_obs := gs) sa sb s0 ee pv vt r s =
-   target_post ctx func cenv cx es sa sb s0 ee pv vt r s) /\
-  (target_post ctx func cenv cx es sa sb s0 (ee with gas_obs := hs) pv vt r s =
-   target_post ctx func cenv cx es sa sb s0 ee pv vt r s)
+  (target_post H ctx func cenv cx (es with gas_obs := gs) sa sb s0 ee pv vt r s =
+   target_post H ctx func cenv cx es sa sb s0 ee pv vt r s) /\
+  (target_post H ctx func cenv cx es sa sb s0 (ee with gas_obs := hs) pv vt r s =
+   target_post H ctx func cenv cx es sa sb s0 ee pv vt r s)
 Proof
   simp[loweringPostsTheory.target_post_def, loweringPostsTheory.locals_kept_def,
        loweringPostsTheory.popped_kept_def]
@@ -98,7 +98,7 @@ Theorem tuple_place_marked_head_step:
   call_evaluation_safe cx (int_calls_target bt) /\ ~immutable_root cx bt /\
   gas_marked_exec F (ctx,func) (eval_target_place cx bt)
     (es,s0) marks (INL p) mid (OK s) /\
-  target_post ctx func cenv cx es sp sa s0 (mid with gas_obs := [])
+  target_post H ctx func cenv cx es sp sa s0 (mid with gas_obs := [])
     (PlaceR p) (Type (EL i tys)) r s /\
   compile_get_target_ptr compile_expr cenv bt sp = (r,sa) /\
   assignable_type (get_tenv cx) (TupleT tys) /\ arg_types_fit ltys tys /\
@@ -148,7 +148,7 @@ Proof
      goal_assum (drule_at Any) >> simp[] >> goal_assum (drule_at Any) >> simp[]) >>
   Cases_on `write_place cx p (EL i vs) (mid with gas_obs := [])` >>
   rename1 `write_place _ _ _ _ = (res,ff)` >>
-  `stmt_state_rel ctx func cenv cx (mid with gas_obs := []) s` by
+  `stmt_state_rel H ctx func cenv cx (mid with gas_obs := []) s` by
     fs[loweringPostsTheory.target_post_def] >>
   `res = INL ()` by (irule tuple_place_source_write_success >>
     goal_assum (drule_at Any) >> simp[] >> metis_tac[]) >> gvs[] >>
@@ -161,7 +161,7 @@ Proof
   `tuple_place_head ctx func cenv cx
     (es with gas_obs := gas_explicit marks s0.vs_gas_readings)
     lo sp tys ltys ltvs vs elems w i s0` by simp[] >>
-  `target_post ctx func cenv cx
+  `target_post H ctx func cenv cx
     (es with gas_obs := gas_explicit marks s0.vs_gas_readings)
     sp sa s0 (mid with gas_obs := []) (PlaceR p) (Type (EL i tys)) r s` by
     (fs[loweringPostsTheory.target_post_def, loweringPostsTheory.locals_kept_def,
@@ -261,7 +261,7 @@ Proof
     fs[vyperTypeSystemTheory.well_typed_target_def] >>
   `gas_outcome F (cx_tops cx) (ctx,func) (eval_target_place cx bt) (es,s0)
     (\res ee t. ?p. res = INL p /\
-      target_post ctx func cenv cx es sp sa s0 ee (PlaceR p) (Type (EL i tys)) r t /\
+      target_post H ctx func cenv cx es sp sa s0 ee (PlaceR p) (Type (EL i tys)) r t /\
       t.vs_current_bb = sa.cs_current_bb /\ t.vs_inst_idx = LENGTH sa.cs_current_insts)
     (\res ee r. expr_exit res r)` by
     (irule target_place_sim >> simp[] >>
@@ -278,7 +278,7 @@ Proof
   irule tuple_place_write_gas_prefix >>
   goal_assum (drule_at Any) >> goal_assum (drule_at Any) >>
   first_x_assum irule >> simp[] >>
-  qpat_x_assum `target_post _ _ _ _ _ _ _ _ _ _ _ _ _` mp_tac >>
+  qpat_x_assum `target_post _ _ _ _ _ _ _ _ _ _ _ _ _ _` mp_tac >>
   simp[loweringPostsTheory.target_post_def] >> strip_tac >>
   rpt strip_tac >>
   `not_fresh_at sa x` by
