@@ -124,12 +124,21 @@ Theorem u2s_zero_second_address_run[local]:
     OK (update_var (u2s_var a 13) (bw+n2w n-1w)
       (update_var (u2s_var a 12) (bw+n2w n) s))
 Proof
+  (* One step lemma per instruction, as in u2s_final_address_run, instead
+     of unfolding all of step_inst_base_def (2.5 s tactic timeout). *)
   strip_tac >>
-  simp[u2s_zero_def, u2s_inst_def, run_inst_seq_def,
-       step_inst_base_def, mk_inst_def, exec_pure2_def,
-       eval_operands_def, eval_operand_def,
-       lookup_var_def, update_var_def, FLOOKUP_UPDATE] >>
-  gvs[eval_operand_def, lookup_var_def]
+  `step_inst_base (u2s_inst a 20 ADD [buf; Lit (n2w n)] [u2s_var a 12]) s =
+     OK (update_var (u2s_var a 12) (bw + n2w n) s)` by
+    (simp[u2s_inst_def] >> irule emitHelperPropsTheory.step_ADD >>
+     simp[emitHelperPropsTheory.eval_operand_lit]) >>
+  `step_inst_base (u2s_inst a 21 SUB [Var (u2s_var a 12); Lit 1w]
+      [u2s_var a 13]) (update_var (u2s_var a 12) (bw + n2w n) s) =
+     OK (update_var (u2s_var a 13) (bw + n2w n - 1w)
+       (update_var (u2s_var a 12) (bw + n2w n) s))` by
+    (simp[u2s_inst_def] >> irule emitHelperPropsTheory.step_SUB >>
+     simp[emitHelperPropsTheory.eval_operand_update_var,
+          emitHelperPropsTheory.eval_operand_lit]) >>
+  simp[u2s_zero_def, exprLoweringPropsTheory.run_inst_seq_def]
 QED
 
 Theorem u2s_zero_tail_mem_ok[local]:
