@@ -240,12 +240,13 @@ Proof
   `step_prov PG (SND o_f rv) inst post = SND o_f (origin_set rv [v] NONE)` by
     (irule compare_prov_erasure >> simp[]) >>
   qexists_tac `tpost` >> gvs[] >>
-  conj_tac
-  >- (fs[local_rel_def] >> irule demand_agree_restrict >> goal_assum (drule_at Any) >> simp[]) >>
-  conj_tac
-  >- (irule relocation_clean_write_taint >> goal_assum (drule_at Any) >> simp[]) >>
-  conj_tac >- (irule relocation_env_update_var >> simp[]) >>
-  irule relocation_reader_context_update_var >> simp[])
+  rpt conj_tac >>
+  FIRST [
+    irule relocation_env_update_var >> simp[] >> NO_TAC,
+    irule relocation_reader_context_update_var >> simp[] >> NO_TAC,
+    irule relocation_clean_write_taint >> goal_assum (drule_at Any) >> simp[] >> NO_TAC,
+    fs[local_rel_def] >> irule demand_agree_restrict >> goal_assum (drule_at Any) >>
+      simp[] >> NO_TAC])
 QED
 
 val _ = export_theory();
