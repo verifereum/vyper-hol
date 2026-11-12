@@ -132,8 +132,9 @@ Theorem extrequest_compile_call_split:
       (addr::rest) dflt sa = (vv,sb) ==>
     ?addr_op s1 arg_vals s2 value_opt gas_opt default_opt s3 gas_op s4 result_op.
       lower_value cfn cenv (BaseT AddressT) addr sa = (addr_op,s1) /\
-      compile_multi_vvs cfn cenv (TAKE (LENGTH arg_types) rest) s1 =
-        (arg_vals,s2) /\
+      compile_ext_call_args cfn cenv (DROP (LENGTH arg_types) rest)
+        (MAP (lowered_value_type cenv) (TAKE (LENGTH arg_types) rest))
+        (TAKE (LENGTH arg_types) rest) s1 = (arg_vals,s2) /\
       compile_ext_call_kwargs cfn cenv ret_type opts
         (DROP (LENGTH arg_types) rest) s2 = ((value_opt,gas_opt,default_opt),s3) /\
       (case gas_opt of SOME g => (g,s3) | NONE => emit_op GAS [] s3) =
