@@ -6,7 +6,7 @@ Ancestors
   localPtrsProps emitHelperProps fragExec venomInst list finite_map arithmetic
   allocationPtr stmtSimForArrayLoop stmtSimDeclCompose words fragGasMode
   stmtLoweringMono vyperAST stmtSimDefs gasSummary vyperInterpreter
-  vyperState vyperValue gasContext
+  vyperState vyperValue gasContext gasOutcome
 Libs
   monadsyntax
 
@@ -131,8 +131,11 @@ Theorem immutable_entry_allocation_bound:
   w2n dst + sz < dimword (:256)
 Proof
   strip_tac >>
-  `?H0. stmt_state_rel H0 ctx func cenv cx es s` by
-    (fs[array_loop_inv_def] >> metis_tac[]) >>
+  `?(H0:(bool # bytes32 # type_value) list # num list). stmt_state_rel H0 ctx func cenv cx es s` by
+    (fs[array_loop_inv_def] >>
+     qpat_x_assum `!H. valid_horizon _ _ H _ ==> _ /\ _` (qspec_then `H` mp_tac) >>
+     impl_tac >- first_assum ACCEPT_TAC >> strip_tac >>
+     qexists_tac `H` >> first_assum ACCEPT_TAC) >>
   gvs[array_loop_inv_def, mk_inst_def] >>
   drule_all (SRULE [mk_inst_def] stmt_state_rel_alloca_site_bound) >> simp[]
 QED
@@ -190,8 +193,8 @@ Proof
   `w2n dst + sz < dimword (:256)` by
     (drule_all immutable_entry_allocation_bound >> simp[]) >>
   qpat_x_assum `stride = type_memory_size tv` SUBST_ALL_TAC >>
-  `?H0. valid_horizon cx st0 H0 ei.storage_trace` by fs[array_loop_inv_def] >>
-  pop_assum (qx_choose_then `H0` assume_tac) >>
+  `?H0. valid_horizon cx st0 H0 ei.storage_trace` by
+    (fs[array_loop_inv_def] >> qexists_tac `H` >> first_assum ACCEPT_TAC) >>
   `P ei /\ stmt_state_rel H0 ctx func cenv cx ei s /\
    (!H. valid_horizon cx st0 H ei.storage_trace ==>
       stmt_state_rel H ctx func cenv cx ei s)` by
@@ -221,6 +224,7 @@ Proof
   qexistsl_tac [`tot`, `ov`, `off`, `j5`, `j4`, `j3`, `dyn`] >>
   asm_rewrite_tac [] >>
   asm_simp_tac (srw_ss()) [mk_inst_def] >>
+  qexists_tac `H0` >> conj_tac >- first_assum ACCEPT_TAC >>
   decide_tac
 QED
 (* A declared pointer is excluded only from scopes in which the new name is absent. *)
@@ -276,8 +280,8 @@ Proof
   `w2n dst + sz < dimword (:256)` by
     (drule_all immutable_entry_allocation_bound >> simp[]) >>
   qpat_x_assum `stride = type_memory_size tv` SUBST_ALL_TAC >>
-  `?H0. valid_horizon cx st0 H0 ei.storage_trace` by fs[array_loop_inv_def] >>
-  pop_assum (qx_choose_then `H0` assume_tac) >>
+  `?H0. valid_horizon cx st0 H0 ei.storage_trace` by
+    (fs[array_loop_inv_def] >> qexists_tac `H` >> first_assum ACCEPT_TAC) >>
   `P ei /\ stmt_state_rel H0 ctx func cenv cx ei s /\
    (!H. valid_horizon cx st0 H ei.storage_trace ==>
       stmt_state_rel H ctx func cenv cx ei s)` by
@@ -305,7 +309,9 @@ Proof
   qpat_assum `compile_iter_elem_copy _ _ _ _ _ _ _ _ _ = _` (irule_at Any) >>
   qexistsl_tac [`tot`, `ov`, `off`, `j5`, `j4`, `j3`, `dyn`] >>
   asm_rewrite_tac [] >>
-  asm_simp_tac (srw_ss()) [mk_inst_def] >> decide_tac
+  asm_simp_tac (srw_ss()) [mk_inst_def] >>
+  qexists_tac `H0` >> conj_tac >- first_assum ACCEPT_TAC >>
+  decide_tac
 QED
 
 
@@ -581,6 +587,7 @@ Proof
      qpat_x_assum `case bd of Fixed cap => LENGTH vs = cap | Dynamic cap => T` mp_tac >>
      qpat_x_assum `case bd of Fixed cap => T | Dynamic cap => _` mp_tac >>
      qpat_x_assum `evaluate_type _ et = SOME tv` mp_tac >>
+     qpat_x_assum `valid_horizon cx st0 _ es.storage_trace` mp_tac >>
      rpt (pop_assum kall_tac) >>
      Cases_on `bd` >> simp[bound_length_def] >> metis_tac[]) >>
   `?bb. lookup_block sb0.cs_current_bb func.fn_blocks = SOME bb /\
@@ -740,7 +747,7 @@ Proof
         qpat_assum `bound_length bd < _` mp_tac >>
         rpt (pop_assum kall_tac) >> decide_tac),
        (rpt gen_tac >> strip_tac >>
-        qpat_assum `!k ei t. array_loop_inv _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ /\ _ ==> _`
+        qpat_assum `!k ei t. array_loop_inv _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ /\ _ ==> _`
           drule_all >> strip_tac >>
         qexists_tac `s2` >> rpt conj_tac >>
         FIRST [first_assum ACCEPT_TAC,
