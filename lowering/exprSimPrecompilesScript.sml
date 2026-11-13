@@ -422,7 +422,11 @@ Proof
   simp[gas_summary_at_def, gas_marked_exec_def, gas_explicit_def,
        eval_exprs_nil, gas_marked_path_def] >>
   qexistsl_tac [`INL []`, `es`, `OK s0`] >>
-  simp[cj 1 gas_path_rules, typed_args_post_def, wb_frame_refl]
+  simp[cj 1 gas_path_rules, typed_args_post_def, wb_frame_refl] >>
+  disj1_tac >> rpt strip_tac >>
+  `(es with gas_obs := []).accounts = es.accounts /\
+   (es with gas_obs := []).tStorage = es.tStorage` by simp[] >>
+  metis_tac[vyperStorageFootprintTheory.storage_well_formed_on_backends]
 QED
 
 Theorem typed_args_post_cons:
@@ -452,9 +456,7 @@ Proof
   gvs[typed_args_post_def] >> conj_tac
   >- (irule eval_operand_frame >> goal_assum (drule_at Any) >>
       simp[] >> metis_tac[wb_frame_vars]) >>
-  irule wb_frame_trans >> simp[] >> reverse conj_tac
-  >- (qexistsl_tac [`es1`, `s1`, `t`] >> simp[]) >>
-  qexistsl_tac [`ctx`, `cx`, `func`] >> simp[]
+  irule wb_frame_trans >> simp[] >> rpt conj_tac >~ [`wb_frame _ _ _ _ _ _`] >- (qexistsl_tac [`es1`, `s1`, `t`] >> simp[]) >> metis_tac[]
 QED
 
 Theorem typed_args_head_admissible[local]:
@@ -1401,13 +1403,13 @@ Proof
   qpat_x_assum `stmt_state_rel H ctx func cenv cx es s` mp_tac >>
   drule_all alloc_buffer_frame_run >> strip_tac >> disch_tac >>
   `wb_frame cenv es es sf s t` by
-    (irule wb_frame_trans >> simp[] >>
-     reverse conj_tac >- (qexistsl_tac [`es`,`sb`,`u`] >> simp[]) >>
-     qexistsl_tac [`ctx`,`cx`,`func`] >> simp[]) >>
+    (irule wb_frame_trans >> simp[] >> rpt conj_tac
+     >~ [`wb_frame _ _ _ _ _ _`] >- (qexistsl_tac [`es`,`sb`,`u`] >> simp[]) >>
+     metis_tac[]) >>
   `!old b sz. old < sf.cs_next_id /\ FLOOKUP t.vs_allocas old = SOME (b,sz) ==>
     regions_disjoint (w2n w) outsz b sz` by
     (rpt strip_tac >> irule state_allocations_disjoint >>
-     qexistsl_tac [`sb.cs_next_id`, `old`, `cenv`,`ctx`,`cx`,`es`,`func`, `t`] >>
+     qexistsl_tac [`H`, `sb.cs_next_id`, `old`, `cenv`,`ctx`,`cx`,`es`,`func`, `t`] >>
      simp[] >> decide_tac) >>
   `!z. not_fresh_at sf z ==> lookup_var z t = lookup_var z s` by
     (qx_gen_tac `z` >> strip_tac >>
@@ -1503,7 +1505,7 @@ Proof
     FLOOKUP s1.vs_allocas aid = SOME (b,len) ==>
     regions_disjoint (w2n wi) insz b len` by
     (rpt strip_tac >> irule state_allocations_disjoint >>
-     qexistsl_tac [`sf.cs_next_id`,`aid`,`cenv`,`ctx`,`cx`,`es`,`func`,`s1`] >>
+     qexistsl_tac [`H`,`sf.cs_next_id`,`aid`,`cenv`,`ctx`,`cx`,`es`,`func`,`s1`] >>
      simp[] >> decide_tac) >>
   qpat_x_assum `!s1 wi. _` (qspecl_then [`s1`,`wi`] mp_tac) >>
   (impl_tac >- (rpt conj_tac >> first_assum ACCEPT_TAC)) >> strip_tac >>
@@ -1514,9 +1516,9 @@ Proof
      `not_fresh_at sa x` by (gvs[not_fresh_at_def] >> decide_tac) >>
      simp[]) >>
   `wb_frame cenv es es sf s u` by
-    (irule wb_frame_trans >> simp[] >>
-     reverse conj_tac >- (qexistsl_tac [`es`,`sf`,`s1`] >> simp[]) >>
-     qexistsl_tac [`ctx`,`cx`,`func`] >> simp[]) >>
+    (irule wb_frame_trans >> simp[] >> rpt conj_tac
+     >~ [`wb_frame _ _ _ _ _ _`] >- (qexistsl_tac [`es`,`sf`,`s1`] >> simp[]) >>
+     metis_tac[]) >>
   `!x. ib.buf_operand = Var x ==> not_fresh_at sb x` by
     (rpt strip_tac >> gvs[not_fresh_at_def] >> decide_tac) >>
   qpat_x_assum `wb_frame cenv es es sf s s1` kall_tac >>
@@ -1528,7 +1530,7 @@ Proof
     metis_tac[] >>
   `regions_disjoint (w2n po) outsz (w2n wi) insz` by
     (irule state_allocations_disjoint >>
-     qexistsl_tac [`sb.cs_next_id`,`sf.cs_next_id`,`cenv`,`ctx`,`cx`,`es`,`func`,`t`] >>
+     qexistsl_tac [`H`,`sb.cs_next_id`,`sf.cs_next_id`,`cenv`,`ctx`,`cx`,`es`,`func`,`t`] >>
      simp[] >> decide_tac) >>
   (* the input buffer is the only memory written: the pure frame *)
   `!n lb lsz. local_region cenv es.scopes s n lb lsz ==>
@@ -1711,9 +1713,9 @@ Proof
   `wb_frame cenv es es sf s3 (mstore (w2n wo) 0w s3)` by
     (irule scratch_mstore_frame >> conj_tac >> first_assum ACCEPT_TAC) >>
   `wb_frame cenv es es sf s (mstore (w2n wo) 0w s3)` by
-    (irule wb_frame_trans >> simp[] >>
-     reverse conj_tac >- (qexistsl_tac [`es`,`sf`,`s3`] >> simp[]) >>
-     qexistsl_tac [`ctx`,`cx`,`func`] >> simp[]) >>
+    (irule wb_frame_trans >> simp[] >> rpt conj_tac
+     >~ [`wb_frame _ _ _ _ _ _`] >- (qexistsl_tac [`es`,`sf`,`s3`] >> simp[]) >>
+     metis_tac[]) >>
   (* the output word lands in the fresh output buffer: the pure frame *)
   `pure_frame cenv func es sf s (mstore (w2n wo) 0w s3)` by
     (match_mp_tac (Q.SPECL [`cenv`,`func`,`es`,`sf`,`s`,`s3`,`mstore (w2n (wo:256 word)) 0w s3`,
@@ -2339,7 +2341,7 @@ Proof
          gvs[loweringStateRelDefsTheory.regions_disjoint_def, listTheory.LENGTH_TAKE_EQ] >>
          decide_tac) >>
      irule precompile_write_immutables >>
-     reverse conj_tac >- (qexistsl_tac [`ctx`,`func`] >> simp[]) >>
+     reverse conj_tac >- (qexistsl_tac [`H`,`ctx`,`func`] >> simp[]) >>
      qexists_tac `w2n outsz` >> simp[listTheory.LENGTH_TAKE_EQ] >>
      first_assum ACCEPT_TAC) >>
   conj_tac >- gvs[] >>
@@ -2773,13 +2775,11 @@ Proof
       metis_tac[run_inst_seq_append]) >>
   conj_tac
   >- (qpat_x_assum `stmt_state_rel H _ _ _ _ (_ with outcomes := _) tf` mp_tac >> simp[]) >>
-  irule wb_frame_trans >>
-  conj_tac >- simp[] >>
-  reverse conj_tac
-  >- (qexistsl_tac [`es`, `sf`, `t`] >> simp[] >>
+  irule wb_frame_trans >> conj_tac >- simp[] >>
+  conj_tac >- (qexistsl_tac [`es`, `sf`, `t`] >> simp[] >>
       qpat_x_assum `wb_frame _ _ (_ with outcomes := _) _ t tf` mp_tac >>
       simp[exprSimHashTheory.wb_frame_outcomes]) >>
-  qexistsl_tac [`ctx`, `cx`, `func`] >> simp[]
+  qexistsl_tac [`H`, `ctx`, `cx`, `func`] >> simp[]
 QED
 
 Theorem compile_ecrecover_oracle_failure:
@@ -3023,10 +3023,9 @@ Proof
      metis_tac[vyperStorageFootprintTheory.storage_well_formed_on_backends]) >>
   irule expr_post_typed_stack_intro >> simp[stmt_state_rel_inst_idx] >>
   irule wb_frame_trans >> conj_tac >- simp[] >>
-  reverse conj_tac
-  >- (qexistsl_tac [`es'`, `sm`, `input`] >>
+  conj_tac >- (qexistsl_tac [`es'`, `sm`, `input`] >>
       gvs[wb_frame_def, lookup_var_def] >> metis_tac[]) >>
-  qexistsl_tac [`ctx`, `cx`, `func`] >> simp[]
+  qexistsl_tac [`H`, `ctx`, `cx`, `func`] >> simp[]
 QED
 
 Theorem ecrecover_read_cases:
@@ -3122,7 +3121,7 @@ Proof
       qexistsl_tac [`INR exc`, `es_end`, `r`] >> conj_tac
       >- (irule gas_marked_exec_bind_exception >> first_assum ACCEPT_TAC) >>
       disj2_tac >> conj_tac >- first_assum ACCEPT_TAC >>
-      rpt strip_tac >>
+      BETA_TAC >> rpt strip_tac >>
       qpat_x_assum `!H exc ee r. _ ==> R _ _ _ _` irule >>
       gvs[wb_args_exit_def]) >>
   qexists_tac `marks` >> disj2_tac >> disj2_tac >>
@@ -3202,7 +3201,8 @@ Theorem ecrecover_success_path[local]:
   ?n u. gas_marked_path F ctx func t n (OK u) /\
     u.vs_current_bb = sb.cs_current_bb /\
     u.vs_inst_idx = LENGTH sb.cs_current_insts /\
-    !H'. stmt_state_rel H' ctx func cenv cx es' t /\
+    !(H':(bool # 256 word # type_value) list # num list).
+      stmt_state_rel H' ctx func cenv cx es' t /\
          storage_well_formed_on cx es' (FST H') ==>
       expr_post H' ctx func cenv cx (Builtin (BaseT AddressT) ECRecover args)
         es sa sb s0 (es' with outcomes := SOME rest)
@@ -3236,11 +3236,10 @@ Proof
   simp[stmt_state_rel_inst_idx, expr_type_def, is_word_type_def,
        vyperValueTheory.evaluate_type_def] >>
   irule wb_frame_trans >> conj_tac >- simp[] >>
-  reverse conj_tac
-  >- (qexistsl_tac [`es'`, `sm`, `t`] >>
+  conj_tac >- (qexistsl_tac [`es'`, `sm`, `t`] >>
       gvs[wb_frame_def, lookup_var_def] >>
       rpt conj_tac >> first_assum ACCEPT_TAC) >>
-  qexistsl_tac [`ctx`, `cx`, `func`] >> simp[]
+  qexistsl_tac [`H`, `ctx`, `cx`, `func`] >> simp[]
 QED
 
 Theorem ecrecover_failure_path[local]:
@@ -3271,7 +3270,7 @@ Theorem ecrecover_continuation_frame[local]:
       INR exc => (INR exc, es1)
     | INL w => (do precompile_call_success ECRecover; return w od) es1)
 Proof
-  `!w. storage_trace_frame
+  `!(w:value). storage_trace_frame
          (do precompile_call_success ECRecover; return w od)` by
     simp[storage_trace_frame_ignore_bind, storage_trace_frame_return,
          storage_trace_frame_precompile_call_success] >>
@@ -3318,8 +3317,7 @@ Proof
   qexists_tac `\H vs ee t. typed_args_post H ctx func cenv cx es sa s0 ee args
                  [h;v;r;sig] vs t /\ t.vs_current_bb = sm.cs_current_bb /\
                  t.vs_inst_idx = LENGTH sm.cs_current_insts` >>
-  BETA_TAC >> conj_tac
-  >~ [`gas_outcome _ _ _ _ _ _ _ _ _`] >- first_assum ACCEPT_TAC >>
+  BETA_TAC >> reverse conj_tac >- first_assum ACCEPT_TAC >>
   rpt gen_tac >> strip_tac >>
   `storage_trace_frame (eval_exprs cx args)` by
     simp[evaluate_storage_trace_frame] >>
@@ -3339,8 +3337,15 @@ Proof
   drule_all ecrecover_typed_result >>
   disch_then (qspec_then `ee.accounts` strip_assume_tac) >>
   gvs[typed_args_post_def] >>
+  `stmt_state_rel H ctx func cenv cx es s0` by
+    (qpat_assum `!H. valid_horizon _ _ H es.storage_trace ==> _`
+       (qspec_then `H` mp_tac) >> simp[]) >>
+  `stmt_state_rel H ctx func cenv cx ee t` by
+    (qpat_assum `!H. valid_horizon _ _ H ee.storage_trace ==> _`
+       (qspec_then `H` mp_tac) >> simp[]) >>
   `ee.outcomes = SOME t.vs_outcomes` by
-    gvs[stmt_state_rel_def, state_rel_def] >>
+    (qpat_x_assum `stmt_state_rel H _ _ _ _ ee t` mp_tac >>
+     rpt (pop_assum kall_tac) >> simp[stmt_state_rel_def, state_rel_def]) >>
   `!x. MEM (Var x) [h;v;r;sig] ==> not_fresh_at sm x` by
     (gvs[] >> metis_tac[]) >>
   qmatch_asmsub_abbrev_tac `builtin_result _ _ _ _ _ _ = INL (AddressV addr)` >>
@@ -3375,10 +3380,13 @@ Proof
        storage_well_formed_on cx ee (FST H2)` by
         (qpat_x_assum `!H. valid_horizon _ _ H ee.storage_trace ==> _`
            (qspec_then `H2` mp_tac) >> simp[]) >>
-      qpat_x_assum `!H'. stmt_state_rel H' _ _ _ _ _ _ /\ _ ==> _`
-        (qspec_then `H2` mp_tac) >>
-      impl_tac >- simp[] >> strip_tac >>
-      gvs[Abbr `addr`]) >>
+      first_x_assum (fn th =>
+        if is_forall (concl th) andalso
+           can (find_term (fn tm => is_const tm andalso
+                  fst (dest_const tm) = "expr_post")) (concl th)
+        then mp_tac (Q.SPEC `H2` th) else NO_TAC) >>
+      impl_tac >- simp[] >>
+      simp[Abbr `addr`]) >>
   `~(?co rest. t.vs_outcomes = co::rest /\ co.co_success)` by gvs[] >>
   drule_all ecrecover_failure_path >> strip_tac >>
   qexists_tac `REPLICATE n F` >> rewrite_tac[gas_summary_at_def] >>

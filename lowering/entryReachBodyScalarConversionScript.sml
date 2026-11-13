@@ -1,10 +1,10 @@
 Theory entryReachBodyScalarConversion
 Ancestors
-  supportedTypes vyperTyping vyperABI vyperABIRoundtrip contractABI
+  entryReachBodyConversionSupport supportedTypes vyperTyping vyperABI vyperABIRoundtrip contractABI
   list integer vyperValue vyperArith vyperMisc byte words string combin
   venomMemProps divides
 
-Theorem entry_scalar_forward_inverse:
+Theorem scalar_forward_inverse[local]:
   supported_scalar_type ty /\ evaluate_type env ty = SOME tv /\
   value_has_type tv v /\ vyper_to_abi env ty v = SOME av ==>
   abi_to_vyper env ty av = SOME v
@@ -38,7 +38,7 @@ Proof
   simp[divides_def] >> CONV_TAC (DEPTH_CONV fcpLib.INDEX_CONV) >> simp[]
 QED
 
-Theorem entry_scalar_conversion_typed:
+Theorem scalar_conversion_typed[local]:
   supported_scalar_type ty /\ evaluate_type env ty = SOME tv /\
   value_has_type tv v /\ vyper_to_abi env ty v = SOME av ==>
   has_type (vyper_to_abi_type env ty) av
@@ -84,4 +84,36 @@ Proof
       CONV_TAC (DEPTH_CONV fcpLib.INDEX_CONV) >> simp[]) >>
   mp_tac (Q.ISPEC `word_of_bytes_be l : 160 word` w2n_lt) >>
   simp[dimword_def] >> CONV_TAC (DEPTH_CONV fcpLib.INDEX_CONV) >> simp[]
+QED
+
+Theorem entry_scalar_forward_inverse:
+  entry_abi_leaf ty /\ evaluate_type env ty = SOME tv /\
+  value_has_type tv v /\ vyper_to_abi env ty v = SOME av ==>
+  abi_to_vyper env ty av = SOME v
+Proof
+  rewrite_tac[entry_abi_leaf_def] >> strip_tac
+  >- metis_tac[scalar_forward_inverse] >>
+  gvs[evaluate_type_def, AllCaseEqs()] >> Cases_on `v` >>
+  gvs[value_has_type_def, vyper_to_abi_def, vyper_to_abi_base_def,
+      abi_to_vyper_def, compatible_bound_def]
+QED
+
+(* bytes0 has no ABI type: valid_bytes_bound (SOME 0) fails. *)
+Theorem entry_scalar_conversion_typed:
+  entry_abi_leaf ty /\ ty <> BaseT (BytesT (Fixed 0)) /\
+  evaluate_type env ty = SOME tv /\
+  value_has_type tv v /\ vyper_to_abi env ty v = SOME av ==>
+  has_type (vyper_to_abi_type env ty) av
+Proof
+  rewrite_tac[entry_abi_leaf_def] >> strip_tac
+  >- metis_tac[scalar_conversion_typed] >>
+  gvs[evaluate_type_def, AllCaseEqs()] >> Cases_on `v` >>
+  gvs[value_has_type_def, vyper_to_abi_def, vyper_to_abi_base_def,
+      vyper_base_to_abi_type_def, has_type_def, valid_int_bound_def,
+      compatible_bound_def]
+  >- (`n < 2 ** 256` suffices_by simp[] >>
+      irule arithmeticTheory.LESS_LESS_EQ_TRANS >> qexists_tac `2 ** m` >>
+      conj_tac >- simp[] >>
+      irule arithmeticTheory.EXP_BASE_LEQ_MONO_IMP >> simp[]) >>
+  Cases_on `l` >> fs[wordsTheory.dimword_def]
 QED

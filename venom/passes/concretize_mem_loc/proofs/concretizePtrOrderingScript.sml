@@ -82,6 +82,13 @@ Proof
   simp[OL, listTheory.EVERY_MAP, listTheory.EVERY_MEM, ptr_base_allocas_ordered]
 QED
 
+Theorem ptr_escaped_allocas_ordered[simp]:
+  OL alloc_to (ml_escaped_allocas bpr fn)
+Proof
+  simp[ml_escaped_allocas_def] >> irule ptr_ordered_merge_fold >>
+  simp[OL, listTheory.EVERY_MAP, listTheory.EVERY_MEM, ptr_base_allocas_ordered]
+QED
+
 
 Theorem ptr_used_inst_ordered:
   (!name. OL alloc_to (mems name)) /\
@@ -376,7 +383,7 @@ QED
 
 Theorem ptr_livesets_insts_ordered:
   !ls. ptr_livesets_ordered ls ==>
-  ptr_livesets_ordered (ml_livesets_insts label la us ls insts)
+  ptr_livesets_ordered (ml_livesets_insts esc label la us ls insts)
 Proof
   Induct_on `insts` >- simp[ml_livesets_insts_def] >>
   gen_tac >> PairCases_on `h` >>
@@ -399,7 +406,7 @@ QED
 Theorem ptr_livesets_blocks_ordered[local]:
   !ls. ptr_livesets_ordered ls ==>
   ptr_livesets_ordered
-    (FOLDL (\m bb. ml_livesets_insts bb.bb_label la us m
+    (FOLDL (\m bb. ml_livesets_insts esc bb.bb_label la us m
       (MAPi (\i inst. (i,inst)) bb.bb_instructions)) ls blocks)
 Proof
   Induct_on `blocks` >> simp[] >>
@@ -407,7 +414,7 @@ Proof
 QED
 
 Theorem ptr_compute_livesets_ordered:
-  ptr_livesets_ordered (ml_compute_livesets la us fn)
+  ptr_livesets_ordered (ml_compute_livesets esc la us fn)
 Proof
   simp[ml_compute_livesets_def, ptr_livesets_blocks_ordered]
 QED

@@ -2593,7 +2593,7 @@ Proof
   Cases_on `builtin_result cx ee.accounts ann bt [expr_type e] [v]` >> gvs[]
 QED
 
-Theorem sha256_continuation_frame[local]:
+Theorem sha256_continuation_frame:
   storage_trace_frame (\es1.
     case builtin_result cx es1.accounts ann Sha256 [ty] [v] of
       INR exc => (INR exc, es1)

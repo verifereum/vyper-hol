@@ -7,7 +7,7 @@ Ancestors
   concretizePtrTaintContent
   concretizePtrDeletedGapHistory concretizePtrStructuralTranscript
   concretizePtrStructuralTrace concretizePtrActivationChronology frameCfgBoundary
-  concretizeStepStructure concretizeStepShape concretizeStepCallChecks
+  concretizeStepStructure concretizeStepShape
   concretizeStepRetpc concretizeStageShape
   venomExecSemantics venomState venomWf unitShapeDefs ptrDiscipline ptrDisciplineEmptyTaint
   pointerConfinedDefs memLocDefs

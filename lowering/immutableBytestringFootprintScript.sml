@@ -28,7 +28,7 @@ Proof
       valueEncodingTheory.type_memory_size_def] >>
   simp[GSYM valueEncodingPropsTheory.mem_word_at_eq_mload] >>
   qmatch_goalsub_abbrev_tac `word_size len` >>
-  imp_res_tac word_size_monotone >>
+  imp_res_tac exprSimPropsTheory.word_size_monotone >>
   mp_tac (Q.SPEC `len` word_size_capacity) >>
   simp[Abbr `len`] >> decide_tac
 QED

@@ -522,7 +522,7 @@ Theorem for_bytes_runtime_extent:
 Proof
   strip_tac >>
   `word_size len <= word_size cap` by
-    (irule exprSimHypsTheory.word_size_monotone >> simp[]) >>
+    (irule exprSimPropsTheory.word_size_monotone >> simp[]) >>
   `32 + 32 * word_size len < dimword (:256)` by decide_tac >>
   simp[buffer_round_size]
 QED
