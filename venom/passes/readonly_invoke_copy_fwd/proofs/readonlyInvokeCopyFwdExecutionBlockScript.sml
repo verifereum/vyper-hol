@@ -1,6 +1,7 @@
 Theory readonlyInvokeCopyFwdExecutionBlock
 Ancestors
-  readonlyInvokeCopyFwdExecution readonlyInvokeCopyFwdOperationalEntry
+  readonlyInvokeCopyFwdExecution readonlyInvokeCopyFwdOpaquePhi
+  readonlyInvokeCopyFwdOpaque frameRel unitShapeDefs venomWf
   readonlyInvokeCopyFwdHistoryInheritedLifecycle
   readonlyInvokeCopyFwdHeterogeneousLedger readonlyInvokeCopyFwdHistoryPhase
   readonlyInvokeCopyFwdHeterogeneousMapOrigins
@@ -60,23 +61,28 @@ Proof
 QED
 
 Theorem ricf_execution_jump_live:
-  ricf_frame_agree D X sites PG G rt s t /\
-  ricf_live_stack_agree D ids rt maps stk targets s t /\
+  ricf_opaque_frame_agree fn D X sites PG G rt s t /\
+  ricf_opaque_live_stack_agree D ids rt maps stk targets s t /\
   ricf_cert_crosses rt curs stk s t /\ ricf_support_agree B E rt s t ==>
-  ricf_frame_agree D X sites PG G rt (jump_to lbl s) (jump_to lbl t) /\
-  ricf_live_stack_agree D ids rt maps stk targets (jump_to lbl s) (jump_to lbl t) /\
+  ricf_opaque_frame_agree fn D X sites PG G rt (jump_to lbl s) (jump_to lbl t) /\
+  ricf_opaque_live_stack_agree D ids rt maps stk targets (jump_to lbl s) (jump_to lbl t) /\
   ricf_cert_crosses rt curs stk (jump_to lbl s) (jump_to lbl t) /\
   ricf_support_agree B E rt (jump_to lbl s) (jump_to lbl t)
 Proof
-  simp[jump_to_def, ricf_frame_agree_def, taint_agree_def,
-    ld_shared_agree_def, ircf_cross_def, ricf_live_stack_agree_def,
-    ricf_cert_crosses_def, ricf_support_agree_def, merge_callee_state_def] >>
-  rpt strip_tac >> gvs[venom_state_component_equality] >> metis_tac[]
+  strip_tac >> rpt conj_tac
+  >- (fs[ricf_opaque_frame_agree_def, ricf_frame_agree_def] >>
+      gvs[ricf_opaque_view_def, jump_to_def, taint_agree_def,
+        ld_shared_agree_def, ircf_cross_def, venom_state_component_equality] >>
+      metis_tac[])
+  >- gvs[ricf_opaque_live_stack_agree_def, merge_callee_state_def, jump_to_def]
+  >- (gvs[ricf_cert_crosses_def, ircf_cross_def, jump_to_def] >> metis_tac[]) >>
+  gvs[ricf_support_agree_def, jump_to_def]
 QED
 
 Theorem ricf_execution_jump_block:
   ricf_execution_invariant vs C D stk PG G tn fn inst s t
     n a U B HP H ledger E sites maps targets rt /\
+  retpc_shape_ok fn /\ fn_inst_wf fn /\
   inst.inst_opcode = JMP /\ inst.inst_operands = [Label lbl] /\
   active_inst fn inst s /\ step_inst fuel C inst s = OK u /\ ~u.vs_halted /\
   enters_block fn u s1 /\ active_inst fn next s1 ==>
@@ -104,7 +110,7 @@ Proof
   disch_then (qspec_then `lbl` strip_assume_tac) >>
   `enters_block fn (jump_to lbl s) s1` by metis_tac[] >>
   `ircf_cross rt {} (jump_to lbl s) (jump_to lbl t)` by simp[ircf_cross_def] >>
-  drule_all ricf_live_support_enters_block >> strip_tac >>
+  drule_all ricf_opaque_live_support_enters_block >> strip_tac >>
   qexistsl_tac [`jump_to lbl t`, `t1`] >>
   simp[step_inst_def, step_inst_base_opcode_eqs, ricf_phase_stack_ranges_block_retire,
     ricf_phase_ranges_block_retire, ircf_cross_def] >>
