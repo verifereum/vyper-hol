@@ -129,6 +129,6 @@ Proof
   qpat_x_assum `!sa sm sb x vv s0 G0 tn0 v gs ee G tn s. _` drule_all >> simp[] >>
   strip_tac >> qexists_tac `marks` >>
   irule hash_summary_ptr_halt_lift >> reverse conj_tac >- first_assum ACCEPT_TAC >>
-  rpt gen_tac >> BETA_TAC >> strip_tac >>
+  rpt gen_tac >> BETA_TAC >> DISCH_TAC >>
   gvs[AllCaseEqs(), exprSimWordArgsTheory.builtin_result_not_halt]
 QED
