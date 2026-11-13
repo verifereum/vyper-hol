@@ -1,9 +1,65 @@
 (* Exact pointer-safe endpoints of passing entry checks. *)
 Theory entryChecksPassPtr
-Ancestors entryChecksLayout entryPrefixPtr entryChecksPtr entryChecksProps moduleLowering
+Ancestors instMemFrontier arithmetic stmtForRangeMemoryParts fragGasOriginPtr fragGasSeqPtr fragGasPathMem entryChecksLayout entryPrefixPtr entryChecksPtr entryChecksProps moduleLowering
   ptrSafeRun ptrDiscipline fragExec venomExecSemantics venomInst venomState
   compileEnv emitHelperProps exprLoweringProps codegenRel list finite_map words
   moduleLoweringProps typedCopyArrayPtr entryDispatchPtr contextCodegenRel
+
+Theorem checks_joint_edge_path[local]:
+  gas_path_mem_edge ctx fn s 0 (OK t) /\
+  gas_path_ptr_edge D lo ctx fn PG G tn s 0 G' tn' (OK t) /\
+  ~t.vs_halted ==>
+  gas_origin_ptr_path (D,lo,explicit,ctx,fn,PG) (s,G,tn) [] (OK t,G',tn')
+Proof
+  strip_tac >>
+  `gas_origin_ptr_edge (D,lo,explicit,ctx,fn,PG) (s,G,tn) [] (OK t,G',tn')` by
+    (simp[gas_origin_ptr_edge_def] >>
+     metis_tac[fragGasOriginTheory.gas_path_mem_edge_zero_origin]) >>
+  metis_tac[gas_origin_ptr_path_rules, APPEND]
+QED
+
+Theorem checks_forward_step[local]:
+  ~s.vs_halted /\ ~u.vs_halted /\
+  lookup_block s.vs_current_bb fn.fn_blocks = SOME bb /\
+  get_instruction bb s.vs_inst_idx = SOME i /\
+  i.inst_opcode <> INVOKE /\ i.inst_opcode <> GAS /\ ~is_terminator i.inst_opcode /\
+  inst_mem_below_frontier i s /\ inst_dload_in_section i s /\
+  step_inst_base i s = OK u /\
+  (!D. ptr_inst_ok D lo 0 ctx fn G tn i s) ==>
+  gas_path_mem ctx fn s 0 (OK (u with vs_inst_idx := SUC s.vs_inst_idx)) /\
+  (!D explicit. gas_origin_ptr_path (D,lo,explicit,ctx,fn,PG) (s,G,tn) []
+    (OK (u with vs_inst_idx := SUC s.vs_inst_idx), step_prov PG G i u,
+     step_taint i s u tn))
+Proof
+  strip_tac >>
+  `gas_path_mem_edge ctx fn s 0 (OK (u with vs_inst_idx := SUC s.vs_inst_idx))` by
+    (irule for_range_straight_line_mem_edge >> simp[] >>
+     qexistsl_tac [`bb`, `i`, `u`] >> simp[]) >>
+  conj_tac
+  >- (drule (cj 2 gas_path_mem_rules) >>
+      disch_then (qspec_then `0` mp_tac) >> simp[cj 1 gas_path_mem_rules]) >>
+  rpt gen_tac >> irule checks_joint_edge_path >> simp[] >>
+  `gas_path_ptr_edge D lo ctx fn PG G tn s
+    (if i.inst_opcode = GAS then 1 else 0) (step_prov PG G i u)
+    (step_taint i s u tn) (OK (u with vs_inst_idx := SUC s.vs_inst_idx))`
+    suffices_by simp[] >>
+  irule straight_line_ptr_edge >> simp[] >> qexists_tac `bb` >> simp[]
+QED
+
+Theorem checks_mem_then[local]:
+  gas_path_mem ctx fn s 0 (OK u) /\ gas_path_mem ctx fn u 0 (OK t) ==>
+  gas_path_mem ctx fn s 0 (OK t)
+Proof
+  metis_tac[gas_path_mem_then, ADD_0]
+QED
+
+Theorem checks_joint_then[local]:
+  (!D explicit. gas_origin_ptr_path (D,lo,explicit,ctx,fn,PG) (s,G,tn) [] (OK u,G1,tn1)) /\
+  (!D explicit. gas_origin_ptr_path (D,lo,explicit,ctx,fn,PG) (u,G1,tn1) [] (OK t,G2,tn2)) ==>
+  !D explicit. gas_origin_ptr_path (D,lo,explicit,ctx,fn,PG) (s,G,tn) [] (OK t,G2,tn2)
+Proof
+  metis_tac[gas_origin_ptr_path_append, APPEND]
+QED
 
 Theorem callvalue_ptr_endpoint:
   !fn bb.
@@ -20,6 +76,8 @@ Theorem callvalue_ptr_endpoint:
       (update_var out s.vs_call_ctx.cc_callvalue s) /\
     tn' = step_taint (mk_inst id CALLVALUE [] [out]) s
       (update_var out s.vs_call_ctx.cc_callvalue s) tn /\
+    gas_path_mem ctx fn s 0 (OK u) /\
+    (!D explicit. gas_origin_ptr_path (D,lo,explicit,ctx,fn,PG) (s,G,tn) [] (OK u,G',tn')) /\
     vars_pc_only s u /\ fresh_vars_wrt st_next u /\ ~u.vs_halted /\
     u.vs_current_bb = s.vs_current_bb /\ u.vs_inst_idx = SUC s.vs_inst_idx /\
     eval_operand (Var out) u = SOME s.vs_call_ctx.cc_callvalue /\
@@ -49,6 +107,16 @@ Proof
          written_taint_def, source_memory_write_ranges_def, adopt_reset_def,
          store_taint_def, imm_taint_def, range_bytes_def, FLOOKUP_DEF,
          pred_setTheory.EXTENSION, SF CONJ_ss] >>
+  `gas_path_mem ctx fn s 0 (OK (t with vs_inst_idx := SUC s.vs_inst_idx)) /\
+   (!D explicit. gas_origin_ptr_path (D,lo,explicit,ctx,fn,PG) (s,G,tn) []
+     (OK (t with vs_inst_idx := SUC s.vs_inst_idx),
+      step_prov PG G (mk_inst id CALLVALUE [] [out]) t,
+      step_taint (mk_inst id CALLVALUE [] [out]) s t tn))` by
+    (irule checks_forward_step >> simp[Abbr `t`, update_var_def] >>
+     simp[mk_inst_def, is_terminator_def, step_inst_base_opcode_eqs, exec_read0_def,
+          step_inst_non_invoke, update_var_def, ptr_inst_ok_def, access_ok_def, taint_ok_def,
+          source_memory_write_ranges_def, source_memory_read_ranges_def] >>
+     irule below_frontier_no_ranges >> simp[]) >>
   simp[Abbr `t`, vars_pc_only_inst_idx, vars_pc_only_update_var,
        vars_pc_only_refl, control_moves_keep_vars, update_var_def,
        eval_operand_def, lookup_var_def, FLOOKUP_UPDATE] >>
@@ -93,6 +161,36 @@ Proof
        step_inst_non_invoke, step_inst_base_opcode_eqs, mk_inst_def]
 QED
 
+Theorem assert_pass_forward[local]:
+  lookup_block s.vs_current_bb fn.fn_blocks = SOME bb /\
+  get_instruction bb s.vs_inst_idx = SOME (mk_inst id ASSERT [op] []) /\
+  ~s.vs_halted /\ eval_operand op s = SOME v /\ v <> 0w /\ op_taint tn op = {} /\
+  allocas_from lo s /\ (ctx_has_dalloca ctx ==> allocas_below_fmp s) ==>
+  gas_path_mem ctx fn s 0 (OK (s with vs_inst_idx := SUC s.vs_inst_idx)) /\
+  (!D explicit. gas_origin_ptr_path (D,lo,explicit,ctx,fn,PG) (s,G,tn) []
+    (OK (s with vs_inst_idx := SUC s.vs_inst_idx),G,tn))
+Proof
+  strip_tac >>
+  `step_prov PG G (mk_inst id ASSERT [op] []) s = G /\
+   step_taint (mk_inst id ASSERT [op] []) s s tn = tn` by
+    (simp[step_prov_def, step_taint_def, mk_inst_def, set_var_taint_def,
+          mem_taint_def, new_site_bytes_def, step_writes_def, written_taint_def,
+          source_memory_write_ranges_def, adopt_reset_def, store_taint_def,
+          imm_taint_def, range_bytes_def, FLOOKUP_DEF,
+          pred_setTheory.EXTENSION, SF CONJ_ss] >>
+     simp[set_prov_def, DRESTRICT_UNIV, taint_component_equality]) >>
+  `gas_path_mem ctx fn s 0 (OK (s with vs_inst_idx := SUC s.vs_inst_idx)) /\
+   (!D explicit. gas_origin_ptr_path (D,lo,explicit,ctx,fn,PG) (s,G,tn) []
+     (OK (s with vs_inst_idx := SUC s.vs_inst_idx),
+      step_prov PG G (mk_inst id ASSERT [op] []) s,
+      step_taint (mk_inst id ASSERT [op] []) s s tn))` suffices_by simp[] >>
+  irule checks_forward_step >> simp[] >>
+  simp[mk_inst_def, is_terminator_def, step_inst_base_opcode_eqs,
+       ptr_inst_ok_def, access_ok_def, taint_ok_def, step_inst_non_invoke,
+       source_memory_write_ranges_def, source_memory_read_ranges_def] >>
+  irule below_frontier_no_ranges >> simp[]
+QED
+
 Theorem compile_entry_value_check_ptr_endpoint[local]:
   compile_entry_checks 4 pay st = ((),st') /\
   (~pay ==> fn_has_code st st' fn) /\
@@ -102,6 +200,8 @@ Theorem compile_entry_value_check_ptr_endpoint[local]:
   allocas_from lo s /\ (ctx_has_dalloca ctx ==> allocas_below_fmp s) /\
   (pay \/ s.vs_call_ctx.cc_callvalue = 0w) ==>
   ?u G' tn'.
+    gas_path_mem ctx fn s 0 (OK u) /\
+    (!D explicit. gas_origin_ptr_path (D,lo,explicit,ctx,fn,PG) (s,G,tn) [] (OK u,G',tn')) /\
     vars_pc_only s u /\ fresh_vars_wrt st' u /\ ~u.vs_halted /\
     u.vs_current_bb = st'.cs_current_bb /\
     u.vs_inst_idx = LENGTH st'.cs_current_insts /\
@@ -113,7 +213,7 @@ Theorem compile_entry_value_check_ptr_endpoint[local]:
 Proof
   Cases_on `pay`
   >- (simp[compile_entry_checks_def, comp_bind_def, comp_ignore_bind_def, comp_return_def] >>
-      rpt strip_tac >> gvs[] >> qexistsl_tac [`s`, `G`, `tn`] >> simp[vars_pc_only_refl]) >>
+      rpt strip_tac >> gvs[] >> qexistsl_tac [`s`, `G`, `tn`] >> simp[vars_pc_only_refl, cj 1 gas_path_mem_rules, cj 1 gas_origin_ptr_path_rules]) >>
   strip_tac >> fs[] >> drule_all compile_entry_checks_value_layout >> strip_tac >>
   `lookup_block s.vs_current_bb fn.fn_blocks = SOME bb /\
    get_instruction bb s.vs_inst_idx =
@@ -146,6 +246,21 @@ Resume compile_entry_value_check_ptr_endpoint[iszero]:
   rename1 `op_taint tn2 (Var (STRING #"%" (toString (st.cs_next_var + 1)))) = {}` >>
   qpat_x_assum `s2 = _` kall_tac >> qpat_x_assum `G2 = _` kall_tac >>
   qpat_x_assum `tn2 = _` kall_tac >>
+  `gas_path_mem ctx fn s2 0 (OK (s2 with vs_inst_idx := SUC s2.vs_inst_idx)) /\
+   (!D explicit. gas_origin_ptr_path (D,lo,explicit,ctx,fn,PG) (s2,G2,tn2) []
+     (OK (s2 with vs_inst_idx := SUC s2.vs_inst_idx),G2,tn2))` by
+    (irule assert_pass_forward >> simp[] >>
+     qexistsl_tac [`st.cs_next_id + 2`,
+       `Var (STRING #"%" (toString (st.cs_next_var + 1)))`, `1w`] >>
+     fs[ADD1]) >>
+  `gas_path_mem ctx fn s 0 (OK s2)` by metis_tac[checks_mem_then] >>
+  `!D explicit. gas_origin_ptr_path (D,lo,explicit,ctx,fn,PG) (s,G,tn) [] (OK s2,G2,tn2)` by
+    (irule checks_joint_then >> qexistsl_tac [`G1`, `tn1`, `s1`] >> simp[]) >>
+  `gas_path_mem ctx fn s 0 (OK (s2 with vs_inst_idx := SUC s2.vs_inst_idx))` by
+    metis_tac[checks_mem_then] >>
+  `!D explicit. gas_origin_ptr_path (D,lo,explicit,ctx,fn,PG) (s,G,tn) []
+    (OK (s2 with vs_inst_idx := SUC s2.vs_inst_idx),G2,tn2)` by
+    (irule checks_joint_then >> qexistsl_tac [`G2`, `tn2`, `s2`] >> simp[]) >>
   qexistsl_tac [`s2 with vs_inst_idx := SUC s2.vs_inst_idx`, `G2`, `tn2`] >>
   `vars_pc_only s s2` by metis_tac[vars_pc_only_trans] >>
   `allocas_from lo (s2 with vs_inst_idx := SUC s2.vs_inst_idx) /\
@@ -173,6 +288,8 @@ Theorem compile_entry_size_check_ptr_endpoint[local]:
   m <= LENGTH s.vs_call_ctx.cc_calldata /\
   LENGTH s.vs_call_ctx.cc_calldata < dimword (:256) ==>
   ?u G' tn'.
+    gas_path_mem ctx fn s 0 (OK u) /\
+    (!D explicit. gas_origin_ptr_path (D,lo,explicit,ctx,fn,PG) (s,G,tn) [] (OK u,G',tn')) /\
     vars_pc_only s u /\ fresh_vars_wrt st' u /\ ~u.vs_halted /\
     u.vs_current_bb = st'.cs_current_bb /\
     u.vs_inst_idx = LENGTH st'.cs_current_insts /\
@@ -186,7 +303,7 @@ Proof
   >- (strip_tac >> `fn_has_code st st' fn` by metis_tac[] >> drule_all compile_entry_checks_size_layout >> strip_tac >>
       suspend "size") >>
   simp[compile_entry_checks_def, comp_bind_def, comp_ignore_bind_def, comp_return_def] >>
-  rpt strip_tac >> gvs[] >> qexistsl_tac [`s`, `G`, `tn`] >> simp[vars_pc_only_refl]
+  rpt strip_tac >> gvs[] >> qexistsl_tac [`s`, `G`, `tn`] >> simp[vars_pc_only_refl, cj 1 gas_path_mem_rules, cj 1 gas_origin_ptr_path_rules]
 QED
 
 Resume compile_entry_size_check_ptr_endpoint[size]:
@@ -245,6 +362,23 @@ Resume compile_entry_size_check_ptr_endpoint[iszero]:
   rename1 `op_taint tn3 (Var (STRING #"%" (toString (st.cs_next_var + 2)))) = {}` >>
   qpat_x_assum `s3 = _` kall_tac >> qpat_x_assum `G3 = _` kall_tac >>
   qpat_x_assum `tn3 = _` kall_tac >>
+  `gas_path_mem ctx fn s3 0 (OK (s3 with vs_inst_idx := SUC s3.vs_inst_idx)) /\
+   (!D explicit. gas_origin_ptr_path (D,lo,explicit,ctx,fn,PG) (s3,G3,tn3) []
+     (OK (s3 with vs_inst_idx := SUC s3.vs_inst_idx),G3,tn3))` by
+    (irule assert_pass_forward >> simp[] >>
+     qexistsl_tac [`st.cs_next_id + 3`,
+       `Var (STRING #"%" (toString (st.cs_next_var + 2)))`, `1w`] >> fs[ADD1]) >>
+  `gas_path_mem ctx fn s 0 (OK s2)` by metis_tac[checks_mem_then] >>
+  `gas_path_mem ctx fn s 0 (OK s3)` by metis_tac[checks_mem_then] >>
+  `gas_path_mem ctx fn s 0 (OK (s3 with vs_inst_idx := SUC s3.vs_inst_idx))` by
+    metis_tac[checks_mem_then] >>
+  `!D explicit. gas_origin_ptr_path (D,lo,explicit,ctx,fn,PG) (s,G,tn) [] (OK s2,G2,tn2)` by
+    (irule checks_joint_then >> qexistsl_tac [`G1`, `tn1`, `s1`] >> simp[]) >>
+  `!D explicit. gas_origin_ptr_path (D,lo,explicit,ctx,fn,PG) (s,G,tn) [] (OK s3,G3,tn3)` by
+    (irule checks_joint_then >> qexistsl_tac [`G2`, `tn2`, `s2`] >> simp[]) >>
+  `!D explicit. gas_origin_ptr_path (D,lo,explicit,ctx,fn,PG) (s,G,tn) []
+    (OK (s3 with vs_inst_idx := SUC s3.vs_inst_idx),G3,tn3)` by
+    (irule checks_joint_then >> qexistsl_tac [`G3`, `tn3`, `s3`] >> simp[]) >>
   qexistsl_tac [`s3 with vs_inst_idx := SUC s3.vs_inst_idx`, `G3`, `tn3`] >>
   `vars_pc_only s s3` by metis_tac[vars_pc_only_trans] >>
   `allocas_from lo (s3 with vs_inst_idx := SUC s3.vs_inst_idx) /\
@@ -295,6 +429,9 @@ Proof
   disch_then (qspecl_then [`tn1`, `s1`, `lo`, `fn`, `ctx`, `PG`, `G1`] mp_tac) >>
   (impl_tac >- simp[]) >> strip_tac >>
   rename1 `vars_pc_only s1 s2` >>
+  `gas_path_mem ctx fn s 0 (OK s2)` by metis_tac[checks_mem_then] >>
+  `!D explicit. gas_origin_ptr_path (D,lo,explicit,ctx,fn,PG) (s,G,tn) [] (OK s2,G',tn')` by
+    (irule checks_joint_then >> qexistsl_tac [`G1`, `tn1`, `s1`] >> simp[]) >>
   qexistsl_tac [`s2`, `G'`, `tn'`] >>
   simp[] >> metis_tac[vars_pc_only_trans]
 QED

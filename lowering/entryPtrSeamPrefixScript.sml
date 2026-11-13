@@ -18,7 +18,7 @@
  *)
 Theory entryPtrSeamPrefix
 Ancestors
-  selectedEntryPrefixCode entryChecksPassPtr entryPrefixPtr sourceValueRejection
+  arithmetic fragGasOriginPtr fragGasPathMem selectedEntryPrefixCode entryChecksPassPtr entryPrefixPtr sourceValueRejection
   entryChecksProps loweringShapeProps loweringShapeSource o1PipelineCorrect
   supportedNames supportedProgramProps loweringShapeDefs unitShapeDefs venomExecProofs list
   entryValueRevertPtr entryDispatchPtr sourceEntryCode selectedBodyCode
@@ -34,6 +34,21 @@ Theorem vars_pc_only_gas_readings:
   !s t. vars_pc_only s t ==> t.vs_gas_readings = s.vs_gas_readings
 Proof
   rw[vars_pc_only_def] >> pop_assum (SUBST1_TAC o SYM) >> simp[]
+QED
+
+Theorem prefix_mem_then[local]:
+  gas_path_mem ctx fn s 0 (OK u) /\ gas_path_mem ctx fn u 0 (OK t) ==>
+  gas_path_mem ctx fn s 0 (OK t)
+Proof
+  metis_tac[gas_path_mem_then, ADD_0]
+QED
+
+Theorem prefix_joint_then[local]:
+  (!D explicit. gas_origin_ptr_path (D,lo,explicit,ctx,fn,PG) (s,G,tn) [] (OK u,G1,tn1)) /\
+  (!D explicit. gas_origin_ptr_path (D,lo,explicit,ctx,fn,PG) (u,G1,tn1) [] (OK t,G2,tn2)) ==>
+  !D explicit. gas_origin_ptr_path (D,lo,explicit,ctx,fn,PG) (s,G,tn) [] (OK t,G2,tn2)
+Proof
+  metis_tac[gas_origin_ptr_path_append, APPEND]
 QED
 
 (* Entry-to-registration prefix seam.
@@ -152,10 +167,22 @@ Resume external_entry_reaches_registration_ptr[dispatch]:
   qabbrev_tac `ss = vs with <|vs_prev_bb := NONE; vs_current_bb := elbl; vs_inst_idx := 0|>` >>
   qspecl_then [`type_env tops`, `FST (classify_functions tops)`]
     assume_tac entryDispatchPropsTheory.linear_selectors_lt >>
+  `MEM efn unit.cu_context.ctx_functions` by metis_tac[lookup_function_MEM] >>
+  `!b. lookup_block b efn.fn_blocks <> NONE ==>
+       !i. MEM i (THE (lookup_block b efn.fn_blocks)).bb_instructions ==>
+           i.inst_opcode <> PHI` by
+    (rpt strip_tac >> Cases_on `lookup_block b efn.fn_blocks` >> fs[] >>
+     drule lookup_block_fn_insts >> disch_then drule >>
+     qpat_x_assum `o1_source_unit_ok unit` mp_tac >>
+     simp[o1_source_unit_ok_def, EVERY_MEM, raw_opcode_ok_def] >> metis_tac[]) >>
+  `!lbl bb. lookup_block lbl efn.fn_blocks = SOME bb ==>
+     phi_prefix_length bb.bb_instructions = 0` by
+    (rpt strip_tac >> irule no_phis_phi_prefix_length_zero >> simp[EVERY_MEM] >>
+     first_x_assum (qspec_then `lbl` mp_tac) >> simp[]) >>
   drule compile_selector_dispatch_linear_ptr_endpoint >>
   disch_then (qspecl_then [`entry_taint`, `ss`, `0`, `efn`, `unit.cu_context`,
     `[]`, `FEMPTY`] mp_tac) >>
-  (impl_tac >- simp[Abbr `ss`]) >> strip_tac >>
+  (impl_tac >- (simp[Abbr `ss`] >> metis_tac[])) >> strip_tac >>
   rename1 `vars_pc_only ss tt` >> rename1 `tn1.t_mem = entry_taint.t_mem` >>
   rename1 `ptr_safe_blocks _ _ _ _ _ _ G1 tn1 tt` >>
   drule_all source_valid_linear_dispatch_target >> strip_tac >>
@@ -190,6 +217,12 @@ Resume external_entry_reaches_registration_ptr[checks]:
   (impl_tac >- simp[]) >> strip_tac >>
   rename1 `vars_pc_only tt u` >> rename1 `tn2.t_mem = tn1.t_mem` >>
   rename1 `ptr_safe_run _ _ _ _ _ _ G2 tn2 u` >>
+  `gas_path_mem unit.cu_context efn ss 0 (OK u)` by
+    (irule prefix_mem_then >> qexists_tac `tt` >> simp[]) >>
+  `!D explicit. gas_origin_ptr_path (D,0,explicit,unit.cu_context,efn,[])
+    (ss,FEMPTY,entry_taint) [] (OK u,G2,tn2)` by
+    (irule prefix_joint_then >> qexistsl_tac [`G1`, `tn1`, `tt`] >> simp[]) >>
+  qpat_x_assum `Abbrev (ss = _)` (SUBST_ALL_TAC o REWRITE_RULE [markerTheory.Abbrev_def]) >>
   qexistsl_tac [`st`, `cenv`, `sa`, `st'`, `u`, `G2`, `tn2`] >>
   simp[entry_taint_def] >>
   (conj_tac >- metis_tac[vars_pc_only_trans]) >>
@@ -205,25 +238,15 @@ Resume external_entry_reaches_registration_ptr[checks]:
      disch_then (qspecl_then [`opened`, `()`, `st`] mp_tac) >>
      simp[shape_extends_def]) >>
   drule_all fn_has_code_start >> strip_tac >>
-  `MEM efn unit.cu_context.ctx_functions` by metis_tac[lookup_function_MEM] >>
-  `!b. lookup_block b efn.fn_blocks <> NONE ==>
-       !i. MEM i (THE (lookup_block b efn.fn_blocks)).bb_instructions ==>
-           i.inst_opcode <> PHI` by
-    (rpt strip_tac >> Cases_on `lookup_block b efn.fn_blocks` >> fs[] >>
-     drule lookup_block_fn_insts >> disch_then drule >>
-     qpat_x_assum `o1_source_unit_ok unit` mp_tac >>
-     simp[o1_source_unit_ok_def, EVERY_MEM, raw_opcode_ok_def] >>
-     metis_tac[]) >>
-  `phi_prefix_length bb.bb_instructions = 0` by
-    (irule no_phis_phi_prefix_length_zero >> simp[EVERY_MEM] >>
-     first_x_assum (qspec_then `opened.cs_current_bb` mp_tac) >> simp[]) >>
+
+  `phi_prefix_length bb.bb_instructions = 0` by metis_tac[] >>
   gen_tac >> disch_tac >>
   drule_all compile_selector_dispatch_linear_layout >> strip_tac >>
   rename1 `get_instruction entrybb (LENGTH ds.cs_current_insts) =
     SOME (mk_inst ds.cs_next_id CALLDATASIZE [] _)` >>
   irule ptr_safe_blocks_nonphi_run >>
   (reverse conj_tac >-
-    (simp[Abbr `ss`] >>
+    (simp[] >>
      qexistsl_tac [`entrybb`, `mk_inst ds.cs_next_id CALLDATASIZE []
        [STRING #"%" (toString ds.cs_next_var)]`] >> gvs[mk_inst_def])) >>
   rewrite_tac[GSYM entry_taint_def] >>
