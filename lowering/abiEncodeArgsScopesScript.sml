@@ -65,13 +65,6 @@ Proof
   Cases_on `r1` >> Cases_on `v` >> rw[return_def] >> gvs[]
 QED
 
-Theorem select_result_scopes[local]:
-  select_result cx ty res sb st = (result,st') ==> st'.scopes = st.scopes
-Proof
-  strip_tac >> drule select_result_state >>
-  disch_then (fn th => once_rewrite_tac [th]) >> simp[]
-QED
-
 Theorem eval_no_mutation_scopes[local]:
   (!cx:evaluation_context. !s:stmt. T) /\
   (!cx:evaluation_context. !ss:stmt list. T) /\
@@ -108,10 +101,18 @@ Proof
       gvs[Once evaluate_def, bind_def, AllCaseEqs(), return_def, raise_def] >>
       Cases_on `subscript_reads_base cx e e'` >>
       gvs[bind_def, return_def, AllCaseEqs()] >>
-      imp_res_tac read_result_state >> imp_res_tac select_result_scopes >> gvs[] >> metis_tac[])
+      imp_res_tac read_result_state >> imp_res_tac select_result_state >>
+      rpt (qpat_x_assum `_ = _ with storage_trace := _`
+        (fn th => assume_tac (SIMP_RULE (srw_ss()) []
+          (AP_TERM ``\s:evaluation_state. s.scopes`` th)))) >>
+      gvs[] >> metis_tac[])
   >- (rpt strip_tac >>
       gvs[Once evaluate_def, bind_def, AllCaseEqs(), return_def, raise_def] >>
-      imp_res_tac select_result_scopes >> gvs[] >> metis_tac[])
+      imp_res_tac select_result_state >>
+      rpt (qpat_x_assum `_ = _ with storage_trace := _`
+        (fn th => assume_tac (SIMP_RULE (srw_ss()) []
+          (AP_TERM ``\s:evaluation_state. s.scopes`` th)))) >>
+      gvs[] >> metis_tac[])
   >- suspend "Builtin"
   >- suspend "TypeBuiltin"
   >- suspend "ExtCall"

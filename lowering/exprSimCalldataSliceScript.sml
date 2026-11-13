@@ -919,7 +919,7 @@ Theorem slice_calldata_vv_post:
   !func cenv cx e es sa sb s t p a n w ctx alloc_id.
   expr_type e = BaseT (BytesT (Dynamic n)) /\ p.ptr_location = LocMemory /\
   eval_operand p.ptr_operand t = SOME w /\ a+n <= LENGTH cx.txn.calldata /\
-  stmt_state_rel H ctx func cenv cx es t /\
+  stmt_state_rel H ctx func cenv cx es t /\ storage_well_formed_on cx es (FST H) /\
   FLOOKUP t.vs_allocas alloc_id = SOME (w2n w,32 + 32 * word_size n) /\
   pure_frame cenv func es sa s t /\
   sa.cs_next_id <= alloc_id /\ alloc_id < sb.cs_next_id /\

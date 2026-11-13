@@ -2368,7 +2368,7 @@ Resume dynamic_scalar_fragment[success]:
     (Q.INST [`res` |-> `INL vout`] dynamic_scalar_run_exact)) >>
   strip_tac >>
   drule_all dynamic_scalar_frag_success >>
-  disch_then (qspecl_then [`s0`,`func`,`es`,`ctx`] mp_tac) >>
+  disch_then (qspecl_then [`s0`,`func`,`es`,`ctx`,`H`] mp_tac) >>
   disch_then (mp_tac o MATCH_MP frag_exec_weaken) >>
   disch_then irule >> simp[wordsTheory.dimword_def]
 QED
