@@ -31,7 +31,7 @@ Ancestors
   exprSimDefs
   loweringPosts
   list rich_list finite_map pred_set
-  fragExec localPtrsProps  loweringSlice  stmtSimDeclStore
+  fragExec localPtrsProps  loweringSlice  stmtSimDeclStore allocLimitsProps
   stmtSimDecl stmtSimDeclCompose stmtSimDeclPath stmtSimDeclSource
   gasSummary gasContext
   fragGasSeq fragGasPath fragGasMode
@@ -65,7 +65,7 @@ Proof
       ho_match_mp_tac type_memory_bytes_ind >>
       rw[type_memory_bytes_def] >>
       AP_TERM_TAC >> irule MAP_CONG >> simp[]) >>
-  gen_tac >> gvs[oneline lowered_value_type_def]
+  rpt strip_tac >> irule allocLimitsPropsTheory.lowered_value_type_frame >> simp[]
 QED
 
 Theorem compile_assign_memory_appends:
@@ -696,7 +696,7 @@ Proof
       `src <> Var tmp /\ p <> tmp` by metis_tac[] >>
       `s.vs_current_bb = sx.cs_current_bb /\
        s.vs_inst_idx = LENGTH sx.cs_current_insts` by simp[] >>
-      drule_all alloc_copy_memory_framed_path >>
+      drule_all alloc_copy_memory_framed_bounded_path >>
       disch_then
         (qx_choosel_then [`u`, `uw`] strip_assume_tac) >>
       `lookup_var p u = SOME w /\
@@ -1189,7 +1189,7 @@ Proof
      POP_ASSUM_LIST (K ALL_TAC) >>
      simp[stmt_post_def, stmt_state_rel_def, state_rel_gas_obs, immutable_alloca_sep_def,
           alloca_frame_def] >>
-     metis_tac[]) >>
+     strip_tac >> rpt conj_tac >> first_assum ACCEPT_TAC) >>
   irule annassign_memory_normal_continuation >>
   qpat_assum `expr_post _ _ _ _ _ _ _ _ _ _ _ _ _` (irule_at Any) >>
   qpat_assum `declare_local _ _ _ _ = _` (irule_at Any) >>

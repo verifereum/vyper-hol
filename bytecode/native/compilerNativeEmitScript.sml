@@ -37,7 +37,8 @@ val () = holbuild_extra_deps
    "../narrow-elems/oracle",
    "../phi-pointers/oracle",
    "../raw-calls/oracle",
-   "../slice-buffers/oracle"];
+   "../slice-buffers/oracle",
+   "../../tests/fixtures/load_timing/oracle"];
 
 val module_name = "compilerNative";
 fun pr s = TextIO.print s;
@@ -93,6 +94,7 @@ val fixtures = [
   ("scalar_convert_bytes32_to_address_program", "scalar_convert_bytes32_to_address.hex"),
   ("scalar_convert_bytes32_to_bytes4_program", "scalar_convert_bytes32_to_bytes4.hex"),
   ("scalar_convert_bytes32_to_decimal_program", "scalar_convert_bytes32_to_decimal.hex"),
+  ("scalar_convert_bytes_dynamic_program", "scalar_convert_bytes_dynamic.hex"),
   ("scalar_convert_bytes_fixed_program", "scalar_convert_bytes_fixed.hex"),
   ("scalar_convert_decimal_program", "scalar_convert_decimal.hex"),
   ("scalar_convert_int_to_decimal_program", "scalar_convert_int_to_decimal.hex"),
@@ -129,8 +131,11 @@ val fixtures = [
   ("storage_scalar_loop_program", "storage_scalar_loop.hex"),
   ("storage_struct_program", "storage_struct.hex"),
   ("storage_write_program", "storage_write.hex"),
+  ("task090_external_arrays_program", "external_arrays.hex"),
+  ("task090_external_dynamic_program", "external_dynamic.hex"),
   ("task090_external_scalars_program", "external_scalars.hex"),
   ("task090_external_struct_program", "external_struct.hex"),
+  ("task090_internal_bytes_call_program", "internal_bytes_call.hex"),
   ("task090_internal_struct_call_program", "internal_struct_call.hex"),
   ("task090_internal_tuple_call_program", "internal_tuple_call.hex"),
   ("task090_send_value_program", "send_value.hex"),
@@ -139,7 +144,7 @@ val fixtures = [
 fun program_term "EMPTY" = ``[] : toplevel list``
   | program_term p = Term [QUOTE p];
 
-(* ---------- feature suites: each oracle directory bytecode/SUITE/oracle holds
+(* ---------- feature suites: each oracle directory SUITE/oracle relative to bytecode/ holds
    NAME.json (the annotated AST and storage layout Python compiled) beside
    NAME.hex; the program is the frontend's translation of the JSON, which the
    HOL checker must accept in runtime and deployment mode ---------- *)
@@ -249,6 +254,10 @@ val suite_fixtures = [
     "rc06_rof_false_bool", "rc07_rof_false_tuple", "rc17_nested_len",
     "rc19_dyn_data", "rc20_storage_data", "rc21_internal_value_gas_order",
     "rc22_bool_in_if", "rc25_stmt_argdata", "rc29_delegate"]),
+  ("../tests/fixtures/load_timing", [
+    "builtin_eager_read", "call_memory_pop", "call_storage_read",
+    "conditional_memory_view", "conditional_snapshot", "pop_refill",
+    "subscript_base_copy", "subscript_base_live"]),
   ("slice-buffers", [
     "slice_bytes_var", "slice_msg_data", "slice_msg_data_var",
     "slice_storage_bytes", "slice_string_lit"])];
@@ -417,7 +426,9 @@ val code_equations = map (fn th => (key (fst (strip_comb (lhs (hd (code_eqs th))
        listTheory.LENGTH_EQ_NUM_compute] >> metis_tac[]),
   (* CV projections, used by the to_ functions that decode the JSON frontend's
      output; cv_compute evaluates them, so they are not in EVAL's compset. *)
-  cvTheory.cv_fst_def, cvTheory.cv_snd_def];
+  cvTheory.cv_fst_def, cvTheory.cv_snd_def,
+  (* Binary-digit compset rules use HOL's internal numeral constructors. *)
+  numposrepTheory.l2n_def];
 (* Proved rewrites applied to every right-hand side: they turn set
    inclusions over finite collections and bounded quantifiers into the list
    and finite-map functions that native code computes. *)
@@ -442,13 +453,17 @@ val code_rewrites = [
   prove (``(s:effects) = empty_effects <=> effects_to_list s = []``,
     rw[dftDefsTheory.effects_to_list_def, venomEffectsTheory.empty_effects_def,
        pred_setTheory.EXTENSION, listTheory.FILTER_EQ_NIL, EQ_IMP_THM] >>
-    Cases_on `x` >> fs[]),
-  (* to_word is width-polymorphic; inlined, its n2w gets each caller's width.
-     The applied form comes first so applied occurrences leave no redex. *)
-  cv_typeTheory.to_word_def,
-  let val (n, eq) = dest_forall (concl cv_typeTheory.to_word_def)
-  in TRANS (GSYM (ETA_CONV (mk_abs (n, lhs eq))))
-       (ABS n (SPEC n cv_typeTheory.to_word_def)) end];
+    Cases_on `x` >> fs[])] @
+  (* Inline width-polymorphic wrappers at the caller's concrete word type.
+     Include their function forms for partially applied occurrences. *)
+  List.concat (map (fn th => let
+    val eq = SPEC_ALL th
+    val (_, args) = strip_comb (lhs (concl eq))
+    val abstracted = List.foldr (fn (v, th) => ABS v th) eq args
+    val eta = QCONV (DEPTH_CONV ETA_CONV) (lhs (concl abstracted))
+  in [th, TRANS (GSYM eta) abstracted] end)
+    [cv_typeTheory.to_word_def, sha2Theory.rotr_def, wordsTheory.l2w_def,
+     wordsTheory.word_from_bin_list_def]);
 fun rewrite_rhs eq = let val r = rhs eq
   in mk_eq (lhs eq, rhs (concl (QCONV (Ho_Rewrite.PURE_REWRITE_CONV code_rewrites) r))) end;
 fun def_rules k = map rewrite_rhs (case Lib.assoc1 k code_equations of

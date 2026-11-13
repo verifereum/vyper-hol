@@ -55,6 +55,10 @@ Theorem entry_source_conversion_layout:
 Proof
   ho_match_mp_tac entry_abi_support_ind >> rpt strip_tac
   >- (simp[abi_encoder_layout_valid_def] >> strip_tac >>
+      Cases_on `ty = BaseT (BytesT (Fixed 0))`
+      >- (gvs[evaluate_type_def] >> Cases_on `v` >>
+          gvs[value_has_type_def, vyper_to_abi_def, vyper_to_abi_base_def,
+              vyper_to_abi_type_def, vyper_base_to_abi_type_def]) >>
       irule (cj 1 enc_has_static_length) >>
       metis_tac[entry_scalar_conversion_typed])
   >- suspend "array"

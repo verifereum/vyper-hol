@@ -11,6 +11,7 @@
 
 Theory asmFrameCallStep
 Ancestors
+  vfmWfState
   evmCreationGuard frameCreationGuard asmFrameRel frameObsStep evmStepSim asmCallOracleProps asmDataSuffixProps
   codegenRel asmSem asmWf symbolResolve extCallOracle callTrace frameOutcome
   vfmExecution vfmExecutionProp vfmRunCall vfmRunWithinFrame vfmContextLength vfmDecreasesGas
@@ -737,7 +738,7 @@ Proof
      fs[vfmConstantsTheory.call_stipend_def, vfmConstantsTheory.call_value_cost_def]) >>
   PairCases_on `cg` >>
   qpat_x_assum `(_,_) = call_gas _ _ _ _ _` (assume_tac o SYM) >>
-  drule_all vfmRunCallTheory.call_gas_stipend_le_consumed >> simp[]
+  drule_all vfmWfStateTheory.call_gas_stipend_le_consumed >> simp[]
 QED
 
 Theorem asm_call_unused_gas_le_paid:
@@ -1097,8 +1098,8 @@ Theorem asm_proceed_call_memory_boundary:
 Proof
   strip_tac >>
   `s.contexts <> []` by simp[] >>
-  drule_all vfmRunCallTheory.proceed_call_push_structure >> strip_tac >>
-  drule vfmRunCallTheory.proceed_call_parent_gas_ok >>
+  drule_all vfmWfStateTheory.proceed_call_push_structure >> strip_tac >>
+  drule vfmWfStateTheory.proceed_call_parent_gas_ok >>
   disch_then (qspec_then `0` mp_tac) >> simp[] >> strip_tac >>
   Cases_on `t.contexts` >- fs[] >>
   PairCases_on `h` >> gvs[]

@@ -45,7 +45,8 @@ Proof
   `(!ty. type_memory_bytes c ty = type_memory_bytes cenv ty) /\
    (!e. lowered_value_type c e = lowered_value_type cenv e)` by
     (conj_tac >- metis_tac[type_memory_bytes_struct_fields] >>
-     simp[oneline lowered_value_type_def]) >>
+     rpt strip_tac >> irule allocLimitsPropsTheory.lowered_value_type_frame >>
+     conj_tac >> first_assum ACCEPT_TAC) >>
   `?sA sV sB vv op.
      emit_inst ALLOCA [Lit (n2w (type_memory_bytes cenv vtyp))] [p] st = ((),sA) /\
      compile_expr c (expr_type e) e sA = (vv,sV) /\
@@ -87,7 +88,9 @@ Proof
   rpt gen_tac >> strip_tac >>
   drule expr_body_pre_var_types_well_formed >> strip_tac >>
   `well_typed_expr env e /\
-   sfields_tenv_consistent cenv.ce_struct_fields env.type_defs` by
+   sfields_tenv_consistent cenv.ce_struct_fields env.type_defs /\
+   (!fid sig. FLOOKUP env.fn_sigs fid = SOME sig ==>
+      cenv.ce_func_return_type (nsid_to_string fid) = sig.ret_ty)` by
     fs[expr_body_pre_def, expr_sim_inv_def, env_consistent_def,
        env_context_consistent_def] >>
   drule ifexp_lowered_type_classify >>
@@ -98,30 +101,15 @@ Proof
   metis_tac[internal_call_location_cases, compile_intcall_open]
 QED
 
-(* The widened RHS's post type is its lowered type, in a context small
-   enough that the case split on the call stays cheap. *)
-Theorem relayout_post_value_type[local]:
-  !c cenv env e typ.
-    well_typed_expr env e /\
-    (!id t. FLOOKUP env.var_types id = SOME t ==>
-            well_formed_type env.type_defs t) /\
-    sfields_tenv_consistent c.ce_struct_fields env.type_defs /\
-    (!e. lowered_value_type c e = lowered_value_type cenv e) /\
-    expr_type e = typ /\ ~is_word_type typ /\ ~is_bytestring_type typ /\
-    lowered_value_type cenv e <> typ ==>
-    post_value_type c e = lowered_value_type cenv e
-Proof
-  rpt strip_tac >> drule_all ifexp_lowered_type_classify >> strip_tac >>
-  gvs[post_value_type_def, vyperASTTheory.expr_type_def]
-QED
-
 Theorem compile_annassign_relayout_stmt_frag:
   !ctx func cx lctx RetQ cenv ret_ty id typ e es stv tyv.
     cenv.ce_alloca_locals /\ ~is_word_type typ /\ ~is_bytestring_type typ /\
     ~(has_length_word typ /\ is_empty_value_expr e) /\
     lookup_scopes id es.scopes = NONE /\
     (!l. FLOOKUP cenv.ce_vars id = SOME l ==> ?q z. l = PtrVar q z) /\
-    expr_type e = typ /\
+    post_value_type cenv e = lowered_value_type cenv e /\
+    lowered_value_type cenv e <> expr_type e /\
+    type_widens_to (get_tenv cx) (lowered_value_type cenv e) (expr_type e) /\
     ~is_word_type (lowered_value_type cenv e) /\
     ~is_bytestring_type (lowered_value_type cenv e) /\
     lowered_value_type cenv e <> typ /\
@@ -164,7 +152,8 @@ Proof
   `(!ty. type_memory_bytes c ty = type_memory_bytes cenv ty) /\
    (!e. lowered_value_type c e = lowered_value_type cenv e)` by
     (conj_tac >- metis_tac[type_memory_bytes_struct_fields] >>
-     simp[oneline lowered_value_type_def]) >>
+     rpt strip_tac >> irule allocLimitsPropsTheory.lowered_value_type_frame >>
+     conj_tac >> first_assum ACCEPT_TAC) >>
   `stmt_state_rel ctx func c cx es s0` by
     (irule stmt_state_rel_declare_local_entry >> metis_tac[]) >>
   `not_local_ptr c es.scopes p` by metis_tac[local_ptrs_reserved_not_live] >>
@@ -201,12 +190,12 @@ Proof
   `~block_is_terminated sB` by (drule_all unwrap_value_open >> simp[]) >>
   `!x. op = Var x ==> not_fresh_at sB x` by metis_tac[compile_lower_value_var] >>
   `post_value_type c e = lowered_value_type cenv e` by
-    (`well_typed_expr env e /\
-      sfields_tenv_consistent c.ce_struct_fields env.type_defs` by
-       fs[expr_body_pre_def, expr_sim_inv_def, env_consistent_def,
-          env_context_consistent_def] >>
-     match_mp_tac relayout_post_value_type >> qexistsl_tac [`env`, `typ`] >>
-     simp[] >> metis_tac[expr_body_pre_var_types_well_formed]) >>
+    (qpat_x_assum `post_value_type cenv e = _` mp_tac >>
+     Cases_on `?ty fid args drv. e = Call ty (IntCall fid) args drv`
+     >- gvs[post_value_type_def] >>
+     Cases_on `e` >> simp[post_value_type_def] >>
+     rename1 `Call ty tgt args drv` >> Cases_on `tgt` >>
+     simp[post_value_type_def]) >>
   `sa.cs_next_id <= ai.inst_id /\ sa.cs_next_id <= sA.cs_next_id /\
    sa.cs_next_var <= sA.cs_next_var` by
     (drule_all declare_local_ptr >> strip_tac >>

@@ -51,7 +51,7 @@ Proof
   simp[venomWfTheory.fn_reachable_def] >> metis_tac[relationTheory.RTC_REFL]
 QED
 
-Theorem entry_step_phi_bound[local]:
+Theorem entry_step_phi_bound:
   codegen_ready_fn fn ==>
   phi_prefix_length (HD fn.fn_blocks).bb_instructions <=
     LENGTH (get_params (HD fn.fn_blocks).bb_instructions)
@@ -67,7 +67,7 @@ Proof
   simp[phi_prefix_length_def]
 QED
 
-Theorem entry_step_run_rest[local]:
+Theorem entry_step_run_rest:
   !cp fn vs as ra rest fuel ctx vs_p.
   codegen_ready_fn fn /\ fn_entry_state_rel cp fn vs as ra rest /\
   lookup_block (HD fn.fn_blocks).bb_label fn.fn_blocks = SOME (HD fn.fn_blocks) /\
@@ -83,7 +83,7 @@ Proof
   Cases_on `exec_block fuel ctx (HD fn.fn_blocks) vs_p` >> simp[]
 QED
 
-Theorem entry_step_return[local]:
+Theorem entry_step_return:
   !cp fn vs as ra rest fuel ctx ret vs' as'.
   fn_entry_state_rel cp fn vs as ra rest /\
   run_blocks fuel ctx fn vs = IntRet ret vs' /\
@@ -107,7 +107,7 @@ Proof
   Induct >> simp[get_params_def] >> rw[] >> Cases_on `i` >> gvs[]
 QED
 
-Theorem revert_forward_pair_past_params[local]:
+Theorem revert_forward_pair_past_params:
   !bb i j. revert_forward_pair bb i j ==>
            LENGTH (get_params bb.bb_instructions) <= i
 Proof

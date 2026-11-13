@@ -1,7 +1,7 @@
 {
   "producer": "pinned Python Vyper",
-  "vyper_commit": "9362e36b145c4b63ceb6a893018ea970e78bf6a6",
-  "vyper_version": "0.5.0a4+9362e36b+commit.9362e36b",
+  "vyper_commit": "577d2534356903076bb79b5b15ebd4d772994693",
+  "vyper_version": "0.5.0b1+commit.577d2534",
   "python_version": "3.11.11",
   "dependencies": {
     "cbor2": "5.9.0",
@@ -32,7 +32,7 @@
     "g8_a_iter_transient.vy": "ad1a2ff33b4bca11235f37d54cedcf94df8eec7d3427df2c0b05900275ddccb2"
   },
   "outputs": {
-    "f01_for_calldata_dynarray.hex": "8e799a94f83b823d6de0b9946c32a3c06041c47fa7fc16ee67583bb0d3a9fb52",
+    "f01_for_calldata_dynarray.hex": "4666d81350305ef4f8a64d56be50bdd759d9a00f092c7f47c862fe72de183acf",
     "f01_for_calldata_dynarray.json": "99f4d6cd5cd020166275d970c036a3da071830dd71e3a98b045badacd819fa3c",
     "f03_for_storage_dynarray.hex": "541a5d849d8039e09c82fad92611961a5940f3c1ea649c962be87a210a9a3cd7",
     "f03_for_storage_dynarray.json": "88db8db51bd77fdd9bec8f9f6506155e3f1ad00e914867d911eee489b3d9b818",

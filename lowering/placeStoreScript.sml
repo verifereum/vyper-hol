@@ -38,7 +38,7 @@ Theorem place_store_default_typed[local]:
 Proof
   ho_match_mp_tac
     (legacyInduction.mutual_ind_from_ops
-      (TypeBase.induction_of ``:type_value``)) >>
+      (TypeBase.set_induction_of ``:type_value``)) >>
   simp[default_value_def, default_value_tuple_MAP, default_value_struct_MAP,
        value_has_type_def] >>
   conj_tac
@@ -1506,7 +1506,7 @@ Proof
   metis_tac[place_store_empty_encoding]
 QED
 
-Theorem place_store_write_location[local]:
+Theorem place_store_write_location:
   !ctx func cenv cx ee ff s p w loc dty v.
     stmt_state_rel ctx func cenv cx ee s /\
     place_ptr_rel cenv cx s (PlaceR p) w (SOME loc) (Type dty) /\
