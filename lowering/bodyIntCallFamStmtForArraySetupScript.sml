@@ -34,7 +34,7 @@ Theorem intcall_array_source_inputs:
     LENGTH vs = bound /\
     (!k. k < LENGTH vs ==> value_has_type tv (EL k vs) /\ val_wf tv (EL k vs)) /\
     (!gs. eval_iterator cx (Array arr) (es with gas_obs := gs) =
-      (INL vs, es with gas_obs := gs)) /\
+      (INL (MAP Value vs), es with gas_obs := gs)) /\
     FLOOKUP ce.ce_vars id = NONE /\ lookup_scopes id es.scopes = NONE
 Proof
   strip_tac >> drule_all array_for_hypotheses >> strip_tac >> gvs[] >>
