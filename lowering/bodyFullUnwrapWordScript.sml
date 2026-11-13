@@ -15,7 +15,7 @@ Ancestors
   exprLowering compileEnv context emitHelperProps venomState finite_map
   exprPtrUnwrapLoad exprPtrUnwrapStorage emitHelper venomExecSemantics
   venomInst freshWrites exprLoweringProps ptrDiscipline vyperStorageFootprint
-  arithmetic list rich_list pred_set
+  loweringStateRelDefs arithmetic list rich_list pred_set
 
 (* vv_post at the compile_expr state, held at the later unwrap state. *)
 val VV_MONO_TAC =
