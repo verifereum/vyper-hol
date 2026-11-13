@@ -46,7 +46,7 @@ Proof
   strip_tac >> drule intcall_entry_semantic_inputs >> strip_tac >>
   drule intcall_entry_source >> strip_tac >>
   drule internal_decl_lookup_not_none >> strip_tac >>
-  fs[cenv_module_pins_def] >>
+  gvs[cenv_module_pins_def] >>
   drule_all pinned_internal_bound_body_typing >> strip_tac >>
   qexistsl [`env_body`, `env_after`] >> simp[] >>
   `es1 with scopes := [penv] = es1` by simp[evaluation_state_component_equality] >>
