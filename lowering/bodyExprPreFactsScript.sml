@@ -46,106 +46,6 @@ QED
 
 (* supported_function_decl finds only the main module's functions. *)
 
-(* An expression with no effect in it has no internal calls to make. *)
-Theorem no_effect_int_calls[local]:
-  (!e. ~supported_expr_exists expr_effect_root e ==> int_calls_expr e = []) /\
-  (!es. ~supported_exprs_exists expr_effect_root es ==>
-        int_calls_exprs es = [])
-Proof
-  `!x. expr_internal_call_root x ==> expr_effect_root x` by
-    (Cases >> simp[expr_internal_call_root_def, expr_effect_root_def]) >>
-  conj_tac >> rpt strip_tac
-  >- (irule (cj 1 no_internal_call_int_calls) >>
-      metis_tac[supported_expr_exists_mono]) >>
-  irule (cj 3 no_internal_call_int_calls) >>
-  metis_tac[supported_expr_exists_mono]
-QED
-
-Theorem supported_pure_forms_int_calls[local]:
-  (!tops e. supported_pure_expr tops e ==> int_calls_expr e = []) /\
-  (!tops es. supported_pure_exprs tops es ==> int_calls_exprs es = []) /\
-  (!tops e. supported_place_expr tops e ==> int_calls_expr e = [])
-Proof
-  metis_tac[no_effect_int_calls, supported_pure_no_effect]
-QED
-
-Theorem supported_effect_main_int_calls[local]:
-  (!tops e. supported_effect_expr tops e ==>
-      EVERY (\c. FST c = NONE /\
-                 IS_SOME (supported_function_decl tops c Internal))
-        (int_calls_expr e)) /\
-  (!tops e. supported_effect_place_expr tops e ==>
-      EVERY (\c. FST c = NONE /\
-                 IS_SOME (supported_function_decl tops c Internal))
-        (int_calls_expr e))
-Proof
-  ho_match_mp_tac supported_effect_expr_ind >>
-  rw[supported_effect_expr_def, int_calls_expr_def] >>
-  imp_res_tac supported_pure_forms_int_calls >>
-  imp_res_tac supported_function_decl_main >> gvs[]
-QED
-
-Theorem no_effect_call_operands:
-  !e. ~expr_has_effect e ==>
-      ~supported_expr_exists call_operands_effect_root e
-Proof
-  `!e. call_operands_effect_root e ==> expr_effect_root e` by
-    (Cases >> simp[call_operands_effect_root_def, expr_effect_root_def] >>
-     rename1 `Call ty target args dflt` >> Cases_on `target` >>
-     simp[call_operands_effect_root_def, expr_effect_root_def]) >>
-  rw[expr_has_effect_def] >>
-  metis_tac[supported_expr_exists_mono]
-QED
-
-Theorem supported_pure_list_call_operands[local]:
-  supported_pure_exprs tops args ==>
-  EVERY (\e. ~expr_has_effect e) args /\
-  EVERY (\e. ~supported_expr_exists call_operands_effect_root e) args
-Proof
-  simp[supported_pure_exprs_every, listTheory.EVERY_MEM] >> strip_tac >>
-  conj_tac >> rpt strip_tac >>
-  `supported_pure_expr tops e` by (first_x_assum irule >> simp[]) >>
-  drule supported_pure_expr_effect_free >>
-  metis_tac[no_effect_call_operands]
-QED
-
-Theorem effect_free_drop[local]:
-  EVERY (\e. ~expr_has_effect e) args ==>
-  ~EXISTS expr_has_effect (DROP n args)
-Proof
-  rw[listTheory.EVERY_MEM, listTheory.EXISTS_MEM] >>
-  drule rich_listTheory.MEM_DROP_IMP >> metis_tac[]
-QED
-
-Theorem supported_effect_no_call_operand_effects[local]:
-  (!tops e. supported_effect_expr tops e ==>
-    ~supported_expr_exists call_operands_effect_root e) /\
-  (!tops e. supported_effect_place_expr tops e ==>
-    ~supported_expr_exists call_operands_effect_root e)
-Proof
-  ho_match_mp_tac supported_effect_expr_ind >>
-  simp[supported_effect_expr_def, supported_expr_exists_def,
-       call_operands_effect_root_def] >>
-  rpt conj_tac >> rpt gen_tac >> rpt strip_tac >>
-  imp_res_tac supported_pure_no_effect >>
-  gvs[GSYM expr_has_effect_def] >>
-  imp_res_tac supported_pure_list_call_operands >>
-  imp_res_tac effect_free_drop >>
-  imp_res_tac supported_pure_expr_effect_free >>
-  imp_res_tac no_effect_call_operands >>
-  gvs[supported_exprs_exists_every, listTheory.EXISTS_MEM,
-      listTheory.EVERY_MEM] >> metis_tac[]
-QED
-
-Theorem supported_expr_no_call_operand_effects:
-  supported_expr tops e ==>
-  ~supported_expr_exists call_operands_effect_root e
-Proof
-  rw[supported_expr_def] >>
-  metis_tac[supported_pure_expr_effect_free, no_effect_call_operands,
-            supported_effect_no_call_operand_effects]
-QED
-
 (* A supported expression runs no EVM code, and its internal calls are to
    internal functions of the main module, as expr_body_pre asks. *)
 (* A supported expression is no bare .code: supported_builtin_form
@@ -168,6 +68,20 @@ Proof
       supportedExprFormsTheory.supported_builtin_form_def]
 QED
 
+Theorem supported_stmt_body_safe:
+  supported_stmt tops bindings s ==> body_stmt_safe tops s
+Proof
+  rw[body_stmt_safe_def] >>
+  drule (cj 1 supported_stmts_storage_syntax) >> simp[]
+QED
+
+Theorem supported_stmts_body_safe:
+  supported_stmts tops bindings ss ==> body_stmts_safe tops ss
+Proof
+  rw[body_stmts_safe_iff] >>
+  drule (cj 2 supported_stmts_storage_syntax) >> simp[]
+QED
+
 Theorem supported_expr_body_calls:
   !tops e. supported_expr tops e ==>
     ~expr_has_evm_run e /\
@@ -182,9 +96,7 @@ Proof
   conj_tac >- metis_tac[supported_expr_no_call_operand_effects] >>
   PURE_ONCE_REWRITE_TAC[CONJ_ASSOC] >>
   reverse conj_tac >- metis_tac[supported_expr_not_extcode] >>
-  pop_assum mp_tac >> simp[supportedExprsTheory.supported_expr_def] >> strip_tac >>
-  imp_res_tac supported_pure_int_calls >>
-  imp_res_tac supported_effect_main_int_calls >>
+  imp_res_tac supported_expr_main_calls >>
   gvs[listTheory.EVERY_CONJ]
 QED
 

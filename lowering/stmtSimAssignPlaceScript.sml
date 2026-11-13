@@ -10,13 +10,8 @@
  * it at the pointer's location (placeStore).  An empty value of a type
  * with a length word compiles no code for e and stores a zero length word.
  *
- * No index of the target can mutate (~expr_can_mutate).  Admitted, each
- * waiting on a later change outside this theory:
- *   assign_place_effectful_index_case — an index that isn't pure, for an
- *     index that can mutate and for a widened RHS (bodySimStmtCases);
- *   immutable_deploy_assign_case — an immutable written by the
- *     constructor, until immutable_alloca_sep and body_inv relate the
- *     constructor's immutables buffer to the source's immutables.
+ * The nonmutating-target case reuses its RHS interface; the effectful-index
+ * case composes snapshot and widened-source continuations.
  *
  * TOP-LEVEL:
  *   compile_assign_place_case — t = e for every outcome
@@ -128,7 +123,7 @@ Proof
   metis_tac[exprSimHypsTheory.expr_body_pre_vv_gas_admissible]
 QED
 
-(* ADMITTED: an index with effects (see the header). *)
+(* Assignment with effectful indices or a physically widened RHS. *)
 Theorem assign_place_effectful_index_case:
   !ctx func cx lctx RetQ cenv ty env tops bt e es dty.
     ~supported_target_pure tops bt /\

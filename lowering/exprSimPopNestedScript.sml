@@ -7,19 +7,16 @@
  * compile_dynarray_pop at that pointer.  The case lemmas take the target's
  * fragment judgment (pop_target_frag, which targetPlaceSimCases'
  * target_place_sim gives from target_sim) and split on the target's root.
- * pop_target_frag, the helpers and pop_nested_storage_pure_sim are in
+ * pop_target_frag, the helpers and pop_nested_storage_sim are in
  * exprSimPopNestedBase; each other lemma is in its own theory, named
- * after it (exprSimPopNestedStorageEffectful, exprSimPopNestedLocal, exprSimPopNestedTargetFrag,
+ * after it (exprSimPopNestedLocal, exprSimPopNestedTargetFrag,
  * bodyPopNestedTargetFrag):
  *
- *   pop_nested_storage_pure_sim — a storage or transient root with pure
- *                             indices: the header load and store and the
+ *   pop_nested_storage_sim  — a storage or transient root, any indices:
+ *                             the header load and store and the
  *                             element's slots, as exprSimPopStorage's
  *                             compile_pop_storage_sim has them at a
  *                             declared variable's slot.
- *   pop_nested_storage_effectful_sim — RESIDUAL: a storage root with an
- *                             index that pops or calls, which can leave
- *                             the target's header dead.
  *   pop_nested_immutable_runtime_sim — an immutable or constant root at
  *                             runtime: such a target does not type
  *                             (bare_global_assignable is empty at runtime).
@@ -36,7 +33,7 @@
 
 Theory exprSimPopNested
 Ancestors
-  exprSimPopNestedBase exprSimPopNestedStorageEffectful
+  exprSimPopNestedBase
   exprSimPopNestedLocal popTargetPre
   exprSimPopNestedTargetFrag bodyPopNestedTargetFrag
   loweringPosts bodySim exprSimHypsDefs
@@ -49,19 +46,6 @@ Ancestors
   exprLoweringProps compileEnv finite_map vyperPureExpr
   vyperStoragePlaceRegion vyperStoragePlaceProvenance
   vyperPlaceFrames vyperStatePreservation
-
-Theorem pop_nested_storage_sim:
-  !ctx func cenv cx env ann bt ty es src id ts d.
-    pop_target_frag ctx func cenv cx env bt es /\
-    expr_body_pre cenv cx env (Pop ann bt) es /\
-    target_root bt = TopLevelNameTarget (src,id) /\
-    get_module_code cx src = SOME ts /\ find_var_decl_by_name id ts = SOME d ==>
-    expr_vv_sim ctx func cenv cx ty (Pop ann bt) es
-Proof
-  rpt strip_tac >> Cases_on `EVERY pure_expr (target_indices bt)`
-  >- (irule pop_nested_storage_pure_sim >> metis_tac[]) >>
-  irule pop_nested_storage_effectful_sim >> metis_tac[]
-QED
 
 Theorem no_storage_root_untyped_runtime[local]:
   !env cx src id.

@@ -3,13 +3,14 @@
 Theory ctorDeployLoweringFrame
 Ancestors
   ctorDeployLoweringDefs ctorDeployImmBudget o1PassContract bodySim e2eDefs callTrace
-  ctorDeployLoweringFramePayload ctorDeployDefs e2eDeployDefs e2eEntry
+  ctorDeployLoweringFramePayload ctorDeployDefs immSectionDead e2eDeployDefs e2eEntry
   vyperTypeStoragePreservation list supportedDecls supportedProgram
   compileEnv loweringStateRelDefs compileVyper moduleLowering entryLocals ctorEntryLocals bodySimEntry
   exprLoweringProps context finite_map stmtLoweringMono freshWrites fragExec vyperScopePreservation
   vyperPlaceInvariants vyperInterpreter vyperState vyperMisc
   vyperTypeDeploymentMachine vyperTypeBindArguments vyperTypeInvariants
   vyperTypeContract vyperContext vyperTypeInitialState vyperTypeContractFunction
+  entryDecodePlanProps
   vyperTypeDeploymentSoundness vyperTypeContractSoundness
   vyperTypeContractStaticMaps vyperTypeEvalStoragePreservation
   typedCopyProducer typedCopyMetadata vyperTypeContractContext
@@ -551,14 +552,14 @@ QED
 
 Theorem deploy_frame_supported_body:
   !tops fname mut nr args dflts ret stmts.
-    supported_program tops /\
+    supported_program_deploy tops /\
     lookup_function NONE fname Deploy tops = SOME (mut,nr,args,dflts,ret,stmts) ==>
     ?bindings. supported_stmts tops bindings stmts
 Proof
   rpt gen_tac >> strip_tac >>
   drule lookup_function_Deploy_SOME_cases >> strip_tac >> gvs[]
   >- simp[supportedStmtsTheory.supported_stmt_def] >>
-  drule_all supported_program_function >>
+  drule_all supported_program_deploy_function >>
   simp[supported_function_body_def] >> metis_tac[]
 QED
 
@@ -643,7 +644,7 @@ Proof
   rpt gen_tac >> strip_tac >>
   drule_all deploy_frame_source_start_setup >> strip_tac >>
   drule_all deploy_frame_start_storage >> strip_tac >>
-  `supported_program tops` by gvs[deploy_source_ok_def] >>
+  `supported_program_deploy tops` by gvs[deploy_source_ok_def] >>
   drule_all deploy_frame_supported_body >> strip_tac >>
   `vs.vs_outcomes = MAP SND (call_trace es)` by
     (qpat_x_assum `gas_variant _ _` mp_tac >>
@@ -678,6 +679,7 @@ Theorem deploy_frame_register_static_fields:
     cenv'.ce_module = cenv.ce_module /\
     cenv'.ce_modules = cenv.ce_modules /\
     cenv'.ce_event_info = cenv.ce_event_info /\
+    cenv'.ce_error_info = cenv.ce_error_info /\
     cenv'.ce_is_external = cenv.ce_is_external
 Proof
   Induct >- simp[compile_register_constructor_args_def, comp_return_def] >>
@@ -708,6 +710,7 @@ Theorem deploy_ctor_static_tables:
       cenv.ce_module_var_type = build_var_type_map tops /\
       cenv.ce_module = NONE /\
       cenv.ce_event_info = build_event_info (type_env tops) tops (K NONE) /\
+      cenv.ce_error_info = (\name. lookup_custom_error_args_in name tops) /\
       ~cenv.ce_is_external
 Proof
   rpt gen_tac >> simp[deploy_ctor_code_def] >> strip_tac >>
@@ -801,38 +804,10 @@ Proof
   drule_all checked_single_module_defined_map_agreement >> simp[]
 QED
 
-Theorem deploy_frame_supported_no_flags:
-  !tops fid.
-    supported_program tops ==> lookup_flag fid tops = NONE
-Proof
-  rpt gen_tac >> strip_tac >>
-  `!ts. EVERY (supported_declaration_body tops) ts ==>
-         lookup_flag fid ts = NONE` suffices_by
-    (disch_then irule >> fs[supported_program_def]) >>
-  Induct >- simp[lookup_flag_def] >>
-  Cases_on `h` >>
-  simp[supported_declaration_body_def, lookup_flag_def]
-QED
-
-Theorem deploy_frame_supported_no_flag_types:
-  !tops nsid n.
-    supported_program tops ==>
-    FLOOKUP (type_env tops) nsid <> SOME (FlagArgs n)
-Proof
-  rpt gen_tac >> strip_tac >>
-  `!ts. EVERY (supported_declaration_body tops) ts ==>
-        FLOOKUP (type_env_for_module NONE ts) nsid <> SOME (FlagArgs n)`
-    suffices_by (disch_then (qspec_then `tops` mp_tac) >>
-                 fs[type_env_def, supported_program_def]) >>
-  Induct >- simp[type_env_for_module_def] >>
-  Cases_on `h` >>
-  simp[supported_declaration_body_def, type_env_for_module_def, FLOOKUP_UPDATE] >>
-  rpt strip_tac >> gvs[AllCaseEqs()]
-QED
-
 Theorem deploy_frame_flag_compatibility:
   !tops am tx cenv.
-    supported_program tops ==>
+    ALL_DISTINCT (FLAT (MAP (type_def_keys_toplevel (NONE:num option)) tops)) /\
+    cenv_module_pins tops cenv ==>
     (!src fid ts ls mid i.
        get_module_code (deploy_evaluation_context tops am tx) src = SOME ts /\
        lookup_flag fid ts = SOME ls /\ INDEX_OF mid ls = SOME i ==>
@@ -846,9 +821,10 @@ Proof
   simp[deploy_evaluation_context_def, initial_evaluation_context_def,
        get_module_code_def, get_tenv_def, type_env_all_modules_def,
        GSYM type_env_def] >>
-  conj_tac
-  >- metis_tac[deploy_frame_supported_no_flags, optionTheory.NOT_SOME_NONE] >>
-  metis_tac[deploy_frame_supported_no_flag_types]
+  gvs[cenv_module_pins_def] >> conj_tac
+  >- (rpt strip_tac >> gvs[AllCaseEqs(), nsid_to_string_def] >>
+      irule build_flag_info_member_id >> metis_tac[]) >>
+  rpt strip_tac >> irule build_flag_info_n_members >> gvs[type_env_def]
 QED
 
 Theorem deploy_frame_checked_struct_metadata:
@@ -1050,37 +1026,12 @@ Proof
   `ALL_DISTINCT (MAP FST args) /\
    ~MEM id (MAP FST (supported_stmts_bindings T stmts)) /\
    ~MEM id (MAP FST (supported_stmts_bindings F stmts))` by
-    (fs[supported_function_body_def, supportedNamesTheory.supported_function_bindings_def,
-        ALL_DISTINCT_APPEND, EVERY_MEM] >> metis_tac[]) >>
+    (drule supported_function_body_binding_contract >>
+     simp[EVERY_MEM] >> metis_tac[]) >>
   `ALOOKUP (REVERSE (collect_locals stmts)) id = NONE` by
     simp[alistTheory.ALOOKUP_NONE, MAP_REVERSE, deploy_frame_collect_locals_names] >>
   simp[REVERSE_APPEND, alistTheory.ALOOKUP_APPEND] >>
   irule alistTheory.ALOOKUP_ALL_DISTINCT_MEM >> simp[MAP_REVERSE]
-QED
-
-Theorem deploy_frame_classified_constructor_lookup:
-  !tops src name.
-    case SND (SND (SND (classify_functions tops))) of
-      NONE => lookup_function src name Deploy tops =
-        SOME (Payable,F,[],[],NoneT,[])
-    | SOME (mut,nr,rr,fname,args,dflts,ret,stmts) =>
-        fname = name ==>
-        lookup_function src name Deploy tops = SOME (mut,nr,args,dflts,ret,stmts)
-Proof
-  Induct >- simp[classify_functions_def, lookup_function_def] >>
-  rpt gen_tac >>
-  first_x_assum (qspecl_then [`src`, `name`] mp_tac) >>
-  simp[classify_functions_def] >>
-  `?a b c d. FOLDR classify_function ([],[],NONE,NONE) tops = (a,b,c,d)` by
-    metis_tac[pairTheory.ABS_PAIR_THM] >>
-  simp[] >> strip_tac >> Cases_on `h` >>
-  simp[classify_function_def, lookup_function_def]
-  >~ [`VariableDecl vd`]
-  >- (Cases_on `vd` >> simp[lookup_function_def])
-  >~ [`HashMapDecl hd`]
-  >- (Cases_on `hd` >> simp[lookup_function_def]) >>
-  qmatch_goalsub_rename_tac `case vv of External => _ | Internal => _ | Deploy => _` >>
-  Cases_on `vv` >> rw[]
 QED
 
 Theorem deploy_ctor_formal_var_types:
@@ -1089,6 +1040,7 @@ Theorem deploy_ctor_formal_var_types:
     deploy_ctor_code tops rpolicy runtime_bc dunit
       (stmts,cenv,nr,nkey,ut,imm,exit_lbl,sa,sb,sj,st_exit,
        st_epilogue,st_final,func) /\ supported_program tops /\
+    supported_program_deploy tops /\
     lookup_function NONE "__init__" Deploy tops =
       SOME (mut,nr,args,[],NoneT,stmts) ==>
     !id ty. MEM (id,ty) args ==> cenv.ce_var_type id = SOME ty
@@ -1100,10 +1052,11 @@ Proof
   `fname = "__init__"` by
     (drule_all lower_vyper_deploy_unit_ctor_named_init >> simp[ctor_named_init_def]) >>
   mp_tac (Q.SPECL [`tops`, `NONE:num option`, `"__init__"`]
-    deploy_frame_classified_constructor_lookup) >> simp[] >> strip_tac >> gvs[] >>
+    classify_functions_ctor_lookup) >> simp[] >> strip_tac >>
+  gvs[constSubstTheory.subst_consts_fn_def, constSubstTheory.subst_consts_expr_def] >>
   rpt gen_tac >> strip_tac >>
   drule lookup_function_Deploy_SOME_cases >> strip_tac >> gvs[] >>
-  drule_all supported_program_function >> strip_tac >>
+  drule_all supported_program_deploy_function >> strip_tac >>
   irule deploy_frame_formal_type_lookup >> goal_assum (drule_at Any) >>
   goal_assum (drule_at Any)
 QED
@@ -1126,7 +1079,8 @@ Proof
   `fname = "__init__"` by
     (drule_all lower_vyper_deploy_unit_ctor_named_init >> simp[ctor_named_init_def]) >>
   mp_tac (Q.SPECL [`tops`, `NONE:num option`, `"__init__"`]
-    deploy_frame_classified_constructor_lookup) >> simp[] >> strip_tac >> gvs[] >>
+    classify_functions_ctor_lookup) >> simp[] >> strip_tac >>
+  gvs[constSubstTheory.subst_consts_fn_def, constSubstTheory.subst_consts_expr_def] >>
   `fn_allocs_ok tops (mut,nr,rr,"__init__",args,[],NoneT,stmts)` by
     (irule lower_vyper_deploy_unit_allocs_ok >>
      conj_tac >- metis_tac[] >>
@@ -1153,6 +1107,7 @@ Theorem deploy_frame_package_body_inv:
    (cf : function_mutability # bool # bool # string # (string # type) list #
          expr list # type # stmt list) cenv args rest art exts ints fb.
     supported_program tops /\
+    supported_program_deploy tops /\
     check_contract T am.layouts tx.target [(NONE,tops)] = SOME art /\
     lower_vyper_deploy_unit tops rpolicy runtime_bc = SOME dunit /\
     classify_functions tops = (exts,ints,fb,SOME cf) /\
@@ -1332,7 +1287,7 @@ Proof
   strip_tac >>
   drule_all deploy_ctor_target_reserved_entry >> strip_tac >>
   mp_tac (Q.SPECL [`tops`, `NONE:num option`, `"__init__"`]
-    deploy_frame_classified_constructor_lookup) >> simp[] >> strip_tac >>
+    classify_functions_ctor_lookup) >> simp[] >> strip_tac >>
   rpt strip_tac >> drule_all deploy_ctor_target_entry_declared >> simp[]
 QED
 
@@ -1464,7 +1419,8 @@ Proof
   >- metis_tac[deploy_ctor_immutable_epilogue] >>
   drule_all deploy_frame_semantic_setup >> strip_tac >>
   `tx.function_name = "__init__"` by fs[deploy_state_rel_def] >>
-  `supported_program tops` by fs[deploy_source_ok_def] >>
+  `supported_program tops /\ supported_program_deploy tops` by
+    fs[deploy_source_ok_def] >>
   `imm_len tops < dimword(:256)` by decide_tac >>
   `lookup_function NONE "__init__" Deploy tops = SOME (mut,nr,args,[],NoneT,body')` by
     metis_tac[] >>
@@ -1486,7 +1442,11 @@ Proof
     (drule deploy_ctor_checked_pointer_domain >> simp[] >>
      disch_then (qspec_then `env_t` mp_tac) >> simp[] >> metis_tac[]) >>
   drule deploy_ctor_formal_var_types >> simp[] >> strip_tac >>
-  drule_all deploy_frame_flag_compatibility >> strip_tac >>
+  `ALL_DISTINCT (FLAT (MAP (type_def_keys_toplevel (NONE:num option)) tops))` by
+    (drule check_contract_namespaces_ok >>
+     simp[contract_namespaces_ok_def, contract_keys_def]) >>
+  qspecl_then [`tops`,`am`,`tx`,`cenv`] mp_tac deploy_frame_flag_compatibility >>
+  impl_tac >- fs[body_inv_def] >> strip_tac >>
   drule_all deploy_ctor_struct_compatibility >> strip_tac >>
   drule_all deploy_ctor_defined_map_agreement >> strip_tac >>
   drule deploy_ctor_static_tables >> strip_tac >>
@@ -1501,8 +1461,6 @@ Proof
      goal_assum (drule_at Any) >> simp[] >> metis_tac[]) >>
   simp[exprSimHypsDefsTheory.expr_sim_inv_def] >>
   conj_tac >- metis_tac[FLOOKUP_DEF, optionTheory.NOT_SOME_NONE] >>
-  conj_tac >- metis_tac[] >>
-  conj_tac >- metis_tac[] >>
   conj_tac >- metis_tac[] >>
   conj_tac >- (drule deploy_ctor_method_id >> simp[]) >>
   conj_tac >- metis_tac[] >>
