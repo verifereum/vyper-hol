@@ -34,12 +34,14 @@ bytecode; it does not reproduce the historical environment receipt.
 Run the checked frontend and HOL compiler comparison from the repository root:
 
 ```sh
-holbuild build compileVyperTheory supportedProgramTheory vyperCheckContractFrontendLib
-python3 bytecode/memory_store_witnesses.py probe \
-  --corpus create-builtins \
-  --fixtures bytecode/create-builtins/oracle \
-  --output /tmp/create-hol
+holbuild -j4 build evalCompilerCreateBuiltinsTheory
 ```
+
+CI reaches this theory through `loweringChecks`. It proves exact
+deployment/runtime parity for every name in `parity-fixtures.txt` and checks
+that the manifest and proved fixture names agree. Small leaf theories evaluate
+the fixtures independently. The proxy, copy and blueprint execution tests'
+existing compiler certificates are reused for their three oracle comparisons.
 
 The task identifies separate prerequisites for dynamic scratch allocation
 (#552), salted raw-create checker evaluation (#542), nested raw calls (#554),
@@ -64,8 +66,9 @@ The full 23-witness probe produced these verdicts:
 In that historical run, every witness was accepted by the checked frontend
 and produced `SOME` bytecode.
 Creation remains excluded by `supported_program`, as required until #575.
-All 23 rows were compared against the current HOL compiler: 22 MATCH and one
-PARITY_DEFECT in the nested `raw_call` dependency (#554).
+The retained manifest now includes `nest01_create_in_call`; its exact parity
+theorem checks the repaired nested `raw_call` path. The table above records the
+older probe's verdicts, not the current manifest's results.
 
 For `cc01_copy`, pinned Vyper's pre-DFT runtime block contains a restore of
 its FMP runner from the allocation pointer immediately before the final
