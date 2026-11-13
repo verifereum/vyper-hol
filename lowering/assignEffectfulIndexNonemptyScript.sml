@@ -499,10 +499,20 @@ Resume assign_place_mutating_nonempty_case_with_store[store]:
      POP_ASSUM_LIST (K all_tac) >>
      simp[vv_post_def, target_post_def] >> metis_tac[]) >>
   `gas_marked_path F ctx func s0 (LENGTH marks + LENGTH marks') (OK z)` by
-    (qpat_assum `gas_marked_exec _ _ (eval_expr _ _) _ _ _ _ _` mp_tac >>
-     qpat_assum `gas_marked_exec _ _ (eval_target_place _ _) _ _ _ _ _` mp_tac >>
-     simp[gasSummaryTheory.gas_marked_exec_def] >> rpt strip_tac >>
-     metis_tac[fragGasModeTheory.gas_marked_path_then, arithmeticTheory.ADD_0]) >>
+    (qpat_assum `gas_marked_exec _ _ (eval_expr _ _) _ _ _ _ _`
+       (assume_tac o CONJUNCT2 o REWRITE_RULE [gasSummaryTheory.gas_marked_exec_def]) >>
+     qpat_assum `gas_marked_exec _ _ (eval_target_place _ _) _ _ _ _ _`
+       (assume_tac o CONJUNCT2 o REWRITE_RULE [gasSummaryTheory.gas_marked_exec_def]) >>
+     `gas_marked_path F ctx func u (LENGTH marks') (OK z)` by
+       (irule (SIMP_RULE (srw_ss()) []
+          (Q.INST [`m` |-> `0`] fragGasModeTheory.gas_marked_path_then)) >>
+        qexists_tac `t'` >> simp[]) >>
+     `gas_marked_path F ctx func t (LENGTH marks') (OK z)` by
+       (irule (SIMP_RULE (srw_ss()) []
+          (Q.INST [`n` |-> `0`] fragGasModeTheory.gas_marked_path_then)) >>
+        qexists_tac `u` >> simp[]) >>
+     irule fragGasModeTheory.gas_marked_path_then >>
+     qexists_tac `t` >> simp[]) >>
   `~block_is_terminated sb` by
     (irule endpoint_path_open >>
      goal_assum (drule_at (Pat `gas_marked_path _ _ _ s0 _ (OK z)`)) >>
