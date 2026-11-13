@@ -191,7 +191,7 @@ Proof
          metis_tac[concretizePtrRequestHistoryTheory.ptr_history_content_labels]) >>
       suspend "dalloca") >>
   `at.po_inst.inst_opcode <> DALLOCA` by
-    (rw[concretize_inst_with_positions_def] >> every_case_tac >>
+    (rw[concretize_inst_with_positions_def] >> rpt CASE_TAC >>
      gvs[mk_assign_inst_def, mk_nop_inst_def]) >>
   simp[dalloca_no_wrap_def]
 QED
