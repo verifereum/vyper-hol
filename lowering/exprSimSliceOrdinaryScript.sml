@@ -262,8 +262,9 @@ Resume compile_slice_ordinary_case[dynamic]:
  qmatch_asmsub_abbrev_tac `gas_outcome _ _ _ _ _ _ _ spost _` >>
  drule slice_ordinary_actions >> strip_tac >> asm_rewrite_tac[] >>
  irule slice_gas_outcome_bind_value >>
+ conj_tac >- simp[slice_two_read_terminal_frame] >>
  qexists_tac `\H v ee t. spost H (INL v) ee t` >>
- simp[slice_two_read_terminal_frame] >> rpt conj_tac
+ simp[] >> rpt conj_tac
  >~ [`gas_outcome _ _ _ _ _ (bind (eval_expr cx src) (read_result cx))`]
  >- (irule slice_gas_outcome_conseq >> goal_assum (drule_at Any) >>
      simp[Abbr `spost`] >> rpt strip_tac >>
@@ -546,8 +547,9 @@ Resume compile_slice_ordinary_case[fixed_source]:
  qmatch_asmsub_abbrev_tac `gas_outcome _ _ _ _ _ _ _ spost _` >>
  drule slice_ordinary_actions >> strip_tac >> asm_rewrite_tac[] >>
  irule slice_gas_outcome_bind_value >>
+ conj_tac >- simp[slice_two_read_terminal_frame] >>
  qexists_tac `\H v ee t. spost H (INL v) ee t` >>
- simp[slice_two_read_terminal_frame] >> rpt conj_tac
+ simp[] >> rpt conj_tac
  >~ [`gas_outcome _ _ _ _ _ (bind (eval_expr cx src) (read_result cx))`]
  >- (irule slice_gas_outcome_conseq >> goal_assum (drule_at Any) >>
      simp[Abbr `spost`] >> rpt strip_tac >>

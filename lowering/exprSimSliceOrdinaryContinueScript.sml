@@ -101,6 +101,7 @@ Theorem slice_read_outcome_bind:
 Proof
   strip_tac >> drule_all expr_sim_apply >> strip_tac >>
   irule slice_gas_outcome_bind_value >>
+  conj_tac >- first_assum ACCEPT_TAC >>
   qexists_tac `\H v ee t. expr_post H ctx func cenv cx e es sa sb s ee v op t /\
     t.vs_current_bb = sb.cs_current_bb /\ t.vs_inst_idx = LENGTH sb.cs_current_insts` >>
   simp[] >> rpt conj_tac
