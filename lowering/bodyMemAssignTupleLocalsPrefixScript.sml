@@ -74,7 +74,9 @@ Theorem tuple_scratch_path_mem:
     val_in_memory tv v (w2n w) t.vs_memory /\
     w2n w + n <= t.vs_alloca_next /\
     FLOOKUP t.vs_allocas sa.cs_next_id = SOME (w2n w,n) /\
-    (!x. buf.buf_operand = Var x ==> not_fresh_at sn x)
+    (!x. buf.buf_operand = Var x ==> not_fresh_at sn x) /\
+    t.vs_accounts = s.vs_accounts /\ t.vs_transient = s.vs_transient /\
+    t.vs_requests = s.vs_requests /\ t.vs_call_ctx = s.vs_call_ctx
 Proof
   strip_tac >> drule_all body_scratch_prefix_shape >> strip_tac >>
   `fn_has_code sa sm func` by metis_tac[fn_has_code_split] >>
@@ -151,7 +153,9 @@ Theorem tuple_stage_copy_path_mem:
     val_in_memory tv v (w2n w) t.vs_memory /\
     w2n w + n <= t.vs_alloca_next /\
     FLOOKUP t.vs_allocas sa.cs_next_id = SOME (w2n w,n) /\
-    (!x. staged = Var x ==> not_fresh_at sb x)
+    (!x. staged = Var x ==> not_fresh_at sb x) /\
+    t.vs_accounts = s.vs_accounts /\ t.vs_transient = s.vs_transient /\
+    t.vs_requests = s.vs_requests /\ t.vs_call_ctx = s.vs_call_ctx
 Proof
   strip_tac >>
   qpat_x_assum `(do _ od) sa = _` mp_tac >>
@@ -205,7 +209,9 @@ Theorem optional_tuple_stage_path_mem:
       gas_path_mem ctx func s 0 (OK t) /\
       alloca_history func t /\ return_buf_frame d cenv sb t /\
       s.vs_alloca_next <= t.vs_alloca_next /\
-      w2n w + type_memory_size_list tvs <= t.vs_alloca_next
+      w2n w + type_memory_size_list tvs <= t.vs_alloca_next /\
+      t.vs_accounts = s.vs_accounts /\ t.vs_transient = s.vs_transient /\
+      t.vs_requests = s.vs_requests /\ t.vs_call_ctx = s.vs_call_ctx
 Proof
   rpt gen_tac >> disch_then (map_every assume_tac o CONJUNCTS) >>
   drule_all expr_tuple_memory_owned >>
@@ -403,12 +409,17 @@ Theorem compile_tuple_load_all_typed_path_mem:
       (!i. i < LENGTH tys ==> ?v. eval_operand (EL i elems) t = SOME v /\
         if is_word_type (EL i tys) then
           v = typed_val_to_w256 (EL i tvs) (EL i vals)
-        else w2n v = w2n w + SUM (MAP type_memory_size (TAKE i tvs)))
+        else w2n v = w2n w + SUM (MAP type_memory_size (TAKE i tvs))) /\
+      t.vs_accounts = s.vs_accounts /\ t.vs_transient = s.vs_transient /\
+      t.vs_requests = s.vs_requests /\ t.vs_call_ctx = s.vs_call_ctx
 Proof
   rpt gen_tac >> strip_tac >>
   drule_all tuple_load_typed_layout >> strip_tac >>
   drule_all compile_tuple_load_all_typed_run >> strip_tac >>
   drule_all tuple_load_run_lift >> strip_tac >>
+  `t.vs_accounts = s.vs_accounts /\ t.vs_transient = s.vs_transient /\
+   t.vs_requests = s.vs_requests /\ t.vs_call_ctx = s.vs_call_ctx` by
+    simp[] >>
   `gas_path_mem ctx func s 0
     (OK (t with vs_inst_idx := LENGTH sb.cs_current_insts))` by
     (irule compile_tuple_load_all_path_mem >> simp[] >>

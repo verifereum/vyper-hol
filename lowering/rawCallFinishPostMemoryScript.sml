@@ -1,7 +1,7 @@
 (* Typed value and capacity postconditions for raw-call finish endpoints. *)
 Theory rawCallFinishPostMemory
 Ancestors
-  exprSimRawCall bodyMemAggregateBounds exprSimMemDefs exprSimVVFrame
+  vyperStorageFootprint exprSimRawCall bodyMemAggregateBounds exprSimMemDefs exprSimVVFrame
   valueEncoding exprSimDefs exprSimProps loweringPosts exprLowering
   vyperInterpreter vyperState compileEnv exprLoweringProps venomState context words finite_map
 
@@ -9,10 +9,11 @@ Theorem raw_call_zero_finish_post_mem:
   expr_has_effect e /\
   expr_type e = (if rev then NoneT else BaseT BoolT) /\
   lowered_value_type ce e = expr_type e /\
-  stmt_state_rel ctx func ce cx es' u /\ wb_frame ce es es' sa s0 u /\
+  stmt_state_rel H ctx func ce cx es' u /\ storage_well_formed_on cx es' (FST H) /\
+  wb_frame ce es es' sa s0 u /\
   (if rev then result = Lit 0w
    else expr_val_rel cx (BaseT BoolT) (BoolV success) result u) ==>
-  vv_post ctx func ce cx e es sa sb s0 es'
+  vv_post H ctx func ce cx e es sa sb s0 es'
     (Value (if rev then NoneV else BoolV success)) (StackValue ann result) u /\
   vv_store_bound cx (expr_type e) (lowered_value_type ce e) es'
     (Value (if rev then NoneV else BoolV success)) (StackValue ann result) u
@@ -39,14 +40,14 @@ Theorem raw_call_bytes_finish_post_mem:
   raw_call_finish_view u =
     raw_call_finish_view (mstore b (n2w (MIN (LENGTH bytes) cap)) t) /\
   mem_bytes_at (b+32) (LENGTH (TAKE cap bytes)) t.vs_memory = TAKE cap bytes /\
-  stmt_state_rel ctx func ce cx es' u /\
+  stmt_state_rel H ctx func ce cx es' u /\ storage_well_formed_on cx es' (FST H) /\
   eval_operand result u = SOME (n2w b) /\
   FLOOKUP t.vs_allocas aid = SOME (b,rounded+32) /\
   sa.cs_next_id <= aid /\ aid < sb.cs_next_id /\
   (!name lb lsz. local_region ce es'.scopes u name lb lsz ==>
     b + (rounded+32) <= lb \/ lb + lsz <= b) /\
   wb_frame ce es es' sa s0 u ==>
-  vv_post ctx func ce cx e es sa sb s0 es' (Value (BytesV (TAKE cap bytes)))
+  vv_post H ctx func ce cx e es sa sb s0 es' (Value (BytesV (TAKE cap bytes)))
     (LocatedValue (expr_type e) (mk_ptr result LocMemory)) u /\
   vv_store_bound cx (expr_type e) (lowered_value_type ce e) es'
     (Value (BytesV (TAKE cap bytes)))
@@ -55,7 +56,7 @@ Proof
   strip_tac >>
   qpat_assum `lowered_value_type _ _ = _`
     (assume_tac o MATCH_MP post_value_type_lowered) >>
-  `vv_post ctx func ce cx e es sa sb s0 es' (Value (BytesV (TAKE cap bytes)))
+  `vv_post H ctx func ce cx e es sa sb s0 es' (Value (BytesV (TAKE cap bytes)))
     (LocatedValue (expr_type e) (mk_ptr result LocMemory)) u` by
     (irule raw_call_bytes_post >> simp[] >>
      qexistsl_tac [`aid`,`b`,`rounded`,`t`] >> simp[] >> metis_tac[]) >>

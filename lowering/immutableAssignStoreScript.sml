@@ -139,7 +139,7 @@ Theorem immutable_assign_normalized_store:
   type_widens_to tenv sty dty /\
   evaluate_type tenv sty = SOME stv /\ evaluate_type tenv dty = SOME dtv /\
   value_has_type stv v /\ value_has_type dtv v /\ val_wf stv v /\ val_wf dtv v /\
-  stmt_state_rel ctx func cenv cx es s /\
+  stmt_state_rel H ctx func cenv cx es s /\
   eval_operand src s = SOME sw /\ eval_operand dst s = SOME (n2w off) /\
   val_in_memory stv v (w2n sw) s.vs_memory /\
   type_memory_size dtv < dimword (:256) /\
@@ -156,7 +156,7 @@ Theorem immutable_assign_normalized_store:
   cenv.ce_module_var_type (cenv.ce_module,id) = SOME dty /\
   evaluate_type (get_tenv cx) dty = SOME dtv /\
   L = type_memory_size dtv /\ L = 32*n /\ 0 < L /\ off+L < dimword (:256) ==>
-  ?r q. stmt_state_rel ctx func cenv cx es r /\
+  ?r q. stmt_state_rel H ctx func cenv cx es r /\
     gas_marked_path F ctx func s 0 (OK r) /\
     gas_marked_path F ctx func r 0 (OK q) /\
     gas_marked_path F ctx func s 0 (OK q) /\
@@ -188,7 +188,7 @@ Proof
   drule immutable_normalized_composite_path >>
   disch_then (drule_at (Pat `compile_store_memory_typed _ _ _ _ _ _ = _`)) >>
   disch_then (drule_at (Pat `(if _ then _ else _) _ = _`)) >>
-  disch_then (drule_at (Pat `stmt_state_rel _ _ _ _ _ _`)) >>
+  disch_then (drule_at (Pat `stmt_state_rel _ _ _ _ _ _ _`)) >>
   disch_then (drule_at (Pat `val_in_memory _ _ _ _`)) >>
   disch_then (drule_at (Pat `FLOOKUP cenv.ce_module_vars _ = _`)) >>
   disch_then (qspecl_then [`tenv`,`n`,`n2w off`] mp_tac) >> simp[] >>

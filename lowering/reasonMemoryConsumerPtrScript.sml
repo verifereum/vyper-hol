@@ -63,7 +63,7 @@ Theorem compile_revert_memory_string_endpoint_ptr:
    (vv = LocatedValue ty p /\ ~is_word_type ty /\
     p.ptr_location = LocMemory /\ p.ptr_operand = op)) /\
   copy_old_operand sa op /\
-  fn_has_code sa sb fn /\ stmt_state_rel ctx fn cenv cx es s /\
+  fn_has_code sa sb fn /\ stmt_state_rel H ctx fn cenv cx es s /\
   fn_inst_ids_distinct fn /\
   (!k. k < 3 ==> not_local_ptr cenv es.scopes
     (STRING #"%" (toString (sa.cs_next_var+k)))) /\

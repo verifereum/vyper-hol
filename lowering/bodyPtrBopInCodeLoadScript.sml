@@ -93,7 +93,7 @@ Proof
 QED
 
 Theorem membership_code_array_read:
-  stmt_state_rel ctx fn cenv cx es s0 /\ ~cenv.ce_is_ctor /\
+  stmt_state_rel H ctx fn cenv cx es s0 /\ ~cenv.ce_is_ctor /\
   immutable_holds cenv cx (ArrayT ety bd) (Value (ArrayV av)) bw es s0 /\
   is_word_type ety /\ evaluate_type (get_tenv cx) ety = SOME tv /\
   value_has_type (ArrayTV tv bd) (ArrayV av) /\
@@ -118,7 +118,7 @@ Theorem membership_code_array_element_prefix:
   membership_loop_registers sa i r G tn s /\
   s.vs_current_bb = fresh_label_output "in_body" (sa.cs_next_label+2) /\
   s.vs_inst_idx = 0 /\ (!x. arr_op = Var x ==> not_fresh_at sa x) /\
-  stmt_state_rel ctx fn cenv cx es s0 /\ ~cenv.ce_is_ctor /\
+  stmt_state_rel H ctx fn cenv cx es s0 /\ ~cenv.ce_is_ctor /\
   immutable_holds cenv cx (ArrayT ety bd) (Value (ArrayV av)) bw es s0 /\
   eval_operand arr_op s0 = SOME bw /\ op_taint tn0 arr_op = {} /\
   is_word_type ety /\ evaluate_type (get_tenv cx) ety = SOME tv /\
@@ -168,7 +168,7 @@ Theorem membership_code_array_element_prefix_source:
   membership_loop_registers sa i r G tn s /\
   s.vs_current_bb = fresh_label_output "in_body" (sa.cs_next_label+2) /\
   s.vs_inst_idx = 0 /\ (!x. arr_op = Var x ==> not_fresh_at early x) /\
-  stmt_state_rel ctx fn cenv cx es s0 /\ ~cenv.ce_is_ctor /\
+  stmt_state_rel H ctx fn cenv cx es s0 /\ ~cenv.ce_is_ctor /\
   immutable_holds cenv cx (ArrayT ety bd) (Value (ArrayV av)) bw es s0 /\
   eval_operand arr_op s0 = SOME bw /\ op_taint tn0 arr_op = {} /\
   is_word_type ety /\ evaluate_type (get_tenv cx) ety = SOME tv /\

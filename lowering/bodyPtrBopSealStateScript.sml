@@ -13,8 +13,8 @@ Proof
 QED
 
 Theorem bop_stmt_state_rel_function_unique:
-  stmt_state_rel ctx f cenv cx es s /\
-  stmt_state_rel ctx g cenv' cx' es' t /\ f.fn_name = g.fn_name ==>
+  stmt_state_rel H ctx f cenv cx es s /\
+  stmt_state_rel H ctx g cenv' cx' es' t /\ f.fn_name = g.fn_name ==>
   f = g
 Proof
   simp[stmt_state_rel_def] >> metis_tac[bop_alloca_room_function_unique]

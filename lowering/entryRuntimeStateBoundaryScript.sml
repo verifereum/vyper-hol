@@ -79,7 +79,7 @@ Theorem runtime_entry_state_rel:
     storage_vars_rel cenv cx /\ transient_vars_rel cenv cx /\
     cenv.ce_module = NONE /\ ~cenv.ce_is_ctor /\
     immutable_section_layout cenv tops ==>
-    state_rel func cenv cx es out
+    state_rel H func cenv cx es out
 Proof
   rpt gen_tac >> strip_tac >>
   fs[entry_decoder_obs_def] >>

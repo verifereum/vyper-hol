@@ -97,10 +97,10 @@ Theorem ptr_fragment_step:
        ?t. step_inst_base inst s = OK t /\
            t.vs_current_bb = s.vs_current_bb /\ t.vs_halted = s.vs_halted /\
            (!fuel fn. ~ctx_has_dalloca ctx ==>
-             ptr_inst_ok (cx_dead cx) 0 fuel ctx fn G tn inst s) /\
+             ptr_inst_ok (cx_dead H cx) 0 fuel ctx fn G tn inst s) /\
            Q (step_prov PG G inst t) (step_taint inst s t tn)
              (t with vs_inst_idx := SUC s.vs_inst_idx)) ==>
-    frag_exec_ptr cx ctx PG sa sb P Q R
+    frag_exec_ptr H cx ctx PG sa sb P Q R
 Proof
   rpt gen_tac >> strip_tac >> simp[frag_exec_ptr_def] >> rpt strip_tac >>
   drule_all fn_has_code_same_block >> strip_tac >>
@@ -133,7 +133,7 @@ Theorem mload_frag_ptr:
               (update_var tmp (mload (w2n a) s) s) tn)
            ((update_var tmp (mload (w2n a) s) s) with
               vs_inst_idx := SUC s.vs_inst_idx)) ==>
-    frag_exec_ptr cx ctx PG sa sb P Q R
+    frag_exec_ptr H cx ctx PG sa sb P Q R
 Proof
   rpt strip_tac >> irule ptr_fragment_step >> simp[] >>
   simp[mk_inst_def, is_terminator_def] >> rpt strip_tac >>
@@ -160,7 +160,7 @@ Theorem mstore_frag_ptr:
            (step_taint (mk_inst id MSTORE [Var dst; value] []) s
               (mstore (w2n a) w s) tn)
            ((mstore (w2n a) w s) with vs_inst_idx := SUC s.vs_inst_idx)) ==>
-    frag_exec_ptr cx ctx PG sa sb P Q R
+    frag_exec_ptr H cx ctx PG sa sb P Q R
 Proof
   rpt strip_tac >> irule ptr_fragment_step >> simp[is_terminator_def] >>
   rpt strip_tac >> first_x_assum drule >> strip_tac >>
@@ -217,7 +217,7 @@ Theorem word_load_store_framed_frag_ptr:
     lookup_var src s = SOME a /\ lookup_var dst s = SOME b /\
     (!i. w2n a <= i /\ i < w2n a+32 ==> i NOTIN tn.t_mem) ==>
     ?Gf tnf sf.
-      frag_exec_ptr cx ctx PG sa sb
+      frag_exec_ptr H cx ctx PG sa sb
         (\g t v. g=G /\ t=tn /\ v=s) (\g t v. g=Gf /\ t=tnf /\ v=sf) R /\
       sf = (mstore (w2n b) (mload (w2n a) s)
         (update_var tmp (mload (w2n a) s) s)) with

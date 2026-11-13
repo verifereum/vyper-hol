@@ -35,7 +35,7 @@ Proof
   strip_tac >> drule_all storage_holds_string_source_resources >> strip_tac >>
   `word_size (LENGTH str) <=
    word_size (32 * (type_slot_size (BaseTV (StringT max)) - 1))` by
-    (irule word_size_monotone >> simp[]) >>
+    (irule exprSimPropsTheory.word_size_monotone >> simp[]) >>
   `word_size (32 * (type_slot_size (BaseTV (StringT max)) - 1)) =
    type_slot_size (BaseTV (StringT max)) - 1` by
     (simp[word_size_def] >> once_rewrite_tac[arithmeticTheory.MULT_COMM] >>

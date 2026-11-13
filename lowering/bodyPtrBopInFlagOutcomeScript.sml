@@ -12,14 +12,14 @@ Theorem membership_flag_success_ghost_path:
   ~ctx_has_dalloca ctx /\ run_inst_seq (emitted_insts sa sb) s = OK t /\
   ~s.vs_halted /\ lookup_block s.vs_current_bb fn.fn_blocks = SOME bb /\
   isPREFIX (emitted_insts sa sb) (DROP s.vs_inst_idx bb.bb_instructions) /\
-  ghost_inv d cenv cx es G tn s /\ local_ptrs_reserved cenv sa /\
+  ghost_inv H d cenv cx es G tn s /\ local_ptrs_reserved cenv sa /\
   (!x sz. cenv.ce_return_buf = SOME (PtrVar (Var x) sz) ==> not_fresh_at sa x) /\
   (!x sz. cenv.ce_return_pc = SOME (PtrVar (Var x) sz) ==> not_fresh_at sa x) /\
   es'.scopes = es.scopes ==>
   ?G' tn'. gas_path_ptr D 0 ctx fn PG G tn s 0 G' tn'
       (OK (t with vs_inst_idx := s.vs_inst_idx + LENGTH (emitted_insts sa sb))) /\
     op_prov G' op = NONE /\ op_taint tn' op = {} /\
-    ghost_inv d cenv cx es' G' tn'
+    ghost_inv H d cenv cx es' G' tn'
       (t with vs_inst_idx := s.vs_inst_idx + LENGTH (emitted_insts sa sb)) /\
     ghost_kept cenv es sa G tn s G' tn'
 Proof
@@ -54,7 +54,7 @@ Theorem membership_flag_suffix_outcome_ptr:
   ~ctx_has_dalloca ctx /\ ~s.vs_halted /\
   lookup_block s.vs_current_bb fn.fn_blocks = SOME bb /\
   isPREFIX (emitted_insts sa sb) (DROP s.vs_inst_idx bb.bb_instructions) /\
-  ghost_inv d cenv cx es G tn s /\ local_ptrs_reserved cenv sa /\
+  ghost_inv H d cenv cx es G tn s /\ local_ptrs_reserved cenv sa /\
   (!x sz. cenv.ce_return_buf = SOME (PtrVar (Var x) sz) ==> not_fresh_at sa x) /\
   (!x sz. cenv.ce_return_pc = SOME (PtrVar (Var x) sz) ==> not_fresh_at sa x) /\
   (?v t. bop_result cx ann bop tys v1 v2 es = INL v /\ word_value v /\
@@ -64,7 +64,7 @@ Theorem membership_flag_suffix_outcome_ptr:
       run_inst_seq (emitted_insts sa sb) s = OK t /\
       eval_operand op t = SOME (val_to_w256 v) /\
       op_prov G' op = NONE /\ op_taint tn' op = {} /\
-      ghost_inv d cenv cx (es with gas_obs := []) G' tn'
+      ghost_inv H d cenv cx (es with gas_obs := []) G' tn'
         (t with vs_inst_idx := s.vs_inst_idx + LENGTH (emitted_insts sa sb)) /\
       ghost_kept cenv es sa G tn s G' tn' ==>
       Q (INL v) (es with gas_obs := []) G' tn'
@@ -77,7 +77,7 @@ Proof
   `?G' tn'. gas_path_ptr D 0 ctx fn PG G tn s 0 G' tn'
       (OK (t with vs_inst_idx := s.vs_inst_idx + LENGTH (emitted_insts sa sb))) /\
     op_prov G' op = NONE /\ op_taint tn' op = {} /\
-    ghost_inv d cenv cx (es with gas_obs := []) G' tn'
+    ghost_inv H d cenv cx (es with gas_obs := []) G' tn'
       (t with vs_inst_idx := s.vs_inst_idx + LENGTH (emitted_insts sa sb)) /\
     ghost_kept cenv es sa G tn s G' tn'` by
     (irule membership_flag_success_ghost_path >> simp[] >>

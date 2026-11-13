@@ -42,8 +42,8 @@ Proof
 QED
 
 Theorem tuple_live_suffix:
-  storage_read_live cx tr st w (TupleTV (pre ++ rest)) ==>
-  storage_read_live cx tr st
+  storage_read_live H tr st w (TupleTV (pre ++ rest)) ==>
+  storage_read_live H tr st
     (w + n2w (type_slot_size_list pre)) (TupleTV rest)
 Proof
   strip_tac >> Cases_on `type_slot_size_list rest = 0`

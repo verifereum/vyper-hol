@@ -208,7 +208,7 @@ Proof
   disch_then (qspecl_then [`PG`, `D`] strip_assume_tac) >>
   rename1 `value = Var out` >>
   qmatch_asmsub_abbrev_tac `inst_seq_ptr D 0 ctx func PG G tn
-    (emitted_insts sa c2) s H tm` >>
+    (emitted_insts sa c2) s HG tm` >>
   qmatch_asmsub_abbrev_tac `run_inst_seq (emitted_insts sa c2) s =
     OK (t with vs_inst_idx := _)` >>
   suspend "word_clamp"
@@ -236,15 +236,15 @@ Resume abi_decode_word_success_ptr[word_store]:
   `fn_has_code c2 c3 func /\ fn_has_code c3 sb func` by
     metis_tac[fn_has_code_split] >>
   `!op. op IN {value} UNION IMAGE Lit UNIV ==>
-     op_prov H op = NONE /\ op_taint tm op = {}` by
+     op_prov HG op = NONE /\ op_taint tm op = {}` by
     (gen_tac >> simp_tac (srw_ss()) [IN_UNION, IN_SING, IN_IMAGE] >>
      strip_tac >- metis_tac[] >>
      qpat_x_assum `op = Lit _` SUBST1_TAC >>
      simp[NoAsms, op_prov_def, op_taint_def]) >>
   drule_all (abi_decode_scalar_compile_replay_ptr |> Q.INST
-    [`G` |-> `H`, `tn` |-> `tm`, `s` |-> `t`, `t` |-> `v`]) >>
+    [`G` |-> `HG`, `tn` |-> `tm`, `s` |-> `t`, `t` |-> `v`]) >>
   disch_then (qspecl_then [`PG`, `D`] strip_assume_tac) >>
-  qmatch_asmsub_abbrev_tac `inst_seq_ptr D 0 ctx func PG H tm
+  qmatch_asmsub_abbrev_tac `inst_seq_ptr D 0 ctx func PG HG tm
     (emitted_insts c2 c3) t Gc tk` >>
   `!x. not_fresh_at sa x ==> lookup_var x v = lookup_var x s /\
       FLOOKUP Gc x = FLOOKUP G x /\ op_taint tk (Var x) = op_taint tn (Var x)` by
@@ -394,7 +394,7 @@ Proof
   disch_then (qspecl_then [`PG`, `D`] strip_assume_tac) >>
   rename1 `value = Var out` >>
   qmatch_asmsub_abbrev_tac `inst_seq_ptr D 0 ctx func PG G tn
-    (emitted_insts sa c2) s H tm` >>
+    (emitted_insts sa c2) s HG tm` >>
   qmatch_asmsub_abbrev_tac `run_inst_seq (emitted_insts sa c2) s =
     OK (t with vs_inst_idx := _)` >>
   suspend "clamp_abort"
@@ -445,7 +445,7 @@ Resume abi_decode_word_abort_ptr[replay]:
 QED
 
 Resume abi_decode_word_abort_ptr[join]:
-  qmatch_asmsub_abbrev_tac `inst_seq_ptr D 0 ctx func PG H tm
+  qmatch_asmsub_abbrev_tac `inst_seq_ptr D 0 ctx func PG HG tm
     (emitted_insts c2 c3) t Gc tk` >>
   drule_all abi_decode_compile_abort_suffix_ptr >> strip_tac >>
   `sb.cs_current_insts = c2.cs_current_insts ++ emitted_insts c2 sb` by
@@ -585,8 +585,8 @@ Theorem abi_decode_word_success_framed:
   p+32 <= h /\ w2n b+h < dimword(:256) /\
   (w2n b+h <= w2n d \/ w2n d+32 <= w2n b) /\
   run_inst_seq (emitted_insts sa sb) s = OK u /\
-  ghost_inv ret cenv cx es G tn s /\
-  stmt_state_rel ctx func cenv cx es s /\ local_ptrs_reserved cenv sa /\
+  ghost_inv H ret cenv cx es G tn s /\
+  stmt_state_rel H ctx func cenv cx es s /\ local_ptrs_reserved cenv sa /\
   (!x sz. cenv.ce_return_buf = SOME (PtrVar (Var x) sz) ==> not_fresh_at sa x) /\
   (!x sz. cenv.ce_return_pc = SOME (PtrVar (Var x) sz) ==> not_fresh_at sa x) /\
   (!name a k. local_region cenv es.scopes s name a k ==>
@@ -596,12 +596,12 @@ Theorem abi_decode_word_success_framed:
     FLOOKUP (case ALOOKUP es.immutables cx.txn.target of NONE => FEMPTY
       | SOME imms => get_source_immutables cenv.ce_module imms) name = SOME (tv,v) ==>
     regions_disjoint off (type_memory_size tv) (w2n d) 32) ==>
-  ?H tf. inst_seq_ptr D 0 ctx func PG G tn (emitted_insts sa sb) s H tf /\
-    ghost_inv ret cenv cx es H tf u /\ stmt_state_rel ctx func cenv cx es u /\
+  ?HG tf. inst_seq_ptr D 0 ctx func PG G tn (emitted_insts sa sb) s HG tf /\
+    ghost_inv H ret cenv cx es HG tf u /\ stmt_state_rel H ctx func cenv cx es u /\
     abi_clamp_ok clamp (mload (w2n b+p) s) /\
     mem_word_at (w2n d) u.vs_memory = mload (w2n b+p) s /\
-    abi_decode_ptr_window H tf u dst d 32 /\
-    abi_decode_ptr_window H tf u src b h /\
+    abi_decode_ptr_window HG tf u dst d 32 /\
+    abi_decode_ptr_window HG tf u src b h /\
     (u with <|vs_vars := s.vs_vars; vs_memory := s.vs_memory;
                vs_inst_idx := s.vs_inst_idx|>) = s /\
     LENGTH s.vs_memory <= LENGTH u.vs_memory /\
@@ -610,24 +610,24 @@ Theorem abi_decode_word_success_framed:
     (!i. ~(w2n d <= i /\ i < w2n d+32) ==>
       (i IN tf.t_mem <=> i IN tn.t_mem)) /\
     (!x. not_fresh_at sa x ==> lookup_var x u = lookup_var x s /\
-      FLOOKUP H x = FLOOKUP G x /\ op_taint tf (Var x) = op_taint tn (Var x)) /\
+      FLOOKUP HG x = FLOOKUP G x /\ op_taint tf (Var x) = op_taint tn (Var x)) /\
     tf.t_stor = tn.t_stor /\ tf.t_trans = tn.t_trans /\ tf.t_imm = tn.t_imm /\
     (fresh_vars_wrt sa s ==> fresh_vars_wrt sb u)
 Proof
   disch_then (map_every assume_tac o CONJUNCTS) >>
   drule_all abi_decode_word_success_ptr >>
   disch_then (qspecl_then [`PG`, `D`] strip_assume_tac) >>
-  rename1 `inst_seq_ptr D 0 ctx func PG G tn (emitted_insts sa sb) s H tf` >>
+  rename1 `inst_seq_ptr D 0 ctx func PG G tn (emitted_insts sa sb) s HG tf` >>
   `u.vs_accounts = s.vs_accounts /\ u.vs_transient = s.vs_transient /\
    u.vs_call_ctx = s.vs_call_ctx` by
     (qpat_assum `(u with <|vs_vars := _; vs_memory := _; vs_inst_idx := _|>) = s` mp_tac >>
      POP_ASSUM_LIST (K all_tac) >> simp[venom_state_component_equality]) >>
-  `stor_taint_ok cx tf u` by
+  `stor_taint_ok H cx tf u` by
     (irule copy_stor_taint_frame >> qexistsl [`s`, `tn`] >>
      fs[ghost_inv_def]) >>
-  `ghost_inv ret cenv cx es H tf u` by
+  `ghost_inv H ret cenv cx es HG tf u` by
     (irule unwrap_endpoint_ghost_inv >> (conj_tac >- simp[]) >>
-     goal_assum (drule_at (Pat `ghost_inv _ _ _ _ _ _ _`)) >>
+     goal_assum (drule_at (Pat `ghost_inv _ _ _ _ _ _ _ _`)) >>
      qexistsl [`func`, `32:num`, `sa`, `w2n d`] >>
      `local_ptrs_rel func cenv es.scopes s` by
        fs[stmt_state_rel_def, state_rel_def] >>
@@ -637,17 +637,17 @@ Proof
 QED
 
 Resume abi_decode_word_success_framed[stmt_frame]:
-  `stmt_state_rel ctx func cenv cx es (u with vs_inst_idx := s.vs_inst_idx)` by
+  `stmt_state_rel H ctx func cenv cx es (u with vs_inst_idx := s.vs_inst_idx)` by
     (irule exprSimBufferStoreTheory.buffer_store_state_frame >>
-     goal_assum (drule_at (Pat `stmt_state_rel _ _ _ _ _ s`)) >>
+     goal_assum (drule_at (Pat `stmt_state_rel _ _ _ _ _ _ s`)) >>
      qexistsl [`w2n d`, `32`, `sa`] >> simp[lookup_var_def] >>
      metis_tac[lookup_var_def]) >>
   `fresh_vars_wrt sa s ==> fresh_vars_wrt sb u` by
     (strip_tac >> irule abi_decode_word_runtime_fresh >>
      goal_assum (drule_at (Pat `compile_abi_decode_to_buf _ _ _ _ _ _ _ = _`)) >>
      qexists_tac `s` >> simp[]) >>
-  qexistsl [`H`, `tf`] >> asm_rewrite_tac[stmt_state_rel_inst_idx] >>
-  qpat_x_assum `stmt_state_rel ctx func cenv cx es (u with vs_inst_idx := _)` mp_tac >>
+  qexistsl [`HG`, `tf`] >> asm_rewrite_tac[stmt_state_rel_inst_idx] >>
+  qpat_x_assum `stmt_state_rel H ctx func cenv cx es (u with vs_inst_idx := _)` mp_tac >>
   simp[stmt_state_rel_inst_idx]
 QED
 

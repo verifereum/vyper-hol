@@ -63,7 +63,7 @@ QED
 (* The prefix's placement witness, not its G-site interval alone, supplies
    the nonwrapping address and length domain for a bytes payload. *)
 Theorem placed_bytes_payload_word_bounds:
-  stmt_state_rel ctx fn cenv cx es s /\
+  stmt_state_rel H ctx fn cenv cx es s /\
   expr_val_at cenv cx ty sa sb es (BytesV bs) op s /\
   evaluate_type (get_tenv cx) ty = SOME (BaseTV (BytesT (Dynamic cap))) /\
   ~is_word_type ty /\ eval_operand op s = SOME (n2w b) /\

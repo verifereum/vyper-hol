@@ -13,7 +13,7 @@ Ancestors
   exprSimAbiEncodeStateTransport exprSimAbiEncodeExecFrame
 
 Theorem abi_encode_translated_relabel_observer:
-  expr_post ctx func ce cx e es origin sa s0 es' v op s /\
+  expr_post (H:(bool # bytes32 # type_value) list # num list) ctx func ce cx e es origin sa s0 es' v op s /\
   expr_body_pre ce cx env e es /\
   expr_body_pre ce cx env (TypeBuiltin ann (AbiEncode F mid0) ty [e]) es /\
   mid = OPTION_MAP bytes_method_id_word mid0 /\
@@ -46,8 +46,10 @@ Theorem abi_encode_translated_relabel_observer:
     ~actual.vs_halted /\ actual.vs_current_bb = sb.cs_current_bb /\
     actual.vs_inst_idx = LENGTH sb.cs_current_insts /\
     abi_decode_sim ctx obs (s with vs_current_bb := L) actual /\
-    stmt_state_rel ctx func ce cx es' actual /\
+    stmt_state_rel H ctx func ce cx es' actual /\
     abi_encode_exec_frame obs (s with vs_current_bb := L) actual /\
+    actual.vs_accounts = s.vs_accounts /\ actual.vs_transient = s.vs_transient /\
+    actual.vs_requests = s.vs_requests /\
     LENGTH s.vs_memory <= LENGTH actual.vs_memory /\
     (!x w. not_fresh_at sa x /\ lookup_var x s = SOME w ==>
       lookup_var x actual = SOME w) /\
@@ -201,7 +203,7 @@ Resume abi_encode_translated_relabel_observer[transport]:
   drule abi_builtin_encode_setup_shape >> strip_tac >>
   drule abi_encoder_counters >> strip_tac >>
   `rst.cs_next_var <= rr.cs_next_var /\ rst.cs_next_var <= re.cs_next_var` by decide_tac >>
-  `stmt_state_rel ctx func ce cx es' actual /\
+  `stmt_state_rel H ctx func ce cx es' actual /\
     (!name b n. local_region ce es'.scopes s name b n ==>
       mem_bytes_at b n actual.vs_memory = mem_bytes_at b n s.vs_memory) /\
     FLOOKUP actual.vs_allocas sa.cs_next_id =
@@ -236,7 +238,7 @@ Resume abi_encode_translated_relabel_observer[transport]:
     (drule_all abi_encode_caller_phase_allocations >>
      disch_then (mp_tac o CONJUNCT1) >> simp_tac (srw_ss()) [Abbr `rs`]) >>
   `alloca_inv actual` by
-    (qpat_assum `stmt_state_rel _ _ _ _ _ actual` mp_tac >>
+    (qpat_assum `stmt_state_rel _ _ _ _ _ _ actual` mp_tac >>
      simp_tac bool_ss [stmt_state_rel_def] >> metis_tac[]) >>
   `rst.cs_next_id <= rr.cs_next_id` by
     (qpat_assum `rr.cs_next_id = _` mp_tac >>
@@ -246,6 +248,18 @@ Resume abi_encode_translated_relabel_observer[transport]:
     (drule abi_encode_caller_phase_old_rows >> disch_then drule >>
      disch_then (qspec_then `actual` mp_tac) >> asm_rewrite_tac[] >>
      simp_tac (srw_ss()) [Abbr `rst`, Abbr `rs`, start_relabel_def]) >>
+  `actual.vs_accounts = s.vs_accounts /\ actual.vs_transient = s.vs_transient /\
+   actual.vs_requests = s.vs_requests` by
+    (qpat_assum `window_strong_result _ _ _ _ _ _ _ _ prepared _`
+       (mp_tac o MATCH_MP abiEncoderWindowContractTheory.window_strong_result_effect) >>
+     qpat_assum `abi_encoder_registered_effect {} _ _ actual` mp_tac >>
+     qpat_assum `prepared.vs_accounts = _` mp_tac >>
+     qpat_assum `prepared.vs_transient = _` mp_tac >>
+     qpat_assum `prepared.vs_requests = _` mp_tac >>
+     qpat_assum `Abbrev (rs = _)` (mp_tac o PURE_REWRITE_RULE [markerTheory.Abbrev_def]) >>
+     POP_ASSUM_LIST (K ALL_TAC) >>
+     rewrite_tac[abiEncoderRegisteredEffectTheory.abi_encoder_registered_effect_def] >>
+     rpt strip_tac >> asm_simp_tac (srw_ss()) []) >>
   qexistsl [`p`, `actual`] >> simp_tac bool_ss [LET_THM] >>
   qpat_x_assum `Abbrev (rs = _)` (SUBST_ALL_TAC o PURE_REWRITE_RULE [markerTheory.Abbrev_def]) >>
   asm_rewrite_tac[] >>

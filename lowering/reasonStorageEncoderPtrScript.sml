@@ -10,7 +10,7 @@ Ancestors
 
 Theorem compile_revert_storage_reason_path_ptr:
   compile_revert_with_reason cenv (LocatedValue ann p) ty m cc = ((),se) /\
-  fn_has_code cc se func /\ stmt_state_rel ctx func cenv cx es s /\
+  fn_has_code cc se func /\ stmt_state_rel H ctx func cenv cx es s /\
   ~ctx_has_dalloca ctx /\ fn_inst_ids_distinct func /\
   s.vs_current_bb = cc.cs_current_bb /\
   s.vs_inst_idx = LENGTH cc.cs_current_insts /\ ~s.vs_halted /\
@@ -48,7 +48,7 @@ Resume compile_revert_storage_reason_path_ptr[suffix]:
   disch_then (drule_at (Pat `emit_op MLOAD _ _ = _`)) >>
   disch_then (drule_at (Pat `MEM _ (fn_insts _)`)) >>
   simp[mk_inst_def] >>
-  disch_then (drule_at (Pat `stmt_state_rel _ _ _ _ _ _`)) >>
+  disch_then (drule_at (Pat `stmt_state_rel _ _ _ _ _ _ _`)) >>
   simp[] >> metis_tac[]
 QED
 
@@ -62,13 +62,13 @@ Theorem reason_storage_success_path_ptr:
     (type_memory_bytes cenv (expr_type r)) sm = ((),sb) /\
   fn_has_code sm sb func /\ local_ptrs_reserved cenv sa /\
   ~ctx_has_dalloca ctx /\ fn_inst_ids_distinct func /\
-  vv_post ctx func cenv cx r es sa sm s0 ee tv (LocatedValue ann p) t /\
+  vv_post H ctx func cenv cx r es sa sm s0 ee tv (LocatedValue ann p) t /\
   ptr_vv_ok cx (expr_type r) tv (LocatedValue ann p) ee G tn t /\
   read_result cx tv ee = (INL (StringV str),ee) /\
   p.ptr_location = (if tr then LocTransient else LocStorage) /\
   ~t.vs_halted /\ t.vs_current_bb = sm.cs_current_bb /\
   t.vs_inst_idx = LENGTH sm.cs_current_insts ==>
-  ?Gf tnf u. gas_path_ptr (cx_dead cx) 0 ctx func PG G tn t 0 Gf tnf
+  ?Gf tnf u. gas_path_ptr (cx_dead H cx) 0 ctx func PG G tn t 0 Gf tnf
     (Abort Revert_abort u)
 Proof
   strip_tac >>
@@ -84,7 +84,7 @@ Proof
     (irule loweringPostsTheory.post_value_type_bytestring >>
      fs[compileEnvTheory.is_bytestring_type_def]) >>
   `vv_holds cenv cx (expr_type r) tv (LocatedValue ann p) ee t /\
-   stmt_state_rel ctx func cenv cx ee t` by fs[vv_post_def] >>
+   stmt_state_rel H ctx func cenv cx ee t` by fs[vv_post_def] >>
   `p.ptr_location <> LocMemory` by (Cases_on `tr` >> fs[]) >>
   drule_all located_unwrap_copy_sizing >> strip_tac >>
   `type_alloc_ok cenv (BaseT (StringT cap))` by
@@ -109,7 +109,7 @@ Proof
   disch_then (drule_at (Pat `vv_holds _ _ _ _ _ _ _`)) >>
   simp[] >>
   disch_then (drule_at (Pat `storage_holds _ _ _ _ _ _ _`)) >>
-  disch_then (drule_at (Pat `stmt_state_rel _ _ _ _ _ _`)) >> simp[]
+  disch_then (drule_at (Pat `stmt_state_rel _ _ _ _ _ _ _`)) >> simp[]
 QED
 
 Resume reason_storage_success_path_ptr[fresh]:

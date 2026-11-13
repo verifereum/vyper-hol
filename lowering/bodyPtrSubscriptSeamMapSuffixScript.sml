@@ -215,7 +215,7 @@ Theorem mapping_slot_hash_inst_seq:
     (!z. slot = Var z \/ key = Var z ==> not_fresh_at sa z) /\
     eval_operand slot s = SOME w0 /\ eval_operand key s = SOME w1 /\
     op_taint tn slot = {} /\ op_taint tn key = {} /\
-    stmt_state_rel ctx fn cenv cx es s /\ fn_inst_ids_distinct fn /\
+    stmt_state_rel H ctx fn cenv cx es s /\ fn_inst_ids_distinct fn /\
     local_ptrs_reserved cenv sa /\
     MEM (mk_inst sa.cs_next_id ALLOCA [Lit 64w]
       [STRING #"%" (toString sa.cs_next_var)]) (fn_insts fn) /\
@@ -305,7 +305,7 @@ Theorem mapping_slot_hash_counted:
     (!z. slot = Var z \/ key = Var z ==> not_fresh_at sa z) /\
     eval_operand slot s = SOME w0 /\ eval_operand key s = SOME w1 /\
     op_taint tn slot = {} /\ op_taint tn key = {} /\
-    stmt_state_rel ctx fn cenv cx es s /\ fn_inst_ids_distinct fn /\
+    stmt_state_rel H ctx fn cenv cx es s /\ fn_inst_ids_distinct fn /\
     local_ptrs_reserved cenv sa /\
     MEM (mk_inst sa.cs_next_id ALLOCA [Lit 64w]
       [STRING #"%" (toString sa.cs_next_var)]) (fn_insts fn) /\

@@ -86,17 +86,18 @@ Theorem body_name_word_mem_prefix[local]:
   expr_sim_pre ce cx env (Name ann id) es /\ word_value_type ann /\
   lower_value compile_expr ce ty (Name ann id) sa = (op,sb) /\
   fn_has_code sa sb func /\ fn_inst_ids_distinct func /\ local_ptrs_reserved ce sa /\
-  stmt_state_rel H ctx func ce cx es s0 /\ alloca_history func s0 /\
+  stmt_state_rel H ctx func ce cx es s0 /\
+  storage_well_formed_on cx es (FST H) /\ alloca_history func s0 /\
   ~s0.vs_halted /\ s0.vs_current_bb = sa.cs_current_bb /\
-  s0.vs_inst_idx = LENGTH sa.cs_current_insts ==>
-  ?v t. gas_value_prefix H T (ctx,func,ce,cx) (ty,Name ann id)
-    (sa,sb,op) (es,s0) [] (v,es,t)
+  s0.vs_inst_idx = LENGTH sa.cs_current_insts /\
+  lookup_scopes id es.scopes = SOME entry /\ op = Var out ==>
+  gas_value_prefix H T (ctx,func,ce,cx) (ty,Name ann id)
+    (sa,sb,op) (es,s0) []
+    (entry.value,es,update_var out (val_to_w256 entry.value)
+      (s0 with vs_inst_idx := LENGTH sb.cs_current_insts))
 Proof
   strip_tac >> drule_all body_name_word_counted >> strip_tac >> gvs[] >>
   `is_word_type ann` by metis_tac[word_value_type_word] >>
-  qexistsl [`entry.value`,
-    `update_var out (val_to_w256 entry.value)
-      (s0 with vs_inst_idx := LENGTH sb.cs_current_insts)`] >>
   simp[gas_value_prefix_def] >>
   conj_tac
   >- (simp[gas_marked_exec_def, gas_explicit_def, gas_marked_path_def] >>
@@ -113,12 +114,23 @@ Theorem compile_name_word_body_sim_mem:
     expr_sim_pre ce cx env (Name ann id) es /\ word_value_type ann ==>
     expr_sim_mem ctx func ce cx ty (Name ann id) es
 Proof
-  rpt strip_tac >> irule expr_sim_mem_word_values >> reverse conj_tac
+  rpt strip_tac >> irule expr_sim_mem_word_values_domain >> reverse conj_tac
   >- (simp[vyperASTTheory.expr_type_def] >>
       metis_tac[word_value_type_word]) >>
   rpt strip_tac >>
-  drule_all body_name_word_mem_prefix >> strip_tac >>
-  qexistsl [`[]`, `v`, `es`, `t`] >> simp[]
+  first_assum drule >> strip_tac >>
+  drule_all body_name_word_counted >> strip_tac >> gvs[] >>
+  qexistsl [`[]`, `entry.value`, `es`,
+    `update_var out (val_to_w256 entry.value)
+      (s0 with vs_inst_idx := LENGTH sb.cs_current_insts)`] >>
+  conj_tac
+  >- (simp[gas_marked_exec_def, gas_explicit_def, gas_marked_path_def] >>
+      gen_tac >>
+      qspecl_then [`cx`, `ann`, `id`, `es with gas_obs := tail`, `entry`]
+        mp_tac eval_name_word >> simp[] >>
+      CONV_TAC (DEPTH_CONV ETA_CONV) >> simp[]) >>
+  rpt strip_tac >> first_x_assum drule >> strip_tac >>
+  irule body_name_word_mem_prefix >> simp[] >> metis_tac[]
 QED
 
 (* Prior proof, preserved verbatim; not checked against the counted schema.

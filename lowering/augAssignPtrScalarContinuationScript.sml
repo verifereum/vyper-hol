@@ -14,10 +14,10 @@ Theorem straight_fresh_scalar_success_path:
   (!v. v IN A ==> op_prov G (Var v) = NONE /\ op_taint tn (Var v) = {}) /\
   ~ctx_has_dalloca ctx /\
   run_inst_seq (emitted_insts sa sb) (drop_fresh sa s) = OK t0 ==>
-  ?t H tm.
+  ?t HG tm.
     run_inst_seq (emitted_insts sa sb) s = OK t /\ vars_ext t0 t /\
-    inst_seq_ptr D 0 ctx fn PG G tn (emitted_insts sa sb) s H tm /\
-    gas_path_ptr D 0 ctx fn PG G tn s 0 H tm
+    inst_seq_ptr D 0 ctx fn PG G tn (emitted_insts sa sb) s HG tm /\
+    gas_path_ptr D 0 ctx fn PG G tn s 0 HG tm
       (OK (t with vs_inst_idx := LENGTH sb.cs_current_insts))
 Proof
   strip_tac >>
@@ -43,15 +43,15 @@ Proof
 QED
 
 Theorem run_inst_seq_abort_zero_path_ptr:
-  !code s t a G tn H tm ctx fn bb.
+  !code s t a G tn HG tm ctx fn bb.
     ~s.vs_halted /\
     lookup_block s.vs_current_bb fn.fn_blocks = SOME bb /\
     isPREFIX code (DROP s.vs_inst_idx bb.bb_instructions) /\
     EVERY (\i. i.inst_opcode <> GAS /\ i.inst_opcode <> INVOKE /\
                ~is_terminator i.inst_opcode) code /\
-    inst_seq_ptr D lo ctx fn PG G tn code s H tm /\
+    inst_seq_ptr D lo ctx fn PG G tn code s HG tm /\
     run_inst_seq code s = Abort a t ==>
-    ?j. gas_path_ptr D lo ctx fn PG G tn s 0 H tm
+    ?j. gas_path_ptr D lo ctx fn PG G tn s 0 HG tm
           (Abort a (t with vs_inst_idx := j))
 Proof
   Induct >- simp[run_inst_seq_def] >>
@@ -82,10 +82,10 @@ Theorem straight_fresh_scalar_abort_path:
   (!v. v IN A ==> op_prov G (Var v) = NONE /\ op_taint tn (Var v) = {}) /\
   ~ctx_has_dalloca ctx /\
   run_inst_seq (emitted_insts sa sb) (drop_fresh sa s) = Abort a t0 ==>
-  ?t j H tm.
+  ?t j HG tm.
     run_inst_seq (emitted_insts sa sb) s = Abort a t /\ vars_ext t0 t /\
-    inst_seq_ptr D 0 ctx fn PG G tn (emitted_insts sa sb) s H tm /\
-    gas_path_ptr D 0 ctx fn PG G tn s 0 H tm
+    inst_seq_ptr D 0 ctx fn PG G tn (emitted_insts sa sb) s HG tm /\
+    gas_path_ptr D 0 ctx fn PG G tn s 0 HG tm
       (Abort a (t with vs_inst_idx := j))
 Proof
   strip_tac >>
@@ -115,8 +115,8 @@ Proof
 QED
 
 Theorem ghost_inv_inst_idx[simp]:
-  ghost_inv d cenv cx es G tn (s with vs_inst_idx := k) <=>
-  ghost_inv d cenv cx es G tn s
+  ghost_inv H d cenv cx es G tn (s with vs_inst_idx := k) <=>
+  ghost_inv H d cenv cx es G tn s
 Proof
   simp[ghost_inv_def, ptr_covers_def, return_buf_ptr_def,
        stor_taint_ok_def, lookup_var_def] >>
@@ -133,8 +133,8 @@ Theorem straight_fresh_scalar_success_post:
   ~ctx_has_dalloca ctx /\
   run_inst_seq (emitted_insts sa sb) (drop_fresh sa s) = OK t0 /\
   eval_operand op t0 = SOME w /\
-  local_ptrs_reserved cenv sa /\ stmt_state_rel ctx fn cenv cx es s /\
-  ghost_inv d cenv cx es G tn s /\
+  local_ptrs_reserved cenv sa /\ stmt_state_rel H ctx fn cenv cx es s /\
+  ghost_inv H d cenv cx es G tn s /\
   (!x sz. cenv.ce_return_pc = SOME (PtrVar (Var x) sz) ==> not_fresh_at sa x) /\
   (!x sz. cenv.ce_return_buf = SOME (PtrVar (Var x) sz) ==> not_fresh_at sa x) /\
   ghost_kept cenv frame_es origin G0 tn0 s0 G tn /\
@@ -142,10 +142,10 @@ Theorem straight_fresh_scalar_success_post:
   scalar_available
     (A UNION BIGUNION (set (MAP (\i. set i.inst_outputs)
                                  (emitted_insts sa sb)))) op ==>
-  ?t H tm.
-    gas_path_ptr D 0 ctx fn PG G tn s 0 H tm
+  ?t HG tm.
+    gas_path_ptr D 0 ctx fn PG G tn s 0 HG tm
       (OK (t with vs_inst_idx := LENGTH sb.cs_current_insts)) /\
-    stmt_state_rel ctx fn cenv cx es (t with vs_inst_idx := LENGTH sb.cs_current_insts) /\
+    stmt_state_rel H ctx fn cenv cx es (t with vs_inst_idx := LENGTH sb.cs_current_insts) /\
     eval_operand op (t with vs_inst_idx := LENGTH sb.cs_current_insts) = SOME w /\
     (!z v. not_fresh_at sa z /\ lookup_var z s = SOME v ==>
        lookup_var z (t with vs_inst_idx := LENGTH sb.cs_current_insts) = SOME v) /\
@@ -153,9 +153,9 @@ Theorem straight_fresh_scalar_success_post:
        FLOOKUP t.vs_allocas aid = SOME b) /\
     t.vs_memory = s.vs_memory /\ ~t.vs_halted /\
     t.vs_current_bb = sb.cs_current_bb /\
-    ghost_inv d cenv cx es H tm (t with vs_inst_idx := LENGTH sb.cs_current_insts) /\
-    ghost_kept cenv frame_es origin G0 tn0 s0 H tm /\
-    op_prov H op = NONE /\ op_taint tm op = {}
+    ghost_inv H d cenv cx es HG tm (t with vs_inst_idx := LENGTH sb.cs_current_insts) /\
+    ghost_kept cenv frame_es origin G0 tn0 s0 HG tm /\
+    op_prov HG op = NONE /\ op_taint tm op = {}
 Proof
   strip_tac >> drule_all straight_fresh_scalar_success_path >>
   disch_then (qspecl_then [`PG`, `D`] strip_assume_tac) >>
@@ -171,7 +171,7 @@ Proof
   drule_all scalar_seq_ghost_kept >> strip_tac >>
   drule scalar_seq_success_clean >> disch_then drule >>
   disch_then drule >> disch_then drule >> strip_tac >>
-  `op_prov H op = NONE /\ op_taint tm op = {}` by
+  `op_prov HG op = NONE /\ op_taint tm op = {}` by
     (irule scalar_available_clean >> goal_assum (drule_at Any) >> simp[]) >>
-  qexistsl [`t`, `H`, `tm`] >> gvs[]
+  qexistsl [`t`, `HG`, `tm`] >> gvs[]
 QED

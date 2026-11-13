@@ -13,7 +13,7 @@ Theorem structlit_uniform_fields_loop_outcome_ptr:
   expr_sim_inv ce cx env es /\
   literal_loop_frame pure ctx func ce cx d root aid addr capacity
     ees fr sf Gf tnf es si G0 tn0 s0 cells off /\
-  literal_prefix_ok cells tn0 s0 /\ stmt_state_rel ctx func ce cx ees sf /\
+  literal_prefix_ok cells tn0 s0 /\ stmt_state_rel H ctx func ce cx ees sf /\
   off + type_memory_size_list tvs <= capacity /\
   fn_has_code si sb func /\ fn_inst_ids_distinct func /\
   local_ptrs_reserved ce si /\ local_ptrs_reserved ce fr /\
@@ -26,12 +26,12 @@ Theorem structlit_uniform_fields_loop_outcome_ptr:
   (!e. MEM e (MAP SND fields) ==> post_value_type ce e = expr_type e) /\
   (pure ==> ~EXISTS expr_has_effect (MAP SND fields)) ==>
   out = Var root /\
-  gas_outcome_ptr (cx_dead cx) (cx_tops cx) (ctx,func) PG
+  gas_outcome_ptr (cx_dead H cx) (cx_tops cx) (ctx,func) PG
     (eval_exprs cx (MAP SND fields)) (es,s0,G0,tn0)
-    (\res ee H tm z. ?vs added. res = INL vs /\ expr_sim_inv ce cx env ee /\
+    (\res ee HG tm z. ?vs added. res = INL vs /\ expr_sim_inv ce cx env ee /\
       LIST_REL value_has_type tvs vs /\
       literal_loop_frame pure ctx func ce cx d root aid addr capacity
-        ees fr sf Gf tnf ee sb H tm z (cells ++ added) (off + type_memory_size_list tvs) /\
+        ees fr sf Gf tnf ee sb HG tm z (cells ++ added) (off + type_memory_size_list tvs) /\
       literal_prefix_ok (cells ++ added) tm z /\
       (!m. mem_agree_outside tm.t_mem z.vs_memory m ==>
         fields_in_memory (ZIP (MAP FST fields,vs)) (ZIP (MAP FST fields,tvs)) (addr+off) m))

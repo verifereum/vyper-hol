@@ -58,7 +58,7 @@ Proof
 QED
 
 Theorem external_storage_value_bounds:
-  vv_post ctx fn cenv cx e es sa sb s0 es' raw (LocatedValue ty p) s /\
+  vv_post H ctx fn cenv cx e es sa sb s0 es' raw (LocatedValue ty p) s /\
   p.ptr_location = (if tr then LocTransient else LocStorage) /\
   read_result cx raw es' = (INL v,es') /\
   evaluate_type (get_tenv cx) (expr_type e) = SOME tv /\
@@ -104,7 +104,7 @@ QED
 
 Theorem external_located_unwrap_sizes:
   compile_expr cenv ty e sa = (LocatedValue t p,sm) /\
-  vv_post ctx fn cenv cx e es sa sn s0 es' raw (LocatedValue t p) s /\
+  vv_post H ctx fn cenv cx e es sa sn s0 es' raw (LocatedValue t p) s /\
   p.ptr_location <> LocMemory /\
   expr_body_pre cenv cx env e es /\
   evaluate_type (get_tenv cx) (expr_type e) = SOME tv /\

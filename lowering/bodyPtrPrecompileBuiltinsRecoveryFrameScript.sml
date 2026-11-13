@@ -28,8 +28,8 @@ Theorem recovery_prefix_ghost_kept:
   compile_alloc_buffer 32 sp = (ob,sm) /\
   run_inst_seq (emitted_insts sf sa) s0 = OK s1 /\
   run_inst_seq (emitted_insts sp sm) s2 = OK s3 /\
-  stmt_state_rel ctx fn cenv cx es s0 /\
-  stmt_state_rel ctx fn cenv cx es s2 /\ fn_inst_ids_distinct fn /\
+  stmt_state_rel H ctx fn cenv cx es s0 /\
+  stmt_state_rel H ctx fn cenv cx es s2 /\ fn_inst_ids_distinct fn /\
   local_ptrs_reserved cenv sf /\ local_ptrs_reserved cenv sp /\
   local_ptrs_rel fn cenv es.scopes s0 /\ local_ptrs_rel fn cenv es.scopes s2 /\
   MEM (mk_inst sf.cs_next_id ALLOCA [Lit 128w]
@@ -44,7 +44,7 @@ Theorem recovery_prefix_ghost_kept:
 Proof
   strip_tac >>
   `128 < dimword(:256)` by simp[wordsTheory.dimword_def] >>
-  qpat_assum `stmt_state_rel ctx fn cenv cx es s0`
+  qpat_assum `stmt_state_rel H ctx fn cenv cx es s0`
     (mp_then Any (drule_all_then strip_assume_tac)
       exprSimLiteralBufferTheory.alloc_buffer_frame_run) >>
   gvs[] >>
@@ -92,8 +92,8 @@ Theorem recovery_prefix_ghost_inv:
   compile_alloc_buffer 32 sp = (ob,sm) /\
   run_inst_seq (emitted_insts sf sa) s0 = OK s1 /\
   run_inst_seq (emitted_insts sp sm) s2 = OK s3 /\
-  stmt_state_rel ctx fn cenv cx es s0 /\
-  stmt_state_rel ctx fn cenv cx es s2 /\ fn_inst_ids_distinct fn /\
+  stmt_state_rel H ctx fn cenv cx es s0 /\
+  stmt_state_rel H ctx fn cenv cx es s2 /\ fn_inst_ids_distinct fn /\
   local_ptrs_reserved cenv sf /\ local_ptrs_reserved cenv sp /\
   local_ptrs_rel fn cenv es.scopes s0 /\ local_ptrs_rel fn cenv es.scopes s2 /\
   MEM (mk_inst sf.cs_next_id ALLOCA [Lit 128w]
@@ -102,7 +102,7 @@ Theorem recovery_prefix_ghost_inv:
     [STRING #"%" (toString sp.cs_next_var)]) (fn_insts fn) /\
   eval_operand ib.buf_operand s1 = SOME b /\
   eval_operand ob.buf_operand s3 = SOME c /\
-  ghost_inv d cenv cx es G tn s0 /\
+  ghost_inv H d cenv cx es G tn s0 /\
   (!p sz. cenv.ce_return_buf = SOME (PtrVar (Var p) sz) ==> not_fresh_at sf p) /\
   (!p sz. cenv.ce_return_pc = SOME (PtrVar (Var p) sz) ==> not_fresh_at sf p) /\
   (!p. not_fresh_at sf p ==> lookup_var p s2 = lookup_var p s0) /\
@@ -119,7 +119,7 @@ Theorem recovery_prefix_ghost_inv:
   run_inst_seq code s0 = OK s4 /\
   (!k. inst_seq_ptr D 0 ctx fn PG G tn code
     (s0 with vs_inst_idx := k) Gf tnf) ==>
-  ghost_inv d cenv cx es Gf tnf s4
+  ghost_inv H d cenv cx es Gf tnf s4
 Proof
   strip_tac >>
   `128 < dimword(:256) /\ 32 < dimword(:256)` by
@@ -166,7 +166,7 @@ Theorem recovery_prefix_framed:
   run_inst_seq (emitted_insts sa sp) s1 = OK s2 /\
   run_inst_seq (emitted_insts sp sm) s2 = OK s3 /\
   run_inst_seq (emitted_insts sm sz) s3 = OK s4 /\
-  stmt_state_rel ctx fn cenv cx es s0 /\ stmt_state_rel ctx fn cenv cx es s2 /\
+  stmt_state_rel H ctx fn cenv cx es s0 /\ stmt_state_rel H ctx fn cenv cx es s2 /\
   fn_inst_ids_distinct fn /\ ~ctx_has_dalloca ctx /\
   local_ptrs_reserved cenv sf /\ local_ptrs_reserved cenv sp /\
   local_ptrs_rel fn cenv es.scopes s0 /\ local_ptrs_rel fn cenv es.scopes s2 /\
@@ -174,7 +174,7 @@ Theorem recovery_prefix_framed:
     [STRING #"%" (toString sf.cs_next_var)]) (fn_insts fn) /\
   MEM (mk_inst sp.cs_next_id ALLOCA [Lit 32w]
     [STRING #"%" (toString sp.cs_next_var)]) (fn_insts fn) /\
-  ghost_inv d cenv cx es G tn s0 /\
+  ghost_inv H d cenv cx es G tn s0 /\
   (!p sz. cenv.ce_return_buf = SOME (PtrVar (Var p) sz) ==> not_fresh_at sf p) /\
   (!p sz. cenv.ce_return_pc = SOME (PtrVar (Var p) sz) ==> not_fresh_at sf p) /\
   eval_operand h s0 = SOME wh /\ eval_operand v s0 = SOME wv /\
@@ -194,14 +194,14 @@ Theorem recovery_prefix_framed:
     lookup_var bufroot s4 = SOME b /\ lookup_var out s4 = SOME c /\
     (!i. w2n b <= i /\ i < w2n b + 128 ==> i NOTIN tnf.t_mem) /\
     (!i. w2n c <= i /\ i < w2n c + 32 ==> i NOTIN tnf.t_mem) /\
-    ghost_inv d cenv cx es Gf tnf s4 /\ ghost_kept cenv es sf G tn s0 Gf tnf
+    ghost_inv H d cenv cx es Gf tnf s4 /\ ghost_kept cenv es sf G tn s0 Gf tnf
 Proof
   strip_tac >>
   `emitted_insts sa sp = emitted_insts sa sb ++ emitted_insts sb sc ++
     emitted_insts sc sd ++ emitted_insts sd sp` by
     (irule recovery_payload_ranges >> qexistsl [`Var bufroot`,`h`,`q`,`r`,`v`] >> simp[]) >>
   `128 < dimword(:256)` by simp[wordsTheory.dimword_def] >>
-  qpat_assum `stmt_state_rel ctx fn cenv cx es s0`
+  qpat_assum `stmt_state_rel H ctx fn cenv cx es s0`
     (mp_then Any (drule_all_then strip_assume_tac)
       exprSimLiteralBufferTheory.alloc_buffer_frame_run) >> gvs[] >>
   `alloca_next_valid s2` by
@@ -235,7 +235,7 @@ Resume recovery_prefix_framed[frame]:
   `EVERY (\i. i.inst_opcode = ALLOCA \/ i.inst_opcode = ADD \/
     i.inst_opcode = MLOAD \/ i.inst_opcode = MSTORE) code` by
     simp[Abbr `code`] >>
-  `ghost_inv d cenv cx es Gf tnf s4` by
+  `ghost_inv H d cenv cx es Gf tnf s4` by
     (mp_tac recovery_prefix_ghost_inv >> simp[] >>
      (impl_tac >- (rpt strip_tac >> first_x_assum irule >> simp[])) >> simp[]) >>
   `ghost_kept cenv es sf G tn s0 Gf tnf` by

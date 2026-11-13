@@ -5,7 +5,7 @@ Ancestors
   finite_map pred_set
 
 Theorem concat_operand_old_allocation_frame:
-  expr_post ctx fn ce cx e es sa sb s0 ee v op s /\
+  expr_post H ctx fn ce cx e es sa sb s0 ee v op s /\
   ghost_kept ce es sa G0 tn0 s0 G tn /\
   FLOOKUP s0.vs_allocas aid = SOME (b,sz) /\ aid < sa.cs_next_id /\
   (!name off len. local_region ce es.scopes s0 name off len ==>

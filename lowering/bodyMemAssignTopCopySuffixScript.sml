@@ -31,7 +31,7 @@ Proof
 QED
 
 Theorem storage_copy_bulk_run_mem:
-  !ctx func cenv cx es' tr src k n sa sb u s b.
+  !ctx func cenv tr src k n sa sb u s b.
     compile_word_copy_loop src (Lit k) n LocMemory
       (if tr then LocTransient else LocStorage) F sa = (u,sb) /\
     n < dimword (:256) /\ w2n b + 32*n <= s.vs_alloca_next /\
@@ -39,13 +39,15 @@ Theorem storage_copy_bulk_run_mem:
     eval_operand src s = SOME b /\
     fn_has_code sa sb func /\ local_ptrs_reserved cenv sa /\
     alloca_history func s /\
-    ~s.vs_halted /\ s.vs_current_bb = sa.cs_current_bb /\
-    s.vs_inst_idx = LENGTH sa.cs_current_insts /\
-    stmt_state_rel H ctx func cenv cx es'
-      (FOLDL (\t i. (if tr then tstore else sstore)
-        (k+n2w i) (mload (w2n (b+n2w i*32w)) s) t) s (COUNT_LIST n)) ==>
+    ~s.vs_halted /\ ~s.vs_call_ctx.cc_static /\
+    s.vs_current_bb = sa.cs_current_bb /\
+    s.vs_inst_idx = LENGTH sa.cs_current_insts ==>
     ?t. gas_marked_path T ctx func s 0 (OK t) /\
-      stmt_state_rel H ctx func cenv cx es' t /\ ~t.vs_halted /\
+      (!H cx es'.
+         stmt_state_rel H ctx func cenv cx es'
+           (FOLDL (\t i. (if tr then tstore else sstore)
+             (k+n2w i) (mload (w2n (b+n2w i*32w)) s) t) s (COUNT_LIST n)) ==>
+         stmt_state_rel H ctx func cenv cx es' t) /\ ~t.vs_halted /\
       t.vs_current_bb = sb.cs_current_bb /\
       t.vs_inst_idx = LENGTH sb.cs_current_insts /\
       (!x. not_fresh_at sa x ==> lookup_var x t = lookup_var x s) /\
@@ -53,18 +55,11 @@ Theorem storage_copy_bulk_run_mem:
       t.vs_alloca_next = s.vs_alloca_next /\ alloca_history func t
 Proof
   rpt gen_tac >> strip_tac >>
-  `~s.vs_call_ctx.cc_static` by
-    (Cases_on `tr` >>
-     fs[stmt_state_rel_def, state_rel_def, storage_copy_backend_fold]) >>
   drule_at (Pat `compile_word_copy_loop _ _ _ _ _ _ _ = _`)
     topcopy_compile_loop_path >>
   disch_then (qspecl_then [`ctx`, `func`, `s`, `b`, `k`] mp_tac) >>
   (impl_tac >- (Cases_on `tr` >> simp[eval_operand_def])) >>
   strip_tac >>
-  `stmt_state_rel H ctx func cenv cx es' t` by
-    (irule storage_copy_normalized_state >> qexistsl_tac [`s`, `sa`] >>
-     fs[store_copy_frame_def, store_copy_normalize_def, store_copy_prefix_def] >>
-     Cases_on `tr` >> gvs[]) >>
   `t.vs_allocas = s.vs_allocas /\
    t.vs_alloca_next = s.vs_alloca_next` by
     (fs[store_copy_frame_def] >>
@@ -77,22 +72,31 @@ Proof
      strip_tac >> simp[]) >>
   `alloca_history func t` by
     (irule alloca_history_jump >> simp[] >> qexists_tac `s` >> simp[]) >>
-  qexists_tac `t` >> fs[store_copy_frame_def]
+  qexists_tac `t` >>
+  conj_tac >- fs[store_copy_frame_def] >>
+  conj_tac
+  >- (rpt strip_tac >>
+      irule storage_copy_normalized_state >> qexistsl_tac [`s`, `sa`] >>
+      fs[store_copy_frame_def, store_copy_normalize_def, store_copy_prefix_def] >>
+      Cases_on `tr` >> gvs[]) >>
+  fs[store_copy_frame_def]
 QED
 
 Theorem storage_copy_one_run_mem:
-  !ctx func cenv cx es' tr src k sa sm sb op s b.
+  !ctx func cenv tr src k sa sm sb op s b.
     emit_op MLOAD [src] sa = (op,sm) /\
     emit_void (if tr then TSTORE else SSTORE) [Lit k;op] sm = ((),sb) /\
     eval_operand src s = SOME b /\ local_ptrs_reserved cenv sa /\
     fn_has_code sa sb func /\ fn_inst_ids_distinct func /\
     alloca_history func s /\ alloca_inv s /\ w2n b + 32 <= s.vs_alloca_next /\
-    ~s.vs_halted /\ s.vs_current_bb = sa.cs_current_bb /\
-    s.vs_inst_idx = LENGTH sa.cs_current_insts /\
-    stmt_state_rel H ctx func cenv cx es'
-      ((if tr then tstore else sstore) k (mload (w2n b) s) s) ==>
+    ~s.vs_halted /\ ~s.vs_call_ctx.cc_static /\
+    s.vs_current_bb = sa.cs_current_bb /\
+    s.vs_inst_idx = LENGTH sa.cs_current_insts ==>
     ?t. gas_marked_path T ctx func s 0 (OK t) /\
-      stmt_state_rel H ctx func cenv cx es' t /\ ~t.vs_halted /\
+      (!H cx es'.
+         stmt_state_rel H ctx func cenv cx es'
+           ((if tr then tstore else sstore) k (mload (w2n b) s) s) ==>
+         stmt_state_rel H ctx func cenv cx es' t) /\ ~t.vs_halted /\
       t.vs_current_bb = sb.cs_current_bb /\
       t.vs_inst_idx = LENGTH sb.cs_current_insts /\
       (!x. not_fresh_at sa x ==> lookup_var x t = lookup_var x s) /\
@@ -111,8 +115,6 @@ Proof
   qmatch_asmsub_abbrev_tac `Var out` >>
   `!x. not_fresh_at sa x ==> x <> out` by
     (simp[not_fresh_at_def, Abbr `out`] >> decide_tac) >>
-  `~s.vs_call_ctx.cc_static` by
-    (Cases_on `tr` >> fs[stmt_state_rel_def, state_rel_def, sstore_def, tstore_def]) >>
   `?u. run_inst_seq (emitted_insts sa sb) s = OK u /\
      store_copy_normalize s u = (if tr then tstore else sstore) k (mload (w2n b) s) s /\
      (!x. x <> out ==> lookup_var x u = lookup_var x s) /\
@@ -142,9 +144,6 @@ Resume storage_copy_one_run_mem[post]:
   `alloca_history func (u with vs_inst_idx := LENGTH sb.cs_current_insts)` by
     (irule body_store_memory_history >> simp[] >> qexistsl_tac [`s`, `sa`] >>
      simp[] >> Cases_on `tr` >> simp[mk_inst_def, is_terminator_def]) >>
-  `stmt_state_rel H ctx func cenv cx es' u` by
-    (irule storage_copy_normalized_state >> qexistsl_tac [`s`, `sa`] >>
-     simp[GSYM store_copy_normalize_def] >> metis_tac[]) >>
   `store_copy_normalize s u =
      store_copy_prefix (if tr then LocTransient else LocStorage) b k s 1` by
     (`COUNT_LIST 1 = [0]` by EVAL_TAC >>
@@ -152,14 +151,18 @@ Resume storage_copy_one_run_mem[post]:
      gvs[WORD_ADD_0, WORD_MULT_CLAUSES]) >>
   drule topcopy_normalize_allocations >> strip_tac >>
   qexists_tac `u with vs_inst_idx := LENGTH sb.cs_current_insts` >>
-  simp[gas_marked_path_def, stmt_state_rel_inst_idx, lookup_var_def] >>
-  metis_tac[lookup_var_def]
+  conj_tac >- (simp[gas_marked_path_def] >> metis_tac[]) >>
+  conj_tac
+  >- (rpt strip_tac >> simp[stmt_state_rel_inst_idx] >>
+      irule storage_copy_normalized_state >> qexistsl_tac [`s`, `sa`] >>
+      simp[GSYM store_copy_normalize_def] >> metis_tac[]) >>
+  simp[lookup_var_def] >> metis_tac[lookup_var_def]
 QED
 
 Finalise storage_copy_one_run_mem
 
 Theorem storage_copy_suffix_run_mem:
-  !ctx func cenv cx es' tr src k n typ src_ty loc sa sb s b.
+  !ctx func cenv tr src k n typ src_ty loc sa sb s b.
     compile_assign_value cenv (Lit k)
       (if tr then LocTransient else LocStorage) src F loc
       typ src_ty (32 * n) sa = ((),sb) /\
@@ -169,13 +172,15 @@ Theorem storage_copy_suffix_run_mem:
     (!x. src = Var x ==> not_fresh_at sa x) /\ eval_operand src s = SOME b /\
     fn_has_code sa sb func /\ fn_inst_ids_distinct func /\
     local_ptrs_reserved cenv sa /\ alloca_history func s /\ alloca_inv s /\
-    ~s.vs_halted /\ s.vs_current_bb = sa.cs_current_bb /\
-    s.vs_inst_idx = LENGTH sa.cs_current_insts /\
-    stmt_state_rel H ctx func cenv cx es'
-      (FOLDL (\t i. (if tr then tstore else sstore)
-        (k+n2w i) (mload (w2n (b+n2w i*32w)) s) t) s (COUNT_LIST n)) ==>
+    ~s.vs_halted /\ ~s.vs_call_ctx.cc_static /\
+    s.vs_current_bb = sa.cs_current_bb /\
+    s.vs_inst_idx = LENGTH sa.cs_current_insts ==>
     ?t. gas_marked_path T ctx func s 0 (OK t) /\
-      stmt_state_rel H ctx func cenv cx es' t /\ ~t.vs_halted /\
+      (!H cx es'.
+         stmt_state_rel H ctx func cenv cx es'
+           (FOLDL (\t i. (if tr then tstore else sstore)
+             (k+n2w i) (mload (w2n (b+n2w i*32w)) s) t) s (COUNT_LIST n)) ==>
+         stmt_state_rel H ctx func cenv cx es' t) /\ ~t.vs_halted /\
       t.vs_current_bb = sb.cs_current_bb /\
       t.vs_inst_idx = LENGTH sb.cs_current_insts /\
       (!x. not_fresh_at sa x ==> lookup_var x t = lookup_var x s) /\
@@ -194,7 +199,8 @@ Proof
       Cases_on `emit_op MLOAD [src] sa` >> gvs[] >>
       `COUNT_LIST 1 = [0]` by EVAL_TAC >>
       fs[WORD_ADD_0, WORD_MULT_CLAUSES] >>
-      drule_all storage_copy_one_run_mem >> simp[]) >>
+      drule_all storage_copy_one_run_mem >> strip_tac >>
+      qexists_tac `t` >> simp[] >> metis_tac[]) >>
   simp[compile_memory_to_storage_def, compile_memory_to_transient_def,
        comp_bind_def, comp_return_def, AllCaseEqs()] >> strip_tac >>
   fs[comp_ignore_bind_def, comp_bind_def, comp_return_def] >>
@@ -207,8 +213,8 @@ Proof
 QED
 
 Theorem storage_copy_success_run_mem:
-  !ctx func cenv cx e es es1 es' v tv tr mid id slot sa sm sf op loc s0 s1.
-    expr_post H ctx func cenv cx e es sa sm s0 es1 v op s1 /\
+  !H0 ctx func cenv cx e es es1 es' v tv tr slot sa sm sf op loc s0 s1.
+    expr_post H0 ctx func cenv cx e es sa sm s0 es1 v op s1 /\
     expr_store_bound cx (expr_type e) v op s1 /\ alloca_history func s1 /\
     ~s1.vs_halted /\ s1.vs_current_bb = sm.cs_current_bb /\
     s1.vs_inst_idx = LENGTH sm.cs_current_insts /\
@@ -218,12 +224,7 @@ Theorem storage_copy_success_run_mem:
     ~is_word_type (expr_type e) /\ ~is_bytestring_type (expr_type e) /\
     value_has_type tv v /\ lowered_value_type cenv e = expr_type e /\
     type_memory_bytes cenv (expr_type e) = type_memory_size tv /\
-    declared_storage_region cx mid id [] = SOME (tr,n2w slot,tv) /\
     0 < type_slot_size tv /\ slot + type_slot_size tv <= dimword (:256) /\
-    (!mid' id' subs' k' tv'.
-       declared_storage_region cx mid' id' subs' = SOME (tr,k',tv') /\
-       (k',tv') <> (n2w slot,tv) ==>
-       ranges_disjoint slot (type_slot_size tv) (w2n k') (type_slot_size tv')) /\
     write_storage_slot cx tr (n2w slot) tv v es1 = (INL (),es') /\
     lower_value compile_expr cenv (expr_type e) e sa = (op,sm) /\
     compile_assign_value cenv (Lit (n2w slot))
@@ -232,7 +233,10 @@ Theorem storage_copy_success_run_mem:
     fn_has_code sa sm func /\ fn_has_code sm sf func /\
     fn_inst_ids_distinct func /\ local_ptrs_reserved cenv sa ==>
     ?t. gas_marked_path T ctx func s1 0 (OK t) /\
-      stmt_state_rel H ctx func cenv cx es' t /\ ~t.vs_halted /\
+      (!H. expr_post H ctx func cenv cx e es sa sm s0 es1 v op s1 /\
+           MEM (tr,(n2w slot :256 word),tv) (FST H) /\ regions_consistent (FST H) /\
+           storage_locks_separated (FST H) (SND H) ==>
+           stmt_state_rel H ctx func cenv cx es' t) /\ ~t.vs_halted /\
       t.vs_current_bb = sf.cs_current_bb /\
       t.vs_inst_idx = LENGTH sf.cs_current_insts /\
       (!x u. not_fresh_at sa x /\ lookup_var x s0 = SOME u ==>
@@ -248,27 +252,48 @@ Proof
   `local_ptrs_reserved cenv sm` by
     (irule local_ptrs_reserved_next_var >> qexists_tac `sa` >> simp[]) >>
   `post_value_type cenv e = expr_type e` by
-    (qpat_x_assum `lowered_value_type cenv e = expr_type e` mp_tac >>
-     rpt (pop_assum kall_tac) >> strip_tac >>
-     Cases_on `e` >> gvs[post_value_type_def] >>
-     rename1 `Call _ tgt _ _` >> Cases_on `tgt` >>
-     gvs[post_value_type_def, vyperASTTheory.expr_type_def]) >>
-  drule_all storage_copy_post_region >> strip_tac >>
+    (irule loweringPostsTheory.post_value_type_lowered >> first_assum ACCEPT_TAC) >>
+  `slot < dimword (:256)` by decide_tac >>
+  (* The source pointer and the slot count come from the post at H0; the
+     copy's run is the same under every horizon. *)
+  `?w. eval_operand op s1 = SOME w /\ type_slot_size tv < dimword (:256)` by
+    (`IS_SOME (encode_value tv v)` by
+       metis_tac[vyperTypingTheory.value_has_type_equiv] >>
+     Cases_on `encode_value tv v` >> fs[] >>
+     `expr_val_rel cx (expr_type e) v op s1` by fs[expr_post_def] >>
+     pop_assum mp_tac >> simp[loweringPostsTheory.expr_val_rel_def] >> strip_tac >>
+     qexists_tac `w` >> simp[] >>
+     drule_all stmtSimAssignStorageCopyTheory.storage_copy_post_words >> simp[]) >>
   `0 < type_memory_size tv` by simp[type_memory_size_slots] >>
   `w2n w + type_memory_size tv <= s1.vs_alloca_next` by
     (drule_all topcopy_source_bound >> simp[]) >>
   `alloca_inv s1` by fs[expr_post_def, stmt_state_rel_def] >>
+  `~s1.vs_call_ctx.cc_static` by
+    fs[expr_post_def, stmt_state_rel_def, state_rel_def] >>
   RULE_ASSUM_TAC (REWRITE_RULE [type_memory_size_slots]) >>
   `w2n w + 32 * type_slot_size tv <= s1.vs_alloca_next` by decide_tac >>
   drule_at (Pat `compile_assign_value _ _ _ _ _ _ _ _ _ _ = _`)
     storage_copy_suffix_run_mem >>
-  disch_then (qspecl_then [`ctx`, `func`, `cx`, `es'`, `s1`, `w`] mp_tac) >>
+  disch_then (qspecl_then [`ctx`, `func`, `s1`, `w`] mp_tac) >>
   (impl_tac >- (simp[] >> metis_tac[])) >> strip_tac >>
   qexists_tac `t` >> asm_rewrite_tac[] >>
+  conj_tac
+  >- (rpt strip_tac >>
+      qpat_assum `expr_post H _ _ _ _ _ _ _ _ _ _ _ _ _`
+        (mp_tac o MATCH_MP (REWRITE_RULE [GSYM AND_IMP_INTRO]
+                              storage_copy_post_region)) >>
+      disch_then (qspecl_then [`tv`, `tr`, `slot`, `es'`] mp_tac) >>
+      rpt (impl_tac >- simp[]) >> strip_tac >>
+      `w' = w` by
+        (qpat_x_assum `eval_operand op s1 = SOME w'` mp_tac >>
+         qpat_x_assum `eval_operand op s1 = SOME w` mp_tac >> simp[]) >>
+      pop_assum SUBST_ALL_TAC >>
+      qpat_x_assum `!H cx es'. _` (qspecl_then [`H`, `cx`, `es'`] mp_tac) >>
+      disch_then match_mp_tac >> first_assum ACCEPT_TAC) >>
   `!x. not_fresh_at sa x ==> not_fresh_at sm x` by
     (rpt strip_tac >> irule not_fresh_at_mono >>
      qexists_tac `sa` >> simp[ci_mono_def]) >>
-  qpat_x_assum `expr_post _ _ _ _ _ _ _ _ _ _ _ _ _ _`
+  qpat_x_assum `expr_post H0 _ _ _ _ _ _ _ _ _ _ _ _ _`
     (strip_assume_tac o REWRITE_RULE [expr_post_def]) >>
   conj_tac >- metis_tac[] >> metis_tac[]
 QED

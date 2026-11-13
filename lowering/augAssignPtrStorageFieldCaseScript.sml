@@ -60,11 +60,11 @@ Resume compile_augassign_attr_storage_case_ptr[load]:
   qabbrev_tac `off = struct_field_offset_slots
     (get_struct_fields cenv.ce_struct_fields (nsid_to_string sid)) fld` >>
   drule_all augassign_storage_field_read_ptr >> strip_tac >>
-  `!st. storage_read_live cx tr st (n2w slot + n2w off) ftv` by
+  `!st. storage_read_live H tr st (n2w slot + n2w off) ftv` by
     (irule declared_storage_field_live_ptr >> metis_tac[]) >>
   `type_slot_size ftv = 1` by metis_tac[word_type_slot_size] >>
-  `!w st. storage_dead cx tr (update_storage (n2w slot + n2w off) w st) =
-      storage_dead cx tr st` by
+  `!w st. storage_dead H tr (update_storage (n2w slot + n2w off) w st) =
+      storage_dead H tr st` by
     (rpt gen_tac >> irule storage_dead_update_struct_word_field >>
      qexistsl [`fld`,`fs`,`ftv`,`src`,`id`] >>
      simp[declared_storage_region_def]) >>
@@ -82,7 +82,7 @@ Resume compile_augassign_attr_storage_case_ptr[load]:
   `storage_holds cx tr ty (Value cur') (n2w slot + n2w off) es s0` by metis_tac[] >>
   `0 < type_slot_size ftv` by simp[] >>
   drule_all augassign_storage_field_load_clean_ptr >>
-  disch_then (qspecl_then [`PG`,`cx_dead cx`] strip_assume_tac) >>
+  disch_then (qspecl_then [`PG`,`cx_dead H cx`] strip_assume_tac) >>
   suspend "pipeline"
 QED
 
@@ -108,7 +108,7 @@ Resume compile_augassign_attr_storage_case_ptr[pipeline]:
   drule_at (Pat `lower_value _ _ _ _ _ = _`) augassign_storage_place_pipeline_ptr >>
   disch_then irule >> simp[SF SFY_ss] >>
   conj_tac >- metis_tac[] >>
-  qexistsl [`H`,`Var z'`,`Var z`,`res_op`,`s3`,`t`,`tm`] >> simp[]
+  qexistsl [`HG`,`Var z'`,`Var z`,`res_op`,`s3`,`t`,`tm`] >> simp[]
 QED
 
 Finalise compile_augassign_attr_storage_case_ptr
