@@ -6,7 +6,29 @@ Ancestors
   abiValidDecodedMetadata abiDecoderCoherence abiDecoderLayout
   valueTypingMemoryProps vyperTypeABI vyperABIValid vyperABI
   abiDecoderMembers abiDecoderFixedMemory valueEncodingProps
-  vyperValue valueEncoding contractABI list arithmetic
+  vyperValue valueEncoding contractABI vyperABIRoundtrip vyperMisc
+  list option pair arithmetic
+
+Theorem abi_decode_tuple_source_accepts:
+  abi_decode_source_accepts env (TupleT tys) bs (ArrayV (TupleV vs)) <=>
+  LENGTH tys < dimword (:256) /\ LENGTH vs = LENGTH tys /\
+  (!i. i < LENGTH tys ==>
+    abi_member_head_size (EL i (MAP (vyper_to_abi_type env) tys)) <=
+      LENGTH (DROP (abi_tuple_cursor (MAP (vyper_to_abi_type env) tys) 0 i) bs) /\
+    abi_decode_source_accepts env (EL i tys)
+      (abi_decode_member_bytes (vyper_to_abi_type env (EL i tys)) bs
+        (DROP (abi_tuple_cursor (MAP (vyper_to_abi_type env) tys) 0 i) bs))
+      (EL i vs))
+Proof
+  simp_tac bool_ss [abi_decode_source_accepts_def, vyper_to_abi_type_def,
+    vyper_to_abi_types_MAP, abi_tuple_valid_root, abi_tuple_decode_root] >>
+  simp[Once abi_to_vyper_def, AllCaseEqs()] >>
+  simp[abi_to_vyper_list_OPT_MMAP, LENGTH_GENLIST, OPT_MMAP_SOME_IFF,
+    EVERY_MAP, EVERY_EL, LIST_EQ_REWRITE, EL_MAP, EL_ZIP, EL_GENLIST] >>
+  eq_tac >> rpt strip_tac >>
+  fs[EL_MAP, EL_ZIP, EL_GENLIST, combinTheory.o_DEF] >>
+  metis_tac[IS_SOME_EXISTS, THE_DEF]
+QED
 
 Theorem abi_decode_source_accepts_wf:
   abi_decoder_coherent ce env ce.ce_struct_fields ty tv /\
