@@ -2,7 +2,7 @@ Theory stmtSimCustomErrorPtrUnwrap
 Ancestors
   stmtSimCustomErrorPtrMaterialise stmtSimCustomErrorPtrWordMaterialise
   stmtSimCustomErrorPtrStorageMaterialise stmtSimCustomErrorPtrCodeMaterialise
-  bodyPtrAttributeCase bodyPtrAttributeAdd emitHelperProps exprSimUnwrap exprSimUnwrapProps exprLoweringProps
+  bodyPtrHashBuiltinsShaEndpoint bodyPtrAttributeCase bodyPtrAttributeAdd emitHelperProps exprSimUnwrap exprSimUnwrapProps exprLoweringProps
   exprOperandVar exprSimVVFrame fragGasSeqPtr freshWrites
   valueEncodingProps loweringPosts bodyPtrDefs exprLowering compileEnv context
   ptrDiscipline venomState finite_map words pred_set fragGasPathPtr
@@ -209,3 +209,81 @@ Resume custom_error_destination_path_ptr[add]:
   simp[wordsTheory.w2n_n2w] >> decide_tac
 QED
 Finalise custom_error_destination_path_ptr
+
+(* Complete destination-before-materialisation interface. *)
+Theorem custom_error_unwrap_path_ptr:
+  (if off = 0 then comp_return (Var x)
+   else emit_op ADD [Var x; Lit (n2w off)]) sm = (dst,sn) /\
+  unwrap_value ce vv sn = (op,sb) /\ ~ce.ce_is_ctor /\
+  vv_post ctx func ce cx e es sa sm s0 ee raw vv s /\
+  ptr_vv_ok cx (post_value_type ce e) raw vv ee G tn s /\
+  ptr_buf_ok ce e (vv_operand vv) G s /\
+  read_result cx raw ee = (INL v,ee) /\
+  evaluate_type (get_tenv cx) (post_value_type ce e) = SOME tv /\
+  value_has_type tv v /\ post_value_type ce e = expr_type e /\
+  lowered_value_type ce e = expr_type e /\
+  nb = type_memory_bytes ce (expr_type e) /\ nb = type_memory_size tv /\
+  nb < dimword (:256) /\
+  local_ptrs_reserved ce sa /\ local_ptrs_reserved ce sm /\
+  MAP FDOM es.scopes = MAP FDOM ee.scopes /\
+  sa.cs_next_var <= sm.cs_next_var /\ sa.cs_next_id <= sm.cs_next_id /\
+  (!z. vv_operand vv = Var z ==> not_fresh_at sm z) /\
+  ghost_inv d ce cx ee G tn s /\
+  (!z sz. ce.ce_return_buf = SOME (PtrVar (Var z) sz) ==> not_fresh_at sm z) /\
+  (!z sz. ce.ce_return_pc = SOME (PtrVar (Var z) sz) ==> not_fresh_at sm z) /\
+  ptr_covers G tn x s asz /\ lookup_var x s = SOME (n2w b) /\
+  not_fresh_at sm x /\ off + nb <= asz /\ b+asz < dimword (:256) /\
+  fn_has_code sm sn func /\ fn_has_code sn sb func /\ fn_inst_ids_distinct func /\
+  ~ctx_has_dalloca ctx /\ ~s.vs_halted /\
+  s.vs_current_bb = sm.cs_current_bb /\
+  s.vs_inst_idx = LENGTH sm.cs_current_insts ==>
+  !D PG. ?Gf tf t y.
+    gas_path_ptr D 0 ctx func PG G tn s 0 Gf tf (OK t) /\
+    expr_post ctx func ce cx e es sa sb s0 ee v op t /\
+    ptr_val_ok cx (post_value_type ce e) v op Gf tf t /\
+    (~is_word_type (post_value_type ce e) ==> ptr_buf_ok ce e op Gf t) /\
+    ghost_inv d ce cx ee Gf tf t /\ ghost_kept ce ee sm G tn s Gf tf /\
+    dst = Var y /\ ptr_covers Gf tf y t nb /\
+    lookup_var y t = SOME (n2w (b+off)) /\
+    t.vs_current_bb = sb.cs_current_bb /\
+    t.vs_inst_idx = LENGTH sb.cs_current_insts /\ ~t.vs_halted /\
+    tf.t_stor = tn.t_stor /\ tf.t_trans = tn.t_trans /\ tf.t_imm = tn.t_imm /\
+    (!z. not_fresh_at sm z ==> lookup_var z t = lookup_var z s /\
+      FLOOKUP Gf z = FLOOKUP G z /\ op_taint tf (Var z) = op_taint tn (Var z)) /\
+    (!aid entry. FLOOKUP s.vs_allocas aid = SOME entry ==>
+      FLOOKUP t.vs_allocas aid = SOME entry) /\
+    (!aid b len i. aid < sm.cs_next_id /\
+      FLOOKUP s.vs_allocas aid = SOME (b,len) /\ b <= i /\ i < b+len ==>
+      mem_bytes_at i 1 t.vs_memory = mem_bytes_at i 1 s.vs_memory /\
+      (i IN tf.t_mem ==> i IN tn.t_mem))
+Proof
+  strip_tac >> rpt gen_tac >>
+  `sm.cs_next_var <= sn.cs_next_var /\ sm.cs_next_id <= sn.cs_next_id` by
+    (Cases_on `off = 0` >> gvs[comp_return_def] >>
+     drule emitted_insts_emit_op >> simp[]) >>
+  drule_all custom_error_destination_path_ptr >>
+  disch_then (qspecl_then [`D`,`PG`] strip_assume_tac) >>
+  `local_ptrs_reserved ce sn` by metis_tac[local_ptrs_reserved_next_var] >>
+  `sa.cs_next_var <= sn.cs_next_var /\ sa.cs_next_id <= sn.cs_next_id` by decide_tac >>
+  `(!z. vv_operand vv = Var z ==> not_fresh_at sn z) /\
+   (!z sz. ce.ce_return_buf = SOME (PtrVar (Var z) sz) ==> not_fresh_at sn z) /\
+   (!z sz. ce.ce_return_pc = SOME (PtrVar (Var z) sz) ==> not_fresh_at sn z)` by
+    metis_tac[freshWritesTheory.not_fresh_at_mono] >>
+  drule_all custom_error_materialise_path_ptr >>
+  disch_then (qspecl_then [`D`,`PG`] strip_assume_tac) >>
+  suspend "compose"
+QED
+Resume custom_error_unwrap_path_ptr[compose]:
+  `!z. not_fresh_at sm z ==> not_fresh_at sn z` by
+    metis_tac[freshWritesTheory.not_fresh_at_mono] >>
+  `ghost_kept ce ee sm G tn s G' tn'` by
+    (irule hash_ghost_kept_then >> goal_assum (drule_at Any) >>
+     goal_assum (drule_at Any) >> simp[] >> metis_tac[]) >>
+  `ptr_covers G' tn' y t nb` by
+    (gvs[ptr_covers_def] >> metis_tac[]) >>
+  qexistsl_tac [`G'`,`tn'`,`t`,`y`] >> simp[] >>
+  conj_tac >- metis_tac[gas_path_ptr_then, arithmeticTheory.ADD] >>
+  rpt gen_tac >> strip_tac >>
+  `aid < sn.cs_next_id` by decide_tac >> metis_tac[]
+QED
+Finalise custom_error_unwrap_path_ptr
