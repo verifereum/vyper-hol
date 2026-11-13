@@ -329,7 +329,7 @@ Proof
       disj1_tac >> suspend "array_post_transport")
   >- (qexists_tac `marks` >> disj1_tac >>
       qexistsl_tac [`res`, `es_end`, `r`] >> simp[] >>
-      disj2_tac >> conj_tac >- first_assum ACCEPT_TAC >>
+      disj2_tac >>
       qpat_x_assum `(\res es' exit. _) _ _ _` mp_tac >>
       qunabbrev_tac `exitrel` >> simp[]) >>
   metis_tac[]
