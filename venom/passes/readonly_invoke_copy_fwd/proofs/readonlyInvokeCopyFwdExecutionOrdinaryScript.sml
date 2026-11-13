@@ -8,7 +8,7 @@ Ancestors
   internalReturnCopyFwdSim allocaFrontierBound taintAgree ptrDiscipline pointerConfinedDefs memLocDefs
   venomExecSemantics venomState venomInst codegenRel finite_map list pred_set words
 
-Theorem ricf_execution_scalar_operand[local]:
+Theorem ricf_execution_scalar_operand:
   ricf_execution_invariant vs C ctx0 log D stk PG G tn fn inst s t
     n a U B HP H ledger E sites maps targets rt /\
   ptr_discipline lo C vs /\ active_inst fn inst s /\
