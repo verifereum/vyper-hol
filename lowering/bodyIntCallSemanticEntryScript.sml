@@ -100,6 +100,7 @@ Proof
        ALL_DISTINCT_APPEND] >> rpt strip_tac >>
   gvs[MEM_MAP] >>
   drule (iffLR collect_locals_supported_bindings) >> strip_tac >>
+  Cases_on `y` >>
   gvs[listTheory.EVERY_MEM, MEM_MAP, PULL_EXISTS, pairTheory.FORALL_PROD] >>
   metis_tac[]
 QED
