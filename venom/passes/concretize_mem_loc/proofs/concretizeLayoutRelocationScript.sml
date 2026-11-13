@@ -267,7 +267,7 @@ Proof
   goal_assum (drule_at (Pat `joint_trace _ _ _ _ _ _`)) >>
   goal_assum (drule_at (Pat `joint_relocation_demand _ _ _ _ _ _ _ _`)) >>
   goal_assum (drule_at (Pat `relocation_pair _ _ _ _ _`)) >>
-  goal_assum (drule_at (Pat `callee_first _ _`)) >> simp[] >> metis_tac[]
+  goal_assum (drule_at (Pat `callee_first _ _`)) >> asm_rewrite_tac[] >> metis_tac[]
 QED
 
 Theorem concretize_positions_demand_write_complement:
@@ -300,7 +300,6 @@ Proof
      drule_all concretize_positions_trace_cache >> strip_tac >> simp[] >>
      strip_tac >> qpat_x_assum `ctx_has_dalloca C ==> ?eom. _` drule >>
      strip_tac >> drule_all concretize_positions_cache_room >> decide_tac) >>
-  irule concretize_relocation_demand_write_complement >> simp[] >>
-  goal_assum (drule_at (Pat `joint_trace _ _ _ _ _ _`)) >>
-  goal_assum (drule_at (Pat `callee_first _ _`)) >> simp[] >> metis_tac[]
+  irule concretize_relocation_demand_write_complement >> asm_rewrite_tac[] >>
+  qexistsl_tac [`C`, `C'`, `names`, `q`, `rpolicy`, `vs0`] >> asm_rewrite_tac[]
 QED

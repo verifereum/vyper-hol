@@ -152,7 +152,7 @@ Proof
 QED
 
 Theorem layout_canonical_ordinary_environment:
-  o1_ctx_shape C /\ ptr_discipline lo C vs0 /\ ~ctx_has_dalloca C /\
+  o1_ctx_shape C /\ ptr_discipline lo C vs0 /\
   EVERY (fn_ptr_ok P) C.ctx_functions /\
   layout_canonical_step_witness D lo vs0 C C' q0 es qs ass qend
     q n i s j t (INL g) /\ decoration_at fn i s q ==>
@@ -221,7 +221,7 @@ Proof
 QED
 
 Theorem layout_canonical_nop_success:
-  o1_ctx_shape C /\ ptr_discipline lo C vs0 /\ ~ctx_has_dalloca C /\
+  o1_ctx_shape C /\ ptr_discipline lo C vs0 /\
   vs0.vs_allocas = FEMPTY /\ EVERY (fn_ptr_ok P) C.ctx_functions /\
   EVERY (\f. EVERY inst_wf (fn_insts f)) C.ctx_functions /\
   es = MAP FST path /\ qs = MAP SND path /\
@@ -268,7 +268,7 @@ Proof
 QED
 
 Theorem layout_canonical_assign_success:
-  o1_ctx_shape C /\ ptr_discipline lo C vs0 /\ ~ctx_has_dalloca C /\
+  o1_ctx_shape C /\ ptr_discipline lo C vs0 /\
   vs0.vs_allocas = FEMPTY /\ EVERY (fn_ptr_ok P) C.ctx_functions /\
   EVERY (\f. EVERY inst_wf (fn_insts f)) C.ctx_functions /\
   es = MAP FST path /\ qs = MAP SND path /\
@@ -304,7 +304,7 @@ Proof
 QED
 
 Theorem layout_canonical_clean_value_success:
-  o1_ctx_shape C /\ ptr_discipline lo C vs0 /\ ~ctx_has_dalloca C /\
+  o1_ctx_shape C /\ ptr_discipline lo C vs0 /\
   vs0.vs_allocas = FEMPTY /\ EVERY (fn_ptr_ok P) C.ctx_functions /\
   EVERY (\f. EVERY inst_wf (fn_insts f)) C.ctx_functions /\
   es = MAP FST path /\ qs = MAP SND path /\
@@ -350,7 +350,7 @@ Proof
 QED
 
 Theorem layout_canonical_affine_success:
-  o1_ctx_shape C /\ ptr_discipline lo C vs0 /\ ~ctx_has_dalloca C /\
+  o1_ctx_shape C /\ ptr_discipline lo C vs0 /\
   vs0.vs_allocas = FEMPTY /\ EVERY (fn_ptr_ok P) C.ctx_functions /\
   EVERY (\f. EVERY inst_wf (fn_insts f)) C.ctx_functions /\
   es = MAP FST path /\ qs = MAP SND path /\
@@ -402,7 +402,7 @@ Theorem layout_canonical_compare_success:
   EVERY (\fn. fn.fn_eom = NONE) C.ctx_functions /\
   ctx_inst_ids_distinct C /\ o1_run_state_ok vs0 /\
   EVERY wf_function C.ctx_functions /\ mem_inv raw_mem_ok C vs0 /\
-  ptr_discipline lo C vs0 /\ ~ctx_has_dalloca C /\
+  ptr_discipline lo C vs0 /\
   vs0.vs_allocas = FEMPTY /\ EVERY (fn_ptr_ok P) C.ctx_functions /\
   EVERY (\f. EVERY inst_wf (fn_insts f)) C.ctx_functions /\
   es = MAP FST path /\ qs = MAP SND path /\
@@ -454,7 +454,9 @@ Theorem layout_canonical_ordinary_nonterm_success:
   EVERY (\fn. fn.fn_eom = NONE) C.ctx_functions /\
   ctx_inst_ids_distinct C /\ o1_run_state_ok vs0 /\
   EVERY wf_function C.ctx_functions /\ mem_inv raw_mem_ok C vs0 /\
-  ptr_discipline lo C vs0 /\ ~ctx_has_dalloca C /\
+  ptr_discipline lo C vs0 /\
+  (ctx_has_dalloca C ==>
+     ?eom. max_live_eom C' = SOME eom /\ eom <= w2n vs0.vs_initial_fmp) /\
   vs0.vs_allocas = FEMPTY /\ EVERY (fn_ptr_ok P) C.ctx_functions /\
   EVERY (\f. EVERY inst_wf (fn_insts f)) C.ctx_functions /\
   es = MAP FST path /\ qs = MAP SND path /\
@@ -575,10 +577,9 @@ Proof
          `?v. i.inst_outputs = [v]` by
            (qpat_x_assum `inst_wf i` mp_tac >>
             simp[inst_wf_def, LENGTH_EQ_NUM_compute] >> metis_tac[]) >>
-         (* waits on P5f: the room premise comes from ~ctx_has_dalloca *)
          `ctx_has_dalloca C ==>
             ?eom. max_live_eom C' = SOME eom /\ eom <= w2n vs0.vs_initial_fmp` by
-           simp[] >>
+           metis_tac[] >>
          drule_all layout_dalloca_trace_step >> metis_tac[]) >>
      `?v. i.inst_outputs = [v]` by
        (qpat_x_assum `inst_wf i` mp_tac >>
