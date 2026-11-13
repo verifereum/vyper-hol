@@ -1,7 +1,9 @@
-(* Runtime-cnt control for memory-to-slot word loops. *)
+(* Runtime-count control for memory-to-slot word loops.
+   Compiler coverage and freshness use the existing general theorem
+   placeStoreCopyPathTheory.place_store_runtime_copy_code. *)
 Theory fullStoreSlotsWordCode
 Ancestors
-  fullStoreSlotsProbe fragGasCopyLoop context emitHelperProps
+  fullStoreSlotsProbe fragGasCopyLoop context emitHelperProps placeStoreCopyPath
   fragGasSeqPtr fragGasOriginPtr ptrSafetyTransport instMemFrontier fragExecMem
   fragExec memSafeRun bodyPtrDefs ptrDiscipline venomState venomInst
   ptrSafeRun codegenRel contextCodegenRel unitTransformDefs
@@ -108,3 +110,4 @@ Proof
   conj_tac >- (qexistsl_tac [`jid`, `tv`] >> simp[]) >>
   metis_tac[]
 QED
+
