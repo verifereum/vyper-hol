@@ -690,6 +690,7 @@ Proof
   `val_wf tv v` by
     (qpat_x_assum `expr_post H0 _ _ _ _ _ _ _ _ _ _ _ _ _` mp_tac >>
      qpat_x_assum `evaluate_type _ ann = SOME tv` mp_tac >>
+     qpat_x_assum `~is_word_type ann` mp_tac >>
      rpt (pop_assum kall_tac) >> rpt strip_tac >>
      fs[expr_post_def, expr_val_at_def, expr_type_def]) >>
   `val_store_size tv v <= 32 * type_slot_size tv` by
@@ -723,8 +724,9 @@ Proof
           toplevel_copy_translated_taint_def] >> rpt strip_tac >>
      first_x_assum drule >> simp[] >> rpt strip_tac >> gvs[] >> decide_tac) >>
   qpat_assum `stmt_state_rel H0 _ _ _ _ es s0`
-    (mp_then Any mp_tac toplevel_local_footprint_forward) >>
-  disch_then (qspec_then `toplevel_copy_region (w2n w) (type_slot_size tv)` mp_tac) >>
+    (mp_tac o MATCH_MP
+       (Q.INST [`writes` |-> `toplevel_copy_region (w2n w) (type_slot_size tv)`]
+          toplevel_local_footprint_forward)) >>
   impl_tac >- first_assum ACCEPT_TAC >> strip_tac >>
   `ghost_kept cenv es sa G0 tn0 s0 Gf tnf` by
     (irule toplevel_ghost_kept_memory_frame >>
