@@ -1,14 +1,17 @@
 (* The cases of bodySimFullMain's induction, one per evaluate_ind case
  * bodySimPtrMainAt's does not close by a short tactic, at the joint
  * judgments of bodySimFull.  A case with an existing joint producer is
- * proved here; every other case is admitted until its leaf lands, and its
- * comment names the separate source, memory and pointer cases it joins.
+ * proved here; a statement case dispatches its supported_stmt clauses to
+ * its leaves in bodyFullCaseLeaves; every other case is admitted until its
+ * leaf lands, and its comment names the separate source, memory and
+ * pointer cases it joins.
  *
  * TOP-LEVEL: body_expr_full_ok_leaf and the body_*_case_full cases.
  *)
 Theory bodyFullCases
 Ancestors
-  bodyFullPreds bodyFullRawRevert bodyFullCtrlCases gasShadowCompile bodySimFull stmtSimZero stmtSimPass gasShadow bodySim
+  bodyFullPreds bodyFullCaseLeaves bodyFullRawRevert bodyFullCtrlCases
+  gasShadowCompile bodySimFull stmtSimZero stmtSimPass gasShadow bodySim
   exprSimHyps bodySimStmtCases bodyExprPreFacts supportedStmts
   supportedExprs supportedStmtTraverse supportedExprTraverse
   msgGasFull exprSimHypsDefs gasContext vyperTypeSystem vyperContext vyperTypeCallGraph
@@ -26,7 +29,8 @@ Proof
   cheat
 QED
 
-(* Admitted: the joint twin of body_annassign_case_ptr_at (bodyPtrAssignCases). *)
+(* The joint twin of body_annassign_case_ptr_at (bodyPtrAssignCases),
+   by its per-clause leaves in bodyFullCaseLeaves. *)
 Theorem body_annassign_case_full:
   !cx id typ e.
     (!tenv s'' tyv t.
@@ -36,10 +40,14 @@ Theorem body_annassign_case_full:
        body_expr_full_ok cx e) ==>
     body_stmt_full_ok cx (AnnAssign id typ e)
 Proof
-  cheat
+  rpt strip_tac >> rewrite_tac[body_stmt_full_ok_def] >> rpt strip_tac >>
+  qpat_x_assum `supported_stmt _ _ _`
+    (strip_assume_tac o SIMP_RULE bool_ss [supported_stmt_def]) >>
+  irule body_annassign_full >> metis_tac[]
 QED
 
-(* Admitted: the joint twin of body_append_case_ptr_at (bodyPtrLogCases). *)
+(* The joint twin of body_append_case_ptr_at (bodyPtrLogCases),
+   by its per-clause leaves in bodyFullCaseLeaves. *)
 Theorem body_append_case_full:
   !cx t e.
     (!s'' p t'.
@@ -47,7 +55,12 @@ Theorem body_append_case_full:
     body_base_target_full_ok cx t ==>
     body_stmt_full_ok cx (Append t e)
 Proof
-  cheat
+  rpt strip_tac >>
+  Cases_on `?id. t = NameTarget id`
+  >- (gvs[] >> irule body_append_local_full >> metis_tac[]) >>
+  Cases_on `?nid. t = TopLevelNameTarget nid`
+  >- (gvs[] >> irule body_append_storage_full >> metis_tac[]) >>
+  irule body_append_nested_full >> metis_tac[]
 QED
 
 (* The joint twin of body_assert_case_ptr_at (bodyPtrExitCases): bodyFullCtrlCases. *)
@@ -57,14 +70,19 @@ Proof
   ACCEPT_TAC bodyFullCtrlCasesTheory.assert_bare_stmt_full_ok
 QED
 
-(* Admitted: the joint twin of body_assert_reason_case_ptr_at (bodyPtrExitCases). *)
+(* The joint twin of body_assert_reason_case_ptr_at (bodyPtrExitCases),
+   by its per-clause leaves in bodyFullCaseLeaves. *)
 Theorem body_assert_reason_case_full:
   !cx e se.
     (!s'' tv t. eval_expr cx e s'' = (INL tv,t) ==> body_expr_full_ok cx se) /\
     body_expr_full_ok cx e ==>
     body_stmt_full_ok cx (Assert e (AssertReason se))
 Proof
-  cheat
+  rpt strip_tac >> rewrite_tac[body_stmt_full_ok_def] >> rpt strip_tac >>
+  qpat_x_assum `supported_stmt _ _ _`
+    (strip_assume_tac o
+     SIMP_RULE bool_ss [supported_stmt_def, supported_assert_reason_def]) >>
+  irule body_assert_reason_full >> metis_tac[]
 QED
 
 (* The joint twin of body_assert_unreachable_case_ptr_at (bodyPtrExitCases): bodyFullCtrlCases. *)
@@ -75,7 +93,8 @@ Proof
   ACCEPT_TAC bodyFullCtrlCasesTheory.assert_unreachable_stmt_full_ok
 QED
 
-(* Admitted: the joint twin of body_assign_case_ptr_at (bodyPtrAssignCases). *)
+(* The joint twin of body_assign_case_ptr_at (bodyPtrAssignCases),
+   by its per-clause leaves in bodyFullCaseLeaves. *)
 Theorem body_assign_case_full:
   !cx t e.
     (!s'' pv t'.
@@ -83,10 +102,14 @@ Theorem body_assign_case_full:
     body_expr_full_ok cx e ==>
     body_stmt_full_ok cx (Assign (BaseTarget t) e)
 Proof
-  cheat
+  rpt strip_tac >> rewrite_tac[body_stmt_full_ok_def] >> rpt strip_tac >>
+  qpat_x_assum `supported_stmt _ _ _`
+    (strip_assume_tac o SIMP_RULE bool_ss [supported_stmt_def]) >>
+  irule body_assign_base_full >> metis_tac[]
 QED
 
-(* Admitted: the joint twin of body_assign_tuple_case_ptr_at (bodyPtrAssignCases). *)
+(* The joint twin of body_assign_tuple_case_ptr_at (bodyPtrAssignCases),
+   by its per-clause leaves in bodyFullCaseLeaves. *)
 Theorem body_assign_tuple_case_full:
   !cx gs e.
     (!s'' tv t s'3' v t'.
@@ -94,7 +117,10 @@ Theorem body_assign_tuple_case_full:
        body_tuple_target_full_ok cx (TupleTarget gs) v) /\ body_expr_full_ok cx e ==>
     body_stmt_full_ok cx (Assign (TupleTarget gs) e)
 Proof
-  cheat
+  rpt strip_tac >> rewrite_tac[body_stmt_full_ok_def] >> rpt strip_tac >>
+  qpat_x_assum `supported_stmt _ _ _`
+    (strip_assume_tac o SIMP_RULE bool_ss [supported_stmt_def]) >>
+  irule body_assign_tuple_full >> metis_tac[]
 QED
 
 (* Admitted: the joint twin of body_attribute_case_ptr_at (bodyPtrExprCases). *)
@@ -104,7 +130,8 @@ Proof
   cheat
 QED
 
-(* Admitted: the joint twin of body_augassign_case_ptr_at (bodyPtrAssignCases). *)
+(* The joint twin of body_augassign_case_ptr_at (bodyPtrAssignCases),
+   by its per-clause leaves in bodyFullCaseLeaves. *)
 Theorem body_augassign_case_full:
   !cx ty t bop e.
     (!s'' p t' s'3' cur t'' s'4' ptv t'3'.
@@ -114,7 +141,10 @@ Theorem body_augassign_case_full:
        body_expr_full_ok cx e) /\ body_base_target_full_ok cx t ==>
     body_stmt_full_ok cx (AugAssign ty t bop e)
 Proof
-  cheat
+  rpt strip_tac >> rewrite_tac[body_stmt_full_ok_def] >> rpt strip_tac >>
+  qpat_x_assum `supported_stmt _ _ _`
+    (strip_assume_tac o SIMP_RULE bool_ss [supported_stmt_def]) >>
+  irule body_augassign_full >> metis_tac[]
 QED
 
 (* The joint twin of body_break_case_ptr_at (bodyPtrCtrlCases): bodyFullCtrlCases. *)
@@ -323,7 +353,8 @@ Proof
   cheat
 QED
 
-(* Admitted: the joint twin of body_for_case_ptr_at (bodyPtrCtrlCases). *)
+(* The joint twin of body_for_case_ptr_at (bodyPtrCtrlCases),
+   by its per-clause leaves in bodyFullCaseLeaves. *)
 Theorem body_for_case_full:
   !cx id typ it n body.
     (!tenv s'' tyv t s'3' vs t' s'4' x t''.
@@ -340,7 +371,10 @@ Theorem body_for_case_full:
        body_iterator_full_ok cx it) ==>
     body_stmt_full_ok cx (For id typ it n body)
 Proof
-  cheat
+  rpt strip_tac >> rewrite_tac[body_stmt_full_ok_def] >> rpt strip_tac >>
+  qpat_x_assum `supported_stmt _ _ _`
+    (strip_assume_tac o SIMP_RULE bool_ss [supported_stmt_def]) >>
+  irule body_for_full >> metis_tac[]
 QED
 
 (* The joint twin of body_if_case_ptr_at (bodyPtrCtrlCases): bodyFullCtrlCases. *)
@@ -439,11 +473,17 @@ Proof
   cheat
 QED
 
-(* Admitted: the joint twin of body_log_case_ptr_at (bodyPtrLogCases). *)
+(* The joint twin of body_log_case_ptr_at (bodyPtrLogCases),
+   by its per-clause leaves in bodyFullCaseLeaves. *)
 Theorem body_log_case_full:
   !cx id es. body_exprs_full_ok cx es ==> body_stmt_full_ok cx (Log id es)
 Proof
-  cheat
+  rpt strip_tac >> rewrite_tac[body_stmt_full_ok_def] >> rpt strip_tac >>
+  qpat_x_assum `supported_stmt _ _ _`
+    (strip_assume_tac o SIMP_RULE bool_ss [supported_stmt_def]) >>
+  Cases_on `supported_log_exact tops id es`
+  >- (irule body_log_exact_full >> metis_tac[]) >>
+  irule body_log_widened_full >> metis_tac[]
 QED
 
 (* Pass, by stmtSimPass's joint fragment. *)
@@ -467,11 +507,16 @@ Proof
   ACCEPT_TAC bodyFullCtrlCasesTheory.raise_bare_stmt_full_ok
 QED
 
-(* Admitted: the joint twin of body_raise_reason_case_ptr_at (bodyPtrExitCases). *)
+(* The joint twin of body_raise_reason_case_ptr_at (bodyPtrExitCases),
+   by its per-clause leaves in bodyFullCaseLeaves. *)
 Theorem body_raise_reason_case_full:
   !cx e. body_expr_full_ok cx e ==> body_stmt_full_ok cx (Raise (RaiseReason e))
 Proof
-  cheat
+  rpt strip_tac >> rewrite_tac[body_stmt_full_ok_def] >> rpt strip_tac >>
+  qpat_x_assum `supported_stmt _ _ _`
+    (strip_assume_tac o
+     SIMP_RULE bool_ss [supported_stmt_def, supported_raise_reason_def]) >>
+  irule body_raise_reason_full >> metis_tac[]
 QED
 
 (* The joint twin of body_raise_unreachable_case_ptr_at (bodyPtrExitCases): bodyFullCtrlCases. *)
