@@ -3227,7 +3227,7 @@ Proof
              vyperStorageTraceTheory.storage_trace_frame_read_result,
              vyperStorageTraceTheory.evaluate_storage_trace_frame] >>
       `valid_horizon cx st0 H0 (es with gas_obs := gs0).storage_trace` by
-        (irule vyperStorageFootprintTheory.valid_horizon_frame >>
+        (irule (INST_TYPE [alpha |-> ``:value``] vyperStorageFootprintTheory.valid_horizon_frame) >>
          qexistsl_tac [`bind (eval_expr cx e) (read_result cx)`, `INL v0`, `es1`] >>
          rpt conj_tac >> first_assum ACCEPT_TAC) >>
       `valid_horizon cx st0 H0 es.storage_trace` by fs[] >>
