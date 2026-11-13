@@ -278,21 +278,21 @@ Resume ptr_mstore_write_producer[classified]:
     simp[source_memory_write_ranges_def, fixed_source_write_range_def, mem_write_ops_def] >>
   qabbrev_tac `ops = <|iao_ofst := op1; iao_size := SOME (Lit 32w);
     iao_max_size := SOME (Lit 32w)|>` >>
-  sg `(op_prov TG ops.iao_ofst = NONE /\
+  Q.SUBGOAL_THEN `(op_prov TG ops.iao_ofst = NONE /\
     op_taint (EL (LENGTH h - 1) h).po_taint ops.iao_ofst = {} /\
     (w2n addr + 32 <= lo \/ dyn_floor C vs <= w2n addr)) \/
    (?dv token bid db sb pb. ops.iao_ofst = Var dv /\ FLOOKUP TG dv = SOME (token,bid) /\
     FLOOKUP (EL (LENGTH h - 1) h).po_prov dv = SOME (db,sb) /\
     FLOOKUP positions (Allocation bid) = SOME (pb,sb) /\ db <= w2n addr /\
     w2n addr + 32 <= db+sb /\ pb+sb < dimword(:256))`
+    (DISJ_CASES_THEN2 (MAP_EVERY assume_tac o CONJUNCTS) strip_assume_tac)
   >- (irule ptr_historical_write_classification >>
      simp[Abbr `ops`] >>
      conj_tac >- (qexists_tac `names` >> first_assum ACCEPT_TAC) >>
      conj_tac
      >- (qexists_tac `a.po_fn` >> simp[]) >>
      conj_tac >- (qexistsl [`C'`, `rpolicy`] >> fs[]) >>
-     rpt (goal_assum (drule_at Any)) >> simp[]) >>
-  pop_assum (DISJ_CASES_THEN2 (MAP_EVERY assume_tac o CONJUNCTS) strip_assume_tac)
+     rpt (goal_assum (drule_at Any)) >> simp[])
   >- (fs[Abbr `ops`] >> suspend "fixed") >>
   fs[Abbr `ops`] >> suspend "owned"
 QED
