@@ -6,7 +6,7 @@
 Theory lowerDloadPtrGasCut
 Ancestors
   lowerDloadPtrAggregate lowerDloadPtrPhase lowerDloadPtrCall o1SafeUpto
-  gasCount venomExecSemantics venomState contextCodegenRel venomInstProofs1
+  gasCount gasOracleReplay venomExecSemantics venomState contextCodegenRel venomInstProofs1
   list
 
 Theorem dload_equal_environment_gas_readings:
@@ -95,21 +95,6 @@ Proof
   gvs[gasCountTheory.gas_count_suffix_def]
 QED
 
-Theorem setup_callee_gas_readings:
-  setup_callee fn args s = SOME cs ==>
-  cs.vs_gas_readings = s.vs_gas_readings
-Proof
-  rw[setup_callee_def] >> simp[]
-QED
-
-Theorem bind_outputs_gas_readings:
-  bind_outputs outs vals s = SOME s' ==>
-  s'.vs_gas_readings = s.vs_gas_readings
-Proof
-  strip_tac >> irule venomInstProofs1Theory.bind_outputs_preserves >>
-  simp[update_var_def] >> metis_tac[]
-QED
-
 (* Each rule of frame_reachable carries a cut at its target back to its
    source. *)
 Theorem frame_next_gas_cut:
@@ -135,7 +120,7 @@ Theorem frame_call_gas_cut:
   setup_callee callee args s = SOME cs /\ enters_block callee cs s1 /\
   gas_cut cut vs s1 ==> gas_cut cut vs s
 Proof
-  rw[] >> imp_res_tac setup_callee_gas_readings >>
+  rw[] >> imp_res_tac gasOracleReplayTheory.gas_setup_callee_readings >>
   imp_res_tac enters_block_gas_le >>
   `LENGTH s1.vs_gas_readings <= LENGTH s.vs_gas_readings` by gvs[] >>
   metis_tac[gas_cut_le]
@@ -148,7 +133,7 @@ Theorem frame_ret_gas_cut:
   gas_cut cut vs (s' with vs_inst_idx := k) ==> gas_cut cut vs s
 Proof
   rw[] >> imp_res_tac step_inst_int_ret_gas_le >>
-  imp_res_tac bind_outputs_gas_readings >>
+  imp_res_tac gasOracleReplayTheory.gas_bind_outputs_readings >>
   `(s' with vs_inst_idx := k).vs_gas_readings = s_end.vs_gas_readings` by
     (Cases_on `ret.iret_adopt_fmp` >>
      gvs[adopt_return_fmp_def, merge_callee_state_def]) >>
