@@ -4,7 +4,7 @@
 
 Theory bodyIntCallSeamReturn
 Ancestors
-  bodyIntCallNrCompiler bodyIntCallNrVoid bodyIntCallNrMemory
+  bodyIntCallNrCompiler bodyIntCallNrVoid bodyIntCallNrMemory bodyIntCallNrStack
   bodyIntCallNrCleanup bodyIntCallNrCleanupCert bodyIntCallNrGuardCert bodyIntCallSeamDefs
   bodyIntCallJointContract
   bodyIntCallSource bodyIntCallWidenedPost bodyIntCallWidenedEndpoint
