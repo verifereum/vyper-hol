@@ -309,6 +309,26 @@ Proof
   qexists_tac `ctx` >> simp[]
 QED
 
+Theorem dft_fn_user_param_count:
+  o1_fn_shape ctx fn ==>
+  LENGTH (fn_user_param_insts (dft_fn fn)) = LENGTH (fn_user_param_insts fn)
+Proof
+  strip_tac >>
+  `LIST_REL dftLifting$dft_block_rel fn.fn_blocks (dft_fn fn).fn_blocks` by
+    (irule dftLiftingTheory.dft_fn_block_rel >>
+     gvs[o1_fn_shape_def, fn_shape_ok_def]) >>
+  Cases_on `fn.fn_blocks` >>
+  gvs[LIST_REL_NIL, LIST_REL_CONS1,
+      callLayoutDefsTheory.fn_user_param_insts_def,
+      callLayoutDefsTheory.fn_entry_insts_def, entry_block_def,
+      dftLiftingTheory.dft_block_rel_def] >>
+  `!l. FILTER (\i. i.inst_opcode = PARAM) l =
+       FILTER (\i. i.inst_opcode = PARAM)
+         (FILTER (\i. is_pseudo i.inst_opcode) l)` by
+    (Induct >> rw[] >> gvs[is_pseudo_def]) >>
+  pop_assum (fn th => ONCE_REWRITE_TAC [th]) >> simp[]
+QED
+
 (* Proof summary:
    - Without SSA, dft_fn can drop an instruction (a block whose ADD reads
      its own output: nothing reaches it from the entries), but it never

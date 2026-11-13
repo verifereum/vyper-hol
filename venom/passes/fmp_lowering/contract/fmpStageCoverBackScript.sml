@@ -20,7 +20,7 @@ Ancestors
   finite_map words list venomWf venomWfProps
   makeSsaCurrentLockstep makeSsaCurrentPhiBatchRuntime analysisSimProofsBase
   venomExecProofs rich_list
-  fmpStageCoverBackArity fmpStageCoverBackParam fmpStageCoverBackKeptOps
+  fmpStageCallArity fmpStageCoverBackParam fmpStageCoverBackKeptOps
 
 Theorem fmp_stage_src_defined:
   fmp_stage_ctx rpolicy D C C' vs vs' fmp eom /\
@@ -65,7 +65,14 @@ Proof
          inv.inst_operands = Label name::args /\
          lookup_function name C.ctx_functions = SOME callee ==>
          LENGTH (fn_user_param_insts callee) <= LENGTH args` by
-        (rpt strip_tac >> drule_all fmp_stage_source_invoke_user_arity >> simp[]) >>
+        (rpt strip_tac >>
+         rename1 `iv.inst_operands = Label name::args` >>
+         `MEM caller C.ctx_functions /\ MEM iv (fn_insts caller)` by
+           metis_tac[fmp_stage_frame_facts] >>
+         `decode_invoke iv = SOME (name,args)` by simp[decode_invoke_def] >>
+         `LENGTH args = LENGTH (fn_user_param_insts callee)` by
+           metis_tac[fmp_stage_invoke_arity] >>
+         simp[]) >>
       drule_all fmp_stage_back_param_conditional >> simp[]) >>
   `!v. MEM (Var v) inst.inst_operands ==> IS_SOME (lookup_var v s)` by
     (rpt strip_tac >> irule fmp_stage_src_defined >>

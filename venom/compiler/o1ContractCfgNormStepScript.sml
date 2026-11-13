@@ -1106,6 +1106,56 @@ Proof
   simp[cfg_norm_function_supply_def] >> metis_tac[cfg_norm_iter_supply_fresh_names]
 QED
 
+Theorem cfg_norm_round_supply_entry_opcodes[local]:
+  supply_o1_inv ctx s fn /\ cfg_norm_round_supply s fn = (fn',changed,s') ==>
+  MAP (\i. i.inst_opcode) (fn_entry_insts fn') =
+  MAP (\i. i.inst_opcode) (fn_entry_insts fn)
+Proof
+  strip_tac >>
+  `wf_function fn` by gvs[supply_o1_inv_def, o1_fn_shape_def] >>
+  drule cfg_norm_round_supply_cases >> strip_tac >- gvs[] >>
+  metis_tac[insert_split_supply_entry_opcodes]
+QED
+
+Theorem cfg_norm_iter_supply_entry_opcodes[local]:
+  !n s fn fn' s'. supply_o1_inv ctx s fn /\
+    cfg_norm_iter_supply n s fn = (fn',s') ==>
+    MAP (\i. i.inst_opcode) (fn_entry_insts fn') =
+    MAP (\i. i.inst_opcode) (fn_entry_insts fn)
+Proof
+  Induct >- simp[cfg_norm_iter_supply_def] >>
+  rpt gen_tac >> strip_tac >>
+  Cases_on `cfg_norm_round_supply s fn` >> PairCases_on `r` >>
+  rename1 `cfg_norm_round_supply s fn = (fn1,changed,s1)` >>
+  `supply_o1_inv ctx s1 fn1` by metis_tac[cfg_norm_round_supply_o1_inv] >>
+  `MAP (\i. i.inst_opcode) (fn_entry_insts fn1) =
+   MAP (\i. i.inst_opcode) (fn_entry_insts fn)` by
+    metis_tac[cfg_norm_round_supply_entry_opcodes] >>
+  Cases_on `changed` >> gvs[cfg_norm_iter_supply_def] >> metis_tac[]
+QED
+
+(* Why it holds (intuition): each round rewrites blocks in place
+   (replace_block is a MAP), appends the split block at the end, and
+   changes only terminator labels and PHI operands, so the head block
+   keeps its opcode sequence. *)
+Theorem cfg_norm_function_supply_user_param_count:
+  supply_o1_inv ctx s fn /\ cfg_norm_function_supply s fn = (fn',s') ==>
+  LENGTH (fn_user_param_insts fn') = LENGTH (fn_user_param_insts fn)
+Proof
+  strip_tac >>
+  `supply_o1_inv ctx s' fn'` by
+    metis_tac[cfg_norm_function_supply_o1_inv] >>
+  `fn.fn_blocks <> [] /\ fn'.fn_blocks <> []` by
+    gvs[supply_o1_inv_def, o1_fn_shape_def, wf_function_def, fn_has_entry_def] >>
+  irule fn_user_param_count_entry_ops >> simp[] >>
+  `MAP (\i. i.inst_opcode) (fn_entry_insts fn') =
+   MAP (\i. i.inst_opcode) (fn_entry_insts fn)` by
+    (gvs[cfg_norm_function_supply_def] >>
+     metis_tac[cfg_norm_iter_supply_entry_opcodes]) >>
+  gvs[callLayoutDefsTheory.fn_entry_insts_def, entry_block_def,
+      listTheory.NULL_EQ]
+QED
+
 Theorem cfg_norm_step_contract:
   o1_step_contract_at 8 rpolicy (CFP_Simple VP_CFGNormalization)
 Proof
