@@ -216,16 +216,16 @@ Proof
        (ee with gas_obs := gas_explicit marks' u.vs_gas_readings)
        cs'' st3 u ee' (IntV i) off_op t' /\
      stmt_state_rel H ctx func cenv cx es s0` by
-    (qx_gen_tac `H` >> strip_tac >>
-     `valid_horizon cx st0 H ee.storage_trace` by
+    (qx_gen_tac `Hv` >> strip_tac >>
+     `valid_horizon cx st0 Hv ee.storage_trace` by
        (qpat_assum `(do r <- eval_expr cx off; read_result cx r od) _ = _`
           (mp_then (Pos last) mp_tac storage_trace_frame_prefix) >>
         simp[storage_trace_frame_bind_all, evaluate_storage_trace_frame,
              storage_trace_frame_read_result] >>
         strip_tac >>
-        qpat_x_assum `valid_horizon _ _ H ee'.storage_trace` mp_tac >>
+        qpat_x_assum `valid_horizon _ _ Hv ee'.storage_trace` mp_tac >>
         simp[valid_horizon_def]) >>
-     `valid_horizon cx st0 H es.storage_trace` by
+     `valid_horizon cx st0 Hv es.storage_trace` by
        (qpat_assum `gas_marked_exec _ _ _ (es,s0) _ _ _ _`
           (mp_tac o Q.SPEC `[]` o cj 1 o REWRITE_RULE [gas_marked_exec_def]) >>
         strip_tac >>
@@ -233,7 +233,7 @@ Proof
         simp[storage_trace_frame_bind_all, evaluate_storage_trace_frame,
              storage_trace_frame_read_result] >>
         strip_tac >>
-        qpat_x_assum `valid_horizon _ _ H ee.storage_trace` mp_tac >>
+        qpat_x_assum `valid_horizon _ _ Hv ee.storage_trace` mp_tac >>
         simp[valid_horizon_def]) >>
      simp[extract32_expr_post_end_gas_obs, extract32_expr_post_start_gas_obs]) >>
   qpat_assum `!H. valid_horizon _ _ H ee'.storage_trace ==>
@@ -277,11 +277,9 @@ Proof
   qexistsl_tac [`dp`, `ee with gas_obs := gas_explicit marks' u.vs_gas_readings`,
                 `len`, `m`, `off_op`, `p`, `raw`, `u`, `cs''`, `src_op`, `st4`] >>
   rpt conj_tac >> TRY (first_assum ACCEPT_TAC) >> TRY (simp_tac (srw_ss()) [] >> NO_TAC) >>
-  qpat_assum `!H. valid_horizon _ _ H ee'.storage_trace ==> _ /\ _ /\ _`
-    (fn th =>
-       let val (v,_) = dest_forall (concl th)
-           val th1 = SPEC v th
-           val (a,_) = dest_imp (concl th1)
-           val c = UNDISCH th1
-       in ACCEPT_TAC (GEN v (DISCH a (CONJ (CONJUNCT1 c) (CONJUNCT1 (CONJUNCT2 c))))) end)
+  qx_gen_tac `Hq` >> strip_tac >>
+  qpat_x_assum `!H. valid_horizon _ _ H ee'.storage_trace ==> _ /\ _ /\ _`
+    (qspec_then `Hq` mp_tac) >>
+  impl_tac >- first_assum ACCEPT_TAC >>
+  strip_tac >> conj_tac >> first_assum ACCEPT_TAC
 QED
