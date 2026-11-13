@@ -42,6 +42,9 @@ Proof
  rpt gen_tac >> strip_tac >>
  qspecl_then [`tops`, `NONE`, `"__init__"`] mp_tac classify_functions_ctor_lookup >>
  simp[] >> strip_tac >> gvs[] >>
+ qpat_assum `deploy_ctor_start _ _ _ _`
+   (strip_assume_tac o REWRITE_RULE [deploy_ctor_start_def]) >>
+ gvs[deploy_ctor_singleton_type_env] >>
  metis_tac[deploy_ctor_source_start_fields]
 QED
 
