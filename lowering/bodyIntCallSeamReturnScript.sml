@@ -62,7 +62,6 @@ QED
    caller's buffer, the frame's cleanup and the cast: the call's
    expr_vv_sim post, or an abort passed on.  Only the case where the
    callee's return type is the call's annotation. *)
-(* HELD (train 17): 0.5.0b1 arg snapshot re-proof *)
 Theorem intcall_return_restore_F:
   !tops ctx func cenv cx tenv ty ann name es dflt es0 sa sb vv s0
    mut args ret ss rr prev penv rtv es1 t rc rbs pvs.
@@ -101,7 +100,6 @@ Theorem intcall_return_restore_F:
          t'.vs_inst_idx = LENGTH sb.cs_current_insts)
       (\res ee r. expr_exit res r)
 Proof
-  (* original proof, kept while held:
   rpt strip_tac >>
   `post_value_type cenv (Call ann (IntCall (NONE,name)) es dflt) =
    expr_type (Call ann (IntCall (NONE,name)) es dflt)` by
@@ -174,16 +172,13 @@ Proof
   irule source_return_dispatch >> asm_rewrite_tac[] >>
   conj_tac >- simp[] >>
   reverse conj_tac >- (qexists_tac `es1` >> rpt conj_tac >> first_assum ACCEPT_TAC) >>
-  goal_assum (drule_at (Pat `compile_multi_vvs _ _ _ _ = _`)) >>
-  goal_assum (drule_at (Pat `compile_stage_intcall_args _ _ _ _ _ = _`)) >>
+  goal_assum (drule_at (Pat `compile_stage_intcall_args _ _ _ _ _ _ = _`)) >>
   goal_assum (drule_at (Pat `gas_path _ _ _ _ _`)) >>
   goal_assum (drule_at (Pat `state_rel _ _ _ _ _`)) >>
   qexistsl_tac [`arg_ops`,`ann`,`lbl`,`rc'`,`rc'`,`rbs`,`rbs`,`rtv`,`HD argv`] >>
   asm_rewrite_tac[] >> simp[NoAsms, expr_type_def] >>
   qpat_assum `rc' = returns_stack_count _ _` (fn th => rewrite_tac[GSYM th]) >>
   asm_rewrite_tac[]
-  *)
-  cheat
 QED
 
 
@@ -265,7 +260,6 @@ Proof
   metis_tac[arg_type_fits_bytestring_source]
 QED
 
-(* HELD (train 17): 0.5.0b1 arg snapshot re-proof *)
 Theorem intcall_return_widened_F:
   !tops ctx func cenv cx tenv ty ann name es dflt es0 sa sb vv s0
    mut args ret ss rr prev penv rtv es1 t rc rbs pvs.
@@ -304,7 +298,6 @@ Theorem intcall_return_widened_F:
          t'.vs_inst_idx = LENGTH sb.cs_current_insts)
       (\res ee r. expr_exit res r)
 Proof
-  (* original proof, kept while held:
   rpt strip_tac >>
   drule_all widened_call_return_type >> strip_tac >>
   `ret <> ann` by metis_tac[] >>
@@ -387,8 +380,7 @@ Proof
          |> SIMP_RULE (srw_ss()) [th])) >>
      rpt conj_tac >> TRY (first_assum ACCEPT_TAC) >>
      TRY (qexists_tac `es1` >> rpt conj_tac >> first_assum ACCEPT_TAC) >>
-     goal_assum (drule_at (Pat `compile_multi_vvs _ _ _ _ = _`)) >>
-     goal_assum (drule_at (Pat `compile_stage_intcall_args _ _ _ _ _ = _`)) >>
+     goal_assum (drule_at (Pat `compile_stage_intcall_args _ _ _ _ _ _ = _`)) >>
      goal_assum (drule_at (Pat `gas_path _ _ _ _ _`)) >>
      goal_assum (drule_at (Pat `state_rel _ _ _ _ _`)) >>
      qexistsl_tac [`lbl`,`rbs`,`rc'`,`HD argv`] >>
@@ -398,7 +390,8 @@ Proof
          POP_ASSUM_LIST (K ALL_TAC) >> strip_tac >>
          goal_assum (drule_at (Pat `compile_alloc_buffer _ _ = _`)) >>
          goal_assum (drule_at (Pat `FLOOKUP _ _ = SOME _`)) >>
-         metis_tac[])
+         rpt conj_tac >> rpt strip_tac >> fs[] >>
+         qexists_tac `inst` >> simp[])
      >- (qpat_assum `rc' = returns_stack_count _ _` (fn th => rewrite_tac[GSYM th]) >> simp[]) >>
      simp[]) >>
   pop_assum strip_assume_tac >>
@@ -427,8 +420,6 @@ Proof
   rpt conj_tac >> TRY (first_assum ACCEPT_TAC) >>
   qpat_assum `off < dimword (:256)` (fn th => simp[NoAsms, th]) >>
   first_assum ACCEPT_TAC
-  *)
-  cheat
 QED
 
 
