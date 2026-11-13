@@ -17,6 +17,8 @@ Ancestors
   tupleWidenedPrefixPtr countedPtrLoop
   assignDynStorageRoundPtr assignTupleDynamicStoragePtr
   assignDynStorageCompiledPtr
+  tupleUnstagedParts tupleWidenedMarkedReadPtr
+  tupleWidenedEntryPtr
   bodyPtrPreds bodyPtrDefs bodySim exprSimHyps supportedStmts supportedDecls
   stmtLowering exprLowering compileEnv vyperAST vyperInterpreter vyperState
   vyperTypeSystem list finite_map
