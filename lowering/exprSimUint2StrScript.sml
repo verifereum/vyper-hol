@@ -2899,7 +2899,7 @@ Proof
   irule expr_sim_suffix >>
   first_assum (irule_at (Pat `expr_sim _ _ _ _ _ _ _`)) >>
   first_assum (irule_at (Pat `lower_value _ _ _ _ _ = _`)) >>
-  simp[] >> conj_tac
+  simp[vyperStorageTraceTheory.storage_trace_frame_def] >> conj_tac
   >- (rpt strip_tac >> Cases_on `exc` >> Cases_on `r` >> gvs[expr_exit_def] >>
       rename1 `Error err` >> Cases_on `err` >> gvs[expr_exit_def]) >>
   rpt strip_tac >>
