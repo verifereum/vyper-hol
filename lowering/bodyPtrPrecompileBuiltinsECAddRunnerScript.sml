@@ -203,8 +203,10 @@ Resume ecadd_expr_vv_sim_ptr[tail_outcome]:
   `ee' with gas_obs := [] = ee'` by
     simp[vyperStateTheory.evaluation_state_component_equality] >>
   `fin with gas_obs := [] = fin` by
-    (drule ec_source_tail_gas_obs >> disch_then (qspec_then `[]` mp_tac) >>
-     simp[] >> gvs[]) >>
+    (qpat_assum `ec_source_tail _ _ _ _ _ ee' = _`
+       (mp_then Any (qspec_then `[]` mp_tac) ec_source_tail_gas_obs) >>
+     qpat_assum `ee' with gas_obs := [] = ee'` (fn eq => rewrite_tac [eq]) >>
+     strip_tac >> gvs[]) >>
   irule ec_source_tail_pointer_outcome >>
   goal_assum (drule_at Any) >> goal_assum (drule_at Any) >>
   simp[] >>

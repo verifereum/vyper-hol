@@ -709,7 +709,7 @@ Proof
       `src <> Var tmp /\ p <> tmp` by metis_tac[] >>
       `s.vs_current_bb = sx.cs_current_bb /\
        s.vs_inst_idx = LENGTH sx.cs_current_insts` by simp[] >>
-      drule_all (SIMP_RULE bool_ss [PULL_EXISTS] alloc_copy_memory_framed_path) >>
+      drule_all (SIMP_RULE bool_ss [PULL_EXISTS] alloc_copy_memory_framed_bounded_path) >>
       disch_then
         (qx_choosel_then [`u`, `uw`] strip_assume_tac) >>
       qpat_assum `!H. _ ==> stmt_state_rel _ _ _ _ _ _ u`

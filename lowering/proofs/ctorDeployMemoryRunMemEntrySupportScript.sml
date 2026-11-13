@@ -3,34 +3,46 @@ Ancestors
   compileVyper supportedProgram supportedDecls list ctorSourceInputs
   ctorDeployMemoryRunMemEntryFormalBound ctorDeployMemoryRunMemEntryAggregate
 
-Theorem ctor_classified_constructor_member:
+Triviality foldr_classify_ctor_member:
   !tops exts ints fb mut nr rr fname fargs dflts ret body.
-  classify_functions tops =
+  FOLDR classify_function ([],[],NONE,NONE) tops =
     (exts,ints,fb,SOME (mut,nr,rr,fname,fargs,dflts,ret,body)) ==>
   MEM (FunctionDecl Deploy mut nr rr fname fargs dflts ret body) tops
 Proof
-  Induct_on `tops` >- simp[classify_functions_def] >>
+  Induct_on `tops` >- simp[] >>
   rpt gen_tac >>
-  Cases_on `classify_functions tops` >>
+  Cases_on `FOLDR classify_function ([],[],NONE,NONE) tops` >>
   PairCases_on `r` >>
-  fs[classify_functions_def] >>
   Cases_on `h` >> simp[classify_function_def] >>
   rpt strip_tac >> gvs[] >> Cases_on `f` >>
   gvs[AllCaseEqs()] >> metis_tac[]
 QED
 
+Theorem ctor_classified_constructor_member:
+  !tops exts ints fb mut nr rr fname fargs dflts ret body.
+  classify_functions tops =
+    (exts,ints,fb,SOME (mut,nr,rr,fname,fargs,dflts,ret,body)) ==>
+  ?dflts0 body0.
+    MEM (FunctionDecl Deploy mut nr rr fname fargs dflts0 ret body0) tops
+Proof
+  rpt gen_tac >> simp[classify_functions_def] >>
+  Cases_on `FOLDR classify_function ([],[],NONE,NONE) tops` >>
+  PairCases_on `r` >> simp[] >>
+  strip_tac >> gvs[] >> PairCases_on `z` >>
+  gvs[constSubstTheory.subst_consts_fn_def] >>
+  drule foldr_classify_ctor_member >> metis_tac[]
+QED
+
 Theorem ctor_classified_constructor_supported:
   !tops exts ints fb mut nr rr fname fargs dflts ret body.
-  supported_program tops /\
+  supported_program tops /\ supported_program_deploy tops /\
   classify_functions tops =
     (exts,ints,fb,SOME (mut,nr,rr,fname,fargs,dflts,ret,body)) ==>
   EVERY (supported_value_type tops) (MAP SND fargs)
 Proof
-  rpt gen_tac >> strip_tac >> drule ctor_classified_constructor_member >> strip_tac >>
-  drule_all supported_program_declaration >>
-  simp[supported_function_header_contract] >>
-  simp[EVERY_MEM, MEM_MAP, PULL_EXISTS, combinTheory.o_DEF,
-    supported_function_argument_def] >> metis_tac[]
+  rpt gen_tac >> strip_tac >> drule ctor_classified_constructor_member >>
+  strip_tac >> drule_all supported_program_deploy_function >>
+  simp[combinTheory.o_DEF, EVERY_MAP]
 QED
 
 Theorem constructor_bound_abi_inputs:

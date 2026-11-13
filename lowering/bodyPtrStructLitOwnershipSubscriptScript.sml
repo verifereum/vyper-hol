@@ -1,7 +1,8 @@
 Theory bodyPtrStructLitOwnershipSubscript
 Ancestors bodyPtrStructLitOwnershipSubscriptTails bodyPtrStructLitOwnershipInterfaces
   bodyPtrStructLitOwnershipMemory bodyPtrStructLitOwnershipFreshness
-  bodyPtrStructLitOwnershipStructFrame bodyPtrStructLitOwnershipSteps
+  bodyPtrStructLitOwnershipStructFrame bodyPtrStructLitOwnershipCallFrames
+  bodyPtrStructLitOwnershipSteps
   loweringShapeDefs loweringShapeProps exprLowering compileEnv context
 
 Theorem alloc_run_compile_subscript:
@@ -18,9 +19,28 @@ Theorem alloc_run_compile_subscript:
 Proof
   strip_tac >> simp[compile_subscript_def] >>
   irule alloc_run_bind >>
-  qexists `\v s. shape_state s /\ cenv_shape_ok s ce` >> reverse conj_tac
+  qexists `\v s. shape_state s /\ cenv_shape_ok s ce /\ value_shape_ok s v` >>
+  reverse conj_tac
   >- (irule alloc_run_conseq >> irule_at Any alloc_run_struct_child_frame >>
       qexistsl [`internal`, `ce`, `\s. T`] >> simp[shape_stable_def]) >>
+  qx_gen_tac `base_vv0` >> simp[] >>
+  irule alloc_run_bind >>
+  qexists `\v s. shape_state s /\ cenv_shape_ok s ce` >> reverse conj_tac
+  >- (reverse (Cases_on `copies_subscript_base ce base_e idx_e`) >> simp[]
+      >- simp[comp_return_def, alloc_run_def, alloc_frame_refl] >>
+      simp[compile_snapshot_vv_def] >>
+      Cases_on `is_word_type (vv_type base_vv0)` >> simp[]
+      >- (irule alloc_run_bind >>
+          qexists `\v s. shape_state s /\ cenv_shape_ok s ce` >> reverse conj_tac
+          >- (irule alloc_run_conseq >> irule_at Any alloc_run_unwrap_value_frame >>
+              qexists `\s. cenv_shape_ok s ce` >> simp[cenv_shape_ok_stable]) >>
+          simp[comp_return_def, alloc_run_def, alloc_frame_refl]) >>
+      irule alloc_run_bind >>
+      qexists `\v s. shape_state s /\ cenv_shape_ok s ce` >> reverse conj_tac
+      >- (irule alloc_run_conseq >>
+          irule_at Any alloc_run_compile_materialize_vv_frame >>
+          qexists `\s. T` >> simp[shape_stable_def]) >>
+      simp[comp_return_def, alloc_run_def, alloc_frame_refl]) >>
   qx_gen_tac `base_vv` >> simp[] >> Cases_on `place_type ce base_e`
   >- suspend "map" >> suspend "value"
 QED
