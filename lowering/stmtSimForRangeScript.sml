@@ -133,7 +133,7 @@ Proof
   disch_then (qspec_then `gs` mp_tac) >> simp[bind_def]
 QED
 
-Theorem forced_endpoint_error_cert:
+Theorem forced_endpoint_error_cert[local]:
   !memory tops ctx func cx e next es s0 marks err ee leaf finish.
   gas_exempt_cert memory tops (ctx,func)
     (ignore_bind (bind (eval_expr cx e) (read_result cx)) (return ()))
@@ -161,7 +161,7 @@ Proof
   first_x_assum (qspec_then `[]` mp_tac) >> simp[]
 QED
 
-Theorem forced_endpoint_tail_cert:
+Theorem forced_endpoint_tail_cert[local]:
   !memory tops ctx func cx e next es s0 left v mid t right err ee leaf finish.
   gas_marked_exec memory (ctx,func)
     (bind (eval_expr cx e) (read_result cx))

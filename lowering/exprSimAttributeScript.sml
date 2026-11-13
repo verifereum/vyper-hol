@@ -467,7 +467,7 @@ Proof
   >~ [`vv_at _ _ _ _ _ _ _ (LocatedValue _ _) _`]
   >- (simp[expr_type_def] >> irule attr_vv_at_field >> simp[] >>
       (conj_tac
-      >- (qexistsl_tac [`ctx`, `func`] >> first_assum ACCEPT_TAC) >>
+      >- (qexistsl_tac [`H`, `ctx`, `func`] >> first_assum ACCEPT_TAC) >>
       qexistsl_tac [`fld`, `fs`, `sid`, `tv`, `vals`] >>
       rpt conj_tac >> TRY (first_assum ACCEPT_TAC) >> simp[]))
   >~ [`storage_read_live`]
