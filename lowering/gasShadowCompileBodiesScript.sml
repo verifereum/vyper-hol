@@ -132,7 +132,8 @@ Proof
     by (Cases_on `sh` >> simp[MAP_MAP_o, combinTheory.o_DEF, ETA_THM]) >>
   `MAP (lowered_value_type cenv) (if sh then MAP gas_shadow_expr args else args) =
    MAP (lowered_value_type cenv) args`
-    by (Cases_on `sh` >> simp[MAP_MAP_o, combinTheory.o_DEF, ETA_THM]) >>
+    by (Cases_on `sh` >>
+        simp[MAP_MAP_o, MAP_EQ_f, combinTheory.o_DEF, gas_shadow_lowered_value_type]) >>
   `LENGTH (if sh then MAP gas_shadow_expr args else args) = LENGTH args`
     by (Cases_on `sh` >> simp[]) >>
   qspecl_then [`args`, `sh`] (qx_choose_then `selected` assume_tac)
