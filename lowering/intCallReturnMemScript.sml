@@ -29,15 +29,15 @@ Ancestors
    epilogue-aware intret_q (zero stack words when ce_returns_count = 0),
    with the returned value in the caller's buffer at address buf. *)
 Definition intret_mem_q_def:
-  intret_mem_q func cenv cx ret_tv (buf:bytes32) v
+  intret_mem_q H func cenv cx ret_tv (buf:bytes32) v
                (es : evaluation_state) r <=>
-    intret_q func cenv cx ret_tv v es r /\
+    intret_q H func cenv cx ret_tv v es r /\
     ?ir s. r = IntRet ir s /\ val_in_memory ret_tv v (w2n buf) s.vs_memory
 End
 
 Theorem intret_mem_q_gas_obs:
-  intret_mem_q func cenv cx ret_tv buf v (es with gas_obs := readings) r =
-  intret_mem_q func cenv cx ret_tv buf v es r
+  intret_mem_q H func cenv cx ret_tv buf v (es with gas_obs := readings) r =
+  intret_mem_q H func cenv cx ret_tv buf v es r
 Proof
   simp[intret_mem_q_def, intret_q_gas_obs]
 QED
@@ -233,7 +233,7 @@ Theorem compile_internal_return_memory_frag:
            eval_operand buf_op s = SOME bw /\
            ?pc. eval_operand rpc s = SOME pc)
       (\s. F)
-      (intret_mem_q func cenv cx tv bw v (es with scopes := []))
+      (intret_mem_q H func cenv cx tv bw v (es with scopes := []))
 Proof
   rpt gen_tac >> strip_tac >>
   simp[frag_exec_def] >> rpt strip_tac >>
@@ -309,14 +309,14 @@ Resume compile_internal_return_memory_frag[fragments]:
   `cs_extends sm sb` by (irule cs_extends_emit_inst >> metis_tac[]) >>
   `frag_exec ctx sa su (\s. s = s0)
      (\s. s = return_unlock_state cenv s0)
-     (intret_mem_q func cenv cx tv bw v (es with scopes := []))` by
+     (intret_mem_q H func cenv cx tv bw v (es with scopes := []))` by
     (irule frag_exec_conseq >>
      qexistsl_tac [`\s. s = s0`, `\s. s = return_unlock_state cenv s0`,
                    `\r. F`] >> simp[] >>
      irule compile_return_unlock_frag >> simp[]) >>
   `frag_exec ctx su sm (\s. s = return_unlock_state cenv s0)
      (\s. s = return_unlock_state cenv pre)
-     (intret_mem_q func cenv cx tv bw v (es with scopes := []))` by
+     (intret_mem_q H func cenv cx tv bw v (es with scopes := []))` by
     (irule frag_exec_run_inst_seq >>
      fs[same_blocks_def, IS_PREFIX_APPEND] >>
      qpat_x_assum `t with vs_inst_idx := _ = _` mp_tac >> simp[]) >>
@@ -327,14 +327,14 @@ Resume compile_internal_return_memory_frag[fragments]:
     (qpat_x_assum `t with vs_inst_idx := _ = _`
        (mp_tac o AP_TERM ``eval_operand rpc``) >> simp[eval_op_inst_idx]) >>
   `frag_exec ctx sm sb (\s. s = return_unlock_state cenv pre) (\s. F)
-     (intret_mem_q func cenv cx tv bw v (es with scopes := []))` by
+     (intret_mem_q H func cenv cx tv bw v (es with scopes := []))` by
     (irule emit_ret_pc_frag >> qexists_tac `rpc` >> simp[] >>
      simp[intret_mem_q_def, intret_q_def, result_rel_def,
           intret_vals_match_def] >>
      conj_tac >- (qexists_tac `pre` >> fs[stmt_state_rel_def]) >>
      simp[Abbr `pre`]) >>
   `frag_exec ctx sa sb (\s. s = s0) (\s. F)
-     (intret_mem_q func cenv cx tv bw v (es with scopes := []))` by
+     (intret_mem_q H func cenv cx tv bw v (es with scopes := []))` by
     (irule frag_exec_seq >>
      qexistsl_tac [`\s. s = return_unlock_state cenv pre`, `sm`] >> simp[] >>
      conj_tac >- metis_tac[cs_extends_trans] >>
