@@ -199,10 +199,10 @@ Proof
     reason_head_run_mem >>
   impl_tac
   >- (rpt conj_tac >> TRY (first_assum ACCEPT_TAC)
-      >- (qspecl_then [`ctx`, `func`, `cenv`, `cx`, `ee`, `t`, `id0`,
+      >- (qspecl_then [`H`, `ctx`, `func`, `cenv`, `cx`, `ee`, `t`, `id0`,
             `64 + Z`, `["%" ++ toString v0]`] mp_tac state_rel_site_size >>
           simp[]) >>
-      qspecl_then [`ctx`, `func`, `cenv`, `cx`, `ee`, `t`, `id0 + 3`,
+      qspecl_then [`H`, `ctx`, `func`, `cenv`, `cx`, `ee`, `t`, `id0 + 3`,
         `Z`, `["%" ++ toString (v0 + 2)]`] mp_tac state_rel_site_size >>
       simp[]) >>
   disch_then (qx_choosel_then [`B`, `TP`] strip_assume_tac) >>
@@ -218,7 +218,7 @@ Proof
       rpt gen_tac >> strip_tac >>
       `FLOOKUP t.vs_allocas (id0 + 4) = SOME (b, m)` by metis_tac[] >>
       `m = Z` by
-        (qspecl_then [`ctx`, `func`, `cenv`, `cx`, `ee`, `t`, `id0 + 4`,
+        (qspecl_then [`H`, `ctx`, `func`, `cenv`, `cx`, `ee`, `t`, `id0 + 4`,
            `Z`, `[out]`] mp_tac state_rel_site_size >>
          impl_tac >- fs[Abbr `allocI`] >>
          disch_then drule >> simp[]) >>
@@ -357,7 +357,7 @@ Proof
     (rpt gen_tac >> strip_tac >>
      `FLOOKUP t.vs_allocas (j + 6) = SOME (z, m)` by metis_tac[] >>
      `m = 32` by
-       (qspecl_then [`ctx`, `func`, `cenv`, `cx`, `ee`, `t`, `j + 6`, `32`,
+       (qspecl_then [`H`, `ctx`, `func`, `cenv`, `cx`, `ee`, `t`, `j + 6`, `32`,
           `["%" ++ toString (u0 + 5)]`] mp_tac state_rel_site_size >>
         impl_tac >- (asm_rewrite_tac[] >> simp[]) >>
         disch_then drule >> simp[]) >>
@@ -367,7 +367,7 @@ Proof
         >- (`t.vs_alloca_next <= TP` by metis_tac[] >> decide_tac) >>
         `TP = FST x` by metis_tac[] >> PairCases_on `x` >>
         `x1 = Z` by
-          (qspecl_then [`ctx`, `func`, `cenv`, `cx`, `ee`, `t`, `id0 + 3`,
+          (qspecl_then [`H`, `ctx`, `func`, `cenv`, `cx`, `ee`, `t`, `id0 + 3`,
              `Z`, `["%" ++ toString (v0 + 2)]`] mp_tac state_rel_site_size >>
            impl_tac >- (asm_rewrite_tac[] >> simp[]) >>
            disch_then drule >> simp[]) >>

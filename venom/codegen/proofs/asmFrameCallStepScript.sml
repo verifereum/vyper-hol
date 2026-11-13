@@ -11,6 +11,7 @@
 
 Theory asmFrameCallStep
 Ancestors
+  vfmWfState
   evmCreationGuard frameCreationGuard asmFrameRel frameObsStep evmStepSim asmCallOracleProps asmDataSuffixProps
   codegenRel asmSem asmWf symbolResolve extCallOracle callTrace frameOutcome
   vfmExecution vfmExecutionProp vfmRunCall vfmRunWithinFrame vfmContextLength vfmDecreasesGas
@@ -737,7 +738,7 @@ Proof
      fs[vfmConstantsTheory.call_stipend_def, vfmConstantsTheory.call_value_cost_def]) >>
   PairCases_on `cg` >>
   qpat_x_assum `(_,_) = call_gas _ _ _ _ _` (assume_tac o SYM) >>
-  drule_all vfmRunCallTheory.call_gas_stipend_le_consumed >> simp[]
+  drule_all vfmWfStateTheory.call_gas_stipend_le_consumed >> simp[]
 QED
 
 Theorem asm_call_unused_gas_le_paid:
@@ -1097,8 +1098,8 @@ Theorem asm_proceed_call_memory_boundary:
 Proof
   strip_tac >>
   `s.contexts <> []` by simp[] >>
-  drule_all vfmRunCallTheory.proceed_call_push_structure >> strip_tac >>
-  drule vfmRunCallTheory.proceed_call_parent_gas_ok >>
+  drule_all vfmWfStateTheory.proceed_call_push_structure >> strip_tac >>
+  drule vfmWfStateTheory.proceed_call_parent_gas_ok >>
   disch_then (qspec_then `0` mp_tac) >> simp[] >> strip_tac >>
   Cases_on `t.contexts` >- fs[] >>
   PairCases_on `h` >> gvs[]
@@ -1408,7 +1409,8 @@ Theorem asm_step_oog_starved:
   step s = handle_step (SOME OutOfGas) t /\
   t.contexts = (c with stack := DROP n c.stack,rb)::rest /\
   t.txParams = s.txParams ==>
-  ?r s'. run_call s = SOME (r,s') /\ frame_resource_starved s r s'
+  ?r s'. run_call s = SOME (r,s') /\ frame_resource_starved s r s' /\
+         call_requests s = []
 Proof
   pure_rewrite_tac[GSYM AND_IMP_INTRO] >> rpt disch_tac >>
   `c.gasUsed <= c.msgParams.gasLimit` by
@@ -1434,8 +1436,10 @@ Resume asm_step_oog_starved[single]:
   `step s = (INR (SOME OutOfGas), t with contexts :=
     [(popped with <|gasUsed := popped.msgParams.gasLimit; returnData := []|>,rb)])`
     by metis_tac[] >>
+  `call_trace s = []` by
+    (drule frame_obs_terminal >> asm_simp_tac (srw_ss()) []) >>
   drule asm_run_call_stops_after_step >> simp[] >> strip_tac >>
-  simp[frame_resource_starved_def, frame_outcome_def] >>
+  simp[frame_resource_starved_def, frame_outcome_def, call_requests_def] >>
   qexistsl_tac [`OutOfGas`, `[]`, `[]`] >> simp[]
 QED
 
@@ -1444,8 +1448,10 @@ Resume asm_step_oog_starved[nested]:
       (h0 with <|pc := SUC h0.pc; stack := 0w::h0.stack; returnData := [];
         memory := buffer_write mr.offset [] h0.memory|>,h1)::t'; rollback := rb|>)`
     by simp[] >>
+  `call_trace s = []` by
+    (drule frame_obs_terminal >> asm_simp_tac (srw_ss()) []) >>
   drule asm_run_call_stops_after_step >> simp[] >> strip_tac >>
-  simp[frame_resource_starved_def, frame_outcome_def] >>
+  simp[frame_resource_starved_def, frame_outcome_def, call_requests_def] >>
   metis_tac[]
 QED
 Finalise asm_step_oog_starved
@@ -1457,7 +1463,8 @@ Theorem asm_call_prepare_failure_starved:
   6 + (if call_has_value op then 1 else 0) <= LENGTH c.stack /\
   (rest = [] \/ (?mr. c.msgParams.outputTo = Memory mr)) /\
   asm_call_prepare op s = (INR e,t) ==>
-  ?r s'. run_call s = SOME (r,s') /\ frame_resource_starved s r s'
+  ?r s'. run_call s = SOME (r,s') /\ frame_resource_starved s r s' /\
+         call_requests s = []
 Proof
   pure_rewrite_tac[GSYM AND_IMP_INTRO] >> rpt disch_tac >>
   drule_all asm_call_prepare_failure_step >> disch_tac >>
@@ -1471,7 +1478,8 @@ Theorem asm_frame_call_prepare_failure_starved:
   6 + (if call_has_value op then 1 else 0) <= LENGTH c.stack /\
   (rest = [] \/ (?mr. c.msgParams.outputTo = Memory mr)) /\
   asm_call_prepare op s = (INR e,t) ==>
-  ?r s'. run_call s = SOME (r,s') /\ frame_resource_starved es0 r s'
+  ?r s'. run_call s = SOME (r,s') /\ frame_resource_starved es0 r s' /\
+         call_requests s = []
 Proof
   pure_rewrite_tac[GSYM AND_IMP_INTRO] >> rpt disch_tac >>
   qpat_x_assum `asm_frame_rel _ _ _ _ _` mp_tac >>

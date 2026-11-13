@@ -2,7 +2,7 @@ Theory concretizePtrPairedFields
 Ancestors
   concretizePtrStructuralTranscript concretizePtrValueSelection
   concretizePtrPrefixLedger concretizePtrStagePlacements concretizePtrBytes
-  concretizeStepStructure concretizeStepShape concretizeStepCallChecks
+  concretizeStepStructure concretizeStepShape
   concretizeStepRetpc concretizeStageShape concretizeStepContract
   concretizePtrOpaqueRetpc
   list rich_list arithmetic pair pred_set

@@ -45,7 +45,8 @@ Proof
 QED
 
 Theorem entry_source_scalar_metadata:
-  supported_scalar_type ty /\ entry_source_metadata ce env sf ty tv di av v ==>
+  entry_abi_leaf ty /\ ty <> BaseT (BytesT (Fixed 0)) /\
+  entry_source_metadata ce env sf ty tv di av v ==>
   entry_descending_metadata ce env sf ty tv di av v
 Proof
   simp_tac bool_ss [entry_source_metadata_def, entry_descending_metadata_def] >>
@@ -54,7 +55,7 @@ Proof
 QED
 
 Theorem entry_source_scalar_producer_bridge:
-  supported_scalar_type ty /\
+  entry_abi_leaf ty /\ ty <> BaseT (BytesT (Fixed 0)) /\
   entry_descending_certified_child_producer cert ce env sf ty tv av v
     ctx fn oid root extent ambient b cap site limit_st ==>
   entry_source_certified_child_producer cert ce env sf ty tv av v
@@ -65,14 +66,4 @@ Proof
   rpt strip_tac >> first_x_assum irule >>
   goal_assum (drule_at Any) >> simp[] >>
   metis_tac[entry_source_scalar_metadata]
-QED
-
-(* Flags are outside entry_abi_support, rather than an aggregate bridge. *)
-Theorem entry_source_flag_metadata_excluded:
-  ~entry_source_metadata ce env sf (FlagT nsid) tv di av v
-Proof
-  simp_tac bool_ss [entry_source_metadata_def] >>
-  once_rewrite_tac[entry_abi_support_cases] >>
-  simp[supported_scalar_type_def, supported_word_type_def,
-       supported_string_type_def]
 QED

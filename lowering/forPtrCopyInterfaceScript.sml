@@ -4,16 +4,6 @@
 Theory forPtrCopyInterface
 Ancestors stmtLowering context supportedStmts
 
-Theorem for_supported_array_element_type:
-  supported_stmt tops bindings (For id ty (Array e) n ss) ==>
-  ?name. e = Name (ArrayT ty (Fixed n)) name
-Proof
-  simp[supported_stmt_def, supported_iterator_def] >>
-  Cases_on `e` >> simp[] >> rpt strip_tac >> gvs[] >>
-  Cases_on `t` >> gvs[] >> rename1 `_ /\ bound = Fixed n` >>
-  Cases_on `bound` >> gvs[]
-QED
-
 Theorem for_memory_element_copy_dispatch:
   compile_iter_elem_copy cenv src dst bytes LocMemory F ty ty =
   if is_word_type ty then

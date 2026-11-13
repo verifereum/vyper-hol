@@ -2,7 +2,7 @@
  * Seam of bodyPtrSubscript's subscript_expr_ptr_ok: a subscript of a
  * mapping whose value is not a mapping, given the base's mapping judgment
  * (bodyPtrSubscriptMapDefs' expr_map_sim_ptr), which
- * bodyPtrSubscriptMapResidual supplies.
+ * body_expr_ptr_ok's mapping clause supplies.
  *
  * TOP-LEVEL:
  *   subscript_map_ptr

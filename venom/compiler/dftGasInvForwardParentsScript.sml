@@ -1,7 +1,7 @@
 Theory dftGasInvForwardParents
 Ancestors
   dftGasInvForwardResidual dftGasInvForwardEffects dftDefs
-  contextCodegenRel venomEffects venomInst venomWf dftCallChecks
+  contextCodegenRel venomEffects venomInst venomWf
   dftScheduleOrder passSharedDefs list rich_list
 
 Theorem inv_forward_copy_not_entry:

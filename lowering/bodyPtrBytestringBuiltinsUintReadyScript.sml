@@ -23,7 +23,7 @@ Theorem u2s_alloc_concrete_ptr:
     G1 = step_prov PG G inst sr /\ tn1 = step_taint inst s sr tn /\
     gas_path_ptr_edge D 0 ctx fn PG G tn s 0 G1 tn1
       (OK (sr with vs_inst_idx := SUC s.vs_inst_idx)) /\
-    u2s_safe ctx fn cenv cx es a (Var p) b sz inst sr sr /\
+    u2s_safe H ctx fn cenv cx es a (Var p) b sz inst sr sr /\
     ghost_inv H d cenv cx es G1 tn1 sr /\ ghost_kept cenv es sa G tn s G1 tn1 /\
     FLOOKUP G1 p = SOME (b,sz) /\ lookup_var p sr = SOME (n2w b) /\
     op_taint tn1 (Var p) = {} /\ b+sz < dimword(:256) /\
@@ -118,7 +118,7 @@ Theorem u2s_alloc_ready_ptr:
     inst = mk_inst sa.cs_next_id ALLOCA [Lit (n2w sz)] [p] /\
     ready = sr with vs_inst_idx := LENGTH a.cs_current_insts /\
     gas_path_ptr D 0 ctx fn PG G tn s 0 G1 tn1 (OK ready) /\
-    u2s_safe ctx fn cenv cx es a (Var p) b sz inst sr ready /\
+    u2s_safe H ctx fn cenv cx es a (Var p) b sz inst sr ready /\
     ghost_inv H d cenv cx es G1 tn1 ready /\ ghost_kept cenv es sa G tn s G1 tn1 /\
     FLOOKUP G1 p = SOME (b,sz) /\ lookup_var p ready = SOME (n2w b) /\
     op_taint tn1 (Var p) = {} /\ b+sz < dimword(:256) /\
@@ -135,7 +135,7 @@ Theorem u2s_alloc_ready_ptr:
     lookup_block a.cs_current_bb fn.fn_blocks = SOME
       <|bb_label := a.cs_current_bb;
         bb_instructions := a.cs_current_insts ++ u2s_setup a op (Var p)|> /\
-    (!out. u2s_safe ctx fn cenv cx es a (Var p) b sz inst sr out ==>
+    (!out. u2s_safe H ctx fn cenv cx es a (Var p) b sz inst sr out ==>
       stmt_state_rel H ctx fn cenv cx es out /\ wb_frame cenv es es sa s out /\
       FLOOKUP out.vs_allocas sa.cs_next_id = SOME (b,sz) /\
       pure_frame cenv fn es sa s out)

@@ -21,6 +21,11 @@ Proof
   Cases_on `topt`
   >- (drule compile_tuple_literal_inv >> strip_tac >>
       drule make_tuple_evaluated_layout >> strip_tac >>
+      qpat_assum `ann = _` (fn th =>
+        qpat_x_assum `compile_alloc_buffer _ _ = _`
+          (assume_tac o SIMP_RULE (srw_ss()) [th, tuple_literal_types_def]) >>
+        qpat_x_assum `compile_make_tuple _ _ _ _ _ _ _ = _`
+          (assume_tac o SIMP_RULE (srw_ss()) [th, tuple_literal_types_def])) >>
       `ci_mono sa sm /\ ci_mono sm sb` by
         metis_tac[ci_mono_compile_alloc_buffer, ci_mono_compile_make_tuple_cfn,
                   compile_expr_ci_mono, pairTheory.SND] >>
@@ -51,9 +56,10 @@ Proof
          disch_then (drule_at (Pat `stmt_state_rel H _ _ _ _ _ t`)) >>
          disch_then (qspec_then `type_memory_size_list tvs` mp_tac) >>
          gvs[] >> metis_tac[]) >>
-      qpat_x_assum `compile_make_tuple _ _ _ _ _ _ = _` mp_tac >>
+      qpat_x_assum `compile_make_tuple _ _ _ _ _ _ _ = _` mp_tac >>
       asm_rewrite_tac[] >> strip_tac >>
-      drule aggregate_body_make_tuple_sim >>
+      drule aggregate_body_make_tuple_fits_sim >>
+      disch_then (drule_at (Pat `LIST_REL _ _ _`)) >>
       disch_then (drule_at (Pat `OPT_MMAP _ _ = _`)) >>
       disch_then (drule_at (Pat `stmt_state_rel H _ _ _ _ _ t`)) >>
       disch_then (qspec_then `env` mp_tac) >> simp[] >>
@@ -77,7 +83,7 @@ QED
 
 Resume compile_make_array_body_vv_case[tuple_post]:
   qmatch_goalsub_abbrev_tac `vv_post H _ _ _ _ e` >>
-  `TupleT (MAP expr_type args) = expr_type e` by
+  `TupleT tys = expr_type e` by
     simp[Abbr `e`, vyperASTTheory.expr_type_def] >>
   pop_assum SUBST1_TAC >> irule buffer_loop_memory_vv_post >>
   simp[Abbr `e`, vyperASTTheory.expr_type_def, post_value_type_def, is_word_type_def,
@@ -109,7 +115,7 @@ Resume compile_make_array_body_vv_case[tuple_post]:
   `val_wf (TupleTV tvs) (ArrayV (TupleV vs))` suffices_by
     (strip_tac >> simp[] >> drule val_footprint_le >>
      simp[valueEncodingTheory.type_memory_size_def]) >>
-  `eval_expr cx (Builtin (TupleT (MAP expr_type args)) (MakeArray NONE bnd) args)
+  `eval_expr cx (Builtin (TupleT tys) (MakeArray NONE bnd) args)
     (es with gas_obs := gs) = (INL (Value (ArrayV (TupleV vs))),ee)` by
     simp[bind_def, return_def] >>
   irule aggregate_materialised_child_wf >>

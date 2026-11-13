@@ -140,36 +140,3 @@ Proof
   simp[compile_load_memory_def, comp_return_def, alloc_run_def, alloc_frame_refl]
 QED
 
-Theorem alloc_run_compile_store_storage:
-  alloc_run fresh_outputs (compile_store_storage src slot prim words)
-    (\u st. fresh_outputs st)
-Proof
-  Cases_on `prim` >> Cases_on `words = 1` >>
-  simp[compile_store_storage_def, comp_ignore_bind_def,
-       alloc_run_emit_void_fresh] >>
-  irule alloc_run_bind >> qexists `\v st. fresh_outputs st` >>
-  reverse conj_tac
-  >- simp[SF ETA_ss, SRULE [SF ETA_ss] alloc_run_emit_op_fresh,
-         SRULE [SF ETA_ss] alloc_run_compile_memory_to_storage] >>
-  simp[SF ETA_ss, SRULE [SF ETA_ss] alloc_run_emit_void_fresh,
-       SRULE [SF ETA_ss] alloc_run_compile_memory_to_storage,
-       SRULE [SF ETA_ss] alloc_run_compile_memory_to_transient] >>
-  simp[comp_return_def, alloc_run_def, alloc_frame_refl]
-QED
-
-Theorem alloc_run_compile_store_transient:
-  alloc_run fresh_outputs (compile_store_transient src slot prim words)
-    (\u st. fresh_outputs st)
-Proof
-  Cases_on `prim` >> Cases_on `words = 1` >>
-  simp[compile_store_transient_def, comp_ignore_bind_def,
-       alloc_run_emit_void_fresh] >>
-  irule alloc_run_bind >> qexists `\v st. fresh_outputs st` >>
-  reverse conj_tac
-  >- simp[SF ETA_ss, SRULE [SF ETA_ss] alloc_run_emit_op_fresh,
-         SRULE [SF ETA_ss] alloc_run_compile_memory_to_transient] >>
-  simp[SF ETA_ss, SRULE [SF ETA_ss] alloc_run_emit_void_fresh,
-       SRULE [SF ETA_ss] alloc_run_compile_memory_to_storage,
-       SRULE [SF ETA_ss] alloc_run_compile_memory_to_transient] >>
-  simp[comp_return_def, alloc_run_def, alloc_frame_refl]
-QED

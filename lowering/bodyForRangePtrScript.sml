@@ -53,9 +53,11 @@ Resume body_for_range_lit_ptr[facts]:
     (strip_tac >>
      qpat_x_assum `!tenv s'' tyv t s3 vs t' s4 x t''. _`
        (qspecl_then [`get_tenv cx`, `es`, `tyv`, `es`, `es`,
-         `GENLIST (\j. IntV (n1 + &j)) (Num (n2 - n1))`, `es`, `es`, `()`, `es`] mp_tac) >>
+         `GENLIST (\j. Value (IntV (n1 + &j))) (Num (n2 - n1))`, `es`, `es`, `()`,
+         `es`] mp_tac) >>
      simp[lift_option_type_def, return_def, eval_iterator_range_lit,
-          check_def, assert_def, compatible_bound_def, body_for_ptr_ok_def]) >>
+          check_def, assert_def, compatible_bound_def, body_for_ptr_ok_def] >>
+     Cases_on `Num (n2 - n1)` >> fs[GENLIST_CONS, read_result_def, return_def]) >>
   `Num (n2 - n1) < dimword (:256)` by metis_tac[range_end_words] >>
   `cenv.ce_alloca_locals` by fs[body_inv_def] >>
   `lookup_scopes id es.scopes = NONE` by
@@ -101,6 +103,8 @@ Resume body_for_range_lit_ptr[body]:
       (expr_abi_decode_target_root target) body ==>
       occurs_abi_decode_target target tops` by
     (qpat_x_assum `!target. _` mp_tac >> simp[supported_stmt_expr_exists_def]) >>
+  `body_stmts_safe tops body` by
+    metis_tac[supported_stmts_body_safe] >>
   qpat_x_assum `body_stmts_ptr_ok _ _`
     (irule o REWRITE_RULE [body_stmts_ptr_ok_def]) >>
   simp[] >> rpt conj_tac
@@ -149,14 +153,14 @@ Theorem body_for_range_active_ptr[local]:
 Proof
   strip_tac >>
   `eval_iterator cx (Range e1 e2) es0 =
-   (INL (GENLIST (\j. IntV (lo + &j)) (Num (hi - lo))), es2)` by
+   (INL (GENLIST (\j. Value (IntV (lo + &j))) (Num (hi - lo))), es2)` by
     (gvs[bind_def, AllCaseEqs()] >>
      simp[Once evaluate_def, bind_def, get_range_limits_def,
           lift_sum_def, return_def]) >>
   gvs[lift_option_type_def, return_def, check_def, assert_def,
       compatible_bound_def] >>
-  first_x_assum drule >> simp[body_for_ptr_ok_def, GENLIST_EQ_NIL] >>
-  Cases_on `hi = lo` >> gvs[]
+  first_x_assum drule >> simp[body_for_ptr_ok_def] >>
+  Cases_on `Num (hi - lo)` >> fs[GENLIST_CONS, read_result_def, return_def]
 QED
 
 Theorem for_ptr_range_typing[local]:
@@ -349,6 +353,8 @@ Resume body_for_range_ptr[body]:
       occurs_abi_decode_target target tops` by
     (qpat_x_assum `!target. supported_stmt_expr_exists _ _ ==> _` mp_tac >>
      simp[supported_stmt_expr_exists_def]) >>
+  `body_stmts_safe tops body` by
+    metis_tac[supported_stmts_body_safe] >>
   qpat_x_assum `body_stmts_ptr_ok _ _`
     (irule o REWRITE_RULE [body_stmts_ptr_ok_def]) >>
   simp[] >> rpt conj_tac

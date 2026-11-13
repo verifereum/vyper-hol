@@ -10,6 +10,7 @@ Ancestors selectedBodyCode runtimeExternalPackageCode entryCheckIntervals
 Theorem source_selected_entry_prefix_code:
   lower_vyper_runtime_unit tops rpolicy = SOME unit /\
   supported_program tops /\ name <> "__default__" /\
+  ALL_DISTINCT (FLAT (MAP (external_name_keys_toplevel NONE) tops)) /\
   vyperInterpreter$lookup_function NONE name External tops =
     SOME (mut,F,args,[],ret,fbody) /\
   venomInst$lookup_function "__entry" unit.cu_context.ctx_functions = SOME efn /\
@@ -36,12 +37,7 @@ Theorem source_selected_entry_prefix_code:
     de.cs_next_var <= opened.cs_next_var
 Proof
   strip_tac >>
-  `!nr' mut' typ x. ~MEM (VariableDecl (Public nr') mut' name typ x) tops` by
-    (rpt strip_tac >> drule_all supported_program_declaration >>
-     simp[supported_declaration_header_def]) >>
-  `!nr' b kt vt x. ~MEM (HashMapDecl (Public nr') b name kt vt x) tops` by
-    (rpt strip_tac >> drule_all supported_program_declaration >>
-     simp[supported_declaration_header_def]) >>
+  `supported_declaration_headers tops` by fs[supported_program_def] >>
   drule_all external_lookup_raw_package_member >> strip_tac >>
   drule_all source_runtime_external_packages >> strip_tac >>
   `MEM (lbl,cenv0,pos_args,min_cds,is_payable,F,nkey,ut',iv,fbody,rt) extpkgs` by
@@ -123,6 +119,7 @@ QED
 Theorem source_selected_entry_prefix_structure:
   lower_vyper_runtime_unit tops rpolicy = SOME unit /\
   supported_program tops /\ name <> "__default__" /\
+  ALL_DISTINCT (FLAT (MAP (external_name_keys_toplevel NONE) tops)) /\
   vyperInterpreter$lookup_function NONE name External tops =
     SOME (mut,F,args,[],ret,fbody) /\
   venomInst$lookup_function "__entry" unit.cu_context.ctx_functions = SOME efn /\

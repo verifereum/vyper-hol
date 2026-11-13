@@ -70,18 +70,28 @@ Proof
 QED
 
 Resume entry_source_encoding_positive[scalar]:
+  Cases_on `ty = BaseT (BytesT (Fixed 0))`
+  >- (gvs[evaluate_type_def] >> Cases_on `v` >>
+      gvs[value_has_type_def, vyper_to_abi_def, vyper_to_abi_base_def,
+          vyper_to_abi_type_def, vyper_base_to_abi_type_def]) >>
   drule_all entry_scalar_conversion_typed >>
-  Cases_on `ty` >> gvs[supported_scalar_type_def, supported_word_type_def,
-    supported_string_type_def] >>
-  Cases_on `b` >> Cases_on `av` >>
-  gvs[vyper_base_to_abi_type_def, has_type_def, enc_def,
-    LENGTH_word_to_bytes, supported_word_type_def, supported_string_type_def,
-    AllCaseEqs()] >>
-  Cases_on `b'` >>
-  gvs[vyper_base_to_abi_type_def, has_type_def, enc_def,
-    supported_word_type_def, supported_string_type_def, evaluate_type_def,
-    value_has_type_def, compatible_bound_def] >>
-  strip_tac >> `LENGTH (TAKE 32 l) = n` by simp[TAKE_LENGTH_TOO_LONG] >> decide_tac
+  Cases_on `supported_scalar_type ty`
+  >- (Cases_on `ty` >> gvs[supported_scalar_type_def, supported_word_type_def,
+      supported_string_type_def] >>
+      Cases_on `b` >> Cases_on `av` >>
+      gvs[vyper_base_to_abi_type_def, has_type_def, enc_def,
+      LENGTH_word_to_bytes, supported_word_type_def, supported_string_type_def,
+      AllCaseEqs()] >>
+      Cases_on `b'` >>
+      gvs[vyper_base_to_abi_type_def, has_type_def, enc_def,
+      supported_word_type_def, supported_string_type_def, evaluate_type_def,
+      value_has_type_def, compatible_bound_def] >>
+      strip_tac >> `LENGTH (TAKE 32 l) = n` by simp[TAKE_LENGTH_TOO_LONG] >> decide_tac) >>
+  qpat_x_assum `entry_abi_leaf _` (strip_assume_tac o REWRITE_RULE [entry_abi_leaf_def]) >>
+  gvs[evaluate_type_def, AllCaseEqs()] >> Cases_on `v` >>
+  gvs[value_has_type_def, vyper_to_abi_def, vyper_to_abi_base_def,
+      vyper_to_abi_type_def, vyper_base_to_abi_type_def, LENGTH_word_to_bytes,
+      TAKE_LENGTH_TOO_LONG]
 QED
 Resume entry_source_encoding_positive[array]:
   Cases_on `bd`
