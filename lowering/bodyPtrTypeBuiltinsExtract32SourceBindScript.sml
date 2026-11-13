@@ -14,10 +14,18 @@ Theorem extract32_source_ptr_bind:
   (!x sz. cenv.ce_return_buf = SOME (PtrVar (Var x) sz) ==> not_fresh_at sa x) /\
   (!x sz. cenv.ce_return_pc = SOME (PtrVar (Var x) sz) ==> not_fresh_at sa x) /\
   gas_admissible (vyperState$bind (eval_expr cx src) (read_result cx)) expr_res_ok es /\
-  stmt_state_rel H ctx func cenv cx es s0 /\ ghost_inv H d cenv cx es G0 tn0 s0 /\
+  (!H. valid_horizon cx st0 H es.storage_trace ==>
+    stmt_state_rel H ctx func cenv cx es s0 /\
+    storage_well_formed_on cx es (FST H) /\ ghost_inv H d cenv cx es G0 tn0 s0) /\
   ~s0.vs_halted /\ s0.vs_current_bb = sa.cs_current_bb /\
   s0.vs_inst_idx = LENGTH sa.cs_current_insts /\
+  (!v. storage_trace_frame (next v)) /\
   (!marks bs mid G tn t.
+    (?H. valid_horizon cx st0 H mid.storage_trace) /\
+    gas_marked_exec F (ctx,func)
+      (vyperState$bind (eval_expr cx src) (read_result cx))
+      (es,s0) marks (INL (BytesV bs)) mid (OK t) /\
+    (!H. valid_horizon cx st0 H mid.storage_trace ==>
     gas_marked_exec_ptr (cx_dead H cx) (ctx,func) PG
       (vyperState$bind (eval_expr cx src) (read_result cx))
       (es,s0,G0,tn0) marks (INL (BytesV bs)) mid G tn (OK t) /\
@@ -30,10 +38,10 @@ Theorem extract32_source_ptr_bind:
     ghost_inv H d cenv cx (mid with gas_obs := []) G tn t /\
     ptr_val_ok cx (post_value_type cenv src) (BytesV bs) op G tn t /\
     (~is_word_type (post_value_type cenv src) ==> ptr_buf_ok cenv src op G t) /\
-    ghost_kept cenv es sa G0 tn0 s0 G tn ==>
-    gas_outcome_ptr (cx_dead H cx) (cx_tops cx) (ctx,func) PG
+    ghost_kept cenv es sa G0 tn0 s0 G tn) ==>
+    gas_outcome_ptr (\H. cx_dead H cx) (cx_tops cx) (ctx,func) PG cx st0
       (next (BytesV bs)) (mid with gas_obs := [],t,G,tn) Q
-      (\res ee gt r. expr_exit res r)) /\
+      (\H res ee gt r. expr_exit res r)) /\
   (!marks err ee leaf fstate.
     gas_exempt_cert F (cx_tops cx) (ctx,func)
       (ignore_bind (vyperState$bind (eval_expr cx src) (read_result cx)) (return ()))
@@ -52,9 +60,9 @@ Theorem extract32_source_ptr_bind:
       (vyperState$bind (vyperState$bind (eval_expr cx src) (read_result cx))
         (\v. ignore_bind (next v) (return ())))
       (es,s0) (left ++ right) (err,ee) (leaf,fstate)) ==>
-  gas_outcome_ptr (cx_dead H cx) (cx_tops cx) (ctx,func) PG
+  gas_outcome_ptr (\H. cx_dead H cx) (cx_tops cx) (ctx,func) PG cx st0
     (vyperState$bind (vyperState$bind (eval_expr cx src) (read_result cx)) next)
-    (es,s0,G0,tn0) Q (\res ee gt r. expr_exit res r)
+    (es,s0,G0,tn0) Q (\H res ee gt r. expr_exit res r)
 Proof
   strip_tac >>
   `expr_body_pre cenv cx env src es` by
@@ -67,10 +75,9 @@ Proof
   qpat_x_assum `expr_sim_ptr _ _ _ _ _ _ _ src _`
     (mp_tac o REWRITE_RULE [expr_sim_ptr_def]) >>
   disch_then drule_all >> strip_tac >>
-  irule gas_outcome_ptr_marked_bind >>
+  irule gas_outcome_ptr_marked_bind >> simp[] >>
   conj_tac >- first_assum ACCEPT_TAC >>
-  conj_tac >- first_assum ACCEPT_TAC >>
-  qexists_tac `\v ee G tn t.
+  qexists_tac `\H v ee G tn t.
     expr_post H ctx func cenv cx src es sa sb s0 ee v op t /\
     t.vs_current_bb = sb.cs_current_bb /\ t.vs_inst_idx = LENGTH sb.cs_current_insts /\
     ghost_inv H d cenv cx ee G tn t /\
@@ -79,6 +86,7 @@ Proof
     ghost_kept cenv es sa G0 tn0 s0 G tn` >>
   simp[] >> conj_tac
   >- (rpt strip_tac >>
+      res_tac >>
       `expr_sim_inv cenv cx env (mid with gas_obs := []) /\
        expr_body_pre cenv cx env off (mid with gas_obs := []) /\
        (?bs. v = BytesV bs /\ LENGTH bs <= m) /\

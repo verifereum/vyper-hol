@@ -23,7 +23,7 @@ QED
 Theorem widen_copy_counted_certificate:
   compile_bytestring_widen_copy capacity (Var src) n sa = (op,sb) /\
   fn_has_code sa sb fn /\ run_inst_seq (emitted_insts sa sb) s0 = OK t /\
-  stmt_state_rel H ctx fn cenv cx es s0 /\ local_ptrs_reserved cenv sa /\
+  stmt_state_rel (H : (bool # bytes32 # type_value) list # num list) ctx fn cenv cx es s0 /\ local_ptrs_reserved cenv sa /\
   fn_inst_ids_distinct fn /\ capacity < dimword(:256) /\ n <= capacity /\
   ~ctx_has_dalloca ctx /\ not_fresh_at sa src /\
   (!p sz. cenv.ce_return_buf = SOME (PtrVar (Var p) sz) ==> not_fresh_at sa p) /\
@@ -36,6 +36,7 @@ Theorem widen_copy_counted_certificate:
   ~s0.vs_halted /\ lookup_block s0.vs_current_bb fn.fn_blocks = SOME bb /\
   isPREFIX (emitted_insts sa sb) (DROP s0.vs_inst_idx bb.bb_instructions) ==>
   ?dst b G th. op = Var dst /\
+    inst_seq_ptr D 0 ctx fn PG G0 tn0 (emitted_insts sa sb) s0 G th /\
     gas_path_ptr D 0 ctx fn PG G0 tn0 s0 0 G th
       (OK (t with vs_inst_idx := s0.vs_inst_idx + LENGTH (emitted_insts sa sb))) /\
     lookup_var dst (t with vs_inst_idx := s0.vs_inst_idx + LENGTH (emitted_insts sa sb)) = SOME b /\
@@ -53,5 +54,5 @@ Proof
   conj_tac >- fs[lookup_var_def] >>
   mp_tac (Q.INST [`tn` |-> `th`, `gs` |-> `es.gas_obs`,
     `s` |-> `t`, `idx` |-> `LENGTH (emitted_insts sa sb) + s0.vs_inst_idx`]
-    literal_ptr_ghost_inv_normalize) >> simp[]
+    (INST_TYPE [alpha |-> ``:256``] literal_ptr_ghost_inv_normalize)) >> simp[]
 QED

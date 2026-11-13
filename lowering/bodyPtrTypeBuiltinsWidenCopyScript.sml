@@ -14,7 +14,7 @@ Ancestors
 Theorem alloc_buffer_source_robust:
   compile_alloc_buffer capacity sa = (buf,sm) /\ fn_has_code sa sm fn /\
   run_inst_seq (emitted_insts sa sm) s = OK t /\
-  stmt_state_rel H ctx fn cenv cx es s /\ local_ptrs_reserved cenv sa /\
+  stmt_state_rel (H : (bool # bytes32 # type_value) list # num list) ctx fn cenv cx es s /\ local_ptrs_reserved cenv sa /\
   fn_inst_ids_distinct fn /\ capacity < dimword(:256) /\
   expr_val_at cenv cx tsrc slo sa es v (Var src) s /\
   evaluate_type (get_tenv cx) tsrc = SOME tv /\ ~is_word_type tsrc /\
@@ -37,16 +37,20 @@ Proof
   drule_all alloca_step_site >> strip_tac >>
   `eval_operand (Var src) s = SOME a` by simp[eval_operand_def] >>
   qpat_assum `expr_val_at _ _ _ _ _ _ _ _ _`
-    (mp_then Any mp_tac alloca_step_expr_robust_preserved) >>
+    (mp_then Any mp_tac (INST_TYPE [alpha |-> ``:256``]
+      alloca_step_expr_robust_preserved)) >>
   simp[eval_operand_def] >> disch_then assume_tac >> rpt strip_tac >>
-  metis_tac[arithmeticTheory.LESS_EQ_REFL]
+  qpat_x_assum `!H ctx' func id n out s1 b' tn' m. _`
+    (qspecl_then [`H`,`ctx`,`fn`,`sa.cs_next_id`,`buf.buf_size`,
+      `STRING #"%" (toString sa.cs_next_var)`,`t`,`b`,`tn`,`m`] mp_tac) >>
+  simp[]
 QED
 
 Theorem alloc_buffer_source_resources:
   compile_alloc_buffer capacity sa = (buf,sm) /\ fn_has_code sa sm fn /\
   run_inst_seq (emitted_insts sa sm) s = OK t /\
   inst_seq_ptr D 0 ctx fn PG G tn (emitted_insts sa sm) s G1 tn1 /\
-  stmt_state_rel H ctx fn cenv cx es s /\ local_ptrs_reserved cenv sa /\
+  stmt_state_rel (H : (bool # bytes32 # type_value) list # num list) ctx fn cenv cx es s /\ local_ptrs_reserved cenv sa /\
   fn_inst_ids_distinct fn /\ capacity < dimword(:256) /\ not_fresh_at sa src /\
   expr_val_at cenv cx tsrc slo sa es v (Var src) s /\
   evaluate_type (get_tenv cx) tsrc = SOME tv /\ ~is_word_type tsrc /\
@@ -75,7 +79,7 @@ Proof
   drule compile_alloc_buffer_insts >> strip_tac >>
   gvs[emitted_insts_def, DROP_LENGTH_APPEND, run_inst_seq_def, AllCaseEqs(),
     fragGasSeqPtrTheory.inst_seq_ptr_def] >>
-  irule alloca_step_old_ptr_covers >> simp[] >>
+  irule (INST_TYPE [alpha |-> ``:256``] alloca_step_old_ptr_covers) >> simp[] >>
   conj_tac >- (fs[not_fresh_at_def] >> metis_tac[]) >>
   metis_tac[]
 QED
@@ -83,7 +87,7 @@ QED
 Theorem widen_copy_checked_certificate:
   compile_bytestring_widen_copy capacity (Var src) n sa = (op,sb) /\
   fn_has_code sa sb fn /\ run_inst_seq (emitted_insts sa sb) s0 = OK t /\
-  stmt_state_rel H ctx fn cenv cx es s0 /\ local_ptrs_reserved cenv sa /\
+  stmt_state_rel (H : (bool # bytes32 # type_value) list # num list) ctx fn cenv cx es s0 /\ local_ptrs_reserved cenv sa /\
   fn_inst_ids_distinct fn /\ capacity < dimword(:256) /\ n <= capacity /\
   ~ctx_has_dalloca ctx /\ not_fresh_at sa src /\
   (!p sz. cenv.ce_return_buf = SOME (PtrVar (Var p) sz) ==> not_fresh_at sa p) /\
