@@ -27,7 +27,8 @@ Proof
   irule enc_operand_bind_nonlabel >> simp[enc_operand_emit_op] >>
   rpt strip_tac >> irule enc_operand_bind_nonlabel >> simp[enc_operand_emit_op] >>
   rpt strip_tac >> simp[] >>
-  irule enc_operand_bind_nonlabel >> simp[enc_operand_emit_op]
+  irule enc_operand_bind_nonlabel >> simp[enc_operand_emit_op] >>
+  rpt strip_tac >> irule enc_operand_bind_nonlabel >> simp[enc_operand_emit_op]
 QED
 
 Theorem typed_copy_operand_family[local]:
