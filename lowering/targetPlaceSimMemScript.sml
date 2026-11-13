@@ -8,7 +8,8 @@ Ancestors
   allocaHistory exprSimDefs targetPlaceSimDefs gasContext gasOutcome gasSummary
   gasExemptCert stmtSimProps loweringPosts exprLowering compileEnv
   supportedTargets vyperAST vyperInterpreter vyperState vyperTypeSystem
-  venomState
+  venomState targetRootAttributeMemory targetAttributeMemory
+  targetSubscriptCompositionMemory targetPlaceSimCasesBase
 Libs
   pairLib
 
@@ -36,16 +37,37 @@ Definition target_sim_mem_def:
         (\res ee r. expr_exit res r)
 End
 
-(* Held: the subscript case waits on S1's proved
-   targetSubscriptSplit.target_subscript_main_case, which this base
-   predates; the name, toplevel and attribute cases are in reach. *)
 Theorem body_target_sim_mem:
   !t cx tops ctx func cenv env es.
     body_base_target_mem_ok cx t /\ body_inv tops ctx cenv cx /\
+    EVERY (supported_expr tops) (target_indices t) /\
     target_pre cenv cx env t es ==>
     target_sim_mem ctx func cenv cx env t es
 Proof
-  cheat
+  ho_match_mp_tac base_assignment_target_induct >> rpt conj_tac
+  >- (rpt strip_tac >> rewrite_tac[target_sim_mem_def] >>
+      rpt strip_tac >> irule target_name_memory >> simp[] >> qexists `env` >> simp[])
+  >- (rpt strip_tac >> rewrite_tac[target_sim_mem_def] >>
+      rpt strip_tac >> irule target_toplevel_memory >> simp[] >> qexists `env` >> simp[])
+  >- (rpt gen_tac >> strip_tac >> rpt gen_tac >> strip_tac >>
+      rewrite_tac[target_sim_mem_def] >>
+      rpt strip_tac >> irule (Q.SPEC `F` target_subscript_case_mem) >> simp[] >>
+      conj_tac
+      >- (rpt strip_tac >>
+          first_x_assum (irule o REWRITE_RULE [target_sim_mem_def]) >>
+          gvs[body_base_target_mem_ok_def, targetPlaceLiveTheory.target_indices_def] >>
+          conj_tac >- (qexists `tops` >> simp[]) >> qexists `env'` >> simp[]) >>
+      conj_tac
+      >- (gvs[body_base_target_mem_ok_def, body_expr_mem_ok_def] >> metis_tac[]) >>
+      conj_tac >- (qexists `tops` >> simp[]) >> qexists `env` >> simp[]) >>
+  rpt gen_tac >> strip_tac >> rpt gen_tac >> strip_tac >>
+  rewrite_tac[target_sim_mem_def] >> rpt strip_tac >>
+  irule target_attribute_memory >> simp[] >>
+  qexists `env` >> simp[] >> rpt strip_tac >>
+  first_x_assum (irule o REWRITE_RULE [target_sim_mem_def]) >>
+  gvs[body_base_target_mem_ok_def, targetPlaceLiveTheory.target_indices_def] >>
+  conj_tac >- (qexists `tops` >> simp[]) >>
+  qexists `env` >> simp[] >> metis_tac[target_pre_sub]
 QED
 
 (* The judgment for eval_target_place: a target typed by a value type

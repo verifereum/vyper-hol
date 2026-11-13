@@ -71,6 +71,12 @@ Proof
      simp[Abbr `bt`] >>
    `target_indices_pre cenv cx env bt` by
      metis_tac[bodyAugAssignOtherTheory.augassign_target_pre] >>
+   `?pt. supported_target_info tops bindings bt = SOME pt` by
+     metis_tac[bodyAugPlaceTargetTheory.aug_place_supported_stmt_target_info] >>
+   `EVERY (supported_expr tops) (target_indices bt)` by
+     (simp[listTheory.EVERY_MEM] >>
+      metis_tac[bodyAugPlaceTargetTheory.aug_place_supported_indices,
+                optionTheory.IS_SOME_EXISTS]) >>
    `target_sim_mem ctx func cenv cx env bt es` by
      (irule body_target_sim_mem >>
       simp[targetPlaceSimTheory.target_pre_def] >> metis_tac[]) >>
