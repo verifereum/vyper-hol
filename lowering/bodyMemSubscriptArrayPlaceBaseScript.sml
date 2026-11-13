@@ -4,8 +4,8 @@ Theory bodyMemSubscriptArrayPlaceBase
 Ancestors
   exprSimMemDefs exprSimHypsDefs
 
-(* RESIDUAL (held): counted twin of S1 compile_subscript_array_place_base_case;
-   retires when S1 proves it. *)
+(* RESIDUAL (held, SEQ-4864): counted twin of S1 compile_subscript_array_place_base_case;
+   retires when S1's stale-base leaf (subarr split) is proved. *)
 Theorem compile_subscript_array_place_base_mem_case:
   !ctx func cenv cx ann obj idx et bd.
     (!env ty es. expr_body_pre cenv cx env obj es ==>
