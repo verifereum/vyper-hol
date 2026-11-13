@@ -780,6 +780,7 @@ Proof
   fs[abi_malformed_entry_def, abi_malformed_allocated_window_def,
      abi_malformed_destination_def, mload_def] >>
   conj_tac >- metis_tac[] >>
+  conj_tac >- (qexists_tac `H` >> simp[]) >>
   qexists_tac `[]` >> simp[abi_reflected_prefix_empty]
 QED
 
