@@ -18,7 +18,7 @@
  *)
 Theory e2eOutcomesProducer
 Ancestors
-  e2eOutcomesGuard
+  e2eOutcomesGuard e2eCallAtMarks
 
 
 Theorem closed_world_call_outcomes_ok:
