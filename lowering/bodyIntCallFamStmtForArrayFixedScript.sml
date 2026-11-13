@@ -25,7 +25,9 @@ Proof
   `supported_stmt fp.jc_tops bindings (For id fty (Array arr) bound stmts) /\
    type_stmt env fp.jc_ret_ty (For id fty (Array arr) bound stmts) = SOME env'` by
     (gvs[supported_stmts_list, type_stmt_def, AllCaseEqs()]) >>
-  drule intcall_array_source_inputs >>
+  mp_tac (Q.INST [`tops` |-> `fp.jc_tops`, `cx` |-> `fp.jc_cx`,
+                  `ret_ty` |-> `fp.jc_ret_ty`]
+    (SPEC_ALL intcall_array_source_inputs)) >>
   (impl_tac >- metis_tac[]) >> strip_tac >> gvs[] >>
   rename1 `FLOOKUP ce.ce_vars name = SOME (PtrVar (Var ip) arrsz)` >>
   qmatch_asmsub_abbrev_tac `LENGTH vs = bound` >>
