@@ -120,7 +120,7 @@ QED
 
 (* An observed struct root's field reads, and in every state related at a
    horizon observing the root, the backend holds the field's value. *)
-Theorem augassign_storage_field_read[local]:
+Theorem augassign_storage_field_read:
   !(H:(bool # bytes32 # type_value) list # num list) cx es tr slot fs fld off
    ftv ty.
     MEM (tr,n2w slot,StructTV fs) (FST H) /\ regions_consistent (FST H) /\
