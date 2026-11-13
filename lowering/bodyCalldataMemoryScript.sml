@@ -153,12 +153,17 @@ Theorem body_calldatasize_mem_prefix[local]:
   lower_value compile_expr cenv ty (Builtin (BaseT (UintT 256)) CalldataLen []) sa = (op,sb) /\
   fn_has_code sa sb func /\ fn_inst_ids_distinct func /\
   local_ptrs_reserved cenv sa /\
-  stmt_state_rel H ctx func cenv cx es s0 /\ alloca_history func s0 /\
+  stmt_state_rel H ctx func cenv cx es s0 /\
+  storage_well_formed_on cx es (FST H) /\ alloca_history func s0 /\
   ~s0.vs_halted /\ s0.vs_current_bb = sa.cs_current_bb /\
   s0.vs_inst_idx = LENGTH sa.cs_current_insts ==>
-  ?t. gas_value_prefix H T (ctx,func,cenv,cx)
+  gas_value_prefix H T (ctx,func,cenv,cx)
     (ty,Builtin (BaseT (UintT 256)) CalldataLen [])
-    (sa,sb,op) (es,s0) [] (IntV &LENGTH cx.txn.calldata,es,t)
+    (sa,sb,op) (es,s0) []
+    (IntV &LENGTH cx.txn.calldata,es,
+     update_var (STRING #"%" (toString sa.cs_next_var))
+       (n2w (LENGTH s0.vs_call_ctx.cc_calldata)) s0
+     with vs_inst_idx := LENGTH sb.cs_current_insts)
 Proof
   strip_tac >>
   `!st. eval_expr cx (Builtin (BaseT (UintT 256)) CalldataLen []) st =
@@ -175,7 +180,15 @@ Proof
     (drule msg_gas_state_frame >>
      disch_then (qspecl_then [`q.vs_gas_readings`, `q.vs_inst_idx`, `[]`] mp_tac) >>
      simp[NoAsms]) >>
-  qexists_tac `q with vs_inst_idx := LENGTH sb.cs_current_insts` >>
+  `storage_well_formed_on cx (es with gas_obs := []) (FST H)` by
+    (`(es with gas_obs := []).accounts = es.accounts /\
+      (es with gas_obs := []).tStorage = es.tStorage` by simp[] >>
+     metis_tac[vyperStorageFootprintTheory.storage_well_formed_on_backends]) >>
+  `q = update_var (STRING #"%" (toString sa.cs_next_var))
+         (n2w (LENGTH s0.vs_call_ctx.cc_calldata)) s0` by
+    (drule body_calldatasize_run >>
+     disch_then (qspec_then `s0` mp_tac) >> simp[]) >>
+  qpat_x_assum `q = _` (fn th => REWRITE_TAC [GSYM th]) >>
   simp[gas_value_prefix_def, gas_marked_exec_def, gas_marked_path_def,
        bind_def, read_result_def, return_def] >>
   simp[lower_value_calldata_len, expr_post_def, expr_val_rel_def,
@@ -225,11 +238,19 @@ Proof
   rpt gen_tac >> strip_tac >>
   `args = [] /\ ann = BaseT (UintT 256)` by
     gvs[expr_body_pre_def, well_typed_expr_def, well_typed_builtin_app_def] >>
-  gvs[] >> irule expr_sim_mem_word_values >>
+  gvs[] >> irule expr_sim_mem_word_values_domain >>
   reverse conj_tac >- simp[vyperASTTheory.expr_type_def, is_word_type_def] >>
   rpt gen_tac >> strip_tac >>
-  drule_all body_calldatasize_mem_prefix >> strip_tac >>
-  qexistsl_tac [`[]`, `IntV &LENGTH cx.txn.calldata`, `es`, `t`] >> simp[]
+  qpat_assum `!H. valid_horizon _ _ H _ ==> _` (drule_then strip_assume_tac) >>
+  qexistsl_tac [`[]`, `IntV &LENGTH cx.txn.calldata`, `es`,
+    `update_var (STRING #"%" (toString sa.cs_next_var))
+       (n2w (LENGTH s0.vs_call_ctx.cc_calldata)) s0
+     with vs_inst_idx := LENGTH sb.cs_current_insts`] >>
+  conj_tac
+  >- (drule_all body_calldatasize_mem_prefix >> simp[gas_value_prefix_def]) >>
+  rpt strip_tac >>
+  qpat_x_assum `!H. valid_horizon _ _ H _ ==> _` (drule_then strip_assume_tac) >>
+  irule body_calldatasize_mem_prefix >> simp[]
 QED
 
 Theorem compile_calldatasize_body_vv_sim_mem:

@@ -18,7 +18,8 @@ Theorem compile_name_nonword_body_sim_mem:
     expr_sim_mem ctx func ce cx ty (Name ann id) es
 Proof
   rpt gen_tac >> strip_tac >>
-  irule expr_sim_mem_values >> rpt gen_tac >> strip_tac >>
+  irule expr_sim_mem_values_domain >> rpt gen_tac >> strip_tac >>
+  qpat_assum `!H. valid_horizon _ _ H _ ==> _` (drule_then strip_assume_tac) >>
   drule_all body_name_source_region >> strip_tac >>
   `ce.ce_var_type id = SOME ann` by
     gvs[expr_sim_pre_def, expr_sim_inv_def, well_typed_expr_def] >>
@@ -26,15 +27,27 @@ Proof
   disch_then (qspecl_then [`ty`, `sa`, `ann`] assume_tac) >>
   gvs[lower_value_def, comp_bind_def, comp_return_def,
       unwrap_value_def, contextTheory.mk_ptr_def] >>
-  `stmt_state_rel H ctx func ce cx (es with gas_obs := []) s0` by
-    (drule msg_gas_state_frame >>
-     disch_then (qspecl_then [`s0.vs_gas_readings`, `s0.vs_inst_idx`, `[]`] mp_tac) >>
-     simp[NoAsms]) >>
   qexistsl_tac [`[]`, `entry.value`, `es`, `s0`] >>
-  reverse conj_tac
+  conj_tac
+  >- (simp[gas_marked_exec_def, gas_explicit_def, gas_marked_path_def,
+           gas_path_mem_rules] >>
+      gen_tac >>
+      qspecl_then [`cx`, `ann`, `id`, `es with gas_obs := tail`, `entry`]
+        mp_tac eval_name_word >> simp[vyperStateTheory.bind_def]) >>
+  conj_tac
   >- (simp[expr_store_bound_def, vyperASTTheory.expr_type_def,
            eval_operand_def] >>
       rpt strip_tac >> gvs[] >> drule val_store_size_le >> decide_tac) >>
+  qx_gen_tac `H1` >> strip_tac >>
+  qpat_x_assum `!H. valid_horizon _ _ H _ ==> _` (drule_then strip_assume_tac) >>
+  `stmt_state_rel H1 ctx func ce cx (es with gas_obs := []) s0` by
+    (drule msg_gas_state_frame >>
+     disch_then (qspecl_then [`s0.vs_gas_readings`, `s0.vs_inst_idx`, `[]`] mp_tac) >>
+     simp[NoAsms]) >>
+  `storage_well_formed_on cx (es with gas_obs := []) (FST H1)` by
+    (`(es with gas_obs := []).accounts = es.accounts /\
+      (es with gas_obs := []).tStorage = es.tStorage` by simp[] >>
+     metis_tac[vyperStorageFootprintTheory.storage_well_formed_on_backends]) >>
   simp[gas_value_prefix_def, gas_marked_exec_def, gas_explicit_def,
        gas_marked_path_def, gas_path_mem_rules,
        lower_value_def, comp_bind_def, comp_return_def,
