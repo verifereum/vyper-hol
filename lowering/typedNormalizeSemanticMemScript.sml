@@ -6,7 +6,7 @@ Ancestors
   arithmetic words list vyperTyping valueEncoding exprSimDefs exprSimProps loweringPosts valueEncodingProofs
   typedNormalizeDynarrayLoop
 
-Theorem normalize_indexed_value_local[local]:
+Theorem normalize_indexed_value_local:
   val_wf tv v /\
   mem_bytes_at a (type_memory_size tv) m =
     mem_bytes_at a (type_memory_size tv) m' ==>

@@ -5025,7 +5025,7 @@ Proof
   fs[memory_rel_def] >> first_x_assum irule >> decide_tac
 QED
 
-Theorem log_asm_rel[local]:
+Theorem log_asm_rel:
   !lo ps vs st n off sz topics tail.
     venom_asm_rel lo ps vs st /\
     st.as_stack = off :: sz :: (topics ++ tail) /\
@@ -5075,6 +5075,22 @@ Proof
   simp[asm_log_def, LET_THM, asm_next_def] >>
   gvs[venom_asm_rel_def, plan_stack_rel_def, plan_spill_rel_def,
       TAKE_APPEND1]
+QED
+
+Theorem log_opcode_dispatch:
+  !n lo o2pc st.
+    n <= 4 ==>
+    asm_step lo o2pc (AsmOp ("LOG" ++ num_to_dec_string n)) st = asm_log n st
+Proof
+  rpt gen_tac >> strip_tac >>
+  `n = 0 \/ n = 1 \/ n = 2 \/ n = 3 \/ n = 4` by decide_tac >>
+  gvs[] >>
+  simp[asm_step_def, asm_step_op_def,
+       asm_step_arith_def, asm_step_compare_def, asm_step_bitwise_def,
+       asm_step_memory_def, asm_step_control_def, asm_step_extcall_def,
+       asm_step_copy_def, asm_step_context_def,
+       dup_table_def, swap_table_def, log_table_def] >>
+  EVAL_TAC
 QED
 
 Theorem log_emit_step_rel:

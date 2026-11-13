@@ -2,13 +2,13 @@
  * DFT's step part of the O1 pass contract: on an SSA function of the O1
  * shape with its pseudo-instructions first, dft_fn keeps the shape, takes
  * no new labels or instruction ids, renames no label and leaves the
- * supply alone.  Off SSA it can break a call check (o1DftCallChecks).
+ * supply alone.
  *)
 Theory o1DftStep
 Ancestors
   o1PassContract unitShapeDefs venomPassDispatcher dftStructural dftDefs
   dftLifting dftShape dftCorrectness unitLabelMapIdentity
-  venomFnScheduleRunnerProps o1DftCallChecks o1DftRetpc
+  venomFnScheduleRunnerProps  o1DftRetpc
   venomWf venomInst venomEffects passSharedDefs dretDesugarDefs list
 Libs
   BasicProvers
@@ -132,13 +132,6 @@ Proof
   gvs[o1_fn_shape_def, fn_shape_ok_def]
 QED
 
-Theorem dft_shape_call_checks:
-  o1_fn_shape ctx fn /\ wf_ssa fn /\ fn_pseudos_prefix fn ==>
-  call_checks_ok (dft_fn fn)
-Proof
-  strip_tac >> irule dft_fn_call_checks_ok >>
-  gvs[o1_fn_shape_def, fn_shape_ok_def]
-QED
 
 Theorem dft_shape_fn_shape:
   o1_fn_shape ctx fn /\ wf_ssa fn /\ fn_pseudos_prefix fn ==>
@@ -160,8 +153,7 @@ Proof
       `EVERY (\l. ~reserved_label l)
          (MAP (\b. b.bb_label) (dft_fn fn).fn_blocks)` by metis_tac[] >>
       gvs[EVERY_MAP])
-  >- (irule dft_fn_inst_shape >> gvs[o1_fn_shape_def, fn_shape_ok_def]) >>
-  metis_tac[dft_shape_call_checks]
+  >> irule dft_fn_inst_shape >> gvs[o1_fn_shape_def, fn_shape_ok_def]
 QED
 
 Theorem dft_shape_invoke_ok:
@@ -334,9 +326,7 @@ QED
      keep arity and opcode class.  ADD [op; Label "code_end"] has at
      most one child, so it is never flipped (the flipped form would fail
      label_positions_ok).
-   - The call checks and the return-PC shape need SSA (o1DftCallChecks,
-     o1DftRetpc): off SSA, a redefinition of a call's flag can be
-     scheduled between the call and its check. *)
+   - The return-PC shape needs SSA (o1DftRetpc). *)
 Theorem dft_step_contract_ssa:
   fn_pass_step rpolicy (CFP_Simple VP_DFT) observed s fn out /\
   o1_ctx_shape observed.cu_context /\ ir_supply_inst_ok s /\

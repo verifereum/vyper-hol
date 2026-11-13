@@ -81,7 +81,7 @@ Proof
 QED
 
 Theorem log_encode_state_frame[local]:
-  state_rel func ce cx es s /\ log_encode_external t = log_encode_external s /\
+  state_rel H func ce cx es s /\ log_encode_external t = log_encode_external s /\
   (!name entry p sz. lookup_scopes name es.scopes = SOME entry /\
     FLOOKUP ce.ce_vars name = SOME (PtrVar (Var p) sz) ==>
     lookup_var p t = lookup_var p s) /\
@@ -99,7 +99,7 @@ Theorem log_encode_state_frame[local]:
     FLOOKUP (case ALOOKUP es.immutables cx.txn.target of NONE => FEMPTY
       | SOME imms => get_source_immutables ce.ce_module imms) name = SOME (tv,v) ==>
     abi_footprint_disjoint off (type_memory_size tv) fp) ==>
-  state_rel func ce cx es t
+  state_rel H func ce cx es t
 Proof
   disch_then (MAP_EVERY assume_tac o CONJUNCTS) >>
   `local_ptrs_rel func ce es.scopes s /\
@@ -114,17 +114,6 @@ Proof
   drule log_encode_external_fields >> strip_tac >>
   irule state_rel_frame >> (conj_tac >- first_assum ACCEPT_TAC) >>
   qexistsl_tac [`es`,`s`] >> asm_simp_tac (srw_ss()) []
-QED
-
-Theorem log_encode_local_region_frame[local]:
-  (!name entry p sz. lookup_scopes name scopes = SOME entry /\
-    FLOOKUP ce.ce_vars name = SOME (PtrVar (Var p) sz) ==>
-    lookup_var p t = lookup_var p s) ==>
-  (local_region ce scopes t name lo sz <=> local_region ce scopes s name lo sz)
-Proof
-  strip_tac >> simp[local_region_def] >>
-  eq_tac >> strip_tac >> qexistsl_tac [`entry`,`p`,`w`] >>
-  asm_simp_tac bool_ss [] >> metis_tac[]
 QED
 
 Theorem log_encode_immutable_sep_frame[local]:
@@ -190,7 +179,7 @@ Proof
 QED
 
 Theorem log_encode_allocation_frame[local]:
-  stmt_state_rel H ctx func ce cx es s /\ state_rel func ce cx es t /\
+  stmt_state_rel H ctx func ce cx es s /\ state_rel H func ce cx es t /\
   immutable_alloca_sep func ce cx es t /\ fn_inst_ids_distinct func /\
   MEM inst (fn_insts func) /\ inst.inst_opcode = ALLOCA /\
   inst.inst_operands = [Lit (n2w n)] /\ n < dimword (:256) /\
@@ -253,9 +242,9 @@ Proof
     (Cases_on `dyn` >> gvs[] >>
      qspecl_then [`inst.inst_id`,`n`,`s`] mp_tac (GEN_ALL log_encode_allocate_metadata) >>
      simp[] >> metis_tac[]) >>
-  `state_rel func ce cx es s /\ immutable_alloca_sep func ce cx es s` by
+  `state_rel H func ce cx es s /\ immutable_alloca_sep func ce cx es s` by
     fs[stmt_state_rel_def] >>
-  `state_rel func ce cx es t` by
+  `state_rel H func ce cx es t` by
     (qpat_x_assum `t.vs_allocas = _` kall_tac >>
      qpat_x_assum `t.vs_alloca_next = _` kall_tac >>
      irule log_encode_state_frame >> qexistsl_tac [`fp`,`s`] >>
@@ -265,7 +254,7 @@ Proof
      qpat_x_assum `t.vs_alloca_next = _` kall_tac >>
      `!name lo sz. local_region ce es.scopes t name lo sz ==>
        local_region ce es.scopes s name lo sz` by
-       (drule log_encode_local_region_frame >> metis_tac[]) >>
+       (drule local_region_lookup_cong >> metis_tac[]) >>
      irule log_encode_immutable_sep_frame >> qexists_tac `s` >>
      asm_simp_tac bool_ss [] >> rpt conj_tac >> first_assum ACCEPT_TAC) >>
   `immutable_base_zero ce t` by

@@ -1,6 +1,6 @@
 Theory dftGasInvScheduledAliases
 Ancestors
-  dftGasInvAliasNormal dftGasInvAliasPaths dftShape dftCallChecks
+  dftGasInvAliasNormal dftGasInvAliasPaths dftShape
   dftScheduleOrder dftRunRel dftWf dftTopoSort dftStructural dftCorrectness dftIdempotent dftDefs venomEffects
   venomWf venomInst contextCodegenRel passSharedDefs list rich_list
 

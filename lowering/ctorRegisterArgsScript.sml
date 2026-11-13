@@ -196,10 +196,12 @@ Proof
           simp[abi_decoder_vars_mono_return, abi_decoder_vars_mono_prims]) >> simp[]) >>
   Cases_on `FLOOKUP ce.ce_vars h0` >> simp[] >>
   Cases_on `var_location_decode_operand x` >> simp[] >>
-  rpt (ho_match_mp_tac abi_decoder_vars_mono_bind >> conj_tac
-        >- simp[abi_decoder_vars_mono_prims] >> gen_tac) >>
-  (ho_match_mp_tac abi_decoder_vars_mono_ignore_bind >> conj_tac
-   >- simp[cj 1 abi_decoder_vars_mono_mutual] >> simp[])
+  rpt (FIRST [first_assum MATCH_ACCEPT_TAC,
+    CHANGED_TAC (simp[abi_decoder_vars_mono_prims,
+      cj 1 abi_decoder_vars_mono_mutual, compile_abi_arg_ptr_guard_def,
+      abi_decoder_vars_mono_return]), gen_tac,
+    ho_match_mp_tac abi_decoder_vars_mono_bind,
+    ho_match_mp_tac abi_decoder_vars_mono_ignore_bind, conj_tac])
 QED
 
 Theorem ctor_registration_vars_mono:
@@ -282,7 +284,15 @@ Proof
   Cases_on `FLOOKUP ce.ce_vars h0` >> simp[] >>
   Cases_on `var_location_decode_operand x` >> simp[] >>
   rpt (ho_match_mp_tac ctor_id_bind >> conj_tac
-        >- simp[ctor_id_prims] >> gen_tac) >>
+        >- simp[ctor_id_prims] >> gen_tac)
+  (* the dynamic case starts with the calldata pointer guard, a no-op for DLOAD *)
+  >~ [`compile_abi_arg_ptr_guard`]
+  >- (ho_match_mp_tac ctor_id_ignore_bind >> conj_tac
+      >- simp[compile_abi_arg_ptr_guard_def, comp_return_def, ctor_id_prims] >>
+      (ho_match_mp_tac ctor_id_ignore_bind >> conj_tac
+   >- (gen_tac >>
+       mp_tac (cj 1 abi_decoder_code_mutual) >>
+       simp[abi_decoder_code_def] >> metis_tac[]) >> simp[])) >>
   (ho_match_mp_tac ctor_id_ignore_bind >> conj_tac
    >- (gen_tac >>
        mp_tac (cj 1 abi_decoder_code_mutual) >>
@@ -367,7 +377,13 @@ Proof
   Cases_on `FLOOKUP ce.ce_vars h0` >> simp[] >>
   Cases_on `var_location_decode_operand x` >> simp[] >>
   rpt (ho_match_mp_tac abi_decoder_phi_bind >> conj_tac
-        >- simp[abi_decoder_phi_emit_op] >> rpt gen_tac) >>
+        >- simp[abi_decoder_phi_emit_op] >> rpt gen_tac)
+  (* the dynamic case starts with the calldata pointer guard, a no-op for DLOAD *)
+  >~ [`compile_abi_arg_ptr_guard`]
+  >- (ho_match_mp_tac abi_decoder_phi_ignore_bind >> conj_tac
+      >- simp[compile_abi_arg_ptr_guard_def, abi_decoder_phi_return] >>
+      gen_tac >> (ho_match_mp_tac abi_decoder_phi_ignore_bind >> conj_tac
+   >- simp[cj 1 abi_decoder_phi_mutual] >> simp[])) >>
   (ho_match_mp_tac abi_decoder_phi_ignore_bind >> conj_tac
    >- simp[cj 1 abi_decoder_phi_mutual] >> simp[])
 QED
@@ -795,10 +811,9 @@ Proof
       pairarg_tac >> simp[] >> pairarg_tac >> simp[]) >>
   Cases_on `is_abi_dynamic ce.ce_struct_fields ty` >>
   simp[build_positional_arg_def, compile_decode_args_def,
-    var_location_decode_operand_def, FUN_EQ_THM,
+    var_location_decode_operand_def, FUN_EQ_THM, compile_abi_arg_ptr_guard_def,
     comp_bind_def, comp_ignore_bind_def, comp_return_def] >>
-  rpt gen_tac >> pairarg_tac >> simp[] >> pairarg_tac >> simp[] >>
-  pairarg_tac >> simp[] >> pairarg_tac >> simp[]
+  rpt gen_tac >> rpt (pairarg_tac >> simp[])
 QED
 
 Theorem ctor_singleton_decode_phases:

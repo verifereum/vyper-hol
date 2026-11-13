@@ -24,7 +24,9 @@ val _ = Parse.hide "body";
    frame_ret_ok_ptr, body_*_ptr_ok). Admitted until S1 proves its twin. *)
 Theorem body_assign_other_ptr:
   !d PG cx t e tops bindings ctx func cenv env env' ret_ty lctx RetQ es res es'.
-    (!s'' pv t'. eval_expr cx e s'' = (INL pv,t') ==> body_base_target_ptr_ok cx t) /\
+    (!s'' pv t' s'3' v t''.
+       eval_expr cx e s'' = (INL pv,t') /\ read_result cx pv s'3' = (INL v,t'') ==>
+       body_base_target_ptr_ok cx t) /\
     body_expr_ptr_ok cx e /\
     body_inv tops ctx cenv cx /\
     supported_stmt tops bindings (Assign (BaseTarget t) e) /\
@@ -197,6 +199,35 @@ Theorem body_annassign_widened_aggregate_call_ptr:
     stmt_frag_ptr d ctx PG func cx lctx RetQ cenv
       (stmt_env cenv lctx ret_ty (AnnAssign id typ e))
       (eval_stmt cx (AnnAssign id typ e)) es
+Proof
+  cheat
+QED
+
+(* RESIDUAL: the pointer twin of S1's bodySimDeclCases$body_annassign_widened_aggregate:
+   annAssignPtrDispatch$body_annassign_memory_ptr's hypotheses with its two
+   layout disjuncts replaced by the widened non-call copy's form premises.
+   Admitted until S1 proves its twin. *)
+Theorem body_annassign_widened_aggregate_ptr:
+ !cx id typ e tops bindings ctx func cenv env env' ret_ty lctx RetQ es d PG.
+    body_stmt_safe tops (AnnAssign id typ e) /\
+ (!tenv s'' tyv t. tenv = get_tenv cx /\
+   lift_option_type (evaluate_type tenv typ) "AnnAssign evaluate_type" s'' =
+     (INL tyv,t) ==> body_expr_ptr_ok cx e) /\
+ body_inv tops ctx cenv cx /\
+ supported_stmt tops bindings (AnnAssign id typ e) /\
+ (!target. supported_stmt_expr_exists
+   (expr_abi_decode_target_root target) (AnnAssign id typ e) ==>
+   occurs_abi_decode_target target tops) /\
+ expr_sim_inv cenv cx env es /\ ce_locals_declared cenv env /\
+ type_stmt env ret_ty (AnnAssign id typ e) = SOME env' /\
+ stmt_exprs_ok cenv (AnnAssign id typ e) /\
+ call_evaluation_safe cx (int_calls_stmt (AnnAssign id typ e)) /\
+ ~is_word_type typ /\ 0 < type_memory_bytes cenv typ /\
+ lowered_value_type cenv e = expr_type e /\ expr_type e <> typ /\
+ ~is_bytestring_type typ /\ ~(has_length_word typ /\ is_empty_value_expr e) ==>
+ stmt_frag_ptr d ctx PG func cx lctx RetQ cenv
+   (stmt_env cenv lctx ret_ty (AnnAssign id typ e))
+   (eval_stmt cx (AnnAssign id typ e)) es
 Proof
   cheat
 QED

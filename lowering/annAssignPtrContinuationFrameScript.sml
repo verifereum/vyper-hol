@@ -21,14 +21,19 @@ Proof
      `FLOOKUP s1.vs_allocas aid = SOME (off,sz)` by metis_tac[] >>
      `i IN tn1.t_mem` by
        (qpat_x_assum `!aid off sz i. FLOOKUP s1.vs_allocas _ = _ /\ _ ==> _` irule >>
-        goal_assum (drule_at Any) >> simp[]) >>
+        conj_tac >- (qexistsl_tac [`aid`,`off`,`sz`] >> asm_rewrite_tac[]) >>
+        first_assum ACCEPT_TAC) >>
      qpat_x_assum `!aid off sz i. FLOOKUP s0.vs_allocas _ = _ /\ _ ==> _` irule >>
-     goal_assum (drule_at Any) >> simp[] >> metis_tac[]) >>
+     conj_tac >- (qexistsl_tac [`aid`,`off`,`sz`] >> asm_rewrite_tac[]) >>
+     first_assum ACCEPT_TAC) >>
+ `local_region cenv es.scopes s1 n b sz` by metis_tac[] >>
  `i IN tn1.t_mem` by
-   (qpat_x_assum `!n b sz i. local_region _ _ s1 _ _ _ /\ _ ==> _` irule >>
-    goal_assum (drule_at Any) >> simp[]) >>
- qpat_x_assum `!n b sz i. local_region _ _ s0 _ _ _ /\ _ ==> _` irule >>
- goal_assum (drule_at Any) >> simp[] >> metis_tac[]
+   (qpat_x_assum `!n b sz i. local_region _ _ s1 _ _ _ /\ _ ==> _`
+      (qspecl_then [`n`,`b`,`sz`,`i`] mp_tac) >>
+    asm_rewrite_tac[]) >>
+ qpat_x_assum `!n b sz i. local_region _ _ s0 _ _ _ /\ _ ==> _`
+   (qspecl_then [`n`,`b`,`sz`,`i`] mp_tac) >>
+ asm_rewrite_tac[]
 QED
 
 Theorem annassign_local_region_frame_iff_ptr:

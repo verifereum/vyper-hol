@@ -13,7 +13,8 @@ Ancestors
    never halts: it has no defaults, its body cannot halt, and the value
    transfer and the lock only raise errors. *)
 Theorem call_external_function_deploy_no_halt:
-  supported_program tops /\ get_module_code cx NONE = SOME tops /\
+  supported_program tops /\ supported_program_deploy tops /\
+  get_module_code cx NONE = SOME tops /\
   lookup_function src name Deploy tops = SOME (mut,nr,args,dflts,ret,fbody) /\
   call_external_function orc gobs am cx nr mut ts mods args dflts vals fbody ret =
     (INR HaltException, am', rqs) ==> F
@@ -24,7 +25,9 @@ Proof
      >- simp[Once evaluate_def, return_def] >>
      drule_all supported_program_declaration >>
      simp[supported_declaration_header_def, supported_declaration_body_def,
-          supported_function_body_def, NULL_EQ] >> strip_tac >>
+          NULL_EQ] >> strip_tac >>
+     drule_all supported_program_deploy_function >>
+     simp[supported_function_body_def] >> strip_tac >>
      drule (cj 2 supported_stmts_storage_syntax) >> strip_tac >>
      rpt gen_tac >> irule (cj 4 eval_no_halt) >> metis_tac[]) >>
   qpat_x_assum `dflts = []` SUBST_ALL_TAC >>
@@ -48,7 +51,7 @@ QED
 Theorem load_contract_sources_layouts:
   !orc gobs am tx tops exps am' rqs.
     load_contract orc gobs am tx [(NONE,tops)] exps = INL (am', rqs) /\
-    supported_program tops ==>
+    supported_program tops /\ supported_program_deploy tops ==>
     am'.sources = (tx.target, [(NONE,tops)]) :: am.sources /\
     am'.layouts = am.layouts
 Proof

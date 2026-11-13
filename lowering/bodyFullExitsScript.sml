@@ -143,7 +143,7 @@ Proof
      simp[]) >>
   `alloca_history func (jump_to lbl s0)` by
     (irule alloca_history_jump >> simp[jump_to_def] >> metis_tac[]) >>
-  irule gas_outcome_full_pure >>
+  irule gas_outcome_full_pure >> reverse conj_tac >- simp[] >>
   qexistsl_tac [`G0`, `es`, `INR exc`, `jump_to lbl s0`, `tn0`] >>
   simp[raise_def] >> qx_gen_tac `H` >> strip_tac >>
   qpat_x_assum `!H. valid_horizon _ _ H _ ==> _` (qspec_then `H` mp_tac) >>
@@ -191,7 +191,7 @@ Proof
   `?a t. step_inst_base (mk_inst sa.cs_next_id opc ops []) s0 = Abort a t /\
          expr_exit (INR (AssertException msg) : unit + exception) (Abort a t)` by
     (gvs[expr_exit_def] >> metis_tac[step_revert_zero, step_invalid]) >>
-  irule gas_outcome_full_exit >>
+  irule gas_outcome_full_exit >> reverse conj_tac >- simp[] >>
   qexistsl_tac [`G0`, `es`, `Abort a t`, `INR (AssertException msg)`, `tn0`] >>
   simp[exit_result_def] >> qx_gen_tac `H` >> strip_tac >>
   qpat_x_assum `!H. valid_horizon _ _ H _ ==> _` (qspec_then `H` mp_tac) >>
@@ -308,6 +308,9 @@ Proof
       BETA_TAC >> rpt conj_tac >> first_assum ACCEPT_TAC)
   >~ [`gas_exempt_cert _ _ _ _ _ _ _`]
   >- (rpt strip_tac >> irule gas_exempt_cert_error_value >> simp[])
+  >~ [`storage_trace_frame (bind (eval_expr _ _) _)`]
+  >- (irule storage_trace_frame_bind_all >>
+      simp[evaluate_storage_trace_frame, storage_trace_frame_read_result])
   >~ [`storage_trace_frame _`]
   >- rw[storage_trace_frame_raise, storage_trace_frame_return] >>
   qexists_tac `\H res ee G' tn' t. condQ H res ee G' tn' t /\ ~t.vs_halted /\
@@ -357,7 +360,7 @@ Resume compile_assert_frag_full[selected]:
 QED
 
 Resume compile_assert_frag_full[true]:
-  irule gas_outcome_full_pure >>
+  irule gas_outcome_full_pure >> reverse conj_tac >- simp[] >>
   qexistsl_tac [`G1`, `mid`, `INL ()`, `jump_to ok t`, `tn1`] >>
   simp[return_def] >> qx_gen_tac `H` >> strip_tac >>
   conj_tac >- (first_x_assum (qspec_then `DF H` mp_tac) >> simp[]) >>
@@ -407,7 +410,7 @@ Resume compile_assert_frag_full[false]:
      simp[] >> strip_tac >>
      drule gas_origin_ptr_path_append >> simp[] >>
      disch_then drule >> simp[]) >>
-  irule gas_outcome_full_exit >>
+  irule gas_outcome_full_exit >> reverse conj_tac >- simp[] >>
   qexistsl_tac [`G1`, `mid`, `Abort a u`, `INR (AssertException msg)`,
     `tn1`] >>
   simp[raise_def, exit_result_def, stmt_exit_ptr_def]

@@ -58,23 +58,6 @@ Proof
     taint_component_equality, EXTENSION] >> simp[SF CONJ_ss]
 QED
 
-Theorem shift_matched_data[local]:
-  dload_vars_match fs V G H tn un s t /\ s.vs_labels = t.vs_labels /\
-  (!v. b = Var v ==> v IN V) /\ op_prov G b = NONE /\
-  eval_operand b t = SOME y ==>
-  ?x. eval_operand b s = SOME x /\
-    op_taint tn b = op_taint un b /\ word_agree_except (op_taint tn b) x y
-Proof
-  strip_tac >>
-  `eval_operand b s = NONE <=> eval_operand b t = NONE` by
-    metis_tac[dload_matched_operand_defined] >>
-  Cases_on `eval_operand b s` >- gvs[] >>
-  `dload_value_word fs (op_taint tn b) (op_prov G b) (op_prov H b) x y` by
-    (irule dload_matched_operand >> qexistsl [`V`,`s`,`t`,`un`] >> simp[]) >>
-  Cases_on `op_prov H b` >> gvs[dload_value_word_def] >>
-  Cases_on `b` >> gvs[op_taint_def, dload_vars_match_def]
-QED
-
 Theorem dload_boundary_core_shift:
   MEM i.inst_opcode [SHL; SHR; SAR] /\
   MEM i (fn_insts f) /\ fn_ptr_ok P f /\ FDOM G SUBSET fn_pv P f /\
@@ -107,7 +90,7 @@ Proof
     (drule_all scalar_operand_equal >> simp[]) >>
   `?w. eval_operand b s = SOME w /\ op_taint tn b = op_taint un b /\
        word_agree_except (op_taint tn b) w y` by
-    (irule shift_matched_data >>
+    (irule scalar_matched_data >>
      qexistsl [`G`,`H`,`V`,`fs`,`t`] >> simp[] >> metis_tac[MEM]) >>
   qexists `update_var out
     (if i.inst_opcode = SHL then word_lsl w (w2n x)

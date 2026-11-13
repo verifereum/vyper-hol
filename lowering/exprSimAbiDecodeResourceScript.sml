@@ -1,6 +1,6 @@
 Theory exprSimAbiDecodeResource
 Ancestors
-  exprSimAbiDecodeShapeProbe exprSimAbiDecodeShape exprSimAbiDecodeTrace
+  exprSimAbiDecodeTraceSafe exprSimAbiDecodeShape exprSimAbiDecodeTrace
   exprSimAbiDecodePrims compileEnv emitHelper emitHelperProps venomInst pred_set list arithmetic
 
 Definition decode_label_range_def:

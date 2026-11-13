@@ -41,7 +41,8 @@ Proof
 QED
 
 Theorem select_result_nonstorage_gas_obs:
-  (!tr slot vt. r <> PlaceR (StoragePlace tr slot vt)) ==>
+  (!tr slot vt. r <> PlaceR (StoragePlace tr slot vt)) /\
+  SND (select_result cx ty r sb s) = s ==>
   select_result cx ty r sb (s with gas_obs := gs) =
     (FST (select_result cx ty r sb s), s with gas_obs := gs)
 Proof
@@ -52,9 +53,11 @@ Proof
      rpt (CASE_TAC >> simp[return_def, raise_def]))
   >~ [`HashMapRef tr slot kt vt`] >-
     (Cases_on `sb` >>
-     simp[select_result_def, extend_place_def, lift_option_type_def,
-          bind_def, ignore_bind_def, return_def, raise_def] >>
-     rpt (CASE_TAC >> simp[bind_def, ignore_bind_def, return_def, raise_def])) >>
+     gvs[select_result_def, extend_place_def, lift_option_type_def,
+         bind_def, ignore_bind_def, return_def, raise_def] >>
+     rpt (CASE_TAC >>
+          gvs[bind_def, ignore_bind_def, return_def, raise_def,
+              record_storage_event_def, evaluation_state_component_equality])) >>
   Cases_on `p`
   >~ [`StoragePlace tr slot vt`] >- metis_tac[]
   >~ [`MemoryPlace id path`] >-
@@ -208,7 +211,7 @@ Proof
      simp[exprSimHypsDefsTheory.expr_body_pre_def,
           Once vyperTypeSystemTheory.well_typed_expr_def] >>
      strip_tac >> gvs[vyperTypeSystemTheory.subscript_type_ok_def] >>
-     drule placeTypingPropsTheory.type_place_expr_vtype_annotation >>
+     drule vyperTypeSystemTheory.type_place_expr_vtype_annotation >>
      strip_tac >> Cases_on `vt` >>
      gvs[vyperTypeSystemTheory.vtype_annotation_ok_def,
          vyperTypeSystemTheory.subscript_vtype_def, AllCaseEqs()]) >>
@@ -382,7 +385,7 @@ Resume framed_array_represented_suffix_summary[valid]:
      simp[exprSimHypsDefsTheory.expr_body_pre_def,
           Once vyperTypeSystemTheory.well_typed_expr_def] >>
      strip_tac >> gvs[vyperTypeSystemTheory.subscript_type_ok_def] >>
-     drule placeTypingPropsTheory.type_place_expr_vtype_annotation >>
+     drule vyperTypeSystemTheory.type_place_expr_vtype_annotation >>
      strip_tac >> Cases_on `vt` >>
      gvs[vyperTypeSystemTheory.vtype_annotation_ok_def] >>
      gvs[vyperTypeSystemTheory.subscript_vtype_def, AllCaseEqs()]) >>

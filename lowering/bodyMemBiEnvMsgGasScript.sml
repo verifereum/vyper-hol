@@ -29,26 +29,40 @@ Theorem body_msg_gas_mem_prefix[local]:
   lower_value compile_expr cenv ty
     (Builtin (env_item_type MsgGas) (Env MsgGas) []) sa = (op,sb) /\
   fn_has_code sa sb func /\ fn_inst_ids_distinct func /\ local_ptrs_reserved cenv sa /\
-  stmt_state_rel ctx func cenv cx es s0 /\ alloca_history func s0 /\
+  (!H. valid_horizon cx st0 H es.storage_trace ==>
+     stmt_state_rel H ctx func cenv cx es s0 /\ storage_well_formed_on cx es (FST H)) /\
+  alloca_history func s0 /\
   ~s0.vs_halted /\ s0.vs_current_bb = sa.cs_current_bb /\
   s0.vs_inst_idx = LENGTH sa.cs_current_insts ==>
-  ?v t. gas_value_prefix T (ctx,func,cenv,cx)
-    (ty,Builtin (env_item_type MsgGas) (Env MsgGas) [])
-    (sa,sb,op) (es,s0) [T] (v,es,t)
+  ?v t. gas_marked_exec T (ctx,func)
+          (bind (eval_expr cx (Builtin (env_item_type MsgGas) (Env MsgGas) []))
+            (read_result cx)) (es,s0) [T] (INL v) es (OK t) /\
+    !H. valid_horizon cx st0 H es.storage_trace ==>
+      gas_value_prefix H T (ctx,func,cenv,cx)
+        (ty,Builtin (env_item_type MsgGas) (Env MsgGas) [])
+        (sa,sb,op) (es,s0) [T] (v,es,t)
 Proof
   strip_tac >> drule lower_value_env >> strip_tac >>
   drule_all compile_msg_gas_mem_path >>
   disch_then (qspec_then `ctx` strip_assume_tac) >> gvs[] >>
-  drule_all msg_gas_post_frame >>
-  disch_then (qspec_then `w` assume_tac) >>
   drule_all compile_msg_gas_history >>
   disch_then (qspec_then `w` assume_tac) >>
   qexistsl_tac [`IntV (&w2n w)`,
     `update_var out w (s0 with <|vs_gas_readings := DROP 1 s0.vs_gas_readings;
                                vs_inst_idx := LENGTH sb.cs_current_insts|>)`] >>
-  simp[gas_value_prefix_def, gas_marked_exec_def, gas_explicit_def,
-       gas_marked_path_def, msg_gas_source, update_var_def] >>
-  gvs[update_var_def]
+  `gas_marked_exec T (ctx,func)
+     (bind (eval_expr cx (Builtin (env_item_type MsgGas) (Env MsgGas) []))
+       (read_result cx)) (es,s0) [T] (INL (IntV (&w2n w))) es
+     (OK (update_var out w (s0 with <|vs_gas_readings := DROP 1 s0.vs_gas_readings;
+                                     vs_inst_idx := LENGTH sb.cs_current_insts|>)))` by
+    (simp[gas_marked_exec_def, gas_explicit_def, gas_marked_path_def,
+          msg_gas_source, update_var_def] >>
+     gvs[update_var_def]) >>
+  simp[] >> rpt strip_tac >>
+  qpat_x_assum `!H. valid_horizon _ _ H _ ==> _` (drule_then strip_assume_tac) >>
+  drule_all msg_gas_post_frame >>
+  disch_then (qspec_then `w` assume_tac) >>
+  simp[gas_value_prefix_def] >> gvs[update_var_def]
 QED
 
 Theorem body_msg_gas_sim_mem[local]:
@@ -82,7 +96,8 @@ QED
 Theorem body_msg_gas_mem_case:
   !cx ann args. body_expr_mem_ok cx (Builtin ann (Env MsgGas) args)
 Proof
-  rpt gen_tac >> pure_rewrite_tac[body_expr_mem_ok_def] >>
+  rpt gen_tac >> (rpt gen_tac >> match_mp_tac body_expr_mem_ok_intro >>
+   conj_tac >- (rpt strip_tac >> gvs[])) >>
   rpt gen_tac >> strip_tac >>
   `args = [] /\ ann = env_item_type MsgGas` by
     gvs[expr_body_pre_def, well_typed_expr_def, well_typed_builtin_app_def] >>
