@@ -4,10 +4,10 @@ Ancestors
   exprSimSend exprSimPrecompiles exprSimWordArgs exprSimHypsDefs vyperState
 
 Theorem gas_outcome_ptr_source_facts:
-  gas_outcome_ptr D tops (ctx,func) PG source (es,s0,G0,tn0) Q R /\
+  gas_outcome_ptr D tops (ctx,func) PG cx st0 source (es,s0,G0,tn0) Q R /\
   (!gs rr ee. source (es with gas_obs := gs) = (rr,ee) ==> P rr ee) ==>
-  gas_outcome_ptr D tops (ctx,func) PG source (es,s0,G0,tn0)
-    (\rr ee G tn t. Q rr ee G tn t /\ P rr ee /\
+  gas_outcome_ptr D tops (ctx,func) PG cx st0 source (es,s0,G0,tn0)
+    (\H rr ee G tn t. Q H rr ee G tn t /\ P rr ee /\
        ee.gas_obs = [] /\ ~t.vs_halted) R
 Proof
   strip_tac >> irule gas_outcome_ptr_marked_conseq >>
@@ -24,9 +24,9 @@ Theorem typed_args_outcome_ptr_facts:
   expr_sim_inv cenv cx env es /\
   (!e s. MEM e args /\ expr_sim_inv cenv cx env s ==>
      expr_body_pre cenv cx env e s /\ is_word_type (expr_type e)) /\
-  gas_outcome_ptr D tops (ctx,func) PG (eval_exprs cx args) (es,s0,G0,tn0) Q R ==>
-  gas_outcome_ptr D tops (ctx,func) PG (eval_exprs cx args) (es,s0,G0,tn0)
-    (\rr ee G tn t. Q rr ee G tn t /\
+  gas_outcome_ptr D tops (ctx,func) PG cx st0 (eval_exprs cx args) (es,s0,G0,tn0) Q R ==>
+  gas_outcome_ptr D tops (ctx,func) PG cx st0 (eval_exprs cx args) (es,s0,G0,tn0)
+    (\H rr ee G tn t. Q H rr ee G tn t /\
       (!vs. rr = INL vs ==> expr_sim_inv cenv cx env ee /\
         LIST_REL (\e v. ?tv.
           evaluate_type (get_tenv cx) (expr_type e) = SOME tv /\

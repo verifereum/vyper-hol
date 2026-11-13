@@ -1,6 +1,7 @@
 (* The first concrete consumer of the checked instruction-trace boundary. *)
 Theory ctorDeployMemoryRunPtrPrefixWord
 Ancestors
+  exprSimUnwrap slotCopyExecution
   ctorDeployMemoryRunPtrPrefixSequence ctorDeployMemoryRunPtrPrefixSteps
   abiEncoder emitHelper compileEnv exprLoweringProps finite_map
   ptrSafeRun ptrDiscipline venomExecSemantics venomState venomInst memLocDefs instIdxIndep
@@ -64,13 +65,13 @@ Proof
   `allocas_from lo (update_var x v s)` by
     (gvs[allocas_from_def, update_var_def] >> metis_tac[]) >>
   `step_inst_base (mk_inst iid DLOAD [src] [x]) s =
-     OK (update_var x v s)` by simp[prefix_dload_step, Abbr `v`] >>
+     OK (update_var x v s)` by simp[exprSimUnwrapTheory.step_DLOAD, Abbr `v`] >>
   `ghost_step fuel ctx PG G tn (mk_inst iid DLOAD [src] [x]) s =
      (DRESTRICT G (COMPL {x}),
       step_taint (mk_inst iid DLOAD [src] [x]) s (update_var x v s) tn)` by
     (qpat_assum `eval_operand src s = SOME w`
        (mp_then Any mp_tac prefix_dload_ghost_step) >> simp[Abbr `v`]) >>
-  simp[prefix_mstore_step, prefix_dload_ptr_step] >>
+  simp[slotCopyExecutionTheory.slot_copy_step_store, prefix_dload_ptr_step] >>
   conj_tac
   >- (irule prefix_mstore_ghost_step >> simp[prefix_mstore_endpoint]) >>
   irule prefix_mstore_ptr_step >>

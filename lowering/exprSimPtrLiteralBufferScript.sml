@@ -465,7 +465,7 @@ Theorem literal_ptr_memory_vv_post:
     ~is_word_type (expr_type e) /\ post_value_type cenv e = expr_type e /\
     evaluate_type (get_tenv cx) (expr_type e) = SOME tvt /\
     val_wf tvt v /\ val_in_memory tvt v (w2n w) t.vs_memory /\
-    stmt_state_rel H ctx func cenv cx es t /\
+    stmt_state_rel H ctx func cenv cx es t /\ storage_well_formed_on cx es (FST H) /\
     eval_operand buf.buf_operand t = SOME w /\
     FLOOKUP t.vs_allocas sa.cs_next_id = SOME (w2n w,sz) /\
     sa.cs_next_id < sb.cs_next_id /\ val_footprint tvt v <= sz /\
@@ -624,7 +624,8 @@ Theorem literal_ptr_memory_vv_frame_post:
   evaluate_type (get_tenv cx) (expr_type e) = SOME tv /\
   val_wf tv v /\ val_in_memory tv v (w2n w) t.vs_memory /\
   val_footprint tv v <= n /\
-  stmt_state_rel H ctx func cenv cx es u /\ local_ptrs_reserved cenv sa /\
+  stmt_state_rel H ctx func cenv cx es u /\ storage_well_formed_on cx es (FST H) /\
+  local_ptrs_reserved cenv sa /\
   (!x. not_fresh_at sa x ==> not_fresh_at sh x) /\
   (!x. not_fresh_at sa x ==> lookup_var x u = lookup_var x s) /\
   (t with <|vs_vars := u.vs_vars; vs_memory := u.vs_memory|>) = u /\
