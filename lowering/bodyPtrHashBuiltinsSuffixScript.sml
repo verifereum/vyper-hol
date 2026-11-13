@@ -94,14 +94,14 @@ Proof
   disch_then (qspecl_then [`sa`, `sm`, `op`, `s0`, `G0`, `tn0`] mp_tac) >>
   (impl_tac >- simp[]) >> strip_tac >>
   irule hash_value_outcome_ptr_suffix >>
-  conj_tac >- metis_tac[] >>
-  qexists_tac `\v ee G tn t.
+  qexistsl_tac [`\v ee G tn t.
     expr_post ctx func cenv cx e es sa sm s0 ee v op t /\
     t.vs_current_bb = sm.cs_current_bb /\
     t.vs_inst_idx = LENGTH sm.cs_current_insts /\
     ghost_inv d cenv cx ee G tn t /\
     ptr_val_ok cx (expr_type e) v op G tn t /\
     (~is_word_type (expr_type e) ==> ptr_buf_ok cenv e op G t) /\
-    ghost_kept cenv es sa G0 tn0 s0 G tn` >>
+    ghost_kept cenv es sa G0 tn0 s0 G tn`, `cx`] >>
+  conj_tac >- metis_tac[] >>
   simp[] >> metis_tac[]
 QED

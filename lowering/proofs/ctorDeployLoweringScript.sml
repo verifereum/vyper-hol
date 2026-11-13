@@ -139,7 +139,10 @@ Proof
          >- (qpat_x_assum `!tail. eval_stmts _ _ _ = _`
                (qspec_then `[]` mp_tac) >> simp[]) >>
          metis_tac[gas_marked_path_exec]) >>
-      `res <> INR HaltException` by metis_tac[] >>
+      `res <> INR HaltException` by
+        (qpat_x_assum `!gs res ee. _`
+           (qspecl_then [`gx`, `res`, `es_end with gas_obs := []`] mp_tac) >>
+         fs[]) >>
       qabbrev_tac `es' = es_end with gas_obs := []` >>
       `load_contract NONE gx am tx [(NONE, tops)] [] =
          deploy_ctor_finish tops tx cx nr mut am_c res es'` by

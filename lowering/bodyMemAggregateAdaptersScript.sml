@@ -84,6 +84,8 @@ Proof
   disch_then (qspecl_then [`es`, `func`] mp_tac) >>
   (impl_tac >- (simp[] >> first_assum ACCEPT_TAC)) >> strip_tac >> simp[] >>
   drule vyperTypeABITheory.OPT_MMAP_LENGTH >> simp[] >> strip_tac >>
+  qpat_x_assum `gas_outcome _ _ _ _ _ _ _` (mp_tac o SIMP_RULE bool_ss [exprSimDefsTheory.halt_exit_simps]) >>
+  strip_tac >>
   irule struct_gas_outcome_post >>
   goal_assum (drule_at Any) >>
   BETA_TAC >> rpt strip_tac >> qexists_tac `vs` >> gvs[] >> simp[] >>
