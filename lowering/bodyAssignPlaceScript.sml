@@ -88,7 +88,7 @@ Theorem body_target_idx_case[local]:
 Proof
   Induct using base_assignment_target_induct >>
   simp[body_base_target_ok_def, target_idx_case_def] >> rpt strip_tac >>
-  gvs[expr_sim_case_def, expr_vv_case_def, body_expr_ok_def] >> metis_tac[]
+  gvs[expr_sim_case_def, expr_vv_case_def, Once body_expr_ok_def] >> metis_tac[]
 QED
 
 Theorem body_target_case[local]:

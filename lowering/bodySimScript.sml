@@ -40,6 +40,8 @@ Ancestors
   vyperAST vyperInterpreter vyperState vyperValue vyperTypeSystem
   vyperTypeCallGraph vyperTypeCallStackSoundness immutableRelation
   immutableLocationProps exprSimMapDefs
+Libs
+  monadsyntax
 
 (* ===== The frame ===== *)
 
@@ -279,7 +281,16 @@ Definition body_expr_ok_def:
     (!a t n elems.
       e = Builtin a (MakeArray t n) elems /\
       builtin_args_length_ok (MakeArray t n) (LENGTH elems) ==>
-      body_exprs_ok cx elems)) /\
+      body_exprs_ok cx elems) /\
+    (!v8 e1 e2.
+      e = Subscript v8 e1 e2 ==>
+      body_expr_ok cx e1 /\
+      (!s'' res t s3 res' t'.
+        eval_expr cx e1 s'' = (INL res,t) /\
+        (if subscript_reads_base cx e1 e2
+         then do v <- read_result cx res; return (Value v) od
+         else return res) s3 = (INL res',t') ==>
+        body_expr_ok cx e2))) /\
   body_exprs_ok cx [] = T /\
   body_exprs_ok cx (e::es) =
     (body_expr_ok cx e /\
@@ -304,8 +315,28 @@ Theorem body_make_array_children_ok:
 Proof
   rpt strip_tac >>
   qpat_x_assum `body_expr_ok _ _`
-    (mp_tac o CONJUNCT2 o CONJUNCT2 o ONCE_REWRITE_RULE [body_expr_ok_def]) >>
+    (mp_tac o CONJUNCT1 o CONJUNCT2 o CONJUNCT2 o
+      ONCE_REWRITE_RULE [body_expr_ok_def]) >>
   simp[]
+QED
+
+(* A subscript's index simulates when evaluation reaches it. *)
+Theorem body_subscript_children_ok:
+  !cx v8 e1 e2.
+    body_expr_ok cx (Subscript v8 e1 e2) ==>
+    body_expr_ok cx e1 /\
+    (!s'' res t s3 res' t'.
+      eval_expr cx e1 s'' = (INL res,t) /\
+      (if subscript_reads_base cx e1 e2
+       then do v <- read_result cx res; return (Value v) od
+       else return res) s3 = (INL res',t') ==>
+      body_expr_ok cx e2)
+Proof
+  rpt gen_tac >>
+  disch_then
+    (mp_tac o CONJUNCT2 o CONJUNCT2 o CONJUNCT2 o
+      ONCE_REWRITE_RULE [body_expr_ok_def]) >>
+  simp[] >> metis_tac[]
 QED
 
 (* Only a top-level name and a subscript name a mapping. *)
@@ -322,7 +353,11 @@ Theorem body_expr_ok_map_case:
     body_expr_ok cx e /\ body_inv tops ctx cenv cx ==>
     expr_map_case F ctx func cenv cx e
 Proof
-  rw[body_expr_ok_def, expr_map_case_def] >> metis_tac[]
+  rpt gen_tac >> strip_tac >>
+  qpat_x_assum `body_expr_ok _ _`
+    (assume_tac o CONJUNCT1 o CONJUNCT2 o
+      ONCE_REWRITE_RULE [body_expr_ok_def]) >>
+  rw[expr_map_case_def] >> metis_tac[]
 QED
 
 (* A well-typed, supported statement of the frame, with its declaration,
