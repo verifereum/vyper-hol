@@ -6,6 +6,7 @@
    provides. *)
 Theory externalReturnWidenedCallMem
 Ancestors
+  externalReturnNormalizedMem incompatibleReturnLayout
   externalReturnLeafMem externalNormalizePremises typedNormalizeRankMem
   nonreentrantExit
   stmtSimDefs loweringPosts
@@ -19,6 +20,21 @@ Ancestors
   stmtLowering vyperTypeSystem vyperState lowerDloadDefs
 
 val _ = Parse.hide "body";
+
+Theorem arg_type_fits_antisym[local]:
+  (!t u. arg_type_fits t u ==> arg_type_fits u t ==> t = u) /\
+  (!ts us. arg_types_fit ts us ==> arg_types_fit us ts ==> ts = us)
+Proof
+  ho_match_mp_tac arg_type_fits_ind >> rpt conj_tac >> rpt gen_tac >>
+  simp_tac std_ss [arg_type_fits_def] >> rpt strip_tac >> gvs[] >>
+  gvs[arg_type_fits_def]
+QED
+
+Theorem type_widens_to_antisym[local]:
+  type_widens_to tenv t u /\ type_widens_to tenv u t ==> t = u
+Proof
+  rw[type_widens_to_def] >> metis_tac[arg_type_fits_antisym]
+QED
 
 Theorem external_frame_ret_widened_call_mem:
   !tops rpolicy unit am tx ret vs mut args fbody env0 lbl cenv0 pos_args
@@ -87,5 +103,31 @@ Theorem external_frame_ret_widened_call_mem:
        ?fuel r. run_from fuel unit.cu_context func t = r /\ exit_result r /\
                 mem_safe_run fuel unit.cu_context func t
 Proof
-  cheat
+  rpt gen_tac >> disch_then (map_every assume_tac o CONJUNCTS) >>
+  rpt gen_tac >> disch_then (map_every assume_tac o CONJUNCTS) >>
+  `well_typed_expr env e` by
+    (qpat_x_assum `IS_SOME (type_stmt _ _ _)` mp_tac >>
+     simp[type_stmt_def, AllCaseEqs()]) >>
+  drule_all incompatible_return_layout_intcall >> strip_tac >>
+  qpat_x_assum `e = _` SUBST_ALL_TAC >>
+  `expr_type (Call ann (IntCall fid) xs drv) = ann` by simp[vyperASTTheory.expr_type_def] >>
+  `type_widens_to
+     (get_tenv (initial_evaluation_context am.sources am.layouts tx NONE))
+     ann ret` by
+    (`env.type_defs =
+      get_tenv (initial_evaluation_context am.sources am.layouts tx NONE)` by
+       (qpat_x_assum `expr_sim_inv _ _ _ _` mp_tac >>
+        simp[exprSimHypsDefsTheory.expr_sim_inv_def,
+          vyperTypeInvariantsTheory.env_consistent_def,
+          vyperTypeInvariantsTheory.env_context_consistent_def]) >>
+     qpat_x_assum `IS_SOME (type_stmt _ _ _)` mp_tac >>
+     simp[type_stmt_def, AllCaseEqs()]) >>
+  `~is_word_type ret` by metis_tac[typedMemoryCopyTheory.typed_copy_word_widening] >>
+  `~(is_bytestring_type
+       (lowered_value_type cenv' (Call ann (IntCall fid) xs drv)) /\
+     is_bytestring_type ret)` by
+    metis_tac[typedMemoryCopyTheory.type_widens_from_bytestring] >>
+  `lowered_value_type cenv' (Call ann (IntCall fid) xs drv) <> ret` by
+    metis_tac[type_widens_to_antisym] >>
+  drule_all external_frame_ret_value_normalized_run_mem >> simp[]
 QED

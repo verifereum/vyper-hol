@@ -18,7 +18,7 @@ Theory o1ContractLowerDload
 Ancestors
   o1PassContract lowerDloadDefs lowerDloadSupplyProofs venomPassDispatcher venomFnScheduleRunner
   unitShapeDefs venomWf irSupply venomInst stackPlanTypes list rich_list
-  contextCodegenRel stackPlanGen lowerDloadCallChecks
+  contextCodegenRel stackPlanGen
 
 (* Why these hold: the expansion of DLOAD/DLOADBYTES only inserts
    non-terminators (ALLOCA, ADD, CODECOPY, MLOAD) in place of a
@@ -1106,8 +1106,6 @@ Proof
       `EVERY (\l. ~reserved_label l) (fn_labels g)` by gvs[] >>
       qpat_x_assum `fn_labels g = _` kall_tac >>
       gvs[fn_labels_def, EVERY_MAP, combinTheory.o_DEF]) >>
-  reverse conj_tac
-  >- metis_tac[lower_dload_function_supply_call_checks] >>
   irule lower_dload_function_supply_every >> conj_tac
   >- metis_tac[lower_dload_inst_supply_shape] >>
   qexistsl [`f`,`s`,`t`] >> simp[]

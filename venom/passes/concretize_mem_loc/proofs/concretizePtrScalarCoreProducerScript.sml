@@ -3,7 +3,7 @@ Ancestors concretizePtrReturnTransport concretizePtrRequestHistory concretizePtr
   concretizePtrPairedNextAttach concretizePtrPairedPrefixProbe
 
   concretizePtrOpaqueRetpc concretizePtrSourceOwnership
-  concretizeStepStructure concretizeStepShape concretizeStepCallChecks
+  concretizeStepStructure concretizeStepShape
   concretizeStepRetpc concretizeStageShape
   concretizePtrOperationalOpcodes opcodeClass
   concretizePtrParamProducer concretizePtrOrdinaryNext concretizePtrPairedPrefix

@@ -12,8 +12,7 @@ Ancestors
   unitShapeDefs venomExecSemantics dftGasSimFuel passSimulationDefs venomInst list rich_list
 
 (* The hypotheses are dft_ctx_sim_gas's (dftContractGas).  o1_ctx_shape C
-   gives inst_shape_ok for every instruction (no CREATE, CREATE2,
-   DELEGATECALL, SELFDESTRUCT, DJMP or OFFSET). *)
+   gives inst_shape_ok for every instruction (no DJMP or OFFSET). *)
 Theorem dft_ev_context_sim:
   LIST_REL (\fn fn'. fn' = dft_fn fn) C.ctx_functions C'.ctx_functions /\
   LIST_REL dft_fn_rel C.ctx_functions C'.ctx_functions /\
