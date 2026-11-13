@@ -147,17 +147,129 @@ Proof
   `vv_post ctx func ce cx e es sa sb s0 ee raw
      (LocatedValue lt (mk_ptr dst LocMemory)) z` by
     (irule lowered_snapshot_store_frame >> simp[] >>
-     qexistsl_tac [`w2n d`, `inst`, `s`, `sc`, `source`, `type_memory_size tv`] >>
-     simp[] >>
-     conj_tac
-     >- (rpt strip_tac >>
-         qpat_x_assum `!n b len. local_region _ _ s _ _ _ ==> _` drule >> simp[]) >>
-     conj_tac
-     >- (rpt strip_tac >>
-         qpat_x_assum `!aid off len. _ /\ aid < sa.cs_next_id ==> _` drule_all >> simp[]) >>
+     qexistsl_tac [`w2n d`, `inst`, `s`, `sc`, `source`, `type_memory_size tv`] >> simp[] >>
+     conj_tac >- (rpt strip_tac >>
+       qpat_x_assum `!n b len. local_region _ _ s _ _ _ ==> _` drule >> simp[]) >>
+     conj_tac >- (rpt strip_tac >>
+       qpat_x_assum `!aid off len. _ /\ aid < sa.cs_next_id ==> _` drule_all >> simp[]) >>
      rpt strip_tac >>
      qpat_x_assum `!a k. _ ==> mem_bytes_at _ _ z.vs_memory = _`
-       (qspecl_then [`off`, `len`] mp_tac) >>
-     simp[arithmeticTheory.ADD_COMM]) >>
+       (qspecl_then [`off`, `len`] mp_tac) >> simp[arithmeticTheory.ADD_COMM]) >>
   qexists_tac `z` >> simp[] >> first_assum ACCEPT_TAC
 QED
+
+(* The capacity premise concerns the lowered layout, never the annotation. *)
+Theorem snapshot_lowered_located_mem:
+  post_value_type ce e = lowered_value_type ce e /\
+  ~is_word_type (lowered_value_type ce e) /\ p.ptr_location = LocMemory /\
+  compile_snapshot_vv ce T
+    (vv_with_type (lowered_value_type ce e) (LocatedValue declared p)) sm = (saved,sb) /\
+  vv_post ctx func ce cx e es sa sm s0 ee raw (LocatedValue declared p) s /\
+  read_result cx raw ee = (INL v,ee) /\
+  evaluate_type (get_tenv cx) (lowered_value_type ce e) = SOME tv /\
+  value_has_type tv v /\
+  type_memory_bytes ce (lowered_value_type ce e) = type_memory_size tv /\
+  type_memory_size tv < dimword (:256) /\
+  (!w. eval_operand p.ptr_operand s = SOME w ==>
+    w2n w + type_memory_size tv <= s.vs_alloca_next) /\
+  local_ptrs_reserved ce sa /\ MAP FDOM es.scopes = MAP FDOM ee.scopes /\
+  sa.cs_next_var <= sm.cs_next_var /\ sa.cs_next_id <= sm.cs_next_id /\
+  fn_has_code sm sb func /\ fn_inst_ids_distinct func /\
+  (!x. p.ptr_operand = Var x ==> not_fresh_at sm x) /\
+  alloca_history func s /\ ~s.vs_halted /\
+  s.vs_current_bb = sm.cs_current_bb /\
+  s.vs_inst_idx = LENGTH sm.cs_current_insts ==>
+  ?z dst d. gas_path_mem ctx func s 0 (OK z) /\
+    saved = LocatedValue (lowered_value_type ce e) (mk_ptr dst LocMemory) /\
+    vv_post ctx func ce cx e es sa sb s0 ee raw saved z /\
+    vv_own ce cx (lowered_value_type ce e) sm sb ee raw saved z /\
+    vv_store_bound cx (lowered_value_type ce e) (lowered_value_type ce e)
+      ee raw saved z /\
+    val_in_memory tv v (w2n d) z.vs_memory /\ eval_operand dst z = SOME d /\
+    FLOOKUP z.vs_allocas sm.cs_next_id = SOME (w2n d,type_memory_size tv) /\
+    (!n b len. local_region ce ee.scopes z n b len ==>
+      regions_disjoint (w2n d) (type_memory_size tv) b len) /\
+    alloca_history func z /\ s.vs_alloca_next <= z.vs_alloca_next /\
+    z.vs_current_bb = sb.cs_current_bb /\
+    z.vs_inst_idx = LENGTH sb.cs_current_insts
+Proof
+  disch_then (map_every assume_tac o CONJUNCTS) >>
+  drule_all snapshot_nonword_slices >> strip_tac >>
+  `sc = mid /\ src = p.ptr_operand` by
+    gvs[vv_with_type_def, unwrap_value_def, comp_return_def] >>
+  gvs[] >>
+  `local_ptrs_reserved ce sm` by
+    metis_tac[local_ptrs_reserved_next_var] >>
+  `?u d. gas_path_mem ctx func s 0 (OK u) /\
+    vv_post ctx func ce cx e es sa mid s0 ee raw (LocatedValue declared p) u /\
+    eval_operand buf.buf_operand u = SOME d /\
+    FLOOKUP u.vs_allocas sm.cs_next_id = SOME (w2n d,type_memory_size tv) /\
+    w2n d + type_memory_size tv <= u.vs_alloca_next /\
+    u.vs_memory = s.vs_memory /\ u.vs_labels = s.vs_labels /\
+    sm.cs_next_id < mid.cs_next_id /\
+    (!x. not_fresh_at sm x ==> lookup_var x u = lookup_var x s) /\
+    (!aid b len. aid < sm.cs_next_id /\ FLOOKUP s.vs_allocas aid = SOME (b,len) ==>
+       regions_disjoint (w2n d) (type_memory_size tv) b len) /\
+    (!n b len. local_region ce ee.scopes u n b len ==>
+       regions_disjoint (w2n d) (type_memory_size tv) b len) /\
+    (?x. buf.buf_operand = Var x /\ not_fresh_at mid x) /\
+    s.vs_alloca_next <= u.vs_alloca_next /\ alloca_history func u /\
+    ~u.vs_halted /\ u.vs_current_bb = mid.cs_current_bb /\
+    u.vs_inst_idx = LENGTH mid.cs_current_insts` by suspend "allocation" >>
+  suspend "store"
+QED
+
+Resume snapshot_lowered_located_mem[allocation]:
+  `stmt_state_rel ctx func ce cx ee s` by fs[vv_post_def] >>
+  `eval_operand (Lit 0w) s = SOME 0w` by simp[eval_operand_def] >>
+  `!x. Lit 0w = Var x ==> not_fresh_at sm x` by simp[] >>
+  drule_all exprSimMemUnwrapTheory.alloc_buffer_source_path_mem_endpoint >> strip_tac >>
+  drule_all exprSimAllocTheory.buffer_alloc_code >> strip_tac >>
+  `!x. vv_operand (LocatedValue declared p) = Var x ==> not_fresh_at sm x` by
+    simp[vv_operand_def] >>
+  drule_all exprSimIfExpTheory.ifexp_alloc_preserves_post >> strip_tac >>
+  gvs[] >>
+  qexistsl_tac [`q with vs_inst_idx := LENGTH mid.cs_current_insts`, `w`] >>
+  simp[] >> metis_tac[]
+QED
+
+Resume snapshot_lowered_located_mem[store]:
+  `val_wf tv v` by metis_tac[valueTypingMemoryPropsTheory.value_has_type_memory_wf] >>
+  `?w. eval_operand p.ptr_operand u = SOME w /\
+    val_in_memory tv v (w2n w) u.vs_memory` by
+    (`vv_holds ce cx (lowered_value_type ce e) raw (LocatedValue declared p) ee u` by
+       gvs[vv_post_def] >>
+     pop_assum mp_tac >> simp[vv_holds_def] >> strip_tac >>
+     gvs[] >> metis_tac[]) >>
+  `eval_operand p.ptr_operand s = SOME w` by
+    (Cases_on `p.ptr_operand` >> gvs[eval_operand_def]) >>
+  `w2n w + type_memory_size tv <= u.vs_alloca_next` by
+    (first_x_assum drule >> decide_tac) >>
+  `!q. p.ptr_operand = Var q \/ buf.buf_operand = Var q ==> not_fresh_at mid q` by
+    (rpt strip_tac >> gvs[] >> irule not_fresh_at_mono >>
+     qexists_tac `sm` >> fs[ci_mono_def]) >>
+  `alloca_inv u` by fs[vv_post_def, stmt_state_rel_def] >>
+  `sa.cs_next_var <= mid.cs_next_var` by (fs[ci_mono_def] >> decide_tac) >>
+  `!aid off len. FLOOKUP s0.vs_allocas aid = SOME (off,len) /\ aid < sa.cs_next_id ==>
+    regions_disjoint (w2n d) (type_memory_size tv) off len` by
+    (rpt strip_tac >>
+     qpat_x_assum `!aid b len. aid < sm.cs_next_id /\ _ ==> _` irule >>
+     qexists_tac `aid` >> conj_tac >- decide_tac >> fs[vv_post_def] >> metis_tac[]) >>
+  drule_all exprSimAllocTheory.buffer_alloc_code >> strip_tac >>
+  qabbrev_tac `inst = mk_inst sm.cs_next_id ALLOCA [Lit (n2w (type_memory_size tv))]
+    [STRING #"%" (toString sm.cs_next_var)]` >>
+  `inst.inst_id = sm.cs_next_id /\ inst.inst_opcode = ALLOCA /\
+    MEM inst (fn_insts func)` by simp[Abbr `inst`, mk_inst_def] >>
+  `inst.inst_id < sb.cs_next_id` by (fs[ci_mono_def] >> decide_tac) >>
+  drule_at (Pat `compile_store_memory _ _ _ _ _ _ = _`) lowered_snapshot_store_mem >>
+  disch_then (drule_at (Pat `vv_post _ _ _ _ _ _ _ _ _ _ _ _ _`)) >>
+  disch_then (drule_at (Pat `read_result _ _ _ = _`)) >>
+  disch_then (drule_at (Pat `evaluate_type _ _ = _`)) >>
+  disch_then (drule_at (Pat `eval_operand p.ptr_operand _ = _`)) >>
+  disch_then (qspecl_then [`sm`, `inst`, `d`] mp_tac) >>
+  (impl_tac >- (gvs[] >> rpt conj_tac >> first_assum ACCEPT_TAC)) >> strip_tac >>
+  qexistsl_tac [`z`, `buf.buf_operand`, `d`] >> simp[] >>
+  conj_tac >- metis_tac[gas_path_mem_then, arithmeticTheory.ADD_0] >>
+  gvs[] >> first_assum ACCEPT_TAC
+QED
+Finalise snapshot_lowered_located_mem
