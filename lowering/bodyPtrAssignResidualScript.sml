@@ -13,9 +13,17 @@
  *)
 Theory bodyPtrAssignResidual
 Ancestors
+  assignScalarTargetFramePtr assignTupleTargetOutcomePtr assignTupleStoreBoundsPtr
+  assignTupleStoreOpenPtr assignTupleTargetSourcePtr assignTupleWordStorageTailPtr
+  assignTupleBytesStorageTailPtr
   assignDynStorageAddressPtr assignStorageBlockFramePtr assignDynStorageDataPtr
   assignStorageHeaderFramePtr assignStoragePrefixLivePtr
   aggregateLocalStorePtr assignDynStorageCompiledPtr
+  assignSubregionPtrStorageGhost assignSubregionPtrStoragePrefix
+  assignTupleStoreCutPtr
+  assignDynStorageLandingPtr assignDynStorageDispatchPtr
+  assignBytesStoragePtr assignBytesStorageLandingPtr assignTupleStorageRegionPtr assignStorageLandingPtr assignStaticStorageLandingPtr assignOwnedValueFramePtr
+  assignStorageBytesPrefixPtr assignStorageSubregionSemanticPtr
   bodyPtrPreds bodyPtrDefs bodySim exprSimHyps supportedStmts supportedDecls
   stmtLowering exprLowering compileEnv vyperAST vyperInterpreter vyperState
   vyperTypeSystem list finite_map
