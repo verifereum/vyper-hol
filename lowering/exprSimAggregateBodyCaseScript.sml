@@ -40,7 +40,7 @@ Proof
              wordsTheory.dimword_def]) >>
       drule buffer_alloc_counted >>
       disch_then (drule_at (Pat `fn_has_code sa sm func`)) >>
-      disch_then (drule_at (Pat `stmt_state_rel _ _ _ _ _ _`)) >>
+      disch_then (drule_at (Pat `stmt_state_rel H _ _ _ _ _ _`)) >>
       simp[] >> strip_tac >>
       `!e st. MEM e args /\ expr_sim_inv cenv cx env st ==>
          expr_body_pre cenv cx env e st /\ (F ==> int_calls_expr e = [])` by
@@ -53,7 +53,7 @@ Proof
         regions_disjoint io (type_memory_size itv) b (type_memory_size_list tvs)` by
         (drule aggregate_body_alloc_immutable_prefix >>
          disch_then (drule_at (Pat `fn_has_code sa sm func`)) >>
-         disch_then (drule_at (Pat `stmt_state_rel _ _ _ _ _ t`)) >>
+         disch_then (drule_at (Pat `stmt_state_rel H _ _ _ _ _ t`)) >>
          disch_then (qspec_then `type_memory_size_list tvs` mp_tac) >>
          gvs[] >> metis_tac[]) >>
       qpat_x_assum `compile_make_tuple _ _ _ _ _ _ _ = _` mp_tac >>
@@ -61,7 +61,7 @@ Proof
       drule aggregate_body_make_tuple_fits_sim >>
       disch_then (drule_at (Pat `LIST_REL _ _ _`)) >>
       disch_then (drule_at (Pat `OPT_MMAP _ _ = _`)) >>
-      disch_then (drule_at (Pat `stmt_state_rel _ _ _ _ _ t`)) >>
+      disch_then (drule_at (Pat `stmt_state_rel H _ _ _ _ _ t`)) >>
       disch_then (qspec_then `env` mp_tac) >> simp[] >>
       disch_then (qspecl_then [`inst`, `b`, `type_memory_size_list tvs`] mp_tac) >>
       simp[] >> (impl_tac >- metis_tac[]) >> strip_tac >>
@@ -82,7 +82,7 @@ Proof
 QED
 
 Resume compile_make_array_body_vv_case[tuple_post]:
-  qmatch_goalsub_abbrev_tac `vv_post _ _ _ _ e` >>
+  qmatch_goalsub_abbrev_tac `vv_post H _ _ _ _ e` >>
   `TupleT tys = expr_type e` by
     simp[Abbr `e`, vyperASTTheory.expr_type_def] >>
   pop_assum SUBST1_TAC >> irule buffer_loop_memory_vv_post >>
@@ -109,7 +109,7 @@ Resume compile_make_array_body_vv_case[tuple_post]:
     drule_at (Pat `local_region _ _ _ _ _ _`) aggregate_alloca_slice_excludes_local >>
     disch_then (qspecl_then [`x`, `0`, `type_memory_size_list tvs`] mp_tac) >>
     disch_then (drule_at (Pat `MEM _ _`)) >> simp[] >>
-    disch_then (drule_at (Pat `stmt_state_rel _ _ _ _ _ _`)) >> simp[]) >>
+    disch_then (drule_at (Pat `stmt_state_rel H _ _ _ _ _ _`)) >> simp[]) >>
   conj_tac >- metis_tac[] >>
   conj_tac >- (rpt strip_tac >> first_x_assum irule >> simp[] >> metis_tac[arithmeticTheory.ADD_COMM]) >>
   `val_wf (TupleTV tvs) (ArrayV (TupleV vs))` suffices_by
@@ -140,7 +140,7 @@ Resume compile_make_array_body_vv_case[array_case]:
      gvs[wordsTheory.dimword_def]) >>
   drule buffer_alloc_counted >>
   disch_then (drule_at (Pat `fn_has_code sa sm func`)) >>
-  disch_then (drule_at (Pat `stmt_state_rel _ _ _ _ _ _`)) >>
+  disch_then (drule_at (Pat `stmt_state_rel H _ _ _ _ _ _`)) >>
   simp[] >> strip_tac >>
   `!e st. MEM e args /\ expr_sim_inv cenv cx env st ==>
      expr_body_pre cenv cx env e st` by
@@ -156,7 +156,7 @@ Resume compile_make_array_body_vv_case[array_case]:
        LENGTH args * type_memory_size tv)` by
     (drule aggregate_body_alloc_immutable_prefix >>
      disch_then (drule_at (Pat `fn_has_code sa sm func`)) >>
-     disch_then (drule_at (Pat `stmt_state_rel _ _ _ _ _ t`)) >>
+     disch_then (drule_at (Pat `stmt_state_rel H _ _ _ _ _ t`)) >>
      disch_then (qspec_then
        `((if (case bnd of Fixed _ => F | Dynamic _ => T) then 32 else 0) +
          LENGTH args * type_memory_size tv)` mp_tac) >>
@@ -165,7 +165,7 @@ Resume compile_make_array_body_vv_case[array_case]:
   asm_rewrite_tac[] >> strip_tac >>
   drule aggregate_body_make_array_sim >>
   disch_then (drule_at (Pat `evaluate_type _ et = _`)) >>
-  disch_then (drule_at (Pat `stmt_state_rel _ _ _ _ _ t`)) >>
+  disch_then (drule_at (Pat `stmt_state_rel H _ _ _ _ _ t`)) >>
   disch_then (qspec_then `env` mp_tac) >> simp[] >>
   disch_then (drule_at (Pat `compile_make_array _ _ _ _ _ _ _ _ = _`)) >>
   disch_then (qspecl_then [`inst`, `b`, `type_memory_bytes cenv (ArrayT et bnd)`] mp_tac) >>
@@ -186,7 +186,7 @@ Resume compile_make_array_body_vv_case[array_case]:
 QED
 
 Resume compile_make_array_body_vv_case[array_post]:
-  qmatch_goalsub_abbrev_tac `vv_post _ _ _ _ e` >>
+  qmatch_goalsub_abbrev_tac `vv_post H _ _ _ _ e` >>
   `ArrayT et bnd = expr_type e` by
     simp[Abbr `e`, vyperASTTheory.expr_type_def] >>
   pop_assum SUBST1_TAC >> irule buffer_loop_memory_vv_post >>
@@ -213,7 +213,7 @@ Resume compile_make_array_body_vv_case[array_post]:
     drule_at (Pat `local_region _ _ _ _ _ _`) aggregate_alloca_slice_excludes_local >>
     disch_then (qspecl_then [`x`, `0`, `type_memory_bytes cenv (ArrayT et bnd)`] mp_tac) >>
     disch_then (drule_at (Pat `MEM _ _`)) >> simp[] >>
-    disch_then (drule_at (Pat `stmt_state_rel _ _ _ _ _ _`)) >> simp[]) >>
+    disch_then (drule_at (Pat `stmt_state_rel H _ _ _ _ _ _`)) >> simp[]) >>
   conj_tac >- metis_tac[] >>
   conj_tac >- (rpt strip_tac >> first_x_assum irule >> simp[] >> metis_tac[arithmeticTheory.ADD_COMM]) >>
   `val_wf (ArrayTV tv bnd) (ArrayV (make_array_value tv bnd vs))` by

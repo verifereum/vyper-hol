@@ -40,15 +40,15 @@ Theorem log_readonly_ptr_args:
                (!l. FST arg <> Label l)) xs /\
   t.vs_memory = s.vs_memory /\ tm.t_mem = tn.t_mem /\
   (!p. not_fresh_at sm p ==>
-    lookup_var p t = lookup_var p s /\ FLOOKUP H p = FLOOKUP G p /\
+    lookup_var p t = lookup_var p s /\ FLOOKUP HG p = FLOOKUP G p /\
     op_taint tm (Var p) = op_taint tn (Var p)) ==>
-  LIST_REL (\arg v. ptr_val_ok cx (SND arg) v (FST arg) H tm t) xs vs
+  LIST_REL (\arg v. ptr_val_ok cx (SND arg) v (FST arg) HG tm t) xs vs
 Proof
   Induct >> Cases_on `vs` >> simp[] >> rpt gen_tac >> strip_tac >>
   suspend "head"
 QED
 Resume log_readonly_ptr_args[head]:
-  rename1 `ptr_val_ok cx (SND arg) v (FST arg) H tm t` >>
+  rename1 `ptr_val_ok cx (SND arg) v (FST arg) HG tm t` >>
   PairCases_on `arg` >> Cases_on `arg0` >>
   gvs[ptr_val_ok_def, ptr_mem_ok_def, eval_operand_def, op_taint_def, op_prov_def] >>
   metis_tac[]
@@ -73,7 +73,7 @@ QED
 
 Theorem compile_log_topic_ops_seq_ptr:
   !xs vs sm ops sb s topics G tn.
-  stmt_state_rel ctx func cenv cx es s /\ local_ptrs_reserved cenv sm /\
+  stmt_state_rel H ctx func cenv cx es s /\ local_ptrs_reserved cenv sm /\
   compile_log_topic_ops (MAP (\p. (FST p,is_bytestring_type (SND p))) xs) sm = (ops,sb) /\
   EVERY (\p. (!z. FST p = Var z ==> not_fresh_at sm z) /\
               (!l. FST p <> Label l)) xs /\
@@ -110,7 +110,7 @@ Resume compile_log_topic_ops_seq_ptr[tail]:
   rename1 `run_inst_seq (emitted_insts sm sc) s = OK u` >>
   qpat_x_assum `encode_indexed_event_topics (T::_) _ _ = _` mp_tac >>
   simp[Once encode_indexed_event_topics_def, AllCaseEqs()] >> strip_tac >> gvs[] >>
-  `stmt_state_rel ctx func cenv cx es u` by
+  `stmt_state_rel H ctx func cenv cx es u` by
     (irule hash_readonly_state_rel >> goal_assum (drule_at Any) >>
      qexists_tac `sm` >> simp[]) >>
   `local_ptrs_reserved cenv sc` by
@@ -131,11 +131,11 @@ Resume compile_log_topic_ops_seq_ptr[shift]:
   map_every (fn pat => qpat_x_assum pat kall_tac)
     [`log_arg_rel _ _ _ _ _ _ _ _`, `ptr_val_ok _ _ _ _ _ _ _`,
      `supported_scalar_type _`, `evaluate_type _ _ = _`, `value_has_type _ _`,
-     `encode_event_topic _ _ = _`, `stmt_state_rel _ _ _ _ _ s`,
+     `encode_event_topic _ _ = _`, `stmt_state_rel _ _ _ _ _ _ s`,
      `local_ptrs_reserved cenv sm`, `!z. x = Var z ==> _`, `!l. x <> Label l`,
      `LIST_REL (\arg v. ptr_val_ok _ _ _ _ G tn s) xs t`,
      `LIST_REL (\arg v. log_arg_rel _ _ _ sm _ s _ _ /\ _) xs t`] >>
-  `stmt_state_rel ctx func cenv cx es ua` by simp[Abbr `ua`, stmt_state_rel_inst_idx] >>
+  `stmt_state_rel H ctx func cenv cx es ua` by simp[Abbr `ua`, stmt_state_rel_inst_idx] >>
   `LIST_REL (\arg v. log_arg_rel cenv cx sa sc es ua arg v /\
       supported_scalar_type (SND arg) /\
       ?tv. evaluate_type (get_tenv cx) (SND arg) = SOME tv /\ value_has_type tv v) xs t` by
@@ -146,9 +146,9 @@ Resume compile_log_topic_ops_seq_ptr[shift]:
 QED
 Resume compile_log_topic_ops_seq_ptr[compose]:
   rename1 `run_inst_seq (emitted_insts sc sb) ua = OK w` >>
-  rename1 `inst_seq_ptr D 0 ctx func PG Gf tnf (emitted_insts sc sb) ua H tm` >>
+  rename1 `inst_seq_ptr D 0 ctx func PG Gf tnf (emitted_insts sc sb) ua HG tm` >>
   rpt (qpat_x_assum `LIST_REL _ xs _` kall_tac) >>
-  rpt (qpat_x_assum `stmt_state_rel _ _ _ _ _ _` kall_tac) >>
+  rpt (qpat_x_assum `stmt_state_rel _ _ _ _ _ _ _` kall_tac) >>
   qpat_x_assum `encode_indexed_event_topics _ _ _ = _` kall_tac >>
   drule log_topic_inst_extends >> strip_tac >>
   drule log_topics_inst_extends >> strip_tac >>
@@ -160,11 +160,11 @@ Resume compile_log_topic_ops_seq_ptr[compose]:
     (drule log_topic_opcode_shape >> drule log_topics_opcode_shape >>
      simp[EVERY_MEM] >> metis_tac[]) >>
   `run_inst_seq (emitted_insts sm sb) s = OK (w with vs_inst_idx := u.vs_inst_idx) /\
-   inst_seq_ptr D 0 ctx func PG G tn (emitted_insts sm sb) s H tm` by
+   inst_seq_ptr D 0 ctx func PG G tn (emitted_insts sm sb) s HG tm` by
     (once_asm_rewrite_tac[] >> irule successful_seq_ptr_append >>
      simp[Abbr `ua`] >> qexistsl_tac [`Gf`, `tnf`] >> simp[] >>
      metis_tac[ADD_COMM]) >>
-  qexistsl_tac [`w with vs_inst_idx := u.vs_inst_idx`, `H`, `tm`] >>
+  qexistsl_tac [`w with vs_inst_idx := u.vs_inst_idx`, `HG`, `tm`] >>
   simp[] >> suspend "post"
 QED
 Resume compile_log_topic_ops_seq_ptr[post]:
@@ -184,7 +184,7 @@ QED
 Finalise compile_log_topic_ops_seq_ptr
 
 Theorem compile_split_log_topics_seq_ptr:
-  stmt_state_rel ctx func cenv cx es s /\ local_ptrs_reserved cenv sm /\
+  stmt_state_rel H ctx func cenv cx es s /\ local_ptrs_reserved cenv sm /\
   LENGTH flags = LENGTH xs /\
   compile_log_topic_ops (FST (split_log_ops xs flags)) sm = (ops,sb) /\
   EVERY (\p. (!z. FST p = Var z ==> not_fresh_at sm z) /\
@@ -205,7 +205,7 @@ Theorem compile_split_log_topics_seq_ptr:
     (!p. not_fresh_at sm p ==>
       lookup_var p t = lookup_var p s /\ FLOOKUP Gf p = FLOOKUP G p /\
       op_taint tnf (Var p) = op_taint tn (Var p)) /\
-    stmt_state_rel ctx func cenv cx es t /\
+    stmt_state_rel H ctx func cenv cx es t /\
     LIST_REL (log_arg_rel cenv cx sa sb es t)
       (SND (split_log_ops xs flags)) (log_non_indexed_values flags vs) /\
     LIST_REL (\arg v. ptr_val_ok cx (SND arg) v (FST arg) Gf tnf t)
@@ -251,7 +251,7 @@ QED
 Finalise compile_split_log_topics_seq_ptr
 
 Theorem compile_split_log_topics_path_ptr:
-  stmt_state_rel ctx func cenv cx es s /\ local_ptrs_reserved cenv sm /\
+  stmt_state_rel H ctx func cenv cx es s /\ local_ptrs_reserved cenv sm /\
   LENGTH flags = LENGTH xs /\
   compile_log_topic_ops (FST (split_log_ops xs flags)) sm = (ops,sb) /\
   EVERY (\p. (!z. FST p = Var z ==> not_fresh_at sm z) /\
@@ -264,20 +264,20 @@ Theorem compile_split_log_topics_path_ptr:
   ~ctx_has_dalloca ctx /\ ~s.vs_halted /\
   lookup_block s.vs_current_bb func.fn_blocks = SOME bb /\
   isPREFIX (emitted_insts sm sb) (DROP s.vs_inst_idx bb.bb_instructions) /\
-  ghost_inv d cenv cx es G tn s /\
+  ghost_inv H d cenv cx es G tn s /\
   (!p sz. cenv.ce_return_buf = SOME (PtrVar (Var p) sz) ==> not_fresh_at sm p) /\
   (!p sz. cenv.ce_return_pc = SOME (PtrVar (Var p) sz) ==> not_fresh_at sm p) /\
   ghost_kept cenv es sa0 G0 tn0 s0 G tn /\ sa0.cs_next_var <= sm.cs_next_var ==>
   ?t Gf tnf. gas_path_ptr D 0 ctx func PG G tn s 0 Gf tnf (OK t) /\
     LIST_REL (\op w. eval_operand op t = SOME w) ops topics /\
     EVERY (\op. op_taint tnf op = {}) ops /\
-    stmt_state_rel ctx func cenv cx es t /\
+    stmt_state_rel H ctx func cenv cx es t /\
     LIST_REL (log_arg_rel cenv cx sa sb es t)
       (SND (split_log_ops xs flags)) (log_non_indexed_values flags vs) /\
     LIST_REL (\arg v. ptr_val_ok cx (SND arg) v (FST arg) Gf tnf t)
       (SND (split_log_ops xs flags)) (log_non_indexed_values flags vs) /\
     EVERY (\op. (!z. op = Var z ==> not_fresh_at sb z) /\ (!l. op <> Label l)) ops /\
-    ghost_inv d cenv cx es Gf tnf t /\ ghost_kept cenv es sa0 G0 tn0 s0 Gf tnf /\
+    ghost_inv H d cenv cx es Gf tnf t /\ ghost_kept cenv es sa0 G0 tn0 s0 Gf tnf /\
     t.vs_inst_idx = s.vs_inst_idx + LENGTH (emitted_insts sm sb) /\
     t.vs_current_bb = s.vs_current_bb /\ t.vs_memory = s.vs_memory /\
     (t with <|vs_vars := s.vs_vars; vs_inst_idx := s.vs_inst_idx|>) = s /\
@@ -289,7 +289,7 @@ Theorem compile_split_log_topics_path_ptr:
 Proof
   strip_tac >> drule_all compile_split_log_topics_seq_ptr >>
   disch_then (qspecl_then [`PG`, `D`] strip_assume_tac) >>
-  `ghost_inv d cenv cx es Gf tnf t` by
+  `ghost_inv H d cenv cx es Gf tnf t` by
     (irule ghost_inv_readonly_transport >> goal_assum (drule_at Any) >> simp[] >>
      qpat_x_assum `t with vs_vars := s.vs_vars = s`
        (fn th => once_rewrite_tac[GSYM th]) >> simp[]) >>

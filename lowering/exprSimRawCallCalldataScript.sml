@@ -38,6 +38,7 @@ Ancestors
   vyperRuntimeAccounts vyperTypeInvariants vyperEvalExprPreservesScopesDom
   venomExecSemantics venomInst venomState exprSimSend builtinSystem context
   venomMemProps exprSimHash venomExecProps emitHelperProps
+  vyperStorageTrace vyperStorageFootprint vyperFiniteStoragePreservation
   supportedExprTraverse exprSimAlloc exprSimBuffer builtinProps varsExt exprSafeOperand valueCopy
 Libs
   pairLib
@@ -342,7 +343,7 @@ Proof
 QED
 
 Theorem calldata_frame_value_state_rel[local]:
-  state_rel func cenv cx es s ==>
+  state_rel H func cenv cx es s ==>
   frame_call_value cx vo es = (INL vo, es)
 Proof
   simp[state_rel_def, frame_call_value_def, vyperStateTheory.return_def]
@@ -484,10 +485,10 @@ QED
 Theorem calldata_default_gas[local]:
   !ctx func cenv cx es sa op sb s.
     emit_op GAS [] sa = (op,sb) /\ local_ptrs_reserved cenv sa /\
-    stmt_state_rel ctx func cenv cx es s ==>
+    stmt_state_rel H ctx func cenv cx es s ==>
     ?t. run_inst_seq (emitted_insts sa sb) s = OK t /\
       eval_operand op t = SOME (HD (s.vs_gas_readings ++ [0w])) /\
-      stmt_state_rel ctx func cenv cx es t /\
+      stmt_state_rel H ctx func cenv cx es t /\
       (!x. not_fresh_at sa x ==> lookup_var x t = lookup_var x s) /\
       t = s with <| vs_vars := t.vs_vars;
                     vs_gas_readings := DROP 1 s.vs_gas_readings |>
@@ -498,12 +499,12 @@ Proof
        exec_gas_def] >>
   `not_local_ptr cenv es.scopes (STRING #"%" (toString sa.cs_next_var))` by
     (irule local_ptrs_reserved_fresh >> goal_assum (drule_at Any) >> simp[]) >>
-  `!w rs. stmt_state_rel ctx func cenv cx es
+  `!w rs. stmt_state_rel H ctx func cenv cx es
             (update_var (STRING #"%" (toString sa.cs_next_var)) w
                (s with vs_gas_readings := rs))` by
     (rpt gen_tac >> irule stmt_state_rel_update_var >>
      simp[hash_gas_readings_state_rel]) >>
-  `!w. stmt_state_rel ctx func cenv cx es
+  `!w. stmt_state_rel H ctx func cenv cx es
          (update_var (STRING #"%" (toString sa.cs_next_var)) w s)` by
     (gen_tac >> irule stmt_state_rel_update_var >> simp[]) >>
   Cases_on `s.vs_gas_readings` >>
@@ -544,13 +545,13 @@ Theorem calldata_outbuf_positive_run[local]:
   !n sa valop ptrop sb ctx func cenv cx es s.
     0 < n /\ ((n + 31) DIV 32) * 32 + 32 < dimword (:256) /\
     compile_raw_call_outbuf n sa = ((valop,ptrop),sb) /\
-    stmt_state_rel ctx func cenv cx es s /\ fn_inst_ids_distinct func /\
+    stmt_state_rel H ctx func cenv cx es s /\ fn_inst_ids_distinct func /\
     local_ptrs_reserved cenv sa /\
     MEM (mk_inst sa.cs_next_id ALLOCA
       [Lit (n2w (((n + 31) DIV 32) * 32 + 32))]
       [STRING #"%" (toString sa.cs_next_var)]) (fn_insts func) ==>
     ?t w. run_inst_seq (emitted_insts sa sb) s = OK t /\
-      stmt_state_rel ctx func cenv cx es t /\
+      stmt_state_rel H ctx func cenv cx es t /\
       eval_operand valop t = SOME w /\ eval_operand ptrop t = SOME (w + 32w) /\
       FLOOKUP t.vs_allocas sa.cs_next_id =
         SOME (w2n w, ((n + 31) DIV 32) * 32 + 32) /\
@@ -599,12 +600,12 @@ Finalise calldata_outbuf_positive_run
 Theorem calldata_outbuf_zero_run[local]:
   !sa valop ptrop sb ctx func cenv cx es s.
     compile_raw_call_outbuf 0 sa = ((valop,ptrop),sb) /\
-    stmt_state_rel ctx func cenv cx es s /\ fn_inst_ids_distinct func /\
+    stmt_state_rel H ctx func cenv cx es s /\ fn_inst_ids_distinct func /\
     local_ptrs_reserved cenv sa /\
     MEM (mk_inst sa.cs_next_id ALLOCA [Lit 0w]
       [STRING #"%" (toString sa.cs_next_var)]) (fn_insts func) ==>
     ?t w. run_inst_seq (emitted_insts sa sb) s = OK t /\
-      stmt_state_rel ctx func cenv cx es t /\
+      stmt_state_rel H ctx func cenv cx es t /\
       eval_operand valop t = SOME w /\ eval_operand ptrop t = SOME w /\
       FLOOKUP t.vs_allocas sa.cs_next_id = SOME (w2n w,0) /\
       w2n w < dimword (:256) /\ t.vs_memory = s.vs_memory /\
@@ -622,12 +623,12 @@ QED
 (* An oracle's bounded return write stays within its own fresh ALLOCA. *)
 Theorem raw_call_outbuf_write_frame:
   !ctx func cenv cx es s inst q b sz dst data.
-    stmt_state_rel ctx func cenv cx es s /\ fn_inst_ids_distinct func /\
+    stmt_state_rel H ctx func cenv cx es s /\ fn_inst_ids_distinct func /\
     MEM inst (fn_insts func) /\ inst.inst_opcode = ALLOCA /\
     inst.inst_outputs = [q] /\ not_local_ptr cenv es.scopes q /\
     FLOOKUP s.vs_allocas inst.inst_id = SOME (b,sz) /\
     b <= dst /\ dst + LENGTH data <= b + sz ==>
-    stmt_state_rel ctx func cenv cx es (write_memory_with_expansion dst data s)
+    stmt_state_rel H ctx func cenv cx es (write_memory_with_expansion dst data s)
 Proof
   rpt gen_tac >> strip_tac >> irule write_memory_stmt_state_rel >> simp[] >>
   conj_tac
@@ -642,7 +643,7 @@ Proof
   irule immutables_rel_mem_agree >> qexists_tac `s` >> simp[] >>
   rpt strip_tac >>
   `regions_disjoint off (type_memory_size tv) b sz` by
-    (qpat_x_assum `stmt_state_rel _ _ _ _ _ _` mp_tac >>
+    (qpat_x_assum `stmt_state_rel H _ _ _ _ _ _` mp_tac >>
      simp[stmt_state_rel_def, immutable_alloca_sep_def] >> metis_tac[]) >>
   irule hash_write_memory_disjoint >>
   gvs[regions_disjoint_def] >> decide_tac
@@ -650,7 +651,7 @@ QED
 
 Theorem calldata_outbuf_below_fmp[local]:
   !ctx func cenv cx es s aid b sz.
-    stmt_state_rel ctx func cenv cx es s /\
+    stmt_state_rel H ctx func cenv cx es s /\
     EXISTS (\inst. inst.inst_opcode = DALLOCA) (fn_insts func) /\
     FLOOKUP s.vs_allocas aid = SOME (b,sz) ==>
     b + sz <= w2n s.vs_fmp
@@ -690,7 +691,7 @@ QED
 Theorem raw_call_oracle_step:
   !func cenv cx es s inst gop aop vop iop zop rop cop
    gas aw vw ip iz rp cap stat out rq outcome es1.
-    state_rel func cenv cx es s /\ inst.inst_outputs = [out] /\
+    state_rel H func cenv cx es s /\ inst.inst_outputs = [out] /\
     inst.inst_opcode = (if stat then STATICCALL else CALL) /\
     inst.inst_operands =
       (if stat then [gop;aop;iop;zop;rop;cop]
@@ -707,7 +708,7 @@ Theorem raw_call_oracle_step:
       (write_memory_with_expansion (w2n rp) (TAKE (w2n cap) outcome.co_returnData) s) ==>
     ?t. step_inst_base inst s =
           OK (update_var out (if outcome.co_success then 1w else 0w) t) /\
-        state_rel func cenv cx (SND (adopt_call_outcome rq outcome es1)) t /\
+        state_rel H func cenv cx (SND (adopt_call_outcome rq outcome es1)) t /\
         t.vs_returndata = outcome.co_returnData /\
         t.vs_memory = (write_memory_with_expansion (w2n rp)
                         (TAKE (w2n cap) outcome.co_returnData) s).vs_memory /\
@@ -728,7 +729,7 @@ Proof
     t.vs_returndata = outcome.co_returnData /\
     (local_ptrs_rel func cenv es.scopes t /\
      immutables_rel cenv cx.txn.target cenv.ce_module cenv.ce_is_ctor es t ==>
-     state_rel func cenv cx (SND (adopt_call_outcome rq outcome es1)) t)` by
+     state_rel H func cenv cx (SND (adopt_call_outcome rq outcome es1)) t)` by
     (irule exec_ext_call_oracle_step >> simp[] >>
      qexists_tac `if stat then NONE else SOME (w2n vw)` >>
      Cases_on `stat` >> gvs[]) >>
@@ -1265,13 +1266,13 @@ QED
 
 Theorem raw_call_output_store_frame[local]:
   !ctx func cenv cx es s saved inst q b sz w len.
-    stmt_state_rel ctx func cenv cx es (s with vs_fmp := saved) /\
+    stmt_state_rel H ctx func cenv cx es (s with vs_fmp := saved) /\
     fn_inst_ids_distinct func /\
     MEM inst (fn_insts func) /\ inst.inst_opcode = ALLOCA /\
     inst.inst_outputs = [q] /\ not_local_ptr cenv es.scopes q /\
     FLOOKUP s.vs_allocas inst.inst_id = SOME (b,sz) /\
     b <= w2n w /\ w2n w + 32 <= b + sz ==>
-    stmt_state_rel ctx func cenv cx es
+    stmt_state_rel H ctx func cenv cx es
       ((mstore (w2n w) len s) with vs_fmp := saved)
 Proof
   rpt strip_tac >>
@@ -1381,7 +1382,7 @@ QED
 
 Theorem raw_call_output_restore_frame[local]:
   !ctx func cenv cx es s u t saved inst q b sz w len.
-    stmt_state_rel ctx func cenv cx es (s with vs_fmp := saved) /\
+    stmt_state_rel H ctx func cenv cx es (s with vs_fmp := saved) /\
     vars_ext s u /\
     t = (mstore (w2n w) len u) with vs_fmp := saved /\
     fn_inst_ids_distinct func /\
@@ -1389,14 +1390,14 @@ Theorem raw_call_output_restore_frame[local]:
     inst.inst_outputs = [q] /\ not_local_ptr cenv es.scopes q /\
     FLOOKUP s.vs_allocas inst.inst_id = SOME (b,sz) /\
     b <= w2n w /\ w2n w + 32 <= b + sz ==>
-    stmt_state_rel ctx func cenv cx es t
+    stmt_state_rel H ctx func cenv cx es t
 Proof
   rpt strip_tac >>
   `vars_ext (s with vs_fmp := saved) (u with vs_fmp := saved)` by
     (qpat_x_assum `vars_ext _ _` mp_tac >>
      simp[varsExtTheory.vars_ext_def] >> strip_tac >>
      qpat_x_assum `u = _` SUBST1_TAC >> simp[]) >>
-  `stmt_state_rel ctx func cenv cx es (u with vs_fmp := saved)` by
+  `stmt_state_rel H ctx func cenv cx es (u with vs_fmp := saved)` by
     (irule stmt_state_rel_vars_ext >> goal_assum (drule_at Any) >> simp[]) >>
   gvs[] >> irule raw_call_output_store_frame >> simp[] >>
   qexistsl_tac [`b`, `inst`, `q`, `sz`] >> simp[] >>
@@ -1417,14 +1418,14 @@ Theorem raw_call_output_restore_frag[local]:
     eval_operand pop s = SOME w /\ eval_operand dop s = SOME saved /\
     mem_bytes_at (w2n w + 32) (LENGTH (TAKE n s.vs_returndata)) s.vs_memory =
       TAKE n s.vs_returndata /\
-    stmt_state_rel ctx func cenv cx es (s with vs_fmp := saved) /\
+    stmt_state_rel H ctx func cenv cx es (s with vs_fmp := saved) /\
     fn_inst_ids_distinct func /\ MEM inst (fn_insts func) /\
     inst.inst_opcode = ALLOCA /\ inst.inst_outputs = [q] /\
     not_local_ptr cenv es.scopes q /\
     FLOOKUP s.vs_allocas inst.inst_id = SOME (b,sz) /\
     b <= w2n w /\ w2n w + 32 <= b + sz ==>
     frag_path ctx sa sb (\r. r = s)
-      (\r. stmt_state_rel ctx func cenv cx es r /\
+      (\r. stmt_state_rel H ctx func cenv cx es r /\
         val_in_memory (BaseTV (BytesT (Dynamic n)))
           (BytesV (TAKE n s.vs_returndata)) (w2n w) r.vs_memory /\
         r.vs_fmp = saved /\ fresh_vars_wrt sb r /\
@@ -1435,7 +1436,7 @@ Proof
   irule frag_path_run_inst_seq >> simp[] >>
   rpt strip_tac >> gvs[] >>
   drule_all raw_call_output_restore_run >> strip_tac >>
-  `stmt_state_rel ctx func cenv cx es t` by
+  `stmt_state_rel H ctx func cenv cx es t` by
     (drule_all raw_call_output_restore_frame >> simp[]) >>
   qexists_tac `t` >>
   simp[stmt_state_rel_inst_idx, fresh_vars_wrt_def,
@@ -1448,9 +1449,9 @@ Theorem raw_call_empty_restore_frag[local]:
   !ctx func cenv cx es sa sb dop s saved.
     emit_void SETFMP [dop] sa = ((),sb) /\
     eval_operand dop s = SOME saved /\ fresh_vars_wrt sa s /\
-    stmt_state_rel ctx func cenv cx es (s with vs_fmp := saved) ==>
+    stmt_state_rel H ctx func cenv cx es (s with vs_fmp := saved) ==>
     frag_path ctx sa sb (\r. r = s)
-      (\r. stmt_state_rel ctx func cenv cx es r /\
+      (\r. stmt_state_rel H ctx func cenv cx es r /\
         r.vs_fmp = saved /\ fresh_vars_wrt sb r /\
         eval_operand (Lit 0w) r = SOME 0w /\
         (!op v. eval_operand op s = SOME v ==> eval_operand op r = SOME v))
@@ -1477,7 +1478,7 @@ QED
    The cutoff is before output allocation, not the start of the finish code. *)
 Theorem raw_call_outbuf_write_regions[local]:
   !ctx func cenv cx es s inst q b sz dst data cutoff.
-    stmt_state_rel ctx func cenv cx es s /\ fn_inst_ids_distinct func /\
+    stmt_state_rel H ctx func cenv cx es s /\ fn_inst_ids_distinct func /\
     MEM inst (fn_insts func) /\ inst.inst_outputs = [q] /\
     not_local_ptr cenv es.scopes q /\
     FLOOKUP s.vs_allocas inst.inst_id = SOME (b,sz) /\
@@ -1503,7 +1504,7 @@ QED
 Theorem raw_call_outbuf_wb_frame[local]:
   !ctx func cenv cx es es1 sa s0 s inst q b sz dst data.
     wb_frame cenv es es1 sa s0 s /\
-    stmt_state_rel ctx func cenv cx es1 s /\ fn_inst_ids_distinct func /\
+    stmt_state_rel H ctx func cenv cx es1 s /\ fn_inst_ids_distinct func /\
     MEM inst (fn_insts func) /\ inst.inst_outputs = [q] /\
     not_local_ptr cenv es1.scopes q /\
     FLOOKUP s.vs_allocas inst.inst_id = SOME (b,sz) /\
@@ -1521,7 +1522,7 @@ QED
 Theorem raw_call_outbuf_mstore_wb_frame[local]:
   !ctx func cenv cx es es1 sa s0 s inst q b sz dst w.
     wb_frame cenv es es1 sa s0 s /\
-    stmt_state_rel ctx func cenv cx es1 s /\ fn_inst_ids_distinct func /\
+    stmt_state_rel H ctx func cenv cx es1 s /\ fn_inst_ids_distinct func /\
     MEM inst (fn_insts func) /\ inst.inst_outputs = [q] /\
     not_local_ptr cenv es1.scopes q /\
     FLOOKUP s.vs_allocas inst.inst_id = SOME (b,sz) /\
@@ -1542,7 +1543,7 @@ Theorem calldata_memory_wb_frame[local]:
     compile_msg_data_to_memory sa = ((pop,len),sb) /\
     run_inst_seq (emitted_insts sa sb) s = OK t /\
     LENGTH s.vs_call_ctx.cc_calldata < dimword (:256) /\
-    stmt_state_rel ctx func cenv cx es1 s /\
+    stmt_state_rel H ctx func cenv cx es1 s /\
     EXISTS (\inst. inst.inst_opcode = DALLOCA) (fn_insts func) /\
     wb_frame cenv es es1 sf s0 s /\ local_ptrs_reserved cenv sf /\
     sf.cs_next_var <= sa.cs_next_var /\ sf.cs_next_id <= sa.cs_next_id /\
@@ -1573,14 +1574,14 @@ Theorem calldata_outbuf_framed_run[local]:
   !n sa valop ptrop sb ctx func cenv cx es es1 sf s0 s.
     (if n = 0 then 0 else ((n + 31) DIV 32) * 32 + 32) < dimword (:256) /\
     compile_raw_call_outbuf n sa = ((valop,ptrop),sb) /\
-    stmt_state_rel ctx func cenv cx es1 s /\ fn_inst_ids_distinct func /\
+    stmt_state_rel H ctx func cenv cx es1 s /\ fn_inst_ids_distinct func /\
     local_ptrs_reserved cenv sa /\
     MEM (mk_inst sa.cs_next_id ALLOCA
       [Lit (n2w (if n = 0 then 0 else ((n + 31) DIV 32) * 32 + 32))]
       [STRING #"%" (toString sa.cs_next_var)]) (fn_insts func) /\
     wb_frame cenv es es1 sf s0 s /\ sf.cs_next_var <= sa.cs_next_var ==>
     ?t w. run_inst_seq (emitted_insts sa sb) s = OK t /\
-      stmt_state_rel ctx func cenv cx es1 t /\ wb_frame cenv es es1 sf s0 t /\
+      stmt_state_rel H ctx func cenv cx es1 t /\ wb_frame cenv es es1 sf s0 t /\
       eval_operand valop t = SOME w /\
       eval_operand ptrop t = SOME (if n = 0 then w else w + 32w) /\
       FLOOKUP t.vs_allocas sa.cs_next_id =
@@ -1608,9 +1609,9 @@ QED
 
 Theorem calldata_write_state_rel[local]:
   !ctx func cenv cx es s data.
-    stmt_state_rel ctx func cenv cx es s /\
+    stmt_state_rel H ctx func cenv cx es s /\
     EXISTS (\inst. inst.inst_opcode = DALLOCA) (fn_insts func) ==>
-    stmt_state_rel ctx func cenv cx es
+    stmt_state_rel H ctx func cenv cx es
       (write_memory_with_expansion (w2n s.vs_fmp) data s)
 Proof
   rpt strip_tac >>
@@ -1635,7 +1636,7 @@ Proof
       simp[LENGTH_TAKE, LENGTH_DROP, arithmeticTheory.MIN_DEF] >> decide_tac) >>
   rpt strip_tac >>
   `off + type_memory_size tv <= s.vs_alloca_next` by
-    (qpat_x_assum `stmt_state_rel _ _ _ _ _ _` mp_tac >>
+    (qpat_x_assum `stmt_state_rel H _ _ _ _ _ _` mp_tac >>
      simp[stmt_state_rel_def, immutable_alloca_sep_def] >> metis_tac[]) >>
   irule hash_write_memory_disjoint >> decide_tac
 QED
@@ -1645,13 +1646,13 @@ Theorem calldata_memory_state_rel[local]:
     compile_msg_data_to_memory sa = ((pop,len),sb) /\
     run_inst_seq (emitted_insts sa sb) s = OK t /\
     LENGTH s.vs_call_ctx.cc_calldata < dimword (:256) /\
-    stmt_state_rel ctx func cenv cx es s /\ local_ptrs_reserved cenv sa /\
+    stmt_state_rel H ctx func cenv cx es s /\ local_ptrs_reserved cenv sa /\
     EXISTS (\inst. inst.inst_opcode = DALLOCA) (fn_insts func) ==>
-    stmt_state_rel ctx func cenv cx es (t with vs_fmp := s.vs_fmp)
+    stmt_state_rel H ctx func cenv cx es (t with vs_fmp := s.vs_fmp)
 Proof
   rpt strip_tac >> drule_all calldata_memory_run >> strip_tac >> gvs[] >>
   qmatch_asmsub_abbrev_tac `t.vs_memory = m.vs_memory` >>
-  `stmt_state_rel ctx func cenv cx es m` by
+  `stmt_state_rel H ctx func cenv cx es m` by
     (simp[Abbr `m`] >> irule calldata_write_state_rel >> simp[]) >>
   `t with vs_fmp := s.vs_fmp = m with vs_vars := t.vs_vars` by
     (qpat_x_assum `t = s with <| vs_memory := _; vs_vars := _; vs_fmp := _ |>`
@@ -1668,7 +1669,7 @@ Theorem calldata_memory_framed_run[local]:
   !ctx func cenv cx es es1 sf s0 s sa pop len sb.
     compile_msg_data_to_memory sa = ((pop,len),sb) /\
     LENGTH s.vs_call_ctx.cc_calldata < dimword (:256) /\
-    stmt_state_rel ctx func cenv cx es1 s /\
+    stmt_state_rel H ctx func cenv cx es1 s /\
     EXISTS (\inst. inst.inst_opcode = DALLOCA) (fn_insts func) /\
     wb_frame cenv es es1 sf s0 s /\ local_ptrs_reserved cenv sf /\
     local_ptrs_reserved cenv sa /\
@@ -1676,7 +1677,7 @@ Theorem calldata_memory_framed_run[local]:
     MAP FDOM es.scopes = MAP FDOM es1.scopes ==>
     ?t. run_inst_seq (emitted_insts sa sb) s = OK t /\
       wb_frame cenv es es1 sf s0 t /\
-      stmt_state_rel ctx func cenv cx es1 (t with vs_fmp := s.vs_fmp) /\
+      stmt_state_rel H ctx func cenv cx es1 (t with vs_fmp := s.vs_fmp) /\
       eval_operand pop t = SOME s.vs_fmp /\
       eval_operand len t = SOME (n2w (LENGTH s.vs_call_ctx.cc_calldata)) /\
       read_memory (w2n s.vs_fmp) (LENGTH s.vs_call_ctx.cc_calldata) t =
@@ -1688,7 +1689,7 @@ Proof
   rpt strip_tac >> drule_all calldata_memory_readback >> strip_tac >>
   `wb_frame cenv es es1 sf s0 t` by
     (drule_all calldata_memory_wb_frame >> simp[]) >>
-  `stmt_state_rel ctx func cenv cx es1 (t with vs_fmp := s.vs_fmp)` by
+  `stmt_state_rel H ctx func cenv cx es1 (t with vs_fmp := s.vs_fmp)` by
     (drule_all calldata_memory_state_rel >> simp[]) >>
   qexists_tac `t` >> simp[]
 QED
@@ -1734,7 +1735,7 @@ Theorem calldata_buffers_run[local]:
     compile_msg_data_to_memory sb = ((dp,dl),sc) /\
     (if n = 0 then 0 else ((n + 31) DIV 32) * 32 + 32) < dimword (:256) /\
     LENGTH cx.txn.calldata < dimword (:256) /\
-    stmt_state_rel ctx func cenv cx es1 s /\ fn_inst_ids_distinct func /\
+    stmt_state_rel H ctx func cenv cx es1 s /\ fn_inst_ids_distinct func /\
     EXISTS (\inst. inst.inst_opcode = DALLOCA) (fn_insts func) /\
     MEM (mk_inst sa.cs_next_id ALLOCA
       [Lit (n2w (if n = 0 then 0 else ((n + 31) DIV 32) * 32 + 32))]
@@ -1745,7 +1746,7 @@ Theorem calldata_buffers_run[local]:
     ?u t w. run_inst_seq (emitted_insts sa sb) s = OK u /\
       run_inst_seq (emitted_insts sa sc) s = OK t /\
       wb_frame cenv es es1 sf s0 t /\
-      stmt_state_rel ctx func cenv cx es1 (t with vs_fmp := u.vs_fmp) /\
+      stmt_state_rel H ctx func cenv cx es1 (t with vs_fmp := u.vs_fmp) /\
       eval_operand dp t = SOME u.vs_fmp /\
       eval_operand dl t = SOME (n2w (LENGTH cx.txn.calldata)) /\
       read_memory (w2n u.vs_fmp) (LENGTH cx.txn.calldata) t = cx.txn.calldata /\
@@ -1790,10 +1791,10 @@ QED
 Theorem calldata_gas_framed_run[local]:
   !go sa gas sb ctx func cenv cx es es1 sf s0 s.
     (case go of SOME g => (g,sa) | NONE => emit_op GAS [] sa) = (gas,sb) /\
-    local_ptrs_reserved cenv sa /\ stmt_state_rel ctx func cenv cx es1 s /\
+    local_ptrs_reserved cenv sa /\ stmt_state_rel H ctx func cenv cx es1 s /\
     wb_frame cenv es es1 sf s0 s /\ sf.cs_next_var <= sa.cs_next_var ==>
     ?t. run_inst_seq (emitted_insts sa sb) s = OK t /\
-      stmt_state_rel ctx func cenv cx es1 t /\ wb_frame cenv es es1 sf s0 t /\
+      stmt_state_rel H ctx func cenv cx es1 t /\ wb_frame cenv es es1 sf s0 t /\
       eval_operand gas t =
         (case go of SOME g => eval_operand g s | NONE => SOME (HD (s.vs_gas_readings ++ [0w]))) /\
       t.vs_fmp = s.vs_fmp /\ t.vs_call_ctx = s.vs_call_ctx /\
@@ -1881,9 +1882,9 @@ Proof
 QED
 
 Definition calldata_prepared_def[local]:
-  calldata_prepared ctx func cenv cx es es1 sf s0 entry sp sa n ov op dp dl t <=>
+  calldata_prepared H ctx func cenv cx es es1 sf s0 entry sp sa n ov op dp dl t <=>
     wb_frame cenv es es1 sf s0 t /\
-    stmt_state_rel ctx func cenv cx es1 (t with vs_fmp := entry.vs_fmp) /\
+    stmt_state_rel H ctx func cenv cx es1 (t with vs_fmp := entry.vs_fmp) /\
     eval_operand dp t = SOME entry.vs_fmp /\
     eval_operand dl t = SOME (n2w (LENGTH cx.txn.calldata)) /\
     read_memory (w2n entry.vs_fmp) (LENGTH cx.txn.calldata) t = cx.txn.calldata /\
@@ -1896,9 +1897,9 @@ Definition calldata_prepared_def[local]:
 End
 
 Theorem calldata_prepared_inst_idx[local]:
-  calldata_prepared ctx func cenv cx es es1 sf s0 entry sp sa n ov op dp dl
+  calldata_prepared H ctx func cenv cx es es1 sf s0 entry sp sa n ov op dp dl
     (t with vs_inst_idx := k) <=>
-  calldata_prepared ctx func cenv cx es es1 sf s0 entry sp sa n ov op dp dl t
+  calldata_prepared H ctx func cenv cx es es1 sf s0 entry sp sa n ov op dp dl t
 Proof
   simp[calldata_prepared_def, wb_frame_def, lookup_var_def,
        hash_eval_operand_inst_idx, read_memory_def,
@@ -1911,7 +1912,7 @@ Theorem calldata_buffers_prepared_run[local]:
     compile_msg_data_to_memory sb = ((dp,dl),sc) /\
     (if n = 0 then 0 else ((n + 31) DIV 32) * 32 + 32) < dimword (:256) /\
     LENGTH cx.txn.calldata < dimword (:256) /\
-    stmt_state_rel ctx func cenv cx es1 s /\ fn_inst_ids_distinct func /\
+    stmt_state_rel H ctx func cenv cx es1 s /\ fn_inst_ids_distinct func /\
     EXISTS (\inst. inst.inst_opcode = DALLOCA) (fn_insts func) /\
     MEM (mk_inst sa.cs_next_id ALLOCA
       [Lit (n2w (if n = 0 then 0 else ((n + 31) DIV 32) * 32 + 32))]
@@ -1920,7 +1921,7 @@ Theorem calldata_buffers_prepared_run[local]:
     sf.cs_next_var <= sa.cs_next_var /\ sf.cs_next_id <= sa.cs_next_id /\
     MAP FDOM es.scopes = MAP FDOM es1.scopes /\ wb_frame cenv es es1 sf s0 s ==>
     ?t. run_inst_seq (emitted_insts sa sc) s = OK t /\
-      calldata_prepared ctx func cenv cx es es1 sf s0 s sa sa n ov op dp dl t
+      calldata_prepared H ctx func cenv cx es es1 sf s0 s sa sa n ov op dp dl t
 Proof
   rpt gen_tac >> strip_tac >> drule_all calldata_buffers_run >> strip_tac >>
   `u.vs_fmp = s.vs_fmp` by (drule_all calldata_outbuf_fmp >> simp[]) >>
@@ -1946,20 +1947,20 @@ Proof
 QED
 
 Theorem calldata_prepared_entry[local]:
-  calldata_prepared ctx func cenv cx es es1 sf s0 mid sa sa n ov op dp dl t /\
+  calldata_prepared H ctx func cenv cx es es1 sf s0 mid sa sa n ov op dp dl t /\
   mid.vs_fmp = entry.vs_fmp /\ sp.cs_next_var <= sa.cs_next_var /\
   (!p. safe_operand sp p ==> eval_operand p mid = eval_operand p entry) ==>
-  calldata_prepared ctx func cenv cx es es1 sf s0 entry sp sa n ov op dp dl t
+  calldata_prepared H ctx func cenv cx es es1 sf s0 entry sp sa n ov op dp dl t
 Proof
   simp[calldata_prepared_def] >> rpt strip_tac >> simp[] >>
   metis_tac[safe_operand_mono]
 QED
 
 Definition calldata_prepare_pre_def[local]:
-  calldata_prepare_pre ctx func cenv cx es es1 sf s0 sa sg n go s <=>
+  calldata_prepare_pre H ctx func cenv cx es es1 sf s0 sa sg n go s <=>
     (if n = 0 then 0 else ((n + 31) DIV 32) * 32 + 32) < dimword (:256) /\
     LENGTH cx.txn.calldata < dimword (:256) /\
-    stmt_state_rel ctx func cenv cx es1 s /\ fn_inst_ids_distinct func /\
+    stmt_state_rel H ctx func cenv cx es1 s /\ fn_inst_ids_distinct func /\
     EXISTS (\inst. inst.inst_opcode = DALLOCA) (fn_insts func) /\
     MEM (mk_inst sg.cs_next_id ALLOCA
       [Lit (n2w (if n = 0 then 0 else ((n + 31) DIV 32) * 32 + 32))]
@@ -1974,9 +1975,9 @@ Theorem calldata_prepare_run[local]:
   (case go of SOME g => (g,sa) | NONE => emit_op GAS [] sa) = (gas,sg) /\
   compile_raw_call_outbuf n sg = ((ov,op),sb) /\
   compile_msg_data_to_memory sb = ((dp,dl),sc) /\
-  calldata_prepare_pre ctx func cenv cx es es1 sf s0 sa sg n go s ==>
+  calldata_prepare_pre H ctx func cenv cx es es1 sf s0 sa sg n go s ==>
   ?t. run_inst_seq (emitted_insts sa sc) s = OK t /\
-    calldata_prepared ctx func cenv cx es es1 sf s0 s sa sg n ov op dp dl t /\
+    calldata_prepared H ctx func cenv cx es es1 sf s0 s sa sg n ov op dp dl t /\
     eval_operand gas t =
       (case go of SOME g => eval_operand g s | NONE => SOME (HD (s.vs_gas_readings ++ [0w])))
 Proof
@@ -1992,11 +1993,11 @@ Proof
     (rpt strip_tac >> Cases_on `p` >> gvs[safe_operand_def, eval_operand_def]) >>
   drule_all (ONCE_REWRITE_RULE [arithmeticTheory.MULT_COMM]
     calldata_buffers_prepared_run) >> strip_tac >>
-  `calldata_prepared ctx func cenv cx es es1 sf s0 s sa sg n ov op dp dl t` by
+  `calldata_prepared H ctx func cenv cx es es1 sf s0 s sa sg n ov op dp dl t` by
     (irule calldata_prepared_entry >> conj_tac
      >- fs[ci_mono_def] >> qexists_tac `u` >> simp[]) >>
   `eval_operand gas t = eval_operand gas u` by
-    (qpat_x_assum `calldata_prepared _ _ _ _ _ _ _ _ u _ _ _ _ _ _ _ t` mp_tac >>
+    (qpat_x_assum `calldata_prepared _ _ _ _ _ _ _ _ _ u _ _ _ _ _ _ _ t` mp_tac >>
      simp[calldata_prepared_def] >> strip_tac >>
      qpat_x_assum `!p. safe_operand sg p ==> _` irule >> simp[]) >>
   drule_all calldata_prepare_code >> strip_tac >>
@@ -2033,17 +2034,30 @@ Theorem calldata_prepare_frag[local]:
   compile_raw_call_outbuf n sg = ((ov,op),sb) /\
   compile_msg_data_to_memory sb = ((dp,dl),sc) ==>
   frag_path vctx sa sc
-    (\s. s = entry /\ calldata_prepare_pre ctx func cenv cx es es1 sf s0 sa sg n go s)
-    (\t. calldata_prepared ctx func cenv cx es es1 sf s0 entry sa sg n ov op dp dl t /\
+    (\s. s = entry /\ calldata_prepare_pre H ctx func cenv cx es es1 sf s0 sa sg n go s)
+    (\t. calldata_prepared H ctx func cenv cx es es1 sf s0 entry sa sg n ov op dp dl t /\
       eval_operand gas t =
         (case go of SOME g => eval_operand g entry |
-          NONE => SOME (HD (entry.vs_gas_readings ++ [0w])))) R
+          NONE => SOME (HD (entry.vs_gas_readings ++ [0w]))) /\
+      (!H'. stmt_state_rel H' ctx func cenv cx es1 entry ==>
+            stmt_state_rel H' ctx func cenv cx es1 (t with vs_fmp := entry.vs_fmp))) R
 Proof
   strip_tac >> drule_all calldata_prepare_shape >> strip_tac >>
   fs[same_blocks_def] >> irule frag_path_run_inst_seq >> simp[] >>
   rpt strip_tac >> gvs[] >> disj1_tac >>
   drule_all calldata_prepare_run >> strip_tac >>
-  qexists_tac `t` >> simp[calldata_prepared_inst_idx]
+  (* The run is a function of entry, so every horizon's run ends at t. *)
+  `!H'. stmt_state_rel H' ctx func cenv cx es1 entry ==>
+        stmt_state_rel H' ctx func cenv cx es1 (t with vs_fmp := entry.vs_fmp)` by
+    (rpt strip_tac >>
+     `calldata_prepare_pre H' ctx func cenv cx es es1 sf s0 sa sg n go entry` by
+       fs[calldata_prepare_pre_def] >>
+     qpat_x_assum `calldata_prepare_pre H' _ _ _ _ _ _ _ _ _ _ _ _ _`
+       (mp_then (Pat `calldata_prepare_pre _ _ _ _ _ _ _ _ _ _ _ _ _ _`) mp_tac
+          calldata_prepare_run) >>
+     disch_then drule_all >> strip_tac >>
+     gvs[calldata_prepared_def]) >>
+  qexists_tac `t` >> simp[calldata_prepared_inst_idx, stmt_state_rel_inst_idx]
 QED
 
 Theorem raw_call_restore_arbitrary_run[local]:
@@ -2161,10 +2175,10 @@ Proof
 QED
 
 Theorem raw_call_reserved_vars_frame:
-  stmt_state_rel ctx func cenv cx es s /\ local_ptrs_reserved cenv sa /\
+  stmt_state_rel H ctx func cenv cx es s /\ local_ptrs_reserved cenv sa /\
   (!p v. safe_operand sa p /\ eval_operand p s = SOME v ==>
     eval_operand p (s with vs_vars := V) = SOME v) ==>
-  stmt_state_rel ctx func cenv cx es (s with vs_vars := V)
+  stmt_state_rel H ctx func cenv cx es (s with vs_vars := V)
 Proof
   strip_tac >> irule stmt_state_rel_vars_frame >> simp[] >> rpt strip_tac >>
   `not_fresh_at sa p` by metis_tac[local_ptrs_reserved_def] >>
@@ -2178,7 +2192,7 @@ QED
 
 Theorem raw_call_output_restore_arbitrary_frame[local]:
   !ctx func cenv cx es sa s u t saved inst q b sz w len.
-    stmt_state_rel ctx func cenv cx es (s with vs_fmp := saved) /\
+    stmt_state_rel H ctx func cenv cx es (s with vs_fmp := saved) /\
     local_ptrs_reserved cenv sa /\ (?V. u = s with vs_vars := V) /\
     (!p v. safe_operand sa p /\ eval_operand p s = SOME v ==>
       eval_operand p u = SOME v) /\
@@ -2188,10 +2202,10 @@ Theorem raw_call_output_restore_arbitrary_frame[local]:
     inst.inst_outputs = [q] /\ not_local_ptr cenv es.scopes q /\
     FLOOKUP s.vs_allocas inst.inst_id = SOME (b,sz) /\
     b <= w2n w /\ w2n w + 32 <= b + sz ==>
-    stmt_state_rel ctx func cenv cx es t
+    stmt_state_rel H ctx func cenv cx es t
 Proof
   rpt gen_tac >> strip_tac >>
-  `stmt_state_rel ctx func cenv cx es (u with vs_fmp := saved)` by
+  `stmt_state_rel H ctx func cenv cx es (u with vs_fmp := saved)` by
     (qpat_assum `u = _` (fn th => RULE_ASSUM_TAC (REWRITE_RULE [th]) >>
        SUBST1_TAC th) >>
      `(s with vs_vars := V) with vs_fmp := saved =
@@ -2227,7 +2241,7 @@ Theorem raw_call_output_restore_wb_frame[local]:
     (?V. u = s with vs_vars := V) /\
     (!p v. safe_operand sa p /\ eval_operand p s = SOME v ==>
       eval_operand p u = SOME v) /\
-    stmt_state_rel ctx func cenv cx es1 (u with vs_fmp := saved) /\
+    stmt_state_rel H ctx func cenv cx es1 (u with vs_fmp := saved) /\
     t = (mstore dst len u) with vs_fmp := saved /\
     fn_inst_ids_distinct func /\ MEM inst (fn_insts func) /\
     inst.inst_outputs = [q] /\ not_local_ptr cenv es1.scopes q /\
@@ -2257,11 +2271,13 @@ Theorem raw_call_empty_restore_arbitrary_frag[local]:
   !ctx func cenv cx es es0 sf s0 sa sb dop s saved.
     emit_void SETFMP [dop] sa = ((),sb) /\
     eval_operand dop s = SOME saved /\ wb_frame cenv es0 es sf s0 s /\
-    stmt_state_rel ctx func cenv cx es (s with vs_fmp := saved) ==>
+    stmt_state_rel H ctx func cenv cx es (s with vs_fmp := saved) ==>
     frag_path ctx sa sb (\r. r = s)
-      (\r. stmt_state_rel ctx func cenv cx es r /\ wb_frame cenv es0 es sf s0 r /\
+      (\r. stmt_state_rel H ctx func cenv cx es r /\ wb_frame cenv es0 es sf s0 r /\
         r.vs_fmp = saved /\ eval_operand (Lit 0w) r = SOME 0w /\
-        (!op. eval_operand op r = eval_operand op s)) (\r. F)
+        (!op. eval_operand op r = eval_operand op s) /\
+        (!H'. stmt_state_rel H' ctx func cenv cx es (s with vs_fmp := saved) ==>
+              stmt_state_rel H' ctx func cenv cx es r)) (\r. F)
 Proof
   rpt strip_tac >>
   `sb.cs_blocks = sa.cs_blocks /\ sb.cs_current_bb = sa.cs_current_bb /\
@@ -2292,7 +2308,7 @@ Theorem raw_call_output_prefix_ready:
     LENGTH s.vs_returndata < dimword (:256) /\ eval_operand pop s = SOME w /\
     mem_bytes_at (w2n w + 32) (LENGTH (TAKE n s.vs_returndata)) s.vs_memory =
       TAKE n s.vs_returndata /\
-    stmt_state_rel ctx func cenv cx es (s with vs_fmp := saved) /\
+    stmt_state_rel H ctx func cenv cx es (s with vs_fmp := saved) /\
     local_ptrs_reserved cenv sa /\ wb_frame cenv es0 es sf s0 s /\
     sf.cs_next_var <= sa.cs_next_var /\ local_ptrs_reserved cenv sf /\
     MAP FDOM es0.scopes = MAP FDOM es.scopes /\ sf.cs_next_id <= inst.inst_id /\
@@ -2302,7 +2318,7 @@ Theorem raw_call_output_prefix_ready:
     FLOOKUP s.vs_allocas inst.inst_id = SOME (b,sz) /\
     b <= w2n w /\ w2n w + 32 <= b + sz ==>
     ?t. run_inst_seq (emitted_insts sa sb) s = OK t /\
-      stmt_state_rel ctx func cenv cx es (t with vs_fmp := saved) /\
+      stmt_state_rel H ctx func cenv cx es (t with vs_fmp := saved) /\
       wb_frame cenv es0 es sf s0 t /\
       val_in_memory (BaseTV (BytesT (Dynamic n)))
         (BytesV (TAKE n s.vs_returndata)) (w2n w) t.vs_memory /\
@@ -2310,7 +2326,7 @@ Theorem raw_call_output_prefix_ready:
       (!p. safe_operand sa p ==> eval_operand p t = eval_operand p s)
 Proof
   rpt gen_tac >> strip_tac >> drule_all raw_call_output_prefix_run >> strip_tac >>
-  `stmt_state_rel ctx func cenv cx es (u with vs_fmp := saved)` by
+  `stmt_state_rel H ctx func cenv cx es (u with vs_fmp := saved)` by
     (qpat_assum `u = _` (fn th => RULE_ASSUM_TAC (REWRITE_RULE [th]) >>
        SUBST1_TAC th) >>
      `(s with vs_vars := vars) with vs_fmp := saved =
@@ -2322,7 +2338,7 @@ Proof
      qpat_x_assum `!p. safe_operand sa p ==> eval_operand p (s with vs_vars := vars) = _`
        (qspec_then `Var x` mp_tac) >>
      simp[eval_operand_def, lookup_var_def, safe_operand_def]) >>
-  `stmt_state_rel ctx func cenv cx es (t with vs_fmp := saved)` by
+  `stmt_state_rel H ctx func cenv cx es (t with vs_fmp := saved)` by
     (gvs[] >> irule raw_call_output_store_frame >> simp[] >>
      qexistsl_tac [`b`,`inst`,`q`,`sz`] >> simp[]) >>
   `!p v. safe_operand sa p /\ eval_operand p s = SOME v ==>
@@ -2353,7 +2369,7 @@ Theorem raw_call_output_restore_allocas_frag[local]:
     eval_operand pop s = SOME w /\ eval_operand dop s = SOME saved /\
     mem_bytes_at (w2n w + 32) (LENGTH (TAKE n s.vs_returndata)) s.vs_memory =
       TAKE n s.vs_returndata /\
-    stmt_state_rel ctx func cenv cx es (s with vs_fmp := saved) /\
+    stmt_state_rel H ctx func cenv cx es (s with vs_fmp := saved) /\
     local_ptrs_reserved cenv sa /\ wb_frame cenv es0 es sf s0 s /\
     sf.cs_next_var <= sa.cs_next_var /\ local_ptrs_reserved cenv sf /\
     MAP FDOM es0.scopes = MAP FDOM es.scopes /\ sf.cs_next_id <= inst.inst_id /\
@@ -2363,9 +2379,11 @@ Theorem raw_call_output_restore_allocas_frag[local]:
     FLOOKUP s.vs_allocas inst.inst_id = SOME (b,sz) /\
     b <= w2n w /\ w2n w + 32 <= b + sz ==>
     frag_path ctx sa sb (\r. r = s)
-      (\r. stmt_state_rel ctx func cenv cx es r /\ wb_frame cenv es0 es sf s0 r /\
+      (\r. stmt_state_rel H ctx func cenv cx es r /\ wb_frame cenv es0 es sf s0 r /\
         val_in_memory (BaseTV (BytesT (Dynamic n)))
           (BytesV (TAKE n s.vs_returndata)) (w2n w) r.vs_memory /\
+        (!H'. stmt_state_rel H' ctx func cenv cx es (s with vs_fmp := saved) ==>
+              stmt_state_rel H' ctx func cenv cx es r) /\
         r.vs_fmp = saved /\ r.vs_allocas = s.vs_allocas /\
         (!p v. safe_operand sa p /\ eval_operand p s = SOME v ==>
           eval_operand p r = SOME v)) (\r. F)
@@ -2373,8 +2391,10 @@ Proof
   rpt strip_tac >> drule_all raw_call_output_code >> strip_tac >>
   irule frag_path_run_inst_seq >> simp[] >> rpt strip_tac >> gvs[] >>
   drule_all raw_call_output_restore_arbitrary_run >> strip_tac >>
-  `stmt_state_rel ctx func cenv cx es (u with vs_fmp := saved)` by
-    (qpat_assum `u = _` (fn th => RULE_ASSUM_TAC (REWRITE_RULE [th]) >>
+  `!H. stmt_state_rel H ctx func cenv cx es (s with vs_fmp := saved) ==>
+       stmt_state_rel H ctx func cenv cx es (u with vs_fmp := saved)` by
+    (gen_tac >> strip_tac >>
+     qpat_assum `u = _` (fn th => RULE_ASSUM_TAC (REWRITE_RULE [th]) >>
        SUBST1_TAC th) >>
      `(s with vs_vars := vars) with vs_fmp := saved =
       (s with vs_fmp := saved) with vs_vars := vars` by simp[] >>
@@ -2385,10 +2405,16 @@ Proof
      qpat_x_assum `!p v. safe_operand sa p /\ _ ==> eval_operand p (s with vs_vars := vars) = _`
        (qspec_then `Var x` mp_tac) >>
      simp[eval_operand_def, lookup_var_def]) >>
-  `stmt_state_rel ctx func cenv cx es t` by
-    (qsuff_tac `?V. u = s with vs_vars := V`
+  `!H. stmt_state_rel H ctx func cenv cx es (s with vs_fmp := saved) ==>
+       stmt_state_rel H ctx func cenv cx es t` by
+    (gen_tac >> strip_tac >>
+     `stmt_state_rel H ctx func cenv cx es (u with vs_fmp := saved)` by
+       metis_tac[] >>
+     qsuff_tac `?V. u = s with vs_vars := V`
      >- (disch_tac >> drule_all raw_call_output_restore_arbitrary_frame >> simp[]) >>
      qexists_tac `vars` >> simp[]) >>
+  `stmt_state_rel H ctx func cenv cx es (u with vs_fmp := saved) /\
+   stmt_state_rel H ctx func cenv cx es t` by metis_tac[] >>
   `wb_frame cenv es0 es sf s0 t` by
     (qsuff_tac `?V. u = s with vs_vars := V`
      >- (disch_tac >> drule_all raw_call_output_restore_wb_frame >> simp[]) >>
@@ -2413,7 +2439,7 @@ Theorem raw_call_output_restore_arbitrary_frag[local]:
     eval_operand pop s = SOME w /\ eval_operand dop s = SOME saved /\
     mem_bytes_at (w2n w + 32) (LENGTH (TAKE n s.vs_returndata)) s.vs_memory =
       TAKE n s.vs_returndata /\
-    stmt_state_rel ctx func cenv cx es (s with vs_fmp := saved) /\
+    stmt_state_rel H ctx func cenv cx es (s with vs_fmp := saved) /\
     local_ptrs_reserved cenv sa /\ wb_frame cenv es0 es sf s0 s /\
     sf.cs_next_var <= sa.cs_next_var /\ local_ptrs_reserved cenv sf /\
     MAP FDOM es0.scopes = MAP FDOM es.scopes /\ sf.cs_next_id <= inst.inst_id /\
@@ -2423,9 +2449,11 @@ Theorem raw_call_output_restore_arbitrary_frag[local]:
     FLOOKUP s.vs_allocas inst.inst_id = SOME (b,sz) /\
     b <= w2n w /\ w2n w + 32 <= b + sz ==>
     frag_path ctx sa sb (\r. r = s)
-      (\r. stmt_state_rel ctx func cenv cx es r /\ wb_frame cenv es0 es sf s0 r /\
+      (\r. stmt_state_rel H ctx func cenv cx es r /\ wb_frame cenv es0 es sf s0 r /\
         val_in_memory (BaseTV (BytesT (Dynamic n)))
           (BytesV (TAKE n s.vs_returndata)) (w2n w) r.vs_memory /\
+        (!H'. stmt_state_rel H' ctx func cenv cx es (s with vs_fmp := saved) ==>
+              stmt_state_rel H' ctx func cenv cx es r) /\
         r.vs_fmp = saved /\
         (!p v. safe_operand sa p /\ eval_operand p s = SOME v ==>
           eval_operand p r = SOME v)) (\r. F)
@@ -2436,8 +2464,8 @@ Proof
 QED
 
 Definition raw_call_buffer_frame_def[local]:
-  raw_call_buffer_frame ctx func cenv cx es0 es sf s0 saved ai (w:bytes32) n s <=>
-    stmt_state_rel ctx func cenv cx es (s with vs_fmp := saved) /\
+  raw_call_buffer_frame H ctx func cenv cx es0 es sf s0 saved ai (w:bytes32) n s <=>
+    stmt_state_rel H ctx func cenv cx es (s with vs_fmp := saved) /\
     wb_frame cenv es0 es sf s0 s /\
     FLOOKUP s.vs_allocas ai =
       SOME (w2n w,if n = 0 then 0 else ((n + 31) DIV 32) * 32 + 32) /\
@@ -2471,12 +2499,12 @@ Proof
 QED
 
 Theorem raw_call_buffer_write[local]:
-  raw_call_buffer_frame ctx func cenv cx es0 es sf s0 saved ai w n s /\
+  raw_call_buffer_frame H ctx func cenv cx es0 es sf s0 saved ai w n s /\
   fn_inst_ids_distinct func /\ MEM alloc (fn_insts func) /\
   alloc.inst_opcode = ALLOCA /\ alloc.inst_outputs = [q] /\ alloc.inst_id = ai /\
   not_local_ptr cenv es.scopes q /\ sf.cs_next_id <= ai /\
   local_ptrs_reserved cenv sf /\ MAP FDOM es0.scopes = MAP FDOM es.scopes ==>
-  raw_call_buffer_frame ctx func cenv cx es0 es sf s0 saved ai w n
+  raw_call_buffer_frame H ctx func cenv cx es0 es sf s0 saved ai w n
     (write_memory_with_expansion (w2n (if n = 0 then w else w + 32w))
       (TAKE n data) s)
 Proof
@@ -2490,7 +2518,7 @@ Proof
      qspec_then `n` mp_tac le_word_size_mul >>
      simp[vfmConstantsTheory.word_size_def, LENGTH_TAKE_EQ,
           arithmeticTheory.MIN_DEF] >> rpt strip_tac >> gvs[] >> decide_tac) >>
-  `stmt_state_rel ctx func cenv cx es
+  `stmt_state_rel H ctx func cenv cx es
     ((write_memory_with_expansion (w2n (if n = 0 then w else w + 32w))
       (TAKE n data) s) with vs_fmp := saved)` by
     (rewrite_tac[GSYM raw_call_write_saved_fmp] >>
@@ -2501,20 +2529,20 @@ Proof
     (write_memory_with_expansion (w2n (if n = 0 then w else w + 32w))
       (TAKE n data) (s with vs_fmp := saved))` by
     (irule raw_call_outbuf_wb_frame >> simp[raw_call_wb_frame_fmp] >>
-     goal_assum (drule_at (Pat `stmt_state_rel _ _ _ _ _ _`)) >> simp[] >>
+     goal_assum (drule_at (Pat `stmt_state_rel H _ _ _ _ _ _`)) >> simp[] >>
      goal_assum (drule_at (Pat `MEM _ (fn_insts _)`)) >> simp[] >>
      goal_assum (drule_at (Pat `FLOOKUP _ _ = SOME _`)) >> simp[]) >>
   gvs[raw_call_write_saved_fmp, raw_call_wb_frame_fmp]
 QED
 
 Theorem raw_call_buffer_oracle_fields[local]:
-  raw_call_buffer_frame ctx func cenv cx es0 es sf s0 saved ai w n s /\
-  state_rel func cenv cx es1 (t with vs_fmp := saved) /\
+  raw_call_buffer_frame H ctx func cenv cx es0 es sf s0 saved ai w n s /\
+  state_rel H func cenv cx es1 (t with vs_fmp := saved) /\
   es1.scopes = es.scopes /\ es1.immutables = es.immutables /\
   t.vs_allocas = s.vs_allocas /\ t.vs_alloca_next = s.vs_alloca_next /\
   t.vs_vars = s.vs_vars /\ t.vs_memory = s.vs_memory /\
   t.vs_labels = s.vs_labels ==>
-  raw_call_buffer_frame ctx func cenv cx es0 es1 sf s0 saved ai w n t
+  raw_call_buffer_frame H ctx func cenv cx es0 es1 sf s0 saved ai w n t
 Proof
   rewrite_tac[raw_call_buffer_frame_def] >> strip_tac >> simp[] >>
   `immutable_alloca_sep func cenv cx es1 (t with vs_fmp := saved)` by
@@ -2537,7 +2565,7 @@ Proof
 QED
 
 Theorem raw_call_state_rel_fmp[local]:
-  state_rel func cenv cx es (s with vs_fmp := saved) <=> state_rel func cenv cx es s
+  state_rel H func cenv cx es (s with vs_fmp := saved) <=> state_rel H func cenv cx es s
 Proof
   simp[state_rel_def, local_ptrs_rel_def, local_region_def, local_backed_def,
        lookup_var_def, immutables_rel_def, storage_rel_def, transient_rel_def,
@@ -2545,9 +2573,9 @@ Proof
 QED
 
 Theorem raw_call_buffer_update[local]:
-  raw_call_buffer_frame ctx func cenv cx es0 es sf s0 saved ai w n s /\
+  raw_call_buffer_frame H ctx func cenv cx es0 es sf s0 saved ai w n s /\
   local_ptrs_reserved cenv sc /\ sf.cs_next_var <= sc.cs_next_var ==>
-  raw_call_buffer_frame ctx func cenv cx es0 es sf s0 saved ai w n
+  raw_call_buffer_frame H ctx func cenv cx es0 es sf s0 saved ai w n
     (update_var (STRING #"%" (toString sc.cs_next_var)) v s)
 Proof
   rewrite_tac[raw_call_buffer_frame_def] >> strip_tac >> conj_tac
@@ -2564,19 +2592,19 @@ Proof
 QED
 
 Theorem raw_call_buffer_frame_inst_idx[local]:
-  raw_call_buffer_frame ctx func cenv cx es0 es sf s0 saved ai w n
+  raw_call_buffer_frame H ctx func cenv cx es0 es sf s0 saved ai w n
     (s with vs_inst_idx := k) <=>
-  raw_call_buffer_frame ctx func cenv cx es0 es sf s0 saved ai w n s
+  raw_call_buffer_frame H ctx func cenv cx es0 es sf s0 saved ai w n s
 Proof
   simp[raw_call_buffer_frame_def, wb_frame_def, lookup_var_def,
        stmt_state_rel_inst_idx]
 QED
 
 Theorem calldata_prepared_buffer_frame[local]:
-  calldata_prepared ctx func cenv cx es0 es sf s0 entry sp sa n ov op dp dl s ==>
+  calldata_prepared H ctx func cenv cx es0 es sf s0 entry sp sa n ov op dp dl s ==>
   ?w. eval_operand ov s = SOME w /\
     eval_operand op s = SOME (if n = 0 then w else w + 32w) /\
-    raw_call_buffer_frame ctx func cenv cx es0 es sf s0 entry.vs_fmp
+    raw_call_buffer_frame H ctx func cenv cx es0 es sf s0 entry.vs_fmp
       sa.cs_next_id w n s
 Proof
   simp[calldata_prepared_def, raw_call_buffer_frame_def] >> metis_tac[]
@@ -2585,7 +2613,7 @@ QED
 Theorem raw_call_oracle_framed_step[local]:
   !ctx func cenv cx es0 es es1 sf s0 saved ai w n s sc alloc q
     inst out gop aop vop iop zop rop cop gas aw vw ip iz stat rq outcome.
-  raw_call_buffer_frame ctx func cenv cx es0 es sf s0 saved ai w n s /\
+  raw_call_buffer_frame H ctx func cenv cx es0 es sf s0 saved ai w n s /\
   inst.inst_outputs = [out] /\
   inst.inst_opcode = (if stat then STATICCALL else CALL) /\
   inst.inst_operands = (if stat then [gop;aop;iop;zop;rop;cop]
@@ -2604,7 +2632,7 @@ Theorem raw_call_oracle_framed_step[local]:
   sf.cs_next_var <= sc.cs_next_var /\ MAP FDOM es0.scopes = MAP FDOM es.scopes /\
   n < dimword (:256) /\ out = STRING #"%" (toString sc.cs_next_var) ==>
   ?u. step_inst_base inst s = OK u /\
-    raw_call_buffer_frame ctx func cenv cx es0
+    raw_call_buffer_frame H ctx func cenv cx es0
       (SND (adopt_call_outcome rq outcome es1)) sf s0 saved ai w n u /\
     eval_operand (Var out) u = SOME (if outcome.co_success then 1w else 0w) /\
     u.vs_returndata = outcome.co_returnData /\ u.vs_fmp = s.vs_fmp /\
@@ -2613,11 +2641,11 @@ Theorem raw_call_oracle_framed_step[local]:
       u.vs_memory = TAKE n outcome.co_returnData)
 Proof
   rpt gen_tac >> strip_tac >>
-  `raw_call_buffer_frame ctx func cenv cx es0 es sf s0 saved ai w n
+  `raw_call_buffer_frame H ctx func cenv cx es0 es sf s0 saved ai w n
     (write_memory_with_expansion (w2n (if n = 0 then w else w + 32w))
       (TAKE n outcome.co_returnData) s)` by
     (drule_all raw_call_buffer_write >> simp[]) >>
-  `state_rel func cenv cx es s` by
+  `state_rel H func cenv cx es s` by
     fs[raw_call_buffer_frame_def, stmt_state_rel_def, raw_call_state_rel_fmp] >>
   `local_ptrs_rel func cenv es.scopes
     (write_memory_with_expansion (w2n (if n = 0 then w else w + 32w))
@@ -2643,9 +2671,9 @@ Proof
      drule venomExecPropsTheory.step_inst_preserves_labels_always >>
      simp[update_var_def]) >>
   drule_all raw_call_take_adopt_fields >> strip_tac >>
-  `raw_call_buffer_frame ctx func cenv cx es0
+  `raw_call_buffer_frame H ctx func cenv cx es0
     (SND (adopt_call_outcome rq outcome es1)) sf s0 saved ai w n t` by
-    (qpat_assum `raw_call_buffer_frame _ _ _ _ _ _ _ _ _ _ _ _
+    (qpat_assum `raw_call_buffer_frame _ _ _ _ _ _ _ _ _ _ _ _ _
        (write_memory_with_expansion _ _ _)`
        (mp_then Any irule raw_call_buffer_oracle_fields) >>
      simp[raw_call_state_rel_fmp, write_memory_with_expansion_def]) >>
@@ -2670,7 +2698,7 @@ Theorem raw_call_oracle_framed_frag[local]:
   emit_op (if stat then STATICCALL else CALL)
     (if stat then [gop;aop;dp;dl;op;Lit (n2w n)]
      else [gop;aop;vop;dp;dl;op;Lit (n2w n)]) sc = (cond,sd) /\
-  raw_call_buffer_frame ctx func cenv cx es0 es sf s0 saved ai w n s /\
+  raw_call_buffer_frame H ctx func cenv cx es0 es sf s0 saved ai w n s /\
   eval_operand gop s = SOME gas /\ eval_operand aop s = SOME aw /\
   eval_operand vop s = SOME vw /\ eval_operand dp s = SOME ip /\
   eval_operand dl s = SOME iz /\
@@ -2684,13 +2712,16 @@ Theorem raw_call_oracle_framed_frag[local]:
   sf.cs_next_var <= sc.cs_next_var /\ MAP FDOM es0.scopes = MAP FDOM es.scopes /\
   n < dimword (:256) ==>
   frag_path ctx sc sd (\u. u = s)
-    (\u. raw_call_buffer_frame ctx func cenv cx es0
+    (\u. raw_call_buffer_frame H ctx func cenv cx es0
        (SND (adopt_call_outcome rq outcome es1)) sf s0 saved ai w n u /\
       eval_operand cond u = SOME (if outcome.co_success then 1w else 0w) /\
       u.vs_returndata = outcome.co_returnData /\ u.vs_fmp = s.vs_fmp /\
       (!p. safe_operand sc p ==> eval_operand p u = eval_operand p s) /\
       (0 < n ==> mem_bytes_at (w2n w + 32) (LENGTH (TAKE n outcome.co_returnData))
-        u.vs_memory = TAKE n outcome.co_returnData)) R
+        u.vs_memory = TAKE n outcome.co_returnData) /\
+      (!H'. stmt_state_rel H' ctx func cenv cx es (s with vs_fmp := saved) ==>
+            stmt_state_rel H' ctx func cenv cx
+              (SND (adopt_call_outcome rq outcome es1)) (u with vs_fmp := saved))) R
 Proof
   strip_tac >> drule emitted_insts_emit_op >> strip_tac >>
   drule emit_op_extends >> strip_tac >>
@@ -2706,8 +2737,21 @@ Proof
           else [gop;aop;vop;dp;dl;op;Lit (n2w n)])` by
         simp[Abbr `inst`, mk_inst_def] >>
       `eval_operand (Lit (n2w n)) s = SOME (n2w n)` by simp[eval_operand_def] >>
-      drule_all (SRULE [] raw_call_oracle_framed_step) >>
-      strip_tac >> qexists_tac `u` >> simp[run_inst_seq_def] >>
+      drule_all (SRULE [] raw_call_oracle_framed_step) >> strip_tac >>
+      (* The step is a function of s, so every horizon's run ends at u. *)
+      `!H'. stmt_state_rel H' ctx func cenv cx es (s with vs_fmp := saved) ==>
+            stmt_state_rel H' ctx func cenv cx
+              (SND (adopt_call_outcome rq outcome es1)) (u with vs_fmp := saved)` by
+        (rpt strip_tac >>
+         `raw_call_buffer_frame H' ctx func cenv cx es0 es sf s0 saved ai w n s` by
+           fs[raw_call_buffer_frame_def] >>
+         qpat_x_assum `raw_call_buffer_frame H' _ _ _ _ _ _ _ _ _ _ _ _ _`
+           (mp_then (Pat `raw_call_buffer_frame _ _ _ _ _ _ _ _ _ _ _ _ _ _`) mp_tac
+              (SRULE [] raw_call_oracle_framed_step)) >>
+         disch_then drule_all >>
+         strip_tac >>
+         gvs[raw_call_buffer_frame_def]) >>
+      qexists_tac `u` >> simp[run_inst_seq_def, stmt_state_rel_inst_idx] >>
       Cases_on `stat` >> gvs[mk_inst_def, is_terminator_def]) >>
   Cases_on `stat` >> simp[mk_inst_def, is_terminator_def]
 QED
@@ -2834,7 +2878,7 @@ Theorem raw_call_success_restore_allocas_frag[local]:
      emit_void MSTORE [ov;cap]; comp_return ov od
    else comp_return (Lit 0w)) sk = (result,se) /\
   emit_void SETFMP [dp] se = ((),sb) /\ ci_mono sc sk /\
-  raw_call_buffer_frame ctx func cenv cx es0 es sf s0 saved ai w n t /\
+  raw_call_buffer_frame H ctx func cenv cx es0 es sf s0 saved ai w n t /\
   fn_inst_ids_distinct func /\ MEM alloc (fn_insts func) /\
   alloc.inst_opcode = ALLOCA /\ alloc.inst_outputs = [q] /\ alloc.inst_id = ai /\
   not_local_ptr cenv es.scopes q /\ sf.cs_next_id <= ai /\
@@ -2846,7 +2890,9 @@ Theorem raw_call_success_restore_allocas_frag[local]:
   (0 < n ==> mem_bytes_at (w2n w + 32) (LENGTH (TAKE n t.vs_returndata))
      t.vs_memory = TAKE n t.vs_returndata) ==>
   frag_path ctx sk sb (\u. u = jump_to ok t)
-    (\u. stmt_state_rel ctx func cenv cx es u /\ wb_frame cenv es0 es sf s0 u /\
+    (\u. stmt_state_rel H ctx func cenv cx es u /\ wb_frame cenv es0 es sf s0 u /\
+      (!H'. stmt_state_rel H' ctx func cenv cx es (t with vs_fmp := saved) ==>
+            stmt_state_rel H' ctx func cenv cx es u) /\
       u.vs_fmp = saved /\
       (0 < n ==> FLOOKUP u.vs_allocas ai = SOME (w2n w, ((n+31) DIV 32)*32+32)) /\
       (!p v. safe_operand sc p /\ eval_operand p t = SOME v ==>
@@ -2860,7 +2906,7 @@ Proof
   `safe_operand sk ov /\ safe_operand sk dp /\
    local_ptrs_reserved cenv sk /\ sf.cs_next_var <= sk.cs_next_var` by
     (fs[ci_mono_def] >> metis_tac[safe_operand_mono, local_ptrs_reserved_next_var]) >>
-  `raw_call_buffer_frame ctx func cenv cx es0 es sf s0 saved ai w n (jump_to ok t)` by
+  `raw_call_buffer_frame H ctx func cenv cx es0 es sf s0 saved ai w n (jump_to ok t)` by
     ( `jump_to ok t with vs_fmp := saved = jump_to ok (t with vs_fmp := saved)` by
         simp[jump_to_def] >>
       fs[raw_call_buffer_frame_def, stmt_state_rel_jump_to] >>
@@ -2868,6 +2914,11 @@ Proof
         (irule wb_frame_readonly_tail >> qexistsl_tac [`sf`, `t`] >>
          simp[jump_to_def, lookup_var_def]) >>
       simp[] >> fs[jump_to_def]) >>
+  `!H'. stmt_state_rel H' ctx func cenv cx es (jump_to ok t with vs_fmp := saved) <=>
+        stmt_state_rel H' ctx func cenv cx es (t with vs_fmp := saved)` by
+    (`jump_to ok t with vs_fmp := saved = jump_to ok (t with vs_fmp := saved)` by
+       simp[jump_to_def] >>
+     simp[stmt_state_rel_jump_to]) >>
   Cases_on `n = 0`
   >- (gvs[comp_return_def] >>
       `eval_operand dp (jump_to ok t) = SOME saved` by simp[jump_to_def, eval_operand_def] >>
@@ -2898,45 +2949,11 @@ Proof
   metis_tac[]
 QED
 
-Theorem raw_call_success_restore_frag[local]:
-  (if 0 < n then do
-     z <- emit_op RETURNDATASIZE []; c <- emit_op LT [z;Lit (n2w n)];
-     cap <- compile_select c z (Lit (n2w n));
-     emit_void MSTORE [ov;cap]; comp_return ov od
-   else comp_return (Lit 0w)) sk = (result,se) /\
-  emit_void SETFMP [dp] se = ((),sb) /\ ci_mono sc sk /\
-  raw_call_buffer_frame ctx func cenv cx es0 es sf s0 saved ai w n t /\
-  fn_inst_ids_distinct func /\ MEM alloc (fn_insts func) /\
-  alloc.inst_opcode = ALLOCA /\ alloc.inst_outputs = [q] /\ alloc.inst_id = ai /\
-  not_local_ptr cenv es.scopes q /\ sf.cs_next_id <= ai /\
-  local_ptrs_reserved cenv sf /\ local_ptrs_reserved cenv sc /\
-  sf.cs_next_var <= sc.cs_next_var /\ MAP FDOM es0.scopes = MAP FDOM es.scopes /\
-  safe_operand sc ov /\ safe_operand sc dp /\
-  eval_operand ov t = SOME w /\ eval_operand dp t = SOME saved /\
-  n < dimword (:256) /\ LENGTH t.vs_returndata < dimword (:256) /\
-  (0 < n ==> mem_bytes_at (w2n w + 32) (LENGTH (TAKE n t.vs_returndata))
-     t.vs_memory = TAKE n t.vs_returndata) ==>
-  frag_path ctx sk sb (\u. u = jump_to ok t)
-    (\u. stmt_state_rel ctx func cenv cx es u /\ wb_frame cenv es0 es sf s0 u /\
-      u.vs_fmp = saved /\
-      (!p v. safe_operand sc p /\ eval_operand p t = SOME v ==>
-        eval_operand p u = SOME v) /\
-      (if n = 0 then eval_operand result u = SOME 0w
-       else eval_operand result u = SOME w /\
-         val_in_memory (BaseTV (BytesT (Dynamic n)))
-           (BytesV (TAKE n t.vs_returndata)) (w2n w) u.vs_memory)) R
-Proof
-  strip_tac >> drule_all raw_call_success_restore_allocas_frag >>
-  disch_then (qspec_then `ok` (qspec_then `R` assume_tac)) >>
-  irule frag_path_conseq >> goal_assum (drule_at (Pat `frag_path _ _ _ _ _ _`)) >>
-  simp[] >> metis_tac[]
-QED
-
 Theorem raw_call_finish_success_allocas_frag[local]:
   compile_raw_call_finish aop dp dl gop vop call_ty n T ov op sc = (result,se) /\
   emit_void SETFMP [dp] se = ((),sb) /\
   (call_ty = StaticCall \/ call_ty = RegularCall) /\
-  raw_call_buffer_frame ctx func cenv cx es0 es sf s0 saved ai w n s /\
+  raw_call_buffer_frame H ctx func cenv cx es0 es sf s0 saved ai w n s /\
   fn_inst_ids_distinct func /\ MEM alloc (fn_insts func) /\
   alloc.inst_opcode = ALLOCA /\ alloc.inst_outputs = [q] /\ alloc.inst_id = ai /\
   not_local_ptr cenv es.scopes q /\ sf.cs_next_id <= ai /\
@@ -2954,7 +2971,10 @@ Theorem raw_call_finish_success_allocas_frag[local]:
   (~outcome.co_success ==> !t. t.vs_returndata = outcome.co_returnData ==> R (Abort Revert_abort t)) ==>
   frag_path ctx sc sb (\u. u = s)
     (\u. outcome.co_success /\
-      stmt_state_rel ctx func cenv cx (SND (adopt_call_outcome rq outcome es1)) u /\
+      stmt_state_rel H ctx func cenv cx (SND (adopt_call_outcome rq outcome es1)) u /\
+      (!H'. stmt_state_rel H' ctx func cenv cx es (s with vs_fmp := saved) ==>
+            stmt_state_rel H' ctx func cenv cx
+              (SND (adopt_call_outcome rq outcome es1)) u) /\
       wb_frame cenv es0 (SND (adopt_call_outcome rq outcome es1)) sf s0 u /\ u.vs_fmp = saved /\
       (0 < n ==> FLOOKUP u.vs_allocas ai = SOME (w2n w, ((n+31) DIV 32)*32+32)) /\
       (!p v. safe_operand sc p /\ eval_operand p s = SOME v ==>
@@ -2971,13 +2991,16 @@ Proof
      else [gop;aop;vop;dp;dl;op;Lit (n2w n)]) sc = (success,s1)` by
     (Cases_on `call_ty` >> gvs[]) >>
   `frag_path ctx sc s1 (\u. u = s)
-    (\u. raw_call_buffer_frame ctx func cenv cx es0
+    (\u. raw_call_buffer_frame H ctx func cenv cx es0
        (SND (adopt_call_outcome rq outcome es1)) sf s0 saved ai w n u /\
       eval_operand success u = SOME (if outcome.co_success then 1w else 0w) /\
       u.vs_returndata = outcome.co_returnData /\ u.vs_fmp = s.vs_fmp /\
       (!p. safe_operand sc p ==> eval_operand p u = eval_operand p s) /\
       (0 < n ==> mem_bytes_at (w2n w + 32) (LENGTH (TAKE n outcome.co_returnData))
-        u.vs_memory = TAKE n outcome.co_returnData)) R` by
+        u.vs_memory = TAKE n outcome.co_returnData) /\
+      (!H'. stmt_state_rel H' ctx func cenv cx es (s with vs_fmp := saved) ==>
+            stmt_state_rel H' ctx func cenv cx
+              (SND (adopt_call_outcome rq outcome es1)) (u with vs_fmp := saved))) R` by
     (drule_all raw_call_oracle_framed_frag >> simp[]) >>
   qpat_x_assum `call_ty = StaticCall \/ call_ty = RegularCall` kall_tac >>
   imp_res_tac fresh_label_props >>
@@ -2988,10 +3011,10 @@ Proof
    MAP FDOM es0.scopes = MAP FDOM (SND (adopt_call_outcome rq outcome es1)).scopes` by
     (drule raw_call_take_adopt_fields >> simp[]) >>
   qpat_x_assum `take_call_outcome _ _ _ _ = _` kall_tac >>
-  qpat_x_assum `raw_call_buffer_frame _ _ _ _ _ es _ _ _ _ _ _ _` kall_tac >>
+  qpat_x_assum `raw_call_buffer_frame _ _ _ _ _ _ es _ _ _ _ _ _ _` kall_tac >>
   qpat_x_assum `not_local_ptr cenv es.scopes q` kall_tac >>
   qpat_x_assum `MAP FDOM es0.scopes = MAP FDOM es.scopes` kall_tac >>
-  qmatch_goalsub_abbrev_tac `stmt_state_rel ctx func cenv cx adopted` >>
+  qmatch_goalsub_abbrev_tac `stmt_state_rel H ctx func cenv cx adopted` >>
   drule frag_path_then >> disch_then irule >>
   reverse conj_tac
   >- fs[ci_mono_def] >>
@@ -3018,114 +3041,6 @@ Proof
   irule frag_path_conseq >>
   goal_assum (drule_at (Pat `frag_path _ _ _ _ _ _`)) >>
   simp[] >> metis_tac[]
-QED
-
-Theorem raw_call_finish_allocas_frag[local]:
-  compile_raw_call_finish aop dp dl gop vop call_ty n T ov op sc = (result,se) /\
-  emit_void SETFMP [dp] se = ((),sb) /\
-  (call_ty = StaticCall \/ call_ty = RegularCall) /\
-  raw_call_buffer_frame ctx func cenv cx es0 es sf s0 saved ai w n s /\
-  fn_inst_ids_distinct func /\ MEM alloc (fn_insts func) /\
-  alloc.inst_opcode = ALLOCA /\ alloc.inst_outputs = [q] /\ alloc.inst_id = ai /\
-  not_local_ptr cenv es.scopes q /\ sf.cs_next_id <= ai /\
-  local_ptrs_reserved cenv sf /\ local_ptrs_reserved cenv sc /\
-  sf.cs_next_var <= sc.cs_next_var /\ MAP FDOM es0.scopes = MAP FDOM es.scopes /\
-  safe_operand sc ov /\ safe_operand sc dp /\
-  eval_operand ov s = SOME w /\ eval_operand dp s = SOME saved /\
-  eval_operand op s = SOME (if n = 0 then w else w + 32w) /\
-  eval_operand gop s = SOME gas /\ eval_operand aop s = SOME aw /\
-  eval_operand vop s = SOME vw /\ eval_operand dl s = SOME iz /\
-  take_call_outcome (w2w aw) (read_memory (w2n saved) (w2n iz) s)
-    (if call_ty = StaticCall then NONE else SOME (w2n vw)) es =
-      (INL (rq,outcome),es1) /\
-  n < dimword (:256) /\ LENGTH outcome.co_returnData < dimword (:256) /\
-  (~outcome.co_success ==> !t. t.vs_returndata = outcome.co_returnData ==> R (Abort Revert_abort t)) ==>
-  frag_path ctx sc sb (\u. u = s)
-    (\u. stmt_state_rel ctx func cenv cx (SND (adopt_call_outcome rq outcome es1)) u /\
-      wb_frame cenv es0 (SND (adopt_call_outcome rq outcome es1)) sf s0 u /\ u.vs_fmp = saved /\
-      (0 < n ==> FLOOKUP u.vs_allocas ai = SOME (w2n w, ((n+31) DIV 32)*32+32)) /\
-      (!p v. safe_operand sc p /\ eval_operand p s = SOME v ==>
-        eval_operand p u = SOME v) /\
-      (if n = 0 then eval_operand result u = SOME 0w
-       else eval_operand result u = SOME w /\
-         val_in_memory (BaseTV (BytesT (Dynamic n)))
-           (BytesV (TAKE n outcome.co_returnData)) (w2n w) u.vs_memory)) R
-Proof
-  disch_then (map_every assume_tac o CONJUNCTS) >>
-  drule_all raw_call_finish_success_allocas_frag >> strip_tac >>
-  irule frag_path_conseq >> goal_assum (drule_at Any) >> simp[]
-QED
-
-Theorem raw_call_finish_guarded_frag[local]:
-  compile_raw_call_finish aop dp dl gop vop call_ty n T ov op sc = (result,se) /\
-  emit_void SETFMP [dp] se = ((),sb) /\
-  (call_ty = StaticCall \/ call_ty = RegularCall) /\
-  raw_call_buffer_frame ctx func cenv cx es0 es sf s0 saved ai w n s /\
-  fn_inst_ids_distinct func /\ MEM alloc (fn_insts func) /\
-  alloc.inst_opcode = ALLOCA /\ alloc.inst_outputs = [q] /\ alloc.inst_id = ai /\
-  not_local_ptr cenv es.scopes q /\ sf.cs_next_id <= ai /\
-  local_ptrs_reserved cenv sf /\ local_ptrs_reserved cenv sc /\
-  sf.cs_next_var <= sc.cs_next_var /\ MAP FDOM es0.scopes = MAP FDOM es.scopes /\
-  safe_operand sc ov /\ safe_operand sc dp /\
-  eval_operand ov s = SOME w /\ eval_operand dp s = SOME saved /\
-  eval_operand op s = SOME (if n = 0 then w else w + 32w) /\
-  eval_operand gop s = SOME gas /\ eval_operand aop s = SOME aw /\
-  eval_operand vop s = SOME vw /\ eval_operand dl s = SOME iz /\
-  take_call_outcome (w2w aw) (read_memory (w2n saved) (w2n iz) s)
-    (if call_ty = StaticCall then NONE else SOME (w2n vw)) es =
-      (INL (rq,outcome),es1) /\
-  n < dimword (:256) /\ LENGTH outcome.co_returnData < dimword (:256) /\
-  (~outcome.co_success ==> !t. t.vs_returndata = outcome.co_returnData ==> R (Abort Revert_abort t)) ==>
-  frag_path ctx sc sb (\u. u = s)
-    (\u. stmt_state_rel ctx func cenv cx (SND (adopt_call_outcome rq outcome es1)) u /\
-      wb_frame cenv es0 (SND (adopt_call_outcome rq outcome es1)) sf s0 u /\ u.vs_fmp = saved /\
-      (!p v. safe_operand sc p /\ eval_operand p s = SOME v ==>
-        eval_operand p u = SOME v) /\
-      (if n = 0 then eval_operand result u = SOME 0w
-       else eval_operand result u = SOME w /\
-         val_in_memory (BaseTV (BytesT (Dynamic n)))
-           (BytesV (TAKE n outcome.co_returnData)) (w2n w) u.vs_memory)) R
-Proof
-  disch_then (map_every assume_tac o CONJUNCTS) >>
-  drule_all raw_call_finish_allocas_frag >> strip_tac >>
-  irule frag_path_conseq >> goal_assum (drule_at (Pat `frag_path _ _ _ _ _ _`)) >>
-  simp[] >> metis_tac[]
-QED
-
-Theorem raw_call_finish_framed_frag[local]:
-  compile_raw_call_finish aop dp dl gop vop call_ty n T ov op sc = (result,se) /\
-  emit_void SETFMP [dp] se = ((),sb) /\
-  (call_ty = StaticCall \/ call_ty = RegularCall) /\
-  raw_call_buffer_frame ctx func cenv cx es0 es sf s0 saved ai w n s /\
-  fn_inst_ids_distinct func /\ MEM alloc (fn_insts func) /\
-  alloc.inst_opcode = ALLOCA /\ alloc.inst_outputs = [q] /\ alloc.inst_id = ai /\
-  not_local_ptr cenv es.scopes q /\ sf.cs_next_id <= ai /\
-  local_ptrs_reserved cenv sf /\ local_ptrs_reserved cenv sc /\
-  sf.cs_next_var <= sc.cs_next_var /\ MAP FDOM es0.scopes = MAP FDOM es.scopes /\
-  safe_operand sc ov /\ safe_operand sc dp /\
-  eval_operand ov s = SOME w /\ eval_operand dp s = SOME saved /\
-  eval_operand op s = SOME (if n = 0 then w else w + 32w) /\
-  eval_operand gop s = SOME gas /\ eval_operand aop s = SOME aw /\
-  eval_operand vop s = SOME vw /\ eval_operand dl s = SOME iz /\
-  take_call_outcome (w2w aw) (read_memory (w2n saved) (w2n iz) s)
-    (if call_ty = StaticCall then NONE else SOME (w2n vw)) es =
-      (INL (rq,outcome),es1) /\
-  n < dimword (:256) /\ LENGTH outcome.co_returnData < dimword (:256) /\
-  (!t. t.vs_returndata = outcome.co_returnData ==> R (Abort Revert_abort t)) ==>
-  frag_path ctx sc sb (\u. u = s)
-    (\u. stmt_state_rel ctx func cenv cx (SND (adopt_call_outcome rq outcome es1)) u /\
-      wb_frame cenv es0 (SND (adopt_call_outcome rq outcome es1)) sf s0 u /\ u.vs_fmp = saved /\
-      (!p v. safe_operand sc p /\ eval_operand p s = SOME v ==>
-        eval_operand p u = SOME v) /\
-      (if n = 0 then eval_operand result u = SOME 0w
-       else eval_operand result u = SOME w /\
-         val_in_memory (BaseTV (BytesT (Dynamic n)))
-           (BytesV (TAKE n outcome.co_returnData)) (w2n w) u.vs_memory)) R
-Proof
-  disch_then (map_every assume_tac o CONJUNCTS) >>
-  `~outcome.co_success ==> !t. t.vs_returndata = outcome.co_returnData ==>
-    R (Abort Revert_abort t)` by simp[] >>
-  drule_all raw_call_finish_guarded_frag >> simp[]
 QED
 
 Theorem calldata_prepare_members[local]:
@@ -3179,7 +3094,7 @@ QED
 Theorem calldata_call_prepare_pre[local]:
   expr_body_pre cenv cx env (Call ann (RawCallCalldataTarget flags) (addr::kws) NONE) es /\
   eval_exprs cx (addr::kws) es = (INL vs,es1) /\
-  typed_args_post ctx func cenv cx es sa s0 es1 (addr::kws) (aop::ops) vs entry /\
+  typed_args_post H ctx func cenv cx es sa s0 es1 (addr::kws) (aop::ops) vs entry /\
   local_ptrs_reserved cenv sa /\ sa.cs_next_var <= sp.cs_next_var /\
   sa.cs_next_id <= sp.cs_next_id /\ EVERY (safe_operand sp) ops /\
   fn_inst_ids_distinct func /\
@@ -3188,11 +3103,11 @@ Theorem calldata_call_prepare_pre[local]:
       else ((flags.rcf_max_outsize + 31) DIV 32) * 32 + 32))]
     [STRING #"%" (toString sg.cs_next_var)]) (fn_insts func) /\
   EXISTS (\inst. inst.inst_opcode = DALLOCA) (fn_insts func) ==>
-  calldata_prepare_pre ctx func cenv cx es es1 sa s0 sp sg
+  calldata_prepare_pre H ctx func cenv cx es es1 sa s0 sp sg
     flags.rcf_max_outsize (ext_call_kwarg EKGas flags.rcf_kws ops) entry
 Proof
   strip_tac >>
-  `stmt_state_rel ctx func cenv cx es1 entry /\ wb_frame cenv es es1 sa s0 entry` by
+  `stmt_state_rel H ctx func cenv cx es1 entry /\ wb_frame cenv es es1 sa s0 entry` by
     fs[typed_args_post_def] >>
   `LENGTH cx.txn.calldata < dimword (:256)` by
     fs[expr_body_pre_def, expr_sim_inv_def,
@@ -3287,7 +3202,7 @@ Theorem calldata_call_source_args[local]:
   expr_body_pre cenv cx env (Call ann (RawCallCalldataTarget flags) (addr::kws) NONE) es /\
   typed_args_ready ctx func cenv cx expr_type (expr_sim_inv cenv cx env) (addr::kws) /\
   eval_exprs cx (addr::kws) es = (INL vs,es1) /\
-  typed_args_post ctx func cenv cx es sa s0 es1 (addr::kws) (aop::ops) vs entry ==>
+  typed_args_post H ctx func cenv cx es sa s0 es1 (addr::kws) (aop::ops) vs entry ==>
   expr_sim_inv cenv cx env es1 /\
   ?aw amount vals. eval_operand aop entry = SOME aw /\
     amount < dimword (:256) /\ (flags.rcf_is_static ==> amount = 0) /\
@@ -3349,7 +3264,7 @@ Proof
 QED
 
 Theorem raw_call_tuple_copy_frame:
-  stmt_state_rel ctx func cenv cx es s /\ fn_inst_ids_distinct func /\
+  stmt_state_rel H ctx func cenv cx es s /\ fn_inst_ids_distinct func /\
   MEM inst (fn_insts func) /\ inst.inst_opcode = ALLOCA /\
   inst.inst_outputs = [q] /\ not_local_ptr cenv es.scopes q /\
   FLOOKUP s.vs_allocas inst.inst_id = SOME (p,32 + sz) /\
@@ -3357,7 +3272,7 @@ Theorem raw_call_tuple_copy_frame:
   val_in_memory (BaseTV (BytesT (Dynamic n))) (BytesV bs) src s.vs_memory /\
   val_wf (BaseTV (BytesT (Dynamic n))) (BytesV bs) /\
   type_memory_size (BaseTV (BytesT (Dynamic n))) <= sz ==>
-  stmt_state_rel ctx func cenv cx es (mcopy (p + 32) src sz s) /\
+  stmt_state_rel H ctx func cenv cx es (mcopy (p + 32) src sz s) /\
   val_in_memory (TupleTV [BaseTV BoolT; BaseTV (BytesT (Dynamic n))])
     (ArrayV (TupleV [BoolV success; BytesV bs])) p
     (mcopy (p + 32) src sz s).vs_memory
@@ -3484,12 +3399,12 @@ QED
 Theorem raw_call_alloc_buffer_run:
   !func cenv cx es sa sm buf sz s ctx saved.
   compile_alloc_buffer sz sa = (buf,sm) /\
-  stmt_state_rel ctx func cenv cx es (s with vs_fmp := saved) /\
+  stmt_state_rel H ctx func cenv cx es (s with vs_fmp := saved) /\
   fn_inst_ids_distinct func /\ local_ptrs_reserved cenv sa /\ sz < dimword (:256) /\
   MEM (mk_inst sa.cs_next_id ALLOCA [Lit (n2w sz)]
     [STRING #"%" (toString sa.cs_next_var)]) (fn_insts func) ==>
   ?t w. run_inst_seq (emitted_insts sa sm) s = OK t /\
-    stmt_state_rel ctx func cenv cx es (t with vs_fmp := saved) /\
+    stmt_state_rel H ctx func cenv cx es (t with vs_fmp := saved) /\
     t.vs_fmp = s.vs_fmp /\ eval_operand buf.buf_operand t = SOME w /\
     FLOOKUP t.vs_allocas sa.cs_next_id = SOME (w2n w,sz) /\
     w2n w + sz < dimword (:256) /\ t.vs_memory = s.vs_memory /\
@@ -3527,7 +3442,7 @@ Proof
 QED
 
 Theorem raw_call_tuple_flag_ready[local]:
-  stmt_state_rel ctx func cenv cx es (s with vs_fmp := saved) /\
+  stmt_state_rel H ctx func cenv cx es (s with vs_fmp := saved) /\
   wb_frame cenv es0 es sf s0 s /\ fn_inst_ids_distinct func /\
   MEM inst (fn_insts func) /\ inst.inst_opcode = ALLOCA /\
   inst.inst_outputs = [q] /\ not_local_ptr cenv es.scopes q /\
@@ -3539,7 +3454,7 @@ Theorem raw_call_tuple_flag_ready[local]:
   emit_void MSTORE [pop;ok] sa = ((),sb) /\
   eval_operand pop s = SOME w /\ eval_operand ok s = SOME flag ==>
   run_inst_seq (emitted_insts sa sb) s = OK (mstore (w2n w) flag s) /\
-  stmt_state_rel ctx func cenv cx es
+  stmt_state_rel H ctx func cenv cx es
     ((mstore (w2n w) flag s) with vs_fmp := saved) /\
   wb_frame cenv es0 es sf s0 (mstore (w2n w) flag s) /\
   val_in_memory ty v off (mstore (w2n w) flag s).vs_memory /\
@@ -3558,7 +3473,7 @@ Proof
          (mstore (w2n w) flag (s with vs_fmp := saved))` suffices_by
         asm_rewrite_tac[raw_call_wb_frame_fmp] >>
       irule raw_call_outbuf_mstore_wb_frame >> simp[raw_call_wb_frame_fmp] >>
-      goal_assum (drule_at (Pat `stmt_state_rel _ _ _ _ _ _`)) >> simp[] >>
+      goal_assum (drule_at (Pat `stmt_state_rel H _ _ _ _ _ _`)) >> simp[] >>
       goal_assum (drule_at (Pat `MEM _ (fn_insts _)`)) >> simp[] >>
       goal_assum (drule_at (Pat `FLOOKUP _ _ = SOME _`)) >> simp[]) >>
   conj_tac
@@ -3570,7 +3485,7 @@ QED
 Theorem raw_call_tuple_alloc_ready:
   compile_alloc_buffer (32 + sz) sa = (buf,sm) /\
   emit_void MSTORE [buf.buf_operand;ok] sm = ((),sb) /\
-  stmt_state_rel ctx func cenv cx es (s with vs_fmp := saved) /\
+  stmt_state_rel H ctx func cenv cx es (s with vs_fmp := saved) /\
   wb_frame cenv es0 es sf s0 s /\ fn_inst_ids_distinct func /\
   local_ptrs_reserved cenv sa /\ local_ptrs_reserved cenv sf /\
   sf.cs_next_var <= sa.cs_next_var /\ sf.cs_next_id <= sa.cs_next_id /\
@@ -3582,7 +3497,7 @@ Theorem raw_call_tuple_alloc_ready:
   type_memory_size ty <= len /\ safe_operand sa ok /\
   eval_operand ok s = SOME (if success then 1w else 0w) ==>
   ?t w. run_inst_seq (emitted_insts sa sb) s = OK t /\
-    stmt_state_rel ctx func cenv cx es (t with vs_fmp := saved) /\
+    stmt_state_rel H ctx func cenv cx es (t with vs_fmp := saved) /\
     wb_frame cenv es0 es sf s0 t /\ t.vs_fmp = s.vs_fmp /\
     eval_operand buf.buf_operand t = SOME w /\
     FLOOKUP t.vs_allocas sa.cs_next_id = SOME (w2n w,32 + sz) /\
@@ -3624,14 +3539,16 @@ QED
 Theorem raw_call_bool_restore_frag[local]:
   emit_void SETFMP [dop] sa = ((),sb) /\
   eval_operand dop s = SOME saved /\ wb_frame cenv es0 es sf s0 s /\
-  stmt_state_rel ctx func cenv cx es (s with vs_fmp := saved) /\
+  stmt_state_rel H ctx func cenv cx es (s with vs_fmp := saved) /\
   ~flags.rcf_revert_on_failure /\ flags.rcf_max_outsize = 0 /\
   eval_operand op s = SOME (if success then 1w else 0w) ==>
   frag_path ctx sa sb (\r. r = s)
-    (\r. stmt_state_rel ctx func cenv cx es r /\ wb_frame cenv es0 es sf s0 r /\
+    (\r. stmt_state_rel H ctx func cenv cx es r /\ wb_frame cenv es0 es sf s0 r /\
       r.vs_fmp = saved /\
       expr_val_rel cx (raw_call_return_type flags) (BoolV success) op r /\
-      (!p. eval_operand p r = eval_operand p s)) (\r. F)
+      (!p. eval_operand p r = eval_operand p s) /\
+      (!H'. stmt_state_rel H' ctx func cenv cx es (s with vs_fmp := saved) ==>
+            stmt_state_rel H' ctx func cenv cx es r)) (\r. F)
 Proof
   strip_tac >> drule_all raw_call_empty_restore_arbitrary_frag >> strip_tac >>
   irule frag_path_conseq >> goal_assum (drule_at (Pat `frag_path _ _ _ _ _ _`)) >>
@@ -3641,7 +3558,7 @@ QED
 
 Theorem raw_call_tuple_copy_wb:
   wb_frame cenv es0 es sf s0 s /\
-  stmt_state_rel ctx func cenv cx es s /\ fn_inst_ids_distinct func /\
+  stmt_state_rel H ctx func cenv cx es s /\ fn_inst_ids_distinct func /\
   MEM inst (fn_insts func) /\ inst.inst_outputs = [q] /\
   not_local_ptr cenv es.scopes q /\
   FLOOKUP s.vs_allocas inst.inst_id = SOME (p,32 + sz) /\
@@ -3651,13 +3568,13 @@ Theorem raw_call_tuple_copy_wb:
 Proof
   strip_tac >> simp[mcopy_def] >> irule raw_call_outbuf_wb_frame >>
   simp[read_memory_def, LENGTH_TAKE_EQ, LENGTH_DROP] >>
-  goal_assum (drule_at (Pat `stmt_state_rel _ _ _ _ _ _`)) >> simp[] >>
+  goal_assum (drule_at (Pat `stmt_state_rel H _ _ _ _ _ _`)) >> simp[] >>
   goal_assum (drule_at (Pat `MEM _ (fn_insts _)`)) >> simp[] >>
   goal_assum (drule_at (Pat `FLOOKUP _ _ = SOME _`)) >> simp[]
 QED
 
 Theorem raw_call_tuple_copy_restored[local]:
-  stmt_state_rel ctx func cenv cx es (s with vs_fmp := saved) /\
+  stmt_state_rel H ctx func cenv cx es (s with vs_fmp := saved) /\
   wb_frame cenv es0 es sf s0 s /\ fn_inst_ids_distinct func /\
   MEM inst (fn_insts func) /\ inst.inst_opcode = ALLOCA /\
   inst.inst_outputs = [q] /\ not_local_ptr cenv es.scopes q /\
@@ -3668,7 +3585,7 @@ Theorem raw_call_tuple_copy_restored[local]:
   val_in_memory (BaseTV (BytesT (Dynamic n))) (BytesV bs) src s.vs_memory /\
   val_wf (BaseTV (BytesT (Dynamic n))) (BytesV bs) /\
   type_memory_size (BaseTV (BytesT (Dynamic n))) <= sz ==>
-  stmt_state_rel ctx func cenv cx es
+  stmt_state_rel H ctx func cenv cx es
     ((mcopy (p + 32) src sz s) with vs_fmp := saved) /\
   wb_frame cenv es0 es sf s0 ((mcopy (p + 32) src sz s) with vs_fmp := saved) /\
   val_in_memory (TupleTV [BaseTV BoolT; BaseTV (BytesT (Dynamic n))])
@@ -3696,7 +3613,7 @@ Theorem raw_call_tuple_tail_ready[local]:
   eval_operand pop s = SOME w /\ eval_operand src s = SOME a /\
   eval_operand dop s = SOME saved /\ sz < dimword (:256) /\
   w2n w + (32 + sz) < dimword (:256) /\
-  stmt_state_rel ctx func cenv cx es (s with vs_fmp := saved) /\
+  stmt_state_rel H ctx func cenv cx es (s with vs_fmp := saved) /\
   wb_frame cenv es0 es sf s0 s /\ fn_inst_ids_distinct func /\
   local_ptrs_reserved cenv sa /\ sf.cs_next_var <= sa.cs_next_var /\
   MEM inst (fn_insts func) /\ inst.inst_opcode = ALLOCA /\
@@ -3709,7 +3626,7 @@ Theorem raw_call_tuple_tail_ready[local]:
   val_wf (BaseTV (BytesT (Dynamic n))) (BytesV bs) /\
   type_memory_size (BaseTV (BytesT (Dynamic n))) <= sz ==>
   ?t. run_inst_seq (emitted_insts sa sd) s = OK t /\
-    stmt_state_rel ctx func cenv cx es t /\ wb_frame cenv es0 es sf s0 t /\
+    stmt_state_rel H ctx func cenv cx es t /\ wb_frame cenv es0 es sf s0 t /\
     t.vs_fmp = saved /\ eval_operand pop t = SOME w /\
     FLOOKUP t.vs_allocas inst.inst_id = SOME (w2n w,32 + sz) /\
     val_in_memory (TupleTV [BaseTV BoolT; BaseTV (BytesT (Dynamic n))])
@@ -3719,7 +3636,7 @@ Proof
   strip_tac >> drule_all raw_call_tuple_copy_restore_run >> strip_tac >>
   `w2n (w + 32w) = w2n w + 32` by
     (irule buffer_offset_no_wrap >> qexists_tac `32 + sz` >> simp[]) >>
-  `stmt_state_rel ctx func cenv cx es (u with vs_fmp := saved)` by
+  `stmt_state_rel H ctx func cenv cx es (u with vs_fmp := saved)` by
     (qpat_assum `u = _` SUBST1_TAC >>
      `(s with vs_vars := vars) with vs_fmp := saved =
         (s with vs_fmp := saved) with vs_vars := vars` by simp[] >>
@@ -3766,7 +3683,7 @@ Theorem raw_call_tuple_build_run[local]:
   emit_op ADD [buf.buf_operand;Lit 32w] sn = (dst,sb) /\
   emit_void MCOPY [dst;src;Lit (n2w sz)] sb = ((),sc) /\
   emit_void SETFMP [dop] sc = ((),sd) /\
-  stmt_state_rel ctx func cenv cx es (s with vs_fmp := saved) /\
+  stmt_state_rel H ctx func cenv cx es (s with vs_fmp := saved) /\
   wb_frame cenv es0 es sf s0 s /\ fn_inst_ids_distinct func /\
   local_ptrs_reserved cenv sa /\ local_ptrs_reserved cenv sf /\
   sf.cs_next_var <= sa.cs_next_var /\ sf.cs_next_id <= sa.cs_next_id /\
@@ -3782,7 +3699,7 @@ Theorem raw_call_tuple_build_run[local]:
   eval_operand ok s = SOME (if success then 1w else 0w) /\
   eval_operand src s = SOME a /\ eval_operand dop s = SOME saved ==>
   ?t w. run_inst_seq (emitted_insts sa sd) s = OK t /\
-    stmt_state_rel ctx func cenv cx es t /\ wb_frame cenv es0 es sf s0 t /\
+    stmt_state_rel H ctx func cenv cx es t /\ wb_frame cenv es0 es sf s0 t /\
     t.vs_fmp = saved /\ eval_operand buf.buf_operand t = SOME w /\
     FLOOKUP t.vs_allocas sa.cs_next_id = SOME (w2n w,32 + sz) /\
     w2n w + (32 + sz) < dimword (:256) /\
@@ -3871,7 +3788,7 @@ Proof
        rich_listTheory.IS_PREFIX_APPEND, rich_listTheory.DROP_APPEND]
 QED
 
-Theorem raw_call_nonrevert_suffix_frag[local]:
+Theorem calldata_nonrevert_positive_run[local]:
   (do result <- (if n > 0 then
        do z <- emit_op RETURNDATASIZE [];
           cmp <- emit_op LT [z;Lit (n2w n)];
@@ -3884,7 +3801,7 @@ Theorem raw_call_nonrevert_suffix_frag[local]:
           return buf.buf_operand od
      else return ok);
      emit_void SETFMP [dp]; return result od) sa = (result,sb) /\
-  raw_call_buffer_frame ctx func cenv cx es0 es sf s0 saved ai w n s /\
+  raw_call_buffer_frame H ctx func cenv cx es0 es sf s0 saved ai w n s /\
   fn_has_code sa sb func /\ fn_inst_ids_distinct func /\
   MEM alloc (fn_insts func) /\ alloc.inst_opcode = ALLOCA /\
   alloc.inst_outputs = [q] /\ alloc.inst_id = ai /\ not_local_ptr cenv es.scopes q /\
@@ -3897,9 +3814,9 @@ Theorem raw_call_nonrevert_suffix_frag[local]:
   (0 < n ==> mem_bytes_at (w2n w + 32) (LENGTH (TAKE n s.vs_returndata))
     s.vs_memory = TAKE n s.vs_returndata) /\
   64 + ((n + 31) DIV 32) * 32 < dimword (:256) /\ n < dimword (:256) /\
-  ~flags.rcf_revert_on_failure /\ flags.rcf_max_outsize = n ==>
-  frag_path ctx sa sb (\u. u = s)
-    (\t. stmt_state_rel ctx func cenv cx es t /\ wb_frame cenv es0 es sf s0 t /\
+  ~flags.rcf_revert_on_failure /\ flags.rcf_max_outsize = n /\ 0 < n ==>
+  ?t. run_inst_seq (emitted_insts sa sb) s = OK t /\
+    !i. (\t. stmt_state_rel H ctx func cenv cx es t /\ wb_frame cenv es0 es sf s0 t /\
       t.vs_fmp = saved /\
       (!p. safe_operand sa p ==> eval_operand p t = eval_operand p s) /\
       expr_val_rel cx (raw_call_return_type flags)
@@ -3914,22 +3831,9 @@ Theorem raw_call_nonrevert_suffix_frag[local]:
           (w2n tw) t.vs_memory /\
         (!k lb lsz. local_region cenv es.scopes t k lb lsz ==>
           w2n tw + (64 + ((n + 31) DIV 32) * 32) <= lb \/
-          lb + lsz <= w2n tw))) (\r. F)
+          lb + lsz <= w2n tw))) (t with vs_inst_idx := i)
 Proof
-  strip_tac >> Cases_on `n = 0`
-  >- (gvs[comp_bind_def, comp_ignore_bind_def, comp_return_def,
-          raw_call_buffer_frame_def] >>
-      pairarg_tac >> gvs[] >>
-      rename1 `emit_void SETFMP [dp] sa = (unit,sb)` >>
-      Cases_on `unit` >> gvs[] >>
-      drule_all raw_call_bool_restore_frag >> strip_tac >>
-      irule frag_path_conseq >> goal_assum (drule_at (Pat `frag_path _ _ _ _ _ _`)) >>
-      simp[NoAsms] >> rpt strip_tac >> simp[]) >>
-  suspend "positive"
-QED
-
-Resume raw_call_nonrevert_suffix_frag[positive]:
-  `0 < n` by decide_tac >> drule_all raw_call_nonrevert_suffix_code >> strip_tac >>
+  strip_tac >> drule_all raw_call_nonrevert_suffix_code >> strip_tac >>
   gvs[raw_call_buffer_frame_def] >>
   qpat_x_assum `do _ <- _; _ od sa = _` kall_tac >>
   drule_at (Pat `MEM _ (fn_insts _)`) raw_call_output_prefix_ready >>
@@ -3955,11 +3859,7 @@ Resume raw_call_nonrevert_suffix_frag[positive]:
      (BytesV (TAKE flags.rcf_max_outsize s.vs_returndata))` by
     (irule (cj 1 valueEncodingTypingTheory.value_has_type_val_wf) >>
      simp[value_has_type_def, LENGTH_TAKE_EQ]) >>
-  suspend "tuple_build"
-QED
-
-Resume raw_call_nonrevert_suffix_frag[tuple_build]:
-  `compile_alloc_buffer (64 + ((flags.rcf_max_outsize + 31) DIV 32) * 32)
+    `compile_alloc_buffer (64 + ((flags.rcf_max_outsize + 31) DIV 32) * 32)
      s4 = (buf,s5)` by simp[] >>
   `emit_void MCOPY [dst;out_val;
       Lit (n2w (32 + ((flags.rcf_max_outsize + 31) DIV 32) * 32))]
@@ -3985,11 +3885,7 @@ Resume raw_call_nonrevert_suffix_frag[tuple_build]:
     (rpt strip_tac >>
      `safe_operand s4 p` by (irule safe_operand_mono >> qexists_tac `sa` >> fs[ci_mono_def]) >>
      metis_tac[]) >>
-  suspend "fragment_post"
-QED
-
-Resume raw_call_nonrevert_suffix_frag[fragment_post]:
-  irule frag_path_run_inst_seq >> simp[] >> rpt strip_tac >>
+  qexists_tac `t` >> simp[] >> gen_tac >>
   simp[stmt_state_rel_inst_idx, raw_call_wb_frame_inst_idx,
        hash_eval_operand_inst_idx]
   >- (qpat_x_assum `expr_val_rel _ _ _ _ t` mp_tac >>
@@ -4007,13 +3903,88 @@ Resume raw_call_nonrevert_suffix_frag[fragment_post]:
   simp[mk_inst_def] >> goal_assum (drule_at Any) >> simp[]
 QED
 
-Finalise raw_call_nonrevert_suffix_frag
+Theorem raw_call_nonrevert_suffix_frag[local]:
+  (do result <- (if n > 0 then
+       do z <- emit_op RETURNDATASIZE [];
+          cmp <- emit_op LT [z;Lit (n2w n)];
+          cap <- compile_select cmp z (Lit (n2w n));
+          emit_void MSTORE [out_val;cap];
+          buf <- compile_alloc_buffer (64 + ((n + 31) DIV 32) * 32);
+          emit_void MSTORE [buf.buf_operand;ok];
+          dst <- emit_op ADD [buf.buf_operand;Lit 32w];
+          emit_void MCOPY [dst;out_val;Lit (n2w (32 + ((n + 31) DIV 32) * 32))];
+          return buf.buf_operand od
+     else return ok);
+     emit_void SETFMP [dp]; return result od) sa = (result,sb) /\
+  raw_call_buffer_frame H ctx func cenv cx es0 es sf s0 saved ai w n s /\
+  fn_has_code sa sb func /\ fn_inst_ids_distinct func /\
+  MEM alloc (fn_insts func) /\ alloc.inst_opcode = ALLOCA /\
+  alloc.inst_outputs = [q] /\ alloc.inst_id = ai /\ not_local_ptr cenv es.scopes q /\
+  local_ptrs_reserved cenv sf /\ local_ptrs_reserved cenv sa /\
+  sf.cs_next_var <= sa.cs_next_var /\ sf.cs_next_id <= ai /\ ai < sa.cs_next_id /\
+  MAP FDOM es0.scopes = MAP FDOM es.scopes /\
+  safe_operand sa out_val /\ safe_operand sa ok /\ safe_operand sa dp /\
+  eval_operand out_val s = SOME w /\ eval_operand ok s = SOME (if success then 1w else 0w) /\
+  eval_operand dp s = SOME saved /\ LENGTH s.vs_returndata < dimword (:256) /\
+  (0 < n ==> mem_bytes_at (w2n w + 32) (LENGTH (TAKE n s.vs_returndata))
+    s.vs_memory = TAKE n s.vs_returndata) /\
+  64 + ((n + 31) DIV 32) * 32 < dimword (:256) /\ n < dimword (:256) /\
+  ~flags.rcf_revert_on_failure /\ flags.rcf_max_outsize = n ==>
+  frag_path ctx sa sb (\u. u = s)
+    (\t. stmt_state_rel H ctx func cenv cx es t /\ wb_frame cenv es0 es sf s0 t /\
+      (!H'. stmt_state_rel H' ctx func cenv cx es (s with vs_fmp := saved) ==>
+            stmt_state_rel H' ctx func cenv cx es t) /\
+      t.vs_fmp = saved /\
+      (!p. safe_operand sa p ==> eval_operand p t = eval_operand p s) /\
+      expr_val_rel cx (raw_call_return_type flags)
+        (if n = 0 then BoolV success else
+          ArrayV (TupleV [BoolV success; BytesV (TAKE n s.vs_returndata)])) result t /\
+      (0 < n ==> ?ti tw. sf.cs_next_id <= ti /\ ti < sb.cs_next_id /\
+        eval_operand result t = SOME tw /\
+        FLOOKUP t.vs_allocas ti = SOME (w2n tw,64 + ((n + 31) DIV 32) * 32) /\
+        w2n tw + (64 + ((n + 31) DIV 32) * 32) < dimword (:256) /\
+        val_in_memory (TupleTV [BaseTV BoolT;BaseTV (BytesT (Dynamic n))])
+          (ArrayV (TupleV [BoolV success;BytesV (TAKE n s.vs_returndata)]))
+          (w2n tw) t.vs_memory /\
+        (!k lb lsz. local_region cenv es.scopes t k lb lsz ==>
+          w2n tw + (64 + ((n + 31) DIV 32) * 32) <= lb \/
+          lb + lsz <= w2n tw))) (\r. F)
+Proof
+  strip_tac >> Cases_on `n = 0`
+  >- (gvs[comp_bind_def, comp_ignore_bind_def, comp_return_def,
+          raw_call_buffer_frame_def] >>
+      pairarg_tac >> gvs[] >>
+      rename1 `emit_void SETFMP [dp] sa = (unit,sb)` >>
+      Cases_on `unit` >> gvs[] >>
+      drule_all raw_call_bool_restore_frag >> strip_tac >>
+      irule frag_path_conseq >> goal_assum (drule_at (Pat `frag_path _ _ _ _ _ _`)) >>
+      simp[NoAsms] >> rpt strip_tac >> simp[]) >>
+  `0 < n` by decide_tac >> drule_all raw_call_nonrevert_suffix_code >> strip_tac >>
+  drule_all calldata_nonrevert_positive_run >> strip_tac >>
+  (* The run is a function of s, so every horizon's run ends at t. *)
+  `!H'. stmt_state_rel H' ctx func cenv cx es (s with vs_fmp := saved) ==>
+        stmt_state_rel H' ctx func cenv cx es t` by
+    (rpt strip_tac >>
+     `raw_call_buffer_frame H' ctx func cenv cx es0 es sf s0 saved ai w n s` by
+       fs[raw_call_buffer_frame_def] >>
+     qpat_x_assum `raw_call_buffer_frame H' _ _ _ _ _ _ _ _ _ _ _ _ _`
+       (mp_then (Pat `raw_call_buffer_frame _ _ _ _ _ _ _ _ _ _ _ _ _ _`) mp_tac
+          calldata_nonrevert_positive_run) >>
+     disch_then drule_all >>
+     strip_tac >> gvs[] >>
+     qpat_x_assum `!i. _` (qspec_then `t.vs_inst_idx` mp_tac) >>
+     simp[venomStateTheory.venom_state_component_equality]) >>
+  qpat_x_assum `!i. _`
+    (qspec_then `LENGTH sb.cs_current_insts` (strip_assume_tac o BETA_RULE)) >>
+  irule frag_path_run_inst_seq >> simp[] >> rpt strip_tac >> gvs[] >>
+  disj1_tac >> qexists_tac `t` >> simp[stmt_state_rel_inst_idx]
+QED
 
 Theorem calldata_call_source_outcome[local]:
   expr_body_pre cenv cx env (Call ann (RawCallCalldataTarget flags) (addr::kws) NONE) es /\
   typed_args_ready ctx func cenv cx expr_type (expr_sim_inv cenv cx env) (addr::kws) /\
   eval_exprs cx (addr::kws) es = (INL vs,es1) /\
-  typed_args_post ctx func cenv cx es sa s0 es1 (addr::kws) (aop::ops) vs entry /\
+  typed_args_post H ctx func cenv cx es sa s0 es1 (addr::kws) (aop::ops) vs entry /\
   eval_expr cx (Call ann (RawCallCalldataTarget flags) (addr::kws) NONE) es = (res,es2) ==>
   ?aw amount rq outcome consumed.
     eval_operand aop entry = SOME aw /\ amount < dimword (:256) /\
@@ -4099,7 +4070,7 @@ Theorem calldata_call_gas[local]:
   expr_body_pre cenv cx env (Call ann (RawCallCalldataTarget flags) (addr::kws) NONE) es /\
   typed_args_ready ctx func cenv cx expr_type (expr_sim_inv cenv cx env) (addr::kws) /\
   eval_exprs cx (addr::kws) es = (INL vs,es1) /\
-  typed_args_post ctx func cenv cx es sa s0 es1 (addr::kws) (aop::ops) vs entry ==>
+  typed_args_post H ctx func cenv cx es sa s0 es1 (addr::kws) (aop::ops) vs entry ==>
   ?gw. (case ext_call_kwarg EKGas flags.rcf_kws ops of
     NONE => SOME (HD (entry.vs_gas_readings ++ [0w]))
   | SOME p => eval_operand p entry) = SOME gw
@@ -4126,7 +4097,7 @@ Theorem calldata_call_prepare_fragment[local]:
   expr_body_pre cenv cx env
     (Call ann (RawCallCalldataTarget flags) (addr::kws) NONE) es /\
   eval_exprs cx (addr::kws) es = (INL vs,es1) /\
-  typed_args_post ctx func cenv cx es sa s0 es1 (addr::kws) (aop::ops) vs entry /\
+  typed_args_post H ctx func cenv cx es sa s0 es1 (addr::kws) (aop::ops) vs entry /\
   local_ptrs_reserved cenv sa /\ fn_inst_ids_distinct func /\
   fn_has_code sa sb func /\ cs_extends sa sp /\ cs_extends sc sb /\
   sa.cs_next_var <= sp.cs_next_var /\ sa.cs_next_id <= sp.cs_next_id /\
@@ -4136,11 +4107,13 @@ Theorem calldata_call_prepare_fragment[local]:
   compile_raw_call_outbuf flags.rcf_max_outsize sg = ((ov,op),so) /\
   compile_msg_data_to_memory so = ((dp,dl),sc) ==>
   frag_path ctx sp sc (\s. s = entry)
-    (\t. calldata_prepared ctx func cenv cx es es1 sa s0 entry sp sg
+    (\t. calldata_prepared H ctx func cenv cx es es1 sa s0 entry sp sg
        flags.rcf_max_outsize ov op dp dl t /\
       eval_operand gop t =
         (case ext_call_kwarg EKGas flags.rcf_kws ops of
-         SOME g => eval_operand g entry | NONE => SOME (HD (entry.vs_gas_readings ++ [0w])))) R
+         SOME g => eval_operand g entry | NONE => SOME (HD (entry.vs_gas_readings ++ [0w]))) /\
+      (!H'. stmt_state_rel H' ctx func cenv cx es1 entry ==>
+            stmt_state_rel H' ctx func cenv cx es1 (t with vs_fmp := entry.vs_fmp))) R
 Proof
   strip_tac >> drule calldata_gas_code >> strip_tac >>
   `ci_mono sg so` by metis_tac[ci_mono_compile_raw_call_outbuf, pairTheory.SND] >>
@@ -4150,15 +4123,15 @@ Proof
      conj_tac >- (fs[ci_mono_def] >> metis_tac[cs_extends_trans]) >>
      qexistsl_tac [`sb`,`sa`] >> fs[ci_mono_def] >> metis_tac[cs_extends_trans]) >>
   drule_all calldata_prepare_members >> strip_tac >>
-  `calldata_prepare_pre ctx func cenv cx es es1 sa s0 sp sg
+  `calldata_prepare_pre H ctx func cenv cx es es1 sa s0 sp sg
     flags.rcf_max_outsize (ext_call_kwarg EKGas flags.rcf_kws ops) entry` by
     (irule calldata_call_prepare_pre >> simp[] >>
-     goal_assum (drule_at (Pat `typed_args_post _ _ _ _ _ _ _ _ _ _ _ _`)) >>
+     goal_assum (drule_at (Pat `typed_args_post _ _ _ _ _ _ _ _ _ _ _ _ _`)) >>
      goal_assum (drule_at (Pat `expr_body_pre _ _ _ _ _`)) >> simp[]) >>
   irule frag_path_conseq >> irule_at (Pat `frag_path _ _ _ _ _ _`) calldata_prepare_frag >>
   goal_assum (drule_at (Pat `compile_raw_call_outbuf _ _ = _`)) >>
   goal_assum (drule_at (Pat `compile_msg_data_to_memory _ = _`)) >> simp[] >>
-  goal_assum (drule_at (Pat `calldata_prepare_pre _ _ _ _ _ _ _ _ _ _ _ _ _`)) >>
+  goal_assum (drule_at (Pat `calldata_prepare_pre _ _ _ _ _ _ _ _ _ _ _ _ _ _`)) >>
   qexistsl_tac [`gop`,`R`] >> simp[]
 QED
 
@@ -4171,7 +4144,8 @@ Theorem raw_call_value_vv_post[local]:
     if n = 0 then NoneV else BytesV (TAKE n data)
     else if n = 0 then BoolV success
     else ArrayV (TupleV [BoolV success;BytesV (TAKE n data)])) /\
-  stmt_state_rel ctx func cenv cx es1 s /\ wb_frame cenv es es1 sa s0 s /\
+  stmt_state_rel H ctx func cenv cx es1 s /\
+  storage_well_formed_on cx es1 (FST H) /\ wb_frame cenv es es1 sa s0 s /\
   (if n = 0 then eval_operand result s =
       SOME (if flags.rcf_revert_on_failure then 0w else if success then 1w else 0w)
    else eval_operand result s = SOME w /\
@@ -4185,7 +4159,7 @@ Theorem raw_call_value_vv_post[local]:
        w2n w + (((n+31) DIV 32)*32 +
          (if flags.rcf_revert_on_failure then 32 else 64)) <= lb \/
        lb + lsz <= w2n w)) ==>
-  vv_post ctx func cenv cx e es sa sb s0 es1 (Value v)
+  vv_post H ctx func cenv cx e es sa sb s0 es1 (Value v)
     (if n = 0 then StackValue (expr_type e) result
      else LocatedValue (expr_type e) (mk_ptr result LocMemory)) s
 Proof
@@ -4219,7 +4193,7 @@ Theorem raw_call_finish_vv_frag[local]:
   compile_raw_call_finish aop dp dl gop vop call_ty n flags.rcf_revert_on_failure ov op sc = (result,se) /\
   emit_void SETFMP [dp] se = ((),sb) /\
   (call_ty = StaticCall \/ call_ty = RegularCall) /\
-  raw_call_buffer_frame ctx func cenv cx es0 es_in sf s0 saved ai w n s /\
+  raw_call_buffer_frame H ctx func cenv cx es0 es_in sf s0 saved ai w n s /\
   fn_inst_ids_distinct func /\ MEM alloc (fn_insts func) /\
   alloc.inst_opcode = ALLOCA /\ alloc.inst_outputs = [q] /\ alloc.inst_id = ai /\
   not_local_ptr cenv es_in.scopes q /\ sf.cs_next_id <= ai /\
@@ -4242,7 +4216,10 @@ Theorem raw_call_finish_vv_frag[local]:
   64 + ((n+31) DIV 32)*32 < dimword (:256) /\ ai < sb.cs_next_id ==>
   frag_path ctx sc sb (\u. u=s)
     (\u. (flags.rcf_revert_on_failure ==> outcome.co_success) /\
-      vv_post ctx func cenv cx e es0 sf sb s0
+      !H'. stmt_state_rel H' ctx func cenv cx es_in (s with vs_fmp := saved) /\
+           storage_well_formed_on cx
+             (SND (adopt_call_outcome rq outcome es_consumed)) (FST H') ==>
+      vv_post H' ctx func cenv cx e es0 sf sb s0
         (SND (adopt_call_outcome rq outcome es_consumed))
         (Value (if flags.rcf_revert_on_failure then
            if n=0 then NoneV else BytesV (TAKE n outcome.co_returnData)
@@ -4266,13 +4243,15 @@ Resume raw_call_finish_vv_frag[reverting]:
   drule raw_call_take_adopt_fields >> strip_tac >>
   irule frag_path_conseq >>
   goal_assum (drule_at (Pat `frag_path _ _ _ _ _ _`)) >>
-  simp[NoAsms] >> gen_tac >> strip_tac >>
+  simp[NoAsms] >> gen_tac >> strip_tac >> rpt strip_tac >>
   qpat_x_assum `frag_path _ _ _ _ _ _` kall_tac >>
+  `stmt_state_rel H' ctx func cenv cx
+     (SND (adopt_call_outcome rq outcome es_consumed)) u` by metis_tac[] >>
   irule raw_call_value_vv_post >> simp[] >>
   qexistsl_tac [`ai`,`outcome.co_returnData`,`flags`,`outcome.co_success`,`w`] >>
   simp[] >> Cases_on `flags.rcf_max_outsize = 0` >> gvs[] >>
   rpt strip_tac >> irule alloca_clear_of_locals >>
-  goal_assum (drule_at (Pat `stmt_state_rel _ _ _ _ _ _`)) >>
+  goal_assum (drule_at (Pat `stmt_state_rel H _ _ _ _ _ _`)) >>
   goal_assum (drule_at (Pat `MEM _ (fn_insts _)`)) >> simp[] >>
   goal_assum (drule_at Any) >> simp[]
 QED
@@ -4322,6 +4301,7 @@ Resume raw_call_finish_vv_frag[suffix]:
    (0 < n ==> mem_bytes_at (w2n w + 32) (LENGTH (TAKE n t.vs_returndata))
      t.vs_memory = TAKE n t.vs_returndata)` by simp[] >>
   drule_all raw_call_nonrevert_suffix_frag >> strip_tac >>
+  qpat_x_assum `!H'. stmt_state_rel H' _ _ _ _ es_in _ ==> _` mp_tac >>
   qpat_x_assum `frag_path _ _ _ _ _ _` mp_tac >>
   qpat_x_assum `post_value_type cenv e = expr_type e` mp_tac >>
   qpat_x_assum `expr_type e = _` mp_tac >>
@@ -4337,8 +4317,10 @@ QED
 Resume raw_call_finish_vv_frag[suffix_value]:
   irule frag_path_conseq >>
   goal_assum (drule_at (Pat `frag_path _ _ _ _ _ _`)) >>
-  simp[NoAsms] >> gen_tac >> strip_tac >>
+  simp[NoAsms] >> gen_tac >> strip_tac >> rpt strip_tac >>
   qpat_x_assum `frag_path _ _ _ _ _ _` kall_tac >>
+  `stmt_state_rel H' ctx func cenv cx
+     (SND (adopt_call_outcome rq outcome es_consumed)) u` by metis_tac[] >>
   qpat_assum `expr_type e = _` (fn th => pure_once_rewrite_tac [GSYM th]) >>
   irule raw_call_value_vv_post >> simp[] >>
   Cases_on `n = 0`
@@ -4427,7 +4409,7 @@ Theorem calldata_prepared_finish[local]:
     (Call ann (RawCallCalldataTarget flags) (addr::kws) NONE) es /\
   typed_args_ready ctx func cenv cx expr_type (expr_sim_inv cenv cx env) (addr::kws) /\
   eval_exprs cx (addr::kws) es = (INL vs,es1) /\
-  typed_args_post ctx func cenv cx es sa s0 es1 (addr::kws) (aop::ops) vs entry /\
+  typed_args_post H ctx func cenv cx es sa s0 es1 (addr::kws) (aop::ops) vs entry /\
   eval_expr cx (Call ann (RawCallCalldataTarget flags) (addr::kws) NONE) es = (res,es2) /\
   fn_has_code sa sb func /\ fn_inst_ids_distinct func /\ local_ptrs_reserved cenv sa /\
   cs_extends sa sp /\ sa.cs_next_var <= sp.cs_next_var /\ sa.cs_next_id <= sp.cs_next_id /\
@@ -4441,13 +4423,17 @@ Theorem calldata_prepared_finish[local]:
     (if flags.rcf_is_static then StaticCall else RegularCall)
     flags.rcf_max_outsize flags.rcf_revert_on_failure ov op sc = (result,se) /\
   emit_void SETFMP [dp] se = ((),sb) /\
-  calldata_prepared ctx func cenv cx es es1 sa s0 entry sp sg
+  calldata_prepared H ctx func cenv cx es es1 sa s0 entry sp sg
     flags.rcf_max_outsize ov op dp dl t /\
+  (!H'. stmt_state_rel H' ctx func cenv cx es1 entry ==>
+        stmt_state_rel H' ctx func cenv cx es1 (t with vs_fmp := entry.vs_fmp)) /\
   eval_operand gop t = (case ext_call_kwarg EKGas flags.rcf_kws ops of
     NONE => SOME (HD (entry.vs_gas_readings ++ [0w])) | SOME g => eval_operand g entry) ==>
   frag_path ctx sc sb (\s. s = t)
     (\s. ?tv. res = INL tv /\
-      vv_post ctx func cenv cx
+      !H'. stmt_state_rel H' ctx func cenv cx es1 entry /\
+           storage_well_formed_on cx es2 (FST H') ==>
+      vv_post H' ctx func cenv cx
         (Call ann (RawCallCalldataTarget flags) (addr::kws) NONE)
         es sa sb s0 es2 tv
         (if flags.rcf_max_outsize = 0 then StackValue ann result
@@ -4480,14 +4466,14 @@ Proof
    eval_operand (case ext_call_kwarg EKValue flags.rcf_kws ops of
      NONE => Lit 0w | SOME p => p) t = SOME (n2w amount)` by
     (fs[calldata_prepared_def] >> metis_tac[]) >>
-  qpat_x_assum `calldata_prepared _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _` mp_tac >>
+  qpat_x_assum `calldata_prepared _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _` mp_tac >>
   simp[calldata_prepared_def] >> strip_tac >>
   irule frag_path_conseq >>
   irule_at (Pat `frag_path _ _ _ _ _ _`) raw_call_finish_vv_frag >>
   goal_assum (drule_at (Pat `compile_raw_call_finish _ _ _ _ _ _ _ _ _ _ _ = _`)) >>
   goal_assum (drule_at (Pat `emit_void SETFMP _ _ = _`)) >> simp[] >>
   goal_assum (drule_at (Pat `MEM _ (fn_insts _)`)) >> simp[mk_inst_def] >>
-  goal_assum (drule_at (Pat `raw_call_buffer_frame _ _ _ _ _ _ _ _ _ _ _ _ _`)) >>
+  goal_assum (drule_at (Pat `raw_call_buffer_frame _ _ _ _ _ _ _ _ _ _ _ _ _ _`)) >>
   simp[] >> qexistsl_tac [`rq`,`outcome`,`consumed`] >>
   qmatch_goalsub_abbrev_tac `expr_exit source_result` >>
   qexists_tac `Call (raw_call_return_type flags) (RawCallCalldataTarget flags) (addr::kws) NONE` >>
@@ -4511,12 +4497,15 @@ Theorem calldata_call_success_frag[local]:
   eval_expr cx (Call ann (RawCallCalldataTarget flags) (addr::kws) NONE) es = (res,es2) /\
   expr_vv_res_ok res /\ fn_has_code sa sb func /\ fn_inst_ids_distinct func /\
   local_ptrs_reserved cenv sa /\
-  typed_args_post ctx func cenv cx es sa s0 es1 (addr::kws) (addr_op::ops) vs entry ==>
+  typed_args_post H ctx func cenv cx es sa s0 es1 (addr::kws) (addr_op::ops)
+    vs entry ==>
   frag_path ctx sp sb (\s. s = entry)
     (\s. ?tv. res = INL tv /\
-      vv_post ctx func cenv cx
-        (Call ann (RawCallCalldataTarget flags) (addr::kws) NONE)
-        es sa sb s0 es2 tv vv s) (expr_exit res)
+      !H'. stmt_state_rel H' ctx func cenv cx es1 entry /\
+           storage_well_formed_on cx es2 (FST H') ==>
+        vv_post H' ctx func cenv cx
+          (Call ann (RawCallCalldataTarget flags) (addr::kws) NONE)
+          es sa sb s0 es2 tv vv s) (expr_exit res)
 Proof
   strip_tac >> drule calldata_call_pre >> strip_tac >> gvs[] >>
   drule calldata_call_compile >> strip_tac >> gvs[] >>
@@ -4530,11 +4519,13 @@ Proof
     (fs[listTheory.EVERY_MEM, safe_operand_def] >>
      rpt strip_tac >> first_x_assum drule >> simp[]) >>
   `frag_path ctx s2 s5 (\s. s = entry)
-    (\t. calldata_prepared ctx func cenv cx es es1 sa s0 entry s2 s3
+    (\t. calldata_prepared H ctx func cenv cx es es1 sa s0 entry s2 s3
       flags.rcf_max_outsize out_val out_ptr data_ptr data_len t /\
       eval_operand gas_op t =
         (case ext_call_kwarg EKGas flags.rcf_kws ops of
-         SOME g => eval_operand g entry | NONE => SOME (HD (entry.vs_gas_readings ++ [0w]))))
+         SOME g => eval_operand g entry | NONE => SOME (HD (entry.vs_gas_readings ++ [0w]))) /\
+      (!H'. stmt_state_rel H' ctx func cenv cx es1 entry ==>
+            stmt_state_rel H' ctx func cenv cx es1 (t with vs_fmp := entry.vs_fmp)))
     (expr_exit res)` by
     (irule calldata_call_prepare_fragment >> simp[] >>
      rpt conj_tac >> goal_assum (drule_at Any) >> simp[] >>
@@ -4552,7 +4543,7 @@ Proof
   simp[] >> conj_tac
   >- (qexists_tac `env` >> simp[]) >>
   goal_assum (drule_at (Pat `compile_raw_call_finish _ _ _ _ _ _ _ _ _ _ _ = _`)) >>
-  goal_assum (drule_at (Pat `calldata_prepared _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _`)) >>
+  goal_assum (drule_at (Pat `calldata_prepared _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _`)) >>
   simp[] >> fs[safe_operand_def]
 QED
 
@@ -4560,15 +4551,15 @@ QED
 
 (* wb_frame and vv_post read the start state's scopes only. *)
 Theorem calldata_typed_args_post_gas_obs[local]:
-  typed_args_post ctx func cenv cx (es with gas_obs := g) sa s0 es' args xs vs s <=>
-  typed_args_post ctx func cenv cx es sa s0 es' args xs vs s
+  typed_args_post H ctx func cenv cx (es with gas_obs := g) sa s0 es' args xs vs s <=>
+  typed_args_post H ctx func cenv cx es sa s0 es' args xs vs s
 Proof
   simp[typed_args_post_def, wb_frame_def, locals_kept_def, popped_kept_def]
 QED
 
 Theorem calldata_vv_post_gas_obs[local]:
-  vv_post ctx func cenv cx e (es with gas_obs := g) sa sb s0 es' tv vv s <=>
-  vv_post ctx func cenv cx e es sa sb s0 es' tv vv s
+  vv_post H ctx func cenv cx e (es with gas_obs := g) sa sb s0 es' tv vv s <=>
+  vv_post H ctx func cenv cx e es sa sb s0 es' tv vv s
 Proof
   simp[vv_post_def, locals_kept_def, popped_kept_def]
 QED
@@ -4627,130 +4618,33 @@ Proof
   rw[vyperStateTheory.return_def, raise_def, bind_def, ignore_bind_def]
 QED
 
-Theorem calldata_call_source_gas_obs[local]:
-  ~cx.txn.is_static /\ ~flags.rcf_is_delegate /\ IS_SOME mid.outcomes /\
-  (!tail. eval_exprs cx args (es with gas_obs := xs ++ tail) =
-          (INL vs, mid with gas_obs := tail)) /\
-  eval_expr cx (Call ann (RawCallCalldataTarget flags) args dflt)
-    (es with gas_obs := xs) = (res, fin) ==>
+(* A tail that reads no gas observation, run as a counted fragment: the
+   path's GAS reads are target-only and take F marks. *)
+Theorem calldata_tail_summary[local]:
+  (!g. tl (ee with gas_obs := g) = (res, fin with gas_obs := g)) /\
   fin.gas_obs = [] /\
-  !tail. eval_expr cx (Call ann (RawCallCalldataTarget flags) args dflt)
-           (es with gas_obs := xs ++ tail) = (res, fin with gas_obs := tail)
+  frag_path ctx sp sb (\u. u = t)
+    (\u. u.vs_current_bb = sb.cs_current_bb /\
+         u.vs_inst_idx = LENGTH sb.cs_current_insts ==> Q res fin u)
+    (R res fin) /\
+  fn_has_code sp sb func /\ ~t.vs_halted /\
+  t.vs_current_bb = sp.cs_current_bb /\
+  t.vs_inst_idx = LENGTH sp.cs_current_insts ==>
+  ?marks. gas_summary_at F (ctx,func) marks tl (ee,t) Q R
 Proof
-  strip_tac >>
-  `eval_exprs cx args (es with gas_obs := xs) = (INL vs, mid with gas_obs := [])` by
-    (first_x_assum (qspec_then `[]` mp_tac) >> simp[]) >>
-  qpat_x_assum `eval_expr _ _ _ = _` mp_tac >>
-  simp[calldata_call_action, bind_def, ignore_bind_def, type_check_def,
-       assert_def, lift_option_type_def, vyperStateTheory.return_def,
-       raise_def] >>
-  IF_CASES_TAC >> simp[raise_def] >>
-  Cases_on `dest_AddressV (HD vs)` >> simp[raise_def, vyperStateTheory.return_def] >>
-  Cases_on `raw_call_value flags.rcf_kws (DROP 1 vs)` >>
-  simp[raise_def, vyperStateTheory.return_def] >>
-  rpt strip_tac >> gvs[] >>
-  qmatch_asmsub_rename_tac
-    `eval_raw_call _ _ tg _ am gw (mid with gas_obs := []) = _` >>
-  qspecl_then [`cx`, `flags`, `tg`, `cx.txn.calldata`, `am`, `gw`,
-    `mid with gas_obs := []`] mp_tac calldata_raw_call_gas_obs >>
-  simp[] >> rpt strip_tac >> gvs[]
-QED
-
-(* The operands' marked run, then the tail's path, whose only GAS read is
-   a target-only one and so takes F marks. *)
-Theorem calldata_call_normal[local]:
-  exprs_case nocalls ctx func cenv cx (addr::kws) /\
-  (nocalls ==> int_calls_expr
-    (Call ann (RawCallCalldataTarget flags) (addr::kws) NONE) = []) /\
-  expr_body_pre cenv cx env
-    (Call ann (RawCallCalldataTarget flags) (addr::kws) NONE) es /\
-  compile_expr cenv ty
-    (Call ann (RawCallCalldataTarget flags) (addr::kws) NONE) sa = (vv,sb) /\
-  lower_word_args cenv expr_type (addr::kws) sa = (addr_op::ops,sp) /\
-  fn_has_code sa sb func /\ fn_has_code sp sb func /\
-  fn_inst_ids_distinct func /\ local_ptrs_reserved cenv sa /\
-  gas_admissible
-    (eval_expr cx (Call ann (RawCallCalldataTarget flags) (addr::kws) NONE))
-    expr_vv_res_ok es /\
-  gas_marked_exec F (ctx,func) (eval_exprs cx (addr::kws)) (es,s0) marks
-    (INL vs) es_end (OK entry) /\
-  typed_args_post ctx func cenv cx es sa s0 (es_end with gas_obs := [])
-    (addr::kws) (addr_op::ops) vs entry /\
-  entry.vs_current_bb = sp.cs_current_bb /\
-  entry.vs_inst_idx = LENGTH sp.cs_current_insts ==>
-  gas_outcome F tops (ctx,func)
-    (eval_expr cx (Call ann (RawCallCalldataTarget flags) (addr::kws) NONE))
-    (es,s0)
-    (\res ee t. ?tv. res = INL tv /\
-       vv_post ctx func cenv cx
-         (Call ann (RawCallCalldataTarget flags) (addr::kws) NONE)
-         es sa sb s0 ee tv vv t /\
-       t.vs_current_bb = sb.cs_current_bb /\
-       t.vs_inst_idx = LENGTH sb.cs_current_insts)
-    (\res ee r. expr_exit res r)
-Proof
-  strip_tac >>
-  drule calldata_call_pre >> strip_tac >> gvs[] >>
-  qabbrev_tac `xs = gas_explicit marks s0.vs_gas_readings` >>
-  `gas_path ctx func s0 (LENGTH marks) (OK entry)` by
-    fs[gas_marked_exec_def, gas_marked_path_def] >>
-  `~entry.vs_halted` by metis_tac[gas_path_normal] >>
-  `!tail. eval_exprs cx (addr::kws) (es with gas_obs := xs ++ tail) =
-          (INL vs, es_end with gas_obs := tail)` by
-    fs[gas_marked_exec_def, Abbr `xs`] >>
-  `eval_exprs cx (addr::kws) (es with gas_obs := xs) =
-     (INL vs, es_end with gas_obs := [])` by
-    (first_x_assum (qspec_then `[]` mp_tac) >> simp[]) >>
-  Cases_on `eval_expr cx (Call (raw_call_return_type flags)
-              (RawCallCalldataTarget flags) (addr::kws) NONE)
-              (es with gas_obs := xs)` >>
-  rename1 `_ = (res, es2)` >>
-  `expr_vv_res_ok res` by (fs[gas_admissible_def] >> metis_tac[]) >>
-  `~cx.txn.is_static /\ IS_SOME es_end.outcomes` by
-    fs[typed_args_post_def, stmt_state_rel_def, state_rel_def] >>
-  `es2.gas_obs = [] /\
-   !tail. eval_expr cx (Call (raw_call_return_type flags)
-            (RawCallCalldataTarget flags) (addr::kws) NONE)
-            (es with gas_obs := xs ++ tail) = (res, es2 with gas_obs := tail)` by
-    (irule calldata_call_source_gas_obs >> simp[] >>
-     qexistsl_tac [`es_end`, `vs`] >> simp[]) >>
-  mp_tac (Q.INST [`es` |-> `es with gas_obs := xs`,
-                  `es1` |-> `es_end with gas_obs := []`,
-                  `ann` |-> `raw_call_return_type flags`]
-            calldata_call_success_frag) >>
-  impl_tac >- simp[calldata_typed_args_post_gas_obs] >>
-  simp[frag_path_def] >>
-  disch_then (qspec_then `func` mp_tac) >> simp[] >> strip_tac >>
-  simp[gas_outcome_def] >> qexists_tac `marks ++ REPLICATE n F` >> disj1_tac >>
-  simp[gas_summary_at_def, gas_marked_exec_def] >>
-  qexistsl_tac [`res`, `es2`, `r`] >>
-  `es2 with gas_obs := [] = es2` by
+  strip_tac >> qpat_x_assum `frag_path _ _ _ _ _ _` mp_tac >>
+  simp[frag_path_def] >> disch_then (qspec_then `func` mp_tac) >> simp[] >>
+  strip_tac >> qexists_tac `REPLICATE n F` >>
+  `fin with gas_obs := [] = fin` by
     simp[vyperStateTheory.evaluation_state_component_equality] >>
-  drule gas_explicit_append_path >>
-  disch_then (qspec_then `REPLICATE n F` SUBST1_TAC) >>
-  simp[calldata_gas_explicit_false, gas_marked_path_def] >>
-  `gas_path ctx func s0 (n + LENGTH marks) r` by
-    metis_tac[gas_path_then, arithmeticTheory.ADD_COMM] >>
-  gvs[calldata_vv_post_gas_obs]
+  simp[gas_summary_at_def, gas_marked_exec_def, gas_marked_path_def,
+       calldata_gas_explicit_false] >>
+  qexistsl_tac [`res`, `fin`, `r`] >> simp[]
 QED
 
-Theorem calldata_call_exempt_cert[local]:
-  gas_exempt_cert memory tops p
-    (ignore_bind (eval_exprs cx args) (return ())) start marks out endpoint ==>
-  gas_exempt_cert memory tops p
-    (ignore_bind (eval_expr cx (Call ann (RawCallCalldataTarget flags) args dflt))
-      (return ())) start marks out endpoint
-Proof
-  strip_tac >> rewrite_tac[calldata_call_action] >>
-  PairCases_on `p` >> PairCases_on `start` >>
-  PairCases_on `out` >> PairCases_on `endpoint` >>
-  qmatch_goalsub_abbrev_tac `ignore_bind (bind _ k) _` >>
-  `ignore_bind (bind (eval_exprs cx args) k) (return ()) =
-   bind (eval_exprs cx args) (\vs. ignore_bind (k vs) (return ()))` by
-    simp[ignore_bind_def, vyperStateTheory.bind_assoc] >>
-  pop_assum SUBST1_TAC >> irule gas_exempt_cert_error_values >> simp[]
-QED
-
+(* The operands through eval_exprs_suffix, then the tail's fragment.  The
+   tail's endpoint is one frag_path run from the operands' endpoint; each
+   horizon valid after the call reads its post there. *)
 Theorem calldata_call_vv_sim[local]:
   exprs_case nocalls ctx func cenv cx args /\
   expr_body_pre cenv cx env (Call ann (RawCallCalldataTarget flags) args dflt) es /\
@@ -4773,28 +4667,90 @@ Proof
     metis_tac[fn_has_code_split] >>
   `expr_sim_inv cenv cx env es` by fs[expr_body_pre_def] >>
   qspecl_then [`addr::kws`, `ctx`, `func`, `cenv`, `cx`, `expr_type`,
-    `expr_sim_inv cenv cx env`, `es`, `sa`, `addr_op::ops`, `s2`, `s0`]
+    `expr_sim_inv cenv cx env`, `st0`, `es`, `sa`, `addr_op::ops`, `s2`, `s0`]
     mp_tac lower_typed_args_sim >>
-  (impl_tac >- simp[]) >>
-  disch_then (strip_assume_tac o REWRITE_RULE [gas_outcome_def])
-  >- (pop_assum (strip_assume_tac o BETA_RULE o REWRITE_RULE [gas_summary_at_def])
-      >- (gvs[] >> irule calldata_call_normal >> simp[] >> rpt conj_tac
-          >- (qexists_tac `ty` >> simp[])
-          >- (qexists_tac `env` >> simp[])
-          >- (qexists_tac `nocalls` >> simp[]) >>
-          qexistsl_tac [`t`, `es_end`, `marks`, `vs`] >> simp[]) >>
-      Cases_on `res` >> gvs[wb_args_exit_def] >>
-      simp[gas_outcome_def] >> qexists_tac `marks` >> disj1_tac >>
-      simp[gas_summary_at_def] >>
-      qexistsl_tac [`INR y`, `es_end`, `r`] >> simp[] >>
-      rewrite_tac[calldata_call_action] >>
-      conj_tac >- (irule gas_marked_exec_bind_exception >> simp[]) >>
-      qpat_x_assum `expr_exit _ _` mp_tac >>
-      Cases_on `r` >> simp[expr_exit_def] >>
-      Cases_on `y` >> simp[expr_exit_def] >>
-      rename1 `Error ee` >> Cases_on `ee` >> simp[expr_exit_def]) >>
-  simp[gas_outcome_def] >> qexists_tac `marks` >> disj2_tac >>
-  metis_tac[calldata_call_exempt_cert]
+  (impl_tac >- simp[]) >> strip_tac >>
+  rewrite_tac[calldata_call_action] >>
+  qmatch_goalsub_abbrev_tac `bind (eval_exprs cx (addr::kws)) kk` >>
+  `!vs. storage_trace_frame (kk vs)` by
+    (simp[Abbr `kk`] >> gen_tac >>
+     irule storage_trace_frame_ignore_bind >>
+     simp[storage_trace_frame_checks] >>
+     irule storage_trace_frame_bind_all >>
+     simp[storage_trace_frame_lifts] >> gen_tac >>
+     irule storage_trace_frame_bind_all >>
+     simp[storage_trace_frame_lifts, storage_trace_frame_raw_call]) >>
+  `!vs mid g. ~cx.txn.is_static /\ IS_SOME mid.outcomes ==>
+     kk vs (mid with gas_obs := g) =
+       (FST (kk vs mid), SND (kk vs mid) with gas_obs := g) /\
+     (SND (kk vs mid)).gas_obs = mid.gas_obs` by
+    (simp[Abbr `kk`] >> rpt gen_tac >> strip_tac >>
+     simp[bind_def, ignore_bind_def, type_check_def, assert_def,
+          lift_option_type_def, vyperStateTheory.return_def, raise_def] >>
+     IF_CASES_TAC >> simp[raise_def] >>
+     Cases_on `dest_AddressV (HD vs)` >> simp[raise_def] >>
+     Cases_on `raw_call_value flags.rcf_kws (DROP 1 vs)` >>
+     simp[raise_def] >>
+     irule calldata_raw_call_gas_obs >> simp[]) >>
+  irule (Q.INST [`P` |->
+    `\H vs ee t. typed_args_post H ctx func cenv cx es sa s0 ee
+       (addr::kws) (addr_op::ops) vs t /\
+       t.vs_current_bb = s2.cs_current_bb /\
+       t.vs_inst_idx = LENGTH s2.cs_current_insts`] eval_exprs_suffix) >>
+  simp[wb_args_exit_def] >>
+  rpt gen_tac >> strip_tac >>
+  qpat_assum `?H. valid_horizon _ _ H ee.storage_trace`
+    (qx_choose_then `H0` assume_tac) >>
+  `typed_args_post H0 ctx func cenv cx es sa s0 ee (addr::kws) (addr_op::ops)
+     vs t /\ t.vs_current_bb = s2.cs_current_bb /\
+   t.vs_inst_idx = LENGTH s2.cs_current_insts` by
+    (first_x_assum drule >> simp[]) >>
+  `~cx.txn.is_static /\ IS_SOME ee.outcomes` by
+    fs[typed_args_post_def, stmt_state_rel_def, state_rel_def] >>
+  Cases_on `kk vs ee` >> rename1 `kk vs ee = (res, fin)` >>
+  `fin.gas_obs = [] /\
+   !g. kk vs (ee with gas_obs := g) = (res, fin with gas_obs := g)` by
+    (first_x_assum (qspecl_then [`vs`, `ee`] mp_tac) >> simp[]) >>
+  `eval_expr cx (Call (raw_call_return_type flags)
+     (RawCallCalldataTarget flags) (addr::kws) NONE)
+     (es with gas_obs := gs) = (res, fin)` by
+    simp[calldata_call_action, bind_def] >>
+  `expr_vv_res_ok res` by (fs[gas_admissible_def] >> metis_tac[]) >>
+  `!H. valid_horizon cx st0 H fin.storage_trace ==>
+     valid_horizon cx st0 H ee.storage_trace` by
+    (rpt strip_tac >> irule vyperStorageFootprintTheory.valid_horizon_frame >>
+     qexistsl_tac [`kk vs`, `res`, `fin`] >> simp[]) >>
+  (* The call keeps each valid horizon's well-formedness. *)
+  `!H tv. res = INL tv /\ valid_horizon cx st0 H fin.storage_trace ==>
+     storage_well_formed_on cx fin (FST H)` by
+    (rpt strip_tac >>
+     `storage_well_formed_on cx ee (FST H)` by
+       (`valid_horizon cx st0 H ee.storage_trace` by metis_tac[] >>
+        `typed_args_post H ctx func cenv cx es sa s0 ee (addr::kws)
+           (addr_op::ops) vs t` by (first_x_assum drule >> simp[]) >>
+        fs[typed_args_post_def]) >>
+     qpat_x_assum `kk vs ee = _` mp_tac >>
+     simp[Abbr `kk`, bind_def, ignore_bind_def, type_check_def, assert_def,
+          lift_option_type_def, vyperStateTheory.return_def, raise_def] >>
+     rw[AllCaseEqs()] >>
+     irule vyperFiniteStoragePreservationTheory.eval_raw_call_preserves_storage_well_formed_on >>
+     fs[valid_horizon_def] >> goal_assum drule) >>
+  mp_tac (Q.INST [`es` |-> `es with gas_obs := gs`, `es1` |-> `ee`,
+                  `es2` |-> `fin`, `entry` |-> `t`, `H` |-> `H0`,
+                  `ann` |-> `raw_call_return_type flags`]
+            calldata_call_success_frag) >>
+  impl_tac >- simp[calldata_typed_args_post_gas_obs] >>
+  simp[calldata_typed_args_post_gas_obs, calldata_vv_post_gas_obs] >>
+  strip_tac >>
+  irule calldata_tail_summary >> simp[] >>
+  qexists_tac `s2` >> simp[] >>
+  drule_then irule frag_path_conseq >> simp[] >>
+  rpt strip_tac >> gvs[] >>
+  qpat_x_assum `!H'. stmt_state_rel H' _ _ _ _ _ _ /\ _ ==> _` irule >>
+  `valid_horizon cx st0 H ee.storage_trace` by metis_tac[] >>
+  conj_tac >- metis_tac[] >>
+  qpat_x_assum `!H. valid_horizon _ _ H ee.storage_trace ==> _` drule >>
+  simp[typed_args_post_def]
 QED
 
 Theorem compile_raw_call_calldata_case:

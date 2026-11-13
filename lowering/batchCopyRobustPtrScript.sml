@@ -14,7 +14,7 @@ Theorem compile_copy_memory_robust_frag_ptr:
   (!m. mem_agree_outside tn.t_mem s.vs_memory m ==>
        val_in_memory tv v (w2n a) m) ==>
   ?Gf tnf sf.
-   frag_exec_ptr cx ctx PG sa sb
+   frag_exec_ptr H cx ctx PG sa sb
      (\g t st. g = G /\ t = tn /\ st = s)
      (\g t st. g = Gf /\ t = tnf /\ st = sf) R /\
    Gf = G /\ tnf.t_var = tn.t_var /\

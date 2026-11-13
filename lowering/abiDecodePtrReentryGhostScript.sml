@@ -14,13 +14,13 @@ Proof
 QED
 
 Theorem abi_decode_ptr_prune_ghost:
-  ghost_inv d cenv cx es G tn s /\
+  ghost_inv H d cenv cx es G tn s /\
   (!name entry p sz. lookup_scopes name es.scopes = SOME entry /\
     FLOOKUP cenv.ce_vars name = SOME (PtrVar (Var p) sz) ==>
     abi_decoder_operand_live next (Var p)) /\
   (!p sz. d <> NONE /\ cenv.ce_return_buf = SOME (PtrVar (Var p) sz) ==>
     abi_decoder_operand_live next (Var p)) ==>
-  ghost_inv d cenv cx es G tn (abi_decoder_prune_vars next s)
+  ghost_inv H d cenv cx es G tn (abi_decoder_prune_vars next s)
 Proof
   rw[ghost_inv_def]
   >- (irule (iffRL abi_decode_ptr_prune_covers) >> metis_tac[])
@@ -38,10 +38,10 @@ QED
 (* The compiler-side age facts already required at decoder entry discharge
    the internal pruning liveness conditions. *)
 Theorem abi_decode_ptr_prune_ghost_reserved:
-  ghost_inv d cenv cx es G tn s /\ local_ptrs_reserved cenv st /\
+  ghost_inv H d cenv cx es G tn s /\ local_ptrs_reserved cenv st /\
   (!p sz. cenv.ce_return_buf = SOME (PtrVar (Var p) sz) ==>
     not_fresh_at st p) ==>
-  ghost_inv d cenv cx es G tn (abi_decoder_prune_vars st.cs_next_var s)
+  ghost_inv H d cenv cx es G tn (abi_decoder_prune_vars st.cs_next_var s)
 Proof
   strip_tac >> irule abi_decode_ptr_prune_ghost >> simp[] >>
   fs[local_ptrs_reserved_def, not_fresh_at_def,

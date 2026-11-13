@@ -35,7 +35,7 @@ Proof
   drule_all augassign_local_layout_ptr >> strip_tac >> gvs[] >>
   `?out. cur_op = Var out` by metis_tac[emitted_insts_emit_op_local] >> gvs[] >>
   drule_all augassign_local_load_clean_ptr >>
-  disch_then (qspecl_then [`PG`, `cx_dead cx`] strip_assume_tac) >>
+  disch_then (qspecl_then [`PG`, `cx_dead H cx`] strip_assume_tac) >>
   `expr_body_pre cenv cx env e (es with gas_obs := [])` by
     fs[expr_body_pre_def] >>
   `expr_sim_ptr d ctx PG func cenv cx ty e (es with gas_obs := [])` by
@@ -45,7 +45,7 @@ Proof
   `gas_admissible (bind (eval_expr cx e) (read_result cx)) expr_res_ok
      (es with gas_obs := [])` by
     (simp[] >> irule augassign_rhs_admissible_ptr >> metis_tac[]) >>
-  `stmt_state_rel ctx func cenv cx (es with gas_obs := []) t` by
+  `stmt_state_rel H ctx func cenv cx (es with gas_obs := []) t` by
     fs[expr_post_def] >>
   `s1.cs_next_var = sa.cs_next_var + 1` by
     metis_tac[emitted_insts_emit_op_local] >>
@@ -58,7 +58,7 @@ Proof
      qexists_tac `sa` >> fs[ret_pc_ok_def]) >>
   qpat_x_assum `expr_sim_ptr _ _ _ _ _ _ _ _ _`
     (mp_tac o REWRITE_RULE [expr_sim_ptr_def]) >>
-  disch_then (qspecl_then [`s1`, `s2`, `rhs_op`, `t`, `H`, `tm`] mp_tac) >>
+  disch_then (qspecl_then [`s1`, `s2`, `rhs_op`, `t`, `HG`, `tm`] mp_tac) >>
   (impl_tac >- simp[]) >>
   disch_tac >> suspend "rhs_continuation"
 QED
@@ -130,7 +130,7 @@ Resume compile_augassign_local_case_ptr[operator_inputs]:
          fs[cs_extends_def]) >>
      irule local_ptrs_reserved_next_var >> qexists_tac `s1` >>
      fs[cs_extends_def]) >>
-  `stmt_state_rel ctx func cenv cx (es_end with gas_obs := []) t'` by
+  `stmt_state_rel H ctx func cenv cx (es_end with gas_obs := []) t'` by
     fs[expr_post_def] >>
   `~t'.vs_halted` by
     metis_tac[gas_path_ptr_erase, fragGasPathTheory.gas_path_normal] >>
@@ -168,7 +168,7 @@ Resume compile_augassign_local_case_ptr[literal_inputs]:
   disch_then (drule_at (Pat `eval_operand _ _ = _`)) >>
   disch_then (drule_at (Pat `eval_operand _ _ = _`)) >>
   disch_then drule_all >>
-  disch_then (qspecl_then [`PG`, `cx_dead cx`] strip_assume_tac)
+  disch_then (qspecl_then [`PG`, `cx_dead H cx`] strip_assume_tac)
   >- suspend "operator_normal" >>
   suspend "operator_abort"
 QED
@@ -176,9 +176,9 @@ QED
 Resume compile_augassign_local_case_ptr[rhs_exception]:
   `?ex. res = INR ex` by
     (Cases_on `res` >> gvs[exprSimDefsTheory.expr_exit_def]) >> gvs[] >>
-  `gas_marked_exec_ptr (cx_dead cx) (ctx,func) PG
+  `gas_marked_exec_ptr (cx_dead H cx) (ctx,func) PG
      (bind (eval_expr cx e) (read_result cx))
-     (es with gas_obs := [],t,H,tm) marks (INR ex) es_end G tn r` by
+     (es with gas_obs := [],t,HG,tm) marks (INR ex) es_end G tn r` by
     simp[gas_marked_exec_ptr_def] >>
   drule_all augassign_rhs_exception_exec_ptr >>
   disch_then (qspecl_then [`ty`, `bop`] assume_tac) >>
@@ -189,9 +189,9 @@ Resume compile_augassign_local_case_ptr[rhs_exception]:
 QED
 
 Resume compile_augassign_local_case_ptr[rhs_exempt]:
-  `gas_marked_exec_ptr (cx_dead cx) (ctx,func) PG
+  `gas_marked_exec_ptr (cx_dead H cx) (ctx,func) PG
      (eval_target_place cx (NameTarget id))
-     (es,s0,G0,tn0) [] (INL (MemoryPlace id [])) es H tm (OK t)` by
+     (es,s0,G0,tn0) [] (INL (MemoryPlace id [])) es HG tm (OK t)` by
     (simp[gas_marked_exec_ptr_def, gas_explicit_def] >>
      gen_tac >> irule (cj 1 eval_target_place_local) >> simp[]) >>
   drule_all augassign_rhs_exempt_ptr >> disch_tac >>
@@ -210,9 +210,9 @@ Resume compile_augassign_local_case_ptr[operator_abort]:
       entry.type bop entry.value v = INR (RuntimeError msg)` by
     (qpat_x_assum `bop_result _ _ _ _ _ _ _ = (case _ of INL z => _ | INR err => _)` mp_tac >>
      simp[CaseEq "sum"]) >>
-  `gas_marked_exec_ptr (cx_dead cx) (ctx,func) PG
+  `gas_marked_exec_ptr (cx_dead H cx) (ctx,func) PG
      (bind (eval_expr cx e) (read_result cx))
-     (es with gas_obs := [],t,H,tm) marks (INL v) es_end G tn (OK t')` by
+     (es with gas_obs := [],t,HG,tm) marks (INL v) es_end G tn (OK t')` by
     simp[gas_marked_exec_ptr_def] >>
   drule_all augassign_error_continuation_exec_ptr >>
   disch_then (qspecl_then [`id`, `es_end with gas_obs := []`, `cx`] assume_tac) >>
@@ -254,9 +254,9 @@ Resume compile_augassign_local_case_ptr[store_entry]:
     (drule_all expr_sim_inv_local >> strip_tac >> gvs[] >>
      metis_tac[expr_sim_inv_def, lookup_scopes_state_well_typed_value_has_type]) >>
   `word_value entry'.value` by metis_tac[word_value_type_typed] >>
-  `stmt_state_rel ctx func cenv cx es_end t''` by
+  `stmt_state_rel H ctx func cenv cx es_end t''` by
     metis_tac[exprLoweringPropsTheory.stmt_state_rel_inst_idx] >>
-  `ghost_inv d cenv cx es_end H' tm' t''` by fs[ghost_inv_gas_obs] >>
+  `ghost_inv H d cenv cx es_end HG' tm' t''` by fs[ghost_inv_gas_obs] >>
   drule_all ghost_inv_word_local_inputs >> strip_tac >>
   `local_ptrs_rel func cenv es_end.scopes t''` by
     fs[stmt_state_rel_def, state_rel_def] >>
@@ -268,22 +268,22 @@ Resume compile_augassign_local_case_ptr[store_entry]:
 QED
 
 Resume compile_augassign_local_case_ptr[store_path]:
-  qmatch_asmsub_abbrev_tac `gas_path_ptr (cx_dead cx) 0 ctx func PG G tn t' 0 H' tm' (OK u)` >>
+  qmatch_asmsub_abbrev_tac `gas_path_ptr (cx_dead H cx) 0 ctx func PG G tn t' 0 HG' tm' (OK u)` >>
   `~u.vs_halted /\ u.vs_current_bb = s3.cs_current_bb /\
    u.vs_inst_idx = LENGTH s3.cs_current_insts /\
-   ptr_covers H' tm' p u 32 /\ lookup_var p u = SOME a /\
+   ptr_covers HG' tm' p u 32 /\ lookup_var p u = SOME a /\
    eval_operand res_op u = SOME (val_to_w256 result)` by
     gvs[Abbr `u`, ptr_covers_def, op_taint_def, lookup_var_def] >>
   drule_all emit_mstore_path_ptr >>
-  disch_then (qspecl_then [`PG`, `cx_dead cx`] strip_assume_tac) >>
+  disch_then (qspecl_then [`PG`, `cx_dead H cx`] strip_assume_tac) >>
   suspend "store_post"
 QED
 
 Resume compile_augassign_local_case_ptr[store_post]:
   qmatch_asmsub_abbrev_tac `write_place cx (MemoryPlace id []) result _ = (INL (),fin)` >>
-  `ghost_inv d cenv cx fin H' tnf sf` by
+  `ghost_inv H d cenv cx fin HG' tnf sf` by
     (`local_ptrs_rel func cenv es_end.scopes u /\
-      ghost_inv d cenv cx es_end H' tm' u` by
+      ghost_inv H d cenv cx es_end HG' tm' u` by
        (conj_tac
         >- (fs[stmt_state_rel_def, state_rel_def]) >>
         simp[Abbr `u`, ghost_inv_jump_to]) >>
@@ -314,8 +314,8 @@ Resume compile_augassign_local_case_ptr[ordinary_store_post]:
 QED
 
 Resume compile_augassign_local_case_ptr[ordinary_store_relation]:
-  `stmt_state_rel ctx func cenv cx fin sf` by
-    (`stmt_state_rel ctx func cenv cx
+  `stmt_state_rel H ctx func cenv cx fin sf` by
+    (`stmt_state_rel H ctx func cenv cx
         (es_end with scopes := pre ++
           (env' |+ (id,entry' with <|value := result; popped := []|>))::rest)
         (mstore (w2n a) (val_to_w256 result) u)` by
@@ -338,15 +338,15 @@ Resume compile_augassign_local_case_ptr[ordinary_store_relation]:
 QED
 
 Resume compile_augassign_local_case_ptr[compose_store]:
-  `gas_path_ptr (cx_dead cx) 0 ctx func PG G tn t' 0 H' tnf (OK sf)` by
+  `gas_path_ptr (cx_dead H cx) 0 ctx func PG G tn t' 0 HG' tnf (OK sf)` by
     (qpat_assum `gas_path_ptr _ _ _ _ _ G tn t' _ _ _ _`
        (mp_then Any mp_tac gas_path_ptr_then) >>
      disch_then drule_all >> simp[]) >>
   drule_all augassign_store_continuation_exec_ptr >>
   disch_tac >>
-  `gas_marked_exec_ptr (cx_dead cx) (ctx,func) PG
+  `gas_marked_exec_ptr (cx_dead H cx) (ctx,func) PG
      (bind (eval_expr cx e) (read_result cx))
-     (es with gas_obs := [],t,H,tm) marks (INL v) es_end G tn (OK t')` by
+     (es with gas_obs := [],t,HG,tm) marks (INL v) es_end G tn (OK t')` by
     simp[gas_marked_exec_ptr_def] >>
   drule_all augassign_rhs_normal_exec_ptr >> disch_tac >>
   suspend "local_frames"
@@ -363,14 +363,14 @@ Resume compile_augassign_local_case_ptr[local_frames]:
      `lookup_var x t' = SOME w` by metis_tac[expr_post_def] >>
      `lookup_var x u = SOME w` by metis_tac[] >>
      metis_tac[]) >>
-  `ghost_kept cenv (es with gas_obs := []) s1 H tm t H' tnf` by
+  `ghost_kept cenv (es with gas_obs := []) s1 HG tm t HG' tnf` by
     (qpat_x_assum `tnf = _` SUBST1_TAC >>
      irule ghost_kept_mstore >> goal_assum (drule_at Any) >> simp[]) >>
-  `!x. not_fresh_at sa x ==> FLOOKUP H' x = FLOOKUP G0 x /\
+  `!x. not_fresh_at sa x ==> FLOOKUP HG' x = FLOOKUP G0 x /\
        op_taint tnf (Var x) = op_taint tn0 (Var x)` by
     (rpt strip_tac >>
      qpat_x_assum `ghost_kept cenv es sa _ _ _ _ _` mp_tac >>
-     qpat_x_assum `ghost_kept _ _ s1 _ _ _ H' tnf` mp_tac >>
+     qpat_x_assum `ghost_kept _ _ s1 _ _ _ HG' tnf` mp_tac >>
      simp[ghost_kept_def] >> metis_tac[]) >>
   suspend "normal_outcome"
 QED

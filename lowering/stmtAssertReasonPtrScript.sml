@@ -125,7 +125,7 @@ Resume compile_assert_reason_frag_general_ptr[normal]:
     gvs[expr_post_def, expr_val_rel_def, evaluate_type_def, is_word_type_def,
         typed_val_to_w256_def, val_to_w256_def] >>
   `op_taint tn op = {}` by gvs[ptr_val_ok_def] >>
-  `gas_path_ptr (cx_dead cx) 0 ctx fn PG G tn t 0 G tn
+  `gas_path_ptr (cx_dead H cx) 0 ctx fn PG G tn t 0 G tn
      (OK (jump_to (if b then sb.cs_current_bb else entry.cs_current_bb) t))` by
     (imp_res_tac emit_inst_extends >> irule assert_jnz_zero_path_ptr >> simp[] >>
      qexistsl [`op`,`s3`,`s4`] >> simp[]) >>
@@ -138,7 +138,7 @@ Resume compile_assert_reason_frag_general_ptr[true]:
     (qpat_assum `!tail. vyperState$bind _ _ (es with gas_obs := _) = _`
        (mp_tac o MATCH_MP eval_read_preserves_scopes_dom o Q.SPEC `[]`) >>
      simp[]) >>
-  `stmt_post ctx fn cx lctx cenv cenv sa sb es s0 (INL ())
+  `stmt_post H ctx fn cx lctx cenv cenv sa sb es s0 (INL ())
      (es_end with gas_obs := []) (jump_to sb.cs_current_bb t)` by
     (irule assert_success_post >> simp[] >>
      qexistsl [`e`,`op`,`s1`] >> simp[]) >>
@@ -176,7 +176,7 @@ Resume compile_assert_reason_frag_general_ptr[false]:
 QED
 
 Resume compile_assert_reason_frag_general_ptr[compose]:
-  `gas_marked_exec_ptr (cx_dead cx) (ctx,fn) PG
+  `gas_marked_exec_ptr (cx_dead H cx) (ctx,fn) PG
     (bind (eval_expr cx e) (read_result cx)) (es,s0,G0,tn0)
     marks (INL (BoolV F)) es_end G tn (OK t)` by
     simp[gas_marked_exec_ptr_def] >>

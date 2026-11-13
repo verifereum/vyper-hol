@@ -2,11 +2,10 @@
  * Runtime joint body entry on finite horizons: one actual body-start state
  * s0 carrying zero-GAS reachability from __entry, its memory-safe twin,
  * the allocation history and frame, and, at every horizon valid for the
- * call's storage trace, the pointer-safety lift, the pointer ghost, the
- * statement state relation and the zero-GAS pointer path from __entry to s0.
- * The endpoint is chosen before any horizon.
+ * call's storage trace, the pointer-safety lift, the pointer ghost and the
+ * statement state relation.  The endpoint is chosen before any horizon.
  *
- * r4: st is pinned by runtime_selected_body_start.  The statement is fixed; its proof is open (cheat) and is being done on
+ * r3: st is pinned by runtime_selected_body_start.  The statement is fixed; its proof is open (cheat) and is being done on
  * the canonical registration path.
  *
  * TOP-LEVEL:
@@ -18,7 +17,7 @@ Ancestors
   vyperLoweringCorrect vyperInterpreter venomWf venomInst venomExecSemantics
   fragExec fragGasPath fragGasPathMem allocaHistory loweringStateRelDefs
   loweringPosts exprLoweringProps vyperStorageFootprint ptrSafeRun
-  ptrDiscipline bodyPtrDefs runtimeBodyStartDefs fragGasOriginPtr
+  ptrDiscipline bodyPtrDefs runtimeBodyStartDefs
 
 Theorem external_entry_joint:
   !tops rpolicy unit am tx ret vs mut args fbody env es0.
@@ -87,14 +86,7 @@ Theorem external_entry_joint:
           (initial_evaluation_context am.sources am.layouts tx NONE) es0
           G0 tn0 s0 /\
         stmt_state_rel H unit.cu_context func cenv
-          (initial_evaluation_context am.sources am.layouts tx NONE) es0 s0 /\
-        !explicit.
-          gas_origin_ptr_path
-            (cx_dead H (initial_evaluation_context am.sources am.layouts tx NONE),
-             0, explicit, unit.cu_context, func, [])
-            (vs with <| vs_prev_bb := NONE; vs_current_bb := "__entry";
-                        vs_inst_idx := 0 |>, FEMPTY, entry_taint)
-            [] (OK s0, G0, tn0)
+          (initial_evaluation_context am.sources am.layouts tx NONE) es0 s0
 Proof
   cheat
 QED

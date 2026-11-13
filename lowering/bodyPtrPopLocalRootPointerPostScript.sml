@@ -6,7 +6,7 @@ Ancestors
   finite_map words list pred_set
 
 Theorem pop_local_pointer_endpoint:
-  ghost_inv d cenv cx es G tn s /\
+  ghost_inv H d cenv cx es G tn s /\
   local_ptrs_rel func cenv es.scopes s /\
   lookup_scopes id es.scopes = SOME entry /\
   FLOOKUP cenv.ce_vars id = SOME (PtrVar (Var p) sz) /\
@@ -31,7 +31,7 @@ Theorem pop_local_pointer_endpoint:
   lookup_var out t = SOME (n2w (w2n a+32+(LENGTH vs-1)*type_memory_size tv)) /\
   w2n a+32+(LENGTH vs-1)*type_memory_size tv < dimword(:256) /\
   ptr_covers G' tn' out t (type_memory_size tv) ==>
-  ghost_inv d cenv cx (ee with gas_obs := gs) G' tn' t /\
+  ghost_inv H d cenv cx (ee with gas_obs := gs) G' tn' t /\
   ptr_vv_ok cx ann
     (PlaceR (MemoryPlace id [ValueSubscript (IntV &(LENGTH vs-1))]))
     (LocatedValue ann (mk_ptr (Var out) LocMemory)) (ee with gas_obs := gs) G' tn' t /\

@@ -5,10 +5,19 @@ Ancestors
   exprSimHypsDefs exprSimMemDefs loweringPosts exprSimUint2Str exprSimHash
   exprLoweringProps exprSimSource exprSafeOperand vyperTyping vyperTypeSystem vyperArith arithmetic context compileEnv valueEncoding loweringSlice vyperValue vyperAST
 
+Theorem u2s_safe_fields[local]:
+  u2s_safe H ctx fn cenv cx es a buf b sz inst s0 s ==>
+  s.vs_accounts = s0.vs_accounts /\ s.vs_transient = s0.vs_transient /\
+  s.vs_requests = s0.vs_requests /\ s.vs_call_ctx = s0.vs_call_ctx
+Proof
+  strip_tac >>
+  gvs[u2s_safe_def, u2s_frame_def, venomStateTheory.venom_state_component_equality]
+QED
+
 Theorem u2s_alloc_mem_ready_mem[local]:
   compile_alloc_buffer sz sa = (ba,a) /\ fn_has_code sa a fn /\
   fn_inst_ids_distinct fn /\ local_ptrs_reserved cenv sa /\
-  stmt_state_rel ctx fn cenv cx es s /\ alloca_history fn s /\
+  stmt_state_rel H ctx fn cenv cx es s /\ alloca_history fn s /\
   ~s.vs_halted /\ s.vs_current_bb = sa.cs_current_bb /\
   s.vs_inst_idx = LENGTH sa.cs_current_insts /\ sz < dimword (:256) /\
   (!z. op = Var z ==> not_fresh_at sa z) /\ (!l. op <> Label l) /\
@@ -17,7 +26,7 @@ Theorem u2s_alloc_mem_ready_mem[local]:
   sp.cs_next_var <= sa.cs_next_var /\ sp.cs_next_id <= sa.cs_next_id ==>
   ?b t inst. gas_path_mem ctx fn s 0 (OK t) /\
     alloca_history fn t /\ s.vs_alloca_next <= t.vs_alloca_next /\
-    u2s_safe ctx fn cenv cx es a ba.buf_operand b sz inst t t /\
+    u2s_safe H ctx fn cenv cx es a ba.buf_operand b sz inst t t /\
     MEM inst (fn_insts fn) /\ inst.inst_opcode = ALLOCA /\
     inst.inst_id = sa.cs_next_id /\ inst.inst_id < a.cs_next_id /\
     eval_operand op t = SOME (n2w X) /\ local_ptrs_reserved cenv a /\
@@ -30,14 +39,16 @@ Theorem u2s_alloc_mem_ready_mem[local]:
     (!aid off len. aid < sp.cs_next_id /\
        FLOOKUP spre.vs_allocas aid = SOME (off,len) ==>
        off+len <= b \/ b+sz <= off) /\
-    t.vs_memory = s.vs_memory
+    t.vs_memory = s.vs_memory /\
+    t.vs_accounts = s.vs_accounts /\ t.vs_transient = s.vs_transient /\
+    t.vs_requests = s.vs_requests /\ t.vs_call_ctx = s.vs_call_ctx
 Proof
   strip_tac >>
   drule_all bodyMemAggregateAllocTheory.aggregate_buffer_alloc_counted_mem_any_block >> strip_tac >>
   drule_all exprSimAllocTheory.buffer_alloc_code >> strip_tac >>
   qabbrev_tac `ai = mk_inst sa.cs_next_id ALLOCA [Lit (n2w sz)]
     [STRING #"%" (toString sa.cs_next_var)]` >>
-  `u2s_safe ctx fn cenv cx es a ba.buf_operand b sz ai t t` by
+  `u2s_safe H ctx fn cenv cx es a ba.buf_operand b sz ai t t` by
     (irule u2s_safe_initial >>
      gvs[Abbr `ai`, venomInstTheory.mk_inst_def, venomStateTheory.eval_operand_def, loweringStateRelDefsTheory.regions_disjoint_def] >>
      metis_tac[ADD_COMM]) >>
@@ -65,7 +76,7 @@ Theorem u2s_allocated_mem_exit_mem[local]:
   compile_alloc_buffer (sz+n) sa = (ba,a) /\
   u2s_layout a op ba.buf_operand n sb /\ fn_has_code sa sb fn /\
   fn_inst_ids_distinct fn /\ local_ptrs_reserved cenv sa /\
-  stmt_state_rel ctx fn cenv cx es s /\ alloca_history fn s /\
+  stmt_state_rel H ctx fn cenv cx es s /\ alloca_history fn s /\
   ~s.vs_halted /\ s.vs_current_bb = sa.cs_current_bb /\
   s.vs_inst_idx = LENGTH sa.cs_current_insts /\ sz+n < dimword (:256) /\
   (!z. op = Var z ==> not_fresh_at sa z) /\ (!l. op <> Label l) /\
@@ -75,7 +86,7 @@ Theorem u2s_allocated_mem_exit_mem[local]:
   sp.cs_next_var <= sa.cs_next_var /\ sp.cs_next_id <= sa.cs_next_id ==>
   ?b ready inst t. gas_path_mem ctx fn s 0 (OK t) /\
     alloca_history fn t /\ s.vs_alloca_next <= t.vs_alloca_next /\
-    u2s_safe ctx fn cenv cx es a ba.buf_operand b (sz+n) inst ready t /\
+    u2s_safe H ctx fn cenv cx es a ba.buf_operand b (sz+n) inst ready t /\
     eval_operand (Var (u2s_var a 2)) t = SOME (n2w (b+n-LENGTH (num_to_dec_string X))) /\
     val_in_memory ty (StringV (num_to_dec_string X))
       (b+n-LENGTH (num_to_dec_string X)) t.vs_memory /\
@@ -87,7 +98,9 @@ Theorem u2s_allocated_mem_exit_mem[local]:
     ready.vs_memory = s.vs_memory /\ wb_frame cenv es es sp spre ready /\
     MEM inst (fn_insts fn) /\ inst.inst_opcode = ALLOCA /\
     (!name lb lsz. local_region cenv es.scopes ready name lb lsz ==>
-       b+(sz+n) <= lb \/ lb+lsz <= b)
+       b+(sz+n) <= lb \/ lb+lsz <= b) /\
+    t.vs_accounts = s.vs_accounts /\ t.vs_transient = s.vs_transient /\
+    t.vs_requests = s.vs_requests /\ t.vs_call_ctx = s.vs_call_ctx
 Proof
   strip_tac >>
   drule_all u2s_alloc_layout_code >> strip_tac >>
@@ -112,6 +125,10 @@ Proof
     (irule u2s_frame_wb_tail >>
      simp[] >> qexistsl_tac [`a`, `b`, `ready`, `sz+n`] >>
      fs[u2s_safe_def] >> conj_tac >> first_assum ACCEPT_TAC) >>
+  `t.vs_accounts = ready.vs_accounts /\ t.vs_transient = ready.vs_transient /\
+   t.vs_requests = ready.vs_requests /\ t.vs_call_ctx = ready.vs_call_ctx` by
+    (qpat_assum `u2s_safe _ _ _ _ _ _ _ _ _ _ _ ready t`
+       (mp_tac o MATCH_MP u2s_safe_fields) >> simp[]) >>
   qexistsl_tac [`b`, `ready`, `inst`, `t`] >> gvs[] >>
   drule_all fragGasPathMemTheory.gas_path_mem_then >> simp[] >>
   strip_tac >> first_assum ACCEPT_TAC
@@ -122,24 +139,30 @@ Theorem uint2str_numeric_mem_path:
   lower_value compile_expr cenv ty e sa = (x,sm) /\
   compile_uint2str x n sz sm = (out,sb) /\ fn_has_code sm sb func /\
   fn_inst_ids_distinct func /\ local_ptrs_reserved cenv sa /\
-  local_ptrs_reserved cenv sm /\ stmt_state_rel ctx func cenv cx es s0 /\
+  local_ptrs_reserved cenv sm /\ stmt_state_rel H ctx func cenv cx es s0 /\
   MAP FDOM es.scopes = MAP FDOM es'.scopes /\
-  expr_post ctx func cenv cx e es sa sm s0 es' (IntV (&X)) x s /\
+  expr_post H ctx func cenv cx e es sa sm s0 es' (IntV (&X)) x s /\
   ~s.vs_halted /\ s.vs_current_bb = sm.cs_current_bb /\
   s.vs_inst_idx = LENGTH sm.cs_current_insts /\
   X < dimword (:256) /\ 78 <= n /\ n+32 <= sz /\ sz+n < dimword (:256) /\
   alloca_history func s ==>
   ?t. gas_path_mem ctx func s 0 (OK t) /\
-    vv_post ctx func cenv cx (Builtin (BaseT (StringT n)) (Uint2Str n) [e])
+    vv_post H ctx func cenv cx (Builtin (BaseT (StringT n)) (Uint2Str n) [e])
       es sa sb s0 es' (Value (StringV (num_to_dec_string X)))
       (LocatedValue (BaseT (StringT n)) (mk_ptr out LocMemory)) t /\
     t.vs_current_bb = sb.cs_current_bb /\
     t.vs_inst_idx = LENGTH sb.cs_current_insts /\
     alloca_history func t /\ s.vs_alloca_next <= t.vs_alloca_next /\
+    t.vs_accounts = s.vs_accounts /\ t.vs_transient = s.vs_transient /\
+    t.vs_requests = s.vs_requests /\ t.vs_call_ctx = s.vs_call_ctx /\
     ?p. eval_operand out t = SOME (n2w p) /\ p < dimword (:256) /\
       p+sz <= t.vs_alloca_next
 Proof
   strip_tac >> drule_all compile_uint2str_layout >> strip_tac >>
+  `storage_well_formed_on cx es' (FST H)` by
+    (qpat_assum `expr_post _ _ _ _ _ _ _ _ _ _ _ _ _ _`
+       (strip_assume_tac o REWRITE_RULE [expr_post_def]) >>
+     first_assum ACCEPT_TAC) >>
   drule_all expr_post_frame >> strip_tac >>
   drule_all expr_post_state >> strip_tac >>
   `wb_frame cenv es' es' sm s s` by simp[wb_frame_refl] >>
@@ -197,7 +220,8 @@ Proof
     [`e` |-> `Builtin (BaseT (StringT n)) (Uint2Str n) [e]`]
     vv_post_allocated_memory_intro)) >>
   simp[expr_type_def, is_word_type_def, evaluate_type_def, mk_ptr_def] >>
-  rpt conj_tac >> TRY (fs[u2s_safe_def] >> NO_TAC) >>
+  rpt conj_tac >> TRY (first_assum ACCEPT_TAC >> NO_TAC) >>
+  TRY (fs[u2s_safe_def] >> NO_TAC) >>
   qexistsl_tac [`inst.inst_id`, `b`, `sz+n`] >>
   fs[u2s_safe_def, type_slot_size_def] >>
   conj_tac >- first_assum ACCEPT_TAC >>
@@ -205,7 +229,7 @@ Proof
 QED
 
 Theorem uint2str_vv_capacity:
-  vv_post ctx func cenv cx (Builtin (BaseT (StringT n)) (Uint2Str n) [e])
+  vv_post H ctx func cenv cx (Builtin (BaseT (StringT n)) (Uint2Str n) [e])
     es sa sb s0 es' tv (LocatedValue (BaseT (StringT n)) p) t /\
   eval_operand p.ptr_operand t = SOME (n2w addr) /\ addr < dimword (:256) /\
   n < dimword (:256) /\

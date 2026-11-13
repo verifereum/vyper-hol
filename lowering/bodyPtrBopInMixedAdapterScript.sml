@@ -21,7 +21,7 @@ Theorem membership_mixed_source_adapter:
     (?gs. bind (eval_expr cx e1) (read_result cx) (es with gas_obs := gs) = (INL v1,es1)) /\
     (?gs. eval_expr cx e2 (es1 with gas_obs := gs) = (INL tv,es2)) /\
     es1.gas_obs = [] /\ ~s1.vs_halted /\ es2.gas_obs = [] /\ ~s2.vs_halted ==>
-    gas_outcome_ptr (cx_dead cx) (cx_tops cx) (ctx,fn) PG
+    gas_outcome_ptr (cx_dead H cx) (cx_tops cx) (ctx,fn) PG
       (bind (read_result cx tv) (\v2 st. (bop_result cx ann bop [expr_type e1;expr_type e2] v1 v2 st,st)))
       (es2,s2,G2,tn2) Q (\res ee gt r. expr_exit res r)) /\
   (!marks err ee leaf sf.
@@ -66,7 +66,7 @@ Theorem membership_mixed_source_adapter:
         (bind (eval_expr cx e2) (\tv. ignore_bind (bind (read_result cx tv)
           (\v2 st. (bop_result cx ann bop [expr_type e1;expr_type e2] v1 v2 st,st))) (return ())))
         (es1,s1) (left ++ right) (err,ee) (leaf,sf))) ==>
-  gas_outcome_ptr (cx_dead cx) (cx_tops cx) (ctx,fn) PG
+  gas_outcome_ptr (cx_dead H cx) (cx_tops cx) (ctx,fn) PG
     (bind (bind (eval_expr cx e1) (read_result cx)) (\v1.
       bind (eval_expr cx e2) (\tv. bind (read_result cx tv)
         (\v2 st. (bop_result cx ann bop [expr_type e1;expr_type e2] v1 v2 st,st)))))

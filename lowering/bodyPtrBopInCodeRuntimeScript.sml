@@ -11,7 +11,7 @@ Theorem membership_fixed_code_runtime:
     (ArrayT ety (Fixed cap)) is_in sa = (op,sb) /\
   fn_has_code sa sb fn /\ ~ctx_has_dalloca ctx /\ ~cenv.ce_is_ctor /\
   p.ptr_location = LocCode /\ p.ptr_operand = arr_op /\
-  (!x. arr_op = Var x ==> not_fresh_at sa x) /\ stmt_state_rel ctx fn cenv cx es s /\
+  (!x. arr_op = Var x ==> not_fresh_at sa x) /\ stmt_state_rel H ctx fn cenv cx es s /\
   vv_holds cenv cx (ArrayT ety (Fixed cap)) (Value (ArrayV (SArrayV kvs)))
     (LocatedValue ann p) es s /\
   ptr_vv_ok cx (ArrayT ety (Fixed cap)) (Value (ArrayV (SArrayV kvs)))
@@ -52,7 +52,7 @@ Theorem membership_dynamic_code_runtime:
     (ArrayT ety (Dynamic cap)) is_in sa = (op,sb) /\
   fn_has_code sa sb fn /\ ~ctx_has_dalloca ctx /\ ~cenv.ce_is_ctor /\
   p.ptr_location = LocCode /\ p.ptr_operand = arr_op /\
-  (!x. arr_op = Var x ==> not_fresh_at sa x) /\ stmt_state_rel ctx fn cenv cx es s /\
+  (!x. arr_op = Var x ==> not_fresh_at sa x) /\ stmt_state_rel H ctx fn cenv cx es s /\
   vv_holds cenv cx (ArrayT ety (Dynamic cap)) (Value (ArrayV (DynArrayV vs)))
     (LocatedValue ann p) es s /\
   ptr_vv_ok cx (ArrayT ety (Dynamic cap)) (Value (ArrayV (DynArrayV vs)))

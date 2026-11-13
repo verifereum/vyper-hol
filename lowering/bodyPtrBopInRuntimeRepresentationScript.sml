@@ -70,7 +70,7 @@ Theorem membership_vv_post_runtime_representation:
         (ArrayT et bd) is_in) /\
     (!x. p.ptr_operand = Var x ==> not_fresh_at sd x) /\
     p.ptr_location <> LocCalldata /\ eval_operand p.ptr_operand s = SOME bw /\
-    stmt_state_rel ctx fn cenv cx ee s /\
+    stmt_state_rel H ctx fn cenv cx ee s /\
     vv_holds cenv cx (ArrayT et bd) (Value (ArrayV av)) (LocatedValue ann p) ee s /\
     vv_at cenv cx (ArrayT et bd) sc sd ee (Value (ArrayV av)) (LocatedValue ann p) s /\
     ptr_vv_ok cx (ArrayT et bd) (Value (ArrayV av)) (LocatedValue ann p) ee G tn s /\
@@ -82,11 +82,11 @@ Proof
   qpat_x_assum `membership_vv_post _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _`
     mp_tac >>
   simp[membership_vv_post_def] >> strip_tac >>
-  `vv_post ctx fn cenv cx e es sc sd s0 ee (Value (ArrayV av)) vv s` by
+  `vv_post H ctx fn cenv cx e es sc sd s0 ee (Value (ArrayV av)) vv s` by
     metis_tac[vv_post_read_result] >>
   `ptr_vv_ok cx (ArrayT et bd) (Value (ArrayV av)) vv ee G tn s` by
     metis_tac[membership_ptr_vv_read_result] >>
-  qpat_x_assum `vv_post _ _ _ _ _ _ _ _ _ _ tvv _ _` kall_tac >>
+  qpat_x_assum `vv_post _ _ _ _ _ _ _ _ _ _ _ tvv _ _` kall_tac >>
   qpat_x_assum `ptr_vv_ok _ _ tvv _ _ _ _ _` kall_tac >>
   gvs[vv_post_def] >>
   conj_tac >- metis_tac[membership_evaluated_array_capacity] >>

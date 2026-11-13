@@ -36,8 +36,8 @@ Proof
 QED
 
 Theorem lower_typed_args_cons_tail_ptr:
-  expr_post ctx func cenv cx e es sa s1 s0 es1 v x t /\
-  stmt_state_rel ctx func cenv cx es s0 /\ local_ptrs_reserved cenv sa /\
+  expr_post H ctx func cenv cx e es sa s1 s0 es1 v x t /\
+  stmt_state_rel H ctx func cenv cx es s0 /\ local_ptrs_reserved cenv sa /\
   local_ptrs_reserved cenv s1 /\
   MAP FDOM es.scopes = MAP FDOM es1.scopes /\
   sa.cs_next_var <= s1.cs_next_var /\ sa.cs_next_id <= s1.cs_next_id /\
@@ -49,7 +49,7 @@ Theorem lower_typed_args_cons_tail_ptr:
   gas_outcome_ptr D (cx_tops cx) (ctx,func) PG (eval_exprs cx args)
     (es1,t,G1,tn1)
     (\rr ee G tn u. ?vs. rr = INL vs /\
-       typed_args_post_ptr d ctx func cenv cx es1 s1 t G1 tn1 ee
+       typed_args_post_ptr H d ctx func cenv cx es1 s1 t G1 tn1 ee
          args xs vs G tn u /\
        u.vs_current_bb = sb.cs_current_bb /\
        u.vs_inst_idx = LENGTH sb.cs_current_insts)
@@ -57,7 +57,7 @@ Theorem lower_typed_args_cons_tail_ptr:
   gas_outcome_ptr D (cx_tops cx) (ctx,func) PG
     (do vs <- eval_exprs cx args; return (v::vs) od) (es1,t,G1,tn1)
     (\rr ee G tn u. ?vs. rr = INL vs /\
-       typed_args_post_ptr d ctx func cenv cx es sa s0 G0 tn0 ee
+       typed_args_post_ptr H d ctx func cenv cx es sa s0 G0 tn0 ee
          (e::args) (x::xs) vs G tn u /\
        u.vs_current_bb = sb.cs_current_bb /\
        u.vs_inst_idx = LENGTH sb.cs_current_insts)

@@ -6,8 +6,8 @@ Ancestors bodyPtrBopInWordBoundary wordArgsPtr bodyPtrDefs bodyPtrPreds
 (* This is the old operand's interface after the next lower_value has run.
    Its semantic relation and ghost facts are kept together for consumers. *)
 Theorem membership_word_operand_kept:
-  expr_post ctx func cenv cx e1 es sa s1 s0 es1 v1 x t /\
-  expr_post ctx func cenv cx e2 es1 s1 s2 t es2 v2 y u /\
+  expr_post H ctx func cenv cx e1 es sa s1 s0 es1 v1 x t /\
+  expr_post H ctx func cenv cx e2 es1 s1 s2 t es2 v2 y u /\
   ptr_val_ok cx (expr_type e1) v1 x G1 tn1 t /\
   is_word_type (expr_type e1) /\
   ghost_kept cenv es1 s1 G1 tn1 t G2 tn2 /\
@@ -39,7 +39,7 @@ Proof
 QED
 
 Theorem membership_vv_word_operand_kept:
-  vv_post ctx func cenv cx e es sa sb s0 ee tv vv u /\
+  vv_post H ctx func cenv cx e es sa sb s0 ee tv vv u /\
   ptr_val_ok cx t v op G0 tn0 s0 /\ is_word_type t /\
   ghost_kept cenv es sa G0 tn0 s0 G tn /\
   (!x. op = Var x ==> not_fresh_at sa x) /\ (!l. op <> Label l) /\
@@ -60,11 +60,11 @@ Theorem membership_vv_outcome_word_kept:
   eval_operand op s0 = SOME w /\
   gas_outcome_ptr D tops (ctx,func) PG source (es,s0,G0,tn0)
     (\res ee G tn u. ?tv. res = INL tv /\
-       vv_post ctx func cenv cx e es sa sb s0 ee tv vv u /\
+       vv_post H ctx func cenv cx e es sa sb s0 ee tv vv u /\
        ghost_kept cenv es sa G0 tn0 s0 G tn /\ P res ee G tn u) R ==>
   gas_outcome_ptr D tops (ctx,func) PG source (es,s0,G0,tn0)
     (\res ee G tn u. ?tv. res = INL tv /\
-       vv_post ctx func cenv cx e es sa sb s0 ee tv vv u /\
+       vv_post H ctx func cenv cx e es sa sb s0 ee tv vv u /\
        ghost_kept cenv es sa G0 tn0 s0 G tn /\ P res ee G tn u /\
        eval_operand op u = SOME w /\ ptr_val_ok cx wt v op G tn u) R
 Proof
