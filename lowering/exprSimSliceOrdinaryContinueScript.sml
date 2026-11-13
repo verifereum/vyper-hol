@@ -276,7 +276,8 @@ Proof
   gvs[] >>
   `~t'.vs_halted` by metis_tac[slice_marked_read_ok_not_halted] >>
   first_x_assum irule >>
-  qexistsl_tac [`mid with gas_obs := []`, `gs`, `gs2`, `t`] >> simp[]
+  simp[] >> qexistsl_tac [`mid with gas_obs := []`, `gs`, `gs2`, `t`] >> simp[] >>
+  metis_tac[]
 QED
 
 Theorem slice_bytes_continue:
@@ -630,7 +631,8 @@ Proof
   gvs[] >>
   `~t'.vs_halted` by metis_tac[slice_marked_read_ok_not_halted] >>
   first_x_assum irule >>
-  qexistsl_tac [`mid with gas_obs := []`, `gs`, `gs2`, `t`] >> simp[]
+  simp[] >> qexistsl_tac [`mid with gas_obs := []`, `gs`, `gs2`, `t`] >> simp[] >>
+  metis_tac[]
 QED
 
 Theorem slice_bytes_continue_seq:
