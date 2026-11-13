@@ -687,7 +687,11 @@ Proof
      irule (SIMP_RULE (srw_ss()) [o1_fn_passes_def, pass_fuel_def]
               (Q.INST [`Inv` |-> `\k C v. o1_inv D k C v /\ (!eom. max_live_eom (stage 9) = SOME eom ==> eom <= w2n v.vs_initial_fmp)`]
                  (Q.SPEC `3` gas_stages_compose))) >>
-     simp[] >> rpt strip_tac >> first_x_assum irule >> simp[]) >>
+     simp[] >> rpt strip_tac >>
+     qpat_x_assum `!k vs. k < 9 /\ k <> 3 /\ _ ==> _`
+       (qspecl_then [`k`, `vo'`] mp_tac) >>
+     impl_tac >- fs[] >>
+     simp[pass_fuel_def, o1_fn_passes_def]) >>
   `!vo. o1_run_state_ok vo ==>
      ?vi. gas_variant vi vo /\
        (o1_inv D 4 (stage 4) vi /\ (!eom. max_live_eom (stage 9) = SOME eom ==> eom <= w2n vi.vs_initial_fmp) ==>
@@ -696,7 +700,11 @@ Proof
      irule (SIMP_RULE (srw_ss()) [o1_fn_passes_def, pass_fuel_def]
               (Q.INST [`Inv` |-> `\k C v. o1_inv D k C v /\ (!eom. max_live_eom (stage 9) = SOME eom ==> eom <= w2n v.vs_initial_fmp)`]
                  (Q.SPEC `9` gas_stages_compose))) >>
-     simp[] >> rpt strip_tac >> first_x_assum irule >> simp[]) >>
+     simp[] >> rpt strip_tac >>
+     qpat_x_assum `!k vs. k < 9 /\ k <> 3 /\ _ ==> _`
+       (qspecl_then [`k`, `vo'`] mp_tac) >>
+     impl_tac >- fs[] >>
+     simp[pass_fuel_def, o1_fn_passes_def]) >>
   qpat_x_assum `!vo. o1_run_state_ok vo ==> ?vi. gas_variant vi vo /\ (o1_inv D 4 _ _ /\ _ ==> _)`
     (qspec_then `vs_out` mp_tac) >> simp[] >>
   disch_then (qx_choose_then `v4` strip_assume_tac) >>
