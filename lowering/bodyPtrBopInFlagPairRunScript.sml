@@ -20,9 +20,9 @@ Theorem membership_flag_pair_run:
         (INL v1,es1)) /\
   (?gs. bind (eval_expr cx e2) (read_result cx) (es1 with gas_obs := gs) =
         (INL v2,es2)) /\
-  bop_operand_post d ctx func cenv cx e1 es ca c1 x t0 G0 tn0
+  bop_operand_post H d ctx func cenv cx e1 es ca c1 x t0 G0 tn0
     v1 es1 t1 G1 tn1 /\
-  bop_operand_post d ctx func cenv cx e2 es1 c1 c2 y t1 G1 tn1
+  bop_operand_post H d ctx func cenv cx e2 es1 c1 c2 y t1 G1 tn1
     v2 es2 t2 G2 tn2 /\
   (bop = In \/ bop = NotIn) /\ expr_type e2 = FlagT fid /\
   compile_binop bop x y (expr_type e1)
