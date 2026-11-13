@@ -1,6 +1,5 @@
 Theory bodyPtrAugAssignPureStorage
 Ancestors
-  bodyPtrAugAssignStorageTarget
   augAssignPtrStorageSuffix augAssignPtrStorageCompose augAssignPtrStorageTargetReady
   bodyPtrAugAssignLocalPrefix bodyPtrPreds bodyPtrDefs bodyAugAssignOther
   bodyAugPlaceTarget stmtSimAugAssignPlaceStorage stmtSimAugAssignPlace
@@ -42,7 +41,7 @@ Theorem body_augassign_pure_storage_place_ptr:
     ~(?nsid fld. t = AttributeTarget (TopLevelNameTarget nsid) fld /\
                  supported_storage_field_write tops nsid fld) /\
     ((?b fld. t = AttributeTarget b fld) \/ (?b k. t = SubscriptTarget b k)) /\
-    (!id. target_root t <> NameTarget id) /\ supported_target_pure tops t ==>
+    (!id. target_root t <> NameTarget id) ==>
     stmt_frag_ptr d ctx PG func cx lctx RetQ cenv
       (stmt_env cenv lctx ret_ty (AugAssign ty t bop e))
       (eval_stmt cx (AugAssign ty t bop e)) es
@@ -62,17 +61,7 @@ Proof
   `target_pre cenv cx env t es` by
     (fs[target_pre_def] >> metis_tac[aug_place_typing]) >>
   `target_sim_ptr d ctx PG func cenv cx env t es` by
-    (irule augassign_storage_target_sim_ptr >> simp[] >> conj_tac
-     >- (qpat_x_assum `!id. target_root t <> NameTarget id` mp_tac >>
-         POP_ASSUM_LIST (K ALL_TAC) >>
-         qid_spec_tac `t` >> recInduct base_assignment_target_induct >>
-         simp[target_root_def]) >>
-     qexists_tac `tops` >> simp[] >>
-     qpat_x_assum `supported_target_pure tops t` mp_tac >>
-     POP_ASSUM_LIST (K ALL_TAC) >>
-     measureInduct_on `base_assignment_target_size t` >> Cases_on `t` >>
-     fs[supported_target_pure_def, target_indices_def] >>
-     first_x_assum irule >> simp[]) >>
+    (irule body_target_sim_ptr >> simp[] >> metis_tac[]) >>
   `!sa r sb. compile_get_target_ptr compile_expr cenv t sa = (r,sb) ==>
       !l. FST r <> Label l` by metis_tac[aug_place_target_ptr_not_label] >>
   qpat_x_assum `(?b fld. _) \/ (?b k. _)` kall_tac >>
