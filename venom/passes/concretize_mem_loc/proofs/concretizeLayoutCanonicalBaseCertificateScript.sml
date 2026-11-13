@@ -34,7 +34,7 @@ QED
 
 Theorem layout_base_opcode_cases[local]:
   inst_wf i /\ i.inst_opcode <> INVOKE /\ ~is_terminator i.inst_opcode /\
-  i.inst_opcode <> DALLOCA /\ i.inst_opcode <> MEMTOP /\
+  i.inst_opcode <> MEMTOP /\
   i.inst_opcode <> GETFMP /\ i.inst_opcode <> SETFMP /\
   i.inst_opcode <> FMP_PARAM /\ i.inst_opcode <> PHI /\
   ~MEM i.inst_opcode [MLOAD; MCOPY; ILOAD; ISTORE; CALLDATALOAD; CALLDATASIZE;
@@ -43,7 +43,7 @@ Theorem layout_base_opcode_cases[local]:
   MEM i.inst_opcode [NOP; ALLOCA; ASSIGN; ADD; SUB; SHL; SHR; SAR; OFFSET;
       CALLER; ADDRESS; CALLVALUE; GAS; SLOAD; TLOAD; BLOCKHASH; BLOBHASH; SSTORE;
       TSTORE; EQ; LT; GT; RETURNDATASIZE; ASSERT; ASSERT_UNREACHABLE; MSTORE;
-      MSTORE8; BUMP; PARAM; RETPC_PARAM; CODESIZE; DLOAD; INITIAL_FMP; BALANCE;
+      MSTORE8; BUMP; DALLOCA; PARAM; RETPC_PARAM; CODESIZE; DLOAD; INITIAL_FMP; BALANCE;
       SELFBALANCE; EXTCODESIZE; EXTCODEHASH] \/
    context_read0_opcode i.inst_opcode \/
    (clean_value_shape i /\ ~MEM i.inst_opcode [ADD; SUB; EQ; LT; GT])
@@ -86,8 +86,6 @@ Proof
   `MEM fn C.ctx_functions /\ MEM i (fn_insts fn) /\ fn_ptr_ok P fn` by
     (drule_all layout_canonical_ordinary_environment >> strip_tac >> simp[]) >>
   `inst_wf i` by (fs[EVERY_MEM] >> metis_tac[]) >>
-  `i.inst_opcode <> DALLOCA` by
-    (strip_tac >> fs[ctx_has_dalloca_def, EXISTS_MEM] >> metis_tac[]) >>
   `i.inst_opcode <> MEMTOP /\ i.inst_opcode <> GETFMP /\
    i.inst_opcode <> SETFMP /\ i.inst_opcode <> FMP_PARAM` by
     (qpat_x_assum `fn_ptr_ok P fn` mp_tac >> simp[fn_ptr_ok_def] >>

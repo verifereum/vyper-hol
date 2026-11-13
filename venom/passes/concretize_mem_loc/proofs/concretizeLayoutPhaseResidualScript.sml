@@ -5,7 +5,8 @@ Ancestors concretizeLayoutPhaseOrigin concretizeLayoutPhaseSuccess
   concretizeLayoutLocalExtcodeHash concretizeLayoutLocalExtcodeCopy
   concretizeLayoutSupplement concretizeLayoutReaderContext
   frameOriginUpdates frameResolvedTrace frameResolvedOrigins
-  venomExecSemantics venomState venomInst ptrDiscipline list
+  frameJointTrace frameJointTransition frameOriginHistory frameOriginReachable
+  venomExecSemantics venomState venomInst ptrDiscipline finite_map list
 
 Theorem layout_assert_trace_step:
   vs0.vs_allocas = FEMPTY /\ ptr_discipline lo C vs0 /\
@@ -195,6 +196,110 @@ Proof
   goal_assum (drule_at (Pat `layout_ordinary_entry _ _ _ _ _ _ _ _ _ _ _ _`)) >>
   simp[is_terminator_def, origin_out_def, resolved_out_def, ETA_AX] >>
   gvs[update_var_def] >> metis_tac[]
+QED
+
+Theorem layout_dalloca_trace_step:
+  ctx_pass_stage rpolicy (CFP_Simple VP_ConcretizeMemLoc)
+    (o1_walk_view rpolicy 2) C C' /\ o1_ctx_shape C /\
+  EVERY (\fn. fn.fn_eom = NONE) C.ctx_functions /\
+  ctx_inst_ids_distinct C /\ o1_run_state_ok vs0 /\
+  EVERY wf_function C.ctx_functions /\
+  vs0.vs_allocas = FEMPTY /\ ptr_discipline lo C vs0 /\
+  callee_first names C.ctx_functions /\ fixed_region_reserved lo C /\
+  (ctx_has_dalloca C ==>
+     ?eom. max_live_eom C' = SOME eom /\ eom <= w2n vs0.vs_initial_fmp) /\
+  EVERY (fn_ptr_ok P) C.ctx_functions /\
+  EVERY (\f. EVERY inst_wf (fn_insts f)) C.ctx_functions /\
+  ~g.lop_pending /\ layout_ordinary_entry D lo vs0 C C' q0 es qs q g s t /\
+  g.lop_config = JointConfig stk PG G tn fn inst s oms om hs h /\
+  g.lop_ids = birth::ids /\ g.lop_anns = (rp,rv)::anns /\
+  g.lop_cursor < LENGTH es /\
+  EL g.lop_cursor es = SOME (OriginOrdinary fuel post) /\
+  inst.inst_opcode = DALLOCA /\ inst.inst_outputs = [v] /\
+  o1_fn_shape C fn /\ fn_ptr_ok P fn /\ MEM inst (fn_insts fn) /\
+  get_instruction g.lop_origin.lbo_source s.vs_inst_idx = SOME inst /\
+  step_inst_base inst s = OK post ==>
+  ?k tpost. step_inst_base inst t = OK tpost /\ k.lop_pending /\
+    k.lop_cursor = SUC g.lop_cursor /\
+    k.lop_origin = g.lop_origin /\ k.lop_ids = g.lop_ids /\
+    k.lop_config = EL (SUC g.lop_cursor) (q0::qs) /\
+    resolved_annotation_update g.lop_config (EL g.lop_cursor es)
+      g.lop_ids g.lop_anns k.lop_anns /\
+    layout_phase_ok_abort D lo vs0 C C' q0 es qs q
+      (INL g) (INL k) (OK post) (OK tpost)
+Proof
+  strip_tac >>
+  `layout_ordinary_trace vs0 C q0 es qs q g s /\
+   layout_ordinary_state D lo C' q0 es qs g s t` by
+    fs[layout_ordinary_entry_def] >>
+  `joint_trace vs0 C q0 es qs q /\
+   EL g.lop_cursor (q0::qs) = g.lop_config /\
+   resolved_config_ok g.lop_config g.lop_ids g.lop_anns` by
+    fs[layout_ordinary_trace_def] >>
+  `joint_config_reachable vs0 C (EL g.lop_cursor (q0::qs))` by
+    (irule frameRelocationBindingTheory.joint_trace_reachable_at >> simp[] >>
+     qexistsl_tac [`es`, `q`] >> simp[]) >>
+  `ctx_has_dalloca C` by
+    (qpat_x_assum `joint_config_reachable _ _ _` mp_tac >> simp[] >>
+     strip_tac >> drule_all joint_reachable_dalloca >> simp[]) >>
+  `w2n s.vs_initial_fmp <= w2n s.vs_fmp` by
+    (`frame_reachable vs0 C stk PG G tn fn inst s` by
+       (gvs[joint_config_reachable_def] >>
+        metis_tac[joint_origin_history_erasure, origin_frame_erasure]) >>
+     fs[ptr_discipline_def, allocas_below_fmp_def] >> metis_tac[]) >>
+  `w2n s.vs_initial_fmp = w2n vs0.vs_initial_fmp` by
+    (`g.lop_cursor <= LENGTH es` by simp[] >>
+     drule_all frameRelocationBindingTheory.joint_initial_fmp_trace >>
+     gvs[frameRelocationBindingTheory.joint_initial_fmp_def]) >>
+  `?eom. max_live_eom C' = SOME eom /\ eom <= w2n vs0.vs_initial_fmp` by
+    metis_tac[] >>
+  `SUC g.lop_cursor <= LENGTH es` by simp[] >>
+  `!d owner aid b sz.
+     activation_cache (EL (SUC g.lop_cursor) (q0::qs)) d owner aid (b,sz) ==>
+     concretize_positions C' owner aid + sz <= w2n s.vs_initial_fmp` by
+    (rpt strip_tac >>
+     drule_at (Pat `activation_cache _ _ _ _ _`)
+       concretizeLayoutPositionsTheory.concretize_positions_cache_room >>
+     disch_then drule_all >> simp[]) >>
+  qpat_x_assum `layout_ordinary_state _ _ _ _ _ _ _ _ _` mp_tac >>
+  simp[layout_ordinary_state_def] >> strip_tac >> gvs[] >> fs[ETA_AX] >>
+  drule_at (Pat `local_rel _ _ _ _ _ _ _`)
+    (REWRITE_RULE[GSYM concretize_local_obs_def, ETA_AX]
+      (Q.INST [`D` |-> `<| d_stor := K (K UNIV); d_trans := K (K UNIV);
+        d_imm := K UNIV; d_ret := K {} |>`]
+        (SPEC_ALL concretize_dalloca_local_complete))) >>
+  disch_then (drule_at (Pat `joint_trace _ _ _ _ _ _`)) >>
+  disch_then (drule_at (Pat `resolved_config_ok _ _ _`)) >>
+  disch_then (drule_at (Pat `relocation_taint_le _ _ _`)) >>
+  disch_then (drule_at (Pat `fn_ptr_ok _ _`)) >> simp[] >>
+  impl_tac >- first_assum ACCEPT_TAC >> strip_tac >>
+  `?x f a f'. post = update_var v x (s with vs_fmp := f) /\
+    tpost = update_var v a (t with vs_fmp := f')` by
+    (map_every (fn pat => qpat_x_assum pat mp_tac)
+       [`step_inst_base inst s = OK post`, `step_inst_base inst t = OK tpost`] >>
+     pure_once_rewrite_tac[step_inst_base_def] >> asm_rewrite_tac[opcode_case_def] >>
+     Cases_on `inst.inst_operands` >> simp[] >>
+     Cases_on `t'` >> simp[] >>
+     simp[AllCaseEqs()] >> metis_tac[]) >>
+  `step_inst fuel C inst s = OK post` by simp[step_inst_non_invoke] >>
+  `concretize_supplement D (step_taint inst s post tn) post tpost` by
+    (irule concretize_supplement_fields >>
+     goal_assum (drule_at (Pat `concretize_supplement _ _ _ _`)) >>
+     gvs[update_var_def, step_taint_def, store_taint_def, adopt_reset_def, imm_taint_def]) >>
+  `?k. k.lop_pending /\ k.lop_cursor = SUC g.lop_cursor /\
+    k.lop_target_taint = step_taint inst t tpost g.lop_target_taint /\
+    k.lop_origin = g.lop_origin /\ k.lop_ids = g.lop_ids /\
+    k.lop_config = EL (SUC g.lop_cursor) (q0::qs) /\
+    resolved_annotation_update g.lop_config (EL g.lop_cursor es)
+      g.lop_ids g.lop_anns k.lop_anns /\
+    layout_phase_ok_abort D lo vs0 C C' q0 es qs q
+      (INL g) (INL k) (OK post) (OK tpost)` suffices_by
+    (strip_tac >> qexistsl_tac [`k`, `tpost`] >> gvs[]) >>
+  irule layout_ordinary_success_phase >> simp[] >>
+  goal_assum (drule_at (Pat `layout_ordinary_entry _ _ _ _ _ _ _ _ _ _ _ _`)) >>
+  simp[is_terminator_def, origin_out_def, resolved_out_def, resolve_tag_def,
+       lookup_var_def, ETA_AX] >>
+  gvs[update_var_def, FLOOKUP_UPDATE, resolve_tag_def] >> metis_tac[]
 QED
 
 Theorem layout_extcodecopy_trace_step:
