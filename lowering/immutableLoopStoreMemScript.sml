@@ -319,7 +319,7 @@ QED
 
 Finalise immutable_loop_iterate_mem
 
-Theorem immutable_loop_path_mem_cont[local]:
+Theorem immutable_loop_path_mem_cont:
   gas_path_mem ctx func s n (OK t) ==> mem_cont_sim ctx func s t
 Proof
   strip_tac >> drule gas_path_mem_exec >>
