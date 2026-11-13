@@ -117,7 +117,7 @@ Proof
   metis_tac[gas_path_mem_then, arithmeticTheory.ADD]
 QED
 
-Theorem raw_call_finish_branch_guarded_mem[local]:
+Theorem raw_call_finish_branch_guarded_mem:
   (?cond ok_lbl fl sa sx x sf z sz rb sp sc se y sk sb success.
   emit_inst JNZ [cond;Label ok_lbl;Label fl] [] sa = ((),sx) /\
   new_block fl sx = (x,sf) /\
