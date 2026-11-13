@@ -1043,6 +1043,10 @@ Proof
   drule_all fn_has_code_same_block >> strip_tac >>
   `get_instruction bb z.vs_inst_idx = SOME ai` by
     (first_x_assum (qspec_then `0` mp_tac) >> simp[Abbr `ai`]) >>
+  `!D. gas_origin_ptr_edge (D,lo,explicit,ctx,func,PG) (z,G,tn) [] (OK q,Ga,ta)` by
+    (gen_tac >> simp_tac bool_ss [Abbr `q`, Abbr `Ga`, Abbr `ta`, Abbr `ai`] >>
+     asm "edge" irule >> simp[] >>
+     qpat_x_assum `get_instruction bb z.vs_inst_idx = _` mp_tac >> simp[]) >>
   `alloca_inv z` by
     (qpat_x_assum `stmt_state_rel _ _ _ _ _ ee z` mp_tac >>
      simp[stmt_state_rel_def, state_rel_def]) >>
@@ -1104,8 +1108,17 @@ Proof
      qpat_x_assum `!x. not_fresh_at salloc x ==> _` (qspec_then `p` mp_tac) >>
      simp[ptr_covers_def, Abbr `q`, lookup_var_def] >> strip_tac >> strip_tac >>
      qexists `w` >> simp[] >>
-     map_every (fn s => asm_x s kall_tac) ["unwrap", "edge", "alloc_ghost", "alloc_kept", "copy"] >>
-     gvs[] >> decide_tac) >>
+     qpat_x_assum `n = val_store_size rty v` mp_tac >>
+     qpat_x_assum `n <= type_memory_size rty` mp_tac >>
+     qpat_x_assum `SOME w = FLOOKUP az.vs_vars p` mp_tac >>
+     qpat_x_assum `FLOOKUP az.vs_vars p = SOME _` mp_tac >>
+     qpat_x_assum `FLOOKUP Gu p = FLOOKUP Ga p` mp_tac >>
+     qpat_x_assum `op_taint tu (Var p) = op_taint ta (Var p)` mp_tac >>
+     qpat_x_assum `op_taint ta (Var p) = {}` mp_tac >>
+     qpat_x_assum `FLOOKUP Ga p = SOME _` mp_tac >>
+     qpat_x_assum `_ <= w2n w'` mp_tac >>
+     qpat_x_assum `type_memory_size rty + w2n w' <= _` mp_tac >>
+     POP_ASSUM_LIST (K ALL_TAC) >> rpt strip_tac >> gvs[] >> decide_tac) >>
   `FLOOKUP su.vs_allocas sm.cs_next_id = SOME (w2n w,type_memory_bytes cenv t)` by
     (qpat_x_assum `wb_frame cenv ee ee salloc q su` mp_tac >>
      simp[wb_frame_def, Abbr `q`] >> strip_tac >> first_x_assum irule >> simp[]) >>
@@ -1411,14 +1424,111 @@ Proof
      simp[ptr_val_ok_def, ptr_mem_ok_def] >>
      disch_then (qspecl_then [`rty`, `sw`] mp_tac) >> simp[]) >>
   `val_wf rty v` by
-    (qpat_x_assum `!mem. mem_agree_outside tu.t_mem _ _ ==> _` (qspec_then `su.vs_memory` mp_tac) >>
-     simp[mem_agree_outside_def] >> metis_tac[val_in_memory_wf]) >>
+    simp[valueEncodingTypingTheory.value_has_type_val_wf] >>
   `!H. valid_horizon cx st0 H ee.storage_trace ==>
     ghost_inv_at (DF H) lo d cenv cx ee Gf tnf final /\
     ptr_val_ok cx t v (Var p) Gf tnf final /\
     (!e'. lowered_value_type cenv e' = t ==> ptr_buf_ok cenv e' (Var p) Gf final) /\
     ghost_kept_at lo cenv es1 sa G1 tn1 u Gf tnf` by
     (gen_tac >> strip_tac >> irule ifexp_widen_copy_ghost_finish >>
-     asm_rewrite_tac[] >> FAIL_TAC "ghost interface") >>
-  FAIL_TAC "finish"
+     asm_rewrite_tac[] >>
+     conj_tac >- (qexistsl [`lowered_value_type cenv e`, `sb`, `sm`, `vv`] >> simp[]) >>
+     qexistsl [`Gu`, `type_memory_bytes cenv t`, `p`, `w`, `n`, `rty`, `su`, `sn`,
+       `w2n sw`, `tu`, `{j | w2n w <= j /\ j < w2n w+n}`] >>
+     simp[] >>
+     conj_tac >- (map_every qx_gen_tac [`name`, `lb`, `k`, `i`] >> strip_tac >>
+       `local_region cenv ee.scopes su name lb k` by metis_tac[] >>
+       qpat_x_assum `!name b k. local_region cenv ee.scopes su _ _ _ ==> _` drule >>
+       qpat_x_assum `n = val_store_size rty v` mp_tac >>
+       qpat_x_assum `n <= type_memory_size rty` mp_tac >>
+       simp[] >> decide_tac) >>
+     conj_tac >- (map_every qx_gen_tac [`name`, `entry`, `lp`, `sz`, `lw`] >> strip_tac >>
+       `val_wf entry.type entry.value /\ type_memory_size entry.type <= sz` by
+         (qpat_assum `expr_post (storage_trace_horizon _) _ _ _ _ _ _ _ _ _ _ _ _ su` mp_tac >>
+          qpat_assum `lookup_scopes name ee.scopes = SOME entry` mp_tac >>
+          qpat_assum `FLOOKUP cenv.ce_vars name = SOME _` mp_tac >>
+          POP_ASSUM_LIST (K all_tac) >>
+          simp[expr_post_def, stmt_state_rel_def, state_rel_def, local_ptrs_rel_def] >>
+          metis_tac[]) >>
+       simp[] >>
+       `local_region cenv ee.scopes su name (w2n lw) sz` by
+         (simp[local_region_def] >> metis_tac[]) >>
+       qpat_x_assum `!name b k. local_region cenv ee.scopes su _ _ _ ==> _` drule >>
+       `val_footprint entry.type entry.value <= sz` by
+         metis_tac[val_footprint_le_store_size, val_store_size_le, arithmeticTheory.LESS_EQ_TRANS] >>
+       qpat_x_assum `n <= type_memory_size rty` mp_tac >>
+       qpat_x_assum `n = val_store_size rty v` mp_tac >> simp[] >> decide_tac) >>
+     conj_tac >- (rpt strip_tac >>
+       irule freshWritesTheory.not_fresh_at_mono >> qexists_tac `sa` >>
+       simp[]) >>
+     conj_tac >- (rpt strip_tac >>
+       irule freshWritesTheory.not_fresh_at_mono >> qexists_tac `sa` >>
+       simp[]) >>
+     conj_tac >- (qpat_x_assum `local_ptrs_reserved cenv sn` mp_tac >>
+       simp[local_ptrs_reserved_def]) >>
+     conj_tac >- (rpt strip_tac >>
+       qpat_x_assum `!p. not_fresh_at sn p ==> _` drule >>
+       simp[Abbr `final`, lookup_var_def]) >>
+     conj_tac >- (rpt strip_tac >> irule freshWritesTheory.not_fresh_at_mono >>
+       qexists_tac `sa` >> simp[]) >>
+     conj_tac >- (rpt strip_tac >>
+       qpat_x_assum `!old off k. FLOOKUP u.vs_allocas old = _ /\ _ ==> _` drule_all >>
+       qpat_x_assum `n <= type_memory_size rty` mp_tac >>
+       qpat_x_assum `n = val_store_size rty v` mp_tac >> simp[] >> decide_tac) >>
+     rpt strip_tac >> eq_tac
+     >- (strip_tac >> gvs[] >> decide_tac) >>
+     simp[] >> strip_tac >> gvs[] >> decide_tac) >>
+  `!H. valid_horizon cx st0 H ee.storage_trace ==>
+     gas_origin_ptr_path (DF H,lo,explicit,ctx,func,PG) (z,G,tn) [] (OK final,Gf,tnf)` by
+    (gen_tac >> strip_tac >>
+     qpat_x_assum `!H. valid_horizon _ _ _ _ ==> gas_origin_ptr_path _ (q,Ga,ta) _ _ /\ _` drule >>
+     strip_tac >>
+     qpat_x_assum `!D. gas_origin_ptr_edge _ _ _ _` (qspec_then `DF H` mp_tac) >>
+     qpat_x_assum `!D. gas_origin_ptr_path _ _ _ _` (qspec_then `DF H` mp_tac) >>
+     qpat_x_assum `gas_origin_ptr_path _ (q,Ga,ta) _ _` mp_tac >>
+     POP_ASSUM_LIST (K all_tac) >> rpt strip_tac >>
+     `gas_origin_ptr_path (DF H,lo,explicit,ctx,func,PG) (q,Ga,ta) [] (OK final,Gf,tnf)` by
+       metis_tac[gas_origin_ptr_path_append, listTheory.APPEND] >>
+     metis_tac[gas_origin_ptr_path_rules, listTheory.APPEND]) >>
+  qpat_assum `!H. valid_horizon _ _ _ _ ==> expr_post _ _ _ _ _ (IfExp _ _ _ _) _ _ _ _ _ _ _ _ /\ _`
+    (drule_then strip_assume_tac) >>
+  qpat_assum `!H. valid_horizon _ _ _ _ ==> ghost_inv_at _ _ _ _ _ _ Gf tnf final /\ _`
+    (drule_then strip_assume_tac) >>
+  qexistsl [`final`, `Gf`, `tnf`] >>
+  qpat_x_assum `p = STRING _ _` kall_tac >>
+  asm_rewrite_tac[] >>
+  conj_tac >- (gen_tac >> strip_tac >>
+    qpat_x_assum `!H. valid_horizon _ _ _ _ ==> gas_origin_ptr_path _ (z,G,tn) _ _` drule >>
+    qpat_x_assum `!H. valid_horizon _ _ _ _ ==> expr_post _ _ _ _ _ (IfExp _ _ _ _) _ _ _ _ _ _ _ _ /\ _` drule >>
+    qpat_x_assum `!H. valid_horizon _ _ _ _ ==> ghost_inv_at _ _ _ _ _ _ Gf tnf final /\ _` drule >>
+    POP_ASSUM_LIST (K all_tac) >> simp[]) >>
+  `final.vs_current_bb = su.vs_current_bb` by
+    (simp[NoAsms, Abbr `final`] >>
+     qpat_x_assum `sf with <|vs_vars := _; vs_memory := _|> = su` mp_tac >>
+     POP_ASSUM_LIST (K all_tac) >>
+     disch_then (fn th => once_rewrite_tac[GSYM th]) >> simp[]) >>
+  conj_tac >- asm_rewrite_tac[] >>
+  conj_tac >- simp[Abbr `final`, listTheory.LENGTH_APPEND] >>
+  reverse conj_tac >- (rpt strip_tac >>
+    qpat_x_assum `!rt w'. evaluate_type _ _ = _ /\ eval_operand _ final = _ ==> _`
+      (qspecl_then [`rty`, `w'`] mp_tac) >> simp[arithmeticTheory.ADD_COMM]) >>
+  `EVERY (\i. ~is_terminator i.inst_opcode) (emitted_insts sn sb)` by
+    (qpat_x_assum `compile_store_bytestring (Var x) (Var p) sn = _` mp_tac >>
+     POP_ASSUM_LIST (K all_tac) >> strip_tac >>
+     gvs[compile_store_bytestring_def, compile_bytestring_copy_len_def,
+       emit_op_def, emit_void_def, comp_bind_def, comp_ignore_bind_def,
+       comp_return_def, fresh_id_def, fresh_var_def, emit_def,
+       emitted_insts_def, listTheory.DROP_APPEND1] >>
+     simp[mk_inst_def, is_terminator_def]) >>
+  qunabbrev_tac `final` >>
+  irule allocaHistoryFragmentTheory.alloca_history_run_inst_seq >>
+  asm_rewrite_tac[] >>
+  qexistsl [`copybb`, `DROP (LENGTH (emitted_insts sn sb))
+    (DROP su.vs_inst_idx copybb.bb_instructions)`] >>
+  simp[] >>
+  qpat_x_assum `isPREFIX (emitted_insts sn sb) _` mp_tac >>
+  qpat_x_assum `su.vs_inst_idx = LENGTH sn.cs_current_insts` mp_tac >>
+  POP_ASSUM_LIST (K all_tac) >>
+  simp[rich_listTheory.IS_PREFIX_APPEND] >>
+  rpt strip_tac >> gvs[listTheory.DROP_APPEND1]
 QED
