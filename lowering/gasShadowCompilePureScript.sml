@@ -59,7 +59,11 @@ QED
 Theorem gas_shadow_lowered_value_type[simp]:
   lowered_value_type cenv (gas_shadow_expr e) = lowered_value_type cenv e
 Proof
-  Cases_on `e` >>
+  qid_spec_tac `cenv` >> qid_spec_tac `e` >>
+  ho_match_mp_tac
+    (expr_induction |> Q.SPEC `P` |> Q.SPEC `\_. T` |>
+      SIMP_RULE (srw_ss()) []) >>
+  rpt strip_tac >>
   simp[gas_shadow_expr_def, lowered_value_type_def, expr_type_def]
   >~ [`lowered_value_type _ (Call _ ct _ _) = _`]
   >- (Cases_on `ct` >> simp[lowered_value_type_def, expr_type_def])
@@ -73,7 +77,11 @@ Proof
   rename1 `TypeBuiltin ann tb ret_ty _` >>
   Cases_on `tb` >> simp[lowered_value_type_def, expr_type_def, MAP_MAP_o, combinTheory.o_DEF] >>
   Cases_on `args` >> simp[gas_shadow_HD, MAP_MAP_o, combinTheory.o_DEF] >>
-  CONV_TAC (DEPTH_CONV ETA_CONV) >> simp[]
+  CONV_TAC (DEPTH_CONV ETA_CONV) >> simp[] >>
+  `MAP (\x. lowered_value_type cenv (gas_shadow_expr x)) t =
+   MAP (lowered_value_type cenv) t` by
+    (irule MAP_CONG >> simp[] >> metis_tac[MEM]) >>
+  simp[]
 QED
 
 Theorem gas_shadow_is_msg_data[simp]:
