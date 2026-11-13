@@ -10,23 +10,6 @@ Ancestors
   gasSummaryCompose gasExemptCert gasContext fragGasPath fragGasMode fragExec
   venomState compileEnv exprSimUnwrapProps
 
-(* A nonreentrant lock with its slot set, outside a static call, is taken
-   from a state where it is free. *)
-Theorem lock_if_nr_runs[local]:
-  (nr ==> IS_SOME cx.nonreentrant_slot) /\ ~cx.txn.is_static ==>
-  ?s u t. lock_if_nr cx nr v s = (INL u,t)
-Proof
-  Cases_on `nr` >> simp[lock_if_nr_def, return_def] >> strip_tac >>
-  Cases_on `cx.nonreentrant_slot` >> gvs[] >>
-  qexists `ARB with tStorage := empty_transient_storage` >>
-  simp[acquire_nonreentrant_lock_def, get_transient_storage_def,
-       update_transient_def, bind_def, ignore_bind_def, return_def,
-       vfmContextTheory.empty_transient_storage_def,
-       vfmExecutionTheory.lookup_transient_storage_def,
-       vfmStateTheory.lookup_storage_def, vfmStateTheory.empty_storage_def] >>
-  rw[return_def]
-QED
-
 (* The IHs at a supported callee (body_intcall_source_selection): no
    defaults, as many arguments as parameters. *)
 Theorem intcall_results_ih[local]:
