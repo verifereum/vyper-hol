@@ -1,6 +1,6 @@
 Theory lowerDloadPtrJointDispatch
 Ancestors
-  lowerDloadPtrControlInversion lowerDloadPtrExclusions lowerDloadPtrJointScalar lowerDloadPtrJointAffine
+  o1SafeUpto lowerDloadPtrGasCut lowerDloadPtrControlInversion lowerDloadPtrExclusions lowerDloadPtrJointScalar lowerDloadPtrJointAffine
   lowerDloadPtrJointVariable lowerDloadPtrJointMemoryRead
   lowerDloadPtrJointHash lowerDloadPtrJointMemoryStore lowerDloadPtrJointLog
   lowerDloadPtrJointStorage lowerDloadPtrJointAllocClosure
@@ -78,8 +78,8 @@ fun normal_row th =
 Theorem dload_joint_covered_next:
   ctx_pass_stage rpolicy (CFP_Simple VP_LowerDload) view C C' /\
   dead_wf D /\ o1_ctx_shape C /\ o1_run_state_ok vs /\
-  o1_src_inv D C vs /\ callee_first names C.ctx_functions /\
-  fixed_region_reserved lo C /\ ptr_discipline lo C vs /\
+  o1_safe_upto D lo cut C vs /\ gas_cut cut vs t /\
+  callee_first names C.ctx_functions /\
   EVERY (fn_ptr_ok P) C.ctx_functions /\
   ALL_DISTINCT (fn_labels g) /\
   ((^normal) (^covered) ds PH H un g j t \/
@@ -149,8 +149,8 @@ QED
 Theorem dload_joint_covered_shift_next:
   ctx_pass_stage rpolicy (CFP_Simple VP_LowerDload) view C C' /\
   dead_wf D /\ o1_ctx_shape C /\ o1_run_state_ok vs /\
-  o1_src_inv D C vs /\ callee_first names C.ctx_functions /\
-  fixed_region_reserved lo C /\ ptr_discipline lo C vs /\
+  o1_safe_upto D lo cut C vs /\ gas_cut cut vs t /\
+  callee_first names C.ctx_functions /\
   EVERY (fn_ptr_ok P) C.ctx_functions /\
   ALL_DISTINCT (fn_labels g) /\
   ((^normal) (\i n emitted. (^covered) i n emitted \/
@@ -205,7 +205,7 @@ Proof
 QED
 
 Theorem dload_joint_dispatch_actual_residual:
-  o1_src_inv D C vs /\ o1_ctx_shape C /\
+  o1_ptr_safe_upto D lo cut C vs /\ o1_ctx_shape C /\
   EVERY (fn_ptr_ok P) C.ctx_functions /\
   frame_reachable vs C cs PG G tn f i s /\
   dload_control_match q f g s t i emitted n /\ j = EL n emitted /\
@@ -248,8 +248,8 @@ QED
 Theorem dload_joint_covered_environment_next:
   ctx_pass_stage rpolicy (CFP_Simple VP_LowerDload) view C C' /\
   dead_wf D /\ o1_ctx_shape C /\ o1_run_state_ok vs /\
-  o1_src_inv D C vs /\ callee_first names C.ctx_functions /\
-  fixed_region_reserved lo C /\ ptr_discipline lo C vs /\
+  o1_safe_upto D lo cut C vs /\ gas_cut cut vs t /\
+  callee_first names C.ctx_functions /\
   EVERY (fn_ptr_ok P) C.ctx_functions /\
   ALL_DISTINCT (fn_labels g) /\
   ((^normal) (^final_covered)
@@ -295,7 +295,7 @@ val _ = List.app (fn (n,th) =>
    ("covered_environment_next", dload_joint_covered_environment_next)];
 
 Theorem dload_joint_dispatch_actual_covered:
-  o1_src_inv D C vs /\ o1_ctx_shape C /\
+  o1_ptr_safe_upto D lo cut C vs /\ o1_ctx_shape C /\
   EVERY (fn_ptr_ok P) C.ctx_functions /\
   frame_reachable vs C cs PG G tn f i s /\
   dload_control_match q f g s t i emitted n /\ j = EL n emitted /\
@@ -311,8 +311,8 @@ QED
 Theorem dload_joint_next:
   ctx_pass_stage rpolicy (CFP_Simple VP_LowerDload) view C C' /\
   dead_wf D /\ o1_ctx_shape C /\ o1_run_state_ok vs /\
-  o1_src_inv D C vs /\ callee_first names C.ctx_functions /\
-  fixed_region_reserved lo C /\ ptr_discipline lo C vs /\
+  o1_safe_upto D lo cut C vs /\ gas_cut cut vs t /\
+  callee_first names C.ctx_functions /\
   EVERY (fn_ptr_ok P) C.ctx_functions /\
   ALL_DISTINCT (fn_labels g) /\
   ((^normal) (\i n emitted. T) ds PH H un g j t \/
@@ -328,6 +328,7 @@ Theorem dload_joint_next:
     (step_taint j t t1 un) g next (t1 with vs_inst_idx := SUC t.vs_inst_idx))
 Proof
   disch_then (map_every assume_tac o CONJUNCTS) >>
+  `o1_ptr_safe_upto D lo cut C vs` by fs[o1_safe_upto_def] >>
   irule dload_joint_covered_environment_next >>
   simp[] >> rpt (first_assum (irule_at Any)) >> simp[] >>
   qpat_x_assum `_ \/ dload_terminal_mode _ _ _ _ _ _ _ _ _ _` strip_assume_tac
@@ -349,8 +350,7 @@ val _ = List.app (fn th => if null (hyp th) then ()
 Theorem dload_joint_entry:
   ctx_pass_stage rpolicy (CFP_Simple VP_LowerDload) view C C' /\
   dead_wf D /\ o1_ctx_shape C /\ o1_run_state_ok vs /\
-  o1_src_inv D C vs /\ callee_first names C.ctx_functions /\
-  fixed_region_reserved lo C /\ ptr_discipline lo C vs /\
+  o1_safe_upto D lo cut C vs /\ callee_first names C.ctx_functions /\
   C'.ctx_entry = SOME name /\ lookup_function name C'.ctx_functions = SOME g /\
   fn_entry_label g = SOME lbl /\
   enters_block g

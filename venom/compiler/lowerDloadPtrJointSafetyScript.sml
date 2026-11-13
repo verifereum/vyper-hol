@@ -1,5 +1,5 @@
 Theory lowerDloadPtrJointSafety
-Ancestors lowerDloadPtrJointReachable lowerDloadPtrTerminalClosure
+Ancestors o1SafeUpto lowerDloadPtrGasCut lowerDloadPtrJointReachable lowerDloadPtrTerminalClosure
   lowerDloadPtrRel lowerDloadPtrAggregate ptrDiscipline list
   venomExecSemantics venomState venomMemProps venomInst finite_map
   lowerDloadPtrPhase lowerDloadPtrPhaseNext lowerDloadDefs
@@ -129,8 +129,8 @@ Proof
 QED
 
 Theorem dload_normal_later_dload_safety:
-  o1_ctx_shape C /\ o1_run_state_ok vs /\ o1_src_inv D C vs /\
-  callee_first names C.ctx_functions /\ ptr_discipline lo C vs /\
+  o1_ctx_shape C /\ o1_run_state_ok vs /\ o1_safe_upto D lo cut C vs /\
+  gas_cut cut vs t /\ callee_first names C.ctx_functions /\
   EVERY (fn_ptr_ok P) C.ctx_functions /\
   frame_reachable vs C cs PG G tn f i s /\
   frame_reachable vs C' ds PH H un g j t /\
@@ -216,10 +216,12 @@ QED
 
 Resume dload_normal_later_dload_safety[clean]:
   rpt strip_tac >>
+  `gas_cut cut vs s` by
+    metis_tac[dload_boundary_prefix_gas_cut, dload_boundary_core_gas_cut] >>
   `taint_ok f tn i s` by
-    (qpat_x_assum `ptr_discipline lo C vs` mp_tac >>
-     simp[ptr_discipline_def] >> strip_tac >>
-     first_x_assum (drule_at (Pat `frame_reachable`)) >> simp[]) >>
+    (qpat_x_assum `o1_safe_upto _ _ _ _ _` mp_tac >>
+     simp[o1_safe_upto_def, o1_ptr_safe_upto_def, ptr_discipline_upto_def] >>
+     strip_tac >> first_x_assum drule_all >> simp[]) >>
   drule_all dload_offset_clean >> strip_tac >>
   drule dload_boundary_vars >> strip_tac >>
   Cases_on `off` >> gvs[op_taint_def] >>
@@ -256,9 +258,7 @@ QED
 
 Resume dload_normal_later_dload_safety[headroom]:
   rpt strip_tac >>
-  qpat_assum `frame_reachable vs C cs PG G tn f i s`
-    (mp_then Any mp_tac o1_src_frame_dload_headroom_ok) >>
-  disch_then (qspec_then `D` mp_tac) >> simp[]
+  irule o1_src_frame_dload_headroom_ok >> metis_tac[]
 QED
 
 Resume dload_normal_later_dload_safety[defined]:
@@ -276,7 +276,7 @@ QED
 Finalise dload_normal_later_dload_safety
 
 Theorem dload_normal_dloadbytes_safety:
-  o1_ctx_shape C /\ ptr_discipline lo C vs /\
+  o1_ctx_shape C /\ ptr_discipline_upto lo cut C vs /\ gas_cut cut vs t /\
   EVERY (fn_ptr_ok P) C.ctx_functions /\
   frame_reachable vs C cs PG G tn f i s /\
   dload_boundary_core lo fs
@@ -307,10 +307,12 @@ Proof
     lower_dload_inst_supply supply i = (emitted,after) /\
     fresh_ir_var supply = (cv,supply1) /\ cv NOTIN set (fn_ir_vars f)` by
     suspend "supply" >>
+  `gas_cut cut vs s` by
+    metis_tac[dload_boundary_prefix_gas_cut, dload_boundary_core_gas_cut] >>
   `access_ok lo G f i s /\ taint_ok f tn i s` by
-    (qpat_x_assum `ptr_discipline lo C vs` mp_tac >>
-     simp[ptr_discipline_def] >> strip_tac >>
-     first_x_assum (drule_at (Pat `frame_reachable`)) >> simp[]) >>
+    (qpat_x_assum `ptr_discipline_upto _ _ _ _` mp_tac >>
+     simp[ptr_discipline_upto_def] >> strip_tac >>
+     first_x_assum drule_all >> simp[]) >>
   `~in_revert_forward f s` by suspend "forward" >>
   suspend "phases"
 QED
@@ -487,14 +489,17 @@ val normal = ``\ds PH H un g j t.
 Theorem dload_normal_safety:
   ctx_pass_stage rpolicy (CFP_Simple VP_LowerDload) view C C' /\
   o1_ctx_shape C /\ EVERY fn_shape_ok C'.ctx_functions /\ o1_run_state_ok vs /\
-  o1_src_inv D C vs /\ callee_first names C.ctx_functions /\
-  ptr_discipline lo C vs /\ EVERY (fn_ptr_ok P) C.ctx_functions /\
+  o1_safe_upto D lo cut C vs /\ gas_cut cut vs t /\
+  callee_first names C.ctx_functions /\ EVERY (fn_ptr_ok P) C.ctx_functions /\
   frame_reachable vs C' ds PH H un g j t /\
   (^normal) ds PH H un g j t ==>
   access_ok lo H g j t /\ taint_ok g un j t /\ allocas_from lo t /\
   (ctx_has_dalloca C' ==> allocas_below_fmp t)
 Proof
   CONV_TAC (REDEPTH_CONV BETA_CONV) >> strip_tac >> gvs[] >>
+  `o1_ptr_safe_upto D lo cut C vs` by fs[o1_safe_upto_def] >>
+  `ptr_discipline_upto lo cut C vs` by
+    fs[o1_safe_upto_def, o1_ptr_safe_upto_def] >>
   `(ctx_has_dalloca C' ==> allocas_below_fmp t)` by
     (metis_tac[lower_dload_src_inv_below_fmp]) >>
   qpat_assum `dload_control_match q f g s t i emitted n`
@@ -581,10 +586,12 @@ QED
 
 Resume dload_normal_safety[early_clean]:
   `fn_ptr_ok P f` by fs[EVERY_MEM] >>
+  `gas_cut cut vs s` by
+    metis_tac[dload_boundary_prefix_gas_cut, dload_boundary_core_gas_cut] >>
   `taint_ok f tn i s` by
-    (qpat_x_assum `ptr_discipline lo C vs` mp_tac >>
-     simp[ptr_discipline_def] >> strip_tac >>
-     first_x_assum (drule_at (Pat `frame_reachable`)) >> simp[]) >>
+    (qpat_x_assum `o1_safe_upto _ _ _ _ _` mp_tac >>
+     simp[o1_safe_upto_def, o1_ptr_safe_upto_def, ptr_discipline_upto_def] >>
+     strip_tac >> first_x_assum drule_all >> simp[]) >>
   drule_all dload_offset_clean >> strip_tac >>
   drule dload_boundary_vars >> strip_tac >>
   Cases_on `off` >> gvs[op_taint_def] >>
@@ -614,10 +621,9 @@ QED
 Theorem lower_dload_stage_dynamic_safety:
   ctx_pass_stage rpolicy (CFP_Simple VP_LowerDload) view C C' /\
   dead_wf D /\ o1_ctx_shape C /\ o1_run_state_ok vs /\
-  o1_src_inv D C vs /\ callee_first names C.ctx_functions /\
-  fixed_region_reserved lo C /\ ptr_discipline lo C vs /\
+  o1_safe_upto D lo cut C vs /\ callee_first names C.ctx_functions /\
   EVERY (fn_ptr_ok P) C.ctx_functions /\
-  frame_reachable vs C' ds PH H un g j t ==>
+  frame_reachable vs C' ds PH H un g j t /\ gas_cut cut vs t ==>
   access_ok lo H g j t /\ taint_ok g un j t /\ allocas_from lo t /\
   (ctx_has_dalloca C' ==> allocas_below_fmp t)
 Proof
@@ -628,6 +634,8 @@ Proof
   disch_then (DISJ_CASES_THEN assume_tac)
   >- (rule_assum_tac (SIMP_RULE (srw_ss()) []) >>
       drule_all (SIMP_RULE (srw_ss()) [] dload_normal_safety) >> simp[]) >>
+  `o1_ptr_safe_upto D lo cut C vs` by fs[o1_safe_upto_def] >>
+  `ptr_discipline_upto lo cut C vs` by fs[o1_safe_upto_def, o1_ptr_safe_upto_def] >>
   metis_tac[dload_terminal_mode_safety, dload_terminal_mode_allocas_from,
             lower_dload_src_inv_below_fmp]
 QED
