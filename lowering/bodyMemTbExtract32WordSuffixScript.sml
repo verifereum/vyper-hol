@@ -52,8 +52,9 @@ Proof
     (SPEC_ALL extract32_suffix_success_entry)) >>
   impl_tac >-
     (rpt conj_tac >>
-     FIRST [first_assum ACCEPT_TAC, REFL_TAC, simp[expr_type_def],
-            (qexists_tac `H` >> first_assum ACCEPT_TAC)]) >>
+     FIRST [first_assum ACCEPT_TAC, REFL_TAC,
+            (qexists_tac `H` >> first_assum ACCEPT_TAC),
+            (simp[expr_type_def] >> NO_TAC)]) >>
   strip_tac >>
   qexists_tac `u` >> rpt conj_tac
   >- first_assum ACCEPT_TAC
