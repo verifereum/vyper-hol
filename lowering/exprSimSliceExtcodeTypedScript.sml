@@ -132,8 +132,8 @@ Resume slice_extcode_typed_entry[reads]:
   `gas_admissible (bind (eval_expr cx start) (read_result cx)) expr_res_ok es` by
     metis_tac[expr_body_pre_gas_admissible] >>
   irule slice_read_outcome_bind >> simp[] >>
+  conj_tac >- slice_frame_tac >>
   qexistsl_tac [`cenv`, `start_op`, `sa`, `st1`, `ty`] >> simp[] >>
-  rpt conj_tac >~ [`storage_trace_frame _`] >- slice_frame_tac >>
   rpt gen_tac >> strip_tac >> suspend "length"
 QED
 
@@ -168,8 +168,8 @@ Resume slice_extcode_typed_entry[length]:
      simp[]) >>
   `~t.vs_halted` by metis_tac[slice_marked_read_ok_not_halted] >>
   irule slice_read_outcome_bind >> simp[] >>
+  conj_tac >- slice_frame_tac >>
   qexistsl_tac [`cenv`, `len_op`, `st1`, `st2`, `ty`] >> gvs[] >>
-  rpt conj_tac >~ [`storage_trace_frame _`] >- slice_frame_tac >>
   rpt gen_tac >> strip_tac >> suspend "address"
 QED
 

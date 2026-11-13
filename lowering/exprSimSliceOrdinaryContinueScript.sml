@@ -222,9 +222,9 @@ Proof
   `gas_admissible (bind (eval_expr cx start) (read_result cx)) expr_res_ok ec` by
     metis_tac[expr_body_pre_gas_admissible] >>
   irule slice_read_outcome_bind >> simp[] >>
-  qexistsl_tac [`cenv`, `sop`, `sc`, `sd`, `ty`] >> simp[] >> rpt conj_tac
-  >~ [`storage_trace_frame _`]
+  conj_tac
   >- (gen_tac >> irule vyperStorageTraceTheory.storage_trace_frame_bind_all >> simp[]) >>
+  qexistsl_tac [`cenv`, `sop`, `sc`, `sd`, `ty`] >> simp[] >>
   rpt gen_tac >> strip_tac >>
   `?gs. bind (eval_expr cx start) (read_result cx) (ec with gas_obs := gs) =
     (INL v,mid with gas_obs := [])` by
@@ -578,9 +578,9 @@ Proof
   `gas_admissible (bind (eval_expr cx start) (read_result cx)) expr_res_ok ec` by
     metis_tac[expr_body_pre_gas_admissible] >>
   irule slice_read_outcome_bind >> simp[] >>
-  qexistsl_tac [`cenv`, `sop`, `sc`, `sd`, `ty`] >> simp[] >> rpt conj_tac
-  >~ [`storage_trace_frame _`]
+  conj_tac
   >- (gen_tac >> irule vyperStorageTraceTheory.storage_trace_frame_bind_all >> simp[]) >>
+  qexistsl_tac [`cenv`, `sop`, `sc`, `sd`, `ty`] >> simp[] >>
   rpt gen_tac >> strip_tac >>
   `?gs. bind (eval_expr cx start) (read_result cx) (ec with gas_obs := gs) =
     (INL v,mid with gas_obs := [])` by
