@@ -223,6 +223,9 @@ Resume slice_data_bytes_outcome[success]:
        loweringPostsTheory.vv_at_def, loweringPostsTheory.expr_val_at_def,
        read_result_def, return_def] >>
   rpt strip_tac
+  >- (`(es with gas_obs := []).accounts = es.accounts /\
+       (es with gas_obs := []).tStorage = es.tStorage` by simp[] >>
+      metis_tac[vyperStorageFootprintTheory.storage_well_formed_on_backends])
   >- (first_x_assum irule >> conj_tac >- first_assum ACCEPT_TAC >>
       qexists_tac `aid` >> simp[]) >>
   qpat_x_assum `locals_kept _ _ _ _ _` mp_tac >>
@@ -339,6 +342,9 @@ Resume slice_data_string_outcome[success]:
        loweringPostsTheory.vv_at_def, loweringPostsTheory.expr_val_at_def,
        read_result_def, return_def] >>
   rpt strip_tac
+  >- (`(es with gas_obs := []).accounts = es.accounts /\
+       (es with gas_obs := []).tStorage = es.tStorage` by simp[] >>
+      metis_tac[vyperStorageFootprintTheory.storage_well_formed_on_backends])
   >- (first_x_assum irule >> conj_tac >- first_assum ACCEPT_TAC >>
       qexists_tac `aid` >> simp[]) >>
   qpat_x_assum `locals_kept _ _ _ _ _` mp_tac >>
