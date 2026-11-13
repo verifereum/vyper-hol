@@ -9,8 +9,8 @@ Ancestors
   exprLoweringProps exprSimAbiGasBridge abiEncoderObserver fragExec fragGasMode compileEnv loweringStateRelDefs venomState venomInst
   venomExecSemantics localPtrsProps list finite_map words
 
-(* The corresponding success-side fact is local to its theory. *)
-Theorem return_reject_stmt_control[local]:
+(* Relabelling an entry does not change its resources. *)
+Theorem return_reject_stmt_control:
   stmt_state_rel H ctx func ce cx es (s with vs_current_bb := b) =
   stmt_state_rel H ctx func ce cx es s
 Proof
