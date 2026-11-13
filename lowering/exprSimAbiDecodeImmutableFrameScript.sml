@@ -9,7 +9,7 @@ Ancestors
   abiEncoderObserver exprSimAbiDecodeAllocationPreserve venomExecSemantics venomMemProofs
   venomExecProps valueEncodingProofs abiDecoderSiteEffect finite_map
 
-Theorem abi_decode_closed_region_frame[local]:
+Theorem abi_decode_closed_region_frame:
   lower_abi_decode data (type_to_abi_dec_info ce.ce_struct_fields ce ty)
     (abi_static_size ce.ce_struct_fields ty) (abi_size_bound ce.ce_struct_fields ty)
     (type_memory_bytes ce ty) start = (out,final) /\
