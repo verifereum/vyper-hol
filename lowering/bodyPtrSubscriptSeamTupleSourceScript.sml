@@ -78,7 +78,7 @@ Proof
       BasicProvers.FULL_CASE_TAC >>
       gvs[assert_def, check_def, ignore_bind_def, bind_def,
           get_storage_backend_def, get_accounts_def, get_transient_storage_def,
-          return_def, raise_def, AllCaseEqs()]) >>
+          return_def, raise_def, AllCaseEqs()])
   >~ [`MemoryPlace id path`]
   >- (simp[select_result_def, extend_place_def, place_type_value_def,
            read_place_def, get_scopes_def, bind_def, ignore_bind_def,
