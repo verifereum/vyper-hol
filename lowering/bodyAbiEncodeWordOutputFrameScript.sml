@@ -3,7 +3,7 @@ Theory bodyAbiEncodeWordOutputFrame
 Ancestors
   bodyAbiEncodeResultMemory bodyAbiEncodeAllocationState abiBuiltinEncodeCode abiEncoderLeaves
   compilerInstructionSuffix abiEncoderProps emitHelperProps exprLoweringProps
-  compileEnv fragExec venomInst pred_set list rich_list arithmetic words
+  compileEnv fragExec venomInst pred_set list rich_list arithmetic words loweringStateRelDefs
   abiEncoder exprLowering emitHelper loweringShapeDefs context
   localPtrsProps exprSimAlloc exprSimOperands abiEncodeWindowTransport
   abiEncoderWindowPhase abiEncoderRegisteredEffect abiEncoderWindowContract finite_map
@@ -116,5 +116,5 @@ Proof
     fs[stmt_state_rel_def, state_rel_def] >>
   `FLOOKUP t.vs_allocas inst.inst_id = SOME (p,n)` by metis_tac[] >>
   drule_all local_ptrs_rel_alloca_disjoint >>
-  simp[compileEnvTheory.regions_disjoint_def]
+  simp[loweringStateRelDefsTheory.regions_disjoint_def]
 QED

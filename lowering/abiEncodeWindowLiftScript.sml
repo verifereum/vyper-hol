@@ -1,6 +1,7 @@
 (* Composition of the live-window ABI builtin phases. *)
 Theory abiEncodeWindowLift
 Ancestors
+  loweringStateRelDefs
   abiEncodeWindowBytes abiEncodeWindowTransport abiBuiltinEncodeCode abiBuiltinEncodeContext
   abiEncoderWindowRunMem abiEncoderWindowContract abiEncoderWindowPhase
   abiEncoderRegisteredEffect abiBuiltinAllocation abiBuiltinEncodeMethod

@@ -1,7 +1,7 @@
 (* Source-free child execution: retain destination and scratch ownership. *)
 Theory abiEncodeEmptySourceSteps
 Ancestors
-  abiEncoderWindowChildMem abiEncodeEmptySourceInput
+  abiEncoderWindowChildMem abiEncodeEmptySourceInput loweringStateRelDefs
   abiEncoderWindowPhase abiEncoderWindowContract abiEncoderRegisteredEffect
   abiEncoderExtendSim abiEncoderProps emitHelperProps freshWrites compileEnv fragExec
   abiEncoderWindowChild windowPhaseMem memContinuation abiEncoderChildCode

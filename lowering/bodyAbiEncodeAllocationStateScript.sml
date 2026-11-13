@@ -3,10 +3,10 @@ Theory bodyAbiEncodeAllocationState
 Ancestors
   bodyAbiEncodeResultMemory abiEncoderWindowContract abiEncoderWindowPhase
   abiEncoderWindowMemFrame abiEncoderRegisteredEffect abiCallerLocalScratch
-  localPtrsProps exprSimProps exprSimAlloc compileEnv loweringPosts exprLoweringProps
+  localPtrsProps exprSimProps exprSimAlloc compileEnv loweringPosts exprLoweringProps loweringStateRelDefs
   venomState venomInst venomMemDefs valueEncoding finite_map pred_set words list arithmetic
 
-Theorem abi_encode_word_stage_local_bytes[local]:
+Theorem abi_encode_word_stage_local_bytes:
   stmt_state_rel ctx func ce cx ee s /\ fn_inst_ids_distinct func /\
   MEM inst (fn_insts func) /\ inst.inst_outputs = [q] /\
   not_local_ptr ce ee.scopes q /\
@@ -25,7 +25,7 @@ Proof
   simp[] >> reverse conj_tac >- metis_tac[window_phase_effect] >>
   rpt strip_tac >> gvs[] >>
   drule_all local_ptrs_rel_alloca_disjoint >>
-  simp[compileEnvTheory.regions_disjoint_def, venomMemDefsTheory.regions_disjoint_def]
+  simp[loweringStateRelDefsTheory.regions_disjoint_def, venomMemDefsTheory.regions_disjoint_def]
 QED
 
 Theorem abi_encode_word_stage_immutable_bytes[local]:
@@ -41,14 +41,15 @@ Proof
   strip_tac >>
   `immutable_alloca_sep func ce cx ee s` by fs[stmt_state_rel_def] >>
   qpat_x_assum `immutable_alloca_sep _ _ _ _ _` mp_tac >>
-  simp[immutable_alloca_sep_def] >> disch_then drule_all >> strip_tac >>
+  simp[immutable_alloca_sep_def] >> strip_tac >>
+  qpat_x_assum `!name tv v off. _ ==> _` drule_all >> strip_tac >>
   drule window_phase_resources >> strip_tac >>
   irule window_alloca_growth_frame >> simp[] >>
   qexistsl [`{inst.inst_id}`, `[]`] >> simp[] >>
   reverse conj_tac >- metis_tac[window_phase_effect] >>
   rpt strip_tac >> gvs[] >>
   first_x_assum drule_all >>
-  simp[compileEnvTheory.regions_disjoint_def, venomMemDefsTheory.regions_disjoint_def]
+  simp[loweringStateRelDefsTheory.regions_disjoint_def, venomMemDefsTheory.regions_disjoint_def]
 QED
 
 Theorem abi_encode_word_stage_state:
@@ -94,7 +95,7 @@ Theorem abi_encode_singleton_wb_frame:
   MEM inst (fn_insts func) /\ inst.inst_outputs = [q] /\
   not_local_ptr ce ee.scopes q /\ inst.inst_id = st.cs_next_id /\
   window_phase ctx func st en {inst.inst_id} [] s t ==>
-  wb_frame ce ee st s t
+  wb_frame ce ee ee st s t
 Proof
   strip_tac >>
   `alloca_inv s` by fs[stmt_state_rel_def] >>

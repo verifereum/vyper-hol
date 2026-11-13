@@ -1,6 +1,7 @@
 (* Re-establish body state at the actual singleton word staging endpoint. *)
 Theory bodyAbiEncodeWordResultMemory
 Ancestors
+  valueEncodingDefs bodyAbiEncodeSingletonFrame
   exprSimSource abiBuiltinEncodeCode abiBuiltinEncodeResources abiEncoderCounters
   bodyAbiEncodeWordSource exprSimWordArgs bodyAbiEncodeWordMemory bodyAbiEncodeResultMemory bodyAbiEncodeAllocationState bodyAbiEncodeWordOutputFrame abiEncoderWindowContract abiEncodeWordWindowGrowth
   abiEncoderWindowPhase abiEncoderWindowMemFrame abiEncoderRegisteredEffect
@@ -33,7 +34,7 @@ Theorem abi_encode_word_source_state_mem:
     stmt_state_rel ctx func ce cx ee t /\ local_ptrs_reserved ce staged /\
     window_phase ctx func arg_st staged {arg_st.cs_next_id} [] s t /\
     mem_cont_sim ctx func s t /\ window_mem_frame ctx func s t /\
-    wb_frame ce ee arg_st s t /\
+    wb_frame ce ee ee arg_st s t /\ pure_frame ce func ee arg_st s t /\
     LENGTH s.vs_memory <= LENGTH t.vs_memory /\
     eval_operand buf.buf_operand t = SOME (n2w sb) /\
     (!x. buf.buf_operand = Var x ==> not_fresh_at staged x) /\
@@ -44,8 +45,7 @@ Theorem abi_encode_word_source_state_mem:
 Proof
   strip_tac >> drule_all compile_abi_encode_word_trace >> strip_tac >>
   drule compile_alloc_buffer_extends >> strip_tac >>
-  drule window_child_void_shape >> strip_tac >>
-  drule lower_abi_encode_extends >> strip_tac >>
+  drule window_child_void_shape >> strip_tac >> drule lower_abi_encode_extends >> strip_tac >>
   `cs_extends arg_st staged` by metis_tac[cs_extends_trans] >>
   drule_all fn_has_code_split >> strip_tac >>
   `fn_has_code arg_st allocated func` by metis_tac[fn_has_code_split] >>
@@ -58,12 +58,10 @@ Proof
   `alloca_inv s /\ alloca_room ctx func s` by fs[stmt_state_rel_def] >>
   drule_all abi_encode_word_source_window_mem >> strip_tac >>
   `buf' = buf /\ allocated' = allocated` by metis_tac[pairTheory.PAIR_EQ] >>
-  qpat_x_assum `buf' = buf` SUBST_ALL_TAC >>
-  qpat_x_assum `allocated' = allocated` SUBST_ALL_TAC >>
+  qpat_x_assum `buf' = buf` SUBST_ALL_TAC >> qpat_x_assum `allocated' = allocated` SUBST_ALL_TAC >>
   `staged' = staged` by metis_tac[pairTheory.PAIR_EQ] >>
   qpat_x_assum `staged' = staged` SUBST_ALL_TAC >>
-  `out' = out` by metis_tac[pairTheory.PAIR_EQ] >>
-  qpat_x_assum `out' = out` SUBST_ALL_TAC >>
+  `out' = out` by metis_tac[pairTheory.PAIR_EQ] >> qpat_x_assum `out' = out` SUBST_ALL_TAC >>
   `stmt_state_rel ctx func ce cx ee t` by
     (irule abi_encode_word_stage_state >> asm_rewrite_tac[] >>
      qpat_assum `MEM (mk_inst _ _ _ _) _` (irule_at Any) >>
@@ -76,8 +74,16 @@ Proof
   `local_ptrs_reserved ce staged` by
     (irule local_ptrs_reserved_next_var >> qexists `arg_st` >>
      asm_rewrite_tac[] >> simp_tac arith_ss []) >>
-  `wb_frame ce ee arg_st s t` by
+  `wb_frame ce ee ee arg_st s t` by
     (irule abi_encode_singleton_wb_frame >>
+     qpat_assum `MEM (mk_inst _ _ _ _) _` (irule_at Any) >>
+     simp_tac (srw_ss()) [mk_inst_def] >>
+     qpat_assum `window_phase _ _ _ _ _ _ _ _` (irule_at Any) >>
+     qexists `cx` >> asm_rewrite_tac[] >>
+     irule local_ptrs_reserved_fresh >> qexists `arg_st` >>
+     asm_rewrite_tac[] >> simp_tac arith_ss []) >>
+  `pure_frame ce func ee arg_st s t` by
+    (irule abi_encode_singleton_pure_frame >>
      qpat_assum `MEM (mk_inst _ _ _ _) _` (irule_at Any) >>
      simp_tac (srw_ss()) [mk_inst_def] >>
      qpat_assum `window_phase _ _ _ _ _ _ _ _` (irule_at Any) >>
@@ -123,7 +129,7 @@ Theorem abi_encode_word_output_mem:
   ?t p. window_phase ctx func st final
       (window_alloca_sites func (frag_ids st final)) [(p,n)] s t /\
     mem_cont_sim ctx func s t /\ window_mem_frame ctx func s t /\
-    wb_frame ce ee st s t /\
+    wb_frame ce ee ee st s t /\ pure_frame ce func ee st s t /\
     stmt_state_rel ctx func ce cx ee t /\
     eval_operand out t = SOME (n2w p) /\
     FLOOKUP t.vs_allocas st.cs_next_id = SOME (p,n) /\
@@ -155,10 +161,18 @@ Proof
     lower_abi_encode_word_window_mem_growth))) >>
   (impl_tac >- simp[abiEncoderAdmissibleTheory.abi_encoder_admissible_def]) >>
   strip_tac >>
-  `wb_frame ce ee st s t` by
+  `wb_frame ce ee ee st s t` by
     (drule_all abi_encode_word_output_sites >>
      disch_then (qspec_then `ee.scopes` strip_assume_tac) >>
      irule abi_encode_singleton_wb_frame >>
+     qpat_assum `MEM inst _` (irule_at Any) >>
+     qexistsl [`q`, `final`, `cx`, `ctx`] >>
+     asm_rewrite_tac[] >> irule abi_encode_word_registered_phase >>
+     metis_tac[]) >>
+  `pure_frame ce func ee st s t` by
+    (drule_all abi_encode_word_output_sites >>
+     disch_then (qspec_then `ee.scopes` strip_assume_tac) >>
+     irule abi_encode_singleton_pure_frame >>
      qpat_assum `MEM inst _` (irule_at Any) >>
      qexistsl [`q`, `final`, `cx`, `ctx`] >>
      asm_rewrite_tac[] >> irule abi_encode_word_registered_phase >>
@@ -189,7 +203,8 @@ Theorem abi_encode_word_execution_mem[local]:
   ~s.vs_halted /\ s.vs_current_bb = arg_st.cs_current_bb /\
   s.vs_inst_idx = LENGTH arg_st.cs_current_insts ==>
   ?t p staged out. mem_cont_sim ctx func s t /\ window_mem_frame ctx func s t /\
-    stmt_state_rel ctx func ce cx ee t /\ wb_frame ce ee arg_st s t /\
+    stmt_state_rel ctx func ce cx ee t /\ wb_frame ce ee ee arg_st s t /\
+    pure_frame ce func ee arg_st s t /\
     ~t.vs_halted /\ t.vs_current_bb = final.cs_current_bb /\
     t.vs_inst_idx = LENGTH final.cs_current_insts /\
     vv = LocatedValue vv_ty (mk_ptr out LocMemory) /\
@@ -216,11 +231,16 @@ Proof
     (fn th => RULE_ASSUM_TAC (PURE_REWRITE_RULE [th])) >>
   drule_all (BETA_RULE (PURE_REWRITE_RULE [LET_THM] abi_encode_word_output_mem)) >>
   strip_tac >>
-  `wb_frame ce ee arg_st s t` by
+  `wb_frame ce ee ee arg_st s t` by
     (irule wb_frame_trans >>
-     qpat_assum `wb_frame ce ee staged u t` (irule_at Any) >>
+     qpat_assum `wb_frame ce ee ee staged u t` (irule_at Any) >>
      qpat_assum `stmt_state_rel ctx func ce cx ee s` (irule_at Any) >>
      asm_rewrite_tac[] >> simp_tac arith_ss []) >>
+  `pure_frame ce func ee arg_st s t` by
+    (irule pure_frame_trans >>
+     qpat_assum `pure_frame ce func ee staged u t` (irule_at Any) >>
+     qpat_assum `pure_frame ce func ee arg_st s u` (irule_at Any) >>
+     asm_rewrite_tac[] >> fs[wb_frame_def]) >>
   `~t.vs_halted /\ t.vs_current_bb = final.cs_current_bb /\
     t.vs_inst_idx = LENGTH final.cs_current_insts` by metis_tac[window_phase_control] >>
   `staged.cs_next_id < final.cs_next_id` by
@@ -259,7 +279,7 @@ Theorem abi_encode_word_result_mem:
   ~s.vs_halted /\ s.vs_current_bb = arg_st.cs_current_bb /\
   s.vs_inst_idx = LENGTH arg_st.cs_current_insts ==>
   ?t. mem_cont_sim ctx func s t /\ window_mem_frame ctx func s t /\
-    stmt_state_rel ctx func ce cx ee t /\ wb_frame ce es origin s0 t /\
+    stmt_state_rel ctx func ce cx ee t /\ wb_frame ce es ee origin s0 t /\
     ~t.vs_halted /\ t.vs_current_bb = final.cs_current_bb /\
     t.vs_inst_idx = LENGTH final.cs_current_insts /\
     vv_post ctx func ce cx E es origin final s0 ee (Value (vyperValue$BytesV bytes)) vv t /\
@@ -269,7 +289,7 @@ Proof
   simp_tac bool_ss [LET_THM] >> strip_tac >>
   drule_all expr_body_pre_lower_value_word_shape >> strip_tac >>
   `stmt_state_rel ctx func ce cx ee s /\ expr_val_rel cx (expr_type e) v value_op s` by
-    fs[expr_post_def] >>
+    ( `post_value_type ce e = expr_type e` by simp[] >> fs[expr_post_def]) >>
   drule_all abi_encode_word_source_rep >> strip_tac >>
   `fn_has_code arg_st final func` by
     (drule_all compile_abi_encode_word_trace >> strip_tac >>
@@ -286,10 +306,10 @@ Proof
   disch_then assume_tac >> Cases_on `mid` >> fs[] >>
   qpat_x_assum `!w value_op s' func ee cx ctx av at arg_st. _` drule_all >>
   strip_tac >>
-  `wb_frame ce es origin s0 s` by metis_tac[expr_post_frame] >>
-  `wb_frame ce es origin s0 t` by
+  `wb_frame ce es ee origin s0 s` by metis_tac[expr_post_frame] >>
+  `wb_frame ce es ee origin s0 t` by
     (irule wb_frame_trans >>
-     qpat_assum `wb_frame ce ee arg_st s t` (irule_at Any) >>
+     qpat_assum `wb_frame ce ee ee arg_st s t` (irule_at Any) >>
      qpat_assum `stmt_state_rel ctx func ce cx es s0` (irule_at Any) >>
      asm_rewrite_tac[]) >>
   qexists_tac `t` >> asm_rewrite_tac[] >>
@@ -299,6 +319,12 @@ Proof
   asm_rewrite_tac[] >>
   qpat_assum `FLOOKUP t.vs_allocas staged.cs_next_id = _` (irule_at Any) >>
   simp[] >>
-  conj_tac >- (first_assum ACCEPT_TAC) >>
-  fs[val_in_memory_def]
+  (conj_tac >-
+    (strip_tac >>
+     `pure_frame ce func es origin s0 s` by metis_tac[expr_post_pure_frame] >>
+     irule pure_frame_trans >>
+     qpat_assum `pure_frame ce func ee arg_st s t` (irule_at Any) >>
+     qpat_assum `pure_frame ce func es origin s0 s` (irule_at Any) >>
+     asm_rewrite_tac[] >> fs[wb_frame_def])) >>
+  fs[val_in_memory_def] >> gvs[]
 QED

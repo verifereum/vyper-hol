@@ -4,7 +4,7 @@ Ancestors
   abiEncoderWindowMemFrame abiEncoderWindowPhase exprSimHash exprSimMemDefs
   localPtrsProps loweringSlice exprSimProps abiEncoderWindowContract
   exprLoweringProps compileEnv abiEncoderRegisteredEffect arithmetic venomState exprSimHyps
-  loweringPosts exprLowering vyperState vyperInterpreter valueEncoding context
+  loweringPosts loweringStateRelDefs exprLowering vyperState vyperInterpreter valueEncoding context
 
 Theorem abi_encode_result_state:
   stmt_state_rel ctx func ce cx ee s /\
@@ -43,16 +43,15 @@ Proof
     (irule immutable_base_zero_frame >> qexists `s` >>
      fs[stmt_state_rel_def, window_phase_def]) >>
   `immutable_alloca_sep func ce cx ee t` by
-    (fs[stmt_state_rel_def, window_phase_def, window_alloca_growth_def,
-        abi_encoder_registered_effect_def, immutable_alloca_sep_def] >>
-     disch_tac >> rpt gen_tac >> strip_tac >>
-     qpat_x_assum `ce.ce_is_ctor ==> !name tv v off. _ ==> _ /\ _ /\ _`
-       drule_all >> strip_tac >>
-     conj_tac >- decide_tac >> conj_tac
-     >- (rpt strip_tac >> Cases_on `FLOOKUP s.vs_allocas inst.inst_id` >>
-         gvs[] >- (fs[compileEnvTheory.regions_disjoint_def] >> metis_tac[LESS_EQ_TRANS]) >>
-         PairCases_on `x` >> metis_tac[optionTheory.SOME_11, pairTheory.PAIR_EQ]) >>
-     metis_tac[]) >>
+    (irule immutable_alloca_sep_frame >> qexistsl [`s`, `ee`] >>
+     fs[stmt_state_rel_def, window_phase_def, window_alloca_growth_def,
+        abi_encoder_registered_effect_def] >>
+     conj_tac
+     >- (rpt strip_tac >> disj1_tac >> qexists `id` >> first_x_assum irule >> simp[]) >>
+     rpt strip_tac >> Cases_on `FLOOKUP s.vs_allocas aid`
+     >- (disj2_tac >> first_x_assum irule >> goal_assum drule >> simp[]) >>
+     PairCases_on `x` >> disj1_tac >>
+     first_x_assum drule >> simp[]) >>
   fs[stmt_state_rel_def, window_phase_def, window_mem_frame_def,
      abi_encoder_registered_effect_def, state_rel_def,
      storage_rel_def, transient_rel_def, accounts_rel_def, logs_rel_def,
@@ -76,7 +75,9 @@ Theorem abi_encode_allocated_bytes_result:
   sa.cs_next_id <= aid /\ aid < sb.cs_next_id /\
   (!name lb lsz. local_region ce ee.scopes t name lb lsz ==>
     b + sz <= lb \/ lb + lsz <= b) /\
-  wb_frame ce es sa s0 t ==>
+  wb_frame ce es ee sa s0 t /\
+  post_value_type ce e = expr_type e /\
+  (~expr_has_effect e ==> pure_frame ce func es sa s0 t) ==>
   vv_post ctx func ce cx e es sa sb s0 ee (Value (BytesV bytes))
     (LocatedValue (expr_type e) (mk_ptr out LocMemory)) t /\
   vv_store_bound cx (expr_type e) (lowered_value_type ce e) ee

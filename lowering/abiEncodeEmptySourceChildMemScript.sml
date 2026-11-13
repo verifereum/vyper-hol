@@ -1,6 +1,7 @@
 (* Source-free child composition with an endpoint frame. *)
 Theory abiEncodeEmptySourceChildMem
 Ancestors
+  loweringStateRelDefs
   abiEncodeEmptySourceSteps abiEncoderWindowPrimitiveFrameMem
   abiEncoderWindowArrayFrameMem abiEncoderWindowMemFrame
   abiEncoderChildContext abiEncoderWindowChild windowTransitionMem

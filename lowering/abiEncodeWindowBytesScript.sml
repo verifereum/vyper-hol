@@ -1,7 +1,7 @@
 (* Selector bytes retained on the setup execution witness. *)
 Theory abiEncodeWindowBytes
 Ancestors
-  abiEncodeWindowMemory abiBuiltinEncodeCode abiBuiltinEncodeContext
+  abiEncodeWindowMemory abiBuiltinEncodeCode abiBuiltinEncodeContext valueEncodingDefs
   abiEncoderWindowRunMem windowPhaseMem abiEncoderWindowPhase
   abiEncoderWindowChild abiEncoderAddressReach abiEncoderWindowContract
   abiEncoderRegisteredEffect emitHelperProps exprLoweringProps compileEnv

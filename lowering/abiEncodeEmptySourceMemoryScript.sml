@@ -1,6 +1,7 @@
 (* Framed source-free ABI encoder execution. *)
 Theory abiEncodeEmptySourceMemory
 Ancestors
+  valueEncodingDefs
   abiEncodeEmptySourceCopyMem abiEncodeEmptySourceInitializeMem
   abiEncodeEmptySourceMembersMem abiEncodeEmptySourceChildMem
   abiEncoderWindowComplexMem abiEncoderWindowComplex abiEncoderWindowStructuralMembers
