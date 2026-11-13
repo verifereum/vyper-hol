@@ -203,7 +203,9 @@ Resume widened_declaration_retained_read_store_ptr[store]:
  `cenv_top_ext old c
    ((sc |+ (id,<|assignable := T;type := tyv;value := v;popped := []|>))::rest)` by
    (irule cenv_top_ext_declare_local >> simp[] >>
-    qexistsl_tac [`id`,`sa0`,`st`,`typ`] >> gvs[lookup_scopes_def,AllCaseEqs()]) >>
+    qexistsl_tac [`id`,`sa0`,`st`,`typ`] >> simp[] >>
+    qpat_x_assum `lookup_scopes id ee.scopes = NONE` mp_tac >>
+    simp[lookup_scopes_def] >> Cases_on `FLOOKUP sc id` >> simp[]) >>
  `~block_is_terminated sf` by
    (`~block_is_terminated sb` by
       (qpat_assum `e = Call _ _ _ _` SUBST_ALL_TAC >>
