@@ -11,6 +11,7 @@ Theorem immutable_augassign_scalar_assembly:
     place_type_value cx p s4 = (INL ptv,s5) ==> body_expr_mem_ok cx e) /\
   body_inv tops ctx cenv cx /\
   supported_stmt tops bindings (AugAssign ty (TopLevelNameTarget nsid) bop e) /\
+  body_stmt_safe tops (AugAssign ty (TopLevelNameTarget nsid) bop e) /\
   (!target. supported_stmt_expr_exists (expr_abi_decode_target_root target)
      (AugAssign ty (TopLevelNameTarget nsid) bop e) ==>
      occurs_abi_decode_target target tops) /\
@@ -34,9 +35,9 @@ Proof
   `expr_body_pre cenv cx env e es` by
     (irule bodyAugAssignOtherTheory.augassign_rhs_pre >> metis_tac[]) >>
   `expr_sim_mem ctx func cenv cx ty e es` by metis_tac[body_expr_mem_ok_def] >>
-  drule_all immutable_augassign_root_metadata >> strip_tac >>
-  drule_all immutableAugAssignRootSourceTheory.immutable_augassign_root_source >>
-  strip_tac >> gvs[] >>
+  drule_all immutable_augassign_root_metadata >> strip_tac >> gvs[] >>
+  drule_all immutableAugAssignSourceContinuationTheory.immutable_augassign_root_replay >>
+  disch_then (qspec_then `es.gas_obs` mp_tac) >> simp[] >> strip_tac >> gvs[] >>
   irule gas_outcome_zero_prefix_any >> goal_assum (drule_at Any) >>
   irule immutable_augassign_root_source_outcome >>
   goal_assum (drule_at Any) >> simp[] >>
@@ -72,7 +73,7 @@ Resume immutable_augassign_scalar_assembly[suffix_preparation]:
     metis_tac[exprSimSourceTheory.word_value_type_word] >>
   `IS_SOME (evaluate_type (get_tenv cx) (expr_type e))` by
     metis_tac[exprSimHypsTheory.expr_body_pre_type_evaluates] >>
-  `gas_admissible (bind (eval_expr cx e) (read_result cx)) expr_res_ok es` by
+  `gas_admissible (vyperState$bind (eval_expr cx e) (read_result cx)) expr_res_ok es` by
     metis_tac[exprSimSourceTheory.expr_body_pre_gas_admissible] >> simp[] >>
   (conj_tac >- (
     drule_all immutableAugAssignSourceContinuationTheory.immutable_augassign_source_replay >>
