@@ -254,8 +254,9 @@ Resume walk_outer_mutual[ifexp]:
   rpt strip_tac >> BETA_TAC >> match_mp_tac walk_bind >>
   conj_tac >- (simp[switch_BoolV_def] >> match_mp_tac walk_bind >>
     conj_tac >- (machine_leaf >> simp[machine_frame_read_result]) >>
-    gen_tac >> BETA_TAC >> rpt IF_CASES_TAC >> simp[] >>
-    FIRST [metis_tac[], machine_leaf >> simp[machine_frame_primitives]]) >>
+    gen_tac >> BETA_TAC >> IF_CASES_TAC >- (simp[] >> metis_tac[]) >>
+    IF_CASES_TAC >- (simp[] >> metis_tac[]) >>
+    simp[] >> machine_leaf >> simp[machine_frame_primitives]) >>
   gen_tac >> BETA_TAC >> machine_leaf >> simp[machine_frame_primitives, machine_frame_unchanged_reads]
 QED
 
