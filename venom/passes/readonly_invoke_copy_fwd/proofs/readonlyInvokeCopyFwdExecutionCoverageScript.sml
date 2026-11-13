@@ -77,13 +77,23 @@ Theorem ricf_copy_coverage_activate:
     other = e /\ EL b fn.fn_blocks = bb) ==>
   ricf_copy_coverage ctx0 fn log a ((p,[])::ledger) u
 Proof
-  pure_rewrite_tac[ricf_copy_coverage_def] >> rpt strip_tac >>
-  rename1 `ricf_located_event ctx0 fn log round b es prefix other current` >>
+  strip_tac >> rewrite_tac[ricf_copy_coverage_def] >>
+  qx_genl_tac [`round`,`b`,`es`,`prefix`,`other`,`current`,`dst`,`sv`,`z`] >>
+  strip_tac >>
+  `other.rfe_index < SUC s.vs_inst_idx /\
+   (EL b fn.fn_blocks).bb_label = s.vs_current_bb` by fs[] >>
   Cases_on `other.rfe_index = s.vs_inst_idx`
-  >- (qexists_tac `p` >> simp[] >> metis_tac[]) >>
+  >- (qpat_x_assum `!round b es prefix other current. _`
+        (qspecl_then [`round`,`b`,`es`,`prefix`,`other`,`current`] mp_tac) >>
+      simp[] >> strip_tac >> qexists_tac `p` >> simp[]) >>
   `other.rfe_index < s.vs_inst_idx` by decide_tac >>
   `?q. MEM (q,[]) ledger /\ q.rpe_event = other /\ q.rpe_fn = fn /\
-    q.rpe_block = EL b fn.fn_blocks /\ q.rpe_owner = a` by metis_tac[] >>
+    q.rpe_block = EL b fn.fn_blocks /\ q.rpe_owner = a` by
+    (qpat_x_assum `ricf_copy_coverage _ _ _ _ _ _`
+       (mp_tac o REWRITE_RULE [ricf_copy_coverage_def]) >>
+     disch_then (qspecl_then
+       [`round`,`b`,`es`,`prefix`,`other`,`current`,`dst`,`sv`,`z`] mp_tac) >>
+     simp[]) >>
   qexists_tac `q` >> simp[]
 QED
 
