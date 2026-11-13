@@ -290,6 +290,7 @@ Resume ptr_mstore_write_producer[classified]:
      conj_tac >- (qexists_tac `names` >> first_assum ACCEPT_TAC) >>
      conj_tac
      >- (qexists_tac `a.po_fn` >> simp[]) >>
+     conj_tac >- (qexistsl [`C'`, `rpolicy`] >> fs[]) >>
      rpt (goal_assum (drule_at Any)) >> simp[]) 
   >- (fs[Abbr `ops`] >> suspend "fixed") >>
   fs[Abbr `ops`] >> suspend "owned"

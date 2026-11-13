@@ -261,7 +261,7 @@ Theorem ptr_demand_fixed_write_exclusion[local]:
   eval_operand ops.iao_ofst src = SOME x /\ eval_operand sizeop src = SOME z /\
   op_prov TGj ops.iao_ofst = NONE /\ op_taint tn ops.iao_ofst = {} /\
   op_prov TGj sizeop = NONE /\ op_taint tn sizeop = {} /\
-  (w2n x + w2n z <= lo \/ pa + sz <= w2n x) ==>
+  ~(lo < w2n x + w2n z /\ w2n x < pa + sz) ==>
   pa+k NOTIN range_bytes (step_writes inst tgt postt)
 Proof
   disch_then (map_every assume_tac o CONJUNCTS) >>
@@ -753,7 +753,7 @@ Theorem ptr_demand_ordinary_write_exclusion:
 Proof
   disch_then (map_every assume_tac o CONJUNCTS) >>
   qpat_x_assum `_ \/ _` strip_assume_tac
-  >- (`w2n x + w2n z <= lo \/ pa + sz <= w2n x` by fs[] >>
+  >- (`~(lo < w2n x + w2n z /\ w2n x < pa + sz)` by decide_tac >>
       drule_all ptr_demand_fixed_write_exclusion >> simp[])
   >- (`pa + sz <= w2n x` by
         (`pa + sz <= eom` by
@@ -762,7 +762,7 @@ Proof
             simp[]) >>
          `w2n x < dimword (:256)` by simp[wordsTheory.w2n_lt] >>
          Cases_on `ctx_has_dalloca C` >> fs[dyn_floor_def] >> decide_tac) >>
-      `w2n x + w2n z <= lo \/ pa + sz <= w2n x` by fs[] >>
+      `~(lo < w2n x + w2n z /\ w2n x < pa + sz)` by decide_tac >>
       drule_all ptr_demand_fixed_write_exclusion >> simp[]) >>
   drule_all ptr_demand_interval_snapshot >> strip_tac >>
   `EVERY (\f. EVERY inst_wf (fn_insts f)) C.ctx_functions /\
