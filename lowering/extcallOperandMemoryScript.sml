@@ -2,7 +2,7 @@
 Theory extcallOperandMemory
 Ancestors
   extcallPositionalMemory extcallCaptureMemory extcallLoweredTyping
-  extcallLoweredRepresentation extcallRequestStages extcallStoreUnwrapMemory
+  extcallLoweredRepresentation extcallStoreUnwrapMemory
   noEffectSourceFrame sourceReadTransport exprSimExtCallCase vyperState
   vyperInterpreter
 
