@@ -14,6 +14,8 @@ Ancestors
   exprSimAbiEncodeFramedSuffix bodyPtrDefs fragGasPathPtr
   exprLoweringProps abiBuiltinEncodeCode abiEncoderWindowContract
   exprSimAbiEncodeExecFrame venomState list venomMemDefs
+  abiEncodePtrSetup abiEncodePtrFinish abiEncodePtrGhostFrame
+  abiEncoderWindowJoint fragGasOriginPtr ptrDiscipline
 
 val _ = Parse.hide "body";
 
@@ -93,5 +95,74 @@ Theorem abi_encode_framed_phases_ptr:
     FST ops = Var x /\ ptr_covers G' tn' x actual outsz /\
     (!i. p <= i /\ i < p + 32 + m + LENGTH (enc at av) ==> i NOTIN tn'.t_mem)
 Proof
+  disch_then (MAP_EVERY assume_tac o CONJUNCTS) >>
+  drule_all abi_encode_setup_ptr_entry >>
+  disch_then (qspecl_then [`PG`, `cx_dead cx`] strip_assume_tac) >>
+  rename1 `abi_builtin_encode_setup_frame _ _ _ _ _ initial prepared` >>
+  `?body Hbody tbody.
+    window_strong_result ctx func ready body_end len at av d prepared body /\
+    abi_encode_exec_frame func prepared body /\
+    op_taint tbody len = {} /\
+    (!x. len = Var x ==> not_fresh_at body_end x) /\
+    (!i. d <= i /\ i < d + LENGTH (enc at av) ==> i NOTIN tbody.t_mem) /\
+    (!x. not_fresh_at ready x ==> FLOOKUP Hbody x = FLOOKUP H x /\
+      op_taint tbody (Var x) = op_taint tf (Var x)) /\
+    (!i. (i < d \/ d + LENGTH (enc at av) <= i) /\
+      (!id b sz. id IN window_alloca_sites func (frag_ids ready body_end) /\
+        FLOOKUP body.vs_allocas id = SOME (b,sz) ==> i < b \/ b+sz <= i) ==>
+      (i IN tbody.t_mem <=> i IN tf.t_mem)) /\
+    tbody.t_stor = tf.t_stor /\ tbody.t_trans = tf.t_trans /\ tbody.t_imm = tf.t_imm /\
+    !D. gas_origin_ptr_path (D,0,(\j. F),ctx,func,PG)
+      (prepared,H,tf) [] (OK body,Hbody,tbody)` by
+    (irule compile_abi_encode_to_buf_window_joint >>
+     simp_tac bool_ss [allocas_from_def, arithmeticTheory.ZERO_LESS_EQ] >>
+     rpt conj_tac >> TRY (first_assum ACCEPT_TAC) >>
+     qexistsl [`cap`, `SND ops`, `ei`, `sb`, `src`] >>
+     rpt conj_tac >> TRY (first_assum ACCEPT_TAC)
+     >- (qpat_assum `abi_builtin_encode_setup_frame _ _ _ _ _ _ _`
+           (strip_assume_tac o REWRITE_RULE [abiBuiltinEncodeSetupTheory.abi_builtin_encode_setup_frame_def]) >>
+         rpt strip_tac >>
+         metis_tac[]) >>
+     rpt strip_tac >> rpt conj_tac >> simp[]) >>
+  pop_assum strip_assume_tac >>
+  `eval_operand (FST ops) body = SOME (n2w p)` by
+    (irule exprSimAbiEncodeExecutionTheory.abi_encode_setup_buffer_eval >>
+     goal_assum (drule_at Any) >> goal_assum (drule_at Any) >>
+     first_assum ACCEPT_TAC) >>
+  `ptr_covers Hbody tbody x body outsz` by
+    (`FLOOKUP Hbody x = FLOOKUP H x /\
+      op_taint tbody (Var x) = op_taint tf (Var x)` by metis_tac[] >>
+     qpat_assum `ptr_covers H tf x prepared outsz`
+       (strip_assume_tac o REWRITE_RULE [ptr_covers_def]) >>
+     pure_asm_rewrite_tac [ptr_covers_def] >>
+     `lookup_var x body = lookup_var x prepared` by
+       (qpat_x_assum `eval_operand (FST ops) body = _` mp_tac >>
+        qpat_x_assum `eval_operand (FST ops) prepared = _` mp_tac >>
+        pure_asm_rewrite_tac [venomStateTheory.eval_operand_def] >>
+        simp_tac bool_ss []) >>
+     metis_tac[]) >>
+  qpat_assum `window_strong_result _ _ _ _ _ _ _ _ _ _`
+    (strip_assume_tac o PURE_REWRITE_RULE
+      [abiEncoderWindowContractTheory.window_strong_result_def,
+       abiEncoderWindowContractTheory.abi_encoder_window_result_def]) >>
+  `32 <= outsz` by (qpat_x_assum `outsz = _` SUBST1_TAC >> decide_tac) >>
+  `eval_operand (Var x) body = SOME (n2w p)` by metis_tac[] >>
+  `abi_builtin_encode_finish (Var x) len m body_end = ((),final)` by metis_tac[] >>
+  `abi_decoder_operand_live body_end.cs_next_var (Var x)` by metis_tac[] >>
+  `mem_bytes_at (p+32) (m+LENGTH (enc at av)) body.vs_memory =
+    mem_bytes_at (p+32) (m+LENGTH (enc at av)) body.vs_memory` by REFL_TAC >>
+  drule_all abi_encode_finish_ptr_from_body >>
+  disch_then (qspecl_then [`PG`, `cx_dead cx`] strip_assume_tac) >>
+  qpat_assum `!D. gas_origin_ptr_path _ _ _ _`
+    (qspec_then `cx_dead cx`
+      (strip_assume_tac o MATCH_MP gas_origin_ptr_path_projections)) >>
+  qpat_x_assum `gas_path_ptr _ _ _ _ _ _ _ prepared _ _ _ _`
+    (assume_tac o PURE_REWRITE_RULE [listTheory.LENGTH]) >>
+  `gas_path_ptr (cx_dead cx) 0 ctx func PG G tn initial 0 H' tf' (OK actual)` by
+    (qpat_assum `gas_path_ptr _ _ _ _ _ G tn initial _ _ _ _` mp_tac >>
+     qpat_assum `gas_path_ptr _ _ _ _ _ H tf prepared _ _ _ _` mp_tac >>
+     qpat_assum `gas_path_ptr _ _ _ _ _ Hbody tbody body _ _ _ _` mp_tac >>
+     rpt (pop_assum kall_tac) >>
+     metis_tac[gas_path_ptr_then, arithmeticTheory.ADD_CLAUSES]) >>
   cheat
 QED
