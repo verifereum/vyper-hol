@@ -380,17 +380,20 @@ Proof
     abi_encoder_write_observations] >> strip_tac >> asm_rewrite_tac[]
 QED
 
-Theorem window_bytes_observed:
-  compile_abi_encode_to_buf dst src (AbiBytestring maxlen) st = (out,st') /\
-  abi_encoder_window_pre ctx func st st' dst src (AbiBytestring maxlen) at av sb cap d s ==>
-  ?t. window_strong_result ctx func st st' out at av d s t /\
-      (!x. ~not_fresh_at st' x ==> lookup_var x t = lookup_var x s)
+Theorem window_bytes_strong_sequence:
+  compile_abi_encode_to_buf dst src (AbiBytestring maxlen) st = (out,en) /\
+  abi_encoder_window_pre ctx func st en dst src (AbiBytestring maxlen) at av sb cap d s ==>
+  ?raw. window_seq st en s raw /\
+    window_strong_result ctx func st en out at av d s
+      (raw with vs_inst_idx := LENGTH en.cs_current_insts) /\
+    (!x. ~not_fresh_at en x ==>
+      lookup_var x (raw with vs_inst_idx := LENGTH en.cs_current_insts) = lookup_var x s)
 Proof
   strip_tac >>
   `EVERY (\i. i.inst_opcode <> INVOKE /\
-             EVERY (not_fresh_at st') i.inst_outputs) (emitted_insts st st')` by
+             EVERY (not_fresh_at en) i.inst_outputs) (emitted_insts st en)` by
     metis_tac[window_bytes_output_bounds] >>
-  `!i b n. i IN window_alloca_sites func (frag_ids st st') /\
+  `!i b n. i IN window_alloca_sites func (frag_ids st en) /\
      FLOOKUP s.vs_allocas i = SOME (b,n) ==> n = 32` by
     metis_tac[window_pre_sites] >> pop_assum (mk_asm "sizes") >>
   qpat_x_assum `abi_encoder_window_pre _ _ _ _ _ _ _ _ _ _ _ _ _`
@@ -410,7 +413,7 @@ Proof
   `mload sb s = n2w (LENGTH bs)` by metis_tac[mem_word_at_eq_mload] >>
   `!x. dst = Var x \/ src = Var x ==> not_fresh_at st x` by metis_tac[] >>
   drule_all window_bytes_sequence >> strip_tac >>
-  rename1 `window_seq st st' s actual` >>
+  rename1 `window_seq st en s actual` >>
   `sb + cap <= d \/ d + LENGTH (enc at (BytesV bs)) <= sb` by
     (qpat_x_assum `venomMemDefs$regions_disjoint _ _` mp_tac >>
      pure_asm_rewrite_tac[venomMemDefsTheory.regions_disjoint_def] >> decide_tac) >>
@@ -420,27 +423,28 @@ Proof
      irule window_bytes_input_memory >>
      qexistsl_tac [`cap`, `maxlen`] >>
      asm_rewrite_tac[]) >>
-  `abi_encoder_registered_effect (window_alloca_sites func (frag_ids st st'))
+  `abi_encoder_registered_effect (window_alloca_sites func (frag_ids st en))
      [(d,LENGTH (enc at (BytesV bs)))] s actual` by
     (asm_rewrite_tac[] >> irule window_bytes_effect >> simp[] >>
      qexistsl_tac [`LENGTH bs`, `sb`] >> simp[]) >>
   `abi_encoder_extend_sim ctx func s
-    (actual with vs_inst_idx := LENGTH st'.cs_current_insts)` by
+    (actual with vs_inst_idx := LENGTH en.cs_current_insts)` by
     (irule window_seq_extend_sim >> simp[] >> qexists_tac `st` >> simp[]) >>
-  `!x. ~not_fresh_at st' x ==>
-       lookup_var x (actual with vs_inst_idx := LENGTH st'.cs_current_insts) =
+  `!x. ~not_fresh_at en x ==>
+       lookup_var x (actual with vs_inst_idx := LENGTH en.cs_current_insts) =
        lookup_var x s` by
-    (`run_inst_seq (emitted_insts st st') s = OK actual` by
+    (`run_inst_seq (emitted_insts st en) s = OK actual` by
        gvs[window_seq_def] >>
      drule abi_window_seq_high_vars >>
-     disch_then (qspec_then `st'` mp_tac) >> simp[lookup_var_def]) >>
-  qexists_tac `actual with vs_inst_idx := LENGTH st'.cs_current_insts` >>
+     disch_then (qspec_then `en` mp_tac) >> simp[lookup_var_def]) >>
+  qexists_tac `actual` >>
+  (conj_tac >- first_assum ACCEPT_TAC) >>
   (conj_tac >- (
   (* Package the concrete sequence without reopening instruction semantics. *)
   `alloca_inv actual` by (irule alloca_inv_fields >> qexists_tac `s` >> simp[]) >>
   `alloca_room ctx func actual` by
     (irule alloca_room_fields >> qexists_tac `s` >> simp[]) >>
-  `st'.cs_current_bb = st.cs_current_bb` by metis_tac[window_seq_def] >>
+  `en.cs_current_bb = st.cs_current_bb` by metis_tac[window_seq_def] >>
   qpat_x_assum `actual.vs_memory = _` kall_tac >>
   qmatch_goalsub_abbrev_tac `window_strong_result _ _ _ _ _ _ _ _ _ final` >>
   `final.vs_allocas = s.vs_allocas /\ final.vs_alloca_next = s.vs_alloca_next` by
@@ -453,14 +457,14 @@ Proof
       [eval_operand_def, lookup_var_def, Abbr `final`]) >>
   `!x. lookup_var x final = lookup_var x actual` by
     simp[lookup_var_def, Abbr `final`] >>
-  `abi_encoder_registered_effect (window_alloca_sites func (frag_ids st st'))
+  `abi_encoder_registered_effect (window_alloca_sites func (frag_ids st en))
      [(d,LENGTH (enc at (BytesV bs)))] s final` by
     (irule abi_encoder_registered_effect_trans >> qexists_tac `actual` >>
      simp[Abbr `final`, abi_encoder_registered_inst_idx]) >>
-  `abi_encoder_registered_effect (frag_ids st st')
+  `abi_encoder_registered_effect (frag_ids st en)
      [(d,LENGTH (enc at (BytesV bs)))] s final` by
     (irule abi_encoder_registered_effect_enlarge >>
-     qexistsl_tac [`window_alloca_sites func (frag_ids st st')`,
+     qexistsl_tac [`window_alloca_sites func (frag_ids st en)`,
        `[(d,LENGTH (enc at (BytesV bs))) ]`] >>
      simp[window_alloca_sites_subset]) >>
   `mem_bytes_at d (LENGTH (enc at (BytesV bs))) final.vs_memory =
@@ -471,12 +475,23 @@ Proof
     (simp[window_alloca_growth_def] >> metis_tac[optionTheory.NOT_SOME_NONE]) >>
   `!x w. not_fresh_at st x /\ lookup_var x s = SOME w ==>
      lookup_var x final = SOME w` by metis_tac[window_seq_def] >>
-  `~final.vs_halted /\ final.vs_current_bb = st'.cs_current_bb /\
-   final.vs_inst_idx = LENGTH st'.cs_current_insts` by simp[Abbr `final`] >>
+  `~final.vs_halted /\ final.vs_current_bb = en.cs_current_bb /\
+   final.vs_inst_idx = LENGTH en.cs_current_insts` by simp[Abbr `final`] >>
   `abi_decode_sim ctx func s final` by metis_tac[abi_encoder_extend_sim_sim] >>
   simp_tac bool_ss [window_strong_result_def, abi_encoder_window_result_def] >>
   asm_rewrite_tac[] >> (conj_tac >- asm "sizes" ACCEPT_TAC) >>
   simp[Abbr `final`] >> metis_tac[window_seq_labels])) >> simp[]
+QED
+
+Theorem window_bytes_observed:
+  compile_abi_encode_to_buf dst src (AbiBytestring maxlen) st = (out,st') /\
+  abi_encoder_window_pre ctx func st st' dst src (AbiBytestring maxlen) at av sb cap d s ==>
+  ?t. window_strong_result ctx func st st' out at av d s t /\
+      (!x. ~not_fresh_at st' x ==> lookup_var x t = lookup_var x s)
+Proof
+  strip_tac >> drule_all window_bytes_strong_sequence >> strip_tac >>
+  rename1 `window_seq st st' s raw` >>
+  qexists_tac `raw with vs_inst_idx := LENGTH st'.cs_current_insts` >> simp[]
 QED
 
 Theorem window_bytes_contract:
