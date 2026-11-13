@@ -1080,7 +1080,9 @@ Theorem inline_root_parameter_step[local]:
   is_param_opcode inst.inst_opcode /\ step_inst fuel C inst s = OK t ==>
   step_inst tfuel Tctx inst s = OK t /\
   inline_caller_bookkeeping s (t with vs_inst_idx := i) /\
-  (t with vs_inst_idx := i).vs_fmp = s.vs_fmp
+  (t with vs_inst_idx := i).vs_fmp = s.vs_fmp /\
+  t.vs_current_bb = s.vs_current_bb /\ t.vs_prev_bb = s.vs_prev_bb /\
+  t.vs_halted = s.vs_halted /\ t.vs_inst_idx = s.vs_inst_idx
 Proof
   strip_tac >> gvs[venomInstTheory.is_param_opcode_iff] >>
   gvs[step_inst_def, step_inst_base_opcode_eqs, AllCaseEqs(),
@@ -1095,7 +1097,11 @@ Theorem inline_root_parameter_trace[local]:
     ss (SUC k) = t with vs_inst_idx := SUC (ss k).vs_inst_idx) ==>
   !k. k <= N ==>
     inline_caller_bookkeeping (ss 0) (ss k) /\
-    (ss k).vs_fmp = (ss 0).vs_fmp
+    (ss k).vs_fmp = (ss 0).vs_fmp /\
+    (ss k).vs_current_bb = (ss 0).vs_current_bb /\
+    (ss k).vs_prev_bb = (ss 0).vs_prev_bb /\
+    (ss k).vs_halted = (ss 0).vs_halted /\
+    (ss k).vs_inst_idx = (ss 0).vs_inst_idx + k
 Proof
   strip_tac >> Induct >- simp[] >> strip_tac >>
   `k < N /\ k <= N` by decide_tac >>
@@ -1104,4 +1110,54 @@ Proof
   simp[] >> strip_tac >>
   drule_all inline_root_parameter_step >> strip_tac >>
   gvs[functionInlinerSimulationTheory.inline_caller_bookkeeping_def]
+QED
+
+Theorem inline_root_parameter_fields[local]:
+  is_param_opcode src.inst_opcode /\ inline_inst_fields dst = inline_inst_fields src ==>
+  step_inst tfuel Tctx dst s = step_inst fuel C src s /\
+  ~is_terminator dst.inst_opcode
+Proof
+  simp[inline_inst_fields_def] >> strip_tac >>
+  gvs[venomInstTheory.is_param_opcode_iff] >>
+  simp[step_inst_def, step_inst_base_opcode_eqs, venomInstTheory.is_terminator_def]
+QED
+
+Theorem inline_root_parameter_fetched_trace[local]:
+  inline_annotated_origin C n root cert /\
+  (inline_entry_function cert).fn_blocks = entry::rest /\
+  entry.bb_instructions = params ++ tail /\ param_insts_from 0 params /\
+  (ss 0).vs_inst_idx = 0 /\
+  (!k. k < LENGTH params ==> ?t.
+    step_inst fuel C (EL k params) (ss k) = OK t /\
+    ss (SUC k) = t with vs_inst_idx := SUC (ss k).vs_inst_idx) ==>
+  ?eb. lookup_block entry.bb_label root.fn_blocks = SOME eb /\
+    (!k. k < LENGTH params ==> ?dst t.
+      get_instruction eb (ss k).vs_inst_idx = SOME dst /\
+      step_inst tfuel Tctx dst (ss k) = OK t /\
+      ss (SUC k) = t with vs_inst_idx := SUC (ss k).vs_inst_idx /\
+      ~is_terminator dst.inst_opcode)
+Proof
+  strip_tac >>
+  drule functionInlinerEntryParametersTheory.inline_annotated_entry_parameter_prefix >>
+  disch_then (qspecl_then [`entry`,`rest`,`params`,`tail`] mp_tac) >>
+  simp[] >> strip_tac >> qexists `eb` >> simp[] >>
+  `!k. k < LENGTH params ==> is_param_opcode (EL k params).inst_opcode` by
+    (rpt strip_tac >> drule_all callLayoutDefsTheory.param_insts_from_el >>
+     simp[callLayoutDefsTheory.param_inst_at_def]) >>
+  `!k. k <= LENGTH params ==> (ss k).vs_inst_idx = k` by
+    (rpt strip_tac >>
+     mp_tac (inline_root_parameter_trace |> Q.INST [`N` |-> `LENGTH (params:instruction list)`]) >>
+     (impl_tac >- metis_tac[]) >> simp[] >> metis_tac[]) >>
+  rpt strip_tac >>
+  `inline_inst_fields (EL k ps) = inline_inst_fields (EL k params)` by
+    metis_tac[listTheory.EL_MAP] >>
+  qexists `EL k ps` >>
+  simp[venomInstTheory.get_instruction_def, listTheory.EL_APPEND_EQN] >>
+  `is_param_opcode (EL k params).inst_opcode` by simp[] >>
+  qpat_x_assum `!k. k < LENGTH params ==> ?t. _` (qspec_then `k` mp_tac) >>
+  simp[] >> strip_tac >>
+  qexists `t` >> simp[] >>
+  qpat_x_assum `!k. k < LENGTH params ==> is_param_opcode _` kall_tac >>
+  gvs[venomInstTheory.is_param_opcode_iff, inline_inst_fields_def] >>
+  gvs[step_inst_def, step_inst_base_opcode_eqs, venomInstTheory.is_terminator_def]
 QED
