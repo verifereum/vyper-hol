@@ -1,6 +1,7 @@
 (* Concrete paired header boundary; the semantic and ghost trace share t. *)
 Theory ctorDeployMemoryRunPtrPrefixLoopHeader
 Ancestors
+  exprLoweringProps exprSimUnwrap
   ctorDeployMemoryRunPtrPrefixBoolHeader ctorDeployMemoryRunPtrPrefixLoopSetup
   ctorAbiActualArrayHeader ctorAbiActualArrayInvariant abiDecoderExecution abiDecoderContract abiDecoderLoop
   abiDecoderReentry abiDecoderArrayBackedge
@@ -189,7 +190,7 @@ Resume prefix_loop_header_trace[load]:
   `slot < dimword(:256)` by decide_tac >>
   `s with vs_inst_idx := 0 = s` by
     simp[fetch "venomState" "venom_state_component_equality"] >>
-  qpat_assum `eval_operand (Var ip) s = _` (mp_then Any assume_tac prefix_mload_step) >>
+  qpat_assum `eval_operand (Var ip) s = _` (mp_then Any assume_tac exprLoweringPropsTheory.step_MLOAD_local) >>
   qpat_assum `eval_operand (Var ip) s = _`
     (mp_then Any assume_tac (SRULE [LET_THM] prefix_mload_ghost_step)) >>
   simp[step_inst_non_invoke,Abbr `u1`,w2n_n2w,update_var_def] >>
@@ -205,7 +206,7 @@ Resume prefix_loop_header_trace[data]:
     (`src <> Var iv` by metis_tac[] >>
      simp[SRULE [LET_THM] prefix_loop_operand_update_frame,Abbr `u1`,update_var_def]) >>
   `step_inst_base (mk_inst (hid+1) DLOAD [src] [cv]) u1 = OK u2` by
-    (qpat_assum `eval_operand src u1 = _` (mp_then Any mp_tac prefix_dload_step) >>
+    (qpat_assum `eval_operand src u1 = _` (mp_then Any mp_tac exprSimUnwrapTheory.step_DLOAD) >>
      gvs[Abbr `u2`,Abbr `u1`,abi_decode_load_def,abi_decode_source_def,update_var_def]) >>
   simp[step_inst_non_invoke] >>
   simp[step_inst_inst_idx_indep,mk_inst_def,is_terminator_def,exec_result_map_def] >>
