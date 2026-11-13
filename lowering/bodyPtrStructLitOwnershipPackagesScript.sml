@@ -24,7 +24,9 @@ Proof
   >- simp[set_fallback_package_target_def, package_fallback_fn_def] >>
   PairCases_on `x` >>
   simp[set_fallback_package_target_def, package_fallback_fn_def,
-    update_cenv_nonreentrant_def, build_compile_env_alloca_locals]
+    update_cenv_ret_abi_def, update_cenv_nonreentrant_def,
+    build_compile_env_alloca_locals] >>
+  IF_CASES_TAC >> simp[build_compile_env_alloca_locals]
 QED
 
 Theorem structlit_internal_package_label:
