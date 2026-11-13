@@ -242,7 +242,8 @@ Proof
 QED
 
 (* The pointer discipline and taint bound from a pointer-safe run, with
-   the pointer parameters ptr_ok_check (in lowering_context_ok) finds. *)
+   the pointer parameters ptr_ok_check (in lowering_context_ok) finds.
+   ptr_ok_check vouches for them only in a unit without DALLOCA. *)
 Theorem lowered_unit_ptr_taint:
   !D lo ctx name fn lbl vs.
     lowering_context_ok ctx /\ ctx.ctx_entry = SOME name /\

@@ -1,7 +1,7 @@
 (* Acceptance projections for the same __entry function used by checks. *)
 Theory entryReachBodyRuntimeResources
 Ancestors
-  compileVyper vyperCompiler ctorDeployMemoryFrontier allocaFrontierBound
+  compileVyper vyperCompiler ctorDeployMemoryFrontier loweredUnitMemoryFrontier allocaFrontierBound
   venomWf venomInst list
 
 Theorem caller_runtime_context_ok:

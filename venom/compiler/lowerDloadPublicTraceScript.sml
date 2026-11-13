@@ -310,7 +310,7 @@ Proof
      irule ld_ptr_use_scalar >> reverse conj_tac >- simp[] >> qexists_tac `inst` >>
      simp[is_pointer_preserving_op_def, mem_read_ops_def, mem_write_ops_def]) >>
   `~MEM inst.inst_opcode
-    [ASSIGN; PHI; RET; RETFMP; DRET; SHL; SHR; SAR; MSTORE; SSTORE; TSTORE; ISTORE]` by simp[] >>
+    [ASSIGN; PHI; RET; RETFMP; DRET; MUL; SHL; SHR; SAR; MSTORE; SSTORE; TSTORE; ISTORE]` by simp[] >>
   drule_all ld_vars_numeric_operands_equal >>
   simp[eval_operands_def, AllCaseEqs()] >>
   Cases_on `eval_operand off f.lf_src` >> Cases_on `eval_operand off f.lf_tgt` >> simp[]
