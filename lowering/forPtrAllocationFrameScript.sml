@@ -60,18 +60,19 @@ Proof
 QED
 
 Theorem gas_outcome_ptr_allocation_frame:
-  gas_outcome_ptr D tops (ctx,fn) PG source (es,s,G,tn) Q R ==>
-  gas_outcome_ptr D tops (ctx,fn) PG source (es,s,G,tn)
-    (\res ee H tm t. Q res ee H tm t /\
+  gas_outcome_ptr D tops (ctx,fn) PG cx st0 source (es,s,G,tn) Q R ==>
+  gas_outcome_ptr D tops (ctx,fn) PG cx st0 source (es,s,G,tn)
+    (\H res ee HG tm t. Q H res ee HG tm t /\
       (!aid b. FLOOKUP s.vs_allocas aid = SOME b ==>
         FLOOKUP t.vs_allocas aid = SOME b)) R
 Proof
-  simp_tac bool_ss [gas_outcome_ptr_def, gas_summary_ptr_at_def] >>
-  rpt strip_tac >> qexists_tac `marks`
-  >- (disj1_tac >>
-      drule gas_path_ptr_old_allocations >> strip_tac >>
-      goal_assum (drule_at Any) >> simp[] >> metis_tac[])
-  >- (disj1_tac >> goal_assum (drule_at Any) >>
-      simp[] >> metis_tac[]) >>
-  disj2_tac >> metis_tac[]
+  rewrite_tac[gas_outcome_ptr_def] >> strip_tac >> qexists_tac `marks`
+  >- simp[]
+  >- (disj2_tac >> disj1_tac >>
+      fs[gas_summary_ptr_at_def] >>
+      qexistsl_tac [`res`, `es_end`, `G'`, `tn'`, `r`] >> simp[] >>
+      rpt strip_tac >> first_x_assum drule >> strip_tac >> gvs[] >>
+      metis_tac[gas_path_ptr_old_allocations]) >>
+  disj2_tac >> disj2_tac >>
+  qexistsl_tac [`err`, `ee`, `leaf`, `finish'`] >> simp[]
 QED
