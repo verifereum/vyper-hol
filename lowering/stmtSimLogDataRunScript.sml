@@ -7,6 +7,8 @@ Ancestors
   annassignRelayoutBounds annassignRelayoutSource wideningZeroLayout
   venomState placeMemoryCopyEffect exprSimMemoryTransport
   placeMemoryPrimitiveForward venomInst
+  exprSimAggregateLoops typedLogFieldChecked bytesCopyProps typedMemoryCopy
+  vyperEventArgCompat aggregateEvaluatedLayout memoryLocalRhsProps fragExec
 
 Definition log_data_layout_def:
   (log_data_layout cx [] [] p mem = T) /\
@@ -722,4 +724,142 @@ Proof
   qexists_tac `q with vs_inst_idx := LENGTH sb.cs_current_insts` >>
   gvs[typed_copy_effect_def, venom_state_component_equality, lookup_var_def] >>
   metis_tac[lookup_var_def]
+QED
+
+Theorem log_declared_store_effect[local]:
+  compile_store_memory cenv src dst dty sty sa = ((),sb) /\
+  acyclic_struct_metadata cenv.ce_struct_fields /\
+  sfields_tenv_consistent cenv.ce_struct_fields (get_tenv cx) /\
+  (!name fields. FLOOKUP cenv.ce_struct_fields name = SOME fields ==>
+    ALL_DISTINCT (MAP FST fields) /\
+    EVERY (\(fname,fty,sz). !tv.
+      evaluate_type (get_tenv cx) fty = SOME tv ==>
+      sz = type_memory_size tv) fields) /\
+  event_arg_compatible dty lty /\ type_widens_to (get_tenv cx) lty dty /\
+  (~is_word_type dty /\ ~is_bytestring_type dty ==> sty = lty) /\
+  evaluate_type (get_tenv cx) lty = SOME ltv /\
+  evaluate_type (get_tenv cx) dty = SOME dtv /\
+  value_has_type ltv v /\ value_has_type dtv v /\
+  val_wf ltv v /\ val_wf dtv v /\ expr_val_rel cx lty v src s /\
+  (!w. ~is_word_type lty /\ ~is_bytestring_type lty /\
+    eval_operand src s = SOME w ==>
+    w2n w + type_memory_size ltv < dimword (:256)) /\
+  log_source_apart cx (w2n dw) (type_memory_bytes cenv dty) (src,lty) v s /\
+  eval_operand dst s = SOME dw /\
+  (!x. src = Var x \/ dst = Var x ==> not_fresh_at sa x) /\
+  w2n dw + type_memory_bytes cenv dty < dimword (:256) /\
+  fn_has_code sa sb func /\ fn_inst_ids_distinct func /\
+  ~s.vs_halted /\ s.vs_current_bb = sa.cs_current_bb /\
+  s.vs_inst_idx = LENGTH sa.cs_current_insts ==>
+  ?t. val_in_memory dtv v (w2n dw) t.vs_memory /\
+    typed_copy_effect ctx func sa sb s t (w2n dw) (type_memory_bytes cenv dty)
+Proof
+  strip_tac >>
+  `type_memory_bytes cenv dty = type_memory_size dtv` by
+    (irule typed_copy_memory_size >> simp[] >> qexists_tac `get_tenv cx` >>
+     simp[] >> metis_tac[]) >>
+  `type_memory_size dtv < dimword (:256)` by decide_tac >>
+  Cases_on `is_word_type dty`
+  >- (`dty = lty` by metis_tac[word_event_compatible_same] >> gvs[] >>
+      `compile_store_memory cenv src dst dty dty sa = ((),sb)` by
+        gvs[compile_store_memory_def] >>
+      simp[] >> irule log_declared_same_type_effect >> simp[] >>
+      goal_assum (drule_at Any) >> metis_tac[]) >>
+  Cases_on `is_bytestring_type dty`
+  >- (`is_bytestring_type lty` by metis_tac[event_arg_compatible_bytestring] >>
+      `compile_store_memory cenv src dst dty dty sa = ((),sb)` by
+        gvs[compile_store_memory_def] >>
+      `expr_val_rel cx dty v src s` by
+        (irule expr_val_rel_compatible >> metis_tac[]) >>
+      simp[] >> irule log_declared_same_type_effect >> simp[] >>
+      goal_assum (drule_at Any) >> metis_tac[]) >>
+  gvs[] >> Cases_on `dty = lty`
+  >- (gvs[] >> simp[] >> irule log_declared_same_type_effect >> simp[] >>
+      goal_assum (drule_at Any) >> metis_tac[]) >>
+  `~is_word_type lty /\ ~is_bytestring_type lty` by
+    (gvs[event_arg_compatible_alias_def] >>
+     metis_tac[aggregateEvaluatedLayoutTheory.arg_type_fits_word_type,
+               memoryLocalRhsPropsTheory.arg_type_fits_bytestring_target]) >>
+  `?sw. eval_operand src s = SOME sw` by gvs[expr_val_rel_def] >>
+  irule log_declared_relayout_run >> simp[] >>
+  goal_assum (drule_at Any) >> simp[] >> metis_tac[]
+QED
+
+Theorem log_declared_field_effect[local]:
+  compile_log_store_data cenv [(src,sty)] [dty] buf off sa = ((),sb) /\
+  acyclic_struct_metadata cenv.ce_struct_fields /\
+  sfields_tenv_consistent cenv.ce_struct_fields (get_tenv cx) /\
+  (!name fields. FLOOKUP cenv.ce_struct_fields name = SOME fields ==>
+    ALL_DISTINCT (MAP FST fields) /\
+    EVERY (\(fname,fty,sz). !tv.
+      evaluate_type (get_tenv cx) fty = SOME tv ==>
+      sz = type_memory_size tv) fields) /\
+  event_arg_compatible dty lty /\ type_widens_to (get_tenv cx) lty dty /\
+  (~is_word_type dty /\ ~is_bytestring_type dty ==> sty = lty) /\
+  evaluate_type (get_tenv cx) lty = SOME ltv /\
+  evaluate_type (get_tenv cx) dty = SOME dtv /\
+  value_has_type ltv v /\ value_has_type dtv v /\
+  val_wf ltv v /\ val_wf dtv v /\ expr_val_rel cx lty v src s /\
+  (!w. ~is_word_type lty /\ ~is_bytestring_type lty /\
+    eval_operand src s = SOME w ==>
+    w2n w + type_memory_size ltv < dimword (:256)) /\
+  log_source_apart cx (w2n bw + off) (type_memory_bytes cenv dty) (src,lty) v s /\
+  eval_operand buf s = SOME bw /\
+  (!x. buf = Var x ==> not_fresh_at sa x) /\
+  (!x. src = Var x ==> not_fresh_at sa x) /\ (!lab. src <> Label lab) /\
+  w2n bw + off + type_memory_bytes cenv dty <= s.vs_alloca_next /\
+  s.vs_alloca_next < dimword (:256) /\
+  fn_has_code sa sb func /\ fn_inst_ids_distinct func /\
+  ~s.vs_halted /\ s.vs_current_bb = sa.cs_current_bb /\
+  s.vs_inst_idx = LENGTH sa.cs_current_insts ==>
+  ?t. val_in_memory dtv v (w2n bw + off) t.vs_memory /\
+    typed_copy_effect ctx func sa sb s t (w2n bw + off) (type_memory_bytes cenv dty)
+Proof
+  strip_tac >>
+  qpat_x_assum `compile_log_store_data _ _ _ _ _ _ = _` mp_tac >>
+  simp[compile_log_store_data_def, comp_bind_def, comp_ignore_bind_def,
+       comp_return_def] >>
+  Cases_on `emit_op ADD [buf; Lit (n2w off)] sa` >> simp[] >>
+  rename1 `emit_op ADD [buf; Lit (n2w off)] sa = (dst,sm)` >> strip_tac >>
+  Cases_on `compile_store_memory cenv src dst dty sty sm` >>
+  rename1 `compile_store_memory cenv src dst dty sty sm = (unit,sn)` >>
+  Cases_on `unit` >> gvs[] >>
+  `cs_extends sa sm` by metis_tac[ci_mono_emit_op, ci_mono_def, pairTheory.SND] >>
+  `cs_extends sm sb` by
+    metis_tac[ci_mono_compile_store_memory, ci_mono_def, pairTheory.SND] >>
+  drule_all fn_has_code_split >> strip_tac >>
+  drule log_data_address_shape >> strip_tac >>
+  `eval_operand buf s = SOME (n2w (w2n bw))` by simp[] >>
+  `?u. eval_operand dst u = SOME (n2w (w2n bw+off)) /\
+    typed_copy_effect ctx func sa sm s u (w2n bw+off) (type_memory_bytes cenv dty)` by
+    (irule log_declared_address_effect >> goal_assum (drule_at Any) >> simp[] >>
+     metis_tac[]) >>
+  `expr_val_rel cx lty v src u /\
+   log_source_apart cx (w2n bw+off) (type_memory_bytes cenv dty) (src,lty) v u` by
+    (irule log_declared_effect_source >> goal_assum (drule_at Any) >> simp[] >>
+     metis_tac[ADD_COMM]) >>
+  `eval_operand src u = eval_operand src s` by
+    (irule log_declared_effect_operand >> goal_assum (drule_at Any) >> simp[] >>
+     metis_tac[]) >>
+  `!x. src = Var x \/ dst = Var x ==> not_fresh_at sm x` by
+    (rpt strip_tac >> metis_tac[freshWritesTheory.not_fresh_at_mono]) >>
+  `~u.vs_halted /\ u.vs_current_bb = sm.cs_current_bb /\
+   u.vs_inst_idx = LENGTH sm.cs_current_insts` by
+    gvs[typed_copy_effect_def] >>
+  `w2n bw+off < dimword (:256)` by decide_tac >>
+  `?t. val_in_memory dtv v (w2n bw+off) t.vs_memory /\
+    typed_copy_effect ctx func sm sb u t (w2n bw+off) (type_memory_bytes cenv dty)` by
+    (`w2n (n2w (w2n bw+off):256 word) = w2n bw+off` by
+       simp[wordsTheory.w2n_n2w] >>
+     `?t. val_in_memory dtv v (w2n (n2w (w2n bw+off):256 word)) t.vs_memory /\
+       typed_copy_effect ctx func sm sb u t (w2n (n2w (w2n bw+off):256 word))
+         (type_memory_bytes cenv dty)` suffices_by metis_tac[] >>
+     irule log_declared_store_effect >>
+     simp[] >> goal_assum (drule_at Any) >> simp[ADD_COMM] >>
+     goal_assum (drule_at Any) >> simp[] >> metis_tac[ADD_COMM]) >>
+  qexists_tac `t` >> conj_tac >- metis_tac[ADD_COMM] >>
+  irule typed_copy_effect_then >> qexistsl_tac [`sm`, `sm`, `u`] >>
+  conj_tac >- (rpt strip_tac >> irule freshWritesTheory.not_fresh_at_mono >>
+    goal_assum (drule_at Any) >> simp[]) >>
+  conj_tac >> metis_tac[ADD_COMM]
 QED
