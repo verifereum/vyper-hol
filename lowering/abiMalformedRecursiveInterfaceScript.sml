@@ -84,7 +84,8 @@ QED
 Theorem abi_malformed_resource_post_frame_intro:
   stmt_state_rel (H:(bool # bytes32 # type_value) list # num list)
     ctx func cenv cx es t /\
-  (!H. stmt_state_rel H ctx func cenv cx es s ==>
+  (!H:(bool # bytes32 # type_value) list # num list.
+     stmt_state_rel H ctx func cenv cx es s ==>
        stmt_state_rel H ctx func cenv cx es t) /\
   s.vs_alloca_next <= t.vs_alloca_next /\
   (!aid entry. FLOOKUP s.vs_allocas aid = SOME entry ==>
