@@ -42,7 +42,7 @@ Proof
   qexists `update_var (STRING #"%" (toString sm.cs_next_var))
     (w0 + n2w off) t with vs_inst_idx := LENGTH sb.cs_current_insts` >>
   simp[] >> rpt conj_tac
-  >- simp[gas_marked_path_def] 
+  >- simp[gas_marked_path_def]
   >- (drule emit_op_extends >> simp[same_blocks_def, update_var_def])
 QED
 

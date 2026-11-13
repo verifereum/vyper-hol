@@ -35,8 +35,7 @@ Theorem target_subscript_case_mem:
       (!env ty es. expr_body_pre cenv cx env e es /\
         (nocalls ==> int_calls_expr e = []) ==>
         expr_vv_sim_mem ctx func cenv cx ty e es)) /\
-    body_inv tops ctx cenv cx /\
-    EVERY (supported_expr tops) (target_indices (SubscriptTarget bt e)) ==>
+    body_inv tops ctx cenv cx ==>
     !env es.
       target_pre cenv cx env (SubscriptTarget bt e) es /\
       (nocalls ==> int_calls_target (SubscriptTarget bt e) = []) ==>

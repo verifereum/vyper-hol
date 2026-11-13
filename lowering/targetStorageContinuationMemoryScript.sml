@@ -1,9 +1,11 @@
-(* Source readiness and counted pure-storage target continuations. *)
+(* Source readiness and counted storage target continuations. *)
 Theory targetStorageContinuationMemory
 Ancestors
   targetStorageArraySummaryMemory targetMappingSummaryMemory
   exprSimPopNestedBase targetPlaceLive bodyAttributeMemory
-  targetIndexCompositionMemory targetSubscriptSplit
+  targetIndexCompositionMemory targetSubscriptSplit targetSubscriptStorage
+  vyperStoragePlaceProvenance vyperPlaceStoragePreservation
+  vyperStorageWritePreservation accountsRelProps
   targetPlaceSimDefs loweringStateRelDefs loweringPosts
   gasOutcome gasSummary exprSimHypsDefs exprSimDefs exprReasonOperand
   targetPlaceSimCasesBase stmtLoweringMono exprLoweringProps
@@ -13,23 +15,24 @@ Ancestors
 Libs
   pairLib
 
-Theorem target_pure_storage_result_ready_mem[local]:
-  contract_storage_well_formed cx es /\
-  EVERY pure_expr (target_indices bt) /\
+Theorem target_storage_result_ready_mem[local]:
+  storage_layout_safe cx /\ contract_storage_well_formed cx ee /\
   eval_base_place cx bt es = (INL (PlaceR (StoragePlace tr slot tv)),ee) ==>
   slots_in_range (get_storage cx ee tr) (w2n slot) tv /\
   storage_read_live cx tr (get_storage cx ee tr) slot tv
 Proof
   strip_tac >>
-  drule_all nested_pop_eval_base_pure_state >> strip_tac >> gvs[] >>
-  drule_all nested_pop_eval_base_slots >>
-  drule_all nested_pop_eval_base_live >>
-  simp[nested_pop_result_slots_def, nested_pop_result_live_def,
-       vyperStorageBackendTheory.get_storage_backend_eq]
+  drule_all eval_base_place_storage_ready >> strip_tac >> simp[] >>
+  Cases_on `type_slot_size tv = 0`
+  >- metis_tac[zero_slot_size_slots_in_range] >>
+  `storage_place_region cx (StoragePlace tr slot tv)` by
+    (drule eval_base_place_region >> simp[storage_result_region_def]) >>
+  irule vyperPlaceStoragePreservationTheory.storage_place_region_slots_in_range >>
+  simp[]
 QED
 
 Theorem target_storage_index_open_mem[local]:
-  body_inv tops ctx cenv cx /\ supported_expr tops e /\
+  body_inv tops ctx cenv cx /\
   expr_body_pre cenv cx env e es /\
   storage_vars_rel cenv cx /\ transient_vars_rel cenv cx /\
   eval_expr cx e es = (INL tv,es1) /\
@@ -141,16 +144,13 @@ Proof
      goal_assum (drule_at (Pat `lower_value`)) >>
      qexists `env` >> fs[expr_body_pre_def, expr_sim_inv_def]) >>
   gvs[] >>
-  drule_at (Pat `target_post _ _ _ _ _ _ _ _ _ _ _ _ _`)
+  drule_at (Pat `expr_post _ _ _ _ _ _ _ _ _ _ _ _ _`)
     target_storage_typed_summary_mem >>
-  disch_then (drule_at (Pat `expr_post _ _ _ _ _ _ _ _ _ _ _ _ _`)) >>
-  disch_then irule >> simp[] >>
-  qexists `env` >> fs[expr_sim_inv_def] >> metis_tac[]
+  disch_then irule >> simp[] >> metis_tac[]
 QED
 
 Theorem target_storage_marked_ready_mem[local]:
   target_pre cenv cx env (SubscriptTarget bt e) es /\
-  EVERY pure_expr (target_indices (SubscriptTarget bt e)) /\
   gas_marked_exec T (ctx,func) (eval_base_place cx bt)
     (es,s0) left (INL pv) mid (OK t) /\
   gas_marked_exec T (ctx,func) (bind (eval_expr cx e) (read_result cx))
@@ -162,6 +162,7 @@ Theorem target_storage_marked_ready_mem[local]:
       w2n (lookup_storage slot (get_storage cx (ee with gas_obs := []) tr)) <= cnt)
 Proof
   strip_tac >> rpt gen_tac >> strip_tac >> gvs[] >>
+  `target_pre cenv cx env bt es` by metis_tac[target_pre_sub] >>
   drule target_subscript_marked_base_source >>
   disch_then (qspec_then `gas_explicit right t.vs_gas_readings` assume_tac) >>
   `bind (eval_expr cx e) (read_result cx)
@@ -170,18 +171,23 @@ Proof
     (qpat_x_assum `gas_marked_exec _ _ (bind _ _) _ _ _ _ _` mp_tac >>
      simp[gas_marked_exec_def] >> strip_tac >>
      first_x_assum (qspec_then `[]` mp_tac) >> simp[]) >>
-  drule_at (Pat `eval_base_place _ _ _ = _`) target_subscript_storage_ready >>
-  disch_then (drule_at (Pat `bind _ _ _ = _`)) >>
-  impl_tac >-
-    (fs[target_pre_def, expr_sim_inv_def] >>
-     irule vyperStorageLayoutSafetyTheory.contract_storage_well_formed_storage_frame >>
-     goal_assum (drule_at Any) >>
-     Cases >> simp[vyperStorageBackendTheory.get_storage_def]) >>
-  simp[]
+  `expr_body_pre cenv cx env e
+    (mid with gas_obs := gas_explicit right t.vs_gas_readings)` by
+    (drule_all target_subscript_marked_base_inv >>
+     fs[target_pre_def, target_indices_pre_def]) >>
+  drule_all target_subscript_index_source_diagnostic >> strip_tac >>
+  `contract_storage_well_formed cx (ee with gas_obs := [])` by
+    (irule vyperStorageLayoutSafetyTheory.contract_storage_well_formed_storage_frame >>
+     qexists `ee` >> conj_tac
+     >- (Cases >> simp[vyperStorageBackendTheory.get_storage_def]) >>
+     fs[expr_sim_inv_def]) >>
+  drule_at (Pat `eval_base_place _ _ _ = _`) eval_base_place_storage_ready >>
+  disch_then (qspec_then `ee with gas_obs := []` mp_tac) >>
+  fs[target_pre_def, expr_sim_inv_def]
 QED
 
 Theorem target_storage_marked_index_open_mem[local]:
-  body_inv tops ctx cenv cx /\ supported_expr tops e /\
+  body_inv tops ctx cenv cx /\
   (!gs. expr_body_pre cenv cx env e (mid with gas_obs := gs)) /\
   storage_vars_rel cenv cx /\ transient_vars_rel cenv cx /\
   gas_marked_exec T (ctx,func) (bind (eval_expr cx e) (read_result cx))
@@ -208,8 +214,7 @@ QED
 
 Theorem target_storage_index_bind_mem[local]:
   target_pre cenv cx env (SubscriptTarget bt e) es /\
-  EVERY pure_expr (target_indices (SubscriptTarget bt e)) /\
-  body_inv tops ctx cenv cx /\ supported_expr tops e /\
+  body_inv tops ctx cenv cx /\
   storage_vars_rel cenv cx /\ transient_vars_rel cenv cx /\
   (!gs. expr_body_pre cenv cx env e (mid with gas_obs := gs)) /\
   ((?tr slot tv. pv = PlaceR (StoragePlace tr slot tv)) \/
@@ -280,8 +285,7 @@ QED
 
 Theorem target_subscript_storage_continuation_mem_core[local]:
   target_pre cenv cx env (SubscriptTarget bt e) es /\
-  EVERY pure_expr (target_indices (SubscriptTarget bt e)) /\
-  body_inv tops ctx cenv cx /\ supported_expr tops e /\
+  body_inv tops ctx cenv cx /\
   storage_vars_rel cenv cx /\ transient_vars_rel cenv cx /\
   ((?tr slot tv. pv = PlaceR (StoragePlace tr slot tv)) \/
    (?tr slot kt vty. pv = HashMapRef tr slot kt vty)) /\
@@ -318,12 +322,7 @@ Proof
     (irule target_subscript_index_admissible >> goal_assum (drule_at Any) >> simp[]) >>
   `!gs v ee. bind (eval_expr cx e) (read_result cx)
     (mid with gas_obs := gs) = (INL v,ee) ==> place_readable cx ee pv` by
-    (rpt gen_tac >> strip_tac >>
-     `place_readable cx (mid with gas_obs := gs) pv` by fs[target_post_def] >>
-     drule target_subscript_marked_base_source >>
-     disch_then (qspec_then `gs` assume_tac) >>
-     drule_all target_subscript_pure_index_live >> strip_tac >>
-     metis_tac[target_subscript_readable_gas_obs]) >>
+    (rpt strip_tac >> fs[place_readable_def]) >>
   `expr_sim_inv cenv cx env es` by fs[target_pre_def] >>
   `!l. FST rb <> Label l` by metis_tac[target_subscript_typed_base_not_label] >>
   `local_ptrs_reserved cenv sm /\ local_ptrs_reserved cenv sn` by
@@ -359,8 +358,7 @@ QED
 
 Theorem target_subscript_storage_continuation_mem:
   target_pre cenv cx env (SubscriptTarget bt e) es /\
-  EVERY pure_expr (target_indices (SubscriptTarget bt e)) /\
-  body_inv tops ctx cenv cx /\ supported_expr tops e /\
+  body_inv tops ctx cenv cx /\
   storage_vars_rel cenv cx /\ transient_vars_rel cenv cx /\
   ((?tr slot tv. pv = PlaceR (StoragePlace tr slot tv)) \/
    (?tr slot kt vty. pv = HashMapRef tr slot kt vty)) /\
@@ -406,10 +404,10 @@ Proof
   rpt gen_tac >> simp[] >> strip_tac >> gvs[] >>
   rpt gen_tac >> disch_tac >> gvs[] >>
   drule_all target_storage_continuation_source_mem >> strip_tac >>
-  irule target_pure_storage_result_ready_mem >>
-  goal_assum (drule_at (Pat `eval_base_place _ _ _ = _`)) >> simp[] >>
-  irule vyperStorageLayoutSafetyTheory.contract_storage_well_formed_storage_frame >>
-  `contract_storage_well_formed cx es` by fs[target_pre_def, expr_sim_inv_def] >>
-  goal_assum (drule_at Any) >> Cases >>
-  simp[vyperStorageBackendTheory.get_storage_def]
+  `expr_sim_inv cenv cx env ee` by
+    (drule_at (Pat `eval_base_place _ _ _ = _`)
+       eval_base_place_sim_inv >> simp[]) >>
+  drule_at (Pat `eval_base_place _ _ _ = _`)
+    target_storage_result_ready_mem >>
+  fs[target_pre_def, expr_sim_inv_def]
 QED
