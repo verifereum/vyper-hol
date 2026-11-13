@@ -3,7 +3,8 @@ Theory stmtSimCustomErrorPtrStoreHead
 Ancestors
   stmtSimCustomErrorPtrUnwrap stmtSimCustomErrorPtrStoreProbe
   annAssignPtrDestinationFrame annAssignPtrExterior annAssignPtrStore
-  annAssignPtrMemorySource bodyImmutableAugAssignStore
+  annAssignPtrMemorySource bodyImmutableAugAssignStore exprSimBufferStore
+  externalReturnBufferlessNormalize
   bodyPtrDefs freshWrites loweringStateRelDefs venomState finite_map pred_set
 
 Theorem custom_error_slice_store_frame_ptr[local]:
@@ -114,7 +115,8 @@ Theorem custom_error_nonword_store_path_ptr[local]:
   nb = type_memory_bytes ce typ /\ nb = type_memory_size tv /\ nb < dimword (:256) /\
   evaluate_type (get_tenv cx) typ = SOME tv /\ value_has_type tv v /\
   ptr_val_ok cx typ v (Var src) G tn s /\
-  ptr_covers G tn src s nb /\ ptr_covers G tn dst s nb ==>
+  (~is_bytestring_type typ /\ nb <> 0 ==> ptr_covers G tn src s nb) /\
+  ptr_covers G tn dst s nb ==>
   !D PG. ?Gf tf t k.
     k <= nb /\
     gas_path_ptr D 0 ctx func PG G tn s 0 Gf tf (OK t) /\
@@ -135,8 +137,27 @@ Proof
     (fs[ptr_val_ok_def, ptr_mem_ok_def, venomStateTheory.eval_operand_def] >> metis_tac[]) >>
   `val_wf tv v` by metis_tac[valueTypingMemoryPropsTheory.value_has_type_memory_wf] >>
   Cases_on `is_bytestring_type typ`
-  >- (drule_all annAssignPtrMemorySourceTheory.annassign_bytestring_window_ptr >>
-      strip_tac >>
+  >- (`val_in_memory tv v (w2n a) s.vs_memory` by
+        (first_x_assum irule >> simp[mem_agree_outside_def]) >>
+      drule_all exprSimBufferStoreTheory.buffer_typed_bytestring_header >>
+      disch_then (qx_choose_then `len` strip_assume_tac) >>
+      `val_footprint tv v <> 0` by
+        (`(?n. tv = BaseTV (BytesT (Dynamic n))) \/
+          (?n. tv = BaseTV (StringT n))` by
+           metis_tac[valueCopyBytesTheory.bytestring_type_value] >>
+         Cases_on `v` >> gvs[vyperTypingTheory.value_has_type_def,
+           loweringPostsTheory.val_footprint_def]) >>
+      `ptr_covers G tn src s (32 + 32 * ((len+31) DIV 32))` by
+        (gvs[ptr_val_ok_def, ptr_mem_ok_def, ptr_covers_def,
+             eval_operand_def, vfmConstantsTheory.word_size_def] >> metis_tac[]) >>
+      drule_all annAssignPtrMemorySourceTheory.annassign_bytestring_window_ptr >>
+      disch_then (qx_choose_then `otherlen` strip_assume_tac) >>
+      qpat_x_assum `mload _ _ = n2w otherlen` kall_tac >>
+      `32 + 32 * ((len+31) DIV 32) <= nb` by
+        metis_tac[exprSimPropsTheory.val_store_size_le, vfmConstantsTheory.word_size_def] >>
+      `val_footprint tv v <= 32 + 32 * ((len+31) DIV 32)` by
+        metis_tac[exprSimPropsTheory.val_footprint_le_store_size,
+          vfmConstantsTheory.word_size_def] >>
       `ptr_covers G tn src s (32 + 32 * ((len+31) DIV 32)) /\
        ptr_covers G tn dst s (32 + 32 * ((len+31) DIV 32))` by
         (fs[ptr_covers_def] >> metis_tac[arithmeticTheory.LESS_EQ_TRANS,
@@ -147,7 +168,6 @@ Proof
          mload (w2n a) s = n2w len /\
          (!i. w2n a <= i /\ i < w2n a+32 ==> i NOTIN tn.t_mem)
        else 32 + 32 * ((len+31) DIV 32) = type_memory_bytes ce typ` by simp[] >>
-      qpat_x_assum `ptr_covers G tn src s nb` kall_tac >>
       qpat_x_assum `ptr_covers G tn dst s nb` kall_tac >>
       drule_all (SRULE [] (Q.INST [`sty` |-> `ty`]
         (SPEC_ALL annAssignPtrDestinationTheory.annassign_store_memory_path_ptr))) >>
@@ -155,6 +175,8 @@ Proof
       qexistsl [`Gf`, `tnf`, `sf`, `32 + 32 * ((len+31) DIV 32)`] >> simp[] >>
       qpat_x_assum `!i. _ ==> mem_bytes_at i 1 sf.vs_memory = _ /\ _` mp_tac >>
       simp[]) >>
+  Cases_on `nb = 0` >- suspend "zero" >>
+  `ptr_covers G tn src s nb` by simp[] >>
   `val_footprint tv v <= nb` by simp[exprSimPropsTheory.val_footprint_le] >>
   `if is_bytestring_type typ then
      nb = 32 + 32 * ((0+31) DIV 32) /\ mload (w2n a) s = n2w 0 /\
@@ -166,6 +188,16 @@ Proof
   qexistsl [`Gf`, `tnf`, `sf`, `nb`] >> simp[] >>
   qpat_x_assum `!i. _ ==> mem_bytes_at i 1 sf.vs_memory = _ /\ _` mp_tac >> simp[]
 QED
+
+Resume custom_error_nonword_store_path_ptr[zero]:
+  `st = su` by
+    gvs[contextTheory.compile_store_memory_def,
+        contextPropsTheory.compile_copy_memory_zero] >>
+  qexistsl [`G`,`tn`,`s`,`0`] >> simp[] >>
+  conj_tac >- metis_tac[cj 1 fragGasPathPtrTheory.gas_path_ptr_rules] >>
+  metis_tac[return_zero_wf_memory]
+QED
+Finalise custom_error_nonword_store_path_ptr
 
 Theorem custom_error_store_head_path_ptr:
   compile_store_memory ce op (Var y) typ typ su = ((),st) /\
@@ -180,7 +212,8 @@ Theorem custom_error_store_head_path_ptr:
   expr_val_rel cx typ v op s /\ ptr_val_ok cx typ v op G tn s /\
   nb = type_memory_bytes ce typ /\ nb = type_memory_size tv /\
   nb < dimword (:256) /\ (is_word_type typ ==> nb = 32) /\
-  (~is_word_type typ ==> ?z. op = Var z /\ not_fresh_at su z /\ ptr_covers G tn z s nb) /\
+  (~is_word_type typ ==> ?z. op = Var z /\ not_fresh_at su z /\
+    (~is_bytestring_type typ /\ nb <> 0 ==> ptr_covers G tn z s nb)) /\
   not_fresh_at su y /\ lookup_var y s = SOME (n2w a) /\
   ptr_covers G tn y s nb /\ a+nb < dimword (:256) /\
   (!n lo sz i. local_region ce ee.scopes s n lo sz /\
@@ -242,9 +275,11 @@ Resume custom_error_store_head_path_ptr[word]:
 QED
 
 Resume custom_error_store_head_path_ptr[memory]:
-  `?z. op = Var z /\ not_fresh_at su z /\ ptr_covers G tn z s nb` by simp[] >>
+  `?z. op = Var z /\ not_fresh_at su z /\
+    (~is_bytestring_type typ /\ nb <> 0 ==> ptr_covers G tn z s nb)` by simp[] >>
   qpat_x_assum `op = Var z` SUBST_ALL_TAC >>
-  `?w. lookup_var z s = SOME w` by fs[ptr_covers_def] >>
+  `?w. lookup_var z s = SOME w` by
+    gvs[loweringPostsTheory.expr_val_rel_def, eval_operand_def] >>
   drule_all custom_error_nonword_store_path_ptr >>
   disch_then (qspecl_then [`D`, `PG`] strip_assume_tac) >>
   `!i. ~(a <= i /\ i < a+nb) ==>

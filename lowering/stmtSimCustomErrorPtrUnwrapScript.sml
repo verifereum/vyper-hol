@@ -13,11 +13,14 @@ Theorem custom_error_materialise_path_ptr[local]:
   unwrap_value ce vv sm = (op,sb) /\ ~ce.ce_is_ctor /\
   vv_post ctx func ce cx e es sa sm s0 ee raw vv s /\
   ptr_vv_ok cx (post_value_type ce e) raw vv ee G tn s /\
-  ptr_buf_ok ce e (vv_operand vv) G s /\
+  (!ty op. vv = StackValue ty op /\ ~is_word_type (expr_type e) ==>
+    ptr_buf_ok ce e op G s) /\
+  (!ty place. vv = LocatedValue ty place /\ place.ptr_location = LocMemory ==>
+    ptr_buf_ok ce e place.ptr_operand G s) /\
   read_result cx raw ee = (INL v,ee) /\
   evaluate_type (get_tenv cx) (post_value_type ce e) = SOME tv /\
   value_has_type tv v /\ post_value_type ce e = expr_type e /\
-  lowered_value_type ce e = expr_type e /\
+  (lowered_value_type ce e = expr_type e \/ is_bytestring_type (expr_type e)) /\
   nb = type_memory_bytes ce (expr_type e) /\ nb = type_memory_size tv /\
   nb < dimword (:256) /\
   local_ptrs_reserved ce sa /\ local_ptrs_reserved ce sm /\
@@ -35,7 +38,7 @@ Theorem custom_error_materialise_path_ptr[local]:
     gas_path_ptr D 0 ctx func PG G tn s 0 G' tn' (OK t) /\
     expr_post ctx func ce cx e es sa sb s0 ee v op t /\
     ptr_val_ok cx (post_value_type ce e) v op G' tn' t /\
-    (~is_word_type (post_value_type ce e) ==> ptr_buf_ok ce e op G' t) /\
+    (~is_word_type (post_value_type ce e) /\ ~is_bytestring_type (expr_type e) ==> ptr_buf_ok ce e op G' t) /\
     ghost_inv d ce cx ee G' tn' t /\ ghost_kept ce ee sm G tn s G' tn' /\
     t.vs_current_bb = sb.cs_current_bb /\
     t.vs_inst_idx = LENGTH sb.cs_current_insts /\ ~t.vs_halted /\
@@ -49,9 +52,10 @@ Theorem custom_error_materialise_path_ptr[local]:
       mem_bytes_at i 1 t.vs_memory = mem_bytes_at i 1 s.vs_memory /\
       (i IN tn'.t_mem ==> i IN tn.t_mem))
 Proof
-  strip_tac >> rpt gen_tac >> Cases_on `vv`
+  disch_then (map_every assume_tac o CONJUNCTS) >>
+  rpt gen_tac >> Cases_on `vv`
   >- suspend "stack" >>
-  rename1 `LocatedValue ty place` >>
+  rename1 `unwrap_value ce (LocatedValue ty place) sm = (op,sb)` >>
   Cases_on `is_word_type ty`
   >- suspend "word" >>
   Cases_on `place.ptr_location = LocMemory`
@@ -67,14 +71,16 @@ Proof
 QED
 
 Resume custom_error_materialise_path_ptr[stack]:
+  qpat_x_assum `_ \/ is_bytestring_type _` kall_tac >>
   gvs[unwrap_value_def, comp_return_def, vv_operand_def] >>
   `vv_post ctx func ce cx e es sa sb s0 ee (Value v) (StackValue t o') s` by
     metis_tac[vv_post_read_result] >>
+  `ptr_val_ok cx (post_value_type ce e) v o' G tn s` by
+    (gvs[ptr_vv_ok_def] >> metis_tac[]) >>
   qexistsl_tac [`G`,`tn`,`s`] >>
-  simp[ghost_kept_def] >>
+  gvs[ghost_kept_def] >>
   conj_tac >- metis_tac[cj 1 gas_path_ptr_rules] >>
-  conj_tac >- metis_tac[expr_post_of_vv_post_stack] >>
-  gvs[ptr_vv_ok_def]
+  metis_tac[expr_post_of_vv_post_stack]
 QED
 Resume custom_error_materialise_path_ptr[word]:
   drule_all custom_error_word_unwrap_ptr >>
@@ -84,6 +90,10 @@ Resume custom_error_materialise_path_ptr[word]:
   qexistsl_tac [`G'`,`tn'`,`u`] >> simp[]
 QED
 Resume custom_error_materialise_path_ptr[memory]:
+  qpat_x_assum `_ \/ is_bytestring_type _` kall_tac >>
+  `~is_word_type (expr_type e)` by
+    (gvs[vv_post_def, vv_holds_def] >>
+     metis_tac[valueCopyBytesTheory.is_bytestring_word_type]) >>
   gvs[unwrap_value_def, comp_return_def, vv_operand_def] >>
   `vv_post ctx func ce cx e es sa sb s0 ee (Value v) (LocatedValue ty place) s` by
     metis_tac[vv_post_read_result] >>
@@ -98,14 +108,14 @@ QED
 Resume custom_error_materialise_path_ptr[storage]:
   markerLib.RESUME_TAC >> (
   `place.ptr_location = LocStorage \/ place.ptr_location = LocTransient` by simp[] >>
-  gvs[vv_operand_def] >>
+  gnvs[vv_operand_def] >>
   mp_tac (Q.INST [`nb` |-> `type_memory_bytes ce (expr_type e)`,
     `ty` |-> `expr_type e`] (SPEC_ALL custom_error_storage_unwrap_ptr)) >>
   (impl_tac >- simp[]) >>
-  disch_then (qspecl_then [`D`,`PG`] strip_assume_tac) >> gvs[] >>
+  disch_then (qspecl_then [`D`,`PG`] strip_assume_tac) >> gnvs[] >>
   qexistsl_tac [`G'`,`tn'`,`t`] >> simp[] >>
   conj_tac
-  >- (gvs[ptr_buf_ok_def, ptr_covers_def, eval_operand_def] >> metis_tac[]) >>
+  >- (strip_tac >> gvs[ptr_buf_ok_def, ptr_covers_def, eval_operand_def] >> metis_tac[]) >>
   rpt gen_tac >> strip_tac >>
   `regions_disjoint (w2n w) (type_memory_bytes ce (expr_type e)) b len` by metis_tac[] >>
   `i NOTIN toplevel_copy_region (w2n w) (type_slot_size tv)` by
@@ -115,14 +125,14 @@ Resume custom_error_materialise_path_ptr[storage]:
   metis_tac[])
 QED
 Resume custom_error_materialise_path_ptr[code]:
-  gvs[vv_operand_def] >>
+  gnvs[vv_operand_def] >>
   mp_tac (Q.INST [`nb` |-> `type_memory_bytes ce (expr_type e)`,
     `ty` |-> `expr_type e`] (SPEC_ALL custom_error_code_unwrap_ptr)) >>
   (impl_tac >- simp[]) >>
-  disch_then (qspecl_then [`D`,`PG`] strip_assume_tac) >> gvs[] >>
+  disch_then (qspecl_then [`D`,`PG`] strip_assume_tac) >> gnvs[] >>
   qexistsl_tac [`G'`,`tn'`,`t`] >> simp[] >>
   conj_tac
-  >- (gvs[ptr_buf_ok_def, ptr_covers_def, eval_operand_def] >> metis_tac[]) >>
+  >- (strip_tac >> gvs[ptr_buf_ok_def, ptr_covers_def, eval_operand_def] >> metis_tac[]) >>
   rpt gen_tac >> strip_tac >>
   `regions_disjoint (w2n w) (type_memory_bytes ce (expr_type e)) b len` by metis_tac[] >>
   `i < w2n w \/ w2n w + type_memory_bytes ce (expr_type e) <= i` by
@@ -137,7 +147,10 @@ Theorem custom_error_destination_path_ptr[local]:
    else emit_op ADD [Var x; Lit (n2w off)]) sm = (dst,sn) /\
   vv_post ctx func ce cx e es sa sm s0 ee raw vv s /\
   ptr_vv_ok cx (post_value_type ce e) raw vv ee G tn s /\
-  ptr_buf_ok ce e (vv_operand vv) G s /\
+  (!ty op. vv = StackValue ty op /\ ~is_word_type (expr_type e) ==>
+    ptr_buf_ok ce e op G s) /\
+  (!ty place. vv = LocatedValue ty place /\ place.ptr_location = LocMemory ==>
+    ptr_buf_ok ce e place.ptr_operand G s) /\
   local_ptrs_reserved ce sm /\ local_ptrs_reserved ce sa /\
   sa.cs_next_var <= sm.cs_next_var /\
   (!z. vv_operand vv = Var z ==> not_fresh_at sm z) /\
@@ -153,7 +166,10 @@ Theorem custom_error_destination_path_ptr[local]:
     gas_path_ptr D 0 ctx func PG G tn s 0 H tm (OK a) /\
     vv_post ctx func ce cx e es sa sn s0 ee raw vv a /\
     ptr_vv_ok cx (post_value_type ce e) raw vv ee H tm a /\
-    ptr_buf_ok ce e (vv_operand vv) H a /\
+    (!ty op. vv = StackValue ty op /\ ~is_word_type (expr_type e) ==>
+      ptr_buf_ok ce e op H a) /\
+    (!ty place. vv = LocatedValue ty place /\ place.ptr_location = LocMemory ==>
+      ptr_buf_ok ce e place.ptr_operand H a) /\
     ghost_inv d ce cx ee H tm a /\ ghost_kept ce ee sm G tn s H tm /\
     dst = Var y /\ not_fresh_at sn y /\
     ptr_covers H tm y a nb /\ lookup_var y a = SOME (n2w (b+off)) /\
@@ -190,7 +206,10 @@ Resume custom_error_destination_path_ptr[add]:
      first_x_assum (qspec_then `sm.cs_next_var` mp_tac) >> simp[]) >>
   `vv_post ctx func ce cx e es sa sn s0 ee raw vv a /\
    ptr_vv_ok cx (post_value_type ce e) raw vv ee H tm a /\
-   ptr_buf_ok ce e (vv_operand vv) H a` by
+   (!ty op. vv = StackValue ty op /\ ~is_word_type (expr_type e) ==>
+     ptr_buf_ok ce e op H a) /\
+   (!ty place. vv = LocatedValue ty place /\ place.ptr_location = LocMemory ==>
+     ptr_buf_ok ce e place.ptr_operand H a)` by
     (qunabbrev_tac `a` >> irule custom_error_fresh_add_transport >>
      goal_assum (drule_at Any) >> simp[] >> metis_tac[]) >>
   `ghost_inv d ce cx ee H tm a /\ ghost_kept ce ee sm G tn s H tm` by
@@ -217,11 +236,14 @@ Theorem custom_error_unwrap_path_ptr:
   unwrap_value ce vv sn = (op,sb) /\ ~ce.ce_is_ctor /\
   vv_post ctx func ce cx e es sa sm s0 ee raw vv s /\
   ptr_vv_ok cx (post_value_type ce e) raw vv ee G tn s /\
-  ptr_buf_ok ce e (vv_operand vv) G s /\
+  (!ty op. vv = StackValue ty op /\ ~is_word_type (expr_type e) ==>
+    ptr_buf_ok ce e op G s) /\
+  (!ty place. vv = LocatedValue ty place /\ place.ptr_location = LocMemory ==>
+    ptr_buf_ok ce e place.ptr_operand G s) /\
   read_result cx raw ee = (INL v,ee) /\
   evaluate_type (get_tenv cx) (post_value_type ce e) = SOME tv /\
   value_has_type tv v /\ post_value_type ce e = expr_type e /\
-  lowered_value_type ce e = expr_type e /\
+  (lowered_value_type ce e = expr_type e \/ is_bytestring_type (expr_type e)) /\
   nb = type_memory_bytes ce (expr_type e) /\ nb = type_memory_size tv /\
   nb < dimword (:256) /\
   local_ptrs_reserved ce sa /\ local_ptrs_reserved ce sm /\
@@ -241,7 +263,7 @@ Theorem custom_error_unwrap_path_ptr:
     gas_path_ptr D 0 ctx func PG G tn s 0 Gf tf (OK t) /\
     expr_post ctx func ce cx e es sa sb s0 ee v op t /\
     ptr_val_ok cx (post_value_type ce e) v op Gf tf t /\
-    (~is_word_type (post_value_type ce e) ==> ptr_buf_ok ce e op Gf t) /\
+    (~is_word_type (post_value_type ce e) /\ ~is_bytestring_type (expr_type e) ==> ptr_buf_ok ce e op Gf t) /\
     ghost_inv d ce cx ee Gf tf t /\ ghost_kept ce ee sm G tn s Gf tf /\
     dst = Var y /\ ptr_covers Gf tf y t nb /\
     lookup_var y t = SOME (n2w (b+off)) /\
@@ -257,7 +279,7 @@ Theorem custom_error_unwrap_path_ptr:
       mem_bytes_at i 1 t.vs_memory = mem_bytes_at i 1 s.vs_memory /\
       (i IN tf.t_mem ==> i IN tn.t_mem))
 Proof
-  strip_tac >> rpt gen_tac >>
+  disch_then (map_every assume_tac o CONJUNCTS) >> rpt gen_tac >>
   `sm.cs_next_var <= sn.cs_next_var /\ sm.cs_next_id <= sn.cs_next_id` by
     (Cases_on `off = 0` >> gvs[comp_return_def] >>
      drule emitted_insts_emit_op >> simp[]) >>

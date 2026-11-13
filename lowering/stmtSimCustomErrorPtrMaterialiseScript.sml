@@ -69,7 +69,10 @@ Theorem custom_error_fresh_add_transport:
   (!z. vv_operand vv = Var z ==> not_fresh_at sm z) /\
   vv_post ctx func ce cx e es sa sm s0 ee tv vv s /\
   ptr_vv_ok cx (post_value_type ce e) tv vv ee G tn s /\
-  ptr_buf_ok ce e (vv_operand vv) G s /\
+  (!ty op. vv = StackValue ty op /\ ~is_word_type (expr_type e) ==>
+    ptr_buf_ok ce e op G s) /\
+  (!ty place. vv = LocatedValue ty place /\ place.ptr_location = LocMemory ==>
+    ptr_buf_ok ce e place.ptr_operand G s) /\
   (!p. p <> out ==> FLOOKUP G' p = FLOOKUP G p /\
      op_taint tn' (Var p) = op_taint tn (Var p)) /\
   tn'.t_mem = tn.t_mem /\ tn'.t_stor = tn.t_stor /\
@@ -78,8 +81,11 @@ Theorem custom_error_fresh_add_transport:
     (update_var out w s with vs_inst_idx := n) /\
   ptr_vv_ok cx (post_value_type ce e) tv vv ee G' tn'
     (update_var out w s with vs_inst_idx := n) /\
-  ptr_buf_ok ce e (vv_operand vv) G'
-    (update_var out w s with vs_inst_idx := n)
+  (!ty op. vv = StackValue ty op /\ ~is_word_type (expr_type e) ==>
+    ptr_buf_ok ce e op G' (update_var out w s with vs_inst_idx := n)) /\
+  (!ty place. vv = LocatedValue ty place /\ place.ptr_location = LocMemory ==>
+    ptr_buf_ok ce e place.ptr_operand G'
+      (update_var out w s with vs_inst_idx := n))
 Proof
   strip_tac >>
   `~not_fresh_at sm out /\ sm.cs_next_id <= sn.cs_next_id` by
@@ -97,5 +103,8 @@ Proof
   conj_tac
   >- (irule custom_error_vv_ghost_frame >>
       qexistsl_tac [`G`, `s`, `tn`] >> simp[update_var_def]) >>
-  irule custom_error_buf_ghost_frame >> metis_tac[]
+  conj_tac >> rpt strip_tac >>
+  irule custom_error_buf_ghost_frame >>
+  qexistsl_tac [`G`,`s`] >> simp[] >>
+  gvs[vv_operand_def] >> metis_tac[]
 QED
