@@ -8,6 +8,7 @@ Ancestors
   venomExecSemantics venomInstProofs venomInst venomState finite_map words
   list rich_list arithmetic abiDecoderReentry abiDecoderContract
   decoderGhostFramePtr loweringStateRelDefs ghostPcTransportPtr instIdxIndep
+  exprSimAbiEncodeFramedBuiltin abiEncoderExtendSim
 
 Theorem abi_encode_finish_ptr_sequence[local]:
   abi_builtin_encode_finish (Var x) encoded_len mid_size st = ((),final) /\
@@ -109,6 +110,85 @@ QED
 
 Finalise abi_encode_finish_ptr_sequence
 
+Theorem abi_encode_finish_ptr_from_body_semantic:
+  abi_builtin_encode_finish (Var x) encoded_len mid_size st = ((),final) /\
+  fn_has_code st final func /\
+  eval_operand (Var x) encoded = SOME (n2w p) /\
+  eval_operand encoded_len encoded = SOME (n2w len) /\
+  abi_decoder_operand_live st.cs_next_var (Var x) /\
+  p < dimword (:256) /\ ~encoded.vs_halted /\
+  encoded.vs_current_bb = st.cs_current_bb /\
+  encoded.vs_inst_idx = LENGTH st.cs_current_insts /\
+  mem_bytes_at (p+32) (mid_size+len) encoded.vs_memory = bytes /\
+  window_strong_result ctx func body_st body_end out at av d initial encoded /\
+  ptr_covers G tn x encoded outsz /\ 32 <= outsz /\
+  op_taint tn encoded_len = {} /\ ~ctx_has_dalloca ctx ==>
+  ?actual H tf.
+    eval_operand (Var x) actual = SOME (n2w p) /\
+    mload p actual = n2w (len+mid_size) /\
+    mem_bytes_at (p+32) (mid_size+len) actual.vs_memory = bytes /\
+    abi_decode_frame p 32 encoded actual /\
+    abi_encoder_registered_effect {} [(p,32)] encoded actual /\
+    actual.vs_allocas = encoded.vs_allocas /\
+    actual.vs_alloca_next = encoded.vs_alloca_next /\
+    window_alloca_growth initial actual /\ actual.vs_labels = initial.vs_labels /\
+    abi_encoder_registered_effect
+      (window_alloca_sites func (frag_ids body_st body_end))
+      [(p,32);(d,LENGTH (enc at av))] initial actual /\
+    (!i b sz. i IN window_alloca_sites func (frag_ids body_st body_end) /\
+      FLOOKUP actual.vs_allocas i = SOME (b,sz) ==> sz = 32) /\
+    (!op w. abi_decoder_operand_live st.cs_next_var op /\
+      eval_operand op encoded = SOME w ==> eval_operand op actual = SOME w) /\
+    actual.vs_current_bb = final.cs_current_bb /\
+    actual.vs_inst_idx = LENGTH final.cs_current_insts /\
+    ~actual.vs_halted /\ abi_decode_sim ctx func encoded actual /\
+    gas_path_ptr D 0 ctx func PG G tn encoded 0 H tf (OK actual) /\
+    ptr_covers H tf x actual outsz /\
+    (!y. not_fresh_at st y ==> FLOOKUP H y = FLOOKUP G y /\
+      op_taint tf (Var y) = op_taint tn (Var y)) /\
+    tf.t_stor = tn.t_stor /\ tf.t_trans = tn.t_trans /\ tf.t_imm = tn.t_imm /\
+    tf.t_mem = tn.t_mem DIFF {i | p <= i /\ i < p+32} /\
+    abi_encode_exec_frame func encoded actual /\
+    abi_encoder_extend_sim ctx func encoded actual
+Proof
+  strip_tac >>
+  drule_all abi_encode_window_finish_concrete >>
+  simp_tac bool_ss [LET_THM] >> strip_tac >>
+  drule_all abi_encode_finish_ptr_sequence >>
+  disch_then (qspecl_then [`func`, `PG`, `D`] strip_assume_tac) >>
+  drule abi_builtin_encode_finish_shape >> strip_tac >>
+  `abi_encode_exec_frame func encoded raw` by
+    (irule abi_encode_framed_finish_sequence >>
+     fs[] >> metis_tac[]) >>
+  `abi_encoder_extend_sim ctx func encoded
+     (raw with vs_inst_idx := LENGTH final.cs_current_insts)` by
+    (irule abi_encoder_run_sequence_extend_sim >>
+     simp[] >> qexists_tac `st` >> simp[]) >>
+  `?bb. lookup_block encoded.vs_current_bb func.fn_blocks = SOME bb /\
+      isPREFIX (emitted_insts st final) (DROP encoded.vs_inst_idx bb.bb_instructions)` by
+    (fs[fragExecTheory.fn_has_code_def, inst_extends_def, emitted_insts_def, IS_PREFIX_APPEND] >>
+     pure_rewrite_tac[GSYM APPEND_ASSOC, DROP_LENGTH_APPEND] >>
+     metis_tac[]) >>
+  drule_all run_inst_seq_gas_path_ptr >> strip_tac >>
+  `LENGTH (FILTER (\i. i.inst_opcode = GAS) (emitted_insts st final)) = 0` by
+    (qpat_x_assum `abi_builtin_encode_finish _ _ _ _ = _` mp_tac >>
+     POP_ASSUM_LIST (K ALL_TAC) >> Cases_on `mid_size > 0` >>
+     simp[abi_builtin_encode_finish_def, comp_bind_def, comp_ignore_bind_def,
+       comp_return_def, emit_op_def, emit_void_def, fresh_var_def, fresh_id_def, emit_def] >>
+     rpt (pairarg_tac >> gvs[]) >> strip_tac >> gvs[] >>
+     simp[emitted_insts_def, GSYM APPEND_ASSOC, DROP_LENGTH_APPEND, mk_inst_def]) >>
+  `encoded.vs_inst_idx + LENGTH (emitted_insts st final) = LENGTH final.cs_current_insts` by
+    (fs[inst_extends_def, emitted_insts_def] >>
+     qpat_x_assum `final.cs_current_insts = _` (mp_tac o Q.AP_TERM `LENGTH`) >> simp[]) >>
+  qpat_x_assum `encoded.vs_inst_idx = _` kall_tac >>
+  qexistsl [`raw with vs_inst_idx := LENGTH final.cs_current_insts`, `H`, `tf`] >>
+  asm_rewrite_tac[] >>
+  qpat_x_assum `ptr_covers H tf x raw outsz` mp_tac >>
+  simp_tac (srw_ss()) [ptr_covers_def, lookup_var_def] >>
+  metis_tac[]
+QED
+
+(* Compatibility projection: the finite pointer execution is proved only above. *)
 Theorem abi_encode_finish_ptr_from_body:
   abi_builtin_encode_finish (Var x) encoded_len mid_size st = ((),final) /\
   fn_has_code st final func /\
@@ -148,32 +228,7 @@ Theorem abi_encode_finish_ptr_from_body:
     tf.t_stor = tn.t_stor /\ tf.t_trans = tn.t_trans /\ tf.t_imm = tn.t_imm /\
     tf.t_mem = tn.t_mem DIFF {i | p <= i /\ i < p+32}
 Proof
-  strip_tac >>
-  drule_all abi_encode_window_finish_concrete >>
-  simp_tac bool_ss [LET_THM] >> strip_tac >>
-  drule_all abi_encode_finish_ptr_sequence >>
-  disch_then (qspecl_then [`func`, `PG`, `D`] strip_assume_tac) >>
-  drule abi_builtin_encode_finish_shape >> strip_tac >>
-  `?bb. lookup_block encoded.vs_current_bb func.fn_blocks = SOME bb /\
-      isPREFIX (emitted_insts st final) (DROP encoded.vs_inst_idx bb.bb_instructions)` by
-    (fs[fragExecTheory.fn_has_code_def, inst_extends_def, emitted_insts_def, IS_PREFIX_APPEND] >>
-     pure_rewrite_tac[GSYM APPEND_ASSOC, DROP_LENGTH_APPEND] >>
-     metis_tac[]) >>
-  drule_all run_inst_seq_gas_path_ptr >> strip_tac >>
-  `LENGTH (FILTER (\i. i.inst_opcode = GAS) (emitted_insts st final)) = 0` by
-    (qpat_x_assum `abi_builtin_encode_finish _ _ _ _ = _` mp_tac >>
-     POP_ASSUM_LIST (K ALL_TAC) >> Cases_on `mid_size > 0` >>
-     simp[abi_builtin_encode_finish_def, comp_bind_def, comp_ignore_bind_def,
-       comp_return_def, emit_op_def, emit_void_def, fresh_var_def, fresh_id_def, emit_def] >>
-     rpt (pairarg_tac >> gvs[]) >> strip_tac >> gvs[] >>
-     simp[emitted_insts_def, GSYM APPEND_ASSOC, DROP_LENGTH_APPEND, mk_inst_def]) >>
-  `encoded.vs_inst_idx + LENGTH (emitted_insts st final) = LENGTH final.cs_current_insts` by
-    (fs[inst_extends_def, emitted_insts_def] >>
-     qpat_x_assum `final.cs_current_insts = _` (mp_tac o Q.AP_TERM `LENGTH`) >> simp[]) >>
-  qpat_x_assum `encoded.vs_inst_idx = _` kall_tac >>
-  qexistsl [`raw with vs_inst_idx := LENGTH final.cs_current_insts`, `H`, `tf`] >>
-  asm_rewrite_tac[] >>
-  qpat_x_assum `ptr_covers H tf x raw outsz` mp_tac >>
-  simp_tac (srw_ss()) [ptr_covers_def, lookup_var_def] >>
-  metis_tac[]
+  strip_tac >> drule_all abi_encode_finish_ptr_from_body_semantic >>
+  disch_then (qspecl_then [`PG`, `D`] strip_assume_tac) >>
+  qexistsl [`actual`, `H`, `tf`] >> asm_rewrite_tac[]
 QED
