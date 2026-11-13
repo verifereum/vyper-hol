@@ -21,12 +21,12 @@ Proof
   rw[frame_outcome_def] >> gvs[]
 QED
 
-Theorem frame_resource_starved_single_transfer[local]:
+Theorem creation_resource_starved_single_transfer[local]:
   es.contexts = [(c0,rb0)] /\ mid.contexts = [(c1,rb1)] /\
-  mid.txParams = es.txParams /\ frame_resource_starved mid r es' ==>
-  frame_resource_starved es r es'
+  mid.txParams = es.txParams /\ creation_resource_starved mid r es' ==>
+  creation_resource_starved es r es'
 Proof
-  rpt strip_tac >> gvs[frame_resource_starved_def, frame_outcome_def] >>
+  rpt strip_tac >> gvs[creation_resource_starved_def, frame_outcome_def] >>
   metis_tac[]
 QED
 
@@ -131,7 +131,7 @@ Theorem deploy_venom_frame:
             venom_frame_rel (shadow_root es) r g res))
     ==>
     ?r es'. run_call es = SOME (r, es') /\
-      (frame_resource_starved es r es' \/
+      (creation_resource_starved es r es' \/
        deploy_result_rel H tops runtime_bc tx es r es' src)
 Proof
   rpt strip_tac >>
@@ -142,7 +142,7 @@ Proof
   >- (gvs[frame_resource_starved_def] >>
       drule_all deploy_frame_exception >> strip_tac >>
       first_assum (irule_at (Pos hd)) >>
-      simp[frame_resource_starved_def] >> metis_tac[]) >>
+      simp[creation_resource_starved_def] >> metis_tac[]) >>
   Cases_on `res` >> gvs[venom_frame_rel_def]
   >~ [`Halt ss`]
   >- (drule_all deploy_frame_halt_mid >> strip_tac >>
@@ -156,7 +156,7 @@ Proof
                 deploy_frame_complete >>
               impl_tac >- simp[] >>
               strip_tac >> gvs[]
-              >- (disj1_tac >> irule frame_resource_starved_single_transfer >>
+              >- (disj1_tac >> irule creation_resource_starved_single_transfer >>
                   metis_tac[]) >>
               disj2_tac >> simp[deploy_result_rel_def] >>
               simp[lookup_account_def, update_account_def,
@@ -175,7 +175,7 @@ Proof
             deploy_frame_complete >>
           impl_tac >- (Cases_on `runtime_bc` >> gvs[]) >>
           strip_tac >> gvs[]
-          >- (disj1_tac >> irule frame_resource_starved_single_transfer >>
+          >- (disj1_tac >> irule creation_resource_starved_single_transfer >>
               metis_tac[]) >>
           disj2_tac >> simp[deploy_result_rel_def] >>
           qexists `section` >>
