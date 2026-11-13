@@ -455,18 +455,24 @@ Resume concat_args_sim_mem[post]:
      ntac 3 (pop_assum mp_tac) >> rpt (disch_then SUBST1_TAC) >> REFL_TAC) >>
   qpat_x_assum `_ ==> pure_args` (fn th => rewrite_tac[th]) >>
   qunabbrev_tac `pure_args` >>
-  simp[] >> conj_tac
-  >- (qpat_x_assum `expr_sim_inv _ _ _ (es_end' with gas_obs := [])` mp_tac >> simp[]) >>
+  ntac 5 (conj_tac >- first_assum ACCEPT_TAC) >>
   conj_tac
-  >- (qpat_x_assum `stmt_state_rel H _ _ _ _ (es_end' with gas_obs := []) tu` mp_tac >> simp[]) >>
+  >- (qexistsl_tac [`v`, `vs`] >> conj_tac >- REFL_TAC >>
+      conj_tac >> first_assum ACCEPT_TAC) >>
   conj_tac
-  >- first_assum ACCEPT_TAC >>
+  >- (rewrite_tac[MAP, FLAT] >> first_assum ACCEPT_TAC) >>
   conj_tac
-  >- (qpat_x_assum `mem_bytes_at _ _ tu.vs_memory = mem_bytes_at _ _ s0.vs_memory ++ _` mp_tac >>
-      simp_tac bool_ss [LENGTH_APPEND, APPEND_ASSOC, AC ADD_ASSOC ADD_COMM]) >>
-  rpt gen_tac >> disch_then (MAP_EVERY assume_tac o CONJUNCTS) >>
-  qpat_x_assum `!aid p n. FLOOKUP s0.vs_allocas aid = SOME (p,n) /\ _ ==> _` irule >>
-  simp[ADD_COMM] >> conj_tac >- first_assum ACCEPT_TAC >>
-  qexists_tac `aid` >> simp[]
+  >- (qpat_x_assum `mload _ tu = _` mp_tac >>
+      rewrite_tac[MAP, FLAT, LENGTH_APPEND, ADD_ASSOC] >>
+      TRY (disch_then ACCEPT_TAC)) >>
+  ntac 2 (conj_tac >- first_assum ACCEPT_TAC) >>
+  conj_tac
+  >- (qpat_x_assum `!aid p n. FLOOKUP s0.vs_allocas aid = SOME (p,n) /\ _ ==> _` mp_tac >>
+      simp_tac bool_ss [ADD_COMM]) >>
+  ntac 2 (conj_tac >- first_assum ACCEPT_TAC) >>
+  qpat_x_assum `s0.vs_alloca_next <= t.vs_alloca_next` mp_tac >>
+  qpat_x_assum `t2.vs_alloca_next = t.vs_alloca_next` mp_tac >>
+  qpat_x_assum `t2.vs_alloca_next <= tu.vs_alloca_next` mp_tac >>
+  rpt (pop_assum kall_tac) >> decide_tac
 QED
 Finalise concat_args_sim_mem
