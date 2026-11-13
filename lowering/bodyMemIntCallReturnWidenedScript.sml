@@ -93,7 +93,8 @@ Proof
      simp[bodySimTheory.same_frame_def, compile_env_component_equality]) >>
   qpat_x_assum `compile_internal_return_from_env _ _ _ _ _ _ = _` mp_tac >>
   simp[stmtLoweringTheory.compile_internal_return_from_env_def,
-       comp_bind_def, comp_return_def] >> strip_tac >>
+       comp_ignore_bind_def, comp_bind_def, comp_return_def] >>
+  rpt (pairarg_tac >> simp[]) >> strip_tac >> gvs[] >>
   `type_memory_bytes cenv' ret_ty = type_memory_size ret_tv` by
     (irule externalReturnCopyRecursiveTheory.return_copy_memory_size >>
      qexists_tac `get_tenv cx` >> fs[exprSimHypsDefsTheory.expr_sim_inv_def] >> metis_tac[]) >>
