@@ -1601,16 +1601,12 @@ Resume extcall_return_default[decode_reject]:
   simp[fragExecTheory.exit_result_def, expr_exit_def]
 QED
 Resume extcall_return_default[default_bytes]:
-  (* Temporary stand-in, named repair for the No-PHI run: this proof is red
-     at the run base. Original proof:
-    qpat_x_assum `wb_frame cenv es ee sa s0 checked` mp_tac >>
-    simp[wb_frame_def, extCallSeamFinishTheory.extcall_jump_fields,
-         exprLoweringPropsTheory.stmt_state_rel_jump_to,
-         locals_kept_def, local_region_def, venomStateTheory.jump_to_def,
-         venomStateTheory.lookup_var_def] >> strip_tac >> simp[] >>
-    conj_tac >> first_assum ACCEPT_TAC
-  *)
-  cheat
+  qpat_x_assum `wb_frame cenv es ee sa s0 checked` mp_tac >>
+  POP_ASSUM_LIST (K all_tac) >>
+  simp[wb_frame_def, locals_kept_def, popped_kept_def,
+       local_region_def, venomStateTheory.jump_to_def,
+       venomStateTheory.lookup_var_def] >>
+  strip_tac >> rpt conj_tac >> first_assum ACCEPT_TAC
 QED
 Finalise extcall_return_default
 
