@@ -444,7 +444,7 @@ Proof
       SRULE [mk_inst_def] send_assert_fail, expr_exit_def, mk_inst_def] >>
   irule expr_post_none_intro >> simp[stmt_state_rel_inst_idx] >>
   rpt conj_tac
-  >~ [`stmt_state_rel _ _ _ _ _ _ _`]
+  >~ [`stmt_state_rel _ _ _ _ _ _ (update_var _ _ _)`]
   >- (irule stmt_state_rel_update_var >> conj_tac
       >- (irule fresh_not_local_ptr >> qexists_tac `sm` >> fs[]) >>
       `es'.scopes = es1.scopes /\ es'.immutables = es1.immutables` by
@@ -548,7 +548,8 @@ Proof
       simp[raise_def, return_def] >>
       rename1 `_ = SOME res` >> PairCases_on `res` >>
       simp[check_def, assert_def, update_accounts_def, update_pending_deletions_def, update_transient_def,
-           append_logs_def, return_def, raise_def] >>
+           append_logs_def, return_def, raise_def, record_storage_backend_def,
+           record_storage_event_def] >>
       Cases_on `res0` >> simp[] >>
       strip_tac >> gvs[evaluation_state_component_equality]) >>
   simp[bind_def, ignore_bind_def, take_call_outcome_gas_obs] >>
@@ -681,7 +682,7 @@ Proof
      simp[] >> metis_tac[]) >>
   irule expr_post_none_intro >> simp[stmt_state_rel_inst_idx] >>
   rpt conj_tac
-  >~ [`stmt_state_rel _ _ _ _ _ _ _`]
+  >~ [`stmt_state_rel _ _ _ _ _ _ (update_var _ _ _)`]
   >- (irule stmt_state_rel_update_var >> conj_tac
       >- (irule fresh_not_local_ptr >> qexists_tac `sm` >> fs[]) >>
       `es'.scopes = es1.scopes /\ es'.immutables = es1.immutables` by

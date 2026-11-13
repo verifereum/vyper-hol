@@ -99,7 +99,7 @@ Theorem fixed_extension_step[local]:
   fixed_shape_path entry.type path /\
   subscripts_type entry.type path = SOME tv /\
   extend_place cx (PlaceR (MemoryPlace id path)) sb st =
-    (INL (PlaceR (MemoryPlace id out)),st) ==>
+    (INL (PlaceR (MemoryPlace id out)),st') ==>
   out = path ++ [sb] /\ ?et. subscript_type tv sb = SOME et
 Proof
   rpt strip_tac >>
@@ -172,11 +172,20 @@ Proof
       `expr_sim_inv cenv cx env s` by fs[target_pre_def] >>
       drule_all local_target_place_type >> strip_tac >> gvs[] >>
       rename1 `type_place_target env bt = SOME (Type bty)` >>
+      `expr_sim_inv cenv cx env s'` by
+        (qpat_x_assum `s' = _` SUBST1_TAC >>
+         simp[exprSimHypsDefsTheory.expr_sim_inv_storage_trace] >>
+         first_assum ACCEPT_TAC) >>
       `?oldentry. lookup_scopes id bs.scopes = SOME oldentry /\
                   oldentry.type = entry.type` by
-        metis_tac[local_entry_type_kept] >>
+        (mp_tac (Q.INST [`a` |-> `s'`, `b` |-> `bs`, `ea` |-> `entry`]
+                   local_entry_type_kept) >>
+         simp[]) >>
       first_x_assum drule_all >> strip_tac >> gvs[] >>
       `state_well_typed ms` by fs[expr_sim_inv_def] >>
+      `s'.scopes = ms.scopes` by
+        (qpat_x_assum `s' = _` (fn th => simp[Once th])) >>
+      `lookup_scopes id ms.scopes = SOME entry` by gvs[] >>
       drule_all fixed_extension_step >> strip_tac >> gvs[] >>
       gvs[Once well_typed_expr_def, subscript_vtype_def, AllCaseEqs()] >>
       Cases_on `bty` >> gvs[subscript_vtype_def] >>
@@ -204,6 +213,9 @@ Proof
   `?bvt. type_place_target env bt = SOME bvt` by
     fs[Once well_typed_expr_def, AllCaseEqs()] >>
   drule_all local_target_type_only >> strip_tac >> gvs[] >>
+  `s'.scopes = bs.scopes` by
+    (qpat_x_assum `s' = _` (fn th => simp[Once th])) >>
+  `lookup_scopes id bs.scopes = SOME entry` by gvs[] >>
   first_x_assum drule_all >> strip_tac >>
   `state_well_typed bs` by fs[expr_sim_inv_def] >>
   drule_all fixed_extension_step >> strip_tac >> gvs[] >>

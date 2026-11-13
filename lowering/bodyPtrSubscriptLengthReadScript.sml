@@ -158,13 +158,15 @@ Theorem expr_sim_ptr_local_length_continuation:
   (!x sz. cenv.ce_return_pc = SOME (PtrVar (Var x) sz) ==>
           not_fresh_at sa x) /\
   gas_admissible (bind (eval_expr cx idx) (read_result cx)) expr_res_ok es /\
-  stmt_state_rel H ctx func cenv cx es s0 /\
-  ghost_inv H d cenv cx es G0 tn0 s0 /\ ~s0.vs_halted /\
+  (!H. valid_horizon cx st0 H es.storage_trace ==>
+    stmt_state_rel H ctx func cenv cx es s0 /\
+    storage_well_formed_on cx es (FST H) /\
+    ghost_inv H d cenv cx es G0 tn0 s0) /\ ~s0.vs_halted /\
   s0.vs_current_bb = sa.cs_current_bb /\
   s0.vs_inst_idx = LENGTH sa.cs_current_insts ==>
-  gas_outcome_ptr (cx_dead H cx) (cx_tops cx) (ctx, func) PG
+  gas_outcome_ptr (\H. cx_dead H cx) (cx_tops cx) (ctx, func) PG cx st0
     (bind (eval_expr cx idx) (read_result cx)) (es, s0, G0, tn0)
-    (\res ee G tn t. ?v. res = INL v /\
+    (\H res ee G tn t. ?v. res = INL v /\
       expr_post H ctx func cenv cx idx es sa sb s0 ee v op t /\
       t.vs_current_bb = sb.cs_current_bb /\
       t.vs_inst_idx = LENGTH sb.cs_current_insts /\
@@ -196,7 +198,7 @@ Theorem expr_sim_ptr_local_length_continuation:
             lookup_var q sf = lookup_var q t /\
             FLOOKUP Gf q = FLOOKUP G q /\
             op_taint tnf (Var q) = op_taint tn (Var q))))
-    (\res ee gt r. expr_exit res r)
+    (\H res ee gt r. expr_exit res r)
 Proof
   strip_tac >> drule_all expr_sim_ptr_local_refresh >> strip_tac >>
   irule gas_outcome_ptr_conseq >> goal_assum (drule_at Any) >>
@@ -204,7 +206,8 @@ Proof
   rpt gen_tac >> strip_tac >>
   qpat_x_assum `!name p sz w. _` drule_all >> strip_tac >>
   first_x_assum drule >> strip_tac >>
-  gvs[] >> drule_all emit_dynarray_length_counted >>
-  disch_then (qspecl_then [`PG`, `cx_dead H cx`] strip_assume_tac) >>
+  gvs[] >>
+  drule_all (INST_TYPE [alpha |-> ``:256``] emit_dynarray_length_counted) >>
+  disch_then (qspecl_then [`PG`, `H`, `cx_dead H cx`] strip_assume_tac) >>
   qexistsl_tac [`Gf`, `tnf`, `sf`] >> simp[]
 QED
