@@ -15,14 +15,14 @@ Theorem tuple_local_word_runtime_head_ptr:
   find_containing_scope id es.scopes = SOME (pre,sc,entry,rest) /\
   FLOOKUP cenv.ce_vars id = SOME (PtrVar (Var p) sz) /\
   lookup_var p s = SOME dw /\
-  stmt_state_rel ctx func cenv cx es s /\ ghost_inv d cenv cx es G tn s /\
+  stmt_state_rel H ctx func cenv cx es s /\ ghost_inv H d cenv cx es G tn s /\
   fn_has_code sa sb func /\ ~ctx_has_dalloca ctx /\ ~s.vs_halted /\
   s.vs_current_bb = sa.cs_current_bb /\ s.vs_inst_idx = LENGTH sa.cs_current_insts ==>
   ?t tn'.
-    stmt_state_rel ctx func cenv cx
+    stmt_state_rel H ctx func cenv cx
       (es with scopes := pre ++
         (sc |+ (id,entry with <|value := v; popped := []|>)) :: rest) t /\
-    ghost_inv d cenv cx
+    ghost_inv H d cenv cx
       (es with scopes := pre ++
         (sc |+ (id,entry with <|value := v; popped := []|>)) :: rest) G tn' t /\
     ~t.vs_halted /\ t.vs_current_bb = sb.cs_current_bb /\

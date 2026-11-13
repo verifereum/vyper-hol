@@ -33,20 +33,27 @@ Theorem log_success_suffix_actual_run:
   log_eval_view ce args sa xs sm /\
   compile_log_topic_ops (FST (split_log_ops xs flags)) sm = (ops,st) /\
   compile_stmt ce lctx ty (Log id args) sa = ((),sb) /\
-  stmt_state_rel ctx func ce cx es s /\ local_ptrs_reserved ce sm /\
+  stmt_state_rel H ctx func ce cx es s /\ local_ptrs_reserved ce sm /\
   fn_has_code sm sb func /\ fn_inst_ids_distinct func /\
   LENGTH flags = LENGTH xs /\ LENGTH (FILTER I flags) <= 3 /\
   EVERY (\p. (!z. FST p = Var z ==> not_fresh_at sm z) /\ (!l. FST p <> Label l)) xs /\
+  LIST_REL (\arg v. supported_scalar_type (SND arg) /\
+    ?aty tv. supported_scalar_type aty /\
+      log_arg_rel ce cx sa sm es s (FST arg,aty) v /\
+      evaluate_type (get_tenv cx) aty = SOME tv /\ value_has_type tv v /\
+      (is_bytestring_type aty <=> is_bytestring_type (SND arg)) /\
+      encode_event_topic aty v = encode_event_topic (SND arg) v) xs vs /\
   LIST_REL (\arg v. log_arg_rel ce cx sa sm es s arg v /\
     supported_scalar_type (SND arg) /\
-    ?tv. evaluate_type (get_tenv cx) (SND arg) = SOME tv /\ value_has_type tv v) xs vs /\
+    ?tv. evaluate_type (get_tenv cx) (SND arg) = SOME tv /\ value_has_type tv v)
+    (SND (split_log_ops xs flags)) (log_non_indexed_values flags vs) /\
   encode_indexed_event_topics flags (MAP SND xs) vs = SOME topics /\
   SUM (MAP (type_memory_bytes ce) (log_non_indexed_types flags (MAP SND xs))) < dimword (:256) /\
   abi_size_bound ce.ce_struct_fields (TupleT (log_non_indexed_types flags (MAP SND xs))) < dimword (:256) /\
   vyper_to_abi_list (get_tenv cx) (log_non_indexed_types flags (MAP SND xs))
     (log_non_indexed_values flags vs) = SOME avs ==>
   ?t. run_inst_seq (emitted_insts sm sb) s = OK t /\
-    stmt_state_rel ctx func ce cx
+    stmt_state_rel H ctx func ce cx
       (es with logs := es.logs ++ [<|logger := w2w cx.txn.target;
         topics := n2w h::topics; data := enc (Tuple (vyper_to_abi_types (get_tenv cx)
           (log_non_indexed_types flags (MAP SND xs)))) (ListV avs) |>]) t /\

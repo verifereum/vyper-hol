@@ -20,7 +20,7 @@ Theorem aggregate_storage_materialise_capacity:
     (!tvt. evaluate_type (get_tenv cx) t = SOME tvt ==>
            type_memory_bytes cenv t = type_memory_size tvt /\
            type_memory_size tvt < 2 ** 64) /\
-    vv_post ctx func cenv cx e es sa sm s0 es' (Value v) (LocatedValue t p) s /\
+    vv_post H ctx func cenv cx e es sa sm s0 es' (Value v) (LocatedValue t p) s /\
     alloca_history func s /\ s0.vs_alloca_next <= s.vs_alloca_next /\
     ~s.vs_halted /\ s.vs_current_bb = sm.cs_current_bb /\
     s.vs_inst_idx = LENGTH sm.cs_current_insts ==>
@@ -30,7 +30,9 @@ Theorem aggregate_storage_materialise_capacity:
       w2n w + type_memory_size tv <= u.vs_alloca_next /\
       alloca_history func u /\ s.vs_alloca_next <= u.vs_alloca_next /\
       u.vs_current_bb = sb.cs_current_bb /\
-      u.vs_inst_idx = LENGTH sb.cs_current_insts
+      u.vs_inst_idx = LENGTH sb.cs_current_insts /\
+      u.vs_accounts = s.vs_accounts /\ u.vs_transient = s.vs_transient /\
+      u.vs_requests = s.vs_requests /\ u.vs_call_ctx = s.vs_call_ctx
 Proof
   rpt gen_tac >> disch_then (map_every assume_tac o CONJUNCTS) >>
   drule_all storage_unwrap_layout_facts >> strip_tac >>
@@ -54,6 +56,14 @@ Proof
   drule_all storage_unwrap_typed_suffix_path_mem >> strip_tac >>
   `z.vs_alloca_next = u.vs_alloca_next` by
     (drule copy_static_fields >> simp[]) >>
+  `z.vs_accounts = s.vs_accounts /\ z.vs_transient = s.vs_transient /\
+   z.vs_requests = s.vs_requests /\ z.vs_call_ctx = s.vs_call_ctx` by
+    (qpat_assum `copy_static z = copy_static u`
+       (fn th => MAP_EVERY (fn f => assume_tac (SIMP_RULE (srw_ss())
+                   [exprSimStorageCopyTheory.copy_static_def] (AP_TERM f th)))
+          [``venom_state_vs_accounts``, ``venom_state_vs_transient``,
+           ``venom_state_vs_requests``, ``venom_state_vs_call_ctx``]) >>
+     simp[]) >>
   qexistsl_tac [`z`, `w`, `tv`] >> simp[] >>
   reverse conj_tac >- metis_tac[] >>
   `0 = 0 + 0` by simp[] >> pop_assum SUBST1_TAC >>
@@ -75,18 +85,20 @@ Theorem aggregate_storage_materialise_post_capacity:
     (!tvt. evaluate_type (get_tenv cx) t = SOME tvt ==>
            type_memory_bytes cenv t = type_memory_size tvt /\
            type_memory_size tvt < 2 ** 64) /\
-    vv_post ctx func cenv cx e es sa sm s0 es' (Value v) (LocatedValue t p) s /\
+    vv_post H ctx func cenv cx e es sa sm s0 es' (Value v) (LocatedValue t p) s /\
     alloca_history func s /\ s0.vs_alloca_next <= s.vs_alloca_next /\
     ~s.vs_halted /\ s.vs_current_bb = sm.cs_current_bb /\
     s.vs_inst_idx = LENGTH sm.cs_current_insts ==>
     ?u w tv. gas_path_mem ctx func s 0 (OK u) /\
-      expr_post ctx func cenv cx e es sa sb s0 es' v op u /\
+      expr_post H ctx func cenv cx e es sa sb s0 es' v op u /\
       evaluate_type (get_tenv cx) t = SOME tv /\
       eval_operand op u = SOME w /\
       w2n w + type_memory_size tv <= u.vs_alloca_next /\
       alloca_history func u /\ s.vs_alloca_next <= u.vs_alloca_next /\
       u.vs_current_bb = sb.cs_current_bb /\
-      u.vs_inst_idx = LENGTH sb.cs_current_insts
+      u.vs_inst_idx = LENGTH sb.cs_current_insts /\
+      u.vs_accounts = s.vs_accounts /\ u.vs_transient = s.vs_transient /\
+      u.vs_requests = s.vs_requests /\ u.vs_call_ctx = s.vs_call_ctx
 Proof
   rpt gen_tac >> disch_then (map_every assume_tac o CONJUNCTS) >>
   drule_all storage_unwrap_layout_facts >> strip_tac >>
@@ -108,7 +120,7 @@ Proof
   qpat_x_assum `(_ + 31) DIV 32 = _`
     (fn th => RULE_ASSUM_TAC (REWRITE_RULE [th])) >>
   drule_all storage_unwrap_typed_suffix_path_mem >> strip_tac >>
-  `expr_post ctx func cenv cx e es sa sb s0 es' v buf.buf_operand z` by
+  `expr_post H ctx func cenv cx e es sa sb s0 es' v buf.buf_operand z` by
     (irule buffer_post_transport >>
      (conj_tac >- first_assum ACCEPT_TAC) >>
      (conj_tac >- first_assum ACCEPT_TAC) >>
@@ -116,6 +128,14 @@ Proof
      asm_rewrite_tac [] >> simp[]) >>
   `z.vs_alloca_next = u.vs_alloca_next` by
     (drule copy_static_fields >> simp[]) >>
+  `z.vs_accounts = s.vs_accounts /\ z.vs_transient = s.vs_transient /\
+   z.vs_requests = s.vs_requests /\ z.vs_call_ctx = s.vs_call_ctx` by
+    (qpat_assum `copy_static z = copy_static u`
+       (fn th => MAP_EVERY (fn f => assume_tac (SIMP_RULE (srw_ss())
+                   [exprSimStorageCopyTheory.copy_static_def] (AP_TERM f th)))
+          [``venom_state_vs_accounts``, ``venom_state_vs_transient``,
+           ``venom_state_vs_requests``, ``venom_state_vs_call_ctx``]) >>
+     simp[]) >>
   qexistsl_tac [`z`, `w`, `tv`] >> simp[] >>
   reverse conj_tac >- metis_tac[] >>
   `0 = 0 + 0` by simp[] >> pop_assum SUBST1_TAC >>
@@ -134,18 +154,20 @@ Theorem aggregate_code_materialise_post_capacity:
     (!x. p.ptr_operand = Var x ==> not_fresh_at sm x) /\
     (!tvt. evaluate_type (get_tenv cx) t = SOME tvt ==>
            type_memory_bytes cenv t = type_memory_size tvt) /\
-    vv_post ctx func cenv cx e es sa sm s0 es' (Value v) (LocatedValue t p) s /\
+    vv_post H ctx func cenv cx e es sa sm s0 es' (Value v) (LocatedValue t p) s /\
     alloca_history func s /\ s0.vs_alloca_next <= s.vs_alloca_next /\
     ~s.vs_halted /\ s.vs_current_bb = sm.cs_current_bb /\
     s.vs_inst_idx = LENGTH sm.cs_current_insts ==>
     ?u w tv. gas_path_mem ctx func s 0 (OK u) /\
-      expr_post ctx func cenv cx e es sa sb s0 es' v op u /\
+      expr_post H ctx func cenv cx e es sa sb s0 es' v op u /\
       evaluate_type (get_tenv cx) t = SOME tv /\
       eval_operand op u = SOME w /\
       w2n w + type_memory_size tv <= u.vs_alloca_next /\
       alloca_history func u /\ s.vs_alloca_next <= u.vs_alloca_next /\
       u.vs_current_bb = sb.cs_current_bb /\
-      u.vs_inst_idx = LENGTH sb.cs_current_insts
+      u.vs_inst_idx = LENGTH sb.cs_current_insts /\
+      u.vs_accounts = s.vs_accounts /\ u.vs_transient = s.vs_transient /\
+      u.vs_requests = s.vs_requests /\ u.vs_call_ctx = s.vs_call_ctx
 Proof
   rpt gen_tac >> strip_tac >>
   qpat_x_assum `unwrap_value _ _ _ = _` mp_tac >>
@@ -177,7 +199,7 @@ Proof
   `fn_has_code sm mid func /\ fn_has_code mid sc func` by
     metis_tac[fn_has_code_split] >>
   `local_ptrs_reserved cenv sm` by metis_tac[local_ptrs_reserved_next_var] >>
-  `stmt_state_rel ctx func cenv cx es' s` by fs[vv_post_def] >>
+  `stmt_state_rel H ctx func cenv cx es' s` by fs[vv_post_def] >>
   drule_all alloc_buffer_source_path_mem >> strip_tac >>
   `copy_old_operand mid p.ptr_operand /\ copy_old_operand mid buf.buf_operand` by
     (rw[copy_old_operand_def] >> gvs[] >>
@@ -214,7 +236,7 @@ Proof
      >- gvs[] >>
      irule exprSimStorageCopyTheory.storage_copy_operand_preserved >> simp[] >>
      qexists_tac `mid` >> simp[]) >>
-  `expr_post ctx func cenv cx e es sa sc s0 es' v buf.buf_operand z` by
+  `expr_post H ctx func cenv cx e es sa sc s0 es' v buf.buf_operand z` by
     (irule buffer_post_transport >>
      (conj_tac >- first_assum ACCEPT_TAC) >>
      (conj_tac >- first_assum ACCEPT_TAC) >>
@@ -222,6 +244,14 @@ Proof
      asm_rewrite_tac [] >> simp[]) >>
   `z.vs_alloca_next = u.vs_alloca_next` by
     (drule copy_static_fields >> simp[]) >>
+  `z.vs_accounts = s.vs_accounts /\ z.vs_transient = s.vs_transient /\
+   z.vs_requests = s.vs_requests /\ z.vs_call_ctx = s.vs_call_ctx` by
+    (qpat_assum `copy_static z = copy_static u`
+       (fn th => MAP_EVERY (fn f => assume_tac (SIMP_RULE (srw_ss())
+                   [exprSimStorageCopyTheory.copy_static_def] (AP_TERM f th)))
+          [``venom_state_vs_accounts``, ``venom_state_vs_transient``,
+           ``venom_state_vs_requests``, ``venom_state_vs_call_ctx``]) >>
+     simp[]) >>
   qexistsl_tac [`z`, `w`, `tv`] >> simp[] >>
   `0 = 0 + 0` by simp[] >> pop_assum SUBST1_TAC >>
   irule gas_path_mem_then >> qexists_tac `u` >> simp[]

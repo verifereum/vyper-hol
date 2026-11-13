@@ -14,7 +14,7 @@ Theorem literal_child_add_endpoint:
   lookup_var root s = SOME a /\ op_taint tn (Var root) = {} /\
   ptr_covers G tn root s capacity /\ FLOOKUP G root = SOME (base,cap) /\
   base + cap <= dimword(:256) /\ off < capacity /\ off+n <= capacity /\
-  vv_post ctx func ce cx e esi si sm s0 es' raw vv s /\
+  vv_post H ctx func ce cx e esi si sm s0 es' raw vv s /\
   ptr_vv_ok cx (expr_type e) raw vv es' G tn s /\
   (!t op. vv = StackValue t op /\ ~is_word_type (expr_type e) ==>
     ptr_buf_ok ce e op G s) /\
@@ -25,22 +25,22 @@ Theorem literal_child_add_endpoint:
   (!p. vv_operand vv = Var p ==> not_fresh_at sm p) /\
   (!p sz. ce.ce_return_buf = SOME (PtrVar (Var p) sz) ==> not_fresh_at sm p) /\
   (!p sz. ce.ce_return_pc = SOME (PtrVar (Var p) sz) ==> not_fresh_at sm p) /\
-  ghost_inv d ce cx es' G tn s /\ ghost_kept ce esi si G0 tn0 s0 G tn ==>
-  ?z H tm.
-    gas_path_ptr D 0 ctx func PG G tn s 0 H tm (OK z) /\
+  ghost_inv H d ce cx es' G tn s /\ ghost_kept ce esi si G0 tn0 s0 G tn ==>
+  ?z HG tm.
+    gas_path_ptr D 0 ctx func PG G tn s 0 HG tm (OK z) /\
     z.vs_current_bb = sn.cs_current_bb /\
     z.vs_inst_idx = LENGTH sn.cs_current_insts /\
-    vv_post ctx func ce cx e esi si sn s0 es' raw vv z /\
-    ptr_vv_ok cx (expr_type e) raw vv es' H tm z /\
+    vv_post H ctx func ce cx e esi si sn s0 es' raw vv z /\
+    ptr_vv_ok cx (expr_type e) raw vv es' HG tm z /\
     (!t op. vv = StackValue t op /\ ~is_word_type (expr_type e) ==>
-      ptr_buf_ok ce e op H z) /\
+      ptr_buf_ok ce e op HG z) /\
     (!t p. vv = LocatedValue t p /\ p.ptr_location = LocMemory ==>
-      ptr_buf_ok ce e p.ptr_operand H z) /\
+      ptr_buf_ok ce e p.ptr_operand HG z) /\
     z.vs_memory = s.vs_memory /\ z.vs_allocas = s.vs_allocas /\
     tm.t_mem = tn.t_mem /\
-    ghost_inv d ce cx es' H tm z /\
-    ghost_kept ce esi si G0 tn0 s0 H tm /\
-    ptr_covers H tm out z n /\ lookup_var out z = SOME (a+n2w off)
+    ghost_inv H d ce cx es' HG tm z /\
+    ghost_kept ce esi si G0 tn0 s0 HG tm /\
+    ptr_covers HG tm out z n /\ lookup_var out z = SOME (a+n2w off)
 Proof
   rpt gen_tac >> disch_then (map_every assume_tac o CONJUNCTS) >>
   drule_all emit_op_fetch_boundary >> strip_tac >> fs[] >>

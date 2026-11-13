@@ -76,7 +76,7 @@ Resume compile_assign_local_stmt_frag_ptr[normal]:
        `gas_explicit marks s0.vs_gas_readings`] >>
      qpat_x_assum `!tail. bind _ _ _ = _` (qspec_then `[]` mp_tac) >>
      CONV_TAC (DEPTH_CONV ETA_CONV) >> simp[]) >>
-  `stmt_state_rel ctx func cenv cx (es_end with gas_obs := []) t /\
+  `stmt_state_rel H ctx func cenv cx (es_end with gas_obs := []) t /\
    eval_operand op t = SOME (typed_val_to_w256 etv v)` by
     (fs[expr_post_def, expr_val_rel_def] >> metis_tac[]) >>
   `~t.vs_halted` by
@@ -86,10 +86,10 @@ Resume compile_assign_local_stmt_frag_ptr[normal]:
   `?dw. lookup_var p t = SOME dw` by
     (fs[stmt_state_rel_def, state_rel_def, local_ptrs_rel_def] >> metis_tac[]) >>
   `op_taint tn op = {}` by fs[ptr_val_ok_def] >>
-  `stmt_state_rel ctx func cenv cx es_end t /\ ghost_inv d cenv cx es_end G tn t`
+  `stmt_state_rel H ctx func cenv cx es_end t /\ ghost_inv H d cenv cx es_end G tn t`
     by (fs[] >> metis_tac[ghost_inv_gas_obs]) >>
   drule_all tuple_local_word_runtime_head_ptr >>
-  disch_then (qspecl_then [`PG`, `cx_dead cx`] strip_assume_tac) >>
+  disch_then (qspecl_then [`PG`, `cx_dead H cx`] strip_assume_tac) >>
   suspend "finish"
 QED
 
@@ -104,7 +104,7 @@ Resume compile_assign_local_stmt_frag_ptr[finish]:
       metis_tac[gas_path_ptr_then, gas_marked_exec_ptr_def, arithmeticTheory.ADD_0]) >>
   disj1_tac >> simp[stmt_lands_def, cenv_top_ext_refl] >>
   conj_tac
-  >- (qpat_x_assum `ghost_inv _ _ _ (_ with scopes := _) _ _ t'` mp_tac >>
+  >- (qpat_x_assum `ghost_inv _ _ _ _ (_ with scopes := _) _ _ t'` mp_tac >>
       simp[ghost_inv_def] >> strip_tac >> asm_rewrite_tac[]) >>
   fs[expr_post_def, ghost_kept_def] >> metis_tac[]
 QED

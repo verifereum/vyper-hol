@@ -85,8 +85,8 @@ QED
 
 (* Public cursor transport; the encoder preserves the original expression interval. *)
 Theorem reason_expr_post_inst_idx[simp]:
-  expr_post ctx func ce cx e es sa sb s0 es' v op (s with vs_inst_idx := j) <=>
-  expr_post ctx func ce cx e es sa sb s0 es' v op s
+  expr_post H ctx func ce cx e es sa sb s0 es' v op (s with vs_inst_idx := j) <=>
+  expr_post H ctx func ce cx e es sa sb s0 es' v op s
 Proof
   simp[expr_post_def, stmt_state_rel_inst_idx, expr_val_rel_def,
        expr_val_at_def, expr_val_own_def, local_region_def, lookup_var_def]
@@ -95,7 +95,7 @@ QED
 Theorem reason_encoder_prefix_path_ptr:
   !ctx func cenv cx e es sa sb s0 es' v op s cc c1 c2 c3 c4 buf payload tuple n m tv ow PG G tn D.
     post_value_type cenv e = expr_type e /\
-    expr_post ctx func cenv cx e es sa sb s0 es' v op s /\
+    expr_post H ctx func cenv cx e es sa sb s0 es' v op s /\
     compile_alloc_buffer n cc = (buf,c1) /\ fn_has_code cc c1 func /\
     emit_void MSTORE [buf.buf_operand; Lit 0x08c379a0w] c1 = ((),c2) /\
     emit_op ADD [buf.buf_operand; Lit 32w] c2 = (payload,c3) /\
@@ -128,7 +128,7 @@ Theorem reason_encoder_prefix_path_ptr:
       eval_operand tuple.buf_operand t = SOME (n2w b2) /\
       FLOOKUP t.vs_allocas c3.cs_next_id = SOME (b2,m) /\
       b2 + m < dimword (:256) /\
-      expr_post ctx func cenv cx e es sa sb s0 es' v op t /\
+      expr_post H ctx func cenv cx e es sa sb s0 es' v op t /\
       local_ptrs_reserved cenv c4 /\
       eval_operand op t = SOME ow /\
       ptr_covers G4 tn4 out2 t m /\
@@ -177,7 +177,7 @@ Resume reason_encoder_prefix_path_ptr[endpoint]:
      `b + n < _`, `b2 + m < _`,
      `gas_path_ptr _ _ _ _ _ _ _ _ _ _ _ _`, `z.vs_current_bb = _`,
      `eval_operand tuple.buf_operand z = _`, `FLOOKUP z.vs_allocas _ = _`,
-     `expr_post _ _ _ _ _ _ _ _ _ _ _ _ z`,
+     `expr_post _ _ _ _ _ _ _ _ _ _ _ _ _ z`,
      `local_ptrs_reserved cenv c4`, `eval_operand op z = _`,
      `ptr_covers G3 tn4 out2 z m`, `ptr_covers G3 tn4 out z n`,
      `ptr_covers G3 tn4 x z _`,
@@ -228,7 +228,7 @@ Resume reason_encoder_prefix_path_ptr[path]:
 QED
 
 Resume reason_encoder_prefix_path_ptr[first_buffer]:
-  qpat_x_assum `expr_post _ _ _ _ _ _ _ _ _ _ _ _ s` mp_tac >>
+  qpat_x_assum `expr_post _ _ _ _ _ _ _ _ _ _ _ _ _ s` mp_tac >>
   qpat_x_assum `compile_alloc_buffer n cc = _` mp_tac >>
   qpat_x_assum `fn_has_code cc c1 func` mp_tac >>
   qpat_x_assum `n < dimword (:256)` mp_tac >>
@@ -239,7 +239,7 @@ Resume reason_encoder_prefix_path_ptr[first_buffer]:
   POP_ASSUM_LIST (K all_tac) >> rpt strip_tac >>
   drule_all buffer_alloc_code >> strip_tac >>
   drule compile_alloc_buffer_parts >> strip_tac >>
-  `stmt_state_rel ctx func cenv cx es' s` by fs[expr_post_def] >>
+  `stmt_state_rel H ctx func cenv cx es' s` by fs[expr_post_def] >>
   gvs[] >> irule alloca_step_ptr_covers >> metis_tac[]
 QED
 

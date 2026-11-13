@@ -8,10 +8,10 @@ Ancestors bodyPtrEnvBuiltinsMethodFolded bodyPtrEnvBuiltinsSelectorBytes
 Theorem folded_selector_run_post:
   LENGTH (bs:word8 list) = 4 /\
   compile_bytelike_literal bs 4 sa = (buf,sb) /\
-  stmt_state_rel ctx fn cenv cx es s /\ fn_inst_ids_distinct fn /\
+  stmt_state_rel H ctx fn cenv cx es s /\ fn_inst_ids_distinct fn /\
   local_ptrs_reserved cenv sa /\ fn_has_code sa sb fn ==>
   ?t. run_inst_seq (emitted_insts sa sb) s = OK t /\
-    vv_post ctx fn cenv cx (Builtin (BaseT (BytesT (Dynamic 4))) MethodId args)
+    vv_post H ctx fn cenv cx (Builtin (BaseT (BytesT (Dynamic 4))) MethodId args)
       es sa sb s es (Value (BytesV bs))
       (LocatedValue (BaseT (BytesT (Dynamic 4))) (base_ptr buf))
       (t with vs_inst_idx := LENGTH sb.cs_current_insts)

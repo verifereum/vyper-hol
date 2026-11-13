@@ -8,16 +8,16 @@ Ancestors
 (* Slot-place classification is independent of runtime registers.  Only the
    saved operand's value and ghost classification need an index frame. *)
 Theorem target_storage_index_frame_ptr:
-  target_post ctx func cenv cx es sa sm s0 ee
+  target_post H ctx func cenv cx es sa sm s0 ee
     (PlaceR (StoragePlace tr slot tv)) vt rb s /\
   target_ptr_ok cenv (PlaceR (StoragePlace tr slot tv)) rb G tn s /\
-  expr_post ctx func cenv cx e ee sm sb s ef v x u /\
-  ghost_kept cenv ee sm G tn s H un /\
+  expr_post H ctx func cenv cx e ee sm sb s ef v x u /\
+  ghost_kept cenv ee sm G tn s HG un /\
   (!lbl. FST rb <> Label lbl) ==>
   eval_operand (FST rb) u = SOME slot /\
   place_ptr_rel cenv cx u (PlaceR (StoragePlace tr slot tv)) slot
     (FST (SND rb)) vt /\
-  target_ptr_ok cenv (PlaceR (StoragePlace tr slot tv)) rb H un u
+  target_ptr_ok cenv (PlaceR (StoragePlace tr slot tv)) rb HG un u
 Proof
   strip_tac >>
   `eval_operand (FST rb) s = SOME slot /\

@@ -23,7 +23,7 @@ Libs
    representability to the actual memory-check frontier. *)
 Theorem tuple_container_frontier:
   !ctx func cenv cx es s b sz.
-    stmt_state_rel ctx func cenv cx es s /\
+    stmt_state_rel H ctx func cenv cx es s /\
     ((?aid. FLOOKUP s.vs_allocas aid = SOME (b,sz)) \/
      (?name. local_region cenv es.scopes s name b sz)) ==>
     b + sz <= s.vs_alloca_next
@@ -53,7 +53,7 @@ Theorem tuple_scratch_prefix_provenance:
   !ctx func ce cx es s sa sm sn buf src n sw a t.
     compile_alloc_buffer n sa = (buf,sm) /\
     compile_copy_memory buf.buf_operand src n sm = ((),sn) /\
-    fn_has_code sa sm func /\ stmt_state_rel ctx func ce cx es s /\
+    fn_has_code sa sm func /\ stmt_state_rel H ctx func ce cx es s /\
     fn_inst_ids_distinct func /\ local_ptrs_reserved ce sa /\
     (!x. src = Var x ==> not_fresh_at sa x) /\
     eval_operand src s = SOME sw /\ n < dimword (:256) /\
@@ -79,7 +79,7 @@ Theorem tuple_scratch_prefix_path_mem:
     compile_alloc_buffer n sa = (buf,sm) /\
     compile_copy_memory buf.buf_operand src n sm = ((),sn) /\
     fn_has_code sa sn func /\ fn_inst_ids_distinct func /\
-    local_ptrs_reserved ce sa /\ stmt_state_rel ctx func ce cx es s /\
+    local_ptrs_reserved ce sa /\ stmt_state_rel H ctx func ce cx es s /\
     alloca_history func s /\ return_buf_frame d ce sa s /\
     (!x. src = Var x ==> not_fresh_at sa x) /\
     eval_operand src s = SOME sw /\ n < dimword (:256) /\
@@ -91,7 +91,7 @@ Theorem tuple_scratch_prefix_path_mem:
     ?t w. gas_path_mem ctx func s 0 (OK t) /\ ~t.vs_halted /\
       t.vs_current_bb = sn.cs_current_bb /\
       t.vs_inst_idx = LENGTH sn.cs_current_insts /\
-      stmt_state_rel ctx func ce cx es t /\ alloca_history func t /\
+      stmt_state_rel H ctx func ce cx es t /\ alloca_history func t /\
       return_buf_frame d ce sn t /\ s.vs_alloca_next <= t.vs_alloca_next /\
       (!x. not_fresh_at sa x ==> lookup_var x t = lookup_var x s) /\
       (!aid b. FLOOKUP s.vs_allocas aid = SOME b ==>
@@ -99,7 +99,9 @@ Theorem tuple_scratch_prefix_path_mem:
       eval_operand buf.buf_operand t = SOME w /\
       val_in_memory tv v (w2n w) t.vs_memory /\
       w2n w + n <= t.vs_alloca_next /\
-      FLOOKUP t.vs_allocas sa.cs_next_id = SOME (w2n w,n)
+      FLOOKUP t.vs_allocas sa.cs_next_id = SOME (w2n w,n) /\
+      t.vs_accounts = s.vs_accounts /\ t.vs_transient = s.vs_transient /\
+      t.vs_requests = s.vs_requests /\ t.vs_call_ctx = s.vs_call_ctx
 Proof
   rpt gen_tac >> strip_tac >>
   drule_all body_scratch_prefix_shape >> strip_tac >>
@@ -146,7 +148,7 @@ Theorem tuple_stage_copy_path_mem:
         emit_void MCOPY [buf.buf_operand; src; Lit (n2w n)];
         comp_return buf.buf_operand od) sa = (staged,sb) /\
     0 < n /\ fn_has_code sa sb func /\ fn_inst_ids_distinct func /\
-    local_ptrs_reserved ce sa /\ stmt_state_rel ctx func ce cx es s /\
+    local_ptrs_reserved ce sa /\ stmt_state_rel H ctx func ce cx es s /\
     alloca_history func s /\ return_buf_frame d ce sa s /\
     (!x. src = Var x ==> not_fresh_at sa x) /\
     eval_operand src s = SOME sw /\ n < dimword (:256) /\
@@ -158,7 +160,7 @@ Theorem tuple_stage_copy_path_mem:
     ?t w. gas_path_mem ctx func s 0 (OK t) /\ ~t.vs_halted /\
       t.vs_current_bb = sb.cs_current_bb /\
       t.vs_inst_idx = LENGTH sb.cs_current_insts /\
-      stmt_state_rel ctx func ce cx es t /\ alloca_history func t /\
+      stmt_state_rel H ctx func ce cx es t /\ alloca_history func t /\
       return_buf_frame d ce sb t /\ s.vs_alloca_next <= t.vs_alloca_next /\
       (!x. not_fresh_at sa x ==> lookup_var x t = lookup_var x s) /\
       (!aid b. FLOOKUP s.vs_allocas aid = SOME b ==>
@@ -166,7 +168,9 @@ Theorem tuple_stage_copy_path_mem:
       eval_operand staged t = SOME w /\
       val_in_memory tv v (w2n w) t.vs_memory /\
       w2n w + n <= t.vs_alloca_next /\
-      FLOOKUP t.vs_allocas sa.cs_next_id = SOME (w2n w,n)
+      FLOOKUP t.vs_allocas sa.cs_next_id = SOME (w2n w,n) /\
+      t.vs_accounts = s.vs_accounts /\ t.vs_transient = s.vs_transient /\
+      t.vs_requests = s.vs_requests /\ t.vs_call_ctx = s.vs_call_ctx
 Proof
   rpt gen_tac >> strip_tac >>
   qpat_x_assum `_ sa = (staged,sb)` mp_tac >>

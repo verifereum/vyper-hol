@@ -100,11 +100,11 @@ QED
    (local_ptrs_rel): what the loop's element reads need beyond
    array_snapshot_memory. *)
 Theorem array_snapshot_frontier[local]:
-  !name ei entry tv n cenv ptr sz ctx func cx s.
+  !H name ei entry tv n cenv ptr sz ctx func cx s.
     lookup_scopes name ei.scopes = SOME entry /\
     entry.type = ArrayTV tv (Fixed n) /\
     FLOOKUP cenv.ce_vars name = SOME (PtrVar (Var ptr) sz) /\
-    stmt_state_rel ctx func cenv cx ei s ==>
+    stmt_state_rel H ctx func cenv cx ei s ==>
     ?base. eval_operand (Var ptr) s = SOME base /\
       w2n base + n * type_memory_size tv <= s.vs_alloca_next
 Proof
@@ -564,9 +564,9 @@ Proof
       simp[])
   >- (rpt strip_tac >> metis_tac[fixed_array_elements_typed])
   >- (rpt strip_tac >>
-      qspecl_then [`name`, `ei`, `entry`, `tv`, `n`, `al`, `cenv`, `ap`, `az`,
+      qspecl_then [`H`, `name`, `ei`, `entry`, `tv`, `n`, `al`, `cenv`, `ap`, `az`,
                    `ctx`, `func`, `cx`, `s`] mp_tac array_snapshot_memory >>
-      qspecl_then [`name`, `ei`, `entry`, `tv`, `n`, `cenv`, `ap`, `az`,
+      qspecl_then [`H`, `name`, `ei`, `entry`, `tv`, `n`, `cenv`, `ap`, `az`,
                    `ctx`, `func`, `cx`, `s`] mp_tac array_snapshot_frontier >>
       simp[] >> rpt strip_tac >> gvs[])
   >- (rpt strip_tac >> irule array_body_fragment_callback_mem >>

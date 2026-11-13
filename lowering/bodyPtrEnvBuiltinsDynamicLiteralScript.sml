@@ -59,7 +59,7 @@ Proof
   disch_then (qspec_then `[Literal la l]` strip_assume_tac) >>
   drule_all folded_selector_prefix >> strip_tac >>
   drule_all folded_selector_counted >>
-  disch_then (qspecl_then [`[Literal la l]`, `PG`, `cx_dead cx`]
+  disch_then (qspecl_then [`[Literal la l]`, `PG`, `cx_dead H cx`]
     strip_assume_tac) >>
   `t.vs_current_bb = s0.vs_current_bb` by
     (irule (cj 2 run_inst_seq_preserves_entry_control) >>

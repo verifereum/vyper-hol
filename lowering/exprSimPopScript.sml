@@ -402,11 +402,11 @@ Proof
   rename1 `ArrayV av` >> Cases_on `av` >> simp[value_has_type_def]
 QED
 
-(* What expr_sim_pre and stmt_state_rel give of the local popped from. *)
+(* What expr_sim_pre and stmt_state_rel H give of the local popped from. *)
 Theorem pop_name_facts:
   !cenv cx env ann id es func s0 ctx.
     expr_sim_pre cenv cx env (Pop ann (NameTarget id)) es /\
-    stmt_state_rel ctx func cenv cx es s0 ==>
+    stmt_state_rel H ctx func cenv cx es s0 ==>
     ?n p sz entry etv vs w.
       FLOOKUP cenv.ce_vars id = SOME (PtrVar (Var p) sz) /\
       cenv.ce_var_type id = SOME (ArrayT ann (Dynamic n)) /\
@@ -553,11 +553,11 @@ Proof
   rpt strip_tac >> gvs[]
 QED
 
-(* stmt_state_rel after the pop: the source changed only the scopes, Venom
+(* stmt_state_rel H after the pop: the source changed only the scopes, Venom
    only variables and memory. *)
 Theorem pop_stmt_state_rel:
   !func cenv cx es es' s0 u ctx.
-    stmt_state_rel ctx func cenv cx es s0 /\
+    stmt_state_rel H ctx func cenv cx es s0 /\
     local_ptrs_rel func cenv es'.scopes u /\
     es' = es with scopes := es'.scopes /\
     u = s0 with <| vs_vars := u.vs_vars; vs_memory := u.vs_memory |> /\
@@ -565,7 +565,7 @@ Theorem pop_stmt_state_rel:
     (!id b sz. local_region cenv es'.scopes u id b sz ==>
        ?id0. local_region cenv es.scopes s0 id0 b sz) /\
     immutable_base_zero cenv u ==>
-    stmt_state_rel ctx func cenv cx es' u
+    stmt_state_rel H ctx func cenv cx es' u
 Proof
   rpt strip_tac >>
   `u.vs_accounts = s0.vs_accounts /\ u.vs_transient = s0.vs_transient /\
@@ -578,9 +578,9 @@ Proof
    u.vs_code = s0.vs_code /\
    u.vs_allocas = s0.vs_allocas /\ u.vs_alloca_next = s0.vs_alloca_next` by
     (qpat_x_assum `u = _` (fn th => ONCE_REWRITE_TAC [th]) >> simp[]) >>
-  `state_rel func cenv cx es s0` by fs[stmt_state_rel_def] >>
+  `state_rel H func cenv cx es s0` by fs[stmt_state_rel_def] >>
   irule stmt_state_rel_allocas_frame >>
-  qpat_assum `stmt_state_rel ctx _ _ _ _ _` (irule_at Any) >>
+  qpat_assum `stmt_state_rel H ctx _ _ _ _ _` (irule_at Any) >>
   qpat_assum `immutable_base_zero cenv _` (irule_at Any) >>
   conj_tac
   >- (irule immutable_alloca_sep_fields >>
@@ -599,13 +599,13 @@ QED
 
 Theorem pop_stmt_state_rel_scopes:
   !func cenv cx es sc s0 u ctx.
-    stmt_state_rel ctx func cenv cx es s0 /\ local_ptrs_rel func cenv sc u /\
+    stmt_state_rel H ctx func cenv cx es s0 /\ local_ptrs_rel func cenv sc u /\
     u = s0 with <| vs_vars := u.vs_vars; vs_memory := u.vs_memory |> /\
     immutables_rel cenv cx.txn.target cenv.ce_module cenv.ce_is_ctor es u /\
     (!id b sz. local_region cenv sc u id b sz ==>
        ?id0. local_region cenv es.scopes s0 id0 b sz) /\
     immutable_base_zero cenv u ==>
-    stmt_state_rel ctx func cenv cx (es with scopes := sc) u
+    stmt_state_rel H ctx func cenv cx (es with scopes := sc) u
 Proof
   rpt strip_tac >> irule pop_stmt_state_rel >> simp[] >>
   qexistsl_tac [`es`, `s0`] >> fs[] >> first_assum ACCEPT_TAC
@@ -653,7 +653,7 @@ Proof
 QED
 
 Theorem pop_local_mstore_immutables[local]:
-  stmt_state_rel ctx func cenv cx es s0 /\
+  stmt_state_rel H ctx func cenv cx es s0 /\
   local_region cenv es.scopes s0 id b sz /\ 32 <= sz /\
   u.vs_memory = (mstore b w s0).vs_memory /\
   u.vs_data_section = s0.vs_data_section ==>
@@ -667,7 +667,7 @@ Proof
   reverse conj_tac >- gvs[stmt_state_rel_def, state_rel_def] >>
   rpt strip_tac >>
   `regions_disjoint off (type_memory_size tv) b sz` by
-    (qpat_x_assum `stmt_state_rel ctx _ _ _ _ _` mp_tac >>
+    (qpat_x_assum `stmt_state_rel H ctx _ _ _ _ _` mp_tac >>
      pure_rewrite_tac[stmt_state_rel_def, immutable_alloca_sep_def] >>
      strip_tac >> qpat_x_assum `cenv.ce_is_ctor ==> _` drule >>
      disch_then drule_all >> strip_tac >> metis_tac[]) >>
@@ -732,8 +732,9 @@ Proof
 QED
 
 Theorem pop_vv_post:
-  !func cenv cx ann id es sa sb s0 u k pre envs entry rest p sz w etv n vs x6 ctx.
-    stmt_state_rel ctx func cenv cx es s0 /\
+  !H func cenv cx ann id es sa sb s0 u k pre envs entry rest p sz w etv n vs x6 ctx.
+    stmt_state_rel H ctx func cenv cx es s0 /\
+    storage_well_formed_on cx es (FST H) /\
     local_ptrs_rel func cenv es.scopes s0 /\
     popped_keys_indexed es.scopes /\
     find_containing_scope id es.scopes = SOME (pre, envs, entry, rest) /\
@@ -758,7 +759,7 @@ Theorem pop_vv_post:
     evaluate_type (get_tenv cx) ann = SOME etv /\
     evaluate_type (get_tenv cx) (ArrayT ann (Dynamic n)) =
       SOME (ArrayTV etv (Dynamic n)) ==>
-    vv_post ctx func cenv cx (Pop ann (NameTarget id)) es sa sb s0
+    vv_post H ctx func cenv cx (Pop ann (NameTarget id)) es sa sb s0
       (es with scopes :=
          pre ++ envs |+ (id, pop_name_entry entry vs)
            :: rest)
@@ -812,6 +813,12 @@ Proof
       simp[] >>
       rpt strip_tac >> irule pop_regions_backwards >>
       goal_assum (drule_at Any) >> goal_assum (drule_at Any) >> simp[])
+  >- (qmatch_goalsub_abbrev_tac `storage_well_formed_on cx es1 _` >>
+      `storage_well_formed_on cx es1 (FST H) <=>
+       storage_well_formed_on cx es (FST H)` by
+        (irule vyperStorageFootprintTheory.storage_well_formed_on_backends >>
+         simp[Abbr `es1`]) >>
+      simp[])
   >- (qpat_assum `read_result _ _ _ = _` (fn th =>
         simp[vv_holds_def, contextTheory.mk_ptr_def, eval_operand_def,
              lookup_var_inst_idx, th]) >>
@@ -932,6 +939,15 @@ Theorem compile_pop_name_sim:
     expr_vv_sim ctx func cenv cx ty (Pop ann (NameTarget id)) es
 Proof
   rw[expr_vv_sim_def] >>
+  reverse (Cases_on `storage_trace_domain cx st0 es.storage_trace`)
+  >- (rewrite_tac[gas_outcome_def] >> qexists_tac `[]` >> disj1_tac >>
+      irule gasStorageTheory.gas_bad_storage_at_initial >>
+      simp[vyperStorageTraceTheory.evaluate_storage_trace_frame]) >>
+  `?H0. valid_horizon cx st0 H0 es.storage_trace` by
+    metis_tac[vyperStorageFootprintTheory.storage_trace_domain_def] >>
+  `stmt_state_rel H0 ctx func cenv cx es s0` by metis_tac[] >>
+  `local_ptrs_rel func cenv es.scopes s0` by
+    fs[stmt_state_rel_def, state_rel_def] >>
   drule_all pop_name_facts >> strip_tac >>
   `popped_keys_indexed es.scopes` by fs[expr_sim_pre_def, expr_sim_inv_def] >>
   drule_all compile_expr_pop_name >> strip_tac >> gvs[] >>
@@ -978,7 +994,7 @@ Proof
       >- (rpt conj_tac >> TRY (first_assum ACCEPT_TAC) >>
           simp[mk_inst_def, is_terminator_def]) >>
       strip_tac >>
-      simp[gas_outcome_def] >> qexists_tac `[]` >> disj1_tac >>
+      simp[gas_outcome_def] >> qexists_tac `[]` >> disj2_tac >> disj1_tac >>
       simp[gas_summary_at_def] >>
       qexistsl_tac [`INR (Error (RuntimeError "pop empty memory array"))`,
                     `es`, `Abort a (s' with vs_inst_idx := j)`] >>
@@ -1001,8 +1017,6 @@ Proof
   `gas_path ctx func s0 0
      (OK (u with vs_inst_idx := LENGTH sa.cs_current_insts + 9))` by
     (qpat_x_assum `gas_path _ _ _ _ _` mp_tac >> simp[mk_inst_def]) >>
-  `local_ptrs_rel func cenv es.scopes s0` by
-    fs[stmt_state_rel_def, state_rel_def] >>
   `!q n' sq. FLOOKUP cenv.ce_vars n' = SOME (PtrVar (Var q) sq) ==>
              lookup_var q u = lookup_var q s0` by metis_tac[] >>
   `!x. not_fresh_at sa x ==> lookup_var x u = lookup_var x s0` by
@@ -1019,20 +1033,7 @@ Proof
     (qpat_x_assum `u = _` mp_tac >> simp[venom_state_component_equality]) >>
   `u.vs_current_bb = s0.vs_current_bb` by
     (qpat_x_assum `u = _` (fn th => once_rewrite_tac[th]) >> simp[]) >>
-  `stmt_state_rel ctx func cenv cx (es with gas_obs := []) s0` by
-    (drule msg_gas_state_frame >>
-     disch_then (qspecl_then [`s0.vs_gas_readings`, `s0.vs_inst_idx`, `[]`]
-                   mp_tac) >>
-     simp[NoAsms]) >>
-  mp_tac (Q.SPECL [`func`, `cenv`, `cx`, `ann`, `id`, `es with gas_obs := []`]
-            pop_vv_post) >>
-  simp[vv_post_initial_gas] >>
-  disch_then (qspecl_then [`sa`, `sc`, `s0`, `u`, `w`, `vs`, `x6`, `ctx`] mp_tac) >>
-  impl_tac
-  >- (rpt conj_tac >> TRY (first_assum ACCEPT_TAC) >>
-      qpat_x_assum `u = _` mp_tac >> simp[]) >>
-  strip_tac >>
-  simp[gas_outcome_def] >> qexists_tac `[]` >> disj1_tac >>
+  simp[gas_outcome_def] >> qexists_tac `[]` >> disj2_tac >> disj1_tac >>
   simp[gas_summary_at_def] >>
   qexistsl_tac [`INL (PlaceR (MemoryPlace id
                    [ValueSubscript (IntV &(LENGTH vs - 1))]))`,
@@ -1040,8 +1041,31 @@ Proof
                    pre ++ envs |+ (id, pop_name_entry entry vs) :: rest`,
                 `OK (u with vs_inst_idx := LENGTH sa.cs_current_insts + 9)`] >>
   simp[gas_marked_exec_def, gas_marked_path_def, exit_result_def] >>
-  gen_tac >>
-  qspecl_then [`cx`, `ann`, `id`, `es with gas_obs := tail`, `entry`, `vs`,
-               `pre`, `envs`, `rest`] mp_tac eval_pop_name_ok >>
+  conj_tac
+  >- (gen_tac >>
+      qspecl_then [`cx`, `ann`, `id`, `es with gas_obs := tail`, `entry`, `vs`,
+                   `pre`, `envs`, `rest`] mp_tac eval_pop_name_ok >>
+      simp[]) >>
+  gen_tac >> strip_tac >>
+  `stmt_state_rel H ctx func cenv cx es s0 /\
+   storage_well_formed_on cx es (FST H)` by metis_tac[] >>
+  `stmt_state_rel H ctx func cenv cx (es with gas_obs := []) s0` by
+    (drule (Q.SPEC `H` msg_gas_state_frame) >>
+     disch_then (qspecl_then [`s0.vs_gas_readings`, `s0.vs_inst_idx`, `[]`]
+                   mp_tac) >>
+     simp[NoAsms]) >>
+  `storage_well_formed_on cx (es with gas_obs := []) (FST H)` by
+    (`storage_well_formed_on cx (es with gas_obs := []) (FST H) <=>
+      storage_well_formed_on cx es (FST H)` by
+       (irule vyperStorageFootprintTheory.storage_well_formed_on_backends >>
+        simp[]) >>
+     simp[]) >>
+  qspecl_then [`H`, `func`, `cenv`, `cx`, `ann`, `id`,
+               `es with gas_obs := []`] mp_tac pop_vv_post >>
+  simp[vv_post_initial_gas] >>
+  disch_then (qspecl_then [`sa`, `sc`, `s0`, `u`, `w`, `vs`, `x6`, `ctx`] mp_tac) >>
+  impl_tac
+  >- (rpt conj_tac >> TRY (first_assum ACCEPT_TAC) >>
+      qpat_x_assum `u = _` mp_tac >> simp[]) >>
   simp[]
 QED

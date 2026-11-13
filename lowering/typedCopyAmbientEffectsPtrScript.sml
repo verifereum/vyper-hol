@@ -3,13 +3,13 @@ Theory typedCopyAmbientEffectsPtr
 Ancestors wordLoadStorePtr typedCopyPtr typedCopyLoopHeaderPtr
 
 Theorem emit_copy_len_binop_effects_frag_ptr:
-  !opc f G cx ctx PG R sa sb left right out tn s a b.
+  !opc f G H cx ctx PG R sa sb left right out tn s a b.
     (opc = ADD /\ f = word_add \/ opc = AND /\ f = word_and) /\
     emit_op opc [left;right] sa = (Var out,sb) /\
     eval_operand left s = SOME a /\ eval_operand right s = SOME b /\
     op_taint tn left = {} /\ op_taint tn right = {} ==>
     ?Gf tnf sf.
-      frag_exec_ptr cx ctx PG sa sb
+      frag_exec_ptr H cx ctx PG sa sb
         (\g t v. g = G /\ t = tn /\ v = s)
         (\g t v. g = Gf /\ t = tnf /\ v = sf) R /\
       lookup_var out sf = SOME (f a b) /\ op_taint tnf (Var out) = {} /\
@@ -27,11 +27,11 @@ Proof
 QED
 
 Theorem emit_copy_len_not_effects_frag_ptr:
-  !G cx ctx PG R sa sb x out tn s a.
+  !G H cx ctx PG R sa sb x out tn s a.
     emit_op NOT [x] sa = (Var out,sb) /\
     eval_operand x s = SOME a /\ op_taint tn x = {} ==>
     ?Gf tnf sf.
-      frag_exec_ptr cx ctx PG sa sb
+      frag_exec_ptr H cx ctx PG sa sb
         (\g t v. g = G /\ t = tn /\ v = s)
         (\g t v. g = Gf /\ t = tnf /\ v = sf) R /\
       lookup_var out sf = SOME (~a) /\ op_taint tnf (Var out) = {} /\
@@ -49,12 +49,12 @@ Proof
 QED
 
 Theorem emit_mload_clean_effects_frag_ptr:
-  !cx ctx PG R sa sb src out G tn s a.
+  !H cx ctx PG R sa sb src out G tn s a.
     emit_op MLOAD [Var src] sa = (Var out,sb) /\
     ptr_covers G tn src s 32 /\ lookup_var src s = SOME a /\
     (!i. w2n a <= i /\ i < w2n a + 32 ==> i NOTIN tn.t_mem) ==>
     ?Gf tnf sf.
-      frag_exec_ptr cx ctx PG sa sb
+      frag_exec_ptr H cx ctx PG sa sb
         (\g t v. g = G /\ t = tn /\ v = s)
         (\g t v. g = Gf /\ t = tnf /\ v = sf) R /\
       lookup_var out sf = SOME (mload (w2n a) s) /\
@@ -73,12 +73,12 @@ Proof
 QED
 
 Theorem compile_bytestring_copy_len_effects_frag_ptr:
-  !cx ctx PG R sa sb src count_op G tn s a.
+  !H cx ctx PG R sa sb src count_op G tn s a.
     compile_bytestring_copy_len (Var src) sa = (count_op,sb) /\
     ptr_covers G tn src s 32 /\ lookup_var src s = SOME a /\
     (!i. w2n a <= i /\ i < w2n a + 32 ==> i NOTIN tn.t_mem) ==>
     ?Gf tnf sf.
-      frag_exec_ptr cx ctx PG sa sb
+      frag_exec_ptr H cx ctx PG sa sb
         (\g t v. g = G /\ t = tn /\ v = s)
         (\g t v. g = Gf /\ t = tnf /\ v = sf) R /\
       eval_operand count_op sf =
@@ -100,7 +100,7 @@ Proof
 QED
 
 Theorem compile_store_bytestring_effects_frag_ptr:
-  !cx ctx PG R sa sb src dst G tn s a b len n.
+  !H cx ctx PG R sa sb src dst G tn s a b len n.
     compile_store_bytestring (Var src) (Var dst) sa = ((),sb) /\
     not_fresh_at sa src /\ not_fresh_at sa dst /\
     lookup_var src s = SOME a /\ lookup_var dst s = SOME b /\
@@ -110,7 +110,7 @@ Theorem compile_store_bytestring_effects_frag_ptr:
     ptr_covers G tn src s n /\ ptr_covers G tn dst s n /\
     (!i. w2n a <= i /\ i < w2n a + 32 ==> i NOTIN tn.t_mem) ==>
     ?Gf tnf sf.
-      frag_exec_ptr cx ctx PG sa sb
+      frag_exec_ptr H cx ctx PG sa sb
         (\g t v. g = G /\ t = tn /\ v = s)
         (\g t v. g = Gf /\ t = tnf /\ v = sf) R /\
       sf.vs_allocas = s.vs_allocas /\ sf.vs_alloca_next = s.vs_alloca_next /\
