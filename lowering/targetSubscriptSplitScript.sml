@@ -6,10 +6,10 @@
  *   target_subscript_shared_case — a storage root, any indices, or a
  *                          local root whose indices pop nothing.  A storage
  *                          place stays in range and live after effectful
- *                          indices by capacity-based provenance
+ *                          indices by horizon-observed provenance
  *                          (targetSubscriptStorage.eval_base_place_storage_ready),
- *                          from storage_layout_safe and
- *                          contract_storage_well_formed in expr_sim_inv;
+ *                          from the finite storage horizon (valid_horizon,
+ *                          storage_well_formed_on in target_post);
  *                          no slot-separation premise
  *   target_subscript_local_pop_case — a local root with an index that pops
  *)
@@ -21,7 +21,8 @@ Ancestors
   exprSimFieldLayout exprSafeOperandBuiltins exprSafeOperand
   exprSimSource
   targetPlaceSimDefs
-  stmtSimProps gasOutcome gasSummary gasSummaryCompose gasContext gasExemptCert
+  stmtSimProps gasOutcome gasStorage gasSummary gasSummaryCompose gasContext gasExemptCert
+  vyperStorageFootprint vyperStorageTrace
   fragGasMode fragGasPath
   exprSimProps exprBopSimProps
   exprSimHypsDefs
@@ -42,15 +43,15 @@ Libs
   pairLib
 
 Theorem target_post_index_frame:
-  target_post ctx func cenv cx es sa sm s0 es1 pv vt rb t /\
-  expr_post ctx func cenv cx e es1 sm sn t es2 v ix u /\
-  stmt_state_rel ctx func cenv cx es s0 /\
+  target_post H ctx func cenv cx es sa sm s0 es1 pv vt rb t /\
+  expr_post H ctx func cenv cx e es1 sm sn t es2 v ix u /\
+  stmt_state_rel H ctx func cenv cx es s0 /\
   local_ptrs_reserved cenv sa /\ local_ptrs_reserved cenv sm /\
   MAP FDOM es.scopes = MAP FDOM es1.scopes /\
   place_readable cx es2 pv /\
   sa.cs_next_var <= sm.cs_next_var /\ sm.cs_next_var <= sn.cs_next_var /\
   sa.cs_next_id <= sm.cs_next_id /\ (!l. FST rb <> Label l) ==>
-  target_post ctx func cenv cx es sa sn s0 es2 pv vt rb u
+  target_post H ctx func cenv cx es sa sn s0 es2 pv vt rb u
 Proof
   simp[target_post_def, expr_post_def] >> strip_tac >>
   `!x. not_fresh_at sa x ==> not_fresh_at sm x` by
@@ -97,50 +98,92 @@ Proof
   metis_tac[]
 QED
 
+Theorem target_subscript_index_frame[local]:
+  storage_trace_frame (bind (eval_expr cx e) (read_result cx)) /\
+  storage_trace_frame (bind (bind (eval_expr cx e) (read_result cx))
+    (\key. extend_place cx pv (ValueSubscript key)))
+Proof
+  `storage_trace_frame (bind (eval_expr cx e) (read_result cx))` by
+    (irule storage_trace_frame_bind_all >>
+     simp[evaluate_storage_trace_frame, storage_trace_frame_read_result]) >>
+  simp[] >> irule storage_trace_frame_bind_all >>
+  simp[storage_trace_frame_extend_place]
+QED
+
+Theorem target_subscript_index_valid_prefix[local]:
+  gas_marked_exec memory (ctx,func) (bind (eval_expr cx e) (read_result cx))
+    (es,s0) marks res ee r /\
+  valid_horizon cx st0 H ee.storage_trace ==>
+  valid_horizon cx st0 H es.storage_trace
+Proof
+  metis_tac[gas_marked_exec_valid_prefix, target_subscript_index_frame]
+QED
+
+Theorem target_subscript_base_valid_prefix[local]:
+  gas_marked_exec memory (ctx,func) (eval_base_place cx bt)
+    (es,s0) marks res mid r /\
+  valid_horizon cx st0 H mid.storage_trace ==>
+  valid_horizon cx st0 H es.storage_trace
+Proof
+  metis_tac[gas_marked_exec_valid_prefix, evaluate_storage_trace_frame]
+QED
+
 (* The counted index keeps the original source computation and error post.
    Readability is a source preservation premise, supplied separately by the
    local no-Pop or unrestricted storage readability boundary. *)
 Theorem target_index_outcome:
-  target_post ctx func cenv cx es sa sm s0 es1 pv vt rb t /\
+  (!H. valid_horizon cx st0 H es1.storage_trace ==>
+     target_post H ctx func cenv cx es sa sm s0 es1 pv vt rb t /\
+     stmt_state_rel H ctx func cenv cx es s0) /\
   expr_sim ctx func cenv cx (expr_type e) e es1 /\
   lower_value compile_expr cenv (expr_type e) e sm = (ix,sn) /\
   fn_has_code sm sn func /\ fn_inst_ids_distinct func /\
   gas_admissible (bind (eval_expr cx e) (read_result cx)) expr_res_ok es1 /\
   ~t.vs_halted /\ t.vs_current_bb = sm.cs_current_bb /\
   t.vs_inst_idx = LENGTH sm.cs_current_insts /\
-  stmt_state_rel ctx func cenv cx es s0 /\
   local_ptrs_reserved cenv sa /\ local_ptrs_reserved cenv sm /\
   MAP FDOM es.scopes = MAP FDOM es1.scopes /\
   (!gs v ee. bind (eval_expr cx e) (read_result cx)
        (es1 with gas_obs := gs) = (INL v,ee) ==> place_readable cx ee pv) /\
   sa.cs_next_var <= sm.cs_next_var /\ sm.cs_next_var <= sn.cs_next_var /\
   sa.cs_next_id <= sm.cs_next_id /\ (!l. FST rb <> Label l) ==>
-  gas_outcome F (cx_tops cx) (ctx,func)
+  gas_outcome F (cx_tops cx) (ctx,func) cx st0
     (bind (eval_expr cx e) (read_result cx)) (es1,t)
-    (\res ee u. ?v. res = INL v /\
-       target_post ctx func cenv cx es sa sn s0 ee pv vt rb u /\
-       expr_post ctx func cenv cx e es1 sm sn t ee v ix u /\
+    (\H res ee u. ?v. res = INL v /\
+       target_post H ctx func cenv cx es sa sn s0 ee pv vt rb u /\
+       expr_post H ctx func cenv cx e es1 sm sn t ee v ix u /\
        u.vs_current_bb = sn.cs_current_bb /\
        u.vs_inst_idx = LENGTH sn.cs_current_insts)
-    (\res ee r. expr_exit res r)
+    (\H res ee r. expr_exit res r)
 Proof
   strip_tac >>
   qpat_x_assum `expr_sim _ _ _ _ _ _ _` mp_tac >>
   rewrite_tac[expr_sim_def] >>
-  disch_then (qspecl_then [`sm`, `sn`, `ix`, `t`] mp_tac) >>
-  impl_tac >- fs[target_post_def] >>
-  rewrite_tac[gas_outcome_def, gas_summary_at_def] >> strip_tac
-  >- (qexists `marks` >> disj1_tac >> gvs[] >>
-      qexistsl [`INL v`, `es_end`, `OK t'`] >> simp[] >>
+  disch_then (qspecl_then [`st0`, `sm`, `sn`, `ix`, `t`] mp_tac) >>
+  impl_tac
+  >- (simp[] >> rpt strip_tac >>
+      qpat_x_assum `!H. valid_horizon _ _ H es1.storage_trace ==> _` drule >>
+      simp[target_post_def]) >>
+  rewrite_tac[gas_outcome_def, gas_summary_at_def] >> BETA_TAC >> strip_tac
+  >- (qexists `marks` >> disj1_tac >> first_assum ACCEPT_TAC)
+  >- (qexists `marks` >> disj2_tac >> disj1_tac >> gvs[] >>
+      qexistsl [`res`, `es_end`, `OK t'`] >> simp[] >>
+      rpt strip_tac >>
+      qpat_x_assum `!H. valid_horizon _ _ H es_end.storage_trace ==> _`
+        (drule_then strip_assume_tac) >> gvs[] >>
+      `valid_horizon cx st0 H es1.storage_trace` by
+        metis_tac[target_subscript_index_valid_prefix] >>
+      qpat_x_assum `!H. valid_horizon _ _ H es1.storage_trace ==> _`
+        (drule_then strip_assume_tac) >>
       `place_readable cx (es_end with gas_obs := []) pv` by
         (qpat_x_assum `gas_marked_exec _ _ _ _ _ _ _ _` mp_tac >>
          simp[gas_marked_exec_def] >> strip_tac >>
          first_x_assum (qspec_then `[]` mp_tac) >>
          metis_tac[]) >>
-      drule_all target_post_index_frame >> simp[]) 
-  >- (qexists `marks` >> disj1_tac >>
+      drule_all target_post_index_frame >> simp[])
+  >- (qexists `marks` >> disj2_tac >> disj1_tac >>
       qexistsl [`res`, `es_end`, `r`] >> simp[]) >>
-  qexists `marks` >> disj2_tac >> metis_tac[]
+  qexists `marks` >> disj2_tac >> disj2_tac >> metis_tac[]
 QED
 
 Theorem target_subscript_base_exempt_cert:
@@ -558,14 +601,37 @@ Theorem target_subscript_pure_index_live:
   EVERY pure_expr (target_indices (SubscriptTarget bt e)) /\
   eval_base_place cx bt es = (INL pv,mid) /\
   bind (eval_expr cx e) (read_result cx) mid = (res,ee) ==>
-  mid = es /\ ee = es /\ nested_pop_result_live cx ee pv
+  mid = es with storage_trace := mid.storage_trace /\
+  ee = es with storage_trace := ee.storage_trace /\
+  !st0 H. valid_horizon cx st0 H mid.storage_trace ==>
+    nested_pop_result_live H cx ee pv
 Proof
-  simp[target_indices_def, EVERY_APPEND, bind_def, AllCaseEqs()] >>
+  simp[target_indices_def, EVERY_APPEND] >> strip_tac >>
+  drule_all nested_pop_eval_base_pure_state >> strip_tac >>
+  `ee = mid with storage_trace := ee.storage_trace` by
+    (qpat_x_assum `bind _ _ _ = _` mp_tac >>
+     simp[bind_def, AllCaseEqs()] >> rpt strip_tac >>
+     imp_res_tac eval_expr_preserves_state >> imp_res_tac read_result_state >>
+     fs[evaluation_state_component_equality]) >>
+  `ee = es with storage_trace := ee.storage_trace` by
+    fs[evaluation_state_component_equality] >>
+  rpt conj_tac >- first_assum ACCEPT_TAC >- first_assum ACCEPT_TAC >>
   rpt strip_tac >>
-  drule_all nested_pop_eval_base_live >> strip_tac >>
-  drule_all nested_pop_eval_base_pure_state >> strip_tac >> gvs[] >>
-  drule_all eval_expr_preserves_state >> strip_tac >> gvs[] >>
-  imp_res_tac read_result_state >> gvs[]
+  drule_all nested_pop_eval_base_live >>
+  qpat_x_assum `ee = es with storage_trace := _`
+    (fn th => once_rewrite_tac[th]) >>
+  simp[]
+QED
+
+Theorem target_subscript_readable_trace[local,simp]:
+  place_readable cx (es with storage_trace := tr) pv <=> place_readable cx es pv
+Proof
+  Cases_on `pv` >> simp[place_readable_def] >>
+  Cases_on `p` >> simp[place_readable_def] >>
+  simp[read_place_def, get_scopes_def, bind_def, lift_option_type_def,
+       lift_sum_def, return_def, raise_def, AllCaseEqs()] >>
+  Cases_on `lookup_scopes s es.scopes` >> simp[return_def, raise_def] >>
+  Cases_on `read_memory_path x l` >> simp[return_def, raise_def]
 QED
 
 Theorem target_subscript_base_exception:
@@ -582,7 +648,8 @@ QED
 Theorem target_subscript_extend_gas_obs:
   !cx pv key es gs.
     extend_place cx pv (ValueSubscript key) (es with gas_obs := gs) =
-      (FST (extend_place cx pv (ValueSubscript key) es), es with gas_obs := gs)
+      (FST (extend_place cx pv (ValueSubscript key) es),
+       SND (extend_place cx pv (ValueSubscript key) es) with gas_obs := gs)
 Proof
   rpt gen_tac >> Cases_on `pv`
   >~ [`PlaceR p`]
@@ -637,7 +704,9 @@ Proof
        lift_option_type_def] >>
   Cases_on `v` >> simp[bind_def, return_def] >>
   rename1 `evaluate_type (get_tenv cx) ty` >>
-  Cases_on `evaluate_type (get_tenv cx) ty` >> simp[return_def, raise_def]
+  Cases_on `evaluate_type (get_tenv cx) ty` >>
+  simp[return_def, raise_def, ignore_bind_def, bind_def,
+       record_storage_event_def]
 QED
 
 Theorem target_subscript_extend_summary_normal:
@@ -647,9 +716,8 @@ Theorem target_subscript_extend_summary_normal:
   gas_summary_at F (ctx,func) [] (extend_place cx pv (ValueSubscript key))
     (es,s) Q (\res ee r. expr_exit res r)
 Proof
-  strip_tac >> drule extend_place_state >> strip_tac >> gvs[] >>
-  simp[gas_summary_at_def] >>
-  qexistsl [`INL pv'`, `es`, `OK u`] >>
+  strip_tac >> simp[gas_summary_at_def] >>
+  qexistsl [`INL pv'`, `es'`, `OK u`] >>
   simp[gas_marked_exec_def, target_subscript_extend_gas_obs]
 QED
 
@@ -660,9 +728,8 @@ Theorem target_subscript_extend_summary_error:
   gas_summary_at F (ctx,func) [] (extend_place cx pv (ValueSubscript key))
     (es,s) Q (\res ee r. expr_exit res r)
 Proof
-  strip_tac >> drule extend_place_state >> strip_tac >> gvs[] >>
-  simp[gas_summary_at_def] >>
-  qexistsl [`INR err`, `es`, `r`] >>
+  strip_tac >> simp[gas_summary_at_def] >>
+  qexistsl [`INR err`, `es'`, `r`] >>
   simp[gas_marked_exec_def, target_subscript_extend_gas_obs] >>
   disj2_tac >> gvs[oneline expr_exit_def, AllCaseEqs()]
 QED
@@ -670,103 +737,191 @@ QED
 (* A successful index is followed by a no-observation place extension.
    The continuation summary retains the exact source extension computation. *)
 Theorem target_subscript_index_bind_outcome:
-  gas_outcome F (cx_tops cx) (ctx,func)
+  gas_outcome F (cx_tops cx) (ctx,func) cx st0
     (bind (eval_expr cx e) (read_result cx)) (mid,t)
-    (\res ee u. ?key. res = INL key /\ P key ee u)
-    (\res ee r. expr_exit res r) /\
+    (\H res ee u. ?key. res = INL key /\ P H key ee u)
+    (\H res ee r. expr_exit res r) /\
   (!right key ee u.
     gas_marked_exec F (ctx,func) (bind (eval_expr cx e) (read_result cx))
       (mid,t) right (INL key) ee (OK u) /\
-    P key (ee with gas_obs := []) u ==>
-    gas_summary_at F (ctx,func) [] (extend_place cx pv (ValueSubscript key))
-      (ee with gas_obs := [],u) Q (\res ee r. expr_exit res r)) ==>
-  gas_outcome F (cx_tops cx) (ctx,func)
+    (!H. valid_horizon cx st0 H ee.storage_trace ==>
+       P H key (ee with gas_obs := []) u) ==>
+    gas_outcome F (cx_tops cx) (ctx,func) cx st0
+      (extend_place cx pv (ValueSubscript key))
+      (ee with gas_obs := [],u) Q (\H res ee r. expr_exit res r)) ==>
+  gas_outcome F (cx_tops cx) (ctx,func) cx st0
     (bind (bind (eval_expr cx e) (read_result cx))
       (\key. extend_place cx pv (ValueSubscript key)))
-    (mid,t) Q (\res ee r. expr_exit res r)
+    (mid,t) Q (\H res ee r. expr_exit res r)
 Proof
   strip_tac >>
-  qpat_x_assum `gas_outcome _ _ _ _ _ _ _` mp_tac >>
-  rewrite_tac[gas_outcome_def, gas_summary_at_def] >>
-  disch_then (qx_choose_then `right` strip_assume_tac)
-  >- (gvs[] >> first_x_assum drule_all >>
-      rewrite_tac[gas_summary_at_def] >> strip_tac
-      >- (qexists `right` >> disj1_tac >>
-          qexistsl [`res`, `es_end'`, `r`] >> conj_tac
-          >- (pure_once_rewrite_tac[GSYM APPEND_NIL] >>
-              irule gas_marked_exec_bind_normal >>
-              goal_assum (drule_at Any) >> simp[] >> metis_tac[]) >> fs[])
-      >> qexists `right` >> disj1_tac >>
-      qexistsl [`res`, `es_end'`, `r`] >> conj_tac
-      >- (pure_once_rewrite_tac[GSYM APPEND_NIL] >>
-          irule gas_marked_exec_bind_normal >>
-          goal_assum (drule_at Any) >> simp[] >> metis_tac[]) >> fs[])
-  >- (gvs[] >>
-      `?exc. res = INR exc` by (Cases_on `res` >> gvs[expr_exit_def]) >>
-      gvs[] >> qexists `right` >> disj1_tac >>
-      qexistsl [`INR exc`, `es_end`, `r`] >> conj_tac
-      >- (irule gas_marked_exec_bind_exception >> simp[]) >>
-      disj2_tac >> gvs[oneline expr_exit_def, AllCaseEqs()]) >>
-  qexists `right` >> disj2_tac >>
+  qpat_x_assum `gas_outcome _ _ _ _ _ (bind _ _) _ _ _`
+    (mp_tac o BETA_RULE o REWRITE_RULE [gas_outcome_def]) >>
+  disch_then (qx_choose_then `right` (DISJ_CASES_THEN mp_tac))
+  >- (strip_tac >> rewrite_tac[gas_outcome_def] >>
+      qexists `right` >> disj1_tac >>
+      irule gas_bad_storage_at_bind_left >>
+      simp[storage_trace_frame_extend_place]) >>
+  disch_then (DISJ_CASES_THEN mp_tac)
+  >- (rewrite_tac[gas_summary_at_def] >> BETA_TAC >>
+      disch_then (qx_choosel_then [`res`, `fin`, `r`]
+        (CONJUNCTS_THEN2 assume_tac mp_tac)) >>
+      reverse (Cases_on `storage_trace_domain cx st0 fin.storage_trace`)
+      >- (disch_then kall_tac >> rewrite_tac[gas_outcome_def] >>
+          qexists `right` >> disj1_tac >>
+          irule gas_bad_storage_at_bind_left >>
+          simp[storage_trace_frame_extend_place] >>
+          irule gas_bad_storage_at_counted_prefix >> metis_tac[]) >>
+      `valid_horizon cx st0 (storage_trace_horizon fin.storage_trace)
+         fin.storage_trace` by fs[storage_trace_domain_def] >>
+      strip_tac
+      >- (`?key. res = INL key` by
+            (qpat_x_assum `!H. valid_horizon _ _ H _ ==> ?key. _`
+               (qspec_then `storage_trace_horizon fin.storage_trace` mp_tac) >>
+             simp[] >> metis_tac[]) >>
+          gvs[] >>
+          qpat_x_assum `!right key ee u. _` drule >>
+          impl_tac >- simp[] >>
+          rewrite_tac[gas_outcome_def] >>
+          disch_then (qx_choose_then `right2` (DISJ_CASES_THEN mp_tac))
+          >- (strip_tac >> qexists `right ++ right2` >> disj1_tac >>
+              irule gas_bad_storage_at_bind_right >> simp[] >> metis_tac[]) >>
+          disch_then (DISJ_CASES_THEN mp_tac)
+          >- (rewrite_tac[gas_summary_at_def] >>
+              disch_then (qx_choosel_then [`res2`, `fin2`, `r2`]
+                (CONJUNCTS_THEN2 assume_tac assume_tac)) >>
+              qexists `right ++ right2` >> disj2_tac >> disj1_tac >>
+              rewrite_tac[gas_summary_at_def] >>
+              qexistsl [`res2`, `fin2`, `r2`] >>
+              conj_tac
+              >- (irule gas_marked_exec_bind_normal >>
+                  goal_assum drule >> simp[]) >>
+              first_assum ACCEPT_TAC) >>
+          strip_tac >> qexists `right ++ right2` >> disj2_tac >> disj2_tac >>
+          qexistsl [`err`, `ee`, `leaf`, `finish`] >>
+          rewrite_tac[ignore_bind_def] >> pure_once_rewrite_tac[bind_assoc] >>
+          irule gas_exempt_cert_bind_value >>
+          simp[GSYM ignore_bind_def] >> metis_tac[]) >>
+      `?exc. res = INR exc` by
+        (Cases_on `res` >> simp[] >>
+         qpat_x_assum `!H. valid_horizon _ _ H _ ==> expr_exit _ _`
+           (qspec_then `storage_trace_horizon fin.storage_trace` mp_tac) >>
+         simp[expr_exit_def]) >>
+      rewrite_tac[gas_outcome_def] >>
+      qexists `right` >> disj2_tac >> disj1_tac >>
+      rewrite_tac[gas_summary_at_def] >>
+      qexistsl [`res`, `fin`, `r`] >> conj_tac
+      >- (gvs[] >> irule gas_marked_exec_bind_exception >> simp[]) >>
+      disj2_tac >> simp[]) >>
+  strip_tac >> rewrite_tac[gas_outcome_def] >>
+  qexists `right` >> disj2_tac >> disj2_tac >>
+  qexistsl [`err`, `ee`, `leaf`, `finish`] >>
   rewrite_tac[ignore_bind_def] >> pure_once_rewrite_tac[bind_assoc] >>
-  irule_at Any gas_exempt_cert_error_value >>
-  simp[GSYM ignore_bind_def] >> metis_tac[]
+  irule gas_exempt_cert_error_value >>
+  simp[GSYM ignore_bind_def]
+QED
+
+Theorem target_subscript_eval_split[local]:
+  eval_base_place cx (SubscriptTarget bt e) =
+  bind (eval_base_place cx bt)
+    (\pv. bind (bind (eval_expr cx e) (read_result cx))
+      (\key. extend_place cx pv (ValueSubscript key)))
+Proof
+  CONV_TAC (LAND_CONV (ONCE_REWRITE_CONV [evaluate_def])) >>
+  rewrite_tac[GSYM bind_assoc]
 QED
 
 Theorem target_subscript_bind_outcome:
-  gas_outcome F (cx_tops cx) (ctx,func) (eval_base_place cx bt) (es,s0)
-    (\res ee t. ?pv. res = INL pv /\ P pv ee t)
-    (\res ee r. expr_exit res r) /\
+  gas_outcome F (cx_tops cx) (ctx,func) cx st0 (eval_base_place cx bt) (es,s0)
+    (\H res ee t. ?pv. res = INL pv /\ P H pv ee t)
+    (\H res ee r. expr_exit res r) /\
   (!left pv mid t.
     gas_marked_exec F (ctx,func) (eval_base_place cx bt)
       (es,s0) left (INL pv) mid (OK t) /\
-    P pv (mid with gas_obs := []) t ==>
-    gas_outcome F (cx_tops cx) (ctx,func)
+    (!H. valid_horizon cx st0 H mid.storage_trace ==>
+       P H pv (mid with gas_obs := []) t) ==>
+    gas_outcome F (cx_tops cx) (ctx,func) cx st0
       (bind (bind (eval_expr cx e) (read_result cx))
         (\key. extend_place cx pv (ValueSubscript key)))
       (mid with gas_obs := [],t)
-      (\res ee u. ?pv'. res = INL pv' /\
-        target_post ctx func cenv cx es sa sb s0 ee pv' vt op u /\
+      (\H res ee u. ?pv'. res = INL pv' /\
+        target_post H ctx func cenv cx es sa sb s0 ee pv' vt op u /\
         u.vs_current_bb = sb.cs_current_bb /\
         u.vs_inst_idx = LENGTH sb.cs_current_insts)
-      (\res ee r. expr_exit res r)) ==>
-  gas_outcome F (cx_tops cx) (ctx,func)
+      (\H res ee r. expr_exit res r)) ==>
+  gas_outcome F (cx_tops cx) (ctx,func) cx st0
     (eval_base_place cx (SubscriptTarget bt e)) (es,s0)
-    (\res ee u. ?pv'. res = INL pv' /\
-      target_post ctx func cenv cx es sa sb s0 ee pv' vt op u /\
+    (\H res ee u. ?pv'. res = INL pv' /\
+      target_post H ctx func cenv cx es sa sb s0 ee pv' vt op u /\
       u.vs_current_bb = sb.cs_current_bb /\
       u.vs_inst_idx = LENGTH sb.cs_current_insts)
-    (\res ee r. expr_exit res r)
+    (\H res ee r. expr_exit res r)
 Proof
-  strip_tac >>
-  qpat_x_assum `gas_outcome _ _ _ _ _ _ _` mp_tac >>
-  rewrite_tac[gas_outcome_def, gas_summary_at_def] >>
-  disch_then (qx_choose_then `left` strip_assume_tac)
-  >- (gvs[] >>
-      first_x_assum drule_all >>
-      rewrite_tac[gas_outcome_def, gas_summary_at_def] >>
-      disch_then (qx_choose_then `right` strip_assume_tac)
-      >- (qexists `left ++ right` >> disj1_tac >>
-          once_rewrite_tac[evaluate_def] >> rewrite_tac[GSYM bind_assoc] >>
-          qexistsl [`res`, `es_end'`, `r`] >> conj_tac
-          >- (irule gas_marked_exec_bind_normal >>
-              goal_assum (drule_at Any) >> simp[] >> metis_tac[]) >> fs[])
-      >- (qexists `left ++ right` >> disj1_tac >>
-          once_rewrite_tac[evaluate_def] >> rewrite_tac[GSYM bind_assoc] >>
-          qexistsl [`res`, `es_end'`, `r`] >> conj_tac
-          >- (irule gas_marked_exec_bind_normal >>
-              goal_assum (drule_at Any) >> simp[] >> metis_tac[]) >> fs[]) >>
-      qexists `left ++ right` >> disj2_tac >>
-      once_rewrite_tac[evaluate_def] >>
-      rewrite_tac[ignore_bind_def, bind_assoc] >>
-      irule_at Any gas_exempt_cert_bind_result >>
-      simp[GSYM ignore_bind_def, GSYM bind_assoc] >> metis_tac[])
-  >- (gvs[] >>
-      `?exc. res = INR exc` by (Cases_on `res` >> gvs[expr_exit_def]) >>
-      gvs[] >> qexists `left` >> disj1_tac >>
-      metis_tac[target_subscript_base_exception]) >>
-  qexists `left` >> disj2_tac >>
-  metis_tac[target_subscript_base_exempt_cert]
+  strip_tac >> rewrite_tac[target_subscript_eval_split] >>
+  qpat_x_assum `gas_outcome _ _ _ _ _ (eval_base_place _ _) _ _ _`
+    (mp_tac o BETA_RULE o REWRITE_RULE [gas_outcome_def]) >>
+  disch_then (qx_choose_then `left` (DISJ_CASES_THEN mp_tac))
+  >- (strip_tac >> rewrite_tac[gas_outcome_def] >>
+      qexists `left` >> disj1_tac >>
+      irule gas_bad_storage_at_bind_left >>
+      simp[target_subscript_index_frame]) >>
+  disch_then (DISJ_CASES_THEN mp_tac)
+  >- (rewrite_tac[gas_summary_at_def] >> BETA_TAC >>
+      disch_then (qx_choosel_then [`res`, `fin`, `r`]
+        (CONJUNCTS_THEN2 assume_tac mp_tac)) >>
+      reverse (Cases_on `storage_trace_domain cx st0 fin.storage_trace`)
+      >- (disch_then kall_tac >> rewrite_tac[gas_outcome_def] >>
+          qexists `left` >> disj1_tac >>
+          irule gas_bad_storage_at_bind_left >>
+          simp[target_subscript_index_frame] >>
+          irule gas_bad_storage_at_counted_prefix >> metis_tac[]) >>
+      `valid_horizon cx st0 (storage_trace_horizon fin.storage_trace)
+         fin.storage_trace` by fs[storage_trace_domain_def] >>
+      strip_tac
+      >- (`?pv. res = INL pv` by
+            (qpat_x_assum `!H. valid_horizon _ _ H _ ==> ?pv. _`
+               (qspec_then `storage_trace_horizon fin.storage_trace` mp_tac) >>
+             simp[] >> metis_tac[]) >>
+          gvs[] >>
+          qpat_x_assum `!left pv mid t. _` drule >>
+          impl_tac >- simp[] >>
+          rewrite_tac[gas_outcome_def] >>
+          disch_then (qx_choose_then `right` (DISJ_CASES_THEN mp_tac))
+          >- (strip_tac >> qexists `left ++ right` >> disj1_tac >>
+              irule gas_bad_storage_at_bind_right >> simp[] >> metis_tac[]) >>
+          disch_then (DISJ_CASES_THEN mp_tac)
+          >- (rewrite_tac[gas_summary_at_def] >>
+              disch_then (qx_choosel_then [`res2`, `fin2`, `r2`]
+                (CONJUNCTS_THEN2 assume_tac assume_tac)) >>
+              qexists `left ++ right` >> disj2_tac >> disj1_tac >>
+              rewrite_tac[gas_summary_at_def] >>
+              qexistsl [`res2`, `fin2`, `r2`] >>
+              conj_tac
+              >- (irule gas_marked_exec_bind_normal >>
+                  goal_assum drule >> simp[]) >>
+              first_assum ACCEPT_TAC) >>
+          strip_tac >> qexists `left ++ right` >> disj2_tac >> disj2_tac >>
+          qexistsl [`err`, `ee`, `leaf`, `finish`] >>
+          rewrite_tac[ignore_bind_def] >> pure_once_rewrite_tac[bind_assoc] >>
+          irule gas_exempt_cert_bind_result >>
+          simp[GSYM ignore_bind_def] >> metis_tac[]) >>
+      `?exc. res = INR exc` by
+        (Cases_on `res` >> simp[] >>
+         qpat_x_assum `!H. valid_horizon _ _ H _ ==> expr_exit _ _`
+           (qspec_then `storage_trace_horizon fin.storage_trace` mp_tac) >>
+         simp[expr_exit_def]) >>
+      rewrite_tac[gas_outcome_def] >>
+      qexists `left` >> disj2_tac >> disj1_tac >>
+      rewrite_tac[gas_summary_at_def] >>
+      qexistsl [`res`, `fin`, `r`] >> conj_tac
+      >- (gvs[] >> irule gas_marked_exec_bind_exception >> simp[]) >>
+      disj2_tac >> simp[]) >>
+  strip_tac >> rewrite_tac[gas_outcome_def] >>
+  qexists `left` >> disj2_tac >> disj2_tac >>
+  qexistsl [`err`, `ee`, `leaf`, `finish`] >>
+  rewrite_tac[ignore_bind_def] >> pure_once_rewrite_tac[bind_assoc] >>
+  irule gas_exempt_cert_error_result >>
+  simp[GSYM ignore_bind_def]
 QED
 
 Theorem target_subscript_pre_gas_obs[simp]:
@@ -946,7 +1101,7 @@ QED
 
 Theorem target_subscript_memory_array_ready[local]:
   expr_sim_inv cenv cx env es /\
-  target_post ctx func cenv cx es0 sa sn s0 es
+  target_post H ctx func cenv cx es0 sa sn s0 es
     (PlaceR (MemoryPlace id path)) bvt rb s /\
   subscript_vtype bvt ity = SOME vt /\
   lookup_scopes id es.scopes = SOME entry /\
@@ -954,7 +1109,7 @@ Theorem target_subscript_memory_array_ready[local]:
   ?av. v = ArrayV av
 Proof
   strip_tac >>
-  `stmt_state_rel ctx func cenv cx es s /\
+  `stmt_state_rel H ctx func cenv cx es s /\
    ?w. place_ptr_rel cenv cx s (PlaceR (MemoryPlace id path)) w
       (FST (SND rb)) bvt` by (fs[target_post_def] >> metis_tac[]) >>
   Cases_on `bvt`
@@ -966,18 +1121,39 @@ Proof
   gvs[place_ptr_rel_def]
 QED
 
-Theorem target_subscript_typed_summary[local]:
+Theorem target_subscript_post_gas_obs[local]:
+  target_post H ctx func cenv cx es0 sa sb s0 (es with gas_obs := gs) pv vt op u <=>
+  target_post H ctx func cenv cx es0 sa sb s0 es pv vt op u
+Proof
+  `storage_well_formed_on cx (es with gas_obs := gs) (FST H) <=>
+   storage_well_formed_on cx es (FST H)` by
+    (irule storage_well_formed_on_backends >> simp[]) >>
+  `locals_kept cenv es0 (es with gas_obs := gs) s0 u <=>
+   locals_kept cenv es0 es s0 u` by
+    simp[locals_kept_def, popped_kept_def] >>
+  simp[target_post_def, stmt_state_rel_start_gas_obs]
+QED
+
+(* The place extension after the index, from (es,s).  Its end trace either
+   leaves the storage domain (a bad-storage outcome) or has the horizon
+   H0 = storage_trace_horizon of its end trace, at which the counted path
+   is taken once (target_subscript_typed_normal_horizons) and transported
+   to every horizon valid there. *)
+Theorem target_subscript_typed_outcome[local]:
+  (!H. valid_horizon cx st0 H es.storage_trace ==>
+     target_post H ctx func cenv cx es0 sa sn s0 es pv bvt rb s /\
+     expr_post H ctx func cenv cx e ee sm sn t es key ix s) /\
+  (!H tr slot tv. valid_horizon cx st0 H es.storage_trace /\
+     pv = PlaceR (StoragePlace tr slot tv) ==>
+     storage_read_live H tr (get_storage cx es tr) slot tv) /\
   subscript_vtype bvt (expr_type e) = SOME vt /\
   well_formed_vtype (get_tenv cx) vt /\
   evaluate_type (get_tenv cx) (expr_type e) = SOME itv /\ value_has_type itv key /\
-  target_post ctx func cenv cx es0 sa sn s0 es pv bvt rb s /\
-  expr_post ctx func cenv cx e ee sm sn t es key ix s /\
   expr_sim_inv cenv cx env es /\
   (!id path. pv = PlaceR (MemoryPlace id path) ==>
     ?entry av. lookup_scopes id es.scopes = SOME entry /\
       evaluate_subscripts entry.type entry.value path = INL (ArrayV av)) /\
   (!tr slot tv. pv = PlaceR (StoragePlace tr slot tv) ==>
-    storage_read_live cx tr (get_storage cx es tr) slot tv /\
     w2n slot + type_slot_size tv <= dimword(:256) /\
     (!etv cnt. tv = ArrayTV etv (Dynamic cnt) ==>
        w2n (lookup_storage slot (get_storage cx es tr)) <= cnt)) /\
@@ -991,30 +1167,56 @@ Theorem target_subscript_typed_summary[local]:
   (!x. ix = Var x ==> not_fresh_at sn x) /\
   (!l. ix <> Label l) /\ (!l. FST rb <> Label l) /\
   (!x. FST op = Var x ==> not_fresh_at sb x) ==>
-  gas_summary_at F (ctx,func) [] (extend_place cx pv (ValueSubscript key))
-    (es,s)
-    (\res es' u. ?pv'. res = INL pv' /\
-      target_post ctx func cenv cx es0 sa sb s0 es' pv' vt op u /\
+  gas_outcome F (cx_tops cx) (ctx,func) cx st0
+    (extend_place cx pv (ValueSubscript key)) (es,s)
+    (\H res es' u. ?pv'. res = INL pv' /\
+      target_post H ctx func cenv cx es0 sa sb s0 es' pv' vt op u /\
       u.vs_current_bb = sb.cs_current_bb /\
       u.vs_inst_idx = LENGTH sb.cs_current_insts)
-    (\res es' r. expr_exit res r)
+    (\H res es' r. expr_exit res r)
 Proof
   strip_tac >>
   Cases_on `extend_place cx pv (ValueSubscript key) es` >>
   rename1 `extend_place cx pv (ValueSubscript key) es = (result,es')` >>
+  rewrite_tac[gas_outcome_def] >> BETA_TAC >> qexists `[]` >>
+  reverse (Cases_on `storage_trace_domain cx st0 es'.storage_trace`)
+  >- (disj1_tac >>
+      simp[gas_bad_storage_at_def, target_subscript_extend_gas_obs]) >>
+  disj2_tac >> disj1_tac >>
+  `valid_horizon cx st0 (storage_trace_horizon es'.storage_trace)
+     es'.storage_trace` by fs[storage_trace_domain_def] >>
+  `!H. valid_horizon cx st0 H es'.storage_trace ==>
+       valid_horizon cx st0 H es.storage_trace` by
+    metis_tac[valid_horizon_frame, storage_trace_frame_extend_place] >>
+  `!H. valid_horizon cx st0 H es'.storage_trace ==>
+       target_post H ctx func cenv cx es0 sa sn s0 es pv bvt rb s` by
+    metis_tac[] >>
+  `!H tr slot tv. valid_horizon cx st0 H es'.storage_trace /\
+     pv = PlaceR (StoragePlace tr slot tv) ==>
+     storage_read_live H tr (get_storage cx es tr) slot tv` by
+    metis_tac[] >>
+  `expr_post (storage_trace_horizon es'.storage_trace)
+     ctx func cenv cx e ee sm sn t es key ix s` by metis_tac[] >>
   Cases_on `result`
-  >- (drule_all target_subscript_typed_normal >> strip_tac >>
-      irule target_subscript_extend_summary_normal >>
-      goal_assum (drule_at Any) >> simp[] >>
-      fs[target_post_def] >>
-      `locals_kept cenv es0 (es' with gas_obs := []) s0 u <=>
-       locals_kept cenv es0 es' s0 u` by
-        (rpt (pop_assum kall_tac) >> simp[locals_kept_def, popped_kept_def]) >>
-      pop_assum (fn th => rewrite_tac[th]) >>
-      rpt conj_tac >> first_assum MATCH_ACCEPT_TAC) >>
-  drule_all target_subscript_typed_error >> strip_tac >>
-  irule target_subscript_extend_summary_error >>
-  goal_assum (drule_at Any) >> simp[] >>
+  >- (drule_all target_subscript_typed_normal_horizons >> strip_tac >>
+      rewrite_tac[gas_summary_at_def] >>
+      qexistsl [`INL x`, `es'`, `OK u`] >>
+      simp[gas_marked_exec_def, target_subscript_extend_gas_obs,
+           target_subscript_post_gas_obs]) >>
+  `target_post (storage_trace_horizon es'.storage_trace)
+     ctx func cenv cx es0 sa sn s0 es pv bvt rb s` by metis_tac[] >>
+  `!tr slot tv. pv = PlaceR (StoragePlace tr slot tv) ==>
+     storage_read_live (storage_trace_horizon es'.storage_trace)
+       tr (get_storage cx es tr) slot tv /\
+     w2n slot + type_slot_size tv <= dimword(:256) /\
+     (!etv cnt. tv = ArrayTV etv (Dynamic cnt) ==>
+        w2n (lookup_storage slot (get_storage cx es tr)) <= cnt)` by
+    metis_tac[] >>
+  drule_all target_subscript_typed_error >>
+  disch_then (CONJUNCTS_THEN2 strip_assume_tac kall_tac) >>
+  rewrite_tac[gas_summary_at_def] >>
+  qexistsl [`INR y`, `es'`, `r`] >>
+  simp[gas_marked_exec_def, target_subscript_extend_gas_obs] >>
   qpat_x_assum `expr_exit (INR _) _` mp_tac >>
   Cases_on `r` >> simp[expr_exit_def, exit_result_def, AllCaseEqs()]
 QED
@@ -1026,13 +1228,14 @@ Theorem target_subscript_source_readiness[local]:
     ~supported_target_exists (\x. ?ty t. x = Pop ty t) (SubscriptTarget bt e)) /\
   eval_base_place cx bt es = (INL pv,mid) /\
   bind (eval_expr cx e) (read_result cx) mid = (res,fin) /\
-  target_post ctx func cenv cx es0 sa sn s0 fin pv bvt rb s /\
-  subscript_vtype bvt (expr_type e) = SOME vt ==>
+  target_post H ctx func cenv cx es0 sa sn s0 fin pv bvt rb s /\
+  subscript_vtype bvt (expr_type e) = SOME vt /\
+  valid_horizon cx st0 H mid.storage_trace ==>
   (!id path. pv = PlaceR (MemoryPlace id path) ==>
     ?entry av. lookup_scopes id fin.scopes = SOME entry /\
       evaluate_subscripts entry.type entry.value path = INL (ArrayV av)) /\
   (!tr slot tv. pv = PlaceR (StoragePlace tr slot tv) ==>
-    storage_read_live cx tr (get_storage cx fin tr) slot tv /\
+    storage_read_live H tr (get_storage cx fin tr) slot tv /\
     w2n slot + type_slot_size tv <= dimword(:256) /\
     (!etv cnt. tv = ArrayTV etv (Dynamic cnt) ==>
        w2n (lookup_storage slot (get_storage cx fin tr)) <= cnt))
@@ -1052,9 +1255,8 @@ Proof
       drule stmtSimForArrayFrameTheory.eval_base_place_memory_root >>
       simp[place_access_target_root]) >>
   rpt gen_tac >> disch_tac >> gvs[] >>
-  drule_at (Pat `eval_base_place _ _ _ = _`) eval_base_place_storage_ready >>
-  disch_then (qspec_then `fin` mp_tac) >>
-  fs[expr_sim_inv_def]
+  `storage_well_formed_on cx fin (FST H)` by fs[target_post_def] >>
+  drule_all eval_base_place_storage_ready >> simp[]
 QED
 
 Theorem target_subscript_suffix_var[local]:
@@ -1152,23 +1354,32 @@ Theorem target_subscript_continuation:
   fn_has_code sm sn func /\ fn_has_code sn sb func /\
   fn_inst_ids_distinct func /\ local_ptrs_reserved cenv sa /\
   gas_admissible (eval_base_place cx (SubscriptTarget bt e)) target_res_ok es /\
-  stmt_state_rel ctx func cenv cx es s0 /\
+  (!H. valid_horizon cx st0 H mid.storage_trace ==>
+     target_post H ctx func cenv cx es sa sm s0 (mid with gas_obs := []) pv bvt rb t /\
+     stmt_state_rel H ctx func cenv cx es s0) /\
   gas_marked_exec F (ctx,func) (eval_base_place cx bt)
     (es,s0) left (INL pv) mid (OK t) /\
-  target_post ctx func cenv cx es sa sm s0 (mid with gas_obs := []) pv bvt rb t /\
   t.vs_current_bb = sm.cs_current_bb /\
   t.vs_inst_idx = LENGTH sm.cs_current_insts ==>
-  gas_outcome F (cx_tops cx) (ctx,func)
+  gas_outcome F (cx_tops cx) (ctx,func) cx st0
     (bind (bind (eval_expr cx e) (read_result cx))
       (\key. extend_place cx pv (ValueSubscript key)))
     (mid with gas_obs := [],t)
-    (\res ee u. ?pv'. res = INL pv' /\
-      target_post ctx func cenv cx es sa sb s0 ee pv' vt op u /\
+    (\H res ee u. ?pv'. res = INL pv' /\
+      target_post H ctx func cenv cx es sa sb s0 ee pv' vt op u /\
       u.vs_current_bb = sb.cs_current_bb /\
       u.vs_inst_idx = LENGTH sb.cs_current_insts)
-    (\res ee r. expr_exit res r)
+    (\H res ee r. expr_exit res r)
 Proof
   disch_then (map_every assume_tac o CONJUNCTS) >>
+  reverse (Cases_on `storage_trace_domain cx st0 mid.storage_trace`)
+  >- (rewrite_tac[gas_outcome_def] >> qexists `[]` >> disj1_tac >>
+      irule gas_bad_storage_at_initial >> simp[target_subscript_index_frame]) >>
+  `valid_horizon cx st0 (storage_trace_horizon mid.storage_trace)
+     mid.storage_trace` by fs[storage_trace_domain_def] >>
+  `place_readable cx (mid with gas_obs := []) pv` by
+    (qpat_x_assum `!H. valid_horizon _ _ H mid.storage_trace ==> _`
+       drule >> simp[target_post_def]) >>
   `expr_sim ctx func cenv cx (expr_type e) e (mid with gas_obs := []) /\
    expr_vv_sim ctx func cenv cx (expr_type e) e (mid with gas_obs := [])` by
     (irule target_subscript_marked_index_sim >> goal_assum (drule_at Any) >>
@@ -1180,8 +1391,7 @@ Proof
     (mid with gas_obs := gs) = (INL v,ee) ==>
     place_readable cx ee pv` by
     (qpat_x_assum `_ \/ _` strip_assume_tac
-     >- (`place_readable cx (mid with gas_obs := []) pv` by fs[target_post_def] >>
-         rpt gen_tac >> strip_tac >>
+     >- (rpt gen_tac >> strip_tac >>
          drule_at (Pat `gas_marked_exec _ _ _ _ _ _ _ _`)
            target_subscript_index_readable >>
          disch_then (qspec_then `e` irule) >> simp[] >>
@@ -1198,25 +1408,38 @@ Proof
   `MAP FDOM es.scopes = MAP FDOM (mid with gas_obs := []).scopes` by
     (drule target_subscript_marked_base_domains >> simp[]) >>
   `~t.vs_halted` by metis_tac[target_subscript_marked_base_nonhalted] >>
-  `gas_outcome F (cx_tops cx) (ctx,func)
+  `gas_outcome F (cx_tops cx) (ctx,func) cx st0
     (bind (eval_expr cx e) (read_result cx)) (mid with gas_obs := [],t)
-    (\res ee u. ?key. res = INL key /\
-      target_post ctx func cenv cx es sa sn s0 ee pv bvt rb u /\
-      expr_post ctx func cenv cx e (mid with gas_obs := []) sm sn t ee key ix u /\
+    (\H res ee u. ?key. res = INL key /\
+      target_post H ctx func cenv cx es sa sn s0 ee pv bvt rb u /\
+      expr_post H ctx func cenv cx e (mid with gas_obs := []) sm sn t ee key ix u /\
       u.vs_current_bb = sn.cs_current_bb /\
       u.vs_inst_idx = LENGTH sn.cs_current_insts)
-    (\res ee r. expr_exit res r)` by
+    (\H res ee r. expr_exit res r)` by
     (irule target_index_outcome >> goal_assum (drule_at Any) >>
      gvs[ci_mono_def] >> first_assum ACCEPT_TAC) >>
   irule target_subscript_index_bind_outcome >>
-  qexists `\key ee u.
-    target_post ctx func cenv cx es sa sn s0 ee pv bvt rb u /\
-    expr_post ctx func cenv cx e (mid with gas_obs := []) sm sn t ee key ix u /\
+  qexists `\H key ee u.
+    target_post H ctx func cenv cx es sa sn s0 ee pv bvt rb u /\
+    expr_post H ctx func cenv cx e (mid with gas_obs := []) sm sn t ee key ix u /\
     u.vs_current_bb = sn.cs_current_bb /\
     u.vs_inst_idx = LENGTH sn.cs_current_insts` >>
-  pure_rewrite_tac[BETA_THM] >> reverse conj_tac >- (gvs[] >> first_assum ACCEPT_TAC) >>
+  pure_rewrite_tac[BETA_THM] >> reverse conj_tac >- first_assum ACCEPT_TAC >>
   rpt gen_tac >> strip_tac >>
-  qpat_x_assum `(\key ee u. _) _ _ _` (strip_assume_tac o BETA_RULE) >>
+  reverse (Cases_on `storage_trace_domain cx st0 ee.storage_trace`)
+  >- (rewrite_tac[gas_outcome_def] >> qexists `[]` >> disj1_tac >>
+      irule gas_bad_storage_at_initial >>
+      simp[storage_trace_frame_extend_place]) >>
+  `valid_horizon cx st0 (storage_trace_horizon ee.storage_trace)
+     ee.storage_trace` by fs[storage_trace_domain_def] >>
+  `u.vs_current_bb = sn.cs_current_bb /\
+   u.vs_inst_idx = LENGTH sn.cs_current_insts` by metis_tac[] >>
+  `!H. valid_horizon cx st0 H ee.storage_trace ==>
+     valid_horizon cx st0 H mid.storage_trace` by
+    (rpt strip_tac >>
+     `valid_horizon cx st0 H (mid with gas_obs := []).storage_trace` by
+       (irule target_subscript_index_valid_prefix >> metis_tac[]) >>
+     fs[]) >>
   `bind (eval_expr cx e) (read_result cx)
     (mid with gas_obs := gas_explicit right t.vs_gas_readings) =
     (INL key, ee with gas_obs := [])` by
@@ -1233,31 +1456,56 @@ Proof
     fs[target_pre_def, target_indices_pre_def] >>
   drule_all target_subscript_index_source_diagnostic >> strip_tac >>
   drule_all target_subscript_index_runtime_diagnostic >> strip_tac >>
-  `(!id path. pv = PlaceR (MemoryPlace id path) ==>
-      ?entry av. lookup_scopes id (ee with gas_obs := []).scopes = SOME entry /\
-        evaluate_subscripts entry.type entry.value path = INL (ArrayV av)) /\
-   (!tr slot tv. pv = PlaceR (StoragePlace tr slot tv) ==>
-      storage_read_live cx tr (get_storage cx (ee with gas_obs := []) tr) slot tv /\
-      w2n slot + type_slot_size tv <= dimword(:256) /\
-      (!etv cnt. tv = ArrayTV etv (Dynamic cnt) ==>
-        w2n (lookup_storage slot (get_storage cx (ee with gas_obs := []) tr)) <= cnt))` by
-    (qpat_x_assum `_ \/ _` strip_assume_tac
+  `!H. valid_horizon cx st0 H ee.storage_trace ==>
+     (!id path. pv = PlaceR (MemoryPlace id path) ==>
+        ?entry av. lookup_scopes id (ee with gas_obs := []).scopes = SOME entry /\
+          evaluate_subscripts entry.type entry.value path = INL (ArrayV av)) /\
+     (!tr slot tv. pv = PlaceR (StoragePlace tr slot tv) ==>
+        storage_read_live H tr (get_storage cx (ee with gas_obs := []) tr) slot tv /\
+        w2n slot + type_slot_size tv <= dimword(:256) /\
+        (!etv cnt. tv = ArrayTV etv (Dynamic cnt) ==>
+          w2n (lookup_storage slot (get_storage cx (ee with gas_obs := []) tr)) <= cnt))` by
+    (gen_tac >> strip_tac >>
+     `target_post H ctx func cenv cx es sa sn s0 (ee with gas_obs := []) pv bvt rb u`
+       by metis_tac[] >>
+     `valid_horizon cx st0 H
+        (mid with gas_obs := gas_explicit right t.vs_gas_readings).storage_trace`
+       by simp[] >>
+     qpat_x_assum `_ \/ _` strip_assume_tac
      >- (drule_at (Pat `eval_base_place _ _ _ = _`) target_subscript_source_readiness >>
          simp[] >> disch_then drule_all >> simp[]) >>
      qpat_x_assum `!gs key ee. _` drule >> strip_tac >> gvs[] >>
      `?av. v = ArrayV av` by
        (irule target_subscript_memory_array_ready >>
-        goal_assum (drule_at (Pat `target_post _ _ _ _ _ _ _ _ _ _ _ _ _`)) >>
+        goal_assum (drule_at (Pat `target_post _ _ _ _ _ _ _ _ _ _ _ _ _ _`)) >>
         simp[] >> metis_tac[]) >> gvs[]) >>
+  `(!id path. pv = PlaceR (MemoryPlace id path) ==>
+      ?entry av. lookup_scopes id (ee with gas_obs := []).scopes = SOME entry /\
+        evaluate_subscripts entry.type entry.value path = INL (ArrayV av)) /\
+   (!tr slot tv. pv = PlaceR (StoragePlace tr slot tv) ==>
+      w2n slot + type_slot_size tv <= dimword(:256) /\
+      (!etv cnt. tv = ArrayTV etv (Dynamic cnt) ==>
+        w2n (lookup_storage slot (get_storage cx (ee with gas_obs := []) tr)) <= cnt))` by
+    metis_tac[] >>
+  `!H. valid_horizon cx st0 H (ee with gas_obs := []).storage_trace ==>
+     target_post H ctx func cenv cx es sa sn s0 (ee with gas_obs := []) pv bvt rb u /\
+     expr_post H ctx func cenv cx e (mid with gas_obs := []) sm sn t
+       (ee with gas_obs := []) key ix u` by
+    (simp[] >> metis_tac[]) >>
+  `!H tr slot tv. valid_horizon cx st0 H (ee with gas_obs := []).storage_trace /\
+     pv = PlaceR (StoragePlace tr slot tv) ==>
+     storage_read_live H tr (get_storage cx (ee with gas_obs := []) tr) slot tv` by
+    (simp[] >> metis_tac[]) >>
   `local_ptrs_reserved cenv sn` by
     metis_tac[local_ptrs_reserved_next_var, ci_mono_def] >>
   `sa.cs_next_var <= sn.cs_next_var /\ sa.cs_next_id <= sn.cs_next_id` by
     (fs[ci_mono_def] >> decide_tac) >>
   `MAP FDOM es.scopes = MAP FDOM (ee with gas_obs := []).scopes` by
     (drule (CONV_RULE (DEPTH_CONV ETA_CONV) bop_marked_scopes_dom) >> simp[]) >>
-  drule_at (Pat `target_post _ _ _ _ _ _ _ _ _ _ _ _ _`)
-    target_subscript_typed_summary >>
-  disch_then (drule_at (Pat `expr_post _ _ _ _ _ _ _ _ _ _ _ _ _`)) >>
+  qpat_x_assum `!H. valid_horizon _ _ H (ee with gas_obs := []).storage_trace ==>
+                  target_post _ _ _ _ _ _ _ _ _ _ _ _ _ _ /\ _`
+    (mp_then (Pos hd) mp_tac target_subscript_typed_outcome) >>
+  disch_then (drule_at (Pos hd)) >>
   disch_then irule >> simp[] >>
   `?env'. expr_sim_inv cenv cx env' ee` by (qexists `env` >> fs[]) >>
   `!x. ix = Var x ==> not_fresh_at sn x` by
@@ -1297,10 +1545,11 @@ Theorem target_subscript_local_live_continuation:
   fn_has_code sm sn func /\ fn_has_code sn sb func /\
   fn_inst_ids_distinct func /\ local_ptrs_reserved cenv sa /\
   gas_admissible (eval_base_place cx (SubscriptTarget bt e)) target_res_ok es /\
-  stmt_state_rel ctx func cenv cx es s0 /\
+  (!H. valid_horizon cx st0 H mid.storage_trace ==>
+     target_post H ctx func cenv cx es sa sm s0 (mid with gas_obs := []) pv bvt rb t /\
+     stmt_state_rel H ctx func cenv cx es s0) /\
   gas_marked_exec F (ctx,func) (eval_base_place cx bt)
     (es,s0) left (INL pv) mid (OK t) /\
-  target_post ctx func cenv cx es sa sm s0 (mid with gas_obs := []) pv bvt rb t /\
   t.vs_current_bb = sm.cs_current_bb /\
   t.vs_inst_idx = LENGTH sm.cs_current_insts /\
   (!gs key ee. bind (eval_expr cx e) (read_result cx) (mid with gas_obs := gs) =
@@ -1308,15 +1557,15 @@ Theorem target_subscript_local_live_continuation:
      ?path entry v. pv = PlaceR (MemoryPlace id path) /\
        lookup_scopes id ee.scopes = SOME entry /\
        evaluate_subscripts entry.type entry.value path = INL v) ==>
-  gas_outcome F (cx_tops cx) (ctx,func)
+  gas_outcome F (cx_tops cx) (ctx,func) cx st0
     (bind (bind (eval_expr cx e) (read_result cx))
       (\key. extend_place cx pv (ValueSubscript key)))
     (mid with gas_obs := [],t)
-    (\res ee u. ?pv'. res = INL pv' /\
-      target_post ctx func cenv cx es sa sb s0 ee pv' vt op u /\
+    (\H res ee u. ?pv'. res = INL pv' /\
+      target_post H ctx func cenv cx es sa sb s0 ee pv' vt op u /\
       u.vs_current_bb = sb.cs_current_bb /\
       u.vs_inst_idx = LENGTH sb.cs_current_insts)
-    (\res ee r. expr_exit res r)
+    (\H res ee r. expr_exit res r)
 Proof
   strip_tac >>
   drule_at (Pat `target_pre _ _ _ _ _`) target_subscript_continuation >>
@@ -1343,21 +1592,22 @@ Theorem target_subscript_local_pop_continuation:
   fn_has_code sm sn func /\ fn_has_code sn sb func /\
   fn_inst_ids_distinct func /\ local_ptrs_reserved cenv sa /\
   gas_admissible (eval_base_place cx (SubscriptTarget bt e)) target_res_ok es /\
-  stmt_state_rel ctx func cenv cx es s0 /\
+  (!H. valid_horizon cx st0 H mid.storage_trace ==>
+     target_post H ctx func cenv cx es sa sm s0 (mid with gas_obs := []) pv bvt rb t /\
+     stmt_state_rel H ctx func cenv cx es s0) /\
   gas_marked_exec F (ctx,func) (eval_base_place cx bt)
     (es,s0) left (INL pv) mid (OK t) /\
-  target_post ctx func cenv cx es sa sm s0 (mid with gas_obs := []) pv bvt rb t /\
   t.vs_current_bb = sm.cs_current_bb /\
   t.vs_inst_idx = LENGTH sm.cs_current_insts ==>
-  gas_outcome F (cx_tops cx) (ctx,func)
+  gas_outcome F (cx_tops cx) (ctx,func) cx st0
     (bind (bind (eval_expr cx e) (read_result cx))
       (\key. extend_place cx pv (ValueSubscript key)))
     (mid with gas_obs := [],t)
-    (\res ee u. ?pv'. res = INL pv' /\
-      target_post ctx func cenv cx es sa sb s0 ee pv' vt op u /\
+    (\H res ee u. ?pv'. res = INL pv' /\
+      target_post H ctx func cenv cx es sa sb s0 ee pv' vt op u /\
       u.vs_current_bb = sb.cs_current_bb /\
       u.vs_inst_idx = LENGTH sb.cs_current_insts)
-    (\res ee r. expr_exit res r)
+    (\H res ee r. expr_exit res r)
 Proof
   strip_tac >>
   `!gs key ee.
@@ -1428,28 +1678,46 @@ Proof
   `fn_has_code sa sm func /\ fn_has_code sm sn func /\
    fn_has_code sn sb func` by
     (irule target_subscript_interval_code >> simp[]) >>
-  `gas_outcome F (cx_tops cx) (ctx,func) (eval_base_place cx bt) (es,s0)
-    (\res ee t. ?pv. res = INL pv /\
-      target_post ctx func cenv cx es sa sm s0 ee pv bvt rb t /\
+  `gas_outcome F (cx_tops cx) (ctx,func) cx st0 (eval_base_place cx bt) (es,s0)
+    (\H res ee t. ?pv. res = INL pv /\
+      target_post H ctx func cenv cx es sa sm s0 ee pv bvt rb t /\
       t.vs_current_bb = sm.cs_current_bb /\
       t.vs_inst_idx = LENGTH sm.cs_current_insts)
-    (\res ee r. expr_exit res r)` by
+    (\H res ee r. expr_exit res r)` by
     (qpat_x_assum `target_case _ _ _ _ _ _` mp_tac >>
      simp[target_case_def, target_sim_def] >>
      disch_then (qspecl_then [`env`, `es`] mp_tac) >>
      impl_tac >- fs[int_calls_expr_def] >>
      disch_then irule >> simp[]) >>
   irule target_subscript_bind_outcome >>
-  qexists `\pv ee t. target_post ctx func cenv cx es sa sm s0 ee pv bvt rb t /\
+  qexists `\H pv ee t. target_post H ctx func cenv cx es sa sm s0 ee pv bvt rb t /\
     t.vs_current_bb = sm.cs_current_bb /\
     t.vs_inst_idx = LENGTH sm.cs_current_insts` >>
   reverse conj_tac >- simp[] >>
   rpt gen_tac >> strip_tac >>
-  gvs[BETA_THM] >>
-  irule target_subscript_continuation >> simp[] >>
-  goal_assum (drule_at (Pat `gas_marked_exec _ _ _ _ _ _ _ _`)) >>
-  goal_assum (drule_at (Pat `target_post _ _ _ _ _ _ _ _ _ _ _ _ _`)) >>
-  qexistsl [`env`, `ix`, `nocalls`, `sn`] >> simp[] >> first_assum ACCEPT_TAC
+  reverse (Cases_on `storage_trace_domain cx st0 mid.storage_trace`)
+  >- (rewrite_tac[gas_outcome_def] >> qexists `[]` >> disj1_tac >>
+      irule gas_bad_storage_at_initial >> simp[target_subscript_index_frame]) >>
+  `valid_horizon cx st0 (storage_trace_horizon mid.storage_trace)
+     mid.storage_trace` by fs[storage_trace_domain_def] >>
+  `t.vs_current_bb = sm.cs_current_bb /\
+   t.vs_inst_idx = LENGTH sm.cs_current_insts` by
+    (qpat_x_assum `!H. valid_horizon _ _ H mid.storage_trace ==> _`
+       drule >> simp[]) >>
+  `!H. valid_horizon cx st0 H mid.storage_trace ==>
+     target_post H ctx func cenv cx es sa sm s0 (mid with gas_obs := []) pv bvt rb t /\
+     stmt_state_rel H ctx func cenv cx es s0` by
+    (gen_tac >> strip_tac >>
+     `valid_horizon cx st0 H es.storage_trace` by
+       metis_tac[target_subscript_base_valid_prefix] >>
+     conj_tac
+     >- (qpat_x_assum `!H. valid_horizon _ _ H mid.storage_trace ==> _`
+           drule >> simp[]) >>
+     qpat_x_assum `!H. valid_horizon _ _ H es.storage_trace ==> _`
+       drule >> simp[]) >>
+  irule target_subscript_continuation >>
+  qexistsl [`bt`, `bvt`, `env`, `ix`, `left`, `nocalls`, `rb`, `sm`, `sn`] >>
+  simp[] >> first_assum ACCEPT_TAC
 QED
 
 (* A pop in a local target's index (x[len(y.pop()) - 1] = v): the index
@@ -1478,26 +1746,44 @@ Proof
   `fn_has_code sa sm func /\ fn_has_code sm sn func /\
    fn_has_code sn sb func` by
     (irule target_subscript_interval_code >> simp[]) >>
-  `gas_outcome F (cx_tops cx) (ctx,func) (eval_base_place cx bt) (es,s0)
-    (\res ee t. ?pv. res = INL pv /\
-      target_post ctx func cenv cx es sa sm s0 ee pv bvt rb t /\
+  `gas_outcome F (cx_tops cx) (ctx,func) cx st0 (eval_base_place cx bt) (es,s0)
+    (\H res ee t. ?pv. res = INL pv /\
+      target_post H ctx func cenv cx es sa sm s0 ee pv bvt rb t /\
       t.vs_current_bb = sm.cs_current_bb /\
       t.vs_inst_idx = LENGTH sm.cs_current_insts)
-    (\res ee r. expr_exit res r)` by
+    (\H res ee r. expr_exit res r)` by
     (qpat_x_assum `target_case _ _ _ _ _ _` mp_tac >>
      simp[target_case_def, target_sim_def] >>
      disch_then (qspecl_then [`env`, `es`] mp_tac) >>
      impl_tac >- fs[int_calls_expr_def] >>
      disch_then irule >> simp[]) >>
   irule target_subscript_bind_outcome >>
-  qexists `\pv ee t. target_post ctx func cenv cx es sa sm s0 ee pv bvt rb t /\
+  qexists `\H pv ee t. target_post H ctx func cenv cx es sa sm s0 ee pv bvt rb t /\
     t.vs_current_bb = sm.cs_current_bb /\
     t.vs_inst_idx = LENGTH sm.cs_current_insts` >>
   reverse conj_tac >- simp[] >>
   rpt gen_tac >> strip_tac >>
-  gvs[BETA_THM] >>
-  irule target_subscript_local_pop_continuation >> simp[] >>
-  goal_assum (drule_at (Pat `gas_marked_exec _ _ _ _ _ _ _ _`)) >>
-  goal_assum (drule_at (Pat `target_post _ _ _ _ _ _ _ _ _ _ _ _ _`)) >>
-  qexistsl [`env`, `id`, `ix`, `nocalls`, `sn`] >> simp[] >> first_assum ACCEPT_TAC
+  reverse (Cases_on `storage_trace_domain cx st0 mid.storage_trace`)
+  >- (rewrite_tac[gas_outcome_def] >> qexists `[]` >> disj1_tac >>
+      irule gas_bad_storage_at_initial >> simp[target_subscript_index_frame]) >>
+  `valid_horizon cx st0 (storage_trace_horizon mid.storage_trace)
+     mid.storage_trace` by fs[storage_trace_domain_def] >>
+  `t.vs_current_bb = sm.cs_current_bb /\
+   t.vs_inst_idx = LENGTH sm.cs_current_insts` by
+    (qpat_x_assum `!H. valid_horizon _ _ H mid.storage_trace ==> _`
+       drule >> simp[]) >>
+  `!H. valid_horizon cx st0 H mid.storage_trace ==>
+     target_post H ctx func cenv cx es sa sm s0 (mid with gas_obs := []) pv bvt rb t /\
+     stmt_state_rel H ctx func cenv cx es s0` by
+    (gen_tac >> strip_tac >>
+     `valid_horizon cx st0 H es.storage_trace` by
+       metis_tac[target_subscript_base_valid_prefix] >>
+     conj_tac
+     >- (qpat_x_assum `!H. valid_horizon _ _ H mid.storage_trace ==> _`
+           drule >> simp[]) >>
+     qpat_x_assum `!H. valid_horizon _ _ H es.storage_trace ==> _`
+       drule >> simp[]) >>
+  irule target_subscript_local_pop_continuation >>
+  qexistsl [`bt`, `bvt`, `env`, `id`, `ix`, `left`, `nocalls`, `rb`, `sm`, `sn`] >>
+  simp[] >> first_assum ACCEPT_TAC
 QED
