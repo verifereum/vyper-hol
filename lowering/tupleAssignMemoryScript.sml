@@ -284,5 +284,3 @@ Resume assign_tuple_locals_memory_suffix_path[vars]:
 QED
 
 Finalise assign_tuple_locals_memory_suffix_path
-
-Finalise assign_tuple_locals_memory_suffix_path
