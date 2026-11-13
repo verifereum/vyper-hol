@@ -325,6 +325,12 @@ Resume concat_args_sim_mem[tail_normal]:
       qpat_assum `gas_marked_exec _ _ _ _ _ (INL vs) _ _`
         (mp_tac o MATCH_MP gas_marked_exec_cons_values) >> simp[]) >>
   disj1_tac >>
+  `!aid p n. FLOOKUP t2.vs_allocas aid = SOME (p,n) /\ aid < s2.cs_next_id /\
+      (p + n <= B \/ B + bsz <= p) /\ (p + n <= w2n ow \/ w2n ow + 64 <= p) /\
+      (!name lo sz. local_region cenv (es_end with gas_obs := []).scopes t2 name lo sz ==>
+                    p + n <= lo \/ lo + sz <= p) ==>
+      mem_bytes_at p n tu.vs_memory = mem_bytes_at p n t2.vs_memory` by
+    (simp[] >> metis_tac[]) >>
   drule_all (INST_TYPE [alpha |-> ``:256``] concat_args_glue) >> strip_tac >>
   suspend "post"
 QED
