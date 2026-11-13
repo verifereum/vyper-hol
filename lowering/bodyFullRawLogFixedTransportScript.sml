@@ -3,14 +3,15 @@ Ancestors
   bodyFullRawLogFixedBoundary bodySimFull bodyPtrDefs exprSimDefs
   exprSimMemDefs exprLoweringProps stmtSimDefs loweringPosts
   exprSimWordArgs exprOperandVar vyperValue venomState words list
-  finite_map pred_set bodyRawLogArgPre exprSimSource vyperTyping
+  finite_map pred_set bodyRawLogArgPre exprSimSource vyperTyping vyperState
   valueEncoding valueEncodingProofs compileEnv loweringStateRelDefs
 
 Theorem raw_log_fixed_child_tail_input:
   expr_body_pre cenv cx env (Call ann RawLog args dflt) es0 /\
   MEM data args /\ expr_sim_inv cenv cx env es /\
-  eval_expr cx data es = (INL r,mid) /\
-  read_result cx r mid = (INL (BytesV bs),mid) /\
+  bind (eval_expr cx data) (read_result cx)
+    (es with gas_obs := input_gas) =
+    (INL (BytesV bs),mid with gas_obs := output_gas) /\
   expr_type data = BaseT (BytesT (Fixed 32)) /\
   post_value_type cenv data = expr_type data /\
   evaluate_type (get_tenv cx) (expr_type data) = SOME (BaseTV (BytesT (Fixed 32))) /\
@@ -71,8 +72,15 @@ Proof
   `expr_body_pre cenv cx env data es` by
     metis_tac[expr_body_pre_raw_log_arg] >>
   `value_has_type (BaseTV (BytesT (Fixed 32))) (BytesV bs)` by
-    (drule_all expr_body_pre_runtime_typed >> strip_tac >>
-     gvs[]) >>
+    (`expr_body_pre cenv cx env data (es with gas_obs := input_gas)` by
+       simp[] >>
+     Cases_on `eval_expr cx data (es with gas_obs := input_gas)` >>
+     rename1 `eval_expr cx data (es with gas_obs := input_gas) = (res,st)` >>
+     Cases_on `res` >> gvs[bind_def] >>
+     drule read_result_state >> strip_tac >> gvs[] >>
+     qpat_x_assum `eval_expr cx data _ = _`
+       (mp_then Any mp_tac expr_body_pre_runtime_typed) >>
+     simp[] >> strip_tac >> gvs[] >> metis_tac[]) >>
   `LENGTH bs = 32` by fs[value_has_type_def] >>
   `?word. eval_operand data_op t = SOME word /\
      TAKE 32 (word_to_bytes_be word) = bs` by
