@@ -24,6 +24,26 @@ Proof
   simp[]
 QED
 
+(* A builtin never halts, so its exit meets halt_exit. *)
+Theorem hash_builtin_summary_halt[local]:
+  gas_summary_ptr_at D (ctx,func) PG marks
+    (\es'. ((case builtin_result cx es'.accounts ann bt ts vs of
+               INL w => INL (Value w) | INR exc => INR exc), es'))
+    (es,s0,G0,tn0) Q (\res ef gt r. expr_exit res r) ==>
+  gas_summary_ptr_at D (ctx,func) PG marks
+    (\es'. ((case builtin_result cx es'.accounts ann bt ts vs of
+               INL w => INL (Value w) | INR exc => INR exc), es'))
+    (es,s0,G0,tn0) Q
+    (\res ef gt r. expr_exit res r /\ halt_exit cx' ef res r)
+Proof
+  rewrite_tac[gas_summary_ptr_at_def] >> strip_tac >>
+  qexistsl_tac [`res`, `es_end`, `G`, `tn`, `r`] >> simp[] >>
+  `res <> INR HaltException` by
+    (strip_tac >> gvs[] >> first_x_assum (qspec_then `[]` mp_tac) >>
+     simp[AllCaseEqs(), exprSimWordArgsTheory.builtin_result_not_halt]) >>
+  fs[halt_exit_def]
+QED
+
 Theorem hash_compile_typed_unary_builtin_vv_sim_ptr:
   expr_body_pre cenv cx env (Builtin ann bt [e]) es /\
   expr_sim_ptr d ctx PG func cenv cx (expr_type e) e es /\
@@ -110,5 +130,7 @@ Proof
      gvs[expr_vv_res_ok_def, expr_res_ok_def] >> rpt strip_tac >>
      gvs[exprSimWordArgsTheory.builtin_result_not_halt]) >>
   gvs[] >>
-  qpat_x_assum `!sa sm sb x vv s0 G0 tn0 v gs ee G tn s. _` drule_all >> simp[]
+  qpat_x_assum `!sa sm sb x vv s0 G0 tn0 v gs ee G tn s. _` drule_all >> simp[] >>
+  strip_tac >> qexists_tac `marks` >>
+  irule hash_builtin_summary_halt >> first_assum ACCEPT_TAC
 QED
