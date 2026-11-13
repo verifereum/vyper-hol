@@ -1,124 +1,74 @@
-(* One counted endpoint for all aligned staged arguments. *)
+(* The arguments of an internal call, staged one at a time as Vyper
+   0.5.0b1 lowers them: each argument's producer runs, then the argument
+   is staged at once, a word on the stack, any other value copied into a
+   fresh buffer of the callee's parameter type. *)
 Theory bodyIntCallStageEndpoint
 Ancestors
   bodyIntCallStageList bodyIntCallStageOwned bodyIntCallStageTransport
   bodyIntCallHeldArgs exprSimWordArgs exprLoweringProps fragGasFocus
-  context exprLowering compileEnv
+  context exprLowering compileEnv bodyIntCallJointContract
+  bodyIntCallFamCallIntAllocatedStage
 
-(* HELD (train 17): 0.5.0b1 arg snapshot re-proof; statement no longer typechecks, commented out whole *)
-(*
-Theorem intcall_stage_args_endpoint:
-  !H flags sm sn ops a s.
-  compile_stage_intcall_args ce (MAP (\(ty,raw,vv). vv) H) flags
-    (MAP (\(ty,raw,vv). ty) H) sm = (ops,sn) /\
-  LENGTH flags = LENGTH H /\
-  EVERY (\(ty,raw,vv). vv_type vv = ty /\
-    type_memory_bytes ce ty < dimword(:256) /\
-    ?tv. evaluate_type (get_tenv cx) ty = SOME tv /\
-         type_memory_bytes ce ty = type_memory_size tv) H /\
-  LIST_REL (\(ty,raw,vv) flag. flag ==> is_word_type ty) H flags /\
-  intcall_held_args ce cx a sm es s H /\
-  stmt_state_rel ctx func ce cx es s /\ fn_inst_ids_distinct func /\
-  fn_has_code sm sn func /\ local_ptrs_reserved ce sm /\
-  expr_sim_inv ce cx env es /\ fn_directly_calls ctx func.fn_name name /\
-  MEM func ctx.ctx_functions /\
-  (!aid. sm.cs_next_id <= aid ==> aid NOTIN FDOM s.vs_allocas) /\
-  ~s.vs_halted /\ s.vs_current_bb = sm.cs_current_bb /\
-  s.vs_inst_idx = LENGTH sm.cs_current_insts ==>
-  ?t D. gas_marked_path F ctx func s 0 (OK t) /\
-    EVERY (staged_arg ce func es sm sn t) D /\
-    MAP (\(ty,tv,v,flag,op). op) D = ops /\
-    LIST_REL (\((ty,raw,vv),flag) (ty',tv,v,flag',op).
-      ty' = ty /\ flag' = flag /\
-      evaluate_type (get_tenv cx) ty = SOME tv /\
-      read_result cx raw es = (INL v,es)) (ZIP(H,flags)) D /\
-    stmt_state_rel ctx func ce cx es t /\ wb_frame ce es es sm s t /\
-    local_ptrs_reserved ce sn /\
-    (!aid. sn.cs_next_id <= aid ==> aid NOTIN FDOM t.vs_allocas) /\
-    ~t.vs_halted /\ t.vs_current_bb = sn.cs_current_bb /\
-    t.vs_inst_idx = LENGTH sn.cs_current_insts
+(* ML abbreviations only, as in bodyIntCallFamCallIntStageInterface:
+   staged argument i, at type ty with flag flag, value v and operand op, in
+   state s, for the staging code from start to current. *)
+val completed = ``\cx start current ty flag v op s.
+  ?tv w. evaluate_type (get_tenv cx) ty = SOME tv /\
+    eval_operand op s = SOME w /\
+    (!x. op = Var x ==> not_fresh_at current x) /\
+    (if flag then is_word_type ty /\ w = typed_val_to_w256 tv v
+     else val_in_memory tv v (w2n w) s.vs_memory /\
+       ?aid len. FLOOKUP s.vs_allocas aid = SOME (w2n w,len) /\
+         start.cs_next_id <= aid /\ aid < current.cs_next_id /\
+         type_memory_size tv <= len /\
+         w2n w + len <= s.vs_alloca_next /\
+         w2n w + len < dimword (:256))``;
+
+val completed_prefix = ``\cx start current tys flags values ops s.
+  LENGTH flags = LENGTH tys /\ LENGTH values = LENGTH tys /\
+  LENGTH ops = LENGTH tys /\
+  !i. i < LENGTH tys ==>
+    ^completed cx start current (EL i tys) (EL i flags)
+      (EL i values) (EL i ops) s``;
+
+(* RESTATED (train 17): 0.5.0b1 per-argument staging.  Replaces the batch
+   endpoints over held arguments (intcall_stage_args_endpoint and its
+   distinct/return variants): ops are the INVOKE's argument operands, vs the
+   source values.  Every ALLOCA of the staging code, a memory argument's
+   buffer among them, is fresh above t's frontier, so clear of the return
+   buffer and the caller's locals; distinct ALLOCAs are disjoint. *)
+Theorem intcall_stage_args_outcome:
+  !args flags tys ce env sa ops sb es fp t.
+  intcall_frame_ok fp /\ body_inv fp.jc_tops fp.jc_ctx ce fp.jc_cx /\
+  (!e. MEM e args ==> intcall_expr_producer fp e /\
+     supportedExprs$supported_expr fp.jc_tops e /\
+     calls_follow_call_graph fp.jc_edges fp.jc_owner (int_calls_expr e)) /\
+  (!e ee. MEM e args /\ expr_sim_inv ce fp.jc_cx env ee ==>
+     expr_body_pre ce fp.jc_cx env e ee) /\
+  LENGTH args <= LENGTH flags /\ LENGTH tys = LENGTH args /\
+  (!i. i < LENGTH args ==>
+     (EL i flags ==> is_word_type (EL i tys)) /\
+     type_widens_to (get_tenv fp.jc_cx) (expr_type (EL i args)) (EL i tys) /\
+     ?dtv. evaluate_type (get_tenv fp.jc_cx) (EL i tys) = SOME dtv /\
+       type_memory_bytes ce (EL i tys) = type_memory_size dtv /\
+       MAX 32 (type_memory_size dtv) + 64 < dimword (:256)) /\
+  compile_stage_intcall_args compile_expr ce args flags tys sa = (ops,sb) /\
+  fn_has_code sa sb fp.jc_func /\ fn_inst_ids_distinct fp.jc_func /\
+  intcall_expr_res fp ce env es sa t /\ ~t.vs_halted /\
+  t.vs_current_bb = sa.cs_current_bb /\
+  t.vs_inst_idx = LENGTH sa.cs_current_insts /\
+  (!aid. sa.cs_next_id <= aid ==> aid NOTIN FDOM t.vs_allocas) ==>
+  gas_outcome F (cx_tops fp.jc_cx) (fp.jc_ctx,fp.jc_func)
+    (eval_exprs fp.jc_cx args) (es,t)
+    (\res ee u. ?vs. res = INL vs /\
+       ^completed_prefix fp.jc_cx sa sb tys (TAKE (LENGTH args) flags) vs ops u /\
+       (!aid off len. FLOOKUP u.vs_allocas aid = SOME (off,len) /\
+          sa.cs_next_id <= aid /\ aid < sb.cs_next_id ==>
+          t.vs_alloca_next <= off) /\
+       (!aid. sb.cs_next_id <= aid ==> aid NOTIN FDOM u.vs_allocas) /\
+       intcall_expr_cont fp ce env es sa t ee sb u /\
+       MAP FDOM es.scopes = MAP FDOM ee.scopes)
+    (\res ee r. expr_exit res r)
 Proof
-  Induct >> rpt gen_tac
-  >- (simp[] >> strip_tac >>
-      gvs[compile_stage_intcall_args_def, comp_return_def] >>
-      qexists_tac `s` >> simp[wb_frame_refl,
-        fragGasModeTheory.gas_marked_path_def] >>
-      metis_tac[fragGasPathTheory.gas_path_rules]) >>
-  PairCases_on `h` >> Cases_on `flags` >> simp[] >>
-  strip_tac >>
-  rename1 `intcall_held_args ce cx a sm es s ((ty,raw,vv)::H)` >>
-  rename1 `compile_stage_intcall_args ce (vv::vals) (flag::flags) (ty::tys) sm = (ops,sn)` >>
-  Cases_on `flag` >> gvs[]
-  >- suspend "word"
-  >> suspend "memory"
+  cheat
 QED
-*)
-
-(* HELD (train 17): 0.5.0b1 arg snapshot re-proof; statement no longer typechecks, commented out whole *)
-(*
-Resume intcall_stage_args_endpoint[word]:
-  drule intcall_stage_word_parts >> strip_tac >>
-  drule_all intcall_stage_word_code >> strip_tac >>
-  `sm.cs_next_id NOTIN FDOM s.vs_allocas` by simp[] >>
-  drule (SRULE [] intcall_stage_word_owned) >>
-  simp[] >> disch_then drule_all >> strip_tac >>
-  `!aid. sm'.cs_next_id <= aid ==> aid NOTIN FDOM z.vs_allocas` by
-    (gvs[ci_mono_def] >> metis_tac[arithmeticTheory.LESS_EQ_TRANS]) >>
-  qpat_x_assum `!flags' sm' sn' ops' a' s''. _`
-    (qspecl_then [`flags`,`sm'`,`sn`,`rest`,`a`,`z`] mp_tac) >>
-  simp[] >> strip_tac >>
-  `staged_arg ce func es sm sn t (vv_type vv,tv,v,T,op)` by
-    (qpat_assum `staged_arg _ _ _ sm sm' z _`
-       (mp_then Any mp_tac staged_arg_path_transport) >>
-     simp[] >> disch_then irule >>
-     gvs[ci_mono_def] >> qexistsl_tac [`ctx`,`cx`,`F`,`0`] >> simp[]) >>
-  `EVERY (staged_arg ce func es sm sn t) D` by
-    (irule staged_args_lower_frontier >> goal_assum (drule_at Any) >>
-     gvs[ci_mono_def]) >>
-  `wb_frame ce es es sm s t` by
-    (qspecl_then [`ctx`,`func`,`ce`,`cx`,`es`,`es`,`sm`,`sm'`,`s`,`z`,`t`] mp_tac
-       exprSimConvertBytesTheory.convert_wb_frame_trans >>
-     impl_tac >- (rpt conj_tac >> fs[ci_mono_def]) >>
-     simp[]) >>
-  qexistsl_tac [`t`,`(vv_type vv,tv,v,T,op)::D`] >> simp[] >>
-  metis_tac[fragGasModeTheory.gas_marked_path_then, arithmeticTheory.ADD_0]
-QED
-*)
-
-(* HELD (train 17): 0.5.0b1 arg snapshot re-proof; statement no longer typechecks, commented out whole *)
-(*
-Resume intcall_stage_args_endpoint[memory]:
-  drule_at (Pat `compile_stage_intcall_args _ _ _ _ _ = _`) intcall_stage_memory_parts >> simp[] >> strip_tac >>
-  drule_all intcall_stage_memory_code >> strip_tac >>
-  drule (SRULE [] intcall_stage_memory_owned) >> simp[] >>
-  disch_then (drule_at (Pat `evaluate_type _ _ = _`)) >>
-  simp[] >> disch_then drule_all >> strip_tac >>
-  rename1 `gas_marked_path F ctx func s 0 (OK z)` >>
-  `sm.cs_next_id <= sj.cs_next_id` by
-    (gvs[ci_mono_def] >> decide_tac) >>
-  `!aid. sj.cs_next_id <= aid ==> aid NOTIN FDOM z.vs_allocas` by
-    metis_tac[arithmeticTheory.LESS_EQ_TRANS] >>
-  qpat_x_assum `!flags' sm' sn' ops' a' s''. _`
-    (qspecl_then [`flags`,`sj`,`sn`,`rest`,`a`,`z`] mp_tac) >>
-  simp[] >> strip_tac >>
-  `staged_arg ce func es sm sn t (vv_type vv,tv,v,F,buf.buf_operand)` by
-    (qpat_assum `staged_arg _ _ _ sm sj z _`
-       (mp_then Any mp_tac staged_arg_path_transport) >>
-     simp[] >> disch_then irule >>
-     gvs[ci_mono_def] >> qexistsl_tac [`ctx`,`cx`,`F`,`0`] >> simp[]) >>
-  `EVERY (staged_arg ce func es sm sn t) D` by
-    (irule staged_args_lower_frontier >> goal_assum (drule_at Any) >> simp[]) >>
-  `wb_frame ce es es sm s t` by
-    (qspecl_then [`ctx`,`func`,`ce`,`cx`,`es`,`es`,`sm`,`sj`,`s`,`z`,`t`] mp_tac
-       exprSimConvertBytesTheory.convert_wb_frame_trans >>
-     impl_tac >- (rpt conj_tac >> fs[ci_mono_def]) >>
-     simp[]) >>
-  qexistsl_tac [`t`,`(vv_type vv,tv,v,F,buf.buf_operand)::D`] >> simp[] >>
-  metis_tac[fragGasModeTheory.gas_marked_path_then, arithmeticTheory.ADD_0]
-QED
-*)
-
-(* HELD (train 17): 0.5.0b1 arg snapshot re-proof; statement no longer typechecks, commented out whole *)
-(*
-Finalise intcall_stage_args_endpoint
-*)
