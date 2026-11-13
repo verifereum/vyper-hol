@@ -156,7 +156,7 @@ Proof
      qpat_x_assum `(\ds PH H un g j t. _) _ _ _ _ _ _ _` mp_tac >>
      CONV_TAC (REDEPTH_CONV BETA_CONV) >> simp[] >>
      disch_then kall_tac >> metis_tac[]) >>
-  drule_all dload_joint_reachable_if_next
+  drule_all_then ACCEPT_TAC dload_joint_reachable_if_next
 QED
 
 val _ = List.app (fn th => if null (hyp th) then ()
