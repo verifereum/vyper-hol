@@ -555,7 +555,7 @@ Proof
 QED
 
 (* A different-layout aggregate cannot use the empty-footprint alternative. *)
-Theorem log_declared_source_separated[local]:
+Theorem log_declared_source_separated:
   type_widens_to (get_tenv cx) lty dty /\
   evaluate_type (get_tenv cx) lty = SOME ltv /\
   evaluate_type (get_tenv cx) dty = SOME dtv /\ lty <> dty /\
@@ -614,7 +614,7 @@ Proof
   first_assum ACCEPT_TAC
 QED
 
-Theorem log_declared_effect_operand[local]:
+Theorem log_declared_effect_operand:
   typed_copy_effect ctx func sa sb s t b n /\
   (!x. op = Var x ==> not_fresh_at sa x) /\
   (!lab. op <> Label lab) ==>
@@ -624,7 +624,7 @@ Proof
   metis_tac[typed_copy_effect_lookup]
 QED
 
-Theorem log_declared_effect_source[local]:
+Theorem log_declared_effect_source:
   typed_copy_effect ctx func sa sb s t b n /\
   (!x. op = Var x ==> not_fresh_at sa x) /\
   (!lab. op <> Label lab) /\
@@ -676,7 +676,7 @@ Proof
   gvs[venom_state_component_equality]
 QED
 
-Theorem log_declared_same_type_opcodes[local]:
+Theorem log_declared_same_type_opcodes:
   compile_store_memory cenv src dst ty ty sa = ((),sb) ==>
   EVERY (\i. i.inst_opcode <> INVOKE /\ ~is_terminator i.inst_opcode)
     (emitted_insts sa sb)
@@ -892,7 +892,7 @@ Proof
   qpat_x_assum `!w. _ ==> _ \/ _ \/ b + (h + n) <= _` drule_all >> decide_tac
 QED
 
-Theorem log_declared_effect_head_frame[local]:
+Theorem log_declared_effect_head_frame:
   typed_copy_effect ctx func mid sb u t (b+h) n /\
   val_in_memory tv v b u.vs_memory /\ val_wf tv v /\
   type_memory_size tv <= h ==>
