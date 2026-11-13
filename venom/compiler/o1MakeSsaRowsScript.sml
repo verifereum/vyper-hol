@@ -179,6 +179,7 @@ Proof
   strip_tac >>
   `wf_function fn /\ first_block_no_preds fn /\ first_block_no_phi fn` by
     gvs[o1_fn_shape_def] >>
+  `ALL_DISTINCT (fn_labels fn)` by gvs[wf_function_def] >>
   `?b0 rest. fn.fn_blocks = b0::rest` by
     (Cases_on `fn.fn_blocks` >> gvs[wf_function_def, fn_has_entry_def]) >>
   `ALL_DISTINCT (b0.bb_label :: MAP (\bb. bb.bb_label) rest)` by

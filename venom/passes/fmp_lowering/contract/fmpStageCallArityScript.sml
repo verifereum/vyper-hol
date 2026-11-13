@@ -38,7 +38,7 @@ Theorem simplify_cfg_pass_user_param_count[local]:
 Proof
   strip_tac >> drule simplify_cfg_pass_step_function >> strip_tac >>
   gvs[o1_fn_row_def] >> irule simplify_cfg_fn_user_param_count >>
-  qexists_tac `C` >> simp[]
+  metis_tac[]
 QED
 
 Theorem sue_pass_user_param_count[local]:
@@ -114,7 +114,8 @@ Proof
   `fn.fn_fmp_signature = NONE` by metis_tac[fmp_stage_actual_witness] >>
   `?g. lookup_function nm observed.cu_context.ctx_functions = SOME g /\
        LENGTH args = LENGTH (fn_user_param_insts g)` by
-    (drule fmp_fn_pass_step_result >> strip_tac >>
+    (qpat_x_assum `fn_pass_step _ _ observed _ fn _`
+       (strip_assume_tac o MATCH_MP fmp_fn_pass_step_result) >>
      gvs[fmp_lower_function_def, AllCaseEqs(), decode_invoke_def] >>
      drule_all fmp_lower_invoke_user_arity >> metis_tac[]) >>
   `MEM nm (fn_invoke_targets fn)` by
