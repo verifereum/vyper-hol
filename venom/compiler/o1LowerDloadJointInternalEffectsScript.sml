@@ -19,10 +19,11 @@ Theorem ld_joint_internal_update_next:
   active_inst fn inst2 (s1 with vs_inst_idx := SUC s.vs_inst_idx) /\
   occ_frame_reachable vs C stk PG G1 tn1 fn inst2
     (s1 with vs_inst_idx := SUC s.vs_inst_idx) n a U B HP H1 /\
-  occurrence_annotation_ok n a U B HP H1 stk PG G1
+  occurrence_annotation_ok (dyn_floor C vs) n a U B HP H1 stk PG G1
     (s1 with vs_inst_idx := SUC s.vs_inst_idx) /\
   ld_env_agree sites fn H1 tn1 s1 t1 /\
   ld_memory_agree sites lo tn1.t_mem s1.vs_memory t1.vs_memory /\
+  ld_dyn_agree (dyn_floor C vs) tn1.t_mem s1.vs_memory t1.vs_memory /\
   ld_shared_agree D s.vs_call_ctx.cc_address tn1 s1 t1 ==>
   ?u fn'. lookup_function fn.fn_name C'.ctx_functions = SOME fn' /\
     ld_joint_control u fn fn' s t /\ active_inst fn' inst t /\
@@ -126,7 +127,7 @@ Proof
        (Cases_on `op` >> simp[op_prov_def] >>
         rename1 `FLOOKUP G vv` >> Cases_on `FLOOKUP G vv` >> simp[] >>
         fs[SUBSET_DEF, FLOOKUP_DEF] >> metis_tac[]) >>
-     `occurrence_env_ok B (a::MAP (\u. u.of_owner) U) H G` by
+     `occurrence_env_ok (dyn_floor C vs) B (a::MAP (\u. u.of_owner) U) H G` by
        fs[ld_joint_boundary_def, occurrence_annotation_ok_def] >>
      drule occurrence_op_erasure >> disch_then (qspec_then `op` mp_tac) >>
      simp[occurrence_param_ok_def]) >>
@@ -153,6 +154,7 @@ Theorem ld_joint_istore_step[local]:
   inst.inst_opcode = ISTORE /\ step_inst fuel C inst s = OK s1 ==>
   ?t1. step_inst fuel C' inst t = OK t1 /\
     ld_memory_agree sites lo (mem_taint tn inst s s1) s1.vs_memory t1.vs_memory /\
+    ld_dyn_agree (dyn_floor C vs) (mem_taint tn inst s s1) s1.vs_memory t1.vs_memory /\
     ld_shared_agree D s.vs_call_ctx.cc_address (step_taint inst s s1 tn) s1 t1
 Proof
   strip_tac >>
@@ -179,17 +181,23 @@ Proof
      gvs[access_ok_def, source_memory_write_ranges_def, mem_write_ops_def,
          fixed_source_write_range_def] >>
      Cases_on `p` >> gvs[op_prov_def] >> metis_tac[arithmeticTheory.NOT_LESS]) >>
+  `mem_taint tn inst s (istore (w2n x) v s) =
+    ((tn.t_mem DIFF {i | w2n x <= i /\ i < w2n x+32}) UNION
+     {w2n x+k | k IN op_taint tn vop})` by
+    (simp[mem_taint_def, step_writes_def, source_memory_write_ranges_def,
+          fixed_source_write_range_def, written_taint_def,
+          new_site_bytes_def, istore_def, mstore_def, range_bytes_def] >>
+     simp[EXTENSION, FLOOKUP_DEF] >> metis_tac[]) >>
+  `ld_dyn_agree (dyn_floor C vs) tn.t_mem s.vs_memory t.vs_memory /\
+   lo <= dyn_floor C vs` by
+    fs[ld_joint_boundary_def, ld_dyn_floor_ok_def] >>
   conj_tac
-  >- (`mem_taint tn inst s (istore (w2n x) v s) =
-        ((tn.t_mem DIFF {i | w2n x <= i /\ i < w2n x+32}) UNION
-         {w2n x+k | k IN op_taint tn vop})` by
-        (simp[mem_taint_def, step_writes_def, source_memory_write_ranges_def,
-              fixed_source_write_range_def, written_taint_def,
-              new_site_bytes_def, istore_def, mstore_def, range_bytes_def] >>
-         simp[EXTENSION, FLOOKUP_DEF] >> metis_tac[]) >>
-      asm_rewrite_tac[] >>
+  >- (asm_rewrite_tac[] >>
       drule_at (Pat `ld_joint_geometry _ _ _ _`) ld_memory_agree_mstore_geometry >>
       disch_then irule >> simp[]) >>
+  conj_tac
+  >- (asm_rewrite_tac[venomExecSemanticsTheory.istore_memory] >>
+      irule ld_dyn_agree_mstore_below >> simp[] >> decide_tac) >>
   `ld_shared_agree D s.vs_call_ctx.cc_address
      (tn with t_imm := key_update tn.t_imm (w2n x) (op_taint tn vop))
      (istore (w2n x) v s) (istore (w2n x) w t)` by
@@ -234,7 +242,7 @@ Proof
      qpat_x_assum `_ = [Var vv]` (mp_tac o AP_TERM ``LENGTH : operand list -> num``) >>
      simp[] >> IF_CASES_TAC >> simp[FILTER_EQ_NIL, EVERY_MEM] >> metis_tac[]) >>
   `op_prov H op = NONE` by
-    (`occurrence_env_ok B (a::MAP (\u. u.of_owner) U) H G` by
+    (`occurrence_env_ok (dyn_floor C vs) B (a::MAP (\u. u.of_owner) U) H G` by
        fs[ld_joint_boundary_def, occurrence_annotation_ok_def] >>
      drule occurrence_op_erasure >> disch_then (qspec_then `op` mp_tac) >>
      Cases_on `op_prov H op` >> simp[occurrence_param_ok_def]) >>
@@ -280,7 +288,8 @@ Proof
   `MEM (w2n x,w2n l) (source_memory_read_ranges inst s)` by
     simp[source_memory_read_ranges_def, memory_range_of_operands_def, REVERSE_APPEND] >>
   `?y. eval_operand p t = SOME y /\
-    (w2n l=0 \/ (w2n x=w2n y /\ w2n x+w2n l<=lo) \/
+    (w2n l=0 \/ (w2n x=w2n y /\ (w2n x+w2n l<=lo \/
+       dyn_floor C vs<=w2n x /\ w2n x+w2n l<=dimword (:256))) \/
      (?id b c z j. FLOOKUP sites id = SOME (b,c,z) /\ j+w2n l<=z /\
                     w2n x=b+j /\ w2n y=c+j))` by
     (drule ld_joint_read_operand_range >>
@@ -295,9 +304,11 @@ Proof
      gvs[taint_ok_def, about_to_revert_def] >>
      disj2_tac >> qexistsl_tac [`w2n x`,`w2n l`,`w2n x+k`] >>
      simp[arithmeticTheory.ADD_COMM]) >>
+  `ld_memory_agree sites lo tn.t_mem s.vs_memory t.vs_memory /\
+   ld_dyn_agree (dyn_floor C vs) tn.t_mem s.vs_memory t.vs_memory` by
+    fs[ld_joint_boundary_def] >>
   qexists_tac `y` >> simp[] >> irule ld_memory_agree_clean_slice >>
-  qexistsl_tac [`lo`,`tn.t_mem`,`sites`] >> simp[] >>
-  gvs[ld_joint_boundary_def] >> metis_tac[arithmeticTheory.ADD_COMM]
+  metis_tac[arithmeticTheory.ADD_COMM]
 QED
 
 Theorem ld_eval_operands_defined:
@@ -317,6 +328,7 @@ Theorem ld_joint_log_step[local]:
   inst.inst_opcode = LOG /\ step_inst fuel C inst s = OK s1 ==>
   ?t1. step_inst fuel C' inst t = OK t1 /\
     ld_memory_agree sites lo (mem_taint tn inst s s1) s1.vs_memory t1.vs_memory /\
+    ld_dyn_agree (dyn_floor C vs) (mem_taint tn inst s s1) s1.vs_memory t1.vs_memory /\
     ld_shared_agree D s.vs_call_ctx.cc_address (step_taint inst s s1 tn) s1 t1
 Proof
   strip_tac >>
@@ -347,19 +359,21 @@ Proof
    ld_memory_agree sites lo tn.t_mem s.vs_memory t.vs_memory` by
     fs[ld_joint_boundary_def, ld_joint_frame_def, ld_joint_local_fields_def] >>
   `~t.vs_call_ctx.cc_static` by metis_tac[] >>
+  `ld_dyn_agree (dyn_floor C vs) tn.t_mem s.vs_memory t.vs_memory` by
+    fs[ld_joint_boundary_def] >>
   qexists_tac `t with vs_logs := t.vs_logs ++
     [<|logger := t.vs_call_ctx.cc_address; topics := topics;
        data := read_memory (w2n y) (w2n sz) t|>]` >>
   simp[GSYM read_memory_def] >>
   `new_site_bytes s s = {}` by
     (simp[new_site_bytes_def, EXTENSION, FLOOKUP_DEF] >> metis_tac[]) >>
-  (conj_tac
+  (rpt (conj_tac
   >- (gvs[mem_taint_def, step_writes_def, source_memory_write_ranges_def,
          new_site_bytes_def, written_taint_def, range_bytes_def, FLOOKUP_DEF] >>
       Cases_on `REVERSE tops ++ [szop;p]` >> gvs[] >>
       rename1 `REVERSE tops ++ [szop;p] = hh::tt` >>
       Cases_on `tt` >> gvs[] >> rename1 `_ = hh::hh2::tt2` >>
-      Cases_on `tt2` >> gvs[]) >>
+      Cases_on `tt2` >> gvs[])) >>
   gvs[ld_shared_agree_def, step_taint_def, store_taint_def,
       imm_taint_def, adopt_reset_def])
 QED
@@ -383,13 +397,14 @@ Proof
   strip_tac >>
   `?t1. step_inst fuel C' inst t = OK t1 /\
     ld_memory_agree sites lo (mem_taint tn inst s s1) s1.vs_memory t1.vs_memory /\
+    ld_dyn_agree (dyn_floor C vs) (mem_taint tn inst s s1) s1.vs_memory t1.vs_memory /\
     ld_shared_agree D s.vs_call_ctx.cc_address (step_taint inst s s1 tn) s1 t1` by
     (Cases_on `inst.inst_opcode = ISTORE`
      >- (irule ld_joint_istore_step >> metis_tac[]) >>
      irule ld_joint_log_step >> gvs[MEM] >> metis_tac[]) >>
   `occ_frame_reachable vs C stk PG G tn fn inst s n a U B HP H` by
     metis_tac[ld_joint_source] >>
-  `occurrence_annotation_ok n a U B HP H stk PG G s` by
+  `occurrence_annotation_ok (dyn_floor C vs) n a U B HP H stk PG G s` by
     gvs[ld_joint_boundary_def] >>
   `MEM fn C.ctx_functions` by
     (drule occ_frame_reachable_annotation >> simp[]) >>
@@ -405,7 +420,7 @@ Proof
   `occ_frame_reachable vs C stk PG G (step_taint inst s s1 tn) fn inst2
      (s1 with vs_inst_idx := SUC s.vs_inst_idx) n a U B HP H` by
     (drule_all occ_frame_reachable_next >> simp[occurrence_sites_step_def] >> gvs[MEM]) >>
-  `occurrence_annotation_ok n a U B HP H stk PG G
+  `occurrence_annotation_ok (dyn_floor C vs) n a U B HP H stk PG G
      (s1 with vs_inst_idx := SUC s.vs_inst_idx)` by
     (drule occurrence_annotation_next >>
      disch_then (qspecl_then [`s1`,`inst`,`SUC s.vs_inst_idx`,`fuel`,`C`] mp_tac) >>
@@ -423,6 +438,8 @@ Proof
      simp[exec_write2_def, AllCaseEqs()] >> rpt strip_tac >>
      gvs[istore_def, mstore_def] >>
      simp[venom_state_component_equality] >> metis_tac[]) >>
+  `ld_dyn_agree (dyn_floor C vs) (step_taint inst s s1 tn).t_mem
+     s1.vs_memory t1.vs_memory` by gvs[step_taint_def] >>
   irule ld_joint_internal_update_next >> simp[] >>
   conj_tac >- metis_tac[] >> conj_tac >- metis_tac[] >>
   conj_tac >- gvs[step_taint_def] >> conj_tac

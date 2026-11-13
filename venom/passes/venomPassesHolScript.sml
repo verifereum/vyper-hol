@@ -16,6 +16,7 @@ Ancestors
   fmpStageReclaimSound
   fmpStageOpSteps
   fmpStageFmpSteps
+  fmpStageBlockSim
   (* lower dload/dloadbytes *)
   lowerDload
   (* branch optimization *)

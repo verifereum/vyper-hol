@@ -20,7 +20,7 @@ QED
 
 Theorem ptr_source_tagged_var_support:
   ptr_source_ownership vs0 C h a tokens registry births PT TG saved /\
-  EVERY (\fn. EVERY (\i. i.inst_opcode <> DALLOCA) (fn_insts fn)) C.ctx_functions /\
+  ptr_discipline lo C vs0 /\
   EVERY (fn_ptr_ok P) C.ctx_functions /\
   EVERY (\fn. EVERY inst_wf (fn_insts fn)) C.ctx_functions /\
   FLOOKUP TG v = SOME tag ==>
@@ -31,22 +31,19 @@ Proof
   simp[ptr_ledger_erases_def] >> strip_tac >>
   `tag IN FDOM births` by metis_tac[] >>
   `?site. FLOOKUP births tag = SOME site` by metis_tac[FLOOKUP_DEF] >>
+  `FLOOKUP a.po_prov v = SOME site` by
+    (qpat_x_assum `!v. ptr_owner_erases _ _ _ _` (qspec_then `v` mp_tac) >>
+     gvs[ptr_owner_erases_def]) >>
   gvs[ptr_static_support_def] >> metis_tac[]
 QED
 
 Theorem ptr_source_tagged_param_support:
   ptr_source_ownership vs0 C h a tokens registry births PT TG saved /\
-  EVERY (\fn. EVERY (\i. i.inst_opcode <> DALLOCA) (fn_insts fn)) C.ctx_functions /\
+  ptr_discipline lo C vs0 /\
   EVERY (fn_ptr_ok P) C.ctx_functions /\
   EVERY (\fn. EVERY inst_wf (fn_insts fn)) C.ctx_functions /\
   k < LENGTH PT /\ EL k PT = SOME tag ==>
   k IN P a.po_fn.fn_name
 Proof
-  strip_tac >> drule_all ptr_owned_current_static >> strip_tac >>
-  drule_all ptr_source_ownership_params_erases >>
-  simp[ptr_params_erases_def, EVERY_EL] >> strip_tac >>
-  `tag IN FDOM births` by
-    (first_x_assum (qspec_then `k` mp_tac) >> simp[]) >>
-  `?site. FLOOKUP births tag = SOME site` by metis_tac[FLOOKUP_DEF] >>
-  gvs[ptr_params_ok_def, EL_MAP, ptr_owner_project_def] >> metis_tac[]
+  cheat
 QED

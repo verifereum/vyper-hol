@@ -4,7 +4,7 @@ Ancestors
   lowerDloadPtrPhi lowerDloadPtrRel o1ContractLowerDload
   lowerDloadPtrStatic o1PassLift o1PassContract venomPassSchedule
   lowerDloadPtrEntry lowerDloadPtrAggregate ptrDiscipline venomWf
-  unitTransformDefs irSupply
+  unitTransformDefs irSupply o1LowerDloadSourceEntry
   contextCodegenRel venomExecSemantics venomExecProofs venomInst lowerDloadDefs list rich_list
 
 Theorem dload_insts_entry_control[local]:
@@ -135,22 +135,6 @@ Proof
   Cases_on `lookup_function name C.ctx_functions` >> simp[] >> metis_tac[]
 QED
 
-Theorem dload_no_phi_entry:
-  first_block_no_phi f /\ fn_entry_label f = SOME lbl ==>
-  (enters_block f
-    (vs with <|vs_prev_bb := NONE; vs_current_bb := lbl; vs_inst_idx := 0|>) t <=>
-   t = vs with <|vs_prev_bb := NONE; vs_current_bb := lbl; vs_inst_idx := 0|>)
-Proof
-  Cases_on `f.fn_blocks` >> simp[fn_entry_label_def, entry_block_def] >> strip_tac >> gvs[] >>
-  `phi_prefix_length h.bb_instructions = 0 /\
-   (!s. eval_phis s h.bb_instructions = OK s)` by
-    (qpat_x_assum `first_block_no_phi f` mp_tac >>
-     simp[first_block_no_phi_def] >>
-     Cases_on `h.bb_instructions` >>
-     simp[phi_prefix_length_def, eval_phis_def]) >>
-  simp[enters_block_def, lookup_block_def, FIND_thm] >> metis_tac[]
-QED
-
 Theorem dload_actual_joint_entry:
   ctx_pass_stage rpolicy (CFP_Simple VP_LowerDload) view C C' /\
   dead_wf D /\ o1_ctx_shape C /\ o1_run_state_ok vs /\
@@ -170,7 +154,7 @@ Theorem dload_actual_joint_entry:
     ir_supply_covers_fn q f /\ lower_dload_function_supply q f = (g,q') /\
     dload_control_match q f g s t i emitted 0 /\ j = HD emitted /\
     k < LENGTH C.ctx_functions /\ EL k C.ctx_functions = f /\
-    dload_boundary_core lo
+    dload_boundary_core (dyn_floor C vs) lo
       [<|dr_source := FEMPTY; dr_target := FEMPTY; dr_scratch := {}|>]
       {v | ~retpc_var f v} [] [] [] FEMPTY FEMPTY entry_taint entry_taint s t [] [] /\
     (!v. lookup_var v s = lookup_var v t) /\
@@ -215,6 +199,10 @@ Proof
   `lo <= t.vs_alloca_next` by
     (qpat_x_assum `ptr_discipline lo C vs` mp_tac >> simp[ptr_discipline_def]) >>
   `t.vs_alloca_next < dimword (:256)` by simp[] >>
+  `vs.vs_alloca_next <= dyn_floor C vs` by
+    (irule dload_active_entry_dyn_floor >> goal_assum (drule_at Any) >>
+     goal_assum (drule_at Any) >> metis_tac[]) >>
+  `t.vs_alloca_next <= dyn_floor C vs` by simp[] >>
   `t.vs_allocas = FEMPTY` by gvs[o1_run_state_ok_def, o1_initial_state_ok_def] >>
   `?k. k < LENGTH C.ctx_functions /\ EL k C.ctx_functions = f` by
     metis_tac[MEM_EL] >>
@@ -241,7 +229,7 @@ Theorem dload_actual_joint_entry_tracked:
     ir_supply_covers_fn q f /\ lower_dload_function_supply q f = (g,q') /\
     dload_control_match q f g s t i emitted 0 /\ j = HD emitted /\
     k < LENGTH C.ctx_functions /\ EL k C.ctx_functions = f /\
-    dload_boundary_core lo
+    dload_boundary_core (dyn_floor C vs) lo
       [<|dr_source := FEMPTY; dr_target := FEMPTY; dr_scratch := {}|>]
       ({v | ?ci. MEM ci (fn_insts f) /\
           (MEM v ci.inst_outputs \/ MEM (Var v) ci.inst_operands)}

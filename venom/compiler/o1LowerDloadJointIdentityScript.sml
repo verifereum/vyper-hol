@@ -33,7 +33,7 @@ Theorem ld_joint_identity_boundary_next:
   active_inst fn inst2 (s with vs_inst_idx := SUC s.vs_inst_idx) /\
   occ_frame_reachable vs C stk PG G tn fn inst2
     (s with vs_inst_idx := SUC s.vs_inst_idx) n a U B HP H /\
-  occurrence_annotation_ok n a U B HP H stk PG G
+  occurrence_annotation_ok (dyn_floor C vs) n a U B HP H stk PG G
     (s with vs_inst_idx := SUC s.vs_inst_idx) ==>
   ?u fn'. lookup_function fn.fn_name C'.ctx_functions = SOME fn' /\
     ld_joint_control u fn fn' s t /\ active_inst fn' inst t /\
@@ -102,7 +102,7 @@ Proof
   strip_tac >> drule_all ld_joint_identity_step >> strip_tac >> gvs[] >>
   `occ_frame_reachable vs C stk PG G tn fn inst s n a U B HP H` by
     metis_tac[ld_joint_source] >>
-  `occurrence_annotation_ok n a U B HP H stk PG G s` by
+  `occurrence_annotation_ok (dyn_floor C vs) n a U B HP H stk PG G s` by
     gvs[ld_joint_boundary_def] >>
   `MEM fn C.ctx_functions` by
     (drule occ_frame_reachable_annotation >> simp[]) >>
@@ -119,7 +119,7 @@ Proof
   `occ_frame_reachable vs C stk PG G tn fn inst2
      (s with vs_inst_idx := SUC s.vs_inst_idx) n a U B HP H` by
     (drule_all occ_frame_reachable_next >> simp[occurrence_sites_step_def] >> gvs[]) >>
-  `occurrence_annotation_ok n a U B HP H stk PG G
+  `occurrence_annotation_ok (dyn_floor C vs) n a U B HP H stk PG G
      (s with vs_inst_idx := SUC s.vs_inst_idx)` by
     (drule occurrence_annotation_next >>
      disch_then (qspecl_then [`s`,`inst`,`SUC s.vs_inst_idx`,`fuel`,`C`] mp_tac) >>

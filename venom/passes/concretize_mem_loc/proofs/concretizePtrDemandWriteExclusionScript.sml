@@ -53,7 +53,7 @@ Theorem ptr_demand_protected_token_interval:
   o1_walk_view rpolicy 2 C' fn observed /\
   o1_run_state_ok vs /\ ~ctx_has_dalloca C /\ ptr_discipline lo C vs /\
   EVERY fn_inst_wf C.ctx_functions ==>
-  ?w. w+1 < LENGTH h /\
+  (?w. w+1 < LENGTH h /\
     b+k IN range_bytes (step_writes (EL w h).po_inst (EL w h).po_state
       (EL (SUC w) h).po_state) /\
     b+k NOTIN (EL (SUC w) h).po_taint.t_mem /\
@@ -71,13 +71,17 @@ Theorem ptr_demand_protected_token_interval:
       ~in_revert_forward (EL j h).po_fn (EL j h).po_state /\
       EL (LENGTH (EL j h).po_stack-d) (FST (EL j H)) = token) /\
     ml_used_gen (Allocation aid) bp mems (ptr_owner_view d (EL w h)).cf_inst /\
-    ml_read_gen (Allocation aid) bp mems (ptr_owner_view d endpoint).cf_inst
+    ml_read_gen (Allocation aid) bp mems (ptr_owner_view d endpoint).cf_inst) \/
+  dyn_floor C vs <= b+k
 Proof
   disch_then (map_every assume_tac o CONJUNCTS) >>
+  Cases_on `dyn_floor C vs <= b+k` >- simp[] >> disj1_tac >>
   drule ptr_structural_transcript_erasure >> strip_tac >>
   drule ptr_structural_trace_source >> strip_tac >>
   `b <= b+k /\ b+k < b+sz` by decide_tac >>
-  drule_all ptr_endpoint_actual_protected_livesets >> strip_tac >>
+  qpat_assum `~(dyn_floor C vs <= b+k)` (fn th =>
+    drule_all ptr_endpoint_actual_protected_livesets >>
+    disch_then (strip_assume_tac o REWRITE_RULE [th])) >>
   drule ptr_chrono_history_end >> strip_tac >>
   drule ptr_structural_transcript_endpoint >> strip_tac >>
   `LENGTH h-1 < LENGTH h /\ EL (LENGTH h-1) h = endpoint /\
@@ -185,13 +189,15 @@ Theorem ptr_demand_interval_exists:
   o1_walk_view rpolicy 2 C' fn observed /\
   o1_run_state_ok vs /\ ~ctx_has_dalloca C /\ ptr_discipline lo C vs /\
   EVERY fn_inst_wf C.ctx_functions ==>
-  ?w. ptr_demand_interval R vs C C' h endpoint ht at done tokens registry births
+  (?w. ptr_demand_interval R vs C C' h endpoint ht at done tokens registry births
     PT TG saved entries H lo P d aid b sz k v token fn bp mems observed
-    rpolicy s out names w
+    rpolicy s out names w) \/
+  dyn_floor C vs <= b+k
 Proof
   disch_then (map_every assume_tac o CONJUNCTS) >>
-  drule_all ptr_demand_protected_token_interval >> strip_tac >>
-  qexists `w` >> simp[ptr_demand_interval_def]
+  drule_all ptr_demand_protected_token_interval >> strip_tac
+  >- (disj1_tac >> qexists `w` >> simp[ptr_demand_interval_def]) >>
+  simp[]
 QED
 
 Theorem ptr_demand_interval_owner_at[local]:
@@ -448,7 +454,7 @@ Proof
      (o1_walk_view rpolicy 2) C C' /\
    EVERY (\f. f.fn_eom = NONE) C.ctx_functions /\ o1_ctx_shape C /\
    ctx_inst_ids_distinct C /\ callee_first names C.ctx_functions /\
-   o1_run_state_ok vs /\ ~ctx_has_dalloca C /\
+   o1_run_state_ok vs /\ ~ctx_has_dalloca C /\ ptr_discipline lo C vs /\
    ptr_structural_transcript R vs C C' h endpoint ht at done tokens registry
      births PT TG saved entries H` by fs[ptr_demand_interval_def] >>
   `?e owner output p.
@@ -751,13 +757,15 @@ Proof
   qpat_x_assum `_ \/ _` strip_assume_tac
   >- (drule_all ptr_demand_fixed_write_exclusion >> simp[]) >>
   drule_all ptr_demand_interval_snapshot >> strip_tac >>
-  `EVERY (\f. EVERY (\i. i.inst_opcode <> DALLOCA) (fn_insts f)) C.ctx_functions`
+  `EVERY (\f. EVERY (\i. i.inst_opcode <> DALLOCA) (fn_insts f)) C.ctx_functions /\
+   ~ctx_has_dalloca C /\ ptr_discipline lo C vs`
     by fs[ptr_demand_interval_def] >>
   `FLOOKUP bj (tokB,bid) = SOME (db,sb)` by
-    (drule_all ptr_source_ownership_prov_erases >>
-     simp[concretizePtrPrefixLedgerTheory.ptr_ledger_erases_def] >> strip_tac >>
+    (drule_all ptr_source_ownership_static_prov_erases >>
+     simp[concretizePtrPrefixLedgerTheory.ptr_ledger_erases_every_dyn] >>
+     strip_tac >>
      qpat_x_assum `!v. FLOOKUP (EL j h).po_prov v = _`
-       (qspec_then `dv` mp_tac) >> simp[ptr_owner_project_def]) >>
+       (qspec_then `dv` mp_tac) >> simp[]) >>
   `op_prov TGj ops.iao_ofst = SOME (tokB,bid)` by simp[op_prov_def] >>
   Cases_on `tokB = token /\ bid = aid`
   >- (qpat_x_assum `tokB = token /\ bid = aid` strip_assume_tac >>

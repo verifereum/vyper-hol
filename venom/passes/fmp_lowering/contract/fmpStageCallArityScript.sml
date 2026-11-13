@@ -11,7 +11,8 @@
  *)
 Theory fmpStageCallArity
 Ancestors
-  fmpStageRel fmpStageOpBaseActual fmpStepBridge fmpStepLayout fmpLowerDefs
+  fmpStageRel fmpStageOpBaseActual fmpStageCoverBackFmpArity fmpStepBridge
+  fmpStepLayout fmpLowerDefs
   fmpLowerProps concretizeStageLookup o1MakeSsaRows o1ContractMakeSsaReplay
   o1ContractSimplifyCfg o1ContractSimplifyCfgParams o1ContractSue
   o1ContractSueStep o1DftStep o1ContractCfgNorm o1ContractCfgNormStep
@@ -86,28 +87,6 @@ Proof
   gvs[]
 QED
 
-(* FmpLowering resolves every INVOKE of an unsealed function against the
-   context it observes, with the callee's user PARAM count as arity. *)
-Theorem fmp_lower_function_invoke_arity[local]:
-  fmp_lower_function ctx s fn = SOME r /\ fn.fn_fmp_signature = NONE /\
-  MEM inst (fn_insts fn) /\ inst.inst_opcode = INVOKE /\
-  decode_invoke inst = SOME (nm,args) ==>
-  ?g. lookup_function nm ctx.ctx_functions = SOME g /\
-      LENGTH args = LENGTH (fn_user_param_insts g)
-Proof
-  strip_tac >>
-  `?infos. fmp_lower_input infos ctx fn` by
-    (gvs[fmp_lower_function_def, fmp_lower_function_with_info_def,
-         AllCaseEqs()] >> metis_tac[]) >>
-  `fmp_lower_inst_shape infos ctx inst` by
-    (gvs[fmp_lower_input_def, fmp_lower_blocks_shape_def,
-         fmp_lower_insts_shape_def, EVERY_MEM, fn_insts_def,
-         fn_insts_blocks_MEM] >> metis_tac[]) >>
-  gvs[fmp_lower_inst_shape_def, optionTheory.IS_SOME_EXISTS] >>
-  PairCases_on `x` >> drule fmp_resolve_invoke_some >> strip_tac >>
-  gvs[decode_invoke_def]
-QED
-
 Theorem fmp_stage_invoke_arity:
   fmp_stage_ctx rpolicy D C C' vs vs' fmp eom /\ MEM fn C.ctx_functions /\
   MEM inst (fn_insts fn) /\ inst.inst_opcode = INVOKE /\
@@ -135,8 +114,9 @@ Proof
   `fn.fn_fmp_signature = NONE` by metis_tac[fmp_stage_actual_witness] >>
   `?g. lookup_function nm observed.cu_context.ctx_functions = SOME g /\
        LENGTH args = LENGTH (fn_user_param_insts g)` by
-    (irule fmp_lower_function_invoke_arity >>
-     metis_tac[fmp_fn_pass_step_result]) >>
+    (drule fmp_fn_pass_step_result >> strip_tac >>
+     gvs[fmp_lower_function_def, AllCaseEqs(), decode_invoke_def] >>
+     drule_all fmp_lower_invoke_user_arity >> metis_tac[]) >>
   `MEM nm (fn_invoke_targets fn)` by
     (simp[fn_invoke_targets_def, fcg_scan_function_def,
           mem_get_invoke_targets] >>

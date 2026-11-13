@@ -1,6 +1,6 @@
 Theory concretizeLayoutStoreProduction
 Ancestors concretizeLayoutAccessGeometry concretizeLayoutLoadProduction concretizeLayoutPointerRanges frameActivationSeparation
-  frameJointDemand venomState byte
+  frameJointDemand frameDemandTaint venomState byte
   frameActivationCache frameRelocationBinding frameJointTrace frameJointTransition
   frameRelocationOpaque frameRelocationStoreValues frameRelocationStoreSteps frameRelocationWriteCoverage
   frameRelocationReachableSupport concretizeLayoutRelocation
@@ -27,22 +27,76 @@ Theorem joint_mstore_demand_address_coherence:
   c < LENGTH es /\
   EL c (q0::qs) = JointConfig stk PG G tn fn inst s oms om hs h /\
   EL c es = SOME (OriginOrdinary fuel post) /\ post.vs_allocas = s.vs_allocas /\
+  (a < lo \/ (o1_ctx_shape C /\ ptr_discipline lo C vs0)) /\
   joint_relocation_demand lo positions q0 es qs (SUC c) a z /\
   relocation_pair lo positions (EL c (q0::qs)) a w ==> z = w
 Proof
-  strip_tac >>
+  disch_then (map_every assume_tac o CONJUNCTS) >>
   drule_all joint_trace_edge_at >> strip_tac >>
   `!d owner aid site.
-    activation_cache (EL c (q0::qs)) d owner aid site ==>
+    activation_cache (EL c (q0::qs)) d owner aid site <=>
     activation_cache (EL (SUC c) (q0::qs)) d owner aid site` by
-    (gvs[joint_transition_ordinary, activation_cache_def]) >>
-  gvs[joint_relocation_demand_def, relocation_pair_def] >>
-  `activation_cache (EL c qs) d'' owner'' aid'' (b'',sz'')` by
-    metis_tac[] >>
-  `d = d'' /\ owner = owner'' /\ aid = aid'' /\ b = b'' /\ sz = sz''` by
-    (irule joint_activation_cache_byte_unique >>
-     conj_tac >- (qexists_tac `a` >> simp[]) >>
-     qexistsl_tac [`C`, `EL c qs`, `vs0`] >> simp[]) >> gvs[]
+    gvs[joint_transition_ordinary, activation_cache_def] >>
+  qpat_x_assum `joint_relocation_demand _ _ _ _ _ _ _ _` mp_tac >>
+  simp[joint_relocation_demand_def] >>
+  disch_then (qx_choose_then `j` (map_every assume_tac o CONJUNCTS)) >>
+  Cases_on `a < lo` >- fs[relocation_pair_static_eq] >>
+  `lo <= a /\ c <= LENGTH es` by decide_tac >>
+  `o1_ctx_shape C /\ ptr_discipline lo C vs0` by fs[] >>
+  `!d owner aid b sz.
+     activation_cache (EL j (q0::qs)) d owner aid (b,sz) /\
+     b <= a /\ a < b + sz ==>
+     activation_cache (EL c (q0::qs)) d owner aid (b,sz)` by
+    (rpt strip_tac >>
+     `activation_cache (EL (SUC c) (q0::qs)) d owner aid (b,sz)`
+       suffices_by metis_tac[] >>
+     irule (cj 2 joint_untainted_demand_cache) >>
+     goal_assum (drule_at (Pat `joint_trace _ _ _ _ _ _`)) >>
+     goal_assum (drule_at (Pat `activation_cache _ _ _ _ _`)) >>
+     qexists_tac `a` >> simp[] >> qexists_tac `SUC c` >>
+     gvs[joint_observed_read_def]) >>
+  `!d owner aid b sz. activation_cache (EL c (q0::qs)) d owner aid (b,sz) /\
+     b <= a /\ a < b + sz ==> w = positions owner aid + (a - b)` by
+    (rpt strip_tac >>
+     qpat_x_assum `relocation_pair _ _ (EL c _) _ _`
+       (DISJ_CASES_THEN2 (fn th => strip_assume_tac th >> decide_tac)
+          (DISJ_CASES_THEN2
+             (fn th => strip_assume_tac th >>
+                metis_tac[joint_activation_cache_byte_unique])
+             (fn th => strip_assume_tac th >>
+                `b + sz <= joint_initial_fmp (EL c (q0::qs))` by metis_tac[] >>
+                decide_tac))
+        o REWRITE_RULE [relocation_pair_def])) >>
+  `!d owner aid b sz. activation_cache (EL c (q0::qs)) d owner aid (b,sz) /\
+     b <= a /\ a < b + sz ==>
+     ~(joint_initial_fmp (EL j (q0::qs)) <= a /\
+       !d owner aid b sz. activation_cache (EL j (q0::qs)) d owner aid (b,sz) ==>
+         b + sz <= joint_initial_fmp (EL j (q0::qs)))` by
+    (rpt strip_tac >> Cases_on `ctx_has_dalloca C`
+     >- (`EVERY wf_function C.ctx_functions` by
+           fs[o1_ctx_shape_def, o1_fn_shape_def, EVERY_MEM] >>
+         `b + sz <= w2n vs0.vs_initial_fmp` by
+           (irule joint_cache_below_initial_fmp >> metis_tac[]) >>
+         `joint_initial_fmp (EL j (q0::qs)) = w2n vs0.vs_initial_fmp` by
+           (irule joint_initial_fmp_trace >> metis_tac[]) >>
+         decide_tac) >>
+     `?d owner aid b sz. activation_cache (EL j (q0::qs)) d owner aid (b,sz) /\
+        b <= a /\ a < b + sz` by
+       (irule joint_observed_read_cached >> metis_tac[]) >>
+     `b' + sz' <= joint_initial_fmp (EL j (q0::qs))` by metis_tac[] >>
+     decide_tac) >>
+  qpat_x_assum `relocation_pair _ _ (EL j _) _ _`
+    (DISJ_CASES_THEN2 (fn th => strip_assume_tac th >> decide_tac)
+       (DISJ_CASES_THEN2
+          (fn th => strip_assume_tac th >> metis_tac[])
+          (fn th => strip_assume_tac th >>
+             qpat_x_assum `relocation_pair _ _ (EL c _) _ _`
+               (DISJ_CASES_THEN2 (fn th => strip_assume_tac th >> decide_tac)
+                  (DISJ_CASES_THEN2
+                     (fn th => strip_assume_tac th >> metis_tac[])
+                     (fn th => strip_assume_tac th >> fs[]))
+                o REWRITE_RULE [relocation_pair_def])))
+     o REWRITE_RULE [relocation_pair_def])
 QED
 
 val _ = if null (hyp joint_mstore_demand_address_coherence) then ()
@@ -66,6 +120,7 @@ Theorem concretize_mstore_execution_geometry:
   EL c es = SOME (OriginOrdinary fuel post) /\
   resolved_config_ok (JointConfig stk PG G tn fn inst s oms om hs h)
     (birth::ids) ((rp,rv)::anns) /\
+  (~ctx_has_dalloca C ==> resolved_complete (EL c (q0::qs)) ((rp,rv)::anns)) /\
   lifetime_ok n (birth::ids) (JointConfig stk PG G tn fn inst s oms om hs h) /\
   ~joint_read_exempt (EL c (q0::qs)) /\
   o1_fn_shape C fn /\ fn_ptr_ok P fn /\ MEM inst (fn_insts fn) /\
@@ -98,7 +153,8 @@ Proof
   `access_ok lo G fn inst s /\ taint_ok fn tn inst s` by
     (fs[ptr_discipline_def] >> metis_tac[]) >>
   `SND o_f rv = G` by
-    (drule resolved_config_current >> simp[] >> metis_tac[resolved_frame_erasure]) >>
+    (qpat_x_assum `resolved_complete _ _` mp_tac >>
+     fs[resolved_complete_def]) >>
   `~in_revert_forward fn s` by fs[joint_read_exempt_def] >>
   `post = mstore (w2n dst) value s` by
     (qpat_x_assum `joint_transition _ _ _ _` mp_tac >>
@@ -109,15 +165,18 @@ Proof
   pop_assum strip_assume_tac >>
   `?valueT. eval_operand opv t = SOME valueT` by suspend "value" >>
   pop_assum strip_assume_tac >>
-  `?dstT. eval_operand opd t = SOME dstT /\
-    ((w2n dst+32 <= lo /\ w2n dstT = w2n dst) \/
-     (?d owner aid b sz.
-       activation_cache (JointConfig stk PG G tn fn inst s oms om hs h)
-         d owner aid (b,sz) /\ lo <= b /\ b <= w2n dst /\
-       w2n dst+32 <= b+sz /\
-       w2n dstT = concretize_positions C' owner aid + (w2n dst-b)))` by
-    suspend "address" >>
-  pop_assum strip_assume_tac >>
+  `~(dyn_floor C s <= w2n dst)` by
+    fs[dyn_floor_def, arithmeticTheory.NOT_LESS_EQUAL, wordsTheory.w2n_lt] >>
+  qpat_assum `~(dyn_floor C s <= w2n dst)` (fn nd =>
+    Q.SUBGOAL_THEN `?dstT. eval_operand opd t = SOME dstT /\
+      (((w2n dst+32 <= lo \/ dyn_floor C s <= w2n dst) /\ w2n dstT = w2n dst) \/
+       (?d owner aid b sz.
+         activation_cache (JointConfig stk PG G tn fn inst s oms om hs h)
+           d owner aid (b,sz) /\ lo <= b /\ b <= w2n dst /\
+         w2n dst+32 <= b+sz /\
+         w2n dstT = concretize_positions C' owner aid + (w2n dst-b)))`
+      (strip_assume_tac o REWRITE_RULE [nd]))
+  >- suspend "address" >>
   `(!a z. joint_relocation_demand lo (concretize_positions C') q0 es qs (SUC c) a z /\
       w2n dst <= a /\ a < w2n dst+32 ==>
       w2n dstT <= z /\ z < w2n dstT+32 /\ a-w2n dst = z-w2n dstT) /\
@@ -138,6 +197,9 @@ Resume concretize_mstore_execution_geometry[support]:
     (fs[o1_ctx_shape_def, o1_fn_shape_def, fn_inst_wf_def, fn_insts_def, fn_insts_blocks_MEM, EVERY_MEM] >> metis_tac[]) >>
   drule_all ptr_frame_current_static >> strip_tac >>
   qexists_tac `Q` >> conj_tac >- (fs[EVERY_MEM] >> metis_tac[]) >>
+  `!v e. FLOOKUP rv v = SOME e ==> FLOOKUP G v = SOME (SND e)` by
+    (qpat_x_assum `SND o_f rv = G` (fn th => rewrite_tac[GSYM th]) >>
+     simp[FLOOKUP_o_f]) >>
   metis_tac[resolved_static_support]
 QED
 Resume concretize_mstore_execution_geometry[value]:
@@ -157,6 +219,7 @@ Resume concretize_mstore_execution_geometry[address]:
                     iao_max_size := SOME (Lit 32w) |>` >>
       simp[source_memory_write_ranges_def, fixed_source_write_range_def,
            mem_write_ops_def]) >>
+  conj_tac >- metis_tac[] >>
   conj_tac >- metis_tac[] >>
   goal_assum (drule_at (Pat `local_rel _ _ _ _ _ _ _`)) >>
   goal_assum (drule_at (Pat `joint_trace _ _ _ _ _ _`)) >>
@@ -220,6 +283,7 @@ Theorem concretize_mstore_demand_execution:
   EL c es = SOME (OriginOrdinary fuel post) /\
   resolved_config_ok (JointConfig stk PG G tn fn inst s oms om hs h)
     (birth::ids) ((rp,rv)::anns) /\
+  (~ctx_has_dalloca C ==> resolved_complete (EL c (q0::qs)) ((rp,rv)::anns)) /\
   lifetime_ok n (birth::ids) (JointConfig stk PG G tn fn inst s oms om hs h) /\
   ~joint_read_exempt (EL c (q0::qs)) /\
   o1_fn_shape C fn /\ fn_ptr_ok P fn /\ MEM inst (fn_insts fn) /\

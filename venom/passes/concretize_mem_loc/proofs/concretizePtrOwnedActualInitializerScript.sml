@@ -5,7 +5,6 @@ Ancestors concretizePtrActualWrites concretizePtrEndpointOrigin
 
 Theorem ptr_endpoint_owned_actual_initializer:
   ptr_chrono_history vs C h endpoint /\ vs.vs_allocas = FEMPTY /\
-  (!k. k < LENGTH h ==> (EL k h).po_inst.inst_opcode <> DALLOCA) /\
   d <= LENGTH endpoint.po_stack /\
   FLOOKUP (ptr_owner_view d endpoint).cf_state.vs_allocas aid = SOME (b,sz) /\
   b <= x /\ x < b + sz /\ x NOTIN endpoint.po_taint.t_mem ==>

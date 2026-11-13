@@ -41,7 +41,8 @@ Theorem ld_mload_vars[local]:
   MEM inst (fn_insts f.lf_fn) /\ taint_ok f.lf_fn tn inst f.lf_src /\
   inst.inst_opcode = MLOAD /\ step_inst_base inst f.lf_tgt = OK ts /\
   ld_memory lo A tn f.lf_src f.lf_tgt /\
-  access_ok lo (ld_erase A o_f f.lf_H) f.lf_fn inst f.lf_src /\
+  access_ok lo G f.lf_fn inst f.lf_src /\ ld_ghost_ok fl A f.lf_H G /\
+  ld_dyn_agree fl tn.t_mem f.lf_src.vs_memory f.lf_tgt.vs_memory /\
   ~in_revert_forward f.lf_fn f.lf_src /\
   (!a b c sz. FLOOKUP A a = SOME (b,c,sz) ==> c+sz < dimword (:256)) ==>
   ?ss. step_inst_base inst f.lf_src = OK ss /\
@@ -62,7 +63,7 @@ Proof
   `word_agree_except (mem_word_taint tn.t_mem (w2n x))
     (mload (w2n x) f.lf_src) (mload (w2n addr) f.lf_tgt)` by
     (irule ld_memory_mload_access >> simp[] >>
-     qexistsl_tac [`A`, `f.lf_H`, `f.lf_fn`, `inst`, `lo`] >>
+     qexistsl_tac [`A`, `G`, `f.lf_H`, `fl`, `f.lf_fn`, `inst`, `lo`] >>
      simp[mem_read_ops_def, source_memory_read_ranges_def, eval_operand_def] >>
      metis_tac[]) >>
   simp[Once step_inst_base_def, exec_read1_def] >>
@@ -93,7 +94,8 @@ Theorem ld_mload_effect:
   inst.inst_opcode = MLOAD /\ step_inst_base inst f.lf_tgt = OK ts /\
   ld_memory lo A tn f.lf_src f.lf_tgt /\
   ld_nonghost tn f.lf_src f.lf_tgt /\
-  access_ok lo (ld_erase A o_f f.lf_H) f.lf_fn inst f.lf_src /\
+  access_ok lo G f.lf_fn inst f.lf_src /\ ld_ghost_ok fl A f.lf_H G /\
+  ld_dyn_agree fl tn.t_mem f.lf_src.vs_memory f.lf_tgt.vs_memory /\
   ~in_revert_forward f.lf_fn f.lf_src /\
   (!a b c sz. FLOOKUP A a = SOME (b,c,sz) ==> c+sz < dimword (:256)) ==>
   ?ss. step_inst_base inst f.lf_src = OK ss /\
@@ -128,5 +130,5 @@ Proof
   simp[] >>
   conj_tac >- (irule ld_memory_update_var >> simp[]) >>
   conj_tac >- (irule ld_nonghost_update_var >> simp[]) >>
-  simp[ld_erase_set_prov, step_prov_def, out_prov_def]
+  simp[ld_erase_set_prov, step_prov_def, out_prov_def, update_var_def]
 QED

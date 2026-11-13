@@ -15,6 +15,8 @@
  *                              predecessor's terminator
  *   fmp_stage_out_not_kept   - a DALLOCA's output is not on the analysis
  *                              stack before it
+ *   fmp_source_memory        - a reachable source state's DALLOCA can't
+ *                              wrap, and its fmp is above the initial one
  *)
 Theory fmpStageReclaimSound
 Ancestors
@@ -32,7 +34,7 @@ Ancestors
   fmpLowerReclaimPlan venomWfProps removeUnusedProofs
   fnFrameSinglePred fmpStageReclaimFresh fnFrameStepsPhi
 
-Theorem fmp_source_memory[local]:
+Theorem fmp_source_memory:
   fmp_stage_ctx rpolicy D C C' vs vs' fmp eom /\
   frame_reachable vs C stk PG G tn fn inst s ==>
   dalloca_no_wrap inst s /\ w2n s.vs_initial_fmp <= w2n s.vs_fmp

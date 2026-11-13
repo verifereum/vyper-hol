@@ -427,7 +427,7 @@ Proof
     FLOOKUP (EL (LENGTH h - 1) h).po_prov dv = SOME (db,sb) /\
     FLOOKUP positions (Allocation bid) = SOME (pb,sb) /\ db <= w2n dst /\
     w2n dst + w2n sz <= db+sb /\ pb+sb < dimword(:256))` by
-    (irule (Q.INST [`ops` |-> `ops`] (SPEC_ALL ptr_historical_write_classification)) >>
+    (irule (Q.INST [`ops` |-> `ops`] (SPEC_ALL ptr_historical_write_classification_static)) >>
      simp[Abbr `ops`] >>
      conj_tac >- (qexists_tac `a.po_fn` >> simp[]) >>
      rpt (goal_assum (drule_at Any)) >> simp[])
@@ -478,8 +478,8 @@ Resume ptr_extcodecopy_write_certificate[owned]:
     (fs[ctx_has_dalloca_def, EVERY_MEM, EXISTS_MEM] >> metis_tac[]) >>
   `MEM token tokens` by (drule_all ptr_source_ownership_live_prov >> simp[]) >>
   `FLOOKUP births (token,bid) = SOME (db,sb)` by
-    (drule_all ptr_source_ownership_prov_erases >>
-     simp[ptr_ledger_erases_def] >> strip_tac >>
+    (drule_all ptr_source_ownership_static_prov_erases >>
+     simp[ptr_ledger_erases_every_dyn] >> strip_tac >>
      first_x_assum (qspec_then `dv` mp_tac) >> gvs[]) >>
   `dt = dst - n2w db + n2w pb` by
     gvs[ptr_lookup_transport_def, ptr_value_transport_def, op_prov_def] >>
@@ -490,7 +490,7 @@ Resume ptr_extcodecopy_write_certificate[owned]:
   simp[ptr_paired_write_def, EL_APPEND_EQN] >>
   reverse conj_tac
   >- (simp[ptr_paired_write_owner_def] >> rpt strip_tac >>
-      disj2_tac >> qexistsl_tac [`token`,`bid`,`db`,`sb`,`pb`,`x-db`] >> simp[] >> decide_tac) >>
+      disj2_tac >> disj1_tac >> qexistsl_tac [`token`,`bid`,`db`,`sb`,`pb`,`x-db`] >> simp[] >> decide_tac) >>
   simp[ptr_ledger_write_pair_def, is_terminator_def] >>
   simp[ptr_bytes_agree_def] >> rpt strip_tac >>
   `x = w2n dst + (x-w2n dst) /\ x-w2n dst < w2n sz /\

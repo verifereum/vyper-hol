@@ -141,7 +141,8 @@ Theorem ld_sha3_operands:
   MEM inst (fn_insts f.lf_fn) /\
   taint_ok f.lf_fn tn inst f.lf_src /\ tn.t_var = f.lf_tv /\
   ld_memory lo A tn f.lf_src f.lf_tgt /\
-  access_ok lo (ld_erase A o_f f.lf_H) f.lf_fn inst f.lf_src /\
+  access_ok lo G f.lf_fn inst f.lf_src /\ ld_ghost_ok fl A f.lf_H G /\
+  ld_dyn_agree fl tn.t_mem f.lf_src.vs_memory f.lf_tgt.vs_memory /\
   ~in_revert_forward f.lf_fn f.lf_src /\
   (!k b c sz. FLOOKUP A k = SOME (b,c,sz) ==> c+sz < dimword(:256)) /\
   inst.inst_opcode = SHA3 /\ step_inst_base inst f.lf_tgt = OK ts ==>
@@ -185,7 +186,8 @@ Theorem ld_sync_sha3_effect:
       lf_tv := (step_taint inst s ss tn).t_var|>) /\
     ld_memory lo A (step_taint inst s ss tn) ss ts /\
     ld_nonghost (step_taint inst s ss tn) ss ts /\
-    step_prov PG G inst ss = ld_erase A o_f H' /\
+    step_prov (MAP (OPTION_MAP (ld_erase A)) f.lf_Q) (ld_erase A o_f f.lf_H)
+      inst ss = ld_erase A o_f H' /\
     (!a. a IN FRANGE H' ==> a IN FDOM A) /\
     ss.vs_allocas = s.vs_allocas /\ ts.vs_allocas = t.vs_allocas /\
     ss.vs_alloca_next = s.vs_alloca_next /\ ts.vs_alloca_next = t.vs_alloca_next /\
@@ -207,6 +209,7 @@ Proof
   drule ld_sync_active >> simp[Excl "MEM"] >> strip_tac >>
   drule ld_sync_ghosts >> simp[Excl "MEM"] >> strip_tac >>
   drule ld_sync_memory >> strip_tac >>
+  drule ld_sync_dyn_agree >> strip_tac >>
   `FDOM A = ld_slots A (f::fs) /\ EVERY (ld_maps A) (f::fs)` by
     (qpat_assum `ld_sync _ _ _ _ _ _ _ _ _ _ _ _ _ _ _` mp_tac >>
      pure_rewrite_tac[ld_sync_def] >> simp[EVERY_MEM] >>
@@ -322,7 +325,8 @@ Theorem ld_sync_log_effect:
       lf_tv := (step_taint inst s ss tn).t_var|>) /\
     ld_memory lo A (step_taint inst s ss tn) ss ts /\
     ld_nonghost (step_taint inst s ss tn) ss ts /\
-    step_prov PG G inst ss = ld_erase A o_f H' /\
+    step_prov (MAP (OPTION_MAP (ld_erase A)) f.lf_Q) (ld_erase A o_f f.lf_H)
+      inst ss = ld_erase A o_f H' /\
     (!a. a IN FRANGE H' ==> a IN FDOM A) /\
     ss.vs_allocas = s.vs_allocas /\ ts.vs_allocas = t.vs_allocas /\
     ss.vs_alloca_next = s.vs_alloca_next /\ ts.vs_alloca_next = t.vs_alloca_next /\

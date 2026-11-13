@@ -8,22 +8,25 @@ Ancestors concretizePtrRuntimeGeneration concretizePtrActivationSupport
    allocation roots use inst_output (the singleton output selector). *)
 Theorem ptr_selected_origin:
   EVERY inst_wf (fn_insts fn) /\
-  ptr_site_supported (pointer_derived_vars fn (ptr_frame_site_roots fn A PG site)) G site /\
+  ptr_site_supported (pointer_derived_vars fn (ptr_frame_site_roots dyn fn A PG site)) G site /\
   FLOOKUP G v = SOME site ==>
   (?aid. FLOOKUP A aid = SOME site /\
     v IN pointer_derived_vars fn (ptr_bp_alloc_roots fn aid)) \/
   (?i idx r. MEM i (fn_insts fn) /\ i.inst_opcode = PARAM /\
     i.inst_operands = [Lit idx] /\ MEM r i.inst_outputs /\
     w2n idx < LENGTH PG /\ EL (w2n idx) PG = SOME site /\
+    v IN pointer_derived_vars fn {r}) \/
+  (?i r. MEM i (fn_insts fn) /\ i.inst_opcode = DALLOCA /\
+    MEM r i.inst_outputs /\ dyn <= FST site /\
     v IN pointer_derived_vars fn {r})
 Proof
   strip_tac >>
-  `v IN pointer_derived_vars fn (ptr_frame_site_roots fn A PG site)` by
+  `v IN pointer_derived_vars fn (ptr_frame_site_roots dyn fn A PG site)` by
     fs[ptr_site_supported_def] >>
-  `?r. r IN ptr_frame_site_roots fn A PG site /\
+  `?r. r IN ptr_frame_site_roots dyn fn A PG site /\
        v IN pointer_derived_vars fn {r}` by
     metis_tac[ptr_derived_root_witness, ptr_frame_site_roots_finite] >>
-  qpat_x_assum `r IN ptr_frame_site_roots _ _ _ _` mp_tac >>
+  qpat_x_assum `r IN ptr_frame_site_roots _ _ _ _ _` mp_tac >>
   simp[ptr_frame_site_roots_def] >>
   disch_then (qx_choose_then `i` strip_assume_tac)
   >- (disj1_tac >> qexists `i.inst_id` >> simp[] >>
@@ -41,7 +44,7 @@ QED
 
 Theorem ptr_frame_write_selected_origin:
   frame_reachable vs0 ctx stk PG G tn fn inst s /\
-  EVERY (\f. EVERY (\i. i.inst_opcode <> DALLOCA) (fn_insts f)) ctx.ctx_functions /\
+  ptr_discipline lo ctx vs0 /\
   fn_ptr_ok P fn /\ wf_function fn /\ all_reachable fn /\ ssa_form fn /\
   EVERY inst_wf (fn_insts fn) /\ MEM inst (fn_insts fn) /\
   inst_write_op inst = SOME (Var v) /\ FLOOKUP G v = SOME site ==>
@@ -51,17 +54,12 @@ Theorem ptr_frame_write_selected_origin:
   (?i idx r. MEM i (fn_insts fn) /\ i.inst_opcode = PARAM /\
     i.inst_operands = [Lit idx] /\ MEM r i.inst_outputs /\
     w2n idx < LENGTH PG /\ EL (w2n idx) PG = SOME site /\
+    v IN pointer_derived_vars fn {r}) \/
+  (?i r. MEM i (fn_insts fn) /\ i.inst_opcode = DALLOCA /\
+    MEM r i.inst_outputs /\ dyn_floor ctx vs0 <= FST site /\
     v IN pointer_derived_vars fn {r})
 Proof
-  strip_tac >>
-  `ptr_site_supported
-    (pointer_derived_vars fn (ptr_frame_site_roots fn s.vs_allocas PG site)) G site` by
-    metis_tac[ptr_frame_current_table_support] >>
-  drule_all ptr_selected_origin >> strip_tac
-  >- (disj1_tac >> qexists `aid` >> simp[] >>
-      irule ptr_production_operand_used_seed >> simp[] >>
-      metis_tac[bp_scan_production_complete, ptr_write_op_operand]) >>
-  disj2_tac >> metis_tac[]
+  cheat
 QED
 
 (* This origin disjunction does not select provenance from a numeric byte

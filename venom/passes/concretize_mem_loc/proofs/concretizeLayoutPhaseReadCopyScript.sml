@@ -41,7 +41,8 @@ Proof
   `joint_trace vs0 C q0 es qs q /\
    EL g.lop_cursor (q0::qs) = g.lop_config /\
    resolved_config_ok g.lop_config g.lop_ids g.lop_anns /\
-   lifetime_ok g.lop_bound g.lop_ids g.lop_config` by
+   lifetime_ok g.lop_bound g.lop_ids g.lop_config /\
+   (~ctx_has_dalloca C ==> resolved_complete g.lop_config g.lop_anns)` by
     fs[layout_ordinary_trace_def] >>
   qpat_x_assum `layout_ordinary_state _ _ _ _ _ _ _ _ _` mp_tac >>
   simp[layout_ordinary_state_def] >> strip_tac >> gvs[] >> fs[ETA_AX] >>

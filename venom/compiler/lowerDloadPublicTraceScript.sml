@@ -123,7 +123,7 @@ Theorem ld_dloadbytes_destinations:
   fn_shape_ok f.lf_fn /\ MEM inst (fn_insts f.lf_fn) /\
   inst.inst_opcode = DLOADBYTES /\ inst.inst_operands = [dest;off;len] /\
   tn.t_var = f.lf_tv /\ taint_ok f.lf_fn tn inst f.lf_src /\
-  access_ok lo (ld_erase A o_f f.lf_H) f.lf_fn inst f.lf_src /\
+  access_ok lo G f.lf_fn inst f.lf_src /\ ld_ghost_ok fl A f.lf_H G /\
   ~in_revert_forward f.lf_fn f.lf_src /\
   eval_operand dest f.lf_src = SOME dw /\
   eval_operand dest f.lf_tgt = SOME dw' /\
@@ -133,23 +133,27 @@ Theorem ld_dloadbytes_destinations:
   w2n nw = 0 \/
   (w2n dw = w2n dw' /\ w2n dw + w2n nw <= lo) \/
   (?k b c sz delta. FLOOKUP A k = SOME (b,c,sz) /\
-    w2n dw = b+delta /\ w2n dw' = c+delta /\ delta+w2n nw <= sz)
+    w2n dw = b+delta /\ w2n dw' = c+delta /\ delta+w2n nw <= sz) \/
+  (w2n dw = w2n dw' /\ fl <= w2n dw /\ w2n dw + w2n nw < dimword(:256))
 Proof
-  strip_tac >> Cases_on `nw = 0w` >- simp[] >> simp[] >>
+  strip_tac >> Cases_on `w2n nw = 0` >- (disj1_tac >> first_assum ACCEPT_TAC) >>
   `MEM dest inst.inst_operands` by simp[] >>
   `op_taint tn dest = {}` by
     (irule ld_numeric_operand_untainted >>
      qexistsl_tac [`f.lf_fn`,`inst`,`f.lf_src`] >> simp[]) >>
   `~MEM inst.inst_opcode [ASSIGN;PHI;RET;RETFMP;DRET]` by simp[] >>
   drule_all ld_write_address_observation >> strip_tac >>
-  `mem_write_ops inst = SOME <|iao_ofst := dest; iao_size := SOME len; iao_max_size := SOME len|>` by
-    simp[mem_write_ops_def] >>
   `MEM (w2n dw,w2n nw) (source_memory_write_ranges inst f.lf_src)` by
-    simp[source_memory_write_ranges_def, sized_source_write_range_def] >>
-  `0 < w2n nw` by (Cases_on `w2n nw` >> gvs[]) >>
-  drule ld_write_access_classified >> simp[] >>
-  disch_then (qspecl_then [`dw'`,`dw`,`w2n nw`] mp_tac) >>
-  simp[] >> metis_tac[arithmeticTheory.ADD_COMM]
+    simp[source_memory_write_ranges_def, sized_source_write_range_def,
+         mem_write_ops_def] >>
+  `?ops. mem_write_ops inst = SOME ops /\ ops.iao_ofst = dest` by
+    simp[mem_write_ops_def] >>
+  `0 < w2n nw` by decide_tac >>
+  `(op_prov f.lf_H ops.iao_ofst = NONE ==> dw = dw') /\
+   (!k. op_prov f.lf_H ops.iao_ofst = SOME k ==> ld_wordrel A (SOME k) dw dw')` by
+    simp[] >>
+  drule_all (Q.INST [`n` |-> `w2n nw`] (cj 2 ld_access_dyn_cases)) >>
+  strip_tac >> metis_tac[]
 QED
 
 Theorem ld_envelope_supply_reserved:
@@ -310,7 +314,7 @@ Proof
      irule ld_ptr_use_scalar >> reverse conj_tac >- simp[] >> qexists_tac `inst` >>
      simp[is_pointer_preserving_op_def, mem_read_ops_def, mem_write_ops_def]) >>
   `~MEM inst.inst_opcode
-    [ASSIGN; PHI; RET; RETFMP; DRET; SHL; SHR; SAR; MSTORE; SSTORE; TSTORE; ISTORE]` by simp[] >>
+    [ASSIGN; PHI; RET; RETFMP; DRET; MUL; SHL; SHR; SAR; MSTORE; SSTORE; TSTORE; ISTORE]` by simp[] >>
   drule_all ld_vars_numeric_operands_equal >>
   simp[eval_operands_def, AllCaseEqs()] >>
   Cases_on `eval_operand off f.lf_src` >> Cases_on `eval_operand off f.lf_tgt` >> simp[]
@@ -475,7 +479,9 @@ Theorem ld_sync_dloadbytes_destination_cases:
   (w2n nw = 0 \/
    (w2n dw = w2n dw' /\ w2n dw + w2n nw <= lo) \/
    (?k b c sz delta. FLOOKUP A k = SOME (b,c,sz) /\
-     w2n dw = b+delta /\ w2n dw' = c+delta /\ delta+w2n nw <= sz)) /\
+     w2n dw = b+delta /\ w2n dw' = c+delta /\ delta+w2n nw <= sz) \/
+   (w2n dw = w2n dw' /\ dyn_floor C vs0 <= w2n dw /\
+    w2n dw + w2n nw < dimword(:256))) /\
   (!k b c sz. FLOOKUP A k = SOME (b,c,sz) ==> lo <= b /\ lo <= c) /\
   (!k k' b c sz b' c' sz'.
     FLOOKUP A k = SOME (b,c,sz) /\ FLOOKUP A k' = SOME (b',c',sz') /\
@@ -498,11 +504,12 @@ Proof
   `!a b c sz. FLOOKUP A a = SOME (b,c,sz) ==> c+sz < dimword(:256)` by
     (drule ld_alloc_target_no_wrap >> simp[]) >>
   conj_tac
-  >- (drule ld_dloadbytes_destinations >> simp[] >>
-      disch_then drule >> simp[] >>
-      disch_then (qspec_then `tn` mp_tac) >> simp[] >>
-      disch_then (qspec_then `lo` mp_tac) >> gvs[] >>
-      disch_then irule >> first_assum ACCEPT_TAC) >>
+  >- (`tn.t_var = f.lf_tv` by simp[] >>
+      qpat_x_assum `f.lf_src = s` (SUBST_ALL_TAC o SYM) >>
+      qpat_x_assum `f.lf_tgt = t` (SUBST_ALL_TAC o SYM) >>
+      qpat_x_assum `f.lf_fn = fn` (SUBST_ALL_TAC o SYM) >>
+      drule_all (Q.INST [`fl` |-> `dyn_floor C vs0`] ld_dloadbytes_destinations) >>
+      simp_tac (srw_ss()) [wordsTheory.w2n_11, wordsTheory.w2n_eq_0]) >>
   conj_tac >- metis_tac[ld_alloc_bounds] >>
   metis_tac[ld_alloc_separate]
 QED

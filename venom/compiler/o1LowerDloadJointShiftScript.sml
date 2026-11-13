@@ -6,26 +6,6 @@ Ancestors
   pointerConfinedDefs memLocDefs o1LowerDloadJointRelation unitShapeDefs list
   venomInst venomExecSemantics o1LowerDloadJointAssign
 
-Theorem ld_env_masked_update:
-  ld_env_agree sites fn H tn s t /\ inst.inst_outputs = [out] /\
-  occurrence_out a HP H inst (update_var out x s) = NONE /\
-  word_agree_except (out_taint tn inst s) x y ==>
-  ld_env_agree sites fn
-    (occurrence_step a HP H inst (update_var out x s))
-    (step_taint inst s (update_var out x s) tn)
-    (update_var out x s) (update_var out y t)
-Proof
-  strip_tac >>
-  simp[ld_env_agree_def, update_var_def, FLOOKUP_UPDATE,
-       occurrence_step_def, set_prov_def, FLOOKUP_DRESTRICT,
-       step_taint_def, set_var_taint_def, op_taint_def] >>
-  conj_tac
-  >- (rpt strip_tac >> Cases_on `v = out` >> gvs[ld_env_agree_def]) >>
-  rpt gen_tac >> Cases_on `v = out` >>
-  gvs[ld_env_agree_def, op_taint_def, ld_value_agree_scalar] >>
-  rpt strip_tac >> gvs[]
-QED
-
 Theorem ld_joint_shift_operands:
   ld_joint_boundary vs C C' lo D stk PG G tn fn inst s t
     n a U B HP H sites X ts /\ ptr_discipline lo C vs /\
@@ -114,7 +94,7 @@ Proof
   strip_tac >> drule_all ld_joint_shift_step >> strip_tac >>
   `occ_frame_reachable vs C stk PG G tn fn inst s n a U B HP H` by
     metis_tac[ld_joint_source] >>
-  `occurrence_annotation_ok n a U B HP H stk PG G s` by
+  `occurrence_annotation_ok (dyn_floor C vs) n a U B HP H stk PG G s` by
     gvs[ld_joint_boundary_def] >>
   `~MEM inst.inst_opcode [DLOAD; DLOADBYTES]` by gvs[] >>
   `~is_terminator inst.inst_opcode /\ inst.inst_opcode <> INVOKE` by
@@ -124,7 +104,7 @@ Proof
      (s1 with vs_inst_idx := SUC s.vs_inst_idx) n a U B HP
      (occurrence_step a HP H inst s1)` by
     (drule_all occ_frame_reachable_next >> simp[occurrence_sites_step_def] >> gvs[]) >>
-  `occurrence_annotation_ok n a U B HP (occurrence_step a HP H inst s1)
+  `occurrence_annotation_ok (dyn_floor C vs) n a U B HP (occurrence_step a HP H inst s1)
      stk PG (step_prov PG G inst s1) (s1 with vs_inst_idx := SUC s.vs_inst_idx)` by
     (drule occurrence_annotation_next >>
      disch_then (qspecl_then [`s1`,`inst`,`SUC s.vs_inst_idx`,`fuel`,`C`] mp_tac) >>

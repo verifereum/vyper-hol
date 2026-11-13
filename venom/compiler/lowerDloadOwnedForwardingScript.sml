@@ -17,7 +17,8 @@ Theorem ld_selected_forwarding:
   EVERY inst_wf (fn_insts fn) /\
   ALL_DISTINCT (MAP (\b. b.bb_label) fn.fn_blocks) /\
   ir_supply_covers_fn (HD frames).lf_supply fn /\
-  dload_headroom_ok C fn inst s /\ in_revert_forward fn s ==>
+  dload_headroom_ok C fn inst s /\ raw_mem_ok C fn inst s /\
+  in_revert_forward fn s /\ (ctx_has_dalloca C' ==> ctx_has_dalloca C) ==>
   ^ld_forward C' fn' ti t
 Proof
   strip_tac >>
@@ -28,6 +29,14 @@ Proof
   `h = 0` by (drule ld_prefix_bound >> simp[] >> decide_tac) >>
   `t = t0` by fs[ld_prefix_zero] >>
   `t.vs_alloca_next < dimword (:256)` by metis_tac[ld_sync_target_headroom] >>
+  `w2n t.vs_initial_fmp <= w2n t.vs_fmp` by
+    (`w2n s.vs_initial_fmp <= w2n s.vs_fmp` by fs[unitMemInvTheory.raw_mem_ok_def] >>
+     `ld_nonghost tn s t0` by fs[ld_sync_def] >>
+     fs[ld_nonghost_def] >> metis_tac[]) >>
+  `ctx_has_dalloca C' ==> t.vs_alloca_next <= w2n t.vs_initial_fmp` by
+    (strip_tac >> `ctx_has_dalloca C` by res_tac >>
+     qpat_x_assum `t = t0` SUBST_ALL_TAC >>
+     drule_all ld_sync_dalloca_room >> decide_tac) >>
   `t.vs_current_bb = s.vs_current_bb` by metis_tac[ld_sync_control] >>
   `t.vs_inst_idx = p` by
     (drule_all ld_sync_envelope_position >> simp[]) >>
@@ -49,6 +58,7 @@ Proof
 QED
 
 Theorem ld_owned_forwarding:
+  (ctx_has_dalloca C' ==> ctx_has_dalloca C) /\
   (?stk PG G tn fn inst s t0 A frames N X p h.
     ^ld_covered_ambient lo C C' vs0 Sigma names fn fn' /\
     ld_sync lo P C vs0 stk PG G tn fn inst s t0 A frames N /\
@@ -77,6 +87,8 @@ Proof
           MEM_FLAT, MEM_MAP, PULL_EXISTS] >> metis_tac[fn_insts_blocks_MEM]) >>
   `dload_headroom_ok C fn inst s` by
     (drule_all ld_sync_source_mem_inv >> simp[]) >>
+  `raw_mem_ok C fn inst s` by
+    (irule ld_sync_source_mem_inv >> metis_tac[]) >>
   `ir_supply_covers_fn (HD frames).lf_supply fn` by
     (Cases_on `frames` >- fs[ld_sync_def] >>
      drule_at (Pat `ld_sync _ _ _ _ _ _ _ _ _ _ _ _ _ _ _`)

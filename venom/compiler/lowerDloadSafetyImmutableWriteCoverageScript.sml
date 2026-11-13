@@ -23,6 +23,7 @@ Theorem ld_sync_istore_effect:
   ld_sync lo P C vs0 stk PG G tn fn inst s t A (f::fs) N /\
   ld_global lo A (f::fs) /\ f.lf_src = s /\ f.lf_tgt = t /\ f.lf_fn = fn /\
   ptr_discipline lo C vs0 /\ fn_shape_ok fn /\ fn_inst_wf fn /\
+  o1_ctx_shape C /\ mem_inv dload_headroom_ok C vs0 /\
   s.vs_labels = t.vs_labels /\ ~in_revert_forward fn s /\
   t.vs_alloca_next < dimword(:256) /\
   inst.inst_opcode = ISTORE /\
@@ -33,6 +34,8 @@ Theorem ld_sync_istore_effect:
     ld_memory lo A (step_taint inst s ss tn) ss ts /\
     ld_nonghost (step_taint inst s ss tn) ss ts /\
     step_prov PG G inst ss = G /\
+    ld_dyn_agree (dyn_floor C vs0) (step_taint inst s ss tn).t_mem
+      ss.vs_memory ts.vs_memory /\
     ss.vs_allocas = s.vs_allocas /\ ss.vs_alloca_next = s.vs_alloca_next /\
     ss.vs_current_bb = s.vs_current_bb /\ ss.vs_prev_bb = s.vs_prev_bb /\
     ss.vs_inst_idx = s.vs_inst_idx /\
@@ -61,6 +64,14 @@ Proof
     metis_tac[ld_global_selected, MEM] >>
   `!a b c sz. FLOOKUP A a = SOME (b,c,sz) ==> c+sz < dimword(:256)` by
     (drule ld_alloc_target_no_wrap >> simp[] >> metis_tac[]) >>
+  `lo <= dyn_floor C vs0 /\
+   !a u v z. FLOOKUP A a = SOME (u,v,z) ==>
+     u+z <= dyn_floor C vs0 /\ v+z <= dyn_floor C vs0` by
+    (`EVERY (ld_maps A) (f::fs)` by
+       FIRST [first_assum ACCEPT_TAC, rewrite_tac[listTheory.EVERY_DEF] >>
+              conj_tac >> first_assum ACCEPT_TAC] >>
+     drule_all ld_sync_dyn_floor >> metis_tac[]) >>
+  drule ld_sync_dyn_agree >> strip_tac >>
   gvs[step_inst_non_invoke] >> suspend "operands"
 QED
 
@@ -82,24 +93,26 @@ Resume ld_sync_istore_effect[operands]:
 QED
 
 Resume ld_sync_istore_effect[write]:
-  Q.SUBGOAL_THEN `((w2n dst+32 <= lo /\ dst=dst) \/
+  `?ops. mem_write_ops inst = SOME ops /\ ops.iao_ofst = a` by
+    simp[mem_write_ops_def] >>
+  `MEM (w2n dst,32) (source_memory_write_ranges inst f.lf_src)` by
+    simp[source_memory_write_ranges_def, fixed_source_write_range_def,
+         eval_operands_def, mem_write_ops_def] >>
+  `0 < (32:num)` by simp[] >>
+  `(op_prov f.lf_H ops.iao_ofst = NONE ==> dst = dst) /\
+   (!k. op_prov f.lf_H ops.iao_ofst = SOME k ==> ld_wordrel A (SOME k) dst dst)` by
+    simp[] >>
+  Q.SUBGOAL_THEN `w2n dst+32 <= lo \/
     (?k b c sz delta. FLOOKUP A k = SOME (b,c,sz) /\
-      w2n dst=b+delta /\ w2n dst=c+delta /\ delta+32 <= sz))` ASSUME_TAC >-
-    (irule ld_write_access_classified >> simp[] >>
-     conj_tac >- metis_tac[] >>
-     qexistsl_tac [`f.lf_H`,`f.lf_fn`,`inst`] >>
-     simp[mem_write_ops_def] >> qexists_tac `f.lf_src` >>
-     simp[mem_write_ops_def, source_memory_write_ranges_def,
-          fixed_source_write_range_def, eval_operands_def]) >>
+      w2n dst=b+delta /\ w2n dst=c+delta /\ delta+32 <= sz) \/
+    dyn_floor C vs0 <= w2n dst` ASSUME_TAC >-
+    (drule_all (Q.INST [`n` |-> `32`] (cj 2 ld_access_dyn_cases)) >>
+     metis_tac[]) >>
   `op_taint tn v SUBSET {j | j < 32}` by
     (drule ld_sync_source >> strip_tac >> irule ld_reachable_op_taint_width >> metis_tac[]) >>
   `tn.t_var = f.lf_tv /\ EVERY (ld_maps A) (f::fs)` by simp[] >>
-  Q.SUBGOAL_THEN `w2n dst+32 <= lo \/
-    (?k b c sz delta. FLOOKUP A k = SOME (b,c,sz) /\
-      w2n dst=b+delta /\ w2n dst=c+delta /\ delta+32 <= sz)` assume_tac
-    >- metis_tac[] >>
   drule_all ld_istore_effect >> strip_tac >>
-  qexists_tac `ss` >> simp[]
+  qexists_tac `ss` >> simp[step_prov_def, set_prov_def, DRESTRICT_UNIV]
 QED
 
 Finalise ld_sync_istore_effect

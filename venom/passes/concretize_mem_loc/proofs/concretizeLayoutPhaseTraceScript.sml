@@ -18,14 +18,26 @@ Proof
   qpat_x_assum `layout_ordinary_trace _ _ _ _ _ _ _ _` mp_tac >>
   simp[layout_ordinary_trace_def] >> strip_tac >>
   drule_all joint_trace_edge_at >> strip_tac >> gvs[] >>
-  `?anns'. resolved_config_ok (EL (SUC g.lop_cursor) (q0::qs)) g.lop_ids anns'` by
-    (irule resolved_config_ordinary >> goal_assum (drule_at Any) >> simp[] >>
-     metis_tac[]) >>
-  `lifetime_ok (SUC g.lop_bound) g.lop_ids (EL (SUC g.lop_cursor) (q0::qs))` by
+  `?birth ids rp rv saved. g.lop_ids = birth::ids /\ g.lop_anns = (rp,rv)::saved` by
+    (fs[resolved_config_ok_def] >> metis_tac[pairTheory.PAIR]) >>
+  gvs[] >>
+  `resolved_config_ok (EL (SUC g.lop_cursor) (q0::qs)) (birth::ids)
+    ((rp,origin_set rv inst.inst_outputs
+      (resolved_out birth post.vs_allocas rp (origin_out PG om inst post)))::saved)` by
+    (drule_at (Pat `joint_transition _ _ _ _`) resolved_config_ordinary_exact >>
+     disch_then drule >> fs[]) >>
+  `~ctx_has_dalloca C ==> resolved_complete (EL (SUC g.lop_cursor) (q0::qs))
+    ((rp,origin_set rv inst.inst_outputs
+      (resolved_out birth post.vs_allocas rp (origin_out PG om inst post)))::saved)` by
+    (strip_tac >> drule_at (Pat `joint_transition _ _ _ _`) resolved_complete_ordinary >>
+     disch_then drule >> fs[]) >>
+  `lifetime_ok (SUC g.lop_bound) (birth::ids) (EL (SUC g.lop_cursor) (q0::qs))` by
     (drule_all lifetime_transition >> simp[lifetime_step_def]) >>
   `LENGTH es = LENGTH qs` by metis_tac[joint_trace_def, joint_chain_length] >>
   qexists_tac `g with <| lop_pending := T; lop_cursor := SUC g.lop_cursor;
-    lop_bound := SUC g.lop_bound; lop_anns := anns';
+    lop_bound := SUC g.lop_bound; lop_anns := (rp,origin_set rv
+      inst.inst_outputs (resolved_out birth post.vs_allocas rp
+        (origin_out PG om inst post)))::saved;
     lop_config := EL (SUC g.lop_cursor) (q0::qs) |>` >>
   gvs[layout_ordinary_trace_def]
 QED
@@ -39,7 +51,10 @@ Theorem layout_no_output_resolved_ordinary:
 Proof
   simp[joint_transition_ordinary] >> rpt strip_tac >> gvs[] >>
   gvs[resolved_config_ok_def] >>
-  `resolved_frame_ok birth post.vs_allocas PG G om (FST ann) (SND ann)
+  `post.vs_initial_fmp = s.vs_initial_fmp` by
+    metis_tac[venomExecSemanticsTheory.step_inst_non_invoke,
+              ctxLookupAgreeHelpersTheory.step_inst_base_initial_fmp] >>
+  `resolved_frame_ok (w2n s.vs_initial_fmp) birth post.vs_allocas PG G om (FST ann) (SND ann)
     (birth::births)
     ((fn,post.vs_allocas)::MAP (\f. (f.cf_fn,f.cf_state.vs_allocas)) stk)` by
     (irule resolved_frame_cache_transport >> goal_assum (drule_at Any) >>
@@ -70,6 +85,13 @@ Proof
   `resolved_config_ok (EL (SUC g.lop_cursor) (q0::qs)) g.lop_ids g.lop_anns` by
     (irule layout_no_output_resolved_ordinary >> goal_assum (drule_at Any) >>
      simp[] >> metis_tac[]) >>
+  `~ctx_has_dalloca C ==>
+   resolved_complete (EL (SUC g.lop_cursor) (q0::qs)) g.lop_anns` by
+    (strip_tac >>
+     `?birth ids rp rv saved. g.lop_ids = birth::ids /\ g.lop_anns = (rp,rv)::saved` by
+       (fs[resolved_config_ok_def] >> metis_tac[pairTheory.PAIR]) >>
+     fs[] >> drule_at (Pat `joint_transition _ _ _ _`) resolved_complete_ordinary >>
+     disch_then drule >> fs[origin_set_def, finite_mapTheory.DRESTRICT_UNIV]) >>
   `lifetime_ok (SUC g.lop_bound) g.lop_ids (EL (SUC g.lop_cursor) (q0::qs))` by
     (drule_all lifetime_transition >> simp[lifetime_step_def]) >>
   `LENGTH es = LENGTH qs` by metis_tac[joint_trace_def, joint_chain_length] >>

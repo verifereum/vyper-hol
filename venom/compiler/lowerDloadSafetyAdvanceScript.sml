@@ -37,8 +37,9 @@ Theorem ld_sync_head_update:
   ld_global lo A (f::fs) /\
   g = f with <|lf_src := s'; lf_tgt := t'; lf_H := H'; lf_tv := tn'.t_var|> /\
   frame_reachable vs0 C stk PG G' tn' fn next s' /\ active_inst fn next s' /\
-  G' = ld_erase A o_f H' /\ ld_vars P A g /\
+  ld_ghost_ok (dyn_floor C vs0) A H' G' /\ ld_vars P A g /\
   ld_memory lo A tn' s' t' /\ ld_nonghost tn' s' t' /\
+  ld_dyn_agree (dyn_floor C vs0) tn'.t_mem s'.vs_memory t'.vs_memory /\
   s'.vs_current_bb = t'.vs_current_bb /\ s'.vs_prev_bb = t'.vs_prev_bb /\
   s'.vs_allocas = s.vs_allocas /\ t'.vs_allocas = t.vs_allocas /\
   s'.vs_alloca_next = s.vs_alloca_next /\ t'.vs_alloca_next = t.vs_alloca_next /\
@@ -80,8 +81,9 @@ Theorem ld_sync_ordinary_advance:
   f' = f with <| lf_src := ss with vs_inst_idx := SUC s.vs_inst_idx;
                  lf_tgt := ts with vs_inst_idx := SUC p;
                  lf_H := H'; lf_tv := tn'.t_var |> /\
-  G' = ld_erase A o_f H' /\ ld_vars P A f' /\
+  ld_ghost_ok (dyn_floor C vs0) A H' G' /\ ld_vars P A f' /\
   ld_memory lo A tn' ss ts /\ ld_nonghost tn' ss ts /\
+  ld_dyn_agree (dyn_floor C vs0) tn'.t_mem ss.vs_memory ts.vs_memory /\
   active_inst fn next (ss with vs_inst_idx := SUC s.vs_inst_idx) /\
   (?Y. ld_envelope f.lf_supply fn
          (ss with vs_inst_idx := SUC s.vs_inst_idx)
@@ -126,7 +128,9 @@ Theorem ld_nonallocating_endpoint:
     lf_H := H'; lf_tv := (step_taint inst s ss tn).t_var|>) /\
   ld_memory lo A (step_taint inst s ss tn) ss ts /\
   ld_nonghost (step_taint inst s ss tn) ss ts /\
-  step_prov PG G inst ss = ld_erase A o_f H' /\
+  ld_ghost_ok (dyn_floor C vs0) A H' (step_prov PG G inst ss) /\
+  ld_dyn_agree (dyn_floor C vs0) (step_taint inst s ss tn).t_mem
+    ss.vs_memory ts.vs_memory /\
   (!a. a IN FRANGE H' ==> a IN FDOM A) /\
   ss.vs_allocas = s.vs_allocas /\ ts.vs_allocas = t.vs_allocas /\
   ss.vs_alloca_next = s.vs_alloca_next /\
@@ -178,8 +182,7 @@ Proof
     (drule_all ld_envelope_source_next >> simp[ADD1]) >>
   `frame_reachable vs0 C stk PG G' tn' fn next
        (ss with vs_inst_idx := SUC s.vs_inst_idx)` by
-    (qpat_x_assum `G' = ld_erase A o_f H'` kall_tac >>
-     gvs[Abbr `tn'`, Abbr `G'`] >> irule frame_reachable_next >>
+    (gvs[Abbr `tn'`, Abbr `G'`] >> irule frame_reachable_next >>
      drule ld_sync_source >> metis_tac[]) >>
   irule (cj 1 ld_sync_head_update) >>
   drule ld_sync_control >> strip_tac >> simp[] >>

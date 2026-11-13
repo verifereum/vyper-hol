@@ -2,13 +2,13 @@
  * DFT's step part of the O1 pass contract: on an SSA function of the O1
  * shape with its pseudo-instructions first, dft_fn keeps the shape, takes
  * no new labels or instruction ids, renames no label and leaves the
- * supply alone.  Off SSA it can break a call check (o1DftCallChecks).
+ * supply alone.
  *)
 Theory o1DftStep
 Ancestors
   o1PassContract unitShapeDefs venomPassDispatcher dftStructural dftDefs
   dftLifting dftShape dftCorrectness unitLabelMapIdentity
-  venomFnScheduleRunnerProps o1DftCallChecks o1DftRetpc
+  venomFnScheduleRunnerProps  o1DftRetpc
   venomWf venomInst venomEffects passSharedDefs dretDesugarDefs list
 Libs
   BasicProvers
@@ -132,13 +132,6 @@ Proof
   gvs[o1_fn_shape_def, fn_shape_ok_def]
 QED
 
-Theorem dft_shape_call_checks:
-  o1_fn_shape ctx fn /\ wf_ssa fn /\ fn_pseudos_prefix fn ==>
-  call_checks_ok (dft_fn fn)
-Proof
-  strip_tac >> irule dft_fn_call_checks_ok >>
-  gvs[o1_fn_shape_def, fn_shape_ok_def]
-QED
 
 Theorem dft_shape_fn_shape:
   o1_fn_shape ctx fn /\ wf_ssa fn /\ fn_pseudos_prefix fn ==>
@@ -160,8 +153,7 @@ Proof
       `EVERY (\l. ~reserved_label l)
          (MAP (\b. b.bb_label) (dft_fn fn).fn_blocks)` by metis_tac[] >>
       gvs[EVERY_MAP])
-  >- (irule dft_fn_inst_shape >> gvs[o1_fn_shape_def, fn_shape_ok_def]) >>
-  metis_tac[dft_shape_call_checks]
+  >> irule dft_fn_inst_shape >> gvs[o1_fn_shape_def, fn_shape_ok_def]
 QED
 
 Theorem dft_shape_invoke_ok:
@@ -317,26 +309,6 @@ Proof
   qexists_tac `ctx` >> simp[]
 QED
 
-(* Proof summary:
-   - Without SSA, dft_fn can drop an instruction (a block whose ADD reads
-     its own output: nothing reaches it from the entries), but it never
-     duplicates one (distinct ids, ds_visited) and every output
-     instruction is an input one or its flip_operands
-     (dft_block_from_orig, schedule_output_from_block).  So the output
-     ids and labels are a subset of the input's (dft_fn_labels_map).
-   - The terminator stays last: it has no outputs (inst_wf), so nothing
-     depends on it (eda_deps_backward_plain needs only distinct ids); it
-     is the last entry, so it is emitted last.  bb_succs reads the last
-     instruction, so the CFG facts are unchanged.
-   - Pseudos: the output is FILTER is_pseudo ++ schedule, and PHIs are
-     already a prefix (bb_well_formed).
-   - Flips touch two-operand ADD/MUL/OR/XOR/AND/EQ and GT/LT/SGT/SLT,
-     keep arity and opcode class.  ADD [op; Label "code_end"] has at
-     most one child, so it is never flipped (the flipped form would fail
-     label_positions_ok).
-   - The call checks and the return-PC shape need SSA (o1DftCallChecks,
-     o1DftRetpc): off SSA, a redefinition of a call's flag can be
-     scheduled between the call and its check. *)
 Theorem dft_fn_user_param_count:
   o1_fn_shape ctx fn ==>
   LENGTH (fn_user_param_insts (dft_fn fn)) = LENGTH (fn_user_param_insts fn)
@@ -357,6 +329,24 @@ Proof
   pop_assum (fn th => ONCE_REWRITE_TAC [th]) >> simp[]
 QED
 
+(* Proof summary:
+   - Without SSA, dft_fn can drop an instruction (a block whose ADD reads
+     its own output: nothing reaches it from the entries), but it never
+     duplicates one (distinct ids, ds_visited) and every output
+     instruction is an input one or its flip_operands
+     (dft_block_from_orig, schedule_output_from_block).  So the output
+     ids and labels are a subset of the input's (dft_fn_labels_map).
+   - The terminator stays last: it has no outputs (inst_wf), so nothing
+     depends on it (eda_deps_backward_plain needs only distinct ids); it
+     is the last entry, so it is emitted last.  bb_succs reads the last
+     instruction, so the CFG facts are unchanged.
+   - Pseudos: the output is FILTER is_pseudo ++ schedule, and PHIs are
+     already a prefix (bb_well_formed).
+   - Flips touch two-operand ADD/MUL/OR/XOR/AND/EQ and GT/LT/SGT/SLT,
+     keep arity and opcode class.  ADD [op; Label "code_end"] has at
+     most one child, so it is never flipped (the flipped form would fail
+     label_positions_ok).
+   - The return-PC shape needs SSA (o1DftRetpc). *)
 Theorem dft_step_contract_ssa:
   fn_pass_step rpolicy (CFP_Simple VP_DFT) observed s fn out /\
   o1_ctx_shape observed.cu_context /\ ir_supply_inst_ok s /\

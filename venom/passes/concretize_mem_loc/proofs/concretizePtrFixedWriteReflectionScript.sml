@@ -4,7 +4,7 @@ Ancestors concretizePtrHistoricalWriteExclusion concretizePtrStageReserved
   concretizePtrWritePurity concretizePtrValueTransport
   concretizePtrSourceOwnership concretizePtrOwnershipErasure concretizePtrComparisonTransport
   concretizePtrPairedPrefix concretizePtrPairedFields
-  concretizeStepStructure concretizeStepShape concretizeStepCallChecks
+  concretizeStepStructure concretizeStepShape
   concretizeStepRetpc concretizeStageShape
   concretizePtrStructuralTranscript concretizePtrStructuralTrace
   concretizePtrChronologicalHistory concretizePtrHistoricalSupport
@@ -97,7 +97,7 @@ Proof
     (qx_choose_then `dest` (qx_choose_then `z` (qx_choose_then `destt`
       (map_every assume_tac o CONJUNCTS)))))) >>
   unabbrev_all_tac >>
-  drule_all ptr_historical_write_classification >>
+  drule_all ptr_historical_write_classification_static >>
   strip_tac
   >- (`MEM (EL (EL q done) h).po_inst.inst_opcode [CALL;STATICCALL;DELEGATECALL] ==>
         LENGTH (EL (SUC (EL q done)) h).po_state.vs_returndata =
@@ -106,8 +106,8 @@ Proof
   drule ptr_structural_transcript_ownership >>
   disch_then (qspec_then `EL q done` mp_tac) >>
   simp[ptr_snapshot_ownership_def] >> strip_tac >>
-  drule_all ptr_source_ownership_prov_erases >>
-  simp[concretizePtrPrefixLedgerTheory.ptr_ledger_erases_def] >> strip_tac >>
+  drule_all ptr_source_ownership_static_prov_erases >>
+  simp[concretizePtrPrefixLedgerTheory.ptr_ledger_erases_every_dyn] >> strip_tac >>
   `FLOOKUP bj (token,bid) = SOME (db,sb)` by
     (qpat_x_assum `!v. FLOOKUP (EL (EL q done) h).po_prov v = _`
        (qspec_then `dv` mp_tac) >>

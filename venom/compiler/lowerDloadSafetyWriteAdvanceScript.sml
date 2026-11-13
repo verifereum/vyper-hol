@@ -8,6 +8,7 @@ Theorem ld_sync_memory_write_advance:
   ld_sync lo P C vs0 stk PG G tn fn inst s t A (f::fs) N /\
   ld_global lo A (f::fs) /\ f.lf_src = s /\ f.lf_tgt = t /\ f.lf_fn = fn /\
   ptr_discipline lo C vs0 /\ fn_shape_ok fn /\ fn_inst_wf fn /\
+  o1_ctx_shape C /\ mem_inv dload_headroom_ok C vs0 /\
   s.vs_labels = t.vs_labels /\ ~in_revert_forward fn s /\
   t.vs_alloca_next < dimword(:256) /\
   MEM inst.inst_opcode [MSTORE;MSTORE8;MCOPY] /\
@@ -39,7 +40,7 @@ Proof
         pure_rewrite_tac[ld_sync_def] >> simp[] >> strip_tac >> simp[]) >> simp[]) >>
   drule_all (SRULE [GSYM arithmeticTheory.ADD1] (Q.INST [`X` |-> `[inst]`] ld_envelope_expansion_next)) >>
   strip_tac >>
-  `G = ld_erase A o_f f.lf_H` by
+  `ld_ghost_ok (dyn_floor C vs0) A f.lf_H G` by
     (drule ld_sync_ghosts >> simp[]) >>
   `~is_terminator inst.inst_opcode /\ inst.inst_opcode <> INVOKE` by
     (qpat_x_assum `MEM inst.inst_opcode _` mp_tac >>

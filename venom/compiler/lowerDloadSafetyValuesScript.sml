@@ -91,7 +91,7 @@ QED
 
 Theorem ld_numeric_operand_untainted:
   taint_ok fn tn inst s /\ MEM op inst.inst_operands /\
-  ~MEM inst.inst_opcode [ASSIGN; SHL; SHR; SAR; MSTORE; SSTORE; TSTORE; ISTORE] ==>
+  ~MEM inst.inst_opcode [ASSIGN; MUL; SHL; SHR; SAR; MSTORE; SSTORE; TSTORE; ISTORE] ==>
   op_taint tn op = {}
 Proof
   simp[taint_ok_def] >> metis_tac[]
@@ -239,7 +239,7 @@ Theorem ld_vars_numeric_operands_equal:
   fn_shape_ok f.lf_fn /\ MEM inst (fn_insts f.lf_fn) /\
   taint_ok f.lf_fn tn inst f.lf_src /\ tn.t_var = f.lf_tv /\
   ~MEM inst.inst_opcode
-    [ASSIGN; PHI; RET; RETFMP; DRET; SHL; SHR; SAR; MSTORE; SSTORE; TSTORE; ISTORE] /\
+    [ASSIGN; PHI; RET; RETFMP; DRET; MUL; SHL; SHR; SAR; MSTORE; SSTORE; TSTORE; ISTORE] /\
   (!v. MEM (Var v) inst.inst_operands ==>
     MEM v (fn_ir_vars f.lf_fn) /\ v NOTIN fn_pv P f.lf_fn) ==>
   eval_operands inst.inst_operands f.lf_src =
@@ -306,6 +306,67 @@ Proof
      metis_tac[]) >>
   disj2_tac >> qexists_tac `w2n x-b` >>
   simp[] >> decide_tac
+QED
+
+(* A nonempty access through the ghost map G is below lo at the same
+   address, inside a selected site (relocated), or inside a DALLOCA
+   region: its offset is unselected, the same word on both sides, and at
+   or above the dynamic floor fl. *)
+Theorem ld_access_dyn_cases:
+  (access_ok lo G fn inst s /\ ld_ghost_ok fl A H G /\
+  ~in_revert_forward fn s /\ 0 < n /\ mem_read_ops inst = SOME ops /\
+  MEM (w2n x,n) (source_memory_read_ranges inst s) /\
+  (op_prov H ops.iao_ofst = NONE ==> x = y) /\
+  (!a. op_prov H ops.iao_ofst = SOME a ==> ld_wordrel A (SOME a) x y) /\
+  (!a b c sz. FLOOKUP A a = SOME (b,c,sz) ==> c+sz < dimword (:256)) ==>
+  (w2n x+n <= lo /\ y=x) \/
+  (?a b c sz delta. op_prov H ops.iao_ofst = SOME a /\
+    FLOOKUP A a = SOME (b,c,sz) /\ w2n x=b+delta /\
+    w2n y=c+delta /\ delta+n <= sz) \/
+  (op_prov H ops.iao_ofst = NONE /\ y = x /\ fl <= w2n x /\
+   w2n x+n < dimword (:256))) /\
+  (access_ok lo G fn inst s /\ ld_ghost_ok fl A H G /\
+  ~in_revert_forward fn s /\ 0 < n /\ mem_write_ops inst = SOME ops /\
+  MEM (w2n x,n) (source_memory_write_ranges inst s) /\
+  (op_prov H ops.iao_ofst = NONE ==> x = y) /\
+  (!a. op_prov H ops.iao_ofst = SOME a ==> ld_wordrel A (SOME a) x y) /\
+  (!a b c sz. FLOOKUP A a = SOME (b,c,sz) ==> c+sz < dimword (:256)) ==>
+  (w2n x+n <= lo /\ y=x) \/
+  (?a b c sz delta. op_prov H ops.iao_ofst = SOME a /\
+    FLOOKUP A a = SOME (b,c,sz) /\ w2n x=b+delta /\
+    w2n y=c+delta /\ delta+n <= sz) \/
+  (op_prov H ops.iao_ofst = NONE /\ y = x /\ fl <= w2n x /\
+   w2n x+n < dimword (:256)))
+Proof
+  conj_tac >> strip_tac >> `n <> 0` by decide_tac >> (
+  `lo < w2n x + n \/ op_prov G ops.iao_ofst <> NONE ==>
+   ?v b sz. ops.iao_ofst = Var v /\ FLOOKUP G v = SOME (b,sz) /\
+            b <= w2n x /\ w2n x + n <= b + sz` by
+    (fs[access_ok_def] >> rpt strip_tac >> metis_tac[]) >>
+  Cases_on `op_prov H ops.iao_ofst`
+  >- (Cases_on `w2n x + n <= lo` >- gvs[] >>
+      `?v b sz. ops.iao_ofst = Var v /\ FLOOKUP G v = SOME (b,sz) /\
+                b <= w2n x /\ w2n x + n <= b + sz` by
+        (qpat_x_assum `_ \/ _ ==> _` irule >> disj1_tac >> decide_tac) >>
+      `FLOOKUP H v = NONE` by gvs[op_prov_def] >>
+      `fl <= b /\ b + sz < dimword (:256)` by
+        (qpat_x_assum `ld_ghost_ok _ _ _ _` mp_tac >>
+         simp[ld_ghost_ok_def] >> strip_tac >>
+         first_x_assum (qspec_then `v` mp_tac) >> gvs[]) >>
+      disj2_tac >> disj2_tac >> gvs[] >> decide_tac) >>
+  rename1 `op_prov H ops.iao_ofst = SOME a` >>
+  `?b c sz. FLOOKUP A a = SOME (b,c,sz)` by metis_tac[ld_wordrel_SOME] >>
+  `?v. ops.iao_ofst = Var v /\ FLOOKUP H v = SOME a` by
+    (Cases_on `ops.iao_ofst` >> gvs[op_prov_def]) >>
+  `FLOOKUP G v = SOME (b,sz)` by
+    (fs[ld_ghost_ok_def] >> res_tac >> gvs[ld_erase_def]) >>
+  `op_prov G ops.iao_ofst <> NONE` by simp[op_prov_def] >>
+  gvs[] >>
+  `w2n y = c+(w2n x-b)` by
+    (irule ld_wordrel_site_value >> simp[] >>
+     qexistsl_tac [`A`, `a`, `sz`] >> simp[] >> metis_tac[]) >>
+  `w2n x = b + (w2n x - b) /\ w2n x - b + n <= sz` by decide_tac >>
+  metis_tac[])
 QED
 
 (* BUMP's explicit base is a scalar under the source discipline. *)

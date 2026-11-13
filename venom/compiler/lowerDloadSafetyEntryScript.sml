@@ -58,6 +58,7 @@ Proof
     lf_E := {}; lf_tv := entry_taint.t_var|>` >>
   simp[ld_sync_def, ld_global_def, ld_vars_def, ld_maps_def, ld_intervals_def,
        ld_slots_def, ld_sites_def, ld_charge_def, ld_memory_def,
+       ld_ghost_ok_def, ld_params_ok_def, ld_dyn_agree_def,
        fmap_eq_flookup, FLOOKUP_o_f] >>
   metis_tac[]
 QED

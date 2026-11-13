@@ -4566,6 +4566,122 @@ QED
 
 Finalise supply_run_blocks_forward
 
+(* The image block run on more fuel gives the same result as the source
+   block on less, since a terminating block run is fuel-monotone. *)
+Theorem supply_ready_run_block_fuel:
+  wf_ssa fn /\ wf_function fn /\ fn_inst_wf fn /\
+  EVERY label_positions_ok (fn_insts fn) /\
+  ir_supply_covers_fn s fn /\ ir_supply_inst_ok s /\
+  MEM pred fn.fn_blocks /\ MEM target fn.fn_blocks /\ 1 < num_succs pred /\
+  build_split_block_supply s pred target = (split,repls,s') /\
+  supply_ready fn pred target split repls u v /\
+  lookup_block u.vs_current_bb fn.fn_blocks = SOME bb /\
+  (!e. run_block_entry k ctx bb u <> Error e) ==>
+  !j. k <= j ==>
+    lift_result (supply_entry_pair fn s pred target split repls)
+      (supply_state_agree fn) (supply_state_agree fn)
+      (run_block_entry k ctx bb u)
+      (run_block_entry j ctx (supply_block_image pred target split repls bb) v)
+Proof
+  strip_tac >> gen_tac >> strip_tac >>
+  drule_all supply_ready_run_block >>
+  disch_then (qspecl_then [`k`, `ctx`] assume_tac) >>
+  `!e. run_block_entry k ctx (supply_block_image pred target split repls bb) v <>
+       Error e` by
+    (rpt strip_tac >> gvs[] >>
+     Cases_on `run_block_entry k ctx bb u` >>
+     gvs[stateEquivTheory.lift_result_def]) >>
+  `run_block_entry j ctx (supply_block_image pred target split repls bb) v =
+   run_block_entry k ctx (supply_block_image pred target split repls bb) v` by
+    (irule venomExecProofsTheory.run_block_fuel_mono >> simp[] >>
+     qexists_tac `k` >> simp[]) >>
+  simp[]
+QED
+
+(* One split at most doubles the fuel: from a ready pair the split function
+   needs 2 * n, from a pending pair (target state at the split block) one
+   step more. *)
+Theorem supply_run_blocks_forward_fuel:
+  wf_ssa fn /\ wf_function fn /\ fn_inst_wf fn /\
+  EVERY label_positions_ok (fn_insts fn) /\
+  ir_supply_covers_fn s fn /\ ir_supply_inst_ok s /\
+  MEM pred fn.fn_blocks /\ MEM target fn.fn_blocks /\ 1 < num_succs pred /\
+  build_split_block_supply s pred target = (split,repls,s') /\
+  insert_split_supply s fn pred target = (fn',s') ==>
+  !n u v. terminates (run_blocks n ctx fn u) ==>
+    (supply_ready fn pred target split repls u v ==>
+       frame_result_rel (run_blocks n ctx fn u) (run_blocks (2 * n) ctx fn' v)) /\
+    (supply_pending fn s pred target split u v ==>
+       frame_result_rel (run_blocks n ctx fn u)
+         (run_blocks (2 * n + 1) ctx fn' v))
+Proof
+  strip_tac >> completeInduct_on `n` >> rpt gen_tac >> strip_tac >>
+  `!v. supply_ready fn pred target split repls u v ==>
+     frame_result_rel (run_blocks n ctx fn u) (run_blocks (2 * n) ctx fn' v)` by
+    suspend "ready" >>
+  simp[] >> strip_tac >>
+  drule_all supply_pending_contract >>
+  disch_then (qspecl_then [`2 * n`, `ctx`] strip_assume_tac) >>
+  drule_all supply_pending_split_lookup >> strip_tac >>
+  `~m.vs_halted` by gvs[supply_ready_def] >>
+  `2 * n + 1 = SUC (2 * n)` by simp[] >>
+  pop_assum SUBST1_TAC >>
+  simp[Once venomExecSemanticsTheory.run_blocks_unfold] >>
+  gvs[venomExecSemanticsTheory.run_block_entry_def]
+QED
+
+Resume supply_run_blocks_forward_fuel[ready]:
+  rpt strip_tac >> Cases_on `n`
+  >- gvs[Once venomExecSemanticsTheory.run_blocks_def,
+         passSimulationDefsTheory.terminates_def] >>
+  rename1 `SUC k` >>
+  Cases_on `lookup_block u.vs_current_bb fn.fn_blocks`
+  >- gvs[venomExecSemanticsTheory.run_blocks_unfold,
+         passSimulationDefsTheory.terminates_def] >>
+  rename1 `lookup_block u.vs_current_bb fn.fn_blocks = SOME bb` >>
+  drule_all supply_ready_image_lookup >> strip_tac >>
+  `!e. run_block_entry k ctx bb u <> Error e` by
+    (rpt strip_tac >>
+     gvs[venomExecSemanticsTheory.run_blocks_unfold,
+         passSimulationDefsTheory.terminates_def]) >>
+  `lift_result (supply_entry_pair fn s pred target split repls)
+     (supply_state_agree fn) (supply_state_agree fn)
+     (run_block_entry k ctx bb u)
+     (run_block_entry (2 * k + 1) ctx
+        (supply_block_image pred target split repls bb) v)` by
+    (mp_tac supply_ready_run_block_fuel >> simp[] >>
+     disch_then (qspec_then `2 * k + 1` mp_tac) >> simp[]) >>
+  pop_assum mp_tac >>
+  `2 * SUC k = SUC (2 * k + 1)` by simp[] >>
+  pop_assum SUBST1_TAC >>
+  Cases_on `run_block_entry k ctx bb u` >>
+  Cases_on `run_block_entry (2 * k + 1) ctx
+              (supply_block_image pred target split repls bb) v` >>
+  simp[stateEquivTheory.lift_result_def] >> rpt strip_tac >>
+  gvs[venomExecSemanticsTheory.run_blocks_unfold,
+      passSimulationDefsTheory.terminates_def]
+  >- suspend "continue" >>
+  simp[o1PassLiftTheory.frame_result_rel_def] >>
+  gvs[supply_state_agree_def]
+QED
+
+Resume supply_run_blocks_forward_fuel[continue]:
+  rename1 `supply_entry_pair fn s pred target split repls u1 v1` >>
+  `~u1.vs_halted /\ ~v1.vs_halted` by
+    gvs[supply_entry_pair_def, supply_ready_def, supply_pending_def] >>
+  gvs[] >>
+  first_x_assum (qspec_then `k` mp_tac) >> simp[] >>
+  disch_then (qspecl_then [`u1`, `v1`] mp_tac) >> simp[] >> strip_tac >>
+  qpat_x_assum `supply_entry_pair _ _ _ _ _ _ _ _`
+    (strip_assume_tac o REWRITE_RULE [supply_entry_pair_def]) >> gvs[] >>
+  `run_blocks (2 * k + 1) ctx fn' v1 = run_blocks (2 * k) ctx fn' v1` by
+    (irule o1PassLiftTheory.run_blocks_terminates_mono >> simp[] >>
+     metis_tac[o1PassLiftTheory.frame_result_rel_terminates]) >>
+  simp[]
+QED
+
+Finalise supply_run_blocks_forward_fuel
+
 Theorem supply_entry_defined_lookup:
   wf_function fn /\ supply_entry_defined fn u ==>
   ?bb. lookup_block u.vs_current_bb fn.fn_blocks = SOME bb

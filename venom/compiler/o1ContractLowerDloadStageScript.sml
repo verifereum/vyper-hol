@@ -29,7 +29,8 @@ Ancestors
   contextRawReachable contextCodegenRel fcgDefs fcgBridge
   venomFnScheduleRunner o1ContractLowerDloadSim o1ContractLowerDloadMem
   o1ContractLowerDloadPtr o1ContractLowerDloadTaint lowerDloadMakeSsaInput
-  venomFnScheduleRunnerProps
+  venomFnScheduleRunnerProps lowerDloadRawCoverage lowerDloadTargetHeadroom
+  lowerDloadPtrStatic
 
 (* ===== Helpers for the shape and DLOAD-bound lemmas ===== *)
 
@@ -129,11 +130,14 @@ Proof
 QED
 
 (* And no DLOAD to need headroom for: the bound is raw_mem_ok's frontier
-   bound. *)
+   bound, and with DALLOCA the frontier stays below the initial frame
+   pointer, from the source's headroom on owned states and from the
+   forwarding certificate on revert-forwarding ones. *)
 Theorem lower_dload_stage_headroom:
-  !rpolicy view C C' vs.
+  !rpolicy D view C C' vs names.
     ctx_pass_stage rpolicy (CFP_Simple VP_LowerDload) view C C' /\
-    o1_ctx_shape C /\ mem_inv raw_mem_ok C' vs ==>
+    dead_wf D /\ o1_ctx_shape C /\ o1_run_state_ok vs /\
+    o1_src_inv D C vs /\ callee_first names C.ctx_functions ==>
     mem_inv dload_headroom_ok C' vs
 Proof
   rpt strip_tac >>
@@ -141,8 +145,31 @@ Proof
     (simp[ctx_dload_count_def, SUM_eq_0, MEM_MAP, PULL_EXISTS,
           FILTER_EQ_NIL, EVERY_MEM] >>
      metis_tac[lower_dload_stage_no_dload]) >>
-  irule mem_inv_mono >> qexists_tac `raw_mem_ok` >>
-  simp[raw_mem_ok_def, dload_headroom_ok_def]
+  `mem_inv raw_mem_ok C' vs` by metis_tac[lower_dload_stage_mem] >>
+  `ctx_has_dalloca C' ==> ctx_has_dalloca C` by
+    metis_tac[lower_dload_stage_no_dalloca] >>
+  drule_all lowerDloadStageAmbientTheory.ld_stage_ambient >> strip_tac >>
+  `mem_inv raw_mem_ok C vs` by fs[o1_src_inv_def] >>
+  RULE_ASSUM_TAC BETA_RULE >>
+  qpat_x_assum `mem_inv raw_mem_ok C' vs` mp_tac >>
+  rewrite_tac[mem_inv_raw_reachable] >> strip_tac >>
+  conj_tac >- metis_tac[] >>
+  rpt strip_tac >> rename1 `raw_reachable vs C' g inst s` >>
+  `raw_mem_ok C' g inst s` by res_tac >>
+  pure_rewrite_tac[dload_headroom_ok_def, GSYM ctx_has_dalloca_def] >>
+  qpat_x_assum `ctx_dload_count C' = 0` (fn th => rewrite_tac[th]) >>
+  simp_tac (srw_ss()) [] >>
+  conj_tac >- fs[raw_mem_ok_def] >>
+  strip_tac >> `ctx_has_dalloca C` by res_tac >>
+  drule_all (BETA_RULE ld_raw_coverage_fixed) >> disch_then DISJ_CASES_TAC
+  >- (irule (BETA_RULE ld_owned_target_headroom) >>
+      goal_assum (drule_at Any) >>
+      drule_all (BETA_RULE ld_raw_fixed_ambient) >> strip_tac >>
+      qpat_x_assum `!fn. MEM fn C.ctx_functions ==> _` drule >>
+      simp[] >> strip_tac >> simp[] >>
+      qpat_x_assum `!fn. MEM fn C.ctx_functions ==> (_ /\ _) /\ _` drule >>
+      simp[] >> strip_tac >> simp[]) >>
+  fs[]
 QED
 
 (* ===== The cheap rows ===== *)
@@ -175,16 +202,6 @@ Proof
   rw[lower_dload_inst_supply_def] >> gvs[]
 QED
 
-Theorem lower_dload_inst_supply_no_raw_fmp[local]:
-  lower_dload_inst_supply s i = (xs,t) /\ ~is_raw_fmp_opcode i.inst_opcode ==>
-  EVERY (\j. ~is_raw_fmp_opcode j.inst_opcode) xs
-Proof
-  strip_tac >>
-  drule (Q.INST [`P` |-> `\op. ~is_raw_fmp_opcode op`]
-           lower_dload_inst_supply_opcodes) >>
-  simp[is_raw_fmp_opcode_def]
-QED
-
 (* The expansion keeps an unset layout end and adds no DALLOCA. *)
 Theorem lower_dload_stage_shape:
   !rpolicy view C C'.
@@ -205,7 +222,7 @@ Proof
   fs[EVERY_MEM] >> metis_tac[]
 QED
 
-(* The expansion keeps the FMP signature and adds no raw FMP opcode. *)
+(* The expansion keeps the FMP signature and the pre-FmpLowering opcodes. *)
 Theorem lower_dload_stage_fmp_free:
   !rpolicy view C C'.
     ctx_pass_stage rpolicy (CFP_Simple VP_LowerDload) view C C' /\
@@ -215,10 +232,11 @@ Proof
   drule_all lower_dload_stage_fn >> strip_tac >>
   first_x_assum drule >> strip_tac
   >- gvs[lower_dload_function_supply_def, AllCaseEqs()] >>
-  fs[no_raw_fmp_ops_def] >> rpt strip_tac >>
+  fs[pre_fmp_ops_def, EVERY_MEM] >> rpt strip_tac >>
   drule_all lower_dload_function_supply_member >> strip_tac >>
-  `EVERY (\j. ~is_raw_fmp_opcode j.inst_opcode) ys` by
-    metis_tac[lower_dload_inst_supply_no_raw_fmp] >>
+  `EVERY (\j. pre_fmp_opcode j.inst_opcode) ys` by
+    (drule lower_dload_inst_supply_opcodes >> disch_then irule >>
+     simp[pre_fmp_opcode_def] >> metis_tac[]) >>
   fs[EVERY_MEM] >> metis_tac[]
 QED
 
@@ -290,9 +308,10 @@ Theorem lower_dload_run_contract:
 Proof
   `EL 1 o1_fn_passes = CFP_Simple VP_LowerDload` by
     simp[o1_fn_passes_def] >>
-  simp[o1_run_contract_def, o1_stage_contract_def, o1_inv_def] >>
+  simp[o1_run_contract_def, o1_stage_contract_def, o1_inv_def,
+       pass_fuel_def] >>
   rpt gen_tac >> strip_tac >>
-  `ctx_sim D C C' vs vs` by metis_tac[lower_dload_stage_sim] >>
+  `ctx_sim_fuel I D C C' vs vs` by metis_tac[lower_dload_stage_sim_fuel] >>
   `mem_inv raw_mem_ok C' vs` by metis_tac[lower_dload_stage_mem] >>
   `taint_within D C' vs` by metis_tac[lower_dload_stage_taint] >>
   `mem_inv dload_offset_ok C' vs` by
@@ -300,8 +319,10 @@ Proof
      metis_tac[]) >>
   `mem_inv dload_headroom_ok C' vs` by
     metis_tac[lower_dload_stage_headroom] >>
-  `EVERY (\fn. fn.fn_eom = NONE) C'.ctx_functions /\ ~ctx_has_dalloca C'` by
-    (irule lower_dload_stage_shape >> fs[o1_src_inv_def] >> metis_tac[]) >>
+  `EVERY (\fn. fn.fn_eom = NONE) C'.ctx_functions` by
+    (rw[EVERY_MEM] >> drule_all lower_dload_stage_fn >> strip_tac >>
+     fs[o1_src_inv_def, EVERY_MEM] >> first_x_assum drule >>
+     gvs[lower_dload_function_supply_def, AllCaseEqs()] >> rw[]) >>
   `fmp_free_ctx C'` by
     (irule lower_dload_stage_fmp_free >> fs[o1_src_inv_def] >> metis_tac[]) >>
   `callee_first names C'.ctx_functions` by
@@ -331,23 +352,15 @@ Proof
      metis_tac[lookup_unique_function_member]) >>
   `fn_inst_ids_distinct fn /\ fn_inst_wf fn` by
     gvs[o1_ctx_shape_def, o1_fn_shape_def, wf_function_def, EVERY_MEM] >>
-  gvs[o1_fn_row_def] >> rpt conj_tac
+  gvs[o1_fn_row_def] >> conj_tac
   >- metis_tac[lower_dload_fn_pass_step_make_ssa_input_ok]
-  >- (drule lower_dload_step_supply >> strip_tac >>
-      fs[no_raw_fmp_ops_def] >> rpt strip_tac >>
-      drule_all lower_dload_function_supply_member >> strip_tac >>
-      `EVERY (\j. ~is_raw_fmp_opcode j.inst_opcode) ys` by
-        metis_tac[lower_dload_inst_supply_no_raw_fmp] >>
-      fs[EVERY_MEM] >> metis_tac[])
-  >- (drule lower_dload_step_supply >> strip_tac >>
+  >> (drule lower_dload_step_supply >> strip_tac >>
       fs[pre_fmp_ops_def, EVERY_MEM] >> rpt strip_tac >>
       drule_all lower_dload_function_supply_member >> strip_tac >>
       `EVERY (\j. pre_fmp_opcode j.inst_opcode) ys` by
         (drule lower_dload_inst_supply_opcodes >> disch_then irule >>
-         rpt conj_tac >> TRY (simp[pre_fmp_opcode_def] >> NO_TAC) >>
-         metis_tac[]) >>
-      fs[EVERY_MEM] >> metis_tac[]) >>
-  drule fn_pass_step_fmp_sig_no_param >> simp[fn_pass_tag_def]
+         simp[pre_fmp_opcode_def] >> metis_tac[]) >>
+      fs[EVERY_MEM] >> metis_tac[])
 QED
 
 Theorem o1_contract_lower_dload:

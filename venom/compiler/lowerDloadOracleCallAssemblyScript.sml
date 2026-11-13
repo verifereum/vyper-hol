@@ -227,7 +227,8 @@ QED
 
 Theorem ld_observed_memory_read:
   ld_memory lo A tn s t /\
-  access_ok lo (ld_erase A o_f H) fn inst s /\
+  access_ok lo G fn inst s /\ ld_ghost_ok fl A H G /\
+  ld_dyn_agree fl tn.t_mem s.vs_memory t.vs_memory /\
   taint_ok fn tn inst s /\ ~about_to_revert fn inst s /\
   ~in_revert_forward fn s /\
   ~MEM inst.inst_opcode [MLOAD;ILOAD;MCOPY;RETURN] /\
@@ -244,16 +245,18 @@ Proof
      first_x_assum (qspecl_then [`w2n x`,`n`,`w2n x+j`] mp_tac) >>
      simp[] >> decide_tac) >>
   `0 < n` by decide_tac >>
-  drule_all ld_read_access_classified >> strip_tac
+  drule_all (cj 1 ld_access_dyn_cases) >> strip_tac
   >- (gvs[] >> irule ld_memory_read_low >>
-      qexistsl_tac [`A`,`lo`,`tn`] >> simp[ADD_COMM]) >>
-  gvs[] >> irule ld_memory_read_slot >>
-  qexistsl_tac [`A`,`k`,`lo`,`sz`,`tn`] >> simp[GSYM ADD_ASSOC]
+      qexistsl_tac [`A`,`lo`,`tn`] >> simp[ADD_COMM])
+  >- (gvs[] >> irule ld_memory_read_slot >>
+      qexistsl_tac [`A`,`a`,`lo`,`sz`,`tn`] >> simp[GSYM ADD_ASSOC]) >>
+  qpat_x_assum `y = x` SUBST_ALL_TAC >> irule ld_dyn_read_memory >> metis_tac[]
 QED
 
 Theorem ld_oracle_call_ranges:
   ld_memory lo A tn s t /\
-  access_ok lo (ld_erase A o_f H) fn inst s /\ taint_ok fn tn inst s /\
+  access_ok lo G fn inst s /\ ld_ghost_ok fl A H G /\
+  ld_dyn_agree fl tn.t_mem s.vs_memory t.vs_memory /\ taint_ok fn tn inst s /\
   ~in_revert_forward fn s /\
   ((inst.inst_opcode = CALL /\ inst.inst_operands = [g;a;v;ao;az;ro;rz] /\
     eval_operand v s = SOME value) \/
@@ -270,7 +273,8 @@ Theorem ld_oracle_call_ranges:
   read_memory (w2n x) (w2n n) s = read_memory (w2n y) (w2n n) t /\
   (w2n rsize = 0 \/ (w2n r = w2n q /\ w2n r + w2n rsize <= lo) \/
    (?k b c sz delta. FLOOKUP A k = SOME (b,c,sz) /\
-     w2n r = b+delta /\ w2n q = c+delta /\ delta + w2n rsize <= sz))
+     w2n r = b+delta /\ w2n q = c+delta /\ delta + w2n rsize <= sz) \/
+   (w2n r = w2n q /\ fl <= w2n r))
 Proof
   disch_then (REPEAT_TCL CONJUNCTS_THEN assume_tac) >>
   `mem_read_ops inst = SOME <|iao_ofst := ao; iao_size := SOME az;
@@ -287,15 +291,16 @@ Proof
        fixed_source_write_range_def, eval_operands_def, about_to_revert_def]) >>
   conj_tac
   >- (irule ld_observed_memory_read >> simp[] >>
-      qexistsl_tac [`A`,`H`,`fn`,`inst`,`lo`,
+      qexistsl_tac [`A`,`G`,`H`,`fl`,`fn`,`inst`,`lo`,
         `<|iao_ofst := ao; iao_size := SOME az; iao_max_size := SOME az|>`,`tn`] >>
       fs[] >> metis_tac[]) >>
   Cases_on `w2n rsize = 0` >- gvs[] >>
   `0 < w2n rsize` by decide_tac >>
-  drule ld_write_access_classified >> simp[] >>
-  disch_then (qspecl_then [`q`,`r`,`w2n rsize`] mp_tac) >>
-  (impl_tac >- (simp[] >> metis_tac[])) >>
-  simp[ADD_COMM] >> metis_tac[]
+  qabbrev_tac `wops = <|iao_ofst := ro; iao_size := NONE; iao_max_size := SOME rz|>` >>
+  `(op_prov H wops.iao_ofst = NONE ==> r = q) /\
+   (!k. op_prov H wops.iao_ofst = SOME k ==> ld_wordrel A (SOME k) r q)` by
+    (simp[Abbr `wops`] >> metis_tac[]) >>
+  drule_all (cj 2 ld_access_dyn_cases) >> strip_tac >> metis_tac[]
 QED
 
 Theorem ld_exec_ext_call_frame:
@@ -403,6 +408,9 @@ Theorem ld_oracle_call_observed_effect:
     FLOOKUP A a = SOME (u,v,z) /\ FLOOKUP A k = SOME (b,c,sz) /\
     a <> k /\ 0 < z /\ 0 < sz ==>
     (u+z <= b \/ b+sz <= u) /\ (v+z <= c \/ c+sz <= v)) /\
+  lo <= fl /\
+  (!a u v z. FLOOKUP A a = SOME (u,v,z) ==> u+z <= fl /\ v+z <= fl) /\
+  ld_dyn_agree fl tn.t_mem f.lf_src.vs_memory f.lf_tgt.vs_memory /\
   (inst.inst_opcode = CALL \/ inst.inst_opcode = STATICCALL) /\
   (inst.inst_opcode = CALL ==> st = f.lf_src.vs_call_ctx.cc_static) /\
   (inst.inst_opcode = STATICCALL ==> st) /\
@@ -413,13 +421,15 @@ Theorem ld_oracle_call_observed_effect:
   exec_ext_call inst f.lf_tgt (gas:bytes32) addr value at az (rt:bytes32) rz st = OK ts /\
   (w2n rz = 0 \/ (w2n ro = w2n rt /\ w2n ro + w2n rz <= lo) \/
    (?k b c sz delta. FLOOKUP A k = SOME (b,c,sz) /\
-     w2n ro = b+delta /\ w2n rt = c+delta /\ delta + w2n rz <= sz)) ==>
+     w2n ro = b+delta /\ w2n rt = c+delta /\ delta + w2n rz <= sz) \/
+   (w2n ro = w2n rt /\ fl <= w2n ro)) ==>
   ?ss. exec_ext_call inst f.lf_src gas addr value ao az ro rz st = OK ss /\
     ld_vars P A (f with <|lf_src := ss; lf_tgt := ts;
       lf_H := set_prov f.lf_H inst.inst_outputs NONE;
       lf_tv := (step_taint inst f.lf_src ss tn).t_var|>) /\
     ld_memory lo A (step_taint inst f.lf_src ss tn) ss ts /\
     ld_nonghost (step_taint inst f.lf_src ss tn) ss ts /\
+    ld_dyn_agree fl (step_taint inst f.lf_src ss tn).t_mem ss.vs_memory ts.vs_memory /\
     ss.vs_allocas = f.lf_src.vs_allocas /\ ts.vs_allocas = f.lf_tgt.vs_allocas /\
     ss.vs_alloca_next = f.lf_src.vs_alloca_next /\ ts.vs_alloca_next = f.lf_tgt.vs_alloca_next /\
     ss.vs_current_bb = f.lf_src.vs_current_bb /\ ts.vs_current_bb = f.lf_tgt.vs_current_bb /\
@@ -452,10 +462,13 @@ Theorem ld_oracle_call_step:
   ld_vars P A f /\ f.lf_src.vs_labels = f.lf_tgt.vs_labels /\
   fn_shape_ok f.lf_fn /\ fn_ptr_ok P f.lf_fn /\ MEM inst (fn_insts f.lf_fn) /\
   taint_ok f.lf_fn tn inst f.lf_src /\ tn.t_var = f.lf_tv /\
-  access_ok lo (ld_erase A o_f f.lf_H) f.lf_fn inst f.lf_src /\
+  access_ok lo G f.lf_fn inst f.lf_src /\ ld_ghost_ok fl A f.lf_H G /\
+  ld_dyn_agree fl tn.t_mem f.lf_src.vs_memory f.lf_tgt.vs_memory /\
   ~in_revert_forward f.lf_fn f.lf_src /\
   ld_memory lo A tn f.lf_src f.lf_tgt /\ ld_nonghost tn f.lf_src f.lf_tgt /\
   (!a u v z. FLOOKUP A a = SOME (u,v,z) ==> lo <= u /\ lo <= v) /\
+  lo <= fl /\
+  (!a u v z. FLOOKUP A a = SOME (u,v,z) ==> u+z <= fl /\ v+z <= fl) /\
   (!a k u v z b c sz.
     FLOOKUP A a = SOME (u,v,z) /\ FLOOKUP A k = SOME (b,c,sz) /\
     a <> k /\ 0 < z /\ 0 < sz ==>
@@ -471,6 +484,7 @@ Theorem ld_oracle_call_step:
       lf_tv := (step_taint inst f.lf_src ss tn).t_var|>) /\
     ld_memory lo A (step_taint inst f.lf_src ss tn) ss ts /\
     ld_nonghost (step_taint inst f.lf_src ss tn) ss ts /\
+    ld_dyn_agree fl (step_taint inst f.lf_src ss tn).t_mem ss.vs_memory ts.vs_memory /\
     ss.vs_allocas = f.lf_src.vs_allocas /\ ts.vs_allocas = f.lf_tgt.vs_allocas /\
     ss.vs_alloca_next = f.lf_src.vs_alloca_next /\ ts.vs_alloca_next = f.lf_tgt.vs_alloca_next /\
     ss.vs_current_bb = f.lf_src.vs_current_bb /\ ts.vs_current_bb = f.lf_tgt.vs_current_bb /\
@@ -483,7 +497,8 @@ Proof
   `read_memory (w2n x) (w2n n) f.lf_src = read_memory (w2n y) (w2n n) f.lf_tgt /\
    (w2n rsize = 0 \/ (w2n r = w2n q /\ w2n r + w2n rsize <= lo) \/
     (?k b c sz delta. FLOOKUP A k = SOME (b,c,sz) /\
-     w2n r = b+delta /\ w2n q = c+delta /\ delta + w2n rsize <= sz))` by
+     w2n r = b+delta /\ w2n q = c+delta /\ delta + w2n rsize <= sz) \/
+    (w2n r = w2n q /\ fl <= w2n r))` by
     (irule ld_oracle_call_ranges >>
      qpat_assum `access_ok _ _ _ _ _` (irule_at Any) >>
      qpat_assum `taint_ok _ _ _ _` (irule_at Any) >>
@@ -495,9 +510,10 @@ Proof
           memory_range_of_operands_def]) >>
   `f.lf_src.vs_call_ctx = f.lf_tgt.vs_call_ctx` by
     fs[ld_nonghost_def] >>
-  qpat_assum `exec_ext_call inst f.lf_tgt _ _ _ _ _ _ _ _ = _`
-    (mp_then Any mp_tac ld_oracle_call_observed_effect) >>
-  disch_then (qspecl_then [`tn`,`r`,`lo`,`x`,`P`,`A`] mp_tac) >>
+  mp_tac (Q.INST [`ro:bytes32` |-> `r:bytes32`, `rz:bytes32` |-> `rsize:bytes32`,
+                  `ao:bytes32` |-> `x:bytes32`, `at:bytes32` |-> `y:bytes32`,
+                  `rt:bytes32` |-> `q:bytes32`, `az:bytes32` |-> `n:bytes32`]
+                 ld_oracle_call_observed_effect) >>
   (impl_tac >- (asm_rewrite_tac[] >>
     qpat_x_assum `inst.inst_opcode = CALL /\ _ \/ _` strip_assume_tac >>
     simp[] >> metis_tac[wordsTheory.w2n_eq_0])) >>
@@ -572,7 +588,10 @@ Theorem ld_sync_oracle_call_effect:
       lf_tv := (step_taint inst s ss tn).t_var|>) /\
     ld_memory lo A (step_taint inst s ss tn) ss ts /\
     ld_nonghost (step_taint inst s ss tn) ss ts /\
-    step_prov PG G inst ss = ld_erase A o_f H' /\
+    step_prov (MAP (OPTION_MAP (ld_erase A)) f.lf_Q) (ld_erase A o_f f.lf_H)
+      inst ss = ld_erase A o_f H' /\
+    ld_dyn_agree (dyn_floor C vs0) (step_taint inst s ss tn).t_mem
+      ss.vs_memory ts.vs_memory /\
     (!a. a IN FRANGE H' ==> a IN FDOM A) /\
     ss.vs_allocas = s.vs_allocas /\ ts.vs_allocas = t.vs_allocas /\
     ss.vs_alloca_next = s.vs_alloca_next /\ ts.vs_alloca_next = t.vs_alloca_next /\
@@ -627,6 +646,15 @@ Proof
       (if inst.inst_opcode = CALL then f.lf_tgt.vs_call_ctx.cc_static else T) = T))`
     assume_tac >- simp[]) >>
   `tn.t_var = f.lf_tv` by simp[] >>
+  `ld_dyn_agree (dyn_floor C vs0) tn.t_mem f.lf_src.vs_memory f.lf_tgt.vs_memory` by
+    (drule ld_sync_dyn_agree >> simp[]) >>
+  `lo <= dyn_floor C vs0 /\
+   !a u v z. FLOOKUP A a = SOME (u,v,z) ==>
+     u+z <= dyn_floor C vs0 /\ v+z <= dyn_floor C vs0` by
+    (`EVERY (ld_maps A) (f::fs)` by
+       FIRST [first_assum ACCEPT_TAC, rewrite_tac[listTheory.EVERY_DEF] >>
+              conj_tac >> first_assum ACCEPT_TAC] >>
+     drule_all ld_sync_dyn_floor >> metis_tac[]) >>
   drule_all ld_oracle_call_step >> strip_tac >>
   qexistsl_tac [`ss`,`set_prov f.lf_H inst.inst_outputs NONE`] >>
   simp[] >> (conj_tac >- (irule ld_oracle_call_provenance >> simp[])) >>
@@ -638,7 +666,8 @@ QED
 (* Checked masked-to-exact consumer at SHA3's real operand shape. *)
 Theorem ld_sha3_observed_bytes:
   ld_memory lo A tn s t /\
-  access_ok lo (ld_erase A o_f H) fn inst s /\
+  access_ok lo G fn inst s /\ ld_ghost_ok fl A H G /\
+  ld_dyn_agree fl tn.t_mem s.vs_memory t.vs_memory /\
   taint_ok fn tn inst s /\ ~about_to_revert fn inst s /\
   ~in_revert_forward fn s /\ inst.inst_opcode = SHA3 /\
   inst.inst_operands = [off;len] /\
@@ -657,11 +686,10 @@ Proof
     simp[source_memory_read_ranges_def, memory_range_of_operands_def] >>
   `~MEM inst.inst_opcode [MLOAD;ILOAD;MCOPY;RETURN]` by simp[] >>
   pure_rewrite_tac[GSYM read_memory_def] >>
-  irule ld_observed_memory_read >> simp[] >>
-  goal_assum (drule_at Any) >>
-  goal_assum (drule_at Any) >>
-  goal_assum (drule_at Any) >> simp[] >>
-  qexistsl_tac [`H`, `fn`, `lo`, `tn`] >> simp[]
+  irule ld_observed_memory_read >>
+  qexistsl_tac [`A`,`G`,`H`,`fl`,`fn`,`inst`,`lo`,
+    `<|iao_ofst := off; iao_size := SOME len; iao_max_size := SOME len|>`,`tn`] >>
+  rpt conj_tac >> FIRST [first_assum ACCEPT_TAC, fs[]]
 QED
 
 val _ = if null (hyp ld_sha3_observed_bytes) then ()

@@ -9,6 +9,7 @@ Ancestors
   lowerDloadPtrTerminalClosure lowerDloadPtrJointShift lowerDloadPtrJointEnvironmentRead
   lowerDloadPtrJointGas lowerDloadPtrJointIdentity lowerDloadPtrJointExternalCall
   lowerDloadPtrJointCreate lowerDloadPtrJointDelegate lowerDloadPtrJointEntry
+  lowerDloadPtrJointDalloca
 
 (* These are quotation abbreviations only, not HOL definitions. Keeping the
    normal existential literally identical at entry and exit avoids drifting
@@ -16,7 +17,7 @@ Ancestors
 val normal = ``\R ds PH H un g j t.
   ?cs PG G tn f i s q emitted n pfuel t0 H0 un0 fs.
     frame_reachable vs C cs PG G tn f i s /\
-    dload_boundary_core lo fs
+    dload_boundary_core (dyn_floor C vs) lo fs
       (set (fn_ir_vars f) DIFF {v | retpc_var f v})
       (MAP (\c. set (fn_ir_vars c.cf_fn) DIFF {v | retpc_var c.cf_fn v}) cs)
       PG PH G H0 tn un0 s t0 cs ds /\
@@ -66,6 +67,7 @@ val covered = ``\i n (emitted:instruction list).
   i.inst_opcode = MSTORE8 \/ MEM i.inst_opcode [MSTORE; ISTORE] \/
   i.inst_opcode = MCOPY \/ MEM i.inst_opcode [SLOAD; TLOAD] \/
   MEM i.inst_opcode [SSTORE; TSTORE] \/ i.inst_opcode = ALLOCA \/
+  i.inst_opcode = DALLOCA \/
   (i.inst_opcode = DLOAD /\ SUC n = LENGTH emitted) \/
   (i.inst_opcode = DLOADBYTES /\ SUC n = LENGTH emitted) \/
   MEM i.inst_opcode [CODECOPY; CALLDATACOPY; RETURNDATACOPY; EXTCODECOPY]``;
@@ -133,6 +135,8 @@ Proof
   >- normal_row dload_joint_tracked_storage_write_next
   >~ [`i.inst_opcode = ALLOCA`]
   >- normal_row dload_joint_tracked_alloca_next
+  >~ [`i.inst_opcode = DALLOCA`]
+  >- normal_row dload_joint_tracked_dalloca_next
   >~ [`i.inst_opcode = DLOAD`]
   >- normal_row dload_joint_tracked_dload_complete_next
   >~ [`i.inst_opcode = DLOADBYTES`]
@@ -198,7 +202,7 @@ Theorem dload_joint_dispatch_residual_classification:
     SUC n <= LENGTH emitted ==>
     (~((^final_covered) i n emitted) <=>
       ~(SUC n < LENGTH emitted) /\
-      MEM i.inst_opcode [MEMTOP; PHI; DALLOCA; GETFMP; SETFMP; FMP_PARAM])
+      MEM i.inst_opcode [MEMTOP; PHI; GETFMP; SETFMP; FMP_PARAM])
 Proof
   rpt gen_tac >> Cases_on `i.inst_opcode` >>
   simp[venomInstTheory.is_terminator_def] >> decide_tac

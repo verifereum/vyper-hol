@@ -1,6 +1,6 @@
 (* Executed test of the concrete typed-array loop. *)
 Theory typedCopyLoopHeaderPtr
-Ancestors typedCopyLoopLayoutPtr typedCopyOffsetPtr venomExecSemantics
+Ancestors wordLoadStorePtr typedCopyLoopLayoutPtr typedCopyOffsetPtr venomExecSemantics
   venomInst venomState words finite_map arithmetic
 
 Theorem typed_copy_loop_test_steps:
@@ -38,7 +38,8 @@ Theorem typed_copy_loop_arith_ghost:
     step_prov PG G (mk_inst id opc ops [out]) s' =
       DRESTRICT G (COMPL {out}) /\
     step_taint (mk_inst id opc ops [out]) s s' tn =
-      (tn with t_var := tn.t_var |+ (out,{}))
+      (tn with t_var := tn.t_var |+
+        (out,out_taint tn (mk_inst id opc ops [out]) s))
 Proof
   rpt gen_tac >> strip_tac >>
   `new_site_bytes s s' = {}` by
@@ -62,6 +63,25 @@ Proof
   Cases_on `eval_operand h s` >> simp[] >>
   Cases_on `t` >> simp[])
 QED
+Theorem typed_copy_loop_arith_ghost_clean:
+  !PG G tn s id opc ops out s'.
+    (opc = LT \/ opc = MUL \/ opc = ISZERO) /\
+    (!op. opc = MUL /\ MEM op ops ==> op_taint tn op = {}) /\
+    s'.vs_allocas = s.vs_allocas /\ s'.vs_fmp = s.vs_fmp ==>
+    step_prov PG G (mk_inst id opc ops [out]) s' =
+      DRESTRICT G (COMPL {out}) /\
+    step_taint (mk_inst id opc ops [out]) s s' tn =
+      (tn with t_var := tn.t_var |+ (out,{}))
+Proof
+  rpt strip_tac >>
+  `out_taint tn (mk_inst id opc ops [out]) s = {}` by
+    (gvs[] >>
+     (simp[ptrDisciplineTheory.out_taint_def, mk_inst_def] >>
+      rpt (BasicProvers.TOP_CASE_TAC >> gvs[]))) >>
+  qspecl_then [`PG`, `G`, `tn`, `s`, `id`, `opc`, `ops`, `out`, `s'`]
+    mp_tac typed_copy_loop_arith_ghost >> simp[]
+QED
+
 Theorem typed_copy_loop_test_check:
   !D ctx fn G tn s id opc ops outs s' fuel.
     (opc = LT /\ (?v k. ops = [Var v; Lit k]) \/
@@ -159,7 +179,7 @@ Proof
   simp[exec_pure2_def, eval_operand_def, w2n_n2w, LESS_MOD,
        is_terminator_def] >>
   simp[ptrSafeRunTheory.ghost_step_def, GSYM mk_inst_def,
-       step_inst_non_invoke, typed_copy_loop_arith_ghost] >>
+       step_inst_non_invoke, typed_copy_loop_arith_ghost_clean] >>
   simp[Once ptrSafeRunTheory.ghost_block_def, get_instruction_def,
        ptrSafeRunTheory.ghost_step_def, step_inst_non_invoke] >>
   PURE_ONCE_REWRITE_TAC[step_inst_base_def] >>
@@ -167,7 +187,7 @@ Proof
     instruction_accfupds, combinTheory.K_THM, opcode_case_def] >>
   simp[exec_pure1_def, eval_operand_def, lookup_var_def, update_var_def,
        FLOOKUP_UPDATE, bool_to_word_def, is_terminator_def,
-       SRULE [update_var_def, mk_inst_def] typed_copy_loop_arith_ghost] >>
+       SRULE [update_var_def, mk_inst_def] typed_copy_loop_arith_ghost_clean] >>
   simp[ptrDisciplineTheory.step_prov_def, ptrDisciplineTheory.set_prov_def,
        ptrDisciplineTheory.out_prov_def] >>
   simp[Once ptrSafeRunTheory.ghost_block_def, get_instruction_def,
@@ -223,7 +243,7 @@ Proof
     instruction_accfupds, combinTheory.K_THM, opcode_case_def] >>
   simp[exec_pure2_def, eval_operand_def, w2n_n2w, LESS_MOD,
        is_terminator_def,
-       SRULE [mk_inst_def] typed_copy_loop_arith_ghost,
+       SRULE [mk_inst_def] typed_copy_loop_arith_ghost_clean,
        ptrDisciplineTheory.step_prov_def, ptrDisciplineTheory.set_prov_def,
        ptrDisciplineTheory.out_prov_def] >>
   conj_tac
@@ -234,7 +254,7 @@ Proof
       pure_rewrite_tac[instruction_accessors, instruction_accfupds,
         combinTheory.K_THM, opcode_case_def] >>
       simp[exec_pure2_def, eval_operand_def, update_var_def]) >>
-  simp[update_var_def, SRULE [mk_inst_def] typed_copy_loop_arith_ghost] >>
+  simp[update_var_def, SRULE [mk_inst_def] typed_copy_loop_arith_ghost_clean] >>
   simp[Once ptrSafeRunTheory.ptr_safe_block_def, get_instruction_def,
        ptrSafeRunTheory.ptr_safe_step_def,
        ptrSafeRunTheory.ghost_step_def, step_inst_non_invoke] >>
@@ -243,7 +263,7 @@ Proof
     instruction_accfupds, combinTheory.K_THM, opcode_case_def] >>
   simp[exec_pure1_def, eval_operand_def, lookup_var_def, update_var_def,
        FLOOKUP_UPDATE, bool_to_word_def, is_terminator_def,
-       SRULE [mk_inst_def] typed_copy_loop_arith_ghost,
+       SRULE [mk_inst_def] typed_copy_loop_arith_ghost_clean,
        ptrDisciplineTheory.step_prov_def, ptrDisciplineTheory.set_prov_def,
        ptrDisciplineTheory.out_prov_def] >>
   conj_tac
@@ -366,9 +386,11 @@ Theorem typed_copy_loop_mul_frag_ptr:
     frag_exec_ptr cx ctx PG sa sb P Q R
 Proof
   rpt gen_tac >> strip_tac >>
-  irule typedCopyPtrTheory.ptr_fragment_step >>
+  irule wordLoadStorePtrTheory.ptr_fragment_step >>
   simp[mk_inst_def, is_terminator_def] >>
   rpt strip_tac >> first_x_assum drule >> strip_tac >>
+  `!op. MEM op [left;right] ==> op_taint tn op = {}` by
+    (rpt strip_tac >> gvs[]) >>
   qexists_tac `update_var out (a*b) s` >>
   conj_tac
   >- (PURE_ONCE_REWRITE_TAC[step_inst_base_def] >>
@@ -376,7 +398,7 @@ Proof
         combinTheory.K_THM, opcode_case_def] >>
       simp[exec_pure2_def]) >>
   simp[update_var_def,
-       SRULE [mk_inst_def, update_var_def] typed_copy_loop_arith_ghost] >>
+       SRULE [mk_inst_def, update_var_def] typed_copy_loop_arith_ghost_clean] >>
   conj_tac
   >- (rpt strip_tac >>
       `step_inst_base (mk_inst id MUL [left;right] [out]) s =
@@ -384,8 +406,6 @@ Proof
         (PURE_ONCE_REWRITE_TAC[step_inst_base_def] >>
          pure_rewrite_tac[mk_inst_def, instruction_accessors, instruction_accfupds,
            combinTheory.K_THM, opcode_case_def] >> simp[exec_pure2_def]) >>
-      `!op. MEM op [left;right] ==> op_taint tn op = {}` by
-        (rpt strip_tac >> gvs[]) >>
       ` (update_var out (a*b) s).vs_requests = s.vs_requests` by
          simp[update_var_def] >>
       metis_tac[typed_copy_loop_test_check, mk_inst_def]) >>

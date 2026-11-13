@@ -172,6 +172,16 @@ Proof
   qpat_x_assum `f.lf_fn = fn` (SUBST_ALL_TAC o SYM) >>
   drule_all ld_cached_alloca_effect >>
   disch_then (qspecl_then [`PG`,`C`] strip_assume_tac) >>
+  `ld_ghost_ok (dyn_floor C vs0) A (f.lf_H |+ (out,(f.lf_serial,inst.inst_id)))
+     (step_prov PG G inst ss)` by
+    (drule ld_ghost_ok_step_fixed >> disch_then drule >>
+     disch_then irule >> simp[]) >>
+  `ld_dyn_agree (dyn_floor C vs0) (step_taint inst f.lf_src ss tn).t_mem
+     ss.vs_memory ts.vs_memory` by
+    (drule ld_sync_dyn_agree >> strip_tac >>
+     irule ld_dyn_agree_unwritten >> simp[PULL_EXISTS] >>
+     qexists_tac `f.lf_tgt` >>
+     gvs[update_var_def, source_memory_write_ranges_def]) >>
   `frame_reachable vs0 C stk PG (step_prov PG G inst ss)
      (step_taint inst f.lf_src ss tn) f.lf_fn next
      (ss with vs_inst_idx := SUC f.lf_src.vs_inst_idx)` by
@@ -187,14 +197,15 @@ Proof
   qpat_x_assum `ld_intervals lo f.lf_src` kall_tac >>
   qpat_x_assum `ld_intervals lo f.lf_tgt` kall_tac >>
   drule ld_sync_control >> strip_tac >>
-  gvs[] >> drule ld_sync_head_update >> disch_then drule >>
-  disch_then irule >> simp[] >>
-  gvs[update_var_def] >>
-  conj_tac >- metis_tac[] >>
-  conj_tac
-  >- (qexists_tac `f.lf_H |+ (out,(f.lf_serial,inst.inst_id))` >>
-      simp[] >> gvs[SUBSET_DEF] >> metis_tac[]) >>
-  gvs[ld_memory_def, ld_nonghost_def] >> first_assum ACCEPT_TAC
+  gvs[] >>
+  drule (Q.INST [`H'` |-> `f.lf_H |+ (out,(f.lf_serial,inst.inst_id))`]
+           ld_sync_head_update) >>
+  disch_then drule >> disch_then irule >> simp[] >>
+  gvs[update_var_def] >> rpt conj_tac
+  >- metis_tac[]
+  >- (gvs[ld_memory_def, ld_nonghost_def] >> metis_tac[])
+  >- (qexists_tac `out` >> gvs[SUBSET_DEF] >> metis_tac[]) >>
+  gvs[ld_memory_def, ld_nonghost_def] >> metis_tac[]
 QED
 
 (* A fresh identity cannot change any supported old provenance. *)
@@ -224,6 +235,24 @@ Proof
   strip_tac >> irule listTheory.MAP_CONG >> simp[] >>
   rpt strip_tac >> Cases_on `x` >> simp[] >>
   irule ld_erase_fresh_update >> metis_tac[]
+QED
+
+(* The ghost relations read sites only through their erasures. *)
+Theorem ld_ghost_ok_erase_cong:
+  ld_erase A' o_f H = ld_erase A o_f H ==>
+  (ld_ghost_ok fl A' H G <=> ld_ghost_ok fl A H G)
+Proof
+  simp[ld_ghost_ok_erased]
+QED
+
+Theorem ld_params_ok_erase_cong:
+  MAP (OPTION_MAP (ld_erase A')) Q = MAP (OPTION_MAP (ld_erase A)) Q ==>
+  (ld_params_ok fl A' Q PG <=> ld_params_ok fl A Q PG)
+Proof
+  rw[ld_params_ok_def, EQ_IMP_THM] >> first_x_assum drule >>
+  `OPTION_MAP (ld_erase A') (EL k Q) = OPTION_MAP (ld_erase A) (EL k Q)` by
+    metis_tac[listTheory.EL_MAP] >>
+  Cases_on `EL k Q` >> gvs[]
 QED
 
 Theorem ld_vars_fresh_update:
@@ -497,7 +526,7 @@ Theorem ld_fresh_alloca_structure:
   sn = ss with vs_inst_idx := SUC s.vs_inst_idx /\
   tt = ts with vs_inst_idx := SUC p /\
   g = f with <|lf_src := sn; lf_tgt := tt; lf_H := H'; lf_tv := tn'.t_var|> /\
-  G' = ld_erase A' o_f H' /\ ld_vars P A' g /\
+  ld_ghost_ok (dyn_floor C vs0) A' H' G' /\ ld_vars P A' g /\
   ld_memory lo A' tn' sn tt /\ ld_nonghost tn' sn tt /\
   lo <= s.vs_alloca_next /\ lo <= t.vs_alloca_next /\
   FRANGE H' SUBSET FDOM A' ==>
@@ -600,8 +629,9 @@ Theorem ld_sync_fresh_alloca_update:
   tt = ts with vs_inst_idx := SUC p /\
   g = f with <|lf_src := sn; lf_tgt := tt; lf_H := H'; lf_tv := tn'.t_var|> /\
   frame_reachable vs0 C stk PG G' tn' fn next sn /\ active_inst fn next sn /\
-  G' = ld_erase A' o_f H' /\ ld_vars P A' g /\
+  ld_ghost_ok (dyn_floor C vs0) A' H' G' /\ ld_vars P A' g /\
   ld_memory lo A' tn' sn tt /\ ld_nonghost tn' sn tt /\
+  ld_dyn_agree (dyn_floor C vs0) tn'.t_mem sn.vs_memory tt.vs_memory /\
   lo <= s.vs_alloca_next /\ lo <= t.vs_alloca_next /\
   (?Y. ld_envelope f.lf_supply fn sn sn.vs_inst_idx Y tt.vs_inst_idx) /\
   FRANGE H' SUBSET FDOM A' ==>
@@ -624,6 +654,7 @@ Proof
   qpat_x_assum `ld_sync lo P C vs0 stk PG G tn fn inst s t A (f::fs) N` mp_tac >>
   simp[ld_sync_def] >> strip_tac >>
   fs[listTheory.EVERY_MEM] >> simp[] >>
+  conj_tac >- metis_tac[ld_params_ok_erase_cong] >>
   conj_tac
   >- (gen_tac >> Cases_on `j` >> simp[]
       >- metis_tac[] >>
@@ -632,7 +663,7 @@ Proof
   rpt strip_tac >>
   `MEM (EL j fs) fs` by (irule listTheory.EL_MEM >> simp[]) >>
   qpat_x_assum `!h. MEM h fs ==> ld_erase _ o_f _ = _ /\ _` drule >>
-  simp[]
+  strip_tac >> metis_tac[ld_ghost_ok_erase_cong, ld_params_ok_erase_cong]
 QED
 
 Theorem ld_fresh_alloca_advance:
@@ -702,24 +733,22 @@ Proof
   qpat_assum `A' = _` (SUBST1_TAC o SYM) >>
   qpat_assum `g = _` (SUBST1_TAC o SYM) >>
   conj_tac >- first_assum ACCEPT_TAC >>
-  qpat_assum `PG = _` (SUBST1_TAC o SYM) >>
-  qpat_assum `G = _` (SUBST1_TAC o SYM) >>
-  drule (INST_TYPE [alpha |-> ``:256``] ld_sync_fresh_alloca_update) >>
-  disch_then drule >>
-  disch_then irule >>
-  conj_tac >- first_assum ACCEPT_TAC >>
-  conj_tac >- (qexists_tac `Y` >> first_assum ACCEPT_TAC) >>
-  conj_tac >- first_assum ACCEPT_TAC >>
-  conj_tac >- first_assum ACCEPT_TAC >>
-  conj_tac >- first_assum ACCEPT_TAC >>
-  conj_tac >- (qexists_tac `out` >> first_assum ACCEPT_TAC) >>
-  conj_tac >- first_assum ACCEPT_TAC >>
-  conj_tac >- first_assum ACCEPT_TAC >>
-  conj_tac >- (qexistsl_tac [`p`,`ss`,`sz`,`ts`] >>
-    rpt conj_tac >> first_assum ACCEPT_TAC) >>
-  conj_tac >- (qexists_tac `f.lf_H |+ (out,(f.lf_serial,inst.inst_id))` >>
-    conj_tac >- metis_tac[] >> rpt conj_tac >> first_assum ACCEPT_TAC) >>
-  rpt conj_tac >> first_assum ACCEPT_TAC
+  `ld_ghost_ok (dyn_floor C vs0) A' (f.lf_H |+ (out,(f.lf_serial,inst.inst_id)))
+     (step_prov PG G inst ss)` by
+    (`~MEM inst.inst_opcode [PARAM; ADD; SUB; ASSIGN]` by simp[] >>
+     drule_then irule ld_ghost_ok_step_fixed >> metis_tac[]) >>
+  `ld_dyn_agree (dyn_floor C vs0) (step_taint inst f.lf_src ss tn).t_mem
+     sn.vs_memory tt.vs_memory` by
+    (drule ld_sync_dyn_agree >> strip_tac >>
+     `sn.vs_memory = ss.vs_memory /\ tt.vs_memory = ts.vs_memory` by simp[] >>
+     qpat_x_assum `sn.vs_memory = _` (fn th => once_rewrite_tac[th]) >>
+     qpat_x_assum `tt.vs_memory = _` (fn th => once_rewrite_tac[th]) >>
+     irule ld_dyn_agree_unwritten >> simp[PULL_EXISTS] >>
+     qexists_tac `f.lf_tgt` >>
+     gvs[exec_alloca_def, update_var_def, source_memory_write_ranges_def]) >>
+  drule_all (SRULE [PULL_EXISTS]
+    (INST_TYPE [alpha |-> ``:256``] ld_sync_fresh_alloca_update)) >>
+  simp[]
 QED
 
 (* Exported allocation interfaces must be closed kernel theorems. *)
@@ -745,7 +774,7 @@ Theorem ld_cached_alloca_endpoint:
       lf_tgt := ts with vs_inst_idx := p + 1;
       lf_H := f.lf_H |+ (out,(f.lf_serial,inst.inst_id));
       lf_tv := (step_taint inst s ss tn).t_var|> /\
-    step_prov PG G inst ss = ld_erase A o_f g.lf_H /\
+    ld_ghost_ok (dyn_floor C vs0) A g.lf_H (step_prov PG G inst ss) /\
     ld_vars P A g /\ ld_maps A g /\
     ld_memory lo A (step_taint inst s ss tn) ss ts /\
     ld_nonghost (step_taint inst s ss tn) ss ts /\
@@ -767,11 +796,19 @@ Proof
   qpat_x_assum `f.lf_fn = fn` (SUBST_ALL_TAC o SYM) >>
   drule_all ld_cached_alloca_effect >>
   disch_then (qspecl_then [`PG`,`C`] strip_assume_tac) >>
+  `ld_ghost_ok (dyn_floor C vs0) A (f.lf_H |+ (out,(f.lf_serial,inst.inst_id)))
+     (step_prov PG G inst ss)` by
+    (drule ld_ghost_ok_step_fixed >> disch_then drule >>
+     disch_then irule >> simp[]) >>
+  `ld_dyn_agree (dyn_floor C vs0) (step_taint inst f.lf_src ss tn).t_mem
+     ss.vs_memory ts.vs_memory` by
+    (drule ld_sync_dyn_agree >> strip_tac >>
+     irule ld_dyn_agree_unwritten >> simp[PULL_EXISTS] >>
+     qexists_tac `f.lf_tgt` >>
+     gvs[update_var_def, source_memory_write_ranges_def]) >>
   `step_inst 0 C inst f.lf_src = OK ss` by
     gvs[step_inst_non_invoke] >>
   `~is_terminator inst.inst_opcode /\ inst.inst_opcode <> INVOKE /\
-   step_prov PG G inst ss =
-     ld_erase A o_f (f.lf_H |+ (out,(f.lf_serial,inst.inst_id))) /\
    (!a. a IN FRANGE (f.lf_H |+ (out,(f.lf_serial,inst.inst_id))) ==>
       a IN FDOM A) /\
    ss.vs_allocas = f.lf_src.vs_allocas /\ ts.vs_allocas = f.lf_tgt.vs_allocas /\
@@ -817,7 +854,7 @@ Theorem ld_fresh_alloca_endpoint:
     g.lf_src = (ss with vs_inst_idx := SUC s.vs_inst_idx) /\
     g.lf_tgt = (ts with vs_inst_idx := p + 1) /\
     g.lf_tv = (step_taint inst s ss tn).t_var /\
-    step_prov PG G inst ss = ld_erase Ar o_f g.lf_H /\
+    ld_ghost_ok (dyn_floor C vs0) Ar g.lf_H (step_prov PG G inst ss) /\
     ld_vars P Ar g /\ ld_maps Ar g /\
     ld_memory lo Ar (step_taint inst s ss tn) ss ts /\
     ld_nonghost (step_taint inst s ss tn) ss ts /\
@@ -865,6 +902,11 @@ Proof
     (gvs[Abbr `g`, Abbr `sn`, Abbr `tt`, ld_vars_def,
          ld_memory_def, ld_nonghost_def] >>
      rpt conj_tac >> first_x_assum ACCEPT_TAC) >>
+  `ld_ghost_ok (dyn_floor C vs0) Ar (f.lf_H |+ (out,(f.lf_serial,inst.inst_id)))
+     (step_prov PG G inst ss)` by
+    (`~MEM inst.inst_opcode [PARAM; ADD; SUB; ASSIGN]` by simp[] >>
+     drule ld_sync_ghosts >> rewrite_tac[listTheory.HD] >> strip_tac >>
+     drule_then irule ld_ghost_ok_step_fixed >> metis_tac[]) >>
   `ld_maps Ar g /\ ld_global lo Ar (g::fs) /\
    FDOM Ar = ld_slots Ar (g::fs) /\
    EVERY (\h. ld_maps Ar h /\ ld_vars P Ar h) fs` by
@@ -883,14 +925,11 @@ Resume ld_fresh_alloca_endpoint[structure]:
    tt = ts with vs_inst_idx := SUC p /\
    g = f with <|lf_src := sn; lf_tgt := tt;
      lf_H := f.lf_H |+ (out,(f.lf_serial,inst.inst_id));
-     lf_tv := (step_taint inst f.lf_src ss tn).t_var|> /\
-   step_prov PG G inst ss =
-     ld_erase Ar o_f (f.lf_H |+ (out,(f.lf_serial,inst.inst_id)))` by
+     lf_tv := (step_taint inst f.lf_src ss tn).t_var|>` by
     (rpt conj_tac
      >- simp[NoAsms, Abbr `sn`]
      >- simp[NoAsms, Abbr `tt`, arithmeticTheory.ADD1]
-     >- simp[NoAsms, Abbr `g`]
-     >> metis_tac[]) >>
+     >> simp[NoAsms, Abbr `g`]) >>
   drule_all ld_fresh_alloca_structure >> strip_tac >>
   rpt conj_tac >> first_assum ACCEPT_TAC
 QED
@@ -929,7 +968,6 @@ Resume ld_fresh_alloca_endpoint[continuation]:
   qpat_x_assum `Abbrev (g = _)` kall_tac >> gvs[]
 QED
 Finalise ld_fresh_alloca_endpoint
-
 val _ = List.app (fn th => if null (hyp th) then ()
   else raise Fail "allocation endpoint has hypotheses")
   [ld_cached_alloca_endpoint, ld_fresh_alloca_endpoint];

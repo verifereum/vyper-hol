@@ -40,6 +40,7 @@ Theorem concretize_mstore8_execution_geometry:
   EL c es = SOME (OriginOrdinary fuel post) /\
   resolved_config_ok (JointConfig stk PG G tn fn inst s oms om hs h)
     (birth::ids) ((rp,rv)::anns) /\
+  (~ctx_has_dalloca C ==> resolved_complete (EL c (q0::qs)) ((rp,rv)::anns)) /\
   lifetime_ok n (birth::ids) (JointConfig stk PG G tn fn inst s oms om hs h) /\
   ~joint_read_exempt (EL c (q0::qs)) /\
   o1_fn_shape C fn /\ fn_ptr_ok P fn /\ MEM inst (fn_insts fn) /\
@@ -72,14 +73,18 @@ Proof
     (qpat_x_assum `joint_transition _ _ _ _` mp_tac >>
      simp[joint_transition_ordinary, step_inst_def, step_inst_base_def, exec_write2_def] >> metis_tac[]) >>
   `eval_operand opv t = SOME value` by suspend "value" >>
-  `?dstT. eval_operand opd t = SOME dstT /\
-    ((w2n dst+1 <= lo /\ w2n dstT = w2n dst) \/
-     (?d owner aid b sz.
-       activation_cache (JointConfig stk PG G tn fn inst s oms om hs h)
-         d owner aid (b,sz) /\ lo <= b /\ b <= w2n dst /\
-       w2n dst+1 <= b+sz /\
-       w2n dstT = concretize_positions C' owner aid + (w2n dst-b)))` by
-    suspend "address" >>
+  `~(dyn_floor C s <= w2n dst)` by
+    fs[dyn_floor_def, arithmeticTheory.NOT_LESS_EQUAL, wordsTheory.w2n_lt] >>
+  qpat_assum `~(dyn_floor C s <= w2n dst)` (fn nd =>
+    Q.SUBGOAL_THEN `?dstT. eval_operand opd t = SOME dstT /\
+      (((w2n dst+1 <= lo \/ dyn_floor C s <= w2n dst) /\ w2n dstT = w2n dst) \/
+       (?d owner aid b sz.
+         activation_cache (JointConfig stk PG G tn fn inst s oms om hs h)
+           d owner aid (b,sz) /\ lo <= b /\ b <= w2n dst /\
+         w2n dst+1 <= b+sz /\
+         w2n dstT = concretize_positions C' owner aid + (w2n dst-b)))`
+      (strip_assume_tac o REWRITE_RULE [nd]))
+  >- suspend "address" >>
   `(!a z. joint_relocation_demand lo (concretize_positions C') q0 es qs (SUC c) a z /\
       w2n dst <= a /\ a < w2n dst+1 ==>
       w2n dstT <= z /\ z < w2n dstT+1 /\ a-w2n dst = z-w2n dstT) /\
@@ -120,6 +125,7 @@ Resume concretize_mstore8_execution_geometry[address]:
                     iao_max_size := SOME (Lit 1w) |>` >>
       simp[source_memory_write_ranges_def, fixed_source_write_range_def,
            mem_write_ops_def]) >>
+  conj_tac >- metis_tac[] >>
   conj_tac >- metis_tac[] >>
   goal_assum (drule_at (Pat `local_rel _ _ _ _ _ _ _`)) >>
   goal_assum (drule_at (Pat `joint_trace _ _ _ _ _ _`)) >>
@@ -181,6 +187,7 @@ Theorem concretize_mstore8_local_complete:
   EL c es = SOME (OriginOrdinary fuel post) /\
   resolved_config_ok (JointConfig stk PG G tn fn inst s oms om hs h)
     (birth::ids) ((rp,rv)::anns) /\
+  (~ctx_has_dalloca C ==> resolved_complete (EL c (q0::qs)) ((rp,rv)::anns)) /\
   lifetime_ok n (birth::ids) (JointConfig stk PG G tn fn inst s oms om hs h) /\
   ~joint_read_exempt (EL c (q0::qs)) /\
   o1_fn_shape C fn /\ fn_ptr_ok P fn /\ MEM inst (fn_insts fn) /\

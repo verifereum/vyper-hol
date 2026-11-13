@@ -137,29 +137,28 @@ Proof
     metis_tac[ld_entry_nonvars] >>
   `t1 = t' with <|vs_vars := t1.vs_vars; vs_inst_idx := t1.vs_inst_idx|>` by
     metis_tac[ld_entry_nonvars] >>
-  simp[ld_joint_boundary_def] >> rpt conj_tac
-  >- (qexists_tac `u` >> simp[ld_joint_frame_def] >> conj_tac
-      >- gvs[ld_env_agree_def, op_taint_def] >>
-      qpat_assum `s1 = _` (fn th => once_rewrite_tac[th]) >>
-      qpat_assum `t1 = _` (fn th => once_rewrite_tac[th]) >>
-      qpat_assum `s' = _` (fn th => once_rewrite_tac[th]) >>
-      qpat_assum `t' = _` (fn th => once_rewrite_tac[th]) >>
-      gnvs[ld_params_agree_def, ld_joint_local_fields_def, ld_joint_allocas_def] >>
-      metis_tac[])
-  >- (qpat_assum `s1 = _` (fn th => once_rewrite_tac[th]) >>
-      qpat_assum `t1 = _` (fn th => once_rewrite_tac[th]) >>
-      qpat_assum `s' = _` (fn th => once_rewrite_tac[th]) >>
-      qpat_assum `t' = _` (fn th => once_rewrite_tac[th]) >>
+  simp[ld_joint_boundary_def] >> rpt conj_tac >>
+  FIRST [
+    (fn (g as (_, w)) => if is_exists w then ALL_TAC g else NO_TAC g) >>
+    qexists_tac `u` >> simp[ld_joint_frame_def] >> conj_tac
+    >- gvs[ld_env_agree_def, op_taint_def] >>
+    qpat_assum `s1 = _` (fn th => once_rewrite_tac[th]) >>
+    qpat_assum `t1 = _` (fn th => once_rewrite_tac[th]) >>
+    qpat_assum `s' = _` (fn th => once_rewrite_tac[th]) >>
+    qpat_assum `t' = _` (fn th => once_rewrite_tac[th]) >>
+    gnvs[ld_params_agree_def, ld_joint_local_fields_def, ld_joint_allocas_def] >>
+    metis_tac[],
+    qpat_assum `s1 = _` (fn th => once_rewrite_tac[th]) >>
+    qpat_assum `t1 = _` (fn th => once_rewrite_tac[th]) >>
+    qpat_assum `s' = _` (fn th => once_rewrite_tac[th]) >>
+    qpat_assum `t' = _` (fn th => once_rewrite_tac[th]) >>
+    FIRST [
+      simp[] >> NO_TAC,
       simp[entry_taint_vars_def] >>
-      Cases_on `lookup_block t'.vs_current_bb fn.fn_blocks` >> simp[])
-  >- (qpat_assum `s1 = _` (fn th => once_rewrite_tac[th]) >>
-      qpat_assum `t1 = _` (fn th => once_rewrite_tac[th]) >>
-      qpat_assum `s' = _` (fn th => once_rewrite_tac[th]) >>
-      qpat_assum `t' = _` (fn th => once_rewrite_tac[th]) >>
+      Cases_on `lookup_block t'.vs_current_bb fn.fn_blocks` >> simp[] >> NO_TAC,
       Cases_on `lookup_block t'.vs_current_bb fn.fn_blocks` >>
-      gnvs[ld_shared_agree_def, entry_taint_vars_def] >> metis_tac[]) >>
-  qpat_assum `s1 = _` (fn th => once_rewrite_tac[th]) >>
-  qpat_assum `t1 = _` (fn th => once_rewrite_tac[th]) >>
-  qpat_assum `s' = _` (fn th => once_rewrite_tac[th]) >>
-  qpat_assum `t' = _` (fn th => once_rewrite_tac[th]) >> simp[]
+      gnvs[ld_shared_agree_def, entry_taint_vars_def] >> metis_tac[]],
+    fn (g as (_, w)) =>
+      (print ("ld_joint_branch_entry: no case closes " ^
+              term_to_string w ^ "\n"); NO_TAC g)]
 QED

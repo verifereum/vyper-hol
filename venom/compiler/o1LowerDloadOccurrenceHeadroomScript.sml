@@ -2,7 +2,8 @@ Theory o1LowerDloadOccurrenceHeadroom
 Ancestors
   o1LowerDloadRawBridge o1LowerDloadReadiness o1LowerDloadOccurrence
   o1PassContract lowerDloadDefs unitMemInv venomWf venomExecSemantics
-  contextCodegenRel list words venomInst
+  contextCodegenRel list words venomInst contextRawReachable ctxLookupAgree
+  ptrDiscipline
 
 Theorem ld_occurrence_headroom:
   (!name f. lookup_function name C.ctx_functions = SOME f ==> wf_function f) /\
@@ -58,3 +59,57 @@ Proof
   strip_tac >> irule ld_occurrence_alloca_headroom >>
   metis_tac[ld_ctx_shape_lookup_wf]
 QED
+
+(* With DALLOCA the frontier, plus the DLOAD scratch still to come, stays at
+   or below the dynamic floor (the initial free memory pointer). *)
+Theorem ld_raw_dyn_headroom:
+  mem_inv dload_headroom_ok C vs /\ raw_reachable vs C fn inst s ==>
+  s.vs_alloca_next + 32 * ctx_dload_count C <= dyn_floor C vs
+Proof
+  strip_tac >>
+  `s.vs_initial_fmp = vs.vs_initial_fmp` by
+    metis_tac[raw_reachable_initial_fmp] >>
+  `dload_headroom_ok C fn inst s` by
+    (qpat_x_assum `mem_inv _ _ _` mp_tac >> simp[mem_inv_raw_reachable] >>
+     metis_tac[]) >>
+  fs[dload_headroom_ok_def, dyn_floor_def, ctx_has_dalloca_def] >>
+  rw[] >> fs[] >>
+  TRY (qpat_x_assum `s.vs_initial_fmp = _` SUBST_ALL_TAC) >> decide_tac
+QED
+
+Theorem ld_occurrence_shape_dyn_headroom:
+  o1_ctx_shape C /\ mem_inv dload_headroom_ok C vs /\
+  occ_frame_reachable vs C stk PG G tn fn inst s n a U B HP H ==>
+  s.vs_alloca_next + 32 * ctx_dload_count C <= dyn_floor C vs
+Proof
+  strip_tac >>
+  `!name f. lookup_function name C.ctx_functions = SOME f ==> wf_function f` by
+    metis_tac[ld_ctx_shape_lookup_wf] >>
+  drule occ_frame_reachable_projection >> strip_tac >>
+  drule_all ld_frame_raw_reachable >> strip_tac >>
+  irule ld_raw_dyn_headroom >> metis_tac[]
+QED
+
+Theorem ld_occurrence_shape_alloca_dyn_headroom:
+  o1_ctx_shape C /\ mem_inv dload_headroom_ok C vs /\
+  occ_frame_reachable vs C stk PG G tn fn inst s n a U B HP H /\
+  active_inst fn inst s /\ inst.inst_opcode = ALLOCA /\
+  step_inst fuel C inst s = OK s1 ==>
+  s1.vs_alloca_next + 32 * ctx_dload_count C <= dyn_floor C vs
+Proof
+  strip_tac >>
+  `!name f. lookup_function name C.ctx_functions = SOME f ==> wf_function f` by
+    metis_tac[ld_ctx_shape_lookup_wf] >>
+  drule occ_frame_reachable_projection >> strip_tac >>
+  drule_all ld_frame_raw_stack >> strip_tac >>
+  drule_all ld_frame_raw_reachable >> strip_tac >>
+  drule_all ld_alloca_successor_active >> strip_tac >>
+  `~is_terminator inst.inst_opcode` by simp[is_terminator_def] >>
+  `raw_reachable vs C fn inst2 (s1 with vs_inst_idx := SUC s.vs_inst_idx)` by
+    metis_tac[raw_reachable_next] >>
+  irule (ld_raw_dyn_headroom
+           |> Q.INST [`s` |-> `s1 with vs_inst_idx := SUC s.vs_inst_idx`]
+           |> SIMP_RULE (srw_ss()) []) >>
+  metis_tac[]
+QED
+

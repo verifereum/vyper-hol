@@ -31,7 +31,7 @@ QED
 
 Theorem ptr_size_step[local]:
   alloca_sizes_match fn s /\ fn_inst_ids_distinct fn /\
-  MEM inst (fn_insts fn) /\ inst.inst_opcode <> DALLOCA /\
+  MEM inst (fn_insts fn) /\
   inst.inst_opcode <> INVOKE /\ step_inst fuel ctx inst s = OK s' ==>
   alloca_sizes_match fn s'
 Proof
@@ -53,7 +53,7 @@ QED
 Theorem ptr_frame_sizes:
   !vs ctx stk PG G tn fn inst s.
   frame_reachable vs ctx stk PG G tn fn inst s ==>
-  o1_run_state_ok vs /\ o1_ctx_shape ctx /\ ~ctx_has_dalloca ctx ==>
+  o1_run_state_ok vs /\ o1_ctx_shape ctx ==>
   MEM fn ctx.ctx_functions /\ alloca_sizes_match fn s /\
   EVERY (\f. MEM f.cf_fn ctx.ctx_functions /\
              alloca_sizes_match f.cf_fn f.cf_state) stk
@@ -70,7 +70,7 @@ Proof
          metis_tac[MEM_EL]) >>
       `alloca_sizes_match fn s'` by
         (irule ptr_size_step >>
-         fs[o1_ctx_shape_def, o1_fn_shape_def, ctx_has_dalloca_def,
+         fs[o1_ctx_shape_def, o1_fn_shape_def,
             EVERY_MEM, wf_function_def] >> metis_tac[]) >>
       fs[alloca_sizes_match_def])
   >- (rpt gen_tac >> strip_tac >> strip_tac >>
@@ -93,7 +93,7 @@ QED
 
 Theorem ptr_frame_current_allocation_size:
   frame_reachable vs ctx stk PG G tn fn inst s /\
-  o1_run_state_ok vs /\ o1_ctx_shape ctx /\ ~ctx_has_dalloca ctx /\
+  o1_run_state_ok vs /\ o1_ctx_shape ctx /\
   FLOOKUP s.vs_allocas aid = SOME (b,sz) ==>
   get_alloca_size fn (Allocation aid) = sz
 Proof
@@ -103,7 +103,7 @@ QED
 
 Theorem ptr_frame_saved_allocation_size:
   frame_reachable vs ctx stk PG G tn fn inst s /\
-  o1_run_state_ok vs /\ o1_ctx_shape ctx /\ ~ctx_has_dalloca ctx /\
+  o1_run_state_ok vs /\ o1_ctx_shape ctx /\
   MEM f stk /\ FLOOKUP f.cf_state.vs_allocas aid = SOME (b,sz) ==>
   get_alloca_size f.cf_fn (Allocation aid) = sz
 Proof
@@ -121,7 +121,7 @@ QED
 
 Theorem ptr_frame_context_allocation_size:
   frame_reachable vs ctx stk PG G tn fn inst s /\
-  o1_run_state_ok vs /\ o1_ctx_shape ctx /\ ~ctx_has_dalloca ctx /\
+  o1_run_state_ok vs /\ o1_ctx_shape ctx /\
   FLOOKUP s.vs_allocas aid = SOME (b,sz) /\
   ~MEM (Allocation aid) (MAP FST imports) ==>
   context_alloca_size fn imports (Allocation aid) = sz

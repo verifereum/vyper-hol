@@ -293,6 +293,7 @@ Proof
           ~MEM b0.bb_label fs` by
     (rpt strip_tac >>
      `MEM d (fn_labels fn)` by metis_tac[current_frontier_key] >>
+     `ALL_DISTINCT (fn_labels fn)` by fs[wf_function_def] >>
      drule_all current_frontier_not_entry >> gvs[]) >>
   `EVERY (\bb. bb.bb_label = b0.bb_label ==>
      MAP (\i. i.inst_opcode) bb.bb_instructions =

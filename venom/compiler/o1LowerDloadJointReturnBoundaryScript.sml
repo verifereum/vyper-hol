@@ -7,6 +7,11 @@ Ancestors
   ptrDiscipline venomExecSemantics venomState contextCodegenRel
   finite_map list pred_set
 
+fun ld_on_head name tac (g as (_, w)) =
+  let val hd = if is_exists w then "?"
+               else (#1 (dest_const (#1 (strip_comb w))) handle HOL_ERR _ => "")
+  in if hd = name then tac g else NO_TAC g end
+
 Theorem ld_joint_boundary_return:
   ld_joint_boundary vs C C' lo D (f::stk) PG G tn fn rinst s t
     n a (ofr::U) B HP H sites X (caller'::ts) /\
@@ -40,7 +45,7 @@ Proof
   gvs[adopt_return_fmp_def] >>
   qhdtm_assum `ld_joint_boundary`
     (strip_assume_tac o REWRITE_RULE [ld_joint_boundary_def]) >>
-  `occurrence_saved_ok B (ofr::U) (f::stk) /\
+  `occurrence_saved_ok (dyn_floor C vs) B (ofr::U) (f::stk) /\
    ~MEM a (MAP (\u. u.of_owner) (ofr::U))` by
     fs[occurrence_annotation_ok_def] >>
   drule_all ld_joint_saved_drop_owner >>
@@ -48,79 +53,71 @@ Proof
   drule_all ld_joint_frame_return_next >>
   disch_then (qspec_then `t` strip_assume_tac) >>
   qexistsl_tac [`t1`, `fn''`] >> simp[adopt_return_fmp_def] >>
-  simp[ld_joint_boundary_def] >> rpt conj_tac
-  >- suspend "source"
-  >- suspend "annotation"
-  >- suspend "erasure"
-  >- suspend "geometry"
-  >- suspend "frame"
-  >- suspend "memory"
-  >- suspend "shared"
-  >> suspend "returndata"
+  simp[ld_joint_boundary_def] >> rpt conj_tac >>
+  FIRST [
+    ld_on_head "occ_frame_reachable"
+     (irule (last (CONJUNCTS occ_frame_reachable_rules)) >>
+      fs[adopt_return_fmp_def] >>
+      goal_assum (drule_at (Pat `occ_frame_reachable _ _ _ _ _ _ _ _ _ _ _ _ _ _ _`)) >>
+      qexistsl_tac [`fuel`, `ir`, `s`] >> fs[]),
+    ld_on_head "occurrence_annotation_ok"
+     (drule occurrence_annotation_return >>
+      simp[adopt_return_fmp_def] >>
+      disch_then irule >> qexistsl_tac [`ir`, `s`, `ir.iret_values`] >>
+      fs[]),
+    ld_on_head "ld_joint_erasure"
+     (irule ld_joint_erasure_restrict >> simp[]),
+    ld_on_head "ld_joint_geometry"
+     (irule ld_joint_geometry_drop_owner >> fs[]),
+    ld_on_head "ld_dyn_floor_ok"
+     (qpat_x_assum `ld_dyn_floor_ok _ _ _ _` mp_tac >>
+      simp[ld_dyn_floor_ok_def, FLOOKUP_DRESTRICT] >> rw[] >> metis_tac[]),
+    ld_on_head "?"
+     (goal_assum drule),
+    ld_on_head "ld_memory_agree"
+     (qpat_assum `bind_outputs _ _ _ = SOME s1`
+        (assume_tac o MATCH_MP ld_bind_outputs_vars_only) >>
+      qpat_assum `bind_outputs _ _ _ = SOME t1`
+        (assume_tac o MATCH_MP ld_bind_outputs_vars_only) >>
+      qpat_x_assum `s1 = _`
+        (mp_tac o AP_TERM ``\u:venom_state. u.vs_memory``) >>
+      simp[merge_callee_state_def] >> strip_tac >>
+      qpat_x_assum `t1 = _`
+        (mp_tac o AP_TERM ``\u:venom_state. u.vs_memory``) >>
+      simp[merge_callee_state_def] >> strip_tac >>
+      simp[] >> irule ld_memory_agree_restrict >> simp[]),
+    ld_on_head "ld_dyn_agree"
+     (qpat_assum `bind_outputs _ _ _ = SOME s1`
+        (assume_tac o MATCH_MP ld_bind_outputs_vars_only) >>
+      qpat_assum `bind_outputs _ _ _ = SOME t1`
+        (assume_tac o MATCH_MP ld_bind_outputs_vars_only) >>
+      qpat_x_assum `s1 = _`
+        (mp_tac o AP_TERM ``\u:venom_state. u.vs_memory``) >>
+      simp[merge_callee_state_def] >> strip_tac >>
+      qpat_x_assum `t1 = _`
+        (mp_tac o AP_TERM ``\u:venom_state. u.vs_memory``) >>
+      simp[merge_callee_state_def] >> strip_tac >> simp[]),
+    ld_on_head "ld_shared_agree"
+     (`ld_shared_agree D s.vs_call_ctx.cc_address tn
+         (merge_callee_state f.cf_state s) (merge_callee_state caller' t)` by
+        (irule ld_shared_agree_merge >> simp[]) >>
+      drule_all ld_shared_agree_bind_outputs >> strip_tac >>
+      qpat_assum `bind_outputs _ _ _ = SOME s1`
+        (mp_tac o AP_TERM ``\u:venom_state. u.vs_call_ctx`` o
+          MATCH_MP ld_bind_outputs_vars_only) >>
+      simp[merge_callee_state_def] >> strip_tac >>
+      qpat_x_assum `s.vs_call_ctx.cc_address = _`
+        (fn th => fs[th, ld_shared_agree_def])),
+    ld_on_head "="
+     (qpat_assum `bind_outputs _ _ _ = SOME s1`
+        (mp_tac o AP_TERM ``\u:venom_state. u.vs_returndata`` o
+          MATCH_MP ld_bind_outputs_vars_only) >>
+      simp[merge_callee_state_def] >> strip_tac >>
+      qpat_assum `bind_outputs _ _ _ = SOME t1`
+        (mp_tac o AP_TERM ``\u:venom_state. u.vs_returndata`` o
+          MATCH_MP ld_bind_outputs_vars_only) >>
+      simp[merge_callee_state_def]),
+    fn (g as (_, w)) =>
+      (print ("ld_joint_boundary_return: no case closes " ^
+              term_to_string w ^ "\n"); NO_TAC g)]
 QED
-
-Resume ld_joint_boundary_return[source]:
-  irule (last (CONJUNCTS occ_frame_reachable_rules)) >>
-  fs[adopt_return_fmp_def] >>
-  goal_assum (drule_at (Pat `occ_frame_reachable _ _ _ _ _ _ _ _ _ _ _ _ _ _ _`)) >>
-  qexistsl_tac [`fuel`, `ir`, `s`] >> fs[]
-QED
-
-Resume ld_joint_boundary_return[annotation]:
-  drule occurrence_annotation_return >>
-  simp[adopt_return_fmp_def] >>
-  disch_then irule >> qexistsl_tac [`ir`, `s`, `ir.iret_values`] >>
-  fs[]
-QED
-
-Resume ld_joint_boundary_return[erasure]:
-  irule ld_joint_erasure_restrict >> simp[]
-QED
-
-Resume ld_joint_boundary_return[geometry]:
-  irule ld_joint_geometry_drop_owner >> fs[]
-QED
-
-Resume ld_joint_boundary_return[frame]:
-  goal_assum drule
-QED
-
-Resume ld_joint_boundary_return[memory]:
-  qpat_assum `bind_outputs _ _ _ = SOME s1`
-    (assume_tac o MATCH_MP ld_bind_outputs_vars_only) >>
-  qpat_assum `bind_outputs _ _ _ = SOME t1`
-    (assume_tac o MATCH_MP ld_bind_outputs_vars_only) >>
-  qpat_x_assum `s1 = _`
-    (mp_tac o AP_TERM ``\u:venom_state. u.vs_memory``) >>
-  simp[merge_callee_state_def] >> strip_tac >>
-  qpat_x_assum `t1 = _`
-    (mp_tac o AP_TERM ``\u:venom_state. u.vs_memory``) >>
-  simp[merge_callee_state_def] >> strip_tac >>
-  simp[] >> irule ld_memory_agree_restrict >> simp[]
-QED
-
-Resume ld_joint_boundary_return[shared]:
-  `ld_shared_agree D s.vs_call_ctx.cc_address tn
-     (merge_callee_state f.cf_state s) (merge_callee_state caller' t)` by
-    (irule ld_shared_agree_merge >> simp[]) >>
-  drule_all ld_shared_agree_bind_outputs >> strip_tac >>
-  qpat_assum `bind_outputs _ _ _ = SOME s1`
-    (mp_tac o AP_TERM ``\u:venom_state. u.vs_call_ctx`` o
-      MATCH_MP ld_bind_outputs_vars_only) >>
-  simp[merge_callee_state_def] >> strip_tac >>
-  qpat_x_assum `s.vs_call_ctx.cc_address = _`
-    (fn th => fs[th, ld_shared_agree_def])
-QED
-
-Resume ld_joint_boundary_return[returndata]:
-  qpat_assum `bind_outputs _ _ _ = SOME s1`
-    (mp_tac o AP_TERM ``\u:venom_state. u.vs_returndata`` o
-      MATCH_MP ld_bind_outputs_vars_only) >>
-  simp[merge_callee_state_def] >> strip_tac >>
-  qpat_assum `bind_outputs _ _ _ = SOME t1`
-    (mp_tac o AP_TERM ``\u:venom_state. u.vs_returndata`` o
-      MATCH_MP ld_bind_outputs_vars_only) >>
-  simp[merge_callee_state_def]
-QED
-
-Finalise ld_joint_boundary_return

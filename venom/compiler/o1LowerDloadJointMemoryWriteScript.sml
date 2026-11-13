@@ -68,6 +68,56 @@ Proof
   qexistsl_tac [`jd`,`lo`,`mask`,`sites`,`sz`] >> gvs[]
 QED
 
+(* An MSTORE at or above the dynamic floor leaves the fixed bytes and the
+   sites, which lie below the floor, alone. *)
+Theorem ld_memory_agree_mstore_dyn[local]:
+  ld_memory_agree sites lo mask s.vs_memory t.vs_memory /\
+  ld_dyn_floor_ok fl lo sites X /\ fl <= a ==>
+  ld_memory_agree sites lo
+    ((mask DIFF {i | a <= i /\ i < a+32}) UNION {a+k | k IN m})
+    (mstore a v s).vs_memory (mstore a w t).vs_memory
+Proof
+  strip_tac >>
+  `lo <= fl /\ !id b c z. FLOOKUP sites id = SOME (b,c,z) ==>
+     b+z <= fl /\ c+z <= fl` by (fs[ld_dyn_floor_ok_def] >> metis_tac[]) >>
+  rewrite_tac[ld_memory_agree_def] >> conj_tac
+  >- (rpt strip_tac >> `~(a <= i /\ i < a+32)` by decide_tac >>
+      asm_rewrite_tac[ld_mstore_bytes] >> irule ld_memory_agree_fixed_byte >>
+      qexistsl_tac [`lo`,`mask`,`sites`] >> gvs[]) >>
+  rpt strip_tac >>
+  `b+z <= fl /\ c+z <= fl` by metis_tac[] >>
+  `~(a <= b+j /\ b+j < a+32) /\ ~(a <= c+j /\ c+j < a+32)` by decide_tac >>
+  asm_rewrite_tac[ld_mstore_bytes] >> irule ld_memory_agree_site_byte >>
+  qexistsl_tac [`id`,`lo`,`mask`,`sites`,`z`] >> gvs[]
+QED
+
+(* An MSTORE wholly below the dynamic floor on both sides. *)
+Theorem ld_dyn_agree_mstore_below:
+  ld_dyn_agree fl mask s.vs_memory t.vs_memory /\ a+32 <= fl /\ c+32 <= fl ==>
+  ld_dyn_agree fl
+    ((mask DIFF {i | a <= i /\ i < a+32}) UNION {a+k | k IN m})
+    (mstore a v s).vs_memory (mstore c w t).vs_memory
+Proof
+  rewrite_tac[ld_dyn_agree_def] >> rpt strip_tac >>
+  `~(a <= i /\ i < a+32) /\ ~(c <= i /\ i < c+32)` by decide_tac >>
+  asm_rewrite_tac[ld_mstore_bytes] >> first_x_assum irule >> gvs[]
+QED
+
+(* The same MSTORE at or above the dynamic floor on both sides. *)
+Theorem ld_dyn_agree_mstore_dyn[local]:
+  ld_dyn_agree fl mask s.vs_memory t.vs_memory /\
+  word_agree_except m v w /\ fl <= a ==>
+  ld_dyn_agree fl
+    ((mask DIFF {i | a <= i /\ i < a+32}) UNION {a+k | k IN m})
+    (mstore a v s).vs_memory (mstore a w t).vs_memory
+Proof
+  rewrite_tac[ld_dyn_agree_def] >> rpt strip_tac >> simp[ld_mstore_bytes] >>
+  Cases_on `a <= i /\ i < a+32`
+  >- (`i-a NOTIN m` by (gvs[] >> metis_tac[arithmeticTheory.SUB_ADD]) >>
+      gvs[word_agree_except_def]) >>
+  simp[] >> first_x_assum irule >> gvs[]
+QED
+
 Theorem ld_joint_mstore_operands[local]:
   ld_joint_boundary vs C C' lo D stk PG G tn fn inst s t
     n a U B HP H sites X ts /\ ptr_discipline lo C vs /\
@@ -76,7 +126,8 @@ Theorem ld_joint_mstore_operands[local]:
   eval_operand p s = SOME x /\ eval_operand vop s = SOME v ==>
   ?y w. eval_operand p t = SOME y /\ eval_operand vop t = SOME w /\
     word_agree_except (op_taint tn vop) v w /\
-    ((w2n x = w2n y /\ w2n x+32 <= lo) \/
+    ((w2n x=w2n y /\ (w2n x+32<=lo \/
+       dyn_floor C vs<=w2n x /\ w2n x+32<=dimword (:256))) \/
      (?id b c z j. FLOOKUP sites id = SOME (b,c,z) /\ j+32 <= z /\
        w2n x = b+j /\ w2n y = c+j))
 Proof
@@ -115,7 +166,7 @@ Proof
   `?w. eval_operand vop t = SOME w /\
     ld_value_agree sites (op_prov H vop) (op_taint tn vop) v w` by
     (irule ld_joint_operand_value >> metis_tac[MEM]) >>
-  `occurrence_env_ok B (a::MAP (\u. u.of_owner) U) H G /\
+  `occurrence_env_ok (dyn_floor C vs) B (a::MAP (\u. u.of_owner) U) H G /\
    ld_joint_erasure sites B /\
    ld_joint_geometry sites X lo (a::MAP (\u. u.of_owner) U)` by
     fs[ld_joint_boundary_def, occurrence_annotation_ok_def] >>
@@ -156,6 +207,8 @@ Theorem ld_joint_mstore_step:
   inst.inst_opcode = MSTORE /\ step_inst fuel C inst s = OK s1 ==>
   ?t1. step_inst fuel C' inst t = OK t1 /\
     ld_memory_agree sites lo (mem_taint tn inst s s1)
+      s1.vs_memory t1.vs_memory /\
+    ld_dyn_agree (dyn_floor C vs) (mem_taint tn inst s s1)
       s1.vs_memory t1.vs_memory
 Proof
   strip_tac >>
@@ -166,22 +219,43 @@ Proof
   rename1 `inst.inst_operands = [p;vop]` >>
   `?y w. eval_operand p t = SOME y /\ eval_operand vop t = SOME w /\
     word_agree_except (op_taint tn vop) v w /\
-    ((w2n x = w2n y /\ w2n x+32 <= lo) \/
+    ((w2n x=w2n y /\ (w2n x+32<=lo \/
+       dyn_floor C vs<=w2n x /\ w2n x+32<=dimword (:256))) \/
      (?id b c z j. FLOOKUP sites id = SOME (b,c,z) /\ j+32 <= z /\
        w2n x = b+j /\ w2n y = c+j))` by
     (irule ld_joint_mstore_operands >> metis_tac[]) >>
   (qexists_tac `mstore (w2n y) w t` >> conj_tac
-  >- (qexists_tac `y` >> simp[] >> qexists_tac `w` >> simp[]) >>
+   >- (qexists_tac `y` >> simp[] >> qexists_tac `w` >> simp[])) >>
   `mem_taint tn inst s (mstore (w2n x) v s) =
     ((tn.t_mem DIFF {i | w2n x <= i /\ i < w2n x+32}) UNION
      {w2n x+k | k IN op_taint tn vop})` by
     (irule ld_mem_taint_mstore >> simp[] >> metis_tac[w2n_lt]) >>
   asm_rewrite_tac[] >>
   `ld_joint_geometry sites X lo (a::MAP (\u. u.of_owner) U) /\
-   ld_memory_agree sites lo tn.t_mem s.vs_memory t.vs_memory` by
+   ld_memory_agree sites lo tn.t_mem s.vs_memory t.vs_memory /\
+   ld_dyn_agree (dyn_floor C vs) tn.t_mem s.vs_memory t.vs_memory /\
+   ld_dyn_floor_ok (dyn_floor C vs) lo sites X` by
     fs[ld_joint_boundary_def] >>
-  drule_at (Pat `ld_joint_geometry _ _ _ _`) ld_memory_agree_mstore_geometry >>
-  disch_then irule >> simp[] >> metis_tac[])
+  `lo <= dyn_floor C vs /\ !id b c z. FLOOKUP sites id = SOME (b,c,z) ==>
+     b+z <= dyn_floor C vs /\ c+z <= dyn_floor C vs` by
+    (fs[ld_dyn_floor_ok_def] >> metis_tac[])
+  (* the operand fact was split on use: fixed, dynamic, site *)
+  >> FIRST [
+    qpat_assum `w2n x + 32 <= lo` (K ALL_TAC) >> conj_tac
+    >- (drule_at (Pat `ld_joint_geometry _ _ _ _`) ld_memory_agree_mstore_geometry >>
+        disch_then irule >> simp[] >> metis_tac[]) >>
+    irule ld_dyn_agree_mstore_below >> simp[] >> decide_tac,
+    qpat_assum `dyn_floor C vs <= w2n x` (K ALL_TAC) >>
+    qpat_x_assum `w2n x = w2n y` (SUBST_ALL_TAC o SYM) >> conj_tac
+    >- (drule_at (Pat `ld_dyn_floor_ok _ _ _ _`) ld_memory_agree_mstore_dyn >>
+          disch_then irule >> metis_tac[]) >>
+    irule ld_dyn_agree_mstore_dyn >> metis_tac[],
+    conj_tac
+    >- (drule_at (Pat `ld_joint_geometry _ _ _ _`) ld_memory_agree_mstore_geometry >>
+        disch_then irule >> simp[] >> metis_tac[]) >>
+    `b+z <= dyn_floor C vs /\ c+z <= dyn_floor C vs` by metis_tac[] >>
+    irule ld_dyn_agree_mstore_below >> simp[] >> decide_tac
+  ]
 QED
 
 Theorem ld_joint_memory_update_next:
@@ -192,11 +266,12 @@ Theorem ld_joint_memory_update_next:
   active_inst fn inst2 (s1 with vs_inst_idx := SUC s.vs_inst_idx) /\
   occ_frame_reachable vs C stk PG G tn1 fn inst2
     (s1 with vs_inst_idx := SUC s.vs_inst_idx) n a U B HP H /\
-  occurrence_annotation_ok n a U B HP H stk PG G
+  occurrence_annotation_ok (dyn_floor C vs) n a U B HP H stk PG G
     (s1 with vs_inst_idx := SUC s.vs_inst_idx) /\
   tn1.t_var = tn.t_var /\ tn1.t_stor = tn.t_stor /\
   tn1.t_trans = tn.t_trans /\ tn1.t_imm = tn.t_imm /\
-  ld_memory_agree sites lo tn1.t_mem s1.vs_memory t1.vs_memory ==>
+  ld_memory_agree sites lo tn1.t_mem s1.vs_memory t1.vs_memory /\
+  ld_dyn_agree (dyn_floor C vs) tn1.t_mem s1.vs_memory t1.vs_memory ==>
   ?u fn'. lookup_function fn.fn_name C'.ctx_functions = SOME fn' /\
     ld_joint_control u fn fn' s t /\ active_inst fn' inst t /\
     ld_joint_boundary vs C C' lo D stk PG G tn1 fn inst2
@@ -252,7 +327,7 @@ Proof
   strip_tac >> drule_all ld_joint_mstore_step >> strip_tac >>
   `occ_frame_reachable vs C stk PG G tn fn inst s n a U B HP H` by
     metis_tac[ld_joint_source] >>
-  `occurrence_annotation_ok n a U B HP H stk PG G s` by
+  `occurrence_annotation_ok (dyn_floor C vs) n a U B HP H stk PG G s` by
     gvs[ld_joint_boundary_def] >>
   `MEM fn C.ctx_functions` by
     (drule occ_frame_reachable_annotation >> simp[]) >>
@@ -269,7 +344,7 @@ Proof
   `occ_frame_reachable vs C stk PG G (step_taint inst s s1 tn) fn inst2
      (s1 with vs_inst_idx := SUC s.vs_inst_idx) n a U B HP H` by
     (drule_all occ_frame_reachable_next >> simp[occurrence_sites_step_def] >> gvs[]) >>
-  `occurrence_annotation_ok n a U B HP H stk PG G
+  `occurrence_annotation_ok (dyn_floor C vs) n a U B HP H stk PG G
      (s1 with vs_inst_idx := SUC s.vs_inst_idx)` by
     (drule occurrence_annotation_next >>
      disch_then (qspecl_then [`s1`,`inst`,`SUC s.vs_inst_idx`,`fuel`,`C`] mp_tac) >>
