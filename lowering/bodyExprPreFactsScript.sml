@@ -579,8 +579,6 @@ Proof
     fs[state_well_typed_def, scope_well_typed_def] >>
   `popped_keys_indexed (es with scopes updated_by CONS FEMPTY).scopes` by
     fs[popped_keys_indexed_def] >>
-  drule_all storage_conjs_scopes >>
-  disch_then (qspec_then `CONS FEMPTY` strip_assume_tac) >>
   ASM_REWRITE_TAC [expr_sim_inv_def] >> simp[]
 QED
 
@@ -599,13 +597,9 @@ Theorem expr_sim_inv_stmt:
     expr_sim_inv c cx env' es1
 Proof
   rpt strip_tac >>
-  `contract_storage_well_formed cx es1 /\ oracle_storage_ok cx es1 /\
-   IS_SOME es1.outcomes` by
-    (qspecl_then [`tops`, `bindings`, `cx`, `s`, `env`, `ret_ty`, `env'`,
-                  `es`, `INL ()`, `es1`] mp_tac (cj 1 eval_stmts_storage_conjs) >>
-     impl_tac >- gvs[expr_sim_inv_def, runtime_storage_consistent_def,
-                     runtime_consistent_def] >>
-     simp[]) >>
+  `IS_SOME es1.outcomes` by
+    (drule (cj 1 eval_outcome_suffix_mutual) >>
+     rw[outcome_suffix_def] >> fs[expr_sim_inv_def]) >>
   drule stmt_env_declare >> strip_tac >>
   qspecl_then [`cx`, `s`, `env`, `ret_ty`, `env'`, `es`, `INL ()`, `es1`]
     mp_tac (cj 1 eval_scc_type_sound_mutual) >>

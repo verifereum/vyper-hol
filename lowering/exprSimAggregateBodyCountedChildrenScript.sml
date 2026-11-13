@@ -55,9 +55,9 @@ Proof
 QED
 
 Theorem aggregate_expr_post_returndata[local]:
-  expr_post ctx func ce cx e es sa sb s0 es' v op
+  expr_post H ctx func ce cx e es sa sb s0 es' v op
     (s with vs_returndata := rd) <=>
-  expr_post ctx func ce cx e es sa sb s0 es' v op s
+  expr_post H ctx func ce cx e es sa sb s0 es' v op s
 Proof
   Cases_on `op` >>
   simp[expr_post_def, pure_frame_def, hash_returndata_state_rel, expr_val_rel_def,
@@ -71,7 +71,7 @@ Theorem aggregate_body_unwrap_marked:
   unwrap_value ce vv sm = (op,su) /\ local_ptrs_reserved ce sm /\
   sa.cs_next_id <= sm.cs_next_id /\
   read_result cx tv es' = (INL v,es') /\
-  vv_post ctx func ce cx e es sa sm s0 es' tv vv r /\
+  vv_post H ctx func ce cx e es sa sm s0 es' tv vv r /\
   fn_has_code sm su func /\ fn_inst_ids_distinct func /\
   (!x. vv_operand vv = Var x ==> not_fresh_at sm x) /\
   (!tvt. evaluate_type (get_tenv cx) (post_value_type ce e) = SOME tvt /\
@@ -81,7 +81,7 @@ Theorem aggregate_body_unwrap_marked:
   ~r.vs_halted /\ r.vs_current_bb = sm.cs_current_bb /\
   r.vs_inst_idx = LENGTH sm.cs_current_insts ==>
   ?u. gas_marked_path F ctx func r 0 (OK u) /\
-    expr_post ctx func ce cx e es' (sa with cs_next_var := sm.cs_next_var)
+    expr_post H ctx func ce cx e es' (sa with cs_next_var := sm.cs_next_var)
       su r es' v op u /\
     ~u.vs_halted /\ u.vs_current_bb = su.cs_current_bb /\
     u.vs_inst_idx = LENGTH su.cs_current_insts
@@ -102,7 +102,7 @@ QED
 Resume aggregate_body_unwrap_marked[equal]:
   drule vv_post_rebase >> strip_tac >>
   drule_at (Pat `unwrap_value _ _ _ = _`) unwrap_value_marked_read >>
-  disch_then (drule_at (Pat `vv_post _ _ _ _ _ _ _ _ _ _ _ _ _`)) >>
+  disch_then (drule_at (Pat `vv_post H _ _ _ _ _ _ _ _ _ _ _ _ _`)) >>
   simp[] >> (impl_tac
   >- (fs[local_ptrs_reserved_def, not_fresh_at_def] >> metis_tac[])) >>
   strip_tac >> gvs[gas_marked_exec_def] >>
@@ -170,7 +170,7 @@ Theorem aggregate_store_body_rebased_slice_marked:
   value_has_type tv v /\ val_wf tv v /\
   type_memory_bytes ce (expr_type e) = type_memory_size tv /\
   type_memory_size tv < dimword (:256) /\
-  stmt_state_rel ctx func ce cx es' r /\
+  stmt_state_rel H ctx func ce cx es' r /\
   FLOOKUP r.vs_allocas did = SOME (b,k) /\ did < sa.cs_next_id /\
   b <= w2n w /\ w2n w + type_memory_size tv <= b+k /\
   w2n w + type_memory_size tv < dimword (:256) /\
@@ -181,13 +181,13 @@ Theorem aggregate_store_body_rebased_slice_marked:
     FLOOKUP (case ALOOKUP es'.immutables cx.txn.target of NONE => FEMPTY
       | SOME imms => get_source_immutables ce.ce_module imms) name = SOME (itv,iv) ==>
     regions_disjoint off (type_memory_size itv) (w2n w) (type_memory_size tv)) /\
-  expr_post ctx func ce cx e es' (sa with cs_next_var := sm.cs_next_var)
+  expr_post H ctx func ce cx e es' (sa with cs_next_var := sm.cs_next_var)
     su r es' v op s /\
   fn_has_code su sb func /\ ~s.vs_halted /\
   s.vs_current_bb = su.cs_current_bb /\ s.vs_inst_idx = LENGTH su.cs_current_insts ==>
   ?q. gas_marked_path F ctx func s 0 (OK q) /\
     (val_in_memory tv v (w2n w) q.vs_memory /\
-     stmt_state_rel ctx func ce cx es' q /\
+     stmt_state_rel H ctx func ce cx es' q /\
      (!z a. not_fresh_at sm z /\ lookup_var z r = SOME a ==> lookup_var z q = SOME a) /\
      (!aid a. FLOOKUP r.vs_allocas aid = SOME a ==> FLOOKUP q.vs_allocas aid = SOME a) /\
      (!aid off sz a len.
@@ -270,7 +270,7 @@ Theorem aggregate_body_child_store_slice_marked:
   sa.cs_next_id <= sm.cs_next_id /\ sm.cs_next_var <= su.cs_next_var /\
   (!z. op = Var z ==> not_fresh_at su z) /\
   read_result cx tvv es' = (INL v,es') /\
-  vv_post ctx func ce cx e es sa sm s0 es' tvv vv r /\
+  vv_post H ctx func ce cx e es sa sm s0 es' tvv vv r /\
   not_fresh_at sm x /\ lookup_var x r = SOME w /\
   evaluate_type (get_tenv cx) (expr_type e) = SOME tv /\
   value_has_type tv v /\ val_wf tv v /\
@@ -282,7 +282,7 @@ Theorem aggregate_body_child_store_slice_marked:
     ~is_word_type (post_value_type ce e) ==>
     type_memory_bytes ce (post_value_type ce e) = type_memory_size tvt /\
     type_memory_size tvt < 2 ** 64) /\
-  stmt_state_rel ctx func ce cx es' r /\
+  stmt_state_rel H ctx func ce cx es' r /\
   FLOOKUP r.vs_allocas did = SOME (b,k) /\ did < sa.cs_next_id /\
   b <= w2n w /\ w2n w + type_memory_size tv <= b+k /\
   w2n w + type_memory_size tv < dimword (:256) /\
@@ -297,7 +297,7 @@ Theorem aggregate_body_child_store_slice_marked:
   r.vs_inst_idx = LENGTH sm.cs_current_insts ==>
   ?q. gas_marked_path F ctx func r 0 (OK q) /\
     (val_in_memory tv v (w2n w) q.vs_memory /\
-     stmt_state_rel ctx func ce cx es' q /\
+     stmt_state_rel H ctx func ce cx es' q /\
      (!z a. not_fresh_at sm z /\ lookup_var z r = SOME a ==> lookup_var z q = SOME a) /\
      (!aid a. FLOOKUP r.vs_allocas aid = SOME a ==> FLOOKUP q.vs_allocas aid = SOME a) /\
      (!aid off sz a len.
@@ -328,12 +328,12 @@ Theorem aggregate_body_child_replay:
     marks (INL tv) mid (OK r) /\
   read_result cx tv (mid with gas_obs := []) =
     (INL v,mid with gas_obs := []) /\
-  vv_post ctx func ce cx e es sa sm s0 (mid with gas_obs := []) tv vv r ==>
+  vv_post H ctx func ce cx e es sa sm s0 (mid with gas_obs := []) tv vv r ==>
   ?replay.
     expr_body_pre ce cx env e replay /\
     (do res <- eval_expr cx e; read_result cx res od) replay =
       (INL v,mid with gas_obs := []) /\
-    vv_post ctx func ce cx e replay sa sm s0
+    vv_post H ctx func ce cx e replay sa sm s0
       (mid with gas_obs := []) tv vv r
 Proof
   rpt strip_tac >>

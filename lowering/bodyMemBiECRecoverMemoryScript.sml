@@ -83,13 +83,13 @@ QED
 (* The existing allocator semantics covers both cached and fresh sites. *)
 Theorem ecrecover_alloc_mem:
   context$compile_alloc_buffer sz sa = (buf,sb) /\
-  stmt_state_rel ctx func cenv cx es s /\ fn_inst_ids_distinct func /\
+  stmt_state_rel H ctx func cenv cx es s /\ fn_inst_ids_distinct func /\
   local_ptrs_reserved cenv sa /\ sz < dimword (:256) /\
   MEM (mk_inst sa.cs_next_id ALLOCA [Lit (n2w sz)]
     [STRING #"%" (toString sa.cs_next_var)]) (fn_insts func) ==>
   run_inst_seq_mem_ok (emitted_insts sa sb) s /\
   ?t w. run_inst_seq (emitted_insts sa sb) s = OK t /\
-    stmt_state_rel ctx func cenv cx es t /\
+    stmt_state_rel H ctx func cenv cx es t /\
     eval_operand buf.buf_operand t = SOME w /\
     w2n w + sz < dimword (:256) /\
     w2n w + sz <= t.vs_alloca_next /\
@@ -118,7 +118,7 @@ Theorem ecrecover_buffers_mem_ready:
       ob <- context$compile_alloc_buffer 32;
       emit_void MSTORE [ob.buf_operand; Lit 0w];
       return (ib.buf_operand,ob.buf_operand) od) sf = ((ip,op),sm) /\
-  stmt_state_rel ctx func cenv cx es s /\ fn_inst_ids_distinct func /\
+  stmt_state_rel H ctx func cenv cx es s /\ fn_inst_ids_distinct func /\
   local_ptrs_reserved cenv sf /\
   (!i. MEM i (emitted_insts sf sm) ==> MEM i (fn_insts func)) /\
   eval_operand h s = SOME wh /\ eval_operand v s = SOME wv /\
@@ -181,7 +181,7 @@ Proof
   drule_all ecrecover_alloc_mem >> strip_tac >>
   rename1 `run_inst_seq (emitted_insts sb sc) s2 = OK s3` >>
   rename1 `eval_operand ob.buf_operand s3 = SOME wo` >>
-  qpat_assum `stmt_state_rel ctx func cenv cx es s2`
+  qpat_assum `stmt_state_rel H ctx func cenv cx es s2`
     (mp_then Any (drule_all_then strip_assume_tac) literal_alloc_buffer_run) >>
   gvs[] >>
   `s2.vs_allocas = s1.vs_allocas` by
@@ -300,7 +300,7 @@ Theorem ecrecover_buffers_mem:
       ob <- context$compile_alloc_buffer 32;
       emit_void MSTORE [ob.buf_operand; Lit 0w];
       return (ib.buf_operand,ob.buf_operand) od) sf = ((ip,op),sm) /\
-  stmt_state_rel ctx func cenv cx es s /\ fn_inst_ids_distinct func /\
+  stmt_state_rel H ctx func cenv cx es s /\ fn_inst_ids_distinct func /\
   local_ptrs_reserved cenv sf /\
   (!i. MEM i (emitted_insts sf sm) ==> MEM i (fn_insts func)) /\
   eval_operand h s = SOME wh /\ eval_operand v s = SOME wv /\
@@ -313,7 +313,7 @@ QED
 
 Theorem compile_ecrecover_mem_ok:
   compile_ecrecover h v r sig sf = (res,sb) /\
-  stmt_state_rel ctx func cenv cx es s /\ fn_inst_ids_distinct func /\
+  stmt_state_rel H ctx func cenv cx es s /\ fn_inst_ids_distinct func /\
   local_ptrs_reserved cenv sf /\
   (!i. MEM i (emitted_insts sf sb) ==> MEM i (fn_insts func)) /\
   eval_operand h s = SOME wh /\ eval_operand v s = SOME wv /\

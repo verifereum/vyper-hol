@@ -15,10 +15,10 @@ Ancestors
 
 (* Original: exprSimCalldataSlice.slice_calldata_vv_post [local]. *)
 Theorem slice_calldata_vv_capacity:
-  vv_post ctx func cenv cx e es sa sb s es tv
+  vv_post H ctx func cenv cx e es sa sb s es tv
     (LocatedValue (expr_type e) p) t /\
   expr_type e = BaseT (BytesT (Dynamic n)) /\
-  stmt_state_rel ctx func cenv cx es t /\
+  stmt_state_rel H ctx func cenv cx es t /\
   eval_operand p.ptr_operand t = SOME w /\
   FLOOKUP t.vs_allocas aid = SOME (w2n w,32 + 32 * word_size n) ==>
   vv_store_bound cx (expr_type e) (expr_type e) es tv
@@ -60,13 +60,13 @@ Theorem slice_calldata_path_mem:
   (!x. op = Var x ==> not_fresh_at sa x) /\
   bres = (case evaluate_calldata_slice cx.txn.calldata (IntV &a) n of
            INL v => INL v | INR err => INR (Error err)) /\
-  stmt_state_rel ctx func cenv cx es s0 /\ eval_operand op s0 = SOME (n2w a) /\
+  stmt_state_rel H ctx func cenv cx es s0 /\ eval_operand op s0 = SOME (n2w a) /\
   alloca_history func s0 /\
   ~s0.vs_halted /\ s0.vs_current_bb = sa.cs_current_bb /\
   s0.vs_inst_idx = LENGTH sa.cs_current_insts ==>
   ?m r. gas_marked_path T ctx func s0 m r /\
     ((?u. r = OK u /\
-          (?rv. bres = INL rv /\ vv_post ctx func cenv cx e es sa sb s0 es
+          (?rv. bres = INL rv /\ vv_post H ctx func cenv cx e es sa sb s0 es
              (Value rv) (LocatedValue (expr_type e) p) u /\
              vv_store_bound cx (expr_type e) (expr_type e) es (Value rv)
                (LocatedValue (expr_type e) p) u) /\
@@ -137,7 +137,7 @@ Resume slice_calldata_path_mem[success]:
      `step_inst 0 ctx i ss1 = OK ss2` by simp[step_inst_non_invoke] >>
      drule venomInstProofsTheory.step_preserves_control_flow >> simp[]) >>
   `a+n <= LENGTH cx.txn.calldata` by decide_tac >>
-  `!j. vv_post ctx func cenv cx e es sa sb s0 es
+  `!j. vv_post H ctx func cenv cx e es sa sb s0 es
      (Value (BytesV (TAKE n (DROP a cx.txn.calldata))))
      (LocatedValue (expr_type e) p) (t with vs_inst_idx := j)` by
     (irule slice_calldata_vv_post >> simp[] >>
@@ -151,7 +151,7 @@ Resume slice_calldata_path_mem[success]:
   simp[same_blocks_def, evaluate_calldata_slice_uint] >>
   qpat_x_assum `expr_type e = _` (assume_tac o GSYM) >>
   asm_rewrite_tac[] >>
-  `vv_post ctx func cenv cx e es sa sb s0 es
+  `vv_post H ctx func cenv cx e es sa sb s0 es
      (Value (BytesV (TAKE n (DROP a cx.txn.calldata))))
      (LocatedValue (expr_type e) p) t` by
     (first_x_assum (qspec_then `t.vs_inst_idx` mp_tac) >>

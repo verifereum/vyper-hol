@@ -104,7 +104,7 @@ Theorem array_snapshot_frontier[local]:
     lookup_scopes name ei.scopes = SOME entry /\
     entry.type = ArrayTV tv (Fixed n) /\
     FLOOKUP cenv.ce_vars name = SOME (PtrVar (Var ptr) sz) /\
-    stmt_state_rel ctx func cenv cx ei s ==>
+    stmt_state_rel H ctx func cenv cx ei s ==>
     ?base. eval_operand (Var ptr) s = SOME base /\
       w2n base + n * type_memory_size tv <= s.vs_alloca_next
 Proof

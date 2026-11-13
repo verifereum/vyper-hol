@@ -4,7 +4,7 @@ Ancestors
   exprSimHypsDefs loweringPosts words allocLimits allocLimitsProps
 
 Theorem memory_place_destination_bound:
-  stmt_state_rel ctx func cenv cx ee s /\
+  stmt_state_rel H ctx func cenv cx ee s /\
   expr_sim_inv cenv cx env ee /\
   place_ptr_rel cenv cx s (PlaceR p) w (SOME LocMemory) (Type dty) /\
   evaluate_type (get_tenv cx) dty = SOME dtv /\

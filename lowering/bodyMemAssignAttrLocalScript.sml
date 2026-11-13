@@ -55,10 +55,10 @@ Theorem assign_attr_local_add_post_mem[local]:
   fn_inst_ids_distinct func /\ ~s.vs_halted /\
   s.vs_current_bb = sm.cs_current_bb /\
   s.vs_inst_idx = LENGTH sm.cs_current_insts /\
-  vv_post ctx func cenv cx e es sa sm s0 es' tv vv s /\
+  vv_post H ctx func cenv cx e es sa sm s0 es' tv vv s /\
   alloca_history func s ==>
   ?q. gas_marked_path T ctx func s 0 (OK q) /\
-    vv_post ctx func cenv cx e es sa sn s0 es' tv vv q /\
+    vv_post H ctx func cenv cx e es sa sn s0 es' tv vv q /\
     eval_operand dst q = SOME (w + n2w off) /\
     alloca_history func q /\ ~q.vs_halted /\
     q.vs_current_bb = sn.cs_current_bb /\
@@ -262,8 +262,8 @@ Proof
 QED
 
 Theorem assign_attr_local_vv_rebase_mem[local]:
-  vv_post ctx func cenv cx e es sa sm s0 ee tv vv s ==>
-  vv_post ctx func cenv cx e ee (sa with cs_next_var := sm.cs_next_var)
+  vv_post H ctx func cenv cx e es sa sm s0 ee tv vv s ==>
+  vv_post H ctx func cenv cx e ee (sa with cs_next_var := sm.cs_next_var)
     sm s ee tv vv s
 Proof
   Cases_on `vv` >>
@@ -279,16 +279,16 @@ Theorem assign_attr_local_unwrap_mem[local]:
   (!x. vv_operand vv = Var x ==> not_fresh_at sm x) /\
   is_word_type (expr_type e) /\
   evaluate_type (get_tenv cx) (expr_type e) = SOME ftv /\
-  stmt_state_rel ctx func cenv cx es s0 /\
-  vv_post ctx func cenv cx e es sa sm s0 ee tv vv s /\
+  stmt_state_rel H ctx func cenv cx es s0 /\
+  vv_post H ctx func cenv cx e es sa sm s0 ee tv vv s /\
   vv_store_bound cx (expr_type e) (lowered_value_type cenv e) ee tv vv s /\
   alloca_history func s /\ s0.vs_alloca_next <= s.vs_alloca_next /\
   ~s.vs_halted /\ s.vs_current_bb = sm.cs_current_bb /\
   s.vs_inst_idx = LENGTH sm.cs_current_insts ==>
   ?v u. gas_marked_exec T (ctx,func) (read_result cx tv) (ee,s)
           [] (INL v) ee (OK u) /\
-    expr_post ctx func cenv cx e es sa sb s0 ee v op u /\
-    expr_post ctx func cenv cx e ee (sa with cs_next_var := sm.cs_next_var)
+    expr_post H ctx func cenv cx e es sa sb s0 ee v op u /\
+    expr_post H ctx func cenv cx e ee (sa with cs_next_var := sm.cs_next_var)
       sb s ee v op u /\
     expr_store_bound cx (expr_type e) v op u /\
     u.vs_current_bb = sb.cs_current_bb /\
@@ -298,7 +298,7 @@ Proof
   strip_tac >>
   drule assign_attr_local_vv_rebase_mem >> strip_tac >>
   drule_at (Pat `unwrap_value _ _ _ = _`) unwrap_value_marked_read_mem >>
-  disch_then (drule_at (Pat `vv_post _ _ _ _ _ _ _ _ _ _ _ _ _`)) >>
+  disch_then (drule_at (Pat `vv_post _ _ _ _ _ _ _ _ _ _ _ _ _ _`)) >>
   impl_tac
   >- (simp[] >> irule local_ptrs_reserved_next_var >> qexists_tac `sa` >> simp[]) >>
   strip_tac >>
@@ -310,7 +310,7 @@ Proof
     (irule exprSimWordArgsTheory.wb_frame_trans >>
      qpat_assum `wb_frame cenv es ee sa s0 s` (irule_at Any) >>
      qpat_assum `wb_frame cenv ee ee _ s u` (irule_at Any) >>
-     qpat_assum `stmt_state_rel _ _ _ _ es s0` (irule_at Any) >> fs[]) >>
+     qpat_assum `stmt_state_rel _ _ _ _ _ es s0` (irule_at Any) >> fs[]) >>
   `~expr_has_effect e ==> pure_frame cenv func es sa s0 u` by
     (strip_tac >> match_mp_tac exprSimPropsTheory.pure_frame_trans >>
      qexistsl_tac [`ee`, `sa with cs_next_var := sm.cs_next_var`, `s`] >>
@@ -324,7 +324,7 @@ Theorem assign_attr_local_store_layout_path_mem[local]:
   fn_has_code st st' func /\ fn_inst_ids_distinct func /\ ~s.vs_halted /\
   s.vs_current_bb = st.cs_current_bb /\
   s.vs_inst_idx = LENGTH st.cs_current_insts /\
-  stmt_state_rel ctx func cenv cx es s /\ alloca_history func s /\
+  stmt_state_rel H ctx func cenv cx es s /\ alloca_history func s /\
   FLOOKUP cenv.ce_vars id = SOME (PtrVar (Var p) sz) /\
   find_containing_scope id es.scopes = SOME (pre,env,entry,rest) /\
   lookup_var p s = SOME wbase /\
@@ -333,7 +333,7 @@ Theorem assign_attr_local_store_layout_path_mem[local]:
   entry.type = StructTV fs /\ entry.value = StructV vals /\
   fields_layout fields fs /\ struct_has_type fs vals /\
   ALOOKUP fs fld = SOME ftv /\ store_lays_out ftv ftv v ==>
-  ?t. stmt_state_rel ctx func cenv cx
+  ?t. stmt_state_rel H ctx func cenv cx
         (es with scopes := pre ++
           (env |+ (id, entry with
             <|value := StructV (AFUPDKEY fld (K v) vals); popped := []|>)) :: rest) t /\
@@ -380,7 +380,7 @@ Proof
   `alloca_history func (u with vs_inst_idx := LENGTH st'.cs_current_insts)` by
     (irule body_store_memory_history >> simp[is_terminator_def] >>
      qexistsl_tac [`s`, `st`] >> simp[is_terminator_def]) >>
-  `stmt_state_rel ctx func cenv cx
+  `stmt_state_rel H ctx func cenv cx
       (es with scopes := pre ++
         (env |+ (id, entry with
           <|value := StructV (AFUPDKEY fld (K v) vals); popped := []|>)) :: rest) u` by
@@ -397,8 +397,8 @@ Theorem assign_attr_local_suffix_mem[local]:
   unwrap_value cenv vv sn = (op,st) /\ emit_void MSTORE [dst; op] st = ((),sb) /\
   fn_has_code sm sn func /\ fn_has_code sn st func /\ fn_has_code st sb func /\
   fn_inst_ids_distinct func /\
-  stmt_state_rel ctx func cenv cx es s0 /\
-  vv_post ctx func cenv cx e es sa sm s0 ee (Value v) vv s /\
+  stmt_state_rel H ctx func cenv cx es s0 /\
+  vv_post H ctx func cenv cx e es sa sm s0 ee (Value v) vv s /\
   vv_store_bound cx (expr_type e) (lowered_value_type cenv e) ee (Value v) vv s /\
   MAP FDOM es.scopes = MAP FDOM ee.scopes /\
   alloca_history func s /\ s0.vs_alloca_next <= s.vs_alloca_next /\
@@ -412,7 +412,7 @@ Theorem assign_attr_local_suffix_mem[local]:
   is_word_type (expr_type e) /\ word_value_type (expr_type e) /\
   evaluate_type (get_tenv cx) (expr_type e) = SOME ftv /\ store_lays_out ftv ftv v ==>
   ?t. gas_marked_path T ctx func s 0 (OK t) /\
-    stmt_state_rel ctx func cenv cx
+    stmt_state_rel H ctx func cenv cx
       (ee with scopes := pre ++
         (env |+ (id, entry with
           <|value := StructV (AFUPDKEY fld (K v) vals); popped := []|>)) :: rest) t /\
@@ -437,7 +437,7 @@ Proof
     (drule (CONJUNCT1 compiler_compile_var) >> strip_tac >>
      fs[not_fresh_at_def] >> metis_tac[arithmeticTheory.LESS_LESS_EQ_TRANS]) >>
   drule_at (Pat `unwrap_value _ _ _ = _`) assign_attr_local_unwrap_mem >>
-  disch_then (drule_at (Pat `vv_post _ _ _ _ _ _ _ _ _ _ _ _ _`)) >>
+  disch_then (drule_at (Pat `vv_post _ _ _ _ _ _ _ _ _ _ _ _ _ _`)) >>
   disch_then (qspec_then `ftv` mp_tac) >>
   impl_tac >- (simp[] >> decide_tac) >> strip_tac >>
   `v' = v /\ gas_marked_path T ctx func q 0 (OK u)` by
@@ -445,10 +445,10 @@ Proof
      simp[gas_marked_exec_def, gas_explicit_def,
           read_result_def, return_def]) >>
   gvs[] >>
-  qpat_x_assum `vv_post _ _ _ _ _ _ _ _ _ _ _ _ s` kall_tac >>
-  qpat_x_assum `vv_post _ _ _ _ _ _ _ _ _ _ _ _ q` kall_tac >>
+  qpat_x_assum `vv_post _ _ _ _ _ _ _ _ _ _ _ _ _ s` kall_tac >>
+  qpat_x_assum `vv_post _ _ _ _ _ _ _ _ _ _ _ _ _ q` kall_tac >>
   `lookup_var out u = SOME (wbase + n2w (struct_field_offset fields fld))` by
-    (qpat_x_assum `expr_post _ _ _ _ _ ee _ _ q _ _ _ _` mp_tac >>
+    (qpat_x_assum `expr_post _ _ _ _ _ _ ee _ _ q _ _ _ _` mp_tac >>
      simp[expr_post_def] >> strip_tac >>
      qpat_x_assum `!x w. not_fresh_at (_ with cs_next_var := _) x /\ _ ==> _` irule >>
      simp[GSYM eval_operand_def] >> fs[not_fresh_at_def]) >>
@@ -458,19 +458,19 @@ Proof
     (`not_fresh_at sn p /\ not_fresh_at sm p` by
        (fs[not_fresh_at_def] >> metis_tac[arithmeticTheory.LESS_EQ_TRANS]) >>
      `lookup_var p q = SOME wbase` by metis_tac[] >>
-     qpat_x_assum `expr_post _ _ _ _ _ ee _ _ q _ _ _ _` mp_tac >>
+     qpat_x_assum `expr_post _ _ _ _ _ _ ee _ _ q _ _ _ _` mp_tac >>
      simp[expr_post_def] >> strip_tac >>
      qpat_x_assum `!x w. not_fresh_at (_ with cs_next_var := _) x /\ _ ==> _` irule >>
      fs[not_fresh_at_def]) >>
   `~u.vs_halted` by
     (drule gas_marked_path_exec >> strip_tac >>
      drule gas_path_normal >> simp[]) >>
-  `stmt_state_rel ctx func cenv cx ee u /\
+  `stmt_state_rel H ctx func cenv cx ee u /\
    eval_operand op u = SOME (typed_val_to_w256 ftv v)` by
-    (qpat_x_assum `expr_post _ _ _ _ _ es _ _ s0 _ _ _ _` mp_tac >>
+    (qpat_x_assum `expr_post _ _ _ _ _ _ es _ _ s0 _ _ _ _` mp_tac >>
      simp[expr_post_def, expr_val_rel_def] >> metis_tac[]) >>
   drule_at (Pat `emit_void _ _ _ = _`) assign_attr_local_word_store_path_mem >>
-  disch_then (drule_at (Pat `stmt_state_rel _ _ _ _ _ _`)) >>
+  disch_then (drule_at (Pat `stmt_state_rel _ _ _ _ _ _ _`)) >>
   disch_then (drule_at (Pat `find_containing_scope _ _ = _`)) >>
   disch_then (drule_at (Pat `fields_layout _ _`)) >>
   disch_then (drule_at (Pat `ALOOKUP _ _ = _`)) >>
@@ -485,7 +485,7 @@ Proof
   `gas_marked_path T ctx func s 0 (OK t)` by
     metis_tac[gas_marked_path_then, arithmeticTheory.ADD] >>
   qexists_tac `t` >> simp[] >>
-  qpat_x_assum `expr_post _ _ _ _ _ es _ _ s0 _ _ _ _` mp_tac >>
+  qpat_x_assum `expr_post _ _ _ _ _ _ es _ _ s0 _ _ _ _` mp_tac >>
   simp[expr_post_def] >> metis_tac[]
 
 QED
@@ -497,8 +497,8 @@ Theorem assign_attr_local_suffix_layout_mem[local]:
   unwrap_value cenv vv sn = (op,st) /\ emit_void MSTORE [dst; op] st = ((),sb) /\
   fn_has_code sm sn func /\ fn_has_code sn st func /\ fn_has_code st sb func /\
   fn_inst_ids_distinct func /\
-  stmt_state_rel ctx func cenv cx es s0 /\
-  vv_post ctx func cenv cx e es sa sm s0 ee (Value v) vv s /\
+  stmt_state_rel H ctx func cenv cx es s0 /\
+  vv_post H ctx func cenv cx e es sa sm s0 ee (Value v) vv s /\
   vv_store_bound cx (expr_type e) (lowered_value_type cenv e) ee (Value v) vv s /\
   MAP FDOM es.scopes = MAP FDOM ee.scopes /\
   alloca_history func s /\ s0.vs_alloca_next <= s.vs_alloca_next /\
@@ -512,7 +512,7 @@ Theorem assign_attr_local_suffix_layout_mem[local]:
   is_word_type (expr_type e) /\
   evaluate_type (get_tenv cx) (expr_type e) = SOME ftv /\ store_lays_out ftv ftv v ==>
   ?t. gas_marked_path T ctx func s 0 (OK t) /\
-    stmt_state_rel ctx func cenv cx
+    stmt_state_rel H ctx func cenv cx
       (ee with scopes := pre ++
         (env |+ (id, entry with
           <|value := StructV (AFUPDKEY fld (K v) vals); popped := []|>)) :: rest) t /\
@@ -537,17 +537,17 @@ Proof
     (drule (CONJUNCT1 compiler_compile_var) >> strip_tac >>
      fs[not_fresh_at_def] >> metis_tac[arithmeticTheory.LESS_LESS_EQ_TRANS]) >>
   drule_at (Pat `unwrap_value _ _ _ = _`) assign_attr_local_unwrap_mem >>
-  disch_then (drule_at (Pat `vv_post _ _ _ _ _ _ _ _ _ _ _ _ _`)) >>
+  disch_then (drule_at (Pat `vv_post _ _ _ _ _ _ _ _ _ _ _ _ _ _`)) >>
   disch_then (qspec_then `ftv` mp_tac) >>
   impl_tac >- (simp[] >> decide_tac) >> strip_tac >>
   `v' = v /\ gas_marked_path T ctx func q 0 (OK u)` by
     (qpat_x_assum `gas_marked_exec _ _ _ _ _ _ _ _` mp_tac >>
      simp[gas_marked_exec_def, gas_explicit_def, read_result_def, return_def]) >>
   gvs[] >>
-  qpat_x_assum `vv_post _ _ _ _ _ _ _ _ _ _ _ _ s` kall_tac >>
-  qpat_x_assum `vv_post _ _ _ _ _ _ _ _ _ _ _ _ q` kall_tac >>
+  qpat_x_assum `vv_post _ _ _ _ _ _ _ _ _ _ _ _ _ s` kall_tac >>
+  qpat_x_assum `vv_post _ _ _ _ _ _ _ _ _ _ _ _ _ q` kall_tac >>
   `lookup_var out u = SOME (wbase + n2w (struct_field_offset fields fld))` by
-    (qpat_x_assum `expr_post _ _ _ _ _ ee _ _ q _ _ _ _` mp_tac >>
+    (qpat_x_assum `expr_post _ _ _ _ _ _ ee _ _ q _ _ _ _` mp_tac >>
      simp[expr_post_def] >> strip_tac >>
      qpat_x_assum `!x w. not_fresh_at (_ with cs_next_var := _) x /\ _ ==> _` irule >>
      simp[GSYM eval_operand_def] >> fs[not_fresh_at_def]) >>
@@ -556,18 +556,18 @@ Proof
     (`not_fresh_at sn p /\ not_fresh_at sm p` by
        (fs[not_fresh_at_def] >> metis_tac[arithmeticTheory.LESS_EQ_TRANS]) >>
      `lookup_var p q = SOME wbase` by metis_tac[] >>
-     qpat_x_assum `expr_post _ _ _ _ _ ee _ _ q _ _ _ _` mp_tac >>
+     qpat_x_assum `expr_post _ _ _ _ _ _ ee _ _ q _ _ _ _` mp_tac >>
      simp[expr_post_def] >> strip_tac >>
      qpat_x_assum `!x w. not_fresh_at (_ with cs_next_var := _) x /\ _ ==> _` irule >>
      fs[not_fresh_at_def]) >>
   `~u.vs_halted` by
     (drule gas_marked_path_exec >> strip_tac >> drule gas_path_normal >> simp[]) >>
-  `stmt_state_rel ctx func cenv cx ee u /\
+  `stmt_state_rel H ctx func cenv cx ee u /\
    eval_operand op u = SOME (typed_val_to_w256 ftv v)` by
-    (qpat_x_assum `expr_post _ _ _ _ _ es _ _ s0 _ _ _ _` mp_tac >>
+    (qpat_x_assum `expr_post _ _ _ _ _ _ es _ _ s0 _ _ _ _` mp_tac >>
      simp[expr_post_def, expr_val_rel_def] >> metis_tac[]) >>
   drule_at (Pat `emit_void _ _ _ = _`) assign_attr_local_store_layout_path_mem >>
-  disch_then (drule_at (Pat `stmt_state_rel _ _ _ _ _ _`)) >>
+  disch_then (drule_at (Pat `stmt_state_rel _ _ _ _ _ _ _`)) >>
   disch_then (drule_at (Pat `find_containing_scope _ _ = _`)) >>
   disch_then (drule_at (Pat `fields_layout _ _`)) >>
   disch_then (drule_at (Pat `ALOOKUP _ _ = _`)) >>
@@ -580,7 +580,7 @@ Proof
   `gas_marked_path T ctx func s 0 (OK t)` by
     metis_tac[gas_marked_path_then, arithmeticTheory.ADD] >>
   qexists_tac `t` >> simp[] >>
-  qpat_x_assum `expr_post _ _ _ _ _ es _ _ s0 _ _ _ _` mp_tac >>
+  qpat_x_assum `expr_post _ _ _ _ _ _ es _ _ s0 _ _ _ _` mp_tac >>
   simp[expr_post_def] >> metis_tac[]
 QED
 
@@ -723,7 +723,7 @@ Resume assign_attr_local_frag_mem[normal]:
      first_x_assum drule_all >> metis_tac[]) >>
   drule_at (Pat `emit_void _ _ _ = _`) assign_attr_local_suffix_layout_mem >>
   disch_then (drule_at (Pat `compile_expr _ _ _ _ = _`)) >>
-  disch_then (drule_at (Pat `vv_post _ _ _ _ _ _ _ _ _ _ _ _ _`)) >>
+  disch_then (drule_at (Pat `vv_post _ _ _ _ _ _ _ _ _ _ _ _ _ _`)) >>
   disch_then (drule_at (Pat `find_containing_scope _ _ = _`) o SRULE []) >>
   disch_then (drule_at (Pat `fields_layout _ _`)) >>
   disch_then (drule_at (Pat `ALOOKUP _ _ = _`)) >>
@@ -733,7 +733,7 @@ Resume assign_attr_local_frag_mem[normal]:
   disch_then (drule_at (Pat `lookup_var p t = _`)) >>
   disch_then (qspec_then `vals` mp_tac) >>
   impl_tac >- simp[] >> strip_tac >>
-  qmatch_asmsub_abbrev_tac `stmt_state_rel ctx func cenv cx ff t'` >>
+  qmatch_asmsub_abbrev_tac `stmt_state_rel H ctx func cenv cx ff t'` >>
   `gas_marked_path T ctx func s0 (LENGTH marks) (OK t')` by
     (qpat_x_assum `gas_marked_exec _ _ _ _ _ _ _ _` mp_tac >>
      simp[gas_marked_exec_def] >> strip_tac >>

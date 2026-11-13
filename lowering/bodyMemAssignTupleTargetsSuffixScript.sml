@@ -33,14 +33,14 @@ Theorem tuple_assignment_prefix_path_mem:
     cs_extends su sl /\ cs_extends sl ss /\
     fn_has_code su sl func /\ fn_has_code sl ss func /\
     fn_inst_ids_distinct func /\ local_ptrs_reserved cenv su /\
-    stmt_state_rel ctx func cenv cx es1 sv /\ alloca_history func sv /\
+    stmt_state_rel H ctx func cenv cx es1 sv /\ alloca_history func sv /\
     return_buf_frame d cenv su sv /\ ~sv.vs_halted /\
     sv.vs_current_bb = su.cs_current_bb /\
     sv.vs_inst_idx = LENGTH su.cs_current_insts ==>
     LENGTH elems = LENGTH tys /\ EVERY (\op. ?x. op = Var x) elems /\
     EVERY (\op. !x. op = Var x ==> not_fresh_at ss x) elems /\
     local_ptrs_reserved cenv ss /\ values_have_types tvs vs /\ tuple_val_wf vs tvs /\
-    ?t (w:256 word) b sz. stmt_state_rel ctx func cenv cx es1 t /\ ~t.vs_halted /\
+    ?t (w:256 word) b sz. stmt_state_rel H ctx func cenv cx es1 t /\ ~t.vs_halted /\
       t.vs_current_bb = ss.cs_current_bb /\
       t.vs_inst_idx = LENGTH ss.cs_current_insts /\
       tuple_in_memory vs tvs (w2n w) t.vs_memory /\ b <= w2n w /\
@@ -100,7 +100,7 @@ QED
 Theorem assign_tuple_targets_suffix_mem:
   !ctx func cx lctx cenv gs e es ee v tys tvs sa su sl ss sf op staged elems sv s0 flag d.
     post_value_type cenv e = expr_type e /\
-    expr_post ctx func cenv cx e es sa su s0 ee v op sv /\
+    expr_post H ctx func cenv cx e es sa su s0 ee v op sv /\
     sv.vs_current_bb = su.cs_current_bb /\
     sv.vs_inst_idx = LENGTH su.cs_current_insts /\ ~sv.vs_halted /\
     alloca_history func sv /\ return_buf_frame d cenv su sv /\
@@ -136,7 +136,7 @@ Theorem assign_tuple_targets_suffix_mem:
       sv.vs_alloca_next <= t'.vs_alloca_next /\
       stmt_lands lctx sf (INL ()) t' /\ ~t'.vs_halted /\ ~block_is_terminated sf /\
       cenv_top_ext cenv cenv ee'.scopes /\
-      stmt_state_rel ctx func cenv cx (ee' with gas_obs := []) t' /\
+      stmt_state_rel H ctx func cenv cx (ee' with gas_obs := []) t' /\
       (!x w. not_fresh_at sa x /\ lookup_var x s0 = SOME w ==>
              lookup_var x t' = SOME w) /\
       (!aid b. FLOOKUP s0.vs_allocas aid = SOME b ==>
@@ -153,7 +153,7 @@ Proof
      qexistsl_tac [`cenv`, `EL n tys`, `EL n vs`] >> simp[]) >>
   `LIST_REL value_has_type tvs vs` by simp[GSYM values_have_types_LIST_REL] >>
   `~cx.txn.is_static` by
-    (qpat_x_assum `expr_post _ _ _ _ _ _ _ _ _ _ _ _ _` mp_tac >>
+    (qpat_x_assum `expr_post _ _ _ _ _ _ _ _ _ _ _ _ _ _` mp_tac >>
      simp[expr_post_def, stmt_state_rel_def, state_rel_def]) >>
   drule_all assign_tuple_targets_safe >> strip_tac >>
   rename1 `assign_tuple_targets _ _ _ ee = (INL (),ee')` >>
@@ -182,7 +182,7 @@ Resume assign_tuple_targets_suffix_mem[prefix]:
     metis_tac[compile_lower_value_var] >>
   `local_ptrs_reserved cenv su` by
     (irule local_ptrs_reserved_next_var >> qexists_tac `sa` >> fs[cs_extends_def]) >>
-  qpat_x_assum `expr_post _ _ _ _ _ _ _ _ _ _ _ _ _` mp_tac >>
+  qpat_x_assum `expr_post _ _ _ _ _ _ _ _ _ _ _ _ _ _` mp_tac >>
   qpat_x_assum `post_value_type _ _ = _`
     (fn th => rewrite_tac[expr_post_def, th]) >>
   strip_tac >>
@@ -224,7 +224,7 @@ Resume assign_tuple_targets_suffix_mem[stores]:
   qpat_x_assum `expr_val_at _ _ (TupleT tys) _ _ _ _ _ _` kall_tac >>
   drule_all tuple_store_targets_path_mem_T >>
   disch_then (map_every assume_tac o CONJUNCTS) >>
-  qpat_x_assum `?t. stmt_state_rel ctx _ _ _ ee' _ /\ _`
+  qpat_x_assum `?t. stmt_state_rel H ctx _ _ _ ee' _ /\ _`
     (qx_choose_then `sfv` (map_every assume_tac o CONJUNCTS)) >>
   qexistsl_tac [`ee'`, `sfv`] >> conj_tac
   >- (drule_all assign_tuple_target_list_gas_obs >>

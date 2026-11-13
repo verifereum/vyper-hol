@@ -1808,14 +1808,14 @@ QED
 
 Theorem internal_body_state_rel[local]:
   !f func cenv cx vs caller cenv1 cenv2 rb rpc caps st st' env s0 s args st0.
-    state_rel f cenv cx (vs with scopes := []) caller /\
+    state_rel H f cenv cx (vs with scopes := []) caller /\
     internal_immutable_regions cenv cx vs caller.vs_alloca_next /\
     cenv1 = cenv with <| ce_return_buf := rb; ce_return_pc := rpc |> /\
     materialize_internal_params cenv1 caps st = (cenv2, st') /\
     EVERY (\c. ?off sz. FLOOKUP cenv1.ce_vars (FST c) = SOME (MemLoc off sz)) caps /\
     setup_callee func args caller = SOME s0 /\ mat_frame st0 s0 s /\
     local_ptrs_rel func cenv2 [env] s ==>
-    state_rel func (cenv2 with ce_alloca_locals := T) cx (vs with scopes := [env]) s
+    state_rel H func (cenv2 with ce_alloca_locals := T) cx (vs with scopes := [env]) s
 Proof
   rpt gen_tac >> strip_tac >>
   drule materialize_global_binding >> simp[] >> disch_then assume_tac >>
@@ -1832,7 +1832,7 @@ Proof
   `local_ptrs_rel func (cenv2 with ce_alloca_locals := T) [env] s` by
     (fs[local_ptrs_rel_def, local_region_def, local_backed_def] >>
      conj_tac >> first_assum ACCEPT_TAC) >>
-  qpat_x_assum `state_rel _ _ _ _ _` mp_tac >>
+  qpat_x_assum `state_rel _ _ _ _ _ _` mp_tac >>
   simp[state_rel_def] >> strip_tac >>
   gvs[] >> rpt conj_tac
   >- fs[storage_rel_def, contract_storage_def]
@@ -2131,7 +2131,7 @@ Theorem internal_prologue_run:
       ((cenv2, return_pc), st1) /\
     fn_has_code st0 st1 func /\ fn_inst_ids_distinct func /\
     setup_callee func args caller = SOME s0 /\
-    state_rel f cenv cx (vs with scopes := []) caller /\
+    state_rel H f cenv cx (vs with scopes := []) caller /\
     internal_immutable_regions cenv cx vs caller.vs_alloca_next /\
     internal_args_rel cenv params env (if has_rb then 1 else 0) args
       caller.vs_alloca_next caller.vs_memory /\
@@ -2160,7 +2160,7 @@ Theorem internal_prologue_run:
       run_inst_seq (emitted_insts st0 st1) s0 = OK t /\
       immutable_alloca_sep func (cenv2 with ce_alloca_locals := T) cx
         (vs with scopes := [env]) t /\
-      state_rel func (cenv2 with ce_alloca_locals := T) cx
+      state_rel H func (cenv2 with ce_alloca_locals := T) cx
         (vs with scopes := [env]) t /\ alloca_inv t /\
       (!inst n base sz.
          MEM inst (fn_insts func) /\ inst.inst_opcode = ALLOCA /\
@@ -2257,7 +2257,7 @@ Resume internal_prologue_run[relation]:
      fs[internal_args_rel_def, EVERY_MEM, MEM_MAP, MEM_EL, EL_MAP] >>
      rpt strip_tac >> gvs[] >>
      first_x_assum drule >> strip_tac >> metis_tac[]) >>
-  qpat_x_assum `state_rel _ _ _ _ _` mp_tac >>
+  qpat_x_assum `state_rel _ _ _ _ _ _` mp_tac >>
   qpat_x_assum `internal_immutable_regions _ _ _ _` mp_tac >>
   qpat_x_assum `setup_callee _ _ _ = _` mp_tac >>
   qpat_x_assum `materialize_internal_params ce caps sc = _` mp_tac >>
@@ -2411,7 +2411,7 @@ Theorem compile_internal_prologue_entry:
     setup_callee func args caller = SOME s0 /\
     (cenv.ce_is_ctor ==>
       IS_SOME (FLOOKUP caller.vs_labels "runtime_begin")) /\
-    state_rel f cenv cx (vs with scopes := []) caller /\
+    state_rel H f cenv cx (vs with scopes := []) caller /\
     internal_immutable_regions cenv cx vs caller.vs_alloca_next /\
     internal_args_rel cenv params env (if has_rb then 1 else 0) args
       caller.vs_alloca_next caller.vs_memory /\
@@ -2441,7 +2441,7 @@ Theorem compile_internal_prologue_entry:
     ?s1.
       ~s1.vs_halted /\ s1.vs_current_bb = st1.cs_current_bb /\
       s1.vs_inst_idx = LENGTH st1.cs_current_insts /\
-      stmt_state_rel ctx func (cenv2 with ce_alloca_locals := T) cx
+      stmt_state_rel H ctx func (cenv2 with ce_alloca_locals := T) cx
         (vs with scopes := [env]) s1 /\
       fresh_vars_wrt st1 s1 /\
       (?x. return_pc = Var x /\ not_fresh_at st1 x /\
