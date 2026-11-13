@@ -2,7 +2,7 @@
 Theory bodyPtrWordBuiltinsModular
 Ancestors bodyPtrWordBuiltinsArithmeticSteps bodyPtrWordBuiltinsNegSuffix
   bodyPtrWordBuiltinsAbsSequence exprSimWordBuiltins builtinMath
-  exprLoweringProps compileEnv emitHelper fragGasSeqPtr
+  exprLoweringProps compileEnv emitHelper fragGasSeqPtr fragGasSeqAbort
   venomExecSemantics venomInst venomState ptrDiscipline ptrSafeRun
   list rich_list finite_map bodyPtrDefs venomExecProofs decoderGhostFramePtr codegenRel
   bodyPtrWordBuiltinsIntervalGhost instIdxIndep fragExec fragGasPathPtr gasSummary
@@ -310,7 +310,9 @@ Theorem word_pow_suffix_outcome:
   allocas_from 0 s /\ ~ctx_has_dalloca ctx /\ ~s.vs_halted /\
   lookup_block s.vs_current_bb fn.fn_blocks = SOME bb /\
   isPREFIX (emitted_insts sa sb) (DROP s.vs_inst_idx bb.bb_instructions) /\
-  ghost_inv H d cenv cx es G tn s /\ ghost_kept cenv es0 sc G0 tn0 s0 G tn /\
+  (!H. valid_horizon cx st0 H es.storage_trace ==>
+    ghost_inv H d cenv cx es G tn s) /\
+  ghost_kept cenv es0 sc G0 tn0 s0 G tn /\
   (!n p sz. FLOOKUP cenv.ce_vars n = SOME (PtrVar (Var p) sz) ==>
     p <> STRING #"%" (toString sa.cs_next_var)) /\
   (!p sz. d <> NONE /\ cenv.ce_return_buf = SOME (PtrVar (Var p) sz) ==>
@@ -319,26 +321,45 @@ Theorem word_pow_suffix_outcome:
     p <> STRING #"%" (toString sa.cs_next_var)) /\
   (!p. not_fresh_at sc p ==> p <> STRING #"%" (toString sa.cs_next_var)) /\
   (!tail. source (es with gas_obs := tail) = (res,es with gas_obs := tail)) /\
-  (!t. run_inst_seq (emitted_insts sa sb) s = OK t ==>
-    HG res (es with gas_obs := []) (t with vs_inst_idx := s.vs_inst_idx + 1))) ==>
-  gas_outcome_ptr D tops (ctx,fn) PG source (es,s,G,tn)
-    (\r ee G' tn' u. HG r ee u /\ ghost_inv H d cenv cx es G' tn' u /\
+  (!H t. valid_horizon cx st0 H es.storage_trace /\
+    run_inst_seq (emitted_insts sa sb) s = OK t ==>
+    HG H res (es with gas_obs := []) (t with vs_inst_idx := s.vs_inst_idx + 1))) ==>
+  gas_outcome_ptr D tops (ctx,fn) PG cx st0 source (es,s,G,tn)
+    (\H r ee G' tn' u. HG H r ee u /\ ghost_inv H d cenv cx es G' tn' u /\
       ghost_kept cenv es0 sc G0 tn0 s0 G' tn' /\
       op_taint tn' op = {} /\ op_prov G' op = NONE) R
 Proof
   strip_tac >> drule_all word_pow_counted_normal >>
-  disch_then (qspecl_then [`PG`, `G`, `D`] strip_assume_tac) >>
+  disch_then (qspecl_then [`PG`, `G`, `D ARB`] strip_assume_tac) >>
+  `!H. inst_seq_ptr (D H) 0 ctx fn PG G tn (emitted_insts sa sb) s G' tn'` by
+    (gen_tac >> drule_all word_pow_emitted_checked >>
+     disch_then (qspecl_then [`fn`, `PG`, `G`, `D H`]
+       (qx_choose_then `GH` (qx_choose_then `tnH` strip_assume_tac))) >>
+     `GH = G' /\ tnH = tn'` by metis_tac[inst_seq_ptr_ghost_unique] >> gvs[]) >>
+  drule word_pow_emitted_shape >> strip_tac >>
+  rewrite_tac[gas_outcome_ptr_def] >> qexists_tac `[]` >> disj2_tac >> disj1_tac >>
+  rewrite_tac[gas_summary_ptr_at_def] >>
+  qexistsl_tac [`res`, `es`, `G'`, `tn'`,
+    `OK (t with vs_inst_idx := s.vs_inst_idx + 1)`] >>
+  simp[gas_explicit_def] >> gen_tac >> strip_tac >>
+  `ghost_inv H d cenv cx es G tn s` by metis_tac[] >>
   drule word_pow_emitted_insts >> strip_tac >>
   `ghost_inv H d cenv cx es G' tn' t /\
    ghost_kept cenv es0 sc G0 tn0 s0 G' tn' /\
    op_taint tn' op = {} /\ op_prov G' op = NONE` by
     (gnvs[] >> irule word_modular_single_frame >> simp[] >>
      goal_assum (drule_at Any) >> simp[] >> metis_tac[]) >>
-  simp[gas_outcome_ptr_def] >> qexists_tac `[]` >> disj1_tac >>
-  simp[gas_summary_ptr_at_def, gas_explicit_def] >>
-  qexistsl_tac [`res`, `es`, `G'`, `tn'`,
-    `OK (t with vs_inst_idx := s.vs_inst_idx + 1)`] >>
-  gvs[word_interval_ghost_inv_index]
+  simp[word_interval_ghost_inv_index] >>
+  `inst_seq_ptr (D H) 0 ctx fn PG G tn (emitted_insts sa sb) s G' tn'` by simp[] >>
+  `gas_path_ptr (D H) 0 ctx fn PG G tn s
+    (LENGTH (FILTER (\i. i.inst_opcode = GAS) (emitted_insts sa sb))) G' tn'
+    (OK (t with vs_inst_idx := s.vs_inst_idx + LENGTH (emitted_insts sa sb)))` by
+    (match_mp_tac (Q.SPECL [`emitted_insts sa sb`, `s`, `t`, `G`, `tn`,
+       `G'`, `tn'`, `ctx`, `fn`, `bb`] run_inst_seq_gas_path_ptr) >>
+     rpt conj_tac >> first_assum ACCEPT_TAC) >>
+  qpat_x_assum `gas_path_ptr (D H) _ _ _ _ _ _ _ _ _ _ _` mp_tac >>
+  qpat_x_assum `emitted_insts sa sb = _`
+    (fn eq => simp_tac (srw_ss()) [eq, mk_inst_def, arithmeticTheory.ADD_COMM])
 QED
 
 Theorem word_modular_suffix_outcome:
@@ -349,7 +370,9 @@ Theorem word_modular_suffix_outcome:
   allocas_from 0 s /\ ~ctx_has_dalloca ctx /\ ~s.vs_halted /\
   lookup_block s.vs_current_bb fn.fn_blocks = SOME bb /\
   isPREFIX (emitted_insts sa sb) (DROP s.vs_inst_idx bb.bb_instructions) /\
-  ghost_inv H d cenv cx es G tn s /\ ghost_kept cenv es0 sc G0 tn0 s0 G tn /\
+  (!H. valid_horizon cx st0 H es.storage_trace ==>
+    ghost_inv H d cenv cx es G tn s) /\
+  ghost_kept cenv es0 sc G0 tn0 s0 G tn /\
   (!n p sz. FLOOKUP cenv.ce_vars n = SOME (PtrVar (Var p) sz) ==>
     p <> STRING #"%" (toString sa.cs_next_var)) /\
   (!p sz. d <> NONE /\ cenv.ce_return_buf = SOME (PtrVar (Var p) sz) ==>
@@ -358,26 +381,46 @@ Theorem word_modular_suffix_outcome:
     p <> STRING #"%" (toString sa.cs_next_var)) /\
   (!p. not_fresh_at sc p ==> p <> STRING #"%" (toString sa.cs_next_var)) /\
   (!tail. source (es with gas_obs := tail) = (res,es with gas_obs := tail)) /\
-  (!t. run_inst_seq (emitted_insts sa sb) s = OK t ==>
-    HG res (es with gas_obs := []) (t with vs_inst_idx := s.vs_inst_idx + 2))) ==>
-  gas_outcome_ptr D tops (ctx,fn) PG source (es,s,G,tn)
-    (\r ee G' tn' u. HG r ee u /\ ghost_inv H d cenv cx es G' tn' u /\
+  (!H t. valid_horizon cx st0 H es.storage_trace /\
+    run_inst_seq (emitted_insts sa sb) s = OK t ==>
+    HG H res (es with gas_obs := []) (t with vs_inst_idx := s.vs_inst_idx + 2))) ==>
+  gas_outcome_ptr D tops (ctx,fn) PG cx st0 source (es,s,G,tn)
+    (\H r ee G' tn' u. HG H r ee u /\ ghost_inv H d cenv cx es G' tn' u /\
       ghost_kept cenv es0 sc G0 tn0 s0 G' tn' /\
       op_taint tn' op = {} /\ op_prov G' op = NONE) R
 Proof
   strip_tac >> drule_all word_modular_counted_normal >>
-  disch_then (qspecl_then [`PG`, `G`, `D`] strip_assume_tac) >>
+  disch_then (qspecl_then [`PG`, `G`, `D ARB`] strip_assume_tac) >>
+  `!H. inst_seq_ptr (D H) 0 ctx fn PG G tn (emitted_insts sa sb) s G' tn'` by
+    (gen_tac >> drule_all word_modular_emitted_checked >>
+     disch_then (qspecl_then [`fn`, `PG`, `G`, `D H`]
+       (qx_choose_then `GH` (qx_choose_then `tnH` strip_assume_tac))) >>
+     `GH = G' /\ tnH = tn'` by metis_tac[inst_seq_ptr_ghost_unique] >> gvs[]) >>
+  drule word_modular_emitted_shape >> strip_tac >>
+  rewrite_tac[gas_outcome_ptr_def] >> qexists_tac `[]` >> disj2_tac >> disj1_tac >>
+  rewrite_tac[gas_summary_ptr_at_def] >>
+  qexistsl_tac [`res`, `es`, `G'`, `tn'`,
+    `OK (t with vs_inst_idx := s.vs_inst_idx + 2)`] >>
+  simp[gas_explicit_def] >> gen_tac >> strip_tac >>
+  `ghost_inv H d cenv cx es G tn s` by metis_tac[] >>
   drule word_modular_emitted_insts >> strip_tac >>
   `ghost_inv H d cenv cx es G' tn' t /\
    ghost_kept cenv es0 sc G0 tn0 s0 G' tn' /\
    op_taint tn' op = {} /\ op_prov G' op = NONE` by
     (gnvs[] >> irule word_modular_pair_frame >> simp[] >>
      goal_assum (drule_at Any) >> Cases_on `is_mul` >> simp[] >> metis_tac[]) >>
-  simp[gas_outcome_ptr_def] >> qexists_tac `[]` >> disj1_tac >>
-  simp[gas_summary_ptr_at_def, gas_explicit_def] >>
-  qexistsl_tac [`res`, `es`, `G'`, `tn'`,
-    `OK (t with vs_inst_idx := s.vs_inst_idx + 2)`] >>
-  gvs[word_interval_ghost_inv_index]
+  simp[word_interval_ghost_inv_index] >>
+  `inst_seq_ptr (D H) 0 ctx fn PG G tn (emitted_insts sa sb) s G' tn'` by simp[] >>
+  `gas_path_ptr (D H) 0 ctx fn PG G tn s
+    (LENGTH (FILTER (\i. i.inst_opcode = GAS) (emitted_insts sa sb))) G' tn'
+    (OK (t with vs_inst_idx := s.vs_inst_idx + LENGTH (emitted_insts sa sb)))` by
+    (match_mp_tac (Q.SPECL [`emitted_insts sa sb`, `s`, `t`, `G`, `tn`,
+       `G'`, `tn'`, `ctx`, `fn`, `bb`] run_inst_seq_gas_path_ptr) >>
+     rpt conj_tac >> first_assum ACCEPT_TAC) >>
+  qpat_x_assum `gas_path_ptr (D H) _ _ _ _ _ _ _ _ _ _ _` mp_tac >>
+  qpat_x_assum `emitted_insts sa sb = _`
+    (fn eq => simp_tac (srw_ss()) [eq, mk_inst_def, arithmeticTheory.ADD_COMM]) >>
+  Cases_on `is_mul` >> simp[]
 QED
 
 Theorem word_modular_abort_outcome:
@@ -390,14 +433,22 @@ Theorem word_modular_abort_outcome:
   isPREFIX (emitted_insts sa sb) (DROP s.vs_inst_idx bb.bb_instructions) /\
   (!tail. source (es with gas_obs := tail) =
     (INR (Error (RuntimeError msg)), es with gas_obs := tail))) ==>
-  gas_outcome_ptr D tops (ctx,fn) PG source (es,s,G,tn)
-    Q (\res fin gt r. expr_exit res r)
+  gas_outcome_ptr D tops (ctx,fn) PG cx st0 source (es,s,G,tn)
+    Q (\H res fin gt r. expr_exit res r)
 Proof
-  strip_tac >> drule_all word_modular_counted_abort >>
-  disch_then (qspecl_then [`PG`, `G`, `D`] strip_assume_tac) >>
-  simp[gas_outcome_ptr_def] >> qexists_tac `REPLICATE n F` >> disj1_tac >>
+  strip_tac >> drule word_modular_emitted_insts >> strip_tac >>
+  `step_inst_base (mk_inst sa.cs_next_id ASSERT [c] []) s = Abort Revert_abort (revert_state (set_returndata [] s))` by
+    simp[step_inst_base_opcode_eqs, mk_inst_def] >>
+  rewrite_tac[gas_outcome_ptr_def] >> qexists_tac `[]` >> disj2_tac >> disj1_tac >>
   simp[gas_summary_ptr_at_def] >>
-  qexistsl_tac [`INR (Error (RuntimeError msg))`, `es`, `G'`, `tn'`,
-    `Abort Revert_abort t`] >>
-  simp[expr_exit_def, exit_result_def]
+  qexistsl_tac [`INR (Error (RuntimeError msg))`, `es`, `G`, `tn`,
+    `Abort Revert_abort (revert_state (set_returndata [] s))`] >>
+  simp[expr_exit_def, exit_result_def] >> rpt strip_tac >>
+  irule (SRULE [mk_inst_def]
+    (Q.INST [`i` |-> `mk_inst sa.cs_next_id ASSERT [c] []`] gas_path_ptr_abort)) >>
+  simp[is_terminator_def] >> qexistsl_tac [`c`,`sa`] >> simp[GSYM mk_inst_def] >> conj_tac
+  >- (qpat_x_assum `isPREFIX _ _` mp_tac >>
+      qpat_x_assum `emitted_insts sa sb = _` (fn eq => rewrite_tac[eq]) >>
+      metis_tac[instruction_prefix_cursor]) >>
+  irule word_modular_inst_ok >> simp[mk_inst_def] >> metis_tac[]
 QED

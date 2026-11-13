@@ -59,6 +59,7 @@ Theorem mload_counted_clean_ambient:
     ptr_covers G tn src s 32 /\ lookup_var src s = SOME a /\
     (!i. w2n a <= i /\ i < w2n a + 32 ==> i NOTIN tn.t_mem) ==>
     ?G' tn' t.
+      inst_seq_ptr D 0 ctx fn PG G tn [mk_inst id MLOAD [Var src] [out]] s G' tn' /\
       gas_path_ptr D 0 ctx fn PG G tn s 0 G' tn' (OK t) /\
       t = (update_var out (mload (w2n a) s) s) with
         vs_inst_idx := SUC s.vs_inst_idx /\
@@ -82,6 +83,11 @@ Proof
     `step_taint (mk_inst id MLOAD [Var src] [out]) s
     (update_var out (mload (w2n a) s) s) tn`,
     `(update_var out (mload (w2n a) s) s) with vs_inst_idx := SUC s.vs_inst_idx`] >>
+  conj_tac
+  >- (simp[inst_seq_ptr_def, ptr_inst_ok_mload] >>
+      `step_inst_base (mk_inst id MLOAD [Var src] [out]) s =
+        OK (update_var out (mload (w2n a) s) s)` by
+        (irule step_MLOAD >> simp[eval_operand_def]) >> simp[]) >>
   conj_tac >- simp[] >>
   `eval_operand (Var src) s = SOME a` by simp[eval_operand_def] >>
   drule_all mload_ghost_clean >> strip_tac >>
