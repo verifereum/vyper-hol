@@ -8,6 +8,14 @@ Ancestors
   exprSimSliceExtcodeContext exprSimSliceMemory exprSimHash loweringHalt loweringPosts venomState
   compileEnv context exprLoweringProps fragExec venomInst pair list rich_list
 
+(* Moves the goals whose conclusion is a gas_outcome to the front; unlike
+   >~, assumptions mentioning gas_outcome don't count. *)
+val outcome_goals_first =
+  SELECT_LT (fn (g as (_, w)) =>
+    if (#1 (dest_const (#1 (strip_comb w))) = "gas_outcome"
+        handle HOL_ERR _ => false)
+    then ALL_TAC g else NO_TAC g);
+
 Theorem slice_extcode_out_control:
   compile_slice_out_buf sz sa = ((out,data),sb) ==>
   sb.cs_current_bb = sa.cs_current_bb /\
@@ -675,8 +683,7 @@ Resume slice_extcode_continue_entry_seq[tail]:
     z.vs_current_bb = sc.cs_current_bb /\ z.vs_inst_idx = LENGTH sc.cs_current_insts)` >>
   qexists_tac `(\H res ef r. expr_exit res r)` >>
   simp[exprSimSliceTerminalTheory.slice_terminal_source_frame] >>
-  rpt conj_tac
-  >~ [`gas_outcome _ _ _ _ _ _ _ _ _`] >- suspend "outcome" >>
+  (rpt conj_tac THEN_LT outcome_goals_first) >- suspend "outcome" >>
   suspend "rebase"
 QED
 

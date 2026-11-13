@@ -5,6 +5,14 @@ Ancestors
   exprSimSliceTerminal exprSimSliceCompose exprSimSource exprSimHyps
   exprSimSliceOrdinaryContext
 
+(* Moves the goals whose conclusion is a gas_outcome to the front; unlike
+   >~, assumptions mentioning gas_outcome don't count. *)
+val outcome_goals_first =
+  SELECT_LT (fn (g as (_, w)) =>
+    if (#1 (dest_const (#1 (strip_comb w))) = "gas_outcome"
+        handle HOL_ERR _ => false)
+    then ALL_TAC g else NO_TAC g);
+
 Theorem slice_two_operand_post_rebase:
   stmt_state_rel H ctx func cenv cx ec u /\
   local_ptrs_reserved cenv sc /\ local_ptrs_reserved cenv sd /\
@@ -104,8 +112,7 @@ Proof
   conj_tac >- first_assum ACCEPT_TAC >>
   qexists_tac `\H v ee t. expr_post H ctx func cenv cx e es sa sb s ee v op t /\
     t.vs_current_bb = sb.cs_current_bb /\ t.vs_inst_idx = LENGTH sb.cs_current_insts` >>
-  simp[] >> rpt conj_tac
-  >~ [`gas_outcome _ _ _ _ _ (bind (eval_expr cx e) (read_result cx))`]
+  simp[] >> (rpt conj_tac THEN_LT outcome_goals_first)
   >- (irule slice_gas_outcome_conseq >> goal_assum (drule_at Any) >>
       simp[] >> rpt strip_tac >> Cases_on `res` >> gvs[] >>
       rename1 `expr_exit (INR ex) r` >>
@@ -385,8 +392,7 @@ Proof
       (LocatedValue (expr_type result) (mk_ptr out LocMemory)) z /\
     z.vs_current_bb = sf.cs_current_bb /\ z.vs_inst_idx = LENGTH sf.cs_current_insts)` >>
   qexists_tac `(\H res ee r. expr_exit res r)` >>
-  simp[slice_terminal_source_frame] >> rpt conj_tac
-  >~ [`gas_outcome _ _ _ _ _ _ _ _ _`]
+  simp[slice_terminal_source_frame] >> (rpt conj_tac THEN_LT outcome_goals_first)
   >- (drule_all slice_data_bytes_outcome >> simp[]) >>
   rpt strip_tac >>
   qpat_assum `!H. valid_horizon _ _ H e2.storage_trace ==> expr_post _ _ _ _ _ _ _ _ _ _ _ _ _ _ /\ _`
@@ -509,8 +515,7 @@ Proof
       (LocatedValue (expr_type result) (mk_ptr out LocMemory)) z /\
     z.vs_current_bb = sf.cs_current_bb /\ z.vs_inst_idx = LENGTH sf.cs_current_insts)` >>
   qexists_tac `(\H res ee r. expr_exit res r)` >>
-  simp[slice_terminal_source_frame] >> rpt conj_tac
-  >~ [`gas_outcome _ _ _ _ _ _ _ _ _`]
+  simp[slice_terminal_source_frame] >> (rpt conj_tac THEN_LT outcome_goals_first)
   >- (drule_all slice_data_string_outcome >> simp[]) >>
   rpt strip_tac >>
   qpat_assum `!H. valid_horizon _ _ H e2.storage_trace ==> expr_post _ _ _ _ _ _ _ _ _ _ _ _ _ _ /\ _`
@@ -750,8 +755,7 @@ Proof
       (LocatedValue (expr_type result) (mk_ptr out LocMemory)) z /\
     z.vs_current_bb = sf.cs_current_bb /\ z.vs_inst_idx = LENGTH sf.cs_current_insts)` >>
   qexists_tac `(\H res ee r. expr_exit res r)` >>
-  simp[slice_terminal_source_frame] >> rpt conj_tac
-  >~ [`gas_outcome _ _ _ _ _ _ _ _ _`]
+  simp[slice_terminal_source_frame] >> (rpt conj_tac THEN_LT outcome_goals_first)
   >- (drule_all slice_data_bytes_outcome >> simp[]) >>
   rpt strip_tac >>
   qpat_assum `!H. valid_horizon _ _ H e2.storage_trace ==> expr_post _ _ _ _ _ _ _ _ _ _ _ _ _ _ /\ _`
@@ -877,8 +881,7 @@ Proof
       (LocatedValue (expr_type result) (mk_ptr out LocMemory)) z /\
     z.vs_current_bb = sf.cs_current_bb /\ z.vs_inst_idx = LENGTH sf.cs_current_insts)` >>
   qexists_tac `(\H res ee r. expr_exit res r)` >>
-  simp[slice_terminal_source_frame] >> rpt conj_tac
-  >~ [`gas_outcome _ _ _ _ _ _ _ _ _`]
+  simp[slice_terminal_source_frame] >> (rpt conj_tac THEN_LT outcome_goals_first)
   >- (drule_all slice_data_string_outcome >> simp[]) >>
   rpt strip_tac >>
   qpat_assum `!H. valid_horizon _ _ H e2.storage_trace ==> expr_post _ _ _ _ _ _ _ _ _ _ _ _ _ _ /\ _`

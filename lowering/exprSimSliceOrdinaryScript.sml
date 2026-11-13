@@ -9,6 +9,14 @@ Ancestors
   exprSimSliceOrdinaryEntry exprSimSliceTerminal compileEnv
   exprSimDefs exprLowering exprLoweringProps exprBopLowering exprSimWordArgs vyperState pair
 
+(* Moves the goals whose conclusion is a gas_outcome to the front; unlike
+   >~, assumptions mentioning gas_outcome don't count. *)
+val outcome_goals_first =
+  SELECT_LT (fn (g as (_, w)) =>
+    if (#1 (dest_const (#1 (strip_comb w))) = "gas_outcome"
+        handle HOL_ERR _ => false)
+    then ALL_TAC g else NO_TAC g);
+
 Theorem names_builtin_slice[local]:
   !args. ~names_builtin (Slice n) args
 Proof
@@ -264,8 +272,7 @@ Resume compile_slice_ordinary_case[dynamic]:
  irule slice_gas_outcome_bind_value >>
  conj_tac >- simp[slice_two_read_terminal_frame] >>
  qexists_tac `\H v ee t. spost H (INL v) ee t` >>
- simp[] >> rpt conj_tac
- >~ [`gas_outcome _ _ _ _ _ (bind (eval_expr cx src) (read_result cx))`]
+ simp[] >> (rpt conj_tac THEN_LT outcome_goals_first)
  >- (irule slice_gas_outcome_conseq >> goal_assum (drule_at Any) >>
      simp[Abbr `spost`] >> rpt strip_tac >>
      Cases_on `res` >> gvs[] >> rename1 `expr_exit (INR ex) r` >>
@@ -549,8 +556,7 @@ Resume compile_slice_ordinary_case[fixed_source]:
  irule slice_gas_outcome_bind_value >>
  conj_tac >- simp[slice_two_read_terminal_frame] >>
  qexists_tac `\H v ee t. spost H (INL v) ee t` >>
- simp[] >> rpt conj_tac
- >~ [`gas_outcome _ _ _ _ _ (bind (eval_expr cx src) (read_result cx))`]
+ simp[] >> (rpt conj_tac THEN_LT outcome_goals_first)
  >- (irule slice_gas_outcome_conseq >> goal_assum (drule_at Any) >>
      simp[Abbr `spost`] >> rpt strip_tac >>
      Cases_on `res` >> gvs[] >> rename1 `expr_exit (INR ex) r` >>

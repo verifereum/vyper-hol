@@ -7,6 +7,14 @@ Ancestors
   exprSimSource exprSimHyps exprSimHypsDefs exprSimWordArgs gasSummaryCompose
   exprLoweringProps exprBopLowering exprSimDefs exprLowering vyperState vyperAST pair
 
+(* Moves the goals whose conclusion is a gas_outcome to the front; unlike
+   >~, assumptions mentioning gas_outcome don't count. *)
+val outcome_goals_first =
+  SELECT_LT (fn (g as (_, w)) =>
+    if (#1 (dest_const (#1 (strip_comb w))) = "gas_outcome"
+        handle HOL_ERR _ => false)
+    then ALL_TAC g else NO_TAC g);
+
 (* Closes a storage_trace_frame goal for a chain of reads and binds. *)
 val slice_frame_tac =
   rpt gen_tac >>
@@ -267,9 +275,9 @@ Resume slice_extcode_typed_entry[finish]:
         (LocatedValue (BaseT (BytesT (Dynamic n))) (mk_ptr q LocMemory)) z /\
       z.vs_current_bb = r.cs_current_bb /\ z.vs_inst_idx = LENGTH r.cs_current_insts`,
     `\H res ee rr. expr_exit res rr`] >>
-  simp[] >> rpt conj_tac
-  >~ [`storage_trace_frame _`] >- slice_frame_tac
-  >~ [`gas_outcome _ _ _ _ _ _ _ _ _`] >- suspend "entry" >>
+  simp[] >> (rpt conj_tac THEN_LT outcome_goals_first)
+  >- suspend "entry"
+  >~ [`storage_trace_frame _`] >- slice_frame_tac >>
   rpt strip_tac >> gvs[] >>
   qpat_assum `!H. valid_horizon _ _ H mid'.storage_trace ==>
     valid_horizon _ _ H mid.storage_trace` (drule_then assume_tac) >>
