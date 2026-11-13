@@ -3,11 +3,12 @@
 Theory ctorDeployMemoryRunPtrPrefixDynamicArray
 Ancestors
   loweringStateRelDefs valueEncodingDefs
+  compileEnv valueEncoding
   ctorDeployMemoryRunPtrPrefixLoopClose ctorAbiActualArrayRun ctorAbiActualArrayInvariant
-  ctorAbiActualArrayContext valueEncoding valueEncodingProps
+  ctorAbiActualArrayContext valueEncodingProps
   abiDecoderContract abiDecoderTypedContract abiDecoderCorrectPrimitiveArray
   abiDecoderRecursiveLoopContext abiDecoderCoherence abiDecoderLoopEmit
-  compileEnv exprLowering ptrSafeRun ptrDiscipline venomState pred_set
+  exprLowering ptrSafeRun ptrDiscipline venomState pred_set
   ctorAbiActualSites ctorAbiActualFrame abiEncoderRegisteredEffect abiDecoderReentry
   abiDecoderCounters abiDecoderArrayLoopInit abiDecoderArraySetupCode abiDecoderIndexInit
   abiDecoderRecursiveArray abiDecoderLoop abiDecoderArrayInvariant arithmetic

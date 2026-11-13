@@ -105,7 +105,7 @@ Proof
   irule gas_outcome_ptr_bind >> rpt conj_tac
   >- suspend "certificate_head"
   >- suspend "certificate_tail" >>
-  irule operandOutcomePtrTheory.gas_outcome_ptr_marked_conseq >>
+  irule gasOutcomeMarkedPtrTheory.gas_outcome_ptr_marked_conseq >>
   goal_assum (drule_at Any) >> conj_tac
   >- suspend "normal" >>
   rpt strip_tac >> Cases_on `res` >>
@@ -278,7 +278,7 @@ Theorem raw_call_prepared_prefix_sim_ptr:
       rr = INL (av::BytesV bs::kvs) /\ value_has_type (BaseTV AddressT) av /\
       expr_post H ctx func cenv cx a es sa s1 s0 ea av addr ta /\
       expr_post H ctx func cenv cx d ea s1 s2 ta ed (BytesV bs) data tb /\
-      typed_args_post ctx func cenv cx ed sm th ee kws xs kvs t /\
+      typed_args_post H ctx func cenv cx ed sm th ee kws xs kvs t /\
       vo = ext_call_kwarg EKValue flags.rcf_kws xs /\
       go = ext_call_kwarg EKGas flags.rcf_kws xs /\ ig = NONE /\
       EVERY (\op. op_taint tn op = {}) xs /\
@@ -329,7 +329,7 @@ Theorem raw_call_prepared_prefix_sim_ptr:
 Proof
   strip_tac >> drule_all rawCallPrefixPtrTheory.raw_call_prefix_sim_ptr >>
   disch_then (qspec_then `PG` assume_tac) >>
-  irule operandOutcomePtrTheory.gas_outcome_ptr_marked_conseq >>
+  irule gasOutcomeMarkedPtrTheory.gas_outcome_ptr_marked_conseq >>
   goal_assum (drule_at Any) >> simp[] >> suspend "normal"
 QED
 
