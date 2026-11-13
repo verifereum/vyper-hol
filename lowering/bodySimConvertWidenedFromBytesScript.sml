@@ -42,31 +42,60 @@ Proof
     (irule convert_operand_admissible >> metis_tac[]) >>
   qpat_x_assum `expr_sim _ _ _ _ _ e1 _`
     (mp_tac o REWRITE_RULE [exprSimDefsTheory.expr_sim_def]) >>
-  disch_then (qspecl_then [`sa`,`s1`,`x`,`s0`] mp_tac) >>
+  disch_then (qspecl_then [`st0`,`sa`,`s1`,`x`,`s0`] mp_tac) >>
   (impl_tac >- gvs[]) >>
   rewrite_tac[gasOutcomeTheory.gas_outcome_def] >> strip_tac
+  >- (qexists_tac `marks` >> disj1_tac >>
+      rewrite_tac[eval_expr_convert_action] >>
+      irule gasStorageTheory.gas_bad_storage_at_bind_left >>
+      simp[vyperStorageTraceTheory.storage_trace_frame_def])
   >- suspend "counted" >>
-  qexists_tac `marks` >> disj2_tac >>
+  qexists_tac `marks` >> disj2_tac >> disj2_tac >>
   qexistsl_tac [`err`,`ee`,`leaf`,`finish'`] >>
   irule convert_exempt_cert >> simp[]
 QED
 
 Resume intcall_convert_from_bytestring_sim[counted]:
-  qexists_tac `marks` >> disj1_tac >>
-  rewrite_tac[eval_expr_convert_action] >>
   qpat_x_assum `gas_summary_at _ _ _ _ _ _ _`
     (mp_tac o REWRITE_RULE [gasSummaryTheory.gas_summary_at_def]) >>
-  strip_tac
+  disch_then (qx_choosel_then [`res`, `es_end`, `rr`]
+    (CONJUNCTS_THEN2 assume_tac mp_tac)) >>
+  reverse (Cases_on `storage_trace_domain cx st0 es_end.storage_trace`)
+  >- (disch_then kall_tac >> qexists_tac `marks` >> disj1_tac >>
+      rewrite_tac[eval_expr_convert_action] >>
+      irule gasStorageTheory.gas_bad_storage_at_bind_left >>
+      conj_tac >- simp[vyperStorageTraceTheory.storage_trace_frame_def] >>
+      irule gasStorageTheory.gas_bad_storage_at_counted_prefix >>
+      qexistsl_tac [`ctx`, `es_end`, `func`, `F`, `rr`, `res`] >>
+      simp[]) >>
+  `?H1. valid_horizon cx st0 H1 es_end.storage_trace` by
+    (qexists_tac `storage_trace_horizon es_end.storage_trace` >>
+     fs[vyperStorageFootprintTheory.storage_trace_domain_def]) >>
+  disch_then (DISJ_CASES_THEN (strip_assume_tac o BETA_RULE)) >>
+  qexists_tac `marks` >> disj2_tac >> disj1_tac >>
+  rewrite_tac[eval_expr_convert_action]
   >- suspend "value" >>
-  Cases_on `res` >- gvs[] >>
-  simp[gasSummaryTheory.gas_summary_at_def] >> qexistsl_tac [`INR y`,`es_end`,`r`] >>
-  simp[] >> conj_tac
-  >- (irule gasSummaryComposeTheory.gas_marked_exec_bind_exception >> simp[]) >>
-  gvs[]
+  `expr_exit res rr` by
+    (qpat_x_assum `!H. valid_horizon _ _ H _ ==> expr_exit _ _`
+       (qspec_then `H1` mp_tac) >> simp[]) >>
+  Cases_on `res` >- gvs[exprSimDefsTheory.expr_exit_def] >>
+  simp[gasSummaryTheory.gas_summary_at_def] >> qexistsl_tac [`INR y`, `es_end`, `rr`] >>
+  simp[] >> irule gasSummaryComposeTheory.gas_marked_exec_bind_exception >> simp[]
 QED
 
 Resume intcall_convert_from_bytestring_sim[value]:
-  gvs[] >>
+  qpat_x_assum `ann = t` (SUBST_ALL_TAC o SYM) >>
+  qpat_x_assum `rr = OK _` SUBST_ALL_TAC >>
+  qpat_x_assum `!H. valid_horizon _ _ H _ ==> ?v. _`
+    (assume_tac o SIMP_RULE (srw_ss()) []) >>
+  qpat_assum `!H. valid_horizon _ _ H es_end.storage_trace ==> _`
+    (drule_then (qx_choose_then `v` strip_assume_tac)) >>
+  qpat_x_assum `res = INL v` SUBST_ALL_TAC >>
+  `!H. valid_horizon cx st0 H es_end.storage_trace ==>
+     expr_post H ctx func cenv cx e1 es sa s1 s0 (es_end with gas_obs := []) v x t'`
+    by (rpt strip_tac >>
+        qpat_x_assum `!H. valid_horizon _ _ H es_end.storage_trace ==> ?v'. _`
+          (drule_then strip_assume_tac) >> gvs[]) >>
   `bind (eval_expr cx e1) (read_result cx)
      (es with gas_obs := gas_explicit marks s0.vs_gas_readings) =
      (INL v, es_end with gas_obs := [])` by
@@ -85,8 +114,13 @@ Resume intcall_convert_from_bytestring_sim[value]:
      gvs[] >> unabbrev_all_tac >>
      drule_at (Pos last) (CONV_RULE (DEPTH_CONV ETA_CONV) intcall_lowered_zero_read_empty) >>
      disch_then (qspecl_then [`cenv`,`env`] mp_tac) >> simp[]) >>
-  drule_all (Q.INST [`t` |-> `ann`] dynamic_continuation_summary
-             |> SIMP_RULE (srw_ss()) []) >>
+  mp_tac (Q.INST [`t` |-> `ann`, `ee` |-> `es_end`, `t0` |-> `t'`, `v1` |-> `v`,
+                  `tenv` |-> `env.type_defs`] dynamic_continuation_summary
+          |> SIMP_RULE (srw_ss()) []) >>
+  impl_tac
+  >- (rpt conj_tac >> TRY (first_assum ACCEPT_TAC) >>
+      TRY (qexists_tac `H1` >> first_assum ACCEPT_TAC >> NO_TAC) >>
+      simp[]) >>
   rewrite_tac[gasSummaryTheory.gas_summary_at_def] >> strip_tac >>
   qexistsl_tac [`res`,`es_end'`,`r`] >>
   (conj_tac
@@ -94,6 +128,6 @@ Resume intcall_convert_from_bytestring_sim[value]:
               gasSummaryComposeTheory.gas_marked_exec_bind_normal
               |> REWRITE_RULE [APPEND_NIL]) >>
        qexistsl_tac [`es_end`,`t'`,`v`] >> gvs[]) >>
-   gvs[])
+   gvs[] >> disj2_tac >> first_assum ACCEPT_TAC)
 QED
 Finalise intcall_convert_from_bytestring_sim

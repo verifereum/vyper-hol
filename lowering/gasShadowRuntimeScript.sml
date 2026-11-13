@@ -34,9 +34,8 @@ Proof
   >- simp[gas_shadow_compiles_new_block] >>
   gen_tac >> BETA_TAC >>
   match_mp_tac gas_shadow_compiles_bind >> conj_tac
-  >- (Cases_on `fb` >> simp[gas_shadow_compiles_emit_inst] >>
-      PairCases_on `x` >>
-      simp[gas_shadow_fallback_package_def,
+  >- (Cases_on `fb` >> TRY (rename1 `SOME pkg` >> PairCases_on `pkg`) >>
+      simp[gas_shadow_compiles_emit_inst, gas_shadow_fallback_package_def,
            gas_shadow_compiles_compile_fallback_body]) >>
   simp[gas_shadow_compiles_bind, gas_shadow_compiles_return,
        gas_shadow_compile_internal_fn_bodies]
@@ -79,9 +78,8 @@ Proof
   >- simp[gas_shadow_compiles_new_block] >>
   gen_tac >> BETA_TAC >>
   match_mp_tac gas_shadow_compiles_bind >> conj_tac
-  >- (Cases_on `fb` >> simp[gas_shadow_compiles_emit_inst] >>
-      PairCases_on `x` >>
-      simp[gas_shadow_fallback_package_def,
+  >- (Cases_on `fb` >> TRY (rename1 `SOME pkg` >> PairCases_on `pkg`) >>
+      simp[gas_shadow_compiles_emit_inst, gas_shadow_fallback_package_def,
            gas_shadow_compiles_compile_fallback_body]) >>
   simp[gas_shadow_compiles_bind, gas_shadow_compiles_return,
        gas_shadow_compile_internal_fn_bodies]

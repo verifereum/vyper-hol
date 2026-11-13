@@ -183,16 +183,9 @@ Resume stmt_frag_cons_env_mem[tail_exempt]:
 QED
 Resume stmt_frag_cons_env_mem[exception_post]:
   qx_gen_tac `HH` >> strip_tac >>
-  `?cenv1. stmt_lands lctx sm (INR exc) t /\ ~t.vs_halted /\
-     cenv_top_ext cenv cenv1 es_end.scopes /\
-     stmt_state_rel HH ctx func cenv1 cx (es_end with gas_obs := []) t /\
-     storage_well_formed_on cx (es_end with gas_obs := []) (FST HH) /\
-     (!x w. not_fresh_at sa x /\ lookup_var x s0 = SOME w ==>
-            lookup_var x t = SOME w) /\
-     (!aid b. FLOOKUP s0.vs_allocas aid = SOME b ==>
-              FLOOKUP t.vs_allocas aid = SOME b) /\
-     return_buf_frame d cenv1 sm t /\ alloca_history func t /\
-     s0.vs_alloca_next <= t.vs_alloca_next` by metis_tac[] >>
+  qpat_x_assum `!H. valid_horizon _ _ H es_end.storage_trace ==> _`
+    (drule_then strip_assume_tac) >>
+  rename1 `return_buf_frame d cenv1 sm t` >>
   `stmt_lands lctx sb (INR exc) t` by gvs[stmt_lands_def] >>
   `return_buf_frame d cenv1 sb t` by
     (irule return_buf_frame_frame >>
@@ -211,17 +204,9 @@ Resume stmt_frag_cons_env_mem[sequence_post]:
       (es_end with gas_obs := []) t` by
     (simp[stmt_post_core_def] >> metis_tac[]) >>
   `s0.vs_alloca_next <= t.vs_alloca_next` by metis_tac[] >>
-  `?cenv1. stmt_lands lctx sb res t' /\ ~t'.vs_halted /\
-     (res = INL () ==> ~block_is_terminated sb /\ cenv1 = cenv') /\
-     cenv_top_ext c cenv1 es_end'.scopes /\
-     stmt_state_rel HH ctx func cenv1 cx (es_end' with gas_obs := []) t' /\
-     storage_well_formed_on cx (es_end' with gas_obs := []) (FST HH) /\
-     (!x w. not_fresh_at sm x /\ lookup_var x t = SOME w ==>
-            lookup_var x t' = SOME w) /\
-     (!aid b. FLOOKUP t.vs_allocas aid = SOME b ==>
-              FLOOKUP t'.vs_allocas aid = SOME b) /\
-     return_buf_frame d cenv1 sb t' /\ alloca_history func t' /\
-     t.vs_alloca_next <= t'.vs_alloca_next` by metis_tac[] >>
+  qpat_x_assum `!H. valid_horizon _ _ H es_end'.storage_trace ==> _`
+    (drule_then strip_assume_tac) >>
+  rename1 `return_buf_frame d cenv1 sb t'` >>
   `stmt_post_core HH ctx func cx lctx c cenv' sm sb t res
       (es_end' with gas_obs := []) t'` by
     (simp[stmt_post_core_def] >> qexists_tac `cenv1` >> simp[]) >>

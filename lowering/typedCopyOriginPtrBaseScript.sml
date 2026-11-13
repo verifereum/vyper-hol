@@ -671,8 +671,9 @@ Finalise typed_copy_origin_ptr_index_addresses_exact
 
 Theorem typed_copy_origin_ptr_binop_ghost_frame:
   (opc = MUL \/ opc = ADD) ==>
-  op_taint (step_taint (mk_inst id opc [left;right] [out]) s
-    (update_var out w s) tn) (Var out) = {} /\
+  ((opc = MUL ==> op_taint tn left = {} /\ op_taint tn right = {}) ==>
+   op_taint (step_taint (mk_inst id opc [left;right] [out]) s
+     (update_var out w s) tn) (Var out) = {}) /\
   (step_taint (mk_inst id opc [left;right] [out]) s
     (update_var out w s) tn).t_mem = tn.t_mem /\
   (step_taint (mk_inst id opc [left;right] [out]) s
@@ -705,7 +706,8 @@ Proof
        codegenRelTheory.source_memory_write_ranges_def,
        ptrDisciplineTheory.written_taint_def, ptrDisciplineTheory.range_bytes_def,
        ptrDisciplineTheory.imm_taint_def,
-       finite_mapTheory.FLOOKUP_DRESTRICT, finite_mapTheory.FLOOKUP_UPDATE]
+       finite_mapTheory.FLOOKUP_DRESTRICT, finite_mapTheory.FLOOKUP_UPDATE] >>
+  gvs[ptrDisciplineTheory.op_taint_def]
 QED
 
 Theorem typed_copy_origin_ptr_counter_backedge_path:

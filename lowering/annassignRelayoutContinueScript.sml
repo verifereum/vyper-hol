@@ -155,14 +155,16 @@ Proof
       w2n w + type_memory_size dtv < dimword (:256) /\
       (w2n sw + type_memory_size stv <= w2n w \/
        w2n w + type_memory_size dtv <= w2n sw)` by
-    (irule expr_post_reserved_destination_source >> simp[] >>
-     goal_assum (drule_at (Pat `expr_post _ _ _ _ _ _ _ _ _ _ _ _ _ _`)) >>
-     simp[] >> metis_tac[]) >>
+    (irule (INST_TYPE [alpha |-> ``:256``]
+              expr_post_reserved_destination_source) >> simp[] >>
+     qexistsl_tac [`H0`, `cenv`, `ctx`, `cx`, `e`, `es`, `es1`, `func`,
+                   `s0`, `sa`, `sb`] >>
+     gvs[]) >>
   `!H. valid_horizon cx st0 H es1.storage_trace ==>
      stmt_state_rel H ctx func cenv cx es1 s` by
     (rpt strip_tac >>
-     qpat_assum `!H. valid_horizon _ _ H _ ==> expr_post _ _ _ _ _ _ _ _ _ _ _ _ _ _`
-       drule >> simp[expr_post_def]) >>
+     `expr_post H ctx func cenv cx e es sa sb s0 es1 v op s` by metis_tac[] >>
+     fs[expr_post_def]) >>
   `not_fresh_at sb p` by
     (irule not_fresh_at_mono >> qexists_tac `sa` >> simp[]) >>
   `local_ptrs_reserved cenv sb` by
@@ -192,11 +194,20 @@ Resume annassign_relayout_store_post_path[direct]:
   >- (rpt strip_tac >>
       `not_fresh_at sb x` by
         (irule not_fresh_at_mono >> qexists_tac `sa` >> simp[]) >>
-      qpat_x_assum `expr_post H0 _ _ _ _ _ _ _ _ _ _ _ _ _` mp_tac >>
-      simp[expr_post_def] >> metis_tac[]) >>
+      `lookup_var x s = SOME u` by
+        (qpat_assum `expr_post H0 _ _ _ _ _ _ _ _ _ _ _ _ _`
+           (strip_assume_tac o REWRITE_RULE [expr_post_def]) >>
+         qpat_x_assum `!x w. not_fresh_at sa x /\ _ ==> _` irule >> simp[]) >>
+      simp[]) >>
   conj_tac
-  >- (qpat_x_assum `expr_post H0 _ _ _ _ _ _ _ _ _ _ _ _ _` mp_tac >>
-      simp[expr_post_def] >> metis_tac[]) >>
+  >- (rpt strip_tac >>
+      `FLOOKUP s.vs_allocas aid = SOME entry` by
+        (qpat_assum `expr_post H0 _ _ _ _ _ _ _ _ _ _ _ _ _`
+           (strip_assume_tac o REWRITE_RULE [expr_post_def]) >>
+         qpat_x_assum `!aid b. FLOOKUP s0.vs_allocas aid = SOME b ==> _` irule >>
+         simp[]) >>
+      qpat_x_assum `!aid entry. FLOOKUP s.vs_allocas aid = SOME entry ==> _` irule >>
+      simp[]) >>
   rpt strip_tac >>
   qpat_assum `!aid off z. _ ==> mem_bytes_at off z t.vs_memory = _`
     (qspecl_then [`aid`, `off`, `z`] mp_tac) >> simp[])
@@ -236,7 +247,7 @@ Resume annassign_relayout_store_post_path[staged]:
   `w2n uw + type_memory_size stv < dimword (:256) /\
    (w2n uw + type_memory_size stv <= w2n w \/
     w2n w + type_memory_size dtv <= w2n uw)` by
-    (irule aggregate_allocated_source_bounds >>
+    (irule (INST_TYPE [alpha |-> ``:256``] aggregate_allocated_source_bounds) >>
      `stmt_state_rel H0 ctx func cenv cx es1 u` by metis_tac[] >>
      goal_assum (drule_at (Pat `stmt_state_rel _ _ _ _ _ _ _`)) >>
      qexistsl_tac [`w2n uw`, `sx.cs_next_id`, `w2n w`, `inst.inst_id`, `sz`, `type_memory_bytes cenv sty`] >> simp[]) >>
@@ -303,9 +314,14 @@ Resume annassign_relayout_store_post_path[staged]:
      `lookup_var x t = lookup_var x u` by
        (qpat_assum `!x. not_fresh_at ss x ==> _` (qspec_then `x` mp_tac) >> simp[]) >>
      simp[]) >>
+  qpat_x_assum `expr_post H0 _ _ _ _ _ _ _ _ _ _ _ _ _`
+    (strip_assume_tac o REWRITE_RULE [expr_post_def]) >>
   qexists_tac `t` >> simp[] >>
-  qpat_x_assum `expr_post H0 _ _ _ _ _ _ _ _ _ _ _ _ _` mp_tac >>
-  simp[expr_post_def] >> rpt strip_tac >> metis_tac[]
+  (conj_tac
+   >- (rpt strip_tac >>
+       qpat_x_assum `!aid off z. _ ==> mem_bytes_at off z t.vs_memory = _`
+         (qspecl_then [`aid`, `off`, `z`] mp_tac) >> simp[]) >>
+   qpat_x_assum `gas_marked_path F ctx func s (0 + 0) (OK t)` mp_tac >> simp[])
 QED
 
 Finalise annassign_relayout_store_post_path

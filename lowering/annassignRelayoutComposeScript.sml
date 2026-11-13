@@ -1,7 +1,7 @@
 (* Source/gas composition for the typed declaration relayout boundary. *)
 Theory annassignRelayoutCompose
 Ancestors
-  annassignRelayoutContinue stmtSimDeclCompose stmtSimDeclSource
+  annassignRelayoutContinue stmtSimDeclCompose stmtSimDeclSource stmtSimProps
   stmtSimDefs gasOutcome fragGasMode fragGasPath exprSimWordArgs
   gasSummary gasSummaryCompose vyperInterpreter vyperState venomState
   valueEncoding finite_map list exprLoweringProps
@@ -100,13 +100,23 @@ Proof
     (drule_all compile_assign_memory_relayout_open >> simp[]) >>
   `(ee with gas_obs := []).scopes = sc :: rest /\
    lookup_scopes id (ee with gas_obs := []).scopes = NONE` by (simp[] >> metis_tac[]) >>
-  drule_all (SRULE [PULL_EXISTS] annassign_relayout_store_post_path) >>
-  disch_then (qspec_then `T` strip_assume_tac) >>
+  qspecl_then [`ctx`, `func`, `c`, `cx`, `e`, `es`, `ee with gas_obs := []`,
+                `salloc`, `s`, `sa`, `sb`, `sf`, `op`, `id`, `p`, `sz`, `w`, `inst`,
+                `v`, `stv`, `tyv`, `sty`, `typ`, `sc`, `rest`, `T`, `loc`, `bytes`,
+                `st0`] mp_tac annassign_relayout_store_post_path >>
+  impl_tac
+  >- (conj_tac >- (qexists_tac `H0` >> first_assum ACCEPT_TAC) >>
+      rpt conj_tac >> first_assum ACCEPT_TAC) >>
+  strip_tac >>
   `MAP FDOM (ee with gas_obs := []).scopes = MAP FDOM es.scopes` by
     (qpat_assum `!tail. bind _ _ _ = _` (qspec_then `[]` assume_tac) >>
      drule eval_read_preserves_scopes_dom >> simp[]) >>
   `alloca_frame c es sa salloc c (ee with gas_obs := []) s` by
-    (irule expr_post_alloca_frame >> metis_tac[]) >>
+    (irule (INST_TYPE [alpha |-> ``:256``] expr_post_alloca_frame) >>
+     conj_tac >- first_assum ACCEPT_TAC >>
+     conj_tac >- first_assum ACCEPT_TAC >>
+     qexistsl_tac [`H0`, `ctx`, `cx`, `e`, `func`, `op`, `sb`, `v`] >>
+     conj_tac >> first_assum ACCEPT_TAC) >>
   `venomMemDefs$allocas_non_overlapping s /\ lookup_var p s = SOME w /\
    FLOOKUP s.vs_allocas inst.inst_id = SOME (w2n w,sz) /\
    (!aid b. FLOOKUP salloc.vs_allocas aid = SOME b ==>
@@ -218,22 +228,33 @@ Theorem annassign_relayout_rhs_outcome:
       (\H res ee r. !tail. stmt_exit (RetQ H) (ee with gas_obs := tail) res r)
 Proof
   rpt gen_tac >> strip_tac >>
-  irule annassign_rhs_outcome >>
-  goal_assum (drule_at Any) >> simp[] >>
-  reverse conj_tac >- metis_tac[] >>
-  rpt gen_tac >> strip_tac >>
-  `t.vs_current_bb = sb.cs_current_bb /\
-   t.vs_inst_idx = LENGTH sb.cs_current_insts` by metis_tac[] >>
-  `!H. valid_horizon cx st0 H ee.storage_trace ==>
-     expr_post H ctx func c cx e es sa sb salloc (ee with gas_obs := []) v op t` by
-    metis_tac[] >>
-  `?H'. valid_horizon cx st0 H' ee.storage_trace` by
-    (qexists_tac `H` >> first_assum ACCEPT_TAC) >>
-  qspecl_then [`ctx`, `func`, `old`, `c`, `cx`, `st0`, `lctx`, `id`, `typ`,
-               `tyv`, `e`, `es`, `stv`, `sty`, `sa0`, `st`, `sa`, `sb`, `sf`,
-               `salloc`, `marks`, `v`, `ee`, `t`, `op`, `p`, `sz`, `w`,
-               `inst`, `loc`, `bytes`] mp_tac
-    (INST_TYPE [alpha |-> ``:256``] annassign_relayout_normal_continuation) >>
-  impl_tac >- (simp[] >> metis_tac[]) >> strip_tac >>
-  qexistsl_tac [`ff`, `u`] >> simp[stmt_post_end_gas_obs]
+  (irule annassign_rhs_outcome >>
+  qexistsl_tac [`\H res ee t. ?v. res = INL v /\
+    expr_post H ctx func c cx e es sa sb salloc ee v op t /\
+    t.vs_current_bb = sb.cs_current_bb /\
+    t.vs_inst_idx = LENGTH sb.cs_current_insts`, `tyv`] >>
+  conj_tac
+  >- (rpt gen_tac >> BETA_TAC >> strip_tac >>
+      `!H. valid_horizon cx st0 H ee.storage_trace ==>
+         expr_post H ctx func c cx e es sa sb salloc (ee with gas_obs := []) v op t /\
+         t.vs_current_bb = sb.cs_current_bb /\
+         t.vs_inst_idx = LENGTH sb.cs_current_insts` by
+        (qx_gen_tac `HH` >> strip_tac >>
+         qpat_assum `!H. valid_horizon _ _ H _ ==> ?v'. _` (qspec_then `HH` mp_tac) >>
+         impl_tac >- first_assum ACCEPT_TAC >>
+         strip_tac >> gvs[]) >>
+      `t.vs_current_bb = sb.cs_current_bb /\
+       t.vs_inst_idx = LENGTH sb.cs_current_insts` by
+        (qpat_assum `!H. valid_horizon _ _ H _ ==> expr_post _ _ _ _ _ _ _ _ _ _ _ _ _ _ /\ _`
+           drule >> simp[]) >>
+      qspecl_then [`ctx`, `func`, `old`, `c`, `cx`, `st0`, `lctx`, `id`, `typ`,
+                   `tyv`, `e`, `es`, `stv`, `sty`, `sa0`, `st`, `sa`, `sb`, `sf`,
+                   `salloc`, `marks`, `v`, `ee`, `t`, `op`, `p`, `sz`, `w`,
+                   `inst`, `loc`, `bytes`] mp_tac
+        (INST_TYPE [alpha |-> ``:256``] annassign_relayout_normal_continuation) >>
+      impl_tac >- (simp[] >> metis_tac[]) >> strip_tac >>
+      qexistsl_tac [`ff`, `u`] >> simp[stmt_post_end_gas_obs]) >>
+  rpt conj_tac >>
+  TRY (first_assum ACCEPT_TAC >> NO_TAC) >>
+  rpt gen_tac >> BETA_TAC >> strip_tac >> fs[])
 QED
