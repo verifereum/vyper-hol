@@ -407,6 +407,10 @@ Proof
     (drule ld_joint_source >>
      disch_then (strip_assume_tac o MATCH_MP occ_frame_reachable_projection) >>
      fs[Once frame_reachable_cases] >> metis_tac[]) >>
+  `gas_cut (SUC (LENGTH vs.vs_gas_readings)) vs s` by simp[] >>
+  `ptr_discipline_upto lo (SUC (LENGTH vs.vs_gas_readings)) C vs /\
+   taint_within_upto D (SUC (LENGTH vs.vs_gas_readings)) C vs /\
+   fmp_free_ctx C` by fs[o1_safe_upto_def, o1_ptr_safe_upto_def] >>
   Cases_on `i.inst_opcode = RETURNDATACOPY /\ in_revert_forward fn s`
   >- (fs[] >>
       `exec_block fuel C bb s = exec_block fuel C bb s` by simp[] >>

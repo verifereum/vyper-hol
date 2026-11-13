@@ -108,9 +108,12 @@ val ldInd = Term.subst (ListPair.map (fn (v,t) => v |-> t)
 val ldClauses = strip_conj (fst (dest_imp ldInd));
 
 (* Exact-fuel packets preserve the original boundary and result relation. *)
+(* They run whole: the cut admits every reading of vs, so each state is
+   inside it (gas_cut_whole). *)
+val ldAFuel = subst [``ncut:num`` |-> ``SUC (LENGTH vs.vs_gas_readings)``] ldA;
 val ldPexecFuel = ``\k ctx bb s.
   !stk PG G tn fn i t n a U B HP H sites X ts r.
-    ctx = C /\ ^ldA /\ opaque_use_ok fn /\ ~s.vs_halted /\
+    ctx = C /\ ^ldAFuel /\ opaque_use_ok fn /\ ~s.vs_halted /\
     ^ldJ stk PG G tn fn i s t n a U B HP H sites X ts /\
     lookup_block s.vs_current_bb fn.fn_blocks = SOME bb /\
     get_instruction bb s.vs_inst_idx = SOME i /\
@@ -122,7 +125,7 @@ val ldPexecFuel = ``\k ctx bb s.
       ^ldR stk PG fn a U HP ts s.vs_call_ctx.cc_address r r'``;
 val ldPrunFuel = ``\k ctx fn s0.
   !stk PG G tn i s1 t0 t1 n a U B HP H sites X ts r.
-    ctx = C /\ ^ldA /\ opaque_use_ok fn /\ ~s0.vs_halted /\
+    ctx = C /\ ^ldAFuel /\ opaque_use_ok fn /\ ~s0.vs_halted /\
     enters_block fn s0 s1 /\
     (?fn'. lookup_function fn.fn_name C'.ctx_functions = SOME fn' /\
       enters_block fn' t0 t1) /\
@@ -133,7 +136,7 @@ val ldPrunFuel = ``\k ctx fn s0.
       ^ldR stk PG fn a U HP ts s0.vs_call_ctx.cc_address r r'``;
 val ldPstepFuel = ``\k ctx callinst s.
   !stk PG G tn fn t n a U B HP H sites X ts r.
-    ctx = C /\ ^ldA /\ opaque_use_ok fn /\ ~s.vs_halted /\
+    ctx = C /\ ^ldAFuel /\ opaque_use_ok fn /\ ~s.vs_halted /\
     ^ldJ stk PG G tn fn callinst s t n a U B HP H sites X ts /\
     active_inst fn callinst s /\ callinst.inst_opcode = INVOKE /\
     step_inst k C callinst s = r /\ terminates r ==>

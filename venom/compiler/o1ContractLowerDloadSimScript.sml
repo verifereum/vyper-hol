@@ -298,6 +298,9 @@ Proof
   CONV_TAC (DEPTH_CONV BETA_CONV) >>
   rpt gen_tac >> strip_tac >> rpt gen_tac >> strip_tac >>
   gvs[] >>
+  `gas_cut (SUC (LENGTH vs.vs_gas_readings)) vs s` by simp[] >>
+  `ptr_discipline_upto lo (SUC (LENGTH vs.vs_gas_readings)) C vs` by
+    fs[o1_safe_upto_def, o1_ptr_safe_upto_def] >>
   drule_at (Pat `terminates _`) ld_terminating_invoke_inversion >>
   disch_then (qspecl_then [`s`, `fuel`, `inst`, `C`] mp_tac) >>
   simp[] >> strip_tac >>
@@ -585,6 +588,9 @@ Theorem lower_dload_stage_sim_fuel:
     ctx_sim_fuel I D C C' vs vs
 Proof
   rpt strip_tac >> simp[ctx_sim_fuel_def] >> rpt strip_tac >>
+  drule o1_src_inv_safe_upto >> strip_tac >>
+  first_x_assum (qspec_then `SUC (LENGTH vs.vs_gas_readings)` assume_tac) >>
+  `0 < SUC (LENGTH vs.vs_gas_readings)` by simp[] >>
   `run_context fuel C vs = run_context fuel C vs` by simp[] >>
   drule_all lower_dload_stage_root_entry >> strip_tac >>
   `opaque_use_ok fn` by metis_tac[ld_ctx_shape_lookup_opaque] >>
