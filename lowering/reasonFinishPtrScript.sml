@@ -38,8 +38,9 @@ QED
 
 Theorem reason_encode_finish_parts[local]:
   reason_encode_finish outer payload tuple slot sa = ((),sb) ==>
-  ?src head off tail len tmp0 rounded0 last cnt tmp1 rounded1 item size_out encoded
-    start rlen p1 p2 p3 p4 c1 c2 c3 c4 c5 c6 c7 c8 c9 c10 c11 c12 c13 c14 c15.
+  ?src head off tail len tmp0 rounded0 last cnt mask1 tmp1 rounded1 item size_out
+    encoded start rlen p1 p2 p3 p4 c1 c2 c3 c4 c5 c6 c7 c7m c8 c9 c10 c11 c12 c13
+    c14 c15.
     emit_op ADD [tuple;Lit 0w] sa = (src,p1) /\
     emit_op ADD [payload;Lit 0w] p1 = (head,p2) /\
     emit_op MLOAD [slot] p2 = (off,p3) /\
@@ -51,9 +52,10 @@ Theorem reason_encode_finish_parts[local]:
     emit_void MSTORE [last;Lit 0w] c4 = ((),c5) /\
     emit_op ADD [Lit 32w;len] c5 = (cnt,c6) /\
     emit_void MCOPY [tail;src;cnt] c6 = ((),c7) /\
-    emit_op ADD [len;Lit 31w] c7 = (tmp1,c8) /\
-    emit_op AND [tmp1;Lit (i2w (-32))] c8 = (rounded1,c9) /\
-    emit_op ADD [Lit 32w;rounded1] c9 = (item,c10) /\
+    emit_op NOT [Lit 31w] c7 = (mask1,c7m) /\
+    emit_op ADD [len;Lit 31w] c7m = (tmp1,c8) /\
+    emit_op AND [tmp1;mask1] c8 = (rounded1,c9) /\
+    emit_op ADD [rounded1;Lit 32w] c9 = (item,c10) /\
     emit_void MSTORE [head;off] c10 = ((),c11) /\
     emit_op ADD [off;item] c11 = (size_out,c12) /\
     emit_void MSTORE [slot;size_out] c12 = ((),c13) /\
@@ -82,8 +84,9 @@ QED
 Theorem reason_encode_finish_inst_parts[local]:
   reason_encode_finish (Var outer) (Var payload) (Var tuple) (Var slot) sa = ((),sb) /\
   fn_has_code sa sb func ==>
-  ?src head off tail len tmp0 rounded0 last cnt tmp1 rounded1 item size_out encoded
-    start rlen p1 p2 p3 p4 c1 c2 c3 c4 c5 c6 c7 c8 c9 c10 c11 c12 c13 c14 c15 c16.
+  ?src head off tail len tmp0 rounded0 last cnt mask1 tmp1 rounded1 item size_out
+    encoded start rlen p1 p2 p3 p4 c1 c2 c3 c4 c5 c6 c7 c7m c8 c9 c10 c11 c12 c13
+    c14 c15 c16.
     emit_inst ADD [Var tuple;Lit 0w] [src] (sa with cs_next_var := 0) = ((),p1) /\
     emit_inst ADD [Var payload;Lit 0w] [head] p1 = ((),p2) /\
     emit_inst MLOAD [Var slot] [off] p2 = ((),p3) /\
@@ -95,9 +98,10 @@ Theorem reason_encode_finish_inst_parts[local]:
     emit_void MSTORE [Var last;Lit 0w] c4 = ((),c5) /\
     emit_inst ADD [Lit 32w;Var len] [cnt] c5 = ((),c6) /\
     emit_void MCOPY [Var tail;Var src;Var cnt] c6 = ((),c7) /\
-    emit_inst ADD [Var len;Lit 31w] [tmp1] c7 = ((),c8) /\
-    emit_inst AND [Var tmp1;Lit (i2w (-32))] [rounded1] c8 = ((),c9) /\
-    emit_inst ADD [Lit 32w;Var rounded1] [item] c9 = ((),c10) /\
+    emit_inst NOT [Lit 31w] [mask1] c7 = ((),c7m) /\
+    emit_inst ADD [Var len;Lit 31w] [tmp1] c7m = ((),c8) /\
+    emit_inst AND [Var tmp1;Var mask1] [rounded1] c8 = ((),c9) /\
+    emit_inst ADD [Var rounded1;Lit 32w] [item] c9 = ((),c10) /\
     emit_void MSTORE [Var head;Var off] c10 = ((),c11) /\
     emit_inst ADD [Var off;Var item] [size_out] c11 = ((),c12) /\
     emit_void MSTORE [Var slot;Var size_out] c12 = ((),c13) /\
@@ -107,15 +111,15 @@ Theorem reason_encode_finish_inst_parts[local]:
     emit_inst REVERT [Var start;Var rlen] [] c16 = ((),sb with cs_next_var := 0) /\
     EVERY (\(a,b). fn_has_code a b func)
       (ZIP (FRONT ((sa with cs_next_var := 0)::
-        [p1;p2;p3;p4;c1;c2;c3;c4;c5;c6;c7;c8;c9;c10;c11;c12;c13;c14;c15;c16;
+        [p1;p2;p3;p4;c1;c2;c3;c4;c5;c6;c7;c7m;c8;c9;c10;c11;c12;c13;c14;c15;c16;
          sb with cs_next_var := 0]),
-        [p1;p2;p3;p4;c1;c2;c3;c4;c5;c6;c7;c8;c9;c10;c11;c12;c13;c14;c15;c16;
+        [p1;p2;p3;p4;c1;c2;c3;c4;c5;c6;c7;c7m;c8;c9;c10;c11;c12;c13;c14;c15;c16;
          sb with cs_next_var := 0])) /\
-    ALL_DISTINCT [src;head;off;tail;len;tmp0;rounded0;last;cnt;tmp1;rounded1;item;
-      size_out;encoded;start;rlen] /\
+    ALL_DISTINCT [src;head;off;tail;len;tmp0;rounded0;last;cnt;mask1;tmp1;rounded1;
+      item;size_out;encoded;start;rlen] /\
     (!p. not_fresh_at sa p ==>
-      ~MEM p [src;head;off;tail;len;tmp0;rounded0;last;cnt;tmp1;rounded1;item;
-        size_out;encoded;start;rlen])
+      ~MEM p [src;head;off;tail;len;tmp0;rounded0;last;cnt;mask1;tmp1;rounded1;
+        item;size_out;encoded;start;rlen])
 Proof
   strip_tac >> drule reason_encode_finish_parts >> strip_tac >>
   imp_res_tac reason_emit_op_counter_projection >>
@@ -140,7 +144,8 @@ Proof
     `"%" ++ toString (sa.cs_next_var + 12)`,
     `"%" ++ toString (sa.cs_next_var + 13)`,
     `"%" ++ toString (sa.cs_next_var + 14)`,
-    `"%" ++ toString (sa.cs_next_var + 15)`] >>
+    `"%" ++ toString (sa.cs_next_var + 15)`,
+    `"%" ++ toString (sa.cs_next_var + 16)`] >>
   simp[listTheory.ALL_DISTINCT, not_fresh_at_def, ASCIInumbersTheory.toString_inj] >>
   suspend "slices"
 QED
@@ -152,7 +157,8 @@ Resume reason_encode_finish_inst_parts[slices]:
       c1 with cs_next_var := 0;c2 with cs_next_var := 0;
       c3 with cs_next_var := 0;c4 with cs_next_var := 0;
       c5 with cs_next_var := 0;c6 with cs_next_var := 0;
-      c7 with cs_next_var := 0;c8 with cs_next_var := 0;
+      c7 with cs_next_var := 0;c7m with cs_next_var := 0;
+      c8 with cs_next_var := 0;
       c9 with cs_next_var := 0;c10 with cs_next_var := 0;
       c11 with cs_next_var := 0;c12 with cs_next_var := 0;
       c13 with cs_next_var := 0;c14 with cs_next_var := 0;
@@ -199,7 +205,7 @@ Proof
     lookup_var encoded s2 = SOME (32w + (32w + ((n + 31w) && i2w (-32)))) /\
     op_taint tn2 (Var encoded) = {} /\
     (!p. ~MEM p [src;head;off;tail;len;tmp0;rounded0;last;cnt;
-                tmp1;rounded1;item;size_out;encoded] ==>
+                mask1;tmp1;rounded1;item;size_out;encoded] ==>
       lookup_var p s2 = lookup_var p s /\
       FLOOKUP G2 p = FLOOKUP G p /\
       op_taint tn2 (Var p) = op_taint tn (Var p))` by suspend "payload" >>
@@ -222,9 +228,11 @@ Resume reason_encode_finish_path_ptr[payload]:
   >- (gvs[])
   >- (gvs[])
   >- (gvs[])
+  >- (gvs[])
+  >- (gvs[])
   >>
   qexistsl [`a`, `addr`, `b`, `c1`, `c10`, `c11`, `c12`, `c13`,
-    `c2`, `c3`, `c4`, `c5`, `c6`, `c7`, `c8`, `c9`, `m`,
+    `c2`, `c3`, `c4`, `c5`, `c6`, `c7`, `c7m`, `c8`, `c9`, `m`,
     `p1`, `p2`, `p3`, `payload`, `sa`, `slot`, `p4`, `tuple`] >>
   simp[Excl "ALL_DISTINCT"] >>
   qpat_x_assum `ALL_DISTINCT _` mp_tac >>
@@ -235,7 +243,7 @@ QED
 
 Resume reason_encode_finish_path_ptr[terminal]:
   `~MEM outer [src;head;off;tail;len;tmp0;rounded0;last;cnt;
-               tmp1;rounded1;item;size_out;encoded]` by
+               mask1;tmp1;rounded1;item;size_out;encoded]` by
     (qpat_x_assum `!p. not_fresh_at sa p ==> _` mp_tac >>
      qpat_x_assum `!p. _ ==> not_fresh_at sa p` mp_tac >>
      rpt (pop_assum kall_tac) >> simp[] >> metis_tac[]) >>

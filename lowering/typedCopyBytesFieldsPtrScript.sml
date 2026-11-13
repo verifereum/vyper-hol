@@ -202,7 +202,16 @@ Resume compile_bytestring_fields_frag_ptr[tail]:
 QED
 
 Resume compile_bytestring_fields_frag_ptr[fields_package]:
-  typedCopyBytesFieldsLib.fields_package false
+  markerLib.RESUME_TAC >>
+  conj_tac >- metis_tac[cs_extends_trans] >>
+  qexistsl_tac [`Gf`, `tnf`, `sf`] >>
+  conj_tac >- metis_tac[frag_exec_ptr_seq] >>
+  conj_tac >- metis_tac[] >> conj_tac >- metis_tac[] >>
+  conj_tac >-
+    (qx_gen_tac `p` >> strip_tac >>
+     `not_fresh_at sm p` by
+       metis_tac[not_fresh_at_def, arithmeticTheory.LESS_EQ_TRANS] >>
+     metis_tac[]) >> suspend "fields_memory"
 QED
 
 Resume compile_bytestring_fields_frag_ptr[fields_memory]:
@@ -220,7 +229,7 @@ Resume compile_bytestring_fields_frag_ptr[fields_elements]:
          (impl_tac >- first_assum ACCEPT_TAC) >> (impl_tac >- decide_tac) >>
          (impl_tac >-
            (`doff + w2n b = w2n b + doff` by decide_tac >> asm_rewrite_tac[])) >>
-         simp[]) >>
+         simp_tac (srw_ss()) [MAP, SUM, ADD_CLAUSES]) >>
      rename1 `SUC j < SUC (LENGTH dts)` >>
      simp_tac (srw_ss()) [EL, TAKE_def, MAP, SUM, TL] >>
      qpat_x_assum `!i. i < LENGTH dts ==> !m.
@@ -239,7 +248,8 @@ Resume compile_bytestring_fields_frag_ptr[fields_elements]:
     (qpat_x_assum `!ft fv p. _ ==> _ ==> _ ==> !m.
        mem_agree_outside tn1.t_mem _ _ ==> _` (qspecl_then [`ft`, `fv`, `p`] mp_tac) >>
      (impl_tac >- first_assum ACCEPT_TAC) >> (impl_tac >- decide_tac) >>
-     (impl_tac >- first_assum ACCEPT_TAC) >> simp[])) >> simp[]
+     (impl_tac >- first_assum ACCEPT_TAC) >> simp_tac bool_ss [])) >>
+  simp_tac bool_ss []
 QED
 
 Finalise compile_bytestring_fields_frag_ptr

@@ -232,7 +232,10 @@ Resume dse_nonterminator_step[external]:
   `s.vs_inst_idx = t.vs_inst_idx` by
     fs[dse_local_agrees_def, dse_operational_agrees_def] >>
   Cases_on `inst.inst_opcode IN {CREATE; CREATE2}`
-  >- (`dse_inst ids AddrSp_Memory inst = inst` by
+  >- (`~(inst.inst_id IN ids)` by
+        (strip_tac >> drule_all all_dead_stores_occurrence >> strip_tac >>
+         metis_tac[dse_create_not_effects_in_space]) >>
+      `dse_inst ids AddrSp_Memory inst = inst` by
         (irule dse_create_memory_retained >> simp[]) >>
       drule_all dse_create_memory_step >> strip_tac >>
       qexistsl_tac [`P`, `t1`] >> simp[dse_local_agrees_inst_idx]) >>
@@ -431,6 +434,9 @@ Resume dse_non_ok_step[selfdestruct_result]:
 QED
 
 Resume dse_non_ok_step[create_result]:
+  `~(inst.inst_id IN ids)` by
+    (strip_tac >> drule_all all_dead_stores_occurrence >> strip_tac >>
+     metis_tac[dse_create_not_effects_in_space]) >>
   `sp = AddrSp_Memory` by
     (qpat_assum `sp IN _` mp_tac >>
      qpat_assum `inst.inst_opcode IN {CREATE; CREATE2}` mp_tac >>
@@ -441,7 +447,7 @@ Resume dse_non_ok_step[create_result]:
   disch_then (qspecl_then [`s`, `fuel`, `ctx`] mp_tac) >>
   strip_tac >- metis_tac[] >- metis_tac[] >>
   drule_all dse_create_memory_abort >>
-  disch_then (qspec_then `ids` strip_assume_tac) >> simp[lift_result_def]
+  strip_tac >> simp[lift_result_def]
 QED
 
 Resume dse_non_ok_step[rdc_result]:

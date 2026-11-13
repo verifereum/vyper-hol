@@ -21,7 +21,7 @@ Theorem compile_for_array_frag_ptr:
   id NOTIN FDOM env.var_types /\
   evaluate_type (get_tenv cx) et = SOME tv /\
   type_stmts (extend_local env id et F) ty stmts = SOME env_b /\
-  EVERY (stmt_exprs_ok cenv) stmts /\
+  stmts_exprs_ok (cenv with ce_var_type updated_by (id =+ SOME et)) stmts /\
   type_memory_bytes cenv et < 2 ** 64 /\
   type_memory_bytes cenv et = type_memory_size tv /\
   type_memory_bytes cenv et + 64 < dimword (:256) /\
@@ -38,7 +38,7 @@ Theorem compile_for_array_frag_ptr:
   vs = array_elements (ArrayTV tv (Fixed (LENGTH vs))) (SArrayV kvs) /\
   LENGTH vs < dimword (:256) /\
   (!gs. eval_iterator cx (Array (Name (ArrayT et (Fixed (LENGTH vs))) name))
-    (es with gas_obs := gs) = (INL vs, es with gas_obs := gs)) ==>
+    (es with gas_obs := gs) = (INL (MAP Value vs), es with gas_obs := gs)) ==>
   stmt_frag_ptr d ctx PG func cx lctx RetQ cenv
     (stmt_env cenv lctx ty
       (For id et (Array (Name (ArrayT et (Fixed (LENGTH vs))) name)) (LENGTH vs) stmts))
@@ -180,7 +180,7 @@ Resume compile_for_array_frag_ptr[returns]:
     SOME (ArrayT et (Fixed (LENGTH vs)))` by simp[vyperTypeSystemTheory.extend_local_def, FLOOKUP_UPDATE, IgnAsm `vs = _`] >>
   `!j. j < LENGTH vs ==> value_has_type tv (EL j vs) /\ val_wf tv (EL j vs) /\
     w2n arr_base + j * type_memory_bytes cenv et < dimword (:256)` by metis_tac[] >>
-  `gas_admissible (eval_for cx tv id stmts vs) (stmt_res_ok lctx) es` by
+  `gas_admissible (eval_for cx tv id stmts (MAP Value vs)) (stmt_res_ok lctx) es` by
     (irule for_array_source_admissible >> goal_assum (drule_at Any) >>
      simp[IgnAsm `vs = _`] >> qexists_tac `name` >> simp[IgnAsm `vs = _`]) >>
   `P es` by simp[Abbr `P`, IgnAsm `vs = _`] >>
@@ -195,7 +195,9 @@ QED
 Resume compile_for_array_frag_ptr[compose]:
   drule_all gas_outcome_ptr_prefix >> disch_tac >>
   drule (iffRL (Q.INST [`gs` |-> `[]`] gas_outcome_ptr_initial_obs)) >> disch_tac >>
-  drule_all (SIMP_RULE bool_ss [] (Q.INST [`n` |-> `LENGTH vs`] for_array_source_prefix_ptr)) >>
+  drule_all (SRULE [] (INST [``n:num`` |-> ``LENGTH (vs0:value list)``,
+                              ``vs:eval_result list`` |-> ``MAP Value (vs0:value list)``]
+                          for_array_source_prefix_ptr)) >>
   disch_tac >> irule gas_outcome_ptr_conseq >>
   goal_assum (drule_at Any) >> simp[NoAsms] >>
   conj_tac >- suspend "post" >>

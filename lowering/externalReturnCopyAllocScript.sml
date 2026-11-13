@@ -109,7 +109,7 @@ Proof
     gvs[return_copy_frame_def, venomStateTheory.venom_state_component_equality] >>
   irule local_ptrs_rel_frame >> qexists_tac `s` >> simp[] >>
   conj_tac
-  >- (rpt strip_tac >> irule val_in_memory_mem_agree >>
+  >- (rpt strip_tac >> irule memoryValueFrameTheory.memory_value_rel_mem_agree_region >>
       simp[] >> qexistsl_tac [`type_memory_size entry.type`, `s.vs_memory`] >>
       simp[] >>
       `local_region cenv scopes s name (w2n w) sz'` by

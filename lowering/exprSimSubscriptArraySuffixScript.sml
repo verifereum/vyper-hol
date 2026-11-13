@@ -1,8 +1,7 @@
 (* Source selection and counted suffix summaries for framed arrays. *)
 Theory exprSimSubscriptArraySuffix
 Ancestors
-  exprSimHashBoundary
-  loweringStateRelDefs exprSimSubscriptArrayEndpoint exprSimSubscriptArrayFramed
+  exprSimHashBoundary exprSimSubscriptArrayEndpoint exprSimSubscriptArrayFramed
   exprSimSubscriptArraySource gasSummary exprSimDefs vyperState
   vyperPlaceTyping vyperValueOperation vyperArray integer_word words integer
   exprSimSource exprSimCopy exprSimLen valueEncodingProps valueEncoding valueEncodingDefs
@@ -66,10 +65,8 @@ Proof
   simp[select_result_def, extend_place_def, place_type_value_def,
        read_place_def, get_immutables_def, get_address_immutables_def,
        lift_option_type_def, lift_sum_def, bind_def, ignore_bind_def, return_def, raise_def] >>
-  Cases_on `ALOOKUP s.immutables cx.txn.target` >> simp[return_def, raise_def] >>
-  Cases_on `FLOOKUP (get_source_immutables o' x) s'` >>
-  simp[return_def, raise_def] >>
-  Cases_on `subscripts_type (FST x') l` >> simp[return_def, raise_def] >>
+  CASE_TAC >> simp[bind_def, ignore_bind_def, return_def, raise_def] >>
+  CASE_TAC >> simp[bind_def, ignore_bind_def, return_def, raise_def] >>
   rpt (CASE_TAC >> simp[bind_def, ignore_bind_def, return_def, raise_def])
 QED
 
@@ -211,7 +208,7 @@ Proof
      simp[exprSimHypsDefsTheory.expr_body_pre_def,
           Once vyperTypeSystemTheory.well_typed_expr_def] >>
      strip_tac >> gvs[vyperTypeSystemTheory.subscript_type_ok_def] >>
-     drule placeTypingPropsTheory.type_place_expr_vtype_annotation >>
+     drule vyperTypeSystemTheory.type_place_expr_vtype_annotation >>
      strip_tac >> Cases_on `vt` >>
      gvs[vyperTypeSystemTheory.vtype_annotation_ok_def,
          vyperTypeSystemTheory.subscript_vtype_def, AllCaseEqs()]) >>
@@ -385,7 +382,7 @@ Resume framed_array_represented_suffix_summary[valid]:
      simp[exprSimHypsDefsTheory.expr_body_pre_def,
           Once vyperTypeSystemTheory.well_typed_expr_def] >>
      strip_tac >> gvs[vyperTypeSystemTheory.subscript_type_ok_def] >>
-     drule placeTypingPropsTheory.type_place_expr_vtype_annotation >>
+     drule vyperTypeSystemTheory.type_place_expr_vtype_annotation >>
      strip_tac >> Cases_on `vt` >>
      gvs[vyperTypeSystemTheory.vtype_annotation_ok_def] >>
      gvs[vyperTypeSystemTheory.subscript_vtype_def, AllCaseEqs()]) >>

@@ -4,7 +4,7 @@ Theory revertReasonSuffixPathPtr
 Ancestors
   wordLoadStorePtr finalAbortSeqPtr revertReasonSuffixPtr revertReasonPrefixFramePtr fragGasSeqPtr
   instSeqComposePtr ghostPcTransportPtr valueEncodingProps pred_set instIdxIndep
-  revertReasonPrefixPtr revertAllocationPtr
+  revertReasonPrefixPtr revertAllocationPtr abiEncoderRounding
   typedCopyPtr decoderGhostFramePtr typedCopyLoopHeaderPtr finite_map ptrDiscipline
   mstoreOperandStep revertReasonLayout exprLoweringProps fragExec bodyPtrDefs revertReasonCopyPtr
   venomMemProps venomState venomInst venomExecSemantics words arithmetic list
@@ -274,7 +274,7 @@ Theorem revert_reason_seven_checks:
   32 + contractABI$ceil32 L <= ms /\ L+63 < dimword(:256) /\
   64+ms < dimword(:256) /\ w2n B+64+ms < dimword(:256) /\
   w2n P+32+ms < dimword(:256) /\
-  (!k. 4 <= k /\ k <= 20 ==>
+  (!k. 4 <= k /\ k <= 21 ==>
     b <> STRING #"%" (toString ((v:num)+k)) /\
     p <> STRING #"%" (toString (v+k)) /\
     q <> STRING #"%" (toString (v+k))) /\
@@ -383,7 +383,7 @@ Resume revert_reason_seven_checks[alias_post]:
      `op_taint tn2 (Var p) = {} /\ op_taint tn2 (Var q) = {}` by
        fs[ptr_covers_def] >>
      `p <> STRING #"%" (toString (v+5))` by
-       (qpat_x_assum `!k. 4 <= k /\ k <= 20 ==> _`
+       (qpat_x_assum `!k. 4 <= k /\ k <= 21 ==> _`
           (qspec_then `5` mp_tac) >> simp[]) >>
      fs[lookup_var_def] >>
      simp[Abbr `s2c`, lookup_var_def, ASCIInumbersTheory.toString_inj] >>
@@ -401,9 +401,9 @@ Resume revert_reason_seven_checks[alias_frames]:
     fs[Abbr `s2c`, mload_def] >>
   `(!x. x = b \/ x = p \/ x = q ==> x <> aq /\ x <> ap /\ x <> dst) /\
    cell <> aq /\ cell <> ap /\ cell <> dst` by
-    (qpat_assum `!k. 4 <= k /\ k <= 20 ==> _` (qspec_then `5` assume_tac) >>
-     qpat_assum `!k. 4 <= k /\ k <= 20 ==> _` (qspec_then `6` assume_tac) >>
-     qpat_assum `!k. 4 <= k /\ k <= 20 ==> _` (qspec_then `7` assume_tac) >>
+    (qpat_assum `!k. 4 <= k /\ k <= 21 ==> _` (qspec_then `5` assume_tac) >>
+     qpat_assum `!k. 4 <= k /\ k <= 21 ==> _` (qspec_then `6` assume_tac) >>
+     qpat_assum `!k. 4 <= k /\ k <= 21 ==> _` (qspec_then `7` assume_tac) >>
      fs[Abbr `aq`, Abbr `ap`, Abbr `dst`, Abbr `cell`,
         ASCIInumbersTheory.toString_inj] >> metis_tac[]) >>
   `lookup_var b s5c = SOME B /\ ptr_covers g5 tn5 b s5c (64+ms)` by
@@ -486,8 +486,8 @@ Resume revert_reason_seven_checks[endpoint_frames]:
   `!x. x = b \/ x = p \/ x = q \/ x = cell \/ x = aq \/ x = ap \/ x = dst ==>
      x <> STRING #"%" (toString (v+8)) /\
      x <> STRING #"%" (toString (v+9))` by
-    (qpat_assum `!k. 4 <= k /\ k <= 20 ==> _` (qspec_then `8` assume_tac) >>
-     qpat_assum `!k. 4 <= k /\ k <= 20 ==> _` (qspec_then `9` assume_tac) >>
+    (qpat_assum `!k. 4 <= k /\ k <= 21 ==> _` (qspec_then `8` assume_tac) >>
+     qpat_assum `!k. 4 <= k /\ k <= 21 ==> _` (qspec_then `9` assume_tac) >>
      simp[DISJ_IMP_THM, FORALL_AND_THM,
        Abbr `cell`, Abbr `aq`, Abbr `ap`, Abbr `dst`,
        ASCIInumbersTheory.toString_inj]) >>
@@ -522,6 +522,124 @@ QED
 
 Finalise revert_reason_seven_checks
 
+Theorem round_ceil32_mask_checks[local]:
+  lookup_var lenvar s = SOME (n2w L) /\
+  op_taint tn (Var lenvar) = {} /\ L+63 < dimword(:256) /\
+  lenvar <> msk /\ tmp <> msk /\ ~ctx_has_dalloca ctx ==>
+  ?Gf tnf.
+    inst_seq_ptr D 0 ctx fn PG G tn
+      [mk_inst id NOT [Lit 31w] [msk];
+       mk_inst (id+1) ADD [Var lenvar;Lit 31w] [tmp];
+       mk_inst (id+2) AND [Var tmp;Var msk] [out]] s Gf tnf /\
+    op_taint tnf (Var out) = {} /\ tnf.t_mem = tn.t_mem /\
+    (!t. run_inst_seq
+      [mk_inst id NOT [Lit 31w] [msk];
+       mk_inst (id+1) ADD [Var lenvar;Lit 31w] [tmp];
+       mk_inst (id+2) AND [Var tmp;Var msk] [out]] s = OK t ==>
+      lookup_var out t = SOME (n2w (contractABI$ceil32 L)) /\
+      (!a. mload a t = mload a s) /\
+      (!x. x <> msk /\ x <> tmp /\ x <> out ==>
+        lookup_var x t = lookup_var x s /\
+        op_taint tnf (Var x) = op_taint tn (Var x) /\
+        (!C. ptr_covers G tn x s C ==> ptr_covers Gf tnf x t C)))
+Proof
+  strip_tac >>
+  `msk <> lenvar /\ msk <> tmp` by (rpt strip_tac >> fs[]) >>
+  `(n2w L:bytes32)+31w &&
+      0xffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffe0w =
+      n2w (contractABI$ceil32 L)` by
+    (once_rewrite_tac[WORD_AND_COMM] >> rewrite_tac[Once WORD_ADD_COMM] >>
+     irule abi_encoder_round_ceil32 >>
+     qpat_assum `L + 63 < dimword(:256)` mp_tac >>
+     simp[NoAsms, dimword_def] >> decide_tac) >>
+  `(n2w L:bytes32)+31w && ~31w = n2w (contractABI$ceil32 L)` by
+    (`(~31w:bytes32) =
+      0xffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffe0w`
+       by blastLib.BBLAST_TAC >> pop_assum SUBST1_TAC >> first_x_assum ACCEPT_TAC) >>
+  `(0xffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffe0w:bytes32) &&
+      n2w L + 31w = n2w (contractABI$ceil32 L)` by
+    (once_rewrite_tac[WORD_AND_COMM] >> first_assum ACCEPT_TAC) >>
+  qmatch_goalsub_abbrev_tac `inst_seq_ptr _ _ _ _ _ _ _ [h;i;j] _ _ _` >>
+  `ptr_inst_ok D 0 0 ctx fn G tn h s` by
+    (simp[Abbr `h`] >> irule ptr_inst_ok_copy_len_not >> simp[op_taint_def]) >>
+  `step_inst_base h s = OK (update_var msk (~31w) s)` by
+    (simp[Abbr `h`, mk_inst_def] >> asm_simp_tac bool_ss [step_inst_base_opcode_eqs, instruction_accfupds, combinTheory.K_THM, opcode_case_def, venomInstTheory.instruction_accessors] >>
+     simp[exec_pure1_def, eval_operand_def]) >>
+  simp[Once inst_seq_ptr_def] >>
+  qmatch_goalsub_abbrev_tac `inst_seq_ptr _ _ _ _ _ g0 t0 _ s0 _ _` >>
+  `op_taint t0 (Var msk) = {} /\ t0.t_mem = tn.t_mem /\
+   op_taint t0 (Var lenvar) = {}` by
+    simp[Abbr `t0`, Abbr `h`, copy_len_not_ghost_frame] >>
+  `lookup_var lenvar s0 = SOME (n2w L)` by
+    fs[Abbr `s0`, update_var_def, lookup_var_def, FLOOKUP_UPDATE] >>
+  `ptr_inst_ok D 0 0 ctx fn g0 t0 i s0` by
+    (simp[Abbr `i`] >> irule ptr_inst_ok_copy_len_binop >> simp[op_taint_def]) >>
+  `step_inst_base i s0 = OK (update_var tmp (n2w L+31w) s0)` by
+    (simp[Abbr `i`, mk_inst_def] >> asm_simp_tac bool_ss [step_inst_base_opcode_eqs, instruction_accfupds, combinTheory.K_THM, opcode_case_def, venomInstTheory.instruction_accessors] >>
+     simp[exec_pure2_def, eval_operand_def]) >>
+  simp[Once inst_seq_ptr_def] >>
+  qmatch_goalsub_abbrev_tac `inst_seq_ptr _ _ _ _ _ g1 t1 _ s1 _ _` >>
+  `op_taint t1 (Var tmp) = {} /\ t1.t_mem = tn.t_mem /\
+   op_taint t1 (Var msk) = {}` by
+    simp[Abbr `t1`, Abbr `i`, copy_len_binop_ghost_frame] >>
+  `lookup_var tmp s1 = SOME (n2w L+31w) /\ lookup_var msk s1 = SOME (~31w)` by
+    fs[Abbr `s1`, Abbr `s0`, update_var_def, lookup_var_def, FLOOKUP_UPDATE] >>
+  `ptr_inst_ok D 0 0 ctx fn g1 t1 j s1` by
+    (simp[Abbr `j`] >> irule ptr_inst_ok_copy_len_binop >> simp[op_taint_def]) >>
+  `step_inst_base j s1 = OK (update_var out (n2w (contractABI$ceil32 L)) s1)` by
+    (simp[Abbr `j`, mk_inst_def] >> asm_simp_tac bool_ss [step_inst_base_opcode_eqs, instruction_accfupds, combinTheory.K_THM, opcode_case_def, venomInstTheory.instruction_accessors] >>
+     simp[exec_pure2_def, eval_operand_def]) >>
+  simp[inst_seq_ptr_def, Abbr `j`, copy_len_binop_ghost_frame] >>
+  suspend "endpoint"
+QED
+
+Resume round_ceil32_mask_checks[endpoint]:
+  gen_tac >> strip_tac >>
+  qmatch_asmsub_abbrev_tac `run_inst_seq [h;i;j] s` >>
+  `step_inst_base i (update_var msk (~31w) s) =
+     OK (update_var tmp (n2w L+31w) (update_var msk (~31w) s))` by
+    (simp[Abbr `i`, mk_inst_def] >> asm_simp_tac bool_ss [step_inst_base_opcode_eqs, instruction_accfupds, combinTheory.K_THM, opcode_case_def, venomInstTheory.instruction_accessors] >>
+     fs[exec_pure2_def, eval_operand_def, lookup_var_def, update_var_def,
+       FLOOKUP_UPDATE]) >>
+  `step_inst_base j (update_var tmp (n2w L+31w) (update_var msk (~31w) s)) =
+     OK (update_var out (n2w (contractABI$ceil32 L))
+       (update_var tmp (n2w L+31w) (update_var msk (~31w) s)))` by
+    (simp[Abbr `j`, mk_inst_def] >> asm_simp_tac bool_ss [step_inst_base_opcode_eqs, instruction_accfupds, combinTheory.K_THM, opcode_case_def, venomInstTheory.instruction_accessors] >>
+     simp[exec_pure2_def, eval_operand_def, lookup_var_def, update_var_def,
+       FLOOKUP_UPDATE]) >>
+  qpat_x_assum `run_inst_seq _ _ = OK t` mp_tac >>
+  fs[Abbr `j`, run_inst_seq_def] >>
+  disch_then (SUBST1_TAC o SYM) >>
+  conj_tac >- simp[lookup_var_def, update_var_def, FLOOKUP_UPDATE] >>
+  conj_tac >- simp[mload_def, update_var_def] >>
+  rpt gen_tac >> strip_tac >>
+  conj_tac >- simp[lookup_var_def, update_var_def, FLOOKUP_UPDATE] >>
+  conj_tac >-
+    simp[Abbr `t1`, Abbr `i`, Abbr `t0`, Abbr `h`, copy_len_binop_ghost_frame,
+         copy_len_not_ghost_frame] >>
+  suspend "coverage"
+QED
+
+Resume round_ceil32_mask_checks[coverage]:
+  rpt strip_tac >>
+  `ptr_covers g0 t0 x s0 C` by
+    (simp[Abbr `g0`, Abbr `t0`, Abbr `s0`] >>
+     irule ptr_covers_step_frame >>
+     simp[Abbr `h`, mk_inst_def, lookup_var_def, update_var_def, FLOOKUP_UPDATE]) >>
+  `ptr_covers g1 t1 x s1 C` by
+    (simp[Abbr `g1`, Abbr `t1`, Abbr `s1`] >>
+     irule ptr_covers_step_frame >>
+     simp[Abbr `i`, mk_inst_def, lookup_var_def, update_var_def, FLOOKUP_UPDATE]) >>
+  qmatch_goalsub_abbrev_tac `step_prov PG g1 j sf` >>
+  `ptr_covers (step_prov PG g1 j sf) (step_taint j s1 sf t1) x sf C` by
+    (simp[Abbr `sf`] >> irule ptr_covers_step_frame >>
+     simp[Abbr `j`, mk_inst_def, lookup_var_def, update_var_def, FLOOKUP_UPDATE]) >>
+  fs[Abbr `sf`, Abbr `s1`, Abbr `s0`, ptr_covers_def, eval_operand_def,
+     lookup_var_def, update_var_def]
+QED
+
+Finalise round_ceil32_mask_checks
+
 Theorem revert_reason_suffix_checks:
   lookup_var b s = SOME B /\ lookup_var p s = SOME P /\
   lookup_var q s = SOME Q /\
@@ -532,7 +650,7 @@ Theorem revert_reason_suffix_checks:
   32 + contractABI$ceil32 L <= ms /\ L+63 < dimword(:256) /\
   64+ms < dimword(:256) /\ w2n B+64+ms < dimword(:256) /\
   w2n P+32+ms < dimword(:256) /\
-  (!k. 4 <= k /\ k <= 20 ==>
+  (!k. 4 <= k /\ k <= 21 ==>
     b <> STRING #"%" (toString ((v:num)+k)) /\
     p <> STRING #"%" (toString (v+k)) /\
     q <> STRING #"%" (toString (v+k))) /\
@@ -545,14 +663,14 @@ Theorem revert_reason_suffix_checks:
     [STRING #"%" (toString (v+4))]) s = OK sa /\
   FLOOKUP sa.vs_allocas (id+5) = SOME (c,32) /\
   (w2n Q+32 <= c \/ c+32 <= w2n Q) /\
-  run_inst_seq (TAKE 22 (revert_reason_suffix id v (Var b) (Var p) (Var q))) s = OK t ==>
+  run_inst_seq (TAKE 23 (revert_reason_suffix id v (Var b) (Var p) (Var q))) s = OK t ==>
   ?Gf tnf. inst_seq_ptr D 0 ctx fn PG G tn
     (revert_reason_suffix id v (Var b) (Var p) (Var q)) s Gf tnf
 Proof
   disch_then (map_every assume_tac o CONJUNCTS) >>
   qabbrev_tac `xs = TAKE 7 (revert_reason_suffix id v (Var b) (Var p) (Var q))` >>
-  qabbrev_tac `ys = TAKE 15 (DROP 7 (revert_reason_suffix id v (Var b) (Var p) (Var q)))` >>
-  `TAKE 22 (revert_reason_suffix id v (Var b) (Var p) (Var q)) = xs ++ ys` by
+  qabbrev_tac `ys = TAKE 16 (DROP 7 (revert_reason_suffix id v (Var b) (Var p) (Var q)))` >>
+  `TAKE 23 (revert_reason_suffix id v (Var b) (Var p) (Var q)) = xs ++ ys` by
     simp[NoAsms, Abbr `xs`, Abbr `ys`, revert_reason_suffix_def] >>
   `?s7. run_inst_seq xs s = OK s7 /\ run_inst_seq ys s7 = OK t` by
     (irule run_inst_seq_append_ok_split >> metis_tac[]) >>
@@ -618,8 +736,8 @@ Resume revert_reason_suffix_checks[round_frames]:
      x <> tmp /\ x <> rnd` by
     (rpt gen_tac >> strip_tac >>
      fs[Abbr `tmp`, Abbr `rnd`, ASCIInumbersTheory.toString_inj] >>
-     qpat_assum `!k. 4 <= k /\ k <= 20 ==> _` (qspec_then `10` assume_tac) >>
-     qpat_assum `!k. 4 <= k /\ k <= 20 ==> _` (qspec_then `11` assume_tac) >>
+     qpat_assum `!k. 4 <= k /\ k <= 21 ==> _` (qspec_then `10` assume_tac) >>
+     qpat_assum `!k. 4 <= k /\ k <= 21 ==> _` (qspec_then `11` assume_tac) >>
      fs[]) >>
   `!x. x = b \/ x = p \/ x = q \/
        (?k. 4 <= k /\ k <= 9 /\ x = STRING #"%" (toString (v+k))) ==>
@@ -705,8 +823,8 @@ Resume revert_reason_suffix_checks[padding_frames]:
      x <> endvar /\ x <> countvar` by
     (rpt gen_tac >> strip_tac >>
      fs[Abbr `endvar`, Abbr `countvar`, ASCIInumbersTheory.toString_inj] >>
-     qpat_assum `!k. 4 <= k /\ k <= 20 ==> _` (qspec_then `12` assume_tac) >>
-     qpat_assum `!k. 4 <= k /\ k <= 20 ==> _` (qspec_then `13` assume_tac) >> fs[]) >>
+     qpat_assum `!k. 4 <= k /\ k <= 21 ==> _` (qspec_then `12` assume_tac) >>
+     qpat_assum `!k. 4 <= k /\ k <= 21 ==> _` (qspec_then `13` assume_tac) >> fs[]) >>
   `!x. x = b \/ x = p \/ x = q \/
        (?k. 4 <= k /\ k <= 9 /\ x = STRING #"%" (toString (v+k))) ==>
      lookup_var x s13 = lookup_var x s7 /\
@@ -726,8 +844,8 @@ Resume revert_reason_suffix_checks[padding_frames]:
 QED
 
 Resume revert_reason_suffix_checks[second_round]:
-  qabbrev_tac `rs2 = TAKE 2 rest` >>
-  qabbrev_tac `rest2 = DROP 2 rest` >>
+  qabbrev_tac `rs2 = TAKE 3 rest` >>
+  qabbrev_tac `rest2 = DROP 3 rest` >>
   `rest = rs2 ++ rest2` by simp[NoAsms, Abbr `rs2`, Abbr `rest2`] >>
   `?s15. run_inst_seq rs2 s13 = OK s15 /\ run_inst_seq rest2 s15 = OK t` by
     (irule run_inst_seq_append_ok_split >> metis_tac[]) >>
@@ -741,8 +859,9 @@ Resume revert_reason_suffix_checks[second_round]:
 QED
 
 Resume revert_reason_suffix_checks[second_round_post]:
-  qabbrev_tac `tmp2 = STRING #"%" (toString (v+14))` >>
-  qabbrev_tac `rnd2 = STRING #"%" (toString (v+15))` >>
+  qabbrev_tac `msk2 = STRING #"%" (toString (v+14))` >>
+  qabbrev_tac `tmp2 = STRING #"%" (toString (v+15))` >>
+  qabbrev_tac `rnd2 = STRING #"%" (toString (v+16))` >>
   qpat_assum `!x. x = b \/ _ ==> lookup_var _ s13 = _ /\ _`
     (qspec_then `STRING #"%" (toString (v+9))` mp_tac) >>
   impl_tac >- (rpt disj2_tac >> qexists `9` >> simp[]) >>
@@ -753,15 +872,16 @@ Resume revert_reason_suffix_checks[second_round_post]:
     (!u. run_inst_seq rs2 s13c = OK u ==>
       lookup_var rnd2 u = SOME (n2w (contractABI$ceil32 L)) /\
       (!a. mload a u = mload a s13c) /\
-      (!x. x <> tmp2 /\ x <> rnd2 ==>
+      (!x. x <> msk2 /\ x <> tmp2 /\ x <> rnd2 ==>
         lookup_var x u = lookup_var x s13c /\
         op_taint tn15 (Var x) = op_taint tn13 (Var x) /\
         (!C. ptr_covers g13 tn13 x s13c C ==> ptr_covers g15 tn15 x u C)))` by
     (simp[NoAsms, Abbr `rs2`, Abbr `rest`, Abbr `zs`, Abbr `ys`,
-       revert_reason_suffix_def, Abbr `tmp2`, Abbr `rnd2`] >>
+       revert_reason_suffix_def, Abbr `msk2`, Abbr `tmp2`, Abbr `rnd2`] >>
      irule (SRULE [GSYM ADD_ASSOC]
-       (Q.INST [`id` |-> `id+18`] round_ceil32_checks)) >>
-     fs[Abbr `s13c`, lookup_var_def]) >>
+       (Q.INST [`id` |-> `id+18`] round_ceil32_mask_checks)) >>
+     fs[Abbr `s13c`, lookup_var_def, dimword_def,
+        ASCIInumbersTheory.toString_inj]) >>
   first_x_assum (drule_then strip_assume_tac) >>
   suspend "second_round_frames"
 QED
@@ -769,11 +889,12 @@ QED
 Resume revert_reason_suffix_checks[second_round_frames]:
   `!x. x = b \/ x = p \/ x = q \/
        (?k. 4 <= k /\ k <= 9 /\ x = STRING #"%" (toString (v+k))) ==>
-     x <> tmp2 /\ x <> rnd2` by
+     x <> msk2 /\ x <> tmp2 /\ x <> rnd2` by
     (rpt gen_tac >> strip_tac >>
-     fs[Abbr `tmp2`, Abbr `rnd2`, ASCIInumbersTheory.toString_inj] >>
-     qpat_assum `!k. 4 <= k /\ k <= 20 ==> _` (qspec_then `14` assume_tac) >>
-     qpat_assum `!k. 4 <= k /\ k <= 20 ==> _` (qspec_then `15` assume_tac) >> fs[]) >>
+     fs[Abbr `msk2`, Abbr `tmp2`, Abbr `rnd2`, ASCIInumbersTheory.toString_inj] >>
+     qpat_assum `!k. 4 <= k /\ k <= 21 ==> _` (qspec_then `14` assume_tac) >>
+     qpat_assum `!k. 4 <= k /\ k <= 21 ==> _` (qspec_then `15` assume_tac) >>
+     qpat_assum `!k. 4 <= k /\ k <= 21 ==> _` (qspec_then `16` assume_tac) >> fs[]) >>
   `!x. x = b \/ x = p \/ x = q \/
        (?k. 4 <= k /\ k <= 9 /\ x = STRING #"%" (toString (v+k))) ==>
      lookup_var x s15 = lookup_var x s7 /\
@@ -783,11 +904,11 @@ Resume revert_reason_suffix_checks[second_round_frames]:
      qpat_assum `!x. x = b \/ _ ==> lookup_var _ s13 = _ /\ _`
        (qspec_then `x` mp_tac) >>
      impl_tac >- asm_rewrite_tac[] >> disch_then strip_assume_tac >>
-     qpat_assum `!x. x <> tmp2 /\ x <> rnd2 ==> _` (qspec_then `x` mp_tac) >>
+     qpat_assum `!x. x <> msk2 /\ x <> tmp2 /\ x <> rnd2 ==> _` (qspec_then `x` mp_tac) >>
      impl_tac >- metis_tac[] >>
      simp[Abbr `s13c`, lookup_var_def] >> fs[lookup_var_def] >> metis_tac[]) >>
-  qpat_x_assum `!x. x <> tmp2 /\ x <> rnd2 ==> _` kall_tac >>
-  qpat_x_assum `!x. x = b \/ _ ==> x <> tmp2 /\ _` kall_tac >>
+  qpat_x_assum `!x. x <> msk2 /\ x <> tmp2 /\ x <> rnd2 ==> _` kall_tac >>
+  qpat_x_assum `!x. x = b \/ _ ==> x <> msk2 /\ _` kall_tac >>
   suspend "size_add"
 QED
 
@@ -797,13 +918,13 @@ Resume revert_reason_suffix_checks[size_add]:
   `rest2 = sizeadd ++ rest3` by simp[NoAsms, Abbr `sizeadd`, Abbr `rest3`] >>
   `?s16. run_inst_seq sizeadd s15 = OK s16 /\ run_inst_seq rest3 s16 = OK t` by
     (irule run_inst_seq_append_ok_split >> metis_tac[]) >>
-  qabbrev_tac `s15c = s15 with vs_inst_idx := s.vs_inst_idx+15` >>
+  qabbrev_tac `s15c = s15 with vs_inst_idx := s.vs_inst_idx+16` >>
   `EVERY (\i. ~is_terminator i.inst_opcode) sizeadd` by
     simp[NoAsms, Abbr `sizeadd`, Abbr `rest2`, Abbr `rest`, Abbr `zs`, Abbr `ys`,
       revert_reason_suffix_def, mk_inst_def, is_terminator_def] >>
-  `run_inst_seq sizeadd s15c = OK (s16 with vs_inst_idx := s.vs_inst_idx+15)` by
+  `run_inst_seq sizeadd s15c = OK (s16 with vs_inst_idx := s.vs_inst_idx+16)` by
     simp[Abbr `s15c`, run_inst_seq_inst_idx, exec_result_map_def] >>
-  qabbrev_tac `szvar = STRING #"%" (toString (v+16))` >>
+  qabbrev_tac `szvar = STRING #"%" (toString (v+17))` >>
   `?g16 tn16. inst_seq_ptr D 0 ctx fn PG g15 tn15 sizeadd s15c g16 tn16 /\
     op_taint tn16 (Var szvar) = {} /\
     (!u. run_inst_seq sizeadd s15c = OK u ==>
@@ -814,8 +935,7 @@ Resume revert_reason_suffix_checks[size_add]:
         (!C. ptr_covers g15 tn15 x s15c C ==> ptr_covers g16 tn16 x u C)))` by
     (simp[NoAsms, Abbr `sizeadd`, Abbr `rest2`, Abbr `rest`, Abbr `zs`, Abbr `ys`,
        revert_reason_suffix_def, Abbr `szvar`] >>
-     irule (ONCE_REWRITE_RULE [wordsTheory.WORD_ADD_COMM]
-       (Q.INST [`a` |-> `32w:bytes32`, `b` |-> `n2w (contractABI$ceil32 L):bytes32`] clean_add_checks)) >>
+     irule (Q.INST [`a` |-> `n2w (contractABI$ceil32 L):bytes32`, `b` |-> `32w:bytes32`] clean_add_checks) >>
      fs[Abbr `s15c`, Abbr `rnd2`, lookup_var_def, eval_operand_def, op_taint_def]) >>
   first_x_assum (drule_then strip_assume_tac) >>
   suspend "size_add_frames"
@@ -827,7 +947,7 @@ Resume revert_reason_suffix_checks[size_add_frames]:
      x <> szvar` by
     (rpt gen_tac >> strip_tac >>
      fs[Abbr `szvar`, ASCIInumbersTheory.toString_inj] >>
-     qpat_assum `!k. 4 <= k /\ k <= 20 ==> _` (qspec_then `16` assume_tac) >> fs[]) >>
+     qpat_assum `!k. 4 <= k /\ k <= 21 ==> _` (qspec_then `17` assume_tac) >> fs[]) >>
   `!x. x = b \/ x = p \/ x = q \/
        (?k. 4 <= k /\ k <= 9 /\ x = STRING #"%" (toString (v+k))) ==>
      lookup_var x s16 = lookup_var x s7 /\
@@ -851,11 +971,11 @@ Resume revert_reason_suffix_checks[offset_store]:
   `rest3 = offstore ++ rest4` by simp[NoAsms, Abbr `offstore`, Abbr `rest4`] >>
   `?s17. run_inst_seq offstore s16 = OK s17 /\ run_inst_seq rest4 s17 = OK t` by
     (irule run_inst_seq_append_ok_split >> metis_tac[]) >>
-  qabbrev_tac `s16c = s16 with vs_inst_idx := s.vs_inst_idx+16` >>
+  qabbrev_tac `s16c = s16 with vs_inst_idx := s.vs_inst_idx+17` >>
   `EVERY (\i. ~is_terminator i.inst_opcode) offstore` by
     simp[NoAsms, Abbr `offstore`, Abbr `rest3`, Abbr `rest2`, Abbr `rest`,
       Abbr `zs`, Abbr `ys`, revert_reason_suffix_def, mk_inst_def, is_terminator_def] >>
-  `run_inst_seq offstore s16c = OK (s17 with vs_inst_idx := s.vs_inst_idx+16)` by
+  `run_inst_seq offstore s16c = OK (s17 with vs_inst_idx := s.vs_inst_idx+17)` by
     simp[Abbr `s16c`, run_inst_seq_inst_idx, exec_result_map_def] >>
   qpat_assum `!x. x = b \/ _ ==> lookup_var _ s16 = _ /\ _`
     (qspec_then `STRING #"%" (toString (v+6))` mp_tac) >>
@@ -916,18 +1036,18 @@ Resume revert_reason_suffix_checks[totvar_add]:
   `rest4 = totvaradd ++ rest5` by simp[NoAsms, Abbr `totvaradd`, Abbr `rest5`] >>
   `?s18. run_inst_seq totvaradd s17 = OK s18 /\ run_inst_seq rest5 s18 = OK t` by
     (irule run_inst_seq_append_ok_split >> metis_tac[]) >>
-  qabbrev_tac `s17c = s17 with vs_inst_idx := s.vs_inst_idx+17` >>
+  qabbrev_tac `s17c = s17 with vs_inst_idx := s.vs_inst_idx+18` >>
   `EVERY (\i. ~is_terminator i.inst_opcode) totvaradd` by
     simp[NoAsms, Abbr `totvaradd`, Abbr `rest4`, Abbr `rest3`, Abbr `rest2`,
       Abbr `rest`, Abbr `zs`, Abbr `ys`, revert_reason_suffix_def,
       mk_inst_def, is_terminator_def] >>
-  `run_inst_seq totvaradd s17c = OK (s18 with vs_inst_idx := s.vs_inst_idx+17)` by
+  `run_inst_seq totvaradd s17c = OK (s18 with vs_inst_idx := s.vs_inst_idx+18)` by
     simp[Abbr `s17c`, run_inst_seq_inst_idx, exec_result_map_def] >>
   suspend "totvar_add_post"
 QED
 
 Resume revert_reason_suffix_checks[totvar_add_post]:
-  qabbrev_tac `totvar = STRING #"%" (toString (v+17))` >>
+  qabbrev_tac `totvar = STRING #"%" (toString (v+18))` >>
   `?g18 tn18. inst_seq_ptr D 0 ctx fn PG g17 tn17 totvaradd s17c g18 tn18 /\
     op_taint tn18 (Var totvar) = {} /\
     (!u. run_inst_seq totvaradd s17c = OK u ==>
@@ -952,7 +1072,7 @@ QED
 
 Resume revert_reason_suffix_checks[cell_update]:
   qabbrev_tac `cell = STRING #"%" (toString (v+4))` >>
-  qabbrev_tac `loaded = STRING #"%" (toString (v+18))` >>
+  qabbrev_tac `loaded = STRING #"%" (toString (v+19))` >>
   `cell <> totvar` by simp[Abbr `cell`, Abbr `totvar`, ASCIInumbersTheory.toString_inj] >>
   qpat_assum `!x. x = b \/ _ ==> lookup_var _ s16 = _ /\ _`
     (qspec_then `cell` mp_tac) >>
@@ -973,12 +1093,12 @@ Resume revert_reason_suffix_checks[cell_run]:
   `rest5 = cellops ++ tailops` by simp[NoAsms, Abbr `cellops`, Abbr `tailops`] >>
   `?s20. run_inst_seq cellops s18 = OK s20 /\ run_inst_seq tailops s20 = OK t` by
     (irule run_inst_seq_append_ok_split >> metis_tac[]) >>
-  qabbrev_tac `s18c = s18 with vs_inst_idx := s.vs_inst_idx+18` >>
+  qabbrev_tac `s18c = s18 with vs_inst_idx := s.vs_inst_idx+19` >>
   `EVERY (\i. ~is_terminator i.inst_opcode) cellops` by
     simp[NoAsms, Abbr `cellops`, Abbr `rest5`, Abbr `rest4`, Abbr `rest3`,
       Abbr `rest2`, Abbr `rest`, Abbr `zs`, Abbr `ys`, revert_reason_suffix_def,
       mk_inst_def, is_terminator_def] >>
-  `run_inst_seq cellops s18c = OK (s20 with vs_inst_idx := s.vs_inst_idx+18)` by
+  `run_inst_seq cellops s18c = OK (s20 with vs_inst_idx := s.vs_inst_idx+19)` by
     simp[Abbr `s18c`, run_inst_seq_inst_idx, exec_result_map_def] >>
   `?g20 tn20. inst_seq_ptr D 0 ctx fn PG g18 tn18 cellops s18c g20 tn20 /\
     op_taint tn20 (Var loaded) = {} /\
@@ -992,7 +1112,7 @@ Resume revert_reason_suffix_checks[cell_run]:
        Abbr `rest2`, Abbr `rest`, Abbr `zs`, Abbr `ys`, revert_reason_suffix_def,
        Abbr `cell`, Abbr `loaded`] >>
      irule (SRULE [GSYM ADD_ASSOC]
-       (Q.INST [`id` |-> `id+23`] store_load_clean_checks)) >>
+       (Q.INST [`id` |-> `id+24`] store_load_clean_checks)) >>
      simp[NoAsms, Abbr `s18c`, GSYM ADD_COMM] >>
      qpat_assum `lookup_var totvar s18 = SOME _` mp_tac >>
      qpat_assum `op_taint tn18 (Var totvar) = {}` mp_tac >>
@@ -1008,8 +1128,8 @@ QED
 
 Resume revert_reason_suffix_checks[tail_checks]:
   `b <> totvar /\ b <> loaded` by
-    (qpat_assum `!k. 4 <= k /\ k <= 20 ==> _` (qspec_then `17` assume_tac) >>
-     qpat_assum `!k. 4 <= k /\ k <= 20 ==> _` (qspec_then `18` assume_tac) >>
+    (qpat_assum `!k. 4 <= k /\ k <= 21 ==> _` (qspec_then `18` assume_tac) >>
+     qpat_assum `!k. 4 <= k /\ k <= 21 ==> _` (qspec_then `19` assume_tac) >>
      fs[Abbr `totvar`, Abbr `loaded`]) >>
   qpat_assum `!x. x = b \/ _ ==> lookup_var _ s16 = _ /\ _`
     (qspec_then `b` mp_tac) >>
@@ -1026,12 +1146,12 @@ Resume revert_reason_suffix_checks[tail_checks]:
 QED
 
 Resume revert_reason_suffix_checks[tail_post]:
-  qabbrev_tac `s20c = s20 with vs_inst_idx := s.vs_inst_idx+20` >>
+  qabbrev_tac `s20c = s20 with vs_inst_idx := s.vs_inst_idx+21` >>
   `?gf tf. inst_seq_ptr D 0 ctx fn PG g20 tn20
-    (DROP 20 (revert_reason_suffix id v (Var b) (Var p) (Var q))) s20c gf tf` by
+    (DROP 21 (revert_reason_suffix id v (Var b) (Var p) (Var q))) s20c gf tf` by
     (simp[NoAsms, revert_reason_suffix_def] >>
      irule (SRULE [GSYM ADD_ASSOC]
-       (Q.INST [`id` |-> `id+25`, `capbytes` |-> `64+ms`,
+       (Q.INST [`id` |-> `id+26`, `capbytes` |-> `64+ms`,
          `k` |-> `64+contractABI$ceil32 L`] revert_abi_tail_checks)) >>
      simp[Abbr `s20c`, Abbr `loaded`, lookup_var_def] >>
      conj_tac
@@ -1044,7 +1164,7 @@ QED
 Resume revert_reason_suffix_checks[compose]:
   `revert_reason_suffix id v (Var b) (Var p) (Var q) =
     xs ++ (rs ++ (pad ++ (rs2 ++ (sizeadd ++ (offstore ++
-      (totvaradd ++ (cellops ++ DROP 20 (revert_reason_suffix id v (Var b) (Var p) (Var q)))))))))` by
+      (totvaradd ++ (cellops ++ DROP 21 (revert_reason_suffix id v (Var b) (Var p) (Var q)))))))))` by
     simp[NoAsms, Abbr `xs`, Abbr `rs`, Abbr `pad`, Abbr `rs2`, Abbr `sizeadd`,
       Abbr `offstore`, Abbr `totvaradd`, Abbr `cellops`, Abbr `rest5`, Abbr `rest4`,
       Abbr `rest3`, Abbr `rest2`, Abbr `rest`, Abbr `zs`, Abbr `ys`, revert_reason_suffix_def] >>
@@ -1085,7 +1205,7 @@ QED
 Resume revert_reason_suffix_checks[compose_size]:
   pure_rewrite_tac[GSYM APPEND_ASSOC] >>
   irule inst_seq_ptr_append_ok >> (conj_tac >- simp[]) >>
-  qexistsl [`g16`, `s16 with vs_inst_idx := s.vs_inst_idx+15`, `tn16`] >>
+  qexistsl [`g16`, `s16 with vs_inst_idx := s.vs_inst_idx+16`, `tn16`] >>
   simp[Abbr `s15c`] >>
   simp[Abbr `sizeadd`, Abbr `rest2`, revert_reason_suffix_def] >>
   suspend "compose_store"
@@ -1094,7 +1214,7 @@ QED
 Resume revert_reason_suffix_checks[compose_store]:
   pure_rewrite_tac[GSYM APPEND_ASSOC] >>
   irule inst_seq_ptr_append_ok >> (conj_tac >- simp[]) >>
-  qexistsl [`g17`, `s17 with vs_inst_idx := s.vs_inst_idx+16`, `tn17`] >>
+  qexistsl [`g17`, `s17 with vs_inst_idx := s.vs_inst_idx+17`, `tn17`] >>
   simp[Abbr `s16c`] >>
   simp[Abbr `offstore`, Abbr `rest3`, revert_reason_suffix_def] >>
   suspend "compose_total"
@@ -1103,7 +1223,7 @@ QED
 Resume revert_reason_suffix_checks[compose_total]:
   pure_rewrite_tac[GSYM APPEND_ASSOC] >>
   irule inst_seq_ptr_append_ok >> (conj_tac >- simp[]) >>
-  qexistsl [`g18`, `s18 with vs_inst_idx := s.vs_inst_idx+17`, `tn18`] >>
+  qexistsl [`g18`, `s18 with vs_inst_idx := s.vs_inst_idx+18`, `tn18`] >>
   simp[] >>
   simp[Abbr `totvaradd`, Abbr `rest4`, revert_reason_suffix_def] >>
   suspend "compose_cell"
@@ -1112,10 +1232,10 @@ QED
 Resume revert_reason_suffix_checks[compose_cell]:
   pure_rewrite_tac[GSYM APPEND_ASSOC] >>
   irule inst_seq_ptr_append_ok >> (conj_tac >- simp[]) >>
-  qexistsl [`g20`, `s20 with vs_inst_idx := s.vs_inst_idx+18`, `tn20`] >>
+  qexistsl [`g20`, `s20 with vs_inst_idx := s.vs_inst_idx+19`, `tn20`] >>
   simp[] >>
   simp[Abbr `cellops`, Abbr `rest5`, revert_reason_suffix_def, Abbr `s20c`] >>
-  qpat_assum `inst_seq_ptr _ _ _ _ _ g20 tn20 (DROP 20 _) _ gf tf` mp_tac >>
+  qpat_assum `inst_seq_ptr _ _ _ _ _ g20 tn20 (DROP 21 _) _ gf tf` mp_tac >>
   simp[NoAsms, revert_reason_suffix_def, Abbr `loaded`]
 QED
 
@@ -1131,7 +1251,7 @@ Theorem revert_reason_suffix_path_ptr:
   32 + contractABI$ceil32 L <= ms /\ L+63 < dimword(:256) /\
   64+ms < dimword(:256) /\ w2n B+64+ms < dimword(:256) /\
   w2n P+32+ms < dimword(:256) /\
-  (!k. 4 <= k /\ k <= 20 ==>
+  (!k. 4 <= k /\ k <= 21 ==>
     b <> STRING #"%" (toString ((v:num)+k)) /\
     p <> STRING #"%" (toString (v+k)) /\
     q <> STRING #"%" (toString (v+k))) /\
@@ -1144,7 +1264,7 @@ Theorem revert_reason_suffix_path_ptr:
     [STRING #"%" (toString (v+4))]) s = OK sa /\
   FLOOKUP sa.vs_allocas (id+5) = SOME (c,32) /\
   (w2n Q+32 <= c \/ c+32 <= w2n Q) /\
-  run_inst_seq (TAKE 22 (revert_reason_suffix id v (Var b) (Var p) (Var q))) s = OK t /\
+  run_inst_seq (TAKE 23 (revert_reason_suffix id v (Var b) (Var p) (Var q))) s = OK t /\
   ~s.vs_halted /\ lookup_block s.vs_current_bb fn.fn_blocks = SOME bb /\
   isPREFIX (revert_reason_suffix id v (Var b) (Var p) (Var q))
     (DROP s.vs_inst_idx bb.bb_instructions) /\
@@ -1155,16 +1275,16 @@ Proof
   disch_then (map_every assume_tac o CONJUNCTS) >>
   drule_all revert_reason_suffix_checks >>
   disch_then (qspecl_then [`fn`, `PG`, `D`] strip_assume_tac) >>
-  qabbrev_tac `xs = TAKE 22 (revert_reason_suffix id v (Var b) (Var p) (Var q))` >>
-  qabbrev_tac `i = mk_inst (id+27) REVERT
-    [Var (STRING #"%" (toString (v+19))); Var (STRING #"%" (toString (v+20)))] []` >>
+  qabbrev_tac `xs = TAKE 23 (revert_reason_suffix id v (Var b) (Var p) (Var q))` >>
+  qabbrev_tac `i = mk_inst (id+28) REVERT
+    [Var (STRING #"%" (toString (v+20))); Var (STRING #"%" (toString (v+21)))] []` >>
   `xs ++ [i] = revert_reason_suffix id v (Var b) (Var p) (Var q)` by
     simp[NoAsms, Abbr `xs`, Abbr `i`, revert_reason_suffix_def] >>
   `!j opc ops outs. (mk_inst j opc ops outs).inst_opcode = opc` by
     simp[mk_inst_def] >>
   `MAP (\h. h.inst_opcode) xs =
     [ALLOCA; MSTORE; ADD; ADD; MLOAD; ADD; MLOAD; ADD; AND; ADD; MSTORE;
-     ADD; MCOPY; ADD; AND; ADD; MSTORE; ADD; MSTORE; MLOAD; ADD; ADD]` by
+     ADD; MCOPY; NOT; ADD; AND; ADD; MSTORE; ADD; MSTORE; MLOAD; ADD; ADD]` by
     (simp[NoAsms, Abbr `xs`, GSYM MAP_TAKE] >>
      pure_rewrite_tac[revert_reason_suffix_def, MAP] >>
      BETA_TAC >>

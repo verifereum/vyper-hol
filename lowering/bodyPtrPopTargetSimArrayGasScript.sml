@@ -2,7 +2,7 @@ Theory bodyPtrPopTargetSimArrayGas
 Ancestors
   bodyPtrPopTargetSimArraySource gasSummaryComposePtr bodyPtrPopTargetDefs
   vyperState vyperStorageBackend vyperAST vyperInterpreter list
-  vyperStoragePlaceProvenance appendStorageSourcePtr fragGasPathPtr
+  vyperStoragePlaceProvenance stmtSimAppendStorageCompose fragGasPathPtr
   exprSimDefs venomState fragExec
 
 Theorem target_memory_extend_gas_tail_ptr:

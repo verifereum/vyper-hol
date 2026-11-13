@@ -411,7 +411,7 @@ Proof
   `wf_function fn` by gvs[codegen_ready_fn_def] >>
   `cfg_reachable_of (cfg_analyze fn) lbl` by
     metis_tac[fn_reachable_cfg_analyze] >>
-  drule cfgAnalysisPropsTheory.cfg_analyze_reachable_in_labels >>
+  drule cfgCorrectnessProofTheory.cfg_analyze_reachable_in_labels >>
   simp[fn_labels_def, MEM_MAP] >> strip_tac >>
   irule_at Any MEM_lookup_block >> simp[] >> gvs[wf_function_def, fn_labels_def] >>
   metis_tac[]

@@ -34,7 +34,7 @@ Theorem external_frame_ret_ok:
       SOME (mut, F, args, [], ret, fbody) /\
     bind_arguments (type_env tops) args tx.args = SOME env /\
     set_external_package_target rpolicy.rpol_target
-      (package_external_fn tops F (assign_nkeys tops 0)
+      (package_external_fn tops T (K global_nonreentrant_slot)
          (mut, F, lookup_raw_return_or_F (NONE : num option)
                      tx.function_name External tops,
           tx.function_name, args, [], ret, fbody)) =
@@ -54,6 +54,11 @@ Theorem external_frame_ret_ok:
       cenv ret
 Proof
   rpt gen_tac >> strip_tac >>
+  `ut' = T` by
+    (drule externalReturnPackageTheory.return_package_target_inversion >>
+     strip_tac >>
+     drule externalReturnPackageTheory.return_package_metadata >> simp[]) >>
+  pop_assum SUBST_ALL_TAC >>
   simp[frame_ret_ok_def] >> rpt gen_tac >> strip_tac >>
   Cases_on `eo`
   >- (irule return_selected_none_frag >>

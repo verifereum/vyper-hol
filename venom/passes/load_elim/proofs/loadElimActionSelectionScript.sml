@@ -31,7 +31,8 @@ Proof
      disch_then (qspecl_then [`origin`, `bb`, `inst.inst_id`] mp_tac) >>
      simp[MEM_MAP] >> metis_tac[EL_MEM]) >> gvs[] >>
   `ALL_DISTINCT (MAP (\i. i.inst_id) bb.bb_instructions)` by
-    (irule wf_function_block_inst_ids_distinct >> metis_tac[]) >>
+    (irule venomFnInstsProofsTheory.fn_inst_ids_block_distinct >>
+     qexists_tac `fn` >> fs[wf_function_def]) >>
   `idx = n` by
     (drule ALL_DISTINCT_EL_IMP >>
      disch_then (qspecl_then [`idx`, `n`] mp_tac) >> simp[EL_MAP]) >>

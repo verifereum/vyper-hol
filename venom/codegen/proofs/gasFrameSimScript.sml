@@ -9,7 +9,7 @@ Ancestors
   codegenRel contextCodegenRel planExec asmSem stackPlanGen stackPlanTypes
   stackPlanOps stackModel venomExecSemantics venomState venomInst
   allocMono contextCodegenRelProps asmIR venomEffects fcgDefs livenessDefs
-  dfgDefs list rich_list deepDupCallerSim venomWf opcodeClass unitShapeDefs finite_map
+  dfgDefs list rich_list deepDupCallerSim venomWf opcodeClass unitShapeDefs finite_map spillPlanSim
 
 Theorem gas_source_shape:
   inst.inst_opcode = GAS /\ inst_wf inst /\

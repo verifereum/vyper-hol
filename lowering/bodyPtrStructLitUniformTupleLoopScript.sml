@@ -13,7 +13,7 @@ Theorem structlit_uniform_tuple_cons_map:
   gas_outcome_ptr D tops (ctx,func) PG (eval_exprs cx args) start
     (\res ee H tm z. ?vs added. res = INL vs /\ expr_sim_inv ce cx env ee /\
       LIST_REL value_has_type tvs vs /\
-      literal_loop_frame ctx func ce cx d root aid addr capacity
+      literal_loop_frame pure ctx func ce cx d root aid addr capacity
         ees fr sf Gf tnf ee sb H tm z
         ((cells ++ [(tv,v,addr+off,type_memory_size tv)]) ++ added)
         ((off+type_memory_size tv) + type_memory_size_list tvs) /\
@@ -26,7 +26,7 @@ Theorem structlit_uniform_tuple_cons_map:
     (bind (eval_exprs cx args) (\vs. return (v::vs))) start
     (\res ee H tm z. ?vs added. res = INL vs /\ expr_sim_inv ce cx env ee /\
       LIST_REL value_has_type (tv::tvs) vs /\
-      literal_loop_frame ctx func ce cx d root aid addr capacity
+      literal_loop_frame pure ctx func ce cx d root aid addr capacity
         ees fr sf Gf tnf ee sb H tm z (cells ++ added)
         (off + type_memory_size_list (tv::tvs)) /\
       literal_prefix_ok (cells ++ added) tm z /\
@@ -54,7 +54,7 @@ Theorem structlit_uniform_tuple_stages:
   emit_op ADD [Var root; Lit (n2w off)] sm = (Var dst,sn) /\
   unwrap_value ce vv sn = (op,su) /\
   compile_store_memory ce op (Var dst) (expr_type e) (lowered_value_type ce e) su = ((),ss) /\
-  compile_make_tuple compile_expr ce args (Var root) next ss = (out,sb) ==>
+  compile_make_tuple compile_expr ce args (MAP expr_type args) (Var root) next ss = (out,sb) ==>
   ci_mono si ss /\ ci_mono ss sb
 Proof
   strip_tac >>
@@ -68,10 +68,10 @@ QED
 
 Theorem structlit_uniform_tuple_loop_outcome_ptr:
   !args ce cx env off si out sb es tvs cells G0 tn0 s0.
-  compile_make_tuple compile_expr ce args (Var root) off si = (out,sb) /\
+  compile_make_tuple compile_expr ce args (MAP expr_type args) (Var root) off si = (out,sb) /\
   OPT_MMAP (evaluate_type (get_tenv cx)) (MAP expr_type args) = SOME tvs /\
   expr_sim_inv ce cx env es /\
-  literal_loop_frame ctx func ce cx d root aid addr capacity
+  literal_loop_frame pure ctx func ce cx d root aid addr capacity
     ees fr sf Gf tnf es si G0 tn0 s0 cells off /\
   literal_prefix_ok cells tn0 s0 /\ stmt_state_rel ctx func ce cx ees sf /\
   off + type_memory_size_list tvs <= capacity /\
@@ -83,13 +83,14 @@ Theorem structlit_uniform_tuple_loop_outcome_ptr:
   body_inv tops ctx ce cx /\ body_exprs_ptr_ok cx args /\
   (!e st. MEM e args /\ expr_sim_inv ce cx env st ==>
     expr_body_pre ce cx env e st) /\
-  (!e. MEM e args ==> post_value_type ce e = expr_type e) ==>
+  (!e. MEM e args ==> post_value_type ce e = expr_type e) /\
+  (pure ==> ~EXISTS expr_has_effect args) ==>
   out = Var root /\
   gas_outcome_ptr (cx_dead cx) (cx_tops cx) (ctx,func) PG
     (eval_exprs cx args) (es,s0,G0,tn0)
     (\res ee H tm z. ?vs added. res = INL vs /\ expr_sim_inv ce cx env ee /\
       LIST_REL value_has_type tvs vs /\
-      literal_loop_frame ctx func ce cx d root aid addr capacity
+      literal_loop_frame pure ctx func ce cx d root aid addr capacity
         ees fr sf Gf tnf ee sb H tm z (cells ++ added) (off + type_memory_size_list tvs) /\
       literal_prefix_ok (cells ++ added) tm z /\
       (!m. mem_agree_outside tm.t_mem z.vs_memory m ==>
@@ -112,14 +113,16 @@ Proof
   `type_memory_bytes ce (expr_type h) = type_memory_size h'` by metis_tac[expr_sim_inv_memory_size] >>
   `off + type_memory_bytes ce (expr_type h) <= capacity` by (fs[type_memory_size_def] >> decide_tac) >>
   `post_value_type ce h = expr_type h` by metis_tac[] >>
-  drule_at (Pat `literal_loop_frame _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _`)
+  `(pure ==> ~expr_has_effect h) /\ (pure ==> ~EXISTS expr_has_effect args)` by
+    (rpt strip_tac >> fs[listTheory.EVERY_MEM, listTheory.EXISTS_MEM] >> metis_tac[]) >>
+  drule_at (Pat `literal_loop_frame _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _`)
     (SRULE [] structlit_uniform_cons_outcome_ptr) >>
   simp[] >> disch_then drule_all >> strip_tac >>
   `out = Var root` by metis_tac[exprOperandVarTheory.compiler_make_tuple_result] >>
   simp[] >> rewrite_tac[literal_tuple_eval_cons] >> irule literal_value_bind_outcome_ptr >>
   irule_at Any gas_outcome_ptr_conseq >> goal_assum (drule_at Any) >> simp[] >>
   qexists `\v ee H tm z. value_has_type h' v /\
-    literal_loop_frame ctx func ce cx d root aid addr capacity
+    literal_loop_frame pure ctx func ce cx d root aid addr capacity
       ees fr sf Gf tnf ee ss H tm z
       (cells ++ [(h',v,addr+off,type_memory_size h')]) (off+type_memory_size h') /\
     literal_prefix_ok (cells ++ [(h',v,addr+off,type_memory_size h')]) tm z` >>
@@ -133,8 +136,8 @@ Proof
   `off + type_memory_size h' + type_memory_size_list t <= capacity` by
     (fs[type_memory_size_def] >> decide_tac) >>
   qpat_x_assum `!ce' cx' env' off' si' out' sb' es' tvs' cells' G0' tn0' s0'. _`
-    (drule_at (Pat `compile_make_tuple _ _ _ _ _ _ = _`)) >> simp[] >>
-  disch_then (drule_at (Pat `literal_loop_frame _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _`)) >>
+    (drule_at (Pat `compile_make_tuple _ _ _ _ _ _ _ = _`)) >> simp[] >>
+  disch_then (drule_at (Pat `literal_loop_frame _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _`)) >>
   simp[] >> disch_then (qspec_then `env` mp_tac) >>
   (impl_tac >- metis_tac[]) >> strip_tac >>
   irule (SRULE [] structlit_uniform_tuple_cons_map) >> simp[] >>

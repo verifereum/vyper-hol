@@ -16,6 +16,7 @@ Libs
 
 Theorem body_assign_tuple_targets_mem:
   !cx gs e d tops bindings ctx func cenv env env' ret_ty lctx RetQ es.
+    body_stmt_safe tops (Assign (TupleTarget gs) e) /\
     body_expr_mem_ok cx e /\ body_inv tops ctx cenv cx /\
     supported_stmt tops bindings (Assign (TupleTarget gs) e) /\
     (!target. supported_stmt_expr_exists (expr_abi_decode_target_root target)
@@ -78,7 +79,8 @@ Proof
           gvs[run_deploy_lowering_def, AllCaseEqs(), lowering_policy_ok_def]) >>
       gvs[lower_vyper_runtime_unit_def, AllCaseEqs()] >>
       rpt (pairarg_tac >> gvs[]) >>
-      gvs[run_lowering_def, AllCaseEqs(), lowering_policy_ok_def])
+      gvs[run_lowering_def, vyperCompilerTheory.run_grouped_lowering_def,
+          AllCaseEqs(), lowering_policy_ok_def])
   >~ [`type_memory_size (TupleTV _) < _`]
   >- (strip_tac >> irule tuple_staging_bound >> metis_tac[])
   >~ [`tuple_target_layout _ _ _ _ _`]

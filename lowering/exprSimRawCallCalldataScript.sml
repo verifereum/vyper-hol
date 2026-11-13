@@ -372,7 +372,7 @@ Theorem raw_call_oracle_result:
                     (call_outcome_return_data outcome))]))), es2))
 Proof
   rpt strip_tac >>
-  simp[eval_raw_call_def, frame_call_value_def, bind_def, ignore_bind_def,
+  simp[eval_raw_call_def, frame_call_value_def, update_pending_deletions_def, bind_def, ignore_bind_def,
        type_check_def, assert_def, vyperStateTheory.return_def, raise_def] >>
   Cases_on `flags.rcf_revert_on_failure` >>
   Cases_on `call_outcome_success outcome` >>
@@ -3481,7 +3481,7 @@ Proof
   gvs[AllCaseEqs()] >> drule raw_call_alloca_saved_fmp >> simp[]
 QED
 
-Theorem raw_call_alloc_buffer_run[local]:
+Theorem raw_call_alloc_buffer_run:
   !func cenv cx es sa sm buf sz s ctx saved.
   compile_alloc_buffer sz sa = (buf,sm) /\
   stmt_state_rel ctx func cenv cx es (s with vs_fmp := saved) /\
@@ -4611,7 +4611,7 @@ Theorem calldata_raw_call_gas_obs:
     (SND (eval_raw_call cx flags target data amount gas st)).gas_obs = st.gas_obs
 Proof
   rpt gen_tac >> strip_tac >>
-  simp[eval_raw_call_def, frame_call_value_def, bind_def, ignore_bind_def,
+  simp[eval_raw_call_def, frame_call_value_def, update_pending_deletions_def, bind_def, ignore_bind_def,
        type_check_def, assert_def, vyperStateTheory.return_def, raise_def] >>
   IF_CASES_TAC >> simp[raise_def] >>
   qmatch_goalsub_abbrev_tac `take_call_outcome target data vo` >>

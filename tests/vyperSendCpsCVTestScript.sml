@@ -48,6 +48,7 @@ Definition send_snapshot_def:
     lookup_storage 1w (lookup_account 11w st.accounts).storage = persistent /\
     lookup_storage 1w (vfmExecution$lookup_transient_storage 11w st.tStorage) = transient /\
     st.logs = logs /\ st.scopes = [FEMPTY] /\ st.immutables = [(11w,[])] /\
+    st.pending_deletions = [] /\
     send_request_fields st = rqs /\
     OPTION_MAP (MAP (λco. (co.co_success,co.co_returnData,
       (lookup_account 11w co.co_accounts).balance,

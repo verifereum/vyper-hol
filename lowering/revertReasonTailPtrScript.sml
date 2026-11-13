@@ -15,7 +15,7 @@ Theorem revert_reason_suffix_resources_path_ptr:
   32 + contractABI$ceil32 L <= ms /\ L+63 < dimword(:256) /\
   64+ms < dimword(:256) /\ w2n B+64+ms < dimword(:256) /\
   w2n P+32+ms < dimword(:256) /\
-  (!k. 4 <= k /\ k <= 20 ==>
+  (!k. 4 <= k /\ k <= 21 ==>
     b <> STRING #"%" (toString ((v:num)+k)) /\
     p <> STRING #"%" (toString (v+k)) /\ q <> STRING #"%" (toString (v+k))) /\
   ~ctx_has_dalloca ctx /\ alloca_inv s /\ alloca_room ctx fn s /\
@@ -67,30 +67,30 @@ Theorem revert_reason_tail_resources_path_ptr:
   32+contractABI$ceil32 L <= ms /\ L+63 < dimword(:256) /\
   64+ms < dimword(:256) /\ w2n B+64+ms < dimword(:256) /\
   w2n P+32+ms < dimword(:256) /\
-  (!k. k <= 20 ==>
+  (!k. k <= 22 ==>
     b <> STRING #"%" (toString ((v:num)+k)) /\
     p <> STRING #"%" (toString (v+k)) /\
     q <> STRING #"%" (toString (v+k)) /\
     src <> STRING #"%" (toString (v+k))) /\
   ~ctx_has_dalloca ctx /\ alloca_inv s /\ alloca_room ctx fn s /\
-  MEM (mk_inst (id+5) ALLOCA [Lit 32w]
-    [STRING #"%" (toString (v+4))]) (fn_insts fn) /\
-  (!a sz. FLOOKUP s.vs_allocas (id+5) = SOME (a,sz) ==> sz = 32) /\
-  FLOOKUP s.vs_allocas parent = SOME (w2n Q,ms) /\ parent <> id+5 /\
+  MEM (mk_inst (id+6) ALLOCA [Lit 32w]
+    [STRING #"%" (toString (v+5))]) (fn_insts fn) /\
+  (!a sz. FLOOKUP s.vs_allocas (id+6) = SOME (a,sz) ==> sz = 32) /\
+  FLOOKUP s.vs_allocas parent = SOME (w2n Q,ms) /\ parent <> id+6 /\
   ~s.vs_halted /\ lookup_block s.vs_current_bb fn.fn_blocks = SOME bb /\
   isPREFIX (revert_reason_copy id v (Var q) (Var src))
     (DROP s.vs_inst_idx bb.bb_instructions) /\
-  isPREFIX (revert_reason_suffix id v (Var b) (Var p) (Var q))
-    (DROP (s.vs_inst_idx+5) bb.bb_instructions) ==>
+  isPREFIX (revert_reason_suffix (id+1) (v+1) (Var b) (Var p) (Var q))
+    (DROP (s.vs_inst_idx+6) bb.bb_instructions) ==>
   ?t z Gf tnf j.
     run_inst_seq (revert_reason_copy id v (Var q) (Var src)) s = OK t /\
-    run_inst_seq (revert_reason_suffix id v (Var b) (Var p) (Var q))
-      (t with vs_inst_idx := s.vs_inst_idx+5) = Abort Revert_abort z /\
+    run_inst_seq (revert_reason_suffix (id+1) (v+1) (Var b) (Var p) (Var q))
+      (t with vs_inst_idx := s.vs_inst_idx+6) = Abort Revert_abort z /\
     gas_path_ptr D 0 ctx fn PG G tn s 0 Gf tnf
       (Abort Revert_abort (z with vs_inst_idx := j))
 Proof
   strip_tac >>
-  `!k. k < 4 ==> src <> STRING #"%" (toString (v+k)) /\
+  `!k. k < 5 ==> src <> STRING #"%" (toString (v+k)) /\
                     q <> STRING #"%" (toString (v+k))` by simp[] >>
   drule_all revert_reason_copy_run >> disch_then (qspec_then `id` strip_assume_tac) >>
   `ptr_covers G tn q s (32+contractABI$ceil32 L)` by
@@ -101,42 +101,45 @@ Proof
     (revert_reason_copy id v (Var q) (Var src))` by
     simp[NoAsms, revert_reason_copy_def, mk_inst_def, is_terminator_def] >>
   drule_all run_inst_seq_preserves_entry_control >> strip_tac >>
-  `alloca_inv (t with vs_inst_idx := s.vs_inst_idx+5) /\
-   alloca_room ctx fn (t with vs_inst_idx := s.vs_inst_idx+5)` by
+  `alloca_inv (t with vs_inst_idx := s.vs_inst_idx+6) /\
+   alloca_room ctx fn (t with vs_inst_idx := s.vs_inst_idx+6)` by
     (conj_tac >- (irule alloca_inv_fields >> qexists_tac `s` >> simp[]) >>
      irule alloca_room_fields >> qexists_tac `s` >> simp[]) >>
-  `lookup_var b (t with vs_inst_idx := s.vs_inst_idx+5) = SOME B /\
-   ptr_covers Gf tnf b (t with vs_inst_idx := s.vs_inst_idx+5) (64+ms)` by
+  `lookup_var b (t with vs_inst_idx := s.vs_inst_idx+6) = SOME B /\
+   ptr_covers Gf tnf b (t with vs_inst_idx := s.vs_inst_idx+6) (64+ms)` by
     (first_x_assum (qspecl_then [`b`,`64+ms`] mp_tac) >>
      asm_rewrite_tac[] >>
-     (impl_tac >- (rpt strip_tac >> qpat_x_assum `!k. k <= 20 ==> _`
+     (impl_tac >- (rpt strip_tac >> qpat_x_assum `!k. k <= 22 ==> _`
        (qspec_then `k` mp_tac) >> asm_rewrite_tac[] >> decide_tac)) >>
      strip_tac >> asm_rewrite_tac[]) >>
-  `lookup_var p (t with vs_inst_idx := s.vs_inst_idx+5) = SOME P /\
-   ptr_covers Gf tnf p (t with vs_inst_idx := s.vs_inst_idx+5) (32+ms)` by
+  `lookup_var p (t with vs_inst_idx := s.vs_inst_idx+6) = SOME P /\
+   ptr_covers Gf tnf p (t with vs_inst_idx := s.vs_inst_idx+6) (32+ms)` by
     (qpat_x_assum `!x C. _ /\ ptr_covers _ _ x _ C ==> _` (qspecl_then [`p`,`32+ms`] mp_tac) >>
      asm_rewrite_tac[] >>
-     (impl_tac >- (rpt strip_tac >> qpat_x_assum `!k. k <= 20 ==> _`
+     (impl_tac >- (rpt strip_tac >> qpat_x_assum `!k. k <= 22 ==> _`
        (qspec_then `k` mp_tac) >> asm_rewrite_tac[] >> decide_tac)) >>
      strip_tac >> asm_rewrite_tac[]) >>
-  `lookup_var q (t with vs_inst_idx := s.vs_inst_idx+5) = SOME Q /\
-   ptr_covers Gf tnf q (t with vs_inst_idx := s.vs_inst_idx+5) ms` by
+  `lookup_var q (t with vs_inst_idx := s.vs_inst_idx+6) = SOME Q /\
+   ptr_covers Gf tnf q (t with vs_inst_idx := s.vs_inst_idx+6) ms` by
     (qpat_x_assum `!x C. _ /\ ptr_covers _ _ x _ C ==> _` (qspecl_then [`q`,`ms`] mp_tac) >>
      asm_rewrite_tac[] >>
-     (impl_tac >- (rpt strip_tac >> qpat_x_assum `!k. k <= 20 ==> _`
+     (impl_tac >- (rpt strip_tac >> qpat_x_assum `!k. k <= 22 ==> _`
        (qspec_then `k` mp_tac) >> asm_rewrite_tac[] >> decide_tac)) >>
      strip_tac >> asm_rewrite_tac[]) >>
   `?z G2 tn2 j.
-    run_inst_seq (revert_reason_suffix id v (Var b) (Var p) (Var q))
-      (t with vs_inst_idx := s.vs_inst_idx+5) = Abort Revert_abort z /\
-    gas_path_ptr D 0 ctx fn PG Gf tnf (t with vs_inst_idx := s.vs_inst_idx+5)
+    run_inst_seq (revert_reason_suffix (id+1) (v+1) (Var b) (Var p) (Var q))
+      (t with vs_inst_idx := s.vs_inst_idx+6) = Abort Revert_abort z /\
+    gas_path_ptr D 0 ctx fn PG Gf tnf (t with vs_inst_idx := s.vs_inst_idx+6)
       0 G2 tn2 (Abort Revert_abort (z with vs_inst_idx := j))` by
-    (irule revert_reason_suffix_resources_path_ptr >>
+    (irule (SRULE [GSYM ADD_ASSOC] (Q.INST [`id` |-> `id+1`, `v` |-> `v+1`]
+       revert_reason_suffix_resources_path_ptr)) >>
      asm_rewrite_tac[venom_state_accfupds, combinTheory.K_THM] >>
-     conj_tac >- (rpt strip_tac >> qpat_x_assum `!k. k <= 20 ==> _`
-       (qspec_then `k` mp_tac) >> asm_rewrite_tac[] >> simp[NoAsms]) >>
+     conj_tac >- (rpt gen_tac >> strip_tac >> qpat_x_assum `!k. k <= 22 ==> _`
+       (qspec_then `k+1` mp_tac) >> qpat_x_assum `k <= 21` mp_tac >>
+       simp[NoAsms]) >>
      conj_tac >- (qexists_tac `bb` >> asm_rewrite_tac[]) >>
-     qexistsl_tac [`B`,`L`,`P`,`Q`,`ms`,`parent`] >> asm_rewrite_tac[]) >>
+     qexistsl_tac [`B`,`L`,`P`,`Q`,`ms`,`parent`] >> asm_rewrite_tac[] >>
+     rewrite_tac[ADD_ASSOC] >> asm_rewrite_tac[]) >>
   qexistsl_tac [`t`,`z`,`G2`,`tn2`,`j`] >> asm_rewrite_tac[] >>
   drule_all gas_path_ptr_then >> simp[]
 QED

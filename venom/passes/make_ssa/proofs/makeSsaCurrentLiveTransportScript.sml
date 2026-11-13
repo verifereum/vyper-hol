@@ -3,7 +3,7 @@ Ancestors
   livenessTransferProofs
   makeSsaCurrentSelectedLive makeSsaDefs makeSsaCurrentDemandDominance
   livenessDefs livenessAnalysisProps livenessLocalProofs dfAnalyzeDefs venomInst venomWf
-  venomExecProps list alist makeSsaCurrentAnalysis cfgAnalysisProps cfgWf relation
+  venomExecProps list alist makeSsaCurrentAnalysis cfgAnalysisProps cfgWf relation livenessProofs
 
 Theorem current_after_phis_lookup:
   !bbs l bb live. lookup_block l bbs = SOME bb /\ bb.bb_instructions <> [] ==>

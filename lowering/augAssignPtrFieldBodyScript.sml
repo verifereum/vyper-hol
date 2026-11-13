@@ -54,6 +54,7 @@ Proof
      first_x_assum irule >> metis_tac[]) >>
   `(bop = Exp ==> nonneg_int_literal e) /\
    (bop = ShL \/ bop = ShR ==> shift_amount_ok e)` by
-    gvs[type_stmt_def, well_typed_expr_def, DISJ_IMP_THM, AllCaseEqs()] >>
+    (gvs[type_stmt_def, well_typed_expr_def, DISJ_IMP_THM, AllCaseEqs()] >>
+     metis_tac[stmtSimAugAssignTheory.augassign_operand_ok_operands]) >>
   irule compile_augassign_attr_local_case_ptr >> simp[] >> metis_tac[]
 QED

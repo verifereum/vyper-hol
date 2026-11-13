@@ -1,5 +1,6 @@
 Theory fnLineageInvTerminal
 Ancestors
+  spillPlanSim
   fnPlanLineageReorder fnPlanLineageInventory stackPlanOps stackModel
   reorderSim doSwapSim planWf generatedPrefixSim planSpillBounds
   list sorting pred_set stackPlanGen venomInst finite_map rich_list indexedLists

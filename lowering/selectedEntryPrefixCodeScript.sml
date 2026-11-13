@@ -10,12 +10,13 @@ Ancestors selectedBodyCode runtimeExternalPackageCode entryCheckIntervals
 Theorem source_selected_entry_prefix_code:
   lower_vyper_runtime_unit tops rpolicy = SOME unit /\
   supported_program tops /\ name <> "__default__" /\
+  ALL_DISTINCT (FLAT (MAP (external_name_keys_toplevel NONE) tops)) /\
   vyperInterpreter$lookup_function NONE name External tops =
     SOME (mut,F,args,[],ret,fbody) /\
   venomInst$lookup_function "__entry" unit.cu_context.ctx_functions = SOME efn /\
   fn_entry_label efn = SOME elbl /\
   set_external_package_target rpolicy.rpol_target
-    (package_external_fn tops F (assign_nkeys tops 0)
+    (package_external_fn tops T (K global_nonreentrant_slot)
       (mut,F,lookup_raw_return_or_F (NONE:num option) name External tops,
        name,args,([] : expr list),ret,fbody)) =
     (lbl,cenv0,pos_args,min_cds,is_payable,F,nkey,ut',iv,fbody,rt) ==>
@@ -36,12 +37,7 @@ Theorem source_selected_entry_prefix_code:
     de.cs_next_var <= opened.cs_next_var
 Proof
   strip_tac >>
-  `!nr' mut' typ x. ~MEM (VariableDecl (Public nr') mut' name typ x) tops` by
-    (rpt strip_tac >> drule_all supported_program_declaration >>
-     simp[supported_declaration_header_def]) >>
-  `!nr' b kt vt x. ~MEM (HashMapDecl (Public nr') b name kt vt x) tops` by
-    (rpt strip_tac >> drule_all supported_program_declaration >>
-     simp[supported_declaration_header_def]) >>
+  `supported_declaration_headers tops` by fs[supported_program_def] >>
   drule_all external_lookup_raw_package_member >> strip_tac >>
   drule_all source_runtime_external_packages >> strip_tac >>
   `MEM (lbl,cenv0,pos_args,min_cds,is_payable,F,nkey,ut',iv,fbody,rt) extpkgs` by
@@ -106,22 +102,30 @@ Theorem lowered_runtime_function_inst_ids_distinct:
   lower_vyper_runtime_unit tops rpolicy = SOME unit /\
   MEM fn unit.cu_context.ctx_functions ==> fn_inst_ids_distinct fn
 Proof
-  strip_tac >> drule lower_vyper_runtime_unit_run_lowering >> strip_tac >>
-  drule run_lowering_context_ok >>
-  disch_then (mp_tac o MATCH_MP lowering_context_ok_static_integrity) >>
+  strip_tac >>
+  `lowering_context_ok unit.cu_context` by
+    (qpat_x_assum `lower_vyper_runtime_unit _ _ = _` mp_tac >>
+     simp[lower_vyper_runtime_unit_def, bool_case_eq] >>
+     Cases_on `classify_functions tops` >> PairCases_on `r` >> simp[] >>
+     strip_tac >> Cases_on `EXISTS external_has_defaults q` >> gvs[] >>
+     imp_res_tac run_grouped_lowering_context >>
+     imp_res_tac run_lowering_context_ok >> simp[]) >>
+  pop_assum (mp_tac o MATCH_MP lowering_context_ok_static_integrity) >>
   strip_tac >> drule_all ctx_inst_ids_distinct_fn >>
-  simp[fn_inst_ids_distinct_def, fn_insts_def, fn_insts_blocks_inst_ids]
+  simp[fn_inst_ids_distinct_def, fn_insts_def,
+    venomFnInstsProofsTheory.fn_insts_blocks_map_id]
 QED
 
 Theorem source_selected_entry_prefix_structure:
   lower_vyper_runtime_unit tops rpolicy = SOME unit /\
   supported_program tops /\ name <> "__default__" /\
+  ALL_DISTINCT (FLAT (MAP (external_name_keys_toplevel NONE) tops)) /\
   vyperInterpreter$lookup_function NONE name External tops =
     SOME (mut,F,args,[],ret,fbody) /\
   venomInst$lookup_function "__entry" unit.cu_context.ctx_functions = SOME efn /\
   fn_entry_label efn = SOME elbl /\
   set_external_package_target rpolicy.rpol_target
-    (package_external_fn tops F (assign_nkeys tops 0)
+    (package_external_fn tops T (K global_nonreentrant_slot)
       (mut,F,lookup_raw_return_or_F (NONE:num option) name External tops,
        name,args,([] : expr list),ret,fbody)) =
     (lbl,cenv0,pos_args,min_cds,is_payable,F,nkey,ut',iv,fbody,rt) ==>

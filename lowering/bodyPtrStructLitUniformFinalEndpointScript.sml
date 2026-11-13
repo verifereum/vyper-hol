@@ -5,7 +5,7 @@ Ancestors bodyPtrMakeArrayPackage bodyPtrMakeArrayConsInvariant
   fragGasPathPtr gasSummaryComposePtr vyperState exprSimProps compileEnv exprSimHash
 
 Theorem structlit_uniform_endpoint_posts:
-  literal_loop_frame ctx func ce cx d root aid addr capacity
+  literal_loop_frame pure ctx func ce cx d root aid addr capacity
     es sa s0 G0 tn0 ee sb G tn s (cells : (type_value # value # num # num) list) off /\
   expr_type e = StructT nsid /\
   evaluate_type (get_tenv cx) (expr_type e) = SOME (StructTV (ZIP (names,tvs))) /\
@@ -15,7 +15,8 @@ Theorem structlit_uniform_endpoint_posts:
   type_memory_bytes ce (lowered_value_type ce e) <= capacity /\
   addr < dimword(:256) /\ post_value_type ce e = expr_type e /\
   (!m. mem_agree_outside tn.t_mem s.vs_memory m ==>
-    fields_in_memory (ZIP (names,vs)) (ZIP (names,tvs)) addr m) ==>
+    fields_in_memory (ZIP (names,vs)) (ZIP (names,tvs)) addr m) /\
+  (~expr_has_effect e ==> pure) ==>
   vv_post ctx func ce cx e es sa sb s0 ee (Value (StructV (ZIP (names,vs))))
     (LocatedValue (expr_type e) (mk_ptr (Var root) LocMemory)) s /\
   ptr_vv_ok cx (expr_type e) (Value (StructV (ZIP (names,vs))))

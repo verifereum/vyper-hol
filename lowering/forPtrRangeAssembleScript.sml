@@ -56,7 +56,7 @@ Theorem for_range_round_ptr:
   LENGTH vs = Num (n2-n1) /\
   (!j. j < LENGTH vs ==> EL j vs = IntV (n1 + &j) /\ (i2w (n1 + &j) : bytes32) <> i2w n2) /\
   k < LENGTH vs /\ Inv k es G tn s /\
-  gas_admissible (eval_for cx tyv id stmts (DROP k vs)) (stmt_res_ok lctx) es ==>
+  gas_admissible (eval_for cx tyv id stmts (MAP Value (DROP k vs))) (stmt_res_ok lctx) es ==>
   gas_outcome_ptr (cx_dead cx) (cx_tops cx) (ctx,func) PG
     (do push_scope_with_var id tyv (EL k vs);
         finally (try (do eval_stmts cx stmts; return F od)

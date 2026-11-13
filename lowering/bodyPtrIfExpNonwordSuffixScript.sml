@@ -17,6 +17,16 @@ Proof
   rw[expr_post_def] >> gvs[] >> metis_tac[]
 QED
 
+(* A freshly allocated non-word result is located wherever it was read. *)
+Theorem ifexp_vv_at_of_val_own[local]:
+  ~is_word_type t /\ expr_val_at ce cx t sa sb ee v op u /\
+  expr_val_own ce cx t sa sb ee v op u /\ read_result cx tv ee = (INL v,ee) ==>
+  vv_at ce cx t sa sb ee tv (LocatedValue t (mk_ptr op LocMemory)) u
+Proof
+  rw[vv_at_def, contextTheory.mk_ptr_def] >> gvs[] >>
+  gvs[expr_val_at_def, expr_val_own_def] >> metis_tac[]
+QED
+
 Theorem ifexp_nonword_arm_suffix:
   body_inv tops ctx ce cx /\
   expr_body_pre ce cx env (IfExp ty c a b) es_outer /\
@@ -46,7 +56,9 @@ Theorem ifexp_nonword_arm_suffix:
     expr_post ctx fn ce cx arm es sa sd s0 ee v op u /\
     ptr_val_ok cx ty v op H tt u /\ ptr_buf_ok ce (IfExp ty c a b) op H u /\
     ghost_inv d ce cx ee H tt u /\ ghost_kept ce es sa G0 tn0 s0 H tt /\
-    u.vs_current_bb = sd.cs_current_bb /\ u.vs_inst_idx = LENGTH sd.cs_current_insts
+    u.vs_current_bb = sd.cs_current_bb /\ u.vs_inst_idx = LENGTH sd.cs_current_insts /\
+    (!tv. tv = raw \/ tv = Value v ==>
+      vv_at ce cx ty sa sd ee tv (LocatedValue ty (mk_ptr op LocMemory)) u)
 Proof
   disch_then (map_every assume_tac o CONJUNCTS) >>
   `expr_type arm = ty` by
@@ -61,6 +73,12 @@ Proof
      conj_tac >- first_assum ACCEPT_TAC >>
      qexists_tac `IfExp ty c a b` >>
      simp[post_value_type_def, expr_type_def] >> metis_tac[]) >>
+  `!tv. tv = raw \/ tv = Value v ==>
+     vv_at ce cx ty sa sd ee tv (LocatedValue ty (mk_ptr op LocMemory)) q` by
+    (rpt strip_tac >> irule ifexp_vv_at_of_val_own >>
+     simp[vyperStateTheory.read_result_def, vyperStateTheory.return_def] >>
+     qpat_x_assum `expr_post _ _ _ _ (IfExp _ _ _ _) _ _ _ _ _ _ _ _` mp_tac >>
+     simp[expr_post_def, post_value_type_def, expr_type_def]) >>
   qexistsl_tac [`q`, `Gf`, `tnf`] >> simp[] >>
   metis_tac[expr_type_def, post_value_type_def]
 QED
@@ -80,7 +98,8 @@ Resume ifexp_nonword_arm_suffix[same]:
   drule_all ifexp_old_unwrap_nonword_path_capacity >>
   disch_then (qspecl_then [`PG`, `D`] strip_assume_tac) >>
   qexistsl_tac [`t`, `H`, `tt`] >> simp[] >>
-  gvs[ptr_buf_ok_def, lowered_value_type_def, expr_type_def]
+  gvs[ptr_buf_ok_def, lowered_value_type_def, expr_type_def] >>
+  first_assum ACCEPT_TAC
 QED
 
 Resume ifexp_nonword_arm_suffix[size]:

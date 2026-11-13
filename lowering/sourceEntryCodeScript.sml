@@ -24,14 +24,8 @@ Theorem supported_external_lookup_member:
   ?rr. MEM (mut,nr,rr,name,args,dflts,ret,fbody)
     (FST (classify_functions tops))
 Proof
-  strip_tac >>
-  `!nr' mut' typ x. ~MEM (VariableDecl (Public nr') mut' name typ x) tops` by
-    (rpt strip_tac >> drule_all supported_program_declaration >>
-     simp[supported_declaration_header_def]) >>
-  `!nr' b kt vt x. ~MEM (HashMapDecl (Public nr') b name kt vt x) tops` by
-    (rpt strip_tac >> drule_all supported_program_declaration >>
-     simp[supported_declaration_header_def]) >>
-  drule_all lookup_function_external_mem >> simp[]
+  strip_tac >> irule supported_headers_external_member >>
+  gvs[supported_program_def]
 QED
 
 Theorem source_runtime_entry_witness:
@@ -64,7 +58,7 @@ Proof
     `extpkgs`, `fallback`, `label_st`, `dispatch_st`, `external_st`, `entry_end`] >>
   simp[] >>
   `MEM (set_external_package_target rpolicy.rpol_target
-      (package_external_fn tops F (assign_nkeys tops 0)
+      (package_external_fn tops T (K global_nonreentrant_slot)
         (mut,F,rr,name,args,([] : expr list),ret,fbody))) extpkgs` by
     (simp_tac pure_ss [Once EQ_SYM_EQ] >>
      qpat_x_assum `extpkgs = _` (fn th => rewrite_tac[th]) >>

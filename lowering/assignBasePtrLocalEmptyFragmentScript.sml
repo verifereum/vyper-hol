@@ -54,6 +54,10 @@ Resume compile_assign_local_empty_stmt_frag_ptr[post]:
    32 <= type_memory_size entry.type /\
    val_in_memory entry.type (default_value tyv) (w2n w)
      (mstore (w2n w) 0w s0).vs_memory` by simp[] >>
+  `memory_value_rel entry.type (default_value tyv) (w2n w)
+     (mstore (w2n w) 0w s0).vs_memory` by
+    (irule memoryValueEncodingTheory.val_in_memory_memory_value_rel >> simp[] >>
+     metis_tac[vyperTypeDefaultsTheory.default_value_has_type_thm]) >>
   drule_all local_header_store_state >> strip_tac >>
   `sb.cs_current_bb = sa.cs_current_bb /\
    LENGTH sb.cs_current_insts = SUC (LENGTH sa.cs_current_insts) /\

@@ -57,8 +57,8 @@ Theorem local_ptrs_rel_clean_write_frame:
 Proof
   strip_tac >> irule local_ptrs_rel_frame >> qexists_tac `s` >> simp[] >>
   reverse conj_tac >- (rpt strip_tac >> gvs[] >> metis_tac[]) >>
-  rpt strip_tac >> irule val_in_memory_mem_agree >> simp[] >>
-  qexistsl_tac [`sz`, `s.vs_memory`] >> simp[] >>
+  rpt strip_tac >> irule memoryValueFrameTheory.memory_value_rel_mem_agree_region >>
+  simp[] >> qexistsl_tac [`sz`, `s.vs_memory`] >> simp[] >>
   `local_region cenv scopes s name (w2n w) sz` by
     (simp[loweringStateRelDefsTheory.local_region_def] >> metis_tac[]) >>
   qpat_x_assum `!name a len. local_region _ _ _ _ _ _ ==> _` drule >>
@@ -82,6 +82,7 @@ Theorem oracle_adoption_locals:
 Proof
   Cases_on `rq.cr_static` >> Cases_on `outcome.co_success` >>
   Cases_on `rq.cr_kind = MessageCall` >>
+  Cases_on `rq.cr_kind = DelegateMessageCall` >>
   simp[vyperCallOutcomeTheory.adopt_call_outcome_equation]
 QED
 

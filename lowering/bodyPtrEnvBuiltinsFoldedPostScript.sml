@@ -37,6 +37,11 @@ Proof
   >- (gvs[compile_alloc_buffer_def, emit_op_def, emit_inst_def,
        fresh_var_def, fresh_id_def, emit_def, comp_bind_def, comp_ignore_bind_def, comp_return_def,
        emitted_insts_def, rich_listTheory.DROP_LENGTH_APPEND]) >>
+  `pure_frame cenv fn es sa s t` by
+    (match_mp_tac (exprSimPropsTheory.pure_frame_fresh_alloca |> Q.SPECL
+       [`cenv`, `fn`, `es`, `sa`, `s`, `t`, `sa.cs_next_id`, `[Lit 64w]`,
+        `[STRING #"%" (toString sa.cs_next_var)]`, `b`, `64`]) >>
+     asm_rewrite_tac[arithmeticTheory.LESS_EQ_REFL]) >>
   irule (SRULE [] selector_buffer_vv_post) >>
   goal_assum (drule_at Any) >> simp[eval_operand_def] >>
   conj_tac >- (first_assum ACCEPT_TAC) >> first_assum ACCEPT_TAC

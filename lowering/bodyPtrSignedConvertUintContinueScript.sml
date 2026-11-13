@@ -94,7 +94,8 @@ Theorem scalar_suffix_expr_post:
   (!z w. not_fresh_at s1 z /\ lookup_var z t0 = SOME w ==>
          lookup_var z s = SOME w) /\
   s.vs_allocas = t0.vs_allocas /\ s.vs_memory = t0.vs_memory /\
-  is_word_type (expr_type eout) /\ sa.cs_next_var <= s1.cs_next_var ==>
+  is_word_type (expr_type eout) /\ sa.cs_next_var <= s1.cs_next_var /\
+  (~expr_has_effect eout ==> pure_frame cenv func es sa s0 t0) ==>
   expr_post ctx func cenv cx eout es sa sb s0 ee v op s
 Proof
   simp[expr_post_def] >> strip_tac >>
@@ -108,6 +109,11 @@ Proof
         irule >> asm_rewrite_tac[] >>
       qpat_x_assum `!x w. not_fresh_at sa x /\ lookup_var x s0 = _ ==> _`
         irule >> asm_rewrite_tac[]) >>
+  `~expr_has_effect eout ==> pure_frame cenv func es sa s0 s` by
+    (strip_tac >>
+     `pure_frame cenv func es sa s0 s <=> pure_frame cenv func es sa s0 t0` by
+       (irule pure_frame_state_cong >> asm_rewrite_tac[]) >>
+     qpat_x_assum `~expr_has_effect eout ==> _` mp_tac >> asm_rewrite_tac[]) >>
   rpt strip_tac >> fs[] >> metis_tac[]
 QED
 

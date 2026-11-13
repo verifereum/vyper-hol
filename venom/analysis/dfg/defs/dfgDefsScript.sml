@@ -19,7 +19,6 @@
  *   operand_equiv         — operands equal after normalization
  *
  * Helper:
- *   operand_var/operand_vars — extract variable names from operands
  *   dfg_add_use/dfg_add_uses — use-tracking mutations
  *   dfg_add_defs            — def-tracking mutations
  *   dfg_add_inst            — add a full instruction to DFG
@@ -65,21 +64,6 @@ End
 (* ==========================================================================
    Variable/Instruction Helpers
    ========================================================================== *)
-
-Definition operand_var_def:
-  operand_var op =
-    case op of
-      Var v => SOME v
-    | _ => NONE
-End
-
-Definition operand_vars_def:
-  operand_vars [] = [] /\
-  operand_vars (op::ops) =
-    case operand_var op of
-      NONE => operand_vars ops
-    | SOME v => v :: operand_vars ops
-End
 
 Definition dfg_add_use_def:
   dfg_add_use dfg v inst =

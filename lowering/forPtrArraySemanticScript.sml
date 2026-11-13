@@ -17,7 +17,7 @@ Theorem for_array_body_fragment_ptr:
   id NOTIN FDOM env.var_types /\
   evaluate_type (get_tenv cx) typ = SOME tv /\ value_has_type tv v /\
   type_stmts (extend_local env id typ F) ret_ty stmts = SOME env_b /\
-  EVERY (stmt_exprs_ok cenv) stmts /\
+  stmts_exprs_ok (cenv with ce_var_type updated_by (id =+ SOME typ)) stmts /\
   type_memory_bytes cenv typ < 2 ** 64 /\
   call_evaluation_safe cx (int_calls_stmts stmts) /\
   frame_ret_ok_ptr d ctx PG func cx RetQ cenv ret_ty /\
@@ -34,10 +34,12 @@ Proof
   `same_frame cenv bc` by
     (drule_then irule declare_local_same_frame >> simp[]) >>
   `body_inv tops ctx bc cx` by metis_tac[body_inv_same_frame] >>
+  `body_stmts_safe tops stmts` by
+    metis_tac[supported_stmts_body_safe] >>
   qpat_x_assum `body_stmts_ptr_ok _ _`
     (irule o REWRITE_RULE [body_stmts_ptr_ok_def]) >>
   simp[] >> rpt conj_tac
-  >- metis_tac[stmt_exprs_ok_same_frame]
+  >- metis_tac[for_declare_stmts_exprs_ok]
   >- (qexistsl_tac [`bindings`, `tops`] >> simp[])
   >- (qexistsl_tac [`extend_local env id typ F`, `env_b`] >> simp[] >>
       `bc.ce_struct_fields = cenv.ce_struct_fields` by

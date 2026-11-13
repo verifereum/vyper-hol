@@ -5,7 +5,7 @@
       "expected": 5,
       "fixture": "pop_refill",
       "returned": 5,
-      "runtime_sha256": "707b4bad77aadfab040e92ae27ad96e3a8874610976963c96091c364e5e7a9c2",
+      "runtime_sha256": "61bfee4421bc100b906d59ffe0c68daa08344da85b58827fb1fafb783fff6abb",
       "signature": "f()"
     },
     {
@@ -15,7 +15,7 @@
       "expected": 5,
       "fixture": "conditional_snapshot",
       "returned": 5,
-      "runtime_sha256": "06504848625b7c153c0e9188a3c3aba8a30a46d535bda8b3754d1ca9e6cc3e8c",
+      "runtime_sha256": "3df66bc45e18d5acb4c3f0c9a0758e747e14462408d8367729a5102e0ba49a1d",
       "signature": "f(bool)"
     },
     {
@@ -25,7 +25,7 @@
       "expected": 5,
       "fixture": "conditional_snapshot",
       "returned": 5,
-      "runtime_sha256": "06504848625b7c153c0e9188a3c3aba8a30a46d535bda8b3754d1ca9e6cc3e8c",
+      "runtime_sha256": "3df66bc45e18d5acb4c3f0c9a0758e747e14462408d8367729a5102e0ba49a1d",
       "signature": "f(bool)"
     },
     {
@@ -35,7 +35,7 @@
       "expected": 2,
       "fixture": "conditional_memory_view",
       "returned": 2,
-      "runtime_sha256": "55962a80a15fd709b637195ce07150f18960f88c97fe3d423fcf06b973a4a9fd",
+      "runtime_sha256": "a8a52c08e934a43ef7ac1bcefdf0dcba89cb70982ac29cad91e8db9885e8f28b",
       "signature": "f(bool)"
     },
     {
@@ -45,23 +45,23 @@
       "expected": 2,
       "fixture": "conditional_memory_view",
       "returned": 2,
-      "runtime_sha256": "55962a80a15fd709b637195ce07150f18960f88c97fe3d423fcf06b973a4a9fd",
+      "runtime_sha256": "a8a52c08e934a43ef7ac1bcefdf0dcba89cb70982ac29cad91e8db9885e8f28b",
       "signature": "f(bool)"
     },
     {
       "arguments": [],
-      "expected": 10,
+      "expected": 0,
       "fixture": "call_storage_read",
-      "returned": 10,
-      "runtime_sha256": "4fb0fa0ba355c7b0f8480d34738e59bf8340512a5e535f342c84c93eb45be443",
+      "returned": 0,
+      "runtime_sha256": "28f103fd38b982cbd625e1f45efe535cb79a828ca0f497bd13675e6149b03e65",
       "signature": "f()"
     },
     {
       "arguments": [],
-      "expected": 1,
+      "expected": 2,
       "fixture": "call_memory_pop",
-      "returned": 1,
-      "runtime_sha256": "6e5c5463b66f466fcc973b5ebaa8d1030b93780a7285688deacdeaef39ee1f2a",
+      "returned": 2,
+      "runtime_sha256": "6704e354f93c26112fff9edf44a47668a64c085dcdf5fffd873f969888844b4d",
       "signature": "f()"
     },
     {
@@ -70,6 +70,22 @@
       "fixture": "builtin_eager_read",
       "returned": 0,
       "runtime_sha256": "cd4e9cf8ae447ef46a1e2b4df70bc3da01317459f87f0d931276f60f692cbf13",
+      "signature": "f()"
+    },
+    {
+      "arguments": [],
+      "expected": 5,
+      "fixture": "subscript_base_copy",
+      "returned": 5,
+      "runtime_sha256": "903c9498ba84a7b8702f347d94da21dce9503a796cb937bb08638f057877b013",
+      "signature": "f()"
+    },
+    {
+      "arguments": [],
+      "expected": 7,
+      "fixture": "subscript_base_live",
+      "returned": 7,
+      "runtime_sha256": "19267fc303e55f2a03b2a0ea3d01e8f15e82f5abf64b72883901dc086a62e152",
       "signature": "f()"
     }
   ],

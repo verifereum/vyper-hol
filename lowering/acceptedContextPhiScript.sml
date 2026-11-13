@@ -24,7 +24,9 @@ Proof
   strip_tac >> irule lowering_context_ok_block_phi >>
   goal_assum (drule_at Any) >> goal_assum (drule_at Any) >> asm_rewrite_tac[] >>
   qpat_x_assum `lower_vyper_runtime_unit _ _ = _` mp_tac >>
-  simp[lower_vyper_runtime_unit_def] >>
-  pairarg_tac >> simp[AllCaseEqs()] >>
-  metis_tac[run_lowering_context_ok]
+  simp[lower_vyper_runtime_unit_def, bool_case_eq] >>
+  Cases_on `classify_functions tops` >> PairCases_on `r` >> simp[] >>
+  strip_tac >> Cases_on `EXISTS external_has_defaults q` >> gvs[] >>
+  imp_res_tac run_grouped_lowering_context >>
+  imp_res_tac run_lowering_context_ok >> simp[]
 QED

@@ -1,7 +1,7 @@
 (* Shared concrete execution endpoints for local tuple copies. *)
 Theory assignTuplePtrLocalCopyRun
 Ancestors
-  fragGasSeqPtr fragGasPathPtr tupleTargetStoreRun tupleTargetStoreProps
+  memoryValueEncoding fragGasSeqPtr fragGasPathPtr tupleTargetStoreRun tupleTargetStoreProps
   valueCopy valueEncodingProps stmtSimProps stmtSimDefs loweringPosts
   stmtLowering exprLowering exprLoweringProps context compileEnv loweringStateRelDefs
   venomState venomExecSemantics venomInst fragExec emitHelper emitHelperProps
@@ -80,8 +80,9 @@ Proof
   reverse conj_tac >- metis_tac[arithmeticTheory.ADD_COMM] >>
   irule stmt_state_rel_write_local >>
   first_assum (irule_at Any) >> simp[] >>
-  qexists `s` >> simp[] >>
-  reverse conj_tac
+  `memory_value_rel entry.type v (w2n dw) u.vs_memory` by
+    (irule memoryValueEncodingTheory.val_in_memory_memory_value_rel >> simp[]) >>
+  reverse (rpt conj_tac >> TRY (first_assum ACCEPT_TAC))
   >- (rpt strip_tac >> first_x_assum irule >>
       fs[not_local_ptr_def, local_ptrs_reserved_def] >> metis_tac[]) >>
   drule_all tuple_store_destination_region >> strip_tac >>

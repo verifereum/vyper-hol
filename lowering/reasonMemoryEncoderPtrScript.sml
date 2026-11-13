@@ -31,6 +31,12 @@ Proof
   simp[listTheory.APPEND_ASSOC, rich_listTheory.IS_PREFIX_APPEND]
 QED
 
+(* The suffix path rule, normalised and curried once here rather than inside
+   the composing proof. *)
+Theorem reason_memory_suffix_path_ptr_curried[local] =
+  REWRITE_RULE [GSYM AND_IMP_INTRO]
+    (SIMP_RULE (srw_ss() ++ numSimps.ARITH_ss) [] reason_memory_suffix_path_ptr);
+
 Theorem reason_memory_encoder_path_ptr:
   compile_revert_with_reason cenv vv (expr_type e) m cc = ((),se) /\
   fn_has_code cc se func /\
@@ -53,13 +59,14 @@ Theorem reason_memory_encoder_path_ptr:
 Proof
   strip_tac >> drule compile_revert_reason_finish_split >> strip_tac >>
   qpat_x_assum `unwrap_value _ _ _ = _` mp_tac >> simp[] >> strip_tac >>
-  `?outer payloadvar tuplevar lenvar rounded0var roundedvar cntvar slotvar.
+  `?outer payloadvar tuplevar lenvar maskvar rounded0var roundedvar cntvar slotvar.
     buf.buf_operand = Var outer /\ payload = Var payloadvar /\
-    tuple.buf_operand = Var tuplevar /\ len = Var lenvar /\
+    tuple.buf_operand = Var tuplevar /\ len = Var lenvar /\ mask = Var maskvar /\
     rounded0 = Var rounded0var /\ rounded = Var roundedvar /\
     cnt = Var cntvar /\ slot.buf_operand = Var slotvar` by suspend "operands" >>
   `fn_has_code cc c1 func /\ fn_has_code c3 c4 func /\ fn_has_code cc c4 func /\
-   fn_has_code c5 c6 func /\ fn_has_code c6 c7 func /\ fn_has_code c7 c8 func /\
+   fn_has_code c5 c6 func /\ fn_has_code c6 c6a func /\ fn_has_code c6a c7 func /\
+   fn_has_code c7 c8 func /\
    fn_has_code c8 c9 func /\ fn_has_code c9 c10 func /\ fn_has_code c10 c11 func /\
    fn_has_code c11 c12 func /\ fn_has_code c12 se func` by suspend "code" >>
   suspend "compose"
@@ -92,7 +99,8 @@ Resume reason_memory_encoder_path_ptr[code]:
   `cs_extends c9 se` by (irule cs_extends_trans >> qexists_tac `c10` >> simp[]) >>
   `cs_extends c8 se` by (irule cs_extends_trans >> qexists_tac `c9` >> simp[]) >>
   `cs_extends c7 se` by (irule cs_extends_trans >> qexists_tac `c8` >> simp[]) >>
-  `cs_extends c6 se` by (irule cs_extends_trans >> qexists_tac `c7` >> simp[]) >>
+  `cs_extends c6a se` by (irule cs_extends_trans >> qexists_tac `c7` >> simp[]) >>
+  `cs_extends c6 se` by (irule cs_extends_trans >> qexists_tac `c6a` >> simp[]) >>
   `cs_extends c5 se` by (irule cs_extends_trans >> qexists_tac `c6` >> simp[]) >>
   `cs_extends c3 se` by (irule cs_extends_trans >> qexists_tac `c5` >> simp[]) >>
   `cs_extends c2 se` by (irule cs_extends_trans >> qexists_tac `c3` >> simp[]) >>
@@ -102,7 +110,8 @@ Resume reason_memory_encoder_path_ptr[code]:
   qspecl_then [`c2`,`c3`,`se`,`func`] mp_tac fn_has_code_split >> simp[] >> strip_tac >>
   qspecl_then [`c3`,`c5`,`se`,`func`] mp_tac fn_has_code_split >> simp[] >> strip_tac >>
   qspecl_then [`c5`,`c6`,`se`,`func`] mp_tac fn_has_code_split >> simp[] >> strip_tac >>
-  qspecl_then [`c6`,`c7`,`se`,`func`] mp_tac fn_has_code_split >> simp[] >> strip_tac >>
+  qspecl_then [`c6`,`c6a`,`se`,`func`] mp_tac fn_has_code_split >> simp[] >> strip_tac >>
+  qspecl_then [`c6a`,`c7`,`se`,`func`] mp_tac fn_has_code_split >> simp[] >> strip_tac >>
   qspecl_then [`c7`,`c8`,`se`,`func`] mp_tac fn_has_code_split >> simp[] >> strip_tac >>
   qspecl_then [`c8`,`c9`,`se`,`func`] mp_tac fn_has_code_split >> simp[] >> strip_tac >>
   qspecl_then [`c9`,`c10`,`se`,`func`] mp_tac fn_has_code_split >> simp[] >> strip_tac >>
@@ -132,9 +141,9 @@ Resume reason_memory_encoder_path_ptr[compose]:
   qpat_x_assum `m = _` SUBST_ALL_TAC >>
   fs[] >>
   `stmt_state_rel ctx func cenv cx ee t` by fs[expr_post_def] >>
-  drule_at (Pat `reason_encode_finish _ _ _ _ _ = _`)
-    (REWRITE_RULE [GSYM AND_IMP_INTRO]
-      (SIMP_RULE (srw_ss() ++ numSimps.ARITH_ss) [] reason_memory_suffix_path_ptr)) >>
+  qpat_assum `reason_encode_finish _ _ _ _ _ = _`
+    (mp_then (Pat `reason_encode_finish _ _ _ _ _ = _`) mp_tac
+       reason_memory_suffix_path_ptr_curried) >>
   disch_then (drule_at (Pat `stmt_state_rel _ _ _ _ _ _`)) >>
   disch_then (drule_at (Pat `ptr_mem_ok _ _ _ _ _ _ _`)) >>
   disch_then (drule_at (Pat `not_fresh_at _ _`)) >>
@@ -142,10 +151,6 @@ Resume reason_memory_encoder_path_ptr[compose]:
   qpat_assum `buf.buf_operand = _` (fn th => disch_then (mp_tac o REWRITE_RULE [th])) >>
   rpt (disch_then drule) >>
   qpat_assum `tuple.buf_operand = _` (fn th => disch_then (mp_tac o REWRITE_RULE [th])) >>
-  rpt (disch_then drule) >>
-  `(i2w (-32) : bytes32) = 0xffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffe0w` by EVAL_TAC >>
-  qpat_assum `(i2w (-32) : bytes32) = _`
-    (fn th => disch_then (mp_tac o REWRITE_RULE [th])) >>
   rpt (disch_then drule) >>
   qpat_assum `slot.buf_operand = _` (fn th => disch_then (mp_tac o REWRITE_RULE [th])) >>
   rpt (disch_then drule) >>

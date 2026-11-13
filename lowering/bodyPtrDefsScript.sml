@@ -203,7 +203,6 @@ Definition ghost_kept_at_def:
     (!n b sz i.
        local_region cenv es.scopes s0 n b sz /\
        b <= i /\ i < b + sz /\
-       (!k. dynarray_len_at cenv n k ==> i < b + k \/ b + k + 32 <= i) /\
        i IN tn.t_mem ==>
        i IN tn0.t_mem) /\
     (!i. i < lo /\ i IN tn.t_mem ==> i IN tn0.t_mem)
@@ -229,7 +228,6 @@ Theorem ghost_kept_def:
     (!n b sz i.
        local_region cenv es.scopes s0 n b sz /\
        b <= i /\ i < b + sz /\
-       (!k. dynarray_len_at cenv n k ==> i < b + k \/ b + k + 32 <= i) /\
        i IN tn.t_mem ==>
        i IN tn0.t_mem)
 Proof

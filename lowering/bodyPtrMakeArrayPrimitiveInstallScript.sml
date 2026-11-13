@@ -27,17 +27,18 @@ QED
 
 Theorem bytestring_copy_len_install_shape:
   compile_bytestring_copy_len src sa = (out,sb) ==>
-  ?a b c d.
+  ?a m b c d.
     out = Var d /\
     sb.cs_current_bb = sa.cs_current_bb /\
     sb.cs_current_insts = sa.cs_current_insts ++
       [mk_inst sa.cs_next_id MLOAD [src] [a];
-       mk_inst (sa.cs_next_id + 1) ADD [Var a; Lit 31w] [b];
-       mk_inst (sa.cs_next_id + 2) AND [Var b; Lit (i2w (- &32))] [c];
-       mk_inst (sa.cs_next_id + 3) ADD [Var c; Lit 32w] [d]] /\
-    sb.cs_next_var = sa.cs_next_var + 4 /\
-    sb.cs_next_id = sa.cs_next_id + 4 /\
-    (!x. not_fresh_at sa x ==> x <> a /\ x <> b /\ x <> c /\ x <> d)
+       mk_inst (sa.cs_next_id + 1) NOT [Lit 31w] [m];
+       mk_inst (sa.cs_next_id + 2) ADD [Var a; Lit 31w] [b];
+       mk_inst (sa.cs_next_id + 3) AND [Var b; Var m] [c];
+       mk_inst (sa.cs_next_id + 4) ADD [Var c; Lit 32w] [d]] /\
+    sb.cs_next_var = sa.cs_next_var + 5 /\
+    sb.cs_next_id = sa.cs_next_id + 5 /\
+    (!x. not_fresh_at sa x ==> x <> a /\ x <> m /\ x <> b /\ x <> c /\ x <> d)
 Proof
   strip_tac >>
   gvs[compile_bytestring_copy_len_def, emit_op_def, comp_bind_def,
@@ -45,23 +46,25 @@ Proof
       comp_return_def] >>
   qexistsl_tac [`STRING #"%" (toString sa.cs_next_var)`,
                 `STRING #"%" (toString (sa.cs_next_var + 1))`,
-                `STRING #"%" (toString (sa.cs_next_var + 2))`] >>
+                `STRING #"%" (toString (sa.cs_next_var + 2))`,
+                `STRING #"%" (toString (sa.cs_next_var + 3))`] >>
   simp[APPEND_ASSOC, not_fresh_at_def]
 QED
 
 Theorem bytestring_store_install_shape:
   compile_store_bytestring src dst sa = ((),sb) ==>
-  ?a b c d.
+  ?a m b c d.
     sb.cs_current_bb = sa.cs_current_bb /\
     sb.cs_current_insts = sa.cs_current_insts ++
       [mk_inst sa.cs_next_id MLOAD [src] [a];
-       mk_inst (sa.cs_next_id + 1) ADD [Var a; Lit 31w] [b];
-       mk_inst (sa.cs_next_id + 2) AND [Var b; Lit (i2w (- &32))] [c];
-       mk_inst (sa.cs_next_id + 3) ADD [Var c; Lit 32w] [d];
-       mk_inst (sa.cs_next_id + 4) MCOPY [dst; src; Var d] []] /\
-    sb.cs_next_var = sa.cs_next_var + 4 /\
-    sb.cs_next_id = sa.cs_next_id + 5 /\
-    (!x. not_fresh_at sa x ==> x <> a /\ x <> b /\ x <> c /\ x <> d)
+       mk_inst (sa.cs_next_id + 1) NOT [Lit 31w] [m];
+       mk_inst (sa.cs_next_id + 2) ADD [Var a; Lit 31w] [b];
+       mk_inst (sa.cs_next_id + 3) AND [Var b; Var m] [c];
+       mk_inst (sa.cs_next_id + 4) ADD [Var c; Lit 32w] [d];
+       mk_inst (sa.cs_next_id + 5) MCOPY [dst; src; Var d] []] /\
+    sb.cs_next_var = sa.cs_next_var + 5 /\
+    sb.cs_next_id = sa.cs_next_id + 6 /\
+    (!x. not_fresh_at sa x ==> x <> a /\ x <> m /\ x <> b /\ x <> c /\ x <> d)
 Proof
   strip_tac >>
   Cases_on `compile_bytestring_copy_len src sa` >>
@@ -69,7 +72,7 @@ Proof
   drule bytestring_copy_len_install_shape >> strip_tac >>
   gvs[emit_void_def, comp_bind_def, fresh_id_def, emit_def,
       comp_return_def] >>
-  qexistsl_tac [`a`, `b`, `c`, `d`] >> simp[APPEND_ASSOC]
+  qexistsl_tac [`a`, `m`, `b`, `c`, `d`] >> simp[APPEND_ASSOC]
 QED
 
 (* This single-instruction boundary does not inspect the copy count: it is
@@ -116,41 +119,43 @@ QED
 Theorem bytestring_copy_len_fetch:
   compile_bytestring_copy_len src sa = (out,sb) /\
   fn_has_code sa sb fn ==>
-  ?a b c d bb.
+  ?a m b c d bb.
     out = Var d /\
     lookup_block sa.cs_current_bb fn.fn_blocks = SOME bb /\
-    (!i. i < 4 ==>
+    (!i. i < 5 ==>
       get_instruction bb (LENGTH sa.cs_current_insts + i) = SOME (EL i
         [mk_inst sa.cs_next_id MLOAD [src] [a];
-         mk_inst (sa.cs_next_id + 1) ADD [Var a; Lit 31w] [b];
-         mk_inst (sa.cs_next_id + 2) AND [Var b; Lit (i2w (- &32))] [c];
-         mk_inst (sa.cs_next_id + 3) ADD [Var c; Lit 32w] [d]])) /\
+         mk_inst (sa.cs_next_id + 1) NOT [Lit 31w] [m];
+         mk_inst (sa.cs_next_id + 2) ADD [Var a; Lit 31w] [b];
+         mk_inst (sa.cs_next_id + 3) AND [Var b; Var m] [c];
+         mk_inst (sa.cs_next_id + 4) ADD [Var c; Lit 32w] [d]])) /\
     sb.cs_current_bb = sa.cs_current_bb /\
-    LENGTH sb.cs_current_insts = LENGTH sa.cs_current_insts + 4 /\
-    (!x. not_fresh_at sa x ==> x <> a /\ x <> b /\ x <> c /\ x <> d)
+    LENGTH sb.cs_current_insts = LENGTH sa.cs_current_insts + 5 /\
+    (!x. not_fresh_at sa x ==> x <> a /\ x <> m /\ x <> b /\ x <> c /\ x <> d)
 Proof
   strip_tac >> drule bytestring_copy_len_install_shape >> strip_tac >>
   drule_all fn_has_code_same_block >> strip_tac >>
-  qexistsl_tac [`a`, `b`, `c`, `d`, `bb`] >> simp[]
+  qexistsl_tac [`a`, `m`, `b`, `c`, `d`, `bb`] >> simp[]
 QED
 
 Theorem bytestring_store_fetch:
   compile_store_bytestring src dst sa = ((),sb) /\
   fn_has_code sa sb fn ==>
-  ?a b c d bb.
+  ?a m b c d bb.
     lookup_block sa.cs_current_bb fn.fn_blocks = SOME bb /\
-    (!i. i < 5 ==>
+    (!i. i < 6 ==>
       get_instruction bb (LENGTH sa.cs_current_insts + i) = SOME (EL i
         [mk_inst sa.cs_next_id MLOAD [src] [a];
-         mk_inst (sa.cs_next_id + 1) ADD [Var a; Lit 31w] [b];
-         mk_inst (sa.cs_next_id + 2) AND [Var b; Lit (i2w (- &32))] [c];
-         mk_inst (sa.cs_next_id + 3) ADD [Var c; Lit 32w] [d];
-         mk_inst (sa.cs_next_id + 4) MCOPY [dst; src; Var d] []])) /\
+         mk_inst (sa.cs_next_id + 1) NOT [Lit 31w] [m];
+         mk_inst (sa.cs_next_id + 2) ADD [Var a; Lit 31w] [b];
+         mk_inst (sa.cs_next_id + 3) AND [Var b; Var m] [c];
+         mk_inst (sa.cs_next_id + 4) ADD [Var c; Lit 32w] [d];
+         mk_inst (sa.cs_next_id + 5) MCOPY [dst; src; Var d] []])) /\
     sb.cs_current_bb = sa.cs_current_bb /\
-    LENGTH sb.cs_current_insts = LENGTH sa.cs_current_insts + 5 /\
-    (!x. not_fresh_at sa x ==> x <> a /\ x <> b /\ x <> c /\ x <> d)
+    LENGTH sb.cs_current_insts = LENGTH sa.cs_current_insts + 6 /\
+    (!x. not_fresh_at sa x ==> x <> a /\ x <> m /\ x <> b /\ x <> c /\ x <> d)
 Proof
   strip_tac >> drule bytestring_store_install_shape >> strip_tac >>
   drule_all fn_has_code_same_block >> strip_tac >>
-  qexistsl_tac [`a`, `b`, `c`, `d`, `bb`] >> simp[]
+  qexistsl_tac [`a`, `m`, `b`, `c`, `d`, `bb`] >> simp[]
 QED

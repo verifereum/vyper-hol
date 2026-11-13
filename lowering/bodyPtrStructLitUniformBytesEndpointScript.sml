@@ -7,7 +7,7 @@ Ancestors bodyPtrStructLitUniformChildUnwrap bodyPtrStructLitBytesCoverage
   compileEnv loweringStateRelDefs loweringPosts fragGasPathPtr
 
 Theorem structlit_uniform_cons_bytes_endpoint:
-  literal_loop_frame ctx func ce cx d root aid addr capacity
+  literal_loop_frame pure ctx func ce cx d root aid addr capacity
     ees fr sf Gf tnf esi si G0 tn0 s0 cells off /\
   literal_prefix_ok cells tn0 s0 /\ stmt_state_rel ctx func ce cx ees sf /\
   compile_expr ce (expr_type e) e si = (vv,sm) /\
@@ -31,10 +31,11 @@ Theorem structlit_uniform_cons_bytes_endpoint:
   (!t op. vv = StackValue t op ==> ptr_buf_ok ce e op G s) /\
   (!t p. vv = LocatedValue t p /\ p.ptr_location = LocMemory ==>
     ptr_buf_ok ce e p.ptr_operand G s) /\
-  ghost_inv d ce cx es' G tn s /\ ghost_kept ce esi si G0 tn0 s0 G tn ==>
+  ghost_inv d ce cx es' G tn s /\ ghost_kept ce esi si G0 tn0 s0 G tn /\
+  (pure ==> ~expr_has_effect e) ==>
   ?z H tm.
     gas_path_ptr D 0 ctx func PG G tn s 0 H tm (OK z) /\
-    literal_loop_frame ctx func ce cx d root aid addr capacity
+    literal_loop_frame pure ctx func ce cx d root aid addr capacity
       ees fr sf Gf tnf es' sb H tm z (cells ++ [(tv,v,addr+off,k)]) (off+k) /\
     literal_prefix_ok (cells ++ [(tv,v,addr+off,k)]) tm z
 Proof
@@ -77,7 +78,7 @@ Proof
       arithmeticTheory.LESS_EQ_TRANS]) >>
   `?z' H' tm'.
     gas_path_ptr D 0 ctx func PG H tm z 0 H' tm' (OK z') /\
-    literal_loop_frame ctx func ce cx d root aid addr capacity
+    literal_loop_frame pure ctx func ce cx d root aid addr capacity
       ees fr sf Gf tnf es' sb H' tm' z' (cells ++ [(tv,v,addr+off,k)]) (off+k) /\
     literal_prefix_ok (cells ++ [(tv,v,addr+off,k)]) tm' z'` by
     (irule literal_bytes_loop_store >> simp[] >>

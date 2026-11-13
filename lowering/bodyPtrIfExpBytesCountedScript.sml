@@ -1,6 +1,6 @@
 Theory bodyPtrIfExpBytesCounted
 Ancestors
-  wordLoadStorePtr bodyPtrIfExpBytesFrame bodyPtrIfExpCopyHeader bodyPtrIfExpCopyInputs typedCopyPtr fragGasSeqPtr
+  assignTuplePtrCopyLen wordLoadStorePtr bodyPtrIfExpBytesFrame bodyPtrIfExpCopyHeader bodyPtrIfExpCopyInputs typedCopyPtr fragGasSeqPtr
   context compileEnv loweringStateRelDefs emitHelper exprLoweringProps rich_list venomInst
   venomState venomExecSemantics ptrSafeRun ptrDiscipline fragExec
   finite_map instIdxIndep ghostPcTransportPtr
@@ -8,10 +8,11 @@ Ancestors
 Theorem compile_store_bytestring_stages:
   !src dst sa sb.
     compile_store_bytestring src dst sa = ((),sb) ==>
-    ?s1 s2 s3 s4 r1 r2 r3 r4.
+    ?s1 sm s2 s3 s4 r1 rm r2 r3 r4.
       emit_op MLOAD [src] sa = (r1,s1) /\
-      emit_op ADD [r1; Lit 31w] s1 = (r2,s2) /\
-      emit_op AND [r2; Lit (i2w (-32))] s2 = (r3,s3) /\
+      emit_op NOT [Lit 31w] s1 = (rm,sm) /\
+      emit_op ADD [r1; Lit 31w] sm = (r2,s2) /\
+      emit_op AND [r2; rm] s2 = (r3,s3) /\
       emit_op ADD [r3; Lit 32w] s3 = (r4,s4) /\
       emit_void MCOPY [dst;src;r4] s4 = ((),sb)
 Proof
@@ -218,10 +219,11 @@ QED
 Theorem compile_bytestring_copy_len_stages:
   !src sa sb count.
     compile_bytestring_copy_len src sa = (count,sb) ==>
-    ?s1 s2 s3 v1 v2 v3 v4.
+    ?s1 sm s2 s3 v1 m v2 v3 v4.
       emit_op MLOAD [src] sa = (Var v1,s1) /\
-      emit_op ADD [Var v1; Lit 31w] s1 = (Var v2,s2) /\
-      emit_op AND [Var v2; Lit (i2w (-32))] s2 = (Var v3,s3) /\
+      emit_op NOT [Lit 31w] s1 = (Var m,sm) /\
+      emit_op ADD [Var v1; Lit 31w] sm = (Var v2,s2) /\
+      emit_op AND [Var v2; Var m] s2 = (Var v3,s3) /\
       emit_op ADD [Var v3; Lit 32w] s3 = (Var v4,sb) /\
       count = Var v4
 Proof
@@ -336,6 +338,207 @@ Proof
   simp[DROP_APPEND] >> rpt strip_tac >> decide_tac
 QED
 
+Theorem not31_i2w[local]:
+  (~31w:bytes32) = i2w (-32)
+Proof
+  simp[integer_wordTheory.i2w_def] >> blastLib.BBLAST_TAC
+QED
+
+Theorem inst_seq_ptr_cons_step[local]:
+  step_inst_base i s = OK u /\ s' = u with vs_inst_idx := SUC s.vs_inst_idx /\
+  inst_seq_ptr D lo ctx fn PG G tn [i] s G1 tn1 /\
+  inst_seq_ptr D lo ctx fn PG G1 tn1 tail s' G2 tn2 ==>
+  inst_seq_ptr D lo ctx fn PG G tn (i::tail) s G2 tn2
+Proof
+  rpt strip_tac >> gvs[inst_seq_ptr_def]
+QED
+
+Theorem copy_len_round_run:
+  !x id v1 m v2 v3 v4 w.
+    lookup_var v1 x = SOME w /\ v1 <> m /\ m <> v2 ==>
+    run_inst_seq
+      [mk_inst id NOT [Lit 31w] [m];
+       mk_inst (id+1) ADD [Var v1; Lit 31w] [v2];
+       mk_inst (id+2) AND [Var v2; Var m] [v3];
+       mk_inst (id+3) ADD [Var v3; Lit 32w] [v4]] x =
+    OK (update_var v4 (((w + 31w) && ~31w) + 32w)
+         (update_var v3 ((w + 31w) && ~31w)
+           (update_var v2 (w + 31w) (update_var m (~31w) x))))
+Proof
+  rpt strip_tac >>
+  `step_inst_base (mk_inst id NOT [Lit 31w] [m]) x =
+     OK (update_var m (~31w) x)` by
+    (irule emitHelperPropsTheory.step_NOT >> simp[eval_operand_def]) >>
+  `step_inst_base (mk_inst (id+1) ADD [Var v1; Lit 31w] [v2])
+     (update_var m (~31w) x) =
+   OK (update_var v2 (w + 31w) (update_var m (~31w) x))` by
+    (irule copy_len_binop_step >>
+     fs[eval_operand_def, lookup_var_def, update_var_def, FLOOKUP_UPDATE]) >>
+  `step_inst_base (mk_inst (id+2) AND [Var v2; Var m] [v3])
+     (update_var v2 (w + 31w) (update_var m (~31w) x)) =
+   OK (update_var v3 ((w + 31w) && ~31w)
+     (update_var v2 (w + 31w) (update_var m (~31w) x)))` by
+    (irule copy_len_binop_step >>
+     simp[eval_operand_def, lookup_var_def, update_var_def, FLOOKUP_UPDATE]) >>
+  `step_inst_base (mk_inst (id+3) ADD [Var v3; Lit 32w] [v4])
+     (update_var v3 ((w + 31w) && ~31w)
+       (update_var v2 (w + 31w) (update_var m (~31w) x))) =
+   OK (update_var v4 (((w + 31w) && ~31w) + 32w)
+     (update_var v3 ((w + 31w) && ~31w)
+       (update_var v2 (w + 31w) (update_var m (~31w) x))))` by
+    (irule copy_len_binop_step >>
+     simp[eval_operand_def, lookup_var_def, update_var_def, FLOOKUP_UPDATE]) >>
+  asm_simp_tac bool_ss [run_inst_seq_def, exec_result_case_def]
+QED
+
+Theorem copy_len_round_seq_ptr:
+  !D ctx fn PG G tn x id v1 m v2 v3 v4 w.
+    lookup_var v1 x = SOME w /\ op_taint tn (Var v1) = {} /\
+    v1 <> m /\ m <> v2 /\ ~ctx_has_dalloca ctx ==>
+    ?Gf tnf.
+      inst_seq_ptr D 0 ctx fn PG G tn
+        [mk_inst id NOT [Lit 31w] [m];
+         mk_inst (id+1) ADD [Var v1; Lit 31w] [v2];
+         mk_inst (id+2) AND [Var v2; Var m] [v3];
+         mk_inst (id+3) ADD [Var v3; Lit 32w] [v4]] x Gf tnf /\
+      op_taint tnf (Var v4) = {} /\
+      tnf.t_mem = tn.t_mem /\ tnf.t_stor = tn.t_stor /\
+      tnf.t_trans = tn.t_trans /\
+      (!p. p <> m /\ p <> v2 /\ p <> v3 /\ p <> v4 ==>
+        FLOOKUP Gf p = FLOOKUP G p /\
+        op_taint tnf (Var p) = op_taint tn (Var p))
+Proof
+  rpt strip_tac >>
+  `!t (k:bytes32). op_taint t (Lit k) = {}` by simp[op_taint_def] >>
+  `!st (k:bytes32). eval_operand (Lit k) st = SOME k` by simp[eval_operand_def] >>
+  qabbrev_tac `y1 = update_var m (~31w) x with vs_inst_idx := SUC x.vs_inst_idx` >>
+  qabbrev_tac `y2 = update_var v2 (w + 31w) y1 with vs_inst_idx := SUC y1.vs_inst_idx` >>
+  qabbrev_tac `y3 = update_var v3 ((w + 31w) && ~31w) y2 with
+                      vs_inst_idx := SUC y2.vs_inst_idx` >>
+  `eval_operand (Var v1) y1 = SOME w` by
+    (simp[Abbr `y1`, eval_operand_def, lookup_var_def, update_var_def,
+          FLOOKUP_UPDATE] >> fs[lookup_var_def]) >>
+  `eval_operand (Var v2) y2 = SOME (w + 31w) /\
+   eval_operand (Var m) y2 = SOME (~31w)` by
+    simp[Abbr `y2`, Abbr `y1`, eval_operand_def, lookup_var_def,
+         update_var_def, FLOOKUP_UPDATE] >>
+  `eval_operand (Var v3) y3 = SOME ((w + 31w) && ~31w)` by
+    simp[Abbr `y3`, eval_operand_def, lookup_var_def, update_var_def,
+         FLOOKUP_UPDATE] >>
+  qspecl_then [`D`, `ctx`, `fn`, `PG`, `G`, `tn`, `x`, `id`, `Lit 31w`, `m`, `31w`]
+    mp_tac copy_len_not_seq_ptr >>
+  impl_tac >- simp[] >>
+  disch_then (qx_choosel_then [`G1`, `tn1`, `t1`] strip_assume_tac) >>
+  qpat_x_assum `run_inst_seq _ _ = _` kall_tac >>
+  qpat_x_assum `t1 = _` kall_tac >>
+  qspecl_then [`D`, `ctx`, `fn`, `PG`, `G1`, `tn1`, `y1`, `id+1`, `ADD`,
+               `Var v1`, `Lit 31w`, `v2`, `word_add`, `w`, `31w`]
+    mp_tac copy_len_binop_seq_ptr >>
+  impl_tac >- simp[] >>
+  disch_then (qx_choosel_then [`G2`, `tn2`] strip_assume_tac) >>
+  qspecl_then [`D`, `ctx`, `fn`, `PG`, `G2`, `tn2`, `y2`, `id+2`, `AND`,
+               `Var v2`, `Var m`, `v3`, `word_and`, `w + 31w`, `~31w`]
+    mp_tac copy_len_binop_seq_ptr >>
+  impl_tac >- simp[] >>
+  disch_then (qx_choosel_then [`G3`, `tn3`] strip_assume_tac) >>
+  qspecl_then [`D`, `ctx`, `fn`, `PG`, `G3`, `tn3`, `y3`, `id+3`, `ADD`,
+               `Var v3`, `Lit 32w`, `v4`, `word_add`, `(w + 31w) && ~31w`, `32w`]
+    mp_tac copy_len_binop_seq_ptr >>
+  impl_tac >- simp[] >>
+  disch_then (qx_choosel_then [`G4`, `tn4`] strip_assume_tac) >>
+  qexistsl_tac [`G4`, `tn4`] >>
+  conj_tac >-
+    (irule inst_seq_ptr_cons_step >>
+     qexistsl_tac [`G1`, `y1`, `tn1`, `update_var m (~31w) x`] >>
+     conj_tac >- (irule emitHelperPropsTheory.step_NOT >> simp[]) >>
+     conj_tac >- simp[Abbr `y1`] >>
+     conj_tac >- first_assum ACCEPT_TAC >>
+     irule inst_seq_ptr_cons_step >>
+     qexistsl_tac [`G2`, `y2`, `tn2`, `update_var v2 (w + 31w) y1`] >>
+     conj_tac >- (irule copy_len_binop_step >> simp[]) >>
+     conj_tac >- simp[Abbr `y2`] >>
+     conj_tac >- first_assum ACCEPT_TAC >>
+     irule inst_seq_ptr_cons_step >>
+     qexistsl_tac [`G3`, `y3`, `tn3`, `update_var v3 ((w + 31w) && ~31w) y2`] >>
+     conj_tac >- (irule copy_len_binop_step >> simp[]) >>
+     conj_tac >- simp[Abbr `y3`] >>
+     conj_tac >- first_assum ACCEPT_TAC >>
+     first_assum ACCEPT_TAC) >>
+  simp[] >> rpt strip_tac >> metis_tac[]
+QED
+
+Theorem copy_len_round_structure:
+  !src sa s1 sm s2 s3 sb v1 m v2 v3 v4.
+    emit_op MLOAD [src] sa = (Var v1,s1) /\
+    emit_op NOT [Lit 31w] s1 = (Var m,sm) /\
+    emit_op ADD [Var v1; Lit 31w] sm = (Var v2,s2) /\
+    emit_op AND [Var v2; Var m] s2 = (Var v3,s3) /\
+    emit_op ADD [Var v3; Lit 32w] s3 = (Var v4,sb) ==>
+    emitted_insts sa sb = emitted_insts sa s1 ++
+      [mk_inst s1.cs_next_id NOT [Lit 31w] [m];
+       mk_inst (s1.cs_next_id+1) ADD [Var v1; Lit 31w] [v2];
+       mk_inst (s1.cs_next_id+2) AND [Var v2; Var m] [v3];
+       mk_inst (s1.cs_next_id+3) ADD [Var v3; Lit 32w] [v4]] /\
+    v1 <> m /\ m <> v2 /\
+    (!p. not_fresh_at sa p ==> p <> m /\ p <> v2 /\ p <> v3 /\ p <> v4)
+Proof
+  rpt gen_tac >> strip_tac >>
+  gvs[emit_op_def, comp_bind_def, comp_ignore_bind_def, fresh_var_def,
+      fresh_id_def, emit_def, comp_return_def, emitted_insts_def,
+      DROP_LENGTH_APPEND, not_fresh_at_def] >>
+  metis_tac[arithmeticTheory.LESS_EQ_REFL,
+    DECIDE ``!n:num. n <= n+1 /\ n <= n+2 /\ n <= n+3 /\ n <= n+4``]
+QED
+
+Theorem clean_emitted_prefix_round:
+  !D ctx fn PG sa s1 sb id v1 m v2 v3 v4 w s G tn.
+    clean_emitted_prefix D ctx fn PG sa s1 (Var v1) w s G tn /\
+    emitted_insts sa sb = emitted_insts sa s1 ++
+      [mk_inst id NOT [Lit 31w] [m];
+       mk_inst (id+1) ADD [Var v1; Lit 31w] [v2];
+       mk_inst (id+2) AND [Var v2; Var m] [v3];
+       mk_inst (id+3) ADD [Var v3; Lit 32w] [v4]] /\
+    v1 <> m /\ m <> v2 /\ ~ctx_has_dalloca ctx /\
+    (!p. not_fresh_at sa p ==> p <> m /\ p <> v2 /\ p <> v3 /\ p <> v4) ==>
+    clean_emitted_prefix D ctx fn PG sa sb (Var v4)
+      (((w + 31w) && ~31w) + 32w) s G tn
+Proof
+  rpt gen_tac >> disch_then (map_every assume_tac o CONJUNCTS) >>
+  qpat_x_assum `clean_emitted_prefix _ _ _ _ _ _ _ _ _ _ _`
+    (strip_assume_tac o REWRITE_RULE [clean_emitted_prefix_def]) >>
+  rename1 `run_inst_seq (emitted_insts sa s1) s = OK t` >>
+  rename1 `inst_seq_ptr D 0 ctx fn PG G tn (emitted_insts sa s1) s G1 tn1` >>
+  `lookup_var v1 t = SOME w` by fs[eval_operand_def] >>
+  `lookup_var v1 (t with vs_inst_idx :=
+      s.vs_inst_idx + LENGTH (emitted_insts sa s1)) = SOME w` by
+    fs[lookup_var_def] >>
+  qspecl_then [`t`, `id`, `v1`, `m`, `v2`, `v3`, `v4`, `w`]
+    mp_tac copy_len_round_run >>
+  impl_tac >- simp[] >> strip_tac >>
+  qspecl_then [`D`, `ctx`, `fn`, `PG`, `G1`, `tn1`,
+     `t with vs_inst_idx := s.vs_inst_idx + LENGTH (emitted_insts sa s1)`,
+     `id`, `v1`, `m`, `v2`, `v3`, `v4`, `w`] mp_tac copy_len_round_seq_ptr >>
+  impl_tac >- simp[] >>
+  disch_then (qx_choosel_then [`G4`, `tn4`] strip_assume_tac) >>
+  rewrite_tac[clean_emitted_prefix_def] >>
+  qpat_x_assum `emitted_insts sa sb = _` SUBST1_TAC >>
+  conj_tac >- simp[listTheory.EVERY_APPEND, mk_inst_def, is_terminator_def] >>
+  qexistsl_tac [`G4`, `tn4`,
+    `update_var v4 (((w + 31w) && ~31w) + 32w)
+       (update_var v3 ((w + 31w) && ~31w)
+         (update_var v2 (w + 31w) (update_var m (~31w) t)))`] >>
+  conj_tac >- (irule inst_seq_ptr_append_run >> metis_tac[]) >>
+  conj_tac >-
+    (qpat_assum `run_inst_seq (emitted_insts sa s1) s = OK t`
+       (mp_tac o MATCH_MP run_inst_seq_append) >> simp[]) >>
+  conj_tac >- simp[eval_operand_def, lookup_var_def, update_var_def,
+                   FLOOKUP_UPDATE] >>
+  conj_tac >- simp[update_var_def] >>
+  simp[] >> rpt strip_tac >>
+  `p <> m /\ p <> v2 /\ p <> v3 /\ p <> v4` by metis_tac[] >>
+  gvs[lookup_var_def, update_var_def, FLOOKUP_UPDATE] >> metis_tac[]
+QED
+
 Theorem compile_bytestring_copy_len_clean_prefix:
   !D ctx fn PG G tn s sa sb src count a.
     compile_bytestring_copy_len (Var src) sa = (count,sb) /\
@@ -347,17 +550,12 @@ Theorem compile_bytestring_copy_len_clean_prefix:
 Proof
   rpt strip_tac >>
   drule compile_bytestring_copy_len_stages >> strip_tac >> gvs[] >>
-  drule_all copy_len_stages_structure >> strip_tac >>
+  drule_all copy_len_round_structure >> strip_tac >>
   `clean_emitted_prefix D ctx fn PG sa s1 (Var v1)
      (mload (w2n a) s) s G tn` by
     (irule clean_emitted_prefix_mload >> metis_tac[]) >>
-  `clean_emitted_prefix D ctx fn PG sa s2 (Var v2)
-     (mload (w2n a) s + 31w) s G tn` by
-    (irule (Q.SPECL [`ADD`, `word_add`] clean_emitted_prefix_binop) >> metis_tac[]) >>
-  `clean_emitted_prefix D ctx fn PG sa s3 (Var v3)
-     (mload (w2n a) s + 31w && i2w (-32)) s G tn` by
-    (irule (Q.SPECL [`AND`, `word_and`] clean_emitted_prefix_binop) >> metis_tac[]) >>
-  irule (Q.SPECL [`ADD`, `word_add`] clean_emitted_prefix_binop) >> metis_tac[]
+  once_rewrite_tac[wordsTheory.WORD_AND_COMM] >>
+  irule (REWRITE_RULE [not31_i2w] clean_emitted_prefix_round) >> metis_tac[]
 QED
 
 Theorem compile_bytestring_copy_len_seq_ptr:
@@ -537,7 +735,7 @@ Proof
     (gvs[bodyPtrDefsTheory.ptr_covers_def] >> decide_tac) >>
   `((mload (w2n a) s + 31w && i2w (-32)) + 32w) = n2w n` by
     (qspec_then `len` mp_tac exprSimBufferStoreTheory.buffer_round_size >>
-     gvs[vfmConstantsTheory.word_size_def]) >>
+     gvs[vfmConstantsTheory.word_size_def, not31_i2w]) >>
   `clean_emitted_prefix D ctx fn PG sa sm count_op (n2w n) s G tn` by
     (drule_all compile_bytestring_copy_len_clean_prefix >> simp[]) >>
   drule_all clean_emitted_prefix_mcopy >> strip_tac >>

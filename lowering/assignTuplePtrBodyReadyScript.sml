@@ -66,18 +66,6 @@ Proof
     metis_tac[allocation_limit_word_room] >> decide_tac
 QED
 
-Theorem body_inv_mcopy_ptr:
-  body_inv tops ctx cenv cx ==> cenv.ce_target CapMcopy
-Proof
-  rw[body_inv_def] >> Cases_on `cx.in_deploy` >> gvs[]
-  >- (gvs[lower_vyper_deploy_unit_def, AllCaseEqs()] >>
-      rpt (pairarg_tac >> gvs[]) >>
-      gvs[run_deploy_lowering_def, AllCaseEqs(), lowering_policy_ok_def]) >>
-  gvs[lower_vyper_runtime_unit_def, AllCaseEqs()] >>
-  rpt (pairarg_tac >> gvs[]) >>
-  gvs[run_lowering_def, AllCaseEqs(), lowering_policy_ok_def]
-QED
-
 Theorem tuple_eval_bind_notation_ptr:
   vyperState$bind (eval_expr cx e) (read_result cx) =
   (do result <- eval_expr cx e; read_result cx result od)

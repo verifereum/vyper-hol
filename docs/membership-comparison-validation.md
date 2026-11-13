@@ -45,13 +45,20 @@ diagnostic, and four shared inventory/provenance files. The manifest hashes the
 other 39 files. Retained sources, inputs, expected bytes and rejection diagnostics
 are unchanged; only the inventories were filtered to the retained cases.
 
-The independent compiler is Vyper `0.5.0a4+cd74ce4f`, commit
+The independent compiler was first Vyper `0.5.0a4+cd74ce4f`, commit
 `cd74ce4f57e3771aeeab8f061fa3be45bfe8a29c`, with Python 3.11.11 and the six
 dependency versions recorded in `compiler-provenance.json`. Settings are
 experimental codegen, optimization NONE with the O1 Venom pipeline, final assembly
 optimization disabled, Prague, and no bytecode metadata.
 
-`compiler-source-audit.json` records the compiler source hashes.
+The corpus was re-run at `VYPER_PIN` (`0.5.0b1`, commit
+`577d2534356903076bb79b5b15ebd4d772994693`) with the same Python, dependencies and
+settings. Every sanitized input, the rejection and eight hex pairs are unchanged.
+`eq_string_lit_same`, `in_mem_dynarray` and `ne_bytes_var` take dynamic calldata
+arguments and gained 0.5.0b1's argument-offset guard (10 bytes per dynamic
+argument), so their hex files and output hashes were replaced.
+
+`compiler-source-audit.json` records the source hashes of the first compiler.
 `compiler-provenance.json` retains each remaining case's original commands,
 source hash, exit codes and output hashes. `report.json` is an artifact inventory,
 not a record of HOL validation results.
@@ -72,19 +79,30 @@ checker boundary tests retain primitive-word and flag acceptance plus rejection
 of strings, dynamic bytes, structs, tuples, nested arrays and oversized fixed
 bytes. Reducing the fixture set does not change these statements.
 
-`membershipCheckerIntegrity` audits the checker and typing dependencies.
-`vyperMembershipAuditTest` checks oracle tags on the parity, matrix, semantic,
-small-step, builtin and bytestring-hash results, together with the exported
-membership instruction traces. The retained aggregate behavior evidence and
-its limitations are described in `membership-element-consistency.md`.
+`holbuild check` audits the checker and typing dependencies and the parity,
+matrix, semantic, small-step, builtin and bytestring-hash results, together
+with the exported membership instruction traces: it fails on any axiom or any
+oracle other than DISK_THM. It doesn't check saved theorems for hypotheses.
+The retained aggregate behavior evidence and its limitations are described in
+`membership-element-consistency.md`.
 
 To rebuild the scoped fixture checks, from the repository root:
 
 ```sh
 holbuild --max-heap 8000 -j2 build --skip-checkpoints --skip-proof-steps \
   --force=theory vyperMembershipParityTestTheory \
-  vyperMembershipMatrixTestTheory vyperMembershipAuditTestTheory \
-  membershipCheckerIntegrityTheory
+  vyperMembershipMatrixTestTheory
+(set -e
+for t in vyperTypeSystemTheory vyperTypeBuiltinsTheory \
+    vyperTypeExprSoundnessTheory vyperTypeSoundnessTheory \
+    vyperMembershipSemanticsTestTheory vyperMembershipParityTestTheory \
+    vyperMembershipMatrixTestTheory vyperSmallStepTheory \
+    bytestringHashPropsTheory \
+    exprLoweringPropsTheory:list_membership_small_traces \
+    exprLoweringPropsTheory:array_membership_entry_traces; do
+  holbuild check "$t"
+done
+)
 ```
 
 These checks establish finite parity and the stated semantic boundaries.

@@ -158,7 +158,7 @@ QED
 (* The actual expr_post and ghost_kept returned above are precisely the
    materialization interface. No equality between independent runs is used. *)
 Theorem literal_zero_frame_extend:
-  literal_loop_frame ctx func ce cx d root aid addr capacity
+  literal_loop_frame pure ctx func ce cx d root aid addr capacity
     ees fr sf Gf tnf esi si G0 tn0 s0 cells off /\
   literal_prefix_ok cells tn0 s0 /\
   stmt_state_rel ctx func ce cx ees sf /\
@@ -169,8 +169,9 @@ Theorem literal_zero_frame_extend:
   si.cs_next_var <= sb.cs_next_var /\ si.cs_next_id <= sb.cs_next_id /\
   ~z.vs_halted /\ z.vs_current_bb = sb.cs_current_bb /\
   z.vs_inst_idx = LENGTH sb.cs_current_insts /\
-  val_wf tv v /\ val_footprint tv v = 0 /\ val_in_memory tv v a mem ==>
-  literal_loop_frame ctx func ce cx d root aid addr capacity
+  val_wf tv v /\ val_footprint tv v = 0 /\ val_in_memory tv v a mem /\
+  (pure ==> ~expr_has_effect e) ==>
+  literal_loop_frame pure ctx func ce cx d root aid addr capacity
     ees fr sf Gf tnf es' sb H tm z (cells ++ [(tv,v,addr+off,0)]) off /\
   literal_prefix_ok (cells ++ [(tv,v,addr+off,0)]) tm z
 Proof

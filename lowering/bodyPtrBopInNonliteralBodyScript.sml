@@ -198,7 +198,7 @@ Resume nonliteral_expr_sim_ptr[success]:
      strip_tac >> qpat_x_assum `_ /\ _ ==> pure_frame _ _ _ _ _ s2` irule >>
      conj_tac >> first_assum ACCEPT_TAC) >>
   drule_all membership_array_continuation_summary_ptr >>
-  disch_then (qspecl_then [`Unsigned 0`,`e1`,`PG`,`cx_dead cx`] assume_tac) >>
+  disch_then (qspecl_then [`Unsigned 0`,`PG`,`cx_dead cx`] assume_tac) >>
   drule membership_typed_read_continuation >> disch_then (fn th => rewrite_tac[th]) >>
   rewrite_tac[gas_outcome_ptr_def] >> qexists_tac `[]` >> disj1_tac >>
   irule gas_summary_ptr_at_conseq >> first_assum (irule_at (Pos last)) >>

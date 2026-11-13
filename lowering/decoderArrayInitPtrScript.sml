@@ -768,7 +768,11 @@ Proof
   `FLOOKUP s.vs_allocas (sb.cs_next_id - 2) = NONE ==>
     s.vs_alloca_next + 32 <= b + cap` by
     (strip_tac >> drule_all abi_decoder_missing_credit >> strip_tac >>
-     fs[abi_decoder_budget_def, Excl "CARD_DELETE"] >> decide_tac) >>
+     qpat_x_assum `abi_decoder_budget _ _ _ _ _`
+       (strip_assume_tac o PURE_REWRITE_RULE[abi_decoder_budget_def]) >>
+     qpat_x_assum `CARD _ = SUC _` SUBST_ALL_TAC >>
+     qpat_x_assum `_ + 32 * SUC _ <= _` mp_tac >>
+     rewrite_tac[arithmeticTheory.MULT_SUC] >> decide_tac) >>
   drule_at (Pat `run_inst_seq _ _ = _`) actual_array_init_endpoint_ptr_core >>
   disch_then drule >>
   disch_then (drule_at (Pat `ptr_covers _ _ _ _ _`)) >>

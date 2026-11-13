@@ -30,6 +30,7 @@ Ancestors
   assignElimDefs passSharedDefs venomWf venomInst venomState
   passSimulationDefs analysisSimDefs
   assignElimConvergence dfAnalyzeProofs
+  assignElimSound venomInstProps analysisSimProps analysisSimProofsBase stateEquiv stateEquivProps execEquivParamDefs execEquivParamProps venomExecSemantics venomExecProofs dfAnalyzeDefs cfgHelpers worklistDefs cfgAnalysisProps finite_map list pred_set arithmetic analysisSimProofsSound cfgCorrectnessProof
 Libs
   indexedListsTheory
 
@@ -48,13 +49,81 @@ Theorem assign_elim_function_correct:
         ~is_terminator (EL i bb.bb_instructions).inst_opcode) /\
     (!bb inst x.
        MEM bb fn_subst.fn_blocks /\ MEM inst bb.bb_instructions /\
-       MEM (Var x) inst.inst_operands ==> x NOTIN elim) ==>
+       MEM (Var x) inst.inst_operands ==> x NOTIN elim)
+    ==>
     (?e. run_blocks fuel ctx fn s = Error e) \/
     lift_result (state_equiv elim) (execution_equiv elim) (execution_equiv elim)
       (run_blocks fuel ctx fn s)
       (run_blocks fuel ctx (assign_elim_function fn) s)
 Proof
-  ACCEPT_TAC assign_elim_function_correct_proof
+  rpt GEN_TAC >> simp_tac std_ss [LET_THM] >> rpt strip_tac >>
+  (* Phase 1: fn → fn_subst gives state_equiv {} (or fn errors) *)
+  mp_tac (SIMP_RULE std_ss [LET_THM]
+    (ISPECL [``fuel:num``, ``ctx:venom_context``,
+             ``fn:ir_function``, ``s:venom_state``]
+     assign_subst_function_eq)) >>
+  impl_tac >- (fs[wf_function_def]) >>
+  strip_tac >- (
+    simp[]
+  ) >>
+  mp_tac (SIMP_RULE std_ss [LET_THM]
+    (ISPECL [``fuel:num``, ``ctx:venom_context``,
+             ``fn:ir_function``, ``s:venom_state``]
+     assign_nop_dead_writes_correct)) >>
+  impl_tac >- (simp[] >> metis_tac[]) >>
+  strip_tac >- (
+    Cases_on `run_blocks fuel ctx fn s` >>
+    fs[lift_result_def]
+  ) >>
+  DISJ2_TAC >>
+  (* Phase 3: clear_nops gives result_equiv {} *)
+  qabbrev_tac `fn_elim = analysis_function_transform NONE
+     (copy_prop_analyze fn)
+     (\v inst. [assign_elim_inst (phi_used_vars fn) v inst]) fn` >>
+  `assign_elim_function fn = clear_nops_function fn_elim` by
+    simp[assign_elim_function_def, Abbr `fn_elim`] >>
+  `!bb. MEM bb fn_elim.fn_blocks ==> bb_well_formed bb` by
+    (simp[Abbr `fn_elim`] >> metis_tac[assign_elim_analysis_blocks_wf]) >>
+  `result_equiv {}
+     (run_blocks fuel ctx fn_elim s)
+     (run_blocks fuel ctx (assign_elim_function fn) s)` by (
+    qpat_x_assum `assign_elim_function fn = clear_nops_function fn_elim`
+      (fn th => REWRITE_TAC [th]) >>
+    irule clear_nops_function_correct_blocks_wf >> simp[]) >>
+  fs[result_equiv_is_lift_result] >>
+  `lift_result (state_equiv (assign_elim_eliminated_vars fn))
+     (execution_equiv (assign_elim_eliminated_vars fn))
+                  (execution_equiv (assign_elim_eliminated_vars fn))
+     (run_blocks fuel ctx fn s)
+     (run_blocks fuel ctx
+        (analysis_function_transform NONE (copy_prop_analyze fn)
+           (\v inst. [assign_subst_inst v inst]) fn) s)` by (
+    irule passSimulationPropsTheory.lift_result_weaken >>
+    qexistsl_tac [`state_equiv {}`, `execution_equiv {}`] >>
+    simp[] >> rpt strip_tac >>
+    metis_tac[state_equiv_subset, execution_equiv_subset, EMPTY_SUBSET]
+  ) >>
+  `lift_result (state_equiv (assign_elim_eliminated_vars fn))
+     (execution_equiv (assign_elim_eliminated_vars fn))
+                  (execution_equiv (assign_elim_eliminated_vars fn))
+     (run_blocks fuel ctx fn s)
+     (run_blocks fuel ctx fn_elim s)` by (
+    irule lift_result_trans >>
+    conj_tac >- (rpt strip_tac >> metis_tac[state_equiv_trans]) >>
+    conj_tac >- (rpt strip_tac >> metis_tac[execution_equiv_trans]) >>
+    qexists_tac `run_blocks fuel ctx
+      (analysis_function_transform NONE (copy_prop_analyze fn)
+         (\v inst. [assign_subst_inst v inst]) fn) s` >>
+    simp[]) >>
+  irule lift_result_trans >>
+  conj_tac >- (rpt strip_tac >> metis_tac[state_equiv_trans]) >>
+  conj_tac >- (rpt strip_tac >> metis_tac[execution_equiv_trans]) >>
+  qexists_tac `run_blocks fuel ctx fn_elim s` >>
+  conj_tac >- first_assum ACCEPT_TAC >>
+  irule passSimulationPropsTheory.lift_result_weaken >>
+  qexistsl_tac [`state_equiv {}`, `execution_equiv {}`] >>
+  simp[] >> rpt strip_tac >>
+  metis_tac[state_equiv_subset, execution_equiv_subset, EMPTY_SUBSET]
 QED
 
 (* ===== Per-instruction structural properties ===== *)
@@ -63,29 +132,6 @@ Triviality aei_preserves_id[local]:
   !pv v inst. (assign_elim_inst pv v inst).inst_id = inst.inst_id
 Proof
   rw[assign_elim_inst_def, LET_THM, mk_nop_inst_def]
-QED
-
-Triviality aei_term_opcode[local]:
-  !pv v inst. is_terminator inst.inst_opcode ==>
-    (assign_elim_inst pv v inst).inst_opcode = inst.inst_opcode
-Proof
-  rpt strip_tac >>
-  `inst.inst_opcode <> PHI` by
-    (Cases_on `inst.inst_opcode` >> fs[is_terminator_def]) >>
-  `~is_forwardable_assign pv inst` by
-    (simp[is_forwardable_assign_def] >>
-     Cases_on `inst.inst_opcode` >> fs[is_terminator_def]) >>
-  simp[assign_elim_inst_def, LET_THM]
-QED
-
-Triviality aei_opcode[local]:
-  !pv v inst. (assign_elim_inst pv v inst).inst_opcode = inst.inst_opcode \/
-              (assign_elim_inst pv v inst).inst_opcode = NOP
-Proof
-  rpt strip_tac >>
-  simp[assign_elim_inst_def, LET_THM] >>
-  Cases_on `inst.inst_opcode = PHI` >> simp[] >>
-  Cases_on `is_forwardable_assign pv inst` >> simp[mk_nop_inst_def]
 QED
 
 Triviality aei_outputs[local]:
@@ -152,52 +198,6 @@ Proof
   simp[copy_prop_join_def, unwrap_copies_def, copy_prop_join_raw_def,
        finite_mapTheory.FLOOKUP_DRESTRICT] >>
   rpt strip_tac >> res_tac
-QED
-
-(* df_process_block doesn't modify ds_inst *)
-Triviality process_block_inst_unchanged[local]:
-  !dir bottom join transfer edge_transfer ctx entry_val cfg bbs lbl st.
-    (df_process_block dir bottom join transfer edge_transfer
-       ctx entry_val cfg bbs lbl st).ds_inst = st.ds_inst
-Proof
-  rpt gen_tac >> simp[dfAnalyzeDefsTheory.df_process_block_def, LET_THM] >>
-  pairarg_tac >> simp[] >> IF_CASES_TAC >> simp[]
-QED
-
-(* FOLDL of join on no-Label values preserves no-Label *)
-Triviality foldl_join_no_label[local]:
-  !preds g init.
-    (!k v. FLOOKUP (unwrap_copies init) k = SOME v ==> !l. v <> Label l) /\
-    (!pred. MEM pred preds ==>
-      !k v. FLOOKUP (unwrap_copies (g pred)) k = SOME v ==>
-            !l. v <> Label l) ==>
-    !k v. FLOOKUP (unwrap_copies
-      (FOLDL (\acc pred. copy_prop_join acc (g pred)) init preds)) k =
-      SOME v ==> !l. v <> Label l
-Proof
-  Induct >- simp[] >>
-  rpt gen_tac >> strip_tac >> simp[] >>
-  first_x_assum (qspecl_then [`g`, `copy_prop_join init (g h)`] mp_tac) >>
-  impl_tac >- (fs[] >> metis_tac[copy_prop_join_no_label]) >>
-  simp[]
-QED
-
-(* FOLDL of copy_prop_join directly on a list of values *)
-Triviality foldl_join_vals_no_label[local]:
-  !vals init.
-    (!k v. FLOOKUP (unwrap_copies init) k = SOME v ==> !l. v <> Label l) /\
-    EVERY (\val. !k v. FLOOKUP (unwrap_copies val) k = SOME v ==>
-                       !l. v <> Label l) vals ==>
-    !k v. FLOOKUP (unwrap_copies (FOLDL copy_prop_join init vals)) k =
-      SOME v ==> !l. v <> Label l
-Proof
-  Induct >> simp[] >> rpt gen_tac >> strip_tac >>
-  PURE_ONCE_REWRITE_TAC[listTheory.FOLDL] >> BETA_TAC >>
-  first_x_assum match_mp_tac >>
-  conj_tac
-  >- (match_mp_tac copy_prop_join_no_label >>
-      conj_tac >> first_x_assum ACCEPT_TAC)
-  >> first_x_assum ACCEPT_TAC
 QED
 
 (* Process changed equivalence (replicated from dfAnalyzeProofs) *)
@@ -429,7 +429,7 @@ Proof
     (rpt strip_tac >> simp[Abbr `process`, Abbr `wl0`] >>
      irule copy_prop_measure_monotone >> fs[]) >>
   `!lbl st. (process lbl st).ds_inst = st.ds_inst` by
-    (rpt strip_tac >> simp[Abbr `process`, process_block_inst_unchanged]) >>
+    (rpt strip_tac >> simp[Abbr `process`, df_process_block_inst_unchanged]) >>
   `!lbl st. MEM lbl wl0 /\ copy_prop_measure_inv fn st /\
             boundary_no_label st ==>
      copy_prop_measure_inv fn (process lbl st) /\
@@ -458,7 +458,7 @@ Proof
   `EVERY (\lbl. MEM lbl wl0) wl0` by simp[Abbr `wl0`, listTheory.EVERY_MEM] >>
   `!lbl. MEM lbl wl0 ==> EVERY (\lbl'. MEM lbl' wl0) (deps lbl)` by
     (simp[Abbr `deps`, Abbr `wl0`] >>
-     metis_tac[analysisSimPropsTheory.cfg_dfs_pre_succs_closed,
+     metis_tac[cfgHelpersTheory.cfg_dfs_pre_succs_closed,
                listTheory.EVERY_MEM]) >>
   impl_tac
   >- (rpt conj_tac >> TRY (first_assum ACCEPT_TAC) >>

@@ -112,6 +112,8 @@ Theorem assign_base_attr_storage_store_post_ptr:
   ~block_is_terminated sb /\
   s.vs_current_bb = su.cs_current_bb /\ s.vs_inst_idx = LENGTH su.cs_current_insts /\
   expr_post ctx fn cenv cx e es sa su s0 ee v op s /\
+  stmt_state_rel ctx fn cenv cx es s0 /\ local_ptrs_reserved cenv sa /\
+  MAP FDOM ee.scopes = MAP FDOM es.scopes /\
   ghost_inv d cenv cx ee G tn s /\ ghost_kept cenv es sa Gi ti s0 G tn /\
   is_word_type (expr_type e) /\ ptr_val_ok cx (expr_type e) v op G tn s /\
   evaluate_type (get_tenv cx) (expr_type e) = SOME ftv /\
@@ -123,12 +125,15 @@ Theorem assign_base_attr_storage_store_post_ptr:
   ?tf u.
     gas_marked_exec_ptr (cx_dead cx) (ctx,fn) PG k
       (ee,s,G,tn) [] (INL ()) ff G tf (OK u) /\
-    stmt_post ctx fn cx lctx cenv cenv sa sb s0 (INL ()) ff u /\
+    stmt_post ctx fn cx lctx cenv cenv sa sb es s0 (INL ()) ff u /\
     ghost_inv d cenv cx ff G tf u /\
     (!x. not_fresh_at sa x ==>
       FLOOKUP G x = FLOOKUP Gi x /\ op_taint tf (Var x) = op_taint ti (Var x))
 Proof
   strip_tac >>
+  drule_all expr_post_alloca_frame >> strip_tac >>
+  `ff.scopes = ee.scopes` by
+    (drule vyperScopePreservationTheory.write_storage_slot_scopes >> simp[]) >>
   `stmt_state_rel ctx fn cenv cx ee s /\
    eval_operand op s = SOME (typed_val_to_w256 ftv v)` by
     (fs[expr_post_def, expr_val_rel_def] >> metis_tac[]) >>
@@ -143,6 +148,13 @@ Proof
   >- simp[gas_marked_exec_ptr_def] >>
   simp[] >> conj_tac
   >- (simp[stmt_post_def, stmt_lands_def, cenv_top_ext_refl] >>
+      `alloca_frame cenv es sa s0 cenv ff t` by
+        (`alloca_frame cenv es sa s0 cenv ee t` by
+           (irule alloca_frame_same_state >> qexists_tac `s` >>
+            simp[finite_mapTheory.FLOOKUP_EXT, FUN_EQ_THM] >>
+            fs[lookup_var_def]) >>
+         qpat_x_assum `alloca_frame _ _ _ _ _ ee t` mp_tac >>
+         asm_rewrite_tac[alloca_frame_def]) >>
       fs[expr_post_def] >> metis_tac[]) >>
   fs[ghost_kept_def] >> metis_tac[]
 QED
@@ -181,7 +193,7 @@ Theorem assign_base_attr_storage_normal_ptr:
       (eval_stmt cx (Assign (BaseTarget
         (AttributeTarget (TopLevelNameTarget (src,id)) fld)) e))
       (es,s0,Gi,ti) marks (INL ()) ff H tf (OK u) /\
-    stmt_post ctx fn cx lctx cenv cenv sa sb s0 (INL ()) ff u /\
+    stmt_post ctx fn cx lctx cenv cenv sa sb es s0 (INL ()) ff u /\
     ghost_inv d cenv cx ff H tf u /\
     (!x. not_fresh_at sa x ==>
       FLOOKUP H x = FLOOKUP Gi x /\ op_taint tf (Var x) = op_taint ti (Var x))
@@ -213,7 +225,7 @@ Resume assign_base_attr_storage_normal_ptr[store]:
         (AttributeTarget (TopLevelNameTarget (src,id)) fld);
         v <- read_result cx raw; write_place cx p v od)
       (ee with gas_obs := [],z,H,tf) [] (INL ()) ee' H tf' (OK u) /\
-    stmt_post ctx fn cx lctx cenv cenv sa sb s0 (INL ()) ee' u /\
+    stmt_post ctx fn cx lctx cenv cenv sa sb es s0 (INL ()) ee' u /\
     ghost_inv d cenv cx ee' H tf' u /\
     (!x. not_fresh_at sa x ==> FLOOKUP H x = FLOOKUP Gi x /\
       op_taint tf' (Var x) = op_taint ti (Var x))` by
@@ -312,7 +324,7 @@ Resume compile_assign_attr_storage_case_ptr[normal]:
       (eval_stmt cx (Assign (BaseTarget
         (AttributeTarget (TopLevelNameTarget (src,id)) fld)) e))
       (es,s0,G0,tn0) marks (INL ()) ff H tf (OK u) /\
-    stmt_post ctx fn cx lctx cenv cenv sa sb s0 (INL ()) ff u /\
+    stmt_post ctx fn cx lctx cenv cenv sa sb es s0 (INL ()) ff u /\
     ghost_inv d cenv cx ff H tf u /\
     (!x. not_fresh_at sa x ==>
       FLOOKUP H x = FLOOKUP G0 x /\ op_taint tf (Var x) = op_taint tn0 (Var x))` by
@@ -338,7 +350,7 @@ QED
 Theorem assign_base_storage_field_decl:
   supported_storage_field_write tops (src,id) fld ==>
   src = NONE /\ find_var_decl_by_name id tops <> NONE /\
-  ?mut sid slot. MEM (VariableDecl Private mut id (StructT sid) slot) tops
+  ?vis mut sid slot. MEM (VariableDecl vis mut id (StructT sid) slot) tops
 Proof
   simp[supported_storage_field_write_def,supported_storage_fields_def] >>
   Cases_on `supported_variable_decl tops (src,id)` >> simp[] >>

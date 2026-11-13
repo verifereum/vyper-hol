@@ -31,7 +31,8 @@ Theorem assign_base_flat_local_continuation_ptr:
     ~ctx_has_dalloca ctx /\
     lookup_var src s = SOME a /\ lookup_var p s = SOME dst /\
     ptr_covers G tn src s n /\ ptr_covers G tn p s n /\
-    val_wf entry.type v /\ val_footprint entry.type v <= n /\
+    val_wf entry.type v /\ value_has_type entry.type v /\
+    val_footprint entry.type v <= n /\
     (!m. mem_agree_outside tn.t_mem s.vs_memory m ==>
       val_in_memory entry.type v (w2n a) m) /\
     ghost_inv d cenv cx es G tn s /\ stmt_state_rel ctx fn cenv cx es s /\
@@ -82,7 +83,8 @@ Theorem assign_base_bytes_local_continuation_ptr:
     ptr_covers G tn src s (32 + 32 * word_size len) /\
     ptr_covers G tn p s (32 + 32 * word_size len) /\
     (!i. w2n a <= i /\ i < w2n a + 32 ==> i NOTIN tn.t_mem) /\
-    val_wf entry.type v /\ val_footprint entry.type v <= 32 + 32 * word_size len /\
+    val_wf entry.type v /\ value_has_type entry.type v /\
+    val_footprint entry.type v <= 32 + 32 * word_size len /\
     (!m. mem_agree_outside tn.t_mem s.vs_memory m ==>
       val_in_memory entry.type v (w2n a) m) /\
     ghost_inv d cenv cx es G tn s /\ stmt_state_rel ctx fn cenv cx es s /\

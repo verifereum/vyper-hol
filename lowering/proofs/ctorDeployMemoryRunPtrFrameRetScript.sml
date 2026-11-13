@@ -40,35 +40,26 @@ Proof
   simp[storage_dead_def]
 QED
 
-(* A copy of ctorReturnFrame's local constructor_exit_code. *)
-Theorem constructor_exit_code_ptr[local]:
-  (if nr then compile_nonreentrant_unlock nkey ut F else comp_return ())
-    st_exit = ((), st_epilogue) /\
-  (nr ==> ut) /\ st_exit.cs_current_insts = [] /\
-  compile_constructor_epilogue rt cap imm st_epilogue = ((), st_final) /\
-  fn_has_code st_exit st_final func ==>
-  fn_has_code st_exit st_epilogue func /\
-  fn_has_code st_epilogue st_final func /\
-  ~block_is_terminated st_epilogue
+(* The constructor runs with created_in_tx set; no storage region depends on
+   it. *)
+Theorem storage_dead_created_in_tx[local]:
+  !srcs lay tx c tr st j b.
+    storage_dead
+      (initial_evaluation_context srcs lay (tx with created_in_tx := c) NONE)
+      tr st j b <=>
+    storage_dead (initial_evaluation_context srcs lay tx NONE) tr st j b
 Proof
-  strip_tac >> drule optional_unlock_code >> simp[] >> strip_tac >>
-  `~block_is_terminated st_epilogue` by
-    (gvs[block_is_terminated_def] >> Cases_on `nr` >>
-     gvs[block_is_terminated_def, mk_inst_def, is_terminator_def]) >>
-  `cs_extends st_exit st_epilogue` by
-    (irule cs_extends_same_block >> Cases_on `nr` >> gvs[]) >>
-  `cs_extends st_epilogue st_final` by
-    (irule cs_extends_same_block >>
-     drule_all compile_constructor_epilogue_append >> strip_tac >>
-     simp[rich_listTheory.IS_PREFIX_APPEND] >>
-     qpat_x_assum `compile_constructor_epilogue _ _ _ _ = _` mp_tac >>
-     Cases_on `cap > 0` >>
-     simp[compile_constructor_epilogue_def, contextTheory.compile_alloc_buffer_def,
-          emit_op_def, emit_void_def, emit_inst_def, comp_bind_def,
-          comp_ignore_bind_def, comp_return_def, fresh_id_def, fresh_var_def,
-          emit_def] >>
-     strip_tac >> gvs[]) >>
-  drule_all fn_has_code_split >> gvs[]
+  rpt gen_tac >>
+  `!mid n subs.
+     declared_storage_region
+       (initial_evaluation_context srcs lay (tx with created_in_tx := c) NONE)
+       mid n subs =
+     declared_storage_region (initial_evaluation_context srcs lay tx NONE)
+       mid n subs` by
+    simp[declared_storage_region_def, get_module_code_def, get_tenv_def,
+         lookup_var_slot_from_layout_def,
+         vyperInterpreterTheory.initial_evaluation_context_def] >>
+  simp[storage_dead_def]
 QED
 
 (* The epilogue's ALLOCA: its site starts at or past lo, and the bytes it
@@ -902,10 +893,10 @@ Proof
      pairTheory.FORALL_PROD] >>
   first_x_assum drule >> rw[] >>
   fs[deploy_evaluation_context_def] >>
-  qmatch_goalsub_abbrev_tac `storage_dead cx0 T _ _ _` >>
-  `(cx0 with in_deploy := T).nonreentrant_slot = SOME nkey` by simp[] >>
+  qmatch_asmsub_abbrev_tac `storage_layout_safe cx1` >>
+  `cx1.nonreentrant_slot = SOME nkey` by fs[Abbr `cx1`] >>
   drule_all nonreentrant_storage_dead_frame >> strip_tac >>
-  fs[storage_dead_in_deploy]
+  fs[Abbr `cx1`, storage_dead_in_deploy, storage_dead_created_in_tx]
 QED
 
 Theorem constructor_exit_run_ptr:
@@ -938,7 +929,7 @@ Proof
   drule_all constructor_exit_run >> strip_tac >>
   qexistsl_tac [`fuel`, `final`] >> simp[] >>
   `nr ==> ut` by simp[] >>
-  drule_all constructor_exit_code_ptr >> strip_tac >>
+  drule_all ctorReturnFrameTheory.constructor_exit_code >> strip_tac >>
   `body_cenv.ce_is_ctor /\
    (imm_len tops <> 0 ==> body_cenv.ce_imm_alloca = SOME imm /\
       (!x. imm = Var x ==> not_fresh_at st_epilogue x))` by

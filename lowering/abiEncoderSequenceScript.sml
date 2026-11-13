@@ -16,6 +16,8 @@ Definition abi_encoder_sequence_post_def:
     fresh_vars_wrt limit_st actual /\ abi_decode_frame d (LENGTH (enc at av)) initial actual /\
     actual.vs_allocas = initial.vs_allocas /\ actual.vs_alloca_next = initial.vs_alloca_next /\
     actual.vs_halted = initial.vs_halted /\
+    actual.vs_tx_ctx = initial.vs_tx_ctx /\ actual.vs_block_ctx = initial.vs_block_ctx /\
+    actual.vs_immutables = initial.vs_immutables /\ actual.vs_outcomes = initial.vs_outcomes /\
     (!op w. abi_decoder_operand_live st.cs_next_var op /\ eval_operand op initial = SOME w ==>
       eval_operand op actual = SOME w)
 End

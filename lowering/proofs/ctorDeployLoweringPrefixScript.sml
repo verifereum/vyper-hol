@@ -195,7 +195,8 @@ Proof
   dep_rewrite.DEP_REWRITE_TAC[deploy_prefix_send_value_ready] >>
   simp[e2eDeployDefsTheory.deploy_evaluation_context_def,
        initial_evaluation_context_def, initial_state_def,
-       vyperStateTheory.return_def] >> gvs[]
+       vyperStateTheory.return_def,
+       e2eDeployDefsTheory.value_transfer_created_in_tx] >> gvs[]
 QED
 
 Theorem deploy_prefix_no_start_nonpayable:
@@ -259,7 +260,7 @@ Theorem deploy_prefix_packaged_payable:
   vyperInterpreter$lookup_function NONE "__init__" Deploy tops =
     SOME (mut,F,args,[],NoneT,body) /\
   set_constructor_package_target rp.rpol_target
-    (package_constructor tops F (assign_nkeys tops 0) cf) =
+    (package_constructor tops T (K global_nonreentrant_slot) cf) =
     (ce,pa,pay,nr,key,ut,ss,ret) ==>
   pay = (mut = Payable)
 Proof
@@ -268,7 +269,7 @@ Proof
   strip_tac >> PairCases_on `cf` >>
   gvs[compileVyperTheory.ctor_named_init_def] >>
   qspecl_then [`tops`, `NONE`, `"__init__"`] mp_tac
-    ctorDeployInitcodeTheory.classify_functions_ctor_lookup >>
+    ctorDeployDefsTheory.classify_functions_ctor_lookup >>
   simp[] >> strip_tac >>
   gvs[compileVyperTheory.package_constructor_def,
       compileVyperTheory.set_constructor_package_target_def]
@@ -377,7 +378,8 @@ QED
 Theorem deploy_prefix_member_entry_label:
   !tops rp runtime unit fn.
   lower_vyper_deploy_unit tops rp runtime = SOME unit /\
-  supported_program tops /\ MEM fn unit.cu_context.ctx_functions ==>
+  supported_program tops /\ supported_program_deploy tops /\
+  MEM fn unit.cu_context.ctx_functions ==>
   fn_entry_label fn = SOME fn.fn_name
 Proof
   rpt gen_tac >> strip_tac >>
@@ -390,7 +392,7 @@ QED
 
 Theorem deploy_prefix_ctor_entry_label:
   !tops rp runtime unit src ce nr key ut imm lbl sa sb sj se sp sf fn.
-  supported_program tops /\
+  supported_program tops /\ supported_program_deploy tops /\
   deploy_ctor_code tops rp runtime unit
     (src,ce,nr,key,ut,imm,lbl,sa,sb,sj,se,sp,sf,fn) ==>
   fn_entry_label fn = SOME "__deploy"
@@ -491,7 +493,8 @@ Proof
   drule_all deploy_prefix_entry_callvalue >> strip_tac >>
   drule_all ctorDeployLoweringCodeTheory.deploy_ctor_code_exists >> strip_tac >>
   drule_all deploy_prefix_selected_guard >> strip_tac >>
-  `supported_program tops` by fs[ctorDeployDefsTheory.deploy_source_ok_def] >>
+  `supported_program tops /\ supported_program_deploy tops` by
+    fs[ctorDeployDefsTheory.deploy_source_ok_def] >>
   drule_all deploy_prefix_ctor_entry_label >> strip_tac >>
   irule deploy_prefix_context_guard_abort >>
   rpt (goal_assum (drule_at Any)) >> simp[]

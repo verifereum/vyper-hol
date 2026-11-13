@@ -815,7 +815,9 @@ Proof
   simp[Once exec_block_def] >>
   simp[Once step_inst_def] >>
   simp_tac (srw_ss()) [mk_inst_def] >>
-  simp[step_inst_base_def, is_terminator_def, jump_to_def]
+  once_rewrite_tac [step_inst_base_def] >>
+  simp_tac (srw_ss()) [] >>
+  simp[is_terminator_def, jump_to_def]
 QED
 
 (* Full single-block execution ending with JNZ *)
@@ -2181,8 +2183,8 @@ Proof
   conj_tac >- (
     gvs[fresh_vars_wrt_def, write_memory_with_expansion_def, LET_THM,
         emit_void_def, comp_bind_def, fresh_id_def, emit_def]) >>
-  simp[write_memory_with_expansion_def, LET_THM,
-       venomMemPropsTheory.eval_operand_with_memory]
+  rw[write_memory_with_expansion_def, LET_THM] >>
+  Cases_on `op` >> gvs[eval_operand_def, lookup_var_def]
 QED
 
 (* ===== ALLOCA ===== *)

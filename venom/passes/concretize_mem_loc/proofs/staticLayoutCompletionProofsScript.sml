@@ -5,30 +5,6 @@ Ancestors
   staticLayoutAllocatorProofs staticLayoutFoldProofs concretizeMemLocDefs
   staticLayoutDefs staticLayoutWf list finite_map arithmetic
 
-Theorem reserved_intervals_disjoint_sym_completion[local]:
-  !r1 r2.
-    reserved_intervals_disjoint r1 r2 <=>
-    reserved_intervals_disjoint r2 r1
-Proof
-  PairCases >> PairCases >>
-  simp[reserved_intervals_disjoint_def] >> metis_tac[]
-QED
-
-Theorem reserved_intervals_wf_insert_after[local]:
-  !prefix suffix r.
-    reserved_intervals_wf (prefix ++ suffix) /\
-    reserved_interval_wf r /\
-    EVERY (reserved_intervals_disjoint r) (prefix ++ suffix) ==>
-    reserved_intervals_wf (prefix ++ r::suffix)
-Proof
-  Induct_on `prefix`
-  >- simp[reserved_intervals_wf_def]
-  >> gen_tac >> rpt gen_tac >>
-  simp[reserved_intervals_wf_def] >> strip_tac >>
-  gvs[EVERY_APPEND] >>
-  metis_tac[reserved_intervals_disjoint_sym_completion]
-QED
-
 Theorem checked_preserved_intervals_aux_invariant:
   !items positions reserved occupied result.
     checked_preserved_intervals_aux items positions reserved occupied =
@@ -109,34 +85,6 @@ Proof
   simp[positive_preserved_item_def] >> metis_tac[]
 QED
 
-Theorem positive_preserved_item_elim[local]:
-  positive_preserved_item items positions (alloc,sz) interval ==>
-  MEM (alloc,sz) items /\ 0 < sz /\
-  ?pos. interval = (pos,sz) /\ FLOOKUP positions alloc = SOME pos
-Proof
-  simp[positive_preserved_item_def] >> metis_tac[]
-QED
-
-Theorem positive_preserved_item_tail_mono[local]:
-  positive_preserved_item items positions item interval ==>
-  positive_preserved_item (h::items) positions item interval
-Proof
-  simp[positive_preserved_item_def] >> metis_tac[]
-QED
-
-Theorem positive_preserved_item_lookup_NONE[local]:
-  FLOOKUP positions alloc = NONE ==>
-  ~positive_preserved_item items positions (alloc,sz) interval
-Proof
-  simp[positive_preserved_item_def] >> metis_tac[]
-QED
-
-Theorem positive_preserved_item_zero[local]:
-  ~positive_preserved_item items positions (alloc,0) interval
-Proof
-  simp[positive_preserved_item_def]
-QED
-
 Theorem checked_preserved_intervals_aux_relational[local]:
   !items positions reserved occupied result.
     checked_preserved_intervals_aux items positions reserved occupied =
@@ -180,18 +128,6 @@ Proof
   strip_tac >> simp[MEM_MAP] >> qexists `(alloc,sz)` >> simp[]
 QED
 
-Theorem all_distinct_item_key_unique[local]:
-  !items alloc sz1 sz2.
-    ALL_DISTINCT (MAP FST items) /\
-    MEM (alloc,sz1) items /\ MEM (alloc,sz2) items ==>
-    sz1 = sz2
-Proof
-  Induct_on `items`
-  >- simp[]
-  >> gen_tac >> PairCases_on `h` >> rpt gen_tac >> strip_tac
-  >> gvs[] >> metis_tac[item_key_MEM_MAP]
-QED
-
 Theorem completion_state_inv_insert[local]:
   ALL_DISTINCT (MAP FST items) /\ MEM (alloc,sz) items /\
   FLOOKUP positions alloc = NONE /\
@@ -205,7 +141,7 @@ Proof
        (fn th => assume_tac (MATCH_MP checked_first_fit_SOME th))
   >> gvs[completion_state_inv_def]
   >> rpt gen_tac >> strip_tac >> Cases_on `alloc' = alloc`
-  >- (`sz' = sz` by metis_tac[all_distinct_item_key_unique] >>
+  >- (`sz' = sz` by metis_tac[ALL_DISTINCT_MAP_FST_size_unique] >>
       gvs[FLOOKUP_UPDATE])
   >> gvs[FLOOKUP_UPDATE]
   >> qpat_x_assum
@@ -414,7 +350,7 @@ Proof
                   >- (rpt strip_tac >> Cases_on `x = 0` >> gvs[])
                   >> rpt gen_tac >> strip_tac
                   >> Cases_on `a = Allocation h.inst_id`
-                  >- (`sz = x` by metis_tac[all_distinct_item_key_unique]
+                  >- (`sz = x` by metis_tac[ALL_DISTINCT_MAP_FST_size_unique]
                       >> gvs[FLOOKUP_UPDATE]
                       >> qpat_x_assum `checked_first_fit occupied x = SOME x'`
                            (fn th => assume_tac (MATCH_MP checked_first_fit_SOME th))
@@ -974,7 +910,7 @@ Proof
           >- (rpt strip_tac >> Cases_on `x = 0` >> gvs[]) >>
           rpt gen_tac >> strip_tac >>
           Cases_on `a = Allocation h.inst_id`
-          >- (`sz = x` by metis_tac[all_distinct_item_key_unique] >>
+          >- (`sz = x` by metis_tac[ALL_DISTINCT_MAP_FST_size_unique] >>
               gvs[FLOOKUP_UPDATE] >>
               drule checked_first_fit_SOME >>
               simp[EVERY_MEM] >> metis_tac[]) >>

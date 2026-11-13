@@ -1,4 +1,62 @@
 {
+  "compiler_patches": [
+    {
+      "path": "bytecode/patches/5239-declared-variable-type.patch",
+      "sha256": "d1091e373ce08a9b814bd6fca18bdf260345d6d277e14b6774a8c14a32b6f3dd"
+    },
+    {
+      "path": "bytecode/patches/5254-inliner-retpc.patch",
+      "sha256": "492183e866961daed3a7df71f3e459770375e29493722c9195a3b89ad84c3690"
+    },
+    {
+      "path": "bytecode/patches/5280-target-subscript-overlap.patch",
+      "sha256": "d651564fb4f4c80622200381c597798cbbd40a0d53f75f90cd6482e64d6d3a8c"
+    },
+    {
+      "path": "bytecode/patches/5282-assign-rhs-snapshot.patch",
+      "sha256": "3b27fc33f684182ec094a6d143478af20b87764939d2598d9049b3f4632565d9"
+    },
+    {
+      "path": "bytecode/patches/5332-immutable-runtime-length.patch",
+      "sha256": "a4cb5d959ab4495c53c7c7d0f42b736be54958084318d3d7da4dc26140c4c67e"
+    },
+    {
+      "path": "bytecode/patches/5336-dft-abort-order.patch",
+      "sha256": "205d42895611d1b990fe7eca01eabab4ce01abf930acb96095f642f0a159cd1e"
+    },
+    {
+      "path": "bytecode/patches/5338-widen-bytestring-convert.patch",
+      "sha256": "f83fe33ded4fd11a22e31eeb45a5216ed52eef35a7cc2ab50f2e11de67126d37"
+    },
+    {
+      "path": "bytecode/patches/5344-uint2str-buffer.patch",
+      "sha256": "e9278c082882fa6207c9706a4a3917d2e49bfd29893762f0b999fa8a51b1e2c2"
+    },
+    {
+      "path": "bytecode/patches/5345-create-memory-effects.patch",
+      "sha256": "9cd14dc145d837020c2abd078b24d1ef4eb75e3d3c18b0304b50d865003afddf"
+    },
+    {
+      "path": "bytecode/patches/5347-sparse-storage-copy.patch",
+      "sha256": "3410db047077af1cf6f5f8f8a0cf1bd4d12df0492eab8655944a88e74e2bb0c5"
+    },
+    {
+      "path": "bytecode/patches/5349-dft-effectless-roots.patch",
+      "sha256": "af4c44342507cea5ba7765f237e9ba253e876a88af7d29f1d25197b60b458dc8"
+    },
+    {
+      "path": "bytecode/patches/5350-pop-subscript-overlap.patch",
+      "sha256": "467574e90e3d00e5fbff7fe421702e5c4e8f3ba58f560ace0b1007162a42f210"
+    },
+    {
+      "path": "bytecode/patches/5354-phi-origins.patch",
+      "sha256": "e6a53dbf955e2306f3b278c7b524d0a493fd0153ff330663dc6759e6922a04de"
+    },
+    {
+      "path": "bytecode/patches/local-dft-create-abort.patch",
+      "sha256": "0c4a28b798de3df8978a7ca2a1965c107a71f6322fa97c22e6aa7356642a5290"
+    }
+  ],
   "dependencies": {
     "cbor2": "5.9.0",
     "immutables": "0.21",
@@ -16,39 +74,53 @@
       "source_sha256": "eaa09b5ff8841cb17d20c4ce68b849a56e96c30aea675717002126a8199b8b45"
     },
     "call_memory_pop": {
-      "deploy_sha256": "617342b1c4dfd146df0b4f9d07df8c073da118255678b53ccbd77570f241c475",
+      "deploy_sha256": "cdc9a270b2774030d176a2efad593e7ef9b054f8aa41be6cfee1fdfad93ee524",
       "frontend_sha256": "43a067808924e8d164ef6c7d9b1a40d23419ea2cc1cd8035ef805032803710e2",
-      "runtime_sha256": "6e5c5463b66f466fcc973b5ebaa8d1030b93780a7285688deacdeaef39ee1f2a",
+      "runtime_sha256": "6704e354f93c26112fff9edf44a47668a64c085dcdf5fffd873f969888844b4d",
       "source": "sources/call_memory_pop.vy",
       "source_sha256": "a61eaaf9dd7ce9b820a8c9a169ea248473a94177dda0e8dfcc83ad032d45cec2"
     },
     "call_storage_read": {
-      "deploy_sha256": "5be6c5691eabe7d9c328f4ba7d8c19232d364685266abab366aa577b5f22848e",
+      "deploy_sha256": "b9c3e88727f6d37ebdaac2b9ad274bb26f9ad24eaf50a89d255aeb92f3a5f7cf",
       "frontend_sha256": "1015b3e33e31464ac8ddfd750656755594ae146ca6e03f8142141e34a17c65fe",
-      "runtime_sha256": "4fb0fa0ba355c7b0f8480d34738e59bf8340512a5e535f342c84c93eb45be443",
+      "runtime_sha256": "28f103fd38b982cbd625e1f45efe535cb79a828ca0f497bd13675e6149b03e65",
       "source": "sources/call_storage_read.vy",
       "source_sha256": "20612d051cb43abe4e8c42a3a392831f78db413f6e90aa49b537194e5bb43407"
     },
     "conditional_memory_view": {
-      "deploy_sha256": "63f4983da727aac6b70d89b673777e5c2740f717f1371c7b771f5656e9fd5099",
+      "deploy_sha256": "5eb37010c1b0b232a9dc421506a3a87197853c6475880449bb5004919dcdaaa5",
       "frontend_sha256": "7c066642536f02761237e922f73a771a83b83ad578a922aa8e081f22e98aa4b8",
-      "runtime_sha256": "55962a80a15fd709b637195ce07150f18960f88c97fe3d423fcf06b973a4a9fd",
+      "runtime_sha256": "a8a52c08e934a43ef7ac1bcefdf0dcba89cb70982ac29cad91e8db9885e8f28b",
       "source": "sources/conditional_memory_view.vy",
       "source_sha256": "651ba00cf9e4bc8d82f7734dbe8f37f413fef56cdb8ee215204077c796fd7c7f"
     },
     "conditional_snapshot": {
-      "deploy_sha256": "9abefc05b01bac8850253abcc43e0c9ebe05a2275501ac0a90259c4ed2e2f649",
+      "deploy_sha256": "7c36681a91bae53fb837eea775cfe496dfc26944da41768383dae131aa517dc2",
       "frontend_sha256": "79ff9f3291278bd35e510cfaf33f09580f96a934209ad8d06cdbe04c59c0d6fc",
-      "runtime_sha256": "06504848625b7c153c0e9188a3c3aba8a30a46d535bda8b3754d1ca9e6cc3e8c",
+      "runtime_sha256": "3df66bc45e18d5acb4c3f0c9a0758e747e14462408d8367729a5102e0ba49a1d",
       "source": "sources/conditional_snapshot.vy",
       "source_sha256": "20ba23272e7bb716a3c4f09421f9a23f238b1c57098e8f5b58c99e76ed17123f"
     },
     "pop_refill": {
-      "deploy_sha256": "0a25d8bf1af12b7a0b921141f692445dabf69c6fd76aa31961d19edaaab8f3ea",
+      "deploy_sha256": "bb09f535c96153a47faff10455a671b9f961b20234e052b29bddbcb5be12dc94",
       "frontend_sha256": "73ec5deeb4227c97a542d7ba390b03fab1802190c52858ba95b59d897a43530d",
-      "runtime_sha256": "707b4bad77aadfab040e92ae27ad96e3a8874610976963c96091c364e5e7a9c2",
+      "runtime_sha256": "61bfee4421bc100b906d59ffe0c68daa08344da85b58827fb1fafb783fff6abb",
       "source": "sources/pop_refill.vy",
       "source_sha256": "54d8d55c0a555b88bb0e87a11353e4a14aa2396e22b3e86d6931910a636ddc57"
+    },
+    "subscript_base_copy": {
+      "deploy_sha256": "b9d765a09fd06b7131db211aba66d4bcc2a591442616c829828489fdc2375abd",
+      "frontend_sha256": "7cecfe81d31b61a77ad98584e9366797fe791304bebadb62b0647b19e09b007d",
+      "runtime_sha256": "903c9498ba84a7b8702f347d94da21dce9503a796cb937bb08638f057877b013",
+      "source": "sources/subscript_base_copy.vy",
+      "source_sha256": "d67d81261609d1daf1a96b310a7acf5ca5ed1dea8ec18d51305a37f499a9db9f"
+    },
+    "subscript_base_live": {
+      "deploy_sha256": "6189009fe4991a0f04f91a9f7891882ea4b7dc6b9963f61c62c6a53034ccbad6",
+      "frontend_sha256": "c708e9fec7fba164c5355d39f269c61c018047989168a4adf4ff9b3c1e2f09ed",
+      "runtime_sha256": "19267fc303e55f2a03b2a0ea3d01e8f15e82f5abf64b72883901dc086a62e152",
+      "source": "sources/subscript_base_live.vy",
+      "source_sha256": "1f330f588e4ecfc0be5470a36946a994ad0187cfc74fb3c6abd7e664723778e5"
     }
   },
   "producer": "pinned Python Vyper",
@@ -69,6 +141,6 @@
     "venom_ir_pipeline": "O1"
   },
   "uv_version": "0.10.11",
-  "vyper_commit": "9362e36b145c4b63ceb6a893018ea970e78bf6a6",
-  "vyper_version": "0.5.0a4+9362e36b"
+  "vyper_commit": "577d2534356903076bb79b5b15ebd4d772994693",
+  "vyper_version": "0.5.0b1"
 }

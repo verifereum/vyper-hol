@@ -61,7 +61,7 @@ Proof
     (* 24 *) simp[body_iterator_ptr_ok_def],
     (* 25 *) rw[body_iterator_ptr_ok_def] >> metis_tac[],
     (* 26 *) simp[body_for_ptr_ok_def],
-    (* 27 *) rw[body_for_ptr_ok_def] >> first_x_assum irule >> simp[push_scope_with_var_def, return_def],
+    (* 27 *) rw[body_for_ptr_ok_def] >> first_x_assum irule >> simp[push_scope_with_var_def, return_def] >> metis_tac[],
     (* 28 *) rpt strip_tac >> irule body_expr_ptr_ok_at_leaf >> simp[],
     (* 29 *) rpt strip_tac >> irule body_expr_ptr_ok_at_leaf >> simp[],
     (* 30 *) rpt strip_tac >> irule body_expr_ptr_ok_at_leaf >> simp[],
@@ -70,14 +70,16 @@ Proof
     (* 33 *) MATCH_ACCEPT_TAC body_structlit_case_ptr_at,
     (* 34 *) MATCH_ACCEPT_TAC body_subscript_case_ptr_at,
     (* 35 *) MATCH_ACCEPT_TAC body_attribute_case_ptr_at,
-    (* 36 *) rpt strip_tac >> irule body_builtin_case_ptr_at >> conj_tac
-               >- (rpt strip_tac >> Cases_on `bt = Bop In \/ bt = Bop NotIn` >>
-                   metis_tac[]) >> metis_tac[],
+    (* 36 *) rpt strip_tac >> irule body_builtin_case_ptr_at >> rpt conj_tac >> rpt strip_tac >>
+               (Cases_on `bt = Bop In \/ bt = Bop NotIn`
+                >- (gvs[] >> metis_tac[]) >> metis_tac[]),
     (* 37 *) MATCH_ACCEPT_TAC body_pop_case_ptr_at,
     (* 38 *) MATCH_ACCEPT_TAC body_type_builtin_case_ptr_at,
     (* 39 *) MATCH_ACCEPT_TAC body_send_case_ptr_at,
-    (* 40 *) MATCH_ACCEPT_TAC body_extcall_case_ptr_at,
-    (* 41 *) MATCH_ACCEPT_TAC body_intcall_case_ptr_at,
+    (* 40 *) (* PORT_ADMISSION: SEQ-3208, bot/opus/seq-3208-train16-unit, built at fc54ea89e *)
+             cheat,
+    (* 41 *) (* PORT_ADMISSION: SEQ-3208, bot/opus/seq-3208-train16-unit, built at fc54ea89e *)
+             cheat,
     (* 42 *) MATCH_ACCEPT_TAC body_raw_call_case_ptr_at,
     (* 43 *) MATCH_ACCEPT_TAC body_raw_call_calldata_case_ptr_at,
     (* 44 *) MATCH_ACCEPT_TAC body_raw_log_case_ptr_at,

@@ -5,6 +5,16 @@ Ancestors bodyPtrIfExpNonwordSuffix bodyPtrIfExpWordMarked
   gasSummaryComposePtr fragGasSeqPtr vyperInterpreter vyperState
   vyperEvalExprPreservesScopesDom exprSimUnwrap exprSimWordArgs
 
+(* A conditional result is its operand or the value it reads to. *)
+Theorem ifexp_conditional_result_shape[local]:
+  conditional_result cx raw st = (INL tv,st') ==> tv = raw \/ ?v. tv = Value v
+Proof
+  Cases_on `raw` >>
+  rw[conditional_result_def, bind_def, return_def, raise_def, AllCaseEqs()] >>
+  gvs[] >> pop_assum mp_tac >> IF_CASES_TAC >>
+  simp[bind_def, return_def, AllCaseEqs()] >> rw[] >> simp[]
+QED
+
 Theorem ifexp_raw_marked_nonword_suffix:
   body_inv tops ctx ce cx /\
   expr_body_pre ce cx env (IfExp ty c a b) es_outer /\
@@ -38,7 +48,10 @@ Theorem ifexp_raw_marked_nonword_suffix:
     ptr_val_ok cx ty v op H tt u /\ ptr_buf_ok ce (IfExp ty c a b) op H u /\
     ghost_inv d ce cx (ee with gas_obs := []) H tt u /\
     ghost_kept ce es sa G0 tn0 s0 H tt /\
-    u.vs_current_bb = sd.cs_current_bb /\ u.vs_inst_idx = LENGTH sd.cs_current_insts
+    u.vs_current_bb = sd.cs_current_bb /\ u.vs_inst_idx = LENGTH sd.cs_current_insts /\
+    (!tv. tv = raw \/ tv = Value v ==>
+      vv_at ce cx ty sa sd (ee with gas_obs := []) tv
+        (LocatedValue ty (mk_ptr op LocMemory)) u)
 Proof
   strip_tac >>
   `?v. read_result cx raw (ee with gas_obs := []) =
@@ -99,11 +112,20 @@ Theorem ifexp_selected_nonword_marked:
     ptr_val_ok cx ty v op H tt u /\ ptr_buf_ok ce (IfExp ty c a b) op H u /\
     ghost_inv d ce cx (ee with gas_obs := []) H tt u /\
     ghost_kept ce es sa G0 tn0 s0 H tt /\
-    u.vs_current_bb = sd.cs_current_bb /\ u.vs_inst_idx = LENGTH sd.cs_current_insts
+    u.vs_current_bb = sd.cs_current_bb /\ u.vs_inst_idx = LENGTH sd.cs_current_insts /\
+    vv_at ce cx ty sa sd (ee with gas_obs := []) tv
+      (LocatedValue ty (mk_ptr op LocMemory)) u
 Proof
   disch_then (map_every assume_tac o CONJUNCTS) >>
   drule_all ifexp_raw_marked_nonword_suffix >> strip_tac >>
   drule_all ifexp_marked_conditional_source >> strip_tac >>
   drule_all ifexp_raw_marked_word_then >> strip_tac >>
-  goal_assum (drule_at Any) >> simp[]
+  `vv_at ce cx ty sa sd (ee with gas_obs := []) tv
+     (LocatedValue ty (mk_ptr op LocMemory)) u` by
+    (qpat_x_assum `!tv. _ ==> vv_at _ _ _ _ _ _ _ _ _` irule >>
+     qpat_assum `!tail. conditional_result _ _ _ = _`
+       (qspec_then `[]` assume_tac) >>
+     drule ifexp_conditional_result_shape >> rpt strip_tac >>
+     gvs[read_result_def, return_def]) >>
+  qexistsl_tac [`v`,`tv`,`u`,`H`,`tt`] >> simp[]
 QED

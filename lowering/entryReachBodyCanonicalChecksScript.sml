@@ -4,7 +4,7 @@ Ancestors
   externalEntryChecks moduleLoweringProps vyperCompiler venomInst
   loweringShapeDefs compileEnv selectedBodyCode venomWf moduleLowering
   loweringShapeProps compileVyper vyperLoweringCorrect entryDispatchProps
-  venomState venomExecSemantics entryChecksProps entryRegistrationOpen list pair
+  venomState venomExecSemantics entryChecksProps entryRegistrationOpen entryStateRel list pair
 Libs
   monadsyntax
 
@@ -82,11 +82,41 @@ Proof
     `registered`,`body_end`] >> simp[]
 QED
 
+Theorem external_name_keys_flat_source[local]:
+  !tops src.
+    FLAT (MAP (external_name_keys_toplevel src) tops) =
+    MAP (\name. (src,name))
+      (FLAT (MAP (\top. MAP SND (external_name_keys_toplevel () top)) tops))
+Proof
+  Induct_on `tops` >> simp[] >> Cases_on `h` >>
+  simp[vyperTypeContractTheory.external_name_keys_toplevel_def]
+  >~ [`FunctionDecl vis`] >- (
+    Cases_on `vis` >>
+    simp[vyperTypeContractTheory.external_name_keys_toplevel_def])
+  >~ [`VariableDecl kind`] >- (
+    Cases_on `kind` >>
+    simp[vyperTypeContractTheory.external_name_keys_toplevel_def])
+  >~ [`HashMapDecl kind`] >- (
+    Cases_on `kind` >>
+    simp[vyperTypeContractTheory.external_name_keys_toplevel_def])
+QED
+
+Theorem external_names_distinct_numeric_namespace[local]:
+  !tops src.
+    ALL_DISTINCT (FLAT (MAP (external_name_keys_toplevel src) tops)) ==>
+    ALL_DISTINCT (FLAT (MAP (external_name_keys_toplevel (NONE:num option)) tops))
+Proof
+  rpt gen_tac >> simp_tac std_ss [external_name_keys_flat_source] >> strip_tac >>
+  irule ALL_DISTINCT_MAP_INJ >> simp[] >>
+  drule ALL_DISTINCT_MAP >> simp[]
+QED
+
 Theorem entry_source_canonical_phase[local]:
   lower_vyper_runtime_unit tops rpolicy = SOME unit /\ supported_program tops /\
+  ALL_DISTINCT (FLAT (MAP (external_name_keys_toplevel (NONE:num option)) tops)) /\
   MEM (mut,F,rr,name,args,[],ret,fbody) (FST (classify_functions tops)) /\
   set_external_package_target rpolicy.rpol_target
-    (package_external_fn tops F (assign_nkeys tops 0)
+    (package_external_fn tops T (K global_nonreentrant_slot)
       (mut,F,rr,name,args,([]:expr list),ret,fbody)) =
     (lbl,ce,pos,mincd,pay,F,key,ut,iv,fbody,rt) /\
   isPREFIX "fn_" lbl /\ ~isPREFIX "@" lbl ==>
@@ -113,15 +143,16 @@ Theorem entry_source_canonical_phase[local]:
     (!inst. MEM inst (state_insts registered) ==> MEM inst (fn_insts func))
 Proof
   strip_tac >>
-  `ALL_DISTINCT (supported_function_names tops)` by
-    gvs[supportedProgramTheory.supported_program_def,
-        supportedNamesTheory.supported_declaration_names_def] >>
   drule classified_external_labels_distinct >> disch_tac >>
   qpat_x_assum `lower_vyper_runtime_unit _ _ = _` mp_tac >>
   simp[lower_vyper_runtime_unit_def] >>
   Cases_on `classify_functions tops` >> PairCases_on `r` >>
   rename1 `classify_functions tops = (exts,ints,fallback,ctor)` >>
   simp[] >> strip_tac >>
+  `~EXISTS external_has_defaults exts` by
+    (drule loweringShapePropsTheory.supported_program_no_external_defaults >>
+     simp[]) >>
+  pop_assum (fn th => RULE_ASSUM_TAC (REWRITE_RULE [th]) >> assume_tac th) >>
   `EVERY (\(sel,lbl,z). isPREFIX "fn_" lbl)
      (build_selectors (type_env tops) exts)` by
     simp[loweringShapePropsTheory.build_selectors_fn_labels] >>
@@ -149,12 +180,13 @@ QED
 Theorem entry_source_canonical_code:
   lower_vyper_runtime_unit tops rpolicy = SOME unit /\ supported_program tops /\
   valid_vyper_call tops tx cd ret /\
+  ALL_DISTINCT (FLAT (MAP (external_name_keys_toplevel NONE) tops)) /\
   vyperInterpreter$lookup_function NONE tx.function_name External tops =
     SOME (mut,F,args,[],ret,fbody) ==>
   ?lbl ce pos mincd pay key ut iv rt
    func se fb label_st dispatch_st checks start cenv registered body_end.
     set_external_package_target rpolicy.rpol_target
-      (package_external_fn tops F (assign_nkeys tops 0)
+      (package_external_fn tops T (K global_nonreentrant_slot)
         (mut,F,lookup_raw_return_or_F (NONE:num option) tx.function_name External tops,
          tx.function_name,args,([]:expr list),ret,fbody)) =
       (lbl,ce,pos,mincd,pay,F,key,ut,iv,fbody,rt) /\
@@ -182,7 +214,7 @@ Proof
   strip_tac >>
   `tx.function_name <> "__default__"` by
     fs[e2eDefsTheory.valid_vyper_call_def] >>
-  drule supported_entry_no_getters >> strip_tac >>
+  `supported_declaration_headers tops` by fs[supportedProgramTheory.supported_program_def] >>
   `MEM (mut,F,lookup_raw_return_or_F (NONE:num option) tx.function_name External tops,
         tx.function_name,args,[],ret,fbody) (FST (classify_functions tops))` by
     (irule external_lookup_raw_package_member >> simp[]) >>
@@ -191,6 +223,7 @@ Proof
     `tx.function_name`,`args`,`ret`,`fbody`] strip_assume_tac selected_external_package >>
   `isPREFIX "fn_" ("fn_" ++ tx.function_name) /\
    ~isPREFIX "@" ("fn_" ++ tx.function_name)` by simp[] >>
+  drule external_names_distinct_numeric_namespace >> disch_tac >>
   drule_all entry_source_canonical_phase >> strip_tac >>
   qexistsl_tac [`"fn_" ++ tx.function_name`,`cenv`,`pos_args`,`min_cds`,
     `is_payable`,`nkey`,`ut`,`iv`,`rt`,`func`,`se`,`fb`,`label_st`,
@@ -207,7 +240,7 @@ Theorem entry_canonical_checks_reached:
     SOME (mut,F,args,[],ret,fbody) ==>
   ?lbl ce pos mincd pay key ut iv rt func se checks start cenv registered body_end s.
     set_external_package_target rpolicy.rpol_target
-      (package_external_fn tops F (assign_nkeys tops 0)
+      (package_external_fn tops T (K global_nonreentrant_slot)
         (mut,F,lookup_raw_return_or_F (NONE:num option) tx.function_name External tops,
          tx.function_name,args,([]:expr list),ret,fbody)) =
       (lbl,ce,pos,mincd,pay,F,key,ut,iv,fbody,rt) /\
@@ -228,7 +261,10 @@ Theorem entry_canonical_checks_reached:
     (!fuel r. run_from fuel unit.cu_context func s = r /\ (!e. r <> Error e) ==>
       ?fuel'. run_context fuel' unit.cu_context vs = r)
 Proof
-  strip_tac >> drule_all entry_source_canonical_code >> strip_tac >>
+  strip_tac >>
+  `ALL_DISTINCT (FLAT (MAP (external_name_keys_toplevel (NONE:num option)) tops))` by
+    metis_tac[source_typing_ok_external_names_distinct] >>
+  drule_all entry_source_canonical_code >> strip_tac >>
   `~block_is_terminated checks` by simp[block_is_terminated_def] >>
   drule_all entry_checks_preserve_open >> strip_tac >>
   `lbl = "fn_" ++ tx.function_name` by

@@ -45,6 +45,27 @@ Proof
   rpt conj_tac
   >- metis_tac[not_fresh_at_mono]
   >- (rpt strip_tac >>
-      `aid < sb.cs_next_id` by decide_tac >> metis_tac[]) >>
-  metis_tac[]
+      `aid < sb.cs_next_id` by decide_tac >>
+      `FLOOKUP s1.vs_allocas aid = SOME (off,sz)` by res_tac >>
+      `i IN tn1.t_mem` by
+        (qpat_x_assum `!aid off sz i. FLOOKUP s1.vs_allocas aid = _ /\ _ ==> _`
+           (qspecl_then [`aid`,`off`,`sz`,`i`] mp_tac) >>
+         impl_tac >- (rpt conj_tac >> first_assum ACCEPT_TAC) >>
+         disch_then ACCEPT_TAC) >>
+      qpat_x_assum `!aid off sz i. FLOOKUP s0.vs_allocas aid = _ /\ _ ==> _`
+        (qspecl_then [`aid`,`off`,`sz`,`i`] mp_tac) >>
+      impl_tac >- (rpt conj_tac >> first_assum ACCEPT_TAC) >>
+      disch_then ACCEPT_TAC) >>
+  rpt strip_tac >>
+  `i IN tn1.t_mem` by
+    (qpat_x_assum `!n b sz i. local_region _ _ _ n b sz /\ _ /\ _ /\
+                     i IN tn2.t_mem ==> _`
+       (qspecl_then [`n`,`b`,`sz`,`i`] mp_tac) >>
+     impl_tac >- (rpt conj_tac >> first_assum ACCEPT_TAC) >>
+     disch_then ACCEPT_TAC) >>
+  qpat_x_assum `!n b sz i. local_region _ _ _ n b sz /\ _ /\ _ /\
+                  i IN tn1.t_mem ==> _`
+    (qspecl_then [`n`,`b`,`sz`,`i`] mp_tac) >>
+  impl_tac >- (rpt conj_tac >> first_assum ACCEPT_TAC) >>
+  disch_then ACCEPT_TAC
 QED

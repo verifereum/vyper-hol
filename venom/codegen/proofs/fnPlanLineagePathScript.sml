@@ -1,5 +1,5 @@
 Theory fnPlanLineagePath
-Ancestors
+Ancestors venomExecProofs
   fnPlanLineagePhiActivation fnPlanLineageLiveness fnPlanLineageDemandSupport
   fnPlanLineageInventory stackPlanGen livenessDefs
   livenessAnalysisProps cfgAnalysisProps removeUnusedProofs
@@ -23,7 +23,7 @@ Proof
   `LENGTH (collect_phis bb.bb_instructions) <= LENGTH bb.bb_instructions` by
     (qpat_assum `bb.bb_instructions = _` (mp_tac o AP_TERM ``LENGTH : instruction list -> num``) >> simp[]) >>
   `MEM v (live_vars_at (liveness_analyze fn) lbl (LENGTH (collect_phis bb.bb_instructions)))` by
-    (drule livenessAnalysisPropsTheory.live_vars_at_propagate_range >>
+    (drule livenessProofsTheory.live_vars_at_propagate_range >>
      disch_then (qspecl_then [`lbl`, `bb`, `LENGTH (collect_phis bb.bb_instructions)`,
        `a`, `v`] mp_tac) >>
      gvs[listTheory.EVERY_EL] >> metis_tac[]) >>
@@ -99,7 +99,7 @@ Proof
   conj_tac >- simp[] >>
   conj_tac >- simp[] >>
   `fn_reachable fn d` by
-    metis_tac[fn_dominates_dom_reachable_compute] >>
+    metis_tac[fn_dominates_dom_reachable] >>
   rewrite_tac[listTheory.EVERY_MEM] >> qx_gen_tac `lbl` >> strip_tac >>
   `fn_reachable fn lbl` by
     (irule is_fn_path_all_reachable >>
@@ -296,7 +296,7 @@ Proof
     (qspec_then `bb.bb_instructions` strip_assume_tac collect_phis_prefix >>
      qpat_assum `bb.bb_instructions = _`
        (mp_tac o AP_TERM ``LENGTH : instruction list -> num``) >> simp[]) >>
-  drule livenessAnalysisPropsTheory.live_vars_at_propagate_range >>
+  drule livenessProofsTheory.live_vars_at_propagate_range >>
   disch_then (qspecl_then [`d`, `bb`] mp_tac) >>
   simp[] >> disch_then irule >> simp[] >>
   qexists_tac `LENGTH bb.bb_instructions` >> simp[]
@@ -340,7 +340,7 @@ Proof
         qexistsl_tac [`bb`, `fn`, `EL j bb.bb_instructions`] >>
         simp[EL_MEM] >> decide_tac) >>
      gvs[venomInstTheory.inst_defs_def, EVERY_MEM]) >>
-  drule livenessAnalysisPropsTheory.live_vars_at_propagate_range >>
+  drule livenessProofsTheory.live_vars_at_propagate_range >>
   disch_then (qspecl_then [`d`, `bb`, `a`, `LENGTH bb.bb_instructions`, `v`] mp_tac) >>
   simp[] >> disch_then irule >> rpt strip_tac >>
   gvs[venomInstTheory.inst_defs_def] >>
@@ -673,8 +673,8 @@ Proof
       `MEM v (inst_uses (EL j' bb.bb_instructions))` by
         gvs[venomInstTheory.inst_uses_def, passSharedDefsTheory.MEM_operand_vars_eq_Var] >>
       `MEM v (live_vars_at (liveness_analyze fn) bb.bb_label j')` by
-        metis_tac[livenessAnalysisPropsTheory.live_vars_at_uses] >>
-      drule livenessAnalysisPropsTheory.live_vars_at_propagate_range >>
+        metis_tac[livenessProofsTheory.live_vars_at_uses] >>
+      drule livenessProofsTheory.live_vars_at_propagate_range >>
       disch_then (qspecl_then [`bb.bb_label`, `bb`, `SUC i`, `j'`, `v`] mp_tac) >>
       simp[] >> disch_then irule >>
       rpt strip_tac >> gvs[venomInstTheory.inst_defs_def] >>
@@ -697,7 +697,7 @@ Proof
   `MEM v (inst_uses (EL q ub.bb_instructions))` by
     gvs[venomInstTheory.inst_uses_def, passSharedDefsTheory.MEM_operand_vars_eq_Var] >>
   `MEM v (live_vars_at (liveness_analyze fn) ub.bb_label q)` by
-    metis_tac[livenessAnalysisPropsTheory.live_vars_at_uses] >>
+    metis_tac[livenessProofsTheory.live_vars_at_uses] >>
   irule analyzed_output_dominance_live_at_to_index >> simp[] >>
   conj_tac >- (qexists_tac `j` >> simp[]) >>
   qexistsl_tac [`ub.bb_label`, `ub`, `q`] >> simp[]
