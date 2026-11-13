@@ -15,9 +15,7 @@ Ancestors
   exprWordOperand exprSafeOperand exprSimCopy exprSimArrayIndex
   bodyPtrPopTargetSimArrayCase stmtReasonLitFragMemory emitHelper rich_list context venomState
   targetPlaceLive vyperStorageLayoutSafety exprPtrUnwrapTypedSize
-  bodyPtrPopTargetSimStorageHeader targetSubscriptStorage
-  vyperStoragePlaceProvenance vyperPlaceStoragePreservation
-  vyperStorageWritePreservation
+  bodyPtrPopTargetSimStorageHeader
 
 (* The posts here keep the source state as `em with gas_obs := []`; stripping
    gas_obs only inside target_post would split it from expr_post. *)
@@ -27,8 +25,6 @@ Theorem target_array_normal_suffix_ptr:
   target_pre cenv cx env (SubscriptTarget bt e) es /\
   type_place_target env bt = SOME (Type (ArrayT et bd)) /\
   well_typed_expr env e /\ is_int_type (expr_type e) /\
-  (!id. target_root bt = NameTarget id ==>
-    local_target_live cx id (SubscriptTarget bt e)) /\
   compile_get_target_ptr compile_expr cenv bt sa = ((bop,loc,SOME (ValPT (ArrayT et bd))),sm) /\
   lower_value compile_expr cenv (expr_type e) e sm = (idx,sn) /\
   compile_array_subscript bop idx (case bd of Fixed _ => F | Dynamic _ => T)
@@ -174,6 +170,8 @@ Resume target_array_normal_suffix_ptr[memory]:
      simp[vyperStateTheory.bind_def, return_def, raise_def, lift_sum_def,
        get_scopes_def, lift_option_type_def, AllCaseEqs()] >>
      Cases_on `read_memory_path x path` >> simp[return_def, raise_def]) >>
+  `target_pre cenv cx env (SubscriptTarget bt e) (es with gas_obs := gs)` by
+    fs[target_pre_def] >>
   drule_all (SRULE [target_root_def] target_index_local_source_ptr) >> simp[] >> strip_tac >>
   suspend "memory_typed"
 QED
@@ -236,8 +234,7 @@ Resume target_array_normal_suffix_ptr[memory_dynamic]:
     (irule target_readable_local_type_ptr >> metis_tac[]) >>
   `!en. lookup_scopes id ef.scopes = SOME en ==>
     ISL (evaluate_subscripts en.type en.value path)` by
-    (rpt strip_tac >> irule target_current_local_resolution_ptr >>
-     fs[target_root_def] >> metis_tac[]) >>
+    (rpt strip_tac >> gvs[]) >>
   drule_all target_index_dynamic_header_ptr >> simp[] >> strip_tac >>
   suspend "memory_dynamic_header"
 QED
@@ -318,15 +315,9 @@ QED
 
 Resume target_array_normal_suffix_ptr[storage_source]:
   `storage_layout_safe cx /\ contract_storage_well_formed cx ef` by
-    fs[expr_sim_inv_def] >>
-  drule_all (Q.INST [`fin` |-> `ef`] (SPEC_ALL eval_base_place_storage_ready)) >>
-  strip_tac >>
-  `storage_place_region cx (StoragePlace tr slot (ArrayTV etv bd))` by
-    (drule eval_base_place_region >> simp[storage_result_region_def]) >>
-  `slots_in_range (get_storage cx ef tr) (w2n slot) (ArrayTV etv bd)` by
-    (Cases_on `type_slot_size (ArrayTV etv bd) = 0`
-     >- metis_tac[zero_slot_size_slots_in_range] >>
-     irule storage_place_region_slots_in_range >> simp[]) >>
+    (qpat_x_assum `expr_sim_inv _ _ _ ef` mp_tac >>
+     simp[Once expr_sim_inv_def] >> metis_tac[]) >>
+  drule_all target_index_pure_storage_source_ptr >> strip_tac >>
   `op_taint un bop = {}` by (Cases_on `bop` >> fs[target_ptr_ok_def, op_taint_def]) >>
   `evaluate_type (get_tenv cx) (ArrayT et bd) = SOME (ArrayTV etv bd)` by
     fs[place_ptr_rel_def] >>
@@ -363,7 +354,7 @@ Resume target_array_normal_suffix_ptr[storage_fixed]:
 QED
 
 Resume target_array_normal_suffix_ptr[storage_fixed_code]:
-  `stmt_state_rel ctx func cenv cx ef u` by simp[] >>
+  `stmt_state_rel ctx func cenv cx ef u` by fs[expr_post_def] >>
   drule_all target_fixed_slot_array_continue_ptr >>
   disch_then (qspecl_then [`PG`, `cx_dead cx`] strip_assume_tac) >>
   (irule target_array_suffix_outcome_ptr >> simp[] >>
@@ -374,7 +365,7 @@ QED
 
 Resume target_array_normal_suffix_ptr[storage_dynamic]:
   gvs[] >>
-  `stmt_state_rel ctx func cenv cx ef u` by simp[] >>
+  `stmt_state_rel ctx func cenv cx ef u` by fs[expr_post_def] >>
   `stor_taint_ok cx un u` by fs[ghost_inv_def] >>
   `0 < type_slot_size (ArrayTV etv (Dynamic n))` by simp[type_slot_size_def] >>
   `key_taint (if tr then un.t_trans else un.t_stor) slot = {}` by
@@ -410,7 +401,7 @@ Resume target_array_normal_suffix_ptr[storage_dynamic_layout]:
 QED
 
 Resume target_array_normal_suffix_ptr[storage_dynamic_code]:
-  `stmt_state_rel ctx func cenv cx ef u` by simp[] >>
+  `stmt_state_rel ctx func cenv cx ef u` by fs[expr_post_def] >>
   drule_all target_live_dynamic_slot_array_continue_ptr >>
   disch_then (qspecl_then [`PG`, `cx_dead cx`] strip_assume_tac) >>
   `sb.cs_current_bb = sn.cs_current_bb` by fs[same_blocks_def] >>
@@ -421,7 +412,7 @@ Resume target_array_normal_suffix_ptr[storage_dynamic_code]:
   `LENGTH sn.cs_current_insts + LENGTH (emitted_insts sn sb) =
    LENGTH sb.cs_current_insts` by metis_tac[LENGTH_APPEND] >>
   (irule target_array_suffix_outcome_ptr >>
-   conj_tac >- simp[evaluation_state_component_equality] >>
+   conj_tac >- first_assum ACCEPT_TAC >>
    conj_tac >- metis_tac[] >>
    reverse conj_tac
    >- (disj2_tac >> qexistsl_tac [`tr`, `slot`, `etv`, `Dynamic n`, `i`] >> simp[NoAsms]) >>
