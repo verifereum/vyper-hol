@@ -4,6 +4,7 @@
    gives pointer safety of the run through it. *)
 Theory registrationGuardPtr
 Ancestors
+  fragGasOriginPtr fragGasOrigin fragGasSeqPtr fragGasSeqMem instMemFrontier
   calldataClampPtr calldataRegistrationExec moduleLowering abiDecoderLoopRegisters
   emitHelperProps
   abiDecoderClamp abiEncoder compileEnv loweringStateRelDefs emitHelper exprLoweringProps
@@ -172,7 +173,66 @@ Proof
 QED
 
 (* A passing guard, run from the end of its code's predecessor. *)
-Theorem registration_ptr_guard_ptr_frame:
+(* The guard's three scalar instructions, at their actual program counters. *)
+Theorem guard_scalar_indexed_origin[local]:
+  MEM opc [LT; ISZERO; ASSERT] /\
+  EVERY (\op. op_taint tn op = {} /\ op_prov G op = NONE) ops /\
+  lookup_block s.vs_current_bb fn.fn_blocks = SOME bb /\
+  get_instruction bb n = SOME (mk_inst id opc ops outs) /\
+  step_inst_base (mk_inst id opc ops outs) s = OK t /\
+  allocas_from lo s /\ ~ctx_has_dalloca ctx /\ ~s.vs_halted ==>
+  gas_origin_ptr_path (D,lo,explicit,ctx,fn,PG)
+    (s with vs_inst_idx := n,G,tn) []
+    (OK (t with vs_inst_idx := SUC n),
+     step_prov PG G (mk_inst id opc ops outs) t,
+     step_taint (mk_inst id opc ops outs) s t tn)
+Proof
+  strip_tac >>
+  qabbrev_tac `ins = mk_inst id opc ops outs` >>
+  `opc <> INVOKE /\ opc <> GAS /\ ~is_terminator opc` by
+    fs[MEM, is_terminator_def] >>
+  `step_inst 0 ctx ins s = OK t` by simp[Abbr `ins`,step_inst_non_invoke] >>
+  `t.vs_requests = s.vs_requests` by
+    (drule_all guard_scalar_state_frame >> strip_tac >> simp[]) >>
+  `step_inst_base ins (s with vs_inst_idx := n) = OK (t with vs_inst_idx := n)` by
+    simp[step_inst_inst_idx_indep,exec_result_map_def,Abbr `ins`,mk_inst_def] >>
+  `step_inst 0 ctx ins (s with vs_inst_idx := n) = OK (t with vs_inst_idx := n)` by
+    simp[step_inst_non_invoke,step_inst_inst_idx_indep,exec_result_map_def,Abbr `ins`,mk_inst_def] >>
+  `ptr_inst_ok D lo 0 ctx fn G tn ins (s with vs_inst_idx := n)` by
+    (`ptr_safe_step D lo 0 ctx fn PG G tn ins (s with vs_inst_idx := n)` by
+       (simp[Abbr `ins`] >> irule guard_scalar_step_safe >>
+        goal_assum $ drule_at (Pat `step_inst`) >>
+        simp[allocas_from_def]) >> fs[ptr_safe_step_def]) >>
+  `inst_mem_below_frontier ins (s with vs_inst_idx := n) /\
+   inst_dload_in_section ins (s with vs_inst_idx := n)` by
+    (fs[MEM] >> simp[Abbr `ins`,inst_mem_below_frontier_def,
+       memSafeRunTheory.inst_dload_in_section_def,source_memory_read_ranges_def,
+       source_memory_write_ranges_def,mk_inst_def]) >>
+  `~(s with vs_inst_idx := n).vs_halted /\
+   lookup_block (s with vs_inst_idx := n).vs_current_bb fn.fn_blocks = SOME bb /\
+   get_instruction bb (s with vs_inst_idx := n).vs_inst_idx = SOME ins` by
+    simp[Abbr `ins`] >>
+  `gas_path_mem_edge ctx fn (s with vs_inst_idx := n) 0
+    (OK (t with vs_inst_idx := SUC n))` by
+    (drule_all fragGasSeqMemTheory.straight_line_mem_edge >>
+     simp[Abbr `ins`,mk_inst_def]) >>
+  `gas_path_ptr_edge D lo ctx fn PG G tn (s with vs_inst_idx := n) 0
+    (step_prov PG G ins t) (step_taint ins s t tn)
+    (OK (t with vs_inst_idx := SUC n))` by
+    (drule_all fragGasSeqPtrTheory.straight_line_ptr_edge >>
+     simp[Abbr `ins`,mk_inst_def,step_prov_inst_idx,step_taint_inst_idx]) >>
+  `gas_origin_ptr_edge (D,lo,explicit,ctx,fn,PG)
+    (s with vs_inst_idx := n,G,tn) []
+    (OK (t with vs_inst_idx := SUC n),step_prov PG G ins t,step_taint ins s t tn)` by
+    (simp[gas_origin_ptr_edge_def] >>
+     metis_tac[fragGasOriginTheory.gas_path_mem_edge_zero_origin]) >>
+  `~t.vs_halted` by metis_tac[venomInstProofsTheory.step_preserves_halted] >>
+  drule (cj 2 gas_origin_ptr_path_rules) >>
+  disch_then (qspec_then `[]` mp_tac) >>
+  simp[cj 1 gas_origin_ptr_path_rules,Abbr `ins`]
+QED
+
+Theorem registration_ptr_guard_origin_frame:
   compile_abi_arg_ptr_guard CALLDATALOAD src (Lit 4w) sa = ((),sb) /\
   eval_operand src s = SOME w /\ ~(w <+ 4w) /\
   (!x. src = Var x ==> not_fresh_at sa x) /\
@@ -182,6 +242,9 @@ Theorem registration_ptr_guard_ptr_frame:
   ~s.vs_halted /\ s.vs_current_bb = sa.cs_current_bb /\
   s.vs_inst_idx = LENGTH sa.cs_current_insts ==>
   ?vars G' tn'.
+    (!D explicit. gas_origin_ptr_path (D,lo,explicit,ctx,fn,PG)
+      (s,G,tn) []
+      (OK (s with <|vs_vars := vars; vs_inst_idx := LENGTH sb.cs_current_insts|>),G',tn')) /\
     fresh_vars_wrt sb (s with vs_vars := vars) /\
     (!x. not_fresh_at sa x ==>
       FLOOKUP vars x = FLOOKUP s.vs_vars x /\
@@ -229,7 +292,7 @@ Proof
   suspend "ghosts"
 QED
 
-Resume registration_ptr_guard_ptr_frame[ghosts]:
+Resume registration_ptr_guard_origin_frame[ghosts]:
   `op_prov G1 (Var v0) = NONE /\ op_taint tn1 (Var v0) = {}` by
     (simp[Abbr `tn1`, Abbr `G1`, Abbr `i0`] >>
      irule guard_scalar_output_ghost >> simp[op_taint_def]) >>
@@ -259,11 +322,40 @@ Resume registration_ptr_guard_ptr_frame[ghosts]:
   qexistsl_tac [`s2.vs_vars`, `G3`, `tn3`] >>
   `s with vs_vars := s2.vs_vars = s2` by
     simp[Abbr `s2`, Abbr `s1`, update_var_def, venom_state_component_equality] >>
+  qpat_assum `s with vs_vars := s2.vs_vars = s2`
+    (fn th => pure_rewrite_tac[th]) >>
+  conj_tac >-
+    (rpt gen_tac >>
+     `gas_origin_ptr_path (D,lo,explicit,ctx,fn,PG)
+       (s with vs_inst_idx := LENGTH sa.cs_current_insts,G,tn) []
+       (OK (s1 with vs_inst_idx := SUC (LENGTH sa.cs_current_insts)),G1,tn1)` by
+       (simp[Abbr `G1`,Abbr `tn1`,Abbr `i0`] >> irule guard_scalar_indexed_origin >>
+        goal_assum $ drule_at Any >> simp[Abbr `i0`,op_taint_def,op_prov_def]) >>
+     `gas_origin_ptr_path (D,lo,explicit,ctx,fn,PG)
+       (s1 with vs_inst_idx := LENGTH sa.cs_current_insts + 1,G1,tn1) []
+       (OK (s2 with vs_inst_idx := SUC (LENGTH sa.cs_current_insts + 1)),G2,tn2)` by
+       (simp[Abbr `G2`,Abbr `tn2`,Abbr `i1`] >> irule guard_scalar_indexed_origin >>
+        goal_assum $ drule_at Any >> simp[Abbr `i1`,Abbr `s1`,update_var_def,allocas_from_def]) >>
+     `gas_origin_ptr_path (D,lo,explicit,ctx,fn,PG)
+       (s2 with vs_inst_idx := LENGTH sa.cs_current_insts + 2,G2,tn2) []
+       (OK (s2 with vs_inst_idx := SUC (LENGTH sa.cs_current_insts + 2)),G3,tn3)` by
+       (simp[Abbr `G3`,Abbr `tn3`,Abbr `i2`] >> irule guard_scalar_indexed_origin >>
+        goal_assum $ drule_at Any >>
+        simp[Abbr `i2`,Abbr `s2`,Abbr `s1`,update_var_def,allocas_from_def]) >>
+     `LENGTH sb.cs_current_insts = LENGTH sa.cs_current_insts + 3` by simp[] >>
+     qpat_assum `gas_origin_ptr_path _ (_,G,tn) _ _` mp_tac >>
+     qpat_assum `gas_origin_ptr_path _ (_,G1,tn1) _ _` mp_tac >>
+     qpat_assum `gas_origin_ptr_path _ (_,G2,tn2) _ _` mp_tac >>
+     qpat_assum `s.vs_inst_idx = _` mp_tac >>
+     qpat_assum `LENGTH sb.cs_current_insts = _` mp_tac >>
+     POP_ASSUM_LIST (K all_tac) >> rpt strip_tac >>
+     gvs[arithmeticTheory.ADD1] >>
+     metis_tac[gas_origin_ptr_path_append,APPEND_NIL]) >>
   simp[] >>
   suspend "parts"
 QED
 
-Resume registration_ptr_guard_ptr_frame[parts]:
+Resume registration_ptr_guard_origin_frame[parts]:
   qunabbrev_tac `s2` >> qunabbrev_tac `s1` >>
   rpt conj_tac
   >- (qunabbrev_tac `v1` >> qunabbrev_tac `v0` >> simp[] >>
@@ -319,4 +411,29 @@ Resume registration_ptr_guard_ptr_frame[parts]:
   simp[]
 QED
 
-Finalise registration_ptr_guard_ptr_frame
+Finalise registration_ptr_guard_origin_frame
+
+Theorem registration_ptr_guard_ptr_frame:
+  compile_abi_arg_ptr_guard CALLDATALOAD src (Lit 4w) sa = ((),sb) /\
+  eval_operand src s = SOME w /\ ~(w <+ 4w) /\
+  (!x. src = Var x ==> not_fresh_at sa x) /\
+  op_taint tn src = {} /\ op_prov G src = NONE /\
+  fn_has_code sa sb fn /\ fn_inst_ids_distinct fn /\ fresh_vars_wrt sa s /\
+  allocas_from lo s /\ ~ctx_has_dalloca ctx /\
+  ~s.vs_halted /\ s.vs_current_bb = sa.cs_current_bb /\
+  s.vs_inst_idx = LENGTH sa.cs_current_insts ==>
+  ?vars G' tn'.
+    fresh_vars_wrt sb (s with vs_vars := vars) /\
+    (!x. not_fresh_at sa x ==>
+      FLOOKUP vars x = FLOOKUP s.vs_vars x /\
+      FLOOKUP G' x = FLOOKUP G x /\ op_taint tn' (Var x) = op_taint tn (Var x)) /\
+    tn'.t_mem = tn.t_mem /\ tn'.t_stor = tn.t_stor /\
+    tn'.t_trans = tn.t_trans /\ tn'.t_imm = tn.t_imm /\
+    (!D. (!fuel. ptr_safe_run D lo fuel ctx fn PG G' tn'
+        (s with <|vs_vars := vars; vs_inst_idx := LENGTH sb.cs_current_insts|>)) ==>
+      !fuel. ptr_safe_run D lo fuel ctx fn PG G tn s)
+Proof
+  rpt strip_tac >> drule_all registration_ptr_guard_origin_frame >>
+  disch_then (qspec_then `PG` strip_assume_tac) >>
+  qexistsl_tac [`vars`,`G'`,`tn'`] >> simp[]
+QED

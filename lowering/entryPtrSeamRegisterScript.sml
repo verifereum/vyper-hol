@@ -1516,7 +1516,8 @@ Resume registration_argument_prepare_guarded_joint[guard]:
      simp[Abbr `t'`, fresh_vars_wrt_def]) >>
   `!D explicit. gas_origin_ptr_path (D,lo,explicit,ctx,fn,PG)
     (s,G,tn) [] (OK t',G',tn')` by
-    (qpat_assum `!D explicit. gas_origin_ptr_path _ (s,G,tn) _ _` mp_tac >>
+    (simp[Abbr `t'`] >>
+     qpat_assum `!D explicit. gas_origin_ptr_path _ (s,G,tn) _ _` mp_tac >>
      qpat_assum `!D explicit. gas_origin_ptr_path _ (t,H,u) _ _` mp_tac >>
      POP_ASSUM_LIST (K all_tac) >> rpt strip_tac >>
      metis_tac[gas_origin_ptr_path_append,APPEND_NIL]) >>
