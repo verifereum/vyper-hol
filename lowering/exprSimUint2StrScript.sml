@@ -3241,11 +3241,23 @@ Proof
         (qpat_x_assum `as_ptr_val _ _ _ = (vv,_)` mp_tac >>
          Cases_on `compile_uint2str x n (type_memory_bytes cenv (BaseT (StringT n))) sm` >>
          simp[exprLoweringTheory.as_ptr_val_def] >> metis_tac[]) >>
-      qpat_assum `expr_type e = _`
-        (fn th => mp_tac (Q.INST [`H` |-> `H0`, `v` |-> `v0`, `es'` |-> `es1`,
-                                  `gs` |-> `gs0`]
-                            (SPEC_ALL (REWRITE_RULE [th] uint2str_typed_path)))) >>
-      impl_tac >- (rpt conj_tac >> first_assum ACCEPT_TAC) >> strip_tac
+      `?m r. gas_marked_path F ctx func s m r /\
+         ((?t rv. r = OK t /\
+             builtin_result cx es1.accounts (BaseT (StringT n)) (Uint2Str n)
+               [BaseT (UintT k)] [v0] = INL rv /\
+             vv_post H0 ctx func cenv cx (Builtin (BaseT (StringT n)) (Uint2Str n) [e])
+               es sa sb s0 es1 (Value rv) vv t /\
+             t.vs_current_bb = sb.cs_current_bb /\
+             t.vs_inst_idx = LENGTH sb.cs_current_insts /\
+             t.vs_accounts = s.vs_accounts /\ t.vs_transient = s.vs_transient /\
+             t.vs_requests = s.vs_requests /\ t.vs_call_ctx = s.vs_call_ctx) \/
+          (exit_result r /\
+           expr_exit (builtin_result cx es1.accounts (BaseT (StringT n)) (Uint2Str n)
+             [BaseT (UintT k)] [v0]) r))` by
+        (qpat_assum `expr_type e = _`
+           (fn th => irule (REWRITE_RULE [th] uint2str_typed_path)) >>
+         goal_assum (drule_at Any) >> simp[] >> metis_tac[]) >>
+      pop_assum strip_assume_tac
       >- (qexistsl_tac [`m`, `r`] >> simp[] >> disj1_tac >>
           qexistsl_tac [`t`, `rv`] >> simp[] >>
           qx_gen_tac `H` >> strip_tac >>
