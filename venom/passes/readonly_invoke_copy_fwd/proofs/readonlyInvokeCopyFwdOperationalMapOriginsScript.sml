@@ -10,7 +10,8 @@ Ancestors
   readonlyInvokeCopyFwdHistorySelected readonlyInvokeCopyFwdHistoryOrigin
   readonlyInvokeCopyFwdHistoryInheritedLifecycle
   readonlyInvokeCopyFwdHistoryStackAlignment
-  readonlyInvokeCopyFwdRel internalReturnCopyFwdSim finite_map list rich_list pred_set
+  readonlyInvokeCopyFwdRel internalReturnCopyFwdSim o1LowerDloadOccurrence
+  finite_map list rich_list pred_set
 
 Definition ricf_saved_map_origins_def:
   ricf_saved_map_origins vs C ctx0 log stk U B maps <=>
@@ -45,6 +46,44 @@ Theorem ricf_saved_map_origins_tail:
 Proof
   rw[ricf_saved_map_origins_def] >>
   first_x_assum (qspec_then `SUC j` mp_tac) >> simp[]
+QED
+
+(* Allocation preserves every endpoint already recorded by an origin,
+   including origins observed at suspended caller states. *)
+Theorem ricf_translation_origin_sites_step:
+  ricf_translation_origin vs C ctx0 log stk PG G tn fn inst s U B key tr /\
+  occurrence_allocas_ok B a s0 /\ alloc_inst.inst_opcode = ALLOCA /\
+  step_inst fuel C alloc_inst s0 = OK u ==>
+  ricf_translation_origin vs C ctx0 log stk PG G tn fn inst s U
+    (occurrence_sites_step a B alloc_inst u) key tr
+Proof
+  rw[ricf_translation_origin_def] >>
+  qexistsl_tac [`p`, `pre`, `anchor`, `tail`, `atn`] >>
+  simp[] >> metis_tac[occurrence_sites_step_preserves]
+QED
+
+Theorem ricf_map_origins_sites_step:
+  ricf_map_origins vs C ctx0 log stk PG G tn fn inst s U B sites /\
+  occurrence_allocas_ok B a s0 /\ alloc_inst.inst_opcode = ALLOCA /\
+  step_inst fuel C alloc_inst s0 = OK u ==>
+  ricf_map_origins vs C ctx0 log stk PG G tn fn inst s U
+    (occurrence_sites_step a B alloc_inst u) sites
+Proof
+  rw[ricf_map_origins_def] >>
+  irule ricf_translation_origin_sites_step >> metis_tac[]
+QED
+
+Theorem ricf_saved_map_origins_sites_step:
+  ricf_saved_map_origins vs C ctx0 log stk U B maps /\
+  occurrence_allocas_ok B a s0 /\ alloc_inst.inst_opcode = ALLOCA /\
+  step_inst fuel C alloc_inst s0 = OK u ==>
+  ricf_saved_map_origins vs C ctx0 log stk U
+    (occurrence_sites_step a B alloc_inst u) maps
+Proof
+  rw[ricf_saved_map_origins_def] >>
+  first_x_assum (qspec_then `j` mp_tac) >> simp[] >> strip_tac >>
+  qexists_tac `sn` >> simp[] >>
+  irule ricf_map_origins_sites_step >> metis_tac[]
 QED
 
 Theorem ricf_translation_origin_selected:
