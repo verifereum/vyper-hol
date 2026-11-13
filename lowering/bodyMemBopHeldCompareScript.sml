@@ -112,7 +112,7 @@ QED
 
 Resume held_bytestring_compare_sim_mem[second]:
   markerLib.RESUME_TAC >>
-  qx_genl_tac [`marks`, `res`, `mid`, `t`] >> BETA_TAC >> strip_tac >>
+  rpt gen_tac >> BETA_TAC >> strip_tac >>
   `?H0. valid_horizon cx st0 H0 mid.storage_trace` by
     (qexists_tac `storage_trace_horizon mid.storage_trace` >>
      qpat_x_assum `storage_trace_domain cx st0 mid.storage_trace`
@@ -210,7 +210,7 @@ QED
 
 Resume held_bytestring_compare_sim_mem[third]:
   markerLib.RESUME_TAC >>
-  qx_genl_tac [`marks2`, `res2`, `mid'`, `t'`] >> BETA_TAC >> strip_tac >>
+  rpt gen_tac >> BETA_TAC >> strip_tac >>
   `?H1. valid_horizon cx st0 H1 mid'.storage_trace` by
     (qexists_tac `storage_trace_horizon mid'.storage_trace` >>
      qpat_x_assum `storage_trace_domain cx st0 mid'.storage_trace`

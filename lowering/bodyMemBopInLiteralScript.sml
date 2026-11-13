@@ -354,7 +354,7 @@ Resume literal_expr_sim_mem[normal]:
    pure_frame cenv func es sa s0 tt` by
     (strip_tac >>
      qpat_x_assum `_ ==> pure_frame cenv func es sa s0 tt` irule >>
-     fs[listTheory.EVERY_NOT_EXISTS]) >>
+     rpt conj_tac >> first_assum ACCEPT_TAC) >>
   `?H. valid_horizon cx st0 H es_end.storage_trace` by
     (qexists_tac `storage_trace_horizon es_end.storage_trace` >>
      first_assum ACCEPT_TAC) >>
