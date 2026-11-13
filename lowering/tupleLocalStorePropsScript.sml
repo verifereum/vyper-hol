@@ -5,6 +5,7 @@
  * TOP-LEVEL:
  *   assign_tuple_target_local, assign_tuple_target_list_local_cons,
  *     assign_tuple_target_list_length — the source writes
+ *   assign_tuple_target_list_locals_backends — local writes keep storage
  *   lookup_scopes_write_local_type — a write keeps every name's type
  *   tuple_store_local_step, tuple_store_locals_grows,
  *     tuple_store_locals_extends — the code of the stores
@@ -165,4 +166,16 @@ Proof
   rename1 `_ = (r1, es1)` >> Cases_on `r1` >> simp[] >> strip_tac >>
   drule assign_tuple_target_local >> simp[] >> strip_tac >>
   gvs[] >> metis_tac[]
+QED
+
+Theorem assign_tuple_target_list_locals_backends:
+  !ids cx vs es es'.
+    assign_tuple_target_list cx (MAP (BaseTarget o NameTarget) ids) vs es =
+      (INL (), es') ==>
+    es'.accounts = es.accounts /\ es'.tStorage = es.tStorage
+Proof
+  Induct >- (Cases_on `vs` >> simp[Once evaluate_def, return_def, raise_def]) >>
+  rpt gen_tac >> Cases_on `vs` >- simp[Once evaluate_def, raise_def] >>
+  strip_tac >> drule assign_tuple_target_list_local_cons >> strip_tac >>
+  gvs[] >> first_x_assum drule >> simp[]
 QED

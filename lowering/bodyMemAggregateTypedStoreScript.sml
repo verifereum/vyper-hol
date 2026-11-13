@@ -26,7 +26,7 @@ Theorem aggregate_typed_store_path_mem:
   s.vs_current_bb = su.cs_current_bb /\ s.vs_inst_idx = LENGTH su.cs_current_insts /\
   eval_operand dst s = SOME dw /\ eval_operand src s = SOME sw /\
   (!x. dst = Var x \/ src = Var x ==> not_fresh_at su x) /\
-  expr_post ctx func ce cx e es' (sa with cs_next_var := sm.cs_next_var)
+  expr_post H ctx func ce cx e es' (sa with cs_next_var := sm.cs_next_var)
     su r es' v op s /\
   sm.cs_next_var <= su.cs_next_var /\
   local_ptrs_reserved ce sm /\ local_ptrs_reserved ce su /\
@@ -40,7 +40,7 @@ Theorem aggregate_typed_store_path_mem:
   fn_inst_ids_distinct fn /\ alloca_history fn s ==>
   ?q. gas_path_mem ctx fn s 0 (OK q) /\
     val_in_memory dtv v (w2n dw) q.vs_memory /\
-    stmt_state_rel ctx func ce cx es' q /\
+    stmt_state_rel H ctx func ce cx es' q /\
     ~q.vs_halted /\ q.vs_current_bb = sb.cs_current_bb /\
     q.vs_inst_idx = LENGTH sb.cs_current_insts /\
     (!z a. not_fresh_at sm z /\ lookup_var z r = SOME a ==> lookup_var z q = SOME a) /\
@@ -53,7 +53,9 @@ Theorem aggregate_typed_store_path_mem:
       (a+len <= w2n dw \/ w2n dw+type_memory_size dtv <= a) ==>
       mem_bytes_at a len q.vs_memory = mem_bytes_at a len r.vs_memory) /\
     locals_kept ce es' es' r q /\ alloca_history fn q /\
-    q.vs_alloca_next = s.vs_alloca_next
+    q.vs_alloca_next = s.vs_alloca_next /\
+    q.vs_accounts = s.vs_accounts /\ q.vs_transient = s.vs_transient /\
+    q.vs_requests = s.vs_requests /\ q.vs_call_ctx = s.vs_call_ctx
 Proof
   disch_then (map_every assume_tac o CONJUNCTS) >>
   drule_all compile_store_memory_typed_path_mem >>
