@@ -1791,7 +1791,13 @@ Proof
        (qpat_x_assum `!id. _ \/ _ ==> FLOOKUP t.vs_allocas id = _`
           (qspec_then `id` mp_tac) >> simp[]) >>
      `first.cs_next_id <= id` by decide_tac >>
-     metis_tac[optionTheory.NOT_NONE_SOME]) >>
+     qpat_x_assum `!id. mid.cs_next_id <= id ==> FLOOKUP ready.vs_allocas id = NONE`
+       (qspec_then `id` mp_tac) >>
+     impl_tac >- decide_tac >>
+     qpat_x_assum `FLOOKUP t.vs_allocas id = FLOOKUP ready.vs_allocas id`
+       (fn th => rewrite_tac[GSYM th]) >>
+     qpat_x_assum `FLOOKUP t.vs_allocas id = SOME _` (fn th => rewrite_tac[th]) >>
+     rewrite_tac[optionTheory.NOT_SOME_NONE]) >>
   `t.vs_call_ctx = s.vs_call_ctx /\ t.vs_data_section = s.vs_data_section` by
     (qpat_x_assum `abi_decode_footprint_frame _ ready t`
        (strip_assume_tac o REWRITE_RULE [abiDecoderFrameTheory.abi_decode_footprint_frame_def]) >>
