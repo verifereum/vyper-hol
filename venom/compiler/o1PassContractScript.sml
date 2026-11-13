@@ -722,15 +722,18 @@ End
 
 (* How a stage run's input state may differ from its output state: in the
    GAS-reading oracle (NONE), and for FmpLowering (SOME fmp) also in the
-   free-memory pointers, which are fmp before the lowering.  The lowered
-   code's pointer is then above every static access and at most fmp. *)
+   free-memory pointers, which are fmp before the lowering.  Every output
+   state starts its free memory at or above the output's static layout
+   end (ConcretizeMemLoc's DALLOCA region needs it); FmpLowering's is
+   also at most fmp. *)
 Definition fmp_variant_def:
   fmp_variant NONE s s' = gas_variant s s' /\
   fmp_variant (SOME fmp) s s' = raw_variant fmp s s'
 End
 
 Definition fmp_variant_room_def:
-  fmp_variant_room NONE (C : venom_context) (s : venom_state) = T /\
+  fmp_variant_room NONE (C : venom_context) (s : venom_state) =
+    (!eom. max_live_eom C = SOME eom ==> eom <= w2n s.vs_initial_fmp) /\
   fmp_variant_room (SOME fmp) C s =
     ((!eom. max_live_eom C = SOME eom ==> eom <= w2n s.vs_initial_fmp) /\
      w2n s.vs_initial_fmp <= w2n (fmp : bytes32))

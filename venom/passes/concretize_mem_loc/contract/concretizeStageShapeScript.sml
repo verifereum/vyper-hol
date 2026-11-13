@@ -502,6 +502,77 @@ Proof
   gvs[o1_ctx_shape_def, o1_fn_shape_def, EVERY_MEM] >> metis_tac[]
 QED
 
+(* ssa_form of the output: each rewritten instruction keeps its outputs
+   or has none (a NOP), and dropping NOPs only removes outputs. *)
+Theorem concretize_positions_outputs_cases[local]:
+  (concretize_inst_with_positions positions inst).inst_outputs =
+    inst.inst_outputs \/
+  (concretize_inst_with_positions positions inst).inst_outputs = []
+Proof
+  Cases_on `inst.inst_opcode = ALLOCA` >>
+  simp[concretize_inst_with_positions_def] >>
+  Cases_on `inst.inst_outputs` >> simp[] >>
+  rename1 `out::rest` >> Cases_on `rest` >> simp[] >>
+  Cases_on `FLOOKUP positions (Allocation inst.inst_id)` >>
+  simp[mk_assign_inst_def, mk_nop_inst_def]
+QED
+
+Theorem concretize_positions_outputs_mem[local]:
+  MEM x (FLAT (MAP (\i. i.inst_outputs)
+           (FILTER (\i. i.inst_opcode <> NOP)
+              (MAP (concretize_inst_with_positions positions) l)))) ==>
+  MEM x (FLAT (MAP (\i. i.inst_outputs) l))
+Proof
+  rw[MEM_FLAT, MEM_MAP, MEM_FILTER, PULL_EXISTS] >>
+  rename1 `MEM i l` >>
+  strip_assume_tac
+    (Q.INST [`inst` |-> `i`] concretize_positions_outputs_cases) >>
+  gvs[] >> metis_tac[]
+QED
+
+Theorem concretize_positions_ssa_form:
+  ssa_form fn ==> ssa_form (concretize_function_with_positions positions fn)
+Proof
+  simp[ssa_form_def, concretize_positions_insts] >>
+  qspec_tac (`fn_insts fn`, `l`) >>
+  Induct >> simp[] >> rpt strip_tac >>
+  strip_assume_tac
+    (Q.INST [`inst` |-> `h`] concretize_positions_outputs_cases) >>
+  rw[] >> gvs[ALL_DISTINCT_APPEND] >>
+  metis_tac[concretize_positions_outputs_mem]
+QED
+
+Theorem concretize_step_ssa_form:
+  fn_pass_step rpolicy (CFP_Simple VP_ConcretizeMemLoc) observed s fn out /\
+  ssa_form fn ==>
+  ssa_form out.fpo_function
+Proof
+  strip_tac >>
+  `execute_configured_fn_pass rpolicy (CFP_Simple VP_ConcretizeMemLoc)
+     observed s fn = SOME out` by fs[fn_pass_step_def] >>
+  Cases_on `fn.fn_eom`
+  >- (gvs[execute_configured_fn_pass_concretize, AllCaseEqs()] >>
+      drule_all concretize_function_fresh_positions >> strip_tac >> gvs[] >>
+      drule concretize_positions_ssa_form >>
+      disch_then (qspec_then `layout.cl_positions` mp_tac) >>
+      simp[ssa_form_def, fn_insts_def, apply_context_concretize_layout_def,
+           apply_concretize_layout_def]) >>
+  `fn_has_static_layout fn` by fs[fn_has_static_layout_def] >>
+  qpat_x_assum `execute_configured_fn_pass _ _ _ _ _ = _` mp_tac >>
+  asm_simp_tac (srw_ss()) [concretize_function_fuel_in_context_def] >>
+  IF_CASES_TAC >> simp[] >> strip_tac >> gvs[]
+QED
+
+Theorem concretize_stage_ssa_form:
+  ctx_pass_stage rpolicy (CFP_Simple VP_ConcretizeMemLoc) view C C' /\
+  EVERY ssa_form C.ctx_functions ==>
+  EVERY ssa_form C'.ctx_functions
+Proof
+  strip_tac >> simp[EVERY_MEM] >> rpt strip_tac >>
+  drule_all concretize_stage_member >> strip_tac >> gvs[EVERY_MEM] >>
+  irule concretize_step_ssa_form >> metis_tac[]
+QED
+
 (* The rewrite adds only ASSIGN and NOP, so it adds no FMP opcode. *)
 Theorem concretize_step_pre_fmp_ops:
   fn_pass_step rpolicy (CFP_Simple VP_ConcretizeMemLoc) observed s fn out /\

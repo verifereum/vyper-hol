@@ -97,7 +97,8 @@ Proof
   simp[lowerDloadDefsTheory.dload_offset_ok_def]
 QED
 
-(* Pruning drops functions, so it keeps the DLOAD headroom bound. *)
+(* Pruning drops functions, so it keeps the DLOAD headroom bound and
+   adds no DALLOCA. *)
 Theorem ctx_dload_count_prune:
   ctx_dload_count (prune_unit_fcg_unreachable unit fcg).cu_context <=
   ctx_dload_count unit.cu_context
@@ -113,7 +114,10 @@ Theorem dload_headroom_ok_prune:
   dload_headroom_ok (prune_unit_fcg_unreachable unit fcg).cu_context fn inst s
 Proof
   simp[lowerDloadDefsTheory.dload_headroom_ok_def] >>
-  mp_tac ctx_dload_count_prune >> decide_tac
+  mp_tac ctx_dload_count_prune >>
+  simp[prune_unit_fcg_unreachable_def, listTheory.EXISTS_MEM,
+       listTheory.MEM_FILTER, PULL_EXISTS] >>
+  rpt strip_tac >> res_tac >> decide_tac
 QED
 
 Theorem o1_fn_passes_steps:
@@ -606,8 +610,7 @@ Theorem o1_walk_stages_sim:
      o1_inv D (LENGTH o1_fn_passes) (stage (LENGTH o1_fn_passes)) vs_out)
 Proof
   strip_tac >>
-  drule o1_walk_stages_max_live_eom >>
-  disch_then (fn th => assume_tac (Q.SPEC `1` th) >> assume_tac (Q.SPEC `6` th)) >>
+  drule o1_walk_stages_max_live_eom >> strip_tac >>
   `!k vs. k < LENGTH o1_fn_passes /\ o1_run_state_ok vs ==>
     ?vi. fmp_variant (if k = 3 then SOME fmp else NONE) vi vs /\
       (o1_inv D k (stage k) vi /\
@@ -623,34 +626,78 @@ Proof
       EVERY (o1_fn_row (SUC k)) (stage (SUC k)).ctx_functions` by simp[] >>
      first_x_assum (qspecl_then [`stage k`, `stage (SUC k)`, `vs`] mp_tac) >>
      simp[]) >>
+  (* MakeSSA's and LowerDload's runs (k < 2) keep their input state: their
+     plain contracts need no headroom. *)
+  `!k vs. k < 2 /\ o1_run_state_ok vs /\ o1_inv D k (stage k) vs ==>
+     ctx_sim_fuel (pass_fuel (EL k o1_fn_passes) (stage (SUC k))) D (stage k) (stage (SUC k)) vs vs /\
+     o1_inv D (SUC k) (stage (SUC k)) vs` by
+    (rpt gen_tac >> strip_tac >>
+     `o1_run_contract rpolicy D k` by
+       (`k = 0 \/ k = 1` by decide_tac >> pop_assum strip_assume_tac >>
+        gvs[o1_contract_make_ssa_1, o1_contract_lower_dload]) >>
+     fs[o1_run_contract_def, o1_stage_contract_def, o1_pre_def] >>
+     `k < LENGTH o1_fn_passes /\ SUC k <= LENGTH o1_fn_passes` by
+       simp[o1_fn_passes_def] >>
+     `EVERY (o1_fn_row k) (stage k).ctx_functions /\
+      EVERY (o1_fn_row (SUC k)) (stage (SUC k)).ctx_functions` by simp[] >>
+     first_x_assum (qspecl_then [`stage k`, `stage (SUC k)`, `vs`] mp_tac) >>
+     simp[]) >>
   `LENGTH o1_fn_passes = 9` by simp[o1_fn_passes_def] >>
   gvs[] >>
+  `max_live_eom (stage 3) = max_live_eom (stage 9) /\
+   max_live_eom (stage 4) = max_live_eom (stage 9) /\
+   max_live_eom (stage 5) = max_live_eom (stage 9) /\
+   max_live_eom (stage 6) = max_live_eom (stage 9) /\
+   max_live_eom (stage 7) = max_live_eom (stage 9) /\
+   max_live_eom (stage 8) = max_live_eom (stage 9)` by
+    (qpat_x_assum `!j. _`
+       (fn th => map_every (fn n => mp_tac (Q.SPEC n th))
+                   [`0`, `1`, `2`, `3`, `4`, `5`, `6`]) >>
+     simp[]) >>
+  (* Every run but FmpLowering's, with the headroom of the last stage's
+     layout end carried along the GAS variants. *)
   `!k vs. k < 9 /\ k <> 3 /\ o1_run_state_ok vs ==>
     ?vi. gas_variant vi vs /\
-      (o1_inv D k (stage k) vi ==>
+      (o1_inv D k (stage k) vi /\ (!eom. max_live_eom (stage 9) = SOME eom ==> eom <= w2n vi.vs_initial_fmp) ==>
        ctx_sim_fuel (pass_fuel (EL k o1_fn_passes) (stage (SUC k))) D (stage k) (stage (SUC k)) vi vs /\
-       o1_inv D (SUC k) (stage (SUC k)) vs)` by
-    (rpt strip_tac >>
-     first_x_assum (qspecl_then [`k`, `vs`] mp_tac) >>
-     simp[fmp_variant_def, fmp_variant_room_def]) >>
-  (* 0..3 first: the 4..9 fact is used first, as the newest assumption. *)
+       o1_inv D (SUC k) (stage (SUC k)) vs /\ (!eom. max_live_eom (stage 9) = SOME eom ==> eom <= w2n vs.vs_initial_fmp))` by
+    (rpt strip_tac >> Cases_on `k < 2`
+     >- (qexists_tac `vs` >> simp[gas_variant_refl] >> strip_tac >>
+         qpat_x_assum `!k vs. k < 2 /\ _ ==> _`
+           (qspecl_then [`k`, `vs`] mp_tac) >> simp[]) >>
+     qpat_x_assum `!k vs. k < 9 /\ o1_run_state_ok vs ==> _`
+       (qspecl_then [`k`, `vs`] mp_tac) >>
+     simp[fmp_variant_def] >> strip_tac >>
+     qexists_tac `vi` >> simp[] >> strip_tac >>
+     `vs.vs_initial_fmp = vi.vs_initial_fmp` by
+       metis_tac[gas_variant_initial_fmp] >>
+     `max_live_eom (stage (SUC k)) = max_live_eom (stage 9)` by
+       (`k = 2 \/ k = 4 \/ k = 5 \/ k = 6 \/ k = 7 \/ k = 8` by decide_tac >>
+        pop_assum strip_assume_tac >> gvs[]) >>
+     `fmp_variant_room NONE (stage (SUC k)) vs` by gvs[fmp_variant_room_def] >>
+     `ctx_sim_fuel (pass_fuel (EL k o1_fn_passes) (stage (SUC k))) D (stage k) (stage (SUC k)) vi vs /\
+      o1_inv D (SUC k) (stage (SUC k)) vs` by (first_x_assum irule >> simp[]) >>
+     simp[]) >>
   `!vo. o1_run_state_ok vo ==>
      ?vi. gas_variant vi vo /\
-       (o1_inv D 0 (stage 0) vi ==>
-        ctx_sim_fuel I D (stage 0) (stage 3) vi vo /\ o1_inv D 3 (stage 3) vo)` by
+       (o1_inv D 0 (stage 0) vi /\ (!eom. max_live_eom (stage 9) = SOME eom ==> eom <= w2n vi.vs_initial_fmp) ==>
+        ctx_sim_fuel I D (stage 0) (stage 3) vi vo /\ o1_inv D 3 (stage 3) vo /\ (!eom. max_live_eom (stage 9) = SOME eom ==> eom <= w2n vo.vs_initial_fmp))` by
     (rpt strip_tac >>
      irule (SIMP_RULE (srw_ss()) [o1_fn_passes_def, pass_fuel_def]
-              (Q.SPEC `3` gas_stages_compose)) >>
+              (Q.INST [`Inv` |-> `\k C v. o1_inv D k C v /\ (!eom. max_live_eom (stage 9) = SOME eom ==> eom <= w2n v.vs_initial_fmp)`]
+                 (Q.SPEC `3` gas_stages_compose))) >>
      simp[] >> rpt strip_tac >> first_x_assum irule >> simp[]) >>
   `!vo. o1_run_state_ok vo ==>
      ?vi. gas_variant vi vo /\
-       (o1_inv D 4 (stage 4) vi ==>
-        ctx_sim_fuel (cfg_norm_fuel (stage 9)) D (stage 4) (stage 9) vi vo /\ o1_inv D 9 (stage 9) vo)` by
+       (o1_inv D 4 (stage 4) vi /\ (!eom. max_live_eom (stage 9) = SOME eom ==> eom <= w2n vi.vs_initial_fmp) ==>
+        ctx_sim_fuel (cfg_norm_fuel (stage 9)) D (stage 4) (stage 9) vi vo /\ o1_inv D 9 (stage 9) vo /\ (!eom. max_live_eom (stage 9) = SOME eom ==> eom <= w2n vo.vs_initial_fmp))` by
     (rpt strip_tac >>
      irule (SIMP_RULE (srw_ss()) [o1_fn_passes_def, pass_fuel_def]
-              (Q.SPEC `9` gas_stages_compose)) >>
+              (Q.INST [`Inv` |-> `\k C v. o1_inv D k C v /\ (!eom. max_live_eom (stage 9) = SOME eom ==> eom <= w2n v.vs_initial_fmp)`]
+                 (Q.SPEC `9` gas_stages_compose))) >>
      simp[] >> rpt strip_tac >> first_x_assum irule >> simp[]) >>
-  first_x_assum (qspec_then `vs_out` mp_tac) >> simp[] >>
+  qpat_x_assum `!vo. o1_run_state_ok vo ==> ?vi. gas_variant vi vo /\ (o1_inv D 4 _ _ /\ _ ==> _)`
+    (qspec_then `vs_out` mp_tac) >> simp[] >>
   disch_then (qx_choose_then `v4` strip_assume_tac) >>
   `o1_run_state_ok v4` by metis_tac[gas_variant_run_state_ok] >>
   qpat_x_assum `!k vs. k < 9 /\ o1_run_state_ok vs ==> _`
@@ -658,14 +705,24 @@ Proof
   simp[fmp_variant_def] >>
   disch_then (qx_choose_then `v3` strip_assume_tac) >>
   `o1_run_state_ok v3` by metis_tac[raw_variant_run_state_ok] >>
-  first_x_assum (qspec_then `v3` mp_tac) >> simp[] >>
+  qpat_x_assum `!vo. o1_run_state_ok vo ==> ?vi. gas_variant vi vo /\ (o1_inv D 0 _ _ /\ _ ==> _)`
+    (qspec_then `v3` mp_tac) >> simp[] >>
   disch_then (qx_choose_then `vi` strip_assume_tac) >>
   qexists_tac `vi` >> conj_tac
   >- metis_tac[gas_raw_variant_trans, raw_gas_variant_trans] >>
-  strip_tac >> gvs[] >>
+  strip_tac >>
+  `v4.vs_initial_fmp = vs_out.vs_initial_fmp /\
+   vi.vs_initial_fmp = v3.vs_initial_fmp` by
+    metis_tac[gas_variant_initial_fmp] >>
+  `v3.vs_initial_fmp = fmp` by
+    (fs[raw_variant_def] >> imp_res_tac gas_variant_initial_fmp >> fs[]) >>
+  `!eom. max_live_eom (stage 9) = SOME eom ==>
+     eom <= w2n vs_out.vs_initial_fmp /\ w2n vs_out.vs_initial_fmp <= w2n fmp` by
+    fs[fmp_variant_room_def] >>
+  `(!eom. max_live_eom (stage 9) = SOME eom ==> eom <= w2n vi.vs_initial_fmp)` by (rpt strip_tac >> first_x_assum drule >> gvs[]) >>
+  `(!eom. max_live_eom (stage 9) = SOME eom ==> eom <= w2n v4.vs_initial_fmp)` by (rpt strip_tac >> first_x_assum drule >> gvs[]) >>
   `fmp_variant_room (SOME fmp) (stage 4) v4` by
-    (imp_res_tac gas_variant_initial_fmp >> gvs[fmp_variant_room_def] >>
-     metis_tac[]) >>
+    (gvs[fmp_variant_room_def] >> metis_tac[]) >>
   gvs[pass_fuel_def] >>
   metis_tac[ctx_sim_fuel_trans, combinTheory.I_o_ID]
 QED
