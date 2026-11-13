@@ -296,7 +296,7 @@ Proof
     (simp[fn_insts_def, venomWfPropsTheory.fn_insts_blocks_flat, MEM_FLAT, MEM_MAP] >>
      metis_tac[]) >>
   conj_tac
-  >- (rpt strip_tac >>
+  >- (disch_then assume_tac >> rpt gen_tac >> strip_tac >>
       `FLOOKUP G u2 <> NONE` by
         (fs[concretizePtrPrefixLedgerTheory.ptr_ledger_erases_def] >>
          qpat_x_assum `!v. ptr_owner_erases _ _ _ _` (qspec_then `u2` mp_tac) >>
