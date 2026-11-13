@@ -153,6 +153,15 @@ Proof
 QED
 Resume compile_for_dynarray_frag_mem[loop]:
   qpat_x_assum `cc = _` kall_tac >>
+  `!lo. alloca_prefix lo s0 ==> alloca_prefix lo cc` by
+    metis_tac[gas_marked_path_exec, gas_path_alloca_prefix] >>
+  `ret_buf_frontier d cenv cc` by
+    (irule ret_buf_frontier_post >> qexistsl_tac [`cenv`, `s0`, `sa`] >>
+     fs[array_caller_frame_def]) >>
+  `local_ptrs_reserved cenv st1` by
+    (qpat_x_assum `local_ptrs_reserved cenv sa` mp_tac >>
+     qpat_x_assum `!x. not_fresh_at sa x ==> not_fresh_at st1 x` mp_tac >>
+     rpt (pop_assum kall_tac) >> simp[local_ptrs_reserved_def] >> metis_tac[]) >>
   `array_round_inv d ctx func cenv cx P vs id idx (Var arr_ptr) arr_base p dst
      (type_memory_bytes cenv et) ainst cond st1 cc 0 es cc` by
     (pure_rewrite_tac[array_round_inv_def] >> conj_tac

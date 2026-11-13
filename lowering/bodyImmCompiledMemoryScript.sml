@@ -9,7 +9,7 @@ Ancestors
   fragExec loweringPosts vyperInterpreter vyperState words arithmetic list
   rich_list finite_map allocaHistory gasSummary gasOutcome gasContext
   exprSimCopy stmtSimDeclCompose venomMemDefs
-  stmtReasonVvMemory exprSimMemDefs
+  stmtReasonVvMemory exprSimMemDefs fragGasMode
 Libs
   monadsyntax
 
@@ -57,7 +57,8 @@ Theorem immutable_compiled_loop_outcome_mem:
   s.vs_current_bb = st.cs_current_bb /\ s.vs_inst_idx = LENGTH st.cs_current_insts /\
   P es /\ lookup_scopes id es.scopes = NONE /\
   gas_admissible (eval_for cx tv id stmts (MAP Value vs)) (stmt_res_ok lctx) es /\
-  alloca_history func s /\ return_buf_frame d cenv st s ==>
+  alloca_history func s /\ return_buf_frame d cenv st s /\
+  ret_buf_frontier d cenv s ==>
   gas_outcome T (cx_tops cx) (ctx,func)
     (eval_for cx tv id stmts (MAP Value vs)) (es,s)
     (\res ee t. res = INL () /\
@@ -145,6 +146,22 @@ Proof
      qpat_assum `array_caller_frame st1 u cc` mp_tac >>
      rpt (pop_assum kall_tac) >>
      simp[ret_pc_ok_def, array_caller_frame_def] >> metis_tac[]) >>
+  `!lo. alloca_prefix lo s ==> alloca_prefix lo cc` by
+    metis_tac[gas_marked_path_exec, gas_path_alloca_prefix] >>
+  `array_caller_frame st s cc` by
+    (irule array_caller_frame_trans >> qexists_tac `u` >> simp[] >>
+     qpat_x_assum `array_caller_frame st1 u cc` mp_tac >>
+     qpat_x_assum `st.cs_next_var <= st1.cs_next_var` mp_tac >>
+     rpt (pop_assum kall_tac) >> simp[array_caller_frame_def, not_fresh_at_def] >>
+     metis_tac[LESS_LESS_EQ_TRANS]) >>
+  `ret_buf_frontier d cenv cc` by
+    (qpat_x_assum `ret_buf_frontier d cenv s` mp_tac >>
+     qpat_x_assum `local_ptrs_reserved cenv st` mp_tac >>
+     qpat_x_assum `!lo. alloca_prefix lo s ==> alloca_prefix lo cc` mp_tac >>
+     qpat_x_assum `array_caller_frame st s cc` mp_tac >>
+     rpt (pop_assum kall_tac) >> rpt strip_tac >>
+     irule ret_buf_frontier_post >> qexistsl_tac [`cenv`, `s`, `st`] >>
+     fs[array_caller_frame_def]) >>
   `array_round_inv d ctx func cenv cx P vs id idx (Lit (n2w off)) (n2w off)
     p dst (type_memory_bytes cenv et) ainst cond st1 u 0 es cc` by
     (pure_rewrite_tac [array_round_inv_def] >> conj_tac
