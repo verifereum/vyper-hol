@@ -10,7 +10,7 @@ Ancestors fragExecPtr
   ghostPcTransportPtr compileEnv contextCodegenRel ptrSafeRun ptrDiscipline
   venomExecSemantics venomState venomInst words list arithmetic finite_map
 
-Theorem window_word_joint_path:
+Theorem window_word_joint_path_strong:
   compile_abi_encode_to_buf (Var dst) (Var src) AbiPrimWord st = (out,en) /\
   eval_operand (Var src) s = SOME (n2w sb) /\
   eval_operand (Var dst) s = SOME (n2w d) /\
@@ -24,6 +24,7 @@ Theorem window_word_joint_path:
   ~s.vs_halted /\ s.vs_current_bb = st.cs_current_bb /\
   s.vs_inst_idx = LENGTH st.cs_current_insts ==>
   ?G' tn'.
+    op_prov G' (Var (STRING #"%" (toString st.cs_next_var))) = NONE /\
     op_taint tn'
       (Var (STRING #"%" (toString st.cs_next_var))) = {} /\
     tn'.t_mem = tn.t_mem DIFF {i | d <= i /\ i < d + 32} /\
@@ -72,6 +73,9 @@ Proof
      qpat_assum `lookup_var dst s1 = _` (mp_then Any mp_tac mstore_ghost_frame) >>
      simp[] >> metis_tac[]) >>
   qexistsl_tac [`G2`, `tn2`] >>
+  conj_tac >-
+    simp[op_prov_def, Abbr `tmp`, Abbr `G1`, Abbr `ld`, step_prov_def,
+      set_prov_def, out_prov_def, mk_inst_def, FLOOKUP_DRESTRICT] >>
   conj_tac >- fs[op_taint_def, Abbr `tmp`] >>
   conj_tac >- simp[] >>
   conj_tac >-
@@ -145,6 +149,34 @@ Proof
      simp[Abbr `G2`, Abbr `tn2`]) >>
   drule_all run_inst_seq_gas_origin_ptr_path >>
   simp[Abbr `s2`, Abbr `s1`, Abbr `tmp`]
+QED
+
+Theorem window_word_joint_path:
+  compile_abi_encode_to_buf (Var dst) (Var src) AbiPrimWord st = (out,en) /\
+  eval_operand (Var src) s = SOME (n2w sb) /\
+  eval_operand (Var dst) s = SOME (n2w d) /\
+  ptr_covers G tn src s 32 /\ ptr_covers G tn dst s 32 /\
+  not_fresh_at st src /\ not_fresh_at st dst /\
+  (!i. sb <= i /\ i < sb + 32 ==> i NOTIN tn.t_mem) /\
+  sb + 32 <= s.vs_alloca_next /\ d + 32 <= s.vs_alloca_next /\
+  s.vs_alloca_next < dimword (:256) /\
+  allocas_from lo s /\ lo <= s.vs_alloca_next /\ ~ctx_has_dalloca ctx /\
+  fn_has_code st en func /\ fn_inst_ids_distinct func /\
+  ~s.vs_halted /\ s.vs_current_bb = st.cs_current_bb /\
+  s.vs_inst_idx = LENGTH st.cs_current_insts ==>
+  ?G' tn'.
+    op_taint tn'
+      (Var (STRING #"%" (toString st.cs_next_var))) = {} /\
+    tn'.t_mem = tn.t_mem DIFF {i | d <= i /\ i < d + 32} /\
+    (!x. not_fresh_at st x ==> FLOOKUP G' x = FLOOKUP G x /\
+       op_taint tn' (Var x) = op_taint tn (Var x)) /\
+    tn'.t_stor = tn.t_stor /\ tn'.t_trans = tn.t_trans /\ tn'.t_imm = tn.t_imm /\
+    !D. gas_origin_ptr_path (D,lo,explicit,ctx,func,PG) (s,G,tn) []
+      (OK ((mstore d (mload sb s)
+        (update_var (STRING #"%" (toString st.cs_next_var)) (mload sb s) s))
+        with vs_inst_idx := LENGTH en.cs_current_insts),G',tn')
+Proof
+  strip_tac >> drule_all window_word_joint_path_strong >> metis_tac[]
 QED
 
 (* Word constructor of the approved joint ABI-window contract. *)
