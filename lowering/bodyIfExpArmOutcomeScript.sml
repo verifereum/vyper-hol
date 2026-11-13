@@ -5,6 +5,34 @@ Ancestors
   bodyIfExpSelectedMemory bodyIfExpBytesAdapter exprSimMemUnwrap
   exprSimUnwrapProps exprSimUnwrap exprLoweringProps fragGasPathMem
 
+(* An arm result held other than behind a memory pointer is no memory place. *)
+Theorem ifexp_arm_raw_not_place[local]:
+  vv_post ctx func ce cx e es sa sm s0 ee raw vv s /\
+  ~is_word_type (expr_type e) /\ post_value_type ce e = expr_type e /\
+  (!vt p. vv = LocatedValue vt p ==> p.ptr_location <> LocMemory) ==>
+  !id path. raw <> PlaceR (MemoryPlace id path)
+Proof
+  strip_tac >> qpat_x_assum `vv_post _ _ _ _ _ _ _ _ _ _ _ _ _` mp_tac >>
+  Cases_on `vv` >> gvs[vv_post_def, vv_at_def]
+QED
+
+(* An arm result that is no memory place keeps the operand's expr_val_at. *)
+Theorem ifexp_arm_vv_at_not_place[local]:
+  expr_post ctx func ce cx e es sa sb s0 ee v op u /\
+  read_result cx raw ee = (INL v,ee) /\
+  ~is_word_type (expr_type e) /\ post_value_type ce e = expr_type e /\
+  (!id path. raw <> PlaceR (MemoryPlace id path)) /\
+  (tv = raw \/ tv = Value v) ==>
+  vv_at ce cx (expr_type e) sa sb ee tv
+    (LocatedValue (expr_type e) (mk_ptr op LocMemory)) u
+Proof
+  strip_tac >>
+  `expr_val_at ce cx (expr_type e) sa sb ee v op u` by gvs[expr_post_def] >>
+  `read_result cx tv ee = (INL v,ee) /\ !id path. tv <> PlaceR (MemoryPlace id path)` by
+    gvs[vyperStateTheory.read_result_def, vyperStateTheory.return_def] >>
+  drule_all exprSimIfExpTheory.ifexp_vv_at_of_val_at >> simp[]
+QED
+
 Theorem ifexp_selected_arm_path_mem:
   post_value_type ce e = expr_type e /\
   expr_type e = t /\ at = lowered_value_type ce e /\ ~is_word_type t /\
@@ -32,10 +60,25 @@ Theorem ifexp_selected_arm_path_mem:
     vv_store_bound cx t t ee raw (LocatedValue t (mk_ptr op LocMemory)) u /\
     u.vs_current_bb = sb.cs_current_bb /\
     u.vs_inst_idx = LENGTH sb.cs_current_insts /\
-    alloca_history func u /\ s0.vs_alloca_next <= u.vs_alloca_next
+    alloca_history func u /\ s0.vs_alloca_next <= u.vs_alloca_next /\
+    !tv. (tv = raw \/ tv = Value v) ==>
+      vv_at ce cx (expr_type e) sa sb ee tv
+        (LocatedValue (expr_type e) (mk_ptr op LocMemory)) u
 Proof
   strip_tac >> Cases_on `same_memory_layout ce at t`
   >- suspend "same" >>
+  `?u. gas_path_mem ctx func s 0 (OK u) /\
+     expr_post ctx func ce cx e es sa sb s0 ee v op u /\
+     vv_store_bound cx t t ee raw (LocatedValue t (mk_ptr op LocMemory)) u /\
+     u.vs_current_bb = sb.cs_current_bb /\
+     u.vs_inst_idx = LENGTH sb.cs_current_insts /\
+     alloca_history func u /\ s0.vs_alloca_next <= u.vs_alloca_next /\
+     !tv'. read_result cx tv' ee = (INL v,ee) ==>
+       vv_at ce cx t sa sb ee tv' (LocatedValue t (mk_ptr op LocMemory)) u`
+    suffices_by
+    (strip_tac >> qexists_tac `u` >> gvs[] >> rpt strip_tac >>
+     qpat_x_assum `!tv'. _` irule >>
+     fs[vyperStateTheory.read_result_def, vyperStateTheory.return_def]) >>
   irule ifexp_bytestring_adapter_path_mem >> simp[] >>
   conj_tac >- (qpat_x_assum `!tv. _ ==> _ /\ _` drule >> simp[]) >>
   qexistsl_tac [`at`,`sm`,`vv`] >> gvs[]
@@ -66,6 +109,17 @@ Resume ifexp_selected_arm_path_mem[same]:
   drule_at (Pat `unwrap_value _ _ _ = _`) unwrap_copy_capacity_path_mem >>
   disch_then (drule_at (Pat `vv_post _ _ _ _ _ _ _ _ _ _ _ _ _`)) >>
   impl_tac >- simp[vv_operand_def] >> strip_tac >>
+  `!id path. raw <> PlaceR (MemoryPlace id path)` by
+    (qpat_assum `vv_post _ _ _ _ _ _ _ _ _ _ raw _ _`
+       (mp_then Any mp_tac ifexp_arm_raw_not_place) >>
+     impl_tac >> gvs[]) >>
+  `!tv. (tv = raw \/ tv = Value v) ==>
+     vv_at ce cx (expr_type e) sa sb ee tv
+       (LocatedValue (expr_type e) (mk_ptr op LocMemory)) u` by
+    (rpt strip_tac >>
+     drule_at (Pat `expr_post _ _ _ _ _ _ _ _ _ _ _ _ _`) ifexp_arm_vv_at_not_place >>
+     disch_then (drule_at (Pat `read_result _ _ _ = _`)) >>
+     disch_then irule >> gvs[]) >>
   qexists_tac `u` >> simp[] >>
   fs[vv_store_bound_def, vyperStateTheory.read_result_def,
      vyperStateTheory.return_def] >> metis_tac[])
@@ -76,8 +130,23 @@ Resume ifexp_selected_arm_path_mem[stack]:
   qexists_tac `s` >> simp[] >> conj_tac
   >- metis_tac[gas_path_mem_rules] >>
   conj_tac >- metis_tac[expr_post_of_vv_post_stack] >>
-  drule_all ifexp_arm_store_bound >>
-  simp[vv_store_bound_def, contextTheory.mk_ptr_def]
+  conj_tac
+  >- (drule_all ifexp_arm_store_bound >>
+      simp[vv_store_bound_def, contextTheory.mk_ptr_def]) >>
+  `expr_post ctx func ce cx e es sa sb s0 ee v op s` by
+    metis_tac[expr_post_of_vv_post_stack] >>
+  `!id path. raw <> PlaceR (MemoryPlace id path)` by
+    (qpat_assum `vv_post _ _ _ _ _ _ _ _ _ _ raw _ _`
+       (mp_then Any mp_tac ifexp_arm_raw_not_place) >>
+     impl_tac >> gvs[]) >>
+  `!tv. (tv = raw \/ tv = Value v) ==>
+     vv_at ce cx t sa sb ee tv (LocatedValue t (mk_ptr op LocMemory)) s` by
+    (qpat_assum `expr_type e = t` (fn th => rewrite_tac[GSYM th]) >>
+     rpt strip_tac >>
+     drule_at (Pat `expr_post _ _ _ _ _ _ _ _ _ _ _ _ _`) ifexp_arm_vv_at_not_place >>
+     disch_then (drule_at (Pat `read_result _ _ _ = _`)) >>
+     disch_then irule >> gvs[]) >>
+  first_assum ACCEPT_TAC
 QED
 
 Resume ifexp_selected_arm_path_mem[memory]:
@@ -95,7 +164,13 @@ Resume ifexp_selected_arm_path_mem[memory]:
   qexists_tac `s` >> simp[] >> conj_tac
   >- metis_tac[gas_path_mem_rules] >>
   conj_tac >- metis_tac[expr_post_of_vv_post_memory] >>
-  fs[vv_store_bound_def, mk_ptr_def]
+  conj_tac >- fs[vv_store_bound_def, mk_ptr_def] >>
+  rpt strip_tac >> irule exprSimIfExpTheory.ifexp_vv_at_conditional >>
+  qexistsl_tac [`raw`, `v`] >> simp[] >>
+  qpat_x_assum `vv_post _ _ _ _ _ _ _ _ _ _ raw _ _` mp_tac >>
+  simp[vv_post_def] >> strip_tac >>
+  qpat_x_assum `vv_at _ _ _ _ _ _ raw _ _` mp_tac >>
+  gvs[vv_at_def, mk_ptr_def]
 QED
 
 Finalise ifexp_selected_arm_path_mem

@@ -2,12 +2,12 @@
 Theory stmtSimAppendStorageCompose
 Ancestors
   exprSimDefs exprSimProps exprSimStack loweringPosts stmtSimDefs stmtSimProps
-  appendStorageRel stmtSimAppendStorage fragExec
+  appendStorageRel stmtSimAppendStorage stmtSimAssignStorage stmtSimAssignStorageCopy fragExec
   gasOutcome gasSummary gasSummaryCompose gasExemptCert gasContext
   fragGasMode fragGasPath fragGasSeq fragGasSeqAbort list rich_list
   varsExt freshWrites stateFrame venomState finite_map 
   accountsRelProps vyperStorage vyperStorageBackend vyperValue vfmState
-  exprOperandVar
+  exprOperandVar bodyAppendStorageStaging externalEntryShape loweringHalt context abiTupleProps
   vyperInterpreter vyperState vyperExprNoControl stmtLowering exprLowering
   exprLoweringProps compileEnv loweringStateRelDefs emitHelper emitHelperProps venomInst venomExecSemantics
 Libs
@@ -18,6 +18,7 @@ Theorem append_storage_word_code_parts:
   FLOOKUP cenv.ce_module_vars nid =
     SOME (if tr then TransientLoc slot else StorageLoc slot) /\
   cenv.ce_module_var_type nid = SOME (ArrayT elem (Dynamic cap)) /\
+  cenv.ce_hashmap_info nid = NONE /\
   cenv.ce_module_dynarray_capacity nid = cap /\
   is_word_type elem /\ type_memory_bytes cenv elem = 32 ==>
   c = cenv /\ ?sb op.
@@ -27,11 +28,10 @@ Theorem append_storage_word_code_parts:
       (if tr then TLOAD else SLOAD) (if tr then TSTORE else SSTORE) sb = ((),sf)
 Proof
   strip_tac >>
+  drule_all compile_get_target_ptr_toplevel >> strip_tac >>
   qpat_x_assum `stmt_env _ _ _ _ _ = _` mp_tac >>
   simp[stmt_env_def, declare_stmt_local_def, comp_bind_def,
-       comp_ignore_bind_def, comp_return_def, Once compile_stmt_def,
-       target_root_type_def, target_root_capacity_def, target_to_expr_def,
-       compile_target_base_def, infer_array_location_def] >>
+       comp_ignore_bind_def, comp_return_def, Once compile_stmt_def] >>
   Cases_on `tr` >>
   simp[word_scale_def, elem_size_in_location_def, is_slot_addressed_def,
        load_opc_for_def, store_opc_for_def] >>
@@ -40,6 +40,57 @@ Proof
   pairarg_tac >> simp[] >> strip_tac >> gvs[] >>
   rename1 `compile_dynarray_append _ _ _ _ _ _ _ _ _ _ _ _ = (u,_)` >>
   Cases_on `u` >> simp[]
+QED
+
+
+
+
+
+
+
+Theorem append_copy_prefix_call_ctx[local]:
+  !n. (store_copy_prefix loc b k s n).vs_call_ctx = s.vs_call_ctx /\
+      (store_copy_prefix loc b k s n).vs_labels = s.vs_labels
+Proof
+  Induct >> fs[stmtSimStoreCopyTheory.store_copy_prefix_def,
+    COUNT_LIST_SNOC, FOLDL_SNOC] >>
+  Cases_on `loc = LocStorage` >> gvs[sstore_def, tstore_def, LET_THM]
+QED
+
+Theorem append_copy_prefix_suc[local]:
+  store_copy_prefix loc b k c (SUC n) =
+    (if loc = LocStorage then sstore else tstore) (k+n2w n)
+      (mload (w2n (b+n2w n*32w)) c) (store_copy_prefix loc b k c n)
+Proof
+  simp[stmtSimStoreCopyTheory.store_copy_prefix_def, COUNT_LIST_SNOC, FOLDL_SNOC]
+QED
+
+Theorem append_copy_normalize_store[local]:
+  store_copy_normalize a ((if tr then tstore else sstore) k v c) =
+  (if tr then tstore else sstore) k v (store_copy_normalize a c)
+Proof
+  Cases_on `tr` >>
+  simp[stmtSimStoreCopyTheory.store_copy_normalize_def, sstore_def, tstore_def]
+QED
+
+Theorem append_copy_normalize_nest[local]:
+  store_copy_normalize a (store_copy_normalize d c) = store_copy_normalize a c
+Proof
+  simp[stmtSimStoreCopyTheory.store_copy_normalize_def]
+QED
+
+Theorem append_copy_normalize_prefix[local]:
+  !n. store_copy_normalize a (store_copy_prefix loc b k c n) =
+      store_copy_prefix loc b k (store_copy_normalize a c) n
+Proof
+  `!p. mload p (store_copy_normalize a c) = mload p c` by
+    simp[stmtSimStoreCopyTheory.store_copy_normalize_def, mload_def] >>
+  Induct
+  >- simp[stmtSimStoreCopyTheory.store_copy_prefix_def, COUNT_LIST_def] >>
+  simp[append_copy_prefix_suc] >>
+  Cases_on `loc = LocStorage` >>
+  fs[SRULE [] (Q.INST [`tr` |-> `T`] append_copy_normalize_store),
+     SRULE [] (Q.INST [`tr` |-> `F`] append_copy_normalize_store)]
 QED
 
 Theorem append_storage_word_suffix_structure:
@@ -148,13 +199,13 @@ QED
 
 (* ===== Counted source action ===== *)
 
-Theorem get_storage_gas_obs[local]:
+Theorem get_storage_gas_obs:
   get_storage cx (st with gas_obs := g) b = get_storage cx st b
 Proof
   Cases_on `b` >> simp[get_storage_def]
 QED
 
-Theorem set_storage_gas_obs[local]:
+Theorem set_storage_gas_obs:
   set_storage cx (st with gas_obs := g) b x =
   set_storage cx st b x with gas_obs := g
 Proof
@@ -458,6 +509,7 @@ Theorem compile_append_storage_word_stmt_frag:
   FLOOKUP cenv.ce_module_vars nid =
     SOME (if tr then TransientLoc slot else StorageLoc slot) /\
   cenv.ce_module_var_type nid = SOME (ArrayT elem (Dynamic cap)) /\
+  cenv.ce_hashmap_info nid = NONE /\
   cenv.ce_module_dynarray_capacity nid = cap /\
   is_word_type elem /\ type_memory_bytes cenv elem = 32 /\
   is_word_type (expr_type e) /\ evaluate_type (get_tenv cx) (expr_type e) = SOME etv /\
@@ -599,14 +651,57 @@ Resume compile_append_storage_word_stmt_frag[stored]:
   disj1_tac >> simp[] >>
   `sb.cs_current_bb = sB.cs_current_bb` by
     (drule append_storage_word_suffix_structure >> simp[same_blocks_def]) >>
+  `!x w. not_fresh_at sa x /\ lookup_var x s0 = SOME w ==>
+         lookup_var x (u with vs_inst_idx := LENGTH sb.cs_current_insts) = SOME w` by
+    (rpt strip_tac >> simp[lookup_var_def] >>
+     `lookup_var x t = SOME w` by metis_tac[] >>
+     `not_fresh_at sB x` by metis_tac[not_fresh_at_mono] >>
+     `lookup_var x u = SOME w` by metis_tac[] >>
+     fs[lookup_var_def]) >>
+  `!aid b. FLOOKUP s0.vs_allocas aid = SOME b ==>
+           FLOOKUP u.vs_allocas aid = SOME b` by
+    (rpt strip_tac >> qpat_x_assum `u.vs_allocas = _` SUBST1_TAC >>
+     qpat_x_assum `!aid b. FLOOKUP s0.vs_allocas aid = SOME b ==> _` irule >>
+     first_assum ACCEPT_TAC) >>
+  `u.vs_memory = t.vs_memory` by
+    (qpat_x_assum `state_frame u = _` mp_tac >>
+     rpt (pop_assum kall_tac) >>
+     Cases_on `tr` >> simp[state_frame_def, sstore_def, tstore_def,
+       LET_THM, venom_state_component_equality]) >>
+  `MAP FDOM es_end.scopes = MAP FDOM es.scopes` by
+    (qpat_x_assum `gas_marked_exec F (ctx,func) _ (es,s0) _ _ _ _` mp_tac >>
+     simp[gas_marked_exec_def] >>
+     disch_then (qspec_then `[]` strip_assume_tac o CONJUNCT1) >>
+     drule stmtSimDefsTheory.eval_read_preserves_scopes_dom >> simp[]) >>
+  `MAP FDOM ee1.scopes = MAP FDOM es.scopes` by
+    (qpat_x_assum `append_place _ _ _ (es_end with gas_obs := []) = _`
+       (assume_tac o MATCH_MP vyperScopePreservationTheory.append_place_scopes_dom) >>
+     fs[]) >>
+  `!aid off sz.
+     FLOOKUP s0.vs_allocas aid = SOME (off, sz) /\ aid < sa.cs_next_id /\
+     (!n b sz'. local_region cenv es.scopes s0 n b sz' ==>
+                off + sz <= b \/ b + sz' <= off) ==>
+     mem_bytes_at off sz (u with vs_inst_idx := LENGTH sb.cs_current_insts).vs_memory =
+     mem_bytes_at off sz s0.vs_memory` by
+    (rpt strip_tac >> simp[] >> qpat_x_assum `u.vs_memory = _` SUBST1_TAC >>
+     qpat_x_assum `!aid off sz. _ ==> mem_bytes_at off sz t.vs_memory = _`
+       (qspecl_then [`aid`, `off`, `sz`] mp_tac) >>
+     impl_tac
+     >- (rpt conj_tac >- first_assum ACCEPT_TAC >- first_assum ACCEPT_TAC >>
+         rpt strip_tac >>
+         qpat_x_assum `!n b sz'. local_region cenv es.scopes s0 _ _ _ ==> _` irule >>
+         qpat_assum `local_region cenv es.scopes s0 _ _ _` (irule_at Any)) >>
+     disch_then ACCEPT_TAC) >>
+  `alloca_frame cenv es sa s0 cenv ee1
+     (u with vs_inst_idx := LENGTH sb.cs_current_insts)` by
+    (mp_tac (Q.INST [`es'` |-> `ee1`,
+                     `s` |-> `u with vs_inst_idx := LENGTH sb.cs_current_insts`]
+               (SPEC_ALL alloca_frame_of_mem_frame)) >>
+     impl_tac >- (rpt conj_tac >> first_assum ACCEPT_TAC) >>
+     disch_then ACCEPT_TAC) >>
   simp[stmt_post_def, stmt_lands_def, stmt_state_rel_inst_idx] >>
   simp[cenv_top_ext_refl] >>
-  conj_tac >- metis_tac[append_storage_word_suffix_open] >>
-  rpt strip_tac >> simp[lookup_var_def] >>
-  `lookup_var x t = SOME w` by metis_tac[] >>
-  `not_fresh_at sB x` by metis_tac[not_fresh_at_mono] >>
-  `lookup_var x u = SOME w` by metis_tac[] >>
-  fs[lookup_var_def]
+  metis_tac[append_storage_word_suffix_open]
 QED
 
 Finalise compile_append_storage_word_stmt_frag

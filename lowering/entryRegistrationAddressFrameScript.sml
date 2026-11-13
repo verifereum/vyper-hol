@@ -50,7 +50,8 @@ Proof
      simp[run_inst_seq_mem_ok_def, inst_mem_below_frontier_def,
        source_memory_read_ranges_def, source_memory_write_ranges_def,
        memSafeRunTheory.inst_dload_in_section_def, mk_inst_def] >>
-     CASE_TAC >> simp[]) >>
+     qmatch_goalsub_abbrev_tac `step_inst_base ii ss` >>
+     Cases_on `step_inst_base ii ss` >> simp[]) >>
   `last.cs_current_bb = st.cs_current_bb` by gvs[same_blocks_def] >>
   `entry_decoder_obs s (update_var (STRING #"%" (toString st.cs_next_var)) w s)` by simp[] >>
   `alloca_history fn ((update_var (STRING #"%" (toString st.cs_next_var)) w s)

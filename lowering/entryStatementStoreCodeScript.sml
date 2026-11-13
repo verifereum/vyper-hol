@@ -14,19 +14,41 @@ Proof
     rpt gen_tac >> BETA_TAC) >> simp[]
 QED
 
-Theorem entry_code_dynarray_to_storage[local]:
-  entry_preserves_code (\i. i.inst_opcode <> DALLOCA)
-    (compile_dynarray_to_storage src dst ew ems transient)
-Proof
-  Cases_on `transient` >> Cases_on `ew = 1` >>
-  simp[compile_dynarray_to_storage_def, comp_ignore_bind_def] >>
-  rpt (irule entry_code_bind >> reverse conj_tac
-    >- simp[entry_code_emit_op, entry_code_emit_void, entry_code_emit_inst,
-            entry_code_fresh_var, entry_code_fresh_label, entry_code_new_block,
-            entry_code_word_copy_loop] >> rpt gen_tac >> BETA_TAC) >>
-  simp[entry_code_emit_void]
-QED
+(* One step per branch of the sparse compile_store_slots; a single loop over
+   every branch exceeds the step limit. *)
+val store_slots_code_tac =
+  rpt (FIRST [CHANGED_TAC (simp[entry_code_emit_op, entry_code_emit_void,
+      entry_code_emit_inst, entry_code_fresh_label, entry_code_fresh_var,
+      entry_code_new_block, entry_code_return, entry_code_lit_byte_offset,
+      entry_code_memory_to_storage, entry_code_memory_to_transient,
+      entry_code_word_copy_loop_op, compile_bytestring_word_count_def]),
+    gen_tac, strip_tac, irule entry_code_bind, conj_tac, IF_CASES_TAC,
+    CASE_TAC]) >>
+  gvs[];
 
+Theorem entry_code_store_slots:
+  (!cenv src slot ty transient.
+     entry_preserves_code (\i. i.inst_opcode <> DALLOCA)
+       (compile_store_slots cenv src slot ty transient)) /\
+  (!cenv src slot members mem_off slot_off transient.
+     entry_preserves_code (\i. i.inst_opcode <> DALLOCA)
+       (compile_store_slots_members cenv src slot members mem_off slot_off
+          transient)) /\
+  (!cenv src slot elem count_op transient.
+     entry_preserves_code (\i. i.inst_opcode <> DALLOCA)
+       (compile_copy_elements_to_slots cenv src slot elem count_op transient))
+Proof
+  ho_match_mp_tac compile_store_slots_ind >> rpt strip_tac >>
+  simp[Once compile_store_slots_def, LET_THM, comp_ignore_bind_def]
+  >- (IF_CASES_TAC >- store_slots_code_tac >>
+      IF_CASES_TAC >- store_slots_code_tac >>
+      IF_CASES_TAC >- store_slots_code_tac >>
+      Cases_on `ty` >> simp[entry_code_emit_void]
+      >- store_slots_code_tac
+      >- (CASE_TAC >- store_slots_code_tac >> store_slots_code_tac) >>
+      store_slots_code_tac) >>
+  store_slots_code_tac
+QED
 Theorem entry_code_store_at_loc:
   entry_preserves_code (\i. i.inst_opcode <> DALLOCA)
     (compile_store_at_loc imm dst value loc)
@@ -63,18 +85,6 @@ Proof
   simp[entry_code_return, entry_code_emit_inst]
 QED
 
-Theorem entry_code_assignment_normalize[local]:
-  entry_preserves_code (\i. i.inst_opcode <> DALLOCA)
-    (do buf <- compile_alloc_buffer memsz;
-        compile_store_memory_typed ce buf.buf_operand dt value st;
-        return buf.buf_operand od)
-Proof
-  simp[comp_ignore_bind_def] >>
-  rpt (irule entry_code_bind >> reverse conj_tac
-    >- simp[entry_code_alloc_buffer, entry_code_store_memory_typed] >>
-    rpt gen_tac >> BETA_TAC) >> simp[entry_code_return]
-QED
-
 Theorem entry_code_store_immutable_bytestring[local]:
   entry_preserves_code (\i. i.inst_opcode <> DALLOCA)
     (compile_store_immutable_bytestring imm src dst)
@@ -101,28 +111,18 @@ QED
 
 Theorem entry_code_assign_value:
   entry_preserves_code (\i. i.inst_opcode <> DALLOCA)
-    (compile_assign_value ce dst loc value prim sl dt st da memsz)
+    (compile_assign_value ce dst loc value prim sl dt st memsz)
 Proof
-  Cases_on `da` >> Cases_on `loc` >>
-  simp[compile_assign_value_def] >> rpt IF_CASES_TAC >>
-  simp[entry_code_emit_void, entry_code_store_memory, comp_ignore_bind_def] >>
-  rpt (irule entry_code_bind >> reverse conj_tac
-    >- simp[SRULE [comp_ignore_bind_def] entry_code_assignment_normalize, entry_code_alloc_buffer,
-            entry_code_copy_memory, entry_code_return, entry_code_emit_op,
-            entry_code_memory_to_storage, entry_code_memory_to_transient,
-            entry_code_emit_inst] >> rpt gen_tac >> BETA_TAC) >>
-  simp[entry_code_emit_void, entry_code_store_memory, entry_code_imm_store,
-       entry_code_return, entry_code_imm_store_words] >>
-  rpt IF_CASES_TAC >>
-  rpt (irule entry_code_bind >> reverse conj_tac
-    >- simp[entry_code_emit_op, entry_code_memory_to_storage,
-            entry_code_memory_to_transient] >> rpt gen_tac >> BETA_TAC) >>
-  simp[entry_code_emit_void, entry_code_return, entry_code_imm_store,
-       entry_code_imm_store_words] >>
-  simp[entry_code_store_immutable_bytestring] >>
-  PairCases_on `x` >> simp[entry_code_dynarray_to_storage]
+  Cases_on `loc` >>
+  simp[compile_assign_value_def, comp_ignore_bind_def, LET_THM] >>
+  rpt (FIRST [CHANGED_TAC (simp[entry_code_emit_op, entry_code_emit_void,
+      entry_code_emit_inst, entry_code_return, entry_code_alloc_buffer,
+      entry_code_copy_memory, entry_code_store_memory,
+      entry_code_store_memory_typed, entry_code_store_slots,
+      entry_code_imm_store, entry_code_imm_store_words,
+      entry_code_store_immutable_bytestring]),
+    gen_tac, irule entry_code_bind, conj_tac, IF_CASES_TAC])
 QED
-
 Theorem entry_code_tuple_load_all:
   !tys offset. entry_preserves_code (\i. i.inst_opcode <> DALLOCA)
     (compile_tuple_load_all ce src tys offset)
