@@ -61,7 +61,8 @@ Proof
   `ce.ce_return_buf = NONE` by fs[return_buf_frame_def] >>
   drule_all compile_internal_word_return_path_mem >>
   disch_then (qspec_then `ctx` strip_assume_tac) >>
-  goal_assum (drule_at Any) >> simp[intret_q_def] >> qexists_tac `t` >>
+  goal_assum (drule_at Any) >> simp[intret_q_def] >>
+  qexistsl_tac [`t`, `(return_unlock_state cenv t).vs_inst_idx`] >>
   simp[result_rel_def, return_unlock_state_def] >>
   conj_tac >- fs[stmt_state_rel_def] >>
   metis_tac[intret_vals_match_word]
