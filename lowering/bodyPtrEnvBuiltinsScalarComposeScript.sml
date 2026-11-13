@@ -33,7 +33,7 @@ Theorem emit_scalar_builtin_append:
     BLOBHASH; ISZERO; SUB; ADD; SHR; SHL] /\
   (!a. MEM a args ==> op_taint tn a = {}) /\
   gas_path_ptr D 0 ctx fn PG G0 tn0 s0 k G tn (OK s) /\
-  ghost_inv d cenv cx es G tn s /\
+  ghost_inv H d cenv cx es G tn s /\
   ghost_kept cenv es sa G0 tn0 s0 G tn /\
   cs_extends sa sm /\ sa.cs_next_var <= sm.cs_next_var /\
   sa.cs_next_id <= sm.cs_next_id /\
@@ -41,7 +41,7 @@ Theorem emit_scalar_builtin_append:
   (!x sz. cenv.ce_return_buf = SOME (PtrVar (Var x) sz) ==> not_fresh_at sa x) /\
   (!x sz. cenv.ce_return_pc = SOME (PtrVar (Var x) sz) ==> not_fresh_at sa x) /\
   local_ptrs_rel fn cenv es.scopes s0 /\
-  stmt_state_rel ctx fn cenv cx es s /\ ~s.vs_halted /\
+  stmt_state_rel H ctx fn cenv cx es s /\ ~s.vs_halted /\
   s.vs_current_bb = sm.cs_current_bb /\
   s.vs_inst_idx = LENGTH sm.cs_current_insts /\
   (!x. not_fresh_at sa x ==> lookup_var x s = lookup_var x s0) /\
@@ -52,12 +52,12 @@ Theorem emit_scalar_builtin_append:
   ?G' tn' t.
     gas_path_ptr D 0 ctx fn PG G0 tn0 s0
       (k + (if opc = GAS then 1 else 0)) G' tn' (OK t) /\
-    ghost_inv d cenv cx es G' tn' t /\
+    ghost_inv H d cenv cx es G' tn' t /\
     ghost_kept cenv es sa G0 tn0 s0 G' tn' /\
     op_taint tn' op = {} /\
     (opc <> ADD /\ opc <> SUB ==> op_prov G' op = NONE) /\
     eval_operand op t = SOME w /\
-    stmt_state_rel ctx fn cenv cx es t /\ ~t.vs_halted /\
+    stmt_state_rel H ctx fn cenv cx es t /\ ~t.vs_halted /\
     t.vs_current_bb = sb.cs_current_bb /\
     t.vs_inst_idx = LENGTH sb.cs_current_insts /\
     cs_extends sa sb /\ sa.cs_next_var <= sb.cs_next_var /\

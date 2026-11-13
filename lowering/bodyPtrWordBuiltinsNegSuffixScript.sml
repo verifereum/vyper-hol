@@ -204,11 +204,11 @@ QED
 (* SUB may propagate the input provenance; a temporary's provenance is
    irrelevant to the frame as long as the frame does not observe it. *)
 Theorem word_neg_temp_ghost_inv:
-  ghost_inv d cenv cx es G tn s /\
+  ghost_inv H d cenv cx es G tn s /\
   (!n p sz. FLOOKUP cenv.ce_vars n = SOME (PtrVar (Var p) sz) ==> p <> x) /\
   (!p sz. d <> NONE /\ cenv.ce_return_buf = SOME (PtrVar (Var p) sz) ==> p <> x) /\
   (!p sz. cenv.ce_return_pc = SOME (PtrVar (Var p) sz) ==> p <> x) ==>
-  ghost_inv d cenv cx es (set_prov G [x] site)
+  ghost_inv H d cenv cx es (set_prov G [x] site)
     (tn with t_var := set_var_taint tn.t_var [x] m) (update_var x w s)
 Proof
   strip_tac >> Cases_on `site`
@@ -251,11 +251,11 @@ Proof
 QED
 
 Theorem word_neg_output_ghost_inv:
-  MEM opc [SGT; SUB] /\ ghost_inv d cenv cx es G tn s /\
+  MEM opc [SGT; SUB] /\ ghost_inv H d cenv cx es G tn s /\
   (!n p sz. FLOOKUP cenv.ce_vars n = SOME (PtrVar (Var p) sz) ==> p <> x) /\
   (!p sz. d <> NONE /\ cenv.ce_return_buf = SOME (PtrVar (Var p) sz) ==> p <> x) /\
   (!p sz. cenv.ce_return_pc = SOME (PtrVar (Var p) sz) ==> p <> x) ==>
-  ghost_inv d cenv cx es
+  ghost_inv H d cenv cx es
     (step_prov PG G (mk_inst id opc args [x]) (update_var x w s))
     (step_taint (mk_inst id opc args [x]) s (update_var x w s) tn)
     (update_var x w s)

@@ -2,12 +2,13 @@ Theory abiEncodeArgsSim
 Ancestors
   loweringStateRelDefs valueEncodingDefs
   abiEncodeMaterialize abiEncodeArgsScopes abiEncodeArgsWindows abiDecoderReentry
+  vyperStorageTrace vyperStorageFootprint
   compileEnv exprSimDefs exprSimProps loweringPosts exprSimHyps exprSimWordArgs abiArgsLabelObserver exprOperandVar
   abiArgsLabelBoundary
 
 Definition abi_args_post_def:
-  abi_args_post ctx func ce cx es sa sb s0 es' args ops vs s <=>
-    stmt_state_rel ctx func ce cx es' s /\
+  abi_args_post (H:(bool # bytes32 # type_value) list # num list) ctx func ce cx es sa sb s0 es' args ops vs s <=>
+    stmt_state_rel H ctx func ce cx es' s /\
     LENGTH args = LENGTH vs /\
     LIST_REL (\op ev.
       expr_val_rel cx (lowered_value_type ce (FST ev)) (SND ev) op s /\
@@ -38,24 +39,24 @@ Definition abi_args_ready_def:
 End
 
 Theorem abi_args_post_nil:
-  abi_args_post ctx func ce cx es sa sb s0 es' [] ops vs s <=>
-    ops = [] /\ vs = [] /\ stmt_state_rel ctx func ce cx es' s /\
+  abi_args_post (H:(bool # bytes32 # type_value) list # num list) ctx func ce cx es sa sb s0 es' [] ops vs s <=>
+    ops = [] /\ vs = [] /\ stmt_state_rel H ctx func ce cx es' s /\
     wb_frame ce es es' sa s0 s
 Proof
   Cases_on `vs` >> simp[abi_args_post_def] >> metis_tac[]
 QED
 
 Theorem abi_args_post_cons:
-  abi_args_post ctx func ce cx es sa sb s0 es' (e::args) (op::ops) (v::vs) s <=>
+  abi_args_post (H:(bool # bytes32 # type_value) list # num list) ctx func ce cx es sa sb s0 es' (e::args) (op::ops) (v::vs) s <=>
     expr_val_rel cx (lowered_value_type ce e) v op s /\
     expr_val_at ce cx (lowered_value_type ce e) sa sb es' v op s /\
-    abi_args_post ctx func ce cx es sa sb s0 es' args ops vs s
+    abi_args_post H ctx func ce cx es sa sb s0 es' args ops vs s
 Proof
   simp[abi_args_post_def] >> metis_tac[]
 QED
 
 Theorem abi_args_post_lengths:
-  abi_args_post ctx func ce cx es sa sb s0 es' args ops vs s ==>
+  abi_args_post (H:(bool # bytes32 # type_value) list # num list) ctx func ce cx es sa sb s0 es' args ops vs s ==>
     LENGTH args = LENGTH vs /\ LENGTH ops = LENGTH args
 Proof
   simp[abi_args_post_def] >> rpt strip_tac >>
@@ -112,8 +113,8 @@ QED
 
 Theorem abi_args_local_region_kept:
   expr_sim_inv ce cx env es /\
-  stmt_state_rel ctx func ce cx es s0 /\
-  stmt_state_rel ctx func ce cx es' s1 /\ es'.scopes = es.scopes /\
+  stmt_state_rel (H0:(bool # bytes32 # type_value) list # num list) ctx func ce cx es s0 /\
+  stmt_state_rel (H1:(bool # bytes32 # type_value) list # num list) ctx func ce cx es' s1 /\ es'.scopes = es.scopes /\
   local_ptrs_reserved ce st /\ wb_frame ce es es' st s0 s1 /\
   local_region ce es.scopes s0 name b sz ==>
   mem_bytes_at b sz s1.vs_memory = mem_bytes_at b sz s0.vs_memory
@@ -123,8 +124,8 @@ QED
 
 Theorem abi_args_local_window_kept:
   expr_sim_inv ce cx env es /\
-  stmt_state_rel ctx func ce cx es s0 /\
-  stmt_state_rel ctx func ce cx es' s1 /\ es'.scopes = es.scopes /\
+  stmt_state_rel (H0:(bool # bytes32 # type_value) list # num list) ctx func ce cx es s0 /\
+  stmt_state_rel (H1:(bool # bytes32 # type_value) list # num list) ctx func ce cx es' s1 /\ es'.scopes = es.scopes /\
   local_ptrs_reserved ce st /\ wb_frame ce es es' st s0 s1 /\
   local_region ce es.scopes s0 name b sz /\
   b <= off /\ off + len <= b + sz ==>
@@ -147,7 +148,7 @@ Proof
 QED
 
 Theorem abi_args_location_kept_eq:
-  stmt_state_rel ctx func ce cx es s0 /\
+  stmt_state_rel (H0:(bool # bytes32 # type_value) list # num list) ctx func ce cx es s0 /\
   MAP FDOM es'.scopes = MAP FDOM es.scopes /\ local_ptrs_reserved ce st /\
   wb_frame ce es es' st s0 s1 /\
   eval_operand op s0 = eval_operand op s1 /\
@@ -174,7 +175,7 @@ Proof
 QED
 
 Theorem abi_args_location_kept:
-  stmt_state_rel ctx func ce cx es s0 /\
+  stmt_state_rel (H0:(bool # bytes32 # type_value) list # num list) ctx func ce cx es s0 /\
   MAP FDOM es'.scopes = MAP FDOM es.scopes /\ local_ptrs_reserved ce st /\
   wb_frame ce es es' st s0 s1 /\
   (!x. op = Var x ==> not_fresh_at st x) /\ (!l. op <> Label l) /\
@@ -194,8 +195,8 @@ QED
 
 Theorem abi_args_value_kept_eq:
   expr_sim_inv ce cx env es /\
-  stmt_state_rel ctx func ce cx es s0 /\
-  stmt_state_rel ctx func ce cx es' s1 /\ es'.scopes = es.scopes /\
+  stmt_state_rel (H0:(bool # bytes32 # type_value) list # num list) ctx func ce cx es s0 /\
+  stmt_state_rel (H1:(bool # bytes32 # type_value) list # num list) ctx func ce cx es' s1 /\ es'.scopes = es.scopes /\
   local_ptrs_reserved ce st /\ wb_frame ce es es' st s0 s1 /\
   sb.cs_next_id <= st.cs_next_id /\
   eval_operand op s0 = eval_operand op s1 /\
@@ -225,8 +226,8 @@ QED
 
 Theorem abi_args_value_kept:
   expr_sim_inv ce cx env es /\
-  stmt_state_rel ctx func ce cx es s0 /\
-  stmt_state_rel ctx func ce cx es' s1 /\ es'.scopes = es.scopes /\
+  stmt_state_rel (H0:(bool # bytes32 # type_value) list # num list) ctx func ce cx es s0 /\
+  stmt_state_rel (H1:(bool # bytes32 # type_value) list # num list) ctx func ce cx es' s1 /\ es'.scopes = es.scopes /\
   local_ptrs_reserved ce st /\ wb_frame ce es es' st s0 s1 /\
   sb.cs_next_id <= st.cs_next_id /\
   (!x. op = Var x ==> not_fresh_at st x) /\ (!l. op <> Label l) /\
@@ -263,8 +264,8 @@ Proof
 QED
 
 Theorem abi_args_nil_sim:
-  frag_exec ctx sa sa (\s. s = s0 /\ stmt_state_rel ctx func ce cx es s)
-    (\s. abi_args_post ctx func ce cx es sa sa s0 es [] [] [] s)
+  frag_exec ctx sa sa (\s. s = s0 /\ stmt_state_rel (H:(bool # bytes32 # type_value) list # num list) ctx func ce cx es s)
+    (\s. abi_args_post H ctx func ce cx es sa sa s0 es [] [] [] s)
     (wb_args_exit (INL []))
 Proof
   irule fragExecTheory.frag_exec_refl >> simp[abi_args_post_def, wb_frame_def] >>
@@ -317,9 +318,9 @@ QED
 
 Theorem abi_args_post_start_mono:
   sa.cs_next_id <= sm.cs_next_id /\
-  abi_args_post ctx func ce cx es sm sb s0 es' args ops vs s /\
+  abi_args_post (H:(bool # bytes32 # type_value) list # num list) ctx func ce cx es sm sb s0 es' args ops vs s /\
   wb_frame ce es es' sa s0 s ==>
-  abi_args_post ctx func ce cx es sa sb s0 es' args ops vs s
+  abi_args_post H ctx func ce cx es sa sb s0 es' args ops vs s
 Proof
   simp[abi_args_post_def] >> rpt strip_tac >>
   irule listTheory.LIST_REL_mono >> goal_assum (drule_at Any) >>
@@ -328,20 +329,20 @@ Proof
 QED
 
 Theorem abi_args_post_cons_frame:
-  expr_post ctx func ce cx e es sa sm s0 es1 v op t /\
-  abi_args_post ctx func ce cx es1 sm sb t es' args ops vs u /\
-  stmt_state_rel ctx func ce cx es s0 /\ local_ptrs_reserved ce sa /\
+  expr_post (H1:(bool # bytes32 # type_value) list # num list) ctx func ce cx e es sa sm s0 es1 v op t /\
+  abi_args_post (H:(bool # bytes32 # type_value) list # num list) ctx func ce cx es1 sm sb t es' args ops vs u /\
+  stmt_state_rel (H0:(bool # bytes32 # type_value) list # num list) ctx func ce cx es s0 /\ local_ptrs_reserved ce sa /\
   MAP FDOM es.scopes = MAP FDOM es1.scopes /\
   sa.cs_next_var <= sm.cs_next_var /\ sa.cs_next_id <= sm.cs_next_id /\
   expr_val_rel cx (lowered_value_type ce e) v op u /\
   expr_val_at ce cx (lowered_value_type ce e) sa sb es' v op u ==>
-  abi_args_post ctx func ce cx es sa sb s0 es' (e::args) (op::ops) (v::vs) u
+  abi_args_post H ctx func ce cx es sa sb s0 es' (e::args) (op::ops) (v::vs) u
 Proof
   strip_tac >> rewrite_tac[abi_args_post_cons] >> simp[] >>
-  `wb_frame ce es es' sa s0 u` by
-    (irule wb_frame_trans >>
-     gvs[abi_args_post_def] >> metis_tac[expr_post_frame]) >>
-  qpat_x_assum `abi_args_post _ _ _ _ _ _ _ _ _ _ _ _ _` mp_tac >>
+  `wb_frame ce es es1 sa s0 t` by metis_tac[expr_post_frame] >>
+  `wb_frame ce es1 es' sm t u` by fs[abi_args_post_def] >>
+  `wb_frame ce es es' sa s0 u` by (drule_all wb_frame_trans >> simp[]) >>
+  qpat_x_assum `abi_args_post _ _ _ _ _ _ _ _ _ _ _ _ _ _` mp_tac >>
   simp[abi_args_post_def] >> strip_tac >> simp[] >>
   irule listTheory.LIST_REL_mono >> goal_assum (drule_at Any) >>
   simp[] >> rpt strip_tac >> irule expr_val_at_start_mono >> metis_tac[]
@@ -454,7 +455,7 @@ QED
 
 Theorem abi_args_expr_post_lowered_rel:
   expr_body_pre ce cx env e es /\
-  expr_post ctx func ce cx e es0 sa sb s0 es' v op s /\
+  expr_post (H1:(bool # bytes32 # type_value) list # num list) ctx func ce cx e es0 sa sb s0 es' v op s /\
   (~is_word_type (expr_type e) ==>
     ?tv. evaluate_type (get_tenv cx) (lowered_value_type ce e) = SOME tv /\
          value_has_type tv v /\ val_wf tv v) ==>
@@ -466,7 +467,7 @@ QED
 
 Theorem abi_args_expr_post_lowered_at:
   expr_body_pre ce cx env e es /\
-  expr_post ctx func ce cx e es0 sa sb s0 es' v op s /\
+  expr_post (H1:(bool # bytes32 # type_value) list # num list) ctx func ce cx e es0 sa sb s0 es' v op s /\
   (~is_word_type (expr_type e) ==>
     ?tv. evaluate_type (get_tenv cx) (lowered_value_type ce e) = SOME tv /\
          value_has_type tv v /\ val_wf tv v) ==>
@@ -477,11 +478,11 @@ Proof
 QED
 
 Theorem abi_args_post_cons_uncaptured:
-  expr_post ctx func ce cx e es sa sm s0 es1 v op t /\
+  expr_post (H1:(bool # bytes32 # type_value) list # num list) ctx func ce cx e es sa sm s0 es1 v op t /\
   expr_val_rel cx (lowered_value_type ce e) v op t /\
   expr_val_at ce cx (lowered_value_type ce e) sa sm es1 v op t /\
-  abi_args_post ctx func ce cx es1 sm sb t es' args ops vs u /\
-  stmt_state_rel ctx func ce cx es s0 /\ local_ptrs_reserved ce sa /\
+  abi_args_post (H:(bool # bytes32 # type_value) list # num list) ctx func ce cx es1 sm sb t es' args ops vs u /\
+  stmt_state_rel (H0:(bool # bytes32 # type_value) list # num list) ctx func ce cx es s0 /\ local_ptrs_reserved ce sa /\
   local_ptrs_reserved ce sm /\ expr_sim_inv ce cx env es1 /\
   MAP FDOM es.scopes = MAP FDOM es1.scopes /\
   MAP FDOM es'.scopes = MAP FDOM es1.scopes /\
@@ -489,12 +490,12 @@ Theorem abi_args_post_cons_uncaptured:
   sa.cs_next_var <= sm.cs_next_var /\ sa.cs_next_id <= sm.cs_next_id /\
   sm.cs_next_id <= sb.cs_next_id /\
   (!x. op = Var x ==> not_fresh_at sm x) /\ (!l. op <> Label l) ==>
-  abi_args_post ctx func ce cx es sa sb s0 es' (e::args) (op::ops) (v::vs) u
+  abi_args_post H ctx func ce cx es sa sb s0 es' (e::args) (op::ops) (v::vs) u
 Proof
   strip_tac >>
   `wb_frame ce es1 es' sm t u` by metis_tac[abi_args_post_def] >>
-  `stmt_state_rel ctx func ce cx es1 t` by metis_tac[expr_post_def] >>
-  `stmt_state_rel ctx func ce cx es' u` by metis_tac[abi_args_post_def] >>
+  `stmt_state_rel H1 ctx func ce cx es1 t` by metis_tac[expr_post_def] >>
+  `stmt_state_rel H ctx func ce cx es' u` by metis_tac[abi_args_post_def] >>
   `expr_val_at ce cx (lowered_value_type ce e) sa sb es' v op u` by
     (irule abi_args_location_end_mono >>
      qexists `sm` >> simp[] >> irule abi_args_location_kept >>
@@ -515,11 +516,14 @@ Theorem abi_args_post_cons_uncaptured_labels:
   (~is_word_type (expr_type e) ==>
     ?tv. evaluate_type (get_tenv cx) (lowered_value_type ce e) = SOME tv /\
          value_has_type tv v /\ val_wf tv v) /\
-  expr_post ctx func ce cx e es sa sm s0 es1 v op t /\
+  expr_post (H1:(bool # bytes32 # type_value) list # num list) ctx func ce cx e es sa sm s0 es1 v op t /\
   expr_val_rel cx (lowered_value_type ce e) v op t /\
   expr_val_at ce cx (lowered_value_type ce e) sa sm es1 v op t /\
-  abi_args_post ctx func ce cx es1 sm sb t es' args ops vs u /\
-  stmt_state_rel ctx func ce cx es s0 /\ local_ptrs_reserved ce sa /\
+  abi_args_post (H:(bool # bytes32 # type_value) list # num list) ctx func ce cx es1 sm sb t es' args ops vs u /\
+  (!H. valid_horizon cx st0 H es.storage_trace ==>
+     stmt_state_rel H ctx func ce cx es s0 /\
+     storage_well_formed_on cx es (FST H)) /\
+  storage_trace_domain cx st0 es1.storage_trace /\ local_ptrs_reserved ce sa /\
   local_ptrs_reserved ce sm /\ expr_sim_inv ce cx env es1 /\
   MAP FDOM es.scopes = MAP FDOM es1.scopes /\
   MAP FDOM es'.scopes = MAP FDOM es1.scopes /\
@@ -532,13 +536,23 @@ Theorem abi_args_post_cons_uncaptured_labels:
   lower_value compile_expr ce (expr_type e) e sa = (op,sm) /\
   (do r <- eval_expr cx e; read_result cx r od) es = (INL v,es1) /\
   fn_has_code sa sm func /\ fn_inst_ids_distinct func ==>
-  abi_args_post ctx func ce cx es sa sb s0 es' (e::args) (op::ops) (v::vs) u
+  abi_args_post H ctx func ce cx es sa sb s0 es' (e::args) (op::ops) (v::vs) u
 Proof
-  strip_tac >> Cases_on `?l. op = Label l`
+  strip_tac >>
+  `storage_trace_frame (do r <- eval_expr cx e; read_result cx r od)` by
+    (irule storage_trace_frame_bind_all >>
+     simp[evaluate_storage_trace_frame, storage_trace_frame_read_result]) >>
+  `valid_horizon cx st0 (storage_trace_horizon es1.storage_trace)
+     es1.storage_trace` by fs[storage_trace_domain_def] >>
+  `valid_horizon cx st0 (storage_trace_horizon es1.storage_trace)
+     es.storage_trace` by metis_tac[valid_horizon_frame] >>
+  `stmt_state_rel (storage_trace_horizon es1.storage_trace) ctx func ce cx
+     es s0` by metis_tac[] >>
+  Cases_on `?l. op = Label l`
   >- (gvs[] >>
       `wb_frame ce es1 es' sm t u` by metis_tac[abi_args_post_def] >>
-      `stmt_state_rel ctx func ce cx es1 t` by metis_tac[expr_post_def] >>
-      `stmt_state_rel ctx func ce cx es' u` by metis_tac[abi_args_post_def] >>
+      `stmt_state_rel H1 ctx func ce cx es1 t` by metis_tac[expr_post_def] >>
+      `stmt_state_rel H ctx func ce cx es' u` by metis_tac[abi_args_post_def] >>
       `expr_val_rel cx (post_value_type ce e) v (Label l) t` by
         metis_tac[expr_post_def] >>
       `expr_val_at ce cx (post_value_type ce e) sa sm es1 v (Label l) t` by
@@ -546,7 +560,8 @@ Proof
       `eval_operand (Label l) t = eval_operand (Label l) u \/
        (expr_val_rel cx (post_value_type ce e) v (Label l) u /\
         expr_val_at ce cx (post_value_type ce e) sa sm es' v (Label l) u)` by
-        (irule abi_args_success_label_transport >> metis_tac[ETA_THM]) >>
+        (irule (INST_TYPE [alpha |-> ``:256``, beta |-> ``:256``]
+           abi_args_success_label_transport) >> metis_tac[ETA_THM]) >>
       pop_assum strip_assume_tac
       >- (`expr_val_at ce cx (lowered_value_type ce e) sa sb es' v (Label l) u` by
             (irule abi_args_location_end_mono >> qexists `sm` >> simp[] >>
@@ -569,11 +584,11 @@ Proof
 QED
 
 Theorem abi_args_post_cons_captured:
-  expr_post ctx func ce cx e es sa sm s0 es1 v op t /\
+  expr_post (H1:(bool # bytes32 # type_value) list # num list) ctx func ce cx e es sa sm s0 es1 v op t /\
   expr_val_rel cx (lowered_value_type ce e) v op t /\
   expr_val_at ce cx (lowered_value_type ce e) sa sm es1 v op t /\
-  abi_args_post ctx func ce cx es1 sm sb t es' args ops vs u /\
-  stmt_state_rel ctx func ce cx es s0 /\ local_ptrs_reserved ce sa /\
+  abi_args_post (H:(bool # bytes32 # type_value) list # num list) ctx func ce cx es1 sm sb t es' args ops vs u /\
+  stmt_state_rel (H0:(bool # bytes32 # type_value) list # num list) ctx func ce cx es s0 /\ local_ptrs_reserved ce sa /\
   local_ptrs_reserved ce sm /\
   MAP FDOM es.scopes = MAP FDOM es1.scopes /\
   MAP FDOM es'.scopes = MAP FDOM es1.scopes /\
@@ -587,11 +602,11 @@ Theorem abi_args_post_cons_captured:
   b <= w2n w /\ w2n w + val_footprint tv v <= b + sz /\
   (!n lb lsz. local_region ce es1.scopes t n lb lsz ==>
               b + sz <= lb \/ lb + lsz <= b) ==>
-  abi_args_post ctx func ce cx es sa sb s0 es' (e::args) (op::ops) (v::vs) u
+  abi_args_post H ctx func ce cx es sa sb s0 es' (e::args) (op::ops) (v::vs) u
 Proof
   strip_tac >>
   `wb_frame ce es1 es' sm t u` by metis_tac[abi_args_post_def] >>
-  `stmt_state_rel ctx func ce cx es1 t` by metis_tac[expr_post_def] >>
+  `stmt_state_rel H1 ctx func ce cx es1 t` by metis_tac[expr_post_def] >>
   `expr_val_at ce cx (lowered_value_type ce e) sa sb es' v op u` by
     (irule abi_args_location_end_mono >>
      qexists `sm` >> simp[] >> irule abi_args_location_kept >>
@@ -653,7 +668,7 @@ Proof
 QED
 
 Theorem abi_args_vv_post_read:
-  vv_post ctx func ce cx e es sa sb s0 es' tvv vv s ==>
+  vv_post (H:(bool # bytes32 # type_value) list # num list) ctx func ce cx e es sa sb s0 es' tvv vv s ==>
   ?v. read_result cx tvv es' = (INL v,es')
 Proof
   Cases_on `vv` >>
@@ -687,28 +702,30 @@ Theorem abi_args_vv_error_prefix:
   fn_has_code sa mid func /\ fn_inst_ids_distinct func /\
   local_ptrs_reserved ce sa /\
   gas_admissible (eval_expr cx e) expr_vv_res_ok es /\
-  stmt_state_rel ctx func ce cx es s0 /\ ~s0.vs_halted /\
+  (!H. valid_horizon cx st0 H es.storage_trace ==>
+     stmt_state_rel (H:(bool # bytes32 # type_value) list # num list) ctx func ce cx es s0 /\
+     storage_well_formed_on cx es (FST H)) /\ ~s0.vs_halted /\
   s0.vs_current_bb = sa.cs_current_bb /\
   s0.vs_inst_idx = LENGTH sa.cs_current_insts ==>
-  gas_outcome F (cx_tops cx) (ctx,func) (eval_expr cx e) (es,s0)
-    (\rr ee t. ?tv v. rr = INL tv /\
-       vv_post ctx func ce cx e es sa mid s0 ee tv vv t /\
+  gas_outcome F (cx_tops cx) (ctx,func) cx st0 (eval_expr cx e) (es,s0)
+    (\H rr ee t. ?tv v. rr = INL tv /\
+       vv_post H ctx func ce cx e es sa mid s0 ee tv vv t /\
        read_result cx tv ee = (INL v,ee) /\
        t.vs_current_bb = mid.cs_current_bb /\
        t.vs_inst_idx = LENGTH mid.cs_current_insts)
-    (\rr ee r. expr_exit rr r)
+    (\H rr ee r. expr_exit rr r)
 Proof
   strip_tac >>
   qpat_x_assum `expr_vv_sim _ _ _ _ _ _ _` mp_tac >>
   simp[expr_vv_sim_def] >>
-  disch_then (qspecl_then [`sa`, `mid`, `vv`, `s0`] mp_tac) >>
+  disch_then (qspecl_then [`st0`, `sa`, `mid`, `vv`, `s0`] mp_tac) >>
   simp[] >>
-  simp[gasOutcomeTheory.gas_outcome_def, gasSummaryTheory.gas_summary_at_def] >>
-  metis_tac[abi_args_vv_post_read]
+  rw[gasOutcomeTheory.gas_outcome_def, gasSummaryTheory.gas_summary_at_def] >>
+  qexists_tac `marks` >> metis_tac[abi_args_vv_post_read]
 QED
 
 Theorem abi_args_vv_read_error_prefix:
-  vv_post ctx func ce cx e es sa mid s0 ee tv vv t /\
+  vv_post (H:(bool # bytes32 # type_value) list # num list) ctx func ce cx e es sa mid s0 ee tv vv t /\
   read_result cx tv ee = (INR exc,ee') ==> F
 Proof
   strip_tac >> drule abi_args_vv_post_read >> simp[]

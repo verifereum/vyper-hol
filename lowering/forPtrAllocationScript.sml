@@ -4,7 +4,7 @@ Ancestors forPtrAdmin allocationPtr localPtrsProps loweringHalt
   exprLoweringProps compileEnv loweringStateRelDefs venomInst venomState finite_map
 
 Theorem for_alloca_outer_local_disjoint:
-  stmt_state_rel ctx fn cenv cx es s /\
+  stmt_state_rel H ctx fn cenv cx es s /\
   fn_inst_ids_distinct fn /\
   MEM (mk_inst id ALLOCA [Lit (n2w n)] [out]) (fn_insts fn) /\
   not_local_ptr cenv es.scopes out /\ n < dimword (:256) /\
@@ -35,7 +35,7 @@ QED
 (* Layout and non-local-output premises remain explicit: neither says that
    this allocation site has not already executed. *)
 Theorem for_alloca_slot_path_ptr:
-  stmt_state_rel ctx fn cenv cx es s /\
+  stmt_state_rel H ctx fn cenv cx es s /\
   fn_inst_ids_distinct fn /\
   MEM (mk_inst id ALLOCA [Lit (n2w n)] [out]) (fn_insts fn) /\
   not_local_ptr cenv es.scopes out /\ n < dimword (:256) /\

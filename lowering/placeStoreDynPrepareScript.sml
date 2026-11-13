@@ -5,9 +5,9 @@ Ancestors
   exprLowering finite_map loweringHalt freshWrites fragGasMode fragExec venomInst exprSimAlloc
 
 Theorem place_stmt_control_frame[local]:
-  stmt_state_rel ctx func cenv cx es
+  stmt_state_rel H ctx func cenv cx es
     (s with <|vs_prev_bb := prev; vs_current_bb := bb; vs_inst_idx := ix|>) <=>
-  stmt_state_rel ctx func cenv cx es s
+  stmt_state_rel H ctx func cenv cx es s
 Proof
   `!op. eval_operand op (s with <|vs_prev_bb := prev;
       vs_current_bb := bb; vs_inst_idx := ix|>) = eval_operand op s` by
@@ -23,13 +23,13 @@ Proof
 QED
 
 Theorem place_typed_copy_alloca_state_frame:
-  stmt_state_rel ctx func cenv cx es s /\ local_ptrs_reserved cenv sa /\
+  stmt_state_rel H ctx func cenv cx es s /\ local_ptrs_reserved cenv sa /\
   typed_copy_state_frame sa dst len s t /\
   MEM inst (fn_insts func) /\ inst.inst_opcode = ALLOCA /\
   FLOOKUP s.vs_allocas inst.inst_id = SOME (dst,alloc_sz) /\ len <= alloc_sz /\
   (!name b sz. local_region cenv es.scopes s name b sz ==>
      regions_disjoint dst len b sz) ==>
-  stmt_state_rel ctx func cenv cx es t
+  stmt_state_rel H ctx func cenv cx es t
 Proof
   strip_tac >>
   `!name tv v off. cenv.ce_is_ctor /\
@@ -38,14 +38,14 @@ Proof
         | SOME imms => get_source_immutables cenv.ce_module imms) name = SOME (tv,v) ==>
       regions_disjoint off (type_memory_size tv) dst len` by
     (rpt strip_tac >>
-     qpat_assum `stmt_state_rel _ _ _ _ _ _`
+     qpat_assum `stmt_state_rel _ _ _ _ _ _ _`
        (strip_assume_tac o REWRITE_RULE[stmt_state_rel_def]) >>
      fs[immutable_alloca_sep_def] >>
      `regions_disjoint off (type_memory_size tv) dst alloc_sz` by metis_tac[] >>
      gvs[regions_disjoint_def] >> decide_tac) >>
   qpat_x_assum `typed_copy_state_frame _ _ _ _ _` mp_tac >>
   simp[typed_copy_state_frame_def, typed_copy_frame_def] >> strip_tac >>
-  `stmt_state_rel ctx func cenv cx es
+  `stmt_state_rel H ctx func cenv cx es
      (t with <|vs_prev_bb := s.vs_prev_bb; vs_current_bb := s.vs_current_bb;
                vs_inst_idx := s.vs_inst_idx|>)` suffices_by
     simp[place_stmt_control_frame] >>
@@ -60,7 +60,7 @@ Proof
 QED
 
 Theorem place_alloca_source_disjoint:
-  stmt_state_rel ctx func cenv cx es s /\
+  stmt_state_rel H ctx func cenv cx es s /\
   inst.inst_outputs = [out] /\ exec_alloca inst s (n2w sz:bytes32) = OK t /\
   lookup_var out t = SOME dw /\
   FLOOKUP t.vs_allocas inst.inst_id = SOME (w2n dw,sz) /\
@@ -100,7 +100,7 @@ Theorem place_dyn_normalize_run:
   type_widens_to tenv sty dty /\
   evaluate_type tenv sty = SOME stv /\ evaluate_type tenv dty = SOME dtv /\
   value_has_type stv v /\ value_has_type dtv v /\ val_wf stv v /\ val_wf dtv v /\
-  stmt_state_rel ctx func cenv cx es s /\
+  stmt_state_rel H ctx func cenv cx es s /\
   eval_operand src s = SOME sw /\ eval_operand dst s = SOME dw /\
   val_in_memory stv v (w2n sw) s.vs_memory /\
   type_memory_size dtv < dimword (:256) /\
@@ -111,7 +111,7 @@ Theorem place_dyn_normalize_run:
   ~s.vs_halted /\ s.vs_current_bb = sa.cs_current_bb /\
   s.vs_inst_idx = LENGTH sa.cs_current_insts ==>
   ?t pw. gas_marked_path F ctx func s 0 (OK t) /\
-    stmt_state_rel ctx func cenv cx es t /\
+    stmt_state_rel H ctx func cenv cx es t /\
     eval_operand buf.buf_operand t = SOME pw /\
     val_in_memory dtv v (w2n pw) t.vs_memory /\
     eval_operand dst t = SOME dw /\
@@ -133,10 +133,10 @@ Proof
   drule compile_alloc_buffer_parts >> strip_tac >>
   `w2n sw + type_memory_size stv <= w2n w \/
    w2n w + type_memory_size dtv <= w2n sw` by
-    (qpat_x_assum `stmt_state_rel _ _ _ _ _ u` kall_tac >>
+    (qpat_x_assum `stmt_state_rel _ _ _ _ _ _ u` kall_tac >>
      irule place_alloca_source_disjoint >>
      simp[] >>
-     goal_assum (drule_at (Pat `stmt_state_rel _ _ _ _ _ _`)) >>
+     goal_assum (drule_at (Pat `stmt_state_rel _ _ _ _ _ _ _`)) >>
      qexistsl_tac [
        `mk_inst sa.cs_next_id ALLOCA [Lit (n2w (type_memory_size dtv))]
          [STRING #"%" (toString sa.cs_next_var)]`,
@@ -165,7 +165,7 @@ Proof
   disch_then (qspec_then `ctx` mp_tac) >>
   simp[] >> (impl_tac >- first_assum ACCEPT_TAC) >> strip_tac >>
   drule_all buffer_alloc_code >> strip_tac >>
-  `stmt_state_rel ctx func cenv cx es t` by
+  `stmt_state_rel H ctx func cenv cx es t` by
     (irule place_typed_copy_alloca_state_frame >>
      goal_assum (drule_at (Pat `typed_copy_state_frame _ _ _ _ _`)) >>
      qexistsl_tac [`type_memory_size dtv`,
@@ -210,7 +210,7 @@ Theorem place_dyn_prepare_run:
   type_widens_to tenv sty dty /\
   evaluate_type tenv sty = SOME stv /\ evaluate_type tenv dty = SOME dtv /\
   value_has_type stv v /\ value_has_type dtv v /\ val_wf stv v /\ val_wf dtv v /\
-  stmt_state_rel ctx func cenv cx es s /\
+  stmt_state_rel H ctx func cenv cx es s /\
   eval_operand src s = SOME sw /\ eval_operand dst s = SOME dw /\
   val_in_memory stv v (w2n sw) s.vs_memory /\
   type_memory_size dtv < dimword (:256) /\
@@ -221,7 +221,7 @@ Theorem place_dyn_prepare_run:
   ~s.vs_halted /\ s.vs_current_bb = sa.cs_current_bb /\
   s.vs_inst_idx = LENGTH sa.cs_current_insts ==>
   ?t pw. gas_marked_path F ctx func s 0 (OK t) /\
-    stmt_state_rel ctx func cenv cx es t /\
+    stmt_state_rel H ctx func cenv cx es t /\
     eval_operand prepared t = SOME pw /\
     val_in_memory dtv v (w2n pw) t.vs_memory /\
     eval_operand dst t = SOME dw /\

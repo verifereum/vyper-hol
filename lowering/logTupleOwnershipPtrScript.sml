@@ -22,7 +22,7 @@ Proof
 QED
 
 Theorem log_alloca_candidate_local_region:
-  stmt_state_rel ctx func ce cx es s /\ fn_inst_ids_distinct func /\
+  stmt_state_rel H ctx func ce cx es s /\ fn_inst_ids_distinct func /\
   local_ptrs_reserved ce st /\ ~not_fresh_at st q /\
   MEM inst (fn_insts func) /\ inst.inst_outputs = [q] /\
   ((FLOOKUP s.vs_allocas inst.inst_id = NONE /\ p = s.vs_alloca_next) \/
@@ -79,7 +79,7 @@ Theorem log_tuple_cursor_local_region:
   EXISTS (\(_,_,_,dyn). dyn) infos /\
   EVERY (\(ei,asz,mz,dyn). log_scalar_enc_info ei) infos /\
   fn_has_code st end_st func /\ end_st.cs_next_var <= limit_st.cs_next_var /\
-  stmt_state_rel ctx func ce cx es s /\ fn_inst_ids_distinct func /\
+  stmt_state_rel H ctx func ce cx es s /\ fn_inst_ids_distinct func /\
   local_ptrs_reserved ce st /\
   t.vs_allocas = (abi_builtin_allocate_state st.cs_next_id 32 s).vs_allocas /\
   FLOOKUP t.vs_allocas st.cs_next_id = SOME (p,32) ==>
@@ -92,14 +92,14 @@ Proof
   rpt gen_tac >> disch_tac >>
   irule log_alloca_candidate_local_region >>
   goal_assum (drule_at Any) >> goal_assum (drule_at Any) >>
-  goal_assum (drule_at (Pat `stmt_state_rel _ _ _ _ _ _`)) >>
+  goal_assum (drule_at (Pat `stmt_state_rel _ _ _ _ _ _ _`)) >>
   qexistsl_tac [`STRING #"%" (toString st.cs_next_var)`,`st`] >>
   asm_simp_tac bool_ss [mk_inst_def] >> simp[not_fresh_at_def]
 QED
 
 Theorem log_buffer_registered_local_region:
   compile_alloc_buffer cap st = (buf,prepared) /\ fn_has_code st prepared func /\
-  stmt_state_rel ctx func ce cx es s /\ fn_inst_ids_distinct func /\
+  stmt_state_rel H ctx func ce cx es s /\ fn_inst_ids_distinct func /\
   local_ptrs_reserved ce st /\
   FLOOKUP s.vs_allocas st.cs_next_id = SOME (p,cap) ==>
   !name lo sz. local_region ce es.scopes s name lo sz ==>
@@ -111,13 +111,13 @@ Proof
   drule emitted_insts_emit_op >> strip_tac >>
   rpt gen_tac >> disch_tac >> irule log_alloca_candidate_local_region >>
   goal_assum (drule_at Any) >> goal_assum (drule_at Any) >>
-  goal_assum (drule_at (Pat `stmt_state_rel _ _ _ _ _ _`)) >>
+  goal_assum (drule_at (Pat `stmt_state_rel _ _ _ _ _ _ _`)) >>
   qexistsl_tac [`STRING #"%" (toString st.cs_next_var)`,`st`] >>
   asm_simp_tac bool_ss [mk_inst_def] >> simp[not_fresh_at_def]
 QED
 
 Theorem log_allocation_local_regions:
-  stmt_state_rel ctx func ce cx es s /\ local_ptrs_reserved ce st /\
+  stmt_state_rel H ctx func ce cx es s /\ local_ptrs_reserved ce st /\
   abi_builtin_allocation_frame st.cs_next_var site cap s t ==>
   !name b sz. (local_region ce es.scopes t name b sz <=>
               local_region ce es.scopes s name b sz)
@@ -207,7 +207,7 @@ Theorem log_output_protected_footprint:
   compile_alloc_buffer cap st = (dst,prepared) /\ fn_has_code st prepared func /\
   abi_builtin_allocation_frame st.cs_next_var st.cs_next_id cap s t /\
   FLOOKUP t.vs_allocas st.cs_next_id = SOME (db,cap) /\
-  stmt_state_rel ctx func ce cx es s /\ stmt_state_rel ctx func ce cx es t /\
+  stmt_state_rel H ctx func ce cx es s /\ stmt_state_rel H ctx func ce cx es t /\
   fn_inst_ids_distinct func /\ local_ptrs_reserved ce st /\
   local_ptrs_reserved ce prepared ==>
   (!name b sz. local_region ce es.scopes t name b sz ==>
@@ -240,7 +240,7 @@ Theorem log_tuple_protected_footprint:
   compile_alloc_buffer cap st = (buf,prepared) /\ fn_has_code st prepared func /\
   abi_builtin_allocation_frame st.cs_next_var st.cs_next_id cap s t /\
   FLOOKUP t.vs_allocas st.cs_next_id = SOME (db,cap) /\
-  stmt_state_rel ctx func ce cx es s /\ stmt_state_rel ctx func ce cx es t /\
+  stmt_state_rel H ctx func ce cx es s /\ stmt_state_rel H ctx func ce cx es t /\
   fn_inst_ids_distinct func /\ local_ptrs_reserved ce st /\
   local_ptrs_reserved ce prepared /\
   compile_abi_encode_to_buf buf.buf_operand src (AbiComplex infos) prepared = (out,end_st) /\

@@ -7,7 +7,7 @@ Ancestors
 (* Zero-footprint values need no readable region.  Every nonempty expression
    value is instead backed by an allocation or a live local region. *)
 Theorem expr_val_at_frontier:
-  stmt_state_rel ctx func cenv cx es s /\
+  stmt_state_rel H ctx func cenv cx es s /\
   expr_val_at cenv cx ty sa sb es v op s /\
   evaluate_type (get_tenv cx) ty = SOME tv /\ ~is_word_type ty ==>
   ?w. eval_operand op s = SOME w /\
@@ -26,7 +26,7 @@ Proof
 QED
 
 Theorem stmt_state_rel_alloca_site:
-  stmt_state_rel ctx func cenv cx es s /\
+  stmt_state_rel H ctx func cenv cx es s /\
   MEM inst (fn_insts func) /\ inst.inst_opcode = ALLOCA /\
   inst.inst_operands = [Lit (n2w n)] /\ n < dimword (:256) ==>
   ?b. FLOOKUP (abi_builtin_allocate_state inst.inst_id n s).vs_allocas
@@ -41,7 +41,7 @@ Proof
 QED
 
 Theorem expr_val_at_raw_frontier:
-  stmt_state_rel ctx func cenv cx es s /\
+  stmt_state_rel H ctx func cenv cx es s /\
   expr_val_at cenv cx ty sa sb es v op s /\
   expr_val_rel cx ty v op s /\
   is_bytestring_type ty /\

@@ -12,7 +12,7 @@ Ancestors
 
 Theorem concat_alloc_raw_frame:
   compile_alloc_buffer n sa = (buf,sm) /\ buf.buf_operand = Var out /\
-  stmt_state_rel ctx fn ce cx es s /\ fn_inst_ids_distinct fn /\
+  stmt_state_rel H ctx fn ce cx es s /\ fn_inst_ids_distinct fn /\
   local_ptrs_reserved ce sa /\ n < dimword (:256) /\
   MEM (mk_inst sa.cs_next_id ALLOCA [Lit (n2w n)] [out]) (fn_insts fn) /\
   step_inst_base (mk_inst sa.cs_next_id ALLOCA [Lit (n2w n)] [out]) s = OK u ==>
@@ -41,9 +41,9 @@ Theorem concat_alloc_zero_counted:
   compile_alloc_buffer n sa = (buf,sm) /\
   emit_void MSTORE [buf.buf_operand; Lit 0w] sm = ((),sb) /\
   fn_has_code sa sm fn /\ fn_has_code sm sb fn /\
-  stmt_state_rel ctx fn ce cx es s /\ fn_inst_ids_distinct fn /\
+  stmt_state_rel H ctx fn ce cx es s /\ fn_inst_ids_distinct fn /\
   local_ptrs_reserved ce sa /\ 32 <= n /\ n < dimword (:256) /\
-  ghost_inv d ce cx es G tn s /\
+  ghost_inv H d ce cx es G tn s /\
   (!x k. ce.ce_return_buf = SOME (PtrVar (Var x) k) ==> not_fresh_at sa x) /\
   (!x k. ce.ce_return_pc = SOME (PtrVar (Var x) k) ==> not_fresh_at sa x) /\
   ~ctx_has_dalloca ctx /\ ~s.vs_halted /\
@@ -62,8 +62,8 @@ Theorem concat_alloc_zero_counted:
       op_taint tn1 (Var x) = op_taint tn (Var x)) /\
     (!x k. not_fresh_at sa x /\ ptr_covers G tn x s k ==>
       ptr_covers G1 tn1 x t k) /\
-    stmt_state_rel ctx fn ce cx es t /\
-    ghost_inv d ce cx es G1 tn1 t /\ ghost_kept ce es sa G tn s G1 tn1 /\
+    stmt_state_rel H ctx fn ce cx es t /\
+    ghost_inv H d ce cx es G1 tn1 t /\ ghost_kept ce es sa G tn s G1 tn1 /\
     FLOOKUP t.vs_allocas sa.cs_next_id = SOME (w2n a,n) /\
     w2n a+n < dimword (:256) /\
     (!aid entry. FLOOKUP s.vs_allocas aid = SOME entry ==>
@@ -154,7 +154,7 @@ Resume concat_alloc_zero_counted[ghost]:
   disch_then (qspec_then `es.scopes` strip_assume_tac) >>
   `MEM (mk_inst sa.cs_next_id ALLOCA [Lit (n2w n)] [out]) (fn_insts fn)` by
     (drule_all compile_alloc_buffer_raw_step >> strip_tac >> gvs[]) >>
-  `ghost_inv d ce cx es G1 tn1 u` by
+  `ghost_inv H d ce cx es G1 tn1 u` by
     (qpat_assum `G1 = _` (fn th => rewrite_tac[th]) >>
      qpat_assum `tn1 = _` (fn th => rewrite_tac[th]) >>
      irule annassign_alloca_ghost_inv_ptr >> simp[] >> metis_tac[]) >>
@@ -234,9 +234,9 @@ Finalise concat_alloc_zero_counted
 
 Theorem concat_slice_out_buf_counted_frame:
   compile_slice_out_buf n sa = ((root,data),sb) /\
-  fn_has_code sa sb fn /\ stmt_state_rel ctx fn ce cx es s /\
+  fn_has_code sa sb fn /\ stmt_state_rel H ctx fn ce cx es s /\
   fn_inst_ids_distinct fn /\ local_ptrs_reserved ce sa /\
-  32 <= n /\ n < dimword (:256) /\ ghost_inv d ce cx es G tn s /\
+  32 <= n /\ n < dimword (:256) /\ ghost_inv H d ce cx es G tn s /\
   (!x k. ce.ce_return_buf = SOME (PtrVar (Var x) k) ==> not_fresh_at sa x) /\
   (!x k. ce.ce_return_pc = SOME (PtrVar (Var x) k) ==> not_fresh_at sa x) /\
   ~ctx_has_dalloca ctx /\ ~s.vs_halted /\
@@ -247,7 +247,7 @@ Theorem concat_slice_out_buf_counted_frame:
     gas_path_ptr D 0 ctx fn PG G tn s 0 G2 tn2 (OK t) /\
     ptr_covers G2 tn2 r t n /\ ptr_covers G2 tn2 p t (n-32) /\
     lookup_var r t = SOME a /\ lookup_var p t = SOME (a+32w) /\
-    stmt_state_rel ctx fn ce cx es t /\ ghost_inv d ce cx es G2 tn2 t /\
+    stmt_state_rel H ctx fn ce cx es t /\ ghost_inv H d ce cx es G2 tn2 t /\
     ghost_kept ce es sa G tn s G2 tn2 /\ ~t.vs_halted /\
     t.vs_current_bb = sb.cs_current_bb /\
     t.vs_inst_idx = LENGTH sb.cs_current_insts /\
@@ -267,7 +267,7 @@ Theorem concat_slice_out_buf_counted_frame:
 Proof
   strip_tac >> drule_all compile_slice_out_buf_counted >>
   disch_then (qspecl_then [`tn`,`PG`,`G`,`D`] strip_assume_tac) >>
-  `ghost_inv d ce cx es G2 tn2 t /\ ghost_kept ce es sa G tn s G2 tn2`
+  `ghost_inv H d ce cx es G2 tn2 t /\ ghost_kept ce es sa G tn s G2 tn2`
     by suspend "frame" >>
   `!name b k. local_region ce es.scopes s name b k <=>
     local_region ce es.scopes t name b k` by
@@ -290,7 +290,7 @@ Resume concat_slice_out_buf_counted_frame[frame]:
   disch_then (qspec_then `es.scopes` strip_assume_tac) >>
   `MEM (mk_inst sa.cs_next_id ALLOCA [Lit (n2w n)] [r]) (fn_insts fn)` by
     (drule_all compile_alloc_buffer_raw_step >> strip_tac >> gvs[]) >>
-  `ghost_inv d ce cx es G1 tn1 u` by
+  `ghost_inv H d ce cx es G1 tn1 u` by
     (qpat_assum `G1 = _` (fn th => rewrite_tac[th]) >>
      qpat_assum `tn1 = _` (fn th => rewrite_tac[th]) >>
      irule annassign_alloca_ghost_inv_ptr >> simp[] >> metis_tac[]) >>
@@ -353,7 +353,7 @@ Theorem concat_prefix_counted:
   emit_void MSTORE [ob.buf_operand; Lit 0w] s3 = ((),s4) /\
   fn_has_code sa s4 fn /\ fn_inst_ids_distinct fn /\
   local_ptrs_reserved ce sa /\ 32 <= bsz /\ bsz < dimword (:256) /\
-  stmt_state_rel ctx fn ce cx es s /\ ghost_inv d ce cx es G tn s /\
+  stmt_state_rel H ctx fn ce cx es s /\ ghost_inv H d ce cx es G tn s /\
   (!x k. ce.ce_return_buf = SOME (PtrVar (Var x) k) ==> not_fresh_at sa x) /\
   (!x k. ce.ce_return_pc = SOME (PtrVar (Var x) k) ==> not_fresh_at sa x) /\
   ~ctx_has_dalloca ctx /\ ~s.vs_halted /\
@@ -362,7 +362,7 @@ Theorem concat_prefix_counted:
   ?r p off a ow Gf tnf t.
     buf.buf_operand = Var r /\ data = Var p /\ ob.buf_operand = Var off /\
     gas_path_ptr D 0 ctx fn PG G tn s 0 Gf tnf (OK t) /\
-    stmt_state_rel ctx fn ce cx es t /\ ghost_inv d ce cx es Gf tnf t /\
+    stmt_state_rel H ctx fn ce cx es t /\ ghost_inv H d ce cx es Gf tnf t /\
     ghost_kept ce es sa G tn s Gf tnf /\
     ptr_covers Gf tnf r t bsz /\ ptr_covers Gf tnf p t (bsz-32) /\
     ptr_covers Gf tnf off t 64 /\

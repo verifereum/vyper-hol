@@ -93,7 +93,7 @@ Resume compile_if_stmt_frag_ptr[selected_branch]:
     (drule_all if_condition_operand >> simp[]) >>
   `~t.vs_halted` by
     (fs[gas_marked_exec_ptr_def] >> metis_tac[gas_path_ptr_erase, gas_path_normal]) >>
-  `gas_path_ptr (cx_dead cx) 0 ctx func PG G tn t 0 G tn
+  `gas_path_ptr (cx_dead H cx) 0 ctx func PG G tn t 0 G tn
      (OK (jump_to (if b then tl else el) t))` by
     (irule if_jnz_zero_path_ptr >>
      drule emit_inst_extends >> strip_tac >> simp[] >>
@@ -111,10 +111,10 @@ Resume compile_if_stmt_frag_ptr[selected_branch]:
   simp[] >> strip_tac >> suspend "compose"
 QED
 Resume compile_if_stmt_frag_ptr[entry]:
-  `ghost_inv d cenv cx
+  `ghost_inv H d cenv cx
      ((es_end with gas_obs := []) with scopes := FEMPTY :: es_end.scopes)
      G tn (jump_to (if b then tl else el) t)` by
-    (qpat_assum `ghost_inv _ _ _ (es_end with gas_obs := []) _ _ _`
+    (qpat_assum `ghost_inv _ _ _ _ (es_end with gas_obs := []) _ _ _`
        (mp_tac o MATCH_MP if_ghost_inv_push) >>
      simp[] >> strip_tac >> irule if_ghost_inv_jump >> simp[]) >>
   simp[compile_stmts_env, ret_pc_ok_jump_to, stmt_state_rel_jump_to,
@@ -134,7 +134,7 @@ Resume compile_if_stmt_frag_ptr[entry]:
 QED
 
 Resume compile_if_stmt_frag_ptr[compose]:
-  `gas_outcome_ptr (cx_dead cx) (cx_tops cx) (ctx,func) PG
+  `gas_outcome_ptr (cx_dead H cx) (cx_tops cx) (ctx,func) PG
     (eval_stmt cx (If c ss1 ss2)) (es,s0,G0,tn0)
     (stmt_post_ptr d ctx func cx lctx cenv cenv sa sb s0 G0 tn0)
     (\res ee gt r. !tail. stmt_exit_ptr RetQ (ee with gas_obs := tail) res gt r)`

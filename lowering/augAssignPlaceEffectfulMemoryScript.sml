@@ -54,11 +54,15 @@ Proof
      disch_then (mp_tac o MATCH_MP
        vyperEvalExprPreservesScopesDomTheory.eval_target_place_preserves_scopes_dom) >>
      simp[]) >>
+  drule_all aug_place_target_horizon_state_rel >> strip_tac >>
+  qpat_assum `!H. valid_horizon _ _ H _ ==> target_post H _ _ _ _ _ _ _ _ _ _ _ _ _ /\ _`
+    (qspec_then `H0` mp_tac) >>
+  impl_tac >- first_assum ACCEPT_TAC >> strip_tac >>
   drule_at (Pat `target_post`) stmtSimDefsTheory.target_post_alloca_frame >>
   impl_tac >- simp[] >> strip_tac >>
   irule (SRULE [vyperStateTheory.bind_assoc, SF ETA_ss]
     (Q.INST [`es0` |-> `es`] aug_place_ready_storage_endpoint)) >>
-  simp[] >> goal_assum (drule_at (Pat `target_post`)) >>
+  simp[] >> goal_assum (drule_at (Pat `!H. valid_horizon _ _ H _ ==> target_post H _ _ _ _ _ _ _ _ _ _ _ _ _ /\ _`)) >>
   goal_assum (drule_at (Pat `type_stmt`)) >>
   goal_assum (drule_at (Pat `compile_binop`)) >>
   goal_assum (drule_at (Pat `lower_value`)) >> simp[] >>

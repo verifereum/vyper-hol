@@ -3,7 +3,7 @@ Ancestors exprSimAggregateChildren bodyPtrDefs loweringPosts
   valueEncodingProofs valueEncoding valueEncodingDefs venomState compileEnv finite_map
 
 Theorem vv_post_old_buffer_mload:
-  vv_post ctx fn ce cx e es sa sb s0 ee tv vv s1 /\
+  vv_post H ctx fn ce cx e es sa sb s0 ee tv vv s1 /\
   FLOOKUP s0.vs_allocas aid = SOME (b,n) /\ aid < sa.cs_next_id /\
   (!name lo sz. local_region ce es.scopes s0 name lo sz ==>
     b+n <= lo \/ lo+sz <= b) /\
@@ -30,7 +30,7 @@ Proof
 QED
 
 Theorem structlit_old_word_preserved:
-  vv_post ctx fn ce cx e es sa sb s0 ee tv vv s1 /\
+  vv_post H ctx fn ce cx e es sa sb s0 ee tv vv s1 /\
   ghost_kept ce es sa G0 tn0 s0 G1 tn1 /\
   FLOOKUP s0.vs_allocas aid = SOME (b,n) /\ aid < sa.cs_next_id /\
   (!name lo sz. local_region ce es.scopes s0 name lo sz ==>

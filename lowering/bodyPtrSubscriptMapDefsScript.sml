@@ -25,31 +25,34 @@ Ancestors
   exprSimMapDefs bodyPtrDefs vyperStoragePlaceProvenance exprSimDefs loweringPosts
   fragGasPathPtr gasContext compileEnv valueEncoding exprLowering
   exprLoweringProps context venomState vyperInterpreter vyperState
+  vyperStorageFootprint
 
 Definition expr_map_sim_ptr_at_def:
-  expr_map_sim_ptr_at D lo d ctx PG func cenv cx ty e es <=>
-    !sa sb vv s0 G0 tn0.
+  expr_map_sim_ptr_at DF lo d ctx PG func cenv cx ty e es <=>
+    !st0 sa sb vv s0 G0 tn0.
       compile_expr cenv ty e sa = (vv, sb) /\
       fn_has_code sa sb func /\ fn_inst_ids_distinct func /\
       local_ptrs_reserved cenv sa /\ ~ctx_has_dalloca ctx /\
-      dead_lo_ok D lo cenv cx /\
+      (!H. dead_lo_ok H (DF H) lo cenv cx) /\
       (!x sz. cenv.ce_return_buf = SOME (PtrVar (Var x) sz) ==>
               not_fresh_at sa x) /\
       (!x sz. cenv.ce_return_pc = SOME (PtrVar (Var x) sz) ==>
               not_fresh_at sa x) /\
       gas_admissible (eval_expr cx e) expr_map_res_ok es /\
-      stmt_state_rel ctx func cenv cx es s0 /\
-      ghost_inv_at D lo d cenv cx es G0 tn0 s0 /\ ~s0.vs_halted /\
+      (!H. valid_horizon cx st0 H es.storage_trace ==>
+        stmt_state_rel H ctx func cenv cx es s0 /\
+        storage_well_formed_on cx es (FST H) /\
+        ghost_inv_at (DF H) lo d cenv cx es G0 tn0 s0) /\ ~s0.vs_halted /\
       s0.vs_current_bb = sa.cs_current_bb /\
       s0.vs_inst_idx = LENGTH sa.cs_current_insts ==>
-      gas_outcome_ptr_lo D lo (cx_tops cx) (ctx, func) PG
+      gas_outcome_ptr_lo DF lo (cx_tops cx) (ctx, func) PG cx st0
         (eval_expr cx e) (es, s0, G0, tn0)
-        (\res ee G tn t. ?tr slot kt vt tp p.
+        (\H res ee G tn t. ?tr slot kt vt tp p.
           res = INL (HashMapRef tr slot kt vt) /\
           storage_mapping_region cx tr slot (HashMapT kt vt) /\
           vv = LocatedValue tp p /\ p.ptr_location = slot_loc tr /\
           eval_operand p.ptr_operand t = SOME slot /\
-          stmt_state_rel ctx func cenv cx ee t /\
+          stmt_state_rel H ctx func cenv cx ee t /\
           (!x w. not_fresh_at sa x /\ lookup_var x s0 = SOME w ==>
                  lookup_var x t = SOME w) /\
           (!aid b. FLOOKUP s0.vs_allocas aid = SOME b ==>
@@ -65,21 +68,21 @@ Definition expr_map_sim_ptr_at_def:
           (~expr_has_effect e ==> pure_frame cenv func es sa s0 t) /\
           t.vs_current_bb = sb.cs_current_bb /\
           t.vs_inst_idx = LENGTH sb.cs_current_insts /\
-          ghost_inv_at D lo d cenv cx ee G tn t /\
+          ghost_inv_at (DF H) lo d cenv cx ee G tn t /\
           op_taint tn p.ptr_operand = {} /\
           ghost_kept_at lo cenv es sa G0 tn0 s0 G tn)
-        (\res ee gt r. expr_exit res r)
+        (\H res ee gt r. expr_exit res r)
 End
 
 Definition expr_map_sim_ptr_cx_dead:
   expr_map_sim_ptr d ctx PG func cenv cx ty e es <=>
     ~cenv.ce_is_ctor ==>
-    expr_map_sim_ptr_at (cx_dead cx) 0 d ctx PG func cenv cx ty e es
+    expr_map_sim_ptr_at (\H. cx_dead H cx) 0 d ctx PG func cenv cx ty e es
 End
 
 Theorem expr_map_sim_ptr_def:
   expr_map_sim_ptr d ctx PG func cenv cx ty e es <=>
-    !sa sb vv s0 G0 tn0.
+    !st0 sa sb vv s0 G0 tn0.
       compile_expr cenv ty e sa = (vv, sb) /\
       fn_has_code sa sb func /\ fn_inst_ids_distinct func /\
       local_ptrs_reserved cenv sa /\ ~ctx_has_dalloca ctx /\
@@ -89,18 +92,20 @@ Theorem expr_map_sim_ptr_def:
       (!x sz. cenv.ce_return_pc = SOME (PtrVar (Var x) sz) ==>
               not_fresh_at sa x) /\
       gas_admissible (eval_expr cx e) expr_map_res_ok es /\
-      stmt_state_rel ctx func cenv cx es s0 /\
-      ghost_inv d cenv cx es G0 tn0 s0 /\ ~s0.vs_halted /\
+      (!H. valid_horizon cx st0 H es.storage_trace ==>
+        stmt_state_rel H ctx func cenv cx es s0 /\
+        storage_well_formed_on cx es (FST H) /\
+        ghost_inv H d cenv cx es G0 tn0 s0) /\ ~s0.vs_halted /\
       s0.vs_current_bb = sa.cs_current_bb /\
       s0.vs_inst_idx = LENGTH sa.cs_current_insts ==>
-      gas_outcome_ptr (cx_dead cx) (cx_tops cx) (ctx, func) PG
+      gas_outcome_ptr (\H. cx_dead H cx) (cx_tops cx) (ctx, func) PG cx st0
         (eval_expr cx e) (es, s0, G0, tn0)
-        (\res ee G tn t. ?tr slot kt vt tp p.
+        (\H res ee G tn t. ?tr slot kt vt tp p.
           res = INL (HashMapRef tr slot kt vt) /\
           storage_mapping_region cx tr slot (HashMapT kt vt) /\
           vv = LocatedValue tp p /\ p.ptr_location = slot_loc tr /\
           eval_operand p.ptr_operand t = SOME slot /\
-          stmt_state_rel ctx func cenv cx ee t /\
+          stmt_state_rel H ctx func cenv cx ee t /\
           (!x w. not_fresh_at sa x /\ lookup_var x s0 = SOME w ==>
                  lookup_var x t = SOME w) /\
           (!aid b. FLOOKUP s0.vs_allocas aid = SOME b ==>
@@ -116,10 +121,10 @@ Theorem expr_map_sim_ptr_def:
           (~expr_has_effect e ==> pure_frame cenv func es sa s0 t) /\
           t.vs_current_bb = sb.cs_current_bb /\
           t.vs_inst_idx = LENGTH sb.cs_current_insts /\
-          ghost_inv d cenv cx ee G tn t /\
+          ghost_inv H d cenv cx ee G tn t /\
           op_taint tn p.ptr_operand = {} /\
           ghost_kept cenv es sa G0 tn0 s0 G tn)
-        (\res ee gt r. expr_exit res r)
+        (\H res ee gt r. expr_exit res r)
 Proof
   simp[expr_map_sim_ptr_cx_dead, expr_map_sim_ptr_at_def, dead_lo_ok_def, ghost_inv_cx_dead,
        ghost_kept_zero, gas_outcome_ptr_zero] >>

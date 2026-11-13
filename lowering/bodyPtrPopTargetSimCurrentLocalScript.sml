@@ -12,7 +12,7 @@ Theorem target_current_local_path_ptr:
   evaluate_type (get_tenv cx) ty = SOME tv /\
   lookup_scopes id es.scopes = SOME entry /\
   FLOOKUP cenv.ce_vars id = SOME (PtrVar (Var p) sz) /\
-  lookup_var p s = SOME w /\ ghost_inv d cenv cx es G tn s /\
+  lookup_var p s = SOME w /\ ghost_inv H d cenv cx es G tn s /\
   mem_path_offset tv path = SOME (off,ptv) /\
   ISL (evaluate_subscripts entry.type entry.value path) ==>
   entry.type = tv /\
@@ -41,7 +41,7 @@ Theorem target_current_local_dynamic_ptr:
   evaluate_type (get_tenv cx) ty = SOME tv /\
   lookup_scopes id es.scopes = SOME entry /\
   FLOOKUP cenv.ce_vars id = SOME (PtrVar (Var p) sz) /\
-  lookup_var p s = SOME w /\ ghost_inv d cenv cx es G tn s /\
+  lookup_var p s = SOME w /\ ghost_inv H d cenv cx es G tn s /\
   mem_path_offset tv path = SOME (off,ArrayTV etv (Dynamic cap)) /\
   ISL (evaluate_subscripts entry.type entry.value path) ==>
   ?vs. evaluate_subscripts tv entry.value path = INL (ArrayV (DynArrayV vs)) /\

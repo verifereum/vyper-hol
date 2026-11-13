@@ -7,11 +7,11 @@ Ancestors
   vyperValue list finite_map pred_set
 
 Theorem pop_storage_positive_endpoint:
-  target_post ctx func cenv cx es0 sa sm s0 es
+  target_post H ctx func cenv cx es0 sa sm s0 es
     (PlaceR (StoragePlace tr slot (ArrayTV tv (Dynamic cap))))
     (Type (ArrayT ann (Dynamic cap))) (hdr,loc,pt) s /\
   ci_mono sa sm /\ local_ptrs_reserved cenv sa /\ local_ptrs_reserved cenv sm /\
-  ghost_inv d cenv cx es G tn s /\
+  ghost_inv H d cenv cx es G tn s /\
   (!x sz. cenv.ce_return_buf = SOME (PtrVar (Var x) sz) ==> not_fresh_at sm x) /\
   (!x sz. cenv.ce_return_pc = SOME (PtrVar (Var x) sz) ==> not_fresh_at sm x) /\
   declared_storage_region cx mid name keys = SOME (tr,root,root_tv) /\
@@ -20,7 +20,7 @@ Theorem pop_storage_positive_endpoint:
   storage_range_agree (get_storage cx es tr)
     (if tr then contract_transient s else contract_storage s)
     slot (ArrayTV tv (Dynamic cap)) /\
-  storage_read_live cx tr
+  storage_read_live H tr
     (if tr then contract_transient s else contract_storage s) slot (ArrayTV tv (Dynamic cap)) /\
   slots_in_range (get_storage cx es tr) (w2n slot) (ArrayTV tv (Dynamic cap)) /\
   len = w2n (lookup_storage slot (get_storage cx es tr)) /\ 0 < len /\ len <= cap /\
@@ -35,19 +35,19 @@ Theorem pop_storage_positive_endpoint:
   tnf.t_trans = (if tr then key_update tn.t_trans slot {} else tn.t_trans) /\
   (!x. ~MEM x xs ==> FLOOKUP Gf x = FLOOKUP G x /\
      op_taint tnf (Var x) = op_taint tn (Var x) /\ lookup_var x u = lookup_var x s) ==>
-  vv_post ctx func cenv cx (Pop ann bt) es0 sa sb s0 ee
+  vv_post H ctx func cenv cx (Pop ann bt) es0 sa sb s0 ee
     (PlaceR (StoragePlace tr (slot + n2w (1 + (len-1) * type_slot_size tv)) tv))
     (LocatedValue ann (mk_ptr op (if tr then LocTransient else LocStorage))) u /\
-  ghost_inv d cenv cx ee Gf tnf u /\
+  ghost_inv H d cenv cx ee Gf tnf u /\
   ptr_vv_ok cx ann
     (PlaceR (StoragePlace tr (slot + n2w (1 + (len-1) * type_slot_size tv)) tv))
     (LocatedValue ann (mk_ptr op (if tr then LocTransient else LocStorage))) ee Gf tnf u /\
   ghost_kept cenv es sm G tn s Gf tnf
 Proof
   strip_tac >>
-  `stmt_state_rel ctx func cenv cx es s /\ evaluate_type (get_tenv cx) ann = SOME tv` by
+  `stmt_state_rel H ctx func cenv cx es s /\ evaluate_type (get_tenv cx) ann = SOME tv` by
     (drule nested_pop_storage_target_metadata >> simp[]) >>
-  `s.vs_call_ctx.cc_address = cx.txn.target /\ stor_taint_ok cx tn s` by
+  `s.vs_call_ctx.cc_address = cx.txn.target /\ stor_taint_ok H cx tn s` by
     fs[stmt_state_rel_def, state_rel_def, call_ctx_rel_def, ghost_inv_def] >>
   `!x. not_fresh_at sm x ==> lookup_var x u = lookup_var x s` by
     (gvs[EVERY_MEM] >> metis_tac[]) >>
@@ -94,7 +94,7 @@ Resume pop_storage_positive_endpoint[ghost]:
   qpat_x_assum `u = su with vs_inst_idx := k` (fn th => once_rewrite_tac[th]) >>
   pure_rewrite_tac[hash_ghost_inv_inst_idx] >>
   irule pop_storage_endpoint_ghost >>
-  qpat_assum `ghost_inv _ _ _ _ _ _ _` (irule_at Any) >>
+  qpat_assum `ghost_inv _ _ _ _ _ _ _ _` (irule_at Any) >>
   qpat_assum `declared_storage_region _ _ _ _ = _` (irule_at Any) >>
   qpat_assum `storage_subregion _ _ _ _` (irule_at Any) >>
   qexistsl [`xs`, `sm`, `len`, `slot`] >>
@@ -103,7 +103,7 @@ QED
 
 Resume pop_storage_positive_endpoint[returned]:
   irule pop_storage_returned_place >>
-  qpat_assum `stor_taint_ok _ _ _` (irule_at Any) >>
+  qpat_assum `stor_taint_ok _ _ _ _` (irule_at Any) >>
   qpat_assum `evaluate_type _ _ = _` (irule_at Any) >>
   qpat_assum `storage_read_live _ _ _ _ _` (irule_at Any) >>
   qexistsl [`n2w (len-1)`, `len`, `slot + n2w (1 + (len-1) * type_slot_size tv)`] >>

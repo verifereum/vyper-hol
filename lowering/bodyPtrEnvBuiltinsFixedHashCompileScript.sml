@@ -33,8 +33,8 @@ Theorem fixed_hash_compile_counted:
   compile_keccak256_bytesm value m sm = (op,sh) /\
   (!x. value = Var x ==> not_fresh_at sm x) /\ m <= 32 /\
   eval_operand value s = SOME w /\ op_taint tn value = {} /\
-  stmt_state_rel ctx fn cenv cx es s /\ fn_inst_ids_distinct fn /\
-  ~ctx_has_dalloca ctx /\ ghost_inv d cenv cx es G tn s /\
+  stmt_state_rel H ctx fn cenv cx es s /\ fn_inst_ids_distinct fn /\
+  ~ctx_has_dalloca ctx /\ ghost_inv H d cenv cx es G tn s /\
   local_ptrs_reserved cenv sm /\
   (!x sz. cenv.ce_return_buf = SOME (PtrVar (Var x) sz) ==> not_fresh_at sm x) /\
   (!x sz. cenv.ce_return_pc = SOME (PtrVar (Var x) sz) ==> not_fresh_at sm x) /\
@@ -44,7 +44,7 @@ Theorem fixed_hash_compile_counted:
   ?G' tn'. gas_path_ptr D 0 ctx fn PG G tn s 0 G' tn'
     (OK (t with vs_inst_idx := LENGTH sh.cs_current_insts)) /\
     ptr_val_ok cx (BaseT (BytesT (Fixed 32))) result op G' tn' t /\
-    ghost_inv d cenv cx es G' tn' t /\ ghost_kept cenv es sm G tn s G' tn'
+    ghost_inv H d cenv cx es G' tn' t /\ ghost_kept cenv es sm G tn s G' tn'
 Proof
   strip_tac >> drule_all fixed_hash_compile_code >> strip_tac >>
   `?bb. lookup_block s.vs_current_bb fn.fn_blocks = SOME bb /\

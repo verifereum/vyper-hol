@@ -35,7 +35,7 @@ Theorem literal_zero_child_add:
   s.vs_current_bb = sm.cs_current_bb /\ s.vs_inst_idx = LENGTH sm.cs_current_insts /\
   ~ctx_has_dalloca ctx /\ ~s.vs_halted /\
   lookup_var root s = SOME a /\ op_taint tn (Var root) = {} /\
-  vv_post ctx func ce cx e esi si sm s0 es' raw vv s /\
+  vv_post H ctx func ce cx e esi si sm s0 es' raw vv s /\
   ptr_vv_ok cx (expr_type e) raw vv es' G tn s /\
   (!t op. vv = StackValue t op ==> ptr_buf_ok ce e op G s) /\
   (!t p. vv = LocatedValue t p /\ p.ptr_location = LocMemory ==>
@@ -45,18 +45,18 @@ Theorem literal_zero_child_add:
   (!p. vv_operand vv = Var p ==> not_fresh_at sm p) /\
   (!p sz. ce.ce_return_buf = SOME (PtrVar (Var p) sz) ==> not_fresh_at sm p) /\
   (!p sz. ce.ce_return_pc = SOME (PtrVar (Var p) sz) ==> not_fresh_at sm p) /\
-  ghost_inv d ce cx es' G tn s /\ ghost_kept ce esi si G0 tn0 s0 G tn ==>
-  ?z H tm.
-    gas_path_ptr D 0 ctx func PG G tn s 0 H tm (OK z) /\
+  ghost_inv H d ce cx es' G tn s /\ ghost_kept ce esi si G0 tn0 s0 G tn ==>
+  ?z HG tm.
+    gas_path_ptr D 0 ctx func PG G tn s 0 HG tm (OK z) /\
     z.vs_current_bb = sn.cs_current_bb /\ z.vs_inst_idx = LENGTH sn.cs_current_insts /\
-    vv_post ctx func ce cx e esi si sn s0 es' raw vv z /\
-    ptr_vv_ok cx (expr_type e) raw vv es' H tm z /\
-    (!t op. vv = StackValue t op ==> ptr_buf_ok ce e op H z) /\
+    vv_post H ctx func ce cx e esi si sn s0 es' raw vv z /\
+    ptr_vv_ok cx (expr_type e) raw vv es' HG tm z /\
+    (!t op. vv = StackValue t op ==> ptr_buf_ok ce e op HG z) /\
     (!t p. vv = LocatedValue t p /\ p.ptr_location = LocMemory ==>
-      ptr_buf_ok ce e p.ptr_operand H z) /\
+      ptr_buf_ok ce e p.ptr_operand HG z) /\
     z.vs_memory = s.vs_memory /\ z.vs_allocas = s.vs_allocas /\
-    tm.t_mem = tn.t_mem /\ ghost_inv d ce cx es' H tm z /\
-    ghost_kept ce esi si G0 tn0 s0 H tm
+    tm.t_mem = tn.t_mem /\ ghost_inv H d ce cx es' HG tm z /\
+    ghost_kept ce esi si G0 tn0 s0 HG tm
 Proof
   disch_then (map_every assume_tac o CONJUNCTS) >>
   drule_all emit_op_fetch_boundary >> strip_tac >> fs[] >>
@@ -93,11 +93,11 @@ Theorem literal_zero_child_materialize:
   ~is_word_type (expr_type e) /\ ~is_bytestring_type (expr_type e) /\
   fn_has_code sm sn func /\ fn_has_code sn sb func /\ fn_inst_ids_distinct func /\
   eval_expr cx e esi = (INL raw,es') /\ read_result cx raw es' = (INL v,es') /\
-  expr_body_pre ce cx env e esi /\ stmt_state_rel ctx func ce cx esi s0 /\
+  expr_body_pre ce cx env e esi /\ stmt_state_rel H ctx func ce cx esi s0 /\
   s.vs_current_bb = sm.cs_current_bb /\ s.vs_inst_idx = LENGTH sm.cs_current_insts /\
   ~ctx_has_dalloca ctx /\ ~s.vs_halted /\ ~ce.ce_is_ctor /\
   lookup_var root s = SOME a /\ op_taint tn (Var root) = {} /\
-  vv_post ctx func ce cx e esi si sm s0 es' raw vv s /\
+  vv_post H ctx func ce cx e esi si sm s0 es' raw vv s /\
   ptr_vv_ok cx (expr_type e) raw vv es' G tn s /\
   (!t op. vv = StackValue t op ==> ptr_buf_ok ce e op G s) /\
   (!t p. vv = LocatedValue t p /\ p.ptr_location = LocMemory ==>
@@ -107,13 +107,13 @@ Theorem literal_zero_child_materialize:
   (!p. vv_operand vv = Var p ==> not_fresh_at sm p) /\
   (!p sz. ce.ce_return_buf = SOME (PtrVar (Var p) sz) ==> not_fresh_at si p) /\
   (!p sz. ce.ce_return_pc = SOME (PtrVar (Var p) sz) ==> not_fresh_at si p) /\
-  ghost_inv d ce cx es' G tn s /\ ghost_kept ce esi si G0 tn0 s0 G tn ==>
-  ?z H tm.
-    gas_path_ptr D 0 ctx func PG G tn s 0 H tm (OK z) /\
+  ghost_inv H d ce cx es' G tn s /\ ghost_kept ce esi si G0 tn0 s0 G tn ==>
+  ?z HG tm.
+    gas_path_ptr D 0 ctx func PG G tn s 0 HG tm (OK z) /\
     z.vs_current_bb = sc.cs_current_bb /\ z.vs_inst_idx = LENGTH sc.cs_current_insts /\
-    expr_post ctx func ce cx e esi si sc s0 es' v op z /\
-    ghost_inv d ce cx es' H tm z /\ ghost_kept ce esi si G0 tn0 s0 H tm /\
-    stmt_state_rel ctx func ce cx es' z /\ ~z.vs_halted
+    expr_post H ctx func ce cx e esi si sc s0 es' v op z /\
+    ghost_inv H d ce cx es' HG tm z /\ ghost_kept ce esi si G0 tn0 s0 HG tm /\
+    stmt_state_rel H ctx func ce cx es' z /\ ~z.vs_halted
 Proof
   disch_then (map_every assume_tac o CONJUNCTS) >>
   `sc = sb` by
@@ -125,7 +125,7 @@ Proof
   drule_all literal_zero_child_add >>
   disch_then (qspecl_then [`PG`, `D`] strip_assume_tac) >>
   `~z.vs_halted` by metis_tac[gas_path_ptr_erase, gas_path_normal] >>
-  `stmt_state_rel ctx func ce cx es' z` by gvs[vv_post_def] >>
+  `stmt_state_rel H ctx func ce cx es' z` by gvs[vv_post_def] >>
   drule literal_nonword_unwrap >> simp[] >> disch_then drule_all >>
   disch_then (qspecl_then [`PG`, `D`] strip_assume_tac) >>
   `si.cs_next_id <= sn.cs_next_id /\ si.cs_next_var <= sn.cs_next_var` by
@@ -136,13 +136,13 @@ Proof
   `MAP FDOM esi.scopes = MAP FDOM es'.scopes` by
     metis_tac[eval_expr_preserves_scopes_dom] >>
   `wb_frame ce esi es' si s0 z` by
-    (qpat_x_assum `vv_post _ _ _ _ _ _ _ sn _ _ _ _ _` mp_tac >>
+    (qpat_x_assum `vv_post _ _ _ _ _ _ _ _ sn _ _ _ _ _` mp_tac >>
      simp[vv_post_def, wb_frame_def] >> metis_tac[]) >>
-  `ghost_kept ce esi si G0 tn0 s0 H' tm'` by
-    (irule (Q.INST [`es1` |-> `es'`, `s1` |-> `z`, `sb` |-> `sn`, `G1` |-> `H`,
+  `ghost_kept ce esi si G0 tn0 s0 HG' tm'` by
+    (irule (Q.INST [`es1` |-> `es'`, `s1` |-> `z`, `sb` |-> `sn`, `G1` |-> `HG`,
                     `tn1` |-> `tm`] wordArgsPtrTheory.ghost_kept_wb_trans) >>
      simp[] >> metis_tac[]) >>
-  qexistsl [`z'`, `H'`, `tm'`] >> simp[] >>
+  qexistsl [`z'`, `HG'`, `tm'`] >> simp[] >>
   metis_tac[gas_path_ptr_then, arithmeticTheory.ADD]
 QED
 
@@ -161,10 +161,10 @@ Theorem literal_zero_frame_extend:
   literal_loop_frame pure ctx func ce cx d root aid addr capacity
     ees fr sf Gf tnf esi si G0 tn0 s0 cells off /\
   literal_prefix_ok cells tn0 s0 /\
-  stmt_state_rel ctx func ce cx ees sf /\
+  stmt_state_rel H ctx func ce cx ees sf /\
   local_ptrs_reserved ce fr /\ local_ptrs_reserved ce si /\
-  expr_post ctx func ce cx e esi si sb s0 es' v op z /\
-  ghost_kept ce esi si G0 tn0 s0 H tm /\ ghost_inv d ce cx es' H tm z /\
+  expr_post H ctx func ce cx e esi si sb s0 es' v op z /\
+  ghost_kept ce esi si G0 tn0 s0 HG tm /\ ghost_inv H d ce cx es' HG tm z /\
   eval_expr cx e esi = (res,es') /\
   si.cs_next_var <= sb.cs_next_var /\ si.cs_next_id <= sb.cs_next_id /\
   ~z.vs_halted /\ z.vs_current_bb = sb.cs_current_bb /\
@@ -172,7 +172,7 @@ Theorem literal_zero_frame_extend:
   val_wf tv v /\ val_footprint tv v = 0 /\ val_in_memory tv v a mem /\
   (pure ==> ~expr_has_effect e) ==>
   literal_loop_frame pure ctx func ce cx d root aid addr capacity
-    ees fr sf Gf tnf es' sb H tm z (cells ++ [(tv,v,addr+off,0)]) off /\
+    ees fr sf Gf tnf es' sb HG tm z (cells ++ [(tv,v,addr+off,0)]) off /\
   literal_prefix_ok (cells ++ [(tv,v,addr+off,0)]) tm z
 Proof
   disch_then (map_every assume_tac o CONJUNCTS) >>

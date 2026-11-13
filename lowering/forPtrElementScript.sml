@@ -6,7 +6,7 @@ Ancestors bodyPtrDefs stmtSimForArray stmtSimForArrayParts ptrCoverage
 (* The statement-boundary invariant's live-local interface, independent of
    For syntax. Consumers need not unfold ghost_inv themselves. *)
 Theorem ghost_inv_local_ptr:
-  ghost_inv d cenv cx es G tn s /\
+  ghost_inv H d cenv cx es G tn s /\
   lookup_scopes name es.scopes = SOME entry /\
   FLOOKUP cenv.ce_vars name = SOME (PtrVar (Var p) sz) ==>
   ptr_covers G tn p s sz /\
@@ -18,7 +18,7 @@ Proof
 QED
 
 Theorem for_local_array_element_robust:
-  ghost_inv d cenv cx es G tn s /\
+  ghost_inv H d cenv cx es G tn s /\
   lookup_scopes name es.scopes = SOME entry /\
   FLOOKUP cenv.ce_vars name = SOME (PtrVar (Var p) sz) /\
   entry.type = ArrayTV tv (Fixed n) /\
@@ -57,7 +57,7 @@ Proof
 QED
 
 Theorem stmt_state_rel_local_extent:
-  stmt_state_rel ctx fn cenv cx es s /\
+  stmt_state_rel H ctx fn cenv cx es s /\
   lookup_scopes name es.scopes = SOME entry /\
   FLOOKUP cenv.ce_vars name = SOME (PtrVar (Var p) sz) ==>
   ?w. lookup_var p s = SOME w /\
@@ -73,8 +73,8 @@ Proof
 QED
 
 Theorem for_local_array_element_coverage:
-  stmt_state_rel ctx fn cenv cx es s /\
-  ghost_inv d cenv cx es G tn s /\
+  stmt_state_rel H ctx fn cenv cx es s /\
+  ghost_inv H d cenv cx es G tn s /\
   lookup_scopes name es.scopes = SOME entry /\
   FLOOKUP cenv.ce_vars name = SOME (PtrVar (Var p) sz) /\
   entry.type = ArrayTV tv (Fixed n) /\ lookup_var p s = SOME w /\
@@ -96,7 +96,7 @@ QED
 Theorem for_array_name_source_ptr:
   expr_sim_inv cenv cx env es /\
   well_typed_expr env (Name (ArrayT ty (Fixed n)) name) /\
-  stmt_state_rel ctx fn cenv cx es s /\ ghost_inv d cenv cx es G tn s ==>
+  stmt_state_rel H ctx fn cenv cx es s /\ ghost_inv H d cenv cx es G tn s ==>
   ?entry tv p sz w.
     lookup_scopes name es.scopes = SOME entry /\
     FLOOKUP cenv.ce_vars name = SOME (PtrVar (Var p) sz) /\

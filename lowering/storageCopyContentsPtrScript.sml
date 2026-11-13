@@ -16,7 +16,7 @@ Proof
 QED
 
 Theorem completed_storage_copy_contents:
-  stmt_state_rel ctx func cenv cx es u /\
+  stmt_state_rel H ctx func cenv cx es u /\
   storage_holds cx tr t tv a es u /\
   read_result cx tv es = (INL v,es) /\
   evaluate_type (get_tenv cx) t = SOME ty /\
