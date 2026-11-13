@@ -2,11 +2,13 @@
 Theory widenedAssignPtrContinuation
 Ancestors widenedAssignPtrTypedLocal widenedAssignPtrRhsInput
   widenedAssignPtrCopyRecursive widenedAssignPtrLocalLanding
+  bodyPtrIfExpZeroStore bodyPtrIfExpReturnMetadata exprSimHypsDefs vyperTypeSystem vyperTypeInvariants
+  loweringPosts externalReturnIntcallProducer
   assignBasePtrAllocSeparate valueEncodingProps bodyDeclMemoryCore
   tupleLocalStoreRun localPtrsProps venomInst fragGasPathPtr stmtFragPtr exprSimAlloc
   assignBasePtrLocalAssign externalEntryShape stmtLowering context
   abiBuiltinAllocation abiBuiltinEncodeAllocate emitHelper emitHelperProps
-  compileEnv exprLoweringProps valueCopyBytes fragExec exprSimBufferStore
+  compileEnv exprLowering exprLoweringProps valueCopyBytes fragExec exprSimBufferStore
   externalNormalizePremises bodyPtrDefs stmtSimAssignStore valueEncodingDefs
   valueEncoding loweringStateRelDefs venomState venomExecSemantics ptrDiscipline
   vyperLookup finite_map words
@@ -382,4 +384,37 @@ Proof
      goal_assum (drule_at (Pat `ghost_inv _ _ _ _ _ _ _`)) >>
      simp[] >> metis_tac[]) >>
   qexistsl_tac [`Gf`,`tf`,`t`] >> simp[]
+QED
+
+(* Genuine widening excludes bufferless internal-call results: a zero-sized
+   evaluated layout cannot widen to a different annotation. *)
+Theorem widened_assign_retained_call_memory:
+  body_inv tops ctx ce cx /\
+  expr_body_pre ce cx env (Call ann (IntCall fid) args drv) es /\
+  ~(lowered_value_type ce (Call ann (IntCall fid) args drv) = ann \/
+    is_bytestring_type ann /\
+    is_bytestring_type (lowered_value_type ce (Call ann (IntCall fid) args drv)) /\
+    arg_type_fits (lowered_value_type ce (Call ann (IntCall fid) args drv)) ann) /\
+  compile_expr ce ct (Call ann (IntCall fid) args drv) sa = (vv,sm) ==>
+  0 < type_memory_bytes ce (lowered_value_type ce (Call ann (IntCall fid) args drv)) /\
+  ?p. vv = LocatedValue (ce.ce_func_return_type (nsid_to_string fid)) p /\
+    p.ptr_location = LocMemory
+Proof
+  strip_tac >>
+  drule_all retained_intcall_physical_layout >> strip_tac >>
+  `get_tenv cx = env.type_defs` by fs[expr_body_pre_def, expr_sim_inv_def,
+      env_consistent_def, env_context_consistent_def] >>
+  `type_widens_to (get_tenv cx)
+    (lowered_value_type ce (Call ann (IntCall fid) args drv)) ann` by
+    (drule_all ifexp_call_annotation_widens >> simp[lowered_value_type_def]) >>
+  `lowered_value_type ce (Call ann (IntCall fid) args drv) <> ann` by metis_tac[] >>
+  `0 < type_memory_size tv` by metis_tac[normalize_return_source_positive] >>
+  `0 < type_memory_bytes ce (lowered_value_type ce (Call ann (IntCall fid) args drv))` by metis_tac[] >>
+  simp[] >>
+  drule return_compile_intcall_output >> strip_tac >- metis_tac[] >>
+  `ce.ce_func_return_type (nsid_to_string fid) <> NoneT` by
+    (strip_tac >>
+     fs[lowered_value_type_def, vyperTypeArgFitsTheory.type_widens_to_NoneT]) >>
+  drule_all ifexp_internal_call_zero_extent >>
+  fs[lowered_value_type_def]
 QED
