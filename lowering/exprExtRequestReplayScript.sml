@@ -223,7 +223,19 @@ Resume extrequest_evaluate_replay[builtin]:
       simp[extrequest_replay_primitives] >>
       irule extrequest_replay_bind >>
       simp[extrequest_replay_lift_option_type, extrequest_replay_primitives]) >>
-  irule extrequest_replay_bind_guarded >> reverse conj_tac >- metis_tac[] >>
+  irule extrequest_replay_bind_guarded >> reverse conj_tac
+  >- (Cases_on `code_slice_source bt es` >> simp[] >- metis_tac[] >>
+      rename1 `SOME pr` >> PairCases_on `pr` >> simp[] >>
+      gvs[code_slice_source_SOME, supported_expr_exists_def] >>
+      irule extrequest_replay_bind_guarded >> reverse conj_tac
+      >- metis_tac[] >>
+      rpt strip_tac >> simp[] >>
+      irule extrequest_replay_bind_guarded >> reverse conj_tac
+      >- metis_tac[] >>
+      rpt strip_tac >> simp[] >> irule extrequest_replay_bind >>
+      simp[extrequest_replay_primitives] >>
+      gen_tac >> simp[] >> irule extrequest_replay_bind >>
+      simp[extrequest_replay_primitives, extrequest_replay_return]) >>
   rpt strip_tac >> simp[] >> irule extrequest_replay_bind >>
   simp[extrequest_replay_primitives] >>
   gen_tac >> simp[] >> irule extrequest_replay_bind >>
