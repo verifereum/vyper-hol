@@ -17,7 +17,7 @@ Theorem intcall_memory_unlock_exit_frame:
   val_in_memory fp.jc_ret_tv v (w2n bw) t.vs_memory ==>
   intcall_stmt_exit fp (INR (ReturnException v)) es
     (IntRet <|iret_values := []; iret_adopt_fmp := NONE|>
-      (return_unlock_state fp.jc_root_ce t))
+      (return_unlock_state fp.jc_root_ce t with vs_inst_idx := idx))
 Proof
   strip_tac >>
   `stmt_state_rel fp.jc_ctx fp.jc_func ce fp.jc_cx
@@ -43,8 +43,7 @@ Proof
        constructor_exit_state_rel)) >> qexists_tac `ce` >>
      fs[intcall_joint_res_def, intcall_expr_res_def, stmt_state_rel_def]) >>
   simp[intcall_stmt_exit_def] >> disj2_tac >> conj_tac
-  >- (irule intret_q_intro >>
-      qexistsl_tac [`<|iret_values := []; iret_adopt_fmp := NONE|>`, `t`] >>
+  >- (simp[intret_q_def] >> qexistsl_tac [`t`, `idx`] >>
       simp[result_rel_def, intret_vals_match_def, state_rel_gas_obs]) >>
   simp[eval_operand_return_unlock] >> conj_tac
   >- (rpt strip_tac >>
@@ -112,4 +111,59 @@ Proof
   Cases_on `info0` >> Cases_on `info2` >> Cases_on `info3` >>
   gvs[return_unlock_state_def, tstore_def, sstore_def,
       copy_static_def, venom_state_component_equality]
+QED
+
+Theorem intcall_memory_unlock_effect_exit:
+  intcall_frame_ok fp /\ intcall_joint_res fp ce env es sa s /\
+  fp.jc_rb = SOME (bw,cap) /\ fp.jc_root_ce.ce_returns_count = 0 /\
+  compile_return_unlock ce sa = ((),su) /\ ci_mono sa su /\
+  typed_copy_effect fp.jc_ctx fp.jc_func su sm (return_unlock_state ce s) t (w2n bw) cap /\
+  val_in_memory fp.jc_ret_tv v (w2n bw) t.vs_memory /\
+  emit_inst RET [fp.jc_rpc] [] sm = ((),sb) /\
+  fn_has_code sm sb fp.jc_func /\ fn_inst_ids_distinct fp.jc_func ==>
+  ?k r. gas_path fp.jc_ctx fp.jc_func (return_unlock_state ce s) k r /\
+    exit_result r /\ intcall_stmt_exit fp (INR (ReturnException v)) es r
+Proof
+  strip_tac >>
+  `(!op x. fp.jc_reserved op /\ op = Var x ==> not_fresh_at su x) /\
+   eval_operand fp.jc_rpc s = SOME fp.jc_pc /\ fp.jc_reserved fp.jc_rpc /\
+   ce.ce_nonreentrant = fp.jc_root_ce.ce_nonreentrant` by
+    (fs[intcall_frame_ok_def, intcall_joint_res_def, intcall_expr_res_def,
+        same_frame_def, compile_env_component_equality, ci_mono_def, not_fresh_at_def] >>
+     metis_tac[arithmeticTheory.LESS_LESS_EQ_TRANS]) >>
+  `eval_operand fp.jc_rpc (return_unlock_state ce s) = SOME fp.jc_pc` by
+    simp[eval_operand_return_unlock] >>
+  `gas_path fp.jc_ctx fp.jc_func (return_unlock_state ce s) 0
+    (IntRet <|iret_values := []; iret_adopt_fmp := NONE|> t)` by
+    (irule (Q.INST [`P` |-> `\b n. F`, `reserved` |-> `fp.jc_reserved`]
+       (cj 1 typed_copy_effect_ret_path)) >>
+     goal_assum (drule_at (Pat `typed_copy_effect _ _ _ _ _ _ _ _`)) >>
+     qexistsl_tac [`fp`, `fp.jc_rpc`, `sb`] >> simp[] >> metis_tac[]) >>
+  `!op. fp.jc_reserved op ==> eval_operand op t = eval_operand op s` by
+    (rpt strip_tac >>
+     `eval_operand op t = eval_operand op (return_unlock_state ce s)` by
+       (irule bodyIntCallCopySharpDynamicTheory.typed_copy_effect_operand_preserved >>
+        goal_assum (drule_at (Pat `typed_copy_effect _ _ _ _ _ _ _ _`)) >>
+        metis_tac[]) >>
+     gvs[eval_operand_return_unlock]) >>
+  `copy_static t = copy_static (return_unlock_state ce s)` by
+    (drule typed_copy_effect_record >>
+     simp[copy_static_def, venom_state_component_equality]) >>
+  drule copy_static_unlock_index_witness >> strip_tac >>
+  `intcall_stmt_exit fp (INR (ReturnException v)) es
+    (IntRet <|iret_values := []; iret_adopt_fmp := NONE|>
+      (return_unlock_state fp.jc_root_ce u with vs_inst_idx := t.vs_inst_idx))` by
+    (irule intcall_memory_unlock_exit_frame >>
+     simp[] >>
+     goal_assum (drule_at (Pat `intcall_joint_res _ _ _ _ _ _`)) >>
+     fs[typed_copy_effect_def] >>
+     conj_tac >- metis_tac[arithmeticTheory.ADD_COMM] >>
+     rpt strip_tac >>
+     `eval_operand op u = eval_operand op t` by
+       (Cases_on `op` >>
+        fs[eval_operand_def, lookup_var_def, copy_static_def,
+           venom_state_component_equality, eval_operand_return_unlock]) >>
+     metis_tac[]) >>
+  qexistsl_tac [`0`, `IntRet <|iret_values := []; iret_adopt_fmp := NONE|> t`] >>
+  fs[fragExecTheory.exit_result_def, return_unlock_state_def] >> metis_tac[]
 QED
