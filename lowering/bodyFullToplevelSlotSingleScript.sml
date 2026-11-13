@@ -13,6 +13,9 @@ Ancestors
   exprPtrUnwrapRuntimeFrame venomMemProps valueEncodingProps arithmetic
   exprPtrUnwrapAllocSeparation exprSimAlloc allocationPtr loweringPosts exprSimProps
   exprPtrUnwrapEndpointFrames ctorDeployMemoryRunMemEntryWord
+  bodyFullToplevelSlotSinglePost exprPtrUnwrapStorage exprPtrUnwrapTypedSize
+  vyperInterpreter vyperState exprLowering vyperAST context freshWrites
+  compileEnv emitHelper loweringHalt
 
 Theorem toplevel_slot_single_suffix_origin_ptr:
   compile_expr cenv ty (TopLevelName ann nsid) si = (LocatedValue vt p,sm) /\
@@ -584,4 +587,124 @@ Proof
   `p.ptr_location = LocStorage <=> ~tr` by
     (Cases_on `tr` >> fs[slot_loc_def]) >>
   Cases_on `tr` >> gvs[] >> metis_tac[]
+QED
+
+Theorem toplevel_slot_single_copy_full:
+  vv = LocatedValue t p /\
+  (p.ptr_location = LocStorage \/ p.ptr_location = LocTransient) /\
+  ~is_word_type t /\
+  compile_expr cenv ty (TopLevelName ann nsid) sa = (vv,sm) /\
+  (is_word_type (post_value_type cenv (TopLevelName ann nsid)) ==>
+    is_word_type (expr_type (TopLevelName ann nsid))) /\
+  sm.cs_next_var <= sb.cs_next_var /\ sm.cs_next_id <= sb.cs_next_id /\
+  unwrap_value cenv vv sb = (op,sc) /\
+  local_ptrs_reserved cenv sa /\ local_ptrs_reserved cenv sm /\
+  MAP FDOM es.scopes = MAP FDOM ee.scopes /\
+  sa.cs_next_var <= sm.cs_next_var /\ sa.cs_next_id <= sm.cs_next_id /\
+  fn_has_code sb sc func /\ fn_inst_ids_distinct func /\
+  ~ctx_has_dalloca ctx /\ (!H. dead_lo_ok H (DF H) lo cenv cx) /\
+  (!x. vv_operand vv = Var x ==> not_fresh_at sm x) /\
+  (!rt. evaluate_type (get_tenv cx) (post_value_type cenv (TopLevelName ann nsid)) = SOME rt /\
+    ~is_word_type (post_value_type cenv (TopLevelName ann nsid)) ==>
+    type_memory_bytes cenv (post_value_type cenv (TopLevelName ann nsid)) = type_memory_size rt /\
+    type_memory_size rt < 2**64) /\
+  evaluate_type (get_tenv cx) (post_value_type cenv (TopLevelName ann nsid)) = SOME rty /\
+  type_slot_size rty = 1 /\
+  (!v. read_result cx tv ee = (INL v,ee) ==> value_has_type rty v) /\
+  storage_trace_domain cx st0 ee.storage_trace /\
+  (!H. valid_horizon cx st0 H ee.storage_trace ==>
+    vv_post H ctx func cenv cx (TopLevelName ann nsid) es sa sm s0 ee tv vv s /\
+    ghost_inv_at (DF H) lo ret cenv cx ee G tn s) /\
+  vv_store_bound cx (expr_type (TopLevelName ann nsid))
+    (lowered_value_type cenv (TopLevelName ann nsid)) ee tv vv s /\
+  alloca_history func s /\ s0.vs_alloca_next <= s.vs_alloca_next /\
+  ~s.vs_halted /\ s.vs_current_bb = sb.cs_current_bb /\
+  s.vs_inst_idx = LENGTH sb.cs_current_insts /\
+  ptr_vv_ok cx (post_value_type cenv (TopLevelName ann nsid)) tv vv ee G tn s /\
+  (!t op0. vv = StackValue t op0 /\ ~is_word_type (post_value_type cenv (TopLevelName ann nsid)) ==>
+    ptr_buf_ok cenv (TopLevelName ann nsid) op0 G s) /\
+  (!t p. vv = LocatedValue t p /\ p.ptr_location = LocMemory ==>
+    ptr_buf_ok cenv (TopLevelName ann nsid) p.ptr_operand G s) /\
+  (cenv.ce_is_ctor /\ vv_location vv = SOME LocCode ==>
+    ?val. read_result cx tv ee = (INL val,ee) /\
+      !rt w. evaluate_type (get_tenv cx) (post_value_type cenv (TopLevelName ann nsid)) = SOME rt /\
+        eval_operand (vv_operand vv) s = SOME w ==>
+        w2n w + type_memory_size rt <= lo /\
+        (!mem. mem_agree_outside tn.t_mem s.vs_memory mem ==>
+          val_in_memory rt val (w2n w) mem)) /\
+  ghost_kept_at lo cenv es sa Gi ti s0 G tn /\
+  (!x sz. cenv.ce_return_buf = SOME (PtrVar (Var x) sz) ==> not_fresh_at sa x) /\
+  (!x sz. cenv.ce_return_pc = SOME (PtrVar (Var x) sz) ==> not_fresh_at sa x) ==>
+  ?v z G' tn'.
+    read_result cx tv ee = (INL v,ee) /\
+    (!H. valid_horizon cx st0 H ee.storage_trace ==>
+      gas_origin_ptr_path (DF H,lo,explicit,ctx,func,PG) (s,G,tn) [] (OK z,G',tn') /\
+      expr_post H ctx func cenv cx (TopLevelName ann nsid) es sa sc s0 ee v op z /\
+      ghost_inv_at (DF H) lo ret cenv cx ee G' tn' z) /\
+    (~is_word_type (post_value_type cenv (TopLevelName ann nsid)) ==>
+      vv_at cenv cx (post_value_type cenv (TopLevelName ann nsid)) sa sc ee tv
+        (LocatedValue (post_value_type cenv (TopLevelName ann nsid)) (mk_ptr op LocMemory)) z) /\
+    expr_store_bound cx (expr_type (TopLevelName ann nsid)) v op z /\
+    z.vs_current_bb = sc.cs_current_bb /\ z.vs_inst_idx = LENGTH sc.cs_current_insts /\
+    alloca_history func z /\ s.vs_alloca_next <= z.vs_alloca_next /\
+    s0.vs_alloca_next <= z.vs_alloca_next /\
+    ptr_val_ok cx (post_value_type cenv (TopLevelName ann nsid)) v op G' tn' z /\
+    (~is_word_type (post_value_type cenv (TopLevelName ann nsid)) ==>
+      ptr_buf_ok cenv (TopLevelName ann nsid) op G' z) /\
+    (~is_word_type (post_value_type cenv (TopLevelName ann nsid)) ==>
+      !rt w. evaluate_type (get_tenv cx) (lowered_value_type cenv (TopLevelName ann nsid)) = SOME rt /\
+        eval_operand op z = SOME w ==> type_memory_size rt = 0 \/
+        w2n w+type_memory_size rt <= z.vs_alloca_next) /\
+    ghost_kept_at lo cenv es sa Gi ti s0 G' tn' /\
+    (!x. not_fresh_at sb x ==> lookup_var x z = lookup_var x s /\
+      FLOOKUP G' x = FLOOKUP G x /\ op_taint tn' (Var x) = op_taint tn (Var x)) /\
+    wb_frame cenv ee ee sb s z /\ ghost_kept_at lo cenv ee sb G tn s G' tn'
+Proof
+  strip_tac >>
+  `valid_horizon cx st0 (storage_trace_horizon ee.storage_trace) ee.storage_trace` by
+    fs[vyperStorageFootprintTheory.storage_trace_domain_def] >>
+  `vv_post (storage_trace_horizon ee.storage_trace) ctx func cenv cx
+     (TopLevelName ann nsid) es sa sm s0 ee tv (LocatedValue t p) s /\
+   ghost_inv_at (DF (storage_trace_horizon ee.storage_trace)) lo ret cenv cx ee G tn s` by
+    metis_tac[] >>
+  `?tr. p.ptr_location = slot_loc tr` by
+    (Cases_on `p.ptr_location = LocTransient` >> metis_tac[slot_loc_def]) >>
+  drule_all vv_post_storage_source >> strip_tac >>
+  `storage_holds cx tr t tv a ee s` by fs[storage_holds_def, read_result_def, return_def] >>
+  `t = ann /\ type_memory_bytes cenv t = 32 /\ type_memory_size rty = 32` by
+    (gvs[post_value_type_def, lowered_value_type_def, expr_type_def] >>
+     simp[valueEncodingPropsTheory.type_memory_size_slots]) >>
+  `compile_ensure_in_memory p.ptr_operand p.ptr_location 32 1
+     cenv.ce_is_ctor cenv.ce_imm_alloca sb = (op,sc)` by
+    (gvs[unwrap_value_def] >> Cases_on `p.ptr_location` >> gvs[]) >>
+  `local_ptrs_reserved cenv sb /\
+   (!x. p.ptr_operand = Var x ==> not_fresh_at sb x)` by
+    (gvs[vv_operand_def] >> metis_tac[local_ptrs_reserved_next_var, not_fresh_at_mono]) >>
+  `allocas_from lo s /\ lo <= s.vs_alloca_next` by fs[ghost_inv_at_def] >>
+  `op_taint tn p.ptr_operand = {}` by (qpat_x_assum `ptr_vv_ok _ _ _ _ _ _ _ _` mp_tac >> simp[ptr_vv_ok_def]) >>
+  `32 < dimword (:256) /\ 32 <= (32:num)` by simp[dimword_def] >>
+  qpat_x_assum `vv = _` SUBST_ALL_TAC >>
+  drule_all toplevel_slot_single_certificate >>
+  disch_then (qspecl_then [`explicit`, `PG`, `G`] strip_assume_tac) >>
+  `sb.cs_next_var <= mid.cs_next_var /\ sb.cs_next_id < sc.cs_next_id` by
+    (qpat_assum `compile_ensure_in_memory _ _ _ _ _ _ _ = _`
+       (mp_then (Pos last) mp_tac ensure_slot_memory_split) >>
+     simp[] >> Cases_on `tr` >> simp[slot_loc_def] >> strip_tac >>
+     drule loweringHaltTheory.compile_alloc_buffer_parts >> strip_tac >>
+     qpat_x_assum `comp_bind _ _ mid = _` mp_tac >>
+     simp[emit_op_def, emit_void_def, comp_bind_def, comp_ignore_bind_def,
+          comp_return_def, fresh_var_def, fresh_id_def, emit_def] >>
+     strip_tac >> gvs[]) >>
+  qpat_x_assum `t = post_value_type _ _` SUBST_ALL_TAC >>
+  `type_memory_size rty <= 32 /\
+   type_memory_bytes cenv (lowered_value_type cenv (TopLevelName ann nsid)) <= 32` by
+    fs[post_value_type_def, lowered_value_type_def] >>
+  rename1 `eval_operand p.ptr_operand s = SOME key` >>
+  rename1 `slot_copy_runtime_frame mid d 1 acopy z` >>
+  mp_tac (Q.INST [`nb` |-> `32`, `a` |-> `acopy`,
+    `t` |-> `post_value_type cenv (TopLevelName ann nsid)`] toplevel_slot_single_posts) >>
+  (impl_tac >- (rpt conj_tac >> first_assum ACCEPT_TAC)) >>
+  disch_then (qx_choose_then `vpost` strip_assume_tac) >>
+  qexistsl [`vpost`, `z`, `Gf`, `tnf`] >>
+  simp[]
 QED
