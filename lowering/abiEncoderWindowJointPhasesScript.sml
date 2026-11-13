@@ -1,6 +1,7 @@
 (* Initialize an ABI scratch cursor on one execution before choosing dead masks. *)
 Theory abiEncoderWindowJointPhases
 Ancestors
+  abiEncoderChildCode abiEncoderWindowChild abiEncoderWindowSequence
   abiEncoderArrayTailInit
   abiEncoderWindowJointLeaves abiEncoderWindowArrayEntry
   abiEncoderArrayPhases abiDecoderIndexInit abiEncoderWindowStructuralMembers
@@ -1071,3 +1072,54 @@ Resume window_array_root_tail_init_joint[tail_allocation]:
 QED
 
 Finalise window_array_root_tail_init_joint
+
+(* The dynamic child setup shares one raw endpoint and ghost pair. *)
+Theorem window_child_prefix_joint:
+  abi_encode_child_prefix (Var dst) ho (Var dp) st = (ops,en) /\
+  fn_has_code st en func /\
+  eval_operand (Var dst) s = SOME (n2w d) /\
+  eval_operand (Var dp) s = SOME (n2w slot) /\
+  not_fresh_at st dst /\ not_fresh_at st dp /\
+  ptr_covers G tn dst s bound /\ ptr_covers G tn dp s 32 /\
+  ho + 32 <= bound /\ off <= bound /\
+  d + bound <= s.vs_alloca_next /\
+  slot + 32 <= s.vs_alloca_next /\
+  mem_word_at slot s.vs_memory = n2w off /\
+  (!i. slot <= i /\ i < slot + 32 ==> i NOTIN tn.t_mem) /\
+  alloca_inv s /\ alloca_room ctx func s /\
+  ~ctx_has_dalloca ctx /\
+  allocas_from lo s /\ lo <= s.vs_alloca_next /\
+  ~s.vs_halted /\ s.vs_current_bb = st.cs_current_bb /\
+  s.vs_inst_idx = LENGTH st.cs_current_insts ==>
+  ?t G' tn' hp cp.
+    run_inst_seq (emitted_insts st en) s =
+      OK (t with vs_inst_idx := s.vs_inst_idx) /\
+    window_phase ctx func st en {} [] s t /\
+    abi_encode_exec_frame func s t /\
+    FST ops = Var hp /\ SND (SND ops) = Var cp /\
+    eval_operand (FST ops) t = SOME (n2w (d+ho)) /\
+    eval_operand (FST (SND ops)) t = SOME (n2w off) /\
+    eval_operand (SND (SND ops)) t = SOME (n2w (d+off)) /\
+    (!x. FST ops = Var x \/ FST (SND ops) = Var x \/
+      SND (SND ops) = Var x ==> not_fresh_at en x) /\
+    op_taint tn' (FST ops) = {} /\
+    op_taint tn' (FST (SND ops)) = {} /\
+    op_taint tn' (SND (SND ops)) = {} /\
+    ptr_covers G' tn' hp t 32 /\
+    ptr_covers G' tn' cp t (bound-off) /\
+    t.vs_memory = s.vs_memory /\
+    allocas_from lo t /\ lo <= t.vs_alloca_next /\
+    (!x. not_fresh_at st x ==>
+      FLOOKUP G' x = FLOOKUP G x /\
+      op_taint tn' (Var x) = op_taint tn (Var x)) /\
+    tn'.t_mem = tn.t_mem /\
+    tn'.t_stor = tn.t_stor /\
+    tn'.t_trans = tn.t_trans /\
+    tn'.t_imm = tn.t_imm /\
+    !D. gas_origin_ptr_path (D,lo,explicit,ctx,func,PG)
+      (s,G,tn) [] (OK t,G',tn')
+Proof
+  cheat
+QED
+
+Finalise window_child_prefix_joint
