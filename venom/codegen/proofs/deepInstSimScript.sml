@@ -3222,7 +3222,8 @@ Theorem gen_inst_ok_sim_marked:
         asm_steps lo o2pc prog n as = AsmOK as' /\
         venom_asm_rel lo ps' vs' as' /\
         (~is_terminator inst.inst_opcode ==>
-         as'.as_pc = as.as_pc + LENGTH (execute_plan initial_fmp ops))
+         as'.as_pc = as.as_pc + LENGTH (execute_plan initial_fmp ops)) /\
+        (inst_create_size_ok inst vs ==> create_safe_prefix lo o2pc prog n as)
 Proof
   rpt strip_tac >>
   Cases_on `inst.inst_opcode = ASSIGN`
@@ -3319,7 +3320,10 @@ Resume gen_inst_ok_sim_marked[offset]:
      irule venom_asm_rel_push_lit_as_fresh_var >>
      ASM_REWRITE_TAC[]) >>
   qexistsl [`1`, `st'`] >> ASM_REWRITE_TAC[] >>
-  simp[execute_plan_def, exec_stack_op_def]
+  simp[execute_plan_def, exec_stack_op_def] >> strip_tac >>
+  irule asm_block_create_safe_prefix >>
+  qexists_tac `[AsmPushOfst lbl (w2n v)]` >>
+  gvs[execute_plan_def, exec_stack_op_def, create_safe_def]
 QED
 
 Resume gen_inst_ok_sim_marked[param]:
