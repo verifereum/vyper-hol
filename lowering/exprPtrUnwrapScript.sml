@@ -85,6 +85,19 @@ Proof
     mp_tac expr_exit_success_map >> simp[FUN_EQ_THM]
 QED
 
+(* The unwrap lemmas take any horizon family P, polymorphic in the horizon
+   type; here P is every valid horizon at the expression's endpoint. *)
+fun horizon_family th =
+  qpat_assum `valid_horizon _ _ _ _` (fn hv =>
+    let
+      val tm = concl hv
+      val f = mk_abs (el 3 (snd (strip_comb tm)), tm)
+      val P = Lib.first (fn v => fst (dest_var v) = "P") (free_vars (concl th))
+      val th' = INST_TYPE (match_type (type_of P) (type_of f)) th
+    in
+      irule (BETA_RULE (INST [mk_var ("P", type_of f) |-> f] th'))
+    end)
+
 Theorem expr_sim_ptr_of_vv:
   !d ctx PG func cenv cx env ty e es.
     expr_body_pre cenv cx env e es /\
@@ -121,11 +134,77 @@ Proof
   >~ [`storage_trace_frame _`]
   >- simp[vyperStorageTraceTheory.storage_trace_frame_read_result]
   >~ [`gas_outcome_ptr _ _ _ _ _ _ (read_result cx _) _ _ _`]
-  >- (* OPEN: needs one unwrap endpoint for every valid horizon; the
-        exprPtrUnwrap* read lemmas give one per horizon *)
-     NO_TAC >>
+  >- suspend "read" >>
   gvs[expr_exit_exception_exists]
 QED
+
+Resume expr_sim_ptr_of_vv[read]:
+  rename1 `gas_marked_exec F _ (eval_expr cx e) _ left (INL tv) mid (OK t)` >>
+  qpat_assum `!H. valid_horizon _ _ H mid.storage_trace ==> _`
+    (drule_then strip_assume_tac) >>
+  `eval_expr cx e
+     (es with gas_obs := gas_explicit left s0.vs_gas_readings) =
+     (INL tv,mid with gas_obs := [])` by
+    (qpat_x_assum `gas_marked_exec F _ _ _ _ _ _ _` mp_tac >>
+     simp[gasSummaryTheory.gas_marked_exec_def] >> strip_tac >>
+     first_x_assum (qspec_then `[]` mp_tac) >> simp[]) >>
+  `expr_body_pre cenv cx env e
+     (es with gas_obs := gas_explicit left s0.vs_gas_readings)` by simp[] >>
+  drule_all expr_body_pre_runtime_typed >> strip_tac >>
+  `MAP FDOM es.scopes = MAP FDOM (mid with gas_obs := []).scopes` by
+    (drule eval_expr_preserves_scopes_dom >> simp[]) >>
+  `~t.vs_halted` by metis_tac[gas_path_ptr_ok_not_halted] >>
+  `?rv HG tf z.
+     (!D. gas_marked_exec_ptr D (ctx,func) PG (read_result cx tv)
+            (mid with gas_obs := [],t,G,tn) [] (INL rv) (mid with gas_obs := [])
+            HG tf (OK z)) /\
+     (!H. valid_horizon cx st0 H mid.storage_trace ==>
+        expr_post H ctx func cenv cx e es sa sb s0 (mid with gas_obs := []) rv op z /\
+        ghost_inv H d cenv cx (mid with gas_obs := []) HG tf z) /\
+     z.vs_current_bb = sb.cs_current_bb /\ z.vs_inst_idx = LENGTH sb.cs_current_insts /\
+     ptr_val_ok cx (post_value_type cenv e) rv op HG tf z /\
+     (~is_word_type (post_value_type cenv e) ==> ptr_buf_ok cenv e op HG z) /\
+     ghost_kept cenv es sa G0 tn0 s0 HG tf` by suspend "unwrap" >>
+  pop_assum strip_assume_tac >>
+  rewrite_tac[gas_outcome_ptr_def, gas_summary_ptr_at_marked] >>
+  qexists `[]` >> disj2_tac >> disj1_tac >>
+  qexistsl [`INL rv`, `mid with gas_obs := []`, `HG`, `tf`, `OK z`] >>
+  conj_tac
+  >- (qpat_assum `!D. gas_marked_exec_ptr D _ _ _ _ _ _ _ _ _ _`
+        (qspec_then `ARB` mp_tac) >>
+      rewrite_tac[gas_marked_exec_ptr_def] >>
+      disch_then (ACCEPT_TAC o CONJUNCT1)) >>
+  gen_tac >> disch_then (assume_tac o SIMP_RULE (srw_ss()) []) >> simp[]
+QED
+
+Resume expr_sim_ptr_of_vv[unwrap]:
+  Cases_on `post_value_type cenv e = expr_type e`
+  >- (qpat_assum `post_value_type cenv e = expr_type e`
+        (fn th => fs[th] >> assume_tac th) >>
+      horizon_family unwrap_value_marked_read_ptr >> simp[] >>
+      conj_tac >- (strip_tac >> drule_all expr_body_pre_copy_ok >> simp[]) >>
+      conj_tac >- (qexists_tac `H` >> first_assum ACCEPT_TAC) >>
+      goal_assum (drule_at (Pat `compile_expr _ _ _ _ = _`)) >> simp[]) >>
+  `type_widens_to env.type_defs (post_value_type cenv e) (expr_type e)` by
+    (irule post_value_type_widens >>
+     fs[expr_body_pre_def] >> qexistsl_tac [`cx`, `es`] >> simp[]) >>
+  `~is_word_type (post_value_type cenv e)` by
+    metis_tac[return_source_word_widens_eq] >>
+  Cases_on `vv`
+  >- (horizon_family unwrap_stack_marked_read_ptr_horizons >> simp[] >>
+      goal_assum (drule_at (Pat `unwrap_value _ _ _ = _`)) >> simp[]) >>
+  rename1 `LocatedValue tag p` >>
+  `p.ptr_location = LocMemory` by
+    metis_tac[aggregate_unequal_post_result_location] >>
+  `~is_word_type tag` by
+    (qpat_assum `vv_post H _ _ _ _ _ _ _ _ _ _ _ _ _`
+       (strip_assume_tac o SIMP_RULE (srw_ss()) [vv_post_def, vv_holds_def]) >>
+     metis_tac[is_bytestring_word_type]) >>
+  horizon_family unwrap_memory_marked_read_ptr_horizons >> simp[] >>
+  conj_tac >- (qexists_tac `H` >> first_assum ACCEPT_TAC) >>
+  goal_assum (drule_at (Pat `unwrap_value _ _ _ = _`)) >> simp[]
+QED
+Finalise expr_sim_ptr_of_vv
 
 Theorem expr_vv_sim_ptr_stack:
   !d ctx PG func cenv cx ty e es.
