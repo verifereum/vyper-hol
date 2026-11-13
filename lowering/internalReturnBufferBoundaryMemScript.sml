@@ -2,7 +2,7 @@
 Theory internalReturnBufferBoundaryMem
 Ancestors
   internalReturnBufferMem bodyMemoryDefs stmtLowering loweringPosts
-  exprLoweringProps compileEnv ctorReturnFrame bodySim loweringStateRelDefs
+  exprLoweringProps compileEnv bodySim loweringStateRelDefs
   vyperState exprSimHypsDefs vyperTypeInvariants vyperTypeEnvPreservation
   returnValueTyped vyperTypeArgFits valueEncodingTyping vyperTypeSystem
   exprSimMemDefs internalReturnBoundaryCommonMem typedMemoryCopy stmtLoweringMono stmtSimReturn
@@ -82,7 +82,7 @@ Proof
 QED
 
 Theorem internal_return_buffer_source_window[local]:
-  expr_post ctx func cenv cx e es sa sb s0 ee v op s /\
+  expr_post H ctx func cenv cx e es sa sb s0 ee v op s /\
   lowered_value_type cenv e = expr_type e /\
   evaluate_type (get_tenv cx) (expr_type e) = SOME stv /\
   ~is_word_type (expr_type e) /\ expr_store_bound cx (expr_type e) v op s ==>
@@ -145,14 +145,14 @@ Theorem internal_return_buffer_boundary_mem:
   lower_value compile_expr ce ty e sa = (op,s1) /\
   fn_has_code sa sb func /\ local_ptrs_reserved ce sa /\ ret_pc_ok ce sa s0 /\
   return_buf_frame (SOME (bw,type_memory_size tv)) ce s1 t /\
-  expr_post ctx func ce cx e es sa s1 s0 ee v op t /\
+  expr_post H ctx func ce cx e es sa s1 s0 ee v op t /\
   expr_store_bound cx (expr_type e) v op t /\
   (?gs. bind (eval_expr cx e) (read_result cx) (es with gas_obs := gs) =
     (INL v, ee with gas_obs := [])) /\
   ~t.vs_halted /\ t.vs_current_bb = s1.cs_current_bb /\
   t.vs_inst_idx = LENGTH s1.cs_current_insts ==>
   ?n r. gas_path_mem ctx func t n r /\
-    intret_mem_q func cenv cx tv bw v (ee with scopes := []) r
+    intret_mem_q H func cenv cx tv bw v (ee with scopes := []) r
 Proof
   strip_tac >>
   `env_consistent env cx ee` by
@@ -189,7 +189,7 @@ Proof
   `expr_val_rel cx (expr_type e) v op t` by
     (fs[expr_post_def, expr_val_at_def] >> metis_tac[post_value_type_lowered]) >>
   `?n r. gas_path_mem ctx func t n r /\
-     intret_mem_q func ce cx tv bw v (ee with scopes := []) r` by
+     intret_mem_q H func ce cx tv bw v (ee with scopes := []) r` by
     (irule compile_internal_return_buffer_path_mem >> simp[] >>
      conj_tac >- metis_tac[] >>
      goal_assum (drule_at (Pat `compile_return_unlock _ _ = _`)) >>

@@ -3,7 +3,7 @@ Theory internalReturnWordBoundaryMem
 Ancestors
   internalReturnStackMem internalReturnBufferBoundaryMem externalReturnPrefix
   stmtLowering loweringPosts compileEnv exprSimHypsDefs vyperTypeSystem
-  stmtSimProps bodySim ctorReturnFrame vyperTypeInvariants exprLoweringProps
+  stmtSimProps bodySim vyperTypeInvariants exprLoweringProps
   fragExec venomExecSemantics loweringStateRelDefs stmtSimReturn stmtSimDefs
   stmtLoweringMono venomState internalReturnBoundaryCommonMem
 
@@ -27,11 +27,11 @@ Theorem internal_return_word_boundary_mem:
   lower_value compile_expr ce ty e sa = (op,s1) /\
   fn_has_code sa sb func /\ ret_pc_ok ce sa s0 /\
   return_buf_frame NONE ce sa s0 /\
-  expr_post ctx func ce cx e es sa s1 s0 ee v op t /\
+  expr_post H ctx func ce cx e es sa s1 s0 ee v op t /\
   ~t.vs_halted /\ t.vs_current_bb = s1.cs_current_bb /\
   t.vs_inst_idx = LENGTH s1.cs_current_insts ==>
   ?n r. gas_path_mem ctx func t n r /\
-    intret_q func cenv cx tv v (ee with scopes := []) r
+    intret_q H func cenv cx tv v (ee with scopes := []) r
 Proof
   strip_tac >>
   `expr_type e = ty` by
@@ -52,7 +52,7 @@ Proof
   `fn_has_code s1 sb func` by metis_tac[fn_has_code_split] >>
   `?pc. eval_operand (Var rpc) t = SOME pc` by
     (fs[ret_pc_ok_def, expr_post_def, eval_operand_def] >> metis_tac[]) >>
-  `stmt_state_rel ctx func cenv cx (ee with scopes := []) t` by
+  `stmt_state_rel H ctx func cenv cx (ee with scopes := []) t` by
     (irule internal_return_exit_stmt_state_rel >> qexists_tac `ce` >>
      fs[expr_post_def]) >>
   `eval_operand op t = SOME (typed_val_to_w256 tv v)` by

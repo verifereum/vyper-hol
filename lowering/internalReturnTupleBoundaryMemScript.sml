@@ -74,7 +74,7 @@ Proof
 QED
 
 Theorem internal_return_tuple_bounds[local]:
-  stmt_state_rel ctx func ce cx es s /\
+  stmt_state_rel H ctx func ce cx es s /\
   expr_val_at ce cx ty sa sb es v op s /\
   evaluate_type (get_tenv cx) ty = SOME tv /\ ~is_word_type ty /\
   eval_operand op s = SOME w /\
@@ -111,11 +111,11 @@ Theorem internal_return_tuple_boundary_mem:
   lower_value compile_expr ce ty e sa = (op,s1) /\
   fn_has_code sa sb func /\ local_ptrs_reserved ce sa /\ ret_pc_ok ce sa s0 /\
   return_buf_frame NONE ce sa s0 /\
-  expr_post ctx func ce cx e es sa s1 s0 ee v op t /\
+  expr_post H ctx func ce cx e es sa s1 s0 ee v op t /\
   ~t.vs_halted /\ t.vs_current_bb = s1.cs_current_bb /\
   t.vs_inst_idx = LENGTH s1.cs_current_insts ==>
   ?n r. gas_path_mem ctx func t n r /\
-    intret_q func cenv cx tv v (ee with scopes := []) r
+    intret_q H func cenv cx tv v (ee with scopes := []) r
 Proof
   strip_tac >>
   `expr_type e = ty` by
@@ -148,7 +148,7 @@ Proof
   `ce.ce_returns_count = LENGTH tys` by metis_tac[] >>
   `!x. Var rpc = Var x ==> not_fresh_at s1 x` by simp[] >>
   `?n r. gas_path_mem ctx func t n r /\
-     intret_q func ce cx tv v (ee with scopes := []) r` by
+     intret_q H func ce cx tv v (ee with scopes := []) r` by
     (irule compile_internal_tuple_return_intret_mem >> metis_tac[]) >>
   goal_assum (drule_at Any) >>
   irule internal_return_post_frame >> metis_tac[]
