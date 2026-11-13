@@ -325,7 +325,7 @@ Resume concat_args_sim_mem[tail_normal]:
       qpat_assum `gas_marked_exec _ _ _ _ _ (INL vs) _ _`
         (mp_tac o MATCH_MP gas_marked_exec_cons_values) >> simp[]) >>
   disj1_tac >>
-  drule_all concat_args_glue >> strip_tac >>
+  drule_all (INST_TYPE [alpha |-> ``:256``] concat_args_glue) >> strip_tac >>
   suspend "post"
 QED
 Resume concat_args_sim_mem[tail_exit]:
