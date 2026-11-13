@@ -41,24 +41,6 @@ Proof
   drule_all fmp_pop_at_none >> simp[]
 QED
 
-Theorem fmp_restore_idle_empty:
-  fmp_stage_lowered infos ctx runner fn fn' /\
-  fn.fn_fmp_signature = NONE /\
-  fmp_reclaim_states infos fn = SOME states /\
-  fmp_base_analyze (fn_insts fn) = SOME env /\
-  ALL_DISTINCT (MAP (\b. b.bb_label) fn.fn_blocks) /\
-  MEM bb fn.fn_blocks /\ k < LENGTH bb.bb_instructions /\
-  df_at NONE states bb.bb_label k = SOME st /\ st.frs_stack = [] ==>
-  ~((bb.bb_label,k) IN FDOM (fmp_stage_plan infos ctx fn))
-Proof
-  strip_tac >> drule_all fmp_restore_idle_plan >> strip_tac >>
-  drule_all fmp_candidate_plan_lookup >>
-  disch_then (qspecl_then [`states`, `infos`, `ctx`] assume_tac) >>
-  gvs[fmp_reclaim_step_def, fmp_pop_at_def, fmp_pop_prefix_def,
-      fmp_pop_target_def, FLOOKUP_DEF] >>
-  metis_tac[optionTheory.NOT_SOME_NONE]
-QED
-
 (* An explicit witness constructor: callers unpack the old frame once and
    pass that same infos/ctx/runner here, so no plan-witness ambiguity arises. *)
 Theorem fmp_restore_idle_frame:

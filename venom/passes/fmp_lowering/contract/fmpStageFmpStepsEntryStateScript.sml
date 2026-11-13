@@ -26,19 +26,6 @@ Proof
       fmp_frontier_rel_def, fmp_variant_room_def]
 QED
 
-Theorem fmp_entry_run_zero:
-  lookup_function name C.ctx_functions = SOME fn /\
-  lookup_block lbl fn.fn_blocks = SOME bb ==>
-  !fuel. fmp_target_run fuel C name
-    (s with <| vs_prev_bb := NONE; vs_current_bb := lbl; vs_inst_idx := 0 |>)
-    0 (s with <| vs_prev_bb := NONE; vs_current_bb := lbl; vs_inst_idx := 0 |>)
-Proof
-  rw[fmp_target_run_def] >>
-  qexists_tac
-    `s with <| vs_prev_bb := NONE; vs_current_bb := lbl; vs_inst_idx := 0 |>` >>
-  simp[run_insts_def]
-QED
-
 Theorem fmp_entry_run_root:
   lookup_function name C.ctx_functions = SOME fn /\
   lookup_block lbl fn.fn_blocks = SOME bb /\

@@ -3,19 +3,13 @@ Ancestors
   fmpStageFmpStepsRestoreControl fmpStepLayout fmpLowerIndexedProps
   fmpLowerDefs fmpStageRel finite_map list rich_list venomInst arithmetic
 
-Theorem fmp_restore_inst_nonempty:
-  fmp_lower_inst infos ctx runner sp inst = SOME (code,sp') ==>
-  code <> []
-Proof
-  simp[fmp_lower_inst_def, AllCaseEqs()] >> rpt strip_tac >> gvs[]
-QED
-
 Theorem fmp_restore_indexed_nonempty:
   fmp_lower_indexed infos ctx runner lbl idx sp restores (inst::insts) =
     SOME (code,leftover,sp') ==> code <> []
 Proof
   simp[fmp_lower_indexed_cons, AllCaseEqs()] >> rpt strip_tac >>
-  drule fmp_restore_inst_nonempty >> gvs[]
+  drule fmpStageControlWalkTheory.fmp_control_inst_length >>
+  rw[] >> CCONTR_TAC >> gvs[]
 QED
 
 Theorem fmp_restore_postroot_bound:
@@ -39,15 +33,6 @@ Proof
   Cases_on `DROP idx bb.bb_instructions` >> gvs[] >>
   drule fmp_restore_indexed_nonempty >> strip_tac >>
   CCONTR_TAC >> gvs[DROP_EQ_NIL]
-QED
-
-
-Theorem fmp_restore_sum_one[local]:
-  (!j. j < n ==> f j = 1) ==> SUM (GENLIST f n) = n
-Proof
-  Induct_on `n` >> simp[GENLIST, SUM_SNOC] >> rpt strip_tac >>
-  `SUM (GENLIST f n) = n` by (first_x_assum irule >> simp[]) >>
-  `f n = 1` by simp[] >> simp[]
 QED
 
 Theorem fmp_restore_preroot_bound:
@@ -93,8 +78,11 @@ Proof
      Cases_on `j < LENGTH users` >>
      gvs[callLayoutDefsTheory.OPTION_TO_LIST_def, EL_APPEND_EQN]) >>
   `fmp_stage_tidx plan (SOME (entry.bb_label,rp)) entry.bb_label entry.bb_instructions idx = idx` by
-    (simp[fmp_stage_tidx_def] >> irule fmp_restore_sum_one >>
-     rpt strip_tac >> gvs[] >> metis_tac[]) >>
+    (`SUM (GENLIST (\j. (if (entry.bb_label,j) IN FDOM plan then 1 else 0) +
+        (if (EL j entry.bb_instructions).inst_opcode = DALLOCA then 4 else 1))
+        idx) = idx` by
+       (irule fmpStageControlTheory.fmp_control_width_one >> metis_tac[]) >>
+     gvs[fmp_stage_tidx_def]) >>
   Cases_on `oldpc` >> Cases_on `newpc` >>
   gvs[callLayoutDefsTheory.OPTION_TO_LIST_def, lookup_block_def, FIND_thm] >>
   Cases_on `fn_is_context_entry ctx fn` >> simp[]
@@ -122,16 +110,18 @@ Proof
       gvs[NOT_FORALL_THM] >>
       metis_tac[fmp_restore_preroot_bound, NOT_LESS_EQUAL]) >>
   `no_raw_fmp_ops fn` by
-    (fs[fmp_stage_lowered_def] >>
-     gvs[fmp_lower_function_with_info_def, AllCaseEqs()] >>
-     irule fmpLowerPropsTheory.fmp_no_need_input_no_raw >> metis_tac[]) >>
+    (irule fmpStageControlTheory.fmp_control_unlowered_no_raw >>
+     metis_tac[]) >>
   drule fmpStageControlTheory.fmp_stage_unlowered >>
   (impl_tac >- metis_tac[]) >> strip_tac >>
   qexists_tac `bb` >> simp[fmp_stage_tidx_def] >>
   irule LESS_EQ_LESS_TRANS >> qexists_tac `idx` >> simp[] >>
-  `SUM (GENLIST (\j. if (EL j bb.bb_instructions).inst_opcode = DALLOCA
-                         then 4 else 1) idx) = idx` suffices_by simp[] >>
-  irule fmp_restore_sum_one >> rpt strip_tac >>
+  `SUM (GENLIST (\j. (if (lbl,j) IN FDOM (FEMPTY:fmp_reclaim_plan)
+      then 1 else 0) +
+    (if (EL j bb.bb_instructions).inst_opcode = DALLOCA then 4 else 1)) idx) =
+   idx` suffices_by simp[] >>
+  irule fmpStageControlTheory.fmp_control_width_one >> rpt strip_tac >>
+  simp[] >>
   `MEM (EL j bb.bb_instructions) (fn_insts fn)` by
     (simp[fn_insts_def] >> irule fmp_fn_insts_blocks_intro >>
      qexists_tac `bb` >> simp[] >> irule EL_MEM >> decide_tac) >>
