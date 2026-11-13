@@ -5,7 +5,7 @@ Ancestors
 
 (* At a positive PC the instruction immediately behind it is the one
    whose nontermination must be retained by an execution invariant. *)
-Theorem endpoint_prefix_previous:
+Theorem endpoint_prefix_previous[local]:
   !cs bb.
     isPREFIX cs.cs_current_insts bb.bb_instructions ==>
     ((0 < LENGTH cs.cs_current_insts ==>
@@ -39,7 +39,7 @@ Proof
   Cases_on `phi_prefix_length insts` >> gvs[is_terminator_def]
 QED
 
-Theorem endpoint_edge_previous:
+Theorem endpoint_edge_previous[local]:
   gas_path_edge ctx fn s n (OK t) /\ 0 < t.vs_inst_idx /\
   lookup_block t.vs_current_bb fn.fn_blocks = SOME bb ==>
   ~is_terminator (EL (t.vs_inst_idx - 1) bb.bb_instructions).inst_opcode
@@ -54,7 +54,7 @@ Proof
   fs[exit_result_def]
 QED
 
-Theorem endpoint_path_previous:
+Theorem endpoint_path_previous[local]:
   !ctx fn s n r.
     gas_path ctx fn s n r ==>
     !t. r = OK t ==>
