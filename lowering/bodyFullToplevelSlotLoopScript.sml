@@ -2,12 +2,12 @@
 Theory bodyFullToplevelSlotLoop
 Ancestors
   exprPtrUnwrapLoopInvariant exprPtrUnwrapGeneratedBody
-  exprPtrUnwrapCopyEdges exprPtrUnwrapCondition
+  exprPtrUnwrapCopyEdges exprPtrUnwrapCondition exprPtrUnwrapBackedge
   slotCopyExecution copyExecution fragGasSeqPtr fragGasOriginPtr
   fragGasOrigin fragGasPathPtr fragGasPathMem gasEvents gasCount
-  memSafeRun instMemFrontier unitTransformDefs exprLoweringProps exprLowering
+  memSafeRun fragExecMem instMemFrontier unitTransformDefs exprLoweringProps exprLowering
   bodyPtrDefs ptrDiscipline ptrSafeRun venomExecSemantics venomState venomInst
-  codegenRel contextCodegenRel finite_map list rich_list arithmetic words
+  codegenRel contextCodegenRel finite_map pred_set list rich_list arithmetic words
 
 Theorem toplevel_slot_copy_control_edge[local]:
   compile_expr cenv ty (TopLevelName ann nsid) ca = (place,cb) /\
@@ -152,7 +152,207 @@ Theorem toplevel_slot_copy_joint_exit:
     slot_copy_ghost_inv cs load p d root n G0 tn0 n G1 tn1 t /\
     allocas_from lo t /\ (ctx_has_dalloca ctx ==> allocas_below_fmp t)
 Proof
-  strip_tac >> drule_all toplevel_slot_copy_header_joint >> strip_tac >>
+  strip_tac >> drule_all toplevel_slot_copy_header_joint >>
+  disch_then (qspec_then `PG` strip_assume_tac) >>
   qexistsl [`slot_copy_cond_result cs n n s`, `G1`, `tn1`] >>
   simp[slot_copy_cond_frame]
+QED
+
+Theorem toplevel_slot_copy_body_mem_ok[local]:
+  compile_expr cenv ty (TopLevelName ann nsid) ca = (place,cb) /\
+  (load = SLOAD \/ load = TLOAD) /\
+  slot_copy_external cs src /\ slot_copy_external cs (Var root) /\
+  eval_operand src s = SOME p /\
+  eval_operand (Var (slot_copy_var cs 0)) s = SOME (n2w i) /\
+  lookup_var root s = SOME d /\
+  w2n (d+n2w i*32w)+32 <= s.vs_alloca_next ==>
+  run_inst_seq_mem_ok (TAKE 7 (slot_copy_body_insts cs src (Var root) load)) s
+Proof
+  strip_tac >>
+  `root <> slot_copy_var cs 2 /\ root <> slot_copy_var cs 3 /\
+   root <> slot_copy_var cs 4` by
+    (fs[slot_copy_external_def] >> metis_tac[DECIDE ``2<7 /\ 3<7 /\ 4<7``]) >>
+  Cases_on `load = SLOAD` >> gvs[] >>
+  simp[slot_copy_body_insts_def, TAKE_def, run_inst_seq_mem_ok_def,
+    step_inst_base_opcode_eqs, mk_inst_def, exec_pure2_def, exec_read1_def,
+    exec_write2_def, exec_pure1_def, eval_operand_def, lookup_var_def,
+    slot_copy_var_distinct, FLOOKUP_UPDATE,
+    inst_mem_below_frontier_def, source_memory_read_ranges_def,
+    source_memory_write_ranges_def, fixed_source_write_range_def,
+    inst_dload_in_section_def, update_var_def, mstore_def] >>
+  gvs[eval_operand_def, lookup_var_def, FLOOKUP_UPDATE, slot_copy_var_distinct]
+QED
+
+Theorem toplevel_slot_copy_backedge_joint[local]:
+  compile_expr cenv ty (TopLevelName ann nsid) ca = (place,cb) /\
+  (load = SLOAD \/ load = TLOAD) /\ ~s.vs_halted /\ s.vs_inst_idx = 0 /\
+  lookup_block s.vs_current_bb fn.fn_blocks = SOME bb /\
+  bb.bb_instructions = slot_copy_body_insts cs src (Var root) load /\
+  run_inst_seq (TAKE 7 bb.bb_instructions) s = OK t /\
+  run_inst_seq_mem_ok (TAKE 7 bb.bb_instructions) s /\
+  inst_seq_ptr D lo ctx fn PG G tn (TAKE 7 bb.bb_instructions) s Gf tnf /\
+  t.vs_current_bb = s.vs_current_bb /\ allocas_from lo t /\
+  (ctx_has_dalloca ctx ==> allocas_below_fmp t) ==>
+  gas_origin_ptr_path (D,lo,explicit,ctx,fn,PG) (s,G,tn) []
+    (OK (jump_to (slot_copy_cond cs) (t with vs_inst_idx := 7)),Gf,tnf)
+Proof
+  strip_tac >>
+  `gas_origin_ptr_path (D,lo,explicit,ctx,fn,PG) (s,G,tn) []
+    (OK (t with vs_inst_idx := 7),Gf,tnf)` by
+    (drule_at (Pat `inst_seq_ptr _ _ _ _ _ _ _ _ _ _ _`)
+       run_inst_seq_gas_origin_ptr_path >>
+     disch_then (qspecl_then [`explicit`, `t`, `bb`] mp_tac) >>
+     (impl_tac >- fs[slot_copy_body_insts_def, TAKE_def, mk_inst_def, is_terminator_def]) >>
+     simp[slot_copy_body_insts_def, TAKE_def, mk_inst_def]) >>
+  `~(t with vs_inst_idx := 7).vs_halted` by
+    (drule gas_origin_ptr_path_projections >> metis_tac[gas_path_ptr_ok_not_halted]) >>
+  `gas_path_ptr_edge D lo ctx fn PG Gf tnf (t with vs_inst_idx := 7) 0 Gf tnf
+    (OK (jump_to (slot_copy_cond cs) (t with vs_inst_idx := 7)))` by
+    (irule copy_jmp_counted_edge >> simp[] >>
+     qexists `cs.cs_next_id+11` >>
+     simp[slot_copy_body_insts_def, get_instruction_def]) >>
+  `gas_origin_ptr_edge (D,lo,explicit,ctx,fn,PG) (t with vs_inst_idx := 7,Gf,tnf) []
+    (OK (jump_to (slot_copy_cond cs) (t with vs_inst_idx := 7)),Gf,tnf)` by
+    (irule toplevel_slot_copy_control_edge >> goal_assum (drule_at Any) >>
+     simp[] >> conj_tac >- metis_tac[] >>
+     qexists `mk_inst (cs.cs_next_id+11) JMP [Label (slot_copy_cond cs)] []` >>
+     simp[slot_copy_body_insts_def, get_instruction_def, mk_inst_def] >> metis_tac[]) >>
+  drule gas_origin_ptr_path_append >>
+  disch_then (qspecl_then [`t with vs_inst_idx := 7`, `Gf`, `tnf`, `[]`] mp_tac) >>
+  simp[] >> disch_then irule >>
+  `~(jump_to (slot_copy_cond cs) (t with vs_inst_idx := 7)).vs_halted` by fs[jump_to_def] >>
+  metis_tac[gas_origin_ptr_path_rules, APPEND]
+QED
+
+Theorem toplevel_slot_copy_body_joint:
+  compile_expr cenv ty (TopLevelName ann nsid) ca = (place,cb) /\
+  (load=SLOAD \/ load=TLOAD) /\
+  slot_copy_inv cs load original p d n regions i s /\ i < n /\
+  slot_copy_ghost_inv cs load p d root n G0 tn0 i G tn s /\
+  slot_copy_external cs src /\ slot_copy_external cs (Var root) /\
+  eval_operand src original = SOME p /\ lookup_var root original = SOME d /\
+  op_taint tn src = {} /\ ~s.vs_halted /\ s.vs_inst_idx = 0 /\
+  lookup_block s.vs_current_bb fn.fn_blocks = SOME bb /\
+  bb.bb_instructions = slot_copy_body_insts cs src (Var root) load /\
+  w2n d+32*n <= s.vs_alloca_next /\
+  allocas_from lo s /\ (ctx_has_dalloca ctx ==> allocas_below_fmp s) ==>
+  ?Gf tnf.
+    (!D explicit. gas_origin_ptr_path (D,lo,explicit,ctx,fn,PG) (s,G,tn) []
+      (OK (slot_copy_body_result cs p d load i s),Gf,tnf)) /\
+    slot_copy_inv cs load original p d n regions (i+1) (slot_copy_body_result cs p d load i s) /\
+    slot_copy_ghost_inv cs load p d root n G0 tn0 (i+1) Gf tnf
+      (slot_copy_body_result cs p d load i s) /\
+    allocas_from lo (slot_copy_body_result cs p d load i s) /\
+    (ctx_has_dalloca ctx ==> allocas_below_fmp (slot_copy_body_result cs p d load i s))
+Proof
+  disch_then (CONJUNCTS_THEN2 assume_tac
+    (CONJUNCTS_THEN2 assume_tac strip_assume_tac)) >>
+  drule_all copy_body_parameters >> strip_tac >>
+  `op_taint tn (Var (slot_copy_var cs 0)) = {} /\
+   ptr_covers G tn root s (32*n)` by fs[slot_copy_ghost_inv_def] >>
+  `root <> slot_copy_var cs 2 /\ root <> slot_copy_var cs 3 /\
+   root <> slot_copy_var cs 4 /\ root <> slot_copy_var cs 5` by simp[] >>
+  qpat_x_assum `eval_operand src s = SOME p` assume_tac >>
+  drule_all copy_generated_body_segment >>
+  disch_then (qspecl_then [`fn`, `PG`, `ARB`] strip_assume_tac) >>
+  `!D. inst_seq_ptr D lo ctx fn PG G tn
+    (TAKE 7 (slot_copy_body_insts cs src (Var root) load)) s Gf tnf` by
+    (gen_tac >> qpat_x_assum `eval_operand src s = SOME p` assume_tac >>
+  drule_all copy_generated_body_segment >>
+     disch_then (qspecl_then [`fn`, `PG`, `D`] strip_assume_tac) >>
+     `!ix. inst_seq_ptr D lo ctx fn PG G tn
+       (TAKE 7 (slot_copy_body_insts cs src (Var root) load))
+       (s with vs_inst_idx := ix) Gf tnf` by
+       metis_tac[inst_seq_ptr_ghost_unique] >>
+     first_x_assum (qspec_then `s.vs_inst_idx` mp_tac) >> simp[]) >>
+  `jump_to (slot_copy_cond cs) (t with vs_inst_idx := 7) =
+   slot_copy_body_result cs p d load i s` by
+    simp[slot_copy_body_result_def, jump_to_def, update_var_def] >>
+  qexistsl [`Gf`, `tnf`] >> conj_tac
+  >- (rpt gen_tac >>
+      qpat_x_assum `jump_to _ _ = slot_copy_body_result _ _ _ _ _ _`
+        (fn th => rewrite_tac[GSYM th]) >>
+      irule toplevel_slot_copy_backedge_joint >>
+      goal_assum (drule_at Any) >> simp[] >>
+      conj_tac >- simp[update_var_def, mstore_def] >>
+      conj_tac >- metis_tac[] >>
+      qexistsl [`load`, `root`, `src`] >> simp[] >>
+      irule toplevel_slot_copy_body_mem_ok >>
+      goal_assum (drule_at Any) >> simp[] >>
+      reverse conj_tac >- metis_tac[] >> qexists `i` >>
+      `i < dimword(:256)` by (fs[slot_copy_inv_def, dimword_def] >> decide_tac) >>
+      simp[] >> decide_tac) >>
+  qpat_x_assum `t = _` kall_tac >> gnvs[] >> simp[slot_copy_body_invariant] >>
+  reverse conj_tac
+  >- (qpat_x_assum `jump_to _ _ = slot_copy_body_result _ _ _ _ _ _`
+        (fn th => rewrite_tac[GSYM th]) >>
+      simp[jump_to_def, allocas_from_def, allocas_below_fmp_def] >>
+      fs[allocas_from_def, allocas_below_fmp_def] >> metis_tac[]) >>
+  irule copy_body_ghost_frame >> conj_tac >- simp[] >> conj_tac
+  >- (`ptr_covers Gf tnf root t (32*n)` by
+        (qpat_x_assum `!v c. _ ==> ptr_covers _ _ _ _ _` irule >>
+         simp[] >> metis_tac[DECIDE ``0<7 /\ 2<7 /\ 3<7 /\ 4<7 /\ 5<7 /\ 6<7``]) >>
+      qpat_x_assum `jump_to _ _ = slot_copy_body_result _ _ _ _ _ _`
+        (fn th => rewrite_tac[GSYM th]) >>
+      fs[jump_to_def, ptr_covers_def, lookup_var_def]) >>
+  qexistsl [`G`, `s`, `tn`] >> simp[] >> conj_tac
+  >- (rpt gen_tac >> disch_tac >>
+      qpat_x_assum `!v. _ ==> FLOOKUP _ _ = _ /\ _` (qspec_then `v` mp_tac) >>
+      (impl_tac >- (fs[slot_copy_external_def] >>
+        metis_tac[DECIDE ``0<7 /\ 2<7 /\ 3<7 /\ 4<7 /\ 5<7 /\ 6<7``])) >> simp[]) >>
+  AP_TERM_TAC >> POP_ASSUM_LIST (K ALL_TAC) >> simp[EXTENSION] >>
+  metis_tac[DECIDE ``!x y z:num. x+(y+z)=y+(x+z)``]
+QED
+
+Theorem toplevel_slot_copy_joint_step:
+  compile_expr cenv ty (TopLevelName ann nsid) ca = (place,cb) /\
+  (load=SLOAD \/ load=TLOAD) /\
+  slot_copy_inv cs load original p d n regions i s /\ i < n /\
+  slot_copy_ghost_inv cs load p d root n G0 tn0 i G tn s /\
+  slot_copy_external cs src /\ slot_copy_external cs (Var root) /\
+  eval_operand src original = SOME p /\ lookup_var root original = SOME d /\
+  op_taint tn src = {} /\ ~s.vs_halted /\ s.vs_inst_idx = 0 /\
+  lookup_block s.vs_current_bb fn.fn_blocks = SOME cond /\
+  cond.bb_instructions = slot_copy_cond_insts cs n /\
+  lookup_block (slot_copy_body cs) fn.fn_blocks = SOME bodybb /\
+  bodybb.bb_instructions = slot_copy_body_insts cs src (Var root) load /\
+  w2n d+32*n <= s.vs_alloca_next /\
+  allocas_from lo s /\ (ctx_has_dalloca ctx ==> allocas_below_fmp s) ==>
+  ?Gf tnf.
+    (!D explicit. gas_origin_ptr_path (D,lo,explicit,ctx,fn,PG) (s,G,tn) []
+      (OK (slot_copy_body_result cs p d load i (slot_copy_cond_result cs n i s)),Gf,tnf)) /\
+    slot_copy_inv cs load original p d n regions (i+1)
+      (slot_copy_body_result cs p d load i (slot_copy_cond_result cs n i s)) /\
+    slot_copy_ghost_inv cs load p d root n G0 tn0 (i+1) Gf tnf
+      (slot_copy_body_result cs p d load i (slot_copy_cond_result cs n i s)) /\
+    allocas_from lo (slot_copy_body_result cs p d load i (slot_copy_cond_result cs n i s)) /\
+    (ctx_has_dalloca ctx ==> allocas_below_fmp
+      (slot_copy_body_result cs p d load i (slot_copy_cond_result cs n i s))) /\
+    (slot_copy_body_result cs p d load i (slot_copy_cond_result cs n i s)).vs_alloca_next =
+      s.vs_alloca_next
+Proof
+  disch_then (CONJUNCTS_THEN2 assume_tac
+    (CONJUNCTS_THEN2 assume_tac strip_assume_tac)) >>
+  drule_all toplevel_slot_copy_header_joint >>
+  disch_then (qspec_then `PG` strip_assume_tac) >>
+  `op_taint tn1 src = {}` by metis_tac[copy_ghost_external_taint] >>
+  `~(slot_copy_cond_result cs n i s).vs_halted /\
+   w2n d+32*n <= (slot_copy_cond_result cs n i s).vs_alloca_next` by
+    simp[slot_copy_cond_result_def, update_var_def, jump_to_def] >>
+  `i <> n` by decide_tac >>
+  `(slot_copy_cond_result cs n i s).vs_inst_idx = 0 /\
+   lookup_block (slot_copy_cond_result cs n i s).vs_current_bb fn.fn_blocks = SOME bodybb`
+    by simp[slot_copy_cond_frame] >>
+  drule_all toplevel_slot_copy_body_joint >>
+  disch_then (qspec_then `PG` strip_assume_tac) >>
+  qexistsl [`Gf`, `tnf`] >> simp[] >> conj_tac
+  >- (rpt gen_tac >>
+      qpat_x_assum `!D explicit. gas_origin_ptr_path _ (s,G,tn) _ _`
+        (qspecl_then [`D`, `explicit`] mp_tac) >>
+      disch_tac >> drule gas_origin_ptr_path_append >>
+      disch_then (qspecl_then
+        [`slot_copy_cond_result cs n i s`, `G1`, `tn1`, `[]`] mp_tac) >>
+      simp[] >> disch_then irule >> simp[]) >>
+  simp[slot_copy_body_result_def, slot_copy_cond_result_def,
+       jump_to_def, update_var_def, mstore_def]
 QED
