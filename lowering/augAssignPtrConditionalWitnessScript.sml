@@ -103,6 +103,7 @@ Theorem converted_local_enriched_path:
     (TypeBuiltin (BaseT (UintT 256)) Convert (BaseT (UintT 256))
       [Name (BaseT (UintT 256)) name]) sa = (op,sb) /\
   fn_has_code sa sb fn /\ stmt_state_rel H ctx fn cenv cx es s /\
+  storage_well_formed_on cx es (FST H) /\
   local_ptrs_reserved cenv sa /\ ghost_inv H d cenv cx es G tn s /\
   (!x sz. cenv.ce_return_pc = SOME (PtrVar (Var x) sz) ==> not_fresh_at sa x) /\
   (!x sz. cenv.ce_return_buf = SOME (PtrVar (Var x) sz) ==> not_fresh_at sa x) /\
@@ -143,18 +144,21 @@ Theorem converted_local_enriched_outcome:
   lower_value compile_expr cenv ty
     (TypeBuiltin (BaseT (UintT 256)) Convert (BaseT (UintT 256))
       [Name (BaseT (UintT 256)) name]) sa = (op,sb) /\
-  fn_has_code sa sb fn /\ stmt_state_rel H ctx fn cenv cx es s /\
-  local_ptrs_reserved cenv sa /\ ghost_inv H d cenv cx es G tn s /\
+  fn_has_code sa sb fn /\
+  (!H. valid_horizon cx st0 H es.storage_trace ==>
+    stmt_state_rel H ctx fn cenv cx es s /\
+    storage_well_formed_on cx es (FST H) /\ ghost_inv H d cenv cx es G tn s) /\
+  local_ptrs_reserved cenv sa /\
   (!x sz. cenv.ce_return_pc = SOME (PtrVar (Var x) sz) ==> not_fresh_at sa x) /\
   (!x sz. cenv.ce_return_buf = SOME (PtrVar (Var x) sz) ==> not_fresh_at sa x) /\
   ~ctx_has_dalloca ctx /\ ~s.vs_halted /\
   s.vs_current_bb = sa.cs_current_bb /\
   s.vs_inst_idx = LENGTH sa.cs_current_insts ==>
-  gas_outcome_ptr (cx_dead H cx) (cx_tops cx) (ctx,fn) PG
+  gas_outcome_ptr (\H. cx_dead H cx) (cx_tops cx) (ctx,fn) PG cx st0
     (bind (eval_expr cx
       (TypeBuiltin (BaseT (UintT 256)) Convert (BaseT (UintT 256))
         [Name (BaseT (UintT 256)) name])) (read_result cx)) (es,s,G,tn)
-    (\res ee HG tm t. ?v. res = INL v /\
+    (\H res ee HG tm t. ?v. res = INL v /\
       expr_post H ctx fn cenv cx
         (TypeBuiltin (BaseT (UintT 256)) Convert (BaseT (UintT 256))
           [Name (BaseT (UintT 256)) name]) es sa sb s ee v op t /\
@@ -166,26 +170,55 @@ Theorem converted_local_enriched_outcome:
         ptr_buf_ok cenv (TypeBuiltin (BaseT (UintT 256)) Convert
           (BaseT (UintT 256)) [Name (BaseT (UintT 256)) name]) op HG t) /\
       ghost_kept cenv es sa G tn s HG tm /\ op_prov HG op = NONE)
-    (\res ee gt r. expr_exit res r)
+    (\H res ee gt r. expr_exit res r)
 Proof
-  strip_tac >> drule_all converted_local_enriched_path >>
+  strip_tac >>
+  drule_at (Pat `lower_value _ _ _ _ _ = _`) lower_value_uint256_convert_child >>
+  simp[expr_type_def] >> strip_tac >>
+  `is_word_type (BaseT (UintT 256))` by simp[is_word_type_def] >>
+  drule_all lower_value_name_word >> strip_tac >>
+  `?out. op = Var out` by
+    (gvs[emitHelperTheory.emit_op_def, comp_bind_def, comp_ignore_bind_def,
+         comp_return_def, fresh_var_def, fresh_id_def, emit_def] >> metis_tac[]) >>
+  gvs[] >>
+  `word_value entry.value` by simp[word_value_def] >>
+  reverse (Cases_on `?H. valid_horizon cx st0 H es.storage_trace`)
+  >- (rewrite_tac[fragGasPathPtrTheory.gas_outcome_ptr_def] >>
+      qexists_tac `[]` >> disj1_tac >>
+      irule gasStorageTheory.gas_bad_storage_at_initial >>
+      simp[vyperStorageTraceTheory.storage_trace_frame_bind_all,
+           vyperStorageTraceTheory.evaluate_storage_trace_frame,
+           vyperStorageTraceTheory.storage_trace_frame_read_result,
+           vyperStorageFootprintTheory.storage_trace_domain_def] >> fs[]) >>
+  pop_assum strip_assume_tac >>
+  `stmt_state_rel H ctx fn cenv cx es s /\
+   storage_well_formed_on cx es (FST H) /\ ghost_inv H d cenv cx es G tn s` by metis_tac[] >>
+  drule_all local_name_enriched_path >>
   disch_then (qspecl_then [`PG`, `cx_dead H cx`] strip_assume_tac) >>
   rewrite_tac[fragGasPathPtrTheory.gas_outcome_ptr_def] >>
-  qexists_tac `[]` >> disj1_tac >>
+  qexists_tac `[]` >> disj2_tac >> disj1_tac >>
   rewrite_tac[fragGasPathPtrTheory.gas_summary_ptr_at_def] >>
   qexistsl_tac [`INL entry.value`, `es`, `HG`, `tm`, `OK t`] >>
-  simp[gasSummaryTheory.gas_explicit_def, bodyPtrDefsTheory.ptr_val_ok_def,
-       is_word_type_def] >> reverse conj_tac >- gvs[] >> gen_tac >>
-  `eval_expr cx (TypeBuiltin (BaseT (UintT 256)) Convert (BaseT (UintT 256))
-      [Name (BaseT (UintT 256)) name]) (es with gas_obs := tail) =
-      (INL (Value (IntV i)), es with gas_obs := tail)` by
-    (irule uint256_convert_value >> simp[expr_type_def] >>
-     `lookup_scopes name (es with gas_obs := tail).scopes = SOME entry` by simp[] >>
-     pop_assum (mp_tac o MATCH_MP eval_name_word) >>
-     disch_then (qspecl_then [`cx`, `BaseT (UintT 256)`] mp_tac) >>
-     CONV_TAC (DEPTH_CONV ETA_CONV) >> simp[]) >>
-  gvs[bind_def, read_result_def, return_def] >>
-  CONV_TAC (DEPTH_CONV ETA_CONV) >> simp[]
+  simp[gasSummaryTheory.gas_explicit_def] >> conj_tac
+  >- (gen_tac >>
+      `eval_expr cx (TypeBuiltin (BaseT (UintT 256)) Convert (BaseT (UintT 256))
+          [Name (BaseT (UintT 256)) name]) (es with gas_obs := tail) =
+          (INL (Value (IntV i)), es with gas_obs := tail)` by
+        (irule uint256_convert_value >> simp[expr_type_def] >>
+         `lookup_scopes name (es with gas_obs := tail).scopes = SOME entry` by simp[] >>
+         pop_assum (mp_tac o MATCH_MP eval_name_word) >>
+         disch_then (qspecl_then [`cx`, `BaseT (UintT 256)`] mp_tac) >>
+         CONV_TAC (DEPTH_CONV ETA_CONV) >> simp[]) >>
+      gvs[bind_def, read_result_def, return_def] >>
+      CONV_TAC (DEPTH_CONV ETA_CONV) >> simp[]) >>
+  qx_gen_tac `HH` >> strip_tac >>
+  `stmt_state_rel HH ctx fn cenv cx es s /\
+   storage_well_formed_on cx es (FST HH) /\ ghost_inv HH d cenv cx es G tn s` by metis_tac[] >>
+  qpat_x_assum `gas_path_ptr _ _ _ _ _ _ _ _ _ _ _ _` kall_tac >>
+  drule_all local_name_enriched_path >>
+  disch_then (qspecl_then [`PG`, `cx_dead HH cx`] strip_assume_tac) >>
+  gvs[bodyPtrDefsTheory.ptr_val_ok_def, is_word_type_def] >>
+  irule uint256_convert_post >> simp[expr_type_def]
 QED
 
 Theorem bool_literal_lower_value:
@@ -198,7 +231,8 @@ Proof
 QED
 
 Theorem bool_literal_post:
-  stmt_state_rel H ctx fn cenv cx es s ==>
+  stmt_state_rel H ctx fn cenv cx es s /\
+  storage_well_formed_on cx es (FST H) ==>
   expr_post H ctx fn cenv cx (Literal (BaseT BoolT) (BoolL b))
     es sa sa s (es with gas_obs := []) (BoolV b) (Lit (if b then 1w else 0w)) s
 Proof
@@ -207,6 +241,10 @@ Proof
     (drule exprLoweringPropsTheory.msg_gas_state_frame >>
      disch_then (qspecl_then [`s.vs_gas_readings`, `s.vs_inst_idx`, `[]`] mp_tac) >>
      simp[NoAsms]) >>
+  `storage_well_formed_on cx (es with gas_obs := []) (FST H)` by
+    (`(es with gas_obs := []).accounts = es.accounts /\
+      (es with gas_obs := []).tStorage = es.tStorage` by simp[] >>
+     metis_tac[vyperStorageFootprintTheory.storage_well_formed_on_backends]) >>
   Cases_on `b` >>
   simp[expr_post_def, expr_type_def, expr_val_rel_def, expr_val_at_def,
        venomStateTheory.eval_operand_def,
