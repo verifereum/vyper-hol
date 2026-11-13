@@ -22,7 +22,8 @@ Theorem type_value_mutual_induction:
 Proof
   rpt gen_tac >> strip_tac >>
   mp_tac (Q.SPECL [`value_pred`, `tuple_pred`, `fields_pred`, `field_pred`]
-    (legacyInduction.mutual_ind_from_ops type_value_induction)) >>
+    (legacyInduction.mutual_ind_from_ops
+       (TypeBase.set_induction_of ``:type_value``))) >>
   asm_rewrite_tac [] >>
   simp_tac bool_ss [AC CONJ_COMM CONJ_ASSOC]
 QED
