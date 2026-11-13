@@ -5,10 +5,12 @@
  * the lowering leaves alone and as its one-instruction lowering otherwise.
  *
  * TOP-LEVEL:
+ *   fmp_stage_root_exists - a function that needs the FMP gets a root
  *   fmp_stage_past_root   - a non-parameter instruction is past the root
  *   fmp_lower_invoke_inst - INVOKE's lowering: the call with FMP extras
  *   fmp_walk_invoke_head  - INVOKE's lowering in an indexed walk
  *   fmp_stage_invoke_at   - a source INVOKE's place in the target
+ *   fmp_frame_invoke_position - a related frame's target INVOKE
  *)
 Theory fmpStageFmpStepsInvokePosition
 Ancestors
@@ -40,6 +42,23 @@ Proof
   `idx < LENGTH prefix` by decide_tac >>
   fs[EVERY_EL, EL_APPEND1] >>
   first_x_assum (qspec_then `idx` mp_tac) >> simp[]
+QED
+
+(* Why: lowering a function that needs the FMP splits its entry, so the
+   function has a root. *)
+Theorem fmp_stage_root_exists:
+  fmp_stage_lowered infos ctx runner fn fn' /\
+  fn.fn_fmp_signature = NONE /\ FLOOKUP infos fn.fn_name = SOME info /\
+  info.fi_needs_fmp ==>
+  ?rl rp. fmp_stage_root infos ctx fn = SOME (rl,rp)
+Proof
+  strip_tac >>
+  `IS_SOME (split_fmp_entry fn)` by
+    gvs[fmp_stage_lowered_def, fmp_lower_function_with_info_def,
+        fmp_lower_input_def, AllCaseEqs(), optionTheory.IS_SOME_EXISTS] >>
+  Cases_on `split_fmp_entry fn` >> gvs[] >> Cases_on `x` >>
+  drule split_fmp_entry_reconstruct >> strip_tac >>
+  simp[fmp_stage_root_def] >> Cases_on `fn_is_context_entry ctx fn` >> simp[]
 QED
 
 (* Why: the root goes right after the entry's parameter prefix, so every
@@ -163,4 +182,58 @@ Proof
     (if (EL j bb.bb_instructions).inst_opcode = DALLOCA then 4 else 1)) idx) = idx` by
     (irule fmp_control_width_one >> simp[]) >>
   gvs[]
+QED
+
+Theorem fmp_stage_invoke_lowered_at[local]:
+  fmp_stage_lowered infos ctx runner fn fn' /\
+  lookup_block lbl fn.fn_blocks = SOME bb /\ i < LENGTH bb.bb_instructions /\
+  (EL i bb.bb_instructions).inst_opcode = INVOKE ==>
+  ?bb' j. lookup_block lbl fn'.fn_blocks = SOME bb' /\
+    j.inst_opcode = INVOKE /\ j.inst_id = (EL i bb.bb_instructions).inst_id /\
+    fmp_stage_tidx (fmp_stage_plan infos ctx fn) (fmp_stage_root infos ctx fn)
+      lbl bb.bb_instructions i +
+      (if (lbl,i) IN FDOM (fmp_stage_plan infos ctx fn) then 1 else 0)
+      < LENGTH bb'.bb_instructions /\
+    EL (fmp_stage_tidx (fmp_stage_plan infos ctx fn) (fmp_stage_root infos ctx fn)
+      lbl bb.bb_instructions i +
+      (if (lbl,i) IN FDOM (fmp_stage_plan infos ctx fn) then 1 else 0))
+      bb'.bb_instructions = j
+Proof
+  strip_tac >> drule_all fmp_stage_invoke_at >> strip_tac >>
+  qexists `bb'` >> simp[] >>
+  imp_res_tac fmp_lower_invoke_inst >> gvs[]
+QED
+
+(* Why: a frame related at a source INVOKE sits at the target's INVOKE
+   with the same id, whichever witness of the lowering relates them. *)
+Theorem fmp_frame_invoke_position:
+  fmp_frame_rel sm fmp0 raw0 eb elo lo T fn fn' PG G tv s t /\
+  ALL_DISTINCT (MAP (\b. b.bb_label) fn.fn_blocks) /\
+  active_inst fn inst s /\ inst.inst_opcode = INVOKE ==>
+  ?j. active_inst fn' j t /\ MEM j (fn_insts fn') /\
+      j.inst_opcode = INVOKE /\ j.inst_id = inst.inst_id
+Proof
+  strip_tac >>
+  `?bb. lookup_block s.vs_current_bb fn.fn_blocks = SOME bb /\
+    s.vs_inst_idx < LENGTH bb.bb_instructions /\
+    EL s.vs_inst_idx bb.bb_instructions = inst` by
+    (gvs[contextCodegenRelTheory.active_inst_def] >>
+     metis_tac[venomExecPropsTheory.MEM_lookup_block]) >>
+  gvs[fmp_frame_rel_def] >>
+  drule_all fmp_stage_invoke_lowered_at >> strip_tac >>
+  qexists `j` >> simp[] >>
+  `MEM bb' fn'.fn_blocks /\ bb'.bb_label = s.vs_current_bb` by
+    (fs[lookup_block_def] >> conj_tac
+     >- (irule FIND_MEM >> goal_assum (drule_at Any)) >>
+     qpat_assum `FIND _ fn'.fn_blocks = SOME bb'`
+       (mp_then Any mp_tac FIND_P) >> simp[]) >>
+  conj_tac
+  >- (simp[contextCodegenRelTheory.active_inst_def] >>
+      qexists `bb'` >>
+      qpat_x_assum `_ + _ < LENGTH bb'.bb_instructions` mp_tac >>
+      once_rewrite_tac[arithmeticTheory.ADD_COMM] >> strip_tac >>
+      qpat_x_assum `EL (_ + _) bb'.bb_instructions = j` mp_tac >>
+      once_rewrite_tac[arithmeticTheory.ADD_COMM] >> strip_tac >> simp[]) >>
+  simp[fn_insts_def, unitShapeDefsTheory.MEM_fn_insts_blocks_iff] >>
+  qexists `bb'` >> simp[] >> metis_tac[EL_MEM]
 QED

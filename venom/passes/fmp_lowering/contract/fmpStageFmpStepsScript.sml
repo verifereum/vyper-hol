@@ -34,7 +34,7 @@ Ancestors
   venomInstProofs1
   ptrStaticDiscipline o1PassContract
   ptrDiscipline venomExecSemantics venomState venomInst finite_map words
-  list rich_list fmpStageFmpStepsLedgerPartition
+  list rich_list fmpStageFmpStepsLedgerPartition ptrDisciplineCallCtx
 
 Theorem fmp_restore_env_update_dead[local]:
   fmp_env_rel sm fn live G tv s t /\ ~MEM runner live ==>
@@ -456,14 +456,16 @@ Proof
     (gvs[fmp_stage_ctx_def, o1_inv_def, o1_static_inv_def,
          fmp_free_ctx_def, EVERY_MEM] >>
      metis_tac[lookup_function_MEM]) >>
-  drule_all fmp_entry_actual_lowering >> strip_tac >>
-  `fn_is_context_entry ctx fn` by simp[fmpWfDefsTheory.fn_is_context_entry_def] >>
+  drule_all fmpStageFmpStepsCallAbiTheory.fmp_call_actual_witness >>
+  strip_tac >>
+  `fn_is_context_entry observed.cu_context fn` by
+    simp[fmpWfDefsTheory.fn_is_context_entry_def] >>
   drule_all fmp_entry_root_position >> strip_tac >>
   drule_all fmp_entry_target_block >> strip_tac >>
   irule fmp_stage_entry_from_layout >>
   simp[] >>
   (reverse conj_tac >- metis_tac[]) >>
-  qexistsl_tac [`ctx`, `infos`, `runner`] >>
+  qexistsl_tac [`observed.cu_context`, `infos`, `FST (fresh_ir_var sp)`] >>
   simp[] >> strip_tac >>
   drule_all fmp_entry_initial_prefix >> strip_tac >> gvs[] >>
   qexists_tac `id` >> simp[]
@@ -519,44 +521,6 @@ Proof
   simp[] >> strip_tac >> fs[EVERY_MEM] >> res_tac >> decide_tac
 QED
 
-Theorem fmp_return_block_context[local]:
-  enters_block fn s t ==> t.vs_call_ctx = s.vs_call_ctx
-Proof
-  simp[contextCodegenRelTheory.enters_block_def] >> strip_tac >> gvs[] >>
-  drule venomExecProofsTheory.eval_phis_only_updates_vs_vars >>
-  disch_then (fn th => once_rewrite_tac[th]) >> simp[]
-QED
-
-Theorem fmp_return_terminator_context[local]:
-  is_terminator inst.inst_opcode /\ step_inst fuel C inst s = OK t ==>
-  t.vs_call_ctx = s.vs_call_ctx
-Proof
-  Cases_on `inst.inst_opcode` >> simp[is_terminator_def] >>
-  strip_tac >> gvs[Once step_inst_def, step_inst_base_opcode_eqs] >>
-  gvs[AllCaseEqs(), jump_to_def] >> pairarg_tac >> gvs[]
-QED
-
-Theorem fmp_return_stack_context[local]:
-  !vs C stk PG G tn fn inst s. frame_reachable vs C stk PG G tn fn inst s ==>
-  !f. MEM f stk ==> s.vs_call_ctx = f.cf_state.vs_call_ctx
-Proof
-  ho_match_mp_tac frame_reachable_ind >> rpt conj_tac
-  >- simp[]
-  >- (rpt strip_tac >> drule_all venomInstProofsTheory.step_preserves_call_ctx >>
-      strip_tac >> simp[])
-  >- (rpt strip_tac >> drule_all fmp_return_terminator_context >>
-      drule fmp_return_block_context >> metis_tac[])
-  >- (rpt strip_tac >> drule fmp_return_block_context >>
-      qpat_x_assum `setup_callee _ _ _ = _` mp_tac >>
-      simp[setup_callee_def, AllCaseEqs()] >> rpt strip_tac >> gvs[] >> metis_tac[])
-  >> rpt strip_tac >>
-  `s'.vs_call_ctx = f.cf_state.vs_call_ctx` by
-    (qspec_then `(\u. u.vs_call_ctx)` mp_tac bind_outputs_preserves >>
-     simp[update_var_def] >> disch_then drule >>
-     Cases_on `ret.iret_adopt_fmp` >> simp[adopt_return_fmp_def, merge_callee_state_def]) >>
-  gvs[] >> metis_tac[]
-QED
-
 Theorem fmp_stage_invoke_return:
   fmp_stage_ctx rpolicy D C C' vs vs' fmp eom /\
   fmp0 = w2n vs'.vs_initial_fmp /\ raw0 = w2n fmp /\
@@ -590,7 +554,7 @@ Theorem fmp_stage_invoke_return:
 Proof
   strip_tac >>
   `s.vs_call_ctx = f.cf_state.vs_call_ctx` by
-    (drule fmp_return_stack_context >> simp[]) >>
+    (drule ptr_reachable_stack_call_ctx >> simp[]) >>
   drule_all fmp_stage_ret_exec >> strip_tac >> gvs[] >>
   `?tn0. tn0.t_var = f.cf_tvar /\
     frame_reachable vs C stk f.cf_params f.cf_prov tn0

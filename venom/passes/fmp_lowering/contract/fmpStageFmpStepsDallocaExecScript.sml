@@ -2,7 +2,7 @@ Theory fmpStageFmpStepsDallocaExec
 Ancestors
   fmpStageFmpStepsLive fmpStageFmpStepsInvokePosition
   fmpStageFmpStepsRestorePosition fmpStageRel fmpStageOpBase fmpStageReclaimSound fmpStageControl
-  fmpStageFmpStepsDallocaCode
+  fmpStageFmpStepsDallocaCode fmpStageOpSimMemSupport
   fmpLowerSequenceExec ptrStaticDiscipline unitMemInv frameViewFacts
   venomExecSemantics venomState words list finite_map passSimulationDefs
 
@@ -61,10 +61,7 @@ Proof
                      unitShapeDefsTheory.fn_shape_ok_def] >>
      qexists_tac `inst` >> gvs[]) >>
   `inst.inst_opcode <> PHI` by simp[] >>
-  drule_all fmp_stage_operand >> simp[] >> strip_tac >>
-  gvs[fmp_value_rel_def,
-      o1LowerDloadRelocationKernelTheory.ld_value_agree_def] >>
-  metis_tac[frameRelocationGuardedValuesTheory.word_agree_except_empty]
+  drule_all fmp_mem_operand_clean >> simp[]
 QED
 
 Theorem fmp_dalloca_lowered_needs:
@@ -87,21 +84,6 @@ Proof
   drule fmpAnalysisPropsTheory.fmp_join_target_info_needs_iff >>
   simp[fmpAnalysisDefsTheory.fmp_direct_info_def] >>
   metis_tac[fmp_scan_dalloca_needs]
-QED
-
-Theorem fmp_dalloca_root_exists:
-  fmp_stage_lowered infos ctx runner fn fn' /\
-  fn.fn_fmp_signature = NONE /\ FLOOKUP infos fn.fn_name = SOME info /\
-  info.fi_needs_fmp ==>
-  ?rl rp. fmp_stage_root infos ctx fn = SOME (rl,rp)
-Proof
-  strip_tac >>
-  `IS_SOME (split_fmp_entry fn)` by
-    gvs[fmp_stage_lowered_def, fmpLowerDefsTheory.fmp_lower_function_with_info_def,
-        fmpLowerDefsTheory.fmp_lower_input_def, AllCaseEqs(), optionTheory.IS_SOME_EXISTS] >>
-  Cases_on `split_fmp_entry fn` >> gvs[] >> Cases_on `x` >>
-  drule fmpStepLayoutTheory.split_fmp_entry_reconstruct >> strip_tac >>
-  simp[fmp_stage_root_def] >> Cases_on `fn_is_context_entry ctx fn` >> simp[]
 QED
 
 Theorem fmp_dalloca_not_before_root:
@@ -165,7 +147,7 @@ Proof
      drule venomInstTheory.FIND_P >> simp[]) >>
   gvs[fmp_stage_rel_def, fmp_frame_rel_def] >>
   drule_all fmp_dalloca_lowered_needs >> strip_tac >>
-  drule_all fmp_dalloca_root_exists >> strip_tac >>
+  drule_all fmp_stage_root_exists >> strip_tac >>
   `~(s.vs_current_bb = rl /\ s.vs_inst_idx < rp)` by
     metis_tac[fmp_dalloca_not_before_root] >>
   Cases_on `s.vs_current_bb = rl` >> gvs[] >>
@@ -202,23 +184,7 @@ Proof
   Cases_on `lbl = rl` >> gvs[]
 QED
 
-Theorem fmp_dalloca_execution_from_suffix:
-  (!inst size_op out runner sp vars restores (lbl:string) idx plan infos ctx insts code leftover sp'.
-    inst.inst_opcode = DALLOCA /\ inst.inst_operands = [size_op] /\
-    inst.inst_outputs = [out] /\ MEM runner sp.irs_used_vars /\
-    list_subset vars sp.irs_used_vars /\ MEM out vars /\ runner <> out /\
-    ALL_DISTINCT (MAP FST restores) /\
-    (!j b. MEM ((lbl,j),b) restores <=> idx <= j /\ FLOOKUP plan (lbl,j) = SOME b) /\
-    fmp_lower_indexed infos ctx runner lbl idx sp restores (inst::insts) =
-      SOME (code,leftover,sp') ==>
-    ?plus31 mask aligned ai ni mi bi tail.
-      DROP (if (lbl,idx) IN FDOM plan then 1 else 0) code =
-        [mk_inst ai ADD [Lit 31w;size_op] [plus31];
-         mk_inst ni NOT [Lit 31w] [mask];
-         mk_inst mi AND [Var plus31;Var mask] [aligned];
-         mk_inst bi BUMP [Var runner;Var aligned] [out;runner]] ++ tail /\
-      ALL_DISTINCT [plus31;mask;aligned;runner;out] /\
-      ~MEM plus31 vars /\ ~MEM mask vars /\ ~MEM aligned vars) /\
+Theorem fmp_dalloca_execution:
   fmp_stage_ctx rpolicy D C C' vs vs' fmp eom /\
   fmp0 = w2n vs'.vs_initial_fmp /\ raw0 = w2n fmp /\
   frame_reachable vs C stk PG G tn fn inst s /\ active_inst fn inst s /\
@@ -286,7 +252,7 @@ Proof
      ALL_DISTINCT [plus31;mask;aligned;runner;out] /\
      ~MEM plus31 (fn_ir_vars fn) /\ ~MEM mask (fn_ir_vars fn) /\
      ~MEM aligned (fn_ir_vars fn)` by
-    (first_x_assum irule >> simp[] >>
+    (irule fmp_dalloca_indexed_suffix >> simp[] >>
      qexistsl [`ctx`, `infos`, `inst`, `DROP (SUC s.vs_inst_idx) bb.bb_instructions`,
                `leftover`, `restores`, `sp`, `sp'`] >> gvs[]) >>
   drule_all dalloca_relocate_exec >> strip_tac >>
@@ -295,7 +261,6 @@ Proof
     (qpat_x_assum `DROP _ code = _` mp_tac >>
      qpat_x_assum `DROP _ bb'.bb_instructions = code` (SUBST_ALL_TAC o SYM) >>
      simp[rich_listTheory.DROP_DROP_T]) >>
-  qpat_x_assum `!inst size_op out runner sp vars restores lbl idx plan infos ctx insts code leftover sp'. _` kall_tac >>
   qexistsl [`out`, `size_op`, `sz`, `ceil32 (w2n sz)`, `runner`, `plus31`, `mask`,
     `aligned`, `s1`, `(update_var runner (n2w (lo+ceil32 (w2n sz)))
       (update_var out (n2w lo) (update_var aligned (n2w (ceil32 (w2n sz)))
@@ -307,49 +272,4 @@ Proof
   reverse conj_tac >- gvs[fmp_dalloca_control_advance] >>
   gen_tac >> irule fmp_dalloca_target_run >> simp[] >>
   qexistsl [`bb'`, `seq`, `tail`] >> simp[Abbr `seq`] >> gvs[]
-QED
-
-Theorem fmp_dalloca_execution:
-  fmp_stage_ctx rpolicy D C C' vs vs' fmp eom /\
-  fmp0 = w2n vs'.vs_initial_fmp /\ raw0 = w2n fmp /\
-  frame_reachable vs C stk PG G tn fn inst s /\ active_inst fn inst s /\
-  ~s.vs_halted /\ inst.inst_opcode = DALLOCA /\
-  fmp_stage_rel D C' sm fmp0 raw0 eom T stk PG G tn fn s lo t ts /\
-  step_inst k C inst s = r /\ terminates r ==>
-  ?out size_op sz z runner plus31 mask aligned s1 t1 fn' infos ctx bb
-    rl rp env states st regions.
-    z = ceil32 (w2n sz) /\ r = OK s1 /\
-    inst.inst_operands = [size_op] /\ inst.inst_outputs = [out] /\
-    eval_operand size_op s = SOME sz /\ eval_operand size_op t = SOME sz /\
-    s1 = update_var out s.vs_fmp (s with vs_fmp := n2w (w2n s.vs_fmp+z)) /\
-    t1 = (update_var runner (n2w (lo+z))
-      (update_var out (n2w lo) (update_var aligned (n2w z)
-       (update_var mask (~31w) (update_var plus31 (sz+31w) t)))))
-      with vs_inst_idx := t.vs_inst_idx+4 /\
-    (!k'. fmp_target_run k' C' fn.fn_name t 4 t1) /\
-    w2n s.vs_fmp+z < dimword (:256) /\ lo+z < dimword (:256) /\
-    fmp_frontier_rel fmp0 raw0 (lo+z) s1.vs_fmp /\
-    ALL_DISTINCT [plus31;mask;aligned;runner;out] /\
-    EVERY (\v. ~MEM v (fn_ir_vars fn)) [plus31;mask;aligned;runner] /\
-    lookup_function fn.fn_name C'.ctx_functions = SOME fn' /\
-    fmp_stage_lowered infos ctx runner fn fn' /\
-    fmp_stage_root infos ctx fn = SOME (rl,rp) /\
-    ~(s.vs_current_bb = rl /\ s.vs_inst_idx < rp) /\
-    lookup_block s.vs_current_bb fn.fn_blocks = SOME bb /\
-    fmp_base_analyze (fn_insts fn) = SOME env /\
-    fmp_reclaim_states infos fn = SOME states /\
-    df_at NONE states s.vs_current_bb s.vs_inst_idx = SOME st /\
-    MAP (\r. r.fr_mark) regions = SND (fmp_pop_at infos fn
-      (liveness_analyze fn) env (s.vs_current_bb,s.vs_inst_idx) inst st) /\
-    fmp_ledger_ok (fn_insts fn) env t lo regions /\
-    EVERY (\r. fmp_frame_lo fmp0 ts <= r.fr_lo) regions /\
-    fmp_ledger_link sm (fmp_frame_base raw0 stk) lo regions /\
-    fmp_frame_covers sm env (fmp_frame_base raw0 stk) lo G /\
-    t.vs_inst_idx+4 = fmp_stage_tidx (fmp_stage_plan infos ctx fn)
-      (fmp_stage_root infos ctx fn) s.vs_current_bb bb.bb_instructions
-      (SUC s.vs_inst_idx)
-Proof
-  strip_tac >> mp_tac fmp_dalloca_execution_from_suffix >>
-  impl_tac >- (conj_tac >- (rpt gen_tac >> MATCH_ACCEPT_TAC fmp_dalloca_indexed_suffix) >>
-               asm_rewrite_tac[]) >> simp[]
 QED
