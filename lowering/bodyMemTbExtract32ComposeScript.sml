@@ -89,13 +89,13 @@ Proof
   (impl_tac >- (rpt conj_tac >> FIRST [first_assum ACCEPT_TAC, simp[]])) >>
   strip_tac >>
   rewrite_tac[extract32_read_action] >>
-  match_mp_tac extract32_outcome_bind_marked >>
-  qexists_tac `\H v ee t.
+  match_mp_tac (Q.INST [`P` |-> `\H v ee t.
     expr_post H ctx func cenv cx src es sa s1 s0 ee v src_op t /\
     expr_store_bound cx (expr_type src) v src_op t /\
     t.vs_current_bb = s1.cs_current_bb /\
     t.vs_inst_idx = LENGTH s1.cs_current_insts /\
-    alloca_history func t /\ s0.vs_alloca_next <= t.vs_alloca_next` >>
+    alloca_history func t /\ s0.vs_alloca_next <= t.vs_alloca_next`]
+    (SPEC_ALL extract32_outcome_bind_marked)) >>
   conj_tac
   >- (`!(res:value + exception) r.
          (?exc. res = INR exc /\ expr_exit (INR exc : value + exception) r) <=>
