@@ -892,7 +892,7 @@ Theorem extcall_decoder_complex_members[local]:
   ~s.vs_halted /\ s.vs_current_bb = st.cs_current_bb /\
   s.vs_inst_idx = LENGTH st.cs_current_insts ==>
   ?k r. gas_path_mem ctx func s k r /\
-    ((?t vs. r = OK t /\ sb <= H /\ LENGTH vs = LENGTH tys /\
+    ((?t vs. r = OK t /\ sb <= H /\ sb + ao (LENGTH tys) <= H /\ LENGTH vs = LENGTH tys /\
        (!i. i < LENGTH tys ==> observed i (EL i vs) /\
           value_has_type (EL i tvs) (EL i vs) /\
           val_in_memory (EL i tvs) (EL i vs) (d+mo i) t.vs_memory) /\
@@ -988,3 +988,118 @@ Resume extcall_decoder_complex_members[traversal_result]:
 QED
 
 Finalise extcall_decoder_complex_members
+
+(* Shared statement syntax only; these quotations introduce no HOL constants. *)
+val decoder_entry_syntax = ``\ce env sf ty tv dst src st fin s sb d.
+  abi_decoder_coherent ce env sf ty tv /\
+  compile_abi_decode_to_buf dst src MLOAD base_op hi
+    (type_to_abi_dec_info sf ce ty) st = ((),fin) /\
+  fn_has_code st fin func /\ fn_inst_ids_distinct func /\
+  eval_operand base_op s = SOME (n2w B) /\ eval_operand src s = SOME (n2w sb) /\
+  eval_operand dst s = SOME (n2w d) /\ eval_operand hi s = SOME (n2w H) /\
+  hi <> Lit 0w /\ base_op <> Lit 0w /\
+  H <= P /\ B+P < dimword(:256) /\ B+P <= s.vs_alloca_next /\
+  sb < dimword(:256) /\ d+type_memory_bytes ce ty < dimword(:256) /\
+  d+type_memory_bytes ce ty <= s.vs_alloca_next /\
+  LENGTH snap = P /\ mem_bytes_at B P s.vs_memory = snap /\
+  (!clamp. type_to_abi_dec_info sf ce ty = DecPrimWord clamp ==> sb+32 <= H) /\
+  abi_footprint_disjoint B P ((d,type_memory_bytes ce ty)::
+    abi_decoder_child_scratch (abi_decoder_ids first last) b cap s) /\
+  abi_footprint_disjoint d (type_memory_bytes ce ty)
+    (abi_decoder_child_scratch (abi_decoder_ids first last) b cap s) /\
+  (!id p n. FLOOKUP s.vs_allocas id = SOME (p,n) ==> p+n <= s.vs_alloca_next) /\
+  abi_decoder_budget first last b cap s /\ first <= abi_decoder_entry_floor st /\
+  fin.cs_next_id <= last /\ fin.cs_next_var <= limit.cs_next_var /\
+  fresh_vars_wrt limit s /\ b+cap < dimword(:256) /\ s.vs_alloca_next <= b+cap /\
+  EVERY (abi_decoder_operand_live st.cs_next_var) [src;dst;base_op;hi] /\
+  ~s.vs_halted /\ s.vs_current_bb = st.cs_current_bb /\
+  s.vs_inst_idx = LENGTH st.cs_current_insts``;
+
+val decoder_good_syntax = ``\env ty tv sb v.
+  let at = vyper_to_abi_type env ty; xs = DROP sb (TAKE H snap) in
+  sb <= H /\ vyper_decode_valid_enc at xs /\
+  (is_dynamic at \/ static_length at <= LENGTH xs) /\
+  abi_to_vyper env ty (dec at xs) = SOME v /\ value_has_type tv v``;
+
+val decoder_result_syntax = ``\ce env ty tv st fin s sb d.
+  ?k r. gas_path_mem ctx func s k r /\
+    ((?t v. r = OK t /\ ^decoder_good_syntax env ty tv sb v /\
+      val_in_memory tv v d t.vs_memory /\
+      abi_scratch_effect first last st.cs_next_id fin.cs_next_id st.cs_next_var limit
+        d (type_memory_bytes ce ty) b cap s t /\
+      mem_bytes_at B P t.vs_memory = snap /\
+      (!id p n. FLOOKUP t.vs_allocas id = SOME (p,n) ==> p+n <= t.vs_alloca_next) /\
+      t.vs_current_bb = fin.cs_current_bb /\ t.vs_inst_idx = LENGTH fin.cs_current_insts /\
+      ~t.vs_halted) \/
+     (?t. r = Abort Revert_abort t /\ ~(?v. ^decoder_good_syntax env ty tv sb v)))``;
+
+Theorem extcall_decoder_tuple_memory:
+  let entry = ^decoder_entry_syntax;
+      result = ^decoder_result_syntax
+  in
+  (!i child_dst child_src a z u child_sb child_d.
+    i < LENGTH tys /\ entry ce env sf (EL i tys) (EL i tvs)
+      child_dst child_src a z u child_sb child_d ==>
+    result ce env (EL i tys) (EL i tvs) a z u child_sb child_d) /\
+  entry ce env sf (TupleT tys) (TupleTV tvs) dst src st fin s sb d ==>
+  result ce env (TupleT tys) (TupleTV tvs) st fin s sb d
+Proof
+  rpt BasicProvers.LET_ELIM_TAC >>
+  qpat_x_assum `entry ce env sf (TupleT tys) _ _ _ _ _ _ _ _` mp_tac >>
+  simp[Abbr `entry`] >> strip_tac >>
+  `LIST_REL (abi_decoder_coherent ce env sf) tys tvs` by
+    fs[abiDecoderCoherenceTheory.abi_decoder_coherent_tuple_iff] >>
+  `MAP type_memory_size tvs = MAP (type_memory_bytes ce) tys` by
+    (`LENGTH tvs = LENGTH tys` by metis_tac[LIST_REL_LENGTH] >>
+     irule LIST_EQ >> simp[] >> rpt strip_tac >>
+     drule_all abiDecoderCoherenceTheory.abi_decoder_coherent_tuple_child >>
+     disch_then (strip_assume_tac o MATCH_MP abiDecoderCoherenceTheory.abi_decoder_coherent_header) >>
+     fs[abiDecoderCoherenceTheory.abi_decoder_header_def, EL_MAP]) >>
+  `type_memory_bytes ce (TupleT tys) = SUM (MAP (type_memory_bytes ce) tys)` by
+    (drule abiDecoderMemberInfosTheory.abi_decoder_member_infos_layout >> strip_tac >>
+     drule abiDecoderCoherenceTheory.abi_decoder_coherent_header >>
+     simp[abiDecoderCoherenceTheory.abi_decoder_header_def,
+       valueEncodingTheory.type_memory_size_def]) >>
+  mp_tac (Q.INST [`dyn` |-> `EXISTS (is_abi_dynamic ce.ce_struct_fields) tys`]
+    extcall_decoder_complex_members) >>
+  rpt BasicProvers.LET_ELIM_TAC >>
+  qpat_x_assum `_ ==> ?k r. gas_path_mem ctx func s k r /\ _` mp_tac >>
+  impl_tac >- suspend "tuple_initial" >>
+  suspend "tuple_result"
+QED
+
+Resume extcall_decoder_tuple_memory[tuple_initial]:
+  fs[abiDecoderMemberInfosTheory.abi_decoder_tuple_infos] >>
+  simp[Abbr `mo`] >>
+  rpt gen_tac >> strip_tac >>
+  qpat_x_assum `!i child_dst child_src a z u child_sb child_d. _` mp_tac >>
+  simp[Abbr `child_entry`, Abbr `result`, Abbr `good`, markerTheory.Abbrev_def] >>
+  metis_tac[]
+QED
+
+Resume extcall_decoder_tuple_memory[tuple_result]:
+  strip_tac >>
+  simp[Abbr `result`, markerTheory.Abbrev_def] >>
+  qexistsl_tac [`k`, `r`] >> simp[]
+  >- suspend "tuple_success" >>
+  suspend "tuple_reject"
+QED
+
+Resume extcall_decoder_tuple_memory[tuple_success]:
+  qpat_x_assum `!i child_dst child_src a z u child_sb child_d. _` kall_tac >>
+  `LENGTH raw = H - sb` by simp[Abbr `raw`, LENGTH_TAKE, MIN_DEF] >>
+  `SUM (MAP abi_member_head_size (MAP (vyper_to_abi_type env) tys)) <= LENGTH raw` by
+    (fs[Abbr `ao`] >> decide_tac) >>
+  mp_tac (MATCH_MP decoder_members_completed_prefix
+    (CONJ static_decode_valid_suffix static_dec_suffix)) >>
+  disch_then (qspecl_then [`tys`, `vs`, `raw`] mp_tac) >>
+  impl_tac >- (fs[Abbr `observed`, Abbr `ao`, markerTheory.Abbrev_def] >> metis_tac[]) >>
+  strip_tac >>
+  FAIL_TAC "tuple completion"
+QED
+
+Resume extcall_decoder_tuple_memory[tuple_reject]:
+  FAIL_TAC "tuple reject"
+QED
+
+Finalise extcall_decoder_tuple_memory
