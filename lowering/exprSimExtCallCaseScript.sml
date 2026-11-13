@@ -131,6 +131,7 @@ Definition extcall_request_ready_def:
     t.vs_inst_idx = LENGTH sp.cs_current_insts /\ ee.gas_obs = [] /\
     outcomes_accounts_typed ee.outcomes /\
     accounts_runtime_well_typed ee.accounts /\
+    MAP FDOM es.scopes = MAP FDOM ee.scopes /\
     sa.cs_next_var <= sp.cs_next_var /\ sa.cs_next_id <= sp.cs_next_id /\
     local_ptrs_reserved cenv sp /\
     EVERY (safe_operand sp)
@@ -183,6 +184,8 @@ Definition extcall_returned_def:
        storage_well_formed_on cx ee (FST H)) /\ wb_frame cenv es ee sa s0 t /\
     ~t.vs_halted /\ t.vs_current_bb = sr.cs_current_bb /\
     t.vs_inst_idx = LENGTH sr.cs_current_insts /\ ee.gas_obs = [] /\
+    accounts_runtime_well_typed ee.accounts /\
+    MAP FDOM es.scopes = MAP FDOM ee.scopes /\
     sa.cs_next_var <= sr.cs_next_var /\ sa.cs_next_id <= sr.cs_next_id /\
     local_ptrs_reserved cenv sr /\
     EVERY (safe_operand sr) [addr_op; buf_op; default_op] /\
