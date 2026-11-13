@@ -1,19 +1,20 @@
 (*
- * e2e_deploy_correct_at_marks: the deploy theorem at one fixed gas marking,
- * the deployment twin of e2eCallAtMarks.
+ * e2e_deploy_correct_from_gas_link: the deploy theorem from a link between the
+ * frame's gas readings and selected raw entry states; the deployment twin of
+ * e2eCallAtMarks.
  *
- * The caller supplies the raw deployment unit's entry state vs (a gas
- * variant of the compiled run's entry state), the S4 simulation facts on it
- * for every well-formed dead mask, the selected-run certificate at marks,
- * and that every filling of the frame's gas readings extends the marked
- * readings of vs.  At each such filling, the exit arm gives the entry's
- * memory- and pointer-safe runs at the run's own storage horizon H
- * (deployUnitExitSafe); the ctorDeployMemoryFrontier bridges turn them into
- * the S4 memory facts, which give ctx_sim at deploy_dead H; codegen and the
- * creation frame finish.
+ * For every guarded filling of the frame's gas readings, the caller supplies
+ * a raw deployment unit's entry state vs (a gas variant of the compiled
+ * run's entry state) whose marked readings the filling extends, the S4
+ * simulation facts on vs for every well-formed dead mask, and the
+ * selected-run certificate at its marks.  At each such filling, the exit
+ * arm gives the entry's memory- and pointer-safe runs at the run's own
+ * storage horizon H (deployUnitExitSafe); the ctorDeployMemoryFrontier
+ * bridges turn them into the S4 memory facts, which give ctx_sim at
+ * deploy_dead H; codegen and the creation frame finish.
  *
  * TOP-LEVEL:
- *   e2e_deploy_correct_at_marks -- the deploy result relation at every
+ *   e2e_deploy_correct_from_gas_link -- the deploy result relation at every
  *     filling, from the facts above
  *   gas_readings_rel_mono -- gas_readings_rel is monotone in its run
  *   gas_variant_code_layout_valid -- a gas variant keeps the code layout
@@ -220,46 +221,49 @@ Proof
   strip_tac >> gvs[]
 QED
 
-(* TOP-LEVEL.  The last premise links the frame's gas readings to the marked
-   readings of vs: every filling the readings allow extends them. *)
-Theorem e2e_deploy_correct_at_marks:
-  !policy tops deploy_bc runtime_bc am tx es rpolicy dunit dout prog cplan vs
-   marks.
+(* TOP-LEVEL.  Where the frame is not starved, every filling of its gas
+   readings that meets the constructor run's storage guard extends the marked
+   readings of some raw entry state vs carrying the S4 facts and the
+   selected-run certificate at its marks; then the deploy result relation
+   holds at every filling. *)
+Theorem e2e_deploy_correct_from_gas_link:
+  !policy tops deploy_bc runtime_bc am tx es r es' rpolicy dunit dout prog cplan.
     compile_vyper (K SOME) policy tops = SOME (deploy_bc, runtime_bc) /\
     deploy_phases policy tops (deploy_bc, runtime_bc)
       (rpolicy, dunit, dout, prog, cplan) /\
     deploy_source_ok tops am tx /\
     deploy_state_rel tops deploy_bc am tx es /\
     ~(?t. runtime_bc = 0xEFw :: t) /\
-    gas_variant vs (deploy_entry_state prog cplan tops es) /\
-    (!D. dead_wf D ==>
-       raw_unit_memory_ok dunit.cu_context vs /\
-       ptr_discipline (imm_len tops) dunit.cu_context vs /\
-       taint_within D dunit.cu_context vs /\
-       mem_inv dload_offset_ok dunit.cu_context vs /\
-       mem_inv dload_headroom_ok dunit.cu_context vs ==>
-       ctx_sim D dunit.cu_context dout.po_unit.cu_context vs
-         (deploy_entry_state prog cplan tops es) /\
-       o1_lowered_inv dout.po_unit.cu_context
-         (deploy_entry_state prog cplan tops es)) /\
-    deploy_unit_execution_correct_at marks tops runtime_bc am tx dunit vs /\
-    gas_readings_rel (gas_readings es)
-      (\gs. ?tail. gs = gas_explicit marks vs.vs_gas_readings ++ tail) T
+    run_call es = SOME (r, es') /\
+    (frame_resource_starved es r es' \/
+     gas_readings_rel (gas_readings es)
+       (\gs. deploy_storage_ok tops am tx (MAP SND (call_trace es)) gs ==>
+             ?vs marks tail.
+               gs = gas_explicit marks vs.vs_gas_readings ++ tail /\
+               gas_variant vs (deploy_entry_state prog cplan tops es) /\
+               (!D. dead_wf D ==>
+                  raw_unit_memory_ok dunit.cu_context vs /\
+                  ptr_discipline (imm_len tops) dunit.cu_context vs /\
+                  taint_within D dunit.cu_context vs /\
+                  mem_inv dload_offset_ok dunit.cu_context vs /\
+                  mem_inv dload_headroom_ok dunit.cu_context vs ==>
+                  ctx_sim D dunit.cu_context dout.po_unit.cu_context vs
+                    (deploy_entry_state prog cplan tops es) /\
+                  o1_lowered_inv dout.po_unit.cu_context
+                    (deploy_entry_state prog cplan tops es)) /\
+               deploy_unit_execution_correct_at marks tops runtime_bc am tx dunit vs) T)
     ==>
-    ?r es'.
-      run_call es = SOME (r, es') /\
-      (frame_resource_starved es r es' \/
-       deploy_call_result_rel tops runtime_bc am tx es r es')
+    frame_resource_starved es r es' \/
+    deploy_call_result_rel tops runtime_bc am tx es r es'
 Proof
   rpt strip_tac >>
-  qspec_then `es` strip_assume_tac run_call_total >>
-  qexistsl_tac [`r`, `es'`] >> simp[] >>
-  Cases_on `frame_resource_starved es r es'` >> simp[] >>
+  Cases_on `frame_resource_starved es r es'` >> fs[] >>
+  simp[deploy_call_result_rel_def] >>
+  drule gas_readings_rel_mono >> disch_then irule >>
+  rpt gen_tac >> BETA_TAC >> rpt strip_tac >>
+  qpat_x_assum `deploy_storage_ok _ _ _ _ gs ==> _` drule >> strip_tac >>
+  gvs[] >>
   drule_all deploy_entry_facts >> strip_tac >>
   qpat_x_assum `vs.vs_outcomes = _` (SUBST_ALL_TAC o SYM) >>
-  simp[deploy_call_result_rel_def] >>
-  irule gas_readings_rel_mono >>
-  qexists_tac `\gs. ?tail. gs = gas_explicit marks vs.vs_gas_readings ++ tail` >>
-  simp[] >> rpt strip_tac >> gvs[] >>
   drule_all deploy_correct_at_tail >> strip_tac >> fs[]
 QED
