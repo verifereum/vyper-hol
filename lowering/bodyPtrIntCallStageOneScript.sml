@@ -5,6 +5,9 @@ Ancestors
   exprSimHyps exprSimIfExpWidenedAdapter bodyPtrIntCallConfinement
   aggregateStorePtr bodyPtrIfExpBytesPost rawCallAllocationProofPtr
   gasSummaryComposePtr vyperTypeSystem valueCopyBytes memoryLayoutDefs
+  bodyPtrIfExpAllocSource bodyPtrIfExpAllocCompiler exprLoweringProps
+  exprSimVVFrame stmtFragPtr compileEnv loweringStateRelDefs
+  loweringHalt allocationPtr exprSimProps
 
 (* Shared suffix proposition S (interface only; not a proof certificate).
 !d ctx PG func cenv cx env e es sa a vv s0 ee tv s G tn Gi ti
@@ -176,4 +179,39 @@ Proof
   rpt strip_tac >> gvs[] >>
   irule compile_nonmemory_lowered_value_type >>
   goal_assum (drule_at Any) >> metis_tac[]
+QED
+
+Theorem intcall_stage_alloc_vv_post:
+  vv_post ctx func cenv cx e es sa a s0 ee tv vv s /\
+  fn_inst_ids_distinct func /\ local_ptrs_reserved cenv sa /\
+  sa.cs_next_var <= a.cs_next_var /\
+  (!x. vv_operand vv = Var x ==> not_fresh_at a x) /\
+  compile_alloc_buffer n a = (buf,a1) /\ fn_has_code a a1 func /\
+  buf.buf_operand = Var out /\ n < dimword (:256) /\
+  step_inst_base (mk_inst a.cs_next_id ALLOCA [Lit (n2w n)] [out]) s = OK u ==>
+  vv_post ctx func cenv cx e es sa a1 s0 ee tv vv u
+Proof
+  strip_tac >>
+  `stmt_state_rel ctx func cenv cx ee s` by gvs[vv_post_def] >>
+  `local_ptrs_reserved cenv a` by
+    (irule local_ptrs_reserved_next_var >> qexists_tac `sa` >> simp[]) >>
+  drule_all compile_alloc_buffer_raw_resources >> strip_tac >>
+  drule compile_alloc_buffer_parts >> strip_tac >>
+  `eval_operand (vv_operand vv) u = eval_operand (vv_operand vv) s` by
+    (irule alloca_step_operand_preserved >> simp[] >>
+     rpt strip_tac >> metis_tac[]) >>
+  `!x. not_fresh_at sa x ==> lookup_var x u = lookup_var x s` by
+    metis_tac[not_fresh_at_mono] >>
+  `!name b sz. local_region cenv ee.scopes u name b sz <=>
+                local_region cenv ee.scopes s name b sz` by
+    (rpt gen_tac >> eq_tac
+     >- (strip_tac >> irule local_region_frame >>
+         conj_tac
+         >- (qexists_tac `func` >> gvs[stmt_state_rel_def, state_rel_def]) >>
+         qexistsl_tac [`sa`, `ee.scopes`, `u`] >> simp[]) >>
+     strip_tac >> irule local_region_frame_fwd >>
+     qexistsl_tac [`s`, `sa`, `ee.scopes`] >> simp[]) >>
+  drule_all alloca_step_contracts >> strip_tac >>
+  irule vv_post_alloc_mono_frame >> simp[] >>
+  qexistsl_tac [`s`, `a`] >> simp[]
 QED
