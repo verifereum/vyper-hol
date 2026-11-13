@@ -141,3 +141,11 @@ Resume store_slots_bytestring_count_counted[resources]:
 QED
 
 Finalise store_slots_bytestring_count_counted
+
+Theorem store_slots_bytestring_count_words:
+  (len + 63) DIV 32 = 1 + word_size len
+Proof
+  `len + 63 = 1 * 32 + (len + 31)` by decide_tac >>
+  pop_assum SUBST1_TAC >>
+  simp[ADD_DIV_ADD_DIV, vfmConstantsTheory.word_size_def]
+QED
