@@ -225,8 +225,8 @@ Theorem ptr_paired_read_range_static_bound:
   ptr_lookup_transport births positions (op_prov TG ops.iao_ofst) {} (SOME x) (SOME y) ==>
   n = 0 \/ w2n y + n <= eom \/ (y = x /\ dyn_floor C vs <= w2n x)
 Proof
-  strip_tac >> irule ptr_paired_current_range_static_bound >>
-  conj_tac >- (qexists_tac `names` >> first_assum ACCEPT_TAC) >>
+  strip_tac >> irule ptr_paired_current_range_static_bound >> simp[] >>
+  conj_tac >- (qexists_tac `names` >> simp[]) >>
   qexistsl [`C'`,`H`,`PT`,`R`,`TG`,`a`,`at`,`births`,`calls`,`done`,`entries`,
             `h`,`ht`,`lo`,`lp`,`ops`,`positions`,`registry`,`rpolicy`,`saved`,
             `tokens`,`ws`] >>
