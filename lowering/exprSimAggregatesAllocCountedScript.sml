@@ -5,7 +5,7 @@
  * the buffer's ALLOCA as a counted path that reads no gas.
  *
  * TOP-LEVEL:
- *   buffer_alloc_counted
+ *   buffer_alloc_counted_horizons
  *)
 Theory exprSimAggregatesAllocCounted
 Ancestors
@@ -16,11 +16,14 @@ Ancestors
   exprLowering exprLoweringProps compileEnv loweringStateRelDefs valueEncoding
   vyperInterpreter vyperState
 
-(* The buffer's ALLOCA, counted: one instruction that reads no gas. *)
-Theorem buffer_alloc_counted:
+(* buffer_alloc_counted for every valid horizon: the ALLOCA run is one
+   function of the start state, so its endpoint is the same for each H. *)
+Theorem buffer_alloc_counted_horizons:
   compile_alloc_buffer sz sa = (buf,sm) /\ fn_has_code sa sm func /\
   fn_inst_ids_distinct func /\ local_ptrs_reserved ce sa /\
-  sz < dimword (:256) /\ stmt_state_rel H ctx func ce cx es s0 /\
+  sz < dimword (:256) /\ valid_horizon cx st0 H0 es.storage_trace /\
+  (!H. valid_horizon cx st0 H es.storage_trace ==>
+     stmt_state_rel H ctx func ce cx es s0) /\
   ~s0.vs_halted /\ s0.vs_current_bb = sa.cs_current_bb /\
   s0.vs_inst_idx = LENGTH sa.cs_current_insts ==>
   ?inst x t b. buf.buf_operand = Var x /\ MEM inst (fn_insts func) /\
@@ -30,7 +33,8 @@ Theorem buffer_alloc_counted:
     gas_marked_path F ctx func s0 0 (OK t) /\ ~t.vs_halted /\
     t.vs_current_bb = sm.cs_current_bb /\
     t.vs_inst_idx = LENGTH sm.cs_current_insts /\
-    stmt_state_rel H ctx func ce cx es t /\
+    (!H. valid_horizon cx st0 H es.storage_trace ==>
+       stmt_state_rel H ctx func ce cx es t) /\
     lookup_var x t = SOME (n2w b) /\
     FLOOKUP t.vs_allocas inst.inst_id = SOME (b,sz) /\
     b + sz < dimword (:256) /\ t.vs_memory = s0.vs_memory /\
@@ -46,10 +50,20 @@ Theorem buffer_alloc_counted:
       local_region ce es.scopes s0 name p n)
 Proof
   strip_tac >>
+  `stmt_state_rel H0 ctx func ce cx es s0` by simp[] >>
   drule_all buffer_alloc_provenance >> strip_tac >>
   drule_all buffer_alloc_code >> strip_tac >>
-  drule_all literal_alloc_buffer_run >> strip_tac >>
+  drule_all (Q.SPEC `H0` literal_alloc_buffer_run) >> strip_tac >>
   rename1 `run_inst_seq _ s0 = OK u` >>
+  `!H. valid_horizon cx st0 H es.storage_trace ==>
+     stmt_state_rel H ctx func ce cx es u` by
+    (rpt strip_tac >>
+     `stmt_state_rel H ctx func ce cx es s0` by
+       (qpat_x_assum `!H. _ ==> stmt_state_rel _ _ _ _ _ _ s0` irule >>
+        first_assum ACCEPT_TAC) >>
+     mp_tac (Q.SPECL [`H`,`func`,`ce`,`cx`,`es`,`sa`,`sm`,`buf`,`sz`,`s0`,`ctx`]
+       (INST_TYPE [alpha |-> ``:256``] literal_alloc_buffer_run)) >>
+     (impl_tac >- simp[]) >> strip_tac >> gvs[]) >>
   `emitted_insts sa sm =
      [mk_inst sa.cs_next_id ALLOCA [Lit (n2w sz)]
        [STRING #"%" (toString sa.cs_next_var)]] /\
