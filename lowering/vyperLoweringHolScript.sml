@@ -53,3 +53,4 @@ Ancestors
   asmSymBridge
   asmDataEnv
   asmOptFinalizerCorrect
+  e2eLifecycle
