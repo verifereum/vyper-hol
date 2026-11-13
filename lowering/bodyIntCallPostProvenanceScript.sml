@@ -16,6 +16,7 @@ Ancestors
   bodyIntCallPostProvenanceStruct
   bodyIntCallPostProvenanceMakeArray
   bodyIntCallPostProvenanceEmpty
+  bodyIntCallPostProvenanceDecode
   bodyIntCallPostProvenanceConditional
   bodyIntCallPostProvenanceConditionalArm
   bodyIntCallPostProvenanceConditionalRoot
