@@ -86,6 +86,8 @@ Theorem abi_encode_translated_no_block_phases:
       ~actual.vs_halted /\ actual.vs_current_bb = final.cs_current_bb /\
       actual.vs_inst_idx = LENGTH final.cs_current_insts /\
       abi_encode_exec_frame func s actual /\
+      actual.vs_accounts = s.vs_accounts /\ actual.vs_transient = s.vs_transient /\
+      actual.vs_requests = s.vs_requests /\
       stmt_state_rel H ctx func ce cx es' actual /\
     (!x w. not_fresh_at sa x /\ lookup_var x s = SOME w ==>
       lookup_var x actual = SOME w) /\
@@ -199,6 +201,17 @@ Resume abi_encode_translated_no_block_phases[caller]:
     (drule abi_encode_caller_phase_old_rows >> disch_then drule >>
      disch_then (qspec_then `actual` mp_tac) >>
      asm_rewrite_tac[]) >>
+  `actual.vs_accounts = s.vs_accounts /\ actual.vs_transient = s.vs_transient /\
+   actual.vs_requests = s.vs_requests` by
+    (qpat_assum `window_strong_result _ _ _ _ _ _ _ _ prepared _`
+       (mp_tac o MATCH_MP abiEncoderWindowContractTheory.window_strong_result_effect) >>
+     qpat_assum `abi_encoder_registered_effect {} _ _ actual` mp_tac >>
+     qpat_assum `prepared.vs_accounts = _` mp_tac >>
+     qpat_assum `prepared.vs_transient = _` mp_tac >>
+     qpat_assum `prepared.vs_requests = _` mp_tac >>
+     POP_ASSUM_LIST (K ALL_TAC) >>
+     rewrite_tac[abiEncoderRegisteredEffectTheory.abi_encoder_registered_effect_def] >>
+     rpt strip_tac >> asm_simp_tac (srw_ss()) []) >>
   qexists `raw` >>
   qpat_x_assum `Abbrev (actual = _)`
     (fn th => rewrite_tac[GSYM (PURE_REWRITE_RULE [markerTheory.Abbrev_def] th)]) >>
@@ -235,6 +248,8 @@ Theorem abi_encode_translated_no_block_run:
     ~actual.vs_halted /\ actual.vs_current_bb = sb.cs_current_bb /\
     actual.vs_inst_idx = LENGTH sb.cs_current_insts /\
     abi_encode_exec_frame func s actual /\
+    actual.vs_accounts = s.vs_accounts /\ actual.vs_transient = s.vs_transient /\
+    actual.vs_requests = s.vs_requests /\
     stmt_state_rel H ctx func ce cx es' actual /\
     (!x w. not_fresh_at sa x /\ lookup_var x s = SOME w ==>
       lookup_var x actual = SOME w) /\
@@ -299,6 +314,8 @@ Theorem abi_encode_translated_no_block_observer:
     ~actual.vs_halted /\ actual.vs_current_bb = sb.cs_current_bb /\
     actual.vs_inst_idx = LENGTH sb.cs_current_insts /\
     abi_encode_exec_frame func s actual /\
+    actual.vs_accounts = s.vs_accounts /\ actual.vs_transient = s.vs_transient /\
+    actual.vs_requests = s.vs_requests /\
     stmt_state_rel H ctx func ce cx es' actual /\
     (!x w. not_fresh_at sa x /\ lookup_var x s = SOME w ==>
       lookup_var x actual = SOME w) /\

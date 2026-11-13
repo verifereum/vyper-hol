@@ -30,6 +30,8 @@ Theorem abi_encode_translated_success_suffix:
     gas_marked_path F ctx func s 0 (OK actual) /\
     ~actual.vs_halted /\ actual.vs_current_bb = sb.cs_current_bb /\
     actual.vs_inst_idx = LENGTH sb.cs_current_insts /\
+    actual.vs_accounts = s.vs_accounts /\ actual.vs_transient = s.vs_transient /\
+    actual.vs_requests = s.vs_requests /\ actual.vs_call_ctx = s.vs_call_ctx /\
     vv_post H ctx func ce cx (TypeBuiltin ann (AbiEncode F mid0) ty [e])
       es origin sb s0 es'
       (Value (BytesV (abi_encode_method_id_bytes mid0 ++
@@ -77,10 +79,7 @@ Proof
                      exprSimPropsTheory.pure_frame_trans) >>
      rpt conj_tac >> first_assum ACCEPT_TAC) >>
   qexists_tac `actual` >>
-  conj_tac >- first_assum ACCEPT_TAC >>
-  conj_tac >- first_assum ACCEPT_TAC >>
-  conj_tac >- first_assum ACCEPT_TAC >>
-  conj_tac >- first_assum ACCEPT_TAC >>
+  ntac 8 (conj_tac >- first_assum ACCEPT_TAC) >>
   `storage_well_formed_on cx es' (FST H)` by fs[expr_post_def] >>
   irule abi_encode_bytes_vv_post >>
   goal_assum (drule_at Any) >>

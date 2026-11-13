@@ -309,6 +309,17 @@ Proof
      qpat_assum `abi_builtin_encode_setup_frame _ _ _ _ _ _ _` (irule_at Any) >>
      qpat_assum `window_strong_result _ _ _ _ _ _ _ _ _ _` (irule_at Any) >>
      rpt conj_tac >> first_assum ACCEPT_TAC) >>
+  `actual.vs_accounts = initial.vs_accounts /\ actual.vs_transient = initial.vs_transient /\
+   actual.vs_requests = initial.vs_requests` by
+    (qpat_assum `window_strong_result _ _ _ _ _ _ _ _ prepared _`
+       (mp_tac o MATCH_MP abiEncoderWindowContractTheory.window_strong_result_effect) >>
+     qpat_assum `abi_encoder_registered_effect {} _ _ actual` mp_tac >>
+     qpat_assum `prepared.vs_accounts = _` mp_tac >>
+     qpat_assum `prepared.vs_transient = _` mp_tac >>
+     qpat_assum `prepared.vs_requests = _` mp_tac >>
+     POP_ASSUM_LIST (K ALL_TAC) >>
+     rewrite_tac[abiEncoderRegisteredEffectTheory.abi_encoder_registered_effect_def] >>
+     rpt strip_tac >> asm_simp_tac (srw_ss()) []) >>
   qpat_assum `abi_encode_exec_frame func initial actual` mp_tac >>
   simp_tac bool_ss [abi_encode_exec_frame_def] >> strip_tac >>
   qexistsl_tac [`p`, `raw`] >>

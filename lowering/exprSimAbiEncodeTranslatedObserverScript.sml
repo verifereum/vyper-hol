@@ -48,6 +48,8 @@ Theorem abi_encode_translated_relabel_observer:
     abi_decode_sim ctx obs (s with vs_current_bb := L) actual /\
     stmt_state_rel H ctx func ce cx es' actual /\
     abi_encode_exec_frame obs (s with vs_current_bb := L) actual /\
+    actual.vs_accounts = s.vs_accounts /\ actual.vs_transient = s.vs_transient /\
+    actual.vs_requests = s.vs_requests /\
     LENGTH s.vs_memory <= LENGTH actual.vs_memory /\
     (!x w. not_fresh_at sa x /\ lookup_var x s = SOME w ==>
       lookup_var x actual = SOME w) /\
@@ -246,6 +248,18 @@ Resume abi_encode_translated_relabel_observer[transport]:
     (drule abi_encode_caller_phase_old_rows >> disch_then drule >>
      disch_then (qspec_then `actual` mp_tac) >> asm_rewrite_tac[] >>
      simp_tac (srw_ss()) [Abbr `rst`, Abbr `rs`, start_relabel_def]) >>
+  `actual.vs_accounts = s.vs_accounts /\ actual.vs_transient = s.vs_transient /\
+   actual.vs_requests = s.vs_requests` by
+    (qpat_assum `window_strong_result _ _ _ _ _ _ _ _ prepared _`
+       (mp_tac o MATCH_MP abiEncoderWindowContractTheory.window_strong_result_effect) >>
+     qpat_assum `abi_encoder_registered_effect {} _ _ actual` mp_tac >>
+     qpat_assum `prepared.vs_accounts = _` mp_tac >>
+     qpat_assum `prepared.vs_transient = _` mp_tac >>
+     qpat_assum `prepared.vs_requests = _` mp_tac >>
+     qpat_assum `Abbrev (rs = _)` (mp_tac o PURE_REWRITE_RULE [markerTheory.Abbrev_def]) >>
+     POP_ASSUM_LIST (K ALL_TAC) >>
+     rewrite_tac[abiEncoderRegisteredEffectTheory.abi_encoder_registered_effect_def] >>
+     rpt strip_tac >> asm_simp_tac (srw_ss()) []) >>
   qexistsl [`p`, `actual`] >> simp_tac bool_ss [LET_THM] >>
   qpat_x_assum `Abbrev (rs = _)` (SUBST_ALL_TAC o PURE_REWRITE_RULE [markerTheory.Abbrev_def]) >>
   asm_rewrite_tac[] >>
