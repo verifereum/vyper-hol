@@ -42,7 +42,7 @@ Proof
   irule vyperStorageFootprintTheory.storage_well_formed_on_backends >> simp[]
 QED
 
-Theorem for_round_frame:
+Theorem for_round_frame[local]:
   storage_trace_frame
     (do push_scope_with_var id tyv v;
         finally (try (do eval_stmts cx stmts; return F od)
@@ -60,7 +60,7 @@ Proof
 QED
 
 (* The body's cleanup only extends the body's storage trace. *)
-Theorem finally_try_trace:
+Theorem finally_try_trace[local]:
   (!e. storage_trace_frame (h e)) /\ storage_trace_frame g ==>
   ?xs. (SND (finally (try (ignore_bind f (return b)) h) g st)).storage_trace =
        (SND (f st)).storage_trace ++ xs

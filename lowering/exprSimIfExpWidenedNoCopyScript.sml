@@ -108,7 +108,7 @@ Proof
     (drule nocopy_ifexp_physical_bound >> simp[] >>
      disch_then (qspec_then `v` mp_tac) >> simp[]) >>
   drule_all unwrap_value_materialise_physical_sim >>
-  disch_then (qspecl_then [`ctx`, `s0`, `R`] mp_tac) >>
+  disch_then (qspecl_then [`H`, `ctx`, `s0`, `R`] mp_tac) >>
   disch_then (mp_then Any mp_tac fragExecTheory.frag_exec_conseq) >>
   disch_then irule >> simp[] >> rpt strip_tac >>
   irule nocopy_ifexp_post_annotated >> metis_tac[]
