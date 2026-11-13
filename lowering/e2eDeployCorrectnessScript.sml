@@ -11,7 +11,7 @@ Ancestors
   compileVyper compilePhasesProps codegen e2eProducers e2eComposition
   o1PipelineCorrect o1PassContract codegenCorrectness passSimulationDefs
   lowerDloadDefs e2eEntry gasSummary asmOptimizer
-  codegenAsmOpt e2eAsmOpt e2eDeployAsmOpt
+  codegenAsmOpt e2eAsmOpt e2eDeployAsmOpt deployOutcomesFreeUnit
 
 (* A successful compilation exposes the deployment unit's phases. *)
 Theorem compile_vyper_deploy_phases:

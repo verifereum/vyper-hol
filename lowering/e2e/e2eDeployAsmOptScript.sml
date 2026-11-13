@@ -26,7 +26,7 @@ Ancestors
   asmOptimizer contextRawReachable asmDataSuffixProps contextPlanLayoutProps
   loweringStateRelDefs vyperArith frameRel codegenRel callTrace
   ctorDeployLowering ctorDeployMemory ctorDeployDload memSafeRun frameObsStep
-  deployOutcomesFreeUnit
+  deployOutcomesFreeUnit asmOptNonemptyFinalizer
 
 (* L1 of the deployment for the optimizer: the deploy code is the optimized
    assembly of the deployment unit's generated assembly. *)
@@ -52,7 +52,9 @@ Theorem compile_vyper_deploy_nonempty_asm_opt:
   compile_vyper asm_opt_finalizer policy tops = SOME (deploy_bc, runtime_bc) ==>
   deploy_bc <> []
 Proof
-  cheat
+  strip_tac >> drule compile_vyper_deploy_phases_asm_opt >> strip_tac >>
+  gvs[] >> irule codegen_assembly_finalizer_nonempty >>
+  fs[deploy_phases_def] >> metis_tac[]
 QED
 
 (* deploy_entry_state with prog's layout over es's code, which has prog'
