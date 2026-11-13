@@ -8,6 +8,8 @@ Ancestors
   placeMemoryTypedBase externalReturnNormalizeMem exprSimProps valueCopyBytes
   valueCopy valueEncodingDefs exprSimBufferStore bodyMemAggregateStore
   immutableBytestringFootprint typedCopyAgreement valueTypingMemoryProps
+  allocaFootprint placeTypedCopyPath unitTransformDefs contextCodegenRel
+  venomInst codegenRel memSafeRun loweringStateRelDefs arithmetic
 
 Definition typed_copy_checked_entry_def:
   typed_copy_checked_entry cenv ctx dty sty dtv stv v <=>
@@ -262,4 +264,51 @@ Proof
   `val_wf dtv v` by metis_tac[value_has_type_memory_wf] >>
   drule_all store_bytestring_checked_post >>
   disch_then (qspec_then `ctx` mp_tac) >> simp[gas_marked_path_def]
+QED
+
+Theorem typed_copy_control_emit_op_checked:
+  emit_op opc args a = (op,b) /\
+  (opc = ADD \/ opc = MUL \/ opc = LT \/ opc = ISZERO) /\
+  (!out. step_inst_base (mk_inst a.cs_next_id opc args [out]) s =
+         OK (update_var out w s)) /\
+  fn_has_code a b func /\ fn_inst_ids_distinct func /\
+  alloca_history func s /\ alloca_inv s /\ ~s.vs_halted /\
+  s.vs_current_bb = a.cs_current_bb /\
+  s.vs_inst_idx = LENGTH a.cs_current_insts ==>
+  ?t. gas_path_mem ctx func s 0 (OK t) /\
+      eval_operand op t = SOME w /\ t.vs_memory = s.vs_memory /\
+      typed_copy_state_frame a off len s t /\
+      ~t.vs_halted /\ t.vs_current_bb = b.cs_current_bb /\
+      t.vs_inst_idx = LENGTH b.cs_current_insts /\
+      alloca_history func t /\ t.vs_alloca_next = s.vs_alloca_next
+Proof
+  strip_tac >> drule emitted_insts_emit_op >> strip_tac >>
+  drule emit_op_same_blocks >> strip_tac >>
+  `run_inst_seq (emitted_insts a b) s =
+     OK (update_var (STRING #"%" (toString a.cs_next_var)) w s)` by
+    (qpat_x_assum `!out. step_inst_base _ s = _`
+       (qspec_then `STRING #"%" (toString a.cs_next_var)` mp_tac) >>
+     simp[mk_inst_def, run_inst_seq_def]) >>
+  `run_inst_seq_mem_ok (emitted_insts a b) s` by
+    (irule run_inst_seq_mem_ok_every >>
+     gvs[inst_mem_below_frontier_def, source_memory_read_ranges_def,
+         source_memory_write_ranges_def, inst_dload_in_section_def, mk_inst_def]) >>
+  `gas_path_mem ctx func s 0
+       (OK ((update_var (STRING #"%" (toString a.cs_next_var)) w s)
+             with vs_inst_idx := LENGTH b.cs_current_insts)) /\
+   alloca_history func ((update_var (STRING #"%" (toString a.cs_next_var)) w s)
+             with vs_inst_idx := LENGTH b.cs_current_insts) /\
+   ~(update_var (STRING #"%" (toString a.cs_next_var)) w s).vs_halted /\
+   (update_var (STRING #"%" (toString a.cs_next_var)) w s).vs_current_bb = b.cs_current_bb` by
+    (irule straight_path_mem >> simp[] >> qexists_tac `a` >>
+     gvs[mk_inst_def, venomInstTheory.is_terminator_def]) >>
+  qexists_tac `(update_var (STRING #"%" (toString a.cs_next_var)) w s)
+             with vs_inst_idx := LENGTH b.cs_current_insts` >>
+  simp[eval_operand_def, lookup_var_update_var, typed_copy_state_frame_def,
+       update_var_def, lookup_var_def, venom_state_component_equality,
+       same_blocks_def, finite_mapTheory.FLOOKUP_UPDATE] >>
+  rpt strip_tac >>
+  `x <> STRING #"%" (toString a.cs_next_var)` by
+    (gvs[not_fresh_at_def] >> metis_tac[LESS_EQ_REFL]) >>
+  simp[finite_mapTheory.FLOOKUP_UPDATE]
 QED
