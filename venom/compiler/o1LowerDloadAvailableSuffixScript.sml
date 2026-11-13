@@ -333,3 +333,37 @@ Proof
       simp[arithmeticTheory.ADD_CLAUSES]) >>
   simp[]
 QED
+
+(* Replay a discarded suffix independently of invocation fuel. *)
+Theorem ld_available_suffix_abort_fuel:
+  !d s t bb bb' ri fuel fuel' C C' reason s1 V.
+  s.vs_labels = t.vs_labels /\
+  (!v. v IN V ==> (IS_SOME (FLOOKUP s.vs_vars v) <=>
+                   IS_SOME (FLOOKUP t.vs_vars v))) /\
+  (!k. k <= d ==> get_instruction bb (s.vs_inst_idx + k) =
+                  get_instruction bb' (t.vs_inst_idx + k)) /\
+  get_instruction bb (s.vs_inst_idx + d) = SOME ri /\
+  ri.inst_opcode = REVERT /\
+  (!k ii. k < d /\ get_instruction bb (s.vs_inst_idx + k) = SOME ii ==>
+          ii.inst_opcode = ASSIGN) /\
+  (!k ii v. k <= d /\ get_instruction bb (s.vs_inst_idx + k) = SOME ii /\
+            MEM (Var v) ii.inst_operands ==> v IN V) /\
+  exec_block fuel C bb s = Abort reason s1 ==>
+  ?t1. exec_block fuel' C' bb' t = Abort reason t1
+Proof
+  rpt gen_tac >> strip_tac >>
+  `reason = Revert_abort` by (drule_all ld_assign_prefix_abort_reason >> simp[]) >>
+  qpat_x_assum `reason = Revert_abort` SUBST_ALL_TAC >>
+  drule_all ld_assign_prefix_abort_trace >> strip_tac >>
+  rename1 `seq 0 = s` >>
+  irule ld_available_assign_prefix_revert_pointwise >>
+  qexistsl_tac [`seq`, `V`, `d`, `len`, `off`, `ri`] >> simp[] >>
+  conj_tac
+  >- metis_tac[MEM, arithmeticTheory.LESS_EQ_REFL] >>
+  conj_tac
+  >- (rpt strip_tac >>
+      qpat_x_assum `!k. k < d ==> _` (qspec_then `j` mp_tac) >>
+      disch_then (strip_assume_tac o REWRITE_RULE []) >>
+      metis_tac[arithmeticTheory.LESS_IMP_LESS_OR_EQ, arithmeticTheory.ADD_COMM]) >>
+  metis_tac[arithmeticTheory.LESS_EQ_REFL, arithmeticTheory.ADD_COMM]
+QED
