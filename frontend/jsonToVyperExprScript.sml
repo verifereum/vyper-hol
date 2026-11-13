@@ -325,9 +325,13 @@ Definition make_builtin_call_def:
                     | JT_Bytes n => Builtin ty (Concat n) args
                     | _ => Builtin ty (Concat 0) args)
     else if name = "slice" then
-      (case ret_ty of JT_String n => Builtin ty (Slice n) args
-                    | JT_Bytes n => Builtin ty (Slice n) args
-                    | _ => Builtin ty (Slice 0) args)
+      (* The length is a compile-time value when it can be: the checker
+         bounds the result by a literal length. *)
+      (let slice_args = (case args of [src; start; len] => [src; start; fold_constant len]
+                                    | _ => args) in
+       case ret_ty of JT_String n => Builtin ty (Slice n) slice_args
+                    | JT_Bytes n => Builtin ty (Slice n) slice_args
+                    | _ => Builtin ty (Slice 0) slice_args)
     else if name = "keccak256" then Builtin ty Keccak256 args
     else if name = "sha256" then Builtin ty Sha256 args
     else if name = "floor" then Builtin ty Floor args
@@ -1085,11 +1089,16 @@ Definition translate_expr_def:
   (translate_expr ctx (JE_IfExp test body orelse ret_ty) =
     IfExp (translate_type (expr_type_ctx ctx) ret_ty) (translate_expr ctx test) (translate_expr ctx body) (translate_expr ctx orelse)) /\
 
-  (* Tuple *)
-  (translate_expr ctx (JE_Tuple es) =
+  (* Tuple: Vyper types a tuple literal by its context (e.g. the parameter
+     it is passed to), so members may be wider than the elements. *)
+  (translate_expr ctx (JE_Tuple es ty) =
     let es' = translate_expr_list ctx es in
-    Builtin (TupleT (MAP expr_type es'))
-      (MakeArray NONE (Fixed (LENGTH es'))) es') /\
+    let tys = (case translate_type (expr_type_ctx ctx) ty of
+               | TupleT tys =>
+                   if LENGTH tys = LENGTH es' /\ ~MEM NoneT tys then tys
+                   else MAP expr_type es'
+               | _ => MAP expr_type es') in
+    Builtin (TupleT tys) (MakeArray NONE (Fixed (LENGTH es'))) es') /\
 
   (* List - array literal *)
   (translate_expr ctx (JE_List es ty) =

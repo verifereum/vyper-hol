@@ -38,6 +38,18 @@ Definition inst_seq_ptr_def:
      | _ => G' = G /\ tn' = tn)
 End
 
+(* The ghost where a run stops depends only on the run, not on the dead
+   mask the check uses. *)
+Theorem inst_seq_ptr_ghost_unique:
+  !is s G tn g1 t1 g2 t2.
+  inst_seq_ptr D1 lo ctx fn PG G tn is s g1 t1 /\
+  inst_seq_ptr D2 lo ctx fn PG G tn is s g2 t2 ==>
+  g1 = g2 /\ t1 = t2
+Proof
+  Induct >> simp[inst_seq_ptr_def] >> rpt gen_tac >>
+  Cases_on `step_inst_base h s` >> simp[] >> metis_tac[]
+QED
+
 Theorem gas_path_ptr_ok_suffix:
   gas_path_ptr D lo ctx fn PG G tn s n G' tn' (OK t) ==>
   t.vs_gas_readings = DROP n s.vs_gas_readings

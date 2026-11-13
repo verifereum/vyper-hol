@@ -55,6 +55,42 @@ Proof
 QED
 
 
+(* A head store that writes only inside a local region of the start scopes,
+   and keeps every reserved pointer, keeps an older allocation frame. *)
+Theorem tuple_head_alloca_frame_ptr:
+  !c0 e0 sa0 s0 cenv es es' s t st.
+    alloca_frame c0 e0 sa0 s0 cenv es s /\
+    MAP FDOM es.scopes = MAP FDOM es'.scopes /\ local_ptrs_reserved cenv st /\
+    (!x. not_fresh_at st x ==> lookup_var x t = lookup_var x s) /\
+    (t.vs_memory = s.vs_memory \/
+     ?id dst dsz written. local_region cenv es.scopes s id dst dsz /\ written <= dsz /\
+       !i. ~(dst <= i /\ i < dst + written) ==>
+         mem_bytes_at i 1 t.vs_memory = mem_bytes_at i 1 s.vs_memory) ==>
+    alloca_frame c0 e0 sa0 s0 cenv es' t
+Proof
+  rpt gen_tac >> disch_then (map_every assume_tac o CONJUNCTS) >>
+  `!n b z. local_region cenv es'.scopes t n b z ==> local_region cenv es.scopes s n b z` by
+    (rw[local_region_def] >>
+     `IS_SOME (lookup_scopes n es.scopes)` by
+       metis_tac[vyperTypeEnvPreservationTheory.lookup_scopes_same_fdoms_some] >>
+     fs[optionTheory.IS_SOME_EXISTS] >>
+     `not_fresh_at st p` by metis_tac[local_ptrs_reserved_def] >>
+     metis_tac[]) >>
+  qpat_x_assum `alloca_frame _ _ _ _ _ _ _` mp_tac >>
+  rewrite_tac[alloca_frame_def] >> strip_tac >> rpt gen_tac >> strip_tac >>
+  first_x_assum (qspecl_then [`aid`, `off`, `sz`] mp_tac) >>
+  (impl_tac >- (rpt conj_tac >> first_assum ACCEPT_TAC)) >> strip_tac >>
+  reverse conj_tac >- metis_tac[] >>
+  qpat_x_assum `mem_bytes_at off sz s.vs_memory = _` (SUBST1_TAC o SYM) >>
+  qpat_x_assum `_ \/ _` strip_assume_tac >- simp[] >>
+  `off + sz <= dst \/ dst + dsz <= off` by metis_tac[] >>
+  irule LIST_EQ >> simp[] >> rpt strip_tac >>
+  qpat_x_assum `!i. ~(dst <= i /\ _) ==> _` (qspec_then `off + x` mp_tac) >>
+  (impl_tac >- decide_tac) >>
+  disch_then (mp_tac o Q.AP_TERM `EL 0`) >>
+  simp[valueEncodingProofsTheory.EL_mem_bytes_at]
+QED
+
 Theorem tuple_store_sequential_path_ptr:
   !gs tys tvs vs ops addr b sz ctx func cenv cx es es' s st st' G tn d D PG P.
     (!scopes scopes' g ty tv v.
@@ -122,7 +158,9 @@ Theorem tuple_store_sequential_path_ptr:
       (!x. not_fresh_at st x ==> lookup_var x t = lookup_var x s /\
         FLOOKUP G' x = FLOOKUP G x /\ op_taint tn' (Var x) = op_taint tn (Var x)) /\
       (!aid bs. FLOOKUP s.vs_allocas aid = SOME bs ==> FLOOKUP t.vs_allocas aid = SOME bs) /\
-      gas_path_ptr D 0 ctx func PG G tn s 0 G' tn' (OK t)
+      gas_path_ptr D 0 ctx func PG G tn s 0 G' tn' (OK t) /\
+      (!c0 e0 sa0 s0. alloca_frame c0 e0 sa0 s0 cenv es s ==>
+        alloca_frame c0 e0 sa0 s0 cenv es' t)
 Proof
   Induct
   >- (rpt gen_tac >> disch_then (map_every assume_tac o CONJUNCTS) >>
@@ -288,6 +326,20 @@ Resume tuple_store_sequential_path_ptr[compose]:
   qpat_x_assum `?t' G'' tn''. _`
     (qx_choose_then `sf` (qx_choose_then `Gf` (qx_choose_then `tnf`
       (map_every assume_tac o CONJUNCTS)))) >>
+  `!c0 e0 sa0 s0. alloca_frame c0 e0 sa0 s0 cenv es s ==>
+     alloca_frame c0 e0 sa0 s0 cenv es1 t` by
+    (rpt strip_tac >>
+     mp_tac (Q.SPECL [`c0`, `e0`, `sa0`, `s0`, `cenv`, `es`, `es1`, `s`, `t`, `st`]
+       tuple_head_alloca_frame_ptr) >>
+     impl_tac >- (rpt conj_tac
+       >- first_assum ACCEPT_TAC
+       >- first_assum ACCEPT_TAC
+       >- first_assum ACCEPT_TAC
+       >- (qpat_x_assum `!x. not_fresh_at st x ==> lookup_var x t = _ /\ _` mp_tac >>
+           rpt (pop_assum kall_tac) >> metis_tac[])
+       >> qpat_x_assum `(t.vs_memory = s.vs_memory /\ _) \/ _` mp_tac >>
+          rpt (pop_assum kall_tac) >> metis_tac[]) >>
+     disch_then ACCEPT_TAC) >>
   qexistsl_tac [`sf`, `Gf`, `tnf`] >> asm_rewrite_tac [] >>
   conj_tac
   >- (rpt strip_tac >>
@@ -295,8 +347,13 @@ Resume tuple_store_sequential_path_ptr[compose]:
         (irule not_fresh_at_mono >> qexists `st` >> simp[]) >>
       metis_tac[]) >>
   conj_tac >- metis_tac[] >>
-  irule (gas_path_ptr_then |> Q.INST [`n` |-> `0`, `m` |-> `0`] |> SRULE []) >>
-  first_assum (irule_at Any) >> simp[])
+  conj_tac
+  >- (irule (gas_path_ptr_then |> Q.INST [`n` |-> `0`, `m` |-> `0`] |> SRULE []) >>
+      first_assum (irule_at Any) >> simp[]) >>
+  rpt strip_tac >>
+  qpat_x_assum `!c0 e0 sa0 s0. _ ==> alloca_frame _ _ _ _ _ es' sf` irule >>
+  qpat_x_assum `!c0 e0 sa0 s0. _ ==> alloca_frame _ _ _ _ _ es1 t` irule >>
+  first_assum ACCEPT_TAC)
 
 QED
 

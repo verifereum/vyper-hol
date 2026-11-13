@@ -184,6 +184,7 @@ QED
 
 Theorem compile_struct_lit_vv_case:
   !nocalls ctx func cenv cx ann nsid fields.
+    acyclic_struct_metadata cenv.ce_struct_fields /\
     exprs_case nocalls ctx func cenv cx (MAP SND fields) /\
     (~nocalls ==> !e. MEM e (MAP SND fields) ==>
        int_calls_expr e = [] \/ lowered_value_type cenv e = expr_type e) ==>
@@ -214,8 +215,8 @@ Proof
   qmatch_asmsub_abbrev_tac `compile_alloc_buffer sz sa` >>
   gvs[] >>
   drule_at (Pat `compile_struct_lit _ _ _ _ _ _ _ = _`) aggregate_struct_fields_sim >>
-  simp[] >> disch_then drule >>
-  simp[] >> disch_then drule >>
+  simp[] >> disch_then drule >> disch_then drule >>
+  simp[] >> disch_then drule >> disch_then drule >>
   disch_then (drule_at (Pat `lookup_var _ _ = _`)) >>
   disch_then (drule_at (Pat `MEM _ (fn_insts _)`)) >>
   simp[] >>
@@ -256,7 +257,8 @@ Proof
      (StructV (ZIP (MAP FST fields,vs))) <= type_memory_size_list tvs` by
     (drule val_footprint_le >> simp[type_memory_size_def] >>
      `LENGTH (MAP FST fields) = LENGTH tvs` by
-       (drule vyperTypeABITheory.OPT_MMAP_LENGTH >> simp[]) >>
+       (drule vyperTypeABITheory.OPT_MMAP_LENGTH >> simp[] >>
+        imp_res_tac listTheory.LIST_REL_LENGTH >> fs[]) >>
      simp[struct_layout_size_zip]) >>
   `MAP FDOM es.scopes = MAP FDOM ee.scopes` by
     (drule vyperEvalExprPreservesScopesDomTheory.eval_expr_preserves_scopes_dom >> simp[]) >>
@@ -304,6 +306,7 @@ QED
 
 Theorem compile_make_array_vv_case:
   !nocalls ctx func cenv cx ann topt bnd args.
+    acyclic_struct_metadata cenv.ce_struct_fields /\
     exprs_case nocalls ctx func cenv cx args /\
     (~nocalls ==> !e. MEM e args ==>
        int_calls_expr e = [] \/ lowered_value_type cenv e = expr_type e) ==>
@@ -317,6 +320,7 @@ Resume compile_make_array_vv_case[tuple]:
   rw[expr_vv_case_def, expr_vv_sim_def] >>
   drule compile_tuple_literal_inv >> strip_tac >> gvs[] >>
   drule make_tuple_evaluated_layout >> strip_tac >> gvs[] >>
+  gvs[exprLoweringTheory.tuple_literal_types_def, listTheory.MAP_MAP_o] >>
   `expr_sim_inv cenv cx env es` by gvs[expr_body_pre_def] >>
   `!e st. MEM e args /\ expr_sim_inv cenv cx env st ==>
     expr_body_pre cenv cx env e st /\ (nocalls ==> int_calls_expr e = [])` by
@@ -332,14 +336,16 @@ Resume compile_make_array_vv_case[tuple]:
     metis_tac[ci_mono_compile_make_tuple_cfn, compile_expr_ci_mono, pairTheory.SND] >>
   `cs_extends sa sm /\ cs_extends sm sb` by gvs[ci_mono_def] >>
   drule_all fn_has_code_split >> strip_tac >>
-  `SUM (MAP (type_memory_bytes cenv o expr_type) args) < dimword (:256)` by
-    (gvs[expr_body_pre_def, alloc_limits_expr_def] >>
-     simp[wordsTheory.dimword_def] >> decide_tac) >>
+  `SUM (MAP (type_memory_bytes cenv) tys) < 2 ** 64` by
+    gvs[expr_body_pre_def, alloc_limits_expr_def, type_alloc_ok_def,
+        type_memory_bytes_def, is_word_type_def] >>
+  `SUM (MAP (type_memory_bytes cenv) tys) < dimword (:256)` by
+    fs[wordsTheory.dimword_def] >>
   `type_memory_size_list tvs < dimword (:256)` by metis_tac[] >>
   drule_all buffer_alloc_code >> strip_tac >>
   drule_all buffer_alloc_counted >> strip_tac >> gvs[] >>
-  drule_at (Pat `compile_make_tuple _ _ _ _ _ _ = _`) aggregate_make_tuple_sim >>
-  disch_then drule >> disch_then drule >>
+  drule_at (Pat `compile_make_tuple _ _ _ _ _ _ _ = _`) aggregate_make_tuple_fits_sim >>
+  disch_then drule >> disch_then drule >> disch_then drule >>
   disch_then (drule_at (Pat `lookup_var _ _ = _`)) >>
   disch_then (drule_at (Pat `MEM _ (fn_insts _)`)) >> simp[] >>
   disch_then (qspecl_then [`ctx`,`nocalls`] mp_tac) >> simp[] >>
@@ -358,14 +364,14 @@ Resume compile_make_array_vv_case[tuple]:
   conj_tac >- (rpt strip_tac >> gvs[sumTheory.SUM_MAP]) >>
   rpt strip_tac >> gvs[sumTheory.SUM_MAP] >>
   rename1 `eval_exprs cx args (es with gas_obs := gs) = (INL vs,ee)` >>
-  `eval_expr cx (Builtin (TupleT (MAP expr_type args)) (MakeArray NONE bnd) args)
+  `eval_expr cx (Builtin (TupleT tys) (MakeArray NONE bnd) args)
     (es with gas_obs := gs) = (INL (Value (ArrayV (TupleV vs))),ee)` by
     (drule_all aggregate_eval_make_tuple >> simp[]) >>
   qpat_x_assum `gas_outcome _ _ _ _ _ _ _` kall_tac >>
   qpat_x_assum `gas_outcome _ _ _ _ _ _ _` kall_tac >>
   rename1 `stmt_state_rel H ctx func cenv cx ee s` >>
   `expr_body_pre cenv cx env
-    (Builtin (TupleT (MAP expr_type args)) (MakeArray NONE bnd) args)
+    (Builtin (TupleT tys) (MakeArray NONE bnd) args)
     (es with gas_obs := gs)` by simp[] >>
   `val_wf (TupleTV tvs) (ArrayV (TupleV vs))` by
     (irule aggregate_materialised_child_wf >>
@@ -379,7 +385,7 @@ Resume compile_make_array_vv_case[tuple]:
   `!nm lb len. local_region cenv ee.scopes s nm lb len ==>
      b + type_memory_size_list tvs <= lb \/ lb + len <= b` by
     (rpt strip_tac >> drule_all aggregate_buffer_clearance >> simp[]) >>
-  `~expr_has_effect (Builtin (TupleT (MAP expr_type args)) (MakeArray NONE bnd) args) ==>
+  `~expr_has_effect (Builtin (TupleT tys) (MakeArray NONE bnd) args) ==>
      pure_frame cenv func es sa s0 s` by
     (rewrite_tac[expr_has_effect_thm] >> strip_tac >>
      qpat_x_assum `EVERY _ _ ==> _` mp_tac >>
@@ -406,7 +412,7 @@ Resume compile_make_array_vv_case[tuple]:
      TRY (qpat_x_assum `b + _ <= p` mp_tac) >>
      rpt (pop_assum kall_tac) >> decide_tac) >>
   irule (buffer_loop_memory_vv_post |> Q.INST
-    [`e` |-> `Builtin (TupleT (MAP expr_type args)) (MakeArray NONE bnd) args`]
+    [`e` |-> `Builtin (TupleT tys) (MakeArray NONE bnd) args`]
     |> SIMP_RULE (srw_ss()) [expr_type_def]) >>
   simp[expr_type_def, is_word_type_def, contextTheory.mk_ptr_def, contextTheory.base_ptr_def,
     eval_operand_def, val_in_memory_def] >>
@@ -548,6 +554,7 @@ Finalise compile_make_array_vv_case
 
 Theorem compile_struct_lit_case:
   !nocalls ctx func cenv cx ann nsid fields.
+    acyclic_struct_metadata cenv.ce_struct_fields /\
     exprs_case nocalls ctx func cenv cx (MAP SND fields) /\
     (~nocalls ==> !e. MEM e (MAP SND fields) ==>
        int_calls_expr e = [] \/ lowered_value_type cenv e = expr_type e) ==>
@@ -561,6 +568,7 @@ QED
 
 Theorem compile_make_array_case:
   !nocalls ctx func cenv cx ann topt bnd args.
+    acyclic_struct_metadata cenv.ce_struct_fields /\
     exprs_case nocalls ctx func cenv cx args /\
     (~nocalls ==> !e. MEM e args ==>
        int_calls_expr e = [] \/ lowered_value_type cenv e = expr_type e) ==>
@@ -576,6 +584,7 @@ QED
 
 Theorem compile_struct_lit_sim:
   !cenv ann nsid fields.
+    acyclic_struct_metadata cenv.ce_struct_fields /\
     expr_sim_below cenv (expr_size (StructLit ann nsid fields)) ==>
     expr_vv_ok cenv (StructLit ann nsid fields)
 Proof
@@ -586,6 +595,7 @@ QED
 
 Theorem compile_make_array_sim:
   !cenv ann topt bnd args.
+    acyclic_struct_metadata cenv.ce_struct_fields /\
     expr_sim_below cenv (list_size expr_size args) ==>
     expr_vv_ok cenv (Builtin ann (MakeArray topt bnd) args)
 Proof
