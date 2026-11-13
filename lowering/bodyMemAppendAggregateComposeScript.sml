@@ -1,4 +1,3 @@
-(* Counted RHS, scratch staging and aggregate storage Append. *)
 Theory bodyMemAppendAggregateCompose
 Ancestors
   bodyMemAppendAggregateCode bodyMemAppendAggregateValuePath bodyMemAppendAggregateFacts
@@ -14,6 +13,13 @@ Libs
   monadsyntax
 
 Theorem compile_append_storage_aggregate_stmt_frag_mem:
+  cenv.ce_hashmap_info nid = NONE /\
+  acyclic_struct_metadata cenv.ce_struct_fields /\
+  sfields_tenv_consistent cenv.ce_struct_fields (get_tenv cx) /\
+  (!name fields. FLOOKUP cenv.ce_struct_fields name = SOME fields ==>
+    ALL_DISTINCT (MAP FST fields) /\
+    EVERY (\(fname,fty,sz). !tv.
+      evaluate_type (get_tenv cx) fty = SOME tv ==> sz = type_memory_size tv) fields) /\
   eval_target_place cx (TopLevelNameTarget nid) es =
     (INL (StoragePlace tr slot (ArrayTV tv (Dynamic cap))),es) /\
   declared_storage_region cx mid name [] = SOME (tr,slot,ArrayTV tv (Dynamic cap)) /\
@@ -42,6 +48,8 @@ Theorem compile_append_storage_aggregate_stmt_frag_mem:
     (eval_stmt cx (Append (TopLevelNameTarget nid) e)) es
 Proof
   strip_tac >> simp[stmt_frag_mem_def] >> rpt gen_tac >> strip_tac >>
+  `((32 * type_slot_size tv + 31) DIV 32) = type_slot_size tv` by
+    simp[Once arithmeticTheory.MULT_COMM, arithmeticTheory.ADD_DIV_ADD_DIV] >>
   drule_all append_storage_copy_code_parts >> strip_tac >> gvs[] >>
   rename1 `lower_value _ _ _ _ sa = (op,sB)` >>
   rename1 `compile_alloc_buffer _ sB = (buf,sc)` >>
@@ -69,6 +77,7 @@ QED
 
 Resume compile_append_storage_aggregate_stmt_frag_mem[suffix]:
   rpt gen_tac >> BETA_TAC >> strip_tac >>
+  RULE_ASSUM_TAC (REWRITE_RULE [ETA_AX]) >>
   drule_all append_aggregate_rhs_memory >> strip_tac >> gvs[] >>
   `value_has_type tv v` by metis_tac[] >>
   `val_wf tv v` by metis_tac[value_has_type_memory_wf] >>
@@ -101,7 +110,9 @@ Resume compile_append_storage_aggregate_stmt_frag_mem[suffix]:
   Cases_on `append_place cx (StoragePlace tr slot
     (ArrayTV tv (Dynamic (cenv.ce_module_dynarray_capacity nid)))) v ee` >>
   rename1 `_ = (res,ee')` >>
-  `w2n slot + type_slot_size (ArrayTV tv (Dynamic (cenv.ce_module_dynarray_capacity nid))) <= dimword (:256)` by decide_tac >>
+  `w2n slot + type_slot_size
+     (ArrayTV tv (Dynamic (cenv.ce_module_dynarray_capacity nid))) <= dimword (:256)` by
+    decide_tac >>
   `!mid' n' subs' slot' tv'.
     declared_storage_region cx mid' n' subs' = SOME (tr,slot',tv') /\
     (slot',tv') <> (slot,ArrayTV tv (Dynamic (cenv.ce_module_dynarray_capacity nid))) ==>
