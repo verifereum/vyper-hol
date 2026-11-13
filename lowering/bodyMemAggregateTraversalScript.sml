@@ -614,7 +614,8 @@ Proof
     (Q.GEN `P` aggregate_tuple_bind_outcome_any)) >>
   conj_tac
   >- (irule aggregate_tuple_gas_outcome_mono >> goal_assum (drule_at Any) >>
-      simp[] >> rpt strip_tac >> Cases_on `res` >> gvs[exprSimDefsTheory.expr_exit_def]) >>
+      simp[] >> rpt strip_tac >> Cases_on `res` >>
+      qpat_x_assum `expr_exit _ _` mp_tac >> simp[exprSimDefsTheory.expr_exit_def]) >>
   rpt gen_tac >> BETA_TAC >> strip_tac >>
   rename1 `gas_marked_exec T _ (eval_expr cx h) _ marks (INL tv) es1 (OK t1)` >>
   qpat_x_assum `arg_type_fits _ _ /\ _`
