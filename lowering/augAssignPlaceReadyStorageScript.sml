@@ -167,7 +167,8 @@ Proof
   goal_assum (drule_at (Pat `gas_marked_path`)) >> simp[] >>
   irule aug_place_loaded_storage_suffix >> simp[] >> conj_tac
   >- (goal_assum (drule_at (Pat `lower_value`)) >>
-      goal_assum (drule_at (Pat `compile_binop`)) >> simp[] >> metis_tac[]) >>
+      goal_assum (drule_at (Pat `compile_binop`)) >> simp[] >>
+      qexists_tac `FST r` >> simp[]) >>
   goal_assum (drule_at (Pat `type_stmt`)) >>
   goal_assum (drule_at (Pat `eval_target_place`)) >> simp[]
 QED
