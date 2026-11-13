@@ -142,13 +142,13 @@ Theorem call_free_type_builtin_dispatch_body:
       (state_insts (SND (compile_materialize_vv ce t vv st)))) ==>
   !args cfn cenv vv_ty ty tb ret_ty.
   (!e ety st. expr_size e < list_size expr_size args /\
-      ~supported_expr_exists constructor_call_root e /\
+      ~supported_expr_exists expr_call_root e /\
       ~supported_expr_exists expr_shape_root e ==>
     EVERY (\i. i.inst_opcode <> RETURNDATACOPY /\ i.inst_opcode <> INVOKE) (state_insts st) ==>
     EVERY (\i. i.inst_opcode <> RETURNDATACOPY /\ i.inst_opcode <> INVOKE)
       (state_insts (SND (cfn cenv ety e st)))) /\
   type_builtin_arity tb <= LENGTH args /\
-  ~supported_exprs_exists constructor_call_root args /\
+  ~supported_exprs_exists expr_call_root args /\
   ~supported_exprs_exists expr_shape_root args ==>
   !st. EVERY (\i. i.inst_opcode <> RETURNDATACOPY /\ i.inst_opcode <> INVOKE) (state_insts st) ==>
     EVERY (\i. i.inst_opcode <> RETURNDATACOPY /\ i.inst_opcode <> INVOKE)

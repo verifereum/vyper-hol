@@ -1,7 +1,16 @@
 (* Instruction-predicate boundaries for the compilation state monad. *)
 Theory ctorCallFreeRules
 Ancestors
-  list compileEnv venomInst loweringShapeDefs emitHelper
+  list vyperAST compileEnv venomInst loweringShapeDefs emitHelper
+
+(* The call-free proof's traversal invariant: no call expression.
+   constructor_call_free also excludes the precompile builtins, but only in
+   the source body: constant substitution can bring a sha256 that does not
+   fold (e.g. sha256(uint2str(1))) into the classified constructor body.
+   The precompile lowerings emit STATICCALL, never RETURNDATACOPY or INVOKE. *)
+Definition expr_call_root_def:
+  expr_call_root e <=> ?ty target es d. e = Call ty target es d
+End
 
 Theorem every_state_insts_blocks:
   EVERY P (state_insts st) <=>

@@ -19,7 +19,7 @@ QED
 
 Theorem call_free_stmt_if:
   (!ce ty e st.
-    ~supported_expr_exists constructor_call_root e /\
+    ~supported_expr_exists expr_call_root e /\
     ~supported_expr_exists expr_shape_root e ==>
     EVERY (\i. i.inst_opcode <> RETURNDATACOPY /\ i.inst_opcode <> INVOKE) (state_insts st) ==>
     EVERY (\i. i.inst_opcode <> RETURNDATACOPY /\ i.inst_opcode <> INVOKE)
@@ -32,7 +32,7 @@ Theorem call_free_stmt_if:
     EVERY (\i. i.inst_opcode <> RETURNDATACOPY /\ i.inst_opcode <> INVOKE)
       (state_insts (SND (compile_stmts ce lc ty b2 st)))) ==>
   !ce lc ty.
-  ~supported_stmt_expr_exists constructor_call_root (If cond b1 b2) /\
+  ~supported_stmt_expr_exists expr_call_root (If cond b1 b2) /\
   ~supported_stmt_expr_exists expr_shape_root (If cond b1 b2) ==>
   !st. EVERY (\i. i.inst_opcode <> RETURNDATACOPY /\ i.inst_opcode <> INVOKE) (state_insts st) ==>
   EVERY (\i. i.inst_opcode <> RETURNDATACOPY /\ i.inst_opcode <> INVOKE)
@@ -53,7 +53,7 @@ QED
 
 Theorem call_free_stmt_for_range:
   (!ce ty e st.
-    ~supported_expr_exists constructor_call_root e /\
+    ~supported_expr_exists expr_call_root e /\
     ~supported_expr_exists expr_shape_root e ==>
     EVERY (\i. i.inst_opcode <> RETURNDATACOPY /\ i.inst_opcode <> INVOKE) (state_insts st) ==>
     EVERY (\i. i.inst_opcode <> RETURNDATACOPY /\ i.inst_opcode <> INVOKE)
@@ -63,7 +63,7 @@ Theorem call_free_stmt_for_range:
     EVERY (\i. i.inst_opcode <> RETURNDATACOPY /\ i.inst_opcode <> INVOKE)
       (state_insts (SND (compile_stmts ce lc ty body st)))) ==>
   !ce lc ty.
-  ~supported_stmt_expr_exists constructor_call_root (For id fty (Range start_e end_e) bound body) /\
+  ~supported_stmt_expr_exists expr_call_root (For id fty (Range start_e end_e) bound body) /\
   ~supported_stmt_expr_exists expr_shape_root (For id fty (Range start_e end_e) bound body) ==>
   !st. EVERY (\i. i.inst_opcode <> RETURNDATACOPY /\ i.inst_opcode <> INVOKE) (state_insts st) ==>
   EVERY (\i. i.inst_opcode <> RETURNDATACOPY /\ i.inst_opcode <> INVOKE)
@@ -101,7 +101,7 @@ QED
 
 Theorem call_free_stmt_for_array:
   (!ce ty e st.
-    ~supported_expr_exists constructor_call_root e /\
+    ~supported_expr_exists expr_call_root e /\
     ~supported_expr_exists expr_shape_root e ==>
     EVERY (\i. i.inst_opcode <> RETURNDATACOPY /\ i.inst_opcode <> INVOKE) (state_insts st) ==>
     EVERY (\i. i.inst_opcode <> RETURNDATACOPY /\ i.inst_opcode <> INVOKE)
@@ -111,7 +111,7 @@ Theorem call_free_stmt_for_array:
     EVERY (\i. i.inst_opcode <> RETURNDATACOPY /\ i.inst_opcode <> INVOKE)
       (state_insts (SND (compile_stmts ce lc ty body st)))) ==>
   !ce lc ty.
-  ~supported_stmt_expr_exists constructor_call_root (For id fty (Array arr) bound body) /\
+  ~supported_stmt_expr_exists expr_call_root (For id fty (Array arr) bound body) /\
   ~supported_stmt_expr_exists expr_shape_root (For id fty (Array arr) bound body) ==>
   !st. EVERY (\i. i.inst_opcode <> RETURNDATACOPY /\ i.inst_opcode <> INVOKE) (state_insts st) ==>
   EVERY (\i. i.inst_opcode <> RETURNDATACOPY /\ i.inst_opcode <> INVOKE)

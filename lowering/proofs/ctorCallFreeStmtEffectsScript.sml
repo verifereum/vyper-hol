@@ -9,13 +9,13 @@ Ancestors
 
 Theorem call_free_custom_error_store_args[local]:
   (!ce ty e st.
-    ~supported_expr_exists constructor_call_root e /\
+    ~supported_expr_exists expr_call_root e /\
     ~supported_expr_exists expr_shape_root e ==>
     EVERY (\i. i.inst_opcode <> RETURNDATACOPY /\ i.inst_opcode <> INVOKE) (state_insts st) ==>
     EVERY (\i. i.inst_opcode <> RETURNDATACOPY /\ i.inst_opcode <> INVOKE)
       (state_insts (SND (compile_expr ce ty e st)))) ==>
   !es tys ce dst off st.
-  EVERY ($~ o supported_expr_exists constructor_call_root) es /\
+  EVERY ($~ o supported_expr_exists expr_call_root) es /\
   EVERY ($~ o supported_expr_exists expr_shape_root) es ==>
   EVERY (\i. i.inst_opcode <> RETURNDATACOPY /\ i.inst_opcode <> INVOKE) (state_insts st) ==>
   EVERY (\i. i.inst_opcode <> RETURNDATACOPY /\ i.inst_opcode <> INVOKE)
@@ -32,13 +32,13 @@ QED
 
 Theorem call_free_revert_with_custom_error[local]:
   (!ce ty e st.
-    ~supported_expr_exists constructor_call_root e /\
+    ~supported_expr_exists expr_call_root e /\
     ~supported_expr_exists expr_shape_root e ==>
     EVERY (\i. i.inst_opcode <> RETURNDATACOPY /\ i.inst_opcode <> INVOKE) (state_insts st) ==>
     EVERY (\i. i.inst_opcode <> RETURNDATACOPY /\ i.inst_opcode <> INVOKE)
       (state_insts (SND (compile_expr ce ty e st)))) ==>
   !ce err st.
-  EVERY ($~ o supported_expr_exists constructor_call_root) (custom_error_exprs err) /\
+  EVERY ($~ o supported_expr_exists expr_call_root) (custom_error_exprs err) /\
   EVERY ($~ o supported_expr_exists expr_shape_root) (custom_error_exprs err) ==>
   EVERY (\i. i.inst_opcode <> RETURNDATACOPY /\ i.inst_opcode <> INVOKE) (state_insts st) ==>
   EVERY (\i. i.inst_opcode <> RETURNDATACOPY /\ i.inst_opcode <> INVOKE)
@@ -58,13 +58,13 @@ QED
 
 Theorem call_free_stmt_assert:
   (!ce ty e st.
-    ~supported_expr_exists constructor_call_root e /\
+    ~supported_expr_exists expr_call_root e /\
     ~supported_expr_exists expr_shape_root e ==>
     EVERY (\i. i.inst_opcode <> RETURNDATACOPY /\ i.inst_opcode <> INVOKE) (state_insts st) ==>
     EVERY (\i. i.inst_opcode <> RETURNDATACOPY /\ i.inst_opcode <> INVOKE)
       (state_insts (SND (compile_expr ce ty e st)))) ==>
   !ce lc ty e ar.
-  ~supported_stmt_expr_exists constructor_call_root (Assert e ar) /\
+  ~supported_stmt_expr_exists expr_call_root (Assert e ar) /\
   ~supported_stmt_expr_exists expr_shape_root (Assert e ar) ==>
   !st. EVERY (\i. i.inst_opcode <> RETURNDATACOPY /\ i.inst_opcode <> INVOKE) (state_insts st) ==>
   EVERY (\i. i.inst_opcode <> RETURNDATACOPY /\ i.inst_opcode <> INVOKE)
@@ -86,13 +86,13 @@ QED
 
 Theorem call_free_stmt_raise:
   (!ce ty e st.
-    ~supported_expr_exists constructor_call_root e /\
+    ~supported_expr_exists expr_call_root e /\
     ~supported_expr_exists expr_shape_root e ==>
     EVERY (\i. i.inst_opcode <> RETURNDATACOPY /\ i.inst_opcode <> INVOKE) (state_insts st) ==>
     EVERY (\i. i.inst_opcode <> RETURNDATACOPY /\ i.inst_opcode <> INVOKE)
       (state_insts (SND (compile_expr ce ty e st)))) ==>
   !ce lc ty rr.
-  ~supported_stmt_expr_exists constructor_call_root (Raise rr) /\
+  ~supported_stmt_expr_exists expr_call_root (Raise rr) /\
   ~supported_stmt_expr_exists expr_shape_root (Raise rr) ==>
   !st. EVERY (\i. i.inst_opcode <> RETURNDATACOPY /\ i.inst_opcode <> INVOKE) (state_insts st) ==>
   EVERY (\i. i.inst_opcode <> RETURNDATACOPY /\ i.inst_opcode <> INVOKE)
@@ -111,13 +111,13 @@ QED
 
 Theorem call_free_stmt_log:
   (!ce ty e st.
-    ~supported_expr_exists constructor_call_root e /\
+    ~supported_expr_exists expr_call_root e /\
     ~supported_expr_exists expr_shape_root e ==>
     EVERY (\i. i.inst_opcode <> RETURNDATACOPY /\ i.inst_opcode <> INVOKE) (state_insts st) ==>
     EVERY (\i. i.inst_opcode <> RETURNDATACOPY /\ i.inst_opcode <> INVOKE)
       (state_insts (SND (compile_expr ce ty e st)))) ==>
   !ce lc ty eid args.
-  ~supported_stmt_expr_exists constructor_call_root (Log eid args) /\
+  ~supported_stmt_expr_exists expr_call_root (Log eid args) /\
   ~supported_stmt_expr_exists expr_shape_root (Log eid args) ==>
   !st. EVERY (\i. i.inst_opcode <> RETURNDATACOPY /\ i.inst_opcode <> INVOKE) (state_insts st) ==>
   EVERY (\i. i.inst_opcode <> RETURNDATACOPY /\ i.inst_opcode <> INVOKE)
@@ -125,7 +125,7 @@ Theorem call_free_stmt_log:
 Proof
   strip_tac >> drule call_free_log_eval_all >> disch_then assume_tac >>
   rpt gen_tac >> simp[supported_stmt_expr_exists_def] >> strip_tac >>
-  `EVERY (\e. ~supported_expr_exists constructor_call_root e /\
+  `EVERY (\e. ~supported_expr_exists expr_call_root e /\
      ~supported_expr_exists expr_shape_root e) args` by
     (gvs[EVERY_MEM, supported_exprs_exists_every, EXISTS_MEM] >> metis_tac[]) >>
   simp[Once compile_stmt_def] >>
@@ -172,13 +172,13 @@ QED
 
 Theorem call_free_stmt_return_some:
   (!ce ty e st.
-    ~supported_expr_exists constructor_call_root e /\
+    ~supported_expr_exists expr_call_root e /\
     ~supported_expr_exists expr_shape_root e ==>
     EVERY (\i. i.inst_opcode <> RETURNDATACOPY /\ i.inst_opcode <> INVOKE) (state_insts st) ==>
     EVERY (\i. i.inst_opcode <> RETURNDATACOPY /\ i.inst_opcode <> INVOKE)
       (state_insts (SND (compile_expr ce ty e st)))) ==>
   !ce lc ty e.
-  ~supported_stmt_expr_exists constructor_call_root (Return (SOME e)) /\
+  ~supported_stmt_expr_exists expr_call_root (Return (SOME e)) /\
   ~supported_stmt_expr_exists expr_shape_root (Return (SOME e)) ==>
   !st. EVERY (\i. i.inst_opcode <> RETURNDATACOPY /\ i.inst_opcode <> INVOKE) (state_insts st) ==>
   EVERY (\i. i.inst_opcode <> RETURNDATACOPY /\ i.inst_opcode <> INVOKE)

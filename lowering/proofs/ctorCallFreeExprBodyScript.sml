@@ -61,9 +61,9 @@ Theorem call_free_expr_body:
     EVERY (\i. i.inst_opcode <> RETURNDATACOPY /\ i.inst_opcode <> INVOKE)
       (state_insts (SND (compile_powmod256_names cenv rty aty a bty b st)))) ==>
   !e.
-  ~supported_expr_exists constructor_call_root e /\ ~supported_expr_exists root2 e /\
+  ~supported_expr_exists expr_call_root e /\ ~supported_expr_exists root2 e /\
   (!child ety st. expr_size child < expr_size e /\
-      ~supported_expr_exists constructor_call_root child /\ ~supported_expr_exists root2 child ==>
+      ~supported_expr_exists expr_call_root child /\ ~supported_expr_exists root2 child ==>
     EVERY (\i. i.inst_opcode <> RETURNDATACOPY /\ i.inst_opcode <> INVOKE) (state_insts st) ==>
     EVERY (\i. i.inst_opcode <> RETURNDATACOPY /\ i.inst_opcode <> INVOKE)
       (state_insts (SND (cfn cenv ety child st)))) /\
@@ -96,7 +96,7 @@ Theorem call_free_expr_body:
       (state_insts (SND (compile_expr_body cfn bfn tfn cenv ty e st)))
 Proof
   strip_tac >> gen_tac >> strip_tac >>
-  Cases_on `e` >> gvs[supported_expr_exists_def, constructor_call_root_def] >>
+  Cases_on `e` >> gvs[supported_expr_exists_def, expr_call_root_def] >>
   all_tac >~ [`compile_expr_body _ _ _ _ _ (IfExp ann cond_e then_e else_e)`] >-
     (ho_match_mp_tac call_free_ifexp_body >> simp[] >> conj_tac >-
        (ho_match_mp_tac every_state_insts_lower_value >> simp[] >>

@@ -129,6 +129,7 @@ Proof
   rpt (FIRST [ho_match_mp_tac every_state_insts_bind >> conj_tac,
     ho_match_mp_tac every_state_insts_ignore_bind >> conj_tac,
     IF_CASES_TAC, CASE_TAC, gen_tac,
+    qid_spec_tac `st` >> ho_match_mp_tac every_state_insts_bind >> conj_tac,
     CHANGED_TAC (simp[call_free_emit_op, call_free_emit_void,
       call_free_emit_inst, every_state_insts_return,
       every_state_insts_fresh_label, every_state_insts_fresh_var,

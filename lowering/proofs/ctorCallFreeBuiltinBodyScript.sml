@@ -4,7 +4,7 @@ Ancestors
   list pair vyperAST compileEnv venomInst loweringShapeDefs loweringShapeProps
   emitHelper context exprLowering exprCallBounds exprCallbackContracts
   ctorCallFreeRules ctorCallFreeCallbacks supportedExprTraverse e2eDeployDefs
-  exprBopLowering abiBuiltinDispatchCorrect
+  exprBopLowering abiBuiltinDispatchCorrect ctorCallFreeValues builtinHashing builtinMisc
 
 Theorem builtin_lower_value_child[local]:
   (!e ety st. expr_size e < list_size expr_size args /\
@@ -40,6 +40,44 @@ Proof
   ho_match_mp_tac every_state_insts_lower_value >> simp[] >>
   rpt strip_tac >> first_x_assum irule >>
   metis_tac[extcode_child_bound, expr_shape_extcode_addr, supported_exprs_exists_every, EXISTS_MEM]
+QED
+
+Theorem call_free_precompiles[local]:
+  (!v st. EVERY (\i. i.inst_opcode <> RETURNDATACOPY /\ i.inst_opcode <> INVOKE) (state_insts st) ==>
+    EVERY (\i. i.inst_opcode <> RETURNDATACOPY /\ i.inst_opcode <> INVOKE) (state_insts (SND (compile_sha256_word v st)))) /\
+  (!v st. EVERY (\i. i.inst_opcode <> RETURNDATACOPY /\ i.inst_opcode <> INVOKE) (state_insts st) ==>
+    EVERY (\i. i.inst_opcode <> RETURNDATACOPY /\ i.inst_opcode <> INVOKE) (state_insts (SND (compile_sha256_bytes v st)))) /\
+  (!v m st. EVERY (\i. i.inst_opcode <> RETURNDATACOPY /\ i.inst_opcode <> INVOKE) (state_insts st) ==>
+    EVERY (\i. i.inst_opcode <> RETURNDATACOPY /\ i.inst_opcode <> INVOKE) (state_insts (SND (compile_sha256_bytesm v m st)))) /\
+  (!h v r s st. EVERY (\i. i.inst_opcode <> RETURNDATACOPY /\ i.inst_opcode <> INVOKE) (state_insts st) ==>
+    EVERY (\i. i.inst_opcode <> RETURNDATACOPY /\ i.inst_opcode <> INVOKE) (state_insts (SND (compile_ecrecover h v r s st)))) /\
+  (!p1 p2 st. EVERY (\i. i.inst_opcode <> RETURNDATACOPY /\ i.inst_opcode <> INVOKE) (state_insts st) ==>
+    EVERY (\i. i.inst_opcode <> RETURNDATACOPY /\ i.inst_opcode <> INVOKE) (state_insts (SND (compile_ecadd_points p1 p2 st)))) /\
+  (!p s st. EVERY (\i. i.inst_opcode <> RETURNDATACOPY /\ i.inst_opcode <> INVOKE) (state_insts st) ==>
+    EVERY (\i. i.inst_opcode <> RETURNDATACOPY /\ i.inst_opcode <> INVOKE) (state_insts (SND (compile_ecmul_point p s st))))
+Proof
+  rpt conj_tac >> rpt gen_tac >> qid_spec_tac `st` >>
+  simp[builtinHashingTheory.compile_sha256_word_def,
+    builtinHashingTheory.compile_sha256_bytes_def,
+    builtinHashingTheory.compile_sha256_bytesm_def,
+    builtinMiscTheory.compile_ecrecover_def,
+    builtinMiscTheory.compile_ecadd_points_def,
+    builtinMiscTheory.compile_ecmul_point_def] >>
+  rpt (FIRST [ho_match_mp_tac every_state_insts_bind >> conj_tac,
+    ho_match_mp_tac every_state_insts_ignore_bind >> conj_tac,
+    gen_tac, CHANGED_TAC (simp[call_free_emit_op, call_free_emit_void,
+      call_free_alloc_buffer, every_state_insts_return])])
+QED
+
+Theorem call_free_ec_ptr[local]:
+  (!t l p1 p2 st. EVERY (\i. i.inst_opcode <> RETURNDATACOPY /\ i.inst_opcode <> INVOKE) (state_insts st) ==>
+    EVERY (\i. i.inst_opcode <> RETURNDATACOPY /\ i.inst_opcode <> INVOKE) (state_insts (SND (as_ptr_val t l (compile_ecadd_points p1 p2 st))))) /\
+  (!t l p s st. EVERY (\i. i.inst_opcode <> RETURNDATACOPY /\ i.inst_opcode <> INVOKE) (state_insts st) ==>
+    EVERY (\i. i.inst_opcode <> RETURNDATACOPY /\ i.inst_opcode <> INVOKE) (state_insts (SND (as_ptr_val t l (compile_ecmul_point p s st)))))
+Proof
+  rpt strip_tac >> qmatch_goalsub_abbrev_tac `as_ptr_val t l r` >>
+  Cases_on `r` >> simp[as_ptr_val_def] >>
+  fs[markerTheory.Abbrev_def] >> metis_tac[pairTheory.SND, call_free_precompiles]
 QED
 
 local
@@ -343,19 +381,34 @@ local
 ) g
 
 
+  | branch "precompile" g = (
+  simp[compile_builtin_dispatch_body_def, as_stack_val_pair, LET_THM,
+    pairTheory.UNCURRY] >> rpt strip_tac >>
+  rpt (FIRST [IF_CASES_TAC, CASE_TAC]) >> simp[as_stack_val_pair] >>
+  rpt (FIRST [MAP_FIRST irule
+    (CONJUNCTS call_free_precompiles @ CONJUNCTS call_free_ec_ptr),
+    first_assum irule])
+) g
+
   | branch label _ = raise Fail ("unknown builtin proof branch: " ^ label)
+  fun child_facts qs =
+    MAP_EVERY (fn q =>
+      qpat_assum `!e ety. MEM e _ ==> _`
+        (qspec_then q (assume_tac o SIMP_RULE (srw_ss()) [MEM])) >>
+      qpat_assum `!e ety st. MEM e _ ==> _`
+        (qspec_then q (assume_tac o SIMP_RULE (srw_ss()) [MEM]))) qs
   val prepare =
     strip_tac >> rpt gen_tac >> strip_tac >>
     `!e ety. MEM e args ==> !st.
       EVERY (\i. i.inst_opcode <> RETURNDATACOPY /\ i.inst_opcode <> INVOKE) (state_insts st) ==>
       EVERY (\i. i.inst_opcode <> RETURNDATACOPY /\ i.inst_opcode <> INVOKE)
         (state_insts (SND (lower_value cfn cenv ety e st)))`
-      by (ho_match_mp_tac (Q.INST [`R` |-> `constructor_call_root`, `Q` |-> `root2`] builtin_lower_value_child) >> simp[]) >>
+      by (ho_match_mp_tac (Q.INST [`R` |-> `expr_call_root`, `Q` |-> `root2`] builtin_lower_value_child) >> simp[]) >>
     `!e ety. MEM e args /\ is_extcode e ==> !st.
       EVERY (\i. i.inst_opcode <> RETURNDATACOPY /\ i.inst_opcode <> INVOKE) (state_insts st) ==>
       EVERY (\i. i.inst_opcode <> RETURNDATACOPY /\ i.inst_opcode <> INVOKE)
         (state_insts (SND (lower_value cfn cenv ety (extcode_addr_expr e) st)))`
-      by (ho_match_mp_tac (Q.INST [`R` |-> `constructor_call_root`, `Q` |-> `root2`] builtin_lower_value_extcode) >> simp[]) >>
+      by (ho_match_mp_tac (Q.INST [`R` |-> `expr_call_root`, `Q` |-> `root2`] builtin_lower_value_extcode) >> simp[]) >>
     `!e ety st. MEM e args ==>
       EVERY (\i. i.inst_opcode <> RETURNDATACOPY /\ i.inst_opcode <> INVOKE) (state_insts st) ==>
       EVERY (\i. i.inst_opcode <> RETURNDATACOPY /\ i.inst_opcode <> INVOKE)
@@ -363,7 +416,6 @@ local
       by (rpt strip_tac >> first_x_assum irule >>
           metis_tac[expr_list_member_bound, supported_exprs_exists_every, EXISTS_MEM]) >>
     qpat_x_assum `builtin_arity bi <= LENGTH args` mp_tac >>
-    qpat_x_assum `~precompile_builtin bi` mp_tac >>
     Cases_on `bi` >> simp[builtin_arity_def] >> ntac 2 strip_tac
 in
 Theorem call_free_builtin_dispatch_body:
@@ -437,10 +489,9 @@ Theorem call_free_builtin_dispatch_body:
     EVERY (\i. i.inst_opcode <> RETURNDATACOPY /\ i.inst_opcode <> INVOKE) (state_insts (SND (compile_method_id_runtime t v b st)))) ==>
   !bi args.
   builtin_arity bi <= LENGTH args /\
-  ~precompile_builtin bi /\
-  ~supported_exprs_exists constructor_call_root args /\ ~supported_exprs_exists root2 args /\
+  ~supported_exprs_exists expr_call_root args /\ ~supported_exprs_exists root2 args /\
   (!e ety st. expr_size e < list_size expr_size args /\
-      ~supported_expr_exists constructor_call_root e /\ ~supported_expr_exists root2 e ==>
+      ~supported_expr_exists expr_call_root e /\ ~supported_expr_exists root2 e ==>
     EVERY (\i. i.inst_opcode <> RETURNDATACOPY /\ i.inst_opcode <> INVOKE) (state_insts st) ==>
     EVERY (\i. i.inst_opcode <> RETURNDATACOPY /\ i.inst_opcode <> INVOKE) (state_insts (SND (cfn cenv ety e st)))) /\
   (!ann ety bnd es st. MEM (Builtin ann (MakeArray ety bnd) es) args ==>
@@ -509,6 +560,23 @@ Proof
       simp[compile_builtin_dispatch_body_def, as_stack_val_pair] >> rpt strip_tac >>
       qpat_x_assum `!e item st. MEM e _ ==> _` irule >> simp[]) >>
     all_tac >~ [`compile_builtin_dispatch_body _ _ _ _ (AsWeiValue denom) args`] >- branch "wei" >>
+    all_tac >~ [`compile_builtin_dispatch_body _ _ _ _ Sha256 args`] >- (
+      Cases_on `args` >- gvs[] >> rename1 `a::rest` >>
+      child_facts [`a`] >> branch "precompile") >>
+    all_tac >~ [`compile_builtin_dispatch_body _ _ _ _ ECRecover args`] >- (
+      Cases_on `args` >- gvs[] >> rename1 `a::rest` >>
+      Cases_on `rest` >- gvs[] >> rename1 `a::b::rest` >>
+      Cases_on `rest` >- gvs[] >> rename1 `a::b::c::rest` >>
+      Cases_on `rest` >- gvs[] >> rename1 `a::b::c::d::rest` >>
+      child_facts [`a`, `b`, `c`, `d`] >> branch "precompile") >>
+    all_tac >~ [`compile_builtin_dispatch_body _ _ _ _ ECAdd args`] >- (
+      Cases_on `args` >- gvs[] >> rename1 `a::rest` >>
+      Cases_on `rest` >- gvs[] >> rename1 `a::b::rest` >>
+      child_facts [`a`, `b`] >> branch "precompile") >>
+    all_tac >~ [`compile_builtin_dispatch_body _ _ _ _ ECMul args`] >- (
+      Cases_on `args` >- gvs[] >> rename1 `a::rest` >>
+      Cases_on `rest` >- gvs[] >> rename1 `a::b::rest` >>
+      child_facts [`a`, `b`] >> branch "precompile") >>
     branch "concat"
 QED
 end

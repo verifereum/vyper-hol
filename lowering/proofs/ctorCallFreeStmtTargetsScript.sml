@@ -7,13 +7,13 @@ Ancestors
 
 Theorem call_free_get_target_ptr:
   (!ce ty e st.
-    ~supported_expr_exists constructor_call_root e /\
+    ~supported_expr_exists expr_call_root e /\
     ~supported_expr_exists expr_shape_root e ==>
     EVERY (\i. i.inst_opcode <> RETURNDATACOPY /\ i.inst_opcode <> INVOKE) (state_insts st) ==>
     EVERY (\i. i.inst_opcode <> RETURNDATACOPY /\ i.inst_opcode <> INVOKE)
       (state_insts (SND (compile_expr ce ty e st)))) ==>
   !target ce.
-  ~supported_target_exists constructor_call_root target /\
+  ~supported_target_exists expr_call_root target /\
   ~supported_target_exists expr_shape_root target ==>
   !st. EVERY (\i. i.inst_opcode <> RETURNDATACOPY /\ i.inst_opcode <> INVOKE) (state_insts st) ==>
   EVERY (\i. i.inst_opcode <> RETURNDATACOPY /\ i.inst_opcode <> INVOKE)
@@ -29,7 +29,7 @@ Proof
 QED
 
 Theorem call_free_tuple_store_all:
-  (!bt st. ~supported_target_exists constructor_call_root bt /\
+  (!bt st. ~supported_target_exists expr_call_root bt /\
     ~supported_target_exists expr_shape_root bt ==>
     EVERY (\i. i.inst_opcode <> RETURNDATACOPY /\ i.inst_opcode <> INVOKE) (state_insts st) ==>
     EVERY (\i. i.inst_opcode <> RETURNDATACOPY /\ i.inst_opcode <> INVOKE)
@@ -43,7 +43,7 @@ Theorem call_free_tuple_store_all:
     EVERY (\i. i.inst_opcode <> RETURNDATACOPY /\ i.inst_opcode <> INVOKE)
       (state_insts (SND (compile_store_at_loc ce.ce_imm_alloca dst value loc st)))) ==>
   !tys targets vals st.
-  ~supported_assignments_exists constructor_call_root targets /\
+  ~supported_assignments_exists expr_call_root targets /\
   ~supported_assignments_exists expr_shape_root targets ==>
   EVERY (\i. i.inst_opcode <> RETURNDATACOPY /\ i.inst_opcode <> INVOKE) (state_insts st) ==>
   EVERY (\i. i.inst_opcode <> RETURNDATACOPY /\ i.inst_opcode <> INVOKE)
@@ -66,13 +66,13 @@ Theorem call_free_tuple_unpack:
     EVERY (\i. i.inst_opcode <> RETURNDATACOPY /\ i.inst_opcode <> INVOKE)
       (state_insts (SND (compile_tuple_load_all ce src tys off st)))) /\
   (!tys targets vals st.
-    ~supported_assignments_exists constructor_call_root targets /\
+    ~supported_assignments_exists expr_call_root targets /\
     ~supported_assignments_exists expr_shape_root targets ==>
     EVERY (\i. i.inst_opcode <> RETURNDATACOPY /\ i.inst_opcode <> INVOKE) (state_insts st) ==>
     EVERY (\i. i.inst_opcode <> RETURNDATACOPY /\ i.inst_opcode <> INVOKE)
       (state_insts (SND (compile_tuple_store_all ce tys targets vals st)))) ==>
   !ty stage targets src st.
-  ~supported_assignments_exists constructor_call_root targets /\
+  ~supported_assignments_exists expr_call_root targets /\
   ~supported_assignments_exists expr_shape_root targets ==>
   EVERY (\i. i.inst_opcode <> RETURNDATACOPY /\ i.inst_opcode <> INVOKE) (state_insts st) ==>
   EVERY (\i. i.inst_opcode <> RETURNDATACOPY /\ i.inst_opcode <> INVOKE)

@@ -24,13 +24,13 @@ QED
 
 Theorem call_free_tuple_unpack_from_expr[local]:
   (!ce ty e st.
-    ~supported_expr_exists constructor_call_root e /\
+    ~supported_expr_exists expr_call_root e /\
     ~supported_expr_exists expr_shape_root e ==>
     EVERY (\i. i.inst_opcode <> RETURNDATACOPY /\ i.inst_opcode <> INVOKE) (state_insts st) ==>
     EVERY (\i. i.inst_opcode <> RETURNDATACOPY /\ i.inst_opcode <> INVOKE)
       (state_insts (SND (compile_expr ce ty e st)))) ==>
   !ce ty stage targets src st.
-  ~supported_assignments_exists constructor_call_root targets /\
+  ~supported_assignments_exists expr_call_root targets /\
   ~supported_assignments_exists expr_shape_root targets ==>
   EVERY (\i. i.inst_opcode <> RETURNDATACOPY /\ i.inst_opcode <> INVOKE) (state_insts st) ==>
   EVERY (\i. i.inst_opcode <> RETURNDATACOPY /\ i.inst_opcode <> INVOKE)
@@ -46,13 +46,13 @@ QED
 
 Theorem call_free_stmt_annassign:
   (!ce ty e st.
-    ~supported_expr_exists constructor_call_root e /\
+    ~supported_expr_exists expr_call_root e /\
     ~supported_expr_exists expr_shape_root e ==>
     EVERY (\i. i.inst_opcode <> RETURNDATACOPY /\ i.inst_opcode <> INVOKE) (state_insts st) ==>
     EVERY (\i. i.inst_opcode <> RETURNDATACOPY /\ i.inst_opcode <> INVOKE)
       (state_insts (SND (compile_expr ce ty e st)))) ==>
   !ce lc ty id vt e.
-  ~supported_stmt_expr_exists constructor_call_root (AnnAssign id vt e) /\
+  ~supported_stmt_expr_exists expr_call_root (AnnAssign id vt e) /\
   ~supported_stmt_expr_exists expr_shape_root (AnnAssign id vt e) ==>
   !st. EVERY (\i. i.inst_opcode <> RETURNDATACOPY /\ i.inst_opcode <> INVOKE) (state_insts st) ==>
   EVERY (\i. i.inst_opcode <> RETURNDATACOPY /\ i.inst_opcode <> INVOKE)
@@ -78,13 +78,13 @@ QED
 
 Theorem call_free_stmt_assign_base:
   (!ce ty e st.
-    ~supported_expr_exists constructor_call_root e /\
+    ~supported_expr_exists expr_call_root e /\
     ~supported_expr_exists expr_shape_root e ==>
     EVERY (\i. i.inst_opcode <> RETURNDATACOPY /\ i.inst_opcode <> INVOKE) (state_insts st) ==>
     EVERY (\i. i.inst_opcode <> RETURNDATACOPY /\ i.inst_opcode <> INVOKE)
       (state_insts (SND (compile_expr ce ty e st)))) ==>
   !ce lc ty bt e.
-  ~supported_stmt_expr_exists constructor_call_root (Assign (BaseTarget bt) e) /\
+  ~supported_stmt_expr_exists expr_call_root (Assign (BaseTarget bt) e) /\
   ~supported_stmt_expr_exists expr_shape_root (Assign (BaseTarget bt) e) ==>
   !st. EVERY (\i. i.inst_opcode <> RETURNDATACOPY /\ i.inst_opcode <> INVOKE) (state_insts st) ==>
   EVERY (\i. i.inst_opcode <> RETURNDATACOPY /\ i.inst_opcode <> INVOKE)
@@ -104,13 +104,13 @@ QED
 
 Theorem call_free_stmt_assign_tuple:
   (!ce ty e st.
-    ~supported_expr_exists constructor_call_root e /\
+    ~supported_expr_exists expr_call_root e /\
     ~supported_expr_exists expr_shape_root e ==>
     EVERY (\i. i.inst_opcode <> RETURNDATACOPY /\ i.inst_opcode <> INVOKE) (state_insts st) ==>
     EVERY (\i. i.inst_opcode <> RETURNDATACOPY /\ i.inst_opcode <> INVOKE)
       (state_insts (SND (compile_expr ce ty e st)))) ==>
   !ce lc ty targets e.
-  ~supported_stmt_expr_exists constructor_call_root (Assign (TupleTarget targets) e) /\
+  ~supported_stmt_expr_exists expr_call_root (Assign (TupleTarget targets) e) /\
   ~supported_stmt_expr_exists expr_shape_root (Assign (TupleTarget targets) e) ==>
   !st. EVERY (\i. i.inst_opcode <> RETURNDATACOPY /\ i.inst_opcode <> INVOKE) (state_insts st) ==>
   EVERY (\i. i.inst_opcode <> RETURNDATACOPY /\ i.inst_opcode <> INVOKE)
@@ -126,13 +126,13 @@ QED
 
 Theorem call_free_stmt_augassign:
   (!ce ty e st.
-    ~supported_expr_exists constructor_call_root e /\
+    ~supported_expr_exists expr_call_root e /\
     ~supported_expr_exists expr_shape_root e ==>
     EVERY (\i. i.inst_opcode <> RETURNDATACOPY /\ i.inst_opcode <> INVOKE) (state_insts st) ==>
     EVERY (\i. i.inst_opcode <> RETURNDATACOPY /\ i.inst_opcode <> INVOKE)
       (state_insts (SND (compile_expr ce ty e st)))) ==>
   !ce lc ty vt bt bop e.
-  ~supported_stmt_expr_exists constructor_call_root (AugAssign vt bt bop e) /\
+  ~supported_stmt_expr_exists expr_call_root (AugAssign vt bt bop e) /\
   ~supported_stmt_expr_exists expr_shape_root (AugAssign vt bt bop e) ==>
   !st. EVERY (\i. i.inst_opcode <> RETURNDATACOPY /\ i.inst_opcode <> INVOKE) (state_insts st) ==>
   EVERY (\i. i.inst_opcode <> RETURNDATACOPY /\ i.inst_opcode <> INVOKE)
@@ -161,13 +161,13 @@ QED
 
 Theorem call_free_stmt_append:
   (!ce ty e st.
-    ~supported_expr_exists constructor_call_root e /\
+    ~supported_expr_exists expr_call_root e /\
     ~supported_expr_exists expr_shape_root e ==>
     EVERY (\i. i.inst_opcode <> RETURNDATACOPY /\ i.inst_opcode <> INVOKE) (state_insts st) ==>
     EVERY (\i. i.inst_opcode <> RETURNDATACOPY /\ i.inst_opcode <> INVOKE)
       (state_insts (SND (compile_expr ce ty e st)))) ==>
   !ce lc ty target e.
-  ~supported_stmt_expr_exists constructor_call_root (Append target e) /\
+  ~supported_stmt_expr_exists expr_call_root (Append target e) /\
   ~supported_stmt_expr_exists expr_shape_root (Append target e) ==>
   !st. EVERY (\i. i.inst_opcode <> RETURNDATACOPY /\ i.inst_opcode <> INVOKE) (state_insts st) ==>
   EVERY (\i. i.inst_opcode <> RETURNDATACOPY /\ i.inst_opcode <> INVOKE)

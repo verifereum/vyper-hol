@@ -9,7 +9,7 @@ Ancestors
   ctorCallFreeBodies ctorCallFreeExpr ctorCallFreeStmtReturns ctorCallFreeStmtStorage
   ctorCallFreeStmtLogs ctorCallFreeStmtTargets ctorCallFreeWrapper ctorCallFreeSource
   supportedStmtTraverse loweringShapeDefs compileEnv moduleLowering
-  ctorDeployLoweringCode context loweringShapeProps
+  ctorDeployLoweringCode context loweringShapeProps ctorDeployDefs
   vyperTypeContract vyperTypeContractContext ctorCallFreeStmt
 
 (* The lowering emits INVOKE only for an internal call and RETURNDATACOPY
@@ -54,13 +54,14 @@ Proof
     gvs[package_constructor_def, set_constructor_package_target_def] >>
   gvs[] >>
   `v_mut <> View` by
-    (`MEM (FunctionDecl Deploy v_mut v_nr v_raw v_name v_args v_defaults v_ret fbody) tops` by
-       (irule deploy_classify_constructor_mem >> simp[]) >>
+    (qspecl_then [`tops`, `v_mut`, `v_nr`, `v_raw`, `v_name`, `v_args`,
+       `v_defaults`, `v_ret`, `fbody`] mp_tac classify_functions_ctor_mem >>
+     simp[] >> strip_tac >>
      qpat_x_assum `deploy_typing_ok _ _ _` mp_tac >>
      simp[deploy_typing_ok_def] >> strip_tac >>
      rename1 `check_contract T am.layouts tx.target [(NONE,tops)] = SOME artifact` >>
      `check_toplevel_decl [(NONE,tops)] artifact NONE
-        (FunctionDecl Deploy v_mut v_nr v_raw v_name v_args v_defaults v_ret fbody)` by
+        (FunctionDecl Deploy v_mut v_nr v_raw v_name v_args raw_defaults v_ret raw_body)` by
        (qpat_x_assum `check_contract T _ _ _ = _` mp_tac >>
         simp[check_contract_def, check_module_def, listTheory.EVERY_MEM] >>
         metis_tac[]) >>

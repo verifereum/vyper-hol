@@ -25,13 +25,13 @@ Proof
 QED
 
 Theorem call_free_builtin_join[local]:
-  (!e ce ty st. ~supported_expr_exists constructor_call_root e /\
+  (!e ce ty st. ~supported_expr_exists expr_call_root e /\
     ~supported_expr_exists expr_shape_root e /\
     EVERY (\i. i.inst_opcode <> RETURNDATACOPY /\ i.inst_opcode <> INVOKE) (state_insts st) ==>
     EVERY (\i. i.inst_opcode <> RETURNDATACOPY /\ i.inst_opcode <> INVOKE)
       (state_insts (SND (cfn ce ty e st)))) ==>
-  builtin_arity bi <= LENGTH args /\ ~constructor_call_root (Builtin rt bi args) /\
-  ~supported_exprs_exists constructor_call_root args /\
+  builtin_arity bi <= LENGTH args /\
+  ~supported_exprs_exists expr_call_root args /\
   ~supported_exprs_exists expr_shape_root args /\
   EVERY (\i. i.inst_opcode <> RETURNDATACOPY /\ i.inst_opcode <> INVOKE) (state_insts st) ==>
   EVERY (\i. i.inst_opcode <> RETURNDATACOPY /\ i.inst_opcode <> INVOKE)
@@ -48,7 +48,7 @@ Proof
     call_free_uint2str, call_free_unwrap_value, call_free_method_id_runtime,
     call_free_compare, call_free_ptr_load, call_free_ensure_in_memory,
     call_free_list_membership_in, call_free_list_membership_notin,
-    call_free_var_array_membership, call_free_literal_vv, constructor_call_root_def] >>
+    call_free_var_array_membership, call_free_literal_vv, expr_call_root_def] >>
   conj_tac >- (rpt gen_tac >> strip_tac >> strip_tac >>
     irule call_free_acc >> simp[] >>
     ho_match_mp_tac every_state_insts_lower_value >> simp[call_free_unwrap_value] >>
@@ -65,23 +65,22 @@ Proof
     simp[call_free_store_memory, call_free_unwrap_value] >>
     rpt strip_tac >> first_assum irule >>
     metis_tac[supported_exprs_exists_every, EXISTS_MEM]) >>
-  reverse conj_tac >- gvs[constructor_call_root_def] >>
   rpt strip_tac >> irule call_free_multi_exprs >> simp[call_free_unwrap_value] >>
   rpt strip_tac >> first_assum irule >>
-  `~supported_expr_exists constructor_call_root (Builtin ann (MakeArray ety bnd) es) /\
+  `~supported_expr_exists expr_call_root (Builtin ann (MakeArray ety bnd) es) /\
    ~supported_expr_exists expr_shape_root (Builtin ann (MakeArray ety bnd) es)` by
     metis_tac[supported_exprs_exists_every, EXISTS_MEM] >>
   gvs[supported_expr_exists_def, supported_exprs_exists_every, EXISTS_MEM] >> metis_tac[]
 QED
 
 Theorem call_free_type_join[local]:
-  (!e ce ty st. ~supported_expr_exists constructor_call_root e /\
+  (!e ce ty st. ~supported_expr_exists expr_call_root e /\
     ~supported_expr_exists expr_shape_root e /\
     EVERY (\i. i.inst_opcode <> RETURNDATACOPY /\ i.inst_opcode <> INVOKE) (state_insts st) ==>
     EVERY (\i. i.inst_opcode <> RETURNDATACOPY /\ i.inst_opcode <> INVOKE)
       (state_insts (SND (cfn ce ty e st)))) ==>
   type_builtin_arity tb <= LENGTH args /\
-  ~supported_exprs_exists constructor_call_root args /\
+  ~supported_exprs_exists expr_call_root args /\
   ~supported_exprs_exists expr_shape_root args /\
   EVERY (\i. i.inst_opcode <> RETURNDATACOPY /\ i.inst_opcode <> INVOKE) (state_insts st) ==>
   EVERY (\i. i.inst_opcode <> RETURNDATACOPY /\ i.inst_opcode <> INVOKE)
@@ -95,24 +94,24 @@ Proof
 QED
 
 Theorem call_free_expr_join[local]:
-  (!child ce ty st. ~supported_expr_exists constructor_call_root child /\
+  (!child ce ty st. ~supported_expr_exists expr_call_root child /\
     ~supported_expr_exists expr_shape_root child /\
     EVERY (\i. i.inst_opcode <> RETURNDATACOPY /\ i.inst_opcode <> INVOKE) (state_insts st) ==>
     EVERY (\i. i.inst_opcode <> RETURNDATACOPY /\ i.inst_opcode <> INVOKE)
       (state_insts (SND (cfn ce ty child st)))) /\
   (!ann bi args st. e = Builtin ann bi args ==>
-    builtin_arity bi <= LENGTH args /\ ~constructor_call_root (Builtin ann bi args) /\
-    ~supported_exprs_exists constructor_call_root args /\ ~supported_exprs_exists expr_shape_root args /\
+    builtin_arity bi <= LENGTH args /\ ~expr_call_root (Builtin ann bi args) /\
+    ~supported_exprs_exists expr_call_root args /\ ~supported_exprs_exists expr_shape_root args /\
     EVERY (\i. i.inst_opcode <> RETURNDATACOPY /\ i.inst_opcode <> INVOKE) (state_insts st) ==>
     EVERY (\i. i.inst_opcode <> RETURNDATACOPY /\ i.inst_opcode <> INVOKE)
       (state_insts (SND (bfn ce ann ty bi args st)))) /\
   (!ann tb rty args st. e = TypeBuiltin ann tb rty args ==>
     type_builtin_arity tb <= LENGTH args /\
-    ~supported_exprs_exists constructor_call_root args /\ ~supported_exprs_exists expr_shape_root args /\
+    ~supported_exprs_exists expr_call_root args /\ ~supported_exprs_exists expr_shape_root args /\
     EVERY (\i. i.inst_opcode <> RETURNDATACOPY /\ i.inst_opcode <> INVOKE) (state_insts st) ==>
     EVERY (\i. i.inst_opcode <> RETURNDATACOPY /\ i.inst_opcode <> INVOKE)
       (state_insts (SND (tfn ce ann ty tb rty args st)))) ==>
-  ~supported_expr_exists constructor_call_root e /\ ~supported_expr_exists expr_shape_root e /\
+  ~supported_expr_exists expr_call_root e /\ ~supported_expr_exists expr_shape_root e /\
   EVERY (\i. i.inst_opcode <> RETURNDATACOPY /\ i.inst_opcode <> INVOKE) (state_insts st) ==>
   EVERY (\i. i.inst_opcode <> RETURNDATACOPY /\ i.inst_opcode <> INVOKE)
     (state_insts (SND (compile_expr_body cfn bfn tfn ce ty e st)))
@@ -124,7 +123,7 @@ Proof
     every_state_insts_addmod_names, every_state_insts_mulmod_names,
     every_state_insts_powmod256_names, call_free_modular] >>
   conj_tac >- (rpt gen_tac >> disch_then SUBST_ALL_TAC >> strip_tac >>
-    irule (Q.INST [`R` |-> `constructor_call_root`, `root2` |-> `expr_shape_root`]
+    irule (Q.INST [`R` |-> `expr_call_root`, `root2` |-> `expr_shape_root`]
       every_state_insts_get_target_ptr) >>
     gvs[supported_expr_exists_def, call_free_keccak256_key,
       call_free_mapping_subscript, call_free_alloc_buffer, call_free_emit_op,
@@ -154,22 +153,22 @@ QED
 
 Theorem compile_expr_call_free_mutual[local]:
   (!ce ty e st.
-    ~supported_expr_exists constructor_call_root e /\
+    ~supported_expr_exists expr_call_root e /\
     ~supported_expr_exists expr_shape_root e /\
     EVERY (\i. i.inst_opcode <> RETURNDATACOPY /\ i.inst_opcode <> INVOKE) (state_insts st) ==>
     EVERY (\i. i.inst_opcode <> RETURNDATACOPY /\ i.inst_opcode <> INVOKE)
       (state_insts (SND (compile_expr ce ty e st)))) /\
   (!ce rt ty bi args st.
     builtin_arity bi <= LENGTH args /\
-    ~constructor_call_root (Builtin rt bi args) /\
-    ~supported_exprs_exists constructor_call_root args /\
+    ~expr_call_root (Builtin rt bi args) /\
+    ~supported_exprs_exists expr_call_root args /\
     ~supported_exprs_exists expr_shape_root args /\
     EVERY (\i. i.inst_opcode <> RETURNDATACOPY /\ i.inst_opcode <> INVOKE) (state_insts st) ==>
     EVERY (\i. i.inst_opcode <> RETURNDATACOPY /\ i.inst_opcode <> INVOKE)
       (state_insts (SND (compile_builtin_dispatch ce rt ty bi args st)))) /\
   (!ce vt ty tb rt args st.
     type_builtin_arity tb <= LENGTH args /\
-    ~supported_exprs_exists constructor_call_root args /\
+    ~supported_exprs_exists expr_call_root args /\
     ~supported_exprs_exists expr_shape_root args /\
     EVERY (\i. i.inst_opcode <> RETURNDATACOPY /\ i.inst_opcode <> INVOKE) (state_insts st) ==>
     EVERY (\i. i.inst_opcode <> RETURNDATACOPY /\ i.inst_opcode <> INVOKE)
@@ -191,7 +190,7 @@ QED
 
 Theorem compile_expr_call_free:
   !e cenv ret_ty st.
-    ~supported_expr_exists constructor_call_root e /\
+    ~supported_expr_exists expr_call_root e /\
     ~supported_expr_exists expr_shape_root e /\
     EVERY (\i. i.inst_opcode <> RETURNDATACOPY /\ i.inst_opcode <> INVOKE) (state_insts st) ==>
     EVERY (\i. i.inst_opcode <> RETURNDATACOPY /\ i.inst_opcode <> INVOKE)
@@ -202,14 +201,14 @@ QED
 
 Theorem compile_get_target_ptr_call_free:
   !target cenv st.
-    ~supported_target_exists constructor_call_root target /\
+    ~supported_target_exists expr_call_root target /\
     ~supported_target_exists expr_shape_root target /\
     EVERY (\i. i.inst_opcode <> RETURNDATACOPY /\ i.inst_opcode <> INVOKE) (state_insts st) ==>
     EVERY (\i. i.inst_opcode <> RETURNDATACOPY /\ i.inst_opcode <> INVOKE)
       (state_insts (SND (compile_get_target_ptr compile_expr cenv target st)))
 Proof
   rpt gen_tac >> strip_tac >>
-  irule (Q.INST [`R` |-> `constructor_call_root`, `root2` |-> `expr_shape_root`]
+  irule (Q.INST [`R` |-> `expr_call_root`, `root2` |-> `expr_shape_root`]
     every_state_insts_get_target_ptr) >>
   simp[call_free_keccak256_key, call_free_mapping_subscript, call_free_alloc_buffer,
     call_free_emit_op, call_free_array_subscript, call_free_ptr_load] >>
@@ -219,7 +218,7 @@ QED
 
 Theorem compile_multi_exprs_call_free:
   !es cenv st.
-    ~supported_exprs_exists constructor_call_root es /\
+    ~supported_exprs_exists expr_call_root es /\
     ~supported_exprs_exists expr_shape_root es /\
     EVERY (\i. i.inst_opcode <> RETURNDATACOPY /\ i.inst_opcode <> INVOKE) (state_insts st) ==>
     EVERY (\i. i.inst_opcode <> RETURNDATACOPY /\ i.inst_opcode <> INVOKE)
@@ -232,7 +231,7 @@ QED
 
 Theorem compile_struct_lit_call_free:
   !fields cenv ty buf off st.
-    ~supported_fields_exists constructor_call_root fields /\
+    ~supported_fields_exists expr_call_root fields /\
     ~supported_fields_exists expr_shape_root fields /\
     EVERY (\i. i.inst_opcode <> RETURNDATACOPY /\ i.inst_opcode <> INVOKE) (state_insts st) ==>
     EVERY (\i. i.inst_opcode <> RETURNDATACOPY /\ i.inst_opcode <> INVOKE)
