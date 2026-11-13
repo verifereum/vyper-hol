@@ -19,6 +19,7 @@ Ancestors
   planSpillBounds reorderSim prefixSim stackOpAsmSim stackOpSim
   instSimHelpers planWf frameViewStep frameViewFacts stackPlanOps stackModel
   allocMono contextCodegenRelProps asmIR venomEffects deepDupCallerSim spillPlanSim
+  planEmissionProps asmRunBounded
 
 (* ===== Restoring a join's spilled targets, with marker slots ===== *)
 
@@ -123,7 +124,9 @@ Theorem gen_jmp_frame_sim_deep_exact:
           (LENGTH (execute_plan cp.cp_initial_fmp ops)) as = AsmOK as' /\
         fn_frame_inv ctx cp lo fn ra rest mem0 ps' vs' as' /\
         as'.as_pc = pc_t /\
-        vs' = jump_to target vs
+        vs' = jump_to target vs /\
+        create_safe_prefix lo o2pc prog
+          (LENGTH (execute_plan cp.cp_initial_fmp ops)) as
 Proof
   rpt gen_tac >> strip_tac >> gen_tac >> strip_tac >>
   rename1 `MEM r cplan.cp_regions` >>
@@ -240,6 +243,23 @@ Proof
   `asm_steps lo o2pc prog (n1 + SUC (SUC 0)) as =
    AsmOK (st3 with as_stack := st3.as_stack ++ rest)` by (
     pop_assum (SUBST1_TAC o GSYM) >> irule asm_steps_frame >> simp[]) >>
+  `asm_steps lo o2pc prog n1 as =
+   AsmOK (st1 with as_stack := st1.as_stack ++ rest)` by
+    (qpat_x_assum `as with as_stack := top ++ rest = as`
+       (SUBST1_TAC o GSYM) >> irule asm_steps_frame >> simp[]) >>
+  `create_safe_prefix lo o2pc prog n1 as` by
+    (irule plan_admin_create_safe_prefix >>
+     qexistsl [`cplan.cp_initial_fmp`, `rest_ops ++ swap_ops`] >>
+     simp[Abbr `n1`, EVERY_APPEND] >>
+     conj_tac >- metis_tac[restore_spilled_plan_admin, reorder_plan_admin] >>
+     gvs[execute_plan_append, asm_block_at_append]) >>
+  `create_safe_prefix lo o2pc prog (SUC (SUC 0))
+     (st1 with as_stack := st1.as_stack ++ rest)` by
+    (rpt (qpat_x_assum `st1.as_pc = _` kall_tac) >>
+     drule_then assume_tac asm_step_pushlabel_ok >>
+     simp[create_safe_prefix_suc, create_safe_def, asm_next_def]) >>
+  `create_safe_prefix lo o2pc prog (n1 + SUC (SUC 0)) as` by
+    metis_tac[create_safe_prefix_compose] >>
   (* The invariant again. *)
   `venom_asm_rel lo (release_dead_spills next_liveness ps2) vsf st3` by (
     simp[Abbr`st3`, venom_asm_rel_pc] >>
@@ -273,6 +293,7 @@ Proof
     simp[execute_plan_append, Abbr `n1`] >>
   qexists `st3 with as_stack := st3.as_stack ++ rest` >>
   conj_tac >- gvs[] >>
+  reverse conj_tac >- gvs[] >>
   simp[fn_frame_inv_def, jump_to_fields] >> rpt conj_tac
   >- (`st3 with as_stack := st1.as_stack = st3 /\
        st3 with as_stack := st3.as_stack = st3` by
@@ -330,7 +351,8 @@ Theorem gen_jmp_frame_sim_deep:
         asm_steps lo o2pc prog n as = AsmOK as' /\
         fn_frame_inv ctx cp lo fn ra rest mem0 ps' vs' as' /\
         as'.as_pc = pc_t /\
-        vs' = jump_to target vs
+        vs' = jump_to target vs /\
+        create_safe_prefix lo o2pc prog n as
 Proof
   rpt strip_tac >> drule_all gen_jmp_frame_sim_deep_exact >>
   metis_tac[]
