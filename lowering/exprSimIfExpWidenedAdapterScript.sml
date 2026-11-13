@@ -320,7 +320,7 @@ Proof
     decide_tac >>
   qpat_x_assum `local_ptrs_reserved ce sm` kall_tac >>
   drule_all unwrap_value_materialise_physical_sim >>
-  disch_then (qspecl_then [`ctx`, `s0`, `R`] mp_tac) >>
+  disch_then (qspecl_then [`H`, `ctx`, `s0`, `R`] mp_tac) >>
   strip_tac >> irule frag_exec_conseq >> goal_assum (drule_at Any) >> simp[]
 QED
 
