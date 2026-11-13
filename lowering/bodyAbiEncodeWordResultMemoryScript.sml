@@ -1,7 +1,7 @@
 (* Re-establish body state at the actual singleton word staging endpoint. *)
 Theory bodyAbiEncodeWordResultMemory
 Ancestors
-  abiBuiltinEncodeCode abiBuiltinEncodeResources abiEncoderCounters
+  exprSimSource abiBuiltinEncodeCode abiBuiltinEncodeResources abiEncoderCounters
   bodyAbiEncodeWordSource exprSimWordArgs bodyAbiEncodeWordMemory bodyAbiEncodeResultMemory bodyAbiEncodeAllocationState bodyAbiEncodeWordOutputFrame abiEncoderWindowContract abiEncodeWordWindowGrowth
   abiEncoderWindowPhase abiEncoderWindowMemFrame abiEncoderRegisteredEffect
   abiBuiltinEncodeWord abiEncoderWindowChild abiEncoderWindow fragExec
@@ -231,4 +231,74 @@ Proof
   qexistsl [`t`, `p`, `staged`, `out`] >> asm_rewrite_tac[] >>
   conj_tac >- metis_tac[memContinuationTheory.mem_cont_sim_trans] >>
   conj_tac >- metis_tac[window_mem_frame_trans] >> decide_tac
+QED
+
+Theorem abi_encode_word_result_mem:
+  let E = TypeBuiltin ann (AbiEncode F mid) typ [e] in
+  let maxlen = abi_size_bound ce.ce_struct_fields (expr_type e) in
+  let bytes = (case mid of NONE => enc (vyper_to_abi_type (get_tenv cx) (expr_type e)) av
+    | SOME m => abi_builtin_encode_method_bytes (bytes_method_id_word m) ++
+      enc (vyper_to_abi_type (get_tenv cx) (expr_type e)) av) in
+  let capacity = maxlen+(case mid of NONE => 0 | SOME _ => 4) in
+  is_word_type (expr_type e) /\ expr_body_pre ce cx env e es /\
+  lower_value compile_expr ce (expr_type e) e origin = (value_op,arg_st) /\
+  compile_type_builtin_dispatch_body compile_expr ce (expr_type E) ty
+    (AbiEncode F mid) typ [e] origin = (vv,final) /\
+  fn_has_code origin final func /\ fn_inst_ids_distinct func /\
+  stmt_state_rel ctx func ce cx es s0 /\ local_ptrs_reserved ce origin /\
+  local_ptrs_reserved ce arg_st /\ MAP FDOM es.scopes = MAP FDOM ee.scopes /\
+  expr_post ctx func ce cx e es origin arg_st s0 ee v value_op s /\
+  evaluate_type (get_tenv cx) (expr_type e) = SOME tv /\ value_has_type tv v /\
+  vyper_to_abi (get_tenv cx) (expr_type e) v = SOME av /\
+  expr_type E = BaseT (BytesT (Dynamic declared)) /\
+  evaluate_type (get_tenv cx) (expr_type E) = SOME (BaseTV (BytesT (Dynamic declared))) /\
+  evaluate_type (get_tenv cx) (lowered_value_type ce E) = SOME (BaseTV (BytesT (Dynamic capacity))) /\
+  val_wf (BaseTV (BytesT (Dynamic declared))) (vyperValue$BytesV bytes) /\
+  LENGTH (enc (vyper_to_abi_type (get_tenv cx) (expr_type e)) av) <= maxlen /\
+  32+32*word_size capacity < dimword (:256) /\
+  ~s.vs_halted /\ s.vs_current_bb = arg_st.cs_current_bb /\
+  s.vs_inst_idx = LENGTH arg_st.cs_current_insts ==>
+  ?t. mem_cont_sim ctx func s t /\ window_mem_frame ctx func s t /\
+    stmt_state_rel ctx func ce cx ee t /\ wb_frame ce es origin s0 t /\
+    ~t.vs_halted /\ t.vs_current_bb = final.cs_current_bb /\
+    t.vs_inst_idx = LENGTH final.cs_current_insts /\
+    vv_post ctx func ce cx E es origin final s0 ee (Value (vyperValue$BytesV bytes)) vv t /\
+    vv_store_bound cx (expr_type E) (lowered_value_type ce E) ee
+      (Value (vyperValue$BytesV bytes)) vv t
+Proof
+  simp_tac bool_ss [LET_THM] >> strip_tac >>
+  drule_all expr_body_pre_lower_value_word_shape >> strip_tac >>
+  `stmt_state_rel ctx func ce cx ee s /\ expr_val_rel cx (expr_type e) v value_op s` by
+    fs[expr_post_def] >>
+  drule_all abi_encode_word_source_rep >> strip_tac >>
+  `fn_has_code arg_st final func` by
+    (drule_all compile_abi_encode_word_trace >> strip_tac >>
+     drule compile_alloc_buffer_extends >> strip_tac >>
+     drule window_child_void_shape >> strip_tac >>
+     drule lower_abi_encode_extends >> strip_tac >>
+     `cs_extends arg_st final` by metis_tac[cs_extends_trans] >>
+     metis_tac[fn_has_code_split]) >>
+  qpat_assum `enc at rv = _`
+    (fn th => RULE_ASSUM_TAC (PURE_REWRITE_RULE [GSYM th]) >>
+      pure_rewrite_tac[GSYM th]) >>
+  drule_at (Pat `compile_type_builtin_dispatch_body _ _ _ _ _ _ _ _ = _`)
+    (BETA_RULE (PURE_REWRITE_RULE [LET_THM] abi_encode_word_execution_mem)) >>
+  disch_then assume_tac >> Cases_on `mid` >> fs[] >>
+  qpat_x_assum `!w value_op s' func ee cx ctx av at arg_st. _` drule_all >>
+  strip_tac >>
+  `wb_frame ce es origin s0 s` by metis_tac[expr_post_frame] >>
+  `wb_frame ce es origin s0 t` by
+    (irule wb_frame_trans >>
+     qpat_assum `wb_frame ce ee arg_st s t` (irule_at Any) >>
+     qpat_assum `stmt_state_rel ctx func ce cx es s0` (irule_at Any) >>
+     asm_rewrite_tac[]) >>
+  qexists_tac `t` >> asm_rewrite_tac[] >>
+  qpat_assum `expr_type (TypeBuiltin _ _ _ _) = _`
+    (fn th => pure_rewrite_tac[GSYM th]) >>
+  irule abi_encode_allocated_bytes_result >>
+  asm_rewrite_tac[] >>
+  qpat_assum `FLOOKUP t.vs_allocas staged.cs_next_id = _` (irule_at Any) >>
+  simp[] >>
+  conj_tac >- (first_assum ACCEPT_TAC) >>
+  fs[val_in_memory_def]
 QED
