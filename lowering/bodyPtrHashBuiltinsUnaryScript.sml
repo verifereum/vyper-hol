@@ -24,23 +24,19 @@ Proof
   simp[]
 QED
 
-(* A builtin never halts, so its exit meets halt_exit. *)
-Theorem hash_builtin_summary_halt[local]:
-  gas_summary_ptr_at D (ctx,func) PG marks
-    (\es'. ((case builtin_result cx es'.accounts ann bt ts vs of
-               INL w => INL (Value w) | INR exc => INR exc), es'))
-    (es,s0,G0,tn0) Q (\res ef gt r. expr_exit res r) ==>
-  gas_summary_ptr_at D (ctx,func) PG marks
-    (\es'. ((case builtin_result cx es'.accounts ann bt ts vs of
-               INL w => INL (Value w) | INR exc => INR exc), es'))
-    (es,s0,G0,tn0) Q
-    (\res ef gt r. expr_exit res r /\ halt_exit cx' ef res r)
+(* A continuation that never ends in a halt meets halt_exit on its exit. *)
+Theorem hash_summary_ptr_halt_lift:
+  gas_summary_ptr_at D (ctx,func) PG marks source (es,s0,G0,tn0) Q
+    (\res ef gt r. expr_exit res r) /\
+  (!st res st'. source st = (res, st') ==> res <> INR HaltException) ==>
+  gas_summary_ptr_at D (ctx,func) PG marks source (es,s0,G0,tn0) Q
+    (\res ef gt r. expr_exit res r /\ halt_exit cx ef res r)
 Proof
   rewrite_tac[gas_summary_ptr_at_def] >> strip_tac >>
   qexistsl_tac [`res`, `es_end`, `G`, `tn`, `r`] >> simp[] >>
   `res <> INR HaltException` by
-    (strip_tac >> gvs[] >> first_x_assum (qspec_then `[]` mp_tac) >>
-     simp[AllCaseEqs(), exprSimWordArgsTheory.builtin_result_not_halt]) >>
+    (qpat_x_assum `!tail. _` (qspec_then `[]` assume_tac) >>
+     first_x_assum drule >> simp[]) >>
   fs[halt_exit_def]
 QED
 
@@ -132,5 +128,7 @@ Proof
   gvs[] >>
   qpat_x_assum `!sa sm sb x vv s0 G0 tn0 v gs ee G tn s. _` drule_all >> simp[] >>
   strip_tac >> qexists_tac `marks` >>
-  irule hash_builtin_summary_halt >> first_assum ACCEPT_TAC
+  irule hash_summary_ptr_halt_lift >> conj_tac >- first_assum ACCEPT_TAC >>
+  rpt gen_tac >> BETA_TAC >> strip_tac >>
+  gvs[AllCaseEqs(), exprSimWordArgsTheory.builtin_result_not_halt]
 QED

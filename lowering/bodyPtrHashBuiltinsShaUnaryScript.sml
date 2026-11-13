@@ -76,5 +76,9 @@ Proof
   `expr_sim_inv cenv cx env ee /\ value_has_type (BaseTV bty) v` by
     metis_tac[hash_operand_base_result] >>
   gvs[] >>
-  qpat_x_assum `!sa sm sb x vv s0 G0 tn0 v gs ee G tn s. _` drule_all >> simp[]
+  qpat_x_assum `!sa sm sb x vv s0 G0 tn0 v gs ee G tn s. _` drule_all >> simp[] >>
+  strip_tac >> qexists_tac `marks` >>
+  irule hash_summary_ptr_halt_lift >> conj_tac >- first_assum ACCEPT_TAC >>
+  rpt gen_tac >> BETA_TAC >> strip_tac >>
+  drule exprSimHashTheory.sha256_result_not_halt >> simp[]
 QED
