@@ -276,3 +276,15 @@ Proof
   simp[literal_loop_frame_def, EVERY_APPEND, EVERY_MEM, FORALL_PROD] >>
   rpt strip_tac >> first_x_assum drule >> strip_tac >> decide_tac
 QED
+
+(* Changing a completed member's static slot leaves runtime state intact. *)
+Theorem literal_loop_frame_retag:
+  literal_loop_frame pure ctx func ce cx d root aid addr capacity
+    ees fr sf Gf tnf es cs G tn s (cells ++ [(stv,v,addr+off,k)]) (off+k) /\
+  k <= k' /\ off+k' <= capacity ==>
+  literal_loop_frame pure ctx func ce cx d root aid addr capacity
+    ees fr sf Gf tnf es cs G tn s (cells ++ [(tv,v,addr+off,k')]) (off+k')
+Proof
+  simp[literal_loop_frame_def, EVERY_APPEND, EVERY_MEM, FORALL_PROD] >>
+  rpt strip_tac >> first_x_assum drule >> strip_tac >> decide_tac
+QED
