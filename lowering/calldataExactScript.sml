@@ -15,6 +15,8 @@ Ancestors
   abiDecoderCoherence abiDecoderFrame exprLowering vyperTyping valueEncodingDefs compileEnv
   calldataExactMembers calldataExactDyn calldataRecursiveProducers
   abiDecoderAppend abiDecoderMemberInfos
+  calldataExactArrayAssembly calldataExactTupleAssembly calldataExactStructAssembly
+  calldataExactLinkedMembers
 
 Theorem calldata_bulk_live_frag_mem_mod_guard:
   compile_abi_decode_to_buf dst src CALLDATALOAD (Lit 0w) (Lit 0w)
@@ -525,12 +527,28 @@ Resume calldata_exact_owned_run[flag]:
 QED
 
 Resume calldata_exact_owned_run[array]:
-  cheat
+  rpt gen_tac >>
+  mp_tac calldata_exact_array_case >>
+  pure_rewrite_tac[LET_THM] >> BETA_TAC >>
+  (impl_tac >- (rpt gen_tac >> MATCH_ACCEPT_TAC calldata_exact_aggregate_owned_run_linked_tail)) >>
+  (impl_tac >- (BETA_TAC >> rpt gen_tac >> strip_tac >> rpt gen_tac >>
+    disch_then (map_every assume_tac o CONJUNCTS) >>
+    `ArrayT ty (Dynamic n) = ArrayT ty (Dynamic n)` by simp[] >>
+    `type_to_abi_dec_info sf ce (ArrayT ty (Dynamic n)) =
+      DecDynArray (type_to_abi_dec_info sf ce ty)
+        (abi_embedded_static_size ce.ce_struct_fields ty)
+        (type_memory_bytes ce ty) F n` by
+      (qpat_x_assum `~is_abi_dynamic _ _` mp_tac >>
+       POP_ASSUM_LIST (K all_tac) >> simp[type_to_abi_dec_info_def]) >>
+    drule_all calldata_exact_bulk_array_owned_run >> disch_then ACCEPT_TAC)) >>
+  disch_then (ACCEPT_TAC o BETA_RULE)
 QED
 Resume calldata_exact_owned_run[tuple]:
-  cheat
+  rpt gen_tac >> mp_tac calldata_exact_tuple_case >>
+  pure_rewrite_tac[LET_THM] >> BETA_TAC >> disch_then (ACCEPT_TAC o BETA_RULE)
 QED
 Resume calldata_exact_owned_run[struct]:
-  cheat
+  rpt gen_tac >> mp_tac calldata_exact_struct_case >>
+  pure_rewrite_tac[LET_THM] >> BETA_TAC >> disch_then (MATCH_ACCEPT_TAC o BETA_RULE)
 QED
 Finalise calldata_exact_owned_run
