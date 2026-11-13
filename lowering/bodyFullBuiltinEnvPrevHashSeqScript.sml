@@ -54,6 +54,55 @@ Proof
        step_prov_def, out_prov_def, set_prov_def, first_prov_def,
        op_prov_def, step_taint_def, out_taint_def, set_var_taint_def,
        store_taint_def, imm_taint_def, adopt_reset_def] >>
-     FAIL_TAC "ptr checks") >>
- FAIL_TAC "exterior frame"
+     conj_tac
+     >- (fs[ghost_inv_at_def] >>
+         simp[ptr_inst_ok_def, access_ok_def, taint_ok_def,
+           source_memory_read_ranges_def, source_memory_write_ranges_def,
+           step_inst_def, step_inst_base_opcode_eqs, exec_read0_def, update_var_def]) >>
+     simp[mem_taint_def, new_site_bytes_def, step_writes_def,
+       source_memory_write_ranges_def, written_taint_def, range_bytes_def,
+       FLOOKUP_DEF] >>
+     simp[Once inst_seq_ptr_def] >>
+     simp[step_inst_base_opcode_eqs, exec_pure2_def, eval_operands_def,
+       eval_operand_def, lookup_var_def, update_var_def, FLOOKUP_UPDATE,
+       step_prov_def, out_prov_def, set_prov_def, first_prov_def,
+       op_prov_def, FLOOKUP_DRESTRICT, step_taint_def, out_taint_def,
+       set_var_taint_def, store_taint_def, imm_taint_def, adopt_reset_def,
+       op_taint_def] >>
+     conj_tac
+     >- (fs[ghost_inv_at_def] >>
+         simp[ptr_inst_ok_def, access_ok_def, taint_ok_def,
+           source_memory_read_ranges_def, source_memory_write_ranges_def,
+           step_inst_def, step_inst_base_opcode_eqs, exec_pure2_def,
+           eval_operands_def, eval_operand_def, lookup_var_def,
+           FLOOKUP_UPDATE, op_taint_def, update_var_def, allocas_from_def] >>
+         fs[allocas_from_def] >> conj_tac
+         >- (gen_tac >> Cases_on `op` >> simp[] >> metis_tac[]) >>
+         metis_tac[]) >>
+     simp[mem_taint_def, new_site_bytes_def, step_writes_def,
+       source_memory_write_ranges_def, written_taint_def, range_bytes_def,
+       FLOOKUP_DEF, SF CONJ_ss] >>
+     simp[Once inst_seq_ptr_def] >>
+     simp[step_inst_base_opcode_eqs, exec_read1_def, eval_operands_def,
+       eval_operand_def, lookup_var_def, update_var_def, FLOOKUP_UPDATE,
+       step_prov_def, out_prov_def, set_prov_def, first_prov_def,
+       op_prov_def, FLOOKUP_DRESTRICT, step_taint_def, out_taint_def,
+       set_var_taint_def, store_taint_def, imm_taint_def, adopt_reset_def,
+       op_taint_def] >> conj_tac
+     >- (fs[ghost_inv_at_def] >>
+         simp[ptr_inst_ok_def, access_ok_def, taint_ok_def,
+           source_memory_read_ranges_def, source_memory_write_ranges_def,
+           step_inst_def, step_inst_base_opcode_eqs, exec_read1_def,
+           eval_operands_def, eval_operand_def, lookup_var_def,
+           FLOOKUP_UPDATE, op_taint_def, update_var_def, allocas_from_def] >>
+         fs[allocas_from_def]) >>
+     simp[inst_seq_ptr_def, mem_taint_def, new_site_bytes_def, step_writes_def,
+       source_memory_write_ranges_def, written_taint_def, range_bytes_def,
+       FLOOKUP_DEF, SF CONJ_ss] >> conj_tac
+     >- (AP_TERM_TAC >> simp[pred_setTheory.EXTENSION] >> metis_tac[]) >>
+     simp[taint_component_equality]) >>
+ irule ghost_inv_at_exterior_frame >>
+ qexistsl_tac [`G`, `es`, `s`, `sa`, `tn`] >>
+ gvs[] >> simp[lookup_var_def, FLOOKUP_UPDATE, FLOOKUP_DRESTRICT,
+   op_taint_def] >> metis_tac[]
 QED
