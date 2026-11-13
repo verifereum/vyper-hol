@@ -133,13 +133,13 @@ Theorem raw_constructor_call_free[local]:
   constructor_call_free tops /\
   check_contract T layouts addr [(NONE,tops)] = SOME art /\
   lookup_function NONE "__init__" Deploy tops =
-    SOME (mut,nr,args,dflts,ret,body) ==>
-  ~supported_stmts_expr_exists expr_call_root body /\
-  ~supported_stmts_expr_exists expr_shape_root body
+    SOME (mut,nr,args,dflts,ret,bd) ==>
+  ~supported_stmts_expr_exists expr_call_root bd /\
+  ~supported_stmts_expr_exists expr_shape_root bd
 Proof
   strip_tac >>
-  `~supported_stmts_expr_exists expr_call_root body` by
-    (`~supported_stmts_expr_exists constructor_call_root body` by
+  `~supported_stmts_expr_exists expr_call_root bd` by
+    (`~supported_stmts_expr_exists constructor_call_root bd` by
        metis_tac[constructor_call_free_def] >>
      strip_tac >>
      qpat_x_assum `~supported_stmts_expr_exists constructor_call_root _` mp_tac >>
@@ -149,15 +149,15 @@ Proof
   simp[] >>
   drule lookup_function_Deploy_SOME_cases >> strip_tac >>
   gvs[supported_stmt_expr_exists_def] >>
-  `~supported_stmts_expr_exists expr_raw_shape_root body` by
+  `~supported_stmts_expr_exists expr_raw_shape_root bd` by
     (strip_tac >>
      qpat_x_assum `~supported_stmts_expr_exists expr_call_root _` mp_tac >>
      simp[] >> irule (cj 2 supported_stmt_expr_exists_mono) >>
      first_assum (irule_at Any) >>
      rpt strip_tac >> gvs[expr_raw_shape_root_def, expr_call_root_def]) >>
-  drule check_contract_deploy_function_body_MEM >> simp[] >>
+  drule check_contract_deploy_function_bd_MEM >> simp[] >>
   disch_then drule >>
-  simp[check_function_body_def, IS_SOME_EXISTS] >> strip_tac >>
+  simp[check_function_bd_def, IS_SOME_EXISTS] >> strip_tac >>
   metis_tac[type_stmt_raw_shape]
 QED
 

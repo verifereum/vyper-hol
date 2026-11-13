@@ -174,8 +174,13 @@ Theorem call_free_stmt_append:
     (state_insts (SND (compile_stmt ce lc ty (Append target e) st)))
 Proof
   strip_tac >> rpt gen_tac >> simp[supported_stmt_expr_exists_def] >> strip_tac >>
+  `!l. load_opc_for l <> RETURNDATACOPY /\ load_opc_for l <> INVOKE /\
+       store_opc_for l <> RETURNDATACOPY /\ store_opc_for l <> INVOKE` by
+    (Cases >> simp[load_opc_for_def, store_opc_for_def]) >>
   simp[Once compile_stmt_def] >>
   ho_match_mp_tac every_state_insts_bind >> conj_tac
+  >- (irule call_free_get_target_ptr >> simp[]) >>
+  gen_tac >> ho_match_mp_tac every_state_insts_bind >> conj_tac
   >- (ho_match_mp_tac every_state_insts_lower_value >> simp[call_free_unwrap_value]) >>
   gen_tac >> ho_match_mp_tac every_state_insts_bind >> conj_tac
   >- (IF_CASES_TAC >> qid_spec_tac `st` >>
@@ -185,7 +190,5 @@ Proof
           call_free_alloc_buffer, call_free_store_memory])])) >>
   gen_tac >> ho_match_mp_tac every_state_insts_bind >> conj_tac
   >- simp[every_state_insts_return] >> gen_tac >>
-  match_mp_tac call_free_dynarray_append >>
-  Cases_on `infer_array_location ce (target_to_expr target)` >>
-  simp[load_opc_for_def, store_opc_for_def]
+  match_mp_tac call_free_dynarray_append >> simp[]
 QED
