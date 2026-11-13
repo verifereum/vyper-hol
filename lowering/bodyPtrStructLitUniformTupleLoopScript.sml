@@ -54,7 +54,7 @@ Theorem structlit_uniform_tuple_stages:
   emit_op ADD [Var root; Lit (n2w off)] sm = (Var dst,sn) /\
   unwrap_value ce vv sn = (op,su) /\
   compile_store_memory ce op (Var dst) (expr_type e) (lowered_value_type ce e) su = ((),ss) /\
-  compile_make_tuple compile_expr ce args (Var root) next ss = (out,sb) ==>
+  compile_make_tuple compile_expr ce args (MAP expr_type args) (Var root) next ss = (out,sb) ==>
   ci_mono si ss /\ ci_mono ss sb
 Proof
   strip_tac >>
@@ -68,7 +68,7 @@ QED
 
 Theorem structlit_uniform_tuple_loop_outcome_ptr:
   !args ce cx env off si out sb es tvs cells G0 tn0 s0.
-  compile_make_tuple compile_expr ce args (Var root) off si = (out,sb) /\
+  compile_make_tuple compile_expr ce args (MAP expr_type args) (Var root) off si = (out,sb) /\
   OPT_MMAP (evaluate_type (get_tenv cx)) (MAP expr_type args) = SOME tvs /\
   expr_sim_inv ce cx env es /\
   literal_loop_frame pure ctx func ce cx d root aid addr capacity
@@ -136,7 +136,7 @@ Proof
   `off + type_memory_size h' + type_memory_size_list t <= capacity` by
     (fs[type_memory_size_def] >> decide_tac) >>
   qpat_x_assum `!ce' cx' env' off' si' out' sb' es' tvs' cells' G0' tn0' s0'. _`
-    (drule_at (Pat `compile_make_tuple _ _ _ _ _ _ = _`)) >> simp[] >>
+    (drule_at (Pat `compile_make_tuple _ _ _ _ _ _ _ = _`)) >> simp[] >>
   disch_then (drule_at (Pat `literal_loop_frame _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _`)) >>
   simp[] >> disch_then (qspec_then `env` mp_tac) >>
   (impl_tac >- metis_tac[]) >> strip_tac >>

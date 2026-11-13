@@ -19,8 +19,8 @@ Theorem lower_vyper_runtime_unit_o1_shape_extras_rawfree:
     ==> unit_entry_no_params unit /\ unit_fmp_unsealed unit
 Proof
   rpt gen_tac >> strip_tac >>
-  drule lower_vyper_runtime_unit_run_lowering >> strip_tac >>
-  reverse conj_tac >- metis_tac[run_lowering_fmp_unsealed] >>
+  drule lower_vyper_runtime_unit_context_entry >> strip_tac >>
+  reverse conj_tac >- metis_tac[lower_vyper_runtime_unit_raw_defaults] >>
   drule lower_vyper_runtime_unit_source_unit_ok_shape_with_no_params >>
   impl_tac
   >- metis_tac[check_contract_runtime_bodies_shape_ok,
@@ -29,8 +29,7 @@ Proof
   `entry_fn_first unit.cu_context` by
     fs[o1_source_unit_ok_def, unit_shape_ok_def] >>
   `ALL_DISTINCT (MAP (\f. f.fn_name) unit.cu_context.ctx_functions)` by
-    (drule run_lowering_context_ok >>
-     simp[lowering_context_ok_def, ctx_fn_names_def]) >>
+    fs[lowering_context_ok_def, ctx_fn_names_def] >>
   qpat_x_assum `entry_fn_first _`
     (strip_assume_tac o REWRITE_RULE [entry_fn_first_def]) >>
   rename1 `_ = efn :: rest` >>

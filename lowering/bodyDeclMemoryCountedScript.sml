@@ -247,11 +247,12 @@ Proof
 QED
 
 Theorem compile_scratch_prefix_body_path:
-  !ctx func ce cx es s sa sm sn buf src n sw tv v d.
+  !P H0 ctx func ce cx es s sa sm sn buf src n sw tv v d.
     compile_alloc_buffer n sa = (buf,sm) /\
     compile_copy_memory buf.buf_operand src n sm = ((),sn) /\
     fn_has_code sa sn func /\ fn_inst_ids_distinct func /\
-    local_ptrs_reserved ce sa /\ stmt_state_rel H ctx func ce cx es s /\
+    local_ptrs_reserved ce sa /\
+    (!H. P H ==> stmt_state_rel H ctx func ce cx es s) /\ P H0 /\
     alloca_history func s /\ return_buf_frame d ce sa s /\
     (!x. src = Var x ==> not_fresh_at sa x) /\
     eval_operand src s = SOME sw /\ n < dimword (:256) /\
@@ -263,7 +264,8 @@ Theorem compile_scratch_prefix_body_path:
     ?t. gas_path_mem ctx func s 0 (OK t) /\ ~t.vs_halted /\
       t.vs_current_bb = sn.cs_current_bb /\
       t.vs_inst_idx = LENGTH sn.cs_current_insts /\
-      stmt_state_rel H ctx func ce cx es t /\ alloca_history func t /\
+      (!H. P H ==> stmt_state_rel H ctx func ce cx es t) /\
+      alloca_history func t /\
       return_buf_frame d ce sn t /\ s.vs_alloca_next <= t.vs_alloca_next /\
       (!x. not_fresh_at sa x ==> lookup_var x t = lookup_var x s) /\
       (!aid b. FLOOKUP s.vs_allocas aid = SOME b ==>
@@ -273,9 +275,15 @@ Theorem compile_scratch_prefix_body_path:
         w2n w + n <= t.vs_alloca_next
 Proof
   rpt gen_tac >> strip_tac >>
+  `stmt_state_rel H0 ctx func ce cx es s` by metis_tac[] >>
   drule_all body_scratch_prefix_shape >> strip_tac >>
   `fn_has_code sa sm func` by metis_tac[fn_has_code_split] >>
   drule_all body_scratch_prefix_run >> strip_tac >>
+  `!H. P H ==> stmt_state_rel H ctx func ce cx es t` by
+    (rpt strip_tac >>
+     `stmt_state_rel H ctx func ce cx es s` by metis_tac[] >>
+     qpat_x_assum `stmt_state_rel H0 _ _ _ _ _ s` kall_tac >>
+     drule_all body_scratch_prefix_run >> strip_tac >> gvs[]) >>
   `run_inst_seq (emitted_insts sa sn) s = OK t` by
     (asm_rewrite_tac[] >>
      qpat_x_assum `run_inst_seq (emitted_insts sa sm) s = OK a`
@@ -348,7 +356,8 @@ Proof
     (drule val_footprint_le >> simp[]) >>
   `type_memory_bytes cenv ty < dimword (:256)` by decide_tac >>
   `w2n sw + type_memory_bytes cenv ty <= s.vs_alloca_next` by simp[] >>
-  drule_all compile_scratch_prefix_body_path >> strip_tac >>
+  drule_all (compile_scratch_prefix_body_path
+             |> Q.SPECL [`\H'. H' = H`, `H`] |> SIMP_RULE bool_ss []) >> strip_tac >>
   `sa.cs_next_var <= sn.cs_next_var` by
     (drule_all body_scratch_prefix_shape >> simp[]) >>
   `!x. not_fresh_at sa x ==> not_fresh_at sn x` by

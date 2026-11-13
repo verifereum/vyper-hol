@@ -118,7 +118,8 @@ Theorem assign_base_ptr_empty_state_rel:
     es.outcomes = SOME s.vs_outcomes /\
     s.vs_accounts = es.accounts /\ s.vs_transient = es.tStorage /\
     call_ctx_rel cx.txn s.vs_call_ctx s.vs_tx_ctx s.vs_block_ctx /\
-    ~s.vs_call_ctx.cc_static /\ ~cx.txn.is_static ==>
+    ~s.vs_call_ctx.cc_static /\ ~cx.txn.is_static /\
+    s.vs_code = cx.txn.code ==>
     state_rel H func cenv cx es s
 Proof
   rpt strip_tac >>
@@ -176,7 +177,8 @@ Proof
                 vs_alloca_next := frontier; vs_accounts := (ARB:evaluation_state).accounts;
                 vs_transient := (ARB:evaluation_state).tStorage; vs_logs := []; vs_requests := [];
                 vs_pending_deletions := []; vs_outcomes := [];
-                vs_call_ctx := cc; vs_tx_ctx := tc; vs_block_ctx := bc|>`] >>
+                vs_call_ctx := cc; vs_tx_ctx := tc; vs_block_ctx := bc;
+                vs_code := tx.code|>`] >>
   simp[] >> irule assign_base_ptr_empty_state_rel >>
   gvs[Abbr `tx`, call_ctx_rel_def]
 QED
