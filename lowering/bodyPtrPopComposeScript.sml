@@ -7,13 +7,10 @@
  *   - a nested target rooted at a module name with no storage
  *     declaration (an immutable or a constant): at runtime such a target
  *     does not type, as in S1's pop_nested_immutable_runtime_sim;
- *   - a nested target rooted at a storage or transient variable: with
- *     pure indices, the seam bodyPtrPopSeamStoragePure over the target's
- *     fragment; otherwise the held residual
- *     bodyPtrPopResidualStorageEffectful;
- *   - a nested target rooted at a local: with local_target_live, the seam
- *     bodyPtrPopSeamNestedLocalLive over the target's fragment; otherwise
- *     the held residual bodyPtrPopResidualNestedLocalPopped.
+ *   - a nested target rooted at a storage or transient variable: the seam
+ *     bodyPtrPopSeamStoragePure over the target's fragment;
+ *   - a nested target rooted at a local: the seam
+ *     bodyPtrPopSeamNestedLocalLive over the target's fragment.
  * The target's fragment (pop_target_frag_ptr) is the seams
  * bodyPtrPopSeamTargetSim and bodyPtrPopSeamTargetFrag.
  *
@@ -24,7 +21,6 @@ Theory bodyPtrPopCompose
 Ancestors
   bodyPtrPopSeamLocalRoot bodyPtrPopSeamStoragePure bodyPtrPopSeamTargetSim
   bodyPtrPopSeamTargetFrag bodyPtrPopSeamNestedLocalLive
-  bodyPtrPopResidualStorageEffectful bodyPtrPopResidualNestedLocalPopped
   bodyPtrPopTargetDefs popTargetPre bodyPtrPreds bodyPtrDefs bodySim
   exprSimHypsDefs targetPlaceSim targetPlaceLive vyperTypeEnv
   vyperTypeInvariants vyperTypeSystem vyperPureExpr vyperInterpreter
@@ -100,15 +96,11 @@ Proof
   simp[Once well_typed_expr_def]
 QED
 
-(* The target's fragment, for a target rooted at a live local or at a
-   storage variable through pure indices. *)
+(* The target's fragment for a local or storage variable. *)
 Theorem pop_nested_frag_ptr[local]:
   !tops ctx cenv cx env ann bt es d PG func.
     body_inv tops ctx cenv cx /\ body_base_target_ptr_ok cx bt /\
-    expr_body_pre cenv cx env (Pop ann bt) es /\ ~immutable_root cx bt /\
-    (!id. target_root bt = NameTarget id ==> local_target_live cx id bt) /\
-    (!src id. target_root bt = TopLevelNameTarget (src,id) ==>
-              EVERY pure_expr (target_indices bt)) ==>
+    expr_body_pre cenv cx env (Pop ann bt) es /\ ~immutable_root cx bt ==>
     pop_target_frag_ptr d ctx PG func cenv cx env bt es
 Proof
   rpt strip_tac >> irule pop_target_frag_ptr_of_sim >>
@@ -116,7 +108,7 @@ Proof
   metis_tac[target_pre_of_pop]
 QED
 
-(* A nested target rooted at a local: live, or a residual. *)
+(* A nested target rooted at a local. *)
 Theorem pop_nested_local_root_vv_ptr[local]:
   !tops ctx cenv cx env ann bt ty es d PG func id.
     body_inv tops ctx cenv cx /\ body_base_target_ptr_ok cx bt /\
@@ -124,16 +116,14 @@ Theorem pop_nested_local_root_vv_ptr[local]:
     expr_body_pre cenv cx env (Pop ann bt) es ==>
     expr_vv_sim_ptr d ctx PG func cenv cx ty (Pop ann bt) es
 Proof
-  rpt strip_tac >> Cases_on `local_target_live cx id bt`
-  >- (`~immutable_root cx bt` by fs[immutable_root_def] >>
-      `pop_target_frag_ptr d ctx PG func cenv cx env bt es` by
-        (irule pop_nested_frag_ptr >> fs[] >> metis_tac[]) >>
-      metis_tac[pop_nested_local_live_vv_ptr]) >>
-  irule pop_nested_local_popped_case_ptr >> simp[] >> metis_tac[]
+  rpt strip_tac >>
+  `~immutable_root cx bt` by fs[immutable_root_def] >>
+  `pop_target_frag_ptr d ctx PG func cenv cx env bt es` by
+    (irule pop_nested_frag_ptr >> fs[] >> metis_tac[]) >>
+  metis_tac[pop_nested_local_live_vv_ptr]
 QED
 
-(* A nested target rooted at a storage or transient variable: pure
-   indices, or a residual. *)
+(* A nested target rooted at a storage or transient variable. *)
 Theorem pop_nested_storage_vv_ptr[local]:
   !tops ctx cenv cx env ann bt ty es d PG func src id ts vd.
     body_inv tops ctx cenv cx /\ body_base_target_ptr_ok cx bt /\
@@ -143,12 +133,11 @@ Theorem pop_nested_storage_vv_ptr[local]:
     expr_body_pre cenv cx env (Pop ann bt) es ==>
     expr_vv_sim_ptr d ctx PG func cenv cx ty (Pop ann bt) es
 Proof
-  rpt strip_tac >> Cases_on `EVERY pure_expr (target_indices bt)`
-  >- (`~immutable_root cx bt` by fs[immutable_root_def] >>
-      `pop_target_frag_ptr d ctx PG func cenv cx env bt es` by
-        (irule pop_nested_frag_ptr >> fs[] >> metis_tac[]) >>
-      metis_tac[pop_nested_storage_pure_vv_ptr]) >>
-  irule pop_nested_storage_effectful_dead_case_ptr >> metis_tac[]
+  rpt strip_tac >>
+  `~immutable_root cx bt` by fs[immutable_root_def] >>
+  `pop_target_frag_ptr d ctx PG func cenv cx env bt es` by
+    (irule pop_nested_frag_ptr >> fs[] >> metis_tac[]) >>
+  metis_tac[pop_nested_storage_pure_vv_ptr]
 QED
 
 (* Every target but a top-level name, by its root. *)

@@ -7,6 +7,7 @@
  *)
 Theory bodyPtrStructLitSeamUniform
 Ancestors
+  bodyPtrPhysicalLiteralPackage placeMemoryTypedBase
   bodyPtrStructLitUniformAllocated bodyPtrStructLitUniformFinalEndpoint
   bodyPtrMakeArrayConsInvariant bodyPtrMakeArrayAllocBuffer
   exprSimAggregateLayout exprSimAggregateSource gasSummaryComposePtr argsTailPtr
@@ -38,12 +39,6 @@ Ancestors
 
 val _ = Parse.hide "body";
 
-(* PORT_ADMISSION: SEQ-3208. 0f7fb5e29/5e4c70ab0 compile a struct literal at its
-   declared field types (get_struct_fields), which may be wider than its
-   values' own types (arg_type_fits); structlit_uniform_allocated_fields_outcome_ptr
-   takes exact field types only. Pointer twin for a struct literal with a field
-   whose declared type isn't its value's expr_type; body_struct_lit_uniform_ptr
-   proves the exact case. *)
 Theorem body_struct_lit_uniform_widened_ptr:
   !cx v7 src_id_opt id kes d PG tops ctx func cenv env ty es.
     body_exprs_ptr_ok cx (MAP SND kes) /\
@@ -55,7 +50,68 @@ Theorem body_struct_lit_uniform_widened_ptr:
        SOME (expr_type e,type_memory_bytes cenv (expr_type e))) kes ==>
     expr_vv_sim_ptr d ctx PG func cenv cx ty (StructLit v7 (src_id_opt,id) kes) es
 Proof
-  cheat
+  rpt gen_tac >> strip_tac >> rw[expr_vv_sim_ptr_def] >>
+  drule compile_struct_literal_inv >> strip_tac >> gvs[] >>
+  drule struct_literal_lookup_types >> strip_tac >>
+  drule struct_literal_evaluated_layout >> strip_tac >>
+  `expr_sim_inv cenv cx env es` by fs[expr_body_pre_def] >>
+  `!e st. MEM e (MAP SND kes) /\ expr_sim_inv cenv cx env st ==>
+    expr_body_pre cenv cx env e st` by metis_tac[expr_body_pre_struct_field] >>
+  `v7 = StructT (src_id_opt,id)` by fs[expr_body_pre_def, well_typed_expr_def] >>
+  `type_memory_size_list tvs < dimword(:256)` by
+    (fs[expr_body_pre_def, alloc_limits_expr_def, type_memory_bytes_def] >>
+     simp[wordsTheory.dimword_def] >> decide_tac) >>
+  `?root. ba.buf_operand = Var root` by metis_tac[alloc_buffer_emitted] >>
+  `compile_alloc_buffer (type_memory_size_list tvs) sa = (ba,sm)` by metis_tac[] >>
+  `compile_make_tuple compile_expr cenv (MAP SND kes)
+    (MAP (FST o SND) (get_struct_fields cenv.ce_struct_fields
+      (nsid_to_string (src_id_opt,id)))) (Var root) 0 sm = (u,sb)` by
+    (drule (SRULE [] (Q.INST [`ty` |-> `StructT (src_id_opt,id)`]
+      compile_struct_lit_as_tuple)) >> simp[] >> metis_tac[]) >>
+  drule_all (REWRITE_RULE []
+    (Q.INST [`pure` |-> `~EXISTS expr_has_effect (args : expr list)`]
+      (SPEC_ALL literal_allocated_tuple_outcome_physical))) >>
+  disch_then (qspec_then `PG` strip_assume_tac) >> gvs[] >>
+  dxrule structlit_uniform_outcome_source_run >> strip_tac >>
+  simp[structlit_uniform_action, combinTheory.o_DEF] >>
+  drule (gas_outcome_ptr_return_map
+    |> Q.GEN `f` |> Q.ISPEC `\(vs : value list). Value (StructV (ZIP (MAP FST (kes : (string # expr) list),vs)))`
+    |> REWRITE_RULE [GSYM boolTheory.AND_IMP_INTRO]) >>
+  disch_then (match_mp_tac o BETA_RULE o SPEC_ALL) >>
+  conj_tac
+  >- (rpt strip_tac >> gvs[] >>
+      rename1 `literal_prefix_ok cells tm z` >>
+      drule literal_loop_frame_runtime >> strip_tac >>
+      `addr < dimword(:256)` by decide_tac >>
+      `LENGTH (MAP FST kes) = LENGTH tvs` by
+        (imp_res_tac vyperTypeABITheory.OPT_MMAP_LENGTH >>
+         imp_res_tac LIST_REL_LENGTH >> fs[]) >>
+      `LENGTH (MAP FST kes) = LENGTH vs` by metis_tac[LIST_REL_LENGTH] >>
+      `!m. mem_agree_outside tm.t_mem z.vs_memory m ==>
+        fields_in_memory (ZIP (MAP FST kes,vs)) (ZIP (MAP FST kes,tvs)) addr m` by
+        simp[typed_memory_fields_tuple_zip] >>
+      `eval_expr cx (StructLit (StructT (src_id_opt,id)) (src_id_opt,id) kes)
+         (es with gas_obs := gs) =
+         (INL (Value (StructV (ZIP (MAP FST kes,vs)))),ee)` by
+        (drule aggregate_eval_struct >> simp[]) >>
+      `val_wf (StructTV (ZIP (MAP FST kes,tvs))) (StructV (ZIP (MAP FST kes,vs)))` by
+        (irule aggregate_materialised_child_wf >>
+         goal_assum (drule_at (Pat `eval_expr _ _ _ = _`)) >>
+         simp[expr_type_def, read_result_def, return_def] >>
+         goal_assum (drule_at Any) >> simp[]) >>
+      drule_at (Pat `literal_loop_frame _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _`)
+        (Q.INST [`e` |-> `StructLit (StructT (src_id_opt,id)) (src_id_opt,id) kes`]
+          structlit_uniform_endpoint_posts) >>
+      simp[expr_type_def, lowered_value_type_def, post_value_type_def,
+        type_memory_bytes_def, listTheory.EXISTS_MAP, combinTheory.o_DEF] >>
+      disch_then (drule_at (Pat `evaluate_type _ _ = _`)) >> simp[] >>
+      disch_then (qspecl_then [`vs`, `kes`] mp_tac) >>
+      impl_tac
+      >- simp[combinTheory.o_DEF, listTheory.EXISTS_MAP, listTheory.EVERY_MAP] >>
+      strip_tac >> simp[contextTheory.base_ptr_def] >>
+      irule structlit_uniform_pointer_posts_cong >>
+      goal_assum (drule_at Any) >> simp[contextTheory.base_ptr_def, contextTheory.mk_ptr_def]) >>
+  gen_tac >> Cases_on `rr` >> simp[]
 QED
 
 Theorem struct_lookup_types_exact[local]:

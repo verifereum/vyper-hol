@@ -22,10 +22,10 @@ val _ = Parse.hide "body";
 (* ADMITTED: a piece of the body induction. *)
 Theorem body_intcall_case_ptr:
   !cx v16 src_id_opt fn es v17.
-    (!s'' x t s'3' ts t' s'4' tup t'' mut stup nr stup2 args sstup dflts sstup2
-         ret body' s'5' x' t'3' s'6' vs t'4' needed_dflts cxd s'7' prev
-         t'5' s'8' dflt_vs t'6' all_tenv s'9' env t'7' s'10' rtv
-         t'8' is_view s'11' x'' t'9' s'12' cxf t'10'.
+    (!s'' x t s'3' ts t' s'4' tup t'' mut stup nr stup2 args sstup dflts
+         sstup2 ret body' s'5' x' t'3' s'6' vs t'4' needed_dflts cxd s'7'
+         prev t'5' s'8' dflt_vs t'6' all_tenv s'9' env t'7' s'10' rtv t'8'
+         is_view s'11' x'' t'9' s'12' cxf t'10'.
        type_check (~MEM (src_id_opt,fn) cx.stk) "recursion" s'' = (INL x,t) /\
        lift_option_type (get_module_code cx src_id_opt)
          "IntCall get_module_code" s'3' = (INL ts,t') /\
@@ -41,8 +41,7 @@ Theorem body_intcall_case_ptr:
        needed_dflts = DROP (LENGTH dflts - (LENGTH args - LENGTH es)) dflts /\
        cxd = cx with stk updated_by CONS (src_id_opt,fn) /\
        get_scopes s'7' = (INL prev,t'5') /\
-       finally
-         (ignore_bind (set_scopes [FEMPTY]) (eval_exprs cxd needed_dflts))
+       finally do set_scopes [FEMPTY]; eval_exprs cxd needed_dflts od
          (set_scopes prev) s'8' = (INL dflt_vs,t'6') /\
        all_tenv = get_tenv cx /\
        lift_option_type (bind_arguments all_tenv args (vs ++ dflt_vs))
@@ -52,9 +51,9 @@ Theorem body_intcall_case_ptr:
        lock_if_nr cx nr is_view s'11' = (INL x'',t'9') /\
        push_function (src_id_opt,fn) env cx s'12' = (INL cxf,t'10') ==>
        body_stmts_ptr_ok cxf body') /\
-    (!s'' x t s'3' ts t' s'4' tup t'' mut stup nr stup2 args sstup dflts sstup2
-         ret body' s'5' x' t'3' s'6' vs t'4' needed_dflts cxd s'7' prev
-         t'5' s'8' x'' t'6'.
+    (!s'' x t s'3' ts t' s'4' tup t'' mut stup nr stup2 args sstup dflts
+         sstup2 ret body' s'5' x' t'3' s'6' vs t'4' needed_dflts cxd s'7'
+         prev t'5' s'8' x'' t'6'.
        type_check (~MEM (src_id_opt,fn) cx.stk) "recursion" s'' = (INL x,t) /\
        lift_option_type (get_module_code cx src_id_opt)
          "IntCall get_module_code" s'3' = (INL ts,t') /\
@@ -72,8 +71,8 @@ Theorem body_intcall_case_ptr:
        get_scopes s'7' = (INL prev,t'5') /\
        set_scopes [FEMPTY] s'8' = (INL x'',t'6') ==>
        body_exprs_ptr_ok cxd needed_dflts) /\
-    (!s'' x t s'3' ts t' s'4' tup t'' mut stup nr stup2 args sstup dflts sstup2
-         ret body' s'5' x' t'3'.
+    (!s'' x t s'3' ts t' s'4' tup t'' mut stup nr stup2 args sstup dflts
+         sstup2 ret body' s'5' x' t'3'.
        type_check (~MEM (src_id_opt,fn) cx.stk) "recursion" s'' = (INL x,t) /\
        lift_option_type (get_module_code cx src_id_opt)
          "IntCall get_module_code" s'3' = (INL ts,t') /\
