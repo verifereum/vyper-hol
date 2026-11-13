@@ -2,7 +2,8 @@
 Theory bodyImmPreparePtr
 Ancestors
   bodyPtrBopScalarSeq whitelistForIterImmLoop forPtrScope stmtSimForArrayLoop
-  exprSimCopy exprSimPtrTopLevelImmutablePost
+  exprSimCopy exprSimPtrTopLevelImmutablePost exprLoweringProps stmtSimProps
+  exprSimPtrProps
   ptrDiscipline venomState venomInst venomExecSemantics fragExec
   finite_map words list arithmetic pred_set vyperState
 
@@ -154,3 +155,81 @@ Proof
   disch_then (qspecl_then [`F`, `PG`, `D`] mp_tac) >>
   simp[] >> disch_then irule >> metis_tac[]
 QED
+
+(* The scalar address calculation preserves the outer semantic and ghost
+   resources, and exposes an old-register frame at the allocation cutoff. *)
+Theorem immutable_address_entry_ptr:
+  lookup_var idx s = SOME (n2w k) /\ ov <> tot /\
+  ~not_fresh_at cut ov /\ ~not_fresh_at cut tot /\ ~not_fresh_at cut ep /\
+  FLOOKUP G idx = NONE /\ op_taint tn (Var idx) = {} /\
+  ~ctx_has_dalloca ctx /\ ~s.vs_halted /\
+  lookup_block s.vs_current_bb func.fn_blocks = SOME bb /\
+  isPREFIX
+    ([mk_inst j3 MUL [Var idx; Lit (n2w stride)] [ov]] ++
+     (if dyn then [mk_inst j4 ADD [Lit 32w; Var ov] [tot]] else []) ++
+     [mk_inst j5 ADD [Lit (n2w off); Var (if dyn then tot else ov)] [ep]])
+    (DROP s.vs_inst_idx bb.bb_instructions) /\
+  stmt_state_rel ctx func cenv cx es s /\ ghost_inv d cenv cx es G tn s /\
+  not_local_ptr cenv es.scopes ov /\ not_local_ptr cenv es.scopes tot /\
+  not_local_ptr cenv es.scopes ep /\ local_ptrs_reserved cenv cut /\
+  (!x sz. cenv.ce_return_buf = SOME (PtrVar (Var x) sz) \/
+     cenv.ce_return_pc = SOME (PtrVar (Var x) sz) ==> not_fresh_at cut x) /\
+  immutable_holds cenv cx et (Value v)
+    (n2w off + n2w ((if dyn then 32 else 0) + k * stride)) es s ==>
+  let code =
+    [mk_inst j3 MUL [Var idx; Lit (n2w stride)] [ov]] ++
+    (if dyn then [mk_inst j4 ADD [Lit 32w; Var ov] [tot]] else []) ++
+    [mk_inst j5 ADD [Lit (n2w off); Var (if dyn then tot else ov)] [ep]];
+      u = update_var ep (n2w off + n2w ((if dyn then 32 else 0) + k * stride))
+       (if dyn then update_var tot (n2w (32 + k * stride))
+          (update_var ov (n2w (k * stride)) s)
+        else update_var ov (n2w (k * stride)) s);
+      t = u with vs_inst_idx := s.vs_inst_idx + LENGTH code
+  in
+  ?H tm.
+    gas_path_ptr D 0 ctx func PG G tn s 0 H tm (OK t) /\
+    op_prov H (Var ep) = NONE /\ op_taint tm (Var ep) = {} /\
+    stmt_state_rel ctx func cenv cx es t /\ ghost_inv d cenv cx es H tm t /\
+    immutable_holds cenv cx et (Value v)
+      (n2w off + n2w ((if dyn then 32 else 0) + k * stride)) es t /\
+    tm.t_mem = tn.t_mem /\ tm.t_stor = tn.t_stor /\
+    tm.t_trans = tn.t_trans /\ tm.t_imm = tn.t_imm /\
+    (!x. not_fresh_at cut x ==>
+      lookup_var x t = lookup_var x s /\ FLOOKUP H x = FLOOKUP G x /\
+      op_taint tm (Var x) = op_taint tn (Var x))
+Proof
+  strip_tac >>
+  `ov NOTIN {x | not_fresh_at cut x} /\
+   tot NOTIN {x | not_fresh_at cut x} /\ ep NOTIN {x | not_fresh_at cut x}` by simp[] >>
+  drule_all immutable_address_prefix_ptr >>
+  disch_then (qspecl_then [`PG`, `D`] mp_tac) >>
+  simp[] >> strip_tac >>
+  qexistsl [`H`, `tm`] >> simp[] >>
+  conj_tac >- suspend "rel" >>
+  conj_tac >- suspend "ghost" >>
+  conj_tac >- suspend "holds" >>
+  rpt strip_tac >>
+  `x <> ov /\ x <> tot /\ x <> ep` by metis_tac[] >>
+  Cases_on `dyn` >>
+  gvs[update_var_def, FLOOKUP_UPDATE, lookup_var_def, op_taint_def]
+QED
+
+Resume immutable_address_entry_ptr[rel]:
+  simp[stmt_state_rel_inst_idx] >> Cases_on `dyn` >> simp[] >>
+  rpt (irule stmt_state_rel_update_var >> simp[])
+QED
+Resume immutable_address_entry_ptr[ghost]:
+  irule exprSimPtrPropsTheory.ghost_inv_fresh_frame >>
+  qexistsl [`G`, `es`, `s`, `cut`, `tn`] >> simp[] >>
+  conj_tac >-
+    (rpt strip_tac >>
+     `x <> ov /\ x <> tot /\ x <> ep` by metis_tac[] >>
+     Cases_on `dyn` >> gvs[update_var_def, FLOOKUP_UPDATE, lookup_var_def, op_taint_def]) >>
+  Cases_on `dyn` >> simp[update_var_def] >> metis_tac[]
+QED
+Resume immutable_address_entry_ptr[holds]:
+  irule immutable_value_holds_transport >>
+  qexistsl [`cenv`, `es`, `s`, `es.scopes`] >>
+  simp[cenv_top_ext_refl] >> Cases_on `dyn` >> gvs[update_var_def]
+QED
+Finalise immutable_address_entry_ptr
