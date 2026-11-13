@@ -20071,6 +20071,99 @@ Proof
   qexists `t` >> simp[]
 QED
 
+Theorem mm_local_calldata_store_extent[local]:
+  j < n /\ j < LENGTH is /\ ALL_DISTINCT (MAP (\i. i.inst_id) is) /\
+  (EL j is).inst_opcode = MSTORE /\
+  (EL j is).inst_operands = [Lit dst; Var v] /\
+  lookup_var v (H j) = SOME (word_of_bytes T (0w:bytes32)
+    (TAKE 32 (DROP src (H j).vs_call_ctx.cc_calldata ++ REPLICATE 32 0w))) /\
+  (!q. q < LENGTH is /\ MEM (EL q is).inst_id lids ==>
+    (EL q is).inst_opcode = CALLDATALOAD) /\
+  c = <| cg_dst := w2n dst; cg_src := src; cg_length := 32;
+         cg_inst_ids := [(EL j is).inst_id] ++ lids |> ==>
+  mm_local_group_coverage is n (mm_local_calldata_capture is H n) c /\
+  mm_local_group_endpoint is n (mm_local_calldata_capture is H n) c
+Proof
+  strip_tac >>
+  `mm_local_calldata_capture is H n j = SOME (w2n dst, mm_local_bytes
+    (\a. if a < LENGTH (H j).vs_call_ctx.cc_calldata
+         then EL a (H j).vs_call_ctx.cc_calldata else 0w) src 32)` by
+    metis_tac[mm_local_calldata_capture_store] >>
+  `!q d bs. q < n /\ q < LENGTH is /\ MEM (EL q is).inst_id lids ==>
+    mm_local_calldata_capture is H n q <> SOME (d,bs)` by
+    (rpt strip_tac >> `(EL q is).inst_opcode = CALLDATALOAD` by metis_tac[] >>
+     gvs[mm_local_calldata_capture_def]) >>
+  gvs[] >> conj_tac
+  >- (irule mm_local_group_coverage_birth_extra >> simp[] >>
+      goal_assum (drule_at Any) >> simp[]) >>
+  irule mm_local_group_endpoint_birth_extra >> simp[] >>
+  goal_assum (drule_at Any) >> simp[]
+QED
+
+Theorem mm_local_calldata_bulk_extent[local]:
+  j < n /\ j < LENGTH is /\ ALL_DISTINCT (MAP (\i. i.inst_id) is) /\
+  (EL j is).inst_opcode = CALLDATACOPY /\
+  (EL j is).inst_operands = [Lit dst; Lit src; Lit len] /\
+  c = <| cg_dst := w2n dst; cg_src := w2n src; cg_length := w2n len;
+         cg_inst_ids := [(EL j is).inst_id] |> ==>
+  mm_local_group_coverage is n (mm_local_calldata_capture is H n) c /\
+  mm_local_group_endpoint is n (mm_local_calldata_capture is H n) c
+Proof
+  strip_tac >>
+  `mm_local_calldata_capture is H n j = SOME (w2n dst, mm_local_bytes
+    (\a. if a < LENGTH (H j).vs_call_ctx.cc_calldata
+         then EL a (H j).vs_call_ctx.cc_calldata else 0w) (w2n src) (w2n len))` by
+    metis_tac[mm_local_calldata_capture_literal] >>
+  gvs[] >> conj_tac
+  >- (irule mm_local_group_coverage_birth_extra >> simp[] >>
+      goal_assum (drule_at Any) >> simp[]) >>
+  irule mm_local_group_endpoint_birth_extra >> simp[] >>
+  goal_assum (drule_at Any) >> simp[]
+QED
+
+Theorem mm_local_calldata_scan_extent[local]:
+  wf_ssa fn0 /\ ir_supply_covers_fn supply fn0 /\
+  index < LENGTH fn0.fn_blocks /\ k <= 4 /\
+  mm_local_prefix fn0 supply index k = (bb,sk) /\
+  ALL_DISTINCT (MAP (\i. i.inst_id) bb.bb_instructions) /\
+  n <= LENGTH bb.bb_instructions /\
+  (!j. j < n ==> (H j).vs_call_ctx.cc_calldata = cd) /\
+  (!j dst v src. j < n /\ (EL j bb.bb_instructions).inst_opcode = MSTORE /\
+    (EL j bb.bb_instructions).inst_operands = [Lit dst; Var v] /\
+    FLOOKUP (FOLDL (scan_inst (dfg_build_function fn0) CalldataMerge)
+      empty_scan_state (TAKE j bb.bb_instructions)).ss_loads v = SOME src ==>
+    lookup_var v (H j) = SOME (word_of_bytes T (0w:bytes32)
+      (TAKE 32 (DROP src cd ++ REPLICATE 32 0w)))) ==>
+  !t. t <= n ==>
+    mm_local_scan_every
+      (\g. mm_local_group_coverage bb.bb_instructions n
+          (mm_local_calldata_capture bb.bb_instructions H n) g /\
+        mm_local_group_endpoint bb.bb_instructions n
+          (mm_local_calldata_capture bb.bb_instructions H n) g)
+      (FOLDL (scan_inst (dfg_build_function fn0) CalldataMerge)
+        empty_scan_state (TAKE t bb.bb_instructions))
+Proof
+  strip_tac >> Induct
+  >- simp[mm_local_scan_every_def, empty_scan_state_def] >>
+  strip_tac >> `t < n /\ t < LENGTH bb.bb_instructions /\ t <= n` by decide_tac >>
+  simp[rich_listTheory.TAKE_SUC, FOLDL_APPEND] >>
+  irule mm_local_inst_ordered_every >> conj_tac
+  >- metis_tac[mm_local_group_coverage_merge, mm_local_group_endpoint_merge] >>
+  `SORTED (\a b. a.cg_dst <= b.cg_dst)
+    (FOLDL (scan_inst (dfg_build_function fn0) CalldataMerge)
+      empty_scan_state (TAKE t bb.bb_instructions)).ss_copies` by
+    (irule mm_local_fold_order >> simp[empty_scan_state_def]) >>
+  simp[mode_copy_opcode_def] >> conj_tac
+  >- (rpt gen_tac >> strip_tac >> rpt gen_tac >> strip_tac >>
+      irule mm_local_calldata_store_extent >> simp[] >>
+      qexistsl [`t`,`v`] >> simp[] >>
+      rpt strip_tac >> `t <= LENGTH bb.bb_instructions` by decide_tac >>
+      drule_all mm_local_calldata_cached_ids_opcode >> simp[]) >>
+  rpt gen_tac >> strip_tac >> rpt gen_tac >> strip_tac >>
+  irule mm_local_calldata_bulk_extent >> simp[] >>
+  qexists `t` >> simp[]
+QED
+
 Theorem mm_local_payload_due_extent[local]:
   mm_local_group_coverage is n cap g /\
   mm_local_group_endpoint is n cap g /\
