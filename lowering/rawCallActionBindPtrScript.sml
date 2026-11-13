@@ -105,7 +105,7 @@ Proof
   irule gas_outcome_ptr_bind >> rpt conj_tac
   >- suspend "certificate_head"
   >- suspend "certificate_tail" >>
-  irule operandOutcomePtrTheory.gas_outcome_ptr_marked_conseq >>
+  irule gasOutcomeMarkedPtrTheory.gas_outcome_ptr_marked_conseq >>
   goal_assum (drule_at Any) >> conj_tac
   >- suspend "normal" >>
   rpt strip_tac >> Cases_on `res` >>
@@ -329,7 +329,7 @@ Theorem raw_call_prepared_prefix_sim_ptr:
 Proof
   strip_tac >> drule_all rawCallPrefixPtrTheory.raw_call_prefix_sim_ptr >>
   disch_then (qspec_then `PG` assume_tac) >>
-  irule operandOutcomePtrTheory.gas_outcome_ptr_marked_conseq >>
+  irule gasOutcomeMarkedPtrTheory.gas_outcome_ptr_marked_conseq >>
   goal_assum (drule_at Any) >> simp[] >> suspend "normal"
 QED
 
