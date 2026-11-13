@@ -2,7 +2,7 @@
    word value (address, bytesM): the lowering loads the slot with MLOAD. *)
 Theory bodyNameWordTypeMemory
 Ancestors
-  bodyNameMemoryFacts
+  bodyNameMemoryFacts vyperStorageFootprint
   exprSimSource exprSimHypsDefs exprSimDefs exprSimProps bodyMemoryDefs
   exprSimMemoryValues exprSimMemoryStack exprSimMemoryRead fragGasSeqMem
   fragGasPathMem gasNormalPrefix gasSummary gasContext gasCount fragGasMode
@@ -99,6 +99,7 @@ QED
 Theorem body_name_wordtype_post[local]:
   emit_op MLOAD [Var p] sa = (Var out,sb) /\
   local_ptrs_reserved ce sa /\ stmt_state_rel H ctx func ce cx es s0 /\
+  storage_well_formed_on cx es (FST H) /\
   is_word_type ann /\ evaluate_type (get_tenv cx) ann = SOME tv ==>
   expr_post H ctx func ce cx (Name ann id) es sa sb s0
     (es with gas_obs := []) v (Var out)
@@ -118,19 +119,24 @@ Proof
      drule msg_gas_state_frame >>
      disch_then (qspecl_then [`s0.vs_gas_readings`,
                             `LENGTH sb.cs_current_insts`, `[]`] mp_tac) >> simp[]) >>
+  `(es with gas_obs := []).accounts = es.accounts /\
+   (es with gas_obs := []).tStorage = es.tStorage` by simp[] >>
+  `storage_well_formed_on cx (es with gas_obs := []) (FST H)` by
+    metis_tac[storage_well_formed_on_backends] >>
+  `!x. not_fresh_at sa x ==> STRING #"%" (toString sa.cs_next_var) <> x` by
+    (rpt strip_tac >> gvs[not_fresh_at_def]) >>
   simp[expr_post_def, expr_val_rel_def, expr_val_at_def,
        vyperASTTheory.expr_type_def, eval_operand_def, update_var_def,
        lookup_var_def, FLOOKUP_UPDATE, locals_kept_mem] >>
-  rpt strip_tac >>
-  `STRING #"%" (toString sa.cs_next_var) <> x` by
-    (strip_tac >> gvs[not_fresh_at_def]) >> simp[]
+  rpt strip_tac >> gvs[]
 QED
 
 Theorem body_name_wordtype_mem_prefix[local]:
   expr_sim_pre ce cx env (Name ann id) es /\ is_word_type ann /\
   lower_value compile_expr ce ty (Name ann id) sa = (op,sb) /\
   fn_has_code sa sb func /\ fn_inst_ids_distinct func /\ local_ptrs_reserved ce sa /\
-  stmt_state_rel H ctx func ce cx es s0 /\ alloca_history func s0 /\
+  stmt_state_rel H ctx func ce cx es s0 /\
+  storage_well_formed_on cx es (FST H) /\ alloca_history func s0 /\
   ~s0.vs_halted /\ s0.vs_current_bb = sa.cs_current_bb /\
   s0.vs_inst_idx = LENGTH sa.cs_current_insts ==>
   ?v t. gas_value_prefix H T (ctx,func,ce,cx) (ty,Name ann id)
@@ -151,14 +157,57 @@ Proof
   simp[update_var_def]
 QED
 
+(* The witnesses do not depend on the horizon: one value and final state serve
+   every horizon that relates the start state. *)
+Theorem body_name_wordtype_mem_prefix_all[local]:
+  expr_sim_pre ce cx env (Name ann id) es /\ is_word_type ann /\
+  lower_value compile_expr ce ty (Name ann id) sa = (op,sb) /\
+  fn_has_code sa sb func /\ fn_inst_ids_distinct func /\ local_ptrs_reserved ce sa /\
+  stmt_state_rel H0 ctx func ce cx es s0 /\
+  storage_well_formed_on cx es (FST H0) /\ alloca_history func s0 /\
+  ~s0.vs_halted /\ s0.vs_current_bb = sa.cs_current_bb /\
+  s0.vs_inst_idx = LENGTH sa.cs_current_insts ==>
+  ?v t. !(H:(bool # bytes32 # type_value) list # num list).
+          stmt_state_rel H ctx func ce cx es s0 /\
+            storage_well_formed_on cx es (FST H) ==>
+    gas_value_prefix H T (ctx,func,ce,cx) (ty,Name ann id)
+      (sa,sb,op) (es,s0) [] (v,es,t)
+Proof
+  strip_tac >> drule_all body_name_wordtype_counted >> strip_tac >> gvs[] >>
+  qexistsl [`entry.value`,
+    `update_var out (typed_val_to_w256 entry.type entry.value)
+      (s0 with vs_inst_idx := LENGTH sb.cs_current_insts)`] >>
+  rpt strip_tac >>
+  simp[gas_value_prefix_def] >>
+  conj_tac
+  >- (simp[gas_marked_exec_def, gas_explicit_def, gas_marked_path_def] >>
+      gen_tac >>
+      qspecl_then [`cx`, `ann`, `id`, `es with gas_obs := tail`, `entry`]
+        mp_tac eval_name_word >> simp[] >>
+      CONV_TAC (DEPTH_CONV ETA_CONV) >> simp[]) >>
+  conj_tac >- (irule body_name_wordtype_post >> simp[] >> metis_tac[]) >>
+  simp[update_var_def]
+QED
+
 Theorem compile_name_wordtype_body_sim_mem:
   !ctx func ce cx env ty ann id es.
     expr_sim_pre ce cx env (Name ann id) es /\
     is_word_type ann /\ ~word_value_type ann ==>
     expr_sim_mem ctx func ce cx ty (Name ann id) es
 Proof
-  rpt strip_tac >> irule expr_sim_mem_word_values >>
+  rpt strip_tac >> irule expr_sim_mem_word_values_domain >>
   reverse conj_tac >- simp[vyperASTTheory.expr_type_def] >> rpt strip_tac >>
-  drule_all body_name_wordtype_mem_prefix >> strip_tac >>
-  qexistsl [`[]`, `v`, `es`, `t`] >> simp[]
+  first_assum drule >> strip_tac >>
+  drule_all body_name_wordtype_mem_prefix_all >> strip_tac >>
+  qexistsl [`[]`, `v`, `es`, `t`] >>
+  conj_tac
+  >- (pop_assum (qspec_then `H` mp_tac) >>
+      impl_tac >- (rpt conj_tac >> first_assum ACCEPT_TAC) >>
+      simp[gas_value_prefix_def]) >>
+  X_GEN_TAC ``(Hn:(bool # bytes32 # type_value) list # num list)`` >>
+  pop_assum (qspec_then `Hn` mp_tac) >> strip_tac >> strip_tac >>
+  qpat_assum `!H. valid_horizon _ _ H _ ==> _`
+    (qspec_then `Hn` mp_tac) >>
+  impl_tac >- first_assum ACCEPT_TAC >> strip_tac >>
+  first_x_assum irule >> rpt conj_tac >> first_assum ACCEPT_TAC
 QED

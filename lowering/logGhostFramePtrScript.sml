@@ -52,6 +52,5 @@ Proof
   strip_tac >> irule ghost_kept_trans >>
   qexistsl_tac [`G1`,`es1`,`s1`,`sm`,`tn1`] >> simp[] >>
   reverse conj_tac >- (gvs[wb_frame_def] >> metis_tac[]) >>
-  rpt gen_tac >> irule log_frame_local_region >>
-  goal_assum (drule_at Any) >> simp[] >> metis_tac[]
+  rpt gen_tac >> drule_all log_frame_local_region >> simp[]
 QED

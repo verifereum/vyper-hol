@@ -3,6 +3,7 @@ Ancestors
   ifJumpPtr bodyPtrDefs gasSummaryComposePtr fragGasPathPtr fragGasSeqPtr
   exprSimDefs loweringPosts exprSimIfExp emitHelperProps fragExec
   vyperInterpreter vyperState vyperAST valueEncoding compileEnv vyperValue gasExemptCert
+  vyperStorageTrace gasSummary gasSummaryCompose
 
 Theorem ifexp_eval_forced:
   eval_expr cx (IfExp t c a b) =
@@ -40,40 +41,51 @@ Proof
 QED
 
 Theorem ifexp_selected_outcome_prefix_ptr:
-  gas_marked_exec_ptr D (ctx,fn) PG (bind (eval_expr cx c) (read_result cx))
-    (es,s0,G0,tn0) marks (INL (BoolV sel)) mid G1 tn1 (OK u) /\
-  gas_path_ptr D 0 ctx fn PG G1 tn1 u 0 G2 tn2 (OK v) /\
-  gas_outcome_ptr D tops (ctx,fn) PG
+  gas_marked_exec F (ctx,fn) (bind (eval_expr cx c) (read_result cx))
+    (es,s0) marks (INL (BoolV sel)) mid (OK u) /\
+  (!H. valid_horizon cx st0 H mid.storage_trace ==>
+    gas_path_ptr (D H) 0 ctx fn PG G0 tn0 s0 (LENGTH marks) G1 tn1 (OK u)) /\
+  (!H. gas_path_ptr (D H) 0 ctx fn PG G1 tn1 u 0 G2 tn2 (OK v)) /\
+  gas_outcome_ptr D tops (ctx,fn) PG cx st0
     (bind (eval_expr cx (if sel then a else b)) (conditional_result cx))
     (mid with gas_obs := [],v,G2,tn2) Q R ==>
-  gas_outcome_ptr D tops (ctx,fn) PG (eval_expr cx (IfExp t c a b))
+  gas_outcome_ptr D tops (ctx,fn) PG cx st0 (eval_expr cx (IfExp t c a b))
     (es,s0,G0,tn0) Q R
 Proof
   strip_tac >>
-  `gas_outcome_ptr D tops (ctx,fn) PG
+  `gas_outcome_ptr D tops (ctx,fn) PG cx st0
     (bind (eval_expr cx (if sel then a else b)) (conditional_result cx))
     (mid with gas_obs := [],u,G1,tn1) Q R` by
     (irule gas_outcome_ptr_prefix >> goal_assum (drule_at Any) >>
      qexists_tac `0` >> simp[]) >>
   rewrite_tac[ifexp_eval_forced] >>
-  irule gas_outcome_ptr_bind_normal >> goal_assum (drule_at Any) >>
-  simp[] >> Cases_on `sel` >> gvs[] >>
-  rpt strip_tac >> irule gas_exempt_cert_bind_value >>
-  goal_assum (drule_at Any) >> simp[]
+  irule gas_outcome_ptr_bind_normal >>
+  qexistsl_tac [`G1`,`marks`,`mid`,`u`,`tn1`,`BoolV sel`] >>
+  Cases_on `sel` >> (
+    fs[] >> conj_tac
+    >- (rpt strip_tac >> irule gas_exempt_cert_bind_value >>
+        goal_assum (drule_at Any) >> simp[]) >>
+    irule storage_trace_frame_bind_all >>
+    simp[evaluate_storage_trace_frame, storage_trace_frame_conditional_result])
 QED
 
 Theorem ifexp_condition_exit_ptr:
-  gas_marked_exec_ptr D (ctx,fn) PG (bind (eval_expr cx c) (read_result cx))
-    (es,s0,G0,tn0) marks res mid G tn r /\ expr_exit res r ==>
-  gas_outcome_ptr D tops (ctx,fn) PG (eval_expr cx (IfExp t c a b))
-    (es,s0,G0,tn0) Q (\res ee gt r. expr_exit res r)
+  gas_marked_exec F (ctx,fn) (bind (eval_expr cx c) (read_result cx))
+    (es,s0) marks res mid r /\
+  (!H. valid_horizon cx st0 H mid.storage_trace ==>
+    gas_path_ptr (D H) 0 ctx fn PG G0 tn0 s0 (LENGTH marks) G tn r) /\
+  expr_exit res r ==>
+  gas_outcome_ptr D tops (ctx,fn) PG cx st0 (eval_expr cx (IfExp t c a b))
+    (es,s0,G0,tn0) Q (\H res ee gt r. expr_exit res r)
 Proof
   Cases_on `res` >> simp[] >> strip_tac >>
-  simp[gas_outcome_ptr_def, gas_summary_ptr_at_marked] >>
-  qexists_tac `marks` >> disj1_tac >>
-  qexistsl_tac [`INR y`,`mid`,`G`,`tn`,`r`] >> simp[] >> conj_tac
+  rewrite_tac[gas_outcome_ptr_def, gas_summary_ptr_at_def] >>
+  qexists_tac `marks` >> disj2_tac >> disj1_tac >>
+  qexistsl_tac [`INR y`,`mid`,`G`,`tn`,`r`] >> conj_tac
   >- (rewrite_tac[ifexp_eval_forced] >>
-      irule gas_marked_exec_ptr_bind_exception >> simp[]) >>
+      irule gas_source_bind_exception >> fs[gas_marked_exec_def]) >>
+  gen_tac >> strip_tac >> conj_tac >- metis_tac[] >>
+  disj2_tac >> simp[] >>
   Cases_on `r` >> fs[expr_exit_def, exit_result_def] >>
   Cases_on `y` >> fs[expr_exit_def] >>
   rename1 `Error er` >> Cases_on `er` >> fs[expr_exit_def]
@@ -83,11 +95,11 @@ Theorem ifexp_condition_exempt_ptr:
   gas_exempt_cert F tops (ctx,fn)
     (ignore_bind (bind (eval_expr cx c) (read_result cx)) (return ()))
     (es,s0) marks (err,ee) (leaf,fstate) ==>
-  gas_outcome_ptr D tops (ctx,fn) PG (eval_expr cx (IfExp t c a b))
+  gas_outcome_ptr D tops (ctx,fn) PG cx st0 (eval_expr cx (IfExp t c a b))
     (es,s0,G0,tn0) Q R
 Proof
   strip_tac >> simp[gas_outcome_ptr_def] >>
-  qexists_tac `marks` >> disj2_tac >>
+  qexists_tac `marks` >> disj2_tac >> disj2_tac >>
   qexistsl_tac [`err`,`ee`,`leaf`,`fstate`] >>
   rewrite_tac[ifexp_eval_forced] >>
   pure_once_rewrite_tac[ignore_bind_def] >>
