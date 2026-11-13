@@ -13,7 +13,7 @@ Ancestors
   bodySimFull stmtSimZero stmtSimPass gasShadow bodySim
   exprSimHyps bodySimStmtCases bodyExprPreFacts supportedStmts
   supportedExprs supportedStmtTraverse supportedExprTraverse
-  bodyMemBiEnvMsgGas exprSimHypsDefs gasContext vyperTypeSystem vyperContext vyperTypeCallGraph
+  msgGasFull exprSimHypsDefs gasContext vyperTypeSystem vyperContext vyperTypeCallGraph
   vyperAST vyperInterpreter vyperState vyperValue list
 
 val _ = Parse.hide "body";
@@ -216,7 +216,7 @@ Proof
   cheat
 QED
 
-(* msg.gas, by bodyMemBiEnvMsgGas's joint fragment: typing fixes the
+(* msg.gas, by msgGasFull's joint fragment: typing fixes the
    annotation and the empty argument list. *)
 Theorem body_msg_gas_full_case:
   !cx ann args. body_expr_full_ok cx (Builtin ann (Env MsgGas) args)
