@@ -20900,6 +20900,22 @@ Proof
   metis_tac[]
 QED
 
+Theorem mm_local_function_forget_vars[local]:
+  lift_result R (execution_equiv excluded) revert_equiv
+    (run_function fuel ctx fn s) (run_function fuel ctx fn' t) ==>
+  lift_result (state_equiv UNIV) (execution_equiv UNIV) revert_equiv
+    (run_function fuel ctx fn s) (run_function fuel ctx fn' t)
+Proof
+  `!u. run_function fuel ctx fn s <> OK u` by
+    (Cases_on `fn_entry_label fn` >>
+     simp[venomExecSemanticsTheory.run_function_def,
+       o1PassLiftTheory.run_blocks_not_OK]) >>
+  Cases_on `run_function fuel ctx fn s` >>
+  Cases_on `run_function fuel ctx fn' t` >>
+  gvs[lift_result_def] >>
+  metis_tac[stateEquivProofsTheory.execution_equiv_subset, pred_setTheory.SUBSET_UNIV]
+QED
+
 Theorem mm_local_stage_correct:
   !fn0 supply index k bb sk fn bb' sk' fn'.
   fn_inst_wf fn0 /\ wf_function fn0 /\ wf_ssa fn0 /\ all_reachable fn0 /\
