@@ -20,8 +20,8 @@ Proof
   Cases_on `FLOOKUP ce.ce_vars h0` >>
   simp[gas_shadow_compiles_bind, gas_shadow_compiles_return] >>
   rename1 `SOME loc` >>
-  Cases_on `var_location_decode_operand loc` >>
-  simp[comp_ignore_bind_def, gas_shadow_compiles_bind,
+  Cases_on `var_location_decode_operand loc` >> Cases_on `opc = CALLDATALOAD` >>
+  simp[comp_ignore_bind_def, gas_shadow_compiles_bind, compile_abi_arg_ptr_guard_def,
        gas_shadow_compiles_return, gas_shadow_compiles_emit_op,
        gas_shadow_compiles_emit_void, gas_shadow_compiles_abi_decode_to_buf]
 QED
@@ -84,7 +84,8 @@ Proof
       ho_match_mp_tac gas_shadow_compiles_bind >> conj_tac
       >- (IF_CASES_TAC >>
           simp[gas_shadow_compiles_bind, gas_shadow_compiles_emit_op,
-               gas_shadow_compiles_return]) >> gen_tac >>
+               gas_shadow_compiles_return, gas_shadow_compiles_emit_void,
+               compile_abi_arg_ptr_guard_def, comp_ignore_bind_def]) >> gen_tac >>
       simp[gas_shadow_compiles_bind, gas_shadow_compiles_abi_decode_to_buf]) >>
   simp[comp_ignore_bind_def] >>
   ho_match_mp_tac gas_shadow_compiles_bind >> conj_tac
