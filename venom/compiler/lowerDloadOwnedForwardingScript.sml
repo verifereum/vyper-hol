@@ -34,17 +34,9 @@ Proof
      `ld_nonghost tn s t0` by fs[ld_sync_def] >>
      fs[ld_nonghost_def] >> metis_tac[]) >>
   `ctx_has_dalloca C' ==> t.vs_alloca_next <= w2n t.vs_initial_fmp` by
-    (strip_tac >>
-     `ctx_has_dalloca C` by res_tac >>
-     drule ld_sync_frontier >> strip_tac >>
-     drule ld_sync_memory >> strip_tac >>
-     `t.vs_initial_fmp = s.vs_initial_fmp` by fs[ld_nonghost_def] >>
-     qpat_x_assum `dload_headroom_ok _ _ _ _` mp_tac >>
-     pure_rewrite_tac[lowerDloadDefsTheory.dload_headroom_ok_def, GSYM ctx_has_dalloca_def] >>
-     qpat_x_assum `ctx_has_dalloca C` (fn th => rewrite_tac[th]) >>
-     qpat_x_assum `t.vs_initial_fmp = _` (fn th => rewrite_tac[th]) >>
+    (strip_tac >> `ctx_has_dalloca C` by res_tac >>
      qpat_x_assum `t = t0` SUBST_ALL_TAC >>
-     strip_tac >> decide_tac) >>
+     drule_all ld_sync_dalloca_room >> decide_tac) >>
   `t.vs_current_bb = s.vs_current_bb` by metis_tac[ld_sync_control] >>
   `t.vs_inst_idx = p` by
     (drule_all ld_sync_envelope_position >> simp[]) >>

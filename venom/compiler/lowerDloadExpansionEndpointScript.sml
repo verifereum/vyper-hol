@@ -279,13 +279,7 @@ Proof
      POP_ASSUM_LIST (K ALL_TAC) >>
      simp[ld_sync_def, EVERY_MEM, SUBSET_DEF, MEM_MAP] >> rpt strip_tac >> metis_tac[]) >>
   `ALL_DISTINCT (MAP (\f. f.lf_fn) (f::fs))` by
-    (qpat_x_assum `!j k. j < k /\ _ ==> _` mp_tac >>
-     POP_ASSUM_LIST (K ALL_TAC) >>
-     strip_tac >> simp[EL_ALL_DISTINCT_EL_EQ, EL_MAP] >> rpt strip_tac >>
-     qmatch_goalsub_rename_tac `(EL j (f::fs)).lf_fn = (EL k (f::fs)).lf_fn` >>
-     Cases_on `j = k` >- simp[] >>
-     `j < k \/ k < j` by decide_tac >>
-     fs[] >> metis_tac[list_precedes_distinct]) >>
+    (irule ld_frames_distinct >> metis_tac[]) >>
   `~MEM a (fn_ir_vars f.lf_fn) /\ ~MEM z (fn_ir_vars f.lf_fn) /\
    dload_headroom_ok C f.lf_fn inst s /\
    eval_operand (Label "code_end") s = SOME basew` by simp[] >>

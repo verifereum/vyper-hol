@@ -357,6 +357,51 @@ Proof
   Cases_on `frames` >> gvs[]
 QED
 
+(* With DALLOCA the target frontier leaves room below the initial frame
+   pointer for every DLOAD the stack has not charged yet. *)
+Theorem ld_sync_dalloca_room:
+  ld_sync lo P C vs0 stk PG G tn fn inst s t A frames N /\
+  dload_headroom_ok C fn inst s /\ ctx_has_dalloca C ==>
+  t.vs_alloca_next + 32 * (ctx_dload_count C - ld_charge frames) <=
+    w2n t.vs_initial_fmp
+Proof
+  strip_tac >> drule ld_sync_frontier >> strip_tac >>
+  drule ld_sync_memory >> strip_tac >>
+  `t.vs_initial_fmp = s.vs_initial_fmp` by fs[ld_nonghost_def] >>
+  qpat_x_assum `dload_headroom_ok _ _ _ _` mp_tac >>
+  pure_rewrite_tac[lowerDloadDefsTheory.dload_headroom_ok_def,
+                   GSYM ctx_has_dalloca_def] >>
+  qpat_x_assum `ctx_has_dalloca C` (fn th => rewrite_tac[th]) >>
+  qpat_x_assum `t.vs_initial_fmp = _` (fn th => rewrite_tac[th]) >>
+  qpat_x_assum `t.vs_alloca_next = _` (fn th => rewrite_tac[th]) >>
+  strip_tac >> decide_tac
+QED
+
+(* The head frame runs the current function, which is in the context. *)
+Theorem ld_sync_head:
+  ld_sync lo P C vs0 stk PG G tn fn inst s t A frames N ==>
+  ?f fs. frames = f::fs /\ f.lf_fn = fn /\ MEM fn C.ctx_functions
+Proof
+  strip_tac >>
+  `frames <> []` by (pop_assum mp_tac >> pure_rewrite_tac[ld_sync_def] >> metis_tac[]) >>
+  Cases_on `frames` >- gvs[] >> simp[] >>
+  pop_assum kall_tac >> pop_assum mp_tac >> simp[ld_sync_def] >> metis_tac[]
+QED
+
+(* Frames ordered by a call order run distinct functions. *)
+Theorem ld_frames_distinct:
+  (!j k. j < k /\ k < LENGTH frames ==>
+     list_precedes (EL j frames).lf_fn.fn_name
+                   (EL k frames).lf_fn.fn_name names) ==>
+  ALL_DISTINCT (MAP (\g. g.lf_fn) frames)
+Proof
+  strip_tac >> simp[EL_ALL_DISTINCT_EL_EQ, EL_MAP] >> rpt strip_tac >>
+  qmatch_goalsub_rename_tac `(EL j frames).lf_fn = (EL k frames).lf_fn` >>
+  Cases_on `j = k` >- simp[] >>
+  `j < k \/ k < j` by decide_tac >>
+  metis_tac[lowerDloadSafetyBoundaryTheory.list_precedes_distinct]
+QED
+
 Theorem ld_maps_original:
   ld_maps A f /\ FLOOKUP f.lf_src.vs_allocas aid = SOME (b,n) ==>
   ?c. FLOOKUP A (f.lf_serial,aid) = SOME (b,c,n) /\
