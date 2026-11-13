@@ -91,6 +91,9 @@ Theorem external_frame_ret_run_mem:
        expr_post unit.cu_context func cenv'
          (initial_evaluation_context am.sources am.layouts tx NONE)
          e es sa s1 s0 ee v op t /\
+       expr_store_bound
+         (initial_evaluation_context am.sources am.layouts tx NONE)
+         (expr_type e) v op t /\
        (?gs ee'.
           bind (eval_expr
                   (initial_evaluation_context am.sources am.layouts tx NONE) e)

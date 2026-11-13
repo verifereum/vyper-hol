@@ -9,7 +9,8 @@ Definition inv_memory_observation_def:
   inv_memory_observation opc <=>
     MEM opc [MLOAD; ILOAD; MSTORE; MSTORE8; ISTORE; MCOPY;
       CALLDATACOPY; RETURNDATACOPY; DLOADBYTES; CODECOPY; EXTCODECOPY;
-      DRET; RETURN; REVERT; SHA3; LOG; CALL; STATICCALL; INVOKE]
+      DRET; RETURN; REVERT; SHA3; LOG; CALL; STATICCALL; DELEGATECALL;
+      CREATE; CREATE2; INVOKE]
 End
 
 (* Exact state-free obstruction, leaving SSA uses and output arity explicit. *)
@@ -47,12 +48,6 @@ Proof
   gvs[inv_crossing_candidate_def, read_effects_def, write_effects_def]
 QED
 
-Theorem inv_shape_excludes_runtime_errors:
-  inst_shape_ok inst ==> ~dft_swap_runtime_error_opcode inst.inst_opcode
-Proof
-  simp[inst_shape_ok_def, dft_swap_runtime_error_opcode_def] >> metis_tac[]
-QED
-
 (* These survivors show why NoFail alone is not the whole table. *)
 Theorem inv_exceptional_crossing_survivors:
   inv_crossing_candidate SSTORE MLOAD T /\
@@ -65,16 +60,39 @@ Proof
   EVAL_TAC
 QED
 
+Theorem inv_memory_observation_touches_memory:
+  inv_memory_observation obs ==>
+  Eff_MEMORY IN read_effects obs \/ Eff_MEMORY IN write_effects obs
+Proof
+  simp[inv_memory_observation_def] >> strip_tac >>
+  gvs[read_effects_def, write_effects_def, all_effects_def]
+QED
+
+Theorem inv_memory_writer_cannot_cross:
+  Eff_MEMORY IN write_effects opc /\ inv_memory_observation obs ==>
+  ~inv_crossing_candidate opc obs outputs_empty
+Proof
+  rpt strip_tac >> drule inv_memory_observation_touches_memory >>
+  gvs[inv_crossing_candidate_def, pred_setTheory.IN_DISJOINT] >>
+  metis_tac[pred_setTheory.IN_UNION]
+QED
+
+(* Memory writers (DELEGATECALL, CREATE and CREATE2 among them) don't cross a
+   memory observation; SELFDESTRUCT is a terminator. *)
 Theorem inv_fallible_crossing_classification:
-  inst_wf x /\ inst_shape_ok x /\
+  inst_wf x /\ inst_shape_ok x /\ ~is_terminator x.inst_opcode /\
   inv_memory_observation obs /\
   inv_crossing_candidate x.inst_opcode obs (x.inst_outputs = []) ==>
-  opcode_fail_class x.inst_opcode = NoFail \/
+  opcode_fail_class x.inst_opcode = NoFail /\
+  ~dft_swap_runtime_error_opcode x.inst_opcode \/
   MEM x.inst_opcode [SSTORE; TSTORE; LOG]
 Proof
   strip_tac >>
-  `x.inst_opcode <> INVOKE` by metis_tac[inv_invoke_cannot_cross_memory] >>
-  Cases_on `x.inst_opcode` >> gvs[opcode_fail_class_def] >>
+  `Eff_MEMORY NOTIN write_effects x.inst_opcode` by
+    metis_tac[inv_memory_writer_cannot_cross] >>
+  Cases_on `x.inst_opcode` >>
+  gvs[opcode_fail_class_def, dft_swap_runtime_error_opcode_def,
+      is_terminator_def, write_effects_def, all_effects_def] >>
   gvs[inst_shape_ok_def] >>
   gvs[inst_wf_def] >>
   gvs[inv_crossing_candidate_def, read_effects_def, write_effects_def,
@@ -166,7 +184,6 @@ Proof
   drule_all inv_fallible_crossing_classification >> strip_tac
   >- (Cases_on `x.inst_opcode = ALLOCA`
       >- metis_tac[inv_oracle_alloca_total] >>
-      drule inv_shape_excludes_runtime_errors >> strip_tac >>
       irule inv_oracle_nofail_total >> simp[]) >>
   irule inv_oracle_static_class_total >> simp[]
 QED
