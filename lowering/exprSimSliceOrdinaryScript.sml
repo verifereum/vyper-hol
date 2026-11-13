@@ -67,6 +67,11 @@ fun alpha_tyvars th =
     INST_TYPE ((tv |-> alpha) :: map (fn v => v |-> gen_tyvar ()) others) th
   end;
 
+(* Splits the let-bound conjunctions the capture entries give into separate
+   assumptions, so the facts in them are dropped or kept one by one. *)
+val unlet_asms_tac =
+  rpt (qpat_x_assum `LET _ _` (strip_assume_tac o SIMP_RULE bool_ss [LET_THM]));
+
 (* Drops the facts about the trace's own horizon, except that it is valid,
    so they don't weigh on the simplifier in the per-horizon goals. *)
 val drop_horizon0_tac =
@@ -147,12 +152,13 @@ Proof
     (drule_then assume_tac) >>
   drule_all (alpha_tyvars slice_source_dynamic_capture_entry) >>
   disch_then (qspec_then `st0` (qx_choosel_then [`cap0`, `bs0`, `p0`, `u0`] strip_assume_tac)) >>
+  unlet_asms_tac >>
   qpat_x_assum `expr_post (storage_trace_horizon _) _ _ _ _ _ _ _ _ _ _ _ _ _` kall_tac >>
   qexistsl_tac [`cap0`, `bs0`, `p0`, `u0`] >> simp[] >> rpt strip_tac >>
   drop_horizon0_tac >>
   qpat_x_assum `!H. valid_horizon _ _ H ee.storage_trace ==> expr_post _ _ _ _ _ _ _ _ _ _ _ _ _ _`
     drule >> strip_tac >>
-  drule_all (alpha_tyvars slice_source_dynamic_capture_entry) >> disch_then (qspec_then `st0` strip_assume_tac) >> gvs[] >>
+  drule_all (alpha_tyvars slice_source_dynamic_capture_entry) >> disch_then (qspec_then `st0` strip_assume_tac) >> unlet_asms_tac >> gvs[] >>
   capture_close_tac
 QED
 
@@ -207,12 +213,13 @@ Proof
     (drule_then assume_tac) >>
   drule_all (alpha_tyvars slice_source_fixed_capture_entry) >>
   disch_then (qspec_then `st0` (qx_choosel_then [`bs0`, `u0`, `p0`] strip_assume_tac)) >>
+  unlet_asms_tac >>
   qpat_x_assum `expr_post (storage_trace_horizon _) _ _ _ _ _ _ _ _ _ _ _ _ _` kall_tac >>
   qexistsl_tac [`bs0`, `u0`, `p0`] >> simp[] >> rpt strip_tac >>
   drop_horizon0_tac >>
   qpat_x_assum `!H. valid_horizon _ _ H ee.storage_trace ==> expr_post _ _ _ _ _ _ _ _ _ _ _ _ _ _`
     drule >> strip_tac >>
-  drule_all (alpha_tyvars slice_source_fixed_capture_entry) >> disch_then (qspec_then `st0` strip_assume_tac) >> gvs[] >>
+  drule_all (alpha_tyvars slice_source_fixed_capture_entry) >> disch_then (qspec_then `st0` strip_assume_tac) >> unlet_asms_tac >> gvs[] >>
   capture_close_tac
 QED
 
