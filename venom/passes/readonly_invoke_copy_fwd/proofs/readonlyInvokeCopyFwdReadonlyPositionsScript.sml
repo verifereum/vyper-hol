@@ -324,3 +324,22 @@ Proof
      Cases_on `h` >> gvs[icf_get_callee_name_def, decode_invoke_def]) >>
   drule_all ricf_readonly_inst_edit_decode >> strip_tac >> gvs[] >> metis_tac[]
 QED
+
+
+Theorem ricf_call_readonly_position:
+  ricf_readonly_function_edit rma original round /\
+  b < LENGTH original.fn_blocks /\
+  i < LENGTH (EL b original.fn_blocks).bb_instructions /\
+  (EL i (EL b original.fn_blocks).bb_instructions).inst_opcode = INVOKE ==>
+  b < LENGTH round.fn_blocks /\
+  i < LENGTH (EL b round.fn_blocks).bb_instructions /\
+  (EL i (EL b round.fn_blocks).bb_instructions).inst_opcode = INVOKE /\
+  LENGTH (EL i (EL b round.fn_blocks).bb_instructions).inst_operands =
+    LENGTH (EL i (EL b original.fn_blocks).bb_instructions).inst_operands
+Proof
+  simp[ricf_readonly_function_edit_def, ricf_readonly_block_edit_def,
+    LIST_REL_EL_EQN] >> strip_tac >>
+  qpat_x_assum `!n. _` (qspec_then `b` mp_tac) >> simp[] >> strip_tac >>
+  qpat_x_assum `!n. _` (qspec_then `i` mp_tac) >>
+  simp[ricf_readonly_inst_edit_def, ricf_inst_edit_def]
+QED

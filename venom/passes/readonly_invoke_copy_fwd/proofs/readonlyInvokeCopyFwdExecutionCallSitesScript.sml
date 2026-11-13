@@ -24,19 +24,6 @@ Proof
      simp[ricf_event_opcode])) >> simp[]
 QED
 
-Theorem ricf_call_function_position[local]:
-  ricf_function_edit original round /\
-  b < LENGTH original.fn_blocks /\
-  i < LENGTH (EL b original.fn_blocks).bb_instructions ==>
-  b < LENGTH round.fn_blocks /\
-  i < LENGTH (EL b round.fn_blocks).bb_instructions /\
-  ricf_inst_edit (EL i (EL b original.fn_blocks).bb_instructions)
-    (EL i (EL b round.fn_blocks).bb_instructions)
-Proof
-  simp[ricf_function_edit_def, ricf_block_edit_def, LIST_REL_EL_EQN] >>
-  rpt strip_tac >> metis_tac[]
-QED
-
 Theorem ricf_call_sites_fold_complete[local]:
   !uses acc sites.
     FOLDL (\acc (v,inst,pos).
@@ -325,24 +312,6 @@ Proof
     icf_assign_root (dfg_build_function original) {} fdst` by
     (irule ircf_alloca_aliases_separate >> metis_tac[]) >>
   metis_tac[ricf_call_earlier_destination_distinct]
-QED
-
-Theorem ricf_call_readonly_position[local]:
-  ricf_readonly_function_edit rma original round /\
-  b < LENGTH original.fn_blocks /\
-  i < LENGTH (EL b original.fn_blocks).bb_instructions /\
-  (EL i (EL b original.fn_blocks).bb_instructions).inst_opcode = INVOKE ==>
-  b < LENGTH round.fn_blocks /\
-  i < LENGTH (EL b round.fn_blocks).bb_instructions /\
-  (EL i (EL b round.fn_blocks).bb_instructions).inst_opcode = INVOKE /\
-  LENGTH (EL i (EL b round.fn_blocks).bb_instructions).inst_operands =
-    LENGTH (EL i (EL b original.fn_blocks).bb_instructions).inst_operands
-Proof
-  simp[ricf_readonly_function_edit_def, ricf_readonly_block_edit_def,
-    LIST_REL_EL_EQN] >> strip_tac >>
-  qpat_x_assum `!n. _` (qspec_then `b` mp_tac) >> simp[] >> strip_tac >>
-  qpat_x_assum `!n. _` (qspec_then `i` mp_tac) >>
-  simp[ricf_readonly_inst_edit_def, ricf_inst_edit_def]
 QED
 
 Theorem ricf_call_original_alias_selected_site:

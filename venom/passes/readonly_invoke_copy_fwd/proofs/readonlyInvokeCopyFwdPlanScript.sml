@@ -1167,3 +1167,17 @@ Proof
             ricf_function_trace_assign_root, ricf_function_trace_assign_root_op,
             ricf_function_trace_collect_aliases]
 QED
+
+
+Theorem ricf_call_function_position:
+  ricf_function_edit original round /\
+  b < LENGTH original.fn_blocks /\
+  i < LENGTH (EL b original.fn_blocks).bb_instructions ==>
+  b < LENGTH round.fn_blocks /\
+  i < LENGTH (EL b round.fn_blocks).bb_instructions /\
+  ricf_inst_edit (EL i (EL b original.fn_blocks).bb_instructions)
+    (EL i (EL b round.fn_blocks).bb_instructions)
+Proof
+  simp[ricf_function_edit_def, ricf_block_edit_def, LIST_REL_EL_EQN] >>
+  rpt strip_tac >> metis_tac[]
+QED
