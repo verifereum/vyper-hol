@@ -4,7 +4,8 @@ Ancestors
   loweringPosts exprLoweringProps valueEncoding vyperValue words
 
 Theorem abi_decode_bytes_footprint:
-  stmt_state_rel H ctx fn ce cx es s /\
+  stmt_state_rel (H:(bool # bytes32 # type_value) list # num list)
+    ctx fn ce cx es s /\
   evaluate_type (get_tenv cx) ty = SOME (BaseTV (BytesT (Dynamic n))) /\
   ~is_word_type ty /\
   expr_val_rel cx ty (BytesV bs) op s /\
@@ -27,14 +28,15 @@ Proof
   qpat_x_assum `expr_val_at _ _ _ _ _ _ _ _ _` mp_tac >>
   simp[expr_val_at_def, val_footprint_def] >> strip_tac >>
   `w2n w + (32 + LENGTH bs) < dimword (:256)` by
-    (irule hash_live_footprint_bound >>
+    (irule (INST_TYPE [alpha |-> ``:256``] hash_live_footprint_bound) >>
      goal_assum (drule_at Any) >>
      metis_tac[arithmeticTheory.ADD_ASSOC, arithmeticTheory.ADD_COMM]) >>
   simp[] >> metis_tac[]
 QED
 
 Theorem abi_decode_bytes_post_footprint:
-  expr_post H ctx fn ce cx e es0 sa sb s0 es (BytesV bs) op s /\
+  expr_post (H:(bool # bytes32 # type_value) list # num list)
+    ctx fn ce cx e es0 sa sb s0 es (BytesV bs) op s /\
   evaluate_type (get_tenv cx) (expr_type e) = SOME (BaseTV (BytesT (Dynamic n))) /\
   ~is_word_type (expr_type e) ==>
   ?p. eval_operand op s = SOME (n2w p) /\
@@ -61,7 +63,8 @@ Proof
 QED
 
 Theorem abi_decode_bytes_alloc_buffer_setup:
-  stmt_state_rel H ctx fn ce cx es s /\
+  stmt_state_rel (H:(bool # bytes32 # type_value) list # num list)
+    ctx fn ce cx es s /\
   evaluate_type (get_tenv cx) ty = SOME (BaseTV (BytesT (Dynamic n))) /\
   ~is_word_type ty /\
   expr_val_rel cx ty (BytesV bs) op s /\
@@ -76,7 +79,7 @@ Theorem abi_decode_bytes_alloc_buffer_setup:
     val_in_memory (BaseTV (BytesT (Dynamic n))) (BytesV bs) p s.vs_memory /\
     p + 32 + LENGTH bs < dimword (:256) /\
     run_inst_seq (emitted_insts sc sd) s = OK t /\
-    stmt_state_rel H ctx fn ce cx es t /\ decode_site_resources ctx fn t /\
+    stmt_state_rel (H:(bool # bytes32 # type_value) list # num list) ctx fn ce cx es t /\ decode_site_resources ctx fn t /\
     eval_operand buf.buf_operand t = SOME w /\
     FLOOKUP t.vs_allocas sc.cs_next_id = SOME (w2n w,sz) /\
     w2n w + sz < dimword (:256) /\ t.vs_memory = s.vs_memory /\
