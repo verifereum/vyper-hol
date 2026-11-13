@@ -9,6 +9,7 @@ Ancestors
   ptrSafeRun ptrDiscipline exprLowering emitHelper emitHelperProps
   exprLoweringProps compileEnv venomExecSemantics venomInst venomState
   list rich_list finite_map codegenRel contextCodegenRel decoderGhostFramePtr
+  freshWrites
 
 Theorem word_neg_emission:
   !x ty sa op sb.
@@ -154,9 +155,10 @@ Theorem word_neg_success_origin:
   ?t G' tn'.
     run_inst_seq (emitted_insts sa sb) s = OK t /\
     eval_operand op t = SOME (0w - w) /\
-    !D. gas_origin_ptr_path (D,lo,explicit,ctx,func,PG) (s,G,tn) []
-      (OK (t with vs_inst_idx := s.vs_inst_idx + LENGTH (emitted_insts sa sb)),
-       G',tn')
+    !D. inst_seq_ptr D lo ctx func PG G tn (emitted_insts sa sb) s G' tn' /\
+      gas_origin_ptr_path (D,lo,explicit,ctx,func,PG) (s,G,tn) []
+        (OK (t with vs_inst_idx := s.vs_inst_idx + LENGTH (emitted_insts sa sb)),
+         G',tn')
 Proof
   strip_tac >> drule_all compile_neg_run >> simp[] >> strip_tac >>
   drule_all word_neg_inst_seq_ptr >>
@@ -311,4 +313,70 @@ Proof
   gvs[Once inst_seq_ptr_def] >>
   Cases_on `step_inst_base k (v' with vs_inst_idx := SUC (SUC s.vs_inst_idx))` >>
   gvs[inst_seq_ptr_def] >> metis_tac[]
+QED
+
+Theorem word_neg_runtime_frame:
+  compile_neg x ty sa = (op,sb) /\
+  run_inst_seq (emitted_insts sa sb) s = OK t ==>
+  t = s with vs_vars := t.vs_vars /\
+  !z. not_fresh_at sa z ==> lookup_var z t = lookup_var z s
+Proof
+  strip_tac >> mp_tac straight_fresh_neg >> simp[straight_fresh_def] >>
+  disch_then drule >> strip_tac >>
+  drule_all run_inst_seq_writes_fresh >> simp[lookup_var_def]
+QED
+
+Theorem word_neg_ghost_frame:
+  compile_neg x ty sa = (op,sb) /\
+  run_inst_seq (emitted_insts sa sb) s = OK t /\
+  inst_seq_ptr D lo ctx fn PG G tn (emitted_insts sa sb) s G' tn' /\
+  ghost_inv_at D lo d cenv cx es G tn s /\ local_ptrs_reserved cenv sa /\
+  (!z sz. cenv.ce_return_buf = SOME (PtrVar (Var z) sz) ==>
+          not_fresh_at sa z) /\
+  (!z sz. cenv.ce_return_pc = SOME (PtrVar (Var z) sz) ==>
+          not_fresh_at sa z) /\ es'.scopes = es.scopes ==>
+  ghost_inv_at D lo d cenv cx es' G' tn' (t with vs_inst_idx := n)
+Proof
+  strip_tac >>
+  drule_all word_neg_runtime_frame >> strip_tac >>
+  drule_all word_neg_taint_exterior >> strip_tac >>
+  `!z. not_fresh_at sa z ==> FLOOKUP G' z = FLOOKUP G z /\
+       op_taint tn' (Var z) = op_taint tn (Var z)` by
+    metis_tac[word_neg_ghost_register_frame] >>
+  irule ghost_inv_at_exterior_frame >>
+  qexistsl [`G`, `es`, `s`, `sa`, `tn`] >>
+  simp[] >>
+  qpat_x_assum `t = s with vs_vars := _` SUBST_ALL_TAC >>
+  fs[lookup_var_def]
+QED
+
+Theorem word_neg_success_ghost_origin:
+  compile_neg x ty sa = (op,sb) /\ fresh_vars_wrt sa s /\
+  eval_operand x s = SOME w /\
+  w2i (FST (type_bounds ty)) < w2i w /\
+  op_taint tn x = {} /\ allocas_from lo s /\
+  (ctx_has_dalloca ctx ==> allocas_below_fmp s) /\ ~s.vs_halted /\
+  lookup_block s.vs_current_bb func.fn_blocks = SOME bb /\
+  isPREFIX (emitted_insts sa sb) (DROP s.vs_inst_idx bb.bb_instructions) /\
+  local_ptrs_reserved cenv sa /\
+  (!z sz. cenv.ce_return_buf = SOME (PtrVar (Var z) sz) ==>
+          not_fresh_at sa z) /\
+  (!z sz. cenv.ce_return_pc = SOME (PtrVar (Var z) sz) ==>
+          not_fresh_at sa z) /\ es'.scopes = es.scopes /\
+  (!H. valid_horizon cx st0 H trace ==>
+       ghost_inv_at (DF H) lo d cenv cx es G tn s) ==>
+  ?t G' tn'.
+    run_inst_seq (emitted_insts sa sb) s = OK t /\
+    eval_operand op t = SOME (0w - w) /\
+    !H. valid_horizon cx st0 H trace ==>
+      gas_origin_ptr_path (DF H,lo,explicit,ctx,func,PG) (s,G,tn) []
+        (OK (t with vs_inst_idx := s.vs_inst_idx + LENGTH (emitted_insts sa sb)),
+         G',tn') /\
+      ghost_inv_at (DF H) lo d cenv cx es' G' tn'
+        (t with vs_inst_idx := s.vs_inst_idx + LENGTH (emitted_insts sa sb))
+Proof
+  strip_tac >> drule_all word_neg_success_origin >>
+  disch_then (qspecl_then [`explicit`, `PG`, `G`] strip_assume_tac) >>
+  qexistsl [`t`, `G'`, `tn'`] >> simp[] >> rpt strip_tac >>
+  irule word_neg_ghost_frame >> metis_tac[]
 QED
