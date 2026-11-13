@@ -17,6 +17,51 @@ Ancestors
   rich_list context compileEnv loweringStateRelDefs venomState venomInst
   venomExecSemantics venomMemDefs venomMemProofs valueEncoding valueEncodingDefs valueEncodingProofs venomWf finite_map words list arithmetic
 
+Theorem constructor_run_inst_seq_ptr_continuation[local]:
+  !code s t G tn G' tn' ctx fn bb.
+    ~s.vs_halted /\
+    lookup_block s.vs_current_bb fn.fn_blocks = SOME bb /\
+    isPREFIX code (DROP s.vs_inst_idx bb.bb_instructions) /\
+    EVERY (\i. i.inst_opcode <> INVOKE /\ ~is_terminator i.inst_opcode) code /\
+    inst_seq_ptr D lo ctx fn PG G tn code s G' tn' /\
+    run_inst_seq code s = OK t ==>
+    ((!fuel. ptr_safe_run D lo fuel ctx fn PG G' tn'
+       (t with vs_inst_idx := s.vs_inst_idx + LENGTH code)) ==>
+     !fuel. ptr_safe_run D lo fuel ctx fn PG G tn s)
+Proof
+  Induct
+  >- (simp[run_inst_seq_def, inst_seq_ptr_def] >> rpt strip_tac >> gvs[]) >>
+  rpt gen_tac >> strip_tac >>
+  drule instruction_prefix_cursor >> strip_tac >>
+  Cases_on `step_inst_base h s` >>
+  gvs[run_inst_seq_def, inst_seq_ptr_def] >>
+  rename1 `step_inst_base h s = OK v` >>
+  `step_inst 0 ctx h s = OK v` by simp[step_inst_non_invoke] >>
+  `~v.vs_halted /\ v.vs_current_bb = s.vs_current_bb` by
+    metis_tac[step_preserves_halted, step_preserves_control_flow] >>
+  `EVERY (\i. ~is_terminator i.inst_opcode) code` by fs[EVERY_MEM] >>
+  first_x_assum (qspecl_then [`v with vs_inst_idx := SUC s.vs_inst_idx`,
+    `t with vs_inst_idx := SUC s.vs_inst_idx`, `step_prov PG G h v`,
+    `step_taint h s v tn`, `G'`, `tn'`, `ctx`, `fn`, `bb`] mp_tac) >>
+  simp[run_inst_seq_inst_idx, exec_result_map_def, ADD1] >>
+  strip_tac >> strip_tac >>
+  `!fuel. ptr_safe_run D lo fuel ctx fn PG (step_prov PG G h v)
+     (step_taint h s v tn) (v with vs_inst_idx := SUC s.vs_inst_idx)` by
+    (simp[ADD1] >> first_x_assum irule >>
+     simp[GSYM ADD1, run_inst_seq_inst_idx, exec_result_map_def]) >>
+  gen_tac >>
+  `step_inst fuel ctx h s = OK v` by simp[step_inst_non_invoke] >>
+  `ghost_step fuel ctx PG G tn h s =
+     (step_prov PG G h v, step_taint h s v tn)` by
+    metis_tac[ghost_step_non_invoke] >>
+  `ptr_inst_ok D lo fuel ctx fn G tn h s` by
+    (gvs[ptr_inst_ok_def, step_inst_non_invoke]) >>
+  simp[ptr_safe_run_def, Once ptr_safe_block_def, ptr_safe_step_def] >>
+  qpat_x_assum `!fuel. ptr_safe_run D lo fuel ctx fn PG
+     (step_prov PG G h v) _ _` (qspec_then `fuel` mp_tac) >>
+  simp[ptr_safe_run_def]
+QED
+
 Theorem constructor_guard_run_joint[local]:
   !code s t G tn H u ctx fn bb.
     ~s.vs_halted /\
