@@ -9,7 +9,7 @@ Ancestors
    This is the local_ptrs_rel projection used in S3's
    bodyMemAssignLocalMem.local_memory_store_body_path. *)
 Theorem tuple_local_destination_room:
-  stmt_state_rel H ctx func ce cx es s /\
+  stmt_state_rel ctx func ce cx es s /\
   lookup_scopes id es.scopes = SOME entry /\
   FLOOKUP ce.ce_vars id = SOME (PtrVar (Var p) sz) /\
   lookup_var p s = SOME w /\ n <= type_memory_size entry.type ==>
@@ -31,7 +31,7 @@ QED
 Theorem tuple_staging_memory_safe:
   compile_alloc_buffer n sa = (buf,sm) /\
   compile_copy_memory buf.buf_operand src n sm = ((),sn) /\
-  fn_has_code sa sm func /\ stmt_state_rel H ctx func ce cx es s /\
+  fn_has_code sa sm func /\ stmt_state_rel ctx func ce cx es s /\
   fn_inst_ids_distinct func /\ local_ptrs_reserved ce sa /\
   (!x. src = Var x ==> not_fresh_at sa x) /\
   eval_operand src s = SOME sw /\ n < dimword (:256) /\

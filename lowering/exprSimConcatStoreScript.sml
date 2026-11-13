@@ -10,12 +10,12 @@ Ancestors
    literal_mstore_state_rel. *)
 Theorem alloca_mcopy_state_rel:
   !ctx func cenv cx es s inst b sz d src n.
-    stmt_state_rel H ctx func cenv cx es s /\ b <= d /\ d + n <= b + sz /\
+    stmt_state_rel ctx func cenv cx es s /\ b <= d /\ d + n <= b + sz /\
     MEM inst (fn_insts func) /\ inst.inst_opcode = ALLOCA /\
     FLOOKUP s.vs_allocas inst.inst_id = SOME (b,sz) /\
     (!name lb lsz. local_region cenv es.scopes s name lb lsz ==>
        b + sz <= lb \/ lb + lsz <= b) ==>
-    stmt_state_rel H ctx func cenv cx es (mcopy d src n s)
+    stmt_state_rel ctx func cenv cx es (mcopy d src n s)
 Proof
   rpt strip_tac >>
   `(mcopy d src n s with vs_memory := s.vs_memory) = s` by
@@ -27,7 +27,7 @@ Proof
     simp[local_region_def] >>
   `LENGTH s.vs_memory <= LENGTH (mcopy d src n s).vs_memory` by
     simp[mcopy_def, immutable_write_memory_capacity, MAX_DEF] >>
-  qpat_x_assum `stmt_state_rel H ctx _ _ _ _ _` mp_tac >>
+  qpat_x_assum `stmt_state_rel ctx _ _ _ _ _` mp_tac >>
   rewrite_tac[Once stmt_state_rel_def] >> strip_tac >>
   `local_ptrs_rel func cenv es.scopes (mcopy d src n s)` by
     (irule local_ptrs_rel_mem_agree >> qexists_tac `s` >>

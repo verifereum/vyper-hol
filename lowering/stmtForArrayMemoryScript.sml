@@ -24,7 +24,7 @@ Theorem compile_for_array_frag_mem:
     cs_extends sa sb /\ sa.cs_next_var <= sb.cs_next_var) /\
   P es /\
   (!k. k < LENGTH vs ==> value_has_type tv (EL k vs) /\ val_wf tv (EL k vs)) /\
-  (!ei s. P ei /\ stmt_state_rel H ctx func cenv cx ei s ==>
+  (!ei s. P ei /\ stmt_state_rel ctx func cenv cx ei s ==>
     ?base. eval_operand (Var arr_ptr) s = SOME base /\
       w2n base + LENGTH vs * type_memory_size tv <= s.vs_alloca_next /\
       (!k. k < LENGTH vs ==>
@@ -90,7 +90,7 @@ Proof
   `gas_outcome T (cx_tops cx) (ctx,func)
      (eval_for cx tv id stmts (MAP Value (DROP 0 vs))) (es,s)
      (\res ee t. res = INL () /\
-       array_round_done H d ctx func cenv cx sa s0 exit ee t)
+       array_round_done d ctx func cenv cx sa s0 exit ee t)
      (\res ee rr. ?ex. res = INR ex /\
        !tail. stmt_exit RetQ (ee with gas_obs := tail) (INR ex) rr)` by
     (drule array_code_loop_outcome_mem >> disch_then irule >>
@@ -110,7 +110,7 @@ QED
 Resume compile_for_array_frag_mem[element_layout]:
   rpt strip_tac >>
   gvs[array_loop_inv_def] >>
-  qpat_x_assum `!ei s. P ei /\ stmt_state_rel _ _ _ _ _ ei s ==> _`
+  qpat_x_assum `!ei s. P ei /\ stmt_state_rel _ _ _ _ ei s ==> _`
     (qspecl_then [`ei`, `t`] mp_tac) >>
   simp[] >> strip_tac >> gvs[] >>
   first_x_assum (qspec_then `k` mp_tac) >> simp[]
@@ -148,7 +148,7 @@ Resume compile_for_array_frag_mem[public_outcome]:
   `gas_outcome T (cx_tops cx) (ctx,func)
      (eval_for cx tv id stmts (MAP Value vs)) (es,s0)
      (\res ee t. res = INL () /\
-       array_round_done H d ctx func cenv cx sa s0 exit ee t)
+       array_round_done d ctx func cenv cx sa s0 exit ee t)
      (\res ee rr. ?ex. res = INR ex /\
        !tail. stmt_exit RetQ (ee with gas_obs := tail) (INR ex) rr)` by
     (irule stmtForArrayMemoryRoundSupportTheory.array_round_outcome_prefix_mem >> goal_assum (drule_at Any) >> gvs[]) >>

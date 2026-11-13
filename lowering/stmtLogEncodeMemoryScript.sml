@@ -350,7 +350,7 @@ QED
 (* The Log caller keeps statement state through source stores and output
    allocation; its cursor ALLOCA is an instruction of the same function. *)
 Theorem log_scalar_cursor_stmt_resources:
-  stmt_state_rel H ctx func ce cx es initial /\
+  stmt_state_rel ctx func ce cx es initial /\
   MEM inst (fn_insts func) /\ inst.inst_opcode = ALLOCA /\
   inst.inst_operands = [Lit (n2w 32)] ==>
   ?p. ((FLOOKUP initial.vs_allocas inst.inst_id = NONE /\ p = initial.vs_alloca_next) \/

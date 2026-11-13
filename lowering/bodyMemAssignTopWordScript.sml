@@ -5,6 +5,7 @@
    touches no memory. *)
 Theory bodyMemAssignTopWord
 Ancestors
+  supportedExprTraverse allocLimits allocLimitsProps
   bodySim vyperTypeCallGraph
   bodyMemoryPreds bodyMemoryDefs bodyDeclMemoryCounted bodyDeclMemoryCore
   allocaFootprint instMemFrontier memSafeRun exprSimMemDefs exprSimSource
@@ -31,9 +32,9 @@ Theorem assign_storage_store_path_mem:
     s.vs_current_bb = st.cs_current_bb /\
     s.vs_inst_idx = LENGTH st.cs_current_insts /\
     eval_operand op s = SOME w /\ alloca_history func s /\ alloca_inv s /\
-    stmt_state_rel H ctx func cenv cx es'
+    stmt_state_rel ctx func cenv cx es'
       (if tr then tstore slot w s else sstore slot w s) ==>
-    ?t. stmt_state_rel H ctx func cenv cx es' t /\
+    ?t. stmt_state_rel ctx func cenv cx es' t /\
         ~t.vs_halted /\ t.vs_current_bb = st'.cs_current_bb /\
         t.vs_inst_idx = LENGTH st'.cs_current_insts /\
         (!x. lookup_var x t = lookup_var x s) /\
@@ -43,7 +44,7 @@ Theorem assign_storage_store_path_mem:
 Proof
   rpt strip_tac >>
   `~s.vs_call_ctx.cc_static` by
-    (qpat_x_assum `stmt_state_rel _ _ _ _ _ _ _` mp_tac >>
+    (qpat_x_assum `stmt_state_rel _ _ _ _ _ _` mp_tac >>
      Cases_on `tr` >>
      simp[stmt_state_rel_def, loweringStateRelDefsTheory.state_rel_def,
           tstore_def, sstore_def, LET_THM]) >>
@@ -132,7 +133,7 @@ Proof
   conj_tac
   >- (rpt strip_tac >> simp[stmt_exit_def] >> metis_tac[expr_exit_INR_type]) >>
   qexists_tac `\v ee t.
-    expr_post H ctx func cenv cx e es sa sB s0 ee v op t /\
+    expr_post ctx func cenv cx e es sa sB s0 ee v op t /\
     expr_store_bound cx (expr_type e) v op t /\
     t.vs_current_bb = sB.cs_current_bb /\
     t.vs_inst_idx = LENGTH sB.cs_current_insts /\
@@ -142,7 +143,7 @@ Proof
       `value_has_type tvt v` by metis_tac[] >>
       `encode_value tvt v = SOME [(0, typed_val_to_w256 tvt v)]` by
         (irule encode_value_word_typed >> metis_tac[]) >>
-      qpat_x_assum `expr_post _ _ _ _ _ _ _ _ _ _ _ _ _ _`
+      qpat_x_assum `expr_post _ _ _ _ _ _ _ _ _ _ _ _ _`
         (strip_assume_tac o REWRITE_RULE [expr_post_def]) >>
       `eval_operand op t = SOME (typed_val_to_w256 tvt v)` by
         (gvs[expr_val_rel_def] >> metis_tac[]) >>
@@ -178,6 +179,7 @@ QED
 
 Theorem body_assign_toplevel_word_mem:
   !cx nsid e d tops bindings ctx func cenv env env' ret_ty lctx RetQ es.
+    body_stmt_safe tops (Assign (BaseTarget (TopLevelNameTarget nsid)) e) /\
     body_expr_mem_ok cx e /\
     body_inv tops ctx cenv cx /\ supported_stmt tops bindings
       (Assign (BaseTarget (TopLevelNameTarget nsid)) e) /\
@@ -240,7 +242,19 @@ Proof
   `t = ty` by metis_tac[build_maps_variable, optionTheory.SOME_11] >>
   gvs[] >> rename1 `FLOOKUP env.toplevel_vtypes _ = SOME (Type ty)` >>
   `expr_type e = ty` by metis_tac[type_widens_to_word] >>
-  drule_then strip_assume_tac supported_expr_body_calls >>
+  qpat_assum `body_stmt_safe _ _` (strip_assume_tac o
+    SIMP_RULE std_ss [body_stmt_safe_def, supported_stmt_expr_exists_def,
+      supported_assignment_exists_def, supported_iterator_exists_def,
+      supported_assert_exists_def, supported_raise_exists_def,
+      supported_expr_exists_def, int_calls_stmt_def, int_calls_atarget_def,
+      int_calls_iterator_def, int_calls_assert_reason_def, int_calls_raise_reason_def,
+      listTheory.EVERY_APPEND, listTheory.EVERY_CONJ,
+      DE_MORGAN_THM, GSYM expr_has_evm_run_def]) >>
+  qpat_assum `stmt_exprs_ok _ _` (strip_assume_tac o
+    SIMP_RULE std_ss [stmt_exprs_ok_def, alloc_limits_stmt_def,
+      alloc_limits_iterator_def, alloc_limits_assert_def, alloc_limits_raise_def,
+      alloc_limits_expr_def]) >>
+  imp_res_tac alloc_limits_expr_not_extcode >>
   `supported_program tops` by gvs[body_inv_def] >>
   `cx_tops cx = tops` by (drule cx_tops_module >> simp[]) >>
   `expr_body_pre cenv cx env e es` by

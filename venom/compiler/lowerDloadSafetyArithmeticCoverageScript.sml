@@ -67,14 +67,14 @@ Proof
       qexistsl_tac [`ss`,`set_prov f.lf_H inst.inst_outputs
         (first_prov f.lf_H inst.inst_operands)`] >>
       simp[] >> metis_tac[ld_set_first_prov_selected]) >>
-  (Cases_on `MEM inst.inst_opcode [SHL;SHR;SAR]`
-  >- (drule_all ld_shift_effect >>
+  (Cases_on `MEM inst.inst_opcode [MUL;SHL;SHR;SAR]`
+  >- (drule_all ld_masked_scalar_effect >>
       disch_then (qspec_then `MAP (OPTION_MAP (ld_erase A)) f.lf_Q` strip_assume_tac) >>
       qexistsl_tac [`ss`,`set_prov f.lf_H inst.inst_outputs NONE`] >>
       simp[] >> (gen_tac >> strip_tac >> irule ld_set_prov_selected >>
        qexistsl_tac [`f.lf_H`,`inst.inst_outputs`,`NONE`] >> simp[])) >>
   `MEM inst.inst_opcode
-    [MUL; Div; Mod; SDIV; SMOD; Exp; ADDMOD; MULMOD; SLT; SGT;
+    [Div; Mod; SDIV; SMOD; Exp; ADDMOD; MULMOD; SLT; SGT;
      ISZERO; AND; OR; XOR; NOT; SIGNEXTEND; BYTE; OFFSET]` by
     (gvs[MEM]) >>
   drule_all ld_scalar_pure_effect >>

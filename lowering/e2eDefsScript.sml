@@ -17,7 +17,7 @@
 Theory e2eDefs
 Ancestors
   vfmExecution vfmExecutionProp vfmState vfmRunCall
-  vfmTotalBalance vfmReturndataBound
+  vfmTotalBalance vfmReturndataBound vfmWfState
   frameOutcome callTrace
   vyperABI vyperEvent vyperInterpreter vyperCall
   vyperTypeContract vyperTypeContractSoundness vyperTypeInitialState
@@ -31,12 +31,12 @@ Definition layouts_agree_def:
   layouts_agree tops am tx <=>
     let (sl, tl) = (case ALOOKUP am.layouts tx.target of
                       SOME p => p | NONE => ([], [])) in
-      (!vis id ty n. MEM (VariableDecl vis Storage id ty (SOME n)) tops ==>
-                     ALOOKUP sl (NONE, id) = SOME n) /\
-      (!vis id ty n. MEM (VariableDecl vis Transient id ty (SOME n)) tops ==>
-                     ALOOKUP tl (NONE, id) = SOME n) /\
-      (!vis tr id kt vt n. MEM (HashMapDecl vis tr id kt vt (SOME n)) tops ==>
-                           ALOOKUP (if tr then tl else sl) (NONE, id) = SOME n) /\
+      (!vis id ty slot_opt. MEM (VariableDecl vis Storage id ty slot_opt) tops ==>
+                            ALOOKUP sl (NONE, id) = slot_opt) /\
+      (!vis id ty slot_opt. MEM (VariableDecl vis Transient id ty slot_opt) tops ==>
+                            ALOOKUP tl (NONE, id) = slot_opt) /\
+      (!vis tr id kt vt slot_opt. MEM (HashMapDecl vis tr id kt vt slot_opt) tops ==>
+                                  ALOOKUP (if tr then tl else sl) (NONE, id) = slot_opt) /\
       (* The pinned frontend reserves this slot when a guard is present.
          Ordinary contracts need not have a transient layout at all. *)
       (!vis mut rr name args dflts ret body.
@@ -198,6 +198,7 @@ Definition call_state_rel_def:
       ctxt.msgParams.caller = tx.sender /\ ctxt.msgParams.callee = tx.target /\
       ctxt.msgParams.value = tx.value /\
       buffer_to_list ctxt.msgParams.data = tx.calldata /\
+      ctxt.msgParams.code = tx.code /\
       tx_block_fields_rel tx es.txParams /\
       source_deployment_rel tops am tx
 End
@@ -300,10 +301,13 @@ Proof
 QED
 
 (* The source machine the next transaction starts from, after a transaction
-   or deployment that ended in EVM state es' with source machine am': it
-   adopts the EVM's committed accounts (pending deletions processed, the
-   target's installed code included), and starts the transaction with empty
-   transient storage, no logs and no pending deletions. *)
+   or deployment whose frame succeeded (r = INR NONE) in EVM state es' with
+   source machine am': it adopts the EVM's committed accounts (pending
+   deletions processed, the target's installed code included), and starts the
+   transaction with empty transient storage, no logs and no pending deletions.
+   After a failed top-level frame es'.rollback still holds the frame's writes
+   (the transaction's accounting discards them), so the next transaction
+   starts from the pre-transaction machine instead. *)
 Definition next_source_machine_def:
   next_source_machine (am' : abstract_machine) es' =
     am' with <| accounts := process_deletions es'.rollback.toDelete

@@ -5,7 +5,7 @@
    externalReturnWidenedCallMem's. *)
 Theory externalReturnValueMem
 Ancestors
-  returnValueTyped
+  returnValueTyped externalReturnDirectMem externalReturnNormalizedMem
   externalReturnLeafMem externalNormalizePremises typedNormalizeRankMem
   externalReturnZeroLayout
   nonreentrantExit
@@ -61,14 +61,17 @@ Theorem external_frame_ret_value_run_mem:
        lower_value compile_expr cenv' ret e sa = (op, s1) /\
        fn_has_code sa sb func /\ fn_inst_ids_distinct func /\
        local_ptrs_reserved cenv' sa /\ ~block_is_terminated sa /\
-       stmt_state_rel H unit.cu_context func cenv'
+       stmt_state_rel unit.cu_context func cenv'
          (initial_evaluation_context am.sources am.layouts tx NONE) es s0 /\
        alloca_history func s0 /\ ~s0.vs_halted /\
        s0.vs_current_bb = sa.cs_current_bb /\
        s0.vs_inst_idx = LENGTH sa.cs_current_insts /\
-       expr_post H unit.cu_context func cenv'
+       expr_post unit.cu_context func cenv'
          (initial_evaluation_context am.sources am.layouts tx NONE)
          e es sa s1 s0 ee v op t /\
+       expr_store_bound
+         (initial_evaluation_context am.sources am.layouts tx NONE)
+         (expr_type e) v op t /\
        (?gs ee'.
           bind (eval_expr
                   (initial_evaluation_context am.sources am.layouts tx NONE) e)
@@ -82,5 +85,12 @@ Theorem external_frame_ret_value_run_mem:
        ?fuel r. run_from fuel unit.cu_context func t = r /\ exit_result r /\
                 mem_safe_run fuel unit.cu_context func t
 Proof
-  cheat
+  rpt gen_tac >> disch_then (map_every assume_tac o CONJUNCTS) >>
+  rpt gen_tac >> disch_then (map_every assume_tac o CONJUNCTS) >>
+  Cases_on `~is_word_type ret /\
+    ~(is_bytestring_type (lowered_value_type cenv' e) /\ is_bytestring_type ret) /\
+    lowered_value_type cenv' e <> ret`
+  >- (qpat_x_assum `~is_word_type ret /\ _` strip_assume_tac >>
+      drule_all external_frame_ret_value_normalized_run_mem >> simp[]) >>
+  drule_all external_frame_ret_value_direct_run_mem >> simp[]
 QED

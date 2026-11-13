@@ -53,12 +53,12 @@ Theorem assign_tuple_locals_memory_suffix_path_mem:
     cs_extends su sl /\ cs_extends sl ss /\ cs_extends ss sf /\
     fn_has_code su sl func /\ fn_has_code sl ss func /\ fn_has_code ss sf func /\
     fn_inst_ids_distinct func /\ local_ptrs_reserved cenv su /\
-    stmt_state_rel H ctx func cenv cx es1 sv /\ alloca_history func sv /\
+    stmt_state_rel ctx func cenv cx es1 sv /\ alloca_history func sv /\
     return_buf_frame d cenv su sv /\ ~sv.vs_halted /\
     sv.vs_current_bb = su.cs_current_bb /\
     sv.vs_inst_idx = LENGTH su.cs_current_insts ==>
     ~block_is_terminated sf /\
-    ?t. stmt_state_rel H ctx func cenv cx es' t /\ ~t.vs_halted /\
+    ?t. stmt_state_rel ctx func cenv cx es' t /\ ~t.vs_halted /\
       t.vs_current_bb = sf.cs_current_bb /\
       t.vs_inst_idx = LENGTH sf.cs_current_insts /\
       (!x. not_fresh_at su x ==> lookup_var x t = lookup_var x sv) /\
@@ -160,7 +160,7 @@ Resume assign_tuple_locals_memory_suffix_path_mem[store_ready]:
   >- (simp[] >> metis_tac[]) >>
   drule_all tuple_store_mixed_locals_path_mem >>
   disch_then (map_every assume_tac o CONJUNCTS) >>
-  qpat_x_assum `?t. stmt_state_rel H ctx _ _ _ es' _ /\ _`
+  qpat_x_assum `?t. stmt_state_rel ctx _ _ _ es' _ /\ _`
     (qx_choose_then `sfv` (map_every assume_tac o CONJUNCTS)) >>
   suspend "compose"
 QED
@@ -346,7 +346,7 @@ Resume compile_assign_tuple_locals_memory_stmt_frag_mem[success]:
     metis_tac[compile_lower_value_var] >>
   qpat_assum `assign_tuple_targets _ _ _ _ = _`
     (mp_tac o SIMP_RULE (srw_ss()) [Once evaluate_def]) >> strip_tac >>
-  qpat_x_assum `expr_post _ _ _ _ _ _ _ _ _ _ _ _ _ _`
+  qpat_x_assum `expr_post _ _ _ _ _ _ _ _ _ _ _ _ _`
     (strip_assume_tac o REWRITE_RULE [expr_post_def]) >>
   suspend "suffix"
 QED

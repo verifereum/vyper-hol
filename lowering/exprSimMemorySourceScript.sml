@@ -62,18 +62,18 @@ QED
 
 Theorem buffer_memory_marked_read:
   gas_marked_exec memory (ctx,func) a (es,s0) marks (INL tv) ee (OK s) /\
-  vv_post H ctx func cenv cx e es sa sb s0 (ee with gas_obs := []) tv
+  vv_post ctx func cenv cx e es sa sb s0 (ee with gas_obs := []) tv
     (LocatedValue t p) s /\
   p.ptr_location = LocMemory /\ ~is_word_type t ==>
   ?v. gas_marked_exec memory (ctx,func) (bind a (read_result cx))
         (es,s0) marks (INL v) (ee with gas_obs := []) (OK s) /\
-      expr_post H ctx func cenv cx e es sa sb s0 (ee with gas_obs := [])
+      expr_post ctx func cenv cx e es sa sb s0 (ee with gas_obs := [])
         v p.ptr_operand s
 Proof
   rpt strip_tac >>
   `?v. read_result cx tv (ee with gas_obs := []) =
        (INL v,ee with gas_obs := [])` by
-    (qpat_x_assum `vv_post _ _ _ _ _ _ _ _ _ _ _ _ _ _` mp_tac >>
+    (qpat_x_assum `vv_post _ _ _ _ _ _ _ _ _ _ _ _ _` mp_tac >>
      simp[loweringPostsTheory.vv_post_def, loweringPostsTheory.vv_holds_def] >>
      metis_tac[]) >>
   qexists_tac `v` >> conj_tac

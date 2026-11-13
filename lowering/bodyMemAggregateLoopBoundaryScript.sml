@@ -133,6 +133,28 @@ Proof
   metis_tac[]
 QED
 
+(* Preserve the source typing independently of the declared destination type. *)
+Theorem aggregate_tuple_marked_child_declared_source_any:
+  expr_body_pre ce cx env e es /\
+  gas_marked_exec memory (ctx,func) (eval_expr cx e) (es,s0)
+    marks (INL tv) mid (OK t) /\
+  arg_type_fits (expr_type e) dty /\
+  evaluate_type (get_tenv cx) dty = SOME dtv ==>
+  expr_sim_inv ce cx env (mid with gas_obs := []) /\
+  MAP FDOM es.scopes = MAP FDOM mid.scopes /\
+  immutable_metadata_frame es (mid with gas_obs := []) /\
+  ?tvt. evaluate_type (get_tenv cx) (expr_type e) = SOME tvt /\
+    eval_result_typed (env,cx,mid with gas_obs := []) tv (Type (expr_type e)) /\
+    (!v. read_result cx tv (mid with gas_obs := []) =
+           (INL v,mid with gas_obs := []) ==>
+      value_has_type tvt v /\ value_has_type dtv v /\ val_wf dtv v)
+Proof
+  strip_tac >> drule_all aggregate_tuple_marked_child_source_any >> strip_tac >>
+  simp[] >> rpt strip_tac >>
+  metis_tac[CONJUNCT1 vyperTypeArgFitsTheory.arg_type_fits_value_has_type,
+            CONJUNCT1 valueEncodingTypingTheory.value_has_type_val_wf]
+QED
+
 Theorem aggregate_tuple_marked_footprint_any:
   expr_body_pre ce cx env e es /\
   gas_marked_exec memory (ctx,func) (eval_expr cx e) (es,s0)
@@ -192,13 +214,13 @@ Theorem aggregate_tuple_child_outcome_mem:
   expr_body_pre ce cx env e es /\
   compile_expr ce (expr_type e) e sa = (vv,sb) /\
   fn_has_code sa sb func /\ fn_inst_ids_distinct func /\
-  local_ptrs_reserved ce sa /\ stmt_state_rel H ctx func ce cx es s0 /\
+  local_ptrs_reserved ce sa /\ stmt_state_rel ctx func ce cx es s0 /\
   alloca_history func s0 /\
   ~s0.vs_halted /\ s0.vs_current_bb = sa.cs_current_bb /\
   s0.vs_inst_idx = LENGTH sa.cs_current_insts ==>
   gas_outcome T (cx_tops cx) (ctx,func) (eval_expr cx e) (es,s0)
     (\res ee t. ?tv. res = INL tv /\
-      vv_post H ctx func ce cx e es sa sb s0 ee tv vv t /\
+      vv_post ctx func ce cx e es sa sb s0 ee tv vv t /\
       vv_store_bound cx (expr_type e) (lowered_value_type ce e) ee tv vv t /\
       t.vs_current_bb = sb.cs_current_bb /\
       t.vs_inst_idx = LENGTH sb.cs_current_insts /\
@@ -212,25 +234,10 @@ Proof
   fs[expr_vv_sim_mem_def]
 QED
 
-Theorem aggregate_mem_tuple_cons_compile:
-  compile_make_tuple compile_expr ce (e::args) buf off sa = (out,sb) ==>
-  ?vv sm dst sn op su st.
-    compile_expr ce (expr_type e) e sa = (vv,sm) /\
-    emit_op ADD [buf; Lit (n2w off)] sm = (dst,sn) /\
-    unwrap_value ce vv sn = (op,su) /\
-    compile_store_memory ce op dst (expr_type e) (lowered_value_type ce e) su = ((),st) /\
-    compile_make_tuple compile_expr ce args buf
-      (off + type_memory_bytes ce (expr_type e)) st = (out,sb)
-Proof
-  simp[Once compile_make_tuple_def, comp_bind_def, comp_ignore_bind_def] >>
-  rpt (pairarg_tac >> gvs[]) >> strip_tac >>
-  goal_assum (drule_at Any) >> simp[]
-QED
-
 Theorem aggregate_mem_tuple_local_region_backward:
   MAP FDOM es.scopes = MAP FDOM es1.scopes /\
-  stmt_state_rel H ctx func ce cx es s0 /\ local_ptrs_reserved ce sa /\
-  vv_post H ctx func ce cx e es sa sb s0 es1 tv vv s1 /\
+  stmt_state_rel ctx func ce cx es s0 /\ local_ptrs_reserved ce sa /\
+  vv_post ctx func ce cx e es sa sb s0 es1 tv vv s1 /\
   local_region ce es1.scopes s1 name b sz ==>
   local_region ce es.scopes s0 name b sz
 Proof

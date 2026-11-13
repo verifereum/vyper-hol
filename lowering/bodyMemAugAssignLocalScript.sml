@@ -14,6 +14,7 @@
    flag where S1's fix it to F. *)
 Theory bodyMemAugAssignLocal
 Ancestors
+  supportedExprTraverse allocLimitsProps
   bodySim vyperTypeCallGraph
   bodyMemoryPreds bodyMemoryDefs bodyMemAssignLocalWord bodyNameWordMemory
   bodyBinopFamiliesMemory bodyBinopFragMemory
@@ -364,13 +365,13 @@ Theorem augassign_local_load_mem[local]:
   lookup_scopes id es.scopes = SOME entry /\
   emit_op MLOAD [Var p] sa = (op,sb) /\
   fn_has_code sa sb func /\ fn_inst_ids_distinct func /\
-  stmt_state_rel H ctx func cenv cx es s0 /\ alloca_history func s0 /\
+  stmt_state_rel ctx func cenv cx es s0 /\ alloca_history func s0 /\
   local_ptrs_reserved cenv sa /\
   ~s0.vs_halted /\ s0.vs_current_bb = sa.cs_current_bb /\
   s0.vs_inst_idx = LENGTH sa.cs_current_insts ==>
   ?t. gas_marked_exec T (ctx,func) (eval_target_place cx (NameTarget id))
         (es,s0) [] (INL (MemoryPlace id [])) es (OK t) /\
-      expr_post H ctx func cenv cx (Name ty id) es sa sb s0
+      expr_post ctx func cenv cx (Name ty id) es sa sb s0
         (es with gas_obs := []) entry.value op t /\
       word_value entry.value /\
       ~t.vs_halted /\ t.vs_current_bb = sb.cs_current_bb /\
@@ -458,7 +459,7 @@ Resume compile_augassign_local_mem[code]:
   `gas_admissible (bind (eval_expr cx e) (read_result cx)) expr_res_ok
     (es with gas_obs := [])` by
     (simp[] >> irule augassign_rhs_admissible_mem_src >> metis_tac[]) >>
-  `stmt_state_rel H ctx func cenv cx (es with gas_obs := []) t` by
+  `stmt_state_rel ctx func cenv cx (es with gas_obs := []) t` by
     fs[expr_post_def] >>
   qpat_x_assum `!gs. expr_sim_mem _ _ _ _ _ _ _`
     (qspec_then `[]` (mp_tac o REWRITE_RULE [expr_sim_mem_def])) >>
@@ -492,7 +493,7 @@ QED
 
 Resume compile_augassign_local_mem[rhs_normal]:
   gvs[] >>
-  rename1 `expr_post H ctx func cenv cx e _ s1 s2 t (ee with gas_obs := []) v rhs_op u` >>
+  rename1 `expr_post ctx func cenv cx e _ s1 s2 t (ee with gas_obs := []) v rhs_op u` >>
   `bind (eval_expr cx e) (read_result cx)
     (es with gas_obs := gas_explicit marks t.vs_gas_readings) =
       (INL v, ee with gas_obs := [])` by
@@ -540,7 +541,7 @@ Resume compile_augassign_local_mem[binop]:
      qexistsl_tac [`s1`, `t`] >> gvs[expr_post_def]) >>
   `not_fresh_at s2 out /\ local_ptrs_reserved cenv s2` by
     metis_tac[freshWritesTheory.not_fresh_at_mono, local_ptrs_reserved_next_var] >>
-  `stmt_state_rel H ctx func cenv cx (ee with gas_obs := []) u` by
+  `stmt_state_rel ctx func cenv cx (ee with gas_obs := []) u` by
     fs[expr_post_def] >>
   `~u.vs_halted` by
     metis_tac[gas_marked_exec_def, gas_marked_path_exec, gas_path_normal] >>
@@ -638,14 +639,14 @@ Resume compile_augassign_local_mem[post]:
        metis_tac[freshWritesTheory.not_fresh_at_mono,
                  arithmeticTheory.LESS_EQ_TRANS] >>
      `lookup_var x u = SOME w` by
-       (qpat_x_assum `expr_post _ _ _ _ _ e _ _ _ _ _ _ _ _` mp_tac >>
+       (qpat_x_assum `expr_post _ _ _ _ e _ _ _ _ _ _ _ _` mp_tac >>
         simp[expr_post_def]) >>
      metis_tac[]) >>
   `!aid b. FLOOKUP s0.vs_allocas aid = SOME b ==>
            FLOOKUP s.vs_allocas aid = SOME b` by
     (rpt strip_tac >>
      `FLOOKUP u.vs_allocas aid = SOME b` by
-       (qpat_x_assum `expr_post _ _ _ _ _ e _ _ _ _ _ _ _ _` mp_tac >>
+       (qpat_x_assum `expr_post _ _ _ _ e _ _ _ _ _ _ _ _` mp_tac >>
         simp[expr_post_def] >> metis_tac[]) >>
      metis_tac[]) >>
   simp[stmt_lands_def, cenv_top_ext_refl] >>
@@ -680,6 +681,7 @@ Finalise compile_augassign_local_mem
 
 Theorem body_augassign_local_mem:
   !cx ty id bop e d tops bindings ctx func cenv env env' ret_ty lctx RetQ es.
+    body_stmt_safe tops (AugAssign ty (NameTarget id) bop e) /\
     (!s'' p t' s'3' cur t'' s'4' ptv t'3'.
        eval_target_place cx (NameTarget id) s'' = (INL p,t') /\
        read_place cx p s'3' = (INL cur,t'') /\
@@ -703,7 +705,19 @@ Theorem body_augassign_local_mem:
 Proof
   rpt strip_tac >>
   `supported_expr tops e` by gvs[supported_stmt_def] >>
-  drule_then strip_assume_tac supported_expr_body_calls >>
+  qpat_assum `body_stmt_safe _ _` (strip_assume_tac o
+    SIMP_RULE std_ss [body_stmt_safe_def, supported_stmt_expr_exists_def,
+      supported_assignment_exists_def, supported_iterator_exists_def,
+      supported_assert_exists_def, supported_raise_exists_def,
+      supported_expr_exists_def, int_calls_stmt_def, int_calls_atarget_def,
+      int_calls_iterator_def, int_calls_assert_reason_def, int_calls_raise_reason_def,
+      listTheory.EVERY_APPEND, listTheory.EVERY_CONJ,
+      DE_MORGAN_THM, GSYM expr_has_evm_run_def]) >>
+  qpat_assum `stmt_exprs_ok _ _` (strip_assume_tac o
+    SIMP_RULE std_ss [stmt_exprs_ok_def, alloc_limits_stmt_def,
+      alloc_limits_iterator_def, alloc_limits_assert_def, alloc_limits_raise_def,
+      alloc_limits_expr_def]) >>
+  imp_res_tac alloc_limits_expr_not_extcode >>
   `supported_program tops /\ get_module_code cx NONE = SOME tops` by
     gvs[body_inv_def] >>
   `cx_tops cx = tops /\
@@ -737,7 +751,7 @@ Proof
   conj_tac
   >- (gen_tac >>
       qpat_x_assum `body_expr_mem_ok cx e`
-        (mp_tac o REWRITE_RULE [body_expr_mem_ok_def]) >>
+        (mp_tac o CONJUNCT1 o REWRITE_RULE [body_expr_mem_ok_def]) >>
       disch_then (qspecl_then [`tops`, `ctx`, `func`, `cenv`, `env`, `ty`,
         `es with gas_obs := gs`] mp_tac) >>
       simp[]) >>

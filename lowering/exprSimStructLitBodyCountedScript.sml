@@ -64,7 +64,7 @@ Resume compile_struct_lit_body_case[vv]:
 QED
 
 Resume compile_struct_lit_body_case[immutable]:
-  qpat_assum `stmt_state_rel H _ _ _ _ _ t` mp_tac >>
+  qpat_assum `stmt_state_rel _ _ _ _ _ t` mp_tac >>
   pure_rewrite_tac[stmt_state_rel_def] >> strip_tac >>
   drule_all exprSimAllocTheory.buffer_alloc_code >> strip_tac >>
   fs[immutable_alloca_sep_def] >> rpt strip_tac >>
@@ -154,7 +154,8 @@ Resume compile_struct_lit_body_case[at]:
   conj_tac >- fs[ci_mono_def] >>
   conj_tac >-
     (`LENGTH (MAP FST fields) = LENGTH tvs` by
-       (drule vyperTypeABITheory.OPT_MMAP_LENGTH >> simp[]) >>
+       (imp_res_tac listTheory.LIST_REL_LENGTH >>
+        imp_res_tac vyperTypeABITheory.OPT_MMAP_LENGTH >> fs[]) >>
      simp[valueEncodingTypingTheory.type_memory_size_fields_zip]) >>
   `MAP FDOM es.scopes = MAP FDOM ee.scopes` by
     (drule vyperEvalExprPreservesScopesDomTheory.eval_exprs_preserves_scopes_dom >> simp[]) >>

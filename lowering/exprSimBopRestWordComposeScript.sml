@@ -85,15 +85,15 @@ Proof
 QED
 
 Theorem rest_word_mixed_post:
-  expr_post H ctx func cenv cx e1 es sa s1 s0 es1 v1 x t /\
-  vv_post H ctx func cenv cx e2 es1 s1 sm t es2 tv vv q /\
+  expr_post ctx func cenv cx e1 es sa s1 s0 es1 v1 x t /\
+  vv_post ctx func cenv cx e2 es1 s1 sm t es2 tv vv q /\
   expr_val_rel cx ann v out q /\
   expr_val_at cenv cx ann sa ct es2 v out q /\
   local_ptrs_reserved cenv sa /\
-  stmt_state_rel H ctx func cenv cx es s0 /\
+  stmt_state_rel ctx func cenv cx es s0 /\
   MAP FDOM es.scopes = MAP FDOM es1.scopes /\
   sa.cs_next_var <= s1.cs_next_var /\ sa.cs_next_id <= s1.cs_next_id ==>
-  expr_post H ctx func cenv cx (Builtin ann (Bop bop) [e1;e2])
+  expr_post ctx func cenv cx (Builtin ann (Bop bop) [e1;e2])
     es sa ct s0 es2 v out q
 Proof
   simp[loweringPostsTheory.expr_post_def, loweringPostsTheory.vv_post_def] >> strip_tac >>
@@ -154,7 +154,7 @@ Theorem rest_word_mixed_outcome:
   fn_inst_ids_distinct func /\
   local_ptrs_reserved cenv sa /\ local_ptrs_reserved cenv s1 /\
   sa.cs_next_var <= s1.cs_next_var /\ sa.cs_next_id <= s1.cs_next_id /\
-  stmt_state_rel H ctx func cenv cx es s0 /\ ~s0.vs_halted /\
+  stmt_state_rel ctx func cenv cx es s0 /\ ~s0.vs_halted /\
   s0.vs_current_bb = sa.cs_current_bb /\ s0.vs_inst_idx = LENGTH sa.cs_current_insts /\
   gas_admissible (bind (eval_expr cx (Builtin ann (Bop bop) [e1;e2])) (read_result cx))
     expr_res_ok es /\
@@ -162,7 +162,7 @@ Theorem rest_word_mixed_outcome:
   (!left v1 mid t.
     gas_marked_exec F (ctx,func) (bind (eval_expr cx e1) (read_result cx))
       (es,s0) left (INL v1) mid (OK t) /\
-    expr_post H ctx func cenv cx e1 es sa s1 s0 (mid with gas_obs := []) v1 x t /\
+    expr_post ctx func cenv cx e1 es sa s1 s0 (mid with gas_obs := []) v1 x t /\
     t.vs_current_bb = s1.cs_current_bb /\ t.vs_inst_idx = LENGTH s1.cs_current_insts ==>
     expr_vv_sim ctx func cenv cx (expr_type e2) e2 (mid with gas_obs := []) /\
     gas_admissible (eval_expr cx e2) expr_vv_res_ok (mid with gas_obs := []) /\
@@ -170,7 +170,7 @@ Theorem rest_word_mixed_outcome:
     !right tv fin u.
       gas_marked_exec F (ctx,func) (eval_expr cx e2)
         (mid with gas_obs := [],t) right (INL tv) fin (OK u) /\
-      vv_post H ctx func cenv cx e2 (mid with gas_obs := []) s1 sm t
+      vv_post ctx func cenv cx e2 (mid with gas_obs := []) s1 sm t
         (fin with gas_obs := []) tv vv u /\
       u.vs_current_bb = sm.cs_current_bb /\ u.vs_inst_idx = LENGTH sm.cs_current_insts ==>
       ?v2 suffix last q v.
@@ -179,7 +179,7 @@ Theorem rest_word_mixed_outcome:
         gas_marked_exec F (ctx,func)
           (\ee. (bop_result cx ann bop [expr_type e1;expr_type e2] v1 v2 ee,ee))
           (fin with gas_obs := [],u) suffix (INL v) last (OK q) /\
-        vv_post H ctx func cenv cx e2 (mid with gas_obs := []) s1 sm t
+        vv_post ctx func cenv cx e2 (mid with gas_obs := []) s1 sm t
           (last with gas_obs := []) tv vv q /\
         expr_val_rel cx ann v out q /\
         expr_val_at cenv cx ann sa ct (last with gas_obs := []) v out q /\
@@ -187,7 +187,7 @@ Theorem rest_word_mixed_outcome:
   gas_outcome F (cx_tops cx) (ctx,func)
     (bind (eval_expr cx (Builtin ann (Bop bop) [e1;e2])) (read_result cx)) (es,s0)
     (\res ee q. ?v. res = INL v /\
-      expr_post H ctx func cenv cx (Builtin ann (Bop bop) [e1;e2])
+      expr_post ctx func cenv cx (Builtin ann (Bop bop) [e1;e2])
         es sa ct s0 ee v out q /\
       q.vs_current_bb = ct.cs_current_bb /\ q.vs_inst_idx = LENGTH ct.cs_current_insts)
     (\res ee r. expr_exit res r)
@@ -224,9 +224,9 @@ QED
 
 Resume rest_word_mixed_outcome[left_normal]:
   qpat_x_assum `(\res ee t. _) _ _ _` (strip_assume_tac o BETA_RULE) >>
-  gnvs[] >> rename1 `expr_post H _ _ _ _ e1 _ _ _ _ _ v1 _ t` >>
+  gnvs[] >> rename1 `expr_post _ _ _ _ e1 _ _ _ _ _ v1 _ t` >>
   qpat_x_assum `!left v1 mid t. _` drule_all >> strip_tac >>
-  `stmt_state_rel H ctx func cenv cx (es_end with gas_obs := []) t` by
+  `stmt_state_rel ctx func cenv cx (es_end with gas_obs := []) t` by
     fs[loweringPostsTheory.expr_post_def] >>
   `~t.vs_halted` by
     metis_tac[gasSummaryTheory.gas_marked_exec_def,
@@ -267,11 +267,11 @@ Resume rest_word_mixed_outcome[right_normal]:
   qpat_x_assum `(\res ee t'. _) _ _ _` (strip_assume_tac o BETA_RULE) >>
   gnvs[] >>
   qpat_x_assum `!right tv fin u. _` drule_all >> strip_tac >>
-  `expr_post H ctx func cenv cx (Builtin ann (Bop bop) [e1;e2])
+  `expr_post ctx func cenv cx (Builtin ann (Bop bop) [e1;e2])
      es sa ct s0 (last with gas_obs := []) v out q` by
     (irule rest_word_mixed_post >>
-     qpat_assum `expr_post H _ _ _ _ e1 _ _ _ _ _ _ _ _` (irule_at Any) >>
-     qpat_assum `vv_post H _ _ _ _ e2 _ _ _ _ _ _ _ q` (irule_at Any) >> simp[]) >>
+     qpat_assum `expr_post _ _ _ _ e1 _ _ _ _ _ _ _ _` (irule_at Any) >>
+     qpat_assum `vv_post _ _ _ _ e2 _ _ _ _ _ _ _ q` (irule_at Any) >> simp[]) >>
   qexists `marks ++ marks' ++ suffix` >> disj1_tac >>
   irule rest_word_mixed_tail_summary >>
   goal_assum (drule_at Any) >> goal_assum (drule_at Any) >>
@@ -480,7 +480,7 @@ Resume compile_rest_word_membership_sim[operand_boundaries]:
     (drule_all (REWRITE_RULE [ETA_AX] exprSimSourceTheory.expr_body_pre_word_value) >>
      strip_tac >> gvs[]) >>
   `eval_operand needle t = SOME (typed_val_to_w256 et v1)` by
-    (qpat_x_assum `expr_post H _ _ _ _ e1 _ _ _ _ _ _ _ _` mp_tac >>
+    (qpat_x_assum `expr_post _ _ _ _ e1 _ _ _ _ _ _ _ _` mp_tac >>
      simp[loweringPostsTheory.expr_post_def, loweringPostsTheory.expr_val_rel_def] >>
      metis_tac[]) >>
   `eval_operand needle u = SOME (typed_val_to_w256 et v1)` by
@@ -513,7 +513,7 @@ Resume compile_rest_word_membership_sim[operand_boundaries]:
   `?q. gas_marked_path F ctx func u 0 (OK q) /\
        q.vs_current_bb = sb.cs_current_bb /\
        q.vs_inst_idx = LENGTH sb.cs_current_insts /\
-       vv_post H ctx func cenv cx e2 (mid with gas_obs := []) st1 st2 t
+       vv_post ctx func cenv cx e2 (mid with gas_obs := []) st1 st2 t
          (fin with gas_obs := []) tv arr_vv q /\
        eval_operand op q = SOME (bool_to_word
          (if bop = In then evaluate_in_array (ArrayTV et bd) v1 av

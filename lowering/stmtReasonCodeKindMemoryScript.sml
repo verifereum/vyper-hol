@@ -70,7 +70,7 @@ QED
 (* At runtime an immutable's bytes lie inside the data section. *)
 Theorem code_reason_data_section[local]:
   immutable_holds cenv cx t (Value v) a es s /\ ~cenv.ce_is_ctor /\
-  stmt_state_rel H ctx func cenv cx es u /\
+  stmt_state_rel ctx func cenv cx es u /\
   evaluate_type (get_tenv cx) t = SOME tv ==>
   w2n a + type_memory_size tv <= LENGTH u.vs_data_section
 Proof
@@ -90,7 +90,7 @@ Theorem reason_code_revert_path_mem:
       (type_memory_bytes cenv (expr_type se)) sm = ((), sb) /\
     fn_has_code sm sb func /\ fn_inst_ids_distinct func /\
     local_ptrs_reserved cenv sa /\
-    vv_post H ctx func cenv cx se es sa sm s0 ee tv vv t /\
+    vv_post ctx func cenv cx se es sa sm s0 ee tv vv t /\
     read_result cx tv ee = (INL (StringV str), ee) /\
     ~t.vs_halted /\ t.vs_current_bb = sm.cs_current_bb /\
     t.vs_inst_idx = LENGTH sm.cs_current_insts ==>
@@ -109,18 +109,18 @@ Proof
                   `LocatedValue ty p`, `sm`] mp_tac
        (CONJUNCT1 compiler_compile_var) >>
      simp[vv_operand_def]) >>
-  `vv_post H ctx func cenv cx se es sa sm s0 ee (Value (StringV str))
+  `vv_post ctx func cenv cx se es sa sm s0 ee (Value (StringV str))
      (LocatedValue ty p) t` by metis_tac[vv_post_read_result] >>
   `ty = BaseT (StringT n)` by
-    (qpat_x_assum `vv_post _ _ _ _ _ _ _ _ _ _ _ (Value _) _ _` mp_tac >>
+    (qpat_x_assum `vv_post _ _ _ _ _ _ _ _ _ _ (Value _) _ _` mp_tac >>
      simp[vv_post_def, vv_holds_def]) >>
   qpat_x_assum `ty = _` SUBST_ALL_TAC >>
   `?a. eval_operand p.ptr_operand t = SOME a /\
        immutable_holds cenv cx (BaseT (StringT n)) (Value (StringV str))
          a ee t` by
-    (qpat_x_assum `vv_post _ _ _ _ _ _ _ _ _ _ _ (Value _) _ _` mp_tac >>
+    (qpat_x_assum `vv_post _ _ _ _ _ _ _ _ _ _ (Value _) _ _` mp_tac >>
      asm_simp_tac (srw_ss()) [vv_post_def, vv_holds_def] >> metis_tac[]) >>
-  `stmt_state_rel H ctx func cenv cx ee t` by fs[vv_post_def] >>
+  `stmt_state_rel ctx func cenv cx ee t` by fs[vv_post_def] >>
   qabbrev_tac `k = (n + 31) DIV 32` >>
   qabbrev_tac `Z = 32 + k * 32` >>
   `type_memory_bytes cenv (BaseT (StringT n)) = Z` by

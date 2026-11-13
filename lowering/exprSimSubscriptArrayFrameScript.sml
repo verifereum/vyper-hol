@@ -133,8 +133,8 @@ Proof
 QED
 
 Theorem framed_array_base_transport:
-  vv_post H ctx func cenv cx obj es sa sb s0 t r (LocatedValue (ArrayT et bd) p) u /\
-  expr_post H ctx func cenv cx idx t sb sc u t' iv iop v /\
+  vv_post ctx func cenv cx obj es sa sb s0 t r (LocatedValue (ArrayT et bd) p) u /\
+  expr_post ctx func cenv cx idx t sb sc u t' iv iop v /\
   expr_type obj = ArrayT et bd /\
   ((~cenv.ce_is_ctor /\ p.ptr_location = LocCode) \/
    ((?n. bd = Fixed n) /\
@@ -158,7 +158,7 @@ Proof
      goal_assum (drule_at Any) >> gvs[wb_frame_def] >> metis_tac[]) >>
   `local_ptrs_rel func cenv t.scopes u` by
     gvs[vv_post_def, stmt_state_rel_def, state_rel_def] >>
-  qpat_x_assum `vv_post H _ _ _ _ _ _ _ _ _ _ _ _ _` mp_tac >>
+  qpat_x_assum `vv_post _ _ _ _ _ _ _ _ _ _ _ _ _` mp_tac >>
   simp[vv_post_def] >> disch_then (map_every assume_tac o CONJUNCTS) >>
   `post_value_type cenv obj = ArrayT et bd` by
     (qpat_x_assum `vv_holds _ _ _ _ _ _ _` mp_tac >>

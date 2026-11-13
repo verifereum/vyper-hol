@@ -14,7 +14,7 @@ Libs
 Theorem compile_blockhash_frag_mem:
   !ctx func cenv cx i es0.
     0 <= i /\ i < 2 ** 256 ==>
-    unop_frag_mem H ctx func cenv cx compile_blockhash
+    unop_frag_mem ctx func cenv cx compile_blockhash
       (typed_val_to_w256 (BaseTV (UintT 256)) (IntV i))
       (BaseT (BytesT (Fixed 32)))
       (unop_result cx (BaseT (BytesT (Fixed 32))) BlockHash

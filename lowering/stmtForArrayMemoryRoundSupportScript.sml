@@ -19,7 +19,7 @@ Theorem array_body_mem_post_projection:
     stmt_lands lctx sb1 r t /\ ~t.vs_halted /\
     (r = INL () ==> ~block_is_terminated sb1 /\ ce = bc') /\
     cenv_top_ext bc ce es2.scopes /\
-    stmt_state_rel H ctx func ce cx es2 t /\
+    stmt_state_rel ctx func ce cx es2 t /\
     (!x w. not_fresh_at sb0 x /\ lookup_var x s_body = SOME w ==>
            lookup_var x t = SOME w) /\
     (!aid b. FLOOKUP s_body.vs_allocas aid = SOME b ==>
@@ -28,7 +28,7 @@ Theorem array_body_mem_post_projection:
     s_body.vs_alloca_next <= t.vs_alloca_next) ==>
   stmt_lands lctx sb1 r t /\ ~t.vs_halted /\
   (r = INL () ==> ~block_is_terminated sb1) /\
-  stmt_state_rel H ctx func cenv cx (es2 with scopes := rest) t /\
+  stmt_state_rel ctx func cenv cx (es2 with scopes := rest) t /\
   (!x w. not_fresh_at sb0 x /\ lookup_var x s_body = SOME w ==>
          lookup_var x t = SOME w) /\
   (!aid b. FLOOKUP s_body.vs_allocas aid = SOME b ==>
@@ -37,7 +37,7 @@ Theorem array_body_mem_post_projection:
   s_body.vs_alloca_next <= t.vs_alloca_next
 Proof
   strip_tac >>
-  `stmt_state_rel H ctx func cenv cx (es2 with scopes := rest) t` by
+  `stmt_state_rel ctx func cenv cx (es2 with scopes := rest) t` by
     (irule array_body_scope_projection >> conj_tac
      >- (qexists_tac `sc` >> simp[]) >>
      goal_assum (drule_at (Pat `eval_stmts _ _ _ = _`)) >>

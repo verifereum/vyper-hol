@@ -130,7 +130,7 @@ Resume compile_for_range_checked_frag_active_mem[endpoints]:
       simp[stmt_exit_def, exprSimDefsTheory.expr_exit_def]) >>
   qexistsl_tac [`cenv`,`op1`,`sa`,`s1`,`fty`] >>
   simp[] >> rpt gen_tac >> strip_tac >>
-  rename1 `expr_post _ _ _ _ _ e1 es sa s1 s0 ee1 v1 op1 t1` >>
+  rename1 `expr_post _ _ _ _ e1 es sa s1 s0 ee1 v1 op1 t1` >>
   `?gs1. bind (eval_expr cx e1) (read_result cx)
      (es with gas_obs := gs1) = (INL v1,ee1)` by
     (qpat_x_assum `!tail. ?gs. _ = (INL v1,_)`
@@ -158,8 +158,8 @@ Resume compile_for_range_checked_frag_active_mem[endpoints]:
   `local_ptrs_reserved cenv s1` by
     (irule exprLoweringPropsTheory.local_ptrs_reserved_next_var >>
      goal_assum (drule_at Any) >> simp[]) >>
-  `stmt_state_rel H ctx func cenv cx ee1 t1` by
-    (qpat_assum `expr_post _ _ _ _ _ _ _ _ _ _ _ _ _ _` mp_tac >>
+  `stmt_state_rel ctx func cenv cx ee1 t1` by
+    (qpat_assum `expr_post _ _ _ _ _ _ _ _ _ _ _ _ _` mp_tac >>
      pure_rewrite_tac[expr_post_def] >> strip_tac >> first_assum ACCEPT_TAC) >>
   qunabbrev_tac `suffix` >>
   irule for_expr_endpoint_outcome_mem >> simp[] >> conj_tac
@@ -171,7 +171,7 @@ Resume compile_for_range_checked_frag_active_mem[endpoints]:
       simp[stmt_exit_def, exprSimDefsTheory.expr_exit_def]) >>
   qexistsl_tac [`cenv`,`op2`,`s1`,`s2`,`fty`] >> simp[] >>
   rpt gen_tac >> strip_tac >>
-  rename1 `expr_post _ _ _ _ _ e2 ee1 s1 s2 t1 ee2 v2 op2 t2` >>
+  rename1 `expr_post _ _ _ _ e2 ee1 s1 s2 t1 ee2 v2 op2 t2` >>
   `?gs2. bind (eval_expr cx e2) (read_result cx)
      (ee1 with gas_obs := gs2) = (INL v2,ee2)` by
     (qpat_x_assum `!tail. ?gs. _ = (INL v2,_)`
@@ -192,13 +192,13 @@ Resume compile_for_range_checked_frag_active_mem[checked_tail]:
      qpat_x_assum `!gs n1 es1 n2 es2. _ ==> Q`
        (qspecl_then [`gs0`,`n1`,`ee1 with gas_obs := gs2`,`n2`,`ee2`] mp_tac) >>
      CONV_TAC (DEPTH_CONV ETA_CONV) >> simp[]) >>
-  `stmt_state_rel H ctx func cenv cx ee2 t2 /\
+  `stmt_state_rel ctx func cenv cx ee2 t2 /\
    (!x w. not_fresh_at sa x /\ lookup_var x s0 = SOME w ==>
           lookup_var x t2 = SOME w) /\
    (!aid ent. FLOOKUP s0.vs_allocas aid = SOME ent ==>
               FLOOKUP t2.vs_allocas aid = SOME ent)` by
-    (qpat_assum `expr_post _ _ _ _ _ e1 _ _ _ _ _ _ _ _` mp_tac >>
-     qpat_assum `expr_post _ _ _ _ _ e2 _ _ _ _ _ _ _ _` mp_tac >>
+    (qpat_assum `expr_post _ _ _ _ e1 _ _ _ _ _ _ _ _` mp_tac >>
+     qpat_assum `expr_post _ _ _ _ e2 _ _ _ _ _ _ _ _` mp_tac >>
      qpat_assum `sa.cs_next_var <= s1.cs_next_var` mp_tac >>
      POP_ASSUM_LIST (K all_tac) >>
      pure_rewrite_tac[expr_post_def] >> rpt strip_tac >>
@@ -240,7 +240,7 @@ Resume compile_for_range_checked_frag_active_mem[checked_tail]:
      drule exprWordOperandTheory.lower_value_word_shape >>
      disch_then (qspec_then `packed6` mp_tac) >> metis_tac[]) >>
   `eval_operand op1 t1 = SOME (i2w n1)` by
-    (qpat_assum `expr_post _ _ _ _ _ e1 _ _ _ _ _ _ _ _` mp_tac >>
+    (qpat_assum `expr_post _ _ _ _ e1 _ _ _ _ _ _ _ _` mp_tac >>
      qpat_assum `evaluate_type _ (expr_type e1) = SOME tyv` mp_tac >>
      qpat_assum `is_word_type (expr_type e1)` mp_tac >>
      qpat_assum `v1 = IntV n1` mp_tac >>
@@ -248,7 +248,7 @@ Resume compile_for_range_checked_frag_active_mem[checked_tail]:
      simp[expr_post_def, expr_val_rel_def] >> rpt strip_tac >>
      simp[typed_val_to_w256_word_value,word_value_def,val_to_w256_def]) >>
   `eval_operand op2 t2 = SOME (i2w n2)` by
-    (qpat_assum `expr_post _ _ _ _ _ e2 _ _ _ _ _ _ _ _` mp_tac >>
+    (qpat_assum `expr_post _ _ _ _ e2 _ _ _ _ _ _ _ _` mp_tac >>
      qpat_assum `evaluate_type _ (expr_type e2) = SOME tyv` mp_tac >>
      qpat_assum `is_word_type (expr_type e2)` mp_tac >>
      qpat_assum `v2 = IntV n2` mp_tac >>
@@ -276,7 +276,7 @@ Resume compile_for_range_checked_frag_active_mem[checked_tail]:
   `(bad ==> ?t. gas_marked_path T ctx func t2 0 (Abort Revert_abort t)) /\
    (~bad ==> ?cc w. gas_path_mem ctx func t2 0 (OK cc) /\
      cc.vs_current_bb = cond_lbl /\ cc.vs_inst_idx = 0 /\ ~cc.vs_halted /\
-     stmt_state_rel H ctx func cenv cx ee2 cc /\
+     stmt_state_rel ctx func cenv cx ee2 cc /\
      lookup_var cv cc = SOME (i2w n1) /\ lookup_var ev cc = SOME (i2w n2) /\
      lookup_var p cc = SOME w /\
      FLOOKUP cc.vs_allocas s2.cs_next_id = SOME (w2n w,type_memory_bytes cenv fty) /\
@@ -449,7 +449,7 @@ Resume compile_for_range_checked_frag_active_mem[loop_ready]:
   `gas_outcome T (cx_tops cx) (ctx,func)
     (eval_for cx tyv id stmts (GENLIST (\j. Value (IntV (n1 + &(0+j)))) (Num (n2-n1)))) (ee2,cc)
     (\res ee s. res = INL () /\ s.vs_current_bb = exit_lbl /\
-      s.vs_inst_idx = 0 /\ ~s.vs_halted /\ stmt_state_rel H ctx func cenv cx ee s /\
+      s.vs_inst_idx = 0 /\ ~s.vs_halted /\ stmt_state_rel ctx func cenv cx ee s /\
       return_buf_frame d cenv s2 s /\ alloca_history func s /\
       cc.vs_alloca_next <= s.vs_alloca_next /\
       (!x v. not_fresh_at s2 x /\ lookup_var x cc = SOME v ==> lookup_var x s = SOME v) /\

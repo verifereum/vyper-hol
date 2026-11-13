@@ -35,7 +35,7 @@ Theorem buffer_memory_vv_post_general:
     ~is_word_type (expr_type e) /\
     evaluate_type (get_tenv cx) (expr_type e) = SOME tvt /\
     val_wf tvt v /\ val_in_memory tvt v (w2n w) t.vs_memory /\
-    stmt_state_rel H ctx func cenv cx es' t /\
+    stmt_state_rel ctx func cenv cx es' t /\
     eval_operand p.ptr_operand t = SOME w /\ p.ptr_location = LocMemory /\
     FLOOKUP t.vs_allocas sa.cs_next_id = SOME (w2n w,sz) /\
     sa.cs_next_id < sb.cs_next_id /\ val_footprint tvt v <= sz /\
@@ -52,7 +52,7 @@ Theorem buffer_memory_vv_post_general:
       mem_bytes_at off len t.vs_memory = mem_bytes_at off len s0.vs_memory) /\
     locals_kept cenv es es' s0 t /\
     (~expr_has_effect e ==> pure_frame cenv func es sa s0 t) ==>
-    vv_post H ctx func cenv cx e es sa sb s0 es' (Value v)
+    vv_post ctx func cenv cx e es sa sb s0 es' (Value v)
       (LocatedValue (expr_type e) p) t
 Proof
   rpt gen_tac >> strip_tac >>
@@ -72,7 +72,7 @@ Theorem buffer_memory_vv_post:
     ~is_word_type (expr_type e) /\
     evaluate_type (get_tenv cx) (expr_type e) = SOME tvt /\
     val_wf tvt v /\ val_in_memory tvt v (w2n w) t.vs_memory /\
-    stmt_state_rel H ctx func cenv cx es t /\
+    stmt_state_rel ctx func cenv cx es t /\
     eval_operand p.ptr_operand t = SOME w /\ p.ptr_location = LocMemory /\
     FLOOKUP t.vs_allocas sa.cs_next_id = SOME (w2n w,sz) /\
     sa.cs_next_id < sb.cs_next_id /\ val_footprint tvt v <= sz /\
@@ -87,7 +87,7 @@ Theorem buffer_memory_vv_post:
     (!name b len. local_region cenv es.scopes s0 name b len ==>
        mem_bytes_at b len t.vs_memory = mem_bytes_at b len s0.vs_memory) /\
     pure_frame cenv func es sa s0 t ==>
-    vv_post H ctx func cenv cx e es sa sb s0 es (Value v)
+    vv_post ctx func cenv cx e es sa sb s0 es (Value v)
       (LocatedValue (expr_type e) p) t
 Proof
   rpt gen_tac >> strip_tac >>

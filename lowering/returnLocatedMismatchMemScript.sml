@@ -42,7 +42,7 @@ Proof
   simp[] >> disch_tac >>
   irule return_no_normal_vv_outcome_mem >>
   qexists_tac `\raw ee t.
-    vv_post H ctx func cenv cx e es sa sm s0 ee raw (LocatedValue declared p) t /\
+    vv_post ctx func cenv cx e es sa sm s0 ee raw (LocatedValue declared p) t /\
     t.vs_current_bb = sm.cs_current_bb /\
     t.vs_inst_idx = LENGTH sm.cs_current_insts /\
     alloca_history func t /\ s0.vs_alloca_next <= t.vs_alloca_next` >>

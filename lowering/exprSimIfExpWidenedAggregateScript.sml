@@ -35,8 +35,8 @@ Theorem changed_aggregate_post_frag:
     EVERY (\(fname, fty, sz). !tv. evaluate_type (get_tenv cx) fty = SOME tv ==>
       sz = type_memory_size tv) fields) ==>
   frag_exec ctx sa sb
-    (\s. expr_post H ctx func ce cx e es origin sa s0 ee v src s)
-    (\q. expr_post H ctx func ce cx (IfExp (expr_type e) c a b)
+    (\s. expr_post ctx func ce cx e es origin sa s0 ee v src s)
+    (\q. expr_post ctx func ce cx (IfExp (expr_type e) c a b)
       es origin sb s0 ee v buf.buf_operand q) R
 Proof
   strip_tac >> irule frag_exec_pointwise >> qx_gen_tac `s` >> simp[] >> strip_tac >>
@@ -82,7 +82,7 @@ Resume changed_aggregate_post_frag[post]:
   simp[vyperASTTheory.expr_type_def, expr_val_rel_def] >>
   conj_tac >- (rpt strip_tac >> irule local_region_frame_fwd >>
     qexistsl_tac [`s0`, `origin`, `es.scopes`] >>
-    qpat_assum `expr_post H _ _ _ _ _ _ _ _ _ _ _ _ _`
+    qpat_assum `expr_post _ _ _ _ _ _ _ _ _ _ _ _ _`
       (strip_assume_tac o PURE_REWRITE_RULE[expr_post_def]) >> asm_rewrite_tac[]) >>
   conj_tac >- metis_tac[not_fresh_at_mono] >>
   qexistsl_tac [`type_memory_size dtv`, `w2n w`] >>
@@ -155,8 +155,8 @@ Theorem compile_changed_aggregate_post_frag:
   acyclic_struct_metadata ce.ce_struct_fields ==>
   ?src. unwrap_value ce vv sa = (src,sa) /\
     frag_exec ctx sa sb
-      (\s. expr_post H ctx func ce cx e es origin sa s0 ee v src s)
-      (\q. expr_post H ctx func ce cx (IfExp (expr_type e) c a b)
+      (\s. expr_post ctx func ce cx e es origin sa s0 ee v src s)
+      (\q. expr_post ctx func ce cx (IfExp (expr_type e) c a b)
         es origin sb s0 ee v op q) R
 Proof
   strip_tac >>

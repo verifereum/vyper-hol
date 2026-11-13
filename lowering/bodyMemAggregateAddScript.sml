@@ -9,14 +9,14 @@ Theorem aggregate_tuple_add_marked_mem:
   compile_expr cenv (expr_type e) e sa = (vv,sm) /\
   local_ptrs_reserved cenv sa /\ sa.cs_next_var <= sm.cs_next_var /\
   emit_op ADD [buf; Lit (n2w off)] sm = (dst,sn) /\
-  vv_post H ctx func cenv cx e es sa sm s0 es' tv vv s /\
+  vv_post ctx func cenv cx e es sa sm s0 es' tv vv s /\
   eval_operand buf s = SOME w /\ fn_has_code sm sn func /\
   ~s.vs_halted /\ s.vs_current_bb = sm.cs_current_bb /\
   s.vs_inst_idx = LENGTH sm.cs_current_insts ==>
   ?q. gas_marked_path T ctx func s 0 (OK q) /\
     ~q.vs_halted /\ q.vs_current_bb = sn.cs_current_bb /\
     q.vs_inst_idx = LENGTH sn.cs_current_insts /\
-    vv_post H ctx func cenv cx e es sa sn s0 es' tv vv q /\
+    vv_post ctx func cenv cx e es sa sn s0 es' tv vv q /\
     eval_operand dst q = SOME (w + n2w off) /\
     q.vs_memory = s.vs_memory /\ q.vs_allocas = s.vs_allocas /\
     q.vs_alloca_next = s.vs_alloca_next /\

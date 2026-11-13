@@ -2,7 +2,7 @@
    and completed target prefixes, including prefixes inside INVOKE. *)
 Theory gasExemptCert
 Ancestors
-  gasExemptOrigin gasNormalPrefix gasSummary gasSummaryCompose fragGasFocus fragGasMode fragGasPathMem
+  gasExemptOrigin gasSummary gasSummaryCompose fragGasFocus fragGasMode fragGasPathMem
   vyperState vyperInterpreter vyperValue venomState list arithmetic
 
 Inductive gas_exempt_cert:
@@ -407,37 +407,4 @@ Proof
   conj_tac >- simp[set_scopes_def, vyperStateTheory.return_def] >>
   irule gas_exempt_cert_handler >> qexists_tac `ee` >>
   simp[handle_function_def, ignore_bind_def, bind_def, raise_def]
-QED
-
-Theorem gas_exempt_cert_start_gas_obs:
-  !memory tops env source start marks out endpoint.
-    gas_exempt_cert memory tops env source start marks out endpoint ==>
-    !gs. gas_exempt_cert memory tops env source
-      (FST start with gas_obs := gs, SND start) marks out endpoint
-Proof
-  ho_match_mp_tac gas_exempt_cert_ind >> rpt strip_tac >> simp[]
-  >- (irule gas_exempt_cert_origin >>
-      fs[gas_exempt_origin_def] >>
-      drule gas_value_prefix_start_gas_obs >>
-      disch_then (qspec_then `gs` assume_tac) >> metis_tac[]) >>
-  fs[]
-  >- metis_tac[gas_exempt_cert_bind_unit, gas_marked_exec_start_gas_obs]
-  >- metis_tac[gas_exempt_cert_error_unit]
-  >- metis_tac[gas_exempt_cert_bind_bool, gas_marked_exec_start_gas_obs]
-  >- metis_tac[gas_exempt_cert_error_bool]
-  >- metis_tac[gas_exempt_cert_bind_result, gas_marked_exec_start_gas_obs]
-  >- metis_tac[gas_exempt_cert_error_result]
-  >- metis_tac[gas_exempt_cert_bind_value, gas_marked_exec_start_gas_obs]
-  >- metis_tac[gas_exempt_cert_error_value]
-  >- metis_tac[gas_exempt_cert_bind_place, gas_marked_exec_start_gas_obs]
-  >- metis_tac[gas_exempt_cert_error_place]
-  >- metis_tac[gas_exempt_cert_bind_values, gas_marked_exec_start_gas_obs]
-  >- metis_tac[gas_exempt_cert_error_values]
-  >- metis_tac[gas_exempt_cert_bind_results, gas_marked_exec_start_gas_obs]
-  >- metis_tac[gas_exempt_cert_error_results]
-  >- (irule gas_exempt_cert_cleanup >> qexists `mid` >> simp[])
-  >- (irule gas_exempt_cert_handler >> qexists `mid` >> simp[])
-  >- (irule gas_exempt_cert_get_scopes >> simp[])
-  >- metis_tac[gas_exempt_cert_invoke]
-  >> metis_tac[gas_exempt_cert_unforce_result]
 QED

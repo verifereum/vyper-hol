@@ -30,7 +30,7 @@ Theorem bytestring_store_allocated_frame:
   value_has_type tv v /\ val_in_memory tv v (w2n w) s.vs_memory /\
   type_memory_size tv < dimword (:256) /\ type_memory_size tv <= N /\
   FLOOKUP s.vs_allocas aid = SOME (w2n d,N) /\
-  stmt_state_rel H ctx func ce cx es s /\ local_ptrs_reserved ce sa /\
+  stmt_state_rel ctx func ce cx es s /\ local_ptrs_reserved ce sa /\
   (!name b sz. local_region ce es.scopes s name b sz ==>
     b+sz <= w2n d \/ w2n d+N <= b) /\
   (ce.ce_is_ctor ==> !name itv iv off.
@@ -40,7 +40,7 @@ Theorem bytestring_store_allocated_frame:
     regions_disjoint off (type_memory_size itv) (w2n d) N) ==>
   ?q. run_inst_seq (emitted_insts sa sb) s = OK q /\
     val_in_memory tv v (w2n d) q.vs_memory /\
-    stmt_state_rel H ctx func ce cx es q /\
+    stmt_state_rel ctx func ce cx es q /\
     (q with <|vs_vars := s.vs_vars; vs_memory := s.vs_memory|>) = s /\
     (!x. not_fresh_at sa x ==> lookup_var x q = lookup_var x s) /\
     LENGTH s.vs_memory <= LENGTH q.vs_memory /\
@@ -55,7 +55,7 @@ Proof
   `!a k. a+k <= w2n d \/ w2n d+N <= a ==>
       mem_bytes_at a k q.vs_memory = mem_bytes_at a k s.vs_memory` by
     (rpt strip_tac >> first_x_assum irule >> decide_tac) >>
-  `stmt_state_rel H ctx func ce cx es q` by
+  `stmt_state_rel ctx func ce cx es q` by
     (irule buffer_store_state_frame >>
      qexistsl_tac [`w2n d`,`N`,`s`,`sa`] >> asm_rewrite_tac []) >>
   qexists_tac `q` >> asm_rewrite_tac []

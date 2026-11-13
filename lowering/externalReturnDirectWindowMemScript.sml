@@ -9,7 +9,7 @@ Ancestors
   venomExecSemantics venomState venomInst words
 
 Theorem direct_encoder_scratch_source:
-  stmt_state_rel H ctx func ce cx es s /\ fn_inst_ids_distinct func /\
+  stmt_state_rel ctx func ce cx es s /\ fn_inst_ids_distinct func /\
   expr_val_at ce cx ty va vb es v src s /\
   evaluate_type (get_tenv cx) ty = SOME tv /\ ~is_word_type ty /\
   eval_operand src s = SOME p /\ cap <= val_footprint tv v /\
@@ -27,7 +27,7 @@ Proof
   drule_all encoder_function_alloca_nonlocal >>
   disch_then (qspec_then `es.scopes` strip_assume_tac) >>
   conj_tac
-  >- (qpat_x_assum `stmt_state_rel _ _ _ _ _ _ _` mp_tac >>
+  >- (qpat_x_assum `stmt_state_rel _ _ _ _ _ _` mp_tac >>
       simp[stmt_state_rel_def] >> strip_tac >>
       first_x_assum drule_all >> simp[wordsTheory.dimword_def]) >>
   `vb.cs_next_id <= inst.inst_id` by fs[frag_ids_def] >>
@@ -35,7 +35,7 @@ Proof
 QED
 
 Theorem direct_encoder_scratch_after_destination:
-  stmt_state_rel H ctx func ce cx es s /\ fn_inst_ids_distinct func /\
+  stmt_state_rel ctx func ce cx es s /\ fn_inst_ids_distinct func /\
   expr_val_at ce cx ty va vb es v src s /\
   evaluate_type (get_tenv cx) ty = SOME tv /\ ~is_word_type ty /\
   eval_operand src s = SOME p /\ cap <= val_footprint tv v /\
@@ -65,7 +65,7 @@ Proof
 QED
 
 Theorem direct_encoder_window_from_alloca:
-  stmt_state_rel H ctx func ce cx es s /\ fn_inst_ids_distinct func /\
+  stmt_state_rel ctx func ce cx es s /\ fn_inst_ids_distinct func /\
   expr_val_at ce cx ty va vb es v src s /\
   evaluate_type (get_tenv cx) ty = SOME tv /\ ~is_word_type ty /\
   eval_operand src s = SOME p /\ cap <= val_footprint tv v /\
@@ -134,7 +134,7 @@ Resume direct_encoder_window_from_alloca[protection]:
     sz = w2n (n2w n : bytes32) /\
     venomMemDefs$regions_disjoint (w2n p,cap) (b,sz)` by
     (rpt gen_tac >> disch_tac >> conj_tac
-     >- (qpat_x_assum `stmt_state_rel _ _ _ _ _ _ _` mp_tac >>
+     >- (qpat_x_assum `stmt_state_rel _ _ _ _ _ _` mp_tac >>
          simp[stmt_state_rel_def] >> strip_tac >>
          first_x_assum drule_all >> simp[Abbr `inst`, mk_inst_def]) >>
      `vb.cs_next_id <= inst.inst_id` by simp[Abbr `inst`, mk_inst_def] >>
@@ -187,7 +187,7 @@ QED
 Finalise direct_encoder_window_from_alloca
 
 Theorem direct_encoder_allocate_window:
-  stmt_state_rel H ctx func ce cx es s /\ fn_inst_ids_distinct func /\
+  stmt_state_rel ctx func ce cx es s /\ fn_inst_ids_distinct func /\
   expr_val_at ce cx ty va vb es v src s /\
   evaluate_type (get_tenv cx) ty = SOME tv /\ ~is_word_type ty /\
   eval_operand src s = SOME p /\ cap <= val_footprint tv v /\
@@ -214,7 +214,7 @@ Proof
   `alloca_room ctx func s /\ alloca_inv s /\
    (!b sz. FLOOKUP s.vs_allocas inst.inst_id = SOME (b,sz) ==>
       sz = w2n (n2w n : bytes32))` by
-    (qpat_x_assum `stmt_state_rel _ _ _ _ _ _ _` mp_tac >>
+    (qpat_x_assum `stmt_state_rel _ _ _ _ _ _` mp_tac >>
      simp[stmt_state_rel_def] >> rpt strip_tac >> first_x_assum drule_all >> simp[]) >>
   drule_all alloca_site_execute >> strip_tac >>
   `w2n (n2w n : bytes32) = n` by simp[] >>

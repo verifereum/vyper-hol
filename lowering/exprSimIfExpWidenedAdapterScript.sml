@@ -27,7 +27,7 @@ Theorem normalize_owned_value_framed_frag:
     ALL_DISTINCT (MAP FST fields) /\
     EVERY (\(fname, fty, sz). !tv. evaluate_type (get_tenv cx) fty = SOME tv ==>
       sz = type_memory_size tv) fields) /\
-  stmt_state_rel H ctx func ce cx es s /\
+  stmt_state_rel ctx func ce cx es s /\
   expr_val_at ce cx sty origin sa es v src s /\
   expr_val_own ce cx sty origin sa es v src s /\
   ~is_word_type sty /\
@@ -35,7 +35,7 @@ Theorem normalize_owned_value_framed_frag:
   eval_operand src s = SOME sw /\
   val_in_memory stv v (w2n sw) s.vs_memory ==>
   frag_exec ctx sa sb (\z. z = s)
-    (\u. ?w. stmt_state_rel H ctx func ce cx es u /\
+    (\u. ?w. stmt_state_rel ctx func ce cx es u /\
       eval_operand buf.buf_operand u = SOME w /\
       w2n w + type_memory_size dtv < dimword (:256) /\
       val_in_memory dtv v (w2n w) u.vs_memory /\
@@ -75,7 +75,7 @@ Theorem ifexp_changed_aggregate_source:
   post_value_type ce e <> expr_type e /\
   ~is_word_type (post_value_type ce e) /\
   ~is_bytestring_type (post_value_type ce e) /\
-  expr_post H ctx func ce cx e es sa sb s0 es' v src s ==>
+  expr_post ctx func ce cx e es sa sb s0 es' v src s ==>
   ?stv dtv sw.
     type_widens_to (get_tenv cx) (post_value_type ce e) (expr_type e) /\
     evaluate_type (get_tenv cx) (post_value_type ce e) = SOME stv /\
@@ -83,7 +83,7 @@ Theorem ifexp_changed_aggregate_source:
     value_has_type stv v /\ value_has_type dtv v /\
     val_footprint stv v = type_memory_size stv /\
     0 < type_memory_size stv /\
-    stmt_state_rel H ctx func ce cx es' s /\
+    stmt_state_rel ctx func ce cx es' s /\
     expr_val_at ce cx (post_value_type ce e) sa sb es' v src s /\
     expr_val_own ce cx (post_value_type ce e) sa sb es' v src s /\
     eval_operand src s = SOME sw /\
@@ -237,8 +237,8 @@ QED
 
 (* Allocation changes provenance monotonically, but not the represented value. *)
 Theorem vv_post_alloc_mono_frame:
-  vv_post H ctx func ce cx e es sa sm s0 ee tv vv s /\
-  stmt_state_rel H ctx func ce cx ee u /\
+  vv_post ctx func ce cx e es sa sm s0 ee tv vv s /\
+  stmt_state_rel ctx func ce cx ee u /\
   u.vs_memory = s.vs_memory /\
   contract_storage u = contract_storage s /\
   contract_transient u = contract_transient s /\
@@ -249,10 +249,10 @@ Theorem vv_post_alloc_mono_frame:
   (!n b sz. local_region ce ee.scopes u n b sz <=>
             local_region ce ee.scopes s n b sz) /\
   sm.cs_next_id <= sn.cs_next_id ==>
-  vv_post H ctx func ce cx e es sa sn s0 ee tv vv u
+  vv_post ctx func ce cx e es sa sn s0 ee tv vv u
 Proof
   strip_tac >>
-  qpat_x_assum `vv_post H _ _ _ _ _ _ _ _ _ _ _ _ _`
+  qpat_x_assum `vv_post _ _ _ _ _ _ _ _ _ _ _ _ _`
     (strip_assume_tac o REWRITE_RULE [vv_post_def]) >>
   `vv_holds ce cx (post_value_type ce e) tv vv ee u` by
     (irule vv_holds_vars_frame >> goal_assum (drule_at Any) >> simp[]) >>
@@ -264,7 +264,7 @@ Proof
      qexistsl [`s`, `sm`] >> simp[]) >>
   `locals_kept ce es ee s0 u` by
     (irule locals_kept_mem_tail >> goal_assum (drule_at Any) >> simp[]) >>
-  `vv_storage_live H cx vv ee s ==> vv_storage_live H cx vv ee u` by
+  `vv_storage_live cx vv ee s ==> vv_storage_live cx vv ee u` by
     (Cases_on `vv` >> fs[contextTheory.vv_operand_def]) >>
   `~expr_has_effect e ==> pure_frame ce func es sa s0 u` by
     (strip_tac >> irule pure_frame_mem_tail >> qexists_tac `s` >> simp[]) >>
@@ -285,10 +285,10 @@ Theorem alloc_unwrap_physical_post_frag:
      ~is_word_type (post_value_type ce e) ==>
      type_memory_bytes ce (post_value_type ce e) = type_memory_size tvt /\
      type_memory_size tvt < 2 ** 64) /\
-  vv_post H ctx func ce cx e es sa sm s0 ee tv vv s /\
+  vv_post ctx func ce cx e es sa sm s0 ee tv vv s /\
   eval_operand (vv_operand vv) s = SOME a ==>
   frag_exec ctx sm sb (\z. z = s)
-    (\u. expr_post H ctx func ce cx e es sa sb s0 ee v op u) R
+    (\u. expr_post ctx func ce cx e es sa sb s0 ee v op u) R
 Proof
   strip_tac >>
   `cs_extends sm sn /\ cs_extends sn sb` by
@@ -296,7 +296,7 @@ Proof
   `sm.cs_next_var <= sn.cs_next_var /\ sm.cs_next_id <= sn.cs_next_id` by
     (qspec_then `sz` (qspec_then `sm` mp_tac) ci_mono_compile_alloc_buffer >>
      simp[ci_mono_def]) >>
-  `stmt_state_rel H ctx func ce cx ee s` by fs[vv_post_def] >>
+  `stmt_state_rel ctx func ce cx ee s` by fs[vv_post_def] >>
   drule_all alloc_buffer_source_frag >>
   disch_then (qspec_then `R` strip_assume_tac) >>
   `!n b k. local_region ce ee.scopes u n b k <=>
@@ -308,7 +308,7 @@ Proof
          qexistsl [`sm`, `ee.scopes`, `u`] >> simp[] >> metis_tac[]) >>
      strip_tac >> irule local_region_frame_fwd >>
      qexistsl [`s`, `sm`, `ee.scopes`] >> simp[] >> metis_tac[]) >>
-  `vv_post H ctx func ce cx e es sa sn s0 ee tv vv u` by
+  `vv_post ctx func ce cx e es sa sn s0 ee tv vv u` by
     (irule vv_post_alloc_mono_frame >> simp[] >>
      qexistsl [`s`, `sm`] >> simp[] >>
      rpt strip_tac >> first_x_assum irule >>

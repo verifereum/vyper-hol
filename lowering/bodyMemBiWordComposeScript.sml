@@ -52,7 +52,7 @@ Theorem word_builtin_continuation_summary_mem:
     EVERY (\x. !z. x = Var z ==> not_fresh_at sa z) xs /\
     fn_has_code sa sb func /\ fn_inst_ids_distinct func /\
     local_ptrs_reserved cenv sa /\
-    stmt_state_rel H ctx func cenv cx (ee with gas_obs := []) s0 /\
+    stmt_state_rel ctx func cenv cx (ee with gas_obs := []) s0 /\
     alloca_history func s0 /\
     LIST_REL (\x v. eval_operand x s0 = SOME (val_to_w256 v)) xs vs /\
     ~s0.vs_halted /\ s0.vs_current_bb = sa.cs_current_bb /\
@@ -60,7 +60,7 @@ Theorem word_builtin_continuation_summary_mem:
     ?r. gas_marked_path T ctx func s0 0 r /\
       ((?s v. r = OK s /\
         builtin_result cx ee.accounts ann bt (MAP expr_type args) vs = INL v /\
-        word_value v /\ stmt_state_rel H ctx func cenv cx (ee with gas_obs := []) s /\
+        word_value v /\ stmt_state_rel ctx func cenv cx (ee with gas_obs := []) s /\
         eval_operand op s = SOME (val_to_w256 v) /\
         (!z w. not_fresh_at sa z /\ lookup_var z s0 = SOME w ==> lookup_var z s = SOME w) /\
         (!aid b. FLOOKUP s0.vs_allocas aid = SOME b ==> FLOOKUP s.vs_allocas aid = SOME b) /\
@@ -79,14 +79,14 @@ Theorem word_builtin_continuation_summary_mem:
     (\st. (builtin_result cx st.accounts ann bt (MAP expr_type args) vs,st))
     (ee with gas_obs := [],t0)
     (\res fin t. ?v. res = INL v /\
-      expr_post H ctx func cenv cx (Builtin ann bt args) es sa sb s0 fin v op t /\
+      expr_post ctx func cenv cx (Builtin ann bt args) es sa sb s0 fin v op t /\
       t.vs_current_bb = sb.cs_current_bb /\
       t.vs_inst_idx = LENGTH sb.cs_current_insts /\
       alloca_history func t /\ s0.vs_alloca_next <= t.vs_alloca_next)
     (\res fin r. expr_exit res r)
 Proof
   strip_tac >>
-  `stmt_state_rel H ctx func cenv cx (ee with gas_obs := []) t0 /\
+  `stmt_state_rel ctx func cenv cx (ee with gas_obs := []) t0 /\
    LIST_REL (\x v. eval_operand x t0 = SOME (val_to_w256 v)) xs vs` by
     gvs[wb_args_post_def] >>
   qpat_x_assum `!sa sb xs op s0. _`
@@ -110,6 +110,7 @@ Theorem compile_typed_word_builtin_sim_mem:
     EVERY (\e. word_value_type (expr_type e)) args /\
     typed_args_ready_mem ctx func cenv cx arg_ty (expr_sim_inv cenv cx env) args /\
     bt <> Len /\ bt <> Env MsgGas /\ ~precompile_builtin bt /\
+    code_slice_source bt args = NONE /\
     bt <> Bop In /\ bt <> Bop NotIn /\
     builtin_args_length_ok bt (LENGTH args) /\ is_word_type ann /\
     (!sa sb op. lower_value compile_expr cenv ty (Builtin ann bt args) sa = (op,sb) ==>
@@ -122,7 +123,7 @@ Theorem compile_typed_word_builtin_sim_mem:
           (builtin_result cx ee.accounts ann bt (MAP expr_type args) vs) /\
         EVERY (\x. !z. x = Var z ==> not_fresh_at sa z) xs /\
         fn_has_code sa sb func /\ fn_inst_ids_distinct func /\
-        local_ptrs_reserved cenv sa /\ stmt_state_rel H ctx func cenv cx ee s0 /\
+        local_ptrs_reserved cenv sa /\ stmt_state_rel ctx func cenv cx ee s0 /\
         alloca_history func s0 /\
         LIST_REL (\x v. eval_operand x s0 = SOME (val_to_w256 v)) xs vs /\
         ~s0.vs_halted /\ s0.vs_current_bb = sa.cs_current_bb /\
@@ -130,7 +131,7 @@ Theorem compile_typed_word_builtin_sim_mem:
         ?r. gas_marked_path T ctx func s0 0 r /\
           ((?s v. r = OK s /\
             builtin_result cx ee.accounts ann bt (MAP expr_type args) vs = INL v /\
-            word_value v /\ stmt_state_rel H ctx func cenv cx ee s /\
+            word_value v /\ stmt_state_rel ctx func cenv cx ee s /\
             eval_operand op s = SOME (val_to_w256 v) /\
             (!z w. not_fresh_at sa z /\ lookup_var z s0 = SOME w ==> lookup_var z s = SOME w) /\
             (!aid b. FLOOKUP s0.vs_allocas aid = SOME b ==> FLOOKUP s.vs_allocas aid = SOME b) /\
@@ -202,7 +203,7 @@ Resume compile_typed_word_builtin_sim_mem[normal]:
      (\st. (builtin_result cx st.accounts ann bt (MAP expr_type args) vs,st))
      (es_end with gas_obs := [],t)
      (\res fin u. ?v. res = INL v /\
-       expr_post H ctx func cenv cx (Builtin ann bt args) es sa sb s0 fin v op u /\
+       expr_post ctx func cenv cx (Builtin ann bt args) es sa sb s0 fin v op u /\
        u.vs_current_bb = sb.cs_current_bb /\
        u.vs_inst_idx = LENGTH sb.cs_current_insts /\
        alloca_history func u /\ s0.vs_alloca_next <= u.vs_alloca_next)

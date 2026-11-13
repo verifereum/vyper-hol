@@ -29,7 +29,7 @@ Ancestors
    lowering reads a dynamic array's length with compile_ptr_load's
    compile_imm_load_word (DLOAD).  A memory base's bytes lie in one of the
    base's own allocations or in a live local's region (vv_at), and
-   contain no length word, so the index's expr_post H keeps them (its
+   contain no length word, so the index's expr_post keeps them (its
    allocation frame, locals_kept); a static array needs no length load.
    With the source locals unchanged, the base's place reads at the index's
    end what it read before.  The bounds check itself, a source RuntimeError
@@ -42,6 +42,7 @@ Theorem compile_subscript_array_framed_base_case:
               expr_sim_case nocalls ctx func cenv cx idx) /\
     expr_type obj = ArrayT et bd /\ place_type cenv obj = ValPT (ArrayT et bd) /\
     (~nocalls ==> post_value_type cenv obj = expr_type obj) /\
+    ~subscript_reads_base cx obj idx /\ ~copies_subscript_base cenv obj idx /\
     (!t r t'. eval_expr cx idx t = (INL r, t') ==>
               t'.scopes = t.scopes /\ t'.immutables = t.immutables) /\
     (!s tr slot vt t. eval_expr cx obj s <> (INL (PlaceR (StoragePlace tr slot vt)), t)) /\
@@ -106,7 +107,8 @@ Resume compile_subscript_array_framed_base_case[base_exit]:
   qexists_tac `marks` >> disj1_tac >>
   simp[gasSummaryTheory.gas_summary_at_def] >>
   qexistsl_tac [`INR exc`,`es_end`,`r`] >> simp[] >>
-  pure_once_rewrite_tac[exprSimSubscriptArraySourceTheory.eval_expr_subscript_bind] >>
+  qpat_assum `~subscript_reads_base _ _ _` (fn th =>
+    pure_once_rewrite_tac[MATCH_MP exprSimSubscriptArraySourceTheory.eval_expr_subscript_bind th]) >>
   conj_tac
   >- (irule gasSummaryComposeTheory.gas_marked_exec_bind_exception >>
       first_assum ACCEPT_TAC) >> fs[]
@@ -114,7 +116,8 @@ QED
 Resume compile_subscript_array_framed_base_case[base_exempt]:
   qexists_tac `marks` >> disj2_tac >>
   qexistsl_tac [`err`,`ee`,`leaf`,`finish'`] >>
-  pure_once_rewrite_tac[exprSimSubscriptArraySourceTheory.eval_expr_subscript_bind] >>
+  qpat_assum `~subscript_reads_base _ _ _` (fn th =>
+    pure_once_rewrite_tac[MATCH_MP exprSimSubscriptArraySourceTheory.eval_expr_subscript_bind th]) >>
   pure_rewrite_tac[vyperStateTheory.ignore_bind_def, vyperStateTheory.bind_assoc] >>
   irule gasExemptCertTheory.gas_exempt_cert_error_result >>
   first_assum ACCEPT_TAC
@@ -133,7 +136,8 @@ Resume compile_subscript_array_framed_base_case[base_normal]:
   qpat_x_assum `s0.vs_current_bb = _` kall_tac >>
   qpat_x_assum `s0.vs_inst_idx = _` kall_tac >>
   pure_rewrite_tac[GSYM gasOutcomeTheory.gas_outcome_def] >>
-  irule framed_array_after_base >> simp[] >>
+  qpat_assum `~subscript_reads_base _ _ _`
+    (irule o MATCH_MP framed_array_after_base) >> simp[] >>
   goal_assum (drule_at (Pat `gas_marked_exec _ _ _ _ _ _ _ _`)) >> simp[] >>
   goal_assum (drule_at (Pat `lower_value _ _ _ _ _ = _`)) >> simp[] >>
   conj_tac >- suspend "base_suffix" >>
@@ -158,7 +162,7 @@ Resume compile_subscript_array_framed_base_case[base_normal]:
       `expr_body_pre cenv cx env idx (es_end with gas_obs := gs)` by fs[] >>
       drule_all (REWRITE_RULE [ETA_THM] expr_body_pre_res_ok) >> simp[]) >>
   conj_tac
-  >- (qpat_x_assum `vv_post H _ _ _ _ _ _ _ _ _ _ _ _ _`
+  >- (qpat_x_assum `vv_post _ _ _ _ _ _ _ _ _ _ _ _ _`
         (mp_tac o CONJUNCT1 o REWRITE_RULE [loweringPostsTheory.vv_post_def]) >>
       simp[exprLoweringPropsTheory.stmt_state_rel_def,
            loweringStateRelDefsTheory.state_rel_gas_obs,
@@ -207,7 +211,7 @@ Resume compile_subscript_array_framed_base_case[base_suffix]:
         metis_tac[pairTheory.FST] >>
       Cases_on `bvv` >>
       gvs[contextTheory.vv_location_def] >>
-      qpat_x_assum `vv_post H _ _ _ _ _ _ _ _ _ _ _ _ _`
+      qpat_x_assum `vv_post _ _ _ _ _ _ _ _ _ _ _ _ _`
         (mp_tac o CONJUNCT1 o CONJUNCT2 o
          REWRITE_RULE [loweringPostsTheory.vv_post_def]) >>
       simp[loweringPostsTheory.vv_holds_def, compileEnvTheory.is_bytestring_type_def] >> rpt strip_tac >>
@@ -254,7 +258,7 @@ Resume compile_subscript_array_framed_base_case[base_suffix]:
      >>~- ([`is_int_type (expr_type idx)`], Cases_on `expr_type idx` >> gvs[vyperTypeSystemTheory.is_int_type_def] >>
          rename1 `is_int_type (BaseT bt)` >> Cases_on `bt` >>
          gvs[vyperTypeSystemTheory.is_int_type_def, compileEnvTheory.is_word_type_def]) >>
-     drule type_place_expr_vtype_annotation >> simp[] >> strip_tac >>
+     drule vyperTypeSystemTheory.type_place_expr_vtype_annotation >> simp[] >> strip_tac >>
      Cases_on `vt` >> gvs[vtype_annotation_ok_def, subscript_vtype_def] >>
      Cases_on `expr_type idx` >> gvs[vyperTypeSystemTheory.is_int_type_def] >>
          rename1 `is_int_type (BaseT bt)` >> Cases_on `bt` >>
@@ -301,15 +305,15 @@ Finalise compile_subscript_array_framed_base_case
    immutable in the constructor, a dynamic array or one with a dynamic
    array inside it in memory, a base whose source result is a storage
    place, or an index that changes the locals or the immutables.  ADMITTED (cheat).  NOT DERIVABLE from these hypotheses,
-   though no miscompile is known: vv_post H does not tie the base's pointer
+   though no miscompile is known: vv_post does not tie the base's pointer
    to its source place.  vv_at and local_val_at pick the local's path by
    its type alone, immutable_holds' constructor form takes any offset of
    the staged buffer that holds the value, and storage_holds pins the slot
    only by what it reads; so the base's pointer may lie in dead bytes that
    hold an equal value (past a dynamic array's length, in the staged
    buffer, in dead slots), which nothing keeps across the index's
-   fragment: state_rel H and immutables_rel relate only the live parts,
-   locals_kept exempts every dynamic array's length word, and expr_post H
+   fragment: state_rel and immutables_rel relate only the live parts,
+   locals_kept exempts every dynamic array's length word, and expr_post
    has no frame on Venom storage.  Witness: x : DynArray[DynArray[uint256,
    2], 2] holding [[5, 1]], with [5, 1] and its length word 2 left at
    x[1]'s bytes by an earlier pop; for x[0][i], with i a local, a pointer
@@ -328,7 +332,7 @@ Finalise compile_subscript_array_framed_base_case
      RuntimeError, an immutable keeping no popped history, while the
      lowering ILOADs the stale length 2 and goes on, where expr_exit asks
      for an abort.
-   A place-pointer clause in vv_post H replaces most of this lemma: a
+   A place-pointer clause in vv_post replaces most of this lemma: a
    conjunct vv_place_ptr cenv cx es' s tv vv, as place_ptr_rel says for
    targets, with
      vv_place_ptr cenv cx es s (PlaceR (MemoryPlace id path))
@@ -366,11 +370,15 @@ Finalise compile_subscript_array_framed_base_case
 Theorem compile_subscript_array_place_base_case:
   !nocalls ctx func cenv cx ann obj idx et bd.
     expr_vv_case nocalls ctx func cenv cx obj /\
-    (!s tv t. eval_expr cx obj s = (INL tv, t) ==>
-              expr_sim_case nocalls ctx func cenv cx idx) /\
+    (!s tv t s' tv' t'. eval_expr cx obj s = (INL tv, t) /\
+       (if subscript_reads_base cx obj idx
+        then do v <- read_result cx tv; return (Value v) od
+        else return tv) s' = (INL tv', t') ==>
+       expr_sim_case nocalls ctx func cenv cx idx) /\
     expr_type obj = ArrayT et bd /\ place_type cenv obj = ValPT (ArrayT et bd) /\
     (~nocalls ==> post_value_type cenv obj = expr_type obj) /\
-    ~((!t r t'. eval_expr cx idx t = (INL r, t') ==>
+    ~(~subscript_reads_base cx obj idx /\ ~copies_subscript_base cenv obj idx /\
+      (!t r t'. eval_expr cx idx t = (INL r, t') ==>
                 t'.scopes = t.scopes /\ t'.immutables = t.immutables) /\
       (!s tr slot vt t. eval_expr cx obj s <> (INL (PlaceR (StoragePlace tr slot vt)), t)) /\
       ((~cenv.ce_is_ctor /\
@@ -386,14 +394,18 @@ QED
 Theorem compile_subscript_array_case:
   !nocalls ctx func cenv cx ann obj idx et bd.
     expr_vv_case nocalls ctx func cenv cx obj /\
-    (!s tv t. eval_expr cx obj s = (INL tv, t) ==>
-              expr_sim_case nocalls ctx func cenv cx idx) /\
+    (!s tv t s' tv' t'. eval_expr cx obj s = (INL tv, t) /\
+       (if subscript_reads_base cx obj idx
+        then do v <- read_result cx tv; return (Value v) od
+        else return tv) s' = (INL tv', t') ==>
+       expr_sim_case nocalls ctx func cenv cx idx) /\
     expr_type obj = ArrayT et bd /\ place_type cenv obj = ValPT (ArrayT et bd) /\
     (~nocalls ==> post_value_type cenv obj = expr_type obj) ==>
     expr_vv_case nocalls ctx func cenv cx (Subscript ann obj idx)
 Proof
   rpt strip_tac >>
-  Cases_on `(!t r t'. eval_expr cx idx t = (INL r, t') ==>
+  Cases_on `~subscript_reads_base cx obj idx /\ ~copies_subscript_base cenv obj idx /\
+            (!t r t'. eval_expr cx idx t = (INL r, t') ==>
                       t'.scopes = t.scopes /\ t'.immutables = t.immutables) /\
             (!s tr slot vt t. eval_expr cx obj s <> (INL (PlaceR (StoragePlace tr slot vt)), t)) /\
             ((~cenv.ce_is_ctor /\
@@ -401,7 +413,14 @@ Proof
              ((?n. bd = Fixed n) /\
               (!tv. evaluate_type (get_tenv cx) et = SOME tv ==> dynarray_free tv) /\
               !ty st. vv_location (FST (compile_expr cenv ty obj st)) = SOME LocMemory))`
-  >- (irule compile_subscript_array_framed_base_case >> asm_rewrite_tac[] >>
+  >- (`!s tv t. eval_expr cx obj s = (INL tv, t) ==>
+                expr_sim_case nocalls ctx func cenv cx idx` by
+        (rpt strip_tac >>
+         qpat_x_assum `!s tv t s' tv' t'. _`
+           (qspecl_then [`s`, `tv`, `t`, `t`, `tv`, `t`] mp_tac) >>
+         fs[vyperStateTheory.return_def]) >>
+      qpat_x_assum `!s tv t s' tv' t'. _` kall_tac >>
+      irule compile_subscript_array_framed_base_case >> asm_rewrite_tac[] >>
       metis_tac[]) >>
   irule compile_subscript_array_place_base_case >> asm_rewrite_tac[] >>
   qexistsl [`bd`, `et`] >> asm_rewrite_tac[]
