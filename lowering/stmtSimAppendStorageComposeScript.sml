@@ -458,7 +458,7 @@ Resume append_storage_word_suffix_path[store]:
   metis_tac[FLOOKUP_SUBMAP]
 QED
 
-Finalise append_storage_word_suffix_path[local]
+Finalise append_storage_word_suffix_path
 
 (* The stored state relates to the source after the append. *)
 Theorem append_storage_word_success_post[local]:
