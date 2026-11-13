@@ -60,7 +60,7 @@ Resume array_index_summary_compose_ptr[live]:
   mp_tac (Q.INST [`fin` |-> `es_end`, `es` |-> `mid with gas_obs := []`,
                   `s0` |-> `t`, `G0` |-> `G1`, `tn0` |-> `tn1`,
                   `source` |-> `b`, `next` |-> `k captured`]
-            gas_summary_ptr_at_bind_exception) >>
+            (INST_TYPE [alpha |-> beta, beta |-> gamma] gas_summary_ptr_at_bind_exception)) >>
   impl_tac
   >- (fs[] >> rpt strip_tac >> first_x_assum drule >> strip_tac >>
       gvs[fragExecTheory.exit_result_def]) >>
@@ -68,20 +68,14 @@ Resume array_index_summary_compose_ptr[live]:
 QED
 
 Resume array_index_summary_compose_ptr[normal]:
-  rename1 `V H v _ G tn u` >>
-  `!H. valid_horizon cx st0 H es_end.storage_trace ==>
-       gas_path_ptr (D H) 0 ctx func PG G1 tn1 t (LENGTH marks) G tn
-         (OK u) /\ V H v (es_end with gas_obs := []) G tn u` by
-    (rpt strip_tac >> first_x_assum drule >> strip_tac >>
-     gvs[fragExecTheory.exit_result_def]) >>
   mp_tac (Q.INST [`right` |-> `[]`, `left` |-> `marks`, `source` |-> `b`,
-                  `next` |-> `k captured`, `mid` |-> `es_end`, `t` |-> `u`,
+                  `next` |-> `k captured`, `mid` |-> `es_end`, `t` |-> `t'`,
                   `G1` |-> `G`, `tn1` |-> `tn`,
                   `es` |-> `mid with gas_obs := []`, `s0` |-> `t`,
                   `G0` |-> `G1`, `tn0` |-> `tn1`]
-            gas_summary_ptr_at_bind_normal |> REWRITE_RULE [APPEND_NIL]) >>
+            (INST_TYPE [alpha |-> beta, beta |-> gamma] gas_summary_ptr_at_bind_normal) |> REWRITE_RULE [APPEND_NIL]) >>
   impl_tac
-  >- (fs[] >> first_x_assum irule >> fs[]) >>
+  >- (fs[] >> first_x_assum irule >> qexists_tac `marks` >> fs[]) >>
   simp[]
 QED
 Finalise array_index_summary_compose_ptr
@@ -161,6 +155,7 @@ Theorem array_index_outcome_post_compose_ptr:
 Proof
   rpt strip_tac >>
   irule array_index_outcome_compose_ptr >>
+  conj_tac >- first_assum ACCEPT_TAC >>
   qexistsl_tac [`G1`, `\H v ee Gi tni u. Qidx H (INL v) ee Gi tni u`,
     `captured`, `left`, `mid`, `t`, `tn1`] >>
   simp[] >> conj_tac >- metis_tac[] >>

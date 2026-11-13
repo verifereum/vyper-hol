@@ -769,6 +769,32 @@ Proof
        sstore_def, arithmeticTheory.ADD1]
 QED
 
+(* The checks and the recorded origin use this same concrete step. *)
+Theorem straight_line_origin_ptr_edge[local]:
+  ~s.vs_halted /\
+  lookup_block s.vs_current_bb func.fn_blocks = SOME bb /\
+  get_instruction bb s.vs_inst_idx = SOME i /\
+  i.inst_opcode <> INVOKE /\ ~is_terminator i.inst_opcode /\
+  inst_mem_below_frontier i s /\ inst_dload_in_section i s /\
+  ptr_inst_ok D lo 0 ctx func G tn i s /\
+  step_inst_base i s = OK u ==>
+  gas_origin_ptr_edge (D, lo, explicit, ctx, func, PG) (s, G, tn)
+    (if i.inst_opcode = GAS then [(func.fn_name, i.inst_id) IN explicit] else [])
+    (OK (u with vs_inst_idx := SUC s.vs_inst_idx),
+     step_prov PG G i u, step_taint i s u tn)
+Proof
+  strip_tac >>
+  `step_inst 0 ctx i s = OK u` by simp[step_inst_non_invoke] >>
+  `~u.vs_halted` by metis_tac[venomInstProofsTheory.step_preserves_halted] >>
+  PURE_REWRITE_TAC[gas_origin_ptr_edge_def] >> conj_tac
+  >- (rewrite_tac[fragGasOriginTheory.gas_origin_edge_def] >> conj_tac >- simp[] >>
+      qexistsl_tac [`0`, `bb`, `i`, `OK u`] >>
+      Cases_on `i.inst_opcode = GAS` >>
+      simp[gasEventsTheory.gas_events_step_def, memSafeRunTheory.mem_safe_step_non_invoke]) >>
+  drule_all straight_line_ptr_edge >>
+  Cases_on `i.inst_opcode = GAS` >> simp[]
+QED
+
 (* A literal guard store is a straight-line step: no memory, no pointer,
    no GAS mark, and no variable taint. *)
 Theorem return_unlock_origin_ptr:

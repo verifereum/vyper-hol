@@ -523,7 +523,7 @@ Proof
     (Cases_on `tr` >>
      gvs[stmt_state_rel_def, state_rel_def, storage_rel_def,
          transient_rel_def, get_storage_def, vfmStateTheory.lookup_account_def]) >>
-  irule storage_range_agree_of_live >> metis_tac[]
+  drule_all storage_range_agree_of_live >> disch_then ACCEPT_TAC
 QED
 
 Theorem pop_declared_array_slots:
@@ -648,7 +648,7 @@ Proof
     (if tr then contract_transient s else contract_storage s) w (ArrayTV tv (Dynamic n))` by
     (irule pop_declared_array_agree >> metis_tac[]) >>
   `slots_in_range (get_storage cx es tr) (w2n w) (ArrayTV tv (Dynamic n))` by
-    (irule pop_declared_array_slots >> metis_tac[]) >>
+    (drule_all pop_declared_array_slots >> disch_then ACCEPT_TAC) >>
   `len <= n` by metis_tac[pop_array_length_bound] >>
   `w2n w + type_slot_size (ArrayTV tv (Dynamic n)) <= dimword(:256)` by
     fs[storage_range_agree_def] >>
@@ -775,9 +775,9 @@ Theorem pop_storage_holds_end:
 Proof
   rw[loweringPostsTheory.storage_holds_def, read_result_def, read_place_def] >>
   qexistsl_tac [`tvt`, `v`] >>
-  `get_storage cx ((es with storage_trace := o') with gas_obs := g) tr =
-   get_storage cx es tr` by
-    (Cases_on `tr` >> simp[vyperStorageBackendTheory.get_storage_def]) >>
+  `!b. get_storage cx ((es with storage_trace := o') with gas_obs := g) b =
+       get_storage cx es b` by
+    (Cases >> simp[vyperStorageBackendTheory.get_storage_def]) >>
   gvs[pop_storage_rss_end]
 QED
 

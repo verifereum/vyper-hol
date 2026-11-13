@@ -9,8 +9,9 @@ Ancestors
   exprSimAggregateLayout storageCopyGasPath
 
 Definition materialize_owned_post_def:
-  materialize_owned_post ctx func ce cx e es sa sm sb s0 es' v dst tv s <=>
-    stmt_state_rel ctx func ce cx es' s /\
+  materialize_owned_post H ctx func ce cx e es sa sm sb s0 es' v dst tv s <=>
+    stmt_state_rel H ctx func ce cx es' s /\
+    storage_well_formed_on cx es' (FST H) /\
     wb_frame ce es es' sa s0 s /\
     expr_val_rel cx (lowered_value_type ce e) v dst s /\
     expr_val_at ce cx (lowered_value_type ce e) sa sb es' v dst s /\
@@ -24,9 +25,9 @@ Definition materialize_owned_post_def:
 End
 
 Theorem materialize_owned_post_returndata:
-  materialize_owned_post ctx func ce cx e es sa sm sb s0 es' v dst tv
+  materialize_owned_post H ctx func ce cx e es sa sm sb s0 es' v dst tv
     (s with vs_returndata := rd) <=>
-  materialize_owned_post ctx func ce cx e es sa sm sb s0 es' v dst tv s
+  materialize_owned_post H ctx func ce cx e es sa sm sb s0 es' v dst tv s
 Proof
   Cases_on `dst` >>
   simp[materialize_owned_post_def, hash_returndata_state_rel,
@@ -37,9 +38,9 @@ Proof
 QED
 
 Theorem materialize_expr_post_returndata[local]:
-  expr_post ctx func ce cx e es sa sb s0 es' v op
+  expr_post H ctx func ce cx e es sa sb s0 es' v op
     (s with vs_returndata := rd) <=>
-  expr_post ctx func ce cx e es sa sb s0 es' v op s
+  expr_post H ctx func ce cx e es sa sb s0 es' v op s
 Proof
   Cases_on `op` >>
   simp[expr_post_def, hash_returndata_state_rel,
@@ -53,7 +54,7 @@ Theorem materialize_unwrap_owned_straight_path[local]:
   unwrap_value ce vv sm = (op,su) /\ local_ptrs_reserved ce sm /\
   sa.cs_next_id <= sm.cs_next_id /\
   read_result cx tvv es' = (INL v,es') /\
-  vv_post ctx func ce cx e es sa sm s0 es' tvv vv r /\
+  vv_post H ctx func ce cx e es sa sm s0 es' tvv vv r /\
   fn_has_code sm su func /\ fn_inst_ids_distinct func /\
   (!x. vv_operand vv = Var x ==> not_fresh_at sm x) /\
   (!tvt. evaluate_type (get_tenv cx) (post_value_type ce e) = SOME tvt /\
@@ -66,7 +67,7 @@ Theorem materialize_unwrap_owned_straight_path[local]:
   ~r.vs_halted /\ r.vs_current_bb = sm.cs_current_bb /\
   r.vs_inst_idx = LENGTH sm.cs_current_insts ==>
   ?u. gas_marked_path F ctx func r 0 (OK u) /\
-      expr_post ctx func ce cx e es'
+      expr_post H ctx func ce cx e es'
         (sa with cs_next_var := sm.cs_next_var) su r es' v op u /\
       lookup_var p u = SOME w /\
       FLOOKUP u.vs_allocas aid = SOME (w2n w,sz) /\
@@ -85,7 +86,7 @@ Theorem materialize_unwrap_identity_path[local]:
   unwrap_value ce vv sm = (op,su) /\ local_ptrs_reserved ce sm /\
   sa.cs_next_id <= sm.cs_next_id /\
   read_result cx tvv es' = (INL v,es') /\
-  vv_post ctx func ce cx e es sa sm s0 es' tvv vv r /\
+  vv_post H ctx func ce cx e es sa sm s0 es' tvv vv r /\
   fn_has_code sm su func /\ fn_inst_ids_distinct func /\
   (!x. vv_operand vv = Var x ==> not_fresh_at sm x) /\
   (!tvt. evaluate_type (get_tenv cx) (post_value_type ce e) = SOME tvt /\
@@ -100,7 +101,7 @@ Theorem materialize_unwrap_identity_path[local]:
   ~r.vs_halted /\ r.vs_current_bb = sm.cs_current_bb /\
   r.vs_inst_idx = LENGTH sm.cs_current_insts ==>
   ?u. gas_marked_path F ctx func r 0 (OK u) /\
-      expr_post ctx func ce cx e es'
+      expr_post H ctx func ce cx e es'
         (sa with cs_next_var := sm.cs_next_var) su r es' v op u /\
       lookup_var p u = SOME w /\
       FLOOKUP u.vs_allocas aid = SOME (w2n w,sz) /\
@@ -235,7 +236,7 @@ QED
 
 Theorem materialize_captured_located_nonword:
   expr_body_pre ce cx env e es_pre /\
-  vv_post ctx func ce cx e es sa sm s0 es' tvv (LocatedValue vty src) r /\
+  vv_post H ctx func ce cx e es sa sm s0 es' tvv (LocatedValue vty src) r /\
   ~is_word_type (expr_type e) ==>
   ~is_word_type vty /\ src.ptr_location <> LocCalldata
 Proof
@@ -700,7 +701,7 @@ QED
 
 Theorem materialize_alloc_semantic_path:
   compile_alloc_buffer sz sa = (buf,sb) /\
-  fn_has_code sa sb fn /\ stmt_state_rel ctx fn ce cx es s /\
+  fn_has_code sa sb fn /\ stmt_state_rel H ctx fn ce cx es s /\
   fn_inst_ids_distinct fn /\ local_ptrs_reserved ce sa /\
   sz < dimword (:256) /\
   ~s.vs_halted /\ s.vs_current_bb = sa.cs_current_bb /\
@@ -708,7 +709,7 @@ Theorem materialize_alloc_semantic_path:
   ?t w. gas_marked_path F ctx fn s 0 (OK t) /\
     ~t.vs_halted /\ t.vs_current_bb = sb.cs_current_bb /\
     t.vs_inst_idx = LENGTH sb.cs_current_insts /\
-    stmt_state_rel ctx fn ce cx es t /\
+    stmt_state_rel H ctx fn ce cx es t /\
     eval_operand buf.buf_operand t = SOME w /\
     FLOOKUP t.vs_allocas sa.cs_next_id = SOME (w2n w,sz) /\
     w2n w + sz < dimword (:256) /\
@@ -786,7 +787,7 @@ Theorem materialize_zero_slot_execution:
   ~is_word_type vty /\ type_memory_bytes ce vty = 0 /\
   (p.ptr_location = LocStorage \/ p.ptr_location = LocTransient) /\
   fn_has_code sa sb fn /\ local_ptrs_reserved ce sa /\
-  stmt_state_rel ctx fn ce cx es s /\ fn_inst_ids_distinct fn /\
+  stmt_state_rel H ctx fn ce cx es s /\ fn_inst_ids_distinct fn /\
   ~s.vs_halted /\ s.vs_current_bb = sa.cs_current_bb /\
   s.vs_inst_idx = LENGTH sa.cs_current_insts ==>
   ?t mid su z w.
@@ -862,13 +863,13 @@ Theorem materialize_zero_code_execution:
   ~is_word_type vty /\ type_memory_bytes ce vty = 0 /\
   p.ptr_location = LocCode /\
   fn_has_code sa sb fn /\ local_ptrs_reserved ce sa /\
-  stmt_state_rel ctx fn ce cx es s /\ fn_inst_ids_distinct fn /\
+  stmt_state_rel H ctx fn ce cx es s /\ fn_inst_ids_distinct fn /\
   ~s.vs_halted /\ s.vs_current_bb = sa.cs_current_bb /\
   s.vs_inst_idx = LENGTH sa.cs_current_insts ==>
   ?t w. gas_marked_path F ctx fn s 0 (OK t) /\
     ~t.vs_halted /\ t.vs_current_bb = sb.cs_current_bb /\
     t.vs_inst_idx = LENGTH sb.cs_current_insts /\
-    stmt_state_rel ctx fn ce cx es t /\
+    stmt_state_rel H ctx fn ce cx es t /\
     eval_operand dst t = SOME w /\
     FLOOKUP t.vs_allocas sa.cs_next_id = SOME (w2n w,0) /\
     t.vs_memory = s.vs_memory /\
@@ -907,7 +908,7 @@ QED
 
 Theorem materialize_located_physical_classify:
   expr_body_pre ce cx env e es_pre /\
-  vv_post ctx func ce cx e es sa sm s0 es' tvv (LocatedValue vty p) r /\
+  vv_post H ctx func ce cx e es sa sm s0 es' tvv (LocatedValue vty p) r /\
   p.ptr_location <> LocMemory /\ ~is_word_type (expr_type e) ==>
   vty = lowered_value_type ce e \/
   (is_bytestring_type vty /\ is_bytestring_type (lowered_value_type ce e))
@@ -1032,7 +1033,7 @@ Theorem materialize_unwrap_code_owned_path:
   ~is_word_type ty /\ src.ptr_location = LocCode /\
   local_ptrs_reserved ce sm /\ sa.cs_next_id <= sm.cs_next_id /\
   read_result cx tvv es' = (INL v,es') /\
-  vv_post ctx func ce cx e es sa sm s0 es' tvv (LocatedValue ty src) r /\
+  vv_post H ctx func ce cx e es sa sm s0 es' tvv (LocatedValue ty src) r /\
   fn_has_code sm su func /\ fn_inst_ids_distinct func /\
   (!x. vv_operand (LocatedValue ty src) = Var x ==> not_fresh_at sm x) /\
   (!tvt. evaluate_type (get_tenv cx) (post_value_type ce e) = SOME tvt /\
@@ -1044,7 +1045,7 @@ Theorem materialize_unwrap_code_owned_path:
   ~r.vs_halted /\ r.vs_current_bb = sm.cs_current_bb /\
   r.vs_inst_idx = LENGTH sm.cs_current_insts ==>
   ?u. gas_marked_path F ctx func r 0 (OK u) /\
-      expr_post ctx func ce cx e es'
+      expr_post H ctx func ce cx e es'
         (sa with cs_next_var := sm.cs_next_var) su r es' v op u /\
       lookup_var p u = SOME w /\
       FLOOKUP u.vs_allocas aid = SOME (w2n w,sz) /\
@@ -1062,7 +1063,7 @@ QED
 (* Physical capacity and storage slot count agree for every evaluated type.
    No restriction of the copy's outside-capacity frame is involved. *)
 Theorem materialize_storage_capacity_contents:
-  stmt_state_rel ctx func ce cx es u /\
+  stmt_state_rel H ctx func ce cx es u /\
   storage_holds cx tr ty (Value v) a es u /\
   evaluate_type (get_tenv cx) ty = SOME tv /\
   copy_prefix (if tr then LocTransient else LocStorage) a b
@@ -1078,7 +1079,8 @@ QED
 (* Reconstruct at the supplied endpoint, never at a legacy existential
    fragment witness.  sa may have its variable watermark rebased by callers. *)
 Theorem materialize_copy_endpoint_owned_post:
-  stmt_state_rel ctx func ce cx es u /\ local_ptrs_reserved ce mid /\
+  stmt_state_rel H ctx func ce cx es u /\ storage_well_formed_on cx es (FST H) /\
+  local_ptrs_reserved ce mid /\
   wb_frame ce es es sa r u /\ sa.cs_next_var <= mid.cs_next_var /\
   (~expr_has_effect e ==> pure_frame ce func es sa r u) /\
   copy_static z = copy_static u /\
@@ -1098,7 +1100,7 @@ Theorem materialize_copy_endpoint_owned_post:
   evaluate_type (get_tenv cx) (post_value_type ce e) = SOME tv /\
   val_wf tv v /\ val_in_memory tv v (w2n w) z.vs_memory /\
   val_footprint tv v <= sz /\ eval_operand op z = SOME w ==>
-  expr_post ctx func ce cx e es sa sb r es v op z /\
+  expr_post H ctx func ce cx e es sa sb r es v op z /\
   (!x a. not_fresh_at sa x /\ lookup_var x r = SOME a ==>
      lookup_var x z = SOME a) /\
   (!aid entry. FLOOKUP r.vs_allocas aid = SOME entry ==>
@@ -1113,7 +1115,7 @@ Proof
     (irule materialize_fresh_store_frame >>
      qexistsl_tac [`inst.inst_id`, `w2n w`, `u`, `sz`] >>
      simp[] >> metis_tac[arithmeticTheory.ADD_COMM]) >>
-  `stmt_state_rel ctx func ce cx es z` by
+  `stmt_state_rel H ctx func ce cx es z` by
     (irule exprSimCopyTheory.copy_buffer_state_rel_frame >>
      qexistsl_tac [`w2n w`, `inst`, `u`, `mid`, `sz`] >>
      simp[] >> metis_tac[arithmeticTheory.ADD_COMM]) >>
@@ -1164,7 +1166,7 @@ Theorem materialize_storage_suffix_owned_path:
         ((type_memory_bytes ce ty + 31) DIV 32) loc LocMemory F;
         return () od) mid = (result,sb) /\
   (!x. src = Var x \/ dst = Var x ==> not_fresh_at mid x) /\
-  stmt_state_rel ctx func ce cx es u /\
+  stmt_state_rel H ctx func ce cx es u /\
   storage_holds cx (loc = LocTransient) ty (Value v) a es u /\
   evaluate_type (get_tenv cx) ty = SOME tv /\
   type_memory_bytes ce ty = type_memory_size tv /\
@@ -1232,7 +1234,7 @@ Theorem materialize_unwrap_storage_owned_path:
   (src.ptr_location = LocStorage \/ src.ptr_location = LocTransient) /\
   local_ptrs_reserved ce sm /\ sa.cs_next_id <= sm.cs_next_id /\
   read_result cx tvv es' = (INL v,es') /\
-  vv_post ctx func ce cx e es sa sm s0 es' tvv (LocatedValue ty src) r /\
+  vv_post H ctx func ce cx e es sa sm s0 es' tvv (LocatedValue ty src) r /\
   fn_has_code sm su func /\ fn_inst_ids_distinct func /\
   (!x. vv_operand (LocatedValue ty src) = Var x ==> not_fresh_at sm x) /\
   (!tvt. evaluate_type (get_tenv cx) (post_value_type ce e) = SOME tvt /\
@@ -1244,7 +1246,7 @@ Theorem materialize_unwrap_storage_owned_path:
   ~r.vs_halted /\ r.vs_current_bb = sm.cs_current_bb /\
   r.vs_inst_idx = LENGTH sm.cs_current_insts ==>
   ?u. gas_marked_path F ctx func r 0 (OK u) /\
-      expr_post ctx func ce cx e es'
+      expr_post H ctx func ce cx e es'
         (sa with cs_next_var := sm.cs_next_var) su r es' v op u /\
       lookup_var p u = SOME w /\
       FLOOKUP u.vs_allocas aid = SOME (w2n w,sz) /\
@@ -1298,7 +1300,8 @@ Proof
      gvs[exprLoweringPropsTheory.ci_mono_def]) >>
   `fn_has_code sm mid func /\ fn_has_code mid su func` by
     metis_tac[fragExecTheory.fn_has_code_split] >>
-  `stmt_state_rel ctx func ce cx es' r` by gvs[vv_post_def] >>
+  `stmt_state_rel H ctx func ce cx es' r /\ storage_well_formed_on cx es' (FST H)` by
+    gvs[vv_post_def] >>
   `type_memory_bytes ce ty < dimword (:256)` by
     (gvs[wordsTheory.dimword_def]) >>
   drule_all materialize_alloc_semantic_path >> strip_tac >>
@@ -1325,7 +1328,7 @@ Proof
     val_footprint tv v <= type_memory_size tv /\
     eval_operand buf.buf_operand z = SOME w'` by
     (irule materialize_storage_suffix_owned_path >> simp[] >>
-     qexistsl_tac [`a`, `ce`, `cx`, `es'`, `src.ptr_location`,
+     qexistsl_tac [`H`, `a`, `ce`, `cx`, `es'`, `src.ptr_location`,
                    `src.ptr_operand`, `ty`] >> simp[] >>
      qpat_x_assum `(if _ then _ else _) mid = _` mp_tac >>
      Cases_on `result` >> gvs[wordsTheory.dimword_def] >> metis_tac[]) >>
@@ -1354,7 +1357,7 @@ Proof
                             `sa with cs_next_var := sm.cs_next_var`, `r`,
                             `r`, `t`] exprSimPropsTheory.pure_frame_mem_tail) >>
      simp[]) >>
-  `expr_post ctx func ce cx e es'
+  `expr_post H ctx func ce cx e es'
      (sa with cs_next_var := sm.cs_next_var) su r es' v op z /\
    (!x a. not_fresh_at (sa with cs_next_var := sm.cs_next_var) x /\
       lookup_var x r = SOME a ==> lookup_var x z = SOME a) /\
@@ -1362,6 +1365,7 @@ Proof
       FLOOKUP z.vs_allocas aid = SOME entry)` by
     (irule materialize_copy_endpoint_owned_post >>
      (conj_tac >- metis_tac[]) >>
+     (conj_tac >- first_assum ACCEPT_TAC) >>
      qexistsl_tac [`mk_inst sm.cs_next_id ALLOCA
        [Lit (n2w (type_memory_bytes ce ty))]
        [STRING #"%" (toString sm.cs_next_var)]`,
@@ -1408,7 +1412,7 @@ Theorem materialize_unwrap_owned_path:
   expr_body_pre ce cx env e es_pre /\ ~is_word_type (expr_type e) /\
   sa.cs_next_id <= sm.cs_next_id /\
   read_result cx tvv es' = (INL v,es') /\
-  vv_post ctx func ce cx e es sa sm s0 es' tvv vv r /\
+  vv_post H ctx func ce cx e es sa sm s0 es' tvv vv r /\
   fn_has_code sm su func /\ fn_inst_ids_distinct func /\
   (!x. vv_operand vv = Var x ==> not_fresh_at sm x) /\
   (!tvt. evaluate_type (get_tenv cx) (post_value_type ce e) = SOME tvt /\
@@ -1420,7 +1424,7 @@ Theorem materialize_unwrap_owned_path:
   ~r.vs_halted /\ r.vs_current_bb = sm.cs_current_bb /\
   r.vs_inst_idx = LENGTH sm.cs_current_insts ==>
   ?u. gas_marked_path F ctx func r 0 (OK u) /\
-      expr_post ctx func ce cx e es'
+      expr_post H ctx func ce cx e es'
         (sa with cs_next_var := sm.cs_next_var) su r es' v op u /\
       lookup_var p u = SOME w /\
       FLOOKUP u.vs_allocas aid = SOME (w2n w,sz) /\
@@ -1442,8 +1446,8 @@ QED
 Theorem compile_materialize_vv_owned_path:
   compile_materialize_vv ce (lowered_value_type ce e) vv sm = (dst,sb) /\
   expr_body_pre ce cx env e es_pre /\
-  vv_post ctx func ce cx e es sa sm s0 es' tvv vv r /\
-  stmt_state_rel ctx func ce cx es s0 /\
+  vv_post H ctx func ce cx e es sa sm s0 es' tvv vv r /\
+  stmt_state_rel H ctx func ce cx es s0 /\
   MAP FDOM es.scopes = MAP FDOM es'.scopes /\
   local_ptrs_reserved ce sa /\ local_ptrs_reserved ce sm /\
   sa.cs_next_var <= sm.cs_next_var /\ sa.cs_next_id <= sm.cs_next_id /\
@@ -1463,7 +1467,7 @@ Theorem compile_materialize_vv_owned_path:
   ~r.vs_halted /\ r.vs_current_bb = sm.cs_current_bb /\
   r.vs_inst_idx = LENGTH sm.cs_current_insts ==>
   ?t. gas_marked_path F ctx func r 0 (OK t) /\
-      materialize_owned_post ctx func ce cx e es sa sm sb s0 es' v dst tv t /\
+      materialize_owned_post H ctx func ce cx e es sa sm sb s0 es' v dst tv t /\
       ~t.vs_halted /\ t.vs_current_bb = sb.cs_current_bb /\
       t.vs_inst_idx = LENGTH sb.cs_current_insts
 Proof
@@ -1481,13 +1485,14 @@ Proof
     (irule fragExecTheory.fn_has_code_split >> simp[]) >>
   `sm.cs_next_id <= mid.cs_next_id` by gvs[exprLoweringPropsTheory.ci_mono_def] >>
   `type_memory_bytes ce (lowered_value_type ce e) < dimword (:256)` by decide_tac >>
-  `stmt_state_rel ctx func ce cx es' r` by gvs[vv_post_def] >>
+  `stmt_state_rel H ctx func ce cx es' r /\ storage_well_formed_on cx es' (FST H)` by
+    gvs[vv_post_def] >>
   drule_all materialize_alloc_semantic_path >> strip_tac >>
   rename1 `gas_marked_path F ctx func r 0 (OK u)` >>
   `eval_operand (vv_operand vv) u = eval_operand (vv_operand vv) r` by
     (drule materialize_vv_post_operand >> strip_tac >>
      Cases_on `vv_operand vv` >> gvs[venomStateTheory.eval_operand_def]) >>
-  `vv_post ctx func ce cx e es sa mid s0 es' tvv vv u` by
+  `vv_post H ctx func ce cx e es sa mid s0 es' tvv vv u` by
     (irule materialize_vv_post_alloc_storage_frame >> simp[] >>
      qexistsl [`r`, `sm`] >> simp[]) >>
   `local_ptrs_reserved ce mid` by
@@ -1522,7 +1527,7 @@ Resume compile_materialize_vv_owned_path[store_continuation]:
      qpat_x_assum `!name b len. local_region _ _ u _ _ _ ==> _` mp_tac >>
      disch_then (qspecl_then [`name`, `b`, `len`] mp_tac) >>
      `local_region ce es'.scopes u name b len` by
-       (qpat_assum `expr_post _ _ _ _ _ es' _ _ u _ _ _ _`
+       (qpat_assum `expr_post _ _ _ _ _ _ es' _ _ u _ _ _ _`
           (mp_then Any strip_assume_tac exprSimWordArgsTheory.expr_post_frame) >>
         irule exprSimPropsTheory.local_region_frame >>
         conj_tac
@@ -1568,7 +1573,7 @@ Resume compile_materialize_vv_owned_path[store_continuation]:
        `w2n (w:256 word)`, `type_memory_size tv`] exprSimPropsTheory.pure_frame_buffer_tail) >>
      rpt conj_tac
      >~ [`pure_frame _ _ _ _ _ z`]
-     >- (qpat_assum `expr_post _ _ _ _ _ es sa _ s0 _ _ _ z`
+     >- (qpat_assum `expr_post _ _ _ _ _ _ es sa _ s0 _ _ _ z`
            (mp_then Any irule exprSimWordArgsTheory.expr_post_pure_frame) >>
          first_assum ACCEPT_TAC)
      >- (rpt strip_tac >>

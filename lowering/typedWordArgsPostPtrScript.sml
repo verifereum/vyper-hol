@@ -50,23 +50,33 @@ Proof
 QED
 
 Theorem lower_typed_args_nil_sim_ptr:
-  stmt_state_rel H ctx func cenv cx es s0 /\ ~s0.vs_halted /\
-  ghost_inv H d cenv cx es G0 tn0 s0 /\
+  (!H. valid_horizon cx st0 H es.storage_trace ==>
+    stmt_state_rel H ctx func cenv cx es s0 /\
+    storage_well_formed_on cx es (FST H) /\
+    ghost_inv H d cenv cx es G0 tn0 s0) /\ ~s0.vs_halted /\
   s0.vs_current_bb = sa.cs_current_bb /\
   s0.vs_inst_idx = LENGTH sa.cs_current_insts ==>
-  gas_outcome_ptr D (cx_tops cx) (ctx,func) PG (eval_exprs cx [])
+  gas_outcome_ptr D (cx_tops cx) (ctx,func) PG cx st0 (eval_exprs cx [])
     (es,s0,G0,tn0)
-    (\rr ee G tn t. ?vs. rr = INL vs /\
+    (\H rr ee G tn t. ?vs. rr = INL vs /\
        typed_args_post_ptr H d ctx func cenv cx es sa s0 G0 tn0 ee [] [] vs G tn t /\
        t.vs_current_bb = sa.cs_current_bb /\
        t.vs_inst_idx = LENGTH sa.cs_current_insts)
-    (\rr ee ghosts r. wb_args_exit rr r)
+    (\H rr ee ghosts r. wb_args_exit rr r)
 Proof
   strip_tac >> rewrite_tac[gas_outcome_ptr_def] >>
-  qexists_tac `[]` >> disj1_tac >>
+  qexists_tac `[]` >> disj2_tac >> disj1_tac >>
   rewrite_tac[gas_summary_ptr_at_marked] >>
   qexistsl_tac [`INL []`, `es`, `G0`, `tn0`, `OK s0`] >>
-  conj_tac >- (irule eval_exprs_nil_marked_ptr >> simp[]) >>
+  conj_tac >- simp[exprSimWordArgsTheory.eval_exprs_nil, vyperStateTheory.return_def] >>
+  gen_tac >> disch_tac >>
+  first_x_assum drule >> strip_tac >>
+  `storage_well_formed_on cx (es with gas_obs := []) (FST H)` by
+    (`(es with gas_obs := []).accounts = es.accounts /\
+      (es with gas_obs := []).tStorage = es.tStorage` by simp[] >>
+     metis_tac[vyperStorageFootprintTheory.storage_well_formed_on_backends]) >>
+  conj_tac
+  >- (irule eval_exprs_nil_marked_ptr >> simp[]) >>
   simp[typed_args_post_ptr_def, typed_args_post_def,
        stmt_state_rel_gas_obs, ghost_inv_gas_obs,
        wb_frame_refl, ghost_kept_refl]
