@@ -7,6 +7,7 @@
 Theory bodyFullExtCallStep
 Ancestors
   bodyFullPreds bodySimFull gasOutcomeFull exprSimExtCallCase bodyPtrDefs
+  oracleCallOriginPtr
   ptrDiscipline gasShadow exprSimHypsDefs exprLowering
   vyperInterpreter vyperAST list
 
@@ -69,9 +70,10 @@ Theorem extcall_call_full:
                  b <= w2n ao /\ w2n ao + w2n az <= b + sz)) /\
     (!dv. default_opt = SOME dv /\ ~is_word_type default_ty ==>
        ptr_mem_ok cx default_ty dv default_op G tn t /\
-       ?x b sz w. default_op = Var x /\ FLOOKUP G x = SOME (b,sz) /\
-         eval_operand default_op t = SOME w /\ b <= w2n w /\
-         w2n w + type_memory_bytes cenv default_ty <= b + sz) /\
+       (type_memory_bytes cenv default_ty <> 0 ==>
+        ?x b sz w. default_op = Var x /\ FLOOKUP G x = SOME (b,sz) /\
+          eval_operand default_op t = SOME w /\ b <= w2n w /\
+          w2n w + type_memory_bytes cenv default_ty <= b + sz)) /\
     (cap <> 0 ==>
      ?v b sz ro. buf_op = Var v /\ FLOOKUP G v = SOME (b,sz) /\
        eval_operand buf_op t = SOME ro /\ b <= w2n ro /\
@@ -87,9 +89,10 @@ Theorem extcall_call_full:
        EVERY (\op. op_taint tn' op = {}) [addr_op; buf_op; default_op] /\
        (!dv. default_opt = SOME dv /\ ~is_word_type default_ty ==>
           ptr_mem_ok cx default_ty dv default_op G' tn' t' /\
-          ?x b sz w. default_op = Var x /\ FLOOKUP G' x = SOME (b,sz) /\
-            eval_operand default_op t' = SOME w /\ b <= w2n w /\
-            w2n w + type_memory_bytes cenv default_ty <= b + sz) /\
+          (type_memory_bytes cenv default_ty <> 0 ==>
+           ?x b sz w. default_op = Var x /\ FLOOKUP G' x = SOME (b,sz) /\
+             eval_operand default_op t' = SOME w /\ b <= w2n w /\
+             w2n w + type_memory_bytes cenv default_ty <= b + sz)) /\
        (cap <> 0 ==>
         ?v b sz ro. buf_op = Var v /\ FLOOKUP G' v = SOME (b,sz) /\
           eval_operand buf_op t' = SOME ro /\ b <= w2n ro /\

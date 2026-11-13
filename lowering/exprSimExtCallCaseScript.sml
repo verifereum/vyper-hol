@@ -125,7 +125,8 @@ Definition extcall_request_ready_def:
       target value_opt calldata has_default default_op default_ty default_opt
       ee t <=>
     (!H. valid_horizon cx st0 H ee.storage_trace ==>
-       stmt_state_rel H ctx func cenv cx ee t) /\ wb_frame cenv es ee sa s0 t /\
+       stmt_state_rel H ctx func cenv cx ee t /\
+       storage_well_formed_on cx ee (FST H)) /\ wb_frame cenv es ee sa s0 t /\
     ~t.vs_halted /\ t.vs_current_bb = sp.cs_current_bb /\
     t.vs_inst_idx = LENGTH sp.cs_current_insts /\ ee.gas_obs = [] /\
     outcomes_accounts_typed ee.outcomes /\
@@ -178,7 +179,8 @@ Definition extcall_returned_def:
   extcall_returned st0 ctx func cenv cx ret_type es sa s0 sr addr_op buf_op cap
       target has_default default_op default_ty default_opt returnData ee t <=>
     (!H. valid_horizon cx st0 H ee.storage_trace ==>
-       stmt_state_rel H ctx func cenv cx ee t) /\ wb_frame cenv es ee sa s0 t /\
+       stmt_state_rel H ctx func cenv cx ee t /\
+       storage_well_formed_on cx ee (FST H)) /\ wb_frame cenv es ee sa s0 t /\
     ~t.vs_halted /\ t.vs_current_bb = sr.cs_current_bb /\
     t.vs_inst_idx = LENGTH sr.cs_current_insts /\ ee.gas_obs = [] /\
     sa.cs_next_var <= sr.cs_next_var /\ sa.cs_next_id <= sr.cs_next_id /\

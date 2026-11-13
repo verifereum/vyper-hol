@@ -175,9 +175,10 @@ Theorem extcall_request_full:
          (!dv. ext_call_kwarg EKDefault opts (DROP (LENGTH arg_types) rest) =
             SOME dv /\ ~is_word_type default_ty ==>
             ptr_mem_ok cx default_ty dv default_op G tn t /\
-            ?x b sz w. default_op = Var x /\ FLOOKUP G x = SOME (b,sz) /\
-              eval_operand default_op t = SOME w /\ b <= w2n w /\
-              w2n w + type_memory_bytes cenv default_ty <= b + sz) /\
+            (type_memory_bytes cenv default_ty <> 0 ==>
+             ?x b sz w. default_op = Var x /\ FLOOKUP G x = SOME (b,sz) /\
+               eval_operand default_op t = SOME w /\ b <= w2n w /\
+               w2n w + type_memory_bytes cenv default_ty <= b + sz)) /\
          (abi_size_bound cenv.ce_struct_fields
             (if needs_external_call_wrap ret_type
              then TupleT [ret_type] else ret_type) <> 0 ==>
