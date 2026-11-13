@@ -1,13 +1,14 @@
 (* Conditional complex-member execution and endpoint-owned allocation frames. *)
 Theory abiDecodeMemMembers
 Ancestors
+  abiDecodeMemMemberReentry allocationGrowth abiDecoderSiteEffect
   abiDecodeMemMemberPointer abiDecoderFrame abiDecoderEffect abiDecoderMemberSetup abiDecoderMemberCode abiDecoderMemberCons
   abiEncoder fragGasPathMem fragGasMode fragExec allocaHistory
   abiDecodeMemBytesGuards venomExecSemantics venomState
   finite_map pred_set list rich_list arithmetic words compileEnv emitHelper
   emitHelperProps exprLoweringProps loweringStateRelDefs
 
-Theorem abi_decode_mem_owned_footprint_exists[local]:
+Theorem abi_decode_mem_owned_footprint_exists:
   !lo hi (m:num |-> (num # num)).
     ?fp. !p n. MEM (p,n) fp <=>
       ?id. lo <= id /\ id < hi /\ FLOOKUP m id = SOME (p,n)
@@ -132,14 +133,18 @@ QED
 Finalise abi_decode_member_setup_path_mem
 
 Theorem abi_decode_mem_members_anchored[local]:
-  !(K:num -> bool). let AS = (\xs. SUM (MAP (\(di,a,m). a) xs));
+  !(W:num -> venom_state -> bool) (Bad:bool) (K:num -> bool). let AS = (\xs. SUM (MAP (\(di,a,m). a) xs));
       MS = (\xs. SUM (MAP (\(di,a,m). m) xs));
       P = (\u. mem_bytes_at B H u.vs_memory = mem_bytes_at B H anchor.vs_memory /\
                 (!p. K p ==> mload p u = mload p anchor) /\
                 u.vs_call_ctx = anchor.vs_call_ctx /\
                 u.vs_data_section = anchor.vs_data_section);
-      E = (\q u. P u /\ fresh_vars_wrt q u /\ alloca_inv u /\
+      E = (\q u. P u /\ fresh_vars_wrt limit_st u /\ alloca_inv u /\
                 alloca_room ctx func u /\ alloca_history func u /\
+                (!inst w b sz. MEM inst (fn_insts func) /\
+                  inst.inst_opcode = ALLOCA /\ inst.inst_operands = [Lit w] /\
+                  FLOOKUP u.vs_allocas inst.inst_id = SOME (b,sz) ==> sz = w2n w) /\
+                allocation_growth anchor u /\
                 ~u.vs_halted /\ u.vs_current_bb = q.cs_current_bb /\
                 u.vs_inst_idx = LENGTH q.cs_current_insts /\
                 B + H <= u.vs_alloca_next /\
@@ -147,31 +152,47 @@ Theorem abi_decode_mem_members_anchored[local]:
                 eval_operand dst u = SOME (n2w d) /\
                 eval_operand bop u = SOME (n2w B) /\
                 eval_operand hi u = SOME (n2w H));
-      R = (\q r out sz u v.
-                E r v /\ u.vs_alloca_next <= v.vs_alloca_next /\
-                (!op w. eval_operand op u = SOME w ==> eval_operand op v = SOME w) /\
+      R = (\j q r out sz u v.
+                W j v /\ E r v /\ u.vs_alloca_next <= v.vs_alloca_next /\
+                (!op. abi_decoder_operand_live q.cs_next_var op ==>
+                  eval_operand op v = eval_operand op u) /\
                 (!id. id < q.cs_next_id \/ r.cs_next_id <= id ==>
                    FLOOKUP v.vs_allocas id = FLOOKUP u.vs_allocas id) /\
                 ?fp. (!p n. MEM (p,n) fp <=>
                         ?id. q.cs_next_id <= id /\ id < r.cs_next_id /\
                              FLOOKUP v.vs_allocas id = SOME (p,n)) /\
                      abi_decode_footprint_frame ((out,sz)::fp) u v);
-      Q = (\q r out sz u.
-                (?v. gas_path_mem ctx func u 0 (OK v) /\ R q r out sz u v) \/
-                (?v. gas_marked_path T ctx func u 0 (Abort Revert_abort v)))
+      Q = (\j q r out sz u.
+                (?v. gas_path_mem ctx func u 0 (OK v) /\ R j q r out sz u v) \/
+                (?v. gas_marked_path T ctx func u 0 (Abort Revert_abort v) /\ Bad))
   in
     compile_abi_decode_complex_elems dst src MLOAD bop hi elems ao vo st = ((),final) /\
     hi <> Lit 0w /\ fn_has_code st final func /\ fn_inst_ids_distinct func /\
+    final.cs_next_var <= limit_st.cs_next_var /\
+    abi_decoder_operand_live st.cs_next_var src /\
+    abi_decoder_operand_live st.cs_next_var dst /\
+    abi_decoder_operand_live st.cs_next_var bop /\
+    abi_decoder_operand_live st.cs_next_var hi /\
+    (!p. K p ==> (B <= p /\ p+32 <= B+H) \/
+      ?id. id < st.cs_next_id /\ FLOOKUP anchor.vs_allocas id = SOME (p,32)) /\
     E st s /\ sb < dimword (:256) /\ B + H < dimword (:256) /\
     sb + ao + AS elems <= H /\ d + vo + MS elems < dimword (:256) /\
     d + vo + MS elems <= s.vs_alloca_next /\
     EVERY (\(di,a,m). (dec_info_needs_offset di ==> 32 <= a) /\
                           (!c. di = DecPrimWord c ==> 32 <= a)) elems /\
+    W j0 s /\
+    (!j u v. W j u /\ u.vs_memory = v.vs_memory /\ decode_static_frame u v /\
+      v.vs_allocas = u.vs_allocas /\ v.vs_alloca_next = u.vs_alloca_next ==> W j v) /\
+    (!pre di a m post q u.
+      elems = pre ++ (di,a,m)::post /\ E q u /\ W (j0+LENGTH pre) u /\
+      dec_info_needs_offset di /\
+      dimword (:256) <= sb + w2n (mload (B+sb+ao+AS pre) u) ==> Bad) /\
     (!pre di a m post q r cs cd u.
         elems = pre ++ (di,a,m)::post /\
         st.cs_next_id <= q.cs_next_id /\ r.cs_next_id <= final.cs_next_id /\
+        st.cs_next_var <= q.cs_next_var /\ r.cs_next_var <= final.cs_next_var /\
         compile_abi_decode_to_buf cd cs MLOAD bop hi di q = ((),r) /\
-        fn_has_code q r func /\ E q u /\
+        fn_has_code q r func /\ E q u /\ W (j0+LENGTH pre) u /\
         abi_decoder_operand_live q.cs_next_var cs /\
         abi_decoder_operand_live q.cs_next_var cd /\
         eval_operand cd u = SOME (n2w (d + vo + MS pre)) /\
@@ -180,10 +201,11 @@ Theorem abi_decode_mem_members_anchored[local]:
                    else ao + AS pre
          in sb + off < dimword (:256) /\
             eval_operand cs u = SOME (n2w (sb + off)))
-        ==> Q q r (d + vo + MS pre) m u)
-    ==> Q st final (d + vo) (MS elems) s
+        ==> Q (SUC (j0+LENGTH pre)) q r (d + vo + MS pre) m u)
+    ==> Q (j0+LENGTH elems) st final (d + vo) (MS elems) s
 Proof
-  map_every qid_spec_tac [`s`,`st`,`final`,`ao`,`vo`] >>
+  qx_gen_tac `Obs` >> qx_gen_tac `Bad` >>
+  map_every qid_spec_tac [`j0`,`s`,`st`,`final`,`ao`,`vo`] >>
   Induct_on `elems`
   >- suspend "nil" >>
   suspend "cons"
@@ -205,8 +227,9 @@ Resume abi_decode_mem_members_anchored[cons]:
   pairarg_tac >> strip_tac >> gvs[] >> pairarg_tac >> gvs[] >>
   `abi_decode_source_opcode MLOAD` by simp[abiDecoderContractTheory.abi_decode_source_opcode_def] >>
   drule_all abi_decoder_member_cons_code >> strip_tac >>
+  `st.cs_next_var <= cs''.cs_next_var` by metis_tac[LESS_EQ_TRANS] >>
   `fn_has_code st cs' func` by metis_tac[fn_has_code_split] >>
-  `fresh_vars_wrt st s /\ alloca_inv s /\ alloca_history func s /\
+  `fresh_vars_wrt limit_st s /\ alloca_inv s /\ alloca_history func s /\
    ~s.vs_halted /\ s.vs_current_bb = st.cs_current_bb /\
    s.vs_inst_idx = LENGTH st.cs_current_insts /\
    eval_operand src s = SOME (n2w sb) /\
@@ -220,11 +243,16 @@ Resume abi_decode_mem_members_anchored[cons]:
   `(dec_info_needs_offset h0 ==> eval_operand bop s = SOME (n2w B) /\
       B+sb+ao < dimword (:256) /\ B+sb+ao+32 <= s.vs_alloca_next)` by
     metis_tac[] >>
-  drule_all abi_decode_member_setup_path_mem >>
+  `cs'.cs_next_var <= limit_st.cs_next_var` by decide_tac >>
+  drule_all abi_decode_member_setup_reentry_path_mem >>
   disch_then (qspec_then `ctx` strip_assume_tac) >>
   Cases_on `dec_info_needs_offset h0 /\
     dimword (:256) <= sb + w2n (mload (B+sb+ao) s)`
-  >- (simp[Abbr `Q`] >> metis_tac[]) >>
+  >- (`Bad` by
+        (qpat_assum `!pre di a m post q u. _`
+          (qspecl_then [`[]`,`h0`,`h1`,`h2`,`elems`,`st`,`s`] mp_tac) >>
+         simp[Abbr `AS`] >> disch_then irule >> fs[Abbr `E`]) >>
+      simp[Abbr `Q`] >> metis_tac[]) >>
   `dec_info_needs_offset h0 ==>
     sb + w2n (mload (B+sb+ao) s) < dimword (:256)` by
       (strip_tac >> fs[]) >>
@@ -232,14 +260,21 @@ Resume abi_decode_mem_members_anchored[cons]:
   suspend "child_entry"
 QED
 Resume abi_decode_mem_members_anchored[child_entry]:
+  `Obs j0 t` by
+    (qpat_assum `!j u v. Obs j u /\ _ ==> Obs j v`
+      (qspecl_then [`j0`,`s`,`t`] mp_tac) >> simp[]) >>
   `alloca_inv t` by metis_tac[localPtrsPropsTheory.alloca_inv_fields] >>
   `alloca_room ctx func t` by
     (irule alloca_room_fields >> qexists_tac `s` >> fs[Abbr `E`]) >>
   `P t` by (fs[Abbr `P`, Abbr `E`] >> metis_tac[mload_def]) >>
+  `allocation_growth anchor s` by fs[Abbr `E`] >>
+  `allocation_growth anchor t` by
+    (qpat_x_assum `allocation_growth anchor s` mp_tac >>
+     simp[allocation_growth_def] >> strip_tac >> first_assum ACCEPT_TAC) >>
   `E cs' t` by (fs[Abbr `E`] >> metis_tac[]) >>
   drule abi_decode_member_setup_counters >> strip_tac >>
   `fn_has_code cs' cs'' func` by metis_tac[fn_has_code_split] >>
-  `Q cs' cs'' (d+vo) h2 t` by
+  `Q (SUC j0) cs' cs'' (d+vo) h2 t` by
     (qpat_assum `!pre di a m post q r cs cd u off. _`
       (qspec_then `[]` mp_tac) >>
      simp_tac (srw_ss()) [Abbr `AS`, Abbr `MS`] >>
@@ -248,7 +283,7 @@ Resume abi_decode_mem_members_anchored[child_entry]:
      simp[markerTheory.Abbrev_def, AC ADD_ASSOC ADD_COMM] >>
      disch_then irule >>
      Cases_on `dec_info_needs_offset h0` >> fs[mload_def] >> decide_tac) >>
-  qpat_x_assum `Q cs' cs'' _ _ t` mp_tac >>
+  qpat_x_assum `Q (SUC j0) cs' cs'' _ _ t` mp_tac >>
   qpat_assum `Abbrev (Q = _)`
     (fn th => rewrite_tac [REWRITE_RULE [markerTheory.Abbrev_def] th]) >>
   BETA_TAC >> strip_tac
@@ -258,39 +293,68 @@ Resume abi_decode_mem_members_anchored[child_entry]:
   metis_tac[gas_path_mem_then, arithmeticTheory.ADD_CLAUSES]
 QED
 Resume abi_decode_mem_members_anchored[child_success]:
-  rename1 `R cs' cs'' (d+vo) h2 t v` >>
-  `E cs'' v /\ s.vs_alloca_next <= v.vs_alloca_next` by
+  rename1 `R (SUC j0) cs' cs'' (d+vo) h2 t v` >>
+  `Obs (SUC j0) v /\ E cs'' v /\ s.vs_alloca_next <= v.vs_alloca_next` by
     (fs[Abbr `R`] >> decide_tac) >>
-  `Q cs'' final (d+(h2+vo)) (MS elems) v` by
-    (asm "ih" (qspecl_then [`h2+vo`,`ao+h1`,`final`,`cs''`,`v`,`K'`] mp_tac) >>
+  `abi_decoder_operand_live cs''.cs_next_var src /\
+   abi_decoder_operand_live cs''.cs_next_var dst /\
+   abi_decoder_operand_live cs''.cs_next_var bop /\
+   abi_decoder_operand_live cs''.cs_next_var hi` by
+    (rpt conj_tac >> irule abiDecoderReentryTheory.abi_decoder_operand_live_mono >>
+     qexists_tac `st.cs_next_var` >> simp[] >> decide_tac) >>
+  `!p. K' p ==> (B <= p /\ p+32 <= B+H) \/
+    ?id. id < cs''.cs_next_id /\ FLOOKUP anchor.vs_allocas id = SOME (p,32)` by
+    (rpt strip_tac >>
+     qpat_x_assum `!p. K' p ==> _` (qspec_then `p` mp_tac) >>
+     asm_rewrite_tac[] >> strip_tac >- simp[] >>
+     disj2_tac >> qexists_tac `id` >> simp[] >> decide_tac) >>
+  `Q (SUC j0+LENGTH elems) cs'' final (d+(h2+vo)) (MS elems) v` by
+    (asm "ih" (qspecl_then [`h2+vo`,`ao+h1`,`final`,`cs''`,`v`,`SUC j0`,`K'`] mp_tac) >>
      simp_tac bool_ss [LET_THM] >>
      impl_tac
      >- suspend "tail_premises" >>
-     simp[Abbr `Q`, Abbr `R`, Abbr `E`, Abbr `P`]) >>
+     simp[Abbr `Q`, Abbr `R`, Abbr `E`, Abbr `P`, ADD_CLAUSES]) >>
   suspend "compose_endpoints"
 QED
 Resume abi_decode_mem_members_anchored[tail_premises]:
+  asm_x "ih" kall_tac >>
   `sb + (ao+h1) + AS elems <= H /\
    d + (h2+vo) + MS elems < dimword (:256) /\
    d + (h2+vo) + MS elems <= v.vs_alloca_next` by
     (fs[Abbr `AS`, Abbr `MS`] >> decide_tac) >>
-  simp[Abbr `E`, Abbr `P`] >>
+  qpat_assum `Abbrev (E = _)` (fn et =>
+    qpat_assum `Abbrev (P = _)` (fn pt =>
+      let
+        val ee = REWRITE_RULE [markerTheory.Abbrev_def] et
+        val pp = REWRITE_RULE [markerTheory.Abbrev_def] pt
+        val applied = BETA_RULE (AP_THM (AP_THM ee ``q:compile_state``) ``u:venom_state``)
+        val expanded = SIMP_RULE bool_ss [pp] applied
+      in pure_rewrite_tac [GSYM expanded] end)) >>
+  simp[] >>
   conj_tac >- fs[] >>
+  conj_tac >- suspend "tail_rejections" >>
   suspend "tail_children"
+QED
+Resume abi_decode_mem_members_anchored[tail_rejections]:
+  rpt gen_tac >> strip_tac >>
+  qpat_x_assum `!pre di a m post q u. _`
+    (qspecl_then [`(h0,h1,h2)::pre`,`di`,`a`,`m`,`post`,`q`,`u`] mp_tac) >>
+  simp[Abbr `AS`, ADD_CLAUSES, AC ADD_ASSOC ADD_COMM] >>
+  disch_then irule >> fs[ADD_CLAUSES, AC ADD_ASSOC ADD_COMM]
 QED
 Resume abi_decode_mem_members_anchored[tail_children]:
   rpt gen_tac >> strip_tac >>
   qpat_x_assum `!pre di a m post q r cs cd u off. _`
     (qspec_then `(h0,h1,h2)::pre` mp_tac) >>
   simp_tac (srw_ss()) [markerTheory.Abbrev_def, Abbr `AS`, Abbr `MS`,
-    Abbr `Q`, Abbr `R`, AC ADD_ASSOC ADD_COMM] >>
+    Abbr `Q`, Abbr `R`, ADD_CLAUSES, AC ADD_ASSOC ADD_COMM] >>
   disch_then (drule_at (Pat `compile_abi_decode_to_buf _ _ _ _ _ _ _ = _`)) >>
   disch_then (qspecl_then [`a`,`m`,`post`,`u`] mp_tac) >>
-  fs[AC ADD_ASSOC ADD_COMM] >>
+  fs[ADD_CLAUSES, AC ADD_ASSOC ADD_COMM] >>
   disch_then irule >> decide_tac
 QED
 Resume abi_decode_mem_members_anchored[compose_endpoints]:
-  qpat_x_assum `Q cs'' final _ _ v` mp_tac >>
+  qpat_x_assum `Q _ cs'' final _ _ v` mp_tac >>
   simp[Abbr `Q`] >> strip_tac
   >- suspend "compose_success" >>
   disj2_tac >> fs[gas_marked_path_def] >>
@@ -299,13 +363,34 @@ Resume abi_decode_mem_members_anchored[compose_endpoints]:
   metis_tac[gas_path_mem_then, arithmeticTheory.ADD_CLAUSES]
 QED
 Resume abi_decode_mem_members_anchored[compose_success]:
-  rename1 `R cs'' final _ _ v z` >>
+  rename1 `R _ cs'' final _ _ v z` >>
   `gas_path_mem ctx func s 0 (OK z)` by
     metis_tac[gas_path_mem_then, arithmeticTheory.ADD_CLAUSES] >>
   disj1_tac >> qexists_tac `z` >> simp[] >>
-  qpat_x_assum `R cs' cs'' _ _ t v` mp_tac >>
-  qpat_x_assum `R cs'' final _ _ v z` mp_tac >>
-  simp[Abbr `R`] >> ntac 2 strip_tac >>
+  qpat_x_assum `R _ cs' cs'' _ _ t v` mp_tac >>
+  qpat_x_assum `R _ cs'' final _ _ v z` mp_tac >>
+  simp[Abbr `R`, ADD_CLAUSES] >> ntac 2 strip_tac >>
+  suspend "compose_operands"
+QED
+Resume abi_decode_mem_members_anchored[compose_operands]:
+  conj_tac
+  >- (rpt strip_tac >>
+      `abi_decoder_operand_live cs'.cs_next_var op /\
+       abi_decoder_operand_live cs''.cs_next_var op` by
+        (conj_tac >> irule abiDecoderReentryTheory.abi_decoder_operand_live_mono >>
+         qexists_tac `st.cs_next_var` >> simp[] >> decide_tac) >>
+      `eval_operand op v = eval_operand op t` by
+        (qpat_assum `!op. _ ==> eval_operand op v = _`
+           (qspec_then `op` mp_tac) >>
+         qpat_assum `abi_decoder_operand_live cs'.cs_next_var op` mp_tac >>
+         qpat_assum `cs'.cs_next_var = _` mp_tac >>
+         qpat_assum `hi <> Lit 0w` mp_tac >>
+         POP_ASSUM_LIST (K ALL_TAC) >> rpt strip_tac >>
+         Cases_on `dec_info_needs_offset h0` >> Cases_on `bop = Lit 0w` >> gvs[]) >>
+      qpat_assum `!op. _ ==> eval_operand op z = _`
+        (qspec_then `op` mp_tac) >> simp[] >>
+      qpat_assum `!op. _ ==> eval_operand op t = _`
+        (qspec_then `op` mp_tac) >> simp[]) >>
   suspend "compose_resources"
 QED
 Resume abi_decode_mem_members_anchored[compose_resources]:
@@ -343,6 +428,17 @@ QED
 Finalise abi_decode_mem_members_anchored
 
 
+(* Public observation contract expands the local proof's quotation bindings. *)
+val abi_decode_mem_members_observed_core =
+  SIMP_RULE bool_ss [LET_THM]
+    (Q.INST [`anchor` |-> `s:venom_state`] abi_decode_mem_members_anchored);
+
+Theorem abi_decode_mem_members_observed:
+  ^(concl abi_decode_mem_members_observed_core)
+Proof
+  ACCEPT_TAC abi_decode_mem_members_observed_core
+QED
+
 Theorem abi_decode_mem_members:
   !(K:num -> bool). let AS = (\xs. SUM (MAP (\(di,a,m). a) xs));
       MS = (\xs. SUM (MAP (\(di,a,m). m) xs));
@@ -350,8 +446,12 @@ Theorem abi_decode_mem_members:
                 (!p. K p ==> mload p u = mload p s) /\
                 u.vs_call_ctx = s.vs_call_ctx /\
                 u.vs_data_section = s.vs_data_section);
-      E = (\q u. P u /\ fresh_vars_wrt q u /\ alloca_inv u /\
+      E = (\q u. P u /\ fresh_vars_wrt limit_st u /\ alloca_inv u /\
                 alloca_room ctx func u /\ alloca_history func u /\
+                (!inst w b sz. MEM inst (fn_insts func) /\
+                  inst.inst_opcode = ALLOCA /\ inst.inst_operands = [Lit w] /\
+                  FLOOKUP u.vs_allocas inst.inst_id = SOME (b,sz) ==> sz = w2n w) /\
+                allocation_growth s u /\
                 ~u.vs_halted /\ u.vs_current_bb = q.cs_current_bb /\
                 u.vs_inst_idx = LENGTH q.cs_current_insts /\
                 B + H <= u.vs_alloca_next /\
@@ -361,7 +461,8 @@ Theorem abi_decode_mem_members:
                 eval_operand hi u = SOME (n2w H));
       R = (\q r out sz u v.
                 E r v /\ u.vs_alloca_next <= v.vs_alloca_next /\
-                (!op w. eval_operand op u = SOME w ==> eval_operand op v = SOME w) /\
+                (!op. abi_decoder_operand_live q.cs_next_var op ==>
+                  eval_operand op v = eval_operand op u) /\
                 (!id. id < q.cs_next_id \/ r.cs_next_id <= id ==>
                    FLOOKUP v.vs_allocas id = FLOOKUP u.vs_allocas id) /\
                 ?fp. (!p n. MEM (p,n) fp <=>
@@ -374,6 +475,13 @@ Theorem abi_decode_mem_members:
   in
     compile_abi_decode_complex_elems dst src MLOAD bop hi elems ao vo st = ((),final) /\
     hi <> Lit 0w /\ fn_has_code st final func /\ fn_inst_ids_distinct func /\
+    final.cs_next_var <= limit_st.cs_next_var /\
+    abi_decoder_operand_live st.cs_next_var src /\
+    abi_decoder_operand_live st.cs_next_var dst /\
+    abi_decoder_operand_live st.cs_next_var bop /\
+    abi_decoder_operand_live st.cs_next_var hi /\
+    (!p. K p ==> (B <= p /\ p+32 <= B+H) \/
+      ?id. id < st.cs_next_id /\ FLOOKUP s.vs_allocas id = SOME (p,32)) /\
     E st s /\ sb < dimword (:256) /\ B + H < dimword (:256) /\
     sb + ao + AS elems <= H /\ d + vo + MS elems < dimword (:256) /\
     d + vo + MS elems <= s.vs_alloca_next /\
@@ -382,6 +490,7 @@ Theorem abi_decode_mem_members:
     (!pre di a m post q r cs cd u.
         elems = pre ++ (di,a,m)::post /\
         st.cs_next_id <= q.cs_next_id /\ r.cs_next_id <= final.cs_next_id /\
+        st.cs_next_var <= q.cs_next_var /\ r.cs_next_var <= final.cs_next_var /\
         compile_abi_decode_to_buf cd cs MLOAD bop hi di q = ((),r) /\
         fn_has_code q r func /\ E q u /\
         abi_decoder_operand_live q.cs_next_var cs /\
@@ -395,5 +504,8 @@ Theorem abi_decode_mem_members:
         ==> Q q r (d + vo + MS pre) m u)
     ==> Q st final (d + vo) (MS elems) s
 Proof
-  irule abi_decode_mem_members_anchored
+  simp_tac bool_ss [LET_THM] >>
+  ACCEPT_TAC (SIMP_RULE bool_ss [LET_THM] (Q.INST [`anchor` |-> `s:venom_state`]
+    (Q.SPECL [`\(j:num) (u:venom_state). T`, `T`]
+      abi_decode_mem_members_anchored)))
 QED
