@@ -35,7 +35,7 @@ Proof
   rpt strip_tac >> metis_tac[]
 QED
 
-Theorem abi_encode_bytes_pointer_posts:
+Theorem abi_encode_bytes_pointer_posts_agree:
   evaluate_type (get_tenv cx) t = SOME (BaseTV (BytesT (Dynamic N))) /\
   lookup_var x s = SOME w /\ ptr_covers G tn x s outsz /\
   32+32*word_size (LENGTH payload) <= outsz /\
