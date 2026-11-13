@@ -431,10 +431,26 @@ Resume custom_error_store_args_sim_ptr_conditional[nonzero_store]:
     `type_memory_size ht`,`b+off`] mp_tac) >>
   (impl_tac >- (TRY (asm_x "tail" kall_tac) >>
     fs[wordArgsPtrTheory.ghost_kept_refl] >>
-    rpt conj_tac >> rpt strip_tac >>
-    FIRST [decide_tac, first_x_assum drule_all >> decide_tac,
+    rpt conj_tac
+    >>~- ([`!name entry z sz. lookup_scopes name es.scopes = SOME entry /\
+             FLOOKUP ce.ce_vars name = SOME (PtrVar (Var z) sz) ==>
+             not_fresh_at su z (* g *)`],
+      rpt strip_tac >>
       fs[loweringStateRelDefsTheory.not_fresh_at_def,
-         loweringStateRelDefsTheory.local_ptrs_reserved_def] >> metis_tac[]])) >>
+         loweringStateRelDefsTheory.local_ptrs_reserved_def] >> metis_tac[])
+    >>~- ([`!z. not_fresh_at (sa with cs_next_id := inst.inst_id) z ==>
+             not_fresh_at su z (* g *)`],
+      qpat_x_assum `!z. not_fresh_at sa z ==> not_fresh_at su z` mp_tac >>
+      simp[loweringStateRelDefsTheory.not_fresh_at_def])
+    >>~- ([`!aid lo sz i. FLOOKUP u.vs_allocas aid = SOME (lo,sz) /\
+             aid < inst.inst_id /\ lo <= i /\ i < lo+sz ==>
+             ~(b+off <= i) \/ ~(i < b+(off+type_memory_size ht)) (* g *)`],
+      rpt strip_tac >>
+      qpat_x_assum `!aid lo sz i. FLOOKUP u.vs_allocas aid = SOME (lo,sz) /\ _ ==> _`
+        (qspecl_then [`aid`,`lo`,`sz`,`i`] mp_tac) >> simp[] >> decide_tac)
+    >> rpt strip_tac >>
+    qpat_x_assum `!n lo sz i. local_region ce es_end.scopes u n lo sz /\ _ ==> _`
+      (qspecl_then [`n`,`lo`,`sz`,`i`] mp_tac) >> simp[] >> decide_tac)) >>
   disch_then (qspecl_then [`cx_dead cx`,`PG`] strip_assume_tac) >>
   rename1 `gas_path_ptr (cx_dead cx) 0 ctx func PG G1 tn1 u 0 H tm (OK z)` >>
   qexistsl_tac [`H`,`tm`,`z`] >> simp[]
@@ -472,9 +488,15 @@ Resume custom_error_store_args_sim_ptr_conditional[tail_setup]:
     `st`,`sb`,`es_end with gas_obs := []`,`tt`,`func`,`inst`,`x`,`b`,`asz`,`q`,
     `ctx`,`MAP expr_type args`,`cx_tops cx`,`d`,`PG`,`G2`,`tn2`] mp_tac) >>
   (impl_tac >- (asm_x "store" kall_tac >> fs[] >>
-    rpt conj_tac >> rpt strip_tac >>
-    fs[valueEncodingTheory.type_memory_size_def] >> TRY decide_tac >>
-    metis_tac[freshWritesTheory.not_fresh_at_mono])) >>
+    rpt conj_tac
+    >>~- ([`off + (type_memory_size ht + type_memory_size_list tt) <= asz (* g *)`],
+      fs[valueEncodingTheory.type_memory_size_def] >> decide_tac)
+    >>~- ([`!n lo sz i. local_region ce es.scopes q n lo sz /\
+             lo <= i /\ i < lo+sz ==> ~(b <= i) \/ ~(i < asz+b) (* g *)`],
+      rpt strip_tac >>
+      qpat_x_assum `!n lo sz i. local_region ce es_end.scopes q n lo sz /\ _ ==> _`
+        (qspecl_then [`n`,`lo`,`sz`,`i`] mp_tac) >> simp[])
+    >> rpt strip_tac >> metis_tac[freshWritesTheory.not_fresh_at_mono])) >>
   strip_tac >> suspend "tail_outcome"
 QED
 
@@ -564,8 +586,11 @@ Resume custom_error_store_args_sim_ptr_conditional[compose_outcome]:
   qpat_x_assum `gas_outcome_ptr _ _ _ _ (eval_exprs cx args) _ _ _`
     (strip_assume_tac o REWRITE_RULE [fragGasPathPtrTheory.gas_outcome_ptr_def])
   >- (qpat_x_assum `gas_summary_ptr_at _ _ _ _ _ _ _ _`
-        (strip_assume_tac o REWRITE_RULE [gas_summary_ptr_at_marked])
-      >- (gvs[] >> suspend "tail_normal")
+        (strip_assume_tac o SIMP_RULE (srw_ss()) [] o
+         REWRITE_RULE [gas_summary_ptr_at_marked])
+      >- (qpat_x_assum `_ = OK _` SUBST_ALL_TAC >>
+          qpat_x_assum `_ = INL (_:value list)` SUBST_ALL_TAC >>
+          suspend "tail_normal")
       >> suspend "tail_exit") >>
   suspend "tail_exempt"
 QED
@@ -641,7 +666,7 @@ QED
 
 Resume custom_error_store_args_sim_ptr_conditional[tail_exit]:
   rpt (CHANGED_TAC markerLib.RESUME_TAC) >> (
-  gvs[] >>
+  qpat_x_assum `_ = INR (_:exception)` SUBST_ALL_TAC >>
   rename1 `gas_marked_exec_ptr _ _ _ (eval_exprs cx args) _ right (INR exc) fin H tm r` >>
   rewrite_tac[fragGasPathPtrTheory.gas_outcome_ptr_def] >>
   qexists_tac `marks ++ right` >> disj1_tac >>
