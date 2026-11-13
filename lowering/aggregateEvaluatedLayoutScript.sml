@@ -17,8 +17,8 @@ Proof
   simp[arg_type_fits_def, evaluate_type_def, AllCaseEqs(),
        type_memory_size_def] >> rpt strip_tac >> gvs[] >>
   simp[type_memory_size_def]
-  >- (irule word_size_monotone >> simp[])
-  >- (irule word_size_monotone >> simp[])
+  >- (irule exprSimPropsTheory.word_size_monotone >> simp[])
+  >- (irule exprSimPropsTheory.word_size_monotone >> simp[])
   >- (irule arithmeticTheory.LESS_MONO_MULT2 >> simp[] >>
       first_x_assum irule >> metis_tac[])
   >- (first_x_assum irule >> metis_tac[])
