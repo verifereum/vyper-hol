@@ -3258,8 +3258,7 @@ Proof
            (fn th => irule (REWRITE_RULE [th] uint2str_typed_path)) >>
          goal_assum (drule_at Any) >> simp[] >> metis_tac[]) >>
       pop_assum strip_assume_tac
-      >- (qexistsl_tac [`m`, `r`] >> simp[] >> disj1_tac >>
-          qexistsl_tac [`t`, `rv`] >> simp[] >>
+      >- (qexistsl_tac [`m`, `r`] >> simp[] >>
           qx_gen_tac `H` >> strip_tac >>
           qpat_x_assum `!H. valid_horizon _ _ H es1.storage_trace ==> _`
             (qspec_then `H` mp_tac) >>
