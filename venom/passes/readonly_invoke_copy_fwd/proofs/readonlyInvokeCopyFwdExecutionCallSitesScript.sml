@@ -22,6 +22,47 @@ Proof
      simp[ricf_event_opcode])) >> simp[]
 QED
 
+Theorem ricf_call_sites_fold_complete[local]:
+  !uses acc sites.
+    FOLDL (\acc (v,inst,pos).
+      case acc of NONE => NONE | SOME xs =>
+        if icf_is_assign_output_use inst pos then SOME xs
+        else if inst.inst_opcode = MCOPY /\ pos = 0 then
+          if inst.inst_id = copy_id then SOME xs else NONE
+        else if inst.inst_opcode = INVOKE /\ icf_is_readonly_op rma inst pos
+          then SOME ((inst,pos)::xs) else NONE) acc uses = SOME sites ==>
+    (?xs. acc = SOME xs /\
+      !ri p. MEM (ri,p) xs ==> MEM (ri,p) sites) /\
+    (!v ri p. MEM (v,ri,p) uses /\ ri.inst_opcode = INVOKE ==>
+      MEM (ri,p) sites)
+Proof
+  Induct >> pure_rewrite_tac[FOLDL]
+  >- (rpt strip_tac >> gvs[]) >>
+  rpt gen_tac >> PairCases_on `h` >> strip_tac >>
+  qmatch_asmsub_abbrev_tac `FOLDL f next uses = SOME sites` >>
+  qpat_x_assum `!acc sites. _` (qspecl_then [`next`,`sites`] mp_tac) >>
+  simp[Abbr `f`] >> strip_tac >>
+  Cases_on `acc` >>
+  gvs[Abbr `next`, AllCaseEqs(), icf_is_assign_output_use_def] >>
+  rpt strip_tac >> gvs[] >> metis_tac[MEM]
+QED
+
+Theorem ricf_call_event_site_complete:
+  ricf_event_ok e current /\
+  (ricf_event_copy e current).inst_operands = [Var dst;src;sz] /\
+  MEM (v,ri,p)
+    (icf_alias_use_positions e.rfe_ctx.icf_dfg
+      (icf_collect_aliases e.rfe_ctx.icf_dfg
+        (icf_assign_root e.rfe_ctx.icf_dfg {} dst))) /\
+  ri.inst_opcode = INVOKE ==>
+  MEM (ri,p) e.rfe_sites
+Proof
+  simp[ricf_event_ok_def, ricf_try_forward_def, ricf_event_copy_def] >>
+  strip_tac >> gvs[AllCaseEqs()] >>
+  drule (INST_TYPE [alpha |-> ``:string``] ricf_call_sites_fold_complete) >>
+  simp[] >> metis_tac[]
+QED
+
 Theorem ricf_call_block_event_erased[local]:
   ricf_block_trace bb (prefix ++ e::suffix) last /\
   ricf_block_trace bb prefix current ==>
