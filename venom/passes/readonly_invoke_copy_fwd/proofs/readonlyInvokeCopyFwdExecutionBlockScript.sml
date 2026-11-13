@@ -102,7 +102,12 @@ Proof
   `ircf_cross rt {} (jump_to lbl s) (jump_to lbl t)` by simp[ircf_cross_def] >>
   drule_all ricf_live_support_enters_block >> strip_tac >>
   qexistsl_tac [`jump_to lbl t`, `t1`] >>
-  simp[step_inst_def, ricf_phase_stack_ranges_block_retire,
+  simp[step_inst_def, step_inst_base_opcode_eqs, ricf_phase_stack_ranges_block_retire,
     ricf_phase_ranges_block_retire, ircf_cross_def] >>
-  FAIL_TAC "post entry fields"
+  qpat_x_assum `enters_block fn (jump_to lbl s) s1` mp_tac >>
+  simp[contextCodegenRelTheory.enters_block_def] >> strip_tac >>
+  qpat_assum `eval_phis (jump_to lbl s) _ = OK _`
+    (mp_tac o MATCH_MP venomExecProofsTheory.eval_phis_only_updates_vs_vars) >>
+  disch_then SUBST_ALL_TAC >>
+  gvs[ircf_dead_def, jump_to_def]
 QED
