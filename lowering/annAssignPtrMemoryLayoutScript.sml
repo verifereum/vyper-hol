@@ -3,7 +3,7 @@ Theory annAssignPtrMemoryLayout
 Ancestors
  annAssignPtrFacts loweringSlice stmtSimProps stmtSimDefs
  stmtSimDeclMem stmtSimDecl exprLoweringProps
- stmtLowering exprLowering emitHelper emitHelperProps context compileEnv
+ stmtLowering exprLowering emitHelper emitHelperProps context compileEnv externalEntryShape
  loweringPosts fragExec venomInst venomState list rich_list finite_map
 Libs monadsyntax
 
@@ -54,7 +54,6 @@ Theorem annassign_memory_code_parts_ptr:
  stmt_env cenv lctx ty (AnnAssign id vtyp e) sa = (c,sf) /\
  cenv.ce_alloca_locals /\ ~is_word_type vtyp /\
  ~(has_length_word vtyp /\ is_empty_value_expr e) /\
- (lowered_value_type cenv e = vtyp \/ is_bytestring_type vtyp) /\
  fn_has_code sa sf func /\ local_ptrs_reserved cenv sa /\
  (!st0 c st1. declare_local cenv id vtyp st0 = (c,st1) ==>
    !a b op. lower_value compile_expr c (expr_type e) e a = (op,b) ==>
@@ -85,8 +84,17 @@ Proof
  drule_all annassign_memory_lowering_parts_ptr >>
  disch_then (qx_choosel_then [`sA`,`sV`,`sB`,`vv`,`op`] strip_assume_tac) >>
  `fn_has_code st sf func` by gvs[fn_has_code_def, emitted_blocks_def] >>
- `cs_extends sA sB /\ cs_extends sB sf` by
-  metis_tac[compile_assign_memory_widen_appends, cs_appends_def] >>
+ `cs_extends sA sB` by metis_tac[] >>
+ `cs_extends sB sf` by
+   (mp_tac compile_assign_value_labels >>
+    disch_then (qspecl_then [`c`,`Var (STRING #"%" (toString sa.cs_next_var))`,`LocMemory`,`op`,`F`,
+      `vv_location vv`,`vtyp`,`lowered_value_type c e`,
+      `case vtyp of ArrayT elem_ty (Dynamic _) =>
+        SOME ((type_memory_bytes c elem_ty + 31) DIV 32,
+          type_memory_bytes c elem_ty) | _ => NONE`,
+      `type_memory_bytes c vtyp`,`sB`] mp_tac) >>
+    qpat_assum `compile_assign_value _ _ _ _ _ _ _ _ _ _ _ = _`
+      (fn th => pure_rewrite_tac[th]) >> simp[]) >>
  `cs_extends sA sf` by metis_tac[cs_extends_trans] >>
  drule_all annassign_alloca_code >> strip_tac >>
  `fn_has_code sA sB func /\ fn_has_code sB sf func` by
