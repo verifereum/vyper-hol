@@ -925,10 +925,11 @@ Proof
     val_in_memory dtv v (w2n bw+off) u.vs_memory /\
     typed_copy_effect ctx func sa mid s u (w2n bw+off) (type_memory_bytes cenv dty)` by
     (qpat_x_assum `!ltys dtys vs off sa sb s. _` kall_tac >>
-     irule log_declared_field_effect_mem >> goal_assum (drule_at Any) >> simp[] >>
-     rpt conj_tac >> TRY decide_tac >>
-     goal_assum (drule_at Any) >> simp[] >>
-     goal_assum (drule_at Any) >> simp[] >> metis_tac[ADD_COMM]) >>
+     mp_tac (Q.INST [`sb` |-> `mid`]
+       (SPEC_ALL log_declared_field_effect_mem)) >>
+     (impl_tac >- (simp[ADD_COMM] >> rpt conj_tac >>
+        FIRST [first_assum ACCEPT_TAC, decide_tac])) >>
+     disch_then ACCEPT_TAC) >>
   `u.vs_labels = s.vs_labels /\ u.vs_alloca_next = s.vs_alloca_next` by
     (drule typed_copy_effect_record >>
      disch_then (mp_tac o AP_TERM ``\s. (s.vs_labels,s.vs_alloca_next)``) >> simp[]) >>
@@ -1008,14 +1009,20 @@ Resume compile_log_store_data_declared_path_mem[join]:
     (irule typed_copy_memory_size >> goal_assum (drule_at Any) >> simp[] >>
      metis_tac[EVERY_MONOTONIC]) >>
   `val_in_memory dtv v (w2n bw+off) result.vs_memory` by
-    (qpat_assum `typed_copy_effect ctx func mid sb u result _ _`
-       (fn eff => irule (MATCH_MP
-          (ONCE_REWRITE_RULE [GSYM AND_IMP_INTRO] log_declared_effect_head_frame)
-          (PURE_REWRITE_RULE [ADD_ASSOC] eff))) >>
-     conj_tac >- first_assum ACCEPT_TAC >>
-     conj_tac >- first_assum ACCEPT_TAC >>
-     qpat_assum `type_memory_bytes cenv dty = _`
-       (fn sz => pure_rewrite_tac[sz, LESS_EQ_REFL])) >>
+    (mp_tac (Q.INST [`tv` |-> `dtv`, `t` |-> `result`,
+       `b` |-> `w2n (bw:256 word)+off`, `h` |-> `type_memory_bytes cenv dty`,
+       `n` |-> `SUM (MAP (type_memory_bytes cenv) dtys)`]
+       (SPEC_ALL log_declared_effect_head_frame)) >>
+     (impl_tac >-
+       (conj_tac >-
+          (pure_rewrite_tac[ADD_ASSOC] >>
+           qpat_assum `typed_copy_effect ctx func mid sb u result _ _`
+             (ACCEPT_TAC o PURE_REWRITE_RULE [ADD_ASSOC])) >>
+        conj_tac >- first_assum ACCEPT_TAC >>
+        conj_tac >- first_assum ACCEPT_TAC >>
+        qpat_assum `type_memory_bytes cenv dty = _`
+          (fn sz => pure_rewrite_tac[sz, LESS_EQ_REFL]))) >>
+     disch_then ACCEPT_TAC) >>
   `typed_copy_effect ctx func sa sb s result (w2n bw+off)
       (type_memory_bytes cenv dty + SUM (MAP (type_memory_bytes cenv) dtys))` by
     (`sa.cs_next_var <= mid.cs_next_var` by
@@ -1027,7 +1034,33 @@ Resume compile_log_store_data_declared_path_mem[join]:
   qexists_tac `result` >>
   `gas_path_mem ctx func s 0 (OK result)` by
     metis_tac[gas_path_mem_then, ADD_CLAUSES] >>
-  gvs[typed_copy_effect_def, gas_marked_path_def, log_data_layout_def,
-      ADD_ASSOC, ADD_COMM] >> metis_tac[]
+  qpat_assum `typed_copy_effect ctx func sa sb s result _ _`
+    (strip_assume_tac o PURE_REWRITE_RULE
+       [typed_copy_effect_def, gas_marked_path_def, COND_CLAUSES]) >>
+  conj_tac >- first_assum ACCEPT_TAC >>
+  conj_tac >- first_assum ACCEPT_TAC >>
+  conj_tac >- first_assum ACCEPT_TAC >>
+  conj_tac >- first_assum ACCEPT_TAC >>
+  conj_tac >-
+    (pure_once_rewrite_tac[log_data_layout_def] >> qexists_tac `dtv` >>
+     conj_tac >- first_assum ACCEPT_TAC >>
+     conj_tac >- first_assum ACCEPT_TAC >>
+     conj_tac >-
+       (qpat_assum `val_in_memory dtv v _ result.vs_memory` mp_tac >>
+        simp_tac std_ss [ADD_COMM]) >>
+     qpat_assum `type_memory_bytes cenv dty = _` (fn sz =>
+       pure_rewrite_tac[GSYM sz, ADD_ASSOC]) >>
+     qpat_assum `log_data_layout cx dtys vtail _ result.vs_memory`
+       mp_tac >> simp_tac arith_ss []) >>
+  conj_tac >-
+    (pure_rewrite_tac[MAP, SUM] >> qx_genl_tac [`p`,`k`] >> strip_tac >>
+     qpat_assum `!a len. _ ==> mem_bytes_at a len result.vs_memory =
+       mem_bytes_at a len s.vs_memory`
+       (qspecl_then [`p`,`k`] match_mp_tac) >> decide_tac) >>
+  conj_tac >-
+    (qpat_assum `s.vs_current_bb = _` (fn bb =>
+     qpat_assum `s.vs_inst_idx = _` (fn idx =>
+     qpat_assum `_ = s` mp_tac >> simp_tac (srw_ss()) [bb, idx]))) >>
+  first_assum ACCEPT_TAC
 QED
 Finalise compile_log_store_data_declared_path_mem
