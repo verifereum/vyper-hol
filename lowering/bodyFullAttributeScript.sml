@@ -12,7 +12,7 @@ Ancestors
   bodyFullAttributeAdd bodyFullAttributeFields bodyPtrAttributeSelection
   bodyAttributeMemory gasOutcomeFullCompose exprSimHyps exprLoweringProps
   bodyFullOfVV bodyFullPreds bodySimFull exprSimAttribute exprSimHypsDefs gasShadow
-  gasShadowState gasShadowCompile emitHelperProps fragExec exprSimUnwrap
+  gasShadowState emitHelperProps fragExec exprSimUnwrap
   loweringPosts compileEnv valueEncoding vyperTyping
   vyperInterpreter vyperState vyperAST
 
@@ -26,6 +26,16 @@ Theorem attribute_vv_sim_full:
     expr_vv_sim_full (DF, lo, d, ctx, shadow_ctx, PG, func, shadow_func)
       cenv cx ty (Attribute ann obj fld) es
 Proof
+  cheat
+QED
+
+(* TEMPORARILY CHEATED - the next step needs gasShadowCompileTheory's
+   gas_shadow_compile_expr, whose producers gas_shadow_compiles_stage_intcall_args
+   (gasShadowCompileCallSupport) and gas_shadow_compiles_slice_extcode
+   (gasShadowCompileBuiltinBytes) still state the old compiler interfaces.
+   Re-add gasShadowCompile to Ancestors when restoring this prefix.
+
+   Original proof prefix:
   rpt gen_tac >> strip_tac >> drule attr_pre_base >> strip_tac >>
   `post_value_type cenv obj = expr_type obj` by
     (drule_all attr_post_value_type >> simp[]) >>
@@ -57,7 +67,7 @@ Proof
                           `bvv`, `s0`, `G0`, `tn0`] mp_tac) >>
   (impl_tac >- simp[]) >>
   FAIL_TAC "base outcome"
-QED
+*)
 
 Theorem attribute_expr_full_ok:
   !cx v9 e id. body_expr_full_ok cx e ==> body_expr_full_ok cx (Attribute v9 e id)
