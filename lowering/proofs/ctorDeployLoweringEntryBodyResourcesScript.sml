@@ -238,7 +238,7 @@ Proof
  qspecl_then [`tops`, `NONE`, `"__init__"`] mp_tac classify_functions_ctor_lookup >>
  simp[] >> strip_tac >>
  gvs[constSubstTheory.subst_consts_fn_empty] >>
- `is_payable = (cf0 = Payable) /\ nr = cf1 /\ ret = NoneT` by
+ `is_payable = (cf0 = Payable) /\ ret = NoneT` by
    fs[set_constructor_package_target_def, package_constructor_def] >>
  gvs[] >>
  drule_all deploy_ctor_entry_registered_map_bounds_normalized >>
