@@ -125,7 +125,7 @@ Proof
   irule straight_fresh_emit_void >> simp[fresh_write_op_def]
 QED
 
-Theorem abi_decode_mem_member_safe[local]:
+Theorem abi_decode_mem_member_safe:
   compile_getelemptr_abi src dyn off MLOAD base_op hi st = (member_op,st') /\
   eval_operand src s = SOME (n2w sb) /\ fresh_vars_wrt st s /\
   (dyn ==> eval_operand base_op s = SOME (n2w B) /\
@@ -165,7 +165,7 @@ Proof
   fs[straight_fresh_def] >> metis_tac[writes_fresh_mem_ok]
 QED
 
-Theorem abi_decode_mem_member_rejected[local]:
+Theorem abi_decode_mem_member_rejected:
   compile_getelemptr_abi src T off MLOAD base_op hi st = (member_op,st') /\
   hi <> Lit 0w /\ eval_operand src s = SOME (n2w sb) /\
   eval_operand base_op s = SOME (n2w B) /\ fresh_vars_wrt st s /\
