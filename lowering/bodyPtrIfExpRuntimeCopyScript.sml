@@ -43,7 +43,7 @@ Theorem ifexp_runtime_copy_ptr:
   w2n d+capacity < dimword (:256) /\ ~ctx_has_dalloca ctx /\
   ~s.vs_halted /\ s.vs_current_bb = ca.cs_current_bb /\
   s.vs_inst_idx = LENGTH ca.cs_current_insts /\
-  ghost_inv rty ce cx ee G tn s /\ ghost_kept ce es sa0 G0 tn0 s0 G tn /\
+  ghost_inv HZ rty ce cx ee G tn s /\ ghost_kept ce es sa0 G0 tn0 s0 G tn /\
   local_ptrs_reserved ce ca /\
   (!x sz. ce.ce_return_buf = SOME (PtrVar (Var x) sz) ==> not_fresh_at ca x) /\
   (!x sz. ce.ce_return_pc = SOME (PtrVar (Var x) sz) ==> not_fresh_at ca x) /\
@@ -64,7 +64,7 @@ Theorem ifexp_runtime_copy_ptr:
     tt.t_stor = tn.t_stor /\ tt.t_trans = tn.t_trans /\ tt.t_imm = tn.t_imm /\
     (!x. not_fresh_at ca x ==> lookup_var x t = lookup_var x s /\
       FLOOKUP H x = FLOOKUP G x /\ op_taint tt (Var x) = op_taint tn (Var x)) /\
-    ghost_inv rty ce cx ee H tt t /\ ghost_kept ce es sa0 G0 tn0 s0 H tt
+    ghost_inv HZ rty ce cx ee H tt t /\ ghost_kept ce es sa0 G0 tn0 s0 H tt
 Proof
   Induct >- suspend "zero" >> rpt gen_tac >> strip_tac >>
   drule_all ifexp_runtime_copy_parts >> strip_tac >>

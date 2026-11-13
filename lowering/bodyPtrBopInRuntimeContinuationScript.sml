@@ -26,7 +26,9 @@ QED
 
 Theorem membership_array_continuation_summary_ptr:
   post_value_type cenv e2 = expr_type e2 /\
-  membership_vv_post d ctx fn cenv cx e2 es1 sc sm vv s1 G1 tn1 tvv ee s G tn /\
+  (?H. valid_horizon cx st0 H ee.storage_trace) /\
+  (!H. valid_horizon cx st0 H ee.storage_trace ==>
+      membership_vv_post H d ctx fn cenv cx e2 es1 sc sm vv s1 G1 tn1 tvv ee s G tn) /\
   compile_expr cenv ty e2 sc = (vv,sm) /\
   local_ptrs_reserved cenv sc /\ local_ptrs_reserved cenv sm /\
   compile_var_array_membership cenv needle vv (ArrayT et bd) (bop = In) sm = (op,sb) /\
@@ -47,17 +49,17 @@ Theorem membership_array_continuation_summary_ptr:
   (~expr_has_effect (Builtin (BaseT BoolT) (Bop bop) [e1;e2]) ==>
    pure_frame cenv fn es sa s0 s) /\
   sa.cs_next_var <= sm.cs_next_var /\ ee.gas_obs = [] ==>
-  gas_summary_ptr_at D (ctx,fn) PG []
+  gas_summary_ptr_at D (ctx,fn) PG cx st0 []
     (bind (read_result cx tvv) (\a. lift_sum (evaluate_binop u (ArrayTV tv bd) bop v a)))
     (ee,s,G,tn)
-    (\res fin G' tn' t. ?b. res = INL (BoolV b) /\
+    (\H res fin G' tn' t. ?b. res = INL (BoolV b) /\
       expr_post H ctx fn cenv cx (Builtin (BaseT BoolT) (Bop bop) [e1;e2])
         es sa sb s0 fin (BoolV b) op t /\
       ghost_inv H d cenv cx fin G' tn' t /\
       ptr_val_ok cx (BaseT BoolT) (BoolV b) op G' tn' t /\
       ghost_kept cenv es sa G0 tn0 s0 G' tn' /\
       t.vs_current_bb = sb.cs_current_bb /\ t.vs_inst_idx = LENGTH sb.cs_current_insts)
-    (\res fin ghosts r. expr_exit res r)
+    (\H res fin ghosts r. expr_exit res r)
 Proof
   disch_then (map_every assume_tac o CONJUNCTS) >>
   qabbrev_tac `ws = (case av of DynArrayV vs => MAP (typed_val_to_w256 tv) vs

@@ -9,21 +9,27 @@ Theorem membership_mixed_source_adapter:
   body_exprs_ptr_ok cx [e1;e2] /\ body_inv tops ctx cenv cx /\
   expr_body_pre cenv cx env (Builtin ann (Bop bop) [e1;e2]) es /\
   is_word_type (expr_type e1) /\
-  bop_operand_entry d ctx fn cenv cx e1 es sa sc needle s0 G0 tn0 /\
+  bop_operand_entry d ctx fn cenv cx st0 e1 es sa sc needle s0 G0 tn0 /\
   (!v1 es1 s1 G1 tn1.
-    bop_operand_post d ctx fn cenv cx e1 es sa sc needle s0 G0 tn0 v1 es1 s1 G1 tn1 /\
+    (?H. valid_horizon cx st0 H es1.storage_trace) /\
+    (!H. valid_horizon cx st0 H es1.storage_trace ==>
+      bop_operand_post H d ctx fn cenv cx e1 es sa sc needle s0 G0 tn0 v1 es1 s1 G1 tn1) /\
     (?gs. bind (eval_expr cx e1) (read_result cx) (es with gas_obs := gs) = (INL v1,es1)) /\
     es1.gas_obs = [] /\ ~s1.vs_halted ==>
-    membership_vv_entry d ctx fn cenv cx e2 es1 sc sm s1 G1 tn1) /\
+    membership_vv_entry d ctx fn cenv cx st0 e2 es1 sc sm s1 G1 tn1) /\
   (!v1 es1 s1 G1 tn1 tv es2 s2 G2 tn2.
-    bop_operand_post d ctx fn cenv cx e1 es sa sc needle s0 G0 tn0 v1 es1 s1 G1 tn1 /\
-    membership_vv_post d ctx fn cenv cx e2 es1 sc sm vv s1 G1 tn1 tv es2 s2 G2 tn2 /\
+    (?H. valid_horizon cx st0 H es1.storage_trace) /\
+    (!H. valid_horizon cx st0 H es1.storage_trace ==>
+      bop_operand_post H d ctx fn cenv cx e1 es sa sc needle s0 G0 tn0 v1 es1 s1 G1 tn1) /\
+    (?H. valid_horizon cx st0 H es2.storage_trace) /\
+    (!H. valid_horizon cx st0 H es2.storage_trace ==>
+      membership_vv_post H d ctx fn cenv cx e2 es1 sc sm vv s1 G1 tn1 tv es2 s2 G2 tn2) /\
     (?gs. bind (eval_expr cx e1) (read_result cx) (es with gas_obs := gs) = (INL v1,es1)) /\
     (?gs. eval_expr cx e2 (es1 with gas_obs := gs) = (INL tv,es2)) /\
     es1.gas_obs = [] /\ ~s1.vs_halted /\ es2.gas_obs = [] /\ ~s2.vs_halted ==>
-    gas_outcome_ptr (cx_dead H cx) (cx_tops cx) (ctx,fn) PG
+    gas_outcome_ptr (\H. cx_dead H cx) (cx_tops cx) (ctx,fn) PG cx st0
       (bind (read_result cx tv) (\v2 st. (bop_result cx ann bop [expr_type e1;expr_type e2] v1 v2 st,st)))
-      (es2,s2,G2,tn2) Q (\res ee gt r. expr_exit res r)) /\
+      (es2,s2,G2,tn2) Q (\H res ee gt r. expr_exit res r)) /\
   (!marks err ee leaf sf.
     gas_exempt_cert F (cx_tops cx) (ctx,fn)
       (ignore_bind (bind (eval_expr cx e1) (read_result cx)) (return ()))
@@ -46,7 +52,9 @@ Theorem membership_mixed_source_adapter:
          (\v2 st. (bop_result cx ann bop [expr_type e1;expr_type e2] v1 v2 st,st)))) (return ())))
       (es,s0) (left ++ right) (err,ee) (leaf,sf)) /\
   (!v1 es1 s1 G1 tn1.
-    bop_operand_post d ctx fn cenv cx e1 es sa sc needle s0 G0 tn0 v1 es1 s1 G1 tn1 /\
+    (?H. valid_horizon cx st0 H es1.storage_trace) /\
+    (!H. valid_horizon cx st0 H es1.storage_trace ==>
+      bop_operand_post H d ctx fn cenv cx e1 es sa sc needle s0 G0 tn0 v1 es1 s1 G1 tn1) /\
     (?gs. bind (eval_expr cx e1) (read_result cx) (es with gas_obs := gs) = (INL v1,es1)) /\
     es1.gas_obs = [] /\ ~s1.vs_halted ==>
     (!marks err ee leaf sf.
@@ -66,11 +74,11 @@ Theorem membership_mixed_source_adapter:
         (bind (eval_expr cx e2) (\tv. ignore_bind (bind (read_result cx tv)
           (\v2 st. (bop_result cx ann bop [expr_type e1;expr_type e2] v1 v2 st,st))) (return ())))
         (es1,s1) (left ++ right) (err,ee) (leaf,sf))) ==>
-  gas_outcome_ptr (cx_dead H cx) (cx_tops cx) (ctx,fn) PG
+  gas_outcome_ptr (\H. cx_dead H cx) (cx_tops cx) (ctx,fn) PG cx st0
     (bind (bind (eval_expr cx e1) (read_result cx)) (\v1.
       bind (eval_expr cx e2) (\tv. bind (read_result cx tv)
         (\v2 st. (bop_result cx ann bop [expr_type e1;expr_type e2] v1 v2 st,st)))))
-    (es,s0,G0,tn0) Q (\res ee gt r. expr_exit res r)
+    (es,s0,G0,tn0) Q (\H res ee gt r. expr_exit res r)
 Proof
   rpt disch_tac >>
   drule_at_then (Pat `lower_value _ _ _ _ _ = _`)

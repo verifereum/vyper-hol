@@ -6,7 +6,7 @@ Ancestors bodyPtrIfExpRuntimeOne bodyPtrIfExpMaterializeWord
 
 (* The producer's restored-cursor runtime frame hides all instruction details. *)
 Theorem ifexp_runtime_fresh_inv:
-  ghost_inv rty ce cx ee G tn s /\ local_ptrs_reserved ce ca /\
+  ghost_inv HZ rty ce cx ee G tn s /\ local_ptrs_reserved ce ca /\
   (!x sz. ce.ce_return_buf = SOME (PtrVar (Var x) sz) ==> not_fresh_at ca x) /\
   (!x sz. ce.ce_return_pc = SOME (PtrVar (Var x) sz) ==> not_fresh_at ca x) /\
   copy_runtime_frame ca s cb (r with vs_inst_idx := s.vs_inst_idx) /\
@@ -14,7 +14,7 @@ Theorem ifexp_runtime_fresh_inv:
   tr.t_stor = tn.t_stor /\ tr.t_trans = tn.t_trans /\ tr.t_imm = tn.t_imm /\
   (!x. not_fresh_at ca x ==> lookup_var x r = lookup_var x s /\
     FLOOKUP J x = FLOOKUP G x /\ op_taint tr (Var x) = op_taint tn (Var x)) ==>
-  ghost_inv rty ce cx ee J tr r
+  ghost_inv HZ rty ce cx ee J tr r
 Proof
   strip_tac >>
   `r.vs_call_ctx = s.vs_call_ctx /\ r.vs_accounts = s.vs_accounts /\
@@ -38,7 +38,7 @@ Theorem ifexp_runtime_one_ptr:
   w2n d+capacity < dimword (:256) /\ ~ctx_has_dalloca ctx /\
   ~s.vs_halted /\ s.vs_current_bb = ca.cs_current_bb /\
   s.vs_inst_idx = LENGTH ca.cs_current_insts /\
-  ghost_inv rty ce cx ee G tn s /\ ghost_kept ce es sa0 G0 tn0 s0 G tn /\
+  ghost_inv HZ rty ce cx ee G tn s /\ ghost_kept ce es sa0 G0 tn0 s0 G tn /\
   local_ptrs_reserved ce ca /\
   (!x sz. ce.ce_return_buf = SOME (PtrVar (Var x) sz) ==> not_fresh_at ca x) /\
   (!x sz. ce.ce_return_pc = SOME (PtrVar (Var x) sz) ==> not_fresh_at ca x) /\
@@ -59,12 +59,12 @@ Theorem ifexp_runtime_one_ptr:
     tt.t_stor = tn.t_stor /\ tt.t_trans = tn.t_trans /\ tt.t_imm = tn.t_imm /\
     (!x. not_fresh_at ca x ==> lookup_var x t = lookup_var x s /\
       FLOOKUP H x = FLOOKUP G x /\ op_taint tt (Var x) = op_taint tn (Var x)) /\
-    ghost_inv rty ce cx ee H tt t /\ ghost_kept ce es sa0 G0 tn0 s0 H tt
+    ghost_inv HZ rty ce cx ee H tt t /\ ghost_kept ce es sa0 G0 tn0 s0 H tt
 Proof
   strip_tac >> drule_all ifexp_runtime_one_path >>
   disch_then (qspecl_then [`PG`, `D`] strip_assume_tac) >>
   rename1 `copy_runtime_frame ca s cc (r with vs_inst_idx := s.vs_inst_idx)` >>
-  `ghost_inv rty ce cx ee J tr r` by
+  `ghost_inv HZ rty ce cx ee J tr r` by
     (irule ifexp_runtime_fresh_inv >> metis_tac[]) >>
   suspend "one_store_inv"
 QED
@@ -82,7 +82,7 @@ Resume ifexp_runtime_one_ptr[one_store_inv]:
      `lookup_var p s = SOME v` by metis_tac[] >>
      qpat_x_assum `!name entry p sz v. _` drule_all >>
      simp[] >> decide_tac) >>
-  `ghost_inv rty ce cx ee H tt t` by
+  `ghost_inv HZ rty ce cx ee H tt t` by
     (qpat_x_assum `t = _` SUBST1_TAC >>
      pure_rewrite_tac[ifexp_ghost_inv_inst_idx] >>
      qpat_x_assum `H = _` SUBST1_TAC >> qpat_x_assum `tt = _` SUBST1_TAC >>

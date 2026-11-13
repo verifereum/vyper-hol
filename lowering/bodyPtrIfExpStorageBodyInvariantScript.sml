@@ -38,7 +38,7 @@ Proof
 QED
 
 Theorem ifexp_copy_ptr_body:
-  ifexp_copy_ptr_inv ce cx rty es sa s0 G0 tn0 ee
+  ifexp_copy_ptr_inv H ce cx rty es sa s0 G0 tn0 ee
     cs load src (Var out) sBase GBase tnBase p d n X i s G tn /\
   i<n /\ MEM load [SLOAD;TLOAD] /\ ~ctx_has_dalloca ctx /\ ~s.vs_halted /\
   lookup_block s.vs_current_bb fn.fn_blocks = SOME bb /\
@@ -64,7 +64,7 @@ Theorem ifexp_copy_ptr_body:
   ?G' tn'.
     gas_path_ptr D 0 ctx fn PG G tn s 0 G' tn'
       (OK (slot_copy_body_result cs p d load i s)) /\
-    ifexp_copy_ptr_inv ce cx rty es sa s0 G0 tn0 ee
+    ifexp_copy_ptr_inv H ce cx rty es sa s0 G0 tn0 ee
       cs load src (Var out) sBase GBase tnBase p d n X (i+1)
       (slot_copy_body_result cs p d load i s) G' tn'
 Proof
@@ -85,7 +85,7 @@ Proof
    op_prov G (Var (slot_copy_var cs 0)) = NONE` by fs[ifexp_copy_ptr_inv_def] >>
   drule_all ifexp_copy_body_transition >>
   disch_then (qspecl_then [`PG`, `D`] strip_assume_tac) >>
-  `ghost_inv rty ce cx ee G' tn' (slot_copy_body_result cs p d load i s) /\
+  `ghost_inv H rty ce cx ee G' tn' (slot_copy_body_result cs p d load i s) /\
    ghost_kept ce es sa G0 tn0 s0 G' tn'` by suspend "frames" >>
   qexistsl_tac [`G'`, `tn'`] >> simp[] >>
   qhdtm_x_assum `ifexp_copy_ptr_inv`
@@ -113,7 +113,7 @@ Resume ifexp_copy_ptr_body[frames]:
     (ho_match_mp_tac ifexp_copy_interior_live_bounds >> simp[] >>
      rpt strip_tac >> qpat_x_assum `!name entry v sz w. _` drule_all >> simp[]) >>
   conj_tac
-  >- (ho_match_mp_tac (INST_TYPE [alpha |-> ``:256``] ifexp_copy_body_ghost_inv) >>
+  >- (ho_match_mp_tac (INST_TYPE [beta |-> ``:256``] ifexp_copy_body_ghost_inv) >>
       simp[IgnAsm `tn'.t_mem = _`, slot_copy_body_memory, slot_copy_body_sources] >>
       conj_tac >- fs[ifexp_copy_ptr_inv_def] >>
       conj_tac >- (qpat_x_assum `tn'.t_mem = _` mp_tac >> simp[]) >>

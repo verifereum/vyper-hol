@@ -22,7 +22,7 @@ Theorem ifexp_storage_allocation_frame:
   compile_alloc_buffer (32*n) sb = (buf,cs) /\ fn_has_code sb cs fn /\
   buf.buf_operand = Var out /\ 32*n < dimword (:256) /\
   step_inst_base (mk_inst sb.cs_next_id ALLOCA [Lit (n2w (32*n))] [out]) s = OK u /\
-  ifexp_copy_ptr_inv ce cx rty es sa s0 G0 tn0 ee cs load src dst
+  ifexp_copy_ptr_inv H ce cx rty es sa s0 G0 tn0 ee cs load src dst
     (u with vs_inst_idx := SUC s.vs_inst_idx) Gb tb p d n X i t HG tt ==>
   (!x. not_fresh_at sb x ==> lookup_var x t = lookup_var x s) /\
   (!aid entry. FLOOKUP s.vs_allocas aid = SOME entry ==>
@@ -42,7 +42,7 @@ Proof
   `!x. not_fresh_at sb x ==> slot_copy_external cs (Var x)` by
     (rpt strip_tac >> irule ifexp_copy_not_fresh_external >>
      fs[not_fresh_at_def] >> first_x_assum drule >> decide_tac) >>
-  qpat_x_assum `ifexp_copy_ptr_inv _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _`
+  qpat_x_assum `ifexp_copy_ptr_inv _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _`
     mp_tac >>
   simp[ifexp_copy_ptr_inv_def, slot_copy_inv_def] >> strip_tac >>
   conj_tac
@@ -82,7 +82,7 @@ Proof
       `mem_bytes_at b len (mstore (w2n d) w u).vs_memory = mem_bytes_at b len u.vs_memory` by
         (irule mstore_mem_bytes_at_disjoint >> simp[]) >>
       gvs[mstore_def]) >>
-  mp_tac (Q.SPECL [`w2n d`, `w`, `s`] LENGTH_mstore_eq) >>
+  mp_tac (Q.SPECL [`w2n (d:β word)`, `w`, `s`] LENGTH_mstore_eq) >>
   simp[mstore_def]
 QED
 

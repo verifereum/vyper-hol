@@ -84,7 +84,7 @@ Resume ifexp_old_ensure_memory_storage_loop[semantic]:
   drule ifexp_copy_ptr_ordinary_frame >> strip_tac >>
   `!x. not_fresh_at cs x ==> lookup_var x t = lookup_var x u` by
     (rpt strip_tac >>
-     qpat_x_assum `ifexp_copy_ptr_inv _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _` mp_tac >>
+     qpat_x_assum `ifexp_copy_ptr_inv _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _` mp_tac >>
      simp[ifexp_copy_ptr_inv_def, slot_copy_inv_def] >> strip_tac >>
      qpat_x_assum `!op. slot_copy_external cs op ==> _`
        (qspec_then `Var x` mp_tac) >>

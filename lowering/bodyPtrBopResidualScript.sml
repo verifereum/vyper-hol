@@ -186,7 +186,7 @@ Proof
      irule exprSimPropsTheory.pure_frame_mem_tail >> qexists_tac `t'` >> simp[] >>
      qpat_x_assum `(u with vs_vars := _) = t'` mp_tac >>
      simp[venomStateTheory.venom_state_component_equality] >> metis_tac[]) >>
-  `bop_operand_post d ctx func cenv cx
+  `bop_operand_post H d ctx func cenv cx
     (Builtin (BaseT BoolT) (Bop bop) [e1;e2]) es sa sb op s0 G0 tn0
     (BoolV (if bop = Eq then
       (word_of_bytes_be (Keccak_256_w64 contents) : bytes32) =

@@ -36,7 +36,7 @@ QED
    boundary (take sb=sa and use equality to obtain its taint subset).
    Do not duplicate that general monotone-taint theorem here. *)
 Theorem ifexp_copy_ghost_inv_transport:
-  ghost_inv rty ce cx es G tn s /\
+  ghost_inv H rty ce cx es G tn s /\
   t.vs_memory = s.vs_memory /\ t.vs_accounts = s.vs_accounts /\
   t.vs_transient = s.vs_transient /\ t.vs_call_ctx = s.vs_call_ctx /\
   tn'.t_mem = tn.t_mem /\ tn'.t_stor = tn.t_stor /\
@@ -50,7 +50,7 @@ Theorem ifexp_copy_ghost_inv_transport:
   (!x sz. ce.ce_return_pc = SOME (PtrVar (Var x) sz) ==>
     lookup_var x t = lookup_var x s /\ FLOOKUP G' x = FLOOKUP G x /\
     op_taint tn' (Var x) = op_taint tn (Var x)) ==>
-  ghost_inv rty ce cx es G' tn' t
+  ghost_inv H rty ce cx es G' tn' t
 Proof
   strip_tac >> fs[ghost_inv_def] >>
   conj_tac >-

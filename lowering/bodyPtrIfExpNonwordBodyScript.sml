@@ -33,10 +33,10 @@ Theorem ifexp_selected_body_nonword_outcome_ptr:
   ghost_inv H d cenv cx (mid with gas_obs := []) G1 tn1 v0 /\
   ~v0.vs_halted /\ v0.vs_current_bb = se.cs_current_bb /\
   v0.vs_inst_idx = LENGTH se.cs_current_insts ==>
-  gas_outcome_ptr (cx_dead H cx) (cx_tops cx) (ctx,fn) PG
+  gas_outcome_ptr (\H. cx_dead H cx) (cx_tops cx) (ctx,fn) PG cx st0
     (bind (eval_expr cx (if sel then a else b)) (conditional_result cx))
     (mid with gas_obs := [],v0,G1,tn1)
-    (\res ee G tn z. ?tv v. res = INL tv /\ read_result cx tv ee = (INL v,ee) /\
+    (\H res ee G tn z. ?tv v. res = INL tv /\ read_result cx tv ee = (INL v,ee) /\
       expr_post H ctx fn cenv cx (if sel then a else b)
         (mid with gas_obs := []) se sx v0 ee v op z /\
       vv_at cenv cx t se sx ee tv (LocatedValue t (mk_ptr op LocMemory)) z /\
@@ -44,7 +44,7 @@ Theorem ifexp_selected_body_nonword_outcome_ptr:
       ghost_inv H d cenv cx ee G tn z /\
       ghost_kept cenv (mid with gas_obs := []) se G1 tn1 v0 G tn /\
       z.vs_current_bb = sx.cs_current_bb /\ z.vs_inst_idx = LENGTH sx.cs_current_insts)
-    (\res ee gt r. expr_exit res r)
+    (\H res ee gt r. expr_exit res r)
 Proof
   strip_tac >>
   `body_expr_ptr_ok cx a /\ body_expr_ptr_ok cx b` by
@@ -102,16 +102,16 @@ Theorem ifexp_nonword_normal_continuation_ptr:
   sx.cs_next_id <= sb.cs_next_id /\ (!x. not_fresh_at sa x ==> x <> rv) /\
   ~u.vs_halted /\ u.vs_current_bb = sc.cs_current_bb /\
   u.vs_inst_idx = LENGTH sc.cs_current_insts ==>
-  gas_outcome_ptr (cx_dead H cx) (cx_tops cx) (ctx,fn) PG
+  gas_outcome_ptr (\H. cx_dead H cx) (cx_tops cx) (ctx,fn) PG cx st0
     (eval_expr cx (IfExp t c a b)) (es,s0,G0,tn0)
-    (\res ee G tn z. ?tv. res = INL tv /\
+    (\H res ee G tn z. ?tv. res = INL tv /\
       vv_post H ctx fn cenv cx (IfExp t c a b) es sa sb s0 ee tv
         (LocatedValue t (mk_ptr (Var rv) LocMemory)) z /\
       ptr_vv_ok cx t tv (LocatedValue t (mk_ptr (Var rv) LocMemory)) ee G tn z /\
       ptr_buf_ok cenv (IfExp t c a b) (Var rv) G z /\
       ghost_inv H d cenv cx ee G tn z /\ ghost_kept cenv es sa G0 tn0 s0 G tn /\
       z.vs_current_bb = sb.cs_current_bb /\ z.vs_inst_idx = LENGTH sb.cs_current_insts)
-    (\res ee gt r. expr_exit res r)
+    (\H res ee gt r. expr_exit res r)
 Proof
   disch_then (map_every assume_tac o CONJUNCTS) >>
   `bind (eval_expr cx c) (read_result cx)

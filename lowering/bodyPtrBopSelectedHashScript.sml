@@ -34,8 +34,9 @@ Proof
 QED
 
 Theorem bop_selected_hash_dynamic_success_frame[local]:
-  bop_operand_entry d ctx func cenv cx e es ca cz h s G tn /\
-  bop_operand_post d ctx func cenv cx e es ca cb m s G tn v ee t HG un /\
+  bop_operand_entry d ctx func cenv cx st0 e es ca cz h s G tn /\
+  valid_horizon cx st0 H es.storage_trace /\
+  bop_operand_post H d ctx func cenv cx e es ca cb m s G tn v ee t HG un /\
   lower_value compile_expr cenv (expr_type e) e ca = (m,cb) /\
   compile_bytestring_hash m cb = (h,cz) /\ cs_extends ca cb /\
   is_bytestring_type (expr_type e) /\
@@ -132,9 +133,10 @@ Proof
     (irule wb_frame_readonly_tail >> qexistsl_tac [`cb`, `t`] >>
      gvs[lookup_var_def] >> metis_tac[]) >>
   `ghost_kept cenv es ca G tn s HG' un'` by
-    (irule ghost_kept_wb_trans >>
+    (irule (INST_TYPE [alpha |-> ``:256``] ghost_kept_wb_trans) >>
      conj_tac >- first_assum ACCEPT_TAC >>
-     conj_tac >- (qexistsl_tac [`ctx`, `cx`, `func`] >> gvs[bop_operand_entry_def]) >>
+     conj_tac >- (qexistsl_tac [`H`, `ctx`, `cx`, `func`] >>
+       gvs[bop_operand_entry_def] >> metis_tac[]) >>
      metis_tac[]) >>
   `(!z. h = Var z ==> not_fresh_at cz z) /\ (!l. h <> Label l)` by
     (qpat_x_assum `compile_bytestring_hash _ _ = _` mp_tac >>
@@ -147,8 +149,9 @@ Proof
 QED
 
 Theorem bop_selected_hash_dynamic_success[local]:
-  bop_operand_entry d ctx func cenv cx e es ca cz h s G tn /\
-  bop_operand_post d ctx func cenv cx e es ca cb m s G tn v ee t HG un /\
+  bop_operand_entry d ctx func cenv cx st0 e es ca cz h s G tn /\
+  valid_horizon cx st0 H es.storage_trace /\
+  bop_operand_post H d ctx func cenv cx e es ca cb m s G tn v ee t HG un /\
   lower_value compile_expr cenv (expr_type e) e ca = (m,cb) /\
   compile_bytestring_hash m cb = (h,cz) /\ cs_extends ca cb /\
   is_bytestring_type (expr_type e) /\
@@ -174,7 +177,7 @@ Theorem bop_selected_hash_outcome_ptr_frame:
      NONE => (\(m,cb). compile_bytestring_hash m cb)
        (lower_value compile_expr cenv (expr_type e) e ca)
    | SOME digest => (Lit digest,ca)) = (h,cz) /\
-  bop_operand_entry d ctx func cenv cx e es ca cz h s G tn /\
+  bop_operand_entry d ctx func cenv cx st0 e es ca cz h s G tn /\
   expr_body_pre cenv cx env e es /\ body_inv tops ctx cenv cx /\
   is_bytestring_type (expr_type e) /\
   (bytestring_literal_hash e = NONE ==>
@@ -192,8 +195,8 @@ Theorem bop_selected_hash_outcome_ptr_frame:
     t.vs_inst_idx = LENGTH cz.cs_current_insts /\
     wb_frame cenv es ee ca s t /\ ghost_kept cenv es ca G tn s HG un /\
     (~expr_has_effect e ==> pure_frame cenv func es ca s t) ==>
-    gas_outcome_ptr (cx_dead H cx) (cx_tops cx) (ctx,func) PG
-      (next v) (ee,t,HG,un) Q (\res ee gt r. expr_exit res r)) /\
+    gas_outcome_ptr (\H. cx_dead H cx) (cx_tops cx) (ctx,func) PG cx st0
+      (next v) (ee,t,HG,un) Q (\H res ee gt r. expr_exit res r)) /\
   (!marks err ee leaf fstate.
     gas_exempt_cert F (cx_tops cx) (ctx,func)
       (ignore_bind (bind (eval_expr cx e) (read_result cx)) (return ()))
@@ -212,9 +215,9 @@ Theorem bop_selected_hash_outcome_ptr_frame:
       (bind (bind (eval_expr cx e) (read_result cx))
         (\v. ignore_bind (next v) (return ())))
       (es,s) (left ++ right) (err,ee) (leaf,fstate)) ==>
-  gas_outcome_ptr (cx_dead H cx) (cx_tops cx) (ctx,func) PG
+  gas_outcome_ptr (\H. cx_dead H cx) (cx_tops cx) (ctx,func) PG cx st0
     (bind (bind (eval_expr cx e) (read_result cx)) next)
-    (es,s,G,tn) Q (\res ee gt r. expr_exit res r)
+    (es,s,G,tn) Q (\H res ee gt r. expr_exit res r)
 Proof
   disch_then (map_every assume_tac o CONJUNCTS) >>
   Cases_on `bytestring_literal_hash e`
@@ -230,7 +233,7 @@ QED
 Resume bop_selected_hash_outcome_ptr_frame[dynamic]:
   drule (CONJUNCT2 compile_expr_grows) >> strip_tac >>
   drule bop_hash_compile_layout >> strip_tac >>
-  `bop_operand_entry d ctx func cenv cx e es ca cb m s G tn` by
+  `bop_operand_entry d ctx func cenv cx st0 e es ca cb m s G tn` by
     (gvs[bop_operand_entry_def] >>
      metis_tac[fn_has_code_mid, cs_extends_refl]) >>
   irule bop_operand_contract_ptr >>
@@ -274,7 +277,7 @@ Theorem bop_selected_hash_outcome_ptr:
      NONE => (\(m,cb). compile_bytestring_hash m cb)
        (lower_value compile_expr cenv (expr_type e) e ca)
    | SOME digest => (Lit digest,ca)) = (h,cz) /\
-  bop_operand_entry d ctx func cenv cx e es ca cz h s G tn /\
+  bop_operand_entry d ctx func cenv cx st0 e es ca cz h s G tn /\
   expr_body_pre cenv cx env e es /\ body_inv tops ctx cenv cx /\
   is_bytestring_type (expr_type e) /\
   (bytestring_literal_hash e = NONE ==>
@@ -291,8 +294,8 @@ Theorem bop_selected_hash_outcome_ptr:
     ~t.vs_halted /\ t.vs_current_bb = cz.cs_current_bb /\
     t.vs_inst_idx = LENGTH cz.cs_current_insts /\
     wb_frame cenv es ee ca s t /\ ghost_kept cenv es ca G tn s HG un ==>
-    gas_outcome_ptr (cx_dead H cx) (cx_tops cx) (ctx,func) PG
-      (next v) (ee,t,HG,un) Q (\res ee gt r. expr_exit res r)) /\
+    gas_outcome_ptr (\H. cx_dead H cx) (cx_tops cx) (ctx,func) PG cx st0
+      (next v) (ee,t,HG,un) Q (\H res ee gt r. expr_exit res r)) /\
   (!marks err ee leaf fstate.
     gas_exempt_cert F (cx_tops cx) (ctx,func)
       (ignore_bind (bind (eval_expr cx e) (read_result cx)) (return ()))
@@ -311,9 +314,9 @@ Theorem bop_selected_hash_outcome_ptr:
       (bind (bind (eval_expr cx e) (read_result cx))
         (\v. ignore_bind (next v) (return ())))
       (es,s) (left ++ right) (err,ee) (leaf,fstate)) ==>
-  gas_outcome_ptr (cx_dead H cx) (cx_tops cx) (ctx,func) PG
+  gas_outcome_ptr (\H. cx_dead H cx) (cx_tops cx) (ctx,func) PG cx st0
     (bind (bind (eval_expr cx e) (read_result cx)) next)
-    (es,s,G,tn) Q (\res ee gt r. expr_exit res r)
+    (es,s,G,tn) Q (\H res ee gt r. expr_exit res r)
 Proof
   disch_then (map_every assume_tac o CONJUNCTS) >>
   irule bop_selected_hash_outcome_ptr_frame >> simp[] >>

@@ -9,7 +9,7 @@ Ancestors
    runtime invariant; this is not a replacement copy semantics. Original-frame
    and copy-start states remain distinct throughout the loop. *)
 Definition ifexp_copy_ptr_inv_def:
-  ifexp_copy_ptr_inv ce cx rty es sa s0 G0 tn0 ee
+  ifexp_copy_ptr_inv H ce cx rty es sa s0 G0 tn0 ee
     cs load src dst sBase GBase tnBase p d n X i s G tn <=>
   slot_copy_inv cs load sBase p d n [] i s /\
   op_prov G (Var (slot_copy_var cs 0)) = NONE /\
@@ -21,7 +21,7 @@ Definition ifexp_copy_ptr_inv_def:
     op_taint tn (Var x) = op_taint tnBase (Var x)) /\
   tn.t_stor = tnBase.t_stor /\ tn.t_trans = tnBase.t_trans /\
   tn.t_imm = tnBase.t_imm /\
-  ghost_inv rty ce cx ee G tn s /\
+  ghost_inv H rty ce cx ee G tn s /\
   ghost_kept ce es sa G0 tn0 s0 G tn /\
   (!j k. j < i /\ k < 32 /\ w2n d + 32*j + k IN tn.t_mem ==> (j,k) IN X) /\
   copy_static s = copy_static sBase /\
@@ -32,7 +32,7 @@ Definition ifexp_copy_ptr_inv_def:
 End
 
 Theorem ifexp_copy_ptr_ordinary_frame:
-  ifexp_copy_ptr_inv ce cx rty es sa s0 G0 tn0 ee
+  ifexp_copy_ptr_inv H ce cx rty es sa s0 G0 tn0 ee
     cs load src dst sBase GBase tnBase p d n X i s G tn ==>
   copy_static s = copy_static sBase /\
   s.vs_allocas = sBase.vs_allocas /\ s.vs_data_section = sBase.vs_data_section /\
@@ -46,7 +46,7 @@ QED
 (* A scratch-only step leaves every pointer field at the interface level.
    Runtime correctness is supplied independently by slotCopyExecution. *)
 Theorem ifexp_copy_ptr_no_write:
-  ifexp_copy_ptr_inv ce cx rty es sa s0 G0 tn0 ee
+  ifexp_copy_ptr_inv H ce cx rty es sa s0 G0 tn0 ee
     cs load src dst sBase GBase tnBase p d n X i s G tn /\
   slot_copy_inv cs load sBase p d n [] i t /\
   op_prov G' (Var (slot_copy_var cs 0)) = NONE /\
@@ -67,11 +67,11 @@ Theorem ifexp_copy_ptr_no_write:
   (!x. slot_copy_external cs (Var x) ==>
     lookup_var x t = lookup_var x s /\ FLOOKUP G' x = FLOOKUP G x /\
     op_taint tn' (Var x) = op_taint tn (Var x)) ==>
-  ifexp_copy_ptr_inv ce cx rty es sa s0 G0 tn0 ee
+  ifexp_copy_ptr_inv H ce cx rty es sa s0 G0 tn0 ee
     cs load src dst sBase GBase tnBase p d n X i t G' tn'
 Proof
   strip_tac >> fs[ifexp_copy_ptr_inv_def] >>
-  `ghost_inv rty ce cx ee G' tn' t` by
+  `ghost_inv H rty ce cx ee G' tn' t` by
     (irule ifexp_copy_ghost_inv_transport >> qexistsl_tac [`G`, `s`, `tn`] >>
      simp[] >> metis_tac[]) >>
   `ghost_kept ce es sa G0 tn0 s0 G' tn'` by
@@ -90,7 +90,7 @@ Proof
 QED
 
 Theorem ifexp_copy_ptr_condition:
-  ifexp_copy_ptr_inv ce cx rty es sa s0 G0 tn0 ee
+  ifexp_copy_ptr_inv H ce cx rty es sa s0 G0 tn0 ee
     cs load src dst sBase GBase tnBase p d n X i s G tn /\
   fn_has_code cs (slot_copy_final cs src dst n load) fn /\
   s.vs_current_bb = slot_copy_cond cs /\ s.vs_inst_idx = 0 /\
@@ -103,7 +103,7 @@ Theorem ifexp_copy_ptr_condition:
   (!x sz. ce.ce_return_pc = SOME (PtrVar (Var x) sz) ==> slot_copy_external cs (Var x)) ==>
   ?G' tn'.
     gas_path_ptr D 0 ctx fn PG G tn s 0 G' tn' (OK (slot_copy_cond_result cs n i s)) /\
-    ifexp_copy_ptr_inv ce cx rty es sa s0 G0 tn0 ee
+    ifexp_copy_ptr_inv H ce cx rty es sa s0 G0 tn0 ee
       cs load src dst sBase GBase tnBase p d n X i
       (slot_copy_cond_result cs n i s) G' tn'
 Proof
@@ -145,10 +145,10 @@ Theorem ifexp_copy_ptr_initial:
     slot_copy_external cs (Var x)) /\
   (!x sz. ce.ce_return_buf = SOME (PtrVar (Var x) sz) ==> slot_copy_external cs (Var x)) /\
   (!x sz. ce.ce_return_pc = SOME (PtrVar (Var x) sz) ==> slot_copy_external cs (Var x)) /\
-  ghost_inv rty ce cx ee G tn s /\ ghost_kept ce es sa G0 tn0 s0 G tn ==>
+  ghost_inv H rty ce cx ee G tn s /\ ghost_kept ce es sa G0 tn0 s0 G tn ==>
   ?G' tn'.
     gas_path_ptr D 0 ctx fn PG G tn s 0 G' tn' (OK (slot_copy_initial cs s)) /\
-    ifexp_copy_ptr_inv ce cx rty es sa s0 G0 tn0 ee
+    ifexp_copy_ptr_inv H ce cx rty es sa s0 G0 tn0 ee
       cs load src dst s G tn p d n X 0 (slot_copy_initial cs s) G' tn'
 Proof
   strip_tac >> drule_all ifexp_copy_initial_transition >>
@@ -159,7 +159,7 @@ Proof
     (rpt strip_tac >>
      `x <> slot_copy_var cs 0` by
        (fs[slot_copy_external_def] >> metis_tac[DECIDE ``0 < 7``]) >> metis_tac[]) >>
-  `ghost_inv rty ce cx ee G' tn' (slot_copy_initial cs s)` by
+  `ghost_inv H rty ce cx ee G' tn' (slot_copy_initial cs s)` by
     (irule ifexp_copy_ghost_inv_transport >> qexistsl_tac [`G`, `s`, `tn`] >>
      conj_tac >- metis_tac[] >>
      conj_tac >- metis_tac[] >>

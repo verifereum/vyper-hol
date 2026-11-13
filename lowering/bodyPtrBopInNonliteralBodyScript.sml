@@ -40,9 +40,9 @@ Proof
 QED
 
 Theorem membership_mixed_post_frames:
-  bop_operand_post d ctx fn cenv cx e1 es sa sc needle s0 G0 tn0
+  bop_operand_post H d ctx fn cenv cx e1 es sa sc needle s0 G0 tn0
     v es1 s1 G1 tn1 /\
-  membership_vv_post d ctx fn cenv cx e2 es1 sc sm vv s1 G1 tn1
+  membership_vv_post H d ctx fn cenv cx e2 es1 sc sm vv s1 G1 tn1
     tv es2 s2 G2 tn2 /\
   stmt_state_rel H ctx fn cenv cx es s0 /\ local_ptrs_reserved cenv sa /\
   MAP FDOM es.scopes = MAP FDOM es1.scopes /\
@@ -169,7 +169,7 @@ QED
 Resume nonliteral_expr_sim_ptr[success]:
   rpt gen_tac >> disch_then (map_every assume_tac o CONJUNCTS) >>
   `vv_holds cenv cx (expr_type e2) tv vv es2 s2` by
-    (qpat_assum `membership_vv_post _ _ _ _ _ e2 _ _ _ _ _ _ _ _ _ _ _ _` mp_tac >>
+    (qpat_assum `membership_vv_post _ _ _ _ _ _ e2 _ _ _ _ _ _ _ _ _ _ _ _` mp_tac >>
      rewrite_tac[bodyPtrBopInVvContractTheory.membership_vv_post_def,
                  loweringPostsTheory.vv_post_def] >>
      qpat_assum `post_value_type cenv e2 = _` (fn th => rewrite_tac[th]) >>

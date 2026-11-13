@@ -73,8 +73,10 @@ Theorem literal_typed_continuation_summary_ptr:
   fn_has_code sm sb fn /\ local_ptrs_reserved cenv sm /\
   (!x sz. cenv.ce_return_buf = SOME (PtrVar (Var x) sz) ==> not_fresh_at sm x) /\
   (!x sz. cenv.ce_return_pc = SOME (PtrVar (Var x) sz) ==> not_fresh_at sm x) /\
-  stmt_state_rel H ctx fn cenv cx (ee with gas_obs := []) s /\
-  ghost_inv H d cenv cx (ee with gas_obs := []) G tn s /\
+  (!H. valid_horizon cx st0 H ee.storage_trace ==>
+     stmt_state_rel H ctx fn cenv cx (ee with gas_obs := []) s /\
+     storage_well_formed_on cx (ee with gas_obs := []) (FST H) /\
+     ghost_inv H d cenv cx (ee with gas_obs := []) G tn s) /\
   ghost_kept cenv es sa G0 tn0 s0 G tn /\
   LIST_REL (\x v. eval_operand x s = SOME (typed_val_to_w256 tv v)) xs vs /\
   eval_operand needle s = SOME (typed_val_to_w256 tv v) /\
@@ -88,10 +90,10 @@ Theorem literal_typed_continuation_summary_ptr:
   ~ctx_has_dalloca ctx /\ ~s.vs_halted /\
   s.vs_current_bb = sm.cs_current_bb /\
   s.vs_inst_idx = LENGTH sm.cs_current_insts ==>
-  gas_summary_ptr_at D (ctx,fn) PG []
+  gas_summary_ptr_at D (ctx,fn) PG cx st0 []
     (return (BoolV (if bop = In then MEM v vs else ~MEM v vs)))
     (ee with gas_obs := [],s,G,tn)
-    (\res fin G' tn' t. ?w. res = INL w /\
+    (\H res fin G' tn' t. ?w. res = INL w /\
       expr_post H ctx fn cenv cx
         (Builtin (BaseT BoolT) (Bop bop) [e1; Builtin a (MakeArray aet n) elems])
         es sa sb s0 fin w op t /\
@@ -99,7 +101,7 @@ Theorem literal_typed_continuation_summary_ptr:
       ptr_val_ok cx (BaseT BoolT) w op G' tn' t /\
       ghost_kept cenv es sa G0 tn0 s0 G' tn' /\
       t.vs_current_bb = sb.cs_current_bb /\ t.vs_inst_idx = LENGTH sb.cs_current_insts)
-    (\res fin ghosts r. expr_exit res r)
+    (\H res fin ghosts r. expr_exit res r)
 Proof
   disch_then (map_every assume_tac o CONJUNCTS) >>
   drule_all literal_typed_scalar_path_arbitrary >>

@@ -190,7 +190,7 @@ Proof
 QED
 
 Theorem ifexp_copy_body_ghost_inv:
-  ghost_inv rty ce cx es G tn s /\ local_ptrs_reserved ce sa /\
+  ghost_inv H rty ce cx es G tn s /\ local_ptrs_reserved ce sa /\
   (!x sz. ce.ce_return_buf = SOME (PtrVar (Var x) sz) ==> not_fresh_at sa x) /\
   (!x sz. ce.ce_return_pc = SOME (PtrVar (Var x) sz) ==> not_fresh_at sa x) /\
   (!x. not_fresh_at sa x ==> !k. k < 7 ==> x <> slot_copy_var cs k) /\
@@ -212,7 +212,7 @@ Theorem ifexp_copy_body_ghost_inv:
     val_wf entry.type entry.value /\
     (w2n w+type_memory_size entry.type <= w2n (d+n2w i*32w) \/
      w2n (d+n2w i*32w)+32 <= w2n w)) ==>
-  ghost_inv rty ce cx es G' tn' t
+  ghost_inv H rty ce cx es G' tn' t
 Proof
   strip_tac >>
   irule (Q.INST [`n` |-> `32`] bytes_writer_ghost_inv) >>
@@ -223,7 +223,13 @@ Proof
   simp[IgnAsm `tn'.t_mem = _`] >>
   conj_tac >- metis_tac[arithmeticTheory.ADD_COMM] >>
   conj_tac >- (gvs[local_ptrs_reserved_def] >> metis_tac[]) >>
-  rpt strip_tac >> irule ifexp_copy_body_robust_frame >> metis_tac[]
+  rpt gen_tac >> disch_then (map_every assume_tac o CONJUNCTS) >>
+  rpt gen_tac >> disch_tac >>
+  irule (INST_TYPE [alpha |-> beta] ifexp_copy_body_robust_frame) >>
+  simp[] >> qexistsl_tac [`d`, `i`, `load`, `p`, `s`, `t`, `tn`, `tn'`] >>
+  asm_rewrite_tac[] >> conj_tac
+  >- (simp[pred_setTheory.EXTENSION] >> metis_tac[arithmeticTheory.ADD_COMM]) >>
+  qpat_x_assum `mem_agree_outside tn'.t_mem _ _` mp_tac >> asm_rewrite_tac[]
 QED
 
 Theorem ifexp_copy_body_prejump_block:

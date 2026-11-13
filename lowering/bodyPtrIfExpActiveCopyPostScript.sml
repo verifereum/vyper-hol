@@ -38,7 +38,7 @@ Proof
   `!aid b len. aid < sb.cs_next_id /\ FLOOKUP s.vs_allocas aid = SOME (b,len) ==>
      regions_disjoint (w2n d) sz b len` by
     (rpt strip_tac >> irule state_allocations_disjoint >>
-     qexistsl_tac [`sb.cs_next_id`, `aid`, `ce`, `ctx`, `cx`, `ee`, `fn`, `u`] >>
+     qexistsl_tac [`H`, `sb.cs_next_id`, `aid`, `ce`, `ctx`, `cx`, `ee`, `fn`, `u`] >>
      simp[] >> metis_tac[]) >>
   `not_local_ptr ce ee.scopes out` by
     (irule fresh_not_local_ptr >> qexists_tac `sb` >> gvs[]) >>

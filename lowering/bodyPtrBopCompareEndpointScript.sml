@@ -185,7 +185,7 @@ Theorem bop_bool_parent_post:
   wb_frame cenv es ee sa s0 t /\
   (~expr_has_effect e ==> pure_frame cenv func es sa s0 t) /\
   ghost_kept cenv es sa G0 tn0 s0 HG un ==>
-  bop_operand_post d ctx func cenv cx e es sa sb op s0 G0 tn0
+  bop_operand_post H d ctx func cenv cx e es sa sb op s0 G0 tn0
     (BoolV b) ee t HG un
 Proof
   strip_tac >>

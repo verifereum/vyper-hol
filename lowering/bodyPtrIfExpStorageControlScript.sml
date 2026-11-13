@@ -126,7 +126,6 @@ Proof
        (simp[GSYM mk_inst_def, ptr_safe_step_def] >>
         irule ifexp_copy_eq_check >> simp[]) >>
      simp[NoAsms, GSYM mk_inst_def] >> disj1_tac >>
-     conj_tac >- simp[update_var_def] >>
      sym_tac >> irule ghost_step_non_invoke >>
      simp[mk_inst_def, step_inst_non_invoke] >> gvs[mk_inst_def]) >>
   `~((update_var (slot_copy_var cs 1) (bool_to_word (i=n)) s)

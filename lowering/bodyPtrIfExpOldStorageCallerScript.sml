@@ -23,7 +23,7 @@ Theorem ifexp_old_copy_allocated_execution:
   ?out u (d:bytes32) GBase tnBase t G' tn'.
     buf.buf_operand = Var out /\
     gas_path_ptr D 0 ctx fn PG G tn s 0 G' tn' (OK t) /\
-    ifexp_copy_ptr_inv ce cx rty es sa s0 G0 tn0 ee cs load src (Var out)
+    ifexp_copy_ptr_inv H ce cx rty es sa s0 G0 tn0 ee cs load src (Var out)
       (u with vs_inst_idx := SUC s.vs_inst_idx) GBase tnBase p d n X n t G' tn' /\
     t.vs_current_bb = slot_copy_exit cs /\ t.vs_inst_idx = 0 /\ ~t.vs_halted /\
     eval_operand (Var out) t = SOME d /\

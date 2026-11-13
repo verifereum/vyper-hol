@@ -19,12 +19,15 @@ Theorem ifexp_selected_nonword_outcome_ptr:
   (!x sz. ce.ce_return_buf = SOME (PtrVar (Var x) sz) ==> not_fresh_at sa x) /\
   (!x sz. ce.ce_return_pc = SOME (PtrVar (Var x) sz) ==> not_fresh_at sa x) /\
   gas_admissible (bind (eval_expr cx arm) (conditional_result cx)) expr_vv_res_ok es /\
-  stmt_state_rel H ctx fn ce cx es s0 /\ ghost_inv H d ce cx es G0 tn0 s0 /\
+  (!H. valid_horizon cx st0 H es.storage_trace ==>
+     stmt_state_rel H ctx fn ce cx es s0 /\
+     storage_well_formed_on cx es (FST H) /\
+     ghost_inv H d ce cx es G0 tn0 s0) /\
   ~s0.vs_halted /\ s0.vs_current_bb = sa.cs_current_bb /\
   s0.vs_inst_idx = LENGTH sa.cs_current_insts ==>
-  gas_outcome_ptr (cx_dead H cx) (cx_tops cx) (ctx,fn) PG
+  gas_outcome_ptr (\H. cx_dead H cx) (cx_tops cx) (ctx,fn) PG cx st0
     (bind (eval_expr cx arm) (conditional_result cx)) (es,s0,G0,tn0)
-    (\res ee G tn u. ?tv v. res = INL tv /\
+    (\H res ee G tn u. ?tv v. res = INL tv /\
        read_result cx tv ee = (INL v,ee) /\
        expr_post H ctx fn ce cx arm es sa sd s0 ee v op u /\
        vv_at ce cx ty sa sd ee tv (LocatedValue ty (mk_ptr op LocMemory)) u /\
@@ -33,7 +36,7 @@ Theorem ifexp_selected_nonword_outcome_ptr:
        ghost_kept ce es sa G0 tn0 s0 G tn /\
        u.vs_current_bb = sd.cs_current_bb /\
        u.vs_inst_idx = LENGTH sd.cs_current_insts)
-    (\res ee gt r. expr_exit res r)
+    (\H res ee gt r. expr_exit res r)
 Proof
   disch_then (map_every assume_tac o CONJUNCTS) >>
   `gas_admissible (eval_expr cx arm) expr_vv_res_ok es` by

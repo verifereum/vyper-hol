@@ -92,13 +92,15 @@ Theorem loop_jump_ptr[local]:
   stmt_env cenv (InLoop ex inc) ty st sa = (cenv', sb) /\
   (st = Break \/ st = Continue) /\
   fn_has_code sa sb func /\ ~ctx_has_dalloca ctx /\
-  stmt_state_rel H ctx func cenv cx es s0 /\
-  ghost_inv H d cenv cx es G0 tn0 s0 /\ ~s0.vs_halted /\
+  (!H. valid_horizon cx st0 H es.storage_trace ==>
+     stmt_state_rel H ctx func cenv cx es s0 /\
+     storage_well_formed_on cx es (FST H) /\
+     ghost_inv H d cenv cx es G0 tn0 s0) /\ ~s0.vs_halted /\
   s0.vs_current_bb = sa.cs_current_bb /\
   s0.vs_inst_idx = LENGTH sa.cs_current_insts ==>
-  gas_outcome_ptr D tops (ctx, func) PG (eval_stmt cx st)
+  gas_outcome_ptr D tops (ctx, func) PG cx st0 (eval_stmt cx st)
     (es, s0, G0, tn0)
-    (\res ee G tn t. ?cenv''.
+    (\H res ee G tn t. ?cenv''.
       stmt_lands (InLoop ex inc) sb res t /\ ~t.vs_halted /\
       (res = INL () ==> ~block_is_terminated sb /\ cenv'' = cenv') /\
       cenv_top_ext cenv cenv'' ee.scopes /\

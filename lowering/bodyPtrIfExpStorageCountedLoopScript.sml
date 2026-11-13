@@ -24,12 +24,12 @@ Theorem ifexp_copy_ptr_loop:
   (!j k. j<n /\ k IN (if load=SLOAD then key_taint tnBase.t_stor (p+n2w j)
     else key_taint tnBase.t_trans (p+n2w j)) ==> (j,k) IN X) ==>
   !i s G tn.
-    ifexp_copy_ptr_inv ce cx rty es sa s0 G0 tn0 ee
+    ifexp_copy_ptr_inv H ce cx rty es sa s0 G0 tn0 ee
       cs load src (Var out) sBase GBase tnBase p d n X i s G tn /\
     s.vs_current_bb = slot_copy_cond cs /\ s.vs_inst_idx = 0 /\ ~s.vs_halted ==>
     ?t G' tn'.
       gas_path_ptr D 0 ctx fn PG G tn s 0 G' tn' (OK t) /\
-      ifexp_copy_ptr_inv ce cx rty es sa s0 G0 tn0 ee
+      ifexp_copy_ptr_inv H ce cx rty es sa s0 G0 tn0 ee
         cs load src (Var out) sBase GBase tnBase p d n X n t G' tn' /\
       t.vs_current_bb = slot_copy_exit cs /\ t.vs_inst_idx = 0 /\ ~t.vs_halted
 Proof
@@ -81,10 +81,10 @@ Theorem ifexp_copy_ptr_execution:
     (w2n w+type_memory_size entry.type <= w2n d \/ w2n d+32*n <= w2n w)) /\
   (!j k. j<n /\ k IN (if load=SLOAD then key_taint tn.t_stor (p+n2w j)
     else key_taint tn.t_trans (p+n2w j)) ==> (j,k) IN X) /\
-  ghost_inv rty ce cx ee G tn s /\ ghost_kept ce es sa G0 tn0 s0 G tn ==>
+  ghost_inv H rty ce cx ee G tn s /\ ghost_kept ce es sa G0 tn0 s0 G tn ==>
   ?t G' tn'.
     gas_path_ptr D 0 ctx fn PG G tn s 0 G' tn' (OK t) /\
-    ifexp_copy_ptr_inv ce cx rty es sa s0 G0 tn0 ee
+    ifexp_copy_ptr_inv H ce cx rty es sa s0 G0 tn0 ee
       cs load src (Var out) s G tn p d n X n t G' tn' /\
     t.vs_current_bb = slot_copy_exit cs /\ t.vs_inst_idx = 0 /\ ~t.vs_halted
 Proof

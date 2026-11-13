@@ -19,7 +19,7 @@ Proof
 QED
 
 Theorem ifexp_copy_ptr_exit:
-  ifexp_copy_ptr_inv ce cx rty es sa s0 G0 tn0 ee
+  ifexp_copy_ptr_inv H ce cx rty es sa s0 G0 tn0 ee
     cs load src (Var out) sBase GBase tnBase p d n
     {(j,k) | (p+n2w j,k) IN source_taint} n t G tn /\
   type_slot_size ty <= n /\ well_formed_type_value ty /\
@@ -31,7 +31,7 @@ Theorem ifexp_copy_ptr_exit:
     dead_bytes (if load = SLOAD then contract_storage sBase else contract_transient sBase)
       (w2n p) ty (w2n k) b) ==>
   (!m. mem_agree_outside tn.t_mem t.vs_memory m ==> val_in_memory ty v (w2n d) m) /\
-  ptr_covers G tn out t (32*n) /\ ghost_inv rty ce cx ee G tn t /\
+  ptr_covers G tn out t (32*n) /\ ghost_inv H rty ce cx ee G tn t /\
   ghost_kept ce es sa G0 tn0 s0 G tn
 Proof
   strip_tac >>

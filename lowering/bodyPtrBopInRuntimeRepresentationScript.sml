@@ -57,7 +57,7 @@ QED
 
 Theorem membership_vv_post_runtime_representation:
   post_value_type cenv e = expr_type e /\
-  membership_vv_post d ctx fn cenv cx e es sc sd vv s0 G0 tn0 tvv ee s G tn /\
+  membership_vv_post H d ctx fn cenv cx e es sc sd vv s0 G0 tn0 tvv ee s G tn /\
   compile_expr cenv ty e sc = (vv,sd) /\ local_ptrs_reserved cenv sc /\
   expr_type e = ArrayT et bd /\
   evaluate_type (get_tenv cx) (ArrayT et bd) = SOME (ArrayTV tv bd) /\
@@ -79,7 +79,7 @@ Proof
   strip_tac >>
   `!x. vv_operand vv = Var x ==> not_fresh_at sd x` by
     metis_tac[cj 1 compiler_compile_var] >>
-  qpat_x_assum `membership_vv_post _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _`
+  qpat_x_assum `membership_vv_post _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _`
     mp_tac >>
   simp[membership_vv_post_def] >> strip_tac >>
   `vv_post H ctx fn cenv cx e es sc sd s0 ee (Value (ArrayV av)) vv s` by

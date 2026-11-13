@@ -5,7 +5,7 @@ Ancestors bodyPtrBopInRuntimeRepresentation bodyPtrBopInMemoryRuntime
 
 Theorem membership_normalized_array_runtime:
   post_value_type cenv e = expr_type e /\
-  membership_vv_post d ctx fn cenv cx e es sc sa vv s0 G0 tn0 tvv ee s G tn /\
+  membership_vv_post H d ctx fn cenv cx e es sc sa vv s0 G0 tn0 tvv ee s G tn /\
   compile_expr cenv ty e sc = (vv,sa) /\ local_ptrs_reserved cenv sc /\
   compile_var_array_membership cenv needle vv (ArrayT et bd) is_in sa = (op,sb) /\
   fn_has_code sa sb fn /\ ~ctx_has_dalloca ctx /\ ~cenv.ce_is_ctor /\

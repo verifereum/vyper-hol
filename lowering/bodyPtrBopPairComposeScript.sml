@@ -12,7 +12,7 @@ Theorem bop_word_pair_outcome_ptr:
   body_inv tops ctx cenv cx /\ body_exprs_ptr_ok cx [e1;e2] /\
   expr_body_pre cenv cx env (Builtin ann (Bop bop) [e1;e2]) es /\
   is_word_type (expr_type e1) /\ is_word_type (expr_type e2) /\
-  bop_operand_entry d ctx func cenv cx (Builtin ann (Bop bop) [e1;e2])
+  bop_operand_entry d ctx func cenv cx st0 (Builtin ann (Bop bop) [e1;e2])
     es ca cz op t0 G0 tn0 /\
   bop <> In /\ bop <> NotIn /\
   cs_extends ca c1 /\ cs_extends c1 c2 /\ cs_extends c2 cz /\
@@ -20,15 +20,15 @@ Theorem bop_word_pair_outcome_ptr:
   c1.cs_next_var <= c2.cs_next_var /\ c1.cs_next_id <= c2.cs_next_id /\
   (!z. x = Var z ==> not_fresh_at c1 z) /\ (!l. x <> Label l) /\
   (!z. y = Var z ==> not_fresh_at c2 z) ==>
-  gas_outcome_ptr (cx_dead H cx) (cx_tops cx) (ctx,func) PG
+  gas_outcome_ptr (\H. cx_dead H cx) (cx_tops cx) (ctx,func) PG cx st0
     (bind (bind (eval_expr cx e1) (read_result cx)) (\v1.
      bind (bind (eval_expr cx e2) (read_result cx)) (\v2.
        \st. (bop_result cx ann bop [expr_type e1;expr_type e2] v1 v2 st,st))))
     (es,t0,G0,tn0)
-    (\res ee G tn t. ?v. res = INL v /\
-      bop_operand_post d ctx func cenv cx (Builtin ann (Bop bop) [e1;e2])
+    (\H res ee G tn t. ?v. res = INL v /\
+      bop_operand_post H d ctx func cenv cx (Builtin ann (Bop bop) [e1;e2])
         es ca cz op t0 G0 tn0 v ee t G tn)
-    (\res ee gt r. expr_exit res r)
+    (\H res ee gt r. expr_exit res r)
 Proof
   strip_tac >> drule expr_body_pre_bop >> strip_tac >> irule (BETA_RULE (Q.INST [`next` |->
     `\v1 v2 st. (bop_result cx ann bop [expr_type e1;expr_type e2] v1 v2 st,st)`]
@@ -53,7 +53,7 @@ Proof
   conj_tac >- (rpt gen_tac >> strip_tac >> conj_tac
     >- (irule (INST_TYPE [alpha |-> ``:operand``] bop_operand_entry_next) >> simp[] >>
         conj_tac >- metis_tac[bop_typed_source_witness] >>
-        goal_assum (drule_at (Pat `bop_operand_post _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _`)) >>
+        goal_assum (drule_at (Pat `bop_operand_post _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _`)) >>
         qexistsl_tac [`cz`, `op`, `Builtin ann (Bop bop) [e1;e2]`] >> simp[]) >>
     metis_tac[]) >>
   conj_tac >- metis_tac[bop_typed_source_witness] >>
