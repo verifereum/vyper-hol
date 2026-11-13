@@ -20,7 +20,7 @@ Proof
 QED
 
 Theorem raw_log_topics_post_words:
-  typed_args_post ctx func cenv cx es sa s0 es1 topics ops vs t /\
+  typed_args_post H ctx func cenv cx es sa s0 es1 topics ops vs t /\
   EVERY ($= (BaseT (BytesT (Fixed 32)))) (MAP expr_type topics) /\
   EVERY (value_has_type (BaseTV (BytesT (Fixed 32)))) vs ==>
   eval_operands ops t = SOME (MAP event_value_to_word vs)
@@ -59,10 +59,10 @@ Proof
 QED
 
 Theorem raw_log_topics_post_wb:
-  typed_args_post ctx func cenv cx es sa s0 es1 topics ops vs t /\
+  typed_args_post H ctx func cenv cx es sa s0 es1 topics ops vs t /\
   EVERY ($= (BaseT (BytesT (Fixed 32)))) (MAP expr_type topics) /\
   EVERY (value_has_type (BaseTV (BytesT (Fixed 32)))) vs ==>
-  wb_args_post ctx func cenv cx es sa s0 es1 ops vs t
+  wb_args_post H ctx func cenv cx es sa s0 es1 ops vs t
 Proof
   strip_tac >> drule_all raw_log_topics_post_words >> strip_tac >>
   drule raw_log_eval_operands_words >>
@@ -70,8 +70,8 @@ Proof
 QED
 
 Theorem raw_log_state_rel:
-  stmt_state_rel ctx func cenv cx es s ==>
-  stmt_state_rel ctx func cenv cx
+  stmt_state_rel H ctx func cenv cx es s ==>
+  stmt_state_rel H ctx func cenv cx
     (es with logs := es.logs ++ [ev])
     (s with vs_logs := s.vs_logs ++ [ev])
 Proof
@@ -255,7 +255,7 @@ Proof
 QED
 
 Theorem raw_log_dynamic_data_view:
-  expr_post ctx func cenv cx e es sa sm s0 es' (BytesV bs) op s /\
+  expr_post H ctx func cenv cx e es sa sm s0 es' (BytesV bs) op s /\
   expr_type e = BaseT (BytesT (Dynamic cap)) /\
   evaluate_type (get_tenv cx) (expr_type e) =
     SOME (BaseTV (BytesT (Dynamic cap))) ==>
@@ -337,7 +337,7 @@ Theorem raw_log_dynamic_prepare_frame:
   TAKE (LENGTH bs) (DROP (b + 32) s.vs_memory ++
     REPLICATE (LENGTH bs) 0w) = bs /\
   b + 32 < dimword (:256) /\ LENGTH bs < dimword (:256) /\
-  stmt_state_rel ctx func cenv cx es s /\ local_ptrs_reserved cenv sm /\
+  stmt_state_rel H ctx func cenv cx es s /\ local_ptrs_reserved cenv sm /\
   wb_frame cenv es0 es sa s0 s /\ sa.cs_next_var <= sm.cs_next_var ==>
   ?t. run_inst_seq (emitted_insts sm sb) s = OK t /\
     eval_operand len_op t = SOME (n2w (LENGTH bs)) /\
@@ -345,7 +345,7 @@ Theorem raw_log_dynamic_prepare_frame:
     eval_operands ops t = SOME topics /\
     TAKE (LENGTH bs) (DROP (b + 32) t.vs_memory ++
       REPLICATE (LENGTH bs) 0w) = bs /\
-    stmt_state_rel ctx func cenv cx es t /\ wb_frame cenv es0 es sa s0 t
+    stmt_state_rel H ctx func cenv cx es t /\ wb_frame cenv es0 es sa s0 t
 Proof
   strip_tac >> drule_all raw_log_dynamic_prepare_run >> strip_tac >>
   `t.vs_memory = s.vs_memory /\ t.vs_allocas = s.vs_allocas` by
@@ -368,9 +368,9 @@ Theorem raw_log_core_frame:
   eval_operands ops s = SOME (MAP event_value_to_word vals) /\
   TAKE (w2n len) (DROP (w2n off) s.vs_memory ++
     REPLICATE (w2n len) 0w) = bytes /\
-  stmt_state_rel ctx func cenv cx es s /\ wb_frame cenv es0 es sa s0 s ==>
+  stmt_state_rel H ctx func cenv cx es s /\ wb_frame cenv es0 es sa s0 s ==>
   ?t. step_inst_base inst s = OK t /\
-    stmt_state_rel ctx func cenv cx
+    stmt_state_rel H ctx func cenv cx
       (es with logs := es.logs ++
         [encode_raw_event_values cx.txn.target vals bytes]) t /\
     wb_frame cenv es0 (es with logs := es.logs ++ [encode_raw_event_values cx.txn.target vals bytes]) sa s0 t
@@ -401,11 +401,11 @@ Theorem raw_log_dynamic_tail_core:
   TAKE (LENGTH bs) (DROP (b + 32) s.vs_memory ++
     REPLICATE (LENGTH bs) 0w) = bs /\
   b + 32 < dimword (:256) /\ LENGTH bs < dimword (:256) /\
-  stmt_state_rel ctx func cenv cx es s /\ local_ptrs_reserved cenv sm /\
+  stmt_state_rel H ctx func cenv cx es s /\ local_ptrs_reserved cenv sm /\
   wb_frame cenv es0 es sa s0 s /\ sa.cs_next_var <= sm.cs_next_var /\
   post_value_type cenv e = expr_type e /\ expr_type e = NoneT ==>
   frag_exec ctx sm sb ($= s)
-    (expr_post ctx func cenv cx e es0 sa sb s0
+    (expr_post H ctx func cenv cx e es0 sa sb s0
       (es with logs := es.logs ++
         [encode_raw_event_values cx.txn.target vals bs]) NoneV (Lit 0w))
     (expr_exit (INL NoneV))
@@ -444,7 +444,7 @@ Proof
   drule run_inst_seq_append >> disch_then (fn th => rewrite_tac[th]) >>
   `?t'. step_inst_base (mk_inst s2.cs_next_id LOG
      (Lit (n2w (LENGTH ops)) :: (REVERSE ops ++ [len_op; ptr_op])) []) t = OK t' /\
-    stmt_state_rel ctx func cenv cx
+    stmt_state_rel H ctx func cenv cx
       (es with logs := es.logs ++
         [encode_raw_event_values cx.txn.target vals bs]) t' /\
     wb_frame cenv es0 (es with logs := es.logs ++ [encode_raw_event_values cx.txn.target vals bs]) sa s0 t'` by
@@ -483,7 +483,7 @@ Theorem raw_log_fixed_store_frame:
   emit_void MSTORE [ptr_op; data_op] sm = (u, sb) /\
   eval_operand ptr_op s = SOME p /\ eval_operand data_op s = SOME w /\
   LENGTH bs = 32 /\ TAKE 32 (word_to_bytes_be w) = bs /\
-  stmt_state_rel ctx func cenv cx es s /\ wb_frame cenv es0 es sa s0 s /\
+  stmt_state_rel H ctx func cenv cx es s /\ wb_frame cenv es0 es sa s0 s /\
   local_ptrs_reserved cenv sa /\
   MAP FDOM es0.scopes = MAP FDOM es.scopes /\
   MEM inst (fn_insts func) /\ inst.inst_opcode = ALLOCA /\
@@ -496,7 +496,7 @@ Theorem raw_log_fixed_store_frame:
   run_inst_seq (emitted_insts sm sb) s = OK (mstore (w2n p) w s) /\
   TAKE 32 (DROP (w2n p) (mstore (w2n p) w s).vs_memory ++
     REPLICATE 32 0w) = bs /\
-  stmt_state_rel ctx func cenv cx es (mstore (w2n p) w s) /\
+  stmt_state_rel H ctx func cenv cx es (mstore (w2n p) w s) /\
   wb_frame cenv es0 es sa s0 (mstore (w2n p) w s)
 Proof
   strip_tac >> drule_all raw_log_fixed_store_run >> strip_tac >> simp[] >>
@@ -520,7 +520,7 @@ Theorem raw_log_fixed_tail_core:
   eval_operands ops s = SOME (MAP event_value_to_word vals) /\
   LENGTH ops < dimword (:256) /\
   LENGTH bs = 32 /\ TAKE 32 (word_to_bytes_be w) = bs /\
-  stmt_state_rel ctx func cenv cx es s /\ wb_frame cenv es0 es sa s0 s /\
+  stmt_state_rel H ctx func cenv cx es s /\ wb_frame cenv es0 es sa s0 s /\
   local_ptrs_reserved cenv sa /\
   MAP FDOM es0.scopes = MAP FDOM es.scopes /\
   MEM inst (fn_insts func) /\ inst.inst_opcode = ALLOCA /\
@@ -531,7 +531,7 @@ Theorem raw_log_fixed_tail_core:
   (!n b sz. local_region cenv es.scopes s n b sz ==>
      regions_disjoint (w2n p) 32 b sz) /\ post_value_type cenv e = expr_type e /\ expr_type e = NoneT ==>
   frag_exec ctx sm sb ($= s)
-    (expr_post ctx func cenv cx e es0 sa sb s0
+    (expr_post H ctx func cenv cx e es0 sa sb s0
       (es with logs := es.logs ++
         [encode_raw_event_values cx.txn.target vals bs]) NoneV (Lit 0w))
     (expr_exit (INL NoneV))
@@ -563,7 +563,7 @@ Proof
   `?t. step_inst_base (mk_inst s1.cs_next_id LOG
       (Lit (n2w (LENGTH ops)) :: (REVERSE ops ++ [Lit 32w; ptr_op])) [])
       (mstore (w2n p) w s) = OK t /\
-    stmt_state_rel ctx func cenv cx
+    stmt_state_rel H ctx func cenv cx
       (es with logs := es.logs ++
         [encode_raw_event_values cx.txn.target vals bs]) t /\
     wb_frame cenv es0 (es with logs := es.logs ++ [encode_raw_event_values cx.txn.target vals bs]) sa s0 t` by

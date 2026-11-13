@@ -10,7 +10,7 @@ Ancestors
   exprSimSource exprSimHypsDefs exprSimHyps vyperTyping builtinSimple exprLowering
 
 Theorem sha256_typed_suffix_mem_ok:
-  expr_post ctx func cenv cx e es sa sm s0 es' v x s /\
+  expr_post H ctx func cenv cx e es sa sm s0 es' v x s /\
   expr_type e = BaseT bty /\ is_bytes_or_string_type (expr_type e) /\
   evaluate_type (get_tenv cx) (expr_type e) = SOME (BaseTV bty) /\
   value_has_type (BaseTV bty) v /\
@@ -26,7 +26,7 @@ Proof
   strip_tac >>
   `!z. x = Var z ==> not_fresh_at sm z` by
     (drule_at (Pos hd) compile_lower_value_var >> simp[]) >>
-  `stmt_state_rel ctx func cenv cx es' s` by metis_tac[expr_post_state] >>
+  `stmt_state_rel H ctx func cenv cx es' s` by metis_tac[expr_post_state] >>
   `alloca_next_valid s` by fs[stmt_state_rel_def, alloca_inv_def] >>
   Cases_on `bty` >> gvs[is_bytes_or_string_type_def] >>
   Cases_on `v` >> gvs[vyperTypingTheory.value_has_type_def] >>
@@ -117,7 +117,7 @@ Proof
 QED
 
 Theorem sha256_typed_effectful_path_mem:
-  expr_post ctx func cenv cx e es sa sm s0 es1 v x s /\
+  expr_post H ctx func cenv cx e es sa sm s0 es1 v x s /\
   expr_type e = BaseT bty /\ is_bytes_or_string_type (expr_type e) /\
   evaluate_type (get_tenv cx) (expr_type e) = SOME (BaseTV bty) /\
   value_has_type (BaseTV bty) v /\
@@ -137,7 +137,7 @@ Theorem sha256_typed_effectful_path_mem:
   expr_store_bound cx (expr_type e) v x s /\ alloca_history func s ==>
   ?n rr. gas_marked_path T ctx func s n rr /\
     ((?t rv. rr = OK t /\ res = INL rv /\
-        vv_post ctx func cenv cx (Builtin (BaseT (BytesT (Fixed 32))) Sha256 [e])
+        vv_post H ctx func cenv cx (Builtin (BaseT (BytesT (Fixed 32))) Sha256 [e])
           es sa sb s0 es2 rv (StackValue (BaseT (BytesT (Fixed 32))) op) t /\
         t.vs_current_bb = sb.cs_current_bb /\
         t.vs_inst_idx = LENGTH sb.cs_current_insts /\
@@ -146,7 +146,7 @@ Theorem sha256_typed_effectful_path_mem:
 Proof
   strip_tac >>
   `run_inst_seq_mem_ok (emitted_insts sm sb) s` by
-    (drule_at (Pat `expr_post _ _ _ _ _ _ _ _ _ _ _ _ _`)
+    (drule_at (Pat `expr_post _ _ _ _ _ _ _ _ _ _ _ _ _ _`)
        sha256_typed_suffix_mem_ok >> simp[]) >>
   drule_at (Pos hd) sha256_typed_suffix_shape >> simp[] >> strip_tac >>
   pop_assum (qspecl_then [`x`,`sm`,`sb`,`op`] mp_tac) >>
@@ -169,7 +169,7 @@ QED
 
 Resume sha256_typed_effectful_path_mem[abort]:
   markerLib.RESUME_TAC >>
-  drule_at (Pat `expr_post _ _ _ _ _ _ _ _ _ _ _ _ _`) sha256_typed_fail_run >>
+  drule_at (Pat `expr_post _ _ _ _ _ _ _ _ _ _ _ _ _ _`) sha256_typed_fail_run >>
   simp[] >> strip_tac >>
   `isPREFIX (emitted_insts sm sb) (DROP s.vs_inst_idx bb.bb_instructions)` by
     simp[rich_listTheory.IS_PREFIX_APPEND] >>
@@ -181,7 +181,7 @@ Resume sha256_typed_effectful_path_mem[abort]:
 QED
 Resume sha256_typed_effectful_path_mem[success]:
   gvs[ignore_bind_def, bind_def, sha256_source_outcome_step, return_def] >>
-  drule_at (Pat `expr_post _ _ _ _ _ _ _ _ _ _ _ _ _`) sha256_typed_post_run >>
+  drule_at (Pat `expr_post _ _ _ _ _ _ _ _ _ _ _ _ _ _`) sha256_typed_post_run >>
   simp[] >> strip_tac >> gvs[] >>
   `isPREFIX (emitted_insts sm sb) (DROP s.vs_inst_idx bb.bb_instructions)` by
     simp[rich_listTheory.IS_PREFIX_APPEND] >>
@@ -214,14 +214,14 @@ Theorem sha256_expr_sim_mem_suffix:
   fn_has_code sa sm func /\ fn_inst_ids_distinct func /\
   local_ptrs_reserved cenv sa /\
   gas_admissible (bind (eval_expr cx e) (read_result cx)) expr_res_ok es /\
-  stmt_state_rel ctx func cenv cx es s0 /\ alloca_history func s0 /\ ~s0.vs_halted /\
+  stmt_state_rel H ctx func cenv cx es s0 /\ alloca_history func s0 /\ ~s0.vs_halted /\
   s0.vs_current_bb = sa.cs_current_bb /\
   s0.vs_inst_idx = LENGTH sa.cs_current_insts /\
   (!exc ee r. expr_exit (INR exc : value + exception) r ==> R (INR exc) ee r) /\
   (!gs v ee t.
      bind (eval_expr cx e) (read_result cx) (es with gas_obs := gs) =
        (INL v, ee) /\ ee.gas_obs = [] /\
-     expr_post ctx func cenv cx e es sa sm s0 ee v op t /\
+     expr_post H ctx func cenv cx e es sa sm s0 ee v op t /\
      expr_store_bound cx (expr_type e) v op t /\ alloca_history func t /\
      s0.vs_alloca_next <= t.vs_alloca_next /\ ~t.vs_halted /\
      t.vs_current_bb = sm.cs_current_bb /\
@@ -292,13 +292,13 @@ Theorem compile_typed_sha256_unary_vv_sim_mem:
        INR exc => (INR exc,es1)
      | INL w => (do precompile_call_success Sha256; return (Value w) od) es1) =
        (res,es2) /\
-    expr_post ctx func cenv cx e es sa sm s0 es1 v x s /\
+    expr_post H ctx func cenv cx e es sa sm s0 es1 v x s /\
     expr_store_bound cx (expr_type e) v x s /\ alloca_history func s /\
     ~s.vs_halted /\ s.vs_current_bb = sm.cs_current_bb /\
     s.vs_inst_idx = LENGTH sm.cs_current_insts ==>
     ?n r. gas_marked_path T ctx func s n r /\
       ((?t rv. r = OK t /\ res = INL rv /\
-          vv_post ctx func cenv cx (Builtin ann Sha256 [e]) es sa sb s0 es2
+          vv_post H ctx func cenv cx (Builtin ann Sha256 [e]) es sa sb s0 es2
             rv vv t /\
           vv_store_bound cx ann (lowered_value_type cenv (Builtin ann Sha256 [e]))
             es2 rv vv t /\
@@ -404,7 +404,7 @@ Proof
   drule_at (Pos hd) sha256_typed_builtin_result >> simp[] >>
   disch_then (qspecl_then [`v`, `cx`, `es1.accounts`] mp_tac) >>
   simp[] >> strip_tac >> gvs[] >>
-  drule_at (Pat `expr_post _ _ _ _ _ _ _ _ _ _ _ _ _`)
+  drule_at (Pat `expr_post _ _ _ _ _ _ _ _ _ _ _ _ _ _`)
     sha256_typed_effectful_path_mem >> simp[] >>
   disch_then (qspecl_then [`r`,`q`] mp_tac) >>
   (impl_tac >- metis_tac[]) >>

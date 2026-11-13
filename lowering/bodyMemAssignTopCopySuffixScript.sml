@@ -41,11 +41,11 @@ Theorem storage_copy_bulk_run_mem:
     alloca_history func s /\
     ~s.vs_halted /\ s.vs_current_bb = sa.cs_current_bb /\
     s.vs_inst_idx = LENGTH sa.cs_current_insts /\
-    stmt_state_rel ctx func cenv cx es'
+    stmt_state_rel H ctx func cenv cx es'
       (FOLDL (\t i. (if tr then tstore else sstore)
         (k+n2w i) (mload (w2n (b+n2w i*32w)) s) t) s (COUNT_LIST n)) ==>
     ?t. gas_marked_path T ctx func s 0 (OK t) /\
-      stmt_state_rel ctx func cenv cx es' t /\ ~t.vs_halted /\
+      stmt_state_rel H ctx func cenv cx es' t /\ ~t.vs_halted /\
       t.vs_current_bb = sb.cs_current_bb /\
       t.vs_inst_idx = LENGTH sb.cs_current_insts /\
       (!x. not_fresh_at sa x ==> lookup_var x t = lookup_var x s) /\
@@ -61,7 +61,7 @@ Proof
   disch_then (qspecl_then [`ctx`, `func`, `s`, `b`, `k`] mp_tac) >>
   (impl_tac >- (Cases_on `tr` >> simp[eval_operand_def])) >>
   strip_tac >>
-  `stmt_state_rel ctx func cenv cx es' t` by
+  `stmt_state_rel H ctx func cenv cx es' t` by
     (irule storage_copy_normalized_state >> qexistsl_tac [`s`, `sa`] >>
      fs[store_copy_frame_def, store_copy_normalize_def, store_copy_prefix_def] >>
      Cases_on `tr` >> gvs[]) >>
@@ -89,10 +89,10 @@ Theorem storage_copy_one_run_mem:
     alloca_history func s /\ alloca_inv s /\ w2n b + 32 <= s.vs_alloca_next /\
     ~s.vs_halted /\ s.vs_current_bb = sa.cs_current_bb /\
     s.vs_inst_idx = LENGTH sa.cs_current_insts /\
-    stmt_state_rel ctx func cenv cx es'
+    stmt_state_rel H ctx func cenv cx es'
       ((if tr then tstore else sstore) k (mload (w2n b) s) s) ==>
     ?t. gas_marked_path T ctx func s 0 (OK t) /\
-      stmt_state_rel ctx func cenv cx es' t /\ ~t.vs_halted /\
+      stmt_state_rel H ctx func cenv cx es' t /\ ~t.vs_halted /\
       t.vs_current_bb = sb.cs_current_bb /\
       t.vs_inst_idx = LENGTH sb.cs_current_insts /\
       (!x. not_fresh_at sa x ==> lookup_var x t = lookup_var x s) /\
@@ -142,7 +142,7 @@ Resume storage_copy_one_run_mem[post]:
   `alloca_history func (u with vs_inst_idx := LENGTH sb.cs_current_insts)` by
     (irule body_store_memory_history >> simp[] >> qexistsl_tac [`s`, `sa`] >>
      simp[] >> Cases_on `tr` >> simp[mk_inst_def, is_terminator_def]) >>
-  `stmt_state_rel ctx func cenv cx es' u` by
+  `stmt_state_rel H ctx func cenv cx es' u` by
     (irule storage_copy_normalized_state >> qexistsl_tac [`s`, `sa`] >>
      simp[GSYM store_copy_normalize_def] >> metis_tac[]) >>
   `store_copy_normalize s u =
@@ -171,11 +171,11 @@ Theorem storage_copy_suffix_run_mem:
     local_ptrs_reserved cenv sa /\ alloca_history func s /\ alloca_inv s /\
     ~s.vs_halted /\ s.vs_current_bb = sa.cs_current_bb /\
     s.vs_inst_idx = LENGTH sa.cs_current_insts /\
-    stmt_state_rel ctx func cenv cx es'
+    stmt_state_rel H ctx func cenv cx es'
       (FOLDL (\t i. (if tr then tstore else sstore)
         (k+n2w i) (mload (w2n (b+n2w i*32w)) s) t) s (COUNT_LIST n)) ==>
     ?t. gas_marked_path T ctx func s 0 (OK t) /\
-      stmt_state_rel ctx func cenv cx es' t /\ ~t.vs_halted /\
+      stmt_state_rel H ctx func cenv cx es' t /\ ~t.vs_halted /\
       t.vs_current_bb = sb.cs_current_bb /\
       t.vs_inst_idx = LENGTH sb.cs_current_insts /\
       (!x. not_fresh_at sa x ==> lookup_var x t = lookup_var x s) /\
@@ -208,7 +208,7 @@ QED
 
 Theorem storage_copy_success_run_mem:
   !ctx func cenv cx e es es1 es' v tv tr mid id slot sa sm sf op loc s0 s1.
-    expr_post ctx func cenv cx e es sa sm s0 es1 v op s1 /\
+    expr_post H ctx func cenv cx e es sa sm s0 es1 v op s1 /\
     expr_store_bound cx (expr_type e) v op s1 /\ alloca_history func s1 /\
     ~s1.vs_halted /\ s1.vs_current_bb = sm.cs_current_bb /\
     s1.vs_inst_idx = LENGTH sm.cs_current_insts /\
@@ -232,7 +232,7 @@ Theorem storage_copy_success_run_mem:
     fn_has_code sa sm func /\ fn_has_code sm sf func /\
     fn_inst_ids_distinct func /\ local_ptrs_reserved cenv sa ==>
     ?t. gas_marked_path T ctx func s1 0 (OK t) /\
-      stmt_state_rel ctx func cenv cx es' t /\ ~t.vs_halted /\
+      stmt_state_rel H ctx func cenv cx es' t /\ ~t.vs_halted /\
       t.vs_current_bb = sf.cs_current_bb /\
       t.vs_inst_idx = LENGTH sf.cs_current_insts /\
       (!x u. not_fresh_at sa x /\ lookup_var x s0 = SOME u ==>
@@ -268,7 +268,7 @@ Proof
   `!x. not_fresh_at sa x ==> not_fresh_at sm x` by
     (rpt strip_tac >> irule not_fresh_at_mono >>
      qexists_tac `sa` >> simp[ci_mono_def]) >>
-  qpat_x_assum `expr_post _ _ _ _ _ _ _ _ _ _ _ _ _`
+  qpat_x_assum `expr_post _ _ _ _ _ _ _ _ _ _ _ _ _ _`
     (strip_assume_tac o REWRITE_RULE [expr_post_def]) >>
   conj_tac >- metis_tac[] >> metis_tac[]
 QED

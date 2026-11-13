@@ -10,7 +10,7 @@ Ancestors
 Theorem topcopy_post_words:
   !ctx func cenv cx e es sa sm s0 es1 v op s tv w.
     post_value_type cenv e = expr_type e /\
-    expr_post ctx func cenv cx e es sa sm s0 es1 v op s /\
+    expr_post H ctx func cenv cx e es sa sm s0 es1 v op s /\
     evaluate_type (get_tenv cx) (expr_type e) = SOME tv /\
     ~is_word_type (expr_type e) /\ ~is_bytestring_type (expr_type e) /\
     eval_operand op s = SOME w ==>

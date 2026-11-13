@@ -64,7 +64,7 @@ Resume compile_struct_lit_body_case[vv]:
 QED
 
 Resume compile_struct_lit_body_case[immutable]:
-  qpat_assum `stmt_state_rel _ _ _ _ _ t` mp_tac >>
+  qpat_assum `stmt_state_rel H _ _ _ _ _ t` mp_tac >>
   pure_rewrite_tac[stmt_state_rel_def] >> strip_tac >>
   drule_all exprSimAllocTheory.buffer_alloc_code >> strip_tac >>
   fs[immutable_alloca_sep_def] >> rpt strip_tac >>

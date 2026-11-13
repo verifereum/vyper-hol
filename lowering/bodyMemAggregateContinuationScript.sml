@@ -18,14 +18,14 @@ Theorem aggregate_rebased_marked_read_mem_capacity:
          ~is_word_type (expr_type e) ==>
          type_memory_bytes ce (expr_type e) = type_memory_size tvt /\
          type_memory_size tvt < 2 ** 64) /\
-  vv_post ctx func ce cx e es sa sm s0 es' tvv vv r /\
+  vv_post H ctx func ce cx e es sa sm s0 es' tvv vv r /\
   vv_store_bound cx (expr_type e) (lowered_value_type ce e) es' tvv vv r /\
   alloca_history func r /\
   ~r.vs_halted /\ r.vs_current_bb = sm.cs_current_bb /\
   r.vs_inst_idx = LENGTH sm.cs_current_insts ==>
   ?v u. gas_marked_exec T (ctx,func) (read_result cx tvv) (es',r)
           [] (INL v) es' (OK u) /\
-    expr_post ctx func ce cx e es' (sa with cs_next_var := sm.cs_next_var)
+    expr_post H ctx func ce cx e es' (sa with cs_next_var := sm.cs_next_var)
       su r es' v op u /\
     expr_store_bound cx (expr_type e) v op u /\
     (~is_word_type (expr_type e) /\ lowered_value_type ce e = expr_type e ==>
@@ -43,14 +43,14 @@ Proof
     (qpat_x_assum `local_ptrs_reserved ce sm` mp_tac >>
      simp_tac (srw_ss()) [local_ptrs_reserved_def, not_fresh_at_def] >>
      metis_tac[]) >>
-  qpat_x_assum `vv_post _ _ _ _ _ es _ _ _ _ _ _ _` kall_tac >>
+  qpat_x_assum `vv_post _ _ _ _ _ _ es _ _ _ _ _ _ _` kall_tac >>
   Cases_on `is_word_type (expr_type e)`
   >- (drule_at (Pat `unwrap_value _ _ _ = _`) unwrap_value_marked_read_mem >>
-      disch_then (drule_at (Pat `vv_post _ _ _ _ _ _ _ _ _ _ _ _ _`)) >>
+      disch_then (drule_at (Pat `vv_post _ _ _ _ _ _ _ _ _ _ _ _ _ _`)) >>
       impl_tac >- simp[] >> strip_tac >>
       qexistsl_tac [`v`, `u`] >> simp[]) >>
   drule_at (Pat `unwrap_value _ _ _ = _`) aggregate_unwrap_value_marked_read_mem_capacity >>
-  disch_then (drule_at (Pat `vv_post _ _ _ _ _ _ _ _ _ _ _ _ _`)) >>
+  disch_then (drule_at (Pat `vv_post _ _ _ _ _ _ _ _ _ _ _ _ _ _`)) >>
   impl_tac >- simp[] >> strip_tac >>
   qexistsl_tac [`v`, `u`] >> simp[]
 QED
@@ -69,9 +69,9 @@ Theorem aggregate_unwrap_store_slice_mem_cursor:
   type_memory_size tv < 2 ** 64 /\
   (!v. read_result cx tvv (es' with gas_obs := []) =
        (INL v,es' with gas_obs := []) ==> value_has_type tv v /\ val_wf tv v) /\
-  vv_post ctx func ce cx e es sa sm s0 es' tvv vv r /\
+  vv_post H ctx func ce cx e es sa sm s0 es' tvv vv r /\
   vv_store_bound cx (expr_type e) (lowered_value_type ce e) es' tvv vv r /\
-  stmt_state_rel ctx func ce cx es' r /\
+  stmt_state_rel H ctx func ce cx es' r /\
   (!n b k. local_region ce es'.scopes r n b k ==>
     b + k <= w2n w \/ w2n w + type_memory_size tv <= b) /\
   (ce.ce_is_ctor ==> !name itv iv off.
@@ -102,7 +102,7 @@ Theorem aggregate_unwrap_store_slice_mem_cursor:
     gas_marked_exec T (ctx,func) (read_result cx tvv) (es',r)
           [] (INL v) es' (OK q) /\
     val_in_memory tv v (w2n w) q.vs_memory /\
-    stmt_state_rel ctx func ce cx es' q /\
+    stmt_state_rel H ctx func ce cx es' q /\
     (!z a. not_fresh_at sm z /\ lookup_var z r = SOME a ==>
       lookup_var z q = SOME a) /\
     (!aid b. FLOOKUP r.vs_allocas aid = SOME b ==>
@@ -124,7 +124,7 @@ Proof
     metis_tac[exprSimHypsTheory.post_value_type_no_calls,
               loweringPostsTheory.post_value_type_lowered] >>
   drule_at (Pat `unwrap_value _ _ _ = _`) aggregate_rebased_marked_read_mem_capacity >>
-  disch_then (drule_at (Pat `vv_post _ _ _ _ _ _ _ _ _ _ _ _ _`)) >>
+  disch_then (drule_at (Pat `vv_post _ _ _ _ _ _ _ _ _ _ _ _ _ _`)) >>
   impl_tac >- (fs[] >> metis_tac[]) >> strip_tac >>
   `gas_path_mem ctx func r 0 (OK u)` by
     fs[gas_marked_exec_def, gas_marked_path_def] >>
@@ -135,7 +135,7 @@ Proof
      qpat_x_assum `gas_marked_exec _ _ _ _ _ _ _ _` mp_tac >>
      simp[gas_marked_exec_def] >> metis_tac[]) >>
   drule_at (Pat `compile_store_memory _ _ _ _ _ _ = _`) aggregate_store_rebased_slice_mem_cursor >>
-  disch_then (drule_at (Pat `expr_post _ _ _ _ _ _ _ _ _ _ _ _ _`)) >>
+  disch_then (drule_at (Pat `expr_post _ _ _ _ _ _ _ _ _ _ _ _ _ _`)) >>
   disch_then (qspecl_then [`w`, `tv`, `env`] mp_tac) >>
   impl_tac >- (fs[wordsTheory.dimword_def] >> rpt conj_tac >> metis_tac[]) >>
   strip_tac >>
@@ -156,17 +156,17 @@ Proof
      `pure_frame ce func es sa s0 r /\
       (!z a. not_fresh_at sa z /\ lookup_var z s0 = SOME a ==>
          lookup_var z r = SOME a)` by
-       (qpat_x_assum `vv_post _ _ _ _ _ _ _ _ _ _ _ _ _` mp_tac >>
+       (qpat_x_assum `vv_post _ _ _ _ _ _ _ _ _ _ _ _ _ _` mp_tac >>
         rewrite_tac[vv_post_def] >> strip_tac >> conj_tac
         >- (qpat_x_assum `~expr_has_effect e ==> _` irule >>
             first_assum ACCEPT_TAC) >>
         first_assum ACCEPT_TAC) >>
-     qpat_assum `expr_post _ _ _ _ e _ _ _ _ _ _ _ u`
+     qpat_assum `expr_post _ _ _ _ _ e _ _ _ _ _ _ _ u`
        (mp_then (Pos hd) mp_tac exprSimWordArgsTheory.expr_post_pure_frame) >>
      (impl_tac >- first_assum ACCEPT_TAC) >> strip_tac >>
      `!aid a. FLOOKUP r.vs_allocas aid = SOME a ==>
         FLOOKUP u.vs_allocas aid = SOME a` by
-       (qpat_x_assum `expr_post _ _ _ _ e _ _ _ _ _ _ _ u` mp_tac >>
+       (qpat_x_assum `expr_post _ _ _ _ _ e _ _ _ _ _ _ _ u` mp_tac >>
         rewrite_tac[expr_post_def] >> strip_tac >> first_assum ACCEPT_TAC) >>
      `pure_frame ce func es sa s0 u` by
        (match_mp_tac exprSimPropsTheory.pure_frame_trans >>
@@ -205,9 +205,9 @@ Theorem aggregate_unwrap_store_slice_mem:
   type_memory_size tv < 2 ** 64 /\
   (!v. read_result cx tvv (es' with gas_obs := []) =
        (INL v,es' with gas_obs := []) ==> value_has_type tv v /\ val_wf tv v) /\
-  vv_post ctx func ce cx e es sa sm s0 es' tvv vv r /\
+  vv_post H ctx func ce cx e es sa sm s0 es' tvv vv r /\
   vv_store_bound cx (expr_type e) (lowered_value_type ce e) es' tvv vv r /\
-  stmt_state_rel ctx func ce cx es' r /\
+  stmt_state_rel H ctx func ce cx es' r /\
   (!n b k. local_region ce es'.scopes r n b k ==>
     b + k <= w2n w \/ w2n w + type_memory_size tv <= b) /\
   (ce.ce_is_ctor ==> !name itv iv off.
@@ -225,7 +225,7 @@ Theorem aggregate_unwrap_store_slice_mem:
   ?v q. gas_marked_exec T (ctx,func) (read_result cx tvv) (es',r)
           [] (INL v) es' (OK q) /\
     val_in_memory tv v (w2n w) q.vs_memory /\
-    stmt_state_rel ctx func ce cx es' q /\
+    stmt_state_rel H ctx func ce cx es' q /\
     (!z a. not_fresh_at sm z /\ lookup_var z r = SOME a ==>
       lookup_var z q = SOME a) /\
     (!aid b. FLOOKUP r.vs_allocas aid = SOME b ==>

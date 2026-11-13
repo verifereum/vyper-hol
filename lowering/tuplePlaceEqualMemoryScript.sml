@@ -53,7 +53,7 @@ Theorem tuple_place_equal_memory_forward:
     ?b len. b <= w2n sw /\ w2n sw+type_memory_size tv <= b+len /\
       ((?name. local_region cenv ee.scopes s name b len) \/
        (?aid. FLOOKUP s.vs_allocas aid = SOME (b,len) /\ aid < sa.cs_next_id))) /\
-  stmt_state_rel ctx func cenv cx ee s /\
+  stmt_state_rel H ctx func cenv cx ee s /\
   write_place cx p v ee = (INL (),ff) /\
   (!id path entry t0. p = MemoryPlace id path /\
     lookup_scopes id ee.scopes = SOME entry /\ cenv.ce_var_type id = SOME t0 ==>
@@ -62,7 +62,7 @@ Theorem tuple_place_equal_memory_forward:
   ~s.vs_halted /\ s.vs_current_bb = sa.cs_current_bb /\
   s.vs_inst_idx = LENGTH sa.cs_current_insts ==>
   ?r t. val_in_memory tv v (w2n w) t.vs_memory /\
-    stmt_state_rel ctx func cenv cx ee r /\
+    stmt_state_rel H ctx func cenv cx ee r /\
     gas_marked_path F ctx func s 0 (OK t) /\
     (t with <|vs_vars := r.vs_vars; vs_memory := r.vs_memory;
       vs_prev_bb := r.vs_prev_bb; vs_current_bb := r.vs_current_bb;
@@ -148,7 +148,7 @@ Resume tuple_place_equal_memory_forward[staged]:
   `type_memory_size tv < dimword (:256)` by decide_tac >>
   drule_at (Pat `compile_alloc_buffer _ _ = _`) tuple_place_staging_positive >>
   disch_then (drule_at (Pat `compile_copy_memory _ _ _ _ = _`)) >>
-  disch_then (drule_at (Pat `stmt_state_rel _ _ _ _ _ _`)) >>
+  disch_then (drule_at (Pat `stmt_state_rel _ _ _ _ _ _ _`)) >>
   disch_then (drule_at (Pat `val_in_memory _ _ _ _`)) >>
   simp[] >> disch_then (qspecl_then [`srclen`, `srcb`] mp_tac) >>
   (impl_tac >- (asm "source_region" mp_tac >> simp[])) >>
@@ -195,7 +195,7 @@ Resume tuple_place_equal_memory_forward[post]:
      `w2n tw+type_memory_size tv <= ob \/ ob+ol <= w2n tw` by
        (irule abi_builtin_allocate_separate >>
         qexistsl_tac [`aid`, `s`, `sa.cs_next_id`] >> simp[] >>
-        qpat_x_assum `stmt_state_rel ctx func cenv cx ee s` mp_tac >>
+        qpat_x_assum `stmt_state_rel H ctx func cenv cx ee s` mp_tac >>
         simp[stmt_state_rel_def]) >> decide_tac) >>
   pop_assum (mk_asm "old_scratch_sep") >>
   `cenv.ce_is_ctor ==> !nm itv iv off.
@@ -258,7 +258,7 @@ Theorem tuple_place_equal_memory_run_frame:
     ?b len. b <= w2n sw /\ w2n sw+type_memory_size tv <= b+len /\
       ((?name. local_region cenv ee.scopes s name b len) \/
        (?aid. FLOOKUP s.vs_allocas aid = SOME (b,len) /\ aid < sa.cs_next_id))) /\
-  stmt_state_rel ctx func cenv cx ee s /\
+  stmt_state_rel H ctx func cenv cx ee s /\
   write_place cx p v ee = (INL (),ff) /\
   (!id path entry t0. p = MemoryPlace id path /\
     lookup_scopes id ee.scopes = SOME entry /\ cenv.ce_var_type id = SOME t0 ==>
@@ -267,7 +267,7 @@ Theorem tuple_place_equal_memory_run_frame:
   ~s.vs_halted /\ s.vs_current_bb = sa.cs_current_bb /\
   s.vs_inst_idx = LENGTH sa.cs_current_insts ==>
   ?t. gas_marked_path F ctx func s 0 (OK t) /\
-    stmt_state_rel ctx func cenv cx ff t /\
+    stmt_state_rel H ctx func cenv cx ff t /\
     (!x. not_fresh_at sa x ==> lookup_var x t = lookup_var x s) /\
     (!aid e. FLOOKUP s.vs_allocas aid = SOME e ==> FLOOKUP t.vs_allocas aid = SOME e) /\
     ~t.vs_halted /\ t.vs_current_bb = sb.cs_current_bb /\
@@ -281,7 +281,7 @@ Theorem tuple_place_equal_memory_run_frame:
       mem_bytes_at a n t.vs_memory = mem_bytes_at a n s.vs_memory)
 Proof
   strip_tac >> drule_all tuple_place_equal_memory_forward >> strip_tac >>
-  `stmt_state_rel ctx func cenv cx ff t` by
+  `stmt_state_rel H ctx func cenv cx ff t` by
     (irule memory_place_write_stmt_state >>
      goal_assum (drule_at (Pat `place_ptr_rel _ _ _ _ _ _ _`)) >>
      goal_assum (drule_at (Pat `(t with <|vs_vars := _; vs_memory := _;
