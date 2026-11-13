@@ -1,6 +1,6 @@
 (* Syntactic provenance of administrative stack planning. *)
 Theory planEmissionProps
-Ancestors stackPlanGen stackPlanOps stackPlanTypes list rich_list
+Ancestors stackPlanGen stackPlanOps stackPlanTypes planExec stackOpSim asmRunBounded asmSem list rich_list
 
 Definition plan_admin_op_def:
   plan_admin_op (SOEmit name) = F /\
@@ -392,4 +392,46 @@ Proof
   >- metis_tac[generate_phi_plan_admin, plan_admin_no_emit]
   >- (simp[generate_offset_plan_def, AllCaseEqs()] >> rw[] >> gvs[])
   >> strip_tac >> drule generate_regular_inst_plan_no_forbidden >> simp[]
+QED
+
+(* Administrative code has neither control transfers nor creation opcodes. *)
+Theorem plan_admin_exec_safe:
+  !op fmp. plan_admin_op op ==>
+    EVERY (\i. i <> AsmOp "JUMP" /\ i <> AsmOp "JUMPI" /\
+               !stk. create_safe i stk) (exec_stack_op fmp op)
+Proof
+  Cases >> simp[plan_admin_op_def, exec_stack_op_def, create_safe_def,
+    EVERY_REPLICATE] >>
+  rpt gen_tac
+  >~ [`exec_stack_op fmp (SOPush operand)`]
+  >- (Cases_on `operand` >> simp[exec_stack_op_def, create_safe_def])
+  >~ [`swap_name n`]
+  >- (qspec_then `n` mp_tac swap_name_prefix >> rpt strip_tac >> gvs[]) >>
+  qspec_then `n` mp_tac dup_name_prefix >> rpt strip_tac >> gvs[]
+QED
+
+Theorem plan_admin_execute_safe:
+  EVERY plan_admin_op ops ==>
+  EVERY (\i. i <> AsmOp "JUMP" /\ i <> AsmOp "JUMPI" /\
+             !stk. create_safe i stk) (execute_plan fmp ops)
+Proof
+  Induct_on `ops` >> simp[execute_plan_def] >>
+  gvs[execute_plan_def] >> metis_tac[plan_admin_exec_safe]
+QED
+
+Theorem plan_admin_create_safe_prefix:
+  EVERY plan_admin_op ops /\
+  asm_block_at prog s.as_pc (execute_plan fmp ops) /\
+  n <= LENGTH (execute_plan fmp ops) ==>
+  create_safe_prefix lo o2pc prog n s
+Proof
+  strip_tac >> drule plan_admin_execute_safe >> strip_tac >>
+  rw[create_safe_prefix_def] >>
+  `t.as_pc = s.as_pc + j` by
+    (irule asm_steps_pc_advance >> goal_assum (drule_at Any) >>
+     qexists `execute_plan fmp ops` >> simp[EVERY_MEM] >>
+     gvs[EVERY_MEM] >> metis_tac[]) >>
+  `EL t.as_pc prog = EL j (execute_plan fmp ops)` by
+    (gvs[asm_block_at_def]) >>
+  gvs[EVERY_EL] >> metis_tac[]
 QED

@@ -11,7 +11,7 @@
 
 Theory fnFrameDeepAbort
 Ancestors
-  deepResidualSim fnPlanPrefix fnFrameTerminal fnFrameTerminalAbort
+  deepResidualSim fnPlanPrefix fnFrameTerminal fnFrameTerminalAbort deepInstSim asmRunBounded venomRunBounded
   fnFrameTerminalPrep generatedPrefixSim planSpillBounds stackOpSim
   stackModel stackPlanOps asmFrame asmIR emitSim frameViewFacts
   frameViewMemory regularMemorySim venomWf venomEffects allocMono
@@ -1059,4 +1059,57 @@ Proof
   drule_all gen_inst_ext_fault_frame_sim_deep >>
   disch_then (qspec_then `o2pc` strip_assume_tac) >>
   qexistsl_tac [`n`, `out`] >> simp[]
+QED
+
+(* The marked abort setup relates a frame view, but creation safety is a
+   property of the original source operands, before that view is taken. *)
+Theorem abort_frame_creation_safe:
+  inst_wf inst /\ opaque_use_ok fn /\ MEM inst (fn_insts fn) /\
+  inst_create_size_ok inst vs /\
+  ((inst.inst_opcode = CREATE /\ name = "CREATE") \/
+   (inst.inst_opcode = CREATE2 /\ name = "CREATE2")) /\
+  (!op. MEM op (compute_operands inst) ==>
+    eval_operand op (frame_view fn ra vs) = operand_val (frame_view fn ra vs) lo op) /\
+  EVERY (\op. op <> dead_stack_marker /\
+    !at. operand_equiv dfg op at ==> at <> dead_stack_marker) (compute_operands inst) /\
+  arranged.ps_stack = stack_pop (LENGTH (compute_operands inst)) arranged.ps_stack ++
+    compute_operands inst /\
+  venom_asm_rel lo arranged (frame_view fn ra vs with vs_memory := m) mid /\
+  eval_operands inst.inst_operands vs = SOME vals ==>
+  create_safe (AsmOp name) (mid.as_stack ++ rest)
+Proof
+  strip_tac >>
+  `mid.as_stack = vals ++ DROP (LENGTH inst.inst_operands) mid.as_stack` by
+    (irule abort_frame_arranged_stack >> simp[] >>
+     conj_tac >- (qexists `dfg` >> gvs[EVERY_MEM] >> metis_tac[]) >>
+     goal_assum (drule_at (Pat `venom_asm_rel _ _ _ _`)) >> simp[]) >>
+  qpat_x_assum `mid.as_stack = _` (fn th => once_rewrite_tac[th]) >>
+  pure_rewrite_tac[GSYM APPEND_ASSOC] >>
+  irule evaluated_creation_safe >> metis_tac[]
+QED
+
+(* Executable abort probe: a static creation still inspects the prepared
+   operands.  Safety and the fault step hold at that same assembly state. *)
+Theorem static_creation_abort_safe:
+  inst_wf inst /\ inst_create_size_ok inst vs /\
+  ((inst.inst_opcode = CREATE /\ name = "CREATE") \/
+   (inst.inst_opcode = CREATE2 /\ name = "CREATE2")) /\
+  eval_operands inst.inst_operands vs = SOME vals /\
+  st.as_stack = vals ++ rest /\ st.as_call_ctx.cc_static /\
+  asm_block_at prog st.as_pc [AsmOp name] /\
+  venom_asm_terminal_rel vs st ==>
+  create_safe (EL st.as_pc prog) st.as_stack /\
+  ?out. asm_steps lo o2pc prog 1 st = AsmFault out /\
+    venom_asm_terminal_rel (halt_state (set_returndata [] vs)) out
+Proof
+  strip_tac >> (conj_tac
+  >- ( `EL st.as_pc prog = AsmOp name` by gvs[asm_block_at_def] >>
+       asm_rewrite_tac[] >> irule evaluated_creation_safe >> metis_tac[]) >>
+  `LENGTH vals = LENGTH inst.inst_operands` by
+    metis_tac[logEmitSimTheory.eval_operands_length] >>
+  `MEM (name, LENGTH vals)
+    [("SSTORE",2); ("TSTORE",2); ("SELFDESTRUCT",1); ("CREATE",3);
+     ("CREATE2",4); ("CALL",7)]` by gvs[inst_wf_def] >>
+  `(name = "CALL" ==> EL 2 vals <> 0w)` by gvs[] >>
+  drule_all static_write_fault_step >> simp[])
 QED

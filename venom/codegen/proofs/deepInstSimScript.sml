@@ -15,7 +15,7 @@ Ancestors
   codegenReadyCompute regularMemorySim reorderSpillFresh prefixSpillReplay deepDupCallerSim
   stackOpAsmSim planSim asmIR venomInstProofs1 venomEffects indexedLists instSimHelpers
   opcodeClass strongPrefixSim emitInputSim planAlign asmOpSim spillSim allocMono cleanOpsSim
-  contextCodegenRelProps unitShapeDefs
+  contextCodegenRelProps unitShapeDefs asmRunBounded venomRunBounded preparedStackValues
   regularEmitSim regularPlanSim emitSim prefixExec prefixSim venomWf
   generatedPrefixSim preparedPrefixSim generatedReorderSim reorderSim
   doSwapSim mixedPrefixSim codegenRel blockSimHelpers planSpillBounds
@@ -3388,3 +3388,41 @@ Resume gen_inst_ok_sim_marked_count[none]:
 QED
 
 Finalise gen_inst_ok_sim_marked_count
+
+(* This bridge is independent of the result of the creation instruction:
+   it applies equally to the marked OK and static-abort input states. *)
+Theorem evaluated_creation_safe:
+  inst_wf inst /\ inst_create_size_ok inst vs /\
+  ((inst.inst_opcode = CREATE /\ name = "CREATE") \/
+   (inst.inst_opcode = CREATE2 /\ name = "CREATE2")) /\
+  eval_operands inst.inst_operands vs = SOME values ==>
+  create_safe (AsmOp name) (values ++ rest)
+Proof
+  strip_tac >> gvs[inst_wf_def, LENGTH_EQ_NUM_compute] >>
+  gvs[eval_operands_def, AllCaseEqs(), create_safe_def] >>
+  fs[inst_create_size_ok_def] >> metis_tac[]
+QED
+
+Theorem prepared_creation_safe:
+  inst_wf inst /\ inst_create_size_ok inst vs /\
+  ((inst.inst_opcode = CREATE /\ name = "CREATE") \/
+   (inst.inst_opcode = CREATE2 /\ name = "CREATE2")) /\
+  venom_asm_rel lo arranged vs mid /\
+  arranged.ps_stack = stack_pop (LENGTH (compute_operands inst)) arranged.ps_stack ++
+    compute_operands inst /\
+  EVERY (\op. op <> dead_stack_marker) (compute_operands inst) /\
+  (!op. MEM op (compute_operands inst) ==>
+    eval_operand op vs = operand_val vs lo op) /\
+  eval_operands inst.inst_operands vs = SOME values ==>
+  create_safe (AsmOp name) (mid.as_stack ++ rest)
+Proof
+  strip_tac >>
+  `REVERSE (compute_operands inst) = inst.inst_operands` by
+    (gvs[compute_operands_def, python_stack_operands_def,
+         ir_specific_operand_order_def] >>
+     fs[inst_wf_def] >> gvs[]) >>
+  `eval_operands (REVERSE (compute_operands inst)) vs = SOME values` by simp[] >>
+  drule_all prepared_operands_values >> strip_tac >>
+  asm_rewrite_tac[] >> pure_rewrite_tac[GSYM APPEND_ASSOC] >>
+  irule evaluated_creation_safe >> metis_tac[]
+QED
