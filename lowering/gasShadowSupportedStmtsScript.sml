@@ -116,14 +116,66 @@ Proof
   metis_tac[shadow_string_support]
 QED
 
+Theorem shadow_loop_iterator_place_root[local]:
+  !e attrs.
+    OPTION_MAP (\t. FST (place_access t attrs))
+      (loop_iterator_place (gas_shadow_expr e)) =
+    OPTION_MAP (\t. FST (place_access t attrs)) (loop_iterator_place e)
+Proof
+  ho_match_mp_tac vyperTypeContractTheory.loop_iterator_place_ind >>
+  rpt strip_tac >>
+  simp[gas_shadow_expr_def, vyperTypeContractTheory.loop_iterator_place_def,
+       vyperTypeSystemTheory.place_access_def, OPTION_MAP_COMPOSE,
+       combinTheory.o_DEF]
+QED
+
 Theorem shadow_iterator_support[local]:
-  (!tops e. supported_pure_expr tops e ==> supported_pure_expr tops (gas_shadow_expr e)) ==>
+  (!tops e. supported_pure_expr tops e ==> supported_pure_expr tops (gas_shadow_expr e)) /  (!tops e. supported_expr tops e ==> supported_expr tops (gas_shadow_expr e)) ==>
   !iter tops ty n. supported_iterator tops ty iter n ==>
     supported_iterator tops ty (gas_shadow_iterator iter) n
 Proof
   strip_tac >> Cases
-  >- (rpt strip_tac >> drule supported_array_iterator_shape >> strip_tac >>
-      gvs[gas_shadow_iterator_def, gas_shadow_expr_def, supported_iterator_def]) >>
+  >- (rpt gen_tac >> rename1 `Array arr` >> simp[gas_shadow_iterator_def] >>
+      `!e. (!t nm. e <> Name t nm) /\ (!t nm. e <> TopLevelName t nm) ==>
+           (supported_iterator tops ty (Array e) n <=>
+            supported_expr tops e /\
+            ~supported_expr_exists (\x. ?t c l r. x = IfExp t c l r) e /\
+            (!tgt nid. loop_iterator_place e = SOME tgt ==>
+                       FST (place_access tgt []) <> TopLevelNameTarget nid) /\
+            (!t fid args drv. e = Call t (IntCall fid) args drv ==>
+               ?m nr rr ps ds b.
+                 supported_function_decl tops fid Internal =
+                   SOME (m,nr,rr,ps,ds,t,b)) /\
+            ?bd. expr_type e = ArrayT ty bd /\ bound_length bd <= n)`
+        by (Cases >> simp[supported_iterator_def]) >>
+      Cases_on `?t nm. arr = Name t nm` >- gvs[gas_shadow_expr_def] >>
+      Cases_on `?t nm. arr = TopLevelName t nm` >- gvs[gas_shadow_expr_def] >>
+      `(!t nm. gas_shadow_expr arr <> Name t nm) /\
+       (!t nm. gas_shadow_expr arr <> TopLevelName t nm)`
+        by (Cases_on `arr` >> gvs[gas_shadow_expr_def]) >>
+      first_assum (qspec_then `arr` mp_tac) >> impl_tac >- fs[] >>
+      disch_then (fn th => REWRITE_TAC [th]) >>
+      first_x_assum (qspec_then `gas_shadow_expr arr` mp_tac) >>
+      impl_tac >- fs[] >>
+      disch_then (fn th => REWRITE_TAC [th]) >>
+      strip_tac >>
+      conj_tac >- metis_tac[] >>
+      conj_tac
+      >- (`supported_expr_exists (\x. ?t c l r. x = IfExp t c l r)
+             (gas_shadow_expr arr) =
+           supported_expr_exists (\x. ?t c l r. x = IfExp t c l r) arr`
+            by (irule (CONJUNCT1 gas_shadow_expr_exists_invariant) >>
+                Cases >> simp[gas_shadow_expr_def]) >>
+          simp[]) >>
+      conj_tac
+      >- (rpt strip_tac >>
+          qspecl_then [`arr`, `[]`] mp_tac shadow_loop_iterator_place_root >>
+          Cases_on `loop_iterator_place arr` >> gvs[] >> metis_tac[]) >>
+      conj_tac
+      >- (rpt gen_tac >> strip_tac >> Cases_on `arr` >>
+          gvs[gas_shadow_expr_def]) >>
+      simp[] >> metis_tac[]) >>
+  qpat_x_assum `!tops e. supported_expr _ _ ==> _` kall_tac >>
   rpt gen_tac >> rename1 `Range a b` >>
   first_assum (qspecl_then [`tops`, `a`] assume_tac) >>
   qpat_assum `!tops e. _` (qspecl_then [`tops`, `b`] assume_tac) >>
