@@ -183,8 +183,10 @@ is actual `run_call` and frame OutOfGas / StackOverflow, or `call_result_rel`.
 Sufficient gas is the companion theorem `vyper_call_gas_sufficient`
 (`lowering/e2eGasSufficientTopScript.sml`): under the call theorem's hypotheses,
 some gas `g` exists such that with any `g' >= g` more gas for the frame, the
-frame runs out of gas only after it has run a `RETURNDATACOPY` (forwarding a
-failed callee's revert data). It composes the planned stage bounds S1b
+run exists, and, provided the outcomes of that run's call trace are
+storage-valid (`call_outcomes_storage_ok`) and none of its source observations
+is exempt (`~source_exempt`), if the frame runs out of gas then it reaches a
+`RETURNDATACOPY` instruction (`frame_inst_at`). It composes the planned stage bounds S1b
 (`lower_vyper_runtime_unit_run_bounded`), S6b
 (`run_venom_pipeline_run_bounded`) and S7g (`codegen_gas_sufficient`).
 

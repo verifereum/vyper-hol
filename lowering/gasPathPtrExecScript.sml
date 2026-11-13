@@ -7,6 +7,8 @@
  *
  * TOP-LEVEL:
  *   gas_path_ptr_exec -- the piece
+ *   gas_path_ptr_safe_run -- pointer safety back along a path that goes
+ *     on, in a function without PHIs
  *)
 Theory gasPathPtrExec
 Ancestors
@@ -250,4 +252,98 @@ Proof
   rpt gen_tac >> strip_tac >>
   conj_tac >- metis_tac[gas_path_ptr_edge_erase, gas_path_rules] >>
   disj2_tac >> simp[] >> metis_tac[ptr_edge_exit]
+QED
+
+(* One edge that goes on at t, in a function without PHIs: pointer safety
+   at every fuel from t gives it at every fuel from s.  The step is lifted
+   from its own fuel to that fuel plus the rest, then dropped back. *)
+Theorem ptr_edge_safe_run[local]:
+  gas_path_ptr_edge D lo ctx fn PG G tn s n G1 tn1 (OK t) /\
+  (!bb lbl. lookup_block lbl fn.fn_blocks = SOME bb ==>
+            phi_prefix_length bb.bb_instructions = 0) /\
+  (!fuel. ptr_safe_run D lo fuel ctx fn PG G1 tn1 t) ==>
+  !m. ptr_safe_run D lo m ctx fn PG G tn s
+Proof
+  strip_tac >> qx_gen_tac `m` >>
+  qpat_x_assum `gas_path_ptr_edge _ _ _ _ _ _ _ _ _ _ _ _ _`
+    (strip_assume_tac o REWRITE_RULE [gas_path_ptr_edge_def]) >>
+  gvs[exit_result_def] >>
+  irule ptr_safe_run_fuel_mono_down >> qexists_tac `SUC (fuel + m)` >>
+  simp[] >>
+  `step_inst (SUC (fuel + m)) ctx inst s = step_inst fuel ctx inst s` by
+    (irule (cj 1 fuel_mono) >> qexists_tac `fuel` >> simp[]) >>
+  `ptr_safe_step D lo (SUC (fuel + m)) ctx fn PG G tn inst s` by
+    (irule (cj 1 ptr_safe_fuel_mono_up) >> qexists_tac `fuel` >> simp[]) >>
+  simp[ptr_safe_run_def]
+  >~ [`jump_to lbl s`]
+  >- (`(jump_to lbl s).vs_current_bb = lbl /\ ~(jump_to lbl s).vs_halted /\
+       jump_to lbl s with vs_inst_idx := 0 = jump_to lbl s` by
+        simp[jump_to_def] >>
+      qspecl_then [`D`, `lo`, `SUC (fuel + m)`, `ctx`, `fn`, `PG`, `G`, `tn`,
+                   `bb`, `s`, `inst`, `jump_to lbl s`] mp_tac
+        ptr_safe_block_terminator >>
+      simp[] >> disch_then kall_tac >>
+      Cases_on `lookup_block lbl fn.fn_blocks`
+      >- simp[Once ptr_safe_blocks_def] >>
+      rename1 `lookup_block lbl fn.fn_blocks = SOME target` >>
+      `phi_prefix_length target.bb_instructions = 0` by metis_tac[] >>
+      `entry_prov fn (jump_to lbl s) G = G /\
+       entry_taint_vars fn (jump_to lbl s) tn = tn` by
+        (irule jump_entry_ghost >> qexists_tac `target` >> simp[]) >>
+      `eval_phis (jump_to lbl s) target.bb_instructions =
+       OK (jump_to lbl s)` by simp[eval_phis_no_phi] >>
+      qspecl_then [`D`, `lo`, `fuel + m`, `ctx`, `fn`, `PG`, `G`, `tn`,
+                   `jump_to lbl s`, `target`, `jump_to lbl s`] mp_tac
+        ptr_safe_blocks_block >>
+      simp[] >> disch_then kall_tac >>
+      first_x_assum (qspec_then `fuel + m` mp_tac) >> simp[ptr_safe_run_def])
+  >~ [`eval_phis _ _ = OK entered`]
+  >- (rename1 `step_inst fuel ctx inst s = OK u` >>
+      `entered.vs_current_bb = u.vs_current_bb` by
+        metis_tac[eval_phis_preserves_current_bb] >>
+      `ptr_safe_block D lo (fuel + m) ctx fn PG (entry_prov fn u G)
+         (entry_taint_vars fn u tn) target
+         (entered with vs_inst_idx := phi_prefix_length target.bb_instructions)` by
+        (first_x_assum (qspec_then `fuel + m` mp_tac) >>
+         simp[ptr_safe_run_def]) >>
+      `step_inst (SUC (fuel + m)) ctx inst s = OK u` by simp[] >>
+      metis_tac[ptr_safe_block_terminator, ptr_safe_blocks_block]) >>
+  rename1 `step_inst fuel ctx inst s = OK u` >>
+  qpat_x_assum `(_,_) = ghost_step _ _ _ _ _ _ _` (assume_tac o GSYM) >>
+  `ghost_step (SUC (fuel + m)) ctx PG G tn inst s =
+   ghost_step fuel ctx PG G tn inst s` by
+    (irule (cj 1 ghost_fuel_mono_up) >> simp[]) >>
+  `u.vs_current_bb = s.vs_current_bb` by
+    metis_tac[step_preserves_control_flow] >>
+  first_x_assum (qspec_then `SUC (fuel + m)` mp_tac) >>
+  simp[ptr_safe_run_def] >> strip_tac >>
+  qspecl_then [`D`, `lo`, `SUC (fuel + m)`, `ctx`, `fn`, `PG`, `G`, `tn`,
+               `bb`, `s`, `inst`, `u`] mp_tac ptr_safe_block_step >>
+  simp[]
+QED
+
+(* A path that goes on at t, in a function without PHIs: pointer safety at
+   every fuel from t is pointer safety at every fuel from s.  Unlike
+   gas_path_ptr_exec this needs no run from t that does not fail. *)
+Theorem gas_path_ptr_safe_run:
+  !D lo ctx fn PG G tn s n G' tn' t.
+    gas_path_ptr D lo ctx fn PG G tn s n G' tn' (OK t) /\
+    (!bb lbl. lookup_block lbl fn.fn_blocks = SOME bb ==>
+              phi_prefix_length bb.bb_instructions = 0) /\
+    (!fuel. ptr_safe_run D lo fuel ctx fn PG G' tn' t) ==>
+    !fuel. ptr_safe_run D lo fuel ctx fn PG G tn s
+Proof
+  `!D lo ctx fn PG G tn s n G' tn' r.
+     gas_path_ptr D lo ctx fn PG G tn s n G' tn' r ==>
+     !t. r = OK t /\
+         (!bb lbl. lookup_block lbl fn.fn_blocks = SOME bb ==>
+                   phi_prefix_length bb.bb_instructions = 0) /\
+         (!fuel. ptr_safe_run D lo fuel ctx fn PG G' tn' t) ==>
+         !fuel. ptr_safe_run D lo fuel ctx fn PG G tn s`
+    suffices_by metis_tac[] >>
+  ho_match_mp_tac gas_path_ptr_ind >> rpt conj_tac
+  >- simp[]
+  >- (rpt gen_tac >> strip_tac >> rpt gen_tac >> strip_tac >> gvs[] >>
+      metis_tac[ptr_edge_safe_run]) >>
+  rpt strip_tac >> gvs[exit_result_def]
 QED

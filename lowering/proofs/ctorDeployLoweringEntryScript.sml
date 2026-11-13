@@ -99,34 +99,6 @@ QED
    registration provenance and empty pointer taint at the same endpoint.
    Complete source argument bounds belong to this entry producer; padded
    decoder reads alone do not establish a source-section memory window. *)
-(* TEMPORARILY CHEATED - horizon restatement (ENTRY-H-r1) and RULE F joint
-   path; the original proof below proves the pre-horizon statement.
-Proof
-  rpt gen_tac >> strip_tac >>
-  drule_all ctorDeployLoweringEntrySelectionTheory.deploy_ctor_entry_selection_agrees >>
-  strip_tac >> gvs[] >>
-  `nr = F` by
-    (drule_all (cj 1 deploy_ctor_entry_body_resources) >> simp[]) >>
-  drule_all deploy_ctor_body_entry_static >> strip_tac >>
-  `supported_program tops` by fs[deploy_source_ok_def] >>
-  drule_all deploy_ctor_original_entry_shape >> strip_tac >>
-  drule_all deploy_ptr_entry_prefix_related_checked >> strip_tac >>
-  drule gas_path_mem_exec >> simp[fragExecTheory.exit_result_def] >> strip_tac >> gvs[] >>
-  qexistsl [`actual`,`H`,`qt`] >> simp[] >>
-  conj_tac
-  >- (strip_tac >>
-      qpat_x_assum `(!fuel. ptr_safe_run _ _ _ _ _ _ H qt actual) ==> _` drule >>
-      disch_tac >> Cases_on `fuel` >> simp[Once ptr_safe_blocks_def] >>
-      simp[eval_phis_no_phi] >>
-      qpat_x_assum `!fuel. ptr_safe_run _ _ _ _ _ _ FEMPTY entry_taint _`
-        (qspec_then `n` mp_tac) >> simp[ptr_safe_run_def]) >>
-  rpt strip_tac >>
-  first_x_assum (qspec_then `fuel` mp_tac) >>
-  simp[] >> strip_tac >>
-  qexists `SUC fuel'` >>
-  simp[run_context_def, run_function_def, run_blocks_run_from_no_phi]
-QED
-*)
 Theorem deploy_ctor_entry_joint:
   !policy tops deploy_bc runtime_bc rpolicy dunit dout prog cplan am tx es vs
    body cenv nr nkey ut imm exit_lbl sa sb sj st_exit st_epilogue st_final func mut nr' body' am_c es0.
@@ -184,5 +156,39 @@ Theorem deploy_ctor_entry_joint:
                         vs_inst_idx := 0 |>, FEMPTY, entry_taint)
             [] (OK s0, G0, tn0)
 Proof
-  cheat
+  rpt gen_tac >> strip_tac >>
+  drule_all ctorDeployLoweringEntrySelectionTheory.deploy_ctor_entry_selection_agrees >>
+  strip_tac >> gvs[] >>
+  `nr = F` by
+    (drule_all (cj 1 deploy_ctor_entry_body_resources) >> simp[]) >>
+  drule_all deploy_ctor_body_entry_static >> strip_tac >>
+  `supported_program tops` by fs[deploy_source_ok_def] >>
+  drule_all deploy_ctor_original_entry_shape >> strip_tac >>
+  drule_all deploy_ptr_entry_prefix_related_checked >> strip_tac >>
+  drule gas_path_mem_exec >> simp[fragExecTheory.exit_result_def] >> strip_tac >> gvs[] >>
+  qexistsl [`actual`,`H`,`qt`] >>
+  rpt conj_tac
+  >~ [`valid_horizon`]
+  >- (qx_genl_tac [`st0`, `HZ`] >> strip_tac >>
+      first_x_assum (qspec_then `HZ` strip_assume_tac) >>
+      rpt conj_tac
+      >- (strip_tac >>
+          qpat_x_assum `(!fuel. ptr_safe_run _ _ _ _ _ _ H qt actual) ==> _` drule >>
+          disch_tac >> Cases_on `fuel` >> simp[Once ptr_safe_blocks_def] >>
+          simp[eval_phis_no_phi] >>
+          qpat_x_assum `!fuel. ptr_safe_run _ _ _ _ _ _ FEMPTY entry_taint _`
+            (qspec_then `n` mp_tac) >> simp[ptr_safe_run_def])
+      >- first_assum ACCEPT_TAC
+      >- first_assum ACCEPT_TAC
+      >- first_assum ACCEPT_TAC >>
+      gen_tac >>
+      first_assum (qspecl_then [`deploy_dead HZ tops runtime_bc am tx`, `explicit`]
+        ACCEPT_TAC))
+  >~ [`run_context`]
+  >- (rpt strip_tac >>
+      first_x_assum (qspec_then `fuel` mp_tac) >>
+      simp[] >> strip_tac >>
+      qexists `SUC fuel'` >>
+      simp[run_context_def, run_function_def, run_blocks_run_from_no_phi]) >>
+  simp[]
 QED

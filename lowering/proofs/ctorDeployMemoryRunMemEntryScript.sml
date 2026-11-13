@@ -24,7 +24,8 @@ Ancestors
 Theorem deploy_unit_fmp_room:
   !tops rpolicy runtime_bc dunit func ss.
     lower_vyper_deploy_unit tops rpolicy runtime_bc = SOME dunit /\
-    supported_program tops /\ MEM func dunit.cu_context.ctx_functions ==>
+    supported_program tops /\ supported_program_deploy tops /\
+    MEM func dunit.cu_context.ctx_functions ==>
     fmp_room dunit.cu_context func ss
 Proof
   rpt strip_tac >>
@@ -33,6 +34,34 @@ Proof
   rw[fmp_room_def, ctx_has_dalloca_def, listTheory.EXISTS_MEM,
      listTheory.EVERY_MEM] >>
   metis_tac[]
+QED
+
+Theorem ctor_path_mem_edge_code[local]:
+  gas_path_mem_edge ctx fn s n (OK t) ==> t.vs_code = s.vs_code
+Proof
+  rw[fragGasPathMemTheory.gas_path_mem_edge_def] >>
+  gvs[fragExecTheory.exit_result_def] >>
+  imp_res_tac step_inst_ok_code_data >>
+  imp_res_tac venomExecProofsTheory.eval_phis_only_updates_vs_vars >>
+  gvs[jump_to_def]
+  >>~- ([`entered = _ with vs_vars := _`],
+     qpat_x_assum `entered = _`
+       (mp_tac o Q.AP_TERM `\u. u.vs_code`) >> simp[]) >>
+  metis_tac[step_inst_ok_code_data, fragExecTheory.exit_result_def]
+QED
+
+Theorem ctor_path_mem_code[local]:
+  gas_path_mem ctx fn s n (OK t) ==> t.vs_code = s.vs_code
+Proof
+  qsuff_tac `!ctx fn s n r. gas_path_mem ctx fn s n r ==>
+    !t. r = OK t ==> t.vs_code = s.vs_code`
+  >- metis_tac[] >>
+  ho_match_mp_tac fragGasPathMemTheory.gas_path_mem_ind >> rpt conj_tac
+  >- simp[]
+  >- (rpt strip_tac >> gvs[] >>
+      imp_res_tac ctor_path_mem_edge_code >> metis_tac[]) >>
+  simp[fragExecTheory.exit_result_def] >>
+  metis_tac[fragExecTheory.exit_result_def]
 QED
 
 Theorem deploy_ctor_entry_run_mem:
@@ -94,6 +123,17 @@ Proof
         disch_then (mp_tac o Q.AP_TERM `\s. s.vs_memory`) >> simp[]) >>
      metis_tac[]) >>
   drule_all ctor_source_entry_world_projections >> strip_tac >>
+  `actual.vs_code = vs.vs_code` by
+    (qpat_assum `gas_path_mem _ _ (vs with <|vs_prev_bb := NONE;
+       vs_current_bb := lbl; vs_inst_idx := 0|>) _ (OK actual)`
+       (mp_tac o MATCH_MP ctor_path_mem_code) >> simp[]) >>
+  `vs.vs_code = (deploy_evaluation_context tops am tx).txn.code` by
+    (qpat_x_assum `gas_variant _ _` mp_tac >>
+     rewrite_tac[gas_variant_def] >>
+     disch_then (mp_tac o Q.AP_TERM `\s. s.vs_code`) >>
+     simp[deploy_entry_state_def, entry_venom_state_def, init_venom_state_def] >>
+     gvs[deploy_state_rel_def, deploy_evaluation_context_def,
+         vyperInterpreterTheory.initial_evaluation_context_def]) >>
   `actual.vs_call_ctx = vs.vs_call_ctx /\ actual.vs_tx_ctx = vs.vs_tx_ctx /\
    actual.vs_block_ctx = vs.vs_block_ctx /\ actual.vs_outcomes = vs.vs_outcomes` by metis_tac[] >>
   drule_all ctor_source_candidate_context >>
@@ -105,6 +145,7 @@ Proof
    actual.vs_logs = [] /\ actual.vs_requests = [] /\ actual.vs_pending_deletions = []` by
     (qpat_x_assum `abi_encoder_registered_effect _ _ _ _` mp_tac >>
      simp[abiEncoderRegisteredEffectTheory.abi_encoder_registered_effect_def]) >>
+  `actual.vs_code = (deploy_evaluation_context tops am tx).txn.code` by metis_tac[] >>
   drule_all ctor_task_landing_state_rel >> strip_tac >>
   drule ctor_checked_code_return_buf >> simp[] >> strip_tac >>
   `immutable_alloca_sep fn (cenv1 with ce_ctor_exit_label := SOME exit_lbl)
@@ -115,7 +156,8 @@ Proof
   conj_tac
   >- (simp[stmt_state_rel_def] >>
       conj_tac
-      >- (`supported_program tops` by gvs[deploy_source_ok_def] >>
+      >- (`supported_program tops /\ supported_program_deploy tops` by
+            gvs[deploy_source_ok_def] >>
           drule_all deploy_unit_fmp_room >> simp[]) >>
       conj_tac
       >- (gvs[immutable_alloca_sep_def] >> metis_tac[]) >>
