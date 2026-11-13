@@ -733,7 +733,13 @@ Proof
   `fmp_variant_room (SOME fmp) (stage 4) v4` by
     (gvs[fmp_variant_room_def] >> metis_tac[]) >>
   gvs[pass_fuel_def] >>
-  metis_tac[ctx_sim_fuel_trans, combinTheory.I_o_ID]
+  `ctx_sim_fuel I D (stage 3) (stage 4) v3 v4` by fs[o1_fn_passes_def] >>
+  `ctx_sim_fuel (I o I) D (stage 0) (stage 4) vi v4` by
+    (irule ctx_sim_fuel_trans >> metis_tac[]) >>
+  `ctx_sim_fuel (cfg_norm_fuel (stage 9) o (I o I)) D (stage 0) (stage 9)
+     vi vs_out` by
+    (irule ctx_sim_fuel_trans >> metis_tac[]) >>
+  fs[combinTheory.I_o_ID]
 QED
 
 Theorem o1_walk_sim:
