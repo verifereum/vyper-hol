@@ -19,7 +19,7 @@ Definition supported_declaration_header_def:
   supported_declaration_header tops top <=>
     case top of
       FunctionDecl vis mut nr rr name args defaults ret body =>
-        NULL defaults /\
+        (vis <> Internal ==> NULL defaults) /\
         (* Internal argument copies keep their layout restriction.  External
            arguments are what the checker's assignable_type admits
            (entry_abi_support); supported_program_deploy constrains Deploy's. *)
@@ -111,7 +111,7 @@ End
 Theorem supported_function_header_contract:
   supported_declaration_header tops
     (FunctionDecl vis mut nr rr name args defaults ret body) <=>
-  NULL defaults /\
+  (vis <> Internal ==> NULL defaults) /\
   (vis = Internal ==> EVERY (supported_value_type tops o SND) args) /\
   supported_function_return tops vis ret
 Proof

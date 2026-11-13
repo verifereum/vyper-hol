@@ -17,7 +17,7 @@ Theorem intcall_package_entry:
   !tops ctx func caller cx tenv name args ret ss mut rr es1 prev penv rtv
    sa sb st2 st3 D vals ws argv rbw rcn rbs pvs lbl t.
     body_inv tops ctx caller cx /\
-    MEM (FunctionDecl Internal mut F rr name args [] ret ss) tops /\
+    MEM (FunctionDecl Internal mut F rr name args dflts ret ss) tops /\
     caller.ce_module = NONE /\
     caller.ce_module_vars =
       add_immutable_locations (get_struct_fields (make_struct_fields_map tops))

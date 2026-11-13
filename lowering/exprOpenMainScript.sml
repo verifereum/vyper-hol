@@ -134,7 +134,7 @@ Resume compile_expr_open_general[builtin]:
   rename1 `compile_expr cenv aty (Builtin ann bi args) sa = (vv,sb)` >>
   `!arg rest. args = arg::rest /\ (!n. bi <> Slice n) ==>
      !cty v st. lower_value
-       (expr_child_callback (list_size expr_size args) compile_expr)
+       (expr_child_callback (list_size expr_size args + cenv_defaults_size cenv) compile_expr)
        cenv cty arg sa = (v,st) ==> ~block_is_terminated st` by
     (rpt gen_tac >> strip_tac >> gvs[] >> rpt gen_tac >> strip_tac >>
      drule_at (Pat `lower_value _ _ _ _ _ = _`) lower_value_child_open >>
@@ -228,10 +228,7 @@ Resume compile_expr_open_general[builtin_dispatch]:
   >~ [`Uint2Str`] >- metis_tac[compile_dispatch_terminal_open]
   >~ [`CalldataSlice`] >- metis_tac[compile_dispatch_terminal_open]
   >~ [`MakeArray elem bound`]
-    >- (Cases_on `elem` >>
-        drule_at (Pat `compile_builtin_dispatch_body _ _ _ _ _ _ _ = _`)
-          compile_dispatch_make_array_open >>
-        fs[well_typed_builtin_app_def, EVERY_MAP, EVERY_MEM] >> metis_tac[]) >>
+    >- metis_tac[compile_dispatch_make_array_open] >>
   gvs[LENGTH_EQ_NUM_compute]
   >~ [`Bop op`]
     >- (rename1 `compile_builtin_dispatch_body _ _ _ _ (Bop op) [arg_e;arg2_e] sa = (v,st)` >>
@@ -239,7 +236,8 @@ Resume compile_expr_open_general[builtin_dispatch]:
           (strip_tac >> gvs[well_typed_builtin_app_def, well_typed_binop_def]) >>
         gvs[SF ETA_ss] >>
         qspecl_then
-          [`expr_child_callback (list_size expr_size [arg_e;arg2_e]) compile_expr`,
+          [`expr_child_callback (list_size expr_size [arg_e;arg2_e] + cenv_defaults_size cenv)
+             compile_expr`,
            `cenv`, `ann`, `aty`, `op`, `arg_e`, `arg2_e`, `sa`, `v`, `st`]
           mp_tac compile_dispatch_bop_open >>
         simp[expr_size_def, SF ETA_ss] >> disch_then irule >> strip_tac >>

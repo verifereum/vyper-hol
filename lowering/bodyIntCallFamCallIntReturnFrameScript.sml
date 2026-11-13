@@ -18,7 +18,7 @@ Proof
 QED
 
 Theorem intcall_callee_src_metadata:
-  intcall_callee_src cx name ss es = (res,ee) ==>
+  intcall_callee_src cx name mut F ss es = (res,ee) ==>
   immutable_metadata_frame es ee
 Proof
   strip_tac >>
@@ -28,7 +28,7 @@ Proof
     (irule (cj 2 eval_metadata_frame_with_results) >>
      goal_assum (drule_at Any)) >>
   Cases_on `result0` >>
-  gvs[intcall_callee_src_def, try_def, ignore_bind_def, bind_def, return_def] >>
+  gvs[intcall_callee_src_F, try_def, ignore_bind_def, bind_def, return_def] >>
   rename1 `handle_function ex st = _` >>
   Cases_on `ex` >>
   gvs[handle_function_def, return_def, raise_def]
@@ -37,11 +37,11 @@ QED
 Theorem intcall_callee_exit_protected:
   allocas_above lo t /\
   (!a k. P a k ==> a + k <= lo) /\
-  intcall_callee_exit func ce cx rtv rcn rb n m t res ee (IntRet ir cs) ==>
+  intcall_callee_exit func ce cx mut F rtv rcn rb n m t res ee (IntRet ir cs) ==>
   !a k. P a k ==>
     mem_bytes_at a k cs.vs_memory = mem_bytes_at a k t.vs_memory
 Proof
-  simp[intcall_callee_exit_def, expr_exit_def] >> strip_tac >>
+  simp[intcall_callee_exit_F, expr_exit_def] >> strip_tac >>
   rpt gen_tac >> disch_tac >>
   `a + k <= lo` by metis_tac[] >>
   qpat_x_assum `!b sz. _ ==> mem_bytes_at _ _ _ = _` irule >>
@@ -55,7 +55,7 @@ QED
 Theorem intcall_callee_exit_protected_merge:
   allocas_above lo t /\
   (!a k. P a k ==> a + k <= lo) /\
-  intcall_callee_exit func ce cx rtv rcn rb n m t res ee (IntRet ir cs) /\
+  intcall_callee_exit func ce cx mut F rtv rcn rb n m t res ee (IntRet ir cs) /\
   bind_outputs outs ir.iret_values
     (adopt_return_fmp ir (merge_callee_state t cs)) = SOME u ==>
   !a k. P a k ==>
@@ -97,7 +97,7 @@ QED
 Theorem intcall_return_bound_resources:
   allocas_above lo t /\
   (!a k. P a k ==> a + k <= lo) /\
-  intcall_callee_exit func ce cx rtv rcn rb n m t res ee (IntRet ir cs) /\
+  intcall_callee_exit func ce cx mut F rtv rcn rb n m t res ee (IntRet ir cs) /\
   bind_outputs outs ir.iret_values
     (adopt_return_fmp ir (merge_callee_state t cs)) = SOME u /\
   (!x. not_fresh_at sa x ==> ~MEM x outs) ==>
@@ -120,7 +120,7 @@ QED
 Theorem intcall_return_restored_frame:
   gas_invoke_entry (ctx,func) t callee entered /\
   gas_path ctx callee entered nsteps (IntRet ir cs) /\
-  intcall_callee_exit other ce cx rtv rcn rb sa.cs_next_id hi t
+  intcall_callee_exit other ce cx mut F rtv rcn rb sa.cs_next_id hi t
     res ee (IntRet ir cs) /\
   stmt_state_rel ctx func ce cx (es with scopes := prev) t /\
   immutable_alloca_sep func ce cx (ee with scopes := prev) t /\
@@ -142,8 +142,8 @@ Theorem intcall_return_restored_frame:
     local_region ce prev t id b sz)
 Proof
   strip_tac >>
-  qpat_x_assum `intcall_callee_exit _ _ _ _ _ _ _ _ _ _ _ _` mp_tac >>
-  simp[intcall_callee_exit_def, expr_exit_def] >> strip_tac >>
+  qpat_x_assum `intcall_callee_exit _ _ _ _ _ _ _ _ _ _ _ _ _ _` mp_tac >>
+  simp[intcall_callee_exit_F, expr_exit_def] >> strip_tac >>
   irule (return_successor_frame |> Q.INST [`es` |-> `es with scopes := prev`] |> SRULE []) >>
   goal_assum (drule_at Any) >> simp[] >>
   reverse conj_tac

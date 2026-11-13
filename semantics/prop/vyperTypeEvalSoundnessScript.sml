@@ -5641,7 +5641,7 @@ Proof
   metis_tac[]
 QED
 
-Theorem default_frame_eval_result[local]:
+Theorem default_frame_eval_result:
   !cx es st prev res st'.
     finally
       (do set_scopes [FEMPTY]; eval_exprs cx es od)
@@ -5684,7 +5684,7 @@ Proof
   metis_tac[]
 QED
 
-Theorem intcall_defaults_frame_sound[local]:
+Theorem intcall_defaults_frame_sound:
   env_consistent env cx base_st /\ state_well_typed base_st /\
   env_body.type_defs = get_tenv cx /\
   env_body.bare_globals = env.bare_globals /\

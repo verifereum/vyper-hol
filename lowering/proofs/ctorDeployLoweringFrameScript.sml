@@ -1107,6 +1107,7 @@ Theorem deploy_frame_package_body_inv:
    (cf : function_mutability # bool # bool # string # (string # type) list #
          expr list # type # stmt list) cenv args rest art exts ints fb.
     supported_program tops /\
+    supported_program_deploy tops /\
     check_contract T am.layouts tx.target [(NONE,tops)] = SOME art /\
     lower_vyper_deploy_unit tops rpolicy runtime_bc = SOME dunit /\
     classify_functions tops = (exts,ints,fb,SOME cf) /\
@@ -1125,6 +1126,17 @@ Proof
   PairCases_on `cf` >>
   simp[set_constructor_package_target_def, package_constructor_def,
        update_cenv_nonreentrant_def] >> strip_tac >> gvs[] >>
+  `!vis mut rr name args dflts ret ss.
+     MEM (FunctionDecl vis mut T rr name args dflts ret ss) tops ==>
+     lookup_nonreentrant_slot am.layouts tx.target =
+       SOME global_nonreentrant_slot` by
+    (rpt strip_tac >>
+     `check_function_body am.layouts tx.target [(NONE,tops)] art NONE vis mut T
+        args dflts ret ss` by
+       (irule vyperTypeContractContextTheory.check_contract_deploy_function_body_MEM >>
+        simp[] >> metis_tac[]) >>
+     fs[vyperTypeContractTheory.check_function_body_def,
+        contextTheory.global_nonreentrant_slot_def]) >>
   simp[body_inv_def, deploy_evaluation_context_def,
        initial_evaluation_context_def, get_module_code_def, get_tenv_def,
        type_env_all_modules_def, GSYM type_env_def,

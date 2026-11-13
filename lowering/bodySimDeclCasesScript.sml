@@ -28,7 +28,7 @@
 Theory bodySimDeclCases
 Ancestors
   supportedExprTraverse allocLimitsProps
-  annassignRelayoutFrag annassignRelayoutSource
+  annassignRelayoutFrag annassignRelayoutSource assignRelayoutCaller
   valueEncodingDefs exprSimSource
   bodyExprPreFacts exprOpenMain exprReasonOperand
   stmtSimProps
@@ -288,7 +288,7 @@ Proof
     (drule_then irule declare_local_same_frame >> simp[]) >>
   `body_inv tops ctx c cx` by metis_tac[body_inv_same_frame] >>
   `stmt_exprs_ok c (AnnAssign id typ e)` by
-    metis_tac[stmt_exprs_ok_same_frame] >>
+    metis_tac[annassign_declare_exprs_ok] >>
   `expr_sim_inv c cx env es` by metis_tac[expr_sim_inv_declare_local] >>
   `expr_body_pre c cx env e es` by metis_tac[body_annassign_rhs_pre] >>
   `expr_body_pre c cx env e (es with gas_obs := gs)` by
@@ -437,6 +437,7 @@ Theorem body_annassign_widened_aggregate_call:
        occurs_abi_decode_target target tops) /\
     expr_sim_inv cenv cx env es /\ ce_locals_declared cenv env /\
     type_stmt env ret_ty (AnnAssign id typ e) = SOME env' /\
+    body_stmt_safe tops (AnnAssign id typ e) /\
     stmt_exprs_ok cenv (AnnAssign id typ e) /\
     call_evaluation_safe cx (int_calls_stmt (AnnAssign id typ e)) /\
     ~is_word_type typ /\ 0 < type_memory_bytes cenv typ /\
@@ -463,10 +464,9 @@ Proof
     (first_x_assum irule >>
      qexistsl_tac [`es`, `es`, `get_tenv cx`, `tyv`] >>
      simp[lift_option_type_def, return_def]) >>
-  `supported_expr tops e /\ supported_copy_types typ (expr_type e)` by
-    gvs[supported_stmt_def] >>
+  `supported_expr tops e` by gvs[supported_stmt_def] >>
   `expr_body_pre cenv cx env e es` by metis_tac[body_annassign_rhs_pre] >>
-  drule_all annassign_relayout_source_classify >> strip_tac >>
+  drule_all assign_relayout_source_classify >> strip_tac >>
   `cenv.ce_alloca_locals /\ supported_program tops /\
    cenv.ce_func_return_type = build_func_return_type tops /\
    get_module_code cx NONE = SOME tops /\
@@ -484,7 +484,7 @@ Proof
     (gvs[wordsTheory.dimword_def] >> decide_tac) >>
   `~(has_length_word typ /\ is_empty_value_expr e)` by
     (Cases_on `e` >>
-     gvs[is_empty_value_expr_def, oneline exprLoweringTheory.lowered_value_type_def, expr_type_def]) >>
+     gvs[is_empty_value_expr_def, exprLoweringTheory.lowered_value_type_def, expr_type_def]) >>
   irule compile_annassign_relayout_stmt_frag >>
   goal_assum (drule_at Any) >> simp[] >>
   conj_tac
@@ -499,7 +499,6 @@ Proof
       `expr_sim_inv c cx env es` by metis_tac[expr_sim_inv_declare_local] >>
       metis_tac[body_annassign_rhs_pre]) >>
   conj_tac >- fs[expr_sim_inv_def] >>
-  conj_tac >- metis_tac[] >>
   rpt gen_tac >> strip_tac >>
   irule annassign_relayout_read_layout >> goal_assum (drule_at Any) >> simp[] >>
   metis_tac[]
@@ -568,7 +567,9 @@ Proof
   `type_memory_bytes cenv (expr_type e) < 2 ** 64 /\
    type_memory_bytes cenv typ < 2 ** 64` by
     (fs[stmt_exprs_ok_def, alloc_limits_stmt_def] >>
-     drule alloc_limits_expr_type_alloc_ok >> simp[type_alloc_ok_def]) >>
+     qpat_x_assum `alloc_limits_expr cenv e`
+       (mp_tac o MATCH_MP alloc_limits_expr_type_alloc_ok) >>
+     simp[type_alloc_ok_def]) >>
   `type_memory_size x < dimword (:256) /\
    type_memory_size tyv < dimword (:256)` by
     (fs[wordsTheory.dimword_def] >> decide_tac) >>

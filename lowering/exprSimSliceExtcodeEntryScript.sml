@@ -2,7 +2,7 @@
 Theory exprSimSliceExtcodeEntry
 Ancestors
   loweringStateRelDefs
-  exprSimSliceExtcodeContext exprSimSliceMemory exprSimSliceExtcode
+  exprSimSliceMemory exprSimSliceData exprSimSliceBounds
   exprSimHash loweringHalt exprSimProps exprSimPrecompiles loweringPosts
   compileEnv exprLoweringProps fragExec finite_map words pair list venomState
 

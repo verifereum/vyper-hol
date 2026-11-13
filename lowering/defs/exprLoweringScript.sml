@@ -2816,6 +2816,60 @@ Definition compile_create_call_def:
     | _ => do emit_inst INVALID [] []; return (Lit 0w) od
 End
 
+(* The defaults of the keyword parameters an internal call to name omits
+   when it supplies nargs arguments: the last ones of the callee's defaults.
+   Mirrors Python: func_t.keyword_args[num_provided_kwargs:] in expr.py
+   _lower_internal_call *)
+Definition omitted_defaults_def:
+  omitted_defaults cenv name nargs =
+    let dflts = (case ALOOKUP cenv.ce_func_defaults name of
+                   SOME ds => ds
+                 | NONE => []) in
+    DROP (LENGTH dflts - (LENGTH (cenv.ce_func_param_types name) - nargs)) dflts
+End
+
+(* The env an internal call compiles its callee's omitted defaults in: the
+   caller's, without the callee's own defaults, so a default that calls its
+   own function cannot expand forever (the source semantics rejects that
+   recursion). *)
+Definition cenv_without_defaults_def:
+  cenv_without_defaults cenv name =
+    cenv with ce_func_defaults := FILTER (λ(n,_). n ≠ name) cenv.ce_func_defaults
+End
+
+Theorem defaults_size_without_le[local]:
+  ∀l. list_size (list_size expr_size o SND) (FILTER (λ(n,_). n ≠ name) l) ≤
+      list_size (list_size expr_size o SND) l
+Proof
+  Induct >- simp[] >> Cases >> rw[list_size_def]
+QED
+
+Theorem defaults_size_without_lookup[local]:
+  ∀l ds d. ALOOKUP l name = SOME ds ∧ MEM d ds ⇒
+    expr_size d +
+    list_size (list_size expr_size o SND) (FILTER (λ(n,_). n ≠ name) l) <
+    list_size (list_size expr_size o SND) l
+Proof
+  Induct >- simp[] >> Cases >> rpt strip_tac >>
+  Cases_on `q = name` >> gvs[list_size_def]
+  >- (drule expr_list_member_bound >>
+      qspec_then `l` assume_tac defaults_size_without_le >> simp[])
+  >> first_x_assum drule_all >> simp[]
+QED
+
+(* An omitted default is compiled within the expression compiler's recursion
+   bound: it is smaller than the defaults the env loses. *)
+Theorem omitted_default_bound:
+  MEM d (omitted_defaults cenv name n) ⇒
+  expr_size d + cenv_defaults_size (cenv_without_defaults cenv name) <
+  cenv_defaults_size cenv
+Proof
+  rw[omitted_defaults_def, cenv_without_defaults_def, cenv_defaults_size_def] >>
+  Cases_on `ALOOKUP cenv.ce_func_defaults name` >> gvs[] >>
+  drule rich_listTheory.MEM_DROP_IMP >> strip_tac >>
+  irule defaults_size_without_lookup >> metis_tac[]
+QED
+
 (* Only literal topic lists are lowered; constant lists are folded by the frontend. *)
 Definition raw_log_topic_exprs_def:
   raw_log_topic_exprs (Builtin ann (MakeArray elem_ty bnd) es) = es /\
@@ -2832,10 +2886,13 @@ Definition compile_call_def:
        return type even where the call is used at a wider type.
        Mirrors Python: _make_ptr_value(return_buf, MEMORY, func_t.return_type) *)
     let call_ty = cenv.ce_func_return_type name in
-    (* Each memory argument is staged in a buffer of its declared parameter
-       type, which may be wider than the argument's own type.
+    let dflts = omitted_defaults cenv name (LENGTH args) in
+    (* Each memory argument, supplied or default, is staged in a buffer of
+       its declared parameter type, which may be wider than the argument's
+       own type.
        Mirrors Python: new_temporary_value(arg_t.typ) + store_vyper_value *)
-    let arg_types = TAKE (LENGTH args) (cenv.ce_func_param_types name) in
+    let arg_types =
+      TAKE (LENGTH args + LENGTH dflts) (cenv.ce_func_param_types name) in
     (* Python allocates the return buffer before lowering the arguments. *)
     let (return_buf, st2) =
       (if returns_count > 0 then
@@ -2847,8 +2904,16 @@ Definition compile_call_def:
          let (rbuf, st_b) = compile_alloc_buffer return_buf_size st in
          (SOME rbuf, st_b)
        else (NONE, st)) in
-    let (invoke_args, st3) =
+    (* The omitted defaults are lowered and staged after the supplied
+       arguments, in the same loop, without the callee's own defaults.
+       Mirrors Python: all_arg_nodes = list(node.args) + default_nodes *)
+    let (supplied_ops, st3a) =
       compile_stage_intcall_args cfn cenv args pass_via_stack arg_types st2 in
+    let (dflt_ops, st3) =
+      compile_stage_intcall_args cfn (cenv_without_defaults cenv name) dflts
+        (DROP (LENGTH args) pass_via_stack) (DROP (LENGTH args) arg_types)
+        st3a in
+    let invoke_args = supplied_ops ++ dflt_ops in
     let buf_prefix = (case return_buf of
         SOME rbuf => if returns_count = 0 then [rbuf.buf_operand] else []
       | NONE => []) in
@@ -3646,25 +3711,31 @@ End
 Definition compile_expr_raw_def:
   compile_expr cenv ty e st =
     compile_expr_body
-      (expr_child_callback (expr_size e) compile_expr)
-      (builtin_child_callback (expr_size e) compile_builtin_dispatch)
-      (type_child_callback (expr_size e) compile_type_builtin_dispatch)
+      (expr_child_callback (expr_size e + cenv_defaults_size cenv) compile_expr)
+      (builtin_child_callback (expr_size e + cenv_defaults_size cenv)
+         compile_builtin_dispatch)
+      (type_child_callback (expr_size e + cenv_defaults_size cenv)
+         compile_type_builtin_dispatch)
       cenv ty e st ∧
   compile_builtin_dispatch cenv ret_ty ty bi args st =
     compile_builtin_dispatch_body
-      (expr_child_callback (list_size expr_size args) compile_expr)
+      (expr_child_callback (list_size expr_size args + cenv_defaults_size cenv)
+         compile_expr)
       cenv ret_ty ty bi args st ∧
   compile_type_builtin_dispatch cenv vv_ty ty tb ret_ty args st =
     (if F then compile_builtin_dispatch cenv vv_ty ty (Env TimeStamp) [] st else
      compile_type_builtin_dispatch_body
-      (expr_child_callback (list_size expr_size args) compile_expr)
+      (expr_child_callback (list_size expr_size args + cenv_defaults_size cenv)
+         compile_expr)
       cenv vv_ty ty tb ret_ty args st)
 Termination
   WF_REL_TAC `measure (λx.
     case x of
-      INL (cenv,ty,e,st) => 2 * expr_size e + 2
-    | INR (INL (cenv,ret_ty,ty,bi,args,st)) => 2 * list_size expr_size args + 1
-    | INR (INR (cenv,vv_ty,ty,tb,ret_ty,args,st)) => 2 * list_size expr_size args + 1)` >>
+      INL (cenv,ty,e,st) => 2 * (expr_size e + cenv_defaults_size cenv) + 2
+    | INR (INL (cenv,ret_ty,ty,bi,args,st)) =>
+        2 * (list_size expr_size args + cenv_defaults_size cenv) + 1
+    | INR (INR (cenv,vv_ty,ty,tb,ret_ty,args,st)) =>
+        2 * (list_size expr_size args + cenv_defaults_size cenv) + 1)` >>
   simp[]
 End
 

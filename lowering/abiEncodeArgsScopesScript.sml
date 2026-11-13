@@ -99,6 +99,8 @@ Proof
       gvs[Once evaluate_def, bind_def, AllCaseEqs(), return_def] >> metis_tac[])
   >- (rpt strip_tac >>
       gvs[Once evaluate_def, bind_def, AllCaseEqs(), return_def, raise_def] >>
+      Cases_on `subscript_reads_base cx e e'` >>
+      gvs[bind_def, return_def, AllCaseEqs()] >>
       imp_res_tac read_result_state >> imp_res_tac select_result_state >> gvs[] >> metis_tac[])
   >- (rpt strip_tac >>
       gvs[Once evaluate_def, bind_def, AllCaseEqs(), return_def, raise_def] >>
@@ -159,7 +161,7 @@ Resume eval_no_mutation_scopes[IntCall]:
   rule_assum_tac (SRULE [type_check_def, assert_def, lift_option_type_def,
                         option_CASE_rator, return_def, raise_def, AllCaseEqs()]) >>
   gvs[] >> BasicProvers.TOP_CASE_TAC >>
-  rename1 `eval_expr_results cx es sa = (qr,sb)` >>
+  rename1 `eval_exprs cx es sa = (qr,sb)` >>
   `sb.scopes = sa.scopes` by metis_tac[] >>
   reverse (Cases_on `qr`)
   >- (rw[] >> gvs[]) >>

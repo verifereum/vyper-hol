@@ -52,6 +52,8 @@ Proof
   gvs[package_constructor_def, set_constructor_package_target_def,
       update_cenv_nonreentrant_def, build_compile_env_non_internal_no_return_pc] >>
   simp[cenv_static_ok_def] >>
+  imp_res_tac supported_program_runtime_bodies_shape_ok >>
+  imp_res_tac runtime_bodies_shape_ok_func_defaults >>
   metis_tac[build_compile_env_static, cenv_static_ok_def]
 QED
 
@@ -65,17 +67,19 @@ Theorem package_internal_fn_ctor_shape_ok:
 Proof
   rpt gen_tac >> PairCases_on `src` >> strip_tac >>
   drule (iffLR MEM_classify_internal) >> strip_tac >>
-  `Internal <> Deploy` by simp[] >>
   `module_consts_env tops [] = []` by
     metis_tac[supported_program_def,
       supportedDeclsTheory.supported_declaration_headers_def,
       supportedDeclsTheory.supported_headers_module_consts_env] >>
   gvs[constSubstTheory.subst_consts_fn_empty] >>
+  `Internal <> Deploy` by simp[] >>
   drule_all supported_program_function >> strip_tac >>
   drule supported_function_body_shape >> strip_tac >>
   simp[package_internal_fn_def, set_internal_package_target_def,
        update_cenv_nonreentrant_def, internal_fn_shape_ok_def,
        cenv_static_ok_def] >>
+  imp_res_tac supported_program_runtime_bodies_shape_ok >>
+  imp_res_tac runtime_bodies_shape_ok_func_defaults >>
   metis_tac[build_compile_env_static, cenv_static_ok_def]
 QED
 

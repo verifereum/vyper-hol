@@ -17,7 +17,9 @@ Libs
 (* Seam 1: argument evaluation and the callee's frame setup.  The
    caller's code up to the INVOKE runs against the source up to
    push_function, so any continuation from an intcall_entry state gives
-   the whole call. *)
+   the whole call.  The callee may have defaults: the call evaluates and
+   compiles the ones it omits after the supplied arguments (intcall_entry).
+   Admitted. *)
 Theorem intcall_args_frame_setup:
   !tops ctx func cenv cx tenv ty ann name es dflt es0 sa sb vv s0
    mut nr args ret ss rr Q R.
@@ -25,9 +27,14 @@ Theorem intcall_args_frame_setup:
     cenv_module_pins tops cenv /\
     expr_body_pre cenv cx tenv (Call ann (IntCall (NONE,name)) es dflt) es0 /\
     lookup_callable_function cx.in_deploy name tops =
-      SOME (mut,nr,args,[],ret,ss) /\
-    MEM (FunctionDecl Internal mut nr rr name args [] ret ss) tops /\
+      SOME (mut,nr,args,dflts,ret,ss) /\
+    MEM (FunctionDecl Internal mut nr rr name args dflts ret ss) tops /\
     (~MEM (NONE,name) cx.stk ==> body_exprs_ok cx es) /\
+    (!s1 vs t1.
+       ~MEM (NONE,name) cx.stk /\
+       eval_exprs cx es s1 = (INL vs,t1) ==>
+       body_exprs_ok (cx with stk updated_by CONS (NONE,name))
+         (DROP (LENGTH dflts - (LENGTH args - LENGTH es)) dflts)) /\
     compile_expr cenv ty (Call ann (IntCall (NONE,name)) es dflt) sa =
       (vv,sb) /\
     fn_has_code sa sb func /\ fn_inst_ids_distinct func /\

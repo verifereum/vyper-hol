@@ -5,6 +5,7 @@ Ancestors
   bodyIntCallArgOwnedFrame bodyIntCallArgLocalFrame bodyIntCallStorageFrame
   exprSimSubscriptArrayFrame exprSimProps loweringPosts exprLoweringProps
   compileEnv loweringStateRelDefs context bodyMemAssignTopCopySem
+  assignBasePtrStorageSemantic
 
 Theorem intcall_vv_provenance_outcomes[simp]:
   intcall_vv_provenance ce cx ty sa sb
@@ -189,7 +190,7 @@ Theorem intcall_held_holds_frame:
 Proof
   strip_tac >> irule intcall_held_holds_storage_frame >>
   goal_assum (drule_at Any) >>
-  metis_tac[topcopy_initial_agree]
+  metis_tac[assignBasePtrStorageSemanticTheory.assign_base_store_initial_agree]
 QED
 
 Theorem intcall_held_source_outcomes:
@@ -253,7 +254,7 @@ Theorem intcall_held_endpoint:
   vv_storage_live cx vv es t
 Proof
   strip_tac >> irule intcall_held_storage_endpoint >>
-  goal_assum (drule_at Any) >> metis_tac[topcopy_initial_agree]
+  goal_assum (drule_at Any) >> metis_tac[assignBasePtrStorageSemanticTheory.assign_base_store_initial_agree]
 QED
 
 Theorem intcall_held_endpoint_outcomes:
@@ -304,7 +305,7 @@ Proof
   `!tr. storage_agree (storage_dead cx tr (get_storage cx es tr))
       (get_storage cx es tr)
       (if tr then contract_transient t else contract_storage t)` by
-    (gen_tac >> drule topcopy_initial_agree >>
+    (gen_tac >> drule assignBasePtrStorageSemanticTheory.assign_base_store_initial_agree >>
      disch_then (qspec_then `tr` mp_tac) >>
      qpat_x_assum `ee = _` SUBST1_TAC >>
      Cases_on `tr` >> simp[vyperStorageBackendTheory.get_storage_def]) >>

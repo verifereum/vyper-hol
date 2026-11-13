@@ -25,7 +25,7 @@ QED
 
 Theorem body_internal_decl_return_type:
   body_inv tops ctx cenv cx /\
-  MEM (FunctionDecl Internal mut F rr name args [] ret ss) tops ==>
+  MEM (FunctionDecl Internal mut F rr name args dflts ret ss) tops ==>
   cenv.ce_func_return_type (nsid_to_string (NONE,name)) = ret
 Proof
   strip_tac >>
@@ -34,7 +34,7 @@ Proof
      simp[supported_declaration_names_def]) >>
   `build_func_return_type tops name = ret` by
     (irule build_func_return_type_distinct >> simp[] >>
-     qexistsl_tac [`args`,`[]`,`mut`,`F`,`rr`,`ss`,`Internal`] >> simp[]) >>
+     qexistsl_tac [`args`,`dflts`,`mut`,`F`,`rr`,`ss`,`Internal`] >> simp[]) >>
   fs[body_inv_def, nsid_to_string_def]
 QED
 
