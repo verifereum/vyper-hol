@@ -20499,6 +20499,136 @@ Proof
   gvs[] >> metis_tac[]
 QED
 
+Theorem mm_local_run_block_pair[local]:
+  ~(?err. run_block fuel ctx bb s = Error err) /\
+  (!sp. eval_phis s bb.bb_instructions = OK sp ==>
+    ?tp. eval_phis t bb'.bb_instructions = OK tp /\
+      lift_result R Rt Ra
+        (exec_block fuel ctx bb
+          (sp with vs_inst_idx := phi_prefix_length bb.bb_instructions))
+        (exec_block fuel ctx bb'
+          (tp with vs_inst_idx := phi_prefix_length bb'.bb_instructions)) /\
+      EVERY P (trace_block [] d fuel ctx fn' bb'
+        (tp with vs_inst_idx := phi_prefix_length bb'.bb_instructions))) ==>
+  lift_result R Rt Ra (run_block fuel ctx bb s) (run_block fuel ctx bb' t) /\
+  EVERY P (case eval_phis t bb'.bb_instructions of
+    OK tp => trace_block [] d fuel ctx fn' bb'
+      (tp with vs_inst_idx := phi_prefix_length bb'.bb_instructions)
+  | _ => [])
+Proof
+  strip_tac >>
+  qspecl_then [`s`,`bb.bb_instructions`] strip_assume_tac
+    venomExecSemanticsTheory.eval_phis_ok_or_error_defs
+  >- (qpat_x_assum `!sp. _` drule >> strip_tac >>
+      simp[venomExecSemanticsTheory.run_block_def]) >>
+  gvs[venomExecSemanticsTheory.run_block_def]
+QED
+
+Theorem mm_local_trace_blocks_run_block[local]:
+  lookup_block s.vs_current_bb fn.fn_blocks = SOME bb ==>
+  trace_blocks [] d (SUC fuel) ctx fn s =
+    (case eval_phis s bb.bb_instructions of
+       OK sp => trace_block [] (SUC d) fuel ctx fn bb
+         (sp with vs_inst_idx := phi_prefix_length bb.bb_instructions)
+     | _ => []) ++
+    (case run_block fuel ctx bb s of
+       OK u => if u.vs_halted then []
+               else trace_blocks [] (SUC d) fuel ctx fn u
+     | _ => [])
+Proof
+  strip_tac >>
+  qspecl_then [`s`, `bb.bb_instructions`] strip_assume_tac
+    venomExecSemanticsTheory.eval_phis_ok_or_error_defs >>
+  simp[Once trace_defs, venomExecSemanticsTheory.run_block_def]
+QED
+
+Theorem mm_local_blocks_pair[local]:
+  (!s t. R s t ==> s.vs_halted = t.vs_halted /\ Rt s t) /\
+  (!fuel d s t bb.
+    R s t /\ lookup_block s.vs_current_bb fn.fn_blocks = SOME bb /\
+    EVERY Q (trace_blocks [] d (SUC fuel) ctx fn s) /\
+    ~(?err. run_block fuel ctx bb s = Error err) ==>
+    ?bb'. lookup_block t.vs_current_bb fn'.fn_blocks = SOME bb' /\
+      lift_result R Rt Ra (run_block fuel ctx bb s) (run_block fuel ctx bb' t) /\
+      EVERY P (case eval_phis t bb'.bb_instructions of
+        OK tp => trace_block [] (SUC d) fuel ctx fn' bb'
+          (tp with vs_inst_idx := phi_prefix_length bb'.bb_instructions)
+      | _ => [])) ==>
+  !fuel d s t.
+    R s t /\ EVERY Q (trace_blocks [] d fuel ctx fn s) /\
+    ~(?err. run_blocks fuel ctx fn s = Error err) ==>
+    lift_result R Rt Ra (run_blocks fuel ctx fn s) (run_blocks fuel ctx fn' t) /\
+    EVERY P (trace_blocks [] d fuel ctx fn' t)
+Proof
+  strip_tac >> Induct_on `fuel`
+  >- simp[venomExecSemanticsTheory.run_blocks_def] >>
+  rpt gen_tac >> strip_tac >>
+  Cases_on `lookup_block s.vs_current_bb fn.fn_blocks`
+  >- gvs[venomExecSemanticsTheory.run_blocks_unfold] >>
+  rename1 `lookup_block s.vs_current_bb fn.fn_blocks = SOME bb` >>
+  `~(?err. run_block fuel ctx bb s = Error err)` by
+    (Cases_on `run_block fuel ctx bb s` >>
+     gvs[venomExecSemanticsTheory.run_blocks_unfold]) >>
+  qpat_x_assum `!fuel d s t bb. _`
+    (qspecl_then [`fuel`,`d`,`s`,`t`,`bb`] mp_tac) >>
+  (impl_tac >- asm_rewrite_tac[]) >> strip_tac >>
+  `trace_blocks [] d (SUC fuel) ctx fn s =
+    (case eval_phis s bb.bb_instructions of
+       OK sp => trace_block [] (SUC d) fuel ctx fn bb
+         (sp with vs_inst_idx := phi_prefix_length bb.bb_instructions)
+     | _ => []) ++
+    (case run_block fuel ctx bb s of
+       OK u => if u.vs_halted then []
+               else trace_blocks [] (SUC d) fuel ctx fn u
+     | _ => [])` by
+    (irule mm_local_trace_blocks_run_block >> simp[]) >>
+  `trace_blocks [] d (SUC fuel) ctx fn' t =
+    (case eval_phis t bb'.bb_instructions of
+       OK tp => trace_block [] (SUC d) fuel ctx fn' bb'
+         (tp with vs_inst_idx := phi_prefix_length bb'.bb_instructions)
+     | _ => []) ++
+    (case run_block fuel ctx bb' t of
+       OK u => if u.vs_halted then []
+               else trace_blocks [] (SUC d) fuel ctx fn' u
+     | _ => [])` by
+    (irule mm_local_trace_blocks_run_block >> simp[]) >>
+  Cases_on `run_block fuel ctx bb s` >>
+  Cases_on `run_block fuel ctx bb' t` >>
+  gvs[lift_result_def, EVERY_APPEND,
+    venomExecSemanticsTheory.run_blocks_unfold] >>
+  qpat_x_assum `!s t. R s t ==> _`
+    (qspecl_then [`v`,`v'`] mp_tac) >>
+  asm_rewrite_tac[] >> strip_tac >>
+  Cases_on `v.vs_halted` >> gvs[lift_result_def] >>
+  qpat_x_assum `!d s t. _` (qspecl_then [`SUC d`,`v`,`v'`] mp_tac) >>
+  simp[]
+QED
+
+Theorem mm_local_function_pair[local]:
+  fn_entry_label fn' = fn_entry_label fn /\
+  (!fuel d s t. R s t /\
+    EVERY Q (trace_blocks [] d fuel ctx fn s) /\
+    ~(?err. run_blocks fuel ctx fn s = Error err) ==>
+    lift_result R Rt Ra (run_blocks fuel ctx fn s) (run_blocks fuel ctx fn' t) /\
+    EVERY P (trace_blocks [] d fuel ctx fn' t)) /\
+  (!s t lbl. R s t ==> R
+    (s with <|vs_current_bb := lbl; vs_inst_idx := 0|>)
+    (t with <|vs_current_bb := lbl; vs_inst_idx := 0|>)) ==>
+  !fuel s t. R s t /\ EVERY Q (trace_function fuel ctx fn s) /\
+    ~(?err. run_function fuel ctx fn s = Error err) ==>
+    lift_result R Rt Ra (run_function fuel ctx fn s) (run_function fuel ctx fn' t) /\
+    EVERY P (trace_function fuel ctx fn' t)
+Proof
+  strip_tac >> rpt gen_tac >> strip_tac >>
+  Cases_on `fn_entry_label fn` >>
+  gvs[venomExecSemanticsTheory.run_function_def, trace_function_def] >>
+  qpat_x_assum `!fuel d s t. _`
+    (qspecl_then [`fuel`,`0`,
+      `s with <|vs_current_bb := x; vs_inst_idx := 0|>`,
+      `t with <|vs_current_bb := x; vs_inst_idx := 0|>`] mp_tac) >>
+  impl_tac >- metis_tac[] >> simp[]
+QED
+
 Theorem mm_local_stage_correct:
   !fn0 supply index k bb sk fn bb' sk' fn'.
   fn_inst_wf fn0 /\ wf_function fn0 /\ wf_ssa fn0 /\ all_reachable fn0 /\
