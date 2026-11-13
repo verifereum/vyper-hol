@@ -1,5 +1,5 @@
 Theory concretizeLayoutRequestSimulation
-Ancestors concretizeLayoutRequestBase concretizeLayoutRequestControl
+Ancestors concretizeLayoutCutSafe concretizeLayoutRequestBase concretizeLayoutRequestControl
   concretizeLayoutCorridorRequests concretizeLayoutStageSimulation
   passSharedFrame frameSelectedSimulation concretizeLayoutRequestRelations
   concretizeLayoutCanonicalDriver list
@@ -34,7 +34,10 @@ Theorem layout_request_simulation_contract:
     (layout_request_OB D lo vs0 C C' q0 es qs ass qend)
     (layout_request_OutR D lo vs0 C C' q0 es qs ass qend)
 Proof
-  strip_tac >> rewrite_tac[selected_simulation_contract_def] >>
+  strip_tac >>
+  `layout_cut_safe D lo (SUC (LENGTH vs0.vs_gas_readings)) vs0 C qend` by
+    simp[layout_cut_safe_whole_run] >>
+  rewrite_tac[selected_simulation_contract_def] >>
   conj_tac
   >- (irule layout_request_base_certificate >>
       metis_tac[step_inst_base_abort_requests]) >>

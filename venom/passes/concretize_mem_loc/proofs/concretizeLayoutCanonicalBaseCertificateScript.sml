@@ -122,7 +122,7 @@ Proof
       CALLDATACOPY; CODECOPY; EXTCODECOPY; RETURNDATACOPY; DLOADBYTES; SHA3; LOG]`
   >- (drule_all layout_canonical_memory_success >> simp[]) >>
   Cases_on `MEM i.inst_opcode [CALL; STATICCALL; DELEGATECALL; CREATE; CREATE2]`
-  >- (drule_all layout_canonical_external_success >> simp[]) >>
+  >- (drule_all layout_canonical_external_success_requests >> metis_tac[]) >>
   drule_all layout_base_opcode_cases >> disch_tac >>
   drule_all layout_canonical_ordinary_nonterm_success >> simp[]
 QED
