@@ -15851,8 +15851,9 @@ Proof
 QED
 
 Theorem mm_local_cut_init[local]:
-  h = phi_prefix_length is ==>
-  mm_local_cut is gs H h excluded pc (H h with vs_inst_idx := pc)
+  h = phi_prefix_length is /\
+  state_equiv excluded (H h with vs_inst_idx := pc) t ==>
+  mm_local_cut is gs H h excluded pc t
 Proof
   strip_tac >>
   `mm_local_pending_indices is gs h = []` by
@@ -15866,7 +15867,9 @@ Proof
   `mm_local_epoch_start is gs h <= h` by
     (irule mm_local_epoch_start_bound >> qexistsl [`gs`,`is`] >> simp[]) >>
   `mm_local_epoch_start is gs h = h` by decide_tac >>
-  simp[mm_local_cut_def, mm_local_nonmemory_frame_def,
+  gvs[state_equiv_frame, stateFrameTheory.state_frame_def,
+    venomStateTheory.venom_state_component_equality,
+    mm_local_cut_def, mm_local_nonmemory_frame_def,
     stateFrameTheory.state_frame_def, mm_local_pending_empty,
     rich_listTheory.COUNT_LIST_def, venomStateTheory.lookup_var_def]
 QED
@@ -16318,7 +16321,7 @@ Proof
 QED
 
 Theorem mm_local_mem2mem_prefix_execution[local]:
-  !n fn0 supply index k bb sk is gs ns rs deleted excluded h H fuel ctx eom pre esh out esn.
+  !n fn0 supply index k bb sk is gs ns rs deleted excluded h H fuel ctx eom pre esh out esn t0.
   wf_ssa fn0 /\ fn_inst_wf fn0 /\ wf_function fn0 /\
   ir_supply_covers_fn supply fn0 /\ index < LENGTH fn0.fn_blocks /\
   k <= 4 /\ mm_local_prefix fn0 supply index k = (bb,sk) /\
@@ -16339,10 +16342,11 @@ Theorem mm_local_mem2mem_prefix_execution[local]:
     static_mem_ok eom ctx (fn0 with fn_blocks := LUPDATE bb index fn0.fn_blocks)
       (EL q is) (H q)) /\
   eom < dimword (:256) /\
+  state_equiv excluded (H h with vs_inst_idx := LENGTH pre) t0 /\
   mm_flat_map_supply (apply_groups_inst_supply Mem2Mem ns rs) sk (TAKE h is) = (pre,esh) /\
   mm_flat_map_supply (apply_groups_inst_supply Mem2Mem ns rs) esh
     (TAKE (n-h) (DROP h is)) = (out,esn) ==>
-  ?t. mm_local_exec_prefix fuel ctx out (H h with vs_inst_idx := LENGTH pre) t /\
+  ?t. mm_local_exec_prefix fuel ctx out t0 t /\
     mm_local_cut is gs H n excluded (LENGTH pre + LENGTH out) t /\
     mm_flat_map_supply (apply_groups_inst_supply Mem2Mem ns rs) sk (TAKE n is) =
       (pre ++ out,esn) /\
@@ -16350,12 +16354,14 @@ Theorem mm_local_mem2mem_prefix_execution[local]:
     t.vs_inst_idx = LENGTH pre + LENGTH out
 Proof
   completeInduct_on `n` >> rpt strip_tac >>
+  `t0.vs_inst_idx = LENGTH pre` by fs[state_equiv_def] >>
   Cases_on `n = h`
-  >- (qpat_x_assum `n = h` SUBST_ALL_TAC >>
+  >- (qpat_x_assum `!m. m < _ ==> _` kall_tac >>
+      qpat_x_assum `n = h` SUBST_ALL_TAC >>
       fs[mm_flat_map_supply_def] >>
-      qexists `H h with vs_inst_idx := LENGTH pre` >>
+      qexists `t0` >>
       simp[mm_local_exec_prefix_def, mm_local_extends_refl] >>
-      conj_tac >- (irule mm_local_cut_init >> simp[]) >>
+      conj_tac >- (irule mm_local_cut_init >> gvs[]) >>
       irule (cj 1 mm_local_list_resources) >>
       qexistsl [`apply_groups_inst_supply Mem2Mem ns rs`,`TAKE h is`] >>
       metis_tac[mm_local_mode_resources]) >>
@@ -16683,6 +16689,8 @@ Theorem mm_local_mem2mem_terminal_prefix_boundary[local]:
       dft_exec_suffix fuel ctx [EL n is] t
 Proof
   strip_tac >> `n < LENGTH is /\ n <= LENGTH is` by decide_tac >>
+  `state_equiv excluded (H h with vs_inst_idx := LENGTH pre)
+    (H h with vs_inst_idx := LENGTH pre)` by simp[stateEquivProofsTheory.state_equiv_refl] >>
   drule_all mm_local_mem2mem_prefix_execution >> strip_tac >>
   drule_all mm_local_mem2mem_terminal_cut >> strip_tac >>
   `DROP n is = [EL n is]` by
@@ -16974,6 +16982,7 @@ Theorem mm_local_mem2mem_stopping_cut[local]:
   excluded = {v | ~MEM v sk.irs_used_vars \/ v IN deleted} /\
   h = phi_prefix_length is /\ h <= LENGTH is /\ s.vs_inst_idx = h /\
   s.vs_current_bb = bb.bb_label /\
+  state_equiv excluded (s with vs_inst_idx := LENGTH pre) t0 /\
   fn = fn0 with fn_blocks := LUPDATE bb index fn0.fn_blocks /\
   eom < dimword (:256) /\
   EVERY (\((p,d',id),f,i,t). p = [] ==> static_mem_ok eom ctx f i t)
@@ -16989,7 +16998,7 @@ Theorem mm_local_mem2mem_stopping_cut[local]:
     exec_block fuel ctx bb s = dft_exec_suffix fuel ctx [EL n is] (H n) /\
     mm_flat_map_supply (apply_groups_inst_supply Mem2Mem ns rs) esh
       (TAKE (n-h) (DROP h is)) = (out,esn) /\
-    mm_local_exec_prefix fuel ctx out (s with vs_inst_idx := LENGTH pre) t /\
+    mm_local_exec_prefix fuel ctx out t0 t /\
     mm_local_cut is gs H n excluded (LENGTH pre + LENGTH out) t /\
     mm_flat_map_supply (apply_groups_inst_supply Mem2Mem ns rs) sk (TAKE n is) =
       (pre ++ out,esn) /\ t.vs_inst_idx = LENGTH pre + LENGTH out
@@ -17023,6 +17032,7 @@ Proof
     static_mem_ok eom ctx (fn0 with fn_blocks := LUPDATE bb index fn0.fn_blocks)
       (EL q is) (H q)` by
     (rpt strip_tac >> gvs[] >> metis_tac[arithmeticTheory.LESS_IMP_LESS_OR_EQ]) >>
+  `state_equiv excluded (H h with vs_inst_idx := LENGTH pre) t0` by metis_tac[] >>
   drule_all mm_local_mem2mem_prefix_execution >> strip_tac >>
   qexistsl [`n`,`H`,`out`,`esn`,`t`] >> simp[] >>
   metis_tac[arithmeticTheory.LESS_IMP_LESS_OR_EQ]
@@ -17139,6 +17149,7 @@ Theorem mm_local_mem2mem_post_phi_result[local]:
   excluded = {v | ~MEM v sk.irs_used_vars \/ v IN deleted} /\
   transform_block_mode_supply (dfg_build_function fn0) Mem2Mem sk bb = (bb',sk') /\
   s.vs_inst_idx = phi_prefix_length is /\ s.vs_current_bb = bb.bb_label /\
+  state_equiv excluded s t0 /\
   fn = fn0 with fn_blocks := LUPDATE bb index fn0.fn_blocks /\
   eom < dimword (:256) /\
   EVERY (\((p,d',id),f,i,t). p = [] ==> static_mem_ok eom ctx f i t)
@@ -17147,9 +17158,10 @@ Theorem mm_local_mem2mem_post_phi_result[local]:
   lift_result
     (\u v. state_equiv excluded (u with vs_inst_idx := 0) (v with vs_inst_idx := 0))
     (execution_equiv excluded) revert_equiv
-    (exec_block fuel ctx bb s) (exec_block fuel ctx bb' s)
+    (exec_block fuel ctx bb s) (exec_block fuel ctx bb' t0)
 Proof
   strip_tac >>
+  `t0.vs_inst_idx = phi_prefix_length is` by gvs[state_equiv_def] >>
   `ALL_DISTINCT (MAP (\i. i.inst_id) bb.bb_instructions)` by
     metis_tac[mm_local_prefix_wf_id_distinct] >>
   `phi_prefix_length is <= LENGTH is` by
@@ -17171,7 +17183,7 @@ Proof
     exec_block fuel ctx bb s = dft_exec_suffix fuel ctx [EL n is] (H n) /\
     mm_flat_map_supply (apply_groups_inst_supply Mem2Mem ns rs) sk
       (TAKE (n-phi_prefix_length is) (DROP (phi_prefix_length is) is)) = (out,esn) /\
-    mm_local_exec_prefix fuel ctx out s t /\
+    mm_local_exec_prefix fuel ctx out t0 t /\
     mm_local_cut is gs H n excluded (phi_prefix_length is + LENGTH out) t /\
     mm_flat_map_supply (apply_groups_inst_supply Mem2Mem ns rs) sk (TAKE n is) =
       (TAKE (phi_prefix_length is) is ++ out,esn) /\
@@ -17234,7 +17246,7 @@ Proof
     (qpat_x_assum `transform_block_mode_supply _ _ _ _ = _` mp_tac >>
      simp[transform_block_mode_supply_def] >>
      gvs[] >> strip_tac >> gvs[]) >>
-  `exec_block fuel ctx bb' s = dft_exec_suffix fuel ctx (out ++ EL n is :: tail) s` by
+  `exec_block fuel ctx bb' t0 = dft_exec_suffix fuel ctx (out ++ EL n is :: tail) t0` by
     (irule dftIndexedExecTheory.dft_exec_suffix_boundary >>
      gvs[] >> simp[listTheory.DROP_APPEND, LENGTH_TAKE,
        venomExecProofsTheory.phi_prefix_length_le, DROP_TAKE] >>
@@ -17314,8 +17326,9 @@ Proof
         (irule mm_local_mem2mem_post_phi_result >>
          (conj_tac >- metis_tac[]) >>
          (conj_tac >- simp[]) >>
+         reverse conj_tac >- simp[stateEquivProofsTheory.state_equiv_refl] >>
          qexistsl [`SUC d`,`deleted`,`eom`,`fn`,`fn0`,`gs`,`index`,`is`,`k`,`ns`,`rs`,`sk`,`sk'`,`supply`] >>
-         gvs[]) >>
+         gvs[stateEquivProofsTheory.state_equiv_refl]) >>
       gvs[venomExecSemanticsTheory.run_block_def]) >>
   gvs[venomExecSemanticsTheory.run_block_def]
 QED
