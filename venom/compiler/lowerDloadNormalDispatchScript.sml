@@ -2,7 +2,7 @@ Theory lowerDloadNormalDispatch
 Ancestors
   lowerDloadNormalExisting lowerDloadResidualNonmemory
   lowerDloadResidualImmutable lowerDloadResidualCopy lowerDloadResidualRead
-  lowerDloadNormalOffset
+  lowerDloadNormalOffset lowerDloadNormalDalloca
   venomWf venomInst list
 
 (* Shape-only boundary for the literal parameter families.  In particular,
@@ -55,9 +55,9 @@ Theorem ld_normal_opcode_partition:
      TIMESTAMP; NUMBER; PREVRANDAO; CHAINID; SELFBALANCE; BALANCE;
      BLOCKHASH; BASEFEE; CODESIZE; CODECOPY; EXTCODESIZE; EXTCODEHASH;
      EXTCODECOPY; RETURNDATASIZE; RETURNDATACOPY; BLOBHASH; BLOBBASEFEE;
-     SHA3; LOG; ASSERT; ASSERT_UNREACHABLE; OFFSET] <=>
+     SHA3; LOG; ASSERT; ASSERT_UNREACHABLE; OFFSET; DALLOCA] <=>
   MEM opc [MEMTOP; JMP; JNZ; DJMP; RET; RETURN; REVERT; STOP; SINK;
-    PHI; ALLOCA; DALLOCA; DRET; GETFMP; SETFMP; RETFMP; INVOKE;
+    PHI; ALLOCA; DRET; GETFMP; SETFMP; RETFMP; INVOKE;
     FMP_PARAM; CALL; STATICCALL; DELEGATECALL; CREATE; CREATE2;
     SELFDESTRUCT; INVALID; DLOAD; DLOADBYTES]
 Proof
@@ -86,7 +86,7 @@ Theorem ld_normal_ordinary_backward:
      TIMESTAMP; NUMBER; PREVRANDAO; CHAINID; SELFBALANCE; BALANCE;
      BLOCKHASH; BASEFEE; CODESIZE; CODECOPY; EXTCODESIZE; EXTCODEHASH;
      EXTCODECOPY; RETURNDATASIZE; RETURNDATACOPY; BLOBHASH; BLOBBASEFEE;
-     SHA3; LOG; ASSERT; ASSERT_UNREACHABLE; OFFSET] /\
+     SHA3; LOG; ASSERT; ASSERT_UNREACHABLE; OFFSET; DALLOCA] /\
   ld_normal_data CS fn V U lo E L H AP BP AG BH tn un s t
     astk live keys d A suspended gstk f /\
   step_inst fuel CT i t = OK t' ==>
@@ -132,6 +132,8 @@ Proof
   Cases_on `MEM i.inst_opcode [BALANCE;SELFBALANCE;EXTCODESIZE;EXTCODEHASH]`
   >- suspend "account" >>
   Cases_on `MEM i.inst_opcode [SSTORE;TSTORE]` >- suspend "storage_write" >>
+  Cases_on `i.inst_opcode = DALLOCA`
+  >- (drule_all ld_normal_dalloca_backward >> simp[]) >>
   `i.inst_opcode = OFFSET` by (fs[MEM] >> metis_tac[]) >>
   drule_all ld_normal_offset_backward >> simp[]
 QED

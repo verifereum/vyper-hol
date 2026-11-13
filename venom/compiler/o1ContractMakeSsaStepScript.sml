@@ -33,7 +33,8 @@ Proof
   >- metis_tac[make_ssa_current_fn_reserved_labels]
   >- metis_tac[make_ssa_current_fn_instruction_shapes]
   >- metis_tac[make_ssa_current_fn_first_block_no_preds]
-  >- metis_tac[make_ssa_current_fn_first_block_no_phi]
+  >- (`ALL_DISTINCT (fn_labels fn)` by fs[wf_function_def] >>
+      metis_tac[make_ssa_current_fn_first_block_no_phi])
   >- metis_tac[make_ssa_current_fn_invoke_ok]
   >- metis_tac[make_ssa_current_fn_label_refs_ok]
   >- metis_tac[make_ssa_current_fn_no_dret]

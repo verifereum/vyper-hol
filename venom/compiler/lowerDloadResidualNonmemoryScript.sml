@@ -212,9 +212,9 @@ Resume ld_normal_gas_backward[completion]:
     (drule ld_normal_data_masks >> strip_tac >> simp[ld_step_taint_bound]) >>
   qpat_x_assum `s' = _` SUBST_ALL_TAC >>
   qpat_x_assum `t' = _` SUBST_ALL_TAC >>
-  simp[ld_normal_data_def] >>
+  simp[ld_normal_data_def, dyn_floor_def] >>
   qpat_x_assum `ld_normal_data _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _` mp_tac >>
-  simp[ld_normal_data_def, update_var_def, ld_alloc_account_def,
+  simp[ld_normal_data_def, update_var_def, dyn_floor_def, ld_alloc_account_def,
        allocas_from_def, read_memory_def] >>
   strip_tac >> gvs[update_var_def] >> asm_rewrite_tac[]
 QED
@@ -274,7 +274,7 @@ Theorem ld_annotated_residual_read_operands:
   ptr_discipline lo CS vs0 /\ opaque_use_ok fn /\
   ld_annotated_reachable vs0 CS astk k L AP AG tn fn i s /\
   (!v. MEM (Var v) i.inst_operands ==> v IN V) /\
-  MEM i.inst_opcode [BYTE; SIGNEXTEND; BUMP;
+  MEM i.inst_opcode [BYTE; SIGNEXTEND; BUMP; DALLOCA;
     CALLER; ADDRESS; CALLVALUE; ORIGIN; GASPRICE; CHAINID; COINBASE;
     TIMESTAMP; NUMBER; PREVRANDAO; GASLIMIT; BASEFEE; BLOBBASEFEE;
     BLOCKHASH; BLOBHASH; CALLDATASIZE; CALLDATALOAD; RETURNDATASIZE; CODESIZE;

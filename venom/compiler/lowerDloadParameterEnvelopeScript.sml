@@ -43,7 +43,7 @@ Proof
     (irule ld_param_selection >> simp[] >> metis_tac[]) >>
   gvs[] >>
   simp[ld_frame_data_def, ld_frame_embedding_update_var] >>
-  conj_tac
+  rpt conj_tac
   >- (fs[ld_shared_state_def] >>
       simp[ld_shared_state_def, ld_param_taint_nonvar, update_var_def]) >>
   disj2_tac >> simp[update_var_def]
