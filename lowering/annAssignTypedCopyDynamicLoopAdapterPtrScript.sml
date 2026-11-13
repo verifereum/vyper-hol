@@ -1,11 +1,7 @@
 (* Compiler-relative unequal-layout dynamic payload execution. *)
 Theory annAssignTypedCopyDynamicLoopAdapterPtr
 Ancestors
-  annAssignTypedCopyDynamicCompilerResourcesPtr
-  annAssignTypedCopyDynamicLoopPtr annAssignTypedCopyDynamicTestPtr
-  annAssignTypedCopyFixedControlPtr typedNormalizeDynarrayLoop
-  typedMemoryCopy bodyPtrDefs compileEnv emitHelper fragExec exprLoweringProps
-  venomState venomInst venomExecSemantics words arithmetic list rich_list
+  annAssignTypedCopyDynamicSlowAdmissiblePtr
 
 Theorem annassign_dynamic_slow_payload_counted:
   !ce dst_op dt cap src_op st sa sb fn s src dst L f stv dtv G tn D ctx PG.
@@ -74,131 +70,7 @@ Theorem annassign_dynamic_slow_payload_counted:
         lookup_var x t = lookup_var x s /\ FLOOKUP H x = FLOOKUP G x /\
         op_taint tm (Var x) = op_taint tn (Var x))
 Proof
-  rpt gen_tac >> disch_then (REPEAT_TCL CONJUNCTS_THEN assume_tac) >>
-  qpat_x_assum `!sc se xr yr u aw bw H tm v. _` (mk_asm "child") >>
-  drule_all annassign_dynamic_child_frontier >> strip_tac >>
-  `?H tm t.
-    gas_path_ptr D 0 ctx fn PG G tn s 0 H tm (OK t) /\
-    t.vs_current_bb = fresh_label_output "typed_dyn_cond" sa.cs_next_label /\
-    t.vs_inst_idx = 0 /\ ~t.vs_halted /\
-    lookup_var ("%" ++ toString (sa.cs_next_var+5)) t = SOME 0w /\
-    op_taint tm (Var ("%" ++ toString (sa.cs_next_var+5))) = {} /\
-    FLOOKUP H ("%" ++ toString (sa.cs_next_var+5)) = NONE /\
-    typed_copy_state_frame sa dst (L * type_memory_size dtv) s t /\
-    t.vs_memory = s.vs_memory /\ tm.t_mem = tn.t_mem /\
-    tm.t_stor = tn.t_stor /\ tm.t_trans = tn.t_trans /\ tm.t_imm = tn.t_imm /\
-    (!x. x <> "%" ++ toString (sa.cs_next_var+5) ==>
-      lookup_var x t = lookup_var x s /\ FLOOKUP H x = FLOOKUP G x /\
-      op_taint tm (Var x) = op_taint tn (Var x))` by
-    (irule annassign_dynamic_compiler_entry >> simp[] >>
-     metis_tac[]) >>
-  `?K tk u. gas_path_ptr D 0 ctx fn PG H tm t 0 K tk (OK u) /\
-    u.vs_current_bb = fresh_label_output "typed_dyn_exit" (sa.cs_next_label+2) /\
-    u.vs_inst_idx = 0 /\ ~u.vs_halted /\
-    (!m. mem_agree_outside tk.t_mem u.vs_memory m ==>
-      typed_copy_index_prefix f dtv dst L L m) /\
-    typed_copy_state_frame sa dst (L * type_memory_size dtv) t u /\
-    (!i. ~(dst <= i /\ i < dst + L * type_memory_size dtv) ==>
-      mem_bytes_at i 1 u.vs_memory = mem_bytes_at i 1 t.vs_memory /\
-      (i IN tk.t_mem <=> i IN tm.t_mem)) /\
-    tk.t_stor = tm.t_stor /\ tk.t_trans = tm.t_trans /\ tk.t_imm = tm.t_imm /\
-    (!x. not_fresh_at sa x \/ x = "%" ++ toString (sa.cs_next_var+3) \/
-      x = "%" ++ toString (sa.cs_next_var+4) \/ x = "%" ++ toString sa.cs_next_var ==>
-      lookup_var x u = lookup_var x t /\ FLOOKUP K x = FLOOKUP H x /\
-      op_taint tk (Var x) = op_taint tm (Var x))` by
-    (rule_assum_tac (SRULE []) >>
-     `!j. j < 5 ==> lookup_var ("%" ++ toString (sa.cs_next_var+j)) t =
-       lookup_var ("%" ++ toString (sa.cs_next_var+j)) s /\
-       FLOOKUP H ("%" ++ toString (sa.cs_next_var+j)) =
-       FLOOKUP G ("%" ++ toString (sa.cs_next_var+j)) /\
-       op_taint tm (Var ("%" ++ toString (sa.cs_next_var+j))) =
-       op_taint tn (Var ("%" ++ toString (sa.cs_next_var+j)))` by
-       (rpt strip_tac >> simp[]) >>
-     map_every (fn j => qpat_assum `!j. j < 5 ==> _`
-       (qspec_then j (assume_tac o SRULE []))) [`0`,`3`,`4`] >>
-     `ptr_covers H tm ("%" ++ toString (sa.cs_next_var+3)) t
-        (L * type_memory_size stv)` by
-       gvs[ptr_covers_def] >>
-     `ptr_covers H tm ("%" ++ toString (sa.cs_next_var+4)) t
-        (L * type_memory_size dtv)` by
-       gvs[ptr_covers_def] >>
-     irule annassign_dynamic_payload_loop >> simp[] >>
-     qexistsl [`cap`,`ce`,`dst_op`,`dt`,`sb`,`se`,`si`,`src`,`src_op`,`st`,`stv`] >>
-     simp[] >> conj_tac
-     >- (rpt gen_tac >> strip_tac >>
-         irule annassign_dynamic_loop_address >> simp[] >>
-         `k * type_memory_size stv < L * type_memory_size stv /\
-          k * type_memory_size dtv < L * type_memory_size dtv /\
-          (k+1) * type_memory_size stv <= L * type_memory_size stv /\
-          (k+1) * type_memory_size dtv <= L * type_memory_size dtv` by simp[] >>
-         rpt conj_tac
-         >- decide_tac
-         >- decide_tac
-         >- (qexistsl [`cap`,`ce`,`dst_op`,`dt`,`sb`,`src_op`,`st`] >> simp[]) 
-         >- (qexists_tac `L * type_memory_size dtv` >> simp[] >>
-             gvs[RIGHT_ADD_DISTRIB] >> decide_tac) >>
-         qexists_tac `L * type_memory_size stv` >> simp[] >>
-         gvs[RIGHT_ADD_DISTRIB] >> decide_tac) >>
-     conj_tac
-     >- (rpt gen_tac >> strip_tac >>
-         irule (SRULE [] annassign_dynamic_loop_backedge) >> simp[] >>
-         qexistsl [`back`,`se`] >>
-         simp[] >>
-         `si.cs_next_var <= se.cs_next_var` by
-           (qspec_then `ce` mp_tac (cj 1 ci_mono_typed_memory_family) >>
-            disch_then (qspec_then `Var ("%" ++ toString (sa.cs_next_var+11))` mp_tac) >>
-            disch_then (qspec_then `dt` mp_tac) >>
-            disch_then (qspec_then `Var ("%" ++ toString (sa.cs_next_var+10))` mp_tac) >>
-            disch_then (qspec_then `st` mp_tac) >>
-            disch_then (qspec_then `si` mp_tac) >>
-            simp[ci_mono_def]) >>
-         conj_tac >- decide_tac >>
-         metis_tac[cs_extends_trans]) >>
-     reverse conj_tac
-     >- (conj_tac
-         >- (rpt gen_tac >> strip_tac >>
-             irule (SRULE [] annassign_dynamic_loop_test) >> simp[] >>
-             qexistsl [`cap`,`ce`,`dst_op`,`dt`,`sb`,`src_op`,`st`] >> simp[]) >>
-         fs[]) >>
-     rpt gen_tac >> strip_tac >>
-     `not_fresh_at si ("%" ++ toString (sa.cs_next_var+10)) /\
-      not_fresh_at si ("%" ++ toString (sa.cs_next_var+11))` by simp[] >>
-     `k * type_memory_size stv < L * type_memory_size stv /\
-      k * type_memory_size dtv < L * type_memory_size dtv /\
-      (k+1) * type_memory_size stv <= L * type_memory_size stv /\
-      (k+1) * type_memory_size dtv <= L * type_memory_size dtv` by simp[] >>
-     `src + k * type_memory_size stv + type_memory_size stv < dimword (:256) /\
-      dst + k * type_memory_size dtv + type_memory_size dtv < dimword (:256) /\
-      (src + k * type_memory_size stv + type_memory_size stv <= dst + k * type_memory_size dtv \/
-       dst + k * type_memory_size dtv + type_memory_size dtv <= src + k * type_memory_size stv)` by
-       (rule_assum_tac (PURE_REWRITE_RULE [RIGHT_ADD_DISTRIB]) >> decide_tac) >>
-     `w2n (n2w (src + k * type_memory_size stv):256 word) = src + k * type_memory_size stv /\
-      w2n (n2w (dst + k * type_memory_size dtv):256 word) = dst + k * type_memory_size dtv` by
-       (simp[wordsTheory.w2n_n2w] >> conj_tac >> irule LESS_MOD >> decide_tac) >>
-     `val_wf stv (f k) /\ val_wf dtv (f k)` by simp[] >>
-     rule_assum_tac (SRULE []) >>
-     asm "child" drule >>
-     disch_then (qspec_then `s''` mp_tac) >> simp[] >>
-     disch_then (qspecl_then [`G'`,`tn'`,`f k`] mp_tac) >> simp[] >>
-     strip_tac >> qexistsl [`K'`,`tk`,`z`] >> simp[] >>
-     reverse conj_tac >- (first_assum MATCH_ACCEPT_TAC) >>
-     qpat_x_assum `typed_copy_state_frame si _ _ s'' z` mp_tac >>
-     simp[typed_copy_state_frame_def] >> strip_tac >> simp[] >>
-     rpt strip_tac >>
-     simp[]) >>
-  qexistsl [`K'`,`tk`,`u`] >> conj_tac
-  >- (ntac 2 (qpat_x_assum `gas_path_ptr _ _ _ _ _ _ _ _ _ _ _ _` mp_tac) >>
-      POP_ASSUM_LIST (K ALL_TAC) >>
-      metis_tac[fragGasPathPtrTheory.gas_path_ptr_then, arithmeticTheory.ADD_CLAUSES]) >>
-  simp[] >> conj_tac
-  >- metis_tac[typed_copy_state_frame_trans] >>
-  qx_gen_tac `x` >> disch_tac >>
-  `x <> "%" ++ toString (sa.cs_next_var+5)` by
-    (gvs[loweringStateRelDefsTheory.not_fresh_at_def,
-       ASCIInumbersTheory.toString_inj] >> rpt strip_tac >>
-     gvs[loweringStateRelDefsTheory.not_fresh_at_def] >> decide_tac) >>
-  qpat_x_assum `!x. (not_fresh_at sa x \/ _) ==> _` (qspec_then `x` mp_tac) >>
-  simp[] >> strip_tac >>
-  qpat_x_assum `!x. x <> _ ==> _` (qspec_then `x` mp_tac) >>
-  simp[]
+  rpt gen_tac >> strip_tac >>
+  match_mp_tac (Q.INST [`P` |-> `\v. T`] (SPEC_ALL annassign_dynamic_slow_payload_admissible_counted)) >>
+  gvs[arithmeticTheory.ADD_COMM] >> gvs[]
 QED
