@@ -6,6 +6,14 @@ Ancestors
   vyperStatePreservation supportedExprForms supportedExprTraverse
   vyperEvalExprPreservesScopesDom vyperPlaceResultTyping vyperTypeSystem vyperTypeEnvExtension vyperTypeArgFits vyperCreateFrame
 
+(* select_result, extend_place and lookup_global record a storage
+   observation, so their end state is the start state with a longer
+   storage_trace; project each equation onto scopes and immutables. *)
+val trace_scopes_tac =
+  rpt (qpat_x_assum `_ = _ with storage_trace := _`
+         (assume_tac o AP_TERM
+           ``\s:evaluation_state. (s.scopes,s.immutables)``)) >> gvs[];
+
 Theorem scope_projection_lookup:
   !a b name.
     MAP (\sc. FLOOKUP sc name) a = MAP (\sc. FLOOKUP sc name) b ==>
@@ -144,24 +152,24 @@ Resume supported_pure_scopes_mutual[subscript1]:
   gvs[Once evaluate_def, bind_def, AllCaseEqs(), return_def, raise_def] >>
   gvs[COND_RATOR, AllCaseEqs(), bind_def, return_def] >>
   imp_res_tac read_result_state >> imp_res_tac select_result_state >>
-  gvs[] >> metis_tac[]
+  gvs[] >> trace_scopes_tac >> metis_tac[]
 QED
 
 Resume supported_pure_scopes_mutual[subscript2]:
   gvs[Once evaluate_def, bind_def, AllCaseEqs(), return_def, raise_def] >>
   gvs[COND_RATOR, AllCaseEqs(), bind_def, return_def] >>
   imp_res_tac read_result_state >> imp_res_tac select_result_state >>
-  gvs[] >> metis_tac[]
+  gvs[] >> trace_scopes_tac >> metis_tac[]
 QED
 
 Resume supported_pure_scopes_mutual[attribute1]:
   gvs[Once evaluate_def, bind_def, AllCaseEqs(), return_def, raise_def] >>
-  imp_res_tac select_result_state >> gvs[] >> metis_tac[]
+  imp_res_tac select_result_state >> gvs[] >> trace_scopes_tac >> metis_tac[]
 QED
 
 Resume supported_pure_scopes_mutual[attribute2]:
   gvs[Once evaluate_def, bind_def, AllCaseEqs(), return_def, raise_def] >>
-  imp_res_tac select_result_state >> gvs[] >> metis_tac[]
+  imp_res_tac select_result_state >> gvs[] >> trace_scopes_tac >> metis_tac[]
 QED
 
 Resume supported_pure_scopes_mutual[builtin]:
@@ -217,7 +225,8 @@ Proof
   rpt strip_tac >>
   gvs[lookup_global_def, vyperMiscTheory.option_CASE_rator,
       vyperMiscTheory.prod_CASE_rator, var_decl_info_CASE_rator,
-      bind_def, lift_option_type_def, return_def, raise_def, AllCaseEqs()]
+      bind_def, ignore_bind_def, record_storage_event_def, lift_option_type_def,
+      return_def, raise_def, AllCaseEqs()]
 QED
 
 Theorem supported_effect_scopes_mutual:
@@ -235,10 +244,11 @@ Proof
     gvs[Once evaluate_def, bind_def, AllCaseEqs(), return_def, raise_def] >>
     gvs[COND_RATOR, AllCaseEqs(), bind_def, return_def] >>
     imp_res_tac read_result_state >> imp_res_tac select_result_state >>
-    imp_res_tac supported_pure_scopes_mutual >> gvs[] >> metis_tac[])
+    imp_res_tac supported_pure_scopes_mutual >> gvs[] >> trace_scopes_tac >>
+    metis_tac[])
   >>~- ([`eval_expr _ (Attribute _ _ _) _ = _`],
     gvs[Once evaluate_def, bind_def, AllCaseEqs(), return_def, raise_def] >>
-    imp_res_tac select_result_state >> gvs[] >> metis_tac[])
+    imp_res_tac select_result_state >> gvs[] >> trace_scopes_tac >> metis_tac[])
   >~ [`eval_expr _ (Call _ (ExtCall _ _ _ _) _ _) _ = _`]
   >- suspend "external"
   >~ [`eval_expr _ (Call _ (Send F) _ _) _ = _`] >- suspend "send2"
@@ -625,21 +635,22 @@ Proof
    gvs[get_accounts_def, COND_RATOR, update_accounts_def,
        update_pending_deletions_def, bind_def, ignore_bind_def,
        return_def, AllCaseEqs()] >>
-   imp_res_tac read_result_state >> gvs[] >> res_tac >> gvs[] >> metis_tac[])
+   imp_res_tac read_result_state >> trace_scopes_tac >>
+   res_tac >> gvs[] >> metis_tac[])
 QED
 
 Resume eval_observation_frame_pred[TopLevelName]:
   qpat_x_assum `_ \/ !e. _` kall_tac >>
   qpat_x_assum `!c tgt s p s' res t. ok tgt /\ _ ==> _` kall_tac >>
   rename1 `TopLevelName _ nsid` >> PairCases_on `nsid` >>
-  gvs[Once evaluate_def] >> imp_res_tac lookup_global_state >> simp[]
+  gvs[Once evaluate_def] >> imp_res_tac lookup_global_state >> trace_scopes_tac
 QED
 
 Resume eval_observation_frame_pred[TopLevelNameTarget]:
   qpat_x_assum `_ \/ !e. _` kall_tac >>
   qpat_x_assum `!c tgt s p s' res t. ok tgt /\ _ ==> _` kall_tac >>
   rename1 `TopLevelNameTarget nsid` >> PairCases_on `nsid` >>
-  gvs[Once evaluate_def] >> imp_res_tac lookup_global_state >> simp[]
+  gvs[Once evaluate_def] >> imp_res_tac lookup_global_state >> trace_scopes_tac
 QED
 
 Resume eval_observation_frame_pred[StructLit]:
@@ -871,7 +882,8 @@ Proof
    imp_res_tac get_accounts_scopes >>
    gvs[COND_RATOR, update_accounts_def, update_pending_deletions_def,
        bind_def, ignore_bind_def, return_def, AllCaseEqs()] >>
-   imp_res_tac read_result_state >> gvs[] >> res_tac >> gvs[] >> metis_tac[])
+   imp_res_tac read_result_state >> trace_scopes_tac >>
+   res_tac >> gvs[] >> metis_tac[])
 QED
 
 Resume eval_name_projection_mutual[TopLevelName]:
@@ -995,6 +1007,7 @@ Proof
       AllCaseEqs()] >>
   gvs[Once evaluate_def, bind_def, AllCaseEqs(), raise_def] >>
   imp_res_tac extend_place_state >> imp_res_tac read_result_state >> gvs[] >>
+  trace_scopes_tac >>
   rename1 `supported_target_info tops bindings inner = SOME inner_pt` >>
   first_x_assum (qspec_then `inner` mp_tac) >> simp[] >>
   disch_then drule_all >> strip_tac >>
@@ -1056,7 +1069,8 @@ Resume supported_simple_target_eval_scopes[subscript]:
   gvs[Once evaluate_def, bind_def, AllCaseEqs(), raise_def] >>
   gvs[Once evaluate_def, bind_def, AllCaseEqs(), raise_def] >>
   imp_res_tac lookup_global_scopes >> imp_res_tac read_result_state >>
-  imp_res_tac extend_place_state >> gvs[] >> metis_tac[supported_expr_scopes]
+  imp_res_tac extend_place_state >> gvs[] >> trace_scopes_tac >>
+  metis_tac[supported_expr_scopes]
 QED
 
 Resume supported_simple_target_eval_scopes[attribute]:
@@ -1066,7 +1080,8 @@ Resume supported_simple_target_eval_scopes[attribute]:
   PairCases_on `nsid` >>
   gvs[Once evaluate_def, bind_def, AllCaseEqs(), raise_def] >>
   gvs[Once evaluate_def, bind_def, AllCaseEqs(), raise_def] >>
-  imp_res_tac lookup_global_scopes >> imp_res_tac extend_place_state >> gvs[]
+  imp_res_tac lookup_global_scopes >> imp_res_tac extend_place_state >> gvs[] >>
+  trace_scopes_tac
 QED
 
 Finalise supported_simple_target_eval_scopes
