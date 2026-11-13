@@ -8,6 +8,8 @@ Ancestors
   venomState venomInst finite_map freshWrites ASCIInumbers
   bodyPtrAttributeSource exprSimFieldLayout exprSimProps exprSimAttributeProps
   valueEncoding valueEncodingDefs vyperAST bodyIntCallArgType exprSimAttributeFields
+  bodyPtrAttributeObservation gasSummary gasSummaryCompose gasContext gasOutcome
+  fragGasMode fragGasPath gasExemptCert vyperState exprSimUnwrap fragExec
 
 (* Only metadata is needed: memory may change provided ownership and the
    operand and local pointer registers are retained. *)
@@ -188,4 +190,160 @@ Proof
   gvs[vv_post_def, intcall_vv_provenance_def, mk_ptr_def, vv_holds_def,
       immutable_holds_def] >> strip_tac >> gvs[] >>
   qexistsl_tac [`name`, `off`, `itv`, `iv`, `k`] >> simp[]
+QED
+
+Theorem intcall_attribute_selected_post[local]:
+  expr_body_pre ce cx env (Attribute ann obj fld) es0 /\
+  eval_expr cx obj es0 = (INL raw,ee) /\
+  vv_post ctx func ce cx obj es sa sb s0 ee raw bvv t /\
+  eval_operand dst t = SOME
+    (w + n2w (attr_offset ce (expr_type obj) (vv_loc bvv) fld)) /\
+  eval_operand (vv_operand bvv) t = SOME w /\
+  select_result cx (expr_type obj) raw (AttrSubscript fld) ee = (INL result,ee) ==>
+  vv_post ctx func ce cx (Attribute ann obj fld) es sa sb s0 ee result
+    (LocatedValue ann (mk_ptr dst (vv_loc bvv))) t
+Proof
+  strip_tac >> drule_all attribute_typed_selection >> strip_tac >> gvs[] >>
+  `post_value_type ce obj = expr_type obj` by
+    (drule attr_pre_base >> strip_tac >> drule_all attr_post_value_type >> simp[]) >>
+  drule select_result_memory_place >> strip_tac >>
+  irule attr_vv_post >> goal_assum (drule_at Any) >> simp[] >>
+  qexists_tac `raw` >> simp[] >>
+  rpt strip_tac >> gvs[] >> simp[vyperTypingTheory.value_has_type_def]
+QED
+
+Theorem intcall_attribute_summary[local]:
+  expr_body_pre ce cx env (Attribute ann obj fld) es /\
+  ~expr_has_effect (Attribute ann obj fld) /\
+  compile_expr ce ty obj sa = (bvv,sm) /\ local_ptrs_reserved ce sa /\
+  local_ptrs_reserved ce sm /\ sa.cs_next_var <= sm.cs_next_var /\
+  emit_op ADD [vv_operand bvv;
+    Lit (n2w (attr_offset ce (expr_type obj) (vv_loc bvv) fld))] sm = (dst,sb) /\
+  fn_has_code sm sb func /\
+  gas_marked_exec F (ctx,func) (eval_expr cx obj) (es,s0) marks (INL raw) fe (OK t) /\
+  vv_post ctx func ce cx obj es sa sm s0 (fe with gas_obs := []) raw bvv t /\
+  intcall_vv_provenance ce cx (expr_type obj) sa sm (fe with gas_obs := []) raw bvv t /\
+  t.vs_current_bb = sm.cs_current_bb /\ t.vs_inst_idx = LENGTH sm.cs_current_insts ==>
+  gas_summary_at F (ctx,func) marks (eval_expr cx (Attribute ann obj fld)) (es,s0)
+    (\res ee u. ?tv. res = INL tv /\
+      vv_post ctx func ce cx (Attribute ann obj fld) es sa sb s0 ee tv
+        (LocatedValue ann (mk_ptr dst (vv_loc bvv))) u /\
+      u.vs_current_bb = sb.cs_current_bb /\
+      u.vs_inst_idx = LENGTH sb.cs_current_insts /\
+      intcall_vv_provenance ce cx ann sa sb ee tv
+        (LocatedValue ann (mk_ptr dst (vv_loc bvv))) u) R
+Proof
+  strip_tac >>
+  `eval_expr cx obj (es with gas_obs := gas_explicit marks s0.vs_gas_readings) =
+    (INL raw,fe with gas_obs := [])` by
+    (qpat_x_assum `gas_marked_exec _ _ _ _ _ _ _ _`
+      (mp_tac o REWRITE_RULE [gas_marked_exec_def]) >>
+     strip_tac >> first_x_assum (qspec_then `[]` mp_tac) >> simp[]) >>
+  `~t.vs_halted` by
+    metis_tac[gas_marked_exec_def, gas_marked_path_exec, gas_path_normal] >>
+  drule_all intcall_attr_add_path >> strip_tac >>
+  rename1 `gas_path ctx func t 0 (OK u)` >>
+  `expr_body_pre ce cx env (Attribute ann obj fld)
+     (es with gas_obs := gas_explicit marks s0.vs_gas_readings)` by simp[] >>
+  drule_all attribute_typed_selection >> strip_tac >>
+  `vv_post ctx func ce cx (Attribute ann obj fld) es sa sb s0
+     (fe with gas_obs := []) tv' (LocatedValue ann (mk_ptr dst (vv_loc bvv))) u` by
+    (irule intcall_attribute_selected_post >> metis_tac[]) >>
+  `intcall_vv_provenance ce cx ann sa sb (fe with gas_obs := []) tv'
+     (LocatedValue ann (mk_ptr dst (vv_loc bvv))) u` by
+    (irule intcall_attribute_selection_provenance >> goal_assum (drule_at Any) >> metis_tac[]) >>
+  `eval_expr cx (Attribute ann obj fld) =
+     bind (eval_expr cx obj)
+       (\r. select_result cx (expr_type obj) r (AttrSubscript fld))` by
+    simp[FUN_EQ_THM, eval_expr_attribute] >>
+  gvs[intcall_vv_provenance_gas_obs] >>
+  simp[gas_summary_at_def] >> qexistsl_tac [`INL tv'`,`fe`,`OK u`] >> simp[] >>
+  irule (Q.INST [`right` |-> `[]`] gas_marked_exec_bind_normal
+    |> REWRITE_RULE [listTheory.APPEND_NIL]) >>
+  qexistsl_tac [`fe`,`t`,`raw`] >> simp[] >>
+  simp[gas_marked_exec_def, gas_marked_path_def, gas_explicit_def,
+       bodyPtrAttributeObservationTheory.select_attr_gas_update]
+QED
+
+Theorem intcall_attribute_exempt[local]:
+  gas_exempt_cert memory tops p (ignore_bind (eval_expr cx obj) (return ()))
+    start marks out endpoint ==>
+  gas_exempt_cert memory tops p
+    (ignore_bind (eval_expr cx (Attribute ann obj fld)) (return ()))
+    start marks out endpoint
+Proof
+  strip_tac >>
+  `eval_expr cx (Attribute ann obj fld) =
+     bind (eval_expr cx obj)
+       (\r. select_result cx (expr_type obj) r (AttrSubscript fld))` by
+    simp[FUN_EQ_THM, eval_expr_attribute] >> simp[] >>
+  PairCases_on `p` >> PairCases_on `start` >>
+  PairCases_on `out` >> PairCases_on `endpoint` >>
+  qmatch_goalsub_abbrev_tac `bind (eval_expr cx obj) sel` >>
+  `ignore_bind (bind (eval_expr cx obj) sel) (return ()) =
+   bind (eval_expr cx obj) (\r. ignore_bind (sel r) (return ()))` by
+    (simp[FUN_EQ_THM, ignore_bind_def, bind_def] >> gen_tac >>
+     Cases_on `eval_expr cx obj x` >> Cases_on `q` >> simp[]) >>
+  pop_assum SUBST1_TAC >> irule gas_exempt_cert_error_result >> simp[]
+QED
+
+Theorem intcall_attribute_outcome:
+  (!env ty es sa sb vv s0.
+    expr_body_pre ce cx env obj es /\ ~expr_has_effect obj /\
+    compile_expr ce ty obj sa = (vv,sb) /\ fn_has_code sa sb func /\
+    fn_inst_ids_distinct func /\ local_ptrs_reserved ce sa /\
+    gas_admissible (eval_expr cx obj) expr_vv_res_ok es /\
+    stmt_state_rel ctx func ce cx es s0 /\ ~s0.vs_halted /\
+    s0.vs_current_bb = sa.cs_current_bb /\
+    s0.vs_inst_idx = LENGTH sa.cs_current_insts ==>
+    gas_outcome F (cx_tops cx) (ctx,func) (eval_expr cx obj) (es,s0)
+      (\res ee t. ?tv. res = INL tv /\
+        vv_post ctx func ce cx obj es sa sb s0 ee tv vv t /\
+        t.vs_current_bb = sb.cs_current_bb /\
+        t.vs_inst_idx = LENGTH sb.cs_current_insts /\
+        intcall_vv_provenance ce cx (expr_type obj) sa sb ee tv vv t)
+      (\res ee r. expr_exit res r)) /\
+  expr_body_pre ce cx env (Attribute ann obj fld) es /\
+  ~expr_has_effect (Attribute ann obj fld) /\
+  compile_expr ce ty (Attribute ann obj fld) sa = (vv,sb) /\
+  fn_has_code sa sb func /\ fn_inst_ids_distinct func /\ local_ptrs_reserved ce sa /\
+  gas_admissible (eval_expr cx (Attribute ann obj fld)) expr_vv_res_ok es /\
+  stmt_state_rel ctx func ce cx es s0 /\ ~s0.vs_halted /\
+  s0.vs_current_bb = sa.cs_current_bb /\
+  s0.vs_inst_idx = LENGTH sa.cs_current_insts ==>
+  gas_outcome F (cx_tops cx) (ctx,func) (eval_expr cx (Attribute ann obj fld)) (es,s0)
+    (\res ee t. ?tv. res = INL tv /\
+      vv_post ctx func ce cx (Attribute ann obj fld) es sa sb s0 ee tv vv t /\
+      t.vs_current_bb = sb.cs_current_bb /\
+      t.vs_inst_idx = LENGTH sb.cs_current_insts /\
+      intcall_vv_provenance ce cx ann sa sb ee tv vv t)
+    (\res ee r. expr_exit res r)
+Proof
+  strip_tac >> drule attr_pre_base >> strip_tac >>
+  drule compile_expr_attribute >> strip_tac >> gvs[] >>
+  rename1 `compile_expr ce ty obj sa = (bvv,sm)` >>
+  drule attr_extends >> strip_tac >>
+  drule compile_expr_extends >> strip_tac >>
+  drule_all fn_has_code_split >> strip_tac >>
+  `gas_admissible (eval_expr cx obj) expr_vv_res_ok es` by
+    metis_tac[exprSimHypsTheory.expr_body_pre_vv_gas_admissible] >>
+  `~expr_has_effect obj` by gvs[] >>
+  `local_ptrs_reserved ce sm` by
+    metis_tac[exprLoweringPropsTheory.local_ptrs_reserved_next_var] >>
+  first_x_assum drule_all >>
+  rewrite_tac[gas_outcome_def] >> strip_tac
+  >- (qexists_tac `marks` >> disj1_tac >>
+      qpat_x_assum `gas_summary_at _ _ _ _ _ _ _`
+        (strip_assume_tac o REWRITE_RULE [gas_summary_at_def]) >> gvs[]
+      >- (irule intcall_attribute_summary >> simp[] >>
+          conj_tac >- metis_tac[] >>
+          qexistsl_tac [`es_end`,`tv`,`sm`,`t`,`ty`] >> simp[]) >>
+      Cases_on `res` >> gvs[] >>
+      simp[gas_summary_at_def] >> qexistsl_tac [`INR y`,`es_end`,`r`] >> simp[] >>
+      `eval_expr cx (Attribute ann obj fld) =
+         bind (eval_expr cx obj)
+           (\v. select_result cx (expr_type obj) v (AttrSubscript fld))` by
+        simp[FUN_EQ_THM, eval_expr_attribute] >>
+      simp[] >> irule gas_marked_exec_bind_exception >> simp[]) >>
+  qexists_tac `marks` >> disj2_tac >> metis_tac[intcall_attribute_exempt]
 QED
