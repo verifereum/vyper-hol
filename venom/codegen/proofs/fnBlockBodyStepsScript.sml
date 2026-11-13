@@ -18,7 +18,7 @@
 Theory fnBlockBodySteps
 Ancestors
   fnBlockBodyHelpers fnBlockPlanStatic fnAliasStep
-  fnFrameStepsRevertForwardDeep fnFrameDeep fnSimSpec fnPlanPlace
+  fnFrameStepsRevertForwardDeep fnFrameDeep fnSimSpec fnPlanPlace asmRunBounded
   fnPlanCover fnPlanPlaceDfsBlock fnPlanLineage fnLineageStatic
   fnPlanPrefix opcodeClass cfgAnalysisProps
   stepWriteFootprintForward asmTargetSafety codegen allocMono
@@ -210,6 +210,65 @@ Proof
   qexistsl_tac [`n + n'`, `as'`] >>
   imp_res_tac asm_steps_add_ok >> simp[] >>
   Cases_on `b` >> gvs[cost_le_def]
+QED
+
+(* The safety mode constrains the same witness as the optional budget. *)
+Definition body_result_resource_def:
+  body_result_resource safe b lo o2pc prog cpl ctx fn mem0 pc_ret rest as res <=>
+    (!vs'. res = Halt vs' ==>
+       ?n as'. cost_le b n /\
+               (safe ==> create_safe_prefix lo o2pc prog n as) /\
+               asm_steps lo o2pc prog n as = AsmHalt as' /\
+               venom_asm_terminal_rel vs' as') /\
+    (!a vs'. res = Abort a vs' ==>
+       ?n as'. cost_le b n /\
+               (safe ==> create_safe_prefix lo o2pc prog n as) /\
+               ((a = Revert_abort /\ asm_steps lo o2pc prog n as = AsmRevert as') \/
+                (a = ExHalt_abort /\ asm_steps lo o2pc prog n as = AsmFault as')) /\
+               venom_asm_terminal_rel vs' as') /\
+    (!ret vs'. res = IntRet ret vs' ==>
+       ?n as'. cost_le b n /\
+               (safe ==> create_safe_prefix lo o2pc prog n as) /\
+               asm_steps lo o2pc prog n as = AsmOK as' /\
+               as'.as_pc = pc_ret /\
+               as'.as_stack = REVERSE ret.iret_values ++ rest /\
+               context_memory_rel cpl vs'.vs_memory as'.as_memory /\
+               (!b. context_spill_byte cpl b /\
+                    ~closure_spill_byte ctx cpl fn.fn_name b ==>
+                    read_byte b as'.as_memory = read_byte b mem0) /\
+               shared_state_rel vs' as')
+End
+
+Theorem body_result_resource_off[simp]:
+  body_result_resource F b lo o2pc prog cpl ctx fn mem0 pc_ret rest as res <=>
+  body_result_cost b lo o2pc prog cpl ctx fn mem0 pc_ret rest as res
+Proof
+  simp[body_result_resource_def, body_result_cost_def]
+QED
+
+Theorem body_result_resource_mono:
+  body_result_resource safe b lo o2pc prog cpl ctx fn mem0 pc_ret rest as res /\
+  (c = NONE \/ ?B C. b = SOME B /\ c = SOME C /\ B <= C) ==>
+  body_result_resource safe c lo o2pc prog cpl ctx fn mem0 pc_ret rest as res
+Proof
+  simp[body_result_resource_def] >> rpt strip_tac >>
+  first_x_assum drule >> strip_tac >>
+  qexistsl_tac [`n`, `as'`] >> simp[] >> irule cost_le_mono >>
+  goal_assum (drule_at Any) >> simp[]
+QED
+
+Theorem body_result_resource_prefix:
+  asm_steps lo o2pc prog n as = AsmOK as1 /\
+  (safe ==> create_safe_prefix lo o2pc prog n as) /\
+  body_result_resource safe b lo o2pc prog cpl ctx fn mem0 pc_ret rest as1 res ==>
+  body_result_resource safe (OPTION_MAP (\B. n + B) b)
+    lo o2pc prog cpl ctx fn mem0 pc_ret rest as res
+Proof
+  rw[body_result_resource_def] >> gvs[] >>
+  qexistsl_tac [`n + n'`, `as'`] >>
+  imp_res_tac asm_steps_add_ok >> simp[] >>
+  Cases_on `b` >> gvs[cost_le_def] >>
+  metis_tac[create_safe_prefix_compose]
 QED
 
 (* ===== Generic facts ===== *)
