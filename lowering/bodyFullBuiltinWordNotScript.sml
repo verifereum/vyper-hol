@@ -155,7 +155,7 @@ Proof
        (`k <> GAS` by
           (qpat_x_assum `k = ISZERO \/ _` strip_assume_tac >> simp[]) >>
         mp_tac (straight_line_origin_ptr_edge |> Q.INST
-         [`i` |-> `inst`, `u` |-> `u`, `D` |-> `DF H`]) >>
+         [`i` |-> `inst`, `u` |-> `u`, `D` |-> `DF (H : (bool # 256 word # type_value) list # num list)`]) >>
         simp[Abbr `inst`, mk_inst_def] >> disch_then irule >>
         simp[GSYM mk_inst_def, Abbr `u`, Abbr `z`, Abbr `out`] >>
         gvs[is_terminator_def,
@@ -166,11 +166,9 @@ Proof
       metis_tac[gas_origin_ptr_path_rules, APPEND_NIL]) >>
   conj_tac
   >- (rpt strip_tac >> irule ghost_inv_at_exterior_frame >>
-      qexists_tac `sa` >>
+      qexistsl_tac [`G`, `es`, `s`, `sa`, `tn`] >>
       simp[Abbr `z`, Abbr `u`, update_var_def] >>
-      conj_tac
-      >- (first_x_assum irule >> simp[]) >>
-      rpt strip_tac >>
+      qx_gen_tac `y` >> strip_tac >>
       `y <> out` by gvs[loweringStateRelDefsTheory.not_fresh_at_def, Abbr `out`] >>
       simp[lookup_var_def, FLOOKUP_UPDATE, ptrDisciplineTheory.op_taint_def] >>
       irule step_prov_other_output >> simp[Abbr `inst`, mk_inst_def]) >>
