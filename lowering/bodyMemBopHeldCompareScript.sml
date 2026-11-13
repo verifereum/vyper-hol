@@ -334,7 +334,8 @@ Resume held_bytestring_compare_sim_mem[third]:
     (qpat_assum `~expr_has_effect e2 ==> _` mp_tac >>
      simp_tac (srw_ss()) [pure_frame_gas_obs]) >>
   `MAP FDOM es.scopes = MAP FDOM mid.scopes` by
-    (qpat_x_assum `MAP FDOM es.scopes = MAP FDOM _` mp_tac >> simp[]) >>
+    (qpat_x_assum `MAP FDOM es.scopes = MAP FDOM (mid with gas_obs := []).scopes` mp_tac >>
+     simp[]) >>
   `!aid off sz. FLOOKUP t.vs_allocas aid = SOME (off,sz) /\
       aid < s1.cs_next_id /\
       (!n b sz'. local_region cenv mid.scopes t n b sz' ==>
