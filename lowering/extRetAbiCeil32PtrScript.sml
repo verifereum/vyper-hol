@@ -36,6 +36,7 @@ Proof
   `MEM i.inst_opcode [NOT; ADD; AND]` by
     (qpat_x_assum `EVERY _ code` mp_tac >> simp[EVERY_MEM] >>
      disch_then drule >> simp[]) >>
+  fs[MEM] >>
   gvs[step_inst_base_def, exec_pure1_def, exec_pure2_def, AllCaseEqs(), update_var_def]
 QED
 
