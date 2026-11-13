@@ -10,12 +10,13 @@
  *)
 Theory bodyFullMaterialize
 Ancestors
-  bodyFullAllocaFresh logStoreDataOriginPtr placeStoreDynPrepare ptrDiscipline
+  bodyFullAllocaFresh allocaHistorySlice bytesSnapshotCode allocaHistory
+  logStoreDataOriginPtr placeStoreDynPrepare ptrDiscipline
   bodyPtrStructLitMonotoneRepresentation typedCopyAppend typedStoreCode
   exprSimAlloc exprSimProps fragGasOriginPtr fragExec loweringHalt
   typedMemoryCopy bodyPtrDefs loweringStateRelDefs loweringShapeDefs
   vyperTypeArgFits exprLoweringProps exprLowering emitHelper context
-  compileEnv venomState
+  compileEnv venomState list rich_list arithmetic
 
 (* Helper: the save's two compile steps. *)
 Theorem materialize_stack_code[local]:
@@ -25,6 +26,8 @@ Theorem materialize_stack_code[local]:
            op = buf.buf_operand /\
            buf.buf_operand = Var (STRING #"%" (toString sa.cs_next_var)) /\
            sa.cs_next_var <= sm.cs_next_var /\
+           sm.cs_current_bb = sa.cs_current_bb /\
+           LENGTH sm.cs_current_insts = LENGTH sa.cs_current_insts + 1 /\
            sm.cs_next_var <= sb.cs_next_var /\
            cs_extends sa sm /\ cs_extends sm sb
 Proof
@@ -35,7 +38,8 @@ Proof
   rename1 `compile_store_memory _ _ _ _ _ sm = (u,sb)` >>
   Cases_on `u` >> simp[] >>
   `buf.buf_operand = Var (STRING #"%" (toString sa.cs_next_var)) /\
-   sa.cs_next_var <= sm.cs_next_var` by
+   sa.cs_next_var <= sm.cs_next_var /\ sm.cs_current_bb = sa.cs_current_bb /\
+   LENGTH sm.cs_current_insts = LENGTH sa.cs_current_insts + 1` by
     (qpat_x_assum `compile_alloc_buffer _ _ = _` mp_tac >>
      simp[compile_alloc_buffer_def, emit_op_def, comp_bind_def,
           comp_ignore_bind_def, comp_return_def, fresh_id_def,
@@ -47,6 +51,51 @@ Proof
   mp_tac (Q.SPECL [`cenv`, `src`, `buf.buf_operand`, `ty`, `ty`]
             cs_appends_compile_store_memory) >>
   simp[cs_appends_def] >> metis_tac[]
+QED
+
+(* Helper: after a bytestring save, the six instructions past the buffer's
+   ALLOCA hold no ALLOCA, so the allocation history carries over. *)
+Theorem materialize_bytes_alloca_history[local]:
+  is_bytestring_type ty /\
+  compile_materialize_vv cenv ty (StackValue ty src) sa = (op,sb) /\
+  fn_has_code sa sb func /\ alloca_history func u /\
+  u.vs_current_bb = sa.cs_current_bb /\
+  u.vs_inst_idx = LENGTH sa.cs_current_insts + 1 /\
+  t.vs_allocas = u.vs_allocas /\ t.vs_current_bb = u.vs_current_bb /\
+  t.vs_inst_idx = LENGTH sb.cs_current_insts ==>
+  alloca_history func t
+Proof
+  strip_tac >>
+  drule_all compile_materialize_bytes_code >> strip_tac >>
+  qabbrev_tac `code = bytes_snapshot_insts sa.cs_next_id
+     (compiler_var_names sa.cs_next_var 6) (type_memory_bytes cenv ty) src` >>
+  `?bb l. lookup_block u.vs_current_bb func.fn_blocks = SOME bb /\
+          bb.bb_instructions = sa.cs_current_insts ++ code ++ l` by
+    (qpat_x_assum `fn_has_code _ _ _` mp_tac >>
+     simp[fn_has_code_def, rich_listTheory.IS_PREFIX_APPEND] >>
+     fs[same_blocks_def] >> rpt strip_tac >> metis_tac[APPEND_ASSOC]) >>
+  `code = HD code :: TL code /\ LENGTH (TL code) = 6 /\
+   EVERY (\i. i.inst_opcode <> ALLOCA) (TL code)` by
+    simp[Abbr `code`, bytes_snapshot_insts_def, venomInstTheory.mk_inst_def] >>
+  `DROP u.vs_inst_idx bb.bb_instructions = TL code ++ l` by
+    (qpat_assum `bb.bb_instructions = _` (fn th => rewrite_tac [th]) >>
+     qpat_assum `u.vs_inst_idx = _` (fn th => rewrite_tac [th]) >>
+     simp[Abbr `code`, bytes_snapshot_insts_def, DROP_APPEND,
+          DROP_LENGTH_TOO_LONG] >>
+     `LENGTH sa.cs_current_insts + 1 - (LENGTH sa.cs_current_insts + 7) = 0`
+       by decide_tac >>
+     asm_rewrite_tac[DROP_0]) >>
+  qspecl_then [`func`, `u`, `t`, `bb`, `TL code`, `l`] mp_tac
+    alloca_history_no_alloca_slice >>
+  impl_tac >- simp[] >>
+  `u.vs_inst_idx + LENGTH (TL code) = t.vs_inst_idx` by
+    (qpat_assum `t.vs_inst_idx = _` (fn th => rewrite_tac [th]) >>
+     qpat_assum `u.vs_inst_idx = _` (fn th => rewrite_tac [th]) >>
+     qpat_assum `sb.cs_current_insts = _` (fn th => rewrite_tac [th]) >>
+     qpat_assum `emitted_insts _ _ = _` (fn th => rewrite_tac [th]) >>
+     simp[Abbr `code`, bytes_snapshot_insts_def]) >>
+  simp[] >> strip_tac >>
+  irule alloca_history_frame >> first_assum (irule_at Any) >> simp[]
 QED
 
 (* TOP-LEVEL: a non-word stack value saved into a fresh buffer. *)
@@ -86,6 +135,7 @@ Theorem materialize_stack_origin_ptr_path:
           stmt_state_rel H' ctx func cenv cx es t) /\
     allocas_from lo t /\
     s.vs_alloca_next <= t.vs_alloca_next /\
+    (is_bytestring_type ty ==> alloca_history func t) /\
     lookup_var q t = SOME w /\ ptr_covers G' tn' q t (type_memory_size tv) /\
     (!mem. mem_agree_outside tn'.t_mem t.vs_memory mem ==>
            val_in_memory tv v (w2n w) mem) /\
@@ -217,6 +267,23 @@ Proof
   conj_tac
   >- (qpat_x_assum `allocas_from lo u` mp_tac >> simp[allocas_from_def]) >>
   conj_tac >- simp[] >>
+  conj_tac
+  >- (strip_tac >>
+      `sb.cs_current_bb = sa.cs_current_bb` by
+        (drule_all compile_materialize_bytes_code >> simp[same_blocks_def]) >>
+      `u.vs_current_bb = sa.cs_current_bb` by
+        (qpat_x_assum `u.vs_current_bb = sm.cs_current_bb` SUBST1_TAC >>
+         first_assum ACCEPT_TAC) >>
+      `u.vs_inst_idx = LENGTH sa.cs_current_insts + 1` by
+        (qpat_x_assum `u.vs_inst_idx = LENGTH sm.cs_current_insts` SUBST1_TAC >>
+         first_assum ACCEPT_TAC) >>
+      `t.vs_current_bb = u.vs_current_bb` by
+        (qpat_x_assum `t.vs_current_bb = sb.cs_current_bb` SUBST1_TAC >>
+         qpat_x_assum `u.vs_current_bb = sa.cs_current_bb` SUBST1_TAC >>
+         first_assum ACCEPT_TAC) >>
+      mp_tac (Q.INST [`src` |-> `Var xs`] materialize_bytes_alloca_history) >>
+      impl_tac >- (rpt conj_tac >> first_assum ACCEPT_TAC) >>
+      disch_then ACCEPT_TAC) >>
   conj_tac >- metis_tac[] >>
   conj_tac
   >- (qpat_x_assum `ptr_covers G1 tn1 q u _` mp_tac >>
