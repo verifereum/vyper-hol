@@ -129,7 +129,7 @@ Proof
   simp[write_memory_with_expansion_def, write_memory_def, expand_memory_def]
 QED
 
-Theorem source_bulk_header_origin[local]:
+Theorem source_bulk_header_origin:
   abi_decode_array_header (Var root) src CALLDATALOAD sa = (cnt,sb) /\
   run_inst_seq (emitted_insts sa sb) s = OK t /\ ~s.vs_halted /\
   lookup_var root s = SOME (n2w d) /\ d < dimword (:256) /\
@@ -346,7 +346,7 @@ Resume source_bulk_header_origin[edges]:
   simp[]
 QED
 
-Finalise source_bulk_header_origin
+Finalise source_bulk_header_origin[local]
 (* A single emitted scalar instruction, with its canonical ghost update. *)
 Theorem source_bulk_instruction_origin[local]:
   sb.cs_current_bb = sa.cs_current_bb /\
@@ -638,7 +638,7 @@ Proof
 QED
 
 
-Theorem source_bulk_count_guard_origin[local]:
+Theorem source_bulk_count_guard_origin:
   abi_decode_count_guard CALLDATALOAD src maxn sa = (cnt,sb) /\
   eval_operand src s = SOME a /\ op_taint tn src = {} /\
   run_inst_seq (emitted_insts sa sb) s = OK t ==>
@@ -836,7 +836,7 @@ Resume source_bulk_count_guard_origin[backward]:
   simp[]
 QED
 
-Finalise source_bulk_count_guard_origin
+Finalise source_bulk_count_guard_origin[local]
 
 (* Split the successful concrete bulk run before choosing any ghosts. *)
 Theorem source_bulk_phase_runs[local]:
