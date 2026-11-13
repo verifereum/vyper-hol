@@ -1,7 +1,7 @@
 (* Compose a counted element copy with the already copied array prefix. *)
 Theory assignStorageBlockFramePtr
 Ancestors
-  assignBasePtrStorageLoop placeDynStorageEffect placeStoreCopyPath
+  assignBasePtrStorageLoop placeStoreCopyPath
   stmtSimStoreCopy venomState venomExecSemantics ptrDiscipline
   words arithmetic list
 

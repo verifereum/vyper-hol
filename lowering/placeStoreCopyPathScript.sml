@@ -455,3 +455,18 @@ Proof
      wordsLib.WORD_DECIDE_TAC) >>
   Cases_on `tr` >> simp[wordsTheory.w2n_n2w, arithmeticTheory.LESS_MOD] >> gvs[]
 QED
+
+
+Theorem place_store_prefix_append:
+  !j i s b k loc.
+    store_copy_prefix loc b k s (i+j) =
+    store_copy_prefix loc (b+n2w i*32w) (k+n2w i)
+      (store_copy_prefix loc b k s i) j
+Proof
+  Induct_on `j` >- simp[place_store_prefix_eqs] >>
+  rpt gen_tac >>
+  simp[ADD_CLAUSES, place_store_prefix_eqs, place_store_prefix_fields,
+       mload_def, GSYM word_add_n2w, WORD_LEFT_ADD_DISTRIB,
+       WORD_RIGHT_ADD_DISTRIB,
+       WORD_ADD_ASSOC]
+QED

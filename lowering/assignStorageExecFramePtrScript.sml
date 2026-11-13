@@ -1,7 +1,7 @@
 (* Storage-copy frame composition keeps all noncontrol machine fields. *)
 Theory assignStorageExecFramePtr
 Ancestors
-  assignStorageBlockFramePtr assignBasePtrStorageLoop placeDynStorageEffect
+  assignStorageBlockFramePtr assignBasePtrStorageLoop placeStoreCopyPath
   stateFrame venomState venomExecSemantics words arithmetic
 
 Theorem store_copy_prefix_execution_frame:
