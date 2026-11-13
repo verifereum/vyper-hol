@@ -22,7 +22,7 @@ Proof
        WORD_ADD_0]
 QED
 
-Theorem immutable_store_word_window[local]:
+Theorem immutable_store_word_window:
   compile_imm_store_word (SOME region) dst value sa = ((),sb) /\
   eval_operand region s = SOME 0w /\ eval_operand dst s = SOME b /\
   eval_operand value s = SOME v /\
