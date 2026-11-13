@@ -57,7 +57,9 @@ Proof
   `gas_admissible (bind (eval_expr fp.jc_cx idx) (read_result fp.jc_cx))
      expr_res_ok (mid with gas_obs := [])` by
     (irule subscript_result_index_admissible >>
-     goal_assum (drule_at Any) >> qexistsl_tac [`A`, `ann`] >> simp[]) >>
+     qpat_assum `~subscript_reads_base _ _ _` (fn th => simp[th]) >>
+     goal_assum (drule_at (Pat `gas_marked_exec _ _ _ _ _ _ _ _`)) >>
+     goal_assum (drule_at (Pat `gas_admissible _ _ _`)) >> fs[]) >>
   `intcall_expr_res fp ce env (mid with gas_obs := []) sm t /\
    ~t.vs_halted /\ t.vs_current_bb = sm.cs_current_bb /\
    t.vs_inst_idx = LENGTH sm.cs_current_insts` by
