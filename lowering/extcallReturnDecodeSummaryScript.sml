@@ -37,7 +37,7 @@ Proof
   qexists_tac `ceiling` >>
   irule (SRULE [abi_valid_allocated_type_contract_def] abi_valid_allocated_success) >>
   simp_tac bool_ss [abi_valid_allocated_entry_def] >>
-  qexistsl_tac [`B`, `LENGTH (TAKE cap bs)`, `base_op`, `dst`, `env`,
+  qexistsl_tac [`B`, `H`, `LENGTH (TAKE cap bs)`, `base_op`, `dst`, `env`,
     `hi`, `live`, `0`, `sf`, `Lit 0w`, `TAKE cap bs`] >>
   fs[vyper_valid_enc_def, evaluate_abi_decode_def, decode_abi_value_def,
      AllCaseEqs(), Excl "dec_def", Excl "enc_def",
