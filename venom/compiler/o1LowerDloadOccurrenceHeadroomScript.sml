@@ -3,7 +3,7 @@ Ancestors
   o1LowerDloadRawBridge o1LowerDloadReadiness o1LowerDloadOccurrence
   o1PassContract lowerDloadDefs unitMemInv venomWf venomExecSemantics
   contextCodegenRel list words venomInst contextRawReachable ctxLookupAgree
-  ptrDiscipline
+  ptrDiscipline lowerDloadDynHeadroom
 
 Theorem ld_occurrence_headroom:
   (!name f. lookup_function name C.ctx_functions = SOME f ==> wf_function f) /\
@@ -58,23 +58,6 @@ Theorem ld_occurrence_shape_alloca_headroom:
 Proof
   strip_tac >> irule ld_occurrence_alloca_headroom >>
   metis_tac[ld_ctx_shape_lookup_wf]
-QED
-
-(* With DALLOCA the frontier, plus the DLOAD scratch still to come, stays at
-   or below the dynamic floor (the initial free memory pointer). *)
-Theorem ld_raw_dyn_headroom:
-  mem_inv dload_headroom_ok C vs /\ raw_reachable vs C fn inst s ==>
-  s.vs_alloca_next + 32 * ctx_dload_count C <= dyn_floor C vs
-Proof
-  strip_tac >>
-  `s.vs_initial_fmp = vs.vs_initial_fmp` by
-    metis_tac[raw_reachable_initial_fmp] >>
-  `dload_headroom_ok C fn inst s` by
-    (qpat_x_assum `mem_inv _ _ _` mp_tac >> simp[mem_inv_raw_reachable] >>
-     metis_tac[]) >>
-  fs[dload_headroom_ok_def, dyn_floor_def, ctx_has_dalloca_def] >>
-  rw[] >> fs[] >>
-  TRY (qpat_x_assum `s.vs_initial_fmp = _` SUBST_ALL_TAC) >> decide_tac
 QED
 
 Theorem ld_occurrence_shape_dyn_headroom:

@@ -179,10 +179,11 @@ Theorem ptr_paired_current_range_static_bound:
   EVERY (\fn. fn.fn_eom = NONE) C.ctx_functions /\
   mem_inv raw_mem_ok C vs /\
   fixed_region_reserved lo C /\ ptr_discipline lo C vs /\
-  EVERY ssa_form C.ctx_functions /\ ~ctx_has_dalloca C /\
+  EVERY ssa_form C.ctx_functions /\
   ctx_inst_ids_distinct C /\ callee_first names C.ctx_functions /\
   EVERY all_reachable C.ctx_functions /\
   EVERY fn_defs_reach_uses C.ctx_functions /\ max_live_eom C' = SOME eom /\
+  (ctx_has_dalloca C ==> eom <= w2n vs.vs_initial_fmp) /\
   ~in_revert_forward a.po_fn a.po_state /\
   ((mem_read_ops a.po_inst = SOME ops /\
     MEM (w2n x,n) (source_memory_read_ranges a.po_inst a.po_state)) \/
@@ -191,12 +192,14 @@ Theorem ptr_paired_current_range_static_bound:
   eval_operand ops.iao_ofst a.po_state = SOME x /\
   eval_operand ops.iao_ofst at.po_state = SOME y /\
   ptr_lookup_transport births positions (op_prov TG ops.iao_ofst) {} (SOME x) (SOME y) ==>
-  n = 0 \/ w2n y + n <= eom
+  n = 0 \/ w2n y + n <= eom \/ (y = x /\ dyn_floor C vs <= w2n x)
 Proof
   rpt gen_tac >> disch_then (map_every assume_tac o CONJUNCTS) >>
   Cases_on `n = 0` >- simp[] >>
   drule_all ptr_paired_current_range_classification >> strip_tac
-  >- (drule_all ptr_stage_fixed_region_bound >> simp[]) >>
+  >- (drule_all ptr_stage_fixed_region_bound >> simp[])
+  >- (rpt disj2_tac >> gvs[]) >>
+  disj2_tac >> disj1_tac >>
   `ptr_stage_placements C' positions` by
     fs[concretizePtrPairedPrefixTheory.ptr_paired_prefix_def] >>
   drule_all ptr_stage_placements_endpoint_bound >> simp[] >> decide_tac
@@ -211,17 +214,18 @@ Theorem ptr_paired_read_range_static_bound:
   EVERY (\fn. fn.fn_eom = NONE) C.ctx_functions /\
   mem_inv raw_mem_ok C vs /\
   fixed_region_reserved lo C /\ ptr_discipline lo C vs /\
-  EVERY ssa_form C.ctx_functions /\ ~ctx_has_dalloca C /\
+  EVERY ssa_form C.ctx_functions /\
   ctx_inst_ids_distinct C /\ callee_first names C.ctx_functions /\
   EVERY all_reachable C.ctx_functions /\
   EVERY fn_defs_reach_uses C.ctx_functions /\ max_live_eom C' = SOME eom /\
+  (ctx_has_dalloca C ==> eom <= w2n vs.vs_initial_fmp) /\
   ~in_revert_forward a.po_fn a.po_state /\
   mem_read_ops a.po_inst = SOME ops /\
   eval_operand ops.iao_ofst a.po_state = SOME x /\
   eval_operand ops.iao_ofst at.po_state = SOME y /\
   MEM (w2n x,n) (source_memory_read_ranges a.po_inst a.po_state) /\
   ptr_lookup_transport births positions (op_prov TG ops.iao_ofst) {} (SOME x) (SOME y) ==>
-  n = 0 \/ w2n y + n <= eom
+  n = 0 \/ w2n y + n <= eom \/ (y = x /\ dyn_floor C vs <= w2n x)
 Proof
   strip_tac >> irule ptr_paired_current_range_static_bound >>
   rpt (goal_assum (drule_at Any)) >> simp[] >>
@@ -314,8 +318,12 @@ Resume ptr_paired_terminal_static_bound[terminal_operands]:
   `mem_read_ops a.po_inst = SOME
     <|iao_ofst := addr; iao_size := SOME lenop; iao_max_size := SOME lenop|>` by
     simp[mem_read_ops_def] >>
+  `ctx_has_dalloca C ==> eom <= w2n vs.vs_initial_fmp` by fs[] >>
+  `!w:word256. ~(dyn_floor C vs <= w2n w)` by
+    fs[dyn_floor_def, arithmeticTheory.NOT_LESS_EQUAL, wordsTheory.w2n_lt] >>
   drule_at (Pat `mem_read_ops _ = _`) ptr_paired_read_range_static_bound >>
-  disch_then (drule_all o SRULE []) >> simp[]
+  disch_then (drule_all o SRULE []) >>
+  qpat_x_assum `!w. ~(dyn_floor _ _ <= _)` (fn th => simp[th])
 QED
 
 Finalise ptr_paired_terminal_static_bound
