@@ -485,7 +485,7 @@ Proof
   irule mstore_mem_bytes_at_disjoint >> decide_tac
 QED
 
-Theorem aug_place_store_trace_frame[local]:
+Theorem aug_place_store_trace_frame:
   storage_trace_frame (bind (lift_sum bv) (write_place cx p))
 Proof
   irule vyperStorageTraceTheory.storage_trace_frame_bind_all >>
@@ -516,7 +516,7 @@ QED
 
 (* A horizon valid after a source with the storage-trace frame is valid
    before it. *)
-Theorem aug_place_valid_back[local]:
+Theorem aug_place_valid_back:
   storage_trace_frame f /\
   f (es with gas_obs := gs) = (res,mid with gas_obs := []) /\
   valid_horizon cx st0 H mid.storage_trace ==>
@@ -778,7 +778,7 @@ Proof
   qexistsl_tac [`get_tenv cx`, `dtv`, `ty`] >> simp[]
 QED
 
-Theorem aug_place_prefix_frame[local]:
+Theorem aug_place_prefix_frame:
   target_post H ctx func cenv cx es sa sc s0 mid pv vt r t /\
   stmt_state_rel H ctx func cenv cx es s0 /\
   stmt_state_rel H ctx func cenv cx mid t /\
@@ -960,7 +960,7 @@ Proof
       FLOOKUP_UPDATE, not_fresh_at_def]
 QED
 
-Theorem aug_place_replay_admissible[local]:
+Theorem aug_place_replay_admissible:
   gas_admissible whole A es /\
   (!gs. whole (es with gas_obs := prefix ++ gs) =
         suffix (mid with gas_obs := gs)) ==>
@@ -1043,7 +1043,7 @@ Proof
   goal_assum (drule_at Any) >> fs[ignore_bind_def]
 QED
 
-Theorem aug_place_bind_value_exec[local]:
+Theorem aug_place_bind_value_exec:
   gas_outcome memory tops (ctx, func) cx st0
     (a : evaluation_state -> value evaluation_result) (es, s0) P Exit /\
   (!H res ee t. P H res ee t ==> ?v. res = INL v) /\
@@ -1163,7 +1163,7 @@ Proof
   goal_assum (drule_at Any) >> simp[]
 QED
 
-Theorem aug_place_stmt_source[local]:
+Theorem aug_place_stmt_source:
   eval_stmt cx (AugAssign ty bt bop e) =
   bind (eval_base_place cx bt) (\pv.
     bind (get_place pv) (\p.
@@ -1178,7 +1178,7 @@ Proof
        SF ETA_ss]
 QED
 
-Theorem aug_place_rest_trace_frame[local]:
+Theorem aug_place_rest_trace_frame:
   !pv. storage_trace_frame (bind (get_place pv) (\p.
       bind (read_place cx p) (\cur.
         bind (place_type_value cx p) (\ptv.

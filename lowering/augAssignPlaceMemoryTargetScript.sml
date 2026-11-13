@@ -1,7 +1,6 @@
 (* Allocation bounds at a word-valued local place. *)
 Theory augAssignPlaceMemoryTarget
 Ancestors
-  augAssignPlaceSourceMemory accountsRelProps vyperFiniteStoragePreservation
   targetPlaceSimMem stmtSimAugAssignPlaceMemory allocaFootprint
   abiValueEncoding loweringPosts bodySimAugPlaceLoad exprSimDefs
   compileEnv exprSimProps exprLoweringProps bodyMemAugAssignAttrLocal
@@ -161,30 +160,15 @@ Theorem aug_place_storage_read_path:
     u.vs_requests = s.vs_requests /\ u.vs_call_ctx = s.vs_call_ctx
 Proof
   rpt strip_tac >>
-  drule_all aug_place_pure_target_storage_range >> strip_tac >>
-  `?offset tv0 path delta. MEM (StorageRoot tr offset tv0) st.storage_trace /\
-     storage_subregion tv0 path delta tv /\ slot = n2w offset + n2w delta` by
-    (qpat_assum `eval_target_place cx bt es = _`
-       (mp_tac o MATCH_MP
-         vyperFiniteStoragePreservationTheory.eval_target_place_observed_region) >>
-     simp[]) >>
-  `storage_place_observed H (StoragePlace tr slot tv)` by
-    (irule aug_place_storage_rooted_observed >>
-     goal_assum (drule_at (Pat `valid_horizon`)) >>
-     goal_assum (drule_at (Pat `MEM`)) >> goal_assum (drule_at Any) >> simp[]) >>
-  `evaluate_type (get_tenv cx) ty = SOME tv` by
-    gvs[target_post_def, place_ptr_rel_def] >>
-  `0 < type_slot_size tv` by
-    (`is_word_type ty` by first_assum ACCEPT_TAC >>
-     gvs[is_word_type_def, evaluate_type_def, type_slot_size_def,
-         AllCaseEqs()]) >>
-  `storage_read_live H tr (get_storage cx st tr) slot tv` by
-    metis_tac[accountsRelPropsTheory.storage_place_observed_read_live] >>
   `evaluate_type (get_tenv cx) ty = SOME tv /\
    stmt_state_rel H ctx func cenv cx st s /\
+   storage_well_formed_on cx st (FST H) /\
    eval_operand (FST r) s = SOME slot /\
    (!x. FST r = Var x ==> not_fresh_at sp x)` by
     gvs[target_post_def, place_ptr_rel_def] >>
+  qspecl_then [`cx`, `st0`, `H`, `st`, `ty`, `tv`, `bt`, `es`, `tr`, `slot`]
+    mp_tac aug_place_target_storage_ready >>
+  impl_tac >- simp[] >> strip_tac >>
   drule_all aug_place_storage_read_ready >> strip_tac >>
   drule_all aug_place_storage_load_ready >> strip_tac >>
   drule_all aug_place_storage_access_path >> strip_tac >>
