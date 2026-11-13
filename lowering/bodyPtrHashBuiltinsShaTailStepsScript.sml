@@ -1,6 +1,6 @@
 (* Non-call edges used by the shared SHA256 tail. *)
 Theory bodyPtrHashBuiltinsShaTailSteps
-Ancestors bodyPtrHashBuiltinsShaCall bodyPtrHashBuiltinsKeccakBytesRun
+Ancestors wordLoadStorePtr bodyPtrHashBuiltinsShaCall bodyPtrHashBuiltinsKeccakBytesRun
   typedCopyPtr bodyPtrDefs fragGasSeqPtr ptrSafeRun ptrDiscipline
   venomExecSemantics venomInst venomState contextCodegenRel codegenRel
   words finite_map pred_set

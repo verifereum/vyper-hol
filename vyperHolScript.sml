@@ -26,8 +26,10 @@ Ancestors
   mmBlockSimProofs mmSupplyWfProofs mmSupplySsaProofs
   (* O1: lifting per-function pass facts to the stage contract *)
   o1PassLift
-  (* codegen and compiler units: frame simulation, stack planning, unit checks *)
+  (* codegen and compiler units: frame simulation, stack planning, unit checks,
+     codegen request prefix *)
   genFrameSim stackPlanGenCompute o1SourceUnitCheck unitMemInv
+  codegenRequestPrefix
   (* lowering: ABI correctness, target/place steps, typed copies and hashing,
      place typing *)
   abiProofs targetPlaceSimCases typedCopyAgreement bytestringHashProps
@@ -52,3 +54,5 @@ Ancestors
   e2eDeployCorrectness
   (* body induction: custom-error rows, admitted until the gate admits them *)
   bodyCustomErrorCases
+  (* codegen: its assembly is label-disciplined (the asm optimizer's premise) *)
+  codegenLabelDisciplined

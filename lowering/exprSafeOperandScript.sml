@@ -403,8 +403,11 @@ Theorem compile_safe_mul_safe_operand:
   compile_safe_mul x y ty sa = (r,sb) ==> safe_operand sb r
 Proof
   Cases_on `type_bounds ty` >>
-  straight_safe_tac [compile_safe_mul_def, compile_mul_overflow_check_def,
-                     clamp_and_return_def, compile_clamp_def]
+  simp ([compile_safe_mul_def, compile_mul_overflow_check_def,
+         clamp_and_return_def, compile_clamp_def] @ monad_rws) >>
+  rpt (IF_CASES_TAC >> simp monad_rws) >>
+  strip_tac >> gvs[] >>
+  simp[safe_operand_def, not_fresh_at_def, ASCIInumbersTheory.toString_11]
 QED
 
 Theorem compile_safe_pow_safe_operand:

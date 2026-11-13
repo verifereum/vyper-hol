@@ -82,6 +82,7 @@ Proof
            (compile_decode_args cenv args off load_opc hi_op base_adj)` by
     (gen_tac >> first_x_assum irule >> simp[]) >>
   PURE_ONCE_REWRITE_TAC [compile_decode_args_def] >>
+  PURE_REWRITE_TAC [compile_abi_arg_ptr_guard_def] >>
   Cases_on `FLOOKUP cenv.ce_vars h0` >>
   simp_tac std_ss [option_case_def] >>
   TRY (rename1 `FLOOKUP _ _ = SOME loc` >>
@@ -249,6 +250,7 @@ Proof
   strip_tac >> drule fuel_ok_lower_value >> strip_tac >>
   Induct >- simp[compile_init_kwargs_def, fuel_ok_return] >>
   PairCases >> rpt gen_tac >> PURE_ONCE_REWRITE_TAC [compile_init_kwargs_def] >>
+  PURE_REWRITE_TAC [compile_abi_arg_ptr_guard_def] >>
   fuel_auto [fuel_ok_emit_op, fuel_ok_emit_void,
              fuel_ok_compile_abi_decode_to_buf, fuel_ok_context_storage] >>
   simp[is_terminator_def]

@@ -6,6 +6,7 @@ Ancestors
   vfmExecution[ignore_grammar] vyperAST vyperGetter vyperABI
   vyperMisc vyperNsidFmap vyperValue vyperValueOperation vyperStorage vyperContext vyperState
   vyperEvent vyperEvmBoundary vyperCreate vyperRuntimeAccounts
+  vyperSubscriptOverlap
 Libs
   cv_transLib wordsLib intLib monadsyntax
 
@@ -397,6 +398,25 @@ Definition remcode_def:
       FILTER (λ((src_id, fn), ss). ¬MEM (src_id, fn) cx.stk)
         (FLAT (MAP (λ(src_id, ts). module_fns src_id ts) mods))
 End
+
+(* Whether array subscript e1[e2] reads its base before evaluating its index:
+   the index could resize a dynamic array the base was derived from. *)
+Definition subscript_reads_base_def:
+  subscript_reads_base cx e1 e2 =
+    subscript_overlap
+      (case ALOOKUP cx.sources cx.txn.target of NONE => [] | SOME mods => mods)
+      e1 e2
+End
+
+val () = cv_auto_trans subscript_reads_base_def;
+
+Theorem subscript_reads_base_through_dynarray:
+  subscript_reads_base cx e1 e2 ⇒
+  is_ArrayT (expr_type e1) ∧ base_through_dynarray e1
+Proof
+  rw[subscript_reads_base_def] >> drule subscript_overlap_through_dynarray >>
+  simp[]
+QED
 
 (* these helpers are also for termination, to enable HOL4's definition machinery
 * to "see through" the state-exception monad when constructing the termination
@@ -1325,6 +1345,31 @@ Proof
   simp[FUN_EQ_THM, precompile_call_success_def]
 QED
 
+(* The x.code source of slice(x.code, start, len): its type and address x.
+   Such a slice evaluates start and len before x (see evaluate_def). *)
+Definition code_slice_source_def[simp]:
+  code_slice_source (Slice n) [Builtin ct (Acc Code) [addr]; start; len] =
+    SOME (ct, addr) ∧
+  code_slice_source _ _ = NONE
+End
+
+val () = cv_auto_trans code_slice_source_def;
+
+Theorem code_slice_source_SOME:
+  code_slice_source bt es = SOME (ct, addr) ⇔
+  ∃n start len. bt = Slice n ∧ es = [Builtin ct (Acc Code) [addr]; start; len]
+Proof
+  qid_spec_tac ‘es’ >> qid_spec_tac ‘bt’ >>
+  ho_match_mp_tac code_slice_source_ind >> simp[]
+QED
+
+Theorem code_slice_source_NONE[simp]:
+  LENGTH es ≠ 3 ⇒ code_slice_source bt es = NONE
+Proof
+  qid_spec_tac ‘es’ >> qid_spec_tac ‘bt’ >>
+  ho_match_mp_tac code_slice_source_ind >> simp[]
+QED
+
 Definition is_view_mut_def[simp]:
   is_view_mut mut ⇔ mut = View ∨ mut = Pure
 End
@@ -1641,6 +1686,10 @@ Definition evaluate_def:
   od ∧
   eval_expr cx (Subscript _ e1 e2) = do
     res <- eval_expr cx e1;
+    res <- (if subscript_reads_base cx e1 e2 then do
+              v <- read_result cx res;
+              return (Value v)
+            od else return res);
     idx <- eval_expr cx e2;
     v <- read_result cx idx;
     select_result cx (expr_type e1) res (ValueSubscript v)
@@ -1663,7 +1712,17 @@ Definition evaluate_def:
       lift_sum $ evaluate_membership tv (bt = Bop NotIn) (EL 0 vs) (EL 1 vs)
     od else if bt = Env MsgGas then next_gas_reading
     else do
-      vs <- eval_exprs cx es;
+      vs <- (case code_slice_source bt es of
+        SOME (code_ty, addr) => do
+          tail_vs <- eval_exprs cx (TL es);
+          addr_vs <- eval_exprs cx [addr];
+          code_acc <- get_accounts;
+          code_v <- lift_sum $ evaluate_code_source cx code_acc
+                                 (is_self_addr addr) code_ty (expr_type addr)
+                                 addr_vs;
+          return (code_v :: tail_vs)
+        od
+      | NONE => eval_exprs cx es);
       acc <- get_accounts;
       v <- lift_sum $ evaluate_builtin cx acc ty bt (MAP expr_type es) vs;
       precompile_call_success bt;
@@ -1689,9 +1748,10 @@ Definition evaluate_def:
   eval_expr cx (Call _ (ExtCall is_static skip_check sig opts) es _) = do
     target <- eval_exprs cx (TAKE 1 es);
     nargs <<- LENGTH (FST (SND sig));
-    results <- eval_expr_results cx (TAKE nargs (DROP 1 es));
+    (* Each argument is read as it is evaluated, before later arguments and
+       the keyword operands run (Vyper 0.5.0b1 snapshot_value_for_delayed_use). *)
+    vs <- eval_exprs cx (TAKE nargs (DROP 1 es));
     kwargs <- eval_exprs cx (DROP (1 + nargs) es);
-    vs <- read_results cx results;
     eval_ext_call cx is_static skip_check sig opts (target ++ vs ++ kwargs)
   od ∧
   eval_expr cx (Call _ (IntCall (src_id_opt, fn)) es _) = do
@@ -1705,7 +1765,9 @@ Definition evaluate_def:
     ret <<- FST $ sstup2; body <<- SND $ sstup2;
     type_check (LENGTH es ≤ LENGTH args ∧
            LENGTH args - LENGTH es ≤ LENGTH dflts) "IntCall args length";
-    results <- eval_expr_results cx es;
+    (* Each argument is read as it is evaluated, before later arguments run
+       (Vyper 0.5.0b1 snapshot_value_for_delayed_use). *)
+    vs <- eval_exprs cx es;
     needed_dflts <<- DROP (LENGTH dflts - (LENGTH args - LENGTH es)) dflts;
     cxd <<- cx with stk updated_by CONS (src_id_opt, fn);
     prev <- get_scopes;
@@ -1714,7 +1776,6 @@ Definition evaluate_def:
           eval_exprs cxd needed_dflts
        od)
       (set_scopes prev);
-    vs <- read_results cx results;
     (* Use combined type env (may reference types from other modules) *)
     all_tenv <<- get_tenv cx;
     env <- lift_option_type (bind_arguments all_tenv args (vs ++ dflt_vs)) "IntCall bind_arguments";
@@ -1901,6 +1962,8 @@ Termination
     >> irule LESS_EQ_LESS_TRANS
     >> qexists_tac `LENGTH vs + n * x + 1` >> simp[]
     >> PROVE_TAC[MULT_COMM, LESS_MONO_MULT])
+  >>~- ([`code_slice_source _ _ = SOME _`],
+    gvs[code_slice_source_SOME, bound_def])
   >>~- ([`builtin_args_length_ok`],
     gvs[builtin_args_length_ok_def, check_def, type_check_def, assert_def,
         LENGTH_EQ_NUM_compute, bound_def])
