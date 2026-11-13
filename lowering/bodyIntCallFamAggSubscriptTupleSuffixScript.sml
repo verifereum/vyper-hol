@@ -112,6 +112,7 @@ Theorem intcall_tuple_selected_post:
          a <= w2n cw /\ w2n cw + type_memory_size etv <= a + len /\
          a + len < dimword (:256) /\
          (fp.jc_lo <= a \/ ?b z. fp.jc_staged b z /\ b <= a /\ a + len <= b + z)) /\
+    (~expr_has_effect (Subscript (EL k tys) obj idx) ==> pure_frame ce fp.jc_func es sa s0 u) /\
     intcall_expr_cont fp ce env es sa s0 ee sb u
 Proof
   strip_tac >>
@@ -172,6 +173,7 @@ Theorem intcall_tuple_suffix_post:
          a <= w2n cw /\ w2n cw + type_memory_size etv <= a + len /\
          a + len < dimword (:256) /\
          (fp.jc_lo <= a \/ ?b z. fp.jc_staged b z /\ b <= a /\ a + len <= b + z)) /\
+    (~expr_has_effect (Subscript (EL k tys) obj idx) ==> pure_frame ce fp.jc_func es sa s0 u) /\
     intcall_expr_cont fp ce env es sa s0 ee sb u
 Proof
   disch_then (map_every assume_tac o CONJUNCTS) >>

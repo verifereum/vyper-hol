@@ -46,7 +46,7 @@ Theorem intcall_callee_src_dynamic:
   runtime_storage_consistent env (cx with stk updated_by CONS (NONE,name)) es /\
   IS_SOME es.outcomes /\
   oracle_storage_ok (cx with stk updated_by CONS (NONE,name)) es /\
-  intcall_callee_src cx name ss es = (res,ee) ==>
+  intcall_callee_src cx name mut F ss es = (res,ee) ==>
   state_well_typed ee /\ accounts_well_typed ee.accounts /\
   contract_storage_well_formed (cx with stk updated_by CONS (NONE,name)) ee /\
   outcome_suffix es.outcomes ee.outcomes
@@ -61,18 +61,18 @@ Proof
   `outcome_suffix es.outcomes st.outcomes` by
     (drule (cj 2 eval_outcome_suffix_mutual) >> simp[]) >>
   Cases_on `result0` >>
-  gvs[intcall_callee_src_def, try_def, ignore_bind_def, bind_def, return_def] >>
+  gvs[intcall_callee_src_F, try_def, ignore_bind_def, bind_def, return_def] >>
   rename1 `handle_function ex st = _` >> Cases_on `ex` >>
   gvs[handle_function_def, return_def, raise_def]
 QED
 
 Theorem intcall_callee_marked_restore_inv:
   expr_sim_inv ce cx env (es with scopes := prev) /\
-  (!gs result fin. intcall_callee_src cx name ss (es with gas_obs := gs) = (result,fin) ==>
+  (!gs result fin. intcall_callee_src cx name mut F ss (es with gas_obs := gs) = (result,fin) ==>
     state_well_typed fin /\ accounts_well_typed fin.accounts /\
     contract_storage_well_formed (cx with stk updated_by CONS (NONE,name)) fin /\
     outcome_suffix es.outcomes fin.outcomes) /\
-  gas_marked_exec memory (ctx,func) (intcall_callee_src cx name ss)
+  gas_marked_exec memory (ctx,func) (intcall_callee_src cx name mut F ss)
     (es,s) marks res ee r ==>
   expr_sim_inv ce cx env (ee with <|scopes := prev; gas_obs := []|>)
 Proof
@@ -99,11 +99,11 @@ QED
 Theorem intcall_entry_callee_dynamic:
   body_inv tops ctx ce cx /\
   expr_body_pre ce cx env (Call ann (IntCall (NONE,name)) es dflt) es0 /\
-  lookup_callable_function cx.in_deploy name tops = SOME (mut,F,args,[],ret,ss) /\
-  MEM (FunctionDecl Internal mut F rr name args [] ret ss) tops /\
+  lookup_callable_function cx.in_deploy name tops = SOME (mut,F,args,dflts,ret,ss) /\
+  MEM (FunctionDecl Internal mut F rr name args dflts ret ss) tops /\
   intcall_entry tops ctx func ce cx env name es sa sb vv s0 es0
     (mut,F,args,ret,ss,rr) prev penv rtv es1 t /\
-  intcall_callee_src cx name ss (es1 with gas_obs := gs) = (res,ee) ==>
+  intcall_callee_src cx name mut F ss (es1 with gas_obs := gs) = (res,ee) ==>
   state_well_typed ee /\ accounts_well_typed ee.accounts /\
   contract_storage_well_formed (cx with stk updated_by CONS (NONE,name)) ee /\
   outcome_suffix es1.outcomes ee.outcomes
@@ -128,13 +128,13 @@ Proof
      contract_storage_well_formed (cx with stk updated_by CONS (NONE,name)) es1 /\
      storage_layout_safe (cx with stk updated_by CONS (NONE,name)) /\
      oracle_storage_ok (cx with stk updated_by CONS (NONE,name)) es1` by
-    (fs[cenv_module_pins_def] >>
+    (gvs[cenv_module_pins_def] >>
      drule_all pinned_internal_bound_body_typing >> strip_tac >>
      drule_all intcall_bound_source_invariants >>
      disch_then (qspec_then `name` strip_assume_tac) >>
      qexistsl [`env_body`,`env_after`] >>
      gvs[]) >>
-  drule_at (Pat `intcall_callee_src _ _ _ _ = _`) intcall_callee_src_dynamic >>
+  drule_at (Pat `intcall_callee_src _ _ _ _ _ _ = _`) intcall_callee_src_dynamic >>
   simp[] >> disch_then irule >>
   fs[supported_function_body_def, body_inv_def, expr_sim_inv_def,
      runtime_storage_consistent_def, runtime_consistent_def,
@@ -149,11 +149,11 @@ QED
 Theorem intcall_entry_marked_restore_inv:
   body_inv tops ctx ce cx /\
   expr_body_pre ce cx env (Call ann (IntCall (NONE,name)) es dflt) es0 /\
-  lookup_callable_function cx.in_deploy name tops = SOME (mut,F,args,[],ret,ss) /\
-  MEM (FunctionDecl Internal mut F rr name args [] ret ss) tops /\
+  lookup_callable_function cx.in_deploy name tops = SOME (mut,F,args,dflts,ret,ss) /\
+  MEM (FunctionDecl Internal mut F rr name args dflts ret ss) tops /\
   intcall_entry tops ctx func ce cx env name es sa sb vv s0 es0
     (mut,F,args,ret,ss,rr) prev penv rtv es1 t /\
-  gas_marked_exec memory (ctx,callee) (intcall_callee_src cx name ss)
+  gas_marked_exec memory (ctx,callee) (intcall_callee_src cx name mut F ss)
     (es1,entered) marks res ee r ==>
   expr_sim_inv ce cx env (ee with <|scopes := prev; gas_obs := []|>)
 Proof

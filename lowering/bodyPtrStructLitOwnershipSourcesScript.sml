@@ -2,16 +2,6 @@ Theory bodyPtrStructLitOwnershipSources
 Ancestors supportedProgram supportedDecls loweringShapeProps compileVyper
   supportedStmtTraverse loweringShapeDefs list pair
 
-Theorem structlit_supported_function_defaults:
-  !tops vis mut nr rr name args defaults ret body.
-  supported_program tops /\
-  MEM (FunctionDecl vis mut nr rr name args defaults ret body) tops ==>
-  defaults = []
-Proof
-  rpt strip_tac >> drule_all supported_program_declaration >>
-  simp[supported_function_header_contract, NULL_EQ]
-QED
-
 Theorem structlit_supported_function_body:
   !tops vis mut nr rr name args defaults ret body.
   supported_program tops /\ (vis = Deploy ==> supported_program_deploy tops) /\

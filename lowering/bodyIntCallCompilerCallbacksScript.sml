@@ -17,8 +17,8 @@ Theorem intcall_interval_expr_child_callback:
     intcall_compiler_interval k a
       (SND (expr_child_callback bound cfn ce ty e a))
 Proof
-  rpt strip_tac >> Cases_on `expr_size e < bound` >>
-  simp[expr_child_callback_def, intcall_interval_invalid_expr_call]
+  rpt strip_tac >> simp[expr_child_callback_def] >> IF_CASES_TAC >>
+  simp[intcall_interval_invalid_expr_call] >> first_x_assum irule >> simp[]
 QED
 
 Theorem intcall_interval_builtin_child_callback:
@@ -29,8 +29,8 @@ Theorem intcall_interval_builtin_child_callback:
     intcall_compiler_interval k a
       (SND (builtin_child_callback bound dispatch ce rt ty bi es a))
 Proof
-  rpt strip_tac >> Cases_on `list_size expr_size es < bound` >>
-  simp[builtin_child_callback_def, intcall_interval_invalid_expr_call]
+  rpt strip_tac >> simp[builtin_child_callback_def] >> IF_CASES_TAC >>
+  simp[intcall_interval_invalid_expr_call] >> first_x_assum irule >> simp[]
 QED
 
 Theorem intcall_interval_type_child_callback:
@@ -41,6 +41,6 @@ Theorem intcall_interval_type_child_callback:
     intcall_compiler_interval k a
       (SND (type_child_callback bound dispatch ce vt ty tb rt es a))
 Proof
-  rpt strip_tac >> Cases_on `list_size expr_size es < bound` >>
-  simp[type_child_callback_def, intcall_interval_invalid_expr_call]
+  rpt strip_tac >> simp[type_child_callback_def] >> IF_CASES_TAC >>
+  simp[intcall_interval_invalid_expr_call] >> first_x_assum irule >> simp[]
 QED
