@@ -2,7 +2,7 @@
 Theory bodyImmConditionPtr
 Ancestors
   forPtrControl forPtrRangePrepare stmtSimForArrayLoop bodyPtrDefs
-  ghostPcTransportPtr stmtSimProps stmtFragPtr allocaHistory
+  ghostPcTransportPtr stmtSimProps stmtFragPtr
   venomState venomInst venomExecSemantics fragExec ptrDiscipline finite_map words list arithmetic
   loweringStateRelDefs loweringPosts compileEnv exprLoweringProps
 
@@ -22,28 +22,21 @@ Theorem immutable_condition_ptr:
   FLOOKUP G idx = NONE /\ op_taint tn (Var idx) = {} /\
   eval_operand lvo s = SOME (n2w (LENGTH vs)) /\
   op_prov G lvo = NONE /\ op_taint tn lvo = {} /\
-  alloca_history func s /\
   (!x v. not_fresh_at caller x /\ lookup_var x orig = SOME v ==>
     lookup_var x s = SOME v) /\
   (!x. not_fresh_at caller x ==> FLOOKUP G x = FLOOKUP G0 x /\
     op_taint tn (Var x) = op_taint tn0 (Var x)) ==>
-  let H = DRESTRICT G (COMPL {dv});
-      tm = tn with t_var := tn.t_var |+ (dv,{});
-      t = jump_to (if k = LENGTH vs then exit else bod)
-        (update_var dv (bool_to_word (k = LENGTH vs)) s)
-  in
-    gas_path_ptr D 0 ctx func PG G tn s 0 H tm (OK t) /\
+    gas_path_ptr D 0 ctx func PG G tn s 0 (DRESTRICT G (COMPL {dv})) (tn with t_var := tn.t_var |+ (dv,{})) (OK (jump_to (if k = LENGTH vs then exit else bod) (update_var dv (bool_to_word (k = LENGTH vs)) s))) /\
     array_loop_inv ctx func cenv cx P vs id idx (Lit (n2w off)) (n2w off)
-      p dst sz ainst (if k = LENGTH vs then exit else bod) caller k es t /\
-    ghost_inv d cenv cx es H tm t /\ ptr_covers H tm p t sz /\
-    FLOOKUP H idx = NONE /\ op_taint tm (Var idx) = {} /\
-    eval_operand lvo t = SOME (n2w (LENGTH vs)) /\
-    op_prov H lvo = NONE /\ op_taint tm lvo = {} /\
-    alloca_history func t /\
+      p dst sz ainst (if k = LENGTH vs then exit else bod) caller k es (jump_to (if k = LENGTH vs then exit else bod) (update_var dv (bool_to_word (k = LENGTH vs)) s)) /\
+    ghost_inv d cenv cx es (DRESTRICT G (COMPL {dv})) (tn with t_var := tn.t_var |+ (dv,{})) (jump_to (if k = LENGTH vs then exit else bod) (update_var dv (bool_to_word (k = LENGTH vs)) s)) /\ ptr_covers (DRESTRICT G (COMPL {dv})) (tn with t_var := tn.t_var |+ (dv,{})) p (jump_to (if k = LENGTH vs then exit else bod) (update_var dv (bool_to_word (k = LENGTH vs)) s)) sz /\
+    FLOOKUP (DRESTRICT G (COMPL {dv})) idx = NONE /\ op_taint (tn with t_var := tn.t_var |+ (dv,{})) (Var idx) = {} /\
+    eval_operand lvo (jump_to (if k = LENGTH vs then exit else bod) (update_var dv (bool_to_word (k = LENGTH vs)) s)) = SOME (n2w (LENGTH vs)) /\
+    op_prov (DRESTRICT G (COMPL {dv})) lvo = NONE /\ op_taint (tn with t_var := tn.t_var |+ (dv,{})) lvo = {} /\
     (!x v. not_fresh_at caller x /\ lookup_var x orig = SOME v ==>
-      lookup_var x t = SOME v) /\
-    (!x. not_fresh_at caller x ==> FLOOKUP H x = FLOOKUP G0 x /\
-      op_taint tm (Var x) = op_taint tn0 (Var x))
+      lookup_var x (jump_to (if k = LENGTH vs then exit else bod) (update_var dv (bool_to_word (k = LENGTH vs)) s)) = SOME v) /\
+    (!x. not_fresh_at caller x ==> FLOOKUP (DRESTRICT G (COMPL {dv})) x = FLOOKUP G0 x /\
+      op_taint (tn with t_var := tn.t_var |+ (dv,{})) (Var x) = op_taint tn0 (Var x))
 Proof
   strip_tac >> simp[] >>
   `k <= LENGTH vs /\ lookup_var idx s = SOME (n2w k) /\
@@ -62,8 +55,6 @@ Proof
     gvs[eval_operand_def, lookup_var_def, jump_to_def, update_var_def, FLOOKUP_UPDATE]) >>
   conj_tac >- (Cases_on `lvo` >> gvs[op_prov_def, FLOOKUP_DRESTRICT]) >>
   conj_tac >- (Cases_on `lvo` >> gvs[op_taint_def, FLOOKUP_UPDATE]) >>
-  conj_tac >- (irule alloca_history_jump >> simp[jump_to_def, update_var_def] >>
-    qexists_tac `s` >> simp[]) >>
   conj_tac >- (rpt strip_tac >>
     `x <> dv` by metis_tac[] >>
     simp[jump_to_def, update_var_def, lookup_var_def, FLOOKUP_UPDATE] >>
