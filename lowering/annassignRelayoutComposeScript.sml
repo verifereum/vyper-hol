@@ -2,7 +2,7 @@
 Theory annassignRelayoutCompose
 Ancestors
   annassignRelayoutContinue stmtSimDeclCompose stmtSimDeclSource
-  stmtSimDefs gasOutcome fragGasMode fragGasPath exprSimWordArgs
+  stmtSimDefs stmtSimProps gasOutcome fragGasMode fragGasPath exprSimWordArgs
   gasSummary gasSummaryCompose vyperInterpreter vyperState venomState
   valueEncoding finite_map list exprLoweringProps
   context compileEnv loweringStateRelDefs stmtLowering loweringPosts
@@ -100,7 +100,9 @@ Proof
     (drule_all compile_assign_memory_relayout_open >> simp[]) >>
   `(ee with gas_obs := []).scopes = sc :: rest /\
    lookup_scopes id (ee with gas_obs := []).scopes = NONE` by (simp[] >> metis_tac[]) >>
-  drule_all (SRULE [PULL_EXISTS] annassign_relayout_store_post_path) >>
+  `?H. valid_horizon cx st0 H (ee with gas_obs := []).storage_trace` by
+    metis_tac[] >>
+  drule_all annassign_relayout_store_post_path >>
   disch_then (qspec_then `T` strip_assume_tac) >>
   `MAP FDOM (ee with gas_obs := []).scopes = MAP FDOM es.scopes` by
     (qpat_assum `!tail. bind _ _ _ = _` (qspec_then `[]` assume_tac) >>

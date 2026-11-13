@@ -172,6 +172,10 @@ Proof
       `expr_sim_inv cenv cx env s` by fs[target_pre_def] >>
       drule_all local_target_place_type >> strip_tac >> gvs[] >>
       rename1 `type_place_target env bt = SOME (Type bty)` >>
+      `expr_sim_inv cenv cx env s'` by
+        (qpat_x_assum `s' = _` SUBST1_TAC >>
+         simp[exprSimHypsDefsTheory.expr_sim_inv_storage_trace] >>
+         first_assum ACCEPT_TAC) >>
       `?oldentry. lookup_scopes id bs.scopes = SOME oldentry /\
                   oldentry.type = entry.type` by
         metis_tac[local_entry_type_kept] >>

@@ -24,7 +24,7 @@
 
 Theory stmtSimAugAssignAttr
 Ancestors
-  fragGasMode exprSimMemoryPath stmtSimDeclGas gasOutcome gasSummary gasSummaryCompose gasContext gasExemptCert
+  fragGasMode fragGasPath exprSimMemoryPath stmtSimDeclGas gasOutcome gasSummary gasSummaryCompose gasContext gasExemptCert
   exprBopSimDefs exprBopSimProps exprSafeOperand exprWordOperand
   exprSimFieldLayout
   exprSimSource
@@ -64,7 +64,7 @@ Proof
        storage_well_formed_on cx es (FST H)` by
         (irule vyperStorageFootprintTheory.storage_well_formed_on_backends >>
          simp[]) >>
-      simp[]) >>
+      fs[]) >>
   rewrite_tac[gas_outcome_def] >> strip_tac >> qexists_tac `marks`
   >- (disj1_tac >> fs[gasStorageTheory.gas_bad_storage_at_def])
   >- (disj2_tac >> disj1_tac >>
@@ -586,6 +586,7 @@ Proof
   `fn_has_code sa sm func /\ fn_has_code sm sn func` by
     metis_tac[fn_has_code_split] >>
   drule_all attr_add_marked_path >> strip_tac >>
+  qpat_x_assum `!es cx ctx. ?q. _` (qspecl_then [`es`, `cx`, `ctx`] strip_assume_tac) >>
   qabbrev_tac `t = (update_var (STRING #"%" (toString sm.cs_next_var))
      (mload (w2n (w + n2w off)) q) q) with
        vs_inst_idx := SUC q.vs_inst_idx` >>
@@ -666,7 +667,7 @@ Proof
       qpat_x_assum `gas_summary_at _ _ _ _ _ _ _` mp_tac >>
       rewrite_tac[gas_summary_at_def] >> strip_tac >>
       qexistsl_tac [`res`, `es_end`, `r`] >> gvs[] >>
-      irule gas_marked_exec_zero_prefix >> qexists_tac `sm` >> simp[]) >>
+      irule stmtSimAugAssignTheory.gas_marked_exec_zero_prefix >> qexists_tac `sm` >> simp[]) >>
   disj2_tac >> disj2_tac >> metis_tac[]
 QED
 
