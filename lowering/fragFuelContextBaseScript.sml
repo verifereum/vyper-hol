@@ -35,6 +35,26 @@ Proof
   fuel_auto [fuel_ok_emit] >> simp[is_terminator_def, mk_inst_def]
 QED
 
+(* A value emit_op returns as a variable is a fresh register. *)
+Theorem emit_op_var:
+  !opc ops st x st'.
+    emit_op opc ops st = (x, st') ==>
+    !y. x = Var y ==> var_below st'.cs_next_var y
+Proof
+  simp[emit_op_def, comp_bind_def, comp_ignore_bind_def, comp_return_def,
+       fresh_id_def, fresh_var_def, emit_def] >>
+  rpt strip_tac >> gvs[] >> simp[var_below_def] >> rpt strip_tac >>
+  fs[ASCIInumbersTheory.toString_inj]
+QED
+
+Theorem emit_op_not_label:
+  !opc ops st x st'. emit_op opc ops st = (x, st') ==> !l. x <> Label l
+Proof
+  simp[emit_op_def, comp_bind_def, comp_ignore_bind_def, comp_return_def,
+       fresh_id_def, fresh_var_def, emit_def] >>
+  rpt strip_tac >> gvs[]
+QED
+
 Theorem fuel_ok_compile_copy_memory:
   !dst src n Wv E. fuel_ok Wv {} E (compile_copy_memory dst src n)
 Proof

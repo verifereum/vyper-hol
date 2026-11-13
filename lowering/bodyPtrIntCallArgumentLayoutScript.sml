@@ -30,7 +30,7 @@ Theorem intcall_internal_argument_size_bound:
   MEM (arg,ty) args ==>
   MAX 32 (type_memory_bytes ce ty) < dimword (:256)
 Proof
-  strip_tac >> drule_all body_inv_internal_allocs_ok >>
+  strip_tac >> drule_all body_inv_internal_subst_allocs_ok >>
   simp[fn_allocs_ok_def, subst_consts_fn_def, EVERY_MEM] >> strip_tac >>
   `ce.ce_struct_fields =
    (build_compile_env tops Internal mut name args ret

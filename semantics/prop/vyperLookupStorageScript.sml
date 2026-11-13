@@ -346,7 +346,6 @@ Proof
               truncate_signed_range]
   >- simp[SIMP_RULE (srw_ss()) [within_int_bound_def, LET_THM]
               (Q.SPEC `168` truncate_signed_range)]
-  >- (first_x_assum irule >> gvs[ETA_THM])
   >- (imp_res_tac LENGTH_decode_static_array >>
       simp[sparse_has_type_enumerate, SORTED_enumerate_static_array])
   >- (drule LENGTH_decode_dyn_array >> strip_tac >>
@@ -1337,9 +1336,9 @@ Proof
       simp[] >> disch_then irule >>
       gvs[value_has_type_def, well_formed_type_value_def, type_slot_size_def] >>
       gvs[listTheory.EVERY_MEM, pairTheory.FORALL_PROD] >>
-      reverse conj_tac >- (conj_tac >- metis_tac[] >>
-        conj_tac >- (qexists_tac `l` >> simp[]) >>
-        gvs[Once slots_in_range_def]) >>
+      reverse conj_tac >-
+        (conj_tac >- (qexists_tac `l` >> simp[]) >>
+         gvs[Once slots_in_range_def]) >>
       rpt strip_tac >>
       `type_value_size p_2 < type_value_size (StructTV ftypes)` by
         (irule MEM_StructTV_type_value_size >> metis_tac[]) >>
