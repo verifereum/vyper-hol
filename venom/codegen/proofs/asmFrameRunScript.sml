@@ -58,7 +58,8 @@ Theorem asm_frame_run:
         as'.as_requests = call_requests es0) /\
      (!as'. asm_steps (SND (compute_label_offsets prog)) (build_offset_to_pc prog)
               prog n as = AsmRevert as' ==>
-        ?lgs. frame_outcome es0 r es' (SOME Reverted) as'.as_returndata lgs) /\
+        (?lgs. frame_outcome es0 r es' (SOME Reverted) as'.as_returndata lgs) /\
+        frame_inst_raises es0 Reverted Revert) /\
      (!as'. asm_steps (SND (compute_label_offsets prog)) (build_offset_to_pc prog)
               prog n as = AsmFault as' ==>
         ?exc lgs. exc <> Reverted /\ frame_outcome es0 r es' (SOME exc) [] lgs))
