@@ -289,7 +289,7 @@ Resume widened_declaration_retained_read_store_ptr[unstaged]:
    `G0` |-> `Ga`,`tn0` |-> `tna`,`dw` |-> `(w:256 word)`,
    `sw` |-> `(sw:256 word)`,`cap` |-> `sz`]) >>
  (impl_tac >- (rpt conj_tac >> TRY (first_assum ACCEPT_TAC) >>
-   TRY (fs[ptr_covers_def] >> NO_TAC) >> metis_tac[])) >>
+   TRY (fs[ptr_covers_def] >> NO_TAC) >> fs[] >> metis_tac[])) >>
  disch_then (qx_choosel_then [`H`,`tm`,`t`] strip_assume_tac) >>
  qexistsl [`H`,`tm`,`t`] >> asm_rewrite_tac[]
 QED
