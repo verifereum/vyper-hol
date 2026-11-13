@@ -53,14 +53,3 @@ Proof
   simp[EVERY_MEM] >> metis_tac[]
 QED
 
-Theorem fmp_return_origin_outputs:
-  fn_inst_ids_distinct fn /\ MEM i (fn_insts fn) /\
-  MEM j (fn_insts fn') /\ j.inst_opcode = INVOKE /\
-  j.inst_id = i.inst_id /\
-  (!j. MEM j (fn_insts fn') /\ j.inst_opcode = INVOKE ==>
-    ?i. MEM i (fn_insts fn) /\ i.inst_opcode = INVOKE /\
-        i.inst_id = j.inst_id /\ i.inst_outputs = j.inst_outputs) ==>
-  j.inst_outputs = i.inst_outputs
-Proof
-  metis_tac[fn_inst_ids_distinct_inj]
-QED

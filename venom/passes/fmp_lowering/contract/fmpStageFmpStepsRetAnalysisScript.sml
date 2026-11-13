@@ -58,16 +58,18 @@ Theorem fmp_return_root_analysis:
   (EL k bb.bb_instructions).inst_opcode = INVOKE /\
   ~fmp_clears_marks infos (EL k bb.bb_instructions) /\
   df_at NONE states bb.bb_label k = SOME st /\
-  stack = SND (fmp_pop_at infos fn (liveness_analyze fn) env
-    (bb.bb_label,k) (EL k bb.bb_instructions) st) /\
   fmp_frame_covers sm env eb lo G /\
   (bb.bb_label = rl ==> rp <> SUC k) /\
   s1.vs_params = s.vs_params /\ t1.vs_params = t.vs_params /\
   bind_outputs outs vals
     (adopt_return_fmp ret (merge_callee_state t callee)) = SOME t1 /\
-  ~MEM runner outs /\ (!v. MEM v stack ==> ~MEM v outs) /\
+  ~MEM runner outs /\
+  (!v. MEM v (SND (fmp_pop_at infos fn (liveness_analyze fn) env
+     (bb.bb_label,k) (EL k bb.bb_instructions) st)) ==> ~MEM v outs) /\
   (if bb.bb_label = rl /\ k < rp then
-     lo = elo /\ stack = [] /\
+     lo = elo /\
+     SND (fmp_pop_at infos fn (liveness_analyze fn) env
+       (bb.bb_label,k) (EL k bb.bb_instructions) st) = [] /\
      (fn_is_context_entry ctx fn ==> fmp0 = elo) /\
      (~fn_is_context_entry ctx fn ==>
        LENGTH s.vs_params = LENGTH (fn_user_param_insts fn) /\
@@ -75,7 +77,9 @@ Theorem fmp_return_root_analysis:
        EL (LENGTH s.vs_params) t.vs_params = n2w elo)
    else lookup_var runner t = SOME (n2w lo) /\
      ?regions. fmp_ledger_ok (fn_insts fn) env t lo regions /\
-       MAP (\r. r.fr_mark) regions = stack /\
+       MAP (\r. r.fr_mark) regions =
+         SND (fmp_pop_at infos fn (liveness_analyze fn) env
+           (bb.bb_label,k) (EL k bb.bb_instructions) st) /\
        EVERY (\r. elo <= r.fr_lo) regions /\
        fmp_ledger_link sm eb lo regions) ==>
   ?st1. df_at NONE states bb.bb_label (SUC k) = SOME st1 /\
@@ -88,7 +92,8 @@ Theorem fmp_return_root_analysis:
          LENGTH s1.vs_params < LENGTH t1.vs_params /\
          EL (LENGTH s1.vs_params) t1.vs_params = n2w elo)
      else lookup_var runner t1 = SOME (n2w lo) /\
-       ?regions. fmp_ledger_ok (fn_insts fn) env t1 lo regions /\
+       ?regions. fmp_ledger_ok (fn_insts fn) env (t1 with vs_inst_idx := tidx)
+           lo regions /\
          MAP (\r. r.fr_mark) regions = st1.frs_stack /\
          EVERY (\r. elo <= r.fr_lo) regions /\
          fmp_ledger_link sm eb lo regions)
@@ -105,12 +110,10 @@ Proof
   conj_tac >- metis_tac[fmp_return_covers] >>
   Cases_on `bb.bb_label = rl` >> Cases_on `k < rp` >> gvs[] >>
   qexists_tac `regions` >> simp[] >>
-  irule fmp_ledger_frame >> qexists_tac `t` >> simp[] >>
-  rpt strip_tac >>
-  `MEM r.fr_mark (MAP (\r. r.fr_mark) regions)` by
-    (simp[MEM_MAP] >> metis_tac[]) >>
-  `~MEM r.fr_mark outs` by metis_tac[] >>
-  drule_all inv_bind_outputs_lookup_outside >>
-  simp[lookup_var_def, adopt_return_fmp_def, merge_callee_state_def] >>
-  Cases_on `ret.iret_adopt_fmp` >> simp[]
+  `!r. MEM r regions ==> ~MEM r.fr_mark outs` by
+    (rpt strip_tac >>
+     `MEM r.fr_mark (MAP (\r. r.fr_mark) regions)` by
+       (simp[MEM_MAP] >> metis_tac[]) >>
+     gvs[]) >>
+  metis_tac[fmp_return_ledger_bind]
 QED
