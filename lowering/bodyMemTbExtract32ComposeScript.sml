@@ -322,25 +322,27 @@ Resume compile_extract32_sim_mem[stage2]:
        (mp_then (Pos hd) mp_tac
           exprSimExtract32PostTheory.extract32_post_operand_kept) >>
      disch_then (qspec_then `len` mp_tac) >>
+     disch_then (qspec_then `n2w (LENGTH bs)` mp_tac) >>
      (impl_tac >-
-        (conj_tac
-         >- (rpt strip_tac >>
-             qpat_x_assum `!x. len = Var x \/ data = Var x ==> not_fresh_at s2 x`
-               irule >> simp[])
-         >> first_assum ACCEPT_TAC)) >>
-     disch_then (qspec_then `n2w (LENGTH bs)` mp_tac) >> simp[]) >>
+        (rpt conj_tac >>
+         FIRST [first_assum ACCEPT_TAC,
+                (rpt strip_tac >>
+                 qpat_x_assum `!x. len = Var x \/ data = Var x ==> not_fresh_at s2 x`
+                   irule >> simp[] >> NO_TAC)])) >>
+     simp[]) >>
   `eval_operand data t2 = SOME (n2w (b + 32))` by
     (qpat_assum `expr_post _ _ _ _ _ off _ _ _ _ _ _ _ t2`
        (mp_then (Pos hd) mp_tac
           exprSimExtract32PostTheory.extract32_post_operand_kept) >>
      disch_then (qspec_then `data` mp_tac) >>
+     disch_then (qspec_then `n2w (b + 32)` mp_tac) >>
      (impl_tac >-
-        (conj_tac
-         >- (rpt strip_tac >>
-             qpat_x_assum `!x. len = Var x \/ data = Var x ==> not_fresh_at s2 x`
-               irule >> simp[])
-         >> first_assum ACCEPT_TAC)) >>
-     disch_then (qspec_then `n2w (b + 32)` mp_tac) >> simp[]) >>
+        (rpt conj_tac >>
+         FIRST [first_assum ACCEPT_TAC,
+                (rpt strip_tac >>
+                 qpat_x_assum `!x. len = Var x \/ data = Var x ==> not_fresh_at s2 x`
+                   irule >> simp[] >> NO_TAC)])) >>
+     simp[]) >>
   `b + 32 + LENGTH bs <= t2.vs_alloca_next` by
     (qpat_x_assum `w2n _ + w2n _ <= u.vs_alloca_next` mp_tac >>
      simp[wordsTheory.w2n_n2w, arithmeticTheory.LESS_MOD] >> decide_tac) >>
