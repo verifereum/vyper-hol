@@ -11,22 +11,6 @@ Ancestors
   vyperTypeExternalDefaults vyperTypeInitialState vyperTypeBindArguments vyperTypeCallStackSoundness
   vyperInterpreter vyperGetter vyperState vyperContext
 
-(* With no public variables, an external function lookup_function selects
-   is a declared function, not a getter. *)
-Theorem lookup_function_external_decl:
-  !tops tops0 name mut nr args dflts ret fbody.
-    EVERY (supported_declaration_header tops0) tops /\
-    lookup_function NONE name External tops =
-      SOME (mut, nr, args, dflts, ret, fbody) ==>
-    ?raw. MEM (FunctionDecl External mut nr raw name args dflts ret fbody) tops
-Proof
-  Induct >- simp[lookup_function_def] >>
-  rpt gen_tac >> strip_tac >> gvs[] >>
-  Cases_on `h` >> gvs[supported_declaration_header_def, lookup_function_def] >>
-  BasicProvers.every_case_tac >> gvs[lookup_function_def, AllCaseEqs()] >>
-  metis_tac[]
-QED
-
 Theorem external_selected_body_typing:
   supported_program tops /\ source_typing_ok tops am tx /\
   source_deployment_rel tops am tx /\
