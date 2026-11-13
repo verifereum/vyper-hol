@@ -4,7 +4,7 @@ Theory bodyFullUnwrapSlotPost
 Ancestors
   exprPtrUnwrapStoragePost exprPtrUnwrapEndpointFrames exprPtrUnwrapRetained
   bodyPtrDefs loweringPosts compileEnv exprSimProps localPtrsProps
-  ptrDiscipline venomState finite_map arithmetic pred_set
+  ptrDiscipline venomState finite_map arithmetic pred_set loweringStateRelDefs
 
 Theorem unwrap_slot_copy_ghost_kept_at:
   ghost_kept_at lo cenv es sa Gi ti s0 G tn /\
@@ -17,7 +17,6 @@ Theorem unwrap_slot_copy_ghost_kept_at:
     i IN tn.t_mem) /\
   (!name b sz i. local_region cenv es.scopes s0 name b sz /\
     b <= i /\ i < b+sz /\
-    (!k. dynarray_len_at cenv name k ==> i < b+k \/ b+k+32 <= i) /\
     i IN tf.t_mem ==> i IN tn.t_mem) /\
   (!i. i < lo /\ i IN tf.t_mem ==> i IN tn.t_mem) ==>
   ghost_kept_at lo cenv es sa Gi ti s0 H tf
@@ -106,9 +105,10 @@ Theorem unwrap_slot_copy_wb_frame:
     mem_bytes_at off len z.vs_memory = mem_bytes_at off len s.vs_memory) ==>
   wb_frame cenv es es sa s z
 Proof
-  strip_tac >> simp[wb_frame_def] >> rpt conj_tac
+  strip_tac >> rewrite_tac[wb_frame_def] >> rpt conj_tac
   >- metis_tac[]
   >- metis_tac[]
-  >- metis_tac[] >>
-  irule locals_kept_regions >> metis_tac[]
+  >- (rpt strip_tac >> first_x_assum irule >> metis_tac[]) >>
+  irule locals_kept_regions >> rpt strip_tac >>
+  first_x_assum irule >> metis_tac[]
 QED

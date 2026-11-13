@@ -350,7 +350,7 @@ QED
 
 Resume reason_encoder_alloc_buffer_resources[oldptr]:
   rpt strip_tac >> irule alloca_step_old_ptr_covers >>
-  simp[] >> qexistsl_tac [`cenv`, `ctx`, `cx`, `es'`, `func`] >> simp[]
+  simp[] >> qexistsl_tac [`H`, `cenv`, `ctx`, `cx`, `es'`, `func`] >> simp[]
 QED
 
 Finalise reason_encoder_alloc_buffer_resources
