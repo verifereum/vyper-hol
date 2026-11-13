@@ -192,19 +192,6 @@ Proof
   metis_tac[abi_decode_sim_trans,SUBSET_TRANS,SUBSET_DEF]
 QED
 
-val loop_premises = ``
-  abi_decoder_recursive_loop_compiled ce sf ty func st middle end_st ops (Var slot_var) src (Var dst_var)
-    DLOAD (Lit 0w) (Lit 0w) hdr exit_lbl hid header_var first last idlo idhi next limit_st slot_id /\
-  abi_decoder_recursive_loop_data ce env sf ty tv maxn avs vs DLOAD (Lit 0w) (Lit 0w) (Var slot_var) src (Var dst_var)
-    0 sb d slot b cap next initial /\
-  mem_bytes_at sb (LENGTH (enc (Array NONE (vyper_to_abi_type env ty)) (ListV avs)))
-    initial.vs_data_section = enc (Array NONE (vyper_to_abi_type env ty)) (ListV avs) /\
-  fn_inst_ids_distinct func /\ unit_alloca_budget ctx < dimword(:256) /\ ~ctx_has_dalloca ctx /\
-  lo <= slot /\ D <= d /\ d + type_memory_bytes ce (ArrayT ty (Dynamic maxn)) <= D+N /\
-  venomMemDefs$regions_disjoint (slot,32) (d,type_memory_bytes ce (ArrayT ty (Dynamic maxn))) /\
-  slot_id IN ctor_actual_sites func ids /\ frag_ids st end_st SUBSET ids /\
-  slot_id NOTIN frag_ids middle end_st /\ b <= d /\
-  d + type_memory_bytes ce (ArrayT ty (Dynamic maxn)) <= b+cap``;
 
 (* The control location is a parameter only to share the body/header/exit interface. *)
 val loop_at = ``\label index j (s,G,tn,B).
@@ -220,38 +207,7 @@ val loop_at = ``\label index j (s,G,tn,B).
   (!mem. (!a. a IN B ==> mem_bytes_at a 1 mem = mem_bytes_at a 1 s.vs_memory) ==>
     mem_bytes_at d 32 mem = header /\ elems_in_memory (TAKE j vs) (d+32) tv mem)``;
 
-Theorem prefix_loop_header_invariant_pair:
-  (^loop_premises) /\ (^loop_at) hdr 0 j X ==>
-  ?Y. (^loop_at) (if j < LENGTH vs then st.cs_current_bb else exit_lbl) 0 j Y /\
-    (^loop_frame) X Y
-Proof
-  PairCases_on `X` >> simp_tac std_ss [] >> strip_tac >>
-  `slot+32 <= X0.vs_alloca_next /\ X0.vs_alloca_next < dimword(:256)` by
-    (fs[ctor_actual_array_observation_def,alloca_inv_def,alloca_next_valid_def] >>
-     metis_tac[alloca_frontier_inv_bound]) >>
-  `!k. k < 32 ==> slot+k NOTIN X2.t_mem` by
-    (qpat_x_assum `DISJOINT X2.t_mem _` mp_tac >>
-     simp_tac std_ss [DISJOINT_DEF,EXTENSION,IN_INTER,NOT_IN_EMPTY,GSPECIFICATION] >>
-     rpt strip_tac >> first_x_assum (qspec_then `slot+k` mp_tac) >> simp[]) >>
-  drule_all prefix_loop_header_reach_pair >>
-  disch_then (qspecl_then [`PG`,`Ddead`] mp_tac) >> strip_tac >>
-  qexists_tac `(t,H,qt,X3)` >> simp_tac std_ss [] >>
-  `abi_decoder_operand_live next (Var slot_var) /\
-   abi_decoder_operand_live next (Var dst_var) /\ abi_decoder_operand_live next src` by
-    fs[abi_decoder_recursive_loop_data_def] >>
-  `!x. abi_decoder_older_vars next x ==> abi_decoder_operand_live next (Var x)` by
-    simp[abi_decoder_operand_live_def,IN_DEF] >>
-  `abi_decoder_older_vars next slot_var /\ abi_decoder_older_vars next dst_var` by
-    (fs[abi_decoder_operand_live_def,IN_DEF]) >>
-  simp[SUBSET_REFL] >> rpt conj_tac >> metis_tac[]
-QED
 
-Theorem prefix_loop_terminal_pair:
-  (^loop_premises) /\ (^loop_at) hdr 0 (LENGTH vs) X ==>
-  ?Y. (^loop_at) exit_lbl 0 (LENGTH vs) Y /\ (^loop_frame) X Y
-Proof
-  strip_tac >> drule_all prefix_loop_header_invariant_pair >> simp[]
-QED
 
 val canonical_pair_floor = ``\ty tv.
  !dst src st st' ctx func site initial limit_st sb d D N ids av v root_di
@@ -396,205 +352,14 @@ Proof
   simp[LENGTH_TAKE,MIN_DEF,ADD_COMM,wordsTheory.w2n_n2w,Excl "enc_def"]
 QED
 
-Theorem prefix_loop_body_index_pair:
-  (^canonical_pair_floor) ty tv ==>
-  (^loop_premises) /\ j < LENGTH vs /\
-  (^loop_at) st.cs_current_bb (LENGTH st.cs_current_insts) j X ==>
-  ?Y. (^loop_at) hdr 0 (SUC j) Y /\ (^loop_frame) X Y
-Proof
-  disch_then (mk_asm "child") >> PairCases_on `X` >>
-  simp_tac std_ss [] >> strip_tac >>
-  drule abi_decoder_recursive_data_facts >> strip_tac >>
-  qpat_assum `abi_decoder_recursive_loop_compiled _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _`
-    (MAP_EVERY assume_tac o CONJUNCTS o PURE_REWRITE_RULE [abi_decoder_recursive_loop_compiled_def]) >>
-  qpat_assum `abi_decoder_recursive_loop_data _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _`
-    (MAP_EVERY assume_tac o CONJUNCTS o PURE_REWRITE_RULE [abi_decoder_recursive_loop_data_def]) >>
-  PairCases_on `ops` >> gvs[Excl "enc_def"] >>
-  `abi_decode_source_opcode DLOAD` by simp[abi_decode_source_opcode_def] >>
-  drule abi_decoder_array_body_code >> simp_tac std_ss [] >>
-  disch_then drule_all >> strip_tac >>
-  `abi_decoder_ranges DLOAD (Lit 0w) (Lit 0w) src (Var dst_var) 0 sb
-     (LENGTH (enc (Array NONE (vyper_to_abi_type env ty)) (ListV avs)))
-     d (type_memory_bytes ce (ArrayT ty (Dynamic maxn))) b cap X0` by
-    (irule ctor_actual_array_observation_ranges >> metis_tac[]) >>
-  drule_all ctor_actual_array_observation_setup_inputs >> strip_tac >>
-  `abi_decoder_operand_live st.cs_next_var src /\
-   abi_decoder_operand_live st.cs_next_var (Var dst_var)` by
-    (asm_x "child" kall_tac >> metis_tac[abi_decoder_operand_live_mono]) >>
-  `middle.cs_next_var <= limit_st.cs_next_var` by decide_tac >>
-  `fresh_vars_wrt limit_st X0` by fs[ctor_actual_array_observation_def] >>
-  `!k. k < 32 ==> slot+k NOTIN X2.t_mem` by
-    (qpat_x_assum `DISJOINT X2.t_mem _` mp_tac >>
-     simp_tac std_ss [DISJOINT_DEF,EXTENSION,IN_INTER,NOT_IN_EMPTY,GSPECIFICATION] >>
-     rpt strip_tac >> first_x_assum (qspec_then `slot+k` mp_tac) >> simp[]) >>
-  `mload slot X0 = n2w j` by
-    (qpat_x_assum `mload _ X0 = _` mp_tac >> simp[]) >>
-  drule_all prefix_loop_element_setup_at_index_pair >>
-  disch_then (qspecl_then [`func`,`PG`,`Ddead`] strip_assume_tac) >>
-  `X0.vs_inst_idx = LENGTH st.cs_current_insts` by simp[] >>
-  drule_all prefix_loop_setup_execution_pair >> simp_tac std_ss [LET_THM] >> strip_tac >>
-  qmatch_asmsub_abbrev_tac `abi_decode_sim ctx func X0 prepared` >>
-  `ctor_actual_array_observation ctx func site ids D N d
-     (type_memory_bytes ce (ArrayT ty (Dynamic maxn))) next limit_st
-     tv vs slot_id slot initial j j prepared` by
-    (simp[Abbr `prepared`] >> irule ctor_actual_array_observation_address >> metis_tac[]) >>
-  suspend "child_inputs"
-QED
 
-Resume prefix_loop_body_index_pair[child_inputs]:
-  `prepared.vs_data_section = X0.vs_data_section /\
-   prepared.vs_memory = X0.vs_memory /\
-   prepared.vs_allocas = X0.vs_allocas /\
-   prepared.vs_alloca_next = X0.vs_alloca_next` by
-    fs[Abbr `prepared`,abi_decoder_address_frame_def,Excl "enc_def"] >>
-  `prepared.vs_data_section = initial.vs_data_section` by
-    fs[ctor_actual_array_observation_def,Excl "enc_def"] >>
-  drule_at (Pat `abi_decoder_metadata _ _ _ _ _ _ _`)
-    (SIMP_RULE std_ss [] (Q.INST [`hi` |-> `Lit (0w:bytes32)`]
-      ctor_actual_array_child_inputs_at_index)) >>
-  disch_then (drule_at (Pat `abi_decoder_ranges _ _ _ _ _ _ _ _ _ _ _ _ _`)) >>
-  disch_then (qspecl_then [`sf`,`prepared`,`j`] mp_tac) >>
-  simp_tac std_ss [LET_THM] >>
-  (impl_tac >- metis_tac[]) >> strip_tac >>
-  suspend "child_ghost"
-QED
 
-Resume prefix_loop_body_index_pair[child_ghost]:
-  `?child_dst. ops2 = Var child_dst` by
-    (Cases_on `ops2` >> fs[op_prov_def]) >>
-  qpat_x_assum `ops2 = Var child_dst` SUBST_ALL_TAC >>
-  `FLOOKUP H child_dst = SOME (b,cap)` by fs[op_prov_def] >>
-  `eval_operand ops1 prepared = SOME (n2w
-      (sb+abi_array_child_offset NONE (vyper_to_abi_type env ty) avs j)) /\
-   eval_operand (Var child_dst) prepared = SOME (n2w
-      (d+32+j*type_memory_size tv)) /\
-   eval_operand (Var (STRING #"%" (toString st.cs_next_var))) prepared = SOME (n2w j)` by
-    fs[Abbr `prepared`,eval_op_inst_idx] >>
-  `allocas_from lo prepared /\ lo <= prepared.vs_alloca_next` by
-    (asm_x "child" kall_tac >> conj_tac >- metis_tac[allocas_from_def] >> metis_tac[]) >>
-  `not_fresh_at st slot_var /\ not_fresh_at st dst_var /\
-   not_fresh_at middle slot_var /\ not_fresh_at middle dst_var /\
-   not_fresh_at middle (STRING #"%" (toString st.cs_next_var)) /\
-   (!x. ops1 = Var x \/ Var child_dst = Var x \/ Lit (0w:bytes32) = Var x ==>
-        not_fresh_at middle x)` by
-    (asm_x "child" kall_tac >> Cases_on `ops1` >>
-     fs[abi_decoder_operand_live_def,abi_decoder_older_vars_def,IN_DEF,not_fresh_at_def] >>
-     metis_tac[]) >>
-  `FLOOKUP H slot_var = SOME (slot,32) /\ FLOOKUP H dst_var = SOME (b,cap) /\
-   op_taint qt (Var slot_var) = {} /\ op_taint qt (Var dst_var) = {}` by
-    (qpat_assum `!v. not_fresh_at st v ==> _` (qspec_then `slot_var` mp_tac) >>
-     qpat_assum `!v. not_fresh_at st v ==> _` (qspec_then `dst_var` mp_tac) >> simp[]) >>
-  suspend "child_call"
-QED
 
-Resume prefix_loop_body_index_pair[child_call]:
-  `?hdr_bb. lookup_block hdr func.fn_blocks = SOME hdr_bb /\
-    phi_prefix_length hdr_bb.bb_instructions = 0` by
-    (fs[abi_decode_position_loop_cfg_def, abi_decode_position_header_zero] >>
-     simp[abi_decode_header_insts_def,phi_prefix_length_def]) >>
-  `eval_operand (Var slot_var) prepared = SOME (n2w slot)` by
-    (`abi_decoder_operand_live st.cs_next_var (Var slot_var)` by
-       (asm_x "child" kall_tac >> metis_tac[abi_decoder_operand_live_mono]) >>
-     simp[Abbr `prepared`,eval_op_inst_idx] >>
-     metis_tac[abi_decoder_address_frame_def]) >>
-  asm "child" (fn th =>
-    qpat_assum `compile_abi_decode_to_buf (Var child_dst) _ _ _ _ _ _ = _`
-      (mp_then Any mp_tac (MATCH_MP prefix_loop_child_iteration_floor th))) >>
-  disch_then (drule_at (Pat `abi_decoder_metadata _ _ _ _ _ _ _`)) >>
-  disch_then (drule_at (Pat `ctor_actual_array_observation _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _`)) >>
-  disch_then (drule_at (Pat `bb.bb_instructions = _`)) >>
-  disch_then (drule_at (Pat `FLOOKUP H child_dst = _`)) >>
-  disch_then (drule_at (Pat `FLOOKUP H slot_var = _`)) >>
-  disch_then (drule_at (Pat `FLOOKUP H dst_var = _`)) >>
-  disch_then (drule_at (Pat `op_taint qt ops1 = _`)) >>
-  disch_then (drule_at (Pat `eval_operand ops1 prepared = _`)) >>
-  disch_then (drule_at (Pat `lookup_block hdr _ = _`)) >>
-  disch_then (drule_at (Pat `FINITE X3`)) >>
-  disch_then (qspec_then `sb+abi_array_child_offset NONE (vyper_to_abi_type env ty) avs j` mp_tac) >>
-  disch_then (qspecl_then [`header`,`Ddead`,`lo`,`PG`] mp_tac) >>
-  (impl_tac >- (asm_x "child" kall_tac >>
-    asm_simp_tac (srw_ss()) [ADD_COMM] >>
-    `middle.cs_next_var <= end_st.cs_next_var` by
-      metis_tac[abi_decoder_variable_counter] >>
-    rpt conj_tac
-    >- metis_tac[]
-    >- metis_tac[]
-    >- decide_tac
-    >- (fs[abiEncoderPropsTheory.frag_ids_def,SUBSET_DEF] >> metis_tac[])
-    >- decide_tac
-    >- (`SUC j <= maxn` by decide_tac >>
-        `SUC j * type_memory_bytes ce ty <= maxn * type_memory_bytes ce ty` by
-          simp[] >> decide_tac)
-    >- (fs[inst_extends_def] >> decide_tac)
-    >> fs[inst_extends_def] >> decide_tac)) >>
-  strip_tac >> suspend "compose" 
-QED
 
-Resume prefix_loop_body_index_pair[compose]:
-  asm_x "child" kall_tac >>
-  `!x. abi_decoder_older_vars next x ==> not_fresh_at st x` by
-    (fs[abi_decoder_older_vars_def,not_fresh_at_def] >> metis_tac[LESS_LESS_EQ_TRANS]) >>
-  `!x. abi_decoder_older_vars next x ==>
-     FLOOKUP H' x = FLOOKUP X1 x /\
-     op_taint qt' (Var x) = op_taint X2 (Var x)` by metis_tac[] >>
-  `op_taint qt' src = {}` by
-    (`abi_decoder_operand_live next src` by
-       fs[abi_decoder_recursive_loop_data_def] >>
-     namedCases_on `src` ["lit","src_var","lab"]
-     >- simp[op_taint_def]
-     >- (`abi_decoder_older_vars next src_var` by
-           (qpat_x_assum `abi_decoder_operand_live next (Var src_var)` mp_tac >>
-            simp[abi_decoder_operand_live_def,IN_DEF]) >>
-         qpat_x_assum `!x. abi_decoder_older_vars next x ==> FLOOKUP H' x = FLOOKUP X1 x /\ _`
-           (qspec_then `src_var` mp_tac) >> simp[]) >>
-     simp[op_taint_def]) >>
-  qexists_tac `(t',H',qt',A)` >>
-  asm_simp_tac std_ss [ADD_COMM] >>
-  rpt conj_tac
-  >- (qpat_x_assum `ctor_actual_array_observation _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ t'` mp_tac >>
-      asm_simp_tac std_ss [])
-  >- (qpat_x_assum `A SUBSET range_bytes _` mp_tac >> asm_simp_tac std_ss [ADD_COMM])
-  >- (irule abi_decode_sim_trans >> qexists_tac `prepared` >> simp[])
-  >> metis_tac[SUBSET_TRANS]
-QED
 
-Finalise prefix_loop_body_index_pair
 
-Theorem prefix_loop_successor_pair:
-  (^canonical_pair_floor) ty tv ==>
-  (^loop_premises) /\ j < LENGTH vs /\ (^loop_at) hdr 0 j X ==>
-  ?Y. (^loop_at) hdr 0 (SUC j) Y /\ (^loop_frame) X Y
-Proof
-  strip_tac >> strip_tac >>
-  `st.cs_current_insts = []` by fs[abi_decoder_recursive_loop_compiled_def] >>
-  `?Z. (^loop_at) st.cs_current_bb 0 j Z /\ (^loop_frame) X Z` by
-    (drule_all prefix_loop_header_invariant_pair >> simp[]) >>
-  `(^loop_at) st.cs_current_bb (LENGTH st.cs_current_insts) j Z` by
-    (PairCases_on `Z` >> fs[]) >>
-  `?Y. (^loop_at) hdr 0 (SUC j) Y /\ (^loop_frame) Z Y` by
-    (drule_all prefix_loop_body_index_pair >> simp[]) >>
-  qexists_tac `Y` >> simp[] >>
-  irule (REWRITE_RULE [transitive_def] prefix_loop_frame_transitive) >>
-  qexists_tac `Z` >> asm_rewrite_tac []
-QED
 
-Theorem prefix_loop_finite_pair:
-  (^canonical_pair_floor) ty tv ==>
-  (^loop_premises) /\ i <= LENGTH vs /\ (^loop_at) hdr 0 i X ==>
-  ?Y. (^loop_at) exit_lbl 0 (LENGTH vs) Y /\ (^loop_frame) X Y
-Proof
-  strip_tac >> strip_tac >>
-  irule prefix_loop_finite_pair_bridge >>
-  conj_tac >- ACCEPT_TAC prefix_loop_frame_transitive >>
-  qexistsl_tac [`(^loop_at) hdr 0`,`i`,`LENGTH vs`] >>
-  asm_rewrite_tac [prefix_loop_frame_transitive] >>
-  conj_tac
-  >- (rpt strip_tac >> drule_all prefix_loop_terminal_pair >> simp[]) >>
-  rpt strip_tac >> drule_all prefix_loop_successor_pair >> simp[]
-QED
 
-(* Unlike loop_premises, the excluded semantic range is the index slot,
-   not the allocation recorded for the destination operand. *)
 val separated_loop_premises = ``
   abi_decoder_recursive_loop_compiled ce sf ty func st middle end_st ops (Var slot_var) src (Var dst_var)
     DLOAD (Lit 0w) (Lit 0w) hdr exit_lbl hid header_var first last idlo idhi next limit_st slot_id /\
@@ -1033,91 +798,5 @@ Proof
   PairCases_on `Y` >> fs[]
 QED
 
-Theorem prefix_dynamic_array_setup_finite_pair:
-  (^canonical_pair_floor) ty tv /\
-  (is_abi_dynamic ce.ce_struct_fields ty \/
-    dec_info_needs_clamp (type_to_abi_dec_info sf ce ty)) ==>
-  !dst src st st' ctx func site initial limit_st sb d D N ids av v root_di
-   G tn b sz Ddead lo PG.
-  compile_abi_decode_to_buf (Var dst) src DLOAD (Lit 0w) (Lit 0w)
-    (type_to_abi_dec_info sf ce (ArrayT ty (Dynamic maxn))) st = ((),st') /\
-  abi_decoder_coherent ce env sf (ArrayT ty (Dynamic maxn)) (ArrayTV tv (Dynamic maxn)) /\
-  abi_decoder_metadata ce env (ArrayT ty (Dynamic maxn)) (ArrayTV tv (Dynamic maxn)) root_di av v /\
-  eval_operand src initial = SOME (n2w sb) /\
-  eval_operand (Var dst) initial = SOME (n2w d) /\
-  sb + LENGTH (enc (vyper_to_abi_type env (ArrayT ty (Dynamic maxn))) av) < dimword (:256) /\
-  mem_bytes_at sb (LENGTH (enc (vyper_to_abi_type env (ArrayT ty (Dynamic maxn))) av))
-    initial.vs_data_section = enc (vyper_to_abi_type env (ArrayT ty (Dynamic maxn))) av /\
-  (!x. src = Var x \/ Var dst = Var x \/ Lit 0w = Var x ==> not_fresh_at st x) /\
-  st'.cs_next_var <= limit_st.cs_next_var /\ fresh_vars_wrt limit_st initial /\
-  fn_has_code st st' func /\ fn_inst_ids_distinct func /\
-  (st.cs_blocks = st'.cs_blocks \/ !bb.
-    lookup_block st'.cs_current_bb func.fn_blocks = SOME bb ==>
-    phi_prefix_length bb.bb_instructions = 0) /\
-  alloca_inv initial /\ alloca_frontier_inv ctx func site initial /\
-  unit_alloca_budget ctx < dimword (:256) /\
-  D <= d /\ d + type_memory_bytes ce (ArrayT ty (Dynamic maxn)) <= D+N /\
-  D+N <= initial.vs_alloca_next /\
-  frag_ids st st' SUBSET ids /\ ctor_actual_scratch func ids D N initial /\
-  ~initial.vs_halted /\ initial.vs_current_bb = st.cs_current_bb /\
-  initial.vs_inst_idx = LENGTH st.cs_current_insts /\
-  FLOOKUP G dst = SOME (b,sz) /\ b <= d /\
-  d + type_memory_bytes ce (ArrayT ty (Dynamic maxn)) <= b+sz /\
-  op_taint tn src = {} /\ op_taint tn (Var dst) = {} /\
-  allocas_from lo initial /\ ~ctx_has_dalloca ctx /\ lo <= initial.vs_alloca_next ==>
-  ?avs vs guard_st header_st loop_st cnt labels body_st ops middle end_st prepared slot iv H qt Y.
-    av = ListV avs /\ v = ArrayV (DynArrayV vs) /\
-    abi_decode_dynarray_checked_prefix src DLOAD (Lit 0w) maxn
-      (abi_embedded_static_size ce.ce_struct_fields ty) st = ((),guard_st) /\
-    abi_decode_array_header (Var dst) src DLOAD guard_st = (cnt,header_st) /\
-    abi_decode_index_init header_st = (Var iv,loop_st) /\
-    abi_decode_loop_prefix (Var iv) src DLOAD (Lit 0w) loop_st = (labels,body_st) /\
-    abi_decoder_recursive_loop_compiled ce sf ty func body_st middle end_st ops (Var iv) src (Var dst)
-      DLOAD (Lit 0w) (Lit 0w) (FST labels) (SND (SND labels)) (loop_st.cs_next_id+1)
-      loop_st.cs_next_var st.cs_next_id st'.cs_next_id st.cs_next_id st'.cs_next_id
-      loop_st.cs_next_var limit_st header_st.cs_next_id /\
-    abi_decoder_recursive_loop_data ce env sf ty tv maxn avs vs DLOAD (Lit 0w) (Lit 0w) (Var iv) src (Var dst)
-      0 sb d slot slot 32 loop_st.cs_next_var prepared /\
-    ctor_actual_array_observation ctx func site ids D N d
-      (type_memory_bytes ce (ArrayT ty (Dynamic maxn))) st.cs_next_var limit_st
-      tv vs header_st.cs_next_id slot initial 0 0 prepared /\
-    ctor_actual_array_observation ctx func site ids D N d
-      (type_memory_bytes ce (ArrayT ty (Dynamic maxn))) loop_st.cs_next_var limit_st
-      tv vs header_st.cs_next_id slot prepared 0 0 prepared /\
-    ~prepared.vs_halted /\ prepared.vs_current_bb = loop_st.cs_current_bb /\
-    prepared.vs_inst_idx = LENGTH loop_st.cs_current_insts /\
-    abi_decode_sim ctx func initial prepared /\
-    eval_operand src prepared = SOME (n2w sb) /\
-    eval_operand (Var dst) prepared = SOME (n2w d) /\
-    eval_operand (Var iv) prepared = SOME (n2w slot) /\
-    FLOOKUP H dst = SOME (b,sz) /\ FLOOKUP H iv = SOME (slot,32) /\
-    op_taint qt src = {} /\ op_taint qt (Var dst) = {} /\ op_taint qt (Var iv) = {} /\
-    DISJOINT qt.t_mem {a | d <= a /\ a < d+32} /\
-    DISJOINT qt.t_mem {a | slot <= a /\ a < slot+32} /\
-    qt.t_mem SUBSET tn.t_mem /\ qt.t_stor = tn.t_stor /\
-    qt.t_trans = tn.t_trans /\ qt.t_imm = tn.t_imm /\
-    allocas_from lo prepared /\ lo <= prepared.vs_alloca_next /\ lo <= slot /\
-    (!x. abi_decoder_older_vars st.cs_next_var x ==>
-      FLOOKUP H x = FLOOKUP G x /\ op_taint qt (Var x) = op_taint tn (Var x)) /\
-    ((!fuel. ptr_safe_run Ddead lo fuel ctx func PG H qt prepared) ==>
-      !fuel. ptr_safe_run Ddead lo fuel ctx func PG G tn initial) /\
-    ((\next slot_id slot_var dst_var cap initial header.
-       (^loop_at) (SND (SND labels)) 0 (LENGTH vs) Y /\
-       (^loop_frame) (jump_to (FST labels) prepared,H,qt,range_bytes [(d,32)]) Y)
-      loop_st.cs_next_var header_st.cs_next_id iv dst sz prepared
-      (mem_bytes_at d 32 prepared.vs_memory)) /\
-    ((!fuel. ptr_safe_run Ddead lo fuel ctx func PG H qt (jump_to (FST labels) prepared)) ==>
-      !fuel. ptr_safe_run Ddead lo fuel ctx func PG H qt prepared)
-Proof
-  disch_then (CONJUNCTS_THEN2 assume_tac assume_tac) >>
-  drule prefix_dynamic_array_setup_finite_pair_complete >>
-  disch_then drule >> disch_then (mk_asm "complete") >> rpt gen_tac >>
-  disch_then (MAP_EVERY assume_tac o CONJUNCTS) >>
-  asm_x "complete" drule_all >>
-  disch_then (qspecl_then [`Ddead`,`PG`] strip_assume_tac) >>
-  qexistsl_tac [`avs`,`vs`,`guard_st`,`header_st`,`loop_st`,`cnt`,`labels`,
-    `body_st`,`ops`,`middle`,`end_st`,`prepared`,`slot`,`iv`,`H`,`qt`,`Y`] >>
-  asm_rewrite_tac []
-QED
 
 val _ = export_theory();
