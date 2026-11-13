@@ -59,6 +59,13 @@ Proof
 QED
 
 
+Theorem selected_segment_start:
+  selected_segment C q0 path n q w qe ==> selected_segment C q0 path n q [] q
+Proof
+  simp[selected_segment_def] >> strip_tac >>
+  qexistsl [`pre`, `w ++ suffix`] >> simp[joint_segment_def]
+QED
+
 Theorem selected_singleton_event:
   selected_segment C q0 path n q [(ev,qn)] qn ==>
   EL n (MAP FST path) = ev

@@ -1,5 +1,5 @@
 Theory concretizeLayoutSelectedBaseInterface
-Ancestors frameSelectedSimulation concretizeLayoutAlignedControl
+Ancestors concretizeLayoutCutSafe frameSelectedSimulation concretizeLayoutAlignedControl
   concretizeLayoutPhaseExternal concretizeLayoutPhaseCorridor
   frameFiniteJointDecoration frameSelectedDecoration concretizeLayoutEntryFlags
   concretizeLayoutScopedPhase concretizeLayoutPhaseOrigin frameControlAgreement
@@ -154,8 +154,7 @@ Theorem layout_base_external:
   EVERY (\fn. fn.fn_eom = NONE) C.ctx_functions /\
   ctx_inst_ids_distinct C /\ o1_run_state_ok vs0 /\
   EVERY wf_function C.ctx_functions /\ mem_inv raw_mem_ok C vs0 /\
-  vs0.vs_allocas = FEMPTY /\ ptr_discipline lo C vs0 /\ taint_within D C vs0 /\
-  callee_first names C.ctx_functions /\ EVERY ssa_form C.ctx_functions /\
+  vs0.vs_allocas = FEMPTY /\ layout_cut_safe D lo ncut vs0 C qend /\ callee_first names C.ctx_functions /\ EVERY ssa_form C.ctx_functions /\
   EVERY fn_defs_reach_uses C.ctx_functions /\ EVERY all_reachable C.ctx_functions /\
   ~ctx_has_dalloca C /\ fixed_region_reserved lo C /\ activation_depth q0 = 0 /\
   EVERY (fn_ptr_ok P) C.ctx_functions /\
@@ -179,6 +178,7 @@ Proof
   gvs[layout_base_witness_def, layout_aligned_entry_def] >>
   drule_at (Pat `layout_ordinary_entry _ _ _ _ _ _ _ _ _ _ _ _`)
     layout_external_trace_step >>
+  disch_then (drule_at (Pat `layout_cut_safe _ _ _ _ _ _`)) >>
   disch_then (drule_at (Pat `_ .lop_config = JointConfig _ _ _ _ _ _ _ _ _ _ _`)) >>
   disch_then (drule_at (Pat `ctx_pass_stage _ _ _ _ _`)) >>
   disch_then (drule_at (Pat `callee_first _ _`)) >>

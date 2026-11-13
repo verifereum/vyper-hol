@@ -1,5 +1,5 @@
 Theory concretizeLayoutCallResult
-Ancestors concretizeLayoutCallControl frameRelocationCleanOperands
+Ancestors concretizeLayoutCutSafe concretizeLayoutCallControl frameRelocationCleanOperands
   memLocDefs pointerConfinedDefs ptrDiscipline o1PassContract
   frameRelocationGuardedValues frameRelocationOpaque frameRelocationLocal
   frameRelocationGhostCopy
@@ -140,7 +140,7 @@ Definition layout_ret_endpoint_def:
 End
 
 Theorem layout_ret_endpoint_produce:
-  ptr_discipline lo C vs0 /\
+  layout_cut_safe D lo ncut vs0 C q /\
   EVERY (fn_ptr_ok P) C.ctx_functions /\
   EVERY (\f. EVERY inst_wf (fn_insts f)) C.ctx_functions /\
   ~g.lop_pending /\ layout_ordinary_entry D lo vs0 C C' q0 es qs q g s t /\
@@ -165,7 +165,7 @@ Proof
   `frame_reachable vs0 C stk PG G tn fn inst s` by
     (gvs[joint_config_reachable_def] >>
      metis_tac[joint_origin_history_erasure, origin_frame_erasure]) >>
-  `taint_ok fn tn inst s` by metis_tac[ptr_discipline_def] >>
+  `taint_ok fn tn inst s` by metis_tac[layout_cut_safe_ptr_edge, layout_cut_safe_ptr_at, layout_cut_safe_ptr_cfg] >>
   `s.vs_labels = t.vs_labels` by fs[relocation_env_def] >>
   `!u. FLOOKUP rv u <> NONE ==> u IN fn_pv P fn` by
     (gvs[resolved_config_ok_def] >>

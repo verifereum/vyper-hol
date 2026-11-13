@@ -1,5 +1,5 @@
 Theory concretizeLayoutAccessGeometry
-Ancestors concretizeLayoutPointerRanges frameRelocationBinding frameRelocationStoreValues
+Ancestors concretizeLayoutCutSafe o1SafeUpto gasOracleReplay venomInst concretizeLayoutPointerRanges frameRelocationBinding frameRelocationStoreValues
   frameRelocationMemoryAccess frameRelocationMemoryOpaque frameRelocationCleanOperands
   frameJointTrace frameJointTransition frameOriginReachable frameOriginHistory
   frameResolvedTrace frameActivationLookup frameActivationLifetime
@@ -8,16 +8,35 @@ Ancestors concretizeLayoutPointerRanges frameRelocationBinding frameRelocationSt
 Theorem frame_reachable_saved_allocas_from:
   !vs0 C stk PG G tn fn inst s.
   frame_reachable vs0 C stk PG G tn fn inst s ==>
-  ptr_discipline lo C vs0 ==>
+  ptr_discipline_upto lo ncut C vs0 /\ gas_cut ncut vs0 s ==>
   EVERY (\f. allocas_from lo f.cf_state) stk
 Proof
   ho_match_mp_tac frame_reachable_strongind >> rpt conj_tac >>
-  rpt strip_tac >> gvs[] >>
-  fs[ptr_discipline_def] >> metis_tac[]
+  rpt gen_tac >> strip_tac >> strip_tac >> gvs[]
+  >- (qpat_x_assum `_ ==> EVERY _ _` irule >> simp[] >> irule gas_cut_readings_mono >>
+      first_assum (irule_at Any) >> simp[] >>
+      irule step_inst_noninvoke_readings_le >> metis_tac[])
+  >- (qpat_x_assum `_ ==> EVERY _ _` irule >> simp[] >> irule gas_cut_readings_mono >>
+      first_assum (irule_at Any) >>
+      drule enters_block_readings >> simp[] >> strip_tac >>
+      irule step_inst_noninvoke_readings_le >>
+      `inst.inst_opcode <> INVOKE` by (strip_tac >> gvs[is_terminator_def]) >>
+      metis_tac[])
+  >- (`gas_cut ncut vs0 s` by
+        (drule enters_block_readings >> drule gas_setup_callee_readings >>
+         rpt strip_tac >> gvs[gas_cut_def]) >>
+      conj_tac >- metis_tac[ptr_discipline_upto_at] >>
+      qpat_x_assum `_ ==> EVERY _ _` irule >> simp[]) >>
+  `LENGTH s'.vs_gas_readings <= LENGTH s.vs_gas_readings` by
+    (drule_all return_readings_le >> simp[]) >>
+  `gas_cut ncut vs0 s` by
+    (irule gas_cut_readings_mono >>
+     qexists_tac `s' with vs_inst_idx := SUC f.cf_state.vs_inst_idx` >> simp[]) >>
+  qpat_x_assum `_ ==> _ /\ _` mp_tac >> simp[]
 QED
 
 Theorem joint_activation_cache_lower_bound:
-  ptr_discipline lo C vs0 /\
+  ptr_discipline_upto lo ncut C vs0 /\ gas_cut ncut vs0 s /\
   joint_config_reachable vs0 C (JointConfig stk PG G tn fn inst s oms om hs h) /\
   activation_cache (JointConfig stk PG G tn fn inst s oms om hs h)
     d owner aid (b,sz) ==> lo <= b
@@ -26,7 +45,7 @@ Proof
   `frame_reachable vs0 C stk PG G tn fn inst s` by
     (fs[joint_config_reachable_def] >>
      metis_tac[joint_origin_history_erasure, origin_frame_erasure]) >>
-  `allocas_from lo s` by (fs[ptr_discipline_def] >> metis_tac[]) >>
+  `allocas_from lo s` by metis_tac[ptr_discipline_upto_at] >>
   drule_all frame_reachable_saved_allocas_from >> strip_tac >>
   gvs[frameActivationCacheTheory.activation_cache_def]
   >- metis_tac[allocas_from_def] >>
@@ -57,8 +76,8 @@ Theorem concretize_memory_access_geometry:
     (o1_walk_view rpolicy 2) C C' /\ o1_ctx_shape C /\
   EVERY (\fn. fn.fn_eom = NONE) C.ctx_functions /\
   ctx_inst_ids_distinct C /\ o1_run_state_ok vs0 /\
-  EVERY wf_function C.ctx_functions /\ mem_inv raw_mem_ok C vs0 /\
-  vs0.vs_allocas = FEMPTY /\ ptr_discipline lo C vs0 /\
+  EVERY wf_function C.ctx_functions /\
+  vs0.vs_allocas = FEMPTY /\ layout_cut_safe D lo ncut vs0 C q /\
   joint_trace vs0 C q0 es qs q /\ c <= LENGTH es /\
   EL c (q0::qs) = JointConfig stk PG G tn fn inst s oms om hs h /\
   resolved_config_ok (JointConfig stk PG G tn fn inst s oms om hs h)
@@ -87,6 +106,8 @@ Theorem concretize_memory_access_geometry:
        w2n offT = concretize_positions C' owner aid + (w2n off-b)))
 Proof
   disch_then (map_every assume_tac o CONJUNCTS) >>
+  `s.vs_alloca_next < dimword (:256)` by
+    (drule_all layout_cut_safe_frontier >> simp[]) >>
   `LENGTH es = LENGTH qs` by
     metis_tac[joint_trace_def, joint_chain_length] >>
   `joint_config_reachable vs0 C (JointConfig stk PG G tn fn inst s oms om hs h)` by
@@ -96,7 +117,7 @@ Proof
     (fs[joint_config_reachable_def] >>
      metis_tac[joint_origin_history_erasure, origin_frame_erasure]) >>
   `access_ok lo G fn inst s /\ taint_ok fn tn inst s` by
-    (fs[ptr_discipline_def] >> metis_tac[]) >>
+    metis_tac[layout_cut_safe_ptr_edge, layout_cut_safe_ptr_at, layout_cut_safe_ptr_cfg] >>
   `SND o_f rv = G` by
     (drule resolved_config_current >> simp[] >> metis_tac[resolved_frame_erasure]) >>
   `~in_revert_forward fn s` by fs[joint_read_exempt_def] >>
@@ -129,6 +150,9 @@ Proof
       (fn::MAP (\f. f.cf_fn) stk) (tok0,tok1) =
       concretize_positions C' owner tok1` by
     metis_tac[resolved_activation_lookup] >>
+  `c <= LENGTH es` by simp[] >>
+  `gas_cut ncut vs0 s` by (drule_all layout_cut_safe_frame >> simp[]) >>
+  `ptr_discipline_upto lo ncut C vs0` by fs[layout_cut_safe_def] >>
   `lo <= b` by metis_tac[joint_activation_cache_lower_bound] >>
   qexists_tac `y` >> simp[] >>
   qexistsl_tac [`d`, `owner`, `tok1`, `b`, `sz`] >> simp[]

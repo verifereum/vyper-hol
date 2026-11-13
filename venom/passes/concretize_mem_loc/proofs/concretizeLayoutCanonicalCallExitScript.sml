@@ -1,12 +1,12 @@
 Theory concretizeLayoutCanonicalCallExit
-Ancestors frameGasEvents concretizeLayoutCanonicalCallEntry concretizeLayoutCanonicalDriver frameSelectedSimulation
+Ancestors concretizeLayoutCutSafe frameGasEvents concretizeLayoutCanonicalCallEntry concretizeLayoutCanonicalDriver frameSelectedSimulation
   frameFiniteJointDecoration frameFiniteExecution list arithmetic
 
 Theorem layout_canonical_call_exit_certificate:
   ctx_pass_stage rpolicy (CFP_Simple VP_ConcretizeMemLoc)
     (o1_walk_view rpolicy 2) C C' /\ o1_ctx_shape C /\
   EVERY (\fn. fn.fn_eom = NONE) C.ctx_functions /\
-  ptr_discipline lo C vs0 /\ vs0.vs_allocas = FEMPTY /\ ~ctx_has_dalloca C /\
+  layout_cut_safe D lo ncut vs0 C qend /\ vs0.vs_allocas = FEMPTY /\ ~ctx_has_dalloca C /\
   joint_trace vs0 C q0 es qs qend /\
   es = MAP FST path /\ qs = MAP SND path /\
   (!k. k < LENGTH path ==>

@@ -1,5 +1,5 @@
 Theory concretizeLayoutLocalAssertions
-Ancestors concretizeLayoutLocalConditionalJump concretizeLayoutLocalOffset
+Ancestors concretizeLayoutCutSafe o1SafeUpto concretizeLayoutLocalConditionalJump concretizeLayoutLocalOffset
   frameRelocationValues frameRelocationLocal frameRelocationDemand
   frameRelocationTaintOrder frameRelocationCopyTaint frameRelocationMemory concretizeLayoutReaderContext
   frameRelocationEnvironment frameRelocationBinding frameJointDemand frameJointTrace
@@ -10,7 +10,7 @@ Ancestors concretizeLayoutLocalConditionalJump concretizeLayoutLocalOffset
   ptrDiscipline venomExecSemantics venomState venomWf codegenRel finite_map pred_set list
 
 Theorem assertion_operands[local]:
-  ptr_discipline lo C vs0 /\
+  ptr_discipline_upto lo ncut C vs0 /\ gas_cut ncut vs0 s /\
   EVERY (fn_ptr_ok P) C.ctx_functions /\
   EVERY (\f. EVERY inst_wf (fn_insts f)) C.ctx_functions /\
   frame_reachable vs0 C stk PG G tn fn inst s /\
@@ -27,7 +27,7 @@ Theorem assertion_operands[local]:
   !op. MEM op inst.inst_operands ==> eval_operand op s = eval_operand op t
 Proof
   strip_tac >>
-  `taint_ok fn tn inst s` by (fs[ptr_discipline_def] >> metis_tac[]) >>
+  `taint_ok fn tn inst s` by (fs[layout_cut_safe_def, ptr_discipline_upto_def] >> metis_tac[]) >>
   `!u. FLOOKUP rv u <> NONE ==> u IN fn_pv P fn` by
     (drule resolved_config_current >> simp[] >> strip_tac >>
      rpt strip_tac >> irule reachable_resolved_support >>
@@ -93,7 +93,7 @@ Proof
 QED
 
 Theorem concretize_assert_abort_complete:
-  ptr_discipline lo C vs0 /\
+  ptr_discipline_upto lo ncut C vs0 /\ gas_cut ncut vs0 s /\
   EVERY (fn_ptr_ok P) C.ctx_functions /\
   EVERY (\f. EVERY inst_wf (fn_insts f)) C.ctx_functions /\
   frame_reachable vs0 C stk PG G tn fn inst s /\
@@ -118,7 +118,7 @@ Proof
 QED
 
 Theorem concretize_assert_local_complete:
-  vs0.vs_allocas = FEMPTY /\ ptr_discipline lo C vs0 /\
+  vs0.vs_allocas = FEMPTY /\ layout_cut_safe Dc lo ncut vs0 C q /\
   EVERY (fn_ptr_ok P) C.ctx_functions /\
   EVERY (\f. EVERY inst_wf (fn_insts f)) C.ctx_functions /\
   joint_trace vs0 C q0 es qs q /\ c < LENGTH es /\
@@ -155,10 +155,9 @@ Theorem concretize_assert_local_complete:
     step_taint inst s post tn = tn /\ step_taint inst t t un = un
 Proof
   strip_tac >>
-  `frame_reachable vs0 C stk PG G tn fn inst s` by
-    (drule_all joint_trace_edge_at >> strip_tac >> gvs[] >>
-     fs[joint_config_reachable_def] >>
-     metis_tac[joint_origin_history_erasure, origin_frame_erasure]) >>
+  `frame_reachable vs0 C stk PG G tn fn inst s /\ gas_cut ncut vs0 s` by
+    (drule_all layout_cut_safe_edge_frame >> simp[]) >>
+  `ptr_discipline_upto lo ncut C vs0` by fs[layout_cut_safe_def] >>
   `!op. MEM op inst.inst_operands ==> eval_operand op s = eval_operand op t` by
     (rpt strip_tac >> drule_all assertion_operands >> simp[]) >>
   drule_all assertion_ok_execution >> strip_tac >> gvs[] >>

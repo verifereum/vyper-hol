@@ -1,5 +1,5 @@
 Theory concretizeLayoutCanonicalDeferredExit
-Ancestors frameGasEvents concretizeLayoutCanonicalCallExit concretizeLayoutCanonicalDeferred
+Ancestors concretizeLayoutCutSafe frameGasEvents concretizeLayoutCanonicalCallExit concretizeLayoutCanonicalDeferred
   frameSelectedSimulation
 
 Theorem deferred_exit_step_match[local]:
@@ -21,7 +21,7 @@ Theorem layout_deferred_call_exit_certificate:
   ctx_pass_stage rpolicy (CFP_Simple VP_ConcretizeMemLoc)
     (o1_walk_view rpolicy 2) C C' /\ o1_ctx_shape C /\
   EVERY (\fn. fn.fn_eom = NONE) C.ctx_functions /\
-  ptr_discipline lo C vs0 /\ vs0.vs_allocas = FEMPTY /\ ~ctx_has_dalloca C /\
+  layout_cut_safe D lo ncut vs0 C qend /\ vs0.vs_allocas = FEMPTY /\ ~ctx_has_dalloca C /\
   joint_trace vs0 C q0 es qs qend /\
   es = MAP FST path /\ qs = MAP SND path /\
   (!k. k < LENGTH path ==>
@@ -37,7 +37,6 @@ Theorem layout_deferred_call_exit_certificate:
 Proof
   strip_tac >>
   drule_all layout_canonical_call_exit_certificate >>
-  disch_then (qspec_then `D` mp_tac) >>
   rewrite_tac[selected_call_exit_certificate_def] >>
   disch_tac >> rpt gen_tac >> strip_tac >>
   gvs[deferred_exit_step_match] >>

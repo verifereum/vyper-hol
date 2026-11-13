@@ -1,5 +1,5 @@
 Theory concretizeLayoutCanonicalBaseMemory
-Ancestors concretizeLayoutCanonicalBase concretizeLayoutCanonicalDriver
+Ancestors concretizeLayoutCutSafe concretizeLayoutCanonicalBase concretizeLayoutCanonicalDriver
   concretizeLayoutSelectedBaseInterface concretizeLayoutCompletedJump
   ptrDiscipline venomExecSemantics venomInst list
   concretizeLayoutExceptionalEntry concretizeLayoutExceptionalCopy
@@ -35,7 +35,7 @@ Proof
 QED
 
 Theorem layout_canonical_exempt_returncopy_success[local]:
-  o1_ctx_shape C /\ ptr_discipline lo C vs0 /\ ~ctx_has_dalloca C /\
+  o1_ctx_shape C /\ layout_cut_safe D lo ncut vs0 C qend /\ ~ctx_has_dalloca C /\
   EVERY (fn_ptr_ok P) C.ctx_functions /\
   EVERY (\f. EVERY inst_wf (fn_insts f)) C.ctx_functions /\
   layout_canonical_step_witness D lo vs0 C C' q0 es qs ass qend
@@ -46,6 +46,8 @@ Theorem layout_canonical_exempt_returncopy_success[local]:
     layout_canonical_success D lo vs0 C C' q0 es qs ass qend n F (INL g) post tpost
 Proof
   strip_tac >> drule_all layout_canonical_ordinary_environment >> strip_tac >>
+  `gas_cut ncut vs0 s /\ ptr_discipline_upto lo ncut C vs0` by
+    (drule_all layout_ordinary_entry_cut >> simp[]) >>
   `j = i` by gvs[concretize_positions_unchanged] >> gvs[] >>
   `revert_forward_at g.lop_origin.lbo_source s.vs_inst_idx` by
     (qpat_x_assum `layout_canonical_step_witness _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _` mp_tac >>
@@ -84,8 +86,8 @@ Theorem layout_canonical_ordinary_memory_success[local]:
     (o1_walk_view rpolicy 2) C C' /\ o1_ctx_shape C /\
   EVERY (\fn. fn.fn_eom = NONE) C.ctx_functions /\
   ctx_inst_ids_distinct C /\ o1_run_state_ok vs0 /\
-  EVERY wf_function C.ctx_functions /\ mem_inv raw_mem_ok C vs0 /\
-  ptr_discipline lo C vs0 /\ ~ctx_has_dalloca C /\
+  EVERY wf_function C.ctx_functions /\
+  layout_cut_safe D lo ncut vs0 C qend /\ ~ctx_has_dalloca C /\
   vs0.vs_allocas = FEMPTY /\ EVERY (fn_ptr_ok P) C.ctx_functions /\
   EVERY (\f. EVERY inst_wf (fn_insts f)) C.ctx_functions /\
   es = MAP FST path /\ qs = MAP SND path /\
@@ -171,12 +173,11 @@ Theorem layout_canonical_memory_success:
     (o1_walk_view rpolicy 2) C C' /\ o1_ctx_shape C /\
   EVERY (\fn. fn.fn_eom = NONE) C.ctx_functions /\
   ctx_inst_ids_distinct C /\ o1_run_state_ok vs0 /\
-  EVERY wf_function C.ctx_functions /\ mem_inv raw_mem_ok C vs0 /\
-  ptr_discipline lo C vs0 /\ ~ctx_has_dalloca C /\
+  EVERY wf_function C.ctx_functions /\
+  layout_cut_safe D lo ncut vs0 C qend /\ ~ctx_has_dalloca C /\
   vs0.vs_allocas = FEMPTY /\ EVERY (fn_ptr_ok P) C.ctx_functions /\
   EVERY (\f. EVERY inst_wf (fn_insts f)) C.ctx_functions /\
-  dead_wf D /\ taint_within D C vs0 /\
-  es = MAP FST path /\ qs = MAP SND path /\
+  dead_wf D /\ es = MAP FST path /\ qs = MAP SND path /\
   (!k. k < LENGTH path ==>
     resolved_annotation_edge C k (EL k (q0::MAP SND path)) (FST (EL k path))
       (EL (SUC k) (q0::MAP SND path))

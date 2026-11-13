@@ -1,6 +1,6 @@
 Theory concretizeLayoutCanonicalRunNext
-Ancestors frameGasEvents concretizeLayoutCanonicalBlock concretizeLayoutCanonicalDriver
-  concretizeLayoutCanonicalDeferred frameSelectedSimulation
+Ancestors concretizeLayoutCutSafe frameGasEvents concretizeLayoutCanonicalBlock concretizeLayoutCanonicalDriver
+  concretizeLayoutCanonicalDeferred frameSelectedPrefix frameSelectedSimulation
   concretizeLayoutScopedPhase concretizeLayoutPhaseOrigin concretizeLayoutPairedEntry
   concretizeLayoutStagePairing concretizeLayoutBlockPairing concretizeMemLocDefs
   concretizeStepStructure passSimulationProofs concretizeLayoutCompletedJump
@@ -9,7 +9,7 @@ Ancestors frameGasEvents concretizeLayoutCanonicalBlock concretizeLayoutCanonica
   arithmetic frameFiniteExecution unitShapeDefs
   passSharedDefs venomExecSemantics venomExecProofs venomWf venomInst list
 
-Theorem layout_canonical_run_block_entry[local]:
+Theorem layout_canonical_run_block_entry:
   layout_canonical_run D lo vs0 C C' q0 es qs ass qend q n fn s fn' t /\
   EVERY wf_function C.ctx_functions /\
   lookup_block s.vs_current_bb fn.fn_blocks = SOME bb /\
@@ -109,17 +109,16 @@ QED
 
 (* Leaf of the canonical simulation contract, run-next: a non-halted OK block ending in a terminator, followed by
    the OriginBlock edge and the rest of the run. *)
-Theorem layout_canonical_run_next_certificate:
+Theorem layout_canonical_run_next_entry_certificate:
   ctx_pass_stage rpolicy (CFP_Simple VP_ConcretizeMemLoc)
     (o1_walk_view rpolicy 2) C C' /\ o1_ctx_shape C /\
   EVERY (\fn. fn.fn_eom = NONE) C.ctx_functions /\
   ctx_inst_ids_distinct C /\ o1_run_state_ok vs0 /\
-  EVERY wf_function C.ctx_functions /\ mem_inv raw_mem_ok C vs0 /\
-  ptr_discipline lo C vs0 /\ ~ctx_has_dalloca C /\
+  EVERY wf_function C.ctx_functions /\
+  layout_cut_safe D lo ncut vs0 C qend /\ ~ctx_has_dalloca C /\
   vs0.vs_allocas = FEMPTY /\ EVERY (fn_ptr_ok P) C.ctx_functions /\
   EVERY (\f. EVERY inst_wf (fn_insts f)) C.ctx_functions /\
-  dead_wf D /\ taint_within D C vs0 /\
-  es = MAP FST path /\ qs = MAP SND path /\
+  dead_wf D /\ es = MAP FST path /\ qs = MAP SND path /\
   (!k. k < LENGTH path ==>
     resolved_annotation_edge C k (EL k (q0::MAP SND path)) (FST (EL k path))
       (EL (SUC k) (q0::MAP SND path))
@@ -129,16 +128,19 @@ Theorem layout_canonical_run_next_certificate:
   EVERY fn_defs_reach_uses C.ctx_functions /\ EVERY all_reachable C.ctx_functions /\
   fixed_region_reserved lo C /\ activation_depth q0 = 0 /\
   joint_trace vs0 C q0 es qs qend ==>
-  selected_run_next_certificate C C' q0 path
+  selected_run_next_entry_certificate C C' q0 path
     (layout_canonical_EB D lo vs0 C C' q0 es qs ass qend)
     (layout_canonical_run D lo vs0 C C' q0 es qs ass qend)
     (events_OB C C' (layout_canonical_OB D lo vs0 C C' q0 es qs ass qend))
     (events_OutR C C' (layout_canonical_OutR D lo vs0 C C' q0 es qs ass qend))
 Proof
-  strip_tac >> simp[selected_run_next_certificate_def] >> rpt gen_tac >> strip_tac >>
+  strip_tac >> simp[selected_run_next_entry_certificate_def] >>
+  rpt gen_tac >> strip_tac >>
   drule_all layout_canonical_run_block_entry >> strip_tac >>
   qexistsl [`bb'`, `phi' with vs_inst_idx := phi_prefix_length bb'.bb_instructions`] >>
-  simp[] >> gen_tac >> strip_tac >>
+  conj_tac >- first_assum ACCEPT_TAC >>
+  conj_tac >- (simp[target_block_entry_def] >> metis_tac[]) >>
+  gen_tac >> strip_tac >>
   qpat_x_assum `events_OB _ _ _ _ _ _ _ _ _ _ _ _ _`
     (strip_assume_tac o REWRITE_RULE [events_OB_def]) >>
   `fn'.fn_name = fn.fn_name` by metis_tac[layout_canonical_run_fn_name] >>
@@ -146,9 +148,14 @@ Proof
   qpat_x_assum `layout_canonical_EB _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _` mp_tac >>
   simp[layout_canonical_EB_def] >> strip_tac >>
   first_x_assum drule >> strip_tac >> gvs[] >>
-  RULE_ASSUM_TAC (PURE_REWRITE_RULE[APPEND_ASSOC, ADD_ASSOC]) >>
-  drule_all (PURE_REWRITE_RULE[APPEND_ASSOC, ADD_ASSOC]
-    selected_run_next_children) >> strip_tac >>
+  `joint_segment C q wb (JointConfig stk PG G tn fn i si oms om hs h)` by
+    metis_tac[cj 2 frameFiniteJointDecorationTheory.decorated_execution_segment] >>
+  `joint_segment C qn [] qn` by
+    simp[frameFiniteJointDecorationTheory.joint_segment_def] >>
+  `selected_segment C q0 path n q
+     (wb ++ ([(SOME (OriginBlock fuel post),qn)] ++ [])) qn` by
+    (pure_rewrite_tac[APPEND_NIL] >> first_assum ACCEPT_TAC) >>
+  drule_all selected_segment_edge >> strip_tac >>
   `?birth ids rp rv saved. b.lop_ids = birth::ids /\ b.lop_anns = (rp,rv)::saved` by
     (fs[layout_completed_jump_def, layout_ordinary_entry_def, layout_ordinary_state_def] >>
      gvs[]) >>
@@ -165,7 +172,12 @@ Proof
   qpat_x_assum `!k. k < LENGTH path ==> _`
     (qspec_then `n + LENGTH wb` mp_tac) >> simp[] >> strip_tac >>
   fs[joint_transition_block_iff] >> gvs[] >>
-  qexists `v` >> conj_tac >- (
+  `finite_block C bb
+     (phi with vs_inst_idx := phi_prefix_length bb.bb_instructions) (OK post)` by
+    metis_tac[cj 2 frameFiniteJointDecorationTheory.decorated_execution_erases] >>
+  `~v.vs_halted` by
+    metis_tac[frameFiniteControlTheory.finite_execution_block_endpoint] >>
+  simp[] >> conj_tac >- (
     `n + (LENGTH wb + 1) = SUC b.lop_cursor` by simp[] >>
     pop_assum (fn th => once_rewrite_tac[th]) >>
     irule layout_canonical_jump_continue >>
@@ -176,24 +188,46 @@ Proof
     fs[ADD_CLAUSES, joint_transition_block_iff] >>
     `FST (EL (n + LENGTH wb) path) = SOME (OriginBlock fuel post)` by
       metis_tac[EL_MAP] >> metis_tac[]) >>
-  gen_tac >> strip_tac >>
+  rpt gen_tac >> strip_tac >>
   qpat_x_assum `events_OutR _ _ _ _ _ _ _ _ _ _ _ _ _`
     (strip_assume_tac o REWRITE_RULE [events_OutR_def]) >>
   `run_events_agree C C' fn s fn' t r rr'` by
-    (irule run_events_agree_next >>
-     `finite_block C bb
-        (phi with vs_inst_idx := phi_prefix_length bb.bb_instructions) (OK post)` by
-       metis_tac[cj 2 frameFiniteJointDecorationTheory.decorated_execution_erases] >>
-     `~v.vs_halted` by
-       metis_tac[frameFiniteControlTheory.finite_execution_block_endpoint] >>
-     metis_tac[]) >>
+    (irule run_events_agree_next >> metis_tac[]) >>
   simp[selected_run_match_def, events_OutR_def, layout_canonical_OutR_def] >>
   qexists `rr'` >> conj_tac
-  >- (irule finite_step_run_next >> goal_assum (drule_at Any) >>
-      metis_tac[frameFiniteControlTheory.finite_execution_block_endpoint]) >>
+  >- (irule finite_step_run_next >> goal_assum (drule_at Any) >> metis_tac[]) >>
   qpat_x_assum `layout_canonical_OutR _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _` mp_tac >>
   pure_rewrite_tac[layout_canonical_OutR_def, LENGTH_APPEND, LENGTH, ADD_ASSOC] >>
   simp[]
+QED
+
+Theorem layout_canonical_run_next_certificate:
+  ctx_pass_stage rpolicy (CFP_Simple VP_ConcretizeMemLoc)
+    (o1_walk_view rpolicy 2) C C' /\ o1_ctx_shape C /\
+  EVERY (\fn. fn.fn_eom = NONE) C.ctx_functions /\
+  ctx_inst_ids_distinct C /\ o1_run_state_ok vs0 /\
+  EVERY wf_function C.ctx_functions /\
+  layout_cut_safe D lo ncut vs0 C qend /\ ~ctx_has_dalloca C /\
+  vs0.vs_allocas = FEMPTY /\ EVERY (fn_ptr_ok P) C.ctx_functions /\
+  EVERY (\f. EVERY inst_wf (fn_insts f)) C.ctx_functions /\
+  dead_wf D /\ es = MAP FST path /\ qs = MAP SND path /\
+  (!k. k < LENGTH path ==>
+    resolved_annotation_edge C k (EL k (q0::MAP SND path)) (FST (EL k path))
+      (EL (SUC k) (q0::MAP SND path))
+      (EL k (lifetime_annotations 0 [0] es)) (EL k ass)
+      (EL (SUC k) (lifetime_annotations 0 [0] es)) (EL (SUC k) ass)) /\
+  callee_first names C.ctx_functions /\ EVERY ssa_form C.ctx_functions /\
+  EVERY fn_defs_reach_uses C.ctx_functions /\ EVERY all_reachable C.ctx_functions /\
+  fixed_region_reserved lo C /\ activation_depth q0 = 0 /\
+  joint_trace vs0 C q0 es qs qend ==>
+  selected_run_next_certificate C C' q0 path
+    (layout_canonical_EB D lo vs0 C C' q0 es qs ass qend)
+    (layout_canonical_run D lo vs0 C C' q0 es qs ass qend)
+    (events_OB C C' (layout_canonical_OB D lo vs0 C C' q0 es qs ass qend))
+    (events_OutR C C' (layout_canonical_OutR D lo vs0 C C' q0 es qs ass qend))
+Proof
+  strip_tac >> irule selected_run_next_entry_certificate_run_next >>
+  irule layout_canonical_run_next_entry_certificate >> metis_tac[]
 QED
 
 val _ = export_theory();

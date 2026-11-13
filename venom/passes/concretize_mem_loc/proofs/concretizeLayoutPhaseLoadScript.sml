@@ -1,5 +1,5 @@
 Theory concretizeLayoutPhaseLoad
-Ancestors concretizeLayoutPhaseOrigin concretizeLayoutPhaseSuccess
+Ancestors concretizeLayoutCutSafe concretizeLayoutPhaseOrigin concretizeLayoutPhaseSuccess
   concretizeLayoutLocalLoad concretizeLayoutSupplement concretizeLayoutReaderContext
   frameRelocationEnvironment frameOriginUpdates frameResolvedTrace
   venomExecSemantics venomState venomInst memSafeRun o1PassContract ptrDiscipline list
@@ -9,8 +9,8 @@ Theorem layout_word_load_trace_step:
     (o1_walk_view rpolicy 2) C C' /\ o1_ctx_shape C /\
   EVERY (\fn. fn.fn_eom = NONE) C.ctx_functions /\
   ctx_inst_ids_distinct C /\ o1_run_state_ok vs0 /\
-  EVERY wf_function C.ctx_functions /\ mem_inv raw_mem_ok C vs0 /\
-  vs0.vs_allocas = FEMPTY /\ ptr_discipline lo C vs0 /\
+  EVERY wf_function C.ctx_functions /\
+  vs0.vs_allocas = FEMPTY /\ layout_cut_safe D lo ncut vs0 C q /\
   ~g.lop_pending /\ layout_ordinary_entry D lo vs0 C C' q0 es qs q g s t /\
   g.lop_config = JointConfig stk PG G tn fn inst s oms om hs h /\
   g.lop_ids = birth::ids /\ g.lop_anns = (rp,rv)::anns /\
@@ -53,6 +53,7 @@ Proof
         (SPEC_ALL concretize_word_load_local_complete))) >>
   disch_then (drule_at (Pat `joint_trace _ _ _ _ _ _`)) >>
   disch_then (drule_at (Pat `resolved_config_ok _ _ _`)) >>
+  disch_then (drule_at (Pat `layout_cut_safe _ _ _ _ _ _`)) >>
   disch_then (drule_at (Pat `relocation_taint_le _ _ _`)) >>
   disch_then (drule_at (Pat `ctx_pass_stage _ _ _ _ _`)) >>
   disch_then (drule_at (Pat `fn_ptr_ok _ _`)) >> simp[] >> disch_then drule_all >> strip_tac >>

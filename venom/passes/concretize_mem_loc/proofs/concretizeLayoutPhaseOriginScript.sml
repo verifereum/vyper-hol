@@ -1,5 +1,5 @@
 Theory concretizeLayoutPhaseOrigin
-Ancestors concretizeLayoutLocalReturnCopy frameTerminalCallOrigins
+Ancestors concretizeLayoutCutSafe concretizeLayoutLocalReturnCopy frameTerminalCallOrigins
   framePhaseCertificates frameRankedTerminalCorridor concretizeLayoutSupplement
   concretizeLayoutReaderContext frameJointTrace frameJointTransition
   frameResolvedTrace frameActivationLifetime frameRelocationLocal
@@ -79,6 +79,20 @@ Definition layout_ordinary_entry_def:
     layout_ordinary_trace vs0 C q0 es qs q g s /\
     layout_ordinary_state D lo C' q0 es qs g s t
 End
+
+(* A settled configuration of the layout chain lies inside the gas cut. *)
+Theorem layout_ordinary_entry_cut:
+  layout_cut_safe D lo n vs0 C q /\
+  layout_ordinary_entry D' lo' vs0 C C' q0 es qs q g s t /\ ~g.lop_pending ==>
+  gas_cut n vs0 s /\ ptr_discipline_upto lo n C vs0
+Proof
+  strip_tac >> reverse conj_tac >- fs[layout_cut_safe_def] >>
+  fs[layout_ordinary_entry_def, layout_ordinary_trace_def,
+     layout_ordinary_state_def] >>
+  Cases_on `g.lop_config` >> gvs[layout_phase_normalize_def] >>
+  `g.lop_cursor < LENGTH (q0::qs)` by simp[] >>
+  drule_all layout_cut_safe_frame_cfg >> simp[]
+QED
 
 Definition layout_terminal_entry_def:
   layout_terminal_entry C g s t <=>
@@ -328,8 +342,8 @@ Theorem layout_returncopy_pending_adapter:
     (o1_walk_view rpolicy 2) C C' /\ o1_ctx_shape C /\
   EVERY (\fn. fn.fn_eom = NONE) C.ctx_functions /\
   ctx_inst_ids_distinct C /\ o1_run_state_ok vs0 /\
-  EVERY wf_function C.ctx_functions /\ mem_inv raw_mem_ok C vs0 /\
-  vs0.vs_allocas = FEMPTY /\ ptr_discipline lo C vs0 /\
+  EVERY wf_function C.ctx_functions /\
+  vs0.vs_allocas = FEMPTY /\ layout_cut_safe D lo ncut vs0 C q /\
   callee_first names C.ctx_functions /\ EVERY ssa_form C.ctx_functions /\
   EVERY fn_defs_reach_uses C.ctx_functions /\ EVERY all_reachable C.ctx_functions /\
   ~ctx_has_dalloca C /\ fixed_region_reserved lo C /\ activation_depth q0 = 0 /\

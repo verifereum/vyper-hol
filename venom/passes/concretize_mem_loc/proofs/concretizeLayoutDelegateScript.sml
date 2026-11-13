@@ -1,5 +1,5 @@
 Theory concretizeLayoutDelegate
-Ancestors concretizeLayoutDelegateBoundary
+Ancestors concretizeLayoutCutSafe concretizeLayoutDelegateBoundary
   concretizeLayoutExternalCall concretizeLayoutExternalRequests
   venomCallOracleDefs extCallOracle
   concretizeLayoutCleanRead concretizeLayoutSupplement concretizeLayoutReaderContext
@@ -281,9 +281,8 @@ Theorem concretize_delegate_local_complete:
     (o1_walk_view rpolicy 2) C C' /\ o1_ctx_shape C /\
   EVERY (\fn. fn.fn_eom = NONE) C.ctx_functions /\
   ctx_inst_ids_distinct C /\ o1_run_state_ok vs0 /\
-  EVERY wf_function C.ctx_functions /\ mem_inv raw_mem_ok C vs0 /\
-  vs0.vs_allocas = FEMPTY /\ ptr_discipline lo C vs0 /\ taint_within D C vs0 /\
-  callee_first names C.ctx_functions /\ EVERY ssa_form C.ctx_functions /\
+  EVERY wf_function C.ctx_functions /\
+  vs0.vs_allocas = FEMPTY /\ layout_cut_safe D lo ncut vs0 C q /\ callee_first names C.ctx_functions /\ EVERY ssa_form C.ctx_functions /\
   EVERY fn_defs_reach_uses C.ctx_functions /\ EVERY all_reachable C.ctx_functions /\
   ~ctx_has_dalloca C /\ fixed_region_reserved lo C /\ activation_depth q0 = 0 /\
   EVERY (fn_ptr_ok P) C.ctx_functions /\
@@ -327,7 +326,7 @@ Proof
   `frame_reachable vs0 C stk PG G tn fn inst s` by
     (fs[joint_config_reachable_def] >>
      metis_tac[joint_origin_history_erasure, origin_frame_erasure]) >>
-  `taint_ok fn tn inst s` by (fs[ptr_discipline_def] >> metis_tac[]) >>
+  `taint_ok fn tn inst s` by metis_tac[layout_cut_safe_ptr_edge, layout_cut_safe_ptr_at, layout_cut_safe_ptr_cfg] >>
   `step_inst_base inst s = OK post` by
     (qpat_x_assum `joint_transition _ _ _ _` mp_tac >>
      simp[joint_transition_ordinary, step_inst_def]) >>
@@ -424,6 +423,7 @@ Resume concretize_delegate_local_complete[output]:
       joint_relocation_demand lo (concretize_positions C') q0 es qs c a b /\
       ~(w2n roT <= b /\ b < w2n roT+LENGTH (TAKE (w2n rs) post.vs_returndata)))` by
     (irule concretize_clean_write_geometry >> simp[] >>
+     goal_assum (drule_at (Pat `layout_cut_safe _ _ _ _ _ _`)) >>
      goal_assum (drule_at (Pat `local_rel _ _ _ _ _ _ _`)) >>
      goal_assum (drule_at (Pat `joint_trace _ _ _ _ _ _`)) >> simp[] >>
      goal_assum (drule_at (Pat `fn_ptr_ok _ _`)) >>

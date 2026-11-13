@@ -1,5 +1,5 @@
 Theory concretizeLayoutLocalCalldataCopy
-Ancestors concretizeLayoutLocalCopy concretizeLayoutLocalCalldataReaders
+Ancestors concretizeLayoutCutSafe o1SafeUpto concretizeLayoutLocalCopy concretizeLayoutLocalCalldataReaders
   frameRelocationEnvironment concretizeLayoutReaderContext venomExecSemantics
   venomState list words ptrDiscipline memLocDefs pointerConfinedDefs
   frameRelocationCleanOperands finite_map frameJointTrace frameJointTransition
@@ -88,7 +88,7 @@ Proof
 QED
 
 Theorem joint_calldatacopy_scalar_agreement:
-  vs0.vs_allocas = FEMPTY /\ ptr_discipline lo C vs0 /\
+  vs0.vs_allocas = FEMPTY /\ layout_cut_safe D lo ncut vs0 C q /\
   EVERY (fn_ptr_ok P) C.ctx_functions /\
   EVERY (\f. EVERY inst_wf (fn_insts f)) C.ctx_functions /\
   joint_trace vs0 C q0 es qs q /\ c < LENGTH es /\
@@ -109,7 +109,7 @@ Proof
     (drule_all joint_trace_edge_at >> strip_tac >> gvs[] >>
      fs[joint_config_reachable_def] >>
      metis_tac[joint_origin_history_erasure, origin_frame_erasure]) >>
-  `taint_ok fn tn inst s` by (fs[ptr_discipline_def] >> metis_tac[]) >>
+  `taint_ok fn tn inst s` by metis_tac[layout_cut_safe_ptr_edge, layout_cut_safe_ptr_at, layout_cut_safe_ptr_cfg] >>
   `!u. FLOOKUP rv u <> NONE ==> u IN fn_pv P fn` by
     (drule resolved_config_current >> simp[] >> strip_tac >>
      rpt strip_tac >> irule reachable_resolved_support >>
@@ -124,8 +124,8 @@ Theorem concretize_clean_write_geometry:
     (o1_walk_view rpolicy 2) C C' /\ o1_ctx_shape C /\
   EVERY (\fn. fn.fn_eom = NONE) C.ctx_functions /\
   ctx_inst_ids_distinct C /\ o1_run_state_ok vs0 /\
-  EVERY wf_function C.ctx_functions /\ mem_inv raw_mem_ok C vs0 /\
-  vs0.vs_allocas = FEMPTY /\ ptr_discipline lo C vs0 /\
+  EVERY wf_function C.ctx_functions /\
+  vs0.vs_allocas = FEMPTY /\ layout_cut_safe D lo ncut vs0 C q /\
   callee_first names C.ctx_functions /\ EVERY ssa_form C.ctx_functions /\
   EVERY fn_defs_reach_uses C.ctx_functions /\ EVERY all_reachable C.ctx_functions /\
   ~ctx_has_dalloca C /\ fixed_region_reserved lo C /\ activation_depth q0 = 0 /\
@@ -225,8 +225,8 @@ Theorem concretize_calldatacopy_execution_geometry:
     (o1_walk_view rpolicy 2) C C' /\ o1_ctx_shape C /\
   EVERY (\fn. fn.fn_eom = NONE) C.ctx_functions /\
   ctx_inst_ids_distinct C /\ o1_run_state_ok vs0 /\
-  EVERY wf_function C.ctx_functions /\ mem_inv raw_mem_ok C vs0 /\
-  vs0.vs_allocas = FEMPTY /\ ptr_discipline lo C vs0 /\
+  EVERY wf_function C.ctx_functions /\
+  vs0.vs_allocas = FEMPTY /\ layout_cut_safe D lo ncut vs0 C q /\
   callee_first names C.ctx_functions /\ EVERY ssa_form C.ctx_functions /\
   EVERY fn_defs_reach_uses C.ctx_functions /\ EVERY all_reachable C.ctx_functions /\
   ~ctx_has_dalloca C /\ fixed_region_reserved lo C /\ activation_depth q0 = 0 /\
@@ -266,7 +266,7 @@ Proof
   strip_tac >>
   `s.vs_labels = t.vs_labels` by fs[relocation_env_def] >>
   `?Q. EVERY (fn_ptr_ok Q) C.ctx_functions` by
-    (fs[ptr_discipline_def, EVERY_MEM] >> metis_tac[]) >>
+    (fs[layout_cut_safe_def, ptr_discipline_upto_def, EVERY_MEM] >> metis_tac[]) >>
   pop_assum strip_assume_tac >>
   `EVERY (\f. EVERY inst_wf (fn_insts f)) C.ctx_functions` by
     (fs[o1_ctx_shape_def, o1_fn_shape_def, fn_inst_wf_def, fn_insts_def,
@@ -308,6 +308,7 @@ Resume concretize_calldatacopy_execution_geometry[step]:
 QED
 Resume concretize_calldatacopy_execution_geometry[geometry]:
   irule concretize_clean_write_geometry >> simp[] >>
+  goal_assum (drule_at (Pat `layout_cut_safe _ _ _ _ _ _`)) >>
   goal_assum (drule_at (Pat `local_rel _ _ _ _ _ _ _`)) >>
   goal_assum (drule_at (Pat `joint_trace _ _ _ _ _ _`)) >> simp[] >>
   goal_assum (drule_at (Pat `fn_ptr_ok _ _`)) >>
@@ -333,9 +334,11 @@ Proof
   >- simp[step_prov_def, set_prov_def, DRESTRICT_UNIV]) >>
   `new_site_bytes s post = {}` by
     (irule new_site_bytes_unchanged >> simp[write_memory_with_expansion_def]) >>
-  gvs[] >> simp[step_taint_def, mem_taint_def, written_taint_def,
+  `written_taint tn inst s = {}` by
+    (rw[written_taint_def] >> rpt CASE_TAC >> simp[]) >>
+  gvs[] >> simp[step_taint_def, mem_taint_def,
     set_var_taint_def, store_taint_def, adopt_reset_def, imm_taint_def,
-    taint_component_equality, DRESTRICT_UNIV] >> rpt CASE_TAC >> simp[]
+    taint_component_equality, DRESTRICT_UNIV]
 QED
 
 Theorem clean_copy_taint_order:
@@ -401,8 +404,8 @@ Theorem concretize_calldatacopy_local_complete:
     (o1_walk_view rpolicy 2) C C' /\ o1_ctx_shape C /\
   EVERY (\fn. fn.fn_eom = NONE) C.ctx_functions /\
   ctx_inst_ids_distinct C /\ o1_run_state_ok vs0 /\
-  EVERY wf_function C.ctx_functions /\ mem_inv raw_mem_ok C vs0 /\
-  vs0.vs_allocas = FEMPTY /\ ptr_discipline lo C vs0 /\
+  EVERY wf_function C.ctx_functions /\
+  vs0.vs_allocas = FEMPTY /\ layout_cut_safe Dc lo ncut vs0 C q /\
   callee_first names C.ctx_functions /\ EVERY ssa_form C.ctx_functions /\
   EVERY fn_defs_reach_uses C.ctx_functions /\ EVERY all_reachable C.ctx_functions /\
   ~ctx_has_dalloca C /\ fixed_region_reserved lo C /\ activation_depth q0 = 0 /\

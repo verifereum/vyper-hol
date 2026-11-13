@@ -1,5 +1,5 @@
 Theory concretizeLayoutPhaseSelfdestruct
-Ancestors concretizeLayoutPhaseOrigin concretizeLayoutHaltExit
+Ancestors concretizeLayoutCutSafe concretizeLayoutPhaseOrigin concretizeLayoutHaltExit
   concretizeLayoutLocalSelfdestruct concretizeLayoutSupplement
   frameJointTrace frameJointTransition frameOriginHistory frameOriginReachable
   frameRelocationLocal frameRelocationEnvironment ptrDiscipline
@@ -32,8 +32,7 @@ QED
 
 
 Theorem layout_selfdestruct_halt:
-  ptr_discipline lo C vs0 /\ taint_within D C vs0 /\
-  EVERY (fn_ptr_ok P) C.ctx_functions /\
+  layout_cut_safe D lo ncut vs0 C q /\ EVERY (fn_ptr_ok P) C.ctx_functions /\
   EVERY (\f. EVERY inst_wf (fn_insts f)) C.ctx_functions /\
   ~g.lop_pending /\ layout_ordinary_entry D lo vs0 C C' q0 es qs q g s t /\
   g.lop_config = JointConfig stk PG G tn fn inst s oms om hs h /\
@@ -45,6 +44,8 @@ Theorem layout_selfdestruct_halt:
     dead_result_rel D (Halt post) (Halt tpost)
 Proof
   strip_tac >>
+  `gas_cut ncut vs0 s /\ ptr_discipline_upto lo ncut C vs0` by
+    (drule_all layout_ordinary_entry_cut >> simp[]) >>
   `layout_ordinary_trace vs0 C q0 es qs q g s /\
    layout_ordinary_state D lo C' q0 es qs g s t` by
     fs[layout_ordinary_entry_def] >>
@@ -67,16 +68,17 @@ Proof
       (Q.INST [`D` |-> `<| d_stor := K (K UNIV); d_trans := K (K UNIV);
         d_imm := K UNIV; d_ret := K {} |>`]
         (SPEC_ALL concretize_selfdestruct_complete)))] >>
-  `final_taint vs0 C post (step_taint inst s post tn) (ret_taint tn inst s)` by
-    (simp[final_taint_def] >>
-     qexistsl [`stk`, `PG`, `G`, `tn`, `fn`, `inst`, `s`, `0`] >>
-     simp[step_inst_non_invoke]) >>
+  `taint_within_upto D ncut C vs0` by fs[layout_cut_safe_def] >>
+  `step_inst 0 C inst s = Halt post` by simp[step_inst_non_invoke] >>
+  `inst.inst_opcode <> INVOKE` by simp[] >>
+  drule_all taint_within_upto_halt >> strip_tac >>
   `concretize_supplement D (step_taint inst s post tn) post post'` by
     metis_tac[GEN_ALL concretize_selfdestruct_supplement] >>
   qexists `post'` >> simp[] >>
   irule concretize_supplement_halt_exit >>
   fs[concretize_local_obs_def, dead_result_rel_def] >>
-  qexistsl [`C`, `ret_taint tn inst s`, `step_taint inst s post tn`, `vs0`] >>
+  conj_tac >- (qexists_tac `ret_taint tn inst s` >> simp[]) >>
+  goal_assum (drule_at (Pat `_.t_imm SUBSET _`)) >>
   simp[ret_taint_def]
 QED
 
