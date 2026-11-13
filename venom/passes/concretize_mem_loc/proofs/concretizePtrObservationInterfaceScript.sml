@@ -226,8 +226,11 @@ Theorem ptr_paired_read_range_static_bound:
   n = 0 \/ w2n y + n <= eom \/ (y = x /\ dyn_floor C vs <= w2n x)
 Proof
   strip_tac >> irule ptr_paired_current_range_static_bound >>
-  rpt (goal_assum (drule_at Any)) >> simp[] >>
-  rpt (goal_assum (drule_at Any)) >> simp[]
+  conj_tac >- (qexists_tac `names` >> first_assum ACCEPT_TAC) >>
+  qexistsl [`C'`,`H`,`PT`,`R`,`TG`,`a`,`at`,`births`,`calls`,`done`,`entries`,
+            `h`,`ht`,`lo`,`lp`,`ops`,`positions`,`registry`,`rpolicy`,`saved`,
+            `tokens`,`ws`] >>
+  simp[]
 QED
 
 Theorem ptr_paired_terminal_static_bound:
