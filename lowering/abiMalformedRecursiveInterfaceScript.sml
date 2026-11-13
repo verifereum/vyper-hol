@@ -127,6 +127,13 @@ Proof
   first_x_assum irule >> qexistsl_tac [`aid`, `cap`] >> simp[]
 QED
 
+Theorem abi_malformed_resource_post_alloca_inv:
+  abi_malformed_resource_post ctx func cenv cx es next sites dstid s t ==>
+  alloca_inv t
+Proof
+  rw[abi_malformed_resource_post_def, stmt_state_rel_def] >> simp[]
+QED
+
 Theorem abi_malformed_resource_weaken:
   abi_malformed_resource_post ctx func cenv cx es child_next child_sites dstid s t /\
   next <= child_next /\ child_sites SUBSET sites ==>

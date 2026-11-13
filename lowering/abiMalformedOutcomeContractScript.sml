@@ -179,5 +179,5 @@ Proof
   qexists_tac `en` >> simp[] >>
   fs[abi_malformed_constructor_outcome_def] >> first_x_assum irule >>
   goal_assum (drule_at Any) >> simp[] >>
-  qexistsl_tac [`B`, `L`, `d`, `live`] >> simp[]
+  qexistsl_tac [`B`, `H`, `L`, `d`, `live`] >> simp[]
 QED

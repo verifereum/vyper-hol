@@ -51,7 +51,8 @@ Proof
   drule_all abi_valid_allocated_members_tail_entry >> strip_tac >>
   `alloca_inv t /\ s.vs_alloca_next <= t.vs_alloca_next /\
    t.vs_alloca_next <= r.vs_alloca_next` by
-    fs[abi_malformed_resource_post_def, stmt_state_rel_def] >>
+    (imp_res_tac abi_malformed_resource_post_alloca_inv >>
+     fs[abi_malformed_resource_post_def]) >>
   `abi_malformed_destination func cenv es.scopes dstid (d+vo)
      (type_memory_size tv) t /\
    dstid NOTIN abi_malformed_scratch_sites end_st en func` by

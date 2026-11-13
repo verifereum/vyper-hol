@@ -351,8 +351,9 @@ Resume abi_valid_allocated_array_init_fresh_effect[compose]:
          `abi_malformed_destination func cenv es.scopes dstid d outsz s` by
             fs[abi_malformed_entry_def] >>
          drule_all abi_malformed_resource_destination >> simp[]) >>
-     fs[abi_malformed_entry_def, abi_valid_allocated_effect_def,
-        abi_malformed_resource_post_def, stmt_state_rel_def]) >>
+     conj_tac >- fs[abi_malformed_entry_def] >>
+     qpat_x_assum `stmt_state_rel H _ _ _ _ _ prepared` mp_tac >>
+     simp[stmt_state_rel_def]) >>
   `mem_bytes_at d 32 indexed.vs_memory = mem_bytes_at d 32 prepared.vs_memory` by
     (`abi_valid_allocated_frame sites 0 0 prepared indexed` by
        fs[abi_valid_allocated_effect_def] >>
