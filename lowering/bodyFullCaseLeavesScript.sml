@@ -78,8 +78,9 @@ QED
 Theorem body_assign_base_full:
   !cx t e DF lo d PG tops bindings ctx shadow_ctx func
    shadow_func cenv env env' ret_ty lctx RetQ es.
-    (!s'' pv t'.
-       eval_expr cx e s'' = (INL pv,t') ==> body_base_target_full_ok cx t) /\
+    (!s'' pv t' s'3' v t''.
+       eval_expr cx e s'' = (INL pv,t') /\ read_result cx pv s'3' = (INL v,t'') ==>
+       body_base_target_full_ok cx t) /\
     body_expr_full_ok cx e /\
     body_inv tops ctx cenv cx /\
     supported_assignment tops bindings (BaseTarget t) e /\
@@ -204,54 +205,58 @@ Proof
   cheat
 QED
 
-(* Admitted: Log whose argument types equal the event's field types. *)
-Theorem body_log_exact_full:
-  !cx id es DF lo d PG tops ctx shadow_ctx func
+(* Admitted: Log whose event's declared field types are all scalar. *)
+Theorem body_log_scalar_full:
+  !cx id args fields DF lo d PG tops ctx shadow_ctx func
    shadow_func cenv env env' ret_ty lctx RetQ es.
-    body_exprs_full_ok cx es /\
+    body_exprs_full_ok cx args /\
     body_inv tops ctx cenv cx /\
-    supported_log tops id es /\ supported_log_exact tops id es /\
+    supported_log tops id args /\
+    supported_event_fields tops id = SOME fields /\
+    EVERY supported_scalar_type (MAP (SND o FST) fields) /\
     (!target. supported_stmt_expr_exists
-       (expr_abi_decode_target_root target) (Log id es) ==>
+       (expr_abi_decode_target_root target) (Log id args) ==>
        occurs_abi_decode_target target tops) /\
     expr_sim_inv cenv cx env es /\ ce_locals_declared cenv env /\
     locals_alloc_ok cenv env /\
-    type_stmt env ret_ty (Log id es) = SOME env' /\
-    stmt_exprs_ok cenv (Log id es) /\
-    call_evaluation_safe cx (int_calls_stmt (Log id es)) /\
+    type_stmt env ret_ty (Log id args) = SOME env' /\
+    stmt_exprs_ok cenv (Log id args) /\
+    call_evaluation_safe cx (int_calls_stmt (Log id args)) /\
     frame_ret_ok_full (DF, lo, d, ctx, shadow_ctx, PG, func, shadow_func)
       cx RetQ cenv ret_ty ==>
     stmt_frag_full (DF, lo, d, ctx, shadow_ctx, PG, func, shadow_func)
       cx lctx RetQ cenv
-      (stmt_env cenv lctx ret_ty (Log id es))
-      (stmt_env cenv lctx ret_ty (gas_shadow_stmt (Log id es)))
-      (eval_stmt cx (Log id es)) es
+      (stmt_env cenv lctx ret_ty (Log id args))
+      (stmt_env cenv lctx ret_ty (gas_shadow_stmt (Log id args)))
+      (eval_stmt cx (Log id args)) es
 Proof
   cheat
 QED
 
-(* Admitted: Log with an argument widened to its event field's type. *)
-Theorem body_log_widened_full:
-  !cx id es DF lo d PG tops ctx shadow_ctx func
+(* Admitted: Log whose event declares an aggregate field. *)
+Theorem body_log_aggregate_full:
+  !cx id args fields DF lo d PG tops ctx shadow_ctx func
    shadow_func cenv env env' ret_ty lctx RetQ es.
-    body_exprs_full_ok cx es /\
+    body_exprs_full_ok cx args /\
     body_inv tops ctx cenv cx /\
-    supported_log tops id es /\ ~supported_log_exact tops id es /\
+    supported_log tops id args /\
+    supported_event_fields tops id = SOME fields /\
+    ~EVERY supported_scalar_type (MAP (SND o FST) fields) /\
     (!target. supported_stmt_expr_exists
-       (expr_abi_decode_target_root target) (Log id es) ==>
+       (expr_abi_decode_target_root target) (Log id args) ==>
        occurs_abi_decode_target target tops) /\
     expr_sim_inv cenv cx env es /\ ce_locals_declared cenv env /\
     locals_alloc_ok cenv env /\
-    type_stmt env ret_ty (Log id es) = SOME env' /\
-    stmt_exprs_ok cenv (Log id es) /\
-    call_evaluation_safe cx (int_calls_stmt (Log id es)) /\
+    type_stmt env ret_ty (Log id args) = SOME env' /\
+    stmt_exprs_ok cenv (Log id args) /\
+    call_evaluation_safe cx (int_calls_stmt (Log id args)) /\
     frame_ret_ok_full (DF, lo, d, ctx, shadow_ctx, PG, func, shadow_func)
       cx RetQ cenv ret_ty ==>
     stmt_frag_full (DF, lo, d, ctx, shadow_ctx, PG, func, shadow_func)
       cx lctx RetQ cenv
-      (stmt_env cenv lctx ret_ty (Log id es))
-      (stmt_env cenv lctx ret_ty (gas_shadow_stmt (Log id es)))
-      (eval_stmt cx (Log id es)) es
+      (stmt_env cenv lctx ret_ty (Log id args))
+      (stmt_env cenv lctx ret_ty (gas_shadow_stmt (Log id args)))
+      (eval_stmt cx (Log id args)) es
 Proof
   cheat
 QED

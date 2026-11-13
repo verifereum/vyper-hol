@@ -97,8 +97,9 @@ QED
    by its per-clause leaves in bodyFullCaseLeaves. *)
 Theorem body_assign_case_full:
   !cx t e.
-    (!s'' pv t'.
-       eval_expr cx e s'' = (INL pv,t') ==> body_base_target_full_ok cx t) /\
+    (!s'' pv t' s'3' v t''.
+       eval_expr cx e s'' = (INL pv,t') /\ read_result cx pv s'3' = (INL v,t'') ==>
+       body_base_target_full_ok cx t) /\
     body_expr_full_ok cx e ==>
     body_stmt_full_ok cx (Assign (BaseTarget t) e)
 Proof
@@ -481,9 +482,12 @@ Proof
   rpt strip_tac >> rewrite_tac[body_stmt_full_ok_def] >> rpt strip_tac >>
   qpat_x_assum `supported_stmt _ _ _`
     (strip_assume_tac o SIMP_RULE bool_ss [supported_stmt_def]) >>
-  Cases_on `supported_log_exact tops id es`
-  >- (irule body_log_exact_full >> metis_tac[]) >>
-  irule body_log_widened_full >> metis_tac[]
+  `?fields. supported_event_fields tops id = SOME fields` by
+    (qpat_x_assum `supported_log _ _ _` mp_tac >>
+     rewrite_tac[supported_log_def] >> CASE_TAC >> simp[]) >>
+  Cases_on `EVERY supported_scalar_type (MAP (SND o FST) fields)`
+  >- (irule body_log_scalar_full >> metis_tac[]) >>
+  irule body_log_aggregate_full >> metis_tac[]
 QED
 
 (* Pass, by stmtSimPass's joint fragment. *)
