@@ -19,6 +19,75 @@ Ancestors
 
 val _ = Parse.hide "body";
 
+(* Pointer seam interface audit (C1.1).
+ *
+ * All seam parameters below are universally quantified, including the
+ * caller's d, PG, G0, tn0, es0, s0, sa, sb and compiled value vv.  The
+ * caller precondition is exactly expr_vv_sim_ptr_def's antecedent plus
+ * body_inv, expr_body_pre, source selection, and the argument pointer IH.
+ * Do not replace this by the S1 seam antecedent: that loses the ghost.
+ *
+ * STAGING: for each continuation Q R, prove gas_outcome_ptr for the
+ * whole call provided the continuation proves it for intcall_rest at
+ * every reached (prev,penv,rtv,es1,t,G,tn).  In addition to intcall_entry,
+ * its entry must carry ghost_inv d cenv cx (es1 with scopes := prev)
+ * G tn t and ghost_kept cenv es0 sa G0 tn0 s0 G tn.  For every actual
+ * decoded INVOKE (lbl,arg_ops,argv), set calleePG = MAP (op_prov G) arg_ops.
+ * Require EVERY (\op. op_taint tn op = {}) arg_ops; for every corresponding
+ * package/setup carry intcall_entry_memory ce params penv argbase calleePG
+ * (tn with t_var := FEMPTY) setup and intcall_entry_return ce has_rb
+ * callee_d calleePG setup.  Here argbase = if has_rb then 1 else 0 and
+ * callee_d = if has_rb then SOME (HD argv,type_memory_size rtv) else NONE.
+ * Keep the fresh allocation witnesses for EVERY outgoing memory site,
+ * including the return buffer.  Each whole site must be disjoint from
+ * P = intcall_protected cenv es0 sa s0, not just its value footprint.
+ *
+ * Producers: eager compile_stage_intcall_args compiles and copies each
+ * memory argument before continuing.  At the next argument its buffer is
+ * an older nonlocal allocation, so that argument's ghost_kept protects
+ * its bytes and provenance.  The return buffer is protected the same way.
+ * intcall_bound_argument_layout supplies the declared slot size;
+ * intcall_separated_site_outside publishes whole-site separation.
+ * S1 intcall_entry alone supplies neither provenance nor robustness.
+ *
+ * CALLEE: quantify over the actual gas_invoke_entry and decoded operands,
+ * not a separately chosen callee or parameter ghost.  Starting with
+ * FEMPTY and tn with t_var := FEMPTY, compose the prologue's counted path
+ * with the body IH and frame_ret_ok_ptr at callee_d and intret_ptr_q.
+ * compile_internal_prologue_entry_ptr supplies ghost_inv and the counted
+ * entry path.  Source selection supplies no defaults, nr=F, and the IH
+ * for the pushed context.  body_sim_mutual supplies the S1 body facts.
+ * The runtime package uses use_trans=T; its constructed environment and
+ * prologue preserve this ce_nonreentrant component.  Prologue capture
+ * replaces the MemLoc return buffer by PtrVar.  These discharge the
+ * transient-unlock and non-MemLoc premises of internal_frame_ret_ok_ptr.
+ * intcall_entry_return_bounds supplies BOTH strict return-size bounds.
+ *
+ * RESTORE: require the callee's pointer outcome for every actual entry,
+ * retaining the same source result, raw IntRet/abort, and gas evidence.
+ * The pointer outcome's erasure and gas_path_exit identify a raw run;
+ * gasPathPtrExec.gas_path_ptr_exec provides its ghost and pointer safety.
+ * Use the S1 exit's concrete-memory frame only on that same raw result,
+ * never on an unrelated existential execution.  The successful post must
+ * be vv_post plus ghost_inv, ptr_vv_ok, ptr_buf_ok and ghost_kept, exactly
+ * as expr_vv_sim_ptr_def; abort post is expr_exit with no ghost invariant.
+ *
+ * For the ghost frame instantiate intcall_run_mem_frame at P above:
+ * setup resets local allocas/G; PG is built from the actual separated
+ * operands; the compiler supplies lowering_context_ok, and the caller
+ * pointer precondition supplies no-DALLOCA.  Empty callee t_var gives
+ * intcall_word_taint_empty.  Confinement covers all local bytes of P.
+ * Restore caller G via ghost_step_invoke, whose outputs have no provenance
+ * or variable taint; combine the concrete S1 frame and nonincreasing
+ * protected t_mem to recover robustness, not from either frame alone.
+ * Store stack-return words into the fresh return site on the rc>0 path.
+ * Compose counted paths with gas_path_ptr_then, preserving the actual
+ * gas marks.  Value-only gas_outcome is NOT a pointer outcome producer.
+ *
+ * This audit identifies construction/proof obligations, not additional
+ * admitted facts.  No missing external premise was found by inspection.
+ *)
+
 (* ADMITTED: a piece of the body induction. *)
 Theorem body_intcall_case_ptr:
   !cx v16 src_id_opt fn es v17.
