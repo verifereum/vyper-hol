@@ -169,10 +169,11 @@ Definition deploy_source_exempt_def:
 End
 
 (* A successful constructor halts returning the runtime code followed by its
-   immutables section, with the source's accounts (the target modulo code,
-   its storage modulo storage_dead), transient storage (modulo storage_dead)
-   and logs. Failures abort; a source Error may also halt
-   only when it is exempt. *)
+   immutables section, with the source's accounts after the pending deletions
+   (the target's code masked to the source's, as deploy_result_rel reads the
+   deposited code before the deletions), transient storage, logs and call
+   requests, as external_call_result_rel. Failures abort; a source Error may
+   also halt only when it is exempt. *)
 Definition deploy_venom_result_rel_def:
   deploy_venom_result_rel H tops runtime_bc tx
     (src : (abstract_machine # call_request list) + exception) vres <=>

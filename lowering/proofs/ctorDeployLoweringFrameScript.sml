@@ -579,23 +579,11 @@ Theorem deploy_frame_start_storage:
     deploy_source_ok tops am tx /\
     deploy_state_rel tops deploy_bc am tx es /\
     deploy_ctor_start tops am tx (mut,nr,stmts,am_c,es0) ==>
-    storage_layout_safe (deploy_evaluation_context tops am tx) /\
-    contract_storage_well_formed (deploy_evaluation_context tops am tx) es0 /\
     popped_keys_indexed es0.scopes
 Proof
   rpt gen_tac >> strip_tac >>
   `~nr` by metis_tac[deploy_ctor_not_nonreentrant] >> gvs[] >>
-  drule deploy_frame_ctor_start_scopes >> strip_tac >>
-  gvs[deploy_source_ok_def, deploy_storage_ok_def, deploy_ctor_start_def] >>
-  qpat_x_assum `ignore_bind _ _ _ = _` mp_tac >>
-  simp[lock_if_nr_def, ignore_bind_def, bind_def, return_def, AllCaseEqs()] >>
-  strip_tac >> gvs[] >>
-  `am_c.accounts = am.accounts /\ am_c.tStorage = am.tStorage` by
-    (drule deploy_frame_all_constants_accounts >>
-     drule deploy_frame_all_constants_tStorage >> simp[]) >>
-  irule deploy_frame_send_value_storage >> goal_assum (drule_at Any) >>
-  irule contract_storage_well_formed_backends_frame >>
-  qexists `initial_state am []` >> simp[initial_state_def]
+  drule deploy_frame_ctor_start_scopes >> simp[]
 QED
 
 Theorem deploy_frame_semantic_setup:
@@ -633,9 +621,6 @@ Theorem deploy_frame_semantic_setup:
     accounts_well_typed es0.accounts /\
     context_well_typed (deploy_evaluation_context tops am tx) /\
     functions_well_typed (deploy_evaluation_context tops am tx) /\
-    storage_layout_safe (deploy_evaluation_context tops am tx) /\
-    contract_storage_well_formed (deploy_evaluation_context tops am tx)
-      (es0 with outcomes := SOME vs.vs_outcomes) /\
     popped_keys_indexed es0.scopes /\
     outcomes_accounts_typed (SOME vs.vs_outcomes) /\
     oracle_storage_ok (deploy_evaluation_context tops am tx)
@@ -658,9 +643,7 @@ Proof
     (irule deploy_ctor_oracle_storage >> goal_assum (drule_at Any) >>
      goal_assum (drule_at Any)) >>
   qexistsl [`deploy_art`, `runtime_art`, `args`, `bindings`, `env_body`, `env_after`] >>
-  simp[] >> conj_tac >- metis_tac[] >>
-  irule contract_storage_well_formed_backends_frame >>
-  qexists `es0` >> simp[]
+  simp[] >> metis_tac[]
 QED
 
 Theorem deploy_frame_register_static_fields:
