@@ -1,7 +1,7 @@
 (* Semantic layout and invariant boundary, independent of compiler states. *)
 Theory placeRelayoutSemantic
 Ancestors
-  bodyPlacePremises placeRelayoutBounds placeRelayoutRawSource
+  placeRelayoutBounds placeRelayoutRawSource
   bodySimAugPlaceLoad annassignRelayoutSource assignRelayoutCaller
   exprSimSource exprSimHyps vyperStoragePlaceProvenance typedMemoryCopy
   vyperTypeArgFits vyperTypeInvariants exprSimHypsDefs
