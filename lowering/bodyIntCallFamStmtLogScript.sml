@@ -37,9 +37,8 @@ Proof
   Cases_on `supported_event_fields fp.jc_tops n` >> gvs[] >>
   drule_all body_log_metadata >> strip_tac >>
   rename1 `supported_event_fields _ _ = SOME fields` >>
-  `LENGTH (MAP SND fields) = LENGTH es` by metis_tac[LENGTH_MAP] >>
-  qpat_assum `MAP expr_type es = _` (fn th => fs[GSYM th]) >>
-  `LENGTH (MAP SND fields) = LENGTH es` by simp[] >>
+  `LENGTH (MAP SND fields) = LENGTH es` by
+    metis_tac[LIST_REL_LENGTH, LENGTH_MAP] >>
   `type_stmt env fp.jc_ret_ty (Log n es) = SOME env'` by
     fs[type_stmt_def, AllCaseEqs()] >>
   `well_typed_exprs env es` by fs[type_stmt_def, AllCaseEqs()] >>
@@ -47,7 +46,6 @@ Proof
   `EVERY (\e. is_bytestring_type (lowered_value_type ce e) <=>
               is_bytestring_type (expr_type e)) es` by
     metis_tac[supported_pure_exprs_bytestring_iff] >>
-  drule_all log_compile_structure >> strip_tac >>
   `EVERY (\e. expr_body_pre ce fp.jc_cx env e es') es` by
     (irule intcall_log_args_body_pre >>
      fs[intcall_joint_res_def, intcall_expr_res_def, supported_stmts_expr_exists_list] >>
