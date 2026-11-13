@@ -431,7 +431,7 @@ QED
 
 Theorem generate_regular_forward_execute_safe:
   generate_regular_inst_plan lv dfg cfg fn inst live halting term cur ps =
-    (ops, ps') /\ MEM inst.inst_opcode [ASSIGN; RETURNDATACOPY; REVERT] ==>
+    (ops, ps') /\ MEM inst.inst_opcode [ASSIGN; RETURNDATACOPY; REVERT; INITIAL_FMP; BUMP] ==>
   EVERY (\i. i <> AsmOp "JUMP" /\ i <> AsmOp "JUMPI" /\
              !stk. create_safe i stk) (execute_plan fmp ops)
 Proof
@@ -447,5 +447,6 @@ Proof
     >- metis_tac[plan_admin_exec_safe] >>
     rpt gen_tac >> strip_tac >>
     gvs[generate_emit_ops_def, asmIRTheory.venom_to_evm_name_def,
-        exec_stack_op_def, create_safe_def]) >> simp[]
+        bump_emit_ops_def, exec_stack_op_def, create_safe_def,
+        dup_name_def]) >> simp[]
 QED

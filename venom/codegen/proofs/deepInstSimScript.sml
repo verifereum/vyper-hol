@@ -2158,7 +2158,8 @@ Theorem initial_fmp_inst_ok_sim_marked_count:
         venom_asm_rel lo ps' vs' as' /\
         (~is_terminator inst.inst_opcode ==>
          as'.as_pc = as.as_pc + LENGTH (execute_plan initial_fmp ops)) /\
-        n = LENGTH (execute_plan initial_fmp ops)
+        n = LENGTH (execute_plan initial_fmp ops) /\
+        (inst_create_size_ok inst vs ==> create_safe_prefix lo o2pc prog n as)
 Proof
   rpt gen_tac >> strip_tac >> gen_tac >> strip_tac >>
   qpat_x_assum `lo = _` kall_tac >> qpat_x_assum `o2pc = _` kall_tac >>
@@ -2167,6 +2168,11 @@ Proof
   qpat_x_assum `generate_inst_plan _ _ _ _ _ _ _ _ _ _ = _` mp_tac >>
   simp[Once generate_inst_plan_def, is_param_opcode_def] >>
   strip_tac >> gvs[is_param_opcode_def] >>
+  `!n. n <= LENGTH (execute_plan initial_fmp ops) ==>
+       create_safe_prefix lo o2pc prog n as` by
+    (rpt strip_tac >> irule asm_block_create_safe_prefix >>
+     qexists_tac `execute_plan initial_fmp ops` >> simp[] >>
+     drule generate_regular_forward_execute_safe >> simp[]) >>
   qpat_x_assum `inst_wf inst` mp_tac >>
   simp[inst_wf_def] >> strip_tac >>
   qpat_x_assum `step_inst _ _ _ _ = _` mp_tac >>
@@ -2349,7 +2355,8 @@ Theorem initial_fmp_inst_ok_sim_marked:
       ?n as'. asm_steps lo o2pc prog n as = AsmOK as' /\
         venom_asm_rel lo ps' vs' as' /\
         (~is_terminator inst.inst_opcode ==>
-          as'.as_pc = as.as_pc + LENGTH (execute_plan initial_fmp ops))
+          as'.as_pc = as.as_pc + LENGTH (execute_plan initial_fmp ops)) /\
+        (inst_create_size_ok inst vs ==> create_safe_prefix lo o2pc prog n as)
 Proof
   rpt gen_tac >> strip_tac >> gen_tac >> strip_tac >>
   drule_all initial_fmp_inst_ok_sim_marked_count >> metis_tac[]
@@ -2466,13 +2473,19 @@ Theorem bump_inst_ok_sim_marked_count:
         venom_asm_rel lo ps' vs' as' /\
         (~is_terminator inst.inst_opcode ==>
          as'.as_pc = as.as_pc + LENGTH (execute_plan initial_fmp ops)) /\
-        n = LENGTH (execute_plan initial_fmp ops)
+        n = LENGTH (execute_plan initial_fmp ops) /\
+        (inst_create_size_ok inst vs ==> create_safe_prefix lo o2pc prog n as)
 Proof
   rpt gen_tac >> strip_tac >> gen_tac >> strip_tac >>
   qpat_x_assum `lo = _` kall_tac >> qpat_x_assum `o2pc = _` kall_tac >>
   qpat_x_assum `generate_inst_plan _ _ _ _ _ _ _ _ _ _ = _` mp_tac >>
   simp[Once generate_inst_plan_def, is_param_opcode_def] >> strip_tac >>
   gvs[is_param_opcode_def] >>
+  `!n. n <= LENGTH (execute_plan initial_fmp ops) ==>
+       create_safe_prefix lo o2pc prog n as` by
+    (rpt strip_tac >> irule asm_block_create_safe_prefix >>
+     qexists_tac `execute_plan initial_fmp ops` >> simp[] >>
+     drule generate_regular_forward_execute_safe >> simp[]) >>
   qpat_x_assum `inst_wf inst` mp_tac >>
   simp[inst_wf_def] >> strip_tac >>
   qpat_x_assum `step_inst _ _ _ _ = _` mp_tac >>
@@ -2723,7 +2736,8 @@ Theorem bump_inst_ok_sim_marked:
       ?n as'. asm_steps lo o2pc prog n as = AsmOK as' /\
         venom_asm_rel lo ps' vs' as' /\
         (~is_terminator inst.inst_opcode ==>
-          as'.as_pc = as.as_pc + LENGTH (execute_plan initial_fmp ops))
+          as'.as_pc = as.as_pc + LENGTH (execute_plan initial_fmp ops)) /\
+        (inst_create_size_ok inst vs ==> create_safe_prefix lo o2pc prog n as)
 Proof
   rpt gen_tac >> strip_tac >> gen_tac >> strip_tac >>
   drule_all bump_inst_ok_sim_marked_count >> metis_tac[]
@@ -3532,9 +3546,9 @@ Proof
   Cases_on `inst.inst_opcode = PHI`
   >- (ok_case_lemma_tac phi_inst_ok_sim_marked_count >> simp[] >> metis_tac[]) >>
   Cases_on `inst.inst_opcode = INITIAL_FMP`
-  >- (ok_case_lemma_tac initial_fmp_inst_ok_sim_marked_count >> simp[]) >>
+  >- (ok_case_lemma_tac initial_fmp_inst_ok_sim_marked_count >> simp[] >> metis_tac[]) >>
   Cases_on `inst.inst_opcode = BUMP`
-  >- (ok_case_lemma_tac bump_inst_ok_sim_marked_count >> simp[]) >>
+  >- (ok_case_lemma_tac bump_inst_ok_sim_marked_count >> simp[] >> metis_tac[]) >>
   Cases_on `inst.inst_opcode = ISTORE`
   >- (ok_case_lemma_tac istore_inst_ok_sim_marked_count >> simp[] >> metis_tac[]) >>
   `inst.inst_opcode <> OFFSET` by
