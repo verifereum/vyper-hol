@@ -3,7 +3,38 @@ Theory stmtSimLogTrace
 Ancestors
   stmtLowering stmtSimLogArgs stmtSimLogTopics context compileEnv emitHelper
   emitHelperProps exprLoweringProps list words abiBuiltinAllocation fragExec
-  venomInst venomExecSemantics
+  venomInst venomExecSemantics eventLoweringStructure
+
+Theorem compile_log_eval_all_code:
+  cenv.ce_event_info (nsid_to_string id) = SOME info /\
+  compile_log_eval_all cenv args sa = (ops,sm) /\
+  compile_stmt cenv lctx ty (Log id args) sa = ((),sb) /\
+  fn_has_code sa sb func ==>
+  cs_extends sa sm /\ cs_extends sm sb /\
+  fn_has_code sa sm func /\ fn_has_code sm sb func
+Proof
+  strip_tac >> PairCases_on `info` >>
+  `ci_mono sa sm` by
+    (mp_tac (Q.SPECL [`cenv`, `args`, `sa`] compile_log_eval_all_ci_mono) >>
+     simp[]) >>
+  `ci_mono sm sb` by
+    (qpat_x_assum `compile_stmt _ _ _ _ _ = _` mp_tac >>
+     simp_tac bool_ss [Once compile_stmt_def, LET_THM] >>
+     asm_simp_tac (srw_ss()) [LET_THM] >>
+     rewrite_tac[Once comp_bind_def] >>
+     asm_simp_tac (srw_ss()) [LET_THM] >>
+     disch_then (fn th => SUBST1_TAC
+       (SYM (SIMP_RULE (srw_ss()) [] (Q.AP_TERM `SND` th)))) >>
+     rpt (FIRST
+       [CHANGED_TAC (asm_simp_tac (srw_ss())
+          [ci_mono_comp_return, ci_mono_emit_inst,
+           ci_mono_compile_alloc_buffer, ci_mono_compile_abi_encode,
+           compile_log_topic_ops_ci_mono, compile_log_store_data_ci_mono]),
+        ho_match_mp_tac ci_mono_bind >> conj_tac >> rpt gen_tac,
+        ho_match_mp_tac ci_mono_ignore_bind >> conj_tac >> rpt gen_tac,
+        IF_CASES_TAC])) >>
+  fs[ci_mono_def] >> metis_tac[fn_has_code_split]
+QED
 
 (* The evaluated arguments seen at their source types: the compiler's
    operands, at types that agree with the lowered ones on whether they are
@@ -65,6 +96,33 @@ Proof
   strip_tac >> gvs[log_eval_view_def] >>
   drule split_log_ops_view >> disch_then (qspec_then `flags` strip_assume_tac) >>
   gvs[] >> simp[Once compile_stmt_def, comp_bind_def, comp_return_def]
+QED
+
+Theorem compile_log_data_trace_declared:
+  cenv.ce_event_info (nsid_to_string id) = SOME (h,dtys,flags) /\
+  compile_log_eval_all cenv args sa = (ys,sm) /\
+  compile_log_topic_ops (FST (split_log_ops ys flags)) sm = (topics,st) /\
+  SND (split_log_ops ys flags) = data_ops /\ data_ops <> [] ==>
+  (compile_stmt cenv lctx ty (Log id args) sa = ((),sb) <=>
+   ?src s1 s2 dst s3 len s4.
+     compile_alloc_buffer
+       (MAX 32 (SUM (MAP (type_memory_bytes cenv)
+         (log_non_indexed_types flags dtys)))) st = (src,s1) /\
+     compile_log_store_data cenv data_ops (log_non_indexed_types flags dtys)
+       src.buf_operand 0 s1 = ((),s2) /\
+     compile_alloc_buffer
+       (MAX 32 (abi_size_bound cenv.ce_struct_fields
+         (TupleT (log_non_indexed_types flags dtys)))) s2 = (dst,s3) /\
+     compile_abi_encode_to_buf dst.buf_operand src.buf_operand
+       (type_to_abi_enc_info cenv.ce_struct_fields cenv
+         (TupleT (log_non_indexed_types flags dtys))) s3 = (len,s4) /\
+     emit_inst LOG
+       (Lit (n2w (LENGTH (Lit (n2w h)::topics))) ::
+         REVERSE (Lit (n2w h)::topics) ++ [len;dst.buf_operand]) [] s4 = ((),sb))
+Proof
+  strip_tac >>
+  simp[Once compile_stmt_def, NULL_EQ, comp_bind_def, comp_return_def,
+       comp_ignore_bind_def] >> rpt (pairarg_tac >> gvs[])
 QED
 
 Theorem compile_log_data_trace:

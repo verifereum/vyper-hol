@@ -18,12 +18,6 @@ Proof
   disch_then SUBST1_TAC >> simp[return_plan_encoder_admissible]
 QED
 
-Theorem encoder_fragment_prior_site_excluded:
-  id < st.cs_next_id ==> id NOTIN frag_ids st en
-Proof
-  simp[frag_ids_def]
-QED
-
 Theorem allocated_encoder_site_excluded:
   compile_alloc_buffer n sa = (buf,st) ==>
   sa.cs_next_id NOTIN frag_ids st en
@@ -32,26 +26,6 @@ Proof
     comp_bind_def, comp_ignore_bind_def, comp_return_def,
     fresh_var_def, fresh_id_def, emit_def, frag_ids_def] >>
   rpt strip_tac >> gvs[]
-QED
-
-Theorem encoder_function_alloca_shape:
-  compile_abi_encode_to_buf dst src info sa = (r,sb) /\
-  fn_has_code sa sb func /\ fn_inst_ids_distinct func /\
-  MEM inst (fn_insts func) /\ inst.inst_id IN frag_ids sa sb /\
-  inst.inst_opcode = ALLOCA ==>
-  inst.inst_operands = [Lit 32w] /\
-  ?q. inst.inst_outputs = [q] /\ ~not_fresh_at sa q
-Proof
-  strip_tac >>
-  `ci_mono sa sb /\
-   EVERY (\i. i.inst_opcode = ALLOCA ==> i.inst_operands = [Lit 32w] /\
-     ?q. i.inst_outputs = [q] /\ ~not_fresh_at sa q) (added_insts sa sb)` by
-    metis_tac[encoder_to_buf_allocation_shape, pairTheory.SND] >>
-  `!id. id IN frag_ids sa sb ==>
-    ?i. MEM i (added_insts sa sb) /\ i.inst_id = id` by
-    metis_tac[encoder_to_buf_id_coverage, pairTheory.SND] >>
-  `cs_extends sa sb` by fs[ci_mono_def] >>
-  drule_all added_insts_function_property >> simp[]
 QED
 
 Theorem encoder_function_alloca_nonlocal:

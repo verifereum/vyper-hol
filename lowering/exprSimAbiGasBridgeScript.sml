@@ -2167,7 +2167,7 @@ Proof
   fs[frag_ops_free_def, EVERY_MEM]
 QED
 
-Theorem frag_relabel_region_closed[local]:
+Theorem frag_relabel_region_closed:
   frag_relabel_context sa sb L ids fn ==>
   observer_region_closed ctx (frag_relabel_observer sa sb L ids fn id)
     (frag_observer_cut sb)
@@ -2192,7 +2192,7 @@ Proof
   gvs[frag_observer_region_def, start_relabel_def, MEM_MAP] >> metis_tac[]
 QED
 
-Theorem frag_relabel_step_edge[local]:
+Theorem frag_relabel_step_edge:
   frag_relabel_context sa sb L ids fn /\
   (u.vs_current_bb,u.vs_inst_idx) IN
     frag_observer_region (start_relabel L ids sa) (start_swap sa L ids sb) /\
@@ -2538,7 +2538,7 @@ Proof
   irule frag_relabel_exit_path_aux >> metis_tac[]
 QED
 
-Theorem frag_relabel_halt_prefix[local]:
+Theorem frag_relabel_halt_prefix:
   frag_relabel_context sa sb L ids fn /\
   (s.vs_current_bb,s.vs_inst_idx) IN
     frag_observer_region (start_relabel L ids sa) (start_swap sa L ids sb) /\

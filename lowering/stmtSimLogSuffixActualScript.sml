@@ -2,7 +2,10 @@
 Theory stmtSimLogSuffixActual
 Ancestors
   stmtSimLogSuffixFrame compileEnv loweringStateRelDefs context venomState finite_map pred_set
-  ASCIInumbers list
+  ASCIInumbers list abiEncoderWindowContract allocaSiteResource venomMemDefs
+  stmtSimLogTrace stmtSimLogDataRun abiEncoderAppend loweringHalt
+  emitHelperProps fragExec exprLoweringProps stmtLoweringMono abiBuiltinAllocation
+  abiEncoderAllocationShape compilerInstructionSuffix
 
 Theorem log_finite_name_bound[local]:
   !names. FINITE names ==>
@@ -68,4 +71,192 @@ Proof
   drule_all log_success_suffix_framed_run >>
   disch_then (qx_choose_then `t` strip_assume_tac) >>
   qexists_tac `t` >> asm_simp_tac bool_ss [] >> first_assum ACCEPT_TAC
+QED
+
+(* Resource packaging only: input validity is supplied by tuple preparation.
+ * stmt_state_rel supplies alloca_inv and alloca_room. The two registrations
+ * are the actual source/output ALLOCA results; their sizes may exceed the
+ * windows used here. Fragment exclusion and size-32 reuse come from the
+ * encoder's allocation sites, not from an instruction-ID interval budget. *)
+Theorem log_encoder_window_pre_registered:
+  abi_encoder_admissible ei /\
+  abi_encoder_window_input ei at av b cap s.vs_memory /\
+  eval_operand src s = SOME (n2w b) /\
+  eval_operand dst s = SOME (n2w d) /\
+  (!x. src = Var x \/ dst = Var x ==> not_fresh_at st x) /\
+  fn_has_code st en func /\ fn_inst_ids_distinct func /\
+  alloca_inv s /\ alloca_room ctx func s /\
+  FLOOKUP s.vs_allocas source_id = SOME (b,source_cap) /\
+  FLOOKUP s.vs_allocas output_id = SOME (d,output_cap) /\
+  cap <= source_cap /\ LENGTH (enc at av) <= output_cap /\
+  source_id <> output_id /\
+  source_id NOTIN frag_ids st en /\ output_id NOTIN frag_ids st en /\
+  (!inst p sz. MEM inst (fn_insts func) /\ inst.inst_opcode = ALLOCA /\
+    inst.inst_id IN frag_ids st en /\
+    FLOOKUP s.vs_allocas inst.inst_id = SOME (p,sz) ==> sz = 32) /\
+  ~s.vs_halted /\ s.vs_current_bb = st.cs_current_bb /\
+  s.vs_inst_idx = LENGTH st.cs_current_insts ==>
+  abi_encoder_window_pre ctx func st en dst src ei at av b cap d s
+Proof
+  strip_tac >>
+  `b + source_cap <= s.vs_alloca_next /\
+   d + output_cap <= s.vs_alloca_next` by
+    metis_tac[alloca_site_registered_below] >>
+  `venomMemDefs$regions_disjoint (b,source_cap) (d,output_cap)` by
+    metis_tac[alloca_site_registered_disjoint] >>
+  simp_tac bool_ss [abi_encoder_window_pre_def] >>
+  asm_rewrite_tac[] >> rpt conj_tac
+  >- decide_tac
+  >- decide_tac
+  >- (qpat_x_assum `venomMemDefs$regions_disjoint _ _` mp_tac >>
+      simp_tac bool_ss [venomMemDefsTheory.regions_disjoint_def] >> decide_tac) >>
+  rpt gen_tac >> strip_tac >>
+  rename1 `FLOOKUP s.vs_allocas inst.inst_id = SOME (p,sz)` >>
+  `inst.inst_id <> source_id /\ inst.inst_id <> output_id` by metis_tac[] >>
+  `venomMemDefs$regions_disjoint (b,source_cap) (p,sz) /\
+   venomMemDefs$regions_disjoint (d,output_cap) (p,sz)` by
+    metis_tac[alloca_site_registered_disjoint] >>
+  conj_tac >- metis_tac[] >>
+  ntac 2 (pop_assum mp_tac) >>
+  simp_tac bool_ss [venomMemDefsTheory.regions_disjoint_def] >> decide_tac
+QED
+
+(* The compiler trace is compile_log_data_trace (or compile_log_empty_trace).
+ * Unlike scalar execution, its encoder stage may extend the CFG.  This
+ * boundary extracts code for each actual stage without flattening that CFG. *)
+Theorem log_declared_data_stage_code:
+  cs_extends sm st /\
+  compile_alloc_buffer cap st = (src,s1) /\
+  compile_log_store_data ce xs dtys src.buf_operand 0 s1 = ((),s2) /\
+  compile_alloc_buffer outcap s2 = (dst,s3) /\
+  compile_abi_encode_to_buf dst.buf_operand src.buf_operand ei s3 = (len,s4) /\
+  emit_inst LOG operands [] s4 = ((),sb) /\
+  fn_has_code sm sb func ==>
+  fn_has_code st s1 func /\ fn_has_code s1 s2 func /\
+  fn_has_code s2 s3 func /\ fn_has_code s3 s4 func /\
+  fn_has_code s4 sb func /\ cs_extends sm s3 /\ cs_extends s3 sb
+Proof
+  strip_tac >>
+  imp_res_tac compile_alloc_buffer_extends >>
+  `cs_extends s1 s2` by
+    (mp_tac (cj 3 ci_mono_list_helpers) >>
+     disch_then (qspecl_then [`ce`, `xs`, `dtys`, `src.buf_operand`, `0`, `s1`] mp_tac) >>
+     simp[ci_mono_def]) >>
+  drule cs_extends_abi_encode >> strip_tac >>
+  drule emit_inst_extends >> strip_tac >>
+  `cs_extends s4 sb` by
+    (irule cs_extends_same_block >> simp[rich_listTheory.IS_PREFIX_APPEND] >> metis_tac[]) >>
+  `cs_extends sm s1` by (irule cs_extends_trans >> qexists_tac `st` >> simp[]) >>
+  `cs_extends sm s2` by (irule cs_extends_trans >> qexists_tac `s1` >> simp[]) >>
+  `cs_extends sm s3` by (irule cs_extends_trans >> qexists_tac `s2` >> simp[]) >>
+  `cs_extends sm s4` by (irule cs_extends_trans >> qexists_tac `s3` >> simp[]) >>
+  `cs_extends s3 sb` by (irule cs_extends_trans >> qexists_tac `s4` >> simp[]) >>
+  `cs_extends s2 sb` by (irule cs_extends_trans >> qexists_tac `s3` >> simp[]) >>
+  `cs_extends s1 sb` by (irule cs_extends_trans >> qexists_tac `s2` >> simp[]) >>
+  rpt conj_tac >> metis_tac[fn_has_code_mid, cs_extends_refl]
+QED
+
+Theorem log_aggregate_data_stage_code:
+  cs_extends sm st /\
+  compile_alloc_buffer cap st = (src,s1) /\
+  compile_log_store_data ce xs (MAP SND xs) src.buf_operand 0 s1 = ((),s2) /\
+  compile_alloc_buffer outcap s2 = (dst,s3) /\
+  compile_abi_encode_to_buf dst.buf_operand src.buf_operand ei s3 = (len,s4) /\
+  emit_inst LOG operands [] s4 = ((),sb) /\
+  fn_has_code sm sb func ==>
+  fn_has_code st s1 func /\ fn_has_code s1 s2 func /\
+  fn_has_code s2 s3 func /\ fn_has_code s3 s4 func /\
+  fn_has_code s4 sb func /\ cs_extends sm s3 /\ cs_extends s3 sb
+Proof
+  metis_tac[log_declared_data_stage_code]
+QED
+
+(* These are the two real allocation sites in compile_log_data_trace.  This
+ * is code membership, not a claim that either site has executed. *)
+Theorem log_declared_data_allocation_sites:
+  cs_extends sm st /\
+  compile_alloc_buffer cap st = (src,s1) /\
+  compile_log_store_data ce xs dtys src.buf_operand 0 s1 = ((),s2) /\
+  compile_alloc_buffer outcap s2 = (dst,s3) /\
+  compile_abi_encode_to_buf dst.buf_operand src.buf_operand ei s3 = (len,s4) /\
+  emit_inst LOG operands [] s4 = ((),sb) /\
+  fn_has_code sm sb func ==>
+  src.buf_size = cap /\ dst.buf_size = outcap /\
+  src.buf_operand = Var (STRING #"%" (toString st.cs_next_var)) /\
+  dst.buf_operand = Var (STRING #"%" (toString s2.cs_next_var)) /\
+  MEM (mk_inst st.cs_next_id ALLOCA [Lit (n2w cap)]
+    [STRING #"%" (toString st.cs_next_var)]) (fn_insts func) /\
+  MEM (mk_inst s2.cs_next_id ALLOCA [Lit (n2w outcap)]
+    [STRING #"%" (toString s2.cs_next_var)]) (fn_insts func) /\
+  st.cs_next_id < s2.cs_next_id /\ s2.cs_next_id < s3.cs_next_id
+Proof
+  strip_tac >> drule_all log_declared_data_stage_code >> strip_tac >>
+  imp_res_tac log_buffer_trace_code >>
+  imp_res_tac abi_builtin_alloc_buffer_shape >>
+  imp_res_tac emitted_insts_emit_op >>
+  mp_tac (cj 3 ci_mono_list_helpers) >>
+  disch_then (qspecl_then [`ce`, `xs`, `dtys`, `src.buf_operand`, `0`, `s1`] mp_tac) >>
+  simp[ci_mono_def] >> strip_tac >> simp[]
+QED
+
+Theorem log_aggregate_data_allocation_sites:
+  cs_extends sm st /\
+  compile_alloc_buffer cap st = (src,s1) /\
+  compile_log_store_data ce xs (MAP SND xs) src.buf_operand 0 s1 = ((),s2) /\
+  compile_alloc_buffer outcap s2 = (dst,s3) /\
+  compile_abi_encode_to_buf dst.buf_operand src.buf_operand ei s3 = (len,s4) /\
+  emit_inst LOG operands [] s4 = ((),sb) /\
+  fn_has_code sm sb func ==>
+  src.buf_size = cap /\ dst.buf_size = outcap /\
+  src.buf_operand = Var (STRING #"%" (toString st.cs_next_var)) /\
+  dst.buf_operand = Var (STRING #"%" (toString s2.cs_next_var)) /\
+  MEM (mk_inst st.cs_next_id ALLOCA [Lit (n2w cap)]
+    [STRING #"%" (toString st.cs_next_var)]) (fn_insts func) /\
+  MEM (mk_inst s2.cs_next_id ALLOCA [Lit (n2w outcap)]
+    [STRING #"%" (toString s2.cs_next_var)]) (fn_insts func) /\
+  st.cs_next_id < s2.cs_next_id /\ s2.cs_next_id < s3.cs_next_id
+Proof
+  metis_tac[log_declared_data_allocation_sites]
+QED
+
+(* Static site boundaries only; no runtime registration or reuse-size claim. *)
+Theorem log_declared_data_encoder_sites:
+  cs_extends sm st /\
+  compile_alloc_buffer cap st = (src,s1) /\
+  compile_log_store_data ce xs dtys src.buf_operand 0 s1 = ((),s2) /\
+  compile_alloc_buffer outcap s2 = (dst,s3) /\
+  compile_abi_encode_to_buf dst.buf_operand src.buf_operand ei s3 = (len,s4) /\
+  emit_inst LOG operands [] s4 = ((),sb) /\
+  fn_has_code sm sb func /\ fn_inst_ids_distinct func ==>
+  st.cs_next_id NOTIN frag_ids s3 s4 /\
+  s2.cs_next_id NOTIN frag_ids s3 s4 /\
+  (!inst. MEM inst (fn_insts func) /\ inst.inst_id IN frag_ids s3 s4 /\
+    inst.inst_opcode = ALLOCA ==>
+    inst.inst_operands = [Lit 32w] /\
+    ?q. inst.inst_outputs = [q] /\ ~not_fresh_at s3 q)
+Proof
+  strip_tac >>
+  drule_all log_declared_data_stage_code >> strip_tac >>
+  drule_all log_declared_data_allocation_sites >> strip_tac >>
+  conj_tac >- (irule encoder_fragment_prior_site_excluded >> decide_tac) >>
+  conj_tac >- (irule encoder_fragment_prior_site_excluded >> decide_tac) >>
+  rpt strip_tac >> drule_all encoder_function_alloca_shape >> simp[]
+QED
+
+Theorem log_aggregate_data_encoder_sites:
+  cs_extends sm st /\
+  compile_alloc_buffer cap st = (src,s1) /\
+  compile_log_store_data ce xs (MAP SND xs) src.buf_operand 0 s1 = ((),s2) /\
+  compile_alloc_buffer outcap s2 = (dst,s3) /\
+  compile_abi_encode_to_buf dst.buf_operand src.buf_operand ei s3 = (len,s4) /\
+  emit_inst LOG operands [] s4 = ((),sb) /\
+  fn_has_code sm sb func /\ fn_inst_ids_distinct func ==>
+  st.cs_next_id NOTIN frag_ids s3 s4 /\
+  s2.cs_next_id NOTIN frag_ids s3 s4 /\
+  (!inst. MEM inst (fn_insts func) /\ inst.inst_id IN frag_ids s3 s4 /\
+    inst.inst_opcode = ALLOCA ==>
+    inst.inst_operands = [Lit 32w] /\
+    ?q. inst.inst_outputs = [q] /\ ~not_fresh_at s3 q)
+Proof
+  metis_tac[log_declared_data_encoder_sites]
 QED

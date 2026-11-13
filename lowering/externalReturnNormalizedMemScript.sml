@@ -9,6 +9,7 @@ Ancestors
   exprSimDefs vyperTypeArgFits compileEnv loweringStateRelDefs typedNormalizeEntryBoundary
   stmtLoweringMono fragExec exprOperandVar externalReturnRegisteredWindowMem
   externalReturnZeroLayout externalReturnEncoderSites externalRawReturnType
+  abiEncoderAllocationShape
   bodySim compileVyper externalReturnDirectSource externalReturnWindowResources
   valueEncodingProofs vyperABI vyperTypeABI loweringHalt
 
