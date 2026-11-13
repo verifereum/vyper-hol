@@ -36,7 +36,7 @@ Theorem widened_assign_typed_store_counted_ptr:
        w2n sw + type_memory_size stv <= w2n dw) /\
       (!m. mem_agree_outside tn.t_mem s.vs_memory m ==>
         val_in_memory stv v (w2n sw) m) /\
-      fn_has_code a b fn /\ fn_inst_ids_distinct fn /\
+      fn_has_code a b fn /\ 
       s.vs_current_bb = a.cs_current_bb /\
       s.vs_inst_idx = LENGTH a.cs_current_insts /\ ~s.vs_halted /\
       ~ctx_has_dalloca ctx ==>
