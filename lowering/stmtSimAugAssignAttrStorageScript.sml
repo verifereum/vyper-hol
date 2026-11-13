@@ -533,8 +533,8 @@ Proof
        q.vs_memory = s.vs_memory /\ q.vs_allocas = s.vs_allocas /\
        (!x u. not_fresh_at sa x /\ lookup_var x s = SOME u ==>
               lookup_var x q = SOME u)` by
-    (irule attr_add_marked_path >> qexists_tac `Lit slot` >>
-     simp[eval_operand_def]) >>
+    (irule attr_add_marked_path >> simp[PULL_EXISTS] >>
+     qexists_tac `Lit slot` >> simp[eval_operand_def]) >>
   pop_assum strip_assume_tac >>
   `stmt_state_rel H0 ctx func cenv cx es q` by
     (qpat_assum `!H. stmt_state_rel H _ _ _ _ _ s ==> _` irule >>
