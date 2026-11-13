@@ -173,6 +173,7 @@ Theorem abi_decode_bytes_tail_path_mem[local]:
     (!op w. eval_operand op s = SOME w ==> eval_operand op t = SOME w) /\
     t.vs_memory = (mcopy d a (32+c)
       (mstore (d+32*((c+31) DIV 32)) 0w s)).vs_memory /\
+    t.vs_call_ctx = s.vs_call_ctx /\ t.vs_data_section = s.vs_data_section /\
     t.vs_alloca_next = s.vs_alloca_next /\ t.vs_allocas = s.vs_allocas /\
     alloca_history func t
 Proof
@@ -228,6 +229,7 @@ Theorem abi_decode_bytes_bounded_path_mem:
     (!op w. eval_operand op s = SOME w ==> eval_operand op t = SOME w) /\
     t.vs_memory = (mcopy d (b+p) (32+c)
       (mstore (d+32*((c+31) DIV 32)) 0w s)).vs_memory /\
+    t.vs_call_ctx = s.vs_call_ctx /\ t.vs_data_section = s.vs_data_section /\
     t.vs_alloca_next = s.vs_alloca_next /\ t.vs_allocas = s.vs_allocas /\
     alloca_history func t)
 Proof

@@ -23,7 +23,7 @@ Proof
   rpt strip_tac >> gvs[eval_operand_def]
 QED
 
-Theorem abi_decode_sequence_revert_extend[local]:
+Theorem abi_decode_sequence_revert_extend:
   !code extras s t u.
   EVERY (\i. abi_decoder_reentry_opcode i.inst_opcode) code /\
   abi_decoder_vars_extend extras s t /\
@@ -42,7 +42,7 @@ Proof
   goal_assum (drule_at Any) >> simp[run_inst_seq_def]
 QED
 
-Theorem abi_decode_sequence_mem_extend[local]:
+Theorem abi_decode_sequence_mem_extend:
   !code extras s t.
   EVERY (\i. abi_decoder_reentry_opcode i.inst_opcode) code /\
   abi_decoder_vars_extend extras s t /\
