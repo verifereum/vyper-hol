@@ -1131,10 +1131,10 @@ Proof
        run_inst_seq_mem_ok
         [mk_inst n NOT ops0 ws; mk_inst a ADD ops xs;
          mk_inst b AND ops' ys; mk_inst c ADD ops'' zs] s` by
-       (rpt gen_tac >>
-        simp[fragExecMemTheory.run_inst_seq_mem_ok_cons, below_frontier_no_ranges, mk_inst_def] >>
-        rpt (CASE_TAC >> simp[fragExecMemTheory.run_inst_seq_mem_ok_cons,
-          fragExecMemTheory.run_inst_seq_mem_ok_last, below_frontier_no_ranges, mk_inst_def])) >>
+       (POP_ASSUM_LIST (K all_tac) >> rpt gen_tac >>
+        irule fragExecMemTheory.run_inst_seq_mem_ok_every >>
+        simp[below_frontier_no_ranges, mk_inst_def,
+          memSafeRunTheory.inst_dload_in_section_def]) >>
      `!src sa out sb s w. compile_bytestring_copy_len src sa = (out,sb) /\
        eval_operand src s = SOME w /\ w2n w + 32 <= s.vs_alloca_next ==>
        run_inst_seq_mem_ok (emitted_insts sa sb) s` by
@@ -1257,10 +1257,13 @@ Proof
      isPREFIX (emitted_insts sn sb) (DROP su.vs_inst_idx bb.bb_instructions)` by
     (qpat_x_assum `fn_has_code sn sb func` mp_tac >>
      simp[fn_has_code_def] >> strip_tac >>
-     qexists_tac `bb` >> fs[IS_PREFIX_APPEND] >> simp[DROP_APPEND]) >>
+     goal_assum (drule_at Any) >>
+     qpat_x_assum `isPREFIX _ _` mp_tac >>
+     simp[rich_listTheory.IS_PREFIX_APPEND] >> strip_tac >>
+     simp[listTheory.DROP_APPEND]) >>
   pop_assum strip_assume_tac >>
   `allocas_from lo su /\ lo <= su.vs_alloca_next /\ ~su.vs_halted` by
-    (qpat_assum `!H. valid_horizon _ _ _ _ ==> expr_post _ _ _ _ _ _ _ _ _ _ _ _ _ /\ _`
+    (qpat_assum `!H. valid_horizon _ _ _ _ ==> gas_origin_ptr_path _ _ _ _ /\ _`
        (qspec_then `storage_trace_horizon ee.storage_trace` mp_tac) >>
      simp[expr_post_def, stmt_state_rel_def, ghost_inv_at_def] >>
      rpt strip_tac >> simp[]) >>
