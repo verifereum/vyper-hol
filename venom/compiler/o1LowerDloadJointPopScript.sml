@@ -78,7 +78,7 @@ QED
 Theorem ld_joint_saved_drop_owner:
   !U stk ts.
   ld_joint_saved C' sites X lo U stk ts /\
-  occurrence_saved_ok B U stk /\
+  occurrence_saved_ok fl B U stk /\
   ~MEM a (MAP (\u. u.of_owner) U) ==>
   ld_joint_saved C' (DRESTRICT sites {id | FST id <> a})
     (DRESTRICT X {id | FST id <> a}) lo U stk ts
@@ -93,7 +93,7 @@ Proof
   rpt strip_tac >>
   gvs[LIST_REL_EL_EQN] >>
   qpat_x_assum `MEM (SOME id) _` (strip_assume_tac o REWRITE_RULE [MEM_EL]) >>
-  qpat_x_assum `!n. n < LENGTH _ ==> occurrence_param_ok _ _ _ _`
+  qpat_x_assum `!n. n < LENGTH _ ==> occurrence_param_ok _ _ _ _ _`
     (qspec_then `n` mp_tac) >>
   strip_tac >> gvs[occurrence_param_ok_def]
 QED

@@ -203,11 +203,10 @@ Theorem ptr_stage_owner_actual_interval_no_kill:
     ~in_revert_forward (EL k h).po_fn (EL k h).po_state /\
     byte NOTIN range_bytes (step_writes (EL k h).po_inst (EL k h).po_state
                                          (EL (SUC k) h).po_state)) /\
-  o1_run_state_ok vs /\ o1_ctx_shape C /\ ~ctx_has_dalloca C /\
+  o1_run_state_ok vs /\ o1_ctx_shape C /\
   EVERY (fn_ptr_ok P) C.ctx_functions /\ EVERY ssa_form C.ctx_functions /\
   EVERY fn_inst_wf C.ctx_functions /\
   EVERY (\f. EVERY inst_wf (fn_insts f)) C.ctx_functions /\
-  EVERY (\f. EVERY (\inst. inst.inst_opcode <> DALLOCA) (fn_insts f)) C.ctx_functions /\
   wf_function fn /\ all_reachable fn /\ ptr_discipline lo C vs /\
   ptr_bp_origins fn (bp_analyze_fuel (concretize_memloc_fuel fn) (cfg_analyze fn) fn) ==>
   !k. i <= k /\ k < j ==>

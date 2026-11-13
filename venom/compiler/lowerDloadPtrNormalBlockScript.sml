@@ -13,7 +13,7 @@ Theorem dload_normal_branch_block:
     resolve_phi lbl a.inst_operands = SOME op /\ op = Var w ==> w IN V) /\
   lower_dload_function_supply q f = (g,q') /\
   ALL_DISTINCT (MAP (\bb. bb.bb_label) g.fn_blocks) /\
-  dload_boundary_core lo fs V Ws PG PH G H tn un s t cs ds /\
+  dload_boundary_core fl lo fs V Ws PG PH G H tn un s t cs ds /\
   (!v. v IN set (fn_ir_vars f) ==>
     (lookup_var v s = NONE <=> lookup_var v t = NONE)) /\
   step_inst fuel C' i t = OK t1 /\ ~t1.vs_halted /\
@@ -47,7 +47,7 @@ Theorem dload_normal_branch_block:
     dload_control_match q f g s2 t2 i' emitted' 0 /\ j = HD emitted' /\
     (!v. v IN set (fn_ir_vars f) ==>
       (lookup_var v s2 = NONE <=> lookup_var v t2 = NONE)) /\
-    dload_boundary_core lo fs V Ws PG PH
+    dload_boundary_core fl lo fs V Ws PG PH
       (entry_prov f s1 G) (entry_prov g t1 H)
       (entry_taint_vars f s1 tn) (entry_taint_vars g t1 un) s2 t2 cs ds /\
     LENGTH fs = SUC (LENGTH cs) /\ LENGTH cs = LENGTH ds /\

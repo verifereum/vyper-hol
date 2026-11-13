@@ -161,10 +161,10 @@ Proof
 QED
 
 Theorem dload_vars_match_write:
-  dload_vars_match fs V G H
+  dload_vars_match fl fs V G H
     (tn with t_var := tv) (un with t_var := uv) s t /\
-  (out IN V ==> m = n /\ dload_value_word fs m p q a b) ==>
-  dload_vars_match fs V (set_prov G [out] p) (set_prov H [out] q)
+  (out IN V ==> m = n /\ dload_value_word fl fs m p q a b) ==>
+  dload_vars_match fl fs V (set_prov G [out] p) (set_prov H [out] q)
     (tn with t_var := set_var_taint tv [out] m)
     (un with t_var := set_var_taint uv [out] n)
     (update_var out a s) (update_var out b t)
@@ -174,7 +174,7 @@ Proof
   >- (gvs[] >> Cases_on `p` >> Cases_on `q` >>
       gvs[lookup_var_def, update_var_def, set_prov_def, set_var_taint_def,
           FLOOKUP_UPDATE, FLOOKUP_DRESTRICT, op_taint_def]) >>
-  qpat_x_assum `dload_vars_match _ _ _ _ _ _ _ _` mp_tac >>
+  qpat_x_assum `dload_vars_match _ _ _ _ _ _ _ _ _` mp_tac >>
   simp[dload_vars_match_def] >>
   disch_then (qspec_then `v` mp_tac) >>
   simp[lookup_var_def, update_var_def, set_var_taint_def,
@@ -185,12 +185,12 @@ QED
 
 Theorem dload_matched_phi:
   s.vs_prev_bb = t.vs_prev_bb /\ s.vs_labels = t.vs_labels /\
-  dload_vars_match fs V G H tn un s t /\
+  dload_vars_match fl fs V G H tn un s t /\
   (!lbl op w. s.vs_prev_bb = SOME lbl /\
     resolve_phi lbl i.inst_operands = SOME op /\ op = Var w ==> w IN V) /\
   eval_one_phi s i = SOME (out,a) /\ eval_one_phi t i = SOME (out,b) ==>
   phi_taint s.vs_prev_bb tn i = phi_taint t.vs_prev_bb un i /\
-  dload_value_word fs (phi_taint s.vs_prev_bb tn i)
+  dload_value_word fl fs (phi_taint s.vs_prev_bb tn i)
     (phi_prov s.vs_prev_bb G i) (phi_prov t.vs_prev_bb H i) a b
 Proof
   strip_tac >> gvs[eval_one_phi_def, AllCaseEqs()] >>
@@ -198,7 +198,7 @@ Proof
   `!w. op = Var w ==> w IN V` by metis_tac[] >>
   `op_taint tn op = op_taint un op` by
     (Cases_on `op` >> gvs[op_taint_def, dload_vars_match_def]) >>
-  `dload_value_word fs (op_taint tn op) (op_prov G op) (op_prov H op) a b` by
+  `dload_value_word fl fs (op_taint tn op) (op_prov G op) (op_prov H op) a b` by
     (irule dload_matched_operand >> qexistsl [`V`,`s`,`t`,`un`] >> simp[]) >>
   gvs[phi_taint_def, phi_prov_def]
 QED
@@ -206,12 +206,12 @@ QED
 Theorem dload_vars_match_phis:
   !xs s t s' t' fs V G H tn un.
   s.vs_prev_bb = t.vs_prev_bb /\ s.vs_labels = t.vs_labels /\
-  dload_vars_match fs V G H tn un s t /\
+  dload_vars_match fl fs V G H tn un s t /\
   (!i v lbl op w. MEM i xs /\ i.inst_outputs = [v] /\ v IN V /\
     s.vs_prev_bb = SOME lbl /\ resolve_phi lbl i.inst_operands = SOME op /\
     op = Var w ==> w IN V) /\
   eval_phis s xs = OK s' /\ eval_phis t xs = OK t' ==>
-  dload_vars_match fs V
+  dload_vars_match fl fs V
     (phis_prov s.vs_prev_bb G xs) (phis_prov t.vs_prev_bb H xs)
     (tn with t_var := phis_taint s.vs_prev_bb tn xs)
     (un with t_var := phis_taint t.vs_prev_bb un xs) s' t'
@@ -231,14 +231,14 @@ Proof
         (gvs[eval_one_phi_def, AllCaseEqs()]) >> gvs[] >>
       rename1 `eval_phis s xs = OK ss` >>
       rename1 `eval_phis t xs = OK tt` >>
-      `dload_vars_match fs V
+      `dload_vars_match fl fs V
         (phis_prov t.vs_prev_bb G xs) (phis_prov t.vs_prev_bb H xs)
         (tn with t_var := phis_taint t.vs_prev_bb tn xs)
         (un with t_var := phis_taint t.vs_prev_bb un xs) ss tt` by
         (first_x_assum irule >> simp[] >> metis_tac[MEM]) >>
       `other0 IN V ==>
         phi_taint s.vs_prev_bb tn h = phi_taint t.vs_prev_bb un h /\
-        dload_value_word fs (phi_taint s.vs_prev_bb tn h)
+        dload_value_word fl fs (phi_taint s.vs_prev_bb tn h)
           (phi_prov s.vs_prev_bb G h) (phi_prov t.vs_prev_bb H h) pair1 other1` by
         (strip_tac >>
          `!lbl op w. s.vs_prev_bb = SOME lbl /\
@@ -281,9 +281,9 @@ QED
 Theorem dload_vars_match_phis_retpc:
   (!i. MEM i xs ==> MEM i (fn_insts f)) /\
   s.vs_prev_bb = t.vs_prev_bb /\ s.vs_labels = t.vs_labels /\
-  dload_vars_match fs {v | ~retpc_var f v} G H tn un s t /\
+  dload_vars_match fl fs {v | ~retpc_var f v} G H tn un s t /\
   eval_phis s xs = OK s' /\ eval_phis t xs = OK t' ==>
-  dload_vars_match fs {v | ~retpc_var f v}
+  dload_vars_match fl fs {v | ~retpc_var f v}
     (phis_prov s.vs_prev_bb G xs) (phis_prov t.vs_prev_bb H xs)
     (tn with t_var := phis_taint s.vs_prev_bb tn xs)
     (un with t_var := phis_taint t.vs_prev_bb un xs) s' t'

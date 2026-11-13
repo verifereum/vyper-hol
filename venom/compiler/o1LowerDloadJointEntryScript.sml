@@ -135,10 +135,11 @@ Proof
   `occ_frame_reachable vs C [] [] FEMPTY entry_taint fn inst s1
       1 0 [] FEMPTY [] FEMPTY` by
     (irule o1LowerDloadOccurrenceTheory.occ_frame_reachable_entry >> metis_tac[]) >>
-  `vs.vs_allocas = FEMPTY /\ ~ctx_has_dalloca C` by
-    gvs[o1_run_state_ok_def, unitTransformDefsTheory.o1_initial_state_ok_def,
-        o1_src_inv_def] >>
-  drule o1LowerDloadOccurrenceTheory.occ_frame_reachable_annotation >> strip_tac >>
+  `vs.vs_allocas = FEMPTY` by
+    gvs[o1_run_state_ok_def, unitTransformDefsTheory.o1_initial_state_ok_def] >>
+  drule o1LowerDloadOccurrenceTheory.occ_frame_reachable_annotation >>
+  disch_then (qspec_then `lo` strip_assume_tac) >>
+  pop_assum mp_tac >> impl_tac >- simp[] >> strip_tac >>
   `raw_reachable vs C fn inst s1` by
     (irule contextRawReachableTheory.raw_reachable_entry >> metis_tac[]) >>
   `s1.vs_alloca_next < dimword (:256)` by
@@ -152,11 +153,33 @@ Proof
      drule venomExecProofsTheory.eval_phis_only_updates_vs_vars >>
      disch_then (fn th => once_rewrite_tac[th]) >> gvs[]) >>
   `lo <= s1.vs_alloca_next` by gvs[ptrDisciplineTheory.ptr_discipline_def] >>
+  `lo <= dyn_floor C vs` by
+    (`dload_headroom_ok C fn inst s1` by
+       (qpat_x_assum `o1_src_inv D C vs` mp_tac >>
+        simp[o1_src_inv_def, mem_inv_raw_reachable] >> strip_tac >>
+        qpat_x_assum `!fn inst s. _ ==> dload_headroom_ok _ _ _ _` drule >>
+        simp[]) >>
+     `s1.vs_initial_fmp = vs.vs_initial_fmp` by
+       (qpat_x_assum `enters_block fn _ s1`
+          (mp_tac o MATCH_MP ctxLookupAgreeHelpersTheory.enters_block_initial_fmp) >>
+        simp[]) >>
+     Cases_on `ctx_has_dalloca C` >>
+     asm_rewrite_tac[ptrDisciplineTheory.dyn_floor_def] >>
+     qpat_x_assum `dload_headroom_ok _ _ _ _`
+       (strip_assume_tac o
+        REWRITE_RULE [lowerDloadDefsTheory.dload_headroom_ok_def]) >>
+     TRY (qpat_x_assum `ctx_has_dalloca C`
+            (assume_tac o
+             REWRITE_RULE [ptrDisciplineTheory.ctx_has_dalloca_def]) >>
+          res_tac) >>
+     gvs[] >> decide_tac) >>
   `fn.fn_name = name` by
     (qpat_x_assum `lookup_function name C.ctx_functions = SOME fn` mp_tac >>
      simp[lookup_function_def] >> strip_tac >> drule FIND_P >> simp[]) >>
   simp[ld_joint_boundary_def, ld_joint_erasure_def, ld_joint_geometry_def,
-       ld_joint_saved_def, o1LowerDloadSharedTheory.ld_shared_agree_refl] >>
+       ld_joint_saved_def, o1LowerDloadSharedTheory.ld_shared_agree_refl,
+       ld_dyn_floor_ok_def,
+       ptrDisciplineTheory.ld_dyn_agree_def] >>
   reverse conj_tac
   >- simp[o1LowerDloadRelocationKernelTheory.ld_memory_agree_empty] >>
   qexists_tac `u` >>

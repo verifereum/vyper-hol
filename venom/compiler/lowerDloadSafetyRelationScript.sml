@@ -3,7 +3,8 @@ Theory lowerDloadSafetyRelation
 Ancestors
   lowerDloadSafetyKernel lowerDloadLiveAllocation lowerDloadScratchSafety
   lowerDloadConfiguredOrigins ptrDiscipline unitShapeDefs finite_map pred_set
-  list rich_list venomExecSemantics venomState
+  list rich_list venomExecSemantics venomState venomWf venomFnInstsProofs
+  pointerConfinedDefs
 
 Datatype:
   ld_frame = <| lf_serial : num; lf_supply : ir_supply; lf_fn : ir_function;
@@ -120,6 +121,149 @@ Definition ld_global_def:
       (a IN FRANGE f.lf_H \/ MEM (SOME a) f.lf_Q) ==> a IN FDOM A)
 End
 
+(* The source ghosts against the frame's selected allocations: every
+   selected variable or parameter has the erased site, and an unselected one
+   is either unprovenanced or a DALLOCA pointer, which is untagged and lies
+   in the dynamic region at or above the floor fl. *)
+Definition ld_ghost_ok_def:
+  ld_ghost_ok fl (A:ld_alloc) (H:(string, ld_site) fmap) G <=>
+    (!v a. FLOOKUP H v = SOME a ==> FLOOKUP G v = SOME (ld_erase A a)) /\
+    (!v. FLOOKUP H v = NONE ==>
+       FLOOKUP G v = NONE \/
+       ?b z. FLOOKUP G v = SOME (b,z) /\ fl <= b /\ b + z < dimword (:256))
+End
+
+Definition ld_params_ok_def:
+  ld_params_ok fl (A:ld_alloc) (Q:ld_site option list) PG <=>
+    LENGTH PG = LENGTH Q /\
+    !k. k < LENGTH Q ==>
+      case EL k Q of
+        SOME a => EL k PG = SOME (ld_erase A a)
+      | NONE => EL k PG = NONE \/
+          ?b z. EL k PG = SOME (b,z) /\ fl <= b /\ b + z < dimword (:256)
+End
+
+(* The ghost relation read through the erased selected sites. *)
+Theorem ld_ghost_ok_erased:
+  ld_ghost_ok fl A H G <=>
+    (!v x. FLOOKUP (ld_erase A o_f H) v = SOME x ==> FLOOKUP G v = SOME x) /\
+    (!v. FLOOKUP (ld_erase A o_f H) v = NONE ==>
+       FLOOKUP G v = NONE \/
+       ?b z. FLOOKUP G v = SOME (b,z) /\ fl <= b /\ b + z < dimword (:256))
+Proof
+  simp[ld_ghost_ok_def, FLOOKUP_o_f, AllCaseEqs(), PULL_EXISTS]
+QED
+
+(* One output provenance against another: the same site, or an unselected
+   one that is unprovenanced or dynamic. *)
+Theorem ld_ghost_ok_set_prov[local]:
+  ld_ghost_ok fl A H G /\ ld_erase A' o_f H' = set_prov (ld_erase A o_f H) outs po /\
+  (!x. po = SOME x ==> po' = SOME x) /\
+  (po = NONE ==>
+     po' = NONE \/ ?b z. po' = SOME (b,z) /\ fl <= b /\ b + z < dimword (:256)) ==>
+  ld_ghost_ok fl A' H' (set_prov G outs po')
+Proof
+  rewrite_tac[ld_ghost_ok_erased] >> strip_tac >> asm_rewrite_tac[] >>
+  Cases_on `outs`
+  >- (simp[set_prov_def, FLOOKUP_DRESTRICT] >> metis_tac[]) >>
+  Cases_on `t`
+  >- (Cases_on `po` >> Cases_on `po'` >>
+      gvs[set_prov_def, FLOOKUP_UPDATE, FLOOKUP_DRESTRICT] >>
+      rw[] >> gvs[] >> metis_tac[]) >>
+  Cases_on `po` >> Cases_on `po'` >>
+  gvs[set_prov_def, FLOOKUP_DRESTRICT] >> rw[] >> gvs[] >> metis_tac[]
+QED
+
+Theorem ld_ghost_first_prov[local]:
+  !ops.
+    (!v x. FLOOKUP (Ke:(string, num # num) fmap) v = SOME x ==>
+           FLOOKUP G v = SOME x) /\
+    (!v. FLOOKUP Ke v = NONE ==>
+       FLOOKUP G v = NONE \/
+       ?b z. FLOOKUP G v = SOME (b,z) /\ fl <= b /\ b + z < dimword (:256)) /\
+    (!v w. MEM (Var v) ops /\ MEM (Var w) ops /\ v IN FDOM G /\
+           w IN FDOM G ==> v = w) ==>
+    (!x. first_prov Ke ops = SOME x ==> first_prov G ops = SOME x) /\
+    (first_prov Ke ops = NONE ==>
+       first_prov G ops = NONE \/
+       ?b z. first_prov G ops = SOME (b,z) /\ fl <= b /\
+             b + z < dimword (:256))
+Proof
+  Induct >> simp[first_prov_def] >> rpt gen_tac >> strip_tac >>
+  `!v w. MEM (Var v) ops /\ MEM (Var w) ops /\ v IN FDOM G /\
+         w IN FDOM G ==> v = w` by metis_tac[] >>
+  first_x_assum drule_all >> strip_tac >>
+  Cases_on `h` >> simp[op_prov_def] >>
+  rename1 `FLOOKUP Ke v` >>
+  Cases_on `FLOOKUP Ke v` >> simp[]
+  >- (`FLOOKUP G v = NONE \/
+       ?b z. FLOOKUP G v = SOME (b,z) /\ fl <= b /\ b + z < dimword (:256)`
+        by metis_tac[] >>
+      pop_assum strip_assume_tac >> simp[] >> rpt strip_tac >>
+      drule first_prov_origin >> strip_tac >>
+      `FLOOKUP G v' = SOME x` by metis_tac[] >>
+      `v' = v` by metis_tac[flookup_thm] >> gvs[]) >>
+  rename1 `FLOOKUP Ke v = SOME y` >>
+  `FLOOKUP G v = SOME y` by metis_tac[] >> simp[]
+QED
+
+(* Opcodes whose output provenance reads neither the ghosts nor the
+   parameters lift any erased step. *)
+Theorem ld_ghost_ok_step_fixed:
+  ld_ghost_ok fl A H G /\
+  step_prov PE (ld_erase A o_f H) inst ss = ld_erase A' o_f H' /\
+  ~MEM inst.inst_opcode [PARAM; ADD; SUB; ASSIGN] ==>
+  ld_ghost_ok fl A' H' (step_prov PG G inst ss)
+Proof
+  rewrite_tac[step_prov_def] >> strip_tac >>
+  irule ld_ghost_ok_set_prov >> goal_assum (drule_at Any) >>
+  qexists_tac `out_prov PE (ld_erase A o_f H) inst ss` >>
+  simp[] >> fs[out_prov_def]
+QED
+
+(* A step moves the ghosts as it moves their selected erasure: pointer
+   arithmetic has one pointer operand, so it keeps the one site. *)
+Theorem ld_ghost_ok_step:
+  ld_ghost_ok fl A H G /\ ld_params_ok fl A Q PG /\
+  FDOM G SUBSET fn_pv P fn /\ fn_ptr_ok P fn /\ fn_inst_wf fn /\
+  MEM inst (fn_insts fn) /\
+  step_prov (MAP (OPTION_MAP (ld_erase A)) Q) (ld_erase A o_f H) inst ss =
+    ld_erase A o_f H' ==>
+  ld_ghost_ok fl A H' (step_prov PG G inst ss)
+Proof
+  rewrite_tac[step_prov_def] >> strip_tac >>
+  irule ld_ghost_ok_set_prov >> goal_assum (drule_at Any) >>
+  qexists_tac `out_prov (MAP (OPTION_MAP (ld_erase A)) Q)
+                 (ld_erase A o_f H) inst ss` >>
+  simp[] >>
+  `?bb. MEM bb fn.fn_blocks /\ MEM inst bb.bb_instructions` by
+    fs[venomInstTheory.fn_insts_def,
+       venomFnInstsProofsTheory.mem_fn_insts_blocks_rev] >>
+  `inst_wf inst` by metis_tac[venomWfTheory.fn_inst_wf_def] >>
+  qpat_x_assum `ld_ghost_ok _ _ _ _` mp_tac >>
+  rewrite_tac[ld_ghost_ok_erased] >> strip_tac >>
+  simp[out_prov_def] >>
+  Cases_on `inst.inst_opcode = ALLOCA` >- simp[] >>
+  Cases_on `inst.inst_opcode = DALLOCA` >- simp[] >>
+  Cases_on `inst.inst_opcode = PARAM`
+  >- (fs[ld_params_ok_def] >>
+      Cases_on `inst.inst_operands` >> simp[] >>
+      Cases_on `t` >> simp[] >>
+      Cases_on `h` >> simp[] >>
+      rename1 `w2n idx < _` >>
+      IF_CASES_TAC >> simp[EL_MAP] >>
+      first_x_assum drule >> Cases_on `EL (w2n idx) Q` >> simp[]) >>
+  Cases_on `inst.inst_opcode = ADD \/ inst.inst_opcode = SUB \/
+            inst.inst_opcode = ASSIGN` >> simp[] >>
+  irule ld_ghost_first_prov >> simp[] >> rpt strip_tac >>
+  `affine_pointer_ops fn (ptr_roots P fn)` by fs[fn_ptr_ok_def] >>
+  `v IN fn_pv P fn /\ w IN fn_pv P fn` by fs[SUBSET_DEF] >>
+  fs[fn_pv_def, pointerConfinedDefsTheory.affine_pointer_ops_def] >>
+  first_x_assum (qspecl_then [`bb`,`inst`] mp_tac) >>
+  gvs[venomWfTheory.inst_wf_def, LENGTH_EQ_NUM_compute] >>
+  metis_tac[]
+QED
+
 Definition ld_sync_def:
   ld_sync lo P C vs0 stk PG G tn fn inst s t A frames N <=>
     frames <> [] /\ (HD frames).lf_fn = fn /\ (HD frames).lf_src = s /\
@@ -127,8 +271,8 @@ Definition ld_sync_def:
     frame_reachable vs0 C stk PG G tn fn inst s /\ active_inst fn inst s /\
     EVERY (fn_ptr_ok P) C.ctx_functions /\
     LENGTH frames = SUC (LENGTH stk) /\
-    G = ld_erase A o_f (HD frames).lf_H /\
-    PG = MAP (OPTION_MAP (ld_erase A)) (HD frames).lf_Q /\
+    ld_ghost_ok (dyn_floor C vs0) A (HD frames).lf_H G /\
+    ld_params_ok (dyn_floor C vs0) A (HD frames).lf_Q PG /\
     ALL_DISTINCT (MAP (\f. f.lf_serial) frames) /\
     EVERY (\f. f.lf_serial < N /\ ld_maps A f /\ ld_vars P A f /\
       ld_intervals lo f.lf_src /\ ld_intervals lo f.lf_tgt /\
@@ -146,11 +290,14 @@ Definition ld_sync_def:
     (!j. j < LENGTH stk ==>
       (EL j stk).cf_fn = (EL (SUC j) frames).lf_fn /\
       (EL j stk).cf_state = (EL (SUC j) frames).lf_src /\
-      (EL j stk).cf_prov = ld_erase A o_f (EL (SUC j) frames).lf_H /\
-      (EL j stk).cf_params = MAP (OPTION_MAP (ld_erase A)) (EL (SUC j) frames).lf_Q /\
+      ld_ghost_ok (dyn_floor C vs0) A (EL (SUC j) frames).lf_H
+        (EL j stk).cf_prov /\
+      ld_params_ok (dyn_floor C vs0) A (EL (SUC j) frames).lf_Q
+        (EL j stk).cf_params /\
       (EL j stk).cf_tvar = (EL (SUC j) frames).lf_tv) /\
     ld_charge frames <= ctx_dload_count C /\
-    ld_memory lo A tn s t /\ ld_nonghost tn s t
+    ld_memory lo A tn s t /\ ld_nonghost tn s t /\
+    ld_dyn_agree (dyn_floor C vs0) tn.t_mem s.vs_memory t.vs_memory
 End
 
 Definition ld_pair_def:
@@ -198,13 +345,15 @@ QED
 
 Theorem ld_sync_ghosts:
   ld_sync lo P C vs0 stk PG G tn fn inst s t A frames N ==>
-  G = ld_erase A o_f (HD frames).lf_H /\
-  PG = MAP (OPTION_MAP (ld_erase A)) (HD frames).lf_Q /\
+  ld_ghost_ok (dyn_floor C vs0) A (HD frames).lf_H G /\
+  ld_params_ok (dyn_floor C vs0) A (HD frames).lf_Q PG /\
   (!j. j < LENGTH stk ==>
     (EL j stk).cf_fn = (EL (SUC j) frames).lf_fn /\
     (EL j stk).cf_state = (EL (SUC j) frames).lf_src /\
-    (EL j stk).cf_prov = ld_erase A o_f (EL (SUC j) frames).lf_H /\
-    (EL j stk).cf_params = MAP (OPTION_MAP (ld_erase A)) (EL (SUC j) frames).lf_Q /\
+    ld_ghost_ok (dyn_floor C vs0) A (EL (SUC j) frames).lf_H
+      (EL j stk).cf_prov /\
+    ld_params_ok (dyn_floor C vs0) A (EL (SUC j) frames).lf_Q
+      (EL j stk).cf_params /\
     (EL j stk).cf_tvar = (EL (SUC j) frames).lf_tv)
 Proof
   simp[ld_sync_def]
@@ -215,6 +364,26 @@ Theorem ld_sync_memory:
   ld_memory lo A tn s t /\ ld_nonghost tn s t
 Proof
   simp[ld_sync_def]
+QED
+
+Theorem ld_sync_dyn_agree:
+  ld_sync lo P C vs0 stk PG G tn fn inst s t A frames N ==>
+  ld_dyn_agree (dyn_floor C vs0) tn.t_mem s.vs_memory t.vs_memory
+Proof
+  simp[ld_sync_def]
+QED
+
+(* A step that leaves both memories alone keeps the dynamic-region agreement:
+   the step's taint mask only grows. *)
+Theorem ld_dyn_agree_unwritten:
+  ld_dyn_agree fl tn.t_mem s.vs_memory t.vs_memory /\
+  ss.vs_memory = s.vs_memory /\ ts.vs_memory = t.vs_memory /\
+  source_memory_write_ranges inst s = [] ==>
+  ld_dyn_agree fl (step_taint inst s ss tn).t_mem ss.vs_memory ts.vs_memory
+Proof
+  simp[ld_dyn_agree_def, step_taint_def, mem_taint_def, step_writes_def,
+       range_bytes_def] >>
+  metis_tac[]
 QED
 
 Theorem ld_sync_frontier:

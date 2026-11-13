@@ -27,7 +27,7 @@ Theorem dload_joint_return_closed:
   EVERY (fn_ptr_ok P) C.ctx_functions /\
   ((?cs PG G tn f i s q emitted n pfuel t0 H0 un0 fs.
     frame_reachable vs C cs PG G tn f i s /\
-    dload_boundary_core lo fs
+    dload_boundary_core fl lo fs
       (set (fn_ir_vars f) DIFF {v | retpc_var f v})
       (MAP (\c. set (fn_ir_vars c.cf_fn) DIFF {v | retpc_var c.cf_fn v}) cs)
       PG PH G H0 tn un0 s t0 cs (d::ds) /\
@@ -69,7 +69,7 @@ Theorem dload_joint_return_closed:
   active_inst d.cf_fn j (t' with vs_inst_idx := SUC d.cf_state.vs_inst_idx) ==>
   (?cs PG G tn f i s q emitted n pfuel t0 H0 un0 fs.
     frame_reachable vs C cs PG G tn f i s /\
-    dload_boundary_core lo fs
+    dload_boundary_core fl lo fs
       (set (fn_ir_vars f) DIFF {v | retpc_var f v})
       (MAP (\c. set (fn_ir_vars c.cf_fn) DIFF {v | retpc_var c.cf_fn v}) cs)
       PG d.cf_params G H0 tn un0 s t0 cs ds /\
@@ -162,9 +162,9 @@ Resume dload_joint_return_closed[origins]:
   Cases_on `cs` >- gvs[] >>
   rename1 `frame_reachable vs C (c::cs0) PG G tn f ri s` >>
   Cases_on `fs` >- gvs[] >>
-  rename1 `dload_boundary_core lo (e::fs0) _ _ _ _ _ _ _ _ _ _ _ _` >>
+  rename1 `dload_boundary_core fl lo (e::fs0) _ _ _ _ _ _ _ _ _ _ _ _` >>
   Cases_on `fs0` >- gvs[] >>
-  rename1 `dload_boundary_core lo (e::ef::fs1) _ _ _ _ _ _ _ _ _ _ _ _` >>
+  rename1 `dload_boundary_core fl lo (e::ef::fs1) _ _ _ _ _ _ _ _ _ _ _ _` >>
   qpat_assum `!k. k < SUC (LENGTH ds) ==> _`
     (qspec_then `0` (strip_assume_tac o SIMP_RULE (srw_ss()) [LET_THM])) >>
   `MEM c.cf_fn C.ctx_functions` by
@@ -182,7 +182,7 @@ Resume dload_joint_return_closed[origins]:
 QED
 
 Resume dload_joint_return_closed[pop]:
-  drule_at (Pat `dload_boundary_core _ _ _ _ _ _ _ _ _ _ _ _ _ _`)
+  drule_at (Pat `dload_boundary_core _ _ _ _ _ _ _ _ _ _ _ _ _ _ _`)
     dload_normal_return >>
   disch_then (drule_at (Pat `frame_reachable _ _ _ _ _ _ _ _ _`)) >>
   disch_then (drule_at (Pat `active_inst _ _ _`)) >>

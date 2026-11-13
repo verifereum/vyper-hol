@@ -282,7 +282,7 @@ Resume ptr_mstore_write_producer[classified]:
     FLOOKUP (EL (LENGTH h - 1) h).po_prov dv = SOME (db,sb) /\
     FLOOKUP positions (Allocation bid) = SOME (pb,sb) /\ db <= w2n addr /\
     w2n addr + 32 <= db+sb /\ pb+sb < dimword(:256))` by
-    (irule ptr_historical_write_classification >>
+    (irule ptr_historical_write_classification_static >>
      simp[Abbr `ops`] >>
      conj_tac
      >- (qexists_tac `a.po_fn` >> simp[]) >>
@@ -353,8 +353,8 @@ Resume ptr_mstore_write_producer[owned]:
   `MEM token tokens` by
     (drule_all ptr_source_ownership_live_prov >> simp[]) >>
   `FLOOKUP births (token,bid) = SOME (db,sb)` by
-    (drule_all ptr_source_ownership_prov_erases >>
-     simp[ptr_ledger_erases_def] >> strip_tac >>
+    (drule_all ptr_source_ownership_static_prov_erases >>
+     simp[ptr_ledger_erases_every_dyn] >> strip_tac >>
      first_x_assum (qspec_then `dv` mp_tac) >> gvs[]) >>
   drule ptr_structural_trace_embedding >> strip_tac >>
   drule ptr_structural_trace_target >> strip_tac >>
@@ -372,7 +372,7 @@ Resume ptr_mstore_write_producer[owned]:
   reverse conj_tac
   >- (simp[ptr_paired_write_owner_def, step_writes_def,
         source_memory_write_ranges_def, fixed_source_write_range_def, range_bytes_def] >>
-      rpt strip_tac >> disj2_tac >>
+      rpt strip_tac >> disj2_tac >> disj1_tac >>
       qexistsl_tac [`token`,`bid`,`db`,`sb`,`pb`,`x-db`] >> simp[] >> decide_tac) >>
   suspend "owned_ledger"
 QED

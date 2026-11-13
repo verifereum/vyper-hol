@@ -89,18 +89,20 @@ Proof
 QED
 
 Theorem ld_source_frame_no_dalloca:
-  o1_src_inv D C vs /\ o1_ctx_shape C /\
+  o1_src_inv D C vs /\ o1_ctx_shape C /\ ~ctx_has_dalloca C /\
   frame_reachable vs C stk PG G tn fn inst s ==>
   inst.inst_opcode <> DALLOCA
 Proof
-  strip_tac >> drule_all ld_frame_reachable_prefix >> strip_tac >>
-  `MEM fn C.ctx_functions` by metis_tac[ld_stack_origin_member] >>
-  `active_inst fn inst s` by metis_tac[frame_reach_active] >>
-  `EVERY (\i. i.inst_opcode <> DALLOCA) (fn_insts fn)` by
-    (qpat_x_assum `o1_src_inv D C vs` mp_tac >>
-     simp[o1_src_inv_def, ctx_has_dalloca_def, EXISTS_MEM, EVERY_MEM] >>
-     metis_tac[]) >>
-  drule_all EVERY_active_inst >> simp[]
+  strip_tac >>
+  `raw_reachable vs C fn inst s` by metis_tac[ld_frame_reachable_raw] >>
+  `!vs C fn inst s. raw_reachable vs C fn inst s ==>
+     active_inst fn inst s /\ ?nm. lookup_function nm C.ctx_functions = SOME fn` by
+    (Induct_on `raw_reachable` >> rw[] >> metis_tac[]) >>
+  `active_inst fn inst s /\ MEM fn C.ctx_functions` by metis_tac[venomInstTheory.lookup_function_MEM] >>
+  `MEM inst (fn_insts fn)` by
+    (fs[active_inst_def, venomInstTheory.fn_insts_def, o1PassContractTheory.fn_insts_blocks_MEM] >>
+     metis_tac[MEM_EL]) >>
+  fs[ctx_has_dalloca_def, EXISTS_MEM] >> metis_tac[]
 QED
 
 (* Natural endpoint geometry: no word no-wrap premise is needed. *)
@@ -614,7 +616,8 @@ QED
 Theorem ld_source_annotation:
   !vs0 ctx stk PG G tn fn inst s.
   frame_reachable vs0 ctx stk PG G tn fn inst s ==>
-  !D. o1_src_inv D ctx vs0 /\ o1_ctx_shape ctx /\ o1_run_state_ok vs0 ==>
+  !D. o1_src_inv D ctx vs0 /\ o1_ctx_shape ctx /\ o1_run_state_ok vs0 /\
+    ~ctx_has_dalloca ctx ==>
   ?astk k L AP AG.
     ld_annotated_reachable vs0 ctx astk k L AP AG tn fn inst s /\
     MAP ld_erase_frame astk = stk /\ MAP (OPTION_MAP SND) AP = PG /\
@@ -1178,7 +1181,8 @@ QED
 
 Theorem ld_source_ownership:
   frame_reachable vs0 ctx stk PG G tn fn inst s /\
-  o1_src_inv D ctx vs0 /\ o1_ctx_shape ctx /\ o1_run_state_ok vs0 ==>
+  o1_src_inv D ctx vs0 /\ o1_ctx_shape ctx /\ o1_run_state_ok vs0 /\
+  ~ctx_has_dalloca ctx ==>
   ?astk k L AP AG.
     ld_annotated_reachable vs0 ctx astk k L AP AG tn fn inst s /\
     MAP ld_erase_frame astk = stk /\ MAP (OPTION_MAP SND) AP = PG /\

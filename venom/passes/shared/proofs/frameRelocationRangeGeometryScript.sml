@@ -35,7 +35,7 @@ Theorem cached_range_relocation:
   target = positions owner aid + (off-b) ==>
   !k. k < len ==> relocation_pair lo positions q (off+k) (target+k)
 Proof
-  rpt strip_tac >> simp[relocation_pair_def] >>
-  qexistsl_tac [`depth`, `owner`, `aid`, `b`, `sz`] >>
-  simp[] >> decide_tac
+  rpt strip_tac >>
+  irule relocation_pair_cached >> conj_tac >- decide_tac >>
+  qexistsl_tac [`aid`, `b`, `depth`, `owner`, `sz`] >> gvs[]
 QED

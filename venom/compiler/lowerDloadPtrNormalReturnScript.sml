@@ -3,7 +3,7 @@ Ancestors lowerDloadPtrReturn lowerDloadPtrNormalPush lowerDloadPtrSupport
   venomExecSemantics list rich_list pred_set
 
 Theorem dload_normal_return:
-  dload_boundary_core lo (e::f::fs)
+  dload_boundary_core fl lo (e::f::fs)
     (set (fn_ir_vars fn) DIFF {a | retpc_var fn a})
     (MAP (\cc. set (fn_ir_vars cc.cf_fn) DIFF {a | retpc_var cc.cf_fn a}) (c::cs))
     PG PH G H tn un s t (c::cs) (d::ds) /\
@@ -42,7 +42,7 @@ Theorem dload_normal_return:
     rs.iret_adopt_fmp = NONE /\ rt.iret_adopt_fmp = NONE /\
     bind_outputs c.cf_inst.inst_outputs rs.iret_values
       (adopt_return_fmp rs (merge_callee_state c.cf_state s)) = SOME s' /\
-    dload_boundary_core lo (f::fs)
+    dload_boundary_core fl lo (f::fs)
       (set (fn_ir_vars c.cf_fn) DIFF {a | retpc_var c.cf_fn a})
       (MAP (\cc. set (fn_ir_vars cc.cf_fn) DIFF {a | retpc_var cc.cf_fn a}) cs)
       c.cf_params d.cf_params

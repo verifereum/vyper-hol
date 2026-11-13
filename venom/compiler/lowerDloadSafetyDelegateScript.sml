@@ -91,9 +91,14 @@ Theorem ld_consume_delegate_effect[local]:
   tn'.t_imm = tn.t_imm /\ tn'.t_stor = {} /\ tn'.t_trans = {} /\
   (xs = [] \/ (ro = rt /\ ro + LENGTH xs <= lo) \/
    (?k b c sz delta. FLOOKUP A k = SOME (b,c,sz) /\
-     ro = b+delta /\ rt = c+delta /\ delta + LENGTH xs <= sz)) ==>
+     ro = b+delta /\ rt = c+delta /\ delta + LENGTH xs <= sz) \/
+   (ro = rt /\ fl <= ro)) /\
+  lo <= fl /\
+  (!a u v z. FLOOKUP A a = SOME (u,v,z) ==> u+z <= fl /\ v+z <= fl) /\
+  ld_dyn_agree fl tn.t_mem s.vs_memory t.vs_memory ==>
   ?ss. consume_call_outcome rq ro n s = (w,ss) /\
     ld_memory lo A tn' ss ts /\ ld_nonghost tn' ss ts /\
+    ld_dyn_agree fl tn'.t_mem ss.vs_memory ts.vs_memory /\
     ss.vs_returndata = ts.vs_returndata /\
     ss.vs_params = s.vs_params /\ ts.vs_params = t.vs_params /\
     ss.vs_fmp = s.vs_fmp /\ ts.vs_fmp = t.vs_fmp /\
@@ -114,6 +119,11 @@ Proof
      (write_memory_with_expansion ro xs s)
      (write_memory_with_expansion rt xs t)` by
     (irule ld_memory_write_classified >> metis_tac[]) >>
+  `ld_dyn_agree fl tn'.t_mem
+     (write_memory_with_expansion ro xs s).vs_memory
+     (write_memory_with_expansion rt xs t).vs_memory` by
+    (qpat_assum `tn'.t_mem = _` (fn th => rewrite_tac[th]) >>
+     irule ld_dyn_agree_write_classified >> metis_tac[]) >>
   qpat_x_assum `consume_call_outcome _ _ _ _ = _` mp_tac >>
   simp[consume_call_outcome_eq, adopt_outcome_def] >> strip_tac >> gvs[] >>
   gvs[ld_memory_def, ld_nonghost_def, storage_agree_except_def,
@@ -161,18 +171,23 @@ Theorem ld_delegate_observed_effect:
     FLOOKUP A a = SOME (u,v,z) /\ FLOOKUP A k = SOME (b,c,sz) /\
     a <> k /\ 0 < z /\ 0 < sz ==>
     (u+z <= b \/ b+sz <= u) /\ (v+z <= c \/ c+sz <= v)) /\
+  lo <= fl /\
+  (!a u v z. FLOOKUP A a = SOME (u,v,z) ==> u+z <= fl /\ v+z <= fl) /\
+  ld_dyn_agree fl tn.t_mem f.lf_src.vs_memory f.lf_tgt.vs_memory /\
   read_memory (w2n (ao:bytes32)) (w2n (az:bytes32)) f.lf_src =
     read_memory (w2n (at:bytes32)) (w2n az) f.lf_tgt /\
   exec_delegatecall inst f.lf_tgt (gas:bytes32) (addr:bytes32) at az (rt:bytes32) rz = OK ts /\
   (w2n rz = 0 \/ (w2n ro = w2n rt /\ w2n ro + w2n rz <= lo) \/
    (?k b c sz delta. FLOOKUP A k = SOME (b,c,sz) /\
-     w2n ro = b+delta /\ w2n rt = c+delta /\ delta + w2n rz <= sz)) ==>
+     w2n ro = b+delta /\ w2n rt = c+delta /\ delta + w2n rz <= sz) \/
+   (w2n ro = w2n rt /\ fl <= w2n ro)) ==>
   ?ss. exec_delegatecall inst f.lf_src gas addr ao az ro rz = OK ss /\
     ld_vars P A (f with <|lf_src := ss; lf_tgt := ts;
       lf_H := set_prov f.lf_H inst.inst_outputs NONE;
       lf_tv := (step_taint inst f.lf_src ss tn).t_var|>) /\
     ld_memory lo A (step_taint inst f.lf_src ss tn) ss ts /\
     ld_nonghost (step_taint inst f.lf_src ss tn) ss ts /\
+    ld_dyn_agree fl (step_taint inst f.lf_src ss tn).t_mem ss.vs_memory ts.vs_memory /\
     ss.vs_allocas = f.lf_src.vs_allocas /\ ts.vs_allocas = f.lf_tgt.vs_allocas /\
     ss.vs_alloca_next = f.lf_src.vs_alloca_next /\ ts.vs_alloca_next = f.lf_tgt.vs_alloca_next /\
     ss.vs_current_bb = f.lf_src.vs_current_bb /\ ts.vs_current_bb = f.lf_tgt.vs_current_bb /\
@@ -188,15 +203,18 @@ Proof
   `LENGTH xs <= w2n rz` by simp[Abbr `xs`, LENGTH_TAKE_EQ, MIN_DEF] >>
   `xs = [] \/ (w2n ro = w2n rt /\ w2n ro + LENGTH xs <= lo) \/
    (?k b c sz delta. FLOOKUP A k = SOME (b,c,sz) /\
-     w2n ro = b+delta /\ w2n rt = c+delta /\ delta + LENGTH xs <= sz)` by
+     w2n ro = b+delta /\ w2n rt = c+delta /\ delta + LENGTH xs <= sz) \/
+   (w2n ro = w2n rt /\ fl <= w2n ro)` by
     (qpat_x_assum `exec_delegatecall _ _ _ _ _ _ _ _ = _` kall_tac >>
      qpat_x_assum `w2n rz = 0 \/ _` strip_assume_tac
      >- (disj1_tac >> fs[Abbr `xs`])
-     >- (disj2_tac >> disj1_tac >> (conj_tac >- asm_rewrite_tac[]) >> decide_tac) >>
-     disj2_tac >> disj2_tac >>
-     qexistsl [`k`,`b`,`c`,`sz`,`delta`] >> simp[] >> decide_tac) >>
+     >- (disj2_tac >> disj1_tac >> (conj_tac >- asm_rewrite_tac[]) >> decide_tac)
+     >- (disj2_tac >> disj2_tac >> disj1_tac >>
+         qexistsl [`k`,`b`,`c`,`sz`,`delta`] >> simp[] >> decide_tac) >>
+     disj2_tac >> disj2_tac >> disj2_tac >> rpt conj_tac >> first_assum ACCEPT_TAC) >>
   `?rs. consume_call_outcome rq (w2n ro) (w2n rz) f.lf_src = (w,rs) /\
     ld_memory lo A tn' rs u /\ ld_nonghost tn' rs u /\
+    ld_dyn_agree fl tn'.t_mem rs.vs_memory u.vs_memory /\
     rs.vs_returndata = u.vs_returndata /\
     rs.vs_params = f.lf_src.vs_params /\ u.vs_params = f.lf_tgt.vs_params /\
     rs.vs_fmp = f.lf_src.vs_fmp /\ u.vs_fmp = f.lf_tgt.vs_fmp /\
@@ -209,13 +227,11 @@ Proof
     (irule ld_consume_delegate_effect >>
      qpat_x_assum `rq = _` kall_tac >>
      qpat_x_assum `exec_delegatecall _ _ _ _ _ _ _ _ = _` kall_tac >>
-     (conj_tac >- metis_tac[]) >>
-     (conj_tac >- metis_tac[]) >>
-     (conj_tac >- simp[Abbr `tn'`]) >>
-     (conj_tac >- simp[Abbr `tn'`]) >>
-     qexistsl [`w2n rt`,`tn`,`xs`] >>
-     simp[Abbr `tn'`] >>
-     asm_rewrite_tac[] >> fs[Abbr `xs`, w2n_11] >> metis_tac[]) >>
+     reverse (rpt conj_tac)
+     >- (qexistsl [`w2n rt`,`tn`,`xs`] >>
+         simp[Abbr `tn'`] >>
+         asm_rewrite_tac[] >> fs[Abbr `xs`, w2n_11] >> metis_tac[]) >>
+     FIRST [first_assum ACCEPT_TAC, simp[Abbr `tn'`]]) >>
   `step_taint inst f.lf_src (update_var out w rs) tn =
     tn' with t_var := set_var_taint f.lf_tv inst.inst_outputs {}` by
     (drule_at (Pat `source_memory_write_ranges _ _ = _`) ld_oracle_call_taint >>
@@ -250,10 +266,13 @@ Theorem ld_delegate_step:
   ld_vars P A f /\ f.lf_src.vs_labels = f.lf_tgt.vs_labels /\
   fn_shape_ok f.lf_fn /\ fn_ptr_ok P f.lf_fn /\ MEM inst (fn_insts f.lf_fn) /\
   taint_ok f.lf_fn tn inst f.lf_src /\ tn.t_var = f.lf_tv /\
-  access_ok lo (ld_erase A o_f f.lf_H) f.lf_fn inst f.lf_src /\
+  access_ok lo G f.lf_fn inst f.lf_src /\ ld_ghost_ok fl A f.lf_H G /\
+  ld_dyn_agree fl tn.t_mem f.lf_src.vs_memory f.lf_tgt.vs_memory /\
   ~in_revert_forward f.lf_fn f.lf_src /\
   ld_memory lo A tn f.lf_src f.lf_tgt /\ ld_nonghost tn f.lf_src f.lf_tgt /\
   (!a u v z. FLOOKUP A a = SOME (u,v,z) ==> lo <= u /\ lo <= v) /\
+  lo <= fl /\
+  (!a u v z. FLOOKUP A a = SOME (u,v,z) ==> u+z <= fl /\ v+z <= fl) /\
   (!a k u v z b c sz.
     FLOOKUP A a = SOME (u,v,z) /\ FLOOKUP A k = SOME (b,c,sz) /\
     a <> k /\ 0 < z /\ 0 < sz ==>
@@ -266,6 +285,7 @@ Theorem ld_delegate_step:
       lf_tv := (step_taint inst f.lf_src ss tn).t_var|>) /\
     ld_memory lo A (step_taint inst f.lf_src ss tn) ss ts /\
     ld_nonghost (step_taint inst f.lf_src ss tn) ss ts /\
+    ld_dyn_agree fl (step_taint inst f.lf_src ss tn).t_mem ss.vs_memory ts.vs_memory /\
     ss.vs_allocas = f.lf_src.vs_allocas /\ ts.vs_allocas = f.lf_tgt.vs_allocas /\
     ss.vs_alloca_next = f.lf_src.vs_alloca_next /\ ts.vs_alloca_next = f.lf_tgt.vs_alloca_next /\
     ss.vs_current_bb = f.lf_src.vs_current_bb /\ ts.vs_current_bb = f.lf_tgt.vs_current_bb /\
@@ -279,7 +299,8 @@ Proof
   `read_memory (w2n x) (w2n n) f.lf_src = read_memory (w2n y) (w2n n) f.lf_tgt /\
    (w2n rn = 0 \/ (w2n r = w2n q /\ w2n r + w2n rn <= lo) \/
     (?k b c sz delta. FLOOKUP A k = SOME (b,c,sz) /\
-     w2n r = b+delta /\ w2n q = c+delta /\ delta + w2n rn <= sz))` by
+     w2n r = b+delta /\ w2n q = c+delta /\ delta + w2n rn <= sz) \/
+    (w2n r = w2n q /\ fl <= w2n r))` by
     (irule ld_oracle_call_ranges >>
      qpat_assum `access_ok _ _ _ _ _` (irule_at Any) >>
      qpat_assum `taint_ok _ _ _ _` (irule_at Any) >>
@@ -291,7 +312,8 @@ Proof
   (Q.SUBGOAL_THEN
     `w2n rn = 0 \/ (w2n r = w2n q /\ w2n r + w2n rn <= lo) \/
      (?k b c sz delta. FLOOKUP A k = SOME (b,c,sz) /\
-      w2n r = b+delta /\ w2n q = c+delta /\ delta + w2n rn <= sz)`
+      w2n r = b+delta /\ w2n q = c+delta /\ delta + w2n rn <= sz) \/
+     (w2n r = w2n q /\ fl <= w2n r)`
     assume_tac >- metis_tac[]) >>
   drule_all ld_delegate_observed_effect >> strip_tac >>
   qexists `ss` >> simp[] >>
@@ -310,7 +332,10 @@ Theorem ld_sync_delegate_effect:
       lf_tv := (step_taint inst s ss tn).t_var|>) /\
     ld_memory lo A (step_taint inst s ss tn) ss ts /\
     ld_nonghost (step_taint inst s ss tn) ss ts /\
-    step_prov PG G inst ss = ld_erase A o_f H' /\
+    step_prov (MAP (OPTION_MAP (ld_erase A)) f.lf_Q) (ld_erase A o_f f.lf_H)
+      inst ss = ld_erase A o_f H' /\
+    ld_dyn_agree (dyn_floor C vs0) (step_taint inst s ss tn).t_mem
+      ss.vs_memory ts.vs_memory /\
     (!a. a IN FRANGE H' ==> a IN FDOM A) /\
     ss.vs_allocas = s.vs_allocas /\ ts.vs_allocas = t.vs_allocas /\
     ss.vs_alloca_next = s.vs_alloca_next /\ ts.vs_alloca_next = t.vs_alloca_next /\
@@ -341,9 +366,17 @@ Proof
      metis_tac[ld_alloc_target_no_wrap, HD]) >>
   `!a. a IN FRANGE f.lf_H ==> a IN FDOM A` by
     metis_tac[ld_global_selected, MEM] >>
+  `lo <= dyn_floor C vs0 /\
+   !a u v z. FLOOKUP A a = SOME (u,v,z) ==>
+     u+z <= dyn_floor C vs0 /\ v+z <= dyn_floor C vs0` by
+    (`EVERY (ld_maps A) (f::fs)` by
+       FIRST [first_assum ACCEPT_TAC, rewrite_tac[listTheory.EVERY_DEF] >>
+              conj_tac >> first_assum ACCEPT_TAC] >>
+     drule_all ld_sync_dyn_floor >> metis_tac[]) >>
   drule ld_sync_active >> simp[] >> strip_tac >>
   drule ld_sync_ghosts >> simp[] >> strip_tac >>
   drule ld_sync_memory >> strip_tac >>
+  drule ld_sync_dyn_agree >> strip_tac >>
   `inst.inst_opcode <> INVOKE` by simp[] >>
   gvs[step_inst_non_invoke] >>
   `tn.t_var = f.lf_tv` by simp[] >>

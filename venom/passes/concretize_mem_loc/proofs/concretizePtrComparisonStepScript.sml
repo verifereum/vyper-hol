@@ -70,9 +70,8 @@ Theorem ptr_comparison_lookup_values[local]:
   (w2n x' > w2n y' <=> w2n x > w2n y)
 Proof
   rpt gen_tac >> disch_then (map_every assume_tac o CONJUNCTS) >>
-  `EVERY (\fn. EVERY (\i. i.inst_opcode <> DALLOCA) (fn_insts fn)) C.ctx_functions` by
-    (gvs[ctx_has_dalloca_def, EVERY_MEM, EXISTS_MEM] >> metis_tac[]) >>
-  drule_all ptr_source_ownership_prov_erases >> strip_tac >>
+  drule_all ptr_source_ownership_static_prov_erases >>
+  simp[ptr_ledger_erases_every_dyn] >> strip_tac >>
   Cases_on `u IN FDOM a.po_prov \/ v IN FDOM a.po_prov`
   >- (qsuff_tac `?b sz. FLOOKUP a.po_prov u = SOME (b,sz) /\
           FLOOKUP a.po_prov v = SOME (b,sz) /\

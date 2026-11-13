@@ -185,8 +185,13 @@ End
    32 bytes per DLOAD in the context ahead of the input's.  This bound keeps
    that frontier below 2^256, where exec_alloca's offsets would wrap onto
    live sites.  Stated per reachable state (mem_inv), like the frontier
-   bound in raw_mem_ok. *)
+   bound in raw_mem_ok.  With a DALLOCA in the context the scratch sites
+   also stay below the initial free-memory pointer, out of the dynamic
+   region [vs_initial_fmp, vs_fmp) that DALLOCA allocates from. *)
 Definition dload_headroom_ok_def:
   dload_headroom_ok (ctx:venom_context) (fn:ir_function) inst s <=>
-    s.vs_alloca_next + 32 * ctx_dload_count ctx < dimword (:256)
+    s.vs_alloca_next + 32 * ctx_dload_count ctx < dimword (:256) /\
+    (EXISTS (\f. EXISTS (\i. i.inst_opcode = DALLOCA) (fn_insts f))
+       ctx.ctx_functions ==>
+     s.vs_alloca_next + 32 * ctx_dload_count ctx <= w2n s.vs_initial_fmp)
 End

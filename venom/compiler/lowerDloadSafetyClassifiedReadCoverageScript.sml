@@ -19,7 +19,8 @@ Theorem ld_sync_classified_read_effect:
       lf_tv := (step_taint inst s ss tn).t_var|>) /\
     ld_memory lo A (step_taint inst s ss tn) ss ts /\
     ld_nonghost (step_taint inst s ss tn) ss ts /\
-    step_prov PG G inst ss = ld_erase A o_f H' /\
+    step_prov (MAP (OPTION_MAP (ld_erase A)) f.lf_Q) (ld_erase A o_f f.lf_H)
+      inst ss = ld_erase A o_f H' /\
     (!a. a IN FRANGE H' ==> a IN FDOM A) /\
     ss.vs_allocas = s.vs_allocas /\ ts.vs_allocas = t.vs_allocas /\
     ss.vs_alloca_next = s.vs_alloca_next /\ ts.vs_alloca_next = t.vs_alloca_next /\
@@ -43,6 +44,10 @@ Proof
      metis_tac[ld_alloc_target_no_wrap, HD]) >>
   `!a. a IN FRANGE f.lf_H ==> a IN FDOM A` by
     metis_tac[ld_global_selected, MEM] >>
+  drule_all ld_sync_dyn_floor >> strip_tac >>
+  `!a b c n. FLOOKUP A a = SOME (b,c,n) ==> b+n <= dyn_floor C vs0` by
+    metis_tac[] >>
+  drule ld_sync_dyn_agree >> strip_tac >>
   `inst.inst_opcode <> INVOKE` by (fs[MEM] >> gvs[]) >>
   drule ld_sync_active >> simp[Excl "MEM"] >> strip_tac >>
   drule ld_sync_ghosts >> simp[Excl "MEM"] >> strip_tac >>
@@ -95,5 +100,15 @@ Theorem ld_sync_classified_read_coverage:
 Proof
   disch_then (REPEAT_TCL CONJUNCTS_THEN assume_tac) >>
   drule_all ld_sync_classified_read_effect >> strip_tac >>
+  drule_all lowerDloadSafetyAmbientTheory.ld_sync_ghost_step >> strip_tac >>
+  `~is_alloca_op inst.inst_opcode /\
+   Eff_MEMORY NOTIN write_effects inst.inst_opcode /\
+   source_memory_write_ranges inst s = []` by
+    (rpt (qpat_x_assum `MEM inst.inst_opcode _` mp_tac) >> simp[] >>
+     rpt strip_tac >>
+     gvs[venomInstTheory.is_alloca_op_def, venomEffectsTheory.write_effects_def,
+         venomEffectsTheory.empty_effects_def,
+         codegenRelTheory.source_memory_write_ranges_def]) >>
+  drule_all lowerDloadSafetyAmbientTheory.ld_sync_dyn_agree_unwritten >> strip_tac >>
   irule ld_sync_ordinary_coverage >> metis_tac[]
 QED

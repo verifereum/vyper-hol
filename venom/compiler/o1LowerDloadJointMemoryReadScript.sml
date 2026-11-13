@@ -82,7 +82,7 @@ Proof
   `?y. eval_operand p t = SOME y /\
     ld_value_agree sites (op_prov H p) (op_taint tn p) x y` by
     (irule ld_joint_operand_value >> metis_tac[]) >>
-  `occurrence_env_ok B (a::MAP (\u. u.of_owner) U) H G /\
+  `occurrence_env_ok (dyn_floor C vs) B (a::MAP (\u. u.of_owner) U) H G /\
    ld_joint_erasure sites B /\
    ld_joint_geometry sites X lo (a::MAP (\u. u.of_owner) U) /\
    ld_memory_agree sites lo tn.t_mem s.vs_memory t.vs_memory` by
@@ -98,11 +98,19 @@ Proof
   Cases_on `op_prov H p`
   >- (gvs[occurrence_param_ok_def] >>
       `x = y` by metis_tac[ld_value_agree_clean] >> gvs[] >>
-      `w2n x+32 <= lo` by
-        (Cases_on `lo < w2n x+32` >> gvs[op_prov_def]) >>
+      `ld_dyn_agree (dyn_floor C vs) tn.t_mem s.vs_memory t.vs_memory` by
+        fs[ld_joint_boundary_def] >>
+      `w2n x+32 <= lo \/
+       dyn_floor C vs <= w2n x /\ w2n x+32 < dimword (:256)` by
+        (Cases_on `lo < w2n x+32` >> gvs[op_prov_def] >> decide_tac) >>
+      pop_assum strip_assume_tac
+      >- (irule ld_mload_masked_bytes >> rpt strip_tac >>
+          irule ld_memory_agree_fixed_byte >>
+          qexistsl_tac [`lo`, `tn.t_mem`, `sites`] >>
+          gvs[mem_word_taint_def] >> decide_tac) >>
       irule ld_mload_masked_bytes >> rpt strip_tac >>
-      irule ld_memory_agree_fixed_byte >>
-      qexistsl_tac [`lo`, `tn.t_mem`, `sites`] >>
+      qpat_x_assum `ld_dyn_agree _ _ _ _`
+        (irule o REWRITE_RULE [ptrDisciplineTheory.ld_dyn_agree_def]) >>
       gvs[mem_word_taint_def] >> decide_tac) >>
   gvs[occurrence_param_ok_def, ld_value_agree_pointer] >>
   gvs[op_prov_def] >>
@@ -166,7 +174,7 @@ Proof
   strip_tac >> drule_all ld_joint_mload_step >> strip_tac >>
   `occ_frame_reachable vs C stk PG G tn fn inst s n a U B HP H` by
     metis_tac[ld_joint_source] >>
-  `occurrence_annotation_ok n a U B HP H stk PG G s` by
+  `occurrence_annotation_ok (dyn_floor C vs) n a U B HP H stk PG G s` by
     gvs[ld_joint_boundary_def] >>
   `~MEM inst.inst_opcode [DLOAD; DLOADBYTES]` by gvs[] >>
   `~is_terminator inst.inst_opcode /\ inst.inst_opcode <> INVOKE` by
@@ -176,7 +184,7 @@ Proof
      (s1 with vs_inst_idx := SUC s.vs_inst_idx) n a U B HP
      (occurrence_step a HP H inst s1)` by
     (drule_all occ_frame_reachable_next >> simp[occurrence_sites_step_def] >> gvs[]) >>
-  `occurrence_annotation_ok n a U B HP (occurrence_step a HP H inst s1)
+  `occurrence_annotation_ok (dyn_floor C vs) n a U B HP (occurrence_step a HP H inst s1)
      stk PG (step_prov PG G inst s1) (s1 with vs_inst_idx := SUC s.vs_inst_idx)` by
     (drule occurrence_annotation_next >>
      disch_then (qspecl_then [`s1`,`inst`,`SUC s.vs_inst_idx`,`fuel`,`C`] mp_tac) >>

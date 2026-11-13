@@ -2,6 +2,7 @@
 Theory lowerDloadPublicEffect
 Ancestors
   lowerDloadPublicTrace lowerDloadCodeDataBytes lowerDloadSafetyWriteBytes
+  lowerDloadExternalBoundary
   lowerDloadSafetyEmptyCopy lowerDloadExpansionGhost lowerDloadSafetyRelation
   lowerDloadSafetyKernel lowerDloadSafetyAmbient lowerDloadOracleCallAssembly regularCallEmitSim ptrDiscipline venomWf codegenRel unitShapeDefs
   venomExecSemantics venomState venomInst memLocDefs finite_map pred_set list words arithmetic
@@ -93,6 +94,21 @@ Proof
   qexists_tac `v1+v2` >> simp[ADD1]
 QED
 
+(* The dyn-region memory facts of ld_sync_dloadbytes_effect, which only its
+   [dyn] and [memory] resumes use and which slow down gvs elsewhere. *)
+val drop_dyn_facts_tac =
+  qpat_x_assum `FDOM A = _` kall_tac >>
+  qpat_x_assum `EVERY (ld_maps A) (f::fs)` kall_tac >>
+  qpat_x_assum `lo <= dyn_floor C vs0` kall_tac >>
+  qpat_x_assum `!a b c n. FLOOKUP A a = SOME (b,c,n) ==> _` kall_tac >>
+  qpat_x_assum `ld_dyn_agree _ _ _ t1.vs_memory` kall_tac >>
+  qpat_x_assum `ld_dyn_agree _ _ _ t0.vs_memory` kall_tac >>
+  qpat_x_assum `w2n nw = 0 \/ _` kall_tac >>
+  qpat_x_assum `!a b c n. FLOOKUP A a = SOME (b,c,n) ==> _` kall_tac >>
+  qpat_x_assum `!k k' b c sz b' c' sz'. _` kall_tac >>
+  qpat_x_assum `bytes = [] \/ _` kall_tac >>
+  qpat_x_assum `ld_memory lo A tn s t1` kall_tac
+
 Theorem ld_sync_dloadbytes_effect:
   ld_sync lo P C vs0 stk PG G tn fn inst s t0 A (f::fs) N /\
   ld_global lo A (f::fs) /\ o1_ctx_shape C /\ o1_run_state_ok vs0 /\
@@ -105,7 +121,9 @@ Theorem ld_sync_dloadbytes_effect:
   ?ss H' G' tn'.
     step_inst 0 C inst s = OK ss /\
     tn' = step_taint inst s ss tn /\ G' = step_prov PG G inst ss /\
-    G' = ld_erase A o_f H' /\ (!a. a IN FRANGE H' ==> a IN FDOM A) /\
+    ld_ghost_ok (dyn_floor C vs0) A H' G' /\
+    ld_dyn_agree (dyn_floor C vs0) tn'.t_mem ss.vs_memory u.vs_memory /\
+    (!a. a IN FRANGE H' ==> a IN FDOM A) /\
     ld_vars P A (f with <|lf_src := ss; lf_tgt := u;
                          lf_H := H'; lf_tv := tn'.t_var|>) /\
     ld_memory lo A tn' ss u /\ ld_nonghost tn' ss u /\
@@ -138,9 +156,37 @@ Proof
     tn with t_mem := tn.t_mem DIFF {w2n dw+j | j < w2n nw}` by
     (irule ld_dloadbytes_taint >> simp[write_memory_with_expansion_def] >>
      metis_tac[]) >>
+  `FDOM A = ld_slots A (f::fs) /\ EVERY (ld_maps A) (f::fs)` by
+    metis_tac[ld_sync_slots, ld_sync_maps] >>
+  `lo <= dyn_floor C vs0 /\
+   !a b c n. FLOOKUP A a = SOME (b,c,n) ==>
+     b+n <= dyn_floor C vs0 /\ c+n <= dyn_floor C vs0` by
+    (`EVERY (ld_maps A) (f::fs)` by
+       FIRST [first_assum ACCEPT_TAC, rewrite_tac[listTheory.EVERY_DEF] >>
+              conj_tac >> first_assum ACCEPT_TAC] >>
+     drule_all ld_sync_dyn_floor >> metis_tac[]) >>
+  drule ld_sync_dyn_agree >> strip_tac >>
+  drule_all ld_sync_dloadbytes_destination_cases >>
+  disch_then (fn th => map_every assume_tac (CONJUNCTS th)) >>
+  Q.SUBGOAL_THEN `bytes = [] \/ (w2n dw = w2n dw' /\ w2n dw + LENGTH bytes <= lo) \/
+    (?k b c sz delta. FLOOKUP A k = SOME (b,c,sz) /\
+      w2n dw = b+delta /\ w2n dw' = c+delta /\ delta + LENGTH bytes <= sz) \/
+    (w2n dw = w2n dw' /\ dyn_floor C vs0 <= w2n dw)` ASSUME_TAC >-
+    (qpat_assum `LENGTH bytes = _`
+       (fn th => rewrite_tac[th, GSYM listTheory.LENGTH_NIL]) >>
+     metis_tac[]) >>
+  `ld_memory lo A tn s t1` by
+    (qpat_x_assum `ld_memory lo A tn s t0` mp_tac >>
+     simp[ld_memory_def, update_var_def] >> strip_tac >> asm_rewrite_tac[]) >>
+  `ld_dyn_agree (dyn_floor C vs0) tn.t_mem s.vs_memory t1.vs_memory` by
+    (qpat_x_assum `ld_dyn_agree _ tn.t_mem s.vs_memory t0.vs_memory` mp_tac >>
+     qpat_assum `t1 = _` (fn th => rewrite_tac[th]) >> simp[update_var_def]) >>
   qexistsl_tac [`ss`,`f.lf_H`] >>
   simp[ld_empty_outputs_prov, step_inst_non_invoke] >>
-  conj_tac >- (rpt strip_tac >> irule ld_global_selected >>
+  conj_tac >- suspend "dyn" >>
+  conj_tac >- (rpt strip_tac >>
+    qpat_assum `FDOM A = _` (fn th => rewrite_tac[GSYM th]) >>
+    irule ld_global_selected >>
     qexistsl_tac [`f`,`f::fs`,`lo`] >> simp[]) >>
   conj_tac >- suspend "observations_vars" >>
   conj_tac >- suspend "memory" >>
@@ -149,6 +195,7 @@ Proof
 QED
 
 Resume ld_sync_dloadbytes_effect[observations_vars]:
+  drop_dyn_facts_tac >>
   `f with <|lf_src := ss; lf_tgt := u; lf_H := f.lf_H; lf_tv := tn.t_var|> =
    f with <|lf_src := ss; lf_tgt := u|>` by
     simp[ld_frame_component_equality] >>
@@ -159,23 +206,31 @@ Resume ld_sync_dloadbytes_effect[observations_vars]:
   simp[write_memory_with_expansion_def, update_var_def, FLOOKUP_UPDATE] >>
   rpt strip_tac >> Cases_on `z = v` >> gvs[]
 QED
+Resume ld_sync_dloadbytes_effect[dyn]:
+  `ld_dyn_agree (dyn_floor C vs0) (tn.t_mem DIFF {w2n dw+j | j < LENGTH bytes})
+     (write_memory_with_expansion (w2n dw) bytes s).vs_memory
+     (write_memory_with_expansion (w2n dw') bytes t1).vs_memory` by
+    (irule ld_dyn_agree_write_classified >> rpt conj_tac >>
+     FIRST [first_assum ACCEPT_TAC,
+            qexistsl_tac [`A`, `lo`] >> rpt conj_tac >> first_assum ACCEPT_TAC]) >>
+  gvs[]
+QED
 Resume ld_sync_dloadbytes_effect[memory]:
-  drule_all ld_sync_dloadbytes_destination_cases >>
-  disch_then (fn th => map_every assume_tac (CONJUNCTS th)) >>
-  `ld_memory lo A tn s t1` by
-    (qpat_x_assum `ld_memory lo A tn s t0` mp_tac >>
-     simp[ld_memory_def, update_var_def] >> strip_tac >> asm_rewrite_tac[]) >>
-  irule ld_public_copy_memory >>
-  conj_tac >- (first_assum ACCEPT_TAC) >>
-  conj_tac >- (first_assum ACCEPT_TAC) >>
-  qexistsl_tac [`w2n nw`,`tn`] >>
-  simp[ADD_COMM] >> metis_tac[]
+  `ld_memory lo A (tn with t_mem := tn.t_mem DIFF {w2n dw+j | j < LENGTH bytes})
+     (write_memory_with_expansion (w2n dw) bytes s)
+     (write_memory_with_expansion (w2n dw') bytes t1)` by
+    (irule ld_memory_write_classified >> rpt conj_tac >>
+     FIRST [first_assum ACCEPT_TAC,
+            qexists_tac `tn` >> conj_tac >- simp[] >> first_assum ACCEPT_TAC,
+            qexists_tac `dyn_floor C vs0` >> rpt conj_tac >>
+            FIRST [first_assum ACCEPT_TAC, simp[]]]) >>
+  gvs[]
 QED
 Resume ld_sync_dloadbytes_effect[observations_nonghost]:
+  drop_dyn_facts_tac >>
   gvs[write_memory_with_expansion_def, update_var_def, ld_nonghost_def]
 QED
 Finalise ld_sync_dloadbytes_effect
-
 val _ = List.app (fn th => if null (hyp th) then ()
   else raise Fail "public effect has hypotheses")
   [ld_public_copy_memory, ld_public_add_prefix_state, ld_sync_dloadbytes_effect];

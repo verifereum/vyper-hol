@@ -42,7 +42,7 @@ Theorem ld_full_endpoint:
     g.lf_src = (ss with vs_inst_idx := SUC s.vs_inst_idx) /\
     g.lf_tgt = (u with vs_inst_idx := p + LENGTH X) /\
     g.lf_tv = (step_taint inst s ss tn).t_var /\
-    step_prov PG G inst ss = ld_erase Ar o_f g.lf_H /\
+    ld_ghost_ok (dyn_floor C vs0) Ar g.lf_H (step_prov PG G inst ss) /\
     ld_vars P Ar g /\ ld_maps Ar g /\
     ld_memory lo Ar (step_taint inst s ss tn) ss u /\
     ld_nonghost (step_taint inst s ss tn) ss u /\

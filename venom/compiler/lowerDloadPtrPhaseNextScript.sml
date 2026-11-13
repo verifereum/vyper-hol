@@ -93,14 +93,14 @@ Proof
 QED
 
 Theorem dload_actual_phase_next:
-  dload_phase_core fuel Ct q f g i xs k
+  dload_phase_core fl fuel Ct q f g i xs k
     lo fs V Ws PG PH G tn s t H un cs ds /\
   ALL_DISTINCT (MAP (\bb. bb.bb_label) g.fn_blocks) /\
   SUC k < LENGTH xs /\
   step_inst fuel Ct (EL k xs) t = OK v /\
   active_inst g j (v with vs_inst_idx := SUC t.vs_inst_idx) ==>
   j = EL (SUC k) xs /\
-  dload_phase_core fuel Ct q f g i xs (SUC k)
+  dload_phase_core fl fuel Ct q f g i xs (SUC k)
     lo fs V Ws PG PH G tn s (v with vs_inst_idx := SUC t.vs_inst_idx)
     (step_prov PH H (EL k xs) v)
     (step_taint (EL k xs) t v un) cs ds

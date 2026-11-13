@@ -253,7 +253,7 @@ Resume ptr_mcopy_write_producer[classify]:
     FLOOKUP (EL (LENGTH h - 1) h).po_prov dv = SOME (db,sb) /\
     FLOOKUP positions (Allocation bid) = SOME (pb,sb) /\ db <= w2n d /\
     w2n d + w2n n <= db+sb /\ pb+sb < dimword(:256))` by
-    (irule (Q.INST [`ops` |-> `ops`] (SPEC_ALL ptr_historical_write_classification)) >>
+    (irule (Q.INST [`ops` |-> `ops`] (SPEC_ALL ptr_historical_write_classification_static)) >>
      simp[Abbr `ops`, mem_write_ops_def, source_memory_write_ranges_def,
        sized_source_write_range_def] >>
      conj_tac >- (qexists_tac `a.po_fn` >> simp[]) >>
@@ -289,8 +289,8 @@ Resume ptr_mcopy_write_producer[owned]:
   `MEM token tokens` by
     (drule_all ptr_source_ownership_live_prov >> simp[]) >>
   `FLOOKUP births (token,bid) = SOME (db,sb)` by
-    (drule_all ptr_source_ownership_prov_erases >>
-     simp[ptr_ledger_erases_def] >> strip_tac >>
+    (drule_all ptr_source_ownership_static_prov_erases >>
+     simp[ptr_ledger_erases_every_dyn] >> strip_tac >>
      first_x_assum (qspec_then `dv` mp_tac) >> gvs[]) >>
   `dt = d - n2w db + n2w pb` by
     gvs[ptr_lookup_transport_def, ptr_value_transport_def, op_prov_def] >>
@@ -302,7 +302,7 @@ Resume ptr_mcopy_write_producer[owned]:
   reverse conj_tac
   >- (simp[ptr_paired_write_owner_def, step_writes_def, source_memory_write_ranges_def,
         sized_source_write_range_def, range_bytes_def] >> rpt strip_tac >>
-      disj2_tac >> qexistsl_tac [`token`,`bid`,`db`,`sb`,`pb`,`x-db`] >> simp[] >> decide_tac) >>
+      disj2_tac >> disj1_tac >> qexistsl_tac [`token`,`bid`,`db`,`sb`,`pb`,`x-db`] >> simp[] >> decide_tac) >>
   simp[ptr_ledger_write_pair_def, is_terminator_def] >>
   conj_tac
   >- (simp[step_writes_def, source_memory_write_ranges_def, sized_source_write_range_def,

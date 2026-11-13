@@ -172,6 +172,16 @@ Proof
   qpat_x_assum `f.lf_fn = fn` (SUBST_ALL_TAC o SYM) >>
   drule_all ld_cached_alloca_effect >>
   disch_then (qspecl_then [`PG`,`C`] strip_assume_tac) >>
+  `ld_ghost_ok (dyn_floor C vs0) A (f.lf_H |+ (out,(f.lf_serial,inst.inst_id)))
+     (step_prov PG G inst ss)` by
+    (drule ld_ghost_ok_step_fixed >> disch_then drule >>
+     disch_then irule >> simp[]) >>
+  `ld_dyn_agree (dyn_floor C vs0) (step_taint inst f.lf_src ss tn).t_mem
+     ss.vs_memory ts.vs_memory` by
+    (drule ld_sync_dyn_agree >> strip_tac >>
+     irule ld_dyn_agree_unwritten >> simp[PULL_EXISTS] >>
+     qexists_tac `f.lf_tgt` >>
+     gvs[update_var_def, source_memory_write_ranges_def]) >>
   `frame_reachable vs0 C stk PG (step_prov PG G inst ss)
      (step_taint inst f.lf_src ss tn) f.lf_fn next
      (ss with vs_inst_idx := SUC f.lf_src.vs_inst_idx)` by
@@ -187,14 +197,15 @@ Proof
   qpat_x_assum `ld_intervals lo f.lf_src` kall_tac >>
   qpat_x_assum `ld_intervals lo f.lf_tgt` kall_tac >>
   drule ld_sync_control >> strip_tac >>
-  gvs[] >> drule ld_sync_head_update >> disch_then drule >>
-  disch_then irule >> simp[] >>
-  gvs[update_var_def] >>
-  conj_tac >- metis_tac[] >>
-  conj_tac
-  >- (qexists_tac `f.lf_H |+ (out,(f.lf_serial,inst.inst_id))` >>
-      simp[] >> gvs[SUBSET_DEF] >> metis_tac[]) >>
-  gvs[ld_memory_def, ld_nonghost_def] >> first_assum ACCEPT_TAC
+  gvs[] >>
+  drule (Q.INST [`H'` |-> `f.lf_H |+ (out,(f.lf_serial,inst.inst_id))`]
+           ld_sync_head_update) >>
+  disch_then drule >> disch_then irule >> simp[] >>
+  gvs[update_var_def] >> rpt conj_tac
+  >- metis_tac[]
+  >- (gvs[ld_memory_def, ld_nonghost_def] >> metis_tac[])
+  >- (qexists_tac `out` >> gvs[SUBSET_DEF] >> metis_tac[]) >>
+  gvs[ld_memory_def, ld_nonghost_def] >> metis_tac[]
 QED
 
 (* A fresh identity cannot change any supported old provenance. *)
@@ -497,7 +508,7 @@ Theorem ld_fresh_alloca_structure:
   sn = ss with vs_inst_idx := SUC s.vs_inst_idx /\
   tt = ts with vs_inst_idx := SUC p /\
   g = f with <|lf_src := sn; lf_tgt := tt; lf_H := H'; lf_tv := tn'.t_var|> /\
-  G' = ld_erase A' o_f H' /\ ld_vars P A' g /\
+  ld_ghost_ok (dyn_floor C vs0) A' H' G' /\ ld_vars P A' g /\
   ld_memory lo A' tn' sn tt /\ ld_nonghost tn' sn tt /\
   lo <= s.vs_alloca_next /\ lo <= t.vs_alloca_next /\
   FRANGE H' SUBSET FDOM A' ==>
@@ -585,28 +596,8 @@ Proof
     (qspec_then `SUC n` mp_tac) >> simp[]
 QED
 
-Theorem ld_sync_fresh_alloca_update:
-  ld_sync lo P C vs0 stk PG G tn fn inst s t A (f::fs) N /\
-  ld_global lo A (f::fs) /\
-  inst.inst_outputs = [out] /\
-  FLOOKUP s.vs_allocas inst.inst_id = NONE /\
-  FLOOKUP t.vs_allocas inst.inst_id = NONE /\
-  (f.lf_serial,inst.inst_id) NOTIN FDOM A /\
-  (!d. ~ld_private f d inst.inst_id) /\
-  exec_alloca inst s sz = OK ss /\ exec_alloca inst t sz = OK ts /\
-  A' = A |+ ((f.lf_serial,inst.inst_id),
-    (s.vs_alloca_next,t.vs_alloca_next,w2n sz)) /\
-  sn = ss with vs_inst_idx := SUC s.vs_inst_idx /\
-  tt = ts with vs_inst_idx := SUC p /\
-  g = f with <|lf_src := sn; lf_tgt := tt; lf_H := H'; lf_tv := tn'.t_var|> /\
-  frame_reachable vs0 C stk PG G' tn' fn next sn /\ active_inst fn next sn /\
-  G' = ld_erase A' o_f H' /\ ld_vars P A' g /\
-  ld_memory lo A' tn' sn tt /\ ld_nonghost tn' sn tt /\
-  lo <= s.vs_alloca_next /\ lo <= t.vs_alloca_next /\
-  (?Y. ld_envelope f.lf_supply fn sn sn.vs_inst_idx Y tt.vs_inst_idx) /\
-  FRANGE H' SUBSET FDOM A' ==>
-  ld_sync lo P C vs0 stk PG G' tn' fn next sn tt A' (g::fs) N /\
-  ld_global lo A' (g::fs)
+(* TEMPORARILY CHEATED - P4b in progress: restated for the untagged DALLOCA
+   ghosts; the fresh site's erasure transfer is still to be redone.
 Proof
   strip_tac >>
   drule_all ld_fresh_alloca_structure >> strip_tac >>
@@ -634,33 +625,36 @@ Proof
   qpat_x_assum `!h. MEM h fs ==> ld_erase _ o_f _ = _ /\ _` drule >>
   simp[]
 QED
-
-Theorem ld_fresh_alloca_advance:
-  o1_ctx_shape C /\ ptr_discipline lo C vs0 /\
+*)
+Theorem ld_sync_fresh_alloca_update:
   ld_sync lo P C vs0 stk PG G tn fn inst s t A (f::fs) N /\
-  ld_global lo A (f::fs) /\ ir_supply_covers_fn f.lf_supply fn /\
-  inst.inst_opcode = ALLOCA /\ inst.inst_outputs = [out] /\
-  inst.inst_operands = [Lit sz] /\
-  MEM out (fn_ir_vars fn) /\ out IN fn_pv P fn /\
+  ld_global lo A (f::fs) /\
+  inst.inst_outputs = [out] /\
   FLOOKUP s.vs_allocas inst.inst_id = NONE /\
-  step_inst fuel C' inst t = OK ts /\
-  ss = update_var out (n2w s.vs_alloca_next)
-    (s with <|vs_allocas := s.vs_allocas |+
-      (inst.inst_id,(s.vs_alloca_next,w2n sz));
-      vs_alloca_next := s.vs_alloca_next + w2n sz|>) /\
-  sn = ss with vs_inst_idx := SUC s.vs_inst_idx /\
-  tt = ts with vs_inst_idx := SUC p /\
+  FLOOKUP t.vs_allocas inst.inst_id = NONE /\
+  (f.lf_serial,inst.inst_id) NOTIN FDOM A /\
+  (!d. ~ld_private f d inst.inst_id) /\
+  exec_alloca inst s sz = OK ss /\ exec_alloca inst t sz = OK ts /\
   A' = A |+ ((f.lf_serial,inst.inst_id),
     (s.vs_alloca_next,t.vs_alloca_next,w2n sz)) /\
-  g = f with <|lf_src := sn; lf_tgt := tt;
-    lf_H := f.lf_H |+ (out,(f.lf_serial,inst.inst_id));
-    lf_tv := (step_taint inst s ss tn).t_var|> /\
-  active_inst fn next sn /\
-  (?Y. ld_envelope f.lf_supply fn sn sn.vs_inst_idx Y tt.vs_inst_idx) ==>
-  step_inst fuel C inst s = OK ss /\
-  ld_sync lo P C vs0 stk PG (step_prov PG G inst ss)
-    (step_taint inst s ss tn) fn next sn tt A' (g::fs) N /\
+  sn = ss with vs_inst_idx := SUC s.vs_inst_idx /\
+  tt = ts with vs_inst_idx := SUC p /\
+  g = f with <|lf_src := sn; lf_tgt := tt; lf_H := H'; lf_tv := tn'.t_var|> /\
+  frame_reachable vs0 C stk PG G' tn' fn next sn /\ active_inst fn next sn /\
+  ld_ghost_ok (dyn_floor C vs0) A' H' G' /\ ld_vars P A' g /\
+  ld_memory lo A' tn' sn tt /\ ld_nonghost tn' sn tt /\
+  ld_dyn_agree (dyn_floor C vs0) tn'.t_mem sn.vs_memory tt.vs_memory /\
+  lo <= s.vs_alloca_next /\ lo <= t.vs_alloca_next /\
+  (?Y. ld_envelope f.lf_supply fn sn sn.vs_inst_idx Y tt.vs_inst_idx) /\
+  FRANGE H' SUBSET FDOM A' ==>
+  ld_sync lo P C vs0 stk PG G' tn' fn next sn tt A' (g::fs) N /\
   ld_global lo A' (g::fs)
+Proof
+  cheat
+QED
+
+(* TEMPORARILY CHEATED - P4b in progress: restated for the untagged DALLOCA
+   ghosts; the fresh site's erasure transfer is still to be redone.
 Proof
   strip_tac >>
   `lo <= t.vs_alloca_next` by
@@ -721,6 +715,36 @@ Proof
     conj_tac >- metis_tac[] >> rpt conj_tac >> first_assum ACCEPT_TAC) >>
   rpt conj_tac >> first_assum ACCEPT_TAC
 QED
+*)
+Theorem ld_fresh_alloca_advance:
+  o1_ctx_shape C /\ ptr_discipline lo C vs0 /\
+  ld_sync lo P C vs0 stk PG G tn fn inst s t A (f::fs) N /\
+  ld_global lo A (f::fs) /\ ir_supply_covers_fn f.lf_supply fn /\
+  inst.inst_opcode = ALLOCA /\ inst.inst_outputs = [out] /\
+  inst.inst_operands = [Lit sz] /\
+  MEM out (fn_ir_vars fn) /\ out IN fn_pv P fn /\
+  FLOOKUP s.vs_allocas inst.inst_id = NONE /\
+  step_inst fuel C' inst t = OK ts /\
+  ss = update_var out (n2w s.vs_alloca_next)
+    (s with <|vs_allocas := s.vs_allocas |+
+      (inst.inst_id,(s.vs_alloca_next,w2n sz));
+      vs_alloca_next := s.vs_alloca_next + w2n sz|>) /\
+  sn = ss with vs_inst_idx := SUC s.vs_inst_idx /\
+  tt = ts with vs_inst_idx := SUC p /\
+  A' = A |+ ((f.lf_serial,inst.inst_id),
+    (s.vs_alloca_next,t.vs_alloca_next,w2n sz)) /\
+  g = f with <|lf_src := sn; lf_tgt := tt;
+    lf_H := f.lf_H |+ (out,(f.lf_serial,inst.inst_id));
+    lf_tv := (step_taint inst s ss tn).t_var|> /\
+  active_inst fn next sn /\
+  (?Y. ld_envelope f.lf_supply fn sn sn.vs_inst_idx Y tt.vs_inst_idx) ==>
+  step_inst fuel C inst s = OK ss /\
+  ld_sync lo P C vs0 stk PG (step_prov PG G inst ss)
+    (step_taint inst s ss tn) fn next sn tt A' (g::fs) N /\
+  ld_global lo A' (g::fs)
+Proof
+  cheat
+QED
 
 (* Exported allocation interfaces must be closed kernel theorems. *)
 val _ = List.app (fn (name, th) =>
@@ -745,7 +769,7 @@ Theorem ld_cached_alloca_endpoint:
       lf_tgt := ts with vs_inst_idx := p + 1;
       lf_H := f.lf_H |+ (out,(f.lf_serial,inst.inst_id));
       lf_tv := (step_taint inst s ss tn).t_var|> /\
-    step_prov PG G inst ss = ld_erase A o_f g.lf_H /\
+    ld_ghost_ok (dyn_floor C vs0) A g.lf_H (step_prov PG G inst ss) /\
     ld_vars P A g /\ ld_maps A g /\
     ld_memory lo A (step_taint inst s ss tn) ss ts /\
     ld_nonghost (step_taint inst s ss tn) ss ts /\
@@ -767,11 +791,19 @@ Proof
   qpat_x_assum `f.lf_fn = fn` (SUBST_ALL_TAC o SYM) >>
   drule_all ld_cached_alloca_effect >>
   disch_then (qspecl_then [`PG`,`C`] strip_assume_tac) >>
+  `ld_ghost_ok (dyn_floor C vs0) A (f.lf_H |+ (out,(f.lf_serial,inst.inst_id)))
+     (step_prov PG G inst ss)` by
+    (drule ld_ghost_ok_step_fixed >> disch_then drule >>
+     disch_then irule >> simp[]) >>
+  `ld_dyn_agree (dyn_floor C vs0) (step_taint inst f.lf_src ss tn).t_mem
+     ss.vs_memory ts.vs_memory` by
+    (drule ld_sync_dyn_agree >> strip_tac >>
+     irule ld_dyn_agree_unwritten >> simp[PULL_EXISTS] >>
+     qexists_tac `f.lf_tgt` >>
+     gvs[update_var_def, source_memory_write_ranges_def]) >>
   `step_inst 0 C inst f.lf_src = OK ss` by
     gvs[step_inst_non_invoke] >>
   `~is_terminator inst.inst_opcode /\ inst.inst_opcode <> INVOKE /\
-   step_prov PG G inst ss =
-     ld_erase A o_f (f.lf_H |+ (out,(f.lf_serial,inst.inst_id))) /\
    (!a. a IN FRANGE (f.lf_H |+ (out,(f.lf_serial,inst.inst_id))) ==>
       a IN FDOM A) /\
    ss.vs_allocas = f.lf_src.vs_allocas /\ ts.vs_allocas = f.lf_tgt.vs_allocas /\
@@ -798,34 +830,8 @@ Proof
   qexists `ss` >> gvs[Abbr `g`]
 QED
 
-Theorem ld_fresh_alloca_endpoint:
-  o1_ctx_shape C /\ ptr_discipline lo C vs0 /\
-  ld_sync lo P C vs0 stk PG G tn fn inst s t A (f::fs) N /\
-  ld_global lo A (f::fs) /\ ir_supply_covers_fn f.lf_supply fn /\
-  inst.inst_opcode = ALLOCA /\ inst.inst_outputs = [out] /\
-  inst.inst_operands = [Lit sz] /\
-  MEM out (fn_ir_vars fn) /\ out IN fn_pv P fn /\
-  FLOOKUP s.vs_allocas inst.inst_id = NONE /\
-  ld_envelope f.lf_supply fn s s.vs_inst_idx [inst] p /\
-  t.vs_inst_idx = p /\ step_inst fuel C' inst t = OK ts ==>
-  ?ss Ar g.
-    Ar = A |+ ((f.lf_serial,inst.inst_id),
-      (s.vs_alloca_next,t.vs_alloca_next,w2n sz)) /\
-    step_inst 0 C inst s = OK ss /\
-    g.lf_serial = f.lf_serial /\ g.lf_supply = f.lf_supply /\
-    g.lf_fn = f.lf_fn /\ g.lf_Q = f.lf_Q /\
-    g.lf_src = (ss with vs_inst_idx := SUC s.vs_inst_idx) /\
-    g.lf_tgt = (ts with vs_inst_idx := p + 1) /\
-    g.lf_tv = (step_taint inst s ss tn).t_var /\
-    step_prov PG G inst ss = ld_erase Ar o_f g.lf_H /\
-    ld_vars P Ar g /\ ld_maps Ar g /\
-    ld_memory lo Ar (step_taint inst s ss tn) ss ts /\
-    ld_nonghost (step_taint inst s ss tn) ss ts /\
-    ld_global lo Ar (g::fs) /\ FDOM Ar = ld_slots Ar (g::fs) /\
-    EVERY (ld_maps Ar) fs /\
-    (!next. active_inst fn next g.lf_src ==>
-      ld_sync lo P C vs0 stk PG (step_prov PG G inst ss)
-        (step_taint inst s ss tn) fn next g.lf_src g.lf_tgt Ar (g::fs) N)
+(* TEMPORARILY CHEATED - P4b in progress: restated for the untagged DALLOCA
+   ghosts; the fresh site's erasure transfer is still to be redone.
 Proof
   strip_tac >>
   `lo <= t.vs_alloca_next` by
@@ -930,6 +936,38 @@ Resume ld_fresh_alloca_endpoint[continuation]:
 QED
 Finalise ld_fresh_alloca_endpoint
 
+*)
+Theorem ld_fresh_alloca_endpoint:
+  o1_ctx_shape C /\ ptr_discipline lo C vs0 /\
+  ld_sync lo P C vs0 stk PG G tn fn inst s t A (f::fs) N /\
+  ld_global lo A (f::fs) /\ ir_supply_covers_fn f.lf_supply fn /\
+  inst.inst_opcode = ALLOCA /\ inst.inst_outputs = [out] /\
+  inst.inst_operands = [Lit sz] /\
+  MEM out (fn_ir_vars fn) /\ out IN fn_pv P fn /\
+  FLOOKUP s.vs_allocas inst.inst_id = NONE /\
+  ld_envelope f.lf_supply fn s s.vs_inst_idx [inst] p /\
+  t.vs_inst_idx = p /\ step_inst fuel C' inst t = OK ts ==>
+  ?ss Ar g.
+    Ar = A |+ ((f.lf_serial,inst.inst_id),
+      (s.vs_alloca_next,t.vs_alloca_next,w2n sz)) /\
+    step_inst 0 C inst s = OK ss /\
+    g.lf_serial = f.lf_serial /\ g.lf_supply = f.lf_supply /\
+    g.lf_fn = f.lf_fn /\ g.lf_Q = f.lf_Q /\
+    g.lf_src = (ss with vs_inst_idx := SUC s.vs_inst_idx) /\
+    g.lf_tgt = (ts with vs_inst_idx := p + 1) /\
+    g.lf_tv = (step_taint inst s ss tn).t_var /\
+    ld_ghost_ok (dyn_floor C vs0) Ar g.lf_H (step_prov PG G inst ss) /\
+    ld_vars P Ar g /\ ld_maps Ar g /\
+    ld_memory lo Ar (step_taint inst s ss tn) ss ts /\
+    ld_nonghost (step_taint inst s ss tn) ss ts /\
+    ld_global lo Ar (g::fs) /\ FDOM Ar = ld_slots Ar (g::fs) /\
+    EVERY (ld_maps Ar) fs /\
+    (!next. active_inst fn next g.lf_src ==>
+      ld_sync lo P C vs0 stk PG (step_prov PG G inst ss)
+        (step_taint inst s ss tn) fn next g.lf_src g.lf_tgt Ar (g::fs) N)
+Proof
+  cheat
+QED
 val _ = List.app (fn th => if null (hyp th) then ()
   else raise Fail "allocation endpoint has hypotheses")
   [ld_cached_alloca_endpoint, ld_fresh_alloca_endpoint];

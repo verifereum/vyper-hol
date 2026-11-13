@@ -119,7 +119,8 @@ Proof
   `op_taint tn addr = {}` by
     (qpat_x_assum `taint_ok _ _ _ _` mp_tac >> gvs[taint_ok_def] >> metis_tac[]) >>
   `?q. eval_operand addr t = SOME q /\
-    (w2n len=0 \/ (w2n p=w2n q /\ w2n p+w2n len<=lo) \/
+    (w2n len=0 \/ (w2n p=w2n q /\ (w2n p+w2n len<=lo \/
+       dyn_floor C vs<=w2n p /\ w2n p+w2n len<=dimword (:256))) \/
      (?id b c z j. FLOOKUP sites id = SOME (b,c,z) /\ j+w2n len<=z /\
        w2n p=b+j /\ w2n q=c+j))` by
     (drule ld_joint_read_operand_range >>
@@ -131,9 +132,10 @@ Proof
           memory_range_of_operands_def, retpc_use_ok_def] >>
      gvs[]) >>
   qexists_tac `q` >> gvs[] >> rpt strip_tac >>
-  irule ld_memory_agree_slice_element >> simp[] >>
-  qexistsl_tac [`lo`,`tn.t_mem`,`sites`] >>
-  gvs[ret_taint_def] >> fs[ld_joint_boundary_def] >> metis_tac[]
+  `ld_memory_agree sites lo tn.t_mem s.vs_memory t.vs_memory /\
+   ld_dyn_agree (dyn_floor C vs) tn.t_mem s.vs_memory t.vs_memory` by
+    fs[ld_joint_boundary_def] >>
+  irule ld_snapshot_slice_element >> gvs[ret_taint_def] >> metis_tac[]
 QED
 
 Theorem ld_joint_return_result:
