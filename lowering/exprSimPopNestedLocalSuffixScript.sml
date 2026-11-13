@@ -124,10 +124,9 @@ Proof
     (drule_all wb_frame_trans >> simp[]) >>
   `local_region cenv scopes' u id (w2n b) sz` by
     (simp[local_region_def] >> metis_tac[]) >>
-  `storage_well_formed_on cx (mid with scopes := scopes') (FST H) <=>
-   storage_well_formed_on cx mid (FST H)` by
-    (irule vyperStorageFootprintTheory.storage_well_formed_on_backends >>
-     simp[]) >>
+  `storage_well_formed_on cx (mid with scopes := scopes') (FST H)` by
+    fs[vyperStorageFootprintTheory.storage_well_formed_on_def,
+       vyperStorageBackendTheory.get_storage_scopes] >>
   irule pop_path_vv_post >>
   qpat_assum `mem_path_offset _ _ = _` (irule_at Any) >>
   qpat_assum `evaluate_subscripts _ _ _ = _` (irule_at Any) >>

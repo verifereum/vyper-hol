@@ -550,7 +550,7 @@ Proof
        (es with <|scopes := (FEMPTY |+ (id,
           <|assignable := F; type := tv; value := v; popped := []|>)) :: es.scopes;
           gas_obs := []|>) (FST H)` by
-    (rpt gen_tac >> disch_tac >> conj_tac
+    (rpt strip_tac
      >- (fs[dynarray_entry_ready_def] >>
          qpat_x_assum `!H. valid_horizon _ _ H _ ==> stmt_state_rel H _ _ bc _ _ s2`
            drule >> strip_tac >>
@@ -820,9 +820,12 @@ Proof
   `!H. valid_horizon cx st0 H es.storage_trace ==>
      storage_well_formed_on cx es (FST H)` by
     (rpt strip_tac >>
-     qpat_x_assum `array_loop_inv _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ cc`
+     qpat_assum `array_loop_inv _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ es cc`
        (strip_assume_tac o REWRITE_RULE [array_loop_inv_def]) >>
-     metis_tac[]) >>
+     qpat_x_assum `!H. valid_horizon _ _ H _ ==> stmt_state_rel H _ _ _ _ es cc /\ _`
+       (qspec_then `H` mp_tac) >>
+     impl_tac >- first_assum ACCEPT_TAC >>
+     strip_tac >> first_assum ACCEPT_TAC) >>
   drule_all dynarray_round_body_prepare >> strip_tac >>
   drule_all dynarray_entry_ready_runtime >> strip_tac >>
   `alloca_frame cenv es caller s bc entry s2` by
@@ -1025,8 +1028,8 @@ Theorem dynarray_loop_last_counted:
     (!H. valid_horizon cx st0 H es.storage_trace ==>
        stmt_state_rel H ctx func cenv cx (es with gas_obs := []) t /\
        storage_well_formed_on cx (es with gas_obs := []) (FST H)) /\
-    array_caller_frame caller old t
-    /\ alloca_frame cenv origin_es caller old cenv (es with gas_obs := []) t
+    array_caller_frame caller old t /\
+    alloca_frame cenv origin_es caller old cenv (es with gas_obs := []) t
 Proof
   strip_tac >> drule dynarray_for_code_entry_static >> strip_tac >>
   `not_local_ptr cenv es.scopes dv` by simp[] >>
@@ -1034,19 +1037,24 @@ Proof
   `!H. valid_horizon cx st0 H es.storage_trace ==>
      stmt_state_rel H ctx func cenv cx (es with gas_obs := []) next /\
      storage_well_formed_on cx (es with gas_obs := []) (FST H)` by
-    (rpt gen_tac >> disch_tac >>
-     qpat_x_assum `array_loop_inv _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ next`
-       mp_tac >>
-     rewrite_tac[array_loop_inv_def] >> strip_tac >>
-     qpat_x_assum `!H'. valid_horizon _ _ H' _ ==> stmt_state_rel H' _ _ _ _ _ _ /\ _`
-       (qspec_then `H` mp_tac) >>
+    (`!H'. valid_horizon cx st0 H' es.storage_trace ==>
+       stmt_state_rel H' ctx func cenv cx es next /\
+       storage_well_formed_on cx es (FST H')` by
+       (qpat_x_assum `array_loop_inv _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ next`
+          mp_tac >>
+        rewrite_tac[array_loop_inv_def] >> strip_tac >> first_assum ACCEPT_TAC) >>
+     gen_tac >> strip_tac >>
+     first_x_assum (qspec_then `H` mp_tac) >>
      impl_tac >- first_assum ACCEPT_TAC >> strip_tac >>
      conj_tac
      >- (drule msg_gas_state_frame >>
          disch_then (qspecl_then [`next.vs_gas_readings`, `next.vs_inst_idx`, `[]`]
            mp_tac) >>
          simp[stmt_state_rel_inst_idx]) >>
-     simp[]) >>
+     `storage_well_formed_on cx (es with gas_obs := []) (FST H) <=>
+      storage_well_formed_on cx es (FST H)` by
+       (irule vyperStorageFootprintTheory.storage_well_formed_on_backends >> simp[]) >>
+     metis_tac[]) >>
   `alloca_frame cenv origin_es caller old cenv es next` by
     (irule alloca_frame_trans >> goal_assum (drule_at Any) >>
      goal_assum (drule_at Any) >> fs[array_caller_frame_def]) >>
@@ -1054,13 +1062,25 @@ Proof
     (qpat_x_assum `alloca_frame cenv origin_es caller old cenv es next` mp_tac >>
      simp[alloca_frame_def]) >>
   qexists_tac `next` >> fs[] >>
-  qpat_x_assum `array_loop_inv _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ exit_lbl _ _ _ next`
-    (strip_assume_tac o REWRITE_RULE [array_loop_inv_def]) >>
-  fs[array_caller_frame_def] >> rpt strip_tac >>
-  `x <> dv` by (strip_tac >> gvs[]) >>
-  res_tac >>
-  qpat_x_assum `!x. x <> dv ==> lookup_var x next = _` (qspec_then `x` mp_tac) >>
-  simp[]
+  fs[array_caller_frame_def] >>
+  `next.vs_current_bb = exit_lbl /\ next.vs_inst_idx = 0 /\ ~next.vs_halted` by
+    (qpat_x_assum `array_loop_inv _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ exit_lbl _ _ es next`
+       mp_tac >>
+     rewrite_tac[array_loop_inv_def] >> strip_tac >>
+     rpt conj_tac >> first_assum ACCEPT_TAC) >>
+  rpt conj_tac >> TRY (first_assum ACCEPT_TAC) >>
+  rpt strip_tac >>
+  `x <> dv` by
+    (strip_tac >> BasicProvers.VAR_EQ_TAC >>
+     qpat_x_assum `~not_fresh_at _ _` (fn th => first_assum (ACCEPT_TAC o MP th))) >>
+  qpat_x_assum `!x. x <> dv ==> lookup_var x next = lookup_var x s`
+    (qspec_then `x` mp_tac) >>
+  impl_tac >- first_assum ACCEPT_TAC >>
+  disch_then (fn th1 =>
+    qpat_x_assum `!x w. not_fresh_at caller x /\ lookup_var x old = SOME w ==>
+                        lookup_var x s = SOME w` (qspecl_then [`x`, `w`] mp_tac) >>
+    impl_tac >- (conj_tac >> first_assum ACCEPT_TAC) >>
+    disch_then (fn th2 => rewrite_tac [th1, th2]))
 QED
 
 Theorem dynarray_for_loop_counted:
