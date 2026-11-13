@@ -24,15 +24,14 @@ QED
 
 (* The semantic transport consumes the very endpoint chosen by Ensure. *)
 Theorem toplevel_storage_ensure_ptr_post_effects:
-  post_value_type cenv e = expr_type e /\
   vv_post ctx fn cenv cx e es sa sm s0 es' (Value v) vv s /\
   local_ptrs_reserved cenv sa /\ local_ptrs_reserved cenv sm /\
   MAP FDOM es.scopes = MAP FDOM es'.scopes /\
   sa.cs_next_var <= sm.cs_next_var /\ sa.cs_next_id <= sm.cs_next_id /\
   (loc = LocStorage \/ loc = LocTransient) /\
-  storage_holds cx (loc = LocTransient) (expr_type e) (Value v) a es' s /\
-  ~is_word_type (expr_type e) /\
-  evaluate_type (get_tenv cx) (expr_type e) = SOME tv /\
+  storage_holds cx (loc = LocTransient) (post_value_type cenv e) (Value v) a es' s /\
+  ~is_word_type (post_value_type cenv e) /\
+  evaluate_type (get_tenv cx) (post_value_type cenv e) = SOME tv /\
   n = type_slot_size tv /\ type_memory_size tv <= nb /\
   compile_ensure_in_memory (Lit a) loc nb n ctor imm sm = (op,sb) /\
   fn_has_code sm sb fn /\ fn_inst_ids_distinct fn /\
@@ -78,7 +77,7 @@ Proof
   `stmt_state_rel ctx fn cenv cx es' s` by fs[vv_post_def] >>
   drule_all toplevel_storage_ensure_ptr_semantic_effects >>
   disch_then (qspecl_then [`tn`, `PG`, `G`, `D`] strip_assume_tac) >>
-  `storage_holds cx (loc = LocTransient) (expr_type e) (Value v) a es' u` by
+  `storage_holds cx (loc = LocTransient) (post_value_type cenv e) (Value v) a es' u` by
     gvs[storage_holds_def, venomStateTheory.contract_storage_def,
       venomStateTheory.contract_transient_def] >>
   `loc = if loc = LocTransient then LocTransient else LocStorage` by metis_tac[] >>
@@ -89,7 +88,7 @@ Proof
   `!x. not_fresh_at sm x ==> lookup_var x t = lookup_var x u` by
     metis_tac[] >>
   `expr_post ctx fn cenv cx e es sa sb s0 es' v op t` by
-    (irule copy_buffer_post_transport >>
+    (irule copy_buffer_post_transport_physical >>
      simp[] >>
      qrefinel [`_`, `sm`, `_`, `_`, `nb`] >>
      rpt (goal_assum (drule_at Any)) >>
@@ -100,15 +99,14 @@ Proof
 QED
 
 Theorem toplevel_storage_ensure_ptr_post:
-  post_value_type cenv e = expr_type e /\
   vv_post ctx fn cenv cx e es sa sm s0 es' (Value v) vv s /\
   local_ptrs_reserved cenv sa /\ local_ptrs_reserved cenv sm /\
   MAP FDOM es.scopes = MAP FDOM es'.scopes /\
   sa.cs_next_var <= sm.cs_next_var /\ sa.cs_next_id <= sm.cs_next_id /\
   (loc = LocStorage \/ loc = LocTransient) /\
-  storage_holds cx (loc = LocTransient) (expr_type e) (Value v) a es' s /\
-  ~is_word_type (expr_type e) /\
-  evaluate_type (get_tenv cx) (expr_type e) = SOME tv /\
+  storage_holds cx (loc = LocTransient) (post_value_type cenv e) (Value v) a es' s /\
+  ~is_word_type (post_value_type cenv e) /\
+  evaluate_type (get_tenv cx) (post_value_type cenv e) = SOME tv /\
   n = type_slot_size tv /\ type_memory_size tv <= nb /\
   compile_ensure_in_memory (Lit a) loc nb n ctor imm sm = (op,sb) /\
   fn_has_code sm sb fn /\ fn_inst_ids_distinct fn /\

@@ -225,7 +225,7 @@ Proof
        venomInstTheory.is_terminator_def]
 QED
 
-Theorem convert_widen_copy_run_path[local]:
+Theorem convert_widen_copy_run_path:
   !d x k sm op sb func s t ctx.
     compile_bytestring_widen_copy d x k sm = (op,sb) /\ 0 < k /\
     fn_has_code sm sb func /\ ~s.vs_halted /\
@@ -874,7 +874,7 @@ Proof
   qpat_x_assum `!z w. _ ==> lookup_var _ _ = _` drule >> simp[lookup_var_def]
 QED
 
-Theorem convert_cast_counted[local]:
+Theorem convert_cast_counted:
   !ctx func cenv cx es sa sb op x p L n i s.
     compile_type_convert x (ConvBytestringCast n i) sa = (op,sb) /\
     fn_has_code sa sb func /\ local_ptrs_reserved cenv sa /\
@@ -1479,7 +1479,7 @@ Proof
   metis_tac[convert_cast_grows]
 QED
 
-Theorem convert_operand_typed[local]:
+Theorem convert_operand_typed:
   !cenv cx env t e1 es v es1.
     expr_body_pre cenv cx env (TypeBuiltin t Convert t [e1]) es /\
     (do r <- eval_expr cx e1; read_result cx r od) es = (INL v,es1) ==>
@@ -1607,7 +1607,7 @@ Proof
   disch_then drule_all >> simp[]
 QED
 
-Theorem convert_dynamic_cont[local]:
+Theorem convert_dynamic_cont:
   !ctx func cenv cx e e1 es es1 sa sm sb s0 s v x op tv1 tv2 i n.
     ((expr_type e1 = BaseT (BytesT (Dynamic i))) \/
       expr_type e1 = BaseT (StringT i)) /\
@@ -1655,7 +1655,7 @@ Proof
   qexistsl_tac [`s`, `sm`, `x`] >> simp[]
 QED
 
-Theorem convert_dynamic_counted_cont[local]:
+Theorem convert_dynamic_counted_cont:
   !ctx func cenv cx e e1 es es1 sa sm sb s0 s v x op tv1 tv2 i n.
     ((expr_type e1 = BaseT (BytesT (Dynamic i))) \/
       expr_type e1 = BaseT (StringT i)) /\
@@ -1711,7 +1711,7 @@ QED
 
 Finalise convert_dynamic_counted_cont
 
-Theorem convert_bytestring_cont[local]:
+Theorem convert_bytestring_cont:
   !ctx func cenv cx e e1 es es1 sa sm sb s0 s v x op tv1 tv2.
     valid_conversion (expr_type e1) (expr_type e) /\
     is_bytestring_type (expr_type e) /\
@@ -1740,7 +1740,7 @@ Proof
   simp[] >> qexists_tac `x` >> simp[]
 QED
 
-Theorem convert_bytestring_counted_cont[local]:
+Theorem convert_bytestring_counted_cont:
   !ctx func cenv cx e e1 es es1 sa sm sb s0 s v x op tv1 tv2.
     valid_conversion (expr_type e1) (expr_type e) /\
     is_bytestring_type (expr_type e) /\
@@ -1788,7 +1788,7 @@ Proof
   simp[] >> qexistsl_tac [`sm`, `x`] >> simp[]
 QED
 
-Theorem convert_bytestring_continuation_summary[local]:
+Theorem convert_bytestring_continuation_summary:
   valid_conversion (expr_type e1) (expr_type e) /\
   is_bytestring_type (expr_type e) /\
   is_bytestring_type (lowered_value_type cenv e1) /\
@@ -1833,7 +1833,7 @@ Proof
   simp[gas_marked_exec_def, exit_result_def]
 QED
 
-Theorem compile_convert_bytestring_frag_sim[local]:
+Theorem compile_convert_bytestring_frag_sim:
   !ctx func cenv cx env ty t e1 es.
     expr_body_pre cenv cx env (TypeBuiltin t Convert t [e1]) es /\
     is_bytestring_type t /\

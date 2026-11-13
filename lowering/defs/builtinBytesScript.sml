@@ -64,7 +64,7 @@ Definition compile_slice_data_def:
 End
 
 (* Adhoc slices (bytes.py _lower_adhoc_slice): the output buffer is allocated
-   before the size opcode and the bounds check. *)
+   after the size opcode and the bounds check. *)
 
 (* new_temporary_value(out_t) and its data pointer. *)
 Definition compile_slice_out_buf_def:
@@ -79,9 +79,9 @@ End
 (* msg.data → calldatacopy *)
 Definition compile_slice_calldata_def:
   compile_slice_calldata start_op length_op out_size =
-    do (out_buf, out_data) <- compile_slice_out_buf out_size;
-       src_len <- emit_op CALLDATASIZE [];
+    do src_len <- emit_op CALLDATASIZE [];
        compile_assert_slice_bounds start_op length_op src_len;
+       (out_buf, out_data) <- compile_slice_out_buf out_size;
        emit_void CALLDATACOPY [out_data; start_op; length_op];
        emit_void MSTORE [out_buf; length_op];
        return out_buf
@@ -91,21 +91,21 @@ End
 (* self.code → codecopy *)
 Definition compile_slice_code_def:
   compile_slice_code start_op length_op out_size =
-    do (out_buf, out_data) <- compile_slice_out_buf out_size;
-       src_len <- emit_op CODESIZE [];
+    do src_len <- emit_op CODESIZE [];
        compile_assert_slice_bounds start_op length_op src_len;
+       (out_buf, out_data) <- compile_slice_out_buf out_size;
        emit_void CODECOPY [out_data; start_op; length_op];
        emit_void MSTORE [out_buf; length_op];
        return out_buf
     od
 End
 
-(* <addr>.code → extcodecopy.  The caller allocates the output buffer with
-   compile_slice_out_buf, so it can do so before lowering the address. *)
+(* <addr>.code → extcodecopy *)
 Definition compile_slice_extcode_def:
-  compile_slice_extcode addr_op start_op length_op out_buf out_data =
+  compile_slice_extcode addr_op start_op length_op out_size =
     do src_len <- emit_op EXTCODESIZE [addr_op];
        compile_assert_slice_bounds start_op length_op src_len;
+       (out_buf, out_data) <- compile_slice_out_buf out_size;
        emit_void EXTCODECOPY [addr_op; out_data; start_op; length_op];
        emit_void MSTORE [out_buf; length_op];
        return out_buf

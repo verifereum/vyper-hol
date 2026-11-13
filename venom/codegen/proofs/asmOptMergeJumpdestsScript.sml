@@ -158,6 +158,7 @@ End
 Definition rn_rel_def:
   rn_rel x y ss ss' ⇔
     ss'.sym_base = ss.sym_base ∧ ss.sym_base.as_stack = [] ∧
+    ss'.sym_own_code = ss.sym_own_code ∧
     LIST_REL (sv_rel x y) ss.sym_stack ss'.sym_stack ∧
     ml_rel x y ss.sym_mem_labels ss'.sym_mem_labels ∧
     mem_blocks_ok ss.sym_mem_labels ∧ mem_blocks_ok ss'.sym_mem_labels
@@ -428,6 +429,13 @@ Proof
       gvs[sv_rel_def] >> rw[res_rel_def] >> gvs[] >>
       irule lift_rel >> fs[rn_rel_def] >>
       simp[ml_rel_clear, blocks_clear]) >>
+  Cases_on `∃dst src sz stk.
+              ss.sym_stack = Val dst :: Val src :: Val sz :: stk`
+  >- (gvs[] >> gvs[LIST_REL_CONS1, sv_rel_val] >>
+      simp[sym_codecopy_def] >>
+      `ss'.sym_own_code = ss.sym_own_code` by fs[rn_rel_def] >>
+      simp[] >> irule lift_rel >> fs[rn_rel_def] >>
+      simp[ml_rel_clear, blocks_clear]) >>
   `∃e. sym_codecopy p env ss = SymError e ∨ sym_codecopy p env ss = SymBad e`
     by (simp[sym_codecopy_def] >>
         Cases_on `ss.sym_stack` >> simp[] >>
@@ -465,7 +473,9 @@ Proof
   simp[sym_step_op_def] >>
   rw[add_rel, mstore_rel, mload_rel, codecopy_rel, res_rel_def]
   >- (Cases_on `ss.sym_stack` >> Cases_on `ss'.sym_stack` >>
-      gvs[res_rel_def] >> irule set_stack_rel >> simp[]) >>
+      gvs[res_rel_def] >> irule set_stack_rel >> simp[])
+  >- (`ss'.sym_own_code = ss.sym_own_code` by fs[rn_rel_def] >>
+      irule set_stack_rel >> simp[sv_rel_def]) >>
   rpt CASE_TAC >> gvs[dup_swap_rel, concrete_rel]
 QED
 

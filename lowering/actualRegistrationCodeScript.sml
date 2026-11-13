@@ -92,6 +92,12 @@ Proof
   metis_tac[cs_appends_def, cj 2 cs_appends_emit_helpers]
 QED
 
+Theorem registration_guard_extends[local]:
+  compile_abi_arg_ptr_guard opc actual parent st = (v,st') ==> cs_extends st st'
+Proof
+  metis_tac[cs_appends_def, cs_appends_abi_arg_ptr_guard]
+QED
+
 Theorem decode_singleton_aggregate_boundary:
   compile_decode_args cenv [(name,F,dyn,sz,info)] off CALLDATALOAD (Lit 0w) base_adj st =
     ((),stf) /\
@@ -109,6 +115,7 @@ Proof
   rpt (pairarg_tac >> fs[]) >> strip_tac >> gvs[] >>
   goal_assum $ drule_at Any >>
   imp_res_tac registration_emit_op_extends >>
+  imp_res_tac registration_guard_extends >>
   metis_tac[cs_extends_trans]
 QED
 
