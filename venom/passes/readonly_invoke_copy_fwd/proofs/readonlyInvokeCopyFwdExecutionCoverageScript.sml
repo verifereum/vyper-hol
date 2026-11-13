@@ -35,7 +35,7 @@ Proof
      simp[EL_MEM]) >>
   `EL b fn.fn_blocks = bb` by metis_tac[optionTheory.SOME_11] >>
   gvs[ricf_event_copy_def] >>
-  drule rangeAnalysisProofsTheory.phi_prefix_length_el_phi >> simp[]
+  drule venomExecProofsTheory.phi_prefix_length_el_phi >> simp[]
 QED
 
 Theorem ricf_copy_coverage_before:

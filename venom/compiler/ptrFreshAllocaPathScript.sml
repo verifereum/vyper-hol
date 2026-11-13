@@ -221,7 +221,7 @@ Proof
   `phi_edge_uses_wf fn bb phi_inst` by
     metis_tac[wf_ssa_def, def_dominates_uses_def] >>
   `MEM (pred,out) (phi_pairs phi_inst.inst_operands)` by
-    metis_tac[scfg_resolve_phi_pair] >>
+    metis_tac[venomWfPropsTheory.resolve_phi_pair] >>
   fs[phi_edge_uses_wf_def] >>
   first_x_assum drule >> strip_tac >>
   fs[def_available_at_def, contextCodegenRelTheory.active_inst_def] >>
