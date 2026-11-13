@@ -2594,7 +2594,7 @@ QED
 (* A byte live in a declared region's subregion is not dead in the
    storage: the regions on a backend are disjoint, so the only region that
    could make it dead is its own root. *)
-Theorem place_store_subregion_not_dead[local]:
+Theorem place_store_subregion_not_dead:
   !cx tr mid name subs rootk root path delta leaf st j b.
     declared_storage_region cx mid name subs = SOME (tr,rootk,root) /\
     storage_subregion root path delta leaf /\
