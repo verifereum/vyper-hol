@@ -131,7 +131,9 @@ Theorem place_staged_store_cont:
         mem_bytes_at p k t.vs_memory = mem_bytes_at p k s.vs_memory) /\
       (!x. not_fresh_at sa x ==> lookup_var x t = lookup_var x s) /\
       (!a r. FLOOKUP s.vs_allocas a = SOME r ==> FLOOKUP t.vs_allocas a = SOME r) /\
-      s.vs_alloca_next <= t.vs_alloca_next
+      s.vs_alloca_next <= t.vs_alloca_next /\
+      (!name b len. local_region ce es.scopes s name b len ==>
+        local_region ce es.scopes u name b len)
 Proof
   qmatch_goalsub_abbrev_tac `LET _ Pre` >>
   pure_rewrite_tac [Once LET_THM] >>
@@ -147,9 +149,11 @@ Proof
      simp[loweringStateRelDefsTheory.not_fresh_at_def]) >>
   `eval_operand dst u = SOME dw` by
     (Cases_on `dst` >> fs[eval_operand_def] >> metis_tac[]) >>
-  `local_region ce es.scopes u name b len` by
+  `!name b len. local_region ce es.scopes s name b len ==>
+    local_region ce es.scopes u name b len` by
     (drule_all exprSimCopyTheory.copy_buffer_local_region_frame >>
-     disch_then (qspecl_then [`es.scopes`, `name`, `b`, `len`] mp_tac) >> simp[]) >>
+     disch_then (qspec_then `es.scopes` mp_tac) >> simp[]) >>
+  `local_region ce es.scopes u name b len` by metis_tac[] >>
   `regions_disjoint (w2n tw) n b len` by
     (qpat_x_assum `!name b len. local_region _ _ u _ _ _ ==> _` irule >>
      qexists_tac `name` >> simp[]) >>
