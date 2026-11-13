@@ -501,7 +501,7 @@ QED
 (* A selected operand cannot have been supplied by any previous accepted
    rewrite, even one from another round.  No instruction-record equality
    between the original function and the selected round is assumed. *)
-Theorem ricf_call_recorded_site_not_forwarded_source[local]:
+Theorem ricf_call_recorded_site_not_forwarded_source:
   ricf_located_event ctx0 original log round b es prefix e current /\
   ricf_located_event ctxP original logP roundP bp esP prefixP f prior /\
   ssa_form original /\ fn_inst_wf original /\
