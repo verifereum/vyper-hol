@@ -274,7 +274,9 @@ QED
    operand with a site and a tagged operand are the same; a DALLOCA output
    lies above the dynamic floor. *)
 Theorem ptr_reachable_step_premises[local]:
-  frame_reachable vs0 C stk PG G tn fn inst s /  ptr_discipline lo C vs0 /\ EVERY (. EVERY inst_wf (fn_insts f)) C.ctx_functions /  ptr_ledger_erases dyn births TG G ==>
+  frame_reachable vs0 C stk PG G tn fn inst s /\
+  ptr_discipline lo C vs0 /\ EVERY (\f. EVERY inst_wf (fn_insts f)) C.ctx_functions /\
+  ptr_ledger_erases dyn births TG G ==>
   (inst.inst_opcode = ADD \/ inst.inst_opcode = SUB \/ inst.inst_opcode = ASSIGN ==>
     !u1 u2. MEM (Var u1) inst.inst_operands /\ MEM (Var u2) inst.inst_operands /\
       FLOOKUP G u1 <> NONE /\ FLOOKUP TG u2 <> NONE ==> u1 = u2) /\
