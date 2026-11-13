@@ -93,6 +93,14 @@ Proof
        checked_contract_call_evaluation_safe_singleton) >>
      qexistsl [`art`, `am.layouts`, `[(NONE,tops)]`] >>
      simp[initial_evaluation_context_def, calls_follow_call_graph_def]) >>
+  `art.cta_bare_global_assignable = FEMPTY` by
+    (`env_context_consistent (artifact_env art [(NONE,tops)] NONE)
+        (initial_evaluation_context am.sources am.layouts tx NONE)` by
+       (irule check_contract_env_context_consistent_initial_src >>
+        qexists_tac `tx.target` >> simp[]) >>
+     pop_assum mp_tac >> rpt (pop_assum kall_tac) >>
+     simp[env_context_consistent_def, bare_global_assignable_complete_def,
+          artifact_env_def, initial_evaluation_context_def]) >>
   qexistsl [`function_entry_env art [(NONE,tops)] NONE External args`,
             `env_after`] >>
   gvs[function_entry_env_def, artifact_env_def, FOLDL_extend_local_args_static,

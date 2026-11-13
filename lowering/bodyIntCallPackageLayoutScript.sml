@@ -51,27 +51,24 @@ QED
 Theorem internal_package_argument_capacity:
   !target tops trans keys ctor imm mut nr rr name args dflts ret body
    lbl ce params has_rb is_nr key use_tr view is_ctor imm_len ss rt i po psz
-   caller cx env es es0 tv.
+   caller cx env es0 tv.
   set_internal_package_target target
     (package_internal_fn tops trans keys ctor imm
       (mut,nr,rr,name,args,dflts,ret,body)) =
       (lbl,ce,params,has_rb,is_nr,key,use_tr,view,is_ctor,imm_len,ss,rt) /\
-  ALL_DISTINCT (MAP FST args) /\ MAP expr_type es = MAP SND args /\
+  ALL_DISTINCT (MAP FST args) /\
   caller.ce_struct_fields = make_struct_fields_map tops /\
   expr_sim_inv caller cx env es0 /\
   i < LENGTH params /\
   FLOOKUP ce.ce_vars (FST (EL i params)) = SOME (MemLoc po psz) /\
-  evaluate_type (get_tenv cx) (expr_type (EL i es)) = SOME tv ==>
-  psz = type_memory_bytes caller (expr_type (EL i es)) /\
+  evaluate_type (get_tenv cx) (SND (EL i args)) = SOME tv ==>
+  psz = type_memory_bytes caller (SND (EL i args)) /\
   psz = type_memory_size tv /\
   type_memory_size tv <= psz /\
-  psz <= MAX 32 (type_memory_bytes caller (expr_type (EL i es)))
+  psz <= MAX 32 (type_memory_bytes caller (SND (EL i args)))
 Proof
   rpt gen_tac >> strip_tac >>
   drule_all internal_package_parameter_layout >> strip_tac >>
-  `i < LENGTH es` by metis_tac[LENGTH_MAP] >>
-  `expr_type (EL i es) = SND (EL i args)` by
-    metis_tac[EL_MAP] >>
   `type_memory_bytes ce (SND (EL i args)) =
    type_memory_bytes caller (SND (EL i args))` by
     (irule type_memory_bytes_struct_fields >> simp[]) >>
@@ -94,11 +91,11 @@ Theorem body_intcall_selected_parameter_capacity:
       (lbl,ce,params,has_rb,is_nr,key,use_tr,view,is_ctor,imm_len,ss',rt) /\
   i < LENGTH params /\
   FLOOKUP ce.ce_vars (FST (EL i params)) = SOME (MemLoc po psz) /\
-  evaluate_type (get_tenv cx) (expr_type (EL i es)) = SOME tv ==>
-  psz = type_memory_bytes caller (expr_type (EL i es)) /\
+  evaluate_type (get_tenv cx) (SND (EL i args)) = SOME tv ==>
+  psz = type_memory_bytes caller (SND (EL i args)) /\
   psz = type_memory_size tv /\
   type_memory_size tv <= psz /\
-  psz <= MAX 32 (type_memory_bytes caller (expr_type (EL i es)))
+  psz <= MAX 32 (type_memory_bytes caller (SND (EL i args)))
 Proof
   rpt gen_tac >> strip_tac >>
   drule_all body_intcall_source_selection >> strip_tac >> gvs[] >>
