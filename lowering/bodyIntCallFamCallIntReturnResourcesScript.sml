@@ -128,7 +128,7 @@ Proof
      contract_storage_well_formed (cx with stk updated_by CONS (NONE,name)) es1 /\
      storage_layout_safe (cx with stk updated_by CONS (NONE,name)) /\
      oracle_storage_ok (cx with stk updated_by CONS (NONE,name)) es1` by
-    (fs[cenv_module_pins_def] >>
+    (gvs[cenv_module_pins_def] >>
      drule_all pinned_internal_bound_body_typing >> strip_tac >>
      drule_all intcall_bound_source_invariants >>
      disch_then (qspec_then `name` strip_assume_tac) >>
