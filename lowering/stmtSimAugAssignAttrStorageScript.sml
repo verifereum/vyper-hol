@@ -993,7 +993,7 @@ Resume compile_augassign_attr_storage_case[rhs_normal]:
             with gas_obs := []) s1 s2 t (es_end with gas_obs := []) v rhs t'` by
     (rpt strip_tac >>
      qpat_x_assum `!H. valid_horizon _ _ H es_end.storage_trace ==>
-                     expr_post H _ _ _ _ _ _ _ _ _ _ _ _ _ /\ _` drule >>
+                     expr_post H _ _ _ _ _ _ _ _ _ _ _ _ _` drule >>
      simp[]) >>
   `expr_res_ok (bop_result cx ty bop [ty;expr_type e] fv v
      (es_end with gas_obs := []))` by
