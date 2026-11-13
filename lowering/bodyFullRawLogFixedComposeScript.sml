@@ -352,9 +352,105 @@ Resume raw_log_fixed_data_full_from_endpoints[data_next]:
       expr_post H ctx func cenv cx data es sa sm s0 mid (BytesV bs) data_op t` by
     (rpt strip_tac >> irule raw_log_fixed_data_reanchor >>
      simp[] >> qexists `u` >> simp[] >> metis_tac[]) >>
-  qpat_assum `!tail. bind (eval_expr _ _) _ _ = _`
-    (qspec_then `[]` mp_tac) >>
-  simp[NoAsms, bind_def, AllCaseEqs()] >> strip_tac >>
-  FAIL_TAC "marked transport"
+  `!H. valid_horizon cx st0 H mid.storage_trace ==>
+    ?word.
+      expr_post H ctx func cenv cx data es sa sm s0 mid (BytesV bs) data_op t /\
+      expr_store_bound cx (expr_type data) (BytesV bs) data_op t /\
+      ghost_inv_at (DF H) lo d cenv cx mid G1 tn1 t /\
+      ptr_val_ok cx (post_value_type cenv data) (BytesV bs) data_op G1 tn1 t /\
+      ghost_kept_at lo cenv es sa G0 tn0 s0 G1 tn1 /\
+      alloca_history func t /\ s0.vs_alloca_next <= t.vs_alloca_next /\
+      LENGTH bs = 32 /\ eval_operand data_op t = SOME word /\
+      TAKE 32 (word_to_bytes_be word) = bs /\
+      buf.buf_operand = Var p /\ eval_operand buf.buf_operand t = SOME w /\
+      ptr_covers G1 tn1 p t 32 /\
+      FLOOKUP t.vs_allocas sa.cs_next_id = SOME (w2n w,32) /\
+      w2n w + 32 < dimword (:256) /\
+      (!name b n. local_region cenv mid.scopes t name b n ==>
+         regions_disjoint (w2n w) 32 b n) /\
+      (!aid b n. aid < sa.cs_next_id /\ FLOOKUP s0.vs_allocas aid = SOME (b,n) ==>
+         regions_disjoint (w2n w) 32 b n) /\
+      eval_operands ops t = SOME (MAP event_value_to_word vals) /\
+      EVERY (\op. op_taint tn1 op = {}) ops /\ ~t.vs_halted /\
+      t.vs_current_bb = sm.cs_current_bb /\ t.vs_inst_idx = LENGTH sm.cs_current_insts` by
+    (rpt strip_tac >>
+     `valid_horizon cx st0 H es.storage_trace` by simp[] >>
+     qpat_assum `!H. valid_horizon _ _ H _ ==> gas_origin_ptr_path _ _ _ _ /\ _`
+       (qspec_then `H` mp_tac) >>
+     (impl_tac >- simp[]) >> strip_tac >>
+     qpat_assum `!H. valid_horizon _ _ H _ ==> expr_post _ _ _ _ _ _ _ sd _ _ _ _ _ _ /\ _`
+       (qspec_then `H` mp_tac) >>
+     (impl_tac >- simp[]) >> strip_tac >>
+     asm_x "tail_endpoint" kall_tac >>
+     irule raw_log_fixed_child_tail_input >> gvs[] >>
+     rpt conj_tac >> metis_tac[]) >>
+  qpat_assum `!H. valid_horizon _ _ H _ ==> ?word. _`
+    (qspec_then `storage_trace_horizon mid.storage_trace` mp_tac) >>
+  (impl_tac >- simp[]) >> strip_tac >>
+  `?uf Gf tnf. !H. valid_horizon cx st0 H mid.storage_trace ==>
+    gas_origin_ptr_path (DF H,lo,gas_explicit_sites ctx shadow_ctx,ctx,func,PG)
+      (t,G1,tn1) [] (OK uf,Gf,tnf) /\
+    expr_post H ctx func cenv cx (Call ann RawLog es_call dflt) es sa sb s0
+      (mid with logs := mid.logs ++ [encode_raw_event_values cx.txn.target vals bs])
+      NoneV (Lit 0w) uf /\
+    expr_store_bound cx (expr_type (Call ann RawLog es_call dflt)) NoneV (Lit 0w) uf /\
+    uf.vs_current_bb = sb.cs_current_bb /\ uf.vs_inst_idx = LENGTH sb.cs_current_insts /\
+    alloca_history func uf /\ s0.vs_alloca_next <= uf.vs_alloca_next /\
+    ghost_inv_at (DF H) lo d cenv cx
+      (mid with logs := mid.logs ++ [encode_raw_event_values cx.txn.target vals bs]) Gf tnf uf /\
+    ptr_val_ok cx (post_value_type cenv (Call ann RawLog es_call dflt)) NoneV (Lit 0w) Gf tnf uf /\
+    (~is_word_type (post_value_type cenv (Call ann RawLog es_call dflt)) ==>
+      ptr_buf_ok cenv (Call ann RawLog es_call dflt) (Lit 0w) Gf uf) /\
+    ghost_kept_at lo cenv es sa G0 tn0 s0 Gf tnf` by
+    (asm "tail_endpoint" irule >> simp[] >>
+     qexists `sa` >>
+     qpat_assum `compile_alloc_buffer 32 sa = _` (irule_at Any) >>
+     qexistsl [`word`, `w`, `sm`, `s1`, `p`, `ops`, `data_op`, `data`] >> simp[] >>
+     asm_x "tail_endpoint" kall_tac >>
+     `sd.cs_next_var <= sm.cs_next_var` by
+       (qpat_assum `lower_value compile_expr cenv (expr_type data) data sd = _` mp_tac >>
+        mp_tac (Q.SPECL [`cenv`, `expr_type data`, `data`, `sd`] ci_mono_lower_value_compile_expr) >>
+        simp[ci_mono_def]) >>
+     `sa.cs_next_var <= sm.cs_next_var` by decide_tac >>
+     `local_ptrs_reserved cenv sm` by
+       (irule local_ptrs_reserved_next_var >> qexists `sd` >> simp[]) >>
+     `!x. data_op = Var x ==> not_fresh_at sm x` by
+       metis_tac[compile_lower_value_var] >>
+     `!x. not_fresh_at sa x ==> not_fresh_at sm x` by
+       (rpt strip_tac >> irule not_fresh_at_mono >> goal_assum (drule_at Any) >> simp[]) >>
+     `not_fresh_at sm p` by
+       (irule not_fresh_at_mono >> qexists `sd` >> simp[]) >>
+     gvs[emitHelperTheory.emit_void_def, emitHelperTheory.emit_inst_def, EVERY_MEM] >>
+     conj_tac >-
+       (rpt gen_tac >> disch_tac >> conj_tac
+        >- (rpt strip_tac >> qpat_assum `!name b n. local_region cenv mid.scopes t name b n ==> _`
+              (qspecl_then [`name`, `b`, `n`] mp_tac) >> simp[]) >>
+        rpt strip_tac >> qpat_assum `!aid b n. aid < sa.cs_next_id /\ FLOOKUP s0.vs_allocas aid = _ ==> _`
+          (qspecl_then [`aid`, `b`, `n`] mp_tac) >> simp[]) >>
+     rpt strip_tac >> qpat_assum `!x. not_fresh_at sa x ==> not_fresh_at sm x` irule >>
+     metis_tac[]) >>
+  asm_x "tail_endpoint" kall_tac >>
+  irule gas_outcome_full_pure >>
+  reverse conj_tac >- simp[] >>
+  qexistsl [`Gf`, `mid with logs := mid.logs ++ [encode_raw_event_values cx.txn.target vals bs]`,
+    `INL NoneV`, `uf`, `tnf`] >>
+  conj_tac >-
+    simp[bind_def, lift_option_type_def, lift_option_def, dest_BytesV_def,
+         ignore_bind_def, type_check_def, assert_def, push_log_def, return_def,
+         evaluation_state_component_equality] >>
+  gen_tac >> simp[] >> disch_tac >>
+  qpat_x_assum `!H. valid_horizon cx st0 H mid.storage_trace ==> gas_origin_ptr_path _ (t,G1,tn1) [] (OK uf,Gf,tnf) /\ _`
+    (qspec_then `H` mp_tac) >>
+  simp[expr_post_def, expr_val_at_def, expr_val_own_def,
+       locals_kept_def, popped_kept_def, ghost_inv_at_def] >>
+  strip_tac >>
+  `stmt_state_rel H ctx func cenv cx
+     (mid with <|logs := mid.logs ++ [encode_raw_event_values cx.txn.target vals bs]; gas_obs := []|>) uf` by
+    (qsuff_tac `stmt_state_rel H ctx func cenv cx
+       ((mid with logs := mid.logs ++ [encode_raw_event_values cx.txn.target vals bs]) with gas_obs := []) uf`
+     >- simp[NoAsms, Excl "stmt_state_rel_gas_obs", Excl "stmt_state_rel_start_gas_obs"] >>
+     pure_rewrite_tac[stmt_state_rel_start_gas_obs] >> first_assum MATCH_ACCEPT_TAC) >>
+  gvs[storage_well_formed_on_def, oneline vyperStorageBackendTheory.get_storage_def] >>
+  rpt conj_tac >> first_assum MATCH_ACCEPT_TAC
 QED
 Finalise raw_log_fixed_data_full_from_endpoints
