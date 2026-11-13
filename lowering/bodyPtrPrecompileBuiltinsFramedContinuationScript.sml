@@ -27,7 +27,7 @@ Theorem computed_load_suffix_framed_path:
   precompile_result (venom_call_request s target 0w wi insz T).cr_target
     (venom_call_request s target 0w wi insz T).cr_data = SOME (SOME data) /\
   (?co rest. s.vs_outcomes = co::rest /\ co.co_success) /\
-  stmt_state_rel ctx fn cenv cx es s /\ ghost_inv d cenv cx es G tn s /\
+  stmt_state_rel H ctx fn cenv cx es s /\ ghost_inv H d cenv cx es G tn s /\
   local_ptrs_reserved cenv sm /\
   sf.cs_next_var <= sm.cs_next_var /\ sf.cs_next_id <= sm.cs_next_id /\
   (!p sz. cenv.ce_return_buf = SOME (PtrVar (Var p) sz) ==> not_fresh_at sm p) /\
@@ -68,10 +68,10 @@ Theorem computed_load_suffix_framed_path:
       tn' = step_taint (mk_inst sl.cs_next_id MLOAD [Var dst] [y])
         (q with vs_inst_idx := s.vs_inst_idx + 3)
         (t with vs_inst_idx := s.vs_inst_idx + 3) tn1) /\
-    stmt_state_rel ctx fn cenv cx
+    stmt_state_rel H ctx fn cenv cx
       (es with outcomes := SOME (DROP 1 s.vs_outcomes)) t /\
     wb_frame cenv es (es with outcomes := SOME (DROP 1 s.vs_outcomes)) sf s t /\
-    ghost_inv d cenv cx (es with outcomes := SOME (DROP 1 s.vs_outcomes)) G' tn' t /\
+    ghost_inv H d cenv cx (es with outcomes := SOME (DROP 1 s.vs_outcomes)) G' tn' t /\
     ghost_kept cenv es sf G tn s G' tn' /\
     t.vs_allocas = s.vs_allocas /\
     (!off len. regions_disjoint off len (w2n wo) 32 ==>

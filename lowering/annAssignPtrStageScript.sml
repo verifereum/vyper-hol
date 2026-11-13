@@ -10,7 +10,7 @@ Theorem annassign_static_stage_ptr:
    t ea eb tv v a.
  emit_inst ALLOCA [Lit (n2w k)] [dst] st = ((),sm) /\
  compile_copy_memory (Var dst) (Var src) k sm = ((),sn) /\
- stmt_state_rel ctx func cenv cx es s0 /\ fn_inst_ids_distinct func /\
+ stmt_state_rel H ctx func cenv cx es s0 /\ fn_inst_ids_distinct func /\
  MEM (mk_inst st.cs_next_id ALLOCA [Lit (n2w k)] [dst]) (fn_insts func) /\
  not_local_ptr cenv es.scopes dst /\ k < dimword (:256) /\
  ~not_fresh_at sa dst /\ local_ptrs_reserved cenv sa /\
@@ -21,7 +21,7 @@ Theorem annassign_static_stage_ptr:
  ~s0.vs_halted /\ ~ctx_has_dalloca ctx /\
  s0.vs_current_bb = st.cs_current_bb /\
  s0.vs_inst_idx = LENGTH st.cs_current_insts /\
- ghost_inv d cenv cx es G0 tn0 s0 /\
+ ghost_inv H d cenv cx es G0 tn0 s0 /\
  expr_val_at cenv cx t ea eb es v (Var src) s0 /\
  evaluate_type (get_tenv cx) t = SOME tv /\ ~is_word_type t /\
  lookup_var src s0 = SOME a /\ ptr_covers G0 tn0 src s0 k /\
@@ -29,8 +29,8 @@ Theorem annassign_static_stage_ptr:
  (!m. mem_agree_outside tn0.t_mem s0.vs_memory m ==>
       val_in_memory tv v (w2n a) m) ==>
  ?s G tn b.
- gas_path_ptr (cx_dead cx) 0 ctx func PG G0 tn0 s0 0 G tn (OK s) /\
- stmt_state_rel ctx func cenv cx es s /\ ghost_inv d cenv cx es G tn s /\
+ gas_path_ptr (cx_dead H cx) 0 ctx func PG G0 tn0 s0 0 G tn (OK s) /\
+ stmt_state_rel H ctx func cenv cx es s /\ ghost_inv H d cenv cx es G tn s /\
  ghost_kept cenv es sa G0 tn0 s0 G tn /\ ptr_covers G tn dst s k /\
  lookup_var dst s = SOME b /\
  FLOOKUP s.vs_allocas st.cs_next_id = SOME (w2n b,k) /\
@@ -70,7 +70,7 @@ Proof
  disch_then drule_all >>
  disch_then (qspec_then `PG` strip_assume_tac) >>
  qexistsl [`s'`,`G1`,`tn'`,`w`] >> simp[] >>
- `gas_path_ptr (cx_dead cx) 0 ctx func PG G0 tn0 s0 (0+0)
+ `gas_path_ptr (cx_dead H cx) 0 ctx func PG G0 tn0 s0 (0+0)
    G1 tn' (OK s')` by
    (irule gas_path_ptr_then >> goal_assum (drule_at Any) >> simp[]) >> fs[]
 QED
@@ -79,7 +79,7 @@ QED
    above.  Staging reads the lowered source buffer, not the annotation size. *)
 Theorem annassign_rhs_stage_input_ptr:
  !ctx func cenv cx e es ea eb s0 es1 v op s G tn dst tv k.
- expr_post ctx func cenv cx e es ea eb s0 es1 v op s /\
+ expr_post H ctx func cenv cx e es ea eb s0 es1 v op s /\
  lower_value compile_expr cenv (expr_type e) e ea = (op,eb) /\
  local_ptrs_reserved cenv ea /\ ~not_fresh_at eb dst /\
  evaluate_type (get_tenv cx) (post_value_type cenv e) = SOME tv /\

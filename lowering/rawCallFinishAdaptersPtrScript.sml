@@ -36,7 +36,7 @@ Proof
 QED
 
 Theorem raw_call_finish_local_separation:
-  stmt_state_rel ctx fn cenv cx es s /\ local_ptrs_reserved cenv sa /\
+  stmt_state_rel H ctx fn cenv cx es s /\ local_ptrs_reserved cenv sa /\
   wb_frame cenv es es' sa s u /\
   (!name a len. local_region cenv es.scopes s name a len ==>
     regions_disjoint dst capacity a len) ==>
@@ -130,11 +130,11 @@ Proof
 QED
 
 Theorem raw_call_finish_operand_transport:
-  wb_frame cenv es es' sa s u /\ ghost_kept cenv es sa G tn s H un /\
+  wb_frame cenv es es' sa s u /\ ghost_kept cenv es sa G tn s HG un /\
   (!z. arg = Var z ==> not_fresh_at sa z) /\ (!l. arg <> Label l) /\
   eval_operand arg s = SOME w ==>
   eval_operand arg u = SOME w /\
-  op_prov H arg = op_prov G arg /\ op_taint un arg = op_taint tn arg
+  op_prov HG arg = op_prov G arg /\ op_taint un arg = op_taint tn arg
 Proof
   strip_tac >> Cases_on `arg` >>
   gvs[venomStateTheory.eval_operand_def, ptrDisciplineTheory.op_prov_def,

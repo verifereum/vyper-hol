@@ -54,20 +54,20 @@ Theorem tuple_assignment_prefix_path_ptr:
   cs_extends su sl /\ cs_extends sl ss /\
   fn_has_code su sl func /\ fn_has_code sl ss func /\
   fn_inst_ids_distinct func /\ local_ptrs_reserved cenv su /\
-  stmt_state_rel ctx func cenv cx es sv /\ ~sv.vs_halted /\
+  stmt_state_rel H ctx func cenv cx es sv /\ ~sv.vs_halted /\
   sv.vs_current_bb = su.cs_current_bb /\
   sv.vs_inst_idx = LENGTH su.cs_current_insts /\
   ~ctx_has_dalloca ctx /\ expr_type e = TupleT tys /\
   lowered_value_type cenv e = TupleT tys /\
   ptr_val_ok cx (TupleT tys) (ArrayV (TupleV vs)) op G tn sv /\
-  ptr_buf_ok cenv e op G sv /\ ghost_inv d cenv cx es G tn sv /\
+  ptr_buf_ok cenv e op G sv /\ ghost_inv H d cenv cx es G tn sv /\
   (!x sz. cenv.ce_return_buf = SOME (PtrVar (Var x) sz) ==> not_fresh_at su x) /\
   (!x sz. cenv.ce_return_pc = SOME (PtrVar (Var x) sz) ==> not_fresh_at su x) ==>
   LENGTH elems = LENGTH tys /\ EVERY (\op. ?x. op = Var x) elems /\
   EVERY (\op. !x. op = Var x ==> not_fresh_at ss x) elems /\
   local_ptrs_reserved cenv ss /\ values_have_types tvs vs /\ tuple_val_wf vs tvs /\
   ?t (w:256 word) b sz p base cap G' tn'.
-    stmt_state_rel ctx func cenv cx es t /\ ghost_inv d cenv cx es G' tn' t /\
+    stmt_state_rel H ctx func cenv cx es t /\ ghost_inv H d cenv cx es G' tn' t /\
     ~t.vs_halted /\ t.vs_current_bb = ss.cs_current_bb /\
     t.vs_inst_idx = LENGTH ss.cs_current_insts /\
     eval_operand staged t = SOME w /\ staged = Var p /\
@@ -127,7 +127,7 @@ Proof
   drule tuple_stage_grows >> strip_tac >>
   qpat_x_assum `ptr_val_ok _ _ _ op _ _ _` kall_tac >>
   qpat_x_assum `ptr_buf_ok _ _ op _ _` kall_tac >>
-  qpat_x_assum `ghost_inv _ _ _ _ G tn sv` kall_tac >>
+  qpat_x_assum `ghost_inv _ _ _ _ _ G tn sv` kall_tac >>
   suspend "loads"
 QED
 
@@ -163,9 +163,9 @@ Resume tuple_assignment_prefix_path_ptr[transport]:
   qpat_x_assum `(if flag then _ else _) su = _` kall_tac >>
   qpat_x_assum `ptr_val_ok _ _ _ _ _ _ st` kall_tac >>
   qpat_x_assum `ptr_buf_ok _ _ _ _ st` kall_tac >>
-  qpat_x_assum `stmt_state_rel _ _ _ _ _ sv` kall_tac >>
-  qpat_x_assum `stmt_state_rel _ _ _ _ _ st` kall_tac >>
-  qpat_x_assum `ghost_inv _ _ _ _ _ _ st` kall_tac >>
+  qpat_x_assum `stmt_state_rel _ _ _ _ _ _ sv` kall_tac >>
+  qpat_x_assum `stmt_state_rel _ _ _ _ _ _ st` kall_tac >>
+  qpat_x_assum `ghost_inv _ _ _ _ _ _ _ st` kall_tac >>
   `!x. not_fresh_at su x ==> not_fresh_at sl x` by
     (rpt strip_tac >> irule not_fresh_at_mono >> qexists_tac `su` >> simp[]) >>
   `gas_path_ptr D 0 ctx func PG G tn sv 0 G' tn' (OK t)` by

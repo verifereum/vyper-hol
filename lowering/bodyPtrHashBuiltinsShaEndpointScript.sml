@@ -16,8 +16,8 @@ Theorem hash_bytes_prepare_endpoint:
   mem_word_at b s.vs_memory = n2w n /\ ~ctx_has_dalloca ctx /\
   ~s.vs_halted /\ lookup_block s.vs_current_bb fn.fn_blocks = SOME bb /\
   isPREFIX (emitted_insts sa sm) (DROP s.vs_inst_idx bb.bb_instructions) /\
-  stmt_state_rel ctx fn cenv cx es s /\ local_ptrs_reserved cenv sa /\
-  ghost_inv d cenv cx es G tn s /\
+  stmt_state_rel H ctx fn cenv cx es s /\ local_ptrs_reserved cenv sa /\
+  ghost_inv H d cenv cx es G tn s /\
   (!p k. cenv.ce_return_buf = SOME (PtrVar (Var p) k) ==> not_fresh_at sa p) /\
   (!p k. cenv.ce_return_pc = SOME (PtrVar (Var p) k) ==> not_fresh_at sa p) /\
   (n = 0 \/
@@ -29,7 +29,7 @@ Theorem hash_bytes_prepare_endpoint:
   a = t with vs_inst_idx := s.vs_inst_idx+2 /\
   run_inst_seq (emitted_insts sa sm) s = OK t /\
   gas_path_ptr D 0 ctx fn PG G tn s 0 G1 tn1 (OK a) /\
-  stmt_state_rel ctx fn cenv cx es a /\ ghost_inv d cenv cx es G1 tn1 a /\
+  stmt_state_rel H ctx fn cenv cx es a /\ ghost_inv H d cenv cx es G1 tn1 a /\
   ghost_kept cenv es sa G tn s G1 tn1 /\ data_op = Var p /\
   eval_operand data_op a = SOME (n2w (b+32)) /\ eval_operand len_op a = SOME (n2w n) /\
   ptr_covers G1 tn1 p a n /\ op_taint tn1 len_op = {} /\

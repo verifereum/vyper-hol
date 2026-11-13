@@ -7,7 +7,7 @@ Ancestors bodyPtrStructLitUniformBytesEndpoint bodyPtrStructLitUniformTypes
 Theorem structlit_uniform_cons_endpoint:
   literal_loop_frame pure ctx func ce cx d root aid addr capacity
     ees fr sf Gf tnf esi si G0 tn0 s0 cells off /\
-  literal_prefix_ok cells tn0 s0 /\ stmt_state_rel ctx func ce cx ees sf /\
+  literal_prefix_ok cells tn0 s0 /\ stmt_state_rel H ctx func ce cx ees sf /\
   compile_expr ce (expr_type e) e si = (vv,sm) /\
   emit_op ADD [Var root; Lit (n2w off)] sm = (Var dst,sn) /\
   unwrap_value ce vv sn = (op,su) /\
@@ -23,17 +23,17 @@ Theorem structlit_uniform_cons_endpoint:
   s.vs_current_bb = sm.cs_current_bb /\ s.vs_inst_idx = LENGTH sm.cs_current_insts /\
   ~s.vs_halted /\ lookup_var root s = SOME (n2w addr) /\
   ptr_covers G tn root s capacity /\ FLOOKUP G root = SOME (addr,capacity) /\
-  vv_post ctx func ce cx e esi si sm s0 es' raw vv s /\
+  vv_post H ctx func ce cx e esi si sm s0 es' raw vv s /\
   ptr_vv_ok cx (expr_type e) raw vv es' G tn s /\
   (!t op. vv = StackValue t op /\ ~is_word_type (expr_type e) ==> ptr_buf_ok ce e op G s) /\
   (!t p. vv = LocatedValue t p /\ p.ptr_location = LocMemory ==>
     ptr_buf_ok ce e p.ptr_operand G s) /\
-  ghost_inv d ce cx es' G tn s /\ ghost_kept ce esi si G0 tn0 s0 G tn /\
+  ghost_inv H d ce cx es' G tn s /\ ghost_kept ce esi si G0 tn0 s0 G tn /\
   (pure ==> ~expr_has_effect e) ==>
-  ?z H tm.
-    gas_path_ptr D 0 ctx func PG G tn s 0 H tm (OK z) /\
+  ?z HG tm.
+    gas_path_ptr D 0 ctx func PG G tn s 0 HG tm (OK z) /\
     literal_loop_frame pure ctx func ce cx d root aid addr capacity
-      ees fr sf Gf tnf es' sb H tm z (cells ++ [(tv,v,addr+off,k)]) (off+k) /\
+      ees fr sf Gf tnf es' sb HG tm z (cells ++ [(tv,v,addr+off,k)]) (off+k) /\
     literal_prefix_ok (cells ++ [(tv,v,addr+off,k)]) tm z
 Proof
   disch_then (map_every assume_tac o CONJUNCTS) >>

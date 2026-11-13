@@ -129,7 +129,7 @@ Resume compile_assign_local_memory_widen_stmt_frag_ptr[source]:
      qpat_x_assum `gas_marked_exec _ _ _ _ _ _ _ _` mp_tac >>
      simp[gas_marked_exec_def] >>
      metis_tac[gas_marked_path_exec, gas_path_normal]) >>
-  `stmt_state_rel ctx func cenv cx (es_end with gas_obs := []) t` by fs[expr_post_def] >>
+  `stmt_state_rel H ctx func cenv cx (es_end with gas_obs := []) t` by fs[expr_post_def] >>
   SUBGOAL_THEN ``vtyp = lowered_value_type cenv e \/
     is_bytestring_type vtyp /\ is_bytestring_type (lowered_value_type cenv e)``
     assume_tac >- metis_tac[] >>
@@ -142,21 +142,21 @@ Resume compile_assign_local_memory_widen_stmt_frag_ptr[source]:
    ptr_covers G tn src t (type_memory_size ltv)` by
     (simp[] >> qpat_x_assum `ptr_covers G tn src t _` mp_tac >> simp[]) >>
   drule_all assign_base_local_memory_assign_ptr >>
-  disch_then (qspecl_then [`PG`, `cx_dead cx`] strip_assume_tac) >>
+  disch_then (qspecl_then [`PG`, `cx_dead H cx`] strip_assume_tac) >>
   suspend "compose"
 QED
 
 Resume compile_assign_local_memory_widen_stmt_frag_ptr[compose]:
   qabbrev_tac `ee = es_end with scopes :=
     pre ++ (env' |+ (id, entry with <|value := v; popped := []|>)) :: rest` >>
-  `gas_marked_exec_ptr (cx_dead cx) (ctx,func) PG
+  `gas_marked_exec_ptr (cx_dead H cx) (ctx,func) PG
     (bind (bind (eval_expr cx e) (read_result cx)) (write_place cx (MemoryPlace id [])))
     (es,s0,G0,tn0) marks (INL ()) ee Gf tf (OK u)` by
     (irule (SIMP_RULE std_ss [APPEND_NIL]
        (Q.INST [`right` |-> `[]`] gas_marked_exec_ptr_bind_normal)) >>
      qexistsl_tac [`G`, `es_end`, `t`, `tn`, `v`] >>
      simp[gas_marked_exec_ptr_def, gas_explicit_def, Abbr `ee`]) >>
-  `gas_marked_exec_ptr (cx_dead cx) (ctx,func) PG
+  `gas_marked_exec_ptr (cx_dead H cx) (ctx,func) PG
     (eval_stmt cx (Assign (BaseTarget (NameTarget id)) e))
     (es,s0,G0,tn0) marks (INL ()) ee Gf tf (OK u)` by
     (drule assign_local_admissible_run >> strip_tac >>
@@ -175,7 +175,7 @@ Resume compile_assign_local_memory_widen_stmt_frag_ptr[post]:
   conj_tac
   >- (drule_at (Pos last) compile_assign_value_memory_widen_open >> simp[]) >>
   conj_tac
-  >- (qpat_x_assum `stmt_state_rel _ _ _ _ (_ with <|scopes := _; gas_obs := _|>) u` mp_tac >>
+  >- (qpat_x_assum `stmt_state_rel _ _ _ _ _ (_ with <|scopes := _; gas_obs := _|>) u` mp_tac >>
       unabbrev_all_tac >>
       qmatch_goalsub_abbrev_tac `es_end with scopes := scs` >>
       `es_end with <|scopes := scs; gas_obs := []|> =
@@ -185,13 +185,13 @@ Resume compile_assign_local_memory_widen_stmt_frag_ptr[post]:
         (fn th => pure_once_rewrite_tac [th]) >>
       simp[stmt_state_rel_gas_obs]) >>
   conj_tac
-  >- (qpat_x_assum `ghost_inv _ _ _ (_ with <|scopes := _; gas_obs := _|>) _ _ u` mp_tac >>
+  >- (qpat_x_assum `ghost_inv _ _ _ _ (_ with <|scopes := _; gas_obs := _|>) _ _ u` mp_tac >>
       simp[Abbr `ee`, GSYM evaluation_state_accfupds]) >>
   conj_tac
   >- (rpt strip_tac >>
       `not_fresh_at sB x` by metis_tac[not_fresh_at_mono] >>
       qpat_x_assum `!x. not_fresh_at sB x ==> _` drule >>
-      qpat_x_assum `expr_post _ _ _ _ _ _ _ _ _ _ _ _ _` mp_tac >>
+      qpat_x_assum `expr_post _ _ _ _ _ _ _ _ _ _ _ _ _ _` mp_tac >>
       simp[expr_post_def] >> metis_tac[]) >>
   rpt strip_tac >>
   `not_fresh_at sB x` by metis_tac[not_fresh_at_mono] >>

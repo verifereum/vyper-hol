@@ -11,12 +11,12 @@ Theorem widen_copy_run_frame_split:
   compile_bytestring_widen_copy capacity x n sa = (op,sb) /\
   run_inst_seq (emitted_insts sa sb) s = OK t /\
   fn_has_code sa sb fn /\ 0 < n /\ n <= capacity /\ capacity < dimword(:256) /\
-  stmt_state_rel ctx fn cenv cx es s /\ local_ptrs_reserved cenv sa /\
+  stmt_state_rel H ctx fn cenv cx es s /\ local_ptrs_reserved cenv sa /\
   fn_inst_ids_distinct fn /\ (!z. x = Var z ==> not_fresh_at sa z) /\
   eval_operand x s = SOME a ==>
   ?mid u w p inst.
     op = Var p /\ t = mcopy (w2n w) (w2n a) n u /\
-    stmt_state_rel ctx fn cenv cx es u /\
+    stmt_state_rel H ctx fn cenv cx es u /\
     lookup_var p u = SOME w /\ u.vs_memory = s.vs_memory /\
     FLOOKUP u.vs_allocas sa.cs_next_id = SOME (w2n w,capacity) /\
     MEM inst (fn_insts fn) /\ inst.inst_id = sa.cs_next_id /\
@@ -59,7 +59,7 @@ Theorem widen_copy_run_wb_frame:
   compile_bytestring_widen_copy capacity x n sa = (op,sb) /\
   run_inst_seq (emitted_insts sa sb) s = OK t /\
   fn_has_code sa sb fn /\ 0 < n /\ n <= capacity /\ capacity < dimword(:256) /\
-  stmt_state_rel ctx fn cenv cx es s /\ local_ptrs_reserved cenv sa /\
+  stmt_state_rel H ctx fn cenv cx es s /\ local_ptrs_reserved cenv sa /\
   fn_inst_ids_distinct fn /\ (!z. x = Var z ==> not_fresh_at sa z) /\
   eval_operand x s = SOME a ==>
   wb_frame cenv es es sa s t
@@ -91,7 +91,7 @@ Theorem widen_copy_run_pure_frame[local]:
   compile_bytestring_widen_copy capacity x n sa = (op,sb) /\
   run_inst_seq (emitted_insts sa sb) s = OK t /\
   fn_has_code sa sb fn /\ 0 < n /\ n <= capacity /\ capacity < dimword(:256) /\
-  stmt_state_rel ctx fn cenv cx es s /\ local_ptrs_reserved cenv sa /\
+  stmt_state_rel H ctx fn cenv cx es s /\ local_ptrs_reserved cenv sa /\
   fn_inst_ids_distinct fn /\ (!z. x = Var z ==> not_fresh_at sa z) /\
   eval_operand x s = SOME a ==>
   pure_frame cenv fn es sa s t
@@ -123,12 +123,12 @@ Theorem widen_copy_run_allocation_frame:
   compile_bytestring_widen_copy capacity x n sa = (op,sb) /\
   run_inst_seq (emitted_insts sa sb) s = OK t /\
   fn_has_code sa sb fn /\ 0 < n /\ n <= capacity /\ capacity < dimword(:256) /\
-  stmt_state_rel ctx fn cenv cx es s /\ local_ptrs_reserved cenv sa /\
+  stmt_state_rel H ctx fn cenv cx es s /\ local_ptrs_reserved cenv sa /\
   fn_inst_ids_distinct fn /\ (!z. x = Var z ==> not_fresh_at sa z) /\
   eval_operand x s = SOME a ==>
   ?w. eval_operand op t = SOME w /\
     FLOOKUP t.vs_allocas sa.cs_next_id = SOME (w2n w,capacity) /\
-    sa.cs_next_id < sb.cs_next_id /\ stmt_state_rel ctx fn cenv cx es t /\
+    sa.cs_next_id < sb.cs_next_id /\ stmt_state_rel H ctx fn cenv cx es t /\
     (!name b sz. local_region cenv es.scopes t name b sz ==>
       w2n w + capacity <= b \/ b + sz <= w2n w)
 Proof
@@ -136,7 +136,7 @@ Proof
   `not_local_ptr cenv es.scopes p` by
     (irule exprSimOperandsTheory.fresh_not_local_ptr >>
      goal_assum (drule_at Any) >> simp[]) >>
-  `stmt_state_rel ctx fn cenv cx es (mcopy (w2n w) (w2n a) n u)` by
+  `stmt_state_rel H ctx fn cenv cx es (mcopy (w2n w) (w2n a) n u)` by
     (irule stmt_state_rel_mcopy_alloca >> simp[] >>
      qexistsl_tac [`capacity`,`inst`,`p`] >> simp[]) >>
   qexists_tac `w` >> fs[lookup_var_def] >>
@@ -151,14 +151,14 @@ Theorem widen_copy_run_parent_post:
   compile_bytestring_widen_copy capacity x n sa = (op,sb) /\
   run_inst_seq (emitted_insts sa sb) s = OK t /\
   fn_has_code sa sb fn /\ 0 < n /\ n <= capacity /\ capacity < dimword(:256) /\
-  stmt_state_rel ctx fn cenv cx es s /\ local_ptrs_reserved cenv sa /\
+  stmt_state_rel H ctx fn cenv cx es s /\ local_ptrs_reserved cenv sa /\
   fn_inst_ids_distinct fn /\ (!z. x = Var z ==> not_fresh_at sa z) /\
   eval_operand x s = SOME a /\ ~is_word_type (expr_type e) /\
   post_value_type cenv e = expr_type e /\
   evaluate_type (get_tenv cx) (expr_type e) = SOME tv /\ val_wf tv v /\
   val_footprint tv v <= capacity /\
   (!w. eval_operand op t = SOME w ==> val_in_memory tv v (w2n w) t.vs_memory) ==>
-  expr_post ctx fn cenv cx e es sa sb s es v op t
+  expr_post H ctx fn cenv cx e es sa sb s es v op t
 Proof
   strip_tac >> drule_all widen_copy_run_allocation_frame >> strip_tac >>
   `wb_frame cenv es es sa s t` by (irule widen_copy_run_wb_frame >> metis_tac[]) >>

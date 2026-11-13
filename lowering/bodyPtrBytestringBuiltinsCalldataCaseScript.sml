@@ -122,10 +122,10 @@ Theorem calldata_slice_operand_source_outcome:
   local_ptrs_reserved cenv sa /\ local_ptrs_reserved cenv sm /\ ~ctx_has_dalloca ctx /\
   (!x sz. cenv.ce_return_buf = SOME (PtrVar (Var x) sz) ==> not_fresh_at sa x) /\
   (!x sz. cenv.ce_return_pc = SOME (PtrVar (Var x) sz) ==> not_fresh_at sa x) /\
-  expr_post ctx func cenv cx e es sa sm s0 ee v op t /\
+  expr_post H ctx func cenv cx e es sa sm s0 ee v op t /\
   t.vs_current_bb = sm.cs_current_bb /\
   t.vs_inst_idx = LENGTH sm.cs_current_insts /\ ~t.vs_halted /\
-  ghost_inv d cenv cx ee G tn t /\ ptr_val_ok cx (expr_type e) v op G tn t /\
+  ghost_inv H d cenv cx ee G tn t /\ ptr_val_ok cx (expr_type e) v op G tn t /\
   (?marks ee0. ee = ee0 with gas_obs := [] /\
     !tail. vyperState$bind (eval_expr cx e) (read_result cx)
       (es with gas_obs := gas_explicit marks s0.vs_gas_readings ++ tail) =
@@ -134,16 +134,16 @@ Theorem calldata_slice_operand_source_outcome:
     (\vst. ((case builtin_result cx vst.accounts (BaseT (BytesT (Dynamic n)))
       (CalldataSlice n) [expr_type e] [v] of
       INL w => INL (Value w) | INR exc => INR exc), vst)) (ee,t,G,tn)
-    (\res ef H tm u. ?w. res = INL (Value w) /\
-      vv_post ctx func cenv cx
+    (\res ef HG tm u. ?w. res = INL (Value w) /\
+      vv_post H ctx func cenv cx
         (Builtin (BaseT (BytesT (Dynamic n))) (CalldataSlice n) [e]) ee sm sb t ef (Value w)
         (LocatedValue (BaseT (BytesT (Dynamic n)))
           <|ptr_operand := out; ptr_location := LocMemory|>) u /\
       ptr_vv_ok cx (BaseT (BytesT (Dynamic n))) (Value w)
         (LocatedValue (BaseT (BytesT (Dynamic n)))
-          <|ptr_operand := out; ptr_location := LocMemory|>) ef H tm u /\
-      ptr_buf_ok cenv (Builtin (BaseT (BytesT (Dynamic n))) (CalldataSlice n) [e]) out H u /\
-      ghost_inv d cenv cx ef H tm u /\ ghost_kept cenv ee sm G tn t H tm /\
+          <|ptr_operand := out; ptr_location := LocMemory|>) ef HG tm u /\
+      ptr_buf_ok cenv (Builtin (BaseT (BytesT (Dynamic n))) (CalldataSlice n) [e]) out HG u /\
+      ghost_inv H d cenv cx ef HG tm u /\ ghost_kept cenv ee sm G tn t HG tm /\
       u.vs_current_bb = sb.cs_current_bb /\
       u.vs_inst_idx = LENGTH sb.cs_current_insts /\ ~u.vs_halted)
     (\res ef gt r. expr_exit res r)
@@ -188,34 +188,34 @@ Theorem calldata_slice_eval_continuation:
   local_ptrs_reserved cenv sa /\ local_ptrs_reserved cenv sm /\ ~ctx_has_dalloca ctx /\
   (!x sz. cenv.ce_return_buf = SOME (PtrVar (Var x) sz) ==> not_fresh_at sa x) /\
   (!x sz. cenv.ce_return_pc = SOME (PtrVar (Var x) sz) ==> not_fresh_at sa x) /\
-  stmt_state_rel ctx func cenv cx es s0 /\
-  expr_post ctx func cenv cx e es sa sm s0 ee v op t /\
+  stmt_state_rel H ctx func cenv cx es s0 /\
+  expr_post H ctx func cenv cx e es sa sm s0 ee v op t /\
   t.vs_current_bb = sm.cs_current_bb /\
   t.vs_inst_idx = LENGTH sm.cs_current_insts /\ ~t.vs_halted /\
-  ghost_inv d cenv cx ee G tn t /\ ptr_val_ok cx (expr_type e) v op G tn t /\
+  ghost_inv H d cenv cx ee G tn t /\ ptr_val_ok cx (expr_type e) v op G tn t /\
   ghost_kept cenv es sa G0 tn0 s0 G tn /\
   MAP FDOM es.scopes = MAP FDOM ee.scopes /\
   (?marks ee0. ee = ee0 with gas_obs := [] /\
     !tail. vyperState$bind (eval_expr cx e) (read_result cx)
       (es with gas_obs := gas_explicit marks s0.vs_gas_readings ++ tail) =
       (INL v,ee0 with gas_obs := tail)) ==>
-  gas_outcome_ptr (cx_dead cx) (cx_tops cx) (ctx,func) PG
+  gas_outcome_ptr (cx_dead H cx) (cx_tops cx) (ctx,func) PG
     (\vst. ((case builtin_result cx vst.accounts (BaseT (BytesT (Dynamic n)))
       (CalldataSlice n) [expr_type e] [v] of
       INL w => INL (Value w) | INR exc => INR exc), vst)) (ee,t,G,tn)
-    (\res ef H tm u. ?tv. res = INL tv /\
-      vv_post ctx func cenv cx
+    (\res ef HG tm u. ?tv. res = INL tv /\
+      vv_post H ctx func cenv cx
         (Builtin (BaseT (BytesT (Dynamic n))) (CalldataSlice n) [e]) es sa sb s0 ef tv vv u /\
       u.vs_current_bb = sb.cs_current_bb /\ u.vs_inst_idx = LENGTH sb.cs_current_insts /\
-      ghost_inv d cenv cx ef H tm u /\
+      ghost_inv H d cenv cx ef HG tm u /\
       ptr_vv_ok cx (expr_type (Builtin (BaseT (BytesT (Dynamic n))) (CalldataSlice n) [e]))
-        tv vv ef H tm u /\
+        tv vv ef HG tm u /\
       (!t' x. vv = StackValue t' x /\
         ~is_word_type (expr_type (Builtin (BaseT (BytesT (Dynamic n))) (CalldataSlice n) [e])) ==>
-        ptr_buf_ok cenv (Builtin (BaseT (BytesT (Dynamic n))) (CalldataSlice n) [e]) x H u) /\
+        ptr_buf_ok cenv (Builtin (BaseT (BytesT (Dynamic n))) (CalldataSlice n) [e]) x HG u) /\
       (!t' p. vv = LocatedValue t' p /\ p.ptr_location = LocMemory ==>
-        ptr_buf_ok cenv (Builtin (BaseT (BytesT (Dynamic n))) (CalldataSlice n) [e]) p.ptr_operand H u) /\
-      ghost_kept cenv es sa G0 tn0 s0 H tm)
+        ptr_buf_ok cenv (Builtin (BaseT (BytesT (Dynamic n))) (CalldataSlice n) [e]) p.ptr_operand HG u) /\
+      ghost_kept cenv es sa G0 tn0 s0 HG tm)
     (\res ef gt r. expr_exit res r)
 Proof
   disch_then (map_every assume_tac o CONJUNCTS) >>
@@ -225,7 +225,7 @@ Proof
   qpat_x_assum `as_ptr_val _ _ _ = _` mp_tac >> simp[as_ptr_val_def] >>
   disch_then (CONJUNCTS_THEN (SUBST_ALL_TAC o SYM)) >>
   drule_all calldata_slice_operand_source_outcome >>
-  disch_then (qspecl_then [`PG`, `cx_dead cx`] assume_tac) >>
+  disch_then (qspecl_then [`PG`, `cx_dead H cx`] assume_tac) >>
   drule_all operand_prefix_frame_inputs >> strip_tac >>
   qpat_x_assum `gas_outcome_ptr _ _ _ _ _ _ _ _`
     (mp_then Any mp_tac gas_outcome_ptr_conseq) >>
@@ -240,7 +240,7 @@ Proof
          metis_tac[]) >>
       irule vv_post_prefix_frame >> simp[] >>
       qexistsl_tac [`ee`, `sm`, `t`] >> simp[] >>
-      qpat_x_assum `vv_post _ _ _ _ _ ee sm _ _ _ _ _ _` mp_tac >>
+      qpat_x_assum `vv_post _ _ _ _ _ _ ee sm _ _ _ _ _ _` mp_tac >>
       once_rewrite_tac[vv_post_located_mk_ptr] >> simp[mk_ptr_def] >>
       rpt strip_tac >> metis_tac[]) >>
   conj_tac >- fs[ptr_vv_ok_def] >>

@@ -52,7 +52,7 @@ Theorem aggregate_body_physical_store_path_mem:
   (do res <- eval_expr cx e; read_result cx res od) es = (INL v,es') /\
   post_value_type ce e <> expr_type e /\
   compile_store_memory ce op dst (expr_type e) (lowered_value_type ce e) su = ((),sb) /\
-  expr_post ctx func ce cx e es' (sa with cs_next_var := sm.cs_next_var)
+  expr_post H ctx func ce cx e es' (sa with cs_next_var := sm.cs_next_var)
     su r es' v op s /\
   evaluate_type (get_tenv cx) (expr_type e) = SOME dtv /\
   value_has_type dtv v /\ val_wf dtv v /\
@@ -80,7 +80,7 @@ Theorem aggregate_body_physical_store_path_mem:
   alloca_history func s ==>
   ?q. gas_path_mem ctx func s 0 (OK q) /\
     val_in_memory dtv v (w2n dw) q.vs_memory /\
-    stmt_state_rel ctx func ce cx es' q /\
+    stmt_state_rel H ctx func ce cx es' q /\
     ~q.vs_halted /\ q.vs_current_bb = sb.cs_current_bb /\
     q.vs_inst_idx = LENGTH sb.cs_current_insts /\
     (!z a. not_fresh_at sm z /\ lookup_var z r = SOME a ==> lookup_var z q = SOME a) /\
@@ -93,7 +93,9 @@ Theorem aggregate_body_physical_store_path_mem:
       (a+len <= w2n dw \/ w2n dw+type_memory_size dtv <= a) ==>
       mem_bytes_at a len q.vs_memory = mem_bytes_at a len r.vs_memory) /\
     locals_kept ce es' es' r q /\ alloca_history func q /\
-    q.vs_alloca_next = s.vs_alloca_next
+    q.vs_alloca_next = s.vs_alloca_next /\
+    q.vs_accounts = s.vs_accounts /\ q.vs_transient = s.vs_transient /\
+    q.vs_requests = s.vs_requests /\ q.vs_call_ctx = s.vs_call_ctx
 Proof
   disch_then (map_every assume_tac o CONJUNCTS) >>
   `~is_word_type (expr_type e) /\ ~is_bytestring_type (expr_type e)` by
@@ -109,7 +111,7 @@ Proof
      rename1 `Call _ tgt _ _` >> Cases_on `tgt` >> gvs[post_value_type_def, vyperASTTheory.expr_type_def]) >>
   `expr_val_at ce cx (post_value_type ce e)
      (sa with cs_next_var := sm.cs_next_var) su es' v op s /\
-   stmt_state_rel ctx func ce cx es' s` by fs[expr_post_def] >>
+   stmt_state_rel H ctx func ce cx es' s` by fs[expr_post_def] >>
   `did < (sa with cs_next_var := sm.cs_next_var).cs_next_id` by simp[] >>
   drule_all aggregate_physical_source_slot_bounds >>
   disch_then (map_every assume_tac o CONJUNCTS) >>
@@ -153,7 +155,7 @@ Proof
       drule_all exprSimAggregateChildrenTheory.aggregate_store_rebased_control_frame >>
       strip_tac >>
       `alloca_inv s` by
-        (qpat_x_assum `stmt_state_rel ctx func ce cx es' s` mp_tac >>
+        (qpat_x_assum `stmt_state_rel H ctx func ce cx es' s` mp_tac >>
          simp[stmt_state_rel_def, loweringStateRelDefsTheory.state_rel_def]) >>
       `alloca_history func t` by
         (irule fragGasPathFrameMemTheory.gas_path_mem_zero_history >> simp[] >>

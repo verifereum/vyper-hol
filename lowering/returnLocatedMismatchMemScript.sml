@@ -38,10 +38,10 @@ Proof
   qpat_x_assum `!sa vv sm. _` drule >> strip_tac >> gvs[] >>
   qpat_x_assum `expr_vv_sim_mem _ _ _ _ _ _ _` mp_tac >>
   simp[expr_vv_sim_mem_def] >>
-  disch_then (qspecl_then [`sa`, `sm`, `LocatedValue declared p`, `s0`] mp_tac) >>
+  disch_then (qspecl_then [`st0`, `sa`, `sm`, `LocatedValue declared p`, `s0`] mp_tac) >>
   simp[] >> disch_tac >>
   irule return_no_normal_vv_outcome_mem >>
-  qexists_tac `\raw ee t.
+  qexists_tac `\H raw ee t.
     vv_post H ctx func cenv cx e es sa sm s0 ee raw (LocatedValue declared p) t /\
     t.vs_current_bb = sm.cs_current_bb /\
     t.vs_inst_idx = LENGTH sm.cs_current_insts /\

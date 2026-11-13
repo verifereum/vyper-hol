@@ -39,7 +39,7 @@ Proof
 QED
 
 Theorem concat_head_arm_mem:
-  !ctx func cenv cx e args es sa s1 sb s0 es1 v op t B bsz ow k P binst
+  !H ctx func cenv cx e args es sa s1 sb s0 es1 v op t B bsz ow k P binst
    oinst dv ov tv.
     compile_concat compile_expr cenv (e::args) (Var dv) (MAP (\e. let ety = expr_type e in
                 if is_bytestring_type ety then (T, 0:num)
@@ -51,11 +51,11 @@ Theorem concat_head_arm_mem:
     (is_bytestring_type (expr_type e) \/
      ?m. expr_type e = BaseT (BytesT (Fixed m))) /\
     evaluate_type (get_tenv cx) (expr_type e) = SOME tv /\ value_has_type tv v /\
-    expr_post ctx func cenv cx e es sa s1 s0 es1 v op t /\
+    expr_post H ctx func cenv cx e es sa s1 s0 es1 v op t /\
     ~t.vs_halted /\ t.vs_current_bb = s1.cs_current_bb /\
     t.vs_inst_idx = LENGTH s1.cs_current_insts /\
     fn_has_code sa sb func /\ local_ptrs_reserved cenv sa /\
-    stmt_state_rel ctx func cenv cx es s0 /\
+    stmt_state_rel H ctx func cenv cx es s0 /\
     MAP FDOM es.scopes = MAP FDOM es1.scopes /\
     not_fresh_at sa dv /\ not_fresh_at sa ov /\
     lookup_var dv s0 = SOME (n2w (B + 32)) /\ lookup_var ov s0 = SOME ow /\
@@ -83,7 +83,7 @@ Theorem concat_head_arm_mem:
         (Var ov) s2 = ((), sb) /\
       ci_mono sa s1 /\ ci_mono s1 s2 /\ fn_has_code s2 sb func /\
       gas_path_mem ctx func t 0 (OK t2) /\
-      stmt_state_rel ctx func cenv cx es1 t2 /\ ~t2.vs_halted /\
+      stmt_state_rel H ctx func cenv cx es1 t2 /\ ~t2.vs_halted /\
       t2.vs_current_bb = s2.cs_current_bb /\
       t2.vs_inst_idx = LENGTH s2.cs_current_insts /\
       lookup_var dv t2 = SOME (n2w (B + 32)) /\ lookup_var ov t2 = SOME ow /\
@@ -102,7 +102,9 @@ Theorem concat_head_arm_mem:
              (p + n <= w2n ow \/ w2n ow + 64 <= p) ==>
              mem_bytes_at p n t2.vs_memory = mem_bytes_at p n t.vs_memory) /\
       mem_bytes_at (B + 32) k t.vs_memory = mem_bytes_at (B + 32) k s0.vs_memory /\
-      alloca_history func t2 /\ t2.vs_alloca_next = t.vs_alloca_next
+      alloca_history func t2 /\ t2.vs_alloca_next = t.vs_alloca_next /\
+      t2.vs_accounts = t.vs_accounts /\ t2.vs_transient = t.vs_transient /\
+      t2.vs_requests = t.vs_requests /\ t2.vs_call_ctx = t.vs_call_ctx
 Proof
   rpt gen_tac >> disch_then (MAP_EVERY assume_tac o CONJUNCTS) >>
   `ci_mono sa s1` by
@@ -125,7 +127,7 @@ Proof
      simp[vyperValueTheory.evaluate_type_def, is_word_type_def,
           optionTheory.IF_EQUALS_OPTION]) >>
   qpat_assum `post_value_type cenv e = _` (fn pth =>
-    qpat_x_assum `expr_post _ _ _ _ _ _ _ _ _ _ _ _ _`
+    qpat_x_assum `expr_post _ _ _ _ _ _ _ _ _ _ _ _ _ _`
       (strip_assume_tac o REWRITE_RULE [expr_post_def, pth])) >>
   `mload (w2n ow) t = n2w k` by metis_tac[] >>
   `eval_operand (Var dv) t = SOME (n2w (B + 32)) /\

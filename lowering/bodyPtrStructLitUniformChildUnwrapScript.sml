@@ -11,14 +11,14 @@ Theorem structlit_uniform_child_add_unwrap:
   unwrap_value ce vv sn = (op,sb) /\
   fn_has_code sm sn func /\ fn_has_code sn sb func /\
   eval_expr cx e esi = (INL raw,es') /\ read_result cx raw es' = (INL v,es') /\
-  expr_body_pre ce cx env e esi /\ stmt_state_rel ctx func ce cx esi s0 /\
+  expr_body_pre ce cx env e esi /\ stmt_state_rel H ctx func ce cx esi s0 /\
   s.vs_current_bb = sm.cs_current_bb /\
   s.vs_inst_idx = LENGTH sm.cs_current_insts /\
   ~ctx_has_dalloca ctx /\ ~s.vs_halted /\
   lookup_var root s = SOME a /\ op_taint tn (Var root) = {} /\
   ptr_covers G tn root s capacity /\ FLOOKUP G root = SOME (base,cap) /\
   base + cap <= dimword(:256) /\ off < capacity /\ off+n <= capacity /\
-  vv_post ctx func ce cx e esi si sm s0 es' raw vv s /\
+  vv_post H ctx func ce cx e esi si sm s0 es' raw vv s /\
   ptr_vv_ok cx (expr_type e) raw vv es' G tn s /\
   (!t op. vv = StackValue t op ==> ptr_buf_ok ce e op G s) /\
   (!t p. vv = LocatedValue t p /\ p.ptr_location = LocMemory ==>
@@ -28,18 +28,18 @@ Theorem structlit_uniform_child_add_unwrap:
   (!p. vv_operand vv = Var p ==> not_fresh_at sm p) /\
   (!p sz. ce.ce_return_buf = SOME (PtrVar (Var p) sz) ==> not_fresh_at si p) /\
   (!p sz. ce.ce_return_pc = SOME (PtrVar (Var p) sz) ==> not_fresh_at si p) /\
-  ghost_inv d ce cx es' G tn s /\ ghost_kept ce esi si G0 tn0 s0 G tn /\
+  ghost_inv H d ce cx es' G tn s /\ ghost_kept ce esi si G0 tn0 s0 G tn /\
   fn_inst_ids_distinct func /\ ~ce.ce_is_ctor /\ ~is_word_type (expr_type e) /\
   post_value_type ce e = expr_type e ==>
-  ?z H tm.
-    gas_path_ptr D 0 ctx func PG G tn s 0 H tm (OK z) /\
+  ?z HG tm.
+    gas_path_ptr D 0 ctx func PG G tn s 0 HG tm (OK z) /\
     z.vs_current_bb = sb.cs_current_bb /\ z.vs_inst_idx = LENGTH sb.cs_current_insts /\
-    expr_post ctx func ce cx e esi si sb s0 es' v op z /\
-    ptr_val_ok cx (expr_type e) v op H tm z /\ ptr_buf_ok ce e op H z /\
-    ptr_mem_ok cx (expr_type e) v op H tm z /\
-    ghost_inv d ce cx es' H tm z /\ ghost_kept ce esi si G0 tn0 s0 H tm /\
-    stmt_state_rel ctx func ce cx es' z /\ ~z.vs_halted /\
-    ptr_covers H tm out z n /\ lookup_var out z = SOME (a+n2w off)
+    expr_post H ctx func ce cx e esi si sb s0 es' v op z /\
+    ptr_val_ok cx (expr_type e) v op HG tm z /\ ptr_buf_ok ce e op HG z /\
+    ptr_mem_ok cx (expr_type e) v op HG tm z /\
+    ghost_inv H d ce cx es' HG tm z /\ ghost_kept ce esi si G0 tn0 s0 HG tm /\
+    stmt_state_rel H ctx func ce cx es' z /\ ~z.vs_halted /\
+    ptr_covers HG tm out z n /\ lookup_var out z = SOME (a+n2w off)
 Proof
   rpt gen_tac >> disch_then (map_every assume_tac o CONJUNCTS) >>
   `(!p sz. ce.ce_return_buf = SOME (PtrVar (Var p) sz) ==> not_fresh_at sm p) /\
@@ -50,13 +50,13 @@ Proof
   drule_all literal_child_add_endpoint >>
   disch_then (qspecl_then [`PG`, `D`] strip_assume_tac) >>
   `~z.vs_halted` by metis_tac[gas_path_ptr_erase, gas_path_normal] >>
-  `stmt_state_rel ctx func ce cx es' z` by gvs[vv_post_def] >>
+  `stmt_state_rel H ctx func ce cx es' z` by gvs[vv_post_def] >>
   `not_fresh_at sn out` by
     (drule emitted_insts_emit_op >> simp[not_fresh_at_def] >> metis_tac[]) >>
-  `!t op. vv = StackValue t op ==> ptr_buf_ok ce e op H z` by metis_tac[] >>
+  `!t op. vv = StackValue t op ==> ptr_buf_ok ce e op HG z` by metis_tac[] >>
   drule_all structlit_uniform_nonword_unwrap >>
   disch_then (qspecl_then [`PG`, `D`] strip_assume_tac) >>
-  `ghost_kept ce esi si G0 tn0 s0 H' tm'` by
+  `ghost_kept ce esi si G0 tn0 s0 HG' tm'` by
     (`si.cs_next_id <= sn.cs_next_id /\ si.cs_next_var <= sn.cs_next_var` by
        (drule emitted_insts_emit_op >> strip_tac >>
         mp_tac (cj 1 compile_expr_ci_mono) >>
@@ -65,11 +65,11 @@ Proof
      `MAP FDOM esi.scopes = MAP FDOM es'.scopes` by
        metis_tac[eval_expr_preserves_scopes_dom] >>
      `wb_frame ce esi es' si s0 z` by
-       (qpat_x_assum `vv_post _ _ _ _ _ _ _ sn _ _ _ _ _` mp_tac >>
+       (qpat_x_assum `vv_post _ _ _ _ _ _ _ _ sn _ _ _ _ _` mp_tac >>
         simp[vv_post_def, wb_frame_def] >> metis_tac[]) >>
-     irule (Q.INST [`es1` |-> `es'`, `s1` |-> `z`, `sb` |-> `sn`, `G1` |-> `H`,
+     irule (Q.INST [`es1` |-> `es'`, `s1` |-> `z`, `sb` |-> `sn`, `G1` |-> `HG`,
                     `tn1` |-> `tm`] wordArgsPtrTheory.ghost_kept_wb_trans) >>
      simp[] >> metis_tac[]) >>
-  qexistsl [`z'`, `H'`, `tm'`] >> simp[] >>
+  qexistsl [`z'`, `HG'`, `tm'`] >> simp[] >>
   metis_tac[gas_path_ptr_then, arithmeticTheory.ADD]
 QED

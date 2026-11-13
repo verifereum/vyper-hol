@@ -74,7 +74,7 @@ Resume raw_revert_vv_sim_ptr[normal]:
   `lower_value compile_expr cenv (expr_type e) e sa = (data,sm) /\
    ptr_val_ok cx (expr_type e) (BytesV bs) data G tn t` by metis_tac[] >>
   drule_all raw_revert_post_path_ptr >>
-  disch_then (qspecl_then [`PG`, `cx_dead cx`] strip_assume_tac) >>
+  disch_then (qspecl_then [`PG`, `cx_dead H cx`] strip_assume_tac) >>
   rewrite_tac[gas_summary_ptr_at_marked] >>
   qexistsl_tac [`INR (Error (RevertData bs))`, `es_end`,
                 `G'`, `tn'`, `Abort Revert_abort t'`] >>

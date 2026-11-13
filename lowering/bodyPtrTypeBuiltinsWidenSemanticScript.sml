@@ -33,7 +33,7 @@ QED
 Theorem widen_copy_converted_counted_certificate:
   compile_bytestring_widen_copy capacity (Var src) n sa = (op,sb) /\
   fn_has_code sa sb fn /\ run_inst_seq (emitted_insts sa sb) s0 = OK t /\
-  stmt_state_rel ctx fn cenv cx es s0 /\ local_ptrs_reserved cenv sa /\
+  stmt_state_rel H ctx fn cenv cx es s0 /\ local_ptrs_reserved cenv sa /\
   fn_inst_ids_distinct fn /\ capacity < dimword(:256) /\ n <= capacity /\
   ~ctx_has_dalloca ctx /\ not_fresh_at sa src /\
   (!p sz. cenv.ce_return_buf = SOME (PtrVar (Var p) sz) ==> not_fresh_at sa p) /\
@@ -41,7 +41,7 @@ Theorem widen_copy_converted_counted_certificate:
   expr_val_at cenv cx tsrc slo sa es v (Var src) s0 /\
   evaluate_type (get_tenv cx) tsrc = SOME tv /\ ~is_word_type tsrc /\
   val_wf tv v /\ val_footprint tv v <= n /\ lookup_var src s0 = SOME a /\
-  ptr_covers G0 tn0 src s0 n /\ ghost_inv d cenv cx es G0 tn0 s0 /\
+  ptr_covers G0 tn0 src s0 n /\ ghost_inv H d cenv cx es G0 tn0 s0 /\
   (!m. mem_agree_outside tn0.t_mem s0.vs_memory m ==> val_in_memory tv v (w2n a) m) /\
   ~s0.vs_halted /\ lookup_block s0.vs_current_bb fn.fn_blocks = SOME bb /\
   isPREFIX (emitted_insts sa sb) (DROP s0.vs_inst_idx bb.bb_instructions) /\
@@ -53,7 +53,7 @@ Theorem widen_copy_converted_counted_certificate:
       (OK (t with vs_inst_idx := s0.vs_inst_idx + LENGTH (emitted_insts sa sb))) /\
     lookup_var dst (t with vs_inst_idx := s0.vs_inst_idx + LENGTH (emitted_insts sa sb)) = SOME b /\
     ptr_covers G th dst (t with vs_inst_idx := s0.vs_inst_idx + LENGTH (emitted_insts sa sb)) capacity /\
-    ghost_inv d cenv cx es G th (t with vs_inst_idx := s0.vs_inst_idx + LENGTH (emitted_insts sa sb)) /\
+    ghost_inv H d cenv cx es G th (t with vs_inst_idx := s0.vs_inst_idx + LENGTH (emitted_insts sa sb)) /\
     ghost_kept cenv es sa G0 tn0 s0 G th /\
     (!m. mem_agree_outside th.t_mem t.vs_memory m ==> val_in_memory tv2 v' (w2n b) m)
 Proof

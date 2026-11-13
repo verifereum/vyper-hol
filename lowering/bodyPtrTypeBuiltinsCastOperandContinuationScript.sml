@@ -20,7 +20,7 @@ Theorem cast_convert_operand_continuation:
   32 <= type_memory_bytes cenv (lowered_value_type cenv e) /\
   (!i. expr_type e = BaseT (BytesT (Dynamic i)) \/ expr_type e = BaseT (StringT i) ==> i < dimword(:256)) /\
   (!n. target = BaseT (BytesT (Dynamic n)) \/ target = BaseT (StringT n) ==> n < dimword(:256)) /\
-  expr_post ctx fn cenv cx e es ca sa s0 ee v x s /\
+  expr_post H ctx fn cenv cx e es ca sa s0 ee v x s /\
   ptr_val_ok cx (post_value_type cenv e) v x G tn s /\ ptr_buf_ok cenv e x G s /\
   local_ptrs_reserved cenv ca /\ local_ptrs_reserved cenv sa /\ ca.cs_next_var <= sa.cs_next_var /\ sa.cs_next_id <= sb.cs_next_id /\
   ~ctx_has_dalloca ctx /\ ~s.vs_halted /\
@@ -28,19 +28,19 @@ Theorem cast_convert_operand_continuation:
   s.vs_inst_idx + LENGTH (emitted_insts sa sb) = LENGTH sb.cs_current_insts /\
   lookup_block s.vs_current_bb fn.fn_blocks = SOME bb /\
   isPREFIX (emitted_insts sa sb) (DROP s.vs_inst_idx bb.bb_instructions) /\
-  ghost_inv d cenv cx ee G tn s /\ ghost_kept cenv es ca G0 tn0 s0 G tn /\
+  ghost_inv H d cenv cx ee G tn s /\ ghost_kept cenv es ca G0 tn0 s0 G tn /\
   (!p sz. cenv.ce_return_buf = SOME (PtrVar (Var p) sz) ==> not_fresh_at sa p) /\
   (!p sz. cenv.ce_return_pc = SOME (PtrVar (Var p) sz) ==> not_fresh_at sa p) ==>
   gas_outcome_ptr D tops (ctx,fn) PG
     (\st. (convert_result cx (expr_type e) target v,st)) (ee,s,G,tn)
-    (\res fin H th u. ?vout. res = INL vout /\
-      expr_post ctx fn cenv cx (TypeBuiltin target Convert target [e]) es ca sb s0 fin vout out u /\
+    (\res fin HG th u. ?vout. res = INL vout /\
+      expr_post H ctx fn cenv cx (TypeBuiltin target Convert target [e]) es ca sb s0 fin vout out u /\
       u.vs_current_bb = sb.cs_current_bb /\ u.vs_inst_idx = LENGTH sb.cs_current_insts /\
-      ghost_inv d cenv cx fin H th u /\
-      ptr_val_ok cx (post_value_type cenv (TypeBuiltin target Convert target [e])) vout out H th u /\
+      ghost_inv H d cenv cx fin HG th u /\
+      ptr_val_ok cx (post_value_type cenv (TypeBuiltin target Convert target [e])) vout out HG th u /\
       (~is_word_type (post_value_type cenv (TypeBuiltin target Convert target [e])) ==>
-        ptr_buf_ok cenv (TypeBuiltin target Convert target [e]) out H u) /\
-      ghost_kept cenv es ca G0 tn0 s0 H th)
+        ptr_buf_ok cenv (TypeBuiltin target Convert target [e]) out HG u) /\
+      ghost_kept cenv es ca G0 tn0 s0 HG th)
     (\res fin gt r. expr_exit res r)
 Proof
   disch_then (map_every assume_tac o CONJUNCTS) >>

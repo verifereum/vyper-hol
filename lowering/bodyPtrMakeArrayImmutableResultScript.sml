@@ -21,7 +21,7 @@ Proof
 QED
 
 Theorem immutable_runtime_result_robust:
-  stmt_state_rel ctx func cenv cx es u /\ ~cenv.ce_is_ctor /\
+  stmt_state_rel H ctx func cenv cx es u /\ ~cenv.ce_is_ctor /\
   immutable_holds cenv cx t (Value v) a es s /\
   evaluate_type (get_tenv cx) t = SOME tv /\
   w2n b + type_memory_size tv < dimword(:256) /\
@@ -45,7 +45,7 @@ Theorem immutable_runtime_buffer_ptr_path:
   ~ctx_has_dalloca ctx /\ ~u.vs_halted /\
   lookup_block u.vs_current_bb func.fn_blocks = SOME bb /\
   isPREFIX (emitted_insts sa sb) (DROP u.vs_inst_idx bb.bb_instructions) /\
-  stmt_state_rel ctx func cenv cx es u /\ ~cenv.ce_is_ctor /\
+  stmt_state_rel H ctx func cenv cx es u /\ ~cenv.ce_is_ctor /\
   immutable_holds cenv cx t (Value v) a es s /\
   evaluate_type (get_tenv cx) t = SOME tv /\
   w2n b + type_memory_size tv < dimword(:256) ==>

@@ -30,7 +30,7 @@ Theorem membership_flag_parent_outcome:
   (!z. x = Var z ==> not_fresh_at c1 z) /\ (!l. x <> Label l) /\
   (!z. y = Var z ==> not_fresh_at c2 z) /\
   es2.gas_obs = [] /\ ~t2.vs_halted ==>
-  gas_outcome_ptr (cx_dead cx) (cx_tops cx) (ctx,func) PG
+  gas_outcome_ptr (cx_dead H cx) (cx_tops cx) (ctx,func) PG
     (\st. (bop_result cx ann bop [expr_type e1;expr_type e2] v1 v2 st,st))
     (es2,t2,G2,tn2)
     (\res ee G tn t. ?v. res = INL v /\
@@ -61,10 +61,10 @@ Proof
        isPREFIX (emitted_insts c2 cz) (DROP t2.vs_inst_idx bb.bb_instructions)` by
     (irule bop_suffix_placement >> gvs[bop_operand_post_def] >>
      qexistsl_tac [`c2`, `cz`] >> simp[]) >>
-  `ghost_inv d cenv cx es2 G2 tn2 t2` by gvs[bop_operand_post_def] >>
+  `ghost_inv H d cenv cx es2 G2 tn2 t2` by gvs[bop_operand_post_def] >>
   drule membership_flag_suffix_outcome_ptr >>
   disch_then (drule_at (Pat `compile_binop _ _ _ _ _ _ _ = _`)) >>
-  disch_then (drule_at (Pat `ghost_inv _ _ _ es2 _ _ _`)) >>
+  disch_then (drule_at (Pat `ghost_inv _ _ _ _ es2 _ _ _`)) >>
   disch_then irule >> simp[] >>
   conj_tac >- metis_tac[bop_operand_entry_def, not_fresh_at_mono] >>
   conj_tac >- metis_tac[bop_operand_entry_def, not_fresh_at_mono] >>
@@ -95,7 +95,7 @@ Theorem membership_flag_pair_outcome_ptr:
   c1.cs_next_var <= c2.cs_next_var /\ c1.cs_next_id <= c2.cs_next_id /\
   (!z. x = Var z ==> not_fresh_at c1 z) /\ (!l. x <> Label l) /\
   (!z. y = Var z ==> not_fresh_at c2 z) ==>
-  gas_outcome_ptr (cx_dead cx) (cx_tops cx) (ctx,func) PG
+  gas_outcome_ptr (cx_dead H cx) (cx_tops cx) (ctx,func) PG
     (bind (bind (eval_expr cx e1) (read_result cx)) (\v1.
      bind (bind (eval_expr cx e2) (read_result cx)) (\v2.
        \st. (bop_result cx ann bop [expr_type e1;expr_type e2] v1 v2 st,st))))

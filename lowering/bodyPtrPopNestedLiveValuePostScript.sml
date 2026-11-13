@@ -8,8 +8,8 @@ Ancestors
 Theorem pop_framed_memory_live_vv_post:
   expr_has_effect e /\
   expr_sim_inv cenv cx env es /\
-  stmt_state_rel ctx func cenv cx es s0 /\
-  stmt_state_rel ctx func cenv cx mid s /\
+  stmt_state_rel H ctx func cenv cx es s0 /\
+  stmt_state_rel H ctx func cenv cx mid s /\
   wb_frame cenv es mid sa s0 s /\
   local_ptrs_reserved cenv sa /\ local_ptrs_reserved cenv sm /\
   MAP FDOM es.scopes = MAP FDOM mid.scopes /\
@@ -46,7 +46,7 @@ Theorem pop_framed_memory_live_vv_post:
   w2n w = w2n b+k+32+(LENGTH vs-1)*type_memory_size etv /\
   local_place_at cenv cx id (k + 32 + (LENGTH vs - 1) * type_memory_size etv)
     etv result ==>
-  vv_post ctx func cenv cx e es sa sb s0 (mid with scopes := scopes') result
+  vv_post H ctx func cenv cx e es sa sb s0 (mid with scopes := scopes') result
     (LocatedValue (expr_type e) (mk_ptr op LocMemory)) t
 Proof
   strip_tac >>
