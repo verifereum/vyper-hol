@@ -16,6 +16,7 @@ Ancestors
   lowerDloadIndexedStageEntry lowerDloadTopEntryControl ctxLookupAgreeHelpers
   contextCodegenRel venomExecSemantics venomInst venomExecProofs venomWf
   ptrDiscipline list rich_list finite_map pred_set words o1ContractSimplifyCfg
+  o1SafeUpto lowerDloadPtrGasCut
 
 (* Diagnostic quotation only: not a definition, theorem, or closure claim.
    CS, lo, rpolicy and view are fixed environmental parameters. Context
@@ -329,13 +330,110 @@ val ld_recursive_candidate =
    observation theorem is asserted; global recursion needs those proofs.
 *)
 
+(* The gas cut at a target state carries to its paired source state (equal
+   readings) and back along a macro-expansion prefix (readings only drop). *)
+Theorem ld_normal_data_gas_cut:
+  ld_normal_data CS fn V U lo E L H AP BP AG BH tn un s t
+    astk live keys d A suspended gstk f ==>
+  gas_cut c vs t ==> gas_cut c vs s
+Proof
+  rw[ld_normal_data_def, gas_cut_def]
+QED
+
+Theorem ld_target_prefix_gas_cut:
+  !C code t0 u0 n t u. ld_target_prefix C code t0 u0 n t u ==>
+    gas_cut c vs t ==> gas_cut c vs t0
+Proof
+  ho_match_mp_tac ld_target_prefix_ind >> rw[] >>
+  first_x_assum irule >> drule frame_next_gas_cut >>
+  disch_then irule >> first_assum (irule_at Any)
+QED
+
+(* Proves gas_cut at the source state of the normal witness in the assumptions
+   from the cut at its target, through an expansion prefix if there is one. *)
+val ld_source_cut_tac =
+  qpat_assum `ld_normal_data _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _`
+    (irule o MATCH_MP ld_normal_data_gas_cut) >>
+  FIRST [first_assum ACCEPT_TAC,
+         first_assum (fn p => first_assum (fn c =>
+           ACCEPT_TAC (MATCH_MP (MATCH_MP ld_target_prefix_gas_cut p) c)))];
+
+(* Projected induction restricted to the states before the gas cut: every
+   rule carries the cut at its result back to its premise state. *)
+Theorem ld_frame_reachable_projected_cut_ind:
+  !P.
+  (!vs0 ctx name fn lbl inst s1.
+    ctx.ctx_entry = SOME name /\
+    lookup_function name ctx.ctx_functions = SOME fn /\
+    fn_entry_label fn = SOME lbl /\
+    enters_block fn
+      (vs0 with <|vs_prev_bb := NONE; vs_current_bb := lbl;
+                  vs_inst_idx := 0|>) s1 /\
+    active_inst fn inst s1 /\ gas_cut ncut vs0 s1 ==>
+    P vs0 ctx [] entry_taint fn inst s1) /\
+  (!vs0 ctx stk tn fn inst inst' s s' fuel.
+    P vs0 ctx stk tn fn inst s /\ active_inst fn inst s /\
+    ~is_terminator inst.inst_opcode /\ inst.inst_opcode <> INVOKE /\
+    step_inst fuel ctx inst s = OK s' /\
+    active_inst fn inst' (s' with vs_inst_idx := SUC s.vs_inst_idx) /\
+    gas_cut ncut vs0 s ==>
+    P vs0 ctx stk (step_taint inst s s' tn) fn inst'
+      (s' with vs_inst_idx := SUC s.vs_inst_idx)) /\
+  (!vs0 ctx stk tn fn inst inst' s s' s1 fuel.
+    P vs0 ctx stk tn fn inst s /\ active_inst fn inst s /\
+    is_terminator inst.inst_opcode /\ step_inst fuel ctx inst s = OK s' /\
+    ~s'.vs_halted /\ enters_block fn s' s1 /\ active_inst fn inst' s1 /\
+    gas_cut ncut vs0 s ==>
+    P vs0 ctx stk (entry_taint_vars fn s' tn) fn inst' s1) /\
+  (!vs0 ctx stk tn caller inv s nm ops callee args cs s1 inst.
+    P vs0 ctx stk tn caller inv s /\ active_inst caller inv s /\
+    inv.inst_opcode = INVOKE /\ decode_invoke inv = SOME(nm,ops) /\
+    lookup_function nm ctx.ctx_functions = SOME callee /\
+    eval_operands ops s = SOME args /\ setup_callee callee args s = SOME cs /\
+    enters_block callee cs s1 /\ active_inst callee inst s1 /\
+    gas_cut ncut vs0 s ==>
+    P vs0 ctx ((caller,inv,s,tn.t_var)::stk)
+      (tn with t_var := FEMPTY) callee inst s1) /\
+  (!vs0 ctx caller inv saved T stk tn fn rinst s ret s_end s' inst' fuel.
+    P vs0 ctx ((caller,inv,saved,T)::stk) tn fn rinst s /\
+    active_inst fn rinst s /\
+    step_inst fuel ctx rinst s = IntRet ret s_end /\
+    bind_outputs inv.inst_outputs ret.iret_values
+      (adopt_return_fmp ret (merge_callee_state saved s_end)) = SOME s' /\
+    active_inst caller inst' (s' with vs_inst_idx := SUC saved.vs_inst_idx) /\
+    gas_cut ncut vs0 s ==>
+    P vs0 ctx stk
+      (tn with t_var := DRESTRICT T (COMPL (set inv.inst_outputs)))
+      caller inst' (s' with vs_inst_idx := SUC saved.vs_inst_idx)) ==>
+  !vs0 ctx stk PG G tn fn inst s.
+    frame_reachable vs0 ctx stk PG G tn fn inst s /\ gas_cut ncut vs0 s ==>
+    P vs0 ctx (MAP (\f. (f.cf_fn,f.cf_inst,f.cf_state,f.cf_tvar)) stk)
+      tn fn inst s
+Proof
+  gen_tac >> disch_then (fn cls =>
+    qspec_then `\v c stk tn fn inst s.
+      gas_cut ncut v s ==> P v c stk tn fn inst s`
+      mp_tac ld_frame_reachable_projected_ind >>
+    impl_tac >- (BETA_TAC >> rpt conj_tac >> rpt gen_tac >> rpt strip_tac
+      >- (irule (cj 1 cls) >> metis_tac[])
+      >- (drule_all frame_next_gas_cut >> strip_tac >>
+          irule (cj 2 cls) >> metis_tac[])
+      >- (drule_all frame_block_gas_cut >> strip_tac >>
+          irule (cj 3 cls) >> metis_tac[])
+      >- (drule_all frame_call_gas_cut >> strip_tac >>
+          irule (cj 4 cls) >> metis_tac[]) >>
+      drule_all frame_ret_gas_cut >> strip_tac >>
+      irule (cj 5 cls) >> metis_tac[])) >>
+  BETA_TAC >> rpt strip_tac >> first_x_assum (drule_all_then ACCEPT_TAC)
+QED
+
 (* Term-only constructor substitution. These are obligations, NOT theorems.
    Keeping the actual five clause terms prevents a prose ledger from silently
    omitting a quantifier, a saved field, or the sole recursive premise of ret.
    In particular this creates no assumed-closure theorem. *)
 val ld_recursive_clause_goals =
   let
-    val (p, body) = dest_forall (concl ld_frame_reachable_projected_ind)
+    val (p, body) = dest_forall (concl ld_frame_reachable_projected_cut_ind)
     val (clauses, _) = dest_imp body
     val _ = if type_of p = type_of ld_recursive_candidate then ()
             else raise Fail "recursive candidate has wrong predicate type"
@@ -363,7 +461,7 @@ fun ld_refine_geometry candidate =
 val ld_entry_geometry_history = ld_refine_geometry ld_recursive_candidate;
 val ld_entry_geometry_history_goal =
   let
-    val (p, body) = dest_forall (concl ld_frame_reachable_projected_ind)
+    val (p, body) = dest_forall (concl ld_frame_reachable_projected_cut_ind)
     val (clauses, _) = dest_imp body
     val clause = subst [p |-> ld_entry_geometry_history] (hd(strip_conj clauses))
     val (v0::ct::rest, b) = strip_forall clause
@@ -414,7 +512,7 @@ val ld_historical_combined_candidate =
   ld_refine_geometry (ld_refine_saved ld_recursive_candidate);
 val ld_historical_combined_entry_goal =
   let
-    val (p,body) = dest_forall (concl ld_frame_reachable_projected_ind)
+    val (p,body) = dest_forall (concl ld_frame_reachable_projected_cut_ind)
     val (clauses,_) = dest_imp body
     val clause = subst [p |-> ld_historical_combined_candidate] (hd(strip_conj clauses))
     val (v0::ct::rest,b) = strip_forall clause
@@ -424,7 +522,7 @@ val ld_historical_combined_entry_goal =
 Theorem ld_historical_combined_entry_clause[local]:
   ctx_pass_stage rpolicy (CFP_Simple VP_LowerDload) view CS CT /\
   dead_wf D /\ o1_ctx_shape CS /\ o1_run_state_ok vs0 /\
-  o1_src_inv D CS vs0 /\ callee_first names CS.ctx_functions /\
+  o1_safe_upto D rlo ncut CS vs0 /\ callee_first names CS.ctx_functions /\
   lo = vs0.vs_alloca_next ==>
   ^ld_historical_combined_entry_goal
 Proof
@@ -584,7 +682,7 @@ Finalise ld_historical_combined_entry_clause
 Theorem ld_entry_geometry_history_clause[local]:
   ctx_pass_stage rpolicy (CFP_Simple VP_LowerDload) view CS CT /\
   dead_wf D /\ o1_ctx_shape CS /\ o1_run_state_ok vs0 /\
-  o1_src_inv D CS vs0 /\ callee_first names CS.ctx_functions /\
+  o1_safe_upto D rlo ncut CS vs0 /\ callee_first names CS.ctx_functions /\
   lo = vs0.vs_alloca_next ==>
   ^ld_entry_geometry_history_goal
 Proof
@@ -607,7 +705,7 @@ QED
 Theorem ld_recursive_entry_clause:
   ctx_pass_stage rpolicy (CFP_Simple VP_LowerDload) view CS CT /\
   dead_wf D /\ o1_ctx_shape CS /\ o1_run_state_ok vs0 /\
-  o1_src_inv D CS vs0 /\ callee_first names CS.ctx_functions /\
+  o1_safe_upto D rlo ncut CS vs0 /\ callee_first names CS.ctx_functions /\
   lo = vs0.vs_alloca_next ==>
   ^ld_recursive_entry_goal
 Proof
@@ -654,7 +752,7 @@ val _ = if aconv ld_entry_history_conclusion (concl ld_recursive_entry_clause)
         then () else raise Fail "historical entry statement changed";
 val ld_recursive_clause_goals =
   let
-    val (p, body) = dest_forall (concl ld_frame_reachable_projected_ind)
+    val (p, body) = dest_forall (concl ld_frame_reachable_projected_cut_ind)
     val (clauses, _) = dest_imp body
   in map (subst [p |-> ld_recursive_candidate]) (strip_conj clauses) end;
 
@@ -1213,7 +1311,7 @@ val ld_recursive_singleton_zero = ld_recursive_opcode_zero ``ops:opcode list``;
 val ld_singleton_next_callback =
   let val tm = ``!nt.
     ld_annotated_reachable vs0 CS astk k L AP AG tn fn i s /\
-    ptr_discipline lo CS vs0 /\ o1_ctx_shape CS /\
+    ptr_discipline_upto lo ncut CS vs0 /\ gas_cut ncut vs0 s /\ o1_ctx_shape CS /\
     mem_inv dload_headroom_ok CS vs0 /\
     callee_first names CS.ctx_functions /\ ld_stack_origin vs0 CS stk fn s0 /\
     LIST_REL (\A g. FINITE A /\
@@ -1266,7 +1364,7 @@ val ld_recursive_external_witness_zero =
 Theorem ld_recursive_singleton_next_witness[local]:
   !ops. (^ld_singleton_next_callback) /\
   (!op. MEM op ops ==> op <> DLOAD /\ op <> DLOADBYTES) ==>
-  !R Q. ptr_discipline lo CS vs0 /\ o1_ctx_shape CS /\
+  !R Q. ptr_discipline_upto lo ncut CS vs0 /\ gas_cut ncut vs0 t /\ o1_ctx_shape CS /\
   mem_inv dload_headroom_ok CS vs0 /\
   callee_first names CS.ctx_functions /\
   (!g. MEM g CS.ctx_functions ==> fn_ptr_ok P g) /\
@@ -1333,6 +1431,7 @@ Proof
     (qpat_assum `LIST_REL _ (A::suspended) _`
        (strip_assume_tac o SRULE []) >>
      simp[MAP_MAP_o,ld_erase_frame_def,combinTheory.o_DEF]) >>
+  `gas_cut ncut vs0 s` by ld_source_cut_tac >>
   asm_x "next" drule_all >>
   disch_then (qspec_then `SUC t.vs_inst_idx` mp_tac) >> strip_tac >>
   `s'.vs_current_bb = s.vs_current_bb /\
@@ -1430,7 +1529,7 @@ QED
 Finalise ld_recursive_singleton_next_witness
 
 Theorem ld_recursive_ordinary_next_witness[local]:
-  !R Q. ptr_discipline lo CS vs0 /\ o1_ctx_shape CS /\
+  !R Q. ptr_discipline_upto lo ncut CS vs0 /\ gas_cut ncut vs0 t /\ o1_ctx_shape CS /\
   mem_inv dload_headroom_ok CS vs0 /\
   callee_first names CS.ctx_functions /\
   (!g. MEM g CS.ctx_functions ==> fn_ptr_ok P g) /\
@@ -1449,7 +1548,7 @@ Proof
 QED
 
 Theorem ld_recursive_external_next_witness[local]:
-  !R Q. ptr_discipline lo CS vs0 /\ o1_ctx_shape CS /\
+  !R Q. ptr_discipline_upto lo ncut CS vs0 /\ gas_cut ncut vs0 t /\ o1_ctx_shape CS /\
   mem_inv dload_headroom_ok CS vs0 /\
   callee_first names CS.ctx_functions /\
   (!g. MEM g CS.ctx_functions ==> fn_ptr_ok P g) /\
@@ -1469,7 +1568,7 @@ Proof
 QED
 
 Theorem ld_recursive_ordinary_next_anchor[local]:
-  !Q. ptr_discipline lo CS vs0 /\ o1_ctx_shape CS /\
+  !Q. ptr_discipline_upto lo ncut CS vs0 /\ gas_cut ncut vs0 t /\ o1_ctx_shape CS /\
   mem_inv dload_headroom_ok CS vs0 /\
   callee_first names CS.ctx_functions /\
   (!g. MEM g CS.ctx_functions ==> fn_ptr_ok P g) /\
@@ -1487,7 +1586,7 @@ Proof
 QED
 
 Theorem ld_recursive_ordinary_next:
-  ptr_discipline lo CS vs0 /\ o1_ctx_shape CS /\
+  ptr_discipline_upto lo ncut CS vs0 /\ gas_cut ncut vs0 t /\ o1_ctx_shape CS /\
   mem_inv dload_headroom_ok CS vs0 /\
   callee_first names CS.ctx_functions /\
   (!g. MEM g CS.ctx_functions ==> fn_ptr_ok P g) /\
@@ -1529,7 +1628,7 @@ val ld_recursive_alloca_witness_zero =
   in list_mk_abs(args,list_mk_exists(ws,mk_conj(nb,transfer))) end;
 
 Theorem ld_recursive_alloca_next_witness[local]:
-  !R Q. ptr_discipline lo CS vs0 /\ o1_ctx_shape CS /\
+  !R Q. ptr_discipline_upto lo ncut CS vs0 /\ gas_cut ncut vs0 t /\ o1_ctx_shape CS /\
   mem_inv dload_headroom_ok CS vs0 /\
   callee_first names CS.ctx_functions /\
   (^ld_recursive_alloca_witness_zero) vs0 CT stk un gn j t /\
@@ -1746,7 +1845,7 @@ QED
 Finalise ld_recursive_alloca_next_witness
 
 Theorem ld_recursive_alloca_next_anchor[local]:
-  !Q. ptr_discipline lo CS vs0 /\ o1_ctx_shape CS /\
+  !Q. ptr_discipline_upto lo ncut CS vs0 /\ gas_cut ncut vs0 t /\ o1_ctx_shape CS /\
   mem_inv dload_headroom_ok CS vs0 /\
   callee_first names CS.ctx_functions /\
   (^ld_recursive_alloca_zero) vs0 CT stk un gn j t /\
@@ -1763,7 +1862,7 @@ Proof
 QED
 
 Theorem ld_recursive_alloca_next:
-  ptr_discipline lo CS vs0 /\ o1_ctx_shape CS /\
+  ptr_discipline_upto lo ncut CS vs0 /\ gas_cut ncut vs0 t /\ o1_ctx_shape CS /\
   mem_inv dload_headroom_ok CS vs0 /\
   callee_first names CS.ctx_functions /\
   (^ld_recursive_alloca_zero) vs0 CT stk un gn j t /\
@@ -1876,7 +1975,7 @@ Theorem ld_recursive_block_clause_witness[local]:
   !R Q.
   ctx_pass_stage rpolicy (CFP_Simple VP_LowerDload) view CS CT /\
   dead_wf D /\ o1_ctx_shape CS /\ o1_run_state_ok vs0 /\
-  o1_src_inv D CS vs0 /\ callee_first names CS.ctx_functions /\
+  o1_safe_upto D rlo ncut CS vs0 /\ callee_first names CS.ctx_functions /\
   lo = vs0.vs_alloca_next ==>
   ^ld_recursive_block_witness_anchor_goal
 Proof
@@ -1890,10 +1989,10 @@ Proof
   qpat_x_assum `inst = i` SUBST_ALL_TAC >>
   qpat_x_assum `s = ta` (SUBST_ALL_TAC o SYM) >>
   qpat_x_assum `tn = ua` (SUBST_ALL_TAC o SYM) >>
-  `?plo. ptr_discipline plo CS vs0` by
-    (qpat_assum `o1_src_inv D CS vs0` mp_tac >>
+  `?plo. ptr_discipline_upto plo ncut CS vs0` by
+    (qpat_assum `o1_safe_upto D rlo ncut CS vs0` mp_tac >>
      POP_ASSUM_LIST (K ALL_TAC) >>
-     simp[o1PassContractTheory.o1_src_inv_def] >> metis_tac[]) >>
+     simp[o1_safe_upto_def, o1_ptr_safe_upto_def] >> metis_tac[]) >>
   `opaque_use_ok fn'` by
     (qpat_assum `o1_ctx_shape CS`
        (strip_assume_tac o SRULE [o1PassContractTheory.o1_ctx_shape_def,
@@ -1906,6 +2005,7 @@ Proof
     metis_tac[ld_normal_data_frame] >>
   `U = {v | MEM v (fn_ir_vars fn') /\ ~retpc_var fn' v}` by simp[] >>
   qpat_x_assum `U = {v | MEM v (fn_ir_vars fn') /\ ~retpc_var fn' v}` SUBST_ALL_TAC >>
+  `gas_cut ncut vs0 s''` by ld_source_cut_tac >>
   drule_all ld_reachable_jump_backward >>
   disch_then (qspec_then `fuel` strip_assume_tac) >>
   `ld_normal_data CS fn' V {v | MEM v (fn_ir_vars fn') /\ ~retpc_var fn' v}
@@ -2082,7 +2182,7 @@ Theorem ld_recursive_block_clause_anchor[local]:
   !Q.
   ctx_pass_stage rpolicy (CFP_Simple VP_LowerDload) view CS CT /\
   dead_wf D /\ o1_ctx_shape CS /\ o1_run_state_ok vs0 /\
-  o1_src_inv D CS vs0 /\ callee_first names CS.ctx_functions /\
+  o1_safe_upto D rlo ncut CS vs0 /\ callee_first names CS.ctx_functions /\
   lo = vs0.vs_alloca_next ==>
   ^ld_recursive_block_anchor_goal
 Proof
@@ -2094,7 +2194,7 @@ QED
 Theorem ld_recursive_block_clause:
   ctx_pass_stage rpolicy (CFP_Simple VP_LowerDload) view CS CT /\
   dead_wf D /\ o1_ctx_shape CS /\ o1_run_state_ok vs0 /\
-  o1_src_inv D CS vs0 /\ callee_first names CS.ctx_functions /\
+  o1_safe_upto D rlo ncut CS vs0 /\ callee_first names CS.ctx_functions /\
   lo = vs0.vs_alloca_next ==>
   ^ld_recursive_block_goal
 Proof
@@ -2121,8 +2221,9 @@ val ld_recursive_bytes_witness_complete =
   in list_mk_abs(args,ld_retain_saved_normal b) end;
 
 Theorem ld_recursive_bytes_next_witness[local]:
-  !R Q. ptr_discipline lo CS vs0 /\ o1_ctx_shape CS /\ o1_run_state_ok vs0 /\
-  mem_inv dload_offset_ok CS vs0 /\
+  !R Q. ptr_discipline_upto lo ncut CS vs0 /\ gas_cut ncut vs0 t /\ o1_ctx_shape CS /\ o1_run_state_ok vs0 /\
+  (!g ii r. raw_reachable vs0 CS g ii r /\ gas_cut ncut vs0 r ==>
+     dload_offset_ok CS g ii r) /\
   callee_first names CS.ctx_functions /\
   (!g. MEM g CS.ctx_functions ==> fn_ptr_ok P g) /\
   (^ld_recursive_bytes_witness_complete) vs0 CT stk un gn j t /\
@@ -2198,10 +2299,10 @@ Proof
      simp[] >> metis_tac[]) >>
   `raw_reachable vs0 CS fn i s` by
     (irule ld_frame_reachable_raw >> drule ld_annotated_erasure >> metis_tac[]) >>
+  `gas_cut ncut vs0 s` by ld_source_cut_tac >>
   `dload_offset_ok CS fn i s` by
-    (qpat_assum `mem_inv dload_offset_ok CS vs0` mp_tac >>
-     qpat_assum `raw_reachable vs0 CS fn i s` mp_tac >>
-     POP_ASSUM_LIST (K ALL_TAC) >> simp[unitMemInvTheory.mem_inv_raw_reachable]) >>
+    (qpat_assum `!g ii r. _ ==> dload_offset_ok _ _ _ _` irule >>
+     rpt conj_tac >> first_assum ACCEPT_TAC) >>
   `code_layout_valid s` by
     (irule o1LowerDloadSuppliedSegmentResourcesTheory.ld_raw_code_layout >>
      goal_assum (drule_at Any) >>
@@ -2370,8 +2471,9 @@ QED
 Finalise ld_recursive_bytes_next_witness
 
 Theorem ld_recursive_bytes_next_anchor[local]:
-  !Q. ptr_discipline lo CS vs0 /\ o1_ctx_shape CS /\ o1_run_state_ok vs0 /\
-  mem_inv dload_offset_ok CS vs0 /\
+  !Q. ptr_discipline_upto lo ncut CS vs0 /\ gas_cut ncut vs0 t /\ o1_ctx_shape CS /\ o1_run_state_ok vs0 /\
+  (!g ii r. raw_reachable vs0 CS g ii r /\ gas_cut ncut vs0 r ==>
+     dload_offset_ok CS g ii r) /\
   callee_first names CS.ctx_functions /\
   (!g. MEM g CS.ctx_functions ==> fn_ptr_ok P g) /\
   (^ld_recursive_bytes_complete) vs0 CT stk un gn j t /\
@@ -2388,8 +2490,9 @@ Proof
 QED
 
 Theorem ld_recursive_bytes_next:
-  ptr_discipline lo CS vs0 /\ o1_ctx_shape CS /\ o1_run_state_ok vs0 /\
-  mem_inv dload_offset_ok CS vs0 /\
+  ptr_discipline_upto lo ncut CS vs0 /\ gas_cut ncut vs0 t /\ o1_ctx_shape CS /\ o1_run_state_ok vs0 /\
+  (!g ii r. raw_reachable vs0 CS g ii r /\ gas_cut ncut vs0 r ==>
+     dload_offset_ok CS g ii r) /\
   callee_first names CS.ctx_functions /\
   (!g. MEM g CS.ctx_functions ==> fn_ptr_ok P g) /\
   (^ld_recursive_bytes_complete) vs0 CT stk un gn j t /\
@@ -2566,7 +2669,7 @@ Proof
 QED
 
 Theorem ld_recursive_geometry_ordinary_next:
-  ptr_discipline lo CS vs0 /\ o1_ctx_shape CS /\
+  ptr_discipline_upto lo ncut CS vs0 /\ gas_cut ncut vs0 t /\ o1_ctx_shape CS /\
   mem_inv dload_headroom_ok CS vs0 /\
   callee_first names CS.ctx_functions /\
   (!g. MEM g CS.ctx_functions ==> fn_ptr_ok P g) /\
@@ -2589,7 +2692,7 @@ val ld_recursive_geometry_alloca_zero = ld_geometry_restriction ld_recursive_all
 val ld_recursive_geometry_bytes_complete = ld_geometry_restriction ld_recursive_bytes_complete;
 
 Theorem ld_recursive_geometry_alloca_next:
-  ptr_discipline lo CS vs0 /\ o1_ctx_shape CS /\
+  ptr_discipline_upto lo ncut CS vs0 /\ gas_cut ncut vs0 t /\ o1_ctx_shape CS /\
   mem_inv dload_headroom_ok CS vs0 /\
   callee_first names CS.ctx_functions /\
   (^ld_recursive_geometry_alloca_zero) vs0 CT stk un gn j t /\
@@ -2615,8 +2718,9 @@ Proof
 QED
 
 Theorem ld_recursive_geometry_bytes_next:
-  ptr_discipline lo CS vs0 /\ o1_ctx_shape CS /\ o1_run_state_ok vs0 /\
-  mem_inv dload_offset_ok CS vs0 /\
+  ptr_discipline_upto lo ncut CS vs0 /\ gas_cut ncut vs0 t /\ o1_ctx_shape CS /\ o1_run_state_ok vs0 /\
+  (!g ii r. raw_reachable vs0 CS g ii r /\ gas_cut ncut vs0 r ==>
+     dload_offset_ok CS g ii r) /\
   callee_first names CS.ctx_functions /\
   (!g. MEM g CS.ctx_functions ==> fn_ptr_ok P g) /\
   (^ld_recursive_geometry_bytes_complete) vs0 CT stk un gn j t /\
@@ -2664,7 +2768,7 @@ QED
 
 val ld_recursive_geometry_entry_goal =
   let
-    val (p, body) = dest_forall (concl ld_frame_reachable_projected_ind)
+    val (p, body) = dest_forall (concl ld_frame_reachable_projected_cut_ind)
     val (clauses, _) = dest_imp body
     val clause = subst [p |-> ld_recursive_geometry_candidate] (hd(strip_conj clauses))
     val (v0::ct::rest, b) = strip_forall clause
@@ -2674,7 +2778,7 @@ val ld_recursive_geometry_entry_goal =
 Theorem ld_recursive_geometry_entry_clause:
   ctx_pass_stage rpolicy (CFP_Simple VP_LowerDload) view CS CT /\
   dead_wf D /\ o1_ctx_shape CS /\ o1_run_state_ok vs0 /\
-  o1_src_inv D CS vs0 /\ callee_first names CS.ctx_functions /\
+  o1_safe_upto D rlo ncut CS vs0 /\ callee_first names CS.ctx_functions /\
   lo = vs0.vs_alloca_next ==>
   ^ld_recursive_geometry_entry_goal
 Proof
@@ -2701,7 +2805,7 @@ QED
 
 val ld_recursive_geometry_block_goal =
   let
-    val (p, body) = dest_forall (concl ld_frame_reachable_projected_ind)
+    val (p, body) = dest_forall (concl ld_frame_reachable_projected_cut_ind)
     val (clauses, _) = dest_imp body
     val clause = subst [p |-> ld_recursive_geometry_candidate] (List.nth(strip_conj clauses,2))
     val (v0::ct::rest, b) = strip_forall clause
@@ -2711,7 +2815,7 @@ val ld_recursive_geometry_block_goal =
 Theorem ld_recursive_geometry_block_clause:
   ctx_pass_stage rpolicy (CFP_Simple VP_LowerDload) view CS CT /\
   dead_wf D /\ o1_ctx_shape CS /\ o1_run_state_ok vs0 /\
-  o1_src_inv D CS vs0 /\ callee_first names CS.ctx_functions /\
+  o1_safe_upto D rlo ncut CS vs0 /\ callee_first names CS.ctx_functions /\
   lo = vs0.vs_alloca_next ==>
   ^ld_recursive_geometry_block_goal
 Proof
@@ -2858,8 +2962,10 @@ val ld_recursive_load_witness_candidate =
        mk_disj(ld_retain_saved_normal normal,exceptional)]) end;
 
 Theorem ld_recursive_geometry_load_next_witness[local]:
-  !R. ptr_discipline lo CS vs0 /\ o1_ctx_shape CS /\ o1_run_state_ok vs0 /\
-  mem_inv dload_offset_ok CS vs0 /\ mem_inv dload_headroom_ok CS vs0 /\
+  !R. ptr_discipline_upto lo ncut CS vs0 /\ gas_cut ncut vs0 t /\ o1_ctx_shape CS /\ o1_run_state_ok vs0 /\
+  (!g ii r. raw_reachable vs0 CS g ii r /\ gas_cut ncut vs0 r ==>
+     dload_offset_ok CS g ii r) /\
+  mem_inv dload_headroom_ok CS vs0 /\
   callee_first names CS.ctx_functions /\
   (!g. MEM g CS.ctx_functions ==> fn_ptr_ok P g) /\
   (^ld_recursive_load_witness_complete) vs0 CT stk un gn j t /\
@@ -2999,8 +3105,11 @@ Proof
   `av NOTIN FDOM BH /\ bv NOTIN FDOM BH` by metis_tac[] >>
   `raw_reachable vs0 CS fn i s` by
     (irule ld_frame_reachable_raw >> drule ld_annotated_erasure >> metis_tac[]) >>
+  `gas_cut ncut vs0 s` by ld_source_cut_tac >>
   `dload_offset_ok CS fn i s /\ dload_headroom_ok CS fn i s` by
-    (qpat_assum `mem_inv dload_offset_ok CS vs0` mp_tac >>
+    (conj_tac >-
+      (qpat_assum `!g ii r. _ ==> dload_offset_ok _ _ _ _` irule >>
+       rpt conj_tac >> first_assum ACCEPT_TAC) >>
      qpat_assum `mem_inv dload_headroom_ok CS vs0` mp_tac >>
      qpat_assum `raw_reachable vs0 CS fn i s` mp_tac >>
      POP_ASSUM_LIST (K ALL_TAC) >>
@@ -3070,6 +3179,7 @@ Proof
     (qpat_assum `ld_target_prefix CT code ta ua (SUC n) _ _` mp_tac >>
      qpat_assum `code = [a;b;c;d]` mp_tac >> qpat_assum `n = 3` mp_tac >>
      POP_ASSUM_LIST (K ALL_TAC) >> simp[]) >>
+  `gas_cut ncut vs0 s` by ld_source_cut_tac >>
   qpat_assum `ld_normal_data _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _`
     (mp_then Any mp_tac ld_configured_load_next_backward) >>
   disch_then (drule_at (Pat `ld_target_prefix _ _ _ _ _ _ _`)) >>
@@ -3093,6 +3203,8 @@ Proof
   disch_then (drule_at (Pat `!fn. MEM fn CS.ctx_functions ==> fn_ptr_ok _ fn`)) >>
   disch_then (fn th => qpat_assum `i.inst_operands = [off]`
     (mp_then (Pat `i.inst_operands = [_]`) mp_tac th)) >>
+  disch_then (drule_at (Pat `ptr_discipline_upto _ _ _ _`)) >>
+  disch_then (drule_at (Pat `gas_cut _ _ _`)) >>
   disch_then (qspec_then `fuel` mp_tac) >>
   (impl_tac >- (qpat_x_assum `saved :- _` kall_tac >> simp[])) >>
   disch_then (qx_choose_then `zs` strip_assume_tac) >>
@@ -3216,8 +3328,10 @@ QED
 Finalise ld_recursive_geometry_load_next_witness
 
 Theorem ld_recursive_geometry_load_next:
-  ptr_discipline lo CS vs0 /\ o1_ctx_shape CS /\ o1_run_state_ok vs0 /\
-  mem_inv dload_offset_ok CS vs0 /\ mem_inv dload_headroom_ok CS vs0 /\
+  ptr_discipline_upto lo ncut CS vs0 /\ gas_cut ncut vs0 t /\ o1_ctx_shape CS /\ o1_run_state_ok vs0 /\
+  (!g ii r. raw_reachable vs0 CS g ii r /\ gas_cut ncut vs0 r ==>
+     dload_offset_ok CS g ii r) /\
+  mem_inv dload_headroom_ok CS vs0 /\
   callee_first names CS.ctx_functions /\
   (!g. MEM g CS.ctx_functions ==> fn_ptr_ok P g) /\
   (^ld_recursive_geometry_load_complete) vs0 CT stk un gn j t /\
@@ -3237,7 +3351,7 @@ QED
    completed-run premise, raw target provenance, or anchor reachability premise. *)
 val ld_recursive_geometry_call_return_goals =
   let
-    val (p,body) = dest_forall (concl ld_frame_reachable_projected_ind)
+    val (p,body) = dest_forall (concl ld_frame_reachable_projected_cut_ind)
     val (clauses,_) = dest_imp body
     fun select idx =
       let
@@ -3454,7 +3568,7 @@ QED
 
 val ld_recursive_guarded_call_goal =
   let
-    val (p,body) = dest_forall (concl ld_frame_reachable_projected_ind)
+    val (p,body) = dest_forall (concl ld_frame_reachable_projected_cut_ind)
     val (clauses,_) = dest_imp body
     val clause = subst [p |-> ld_recursive_guarded_candidate]
       (List.nth(strip_conj clauses,3))
@@ -3465,7 +3579,7 @@ val ld_recursive_guarded_call_goal =
 Theorem ld_recursive_guarded_call_clause[local]:
   ctx_pass_stage rpolicy (CFP_Simple VP_LowerDload) view CS CT /\
   dead_wf D /\ o1_ctx_shape CS /\ o1_run_state_ok vs0 /\
-  o1_src_inv D CS vs0 /\ callee_first names CS.ctx_functions /\
+  o1_safe_upto D rlo ncut CS vs0 /\ callee_first names CS.ctx_functions /\
   lo = vs0.vs_alloca_next ==> ^ld_recursive_guarded_call_goal
 Proof
   strip_tac >> rpt gen_tac >> strip_tac >>
@@ -3498,10 +3612,11 @@ Proof
      POP_ASSUM_LIST (K ALL_TAC) >> rpt strip_tac >>
      fs[o1PassContractTheory.o1_ctx_shape_def, EVERY_MEM,
        o1PassContractTheory.o1_fn_shape_def, unitShapeDefsTheory.fn_shape_ok_def]) >>
-  `?floor. ptr_discipline floor CS vs0` by
-    (qpat_assum `o1_src_inv D CS vs0` mp_tac >>
+  `?floor. ptr_discipline_upto floor ncut CS vs0` by
+    (qpat_assum `o1_safe_upto D rlo ncut CS vs0` mp_tac >>
      POP_ASSUM_LIST (K ALL_TAC) >>
-     simp[o1PassContractTheory.o1_src_inv_def] >> metis_tac[]) >>
+     simp[o1_safe_upto_def, o1_ptr_safe_upto_def] >> metis_tac[]) >>
+  `gas_cut ncut vs0 s''` by ld_source_cut_tac >>
   `taint_ok fn tn' i s''` by
     (drule_all lowerDloadReachableDisciplineTheory.ld_annotated_taint_ok >> simp[]) >>
   drule_at (Pat `ld_normal_data _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _`)
@@ -3681,7 +3796,7 @@ Finalise ld_recursive_guarded_call_clause
 Theorem ld_recursive_geometry_call_clause:
   ctx_pass_stage rpolicy (CFP_Simple VP_LowerDload) view CS CT /\
   dead_wf D /\ o1_ctx_shape CS /\ o1_run_state_ok vs0 /\
-  o1_src_inv D CS vs0 /\ callee_first names CS.ctx_functions /\
+  o1_safe_upto D rlo ncut CS vs0 /\ callee_first names CS.ctx_functions /\
   lo = vs0.vs_alloca_next ==> ^ld_recursive_geometry_call_goal
 Proof
   mp_tac (Q.INST [`b` |-> `F`] ld_recursive_guarded_call_clause) >>
@@ -3730,7 +3845,7 @@ val ld_proposed_return_normal_restore =
         NONE => NONE | SOME w => SOME (v |-> w)) (free_vars tm)) tm
     val env = ``ctx_pass_stage rpolicy (CFP_Simple VP_LowerDload) view CS CT /\
       dead_wf D /\ o1_ctx_shape CS /\ o1_run_state_ok vs0 /\
-      o1_src_inv D CS vs0 /\ callee_first names CS.ctx_functions /\
+      o1_safe_upto D rlo ncut CS vs0 /\ callee_first names CS.ctx_functions /\
       lo = vs0.vs_alloca_next``
   in list_mk_forall(args @ ws,
        mk_imp(list_mk_conj [align env,g1,g2,b,align extra],align result)) end;
@@ -3854,7 +3969,7 @@ QED
 
 val ld_recursive_saved_clause_goals =
   let
-    val (p,body) = dest_forall (concl ld_frame_reachable_projected_ind)
+    val (p,body) = dest_forall (concl ld_frame_reachable_projected_cut_ind)
     val (clauses,_) = dest_imp body
     val originals = strip_conj clauses
     val _ = if length originals = 5 then ()
@@ -4001,7 +4116,7 @@ QED
 
 val ld_recursive_combined_clause_goals =
   let
-    val (p,body) = dest_forall (concl ld_frame_reachable_projected_ind)
+    val (p,body) = dest_forall (concl ld_frame_reachable_projected_cut_ind)
     val (clauses,_) = dest_imp body
     val originals = strip_conj clauses
     val _ = if length originals = 5 then ()
@@ -4079,7 +4194,7 @@ val ld_recursive_combined_entry_fixed_goal =
 Theorem ld_recursive_combined_entry_clause:
   ctx_pass_stage rpolicy (CFP_Simple VP_LowerDload) view CS CT /\
   dead_wf D /\ o1_ctx_shape CS /\ o1_run_state_ok vs0 /\
-  o1_src_inv D CS vs0 /\ callee_first names CS.ctx_functions /\
+  o1_safe_upto D rlo ncut CS vs0 /\ callee_first names CS.ctx_functions /\
   lo = vs0.vs_alloca_next ==>
   ^ld_recursive_combined_entry_fixed_goal
 Proof
@@ -4110,7 +4225,7 @@ val ld_recursive_combined_ordinary_zero =
   ld_combined_restriction ld_recursive_ordinary_zero;
 
 Theorem ld_recursive_combined_ordinary_next:
-  ptr_discipline lo CS vs0 /\ o1_ctx_shape CS /\
+  ptr_discipline_upto lo ncut CS vs0 /\ gas_cut ncut vs0 t /\ o1_ctx_shape CS /\
   mem_inv dload_headroom_ok CS vs0 /\
   callee_first names CS.ctx_functions /\
   (!g. MEM g CS.ctx_functions ==> fn_ptr_ok P g) /\
@@ -4144,7 +4259,7 @@ val ld_recursive_combined_external_zero =
   ld_combined_restriction ld_recursive_external_zero;
 
 Theorem ld_recursive_combined_external_next:
-  ptr_discipline lo CS vs0 /\ o1_ctx_shape CS /\
+  ptr_discipline_upto lo ncut CS vs0 /\ gas_cut ncut vs0 t /\ o1_ctx_shape CS /\
   mem_inv dload_headroom_ok CS vs0 /\
   callee_first names CS.ctx_functions /\
   (!g. MEM g CS.ctx_functions ==> fn_ptr_ok P g) /\
@@ -4178,8 +4293,9 @@ val ld_recursive_combined_bytes_complete =
   ld_combined_restriction ld_recursive_bytes_complete;
 
 Theorem ld_recursive_combined_bytes_next:
-  ptr_discipline lo CS vs0 /\ o1_ctx_shape CS /\ o1_run_state_ok vs0 /\
-  mem_inv dload_offset_ok CS vs0 /\
+  ptr_discipline_upto lo ncut CS vs0 /\ gas_cut ncut vs0 t /\ o1_ctx_shape CS /\ o1_run_state_ok vs0 /\
+  (!g ii r. raw_reachable vs0 CS g ii r /\ gas_cut ncut vs0 r ==>
+     dload_offset_ok CS g ii r) /\
   callee_first names CS.ctx_functions /\
   (!g. MEM g CS.ctx_functions ==> fn_ptr_ok P g) /\
   (^ld_recursive_combined_bytes_complete) vs0 CT stk un gn j t /\
@@ -4220,8 +4336,10 @@ val ld_recursive_combined_load_complete =
   in ld_combined_restriction base_restriction end;
 
 Theorem ld_recursive_combined_load_next:
-  ptr_discipline lo CS vs0 /\ o1_ctx_shape CS /\ o1_run_state_ok vs0 /\
-  mem_inv dload_offset_ok CS vs0 /\ mem_inv dload_headroom_ok CS vs0 /\
+  ptr_discipline_upto lo ncut CS vs0 /\ gas_cut ncut vs0 t /\ o1_ctx_shape CS /\ o1_run_state_ok vs0 /\
+  (!g ii r. raw_reachable vs0 CS g ii r /\ gas_cut ncut vs0 r ==>
+     dload_offset_ok CS g ii r) /\
+  mem_inv dload_headroom_ok CS vs0 /\
   callee_first names CS.ctx_functions /\
   (!g. MEM g CS.ctx_functions ==> fn_ptr_ok P g) /\
   (^ld_recursive_combined_load_complete) vs0 CT stk un gn j t /\
@@ -4263,7 +4381,7 @@ val ld_recursive_combined_block_fixed_goal =
 Theorem ld_recursive_combined_block_clause:
   ctx_pass_stage rpolicy (CFP_Simple VP_LowerDload) view CS CT /\
   dead_wf D /\ o1_ctx_shape CS /\ o1_run_state_ok vs0 /\
-  o1_src_inv D CS vs0 /\ callee_first names CS.ctx_functions /\
+  o1_safe_upto D rlo ncut CS vs0 /\ callee_first names CS.ctx_functions /\
   lo = vs0.vs_alloca_next ==>
   ^ld_recursive_combined_block_fixed_goal
 Proof
@@ -4302,7 +4420,7 @@ val ld_recursive_combined_alloca_zero =
   ld_combined_restriction ld_recursive_alloca_zero;
 
 Theorem ld_recursive_combined_alloca_next:
-  ptr_discipline lo CS vs0 /\ o1_ctx_shape CS /\
+  ptr_discipline_upto lo ncut CS vs0 /\ gas_cut ncut vs0 t /\ o1_ctx_shape CS /\
   mem_inv dload_headroom_ok CS vs0 /\
   callee_first names CS.ctx_functions /\
   (^ld_recursive_combined_alloca_zero) vs0 CT stk un gn j t /\
@@ -4347,7 +4465,7 @@ val ld_recursive_combined_call_fixed_goal =
 Theorem ld_recursive_combined_call_clause:
   ctx_pass_stage rpolicy (CFP_Simple VP_LowerDload) view CS CT /\
   dead_wf D /\ o1_ctx_shape CS /\ o1_run_state_ok vs0 /\
-  o1_src_inv D CS vs0 /\ callee_first names CS.ctx_functions /\
+  o1_safe_upto D rlo ncut CS vs0 /\ callee_first names CS.ctx_functions /\
   lo = vs0.vs_alloca_next ==> ^ld_recursive_combined_call_fixed_goal
 Proof
   mp_tac (Q.INST [`b` |-> `T`] ld_recursive_guarded_call_clause) >>
@@ -4359,7 +4477,7 @@ val ld_recursive_combined_return_zero = ld_call_zero ld_recursive_combined_candi
 
 (* Opcode/supply inversion only: independent of recursive witness packaging. *)
 Theorem ld_supply_intret_anchor[local]:
-  ptr_discipline floor CS vs0 /\ MEM fn CS.ctx_functions /\
+  ptr_discipline_upto floor ncut CS vs0 /\ MEM fn CS.ctx_functions /\
   MEM i (fn_insts fn) /\ lower_dload_inst_supply a1 i = (code,a2) /\
   MEM j code /\ step_inst fuel CT j t = IntRet ret tend ==>
   j = i /\ i.inst_opcode = RET /\ code = [i] /\ a2 = a1 /\
@@ -4394,7 +4512,7 @@ QED
 Theorem ld_recursive_combined_return_anchor:
   ctx_pass_stage rpolicy (CFP_Simple VP_LowerDload) view CS CT /\
   dead_wf D /\ o1_ctx_shape CS /\ o1_run_state_ok vs0 /\
-  o1_src_inv D CS vs0 /\ callee_first names CS.ctx_functions /\
+  o1_safe_upto D rlo ncut CS vs0 /\ callee_first names CS.ctx_functions /\
   lo = vs0.vs_alloca_next /\
   (^ld_recursive_combined_candidate) vs0 CT stk un gn j t /\
   step_inst fuel CT j t = IntRet ret tend ==>
@@ -4418,10 +4536,10 @@ Proof
      POP_ASSUM_LIST (K ALL_TAC) >>
      simp[active_inst_def,fn_insts_def,o1PassContractTheory.fn_insts_blocks_MEM] >>
      metis_tac[EL_MEM]) >>
-  `?floor. ptr_discipline floor CS vs0` by
-    (qpat_assum `o1_src_inv D CS vs0` mp_tac >>
+  `?floor. ptr_discipline_upto floor ncut CS vs0` by
+    (qpat_assum `o1_safe_upto D rlo ncut CS vs0` mp_tac >>
      POP_ASSUM_LIST (K ALL_TAC) >>
-     simp[o1PassContractTheory.o1_src_inv_def] >> metis_tac[]) >>
+     simp[o1_safe_upto_def, o1_ptr_safe_upto_def] >> metis_tac[]) >>
   `MEM fn CS.ctx_functions` by asm_rewrite_tac[MEM_APPEND, MEM] >>
   drule_all ld_supply_intret_anchor >> strip_tac >>
   TRY (qpat_x_assum `0 < n` mp_tac >>
@@ -4451,8 +4569,8 @@ val ld_combined_return_witness =
 Theorem ld_recursive_paired_return_pop:
   ctx_pass_stage rpolicy (CFP_Simple VP_LowerDload) view CS CT /\
   dead_wf D /\ o1_ctx_shape CS /\ o1_run_state_ok vs0 /\
-  o1_src_inv D CS vs0 /\ callee_first names CS.ctx_functions /\
-  lo = vs0.vs_alloca_next /\
+  o1_safe_upto D rlo ncut CS vs0 /\ callee_first names CS.ctx_functions /\
+  lo = vs0.vs_alloca_next /\ gas_cut ncut vs0 t /\
   ^ld_combined_return_witness /\ astk = sf::astail /\ gstk = tf::gtail /\
   i.inst_opcode = RET /\ ret.iret_adopt_fmp = NONE /\
   step_inst fuel CT i t = IntRet ret t /\
@@ -4483,10 +4601,10 @@ Proof
   qpat_x_assum `t = ta` SUBST_ALL_TAC >>
   qpat_x_assum `astk = sf::astail` SUBST_ALL_TAC >>
   qpat_x_assum `gstk = tf::gtail` SUBST_ALL_TAC >>
-  `?floor. ptr_discipline floor CS vs0` by
-    (qpat_assum `o1_src_inv D CS vs0` mp_tac >>
+  `?floor. ptr_discipline_upto floor ncut CS vs0` by
+    (qpat_assum `o1_safe_upto D rlo ncut CS vs0` mp_tac >>
      POP_ASSUM_LIST (K ALL_TAC) >>
-     simp[o1PassContractTheory.o1_src_inv_def] >> metis_tac[]) >>
+     simp[o1_safe_upto_def, o1_ptr_safe_upto_def] >> metis_tac[]) >>
   `MEM fn CS.ctx_functions` by asm_rewrite_tac[MEM_APPEND, MEM] >>
   `MEM i (fn_insts fn)` by
     (qpat_assum `active_inst fn i s` mp_tac >>
@@ -4499,12 +4617,13 @@ Proof
      POP_ASSUM_LIST (K ALL_TAC) >> rpt strip_tac >>
      fs[o1PassContractTheory.o1_ctx_shape_def, EVERY_MEM,
        o1PassContractTheory.o1_fn_shape_def, unitShapeDefsTheory.fn_shape_ok_def]) >>
+  `gas_cut ncut vs0 s` by ld_source_cut_tac >>
   `taint_ok fn tn i s` by
     (drule_all lowerDloadReachableDisciplineTheory.ld_annotated_taint_ok >> simp[]) >>
   `?P. !g. MEM g CS.ctx_functions ==> fn_ptr_ok P g` by
-    (qpat_assum `ptr_discipline floor CS vs0` mp_tac >>
+    (qpat_assum `ptr_discipline_upto floor ncut CS vs0` mp_tac >>
      POP_ASSUM_LIST (K ALL_TAC) >>
-     simp[ptr_discipline_def, EVERY_MEM] >> metis_tac[]) >>
+     simp[ptr_discipline_upto_def, EVERY_MEM] >> metis_tac[]) >>
   `fn_ptr_ok P fn` by metis_tac[] >>
   `FDOM AG SUBSET fn_pv P fn` by
     (drule_all lowerDloadProvenanceSupportTheory.ld_annotated_prov_support >> simp[]) >>
@@ -5338,43 +5457,48 @@ Theorem ld_frame_reachable_fixed_projected_ind:
     lookup_function name CT.ctx_functions = SOME fn /\
     fn_entry_label fn = SOME lbl /\
     enters_block fn (vs0 with <|vs_prev_bb := NONE; vs_current_bb := lbl;
-      vs_inst_idx := 0|>) s1 /\ active_inst fn inst s1 ==>
+      vs_inst_idx := 0|>) s1 /\ active_inst fn inst s1 /\
+    gas_cut ncut vs0 s1 ==>
     P [] entry_taint fn inst s1) /\
   (!stk tn fn inst inst' s s' fuel.
     P stk tn fn inst s /\ active_inst fn inst s /\
     ~is_terminator inst.inst_opcode /\ inst.inst_opcode <> INVOKE /\
     step_inst fuel CT inst s = OK s' /\
-    active_inst fn inst' (s' with vs_inst_idx := SUC s.vs_inst_idx) ==>
+    active_inst fn inst' (s' with vs_inst_idx := SUC s.vs_inst_idx) /\
+    gas_cut ncut vs0 s ==>
     P stk (step_taint inst s s' tn) fn inst'
       (s' with vs_inst_idx := SUC s.vs_inst_idx)) /\
   (!stk tn fn inst inst' s s' s1 fuel.
     P stk tn fn inst s /\ active_inst fn inst s /\
     is_terminator inst.inst_opcode /\ step_inst fuel CT inst s = OK s' /\
-    ~s'.vs_halted /\ enters_block fn s' s1 /\ active_inst fn inst' s1 ==>
+    ~s'.vs_halted /\ enters_block fn s' s1 /\ active_inst fn inst' s1 /\
+    gas_cut ncut vs0 s ==>
     P stk (entry_taint_vars fn s' tn) fn inst' s1) /\
   (!stk tn caller inv s nm ops callee args cs s1 inst.
     P stk tn caller inv s /\ active_inst caller inv s /\
     inv.inst_opcode = INVOKE /\ decode_invoke inv = SOME (nm,ops) /\
     lookup_function nm CT.ctx_functions = SOME callee /\
     eval_operands ops s = SOME args /\ setup_callee callee args s = SOME cs /\
-    enters_block callee cs s1 /\ active_inst callee inst s1 ==>
+    enters_block callee cs s1 /\ active_inst callee inst s1 /\
+    gas_cut ncut vs0 s ==>
     P ((caller,inv,s,tn.t_var)::stk) (tn with t_var := FEMPTY) callee inst s1) /\
   (!caller inv saved T stk tn fn rinst s ret s_end s' inst' fuel.
     P ((caller,inv,saved,T)::stk) tn fn rinst s /\ active_inst fn rinst s /\
     step_inst fuel CT rinst s = IntRet ret s_end /\
     bind_outputs inv.inst_outputs ret.iret_values
       (adopt_return_fmp ret (merge_callee_state saved s_end)) = SOME s' /\
-    active_inst caller inst' (s' with vs_inst_idx := SUC saved.vs_inst_idx) ==>
+    active_inst caller inst' (s' with vs_inst_idx := SUC saved.vs_inst_idx) /\
+    gas_cut ncut vs0 s ==>
     P stk (tn with t_var := DRESTRICT T (COMPL (set inv.inst_outputs)))
       caller inst' (s' with vs_inst_idx := SUC saved.vs_inst_idx)) ==>
   !stk PG G tn fn inst s.
-    frame_reachable vs0 CT stk PG G tn fn inst s ==>
+    frame_reachable vs0 CT stk PG G tn fn inst s /\ gas_cut ncut vs0 s ==>
     P (MAP (\f. (f.cf_fn,f.cf_inst,f.cf_state,f.cf_tvar)) stk) tn fn inst s
 Proof
   gen_tac >> strip_tac >>
   qspec_then `\v c stk tn fn inst s.
     v = vs0 /\ c = CT ==> P stk tn fn inst s`
-    mp_tac ld_frame_reachable_projected_ind >>
+    mp_tac ld_frame_reachable_projected_cut_ind >>
   (impl_tac >- (simp[] >> rpt conj_tac >> rpt gen_tac >>
     strip_tac >> gvs[] >> metis_tac[])) >>
   simp[]
@@ -5390,7 +5514,7 @@ val ld_recursive_combined_fixed_clauses =
 Theorem ld_recursive_combined_coverage_conditional:
   ^ld_recursive_combined_fixed_clauses ==>
   !stk PG G un gn j t.
-    frame_reachable vs0 CT stk PG G un gn j t ==>
+    frame_reachable vs0 CT stk PG G un gn j t /\ gas_cut ncut vs0 t ==>
     (^ld_recursive_combined_candidate) vs0 CT
       (MAP (\f. (f.cf_fn,f.cf_inst,f.cf_state,f.cf_tvar)) stk) un gn j t
 Proof
@@ -5546,7 +5670,8 @@ Proof
 QED
 
 Theorem ld_recursive_combined_request_observation:
-  dead_wf D /\ taint_within D CS vs0 /\ ptr_discipline lo CS vs0 /\
+  dead_wf D /\ taint_within_upto D ncut CS vs0 /\
+  ptr_discipline_upto lo ncut CS vs0 /\ gas_cut ncut vs0 t /\
   o1_ctx_shape CS /\ mem_inv dload_headroom_ok CS vs0 /\
   callee_first names CS.ctx_functions /\
   (!g. MEM g CS.ctx_functions ==> fn_ptr_ok P g) /\
@@ -5596,10 +5721,12 @@ Proof
       disch_then (drule_at (Pat `ld_stack_origin _ _ _ _ _`)) >>
       disch_then (drule_at (Pat `callee_first _ _`)) >>
       disch_then (drule_at (Pat `dead_wf _`)) >>
+      disch_then (drule_at (Pat `ptr_discipline_upto _ _ _ _`)) >>
       disch_then (qspecl_then [`t'`, `fuel`, `P`, `CT`] mp_tac) >>
       simp_tac (srw_ss()) [listTheory.MAP_MAP_o, combinTheory.o_DEF, ld_erase_frame_def] >>
       qpat_x_assum `t = ta` SUBST_ALL_TAC >>
       qpat_x_assum `un = ua` SUBST_ALL_TAC >>
+      `gas_cut ncut vs0 s` by ld_source_cut_tac >>
       impl_tac >- (
         rpt conj_tac >> FIRST [first_assum ACCEPT_TAC,
           qpat_x_assum `LIST_REL _ (A::suspended) _` mp_tac >>
@@ -5702,7 +5829,7 @@ val ld_recursive_member_candidate = ``\vs0 CT stk un gn j t.
 
 val ld_recursive_member_fixed_goals =
   let
-    val (p,body) = dest_forall (concl ld_frame_reachable_projected_ind)
+    val (p,body) = dest_forall (concl ld_frame_reachable_projected_cut_ind)
     val (clauses,_) = dest_imp body
   in map (ld_fix_combined_environment o
     subst [p |-> ld_recursive_member_candidate]) (strip_conj clauses) end;
@@ -5716,7 +5843,7 @@ fun ld_head_beta_conv tm =
 Theorem ld_recursive_member_entry_clause[local]:
   ctx_pass_stage rpolicy (CFP_Simple VP_LowerDload) view CS CT /\
   dead_wf D /\ o1_ctx_shape CS /\ o1_run_state_ok vs0 /\
-  o1_src_inv D CS vs0 /\ callee_first names CS.ctx_functions /\
+  o1_safe_upto D rlo ncut CS vs0 /\ callee_first names CS.ctx_functions /\
   lo = vs0.vs_alloca_next ==> ^ld_recursive_member_entry_goal
 Proof
   strip_tac >> mp_tac ld_recursive_combined_entry_clause >>
@@ -5732,7 +5859,7 @@ val ld_member_beta_conv = EVERY_CONV (List.tabulate (7, K ld_head_beta_conv));
 Theorem ld_recursive_member_block_clause[local]:
   ctx_pass_stage rpolicy (CFP_Simple VP_LowerDload) view CS CT /\
   dead_wf D /\ o1_ctx_shape CS /\ o1_run_state_ok vs0 /\
-  o1_src_inv D CS vs0 /\ callee_first names CS.ctx_functions /\
+  o1_safe_upto D rlo ncut CS vs0 /\ callee_first names CS.ctx_functions /\
   lo = vs0.vs_alloca_next ==> ^ld_recursive_member_block_goal
 Proof
   strip_tac >> mp_tac ld_recursive_combined_block_clause >>
@@ -5751,7 +5878,7 @@ QED
 Theorem ld_recursive_member_call_clause[local]:
   ctx_pass_stage rpolicy (CFP_Simple VP_LowerDload) view CS CT /\
   dead_wf D /\ o1_ctx_shape CS /\ o1_run_state_ok vs0 /\
-  o1_src_inv D CS vs0 /\ callee_first names CS.ctx_functions /\
+  o1_safe_upto D rlo ncut CS vs0 /\ callee_first names CS.ctx_functions /\
   lo = vs0.vs_alloca_next ==> ^ld_recursive_member_call_goal
 Proof
   strip_tac >> mp_tac ld_recursive_combined_call_clause >>
@@ -5768,8 +5895,9 @@ Proof
   qpat_x_assum `!stk tn caller inv s nm ops callee args cs s1 inst. _`
     (drule_at (Pat `(^ld_recursive_combined_candidate) _ _ _ _ _ _ _`)) >>
   disch_then irule >> rpt (conj_tac >- first_assum ACCEPT_TAC) >>
-  qexistsl [`args`, `cs`, `nm`, `ops`] >>
-  rpt conj_tac >> first_assum ACCEPT_TAC
+  conj_tac >- (qexistsl [`args`, `cs`, `nm`, `ops`] >>
+               rpt conj_tac >> first_assum ACCEPT_TAC) >>
+  first_assum ACCEPT_TAC
 QED
 
 Theorem ld_stage_member_distinct_labels[local]:
@@ -5996,7 +6124,7 @@ QED
 Theorem ld_recursive_member_next_clause[local]:
   ctx_pass_stage rpolicy (CFP_Simple VP_LowerDload) view CS CT /\
   dead_wf D /\ o1_ctx_shape CS /\ o1_run_state_ok vs0 /\
-  o1_src_inv D CS vs0 /\ callee_first names CS.ctx_functions /\
+  o1_safe_upto D rlo ncut CS vs0 /\ callee_first names CS.ctx_functions /\
   lo = vs0.vs_alloca_next ==> ^ld_recursive_member_next_goal
 Proof
   strip_tac >> rpt gen_tac >> strip_tac >>
@@ -6008,7 +6136,8 @@ Proof
   drule ld_recursive_combined_phase_split >>
   disch_then (DISJ_CASES_THEN2 assume_tac mp_tac)
   >- (irule ld_recursive_combined_prefix_next >>
-      rpt conj_tac >> goal_assum (drule_at Any) >> first_assum ACCEPT_TAC) >>
+      rpt conj_tac >> goal_assum (drule_at Any) >> rpt conj_tac >>
+      first_assum ACCEPT_TAC) >>
   disch_then (DISJ_CASES_THEN2 assume_tac assume_tac)
   >- suspend "complete" >>
   qpat_x_assum `(^ld_recursive_combined_exceptional) _ _ _ _ _ _ _`
@@ -6024,40 +6153,48 @@ Proof
 QED
 
 Resume ld_recursive_member_next_clause[complete]:
-  `ptr_discipline lo CS vs0` by
-    (qpat_assum `o1_src_inv D CS vs0` mp_tac >>
+  `ptr_discipline_upto lo ncut CS vs0` by
+    (qpat_assum `o1_safe_upto D rlo ncut CS vs0` mp_tac >>
      qpat_assum `o1_run_state_ok vs0` mp_tac >>
      qpat_assum `lo = vs0.vs_alloca_next` SUBST1_TAC >>
-     metis_tac[lowerDloadReachableFloorTheory.ld_o1_src_inv_frontier_discipline]) >>
-  `?P. !g. MEM g CS.ctx_functions ==> fn_ptr_ok P g` by
-    (qpat_assum `ptr_discipline lo CS vs0` mp_tac >>
-     POP_ASSUM_LIST (K ALL_TAC) >> simp[ptr_discipline_def, EVERY_MEM] >>
+     POP_ASSUM_LIST (K ALL_TAC) >> simp[o1_safe_upto_def] >> rpt strip_tac >>
+     irule lowerDloadReachableFloorTheory.ld_o1_src_inv_frontier_discipline >>
      metis_tac[]) >>
-  `mem_inv dload_offset_ok CS vs0 /\ mem_inv dload_headroom_ok CS vs0` by
-    (qpat_assum `o1_src_inv D CS vs0` mp_tac >>
-     POP_ASSUM_LIST (K ALL_TAC) >> simp[o1PassContractTheory.o1_src_inv_def]) >>
+  `?P. !g. MEM g CS.ctx_functions ==> fn_ptr_ok P g` by
+    (qpat_assum `ptr_discipline_upto lo ncut CS vs0` mp_tac >>
+     POP_ASSUM_LIST (K ALL_TAC) >> simp[ptr_discipline_upto_def, EVERY_MEM] >>
+     metis_tac[]) >>
+  `(!g ii r. raw_reachable vs0 CS g ii r /\ gas_cut ncut vs0 r ==>
+      dload_offset_ok CS g ii r) /\ mem_inv dload_headroom_ok CS vs0` by
+    (qpat_assum `o1_safe_upto D rlo ncut CS vs0` mp_tac >>
+     POP_ASSUM_LIST (K ALL_TAC) >> simp[o1_safe_upto_def] >> metis_tac[]) >>
   drule ld_recursive_combined_opcode_split >>
   disch_then (DISJ_CASES_THEN2 assume_tac mp_tac)
   >- (irule ld_recursive_combined_bytes_next >>
-      rpt conj_tac >> goal_assum (drule_at Any) >> first_assum ACCEPT_TAC) >>
+      rpt conj_tac >> goal_assum (drule_at Any) >> rpt conj_tac >>
+      first_assum ACCEPT_TAC) >>
   disch_then (DISJ_CASES_THEN2 assume_tac assume_tac)
   >- (irule ld_recursive_combined_load_next >>
-      rpt conj_tac >> goal_assum (drule_at Any) >> first_assum ACCEPT_TAC) >>
+      rpt conj_tac >> goal_assum (drule_at Any) >> rpt conj_tac >>
+      first_assum ACCEPT_TAC) >>
   suspend "nonmacro"
 QED
 Resume ld_recursive_member_next_clause[nonmacro]:
   `fmp_free_ctx CS` by
-    (qpat_assum `o1_src_inv D CS vs0` mp_tac >>
-     POP_ASSUM_LIST (K ALL_TAC) >> simp[o1PassContractTheory.o1_src_inv_def]) >>
+    (qpat_assum `o1_safe_upto D rlo ncut CS vs0` mp_tac >>
+     POP_ASSUM_LIST (K ALL_TAC) >> simp[o1_safe_upto_def, o1_ptr_safe_upto_def]) >>
   drule_all ld_recursive_combined_singleton_split >>
   disch_then (DISJ_CASES_THEN2 assume_tac mp_tac)
   >- (irule ld_recursive_combined_ordinary_next >>
-      rpt conj_tac >> goal_assum (drule_at Any) >> first_assum ACCEPT_TAC) >>
+      rpt conj_tac >> goal_assum (drule_at Any) >> rpt conj_tac >>
+      first_assum ACCEPT_TAC) >>
   disch_then (DISJ_CASES_THEN2 assume_tac assume_tac)
   >- (irule ld_recursive_combined_external_next >>
-      rpt conj_tac >> goal_assum (drule_at Any) >> first_assum ACCEPT_TAC) >>
+      rpt conj_tac >> goal_assum (drule_at Any) >> rpt conj_tac >>
+      first_assum ACCEPT_TAC) >>
   irule ld_recursive_combined_alloca_next >>
-  rpt conj_tac >> goal_assum (drule_at Any) >> first_assum ACCEPT_TAC
+  rpt conj_tac >> goal_assum (drule_at Any) >> rpt conj_tac >>
+      first_assum ACCEPT_TAC
 QED
 Finalise ld_recursive_member_next_clause
 
@@ -6106,7 +6243,7 @@ QED
 Theorem ld_recursive_member_return_clause[local]:
   ctx_pass_stage rpolicy (CFP_Simple VP_LowerDload) view CS CT /\
   dead_wf D /\ o1_ctx_shape CS /\ o1_run_state_ok vs0 /\
-  o1_src_inv D CS vs0 /\ callee_first names CS.ctx_functions /\
+  o1_safe_upto D rlo ncut CS vs0 /\ callee_first names CS.ctx_functions /\
   lo = vs0.vs_alloca_next ==> ^ld_recursive_member_return_goal
 Proof
   strip_tac >> rpt gen_tac >> strip_tac >>
@@ -6142,7 +6279,7 @@ Proof
     (drule_at (Pat `bind_outputs _ _ _ = SOME _`)) o
     MATCH_MP (BETA_RULE ld_pop_witness_first)) >>
   disch_then (drule_at (Pat `step_inst _ _ _ _ = IntRet _ _`)) >>
-  disch_then (qspecl_then [`names`, `D`] mp_tac) >>
+  disch_then (qspecl_then [`rlo`, `ncut`, `names`, `D`] mp_tac) >>
   impl_tac
   >- (rpt conj_tac >> simp_tac (srw_ss()) [] >> first_assum ACCEPT_TAC) >>
   disch_then (REPEAT_TCL CHOOSE_THEN (fn th =>
@@ -6163,10 +6300,10 @@ QED
 Theorem ld_recursive_combined_coverage:
   ctx_pass_stage rpolicy (CFP_Simple VP_LowerDload) view CS CT /\
   dead_wf D /\ o1_ctx_shape CS /\ o1_run_state_ok vs0 /\
-  o1_src_inv D CS vs0 /\ callee_first names CS.ctx_functions /\
+  o1_safe_upto D rlo ncut CS vs0 /\ callee_first names CS.ctx_functions /\
   lo = vs0.vs_alloca_next ==>
   !stk PG G un gn j t.
-    frame_reachable vs0 CT stk PG G un gn j t ==>
+    frame_reachable vs0 CT stk PG G un gn j t /\ gas_cut ncut vs0 t ==>
     (^ld_recursive_combined_candidate) vs0 CT
       (MAP (\f. (f.cf_fn,f.cf_inst,f.cf_state,f.cf_tvar)) stk) un gn j t
 Proof
@@ -6190,9 +6327,10 @@ QED
 Theorem ld_reachable_request_observation:
   ctx_pass_stage rpolicy (CFP_Simple VP_LowerDload) view CS CT /\
   dead_wf D /\ o1_ctx_shape CS /\ o1_run_state_ok vs0 /\
-  o1_src_inv D CS vs0 /\ callee_first names CS.ctx_functions ==>
+  o1_safe_upto D rlo ncut CS vs0 /\ callee_first names CS.ctx_functions ==>
   !stk PG G un gn j t fuel t'.
-    frame_reachable vs0 CT stk PG G un gn j t /\ active_inst gn j t /\
+    frame_reachable vs0 CT stk PG G un gn j t /\ gas_cut ncut vs0 t /\
+    active_inst gn j t /\
     j.inst_opcode <> INVOKE /\ step_inst fuel CT j t = OK t' /\
     LENGTH t.vs_requests < LENGTH t'.vs_requests ==>
     un.t_stor SUBSET D.d_stor t.vs_call_ctx.cc_address
@@ -6201,24 +6339,25 @@ Theorem ld_reachable_request_observation:
       (t.vs_transient t.vs_call_ctx.cc_address)
 Proof
   strip_tac >>
-  `ptr_discipline vs0.vs_alloca_next CS vs0` by
-    metis_tac[lowerDloadReachableFloorTheory.ld_o1_src_inv_frontier_discipline] >>
+  `ptr_discipline_upto vs0.vs_alloca_next ncut CS vs0` by
+    (irule lowerDloadReachableFloorTheory.ld_o1_src_inv_frontier_discipline >>
+     fs[o1_safe_upto_def] >> metis_tac[]) >>
   `?P. !g. MEM g CS.ctx_functions ==> fn_ptr_ok P g` by
-    (qpat_assum `ptr_discipline _ CS vs0` mp_tac >>
-     POP_ASSUM_LIST (K ALL_TAC) >> simp[ptr_discipline_def, EVERY_MEM] >>
+    (qpat_assum `ptr_discipline_upto _ ncut CS vs0` mp_tac >>
+     POP_ASSUM_LIST (K ALL_TAC) >> simp[ptr_discipline_upto_def, EVERY_MEM] >>
      metis_tac[]) >>
-  `taint_within D CS vs0 /\ mem_inv dload_headroom_ok CS vs0` by
-    (qpat_assum `o1_src_inv D CS vs0` mp_tac >>
-     POP_ASSUM_LIST (K ALL_TAC) >> simp[o1PassContractTheory.o1_src_inv_def]) >>
+  `taint_within_upto D ncut CS vs0 /\ mem_inv dload_headroom_ok CS vs0` by
+    (qpat_assum `o1_safe_upto D rlo ncut CS vs0` mp_tac >>
+     POP_ASSUM_LIST (K ALL_TAC) >> simp[o1_safe_upto_def, o1_ptr_safe_upto_def]) >>
   rpt gen_tac >> strip_tac >>
   mp_tac (Q.INST [`lo` |-> `vs0.vs_alloca_next`] ld_recursive_combined_coverage) >>
   (impl_tac >- (rpt conj_tac >> simp[])) >>
   disch_then (qspecl_then [`stk`, `PG`, `G`, `un`, `gn`, `j`, `t`] mp_tac) >>
-  (impl_tac >- first_assum ACCEPT_TAC) >>
+  (impl_tac >- (conj_tac >> first_assum ACCEPT_TAC)) >>
   disch_tac >>
   irule ld_recursive_combined_request_observation >>
   rpt conj_tac >> goal_assum (drule_at Any) >>
-  qexistsl [`P`, `fuel`, `names`, `t'`] >>
+  qexistsl [`P`, `fuel`, `names`, `ncut`, `t'`] >>
   rpt conj_tac >> first_assum ACCEPT_TAC
 QED
 

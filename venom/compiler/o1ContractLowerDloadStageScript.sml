@@ -19,6 +19,8 @@
  *                                    frontier bound after
  *   (the simulation and the raw memory, pointer and taint rows are in
  *    o1ContractLowerDload{Sim,Mem,Ptr,Taint})
+ *   lower_dload_stage_safe_upto    - the guarded pointer row and the
+ *                                    alloca frontier, up to a gas cut
  *   lower_dload_fn_row             - function row 1 to row 2
  *   o1_contract_lower_dload        - the contract theorem
  *)
@@ -29,6 +31,7 @@ Ancestors
   contextRawReachable contextCodegenRel fcgDefs fcgBridge
   venomFnScheduleRunner o1ContractLowerDloadSim o1ContractLowerDloadMem
   o1ContractLowerDloadPtr o1ContractLowerDloadTaint lowerDloadMakeSsaInput
+  o1SafeUpto lowerDloadPtrJointSafety
   venomFnScheduleRunnerProps
 
 (* ===== Helpers for the shape and DLOAD-bound lemmas ===== *)
@@ -301,9 +304,35 @@ Proof
     metis_tac[lower_dload_stage_ssa_form] >>
   fs[o1_src_inv_def] >>
   `ptr_discipline lo C' vs` by
-    (irule lower_dload_stage_ptr >> simp[o1_src_inv_def] >> metis_tac[]) >>
+    (irule lower_dload_stage_ptr_whole >> simp[o1_src_inv_def] >> metis_tac[]) >>
   `C'.ctx_global_reserved = C.ctx_global_reserved` by fs[ctx_pass_stage_def] >>
   fs[fixed_region_reserved_def] >> metis_tac[]
+QED
+
+(* The guarded pointer row and the target frontier, both up to the cut. *)
+Theorem lower_dload_stage_safe_upto:
+  !rpolicy D view C C' vs names lo n.
+    ctx_pass_stage rpolicy (CFP_Simple VP_LowerDload) view C C' /\
+    dead_wf D /\ o1_ctx_shape C /\ o1_run_state_ok vs /\
+    callee_first names C.ctx_functions /\ o1_safe_upto D lo n C vs ==>
+    o1_ptr_safe_upto D lo n C' vs /\ alloca_frontier_upto n C' vs
+Proof
+  rpt gen_tac >> strip_tac >>
+  `o1_ptr_safe_upto D lo n C vs` by fs[o1_safe_upto_def] >>
+  `ptr_discipline_upto lo n C' vs` by
+    metis_tac[lower_dload_stage_ptr] >>
+  `taint_within_upto D n C' vs` by
+    metis_tac[lower_dload_stage_taint_upto] >>
+  `alloca_frontier_upto n C' vs` by
+    metis_tac[lower_dload_stage_alloca_frontier] >>
+  `EVERY (\fn. fn.fn_eom = NONE) C'.ctx_functions /\ ~ctx_has_dalloca C'` by
+    (irule lower_dload_stage_shape >> fs[o1_ptr_safe_upto_def] >>
+     metis_tac[]) >>
+  `fmp_free_ctx C'` by
+    (irule lower_dload_stage_fmp_free >> fs[o1_ptr_safe_upto_def] >>
+     metis_tac[]) >>
+  `C'.ctx_global_reserved = C.ctx_global_reserved` by fs[ctx_pass_stage_def] >>
+  fs[o1_ptr_safe_upto_def, fixed_region_reserved_def]
 QED
 
 (* One run takes function row 1 to row 2: it keeps a valid MakeSSA
