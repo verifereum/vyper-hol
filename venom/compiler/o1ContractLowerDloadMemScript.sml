@@ -11,6 +11,7 @@ Theory o1ContractLowerDloadMem
 Ancestors
   o1ContractLowerDload o1PassContract ptrDiscipline unitMemInv
   lowerDloadDefs venomPassSchedule list lowerDloadRawCoverage lowerDloadCurrentSafety
+  lowerDloadPtrStatic
 
 (* The output's reachable states keep raw memory safety. *)
 Theorem lower_dload_stage_mem:
@@ -27,6 +28,8 @@ Proof
   rewrite_tac[mem_inv_raw_reachable] >>
   conj_tac >- metis_tac[] >>
   rpt strip_tac >>
+  `ctx_has_dalloca C' ==> ctx_has_dalloca C` by
+    metis_tac[lower_dload_stage_no_dalloca] >>
   drule_all (BETA_RULE ld_raw_coverage_fixed) >> disch_tac >>
   irule (BETA_RULE ld_owned_or_forward_current_raw) >>
   goal_assum (drule_at Any) >>

@@ -82,7 +82,7 @@ Theorem ld_joint_shared_update_next:
   active_inst fn inst2 (s1 with vs_inst_idx := SUC s.vs_inst_idx) /\
   occ_frame_reachable vs C stk PG G tn1 fn inst2
     (s1 with vs_inst_idx := SUC s.vs_inst_idx) n a U B HP H /\
-  occurrence_annotation_ok n a U B HP H stk PG G
+  occurrence_annotation_ok (dyn_floor C vs) n a U B HP H stk PG G
     (s1 with vs_inst_idx := SUC s.vs_inst_idx) /\
   tn1.t_var = tn.t_var /\ tn1.t_mem = tn.t_mem /\
   ld_shared_agree D s.vs_call_ctx.cc_address tn1 s1 t1 ==>
@@ -180,7 +180,7 @@ Proof
   strip_tac >> drule_all ld_joint_storage_store_step >> strip_tac >>
   `occ_frame_reachable vs C stk PG G tn fn inst s n a U B HP H` by
     metis_tac[ld_joint_source] >>
-  `occurrence_annotation_ok n a U B HP H stk PG G s` by
+  `occurrence_annotation_ok (dyn_floor C vs) n a U B HP H stk PG G s` by
     gvs[ld_joint_boundary_def] >>
   `MEM fn C.ctx_functions` by
     (drule occ_frame_reachable_annotation >> simp[]) >>
@@ -196,7 +196,7 @@ Proof
   `occ_frame_reachable vs C stk PG G (step_taint inst s s1 tn) fn inst2
      (s1 with vs_inst_idx := SUC s.vs_inst_idx) n a U B HP H` by
     (drule_all occ_frame_reachable_next >> simp[occurrence_sites_step_def] >> gvs[MEM]) >>
-  `occurrence_annotation_ok n a U B HP H stk PG G
+  `occurrence_annotation_ok (dyn_floor C vs) n a U B HP H stk PG G
      (s1 with vs_inst_idx := SUC s.vs_inst_idx)` by
     (drule occurrence_annotation_next >>
      disch_then (qspecl_then [`s1`,`inst`,`SUC s.vs_inst_idx`,`fuel`,`C`] mp_tac) >>

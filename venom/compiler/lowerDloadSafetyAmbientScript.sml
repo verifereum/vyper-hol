@@ -2,7 +2,8 @@
 Theory lowerDloadSafetyAmbient
 Ancestors
   lowerDloadSafetyRelation lowerDloadSafetyKernel lowerDloadDefs words lowerDloadFrontier
-  o1PassContract venomWf venomInst list contextCodegenRel venomExecProps venomInstProps venomExecSemantics venomExecProofs contextRawReachable ptrDiscipline unitMemInv
+  o1PassContract venomWf venomInst list contextCodegenRel venomExecProps venomInstProps venomExecSemantics venomExecProofs contextRawReachable ptrDiscipline unitMemInv o1LowerDloadGhost venomInstProofs3
+  lowerDloadSafetyAllocBounds ctxLookupAgree
 
 Theorem ld_sync_labels:
   ld_sync lo P C vs0 stk PG G tn fn inst s t A frames N ==>
@@ -40,6 +41,44 @@ Theorem o1_fn_shape_components:
   ALL_DISTINCT (MAP (\bb. bb.bb_label) fn.fn_blocks)
 Proof
   simp[o1_fn_shape_def, wf_function_def, fn_labels_def]
+QED
+
+(* An effect proved over the erased selected sites lifts to the ghost
+   relation of the next state. *)
+Theorem ld_sync_ghost_step:
+  ld_sync lo P C vs0 stk PG G tn fn inst s t A (f::fs) N /\ o1_ctx_shape C /\
+  step_prov (MAP (OPTION_MAP (ld_erase A)) f.lf_Q) (ld_erase A o_f f.lf_H)
+    inst ss = ld_erase A o_f H' ==>
+  ld_ghost_ok (dyn_floor C vs0) A H' (step_prov PG G inst ss)
+Proof
+  strip_tac >>
+  `o1_fn_shape C fn` by metis_tac[ld_sync_fn_shape] >>
+  drule o1_fn_shape_components >> strip_tac >>
+  drule ld_sync_ghosts >> simp[] >> strip_tac >>
+  drule ld_sync_source >> strip_tac >>
+  `EVERY (fn_ptr_ok P) C.ctx_functions` by fs[ld_sync_def] >>
+  drule frame_reachable_prov_support >> disch_then drule >> strip_tac >>
+  `fn_ptr_ok P fn` by fs[EVERY_MEM] >>
+  `MEM inst (fn_insts fn)` by
+    (fs[active_inst_def, fn_insts_def, o1PassContractTheory.fn_insts_blocks_MEM] >>
+     metis_tac[MEM_EL]) >>
+  metis_tac[ld_ghost_ok_step]
+QED
+
+(* A step that writes no memory keeps the dynamic-region agreement. *)
+Theorem ld_sync_dyn_agree_unwritten:
+  ~is_alloca_op inst.inst_opcode /\
+  Eff_MEMORY NOTIN write_effects inst.inst_opcode /\
+  source_memory_write_ranges inst s = [] /\
+  ld_sync lo P C vs0 stk PG G tn fn inst s t A frames N /\
+  step_inst fuel C inst s = OK ss /\ step_inst fuel' C' inst t = OK ts /\
+  inst.inst_opcode <> INVOKE /\ ~is_terminator inst.inst_opcode ==>
+  ld_dyn_agree (dyn_floor C vs0) (step_taint inst s ss tn).t_mem
+    ss.vs_memory ts.vs_memory
+Proof
+  strip_tac >> gvs[step_inst_non_invoke] >> irule ld_dyn_agree_unwritten >>
+  imp_res_tac venomInstProofs3Theory.step_inst_base_preserves_memory >>
+  simp[] >> metis_tac[ld_sync_dyn_agree]
 QED
 
 (* C1.11.5.48: source reachability interface audit (not a proved bridge).
@@ -443,4 +482,35 @@ Proof
   drule_all ld_frame_raw_reachable >>
   strip_tac >> drule ld_raw_reachable_frontier >> strip_tac >>
   drule ld_sync_frontier >> gvs[ptr_discipline_def]
+QED
+
+(* The frontiers and every selected allocation lie below the dynamic
+   floor: the DLOAD headroom ends at the initial free memory pointer when
+   the context has DALLOCA, and below 2^256 otherwise. *)
+Theorem ld_sync_dyn_floor:
+  o1_ctx_shape C /\ ptr_discipline lo C vs0 /\
+  mem_inv dload_headroom_ok C vs0 /\
+  ld_sync lo P C vs0 stk PG G tn fn inst s t A frames N /\
+  ld_global lo A frames /\ FDOM A = ld_slots A frames /\
+  EVERY (ld_maps A) frames ==>
+  lo <= dyn_floor C vs0 /\ t.vs_alloca_next <= dyn_floor C vs0 /\
+  !a b c n. FLOOKUP A a = SOME (b,c,n) ==>
+    b+n <= dyn_floor C vs0 /\ c+n <= dyn_floor C vs0
+Proof
+  strip_tac >>
+  `dload_headroom_ok C fn inst s` by metis_tac[ld_sync_source_mem_inv] >>
+  `s.vs_initial_fmp = vs0.vs_initial_fmp` by
+    (drule ld_sync_source >> strip_tac >> drule_all ld_frame_raw_reachable >>
+     metis_tac[raw_reachable_initial_fmp]) >>
+  `lo <= t.vs_alloca_next` by metis_tac[ld_sync_frontier_lower_bound] >>
+  `ld_charge frames <= ctx_dload_count C /\
+   t.vs_alloca_next = s.vs_alloca_next + 32 * ld_charge frames` by
+    metis_tac[ld_sync_frontier] >>
+  `t.vs_alloca_next <= dyn_floor C vs0` by
+    (simp[dyn_floor_def] >> IF_CASES_TAC >>
+     gvs[dload_headroom_ok_def, ctx_has_dalloca_def] >> decide_tac) >>
+  conj_tac >- decide_tac >> conj_tac >- first_assum ACCEPT_TAC >>
+  rpt gen_tac >> strip_tac >>
+  drule_all ld_alloc_frontiers >> strip_tac >>
+  drule ld_sync_active >> strip_tac >> gvs[] >> decide_tac
 QED

@@ -431,7 +431,13 @@ Proof
   `ctx_dload_count C' <= ctx_dload_count C` by
     (irule simplify_cfg_ctx_dload_count_le >>
      simp[] >> irule simplify_cfg_stage_functions >> goal_assum drule) >>
-  irule dload_headroom_mem_inv_decrease >> qexists_tac `C` >> simp[] >>
+  `ctx_has_dalloca C' ==> ctx_has_dalloca C` by
+    (`C' = C with ctx_functions := MAP simplify_cfg_fn C.ctx_functions` by
+       (drule simplify_cfg_stage_functions >>
+        strip_tac >> fs[ctx_pass_stage_def, venom_context_component_equality]) >>
+     metis_tac[scfg_simplify_cfg_no_dalloca]) >>
+  irule dload_headroom_mem_inv_decrease >> qexists_tac `C` >>
+  fs[ctx_has_dalloca_def] >>
   irule simplify_cfg_stage_mem_inv_rf >>
   simp[dload_headroom_fixed_corr_closed_rf] >>
   qexistsl_tac [`C`, `rpolicy`, `view`] >> simp[] >>

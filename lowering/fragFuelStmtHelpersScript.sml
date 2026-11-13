@@ -215,7 +215,7 @@ Proof
              fuel_ok_compile_alloc_buffer, fuel_ok_compile_copy_memory,
              fuel_ok_compile_store_memory, fuel_ok_typed_memory_family,
              CONJUNCT1 fuel_ok_typed_memory_family,
-             fuel_ok_compile_dynarray_to_storage,
+             fuel_ok_compile_store_slots,
              fuel_ok_compile_imm_store_word,
              fuel_ok_compile_store_immutable_bytestring,
              fuel_ok_compile_imm_store_words,

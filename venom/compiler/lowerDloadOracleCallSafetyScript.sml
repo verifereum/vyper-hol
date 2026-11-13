@@ -1,30 +1,12 @@
 (* Current-instruction range safety does not require successful execution. *)
 Theory lowerDloadOracleCallSafety
 Ancestors
-  lowerDloadOracleCallAssembly lowerDloadSafetyAllocBounds
+  lowerDloadOracleCallAssembly lowerDloadSafetyAllocBounds lowerDloadRangeFrontier
   lowerDloadSafetyAmbient lowerDloadSafetyValues lowerDloadSafetyRelation lowerDloadSafetyKernel
   unitMemInv unitTransformDefs memLocDefs ptrDiscipline
   codegenRel contextCodegenRel venomExecSemantics venomInst
   finite_map pred_set list words arithmetic pair venomWf
   lowerDloadSafetyAssemblyPremises lowerDloadSafetyWriteAssembly
-
-Theorem ld_alloc_target_frontier:
-  ld_global lo A frames /\ FDOM A = ld_slots A frames /\
-  EVERY (ld_maps A) frames /\ FLOOKUP A k = SOME (b,c,n) ==>
-  c+n <= (HD frames).lf_tgt.vs_alloca_next
-Proof
-  strip_tac >> drule_all ld_slot_source_site >> strip_tac >>
-  `ld_maps A (EL j frames)` by gvs[EVERY_EL] >>
-  `FLOOKUP (EL j frames).lf_src.vs_allocas aid = SOME (b,n)` by
-    gvs[ld_sites_def] >>
-  `FLOOKUP (EL j frames).lf_tgt.vs_allocas aid = SOME (c,n)` by
-    (gvs[ld_maps_def] >>
-     qpat_x_assum `!aid b n. FLOOKUP _ aid = SOME (b,n) ==> ?c. _ /\ _`
-       drule >> strip_tac >> gvs[]) >>
-  `(j,aid,c,n) IN ld_sites frames F` by
-    (simp[ld_sites_def] >> metis_tac[]) >>
-  drule_all ld_global_bounds >> simp[]
-QED
 
 Theorem ld_oracle_call_range_transport:
   MEM (getops,ranges)
@@ -110,8 +92,8 @@ Finalise ld_oracle_call_range_transport
 Theorem ld_sync_oracle_call_raw:
   ld_sync lo P C vs0 stk PG G tn fn inst s t A (f::fs) N /\
   ld_global lo A (f::fs) /\ o1_ctx_shape C /\ ptr_discipline lo C vs0 /\
-  mem_inv dload_headroom_ok C vs0 /\ ~in_revert_forward fn s /\
-  MEM inst.inst_opcode [CALL;STATICCALL] ==>
+  mem_inv dload_headroom_ok C vs0 /\ mem_inv raw_mem_ok C vs0 /\
+  ~in_revert_forward fn s /\ MEM inst.inst_opcode [CALL;STATICCALL] ==>
   raw_mem_ok C fn inst t
 Proof
   strip_tac >>
@@ -128,7 +110,7 @@ Proof
   `FDOM A = ld_slots A (f::fs) /\ EVERY (ld_maps A) (f::fs)` by
     metis_tac[ld_sync_slots, ld_sync_maps] >>
   `!k b c sz. FLOOKUP A k = SOME (b,c,sz) ==> c+sz <= t.vs_alloca_next` by
-    (rpt strip_tac >> drule_all ld_alloc_target_frontier >>
+    (rpt strip_tac >> drule_all ld_alloc_frontiers >>
      drule ld_sync_active >> simp[]) >>
   `!k b c sz. FLOOKUP A k = SOME (b,c,sz) ==> c+sz < dimword(:256)` by
     metis_tac[LESS_EQ_LESS_TRANS] >>
@@ -155,6 +137,11 @@ Proof
     (rpt strip_tac >>
      `?x. eval_operand op f.lf_src = SOME x` suffices_by metis_tac[] >>
      irule ld_write_operand_defined >> simp[] >> metis_tac[]) >>
+  `raw_mem_ok C fn inst s` by (irule ld_sync_source_mem_inv >> metis_tac[]) >>
+  `ld_nonghost tn s t` by fs[ld_sync_def] >>
+  `w2n t.vs_initial_fmp <= w2n t.vs_fmp` by
+    (fs[ld_nonghost_def, raw_mem_ok_def] >> metis_tac[]) >>
+  `dalloca_no_wrap inst t` by gvs[dalloca_no_wrap_def] >>
   simp[raw_mem_ok_def, inst_mem_ok_in_fn_def] >> disj1_tac >>
   pure_rewrite_tac[inst_mem_below_frontier_def, EVERY_MEM] >>
   qx_gen_tac `r` >> PairCases_on `r` >> pure_rewrite_tac[UNCURRY] >>
@@ -179,16 +166,27 @@ Proof
      conj_tac >- (qexists_tac `inst` >> gvs[]) >>
      metis_tac[]) >>
   `xx = x` by metis_tac[optionTheory.SOME_11] >>
-  ` (w2n x+r1 <= lo /\ y=x) \/
-    (?k b c sz delta. FLOOKUP A k = SOME (b,c,sz) /\
-      w2n x=b+delta /\ w2n y=c+delta /\ delta+r1 <= sz)` by
-    (`0 < r1` by decide_tac >>
-     qpat_x_assum `MEM (getops,ranges) _`
-       (strip_assume_tac o REWRITE_RULE [MEM, PAIR_EQ])
-     >- (gvs[] >> drule_all ld_read_access_classified >> simp[]) >>
-     gvs[] >> drule_all ld_write_access_classified >> simp[]) >>
-  qpat_assum `!k b c sz. FLOOKUP A k = SOME (b,c,sz) ==> c+sz <= _`
-    imp_res_tac >>
-  qpat_x_assum `r0 = w2n y` SUBST1_TAC >>
-  pure_asm_rewrite_tac[] >> decide_tac
+  `r1 = 0 \/ w2n y + r1 <= t.vs_alloca_next \/ y = x` by
+    (qpat_x_assum `MEM (getops,ranges) _`
+       (strip_assume_tac o REWRITE_RULE [MEM, PAIR_EQ]) >>
+     irule ld_classified_range_frontier >>
+     rpt conj_tac >> TRY (qexistsl_tac [`A`,`G`,`f.lf_H`,`dyn_floor C vs0`]) >>
+     rpt conj_tac >> metis_tac[]) >>
+  (* same address on both sides: the source's own raw check bounds it *)
+  `y = x ==> r1 = 0 \/ w2n y + r1 <= t.vs_alloca_next \/
+     w2n t.vs_initial_fmp <= w2n y /\ w2n y + r1 <= w2n t.vs_fmp` by
+    (strip_tac >>
+     `s.vs_alloca_next <= t.vs_alloca_next` by
+       (drule ld_sync_frontier >> simp[]) >>
+     irule ld_source_range_frontier >>
+     qexistsl_tac [`fn`,`inst`,`ranges`,`s`] >>
+     fs[raw_mem_ok_def, ld_nonghost_def] >>
+     TRY (qpat_x_assum `MEM (getops,ranges) _`
+            (strip_assume_tac o REWRITE_RULE [MEM, PAIR_EQ])) >>
+     metis_tac[]) >>
+  qpat_x_assum `r0 = w2n y` SUBST_ALL_TAC >>
+  `r1 = 0 \/ w2n y + r1 <= t.vs_alloca_next \/
+   w2n t.vs_initial_fmp <= w2n y /\ w2n y + r1 <= w2n t.vs_fmp`
+    suffices_by (rpt strip_tac >> FIRST [decide_tac, fs[] >> decide_tac]) >>
+  metis_tac[]
 QED

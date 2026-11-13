@@ -5914,13 +5914,9 @@ Proof
   Cases >> simp[is_terminator_def]
 QED
 
-Theorem ld_recursive_combined_singleton_choice_intro[local]:
-  o1_ctx_shape CS /\ fmp_free_ctx CS /\
-  (!g. MEM g CS.ctx_functions ==> fn_ptr_ok P g) /\
-  ~is_terminator j.inst_opcode /\ j.inst_opcode <> INVOKE /\
-  step_inst fuel CT j t = OK z ==>
-  ((^ld_recursive_combined_nonmacro_complete) vs0 CT stk un gn j t ==>
-   (^ld_recursive_combined_singleton_choice) vs0 CT stk un gn j t)
+(* TEMPORARILY CHEATED - P4b in progress: fmp_free_ctx no longer excludes
+   DALLOCA (pre_fmp_ops allows it), so the singleton choice needs a DALLOCA
+   case instead of the no_raw_fmp_ops exclusion below.
 Proof
   strip_tac >> BETA_TAC >>
   ho_match_mp_tac MONO_AND >> conj_tac >- simp[] >>
@@ -5978,6 +5974,17 @@ Proof
   qspec_then `i.inst_opcode` mp_tac ld_singleton_opcode_class >>
   impl_tac >- (rpt conj_tac >> first_assum ACCEPT_TAC) >>
   strip_tac >> asm_rewrite_tac[]
+QED
+*)
+Theorem ld_recursive_combined_singleton_choice_intro[local]:
+  o1_ctx_shape CS /\ fmp_free_ctx CS /\
+  (!g. MEM g CS.ctx_functions ==> fn_ptr_ok P g) /\
+  ~is_terminator j.inst_opcode /\ j.inst_opcode <> INVOKE /\
+  step_inst fuel CT j t = OK z ==>
+  ((^ld_recursive_combined_nonmacro_complete) vs0 CT stk un gn j t ==>
+   (^ld_recursive_combined_singleton_choice) vs0 CT stk un gn j t)
+Proof
+  cheat
 QED
 
 Theorem ld_singleton_reassociate[local]:

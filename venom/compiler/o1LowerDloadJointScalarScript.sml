@@ -92,7 +92,7 @@ Proof
      Cases_on `FLOOKUP G vv` >> simp[] >>
      `vv IN fn_pv P fn` by (fs[SUBSET_DEF, FLOOKUP_DEF] >> metis_tac[]) >>
      gvs[ptr_use_ok_def] >> metis_tac[]) >>
-  `occurrence_env_ok B (a::MAP (\u. u.of_owner) U) H G` by
+  `occurrence_env_ok (dyn_floor C vs) B (a::MAP (\u. u.of_owner) U) H G` by
     fs[ld_joint_boundary_def, occurrence_annotation_ok_def] >>
   drule occurrence_op_erasure >> disch_then (qspec_then `op` mp_tac) >>
   Cases_on `op_prov H op` >> simp[occurrence_param_ok_def]
@@ -137,7 +137,7 @@ Proof
      metis_tac[MEM_EL]) >>
   `ptr_use_ok P (fn_pv P fn) inst` by
     (gvs[EVERY_MEM, fn_ptr_ok_def] >> metis_tac[]) >>
-  `occurrence_env_ok B (a::MAP (\u. u.of_owner) U) H G` by
+  `occurrence_env_ok (dyn_floor C vs) B (a::MAP (\u. u.of_owner) U) H G` by
     fs[ld_joint_boundary_def, occurrence_annotation_ok_def] >>
   rpt strip_tac >>
   `op_prov G op = NONE` by (irule ld_scalar_no_provenance >> metis_tac[]) >>
@@ -268,7 +268,7 @@ Proof
   strip_tac >> drule_all ld_joint_unary_step >> strip_tac >>
   `occ_frame_reachable vs C stk PG G tn fn inst s n a U B HP H` by
     metis_tac[ld_joint_source] >>
-  `occurrence_annotation_ok n a U B HP H stk PG G s` by
+  `occurrence_annotation_ok (dyn_floor C vs) n a U B HP H stk PG G s` by
     gvs[ld_joint_boundary_def] >>
   `~MEM inst.inst_opcode [DLOAD; DLOADBYTES]` by gvs[] >>
   `~is_terminator inst.inst_opcode /\ inst.inst_opcode <> INVOKE` by
@@ -278,7 +278,7 @@ Proof
      (s1 with vs_inst_idx := SUC s.vs_inst_idx) n a U B HP
      (occurrence_step a HP H inst s1)` by
     (drule_all occ_frame_reachable_next >> simp[occurrence_sites_step_def] >> gvs[]) >>
-  `occurrence_annotation_ok n a U B HP (occurrence_step a HP H inst s1)
+  `occurrence_annotation_ok (dyn_floor C vs) n a U B HP (occurrence_step a HP H inst s1)
      stk PG (step_prov PG G inst s1) (s1 with vs_inst_idx := SUC s.vs_inst_idx)` by
     (drule occurrence_annotation_next >>
      disch_then (qspecl_then [`s1`,`inst`,`SUC s.vs_inst_idx`,`fuel`,`C`] mp_tac) >>
@@ -441,7 +441,7 @@ Proof
   strip_tac >> drule_all ld_joint_binary_step >> strip_tac >>
   `occ_frame_reachable vs C stk PG G tn fn inst s n a U B HP H` by
     metis_tac[ld_joint_source] >>
-  `occurrence_annotation_ok n a U B HP H stk PG G s` by
+  `occurrence_annotation_ok (dyn_floor C vs) n a U B HP H stk PG G s` by
     gvs[ld_joint_boundary_def] >>
   `~MEM inst.inst_opcode [DLOAD; DLOADBYTES]` by gvs[] >>
   `~is_terminator inst.inst_opcode /\ inst.inst_opcode <> INVOKE` by
@@ -451,7 +451,7 @@ Proof
      (s1 with vs_inst_idx := SUC s.vs_inst_idx) n a U B HP
      (occurrence_step a HP H inst s1)` by
     (drule_all occ_frame_reachable_next >> simp[occurrence_sites_step_def] >> gvs[]) >>
-  `occurrence_annotation_ok n a U B HP (occurrence_step a HP H inst s1)
+  `occurrence_annotation_ok (dyn_floor C vs) n a U B HP (occurrence_step a HP H inst s1)
      stk PG (step_prov PG G inst s1) (s1 with vs_inst_idx := SUC s.vs_inst_idx)` by
     (drule occurrence_annotation_next >>
      disch_then (qspecl_then [`s1`,`inst`,`SUC s.vs_inst_idx`,`fuel`,`C`] mp_tac) >>

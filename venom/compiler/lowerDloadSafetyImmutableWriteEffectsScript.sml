@@ -1,7 +1,7 @@
 (* Immutable writes share physical MSTORE effects, with masked bookkeeping. *)
 Theory lowerDloadSafetyImmutableWriteEffects
 Ancestors
-  lowerDloadSafetyMemoryWriteEffects lowerDloadSafetyRelation
+  lowerDloadSafetyMemoryWriteEffects lowerDloadSafetyWriteBytes lowerDloadSafetyRelation byte
   lowerDloadSafetyKernel ptrDiscipline venomExecSemantics venomInst
   venomState memLocDefs codegenRel finite_map pred_set list words arithmetic
 
@@ -67,9 +67,13 @@ Theorem ld_istore_effect:
   op_taint tn v SUBSET {j | j < 32} /\
   ld_global lo A frames /\ FDOM A = ld_slots A frames /\
   EVERY (ld_maps A) frames /\
+  ld_dyn_agree fl tn.t_mem f.lf_src.vs_memory f.lf_tgt.vs_memory /\
+  lo <= fl /\
+  (!a u v z. FLOOKUP A a = SOME (u,v,z) ==> u+z <= fl /\ v+z <= fl) /\
   (w2n dst+32 <= lo \/
    (?k b c sz delta. FLOOKUP A k = SOME (b,c,sz) /\
-     w2n dst=b+delta /\ w2n dst=c+delta /\ delta+32 <= sz)) /\
+     w2n dst=b+delta /\ w2n dst=c+delta /\ delta+32 <= sz) \/
+   fl <= w2n dst) /\
   step_inst_base inst f.lf_tgt = OK ts /\
   ld_memory lo A tn f.lf_src f.lf_tgt /\ ld_nonghost tn f.lf_src f.lf_tgt ==>
   ?ss. step_inst_base inst f.lf_src = OK ss /\
@@ -77,6 +81,8 @@ Theorem ld_istore_effect:
       lf_tv := (step_taint inst f.lf_src ss tn).t_var |> ) /\
     ld_memory lo A (step_taint inst f.lf_src ss tn) ss ts /\
     ld_nonghost (step_taint inst f.lf_src ss tn) ss ts /\
+    ld_dyn_agree fl (step_taint inst f.lf_src ss tn).t_mem
+      ss.vs_memory ts.vs_memory /\
     step_prov (MAP (OPTION_MAP (ld_erase A)) f.lf_Q)
       (ld_erase A o_f f.lf_H) inst ss = ld_erase A o_f f.lf_H /\
     ss.vs_allocas = f.lf_src.vs_allocas /\
@@ -96,7 +102,7 @@ Theorem ld_istore_effect:
     ts.vs_labels = f.lf_tgt.vs_labels /\
     ts.vs_return_pc_token = f.lf_tgt.vs_return_pc_token
 Proof
-  strip_tac >>
+  disch_then (REPEAT_TCL CONJUNCTS_THEN assume_tac) >>
   `step_inst_base inst f.lf_src = OK (istore (w2n dst) x f.lf_src)` by
     (irule ld_istore_step >> simp[]) >>
   `step_inst_base inst f.lf_tgt = OK (istore (w2n dst) y f.lf_tgt)` by
@@ -106,15 +112,51 @@ Proof
                           {w2n dst+j | j < 32 /\ j IN op_taint tn v};
                t_imm := key_update tn.t_imm (w2n dst) (op_taint tn v)|>` by
     (irule ld_istore_taint >> simp[]) >>
-  qexists_tac `istore (w2n dst) x f.lf_src` >> gvs[] >>
-  (conj_tac >- gvs[ld_vars_def, istore_def, mstore_def] >>
-   conj_tac >- (
-     irule ld_memory_istore_bookkeeping >>
+  `!z w. mstore (w2n dst) w z =
+         write_memory_with_expansion (w2n dst) (word_to_bytes w T) z` by
+    simp[mstore_def, write_memory_with_expansion_def, LENGTH_word_to_bytes,
+         fcpLib.INDEX_CONV ``dimindex(:256)``] >>
+  `!z w. (istore (w2n dst) w z).vs_memory = (mstore (w2n dst) w z).vs_memory`
+    by simp[istore_def] >>
+  `ld_dyn_agree fl
+     ((tn.t_mem DIFF {w2n dst+j | j < 32}) UNION
+       {w2n dst+j | j < 32 /\ j IN op_taint tn v})
+     (istore (w2n dst) x f.lf_src).vs_memory
+     (istore (w2n dst) y f.lf_tgt).vs_memory` by
+    (qpat_assum `!z w. (istore _ _ _).vs_memory = _`
+       (fn th => rewrite_tac[th]) >>
+     qpat_assum `!z w. mstore _ _ _ = _` (fn th => rewrite_tac[th]) >>
+     irule ld_dyn_agree_write >>
+     qexistsl_tac [`op_taint tn v`, `32`, `tn`] >>
+     rpt conj_tac >>
+     FIRST [first_assum ACCEPT_TAC,
+            disj2_tac >> disj1_tac >> fs[word_agree_except_def] >> NO_TAC,
+            simp[LENGTH_word_to_bytes, fcpLib.INDEX_CONV ``dimindex(:256)``]]) >>
+  `ld_memory lo A
+     (tn with <|t_mem := (tn.t_mem DIFF {w2n dst+j | j < 32}) UNION
+                          {w2n dst+j | j < 32 /\ j IN op_taint tn v};
+               t_imm := key_update tn.t_imm (w2n dst) (op_taint tn v)|>)
+     (istore (w2n dst) x f.lf_src) (istore (w2n dst) y f.lf_tgt)` by
+    (irule ld_memory_istore_bookkeeping >>
+     Cases_on `fl <= w2n dst`
+     >- (qpat_assum `!z w. mstore _ _ _ = _` (fn th => rewrite_tac[th]) >>
+         irule ld_memory_write_high >> rpt conj_tac >>
+         FIRST [qexistsl_tac [`op_taint tn v`, `32`, `tn`] >>
+                simp[LENGTH_word_to_bytes, fcpLib.INDEX_CONV ``dimindex(:256)``] >>
+                NO_TAC,
+                decide_tac,
+                rpt strip_tac >> res_tac >> decide_tac]) >>
      irule ld_memory_mstore >>
      conj_tac >- metis_tac[] >>
      conj_tac >- (qexists_tac `frames` >> simp[]) >>
      qexistsl_tac [`op_taint tn v`, `tn`] >>
      simp[AC ADD_ASSOC ADD_COMM]) >>
-   conj_tac >- (irule ld_nonghost_istore >> simp[]) >>
-   simp[step_prov_def, set_prov_def, DRESTRICT_UNIV, istore_def, mstore_def])
+  qpat_x_assum `!z w. (istore _ _ _).vs_memory = _` kall_tac >>
+  qpat_x_assum `!z w. mstore _ _ _ = _` kall_tac >>
+  qexists_tac `istore (w2n dst) x f.lf_src` >> gvs[] >>
+  rpt conj_tac >>
+  FIRST [first_assum ACCEPT_TAC,
+         gvs[ld_vars_def, istore_def, mstore_def] >> NO_TAC,
+         irule ld_nonghost_istore >> simp[] >> NO_TAC,
+         simp[step_prov_def, set_prov_def, DRESTRICT_UNIV, istore_def, mstore_def]]
 QED

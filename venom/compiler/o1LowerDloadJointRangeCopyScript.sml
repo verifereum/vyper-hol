@@ -18,7 +18,8 @@ Theorem ld_joint_operand_range:
    ?v b z. op = Var v /\ FLOOKUP G v = SOME (b,z) /\
      b<=w2n x /\ w2n x+len<=b+z) ==>
   ?y. eval_operand op t = SOME y /\
-    (len=0 \/ (w2n x=w2n y /\ w2n x+len<=lo) \/
+    (len=0 \/ (w2n x=w2n y /\ (w2n x+len<=lo \/
+       dyn_floor C vs<=w2n x /\ w2n x+len<=dimword (:256))) \/
      (?id b c z j. FLOOKUP sites id = SOME (b,c,z) /\ j+len<=z /\
                     w2n x=b+j /\ w2n y=c+j))
 Proof
@@ -28,7 +29,7 @@ Proof
     (irule ld_joint_operand_value >>
      metis_tac[ld_active_operand_ir_var, ld_active_operand_non_retpc]) >>
   qexists_tac `y` >> simp[] >> Cases_on `len=0` >> simp[] >>
-  `occurrence_env_ok B (a::MAP (\u. u.of_owner) U) H G /\
+  `occurrence_env_ok (dyn_floor C vs) B (a::MAP (\u. u.of_owner) U) H G /\
    ld_joint_erasure sites B /\
    ld_joint_geometry sites X lo (a::MAP (\u. u.of_owner) U)` by
     fs[ld_joint_boundary_def, occurrence_annotation_ok_def] >>
@@ -58,7 +59,8 @@ Theorem ld_joint_write_operand_range:
   op_taint tn op = {} /\ eval_operand op s = SOME x /\
   MEM (w2n x,len) (source_memory_write_ranges inst s) ==>
   ?y. eval_operand op t = SOME y /\
-    (len=0 \/ (w2n x=w2n y /\ w2n x+len<=lo) \/
+    (len=0 \/ (w2n x=w2n y /\ (w2n x+len<=lo \/
+       dyn_floor C vs<=w2n x /\ w2n x+len<=dimword (:256))) \/
      (?id b c z j. FLOOKUP sites id = SOME (b,c,z) /\ j+len<=z /\
                     w2n x=b+j /\ w2n y=c+j))
 Proof
@@ -79,7 +81,8 @@ Theorem ld_joint_read_operand_range:
   op_taint tn op = {} /\ eval_operand op s = SOME x /\
   MEM (w2n x,len) (source_memory_read_ranges inst s) ==>
   ?y. eval_operand op t = SOME y /\
-    (len=0 \/ (w2n x=w2n y /\ w2n x+len<=lo) \/
+    (len=0 \/ (w2n x=w2n y /\ (w2n x+len<=lo \/
+       dyn_floor C vs<=w2n x /\ w2n x+len<=dimword (:256))) \/
      (?id b c z j. FLOOKUP sites id = SOME (b,c,z) /\ j+len<=z /\
                     w2n x=b+j /\ w2n y=c+j))
 Proof
@@ -123,7 +126,7 @@ Proof
      Cases_on `dst = Var vv` >> Cases_on `src = Var vv` >>
      Cases_on `sz = Var vv` >> simp[] >> rpt strip_tac >> gvs[]) >>
   `op_prov H op = NONE` by
-    (`occurrence_env_ok B (a::MAP (\u. u.of_owner) U) H G` by
+    (`occurrence_env_ok (dyn_floor C vs) B (a::MAP (\u. u.of_owner) U) H G` by
        fs[ld_joint_boundary_def, occurrence_annotation_ok_def] >>
      drule occurrence_op_erasure >> disch_then (qspec_then `op` mp_tac) >>
      Cases_on `op_prov H op` >> simp[occurrence_param_ok_def]) >>
@@ -145,10 +148,12 @@ Theorem ld_joint_mcopy_operands:
   eval_operand sz s = SOME l ==>
   ?d' r'. eval_operand dst t = SOME d' /\ eval_operand src t = SOME r' /\
     eval_operand sz t = SOME l /\
-    (w2n l=0 \/ (w2n d=w2n d' /\ w2n d+w2n l<=lo) \/
+    (w2n l=0 \/ (w2n d=w2n d' /\ (w2n d+w2n l<=lo \/
+       dyn_floor C vs<=w2n d /\ w2n d+w2n l<=dimword (:256))) \/
      (?id b c z j. FLOOKUP sites id = SOME (b,c,z) /\ j+w2n l<=z /\
                     w2n d=b+j /\ w2n d'=c+j)) /\
-    (w2n l=0 \/ (w2n r=w2n r' /\ w2n r+w2n l<=lo) \/
+    (w2n l=0 \/ (w2n r=w2n r' /\ (w2n r+w2n l<=lo \/
+       dyn_floor C vs<=w2n r /\ w2n r+w2n l<=dimword (:256))) \/
      (?id b c z j. FLOOKUP sites id = SOME (b,c,z) /\ j+w2n l<=z /\
                     w2n r=b+j /\ w2n r'=c+j))
 Proof
@@ -163,14 +168,16 @@ Proof
     (qpat_x_assum `taint_ok _ _ _ _` mp_tac >> gvs[taint_ok_def] >> metis_tac[]) >>
   `!v. ~retpc_use_ok inst v` by simp[retpc_use_ok_def] >>
   `?d'. eval_operand dst t = SOME d' /\
-    (w2n l=0 \/ (w2n d=w2n d' /\ w2n d+w2n l<=lo) \/
+    (w2n l=0 \/ (w2n d=w2n d' /\ (w2n d+w2n l<=lo \/
+       dyn_floor C vs<=w2n d /\ w2n d+w2n l<=dimword (:256))) \/
      (?id b c z j. FLOOKUP sites id = SOME (b,c,z) /\ j+w2n l<=z /\
                     w2n d=b+j /\ w2n d'=c+j))` by
     (drule ld_joint_write_operand_range >> disch_then irule >> simp[] >>
      simp[mem_write_ops_def, source_memory_write_ranges_def,
           fixed_source_write_range_def, sized_source_write_range_def, eval_operand_def] >> metis_tac[]) >>
   `?r'. eval_operand src t = SOME r' /\
-    (w2n l=0 \/ (w2n r=w2n r' /\ w2n r+w2n l<=lo) \/
+    (w2n l=0 \/ (w2n r=w2n r' /\ (w2n r+w2n l<=lo \/
+       dyn_floor C vs<=w2n r /\ w2n r+w2n l<=dimword (:256))) \/
      (?id b c z j. FLOOKUP sites id = SOME (b,c,z) /\ j+w2n l<=z /\
                     w2n r=b+j /\ w2n r'=c+j))` by
     (drule ld_joint_read_operand_range >> disch_then irule >> simp[] >>
@@ -195,6 +202,31 @@ Proof
   simp[EXTENSION, FLOOKUP_DEF] >> metis_tac[]
 QED
 
+(* Discharges one hypothesis of a range-transport lemma for a single
+   operand case: a fact, an arithmetic bound, or one disjunct of the
+   fixed / site / dynamic-region alternatives. *)
+(* Runs tac on a goal whose conclusion is headed by the constant name,
+   and leaves any other goal alone. *)
+fun ld_on_head name tac (g as (_, w)) =
+  if (#1 (dest_const (#1 (strip_comb w))) = name handle HOL_ERR _ => false)
+  then tac g else ALL_TAC g
+
+val ld_range_case_tac =
+  let
+    val leaf = FIRST [first_assum ACCEPT_TAC, simp[] >> NO_TAC, decide_tac,
+                      res_tac >> decide_tac, metis_tac[]]
+  in
+    rpt conj_tac >>
+    FIRST [leaf,
+           disj1_tac >> rpt conj_tac >> leaf,
+           disj2_tac >> rpt conj_tac >> leaf,
+           disj2_tac >> disj1_tac >> rpt conj_tac >> leaf,
+           disj2_tac >> disj2_tac >> rpt conj_tac >> leaf,
+           fn (g as (_, w)) =>
+             (print ("ld_range_case_tac: no case closes " ^
+                     term_to_string w ^ "\n"); NO_TAC g)]
+  end
+
 Theorem ld_joint_mcopy_step:
   ld_joint_boundary vs C C' lo D stk PG G tn fn inst s t
     n a U B HP H sites X ts /\ ptr_discipline lo C vs /\
@@ -202,6 +234,8 @@ Theorem ld_joint_mcopy_step:
   inst.inst_opcode = MCOPY /\ step_inst fuel C inst s = OK s1 ==>
   ?t1. step_inst fuel C' inst t = OK t1 /\
     ld_memory_agree sites lo (mem_taint tn inst s s1)
+      s1.vs_memory t1.vs_memory /\
+    ld_dyn_agree (dyn_floor C vs) (mem_taint tn inst s s1)
       s1.vs_memory t1.vs_memory
 Proof
   strip_tac >>
@@ -221,13 +255,39 @@ Proof
     (irule ld_mem_taint_mcopy >> metis_tac[]) >>
   asm_rewrite_tac[] >>
   `ld_memory_agree sites lo tn.t_mem s.vs_memory t.vs_memory /\
-   ld_joint_geometry sites X lo (a::MAP (\u. u.of_owner) U)` by
+   ld_joint_geometry sites X lo (a::MAP (\u. u.of_owner) U) /\
+   ld_dyn_agree (dyn_floor C vs) tn.t_mem s.vs_memory t.vs_memory /\
+   ld_dyn_floor_ok (dyn_floor C vs) lo sites X` by
     fs[ld_joint_boundary_def, ld_joint_frame_def, ld_joint_allocas_def] >>
+  `lo <= dyn_floor C vs /\ !id b c z. FLOOKUP sites id = SOME (b,c,z) ==>
+     b+z <= dyn_floor C vs /\ c+z <= dyn_floor C vs` by
+    (fs[ld_dyn_floor_ok_def] >> metis_tac[]) >>
   Cases_on `w2n l=0`
-  >- (gvs[mcopy_def] >> irule ld_memory_agree_empty_write >> simp[]) >>
+  >- (gvs[mcopy_def] >> rpt conj_tac >>
+      (* gvs splits the operand cases here *)
+      ld_on_head "ld_memory_agree"
+        (irule ld_memory_agree_empty_write >> simp[]) >>
+      ld_on_head "ld_dyn_agree"
+        (simp[ptrDisciplineTheory.ld_dyn_agree_def,
+              regularCallEmitSimTheory.read_byte_write_memory_with_expansion] >>
+         fs[ptrDisciplineTheory.ld_dyn_agree_def])) >>
+  `l <> 0w` by (strip_tac >> gvs[]) >>
+  (* split the operand cases; no simplification after this point, since it
+     would reorder the mask's sums away from the lemmas' syntactic form *)
+  qpat_x_assum `eval_operand dop t = SOME d' /\ _` strip_assume_tac >>
+  rpt (qpat_x_assum `l = 0w` (fn th => fs[th])) >>
+  rpt (qpat_x_assum `d = d'` SUBST_ALL_TAC) >>
+  rpt (qpat_x_assum `r = r'` SUBST_ALL_TAC) >>
   pure_rewrite_tac[mcopy_def, GSYM read_memory_def, LET_THM] >> BETA_TAC >>
-  drule_at (Pat `ld_joint_geometry _ _ _ _`) ld_memory_agree_snapshot_copy >>
-  disch_then irule >> gvs[] >> metis_tac[]
+  rpt conj_tac >>
+  ld_on_head "ld_memory_agree"
+    (drule_at (Pat `ld_joint_geometry _ _ _ _`)
+       ld_memory_agree_snapshot_copy >>
+     disch_then irule >> rpt conj_tac >> TRY (qexists_tac `dyn_floor C vs`) >>
+     ld_range_case_tac) >>
+  ld_on_head "ld_dyn_agree"
+    (drule_at (Pat `ld_memory_agree _ _ _ _ _`) ld_dyn_agree_snapshot_copy >>
+     disch_then irule >> ld_range_case_tac)
 QED
 
 Theorem ld_joint_mcopy_next:
@@ -249,7 +309,7 @@ Proof
   strip_tac >> drule_all ld_joint_mcopy_step >> strip_tac >>
   `occ_frame_reachable vs C stk PG G tn fn inst s n a U B HP H` by
     metis_tac[ld_joint_source] >>
-  `occurrence_annotation_ok n a U B HP H stk PG G s` by
+  `occurrence_annotation_ok (dyn_floor C vs) n a U B HP H stk PG G s` by
     gvs[ld_joint_boundary_def] >>
   `MEM fn C.ctx_functions` by
     (drule occ_frame_reachable_annotation >> simp[]) >>
@@ -265,7 +325,7 @@ Proof
   `occ_frame_reachable vs C stk PG G (step_taint inst s s1 tn) fn inst2
      (s1 with vs_inst_idx := SUC s.vs_inst_idx) n a U B HP H` by
     (drule_all occ_frame_reachable_next >> simp[occurrence_sites_step_def] >> gvs[]) >>
-  `occurrence_annotation_ok n a U B HP H stk PG G
+  `occurrence_annotation_ok (dyn_floor C vs) n a U B HP H stk PG G
      (s1 with vs_inst_idx := SUC s.vs_inst_idx)` by
     (drule occurrence_annotation_next >>
      disch_then (qspecl_then [`s1`,`inst`,`SUC s.vs_inst_idx`,`fuel`,`C`] mp_tac) >>

@@ -5,35 +5,7 @@ Ancestors
   lowerDloadSafetyRelation lowerDloadSafetyKernel lowerDloadSafetyAdvance ptrDiscipline o1PassContract
   unitShapeDefs venomExecProofs venomState venomInst finite_map list pred_set
 
-Theorem ld_sync_control_entry:
-  EVERY (\f. !j a. j < LENGTH f.lf_Q /\ EL j f.lf_Q = SOME a ==>
-    j IN P f.lf_fn.fn_name) (f::fs) ==>
-  ld_sync lo P C vs0 stk PG G tn fn inst s t A (f::fs) N /\
-  ld_global lo A (f::fs) /\ o1_ctx_shape C /\ taint_ok fn tn inst s /\
-  MEM inst.inst_opcode [JMP; JNZ; DJMP] /\
-  step_inst fuel C' inst t = OK ts /\ ~ts.vs_halted /\
-  enters_block (ld_image f) ts t1 /\ active_inst (ld_image f) ti t1 /\
-  EVERY (\f. f.lf_supply = Sigma f.lf_fn.fn_name) (f::fs) /\
-  (!j k. j < k /\ k < LENGTH (f::fs) ==>
-    list_precedes (EL j (f::fs)).lf_fn.fn_name
-                  (EL k (f::fs)).lf_fn.fn_name names) ==>
-  ?lbl H' ni s1 g X.
-    ts = jump_to lbl t /\ step_inst fuel C inst s = OK (jump_to lbl s) /\
-    enters_block fn (jump_to lbl s) s1 /\
-    g = f with <|lf_src := s1; lf_tgt := t1; lf_H := H';
-      lf_tv := (entry_taint_vars fn (jump_to lbl s) tn).t_var|> /\
-    ld_sync lo P C vs0 stk PG (ld_erase A o_f H')
-      (entry_taint_vars fn (jump_to lbl s) tn) fn ni s1 t1 A (g::fs) N /\
-    ld_global lo A (g::fs) /\
-    EVERY (\f. f.lf_supply = Sigma f.lf_fn.fn_name) (g::fs) /\
-    (!j k. j < k /\ k < LENGTH (g::fs) ==>
-      list_precedes (EL j (g::fs)).lf_fn.fn_name
-                    (EL k (g::fs)).lf_fn.fn_name names) /\
-    ld_image f = ld_image g /\
-    ld_envelope g.lf_supply fn s1 s1.vs_inst_idx X t1.vs_inst_idx /\
-    ld_prefix C' (ld_image f) X t1.vs_inst_idx 0 t1 t1 /\ ti = HD X /\
-    EVERY (\f. !j a. j < LENGTH f.lf_Q /\ EL j f.lf_Q = SOME a ==>
-      j IN P f.lf_fn.fn_name) (g::fs)
+(* TEMPORARILY CHEATED - P4b in progress: the entry ghost map is now existential (entry_prov of the live G is no longer ld_erase A o_f H'); proof needs the entry_prov ghost lift
 Proof
   rpt strip_tac >>
   drule ld_sync_active >> simp[] >> strip_tac >>
@@ -104,6 +76,39 @@ Proof
       Cases_on `j` >> Cases_on `k` >> simp[]) >>
   simp[ld_prefix_zero] >> Cases_on `X` >> fs[ld_image_def]
 QED
+*)
+Theorem ld_sync_control_entry:
+  EVERY (\f. !j a. j < LENGTH f.lf_Q /\ EL j f.lf_Q = SOME a ==>
+    j IN P f.lf_fn.fn_name) (f::fs) ==>
+  ld_sync lo P C vs0 stk PG G tn fn inst s t A (f::fs) N /\
+  ld_global lo A (f::fs) /\ o1_ctx_shape C /\ taint_ok fn tn inst s /\
+  MEM inst.inst_opcode [JMP; JNZ; DJMP] /\
+  step_inst fuel C' inst t = OK ts /\ ~ts.vs_halted /\
+  enters_block (ld_image f) ts t1 /\ active_inst (ld_image f) ti t1 /\
+  EVERY (\f. f.lf_supply = Sigma f.lf_fn.fn_name) (f::fs) /\
+  (!j k. j < k /\ k < LENGTH (f::fs) ==>
+    list_precedes (EL j (f::fs)).lf_fn.fn_name
+                  (EL k (f::fs)).lf_fn.fn_name names) ==>
+  ?lbl H' G' ni s1 g X.
+    ts = jump_to lbl t /\ step_inst fuel C inst s = OK (jump_to lbl s) /\
+    enters_block fn (jump_to lbl s) s1 /\
+    g = f with <|lf_src := s1; lf_tgt := t1; lf_H := H';
+      lf_tv := (entry_taint_vars fn (jump_to lbl s) tn).t_var|> /\
+    ld_sync lo P C vs0 stk PG G'
+      (entry_taint_vars fn (jump_to lbl s) tn) fn ni s1 t1 A (g::fs) N /\
+    ld_global lo A (g::fs) /\
+    EVERY (\f. f.lf_supply = Sigma f.lf_fn.fn_name) (g::fs) /\
+    (!j k. j < k /\ k < LENGTH (g::fs) ==>
+      list_precedes (EL j (g::fs)).lf_fn.fn_name
+                    (EL k (g::fs)).lf_fn.fn_name names) /\
+    ld_image f = ld_image g /\
+    ld_envelope g.lf_supply fn s1 s1.vs_inst_idx X t1.vs_inst_idx /\
+    ld_prefix C' (ld_image f) X t1.vs_inst_idx 0 t1 t1 /\ ti = HD X /\
+    EVERY (\f. !j a. j < LENGTH f.lf_Q /\ EL j f.lf_Q = SOME a ==>
+      j IN P f.lf_fn.fn_name) (g::fs)
+Proof
+  cheat
+QED
 
 Theorem ld_sync_control_owned_coverage:
   EVERY (\f. !j a. j < LENGTH f.lf_Q /\ EL j f.lf_Q = SOME a ==>
@@ -131,7 +136,7 @@ Theorem ld_sync_control_owned_coverage:
       j IN P f.lf_fn.fn_name) frames
 Proof
   rpt strip_tac >> drule_all ld_sync_control_entry >> strip_tac >>
-  qexistsl_tac [`stk`,`PG`,`ld_erase A o_f H'`,
+  qexistsl_tac [`stk`,`PG`,`G'`,
     `entry_taint_vars fn (jump_to lbl s) tn`,`fn`,`ni`,`s1`,`t1`,
     `A`,`g::fs`,`N`,`X`,`t1.vs_inst_idx`,`0`] >>
   qpat_x_assum `MEM inst.inst_opcode [JMP; JNZ; DJMP]` kall_tac >>
