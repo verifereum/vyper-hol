@@ -90,3 +90,87 @@ Proof
           strip_tac >> gvs[]) >> strip_tac >> gvs[]) >>
   strip_tac >> gvs[])
 QED
+
+Theorem finite_prefix_Expr_Call_Send:
+  (!cx initial_st st has_gas vs res out selected.
+    IS_SOME st.outcomes /\
+    valid_horizon cx initial_st H st.storage_trace /\
+    storage_well_formed_on cx st (FST H) /\
+    eval_send cx has_gas vs st = (res,out) /\
+    (?sfx. selected = out.storage_trace ++ sfx) /\
+    (!pre q co sfx.
+      selected = pre ++ StorageOutcome q co :: sfx /\
+      valid_horizon cx initial_st H pre /\
+      storage_well_formed_on cx
+        (empty_state with <|accounts := q.cr_accounts;
+                           tStorage := q.cr_tStorage|>) (FST H) ==>
+      storage_well_formed_on cx
+        (empty_state with <|accounts := co.co_accounts;
+                           tStorage := co.co_tStorage|>) (FST H)) ==>
+    storage_well_formed_on cx out (FST H) /\
+    storage_observations_ok cx H out.storage_trace) ==>
+  ^(guardSourceSchemaLib.branch finite_prefix_evaluate_ind "Expr_Call_Send")
+Proof
+  disch_tac >> rpt gen_tac >> strip_tac >> rpt gen_tac >> strip_tac >>
+  `call_evaluation_safe cx (int_calls_exprs es)` by
+    (qpat_assum `call_evaluation_safe cx (int_calls_expr (Call _ _ _ _))` mp_tac >>
+     pure_rewrite_tac[int_calls_expr_def] >> strip_tac) >>
+  reverse conj_tac
+  >- (rpt strip_tac >>
+      qpat_x_assum `type_place_expr _ (Call _ _ _ _) = SOME _` mp_tac >>
+      simp[Once well_typed_expr_def]) >>
+  strip_tac >>
+  qpat_x_assum `well_typed_expr env (Call _ _ _ _)` mp_tac >>
+  simp_tac(srw_ss())[Once well_typed_expr_def] >> strip_tac >>
+  `LENGTH es = if has_gas then 3 else 2` by
+    (qpat_assum `MAP expr_type es = _` (mp_tac o Q.AP_TERM `LENGTH`) >>
+     Cases_on `has_gas` >> simp[]) >>
+  qpat_x_assum `!s'' x t. type_check _ _ _ = _ ==> _` mp_tac >>
+  simp_tac(srw_ss())[type_check_def, assert_def, return_def, raise_def] >>
+  (impl_tac >- simp[]) >> disch_tac >>
+  (qpat_x_assum `eval_expr _ (Call _ _ _ _) _ = _` mp_tac >>
+   simp_tac(srw_ss())[Once evaluate_def, bind_def, ignore_bind_def,
+     type_check_def, assert_def, return_def, raise_def] >>
+   Cases_on `eval_exprs cx es st` >> rename1 `eval_exprs cx es st = (er,st1)` >>
+   Cases_on `er` >> simp_tac(srw_ss())[bind_def, return_def, raise_def]
+   >- (qpat_assum `LENGTH es = _` (fn th => simp_tac(srw_ss())[th]) >> strip_tac >>
+       `?suffix. st'.storage_trace = st1.storage_trace ++ suffix` by
+         (qpat_assum `eval_send _ _ _ _ = _`
+            (mp_then Any mp_tac storage_trace_frame_prefix) >>
+          simp[storage_trace_frame_send]) >>
+       `storage_well_formed_on cx st1 (FST H) /\
+        storage_observations_ok cx H st1.storage_trace` by
+         (first_x_assum (drule_at (Pat `eval_exprs _ _ _ = _`)) >>
+          disch_then irule >> simp[] >>
+          conj_tac >- (qexists `env` >> simp[]) >>
+          qexistsl [`initial_st`,`selected`] >>
+          simp[listTheory.APPEND_ASSOC] >>
+          qpat_x_assum `!pre rq co sfx. selected = _ /\ _ ==> _` mp_tac >>
+          qpat_x_assum `selected = _` SUBST_ALL_TAC >>
+          qpat_x_assum `st'.storage_trace = _` SUBST_ALL_TAC >>
+          simp[listTheory.APPEND_ASSOC]) >>
+       `IS_SOME st1.outcomes` by
+         (qpat_x_assum `!initial_st selected env st res st'. _` kall_tac >>
+          qpat_x_assum `!cx initial_st st has_gas vs res out selected. _` kall_tac >>
+          mp_tac (cj 6 eval_outcomes_suffix_mutual) >>
+          simp_tac(srw_ss())[outcomes_suffix_def] >>
+          disch_then (qspecl_then [`cx`,`es`,`st`] mp_tac) >>
+          simp[outcome_suffix_def] >> strip_tac >> gvs[]) >>
+       qpat_x_assum `!cx initial_st st has_gas vs res out selected. _` irule >>
+       goal_assum (drule_at (Pat `eval_send _ _ _ _ = _`)) >>
+       qexistsl [`initial_st`,`selected`] >>
+       qpat_x_assum `!initial_st selected env st res st'. _` kall_tac >>
+       conj_tac >- first_assum ACCEPT_TAC >>
+       qpat_x_assum `!pre rq co sfx. selected = _ /\ _ ==> _` kall_tac >>
+       simp[] >>
+       qpat_x_assum `valid_horizon cx initial_st H _` mp_tac >>
+       simp[valid_horizon_def]) >>
+   qpat_assum `LENGTH es = _` (fn th => simp_tac(srw_ss())[th]) >>
+   strip_tac >> qpat_x_assum `st1 = st'` SUBST_ALL_TAC >>
+   first_x_assum (drule_at (Pat `eval_exprs _ _ _ = _`)) >>
+   disch_then irule >> simp[] >>
+   conj_tac >- (qexists `env` >> simp[]) >>
+   qexistsl [`initial_st`,`selected`] >> simp[] >>
+   qpat_x_assum `!pre rq co sfx. selected = _ /\ _ ==> _` mp_tac >>
+   qpat_x_assum `selected = _` SUBST_ALL_TAC >> simp[])
+QED
