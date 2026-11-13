@@ -20071,6 +20071,32 @@ Proof
   qexists `t` >> simp[]
 QED
 
+Theorem mm_local_payload_due_extent[local]:
+  mm_local_group_coverage is n cap g /\
+  mm_local_group_endpoint is n cap g /\
+  ws = MAP (THE o cap) js /\
+  (!j. MEM j js ==> IS_SOME (cap j)) /\
+  (!j d bs. (MEM j js /\ cap j = SOME (d,bs)) <=>
+    (j < n /\ j < LENGTH is /\ MEM (EL j is).inst_id g.cg_inst_ids /\
+     cap j = SOME (d,bs))) ==>
+  (!a. (g.cg_dst <= a /\ a < g.cg_dst + g.cg_length) <=>
+    ?d bs. MEM (d,bs) ws /\ d <= a /\ a < d + LENGTH bs) /\
+  (!d bs. MEM (d,bs) ws ==> d + LENGTH bs <= g.cg_dst + g.cg_length) /\
+  MAX_LIST (MAP (\(d,bs). d + LENGTH bs) ws) = g.cg_dst + g.cg_length
+Proof
+  strip_tac >>
+  `!d bs. MEM (d,bs) ws <=> ?j. MEM j js /\ cap j = SOME (d,bs)` by
+    (gvs[MEM_MAP] >> rpt gen_tac >> eq_tac
+     >- (strip_tac >> rename1 `MEM j js` >>
+         `IS_SOME (cap j)` by metis_tac[] >>
+         Cases_on `cap j` >> gvs[] >> metis_tac[]) >>
+     strip_tac >> qexists `j` >> simp[] >> metis_tac[]) >>
+  qpat_x_assum `ws = _` kall_tac >>
+  fs[mm_local_group_coverage_def, mm_local_group_endpoint_def] >>
+  conj_tac >- metis_tac[] >>
+  irule mm_local_write_log_endpoint >> metis_tac[]
+QED
+
 Theorem mm_local_payload_due_realize[local]:
   ws = MAP (THE o cap) (due ++ [r]) /\
   (!j. MEM j (due ++ [r]) ==> IS_SOME (cap j)) /\
