@@ -169,7 +169,8 @@ Proof
 QED
 
 Theorem target_indices_body_pre[local]:
-  !tops bindings t cenv cx env pt.
+  !tops bindings ctx t cenv cx env pt.
+    body_inv tops ctx cenv cx /\
     ~supported_target_exists call_operands_effect_root t /\
     EVERY (\c. IS_SOME (supported_function_decl tops c Internal)) (int_calls_target t) /\
     EVERY (\e. ~is_extcode e) (target_indices t) /\
@@ -190,7 +191,7 @@ Theorem target_indices_body_pre[local]:
        is_dynamic (vyper_to_abi_type (type_env (cx_tops cx)) target)) ==>
     target_indices_pre cenv cx env t
 Proof
-  ntac 2 gen_tac >>
+  ntac 3 gen_tac >>
   Induct using base_assignment_target_induct >>
   simp[target_indices_pre_def, supported_expr_exists_def, int_calls_expr_def,
        allocLimitsTheory.alloc_limits_expr_def, listTheory.EVERY_APPEND, targetPlaceLiveTheory.target_indices_def] >> rpt strip_tac >>
@@ -239,7 +240,7 @@ Proof
    IS_SOME (supported_target_info tops bindings t)` by
     (fs[supported_assignment_def] >>
      Cases_on `supported_target_info tops bindings t` >> fs[]) >>
-  irule (Q.SPECL [`tops`, `bindings`] target_indices_body_pre) >>
+  irule (Q.SPECL [`tops`, `bindings`, `ctx`] target_indices_body_pre) >>
   gvs[stmt_exprs_ok_flat, supported_stmt_expr_exists_def,
       allocLimitsTheory.alloc_limits_stmt_def, allocLimitsTheory.alloc_limits_assignment_def,
       supported_assignment_exists_def, int_calls_stmt_def, int_calls_atarget_def, listTheory.EVERY_CONJ] >>

@@ -108,7 +108,10 @@ Resume body_assignment_place_premises[indices]:
    (!target. is_dynamic (vyper_to_abi_type (get_tenv cx) target) ==>
      is_dynamic (vyper_to_abi_type (type_env tops) target))` by gvs[body_inv_def] >>
   Cases_on `IS_SOME (supported_target_info tops bindings t)`
-  >- (irule aug_place_target_indices_pre >>
+  >- (`~supported_target_exists (const_name_root cx) t` by
+        (drule_then irule bodySimTheory.body_inv_target_const_name_free >>
+         qexists_tac `bindings` >> gvs[optionTheory.IS_SOME_EXISTS]) >>
+      irule aug_place_target_indices_pre >>
       gvs[stmt_exprs_ok_flat, supported_stmt_expr_exists_def,
           allocLimitsTheory.alloc_limits_stmt_def, allocLimitsTheory.alloc_limits_assignment_def,
           supported_assignment_exists_def, int_calls_stmt_def, int_calls_atarget_def] >>

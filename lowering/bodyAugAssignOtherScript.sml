@@ -283,6 +283,9 @@ Proof
      fs[stmt_exprs_ok_def, alloc_limits_stmt_def]) >>
   `?pt. supported_target_info tops bindings t = SOME pt` by
     metis_tac[aug_place_supported_stmt_target_info] >>
+  `~supported_target_exists (const_name_root cx) t` by
+    (drule_then irule bodySimTheory.body_inv_target_const_name_free >>
+     qexists_tac `bindings` >> simp[]) >>
   irule aug_place_target_indices_pre >>
   gvs[type_stmt_def, well_typed_target_def, stmt_exprs_ok_flat,
       allocLimitsTheory.alloc_limits_stmt_def,

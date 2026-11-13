@@ -355,7 +355,8 @@ Proof
       byte_widths_expr_def, alloc_limits_expr_def, int_calls_expr_def,
       supportedExprTraverseTheory.expr_has_evm_run_thm,
       supportedExprTraverseTheory.supported_expr_exists_def,
-      supportedProgramTheory.expr_abi_decode_target_root_def] >>
+      supportedProgramTheory.expr_abi_decode_target_root_def,
+      exprSimHypsDefsTheory.const_name_root_def] >>
   irule vyperTypeCallStackSoundnessTheory.call_evaluation_safe_mono >>
   qexists_tac `int_calls_expr e` >> simp[]
 QED
