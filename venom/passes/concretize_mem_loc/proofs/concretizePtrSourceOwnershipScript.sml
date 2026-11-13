@@ -254,7 +254,8 @@ Proof
           venomStateTheory.update_var_def, venomStateTheory.lookup_var_def, FLOOKUP_UPDATE])
   >- (simp[] >> irule ptr_owner_entry_projection >> simp[])
   >- (`ptr_ledger_erases dyn births FEMPTY FEMPTY` by
-        simp[concretizePtrPrefixLedgerTheory.ptr_ledger_erases_def] >>
+        simp[concretizePtrPrefixLedgerTheory.ptr_ledger_erases_def,
+          concretizePtrPrefixLedgerTheory.ptr_owner_erases_def] >>
       simp[ptr_saved_erases_cons] >> irule ptr_owner_call_params >> simp[]) >>
   gvs[ptr_saved_erases_cons] >> irule ptr_owner_restrict_projection >> simp[]
 QED
