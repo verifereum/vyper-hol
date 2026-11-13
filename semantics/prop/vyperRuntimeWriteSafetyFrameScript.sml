@@ -337,18 +337,21 @@ Proof
       ntac 12 IMMS_INT_STEP >>
       simp[] >>
       IMMS_INT_STEP >>
-      ntac 8 IMMS_INT_STEP >- IMMS_INT_STEP >>
-      IMMS_INT_STEP
-      >- (simp_tac bool_ss [ignore_bind_def] >>
-          MATCH_MP_TAC state_rel_frame_bind_guarded >> conj_tac
-          >- simp[] >> conj_tac
-          >- (simp[imms_frame_result] >> metis_tac[acquire_nonreentrant_lock_immutables]) >>
-          rpt gen_tac >> strip_tac >>
+      simp[]
+      >- (POP_ASSUM_LIST (K all_tac) >>
+          Cases_on `inr` >>
+          simp[imms_frame_result, return_def] >>
+          Cases_on `cx.nonreentrant_slot` >>
+          simp[imms_frame_result, raise_def, ignore_bind_def, bind_def,
+               check_not_static_def, type_check_def, assert_def, check_def,
+               return_def, AllCaseEqs()] >>
+          rpt strip_tac >> gvs[] >>
           Cases_on `imut = View \/ imut = Pure` >>
-          simp[imms_frame_result, check_not_static_def, type_check_def,
-               assert_def, check_def, return_def, raise_def, AllCaseEqs()] >>
-          rpt strip_tac >> gvs[]) >>
-      ntac 4 IMMS_INT_STEP >> gen_tac >> strip_tac >>
+          gvs[assert_def, return_def, raise_def, AllCaseEqs()] >>
+          metis_tac[acquire_nonreentrant_lock_immutables]) >>
+      ntac 4 IMMS_INT_STEP >> simp[]
+      >- IMMS_STEP >>
+      rpt gen_tac >> strip_tac >>
       qmatch_asmsub_rename_tac `push_function (src_id_opt,fn) env cx ps = (INL cxf,pt)` >>
       `cxf = cx with stk updated_by CONS (src_id_opt,fn)` by
         (qpat_x_assum `push_function _ _ _ _ = _` mp_tac >>
