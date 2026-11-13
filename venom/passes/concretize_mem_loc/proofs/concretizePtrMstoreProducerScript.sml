@@ -315,7 +315,8 @@ Resume ptr_mstore_write_producer[fixed]:
   reverse conj_tac
   >- (simp[ptr_paired_write_owner_def, step_writes_def,
         source_memory_write_ranges_def, fixed_source_write_range_def, range_bytes_def] >>
-      rpt strip_tac >> fs[] >> decide_tac) >>
+      rpt strip_tac >>
+      `x < lo \/ dyn_floor C vs <= x` by (fs[] >> decide_tac) >> fs[]) >>
   qpat_assum `ptr_chrono_step C' at zt` mp_tac >>
   once_rewrite_tac[ptr_chrono_step_cases] >>
   simp[ptr_observe_def, ptr_observation_component_equality, is_terminator_def] >>
