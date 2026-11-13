@@ -42,7 +42,7 @@ QED
 Theorem abi_encode_setup_row_local_exclusion:
   abi_builtin_encode_setup mid maxlen sa = (ops,ready) /\
   fn_has_code sa ready func /\ fn_inst_ids_distinct func /\
-  local_ptrs_reserved ce sa /\ stmt_state_rel ctx func ce cx es' actual /\
+  local_ptrs_reserved ce sa /\ stmt_state_rel (H:(bool # bytes32 # type_value) list # num list) ctx func ce cx es' actual /\
   FLOOKUP actual.vs_allocas sa.cs_next_id = SOME(p,sz) ==>
   !name b n. local_region ce es'.scopes actual name b n ==>
     p+sz <= b \/ b+n <= p
@@ -62,7 +62,7 @@ QED
 Theorem abi_encode_row_local_exclusion:
   lower_abi_encode F mid op ei maxlen sa = (out,sb) /\
   fn_has_code sa sb func /\ fn_inst_ids_distinct func /\
-  local_ptrs_reserved ce sa /\ stmt_state_rel ctx func ce cx es' actual /\
+  local_ptrs_reserved ce sa /\ stmt_state_rel (H:(bool # bytes32 # type_value) list # num list) ctx func ce cx es' actual /\
   FLOOKUP actual.vs_allocas sa.cs_next_id = SOME(p,sz) ==>
   !name b n. local_region ce es'.scopes actual name b n ==>
     p+sz <= b \/ b+n <= p
