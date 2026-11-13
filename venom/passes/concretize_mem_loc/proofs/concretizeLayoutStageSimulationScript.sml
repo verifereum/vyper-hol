@@ -56,12 +56,11 @@ Theorem layout_stage_selected_run_fuel:
     (o1_walk_view rpolicy 2) C C' /\ o1_ctx_shape C /\
   EVERY (\fn. fn.fn_eom = NONE) C.ctx_functions /\
   ctx_inst_ids_distinct C /\ o1_run_state_ok vs0 /\
-  EVERY wf_function C.ctx_functions /\ mem_inv raw_mem_ok C vs0 /\
-  ptr_discipline lo C vs0 /\ ~ctx_has_dalloca C /\
+  EVERY wf_function C.ctx_functions /\
+  layout_cut_safe D lo ncut vs0 C qend /\ ~ctx_has_dalloca C /\
   vs0.vs_allocas = FEMPTY /\ EVERY (fn_ptr_ok P) C.ctx_functions /\
   EVERY (\f. EVERY inst_wf (fn_insts f)) C.ctx_functions /\
-  dead_wf D /\ taint_within D C vs0 /\
-  es = MAP FST path /\ qs = MAP SND path /\
+  dead_wf D /\ es = MAP FST path /\ qs = MAP SND path /\
   (!k. k < LENGTH path ==>
     resolved_annotation_edge C k (EL k (q0::MAP SND path)) (FST (EL k path))
       (EL (SUC k) (q0::MAP SND path))
@@ -502,6 +501,8 @@ Proof
     (irule layout_stage_entry_initial >>
      goal_assum (drule_at Any) >> simp[Abbr `q0`] >> metis_tac[]) >>
   `activation_depth q0 = 0` by simp[Abbr `q0`, frameActivationCacheTheory.activation_depth_def] >>
+  `layout_cut_safe D lo (SUC (LENGTH vs.vs_gas_readings)) vs C qe` by
+    metis_tac[layout_cut_safe_whole_run] >>
   `?r'. run_blocks fuel C' fn' s = r' /\ finite_run C' fn' s r' /\
     layout_canonical_OutR D lo vs C C' q0 (MAP FST path) (MAP SND path)
       ass qe q0 0 qe (0 + LENGTH path) fn s fn' s r r'` by

@@ -325,7 +325,7 @@ QED
 
 Theorem ld_joint_mul_operands[local]:
   ld_joint_boundary vs C C' lo D stk PG G tn fn inst s t
-    n a U B HP H sites X ts /\ ptr_discipline lo C vs /\
+    n a U B HP H sites X ts /\ ptr_discipline_upto lo ncut C vs /\ gas_cut ncut vs s /\
   opaque_use_ok fn /\ active_inst fn inst s /\
   inst.inst_opcode = MUL /\ inst.inst_operands = [p;q] /\
   eval_operand p s = SOME x /\ eval_operand q s = SOME z ==>
@@ -338,7 +338,7 @@ Proof
      gvs[is_pointer_preserving_op_def, mem_read_ops_def, mem_write_ops_def]) >>
   `frame_reachable vs C stk PG G tn fn inst s` by
     metis_tac[ld_joint_source, occ_frame_reachable_projection] >>
-  `taint_ok fn tn inst s` by metis_tac[ptr_discipline_def] >>
+  `taint_ok fn tn inst s` by metis_tac[ptr_discipline_upto_def] >>
   `!op v. MEM op inst.inst_operands /\ op = Var v ==> MEM v (fn_ir_vars fn)` by
     metis_tac[ld_active_operand_ir_var] >>
   `!v. ~retpc_use_ok inst v` by gvs[retpc_use_ok_def] >>
