@@ -11,22 +11,23 @@ Theorem ec_counted_success_mem:
   (compile_ecadd_points p q sa = (op,sb) \/
    compile_ecmul_point p q sa = (op,sb)) /\
   fn_has_code sa sb func /\ fn_inst_ids_distinct func /\
-  stmt_state_rel ctx func cenv cx es s /\ alloca_history func s /\
+  stmt_state_rel H ctx func cenv cx es s /\ alloca_history func s /\
   ~s.vs_halted /\ s.vs_current_bb = sa.cs_current_bb /\
   s.vs_inst_idx = LENGTH sa.cs_current_insts /\
   run_inst_seq_mem_ok (emitted_insts sa sb) s /\
   run_inst_seq (emitted_insts sa sb) s = OK t /\
-  vv_post ctx func cenv cx e es sa sb s es' (Value v) vv t /\
+  vv_post H ctx func cenv cx e es sa sb s es' (Value v) vv t /\
   vv = LocatedValue (expr_type e) rp /\
   expr_type e = ArrayT (BaseT (UintT 256)) (Fixed 2) /\
   lowered_value_type cenv e = expr_type e ==>
   ?u n. gas_marked_path T ctx func s n (OK u) /\
-    vv_post ctx func cenv cx e es sa sb s es' (Value v) vv u /\
+    vv_post H ctx func cenv cx e es sa sb s es' (Value v) vv u /\
     vv_store_bound cx (expr_type e) (lowered_value_type cenv e) es'
       (Value v) vv u /\
     u.vs_current_bb = sb.cs_current_bb /\
     u.vs_inst_idx = LENGTH sb.cs_current_insts /\
-    alloca_history func u /\ s.vs_alloca_next <= u.vs_alloca_next
+    alloca_history func u /\ s.vs_alloca_next <= u.vs_alloca_next /\
+    u = t with vs_inst_idx := LENGTH sb.cs_current_insts
 Proof
   strip_tac >>
   `sb.cs_current_insts = sa.cs_current_insts ++ emitted_insts sa sb /\
@@ -83,7 +84,7 @@ QED
 
 Theorem ecmul_points_path_mem:
   compile_ecmul_point p scalar sa = (op,sb) /\
-  stmt_state_rel ctx func cenv cx es s /\ fn_inst_ids_distinct func /\
+  stmt_state_rel H ctx func cenv cx es s /\ fn_inst_ids_distinct func /\
   local_ptrs_reserved cenv sa /\
   (!i. MEM i (emitted_insts sa sb) ==> MEM i (fn_insts func)) /\
   eval_operand p s = SOME point /\ eval_operand scalar s = SOME sw /\
@@ -102,8 +103,10 @@ Theorem ecmul_points_path_mem:
   s.vs_current_bb = sa.cs_current_bb /\
   s.vs_inst_idx = LENGTH sa.cs_current_insts /\ alloca_history func s ==>
   ?n rr. gas_marked_path T ctx func s n rr /\
-    ((?t a. rr = OK t /\ r = INL a /\
-        vv_post ctx func cenv cx e es sa sb s es' a
+    ((?t t0 a. rr = OK t /\
+        run_inst_seq (emitted_insts sa sb) s = OK t0 /\
+        t = t0 with vs_inst_idx := LENGTH sb.cs_current_insts /\ r = INL a /\
+        vv_post H ctx func cenv cx e es sa sb s es' a
           (FST (as_ptr_val (expr_type e) LocMemory (op,sb))) t /\
         vv_store_bound cx (expr_type e) (lowered_value_type cenv e) es' a
           (FST (as_ptr_val (expr_type e) LocMemory (op,sb))) t /\
@@ -131,7 +134,7 @@ Proof
       (irule ec_counted_revert_mem >> metis_tac[])) >>
   rename1 `s.vs_outcomes = co::rest` >> Cases_on `co.co_success`
   >- (gvs[ec_source_tail_cases, builtin_result_def, evaluate_builtin_def] >>
-      (drule_at (Pat `vv_post _ _ _ _ _ _ _ _ _ _ _ _ _`) ec_counted_success_mem >>
+      (drule_at (Pat `vv_post _ _ _ _ _ _ _ _ _ _ _ _ _ _`) ec_counted_success_mem >>
        simp[as_ptr_val_def] >> metis_tac[])) >>
   gvs[ec_source_tail_cases, builtin_result_def, evaluate_builtin_def] >>
   (irule ec_counted_revert_mem >> metis_tac[])
@@ -139,7 +142,7 @@ QED
 
 Theorem ecadd_points_path_mem:
   compile_ecadd_points p q sa = (op,sb) /\
-  stmt_state_rel ctx func cenv cx es s /\ fn_inst_ids_distinct func /\
+  stmt_state_rel H ctx func cenv cx es s /\ fn_inst_ids_distinct func /\
   local_ptrs_reserved cenv sa /\
   (!i. MEM i (emitted_insts sa sb) ==> MEM i (fn_insts func)) /\
   eval_operand p s = SOME point /\ eval_operand q s = SOME point2 /\
@@ -161,8 +164,10 @@ Theorem ecadd_points_path_mem:
   s.vs_current_bb = sa.cs_current_bb /\
   s.vs_inst_idx = LENGTH sa.cs_current_insts /\ alloca_history func s ==>
   ?n rr. gas_marked_path T ctx func s n rr /\
-    ((?t a. rr = OK t /\ r = INL a /\
-        vv_post ctx func cenv cx e es sa sb s es' a
+    ((?t t0 a. rr = OK t /\
+        run_inst_seq (emitted_insts sa sb) s = OK t0 /\
+        t = t0 with vs_inst_idx := LENGTH sb.cs_current_insts /\ r = INL a /\
+        vv_post H ctx func cenv cx e es sa sb s es' a
           (FST (as_ptr_val (expr_type e) LocMemory (op,sb))) t /\
         vv_store_bound cx (expr_type e) (lowered_value_type cenv e) es' a
           (FST (as_ptr_val (expr_type e) LocMemory (op,sb))) t /\
@@ -192,7 +197,7 @@ Proof
       irule ec_counted_revert_mem >> metis_tac[]) >>
   rename1 `s.vs_outcomes = co::rest` >> Cases_on `co.co_success`
   >- (gvs[ec_source_tail_cases, builtin_result_def, evaluate_builtin_def] >>
-      drule_at (Pat `vv_post _ _ _ _ _ _ _ _ _ _ _ _ _`) ec_counted_success_mem >>
+      drule_at (Pat `vv_post _ _ _ _ _ _ _ _ _ _ _ _ _ _`) ec_counted_success_mem >>
       simp[as_ptr_val_def] >> metis_tac[]) >>
   gvs[ec_source_tail_cases, builtin_result_def, evaluate_builtin_def] >>
   irule ec_counted_revert_mem >> metis_tac[]

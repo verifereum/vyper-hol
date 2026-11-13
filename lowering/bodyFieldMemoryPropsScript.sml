@@ -741,7 +741,9 @@ Theorem attr_add_counted_post:
       eval_operand dst t = SOME (w + n2w off) /\
       t.vs_current_bb = sn.cs_current_bb /\
       t.vs_inst_idx = LENGTH sn.cs_current_insts /\ ~t.vs_halted /\
-      alloca_history func t /\ t.vs_alloca_next = s.vs_alloca_next
+      alloca_history func t /\ t.vs_alloca_next = s.vs_alloca_next /\
+      t.vs_accounts = s.vs_accounts /\ t.vs_transient = s.vs_transient /\
+      t.vs_requests = s.vs_requests /\ t.vs_call_ctx = s.vs_call_ctx
 Proof
   strip_tac >> drule_all buffer_emit_add_run >> strip_tac >>
   drule_all attr_add_run_post >> strip_tac >>
@@ -808,7 +810,9 @@ Theorem body_unwrap_memory_counted_read:
       u.vs_inst_idx = LENGTH sb.cs_current_insts /\
       alloca_history func u /\ s0.vs_alloca_next <= u.vs_alloca_next /\
       (vv_store_bound cx t lt es' tv (LocatedValue t p) s ==>
-       expr_store_bound cx t v op u)
+       expr_store_bound cx t v op u) /\
+      u.vs_accounts = s.vs_accounts /\ u.vs_transient = s.vs_transient /\
+      u.vs_requests = s.vs_requests /\ u.vs_call_ctx = s.vs_call_ctx
 Proof
   strip_tac >>
   `vv_store_bound cx t lt es' tv (LocatedValue t p) s ==>

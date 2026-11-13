@@ -52,7 +52,7 @@ Proof
 QED
 
 Theorem tuple_place_success_descriptor_probe:
-  target_post ctx func cenv cx es sp sa s0 ee (PlaceR p) (Type dty) r s ==>
+  target_post H ctx func cenv cx es sp sa s0 ee (PlaceR p) (Type dty) r s ==>
   SND (SND r) = SOME (ValPT dty) /\
   ?loc. FST (SND r) = SOME loc /\
     (loc = LocMemory \/ loc = LocStorage \/ loc = LocTransient)
@@ -146,7 +146,7 @@ QED
 Finalise tuple_place_assign_value_open
 
 Theorem tuple_place_success_store_open:
-  target_post ctx func cenv cx es sp sa s0 ee (PlaceR p) (Type dty) r t /\
+  target_post H ctx func cenv cx es sp sa s0 ee (PlaceR p) (Type dty) r t /\
   arg_type_fits sty dty /\ ~block_is_terminated sp /\
   compile_get_target_ptr compile_expr cenv bt sp = (r,sa) /\
   acyclic_struct_metadata cenv.ce_struct_fields /\

@@ -115,12 +115,13 @@ Theorem tuple_target_toplevel_place:
     lookup_var_slot_from_layout cx tr src id_str = SOME slot /\
     evaluate_type (get_tenv cx) typ = SOME tv ==>
     eval_target_place cx (TopLevelNameTarget (src, id)) es =
-      (INL (StoragePlace tr (n2w slot) tv), es)
+      (INL (StoragePlace tr (n2w slot) tv),
+       es with storage_trace := es.storage_trace ++ [StorageRoot tr slot tv])
 Proof
   rpt strip_tac >>
   simp[Once evaluate_def, bind_def] >>
-  simp[Once evaluate_def, lookup_global_def, bind_def, lift_option_type_def,
-       return_def, get_place_def]
+  simp[Once evaluate_def, lookup_global_def, bind_def, ignore_bind_def,
+       lift_option_type_def, record_storage_event_def, return_def, get_place_def]
 QED
 
 Theorem tuple_target_field_place:
@@ -131,13 +132,16 @@ Theorem tuple_target_field_place:
     evaluate_type (get_tenv cx) typ = SOME (StructTV fs) /\
     struct_field_slot fs fld = SOME (off, tv) ==>
     eval_target_place cx (AttributeTarget (TopLevelNameTarget (src, id)) fld)
-      es = (INL (StoragePlace tr (n2w slot + n2w off) tv), es)
+      es = (INL (StoragePlace tr (n2w slot + n2w off) tv),
+            es with storage_trace :=
+              es.storage_trace ++ [StorageRoot tr slot (StructTV fs)])
 Proof
   rpt strip_tac >>
   simp[Once evaluate_def, bind_def] >>
   simp[Once evaluate_def, bind_def] >>
-  simp[Once evaluate_def, lookup_global_def, bind_def, lift_option_type_def,
-       return_def, get_place_def, extend_place_def, extend_storage_place_def]
+  simp[Once evaluate_def, lookup_global_def, bind_def, ignore_bind_def,
+       lift_option_type_def, record_storage_event_def, return_def, get_place_def,
+       extend_place_def, extend_storage_place_def]
 QED
 
 Theorem tuple_target_local_preserves_layout:
@@ -163,8 +167,9 @@ Theorem tuple_target_write_safe:
        eval_target_place cx bt es = (INL (MemoryPlace id []), es) /\
        find_containing_scope id es.scopes = SOME (pre, sc, entry, rest) /\
        entry.assignable) \/
-     (?tr slot ty tv.
-       eval_target_place cx bt es = (INL (StoragePlace tr slot tv), es) /\
+     (?tr slot ty tv obs.
+       eval_target_place cx bt es =
+         (INL (StoragePlace tr slot tv), es with storage_trace := obs) /\
        is_word_type ty /\ evaluate_type (get_tenv cx) ty = SOME tv /\
        value_has_type tv v)) ==>
     ?es'. assign_tuple_targets cx (BaseTarget bt) v es = (INL (), es') /\
@@ -175,8 +180,9 @@ Proof
   >- (drule_all tuple_target_local_write_safe >> strip_tac >>
       simp[Once evaluate_def, bind_def] >>
       metis_tac[tuple_target_local_preserves_layout]) >>
-  drule_all tuple_target_storage_write_safe >> strip_tac >>
-  simp[Once evaluate_def, bind_def] >> metis_tac[]
+  drule_all tuple_target_storage_write_safe >>
+  disch_then (qspec_then `es with storage_trace := obs` strip_assume_tac) >>
+  simp[Once evaluate_def, bind_def] >> gvs[]
 QED
 
 (* Pure declaration information; deliberately no execution or compiler facts. *)
@@ -366,9 +372,7 @@ Definition tuple_target_aligned_def:
         SOME (if tr then TransientLoc (n2w k) else StorageLoc (n2w k)) /\
       cenv.ce_hashmap_info (src,id) = NONE /\
       cenv.ce_module_var_type (src,id) = SOME ty /\ is_word_type ty /\
-      evaluate_type (get_tenv cx) ty = SOME tv /\
-      (!u mem. storage_dead cx tr (update_storage (n2w k) u mem) =
-               storage_dead cx tr mem)) \/
+      evaluate_type (get_tenv cx) ty = SOME tv) \/
     (?src id ts tr id_str k sid fs fld off fsz.
       g = BaseTarget (AttributeTarget (TopLevelNameTarget (src,id)) fld) /\
       get_module_code cx src = SOME ts /\
@@ -384,9 +388,7 @@ Definition tuple_target_aligned_def:
       struct_field_slot fs fld = SOME (off,tv) /\
       off = struct_field_offset_slots
         (get_struct_fields cenv.ce_struct_fields (nsid_to_string sid)) fld /\
-      is_word_type ty /\ evaluate_type (get_tenv cx) ty = SOME tv /\
-      (!u mem. storage_dead cx tr (update_storage (n2w k + n2w off) u mem) =
-               storage_dead cx tr mem))
+      is_word_type ty /\ evaluate_type (get_tenv cx) ty = SOME tv)
 End
 
 Definition tuple_target_layout_def:
@@ -470,9 +472,7 @@ Theorem tuple_target_aligned_toplevel:
         SOME (if tr then TransientLoc (n2w k) else StorageLoc (n2w k)) /\
       cenv.ce_hashmap_info (src,id) = NONE /\
       cenv.ce_module_var_type (src,id) = SOME ty /\ is_word_type ty /\
-      evaluate_type (get_tenv cx) ty = SOME tv /\
-      (!u mem. storage_dead cx tr (update_storage (n2w k) u mem) =
-               storage_dead cx tr mem)
+      evaluate_type (get_tenv cx) ty = SOME tv
 Proof
   simp[tuple_target_aligned_def]
 QED
@@ -495,9 +495,7 @@ Theorem tuple_target_aligned_field:
       struct_field_slot fs fld = SOME (off,tv) /\
       off = struct_field_offset_slots
         (get_struct_fields cenv.ce_struct_fields (nsid_to_string sid)) fld /\
-      is_word_type ty /\ evaluate_type (get_tenv cx) ty = SOME tv /\
-      (!u mem. storage_dead cx tr (update_storage (n2w k + n2w off) u mem) =
-               storage_dead cx tr mem)
+      is_word_type ty /\ evaluate_type (get_tenv cx) ty = SOME tv
 Proof
   simp[tuple_target_aligned_def]
 QED
@@ -522,10 +520,10 @@ Proof
 QED
 
 Theorem tuple_target_storage_assignment:
-  !cx bt tr slot tv v es es'.
-    eval_target_place cx bt es = (INL (StoragePlace tr slot tv),es) /\
+  !cx bt tr slot tv v es es1 es'.
+    eval_target_place cx bt es = (INL (StoragePlace tr slot tv),es1) /\
     assign_tuple_targets cx (BaseTarget bt) v es = (INL (),es') ==>
-    write_storage_slot cx tr slot tv v es = (INL (),es')
+    write_storage_slot cx tr slot tv v es1 = (INL (),es')
 Proof
   rpt strip_tac >>
   qpat_x_assum `assign_tuple_targets _ _ _ _ = _` mp_tac >>
