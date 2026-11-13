@@ -10,7 +10,7 @@ Theorem staged_arg_old_allocation_disjoint:
   alloca_inv t /\ rid < a.cs_next_id /\
   FLOOKUP t.vs_allocas rid = SOME (rb,cap) /\
   eval_operand op t = SOME w /\ rsz <= cap ==>
-  compileEnv$regions_disjoint rb rsz (w2n w) (type_memory_size tv)
+  loweringStateRelDefs$regions_disjoint rb rsz (w2n w) (type_memory_size tv)
 Proof
   simp[staged_arg_def] >> strip_tac >>
   `rid <> aid` by decide_tac >>

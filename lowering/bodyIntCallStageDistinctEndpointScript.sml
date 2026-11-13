@@ -12,9 +12,9 @@ Theorem staged_arg_tail_separation:
   !i. i < LENGTH D ==>
   (\(ty',tv',v',flag',op'). ~flag /\ ~flag' ==>
     !w w'. eval_operand op t = SOME w /\ eval_operand op' t = SOME w' ==>
-      compileEnv$regions_disjoint (w2n w) (type_memory_size tv)
+      loweringStateRelDefs$regions_disjoint (w2n w) (type_memory_size tv)
         (w2n w') (type_memory_size tv') /\
-      compileEnv$regions_disjoint (w2n w') (type_memory_size tv')
+      loweringStateRelDefs$regions_disjoint (w2n w') (type_memory_size tv')
         (w2n w) (type_memory_size tv)) (EL i D)
 Proof
   strip_tac >> rpt strip_tac >>
