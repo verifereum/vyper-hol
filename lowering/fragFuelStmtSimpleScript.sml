@@ -204,7 +204,8 @@ Theorem fuel_ok_stmt_append[local]:
     fuel_ok Wv {} E (compile_stmt cenv lctx ty (Append tgt e))
 Proof
   rpt gen_tac >> simp_tac std_ss [compile_stmt_def] >>
-  fuel_auto [fuel_ok_lower_value_compile_expr, fuel_ok_compile_alloc_buffer,
+  fuel_auto [fuel_ok_compile_get_target_ptr_ce,
+             fuel_ok_lower_value_compile_expr, fuel_ok_compile_alloc_buffer,
              fuel_ok_compile_store_memory, fuel_ok_compile_dynarray_append] >>
   simp[fuel_ok_ld_st_opc]
 QED

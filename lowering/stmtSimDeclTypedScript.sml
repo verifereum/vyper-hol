@@ -30,7 +30,7 @@ Theorem annassign_typed_store_post_path:
   type_memory_bytes cenv (expr_type e) = type_memory_size stv /\
   type_memory_size stv < dimword (:256) /\ type_memory_size dtv <= sz /\
   compile_assign_value cenv (Var p) LocMemory op F loc dty (expr_type e)
-    info bytes sb = ((),sf) /\
+    bytes sb = ((),sf) /\
   fn_has_code sb sf func /\ fn_inst_ids_distinct func /\
   ~s.vs_halted /\ s.vs_current_bb = sb.cs_current_bb /\
   s.vs_inst_idx = LENGTH sb.cs_current_insts /\
@@ -50,7 +50,11 @@ Theorem annassign_typed_store_post_path:
       (!x u. not_fresh_at sa x /\ lookup_var x s0 = SOME u ==>
         lookup_var x t = SOME u) /\
       (!aid entry. FLOOKUP s0.vs_allocas aid = SOME entry ==>
-        FLOOKUP t.vs_allocas aid = SOME entry)
+        FLOOKUP t.vs_allocas aid = SOME entry) /\
+      (!x. not_fresh_at sb x ==> lookup_var x t = lookup_var x s) /\
+      (!aid off z. FLOOKUP s.vs_allocas aid = SOME (off,z) /\
+         aid <> inst.inst_id /\ aid < sb.cs_next_id ==>
+         mem_bytes_at off z t.vs_memory = mem_bytes_at off z s.vs_memory)
 Proof
   disch_then (MAP_EVERY assume_tac o CONJUNCTS) >>
   drule_then (drule_then assume_tac) compile_lower_value_var >>
@@ -88,7 +92,8 @@ Proof
   disch_then (drule_at (Pat `val_in_memory _ _ _ _`)) >> simp[] >>
   disch_then (qspecl_then [`sz`, `sa`, `inst`, `id`, `a`] mp_tac) >>
   (impl_tac >- (asm_rewrite_tac[] >> gvs[])) >> strip_tac >>
-  qexists `t` >> simp[] >> rpt strip_tac >>
+  qexists `t` >> simp[] >> rpt conj_tac >> TRY (first_assum ACCEPT_TAC) >>
+  rpt strip_tac >>
   `not_fresh_at sb x` by metis_tac[not_fresh_at_mono] >> metis_tac[])
 QED
 
@@ -113,10 +118,13 @@ Theorem annassign_typed_normal_continuation:
      (es with gas_obs := gs) = (INL v,es1) ==>
      value_has_type tyv v /\ value_has_type etv v) /\
   local_ptrs_reserved c sa /\ cs_extends sa sb /\ ~block_is_terminated sb /\
+  stmt_state_rel ctx func c cx es salloc /\
+  sa0.cs_next_id <= inst.inst_id /\ sa0.cs_next_id <= sa.cs_next_id /\
+  sa0.cs_next_var <= sa.cs_next_var /\
   (!l. op <> Label l) /\
   lower_value compile_expr c (expr_type e) e sa = (op,sb) /\
   compile_assign_value c (Var p) LocMemory op F loc typ (expr_type e)
-    info bytes sb = ((),sf) /\
+    bytes sb = ((),sf) /\
   fn_has_code sb sf func /\ fn_inst_ids_distinct func /\
   FLOOKUP c.ce_vars id = SOME (PtrVar (Var p) sz) /\ not_fresh_at sa p /\
   lookup_var p salloc = SOME w /\
@@ -129,7 +137,7 @@ Theorem annassign_typed_normal_continuation:
   s.vs_current_bb = sb.cs_current_bb /\ s.vs_inst_idx = LENGTH sb.cs_current_insts ==>
   ?ff u. gas_marked_exec F (ctx,func) (new_variable id tyv v)
     (ee with gas_obs := [],s) [] (INL ()) ff (OK u) /\
-    stmt_post ctx func cx lctx old c sa sf salloc (INL ()) ff u
+    stmt_post ctx func cx lctx old c sa0 sf es salloc (INL ()) ff u
 Proof
   disch_then (MAP_EVERY assume_tac o CONJUNCTS) >>
   `!tail. bind (eval_expr cx e) (read_result cx)
@@ -157,15 +165,68 @@ Proof
    lookup_scopes id (ee with gas_obs := []).scopes = NONE` by gvs[] >>
   drule_all annassign_typed_store_post_path >>
   disch_then (qspec_then `T` strip_assume_tac) >>
-  qexistsl [`ee with <|gas_obs := []; scopes :=
+  `MAP FDOM (ee with gas_obs := []).scopes = MAP FDOM es.scopes` by
+    (qpat_assum `!tail. bind _ _ _ = _` (qspec_then `[]` assume_tac) >>
+     drule eval_read_preserves_scopes_dom >> simp[]) >>
+  `alloca_frame c es sa salloc c (ee with gas_obs := []) s` by
+    (irule expr_post_alloca_frame >> metis_tac[]) >>
+  `venomMemDefs$allocas_non_overlapping s /\ lookup_var p s = SOME w /\
+   FLOOKUP s.vs_allocas inst.inst_id = SOME (w2n w, sz) /\
+   (!aid b. FLOOKUP salloc.vs_allocas aid = SOME b ==>
+            FLOOKUP s.vs_allocas aid = SOME b)` by
+    (qpat_x_assum `expr_post _ _ _ _ _ _ _ _ _ _ _ _ _` mp_tac >>
+     simp[expr_post_def, stmt_state_rel_def, venomMemDefsTheory.alloca_inv_def] >>
+     metis_tac[]) >>
+  `sa.cs_next_id <= sb.cs_next_id /\ sa.cs_next_var <= sb.cs_next_var` by
+    metis_tac[cj 2 compile_expr_grows] >>
+  `local_ptrs_reserved c sb` by
+    (irule local_ptrs_reserved_next_var >> qexists_tac `sa` >> simp[]) >>
+  drule_all declare_local_ptr >> strip_tac >>
+  `!aid off z'. FLOOKUP s.vs_allocas aid = SOME (off, z') /\ aid < sa0.cs_next_id ==>
+     mem_bytes_at off z' t.vs_memory = mem_bytes_at off z' s.vs_memory` by
+    (rpt strip_tac >>
+     qpat_x_assum `!aid off z. FLOOKUP s.vs_allocas aid = _ /\ _ ==> _` irule >>
+     qexists_tac `aid` >> rpt conj_tac >- decide_tac >- decide_tac >>
+     first_assum ACCEPT_TAC) >>
+  `((ee with gas_obs := []) with scopes :=
+      (sc |+ (id, <|assignable := T; type := tyv; value := v; popped := []|>)) :: rest).scopes =
+   (sc |+ (id, <|assignable := T; type := tyv; value := v; popped := []|>)) :: rest` by
+    simp[] >>
+  `alloca_frame old es sa0 salloc c ((ee with gas_obs := []) with scopes :=
+    (sc |+ (id, <|assignable := T; type := tyv; value := v; popped := []|>)) :: rest) t` by
+    (mp_tac (Q.INST [`ee` |-> `(ee with gas_obs := []) with scopes :=
+         (sc |+ (id, <|assignable := T; type := tyv; value := v; popped := []|>)) :: rest`,
+       `es1` |-> `ee with gas_obs := []`,
+       `s0` |-> `salloc`, `aid0` |-> `inst.inst_id`, `z` |-> `sz`,
+       `entry` |-> `<|assignable := T; type := tyv; value := v; popped := []|>`,
+       `sa1` |-> `sb`] alloca_frame_declare_local_store) >>
+     impl_tac >- (rpt conj_tac >> first_assum ACCEPT_TAC) >>
+     simp[]) >>
+  `!x u. not_fresh_at sa0 x /\ lookup_var x salloc = SOME u ==>
+         lookup_var x t = SOME u` by
+    (rpt gen_tac >> strip_tac >>
+     `not_fresh_at sa x` by
+       (qpat_x_assum `not_fresh_at sa0 x` mp_tac >> rw[not_fresh_at_def] >>
+        first_x_assum irule >> simp[]) >>
+     metis_tac[]) >>
+  qexistsl_tac [`ee with <|gas_obs := []; scopes :=
     (sc |+ (id, <|assignable := T; type := tyv; value := v; popped := []|>)) :: rest|>`, `t`] >>
-  conj_tac >- simp[gas_marked_exec_def] >>
+  conj_tac
+  >- simp[gas_marked_exec_def] >>
   simp[stmt_post_def, stmt_lands_def] >>
   qmatch_goalsub_abbrev_tac `stmt_state_rel _ _ _ _ (ee with scopes := scs) _` >>
   `ee with <|scopes := scs; gas_obs := []|> =
    (ee with scopes := scs) with gas_obs := []`
     by simp[evaluation_state_component_equality] >>
-  metis_tac[exprSimWordArgsTheory.stmt_state_rel_gas_obs]
+  `ee with <|scopes := scs; gas_obs := []|> =
+   (ee with gas_obs := []) with scopes := scs`
+    by simp[evaluation_state_component_equality] >>
+  qpat_x_assum `ee with <|scopes := scs; gas_obs := []|> =
+                (ee with scopes := scs) with gas_obs := []`
+    (fn th => RULE_ASSUM_TAC (REWRITE_RULE [th])) >>
+  RULE_ASSUM_TAC (REWRITE_RULE [exprSimWordArgsTheory.stmt_state_rel_gas_obs,
+                                alloca_frame_gas_obs]) >>
+  conj_tac >> first_assum ACCEPT_TAC
 QED
 
 Theorem compile_annassign_typed_widen_stmt_frag:
@@ -248,21 +309,28 @@ Proof
     (`sA.cs_next_var = st.cs_next_var` by
        (drule emit_inst_extends >> simp[]) >>
      drule declare_local_old_fresh >> simp[] >> simp[not_fresh_at_def]) >>
+  `sa.cs_next_id <= ai.inst_id /\ sa.cs_next_id <= sA.cs_next_id /\
+   sa.cs_next_var <= sA.cs_next_var` by
+    (drule_all declare_local_ptr >> strip_tac >>
+     qpat_x_assum `emit_inst ALLOCA _ _ _ = _` assume_tac >>
+     drule emit_inst_extends >>
+     simp[Abbr `ai`, venomInstTheory.mk_inst_def]) >>
   irule annassign_outcome_entry_prefix >>
-  qexistsl_tac [`sA`, `salloc`] >> simp[] >>
+  simp[] >> qexists_tac `salloc` >> simp[] >>
   irule annassign_rhs_outcome >>
   goal_assum (drule_at Any) >> simp[] >>
   reverse conj_tac >- metis_tac[] >>
   rpt gen_tac >> strip_tac >>
   `?ff u. gas_marked_exec F (ctx,func) (new_variable id tyv v)
     (ee with gas_obs := [],t) [] (INL ()) ff (OK u) /\
-    stmt_post ctx func cx lctx cenv c sA sb salloc (INL ()) ff u` suffices_by
+    stmt_post ctx func cx lctx cenv c sa sb es salloc (INL ()) ff u` suffices_by
     (strip_tac >> qexistsl_tac [`ff`, `u`] >>
      conj_tac >- first_assum ACCEPT_TAC >>
-     qpat_x_assum `stmt_post _ _ _ _ _ _ _ _ _ _ _ _` mp_tac >>
+     qpat_x_assum `stmt_post _ _ _ _ _ _ _ _ _ _ _ _ _` mp_tac >>
      POP_ASSUM_LIST (K ALL_TAC) >>
-     simp[stmt_post_def, stmt_state_rel_def, state_rel_gas_obs, immutable_alloca_sep_def] >>
-     metis_tac[]) >>
+     simp[stmt_post_def, stmt_state_rel_def, state_rel_gas_obs, immutable_alloca_sep_def,
+          alloca_frame_def] >>
+     strip_tac >> rpt conj_tac >> first_assum ACCEPT_TAC) >>
   `~block_is_terminated sA` by
     (drule emit_inst_nonterminator_open >> simp[is_terminator_def]) >>
   `?tv es1. eval_expr cx e
@@ -276,13 +344,13 @@ Proof
      pure_rewrite_tac[stmt_state_rel_def, loweringStateRelDefsTheory.state_rel_def] >> metis_tac[]) >>
   `~block_is_terminated sV` by metis_tac[] >>
   `~block_is_terminated sB` by metis_tac[unwrap_value_open] >>
-  qpat_x_assum `compile_assign_value _ _ _ _ _ _ _ _ _ _ _ = _` mp_tac >>
+  qpat_x_assum `compile_assign_value _ _ _ _ _ _ _ _ _ _ = _` mp_tac >>
   asm_rewrite_tac[] >> strip_tac >>
   irule annassign_typed_normal_continuation >>
   qpat_assum `expr_post _ _ _ _ _ _ _ _ _ _ _ _ _` (irule_at Any) >>
   qpat_assum `declare_local _ _ _ _ = _` (irule_at Any) >>
   simp[] >>
-  qpat_assum `compile_assign_value _ _ _ _ _ _ _ _ _ _ _ = _`
+  qpat_assum `compile_assign_value _ _ _ _ _ _ _ _ _ _ = _`
     (irule_at Any o SRULE []) >>
   simp[] >>
   qexistsl_tac [`marks`, `ai`] >> simp[] >>
