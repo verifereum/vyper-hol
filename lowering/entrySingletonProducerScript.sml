@@ -102,6 +102,26 @@ Theorem entry_registration_singleton_source_endpoint:
     (!id. final.cs_next_id <= id ==> FLOOKUP out.vs_allocas id = NONE)
 Proof
   disch_then (map_every assume_tac o CONJUNCTS) >>
+  `dyn /\ ~prim ==> ~(n2w 4 + abi_decode_load CALLDATALOAD
+     (n2w 4 + n2w (off-4):bytes32) initial <+ 4w)` by
+    (strip_tac >>
+     `is_dynamic at` by
+       (qpat_x_assum `_ <=> is_dynamic at` (SUBST1_TAC o SYM) >> simp[]) >>
+     drule_all entry_canonical_member_window >>
+     simp_tac bool_ss [LET_THM] >> strip_tac >>
+     qabbrev_tac `k = abi_decode_member_offset at bs
+       (SUM (MAP abi_member_head_size pre))` >>
+     `(n2w 4 + n2w (off-4)):bytes32 =
+      n2w (4 + SUM (MAP abi_member_head_size pre))` by simp[word_add_n2w] >>
+     `abi_decode_load CALLDATALOAD (n2w 4 + n2w (off-4):bytes32) initial =
+      n2w k` by
+       (qpat_x_assum `(_:bytes32) = n2w (4 + _)` SUBST1_TAC >>
+        qpat_x_assum `is_dynamic at ==> _` irule >> first_assum ACCEPT_TAC) >>
+     qpat_x_assum `4 + k < _` mp_tac >>
+     qpat_x_assum `abi_decode_load _ _ _ = n2w k` SUBST1_TAC >>
+     POP_ASSUM_LIST (K all_tac) >> strip_tac >>
+     `4 < dimword (:256)` by decide_tac >>
+     simp[word_add_n2w, WORD_LO, w2n_n2w, arithmeticTheory.LESS_MOD]) >>
   drule_all entry_registration_singleton_prefix_frame >> strip_tac >>
   drule_all entry_canonical_registration_address >> strip_tac >>
   qexistsl [`dst`,`src`,`first`,`ready`,`p`] >>
