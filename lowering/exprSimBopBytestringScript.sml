@@ -507,13 +507,8 @@ Proof
     metis_tac[fn_has_code_mid, cs_extends_trans, cs_extends_refl] >>
   `sa.cs_next_var <= sh1.cs_next_var /\ sh1.cs_next_var <= sh2.cs_next_var` by
     (conj_tac >>
-     qpat_x_assum `case bytestring_literal_hash e1 of NONE => _ | SOME h => _`
-       mp_tac >>
-     qpat_x_assum `case bytestring_literal_hash e2 of NONE => _ | SOME h => _`
-       mp_tac >>
      Cases_on `bytestring_literal_hash e1` >>
-     Cases_on `bytestring_literal_hash e2` >> simp_tac (srw_ss()) [] >>
-     rpt strip_tac >> rpt BasicProvers.VAR_EQ_TAC >>
+     Cases_on `bytestring_literal_hash e2` >> gvs[] >>
      imp_res_tac (cj 2 compile_expr_grows) >>
      imp_res_tac (SIMP_RULE std_ss [ci_mono_def] compile_bytestring_hash_shape) >> decide_tac) >>
   `local_ptrs_reserved cenv sh1 /\ local_ptrs_reserved cenv sh2` by

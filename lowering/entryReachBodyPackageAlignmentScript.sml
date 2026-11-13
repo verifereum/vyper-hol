@@ -3,6 +3,7 @@ Theory entryReachBodyPackageAlignment
 Ancestors
   supportedGetterProps
   returnMetadataPtr calldataRegistration entryReachBodySourceMemberEntry externalBodyFrame
+  externalBodySupport
   e2eDefs supportedProgram supportedDecls vyperABIRoundtrip
   vyperTypeContractContext vyperTypeContractStaticMaps vyperTypeContract
   entryReachBodySourceSupport entryReachBodyCallInputs ctorSourceInputs

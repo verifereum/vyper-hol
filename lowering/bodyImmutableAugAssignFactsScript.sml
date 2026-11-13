@@ -97,7 +97,7 @@ Proof
 QED
 
 Theorem immutable_augassign_load:
-  stmt_state_rel ctx func cenv cx es ss /\ cenv.ce_is_ctor /\
+  stmt_state_rel H ctx func cenv cx es ss /\ cenv.ce_is_ctor /\
   FLOOKUP cenv.ce_module_vars (cenv.ce_module,id) = SOME (ImmutableLoc off) /\
   ALOOKUP es.immutables cx.txn.target = SOME imms /\
   FLOOKUP (get_source_immutables cenv.ce_module imms) id = SOME (tv,v) /\

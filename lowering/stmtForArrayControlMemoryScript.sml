@@ -6,14 +6,14 @@ Ancestors
   venomInst venomExecProps memSafeRun instMemFrontier gasCount
 
 Theorem array_condition_boundary_mem:
-  !ctx func cenv cx P vs id idx saved_base base p dst sz ainst cond_lbl st
+  !ctx func cenv cx st0 P vs id idx saved_base base p dst sz ainst cond_lbl st
    k es cc n dv j1 j2 exit_lbl stmts_lbl.
   lookup_block cond_lbl func.fn_blocks =
     SOME <| bb_label := cond_lbl;
             bb_instructions :=
               [mk_inst j1 EQ [Var idx; Lit (n2w n)] [dv];
                mk_inst j2 JNZ [Var dv; Label exit_lbl; Label stmts_lbl] []] |> /\
-  array_loop_inv ctx func cenv cx P vs id idx saved_base base p dst sz
+  array_loop_inv ctx func cenv cx st0 P vs id idx saved_base base p dst sz
     ainst cond_lbl st k es cc /\
   n = LENGTH vs /\ n < dimword (:256) /\
   not_local_ptr cenv es.scopes dv /\ dv <> idx /\ dv <> p /\
@@ -21,7 +21,7 @@ Theorem array_condition_boundary_mem:
   fn_inst_ids_distinct func /\ alloca_history func cc ==>
   let next = jump_to (if k = n then exit_lbl else stmts_lbl)
                (update_var dv (bool_to_word (k = n)) cc) in
-    array_loop_inv ctx func cenv cx P vs id idx saved_base base p dst sz
+    array_loop_inv ctx func cenv cx st0 P vs id idx saved_base base p dst sz
       ainst (if k = n then exit_lbl else stmts_lbl) st k es next /\
     gas_path_mem ctx func cc 0 (OK next) /\
     (!x. x <> dv ==> lookup_var x next = lookup_var x cc) /\
@@ -39,9 +39,10 @@ QED
 Resume array_condition_boundary_mem[invariant]:
   fs[array_loop_inv_def] >>
   rename1 `eval_operand saved_base cc = SOME array_base` >>
-  `stmt_state_rel H ctx func cenv cx es
-     (update_var dv (bool_to_word (k = n)) cc)` by
-    (irule stmt_state_rel_update_var >> simp[]) >>
+  `!H. valid_horizon cx st0 H es.storage_trace ==>
+     stmt_state_rel H ctx func cenv cx es
+       (update_var dv (bool_to_word (k = n)) cc)` by
+    (rpt strip_tac >> irule stmt_state_rel_update_var >> simp[]) >>
   `eval_operand saved_base (update_var dv (bool_to_word (k = n)) cc) = SOME array_base` by
     (irule eval_operand_update_other_local >> simp[]) >>
   simp[array_loop_inv_def, stmt_state_rel_jump_to, ret_pc_ok_jump_to] >>
@@ -104,14 +105,14 @@ QED
 Finalise array_condition_boundary_mem
 
 Theorem array_increment_boundary_mem:
-  !ctx func cenv cx P vs id idx saved_base base p dst sz ainst cond_lbl
+  !ctx func cenv cx st0 P vs id idx saved_base base p dst sz ainst cond_lbl
    incr_lbl st k es dd nv i1 i2 i3.
   lookup_block incr_lbl func.fn_blocks =
     SOME <| bb_label := incr_lbl; bb_instructions :=
       [mk_inst i1 ADD [Var idx; Lit 1w] [nv];
        mk_inst i2 ASSIGN [Var nv] [idx];
        mk_inst i3 JMP [Label cond_lbl] []] |> /\
-  array_loop_inv ctx func cenv cx P vs id idx saved_base base p dst sz
+  array_loop_inv ctx func cenv cx st0 P vs id idx saved_base base p dst sz
     ainst incr_lbl st k es dd /\ k < LENGTH vs /\
   not_local_ptr cenv es.scopes idx /\ not_local_ptr cenv es.scopes nv /\
   p <> idx /\ p <> nv /\
@@ -119,7 +120,7 @@ Theorem array_increment_boundary_mem:
   fn_inst_ids_distinct func /\ alloca_history func dd ==>
   let next = jump_to cond_lbl
     (update_var idx (n2w (k+1)) (update_var nv (n2w (k+1)) dd)) in
-    array_loop_inv ctx func cenv cx P vs id idx saved_base base p dst sz
+    array_loop_inv ctx func cenv cx st0 P vs id idx saved_base base p dst sz
       ainst cond_lbl st (k+1) es next /\
     gas_path_mem ctx func dd 0 (OK next) /\
     (!x. x <> idx /\ x <> nv ==> lookup_var x next = lookup_var x dd) /\
@@ -138,9 +139,10 @@ QED
 Resume array_increment_boundary_mem[invariant]:
   fs[array_loop_inv_def] >>
   rename1 `eval_operand saved_base dd = SOME array_base` >>
-  `stmt_state_rel H ctx func cenv cx es
-     (update_var idx (n2w (k+1)) (update_var nv (n2w (k+1)) dd))` by
-    (irule stmt_state_rel_update_var >> simp[] >>
+  `!H. valid_horizon cx st0 H es.storage_trace ==>
+     stmt_state_rel H ctx func cenv cx es
+       (update_var idx (n2w (k+1)) (update_var nv (n2w (k+1)) dd))` by
+    (rpt strip_tac >> irule stmt_state_rel_update_var >> simp[] >>
      irule stmt_state_rel_update_var >> simp[]) >>
   `eval_operand saved_base
      (update_var idx (n2w (k+1)) (update_var nv (n2w (k+1)) dd)) = SOME array_base` by
