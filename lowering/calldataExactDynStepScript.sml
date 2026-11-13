@@ -1,5 +1,6 @@
 Theory calldataExactDynStep
 Ancestors
+  calldataExactHeaderEntry
   calldataDynOwned calldataSourceCorrespondence abiDecoderFrame calldataRegistrationExec
   fragExecMem abiDecoderContract arithmetic list words valueEncodingProofs valueEncodingProps
   calldataDynStep venomExecSemantics venomState venomMemDefs
@@ -348,3 +349,243 @@ Resume calldata_exact_owned_child_backedge[transfer]:
     (qspecl_then [`fuel'`,`r`] mp_tac) >> asm_rewrite_tac[] >> metis_tac[]
 QED
 Finalise calldata_exact_owned_child_backedge
+
+
+Theorem calldata_exact_owned_header_step:
+  (Own = \lo hi s. !id q k.
+    lo <= id /\ id < hi /\ FLOOKUP s.vs_allocas id = SOME (q,k) ==>
+    k = 32 /\ q < dimword (:256) /\ q+32 <= s.vs_alloca_next /\
+    ?ins. MEM ins (fn_insts fn) /\ ins.inst_id = id /\
+      ins.inst_opcode = ALLOCA /\ ins.inst_operands = [Lit 32w]) /\
+  (Rel = \s t. !fuel r.
+    run_from fuel ctx fn t = r /\ (!err. r <> Error err) ==>
+    ?fuel'. run_from fuel' ctx fn s = r /\
+      (mem_safe_run fuel ctx fn t ==> mem_safe_run fuel' ctx fn s)) /\
+  (H = \i s.
+    ~s.vs_halted /\ s.vs_current_bb = hdr /\ s.vs_inst_idx = 0 /\
+    i <= n /\ n <= maxn /\
+    eval_operand src s = SOME srcword /\ eval_operand dst s = SOME (n2w d) /\
+    eval_operand ip s = SOME (n2w p) /\ mload p s = n2w i /\
+    mem_word_at d s.vs_memory = n2w n /\
+    s.vs_call_ctx = initial.vs_call_ctx /\ s.vs_data_section = initial.vs_data_section /\
+    FLOOKUP s.vs_allocas header_id = SOME (p,32) /\
+    FLOOKUP s.vs_allocas oid = SOME (base_addr,cap) /\
+    alloca_inv s /\ alloca_frontier_inv ctx fn site s /\ Own lo hi s /\
+    initial.vs_alloca_next <= s.vs_alloca_next /\
+    (!id q k. FLOOKUP initial.vs_allocas id = SOME (q,k) ==>
+      FLOOKUP s.vs_allocas id = SOME (q,k)) /\
+    (!id. id < lo \/ hi <= id ==>
+      FLOOKUP s.vs_allocas id = FLOOKUP initial.vs_allocas id) /\
+    (!op. abi_decoder_operand_live live op ==>
+      eval_operand op s = eval_operand op initial) /\
+    ?scratch. abi_decode_footprint_frame ((d,32+maxn*type_memory_size tv)::scratch) initial s /\
+      !q k. MEM (q,k) scratch ==> ?id. lo <= id /\ id < hi /\
+        FLOOKUP s.vs_allocas id = SOME (q,k)) /\
+  abi_decode_array_element_setup ip src dst CALLDATALOAD (Lit 0w) (Lit 0w) di
+    abi_sz (type_memory_size tv) st0 = (ops,middle) /\
+  fn_has_code st0 middle fn /\
+  lo <= header_id /\ header_id < middle.cs_next_id /\
+  middle.cs_next_id <= st1.cs_next_id /\ st1.cs_next_id <= hi /\
+  lookup_block hdr fn.fn_blocks = SOME
+    <|bb_label := hdr; bb_instructions :=
+      abi_decode_header_insts hid ip src CALLDATALOAD hiv hcv hcmp hdone body_lbl exit_lbl|> /\
+  lookup_block body_lbl fn.fn_blocks = SOME body_bb /\
+  phi_prefix_length body_bb.bb_instructions = 0 /\
+  st0.cs_current_bb = body_lbl /\ st0.cs_current_insts = [] /\
+  lookup_block st1.cs_current_bb fn.fn_blocks = SOME
+    <|bb_label := st1.cs_current_bb; bb_instructions :=
+      st1.cs_current_insts ++ abi_decode_backedge_insts st1.cs_next_id biv nv ip hdr|> /\
+  phi_prefix_length
+    (abi_decode_header_insts hid ip src CALLDATALOAD hiv hcv hcmp hdone body_lbl exit_lbl) = 0 /\
+  FST ops = Var biv /\ hiv <> hcv /\ src <> Var hiv /\ ip <> Var nv /\
+  (!op. op = src \/ op = dst \/ op = ip \/ abi_decoder_operand_live live op ==>
+    op <> Var hiv /\ op <> Var hcv /\ op <> Var hcmp /\ op <> Var hdone /\
+    op <> Var nv /\ abi_decoder_operand_live st0.cs_next_var op) /\
+  abi_decoder_operand_live middle.cs_next_var (FST ops) /\
+  (!op. abi_decoder_operand_live st0.cs_next_var op ==>
+    abi_decoder_operand_live middle.cs_next_var op) /\
+  p < dimword (:256) /\ n < dimword (:256) /\
+  abi_decode_load CALLDATALOAD srcword initial = n2w n /\
+  d+(32+maxn*type_memory_size tv) < dimword (:256) /\
+  (d+(32+maxn*type_memory_size tv) <= p \/ p+32 <= d) /\
+  (oid < lo \/ hi <= oid) /\ base_addr <= d /\
+  d+(32+maxn*type_memory_size tv) <= base_addr+cap /\
+  (!a.
+    ~a.vs_halted /\ a.vs_current_bb = middle.cs_current_bb /\
+    a.vs_inst_idx = LENGTH middle.cs_current_insts /\
+    eval_operand (FST (SND ops)) a = SOME
+      (if dec_info_needs_offset di then n2w (w2n srcword+32) +
+        abi_decode_load CALLDATALOAD (n2w (w2n srcword+32+j*abi_sz):bytes32) initial
+       else n2w (w2n srcword+32+j*abi_sz)) /\
+    eval_operand (SND (SND ops)) a = SOME (n2w (d+32+j*type_memory_size tv)) /\
+    a.vs_call_ctx = initial.vs_call_ctx /\
+    alloca_inv a /\ alloca_frontier_inv ctx fn site a /\
+    Own middle.cs_next_id st1.cs_next_id a /\
+    FLOOKUP a.vs_allocas oid = SOME (base_addr,cap) /\
+    base_addr <= d+32+j*type_memory_size tv /\
+    d+32+j*type_memory_size tv+type_memory_size tv <= base_addr+cap /\
+    d+32+j*type_memory_size tv+type_memory_size tv < dimword (:256) ==>
+    (D j = NONE /\ ?fuel z. run_from fuel ctx fn a = Abort Revert_abort z /\
+      mem_safe_run fuel ctx fn a) \/ ?b x scratch.
+      D j = SOME x /\ ~b.vs_halted /\ b.vs_current_bb = st1.cs_current_bb /\
+      b.vs_inst_idx = LENGTH st1.cs_current_insts /\
+      value_has_type tv x /\ val_wf tv x /\
+      val_in_memory tv x (d+32+j*type_memory_size tv) b.vs_memory /\ Rel a b /\
+      b.vs_call_ctx = a.vs_call_ctx /\ b.vs_data_section = a.vs_data_section /\
+      alloca_inv b /\ alloca_frontier_inv ctx fn site b /\
+      Own middle.cs_next_id st1.cs_next_id b /\
+      a.vs_alloca_next <= b.vs_alloca_next /\
+      (!id q k. FLOOKUP a.vs_allocas id = SOME (q,k) ==>
+        FLOOKUP b.vs_allocas id = SOME (q,k)) /\
+      (!id. id < middle.cs_next_id \/ st1.cs_next_id <= id ==>
+        FLOOKUP b.vs_allocas id = FLOOKUP a.vs_allocas id) /\
+      (!op. abi_decoder_operand_live middle.cs_next_var op ==>
+        eval_operand op b = eval_operand op a) /\
+      abi_decode_footprint_frame
+        ((d+32+j*type_memory_size tv,type_memory_size tv)::scratch) a b /\
+      (!q k. MEM (q,k) scratch ==> ?id.
+        middle.cs_next_id <= id /\ id < st1.cs_next_id /\
+        FLOOKUP b.vs_allocas id = SOME (q,k))) /\
+  j < n /\ H j u ==>
+  (D j = NONE /\ ?fuel z. run_from fuel ctx fn u = Abort Revert_abort z /\
+    mem_safe_run fuel ctx fn u) \/ ?v x.
+    D j = SOME x /\ H (SUC j) v /\ value_has_type tv x /\ val_wf tv x /\
+    val_in_memory tv x (d+32+j*type_memory_size tv) v.vs_memory /\
+    mem_bytes_at d (32+j*type_memory_size tv) v.vs_memory =
+      mem_bytes_at d (32+j*type_memory_size tv) u.vs_memory /\ Rel u v
+Proof
+  disch_then (map_every assume_tac o CONJUNCTS) >>
+  qpat_assum `H j u` mp_tac >>
+  qpat_assum `H = _` (fn th => pure_rewrite_tac[th]) >>
+  BETA_TAC >> strip_tac >>
+  `p+32 <= u.vs_alloca_next` by
+    (qpat_assum `alloca_inv u` mp_tac >>
+     qpat_assum `FLOOKUP u.vs_allocas header_id = _` mp_tac >>
+     POP_ASSUM_LIST (K all_tac) >>
+     simp[alloca_inv_def, alloca_next_valid_def] >> metis_tac[]) >>
+  `abi_decode_load CALLDATALOAD srcword u = n2w n` by
+    (qpat_assum `abi_decode_load CALLDATALOAD srcword initial = _` mp_tac >>
+     qpat_assum `u.vs_call_ctx = _` mp_tac >>
+     POP_ASSUM_LIST (K all_tac) >>
+     simp[abi_decode_load_def, abi_decode_source_def]) >>
+  suspend "entry"
+QED
+Resume calldata_exact_owned_header_step[entry]:
+  `lookup_block u.vs_current_bb fn.fn_blocks = SOME
+    <|bb_label := hdr; bb_instructions :=
+      abi_decode_header_insts hid ip src CALLDATALOAD hiv hcv hcmp hdone body_lbl exit_lbl|>` by simp[] >>
+  `w2n (n2w p:bytes32)+32 <= u.vs_alloca_next` by simp[] >>
+  qabbrev_tac `Keep = \op. op = src \/ op = dst \/ op = ip \/
+    abi_decoder_operand_live live op` >>
+  `!op. Keep op ==> abi_decoder_operand_live st0.cs_next_var op` by
+    (simp[Abbr `Keep`] >>
+     qpat_assum `!op. op = src \/ _ ==> _` mp_tac >>
+     POP_ASSUM_LIST (K all_tac) >> metis_tac[]) >>
+  `!op. op = ip \/ op = src \/ op = dst \/ Keep op ==>
+    op <> Var hiv /\ op <> Var hcv /\ op <> Var hcmp /\ op <> Var hdone` by
+    (simp[Abbr `Keep`] >>
+     qpat_assum `!op. op = src \/ _ ==> _` mp_tac >>
+     POP_ASSUM_LIST (K all_tac) >> metis_tac[]) >>
+  `abi_decoder_operand_live st0.cs_next_var src /\
+    abi_decoder_operand_live st0.cs_next_var dst` by
+    (qpat_assum `!op. op = src \/ _ ==> _` mp_tac >>
+     POP_ASSUM_LIST (K all_tac) >> metis_tac[]) >>
+  `mload (w2n (n2w p:bytes32)) u = n2w j` by simp[] >>
+  drule_all calldata_exact_header_entry_preserving >>
+  disch_then (qspec_then `ctx` strip_assume_tac) >>
+  suspend "callback"
+QED
+Resume calldata_exact_owned_header_step[callback]:
+  rename1 `eval_operand (FST ops) entry = SOME (n2w j)` >>
+  `d+32+j*type_memory_size tv+type_memory_size tv <= d+(32+maxn*type_memory_size tv)` by
+    (`j+1 <= maxn` by decide_tac >>
+     `(j+1)*type_memory_size tv <= maxn*type_memory_size tv` by simp[LE_MULT_RCANCEL] >>
+     qpat_x_assum `(j+1)*_ <= maxn*_` mp_tac >>
+     pure_rewrite_tac[RIGHT_ADD_DISTRIB, MULT_CLAUSES] >> decide_tac) >>
+  `Own middle.cs_next_id st1.cs_next_id entry` by
+    (qpat_assum `Own lo hi u` mp_tac >>
+     qpat_assum `Own = _` (fn th => pure_rewrite_tac[th]) >> BETA_TAC >>
+     qpat_assum `entry.vs_allocas = _` mp_tac >>
+     qpat_assum `entry.vs_alloca_next = _` mp_tac >>
+     qpat_assum `lo <= header_id` mp_tac >>
+     qpat_assum `header_id < middle.cs_next_id` mp_tac >>
+     qpat_assum `st1.cs_next_id <= hi` mp_tac >>
+     POP_ASSUM_LIST (K all_tac) >> rpt disch_tac >>
+     qpat_x_assum `entry.vs_allocas = _` (fn th => rewrite_tac[th]) >>
+     qpat_x_assum `entry.vs_alloca_next = _` (fn th => rewrite_tac[th]) >>
+     rpt gen_tac >> disch_tac >>
+     qpat_x_assum `!id q k. _` (qspecl_then [`id`,`q`,`k`] mp_tac) >>
+     impl_tac >- (fs[] >> decide_tac) >> simp[]) >>
+  `alloca_inv entry /\ alloca_frontier_inv ctx fn site entry` by
+    (qpat_assum `alloca_inv u` mp_tac >>
+     qpat_assum `alloca_frontier_inv ctx fn site u` mp_tac >>
+     qpat_assum `entry.vs_allocas = _` mp_tac >>
+     qpat_assum `entry.vs_alloca_next = _` mp_tac >>
+     POP_ASSUM_LIST (K all_tac) >>
+     rpt disch_tac >>
+     metis_tac[calldata_alloca_invariants_fields]) >>
+  qpat_x_assum `!a. _ ==> (D j = NONE /\ _) \/ _`
+    (qspec_then `entry` mp_tac) >>
+  impl_tac >- suspend "resources" >>
+  strip_tac >- suspend "revert" >>
+  suspend "success"
+QED
+Resume calldata_exact_owned_header_step[resources]:
+  simp[] >>
+  qpat_assum `u.vs_call_ctx = _` mp_tac >>
+  POP_ASSUM_LIST (K all_tac) >>
+  simp[abi_decode_load_def, abi_decode_source_def]
+QED
+Resume calldata_exact_owned_header_step[revert]:
+  disj1_tac >> conj_tac >- first_assum ACCEPT_TAC >>
+  qpat_x_assum `!fuel r. _ ==> ?fuel'. run_from fuel' ctx fn u = _ /\ _`
+    (qspecl_then [`fuel`,`Abort Revert_abort z`] mp_tac) >>
+  impl_tac >- simp[] >>
+  strip_tac >> qexistsl [`fuel'`,`z`] >> simp[]
+QED
+Resume calldata_exact_owned_header_step[success]:
+  rename1 `Rel entry child` >>
+  `!op. op = src \/ op = dst \/ op = ip \/ abi_decoder_operand_live live op ==>
+    eval_operand op entry = eval_operand op u /\
+    abi_decoder_operand_live middle.cs_next_var op /\ op <> Var nv` by
+    (qpat_assum `!op. Keep op ==> eval_operand op entry = _` mp_tac >>
+     qpat_assum `!op. op = src \/ _ ==> _` mp_tac >>
+     qpat_assum `!op. abi_decoder_operand_live st0.cs_next_var op ==> _` mp_tac >>
+     simp[Abbr `Keep`] >> POP_ASSUM_LIST (K all_tac) >> metis_tac[]) >>
+  `abi_decoder_operand_live middle.cs_next_var (Var biv) /\
+    eval_operand (Var biv) entry = SOME (n2w j)` by
+    (qpat_assum `FST ops = Var biv` mp_tac >>
+     qpat_assum `eval_operand (FST ops) entry = _` mp_tac >>
+     qpat_assum `abi_decoder_operand_live middle.cs_next_var (FST ops)` mp_tac >>
+     POP_ASSUM_LIST (K all_tac) >> metis_tac[]) >>
+  `lookup_block child.vs_current_bb fn.fn_blocks = SOME
+    <|bb_label := st1.cs_current_bb; bb_instructions :=
+      st1.cs_current_insts ++ abi_decode_backedge_insts st1.cs_next_id biv nv ip hdr|>` by simp[] >>
+  `<|bb_label := st1.cs_current_bb; bb_instructions :=
+      st1.cs_current_insts ++ abi_decode_backedge_insts st1.cs_next_id biv nv ip hdr|>.bb_instructions =
+    st1.cs_current_insts ++ abi_decode_backedge_insts st1.cs_next_id biv nv ip hdr` by simp[] >>
+  `phi_prefix_length
+    <|bb_label := hdr; bb_instructions :=
+      abi_decode_header_insts hid ip src CALLDATALOAD hiv hcv hcmp hdone body_lbl exit_lbl|>.bb_instructions = 0` by simp[] >>
+  drule_all calldata_exact_owned_child_backedge >>
+  strip_tac >>
+  disj2_tac >> qexistsl [`v`,`x`] >>
+  conj_tac >- first_assum ACCEPT_TAC >>
+  suspend "transfer"
+QED
+Resume calldata_exact_owned_header_step[transfer]:
+  `Rel u v` by
+    (qpat_assum `Rel entry v` mp_tac >>
+     qpat_assum `Rel = _` mp_tac >>
+     qpat_assum `!fuel r. _ ==> ?fuel'. run_from fuel' ctx fn u = _ /\ _` mp_tac >>
+     POP_ASSUM_LIST (K all_tac) >> rpt disch_tac >> gvs[] >> metis_tac[]) >>
+  qpat_assum `H (SUC j) v` mp_tac >>
+  qpat_assum `H = _` (fn th => pure_rewrite_tac[th]) >>
+  BETA_TAC >> strip_tac >>
+  qpat_x_assum `H = _` kall_tac >>
+  qpat_x_assum `Own = _` kall_tac >>
+  qpat_x_assum `Rel = _` kall_tac >>
+  asm_rewrite_tac[] >>
+  goal_assum (drule_at Any) >> simp[]
+QED
+Finalise calldata_exact_owned_header_step
