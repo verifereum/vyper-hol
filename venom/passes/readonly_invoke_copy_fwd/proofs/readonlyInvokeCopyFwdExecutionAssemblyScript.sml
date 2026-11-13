@@ -59,6 +59,36 @@ QED
 
 (* This enters the raw target from the actual source PHI evaluation, not
    from an assumed post-entry relation.  Coverage is vacuous at that prefix. *)
+Theorem ricf_execution_instruction_position:
+  ricf_function_edit fn mid /\ wf_function fn /\
+  lookup_block lbl fn.fn_blocks = SOME bb /\
+  lookup_block lbl mid.fn_blocks = SOME tb /\
+  get_instruction bb i = SOME inst /\ get_instruction tb i = SOME j ==>
+  ?b. b < LENGTH fn.fn_blocks /\
+    i < LENGTH (EL b fn.fn_blocks).bb_instructions /\
+    inst = EL i (EL b fn.fn_blocks).bb_instructions /\
+    bb = EL b fn.fn_blocks /\
+    j = EL i (EL b mid.fn_blocks).bb_instructions
+Proof
+  strip_tac >>
+  `MEM bb fn.fn_blocks` by metis_tac[lookup_block_MEM] >>
+  `?b. b < LENGTH fn.fn_blocks /\ bb = EL b fn.fn_blocks` by
+    metis_tac[MEM_EL] >>
+  `LENGTH mid.fn_blocks = LENGTH fn.fn_blocks /\
+   !k. k < LENGTH fn.fn_blocks ==>
+     ricf_block_edit (EL k fn.fn_blocks) (EL k mid.fn_blocks)` by
+    fs[ricf_function_edit_def, LIST_REL_EL_EQN] >>
+  `MAP (\b. b.bb_label) mid.fn_blocks = MAP (\b. b.bb_label) fn.fn_blocks` by
+    (simp[LIST_EQ_REWRITE, EL_MAP] >> rpt strip_tac >>
+     metis_tac[ricf_block_edit_def]) >>
+  `ALL_DISTINCT (MAP (\b. b.bb_label) mid.fn_blocks)` by
+    fs[wf_function_def, fn_labels_def] >>
+  `lookup_block lbl mid.fn_blocks = SOME (EL b mid.fn_blocks)` by
+    (irule venomExecProofsTheory.MEM_lookup_block >> simp[EL_MEM] >>
+     metis_tac[ricf_block_edit_def, lookup_block_label]) >>
+  qexists_tac `b` >> gvs[get_instruction_def, AllCaseEqs()]
+QED
+
 Theorem ricf_execution_run_entry:
   ricf_execution_boundary vs C mid_of log_of D a U B0 E0 outer_history outer_certificates sites maps targets
     stk PG G tn fn s t /\
