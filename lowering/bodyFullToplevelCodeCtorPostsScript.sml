@@ -8,6 +8,7 @@ Ancestors
   loweringStateRelDefs exprPtrUnwrapAllocSeparation bodyPtrDefs allocationPtr
   ptrDiscipline immutableCopyExecution bodyFullUnwrapSlotPost
   exprLoweringProps exprPtrUnwrapRetained bufferAllocationExecution exprSimStorageCopy
+  abiEncodeMaterializeExec exprSimProps loweringPosts
 
 Theorem toplevel_code_ctor_contents:
   compile_expr cenv ty (TopLevelName ann nsid) sx = (vv,sm) /\
@@ -168,4 +169,54 @@ Proof
   goal_assum (drule_at (Pat `local_ptrs_rel _ _ _ _`)) >>
   qexistsl [`nb`, `sa`, `w2n d`] >> asm_rewrite_tac[] >>
   `nb+w2n d = w2n d+nb` by decide_tac >> asm_rewrite_tac[]
+QED
+
+Theorem toplevel_code_ctor_semantic:
+  compile_expr cenv ty (TopLevelName ann nsid) sx = (vv,sm0) /\
+  vv_post H ctx func cenv cx (TopLevelName ann nsid) es sa sm s0 ee
+    (Value v) (LocatedValue t p) s /\
+  local_ptrs_reserved cenv sa /\ local_ptrs_reserved cenv sm /\
+  fn_inst_ids_distinct func /\ MAP FDOM es.scopes = MAP FDOM ee.scopes /\
+  sa.cs_next_var <= sm.cs_next_var /\ sa.cs_next_id <= sm.cs_next_id /\
+  mid.cs_next_id <= sb.cs_next_id /\
+  compile_alloc_buffer (type_memory_bytes cenv t) sm = (buf,mid) /\
+  fn_has_code sm mid func /\ type_memory_bytes cenv t < dimword(:256) /\
+  buf.buf_operand = Var root /\
+  step_inst_base (mk_inst sm.cs_next_id ALLOCA [Lit (n2w (type_memory_bytes cenv t))] [root]) s = OK u /\
+  a = u with vs_inst_idx := k /\ eval_operand buf.buf_operand a = SOME d /\
+  compile_imm_copy_to_memory T imm src buf.buf_operand (type_slot_size rt) 0 mid = ((),sb) /\
+  copy_old_operand mid src /\ copy_old_operand mid buf.buf_operand /\
+  eval_operand src a = SOME q /\
+  (!region. imm = SOME region ==> eval_operand region a = SOME 0w /\
+    copy_old_operand mid region) /\
+  copy_runtime_frame mid a sb z /\ cenv.ce_is_ctor /\
+  immutable_holds cenv cx t (Value v) q ee s /\
+  evaluate_type (get_tenv cx) t = SOME rt /\
+  type_memory_bytes cenv t = type_memory_size rt /\
+  t = expr_type (TopLevelName ann nsid) /\ ~is_word_type t /\
+  regions_disjoint (w2n q) (type_memory_size rt) (w2n d) (type_memory_size rt) /\
+  eval_operand buf.buf_operand z = SOME d ==>
+  expr_post H ctx func cenv cx (TopLevelName ann nsid) es sa sb s0 ee v buf.buf_operand z
+Proof
+  strip_tac >>
+  `stmt_state_rel H ctx func cenv cx ee s` by fs[vv_post_def] >>
+  drule_all materialize_alloc_run >> strip_tac >>
+  drule unwrap_alloc_generated_code >> strip_tac >>
+  `root = out` by gvs[] >> qpat_x_assum `root = out` SUBST_ALL_TAC >>
+  `u' = u` by gvs[run_inst_seq_def] >> qpat_x_assum `u' = u` SUBST_ALL_TAC >>
+  `w = d` by gvs[eval_operand_def, lookup_var_def] >> qpat_x_assum `w = d` SUBST_ALL_TAC >>
+  `stmt_state_rel H ctx func cenv cx ee a /\ a.vs_memory = s.vs_memory` by
+    simp[stmt_state_rel_inst_idx] >>
+  `immutable_holds cenv cx t (Value v) q ee a` by
+    metis_tac[immutable_holds_memory_cong] >>
+  `w2n d + type_memory_size rt < dimword(:256)` by metis_tac[] >>
+  drule_all toplevel_code_ctor_contents >> strip_tac >>
+  `copy_static z = copy_static u /\
+   !x. not_fresh_at mid x ==> lookup_var x z = lookup_var x u` by
+    gvs[copy_runtime_frame_def, copy_static_def, lookup_var_def] >>
+  irule buffer_post_transport >>
+  simp[] >> qexistsl [`mid`, `p`, `s`, `sm`, `rt`, `u`] >>
+  gvs[] >> simp[ADD_COMM] >>
+  drule loweringHaltTheory.compile_alloc_buffer_parts >> strip_tac >>
+  gvs[] >> rpt conj_tac >> metis_tac[]
 QED
