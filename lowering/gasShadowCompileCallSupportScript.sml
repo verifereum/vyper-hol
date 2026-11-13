@@ -85,20 +85,29 @@ Proof
 QED
 
 Theorem gas_shadow_compiles_stage_intcall_args:
-  !cenv vals flags tys.
-    gas_shadow_compiles (compile_stage_intcall_args cenv vals flags tys)
-      (compile_stage_intcall_args cenv vals flags tys)
+  (!cenv ty e sh. gas_shadow_compiles (f cenv ty e)
+    (g cenv ty (if sh then gas_shadow_expr e else e))) ==>
+  !es flags tys.
+    gas_shadow_compiles (compile_stage_intcall_args f cenv es flags tys)
+      (compile_stage_intcall_args g cenv
+         (if sh then MAP gas_shadow_expr es else es) flags tys)
 Proof
-  recInduct compile_stage_intcall_args_ind >> rpt strip_tac >> gvs[LET_THM] >>
-  once_rewrite_tac[compile_stage_intcall_args_def] >>
-  simp[LET_THM, comp_ignore_bind_def, gas_shadow_compiles_return] >>
+  disch_then (fn th => assume_tac
+    (Q.GENL [`ty`, `e`] (Q.SPECL [`cenv`, `ty`, `e`, `sh`] th))) >>
+  Cases_on `sh` >> fs[] >> Induct
+  >- simp[compile_stage_intcall_args_def, gas_shadow_compiles_return] >>
+  rpt gen_tac >>
+  Cases_on `flags` >> Cases_on `tys` >>
+  TRY (rename1 `compile_stage_intcall_args _ _ _ (bflag::_) _` >> Cases_on `bflag`) >>
+  simp[Once compile_stage_intcall_args_def, LET_THM, comp_ignore_bind_def] >>
+  simp[Once compile_stage_intcall_args_def, LET_THM, comp_ignore_bind_def,
+       SimpR ``gas_shadow_compiles``] >>
   rpt (match_mp_tac gas_shadow_compiles_bind >> conj_tac
-       >- simp[gas_shadow_compiles_unwrap_value, gas_shadow_compiles_alloc_buffer]
-       >> gen_tac >> BETA_TAC) >> simp[gas_shadow_compiles_return] >>
-  match_mp_tac gas_shadow_compiles_bind >> conj_tac
-  >- (rpt IF_CASES_TAC >>
-      simp[gas_shadow_compiles_emit_void, gas_shadow_compiles_bind,
-           gas_shadow_compiles_store_bytestring, gas_shadow_compiles_store_memory,
-           gas_shadow_compiles_return]) >>
-  simp[gas_shadow_compiles_bind, gas_shadow_compiles_return]
+       >- (rpt IF_CASES_TAC >>
+           simp[gas_shadow_compiles_unwrap_value, gas_shadow_compiles_alloc_buffer,
+                gas_shadow_compiles_emit_void, gas_shadow_compiles_bind,
+                gas_shadow_compiles_store_bytestring, gas_shadow_compiles_store_memory,
+                gas_shadow_compiles_return]) >>
+       gen_tac >> BETA_TAC) >>
+  simp[gas_shadow_compiles_return]
 QED

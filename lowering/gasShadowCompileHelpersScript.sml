@@ -57,6 +57,30 @@ Proof
   rw[expr_can_mutate_def, gas_shadow_expr_def, pairTheory.PAIR_MAP_THM]
 QED
 
+Theorem gas_shadow_compiles_ext_call_args[local]:
+  (!cenv ty e sh. gas_shadow_compiles (f cenv ty e)
+    (g cenv ty (if sh then gas_shadow_expr e else e))) ==>
+  !es kw_es tys.
+    gas_shadow_compiles (compile_ext_call_args f cenv kw_es tys es)
+      (compile_ext_call_args g cenv
+         (if sh then MAP gas_shadow_expr kw_es else kw_es) tys
+         (if sh then MAP gas_shadow_expr es else es))
+Proof
+  strip_tac >> Cases_on `sh` >> simp[] >> Induct >>
+  rpt gen_tac >> Cases_on `tys` >>
+  simp[compile_ext_call_args_def, gas_shadow_compiles_return] >>
+  (match_mp_tac gas_shadow_compiles_bind >> conj_tac
+   >- metis_tac[COND_CLAUSES] >>
+   gen_tac >> BETA_TAC >>
+   match_mp_tac gas_shadow_compiles_bind >> conj_tac
+   >- (ONCE_REWRITE_TAC[GSYM MAP_APPEND] >>
+       REWRITE_TAC[gas_shadow_expr_can_mutate] >>
+       simp[gas_shadow_compiles_snapshot_vv]) >>
+   gen_tac >> BETA_TAC >>
+   match_mp_tac gas_shadow_compiles_bind >> conj_tac >- simp[] >>
+   simp[gas_shadow_compiles_return])
+QED
+
 Theorem gas_shadow_compiles_abi_encode_args:
   (!cenv ty e sh. gas_shadow_compiles (f cenv ty e)
     (g cenv ty (if sh then gas_shadow_expr e else e))) ==>
@@ -94,13 +118,14 @@ QED
 Theorem gas_shadow_compiles_make_tuple:
   (!cenv ty e sh. gas_shadow_compiles (f cenv ty e)
     (g cenv ty (if sh then gas_shadow_expr e else e))) ==>
-  !es off. gas_shadow_compiles (compile_make_tuple f cenv es buf_op off)
-    (compile_make_tuple g cenv (if sh then MAP gas_shadow_expr es else es) buf_op off)
+  !es tys off. gas_shadow_compiles (compile_make_tuple f cenv es tys buf_op off)
+    (compile_make_tuple g cenv (if sh then MAP gas_shadow_expr es else es) tys buf_op off)
 Proof
   strip_tac >> Induct >>
   simp[compile_make_tuple_def, gas_shadow_compiles_return] >>
-  Cases_on `sh` >> gvs[compile_make_tuple_def, comp_ignore_bind_def,
-                       gas_shadow_lowered_value_type] >> rpt gen_tac >>
+  Cases_on `sh` >> gvs[] >> rpt gen_tac >> Cases_on `tys` >>
+  gvs[compile_make_tuple_def, comp_ignore_bind_def,
+      gas_shadow_lowered_value_type, gas_shadow_compiles_return] >>
   (match_mp_tac gas_shadow_compiles_bind >> conj_tac
    >- metis_tac[COND_CLAUSES] >>
    gen_tac >> BETA_TAC >>
@@ -577,9 +602,14 @@ Proof
   `!ty e. gas_shadow_compiles (lower_value f cenv ty e)
      (lower_value g cenv ty (if sh then gas_shadow_expr e else e))`
     by (rpt gen_tac >> irule gas_shadow_compiles_lower_value >> simp[]) >>
-  Cases_on `sh` >> gvs[compile_subscript_def, gas_shadow_literal_int_index] >>
+  Cases_on `sh` >> gvs[compile_subscript_def, copies_subscript_base_def,
+                       gas_shadow_literal_int_index] >>
   (match_mp_tac gas_shadow_compiles_bind >> conj_tac
    >- metis_tac[COND_CLAUSES] >>
+   gen_tac >> BETA_TAC >>
+   match_mp_tac gas_shadow_compiles_bind >> conj_tac
+   >- (IF_CASES_TAC >>
+       simp[gas_shadow_compiles_snapshot_vv, gas_shadow_compiles_return]) >>
    gen_tac >> BETA_TAC >>
    Cases_on `place_type cenv base_e`
    >- (simp[] >>
@@ -664,9 +694,10 @@ Theorem gas_shadow_compiles_call_int[local]:
       (if sh then OPTION_MAP gas_shadow_expr fallback else fallback))
 Proof
   strip_tac >>
-  `!es. gas_shadow_compiles (compile_multi_vvs f cenv es)
-    (compile_multi_vvs g cenv (if sh then MAP gas_shadow_expr es else es))`
-    by (irule gas_shadow_compiles_multi_vvs >> simp[]) >>
+  `!es flags tys. gas_shadow_compiles (compile_stage_intcall_args f cenv es flags tys)
+    (compile_stage_intcall_args g cenv
+       (if sh then MAP gas_shadow_expr es else es) flags tys)`
+    by (irule gas_shadow_compiles_stage_intcall_args >> simp[]) >>
   qabbrev_tac `info = cenv.ce_func_info (nsid_to_string fid)` >>
   PairCases_on `info` >> fs[markerTheory.Abbrev_def] >>
   qpat_x_assum `_ = cenv.ce_func_info _` (assume_tac o SYM) >>
@@ -675,17 +706,14 @@ Proof
   simp[compile_call_def, MAP_MAP_o, combinTheory.o_DEF,
        GSYM comp_bind_def, GSYM comp_return_def, gasShadowCompileBaseTheory.comp_bind_uncurry] >>
   CONV_TAC (DEPTH_CONV ETA_CONV) >>
-  (match_mp_tac gas_shadow_compiles_bind >> conj_tac >- simp[] >>
-   gen_tac >> BETA_TAC >>
-   simp[gasShadowCompileBaseTheory.comp_bind_uncurry] >>
-   match_mp_tac gas_shadow_compiles_bind >> conj_tac
+  (match_mp_tac gas_shadow_compiles_bind >> conj_tac
    >- (Cases_on `info0 > 0` >> Cases_on `info1 > 0` >>
        simp[SF ETA_ss, gas_shadow_compiles_return] >>
        match_mp_tac gas_shadow_compiles_bind >>
        simp[gas_shadow_compiles_alloc_buffer, gas_shadow_compiles_return]) >>
    qx_gen_tac `rbuf_opt` >> BETA_TAC >>
    match_mp_tac gas_shadow_compiles_bind >> conj_tac
-   >- simp[gas_shadow_compiles_stage_intcall_args] >>
+   >- simp[] >>
    qx_gen_tac `invoke_args` >> BETA_TAC >>
    Cases_on `rbuf_opt` >> Cases_on `info0 > 0` >>
    simp[GSYM comp_bind_def, GSYM comp_return_def, SF ETA_ss] >>
@@ -708,16 +736,18 @@ Proof
   `!t e. gas_shadow_compiles (lower_value f cenv t e)
     (lower_value g cenv t (if sh then gas_shadow_expr e else e))`
     by (rpt gen_tac >> irule gas_shadow_compiles_lower_value >> simp[]) >>
-  `!es. gas_shadow_compiles (compile_multi_vvs f cenv es)
-    (compile_multi_vvs g cenv (if sh then MAP gas_shadow_expr es else es))`
-    by (irule gas_shadow_compiles_multi_vvs >> simp[]) >>
+  `!kw tys es. gas_shadow_compiles (compile_ext_call_args f cenv kw tys es)
+    (compile_ext_call_args g cenv (if sh then MAP gas_shadow_expr kw else kw) tys
+       (if sh then MAP gas_shadow_expr es else es))`
+    by (rpt gen_tac >> irule gas_shadow_compiles_ext_call_args >> simp[]) >>
   `!t ks es. gas_shadow_compiles (compile_ext_call_kwargs f cenv t ks es)
     (compile_ext_call_kwargs g cenv t ks (if sh then MAP gas_shadow_expr es else es))`
     by (rpt gen_tac >> irule gas_shadow_compiles_ext_call_kwargs >> simp[]) >>
   PairCases_on `sig` >> Cases_on `args` >> Cases_on `sh` >> gvs[] >>
   CONV_TAC (BINOP_CONV (REWR_CONV (GSYM ETA_AX))) >>
   simp[compile_call_def, GSYM comp_bind_def, GSYM comp_return_def,
-       gasShadowCompileBaseTheory.comp_bind_uncurry, GSYM MAP_TAKE, GSYM MAP_DROP] >>
+       gasShadowCompileBaseTheory.comp_bind_uncurry, GSYM MAP_TAKE, GSYM MAP_DROP,
+       MAP_MAP_o, combinTheory.o_DEF] >>
   CONV_TAC (DEPTH_CONV ETA_CONV) >>
   rpt (match_mp_tac gas_shadow_compiles_bind >> conj_tac
        >- simp[gas_shadow_compiles_emit_inst] >> gen_tac >> BETA_TAC) >>

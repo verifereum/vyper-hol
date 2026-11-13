@@ -1,7 +1,7 @@
 (* Source-exact initialized array loop with a synchronized owned child callback. *)
 Theory sourceOwnedArrayLoopPtr
 Ancestors
-  decoderLoopHeaderCorePtr decoderLoopBackedgeCorePtr decoderArraySetupPtr
+  decoderLoopHeaderCorePtr decoderLoopBackedgeCorePtr decoderArraySetupPtr fragGasSeqMem fragGasOriginPtr
   calldataDynOwned sourceRecursiveComplexPtr sourceEncodingWindows sourceEncodingLayout
   actualAllocaReplayPtr actualAllocSitesCredit abiDecoderCoherence abiDecoderContract
   abiDecoderExecution abiDecoderFrame abiDecoderReentry abiDecoderLoop
@@ -15,6 +15,7 @@ Ancestors
   finite_map words list rich_list arithmetic pred_set contractABI byte
   canonicalMemberTraversalPtr abiDecoderOffset decoderWorldFramePtr
   decoderCalldataShell exprSimProps
+  sourceArrayHeaderGasMem sourceArraySetupGasMem sourceArrayBackedgeGasMem fragGasPathMem
 
 val world_fields =
   ["vs_accounts", "vs_transient", "vs_logs", "vs_outcomes", "vs_requests",
@@ -60,6 +61,8 @@ Theorem source_owned_array_loop_ptr:
     r.vs_inst_idx = LENGTH middle.cs_current_insts ==>
     ?t H u fp.
       abi_decode_sim ctx fn r t /\
+      gas_path_mem ctx fn r 0 (OK t) /\
+      (!D explicit. gas_origin_ptr_path (D, lower, explicit, ctx, fn, PG) (r, G, tn) [] (OK t, H, u)) /\
       ~t.vs_halted /\ t.vs_current_bb = end_st.cs_current_bb /\
       t.vs_inst_idx = LENGTH end_st.cs_current_insts /\ fresh_vars_wrt limit t /\
       val_in_memory tv (EL i xs) e t.vs_memory /\
@@ -159,6 +162,8 @@ Theorem source_owned_array_loop_ptr:
     ~ctx_has_dalloca ctx /\ ~s.vs_halted /\ s.vs_current_bb = hdr /\ s.vs_inst_idx = 0 ==>
     ?t H u fp.
       abi_decode_sim ctx fn s t /\
+      gas_path_mem ctx fn s 0 (OK t) /\
+      (!D explicit. gas_origin_ptr_path (D, lower, explicit, ctx, fn, PG) (s, G, tn) [] (OK t, H, u)) /\
       ~t.vs_halted /\ t.vs_current_bb = exit_lbl /\ t.vs_inst_idx = 0 /\
       val_in_memory (ArrayTV tv (Dynamic maxn)) (ArrayV (DynArrayV xs)) d t.vs_memory /\
       (!mem. mem_agree_outside u.t_mem t.vs_memory mem ==>
@@ -223,6 +228,27 @@ Proof
       `j <= j /\ LENGTH xs < dimword (:256)` by decide_tac >>
       drule_all decoder_index_header_ptr_core_uniform >>
       disch_then (qspec_then `PG` strip_assume_tac) >>
+      `slot + 32 <= s.vs_alloca_next` by
+        (qpat_assum `alloca_inv s` mp_tac >>
+         qpat_assum `FLOOKUP s.vs_allocas index_id = _` mp_tac >>
+         POP_ASSUM_LIST (K ALL_TAC) >>
+         simp[alloca_inv_def, alloca_next_valid_def] >> metis_tac[]) >>
+      `gas_path_mem ctx fn s 0 (OK t)` by
+        (qpat_assum `t = jump_to _ _` SUBST1_TAC >>
+         map_every (fn pat => qpat_assum pat mp_tac)
+           [`abi_decode_loop_cfg fn hdr _ _ _ _ _ _ _ _ _ _`,
+            `lookup_var q s = _`, `eval_operand src s = _`,
+            `mload slot s = _`, `abi_decode_load CALLDATALOAD _ s = n2w j`,
+            `s.vs_current_bb = hdr`, `s.vs_inst_idx = 0`, `~s.vs_halted`,
+            `src <> Var iv`, `ALL_DISTINCT [q;iv;cv;cmp;done]`,
+            `slot+32 < dimword (:256)`, `slot+32 <= s.vs_alloca_next`,
+            `j <= j`, `j < dimword (:256)`] >>
+         POP_ASSUM_LIST (K ALL_TAC) >> rpt strip_tac >>
+         irule source_array_header_gas_path_mem >>
+         fs[abi_decode_loop_cfg_def] >>
+         `slot < dimword (:256)` by decide_tac >>
+         qexistsl_tac [`hid`, `Var q`, `n2w slot`, `src`, `n2w cdsbase`] >>
+         simp[eval_operand_def]) >>
       `abi_decode_sim ctx fn s t` by
         (qpat_assum `t = jump_to _ _` SUBST1_TAC >>
          irule abi_decode_ready_header_sim >>
@@ -344,6 +370,27 @@ Proof
   `(ctx_has_dalloca ctx ==> allocas_below_fmp s)` by metis_tac[] >>
   drule_all decoder_index_header_ptr_core_uniform >>
   disch_then (qspec_then `PG` strip_assume_tac) >>
+  `slot + 32 <= s.vs_alloca_next` by
+    (qpat_assum `alloca_inv s` mp_tac >>
+     qpat_assum `FLOOKUP s.vs_allocas index_id = _` mp_tac >>
+     POP_ASSUM_LIST (K ALL_TAC) >>
+     simp[alloca_inv_def, alloca_next_valid_def] >> metis_tac[]) >>
+  `gas_path_mem ctx fn s 0 (OK t)` by
+    (qpat_assum `t = jump_to _ _` SUBST1_TAC >>
+     map_every (fn pat => qpat_assum pat mp_tac)
+       [`abi_decode_loop_cfg fn hdr _ _ _ _ _ _ _ _ _ _`,
+        `lookup_var q s = _`, `eval_operand src s = _`,
+        `mload slot s = _`, `abi_decode_load CALLDATALOAD _ s = _`,
+        `s.vs_current_bb = hdr`, `s.vs_inst_idx = 0`, `~s.vs_halted`,
+        `src <> Var iv`, `ALL_DISTINCT [q;iv;cv;cmp;done]`,
+        `slot+32 < dimword (:256)`, `slot+32 <= s.vs_alloca_next`,
+        `j <= LENGTH xs`, `LENGTH xs < dimword (:256)`] >>
+     POP_ASSUM_LIST (K ALL_TAC) >> rpt strip_tac >>
+     irule source_array_header_gas_path_mem >>
+     fs[abi_decode_loop_cfg_def] >>
+     `slot < dimword (:256)` by decide_tac >>
+     qexistsl_tac [`hid`, `Var q`, `n2w slot`, `src`, `n2w cdsbase`] >>
+     simp[eval_operand_def]) >>
   drule abi_encoder_same_conversion >> strip_tac >>
   `j < LENGTH avs` by decide_tac >>
   `32 + abi_tuple_child_offset
@@ -496,6 +543,24 @@ Proof
      rpt strip_tac >> fs[frag_exec_ptr_def] >>
      first_x_assum (qspec_then `fn` mp_tac) >>
      simp[] >> strip_tac >> gvs[abi_decode_sim_def] >> metis_tac[]) >>
+  `gas_path_mem ctx fn t 0 (OK r)` by
+    (simp_tac bool_ss [Abbr `r`] >>
+     map_every (fn pat => qpat_assum pat mp_tac)
+       [`abi_decode_array_element_setup _ _ _ _ _ _ _ _ _ body_st = _`,
+        `eval_operand (Var q) t = _`, `slot+32 < dimword (:256)`,
+        `slot+32 <= s.vs_alloca_next`, `t.vs_alloca_next = s.vs_alloca_next`,
+        `fn_has_code body_st middle fn`, `~t.vs_halted`,
+        `t.vs_current_bb = body_lbl`, `body_st.cs_current_bb = body_lbl`,
+        `t.vs_inst_idx = 0`, `body_st.cs_current_insts = []`,
+        `run_inst_seq (emitted_insts body_st middle) t = OK t'`] >>
+     POP_ASSUM_LIST (K ALL_TAC) >> rpt strip_tac >>
+     irule source_array_setup_gas_path_mem >>
+     `slot < dimword (:256)` by decide_tac >>
+     simp[] >>
+     qexistsl_tac [`abi_embedded_static_size ce.ce_struct_fields ty`,
+       `type_to_abi_dec_info sf ce ty`, `Var root`, `Var q`,
+       `type_memory_size tv`, `ops`, `n2w slot`, `src`, `body_st`] >>
+     simp[]) >>
   `r.vs_memory = t.vs_memory /\ r.vs_call_ctx = t.vs_call_ctx /\
     r.vs_data_section = t.vs_data_section /\ r.vs_allocas = t.vs_allocas /\
     r.vs_alloca_next = t.vs_alloca_next /\
@@ -945,6 +1010,29 @@ Proof
     (qpat_assum `lookup_var q child_end = SOME (n2w slot)` mp_tac >>
      qpat_assum `q <> nv` mp_tac >> rpt (pop_assum kall_tac) >>
      simp[eval_operand_def]) >>
+  `slot + 32 <= child_end.vs_alloca_next` by
+    (qpat_assum `alloca_inv child_end` mp_tac >>
+     qpat_assum `FLOOKUP child_end.vs_allocas index_id = _` mp_tac >>
+     POP_ASSUM_LIST (K ALL_TAC) >>
+     simp[alloca_inv_def, alloca_next_valid_def] >> metis_tac[]) >>
+  `gas_path_mem ctx fn child_end 0 (OK backstate)` by
+    (qpat_assum `backstate = _` SUBST1_TAC >>
+     map_every (fn pat => qpat_assum pat mp_tac)
+       [`lookup_block child_end.vs_current_bb fn.fn_blocks = _`,
+        `back_bb.bb_instructions = _`, `lookup_block hdr fn.fn_blocks = SOME hdr_bb`,
+        `phi_prefix_length hdr_bb.bb_instructions = 0`,
+        `child_end.vs_inst_idx = _`, `~child_end.vs_halted`,
+        `eval_operand (Var q) child_end = _`, `Var q <> Var nv`,
+        `eval_operand (Var elem_idx) child_end = SOME (n2w j)`, `j < LENGTH xs`,
+        `LENGTH xs < dimword (:256)`, `slot+32 < dimword (:256)`,
+        `slot+32 <= child_end.vs_alloca_next`] >>
+     POP_ASSUM_LIST (K ALL_TAC) >> rpt strip_tac >>
+     `slot < dimword (:256)` by decide_tac >>
+     `gas_path_mem ctx fn child_end 0
+       (OK (jump_to hdr (mstore (w2n (n2w slot : bytes32)) (n2w (SUC j))
+         (update_var nv (n2w (SUC j)) child_end))))` suffices_by simp[] >>
+     irule source_array_backedge_gas_path_mem >>
+     simp[] >> metis_tac[]) >>
   `abi_decode_sim ctx fn child_end backstate` by
     (drule_all abi_decode_backedge_sim >>
      qpat_assum `backstate = _` mp_tac >>
@@ -1205,6 +1293,14 @@ Proof
         `j < LENGTH xs`, `LENGTH xs < dimword (:256)`] >>
      rpt (pop_assum kall_tac) >> rpt strip_tac >>
      `slot < dimword (:256)` by decide_tac >> simp[wordsTheory.w2n_n2w]) >>
+  `gas_path_mem ctx fn s 0 (OK final)` by
+    (map_every (fn pat => qpat_assum pat mp_tac)
+      [`gas_path_mem ctx fn s 0 (OK t)`, `gas_path_mem ctx fn t 0 (OK r)`,
+       `gas_path_mem ctx fn r 0 (OK child_end)`,
+       `gas_path_mem ctx fn child_end 0 (OK backstate)`,
+       `gas_path_mem ctx fn backstate 0 (OK final)`] >>
+     POP_ASSUM_LIST (K ALL_TAC) >> rpt strip_tac >>
+     metis_tac[gas_path_mem_then, ADD_CLAUSES]) >>
   `abi_decode_sim ctx fn s final` by
     (map_every (fn pat => qpat_assum pat mp_tac)
       [`abi_decode_sim ctx fn s t`, `abi_decode_sim ctx fn t r`,
