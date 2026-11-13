@@ -1,7 +1,18 @@
 (* Counted direct memory return at the actual store endpoint. *)
 Theory internalReturnMemorySuffixPtr
 Ancestors internalReturnStorePtr internalReturnCountedPtr stmtLowering
-  typedMemoryCopy compileEnv fragGasPathPtr
+  typedMemoryCopy compileEnv fragGasPathPtr context memoryStoreCode bytesCopyCode
+
+Theorem return_store_memory_insts_length[local]:
+  compile_store_memory ce src dst ty sty sa = ((),sb) /\
+  ~is_word_type ty /\ (ty = sty \/ is_bytestring_type ty) ==>
+  LENGTH sa.cs_current_insts <= LENGTH sb.cs_current_insts
+Proof
+  rpt strip_tac >> gvs[compile_store_memory_def] >>
+  Cases_on `is_bytestring_type sty` >> gvs[] >>
+  imp_res_tac compile_store_bytestring_code >>
+  imp_res_tac compile_copy_memory_code >> asm_simp_tac (srw_ss()) []
+QED
 
 Theorem internal_return_memory_suffix_path_ptr:
   compile_internal_return_from_env ce ty sty (Var src) (Var rpc) sa0 = ((),sb) /\
@@ -29,7 +40,7 @@ Theorem internal_return_memory_suffix_path_ptr:
     typed_copy_state_frame sa (w2n d) n s t /\
     (!m. mem_agree_outside tm.t_mem t.vs_memory m ==>
          val_in_memory tv v (w2n d) m) /\
-    stor_taint_ok cx tm t /\
+    stor_taint_ok cx tm t /\ s.vs_inst_idx <= t.vs_inst_idx /\
     tm.t_stor = tn.t_stor /\ tm.t_trans = tn.t_trans /\ tm.t_imm = tn.t_imm /\
     (!p. not_fresh_at sa p ==>
       lookup_var p t = lookup_var p s /\ FLOOKUP H p = FLOOKUP G p /\
@@ -58,6 +69,8 @@ Proof
     (irule emit_ret_values_path_ptr >> simp[ptrDisciplineTheory.allocas_from_def] >>
      qexistsl_tac [`[]`, `pc`, `rpc`, `sm`, `sb`] >>
      simp[venomStateTheory.eval_operands_def]) >>
+  `s.vs_inst_idx <= t.vs_inst_idx` by
+    metis_tac[return_store_memory_insts_length] >>
   qexistsl_tac [`H`, `tm`, `t`] >> simp[] >>
   conj_tac >- metis_tac[gas_path_ptr_then, arithmeticTheory.ADD_0] >>
   qpat_x_assum `typed_copy_state_frame _ _ _ _ _` mp_tac >>

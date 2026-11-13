@@ -10,7 +10,7 @@ Ancestors
   stmtSimReturn stmtLowering context emitHelper assignTuplePtrPrefix
   assignBasePtrWordStore transientLockProps accountsRelProps bodyPtrDefs
   fragGasPathPtr ptrDiscipline ptrSafeRun venomState venomInst
-  loweringStateRelDefs pred_set
+  loweringStateRelDefs pred_set compileEnv
 
 Theorem return_unlock_path_ptr:
   compile_return_unlock ce sa = ((),su) /\ fn_has_code sa su func /\
@@ -74,7 +74,8 @@ QED
 Theorem return_unlock_state_from_final:
   (!nr nkey ut iv. ce.ce_nonreentrant = (nr,nkey,ut,iv) ==> ut) /\
   t.vs_transient = (return_unlock_state ce t0).vs_transient /\
-  t.vs_call_ctx = t0.vs_call_ctx /\ 0 < t.vs_inst_idx ==>
+  t.vs_call_ctx = t0.vs_call_ctx /\
+  (return_unlock_state ce t0).vs_inst_idx <= t.vs_inst_idx ==>
   ?i. t = return_unlock_state ce
             (t with <| vs_transient := t0.vs_transient; vs_inst_idx := i |>)
 Proof
@@ -89,4 +90,59 @@ Proof
       decide_tac) >>
   qexists_tac `t.vs_inst_idx` >>
   gvs[return_unlock_state_def, LET_THM, venom_state_component_equality]
+QED
+
+(* Under a transient guard the release changes only transient storage and
+   the instruction index. *)
+Theorem return_unlock_state_shape:
+  (!nr nkey ut iv. ce.ce_nonreentrant = (nr,nkey,ut,iv) ==> ut) ==>
+  ?tr i. return_unlock_state ce s =
+           s with <| vs_transient := tr; vs_inst_idx := i |>
+Proof
+  strip_tac >>
+  `?nr nkey ut iv. ce.ce_nonreentrant = (nr,nkey,ut,iv)` by
+    metis_tac[pairTheory.ABS_PAIR_THM] >>
+  `ut` by metis_tac[] >>
+  Cases_on `nr /\ ~iv` >>
+  gvs[return_unlock_state_def, LET_THM, tstore_def,
+      venom_state_component_equality]
+QED
+
+(* The release's code leaves the block open and moves the index by what
+   the release executes. *)
+Theorem compile_return_unlock_code_idx:
+  compile_return_unlock ce sa = ((),su) /\
+  (!nr nkey ut iv. ce.ce_nonreentrant = (nr,nkey,ut,iv) ==> ut) /\
+  s.vs_inst_idx = LENGTH sa.cs_current_insts ==>
+  (return_unlock_state ce s).vs_inst_idx = LENGTH su.cs_current_insts /\
+  su.cs_current_bb = sa.cs_current_bb /\ su.cs_blocks = sa.cs_blocks /\
+  su.cs_next_var = sa.cs_next_var
+Proof
+  strip_tac >>
+  `?nr nkey ut iv. ce.ce_nonreentrant = (nr,nkey,ut,iv)` by
+    metis_tac[pairTheory.ABS_PAIR_THM] >>
+  `ut` by metis_tac[] >>
+  qpat_x_assum `compile_return_unlock _ _ = _` mp_tac >>
+  Cases_on `nr` >> Cases_on `iv` >>
+  asm_simp_tac (srw_ss()) [compile_return_unlock_def, LET_THM,
+    compile_nonreentrant_unlock_def, emit_void_def, emit_inst_def,
+    comp_bind_def, comp_ignore_bind_def, comp_return_def, fresh_id_def,
+    emit_def, return_unlock_state_def] >>
+  strip_tac >> gvs[]
+QED
+
+Theorem return_unlock_state_memory:
+  (return_unlock_state ce s).vs_memory = s.vs_memory
+Proof
+  `?nr nkey ut iv. ce.ce_nonreentrant = (nr,nkey,ut,iv)` by
+    metis_tac[pairTheory.ABS_PAIR_THM] >>
+  rw[return_unlock_state_def, LET_THM, tstore_def, sstore_def]
+QED
+
+(* The release reads only the guard of its compile env. *)
+Theorem return_unlock_state_cong:
+  ce1.ce_nonreentrant = ce2.ce_nonreentrant ==>
+  return_unlock_state ce1 = return_unlock_state ce2
+Proof
+  simp[FUN_EQ_THM, return_unlock_state_def]
 QED
