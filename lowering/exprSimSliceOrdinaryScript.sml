@@ -54,12 +54,18 @@ Proof
   simp[bind_return, bind_assoc]
 QED
 
-(* The capture entries, with the source post and the facts it carries
-   quantified over the horizons valid where the source read ends. *)
-(* The capture entries with their type variables renamed to alpha, so the
-   gas_outcome facts they give share the source type of the goals here. *)
+(* A capture entry with the type variable of its gas_outcome source renamed
+   to alpha, the source type of the goals here, and its other type variables
+   made fresh so they stay free to match. *)
 fun alpha_tyvars th =
-  INST_TYPE (map (fn v => v |-> alpha) (type_vars_in_term (concl th))) th;
+  let
+    val src = bvar (find_term (fn t => is_abs t andalso
+                                 fst (dest_var (bvar t)) = "source") (concl th))
+    val tv = hd (type_vars (type_of src))
+    val others = List.filter (fn v => v <> tv) (type_vars_in_term (concl th))
+  in
+    INST_TYPE ((tv |-> alpha) :: map (fn v => v |-> gen_tyvar ()) others) th
+  end;
 
 (* Closes a per-horizon goal of the capture wrappers from the matching
    fact of the capture entry: a gas_outcome by its implication, the rest by
@@ -70,6 +76,8 @@ fun capture_close_tac (g as (_, w)) =
    then first_x_assum irule >> fs[]
    else first_x_assum irule >> simp[] >> metis_tac[]) g;
 
+(* The capture entries, with the source post and the facts it carries
+   quantified over the horizons valid where the source read ends. *)
 Theorem slice_dynamic_capture_horizons[local]:
   expr_body_pre cenv cx env src es /\
   bind (eval_expr cx src) (read_result cx) (es with gas_obs := gs) = (INL v,ee) /\
