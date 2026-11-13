@@ -319,6 +319,17 @@ Proof
   gvs[eval_operand_def, lookup_var_def]
 QED
 
+(* Fix the type of a transport lemma's !H' to the finite-storage horizon
+   type, so its !H' conjunct meets valid_horizon. *)
+fun at_horizon th =
+  let
+    val hs = find_terms (fn t => is_var t andalso fst (dest_var t) = "H'")
+                        (concl th)
+  in
+    INST_TYPE (match_type (type_of (hd hs))
+                 ``:(bool # bytes32 # type_value) list # num list``) th
+  end;
+
 Theorem tuple_assignment_prefix_path:
   !st0 ctx func cenv cx es1 tys tvs vs sa su sl ss op staged elems sv flag.
     value_has_type (TupleTV tvs) (ArrayV (TupleV vs)) /\
