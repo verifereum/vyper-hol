@@ -7,10 +7,10 @@ Ancestors
   supportedStmtTraverse e2eDeployDefs loweringShapeProps
 
 Theorem call_free_dynarray_append[local]:
-  load_op <> RETURNDATACOPY /\ load_op <> INVOKE /\
-  store_op <> RETURNDATACOPY /\ store_op <> INVOKE ==>
-  !st. EVERY (\i. i.inst_opcode <> RETURNDATACOPY /\ i.inst_opcode <> INVOKE) (state_insts st) ==>
-  EVERY (\i. i.inst_opcode <> RETURNDATACOPY /\ i.inst_opcode <> INVOKE)
+  load_op <> RETURNDATACOPY /\ load_op <> INVOKE /\ load_op <> CREATE /\ load_op <> CREATE2 /\
+  store_op <> RETURNDATACOPY /\ store_op <> INVOKE /\ store_op <> CREATE /\ store_op <> CREATE2 ==>
+  !st. EVERY (\i. i.inst_opcode <> RETURNDATACOPY /\ i.inst_opcode <> INVOKE /\ i.inst_opcode <> CREATE /\ i.inst_opcode <> CREATE2) (state_insts st) ==>
+  EVERY (\i. i.inst_opcode <> RETURNDATACOPY /\ i.inst_opcode <> INVOKE /\ i.inst_opcode <> CREATE /\ i.inst_opcode <> CREATE2)
     (state_insts (SND (compile_dynarray_append ce base_op value ws sz dt sy cap prim load_op store_op st)))
 Proof
   strip_tac >> simp[compile_dynarray_append_def] >>
@@ -26,14 +26,14 @@ Theorem call_free_tuple_unpack_from_expr[local]:
   (!ce ty e st.
     ~supported_expr_exists expr_call_root e /\
     ~supported_expr_exists expr_shape_root e ==>
-    EVERY (\i. i.inst_opcode <> RETURNDATACOPY /\ i.inst_opcode <> INVOKE) (state_insts st) ==>
-    EVERY (\i. i.inst_opcode <> RETURNDATACOPY /\ i.inst_opcode <> INVOKE)
+    EVERY (\i. i.inst_opcode <> RETURNDATACOPY /\ i.inst_opcode <> INVOKE /\ i.inst_opcode <> CREATE /\ i.inst_opcode <> CREATE2) (state_insts st) ==>
+    EVERY (\i. i.inst_opcode <> RETURNDATACOPY /\ i.inst_opcode <> INVOKE /\ i.inst_opcode <> CREATE /\ i.inst_opcode <> CREATE2)
       (state_insts (SND (compile_expr ce ty e st)))) ==>
   !ce ty stage targets src st.
   ~supported_assignments_exists expr_call_root targets /\
   ~supported_assignments_exists expr_shape_root targets ==>
-  EVERY (\i. i.inst_opcode <> RETURNDATACOPY /\ i.inst_opcode <> INVOKE) (state_insts st) ==>
-  EVERY (\i. i.inst_opcode <> RETURNDATACOPY /\ i.inst_opcode <> INVOKE)
+  EVERY (\i. i.inst_opcode <> RETURNDATACOPY /\ i.inst_opcode <> INVOKE /\ i.inst_opcode <> CREATE /\ i.inst_opcode <> CREATE2) (state_insts st) ==>
+  EVERY (\i. i.inst_opcode <> RETURNDATACOPY /\ i.inst_opcode <> INVOKE /\ i.inst_opcode <> CREATE /\ i.inst_opcode <> CREATE2)
     (state_insts (SND (compile_tuple_unpack ce ty stage targets src st)))
 Proof
   strip_tac >> gen_tac >>
@@ -48,14 +48,14 @@ Theorem call_free_stmt_annassign:
   (!ce ty e st.
     ~supported_expr_exists expr_call_root e /\
     ~supported_expr_exists expr_shape_root e ==>
-    EVERY (\i. i.inst_opcode <> RETURNDATACOPY /\ i.inst_opcode <> INVOKE) (state_insts st) ==>
-    EVERY (\i. i.inst_opcode <> RETURNDATACOPY /\ i.inst_opcode <> INVOKE)
+    EVERY (\i. i.inst_opcode <> RETURNDATACOPY /\ i.inst_opcode <> INVOKE /\ i.inst_opcode <> CREATE /\ i.inst_opcode <> CREATE2) (state_insts st) ==>
+    EVERY (\i. i.inst_opcode <> RETURNDATACOPY /\ i.inst_opcode <> INVOKE /\ i.inst_opcode <> CREATE /\ i.inst_opcode <> CREATE2)
       (state_insts (SND (compile_expr ce ty e st)))) ==>
   !ce lc ty id vt e.
   ~supported_stmt_expr_exists expr_call_root (AnnAssign id vt e) /\
   ~supported_stmt_expr_exists expr_shape_root (AnnAssign id vt e) ==>
-  !st. EVERY (\i. i.inst_opcode <> RETURNDATACOPY /\ i.inst_opcode <> INVOKE) (state_insts st) ==>
-  EVERY (\i. i.inst_opcode <> RETURNDATACOPY /\ i.inst_opcode <> INVOKE)
+  !st. EVERY (\i. i.inst_opcode <> RETURNDATACOPY /\ i.inst_opcode <> INVOKE /\ i.inst_opcode <> CREATE /\ i.inst_opcode <> CREATE2) (state_insts st) ==>
+  EVERY (\i. i.inst_opcode <> RETURNDATACOPY /\ i.inst_opcode <> INVOKE /\ i.inst_opcode <> CREATE /\ i.inst_opcode <> CREATE2)
     (state_insts (SND (compile_stmt ce lc ty (AnnAssign id vt e) st)))
 Proof
   strip_tac >> rpt gen_tac >> simp[supported_stmt_expr_exists_def] >> strip_tac >>
@@ -80,14 +80,14 @@ Theorem call_free_stmt_assign_base:
   (!ce ty e st.
     ~supported_expr_exists expr_call_root e /\
     ~supported_expr_exists expr_shape_root e ==>
-    EVERY (\i. i.inst_opcode <> RETURNDATACOPY /\ i.inst_opcode <> INVOKE) (state_insts st) ==>
-    EVERY (\i. i.inst_opcode <> RETURNDATACOPY /\ i.inst_opcode <> INVOKE)
+    EVERY (\i. i.inst_opcode <> RETURNDATACOPY /\ i.inst_opcode <> INVOKE /\ i.inst_opcode <> CREATE /\ i.inst_opcode <> CREATE2) (state_insts st) ==>
+    EVERY (\i. i.inst_opcode <> RETURNDATACOPY /\ i.inst_opcode <> INVOKE /\ i.inst_opcode <> CREATE /\ i.inst_opcode <> CREATE2)
       (state_insts (SND (compile_expr ce ty e st)))) ==>
   !ce lc ty bt e.
   ~supported_stmt_expr_exists expr_call_root (Assign (BaseTarget bt) e) /\
   ~supported_stmt_expr_exists expr_shape_root (Assign (BaseTarget bt) e) ==>
-  !st. EVERY (\i. i.inst_opcode <> RETURNDATACOPY /\ i.inst_opcode <> INVOKE) (state_insts st) ==>
-  EVERY (\i. i.inst_opcode <> RETURNDATACOPY /\ i.inst_opcode <> INVOKE)
+  !st. EVERY (\i. i.inst_opcode <> RETURNDATACOPY /\ i.inst_opcode <> INVOKE /\ i.inst_opcode <> CREATE /\ i.inst_opcode <> CREATE2) (state_insts st) ==>
+  EVERY (\i. i.inst_opcode <> RETURNDATACOPY /\ i.inst_opcode <> INVOKE /\ i.inst_opcode <> CREATE /\ i.inst_opcode <> CREATE2)
     (state_insts (SND (compile_stmt ce lc ty (Assign (BaseTarget bt) e) st)))
 Proof
   strip_tac >> drule call_free_get_target_ptr >> disch_then assume_tac >>
@@ -106,14 +106,14 @@ Theorem call_free_stmt_assign_tuple:
   (!ce ty e st.
     ~supported_expr_exists expr_call_root e /\
     ~supported_expr_exists expr_shape_root e ==>
-    EVERY (\i. i.inst_opcode <> RETURNDATACOPY /\ i.inst_opcode <> INVOKE) (state_insts st) ==>
-    EVERY (\i. i.inst_opcode <> RETURNDATACOPY /\ i.inst_opcode <> INVOKE)
+    EVERY (\i. i.inst_opcode <> RETURNDATACOPY /\ i.inst_opcode <> INVOKE /\ i.inst_opcode <> CREATE /\ i.inst_opcode <> CREATE2) (state_insts st) ==>
+    EVERY (\i. i.inst_opcode <> RETURNDATACOPY /\ i.inst_opcode <> INVOKE /\ i.inst_opcode <> CREATE /\ i.inst_opcode <> CREATE2)
       (state_insts (SND (compile_expr ce ty e st)))) ==>
   !ce lc ty targets e.
   ~supported_stmt_expr_exists expr_call_root (Assign (TupleTarget targets) e) /\
   ~supported_stmt_expr_exists expr_shape_root (Assign (TupleTarget targets) e) ==>
-  !st. EVERY (\i. i.inst_opcode <> RETURNDATACOPY /\ i.inst_opcode <> INVOKE) (state_insts st) ==>
-  EVERY (\i. i.inst_opcode <> RETURNDATACOPY /\ i.inst_opcode <> INVOKE)
+  !st. EVERY (\i. i.inst_opcode <> RETURNDATACOPY /\ i.inst_opcode <> INVOKE /\ i.inst_opcode <> CREATE /\ i.inst_opcode <> CREATE2) (state_insts st) ==>
+  EVERY (\i. i.inst_opcode <> RETURNDATACOPY /\ i.inst_opcode <> INVOKE /\ i.inst_opcode <> CREATE /\ i.inst_opcode <> CREATE2)
     (state_insts (SND (compile_stmt ce lc ty (Assign (TupleTarget targets) e) st)))
 Proof
   strip_tac >> drule call_free_tuple_unpack_from_expr >> disch_then assume_tac >>
@@ -128,14 +128,14 @@ Theorem call_free_stmt_augassign:
   (!ce ty e st.
     ~supported_expr_exists expr_call_root e /\
     ~supported_expr_exists expr_shape_root e ==>
-    EVERY (\i. i.inst_opcode <> RETURNDATACOPY /\ i.inst_opcode <> INVOKE) (state_insts st) ==>
-    EVERY (\i. i.inst_opcode <> RETURNDATACOPY /\ i.inst_opcode <> INVOKE)
+    EVERY (\i. i.inst_opcode <> RETURNDATACOPY /\ i.inst_opcode <> INVOKE /\ i.inst_opcode <> CREATE /\ i.inst_opcode <> CREATE2) (state_insts st) ==>
+    EVERY (\i. i.inst_opcode <> RETURNDATACOPY /\ i.inst_opcode <> INVOKE /\ i.inst_opcode <> CREATE /\ i.inst_opcode <> CREATE2)
       (state_insts (SND (compile_expr ce ty e st)))) ==>
   !ce lc ty vt bt bop e.
   ~supported_stmt_expr_exists expr_call_root (AugAssign vt bt bop e) /\
   ~supported_stmt_expr_exists expr_shape_root (AugAssign vt bt bop e) ==>
-  !st. EVERY (\i. i.inst_opcode <> RETURNDATACOPY /\ i.inst_opcode <> INVOKE) (state_insts st) ==>
-  EVERY (\i. i.inst_opcode <> RETURNDATACOPY /\ i.inst_opcode <> INVOKE)
+  !st. EVERY (\i. i.inst_opcode <> RETURNDATACOPY /\ i.inst_opcode <> INVOKE /\ i.inst_opcode <> CREATE /\ i.inst_opcode <> CREATE2) (state_insts st) ==>
+  EVERY (\i. i.inst_opcode <> RETURNDATACOPY /\ i.inst_opcode <> INVOKE /\ i.inst_opcode <> CREATE /\ i.inst_opcode <> CREATE2)
     (state_insts (SND (compile_stmt ce lc ty (AugAssign vt bt bop e) st)))
 Proof
   strip_tac >> drule call_free_get_target_ptr >> disch_then assume_tac >>
@@ -163,19 +163,19 @@ Theorem call_free_stmt_append:
   (!ce ty e st.
     ~supported_expr_exists expr_call_root e /\
     ~supported_expr_exists expr_shape_root e ==>
-    EVERY (\i. i.inst_opcode <> RETURNDATACOPY /\ i.inst_opcode <> INVOKE) (state_insts st) ==>
-    EVERY (\i. i.inst_opcode <> RETURNDATACOPY /\ i.inst_opcode <> INVOKE)
+    EVERY (\i. i.inst_opcode <> RETURNDATACOPY /\ i.inst_opcode <> INVOKE /\ i.inst_opcode <> CREATE /\ i.inst_opcode <> CREATE2) (state_insts st) ==>
+    EVERY (\i. i.inst_opcode <> RETURNDATACOPY /\ i.inst_opcode <> INVOKE /\ i.inst_opcode <> CREATE /\ i.inst_opcode <> CREATE2)
       (state_insts (SND (compile_expr ce ty e st)))) ==>
   !ce lc ty target e.
   ~supported_stmt_expr_exists expr_call_root (Append target e) /\
   ~supported_stmt_expr_exists expr_shape_root (Append target e) ==>
-  !st. EVERY (\i. i.inst_opcode <> RETURNDATACOPY /\ i.inst_opcode <> INVOKE) (state_insts st) ==>
-  EVERY (\i. i.inst_opcode <> RETURNDATACOPY /\ i.inst_opcode <> INVOKE)
+  !st. EVERY (\i. i.inst_opcode <> RETURNDATACOPY /\ i.inst_opcode <> INVOKE /\ i.inst_opcode <> CREATE /\ i.inst_opcode <> CREATE2) (state_insts st) ==>
+  EVERY (\i. i.inst_opcode <> RETURNDATACOPY /\ i.inst_opcode <> INVOKE /\ i.inst_opcode <> CREATE /\ i.inst_opcode <> CREATE2)
     (state_insts (SND (compile_stmt ce lc ty (Append target e) st)))
 Proof
   strip_tac >> rpt gen_tac >> simp[supported_stmt_expr_exists_def] >> strip_tac >>
-  `!l. load_opc_for l <> RETURNDATACOPY /\ load_opc_for l <> INVOKE /\
-       store_opc_for l <> RETURNDATACOPY /\ store_opc_for l <> INVOKE` by
+  `!l. load_opc_for l <> RETURNDATACOPY /\ load_opc_for l <> INVOKE /\ load_opc_for l <> CREATE /\ load_opc_for l <> CREATE2 /\
+       store_opc_for l <> RETURNDATACOPY /\ store_opc_for l <> INVOKE /\ store_opc_for l <> CREATE /\ store_opc_for l <> CREATE2` by
     (Cases >> simp[load_opc_for_def, store_opc_for_def]) >>
   simp[Once compile_stmt_def] >>
   ho_match_mp_tac every_state_insts_bind >> conj_tac

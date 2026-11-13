@@ -1,7 +1,9 @@
 (* A call-free constructor lowers to a deployment entry function that makes
- * no internal or external calls: no INVOKE and no RETURNDATACOPY.
- * TOP-LEVEL: lower_vyper_deploy_unit_call_free_entry (used by
- * deploy_frame_gas_sufficient).
+ * no internal or external calls and creates no contract: no INVOKE, no
+ * RETURNDATACOPY, no CREATE and no CREATE2.
+ * TOP-LEVEL: lower_vyper_deploy_unit_call_free_entry_ops (used by
+ * o1_deploy_unit_create_size_ok) and its corollary
+ * lower_vyper_deploy_unit_call_free_entry (used by deploy_frame_gas_sufficient).
  *)
 Theory ctorDeployCallFree
 Ancestors
@@ -13,11 +15,12 @@ Ancestors
   vyperTypeContract vyperTypeContractContext ctorCallFreeStmt
 
 (* The lowering emits INVOKE only for an internal call and RETURNDATACOPY
-   only on the external-call, raw_call and create paths, all of which
+   only on the external-call, raw_call and create paths, and CREATE and
+   CREATE2 only on the create paths, all of which
    constructor_call_free excludes from __init__'s body; typing fixes each
    builtin's argument count, so no lowering reads past its arguments.
    Without a constructor the entry is the fixed CODECOPY/RETURN stub. *)
-Theorem lower_vyper_deploy_unit_call_free_entry:
+Theorem lower_vyper_deploy_unit_call_free_entry_ops:
   !tops rpolicy runtime_bc dunit am tx.
     lower_vyper_deploy_unit tops rpolicy runtime_bc = SOME dunit /\
     constructor_call_free tops /\ deploy_typing_ok tops am tx
@@ -26,7 +29,8 @@ Theorem lower_vyper_deploy_unit_call_free_entry:
       dunit.cu_context.ctx_entry = SOME efn.fn_name /\
       lookup_function efn.fn_name dunit.cu_context.ctx_functions = SOME efn /\
       !inst. MEM inst (fn_insts efn) ==>
-             inst.inst_opcode <> RETURNDATACOPY /\ inst.inst_opcode <> INVOKE
+             inst.inst_opcode <> RETURNDATACOPY /\ inst.inst_opcode <> INVOKE /\
+             inst.inst_opcode <> CREATE /\ inst.inst_opcode <> CREATE2
 Proof
   rpt gen_tac >> strip_tac >>
   Cases_on `classify_functions tops` >>
@@ -76,8 +80,10 @@ Proof
      gvs[deploy_build_env_no_return_pc, cenv_static_ok_def] >>
      rpt conj_tac >> first_assum ACCEPT_TAC) >>
   `!ce st.
-    EVERY (\i. i.inst_opcode <> RETURNDATACOPY /\ i.inst_opcode <> INVOKE) (state_insts st) ==>
-    EVERY (\i. i.inst_opcode <> RETURNDATACOPY /\ i.inst_opcode <> INVOKE)
+    EVERY (\i. i.inst_opcode <> RETURNDATACOPY /\ i.inst_opcode <> INVOKE /\
+                i.inst_opcode <> CREATE /\ i.inst_opcode <> CREATE2) (state_insts st) ==>
+    EVERY (\i. i.inst_opcode <> RETURNDATACOPY /\ i.inst_opcode <> INVOKE /\
+                i.inst_opcode <> CREATE /\ i.inst_opcode <> CREATE2)
       (state_insts (SND (compile_stmts ce NoLoop NoneT fbody st)))` by
     (rpt strip_tac >> irule compile_stmts_call_free_from_expr >>
      simp[compile_expr_call_free] >> rpt strip_tac >>
@@ -87,4 +93,19 @@ Proof
   strip_tac >> first_x_assum drule_all >> strip_tac >>
   drule_all immutable_reservation_entry_every >>
   gvs[listTheory.EVERY_MEM] >> metis_tac[]
+QED
+
+Theorem lower_vyper_deploy_unit_call_free_entry:
+  !tops rpolicy runtime_bc dunit am tx.
+    lower_vyper_deploy_unit tops rpolicy runtime_bc = SOME dunit /\
+    constructor_call_free tops /\ deploy_typing_ok tops am tx
+    ==>
+    ?efn.
+      dunit.cu_context.ctx_entry = SOME efn.fn_name /\
+      lookup_function efn.fn_name dunit.cu_context.ctx_functions = SOME efn /\
+      !inst. MEM inst (fn_insts efn) ==>
+             inst.inst_opcode <> RETURNDATACOPY /\ inst.inst_opcode <> INVOKE
+Proof
+  rpt strip_tac >> drule_all lower_vyper_deploy_unit_call_free_entry_ops >>
+  metis_tac[]
 QED

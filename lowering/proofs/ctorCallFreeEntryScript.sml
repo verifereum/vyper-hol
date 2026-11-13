@@ -44,7 +44,8 @@ Theorem no_ctor_lowering_entry_call_free:
     unit.cu_context.ctx_entry = SOME efn.fn_name /\
     lookup_function efn.fn_name unit.cu_context.ctx_functions = SOME efn /\
     EVERY (\inst. inst.inst_opcode <> RETURNDATACOPY /\
-                  inst.inst_opcode <> INVOKE) (fn_insts efn)
+                  inst.inst_opcode <> INVOKE /\ inst.inst_opcode <> CREATE /\
+                  inst.inst_opcode <> CREATE2) (fn_insts efn)
 Proof
   strip_tac >> drule no_ctor_lowering_context_shape >> strip_tac >>
   qexists_tac `HD unit.cu_context.ctx_functions` >>
