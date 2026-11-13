@@ -11,7 +11,7 @@ Ancestors
   valueEncodingProps loweringPosts exprLowering compileEnv loweringStateRelDefs vyperState vyperInterpreter
   vyperTypeSystem vyperValue vyperValueOperation list rich_list pair
   words arithmetic finite_map venomState venomMemDefs exprSimSubscriptArrayFramed
-  memoryValueEncoding
+  memoryValueEncoding vyperPlaceFrames vyperStorageFootprint
 Libs
   pairLib
 
