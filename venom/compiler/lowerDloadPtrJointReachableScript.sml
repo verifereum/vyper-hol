@@ -46,6 +46,16 @@ val normal = ``\ds PH H un g j t.
 val joint = ``\ds PH H un g j t.
   (^normal) ds PH H un g j t \/ dload_terminal_mode lo P vs C ds H un g j t``;
 
+(* ML-only abbreviation: joint is preserved by a non-terminator step. *)
+val step = ``!ds PH H un g j t next t1 fuel.
+    frame_reachable vs C' ds PH H un g j t /\ gas_cut cut vs t /\
+    (^joint) ds PH H un g j t /\
+    active_inst g j t /\ ~is_terminator j.inst_opcode /\ j.inst_opcode <> INVOKE /\
+    step_inst fuel C' j t = OK t1 /\
+    active_inst g next (t1 with vs_inst_idx := SUC t.vs_inst_idx) ==>
+    (^joint) ds PH (step_prov PH H j t1) (step_taint j t t1 un) g next
+      (t1 with vs_inst_idx := SUC t.vs_inst_idx)``;
+
 Theorem dload_joint_reachable_if_next:
   !vs C' ds PH H un g j t.
   frame_reachable vs C' ds PH H un g j t ==>
@@ -53,14 +63,7 @@ Theorem dload_joint_reachable_if_next:
   dead_wf D /\ o1_ctx_shape C /\ o1_run_state_ok vs /\
   o1_safe_upto D lo cut C vs /\ callee_first names C.ctx_functions /\
   EVERY (fn_ptr_ok P) C.ctx_functions /\ gas_cut cut vs t /\
-  (!ds PH H un g j t next t1 fuel.
-    frame_reachable vs C' ds PH H un g j t /\ gas_cut cut vs t /\
-    (^joint) ds PH H un g j t /\
-    active_inst g j t /\ ~is_terminator j.inst_opcode /\ j.inst_opcode <> INVOKE /\
-    step_inst fuel C' j t = OK t1 /\
-    active_inst g next (t1 with vs_inst_idx := SUC t.vs_inst_idx) ==>
-    (^joint) ds PH (step_prov PH H j t1) (step_taint j t t1 un) g next
-      (t1 with vs_inst_idx := SUC t.vs_inst_idx)) ==>
+  (^step) ==>
   (^joint) ds PH H un g j t
 Proof
   ho_match_mp_tac frame_reachable_strongind >> rpt conj_tac
@@ -142,21 +145,18 @@ Theorem dload_joint_reachable:
   (^joint) ds PH H un g j t
 Proof
   rpt gen_tac >> strip_tac >> strip_tac >>
-  drule dload_joint_reachable_if_next >>
-  disch_then (fn th => mp_tac (SPECL (fst (strip_forall (concl th))) th)) >>
-  impl_tac
-  >- (rpt conj_tac >> TRY (first_assum ACCEPT_TAC) >>
-      rpt gen_tac >> strip_tac >>
-      `ALL_DISTINCT (fn_labels g')` by
-        (irule dload_target_reachable_labels >> metis_tac[]) >>
-      CONV_TAC (REDEPTH_CONV BETA_CONV) >>
-      irule (SRULE [] dload_joint_next) >>
-      simp[] >>
-      conj_tac >- (qexists_tac `fuel` >> simp[]) >>
-      qpat_x_assum `(\ds PH H un g j t. _) _ _ _ _ _ _ _` mp_tac >>
-      CONV_TAC (REDEPTH_CONV BETA_CONV) >> simp[] >>
-      disch_then kall_tac >> metis_tac[]) >>
-  simp[]
+  `^step` by
+    (rpt gen_tac >> strip_tac >>
+     `ALL_DISTINCT (fn_labels g')` by
+       (irule dload_target_reachable_labels >> metis_tac[]) >>
+     CONV_TAC (REDEPTH_CONV BETA_CONV) >>
+     irule (SRULE [] dload_joint_next) >>
+     simp[] >>
+     conj_tac >- (qexists_tac `fuel` >> simp[]) >>
+     qpat_x_assum `(\ds PH H un g j t. _) _ _ _ _ _ _ _` mp_tac >>
+     CONV_TAC (REDEPTH_CONV BETA_CONV) >> simp[] >>
+     disch_then kall_tac >> metis_tac[]) >>
+  drule_all dload_joint_reachable_if_next
 QED
 
 val _ = List.app (fn th => if null (hyp th) then ()
