@@ -553,11 +553,8 @@ Resume protected_writes_frame_mutual[internal_call]:
          (DROP (LENGTH idflts - (LENGTH iargs - LENGTH es)) idflts)` by
         metis_tac[rich_listTheory.EVERY_DROP] >>
       fs[lookup_immutable_def] >> PROTECTED_FORWARD_IH) >>
-  ntac 5 PROTECTED_STEP >> ntac 5 PROTECTED_STEP >>
-  ntac 5 PROTECTED_STEP >> ntac 3 PROTECTED_STEP >>
-  simp_tac bool_ss [lock_if_nr_def, unlock_if_nr_def] >>
-  PROTECTED_STEP
-  >- metis_tac[]
+  rpt (CHANGED_TAC PROTECTED_STEP) >>
+  simp_tac bool_ss [lock_if_nr_def, unlock_if_nr_def]
   >- (POP_ASSUM_LIST (K all_tac) >>
       rewrite_tac[protected_frame_result] >> rpt gen_tac >> strip_tac >>
       Cases_on `inr` >> Cases_on `cx.nonreentrant_slot` >>
@@ -570,11 +567,8 @@ Resume protected_writes_frame_mutual[internal_call]:
       gvs[is_view_mut_def, ignore_bind_def, bind_def, check_not_static_def,
           type_check_def, assert_def, check_def, return_def, raise_def,
           AllCaseEqs()] >>
-      strip_tac >> simp[lookup_immutable_def]) >>
-  ntac 4 PROTECTED_STEP >>
-  simp_tac bool_ss [BETA_THM] >> ntac 4 PROTECTED_STEP >>
-  strip_tac >>
-  qmatch_asmsub_rename_tac `push_function (src_id_opt,fn) env cx ps = (INL cxf,pt)` >>
+      strip_tac >> simp[lookup_immutable_def])
+  >- (qmatch_asmsub_rename_tac `push_function (src_id_opt,fn) env cx ps = (INL cxf,pt)` >>
   `cxf = cx with stk updated_by CONS (src_id_opt,fn)` by
     (qpat_x_assum `push_function _ _ _ _ = _` mp_tac >>
      simp[push_function_def, return_def]) >>
@@ -596,11 +590,13 @@ Resume protected_writes_frame_mutual[internal_call]:
   qpat_x_assum `cxf = _` SUBST_ALL_TAC >>
   qpat_x_assum `state_rel_frame _ (eval_stmts _ _)`
     (fn th => POP_ASSUM_LIST (K all_tac) >>
-      assume_tac (REWRITE_RULE [lookup_immutable_stk] th)) >>
-  rpt (CHANGED_TAC PROTECTED_STEP)
-  >- gvs[lookup_immutable_def] >>
+      simp_tac bool_ss [lookup_immutable_def] >>
+      MATCH_ACCEPT_TAC (SIMP_RULE (srw_ss()) [lookup_immutable_stk, lookup_immutable_def] th))) >>
+  POP_ASSUM_LIST (K all_tac) >>
   simp[protected_frame_result] >>
   rpt gen_tac >> strip_tac >>
+  Cases_on `inr /\ imut <> View /\ imut <> Pure` >>
+  Cases_on `cx.nonreentrant_slot` >> gvs[return_def] >>
   drule release_nonreentrant_lock_immutables >>
   simp[lookup_immutable_def]
 QED
