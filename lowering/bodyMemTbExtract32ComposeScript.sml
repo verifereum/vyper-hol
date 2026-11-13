@@ -435,7 +435,7 @@ Resume compile_extract32_sim_mem[suffix_revert]:
   qexists_tac `REPLICATE k' F` >> disj2_tac >> disj1_tac >>
   rewrite_tac[gas_summary_at_def] >>
   qexistsl_tac [`INR (Error (RuntimeError msg))`, `ee2`,
-    `Abort Revert_abort (t'' with vs_inst_idx := j)`] >>
+    `Abort Revert_abort (t with vs_inst_idx := j)`] >>
   conj_tac
   >- simp[gas_marked_exec_def, gas_marked_path_def,
           vyperContextTheory.evaluate_type_builtin_def,
