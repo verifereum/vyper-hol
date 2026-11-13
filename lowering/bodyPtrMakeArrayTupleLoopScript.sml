@@ -144,7 +144,9 @@ Theorem literal_tuple_loop_outcome_ptr:
       literal_prefix_ok (cells ++ added) tm z /\
       (!m. mem_agree_outside tm.t_mem z.vs_memory m ==>
         tuple_in_memory vs tvs (addr+off) m))
-    (\res ee gt r. ?exc. res = INR exc /\ expr_exit (INR exc : eval_result + exception) r)
+    (\res ee gt r. ?exc. res = INR exc /\
+       expr_exit (INR exc : eval_result + exception) r /\
+       halt_exit cx ee (INR exc : eval_result + exception) r)
 Proof
   Induct_on `args`
   >- (rpt gen_tac >> strip_tac >>
@@ -266,7 +268,9 @@ Theorem literal_array_loop_outcome_ptr:
       literal_prefix_ok (cells ++ added) tm z /\
       (!m. mem_agree_outside tm.t_mem z.vs_memory m ==>
         tuple_in_memory vs (REPLICATE (LENGTH args) tv) (addr+off) m))
-    (\res ee gt r. ?exc. res = INR exc /\ expr_exit (INR exc : eval_result + exception) r)
+    (\res ee gt r. ?exc. res = INR exc /\
+       expr_exit (INR exc : eval_result + exception) r /\
+       halt_exit cx ee (INR exc : eval_result + exception) r)
 Proof
   strip_tac >>
   `MAP expr_type args = REPLICATE (LENGTH args) elem_ty` by

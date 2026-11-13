@@ -98,7 +98,7 @@ Proof
       qexistsl_tac [`s1`,`t0`,`v1`,`x`] >> simp[]) >>
   simp[gas_summary_at_def] >>
   qexistsl_tac [`convert_result cx (expr_type e1) t v1`,`ee`,`r`] >>
-  simp[gas_marked_exec_def]
+  simp[gas_marked_exec_def, halt_exit_def]
 QED
 
 Theorem compile_convert_frag_sim_mem:

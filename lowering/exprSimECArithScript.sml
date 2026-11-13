@@ -1474,7 +1474,7 @@ Proof
   simp[vyperStateTheory.return_def, vyperStateTheory.raise_def]
 QED
 
-Theorem ec_source_tail_not_halt[local]:
+Theorem ec_source_tail_not_halt:
   (bt = ECAdd \/ bt = ECMul) ==>
   ec_source_tail cx ann bt tys vs es <> (INR HaltException, es')
 Proof

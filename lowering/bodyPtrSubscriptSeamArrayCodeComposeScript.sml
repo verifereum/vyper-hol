@@ -56,8 +56,10 @@ Proof
     ptr_val_ok cx (post_value_type cenv idx) v iop Gi tni u /\
     (~is_word_type (post_value_type cenv idx) ==> ptr_buf_ok cenv idx iop Gi u) /\
     ghost_kept cenv (mid with gas_obs := []) sm G1 tn1 t Gi tni` >> simp[] >>
-  `(!res out. (?exc. res = (INR exc : value + exception) /\
-        expr_exit (INR exc : eval_result + exception) out) = expr_exit res out)` by
+  `(!res ee out. (?exc. res = (INR exc : value + exception) /\
+        expr_exit (INR exc : eval_result + exception) out /\
+        (exc = HaltException ==> ?s. out = Halt s /\ halt_rel cx ee s)) =
+      (expr_exit res out /\ halt_exit cx ee res out))` by
     (gen_tac >> Cases_on `res` >> simp[] >> rename1 `INR exc` >>
      qspec_then `Value` (mp_tac o REWRITE_RULE [FUN_EQ_THM]) expr_exit_success_map >>
      disch_then (qspec_then `INR exc : value + exception` mp_tac) >> simp[]) >>

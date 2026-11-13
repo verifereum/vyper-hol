@@ -60,8 +60,9 @@ Proof
   disch_then (qspecl_then [`sa`,`sa'`,`x`,`s0`,`G0`,`tn0`] mp_tac) >>
   (impl_tac >- simp[]) >> strip_tac >>
   irule convert_operand_marked_bind >>
-  `!res r. (?exc. res = INR exc /\ expr_exit (INR exc : value + exception) r) <=>
-     expr_exit (res : value + exception) r` by
+  `!res ee r. (?exc. res = INR exc /\ expr_exit (INR exc : value + exception) r /\
+       (exc = HaltException ==> ?s. r = Halt s /\ halt_rel cx ee s)) <=>
+     expr_exit (res : value + exception) r /\ halt_exit cx ee res r` by
     (Cases >> simp[expr_exit_def]) >>
   simp[] >> qexists_tac `\v ee G tn t.
     expr_post ctx fn cenv cx e es sa sa' s0 ee v x t /\

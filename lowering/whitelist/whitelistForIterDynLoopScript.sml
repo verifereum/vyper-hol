@@ -849,7 +849,8 @@ Theorem dynarray_for_round_counted:
         p dst sz ainst cond_lbl st (SUC k) ee t) /\
       alloca_frame cenv es caller cc cenv ee t)
     (\res ee r. ?ex. res = INR ex /\
-      !tail. stmt_exit RetQ (ee with gas_obs := tail) (INR ex) r)
+      (!tail. stmt_exit RetQ (ee with gas_obs := tail) (INR ex) r) /\
+      halt_exit cx ee (INR ex : unit + exception) r)
 Proof
   strip_tac >>
   `gas_admissible (eval_stmts cx stmts)
@@ -1025,7 +1026,8 @@ Theorem dynarray_for_loop_counted:
       array_caller_frame caller old t /\
       alloca_frame cenv origin_es caller old cenv ee t)
     (\res ee r. ?ex. res = INR ex /\
-      !tail. stmt_exit RetQ (ee with gas_obs := tail) (INR ex) r)
+      (!tail. stmt_exit RetQ (ee with gas_obs := tail) (INR ex) r) /\
+      halt_exit cx ee (INR ex : unit + exception) r)
 Proof
   strip_tac >>
   qabbrev_tac `Inv = \j ei s.
@@ -1036,7 +1038,8 @@ Proof
     ~s.vs_halted /\ stmt_state_rel ctx func cenv cx ei s /\
     array_caller_frame caller old s /\
     alloca_frame cenv origin_es caller old cenv ei s` >>
-  qabbrev_tac `R = \ex ee r. !tail. stmt_exit RetQ (ee with gas_obs := tail) (INR ex) r` >>
+  qabbrev_tac `R = \ex ee r. (!tail. stmt_exit RetQ (ee with gas_obs := tail) (INR ex) r) /\
+    halt_exit cx ee (INR ex : unit + exception) r` >>
   `(!j ei s. j < LENGTH vs /\ Inv j ei s /\
       gas_admissible (eval_for cx tv id stmts (MAP Value (DROP j vs))) (stmt_res_ok lctx) ei ==>
       gas_outcome F (cx_tops cx) (ctx,func)

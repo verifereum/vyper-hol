@@ -80,16 +80,18 @@ Theorem for_checked_range_tail_compose:
          (eval_for cx tyv id stmts
            (MAP Value (GENLIST (\j. IntV (n1 + &j)) (Num (n2-n1)))))
          (es,cc,Gc,tc) Post
-         (\res ee gt r. !tail.
-           stmt_exit_ptr RetQ (ee with gas_obs := tail) res gt r)) ==>
+         (\res ee gt r. (!tail.
+           stmt_exit_ptr RetQ (ee with gas_obs := tail) res gt r) /\
+           halt_exit cx ee res r)) ==>
   gas_outcome_ptr (cx_dead cx) (cx_tops cx) (ctx,func) PG
     (do rl <- lift_sum (get_range_limits (IntV n1) (IntV n2));
         check (compatible_bound (Dynamic bound) (SND rl)) "For too long";
         eval_for cx tyv id stmts
           (MAP Value (GENLIST (\j. IntV (FST rl + &j)) (SND rl))) od)
     (es,s,G,tn) Post
-    (\res ee gt r. !tail.
-      stmt_exit_ptr RetQ (ee with gas_obs := tail) res gt r)
+    (\res ee gt r. (!tail.
+      stmt_exit_ptr RetQ (ee with gas_obs := tail) res gt r) /\
+      halt_exit cx ee res r)
 Proof
   strip_tac >> rewrite_tac[for_checked_range_tail_action] >>
   Cases_on `n1 <= n2`
@@ -138,16 +140,18 @@ Theorem for_checked_range_entry_outcome_ptr:
         DRESTRICT G (COMPL {cv;rv;g1;z1;g2;z2;ev}),
         tn with t_var := tn.t_var |++
           [(cv,{});(rv,{});(g1,{});(z1,{});(g2,{});(z2,{});(ev,{})]) Post
-       (\res ee gt r. !tail.
-         stmt_exit_ptr RetQ (ee with gas_obs := tail) res gt r)) ==>
+       (\res ee gt r. (!tail.
+         stmt_exit_ptr RetQ (ee with gas_obs := tail) res gt r) /\
+         halt_exit cx ee res r)) ==>
   gas_outcome_ptr (cx_dead cx) (cx_tops cx) (ctx,func) PG
     (do rl <- lift_sum (get_range_limits (IntV n1) (IntV n2));
         check (compatible_bound (Dynamic bound) (SND rl)) "For too long";
         eval_for cx tyv id stmts
           (MAP Value (GENLIST (\j. IntV (FST rl + &j)) (SND rl))) od)
     (es,ee,G,tn) Post
-    (\res ee gt r. !tail.
-      stmt_exit_ptr RetQ (ee with gas_obs := tail) res gt r)
+    (\res ee gt r. (!tail.
+      stmt_exit_ptr RetQ (ee with gas_obs := tail) res gt r) /\
+      halt_exit cx ee res r)
 Proof
   strip_tac >>
   mp_tac (Q.INST [`tenv` |-> `get_tenv cx`] (SPEC_ALL for_checked_range_test_words)) >>
@@ -241,8 +245,9 @@ Theorem for_range_checked_tail_outcome_ptr:
           lookup_var x t = SOME w) /\
        (!x. not_fresh_at st x ==> FLOOKUP Gf x = FLOOKUP G x /\
           op_taint tf (Var x) = op_taint tn (Var x)))
-    (\res ee gt r. !tail.
-       stmt_exit_ptr RetQ (ee with gas_obs := tail) res gt r)
+    (\res ee gt r. (!tail.
+       stmt_exit_ptr RetQ (ee with gas_obs := tail) res gt r) /\
+       halt_exit cx ee res r)
 Proof
   strip_tac >>
   `cs_extends st st` by simp[cs_extends_refl] >>

@@ -109,7 +109,9 @@ Resume compile_assert_reason_frag_general_ptr[exception]:
   qexistsl [`INR y`,`es_end`,`G`,`tn`,`r'`] >>
   conj_tac >- (gen_tac >> simp[eval_assert_reason_bind, Once bind_def]) >>
   conj_tac >- simp[] >>
-  disj2_tac >> simp[stmt_exit_ptr_def] >> metis_tac[expr_exit_INR_type]
+  disj2_tac >> simp[stmt_exit_ptr_def] >>
+  conj_tac >- metis_tac[expr_exit_INR_type] >>
+  qpat_x_assum `halt_exit _ _ _ _` mp_tac >> simp[]
 QED
 
 Resume compile_assert_reason_frag_general_ptr[normal]:

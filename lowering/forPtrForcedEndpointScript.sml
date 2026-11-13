@@ -130,9 +130,11 @@ Resume forced_endpoint_bind_outcome_ptr[exception]:
   conj_tac
   >- (irule gas_marked_exec_ptr_bind_exception >> simp[]) >>
   disj2_tac >> simp[stmt_exit_ptr_def] >>
-  gen_tac >> disj1_tac >>
-  once_rewrite_tac[INST_TYPE [beta |-> ``:value``] expr_exit_INR_type] >>
-  first_assum ACCEPT_TAC
+  conj_tac >- (
+    gen_tac >> disj1_tac >>
+    once_rewrite_tac[INST_TYPE [beta |-> ``:value``] expr_exit_INR_type] >>
+    first_assum ACCEPT_TAC) >>
+  fs[halt_exit_def]
 QED
 
 Finalise forced_endpoint_bind_outcome_ptr

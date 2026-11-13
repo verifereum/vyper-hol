@@ -316,7 +316,8 @@ Theorem aggregate_make_tuple_body_sim:
             regions_disjoint p n c sz) ==>
           mem_bytes_at p n r.vs_memory = mem_bytes_at p n s0.vs_memory)))
     (\res es' exit. ?exc. res = INR exc /\
-      expr_exit (INR exc : eval_result + exception) exit)
+      expr_exit (INR exc : eval_result + exception) exit /\
+      halt_exit cx es' (INR exc : eval_result + exception) exit)
 Proof
   Induct_on `args`
   >- (rpt gen_tac >>
@@ -351,7 +352,7 @@ Resume aggregate_make_tuple_body_sim[cons]:
   >- (rpt strip_tac >> pure_rewrite_tac[ignore_bind_def, bind_assoc] >>
       irule gas_exempt_cert_error_result >> simp[]) >>
   goal_assum (drule_at Any) >> simp[] >>
-  conj_tac >- (Cases >> simp[expr_exit_def]) >>
+  conj_tac >- (Cases >> simp[expr_exit_def] >> metis_tac[]) >>
   reverse conj_tac >- metis_tac[] >>
   rpt gen_tac >> strip_tac >>
   drule_all aggregate_body_tuple_marked_child_source >> strip_tac >>

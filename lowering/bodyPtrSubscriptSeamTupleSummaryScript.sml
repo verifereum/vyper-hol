@@ -176,7 +176,8 @@ Resume tuple_vv_sim_ptr_compose[exception]:
   `eval_expr cx (Subscript (EL k tys) obj (Literal ity (IntL (&k)))) = bind (eval_expr cx obj)
     (\v. select_result cx (TupleT tys) v (ValueSubscript (IntV (&k))))` by
     simp[FUN_EQ_THM, tuple_subscript_source] >> asm_rewrite_tac[] >>
-  irule gas_marked_exec_ptr_bind_exception >> simp[]
+  conj_tac >- (irule gas_marked_exec_ptr_bind_exception >> simp[]) >>
+  fs[halt_exit_def]
 QED
 Resume tuple_vv_sim_ptr_compose[exempt]:
   qexistsl_tac [`err`, `ee`, `leaf`, `finish'`] >>

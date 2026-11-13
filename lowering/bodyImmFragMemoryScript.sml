@@ -65,7 +65,8 @@ Theorem compile_for_immutable_frag_mem_from_outcome:
        return_buf_frame d cenv st' t /\ alloca_history func t /\
        s.vs_alloca_next <= t.vs_alloca_next)
     (\res ee r. ?ex. res = INR ex /\
-       !tail. stmt_exit RetQ (ee with gas_obs := tail) (INR ex) r)) ==>
+       (!tail. stmt_exit RetQ (ee with gas_obs := tail) (INR ex) r) /\
+       halt_exit cx ee (INR ex : unit + exception) r)) ==>
   !d ctx func cx cenv lctx RetQ ty id et bd n src name off stmts tv vs es P.
   FLOOKUP cenv.ce_module_vars (src,name) = SOME (ImmutableLoc off) /\
   cenv.ce_alloca_locals /\ FLOOKUP cenv.ce_vars id = NONE /\

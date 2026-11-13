@@ -74,7 +74,8 @@ Theorem aggregate_body_make_tuple_sim:
             regions_disjoint p n c sz) ==>
           mem_bytes_at p n r.vs_memory = mem_bytes_at p n s0.vs_memory)))
     (\res es' exit. ?exc. res = INR exc /\
-      expr_exit (INR exc : eval_result + exception) exit)
+      expr_exit (INR exc : eval_result + exception) exit /\
+      halt_exit cx es' (INR exc : eval_result + exception) exit)
 Proof
   Induct_on `args`
   >- (rpt gen_tac >>
@@ -127,7 +128,7 @@ Proof
      t.vs_inst_idx = LENGTH sm.cs_current_insts` >>
   reverse conj_tac
   >- (qpat_x_assum `gas_outcome _ _ _ _ _ _ _` mp_tac >>
-      simp[gas_outcome_def, gas_summary_at_def] >>
+      simp[gas_outcome_def, gas_summary_at_def, halt_exit_def] >>
       metis_tac[expr_exit_INL, sumTheory.sum_CASES]) >>
   simp[] >>
   rpt gen_tac >> strip_tac >>
@@ -199,7 +200,9 @@ Proof
             FLOOKUP r.vs_allocas i.inst_id = SOME (c,sz) ==>
             regions_disjoint p n c sz) ==>
           mem_bytes_at p n r.vs_memory = mem_bytes_at p n q.vs_memory)))
-    (\res ee exit. ?exc. res = INR exc /\ expr_exit (INR exc : eval_result + exception) exit)` by
+    (\res ee exit. ?exc. res = INR exc /\
+      expr_exit (INR exc : eval_result + exception) exit /\
+      halt_exit cx ee (INR exc : eval_result + exception) exit)` by
     (simp[] >> first_x_assum (irule o SRULE [] o
        Q.INST [`es'` |-> `mid with gas_obs := []`] o SPEC_ALL o cj 2) >>
      simp[] >> conj_tac >- metis_tac[] >>
@@ -401,7 +404,8 @@ Theorem aggregate_body_make_tuple_narrow_sim:
             regions_disjoint p n c sz) ==>
           mem_bytes_at p n r.vs_memory = mem_bytes_at p n s0.vs_memory)))
     (\res es' exit. ?exc. res = INR exc /\
-      expr_exit (INR exc : eval_result + exception) exit)
+      expr_exit (INR exc : eval_result + exception) exit /\
+      halt_exit cx es' (INR exc : eval_result + exception) exit)
 Proof
   cheat
 QED
@@ -467,7 +471,8 @@ Theorem aggregate_body_make_tuple_fits_sim:
             regions_disjoint p n c sz) ==>
           mem_bytes_at p n r.vs_memory = mem_bytes_at p n s0.vs_memory)))
     (\res es' exit. ?exc. res = INR exc /\
-      expr_exit (INR exc : eval_result + exception) exit)
+      expr_exit (INR exc : eval_result + exception) exit /\
+      halt_exit cx es' (INR exc : eval_result + exception) exit)
 Proof
   rpt gen_tac >> strip_tac >>
   Cases_on `tys = MAP expr_type args`
@@ -539,7 +544,8 @@ Theorem aggregate_body_make_array_elems_sim:
             regions_disjoint p n c sz) ==>
           mem_bytes_at p n r.vs_memory = mem_bytes_at p n s0.vs_memory)))
     (\res es' exit. ?exc. res = INR exc /\
-      expr_exit (INR exc : eval_result + exception) exit)
+      expr_exit (INR exc : eval_result + exception) exit /\
+      halt_exit cx es' (INR exc : eval_result + exception) exit)
 Proof
   rpt gen_tac >> strip_tac >>
   mp_tac (Q.SPECL [`args`, `idx`] (Q.INST [`cfn` |-> `compile_expr`,
@@ -638,7 +644,8 @@ Theorem aggregate_body_make_array_sim:
             regions_disjoint p n c sz) ==>
           mem_bytes_at p n r.vs_memory = mem_bytes_at p n s0.vs_memory)))
     (\res es' exit. ?exc. res = INR exc /\
-      expr_exit (INR exc : eval_result + exception) exit)
+      expr_exit (INR exc : eval_result + exception) exit /\
+      halt_exit cx es' (INR exc : eval_result + exception) exit)
 Proof
   rpt gen_tac >> strip_tac >> Cases_on `header`
   >- suspend "dynamic"

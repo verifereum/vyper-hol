@@ -188,7 +188,8 @@ Resume compile_for_dynarray_frag_mem[loop]:
      (\res ee t. res = INL () /\
        array_round_done d ctx func cenv cx st1 cc exit ee t)
      (\res ee rr. ?ex. res = INR ex /\
-       !tail. stmt_exit RetQ (ee with gas_obs := tail) (INR ex) rr)` by
+       (!tail. stmt_exit RetQ (ee with gas_obs := tail) (INR ex) rr) /\
+       halt_exit cx ee (INR ex : unit + exception) rr)` by
     (drule dynarray_code_loop_outcome_mem >> disch_then irule >>
      simp[] >> conj_tac
      >- (qhdtm_assum `dynarray_for_code`
@@ -235,13 +236,16 @@ Resume compile_for_dynarray_frag_mem[public]:
      (\res ee t. res = INL () /\
        array_round_done d ctx func cenv cx st1 cc exit ee t)
      (\res ee rr. ?ex. res = INR ex /\
-       !tail. stmt_exit RetQ (ee with gas_obs := tail) (INR ex) rr)` by
+       (!tail. stmt_exit RetQ (ee with gas_obs := tail) (INR ex) rr) /\
+       halt_exit cx ee (INR ex : unit + exception) rr)` by
     (irule array_round_outcome_prefix_mem >> goal_assum (drule_at Any) >> gvs[]) >>
   ` (\res ee rr. ?ex. res = INR ex /\
-       !tail. stmt_exit RetQ (ee with gas_obs := tail) (INR ex) rr) =
+       (!tail. stmt_exit RetQ (ee with gas_obs := tail) (INR ex) rr) /\
+       halt_exit cx ee (INR ex : unit + exception) rr) =
     (\res ee rr. (!tail. stmt_exit RetQ (ee with gas_obs := tail) res rr) /\ halt_exit cx ee res rr)` by
     (simp[FUN_EQ_THM] >> Cases_on `res` >>
-     simp[stmt_exit_def, exprSimDefsTheory.expr_exit_def]) >>
+     simp[stmt_exit_def, exprSimDefsTheory.expr_exit_def,
+          exprSimDefsTheory.halt_exit_def]) >>
   gvs[] >>
   drule exprSimMemDefsTheory.gas_outcome_post_mono >> disch_then irule >>
   rpt strip_tac >>

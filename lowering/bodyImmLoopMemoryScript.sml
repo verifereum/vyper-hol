@@ -144,7 +144,8 @@ Theorem immutable_code_loop_outcome_mem:
       (eval_for cx tv id stmts (MAP Value (DROP k vs))) (es,s)
       (\res ee t. res = INL () /\ array_round_done d ctx func cenv cx st1 u exit ee t)
       (\res ee rr. ?ex. res = INR ex /\
-        !tail. stmt_exit RetQ (ee with gas_obs := tail) (INR ex) rr)
+        (!tail. stmt_exit RetQ (ee with gas_obs := tail) (INR ex) rr) /\
+        halt_exit cx ee (INR ex : unit + exception) rr)
 Proof
   strip_tac >>
   `sb0.cs_next_var <= sb1.cs_next_var` by

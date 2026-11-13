@@ -75,8 +75,9 @@ QED
    loaded word's taint needs: ptr_vv_ok's memory clause says nothing about
    a type that doesn't evaluate. *)
 Theorem expr_exit_exception_exists[local]:
-  (?exc. res = INR exc /\ expr_exit (INR exc : 'b + exception) r) <=>
-  expr_exit (res : 'a + exception) r
+  (?exc. res = INR exc /\ expr_exit (INR exc : 'b + exception) r /\
+     (exc = HaltException ==> ?s. r = Halt s /\ halt_rel cx ee s)) <=>
+  expr_exit (res : 'a + exception) r /\ halt_exit cx ee res r
 Proof
   Cases_on `res` >- simp[] >> simp[] >>
   qspecl_then [`(\x:'a. ARB:'b)`, `INR y : 'a + exception`]

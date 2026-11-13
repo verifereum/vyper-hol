@@ -316,7 +316,7 @@ Proof
   rpt gen_tac >> strip_tac >>
   irule gas_outcome_ptr_conseq >>
   qexistsl_tac [`log_eval_ptr_post d ctx func cenv cx es sa sb s0 G0 tn0 args xs`,
-                `\res ee gt r. expr_exit res r`] >>
+                `\res ee gt r. expr_exit res r /\ halt_exit cx ee res r`] >>
   conj_tac
   >- (simp[log_eval_ptr_post_def] >> metis_tac[]) >>
   conj_tac >- simp[] >>
@@ -374,7 +374,7 @@ Proof
   rpt gen_tac >> strip_tac >>
   irule gas_outcome_ptr_conseq >>
   qexistsl_tac [`log_eval_ptr_post d ctx func cenv cx es sa sb s0 G0 tn0 args xs`,
-                `\res ee gt r. expr_exit res r`] >>
+                `\res ee gt r. expr_exit res r /\ halt_exit cx ee res r`] >>
   conj_tac
   >- (simp[log_eval_ptr_post_def] >> metis_tac[]) >>
   conj_tac >- simp[] >>

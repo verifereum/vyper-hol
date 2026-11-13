@@ -65,7 +65,8 @@ Theorem aggregate_struct_fields_body_sim_mem:
              regions_disjoint p n c sz) ==>
           mem_bytes_at p n r.vs_memory = mem_bytes_at p n s0.vs_memory))
     (\res es' exit. ?exc. res = INR exc /\
-      expr_exit (INR exc : eval_result + exception) exit)
+      expr_exit (INR exc : eval_result + exception) exit /\
+      halt_exit cx es' (INR exc : eval_result + exception) exit)
 Proof
   rpt gen_tac >> strip_tac >>
   drule exprSimAggregateLayoutTheory.compile_struct_lit_as_tuple >>
@@ -80,6 +81,9 @@ Proof
   (impl_tac >- (simp[] >> first_assum ACCEPT_TAC)) >> strip_tac >> simp[] >>
   imp_res_tac listTheory.LIST_REL_LENGTH >>
   drule vyperTypeABITheory.OPT_MMAP_LENGTH >> simp[] >> strip_tac >>
+  (* Bring the exit relation to the simp normal form the goal's has. *)
+  qpat_x_assum `gas_outcome _ _ _ (eval_exprs _ _) _ _ _`
+    (assume_tac o CONV_RULE (RAND_CONV (SIMP_CONV (srw_ss()) []))) >>
   irule struct_gas_outcome_post >>
   goal_assum (drule_at Any) >>
   BETA_TAC >> rpt strip_tac >> qexists_tac `vs` >> gvs[] >> simp[] >>

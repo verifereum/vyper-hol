@@ -20,7 +20,9 @@ Theorem structlit_uniform_tuple_cons_map:
       literal_prefix_ok ((cells ++ [(tv,v,addr+off,type_memory_size tv)]) ++ added) tm z /\
       (!m. mem_agree_outside tm.t_mem z.vs_memory m ==>
         tuple_in_memory vs tvs (addr+(off+type_memory_size tv)) m))
-    (\res ee gt r. ?exc. res = INR exc /\ expr_exit (INR exc : eval_result + exception) r) /\
+    (\res ee gt r. ?exc. res = INR exc /\
+       expr_exit (INR exc : eval_result + exception) r /\
+       halt_exit cx ee (INR exc : eval_result + exception) r) /\
   value_has_type tv v ==>
   gas_outcome_ptr D tops (ctx,func) PG
     (bind (eval_exprs cx args) (\vs. return (v::vs))) start
@@ -32,7 +34,9 @@ Theorem structlit_uniform_tuple_cons_map:
       literal_prefix_ok (cells ++ added) tm z /\
       (!m. mem_agree_outside tm.t_mem z.vs_memory m ==>
         tuple_in_memory vs (tv::tvs) (addr+off) m))
-    (\res ee gt r. ?exc. res = INR exc /\ expr_exit (INR exc : eval_result + exception) r)
+    (\res ee gt r. ?exc. res = INR exc /\
+       expr_exit (INR exc : eval_result + exception) r /\
+       halt_exit cx ee (INR exc : eval_result + exception) r)
 Proof
   PairCases_on `start` >> strip_tac >> irule gas_outcome_ptr_return_map >>
   goal_assum (drule_at Any) >> simp[] >> conj_tac
@@ -95,7 +99,9 @@ Theorem structlit_uniform_tuple_loop_outcome_ptr:
       literal_prefix_ok (cells ++ added) tm z /\
       (!m. mem_agree_outside tm.t_mem z.vs_memory m ==>
         tuple_in_memory vs tvs (addr+off) m))
-    (\res ee gt r. ?exc. res = INR exc /\ expr_exit (INR exc : eval_result + exception) r)
+    (\res ee gt r. ?exc. res = INR exc /\
+       expr_exit (INR exc : eval_result + exception) r /\
+       halt_exit cx ee (INR exc : eval_result + exception) r)
 Proof
   Induct_on `args`
   >- (rpt gen_tac >> strip_tac >> gvs[compile_make_tuple_def, comp_return_def] >>

@@ -39,7 +39,11 @@ Theorem membership_lower_typed_args:
 Proof
   Induct
   >- (rpt strip_tac >> gvs[lower_word_args_nil] >>
-      irule lower_typed_args_nil_sim_ptr >> simp[]) >>
+      mp_tac (Q.INST [`D` |-> `cx_dead cx`]
+        typedWordArgsPostPtrTheory.lower_typed_args_nil_sim_ptr) >>
+      impl_tac >- simp[] >> strip_tac >>
+      irule gas_outcome_ptr_conseq >> goal_assum (drule_at Any) >>
+      simp[]) >>
   rpt gen_tac >> strip_tac >> gvs[lower_word_args_cons, SF ETA_ss] >>
   `cs_extends sa s1 /\ sa.cs_next_var <= s1.cs_next_var /\
    sa.cs_next_id <= s1.cs_next_id /\
