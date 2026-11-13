@@ -178,9 +178,9 @@ Proof
      conj_tac >- metis_tac[] >>
      conj_tac >- (qexistsl_tac [`a`,`addr`,`dst`,`off`,`r`,`sz`] >> simp[]) >>
      simp[] >> metis_tac[]) >>
-  `(!a b. ((a=b /\ a<lo) \/ ld_site_bytes E live a b) ==>
+  `(!a b. ((a=b /\ a<lo) \/ (a=b /\ dyn_floor CS s <= a /\ a < dimword (:256)) \/ ld_site_bytes E live a b) ==>
       ((w2n p<=a /\ a<w2n p+w2n n) <=> (w2n q<=b /\ b<w2n q+w2n n))) /\
-   (!a b. ((a=b /\ a<lo) \/ ld_site_bytes E live a b) /\
+   (!a b. ((a=b /\ a<lo) \/ (a=b /\ dyn_floor CS s <= a /\ a < dimword (:256)) \/ ld_site_bytes E live a b) /\
       w2n p<=a /\ a<w2n p+w2n n ==> a-w2n p=b-w2n q)` by suspend "geometry" >>
   suspend "complete"
 QED
@@ -210,7 +210,8 @@ Resume ld_normal_payload_copy_backward[geometry]:
   `0 < w2n n` by decide_tac >>
   `((w2n p = w2n q /\ w2n p+w2n n <= lo) \/
     (?owner bs bt sz. owner IN live /\ ld_site_entry E owner bs bt sz /\
-      bs <= w2n p /\ w2n p+w2n n <= bs+sz /\ w2n q=bt+(w2n p-bs)))` by
+      bs <= w2n p /\ w2n p+w2n n <= bs+sz /\ w2n q=bt+(w2n p-bs)) \/
+    (w2n p = w2n q /\ dyn_floor CS s <= w2n p))` by
     suspend "destination" >>
   (match_mp_tac ld_fixed_live_write_footprint >>
    conj_tac >- metis_tac[] >>
@@ -218,16 +219,24 @@ Resume ld_normal_payload_copy_backward[geometry]:
 QED
 
 Resume ld_normal_payload_copy_backward[destination]:
-  drule ld_access_write_classification >>
-  disch_then (qspecl_then [`w2n p`,`w2n n`] mp_tac) >> simp[] >> strip_tac
+  mp_tac (Q.INST [`off` |-> `w2n p`, `len` |-> `w2n n`, `inst` |-> `i`,
+                  `fl` |-> `dyn_floor CS s`] ld_access_write_classification) >>
+  impl_tac >- simp[] >> strip_tac
   >- (disj1_tac >> simp[] >>
       `ld_op_prov AG dst = NONE` by
         (qpat_x_assum `!ops. _` mp_tac >>
          qpat_x_assum `MEM i.inst_opcode _` mp_tac >> simp[MEM] >> strip_tac >>
          simp[mem_write_ops_def, GSYM ld_erase_op_prov]) >>
       drule ld_owned_operand_clean >> disch_then (qspec_then `dst` mp_tac) >>
+      Cases_on `i.inst_opcode = EXTCODECOPY` >> fs[MEM])
+  >~ [`dyn_floor CS s <= w2n _`]
+  >- (rpt disj2_tac >>
+      `ld_op_prov AG dst = NONE` by
+        (qpat_x_assum `MEM i.inst_opcode _` mp_tac >> simp[MEM] >> strip_tac >>
+         gvs[mem_write_ops_def, ld_op_prov_def]) >>
+      drule ld_owned_operand_clean >> disch_then (qspec_then `dst` mp_tac) >>
       Cases_on `i.inst_opcode = EXTCODECOPY` >> fs[MEM]) >>
-  disj2_tac >>
+  disj2_tac >> disj1_tac >>
   `mem_write_ops i = SOME <| iao_ofst := dst; iao_size := SOME sz;
                             iao_max_size := SOME sz |>` by
     (qpat_x_assum `MEM i.inst_opcode _` mp_tac >> simp[MEM] >> strip_tac >>
@@ -257,7 +266,7 @@ Resume ld_normal_payload_copy_backward[complete]:
     ld_payload_copy_taint) >> asm_rewrite_tac[] >> strip_tac >>
   mp_tac (Q.INST [`s` |-> `t`, `s'` |-> `t'`, `tn` |-> `un`, `p` |-> `q`]
     ld_payload_copy_taint) >> asm_rewrite_tac[] >> strip_tac >>
-  `ld_byte_rel (\a b. (a=b /\ a<lo) \/ ld_site_bytes E live a b)
+  `ld_byte_rel (\a b. (a=b /\ a<lo) \/ (a=b /\ dyn_floor CS s <= a /\ a < dimword (:256)) \/ ld_site_bytes E live a b)
     ((step_taint i s (write_memory_with_expansion (w2n p) bs s) tn).t_mem)
     ((step_taint i t t' un).t_mem)
     (\a. read_memory a 1 (write_memory_with_expansion (w2n p) bs s))

@@ -20,11 +20,13 @@ Theorem ld_reachable_bytes_memory:
   (!owner bs bt size. owner IN live /\ ld_site_entry E owner bs bt size ==>
     lo <= bs /\ lo <= bt /\ bs+size < dimword(:256) /\
     bt+size < dimword(:256)) /\
+  (!owner bs bt size. owner IN live /\ ld_site_entry E owner bs bt size ==>
+    bs+size <= dyn_floor CS s /\ bt+size <= dyn_floor CS s) /\
   (!owner other bs bt size cs ct cz.
     owner IN live /\ other IN live /\ owner <> other /\
     ld_site_entry E owner bs bt size /\ ld_site_entry E other cs ct cz ==>
     (bs+size <= cs \/ cs+cz <= bs) /\ (bt+size <= ct \/ ct+cz <= bt)) /\
-  ld_byte_rel (\a b. (a=b /\ a<lo) \/ ld_site_bytes E live a b)
+  ld_byte_rel (\a b. (a=b /\ a<lo) \/ (a=b /\ dyn_floor CS s <= a /\ a < dimword (:256)) \/ ld_site_bytes E live a b)
     tn.t_mem u0.t_mem (\a. read_memory a 1 s) (\b. read_memory b 1 t0) /\
   a.inst_opcode = ADD /\ a.inst_operands = [off;Label "code_end"] /\
   a.inst_outputs = [av] /\
@@ -36,7 +38,7 @@ Theorem ld_reachable_bytes_memory:
     SOME (n2w (LENGTH s.vs_code - LENGTH s.vs_data_section)) /\
   dload_offset_ok CS fn inst s ==>
   ?z. step_inst fuel CS inst s = OK z /\
-    ld_byte_rel (\a b. (a=b /\ a<lo) \/ ld_site_bytes E live a b)
+    ld_byte_rel (\a b. (a=b /\ a<lo) \/ (a=b /\ dyn_floor CS s <= a /\ a < dimword (:256)) \/ ld_site_bytes E live a b)
       (step_taint inst s z tn).t_mem u.t_mem
       (\a. read_memory a 1 z) (\b. read_memory b 1 t)
 Proof
@@ -93,21 +95,28 @@ Resume ld_reachable_bytes_memory[footprint]:
   `((w2n p = w2n q /\ w2n p+w2n n <= lo) \/
     (?owner bp bq size. owner IN live /\ ld_site_entry E owner bp bq size /\
       bp <= w2n p /\ w2n p+w2n n <= bp+size /\
-      w2n q = bq+(w2n p-bp)))` by
+      w2n q = bq+(w2n p-bp)) \/
+    (w2n p = w2n q /\ dyn_floor CS s <= w2n p))` by
     suspend "classify" >>
   simp_tac bool_ss [Abbr `R`] >> irule ld_fixed_live_write_footprint >> metis_tac[]
 QED
 
 Resume ld_reachable_bytes_memory[classify]:
-  drule ld_access_write_classification >>
-  disch_then (qspecl_then [`w2n p`,`w2n n`] mp_tac) >> simp[] >> strip_tac
+  mp_tac (Q.INST [`off` |-> `w2n p`, `len` |-> `w2n n`,
+                  `fl` |-> `dyn_floor CS s`] ld_access_write_classification) >>
+  impl_tac >- simp[] >> strip_tac
   >- (disj1_tac >> simp[] >>
       `ld_op_prov AG dst = NONE` by
         (qpat_x_assum `!ops. _` mp_tac >>
          simp[mem_write_ops_def, GSYM ld_erase_op_prov]) >>
       drule ld_owned_operand_clean >>
+      disch_then (qspec_then `dst` mp_tac) >> simp[])
+  >~ [`dyn_floor CS s <= w2n _`]
+  >- (rpt disj2_tac >>
+      `ld_op_prov AG dst = NONE` by gvs[mem_write_ops_def, ld_op_prov_def] >>
+      drule ld_owned_operand_clean >>
       disch_then (qspec_then `dst` mp_tac) >> simp[]) >>
-  disj2_tac >> gvs[mem_write_ops_def] >>
+  disj2_tac >> disj1_tac >> gvs[mem_write_ops_def] >>
   `owner IN live` by metis_tac[] >>
   `v IN V` by simp[] >>
   `?bt. ld_site_entry E owner bs' bt sz'` by

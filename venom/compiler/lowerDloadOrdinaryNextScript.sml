@@ -15,7 +15,7 @@ Theorem ld_normal_data_index_update:
 Proof
   rewrite_tac[ld_normal_data_def, ld_frame_data_def, ld_frame_embedding_def,
        ld_owned_vars_def, ld_shared_state_def, ld_alloc_account_def,
-       allocas_from_def, lookup_var_def, read_memory_def,
+       allocas_from_def, lookup_var_def, read_memory_def, dyn_floor_def,
        venom_state_accfupds]
 QED
 

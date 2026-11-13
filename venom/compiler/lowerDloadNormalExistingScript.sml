@@ -437,7 +437,7 @@ Proof
    (!v. v IN V ==> (lookup_var v s = NONE <=> lookup_var v t = NONE)) /\
    (!v. ld_owned_selection E (FLOOKUP AG v) (FLOOKUP BH v))` by
     (drule ld_normal_data_frame >> simp[ld_frame_data_def]) >>
-  `access_ok lo (ld_erase AG) fn i s` by metis_tac[ld_annotated_access_ok] >>
+  drule_all ld_annotated_access_ok >> strip_tac >>
   `taint_ok fn tn i s` by metis_tac[ld_annotated_taint_ok] >>
   `op_taint tn op = {}` by
     (irule ld_taint_operand_clean >> qexistsl_tac [`fn`,`i`,`s`] >> simp[]) >>
@@ -458,8 +458,9 @@ Proof
     (irule ld_mload_live_backward >> simp[] >>
      conj_tac >- metis_tac[] >>
      conj_tac >- (fs[] >> metis_tac[]) >>
-     qexistsl_tac [`\a b. (a=b /\ a<lo) \/ ld_site_bytes E live a b`,
-                    `fn`, `live`, `lo`] >> simp[] >> rpt conj_tac >> fs[]) >>
+     qexistsl_tac [`G`,
+                    `\a b. (a=b /\ a<lo) \/ (a=b /\ dyn_floor CS s <= a /\ a < dimword (:256)) \/ ld_site_bytes E live a b`,
+                    `dyn_floor CS s`, `fn`, `live`, `lo`] >> simp[] >> rpt conj_tac >> fs[]) >>
   qexists_tac `s'` >> (conj_tac >- asm_rewrite_tac[]) >>
   suspend "completion"
 QED
@@ -491,7 +492,7 @@ Theorem ld_normal_step_memory_complete:
     (step_taint i s s' tn) (step_taint i t t' un) s' t' /\
   (!v. ld_owned_selection E (FLOOKUP (ld_step_prov AP AG L i) v)
     (FLOOKUP (ld_step_prov BP BH H i) v)) /\
-  ld_byte_rel (\a b. (a=b /\ a<lo) \/ ld_site_bytes E live a b)
+  ld_byte_rel (\a b. (a=b /\ a<lo) \/ (a=b /\ dyn_floor CS s <= a /\ a < dimword (:256)) \/ ld_site_bytes E live a b)
     (step_taint i s s' tn).t_mem (step_taint i t t' un).t_mem
     (\a. read_memory a 1 s') (\b. read_memory b 1 t') /\
   (step_taint i s s' tn).t_stor = tn.t_stor /\

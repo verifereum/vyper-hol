@@ -44,7 +44,7 @@ Theorem ld_mcopy_certificate_backward:
     owner IN live /\ other IN live /\ owner <> other /\
     ld_site_entry E owner bs bt sz /\ ld_site_entry E other cs ct cz ==>
     (bs+sz <= cs \/ cs+cz <= bs) /\ (bt+sz <= ct \/ ct+cz <= bt)) /\
-  ld_byte_rel (\a b. (a=b /\ a<lo) \/ ld_site_bytes E live a b)
+  ld_byte_rel (\a b. (a=b /\ a<lo) \/ (a=b /\ dyn_floor CS s <= a /\ a < dimword (:256)) \/ ld_site_bytes E live a b)
     tn.t_mem un.t_mem (\a. read_memory a 1 s) (\b. read_memory b 1 t) /\
   ld_shared_state tn un s t /\
   ld_frame_embedding E L H s t /\ ld_alloc_account keys d A s t /\
@@ -58,13 +58,15 @@ Theorem ld_mcopy_certificate_backward:
   (!owner bs bt sz. owner IN live /\ ld_site_entry E owner bs bt sz ==>
     lo <= bs /\ lo <= bt /\ bs+sz <= s.vs_alloca_next /\ bt+sz <= t.vs_alloca_next) /\
   (!owner bs bt sz. owner IN live /\ ld_site_entry E owner bs bt sz ==>
+    bs+sz <= dyn_floor CS s /\ bt+sz <= dyn_floor CS s) /\
+  (!owner bs bt sz. owner IN live /\ ld_site_entry E owner bs bt sz ==>
     bt+sz <= f \/ ?j. j NOTIN keys /\ FLOOKUP t.vs_allocas j = SOME(bt,sz)) /\
   (!v. op_taint tn (Var v) SUBSET count 32) /\
   (!v. op_taint un (Var v) SUBSET count 32) /\
   un.t_stor SUBSET tn.t_stor /\ un.t_trans SUBSET tn.t_trans /\ un.t_imm SUBSET tn.t_imm /\
   step_inst fuel CT i t = OK t' ==>
   ?s'. step_inst fuel CS i s = OK s' /\
-    ld_byte_rel (\a b. (a=b /\ a<lo) \/ ld_site_bytes E live a b)
+    ld_byte_rel (\a b. (a=b /\ a<lo) \/ (a=b /\ dyn_floor CS s <= a /\ a < dimword (:256)) \/ ld_site_bytes E live a b)
       (step_taint i s s' tn).t_mem (step_taint i t t' un).t_mem
       (\a. read_memory a 1 s') (\b. read_memory b 1 t') /\
     ld_shared_state (step_taint i s s' tn) (step_taint i t t' un) s' t' /\
@@ -120,14 +122,15 @@ Proof
      goal_assum (drule_at Any) >> simp[]) >>
   `m = n` by
     (drule ld_owned_operand_clean >> disch_then (qspec_then `lenop` mp_tac) >> simp[]) >>
-  `(!a b. ((a=b /\ a<lo) \/ ld_site_bytes E live a b) ==>
+  `(!a b. ((a=b /\ a<lo) \/ (a=b /\ dyn_floor CS s <= a /\ a < dimword (:256)) \/ ld_site_bytes E live a b) ==>
       ((w2n p<=a /\ a<w2n p+w2n n) <=> (w2n q<=b /\ b<w2n q+w2n n))) /\
-   (!a b. ((a=b /\ a<lo) \/ ld_site_bytes E live a b) /\
+   (!a b. ((a=b /\ a<lo) \/ (a=b /\ dyn_floor CS s <= a /\ a < dimword (:256)) \/ ld_site_bytes E live a b) /\
       w2n p<=a /\ a<w2n p+w2n n ==> a-w2n p=b-w2n q) /\
    (!j. j<w2n n ==> ((w2n r+j = w2n u+j /\ w2n r+j<lo) \/
+     (w2n r+j = w2n u+j /\ dyn_floor CS s <= w2n r+j /\ w2n r+j < dimword (:256)) \/
      ld_site_bytes E live (w2n r+j) (w2n u+j)))` by suspend "geometry" >>
   `?s'. step_inst fuel CS i s = OK s' /\
-    ld_byte_rel (\a b. (a=b /\ a<lo) \/ ld_site_bytes E live a b)
+    ld_byte_rel (\a b. (a=b /\ a<lo) \/ (a=b /\ dyn_floor CS s <= a /\ a < dimword (:256)) \/ ld_site_bytes E live a b)
       (step_taint i s s' tn).t_mem (step_taint i t t' un).t_mem
       (\a. read_memory a 1 s') (\b. read_memory b 1 t') /\
     ld_shared_state (step_taint i s s' tn) (step_taint i t t' un) s' t' /\
@@ -170,14 +173,16 @@ QED
 
 Resume ld_mcopy_certificate_backward[positive_geometry]:
   `!j. j<w2n n ==> ((w2n r+j = w2n u+j /\ w2n r+j<lo) \/
+     (w2n r+j = w2n u+j /\ dyn_floor CS s <= w2n r+j /\ w2n r+j < dimword (:256)) \/
      ld_site_bytes E live (w2n r+j) (w2n u+j))` by suspend "source_classification" >>
   `((w2n p = w2n q /\ w2n p+w2n n <= lo) \/
     (?owner bs bt sz. owner IN live /\ ld_site_entry E owner bs bt sz /\
-      bs <= w2n p /\ w2n p+w2n n <= bs+sz /\ w2n q=bt+(w2n p-bs)))` by
+      bs <= w2n p /\ w2n p+w2n n <= bs+sz /\ w2n q=bt+(w2n p-bs)) \/
+    (w2n p = w2n q /\ dyn_floor CS s <= w2n p))` by
     suspend "destination_classification" >>
-  `(!a b. ((a=b /\ a<lo) \/ ld_site_bytes E live a b) ==>
+  `(!a b. ((a=b /\ a<lo) \/ (a=b /\ dyn_floor CS s <= a /\ a < dimword (:256)) \/ ld_site_bytes E live a b) ==>
       ((w2n p<=a /\ a<w2n p+w2n n) <=> (w2n q<=b /\ b<w2n q+w2n n))) /\
-   (!a b. ((a=b /\ a<lo) \/ ld_site_bytes E live a b) /\
+   (!a b. ((a=b /\ a<lo) \/ (a=b /\ dyn_floor CS s <= a /\ a < dimword (:256)) \/ ld_site_bytes E live a b) /\
       w2n p<=a /\ a<w2n p+w2n n ==> a-w2n p=b-w2n q)` by
     (irule ld_fixed_live_write_footprint >>
      conj_tac >- metis_tac[] >>
@@ -187,14 +192,20 @@ QED
 
 Resume ld_mcopy_certificate_backward[destination_classification]:
   `0 < w2n n` by decide_tac >>
-  drule ld_access_write_classification >>
-  disch_then (qspecl_then [`w2n p`,`w2n n`] mp_tac) >> simp[] >> strip_tac
+  mp_tac (Q.INST [`off` |-> `w2n p`, `len` |-> `w2n n`, `inst` |-> `i`,
+                  `fl` |-> `dyn_floor CS s`] ld_access_write_classification) >>
+  impl_tac >- simp[] >> strip_tac
   >- (disj1_tac >> simp[] >>
       `ld_op_prov AG dst = NONE` by
         (qpat_x_assum `!ops. _` mp_tac >>
          simp[mem_write_ops_def, GSYM ld_erase_op_prov]) >>
-      drule ld_owned_operand_clean >> disch_then (qspec_then `dst` mp_tac) >> simp[]) >>
-  disj2_tac >> gvs[mem_write_ops_def] >>
+      drule ld_owned_operand_clean >> disch_then (qspec_then `dst` mp_tac) >> simp[])
+  >~ [`dyn_floor CS s <= w2n _`]
+  >- (rpt disj2_tac >>
+      `ld_op_prov AG dst = NONE` by gvs[mem_write_ops_def, ld_op_prov_def] >>
+      drule ld_owned_operand_clean >>
+      disch_then (qspec_then `dst` mp_tac) >> simp[]) >>
+  disj2_tac >> disj1_tac >> gvs[mem_write_ops_def] >>
   `owner IN live` by metis_tac[] >>
   `v IN U` by simp[] >>
   `?bt. ld_site_entry E owner bs bt sz` by
@@ -209,14 +220,20 @@ QED
 Resume ld_mcopy_certificate_backward[source_classification]:
   markerLib.RESUME_TAC >>
   `0 < w2n n` by decide_tac >>
-  drule ld_access_read_classification >>
-  disch_then (qspecl_then [`w2n r`,`w2n n`] mp_tac) >> simp[] >> strip_tac
+  mp_tac (Q.INST [`off` |-> `w2n r`, `len` |-> `w2n n`, `inst` |-> `i`,
+                  `fl` |-> `dyn_floor CS s`] ld_access_read_classification) >>
+  impl_tac >- simp[] >> strip_tac
   >- (`ld_op_prov AG src = NONE` by
         (qpat_x_assum `!ops. _` mp_tac >>
          simp[mem_read_ops_def, GSYM ld_erase_op_prov]) >>
       `r = u` by
         (drule ld_owned_operand_clean >> disch_then (qspec_then `src` mp_tac) >> simp[]) >>
-      rpt strip_tac >> disj1_tac >> gvs[] >> decide_tac) >>
+      rpt strip_tac >> disj1_tac >> gvs[] >> decide_tac)
+  >~ [`dyn_floor CS s <= w2n _`]
+  >- (`ld_op_prov AG src = NONE` by gvs[mem_read_ops_def, ld_op_prov_def] >>
+      `r = u` by
+        (drule ld_owned_operand_clean >> disch_then (qspec_then `src` mp_tac) >> simp[]) >>
+      rpt strip_tac >> disj2_tac >> disj1_tac >> gvs[] >> decide_tac) >>
   gvs[mem_read_ops_def] >>
   `owner IN live` by metis_tac[] >>
   `v IN U` by simp[] >>
@@ -227,7 +244,7 @@ Resume ld_mcopy_certificate_backward[source_classification]:
   `bs+sz < dimword(:256)` by metis_tac[] >>
   `!bt. ld_site_entry E owner bs bt sz ==> bt+sz < dimword(:256)` by metis_tac[] >>
   drule_all (SRULE[arithmeticTheory.ADD_COMM] ld_owned_address_transport) >> strip_tac >>
-  rpt strip_tac >> disj2_tac >> simp[ld_site_bytes_def] >>
+  rpt strip_tac >> rpt disj2_tac >> simp[ld_site_bytes_def] >>
   qexistsl_tac [`owner`,`bs`,`bt'`,`sz`,`w2n r-bs+j`] >>
   simp[] >> decide_tac
 QED

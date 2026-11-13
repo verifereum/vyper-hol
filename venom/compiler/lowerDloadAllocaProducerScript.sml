@@ -35,14 +35,15 @@ Theorem ld_alloca_pair_memory:
   FLOOKUP t'.vs_allocas i.inst_id = SOME(bt,sz) /\
   (FLOOKUP L i.inst_id = NONE ==> (0,k) NOTIN live) /\
   lo <= t.vs_alloca_next /\
+  (FLOOKUP L i.inst_id = NONE ==> t'.vs_alloca_next <= dyn_floor CS s) /\
   (!owner b c n. owner IN live /\ ld_site_entry E owner b c n ==>
     c+n <= t.vs_alloca_next) /\
-  ld_byte_rel (\a b. (a=b /\ a<lo) \/ ld_site_bytes E live a b)
+  ld_byte_rel (\a b. (a=b /\ a<lo) \/ (a=b /\ dyn_floor CS s <= a /\ a < dimword (:256)) \/ ld_site_bytes E live a b)
     tn.t_mem un.t_mem (\a. read_memory a 1 s) (\b. read_memory b 1 t) ==>
   let E' = if FLOOKUP L i.inst_id = NONE
            then E |+ ((0,k),(bs,bt,sz)) else E in
   let live' = if FLOOKUP L i.inst_id = NONE then (0,k) INSERT live else live in
-  ld_byte_rel (\a b. (a=b /\ a<lo) \/ ld_site_bytes E' live' a b)
+  ld_byte_rel (\a b. (a=b /\ a<lo) \/ (a=b /\ dyn_floor CS s <= a /\ a < dimword (:256)) \/ ld_site_bytes E' live' a b)
     (step_taint i s s' tn).t_mem (step_taint i t t' un).t_mem
     (\a. read_memory a 1 s') (\b. read_memory b 1 t')
 Proof
@@ -67,6 +68,12 @@ Resume ld_alloca_pair_memory[fresh]:
     metis_tac[ld_alloc_account_old_absent] >>
   `bs = s.vs_alloca_next /\ bt = t.vs_alloca_next /\ sz = w2n n` by
     (gvs[exec_alloca_def, update_var_def, FLOOKUP_UPDATE, AllCaseEqs()]) >>
+  `t.vs_alloca_next + w2n n <= dyn_floor CS s` by
+    (`t'.vs_alloca_next = t.vs_alloca_next + w2n n` by
+       (qpat_x_assum `exec_alloca i t n = OK t'` mp_tac >>
+        simp[exec_alloca_def, update_var_def, AllCaseEqs()] >>
+        strip_tac >> gvs[]) >>
+     metis_tac[]) >>
   gvs[] >> simp[step_taint_def] >>
   irule ld_alloca_fresh_site_memory >> simp[] >>
   goal_assum (drule_at Any) >> simp[]
@@ -188,7 +195,7 @@ Theorem ld_alloca_certificate_backward:
   (!v. op_taint un (Var v) SUBSET count 32) /\
   un.t_stor SUBSET tn.t_stor /\ un.t_trans SUBSET tn.t_trans /\
   un.t_imm SUBSET tn.t_imm /\
-  ld_byte_rel (\a b. (a=b /\ a<lo) \/ ld_site_bytes E live a b)
+  ld_byte_rel (\a b. (a=b /\ a<lo) \/ (a=b /\ dyn_floor CS s <= a /\ a < dimword (:256)) \/ ld_site_bytes E live a b)
     tn.t_mem un.t_mem (\a. read_memory a 1 s) (\b. read_memory b 1 t) /\
   ld_frame_bound t.vs_alloca_next H BP BH /\
   ld_stack_bound t.vs_alloca_next gstk /\
@@ -199,6 +206,9 @@ Theorem ld_alloca_certificate_backward:
   (!owner bs bt sz. owner IN live /\ ld_site_entry E owner bs bt sz ==>
     lo <= bs /\ lo <= bt /\ bs+sz <= s.vs_alloca_next /\
     bt+sz <= t.vs_alloca_next) /\
+  (!owner bs bt sz. owner IN live /\ ld_site_entry E owner bs bt sz ==>
+    bs+sz <= dyn_floor CS s /\ bt+sz <= dyn_floor CS s) /\
+  (FLOOKUP L i.inst_id = NONE ==> t'.vs_alloca_next <= dyn_floor CS s) /\
   (!owner other bs bt sz cs ct cz.
     owner IN live /\ other IN live /\ owner <> other /\
     ld_site_entry E owner bs bt sz /\ ld_site_entry E other cs ct cz ==>
@@ -240,10 +250,14 @@ Theorem ld_alloca_certificate_backward:
       owner <> other /\ ld_site_entry E' owner b c n /\
       ld_site_entry E' other e g h ==>
       (b+n <= e \/ e+h <= b) /\ (c+n <= g \/ g+h <= c)) /\
+    (!owner b c n. owner IN
+        (if FLOOKUP L i.inst_id = NONE then (0,k) INSERT live else live) /\
+      ld_site_entry E' owner b c n ==>
+      b+n <= dyn_floor CS s /\ c+n <= dyn_floor CS s) /\
     (!owner b c n. ld_live astk L' AP (ld_step_prov AP AG L' i) (owner,(b,n)) /\
       ld_site_entry E' owner b c n ==>
       c+n <= f \/ ?j. j NOTIN keys /\ FLOOKUP t'.vs_allocas j = SOME(c,n)) /\
-    ld_byte_rel (\a b. (a=b /\ a<lo) \/ ld_site_bytes E'
+    ld_byte_rel (\a b. (a=b /\ a<lo) \/ (a=b /\ dyn_floor CS s <= a /\ a < dimword (:256)) \/ ld_site_bytes E'
       (if FLOOKUP L i.inst_id = NONE then (0,k) INSERT live else live) a b)
       (step_taint i s s' tn).t_mem (step_taint i t t' un).t_mem
       (\a. read_memory a 1 s') (\b. read_memory b 1 t') /\
@@ -279,6 +293,7 @@ Proof
   >- suspend "live"
   >- suspend "endpoints"
   >- suspend "separation"
+  >- suspend "floor"
   >- suspend "representation"
   >- suspend "memory"
   >- (gen_tac >> strip_tac >> Cases_on `v = out` >> simp[])
@@ -374,6 +389,31 @@ Resume ld_alloca_certificate_backward[separation]:
         ld_site_extend_separation) >>
       (impl_tac >- asm_rewrite_tac[]) >> simp[IN_INSERT]) >>
   gvs[] >> asm_rewrite_tac[]
+QED
+
+Resume ld_alloca_certificate_backward[floor]:
+  qpat_x_assum `_ = E'` (SUBST_ALL_TAC o GSYM) >>
+  Cases_on `FLOOKUP L i.inst_id`
+  >- (`FLOOKUP s.vs_allocas i.inst_id = NONE` by
+        metis_tac[ld_frame_embedding_source, ld_erase_lookup,
+                  optionTheory.OPTION_MAP_EQ_NONE] >>
+      `FLOOKUP t.vs_allocas i.inst_id = NONE` by
+        metis_tac[ld_alloc_account_old_absent] >>
+      `bs = s.vs_alloca_next /\ bs+sz = s'.vs_alloca_next` by
+        metis_tac[ld_alloca_fresh_extent] >>
+      `bt = t.vs_alloca_next /\ bt+sz = t'.vs_alloca_next` by
+        metis_tac[ld_alloca_fresh_extent] >>
+      `t'.vs_alloca_next <= dyn_floor CS s` by metis_tac[] >>
+      rpt gen_tac >> simp[ld_site_entry_def, FLOOKUP_UPDATE] >>
+      Cases_on `owner = (0,k)` >> simp[]
+      >- (rpt strip_tac >> gvs[] >> decide_tac) >>
+      rpt strip_tac >>
+      qpat_x_assum `!owner bs bt sz. _ IN live /\ _ ==> _ <= dyn_floor _ _ /\ _`
+        (qspecl_then [`owner`,`b`,`c`,`n'`] mp_tac) >>
+      simp[ld_site_entry_def]) >>
+  simp[] >> rpt gen_tac >> strip_tac >>
+  qpat_x_assum `!owner bs bt sz. _ IN live /\ _ ==> _ <= dyn_floor _ _ /\ _`
+    drule_all >> simp[]
 QED
 
 Finalise ld_alloca_certificate_backward

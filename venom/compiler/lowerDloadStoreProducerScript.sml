@@ -11,7 +11,7 @@ Ancestors
    Separation is required only among currently live owners. *)
 Theorem ld_fixed_live_write_footprint:
   (!owner bs bt sz. owner IN live /\ ld_site_entry E owner bs bt sz ==>
-    lo <= bs /\ lo <= bt) /\
+    lo <= bs /\ lo <= bt /\ bs+sz <= fl /\ bt+sz <= fl) /\
   (!owner other bs bt sz cs ct cz.
     owner IN live /\ other IN live /\ owner <> other /\
     ld_site_entry E owner bs bt sz /\ ld_site_entry E other cs ct cz ==>
@@ -19,28 +19,23 @@ Theorem ld_fixed_live_write_footprint:
     (bt+sz <= ct \/ ct+cz <= bt)) /\
   ((p = q /\ p+n <= lo) \/
    (?owner bs bt sz. owner IN live /\ ld_site_entry E owner bs bt sz /\
-     bs <= p /\ p+n <= bs+sz /\ q = bt+(p-bs))) ==>
-  (!a b. ((a=b /\ a<lo) \/ ld_site_bytes E live a b) ==>
+     bs <= p /\ p+n <= bs+sz /\ q = bt+(p-bs)) \/
+   (p = q /\ fl <= p)) ==>
+  (!a b. ((a=b /\ a<lo) \/ (a=b /\ fl <= a /\ a < dimword (:256)) \/ ld_site_bytes E live a b) ==>
     ((p<=a /\ a<p+n) <=> (q<=b /\ b<q+n))) /\
-  (!a b. ((a=b /\ a<lo) \/ ld_site_bytes E live a b) /\
+  (!a b. ((a=b /\ a<lo) \/ (a=b /\ fl <= a /\ a < dimword (:256)) \/ ld_site_bytes E live a b) /\
     p<=a /\ a<p+n ==> a-p=b-q)
 Proof
   strip_tac >> rpt conj_tac >> rpt gen_tac >>
   simp[ld_site_bytes_def] >> strip_tac >>
   gvs[] >>
-  qpat_assum `!owner bs bt sz. _ ==> lo <= bs /\ lo <= bt`
-    (fn th => imp_res_tac th)
-  >- decide_tac
-  >- decide_tac
-  >- decide_tac
-  >- (Cases_on `owner = owner'`
-      >- (gvs[ld_site_entry_def] >> decide_tac) >>
-      qpat_x_assum `!owner other bs bt sz cs ct cz. _` drule_all >>
-      decide_tac)
-  >- decide_tac >>
+  qpat_assum `!owner bs bt sz. _ ==> lo <= bs /\ lo <= bt /\ _`
+    (fn th => imp_res_tac th) >>
+  TRY decide_tac >>
   Cases_on `owner = owner'`
   >- (gvs[ld_site_entry_def] >> decide_tac) >>
-  qpat_x_assum `!owner other bs bt sz cs ct cz. _` drule_all >> decide_tac
+  qpat_x_assum `!owner other bs bt sz cs ct cz. _` drule_all >>
+  decide_tac
 QED
 
 Theorem ld_mstore_value_not_pointer[local]:
@@ -66,13 +61,15 @@ Theorem ld_reachable_mstore_backward:
   (!owner bs bt sz. owner IN live /\ ld_site_entry E owner bs bt sz ==>
     lo <= bs /\ lo <= bt /\ bs+sz < dimword(:256) /\
     bt+sz < dimword(:256)) /\
+  (!owner bs bt sz. owner IN live /\ ld_site_entry E owner bs bt sz ==>
+    bs+sz <= dyn_floor CS s /\ bt+sz <= dyn_floor CS s) /\
   (!owner other bs bt sz cs ct cz.
     owner IN live /\ other IN live /\ owner <> other /\
     ld_site_entry E owner bs bt sz /\ ld_site_entry E other cs ct cz ==>
     (bs+sz <= cs \/ cs+cz <= bs) /\
     (bt+sz <= ct \/ ct+cz <= bt)) /\
   op_taint tn value SUBSET count 32 /\ op_taint un value SUBSET count 32 /\
-  ld_byte_rel (\a b. (a=b /\ a<lo) \/ ld_site_bytes E live a b)
+  ld_byte_rel (\a b. (a=b /\ a<lo) \/ (a=b /\ dyn_floor CS s <= a /\ a < dimword (:256)) \/ ld_site_bytes E live a b)
     tn.t_mem un.t_mem (\a. read_memory a 1 s) (\b. read_memory b 1 t) /\
   step_inst fuel CT i t = OK t' ==>
   ?s' x v y w.
@@ -80,7 +77,7 @@ Theorem ld_reachable_mstore_backward:
     s' = mstore (w2n x) v s /\ t' = mstore (w2n y) w t /\
     eval_operand dst s = SOME x /\ eval_operand dst t = SOME y /\
     eval_operand value s = SOME v /\ eval_operand value t = SOME w /\
-    ld_byte_rel (\a b. (a=b /\ a<lo) \/ ld_site_bytes E live a b)
+    ld_byte_rel (\a b. (a=b /\ a<lo) \/ (a=b /\ dyn_floor CS s <= a /\ a < dimword (:256)) \/ ld_site_bytes E live a b)
       (step_taint i s s' tn).t_mem (step_taint i t t' un).t_mem
       (\a. read_memory a 1 s') (\b. read_memory b 1 t')
 Proof
@@ -118,11 +115,12 @@ Proof
   `((w2n x = w2n y /\ w2n x+32 <= lo) \/
     (?owner bs bt sz. owner IN live /\ ld_site_entry E owner bs bt sz /\
       bs <= w2n x /\ w2n x+32 <= bs+sz /\
-      w2n y = bt+(w2n x-bs)))` by
+      w2n y = bt+(w2n x-bs)) \/
+    (w2n x = w2n y /\ dyn_floor CS s <= w2n x))` by
     suspend "write_classification" >>
-  `(!a b. ((a=b /\ a<lo) \/ ld_site_bytes E live a b) ==>
+  `(!a b. ((a=b /\ a<lo) \/ (a=b /\ dyn_floor CS s <= a /\ a < dimword (:256)) \/ ld_site_bytes E live a b) ==>
       ((w2n x<=a /\ a<w2n x+32) <=> (w2n y<=b /\ b<w2n y+32))) /\
-   (!a b. ((a=b /\ a<lo) \/ ld_site_bytes E live a b) /\
+   (!a b. ((a=b /\ a<lo) \/ (a=b /\ dyn_floor CS s <= a /\ a < dimword (:256)) \/ ld_site_bytes E live a b) /\
       w2n x<=a /\ a<w2n x+32 ==> a-w2n x=b-w2n y)` by
     (irule ld_fixed_live_write_footprint >> metis_tac[]) >>
   `step_inst fuel CS i s = OK (mstore (w2n x) v s)` by
@@ -130,7 +128,7 @@ Proof
      qpat_assum `i.inst_opcode = MSTORE` (fn th => pure_rewrite_tac[th]) >>
      simp[exec_write2_def]) >>
   drule_all (ld_mstore_memory_backward |> Q.INST
-    [`R` |-> `\a b. (a=b /\ a<lo) \/ ld_site_bytes E live a b`] |>
+    [`R` |-> `\a b. (a=b /\ a<lo) \/ (a=b /\ dyn_floor CS s <= a /\ a < dimword (:256)) \/ ld_site_bytes E live a b`] |>
     SIMP_RULE (srw_ss()) []) >>
   disch_then (qx_choose_then `ss` strip_assume_tac) >>
   `ss = mstore (w2n x) v s` by
@@ -149,15 +147,21 @@ Resume ld_reachable_mstore_backward[source_operands]:
 QED
 
 Resume ld_reachable_mstore_backward[write_classification]:
-  drule ld_access_write_classification >>
-  disch_then (qspecl_then [`w2n x`,`32`] mp_tac) >> simp[] >> strip_tac
+  mp_tac (Q.INST [`off` |-> `w2n x`, `len` |-> `32`, `inst` |-> `i`,
+                  `fl` |-> `dyn_floor CS s`] ld_access_write_classification) >>
+  impl_tac >- simp[] >> strip_tac
   >- (disj1_tac >> simp[] >>
       `ld_op_prov AG dst = NONE` by
         (qpat_x_assum `!ops. _` mp_tac >>
          simp[mem_write_ops_def, GSYM ld_erase_op_prov]) >>
       drule ld_owned_operand_clean >>
+      disch_then (qspec_then `dst` mp_tac) >> simp[])
+  >~ [`dyn_floor CS s <= w2n _`]
+  >- (rpt disj2_tac >>
+      `ld_op_prov AG dst = NONE` by gvs[mem_write_ops_def, ld_op_prov_def] >>
+      drule ld_owned_operand_clean >>
       disch_then (qspec_then `dst` mp_tac) >> simp[]) >>
-  disj2_tac >>
+  disj2_tac >> disj1_tac >>
   gvs[mem_write_ops_def] >>
   `owner IN live` by metis_tac[] >>
   `v' IN V` by simp[] >>

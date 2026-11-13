@@ -212,9 +212,9 @@ Resume ld_normal_gas_backward[completion]:
     (drule ld_normal_data_masks >> strip_tac >> simp[ld_step_taint_bound]) >>
   qpat_x_assum `s' = _` SUBST_ALL_TAC >>
   qpat_x_assum `t' = _` SUBST_ALL_TAC >>
-  simp[ld_normal_data_def] >>
+  simp[ld_normal_data_def, dyn_floor_def] >>
   qpat_x_assum `ld_normal_data _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _` mp_tac >>
-  simp[ld_normal_data_def, update_var_def, ld_alloc_account_def,
+  simp[ld_normal_data_def, update_var_def, dyn_floor_def, ld_alloc_account_def,
        allocas_from_def, read_memory_def] >>
   strip_tac >> gvs[update_var_def] >> asm_rewrite_tac[]
 QED

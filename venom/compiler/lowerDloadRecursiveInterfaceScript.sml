@@ -3039,6 +3039,12 @@ Proof
     (drule_all ld_configured_scratch_headroom >> simp[]) >>
   `a.inst_id NOTIN A ==> ta.vs_alloca_next + 32 < dimword (:256)` by
     (drule_all lowerDloadAllocationTheory.ld_alloc_account_scratch_absent >> simp[]) >>
+  `ta.vs_alloca_next <= dyn_floor CS s /\
+    (FLOOKUP ta.vs_allocas a.inst_id = NONE ==>
+      ta.vs_alloca_next + 32 <= dyn_floor CS s)` by
+    (drule_all ld_configured_scratch_headroom >> simp[]) >>
+  `a.inst_id NOTIN A ==> ta.vs_alloca_next + 32 <= dyn_floor CS s` by
+    (drule_all lowerDloadAllocationTheory.ld_alloc_account_scratch_absent >> simp[]) >>
   `allocas_non_overlapping ta /\ alloca_next_valid ta` by
     (qpat_assum `alloca_inv ta` mp_tac >>
      POP_ASSUM_LIST (K ALL_TAC) >> simp[venomMemDefsTheory.alloca_inv_def]) >>
@@ -4863,7 +4869,7 @@ Resume ld_recursive_return_normal_prefix[normal_clauses]:
   drule ld_normal_data_geometry >> strip_tac >>
   drule ld_normal_data_masks >> strip_tac >>
   drule ld_normal_data_memory >> strip_tac >>
-  `ld_byte_rel (\a b. (a=b /\ a<lo) \/ ld_site_bytes (DRESTRICT E owners) owners a b)
+  `ld_byte_rel (\a b. (a=b /\ a<lo) \/ (a=b /\ dyn_floor CS s' <= a /\ a < dimword (:256)) \/ ld_site_bytes (DRESTRICT E owners) owners a b)
     tn.t_mem un.t_mem (\a. read_memory a 1 s') (\b. read_memory b 1 t')` by
     (irule lowerDloadCallMemoryTheory.ld_call_return_memory >>
      goal_assum (drule_at Any) >> asm_rewrite_tac [] >>
@@ -5044,7 +5050,7 @@ Proof
     lowerDloadPairedBoundaryTheory.ld_owned_vars_def,
     venomStateTheory.lookup_var_def,
     lowerDloadAllocationTheory.ld_alloc_account_def, allocas_from_def,
-    venomStateTheory.read_memory_def]
+    venomStateTheory.read_memory_def, ptrDisciplineTheory.dyn_floor_def]
 QED
 
 Theorem ld_recursive_return_restore:
@@ -5914,9 +5920,13 @@ Proof
   Cases >> simp[is_terminator_def]
 QED
 
-(* TEMPORARILY CHEATED - P4b in progress: fmp_free_ctx no longer excludes
-   DALLOCA (pre_fmp_ops allows it), so the singleton choice needs a DALLOCA
-   case instead of the no_raw_fmp_ops exclusion below.
+Theorem ld_recursive_combined_singleton_choice_intro[local]:
+  o1_ctx_shape CS /\ fmp_free_ctx CS /\
+  (!g. MEM g CS.ctx_functions ==> fn_ptr_ok P g) /\
+  ~is_terminator j.inst_opcode /\ j.inst_opcode <> INVOKE /\
+  step_inst fuel CT j t = OK z ==>
+  ((^ld_recursive_combined_nonmacro_complete) vs0 CT stk un gn j t ==>
+   (^ld_recursive_combined_singleton_choice) vs0 CT stk un gn j t)
 Proof
   strip_tac >> BETA_TAC >>
   ho_match_mp_tac MONO_AND >> conj_tac >- simp[] >>
@@ -5942,22 +5952,11 @@ Proof
      metis_tac[EL_MEM]) >>
   `fn_ptr_ok P fn` by
     (first_x_assum irule >> simp[]) >>
-  `no_raw_fmp_ops fn` by
-    (qpat_assum `fmp_free_ctx CS` mp_tac >>
-     qpat_assum `CS.ctx_functions = _` mp_tac >>
-     POP_ASSUM_LIST (K ALL_TAC) >>
-     simp[o1PassContractTheory.fmp_free_ctx_def, EVERY_MEM] >> metis_tac[]) >>
   `i.inst_opcode <> MEMTOP /\ i.inst_opcode <> FMP_PARAM /\
    i.inst_opcode <> GETFMP /\ i.inst_opcode <> SETFMP` by
     (qpat_assum `fn_ptr_ok P fn` mp_tac >>
      qpat_assum `MEM i (fn_insts fn)` mp_tac >>
      POP_ASSUM_LIST (K ALL_TAC) >> simp[fn_ptr_ok_def] >> metis_tac[]) >>
-  `i.inst_opcode <> DALLOCA` by
-    (qpat_assum `no_raw_fmp_ops fn` mp_tac >>
-     qpat_assum `MEM i (fn_insts fn)` mp_tac >>
-     POP_ASSUM_LIST (K ALL_TAC) >>
-     simp[no_raw_fmp_ops_def, EVERY_MEM] >>
-     metis_tac[is_raw_fmp_opcode_def]) >>
   `i.inst_opcode <> PHI` by
     (qpat_assum `step_inst fuel CT j t = OK z` mp_tac >>
      qpat_assum `j = i` mp_tac >> POP_ASSUM_LIST (K ALL_TAC) >>
@@ -5968,23 +5967,12 @@ Proof
      `j.inst_opcode <> INVOKE`, `i.inst_opcode <> DLOAD`,
      `i.inst_opcode <> DLOADBYTES`, `i.inst_opcode <> MEMTOP`,
      `i.inst_opcode <> FMP_PARAM`, `i.inst_opcode <> GETFMP`,
-     `i.inst_opcode <> SETFMP`, `i.inst_opcode <> DALLOCA`, `i.inst_opcode <> PHI`] >>
+     `i.inst_opcode <> SETFMP`, `i.inst_opcode <> PHI`] >>
   POP_ASSUM_LIST (K ALL_TAC) >> rpt strip_tac >>
   qpat_x_assum `j = i` SUBST_ALL_TAC >>
   qspec_then `i.inst_opcode` mp_tac ld_singleton_opcode_class >>
   impl_tac >- (rpt conj_tac >> first_assum ACCEPT_TAC) >>
   strip_tac >> asm_rewrite_tac[]
-QED
-*)
-Theorem ld_recursive_combined_singleton_choice_intro[local]:
-  o1_ctx_shape CS /\ fmp_free_ctx CS /\
-  (!g. MEM g CS.ctx_functions ==> fn_ptr_ok P g) /\
-  ~is_terminator j.inst_opcode /\ j.inst_opcode <> INVOKE /\
-  step_inst fuel CT j t = OK z ==>
-  ((^ld_recursive_combined_nonmacro_complete) vs0 CT stk un gn j t ==>
-   (^ld_recursive_combined_singleton_choice) vs0 CT stk un gn j t)
-Proof
-  cheat
 QED
 
 Theorem ld_singleton_reassociate[local]:

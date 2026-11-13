@@ -173,15 +173,16 @@ Resume ld_normal_return_observation[observation]:
         simp[ld_owned_selection_def] >> metis_tac[]) >> metis_tac[]) >>
   `!j. j < w2n n ==>
     ((w2n p+j = w2n q+j /\ w2n p+j < lo) \/
+      (w2n p+j = w2n q+j /\ dyn_floor CS s <= w2n p+j /\ w2n p+j < dimword (:256)) \/
       ld_site_bytes E live (w2n p+j) (w2n q+j))` by
-    (gen_tac >> strip_tac >> irule ld_owned_read_range_geometry >>
-     conj_tac >- metis_tac[] >>
-     goal_assum (drule_at (Pat `ld_owned_vars _ _ _ _ _ _ _ _`)) >>
-     qexistsl_tac [`fn`,`i`,`w2n n`,
-       `<|iao_ofst := off; iao_size := SOME sz; iao_max_size := SOME sz|>`] >>
-     simp[mem_read_ops_def, source_memory_read_ranges_def,
-          memory_range_of_operands_def] >>
-     metis_tac[ld_annotated_access_ok, MEM]) >>
+    (drule_all ld_annotated_access_ok >> strip_tac >>
+     mp_tac (Q.INST [`fl` |-> `dyn_floor CS s`, `n` |-> `w2n (n:bytes32)`,
+       `ops` |-> `<|iao_ofst := off; iao_size := SOME sz; iao_max_size := SOME sz|>`]
+       ld_owned_read_range_geometry) >>
+     asm_rewrite_tac[] >>
+     impl_tac >- (simp[mem_read_ops_def, source_memory_read_ranges_def,
+                       memory_range_of_operands_def] >> metis_tac[MEM]) >>
+     simp[]) >>
   `LENGTH (read_memory (w2n p) (w2n n) s) =
      LENGTH (read_memory (w2n q) (w2n n) t) /\
    (!j. j < w2n n /\ w2n p+j NOTIN tn.t_mem ==>
@@ -190,7 +191,7 @@ Resume ld_normal_return_observation[observation]:
    {j | j < w2n n /\ w2n q+j IN un.t_mem} SUBSET
      {j | j < w2n n /\ w2n p+j IN tn.t_mem}` by
     (irule ld_byte_rel_masked_slice >>
-     qexists_tac `(\a b. (a=b /\ a<lo) \/ ld_site_bytes E live a b)` >>
+     qexists_tac `(\a b. (a=b /\ a<lo) \/ (a=b /\ dyn_floor CS s <= a /\ a < dimword (:256)) \/ ld_site_bytes E live a b)` >>
      conj_tac >- (BETA_TAC >> asm_rewrite_tac[]) >>
      drule ld_normal_data_memory >> simp[]) >>
   suspend "execution"

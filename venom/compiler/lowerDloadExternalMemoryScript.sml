@@ -39,7 +39,11 @@ QED
 (* The declared output range bounds every actually written prefix.  Unlike
    a read footprint this gives both directions of related-byte membership. *)
 Theorem ld_owned_write_prefix_geometry:
-  access_ok lo (ld_erase AG) fn i s /\ ~in_revert_forward fn s /\
+  access_ok lo G fn i s /\
+  (!v x. FLOOKUP (ld_erase AG) v = SOME x ==> FLOOKUP G v = SOME x) /\
+  (!v b z. FLOOKUP AG v = NONE /\ FLOOKUP G v = SOME (b,z) ==>
+     fl <= b /\ b + z < dimword (:256)) /\
+  ~in_revert_forward fn s /\
   mem_write_ops i = SOME ops /\
   MEM (w2n p,n) (source_memory_write_ranges i s) /\
   eval_operand ops.iao_ofst s = SOME p /\
@@ -50,38 +54,45 @@ Theorem ld_owned_write_prefix_geometry:
   (!v owner bs sz. FLOOKUP AG v = SOME(owner,(bs,sz)) ==>
     owner IN live /\ bs+sz < dimword(:256)) /\
   (!owner bs bt sz. owner IN live /\ ld_site_entry E owner bs bt sz ==>
-    lo <= bs /\ lo <= bt /\ bt+sz < dimword(:256)) /\
+    lo <= bs /\ lo <= bt /\ bt+sz < dimword(:256) /\
+    bs+sz <= fl /\ bt+sz <= fl) /\
   (!owner other bs bt sz cs ct cz.
     owner IN live /\ other IN live /\ owner <> other /\
     ld_site_entry E owner bs bt sz /\ ld_site_entry E other cs ct cz ==>
     (bs+sz <= cs \/ cs+cz <= bs) /\
     (bt+sz <= ct \/ ct+cz <= bt)) /\ m <= n ==>
-  (!a b. ((a=b /\ a<lo) \/ ld_site_bytes E live a b) ==>
+  (!a b. ((a=b /\ a<lo) \/ (a=b /\ fl <= a /\ a < dimword (:256)) \/ ld_site_bytes E live a b) ==>
     ((w2n p<=a /\ a<w2n p+m) <=> (w2n q<=b /\ b<w2n q+m))) /\
-  (!a b. ((a=b /\ a<lo) \/ ld_site_bytes E live a b) /\
+  (!a b. ((a=b /\ a<lo) \/ (a=b /\ fl <= a /\ a < dimword (:256)) \/ ld_site_bytes E live a b) /\
     w2n p<=a /\ a<w2n p+m ==> a-w2n p=b-w2n q)
 Proof
   strip_tac >> Cases_on `m = 0` >- simp[] >>
   `n <> 0` by decide_tac >>
   `((w2n p = w2n q /\ w2n p+m <= lo) \/
     (?owner bs bt sz. owner IN live /\ ld_site_entry E owner bs bt sz /\
-      bs <= w2n p /\ w2n p+m <= bs+sz /\ w2n q = bt+(w2n p-bs)))` by
-    (drule ld_access_write_classification >>
-     disch_then (qspecl_then [`w2n p`,`n`] mp_tac) >> simp[] >> strip_tac
+      bs <= w2n p /\ w2n p+m <= bs+sz /\ w2n q = bt+(w2n p-bs)) \/
+    (w2n p = w2n q /\ fl <= w2n p))` by
+    (mp_tac (Q.INST [`off` |-> `w2n p`, `len` |-> `n`, `inst` |-> `i`]
+       ld_access_write_classification) >>
+     impl_tac >- simp[] >> strip_tac
      >- (disj1_tac >>
          `ld_op_prov AG ops.iao_ofst = NONE` by gvs[GSYM ld_erase_op_prov] >>
          drule ld_owned_operand_clean >>
          disch_then (qspec_then `ops.iao_ofst` mp_tac) >> simp[] >>
-         strip_tac >> gvs[] >> decide_tac) >>
-     gvs[] >>
-     `?bt. ld_site_entry E owner bs bt sz /\
-       FLOOKUP BH v = SOME(owner,(bt,sz)) /\
-       w2n q = bt+(w2n p-bs) /\ w2n q+n <= bt+sz` by
-       (irule ld_owned_address_transport >> simp[] >>
-        conj_tac >- metis_tac[] >> conj_tac >- metis_tac[] >>
-        qexistsl_tac [`AG`,`U`,`s`,`t`,`tn`,`un`] >> simp[]) >>
-     disj2_tac >> qexistsl_tac [`owner`,`bs`,`bt`,`sz`] >> simp[] >>
-     metis_tac[]) >>
+         strip_tac >> gvs[] >> decide_tac)
+     >- (gvs[] >>
+         `?bt. ld_site_entry E owner bs bt sz /\
+           FLOOKUP BH v = SOME(owner,(bt,sz)) /\
+           w2n q = bt+(w2n p-bs) /\ w2n q+n <= bt+sz` by
+           (irule ld_owned_address_transport >> simp[] >>
+            conj_tac >- metis_tac[] >> conj_tac >- metis_tac[] >>
+            qexistsl_tac [`AG`,`U`,`s`,`t`,`tn`,`un`] >> simp[]) >>
+         disj2_tac >> disj1_tac >> qexistsl_tac [`owner`,`bs`,`bt`,`sz`] >> simp[] >>
+         metis_tac[]) >>
+     gvs[] >> rpt disj2_tac >>
+     `ld_op_prov AG (Var v) = NONE` by simp[ld_op_prov_def] >>
+     drule ld_owned_operand_clean >>
+     disch_then (qspec_then `Var v` mp_tac) >> simp[]) >>
   irule ld_fixed_live_write_footprint >> metis_tac[]
 QED
 
@@ -116,7 +127,7 @@ Theorem ld_external_memory_preserved:
   s'.vs_returndata = bs /\ t'.vs_returndata = bs /\
   s'.vs_memory = (write_memory_with_expansion (w2n p) (TAKE n bs) s).vs_memory /\
   t'.vs_memory = (write_memory_with_expansion (w2n q) (TAKE n bs) t).vs_memory ==>
-  ld_byte_rel (\a b. (a=b /\ a<lo) \/ ld_site_bytes E live a b)
+  ld_byte_rel (\a b. (a=b /\ a<lo) \/ (a=b /\ dyn_floor CS s <= a /\ a < dimword (:256)) \/ ld_site_bytes E live a b)
     (step_taint i s s' tn).t_mem (step_taint i t t' un).t_mem
     (\a. read_memory a 1 s') (\b. read_memory b 1 t')
 Proof
@@ -134,15 +145,15 @@ Proof
      qpat_x_assum `!v. ld_owned_selection E _ _`
        (qspec_then `v` mp_tac) >>
      simp[ld_owned_selection_def] >> strip_tac >> metis_tac[]) >>
-  `(!a b. ((a=b /\ a<lo) \/ ld_site_bytes E live a b) ==>
+  `(!a b. ((a=b /\ a<lo) \/ (a=b /\ dyn_floor CS s <= a /\ a < dimword (:256)) \/ ld_site_bytes E live a b) ==>
       ((w2n p<=a /\ a<w2n p+LENGTH (TAKE n bs)) <=>
        (w2n q<=b /\ b<w2n q+LENGTH (TAKE n bs)))) /\
-   (!a b. ((a=b /\ a<lo) \/ ld_site_bytes E live a b) /\
+   (!a b. ((a=b /\ a<lo) \/ (a=b /\ dyn_floor CS s <= a /\ a < dimword (:256)) \/ ld_site_bytes E live a b) /\
       w2n p<=a /\ a<w2n p+LENGTH (TAKE n bs) ==> a-w2n p=b-w2n q)` by
-    (irule ld_owned_write_prefix_geometry >>
-     conj_tac >- metis_tac[] >> conj_tac >- metis_tac[] >>
-     goal_assum (drule_at (Pat `access_ok _ _ _ _ _`)) >>
-     simp[LENGTH_TAKE_EQ] >> metis_tac[]) >>
+    (mp_tac (Q.INST [`fl` |-> `dyn_floor CS s`, `m` |-> `LENGTH (TAKE n bs)`]
+       ld_owned_write_prefix_geometry) >>
+     asm_rewrite_tac[] >>
+     impl_tac >- (simp[LENGTH_TAKE_EQ] >> metis_tac[]) >> simp[]) >>
   `(step_taint i s s' tn).t_mem =
      tn.t_mem DIFF {a | w2n p<=a /\ a<w2n p+LENGTH (TAKE n bs)}` by
     (metis_tac[ld_external_return_mem_taint]) >>
@@ -150,7 +161,7 @@ Proof
      un.t_mem DIFF {b | w2n q<=b /\ b<w2n q+LENGTH (TAKE n bs)}` by
     (metis_tac[ld_external_return_mem_taint]) >>
   drule ld_normal_data_memory >> disch_tac >>
-  `ld_byte_rel (\a b. (a=b /\ a<lo) \/ ld_site_bytes E live a b)
+  `ld_byte_rel (\a b. (a=b /\ a<lo) \/ (a=b /\ dyn_floor CS s <= a /\ a < dimword (:256)) \/ ld_site_bytes E live a b)
      (tn.t_mem DIFF {a | w2n p<=a /\ a<w2n p+LENGTH (TAKE n bs)})
      (un.t_mem DIFF {b | w2n q<=b /\ b<w2n q+LENGTH (TAKE n bs)})
      (\a. read_memory a 1 (write_memory_with_expansion (w2n p) (TAKE n bs) s))

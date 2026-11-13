@@ -14,11 +14,11 @@ Ancestors
   venomExecSemantics venomState venomInst list finite_map pred_set arithmetic words
 
 Theorem ld_byte_rel_fresh_region[local]:
-  ld_byte_rel (\a b. (a=b /\ a<lo) \/ ld_site_bytes E live a b) Ts Tt ms mt /\
+  ld_byte_rel (\a b. (a=b /\ a<lo) \/ (a=b /\ fl <= a /\ a < dimword (:256)) \/ ld_site_bytes E live a b) Ts Tt ms mt /\
   (!owner bs bt sz. owner IN live /\ ld_site_entry E owner bs bt sz ==>
      bt + sz <= n) /\
   (!b. b IN R ==> n <= b) ==>
-  ld_byte_rel (\a b. (a=b /\ a<lo) \/ ld_site_bytes E live a b)
+  ld_byte_rel (\a b. (a=b /\ a<lo) \/ (a=b /\ fl <= a /\ a < dimword (:256)) \/ ld_site_bytes E live a b)
     (Ts UNION R) (Tt UNION R) ms mt
 Proof
   rewrite_tac[ld_byte_rel_def, IN_UNION] >> BETA_TAC >> strip_tac >>
@@ -47,7 +47,7 @@ Theorem ld_normal_data_fmp_region[local]:
     astk live keys d A suspended gstk f
 Proof
   rewrite_tac[ld_normal_data_def] >> strip_tac >>
-  `ld_byte_rel (\a b. (a=b /\ a<lo) \/ ld_site_bytes E live a b)
+  `ld_byte_rel (\a b. (a=b /\ a<lo) \/ (a=b /\ dyn_floor CS s <= a /\ a < dimword (:256)) \/ ld_site_bytes E live a b)
      (tn.t_mem UNION R) (un.t_mem UNION R)
      (\a. read_memory a 1 s) (\b. read_memory b 1 t)` by
     (irule ld_byte_rel_fresh_region >>
@@ -61,7 +61,7 @@ Proof
        ld_shared_state_def, op_taint_def, lookup_var_def] >>
   strip_tac >>
   fs[ld_alloc_account_def, allocas_from_def, read_memory_def, op_taint_def,
-     lookup_var_def] >>
+     lookup_var_def, dyn_floor_def] >>
   rpt conj_tac >>
   FIRST [first_assum ACCEPT_TAC, rpt strip_tac >> res_tac >> fs[]]
 QED

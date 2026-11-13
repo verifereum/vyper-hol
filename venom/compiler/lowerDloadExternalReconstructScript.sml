@@ -26,7 +26,7 @@ Theorem ld_external_normal_reconstruct:
   s' = update_var out w rS /\ t' = update_var out w rT /\
   tn' = step_taint i s s' tn /\ un' = step_taint i t t' un /\
   ld_shared_state tn' un' s' t' /\
-  ld_byte_rel (\a b. (a=b /\ a<lo) \/ ld_site_bytes E live a b)
+  ld_byte_rel (\a b. (a=b /\ a<lo) \/ (a=b /\ dyn_floor CS s <= a /\ a < dimword (:256)) \/ ld_site_bytes E live a b)
     tn'.t_mem un'.t_mem (\a. read_memory a 1 s') (\b. read_memory b 1 t') /\
   un'.t_stor SUBSET tn'.t_stor /\ un'.t_trans SUBSET tn'.t_trans /\
   un'.t_imm SUBSET tn'.t_imm /\
@@ -69,6 +69,8 @@ Proof
   drule ld_normal_data_masks >> strip_tac >>
   drule ld_normal_data_envelope >> disch_tac >>
   drule ld_normal_data_companions >> strip_tac >>
+  `dyn_floor CS (update_var out w rS) = dyn_floor CS s` by
+    simp[dyn_floor_def, update_var_def] >>
   simp[ld_normal_data_def] >>
   conj_tac
   >- (simp[FLOOKUP_DRESTRICT] >> metis_tac[]) >>
