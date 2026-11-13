@@ -224,3 +224,27 @@ Proof
   `~(u with vs_inst_idx := SUC t.vs_inst_idx).vs_halted` by simp[] >>
   metis_tac[gas_path_rules, ADD_0]
 QED
+
+Theorem tuple_immutable_callee_counted_abort:
+  gas_invoke_entry (ctx,func) t callee entered /\
+  gas_marked_path F ctx callee entered n (Abort a cs') ==>
+  ?fuel bb inst name arg_ops argv setup.
+    lookup_block t.vs_current_bb func.fn_blocks = SOME bb /\
+    get_instruction bb t.vs_inst_idx = SOME inst /\
+    inst.inst_opcode = INVOKE /\
+    decode_invoke inst = SOME (name,arg_ops) /\
+    lookup_function name ctx.ctx_functions = SOME callee /\
+    eval_operands arg_ops t = SOME argv /\
+    setup_callee callee argv t = SOME setup /\
+    run_blocks fuel ctx callee setup = Abort a cs' /\
+    gas_count_step fuel ctx inst t = n
+Proof
+  strip_tac >>
+  `gas_path ctx callee entered n (Abort a cs')` by
+    metis_tac[gas_marked_path_exec] >>
+  drule counted_path_exit >> simp[exit_result_def] >> strip_tac >>
+  gvs[gas_invoke_entry_def] >>
+  drule_all counted_enter >> strip_tac >>
+  qexists_tac `SUC fuel` >>
+  simp[gas_count_step_def]
+QED
