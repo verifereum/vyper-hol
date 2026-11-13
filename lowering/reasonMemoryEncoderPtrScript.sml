@@ -141,8 +141,9 @@ Resume reason_memory_encoder_path_ptr[compose]:
   qpat_x_assum `m = _` SUBST_ALL_TAC >>
   fs[] >>
   `stmt_state_rel ctx func cenv cx ee t` by fs[expr_post_def] >>
-  drule_at (Pat `reason_encode_finish _ _ _ _ _ = _`)
-    reason_memory_suffix_path_ptr_curried >>
+  qpat_assum `reason_encode_finish _ _ _ _ _ = _`
+    (mp_then (Pat `reason_encode_finish _ _ _ _ _ = _`) mp_tac
+       reason_memory_suffix_path_ptr_curried) >>
   disch_then (drule_at (Pat `stmt_state_rel _ _ _ _ _ _`)) >>
   disch_then (drule_at (Pat `ptr_mem_ok _ _ _ _ _ _ _`)) >>
   disch_then (drule_at (Pat `not_fresh_at _ _`)) >>
