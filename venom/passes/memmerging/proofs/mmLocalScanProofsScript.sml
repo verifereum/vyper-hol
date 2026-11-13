@@ -18671,6 +18671,51 @@ QED
 
 Finalise mm_local_zero_revert_forward_transport
 
+Theorem mm_local_zero_in_revert_forward_transport[local]:
+  ALL_DISTINCT (MAP (\b. b.bb_label) fn.fn_blocks) /\
+  index < LENGTH fn.fn_blocks /\ bb = EL index fn.fn_blocks /\
+  ALL_DISTINCT (MAP (\i. i.inst_id) bb.bb_instructions) /\
+  f = apply_memzero_inst_supply
+    (nop_ids_of_groups dfg Mem2Mem bb.bb_instructions
+      (scan_block_memzero dfg bb).mz_flushed)
+    (rep_map_of_groups bb.bb_instructions
+      (scan_block_memzero dfg bb).mz_flushed) /\
+  EVERY (\i. inst_wf i /\
+    !v. MEM (Var v) i.inst_operands ==> v IN P) bb.bb_instructions /\
+  (!v. v IN P ==> MEM v supply.irs_used_vars) /\
+  mm_flat_map_supply f supply (TAKE n bb.bb_instructions) = (pre,sn) /\
+  transform_block_memzero_supply dfg supply bb = (bb',supply') /\
+  s.vs_current_bb = bb.bb_label /\ s.vs_inst_idx = n /\
+  t.vs_current_bb = bb.bb_label /\ t.vs_inst_idx = LENGTH pre /\
+  in_revert_forward fn s ==>
+  in_revert_forward (fn with fn_blocks := LUPDATE bb' index fn.fn_blocks) t
+Proof
+  strip_tac >>
+  `bb'.bb_label = bb.bb_label` by
+    metis_tac[mmSupplyWfProofsTheory.transform_block_memzero_supply_label] >>
+  `MAP (\b. b.bb_label) (LUPDATE bb' index fn.fn_blocks) =
+   MAP (\b. b.bb_label) fn.fn_blocks` by
+    (simp[NoAsms, LUPDATE_MAP] >>
+     `bb'.bb_label = EL index (MAP (\b. b.bb_label) fn.fn_blocks)` by simp[EL_MAP] >>
+     pop_assum SUBST1_TAC >> irule LUPDATE_SAME >> simp[]) >>
+  `lookup_block s.vs_current_bb fn.fn_blocks = SOME bb` by
+    (irule venomExecProofsTheory.MEM_lookup_block >> simp[EL_MEM]) >>
+  `lookup_block t.vs_current_bb (LUPDATE bb' index fn.fn_blocks) = SOME bb'` by
+    (irule venomExecProofsTheory.MEM_lookup_block >> simp[MEM_LUPDATE] >>
+     metis_tac[]) >>
+  `revert_forward_at bb n` by
+    gvs[contextCodegenRelTheory.in_revert_forward_def] >>
+  simp[contextCodegenRelTheory.in_revert_forward_def] >>
+  qexists `bb'` >> conj_tac >- metis_tac[] >>
+  qpat_x_assum `revert_forward_at bb n` mp_tac >>
+  pure_rewrite_tac[contextCodegenRelTheory.revert_forward_at_def] >>
+  disch_then (qx_choose_then `j` strip_assume_tac) >>
+  Cases_on `mm_flat_map_supply f supply (TAKE j bb.bb_instructions)` >>
+  rename1 `mm_flat_map_supply f supply (TAKE j bb.bb_instructions) = (prej,sj)` >>
+  qexists `LENGTH prej` >>
+  metis_tac[mm_local_zero_revert_forward_transport]
+QED
+
 Theorem mm_local_zero_noninvoke_stop[local]:
   mm_local_zero_cut dfg is gs H n excluded pc t /\
   (!v. MEM (Var v) i.inst_operands ==> v NOTIN excluded) /\
