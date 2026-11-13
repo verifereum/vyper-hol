@@ -272,7 +272,7 @@ Proof
    ?k. v = IntV (&k) /\ k < dimword (:256) /\ eval_operand lop t' = SOME (n2w k)` by
     (irule (INST_TYPE [alpha |-> ``:256``] slice_uint_read_post) >>
      goal_assum (drule_at Any) >> simp[] >>
-     goal_assum (drule_at Any) >> simp[] >> metis_tac[]) >>
+     qexists_tac `gs2` >> fs[] >> metis_tac[]) >>
   gvs[] >>
   `~t'.vs_halted` by metis_tac[slice_marked_read_ok_not_halted] >>
   first_x_assum irule >>
@@ -626,7 +626,7 @@ Proof
    ?k. v = IntV (&k) /\ k < dimword (:256) /\ eval_operand lop t' = SOME (n2w k)` by
     (irule (INST_TYPE [alpha |-> ``:256``] slice_uint_read_post) >>
      goal_assum (drule_at Any) >> simp[] >>
-     goal_assum (drule_at Any) >> simp[] >> metis_tac[]) >>
+     qexists_tac `gs2` >> fs[] >> metis_tac[]) >>
   gvs[] >>
   `~t'.vs_halted` by metis_tac[slice_marked_read_ok_not_halted] >>
   first_x_assum irule >>
