@@ -7780,7 +7780,7 @@ Theorem mm_local_write_rep_unique[local]:
   ir_supply_covers_fn supply fn0 /\ index < LENGTH fn0.fn_blocks /\
   k <= 4 /\ mm_local_prefix fn0 supply index k = (bb,sk) /\
   is = bb.bb_instructions /\
-  gs = (scan_block (dfg_build_function fn0) Mem2Mem bb).ss_flushed /\
+  gs = (scan_block (dfg_build_function fn0) mode bb).ss_flushed /\
   j < LENGTH is /\
   (EL j is).inst_opcode IN {MSTORE; MCOPY; CALLDATACOPY; DLOADBYTES} /\
   MEM a gs /\ MEM b gs /\ MEM (EL j is).inst_id a.cg_inst_ids /\
@@ -7791,7 +7791,7 @@ Proof
   strip_tac >>
   `a = b` by
     (irule mm_local_prefix_write_group_owner >>
-     qexistsl [`bb`, `fn0`, `index`, `k`, `Mem2Mem`, `sk`, `supply`, `EL j is`] >>
+     qexistsl [`bb`, `fn0`, `index`, `k`, `mode`, `sk`, `supply`, `EL j is`] >>
      gvs[] >> metis_tac[EL_MEM]) >>
   `ALL_DISTINCT (MAP (\i. i.inst_id) is)` by
     metis_tac[mm_local_prefix_wf_id_distinct] >>
@@ -7810,7 +7810,7 @@ Theorem mm_local_rep_index_eq[local]:
   ir_supply_covers_fn supply fn0 /\ index < LENGTH fn0.fn_blocks /\
   k <= 4 /\ mm_local_prefix fn0 supply index k = (bb,sk) /\
   is = bb.bb_instructions /\
-  gs = (scan_block (dfg_build_function fn0) Mem2Mem bb).ss_flushed /\
+  gs = (scan_block (dfg_build_function fn0) mode bb).ss_flushed /\
   j < LENGTH is /\
   (EL j is).inst_opcode IN {MSTORE; MCOPY; CALLDATACOPY; DLOADBYTES} /\
   MEM g gs /\ MEM (EL j is).inst_id g.cg_inst_ids /\ r < LENGTH is /\
@@ -8090,7 +8090,7 @@ Theorem mm_local_canonical_rep_write[local]:
   ir_supply_covers_fn supply fn0 /\ index < LENGTH fn0.fn_blocks /\
   k <= 4 /\ mm_local_prefix fn0 supply index k = (bb,sk) /\
   is = bb.bb_instructions /\
-  gs = (scan_block (dfg_build_function fn0) Mem2Mem bb).ss_flushed /\
+  gs = (scan_block (dfg_build_function fn0) mode bb).ss_flushed /\
   n < LENGTH is /\ MEM g gs /\
   rep_of_group is g = SOME ((EL n is).inst_id,g) ==>
   (EL n is).inst_opcode IN {MSTORE; MCOPY; CALLDATACOPY; DLOADBYTES}
@@ -8100,7 +8100,7 @@ Proof
     metis_tac[mm_local_prefix_wf_id_distinct] >>
   `MEM (EL n is) bb.bb_instructions` by metis_tac[EL_MEM] >>
   `ALOOKUP (rep_map_of_groups bb.bb_instructions
-    (scan_block (dfg_build_function fn0) Mem2Mem bb).ss_flushed)
+    (scan_block (dfg_build_function fn0) mode bb).ss_flushed)
     (EL n is).inst_id = SOME g` by
     (qpat_x_assum `is = _` SUBST_ALL_TAC >>
      qpat_x_assum `gs = _` SUBST_ALL_TAC >>
@@ -8113,7 +8113,7 @@ Theorem mm_local_canonical_due_group[local]:
   ir_supply_covers_fn supply fn0 /\ index < LENGTH fn0.fn_blocks /\
   k <= 4 /\ mm_local_prefix fn0 supply index k = (bb,sk) /\
   is = bb.bb_instructions /\
-  gs = (scan_block (dfg_build_function fn0) Mem2Mem bb).ss_flushed /\
+  gs = (scan_block (dfg_build_function fn0) mode bb).ss_flushed /\
   n < LENGTH is /\ MEM g gs /\
   rep_of_group is g = SOME ((EL n is).inst_id,g) /\
   js = mm_local_pending_indices is gs n /\
@@ -8140,7 +8140,7 @@ Proof
       `MEM (EL n is).inst_id g'.cg_inst_ids` by metis_tac[mm_local_rep_member] >>
       `g' = g` by
         (irule mm_local_prefix_write_group_owner >>
-         qexistsl [`bb`, `fn0`, `index`, `k`, `Mem2Mem`, `sk`, `supply`, `EL n is`] >>
+         qexistsl [`bb`, `fn0`, `index`, `k`, `mode`, `sk`, `supply`, `EL n is`] >>
          gvs[] >> metis_tac[EL_MEM]) >> gvs[]) >>
   strip_tac >> `j < LENGTH is` by decide_tac >>
   `mm_local_rep_index is gs j = n` by
