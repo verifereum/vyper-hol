@@ -271,7 +271,7 @@ Proof
    MAP FDOM (mid with gas_obs := []).scopes = MAP FDOM (mid' with gas_obs := []).scopes /\
    ?k. v = IntV (&k) /\ k < dimword (:256) /\ eval_operand lop t' = SOME (n2w k)` by
     (irule slice_uint_read_post >> goal_assum (drule_at Any) >> simp[] >>
-     goal_assum (drule_at Any) >> simp[] >> metis_tac[]) >>
+     first_assum (irule_at Any) >> simp[] >> metis_tac[]) >>
   gvs[] >>
   `~t'.vs_halted` by metis_tac[slice_marked_read_ok_not_halted] >>
   first_x_assum irule >>
@@ -624,7 +624,7 @@ Proof
    MAP FDOM (mid with gas_obs := []).scopes = MAP FDOM (mid' with gas_obs := []).scopes /\
    ?k. v = IntV (&k) /\ k < dimword (:256) /\ eval_operand lop t' = SOME (n2w k)` by
     (irule slice_uint_read_post >> goal_assum (drule_at Any) >> simp[] >>
-     goal_assum (drule_at Any) >> simp[] >> metis_tac[]) >>
+     first_assum (irule_at Any) >> simp[] >> metis_tac[]) >>
   gvs[] >>
   `~t'.vs_halted` by metis_tac[slice_marked_read_ok_not_halted] >>
   first_x_assum irule >>
