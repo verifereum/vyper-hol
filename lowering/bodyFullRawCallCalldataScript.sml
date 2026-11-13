@@ -8,8 +8,8 @@
  *)
 Theory bodyFullRawCallCalldata
 Ancestors
-  bodyFullPreds bodySimFull bodyPtrCallCalldata exprSimHypsDefs fragExec
-  ptrDiscipline exprLowering vyperAST list
+  bodyFullPreds bodySimFull rawCallCalldataDalloca exprSimHypsDefs fragExec
+  ptrDiscipline exprLowering vyperTypeSystem vyperAST list
 
 val _ = Parse.hide "body";
 
@@ -21,12 +21,14 @@ Proof
   rw[body_expr_full_ok_def] >>
   `es <> []` by (strip_tac >> gvs[expr_body_pre_def, well_typed_expr_def]) >>
   rw[expr_sim_full_def, expr_vv_sim_full_def] >>
-  qpat_x_assum `~ctx_has_dalloca _` mp_tac >>
-  simp[ctx_has_dalloca_def, EXISTS_MEM] >>
-  first_assum (irule_at Any) >>
-  simp[GSYM EXISTS_MEM]
-  >- (drule lower_value_compile_expr_split >> strip_tac >>
-      `fn_has_code sa sm func` by metis_tac[fn_has_code_split] >>
+  `EXISTS (\inst. inst.inst_opcode = DALLOCA) (fn_insts func)`
+    suffices_by (strip_tac >> gvs[ctx_has_dalloca_def, EXISTS_MEM] >>
+                 metis_tac[])
+  >- (qpat_assum `lower_value _ _ _ (Call _ _ _ _) sa = _`
+        (strip_assume_tac o MATCH_MP lower_value_compile_expr_split) >>
+      `fn_has_code sa sm func` by
+        (qspecl_then [`sa`, `sm`, `sb`, `func`] mp_tac fn_has_code_split >>
+         fs[]) >>
       drule_all compile_expr_raw_call_calldata_dalloca >> simp[]) >>
   drule_all compile_expr_raw_call_calldata_dalloca >> simp[]
 QED
