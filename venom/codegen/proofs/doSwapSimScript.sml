@@ -2584,7 +2584,7 @@ Proof
   first_assum ACCEPT_TAC
 QED
 
-Theorem deep_swap_occurrence_offsets[local]:
+Theorem deep_swap_occurrence_offsets:
   !dist items al sp.
     dist > 16 /\ LENGTH items = dist + 1 /\
     spill_alloc_layout_wf al sp /\
