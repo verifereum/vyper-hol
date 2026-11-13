@@ -21,6 +21,8 @@ Ancestors
   exprSimSource exprSimHypsDefs list exprSimHyps exprSimPop exprSimAttribute exprSimTuple exprSimPopStorage exprSimPopNested
   exprSimArrayIndex exprSimSubscriptArrayFramed exprSimSubscriptArrayCompose
   exprLowering placeTypingProps vyperAST vyperTypeSystem vyperTypeCallGraph
+  exprSimCopiedPrefix exprSimCopiedCompile exprSimCopiedCompose
+  exprSimCopiedAlloc exprSimCopiedSnapshot exprSimCopiedFrame exprSimCopiedSuffix
 
 (* An element of an array whose index leaves the locals and the immutables
    as they were, and whose base the index's fragment keeps as it is: an
@@ -324,8 +326,66 @@ Theorem compile_subscript_array_copied_base_case:
     subscript_reads_base cx obj idx /\ copies_subscript_base cenv obj idx ==>
     expr_vv_case nocalls ctx func cenv cx (Subscript ann obj idx)
 Proof
+  rpt gen_tac >>
+  disch_then (map_every assume_tac o CONJUNCTS) >>
+  simp[expr_vv_case_def] >> rpt gen_tac >> strip_tac >>
+  `post_value_type cenv obj = expr_type obj` by
+    (Cases_on `nocalls` >> fs[] >>
+     `int_calls_expr obj = []` by fs[int_calls_expr_def] >>
+     drule post_value_type_no_calls >> simp[]) >>
+  drule_all_then assume_tac
+    exprSimSubscriptArraySourceTheory.expr_body_pre_array_subscript_base >>
+  `expr_vv_sim ctx func cenv cx ty obj es` by
+    (qpat_x_assum `expr_vv_case _ _ _ _ _ obj` mp_tac >>
+     simp[expr_vv_case_def] >> disch_then irule >>
+     conj_tac >- (strip_tac >> fs[int_calls_expr_def]) >>
+     qexists_tac `env` >> simp[]) >>
+  simp[exprSimDefsTheory.expr_vv_sim_def] >> rpt gen_tac >> strip_tac >>
+  drule_all compile_expr_array_subscript_copied_base_prefix >> strip_tac >>
+  rename1 `compile_expr cenv ty obj sa = (bvv, sm)` >>
+  drule exprSimUnwrapTheory.compile_expr_extends >> strip_tac >>
+  `gas_admissible (eval_expr cx obj) expr_vv_res_ok es` by
+    (simp[gasContextTheory.gas_admissible_def] >> rpt strip_tac >>
+     metis_tac[expr_body_pre_gas_obs, expr_body_pre_vv_res_ok]) >>
+  drule_all fragExecTheory.fn_has_code_split >> strip_tac >>
+  qpat_x_assum `expr_vv_sim _ _ _ _ _ obj _`
+    (mp_tac o REWRITE_RULE [exprSimDefsTheory.expr_vv_sim_def]) >>
+  disch_then (qspecl_then [`sa`,`sm`,`bvv`,`s0`] mp_tac) >>
+  (impl_tac >- simp[]) >>
+  rewrite_tac[gasOutcomeTheory.gas_outcome_def] >> strip_tac
+  >- (qpat_x_assum `gas_summary_at _ _ _ _ _ _ _`
+        (strip_assume_tac o PURE_ONCE_REWRITE_RULE [gasSummaryTheory.gas_summary_at_def])
+      >- suspend "copied_normal"
+      >> suspend "copied_exit") >>
+  suspend "copied_exempt"
+QED
+Resume compile_subscript_array_copied_base_case[copied_normal]:
+  qpat_x_assum `(\res ee t. _) _ _ _` (strip_assume_tac o BETA_RULE) >>
+  gnvs[] >>
   cheat
 QED
+Resume compile_subscript_array_copied_base_case[copied_exit]:
+  Cases_on `res` >- fs[] >> rename1 `INR exc` >>
+  qexists_tac `marks` >> disj1_tac >>
+  simp[gasSummaryTheory.gas_summary_at_def] >>
+  qexistsl_tac [`INR exc`,`es_end`,`r`] >> simp[] >>
+  drule eval_expr_subscript_copied_bind >>
+  disch_then (qspec_then `ann` SUBST1_TAC) >>
+  conj_tac
+  >- (irule gasSummaryComposeTheory.gas_marked_exec_bind_exception >>
+      irule gasSummaryComposeTheory.gas_marked_exec_bind_exception >>
+      first_assum ACCEPT_TAC) >> fs[]
+QED
+Resume compile_subscript_array_copied_base_case[copied_exempt]:
+  qexists_tac `marks` >> disj2_tac >>
+  qexistsl_tac [`err`,`ee`,`leaf`,`finish'`] >>
+  drule eval_expr_subscript_copied_bind >>
+  disch_then (qspec_then `ann` SUBST1_TAC) >>
+  pure_rewrite_tac[vyperStateTheory.ignore_bind_def, vyperStateTheory.bind_assoc] >>
+  irule gasExemptCertTheory.gas_exempt_cert_error_result >>
+  first_assum ACCEPT_TAC
+QED
+Finalise compile_subscript_array_copied_base_case
 
 (* The base's source result still reads at the index's end: a local's
    path, a storage place's slots (live and in range), or a runtime
