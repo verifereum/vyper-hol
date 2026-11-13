@@ -61,11 +61,11 @@ Theorem membership_args_head_outcome_facts:
       Inv ee)) /\ Inv es /\
   (!es gs. Inv es ==> Inv (es with gas_obs := gs)) /\
   ptr_args_ready d ctx PG func cenv cx arg_ty Inv (e0::args) /\
-  gas_outcome_ptr D tops (ctx,func) PG
+  gas_outcome_ptr D tops (ctx,func) PG cx st0
     (do r <- eval_expr cx e0; read_result cx r od) (es,s0,G0,tn0) Q R ==>
-  gas_outcome_ptr D tops (ctx,func) PG
+  gas_outcome_ptr D tops (ctx,func) PG cx st0
     (do r <- eval_expr cx e0; read_result cx r od) (es,s0,G0,tn0)
-    (\rr ee G tn t. Q rr ee G tn t /\ ~t.vs_halted /\
+    (\H rr ee G tn t. Q H rr ee G tn t /\ ~t.vs_halted /\
       (!v. rr = INL v ==>
         Inv ee /\ ptr_args_ready d ctx PG func cenv cx arg_ty Inv args /\
         MAP FDOM es.scopes = MAP FDOM ee.scopes)) R
