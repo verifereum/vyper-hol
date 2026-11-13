@@ -29,6 +29,7 @@ Theorem env_reads_step_full:
     t.vs_current_bb = sb.cs_current_bb /\ t.vs_inst_idx = LENGTH sb.cs_current_insts /\
     alloca_history func t /\ t.vs_memory = s0.vs_memory /\
     t.vs_allocas = s0.vs_allocas /\ t.vs_alloca_next = s0.vs_alloca_next /\
+    tn'.t_mem = tn0.t_mem /\
     (!x. not_fresh_at sa x ==>
       lookup_var x t = lookup_var x s0 /\ FLOOKUP G' x = FLOOKUP G0 x /\
       op_taint tn' (Var x) = op_taint tn0 (Var x)) /\
@@ -118,5 +119,9 @@ Proof
        lookup_var_def, FLOOKUP_UPDATE, Abbr `inst`, Abbr `opc`, mk_inst_def,
        step_prov_def, out_prov_def, set_prov_def, op_prov_def,
        step_taint_def, op_taint_def, out_taint_def, set_var_taint_def,
-       FLOOKUP_DRESTRICT])
+       mem_taint_def, store_taint_def, adopt_reset_def, imm_taint_def,
+       new_site_bytes_def, step_writes_def, written_taint_def, range_bytes_def,
+       codegenRelTheory.source_memory_write_ranges_def,
+       FLOOKUP_DRESTRICT] >>
+  simp[FLOOKUP_DEF, pred_setTheory.EXTENSION] >> metis_tac[])
 QED
