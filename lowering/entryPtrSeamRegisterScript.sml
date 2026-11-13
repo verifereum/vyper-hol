@@ -3822,7 +3822,8 @@ QED
 
 Finalise registration_actual_endpoint_relations
 
-(* Code bytes are immutable along the successful checked execution itself. *)
+(* Code bytes and labels are immutable along the successful checked
+   execution itself. *)
 Theorem registration_path_edge_code[local]:
   fragGasPath$gas_path_edge ctx fn s n (OK t) ==> t.vs_code = s.vs_code
 Proof
@@ -3834,13 +3835,24 @@ Proof
   >> simp[jump_to_def]
 QED
 
-Theorem registration_path_code[local]:
+Theorem registration_path_edge_labels[local]:
+  fragGasPath$gas_path_edge ctx fn s n (OK t) ==> t.vs_labels = s.vs_labels
+Proof
+  rw[fragGasPathTheory.gas_path_edge_def] >> gvs[fragExecTheory.exit_result_def]
+  >- metis_tac[venomInstProofsTheory.step_preserves_labels]
+  >- (drule_all venomExecProofsTheory.step_inst_ok_terminator_jump >> strip_tac >>
+      drule venomExecProofsTheory.eval_phis_only_updates_vs_vars >> strip_tac >>
+      gvs[step_inst_non_invoke,step_inst_base_opcode_eqs,jump_to_def,AllCaseEqs()])
+  >> simp[jump_to_def]
+QED
+
+Theorem registration_path_code:
   !ctx fn s n r. fragGasPath$gas_path ctx fn s n r ==>
-    !t. r = OK t ==> t.vs_code = s.vs_code
+    !t. r = OK t ==> t.vs_code = s.vs_code /\ t.vs_labels = s.vs_labels
 Proof
   ho_match_mp_tac fragGasPathTheory.gas_path_ind >> rpt conj_tac >>
   rpt strip_tac >> gvs[fragExecTheory.exit_result_def] >>
-  metis_tac[registration_path_edge_code]
+  metis_tac[registration_path_edge_code, registration_path_edge_labels]
 QED
 
 Theorem registration_positional_args_joint[local]:
