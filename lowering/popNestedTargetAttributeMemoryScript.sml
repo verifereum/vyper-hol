@@ -1,6 +1,7 @@
 (* Counted ADD continuation for nested target fields. *)
 Theory popNestedTargetAttributeMemory
 Ancestors
+  popNestedTargetReadinessMemory
   targetPlaceSimMem targetPlaceSimCasesBase bodyMemEmitOpFrame
   exprLoweringProps emitHelperProps stmtSimProps compileEnv loweringPosts
   loweringStateRelDefs exprSimDefs exprSimHypsDefs fragExec
@@ -54,6 +55,8 @@ Theorem pop_nested_target_attr_mem:
   target_sim_mem ctx func cenv cx env (AttributeTarget bt fld) es
 Proof
   strip_tac >> simp[target_sim_mem_def] >> rpt gen_tac >> strip_tac >>
+  irule pop_nested_target_outcome_ready_mem >>
+  conj_tac >- (qexists `env` >> first_assum ACCEPT_TAC) >>
   `target_pre cenv cx env bt es` by metis_tac[target_pre_sub] >>
   qpat_x_assum `type_place_target _ _ = _` mp_tac >>
   simp[Once well_typed_expr_def, AllCaseEqs()] >> strip_tac >> gvs[] >>

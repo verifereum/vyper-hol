@@ -5,10 +5,9 @@ Ancestors
   targetPlaceSim targetPlaceSimCasesBase
   exprSimMemDefs popNestedTargetRootsMemory popNestedTargetAttributeMemory
   popNestedTargetIndexMemory popNestedTargetSuffixMemory
-  popNestedStorageIndexReadiness popNestedLocalReadinessMemory
-  popNestedLocalTypeMemory
+  targetSubscriptStorage targetLocalLive
   popNestedSubscriptConstructorMemory popNestedSubscriptContinuationMemory
-  exprSimPopNestedBase exprSimPopNestedStorageFrame loweringPosts
+  exprSimPopNestedBase loweringPosts
   targetPlaceSimDefs vyperInterpreter vyperState exprSimHypsDefs targetPlaceLive
   vyperTypeSystem vyperTypeEnv vyperTypeCallGraph vyperTypeCallStackSoundness
 
@@ -41,8 +40,7 @@ Theorem pop_nested_storage_target_mem:
     body_inv (cx_tops cx) ctx cenv cx /\
     target_pre cenv cx env bt es /\ body_base_target_mem_ok cx bt /\
     target_root bt = TopLevelNameTarget (src,id) /\
-    get_module_code cx src = SOME ts /\ find_var_decl_by_name id ts = SOME d /\
-    EVERY (storage_frame_expr cx) (target_indices bt) ==>
+    get_module_code cx src = SOME ts /\ find_var_decl_by_name id ts = SOME d ==>
     target_sim_mem ctx func cenv cx env bt es
 Proof
   recInduct base_assignment_target_induct >> rpt conj_tac >> rpt gen_tac
@@ -61,7 +59,7 @@ Resume pop_nested_storage_target_mem[subscript]:
   irule pop_nested_subscript_constructor_mem >> simp[] >> reverse conj_tac
   >- (first_x_assum irule >>
       gvs[target_root_def, body_base_target_mem_ok_def, target_indices_def] >>
-      metis_tac[target_pre_sub, listTheory.EVERY_APPEND]) >>
+      metis_tac[target_pre_sub]) >>
   rpt gen_tac >> strip_tac >>
   `expr_sim_mem ctx func cenv cx (expr_type e) e (mid with gas_obs := [])` by
     (drule_all pop_nested_subscript_index_mem >> simp[]) >>
@@ -80,13 +78,16 @@ Resume pop_nested_storage_target_mem[ready]:
   `target_root bt = TopLevelNameTarget (src,id)` by fs[target_root_def] >>
   drule_all nested_pop_eval_base_storage_class >> strip_tac >> gvs[] >>
   simp[place_readable_def] >>
-  `storage_layout_safe cx /\ contract_storage_well_formed cx
-     (es with gas_obs := gas_explicit left s0.vs_gas_readings ++ gs) /\
-   EVERY (storage_frame_expr cx) (target_indices bt) /\ storage_frame_expr cx e` by
-    (fs[target_pre_def, expr_sim_inv_def, target_indices_def, listTheory.EVERY_APPEND] >>
-     irule vyperStorageLayoutSafetyTheory.contract_storage_well_formed_storage_frame >>
-     qexists `es` >> simp[] >> Cases >> simp[vyperStorageBackendTheory.get_storage_def]) >>
-  drule_all pop_nested_storage_index_ready >> simp[]
+  `expr_sim_inv cenv cx env (mid with gas_obs := [])` by
+    metis_tac[target_subscript_marked_base_inv, target_pre_sub] >>
+  `expr_body_pre cenv cx env e (mid with gas_obs := gs)` by
+    fs[target_pre_def, target_indices_pre_def] >>
+  drule_all target_subscript_index_source_diagnostic >> strip_tac >>
+  `storage_layout_safe cx /\ contract_storage_well_formed cx ee` by
+    fs[expr_sim_inv_def] >>
+  simp[place_readable_def] >> rpt strip_tac >> gvs[] >>
+  drule_at (Pat `eval_base_place _ _ _ = _`) eval_base_place_storage_ready >>
+  disch_then (qspec_then `ee` mp_tac) >> simp[]
 QED
 
 Finalise pop_nested_storage_target_mem
@@ -118,7 +119,7 @@ Resume pop_nested_local_target_mem[subscript]:
       gvs[target_root_def, body_base_target_mem_ok_def,
           type_place_target_SubscriptTarget, int_calls_expr_def, AllCaseEqs()] >>
       `expr_sim_inv cenv cx env es` by fs[target_pre_def] >>
-      drule_all local_target_place_vtype >> strip_tac >>
+      drule_all local_target_place_type >> strip_tac >>
       metis_tac[target_pre_sub, call_evaluation_safe_append_left]) >>
   rpt gen_tac >> strip_tac >>
   `expr_sim_mem ctx func cenv cx (expr_type e) e (mid with gas_obs := [])` by
@@ -135,29 +136,16 @@ Resume pop_nested_local_target_mem[ready]:
   rpt gen_tac >> disch_tac >>
   drule target_subscript_marked_base_source >>
   disch_then (qspec_then `gs` assume_tac) >>
-  `target_root bt = NameTarget id /\ target_pre cenv cx env bt es /\
-   call_evaluation_safe cx (int_calls_target bt)` by
-    (fs[target_root_def, int_calls_expr_def] >>
-     metis_tac[target_pre_sub, call_evaluation_safe_append_left]) >>
-  `expr_sim_inv cenv cx env es` by fs[target_pre_def] >>
-  drule_all local_target_place_vtype >> strip_tac >> gvs[] >>
-  `target_pre cenv cx env bt
+  `target_root bt = NameTarget id` by fs[target_root_def] >>
+  `target_pre cenv cx env (SubscriptTarget bt e)
     (es with gas_obs := gas_explicit left s0.vs_gas_readings ++ gs)` by simp[] >>
-  drule_all pop_nested_local_base_ready >> strip_tac >> gvs[] >>
-  `expr_sim_inv cenv cx env (mid with gas_obs := [])` by
-    metis_tac[target_subscript_marked_base_inv] >>
-  `expr_sim_inv cenv cx env (mid with gas_obs := gs)` by fs[] >>
-  `expr_body_pre cenv cx env e (mid with gas_obs := gs) /\
-   ~target_subscript_overlap cenv bt e` by
-    (fs[target_pre_def, target_indices_pre_def] >> metis_tac[]) >>
-  drule_at (Pat `eval_base_place _ _ _ = _`) pop_nested_local_index_ready >>
-  simp[] >> disch_then (drule_at (Pat `monad_bind _ _ _ = _`)) >>
-  simp[] >> strip_tac >>
-  `expr_body_pre cenv cx env e mid` by fs[] >>
-  `?other w. lookup_scopes id ee.scopes = SOME other /\
-    evaluate_subscripts other.type other.value path = INL w` by metis_tac[] >>
+  mp_tac (Q.INST
+    [`s` |-> `es with gas_obs := gas_explicit left s0.vs_gas_readings ++ gs`,
+     `mid` |-> `mid with gas_obs := gs`, `fin` |-> `ee`]
+    (SPEC_ALL local_subscript_index_live)) >>
+  simp[] >> strip_tac >> gvs[] >>
   simp[place_readable_def, read_place_def, bind_def, get_scopes_def,
-       return_def, read_memory_path_def, lift_sum_def]
+       return_def, read_memory_path_def, lift_sum_def] >> metis_tac[]
 QED
 
 Finalise pop_nested_local_target_mem

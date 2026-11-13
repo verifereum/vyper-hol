@@ -1,6 +1,7 @@
 (* Counted constructor sequencing; endpoint readiness is supplied by callers. *)
 Theory popNestedSubscriptConstructorMemory
 Ancestors
+  popNestedTargetReadinessMemory
   targetPlaceSimMem targetSubscriptSplit targetSubscriptContinuation
   targetPlaceSim targetPlaceSimCasesBase exprSimSubscriptMap exprSimMemDefs
   targetPlaceSimDefs loweringPosts exprLowering exprLoweringProps gasOutcome
@@ -39,6 +40,8 @@ Theorem pop_nested_subscript_constructor_mem:
   target_sim_mem ctx func cenv cx env (SubscriptTarget bt e) es
 Proof
   strip_tac >> rewrite_tac[target_sim_mem_def] >> rpt strip_tac >>
+  irule pop_nested_target_outcome_ready_mem >>
+  conj_tac >- (qexists `env` >> first_assum ACCEPT_TAC) >>
   `target_pre cenv cx env bt es` by metis_tac[target_pre_sub] >>
   `gas_admissible (eval_base_place cx bt) target_res_ok es` by
     metis_tac[target_subscript_base_admissible] >>
@@ -60,8 +63,13 @@ Resume pop_nested_subscript_constructor_mem[bind]:
       t.vs_inst_idx = LENGTH sm.cs_current_insts /\
       alloca_history func t /\ s0.vs_alloca_next <= t.vs_alloca_next)
     (\res ee r. expr_exit res r)` by
-    (qpat_x_assum `target_sim_mem _ _ _ _ _ _ _` mp_tac >>
-     simp[target_sim_mem_def] >> disch_then irule >> simp[]) >>
+    (qpat_x_assum `target_sim_mem _ _ _ _ _ _ _`
+       (mp_tac o REWRITE_RULE [target_sim_mem_def]) >>
+     disch_then (qspecl_then [`bvt`,`sa`,`sm`,`rb`,`s0`] mp_tac) >>
+     (impl_tac >- simp[]) >> disch_tac >>
+     irule gas_outcome_post_mono >>
+     goal_assum (drule_at (Pat `gas_outcome _ _ _ _ _ _ _`)) >>
+     simp[] >> metis_tac[]) >>
   once_rewrite_tac[evaluate_def] >> rewrite_tac[GSYM bind_assoc] >>
   irule gas_outcome_bind_result_exec >>
   goal_assum (drule_at (Pat `gas_outcome _ _ _ _ _ _ _`)) >>

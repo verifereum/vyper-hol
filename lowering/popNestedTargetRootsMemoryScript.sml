@@ -1,6 +1,7 @@
 (* Counted root target evaluation: roots emit no instructions. *)
 Theory popNestedTargetRootsMemory
 Ancestors
+  popNestedTargetReadinessMemory
   targetPlaceSimMem targetPlaceSim stmtSimAugAssign fragGasPathMem
   exprLoweringProps fragExec vyperAST
   exprSimHypsDefs exprLowering emitHelper stmtSimProps exprSimDefs
@@ -11,7 +12,10 @@ Theorem pop_nested_target_name_mem:
   target_pre cenv cx env (NameTarget id) es ==>
   target_sim_mem ctx func cenv cx env (NameTarget id) es
 Proof
-  rw[target_sim_mem_def, target_pre_def] >>
+  rw[target_sim_mem_def] >>
+  irule pop_nested_target_outcome_ready_mem >>
+  conj_tac >- (qexists `env` >> first_assum ACCEPT_TAC) >>
+  fs[target_pre_def] >>
   qpat_x_assum `type_place_target _ _ = _` mp_tac >>
   simp[Once well_typed_expr_def, AllCaseEqs()] >> strip_tac >> gvs[] >>
   drule_all stmtSimAugAssignTheory.expr_sim_inv_local >> strip_tac >>
@@ -44,7 +48,10 @@ Theorem pop_nested_target_toplevel_mem:
   ~immutable_root cx (TopLevelNameTarget nsid) ==>
   target_sim_mem ctx func cenv cx env (TopLevelNameTarget nsid) es
 Proof
-  rw[target_sim_mem_def, target_pre_def] >>
+  rw[target_sim_mem_def] >>
+  irule pop_nested_target_outcome_ready_mem >>
+  conj_tac >- (qexists `env` >> first_assum ACCEPT_TAC) >>
+  fs[target_pre_def] >>
   PairCases_on `nsid` >> rename1 `TopLevelNameTarget (src,id)` >>
   `env_consistent env cx es` by fs[expr_sim_inv_def] >>
   `!ts. get_module_code cx src = SOME ts ==>

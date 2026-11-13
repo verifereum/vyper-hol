@@ -46,7 +46,7 @@ Proof
 QED
 
 (* A local-rooted target's typing agrees with the lowering's place type. *)
-Theorem local_target_place_type[local]:
+Theorem local_target_place_type:
   !bt cenv cx env s id bvt.
     expr_sim_inv cenv cx env s /\ target_root bt = NameTarget id /\
     type_place_target env bt = SOME bvt ==>
