@@ -31,8 +31,9 @@ Definition store_slots_ptr_frame_def:
       (if tr then tn.t_stor else tn.t_trans)
 End
 
-(* The coverage is the represented footprint, not unused dynamic capacity.
-   Robustness is inherited by children using typedCopyLayoutPtr boundaries. *)
+(* The coverage includes the rounded live read size, not unused dynamic
+   capacity. In particular a partial bytes payload still needs its final
+   MLOAD word. Robustness is inherited by children via layout boundaries. *)
 Definition store_slots_ptr_entry_def:
   store_slots_ptr_entry cenv D ctx PG ty tv v <=>
     !root slot tr sa sb func s sw dw writes G tn.
@@ -41,7 +42,7 @@ Definition store_slots_ptr_entry_def:
       (!x. slot = Var x ==> not_fresh_at sa x) /\
       lookup_var root s = SOME sw /\ eval_operand slot s = SOME dw /\
       op_taint tn slot = {} /\
-      ptr_covers G tn root s (val_footprint tv v) /\
+      ptr_covers G tn root s (val_store_size tv v) /\
       (!m. mem_agree_outside tn.t_mem s.vs_memory m ==>
         val_in_memory tv v (w2n sw) m) /\
       w2n sw + type_memory_size tv < dimword (:256) /\
