@@ -182,7 +182,8 @@ Proof
          metis_tac[]) >>
       drule_all target_post_index_frame >> simp[])
   >- (qexists `marks` >> disj2_tac >> disj1_tac >>
-      qexistsl [`res`, `es_end`, `r`] >> simp[]) >>
+      qexistsl [`res`, `es_end`, `r`] >> simp[] >> disj2_tac >>
+      rpt strip_tac >> qpat_x_assum `!H. _ ==> expr_exit _ _` irule >> fs[]) >>
   qexists `marks` >> disj2_tac >> disj2_tac >> metis_tac[]
 QED
 
