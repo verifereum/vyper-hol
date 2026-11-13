@@ -76,7 +76,7 @@ Proof
       gvs[valid_horizon_def]) >>
   simp_tac std_ss [Once bind_apply] >>
   BasicProvers.TOP_CASE_TAC >>
-  qmatch_asmsub_rename_tac `eval_expr_results cx es st = (args_res,args_st)` >>
+  qmatch_asmsub_rename_tac `eval_exprs cx es st = (args_res,args_st)` >>
   Cases_on `args_res` >> simp_tac std_ss [] >> strip_tac
   >- (qmatch_asmsub_abbrev_tac `kont args_st = (res,st')` >>
       `storage_trace_frame kont` by
@@ -110,7 +110,7 @@ Proof
          conj_tac >- first_assum ACCEPT_TAC >>
          conj_tac >- first_assum ACCEPT_TAC >>
          conj_tac >- first_assum ACCEPT_TAC >>
-         qmatch_asmsub_rename_tac `eval_expr_results cx es st = (INL args_vals,args_st)` >>
+         qmatch_asmsub_rename_tac `eval_exprs cx es st = (INL args_vals,args_st)` >>
          qexistsl [`env`, `initial_st`, `INL args_vals`, `selected`, `st`] >>
          conj_tac >- metis_tac[] >>
          conj_tac >- (qexists_tac `tail` >> first_assum ACCEPT_TAC) >>
@@ -131,7 +131,7 @@ Proof
       disch_then (assume_tac o PURE_REWRITE_RULE [GSYM AND_IMP_INTRO]) >>
       qpat_assum `runtime_consistent env cx st`
         (strip_assume_tac o SRULE [vyperTypeExprSoundnessTheory.runtime_consistent_def]) >>
-      drule_all (cj 1 (cj 11 eval_scc_type_sound_results_mutual)) >> strip_tac >>
+      drule_all (cj 1 (cj 6 eval_scc_type_sound_results_mutual)) >> strip_tac >>
       qpat_assum `lift_option_type (get_module_code cx _) _ _ = _`
         (strip_assume_tac o SRULE [lift_option_type_def, vyperMiscTheory.option_CASE_rator, return_def, raise_def, AllCaseEqs()]) >>
       qpat_assum `lift_option_type (lookup_callable_function _ _ _) _ _ = _`
@@ -211,7 +211,10 @@ Proof
          conj_tac >- first_assum ACCEPT_TAC >>
          conj_tac
          >- (simp_tac (srw_ss()) [] >>
-             drule vyperEvalOutcomeSuffixTheory.eval_expr_results_outcome_suffix >>
+             qpat_assum `eval_exprs cx es st = (_,args_st)` mp_tac >>
+             qpat_assum `IS_SOME st.outcomes` mp_tac >>
+             POP_ASSUM_LIST (K ALL_TAC) >> rpt disch_tac >>
+             drule (cj 6 vyperEvalOutcomeSuffixTheory.eval_outcome_suffix_mutual) >>
              metis_tac[exprOracleStorageInterfacesTheory.outcome_suffix_IS_SOME]) >>
          conj_tac >- first_assum ACCEPT_TAC >>
          conj_tac >- first_assum ACCEPT_TAC >>
@@ -258,7 +261,7 @@ Proof
   conj_tac >- first_assum ACCEPT_TAC >>
   conj_tac >- first_assum ACCEPT_TAC >>
   conj_tac >- first_assum ACCEPT_TAC >>
-  goal_assum (drule_at (Pat `eval_expr_results _ _ _ = _`)) >>
+  goal_assum (drule_at (Pat `eval_exprs _ _ _ = _`)) >>
   qexistsl [`env`, `initial_st`, `selected`] >>
   rpt conj_tac >> metis_tac[]
 QED
@@ -266,13 +269,6 @@ QED
 Resume finite_prefix_Expr_Call_IntCall[body_setup]:
   qpat_x_assum `body_kont defaults_st = _` mp_tac >>
   simp_tac std_ss [Abbr `body_kont`, Once bind_apply] >>
-  BasicProvers.TOP_CASE_TAC >>
-  imp_res_tac read_results_state >> BasicProvers.VAR_EQ_TAC >>
-  reverse BasicProvers.TOP_CASE_TAC
-  >- (simp_tac std_ss [] >>
-      disch_then (strip_assume_tac o PURE_REWRITE_RULE [pairTheory.PAIR_EQ]) >>
-      BasicProvers.VAR_EQ_TAC >> conj_tac >> first_assum ACCEPT_TAC) >>
-  simp_tac std_ss [Once bind_apply] >>
   BasicProvers.TOP_CASE_TAC >>
   imp_res_tac vyperStatePreservationTheory.lift_option_type_state >>
   BasicProvers.VAR_EQ_TAC >>
@@ -284,9 +280,8 @@ Resume finite_prefix_Expr_Call_IntCall[body_setup]:
      (INL ret_tv,defaults_st)` by
     (qpat_assum `evaluate_type _ _ = SOME ret_tv` (fn th =>
        simp_tac std_ss [th, lift_option_type_def, return_def])) >>
-  qpat_x_assum `!s d t s1 vs t1 s2 env t2 s3 rtv t3 s4 x t4 s5 cxf t5 initial selected env1 ret env2 st1 res1 st2. _`
+  qpat_x_assum `!s d t s1 env t1 s2 rtv t2 s3 x t3 s4 cxf t4 initial selected env1 ret env2 st1 res1 st2. _`
     (drule_at (Pat `finally _ _ _ = _`)) >>
-  disch_then (drule_at (Pat `read_results _ _ _ = _`)) >>
   disch_then (drule_at (Pat `lift_option_type _ "IntCall bind_arguments" _ = _`)) >>
   disch_then (drule_at (Pat `lift_option_type _ "IntCall eval ret" _ = _`)) >>
   disch_then assume_tac >>
@@ -395,24 +390,69 @@ Resume finite_prefix_Expr_Call_IntCall[lock_success]:
        vfmStateTheory.lookup_storage_def, vfmStateTheory.update_storage_def,
        vfmExecutionTheory.update_transient_storage_def] >>
      Cases_on `addr = cx.txn.target` >> simp[combinTheory.APPLY_UPDATE_THM]) >>
-  qpat_assum `case INL _ of INL results => expr_results_typed _ _ _ | INR _ => _`
-    (assume_tac o SRULE []) >>
-  drule read_results_state >> disch_then SUBST_ALL_TAC >>
-  qpat_assum `lift_option_type _ "IntCall bind_arguments" _ = _`
-    (mp_tac o MATCH_MP vyperStatePreservationTheory.lift_option_type_state) >>
-  disch_then SUBST_ALL_TAC >>
-  qpat_assum `lock_if_nr _ _ _ _ = (INL _,_)`
-    (assume_tac o SRULE [pairTheory.FST, sumTheory.INL_11]) >>
-  qmatch_asmsub_rename_tac `lock_if_nr cx callable1 (is_view_mut callable0) defaults_st = (INL lock_unit,lock_st)` >>
+  drule default_finally_result >> strip_tac >>
+  qpat_assum `runtime_consistent (defaults_env env_body) _ _`
+    (strip_assume_tac o SRULE [vyperTypeExprSoundnessTheory.runtime_consistent_def]) >>
+  drule_at (Pat `eval_exprs _ _ _ = _`) (cj 1 (cj 6 eval_scc_type_sound_results_mutual)) >>
+  disch_then (qspec_then `defaults_env env_body` mp_tac) >>
+  (impl_tac >- simp[]) >> strip_tac >>
+  drule_all default_restore_runtime_projections >> strip_tac >>
+  rpt (qpat_x_assum `case INL _ of INL vs => exprs_runtime_typed _ _ _ | INR _ => _`
+         (assume_tac o SRULE [])) >>
+  `env.type_defs = get_tenv cx /\ fn_sigs_consistent env.fn_sigs cx` by
+    (qpat_assum `env_consistent env cx args_st` mp_tac >>
+     POP_ASSUM_LIST (K ALL_TAC) >>
+     simp[vyperTypeInvariantsTheory.env_consistent_def,
+          vyperTypeInvariantsTheory.env_context_consistent_def]) >>
+  `sig.param_types = MAP SND callable2 /\ sig.num_defaults = LENGTH callable3` by
+    (qpat_assum `fn_sigs_consistent env.fn_sigs cx` mp_tac >>
+     qpat_assum `FLOOKUP env.fn_sigs _ = SOME sig` mp_tac >>
+     qpat_assum `get_module_code cx _ = SOME _` mp_tac >>
+     qpat_assum `lookup_callable_function _ _ _ = SOME _` mp_tac >>
+     POP_ASSUM_LIST (K ALL_TAC) >>
+     simp[vyperTypeInvariantsTheory.fn_sigs_consistent_def] >>
+     rpt strip_tac >> first_x_assum drule >> strip_tac >> gvs[]) >>
+  `LIST_REL (type_widens_to (get_tenv cx)) (MAP expr_type es)
+     (TAKE (LENGTH es) (MAP SND callable2))` by
+    (qpat_x_assum `LIST_REL _ (MAP expr_type es) _` mp_tac >>
+     qpat_assum `env.type_defs = get_tenv cx` (fn th => rewrite_tac[th]) >>
+     qpat_assum `sig.param_types = MAP SND callable2` (fn th => rewrite_tac[th])) >>
+  `LENGTH es <= LENGTH callable2 /\
+   LENGTH callable2 - LENGTH es <= LENGTH callable3` by
+    (qpat_assum `LENGTH es <= LENGTH sig.param_types` mp_tac >>
+     qpat_assum `LENGTH sig.param_types - sig.num_defaults <= LENGTH es` mp_tac >>
+     qpat_assum `sig.param_types = MAP SND callable2` (fn th => rewrite_tac[th]) >>
+     qpat_assum `sig.num_defaults = LENGTH callable3` (fn th => rewrite_tac[th]) >>
+     simp[] >> decide_tac) >>
+  drule_at (Pos hd) vyperTypeBindArgumentsTheory.intcall_bind_arguments_from_runtime_typed >>
+  disch_then (drule_at (Pat `exprs_runtime_typed (defaults_env _) _ _`)) >>
+  disch_then (drule_at (Pat `MAP expr_type _ = MAP SND _`)) >>
+  disch_then (qspecl_then [`cx with stk updated_by CONS (src_id_opt,fn)`, `defaults_st`] mp_tac) >>
+  (impl_tac >-
+     (qpat_x_assum `LIST_REL _ (MAP expr_type es) (TAKE _ (MAP SND _))`
+        (mp_tac o SRULE [vyperContextTheory.get_tenv_def]) >>
+      simp[vyperContextTheory.get_tenv_def] >> metis_tac[])) >> strip_tac >>
+  `call_env' = call_env` by
+    (qpat_assum `bind_arguments _ _ _ = SOME call_env'` mp_tac >>
+     qpat_assum `lift_option_type _ "IntCall bind_arguments" _ = _` mp_tac >>
+     POP_ASSUM_LIST (K ALL_TAC) >>
+     simp[vyperContextTheory.get_tenv_def, lift_option_type_def, vyperStateTheory.return_def, AllCaseEqs()] >>
+     rpt strip_tac >> gvs[vyperStateTheory.return_def]) >>
+  qpat_x_assum `call_env' = call_env` SUBST_ALL_TAC >>
+  qmatch_asmsub_rename_tac
+    `lock_if_nr cx callable1 (is_view_mut callable0) defaults_st = (INL lock_unit,lock_st)` >>
   Cases_on `lock_unit` >>
+  qpat_assum `lock_if_nr _ _ _ _ = _`
+    (assume_tac o REWRITE_RULE [lock_if_nr_def]) >>
+  drule_at (Pat `(if _ then _ else _) _ = _`) intcall_live_pushed_body_preconditions >>
+  disch_then (qspecl_then [`env`, `env_body`] mp_tac) >>
+  disch_then (qspecl_then [`args_st`, `call_env`, `fn`] mp_tac) >>
+  (impl_tac >- (qpat_x_assum `defaults_st = _ with scopes := _` kall_tac >> simp[])) >>
+  strip_tac >>
   `runtime_consistent env_body (cx with stk updated_by CONS (src_id_opt,fn))
      (lock_st with scopes := [call_env])` by
-    (irule intcall_defaults_body_runtime >>
-     goal_assum (drule_at Any) >> simp[] >>
-     goal_assum (drule_at Any) >> simp[] >>
-     qpat_assum `finally _ _ args_st = _` (irule_at (Pat `finally _ _ _ = _`)) >>
-     simp[] >> goal_assum (drule_at Any) >> simp[] >>
-     metis_tac[]) >>
+    (qpat_x_assum `defaults_st = _ with scopes := _` kall_tac >>
+     simp[vyperTypeExprSoundnessTheory.runtime_consistent_def] >> metis_tac[]) >>
   qpat_x_assum `Abbrev (cleanup_kont = _)` (mp_tac o REWRITE_RULE [markerTheory.Abbrev_def]) >>
   disch_then SUBST_ALL_TAC >>
   qpat_x_assum `(do rv <- _; _ od) _ = _` mp_tac >>
@@ -476,12 +516,16 @@ Resume finite_prefix_Expr_Call_IntCall[body_forward]:
      irule call_evaluation_safe_push_body >> metis_tac[]) >>
   `IS_SOME defaults_st.outcomes` by
     (qpat_assum `finally _ _ args_st = (INL _,defaults_st)` mp_tac >>
-     qpat_assum `eval_expr_results _ _ st = (_,args_st)` mp_tac >>
+     qpat_assum `eval_exprs _ _ st = (_,args_st)` mp_tac >>
      qpat_assum `IS_SOME st.outcomes` mp_tac >>
      POP_ASSUM_LIST (K ALL_TAC) >> rpt disch_tac >>
      drule default_finally_result >> strip_tac >>
-     drule (cj 6 vyperEvalOutcomeSuffixTheory.eval_outcome_suffix_mutual) >>
-     drule vyperEvalOutcomeSuffixTheory.eval_expr_results_outcome_suffix >>
+     `IS_SOME args_st.outcomes` by
+       (qpat_assum `eval_exprs cx es st = _`
+          (mp_tac o MATCH_MP (cj 6 vyperEvalOutcomeSuffixTheory.eval_outcome_suffix_mutual)) >>
+        metis_tac[exprOracleStorageInterfacesTheory.outcome_suffix_IS_SOME]) >>
+     qpat_assum `eval_exprs (cx with stk updated_by _) _ _ = _`
+       (mp_tac o MATCH_MP (cj 6 vyperEvalOutcomeSuffixTheory.eval_outcome_suffix_mutual)) >>
      gvs[] >> metis_tac[exprOracleStorageInterfacesTheory.outcome_suffix_IS_SOME]) >>
   `IS_SOME lock_st.outcomes` by
     (qpat_x_assum `lock_if_nr _ _ _ _ = _` mp_tac >>
