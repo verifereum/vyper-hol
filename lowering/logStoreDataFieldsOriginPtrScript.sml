@@ -13,7 +13,7 @@
  *)
 Theory logStoreDataFieldsOriginPtr
 Ancestors
-  logStoreDataOriginPtr typedCopyOriginPtrFields typedCopyOriginPtrBase
+  logStoreDataOriginPtr typedCopyOriginPtrFields typedCopyOriginPtrBase typedCopyOriginPtrBytes
   typedMemoryCopy fragGasOriginPtr fragGasOriginPtrDead bodyPtrDefs
   robustCopyTransportPtr ptrDiscipline stmtLowering eventLoweringStructure
   exprLoweringProps localValueStoreProps exprSimProps loweringShapeDefs
@@ -40,11 +40,17 @@ Definition log_field_src_def:
          lookup_var xs s = SOME sw /\
          (!mem. mem_agree_outside tn.t_mem s.vs_memory mem ==>
                 val_in_memory stv v (w2n sw) mem) /\
-         w2n sw + type_memory_size stv < dimword (:256) /\
-         (type_memory_size stv = 0 \/
-          w2n sw + type_memory_size stv <= s.vs_alloca_next) /\
-         (w2n sw + type_memory_size stv <= b \/ b + cap <= w2n sw) /\
-         ptr_covers G tn xs s (type_memory_size stv))
+         w2n sw + (if is_bytestring_type dty then val_store_size stv v
+                   else type_memory_size stv) < dimword (:256) /\
+         ((if is_bytestring_type dty then val_store_size stv v
+           else type_memory_size stv) = 0 \/
+          w2n sw + (if is_bytestring_type dty then val_store_size stv v
+                    else type_memory_size stv) <= s.vs_alloca_next) /\
+         (w2n sw + (if is_bytestring_type dty then val_footprint stv v
+                   else type_memory_size stv) <= b \/ b + cap <= w2n sw) /\
+         ptr_covers G tn xs s
+           (if is_bytestring_type dty then val_store_size stv v
+            else type_memory_size stv))
 End
 
 (* Helper: a store into a window of the buffer keeps every field source. *)
@@ -82,14 +88,15 @@ Resume log_field_src_frame[robust]:
   qpat_assum `val_wf stv v`
     (assume_tac o MATCH_MP exprSimPropsTheory.val_footprint_le) >>
   qexistsl_tac [`xs`, `stv`, `sw`] >> simp[] >>
-  conj_tac
+  Cases_on `is_bytestring_type dty` >> fs[] >>
+  (conj_tac
   >- (rpt strip_tac >> irule robust_val_in_memory_exterior_frame >>
       conj_tac >- first_assum ACCEPT_TAC >>
       qexistsl_tac [`s.vs_memory`, `t.vs_memory`, `tn.t_mem`, `tnf.t_mem`,
         `{i | w <= i /\ i < w + len}`] >>
       simp[] >> gvs[typed_copy_state_frame_def, typed_copy_frame_def] >>
       rpt strip_tac >> TRY (first_x_assum irule) >> decide_tac) >>
-  gvs[ptr_covers_def] >> metis_tac[]
+  gvs[ptr_covers_def] >> metis_tac[])
 QED
 
 Finalise log_field_src_frame
@@ -150,11 +157,21 @@ Proof
   qpat_x_assum `FST f = Var xs` (fn eq =>
     qpat_x_assum `compile_store_memory _ _ _ _ _ _ = _`
       (assume_tac o REWRITE_RULE [eq]) >> assume_tac eq) >>
+  Cases_on `is_bytestring_type dty`
+  >- (fs[] >> (
+      `compile_store_bytestring (Var xs) (Var xd) sa = ((),sb)` by
+        gvs[contextTheory.compile_store_memory_def] >>
+      mp_tac (Q.INST [`sty` |-> `SND (f : operand # type)`]
+        (SPEC_ALL compile_store_bytestring_value_origin_ptr_path)) >>
+      impl_tac >- (asm_rewrite_tac [] >> decide_tac) >>
+      strip_tac >> qexistsl_tac [`t`, `Gf`, `tnf`] >> simp[] >>
+      gen_tac >> irule gas_origin_ptr_path_from_no_dead >>
+      first_assum ACCEPT_TAC)) >>
+  fs[] >> (
   mp_tac (Q.INST [`sty` |-> `SND (f : operand # type)`]
     compile_store_memory_origin_ptr_path) >>
-  impl_tac >- (rpt conj_tac >>
-    FIRST [first_assum ACCEPT_TAC, decide_tac]) >>
-  strip_tac >> qexistsl_tac [`t`, `Gf`, `tnf`] >> simp[]
+  impl_tac >- (asm_rewrite_tac [] >> decide_tac) >>
+  strip_tac >> qexistsl_tac [`t`, `Gf`, `tnf`] >> simp[])
 QED
 
 (* Helper: one field's base-plus-offset ADD and store. *)
