@@ -180,16 +180,18 @@ Proof
      disch_then (qspecl_then [`s`,`LENGTH sa.cs_current_insts`] mp_tac) >>
      simp[exec_result_map_def]) >>
   `eval_operand src (s with vs_inst_idx := LENGTH sa.cs_current_insts) = SOME a` by simp[] >>
-  drule_all (Q.INST [`s` |-> `s with vs_inst_idx := LENGTH sa.cs_current_insts`,
+  drule_all (Q.INST [`H` |-> `ARB`,
+    `s` |-> `s with vs_inst_idx := LENGTH sa.cs_current_insts`,
     `t` |-> `s1 with vs_inst_idx := LENGTH sa.cs_current_insts`]
     (SPEC_ALL emit_calldata_load_endpoint_ptr_origin_core)) >>
-  disch_then (qspecl_then [`ARB`,`ARB`,`ARB`,`PG`,`G`] strip_assume_tac) >>
+  disch_then (qspecl_then [`ARB`,`ARB`,`ARB`,`PG`,`G`]
+    (qx_choose_then `H` (qx_choose_then `u` strip_assume_tac))) >>
   gvs[lookup_var_def] >>
   suspend "finish"
 QED
 
 Resume source_bulk_header_origin[finish]:
-  rpt (qpat_x_assum `frag_exec_ptr _ _ _ _ _ _ _ _` kall_tac) >>
+  rpt (qpat_x_assum `frag_exec_ptr _ _ _ _ _ _ _ _ _` kall_tac) >>
   `lookup_var root s1 = SOME (n2w d) /\ ptr_covers H u root s1 capacity` by
     (conj_tac >- metis_tac[lookup_var_def] >>
      irule ptr_covers_frame >> metis_tac[lookup_var_def]) >>
@@ -595,7 +597,7 @@ Theorem source_bulk_assert_origin[local]:
       (OK (t with vs_inst_idx := LENGTH sb.cs_current_insts),G,tn))
 Proof
   strip_tac >> conj_tac
-  >- (drule_all emit_assert_endpoint_ptr_core >>
+  >- (drule_all (Q.INST [`H` |-> `ARB`] emit_assert_endpoint_ptr_core) >>
       disch_then (qspecl_then [`ARB`,`ARB`,`ARB`,`PG`] mp_tac) >>
       metis_tac[]) >>
   `t = s` by (drule_all emit_assert_endpoint_ptr_core >> metis_tac[]) >>
@@ -687,7 +689,7 @@ Proof
      gvs[run_inst_seq_def, AllCaseEqs()] >>
      imp_res_tac step_inst_base_preserves_inst_idx >>
      gvs[mk_inst_def, is_terminator_def]) >>
-  drule_all emit_calldata_load_endpoint_ptr_origin_core >>
+  drule_all (Q.INST [`H` |-> `ARB`] emit_calldata_load_endpoint_ptr_origin_core) >>
   disch_then (qspecl_then [`G`,`ARB`,`ARB`,`PG`,`ARB`] mp_tac) >>
   strip_tac >>
   suspend "segments"
@@ -764,7 +766,7 @@ Resume source_bulk_count_guard_origin[frames]:
 QED
 
 Resume source_bulk_count_guard_origin[joint]:
-  rpt (qpat_x_assum `frag_exec_ptr _ _ _ _ _ _ _ _` kall_tac) >>
+  rpt (qpat_x_assum `frag_exec_ptr _ _ _ _ _ _ _ _ _` kall_tac) >>
   rpt (qpat_x_assum `!x. not_fresh_at _ x ==> _` kall_tac) >>
   `cs_extends sa c1 /\ cs_extends c1 c2 /\ cs_extends c2 c3 /\ cs_extends c3 sb` by
     (rpt conj_tac >> irule cs_extends_same_block >> fs[inst_extends_def] >>
@@ -805,7 +807,7 @@ Resume source_bulk_count_guard_origin[joint]:
 QED
 
 Resume source_bulk_count_guard_origin[backward]:
-  rpt (qpat_x_assum `frag_exec_ptr _ _ _ _ _ _ _ _` kall_tac) >>
+  rpt (qpat_x_assum `frag_exec_ptr _ _ _ _ _ _ _ _ _` kall_tac) >>
   rpt (qpat_x_assum `!x. not_fresh_at _ x ==> _` kall_tac) >>
   `cs_extends sa c1 /\ cs_extends c1 c2 /\ cs_extends c2 c3 /\ cs_extends c3 sb` by
     (rpt conj_tac >> irule cs_extends_same_block >> fs[inst_extends_def] >>
@@ -1012,11 +1014,11 @@ Proof
    op_taint tn (Lit (n2w mem_sz)) = {} /\
    op_prov G (Lit (n2w mem_sz)) = NONE` by
     simp[eval_operand_def, op_taint_def, op_prov_def] >>
-  drule_all (SRULE [] (Q.INST [`opc` |-> `MUL`]
+  drule_all (SRULE [] (Q.INST [`H` |-> `ARB`, `opc` |-> `MUL`]
     (SPEC_ALL emit_scalar_binop_endpoint_ptr_origin_core))) >>
   disch_then (qspecl_then [`ARB`,`ARB`,`ARB`,`PG`] strip_assume_tac) >>
   rename1 `op_taint u1 sz = {}` >> rename1 `op_prov H1 sz = NONE` >>
-  qpat_x_assum `frag_exec_ptr _ _ _ _ _ _ _ _` kall_tac >>
+  qpat_x_assum `frag_exec_ptr _ _ _ _ _ _ _ _ _` kall_tac >>
   qpat_assum `!x. not_fresh_at sa x ==> _`
     (mp_then Any mp_tac old_operand_ghost_frame) >>
   disch_then (qspec_then `src` mp_tac) >> simp[] >> strip_tac >>
@@ -1030,13 +1032,13 @@ Proof
     (qpat_assum `emit_op ADD [src; Lit 32w] c1 = _` (mp_then Any mp_tac emit_op_run_pc) >>
      disch_then (qspecl_then [`s1`,`LENGTH c1.cs_current_insts`] mp_tac) >>
      simp[is_terminator_def, exec_result_map_def]) >>
-  drule_all (SRULE [eval_op_inst_idx] (Q.INST [`opc` |-> `ADD`,
+  drule_all (SRULE [eval_op_inst_idx] (Q.INST [`H` |-> `ARB`, `opc` |-> `ADD`,
     `s` |-> `s1 with vs_inst_idx := LENGTH c1.cs_current_insts`,
     `t` |-> `s2 with vs_inst_idx := LENGTH c1.cs_current_insts`]
     (SPEC_ALL emit_scalar_binop_endpoint_ptr_origin_core))) >>
   disch_then (qspecl_then [`ARB`,`ARB`,`ARB`,`PG`] strip_assume_tac) >>
   rename1 `op_taint u2 sd = {}` >> rename1 `op_prov H2 sd = NONE` >>
-  qpat_x_assum `frag_exec_ptr _ _ _ _ _ _ _ _` kall_tac >>
+  qpat_x_assum `frag_exec_ptr _ _ _ _ _ _ _ _ _` kall_tac >>
   fs[lookup_var_def] >>
   `sa.cs_next_var <= c1.cs_next_var /\ c1.cs_next_var <= c2.cs_next_var /\
    c2.cs_next_var <= c3.cs_next_var` by
@@ -1059,13 +1061,13 @@ Proof
   `ptr_covers H2 u2 root (s2 with vs_inst_idx := LENGTH c2.cs_current_insts) capacity` by
     simp[ptr_covers_def, lookup_var_def] >>
   drule_all (SRULE [eval_op_inst_idx, cj 4 control_moves_keep_vars]
-    (Q.INST [`off` |-> `32`, `n` |-> `n*mem_sz`,
+    (Q.INST [`H` |-> `ARB`, `off` |-> `32`, `n` |-> `n*mem_sz`,
       `s` |-> `s2 with vs_inst_idx := LENGTH c2.cs_current_insts`,
       `t` |-> `s3 with vs_inst_idx := LENGTH c2.cs_current_insts`]
       (SPEC_ALL emit_ptr_offset_endpoint_ptr_origin_core))) >>
   disch_then (qspecl_then [`ARB`,`ARB`,`ARB`,`PG`] strip_assume_tac) >>
   rename1 `dd = Var q` >>
-  qpat_x_assum `frag_exec_ptr _ _ _ _ _ _ _ _` kall_tac >>
+  qpat_x_assum `frag_exec_ptr _ _ _ _ _ _ _ _ _` kall_tac >>
   rename1 `u3.t_mem = u2.t_mem` >>
   rename1 `gas_origin_ptr_path _ (_,H2,u2) [] (_,H3,u3)` >>
   `(!x. sz = Var x ==> not_fresh_at c1 x) /\
@@ -1706,7 +1708,7 @@ Proof
      simp[run_inst_seq_inst_idx] >>
      Cases_on `run_inst_seq (emitted_insts c1 c2) s1` >>
      simp[exec_result_map_def]) >>
-  drule_all emit_calldata_load_endpoint_ptr_origin_core >>
+  drule_all (Q.INST [`H` |-> `ARB`] emit_calldata_load_endpoint_ptr_origin_core) >>
   disch_then (qspecl_then [`G`,`ARB`,`ctx`,`PG`,`\g r. T`] strip_assume_tac) >>
   rename1 `op_prov H1 value = NONE` >>
   `raw1 with vs_inst_idx := LENGTH c1.cs_current_insts = s1` by

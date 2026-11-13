@@ -507,6 +507,7 @@ Proof
   disch_then (qspecl_then [`ARB`,`ctx`,`PG`,`\g r. F`,`ARB`] strip_assume_tac) >>
   rename1 `SND (SND ops) = Var child` >>
   rename1 `op_taint u' (FST ops) = {}` >>
+  rename1 `ptr_covers HG u' child _ _` >>
   qabbrev_tac `r = t' with vs_inst_idx := LENGTH middle.cs_current_insts` >>
   `LENGTH (emitted_insts body_st middle) + t.vs_inst_idx =
      LENGTH middle.cs_current_insts` by
@@ -549,7 +550,7 @@ Proof
      qpat_assum `allocas_from lower s` mp_tac >>
      POP_ASSUM_LIST (K ALL_TAC) >> simp[allocas_from_def] >> metis_tac[]) >>
   `!D explicit. gas_origin_ptr_path (D,lower,explicit,ctx,fn,PG)
-      (t,H,u) [] (OK r,H',u')` by
+      (t,H,u) [] (OK r,HG,u')` by
     (simp_tac bool_ss [Abbr `r`] >>
      map_every (fn pat => qpat_assum pat mp_tac)
        [`!D lower explicit ctx' func. _`, `fn_has_code body_st middle fn`,
@@ -1318,7 +1319,7 @@ Proof
     (map_every (fn pat => qpat_assum pat mp_tac)
       [`!D explicit. gas_origin_ptr_path _ (s,G,tn) _ _`,
        `!D explicit. gas_origin_ptr_path _ (t,H,u) _ _`,
-       `!D explicit. gas_origin_ptr_path _ (r,H',u') _ _`,
+       `!D explicit. gas_origin_ptr_path _ (r,HG,u') _ _`,
        `!D explicit. gas_origin_ptr_path _ (child_end,childG,childtn) _ _`,
        `!D explicit. gas_origin_ptr_path _ (backstate,backG,backtn) _ _`] >>
      POP_ASSUM_LIST (K ALL_TAC) >> rpt strip_tac >>
