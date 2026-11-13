@@ -268,6 +268,7 @@ Resume slice_extcode_typed_entry[finish]:
      metis_tac[compileEnvTheory.cs_extends_trans, compileEnvTheory.cs_extends_refl]) >>
   `nocalls ==> int_calls_expr a = []` by metis_tac[] >>
   irule exprSimSliceTerminalTheory.slice_gas_outcome_conseq_frame >>
+  conj_tac >- slice_frame_tac >>
   qexistsl_tac [
     `\H res ee z. ?tv. res = INL tv /\
       vv_post H ctx func cenv cx
@@ -277,8 +278,7 @@ Resume slice_extcode_typed_entry[finish]:
       z.vs_current_bb = r.cs_current_bb /\ z.vs_inst_idx = LENGTH r.cs_current_insts`,
     `\H res ee rr. expr_exit res rr`] >>
   simp[] >> (rpt conj_tac THEN_LT outcome_goals_first)
-  >- suspend "entry"
-  >~ [`storage_trace_frame _`] >- slice_frame_tac >>
+  >- suspend "entry" >>
   rpt strip_tac >> gvs[] >>
   qpat_assum `!H. valid_horizon _ _ H mid'.storage_trace ==>
     valid_horizon _ _ H mid.storage_trace` (drule_then assume_tac) >>

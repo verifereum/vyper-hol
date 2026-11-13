@@ -676,6 +676,7 @@ QED
 
 Resume slice_extcode_continue_entry_seq[tail]:
   irule exprSimSliceTerminalTheory.slice_gas_outcome_conseq_frame >>
+  conj_tac >- simp[exprSimSliceTerminalTheory.slice_terminal_source_frame] >>
   qexists_tac `(\H res ef z. ?tv. res = INL tv /\
     vv_post H ctx func cenv cx result ee sb sc t ef tv
       (LocatedValue (expr_type result) (mk_ptr r LocMemory)) z /\

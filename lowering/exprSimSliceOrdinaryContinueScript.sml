@@ -384,6 +384,7 @@ Proof
   qpat_x_assum `expr_post _ _ _ _ _ start _ _ _ _ _ _ _ _` kall_tac >>
   qpat_x_assum `expr_post _ _ _ _ _ len _ _ _ _ _ _ _ _` kall_tac >>
   irule slice_gas_outcome_conseq_frame >>
+  conj_tac >- simp[slice_terminal_source_frame] >>
   qexists_tac `(\H res ee z. ?tv. res = INL tv /\
     vv_post H ctx func cenv cx result e2 se sf r ee tv
       (LocatedValue (expr_type result) (mk_ptr out LocMemory)) z /\
@@ -505,6 +506,7 @@ Proof
   qpat_x_assum `expr_post _ _ _ _ _ start _ _ _ _ _ _ _ _` kall_tac >>
   qpat_x_assum `expr_post _ _ _ _ _ len _ _ _ _ _ _ _ _` kall_tac >>
   irule slice_gas_outcome_conseq_frame >>
+  conj_tac >- simp[slice_terminal_source_frame] >>
   qexists_tac `(\H res ee z. ?tv. res = INL tv /\
     vv_post H ctx func cenv cx result e2 se sf r ee tv
       (LocatedValue (expr_type result) (mk_ptr out LocMemory)) z /\
@@ -742,6 +744,7 @@ Proof
   qpat_x_assum `expr_post _ _ _ _ _ start _ _ _ _ _ _ _ _` kall_tac >>
   qpat_x_assum `expr_post _ _ _ _ _ len _ _ _ _ _ _ _ _` kall_tac >>
   irule slice_gas_outcome_conseq_frame >>
+  conj_tac >- simp[slice_terminal_source_frame] >>
   qexists_tac `(\H res ee z. ?tv. res = INL tv /\
     vv_post H ctx func cenv cx result e2 se sf r ee tv
       (LocatedValue (expr_type result) (mk_ptr out LocMemory)) z /\
@@ -866,6 +869,7 @@ Proof
   qpat_x_assum `expr_post _ _ _ _ _ start _ _ _ _ _ _ _ _` kall_tac >>
   qpat_x_assum `expr_post _ _ _ _ _ len _ _ _ _ _ _ _ _` kall_tac >>
   irule slice_gas_outcome_conseq_frame >>
+  conj_tac >- simp[slice_terminal_source_frame] >>
   qexists_tac `(\H res ee z. ?tv. res = INL tv /\
     vv_post H ctx func cenv cx result e2 se sf r ee tv
       (LocatedValue (expr_type result) (mk_ptr out LocMemory)) z /\
