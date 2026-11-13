@@ -66,7 +66,9 @@ Theorem abi_encoder_static_length_alignment_mutual:
   (!at. static_length at MOD 32 = 0) /\
   (!ats. SUM (MAP static_length ats) MOD 32 = 0)
 Proof
-  ho_match_mp_tac (legacyInduction.mutual_ind_from_ops abi_type_induction) >>
+  ho_match_mp_tac
+    (legacyInduction.mutual_ind_from_ops
+       (TypeBase.set_induction_of ``:abi_type``)) >>
   simp[static_length_def, static_length_Tuple_SUM, arithmeticTheory.MOD_PLUS,
     arithmeticTheory.MOD_TIMES2] >> rpt strip_tac
   >- (rename1 `static_length (Array bound at)` >> Cases_on `bound` >>
