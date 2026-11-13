@@ -10,6 +10,11 @@ Ancestors bodyPtrPreds bodyPtrDefs bodySimDeclCases
   vyperTypeEnv arithmetic valueEncoding stmtSimProps stmtLoweringMono loweringPosts
   forPtrArraySemantic exprSimWordArgs vyperBareGlobalName
   whitelistForIterImmCopy exprSimCopy vyperValueOperation compileEnv
+  bodyImmEntryPtr whitelistForIterImmFrag forPtrArraySource
+  gasSummaryComposePtr stmtLoweringProps stmtLowering
+  localPtrsProps emitHelperProps context emitHelper venomInst
+  fragExec loweringStateRelDefs stmtFragPtr gasContext whitelistForIterImmLoop
+  ptrDiscipline stmtSimForArrayLoop forPtrArrayEntry
 Libs monadsyntax
 
 val _ = Parse.hide "body";
@@ -216,7 +221,121 @@ Resume body_for_immutable_array_ptr[scope]:
 QED
 
 Resume body_for_immutable_array_ptr[loop]:
-  FAIL_TAC "immutable pointer loop bridge"
+  simp[stmt_frag_ptr_def] >>
+  map_every qx_gen_tac [`st`, `st'`, `s0`, `G0`, `tn0`, `cenv'`] >> strip_tac >>
+  qpat_x_assum `stmt_env _ _ _ _ _ = _` mp_tac >>
+  simp[stmt_env_def, declare_stmt_local_def, comp_bind_def,
+    comp_ignore_bind_def, comp_return_def] >>
+  pairarg_tac >> simp[] >> strip_tac >> Cases_on `_0` >>
+  qpat_x_assum `cs' = st'` SUBST_ALL_TAC >>
+  qpat_x_assum `cenv = cenv'` (SUBST_ALL_TAC o SYM) >>
+  `!c lc sa sb. compile_stmts c lc ret_ty body sa = ((),sb) ==>
+    cs_extends sa sb` by
+    (rpt gen_tac >> strip_tac >>
+     drule (SIMP_RULE std_ss [cs_mono_def] (cj 2 compile_stmt_cs_mono)) >> simp[]) >>
+  drule_all compile_for_immutable_entry_code_normalized >> strip_tac >>
+  drule_all immutable_optional_load_ready >> strip_tac >>
+  `sb0.cs_next_var <= sb1.cs_next_var` by
+    (mp_tac (cj 2 compile_stmt_cs_mono) >>
+     simp[cs_mono_def] >> disch_then drule >> simp[]) >>
+  `sa.cs_next_var <= sj.cs_next_var` by decide_tac >>
+  qabbrev_tac `tot = STRING #"%" (toString (st1.cs_next_var + 6))` >>
+  `tot = STRING #"%" (toString (st1.cs_next_var + 6))` by simp[Abbr `tot`] >>
+  drule_all immutable_register_frame >> strip_tac >>
+  `fn_has_code st st1 func` by
+    (irule (cj 1 fn_has_code_split) >> asm_rewrite_tac[] >>
+     qexists_tac `st'` >> asm_rewrite_tac[] >> metis_tac[cs_extends_trans]) >>
+  qabbrev_tac `ainst = mk_inst st1.cs_next_id ALLOCA
+    [Lit (n2w (type_memory_bytes cenv typ))] [p]` >>
+  `MEM ainst (fn_insts func)` by
+    (irule lookup_block_fn_insts >>
+     qpat_assum `lookup_block st1.cs_current_bb _ = _` (irule_at Any) >>
+     simp[Abbr `ainst`]) >>
+  qabbrev_tac `g = STRING #"%" (toString (st1.cs_next_var + 2))` >>
+  qabbrev_tac `vld = STRING #"%" (toString (st1.cs_next_var + 3))` >>
+  `ALL_DISTINCT [p;idx;g;vld] /\
+   (!scopes. not_local_ptr cenv scopes g /\ not_local_ptr cenv scopes vld) /\
+   (!x. not_fresh_at st1 x ==> ~MEM x [p;idx;g;vld])` by
+    (simp[Abbr `g`, Abbr `vld`, not_fresh_at_def] >>
+     rpt conj_tac >> rpt gen_tac >> rpt strip_tac >>
+     irule local_ptrs_reserved_fresh >> qexists_tac `st1` >> simp[]) >>
+  `!x. lvo = Var x ==> ~MEM x [p;idx;g;vld]` by metis_tac[] >>
+  `!x sz. cenv.ce_return_buf = SOME (PtrVar (Var x) sz) \/
+    cenv.ce_return_pc = SOME (PtrVar (Var x) sz) ==> not_fresh_at st x` by
+    (qpat_assum `ret_pc_ok cenv st s0` mp_tac >>
+     qpat_assum `!x sz. cenv.ce_return_buf = _ ==> _` mp_tac >>
+     rpt (pop_assum kall_tac) >> simp[ret_pc_ok_def] >> metis_tac[]) >>
+  `stmt_state_rel ctx func cenv cx (es with gas_obs := []) s0 /\
+   ghost_inv d cenv cx (es with gas_obs := []) G0 tn0 s0` by
+    simp[ghost_inv_gas_obs] >>
+  `lookup_scopes id (es with gas_obs := []).scopes = NONE` by simp[] >>
+  `type_memory_bytes cenv typ < dimword (:256)` by decide_tac >>
+  `gas_admissible (eval_for cx tv id body (MAP Value vs)) (stmt_res_ok lctx)
+    (es with gas_obs := [])` by
+    (qpat_x_assum `gas_admissible _ _ _` mp_tac >>
+     simp[gas_admissible_def, Once evaluate_def, lift_option_type_def,
+       lift_option_def, bind_return, bind_def, compatible_bound_def,
+       check_def, vyperStateTheory.assert_def, ignore_bind_def, return_def]) >>
+  suspend "initialize"
+QED
+
+Resume body_for_immutable_array_ptr[initialize]:
+  qpat_assum `!ei s. P ei /\ stmt_state_rel _ _ _ _ _ _ ==> _` drule_all >>
+  strip_tac >>
+  `?iav. (dyn ==>
+    immutable_holds cenv cx (ArrayT typ (Dynamic (bound_length bd)))
+      (Value (ArrayV iav)) (n2w off) (es with gas_obs := []) s0 /\
+    evaluate_type (get_tenv cx) typ = SOME tv /\
+    value_has_type (ArrayTV tv (Dynamic (bound_length bd))) (ArrayV iav) /\
+    LENGTH vs = array_length (ArrayTV tv (Dynamic (bound_length bd))) iav) /\
+    (~dyn ==> LENGTH vs = bound_length bd)` by
+    (qpat_x_assum `case bd of Fixed cap => T | Dynamic cap => _` mp_tac >>
+     qpat_x_assum `case bd of Fixed cap => LENGTH vs = cap | Dynamic cap => T` mp_tac >>
+     qpat_assum `dyn = _` mp_tac >>
+     qpat_assum `evaluate_type _ typ = SOME tv` mp_tac >>
+     rpt (pop_assum kall_tac) >> Cases_on `bd` >>
+     simp[bound_length_def] >> metis_tac[]) >>
+  `?dst cc H tm.
+    array_loop_inv ctx func cenv cx P vs id idx (Lit (n2w off)) (n2w off)
+      p dst (type_memory_bytes cenv typ) ainst cond st 0
+      (es with gas_obs := []) cc /\
+    ghost_inv d cenv cx (es with gas_obs := []) H tm cc /\
+    ptr_covers H tm p cc (type_memory_bytes cenv typ) /\
+    eval_operand lvo cc = SOME (n2w (LENGTH vs)) /\
+    FLOOKUP H idx = NONE /\ op_taint tm (Var idx) = {} /\
+    op_prov H lvo = NONE /\ op_taint tm lvo = {} /\
+    array_caller_frame st s0 cc /\
+    gas_path_ptr (cx_dead cx) 0 ctx func PG G0 tn0 s0 0 H tm (OK cc) /\
+    (!x. not_fresh_at st x ==> FLOOKUP H x = FLOOKUP G0 x /\
+      op_taint tm (Var x) = op_taint tn0 (Var x))` by
+    (mp_tac (Q.INST [`es` |-> `es with gas_obs := []`, `sa` |-> `st`,
+       `sb` |-> `st1`, `cap` |-> `bound_length bd`, `sz` |-> `type_memory_bytes cenv typ`,
+       `et` |-> `typ`, `av` |-> `iav`, `s` |-> `s0`, `G` |-> `G0`, `tn` |-> `tn0`,
+       `lbl` |-> `st1.cs_current_bb`, `aid` |-> `st1.cs_next_id`,
+       `j` |-> `st1.cs_next_id + 1`, `e1` |-> `st1.cs_next_id + 2`,
+       `e2` |-> `st1.cs_next_id + 3`, `e3` |-> `st1.cs_next_id + 4`,
+       `e4` |-> `st1.cs_next_id + 5`, `e5` |-> `h - 3`, `cond_lbl` |-> `cond`,
+       `D` |-> `cx_dead cx`]
+       (SPEC_ALL (INST_TYPE [alpha |-> ``:value``] immutable_entry_initialize_ptr))) >>
+     impl_tac >- (simp[Abbr `ainst`, Abbr `g`, Abbr `vld`] >>
+       rpt conj_tac >> first_assum ACCEPT_TAC) >>
+     strip_tac >>
+     qpat_assum `op_prov H (Var idx) = NONE`
+       (assume_tac o SIMP_RULE (srw_ss()) [op_prov_def]) >>
+     qexistsl_tac [`dst`, `cc`, `H`, `tm`] >> simp[Abbr `ainst`]) >>
+  `copy_old_operand st1 lvo` by simp[copy_old_operand_def] >>
+  `LENGTH vs < dimword (:256)` by decide_tac >>
+  `!ei t j. P ei /\ stmt_state_rel ctx func cenv cx ei t /\ j < LENGTH vs ==>
+    immutable_holds cenv cx typ (Value (EL j vs))
+      (n2w off + n2w ((if dyn then 32 else 0) + j * type_memory_size tv)) ei t` by
+    (qpat_x_assum `!ei s. P ei /\ stmt_state_rel _ _ _ _ _ _ ==> _` mp_tac >>
+     qpat_x_assum `dyn = _` mp_tac >>
+     rpt (pop_assum kall_tac) >> Cases_on `bd` >> simp[] >> metis_tac[]) >>
+  suspend "counted"
+QED
+
+Resume body_for_immutable_array_ptr[counted]:
+  FAIL_TAC "immutable pointer counted loop bridge"
 QED
 
 Finalise body_for_immutable_array_ptr
