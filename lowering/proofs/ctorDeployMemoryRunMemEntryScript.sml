@@ -145,6 +145,7 @@ Proof
    actual.vs_logs = [] /\ actual.vs_requests = [] /\ actual.vs_pending_deletions = []` by
     (qpat_x_assum `abi_encoder_registered_effect _ _ _ _` mp_tac >>
      simp[abiEncoderRegisteredEffectTheory.abi_encoder_registered_effect_def]) >>
+  `actual.vs_code = (deploy_evaluation_context tops am tx).txn.code` by metis_tac[] >>
   drule_all ctor_task_landing_state_rel >> strip_tac >>
   drule ctor_checked_code_return_buf >> simp[] >> strip_tac >>
   `immutable_alloca_sep fn (cenv1 with ce_ctor_exit_label := SOME exit_lbl)
