@@ -7,6 +7,7 @@ Ancestors
   concretizePtrOwnerFloor concretizePtrAllocationOwnership concretizePtrChronologicalHistory
   concretizePtrOpaqueRetpc concretizePtrValueTransport
   concretizePtrWritePurity concretizePtrWriteClassification concretizePtrOwnerSeeds
+  ptrDiscipline concretizePtrComparisonTransport
   list finite_map option arithmetic
 
 (* Source-directed extraction: unlike the historical reverse interface this
@@ -156,4 +157,59 @@ Proof
   `b+sz <= dyn_floor C vs` by
     (drule_all ptr_reachable_owner_below_dyn_floor >> simp[]) >>
   drule_all ptr_dalloca_source_writer_owner >> simp[]
+QED
+
+Theorem ptr_dalloca_owned_write_forward:
+  ptr_mixed_vars births positions TG tn fn ft src tgt /\
+  src.vs_labels = tgt.vs_labels /\
+  fn_ptr_ok P fn /\ opaque_use_ok fn /\ MEM inst (fn_insts fn) /\
+  taint_ok fn tn inst src /\ label_positions_ok inst /\ inst.inst_opcode <> DRET /\
+  (!u. u IN FDOM TG ==> u IN fn_pv P fn) /\
+  access_ok lo G fn inst src /\ ~in_revert_forward fn src /\
+  mem_write_ops inst = SOME ops /\ ops.iao_ofst = Var u /\
+  FLOOKUP G u = SOME (b,sz) /\ FLOOKUP TG u = SOME (token:num,aid) /\
+  FLOOKUP births (token,aid) = SOME (b,sz) /\
+  FLOOKUP positions (Allocation aid) = SOME (pa,sz) /\ pa+sz < dimword(:256) /\
+  (MEM inst.inst_opcode [CALL;STATICCALL;DELEGATECALL] ==>
+    LENGTH posts.vs_returndata = LENGTH postt.vs_returndata) /\
+  k < sz /\ b+k IN range_bytes (step_writes inst src posts) ==>
+  pa+k IN range_bytes (step_writes inst tgt postt) /\
+  ?sizeop x z xt off.
+    ops.iao_max_size = SOME sizeop /\
+    eval_operand ops.iao_ofst src = SOME x /\ eval_operand sizeop src = SOME z /\
+    eval_operand ops.iao_ofst tgt = SOME xt /\ eval_operand sizeop tgt = SOME z /\
+    b+k = w2n x+off /\ pa+k = w2n xt+off /\ off < w2n z
+Proof
+  strip_tac >> drule_all ptr_dalloca_forward_write_operands >> strip_tac >>
+  gvs[] >>
+  `op_prov TG (Var u) = SOME (token,aid)` by simp[op_prov_def] >>
+  `b <= w2n x /\ w2n x + w2n z <= b+sz` by
+    (fs[access_ok_def] >>
+     qpat_x_assum `!off len. MEM (off,len) (source_memory_write_ranges _ _) /\ _ ==> _`
+       (qspecl_then [`w2n x`,`w2n z`] mp_tac) >>
+     simp[op_prov_def] >> (impl_tac >- metis_tac[]) >> strip_tac >> gvs[]) >>
+  `ptr_lookup_transport births positions (op_prov TG sizeop)
+    (op_taint tn sizeop) (eval_operand sizeop src) (eval_operand sizeop tgt)` by
+    simp[ptr_lookup_transport_some, ptr_value_transport_scalar_empty] >>
+  `pa+k IN range_bytes (step_writes inst tgt postt)` by
+    (`ptr_lookup_transport births positions (op_prov TG ops.iao_ofst)
+        (op_taint tn ops.iao_ofst) (eval_operand ops.iao_ofst src)
+        (eval_operand ops.iao_ofst tgt)` by gvs[] >>
+     `eval_operand ops.iao_ofst src = SOME x /\
+      op_prov TG ops.iao_ofst = SOME (token,aid) /\
+      (MEM inst.inst_opcode [CALL;STATICCALL;DELEGATECALL] ==>
+       LENGTH posts.vs_returndata = LENGTH postt.vs_returndata)` by
+       (simp[] >> metis_tac[]) >>
+     drule_all ptr_write_transport_owner_exact >>
+     simp[]) >>
+  `xt = x - n2w b + n2w pa` by
+    gvs[ptr_lookup_transport_some, ptr_value_transport_def] >>
+  `w2n xt = pa + (w2n x-b)` by
+    (asm_rewrite_tac[] >> irule ptr_closed_relocation_value >>
+     simp[] >> qexists `sz` >> simp[] >> decide_tac) >>
+  `w2n x <= b+k /\ b+k < w2n x+w2n z` by
+    (`eval_operand ops.iao_ofst src = SOME x` by simp[] >>
+     drule_all ptr_step_write_max_containment >> simp[]) >>
+  conj_tac >- gvs[ADD_COMM] >>
+  qexists_tac `b+k-w2n x` >> decide_tac
 QED
