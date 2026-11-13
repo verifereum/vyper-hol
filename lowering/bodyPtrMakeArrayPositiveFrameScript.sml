@@ -28,7 +28,7 @@ Proof
 QED
 
 Theorem literal_store_outer_wb:
-  literal_loop_frame pure ctx func ce cx d root aid addr capacity
+  literal_loop_frame H pure ctx func ce cx d root aid addr capacity
     ees fr sf Gf tnf es sa G tn s cells off /\
   local_ptrs_reserved ce fr /\
   (!x. not_fresh_at sa x ==> lookup_var x z = lookup_var x s) /\
@@ -69,7 +69,7 @@ Proof
 QED
 
 Theorem literal_loop_store_endpoint:
-  literal_loop_frame pure ctx func ce cx d root aid addr capacity
+  literal_loop_frame H pure ctx func ce cx d root aid addr capacity
     ees fr sf Gf tnf es sa G tn s cells off /\
   local_ptrs_reserved ce fr /\ local_ptrs_reserved ce sa /\
   (!x. not_fresh_at sa x ==> lookup_var x z = lookup_var x s) /\
@@ -81,7 +81,7 @@ Theorem literal_loop_store_endpoint:
   FLOOKUP HG root = SOME (addr,capacity) /\ ptr_covers HG tm root z capacity /\
   (!i. ~(addr+off <= i /\ i < addr+off+n) ==>
     mem_bytes_at i 1 z.vs_memory = mem_bytes_at i 1 s.vs_memory) ==>
-  literal_loop_frame pure ctx func ce cx d root aid addr capacity
+  literal_loop_frame H pure ctx func ce cx d root aid addr capacity
     ees fr sf Gf tnf es sb HG tm z cells off
 Proof
   disch_then (map_every assume_tac o CONJUNCTS) >>
@@ -116,7 +116,7 @@ Proof
 QED
 
 Theorem literal_flat_loop_store:
-  literal_loop_frame pure ctx func ce cx d root aid addr capacity
+  literal_loop_frame H pure ctx func ce cx d root aid addr capacity
     ees fr sf Gf tnf es sa G tn s cells off /\
   literal_prefix_ok cells tn s /\
   compile_store_memory ce (Var src) (Var dst) ty ty sa = ((),sb) /\
@@ -133,7 +133,7 @@ Theorem literal_flat_loop_store:
   sa.cs_next_var <= sb.cs_next_var /\ sa.cs_next_id <= sb.cs_next_id ==>
   ?z tm.
     gas_path_ptr D 0 ctx func PG G tn s 0 G tm (OK z) /\
-    literal_loop_frame pure ctx func ce cx d root aid addr capacity
+    literal_loop_frame H pure ctx func ce cx d root aid addr capacity
       ees fr sf Gf tnf es sb G tm z (cells ++ [(tv,v,addr+off,k)]) (off+k) /\
     literal_prefix_ok (cells ++ [(tv,v,addr+off,k)]) tm z
 Proof
@@ -146,7 +146,7 @@ Proof
   rename1 `gas_path_ptr D 0 ctx func PG G tn s 0 G tm (OK z)` >>
   `FLOOKUP G root = SOME (addr,capacity) /\ ptr_covers G tm root z capacity` by
     metis_tac[literal_loop_frame_allocation] >>
-  `literal_loop_frame pure ctx func ce cx d root aid addr capacity
+  `literal_loop_frame H pure ctx func ce cx d root aid addr capacity
     ees fr sf Gf tnf es sb G tm z cells off` by
     (irule literal_loop_store_endpoint >> simp[] >>
      qexistsl [`G`, `k`, `s`, `sa`, `tn`] >> simp[] >> metis_tac[]) >>
