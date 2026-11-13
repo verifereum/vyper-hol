@@ -1474,17 +1474,23 @@ QED
 
 (* Successful instruction cuts expose the concrete remaining reading budget,
    including variable-length INVOKE segments. *)
-Theorem prefix_ok_readings_events[local]:
+Theorem prefix_ok_readings_replay[local]:
   !xs s t bb.
     EVERY (\i. ~is_terminator i.inst_opcode) xs /\
     DROP s.vs_inst_idx bb.bb_instructions = xs /\
     FOLDR (dft_exec_cons fuel C) OK xs s = OK t ==>
     t.vs_gas_readings =
-      DROP (LENGTH (gas_events_block fuel C owner bb s)) s.vs_gas_readings
+      DROP (LENGTH (gas_events_block fuel C owner bb s)) s.vs_gas_readings /\
+    !tail. FOLDR (dft_exec_cons fuel C) OK xs
+      (s with vs_gas_readings :=
+        gasOracleReplay$gas_prefix (LENGTH (gas_events_block fuel C owner bb s))
+          s.vs_gas_readings ++ tail) = OK (t with vs_gas_readings := tail)
 Proof
   Induct >> rpt gen_tac >> strip_tac
   >- (gvs[DROP_EQ_NIL] >>
-      simp[Once gas_events_block_def, venomInstTheory.get_instruction_def]) >>
+      `gas_events_block fuel C owner bb s = []` by
+        simp[Once gas_events_block_def, venomInstTheory.get_instruction_def] >>
+      simp[gasOracleReplayTheory.gas_prefix_def]) >>
   fs[EVERY_DEF, dftIndexedExecTheory.dft_exec_cons_def] >>
   Cases_on `step_inst fuel C h s` >> gvs[] >>
   `s.vs_inst_idx < LENGTH bb.bb_instructions` by
@@ -1499,10 +1505,55 @@ Proof
   mp_tac (cj 1 gas_count_suffix) >>
   disch_then (qspecl_then [`fuel`, `C`, `h`, `s`] mp_tac) >>
   simp[gas_count_suffix_def] >> strip_tac >>
+  conj_tac
+  >- (simp[Once gas_events_block_def, venomInstTheory.get_instruction_def,
+           gas_events_length, rich_listTheory.DROP_DROP_T] >>
+      simp[SimpRHS, Once gas_count_block_def, venomInstTheory.get_instruction_def] >>
+      simp[arithmeticTheory.ADD_COMM]) >>
+  gen_tac >>
+  `gasOracleReplay$gas_replay_at (gas_count_step fuel C h s)
+    (step_inst fuel C h) s` by
+    (irule removeUnusedGasProofsTheory.remove_unused_step_successful_replay_count >> simp[]) >>
+  qpat_x_assum `gasOracleReplay$gas_replay_at _ _ _` mp_tac >>
+  simp[gasOracleReplayTheory.gas_replay_at_def] >> strip_tac >>
+  qpat_x_assum `!tail. lift_result _ _ _ _ _`
+    (qspec_then `gasOracleReplay$gas_prefix
+       (LENGTH (gas_events_block fuel C owner bb
+         (v with vs_inst_idx := SUC s.vs_inst_idx))) v.vs_gas_readings ++ tail` mp_tac) >>
+  simp[stateEquivTheory.lift_result_def] >> strip_tac >>
   simp[Once gas_events_block_def, venomInstTheory.get_instruction_def,
-       gas_events_length, rich_listTheory.DROP_DROP_T] >>
-  simp[SimpRHS, Once gas_count_block_def, venomInstTheory.get_instruction_def] >>
-  simp[arithmeticTheory.ADD_COMM]
+       gas_events_length, gasOracleReplayTheory.gas_prefix_add,
+       dftIndexedExecTheory.dft_exec_cons_def, GSYM APPEND_ASSOC] >>
+  `gas_count_block fuel C bb s = gas_count_step fuel C h s +
+     gas_count_block fuel C bb (v with vs_inst_idx := SUC s.vs_inst_idx)` by
+    simp[Once gas_count_block_def, venomInstTheory.get_instruction_def] >>
+  `gas_count_block fuel C bb s = gas_count_step fuel C h s +
+     LENGTH (gas_events_block fuel C owner bb
+       (v with vs_inst_idx := SUC s.vs_inst_idx))` by
+    metis_tac[gas_events_length] >>
+  qpat_x_assum `gas_count_block fuel C bb s = _ + LENGTH _`
+    (fn th => pure_rewrite_tac[th]) >>
+  pure_rewrite_tac[gasOracleReplayTheory.gas_prefix_add, GSYM APPEND_ASSOC] >>
+  qpat_x_assum `lift_result _ _ _ _ _` mp_tac >>
+  Cases_on `step_inst fuel C h
+    (s with vs_gas_readings :=
+      gasOracleReplay$gas_prefix (gas_count_step fuel C h s) s.vs_gas_readings ++
+      gasOracleReplay$gas_prefix
+        (LENGTH (gas_events_block fuel C owner bb
+          (v with vs_inst_idx := SUC s.vs_inst_idx)))
+        (DROP (gas_count_step fuel C h s) s.vs_gas_readings) ++ tail)` >>
+  simp[stateEquivTheory.lift_result_def] >> strip_tac >> gvs[]
+QED
+
+Theorem prefix_ok_readings_events[local]:
+  !xs s t bb.
+    EVERY (\i. ~is_terminator i.inst_opcode) xs /\
+    DROP s.vs_inst_idx bb.bb_instructions = xs /\
+    FOLDR (dft_exec_cons fuel C) OK xs s = OK t ==>
+    t.vs_gas_readings =
+      DROP (LENGTH (gas_events_block fuel C owner bb s)) s.vs_gas_readings
+Proof
+  metis_tac[prefix_ok_readings_replay]
 QED
 
 (* Lift an exact returning callee cut through the real caller frame. *)
@@ -6143,6 +6194,111 @@ Proof
     `post`] mp_tac prefix_events_stopped >>
   `s.vs_inst_idx - (LENGTH pre + s.vs_inst_idx) = 0` by decide_tac >>
   simp[DROP_APPEND] >> gvs[]
+QED
+
+(* The padded-prefix S conjunct of P is already quantified over arbitrary
+   residual tails.  This projection uses that prefix packet, not an extension
+   of its filling to the packet array of the full block. *)
+Theorem identity_prefix_mask_result[local]:
+  !fuel C C' owner pre post st m es unused.
+  let R = (\n D xs s. FOLDR (dft_exec_cons n D) OK xs s);
+      E = (\D xs s. gas_events_block fuel D owner
+        <|bb_label := s.vs_current_bb; bb_instructions :=
+          REPLICATE s.vs_inst_idx (mk_inst 0 STOP [] []) ++ xs|> s);
+      S = (\xs s m es unused.
+        LENGTH m = LENGTH es /\
+        PERM (MAP THE (FILTER IS_SOME m) ++ unused) s.vs_gas_readings /\
+        (!u. (R fuel C' xs s = OK u \/ (?ir. R fuel C' xs s = IntRet ir u)) ==>
+          EVERY IS_SOME m /\ unused = u.vs_gas_readings) /\
+        !gs tail. LIST_REL (\slot w. slot = NONE \/ slot = SOME w) m gs ==>
+          (?extra. es = E C xs (s with vs_gas_readings := gs ++ tail) ++ extra) /\
+          ((?j. terminates (R j C xs (s with vs_gas_readings := gs ++ tail))) ==>
+            terminates (R fuel C xs (s with vs_gas_readings := gs ++ tail)) /\
+            dft_res_rel
+              (restore_result [] (R fuel C xs (s with vs_gas_readings := gs ++ tail)))
+              (restore_result [] (R fuel C' xs s)) /\
+            (((?u. R fuel C' xs s = OK u) \/ (?ir u. R fuel C' xs s = IntRet ir u)) ==>
+              E C xs (s with vs_gas_readings := gs ++ tail) = es /\
+              residual_result tail (R fuel C' xs s)
+                (R fuel C xs (s with vs_gas_readings := gs ++ tail)))))
+  in
+    EVERY (\i. ~is_terminator i.inst_opcode) pre /\ S pre st m es unused ==>
+    !gs tail.
+      LIST_REL (\slot w. slot = NONE \/ slot = SOME w) m gs ==>
+      let a = st with vs_gas_readings := gs ++ tail in
+      (?extra. es = E C pre a ++ extra) /\
+      (!u. R fuel C pre a = OK u ==>
+        E C pre a = es /\ u.vs_gas_readings = tail /\
+        (?t. R fuel C' pre st = OK t) /\
+        !tail'. R fuel C pre (st with vs_gas_readings := gs ++ tail') =
+          OK (u with vs_gas_readings := tail')) /\
+      (((~?u. R fuel C pre a = OK u) /\ (?j. terminates (R j C pre a))) ==>
+        terminates (R fuel C pre a) /\
+        dft_res_rel (restore_result [] (R fuel C pre a))
+          (restore_result [] (R fuel C' (pre ++ post) st))) /\
+      ((~?t. R fuel C' pre st = OK t) ==> ~?u. R fuel C pre a = OK u)
+Proof
+  rpt gen_tac >> pure_rewrite_tac[LET_THM] >>
+  CONV_TAC (REDEPTH_CONV BETA_CONV) >>
+  qabbrev_tac `R = (\n D xs s. FOLDR (dft_exec_cons n D) OK xs s)` >>
+  qabbrev_tac `E = (\D xs s. gas_events_block fuel D owner
+    <|bb_label := s.vs_current_bb; bb_instructions :=
+      REPLICATE s.vs_inst_idx (mk_inst 0 STOP [] []) ++ xs|> s)` >>
+  strip_tac >> rpt gen_tac >> strip_tac >>
+  qabbrev_tac `a = st with vs_gas_readings := gs ++ tail` >>
+  qpat_x_assum `!gs tail. LIST_REL _ m gs ==> _`
+    (qspecl_then [`gs`, `tail`] mp_tac) >> simp[GSYM markerTheory.Abbrev_def] >>
+  strip_tac >>
+  `!u. R fuel C pre a = OK u ==> ?t. R fuel C' pre st = OK t` by
+    (rpt strip_tac >>
+     `?j. terminates (R j C pre a)` by
+       (qexists_tac `fuel` >> simp[passSimulationDefsTheory.terminates_def]) >>
+     qpat_x_assum `(?j. _) ==> _` mp_tac >> (impl_tac >- metis_tac[]) >>
+     strip_tac >> qpat_x_assum `dft_res_rel _ _` mp_tac >>
+     Cases_on `R fuel C' pre st` >>
+     simp[restore_result_def, dftRunRelTheory.dft_res_rel_def]) >>
+  conj_tac
+  >- (rpt strip_tac >>
+      `?t. R fuel C' pre st = OK t` by metis_tac[] >>
+      qpat_x_assum `(?j. _) ==> _` mp_tac >>
+      (impl_tac >- (qexists_tac `fuel` >> simp[passSimulationDefsTheory.terminates_def])) >>
+      simp[residual_result_cases] >> strip_tac >>
+      `E C pre a = es /\ u.vs_gas_readings = tail` by gvs[] >>
+      simp[] >>
+      `LENGTH gs = LENGTH es` by metis_tac[LIST_REL_LENGTH] >>
+      qunabbrev_tac `R` >> BETA_TAC >>
+      RULE_ASSUM_TAC BETA_RULE >>
+      qpat_assum `FOLDR (dft_exec_cons fuel C) OK pre a = OK u`
+        (mp_then (Pos last) mp_tac prefix_ok_readings_replay) >>
+      disch_then (qspecl_then [`owner`,
+        `<|bb_label := a.vs_current_bb; bb_instructions :=
+          REPLICATE a.vs_inst_idx (mk_inst 0 STOP [] []) ++ pre|>`] mp_tac) >>
+      (impl_tac >- simp[DROP_APPEND, DROP_REPLICATE]) >> strip_tac >>
+      qpat_x_assum `!tail. FOLDR _ _ _ _ = _` (qspec_then `tail'` mp_tac) >>
+      qunabbrev_tac `E` >> RULE_ASSUM_TAC BETA_RULE >>
+      qpat_assum `gas_events_block _ _ _ _ a = es`
+        (fn th => pure_rewrite_tac[th]) >>
+      qpat_assum `LENGTH gs = LENGTH es`
+        (fn th => pure_rewrite_tac[GSYM th]) >>
+      qpat_assum `u = _` (fn th => pure_rewrite_tac[th]) >>
+      simp_tac (srw_ss()) [Abbr `a`, gasOracleReplayTheory.gas_prefix_def,
+          TAKE_LENGTH_APPEND] >>
+      pure_rewrite_tac[GSYM APPEND_ASSOC, TAKE_LENGTH_APPEND] >>
+      disch_then ACCEPT_TAC) >>
+  reverse conj_tac >- metis_tac[] >>
+  strip_tac >>
+  qpat_x_assum `(?j. _) ==> _` mp_tac >> (impl_tac >- metis_tac[]) >> strip_tac >>
+  `~?t. R fuel C' pre st = OK t` by
+    (Cases_on `R fuel C pre a` >>
+     gvs[restore_result_def, dftRunRelTheory.dft_res_rel_def,
+         passSimulationDefsTheory.terminates_def] >>
+     Cases_on `R fuel C' pre st` >>
+     gvs[restore_result_def, dftRunRelTheory.dft_res_rel_def]) >>
+  `R fuel C' (pre ++ post) st = R fuel C' pre st` by
+    (qpat_x_assum `~?t. R fuel C' pre st = OK t` mp_tac >>
+     simp[Abbr `R`] >> strip_tac >>
+     metis_tac[stopped_prefix_suffix]) >>
+  metis_tac[]
 QED
 
 Theorem stopped_extracted_suffix[local]:
