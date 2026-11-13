@@ -6,7 +6,7 @@ Ancestors
   readonlyInvokeCopyFwdOperationalMapOrigins readonlyInvokeCopyFwdGlobalSupport
   readonlyInvokeCopyFwdHistoryInheritedLifecycle readonlyInvokeCopyFwdHeterogeneousLedger
   readonlyInvokeCopyFwdOperationalSupport readonlyInvokeCopyFwdHistoryPhase
-  codegenRel ptrDiscipline
+  codegenRel contextCodegenRel memSafeRun dftGasFromListLookup ptrDiscipline
   readonlyInvokeCopyFwdRel taintAgree o1LowerDloadShared o1LowerDloadOccurrence
   internalReturnCopyFwdSim venomInst venomState finite_map list pred_set words
 
@@ -238,4 +238,62 @@ Proof
   disch_then (qspec_then `Ct` strip_assume_tac) >>
   qexistsl_tac [`u`,`un`,`(p,[])::ledger`,`E UNION {(a,did)}`] >>
   simp[] >> metis_tac[]
+QED
+
+(* Revert forwarding concerns RETURNDATACOPY and REVERT, never MCOPY. *)
+Theorem ricf_mcopy_not_in_revert_forward:
+  lookup_block s.vs_current_bb fn.fn_blocks = SOME bb /\
+  get_instruction bb s.vs_inst_idx = SOME inst /\ inst.inst_opcode = MCOPY ==>
+  ~in_revert_forward fn s
+Proof
+  rw[in_revert_forward_def] >> strip_tac >>
+  drule_all memSafeRunTheory.revert_forward_at_opcode >> simp[]
+QED
+
+Theorem ricf_operational_copy_non_revert:
+  EVERY wf_ssa C.ctx_functions /\ EVERY wf_function C.ctx_functions /\
+  EVERY fn_inst_wf C.ctx_functions /\ vs.vs_allocas = FEMPTY /\
+  ~ctx_has_dalloca C /\ ssa_form fn /\ fn_inst_wf fn /\
+  ricf_full_alloca_copies fn /\ ricf_src_alloca fn /\
+  ALL_DISTINCT (MAP (\inst. inst.inst_id) (fn_insts fn)) /\
+  ricf_located_event ctx0 fn log round b es prefix e current /\
+  lookup_block s.vs_current_bb fn.fn_blocks = SOME (EL b fn.fn_blocks) /\
+  s.vs_inst_idx = e.rfe_index /\
+  (ricf_event_copy e (EL b fn.fn_blocks)).inst_operands = [Var dst;Var sv;Lit z] /\
+  occurrence_natural_geometry lo a U B stk s /\
+  s.vs_alloca_next <= dimword (:256) /\
+  ricf_operational_invariant vs C ctx0 log D stk PG G tn fn
+    (ricf_event_copy e (EL b fn.fn_blocks)) s t
+    n a U B HP H ledger E sites maps targets G0 tn0 /\
+  active_inst fn (ricf_event_copy e (EL b fn.fn_blocks)) s /\ wf_function fn /\
+  access_ok lo G fn (ricf_event_copy e (EL b fn.fn_blocks)) s /\
+  nop.inst_opcode = NOP /\ nop.inst_operands = [] /\ nop.inst_outputs = [] /\
+  (!u. step_inst fuel C (ricf_event_copy e (EL b fn.fn_blocks)) s = OK u ==>
+    active_inst fn next (u with vs_inst_idx := SUC s.vs_inst_idx)) ==>
+  ?u un ledger' E'.
+    step_inst fuel C (ricf_event_copy e (EL b fn.fn_blocks)) s = OK u /\
+    step_inst fuel Ct nop t = OK t /\
+    (if z = 0w then ledger' = ledger /\ E' = E /\ un = tn0
+     else ?did p. FLOOKUP H dst = SOME (a,did) /\
+       p.rpe_event = e /\ p.rpe_before = s /\ p.rpe_after = u /\
+       ledger' = (p,[])::ledger /\ E' = E UNION {(a,did)}) /\
+    ricf_operational_invariant vs C ctx0 log D stk PG
+      (step_prov PG G (ricf_event_copy e (EL b fn.fn_blocks)) u)
+      (step_taint (ricf_event_copy e (EL b fn.fn_blocks)) s u tn) fn next
+      (u with vs_inst_idx := SUC s.vs_inst_idx)
+      (t with vs_inst_idx := SUC s.vs_inst_idx)
+      n a U (occurrence_sites_step a B (ricf_event_copy e (EL b fn.fn_blocks)) u)
+      HP (occurrence_step a HP H (ricf_event_copy e (EL b fn.fn_blocks)) u)
+      ledger' E' sites maps targets G0 un
+Proof
+  strip_tac >>
+  `occ_frame_reachable vs C stk PG G tn fn
+    (ricf_event_copy e (EL b fn.fn_blocks)) s n a U B HP H` by
+    fs[ricf_operational_invariant_def, ricf_heterogeneous_source_ledger_def] >>
+  drule_all ricf_located_event_operands_available >> strip_tac >>
+  `~in_revert_forward fn s` by
+    (drule_all wf_active_lookup >> strip_tac >>
+     irule ricf_mcopy_not_in_revert_forward >> metis_tac[]) >>
+  drule_all ricf_operational_copy_transition >>
+  gvs[]
 QED
