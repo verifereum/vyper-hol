@@ -182,7 +182,7 @@ Theorem aggregate_body_head_continuation_mem:
     value_has_type htv v /\ MAP FDOM es.scopes = MAP FDOM es1.scopes /\
     mem_bytes_at b asz t1.vs_memory = mem_bytes_at b asz s0.vs_memory
 Proof
-  strip_tac >>
+  disch_then (map_every assume_tac o CONJUNCTS) >>
   `es1 with gas_obs := [] = es1` by
     simp[vyperStateTheory.evaluation_state_component_equality] >>
   drule_all aggregate_tuple_marked_child_declared_source_any >>
