@@ -463,10 +463,10 @@ Resume concat_args_sim_mem[post]:
   >- (qexistsl_tac [`v`, `vs`] >> conj_tac >- REFL_TAC >>
       conj_tac >> first_assum ACCEPT_TAC) >>
   conj_tac
-  >- (rewrite_tac[MAP, FLAT] >> first_assum ACCEPT_TAC) >>
+  >- (rewrite_tac[MAP, FLAT] >> TRY BETA_TAC >> first_assum ACCEPT_TAC) >>
   conj_tac
   >- (qpat_x_assum `mload _ tu = _` mp_tac >>
-      rewrite_tac[MAP, FLAT, LENGTH_APPEND, ADD_ASSOC] >>
+      rewrite_tac[MAP, FLAT, LENGTH_APPEND, ADD_ASSOC] >> TRY BETA_TAC >>
       TRY (disch_then ACCEPT_TAC)) >>
   ntac 2 (conj_tac >- first_assum ACCEPT_TAC) >>
   conj_tac
