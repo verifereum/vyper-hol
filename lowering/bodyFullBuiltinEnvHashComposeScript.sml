@@ -249,17 +249,85 @@ Resume hash_builtin_value_from_suffixes[suffix]:
       Cases_on `unop_result cx (BaseT (BytesT (Fixed 32))) BlockHash [BaseT (UintT 256)] (IntV i) mid`
       >- suspend "block_success" >>
       gvs[Abbr `childR`] >>
-      Cases_on `r` >> fs[exprSimDefsTheory.expr_exit_def, exit_result_def] >>
-      metis_tac[exprSimDefsTheory.expr_exit_def]) >>
+      qpat_x_assum `expr_exit _ r` mp_tac >>
+      rpt (pop_assum kall_tac) >> disch_tac >>
+      Cases_on `r` >> Cases_on `y` >>
+      gvs[exprSimDefsTheory.expr_exit_def, exit_result_def] >>
+      rename1 `Error err` >> Cases_on `err` >>
+      gvs[exprSimDefsTheory.expr_exit_def, exit_result_def]) >>
  suspend "blob"
 QED
 
 Resume hash_builtin_value_from_suffixes[block_success]:
- FAIL_TAC "success inspect"
+ qpat_x_assum `!arg sa op sb func st0 cenv cx mid s ctx DF lo d G tn explicit PG i. compile_blockhash _ _ = _ /\ _ ==> _` kall_tac >>
+ qpat_x_assum `!arg sa op sb func st0 cenv cx mid s ctx DF lo d G tn explicit PG i. emit_op BLOBHASH _ _ = _ /\ _ ==> _` kall_tac >>
+ gvs[] >>
+ qpat_assum `!H. valid_horizon _ _ H _ ==> gas_origin_ptr_path _ _ _ _ /\ _`
+   (qspec_then `H` mp_tac) >>
+ (impl_tac >- first_assum ACCEPT_TAC) >>
+ disch_then (strip_assume_tac o PURE_REWRITE_RULE [sumTheory.sum_case_def]) >> gvs[] >>
+ qpat_assum `!H. valid_horizon _ _ H _ ==> expr_post _ _ _ _ _ _ _ _ _ _ _ _ _ _`
+   (qspec_then `H` mp_tac) >>
+ (impl_tac >- first_assum ACCEPT_TAC) >>
+ disch_then (strip_assume_tac o REWRITE_RULE [expr_post_def]) >>
+ `mid with gas_obs := [] = mid` by
+   simp[vyperStateTheory.evaluation_state_component_equality] >>
+ disj1_tac >> simp[] >>
+ simp[expr_post_def, ptr_val_ok_def, is_word_type_def,
+      vyperASTTheory.expr_type_def, expr_val_at_def] >>
+ conj_tac
+ >- (rpt conj_tac
+     >- metis_tac[loweringShapeDefsTheory.not_fresh_at_mono]
+     >- metis_tac[]
+     >- metis_tac[locals_kept_mem_tail]
+     >> metis_tac[pure_frame_mem_tail]) >>
+ conj_tac >- simp[exprSimMemDefsTheory.expr_store_bound_word, is_word_type_def] >>
+ qpat_x_assum `ghost_kept_at _ _ _ _ _ _ _ _ _` mp_tac >>
+ qpat_x_assum `!p. not_fresh_at sm p ==> _` mp_tac >>
+ qpat_x_assum `tn'.t_mem = tn1.t_mem` mp_tac >>
+ qpat_x_assum `sa.cs_next_var <= sm.cs_next_var` mp_tac >>
+ rpt (pop_assum kall_tac) >>
+ simp[bodyPtrDefsTheory.ghost_kept_at_def] >>
+ metis_tac[loweringShapeDefsTheory.not_fresh_at_mono]
 QED
 
 Resume hash_builtin_value_from_suffixes[blob]:
- FAIL_TAC "blob apply"
+ gvs[] >>
+ qpat_x_assum `!arg sa op sb func st0 cenv cx mid s ctx DF lo d G tn explicit PG i. compile_blockhash _ _ = _ /\ _ ==> _` kall_tac >>
+ qpat_x_assum `!arg sa op sb func st0 cenv cx mid s ctx DF lo d G tn explicit PG i. emit_op BLOBHASH _ _ = _ /\ _ ==> _` drule_all >>
+ disch_then (qspecl_then [`gas_explicit_sites ctx shadow_ctx`, `PG`] strip_assume_tac) >>
+ irule gas_outcome_full_intro >>
+ qexistsl_tac [`G'`, `mid`, `[]`, `OK t'`, `INL (evaluate_blob_hash cx.txn (Num i))`, `tn'`] >>
+ simp[] >> conj_tac
+ >- (qpat_x_assum `unop_result _ _ BlobHash _ _ _ = _` mp_tac >>
+     simp[unop_result_def]) >>
+ rpt strip_tac >>
+ qpat_assum `!H. valid_horizon _ _ H _ ==> gas_origin_ptr_path _ _ _ _ /\ _`
+   (qspec_then `H` mp_tac) >>
+ (impl_tac >- first_assum ACCEPT_TAC) >> strip_tac >>
+ qpat_assum `!H. valid_horizon _ _ H _ ==> expr_post _ _ _ _ _ _ _ _ _ _ _ _ _ _`
+   (qspec_then `H` mp_tac) >>
+ (impl_tac >- first_assum ACCEPT_TAC) >>
+ disch_then (strip_assume_tac o REWRITE_RULE [expr_post_def]) >>
+ `mid with gas_obs := [] = mid` by
+   simp[vyperStateTheory.evaluation_state_component_equality] >>
+ simp[] >> disj1_tac >>
+ simp[expr_post_def, ptr_val_ok_def, is_word_type_def,
+      vyperASTTheory.expr_type_def, expr_val_at_def] >>
+ conj_tac
+ >- (rpt conj_tac
+     >- metis_tac[loweringShapeDefsTheory.not_fresh_at_mono]
+     >- metis_tac[]
+     >- metis_tac[locals_kept_mem_tail]
+     >> metis_tac[pure_frame_mem_tail]) >>
+ conj_tac >- simp[exprSimMemDefsTheory.expr_store_bound_word, is_word_type_def] >>
+ qpat_x_assum `ghost_kept_at _ _ _ _ _ _ _ _ _` mp_tac >>
+ qpat_x_assum `!p. not_fresh_at sm p ==> _` mp_tac >>
+ qpat_x_assum `tn'.t_mem = tn1.t_mem` mp_tac >>
+ qpat_x_assum `sa.cs_next_var <= sm.cs_next_var` mp_tac >>
+ rpt (pop_assum kall_tac) >>
+ simp[bodyPtrDefsTheory.ghost_kept_at_def] >>
+ metis_tac[loweringShapeDefsTheory.not_fresh_at_mono]
 QED
 
 Finalise hash_builtin_value_from_suffixes
