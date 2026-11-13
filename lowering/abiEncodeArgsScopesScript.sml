@@ -101,10 +101,18 @@ Proof
       gvs[Once evaluate_def, bind_def, AllCaseEqs(), return_def, raise_def] >>
       Cases_on `subscript_reads_base cx e e'` >>
       gvs[bind_def, return_def, AllCaseEqs()] >>
-      imp_res_tac read_result_state >> imp_res_tac select_result_state >> gvs[] >> metis_tac[])
+      imp_res_tac read_result_state >> imp_res_tac select_result_state >>
+      rpt (qpat_x_assum `_ = _ with storage_trace := _`
+        (fn th => assume_tac (SIMP_RULE (srw_ss()) []
+          (AP_TERM ``\s:evaluation_state. s.scopes`` th)))) >>
+      gvs[] >> metis_tac[])
   >- (rpt strip_tac >>
       gvs[Once evaluate_def, bind_def, AllCaseEqs(), return_def, raise_def] >>
-      imp_res_tac select_result_state >> gvs[] >> metis_tac[])
+      imp_res_tac select_result_state >>
+      rpt (qpat_x_assum `_ = _ with storage_trace := _`
+        (fn th => assume_tac (SIMP_RULE (srw_ss()) []
+          (AP_TERM ``\s:evaluation_state. s.scopes`` th)))) >>
+      gvs[] >> metis_tac[])
   >- suspend "Builtin"
   >- suspend "TypeBuiltin"
   >- suspend "ExtCall"
