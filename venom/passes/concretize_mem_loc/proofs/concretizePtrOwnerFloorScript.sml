@@ -46,20 +46,6 @@ Proof
   metis_tac[]
 QED
 
-(* Under DALLOCA, a reachable frame's static allocations end at or below the
-   initial free memory pointer (ptr_discipline's allocas_below_fmp). *)
-Theorem ptr_reachable_alloca_below_initial_fmp:
-  frame_reachable vs C stk PG G tn fn inst s /\ ptr_discipline lo C vs /\
-  ctx_has_dalloca C /\ FLOOKUP s.vs_allocas aid = SOME (b,sz) ==>
-  b + sz <= w2n vs.vs_initial_fmp
-Proof
-  strip_tac >>
-  `allocas_below_fmp s` by (fs[ptr_discipline_def] >> metis_tac[]) >>
-  `s.vs_initial_fmp = vs.vs_initial_fmp` by
-    metis_tac[frameResolvedTraceTheory.frame_reachable_initial_fmp] >>
-  fs[allocas_below_fmp_def] >> metis_tac[]
-QED
-
 Theorem ptr_reachable_owner_below_initial_fmp:
   ptr_observation_reachable vs C obs /\ ptr_discipline lo C vs /\
   ctx_has_dalloca C /\ d <= LENGTH obs.po_stack /\
@@ -67,7 +53,10 @@ Theorem ptr_reachable_owner_below_initial_fmp:
   b + sz <= w2n vs.vs_initial_fmp
 Proof
   strip_tac >> drule_all ptr_reachable_owner_frame >> strip_tac >>
-  drule_all ptr_reachable_alloca_below_initial_fmp >> simp[]
+  `(ptr_owner_view d obs).cf_state.vs_initial_fmp = vs.vs_initial_fmp` by
+    metis_tac[frame_reachable_initial_fmp] >>
+  drule frame_reachable_caches_below >> rpt (disch_then drule) >>
+  disch_then (qspecl_then [`0`,`aid`,`b`,`sz`] mp_tac) >> simp[]
 QED
 
 (* A reachable frame's static allocations end at or below the dynamic floor:
@@ -80,7 +69,10 @@ Theorem ptr_reachable_alloca_below_dyn_floor:
   b + sz <= dyn_floor C vs
 Proof
   strip_tac >> simp[dyn_floor_def] >> IF_CASES_TAC
-  >- (drule_all ptr_reachable_alloca_below_initial_fmp >> simp[]) >>
+  >- (`s.vs_initial_fmp = vs.vs_initial_fmp` by
+        metis_tac[frame_reachable_initial_fmp] >>
+      drule frame_reachable_caches_below >> rpt (disch_then drule) >>
+      disch_then (qspecl_then [`0`,`aid`,`b`,`sz`] mp_tac) >> simp[]) >>
   `ptr_alloc_table_ok s` by
     (drule_all ptr_frame_alloc_geometry >> simp[ptr_active_alloc_geometry_def]) >>
   `b + sz <= s.vs_alloca_next` by (fs[ptr_alloc_table_ok_def] >> metis_tac[]) >>
