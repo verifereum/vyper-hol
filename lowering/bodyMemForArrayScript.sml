@@ -209,7 +209,7 @@ Proof
   rename1 `evaluate_type (get_tenv cx) typ = SOME tv` >>
   rename1 `lookup_scopes name es.scopes = SOME entry` >>
   rename1 `entry.value = ArrayV (DynArrayV vs)` >>
-  `body_for_mem_ok cx tv id body vs` by
+  `body_for_mem_ok cx tv id body (MAP Value vs)` by
     (qpat_x_assum `!s3 vs t3 s4 t4. _` mp_tac >>
      simp[check_def, assert_def, compatible_bound_def, return_def] >>
      disch_then irule >>
@@ -226,9 +226,9 @@ Proof
   `name <> id` by metis_tac[optionTheory.NOT_NONE_SOME] >>
   `cenv.ce_alloca_locals /\ supported_program tops /\
    get_module_code cx NONE = SOME tops` by fs[body_inv_def] >>
-  `EVERY (stmt_exprs_ok cenv) body /\ type_memory_bytes cenv typ < 2 ** 64` by
+  `stmts_exprs_ok (cenv with ce_var_type updated_by (id =+ SOME typ)) body /\ type_memory_bytes cenv typ < 2 ** 64` by
     fs[stmt_exprs_ok_def, supported_stmt_expr_exists_def,
-       stmts_exprs_ok_EVERY, alloc_limits_stmt_def, stmt_valued_return_def] >>
+       stmts_exprs_ok_thm, alloc_limits_stmt_def, stmt_valued_return_def] >>
   `call_evaluation_safe cx (int_calls_stmts body)` by
     (fs[int_calls_stmt_def] >> metis_tac[call_evaluation_safe_append_right]) >>
   MATCH_MP_TAC
@@ -243,12 +243,14 @@ Proof
   >- (gen_tac >> strip_tac >> irule dynarray_elements_typed >>
       simp[] >> qexists_tac `c` >> gvs[])
   >- (rpt strip_tac >>
+      `value_has_type entry.type entry.value` by simp[] >>
       drule_all dynarray_snapshot_memory >> strip_tac >>
       drule_all dynarray_snapshot_frontier >> strip_tac >>
       gvs[] >> goal_assum (drule_at Any) >> simp[arithmeticTheory.ADD_ASSOC])
   >- (rpt strip_tac >>
       `body_stmts_mem_ok cx body` by
-        (fs[body_for_mem_ok_def] >> Cases_on `vs` >> fs[]) >>
+        (fs[body_for_mem_ok_def] >> Cases_on `vs` >>
+         gvs[read_result_def, return_def]) >>
       irule array_body_fragment_callback_mem >>
       metis_tac[dynarray_elements_typed]) >>
   rpt gen_tac >> strip_tac >>
@@ -317,18 +319,18 @@ Proof
      gvs[expr_sim_inv_def, env_consistent_def, env_scopes_consistent_def] >>
      qpat_x_assum `!id entry. lookup_scopes _ _ = _ ==> _` drule >>
      simp[FLOOKUP_DEF]) >>
-  qmatch_asmsub_abbrev_tac `INL vs` >>
+  qmatch_asmsub_abbrev_tac `INL (MAP Value vs)` >>
   `LENGTH vs <= bound_length bd /\ bound_length bd < dimword (:256) /\
    (case bd of Fixed cap => LENGTH vs = cap | Dynamic cap => T)` by
     suspend "bounds" >>
   `LENGTH vs <= n` by decide_tac >>
   `eval_iterator cx (Array (TopLevelName (ArrayT typ bd) (cenv.ce_module,name)))
-      es = (INL vs,es)` by
+      es = (INL (MAP Value vs),es)` by
     (`es = es with gas_obs := es.gas_obs` by
        simp[vyperStateTheory.evaluation_state_component_equality] >>
      pop_assum SUBST1_TAC >>
-     qpat_assum `!gs. eval_iterator _ _ _ = (INL vs,_)` (fn th => rewrite_tac [th])) >>
-  `body_for_mem_ok cx tv id body vs` by
+     qpat_assum `!gs. eval_iterator _ _ _ = (INL (MAP Value vs),_)` (fn th => rewrite_tac [th])) >>
+  `body_for_mem_ok cx tv id body (MAP Value vs)` by
     (qpat_x_assum `!s3 vs t' s4 t''. _` mp_tac >>
      simp[lift_option_type_def, return_def, check_def, assert_def, compatible_bound_def] >>
      disch_then irule >> simp[] >> qexistsl_tac [`es`, `es`] >> simp[]) >>
@@ -402,13 +404,15 @@ QED
 Resume body_for_immutable_array_mem[body]:
   rpt gen_tac >> strip_tac >>
   `vs <> []` by (Cases_on `vs` >> fs[]) >>
-  `body_stmts_mem_ok cx body` by fs[body_for_mem_ok_def] >>
+  `body_stmts_mem_ok cx body` by
+    (fs[body_for_mem_ok_def] >> Cases_on `vs` >>
+     gvs[read_result_def, return_def]) >>
   `body_stmts_safe tops body` by metis_tac[body_stmt_safe_for_body] >>
   `!target. supported_stmts_expr_exists (expr_abi_decode_target_root target) body ==>
     occurs_abi_decode_target target tops` by fs[supported_stmt_expr_exists_def] >>
-  `EVERY (stmt_exprs_ok cenv) body` by
+  `stmts_exprs_ok (cenv with ce_var_type updated_by (id =+ SOME typ)) body` by
     fs[stmt_exprs_ok_def, supported_stmt_expr_exists_def,
-       stmts_exprs_ok_EVERY, alloc_limits_stmt_def, stmt_valued_return_def] >>
+       stmts_exprs_ok_thm, alloc_limits_stmt_def, stmt_valued_return_def] >>
   `call_evaluation_safe cx (int_calls_stmts body)` by
     (fs[int_calls_stmt_def] >> metis_tac[call_evaluation_safe_append_right]) >>
   irule array_body_fragment_callback_mem >> metis_tac[]
