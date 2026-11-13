@@ -21,6 +21,10 @@ Ancestors
   exprSimSource exprSimHypsDefs list exprSimHyps exprSimPop exprSimAttribute exprSimTuple exprSimPopStorage exprSimPopNested
   exprSimArrayIndex exprSimSubscriptArrayFramed exprSimSubscriptArrayCompose
   exprLowering placeTypingProps vyperAST vyperTypeSystem vyperTypeCallGraph
+  exprSimCopiedPrefix exprSimCopiedCompile exprSimCopiedCompose
+  exprSimCopiedAlloc exprSimCopiedSnapshot exprSimCopiedFrame exprSimCopiedSuffix
+  exprSimCopiedBuiltinAnnotation bodyPtrAttributeSource exprOperandVar
+  aggregateCountedPureFramePrep exprSimCopiedHistory
 
 (* An element of an array whose index leaves the locals and the immutables
    as they were, and whose base the index's fragment keeps as it is: an
@@ -312,7 +316,7 @@ Finalise compile_subscript_array_framed_base_case
    and the lowering copies the base into a fresh memory buffer before
    lowering the index (copies_subscript_base, compile_snapshot_vv cenv T),
    so the element is selected from that copy, which the index's fragment
-   leaves as it is.  ADMITTED (cheat). *)
+   leaves as it is. *)
 Theorem compile_subscript_array_copied_base_case:
   !nocalls ctx func cenv cx ann obj idx et bd.
     expr_vv_case nocalls ctx func cenv cx obj /\
@@ -324,8 +328,409 @@ Theorem compile_subscript_array_copied_base_case:
     subscript_reads_base cx obj idx /\ copies_subscript_base cenv obj idx ==>
     expr_vv_case nocalls ctx func cenv cx (Subscript ann obj idx)
 Proof
-  cheat
+  rpt gen_tac >>
+  disch_then (map_every assume_tac o CONJUNCTS) >>
+  simp[expr_vv_case_def] >> rpt gen_tac >> strip_tac >>
+  `post_value_type cenv obj = expr_type obj` by
+    (Cases_on `nocalls` >> fs[] >>
+     `int_calls_expr obj = []` by fs[int_calls_expr_def] >>
+     drule post_value_type_no_calls >> simp[]) >>
+  drule_all_then assume_tac
+    exprSimSubscriptArraySourceTheory.expr_body_pre_array_subscript_base >>
+  `expr_vv_sim ctx func cenv cx ty obj es` by
+    (qpat_x_assum `expr_vv_case _ _ _ _ _ obj` mp_tac >>
+     simp[expr_vv_case_def] >> disch_then irule >>
+     conj_tac >- (strip_tac >> fs[int_calls_expr_def]) >>
+     qexists_tac `env` >> simp[]) >>
+  simp[exprSimDefsTheory.expr_vv_sim_def] >> rpt gen_tac >> strip_tac >>
+  drule_all compile_expr_array_subscript_copied_base_prefix >> strip_tac >>
+  rename1 `compile_expr cenv ty obj sa = (bvv, sm)` >>
+  drule exprSimUnwrapTheory.compile_expr_extends >> strip_tac >>
+  `gas_admissible (eval_expr cx obj) expr_vv_res_ok es` by
+    (simp[gasContextTheory.gas_admissible_def] >> rpt strip_tac >>
+     metis_tac[expr_body_pre_gas_obs, expr_body_pre_vv_res_ok]) >>
+  drule_all fragExecTheory.fn_has_code_split >> strip_tac >>
+  qpat_x_assum `expr_vv_sim _ _ _ _ _ obj _`
+    (mp_tac o REWRITE_RULE [exprSimDefsTheory.expr_vv_sim_def]) >>
+  disch_then (qspecl_then [`sa`,`sm`,`bvv`,`s0`] mp_tac) >>
+  (impl_tac >- simp[]) >>
+  rewrite_tac[gasOutcomeTheory.gas_outcome_def] >> strip_tac
+  >- (qpat_x_assum `gas_summary_at _ _ _ _ _ _ _`
+        (strip_assume_tac o PURE_ONCE_REWRITE_RULE [gasSummaryTheory.gas_summary_at_def])
+      >- suspend "copied_normal"
+      >> suspend "copied_exit") >>
+  suspend "copied_exempt"
 QED
+Resume compile_subscript_array_copied_base_case[copied_normal]:
+  qpat_x_assum `(\res ee t. _) _ _ _` (strip_assume_tac o BETA_RULE) >>
+  gnvs[] >>
+  `vv_type bvv = ArrayT et bd` by
+    metis_tac[compile_expr_array_result_type] >>
+  `vv_type (FST (compile_expr cenv ty obj sa)) = ArrayT et bd` by simp[] >>
+  drule_all compile_expr_array_subscript_copied >> strip_tac >> gvs[] >>
+  `?tvt. evaluate_type (get_tenv cx) (ArrayT et bd) = SOME tvt` by
+    metis_tac[expr_body_pre_type_evaluates, optionTheory.IS_SOME_EXISTS] >>
+  `type_memory_bytes cenv (ArrayT et bd) = type_memory_size tvt /\
+   type_memory_size tvt < 2 ** 64` by
+    metis_tac[expr_body_pre_copy_ok, compileEnvTheory.is_word_type_def] >>
+  `local_ptrs_reserved cenv sm` by
+    metis_tac[exprLoweringPropsTheory.local_ptrs_reserved_next_var] >>
+  `!x. vv_operand bvv = Var x ==> not_fresh_at sm x` by
+    metis_tac[CONJUNCT1 exprOperandVarTheory.compiler_compile_var] >>
+  `?v a. read_result cx tv (es_end with gas_obs := []) =
+           (INL v, es_end with gas_obs := []) /\
+         eval_operand (vv_operand bvv) t = SOME a` by
+    metis_tac[loweringPostsTheory.vv_post_def, bodyPtrAttributeSourceTheory.attribute_vv_holds_read_operand] >>
+  `ci_mono sa1 su /\ ci_mono su sn /\ ci_mono sn si /\ ci_mono si sb` by
+    (rpt conj_tac
+     >- metis_tac[exprLoweringPropsTheory.ci_mono_unwrap_value, pairTheory.SND]
+     >- metis_tac[exprLoweringPropsTheory.ci_mono_compile_store_memory, pairTheory.SND]
+     >- metis_tac[exprLoweringPropsTheory.ci_mono_lower_value_compile_expr, pairTheory.SND] >>
+     qpat_x_assum `compile_array_subscript _ _ _ _ _ _ _ _ _ = _`
+       (mp_tac o Q.AP_TERM `SND`) >>
+     pure_rewrite_tac [pairTheory.SND] >>
+     disch_then (SUBST1_TAC o SYM) >>
+     irule exprLoweringPropsTheory.ci_mono_compile_array_subscript >>
+     simp[exprLoweringPropsTheory.ci_mono_compile_ptr_load]) >>
+  `cs_extends sa1 sb` by
+    metis_tac[exprLoweringPropsTheory.ci_mono_def, compileEnvTheory.cs_extends_trans] >>
+  `fn_has_code sm sa1 func` by
+    metis_tac[fragExecTheory.fn_has_code_split,
+              loweringHaltTheory.compile_alloc_buffer_extends] >>
+  `type_memory_bytes cenv (ArrayT et bd) < dimword (:256)` by
+    (qpat_x_assum `type_memory_size tvt < _` mp_tac >>
+     simp[wordsTheory.dimword_def]) >>
+  `~t.vs_halted` by
+    (qpat_x_assum `gas_marked_exec _ _ _ _ _ _ _ _` mp_tac >>
+     simp[gasSummaryTheory.gas_marked_exec_def, fragGasModeTheory.gas_marked_path_def] >>
+     metis_tac[fragGasPathTheory.gas_path_normal]) >>
+  `stmt_state_rel ctx func cenv cx (es_end with gas_obs := []) t` by
+    fs[loweringPostsTheory.vv_post_def] >>
+  drule_all exprSimAllocTheory.buffer_alloc_code >> strip_tac >>
+  drule_all exprSimIfExpWidenedCountedTheory.literal_alloc_buffer_counted >>
+  disch_then (qx_choose_then `u` (qx_choose_then `w` strip_assume_tac)) >>
+  `eval_operand (vv_operand bvv) u = eval_operand (vv_operand bvv) t` by
+    (Cases_on `vv_operand bvv` >> gvs[venomStateTheory.eval_operand_def]) >>
+  `!n b k. local_region cenv (es_end with gas_obs := []).scopes u n b k <=>
+            local_region cenv (es_end with gas_obs := []).scopes t n b k` by
+    (rpt gen_tac >> irule exprSimCopyTheory.copy_buffer_local_region_frame >>
+     qexists `sm` >> simp[]) >>
+  `vv_post ctx func cenv cx obj es sa sa1 s0 (es_end with gas_obs := []) tv bvv u` by
+    (irule exprSimIfExpWidenedAdapterTheory.vv_post_alloc_mono_frame >> simp[] >>
+     qexistsl [`t`, `sm`] >> simp[] >> rpt strip_tac >>
+     first_x_assum irule >> irule freshWritesTheory.not_fresh_at_mono >>
+     goal_assum (drule_at Any) >> simp[]) >>
+  drule_all aggregateCountedPureFramePrepTheory.aggregate_body_tuple_marked_child_source >>
+  strip_tac >> gvs[] >>
+  `value_has_type tvt v` by metis_tac[] >>
+  `ci_mono sm sa1` by
+    metis_tac[exprLoweringPropsTheory.ci_mono_compile_alloc_buffer, pairTheory.SND] >>
+  `sa.cs_next_var <= sa1.cs_next_var /\ sa.cs_next_id <= sa1.cs_next_id` by
+    (fs[exprLoweringPropsTheory.ci_mono_def] >> decide_tac) >>
+  `!x. vv_operand bvv = Var x ==> not_fresh_at sa1 x` by
+    metis_tac[freshWritesTheory.not_fresh_at_mono,
+              exprLoweringPropsTheory.ci_mono_def] >>
+  `fn_has_code sa1 su func /\ fn_has_code su sn func` by
+    metis_tac[fragExecTheory.fn_has_code_split,
+              exprLoweringPropsTheory.ci_mono_def, compileEnvTheory.cs_extends_trans] >>
+  `local_ptrs_rel func cenv es.scopes s0` by
+    fs[exprLoweringPropsTheory.stmt_state_rel_def,
+       loweringStateRelDefsTheory.state_rel_def] >>
+  `~t.vs_halted` by
+    (qpat_x_assum `gas_marked_exec _ _ _ _ _ _ _ _` mp_tac >>
+     simp[gasSummaryTheory.gas_marked_exec_def, fragGasModeTheory.gas_marked_path_def] >>
+     metis_tac[fragGasPathTheory.gas_path_normal]) >>
+
+  drule_all exprSimAllocTheory.buffer_alloc_code >> strip_tac >>
+  qmatch_asmsub_abbrev_tac `MEM ai (fn_insts func)` >>
+  `ai.inst_opcode = ALLOCA /\ ai.inst_id = sm.cs_next_id` by
+    simp[Abbr `ai`, venomInstTheory.mk_inst_def] >>
+  `!name b len. local_region cenv (es_end with gas_obs := []).scopes u name b len ==>
+     w2n w + type_memory_size tvt <= b \/ b + len <= w2n w` by
+    (fs[loweringStateRelDefsTheory.regions_disjoint_def] >>
+     metis_tac[arithmeticTheory.ADD_COMM]) >>
+  `sa.cs_next_id <= ai.inst_id` by simp[] >>
+  drule_at (Pat `unwrap_value _ _ _ = _`) copied_array_snapshot_tail >>
+  disch_then (drule_at (Pat `vv_post _ _ _ _ _ _ _ _ _ _ _ _ _`)) >>
+  disch_then (drule_at (Pat `compile_store_memory _ _ _ _ _ _ = _`)) >>
+  disch_then (drule_at (Pat `read_result _ _ _ = _`)) >>
+  disch_then (drule_at (Pat `evaluate_type _ _ = _`)) >>
+  disch_then (drule_at (Pat `eval_operand (Var _) _ = _`)) >>
+  disch_then (drule_at (Pat `MEM _ (fn_insts _)`)) >>
+  impl_tac >- (simp[] >> gvs[arithmeticTheory.ADD_COMM]) >>
+  disch_then (qx_choose_then `uw` (qx_choose_then `cap` strip_assume_tac)) >>
+  `gas_marked_exec F (ctx,func) (read_result cx tv)
+     (es_end with gas_obs := [],t) [] (INL v) (es_end with gas_obs := []) (OK cap)` by
+    (fs[gasSummaryTheory.gas_marked_exec_def] >>
+     metis_tac[fragGasModeTheory.gas_marked_path_then, arithmeticTheory.ADD_0]) >>
+  `gas_marked_exec F (ctx,func)
+     (bind (eval_expr cx obj) (\r. bind (read_result cx r) (\v. return (Value v))))
+     (es,s0) marks (INL (Value v)) (es_end with gas_obs := []) (OK cap)` by
+    (fs[gasSummaryTheory.gas_marked_exec_def] >> conj_tac
+     >- simp[vyperStateTheory.bind_def, vyperStateTheory.return_def] >>
+     metis_tac[fragGasModeTheory.gas_marked_path_then, arithmeticTheory.ADD_0]) >>
+  pure_rewrite_tac[GSYM gasOutcomeTheory.gas_outcome_def] >>
+  irule copied_array_after_capture >>
+  simp[] >>
+  goal_assum (drule_at (Pat `gas_marked_exec _ _ _ _ _ _ _ _`)) >> simp[] >>
+  goal_assum (drule_at (Pat `lower_value _ _ _ _ _ = _`)) >> simp[] >>
+  conj_tac >- suspend "copied_suffix" >>
+  `eval_expr cx obj
+      (es with gas_obs := gas_explicit marks s0.vs_gas_readings) =
+      (INL tv, es_end with gas_obs := [])` by
+    (qpat_x_assum `gas_marked_exec _ _ (eval_expr cx obj) _ _ _ _ _` mp_tac >>
+     simp[gasSummaryTheory.gas_marked_exec_def] >>
+     disch_then (qspec_then `[]` mp_tac o CONJUNCT1) >> simp[]) >>
+  `expr_body_pre cenv cx env idx (es_end with gas_obs := [])` by
+    (irule exprSimSubscriptArraySourceTheory.expr_body_pre_array_subscript_index_after_base >>
+     goal_assum (drule_at (Pat `eval_expr _ _ _ = _`)) >> simp[] >>
+     qexists_tac `ann` >> simp[]) >>
+  `expr_sim_case nocalls ctx func cenv cx idx` by metis_tac[] >>
+  conj_tac >- metis_tac[exprLoweringPropsTheory.local_ptrs_reserved_next_var,
+                        exprLoweringPropsTheory.ci_mono_def] >>
+  conj_tac >- metis_tac[fragExecTheory.fn_has_code_split,
+                        exprLoweringPropsTheory.ci_mono_def, compileEnvTheory.cs_extends_trans] >>
+  conj_tac
+  >- (simp[gasContextTheory.gas_admissible_def] >> rpt strip_tac >>
+      `expr_body_pre cenv cx env idx (es_end with gas_obs := gs)` by fs[] >>
+      drule_all (REWRITE_RULE [ETA_THM] expr_body_pre_res_ok) >> simp[]) >>
+  conj_tac >- (gvs[exprLoweringPropsTheory.stmt_state_rel_def,
+                  loweringStateRelDefsTheory.state_rel_gas_obs,
+                  loweringPostsTheory.expr_post_def,
+                  typedMemoryCopyTheory.typed_copy_state_frame_def] >> metis_tac[]) >>
+  qpat_x_assum `expr_sim_case _ _ _ _ _ idx` mp_tac >>
+  simp[expr_sim_case_def] >> disch_then irule >>
+  conj_tac >- (strip_tac >> fs[int_calls_expr_def]) >>
+  qexists_tac `env` >> simp[]
+
+QED
+Resume compile_subscript_array_copied_base_case[copied_exit]:
+  Cases_on `res` >- fs[] >> rename1 `INR exc` >>
+  qexists_tac `marks` >> disj1_tac >>
+  simp[gasSummaryTheory.gas_summary_at_def] >>
+  qexistsl_tac [`INR exc`,`es_end`,`r`] >> simp[] >>
+  drule eval_expr_subscript_copied_bind >>
+  disch_then (qspec_then `ann` SUBST1_TAC) >>
+  conj_tac
+  >- (irule gasSummaryComposeTheory.gas_marked_exec_bind_exception >>
+      irule gasSummaryComposeTheory.gas_marked_exec_bind_exception >>
+      first_assum ACCEPT_TAC) >> fs[]
+QED
+Resume compile_subscript_array_copied_base_case[copied_exempt]:
+  qexists_tac `marks` >> disj2_tac >>
+  qexistsl_tac [`err`,`ee`,`leaf`,`finish'`] >>
+  drule eval_expr_subscript_copied_bind >>
+  disch_then (qspec_then `ann` SUBST1_TAC) >>
+  pure_rewrite_tac[vyperStateTheory.ignore_bind_def, vyperStateTheory.bind_assoc] >>
+  irule gasExemptCertTheory.gas_exempt_cert_error_result >>
+  first_assum ACCEPT_TAC
+QED
+Resume compile_subscript_array_copied_base_case[copied_suffix]:
+  rpt gen_tac >> strip_tac >>
+  `vyperState$bind (eval_expr cx idx) (read_result cx)
+     (es_end with gas_obs := gas_explicit imarks cap.vs_gas_readings) =
+     (INL v', raw with gas_obs := [])` by
+    (qpat_x_assum `gas_marked_exec _ _ _ _ imarks _ _ _` mp_tac >>
+     simp[gasSummaryTheory.gas_marked_exec_def] >>
+     disch_then (qspec_then `[]` mp_tac o CONJUNCT1) >> simp[]) >>
+  `eval_expr cx obj
+     (es with gas_obs := gas_explicit marks s0.vs_gas_readings ++
+                         gas_explicit imarks cap.vs_gas_readings) =
+     (INL tv, es_end with gas_obs := gas_explicit imarks cap.vs_gas_readings)` by
+    (qpat_x_assum `gas_marked_exec _ _ (eval_expr cx obj) _ _ _ _ _` mp_tac >>
+     simp[gasSummaryTheory.gas_marked_exec_def] >>
+     disch_then (qspec_then `gas_explicit imarks cap.vs_gas_readings` mp_tac o CONJUNCT1) >> simp[]) >>
+  `expr_body_pre cenv cx env idx
+     (es_end with gas_obs := gas_explicit imarks cap.vs_gas_readings)` by
+    (irule exprSimSubscriptArraySourceTheory.expr_body_pre_array_subscript_index_after_base >>
+     goal_assum (drule_at (Pat `eval_expr cx obj _ = _`)) >> simp[] >>
+     qexists_tac `ann` >> simp[]) >>
+  `?ir. eval_expr cx idx
+      (es_end with gas_obs := gas_explicit imarks cap.vs_gas_readings) =
+      (INL ir,raw with gas_obs := []) /\
+      read_result cx ir (raw with gas_obs := []) = (INL v',raw with gas_obs := [])` by
+    (qpat_x_assum `vyperState$bind _ _ _ = _` mp_tac >>
+     simp[vyperStateTheory.bind_def, AllCaseEqs()] >> rpt strip_tac >>
+     imp_res_tac vyperStateTheory.read_result_state >> gvs[] >> metis_tac[]) >>
+  drule_at (Pat `eval_expr cx idx _ = _`) expr_body_pre_runtime_typed >>
+  disch_then drule >> strip_tac >>
+  `value_has_type tvt' v'` by metis_tac[] >>
+  drule_all exprSimSubscriptArraySuffixTheory.framed_array_index_post_view >> strip_tac >>
+  `?etv. tvt = ArrayTV etv bd /\ evaluate_type (get_tenv cx) et = SOME etv` by
+    metis_tac[vyperTypeValuesTheory.evaluate_type_ArrayT_cases] >>
+  gvs[] >>
+  `?av. v = ArrayV av` by
+    (Cases_on `v` >> gvs[vyperTypingTheory.value_has_type_def]) >> gvs[] >>
+  `is_word_type (expr_type idx)` by
+    (qpat_x_assum `value_has_type tvt' (IntV _)` mp_tac >>
+     qpat_x_assum `evaluate_type _ (expr_type idx) = _` mp_tac >>
+     rpt (pop_assum kall_tac) >> Cases_on `expr_type idx` >>
+     simp[vyperValueTheory.evaluate_type_def, AllCaseEqs(),
+          vyperTypingTheory.value_has_type_def, compileEnvTheory.is_word_type_def] >>
+     rpt strip_tac >> gvs[vyperTypingTheory.value_has_type_def,
+                         compileEnvTheory.is_word_type_def]) >>
+  `local_ptrs_reserved cenv sn /\ local_ptrs_reserved cenv si` by
+    metis_tac[exprLoweringPropsTheory.local_ptrs_reserved_next_var,
+              exprLoweringPropsTheory.ci_mono_def] >>
+  `!x. iop = Var x ==> not_fresh_at si x` by
+    (qpat_x_assum `lower_value _ _ _ _ _ = _`
+       (mp_then Any mp_tac exprOperandVarTheory.compile_lower_value_var) >> simp[]) >>
+  `!l. iop <> Label l` by
+    (drule exprWordOperandTheory.lower_value_word_shape >>
+     disch_then (qspec_then `env` mp_tac) >> simp[] >> impl_tac
+     >- (conj_tac >- fs[expr_body_pre_def] >>
+         metis_tac[expr_body_pre_var_types_well_formed]) >> simp[]) >>
+  `not_fresh_at sn p` by
+    metis_tac[freshWritesTheory.not_fresh_at_mono, exprLoweringPropsTheory.ci_mono_def] >>
+  `val_wf (ArrayTV etv bd) (ArrayV av)` by
+    metis_tac[valueEncodingTypingTheory.value_has_type_val_wf] >>
+  `memory_value_rel (ArrayTV etv bd) (ArrayV av) (w2n w) cap.vs_memory` by
+    metis_tac[memoryValueEncodingTheory.memory_layout_bridges,
+              memoryValueEncodingTheory.memory_layout_bridge_def] >>
+  drule_at (Pat `expr_post _ _ _ _ idx _ _ _ _ _ _ _ _`) copied_array_index_frame >>
+  disch_then (drule_at (Pat `FLOOKUP cap.vs_allocas _ = _`)) >>
+  disch_then (qspecl_then [`ArrayV av`,`ArrayTV etv bd`,`p`] mp_tac) >>
+  impl_tac >-
+    (conj_tac
+     >- (qpat_x_assum `sm.cs_next_id < sa1.cs_next_id` mp_tac >>
+         qpat_x_assum `ci_mono sa1 su` mp_tac >>
+         qpat_x_assum `ci_mono su sn` mp_tac >>
+         rpt (pop_assum kall_tac) >>
+         simp[exprLoweringPropsTheory.ci_mono_def]) >>
+     conj_tac
+     >- (qpat_x_assum `!name base len. local_region _ _ cap _ _ _ ==> _` mp_tac >>
+         rpt (pop_assum kall_tac) >>
+         once_rewrite_tac[arithmeticTheory.ADD_COMM] >> simp[]) >>
+     simp[]) >>
+  strip_tac >>
+  `ann = et` by
+    (qpat_x_assum `expr_body_pre _ _ _ (Subscript _ _ _) _` mp_tac >>
+     qpat_x_assum `expr_type obj = _` mp_tac >>
+     rpt (pop_assum kall_tac) >>
+     simp[expr_body_pre_def, Once vyperTypeSystemTheory.well_typed_expr_def] >>
+     rpt strip_tac >>
+     gvs[vyperTypeSystemTheory.subscript_type_ok_def] >>
+     drule placeTypingPropsTheory.type_place_expr_vtype_annotation >>
+     Cases_on `vt` >>
+     gvs[vyperTypeSystemTheory.vtype_annotation_ok_def,
+         vyperTypeSystemTheory.subscript_vtype_def] >>
+     strip_tac >>
+     qpat_x_assum `ArrayT _ _ = _`
+       (fn th => fs[SYM th, vyperTypeSystemTheory.subscript_vtype_def])) >>
+  gvs[] >>
+  `type_memory_bytes cenv ann = type_memory_size etv` by
+    (irule exprSimHypsTheory.expr_sim_inv_memory_size >>
+     goal_assum (drule_at Any) >>
+     qexistsl_tac [`env`,`es`] >> fs[expr_body_pre_def]) >>
+  `elem_size_in_location cenv LocMemory ann = type_memory_size etv /\
+   word_scale LocMemory = 32` by
+    simp[compileEnvTheory.elem_size_in_location_def,
+         compileEnvTheory.is_slot_addressed_def, compileEnvTheory.word_scale_def] >>
+  gs[] >>
+  `ci_mono sm sa1` by
+    (qspec_then `type_memory_size (ArrayTV etv bd)`
+       (qspec_then `sm` mp_tac) exprLoweringPropsTheory.ci_mono_compile_alloc_buffer >> simp[]) >>
+  `sa.cs_next_var <= sn.cs_next_var /\ sa.cs_next_id <= sn.cs_next_id` by
+    (qpat_x_assum `sa.cs_next_var <= sm.cs_next_var` mp_tac >>
+     qpat_x_assum `ci_mono sm sa1` mp_tac >>
+     qpat_x_assum `ci_mono sa1 su` mp_tac >>
+     qpat_x_assum `ci_mono su sn` mp_tac >>
+     qpat_assum `sa.cs_next_id <= sm.cs_next_id` mp_tac >>
+     rpt (pop_assum kall_tac) >> simp[exprLoweringPropsTheory.ci_mono_def]) >>
+  drule_at (Pat `expr_post _ _ _ _ idx _ _ _ _ _ _ _ _`)
+    copied_array_history_after_index >>
+  disch_then (drule_at (Pat `locals_kept _ es _ s0 cap`)) >>
+  disch_then (qspecl_then [`sa`,`obj`,`ann`] mp_tac) >>
+  impl_tac >-
+    (simp[] >>
+     qpat_x_assum `!aid off len. _ ==> mem_bytes_at off len cap.vs_memory = _` mp_tac >>
+     rpt (pop_assum kall_tac) >> metis_tac[arithmeticTheory.ADD_COMM]) >>
+  strip_tac >>
+  `gas_summary_at F (ctx,func) []
+    (select_result cx (ArrayT ann bd) (Value (ArrayV av))
+      (ValueSubscript (IntV (if is_signed_type (expr_type idx) then w2i iw else &(w2n iw)))))
+    (raw with gas_obs := [],u')
+    (\res ee q. ?v. res = INL (Value v) /\
+      vv_post ctx func cenv cx (Subscript ann obj idx) es sa sb s0 ee (Value v)
+        (LocatedValue ann (mk_ptr dst LocMemory)) q /\
+      q.vs_current_bb = sb.cs_current_bb /\ q.vs_inst_idx = LENGTH sb.cs_current_insts)
+    (\res ee out. expr_exit res out)` by
+    (irule copied_array_suffix_summary >> simp[] >>
+     conj_tac >-
+       (qpat_x_assum `!aid off len. _ ==> mem_bytes_at off len u'.vs_memory = _` mp_tac >>
+        rpt (pop_assum kall_tac) >> metis_tac[arithmeticTheory.ADD_COMM]) >>
+     conj_tac >-
+       (qpat_x_assum `gas_marked_exec _ _ _ _ imarks _ _ _` mp_tac >>
+        rpt (pop_assum kall_tac) >>
+        simp[gasSummaryTheory.gas_marked_exec_def,
+             fragGasModeTheory.gas_marked_path_def] >>
+        metis_tac[fragGasPathTheory.gas_path_normal]) >>
+     conj_tac >-
+       (qpat_x_assum `expr_post _ _ _ _ idx _ _ _ _ _ _ _ _` mp_tac >>
+        rpt (pop_assum kall_tac) >>
+        simp[loweringPostsTheory.expr_post_def,
+             exprLoweringPropsTheory.stmt_state_rel_def,
+             loweringStateRelDefsTheory.state_rel_def]) >>
+     reverse conj_tac >-
+       (qpat_x_assum `expr_post _ _ _ _ idx _ _ _ _ _ _ _ _` mp_tac >>
+        simp[loweringPostsTheory.expr_post_def]) >>
+     qexistsl_tac [`sm.cs_next_id`,`w`,`Var p`,`iop`,`iw`,`si`,
+                   `is_signed_type (expr_type idx)`] >> simp[] >>
+     conj_tac >-
+       (qpat_x_assum `sm.cs_next_id < sa1.cs_next_id` mp_tac >>
+        qpat_x_assum `ci_mono sa1 su` mp_tac >>
+        qpat_x_assum `ci_mono su sn` mp_tac >>
+        qpat_x_assum `ci_mono sn si` mp_tac >>
+        qpat_x_assum `ci_mono si sb` mp_tac >>
+        rpt (pop_assum kall_tac) >> simp[exprLoweringPropsTheory.ci_mono_def]) >>
+     conj_tac >-
+       (qpat_x_assum `!name b len. local_region _ _ cap _ _ _ ==> _` mp_tac >>
+        qpat_x_assum `expr_post _ _ _ _ idx _ _ _ _ _ _ _ _` mp_tac >>
+        qpat_x_assum `stmt_state_rel _ _ _ _ es_end cap` mp_tac >>
+        qpat_x_assum `local_ptrs_reserved cenv sn` mp_tac >>
+        rpt (pop_assum kall_tac) >>
+        simp[loweringPostsTheory.expr_post_def,
+             exprLoweringPropsTheory.stmt_state_rel_def,
+             loweringStateRelDefsTheory.state_rel_def] >>
+        rpt strip_tac >>
+        `local_region cenv es_end.scopes cap n lb lsz` by
+          (irule exprSimPropsTheory.local_region_frame >>
+           conj_tac >- metis_tac[] >>
+           qexistsl_tac [`sn`,`raw.scopes`,`u'`] >>
+           fs[loweringPostsTheory.locals_kept_def]) >> metis_tac[]) >>
+     conj_tac >- (irule vyperTypeValuesTheory.evaluate_type_well_formed_type_value >>
+                   goal_assum (drule_at Any)) >>
+     conj_tac >-
+       (qpat_x_assum `not_fresh_at sn p` mp_tac >>
+        qpat_x_assum `ci_mono sn si` mp_tac >>
+        rpt (pop_assum kall_tac) >>
+        metis_tac[freshWritesTheory.not_fresh_at_mono,
+                  exprLoweringPropsTheory.ci_mono_def]) >>
+     conj_tac >-
+       (qpat_x_assum `sa.cs_next_var <= sn.cs_next_var` mp_tac >>
+        qpat_x_assum `ci_mono sn si` mp_tac >>
+        rpt (pop_assum kall_tac) >> simp[exprLoweringPropsTheory.ci_mono_def]) >>
+     conj_tac >-
+       (qpat_x_assum `fn_has_code sm sb func` mp_tac >>
+        qpat_x_assum `ci_mono sm sa1` mp_tac >>
+        qpat_x_assum `ci_mono sa1 su` mp_tac >>
+        qpat_x_assum `ci_mono su sn` mp_tac >>
+        qpat_x_assum `ci_mono sn si` mp_tac >>
+        qpat_x_assum `ci_mono si sb` mp_tac >>
+        rpt (pop_assum kall_tac) >>
+        simp[exprLoweringPropsTheory.ci_mono_def] >>
+        metis_tac[fragExecTheory.fn_has_code_split, compileEnvTheory.cs_extends_trans]) >>
+     qpat_x_assum `memory_value_rel _ _ _ u'.vs_memory` mp_tac >>
+     qpat_x_assum `value_has_type (ArrayTV _ _) _` mp_tac >>
+     rpt (pop_assum kall_tac) >>
+     metis_tac[memoryValueEncodingTheory.memory_encoding_bridges,
+               memoryValueEncodingTheory.memory_encoding_bridge_def]) >>
+  qpat_x_assum `gas_summary_at _ _ [] _ _ _ _` mp_tac >>
+  rpt (pop_assum kall_tac) >>
+  simp[gasSummaryTheory.gas_summary_at_def] >>
+  metis_tac[]
+QED
+Finalise compile_subscript_array_copied_base_case
 
 (* The base's source result still reads at the index's end: a local's
    path, a storage place's slots (live and in range), or a runtime
