@@ -15,7 +15,7 @@ Theory bodyPtrAssignResidual
 Ancestors
   bodyPtrPreds bodyPtrDefs bodySim exprSimHyps supportedStmts supportedDecls
   stmtLowering exprLowering compileEnv vyperAST vyperInterpreter vyperState
-  vyperTypeSystem list finite_map bodyPtrAugAssignEffectfulIndex
+  vyperTypeSystem list finite_map
   bodyPtrAugAssignNarrow bodyPtrAugAssignLocal bodyPtrAugAssignPureStorage
   supportedTargetLocalLive bodyAugAssignOther bodyAugPlaceTarget
   exprSimHypsDefs exprSimDefs vyperTypeInvariants
@@ -213,9 +213,7 @@ Proof
        `!id. target_root bt = NameTarget id ==> local_target_live cx id bt` by
          metis_tac[supported_target_local_live] >>
        gvs[Abbr `bt`] >> irule body_augassign_local_place_ptr >> simp[] >> metis_tac[]) >>
-   Cases_on `supported_target_pure tops bt`
-   >- (gvs[Abbr `bt`] >> irule body_augassign_pure_storage_place_ptr >> simp[] >> metis_tac[]) >>
-   gvs[Abbr `bt`] >> irule augassign_place_effectful_index_case_ptr >> simp[] >> metis_tac[])
+   gvs[Abbr `bt`] >> irule body_augassign_pure_storage_place_ptr >> simp[] >> metis_tac[])
 QED
 
 (* RESIDUAL: the pointer twin of S1's bodySimDeclCases$body_annassign_widened_aggregate_call, stated as S1
