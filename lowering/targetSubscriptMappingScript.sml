@@ -355,7 +355,7 @@ Theorem target_mapping_scalar_post:
   is_word_type (expr_type e) /\
   evaluate_type (get_tenv cx) (expr_type e) = SOME tv /\
   value_has_type tv key /\
-  expr_post ctx func cenv cx e es sa sb s0 es' key op s ==>
+  expr_post H ctx func cenv cx e es sa sb s0 es' key op s ==>
   eval_operand op s = SOME (encode_hashmap_key (expr_type e) key)
 Proof
   strip_tac >> irule target_mapping_scalar_operand >>
@@ -366,7 +366,7 @@ Theorem target_mapping_dynamic_post:
   hashmap_key_type (expr_type e) /\ is_bytestring_type (expr_type e) /\
   evaluate_type (get_tenv cx) (expr_type e) = SOME tv /\
   value_has_type tv key /\
-  expr_post ctx func cenv cx e es sa sb s0 es' key op s ==>
+  expr_post H ctx func cenv cx e es sa sb s0 es' key op s ==>
   ?w bs. eval_operand op s = SOME w /\
     mem_word_at (w2n w) s.vs_memory = n2w (LENGTH bs) /\
     mem_bytes_at (w2n w + 32) (LENGTH bs) s.vs_memory = bs /\
@@ -466,14 +466,18 @@ Theorem target_mapping_post:
     (op,SOME (slot_loc tr),SOME (value_type_place vt)) t
 Proof
   strip_tac >>
-  drule target_mapping_extend_place >> strip_tac >>
+  `es'' = es' with storage_trace := es''.storage_trace /\
+   place_ptr_rel cenv cx t pv (hashmap_slot slot (encode_hashmap_key kt key))
+     (SOME (slot_loc tr)) vt /\
+   place_readable cx es'' pv` by metis_tac[target_mapping_extend_place] >>
   `storage_well_formed_on cx (es' with storage_trace := es''.storage_trace)
      (FST H) <=> storage_well_formed_on cx es' (FST H)` by
     (irule vyperStorageFootprintTheory.storage_well_formed_on_backends >>
      simp[]) >>
   simp[target_post_def] >>
   qpat_assum `es'' = _` (fn th => once_rewrite_tac[th]) >>
-  gvs[wb_frame_def, locals_kept_def] >> metis_tac[]
+  gvs[wb_frame_def, locals_kept_def, popped_kept_def] >>
+  rpt conj_tac >> first_assum ACCEPT_TAC
 QED
 
 (* Counted scratch suffix, retaining the frame of the whole target. *)
@@ -507,8 +511,8 @@ Proof
      metis_tac[]) >>
   qexists_tac `t with vs_inst_idx := LENGTH sb.cs_current_insts` >>
   simp[] >> irule target_mapping_post >>
-  goal_assum (drule_at Any) >> simp[] >>
-  metis_tac[target_mapping_suffix_shape]
+  conj_tac >- metis_tac[target_mapping_suffix_shape] >>
+  qexistsl_tac [`es'`, `key`, `kt`, `slot`] >> simp[]
 QED
 
 Theorem target_keccak_key_counted_prefix:
@@ -630,8 +634,8 @@ Proof
      qexistsl_tac [`s`, `es'.scopes`, `sm`] >> simp[] >>
      metis_tac[]) >>
   qexists_tac `t` >> simp[] >> irule target_mapping_post >>
-  goal_assum (drule_at Any) >> simp[] >>
-  metis_tac[target_mapping_suffix_shape]
+  conj_tac >- metis_tac[target_mapping_suffix_shape] >>
+  qexistsl_tac [`es'`, `key`, `kt`, `slot`] >> simp[]
 QED
 
 Theorem target_mapping_counted_suffix_horizons:
