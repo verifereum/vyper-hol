@@ -1,7 +1,7 @@
 (* Finite memory-checked decoder sequences tolerate stale temporaries. *)
 Theory abiDecodeMemElementReentry
 Ancestors
-  abiDecodeMemElementPointer abiDecodeMemReentry abiDecoderReentryPointer
+  abiDecodeMemElementFrame abiDecodeMemElementPointer abiDecodeMemReentry abiDecoderReentryPointer
   abiDecoderReentry abiDecoderContract abiEncoder abiDecoderBytesPrefix words
   abiDecoderVarSequence abiDecoderVarExtend opcodeClass venomExecSemantics
   venomState venomInst fragExecMem fragExec emitHelperProps exprLoweringProps
@@ -79,8 +79,8 @@ Theorem abi_decode_element_reentry_sequence[local]:
   (w2n d + w2n (abi_decode_load MLOAD (b+p) s) + sz <= w2n h ==>
     ?t. run_inst_seq (emitted_insts st st') s = OK t /\
       eval_operand ptr_op t = SOME (d+abi_decode_load MLOAD (b+p) s) /\
-      (!op w. abi_decoder_operand_live st.cs_next_var op /\
-        eval_operand op s = SOME w ==> eval_operand op t = SOME w) /\
+      (!op. abi_decoder_operand_live st.cs_next_var op ==>
+        eval_operand op t = eval_operand op s) /\
       t.vs_memory = s.vs_memory /\ t.vs_call_ctx = s.vs_call_ctx /\
       t.vs_data_section = s.vs_data_section /\
       t.vs_allocas = s.vs_allocas /\ t.vs_alloca_next = s.vs_alloca_next) /\
@@ -138,9 +138,7 @@ Resume abi_decode_element_reentry_sequence[accept]:
   goal_assum (drule_at Any) >>
   conj_tac >- metis_tac[abi_decoder_vars_extend_eval] >>
   reverse conj_tac >- simp[Abbr `clean`, abi_decoder_prune_vars_def] >>
-  rpt strip_tac >>
-  `eval_operand op clean = SOME w` by simp[Abbr `clean`, abi_decoder_prune_eval] >>
-  metis_tac[abi_decoder_vars_extend_eval]
+  metis_tac[abi_decode_element_total_frame]
 QED
 Finalise abi_decode_element_reentry_sequence
 
@@ -166,8 +164,8 @@ Theorem abi_decode_mload_element_reentry_path_mem:
       w2n (d+abi_decode_load MLOAD (b+p) s) + sz <= w2n h /\
       t.vs_current_bb = st'.cs_current_bb /\
       t.vs_inst_idx = LENGTH st'.cs_current_insts /\ ~t.vs_halted /\
-      (!op w. abi_decoder_operand_live st.cs_next_var op /\
-        eval_operand op s = SOME w ==> eval_operand op t = SOME w) /\
+      (!op. abi_decoder_operand_live st.cs_next_var op ==>
+        eval_operand op t = eval_operand op s) /\
       t.vs_memory = s.vs_memory /\ t.vs_call_ctx = s.vs_call_ctx /\
       t.vs_data_section = s.vs_data_section /\
       t.vs_alloca_next = s.vs_alloca_next /\ t.vs_allocas = s.vs_allocas /\

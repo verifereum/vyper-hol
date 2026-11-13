@@ -145,8 +145,8 @@ Theorem abi_decode_array_source_setup_path_mem[local]:
       w2n data <= w2n (data+off) /\ w2n (data+off)+asz <= w2n h /\
       abi_decoder_operand_live st'.cs_next_var (FST ops) /\
       abi_decoder_operand_live st'.cs_next_var (SND ops) /\
-      (!op w. abi_decoder_operand_live st.cs_next_var op /\
-        eval_operand op s = SOME w ==> eval_operand op t = SOME w) /\
+      (!op. abi_decoder_operand_live st.cs_next_var op ==>
+        eval_operand op t = eval_operand op s) /\
       t.vs_memory = s.vs_memory /\ t.vs_call_ctx = s.vs_call_ctx /\
       t.vs_data_section = s.vs_data_section /\
       t.vs_allocas = s.vs_allocas /\ t.vs_alloca_next = s.vs_alloca_next /\
@@ -193,8 +193,8 @@ Resume abi_decode_array_source_setup_path_mem[accept]:
      qpat_x_assum `gas_path_mem ctx func s1 0 (OK t)` mp_tac >>
      POP_ASSUM_LIST (K all_tac) >> metis_tac[gas_path_mem_then, ADD_CLAUSES]) >>
   `eval_operand (FST ops) t = SOME (n2w j)` by metis_tac[] >>
-  `!op w. abi_decoder_operand_live st.cs_next_var op /\
-    eval_operand op s = SOME w ==> eval_operand op t = SOME w` by
+  `!op. abi_decoder_operand_live st.cs_next_var op ==>
+    eval_operand op t = eval_operand op s` by
     (rpt strip_tac >>
      `abi_decoder_operand_live c1.cs_next_var op` by
        (irule abi_decoder_operand_live_mono >>
@@ -249,8 +249,8 @@ Theorem abi_decode_dynamic_element_setup_path_mem[local]:
       abi_decoder_operand_live st'.cs_next_var (FST ops) /\
       abi_decoder_operand_live st'.cs_next_var (FST (SND ops)) /\
       abi_decoder_operand_live st'.cs_next_var (SND (SND ops)) /\
-      (!op w. abi_decoder_operand_live st.cs_next_var op /\
-        eval_operand op s = SOME w ==> eval_operand op t = SOME w) /\
+      (!op. abi_decoder_operand_live st.cs_next_var op ==>
+        eval_operand op t = eval_operand op s) /\
       t.vs_memory = s.vs_memory /\ t.vs_call_ctx = s.vs_call_ctx /\
       t.vs_data_section = s.vs_data_section /\
       t.vs_allocas = s.vs_allocas /\ t.vs_alloca_next = s.vs_alloca_next /\
@@ -287,8 +287,8 @@ Resume abi_decode_dynamic_element_setup_path_mem[accept]:
     (qpat_x_assum `gas_path_mem ctx func s 0 (OK s1)` mp_tac >>
      qpat_x_assum `gas_path_mem ctx func s1 0 (OK t)` mp_tac >>
      POP_ASSUM_LIST (K all_tac) >> metis_tac[gas_path_mem_then, ADD_CLAUSES]) >>
-  `!op w. abi_decoder_operand_live st.cs_next_var op /\
-    eval_operand op s = SOME w ==> eval_operand op t = SOME w` by
+  `!op. abi_decoder_operand_live st.cs_next_var op ==>
+    eval_operand op t = eval_operand op s` by
     (rpt strip_tac >>
      `abi_decoder_operand_live c1.cs_next_var op` by
        (irule abi_decoder_operand_live_mono >> qexists_tac `st.cs_next_var` >>
@@ -330,8 +330,8 @@ Theorem abi_decode_array_element_setup_path_mem:
       abi_decoder_operand_live st'.cs_next_var (FST ops) /\
       abi_decoder_operand_live st'.cs_next_var (FST (SND ops)) /\
       abi_decoder_operand_live st'.cs_next_var (SND (SND ops)) /\
-      (!op w. abi_decoder_operand_live st.cs_next_var op /\
-        eval_operand op s = SOME w ==> eval_operand op t = SOME w) /\
+      (!op. abi_decoder_operand_live st.cs_next_var op ==>
+        eval_operand op t = eval_operand op s) /\
       t.vs_memory = s.vs_memory /\ t.vs_call_ctx = s.vs_call_ctx /\
       t.vs_data_section = s.vs_data_section /\
       t.vs_allocas = s.vs_allocas /\ t.vs_alloca_next = s.vs_alloca_next /\

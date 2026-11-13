@@ -30,7 +30,7 @@ Proof
   simp[abi_decoder_reentry_opcode_def, mk_inst_def]
 QED
 
-Theorem entry_sequence_nonoutput_lookup[local]:
+Theorem entry_sequence_nonoutput_lookup:
   !insts s t x.
     EVERY (\i. ~is_terminator i.inst_opcode /\ ~MEM x i.inst_outputs) insts /\
     run_inst_seq insts s = OK t ==> lookup_var x t = lookup_var x s
@@ -60,7 +60,7 @@ Proof
   fs[abi_decoder_older_vars_def]
 QED
 
-Theorem entry_sequence_nonterminator_labels[local]:
+Theorem entry_sequence_nonterminator_labels:
   !insts s t. EVERY (\i. ~is_terminator i.inst_opcode) insts /\
     run_inst_seq insts s = OK t ==> t.vs_labels = s.vs_labels
 Proof
