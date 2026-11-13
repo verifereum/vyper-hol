@@ -8,7 +8,7 @@ Ancestors
   list rich_list bodyMemBopHeldFacts vyperAST exprSimOperators stmtReasonVvMemory
   exprBopDigestProps bodyMemBopHeldPost vyperTypeExprSoundness byte
   vyperTypeExprResult vyperTypeInvariants fragGasMode
-  gasStorage vyperStorageTrace vyperStorageFootprint exprSimWordArgs exprBopSimDefs
+  gasStorage vyperStorageTrace vyperStorageFootprint exprSimWordArgs exprBopSimDefs exprSimDefs exprLoweringProps
 Libs
   pairLib
 
@@ -40,6 +40,9 @@ Theorem held_bytestring_compare_sim_mem:
   body_exprs_mem_ok cx [e1;e2] ==>
   expr_sim_mem ctx func cenv cx ty (Builtin ann (Bop bop) [e1;e2]) es
 Proof
+  `!ann bop ts v1 v2. storage_trace_frame
+      (\es2. (bop_result cx ann bop ts v1 v2 es2, es2))` by
+    simp[storage_trace_frame_def, exprBopSimDefsTheory.bop_result_def] >>
   disch_then (map_every assume_tac o CONJUNCTS) >>
   `well_typed_binop ann bop (expr_type e1) (expr_type e2)` by
     (qpat_assum `expr_body_pre _ _ _ _ _`
@@ -104,14 +107,17 @@ Proof
       [qpat_x_assum `expr_exit _ _` mp_tac >> simp[expr_exit_def],
        simp[]] >> NO_TAC),
      (gen_tac >> BETA_TAC >> irule storage_trace_frame_bind_all >>
-      conj_tac >- first_assum ACCEPT_TAC >>
-      gen_tac >> BETA_TAC >>
-      simp[storage_trace_frame_def, exprBopSimDefsTheory.bop_result_def] >> NO_TAC),
+      rpt conj_tac >>
+      FIRST [first_assum ACCEPT_TAC,
+             (gen_tac >> BETA_TAC >>
+              first_assum MATCH_ACCEPT_TAC)] >>
+      NO_TAC),
      suspend "second"]
 QED
 
 Resume held_bytestring_compare_sim_mem[second]:
-  qx_genl_tac [`marks`, `res`, `mid`, `t`] >> BETA_TAC >> strip_tac >>
+  markerLib.RESUME_TAC >>
+  rpt gen_tac >> BETA_TAC >> strip_tac >>
   `?H0. valid_horizon cx st0 H0 mid.storage_trace` by
     (qexists_tac `storage_trace_horizon mid.storage_trace` >>
      qpat_x_assum `storage_trace_domain cx st0 mid.storage_trace`
@@ -203,12 +209,13 @@ Resume held_bytestring_compare_sim_mem[second]:
       [qpat_x_assum `expr_exit _ _` mp_tac >> simp[expr_exit_def],
        simp[]] >> NO_TAC),
      (gen_tac >> BETA_TAC >>
-      simp[storage_trace_frame_def, exprBopSimDefsTheory.bop_result_def] >> NO_TAC),
+      first_assum MATCH_ACCEPT_TAC >> NO_TAC),
      suspend "third"]
 QED
 
 Resume held_bytestring_compare_sim_mem[third]:
-  qx_genl_tac [`marks2`, `res2`, `mid'`, `t'`] >> BETA_TAC >> strip_tac >>
+  markerLib.RESUME_TAC >>
+  rpt gen_tac >> BETA_TAC >> strip_tac >>
   `?H1. valid_horizon cx st0 H1 mid'.storage_trace` by
     (qexists_tac `storage_trace_horizon mid'.storage_trace` >>
      qpat_x_assum `storage_trace_domain cx st0 mid'.storage_trace`
@@ -327,7 +334,7 @@ Resume held_bytestring_compare_sim_mem[third]:
     (qpat_assum `~expr_has_effect e2 ==> _` mp_tac >>
      simp_tac (srw_ss()) [pure_frame_gas_obs]) >>
   `MAP FDOM es.scopes = MAP FDOM mid.scopes` by
-    (qpat_x_assum `MAP FDOM es.scopes = MAP FDOM _` mp_tac >> simp[]) >>
+    (FIRST_ASSUM (fn th => mp_tac th >> simp_tac (srw_ss()) [] >> NO_TAC)) >>
   `!aid off sz. FLOOKUP t.vs_allocas aid = SOME (off,sz) /\
       aid < s1.cs_next_id /\
       (!n b sz'. local_region cenv mid.scopes t n b sz' ==>
@@ -364,13 +371,14 @@ Resume held_bytestring_compare_sim_mem[third]:
      (impl_tac >- first_assum ACCEPT_TAC) >> strip_tac >>
      `stmt_state_rel H ctx func cenv cx (mid' with gas_obs := []) u` by
        (mp_tac (Q.INST [`H0` |-> `H1`, `es` |-> `mid' with gas_obs := []`,
-                        `s` |-> `t'`] stmt_state_rel_fields_transport) >>
+                        `s` |-> `t'`]
+                       (INST_TYPE [alpha |-> ``:256``, beta |-> ``:256``] stmt_state_rel_fields_transport)) >>
         (impl_tac >- (rpt conj_tac >> first_assum ACCEPT_TAC)) >>
         disch_then ACCEPT_TAC) >>
      mp_tac (Q.SPECL [`H`, `ctx`, `func`, `cenv`, `cx`, `bop`, `e1`, `e2`,
         `es`, `mid`, `mid' with gas_obs := []`, `sa`, `s1`, `s2`, `sb`, `s0`,
         `t`, `t'`, `u`, `op`, `(if bop = Eq then (word_of_bytes_be (Keccak_256_w64 bs1):bytes32) = word_of_bytes_be (Keccak_256_w64 bs2)
-      else (word_of_bytes_be (Keccak_256_w64 bs1):bytes32) <> word_of_bytes_be (Keccak_256_w64 bs2))`] held_digest_compare_post) >>
+      else (word_of_bytes_be (Keccak_256_w64 bs1):bytes32) <> word_of_bytes_be (Keccak_256_w64 bs2))`] (INST_TYPE [alpha |-> ``:256``] held_digest_compare_post)) >>
      (impl_tac >- (rpt conj_tac >> first_assum ACCEPT_TAC)) >>
      disch_then ACCEPT_TAC) >>
   rewrite_tac[gas_outcome_def] >> qexists_tac `[]` >> disj2_tac >> disj1_tac >>
@@ -383,9 +391,9 @@ Resume held_bytestring_compare_sim_mem[third]:
             (fn th => simp[th]))
       >- (irule gas_marked_path_from_mem >> simp[] >> first_assum ACCEPT_TAC)) >>
   disj1_tac >> qexists_tac `u` >> conj_tac >- REFL_TAC >>
-  gen_tac >> strip_tac >>
+  BETA_TAC >> qx_gen_tac `H2` >> BETA_TAC >> strip_tac >>
   qpat_assum `!H. valid_horizon cx st0 H (mid' with gas_obs := []).storage_trace ==>
-              expr_post _ _ _ _ _ _ _ _ _ _ _ _ _ _` (qspec_then `H` mp_tac) >>
+              expr_post _ _ _ _ _ _ _ _ _ _ _ _ _ _` (qspec_then `H2` mp_tac) >>
   (impl_tac >- first_assum ACCEPT_TAC) >> strip_tac >>
   qexists_tac `BoolV (if bop = Eq then (word_of_bytes_be (Keccak_256_w64 bs1):bytes32) = word_of_bytes_be (Keccak_256_w64 bs2)
       else (word_of_bytes_be (Keccak_256_w64 bs1):bytes32) <> word_of_bytes_be (Keccak_256_w64 bs2))` >>
