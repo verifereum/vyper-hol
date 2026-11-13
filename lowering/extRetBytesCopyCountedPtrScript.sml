@@ -4,7 +4,7 @@ Ancestors
   fragGasPathPtr fragExec fragExecPtr venomExecSemantics venomInstProofs
   venomInst venomState ptrSafeRun ptrDiscipline bodyPtrDefs finite_map
   context compileEnv loweringStateRelDefs emitHelper arithmetic
-  exprSimBufferStore wordLoadStorePtr
+  exprSimBufferStore wordLoadStorePtr annAssignPtrLength
 (* An emitted, nonterminating, non-GAS instruction is one zero-count edge.
    The semantic and pointer premises are discharged for each concrete opcode
    below; this is not a conversion from a fixed-run fragment. *)
@@ -239,70 +239,13 @@ Theorem compile_bytestring_copy_len_counted_ptr:
       op_taint tnf (Var p) = op_taint tn (Var p))
 Proof
   strip_tac >>
-  qpat_x_assum `compile_bytestring_copy_len _ _ = _` mp_tac >>
-  simp[compile_bytestring_copy_len_def, comp_bind_def] >>
-  ntac 3 (pairarg_tac >> simp[LET_THM, pairTheory.pair_case_def]) >>
-  strip_tac >>
-  `?v1. src_len = Var v1` by
-    gvs[emit_op_def, comp_bind_def, comp_ignore_bind_def, fresh_var_def,
-        fresh_id_def, emit_def, comp_return_def] >>
-  `?v2. padded_len = Var v2` by
-    gvs[emit_op_def, comp_bind_def, comp_ignore_bind_def, fresh_var_def,
-        fresh_id_def, emit_def, comp_return_def] >>
-  `?v3. rounded = Var v3` by
-    gvs[emit_op_def, comp_bind_def, comp_ignore_bind_def, fresh_var_def,
-        fresh_id_def, emit_def, comp_return_def] >>
-  `?v4. count_op = Var v4` by
-    gvs[emit_op_def, comp_bind_def, comp_ignore_bind_def, fresh_var_def,
-        fresh_id_def, emit_def, comp_return_def] >>
-  gvs[] >>
-  rename1 `emit_op MLOAD [Var src] sa = (Var v1,sc1)` >>
-  rename1 `emit_op ADD [Var v1; Lit 31w] sc1 = (Var v2,sc2)` >>
-  rename1 `emit_op AND [Var v2; Lit (i2w (-32))] sc2 = (Var v3,sc3)` >>
-  `cs_extends sa sc1 /\ cs_extends sc1 sc2 /\
-   cs_extends sc2 sc3 /\ cs_extends sc3 sb` by
-    (imp_res_tac exprLoweringPropsTheory.emit_op_extends >>
-     fs[cs_extends_def, exprLoweringPropsTheory.same_blocks_def] >>
-     rpt conj_tac >> qexists_tac `[]` >> simp[]) >>
-  `fn_has_code sa sc1 fn /\ fn_has_code sc1 sc2 fn /\
-   fn_has_code sc2 sc3 fn /\ fn_has_code sc3 sb fn` by
-    metis_tac[fn_has_code_split, cs_extends_trans] >>
-  drule_all emit_mload_clean_ambient_counted_ptr >>
-  disch_then (qspecl_then [`PG`, `D`] (qx_choose_then `G1` (qx_choose_then `tn1` (qx_choose_then `s1` strip_assume_tac)))) >>
-  `eval_operand (Var v1) s1 = SOME (mload (w2n a) s) /\
-   eval_operand (Lit 31w) s1 = SOME 31w /\ op_taint tn1 (Lit 31w) = {}` by
-    simp[eval_operand_def, op_taint_def] >>
-  drule_all (SRULE [] (Q.INST [`opc` |-> `ADD`, `f` |-> `word_add`] emit_copy_len_binop_counted_ptr)) >>
-  disch_then (qspecl_then [`PG`, `G1`, `D`] (qx_choose_then `G2` (qx_choose_then `tn2` (qx_choose_then `s2` strip_assume_tac)))) >>
-  `eval_operand (Var v2) s2 = SOME (mload (w2n a) s + 31w) /\
-   eval_operand (Lit (i2w (-32))) s2 = SOME (i2w (-32)) /\
-   op_taint tn2 (Lit (i2w (-32))) = {}` by simp[eval_operand_def, op_taint_def] >>
-  drule_all (SRULE [] (Q.INST [`opc` |-> `AND`, `f` |-> `word_and`] emit_copy_len_binop_counted_ptr)) >>
-  disch_then (qspecl_then [`PG`, `G2`, `D`] (qx_choose_then `G3` (qx_choose_then `tn3` (qx_choose_then `s3` strip_assume_tac)))) >>
-  `eval_operand (Var v3) s3 = SOME (mload (w2n a) s + 31w && i2w (-32)) /\
-   eval_operand (Lit 32w) s3 = SOME 32w /\ op_taint tn3 (Lit 32w) = {}` by
-    simp[eval_operand_def, op_taint_def] >>
-  drule_all (SRULE [] (Q.INST [`opc` |-> `ADD`, `f` |-> `word_add`] emit_copy_len_binop_counted_ptr)) >>
-  disch_then (qspecl_then [`PG`, `G3`, `D`] (qx_choose_then `G4` (qx_choose_then `tn4` (qx_choose_then `s4` strip_assume_tac)))) >>
-  qexistsl_tac [`G4`, `tn4`, `s4`] >>
-  conj_tac >-
-    (irule (SRULE [] (Q.INST [`n` |-> `0`, `m` |-> `0`] gas_path_ptr_then)) >>
-     qexistsl_tac [`G1`, `s1`, `tn1`] >> simp[] >>
-     irule (SRULE [] (Q.INST [`n` |-> `0`, `m` |-> `0`] gas_path_ptr_then)) >>
-     qexistsl_tac [`G2`, `s2`, `tn2`] >> simp[] >>
-     irule (SRULE [] (Q.INST [`n` |-> `0`, `m` |-> `0`] gas_path_ptr_then)) >>
-     qexistsl_tac [`G3`, `s3`, `tn3`] >> simp[]) >>
-  `!p. not_fresh_at sa p ==> not_fresh_at sc1 p /\
-       not_fresh_at sc2 p /\ not_fresh_at sc3 p` by
-    (gvs[emit_op_def, comp_bind_def, comp_ignore_bind_def, fresh_var_def,
-         fresh_id_def, emit_def, comp_return_def, not_fresh_at_def] >>
-     rpt strip_tac >> decide_tac) >>
-  simp[eval_operand_def] >> gen_tac >> strip_tac >>
-  `not_fresh_at sc1 p /\ not_fresh_at sc2 p /\ not_fresh_at sc3 p` by metis_tac[] >>
-  qpat_x_assum `!p. not_fresh_at sa p ==> _` (qspec_then `p` mp_tac) >>
-  qpat_x_assum `!p. not_fresh_at sc1 p ==> _` (qspec_then `p` mp_tac) >>
-  qpat_x_assum `!p. not_fresh_at sc2 p ==> _` (qspec_then `p` mp_tac) >>
-  qpat_x_assum `!p. not_fresh_at sc3 p ==> _` (qspec_then `p` mp_tac) >> simp[]
+  drule_all annassign_bytestring_copy_len_path_ptr >>
+  disch_then (qspecl_then [`D`, `PG`]
+    (qx_choosel_then [`Gf`, `tnf`, `sf`] strip_assume_tac)) >>
+  `(~31w : bytes32) = i2w (-32)` by
+    (simp[integer_wordTheory.i2w_def] >> blastLib.BBLAST_TAC) >>
+  qexistsl [`Gf`, `tnf`, `sf`] >>
+  gvs[venom_state_component_equality]
 QED
 
 Theorem emit_mcopy_ambient_counted_ptr:
@@ -439,7 +382,7 @@ Proof
     (qx_choose_then `G1` (qx_choose_then `tn1` (qx_choose_then `s1` strip_assume_tac)))) >>
   `eval_operand count_op s1 = SOME (n2w n)` by
     (fs[] >> qspec_then `len` mp_tac buffer_round_size >>
-     simp[vfmConstantsTheory.word_size_def]) >>
+     simp[vfmConstantsTheory.word_size_def, integer_wordTheory.i2w_def]) >>
   `lookup_var src s1 = SOME a /\ lookup_var dst s1 = SOME b /\
    ptr_covers G1 tn1 src s1 n /\ ptr_covers G1 tn1 dst s1 n` by
     (qpat_assum `!p. not_fresh_at sa p ==> _` (qspec_then `src` strip_assume_tac) >>
