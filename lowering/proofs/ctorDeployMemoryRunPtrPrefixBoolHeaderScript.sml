@@ -1,6 +1,7 @@
 (* The repeatedly visited Bool decoder header: closed local certificates. *)
 Theory ctorDeployMemoryRunPtrPrefixBoolHeader
 Ancestors
+  exprLoweringProps exprSimUnwrap
   ctorDeployMemoryRunPtrPrefixHeader ctorDeployMemoryRunPtrPrefixBoolShape
   ctorDeployMemoryRunPtrPrefixWordRead ctorDeployMemoryRunPtrPrefixBoolWord
   ctorDeployMemoryRunPtrPrefixSteps instIdxIndep
@@ -8,21 +9,6 @@ Ancestors
   venomExecSemantics venomExecProofs venomState venomInst words arithmetic
   list rich_list finite_map pred_set codegenRel contextCodegenRel memLocDefs
 
-Theorem prefix_bool_header_state_frames:
-  ALL_DISTINCT [ip;src;dst;iv;cv;cmp;done] ==>
-  let h = abi_decode_header_state iv cv cmp done i ncount s;
-      t = jump_to target h
-  in
-    t.vs_memory = s.vs_memory /\
-    t.vs_data_section = s.vs_data_section /\
-    t.vs_allocas = s.vs_allocas /\ t.vs_alloca_next = s.vs_alloca_next /\
-    (!v. MEM v [ip;src;dst] ==>
-      eval_operand (Var v) t = eval_operand (Var v) s)
-Proof
-  simp[abi_decode_header_state_def, jump_to_def, update_var_def,
-       eval_operand_def, lookup_var_def, FLOOKUP_UPDATE] >>
-  metis_tac[]
-QED
 
 Theorem prefix_bool_header_execution:
   ~s.vs_halted /\ s.vs_inst_idx = 0 /\
@@ -192,7 +178,7 @@ Resume prefix_bool_header_closed[trace]:
 QED
 
 Resume prefix_bool_header_closed[mload]:
-  qpat_assum `eval_operand (Var ip) s = _` (mp_then Any assume_tac prefix_mload_step) >>
+  qpat_assum `eval_operand (Var ip) s = _` (mp_then Any assume_tac exprLoweringPropsTheory.step_MLOAD_local) >>
   qpat_assum `eval_operand (Var ip) s = _` (mp_then Any assume_tac (SRULE [LET_THM] prefix_mload_ghost_step)) >>
   simp[step_inst_non_invoke, Abbr `u1`, Abbr `g1`, Abbr `q1`, w2n_n2w, update_var_def] >>
   irule prefix_mload_ptr_step >> simp[w2n_n2w] >> metis_tac[]
@@ -205,7 +191,7 @@ Resume prefix_bool_header_closed[dload]:
     simp[Abbr `u1`, eval_operand_def, lookup_var_update_var, GSYM eval_operand_def] >>
   `step_inst_base (mk_inst (id+1) DLOAD [Var src] [cv]) u1 = OK u2` by
     (qpat_assum `eval_operand (Var src) u1 = _`
-       (mp_then Any mp_tac prefix_dload_step) >>
+       (mp_then Any mp_tac exprSimUnwrapTheory.step_DLOAD) >>
      gvs[Abbr `u2`, Abbr `u1`, abi_decode_load_def, abi_decode_source_def, update_var_def]) >>
   simp[step_inst_non_invoke] >>
   conj_tac >- simp[step_inst_inst_idx_indep, mk_inst_def,

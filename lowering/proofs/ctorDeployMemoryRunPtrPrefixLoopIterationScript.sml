@@ -2,10 +2,11 @@
 Theory ctorDeployMemoryRunPtrPrefixLoopIteration
 Ancestors
   loweringStateRelDefs valueEncodingDefs
+  compileEnv valueEncoding
   ctorDeployMemoryRunPtrPrefixLoopBackedge ctorDeployMemoryRunPtrPrefixMembersCons
   ctorAbiActualArrayInvariant abiDecoderArrayBackedge abiDecoderExecution
-  abiDecoderContract abiDecoderReentry abiDecoderArrayPrefix abiDecoderLoop compileEnv
-  valueEncodingProps valueEncoding venomMemDefs
+  abiDecoderContract abiDecoderReentry abiDecoderArrayPrefix abiDecoderLoop
+  valueEncodingProps venomMemDefs
   ctorDeployMemoryRunPtrPrefixMembers rich_list
   ptrSafeRun ptrDiscipline venomExecSemantics venomState venomInst
   words arithmetic list finite_map pred_set
@@ -56,7 +57,7 @@ Proof
   `ip <> Var fresh /\ Var dst <> Var fresh` by
     metis_tac[abi_decoder_live_excludes_output] >>
   drule_all ctor_actual_array_observation_backedge >>
-  disch_then (qspec_then `hdr` assume_tac) >>
+  disch_then (qspec_then `hdr` (strip_assume_tac o BETA_RULE)) >>
   drule_all abi_decode_backedge_sim >> disch_then (qspec_then `ctx` mp_tac) >>
   simp[w2n_n2w] >> disch_tac >> gvs[] >>
   qpat_assum `eval_operand (Var iv) s = SOME (n2w j)`
@@ -76,7 +77,7 @@ Proof
     (simp[Abbr `raw`,jump_to_def,mstore_def,update_var_def,
        write_memory_with_expansion_def,allocas_from_def] >>
      gvs[allocas_from_def] >> metis_tac[]) >>
-  simp[] >> suspend "remaining"
+  asm_simp_tac bool_ss [] >> suspend "remaining"
 QED
 
 Resume prefix_loop_backedge_support_pair[remaining]:

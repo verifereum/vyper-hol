@@ -863,7 +863,7 @@ QED
 
 (* Entering a block on a run that is safe at every fuel: the run from past
    its PHIs is, and returns the same way with the same ghost. *)
-Theorem ptr_safe_enters_block[local]:
+Theorem ptr_safe_enters_block:
   !D lo ctx fn PG G tn s s1.
     enters_block fn s s1 /\
     (!fuel. ptr_safe_blocks D lo fuel ctx fn PG G tn s) ==>
@@ -874,7 +874,7 @@ Proof
   metis_tac[ptr_safe_blocks_block]
 QED
 
-Theorem frame_run_enters_block[local]:
+Theorem frame_run_enters_block:
   !ctx fn PG G tn s s1 fuel.
     enters_block fn s s1 ==>
     run_blocks (SUC fuel) ctx fn s = frame_run fuel ctx fn s1 /\
