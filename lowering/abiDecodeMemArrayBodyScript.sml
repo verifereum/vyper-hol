@@ -147,19 +147,19 @@ Resume abi_decode_mem_array_body[success]:
   `!op. abi_decoder_operand_live st.cs_next_var op ==>
     eval_operand op v = eval_operand op b` by metis_tac[] >>
   `J j end_st.cs_current_bb (LENGTH end_st.cs_current_insts) v` by
-    (gvs[Abbr `J`, Abbr `P`, Abbr `slot`] >> metis_tac[LESS_EQ_TRANS]) >>
+    (gvs[Abbr `J`, Abbr `P`, Abbr `slot`,
+         abi_decode_footprint_frame_def, mload_def] >> decide_tac) >>
   disj1_tac >> qexists_tac `v` >> asm_simp_tac bool_ss [] >>
-  conj_tac >- metis_tac[] >>
   simp_tac bool_ss [Abbr `R`] >> conj_tac >- decide_tac >>
   conj_tac >- metis_tac[] >> conj_tac
-  >- (rpt strip_tac >> first_x_assum irule >> decide_tac) >>
+  >- (rpt strip_tac >> simp[]) >>
   suspend "frame"
 QED
 Resume abi_decode_mem_array_body[frame]:
   `abi_decode_footprint_frame ((d+32+j*msz,msz)::fp) b v` by
     gvs[abi_decode_footprint_frame_def] >>
   irule abi_decode_footprint_frame_weaken >> goal_assum (drule_at Any) >>
-  simp[Abbr `F`, MEM_MAP, MEM_FILTER, MEM_fmap_to_alist_FLOOKUP] >>
+  simp[Abbr `F'`, MEM_MAP, MEM_FILTER, MEM_fmap_to_alist_FLOOKUP] >>
   rpt gen_tac >> strip_tac
   >- (qexistsl_tac [`d`,`sz`] >> simp[] >>
       `j*msz+msz <= ncount*msz` by
