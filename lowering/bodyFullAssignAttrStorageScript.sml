@@ -2,7 +2,7 @@
 Theory bodyFullAssignAttrStorage
 Ancestors
   bodyFullAssignAttrStorageAddress bodyFullAssignAttrStorageStore
-  bodyFullUnwrap bodySimFull gasOutcomeFullCompose gasOutcomeFull
+  bodyFullUnwrapWord bodySimFull gasOutcomeFullCompose gasOutcomeFull
   stmtSimAssignAttrStorage stmtSimAssignStorage stmtSimForced assignTuplePtrStorage
   stmtSimProps stmtSimDefs bodyMemoryDefs bodyPtrDefs
   gasShadowCompileStmtHelpers gasShadowState gasShadow gasExemptCert
@@ -189,7 +189,7 @@ Resume compile_assign_attr_storage_full[continue]:
   mp_tac (Q.INST [`explicit` |-> `gas_explicit_sites ctx shadow_ctx`,
     `PG` |-> `PG`, `ty` |-> `expr_type e`, `sb` |-> `sn`, `sc` |-> `su`,
     `s` |-> `q`, `ee` |-> `mid`, `G` |-> `HG`, `tn` |-> `tf`,
-    `Gi` |-> `G0`, `ti` |-> `tn0`] unwrap_value_origin_ptr) >>
+    `Gi` |-> `G0`, `ti` |-> `tn0`] unwrap_word_value_origin_ptr) >>
   (impl_tac >- (simp[] >> metis_tac[])) >> strip_tac >>
   rename1 `read_result cx tv mid = (INL v,mid)` >>
   rename1 `ptr_val_ok cx _ v op Gu tu z` >>
