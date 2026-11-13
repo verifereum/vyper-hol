@@ -3242,8 +3242,10 @@ Proof
          Cases_on `compile_uint2str x n (type_memory_bytes cenv (BaseT (StringT n))) sm` >>
          simp[exprLoweringTheory.as_ptr_val_def] >> metis_tac[]) >>
       qpat_assum `expr_type e = _`
-        (fn th => mp_tac (REWRITE_RULE [th] uint2str_typed_path)) >>
-      disch_then drule_all >> strip_tac
+        (fn th => mp_tac (Q.INST [`H` |-> `H0`, `v` |-> `v0`, `es'` |-> `es1`,
+                                  `gs` |-> `gs0`]
+                            (SPEC_ALL (REWRITE_RULE [th] uint2str_typed_path)))) >>
+      impl_tac >- (rpt conj_tac >> first_assum ACCEPT_TAC) >> strip_tac
       >- (qexistsl_tac [`m`, `r`] >> simp[] >> disj1_tac >>
           qexistsl_tac [`t`, `rv`] >> simp[] >>
           qx_gen_tac `H` >> strip_tac >>
