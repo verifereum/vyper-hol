@@ -8,7 +8,7 @@ Ancestors
 
 Theorem tuple_place_local_path_extent:
   expr_sim_inv cenv cx env ee /\
-  stmt_state_rel ctx func cenv cx ee s /\
+  stmt_state_rel H ctx func cenv cx ee s /\
   local_region cenv ee.scopes s n b sz /\
   local_path_at cenv cx n k tv ==>
   k + type_memory_size tv <= sz
@@ -82,7 +82,7 @@ QED
 
 (* Coordinate interface for live memory places; no write is needed. *)
 Theorem tuple_place_memory_coordinates:
-  expr_sim_inv cenv cx env ee /\ stmt_state_rel ctx func cenv cx ee s /\
+  expr_sim_inv cenv cx env ee /\ stmt_state_rel H ctx func cenv cx ee s /\
   lookup_scopes id ee.scopes = SOME entry /\
   place_ptr_rel cenv cx s (PlaceR (MemoryPlace id path)) dw
     (SOME LocMemory) (Type ty) ==>
@@ -114,7 +114,7 @@ Proof
 QED
 
 Theorem tuple_place_borrow_destination_apart:
-  expr_sim_inv cenv cx env ee /\ stmt_state_rel ctx func cenv cx ee s /\
+  expr_sim_inv cenv cx env ee /\ stmt_state_rel H ctx func cenv cx ee s /\
   local_region cenv ee.scopes s n b sz /\
   local_path_at cenv cx n k (TupleTV tvs) /\
   k + type_memory_size (TupleTV tvs) <= sz /\

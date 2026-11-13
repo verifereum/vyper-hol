@@ -36,6 +36,8 @@ Ancestors
   list rich_list finite_map pred_set alist
   fragExec exprSimHyps exprSimLeaves exprSimAttributeFields stmtSimDecl stmtSimDeclMem stmtSimAssign stmtSimAssignMem storageStoreFrame
   stmtSimAssignStorage stmtSimAssignAttr
+  vyperStorageTrace vyperStorageFootprint vyperStoragePlaceRegion
+  vyperStorageRegionWrite gasStorage
   exprLowering stmtLowering emitHelper emitHelperProps exprLoweringProps
   compileEnv loweringStateRelDefs valueEncoding accountsRelProps
   vyperInterpreter vyperState vyperStorage vyperValue vyperTyping
@@ -44,429 +46,6 @@ Ancestors
   venomExecSemantics venomInst venomState
 Libs
   monadsyntax
-
-Theorem assign_attr_add_marked[local]:
-  compile_expr cenv (expr_type e) e sa = (vv,sm) /\
-  local_ptrs_reserved cenv sa /\ sa.cs_next_var <= sm.cs_next_var /\
-  emit_op ADD [Lit (n2w slot); Lit (n2w off)] sm = (dst,sn) /\
-  vv_post ctx func cenv cx e es sa sm s0 ee raw vv s /\
-  fn_has_code sm sn func /\ ~s.vs_halted /\
-  s.vs_current_bb = sm.cs_current_bb /\
-  s.vs_inst_idx = LENGTH sm.cs_current_insts ==>
-  ?t. gas_marked_path F ctx func s 0 (OK t) /\
-    vv_post ctx func cenv cx e es sa sn s0 ee raw vv t /\
-    eval_operand dst t = SOME (n2w slot + n2w off) /\
-    ~t.vs_halted /\ t.vs_current_bb = sn.cs_current_bb /\
-    t.vs_inst_idx = LENGTH sn.cs_current_insts /\
-    (?d. dst = Var d /\ not_fresh_at sn d)
-Proof
-  strip_tac >>
-  `eval_operand (Lit (n2w slot)) s = SOME (n2w slot)` by
-    simp[eval_operand_def] >>
-  drule_all buffer_emit_add_vv_post >> strip_tac >>
-  drule emitted_insts_emit_op >> strip_tac >>
-  drule emit_op_extends >> strip_tac >>
-  `sn.cs_current_bb = sm.cs_current_bb` by
-    gvs[cs_extends_def, same_blocks_def] >>
-  drule_all fn_has_code_same_block >> strip_tac >>
-  `get_instruction bb s.vs_inst_idx =
-     SOME (mk_inst sm.cs_next_id ADD [Lit (n2w slot); Lit (n2w off)]
-       [STRING #"%" (toString sm.cs_next_var)])` by
-    (first_x_assum (qspec_then `0` mp_tac) >> simp[]) >>
-  `step_inst_base
-    (mk_inst sm.cs_next_id ADD [Lit (n2w slot); Lit (n2w off)]
-      [STRING #"%" (toString sm.cs_next_var)]) s = OK q` by
-    gvs[run_inst_seq_def, AllCaseEqs()] >>
-  `gas_path_edge ctx func s 0
-    (OK (q with vs_inst_idx := SUC s.vs_inst_idx))` by
-    (drule_at (Pos last) tuple_straight_line_edge >>
-     simp[mk_inst_def, is_terminator_def] >>
-     disch_then irule >> simp[GSYM mk_inst_def] >> metis_tac[]) >>
-  `gas_marked_path F ctx func s 0
-    (OK (q with vs_inst_idx := SUC s.vs_inst_idx))` by
-    (simp[gas_marked_path_def] >>
-     drule gas_path_edge_normal >> simp[] >> strip_tac >>
-     drule (cj 2 gas_path_rules) >>
-     disch_then (qspec_then `0` mp_tac) >> simp[] >>
-     disch_then irule >> irule (cj 1 gas_path_rules) >> simp[]) >>
-  qexists_tac `q with vs_inst_idx := SUC s.vs_inst_idx` >>
-  gvs[eval_operand_def, lookup_var_def, not_fresh_at_def] >>
-  qpat_x_assum `q with vs_vars := _ = s`
-    (mp_tac o Q.AP_TERM `\r. (~r.vs_halted /\ r.vs_current_bb = sm.cs_current_bb)`) >>
-  simp[]
-QED
-
-Theorem assign_attr_stack_marked_read[local]:
-  unwrap_value cenv (StackValue t arg) sm = (op,sb) /\
-  vv_post ctx func cenv cx e es sa sm s0 ee raw (StackValue t arg) s /\
-  ~s.vs_halted /\ s.vs_current_bb = sm.cs_current_bb /\
-  s.vs_inst_idx = LENGTH sm.cs_current_insts ==>
-  ?v u. gas_marked_exec F (ctx,func) (read_result cx raw) (ee,s)
-      [] (INL v) ee (OK u) /\
-    expr_post ctx func cenv cx e es sa sb s0 ee v op u /\
-    ~u.vs_halted /\ u.vs_current_bb = sb.cs_current_bb /\
-    u.vs_inst_idx = LENGTH sb.cs_current_insts /\
-    (!x w. not_fresh_at sm x /\ lookup_var x s = SOME w ==>
-       lookup_var x u = SOME w) /\
-    (!aid b. FLOOKUP s.vs_allocas aid = SOME b ==>
-       FLOOKUP u.vs_allocas aid = SOME b)
-Proof
-  strip_tac >>
-  `?v. read_result cx raw ee = (INL v,ee)` by
-    gvs[vv_post_def, vv_holds_def] >>
-  `vv_post ctx func cenv cx e es sa sm s0 ee (Value v)
-      (StackValue t arg) s` by metis_tac[vv_post_read_result] >>
-  gvs[unwrap_value_def, comp_return_def] >>
-  qexistsl_tac [`v`, `s`] >> simp[] >> conj_tac
-  >- (simp[gas_marked_exec_def] >> conj_tac
-      >- metis_tac[read_result_gas_obs] >>
-      simp[gas_marked_path_def] >> irule (cj 1 gas_path_rules) >> simp[]) >>
-  irule expr_post_of_vv_post_stack >> goal_assum drule
-QED
-
-Theorem assign_attr_storage_marked_read[local]:
-  unwrap_value cenv (LocatedValue t p) sm = (op,sb) /\
-  p.ptr_location = (if tr then LocTransient else LocStorage) /\
-  is_word_type (expr_type e) /\ local_ptrs_reserved cenv sm /\
-  sa.cs_next_var <= sm.cs_next_var /\ fn_has_code sm sb func /\
-  vv_post ctx func cenv cx e es sa sm s0 ee raw (LocatedValue t p) s /\
-  ~s.vs_halted /\ s.vs_current_bb = sm.cs_current_bb /\
-  s.vs_inst_idx = LENGTH sm.cs_current_insts ==>
-  ?v u. gas_marked_exec F (ctx,func) (read_result cx raw) (ee,s)
-      [] (INL v) ee (OK u) /\
-    expr_post ctx func cenv cx e es sa sb s0 ee v op u /\
-    ~u.vs_halted /\ u.vs_current_bb = sb.cs_current_bb /\
-    u.vs_inst_idx = LENGTH sb.cs_current_insts /\
-    (!x w. not_fresh_at sm x /\ lookup_var x s = SOME w ==>
-       lookup_var x u = SOME w) /\
-    (!aid b. FLOOKUP s.vs_allocas aid = SOME b ==>
-       FLOOKUP u.vs_allocas aid = SOME b)
-Proof
-  strip_tac >>
-  `t = expr_type e /\ ?w v. eval_operand p.ptr_operand s = SOME w /\
-    read_result cx raw ee = (INL v,ee) /\
-    storage_holds cx tr (expr_type e) (Value v) w ee s /\
-    stmt_state_rel ctx func cenv cx ee s` by
-    (Cases_on `tr` >> gvs[vv_post_def, vv_holds_def, storage_holds_def,
-       read_result_def, return_def]) >>
-  `vv_post ctx func cenv cx e es sa sm s0 ee (Value v)
-     (LocatedValue t p) s` by metis_tac[vv_post_read_result] >>
-  `emit_op (if tr then TLOAD else SLOAD) [p.ptr_operand] sm = (op,sb)` by
-    (Cases_on `tr` >> gvs[unwrap_value_def, contextTheory.compile_ptr_load_def]) >>
-  `!out. step_inst_base
-      (mk_inst sm.cs_next_id (if tr then TLOAD else SLOAD)
-        [p.ptr_operand] [out]) s =
-      OK (update_var out (if tr then tload w s else sload w s) s)` by
-    (Cases_on `tr` >> simp[step_inst_base_def, mk_inst_def, exec_read1_def]) >>
-  `gas_path ctx func s 0
-    (OK (update_var (STRING #"%" (toString sm.cs_next_var))
-       (if tr then tload w s else sload w s) s
-       with vs_inst_idx := SUC s.vs_inst_idx))` by
-    (irule emit_op_zero_path >> simp[] >>
-     qexistsl_tac [`[p.ptr_operand]`, `op`, `if tr then TLOAD else SLOAD`, `sb`] >>
-     Cases_on `tr` >> simp[is_terminator_def]) >>
-  drule emitted_insts_emit_op >> strip_tac >>
-  `sb.cs_current_bb = sm.cs_current_bb` by
-    (drule emit_op_extends >> simp[same_blocks_def]) >>
-  qabbrev_tac `u = update_var (STRING #"%" (toString sm.cs_next_var))
-       (if tr then tload w s else sload w s) s
-       with vs_inst_idx := SUC s.vs_inst_idx` >>
-  `(!x w. not_fresh_at sm x /\ lookup_var x s = SOME w ==>
-       lookup_var x u = SOME w) /\
-   (!aid b. FLOOKUP s.vs_allocas aid = SOME b ==>
-       FLOOKUP u.vs_allocas aid = SOME b)` by
-    (simp[Abbr `u`, update_var_def, lookup_var_def, FLOOKUP_UPDATE] >>
-     rpt strip_tac >> gvs[not_fresh_at_def]) >>
-  qexistsl_tac [`v`, `u`] >> conj_tac
-  >- (simp[gas_marked_exec_def, gas_marked_path_def, Abbr `u`] >>
-      metis_tac[read_result_gas_obs]) >>
-  conj_tac
-  >- (irule expr_post_of_vv_post_load >>
-      goal_assum (drule_at Any) >> simp[] >> conj_tac
-      >- (qexists_tac `if tr then tload w s else sload w s` >>
-          simp[Abbr `u`, eval_operand_def, lookup_var_update_var, lookup_var_def,
-               update_var_def, FLOOKUP_UPDATE] >>
-          metis_tac[storage_holds_load]) >>
-      conj_tac
-      >- (simp[Abbr `u`, stmt_state_rel_inst_idx] >>
-          irule stmt_state_rel_update_var >> simp[] >>
-          irule local_ptrs_reserved_fresh >> qexists_tac `sm` >> simp[]) >>
-      qexistsl_tac [`p`, `s`, `sm`, `t`] >> simp[Abbr `u`, update_var_def]) >>
-  simp[Abbr `u`, update_var_def]
-QED
-
-Theorem assign_attr_emit_endpoint[local]:
-  emit_op opc args sm = (op,sb) /\ fn_has_code sm sb func /\
-  opc <> INVOKE /\ opc <> GAS /\ ~is_terminator opc /\
-  local_ptrs_reserved cenv sm /\ stmt_state_rel ctx func cenv cx ee s /\
-  ~s.vs_halted /\ s.vs_current_bb = sm.cs_current_bb /\
-  s.vs_inst_idx = LENGTH sm.cs_current_insts /\
-  (!out. step_inst_base (mk_inst sm.cs_next_id opc args [out]) s =
-         OK (update_var out w s)) ==>
-  ?u. gas_path ctx func s 0 (OK u) /\ eval_operand op u = SOME w /\
-    stmt_state_rel ctx func cenv cx ee u /\
-    ~u.vs_halted /\ u.vs_current_bb = sb.cs_current_bb /\
-    u.vs_inst_idx = LENGTH sb.cs_current_insts /\
-    (!x v. not_fresh_at sm x /\ lookup_var x s = SOME v ==>
-       lookup_var x u = SOME v) /\
-    (!aid b. FLOOKUP s.vs_allocas aid = SOME b ==>
-       FLOOKUP u.vs_allocas aid = SOME b) /\
-    u.vs_memory = s.vs_memory /\ u.vs_data_section = s.vs_data_section
-Proof
-  strip_tac >> drule_all emit_op_zero_path >> strip_tac >>
-  drule emitted_insts_emit_op >> strip_tac >>
-  `sb.cs_current_bb = sm.cs_current_bb` by
-    (drule emit_op_extends >> simp_tac std_ss [same_blocks_def]) >>
-  qexists_tac `update_var (STRING #"%" (toString sm.cs_next_var)) w s
-    with vs_inst_idx := SUC s.vs_inst_idx` >>
-  asm_simp_tac std_ss [eval_operand_def, lookup_var_def, update_var_def,
-    venom_state_accfupds, FLOOKUP_UPDATE, stmt_state_rel_inst_idx,
-    listTheory.LENGTH_APPEND, listTheory.LENGTH] >>
-  conj_tac
-  >- (pure_rewrite_tac [GSYM update_var_def] >>
-      irule stmt_state_rel_update_var >> asm_simp_tac std_ss [] >>
-      irule local_ptrs_reserved_fresh >> qexists_tac `sm` >>
-      asm_simp_tac std_ss []) >>
-  asm_simp_tac std_ss [update_var_def, lookup_var_def, FLOOKUP_UPDATE] >>
-  rpt strip_tac >> fs[not_fresh_at_def] >>
-  `x <> STRING #"%" (toString sm.cs_next_var)` by
-    (first_x_assum irule >> simp[]) >>
-  simp[FLOOKUP_UPDATE]
-QED
-
-Theorem assign_attr_immutable_load_path[local]:
-  compile_imm_load_word cenv.ce_is_ctor cenv.ce_imm_alloca pop sm = (op,sb) /\
-  fn_has_code sm sb func /\ local_ptrs_reserved cenv sm /\
-  stmt_state_rel ctx func cenv cx ee s /\ eval_operand pop s = SOME a /\
-  ~s.vs_halted /\ s.vs_current_bb = sm.cs_current_bb /\
-  s.vs_inst_idx = LENGTH sm.cs_current_insts ==>
-  ?u. gas_path ctx func s 0 (OK u) /\
-    eval_operand op u = SOME
-      (if cenv.ce_is_ctor then mload (w2n a) s else
-       word_of_bytes T (0w:bytes32)
-         (TAKE 32 (DROP (w2n a) s.vs_data_section ++ REPLICATE 32 0w))) /\
-    stmt_state_rel ctx func cenv cx ee u /\
-    ~u.vs_halted /\ u.vs_current_bb = sb.cs_current_bb /\
-    u.vs_inst_idx = LENGTH sb.cs_current_insts /\
-    (!x v. not_fresh_at sm x /\ lookup_var x s = SOME v ==>
-       lookup_var x u = SOME v) /\
-    (!aid b. FLOOKUP s.vs_allocas aid = SOME b ==>
-       FLOOKUP u.vs_allocas aid = SOME b) /\ u.vs_memory = s.vs_memory
-Proof
-  strip_tac >> Cases_on `cenv.ce_is_ctor`
-  >- (Cases_on `cenv.ce_imm_alloca`
-      >- (gvs[contextTheory.compile_imm_load_word_def] >>
-          `!out. step_inst_base (mk_inst sm.cs_next_id ILOAD [pop] [out]) s =
-            OK (update_var out (mload (w2n a) s) s)` by
-            simp[step_inst_base_def, mk_inst_def, exec_read1_def] >>
-          drule_at (Pat `emit_op`) assign_attr_emit_endpoint >>
-          simp[is_terminator_def] >> disch_then drule_all >>
-          strip_tac >> qexists_tac `u` >> simp[]) >>
-      gvs[contextTheory.compile_imm_load_word_def, comp_bind_def] >>
-      pairarg_tac >> gvs[] >>
-      rename1 `emit_op ADD [pop; ib] sm = (addr,mid)` >>
-      `cs_extends sm mid /\ cs_extends mid sb` by
-        (conj_tac >>
-         `!opc args st op st'. emit_op opc args st = (op,st') ==>
-            cs_extends st st'` by
-           (rpt strip_tac >>
-            `cs_appends (emit_op opc args)` by simp[cs_appends_emit_helpers] >>
-            gvs[cs_appends_def] >> first_x_assum drule >> simp[]) >>
-         metis_tac[]) >>
-      `fn_has_code sm mid func /\ fn_has_code mid sb func` by
-        metis_tac[fn_has_code_split] >>
-      `eval_operand ib s = SOME 0w` by
-        gvs[stmt_state_rel_def, immutable_base_zero_def] >>
-      `!out. step_inst_base (mk_inst sm.cs_next_id ADD [pop; ib] [out]) s =
-         OK (update_var out a s)` by
-        (gen_tac >> irule immutable_word_add_zero >> simp[]) >>
-      qpat_assum `emit_op ADD _ _ = _`
-        (mp_then (Pat `emit_op`) mp_tac assign_attr_emit_endpoint) >>
-      simp[is_terminator_def] >> disch_then drule_all >> strip_tac >>
-      rename1 `gas_path ctx func s 0 (OK u1)` >>
-      `sm.cs_next_var <= mid.cs_next_var` by
-        (drule emitted_insts_emit_op >> simp[]) >>
-      `local_ptrs_reserved cenv mid` by
-        (irule local_ptrs_reserved_next_var >> qexists_tac `sm` >> simp[]) >>
-      `!out. step_inst_base (mk_inst mid.cs_next_id ILOAD [addr] [out]) u1 =
-         OK (update_var out (mload (w2n a) s) u1)` by
-        simp[step_inst_base_def, mk_inst_def, exec_read1_def, mload_def] >>
-      qpat_assum `emit_op ILOAD _ _ = _`
-        (mp_then (Pat `emit_op`) mp_tac assign_attr_emit_endpoint) >>
-      simp[is_terminator_def] >> disch_then drule_all >> strip_tac >>
-      rename1 `gas_path ctx func u1 0 (OK u2)` >>
-      qexists_tac `u2` >> simp[] >> conj_tac
-      >- metis_tac[gas_path_then, arithmeticTheory.ADD_CLAUSES] >>
-      metis_tac[freshWritesTheory.not_fresh_at_mono]) >>
-  gvs[contextTheory.compile_imm_load_word_def] >>
-  `!out. step_inst_base (mk_inst sm.cs_next_id DLOAD [pop] [out]) s =
-    OK (update_var out (word_of_bytes T (0w:bytes32)
-      (TAKE 32 (DROP (w2n a) s.vs_data_section ++ REPLICATE 32 0w))) s)` by
-    (gen_tac >> irule step_DLOAD >> simp[]) >>
-  drule_at (Pat `emit_op`) assign_attr_emit_endpoint >>
-  simp[is_terminator_def] >> disch_then drule_all >>
-  strip_tac >> qexists_tac `u` >> simp[]
-QED
-
-Theorem assign_attr_immutable_marked_read[local]:
-  unwrap_value cenv (LocatedValue t p) sm = (op,sb) /\
-  p.ptr_location = LocCode /\
-  is_word_type (expr_type e) /\ local_ptrs_reserved cenv sm /\
-  sa.cs_next_var <= sm.cs_next_var /\ fn_has_code sm sb func /\
-  vv_post ctx func cenv cx e es sa sm s0 ee raw (LocatedValue t p) s /\
-  ~s.vs_halted /\ s.vs_current_bb = sm.cs_current_bb /\
-  s.vs_inst_idx = LENGTH sm.cs_current_insts ==>
-  ?v u. gas_marked_exec F (ctx,func) (read_result cx raw) (ee,s)
-      [] (INL v) ee (OK u) /\
-    expr_post ctx func cenv cx e es sa sb s0 ee v op u /\
-    ~u.vs_halted /\ u.vs_current_bb = sb.cs_current_bb /\
-    u.vs_inst_idx = LENGTH sb.cs_current_insts /\
-    (!x w. not_fresh_at sm x /\ lookup_var x s = SOME w ==>
-       lookup_var x u = SOME w) /\
-    (!aid b. FLOOKUP s.vs_allocas aid = SOME b ==>
-       FLOOKUP u.vs_allocas aid = SOME b)
-Proof
-  strip_tac >>
-  `t = expr_type e /\ ?a v. eval_operand p.ptr_operand s = SOME a /\
-    read_result cx raw ee = (INL v,ee) /\
-    immutable_holds cenv cx (expr_type e) (Value v) a ee s /\
-    stmt_state_rel ctx func cenv cx ee s` by
-    (gvs[vv_post_def, vv_holds_def, immutable_holds_def,
-         read_result_def, return_def] >>
-     qexistsl_tac [`name`, `off`, `itv`, `iv`, `k`] >> simp[]) >>
-  `vv_post ctx func cenv cx e es sa sm s0 ee (Value v)
-     (LocatedValue t p) s` by metis_tac[vv_post_read_result] >>
-  `compile_imm_load_word cenv.ce_is_ctor cenv.ce_imm_alloca
-     p.ptr_operand sm = (op,sb)` by
-    gvs[unwrap_value_def, contextTheory.compile_ptr_load_def] >>
-  drule_all assign_attr_immutable_load_path >> strip_tac >>
-  `!tvt. evaluate_type (get_tenv cx) (expr_type e) = SOME tvt ==>
-    (if cenv.ce_is_ctor then mload (w2n a) s else
-      word_of_bytes T (0w:bytes32)
-        (TAKE 32 (DROP (w2n a) s.vs_data_section ++ REPLICATE 32 0w))) =
-    typed_val_to_w256 tvt v` by
-    (Cases_on `cenv.ce_is_ctor` >>
-     metis_tac[immutable_holds_iload, immutable_holds_dload, optionTheory.SOME_11]) >>
-  qexistsl_tac [`v`, `u`] >> conj_tac
-  >- (simp[gas_marked_exec_def, gas_marked_path_def] >>
-      metis_tac[read_result_gas_obs]) >>
-  conj_tac
-  >- (irule expr_post_of_vv_post_load >> goal_assum (drule_at Any) >>
-      simp[] >> qexistsl_tac [`p`, `s`, `sm`, `t`] >> simp[]) >>
-  simp[]
-QED
-
-Theorem assign_attr_ghost_regions[local]:
-  local_ptrs_rel func cenv scopes s0 /\ local_ptrs_reserved cenv sa /\
-  (!x w. not_fresh_at sa x /\ lookup_var x s0 = SOME w ==>
-    lookup_var x s = SOME w) ==>
-  !n b sz. local_region cenv scopes (s0 with vs_vars := s.vs_vars) n b sz <=>
-    local_region cenv scopes s0 n b sz
-Proof
-  strip_tac >> rpt gen_tac >> eq_tac
-  >- (strip_tac >> irule local_region_frame >> conj_tac
-      >- (qexists_tac `func` >> simp[]) >>
-      qexistsl_tac [`sa`, `scopes`, `s`] >>
-      simp[] >> gvs[local_region_def, lookup_var_def]) >>
-  strip_tac >>
-  `local_region cenv scopes s n b sz` by
-    (irule local_region_frame_fwd >>
-     qexistsl_tac [`s0`, `sa`, `scopes`] >> simp[]) >>
-  gvs[local_region_def, lookup_var_def]
-QED
-
-Theorem assign_attr_ghost_vv_post[local]:
-  stmt_state_rel ctx func cenv cx es s0 /\ local_ptrs_reserved cenv sa /\
-  sa.cs_next_var <= sm.cs_next_var /\
-  vv_post ctx func cenv cx e es sa sm s0 ee raw (LocatedValue t p) s ==>
-  vv_post ctx func cenv cx e es (sa with cs_next_var := sm.cs_next_var)
-    sm (s0 with vs_vars := s.vs_vars) ee raw (LocatedValue t p) s
-Proof
-  strip_tac >>
-  `local_ptrs_rel func cenv es.scopes s0` by
-    gvs[stmt_state_rel_def, state_rel_def] >>
-  `!x w. not_fresh_at sa x /\ lookup_var x s0 = SOME w ==>
-    lookup_var x s = SOME w` by gvs[vv_post_def] >>
-  drule_all assign_attr_ghost_regions >> strip_tac >>
-  gvs[vv_post_def, vv_at_def, lookup_var_def, locals_kept_def,
-      popped_kept_def, pure_frame_def] >>
-  rpt conj_tac >> first_assum ACCEPT_TAC
-QED
-
-Theorem assign_attr_ghost_expr_post[local]:
-  stmt_state_rel ctx func cenv cx es s0 /\ local_ptrs_reserved cenv sa /\
-  sa.cs_next_var <= sm.cs_next_var /\
-  vv_post ctx func cenv cx e es sa sm s0 ee raw (LocatedValue t p) s /\
-  expr_post ctx func cenv cx e es (sa with cs_next_var := sm.cs_next_var)
-    sb (s0 with vs_vars := s.vs_vars) ee v op u ==>
-  expr_post ctx func cenv cx e es sa sb s0 ee v op u
-Proof
-  strip_tac >>
-  `local_ptrs_rel func cenv es.scopes s0` by
-    gvs[stmt_state_rel_def, state_rel_def] >>
-  `!x w. not_fresh_at sa x /\ lookup_var x s0 = SOME w ==>
-    lookup_var x s = SOME w` by gvs[vv_post_def] >>
-  drule_all assign_attr_ghost_regions >> strip_tac >>
-  `~expr_has_effect e ==> pure_frame cenv func es sa s0 u` by
-    (qpat_assum `expr_post _ _ _ _ _ _ _ _ _ _ _ _ u`
-       (mp_tac o last o CONJUNCTS o REWRITE_RULE [expr_post_def]) >>
-     qpat_x_assum `!n b sz. local_region _ _ (s0 with vs_vars := _) _ _ _ <=> _`
-       mp_tac >>
-     rpt (pop_assum kall_tac) >> simp[pure_frame_def]) >>
-  gvs[expr_post_def, expr_val_at_def, expr_val_own_def, lookup_var_def,
-      locals_kept_def, popped_kept_def, not_fresh_at_def] >>
-  TRY (qpat_x_assum `~expr_has_effect e ==> pure_frame _ _ _ (sa with cs_next_var := _) _ _`
-         kall_tac) >>
-  rpt strip_tac >> metis_tac[]
-QED
-
-Theorem assign_attr_path_nonhalting[local]:
-  !ctx fn s n r. gas_path ctx fn s n r ==> !u. r = OK u ==> ~u.vs_halted
-Proof
-  Induct_on `gas_path` >> rw[] >> gvs[exit_result_def]
-QED
-
-Theorem assign_attr_word_marked_read[local]:
-  unwrap_value cenv vv sm = (op,sb) /\
-  is_word_type (expr_type e) /\ local_ptrs_reserved cenv sm /\
-  local_ptrs_reserved cenv sa /\ stmt_state_rel ctx func cenv cx es s0 /\
-  sa.cs_next_var <= sm.cs_next_var /\ fn_has_code sm sb func /\
-  fn_inst_ids_distinct func /\
-  vv_post ctx func cenv cx e es sa sm s0 ee raw vv s /\
-  ~s.vs_halted /\ s.vs_current_bb = sm.cs_current_bb /\
-  s.vs_inst_idx = LENGTH sm.cs_current_insts ==>
-  ?v u. gas_marked_exec F (ctx,func) (read_result cx raw) (ee,s)
-      [] (INL v) ee (OK u) /\
-    expr_post ctx func cenv cx e es sa sb s0 ee v op u /\
-    ~u.vs_halted /\ u.vs_current_bb = sb.cs_current_bb /\
-    u.vs_inst_idx = LENGTH sb.cs_current_insts /\
-    (!x w. not_fresh_at sm x /\ lookup_var x s = SOME w ==>
-       lookup_var x u = SOME w)
-Proof
-  strip_tac >> Cases_on `vv`
-  >- (drule_all assign_attr_stack_marked_read >> strip_tac >>
-      qexistsl_tac [`v`, `u`] >> simp[]) >>
-  rename1 `LocatedValue t p` >> Cases_on `p.ptr_location`
-  >- (drule_all assign_attr_ghost_vv_post >> strip_tac >>
-      drule_at (Pat `vv_post`) unwrap_memory_marked_read >>
-      simp[] >> strip_tac >>
-      `expr_post ctx func cenv cx e es sa sb s0 ee v op u` by
-        (irule assign_attr_ghost_expr_post >> goal_assum (drule_at Any) >>
-         simp[] >> metis_tac[]) >>
-      qexistsl_tac [`v`, `u`] >> simp[] >> conj_tac
-      >- (gvs[gas_marked_exec_def, gas_marked_path_def] >>
-          metis_tac[assign_attr_path_nonhalting]) >>
-      gvs[expr_post_def, not_fresh_at_def, lookup_var_def])
-  >- (mp_tac (Q.INST [`tr` |-> `F`] assign_attr_storage_marked_read) >>
-      simp[] >> strip_tac >>
-      qexistsl_tac [`v`, `u`] >> simp[])
-  >- (mp_tac (Q.INST [`tr` |-> `T`] assign_attr_storage_marked_read) >>
-      simp[] >> strip_tac >>
-      qexistsl_tac [`v`, `u`] >> simp[])
-  >- (drule_all assign_attr_immutable_marked_read >> strip_tac >>
-      qexistsl_tac [`v`, `u`] >> simp[]) >>
-  gvs[vv_post_def, vv_holds_def]
-QED
 
 (* ===== The source ===== *)
 
@@ -508,26 +87,28 @@ Theorem eval_target_place_attr_toplevel:
     eval_target_place cx (AttributeTarget (TopLevelNameTarget (src, id)) fld)
       es = (r, es') /\
     (!m. r <> INR (Error (TypeError m))) ==>
-    es' = es /\
     ?fs off ftv.
       evaluate_type (get_tenv cx) typ = SOME (StructTV fs) /\
       struct_field_slot fs fld = SOME (off, ftv) /\
-      r = INL (StoragePlace tr (n2w slot + n2w off) ftv)
+      r = INL (StoragePlace tr (n2w slot + n2w off) ftv) /\
+      es' = es with storage_trace :=
+              es.storage_trace ++ [StorageRoot tr slot (StructTV fs)]
 Proof
   rpt gen_tac >> strip_tac >>
   qpat_x_assum `eval_target_place _ _ _ = _` mp_tac >>
   simp[Once evaluate_def, bind_def] >>
   simp[Once evaluate_def, bind_def] >>
   simp[Once evaluate_def, lookup_global_def, bind_def, lift_option_type_def,
-       return_def, LET_THM] >>
+       return_def, LET_THM, ignore_bind_def, record_storage_event_def] >>
   Cases_on `evaluate_type (get_tenv cx) typ` >>
   simp[raise_def, return_def, extend_place_def, bind_def] >>
   TRY (strip_tac >> gvs[] >> NO_TAC) >>
-  rename1 `extend_storage_place cx tr _ tv` >>
-  Cases_on `extend_storage_place cx tr (n2w slot) tv (AttrSubscript fld) es` >>
+  qmatch_goalsub_abbrev_tac `extend_storage_place cx tr _ tv _ es0` >>
+  Cases_on `extend_storage_place cx tr (n2w slot) tv (AttrSubscript fld) es0` >>
   rename1 `_ = (r1, es1)` >>
   drule extend_storage_place_attr >> strip_tac >>
-  Cases_on `r1` >> simp[return_def, get_place_def] >> strip_tac >> gvs[]
+  Cases_on `r1` >> simp[return_def, get_place_def] >> strip_tac >>
+  gvs[Abbr `es0`]
 QED
 
 (* self.x.f = e, unless it fails with a type error: e's forced value r,
@@ -548,7 +129,9 @@ Theorem eval_assign_attr_toplevel:
            ?fs off ftv.
              evaluate_type (get_tenv cx) typ = SOME (StructTV fs) /\
              struct_field_slot fs fld = SOME (off, ftv) /\
-             write_storage_slot cx tr (n2w slot + n2w off) ftv v es1 =
+             write_storage_slot cx tr (n2w slot + n2w off) ftv v
+               (es1 with storage_trace :=
+                  es1.storage_trace ++ [StorageRoot tr slot (StructTV fs)]) =
                (res, es'))
 Proof
   rpt gen_tac >> strip_tac >>
@@ -591,15 +174,17 @@ Theorem eval_target_place_attr_toplevel_action[local]:
   lookup_var_slot_from_layout cx tr src id_str = SOME slot /\
   evaluate_type (get_tenv cx) typ = SOME (StructTV fs) /\
   struct_field_slot fs fld = SOME (off, ftv) ==>
-  eval_target_place cx
-    (AttributeTarget (TopLevelNameTarget (src, id)) fld) =
-  return (StoragePlace tr (n2w slot + n2w off) ftv)
+  !es. eval_target_place cx
+         (AttributeTarget (TopLevelNameTarget (src, id)) fld) es =
+       (INL (StoragePlace tr (n2w slot + n2w off) ftv),
+        es with storage_trace :=
+          es.storage_trace ++ [StorageRoot tr slot (StructTV fs)])
 Proof
-  strip_tac >> simp[FUN_EQ_THM, Once evaluate_def, bind_def] >>
+  strip_tac >> gen_tac >> simp[Once evaluate_def, bind_def] >>
   simp[Once evaluate_def, bind_def] >>
   simp[Once evaluate_def, lookup_global_def, lift_option_type_def,
        bind_def, return_def, extend_place_def, extend_storage_place_def,
-       get_place_def]
+       get_place_def, ignore_bind_def, record_storage_event_def]
 QED
 
 Theorem assign_attr_storage_tail[local]:
@@ -609,7 +194,9 @@ Theorem assign_attr_storage_tail[local]:
   evaluate_type (get_tenv cx) typ = SOME (StructTV fs) /\
   struct_field_slot fs fld = SOME (off, ftv) /\
   read_result cx raw ee = (INL v, ee) /\
-  write_storage_slot cx tr (n2w slot + n2w off) ftv v ee = (res, ee') ==>
+  write_storage_slot cx tr (n2w slot + n2w off) ftv v
+    (ee with storage_trace :=
+       ee.storage_trace ++ [StorageRoot tr slot (StructTV fs)]) = (res, ee') ==>
   !tail.
     (do
       v <- read_result cx raw;
@@ -618,10 +205,14 @@ Theorem assign_attr_storage_tail[local]:
       write_place cx p v
     od) (ee with gas_obs := tail) = (res, ee' with gas_obs := tail)
 Proof
-  strip_tac >> drule_all eval_target_place_attr_toplevel_action >>
-  disch_then SUBST1_TAC >>
+  strip_tac >> gen_tac >>
+  drule_all eval_target_place_attr_toplevel_action >> strip_tac >>
   drule read_result_gas_obs >> strip_tac >>
-  simp[bind_def, return_def, write_place_def, write_storage_slot_gas_obs]
+  mp_tac (Q.SPECL [`cx`, `tr`, `n2w slot + n2w off`, `ftv`, `v`,
+    `ee with storage_trace :=
+       ee.storage_trace ++ [StorageRoot tr slot (StructTV fs)]`, `tail`]
+    write_storage_slot_gas_obs) >>
+  simp[bind_def, write_place_def]
 QED
 
 (* What self.x.f = e does on each outcome of e, with the typing that makes
@@ -645,20 +236,19 @@ Theorem assign_attr_storage_source:
       expr_res_ok r /\
       (!ex. r = INR ex ==> res = INR ex /\ es' = es1) /\
       (!v. r = INL v ==>
-           ?ftv. evaluate_type (get_tenv cx) fty = SOME ftv /\
-                 encode_value ftv v = SOME [(0, typed_val_to_w256 ftv v)] /\
-                 write_storage_slot cx tr
-                   (n2w slot + n2w (struct_field_offset_slots
-                      (get_struct_fields cenv.ce_struct_fields
-                         (nsid_to_string sid)) fld))
-                   ftv v es1 = (res, es') /\
-                 !u st.
-                   storage_dead cx tr
-                     (update_storage
-                        (n2w slot + n2w (struct_field_offset_slots
-                           (get_struct_fields cenv.ce_struct_fields
-                              (nsid_to_string sid)) fld)) u st) =
-                   storage_dead cx tr st)
+           ?fs off ftv.
+             evaluate_type (get_tenv cx) (StructT sid) = SOME (StructTV fs) /\
+             struct_field_slot fs fld = SOME (off, ftv) /\
+             off = struct_field_offset_slots
+               (get_struct_fields cenv.ce_struct_fields (nsid_to_string sid))
+               fld /\
+             evaluate_type (get_tenv cx) fty = SOME ftv /\
+             value_has_type ftv v /\
+             encode_value ftv v = SOME [(0, typed_val_to_w256 ftv v)] /\
+             write_storage_slot cx tr (n2w slot + n2w off) ftv v
+               (es1 with storage_trace :=
+                  es1.storage_trace ++ [StorageRoot tr slot (StructTV fs)]) =
+               (res, es'))
 Proof
   rpt gen_tac >> strip_tac >>
   `!m. res <> INR (Error (TypeError m))` by
@@ -668,6 +258,7 @@ Proof
   conj_tac >- (irule expr_body_pre_res_ok >> metis_tac[]) >>
   rpt gen_tac >> strip_tac >> gvs[] >>
   rename1 `struct_field_slot fs fld = SOME (off, ftv)` >>
+  qexistsl_tac [`fs`, `off`, `ftv`] >> simp[] >>
   `expr_sim_inv cenv cx env es` by fs[expr_body_pre_def] >>
   drule_all struct_fields_layout >> strip_tac >> gvs[] >>
   drule_all struct_field_offset_slots_eq >> strip_tac >> gvs[] >>
@@ -678,13 +269,7 @@ Proof
     gvs[expr_sim_inv_def, env_consistent_def, env_context_consistent_def] >>
   gvs[expr_result_typed_def, expr_runtime_typed_def,
       value_result_typed_def] >>
-  rpt conj_tac
-  >~ [`storage_dead`]
-  >- (rpt gen_tac >> irule storage_dead_update_struct_word_field >>
-      qexistsl_tac [`fld`, `fs`, `ftv`, `src`, `id`] >>
-      simp[vyperStorageLayoutSafetyTheory.declared_storage_region_def] >>
-      metis_tac[exprSimUnwrapTheory.word_type_slot_size]) >>
-  irule encode_value_word_typed >> metis_tac[]
+  rpt conj_tac >> metis_tac[encode_value_word_typed]
 QED
 
 Theorem assign_attr_storage_source_counted[local]:
@@ -707,17 +292,18 @@ Theorem assign_attr_storage_source_counted[local]:
     off = struct_field_offset_slots
       (get_struct_fields cenv.ce_struct_fields (nsid_to_string sid)) fld /\
     evaluate_type (get_tenv cx) fty = SOME ftv /\
+    value_has_type ftv v /\
     encode_value ftv v = SOME [(0, typed_val_to_w256 ftv v)] /\
-    write_storage_slot cx tr (n2w slot + n2w off) ftv v ee = (res, ee') /\
+    write_storage_slot cx tr (n2w slot + n2w off) ftv v
+      (ee with storage_trace :=
+         ee.storage_trace ++ [StorageRoot tr slot (StructTV fs)]) = (res, ee') /\
     (!tail.
       (do
         v <- read_result cx raw;
         p <- eval_target_place cx
           (AttributeTarget (TopLevelNameTarget (src,id)) fld);
         write_place cx p v
-      od) (ee with gas_obs := tail) = (res, ee' with gas_obs := tail)) /\
-    (!u st. storage_dead cx tr
-       (update_storage (n2w slot + n2w off) u st) = storage_dead cx tr st)
+      od) (ee with gas_obs := tail) = (res, ee' with gas_obs := tail))
 Proof
   strip_tac >>
   Cases_on `eval_stmt cx
@@ -726,17 +312,9 @@ Proof
   rename1 `_ = (res, ee')` >>
   `stmt_res_ok lctx res` by (drule_all gas_admissible_result >> simp[]) >>
   `expr_body_pre cenv cx env e (es with gas_obs := gs)` by simp[] >>
-  `!m. res <> INR (Error (TypeError m))` by
-    (rpt strip_tac >> gvs[stmt_res_ok_def]) >>
-  drule_all eval_assign_attr_toplevel >>
-  simp[bind_def] >> strip_tac >>
   drule_all assign_attr_storage_source >> simp[bind_def] >> strip_tac >>
-  `expr_sim_inv cenv cx env es` by fs[expr_body_pre_def] >>
-  drule_all struct_fields_layout >> strip_tac >> gvs[] >>
-  drule_all struct_field_offset_slots_eq >> strip_tac >> gvs[] >>
-  drule_all struct_field_type >> strip_tac >>
-  imp_res_tac struct_field_slot_alookup >> gvs[] >>
-  drule_all assign_attr_storage_tail >> simp[bind_def]
+  drule_all assign_attr_storage_tail >> strip_tac >>
+  qexistsl_tac [`fs`, `off`, `ftv`, `res`, `ee'`] >> simp[]
 QED
 
 (* ===== The code ===== *)
@@ -798,13 +376,13 @@ QED
 
 (* An SSTORE or TSTORE at a variable holding a slot, run. *)
 Theorem store_var_frag:
-  !ctx func cenv cx es' s1 tr d a op w st st' R.
+  !H ctx func cenv cx es' s1 tr d a op w st st' R.
     emit_void (if tr then TSTORE else SSTORE) [Var d; op] st = ((), st') /\
     lookup_var d s1 = SOME a /\ eval_operand op s1 = SOME w /\
-    stmt_state_rel ctx func cenv cx es'
+    stmt_state_rel H ctx func cenv cx es'
       (if tr then tstore a w s1 else sstore a w s1) ==>
     frag_exec ctx st st' (\t. t = s1)
-      (\t. stmt_state_rel ctx func cenv cx es' t /\
+      (\t. stmt_state_rel H ctx func cenv cx es' t /\
            (!x. lookup_var x t = lookup_var x s1) /\
            (!aid b. FLOOKUP s1.vs_allocas aid = SOME b ==>
                     FLOOKUP t.vs_allocas aid = SOME b)) R
@@ -816,38 +394,51 @@ Proof
   disch_then (mp_then Any irule frag_exec_weaken) >> simp[]
 QED
 
+(* After e's code: the ADD of f's offset to x's slot, e's unwrap and one
+   SSTORE or TSTORE, for any e whose read succeeds; the store's horizons
+   are those that declare x's root, which the write's trace records. *)
 Theorem assign_attr_storage_word_suffix[local]:
   compile_expr cenv (expr_type e) e sa = (vv,sm) /\
   emit_op ADD [Lit (n2w slot); Lit (n2w off)] sm = (dst,sn) /\
   unwrap_value cenv vv sn = (op,su) /\
   emit_void (if tr then TSTORE else SSTORE) [dst;op] su = ((),sf) /\
-  local_ptrs_reserved cenv sa /\ local_ptrs_reserved cenv sn /\
-  sa.cs_next_var <= sm.cs_next_var /\ sa.cs_next_var <= sn.cs_next_var /\
-  stmt_state_rel ctx func cenv cx es s0 /\ is_word_type (expr_type e) /\
+  local_ptrs_reserved cenv sa /\
   fn_has_code sm sn func /\ fn_has_code sn su func /\
   fn_has_code su sf func /\ fn_inst_ids_distinct func /\
-  vv_post ctx func cenv cx e es sa sm s0 ee raw vv s /\
+  is_word_type (expr_type e) /\
+  (!H. valid_horizon cx st0 H ee.storage_trace ==>
+       vv_post H ctx func cenv cx e es sa sm s0 ee raw vv s) /\
+  valid_horizon cx st0 H0 ee.storage_trace /\
+  stmt_state_rel H0 ctx func cenv cx es s0 /\
   MAP FDOM ee.scopes = MAP FDOM es.scopes /\
   ~s.vs_halted /\ s.vs_current_bb = sm.cs_current_bb /\
   s.vs_inst_idx = LENGTH sm.cs_current_insts /\ ee.gas_obs = [] /\
   (!v. read_result cx raw ee = (INL v,ee) ==>
-    ?ftv res ee'.
-      evaluate_type (get_tenv cx) (expr_type e) = SOME ftv /\
-      encode_value ftv v = SOME [(0,typed_val_to_w256 ftv v)] /\
-      write_storage_slot cx tr (n2w slot + n2w off) ftv v ee = (res,ee') /\
-      (!tail. k raw (ee with gas_obs := tail) =
-        (res,ee' with gas_obs := tail)) /\
-      (!u st. storage_dead cx tr
-        (update_storage (n2w slot + n2w off) u st) = storage_dead cx tr st)) ==>
+     ?fs ftv res ee'.
+       struct_field_slot fs fld = SOME (off,ftv) /\
+       evaluate_type (get_tenv cx) (expr_type e) = SOME ftv /\
+       value_has_type ftv v /\
+       encode_value ftv v = SOME [(0,typed_val_to_w256 ftv v)] /\
+       write_storage_slot cx tr (n2w slot + n2w off) ftv v
+         (ee with storage_trace :=
+            ee.storage_trace ++ [StorageRoot tr slot (StructTV fs)]) =
+         (res,ee') /\
+       !tail. k raw (ee with gas_obs := tail) =
+              (res,ee' with gas_obs := tail)) ==>
   ?res ee' r.
     (!tail. k raw (ee with gas_obs := tail) = (res,ee' with gas_obs := tail)) /\
     gas_marked_path F ctx func s 0 r /\
-    ?t'. r = OK t' /\ stmt_post ctx func cx lctx cenv cenv sa sf es s0 res
-      (ee' with gas_obs := []) t'
+    ?t'. r = OK t' /\
+      !H. valid_horizon cx st0 H ee'.storage_trace ==>
+          stmt_post H ctx func cx lctx cenv cenv sa sf es s0 res
+            (ee' with gas_obs := []) t'
 Proof
   strip_tac >>
-  drule_all assign_attr_add_marked >> strip_tac >>
-  drule_all assign_attr_word_marked_read >> strip_tac >>
+  `eval_operand (Lit (n2w slot)) s = SOME (n2w slot)` by
+    simp[eval_operand_def] >>
+  drule_all expr_add_unwrap_marked_read >> strip_tac >>
+  rename1 `gas_marked_exec F (ctx,func) (read_result cx raw) (ee,s) []
+             (INL v) ee (OK u)` >>
   `read_result cx raw ee = (INL v,ee)` by
     (`ee with gas_obs := [] = ee` by
        simp[evaluation_state_component_equality] >>
@@ -856,36 +447,34 @@ Proof
      disch_then (qspec_then `[]` mp_tac) >>
      simp[gas_explicit_def]) >>
   qpat_x_assum `!v. read_result cx raw ee = _ ==> _` drule >> strip_tac >>
-  rename1 `evaluate_type (get_tenv cx) (expr_type e) = SOME ftv` >>
-  `eval_operand dst u = SOME (n2w slot + n2w off)` by
-    (gvs[eval_operand_def] >> metis_tac[]) >>
-  qpat_x_assum `expr_post _ _ _ _ _ _ _ _ _ _ _ _ _`
-    (strip_assume_tac o REWRITE_RULE [expr_post_def]) >>
-  `alloca_frame cenv es sa s0 cenv ee' u` by
-    (`ee'.scopes = ee.scopes` by
-       (drule vyperScopePreservationTheory.write_storage_slot_scopes >>
-        simp[]) >>
-     mp_tac (Q.INST [`es'` |-> `ee'`, `s` |-> `u`] alloca_frame_of_mem_frame) >>
-     impl_tac
-     >- (rpt conj_tac
-         >- first_assum ACCEPT_TAC
-         >- first_assum ACCEPT_TAC
-         >- fs[]
-         >- fs[lookup_var_def] >>
-         first_assum ACCEPT_TAC) >>
-     disch_then ACCEPT_TAC) >>
-  `eval_operand op u = SOME (typed_val_to_w256 ftv v)` by
-    (gvs[expr_val_rel_def] >> metis_tac[]) >>
-  drule_all stmt_state_rel_write_storage_word >> strip_tac >> gvs[] >>
-  `~u.vs_call_ctx.cc_static` by
+  `type_slot_size ftv = 1` by metis_tac[word_type_slot_size] >>
+  `well_formed_type_value ftv` by
+    metis_tac[cj 1 vyperTypingTheory.evaluate_type_well_formed] >>
+  `stmt_state_rel H0 ctx func cenv cx ee u` by metis_tac[] >>
+  `~u.vs_call_ctx.cc_static /\ ~cx.txn.is_static` by
     fs[exprLoweringPropsTheory.stmt_state_rel_def,
        loweringStateRelDefsTheory.state_rel_def] >>
+  `res = INL ()` by
+    (qpat_x_assum `write_storage_slot _ _ _ _ _ _ = _` mp_tac >>
+     simp[write_storage_slot_eq]) >>
+  pop_assum SUBST_ALL_TAC >>
+  `ee'.gas_obs = [] /\ ee'.scopes = ee.scopes /\
+   ee'.storage_trace =
+     ee.storage_trace ++ [StorageRoot tr slot (StructTV fs)]` by
+    (qpat_x_assum `write_storage_slot _ _ _ _ _ _ = _` mp_tac >>
+     simp[write_storage_slot_eq] >> Cases_on `tr` >>
+     simp[set_storage_def] >> strip_tac >> gvs[]) >>
+  `ee' with gas_obs := [] = ee'` by
+    simp[evaluation_state_component_equality] >>
+  `eval_operand op u = SOME (typed_val_to_w256 ftv v)` by
+    (gvs[expr_val_rel_def] >> metis_tac[]) >>
   `gas_marked_path F ctx func u 0
     (OK ((if tr then tstore (n2w slot + n2w off) (typed_val_to_w256 ftv v) u
           else sstore (n2w slot + n2w off) (typed_val_to_w256 ftv v) u)
       with vs_inst_idx := SUC u.vs_inst_idx))` by
     (irule emit_inst_zero_marked_path >> simp[] >>
-     qexistsl_tac [`[Var d;op]`, `if tr then TSTORE else SSTORE`, `[]`, `su`, `sf`] >>
+     qexistsl_tac [`[dst;op]`, `if tr then TSTORE else SSTORE`, `[]`,
+                   `su`, `sf`] >>
      Cases_on `tr` >> gvs[emit_void_def,emit_inst_def,is_terminator_def] >>
      PURE_ONCE_REWRITE_TAC[step_inst_base_def] >>
      fs[mk_inst_def,exec_write2_def]) >>
@@ -896,26 +485,78 @@ Proof
     (Cases_on `tr` >>
      gvs[emit_void_def,comp_bind_def,fresh_id_def,comp_ignore_bind_def,
          comp_return_def,emit_def]) >>
-  `ee'.gas_obs = []` by
-    (qpat_x_assum `write_storage_slot _ _ _ _ _ _ = _` mp_tac >>
-     simp[write_storage_slot_eq] >> Cases_on `tr` >>
-     simp[set_storage_def] >> rw[] >> gvs[]) >>
-  `ee' with gas_obs := [] = ee'` by
-    simp[evaluation_state_component_equality] >>
+  `alloca_frame cenv es sa s0 cenv ee u` by metis_tac[] >>
+  `alloca_frame cenv es sa s0 cenv ee'
+     ((if tr then tstore (n2w slot + n2w off) (typed_val_to_w256 ftv v) u
+       else sstore (n2w slot + n2w off) (typed_val_to_w256 ftv v) u)
+      with vs_inst_idx := SUC u.vs_inst_idx)` by
+    (irule alloca_frame_same_state >> qexists_tac `u` >>
+     Cases_on `tr` >> simp[sstore_def, tstore_def, LET_THM] >>
+     qpat_x_assum `alloca_frame _ _ _ _ _ ee u` mp_tac >>
+     simp[alloca_frame_def]) >>
   qexistsl_tac [`INL ()`, `ee'`,
     `OK ((if tr then tstore (n2w slot + n2w off) (typed_val_to_w256 ftv v) u
           else sstore (n2w slot + n2w off) (typed_val_to_w256 ftv v) u)
       with vs_inst_idx := SUC u.vs_inst_idx)`] >>
-  simp[] >> conj_tac
+  conj_tac >- first_assum ACCEPT_TAC >>
+  conj_tac
   >- (qpat_x_assum `gas_marked_exec _ _ _ _ _ _ _ _` mp_tac >>
       simp[gas_marked_exec_def] >> strip_tac >>
       metis_tac[gas_marked_path_then,ADD_CLAUSES]) >>
-  simp[stmt_post_def,stmt_lands_def,cenv_top_ext_refl,
+  simp[] >> qx_gen_tac `H` >> strip_tac >>
+  `valid_horizon cx st0 H ee.storage_trace /\
+   MEM (tr, n2w slot, StructTV fs) (FST H) /\ regions_consistent (FST H)` by
+    fs[vyperStorageFootprintTheory.valid_horizon_def,
+       vyperStorageFootprintTheory.storage_observations_ok_def,
+       listTheory.EVERY_APPEND,
+       vyperStorageFootprintTheory.storage_trace_regions_def] >>
+  `stmt_state_rel H ctx func cenv cx ee u /\
+   storage_well_formed_on cx ee (FST H)` by metis_tac[] >>
+  `!u' st. storage_dead H tr (update_storage (n2w slot + n2w off) u' st) =
+           storage_dead H tr st` by
+    (rpt gen_tac >> irule storage_dead_update_struct_word_field >>
+     metis_tac[]) >>
+  qspecl_then [`H`, `func`, `cenv`, `cx`,
+    `ee with storage_trace :=
+       ee.storage_trace ++ [StorageRoot tr slot (StructTV fs)]`,
+    `u`, `tr`, `n2w slot + n2w off`, `ftv`, `v`,
+    `typed_val_to_w256 ftv v`, `INL ()`, `ee'`, `ctx`]
+    mp_tac stmt_state_rel_write_storage_word >>
+  impl_tac >- simp[] >> strip_tac >>
+  `storage_well_formed_on cx ee' (FST H)` by
+    (qabbrev_tac `ee1 = ee with storage_trace :=
+       ee.storage_trace ++ [StorageRoot tr slot (StructTV fs)]` >>
+     `storage_well_formed_on cx ee1 (FST H)` by
+       fs[Abbr `ee1`, vyperStorageFootprintTheory.storage_well_formed_on_def] >>
+     qpat_x_assum `storage_well_formed_on cx ee _` kall_tac >>
+     `storage_subregion (StructTV fs) [AttrSubscript fld] off ftv` by
+       simp[vyperStoragePlaceRegionTheory.storage_subregion_def] >>
+     `w2n (n2w slot : bytes32) + type_slot_size (StructTV fs) <= dimword(:256)` by
+       metis_tac[vyperStorageFootprintTheory.regions_consistent_def] >>
+     drule vyperStoragePlaceRegionTheory.storage_subregion_bounds >>
+     strip_tac >>
+     `w2n (n2w slot + n2w off : bytes32) = w2n (n2w slot : bytes32) + off` by
+       (`w2n (n2w slot : bytes32) + off < dimword (:256)` by decide_tac >>
+        Cases_on `(n2w slot : bytes32)` >>
+        fs[wordsTheory.word_add_n2w]) >>
+     `slots_in_range (get_storage cx ee1 tr) (w2n (n2w slot : bytes32))
+        (StructTV fs)` by
+       metis_tac[vyperStorageFootprintTheory.storage_well_formed_on_def] >>
+     `0 < type_slot_size ftv` by simp[] >>
+     `slots_in_range (get_storage cx ee' tr) (w2n (n2w slot : bytes32))
+        (StructTV fs)` by
+       (drule_all
+          vyperStorageRegionWriteTheory.storage_subregion_typed_write_preserves_root >>
+        simp[]) >>
+     irule vyperStorageFootprintTheory.contained_write_preserves_storage_well_formed_on >>
+     goal_assum (drule_at Any) >> goal_assum (drule_at Any) >>
+     goal_assum (drule_at Any) >> simp[] >>
+     qexistsl [`ee1`, `n2w slot + n2w off`, `ftv`, `v`] >> simp[] >>
+     decide_tac) >>
+  simp[stmt_post_def, stmt_lands_def, cenv_top_ext_refl,
        stmt_state_rel_inst_idx] >>
   Cases_on `tr` >>
-  gvs[sstore_def,tstore_def,lookup_var_def,LET_THM] >>
-  irule alloca_frame_same_state >> qexists_tac `u` >> simp[] >>
-  first_assum ACCEPT_TAC
+  gvs[sstore_def, tstore_def, lookup_var_def, LET_THM]
 QED
 
 (* self.x.f = e for a storage or transient struct x the lowering holds by
@@ -947,6 +588,13 @@ Theorem compile_assign_attr_storage_case:
 Proof
   rpt gen_tac >> strip_tac >>
   simp[stmt_frag_def,stmt_framed_frag_def] >> rpt gen_tac >> strip_tac >>
+  reverse (Cases_on `storage_trace_domain cx st0 es.storage_trace`)
+  >- (rewrite_tac[gas_outcome_def] >> qexists_tac `[]` >> disj1_tac >>
+      irule gasStorageTheory.gas_bad_storage_at_initial >>
+      simp[vyperStorageTraceTheory.evaluate_storage_trace_frame]) >>
+  `?H0. valid_horizon cx st0 H0 es.storage_trace` by
+    metis_tac[vyperStorageFootprintTheory.storage_trace_domain_def] >>
+  `stmt_state_rel H0 ctx func cenv cx es s0` by metis_tac[] >>
   `FLOOKUP cenv.ce_module_vars (src, id) =
      SOME (if tr then TransientLoc (n2w slot) else StorageLoc (n2w slot))` by
     (irule toplevel_storage_ce_vars >>
@@ -962,57 +610,79 @@ Proof
     (fs[ci_mono_def] >> metis_tac[fn_has_code_split,cs_extends_trans]) >>
   irule forced_vv_then_stmt_outcome >>
   qexistsl_tac [
-    `\raw ee t. vv_post ctx func cenv cx e es sa sm s0 ee raw vv t /\
+    `\H raw ee t. vv_post H ctx func cenv cx e es sa sm s0 ee raw vv t /\
       t.vs_current_bb = sm.cs_current_bb /\
       t.vs_inst_idx = LENGTH sm.cs_current_insts`, `e`,
     `\raw. do v <- read_result cx raw;
        p <- eval_target_place cx
          (AttributeTarget (TopLevelNameTarget (src,id)) fld);
        write_place cx p v od`] >>
-  reverse conj_tac
-  >- (conj_tac >- simp[eval_assign_attr_toplevel_action] >>
-      qpat_x_assum `expr_vv_sim _ _ _ _ _ _ _`
+  rpt conj_tac
+  >~ [`eval_stmt _ _ = _`] >- simp[eval_assign_attr_toplevel_action]
+  >~ [`storage_trace_frame _`]
+  >- (gen_tac >> BETA_TAC >>
+      irule vyperStorageTraceTheory.storage_trace_frame_bind_all >>
+      simp[vyperStorageTraceTheory.storage_trace_frame_read_result] >>
+      gen_tac >>
+      irule vyperStorageTraceTheory.storage_trace_frame_bind_all >>
+      simp[vyperStorageTraceTheory.evaluate_storage_trace_frame,
+           vyperStorageTraceTheory.storage_trace_frame_write_place])
+  >~ [`gas_outcome _ _ _ _ _ _ _ _ _`]
+  >- (qpat_x_assum `expr_vv_sim _ _ _ _ _ _ _`
         (mp_tac o REWRITE_RULE [expr_vv_sim_def]) >>
-      disch_then (qspecl_then [`sa`,`sm`,`vv`,`s0`] mp_tac) >>
+      disch_then (qspecl_then [`st0`,`sa`,`sm`,`vv`,`s0`] mp_tac) >>
       impl_tac >- (simp[] >> metis_tac[expr_body_pre_vv_gas_admissible]) >>
       simp[]) >>
   rpt gen_tac >> BETA_TAC >> strip_tac >>
-  `local_ptrs_reserved cenv sn /\ sa.cs_next_var <= sm.cs_next_var /\
-   sa.cs_next_var <= sn.cs_next_var` by
-    (fs[ci_mono_def,cs_extends_def] >>
-     metis_tac[local_ptrs_reserved_next_var]) >>
-  `!v. read_result cx tv ee = (INL v,ee) ==>
-    ?ftv res ee'.
-      evaluate_type (get_tenv cx) (expr_type e) = SOME ftv /\
-      encode_value ftv v = SOME [(0,typed_val_to_w256 ftv v)] /\
-      write_storage_slot cx tr (n2w slot + n2w (struct_field_offset_slots
-        (get_struct_fields cenv.ce_struct_fields (nsid_to_string sid)) fld))
-        ftv v ee = (res,ee') /\
-      (!tail. (do v <- read_result cx tv;
-        p <- eval_target_place cx
-          (AttributeTarget (TopLevelNameTarget (src,id)) fld);
-        write_place cx p v od)
-        (ee with gas_obs := tail) = (res,ee' with gas_obs := tail)) /\
-      (!u st. storage_dead cx tr (update_storage
-        (n2w slot + n2w (struct_field_offset_slots
-          (get_struct_fields cenv.ce_struct_fields (nsid_to_string sid)) fld))
-        u st) = storage_dead cx tr st)` by
+  rename1 `valid_horizon cx st0 H1 ee.storage_trace` >>
+  `storage_trace_frame (eval_expr cx e)` by
+    simp[vyperStorageTraceTheory.evaluate_storage_trace_frame] >>
+  `!H. valid_horizon cx st0 H ee.storage_trace ==>
+       valid_horizon cx st0 H es.storage_trace` by
     (rpt strip_tac >>
-     drule_all (SRULE [] (Q.INST [`fty` |-> `expr_type e`]
-       assign_attr_storage_source_counted)) >>
-     strip_tac >> goal_assum (drule_at Any) >> simp[]) >>
+     `valid_horizon cx st0 H (es with gas_obs := gs).storage_trace`
+       suffices_by simp[] >>
+     metis_tac[vyperStorageFootprintTheory.valid_horizon_frame]) >>
+  `stmt_state_rel H1 ctx func cenv cx es s0` by metis_tac[] >>
+  `!H. valid_horizon cx st0 H ee.storage_trace ==>
+       vv_post H ctx func cenv cx e es sa sm s0 ee tv vv t` by metis_tac[] >>
+  `t.vs_current_bb = sm.cs_current_bb /\
+   t.vs_inst_idx = LENGTH sm.cs_current_insts` by metis_tac[] >>
   `MAP FDOM ee.scopes = MAP FDOM es.scopes` by
     (qpat_assum `eval_expr cx e (es with gas_obs := _) = _`
        (mp_tac o MATCH_MP
           vyperEvalExprPreservesScopesDomTheory.eval_expr_preserves_scopes_dom) >>
      simp[]) >>
+  `!v. read_result cx tv ee = (INL v,ee) ==>
+     ?fs ftv res ee'.
+       struct_field_slot fs fld = SOME (struct_field_offset_slots
+         (get_struct_fields cenv.ce_struct_fields (nsid_to_string sid)) fld,
+         ftv) /\
+       evaluate_type (get_tenv cx) (expr_type e) = SOME ftv /\
+       value_has_type ftv v /\
+       encode_value ftv v = SOME [(0,typed_val_to_w256 ftv v)] /\
+       write_storage_slot cx tr (n2w slot + n2w (struct_field_offset_slots
+         (get_struct_fields cenv.ce_struct_fields (nsid_to_string sid)) fld))
+         ftv v
+         (ee with storage_trace :=
+            ee.storage_trace ++ [StorageRoot tr slot (StructTV fs)]) =
+         (res,ee') /\
+       !tail. (do v <- read_result cx tv;
+         p <- eval_target_place cx
+           (AttributeTarget (TopLevelNameTarget (src,id)) fld);
+         write_place cx p v od)
+         (ee with gas_obs := tail) = (res,ee' with gas_obs := tail)` by
+    (rpt strip_tac >>
+     drule_all (SRULE [] (Q.INST [`fty` |-> `expr_type e`]
+       assign_attr_storage_source_counted)) >>
+     strip_tac >> qexistsl_tac [`fs`, `ftv`, `res`, `ee'`] >> gvs[]) >>
   drule_all (SRULE [] (Q.INST [`k` |-> `\raw. do
     v <- read_result cx raw;
     p <- eval_target_place cx (AttributeTarget (TopLevelNameTarget (src,id)) fld);
     write_place cx p v od`]
     assign_attr_storage_word_suffix)) >>
   disch_then (qspec_then `lctx` strip_assume_tac) >>
-  qexistsl_tac [`res`,`ee'`,`r`] >> simp[]
+  metis_tac[]
 QED
 
 (* compile_assign_attr_storage_case for an e with no internal call. *)

@@ -8,7 +8,7 @@ Ancestors
 Libs monadsyntax
 
 Theorem tuple_place_optional_stage_path[local]:
-  !ctx func cenv cx es flag tys ltys ltvs vs sa su sl staged op s sw.
+  !cx st0 ctx func cenv es flag tys ltys ltvs vs sa su sl staged op s sw.
     (if flag then
        do buf <- compile_alloc_buffer (type_memory_size_list ltvs);
           emit_void MCOPY [buf.buf_operand; op; Lit (n2w (type_memory_size_list ltvs))];
@@ -21,14 +21,17 @@ Theorem tuple_place_optional_stage_path[local]:
     fn_has_code su sl func /\ local_ptrs_reserved cenv su /\
     (!x. op = Var x ==> not_fresh_at su x) /\
     eval_operand op s = SOME sw /\
-    stmt_state_rel ctx func cenv cx es s /\ fn_inst_ids_distinct func /\
+    (?H. valid_horizon cx st0 H es.storage_trace) /\
+    (!H. valid_horizon cx st0 H es.storage_trace ==>
+         stmt_state_rel H ctx func cenv cx es s) /\ fn_inst_ids_distinct func /\
     ~s.vs_halted /\ s.vs_current_bb = su.cs_current_bb /\
     s.vs_inst_idx = LENGTH su.cs_current_insts ==>
     ?t w. eval_operand staged t = SOME w /\
       tuple_in_memory vs ltvs (w2n w) t.vs_memory /\
       w2n w + type_memory_size_list ltvs < dimword (:256) /\
       tuple_place_snapshot cenv cx es sa.cs_next_id sl.cs_next_id tys ltys ltvs w t /\
-      stmt_state_rel ctx func cenv cx es t /\
+      (!H. valid_horizon cx st0 H es.storage_trace ==>
+           stmt_state_rel H ctx func cenv cx es t) /\
       (!x. not_fresh_at su x ==> lookup_var x t = lookup_var x s) /\
       (!aid entry. FLOOKUP s.vs_allocas aid = SOME entry ==>
         FLOOKUP t.vs_allocas aid = SOME entry) /\
@@ -44,12 +47,15 @@ Proof
        val_footprint (TupleTV ltvs) (ArrayV (TupleV vs)) <= type_memory_size_list ltvs` by
         simp[val_in_memory_def, val_wf_def, val_footprint_def, type_memory_size_def] >>
       `type_memory_size_list ltvs < dimword (:256)` by decide_tac >>
-      drule_all tuple_place_stage_snapshot_path >>
-      disch_then (qspecl_then [`tys`, `ltys`]
-        (qx_choosel_then [`t`, `w`] strip_assume_tac)) >>
+      qspecl_then [`cx`, `st0`, `ctx`, `func`, `cenv`, `es`, `su`, `sl`, `staged`,
+        `op`, `s`, `sw`, `ltvs`, `ArrayV (TupleV vs)`, `sa.cs_next_id`, `tys`, `ltys`]
+        mp_tac tuple_place_stage_snapshot_path >>
+      impl_tac >- (asm_rewrite_tac[] >> qexists_tac `H` >> first_assum ACCEPT_TAC) >>
+      disch_then (qx_choosel_then [`t`, `w`] strip_assume_tac) >>
+      `stmt_state_rel H ctx func cenv cx es t` by res_tac >>
       `w2n w + type_memory_size_list ltvs < dimword (:256)` by
-        (irule tuple_container_bound >>
-         goal_assum (drule_at (Pat `stmt_state_rel _ _ _ _ _ _`)) >>
+        (irule (INST_TYPE [alpha |-> ``:256``] tuple_container_bound) >>
+         goal_assum (drule_at (Pat `stmt_state_rel _ _ _ _ _ _ _`)) >>
          disj1_tac >> qexists `su.cs_next_id` >> simp[]) >>
       qexistsl [`t`, `w`] >> gvs[val_in_memory_def]) >>
   gvs[comp_return_def] >> qexistsl [`s`, `sw`] >> simp[] >>
@@ -57,12 +63,14 @@ Proof
 QED
 
 Theorem tuple_place_assignment_prefix_path:
-  !ctx func cenv cx es es1 tys ltys ltvs vs sa su sl ss op staged elems sv s0 e.
+  !cx st0 ctx func cenv es es1 tys ltys ltvs vs sa su sl ss op staged elems sv s0 e.
     expr_type e = TupleT tys /\ lowered_value_type cenv e = TupleT ltys /\
     value_has_type (TupleTV ltvs) (ArrayV (TupleV vs)) /\
     evaluate_type (get_tenv cx) (TupleT ltys) = SOME (TupleTV ltvs) /\
     LIST_REL (\t tv. type_memory_bytes cenv t = type_memory_size tv) ltys ltvs /\
-    expr_post ctx func cenv cx e es sa su s0 es1 (ArrayV (TupleV vs)) op sv /\
+    (?H. valid_horizon cx st0 H es1.storage_trace) /\
+    (!H. valid_horizon cx st0 H es1.storage_trace ==>
+         expr_post H ctx func cenv cx e es sa su s0 es1 (ArrayV (TupleV vs)) op sv) /\
     (!x. op = Var x ==> not_fresh_at su x) /\ sa.cs_next_id <= su.cs_next_id /\
     (if is_memory_view e /\ EXISTS (\t. ~is_word_type t) ltys /\
         0 < type_memory_size_list ltvs then
@@ -79,7 +87,8 @@ Theorem tuple_place_assignment_prefix_path:
     LENGTH elems = LENGTH ltys /\ EVERY (\op. ?x. op = Var x) elems /\
     (!x. MEM (Var x) elems ==> not_fresh_at ss x) /\
     local_ptrs_reserved cenv ss /\ values_have_types ltvs vs /\ tuple_val_wf vs ltvs /\
-    ?t w. stmt_state_rel ctx func cenv cx es1 t /\ ~t.vs_halted /\
+    ?t w. (!H. valid_horizon cx st0 H es1.storage_trace ==>
+             stmt_state_rel H ctx func cenv cx es1 t) /\ ~t.vs_halted /\
       t.vs_current_bb = ss.cs_current_bb /\
       t.vs_inst_idx = LENGTH ss.cs_current_insts /\
       tuple_place_snapshot cenv cx es1 sa.cs_next_id ss.cs_next_id tys ltys ltvs w t /\
@@ -94,6 +103,15 @@ Theorem tuple_place_assignment_prefix_path:
       gas_marked_path F ctx func sv 0 (OK t)
 Proof
   rpt gen_tac >> strip_tac >>
+  `expr_post H ctx func cenv cx e es sa su s0 es1 (ArrayV (TupleV vs)) op sv` by
+    res_tac >>
+  `!H. valid_horizon cx st0 H es1.storage_trace ==>
+       stmt_state_rel H ctx func cenv cx es1 sv` by
+    (rpt strip_tac >>
+     qpat_assum `!H. _ ==> expr_post _ _ _ _ _ _ _ _ _ _ _ _ _ _`
+       (qspec_then `H'` mp_tac) >>
+     impl_tac >- first_assum ACCEPT_TAC >>
+     disch_then (ACCEPT_TAC o CONJUNCT1 o REWRITE_RULE [expr_post_def])) >>
   drule_all tuple_place_rhs_certificate >> strip_tac >>
   `values_have_types ltvs vs` by gvs[value_has_type_def] >>
   `LIST_REL (\t tv. evaluate_type (get_tenv cx) t = SOME tv) ltys ltvs` by
@@ -120,17 +138,22 @@ Proof
      gvs[comp_bind_def, comp_ignore_bind_def, comp_return_def]) >>
   `local_ptrs_reserved cenv sl` by
     (irule local_ptrs_reserved_next_var >> qexists `su` >> simp[]) >>
-  fs[] >> drule tuple_place_optional_stage_path >>
-  disch_then (drule_at (Pat `tuple_place_snapshot _ _ _ _ _ _ _ _ _ _`)) >>
-  disch_then (drule_at (Pat `stmt_state_rel _ _ _ _ _ _`)) >>
-  simp[] >> disch_then (qspec_then `vs` mp_tac) >> simp[] >>
+  qpat_x_assum `type_memory_bytes _ (TupleT _) = _`
+    (fn th => RULE_ASSUM_TAC (REWRITE_RULE [th]) >> assume_tac th) >>
+  qspecl_then [`cx`, `st0`, `ctx`, `func`, `cenv`, `es1`, `flag`, `tys`, `ltys`,
+    `ltvs`, `vs`, `sa`, `su`, `sl`, `staged`, `op`, `sv`, `w`]
+    mp_tac tuple_place_optional_stage_path >>
+  impl_tac >- (asm_rewrite_tac[] >> qexists_tac `H` >> first_assum ACCEPT_TAC) >>
   disch_then (qx_choosel_then [`st`, `sw`] strip_assume_tac) >>
+  `stmt_state_rel H ctx func cenv cx es1 st` by res_tac >>
   drule tuple_place_load_snapshot_path >>
   disch_then (drule_at (Pat `tuple_place_snapshot _ _ _ _ _ _ _ _ _ _`)) >>
-  disch_then (drule_at (Pat `stmt_state_rel _ _ _ _ _ _`)) >>
+  disch_then (drule_at (Pat `stmt_state_rel _ _ _ _ _ _ _`)) >>
   simp[] >> disch_then (qspecl_then [`vs`, `get_tenv cx`] mp_tac) >>
   simp[] >> strip_tac >>
-  simp[] >> qexistsl [`t`, `sw`] >> simp[] >>
+  simp[] >> qexistsl [`t`, `sw`] >>
+  conj_tac >- (rpt strip_tac >> first_x_assum irule >> res_tac) >>
+  simp[] >>
   conj_tac
   >- (rpt strip_tac >>
       `not_fresh_at sl x` by gvs[not_fresh_at_def] >> simp[]) >>

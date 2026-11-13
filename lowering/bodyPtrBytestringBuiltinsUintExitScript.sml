@@ -313,9 +313,9 @@ Proof
 QED
 
 Theorem u2s_final_address_safe:
-  u2s_safe ctx fn cenv cx es a (Var p) b sz inst sr s /\
+  u2s_safe H ctx fn cenv cx es a (Var p) b sz inst sr s /\
   local_ptrs_reserved cenv a /\ not_fresh_at a p ==>
-  u2s_safe ctx fn cenv cx es a (Var p) b sz inst sr
+  u2s_safe H ctx fn cenv cx es a (Var p) b sz inst sr
     (update_var (u2s_var a 15) w15 (update_var (u2s_var a 14) w14 s)
       with vs_inst_idx := idx)
 Proof
@@ -324,7 +324,7 @@ Proof
 QED
 
 Theorem u2s_final_counted_invariant_ptr:
-  u2s_safe ctx fn cenv cx es a (Var p) b (buf_size+n) inst sr s /\
+  u2s_safe H ctx fn cenv cx es a (Var p) b (buf_size+n) inst sr s /\
   u2s_ptr_state d cenv cx es a G0 tn0 s0 p b (buf_size+n) n i G tn s /\
   not_fresh_at a p /\ local_ptrs_reserved cenv a /\
   (!p sz. cenv.ce_return_buf = SOME (PtrVar (Var p) sz) ==> not_fresh_at a p) /\
@@ -349,7 +349,7 @@ Proof
   strip_tac >> drule_all u2s_final_address_invariant_ptr >>
   disch_then (qspecl_then [`PG`, `D`] strip_assume_tac) >>
   qmatch_asmsub_abbrev_tac `gas_path_ptr _ _ _ _ _ _ _ _ _ ga ta (OK addr)` >>
-  `u2s_safe ctx fn cenv cx es a (Var p) b (buf_size+n) inst sr addr` by
+  `u2s_safe H ctx fn cenv cx es a (Var p) b (buf_size+n) inst sr addr` by
     (simp[Abbr `addr`] >> irule u2s_final_address_safe >> simp[]) >>
   drule u2s_safe_store_frame >> strip_tac >>
   `lookup_var (u2s_var a 15) addr = SOME (n2w (b+n-i)) /\
@@ -403,11 +403,11 @@ Proof
 QED
 
 Theorem u2s_final_endpoint_safe:
-  u2s_safe ctx fn cenv cx es a (Var p) b sz inst sr s /\
+  u2s_safe H ctx fn cenv cx es a (Var p) b sz inst sr s /\
   local_ptrs_reserved cenv a /\ not_fresh_at a p /\
   MEM inst (fn_insts fn) /\ inst.inst_opcode = ALLOCA /\
   b <= at /\ at+32 <= b+sz ==>
-  u2s_safe ctx fn cenv cx es a (Var p) b sz inst sr
+  u2s_safe H ctx fn cenv cx es a (Var p) b sz inst sr
     (jump_to lbl (update_var (u2s_var a 2) (n2w at)
       (mstore at w (update_var (u2s_var a 15) (n2w at)
         (update_var (u2s_var a 14) w14 s)))))
