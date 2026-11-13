@@ -257,7 +257,8 @@ Proof
     simp[supported_stmt_def, supported_expr_def] >>
   `body_stmts_safe tops [Return (SOME exp)]` by
     (rw[body_stmts_safe_iff] >>
-     drule (CONJUNCT2 supported_stmts_storage_syntax) >> simp[]) >>
+     drule (CONJUNCT2 supported_stmts_storage_syntax) >>
+     metis_tac[no_halt_root_no_evm_run]) >>
   simp[supported_function_body_def, supported_function_bindings_def,
        supported_stmt_bindings_def, supported_stmt_def,
        supported_stmt_expr_exists_def, supported_expr_def,

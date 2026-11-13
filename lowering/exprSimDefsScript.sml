@@ -157,14 +157,3 @@ Proof
        loweringStateRelDefsTheory.accounts_rel_def]
 QED
 
-Theorem halt_rel_cx_cong:
-  !cx cx'.
-    cx'.sources = cx.sources /\ cx'.layouts = cx.layouts /\
-    cx'.txn.target = cx.txn.target ==>
-    halt_rel cx' = halt_rel cx
-Proof
-  rpt strip_tac >> drule accountsRelPropsTheory.agree_cx_cong >>
-  strip_tac >>
-  simp[FUN_EQ_THM, loweringStateRelDefsTheory.halt_rel_def,
-       loweringStateRelDefsTheory.accounts_rel_def]
-QED
