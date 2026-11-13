@@ -65,7 +65,7 @@ Proof
   fs[vars_pc_only_def, venom_state_component_equality]
 QED
 
-Theorem abi_decode_primitive_mem_ok[local]:
+Theorem abi_decode_primitive_mem_ok:
   compile_abi_decode_to_buf dst src MLOAD base_op hi (DecPrimWord clamp) st = ((),st') /\
   fresh_vars_wrt st s /\ eval_operand src s = SOME (n2w pos) /\
   eval_operand base_op s = SOME (n2w B) /\ eval_operand dst s = SOME d /\
@@ -133,7 +133,7 @@ Proof
   rpt strip_tac >> gvs[mk_inst_def] >> metis_tac[]
 QED
 
-Theorem abi_decode_primitive_shape[local]:
+Theorem abi_decode_primitive_shape:
   compile_abi_decode_to_buf dst src MLOAD base_op hi (DecPrimWord clamp) st = ((),st') ==>
   st'.cs_blocks = st.cs_blocks /\ st'.cs_current_bb = st.cs_current_bb /\
   st'.cs_current_insts = st.cs_current_insts ++ emitted_insts st st' /\
@@ -156,7 +156,7 @@ Proof
       fresh_var_def, fresh_id_def, emit_def, mk_inst_def, is_terminator_def]
 QED
 
-Theorem abi_decode_primitive_sequence[local]:
+Theorem abi_decode_primitive_sequence:
   compile_abi_decode_to_buf dst src MLOAD base_op hi (DecPrimWord clamp) st = ((),st') /\
   fresh_vars_wrt st s /\ eval_operand src s = SOME (n2w pos) /\
   eval_operand base_op s = SOME (n2w B) /\ eval_operand dst s = SOME d /\
