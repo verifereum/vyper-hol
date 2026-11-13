@@ -19,7 +19,7 @@
 
 Theory asmFrame
 Ancestors
-  asmSem asmFrameHelpers
+  asmSem asmFrameHelpers asmRunBounded
 
 Theorem asm_step_arith_none:
   (asm_step_arith name s = NONE) = (asm_step_arith name u = NONE)
@@ -219,4 +219,33 @@ Proof
   simp[] >> disch_then irule >>
   `s1 with as_stack := s1.as_stack = s1` by simp[asmSemTheory.asm_state_component_equality] >>
   simp[]
+QED
+
+Theorem create_safe_stack_append:
+  !inst stk rest. create_safe inst stk ==> create_safe inst (stk ++ rest)
+Proof
+  rpt gen_tac >> simp[create_safe_def] >> strip_tac >> strip_tac >>
+  namedCases_on `stk` ["", "x xs"] >> gvs[] >>
+  namedCases_on `xs` ["", "y ys"] >> gvs[] >>
+  namedCases_on `ys` ["", "sz zs"] >> gvs[]
+QED
+
+Theorem create_safe_prefix_frame:
+  !n lo o2pc prog s top rest out.
+    asm_steps lo o2pc prog n (s with as_stack := top) = AsmOK out /\
+    create_safe_prefix lo o2pc prog n (s with as_stack := top) ==>
+    create_safe_prefix lo o2pc prog n (s with as_stack := top ++ rest)
+Proof
+  Induct >> simp[asm_steps_def, create_safe_prefix_suc] >>
+  rpt gen_tac >> strip_tac >>
+  gvs[AllCaseEqs()] >>
+  rename1 `asm_step _ _ _ _ = AsmOK mid` >>
+  conj_tac >- metis_tac[create_safe_stack_append] >>
+  rpt strip_tac >>
+  qpat_assum `asm_step _ _ _ (s with as_stack := top) = _`
+    (mp_then Any (qspec_then `rest` assume_tac) asm_step_frame) >>
+  gvs[] >>
+  qpat_x_assum `!lo o2pc prog s top rest out. _`
+    (qspecl_then [`lo`, `o2pc`, `prog`, `mid`, `mid.as_stack`, `rest`, `out`] mp_tac) >>
+  simp[asm_state_component_equality]
 QED
