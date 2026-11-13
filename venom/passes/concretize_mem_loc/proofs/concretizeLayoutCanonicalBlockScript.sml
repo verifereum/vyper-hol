@@ -719,7 +719,7 @@ Theorem layout_canonical_nop_next_execution:
 Proof
   strip_tac >>
   drule_all layout_canonical_nop_next_witness >> strip_tac >>
-  qexists `j` >> simp[] >> rpt strip_tac >>
+  qexists `j` >> gvs[] >> rpt strip_tac >>
   first_x_assum (drule_all_then strip_assume_tac) >>
   qexists `t` >> simp[] >> rpt strip_tac >>
   simp[selected_block_match_def] >> qexists `rb'` >> simp[]
