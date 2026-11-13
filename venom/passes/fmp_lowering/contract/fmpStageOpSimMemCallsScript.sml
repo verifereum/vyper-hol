@@ -346,7 +346,8 @@ Proof
      fs[fmp_stage_rel_def, Excl "consume_call_outcome_eq"] >>
      simp[arithmeticTheory.MIN_DEF] >> rpt IF_CASES_TAC >>
      gvs[Excl "consume_call_outcome_eq"] >>
-     disj2_tac >> disj2_tac >> qexistsl_tac [`id`,`b`,`c`,`z`,`j`] >> simp[] >> decide_tac) >>
+     qexists_tac `0` >> disj2_tac >> disj2_tac >> disj1_tac >>
+     qexistsl_tac [`id`,`b`,`c`,`z`,`j`] >> simp[] >> decide_tac) >>
   gvs[step_taint_def, mem_taint_def, step_writes_def, range_bytes_def, update_var_def,
       Excl "consume_call_outcome_eq"])
 QED
