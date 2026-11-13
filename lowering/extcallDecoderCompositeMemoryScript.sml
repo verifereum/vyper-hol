@@ -4,6 +4,8 @@ Ancestors
   extcallDecoderPreparationMemory extcallDecoderMemberPreparationMemory extcallDecoderHeadBounds
   extcallDecoderMemberSemantics extcallDecoderArraySemantics extcallDecoderStaticSuffix
   extcallDecoderIndexedMember
+  extcallDecoderBudgetBounds valueEncodingProps
+  typedCopyTuplePtr
   extcallDecoderPrefixMemory extcallDecoderBulkMemory extcallDecoderLoopEdgesMemory
   abiDecoderComplexGuard abiDecoderComplexHead abiDecoderMemberBound
   abiDecoderMemberSetup abiDecoderMemberCode freshWrites exprSimCalldataSlice
@@ -637,7 +639,9 @@ Resume extcall_decoder_remaining_members[member_success]:
      irule (PURE_REWRITE_RULE [REFL_CLAUSE, AND_CLAUSES]
        (Q.INST [`di` |-> `type_to_abi_dec_info sf ce ty`]
          (SPEC_ALL extcall_decoder_member_entry))) >>
-     fs[Abbr `inv'`] >>
+     qpat_x_assum `inv' j ps st s` mp_tac >>
+     simp[Abbr `inv'`] >> strip_tac >>
+     simp[] >>
      conj_tac
      >- (fs[abiDecoderTypedContractTheory.abi_decoder_entry_floor_def, cs_extends_def] >> decide_tac) >>
      qexistsl_tac [`mo (LENGTH tys)`, `s`, `st`] >>
@@ -1047,6 +1051,12 @@ Proof
   rpt BasicProvers.LET_ELIM_TAC >>
   qpat_x_assum `entry ce env sf (TupleT tys) _ _ _ _ _ _ _ _` mp_tac >>
   simp[Abbr `entry`] >> strip_tac >>
+  `evaluate_type env (TupleT tys) = SOME (TupleTV tvs) /\
+   type_memory_size (TupleTV tvs) = type_memory_bytes ce (TupleT tys)` by
+    metis_tac[abiDecoderCoherenceTheory.abi_decoder_coherent_header,
+      abiDecoderCoherenceTheory.abi_decoder_header_def] >>
+  `LENGTH tys < dimword(:256)` by
+    (drule_all extcall_decoder_tuple_budget_bound >> simp[]) >>
   `LIST_REL (abi_decoder_coherent ce env sf) tys tvs` by
     fs[abiDecoderCoherenceTheory.abi_decoder_coherent_tuple_iff] >>
   `MAP type_memory_size tvs = MAP (type_memory_bytes ce) tys` by
@@ -1056,10 +1066,9 @@ Proof
      disch_then (strip_assume_tac o MATCH_MP abiDecoderCoherenceTheory.abi_decoder_coherent_header) >>
      fs[abiDecoderCoherenceTheory.abi_decoder_header_def, EL_MAP]) >>
   `type_memory_bytes ce (TupleT tys) = SUM (MAP (type_memory_bytes ce) tys)` by
-    (drule abiDecoderMemberInfosTheory.abi_decoder_member_infos_layout >> strip_tac >>
-     drule abiDecoderCoherenceTheory.abi_decoder_coherent_header >>
-     simp[abiDecoderCoherenceTheory.abi_decoder_header_def,
-       valueEncodingTheory.type_memory_size_def]) >>
+    (qpat_x_assum `type_memory_size (TupleTV tvs) = _` mp_tac >>
+     simp[valueEncodingTheory.type_memory_size_def,
+       valueEncodingProofsTheory.type_memory_size_list_sum]) >>
   mp_tac (Q.INST [`dyn` |-> `EXISTS (is_abi_dynamic ce.ce_struct_fields) tys`]
     extcall_decoder_complex_members) >>
   rpt BasicProvers.LET_ELIM_TAC >>
@@ -1095,11 +1104,33 @@ Resume extcall_decoder_tuple_memory[tuple_success]:
   disch_then (qspecl_then [`tys`, `vs`, `raw`] mp_tac) >>
   impl_tac >- (fs[Abbr `observed`, Abbr `ao`, markerTheory.Abbrev_def] >> metis_tac[]) >>
   strip_tac >>
-  FAIL_TAC "tuple completion"
+  drule_all decoder_tuple_completion >> strip_tac >>
+  `tuple_in_memory vs tvs d t.vs_memory` by
+    (irule tuple_in_memory_from_elements >>
+     `LENGTH tvs = LENGTH tys` by metis_tac[LIST_REL_LENGTH] >>
+     simp[] >> rpt strip_tac >>
+     `SUM (MAP type_memory_size (TAKE i tvs)) = mo i` by
+       (asm_simp_tac std_ss [Abbr `mo`, MAP_TAKE]) >>
+     metis_tac[]) >>
+  qexists_tac `ArrayV (TupleV vs)` >>
+  gvs[Once vyperABITheory.vyper_to_abi_type_def,
+    abiDecoderMembersTheory.vyper_to_abi_types_MAP,
+    Once contractABITheory.dec_def, valueEncodingDefsTheory.val_in_memory_def,
+    abiValidMembersTheory.abi_decode_members_value, Abbr `mo`, Abbr `raw`] >>
+  first_assum ACCEPT_TAC
 QED
 
 Resume extcall_decoder_tuple_memory[tuple_reject]:
-  FAIL_TAC "tuple reject"
+  qpat_x_assum `!i child_dst child_src a z u child_sb child_d. _` kall_tac >>
+  gvs[Abbr `raw`] >> rpt strip_tac >>
+  qpat_x_assum `!vs. abi_to_vyper_list _ _ _ = SOME vs ==> _` mp_tac >>
+  qpat_x_assum `abi_to_vyper env (TupleT tys) _ = SOME v` mp_tac >>
+  POP_ASSUM_LIST (K ALL_TAC) >>
+  simp[Once vyperABITheory.abi_to_vyper_def,
+    abiDecoderMembersTheory.vyper_to_abi_types_MAP,
+    abiValidMembersTheory.abi_decode_members_value, AllCaseEqs(),
+    Once vyperABITheory.vyper_decode_valid_enc_def] >>
+  metis_tac[]
 QED
 
 Finalise extcall_decoder_tuple_memory
