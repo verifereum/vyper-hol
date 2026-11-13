@@ -3,7 +3,7 @@ Theory bodyIntCallFamCallInt
 Ancestors
   bodyIntCallJointContract bodyIntCallSeamDefs bodyIntCallJointPackage
   bodyIntCallJointCallCore bodyIntCallProducerOrder bodyIntCallSource
-  bodyIntCallFamCallIntEntry bodyIntCallFamCallIntReturn
+  bodyIntCallFamCallIntEntry bodyIntCallFamCallIntReturn bodySim
 
 (* The packaging theorem quantifies over every frame at the selected owner;
    the graph induction premise supplies all of them at once. *)
@@ -109,6 +109,7 @@ Theorem intcall_intcall_step_nonreentrant:
                 a + k < dimword (:256) /\
                 (fp.jc_lo <= a \/
                  ?b z. fp.jc_staged b z /\ b <= a /\ a + k <= b + z)) /\
+           (~expr_has_effect e ==> pure_frame ce fp.jc_func es sa s u) /\
            intcall_expr_cont fp ce env es sa s ee sb u)
         (\res ee r. expr_exit res r)
 Proof

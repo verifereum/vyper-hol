@@ -131,6 +131,13 @@ Proof
   drule_all intcall_entry_root_expr_inv >> strip_tac >>
   drule_all bodyIntCallActualEntrySemanticTheory.packaged_internal_entry_locals_declared >> strip_tac >>
   drule_all body_inv_internal_allocs_ok >> strip_tac >>
+  (* the packaging ignores the defaults; restate it at the declared ones *)
+  `set_internal_package_target cenv.ce_target
+     (package_internal_fn tops use_trans nkeys cenv.ce_is_ctor ilen
+       (mut,F,rr,name,args,dflts,ret,ss)) =
+   (label,ce,params,has_rb,is_nr,key,trans,view,ctor,ilen',ss',rt)` by
+    (qpat_assum `set_internal_package_target _ _ = _` (SUBST1_TAC o SYM) >>
+     rewrite_tac[package_internal_fn_def]) >>
   drule_all bodyIntCallActualEntrySemanticTheory.packaged_internal_entry_locals_alloc_ok >> strip_tac >>
   `supported_function_body tops Internal args ss` by
     (drule_at (Pat `MEM (FunctionDecl _ _ _ _ _ _ _ _ _) _`)

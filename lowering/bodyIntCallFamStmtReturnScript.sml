@@ -50,7 +50,7 @@ Proof
   fs[intcall_joint_res_def, intcall_expr_res_def, intcall_frame_ok_def,
      returns_stack_count_def, vyperValueTheory.evaluate_type_def] >>
   qpat_assum `~FST fp.jc_root_ce.ce_nonreentrant` (fn nr =>
-    simp[MATCH_MP return_unlock_state_inactive nr, intret_q_def, result_rel_def]) >>
+    simp[MATCH_MP return_unlock_state_inactive nr, intret_q_inactive, result_rel_def]) >>
   simp[intret_vals_match_def, state_rel_gas_obs] >>
   irule constructor_exit_state_rel >> qexists_tac `ce` >>
   fs[exprLoweringPropsTheory.stmt_state_rel_def, state_rel_gas_obs]
