@@ -7,11 +7,11 @@ Ancestors
 
 (* The argument contract restricts without changing its original baseline. *)
 Theorem abi_encode_tuple_clean_args_probe:
-  abi_args_post ctx func ce cx es origin st s0 es' args ops vs initial /\
+  abi_args_post H ctx func ce cx es origin st s0 es' args ops vs initial /\
   EVERY (abi_decoder_operand_live st.cs_next_var) ops /\
   local_ptrs_reserved ce st /\ origin.cs_next_var <= st.cs_next_var /\
   st.cs_next_var <= final.cs_next_var ==>
-  abi_args_post ctx func ce cx es origin st s0 es' args ops vs (drop_fresh st initial) /\
+  abi_args_post H ctx func ce cx es origin st s0 es' args ops vs (drop_fresh st initial) /\
   fresh_vars_wrt final (drop_fresh st initial)
 Proof
   strip_tac >> conj_tac
