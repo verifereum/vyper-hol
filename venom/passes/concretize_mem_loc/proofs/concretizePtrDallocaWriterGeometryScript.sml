@@ -8,7 +8,11 @@ Ancestors
   concretizePtrOpaqueRetpc concretizePtrValueTransport
   concretizePtrWritePurity concretizePtrWriteClassification concretizePtrOwnerSeeds
   ptrDiscipline concretizePtrComparisonTransport
-  list finite_map option arithmetic
+  concretizePtrTaggedSupport concretizePtrPlacementBounds concretizePtrPairedPrefix
+  concretizePtrRequestHistory concretizeStepStructure concretizePtrStructuralTrace
+  concretizePtrOwnerPath concretizePtrLifetime concretizePtrOperationalOpcodes
+  venomExecSemantics venomWf venomInst unitShapeDefs o1PassContract contextCodegenRel
+  opcodeClass list finite_map option arithmetic
 
 (* Source-directed extraction: unlike the historical reverse interface this
    boundary requires no target write coverage. *)
@@ -212,4 +216,225 @@ Proof
      drule_all ptr_step_write_max_containment >> simp[]) >>
   conj_tac >- gvs[ADD_COMM] >>
   qexists_tac `b+k-w2n x` >> decide_tac
+QED
+
+Theorem ptr_dalloca_writer_instruction_facts:
+  ptr_observation_reachable vs C a /\ ptr_discipline lo C vs /\
+  o1_ctx_shape C /\ EVERY (fn_ptr_ok P) C.ctx_functions ==>
+  fn_ptr_ok P a.po_fn /\ opaque_use_ok a.po_fn /\
+  MEM a.po_inst (fn_insts a.po_fn) /\ label_positions_ok a.po_inst /\
+  a.po_inst.inst_opcode <> DRET
+Proof
+  strip_tac >>
+  `MEM a.po_fn C.ctx_functions` by
+    (fs[ptr_observation_reachable_def] >>
+     drule ptr_frame_context_membership >> simp[]) >>
+  `active_inst a.po_fn a.po_inst a.po_state` by
+    (drule (cj 1 ptr_owner_view_active) >>
+     disch_then (qspec_then `LENGTH a.po_stack` mp_tac) >>
+     simp[ptr_owner_view_def]) >>
+  `MEM a.po_inst (fn_insts a.po_fn)` by
+    (fs[active_inst_def, fn_insts_def, MEM_fn_insts_blocks_iff, lookup_block_def] >>
+     metis_tac[MEM_EL]) >>
+  `a.po_inst.inst_opcode <> DRET` by
+    (drule_all ptr_discipline_no_dret >> simp[]) >>
+  fs[o1_ctx_shape_def, o1_fn_shape_def, fn_shape_ok_def, EVERY_MEM,
+     inst_shape_ok_def] >> metis_tac[]
+QED
+
+Theorem ptr_dalloca_writer_forward:
+  ptr_paired_prefix R lp positions lo vs C C'
+    h endpoint ht at done tokens registry births PT TG saved entries H calls ws /\
+  ptr_demand_interval R vs C C' h endpoint ht at done tokens registry births
+    PT TG saved entries H lo P d aid b sz k v token fn bp mems observed
+    rpolicy s out names w /\
+  ctx_pass_stage rpolicy (CFP_Simple VP_ConcretizeMemLoc)
+    (o1_walk_view rpolicy 2) C C' /\
+  o1_ctx_shape C /\ o1_run_state_ok vs /\
+  EVERY (\fn. fn.fn_eom = NONE) C.ctx_functions /\
+  mem_inv raw_mem_ok C vs /\ fixed_region_reserved lo C /\ ptr_discipline lo C vs /\
+  EVERY ssa_form C.ctx_functions /\ ctx_inst_ids_distinct C /\
+  callee_first names C.ctx_functions /\ EVERY all_reachable C.ctx_functions /\
+  EVERY fn_defs_reach_uses C.ctx_functions /\
+  max_live_eom C' = SOME eom /\ (ctx_has_dalloca C ==> eom <= w2n vs.vs_initial_fmp) /\
+  FLOOKUP positions (Allocation aid) = SOME (pa,sz) /\
+  q < LENGTH done /\ EL q done = w ==>
+  pa+k IN range_bytes (step_writes (EL q ht).po_inst (EL q ht).po_state
+    (EL (SUC q) ht).po_state) /\
+  (EL q ht).po_inst = (EL w h).po_inst /\ (EL w h).po_inst.inst_opcode <> DRET /\
+  ?ops sizeop x z xt off.
+    mem_write_ops (EL w h).po_inst = SOME ops /\ ops.iao_max_size = SOME sizeop /\
+    eval_operand ops.iao_ofst (EL w h).po_state = SOME x /\
+    eval_operand sizeop (EL w h).po_state = SOME z /\
+    eval_operand ops.iao_ofst (EL q ht).po_state = SOME xt /\
+    eval_operand sizeop (EL q ht).po_state = SOME z /\
+    b+k = w2n x+off /\ pa+k = w2n xt+off /\ off < w2n z
+Proof
+  disch_then (map_every assume_tac o CONJUNCTS) >>
+  `~in_revert_forward (EL (EL q done) h).po_fn
+      (EL (EL q done) h).po_state` by
+    (fs[ptr_demand_interval_def] >>
+     qpat_x_assum `!j. w <= j /\ j < LENGTH h ==> _`
+       (qspec_then `w` mp_tac) >> simp[] >> decide_tac) >>
+  drule_all ptr_paired_historical_event >> strip_tac >>
+  `EVERY (fn_ptr_ok P) C.ctx_functions /\
+   EVERY (\f. EVERY inst_wf (fn_insts f)) C.ctx_functions /\ k < sz /\
+   b+k IN range_bytes (step_writes (EL w h).po_inst (EL w h).po_state
+     (EL (SUC w) h).po_state)` by fs[ptr_demand_interval_def] >>
+  drule_all ptr_dalloca_writer_instruction_facts >> strip_tac >>
+  gvs[] >>
+  drule_all ptr_dalloca_initial_writer_snapshot >> strip_tac >>
+  drule_all ptr_dalloca_initial_writer_owner >> strip_tac >>
+  `!uu. uu IN FDOM TGj ==> uu IN fn_pv P (EL (EL q done) h).po_fn` by
+    (qx_gen_tac `uu` >> strip_tac >>
+     `?tag. FLOOKUP TGj uu = SOME tag` by metis_tac[FLOOKUP_DEF] >>
+     drule_all ptr_source_tagged_var_support >> simp[]) >>
+  `(EL (EL q done) h).po_state.vs_labels = (EL q ht).po_state.vs_labels` by
+    metis_tac[ptr_history_content_labels] >>
+  `pa+sz < dimword(:256)` by
+    (drule_all ptr_stage_placements_strict_bound >> simp[]) >>
+  `(EL (SUC (EL q done)) h).po_state.vs_returndata =
+    (EL (SUC q) ht).po_state.vs_returndata` by
+    (drule ptr_paired_prefix_samples >> strip_tac >>
+     drule ptr_structural_transcript_erasure >> strip_tac >>
+     drule_all ptr_paired_samples_post_returndata >> simp[]) >>
+  `(EL q ht).po_inst = (EL (EL q done) h).po_inst` by
+    (drule ptr_step_write_opcode >> simp[] >> strip_tac >>
+     simp[concretize_positions_unchanged]) >>
+  `(MEM (EL (EL q done) h).po_inst.inst_opcode [CALL;STATICCALL;DELEGATECALL] ==>
+     LENGTH (EL (SUC (EL q done)) h).po_state.vs_returndata =
+     LENGTH (EL (SUC q) ht).po_state.vs_returndata)` by simp[] >>
+  drule_all ptr_dalloca_owned_write_forward >>
+  strip_tac >> gvs[] >> rpt (goal_assum (drule_at Any)) >> simp[] >> metis_tac[]
+QED
+
+Theorem ptr_dalloca_writer_geometry:
+  ptr_paired_prefix R lp positions lo vs C C'
+    h endpoint ht at done tokens registry births PT TG saved entries H calls ws /\
+  ptr_demand_interval R vs C C' h endpoint ht at done tokens registry births
+    PT TG saved entries H lo P d aid b sz k v token fn bp mems observed
+    rpolicy s out names w /\
+  ctx_pass_stage rpolicy (CFP_Simple VP_ConcretizeMemLoc)
+    (o1_walk_view rpolicy 2) C C' /\
+  o1_ctx_shape C /\ o1_run_state_ok vs /\
+  EVERY (\fn. fn.fn_eom = NONE) C.ctx_functions /\
+  mem_inv raw_mem_ok C vs /\ fixed_region_reserved lo C /\ ptr_discipline lo C vs /\
+  EVERY ssa_form C.ctx_functions /\ ctx_inst_ids_distinct C /\
+  callee_first names C.ctx_functions /\ EVERY all_reachable C.ctx_functions /\
+  EVERY fn_defs_reach_uses C.ctx_functions /\
+  max_live_eom C' = SOME eom /\ (ctx_has_dalloca C ==> eom <= w2n vs.vs_initial_fmp) /\
+  FLOOKUP positions (Allocation aid) = SOME (pa,sz) /\
+  q < LENGTH done /\ EL q done = w ==>
+  pa+k IN range_bytes (step_writes (EL q ht).po_inst (EL q ht).po_state
+    (EL (SUC q) ht).po_state)
+Proof
+  strip_tac >> drule_all ptr_dalloca_writer_forward >> strip_tac >> gvs[] >> metis_tac[]
+QED
+
+(* Descriptor-level offsets are shared by every writer. Stores specialize
+   their size to 32; copies use exactly the same evaluated size in both runs. *)
+Theorem ptr_dalloca_writer_offsets:
+  ptr_paired_prefix R lp positions lo vs C C'
+    h endpoint ht at done tokens registry births PT TG saved entries H calls ws /\
+  ptr_demand_interval R vs C C' h endpoint ht at done tokens registry births
+    PT TG saved entries H lo P d aid b sz k v token fn bp mems observed
+    rpolicy s out names w /\
+  ctx_pass_stage rpolicy (CFP_Simple VP_ConcretizeMemLoc)
+    (o1_walk_view rpolicy 2) C C' /\
+  o1_ctx_shape C /\ o1_run_state_ok vs /\
+  EVERY (\fn. fn.fn_eom = NONE) C.ctx_functions /\
+  mem_inv raw_mem_ok C vs /\ fixed_region_reserved lo C /\ ptr_discipline lo C vs /\
+  EVERY ssa_form C.ctx_functions /\ ctx_inst_ids_distinct C /\
+  callee_first names C.ctx_functions /\ EVERY all_reachable C.ctx_functions /\
+  EVERY fn_defs_reach_uses C.ctx_functions /\
+  max_live_eom C' = SOME eom /\ (ctx_has_dalloca C ==> eom <= w2n vs.vs_initial_fmp) /\
+  FLOOKUP positions (Allocation aid) = SOME (pa,sz) /\
+  q < LENGTH done /\ EL q done = w ==>
+  ?ops sizeop x z xt off.
+    mem_write_ops (EL w h).po_inst = SOME ops /\ ops.iao_max_size = SOME sizeop /\
+    eval_operand ops.iao_ofst (EL w h).po_state = SOME x /\
+    eval_operand sizeop (EL w h).po_state = SOME z /\
+    eval_operand ops.iao_ofst (EL q ht).po_state = SOME xt /\
+    eval_operand sizeop (EL q ht).po_state = SOME z /\
+    b+k = w2n x+off /\ pa+k = w2n xt+off /\ off < w2n z
+Proof
+  strip_tac >> drule_all ptr_dalloca_writer_forward >> strip_tac >> gvs[] >> metis_tac[]
+QED
+
+(* An observation after an ordinary instruction contains the incremented
+   instruction cursor, not the immediate successful post-state. *)
+Theorem ptr_dalloca_chrono_ordinary_update:
+  !C a z. ptr_chrono_step C a z ==>
+  ~is_terminator a.po_inst.inst_opcode /\ a.po_inst.inst_opcode <> INVOKE ==>
+  ?fuel post.
+    step_inst fuel C a.po_inst a.po_state = OK post /\
+    z.po_taint = step_taint a.po_inst a.po_state post a.po_taint /\
+    z.po_state = post with vs_inst_idx := SUC a.po_state.vs_inst_idx
+Proof
+  ho_match_mp_tac ptr_chrono_step_ind >> rpt conj_tac >>
+  simp[ptr_observe_def] >> rpt strip_tac
+  >- (qexistsl [`fuel`,`s'`] >> simp[]) >>
+  gvs[step_inst_non_invoke] >>
+  drule step_inst_base_intret_opcodes >> strip_tac >> gvs[is_terminator_def]
+QED
+
+Theorem ptr_dalloca_chrono_writer_update:
+  ptr_chrono_step C a z /\ a.po_inst.inst_opcode <> DRET /\
+  x IN range_bytes (step_writes a.po_inst a.po_state z.po_state) ==>
+  ?fuel post.
+    step_inst fuel C a.po_inst a.po_state = OK post /\
+    z.po_taint = step_taint a.po_inst a.po_state post a.po_taint /\
+    z.po_state = post with vs_inst_idx := SUC a.po_state.vs_inst_idx
+Proof
+  strip_tac >>
+  `~is_terminator a.po_inst.inst_opcode /\ a.po_inst.inst_opcode <> INVOKE` by
+    (drule ptr_step_write_opcode >> simp[] >> strip_tac >> gvs[is_terminator_def]) >>
+  drule_all ptr_dalloca_chrono_ordinary_update >> simp[]
+QED
+
+Theorem ptr_dalloca_writer_updates:
+  ptr_paired_prefix R lp positions lo vs C C'
+    h endpoint ht at done tokens registry births PT TG saved entries H calls ws /\
+  ptr_demand_interval R vs C C' h endpoint ht at done tokens registry births
+    PT TG saved entries H lo P d aid b sz k v token fn bp mems observed
+    rpolicy s out names w /\
+  ctx_pass_stage rpolicy (CFP_Simple VP_ConcretizeMemLoc)
+    (o1_walk_view rpolicy 2) C C' /\
+  o1_ctx_shape C /\ o1_run_state_ok vs /\
+  EVERY (\fn. fn.fn_eom = NONE) C.ctx_functions /\
+  mem_inv raw_mem_ok C vs /\ fixed_region_reserved lo C /\ ptr_discipline lo C vs /\
+  EVERY ssa_form C.ctx_functions /\ ctx_inst_ids_distinct C /\
+  callee_first names C.ctx_functions /\ EVERY all_reachable C.ctx_functions /\
+  EVERY fn_defs_reach_uses C.ctx_functions /\
+  max_live_eom C' = SOME eom /\ (ctx_has_dalloca C ==> eom <= w2n vs.vs_initial_fmp) /\
+  FLOOKUP positions (Allocation aid) = SOME (pa,sz) /\
+  q < LENGTH done /\ EL q done = w ==>
+  ?fuel post fuelT postT.
+    step_inst fuel C (EL w h).po_inst (EL w h).po_state = OK post /\
+    (EL (SUC w) h).po_taint =
+      step_taint (EL w h).po_inst (EL w h).po_state post (EL w h).po_taint /\
+    (EL (SUC w) h).po_state = post with vs_inst_idx := SUC (EL w h).po_state.vs_inst_idx /\
+    step_inst fuelT C' (EL q ht).po_inst (EL q ht).po_state = OK postT /\
+    (EL (SUC q) ht).po_taint =
+      step_taint (EL q ht).po_inst (EL q ht).po_state postT (EL q ht).po_taint /\
+    (EL (SUC q) ht).po_state = postT with vs_inst_idx := SUC (EL q ht).po_state.vs_inst_idx
+Proof
+  strip_tac >> drule_all ptr_dalloca_writer_forward >> strip_tac >>
+  drule ptr_dalloca_demand_writer_source_edge >> strip_tac >>
+  `ptr_structural_transcript R vs C C' h endpoint ht at done tokens registry
+    births PT TG saved entries H /\
+   b+k IN range_bytes (step_writes (EL w h).po_inst (EL w h).po_state
+     (EL (SUC w) h).po_state)` by fs[ptr_demand_interval_def] >>
+  `ptr_chrono_step C' (EL q ht) (EL (SUC q) ht)` by
+    (drule ptr_structural_transcript_erasure >> strip_tac >>
+     drule ptr_structural_trace_target >>
+     disch_then (mp_tac o MATCH_MP ptr_chrono_history_adjacent) >>
+     disch_then (qspec_then `q` mp_tac) >>
+     drule ptr_paired_prefix_samples >>
+     simp[ptr_paired_samples_def, ptr_sample_list_def]) >>
+  drule_all ptr_dalloca_chrono_writer_update >> strip_tac >>
+  qpat_x_assum `ptr_chrono_step C _ _` kall_tac >>
+  `(EL q ht).po_inst.inst_opcode <> DRET` by simp[] >>
+  drule_all ptr_dalloca_chrono_writer_update >> strip_tac >>
+  rpt (goal_assum (drule_at Any)) >> simp[]
 QED
