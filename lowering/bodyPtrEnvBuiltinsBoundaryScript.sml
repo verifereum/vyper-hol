@@ -89,6 +89,7 @@ QED
 
 Theorem body_expr_ptr_stack:
   (!a t n elems. e <> Builtin a (MakeArray t n) elems) /\
+  (!ty id. e <> TopLevelName ty id) /\ (!ty e1 e2. e <> Subscript ty e1 e2) /\
   (!d PG tops ctx func cenv env ty es.
      body_inv tops ctx cenv cx /\ expr_body_pre cenv cx env e es ==>
      expr_sim_ptr d ctx PG func cenv cx ty e es) /\
@@ -105,6 +106,7 @@ QED
 
 Theorem body_expr_ptr_of_vv:
   (!a t n elems. e <> Builtin a (MakeArray t n) elems) /\
+  (!ty id. e <> TopLevelName ty id) /\ (!ty e1 e2. e <> Subscript ty e1 e2) /\
   (!d PG tops ctx func cenv env ty es.
      body_inv tops ctx cenv cx /\ expr_body_pre cenv cx env e es ==>
      expr_vv_sim_ptr d ctx PG func cenv cx ty e es) ==>

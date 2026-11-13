@@ -5,7 +5,7 @@ Ancestors bodyPtrStructLitOwnershipAggregateWrite bodyPtrStructLitOwnershipStruc
   loweringShapeRules context compileEnv exprLowering list unitShapeDefs stackPlanTypes
 
 Theorem alloc_run_compile_make_tuple_frame:
-  !es off R.
+  !es tys off R.
   shape_stable R /\
   (!e. MEM e es ==>
     shape_step F compiler_label (\s. cenv_shape_ok s ce)
@@ -13,13 +13,14 @@ Theorem alloc_run_compile_make_tuple_frame:
     alloc_run (\s. shape_state s /\ cenv_shape_ok s ce)
       (cfn ce (expr_type e) e) (\vv s. T)) ==>
   alloc_run (\s. shape_state s /\ R s /\ cenv_shape_ok s ce /\ plain_operand s buf)
-    (compile_make_tuple cfn ce es buf off)
+    (compile_make_tuple cfn ce es tys buf off)
     (\op s. shape_state s /\ R s /\ cenv_shape_ok s ce /\ plain_operand s buf /\
       plain_operand s op)
 Proof
   Induct
   >- simp[compile_make_tuple_def, comp_return_def, alloc_run_def, alloc_frame_refl] >>
-  rpt gen_tac >> strip_tac >>
+  rpt gen_tac >> strip_tac >> Cases_on `tys`
+  >- simp[compile_make_tuple_def, comp_return_def, alloc_run_def, alloc_frame_refl] >>
   simp[compile_make_tuple_def, comp_ignore_bind_def] >>
   irule alloc_run_bind >>
   qexists `\vv s. shape_state s /\ R s /\ cenv_shape_ok s ce /\

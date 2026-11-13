@@ -363,7 +363,7 @@ Proof
   gvs[n2w_11]
 QED
 
-Theorem array_ret_pc_update[local]:
+Theorem array_ret_pc_update:
   ret_pc_ok cenv st s ==> ret_pc_ok cenv st (update_var v w s)
 Proof
   rw[ret_pc_ok_def] >> first_x_assum drule >> strip_tac >> simp[] >>
@@ -1331,7 +1331,7 @@ Proof
   metis_tac[]
 QED
 
-Theorem array_body_continue_iteration_framed[local]:
+Theorem array_body_continue_iteration_framed:
   !ctx func cenv cx st0 P vs id idx saved_base arr_base p dst sz ainst st k es s
    r sb sj exit_lbl incr_lbl cond_lbl nv i1 i2 i3.
   stmt_lands (InLoop exit_lbl incr_lbl) sb r s /\

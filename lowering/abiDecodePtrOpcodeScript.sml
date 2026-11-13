@@ -1,7 +1,7 @@
 Theory abiDecodePtrOpcode
 Ancestors
   exprSimAbiDecodeFramed exprSimAbiDecodeResource
-  exprSimAbiDecodeShape exprSimAbiDecodeShapeProbe exprSimAbiDecodeTrace exprSimAbiGasBridge
+  exprSimAbiDecodeShape exprSimAbiDecodeTraceSafe exprSimAbiDecodeTrace exprSimAbiGasBridge
   fragExec compileEnv context venomInst pred_set sorting list
 
 Theorem decode_framed_emitted_opcodes:

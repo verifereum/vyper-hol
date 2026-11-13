@@ -3,7 +3,7 @@ Ancestors
   externalEntryChecks externalEntryShape actualRegistrationCode
   actualDecoderPackaging loweringShapeDefs loweringShapeProps moduleLowering
   compileEnv compileVyper vyperCompiler venomWf allocaFrontierBound
-  fragExec abiDecoderAppend list pair vyperInterpreter e2eDefs
+  fragExec abiDecoderAppend list pair vyperInterpreter e2eDefs selectedBodyCode
 
 (* Keep all phase witnesses tied to the same occurrence of the package. *)
 Theorem entry_selected_phase_equations[local]:
@@ -133,39 +133,11 @@ Proof
   drule_all entry_selected_runtime_phase >> simp[]
 QED
 
-Theorem entry_selected_classified_raw[local]:
-  !ts name mut nr args dflts ret fbody.
-  lookup_function (NONE:num option) name External ts =
-    SOME (mut,nr,args,dflts,ret,fbody) /\ name <> "__default__" /\
-  (!nr' mut' typ x. ~MEM (VariableDecl (Public nr') mut' name typ x) ts) /\
-  (!nr' b kt vt x. ~MEM (HashMapDecl (Public nr') b name kt vt x) ts) ==>
-  MEM (mut,nr,lookup_raw_return_or_F (NONE:num option) name External ts,
-       name,args,dflts,ret,fbody) (FST (classify_functions ts))
-Proof
-  Induct >- simp[lookup_function_def] >>
-  rpt gen_tac >> Cases_on `classify_functions ts` >> PairCases_on `r` >>
-  Cases_on `h`
-  >- (rename1 `FunctionDecl vis fm nk rr fname fa fd fr fb` >>
-      Cases_on `vis` >> Cases_on `fname = name` >>
-      Cases_on `fname = "__default__"` >>
-      gvs[lookup_function_def, lookup_raw_return_or_F_def, lookup_raw_return_def,
-          classify_functions_def, classify_function_def] >> metis_tac[])
-  >- (rename1 `VariableDecl vis vm vname vt vx` >> Cases_on `vis` >>
-      gvs[lookup_function_def, lookup_raw_return_or_F_def, lookup_raw_return_def,
-          classify_functions_def, classify_function_def] >>
-      rpt strip_tac >> gvs[] >> metis_tac[])
-  >- (rename1 `HashMapDecl vis hb hname kt vt hx` >> Cases_on `vis` >>
-      gvs[lookup_function_def, lookup_raw_return_or_F_def, lookup_raw_return_def,
-          classify_functions_def, classify_function_def] >>
-      rpt strip_tac >> gvs[] >> metis_tac[]) >>
-  gvs[lookup_function_def, lookup_raw_return_or_F_def, lookup_raw_return_def,
-      classify_functions_def, classify_function_def] >> metis_tac[]
-QED
-
 Theorem entry_selected_source_code:
   !tops rpolicy unit tx cd ret mut args fbody.
   lower_vyper_runtime_unit tops rpolicy = SOME unit /\ supported_program tops /\
   valid_vyper_call tops tx cd ret /\
+  ALL_DISTINCT (FLAT (MAP (external_name_keys_toplevel NONE) tops)) /\
   lookup_function NONE tx.function_name External tops =
     SOME (mut,F,args,[],ret,fbody) ==>
   ?lbl ce pos_args mincd pay key ut iv rt
@@ -187,11 +159,11 @@ Theorem entry_selected_source_code:
     (!inst. MEM inst (state_insts registered) ==> MEM inst (fn_insts func))
 Proof
   rpt gen_tac >> strip_tac >>
-  drule supported_entry_no_getters >> strip_tac >>
+  `supported_declaration_headers tops` by fs[supportedProgramTheory.supported_program_def] >>
   `tx.function_name <> "__default__"` by fs[valid_vyper_call_def] >>
   `MEM (mut,F,lookup_raw_return_or_F (NONE:num option) tx.function_name External tops,
         tx.function_name,args,[],ret,fbody) (FST (classify_functions tops))` by
-    (irule entry_selected_classified_raw >> simp[]) >>
+    (irule external_lookup_raw_package_member >> simp[]) >>
   qspecl_then [`tops`,`rpolicy.rpol_target`,`mut`,
     `lookup_raw_return_or_F (NONE:num option) tx.function_name External tops`,
     `tx.function_name`,`args`,`ret`,`fbody`] strip_assume_tac selected_external_package >>

@@ -222,8 +222,8 @@ Theorem append_storage_word_value_path_mem:
     (if tr then TLOAD else SLOAD) (if tr then TSTORE else SSTORE) sb = ((),sf) /\
   (!x. op = Var x ==> not_fresh_at sb x) /\
   eval_operand op s = SOME w /\ cap < dimword (:256) /\
-  (?H. stmt_state_rel H ctx func cenv cx es s /\
-       MEM (tr,slot,ArrayTV tv (Dynamic cap)) (FST H)) /\
+  (!H. P H ==> stmt_state_rel H ctx func cenv cx es s /\
+              MEM (tr,slot,ArrayTV tv (Dynamic cap)) (FST H)) /\ P H0 /\
   local_ptrs_reserved cenv sb /\
   declared_storage_region cx mid n [] = SOME (tr,slot,ArrayTV tv (Dynamic cap)) /\
   type_slot_size tv = 1 /\ encode_value tv v = SOME [(0,w)] /\
@@ -234,9 +234,7 @@ Theorem append_storage_word_value_path_mem:
   alloca_history func s /\ alloca_inv s ==>
   ?r. gas_marked_path T ctx func s 0 r /\
     ((?t. r = OK t /\ res = INL () /\
-      (!H. stmt_state_rel H ctx func cenv cx es s /\
-           MEM (tr,slot,ArrayTV tv (Dynamic cap)) (FST H) ==>
-           stmt_state_rel H ctx func cenv cx es' t) /\
+      (!H. P H ==> stmt_state_rel H ctx func cenv cx es' t) /\
       stmt_lands lctx sf (INL ()) t /\ ~t.vs_halted /\
       (!x a. not_fresh_at sb x /\ lookup_var x s = SOME a ==> lookup_var x t = SOME a) /\
       t.vs_allocas = s.vs_allocas /\ t.vs_alloca_next = s.vs_alloca_next /\
@@ -244,6 +242,8 @@ Theorem append_storage_word_value_path_mem:
      (exit_result r /\ stmt_exit RetQ es' res r))
 Proof
   strip_tac >>
+  `stmt_state_rel H0 ctx func cenv cx es s /\
+   MEM (tr,slot,ArrayTV tv (Dynamic cap)) (FST H0)` by metis_tac[] >>
   drule_all append_storage_header_agree_mem >> strip_tac >>
   `eval_operand (Lit slot) s = SOME slot /\
    (!x. Lit slot = Var x ==> not_fresh_at sb x)` by simp[eval_operand_def] >>
@@ -255,7 +255,7 @@ Proof
            MEM (tr,slot,ArrayTV tv (Dynamic cap)) (FST H)` by metis_tac[] >>
       drule_all append_storage_word_success_path_mem >>
       disch_then (qspec_then `lctx` strip_assume_tac) >>
-      qexists_tac `OK t` >> simp[]) >>
+      qexists_tac `OK t` >> simp[] >> metis_tac[]) >>
   `cap <= w2n (lookup_storage slot (get_storage cx es tr))` by decide_tac >>
   drule append_storage_full >> strip_tac >>
   `cap <= w2n (if tr then tload slot s else sload slot s)` by metis_tac[] >>

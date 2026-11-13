@@ -60,10 +60,11 @@ Theorem hash_after_payload_add_ok:
 Proof
   strip_tac >> irule hash_covered_payload_ok >>
   simp[copy_len_binop_ghost_frame] >>
-  qexists_tac `n` >>
+  qexistsl [`a + 32w`, `n`] >>
+  `eval_operand (Var dst) (update_var dst (a + 32w) s) = SOME (a + 32w) /\
+   eval_operand (Var len) (update_var dst (a + 32w) s) = SOME n` by
+    gvs[eval_operand_def, lookup_var_def, update_var_def, FLOOKUP_UPDATE] >>
   simp[copy_len_binop_ghost_frame, wordsTheory.w2n_add_2] >>
-  conj_tac >- simp[eval_operand_def, lookup_var_def, update_var_def,
-                   FLOOKUP_UPDATE] >>
   irule hash_payload_add_covers >> metis_tac[]
 QED
 
@@ -169,8 +170,19 @@ Proof
       rpt strip_tac >> gvs[] >> simp[op_taint_def]) >>
   gvs[] >> simp[step_inst_inst_idx_indep, exec_result_map_def] >>
   simp[Once inst_seq_ptr_def] >> conj_tac
-  >- (irule hash_covered_payload_ok >>
+  >- (`!i. w2n a + 32 <= i /\ i < w2n a + 32 + w2n (mload (w2n a) s) ==>
+           i NOTIN tn.t_mem` by
+        (rpt gen_tac >> disch_tac >>
+         qpat_assum `!i. w2n a <= i /\ i < w2n a + (_ + 32) ==> _` irule >>
+         decide_tac) >>
+      irule hash_covered_payload_ok >>
       simp[copy_len_binop_ghost_frame] >>
+      qexistsl [`a + 32w`, `mload (w2n a) s`] >>
+      `eval_operand (Var dst) (update_var dst (a + 32w)
+         (update_var len (mload (w2n a) s) s)) = SOME (a + 32w) /\
+       eval_operand (Var len) (update_var dst (a + 32w)
+         (update_var len (mload (w2n a) s) s)) = SOME (mload (w2n a) s)` by
+        gvs[eval_operand_def, lookup_var_def, update_var_def, FLOOKUP_UPDATE] >>
       simp[copy_len_binop_ghost_frame, wordsTheory.w2n_add_2] >>
       irule hash_payload_add_covers >> simp[] >>
       qexistsl_tac [`b`, `sz`] >> simp[]) >>

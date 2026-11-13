@@ -22,6 +22,50 @@ Proof
   rw[supported_variable_decl_def] >> metis_tac[]
 QED
 
+Theorem find_var_decl_absent[local]:
+  !tops id.
+    ~MEM (NONE, id)
+       (FLAT (MAP (toplevel_vtype_keys_toplevel (NONE : num option)) tops)) ==>
+    find_var_decl_by_name id tops = NONE
+Proof
+  Induct >> simp[find_var_decl_by_name_def] >> Cases >>
+  simp[find_var_decl_by_name_def, toplevel_vtype_keys_toplevel_def]
+QED
+
+Theorem find_var_decl_immutable_NONE[local]:
+  !tops vis id ty init.
+    ALL_DISTINCT
+      (FLAT (MAP (toplevel_vtype_keys_toplevel (NONE : num option)) tops)) /\
+    MEM (VariableDecl vis Immutable id ty init) tops ==>
+    find_var_decl_by_name id tops = NONE
+Proof
+  Induct >> simp[] >> rpt gen_tac >> strip_tac
+  >- gvs[toplevel_vtype_keys_toplevel_def, find_var_decl_by_name_def,
+         find_var_decl_absent] >>
+  Cases_on `h` >>
+  gvs[toplevel_vtype_keys_toplevel_def, find_var_decl_by_name_def,
+      ALL_DISTINCT_APPEND] >>
+  rw[] >> gvs[MEM_FLAT, MEM_MAP, PULL_EXISTS] >> res_tac >>
+  gvs[toplevel_vtype_keys_toplevel_def] >>
+  qpat_x_assum `!y. ~MEM y tops \/ _`
+    (qspec_then `VariableDecl vis Immutable id ty init` mp_tac) >>
+  simp[toplevel_vtype_keys_toplevel_def]
+QED
+
+(* A supported immutable is a main-module variable with no storage or
+   hashmap declaration of its name. *)
+Theorem supported_immutable_type_find_NONE:
+  !tops src id ty.
+    ALL_DISTINCT
+      (FLAT (MAP (toplevel_vtype_keys_toplevel (NONE : num option)) tops)) /\
+    supported_immutable_type tops (src,id) = SOME ty ==>
+    src = NONE /\ find_var_decl_by_name id tops = NONE
+Proof
+  rpt gen_tac >> simp[supported_immutable_type_def, AllCaseEqs()] >>
+  strip_tac >> drule supported_variable_decl_mem >> strip_tac >> gvs[] >>
+  metis_tac[find_var_decl_immutable_NONE]
+QED
+
 Theorem build_hashmap_info_absent[local]:
   !tops id.
     ~MEM (NONE, id)

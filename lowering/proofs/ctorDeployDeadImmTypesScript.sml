@@ -23,7 +23,7 @@ QED
 
 Theorem load_contract_singleton_tenv:
   load_contract NONE gobs am tx [(NONE,tops)] [] = INL (am',rqs) /\
-  supported_program tops ==>
+  supported_program tops /\ supported_program_deploy tops ==>
   get_tenv (initial_evaluation_context am'.sources am'.layouts tx NONE) =
     type_env tops
 Proof
@@ -46,6 +46,9 @@ Proof
   `MEM (VariableDecl vis Immutable name ty slot) tops` by simp[] >>
   qpat_x_assum `tops = _` kall_tac >>
   `supported_program tops` by
+    (qpat_x_assum `deploy_source_ok _ _ _` mp_tac >>
+     simp[deploy_source_ok_def]) >>
+  `supported_program_deploy tops` by
     (qpat_x_assum `deploy_source_ok _ _ _` mp_tac >>
      simp[deploy_source_ok_def]) >>
   `?art. check_contract F am.layouts tx.target [(NONE,tops)] = SOME art` by

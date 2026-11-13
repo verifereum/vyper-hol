@@ -53,7 +53,7 @@ Proof
        fn_succs_closed_def, fn_inst_ids_distinct_def, fn_inst_wf_def,
        fn_shape_ok_def, fn_entry_label_def, entry_block_def,
        opaque_use_ok_def, retpc_shape_ok_def, retpc_var_def, gas_var_def,
-       call_checks_ok_def, first_block_no_preds_def, first_block_no_phi_def,
+       first_block_no_preds_def, first_block_no_phi_def,
        fn_invoke_ok_def, fn_label_refs_ok_def, no_dret_def,
        entry_fn_no_return_def, entry_fn_no_params_def]
 QED
@@ -108,8 +108,8 @@ QED
    ASSIGN [Lit pos] with the same outputs and inst_id, every other
    instruction is kept, and only metadata (fn_eom, fn_mems_used,
    fn_forced_alloc_positions) changes.  So labels, blocks, terminators,
-   INVOKE operands, PHIs and each CALL's success check (call_checks_ok)
-   are unchanged; fresh_names_ok holds because labels and ids are fn's;
+   INVOKE operands and PHIs are unchanged;
+   fresh_names_ok holds because labels and ids are fn's;
    the label map is []; and the output has no ALLOCA (row 3).  A function
    with a static layout is returned as it is, and the rewrite keeps the
    blocks' shape and adds no FMP operation, so the output is still a
@@ -134,4 +134,3 @@ Proof
   simp[label_map_sources_ok_def] >>
   drule_all concretize_context_success_contract >> simp[]
 QED
-

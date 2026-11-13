@@ -81,7 +81,9 @@ Theorem len_vv_path_mem:
       vv_post H ctx func cenv cx (Builtin (BaseT (UintT 256)) Len [e]) es
         sa sb s0 es' (Value (IntV (&n)))
         (StackValue (BaseT (UintT 256)) op) t' /\
-      alloca_history func t' /\ t'.vs_alloca_next = t.vs_alloca_next
+      alloca_history func t' /\ t'.vs_alloca_next = t.vs_alloca_next /\
+      t'.vs_accounts = t.vs_accounts /\ t'.vs_transient = t.vs_transient /\
+      t'.vs_requests = t.vs_requests /\ t'.vs_call_ctx = t.vs_call_ctx
 Proof
   rpt gen_tac >> strip_tac >>
   `stmt_state_rel H ctx func cenv cx es' t /\

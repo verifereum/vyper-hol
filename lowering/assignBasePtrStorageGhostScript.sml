@@ -89,14 +89,13 @@ Theorem assign_base_store_selected_dead:
   assign_base_store_frame (if tr then LocTransient else LocStorage)
     b k s0 tn0 (type_slot_size tv) s tn /\
   declared_storage_region cx mid id subs = SOME (tr,k,tv) /\
-  (!mid' id' subs' k' tv'.
-     declared_storage_region cx mid' id' subs' = SOME (tr,k',tv') /\
-     (k',tv') <> (k,tv) ==>
-     ranges_disjoint (w2n k) (type_slot_size tv) (w2n k') (type_slot_size tv')) /\
+  MEM (tr,k,tv) (FST H) /\ regions_consistent (FST H) /\
+  storage_locks_separated (FST H) (SND H) /\
   well_formed_type_value tv /\ value_has_type tv v /\
   encode_value tv v = SOME writes /\
   w2n k+type_slot_size tv <= dimword (:256) /\
   w2n b+32*(type_slot_size tv-1) < dimword (:256) /\
+  (!i. i < type_slot_size tv ==> MEM i (MAP FST writes)) /\
   (!m. mem_agree_outside tn0.t_mem s0.vs_memory m ==>
        val_in_memory tv v (w2n b) m) /\
   (!q c. (q,c) IN (if tr then tn0.t_trans else tn0.t_stor) ==>
@@ -133,6 +132,9 @@ Proof
   >- (irule storage_dead_endpoint_outside >>
       goal_assum (drule_at (Pat `declared_storage_region _ _ _ _ = _`)) >>
       qexists_tac `initial` >> simp[]) >>
+  `MEM j (MAP FST writes)` by
+    (qpat_x_assum `!i. i < type_slot_size tv ==> MEM i (MAP FST writes)`
+       irule >> decide_tac) >>
   drule_all robust_memory_storage_dead_at_endpoint >> simp[]
 QED
 
@@ -177,14 +179,13 @@ Theorem assign_base_store_stor_taint_ok:
     b k s0 tn0 (type_slot_size tv) s tn /\
   stor_taint_ok H cx tn0 s0 /\ s0.vs_call_ctx.cc_address = cx.txn.target /\
   declared_storage_region cx mid id subs = SOME (tr,k,tv) /\
-  (!mid' id' subs' k' tv'.
-     declared_storage_region cx mid' id' subs' = SOME (tr,k',tv') /\
-     (k',tv') <> (k,tv) ==>
-     ranges_disjoint (w2n k) (type_slot_size tv) (w2n k') (type_slot_size tv')) /\
+  MEM (tr,k,tv) (FST H) /\ regions_consistent (FST H) /\
+  storage_locks_separated (FST H) (SND H) /\
   well_formed_type_value tv /\ value_has_type tv v /\
   encode_value tv v = SOME writes /\
   w2n k+type_slot_size tv <= dimword (:256) /\
   w2n b+32*(type_slot_size tv-1) < dimword (:256) /\
+  (!i. i < type_slot_size tv ==> MEM i (MAP FST writes)) /\
   (!m. mem_agree_outside tn0.t_mem s0.vs_memory m ==>
        val_in_memory tv v (w2n b) m) ==>
   stor_taint_ok H cx tn s
