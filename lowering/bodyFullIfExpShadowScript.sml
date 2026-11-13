@@ -5,36 +5,7 @@ Theory bodyFullIfExpShadow
 Ancestors
   gasShadow gasShadowState exprSimIfExp exprLoweringProps exprLowering
   emitHelperProps fragExec compileEnv loweringPosts vyperAST loweringStateRelDefs
-
-(* By induction: an AbiEncode's lowered type reads its arguments' lowered
-   types. *)
-Theorem lowered_value_type_gas_shadow[local]:
-  !e. lowered_value_type ce (gas_shadow_expr e) = lowered_value_type ce e
-Proof
-  completeInduct_on `expr_size e` >> rpt strip_tac >> gvs[PULL_FORALL] >>
-  Cases_on `e` >>
-  simp[gas_shadow_expr_def, lowered_value_type_def, expr_type_def]
-  >~ [`lowered_value_type _ (Call _ ct _ _) = _`]
-  >- (Cases_on `ct` >> simp[lowered_value_type_def, expr_type_def])
-  >~ [`lowered_value_type _ (Builtin _ _ _) = _`]
-  >- (rename1 `gas_shadow_builtin bi` >> Cases_on `bi` >>
-      simp[gas_shadow_builtin_def, lowered_value_type_def, expr_type_def,
-           listTheory.MAP_MAP_o, combinTheory.o_DEF] >>
-      rpt IF_CASES_TAC >> simp[lowered_value_type_def, expr_type_def])
-  >~ [`TypeBuiltin _ tb _ (MAP gas_shadow_expr args)`]
-  >- (`!x. MEM x args ==>
-           lowered_value_type ce (gas_shadow_expr x) = lowered_value_type ce x` by
-        (rpt strip_tac >> first_x_assum irule >>
-         drule exprCallBoundsTheory.expr_list_member_bound >>
-         simp[expr_size_def, ETA_AX]) >>
-      `MAP (\x. lowered_value_type ce (gas_shadow_expr x)) args =
-       MAP (lowered_value_type ce) args` by
-        (irule listTheory.MAP_CONG >> simp[]) >>
-      Cases_on `tb` >>
-      simp[lowered_value_type_def, expr_type_def, listTheory.MAP_MAP_o,
-           combinTheory.o_DEF] >>
-      Cases_on `args` >> gvs[])
-QED
+  gasShadowCompilePure
 
 Theorem gas_shadow_call[local]:
   gas_shadow_compiles f g /\ gas_shadow_state s ss /\
@@ -215,7 +186,7 @@ Proof
   `gas_shadow_state s7 h7` by
     metis_tac[gas_shadow_call, gas_shadow_compiles_new_block] >>
   `hv = av /\ gas_shadow_state s7a h7a` by metis_tac[gas_shadow_call] >>
-  fs[lowered_value_type_gas_shadow] >>
+  fs[gas_shadow_lowered_value_type] >>
   `hop = aop /\ gas_shadow_state s8 h8` by metis_tac[gas_shadow_call] >>
   `gas_shadow_state s9 h9` by
     metis_tac[gas_shadow_call, gas_shadow_compiles_emit_inst] >>
