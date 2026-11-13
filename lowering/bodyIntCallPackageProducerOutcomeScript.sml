@@ -39,7 +39,7 @@ Theorem intcall_producer_callee_outcome:
   OPTION_MAP FST fp.jc_rb = rb ==>
   gas_outcome F (cx_tops fp.jc_cx) (fp.jc_ctx,fp.jc_func)
     (try (ignore_bind (eval_stmts fp.jc_cx ss) (return NoneV)) handle_function)
-    (es,s) (\res ee u. F) (intcall_callee_exit func cenv cx rtv nret rb n m t)
+    (es,s) (\res ee u. F) (intcall_callee_exit func cenv cx mut F rtv nret rb n m t)
 Proof
   disch_then (fn th => map_every assume_tac (CONJUNCTS th)) >>
   qpat_x_assum `intcall_stmts_producer fp ss`
@@ -51,13 +51,13 @@ Proof
   impl_tac >- simp[] >> strip_tac >>
   drule_at (Pat `gas_outcome _ _ _ _ _ _ _`) gas_outcome_internal_body >>
   disch_then (qspecl_then [`sf`, `sb`,
-    `intcall_callee_exit func cenv cx rtv nret rb n m t`] mp_tac) >>
+    `intcall_callee_exit func cenv cx mut F rtv nret rb n m t`] mp_tac) >>
   impl_tac >-
     (qpat_assum `~FST _` (fn nr => simp[nr]) >> conj_tac
      >- (rpt strip_tac >> gvs[] >> metis_tac[]) >>
      conj_tac >- (rpt strip_tac >> irule intcall_stmt_return_callee_exit >>
        goal_assum (drule_at Any) >> qexists `owner` >> simp[]) >>
-     rpt strip_tac >> pure_rewrite_tac[intcall_callee_exit_def] >>
+     rpt strip_tac >> pure_rewrite_tac[intcall_callee_exit_F] >>
      disj1_tac >> first_assum ACCEPT_TAC) >>
   simp[]
 QED

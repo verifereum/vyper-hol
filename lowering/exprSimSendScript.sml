@@ -63,10 +63,11 @@ Proof
   simp[Once (CONJUNCT1 compile_expr_raw_def), compile_expr_body_def,
        expr_type_def] >>
   CONV_TAC (DEPTH_CONV ETA_CONV) >>
-  irule compile_call_callback_contract >>
-  irule expr_child_callback_agrees >>
-  rpt strip_tac >> drule call_callback_child_bound >>
-  simp[expr_size_def]
+  irule compile_call_callback_contract >> rpt strip_tac >>
+  irule expr_child_callback_agrees >> rpt strip_tac
+  >- (drule omitted_default_bound >> simp[]) >>
+  drule call_callback_child_bound >>
+  disch_then (qspecl_then [`target`, `ann`] mp_tac) >> simp[]
 QED
 
 Theorem compile_expr_send_stack:
@@ -561,7 +562,7 @@ Proof
   gvs[]
 QED
 
-Theorem send_read_gas_obs[local]:
+Theorem send_read_gas_obs:
   bind (eval_send cx has_gas vs) (read_result cx) st = (res, st') ==>
   !tail. bind (eval_send cx has_gas vs) (read_result cx)
            (st with gas_obs := tail) = (res, st' with gas_obs := tail)
@@ -573,7 +574,7 @@ Proof
   drule eval_send_value >> strip_tac >> gvs[read_result_def, return_def]
 QED
 
-Theorem eval_expr_send_read_action[local]:
+Theorem eval_expr_send_read_action:
   LENGTH args = (if has_gas then 3 else 2) ==>
   bind (eval_expr cx (Call ann (Send has_gas) args dflt)) (read_result cx) =
   bind (eval_exprs cx args) (\vs. bind (eval_send cx has_gas vs) (read_result cx))
@@ -585,7 +586,7 @@ Proof
   strip_tac >> gvs[bind_def]
 QED
 
-Theorem send_tail_path[local]:
+Theorem send_tail_path:
   expr_has_effect e /\
   emit_op CALL [gas_op; addr_op; val_op; Lit 0w; Lit 0w; Lit 0w; Lit 0w]
     sm = (success, s3) /\
@@ -672,7 +673,7 @@ Proof
   rw[] >> gvs[not_fresh_at_def] >> metis_tac[]
 QED
 
-Theorem send_tail_summary[local]:
+Theorem send_tail_summary:
   expr_has_effect e /\
   emit_op CALL [gas_op; addr_op; val_op; Lit 0w; Lit 0w; Lit 0w; Lit 0w]
     sm = (success, s3) /\

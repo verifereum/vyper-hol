@@ -84,12 +84,12 @@ QED
 
 Theorem run_deploy_lowering_internal_lookup:
   !has rp bytes imm args data_size ints ce stmts pay nr key trans entry unit
-   name has_rb rc.
+   name has_rb retc.
   run_deploy_lowering has rp bytes imm args data_size ints ce stmts pay nr key trans
     entry = SOME unit /\
-  MEM (name,has_rb,rc) (internal_fn_descriptors ints) ==>
+  MEM (name,has_rb,retc) (internal_fn_descriptors ints) ==>
   ?fbs. lookup_function name unit.cu_context.ctx_functions =
-          SOME (mk_internal_function name fbs has_rb rc) /\
+          SOME (mk_internal_function name fbs has_rb retc) /\
         fbs <> [] /\ (HD fbs).bb_label = name
 Proof
   rpt gen_tac >>

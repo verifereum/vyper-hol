@@ -47,6 +47,7 @@ Theorem intcall_array_selected_post:
          a + k < dimword (:256) /\
          (fp.jc_lo <= a \/
           ?b z. fp.jc_staged b z /\ b <= a /\ a + k <= b + z)) /\
+    (~expr_has_effect (Subscript et obj idx) ==> pure_frame ce fp.jc_func es sa s0 q) /\
     intcall_expr_cont fp ce env es sa s0 ee sd q
 Proof
   strip_tac >>
@@ -76,8 +77,8 @@ Theorem intcall_array_element_summary:
   read_result fp.jc_cx r ee = (INL (ArrayV av),ee) /\
   array_index (ArrayTV etv bd) av i = SOME v /\
   val_wf (ArrayTV etv bd) (ArrayV av) /\ val_wf etv v /\ value_has_type etv v /\
-  vv_post fp.jc_ctx fp.jc_func ce fp.jc_cx obj es sa sd s0 ee r
-    (LocatedValue ann p) q /\
+  vv_post fp.jc_ctx fp.jc_func ce fp.jc_cx (Subscript (ArrayT et bd) obj idx)
+    es sa sd s0 ee r (LocatedValue ann p) q /\
   (p.ptr_location = LocMemory \/ p.ptr_location = LocCode) /\
   (p.ptr_location = LocMemory ==> ?n. bd = Fixed n) /\
   eval_operand p.ptr_operand q = SOME w /\
@@ -126,6 +127,7 @@ Theorem intcall_array_element_summary:
            a + k < dimword (:256) /\
            (fp.jc_lo <= a \/
             ?b z. fp.jc_staged b z /\ b <= a /\ a + k <= b + z)) /\
+      (~expr_has_effect (Subscript et obj idx) ==> pure_frame ce fp.jc_func es sa s0 u) /\
       intcall_expr_cont fp ce env es sa s0 ee' sd u)
     (\res ee' outcome. expr_exit res outcome)
 Proof
@@ -133,11 +135,6 @@ Proof
   drule_all framed_array_select_read >> strip_tac >>
   qpat_assum `select_result _ _ _ _ _ = (INL _, _)`
     (assume_tac o MATCH_MP exprSimPropsTheory.select_result_memory_place) >>
-  `vv_post fp.jc_ctx fp.jc_func ce fp.jc_cx (Subscript (ArrayT et bd) obj idx)
-     es sa sd s0 ee r (LocatedValue ann p) q` by
-    (qpat_x_assum `vv_post _ _ _ _ obj _ _ _ _ _ _ _ _` mp_tac >>
-     simp[vv_post_def, vyperASTTheory.expr_type_def] >> rpt strip_tac >>
-     gvs[]) >>
   `vv_post fp.jc_ctx fp.jc_func ce fp.jc_cx (Subscript et obj idx)
      es sa sd s0 ee child (LocatedValue et (mk_ptr dst p.ptr_location)) q` by
     (irule vv_post_array_element >> simp[] >>

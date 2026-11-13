@@ -94,9 +94,6 @@ Theorem return_allocated_counted_reject:
   compile_abi_decode_to_buf buf.buf_operand (Lit 0w) MLOAD base_op hi
     (type_to_abi_dec_info sf ce rt) st = ((),en) /\
   cs_extends st en /\ fn_has_code a en func /\ fn_inst_ids_distinct func /\
-  (en.cs_current_insts <> [] \/
-   !bb. lookup_block en.cs_current_bb func.fn_blocks = SOME bb ==>
-        phi_prefix_length bb.bb_instructions = 0) /\
   stmt_state_rel ctx func ce cx ee s /\ local_ptrs_reserved ce a /\
   type_memory_bytes ce rt < dimword (:256) /\ ~s.vs_halted /\
   s.vs_current_bb = a.cs_current_bb /\

@@ -2,12 +2,12 @@
 Theory abiValidAllocatedResource
 Ancestors
   abiValidAllocatedObservations abiValidAllocatedContract abiDecoderFrame
-  ctorAbiActualWorld abiDecoderReentry abiDecoderContract
+  ctorAbiActualWorld venomInstProofs1 opcodeClass abiDecoderReentry abiDecoderContract
   abiMalformedRecursiveInterface venomMemDefs
   localPtrsProps loweringSlice exprLoweringProps compileEnv loweringStateRelDefs venomState
-  finite_map words list arithmetic
+  venomInst venomExecSemantics finite_map words list arithmetic
 
-(* HELD (train 17): 0.5.0b1 arg snapshot re-proof *)
+(* Allocation-free decoder execution preserves the destination's resource frame. *)
 Theorem abi_valid_allocated_scratch_free_resource:
   stmt_state_rel ctx func cenv cx es s /\ local_ptrs_reserved cenv st /\
   fn_inst_ids_distinct func /\
@@ -19,10 +19,10 @@ Theorem abi_valid_allocated_scratch_free_resource:
     eval_operand op t = SOME w) ==>
   abi_malformed_resource_post ctx func cenv cx es st.cs_next_var sites dstid s t
 Proof
-  (* original proof, kept while held:
   disch_then (map_every assume_tac o CONJUNCTS) >>
   `EVERY (\i. abi_decoder_reentry_opcode i.inst_opcode) code` by fs[EVERY_MEM] >>
   drule_all abi_valid_allocated_sequence_static >> strip_tac >>
+  `t.vs_code = s.vs_code` by suspend "code" >>
   drule_all ctor_actual_sequence_world >> strip_tac >>
   drule_all ctor_actual_sequence_no_alloca >> strip_tac >>
   `local_ptrs_rel func cenv es.scopes s /\ alloca_inv s` by
@@ -47,43 +47,67 @@ Proof
      regions_disjoint b sz lb lsz` by
     (rpt strip_tac >> irule local_ptrs_rel_alloca_disjoint >>
      goal_assum (drule_at Any) >> goal_assum (drule_at Any) >> simp[] >> metis_tac[]) >>
-  `local_ptrs_rel func cenv es.scopes t` by
-    (irule local_ptrs_rel_mem_agree >> qexists_tac `s` >> simp[] >>
-     reverse conj_tac >- (conj_tac >- first_assum ACCEPT_TAC >> rpt strip_tac >> gvs[]) >>
-     rpt strip_tac >> sym_tac >>
-     qhdtm_assum `abi_decode_frame`
-       (strip_assume_tac o PURE_REWRITE_RULE [abi_decode_frame_def]) >>
-     first_x_assum match_mp_tac >>
-     qpat_x_assum `!name lb lsz. _ ==> regions_disjoint _ _ _ _` drule >>
-     simp[loweringStateRelDefsTheory.regions_disjoint_def] >> decide_tac) >>
+  `local_ptrs_rel func cenv es.scopes t` by suspend "locals" >>
   `immutables_rel cenv cx.txn.target cenv.ce_module cenv.ce_is_ctor es t` by
-    (irule immutables_rel_mem_agree >> qexists_tac `s` >> simp[] >>
-     reverse conj_tac >- fs[stmt_state_rel_def, state_rel_def] >>
-     fs[stmt_state_rel_def, immutable_alloca_sep_def] >> rpt strip_tac >>
-     `regions_disjoint off (type_memory_size tv) b sz` by metis_tac[] >>
-     qhdtm_assum `abi_decode_frame`
-       (strip_assume_tac o PURE_REWRITE_RULE [abi_decode_frame_def]) >>
-     first_x_assum match_mp_tac >> fs[loweringStateRelDefsTheory.regions_disjoint_def] >> decide_tac) >>
-  `stmt_state_rel ctx func cenv cx es t` by
-    (irule stmt_state_rel_allocas_frame >> conj_tac
-     >- (irule immutable_base_zero_frame >> qexists_tac `s` >> simp[] >>
-         reverse conj_tac >- fs[stmt_state_rel_def] >> rpt strip_tac >>
-         `not_fresh_at st x` by (fs[local_ptrs_reserved_def] >> metis_tac[]) >>
-         `lookup_var x s = SOME 0w` by
-           (fs[stmt_state_rel_def, immutable_base_zero_alt, lookup_var_def] >> metis_tac[]) >>
-         metis_tac[]) >>
-     conj_tac
-     >- (irule immutable_alloca_sep_fields >> qexistsl_tac [`s`, `es`] >> simp[] >>
-         reverse conj_tac >- fs[stmt_state_rel_def] >> metis_tac[]) >>
-     reverse conj_tac >- (qexistsl_tac [`es`, `s`] >> simp[]) >>
-     irule state_rel_frame >> simp[] >> qexistsl_tac [`es`, `s`] >>
-     simp[] >> fs[stmt_state_rel_def]) >>
+    suspend "immutables" >>
+  `stmt_state_rel ctx func cenv cx es t` by suspend "state" >>
   simp[abi_malformed_resource_post_def] >> rpt strip_tac >>
   qhdtm_assum `abi_decode_frame`
     (strip_assume_tac o PURE_REWRITE_RULE [abi_decode_frame_def]) >>
   first_x_assum match_mp_tac >>
   `B+cap <= b \/ b+sz <= B` by
     (fs[alloca_inv_def, allocas_non_overlapping_def] >> metis_tac[]) >> decide_tac
-  *)
-  cheat
 QED
+
+Resume abi_valid_allocated_scratch_free_resource[code]:
+  irule run_inst_seq_preserves_field >> goal_assum (drule_at Any) >>
+  rpt strip_tac >> Cases_on `is_terminator i.inst_opcode`
+  >- (Cases_on `i.inst_opcode` >> gvs[is_terminator_def] >>
+      qpat_x_assum `step_inst_base _ _ = _` mp_tac >>
+      qpat_assum `i.inst_opcode = _` (fn eq =>
+        PURE_ONCE_REWRITE_TAC
+          [tryfind (fn th => MATCH_MP th eq)
+            (CONJUNCTS step_inst_base_opcode_eqs)]) >>
+      simp[jump_to_def, AllCaseEqs()] >> rpt strip_tac >> gvs[] >>
+      pairarg_tac >> gvs[]) >>
+  drule_all step_inst_base_preserves_all >> simp[]
+QED
+
+Resume abi_valid_allocated_scratch_free_resource[locals]:
+  irule local_ptrs_rel_mem_agree >> qexists_tac `s` >> simp[] >>
+  reverse conj_tac >- (conj_tac >- first_assum ACCEPT_TAC >> rpt strip_tac >> gvs[]) >>
+  rpt strip_tac >> sym_tac >>
+  qhdtm_assum `abi_decode_frame`
+    (strip_assume_tac o PURE_REWRITE_RULE [abi_decode_frame_def]) >>
+  first_x_assum match_mp_tac >>
+  qpat_x_assum `!name lb lsz. _ ==> regions_disjoint _ _ _ _` drule >>
+  simp[loweringStateRelDefsTheory.regions_disjoint_def] >> decide_tac
+QED
+
+Resume abi_valid_allocated_scratch_free_resource[immutables]:
+  irule immutables_rel_mem_agree >> qexists_tac `s` >> simp[] >>
+  reverse conj_tac >- fs[stmt_state_rel_def, state_rel_def] >>
+  fs[stmt_state_rel_def, immutable_alloca_sep_def] >> rpt strip_tac >>
+  `regions_disjoint off (type_memory_size tv) b sz` by metis_tac[] >>
+  qhdtm_assum `abi_decode_frame`
+    (strip_assume_tac o PURE_REWRITE_RULE [abi_decode_frame_def]) >>
+  first_x_assum match_mp_tac >> fs[loweringStateRelDefsTheory.regions_disjoint_def] >> decide_tac
+QED
+
+Resume abi_valid_allocated_scratch_free_resource[state]:
+  irule stmt_state_rel_allocas_frame >> conj_tac
+  >- (irule immutable_base_zero_frame >> qexists_tac `s` >> simp[] >>
+      reverse conj_tac >- fs[stmt_state_rel_def] >> rpt strip_tac >>
+      `not_fresh_at st x` by (fs[local_ptrs_reserved_def] >> metis_tac[]) >>
+      `lookup_var x s = SOME 0w` by
+        (fs[stmt_state_rel_def, immutable_base_zero_alt, lookup_var_def] >> metis_tac[]) >>
+      metis_tac[]) >>
+  conj_tac
+  >- (irule immutable_alloca_sep_fields >> qexistsl_tac [`s`, `es`] >> simp[] >>
+      reverse conj_tac >- fs[stmt_state_rel_def] >> metis_tac[]) >>
+  reverse conj_tac >- (qexistsl_tac [`es`, `s`] >> simp[]) >>
+  irule state_rel_frame >> simp[] >> qexistsl_tac [`es`, `s`] >>
+  simp[] >> fs[stmt_state_rel_def]
+QED
+
+Finalise abi_valid_allocated_scratch_free_resource

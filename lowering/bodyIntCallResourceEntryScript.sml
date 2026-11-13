@@ -12,7 +12,7 @@ Theorem body_inv_push_stack:
   body_inv tops ctx cenv cx ==>
   body_inv tops ctx cenv (cx with stk updated_by CONS src_fn)
 Proof
-  simp[body_inv_def, get_module_code_def, get_tenv_def]
+  rw[body_inv_def, get_module_code_def, get_tenv_def] >> res_tac
 QED
 
 Theorem body_inv_push_function:

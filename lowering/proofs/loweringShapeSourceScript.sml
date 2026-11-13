@@ -379,7 +379,12 @@ Proof
     MEM (FunctionDecl vis mut nr rr name args dflts ret body) tops /\ vis <> Deploy ==>
     EVERY (\e. ~supported_expr_exists expr_shape_root e) dflts` by
     metis_tac[checked_runtime_function_defaults_shape] >>
-  pure_rewrite_tac[runtime_bodies_shape_ok_def] >>
+  pure_rewrite_tac[runtime_bodies_shape_ok_def] >> reverse conj_tac
+  >- (simp[EVERY_MEM] >> qx_gen_tac `nd` >> strip_tac >>
+      drule build_func_defaults_MEM >> strip_tac >>
+      `EVERY (\e. ~supported_expr_exists expr_shape_root e) (SND nd)` by
+        metis_tac[function_visibility_distinct] >>
+      fs[supported_exprs_exists_every, NOT_EXISTS, combinTheory.o_DEF]) >>
   rpt gen_tac >> strip_tac
   >- suspend "external"
   >- suspend "internal" >>
@@ -505,13 +510,19 @@ Proof
   `~supported_stmts_expr_exists expr_shape_root stmts` by
     (drule_all supported_program_function >> strip_tac >>
      drule supported_function_body_shape >> simp[]) >>
-  reverse conj_tac
-  >- (drule_all supported_program_declaration >>
-      simp[supportedDeclsTheory.supported_declaration_header_def, NULL_EQ] >>
-      metis_tac[]) >>
-  strip_tac >>
-  qpat_x_assum `~supported_stmts_expr_exists expr_shape_root _` mp_tac >>
-  simp[] >> irule (CONJUNCT2 supported_stmt_expr_exists_mono) >>
+  `EVERY (\e. ~supported_expr_exists expr_shape_root e) dflts` by
+    (drule_all supported_program_defaults >>
+     rw[EVERY_MEM, supported_default_expression_def] >>
+     metis_tac[supported_expr_shape]) >>
+  conj_tac
+  >- (strip_tac >>
+      qpat_x_assum `~supported_stmts_expr_exists expr_shape_root _` mp_tac >>
+      simp[] >> irule (CONJUNCT2 supported_stmt_expr_exists_mono) >>
+      first_x_assum (irule_at Any) >>
+      simp[expr_raw_shape_root_def, expr_shape_root_def] >> metis_tac[]) >>
+  fs[EVERY_MEM] >> rpt strip_tac >>
+  qpat_x_assum `!e. MEM e dflts ==> _` drule >> simp[] >>
+  irule (CONJUNCT1 supported_expr_exists_mono) >>
   first_x_assum (irule_at Any) >>
   simp[expr_raw_shape_root_def, expr_shape_root_def] >> metis_tac[]
 QED
