@@ -388,7 +388,7 @@ Proof
   gvs[ci_mono_def] >> qexistsl_tac [`sf`, `sa`] >> simp[]
 QED
 
-Theorem store_slots_normalize_fold[local]:
+Theorem store_slots_normalize_fold:
   store_copy_normalize s
     (FOLDL (\q j. (if tr then tstore else sstore) (key j) (value j) q) a (ks:num list)) =
   FOLDL (\q j. (if tr then tstore else sstore) (key j) (value j) q)
@@ -654,7 +654,7 @@ Definition store_slots_loop_code_def:
     lv <> cv /\ dv <> cv
 End
 
-Theorem store_slots_loop_code[local]:
+Theorem store_slots_loop_code:
   compile_copy_elements_to_slots cenv src slot elem cnt tr sa = ((),sb) /\
   fn_has_code sa sb func /\ fn_inst_ids_distinct func ==>
   ?layout. store_slots_loop_code cenv src slot elem cnt tr sa sb func layout
