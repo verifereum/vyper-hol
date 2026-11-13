@@ -3271,7 +3271,7 @@ Proof
             `s0`, `es1`, `Value rv`, `vv`, `t`, `s`] mp_tac) >>
           impl_tac >-
             (rpt conj_tac >> TRY (first_assum ACCEPT_TAC >> NO_TAC) >>
-             strip_tac >> gvs[vv_storage_live_def]) >>
+             strip_tac >> gvs[vv_storage_live_def, contextTheory.mk_ptr_def]) >>
           simp[])
       >- (qexistsl_tac [`m`, `r`] >> simp[])) >>
   rpt strip_tac >> simp[cs_appends_def] >> rpt strip_tac >>
