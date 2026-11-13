@@ -18,7 +18,7 @@ Ancestors
 Libs
   monadsyntax
 
-Theorem internal_package_nr_flag[local]:
+Theorem internal_package_nr_flag:
   set_internal_package_target target
     (package_internal_fn tops trans keys ctor imm
       (mut,nr,rr,name,args,dflts,ret,bd)) =
