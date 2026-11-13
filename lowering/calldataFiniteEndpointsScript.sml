@@ -327,6 +327,9 @@ Resume calldata_valid_bulk_owned_endpoint[endpoint]:
     abi_footprint_disjoint_def] >> strip_tac >> asm_rewrite_tac[] >>
   simp_tac (srw_ss()) [] >> conj_tac
   >- (qpat_x_assum `!p k. _ ==> mem_bytes_at p k actual.vs_memory = _` mp_tac >>
-      asm_simp_tac (srw_ss()) []) >> asm_rewrite_tac[]
+      qpat_assum `type_memory_bytes ce (ArrayT elem_ty (Dynamic maxn)) = _`
+        (fn th => rewrite_tac[th]) >>
+      qpat_assum `mem_sz = _` (fn th => rewrite_tac[th]) >>
+      disch_then ACCEPT_TAC) >> asm_rewrite_tac[]
 QED
 Finalise calldata_valid_bulk_owned_endpoint

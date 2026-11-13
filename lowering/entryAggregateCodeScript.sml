@@ -50,13 +50,15 @@ Proof
 QED
 
 Theorem entry_code_make_tuple:
-  !es cenv buf off. (!e ce ty. MEM e es ==>
+  !es tys cenv buf off. (!e ce ty. MEM e es ==>
     entry_preserves_code (\i. i.inst_opcode <> DALLOCA) (cfn ce ty e)) ==>
   entry_preserves_code (\i. i.inst_opcode <> DALLOCA)
-    (compile_make_tuple cfn cenv es buf off)
+    (compile_make_tuple cfn cenv es tys buf off)
 Proof
   Induct_on `es` >- simp[compile_make_tuple_def, entry_code_return] >>
-  rpt strip_tac >> gvs[] >>
+  rpt strip_tac >> Cases_on `tys`
+  >- simp[compile_make_tuple_def, entry_code_return] >>
+  gvs[] >>
   simp[compile_make_tuple_def, compileEnvTheory.comp_ignore_bind_def] >>
   ntac 4 (irule entry_code_bind >> reverse conj_tac
     >- simp[entry_code_emit_op, entry_code_unwrap_value, entry_code_store_memory] >>
@@ -164,6 +166,14 @@ Proof
   irule entry_code_bind >> simp[entry_code_emit_op]
 QED
 
+Theorem entry_code_snapshot_vv:
+  entry_preserves_code (\i. i.inst_opcode <> DALLOCA)
+    (compile_snapshot_vv cenv copy vv)
+Proof
+  rw[compile_snapshot_vv_def, entry_code_return] >> irule entry_code_bind >>
+  simp[entry_code_unwrap_value, entry_code_materialize_vv, entry_code_return]
+QED
+
 Theorem entry_code_subscript:
   (!ce et. entry_preserves_code (\i. i.inst_opcode <> DALLOCA) (cfn ce et base_e)) /\
   (!ce et. entry_preserves_code (\i. i.inst_opcode <> DALLOCA) (cfn ce et idx_e)) ==>
@@ -172,6 +182,9 @@ Theorem entry_code_subscript:
 Proof
   strip_tac >> simp[compile_subscript_def] >>
   irule entry_code_bind >> reverse conj_tac >- simp[] >>
+  gen_tac >> BETA_TAC >>
+  irule entry_code_bind >> reverse conj_tac
+  >- (IF_CASES_TAC >> simp[entry_code_snapshot_vv, entry_code_return]) >>
   gen_tac >> BETA_TAC >> Cases_on `place_type cenv base_e`
   >~ [`place_type cenv base_e = ValPT _`] >- suspend "val" >>
   simp[] >> irule entry_code_bind >> reverse conj_tac

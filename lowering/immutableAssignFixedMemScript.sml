@@ -1,7 +1,7 @@
 (* Equal-layout immutable assignment uses the fixed word-copy endpoint. *)
 Theory immutableAssignFixedMem
 Ancestors
-  immutableFixedCopyTransportMem immutableConstructorRelation exprSimPopImmutableTarget
+  immutableFixedCopyTransportMem immutableConstructorRelation immutableDeployAssignBytes
   exprLoweringProps stmtLowering context compileEnv loweringSlice valueEncodingProps venomState loweringStateRelDefs
 
 Theorem immutable_assign_fixed_mem_endpoint:
@@ -69,7 +69,7 @@ Proof
   gvs[] >>
   `immutable_value_bytes_rel dtv v
     (mem_bytes_at a (32*n) s.vs_memory)` by
-    metis_tac[immutable_admissible_memory_bytes] >>
+    metis_tac[immutable_memory_bytes] >>
   fs[lookup_var_def, same_blocks_def] >>
   conj_tac >- metis_tac[] >>
   qpat_x_assum `t = _` (fn th => once_rewrite_tac[th]) >> simp[] >>

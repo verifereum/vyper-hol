@@ -1,7 +1,7 @@
 (* Source and memory outcome of an empty deploy-time immutable assignment. *)
 Theory immutableAssignEmptyOutcome
 Ancestors
-  immutableAssignEmpty immutableAssignState immutableAssignAdmissibility
+  immutableAssignEmpty immutableAssignEmptyEndpointMem immutableAssignCode immutableAssignState immutableAssignAdmissibility
   bodyMemoryPreds bodyAssignPlace memoryLocalRhsProps exprSimHypsDefs
   stmtSimDefs stmtLowering compileEnv loweringPosts
   vyperTypeInvariants vyperInterpreter vyperState
@@ -13,7 +13,7 @@ Ancestors
   typedNormalizeStraightPathMem localPtrsProps allocaHistory valueEncodingProofs
   context exprLoweringProps fragExecMem immutableRelation
   gasOutcome gasSummary fragExec
-  exprSimPopImmutableTarget stmtSimProps
+  immutableDeployAssignBytes stmtSimProps
   immutableAssignSource immutableWordPathMem immutableAssignSeparation
   placeStore bodyImmutableAssignFacts
 Libs monadsyntax
@@ -75,13 +75,14 @@ Proof
      gvs[optionTheory.IS_SOME_EXISTS] >> metis_tac[pairTheory.PAIR]) >>
   `has_length_word ity` by metis_tac[type_widens_to_has_length_word] >>
   simp[stmt_frag_mem_def] >> rpt gen_tac >> strip_tac >>
+  `compile_get_target_ptr compile_expr ce (TopLevelNameTarget (ce.ce_module,id)) =
+     comp_return (Lit (n2w off),SOME LocCode,SOME (ValPT ity))` by
+    (simp[FUN_EQ_THM,comp_return_def] >> gen_tac >>
+     irule immutable_assignment_target_lowering >> simp[]) >>
   `compile_imm_store_word ce.ce_imm_alloca (Lit (n2w off)) (Lit 0w) sa = ((),sb) /\
    cenv' = ce` by
-    (drule_all immutable_assign_empty_code >>
-     disch_then (qspecl_then [`ty`,`sa`,`lc`] assume_tac) >>
-     Cases_on `compile_imm_store_word ce.ce_imm_alloca (Lit (n2w off)) (Lit 0w) sa` >>
-     gvs[stmt_env_def,declare_stmt_local_def,comp_bind_def,
-         comp_ignore_bind_def,comp_return_def]) >>
+    (drule_all immutableAssignCodeTheory.immutable_assign_empty_code >>
+     simp[compile_store_at_loc_def]) >>
   suspend "endpoint"
 QED
 
@@ -128,7 +129,7 @@ QED
 Resume immutable_assign_empty_stmt_mem[reconstruction]:
   `immutable_value_bytes_rel tv (default_value tv)
      (mem_bytes_at off (type_memory_size tv) u.vs_memory)` by
-    (irule immutable_admissible_memory_bytes >> gvs[]) >>
+    (irule immutable_memory_bytes >> gvs[]) >>
   `!name tv0 v0 off0. name <> id /\
     FLOOKUP ce.ce_module_vars (ce.ce_module,name) = SOME (ImmutableLoc off0) /\
     FLOOKUP (get_source_immutables ce.ce_module imms) name = SOME (tv0,v0) ==>

@@ -1,7 +1,7 @@
 (* Counted bytestring writes into the constructor immutable region. *)
 Theory immutableAssignBytesMem
 Ancestors
-  immutableLoopStoreMem immutableCopyExecution immutableConstructorRelation exprSimPopImmutableTarget
+  immutableLoopStoreMem immutableCopyExecution immutableConstructorRelation immutableDeployAssignBytes
   valueCopyBytes valueCopy exprSimBufferStore stmtLowering context compileEnv
   loweringSlice valueEncodingProps venomState loweringStateRelDefs
 
@@ -89,7 +89,7 @@ Resume immutable_assign_bytes_mem_endpoint[contents]:
     (simp[] >> irule mcopy_val_in_memory >> simp[]) >>
   qexists_tac `t` >> simp[] >>
   conj_tac >-
-    (irule immutable_admissible_memory_bytes >>
+    (irule immutable_memory_bytes >>
      simp[] >> irule mcopy_val_in_memory >> simp[]) >>
   rpt strip_tac >> irule mem_bytes_at_mcopy_disjoint >> decide_tac
 QED

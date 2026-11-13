@@ -180,6 +180,7 @@ Proof
 QED
 
 Theorem convert_widen_cont_mem:
+  (~expr_has_effect e ==> ~expr_has_effect e1) /\
   is_bytestring_type (expr_type e1) /\ is_bytestring_type (expr_type e) /\
   is_bytestring_type (lowered_value_type cenv e1) /\
   evaluate_type (get_tenv cx) (expr_type e1) = SOME tv1 /\

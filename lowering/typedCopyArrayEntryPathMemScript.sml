@@ -79,7 +79,7 @@ Proof
     "%" ++ toString (sa.cs_next_var+3); "%" ++ toString (sa.cs_next_var+4)]` by
     (rpt gen_tac >> disch_tac >>
      `not_fresh_at sa x` by metis_tac[] >>
-     gvs[not_fresh_at_def, ASCIInumbersTheory.toString_inj] >>
+     gvs[loweringStateRelDefsTheory.not_fresh_at_def, ASCIInumbersTheory.toString_inj] >>
      rpt strip_tac >> gvs[ASCIInumbersTheory.toString_inj]) >>
   suspend "path"
 QED
@@ -113,7 +113,7 @@ Resume typed_dynarray_prefix_path_mem[finish]:
    x <> "%" ++ toString (sa.cs_next_var+2) /\
    x <> "%" ++ toString (sa.cs_next_var+3) /\
    x <> "%" ++ toString (sa.cs_next_var+4)` by
-    (gvs[not_fresh_at_def, ASCIInumbersTheory.toString_inj] >>
+    (gvs[loweringStateRelDefsTheory.not_fresh_at_def, ASCIInumbersTheory.toString_inj] >>
      rpt strip_tac >> gvs[ASCIInumbersTheory.toString_inj]) >>
   first_x_assum irule >> gvs[]
 QED

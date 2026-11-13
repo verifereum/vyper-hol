@@ -1,8 +1,44 @@
 (* Semantic reconstruction after a constructor immutable write. *)
 Theory immutableAssignState
 Ancestors
-  exprSimPopNestedImmutableDeploy localPtrsProps exprLoweringProps
+  immutableRelation loweringSlice valueEncodingProps localPtrsProps exprLoweringProps
   loweringStateRelDefs loweringSlice valueEncodingProps vyperState venomState finite_map alist
+
+Theorem immutables_rel_ctor_update[local]:
+  !cenv addr src es s t imms id tv updated off es'.
+    immutables_rel cenv addr src T es s /\
+    ALOOKUP es.immutables addr = SOME imms /\
+    FLOOKUP cenv.ce_module_vars (src,id) = SOME (ImmutableLoc off) /\
+    es'.immutables =
+      (addr,set_source_immutables src
+        (get_source_immutables src imms |+ (id,(tv,updated))) imms) ::
+      ADELKEY addr es.immutables /\
+    immutable_value_admissible tv updated /\
+    val_in_memory tv updated off t.vs_memory /\
+    immutable_value_bytes_rel tv updated
+      (mem_bytes_at off (type_memory_size tv) t.vs_memory) /\
+    (!name tv0 v off0.
+      name <> id /\
+      FLOOKUP cenv.ce_module_vars (src,name) = SOME (ImmutableLoc off0) /\
+      FLOOKUP (get_source_immutables src imms) name = SOME (tv0,v) ==>
+      mem_bytes_at off0 (type_memory_size tv0) t.vs_memory =
+      mem_bytes_at off0 (type_memory_size tv0) s.vs_memory) ==>
+    immutables_rel cenv addr src T es' t
+Proof
+  rpt gen_tac >> strip_tac >>
+  gvs[immutables_rel_def, get_source_immutables_def, set_source_immutables_def] >>
+  rpt gen_tac >> strip_tac >>
+  Cases_on `name = id` >> gvs[finite_mapTheory.FLOOKUP_UPDATE] >>
+  `mem_bytes_at byte_offset (type_memory_size tv') t.vs_memory =
+    mem_bytes_at byte_offset (type_memory_size tv') s.vs_memory` by
+    (first_x_assum drule_all >> simp[]) >>
+  qpat_x_assum `!name tv' v byte_offset. _ ==> _ /\ _ /\ _`
+    drule_all >> strip_tac >>
+  simp[] >> irule valueEncodingPropsTheory.val_in_memory_mem_agree >>
+  conj_tac
+  >- metis_tac[loweringSliceTheory.immutable_admissible_val_wf] >>
+  qexistsl [`type_memory_size tv'`, `s.vs_memory`] >> simp[]
+QED
 
 (* The absent-address case is a first write, not a read of an old value. *)
 Theorem immutable_assign_ctor_relation[local]:

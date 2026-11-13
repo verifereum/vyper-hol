@@ -2,7 +2,7 @@
 Theory immutableAssignNormalizedMem
 Ancestors
   immutableNormalizedCopyFrame immutableNormalizeMem immutableAssignFixedMem immutableFixedCopyTransportMem
-  exprSimPopImmutableTarget stmtLowering compileEnv context
+  immutableDeployAssignBytes stmtLowering compileEnv context
   immutableFixedCopyMem fragExec loweringSlice exprLoweringProps localPtrsProps valueEncodingProps
   venomState venomExecSemantics loweringStateRelDefs finite_map words arithmetic list pair
 

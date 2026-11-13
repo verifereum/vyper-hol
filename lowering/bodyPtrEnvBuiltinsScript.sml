@@ -8,6 +8,9 @@
  *)
 Theory bodyPtrEnvBuiltins
 Ancestors
+  bodyPtrEnvBuiltinsLenCase bodyPtrEnvBuiltinsScalar bodyPtrEnvBuiltinsGas
+  bodyPtrEnvBuiltinsPrevHash bodyPtrEnvBuiltinsAccountCase
+  bodyPtrEnvBuiltinsBlockHashCase bodyPtrEnvBuiltinsBlobHashCase bodyPtrEnvBuiltinsMethodCase
   exprPtrUnwrap bodyPtrPreds bodyPtrDefs bodySim exprSimHyps vyperAST
   vyperInterpreter vyperState vyperContext vyperTypeCallGraph list
 
@@ -27,5 +30,14 @@ Theorem env_builtin_expr_ptr_ok:
        body_expr_ptr_ok cx (HD es)) ==>
     body_expr_ptr_ok cx (Builtin ty bt es)
 Proof
-  cheat
+  rpt gen_tac >> strip_tac >> gvs[]
+  >- (irule len_builtin_body_ptr_ok >> rpt gen_tac >> Cases_on `x` >> metis_tac[])
+  >- simp[body_calldata_ptr_case]
+  >- (Cases_on `i = MsgGas` >- gvs[body_msg_gas_ptr_case] >>
+      Cases_on `i = PrevHash` >- gvs[body_prevhash_ptr_case] >>
+      irule body_env_ptr_case >> simp[])
+  >- (irule body_account_ptr_case >> rpt gen_tac >> Cases_on `x` >> metis_tac[])
+  >- (irule body_blockhash_ptr_case >> rpt gen_tac >> Cases_on `x` >> metis_tac[])
+  >- (irule body_blobhash_ptr_case >> rpt gen_tac >> Cases_on `x` >> metis_tac[]) >>
+  irule body_method_id_ptr_case >> rpt gen_tac >> Cases_on `x` >> metis_tac[]
 QED

@@ -2,7 +2,7 @@
 Theory immutableNormalizedCopyFrame
 Ancestors
   immutableNormalizeMem immutableAssignFixedMem immutableFixedCopyTransportMem
-  exprSimPopImmutableTarget stmtLowering compileEnv context
+  immutableDeployAssignBytes stmtLowering compileEnv context
   immutableFixedCopyMem fragExec loweringSlice exprLoweringProps localPtrsProps valueEncodingProps
   venomState venomExecSemantics loweringStateRelDefs finite_map words arithmetic list pair
 
@@ -193,7 +193,7 @@ Proof
      POP_ASSUM_LIST (K all_tac) >> rpt strip_tac >>
      irule mcopy_establishes_val_in_memory >> simp[]) >>
   `immutable_value_bytes_rel dtv v (mem_bytes_at b (32*n) r.vs_memory)` by
-    metis_tac[immutable_admissible_memory_bytes] >>
+    metis_tac[immutable_memory_bytes] >>
   `~t.vs_halted /\ t.vs_current_bb = sb.cs_current_bb` by
     (qpat_assum `t = _` (mp_tac o Q.AP_TERM `\z. (z.vs_halted,z.vs_current_bb)`) >>
      qpat_assum `~r.vs_halted` mp_tac >>

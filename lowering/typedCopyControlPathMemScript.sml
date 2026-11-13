@@ -43,9 +43,7 @@ Theorem typed_sa_header_path_mem:
       typed_sa_header_insts id ctr cmp done ncount body_lbl exit_lbl|> /\
   ~s.vs_halted /\ s.vs_inst_idx = 0 /\
   eval_operand (Var ctr) s = SOME (n2w i) /\
-  i <= ncount /\ ncount < dimword(:256) /\
-  lookup_block (if i < ncount then body_lbl else exit_lbl) fn.fn_blocks = SOME next_bb /\
-  phi_prefix_length next_bb.bb_instructions = 0 ==>
+  i <= ncount /\ ncount < dimword(:256) ==>
   gas_path_mem ctx fn s 0
     (OK (jump_to (if i < ncount then body_lbl else exit_lbl)
       (typed_sa_header_state cmp done i ncount s)))
