@@ -665,9 +665,13 @@ Theorem terminal_invalid_step:
     ?st'.
       asm_steps lo o2pc prog 1 st = AsmFault st' /\
       venom_asm_terminal_rel
-        (vs with <| vs_returndata := []; vs_halted := T |>) st'
+        (vs with <| vs_returndata := []; vs_halted := T |>) st' /\
+      create_safe_prefix lo o2pc prog 1 st
 Proof
   rpt strip_tac >>
+  `create_safe_prefix lo o2pc prog 1 st` by
+    (irule asm_block_create_safe_prefix >> goal_assum (drule_at Any) >>
+     simp[create_safe_def]) >>
   `1 = SUC 0` by simp[] >> pop_assum SUBST1_TAC >>
   simp[Once asm_steps_def, asm_steps_def] >>
   fs[asm_block_at_def] >>
@@ -1628,7 +1632,8 @@ Theorem terminal_pushlabel_jumpi_invalid:
     ?st'.
       asm_steps lo o2pc prog 3 st = AsmFault st' /\
       venom_asm_terminal_rel
-        (vs with <| vs_returndata := []; vs_halted := T |>) st'
+        (vs with <| vs_returndata := []; vs_halted := T |>) st' /\
+      create_safe_prefix lo o2pc prog 3 st
 Proof
   rpt strip_tac >>
   fs[asm_block_at_def] >>
@@ -1638,11 +1643,17 @@ Proof
     (first_x_assum (qspec_then `1` mp_tac) >> simp[]) >>
   `EL (st.as_pc + 2) prog = AsmOp "INVALID"` by
     (first_x_assum (qspec_then `2` mp_tac) >> simp[]) >>
-  Q.EXISTS_TAC `st with <| as_pc := st.as_pc + 2;
-    as_stack := rest_stk; as_returndata := [] |>` >>
   `asm_step lo o2pc (AsmPushLabel end_lbl) st =
    AsmOK (asm_next (st with as_stack := n2w off :: st.as_stack))` by
     simp[asm_step_pushlabel_ok] >>
+  `create_safe_prefix lo o2pc prog 3 st` by
+    (rewrite_tac[numLib.num_CONV ``3:num``, create_safe_prefix_suc] >>
+     simp[create_safe_def, asm_next_def] >>
+     rewrite_tac[numLib.num_CONV ``2:num``, create_safe_prefix_suc] >>
+     simp[create_safe_def, asm_step_jumpi, asm_jumpi_def, asm_next_def] >>
+     rewrite_tac[ONE, create_safe_prefix_suc] >> simp[create_safe_def]) >>
+  Q.EXISTS_TAC `st with <| as_pc := st.as_pc + 2;
+    as_stack := rest_stk; as_returndata := [] |>` >>
   (* PushLabel *)
   `3 = SUC 2` by DECIDE_TAC >> pop_assum SUBST1_TAC >>
   rewrite_tac[Once asm_steps_def] >> simp[asm_next_def] >>

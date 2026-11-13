@@ -572,7 +572,8 @@ Resume gen_inst_assert_unreachable_frame_sim[prepared]:
      gvs[compute_operands_def, python_stack_operands_def, ir_specific_operand_order_def,
        eval_operand_with_memory] >> metis_tac[]) >>
   `?out. asm_steps lo o2pc prog 3 (mid with as_stack := mid.as_stack ++ rest) = AsmFault out /\
-    venom_asm_terminal_rel (vs with <|vs_returndata := []; vs_halted := T|>) out` by
+    venom_asm_terminal_rel (vs with <|vs_returndata := []; vs_halted := T|>) out /\
+    create_safe_prefix lo o2pc prog 3 (mid with as_stack := mid.as_stack ++ rest)` by
     (irule terminal_pushlabel_jumpi_invalid >>
      simp[] >> conj_tac
      >- (qexists `DROP (LENGTH inst.inst_operands) mid.as_stack ++ rest` >>
@@ -667,7 +668,8 @@ Resume gen_inst_invalid_frame_sim[decomposed]:
      qexists `[SOEmit "INVALID"]` >>
      gvs[sortingTheory.PERM_REFL] >> metis_tac[]) >>
   `?out. asm_steps lo o2pc prog 1 (mid with as_stack := mid.as_stack ++ rest) = AsmFault out /\
-    venom_asm_terminal_rel (vs with <|vs_returndata := []; vs_halted := T|>) out` by
+    venom_asm_terminal_rel (vs with <|vs_returndata := []; vs_halted := T|>) out /\
+    create_safe_prefix lo o2pc prog 1 (mid with as_stack := mid.as_stack ++ rest)` by
     (irule terminal_invalid_step >> simp[] >> metis_tac[arithmeticTheory.ADD_COMM]) >>
   qexistsl_tac [`LENGTH (execute_plan cplan.cp_initial_fmp (iops ++ rops)) + 1`, `out`] >>
   simp[halt_state_def, set_returndata_def] >>
