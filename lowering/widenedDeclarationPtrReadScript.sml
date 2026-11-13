@@ -1,6 +1,6 @@
 (* Retained physical RHS to a counted fresh declaration. *)
 Theory widenedDeclarationPtrRead
-Ancestors exprSimWordArgs bodyPtrDefs widenedDeclarationPtrStore
+Ancestors exprSimWordArgs bodyPtrDefs widenedDeclarationPtrStore stmtLowering
  externalNormalizePremises stmtSimDeclSourceSeparation bodySimStmtCases fragGasPath stmtSimDeclCompose stmtFragPtr gasOutcome widenedDeclarationPtrStage widenedAssignPtrRhsInput
  annAssignPtrMemoryCont annAssignPtrContinuationFrame annAssignPtrMemoryContinuation
  annAssignPtrFacts annAssignPtrSetup annAssignPtrCompose
