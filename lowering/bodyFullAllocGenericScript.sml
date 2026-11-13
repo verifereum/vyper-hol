@@ -63,7 +63,8 @@ Proof
      simp[ghost_inv_at_def] >> strip_tac >>
      first_x_assum (qspecl_then [`name`, `entry`, `p`, `sz`] mp_tac) >>
      simp[]) >>
-  rpt strip_tac >> irule alloca_step_robust_below_frontier >>
+  rpt strip_tac >>
+  irule bodyPtrIfExpAllocFrameTheory.alloca_step_robust_below_frontier >>
   conj_tac >- simp[] >>
   qexistsl_tac [`id`, `n`, `out`, `s`, `u`, `tn`] >> simp[]
 QED
@@ -88,7 +89,7 @@ Proof
   rewrite_tac[ghost_inv_at_def] >> strip_tac >>
   rewrite_tac[ghost_inv_at_def] >> conj_tac
   >- (rpt gen_tac >> strip_tac >>
-      `p <> out` by metis_tac[not_local_ptr_def] >>
+      `p <> out` by metis_tac[loweringStateRelDefsTheory.not_local_ptr_def] >>
       first_x_assum (qspecl_then [`name`, `entry`, `p`, `sz`] mp_tac) >>
       simp[] >> strip_tac >> conj_tac
       >- (irule alloca_step_old_ptr_covers >> simp[] >>
@@ -102,10 +103,14 @@ Proof
   conj_tac
   >- (rpt strip_tac >>
       `x <> out` by metis_tac[] >>
-      simp[step_taint_other_output, mk_inst_def] >> metis_tac[]) >>
+      simp[decoderGhostFramePtrTheory.step_taint_other_output, mk_inst_def] >> metis_tac[]) >>
   conj_tac
   >- (drule_all alloca_runtime_frames >> strip_tac >>
-      gvs[stor_taint_ok_at_def, alloca_ghost_frames]) >>
+      gvs[stor_taint_ok_at_def, alloca_ghost_frames] >>
+      `step_inst 0 ctx (mk_inst id ALLOCA [Lit (n2w n)] [out]) s = OK u` by
+        simp[step_inst_non_invoke, mk_inst_def] >>
+      drule venomInstProofsTheory.step_alloca_preserves >>
+      simp[mk_inst_def, is_alloca_op_def] >> metis_tac[]) >>
   conj_tac
   >- (drule_all alloca_runtime_frames >> strip_tac >>
       rpt strip_tac >>
@@ -139,9 +144,15 @@ Proof
   drule_all compile_alloc_buffer_frame_separation >>
   disch_then (qspec_then `es.scopes` strip_assume_tac) >>
   drule_all compile_alloc_buffer_raw_step >> strip_tac >> gvs[] >>
-  irule alloca_step_ghost_inv_separated_at >> simp[] >>
+  irule (INST_TYPE [alpha |-> ``:256``]
+    alloca_step_ghost_inv_separated_at) >> simp[] >>
   drule compile_alloc_buffer_parts >> strip_tac >>
-  gvs[local_ptrs_reserved_def] >> metis_tac[not_fresh_at_mono]
+  gvs[loweringStateRelDefsTheory.local_ptrs_reserved_def] >>
+  conj_tac
+  >- (strip_tac >>
+      qpat_x_assum `!x. cenv.ce_imm_alloca = SOME (Var x) ==> _`
+        drule >> simp[]) >>
+  qexistsl_tac [`H`, `ctx`, `fn`] >> simp[]
 QED
 
 Theorem compile_alloc_buffer_kept_frame_at:
