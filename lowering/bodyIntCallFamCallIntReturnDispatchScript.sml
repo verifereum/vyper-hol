@@ -8,12 +8,10 @@ Ancestors
   emitHelperProps emitHelper exprLoweringProps compileEnv loweringStateRelDefs venomState
   venomExecSemantics loweringPosts exprSimDefs intCallFrame list finite_map
 
-(* HELD (train 17): 0.5.0b1 arg snapshot re-proof; statement no longer typechecks, commented out whole *)
-(*
+(* RESTATED (train 17): 0.5.0b1 per-argument staging *)
 Theorem intcall_stack_return_prepare:
-  compile_multi_vvs compile_expr ce es sa = (vals,s1) /\
-  ci_mono s1 s2 /\
-  compile_stage_intcall_args ce vals flags tys s2 = (args,si) /\
+  ci_mono sa s2 /\
+  compile_stage_intcall_args compile_expr ce es flags tys s2 = (args,si) /\
   emit_multi_op INVOKE ops nret si = (results,sj) /\
   store_multi_results buf results 0 sj = ((),sb) /\
   fn_has_code sa sb func /\ local_ptrs_reserved ce sa /\
@@ -68,7 +66,6 @@ Proof
   simp[eval_operand_def, lookup_var_def] >>
   gvs[]
 QED
-*)
 
 (* Geometry at the restored successor, independent of the way it was reached. *)
 Theorem intcall_return_buffer_prepare:
@@ -155,11 +152,10 @@ Proof
 QED
 
 (* Both zero-count modes land at the same explicit merge successor. *)
-(* HELD (train 17): 0.5.0b1 arg snapshot re-proof; statement no longer typechecks, commented out whole *)
-(*
+(* RESTATED (train 17): 0.5.0b1 per-argument staging *)
 Theorem intcall_zero_return_prepare:
-  compile_multi_vvs compile_expr ce es sa = (vals,s1) /\ ci_mono s1 s2 /\
-  compile_stage_intcall_args ce vals flags tys s2 = (args,si) /\
+  ci_mono sa s2 /\
+  compile_stage_intcall_args compile_expr ce es flags tys s2 = (args,si) /\
   emit_void INVOKE ops si = ((),sb) /\
   fn_has_code sa sb func /\ local_ptrs_reserved ce sa /\
   t.vs_current_bb = si.cs_current_bb /\
@@ -207,21 +203,18 @@ Proof
      disch_then (SUBST1_TAC o SYM) >> simp[]) >>
   gvs[merge_callee_state_def]
 QED
-*)
 
-(* HELD (train 17): 0.5.0b1 arg snapshot re-proof; statement no longer typechecks, commented out whole *)
-(*
+(* RESTATED (train 17): 0.5.0b1 per-argument staging *)
 Theorem intcall_physical_return_resources:
   !nret.
-  compile_multi_vvs compile_expr ce es sa = (vals,s1) /\
-  compile_stage_intcall_args ce vals flags tys s2 = (args,si) /\
+  compile_stage_intcall_args compile_expr ce es flags tys s2 = (args,si) /\
   fn_has_code sa sb func /\ local_ptrs_reserved ce sa /\
   (nret = 0 /\ cty = NoneT ==>
-    s2 = s1 /\ (?u. emit_void INVOKE (Label lbl::args) si = (u,sb)) /\
+    s2 = sa /\ (?u. emit_void INVOKE (Label lbl::args) si = (u,sb)) /\
     vv = StackValue cty (Lit 0w)) /\
   (0 < nret \/ cty <> NoneT ==>
     ?buf aid off.
-      compile_alloc_buffer (if 0 < nret then 32 * nret else rbs) s1 = (buf,s2) /\
+      compile_alloc_buffer (if 0 < nret then 32 * nret else rbs) sa = (buf,s2) /\
       vv = LocatedValue cty (base_ptr buf) /\
       eval_operand buf.buf_operand t = SOME (n2w off) /\
       FLOOKUP t.vs_allocas aid = SOME (off,buf.buf_size) /\
@@ -290,25 +283,19 @@ Proof
       Cases_on `cty = NoneT` >- suspend "void" >> suspend "memory") >>
   suspend "stack"
 QED
-*)
 
-(* HELD (train 17): 0.5.0b1 arg snapshot re-proof; statement no longer typechecks, commented out whole *)
-(*
 Resume intcall_physical_return_resources[void]:
   gvs[] >>
-  `ci_mono s1 s1` by simp[ci_mono_refl] >>
+  `ci_mono s2 s2` by simp[ci_mono_refl] >>
   drule_all (intcall_zero_return_prepare |> Q.INST [`ee` |-> `ee with gas_obs := []`] |> SRULE []) >> strip_tac >>
   qexistsl [`0`,`merge_callee_state t cs with vs_inst_idx := SUC t.vs_inst_idx`] >>
   gvs[]
 QED
-*)
 
-(* HELD (train 17): 0.5.0b1 arg snapshot re-proof; statement no longer typechecks, commented out whole *)
-(*
 Resume intcall_physical_return_resources[memory]:
   gvs[] >>
-  `ci_mono s1 s2` by
-    (qspecl_then [`rbs`,`s1`] mp_tac ci_mono_compile_alloc_buffer >> simp[]) >>
+  `ci_mono sa s2` by
+    (qspecl_then [`rbs`,`sa`] mp_tac ci_mono_compile_alloc_buffer >> simp[]) >>
   drule_all (intcall_zero_return_prepare |> Q.INST [`ee` |-> `ee with gas_obs := []`] |> SRULE []) >> strip_tac >>
   qexistsl [`0`,`merge_callee_state t cs with vs_inst_idx := SUC t.vs_inst_idx`] >>
   gvs[] >>
@@ -329,14 +316,11 @@ Resume intcall_physical_return_resources[memory]:
     drule val_footprint_le >> strip_tac >> decide_tac) >>
   rpt strip_tac >> fs[regions_disjoint_def] >> metis_tac[arithmeticTheory.ADD_COMM]
 QED
-*)
 
-(* HELD (train 17): 0.5.0b1 arg snapshot re-proof; statement no longer typechecks, commented out whole *)
-(*
 Resume intcall_physical_return_resources[stack]:
   `0 < nret` by decide_tac >> gvs[] >>
-  `ci_mono s1 s2` by
-    (qspecl_then [`32 * LENGTH ir.iret_values`,`s1`] mp_tac ci_mono_compile_alloc_buffer >> simp[]) >>
+  `ci_mono sa s2` by
+    (qspecl_then [`32 * LENGTH ir.iret_values`,`sa`] mp_tac ci_mono_compile_alloc_buffer >> simp[]) >>
   drule_all (intcall_stack_return_prepare |> Q.INST [`nret` |-> `LENGTH ir.iret_values`] |> SRULE []) >>
   disch_then (qspecl_then [`prev`,`cs`] strip_assume_tac) >>
   drule_all (intcall_return_restored_frame |> Q.INST [`ee` |-> `ee with gas_obs := []`] |> SRULE []) >>
@@ -385,9 +369,5 @@ Resume intcall_physical_return_resources[stack]:
       goal_assum (drule_at Any) >> simp[]) >> metis_tac[]) >>
   qexistsl [`buf`,`ai.inst_id`,`off`] >> gvs[] >> gvs[]
 QED
-*)
 
-(* HELD (train 17): 0.5.0b1 arg snapshot re-proof; statement no longer typechecks, commented out whole *)
-(*
 Finalise intcall_physical_return_resources
-*)
