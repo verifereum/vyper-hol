@@ -73,6 +73,13 @@ Proof
      qpat_x_assum `expr_body_pre _ _ _ _ _` mp_tac >>
      simp[expr_body_pre_def, well_typed_expr_def, well_typed_builtin_app_def,
           well_typed_binop_def]) >>
+  `code_slice_source bt args = NONE` by
+    (Cases_on `code_slice_source bt args` >> simp[] >>
+     rename1 `SOME p` >> PairCases_on `p` >>
+     gvs[vyperInterpreterTheory.code_slice_source_SOME, expr_type_def] >>
+     qpat_x_assum `expr_body_pre _ _ _ _ _` mp_tac >>
+     simp[expr_body_pre_def, well_typed_expr_def, well_typed_builtin_app_def,
+          account_item_type_def]) >>
   simp[eval_expr_builtin_action, expr_type_def] >>
   irule gas_outcome_ptr_bind_mid >>
   conj_tac >- suspend "cert_normal" >>
