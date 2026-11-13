@@ -332,7 +332,8 @@ Proof
       drule_all ptr_paired_universal_normalize_immediate >> simp[])
   >- (drule_all ptr_paired_prefix_mstore >> strip_tac >>
       drule_all ptr_paired_universal_normalize_immediate >> simp[])
-  >- (drule_all ptr_paired_prefix_mcopy >> strip_tac >>
+  >- (`ctx_has_dalloca C ==> eom <= w2n vs.vs_initial_fmp` by simp[] >>
+      drule_all ptr_paired_prefix_mcopy >> strip_tac >>
       drule_all ptr_paired_universal_normalize_immediate >> simp[])
   >- (drule_all ptr_paired_prefix_assign >> strip_tac >>
       drule_all ptr_paired_universal_normalize_immediate >> simp[])
