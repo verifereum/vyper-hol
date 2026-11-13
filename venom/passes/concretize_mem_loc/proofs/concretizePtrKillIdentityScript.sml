@@ -90,7 +90,33 @@ Theorem ptr_reachable_base_write_identity:
     (Var v) = [Allocation aid] /\ lookup_var v s = SOME w ==>
   ?site. FLOOKUP G v = SOME site /\ FLOOKUP s.vs_allocas aid = SOME site
 Proof
-  cheat
+  strip_tac >>
+  `MEM fn ctx.ctx_functions` by
+    metis_tac[concretizePtrParamSupportTheory.ptr_frame_current_static] >>
+  `fn_ptr_ok P fn /\ ssa_form fn /\ EVERY inst_wf (fn_insts fn)` by (fs[EVERY_MEM] >> metis_tac[]) >>
+  `v IN (pointer_derived_vars fn (alloca_roots fn) DIFF
+         pointer_derived_vars fn (ptr_roots P fn DIFF alloca_roots fn))` by
+    metis_tac[ptr_base_write_pure_local] >>
+  `?site. FLOOKUP G v = SOME site` by
+    metis_tac[ptr_reachable_pure_local_totality] >>
+  qexists `site` >> simp[] >>
+  `ptr_site_supported
+    (pointer_derived_vars fn
+      (ptr_frame_site_roots (dyn_floor ctx vs) fn s.vs_allocas PG site)) G site` by
+    metis_tac[ptr_frame_current_table_support] >>
+  `!bid u. u IN pointer_derived_vars fn (ptr_bp_alloc_roots fn bid) ==>
+    ?off. MEM (Ptr (Allocation bid) off)
+      (bp_get_ptrs (bp_analyze_fuel (concretize_memloc_fuel fn) (cfg_analyze fn) fn) u)` by
+    (rpt strip_tac >> irule ptr_bp_production_coverage >>
+     goal_assum (drule_at Any) >> simp[] >>
+     metis_tac[bp_scan_production_complete]) >>
+  `!r. r IN ptr_frame_site_roots (dyn_floor ctx vs) fn s.vs_allocas PG site ==>
+    (?bid. FLOOKUP s.vs_allocas bid = SOME site /\ r IN ptr_bp_alloc_roots fn bid) \/
+    r IN (ptr_roots P fn DIFF alloca_roots fn)` by
+    metis_tac[ptr_frame_current_root_cover] >>
+  irule ptr_covered_base_write_site >>
+  qexists `dyn_floor ctx vs` >>
+  fs[ptr_site_supported_def] >> metis_tac[]
 QED
 
 Theorem evaluated_member[local]:
