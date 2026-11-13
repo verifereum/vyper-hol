@@ -75,7 +75,7 @@ Resume array_index_summary_compose_ptr[normal]:
                   `G0` |-> `G1`, `tn0` |-> `tn1`]
             (INST_TYPE [alpha |-> beta, beta |-> gamma] gas_summary_ptr_at_bind_normal) |> REWRITE_RULE [APPEND_NIL]) >>
   impl_tac
-  >- (fs[] >> first_x_assum irule >> fs[]) >>
+  >- (fs[] >> first_x_assum irule >> qexists_tac `marks` >> fs[]) >>
   simp[]
 QED
 Finalise array_index_summary_compose_ptr
