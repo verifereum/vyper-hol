@@ -233,7 +233,7 @@ Proof
           >- (irule transient_agree_dead_target_trans >>
               qexistsl [`D`, `s.vs_transient`] >>
               rpt conj_tac >> TRY (first_assum ACCEPT_TAC) >>
-              simp[Abbr `D`, deploy_dead_def, initial_evaluation_context_def])
+              simp[Abbr `D`, deploy_dead_def, initial_evaluation_context_def]) >>
           gvs[LIST_REL_EL_EQN] >> rpt strip_tac >>
           irule request_agree_dead_target_trans >>
           qexistsl [`D`, `EL n s.vs_requests`] >>
