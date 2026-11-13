@@ -42,7 +42,7 @@ Proof
   goal_assum (drule_at Any) >> simp[] >> metis_tac[n2w_w2n]
 QED
 
-Theorem body_name_wordtype_counted[local]:
+Theorem body_name_wordtype_counted:
   expr_sim_pre ce cx env (Name ann id) es /\ is_word_type ann /\
   lower_value compile_expr ce ty (Name ann id) sa = (op,sb) /\
   fn_has_code sa sb func /\ fn_inst_ids_distinct func /\
