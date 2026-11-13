@@ -38,7 +38,7 @@ Theorem compile_revert_reason_prefix_code:
     sb.cs_current_insts = sn.cs_current_insts ++
       (revert_reason_copy sn.cs_next_id sn.cs_next_var
         (Var (STRING #"%" (toString (sa.cs_next_var+2)))) op ++
-       revert_reason_suffix sn.cs_next_id sn.cs_next_var
+       revert_reason_suffix (sn.cs_next_id+1) (sn.cs_next_var+1)
         (Var (STRING #"%" (toString sa.cs_next_var)))
         (Var (STRING #"%" (toString (sa.cs_next_var+1))))
         (Var (STRING #"%" (toString (sa.cs_next_var+2)))))

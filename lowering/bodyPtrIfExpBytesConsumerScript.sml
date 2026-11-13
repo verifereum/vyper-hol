@@ -46,6 +46,8 @@ Theorem ifexp_allocated_bytes_writer:
       (OK (sf with vs_inst_idx := t.vs_inst_idx + LENGTH (emitted_insts sc sd))) /\
     expr_post ctx fn ce cx result es sa sd s0 ee v (Var out)
       (sf with vs_inst_idx := t.vs_inst_idx + LENGTH (emitted_insts sc sd)) /\
+    expr_val_own ce cx (expr_type result) sa sd ee v (Var out)
+      (sf with vs_inst_idx := t.vs_inst_idx + LENGTH (emitted_insts sc sd)) /\
     (~expr_has_effect arm ==> pure_frame ce fn es sa s0
       (sf with vs_inst_idx := t.vs_inst_idx + LENGTH (emitted_insts sc sd))) /\
     ghost_inv d ce cx ee Gf tnf
@@ -69,6 +71,7 @@ Proof
   `val_wf dtv v` by metis_tac[value_has_type_val_wf] >>
   qexistsl_tac [`Gf`, `tnf`, `sf`] >> simp[] >>
   conj_tac >- suspend "semantic" >>
+  conj_tac >- suspend "own" >>
   conj_tac >- suspend "armpure" >>
   conj_tac >- suspend "ghost" >>
   conj_tac >- suspend "kept" >>
@@ -76,6 +79,14 @@ Proof
 QED
 
 Resume ifexp_allocated_bytes_writer[semantic]:
+  `eval_operand (Var out) sf = SOME b` by simp[eval_operand_def] >>
+  `val_in_memory dtv v (w2n b) sf.vs_memory` by
+    metis_tac[mem_agree_outside_def] >>
+  `!x. not_fresh_at sc x ==> lookup_var x sf = lookup_var x t` by metis_tac[] >>
+  drule_all ifexp_bytes_destination_expr_post >> simp[]
+QED
+
+Resume ifexp_allocated_bytes_writer[own]:
   `eval_operand (Var out) sf = SOME b` by simp[eval_operand_def] >>
   `val_in_memory dtv v (w2n b) sf.vs_memory` by
     metis_tac[mem_agree_outside_def] >>
@@ -109,8 +120,10 @@ Resume ifexp_allocated_bytes_writer[kept]:
 QED
 
 Resume ifexp_allocated_bytes_writer[pointer]:
-  irule ifexp_bytes_destination_ptr_post >> simp[] >>
-  qexistsl_tac [`capacity`, `b`] >> simp[eval_operand_def]
+  irule ifexp_bytes_destination_ptr_post >>
+  conj_tac >- first_assum ACCEPT_TAC >>
+  qexistsl_tac [`capacity`, `dtv`, `b`] >>
+  rewrite_tac[eval_operand_def] >> rpt conj_tac >> first_assum ACCEPT_TAC
 QED
 
 Finalise ifexp_allocated_bytes_writer

@@ -70,6 +70,7 @@ Theorem pop_memory_target_ptr_handoff:
   ghost_inv d cenv cx mid G tn s /\
   target_ptr_ok cenv (PlaceR (MemoryPlace id path)) (hdr,loc,pt) G tn s /\
   lookup_scopes id mid.scopes = SOME entry /\
+  value_has_type entry.type entry.value /\
   cenv.ce_var_type id = SOME root_ty /\
   evaluate_type (get_tenv cx) root_ty = SOME entry.type ==>
   ?p b sz k tv w out.

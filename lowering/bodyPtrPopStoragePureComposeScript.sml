@@ -6,7 +6,7 @@ Ancestors
   stmtLoweringMono exprLoweringProps compileEnv loweringStateRelDefs loweringPosts
   bodyPtrDefs vyperTypeSystem fragExec fragGasPathPtr exprSimDefs stmtSimProps exprSimPopStorage
   vyperStoragePlaceProvenance fragGasPath gasSummary fragGasMode
-  vyperStorageLayoutSafety vyperLookupStorage vyperStorageBackend appendStorageSourcePtr
+  vyperStorageLayoutSafety vyperLookupStorage vyperStorageBackend stmtSimAppendStorageCompose
   exprSimSource bodyPtrPopStoragePureFrame exprOperandVar context
 
 Theorem pop_storage_pure_compose:

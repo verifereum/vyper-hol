@@ -1,7 +1,7 @@
 Theory lowerDloadPtrRawReachable
 Ancestors
   contextRawReachable ptrDiscipline venomExecSemantics venomInst contextCodegenRel
-  crossBlockSimProps passSimulationDefs venomExecProofs o1PassContract venomWf list
+  crossBlockSimProps passSimulationDefs venomExecProofs o1PassContract venomWf list crossBlockSimProofs
 
 Theorem raw_reachable_completed_invoke:
   !vs ctx caller callinst s nm ops callee args cs fuel ret se sr inst'.

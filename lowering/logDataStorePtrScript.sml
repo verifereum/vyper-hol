@@ -4,6 +4,20 @@ Ancestors robustCopyTransportPtr logValueFramePtr loweringPosts exprSimDefs expr
   stmtSimLogDataFrame stmtSimLogData stmtSimLogTopics bodyPtrDefs ptrDiscipline
   exprLoweringProps context stmtLowering emitHelper emitHelperProps freshWrites venomInst venomState compileEnv words list arithmetic
 
+Theorem compile_log_store_data_split_ptr[local]:
+  compile_log_store_data ce ((src,ty)::xs) (ty::MAP SND xs) buf off sa = ((),sb) ==>
+  ?dst sm sn. emit_op ADD [buf; Lit (n2w off)] sa = (dst,sm) /\
+    compile_store_memory ce src dst ty ty sm = ((),sn) /\
+    compile_log_store_data ce xs (MAP SND xs) buf
+      (off + type_memory_bytes ce ty) sn = ((),sb)
+Proof
+  simp[compile_log_store_data_scalar_cons, comp_bind_def, comp_ignore_bind_def,
+       pairTheory.pair_case_eq] >>
+  Cases_on `emit_op ADD [buf; Lit (n2w off)] sa` >>
+  rename1 `emit_op ADD [buf; Lit (n2w off)] sa = (dst,sm)` >>
+  Cases_on `compile_store_memory ce src dst ty ty sm` >> simp[]
+QED
+
 Theorem log_data_sources_ptr_kept:
   !xs vs. LIST_REL (log_data_source cx b cap s) xs vs /\
   LIST_REL (\(op,ty) v. ptr_val_ok cx ty v op G tn s) xs vs /\
@@ -78,14 +92,14 @@ QED
 
 Theorem log_data_store_opcode_shape:
   !xs buf off sa sb. EVERY (supported_scalar_type o SND) xs /\
-  compile_log_store_data ce xs buf off sa = ((),sb) ==>
+  compile_log_store_data ce xs (MAP SND xs) buf off sa = ((),sb) ==>
   EVERY (\i. i.inst_opcode <> INVOKE /\ ~is_terminator i.inst_opcode)
     (emitted_insts sa sb)
 Proof
   Induct_on `xs`
   >- simp[compile_log_store_data_def,comp_return_def,emitted_insts_def] >>
   gen_tac >> PairCases_on `h` >> simp[] >> rpt gen_tac >> strip_tac >>
-  drule_all compile_log_store_data_split >> strip_tac >>
+  drule_all compile_log_store_data_split_ptr >> strip_tac >>
   drule emit_op_extends >> strip_tac >> drule log_data_address_shape >> strip_tac >>
   drule exprSimBufferStoreTheory.buffer_store_memory_shape >> strip_tac >>
   `emitted_insts sa sn = emitted_insts sa sm ++ emitted_insts sm sn` by
@@ -137,7 +151,7 @@ QED
 
 Theorem compile_log_store_data_seq_ptr:
   !xs vs off sa sb s G tn.
-    compile_log_store_data ce xs (Var buf) off sa = ((),sb) /\
+    compile_log_store_data ce xs (MAP SND xs) (Var buf) off sa = ((),sb) /\
     LIST_REL (log_data_source cx b cap s) xs vs /\
     LIST_REL (\(op,ty) v. ptr_val_ok cx ty v op G tn s) xs vs /\
     EVERY (\(op,ty). !x. op = Var x ==> not_fresh_at sa x) xs /\
@@ -169,7 +183,7 @@ Proof
   `supported_scalar_type h1 /\
    ?tv. evaluate_type (get_tenv cx) h1 = SOME tv /\
      value_has_type tv h /\ val_wf tv h` by gvs[log_data_source_def] >>
-  drule_all compile_log_store_data_split >> strip_tac >>
+  drule_all compile_log_store_data_split_ptr >> strip_tac >>
   `?dv. dst = Var dv` by metis_tac[emitted_insts_emit_op] >>
   gvs[] >>
   `expr_val_rel cx h1 h h0 s` by gvs[log_data_source_def] >>
@@ -188,8 +202,10 @@ Resume compile_log_store_data_seq_ptr[tail_ready]:
     (irule log_data_sources_ptr_kept >>
      qexistsl_tac [`G`,`b`,`cap`,`s`,`sa`,`tn`] >> simp[] >> rpt strip_tac >>
      first_x_assum irule >> decide_tac) >>
+  `sm.cs_next_var <= sn.cs_next_var` by
+    (drule exprSimBufferStoreTheory.buffer_store_memory_shape >> simp[]) >>
   `EVERY (\(op,ty). !x. op = Var x ==> not_fresh_at sn x) xs` by
-    metis_tac[log_data_fresh_mono] >>
+    (irule log_data_fresh_mono >> qexists_tac `sa` >> simp[] >> decide_tac) >>
   `not_fresh_at sn buf` by metis_tac[not_fresh_at_mono] >>
   `lookup_var buf sf = SOME (n2w b) /\ ptr_covers Gf tnf buf sf cap` by
     (gvs[ptr_covers_def] >> metis_tac[]) >>
@@ -248,7 +264,9 @@ Resume compile_log_store_data_seq_ptr[layout]:
   rpt strip_tac >> decide_tac
 QED
 Resume compile_log_store_data_seq_ptr[write_frame]:
-  qpat_assum `compile_log_store_data ce ((_,_)::xs) _ _ sa = _`
+  `compile_log_store_data ce ((h0,h1)::xs) (MAP SND ((h0,h1)::xs)) (Var buf)
+     off sa = ((),sb)` by simp[] >>
+  qpat_assum `compile_log_store_data ce _ (MAP SND _) _ _ sa = _`
     (mp_then Any mp_tac compile_log_store_data_run) >>
   disch_then (qspecl_then [`h::t`,`s`] mp_tac) >>
   simp[eval_operand_def] >>
@@ -273,7 +291,7 @@ QED
 Finalise compile_log_store_data_seq_ptr
 
 Theorem compile_log_store_data_path_ptr:
-  compile_log_store_data ce xs (Var buf) off sa = ((),sb) /\
+  compile_log_store_data ce xs (MAP SND xs) (Var buf) off sa = ((),sb) /\
   LIST_REL (log_data_source cx b cap s) xs vs /\
   LIST_REL (\(op,ty) v. ptr_val_ok cx ty v op G tn s) xs vs /\
   EVERY (\(op,ty). !x. op = Var x ==> not_fresh_at sa x) xs /\

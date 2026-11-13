@@ -12,12 +12,14 @@
  *)
 Theory bodyPtrPreds
 Ancestors
-  bodyPtrDefs bodySim exprSimHypsDefs supportedStmts
+  bodyPtrDefs bodySim exprSimHypsDefs supportedStmts supportedStmtTraverse
+  bodyPtrSubscriptMapDefs
   vyperInterpreter vyperTypeSystem vyperState vyperAST list
 
 val _ = Parse.hide "body";
 
-(* As bodySim's body_expr_ok, a literal array's elements are ok too. *)
+(* As bodySim's body_expr_ok, a literal array's elements are ok too, and an
+   expression naming a mapping has its mapping judgment. *)
 Definition body_expr_ptr_ok_def:
   (body_expr_ptr_ok cx e <=>
     (!d PG tops ctx func cenv env ty es.
@@ -27,7 +29,10 @@ Definition body_expr_ptr_ok_def:
     (!a t n elems.
       e = Builtin a (MakeArray t n) elems /\
       builtin_args_length_ok (MakeArray t n) (LENGTH elems) ==>
-      body_exprs_ptr_ok cx elems)) /\
+      body_exprs_ptr_ok cx elems) /\
+    (!d PG tops ctx func cenv env ty es.
+      body_inv tops ctx cenv cx /\ expr_map_pre cenv cx env e es ==>
+      expr_map_sim_ptr d ctx PG func cenv cx ty e es)) /\
   body_exprs_ptr_ok cx [] = T /\
   body_exprs_ptr_ok cx (e::es) =
     (body_expr_ptr_ok cx e /\
@@ -52,7 +57,7 @@ Theorem body_make_array_children_ptr_ok:
 Proof
   rpt strip_tac >>
   qpat_x_assum `body_expr_ptr_ok _ _`
-    (mp_tac o CONJUNCT2 o ONCE_REWRITE_RULE [body_expr_ptr_ok_def]) >>
+    (mp_tac o CONJUNCT1 o CONJUNCT2 o ONCE_REWRITE_RULE [body_expr_ptr_ok_def]) >>
   simp[]
 QED
 
@@ -60,6 +65,7 @@ Definition body_stmt_ptr_ok_def:
   body_stmt_ptr_ok cx s <=>
     !d PG tops bindings ctx func cenv env env' ret_ty lctx RetQ es.
       body_inv tops ctx cenv cx /\ supported_stmt tops bindings s /\
+      body_stmt_safe tops s /\
       (!target. supported_stmt_expr_exists
          (expr_abi_decode_target_root target) s ==>
          occurs_abi_decode_target target tops) /\
@@ -76,6 +82,7 @@ Definition body_stmts_ptr_ok_def:
   body_stmts_ptr_ok cx ss <=>
     !d PG tops bindings ctx func cenv env env' ret_ty lctx RetQ es.
       body_inv tops ctx cenv cx /\ supported_stmts tops bindings ss /\
+      body_stmts_safe tops ss /\
       (!target. supported_stmts_expr_exists
          (expr_abi_decode_target_root target) ss ==>
          occurs_abi_decode_target target tops) /\
@@ -107,8 +114,10 @@ Definition body_iterator_ptr_ok_def:
 End
 
 Definition body_for_ptr_ok_def:
-  body_for_ptr_ok cx (tyv : type_value) (nm : identifier) body (vs : value list)
-  <=> vs <> [] ==> body_stmts_ptr_ok cx body
+  body_for_ptr_ok cx (tyv : type_value) (nm : identifier) body (vs : eval_result list)
+  <=>
+    (?s v t. vs <> [] /\ read_result cx (HD vs) s = (INL v,t)) ==>
+    body_stmts_ptr_ok cx body
 End
 
 Definition body_base_target_ptr_ok_def:

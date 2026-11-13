@@ -6,6 +6,42 @@ Ancestors bodyPtrIfExpUnwrapContract bodyPtrIfExpNoopPost
   exprLowering exprSimUnwrap valueEncodingTyping vyperState venomState finite_map words arithmetic
   copyExecution exprSimCopy
 
+(* A non-word arm result held at op as expr_val_at says, for a result that
+   is no memory place. *)
+Theorem ifexp_unwrap_vv_at_nonplace[local]:
+  expr_val_at ce cx t sa sb ee v op u /\ ~is_word_type t /\
+  read_result cx raw ee = (INL v,ee) /\
+  (!id path. raw <> PlaceR (MemoryPlace id path)) ==>
+  !tv. tv = raw \/ tv = Value v ==>
+    vv_at ce cx t sa sb ee tv (LocatedValue t (mk_ptr op LocMemory)) u
+Proof
+  strip_tac >> gen_tac >> disch_tac >>
+  `read_result cx tv ee = (INL v,ee) /\ !id path. tv <> PlaceR (MemoryPlace id path)` by
+    (qpat_x_assum `tv = raw \/ _` strip_assume_tac >>
+     gvs[vyperStateTheory.read_result_def, vyperStateTheory.return_def]) >>
+  `!n k ptv. local_place_at ce cx n k ptv tv` by simp[local_place_at_def] >>
+  simp[vv_at_def, contextTheory.mk_ptr_def] >> rpt strip_tac >>
+  gvs[expr_val_at_def] >> metis_tac[]
+QED
+
+(* A non-word arm already in memory keeps its result's vv_at. *)
+Theorem ifexp_unwrap_vv_at_memory[local]:
+  vv_at ce cx t sa sb ee raw (LocatedValue tag pp) u /\
+  pp.ptr_location = LocMemory /\ read_result cx raw ee = (INL v,ee) ==>
+  !tv. tv = raw \/ tv = Value v ==>
+    vv_at ce cx t sa sb ee tv (LocatedValue t (mk_ptr pp.ptr_operand LocMemory)) u
+Proof
+  strip_tac >>
+  `read_result cx (Value v) ee = (INL v,ee)` by
+    simp[vyperStateTheory.read_result_def, vyperStateTheory.return_def] >>
+  rpt strip_tac >> gvs[]
+  >- (qpat_x_assum `vv_at _ _ _ _ _ _ _ _ _` mp_tac >>
+      simp[vv_at_def, contextTheory.mk_ptr_def]) >>
+  qpat_x_assum `vv_at _ _ _ _ _ _ _ _ _` mp_tac >>
+  simp[vv_at_def, contextTheory.mk_ptr_def, local_place_at_def] >>
+  metis_tac[]
+QED
+
 Theorem ifexp_old_unwrap_nonword_path_capacity:
   post_value_type ce e = expr_type e /\
   ~is_word_type (expr_type e) /\ ~ce.ce_is_ctor /\
@@ -38,11 +74,14 @@ Theorem ifexp_old_unwrap_nonword_path_capacity:
     (same_memory_layout ce (lowered_value_type ce e) (expr_type e) ==>
       !w. eval_operand op t = SOME w /\ type_memory_bytes ce (expr_type e) <> 0 ==>
       ?x b sz. op = Var x /\ FLOOKUP H x = SOME (b,sz) /\ b <= w2n w /\
-        w2n w + type_memory_bytes ce (expr_type e) <= b+sz)
+        w2n w + type_memory_bytes ce (expr_type e) <= b+sz) /\
+    (!tv. tv = raw \/ tv = Value v ==>
+      vv_at ce cx (expr_type e) sa sb ee tv
+        (LocatedValue (expr_type e) (mk_ptr op LocMemory)) t)
 Proof
   strip_tac >> Cases_on `vv`
   >- suspend "stack" >>
-  rename1 `LocatedValue tag pp` >>
+  rename1 `vv_post _ _ _ _ _ _ _ _ _ _ _ (LocatedValue tag pp) _` >>
   `~is_word_type tag` by
     metis_tac[exprPtrUnwrapMarkedTheory.vv_post_located_type,
               valueCopyBytesTheory.is_bytestring_word_type] >>
@@ -62,6 +101,15 @@ Resume ifexp_old_unwrap_nonword_path_capacity[stack]:
   drule_at (Pat `vv_post _ _ _ _ _ _ _ _ _ _ _ _ _`) unwrap_value_noop_post >>
   disch_then (qspecl_then [`v`, `tn`, `sb`, `op`, `G`] mp_tac) >>
   (impl_tac >- (simp[] >> metis_tac[])) >> strip_tac >>
+  `!id path. raw <> PlaceR (MemoryPlace id path)` by
+    (qpat_x_assum `vv_post _ _ _ _ _ _ _ _ _ _ raw _ _` mp_tac >>
+     simp[vv_post_def, vv_at_def]) >>
+  `expr_val_at ce cx (expr_type e) sa sb ee v op s` by
+    (qpat_x_assum `expr_post _ _ _ _ e _ _ _ _ _ _ _ s` mp_tac >>
+     simp[expr_post_def]) >>
+  `!tv. tv = raw \/ tv = Value v ==>
+     vv_at ce cx (expr_type e) sa sb ee tv (LocatedValue (expr_type e) (mk_ptr op LocMemory)) s` by
+    (match_mp_tac ifexp_unwrap_vv_at_nonplace >> rpt conj_tac >> first_assum ACCEPT_TAC) >>
   qexistsl_tac [`s`, `G`, `tn`] >> simp[] >>
   conj_tac >- (irule (cj 1 gas_path_ptr_rules) >> simp[]) >>
   metis_tac[ifexp_noop_annotation_capacity]
@@ -71,6 +119,17 @@ Resume ifexp_old_unwrap_nonword_path_capacity[memory]:
   drule_at (Pat `vv_post _ _ _ _ _ _ _ _ _ _ _ _ _`) unwrap_value_noop_post >>
   disch_then (qspecl_then [`v`, `tn`, `sb`, `op`, `G`] mp_tac) >>
   (impl_tac >- (simp[] >> metis_tac[])) >> strip_tac >>
+  `op = pp.ptr_operand` by
+    (qpat_x_assum `unwrap_value _ _ _ = _` mp_tac >>
+     simp[unwrap_value_def, comp_return_def]) >>
+  `vv_at ce cx (expr_type e) sa sb ee raw (LocatedValue tag pp) s` by
+    (qpat_x_assum `vv_post _ _ _ _ _ _ _ _ _ _ raw _ _` mp_tac >>
+     qpat_x_assum `sb = sm` (fn th => rewrite_tac[th]) >>
+     simp[vv_post_def]) >>
+  `!tv. tv = raw \/ tv = Value v ==>
+     vv_at ce cx (expr_type e) sa sb ee tv (LocatedValue (expr_type e) (mk_ptr op LocMemory)) s` by
+    (qpat_assum `op = _` SUBST1_TAC >> match_mp_tac ifexp_unwrap_vv_at_memory >>
+     rpt conj_tac >> first_assum ACCEPT_TAC) >>
   qexistsl_tac [`s`, `G`, `tn`] >> simp[] >>
   conj_tac >- (irule (cj 1 gas_path_ptr_rules) >> simp[]) >>
   metis_tac[ifexp_noop_annotation_capacity]
@@ -94,6 +153,15 @@ QED
 
 Resume ifexp_old_unwrap_nonword_path_capacity[runtime_post]:
   qpat_x_assum `op = Var out` SUBST_ALL_TAC >>
+  `!id path. raw <> PlaceR (MemoryPlace id path)` by
+    (qpat_x_assum `vv_post _ _ _ _ _ _ _ _ _ _ raw _ _` mp_tac >>
+     simp[vv_post_def, vv_at_def]) >>
+  `expr_val_at ce cx (expr_type e) sa sb ee v (Var out) t` by
+    (qpat_x_assum `~is_word_type _ ==> expr_post _ _ _ _ _ _ _ _ _ _ _ _ _` mp_tac >>
+     simp[expr_post_def]) >>
+  `!tv. tv = raw \/ tv = Value v ==>
+     vv_at ce cx (expr_type e) sa sb ee tv (LocatedValue (expr_type e) (mk_ptr (Var out) LocMemory)) t` by
+    (match_mp_tac ifexp_unwrap_vv_at_nonplace >> rpt conj_tac >> first_assum ACCEPT_TAC) >>
   drule_all bodyPtrIfExpBytesInputsTheory.ifexp_arm_annotation_typed >> strip_tac >>
   `val_store_size ty' v <= type_memory_bytes ce (expr_type e)` by
     metis_tac[val_store_size_le, value_has_type_val_wf, optionTheory.SOME_11] >>
@@ -129,6 +197,15 @@ QED
 Resume ifexp_old_unwrap_nonword_path_capacity[storage_post]:
   markerLib.RESUME_TAC >>
   qpat_x_assum `op = Var out` SUBST_ALL_TAC >>
+  `!id path. raw <> PlaceR (MemoryPlace id path)` by
+    (qpat_x_assum `vv_post _ _ _ _ _ _ _ _ _ _ raw _ _` mp_tac >>
+     simp[vv_post_def, vv_at_def]) >>
+  `expr_val_at ce cx (expr_type e) sa sb ee v (Var out) t` by
+    (qpat_x_assum `~is_word_type _ ==> expr_post _ _ _ _ _ _ _ _ _ _ _ _ _` mp_tac >>
+     simp[expr_post_def]) >>
+  `!tv. tv = raw \/ tv = Value v ==>
+     vv_at ce cx (expr_type e) sa sb ee tv (LocatedValue (expr_type e) (mk_ptr (Var out) LocMemory)) t` by
+    (match_mp_tac ifexp_unwrap_vv_at_nonplace >> rpt conj_tac >> first_assum ACCEPT_TAC) >>
   drule_all bodyPtrIfExpBytesInputsTheory.ifexp_arm_annotation_typed >> strip_tac >>
   `val_store_size ty' v <= type_memory_bytes ce (expr_type e)` by
     metis_tac[val_store_size_le, value_has_type_val_wf, optionTheory.SOME_11] >>

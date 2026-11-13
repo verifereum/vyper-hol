@@ -23,14 +23,15 @@ Theorem structlit_uniform_allocated_fields_outcome_ptr:
   body_inv tops ctx ce cx /\ body_exprs_ptr_ok cx (MAP SND fields) /\
   (!e st. MEM e (MAP SND fields) /\ expr_sim_inv ce cx env st ==>
     expr_body_pre ce cx env e st) /\
-  (!e. MEM e (MAP SND fields) ==> post_value_type ce e = expr_type e) ==>
+  (!e. MEM e (MAP SND fields) ==> post_value_type ce e = expr_type e) /\
+  (pure ==> ~EXISTS (expr_has_effect o SND) fields) ==>
   out = Var root /\
   ?addr. addr + type_memory_size_list tvs < dimword(:256) /\
   gas_outcome_ptr (cx_dead cx) (cx_tops cx) (ctx,func) PG
     (eval_exprs cx (MAP SND fields)) (es,s,G,tn)
     (\res ee H tm z. ?vs cells. res = INL vs /\ expr_sim_inv ce cx env ee /\
       LIST_REL value_has_type tvs vs /\
-      literal_loop_frame ctx func ce cx d root sa.cs_next_id addr (type_memory_size_list tvs)
+      literal_loop_frame pure ctx func ce cx d root sa.cs_next_id addr (type_memory_size_list tvs)
         es sa s G tn ee sb H tm z cells (type_memory_size_list tvs) /\
       literal_prefix_ok cells tm z /\
       (!m. mem_agree_outside tm.t_mem z.vs_memory m ==>
@@ -42,15 +43,17 @@ Proof
     metis_tac[ci_mono_compile_struct_lit_cfn, compile_expr_ci_mono, pairTheory.SND] >>
   `ci_mono sa sm` by metis_tac[ci_mono_compile_alloc_buffer, pairTheory.SND] >>
   `cs_extends sm sb` by fs[ci_mono_def] >>
-  drule_all literal_allocated_loop_start >>
-  disch_then (qspecl_then [`PG`, `cx_dead cx`] strip_assume_tac) >>
+  drule_all (Q.INST [`D` |-> `cx_dead cx`] (SPEC_ALL literal_allocated_loop_start)) >>
+  disch_then (strip_assume_tac o SPEC_ALL) >>
   `fn_has_code sm sb func` by metis_tac[fn_has_code_split, ci_mono_def] >>
   `local_ptrs_reserved ce sm` by metis_tac[local_ptrs_reserved_next_var, ci_mono_def] >>
   `!p sz. ce.ce_return_buf = SOME (PtrVar (Var p) sz) ==> not_fresh_at sm p` by
     metis_tac[not_fresh_at_mono, ci_mono_def] >>
   `!p sz. ce.ce_return_pc = SOME (PtrVar (Var p) sz) ==> not_fresh_at sm p` by
     metis_tac[not_fresh_at_mono, ci_mono_def] >>
-  drule_at (Pat `literal_loop_frame _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _`)
+  `pure ==> EVERY ($~ o expr_has_effect) (MAP SND fields)` by
+    (strip_tac >> fs[listTheory.EXISTS_MAP, listTheory.EVERY_MAP, combinTheory.o_DEF]) >>
+  drule_at (Pat `literal_loop_frame _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _`)
     structlit_uniform_fields_loop_outcome_ptr >> simp[] >>
   disch_then (drule_at (Pat `compile_struct_lit _ _ _ _ _ _ _ = _`)) >> simp[] >>
   disch_then drule_all >> disch_then (qspec_then `PG` strip_assume_tac) >>

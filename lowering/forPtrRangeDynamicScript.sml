@@ -123,7 +123,7 @@ Resume compile_for_range_checked_frag_active_ptr[endpoints]:
       rl <- lift_sum (get_range_limits v1 v2);
       check (compatible_bound (Dynamic bound) (SND rl)) "For too long";
       eval_for cx tyv id stmts
-        (GENLIST (\j. IntV (FST rl + &j)) (SND rl)) od` by
+        (MAP Value (GENLIST (\j. IntV (FST rl + &j)) (SND rl))) od` by
     (irule for_endpoint_stmt_source >> simp[]) >>
   qpat_x_assum `gas_admissible _ _ es` mp_tac >>
   asm_rewrite_tac[] >> strip_tac >> simp[SF ETA_ss] >>

@@ -33,7 +33,13 @@ Proof
     (gvs[expr_post_def, expr_val_at_def] >> rpt strip_tac >>
      first_x_assum drule_all >> strip_tac >> qexists_tac `w` >> simp[] >>
      metis_tac[arithmeticTheory.LESS_LESS_EQ_TRANS]) >>
-  gvs[expr_post_def, wb_frame_def, expr_val_rel_def] >> gvs[]
+  gvs[expr_post_def, wb_frame_def, expr_val_rel_def] >> gvs[] >>
+  conj_tac >- first_assum ACCEPT_TAC >>
+  strip_tac >>
+  `pure_frame cenv func es sa s0 s` by gvs[] >>
+  `pure_frame cenv func es sa s0 t <=> pure_frame cenv func es sa s0 s` by
+    (irule pure_frame_state_cong >> simp[]) >>
+  simp[]
 QED
 
 Theorem extract32_prepare_site:

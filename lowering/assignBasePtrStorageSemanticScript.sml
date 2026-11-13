@@ -153,6 +153,7 @@ Theorem assign_base_store_state_region:
                        (w2n k') (type_slot_size tv')) /\
     well_formed_type_value tv /\ value_has_type tv v /\
     val_in_memory tv v off mem /\ encode_value tv v = SOME writes /\
+    (!i. i < type_slot_size tv ==> MEM i (MAP FST writes)) /\
     (!i. i < type_slot_size tv /\
          (?b. b < 32 /\
               ~dead_bytes (apply_writes k writes (get_storage cx es tr))
@@ -166,6 +167,12 @@ Theorem assign_base_store_state_region:
 Proof
   rpt gen_tac >> strip_tac >>
   drule_then (qspec_then `tr` assume_tac) assign_base_store_initial_agree >>
+  `!i b. i < type_slot_size tv /\ b < 32 /\
+     ~dead_bytes (apply_writes k writes (get_storage cx es tr)) (w2n k) tv
+       (w2n k + i) b ==> MEM i (MAP FST writes)` by
+    (rpt strip_tac >>
+     qpat_x_assum `!i. i < type_slot_size tv ==> MEM i (MAP FST writes)`
+       irule >> decide_tac) >>
   drule_all storage_agree_copy_region >> strip_tac >>
   `~cx.txn.is_static` by fs[stmt_state_rel_def, state_rel_def] >>
   gvs[write_storage_slot_eq] >>
@@ -239,6 +246,7 @@ Theorem assign_base_store_frame_live:
   encode_value tv v = SOME writes /\
   w2n k+type_slot_size tv <= dimword (:256) /\
   w2n b+32*(type_slot_size tv-1) < dimword (:256) /\
+  (!i. i < type_slot_size tv ==> MEM i (MAP FST writes)) /\
   w2n k <= x /\ x < w2n k+type_slot_size tv /\ c < 32 /\
   ~dead_bytes (apply_writes k writes st) (w2n k) tv x c ==>
   EL c (word_to_bytes
@@ -254,6 +262,9 @@ Proof
   `mload (w2n (b+n2w (x-w2n k)*32w)) s0 =
    mem_word_at (w2n b+32*(x-w2n k)) s0.vs_memory` by
     (irule assign_base_store_source_word >> qexists_tac `type_slot_size tv` >> simp[]) >>
+  `MEM (x - w2n k) (MAP FST writes)` by
+    (qpat_x_assum `!i. i < type_slot_size tv ==> MEM i (MAP FST writes)`
+       irule >> decide_tac) >>
   simp[] >> metis_tac[encode_value_memory_live]
 QED
 
@@ -268,6 +279,7 @@ Theorem assign_base_store_prefix_state_region:
   well_formed_type_value tv /\ value_has_type tv v /\
   val_in_memory tv v (w2n b) s0.vs_memory /\ encode_value tv v = SOME writes /\
   w2n b+32*(type_slot_size tv-1) < dimword (:256) /\
+  (!i. i < type_slot_size tv ==> MEM i (MAP FST writes)) /\
   write_storage_slot cx tr k tv v es = (INL (),es') ==>
   stmt_state_rel ctx func cenv cx es'
     (store_copy_prefix (if tr then LocTransient else LocStorage)

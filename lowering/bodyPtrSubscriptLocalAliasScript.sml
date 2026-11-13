@@ -9,7 +9,7 @@ Theorem local_ptrs_rel_retained_root:
   FLOOKUP cenv.ce_vars name = SOME (PtrVar (Var p) sz) /\
   lookup_var p ss = SOME w /\
   lookup_var p ss' = lookup_var p ss ==>
-  val_in_memory entry'.type entry'.value (w2n w) ss'.vs_memory
+  memory_value_rel entry'.type entry'.value (w2n w) ss'.vs_memory
 Proof
   strip_tac >>
   fs[local_ptrs_rel_def] >>

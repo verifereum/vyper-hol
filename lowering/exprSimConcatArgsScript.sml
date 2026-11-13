@@ -471,7 +471,7 @@ Proof
   qexistsl_tac [`B`, `bsz`] >> asm_rewrite_tac[] >> decide_tac
 QED
 
-Theorem concat_fixed_value[local]:
+Theorem concat_fixed_value:
   !cx m v op s tv.
     expr_val_rel cx (BaseT (BytesT (Fixed m))) v op s /\
     evaluate_type (get_tenv cx) (BaseT (BytesT (Fixed m))) = SOME tv /\
@@ -486,7 +486,7 @@ Proof
   gvs[expr_val_rel_def, is_word_type_def, typed_val_to_w256_def, evaluate_type_def]
 QED
 
-Theorem concat_bytes_value[local]:
+Theorem concat_bytes_value:
   !ctx func cenv cx ty v op s sa sb es tv.
     expr_val_rel cx ty v op s /\ expr_val_at cenv cx ty sa sb es v op s /\
     stmt_state_rel ctx func cenv cx es s /\ is_bytestring_type ty /\
@@ -520,7 +520,7 @@ Proof
   res_tac >> decide_tac
 QED
 
-Theorem concat_head_typed[local]:
+Theorem concat_head_typed:
   !cenv cx env e es v es'.
     expr_body_pre cenv cx env e es /\
     bind (eval_expr cx e) (read_result cx) es = (INL v, es') ==>
@@ -552,7 +552,7 @@ Proof
   metis_tac[]
 QED
 
-Theorem concat_fixed_step_mono[local]:
+Theorem concat_fixed_step_mono:
   !data_ptr off_ptr x m s1 s2.
     (do offset_op <- emit_op MLOAD [off_ptr];
         dst <- emit_op ADD [data_ptr; offset_op];
@@ -570,7 +570,7 @@ Proof
   simp[ci_mono_emit_op, ci_mono_emit_void]
 QED
 
-Theorem concat_bytes_step_mono[local]:
+Theorem concat_bytes_step_mono:
   !mem_ptr data_ptr off_ptr s1 s2.
     (do arg_len <- emit_op MLOAD [mem_ptr];
         arg_data <- emit_op ADD [mem_ptr; Lit 32w];
@@ -817,7 +817,7 @@ QED
 
 Finalise concat_head_arm
 
-Theorem concat_cons_mono[local]:
+Theorem concat_cons_mono:
   !cenv e args dv ov sa sb op s1.
     compile_concat compile_expr cenv (e::args) (Var dv) (MAP (\e. let ety = expr_type e in
                 if is_bytestring_type ety then (T, 0:num)
@@ -1006,13 +1006,24 @@ Resume concat_args_sim[head_normal]:
   `exprs_case nocalls ctx func cenv cx args` by metis_tac[] >>
   `!e' st. MEM e' args /\ expr_sim_inv cenv cx env st ==>
      expr_body_pre cenv cx env e' st /\ (nocalls ==> int_calls_expr e' = [])` by
-    metis_tac[MEM] >>
+    (rpt gen_tac >> strip_tac >>
+     qpat_assum `!e' st. (e' = e \/ MEM e' args) /\ _ ==> _`
+       (qspecl_then [`e'`, `st`] mp_tac) >>
+     impl_tac
+     >- (conj_tac >- (disj2_tac >> first_assum ACCEPT_TAC) >>
+         first_assum ACCEPT_TAC) >>
+     disch_then ACCEPT_TAC) >>
   `sa.cs_next_var <= s1.cs_next_var /\ s1.cs_next_var <= s2.cs_next_var /\
    sa.cs_next_id <= s2.cs_next_id` by fs[ci_mono_def] >>
   `local_ptrs_reserved cenv s2` by
     metis_tac[local_ptrs_reserved_next_var, arithmeticTheory.LESS_EQ_TRANS] >>
   `not_fresh_at s2 dv /\ not_fresh_at s2 ov` by
-    metis_tac[not_fresh_at_mono, arithmeticTheory.LESS_EQ_TRANS] >>
+    (conj_tac >> irule not_fresh_at_mono >>
+     qexists_tac `sa` >> rpt conj_tac >>
+     FIRST [first_assum ACCEPT_TAC,
+            irule arithmeticTheory.LESS_EQ_TRANS >>
+            qexists_tac `s1.cs_next_var` >> conj_tac >>
+            first_assum ACCEPT_TAC]) >>
   `binst.inst_id < s2.cs_next_id /\ oinst.inst_id < s2.cs_next_id` by decide_tac >>
   `32 + (P + concat_payload_capacity (expr_type e)) +
      SUM (MAP concat_payload_capacity (MAP expr_type args)) <= bsz` by
@@ -1189,7 +1200,9 @@ Resume concat_args_sim[tail_exit]:
       irule gas_marked_exec_bind_normal >>
       qpat_assum `gas_marked_exec _ _ _ _ _ (INL v) _ _` (irule_at Any) >>
       BETA_TAC >> irule gas_marked_exec_bind_exception >> first_assum ACCEPT_TAC) >>
-  disj2_tac >> gvs[]
+  disj2_tac >>
+  qpat_x_assum `(\rr ee r. _) _ _ _` mp_tac >>
+  qpat_x_assum `exit_result r` mp_tac >> simp[]
 QED
 
 Resume concat_args_sim[tail_exempt]:

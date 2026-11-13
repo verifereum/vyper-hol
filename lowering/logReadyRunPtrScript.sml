@@ -4,11 +4,12 @@ Ancestors logArgsRunPtr logArgsPtr bodyPtrDefs exprSimDefs stmtSimLogArgs
   gasSummaryComposePtr exprSimHypsDefs vyperInterpreter vyperState list
 
 Theorem compile_log_eval_all_gas_ptr:
-  !args d ctx PG func cenv cx Inv es sa xs sb s0 G0 tn0 env env0 es0.
+  !args d ctx PG func cenv cx Inv es sa xs sb s0 G0 tn0 env env0 es0 ops.
     log_args_ready_ptr d ctx PG func cenv cx Inv args /\ Inv es /\
     (!s gs. Inv s ==> Inv (s with gas_obs := gs)) /\
     EVERY supported_scalar_type (MAP expr_type args) /\
-    compile_log_eval_all cenv args sa = (xs,sb) /\
+    ~exprs_can_mutate cenv args /\ compile_log_eval_all cenv args sa = (ops,sb) /\
+    xs = ZIP (MAP FST ops, MAP expr_type args) /\
     gas_admissible (eval_exprs cx args)
       (\r. !exc. r = INR exc ==> expr_res_ok (INR exc : value + exception)) es /\
     fn_has_code sa sb func /\ fn_inst_ids_distinct func /\ local_ptrs_reserved cenv sa /\

@@ -6,7 +6,7 @@ Ancestors
 
 Theorem revert_reason_copy_run:
   lookup_var dst s = SOME b /\ lookup_var src s = SOME a /\
-  (!k. k < 4 ==> src <> STRING #"%" (toString (v+k)) /\
+  (!k. k < 5 ==> src <> STRING #"%" (toString (v+k)) /\
                     dst <> STRING #"%" (toString (v+k))) ==>
   ?t. run_inst_seq (revert_reason_copy id v (Var dst) (Var src)) s = OK t /\
       t.vs_allocas = s.vs_allocas /\ t.vs_alloca_next = s.vs_alloca_next
@@ -14,8 +14,8 @@ Proof
   strip_tac >>
   `?t. run_inst_seq (revert_reason_copy id v (Var dst) (Var src)) s = OK t`
     suffices_by metis_tac[revert_reason_copy_allocation_frame] >>
-  map_every (fn k => qpat_assum `!k. k < 4 ==> _`
-    (qspec_then k assume_tac)) [`0`,`1`,`2`,`3`] >>
+  map_every (fn k => qpat_assum `!k. k < 5 ==> _`
+    (qspec_then k assume_tac)) [`0`,`1`,`2`,`3`,`4`] >>
   gvs[] >>
   pure_rewrite_tac[revert_reason_copy_def] >>
   simp[Once run_inst_seq_def] >>
@@ -24,18 +24,23 @@ Proof
   simp[Once run_inst_seq_def] >>
   PURE_ONCE_REWRITE_TAC[step_inst_base_def] >>
   pure_rewrite_tac[mk_inst_def, instruction_accessors, opcode_case_def] >>
-  simp[exec_pure2_def, eval_operand_def, update_var_def,
+  simp[exec_pure1_def, eval_operand_def, update_var_def,
        lookup_var_def, FLOOKUP_UPDATE] >>
   simp[Once run_inst_seq_def] >>
   PURE_ONCE_REWRITE_TAC[step_inst_base_def] >>
   pure_rewrite_tac[mk_inst_def, instruction_accessors, opcode_case_def] >>
   simp[exec_pure2_def, eval_operand_def, update_var_def,
-       lookup_var_def, FLOOKUP_UPDATE] >>
+       lookup_var_def, FLOOKUP_UPDATE, ASCIInumbersTheory.toString_11] >>
   simp[Once run_inst_seq_def] >>
   PURE_ONCE_REWRITE_TAC[step_inst_base_def] >>
   pure_rewrite_tac[mk_inst_def, instruction_accessors, opcode_case_def] >>
   simp[exec_pure2_def, eval_operand_def, update_var_def,
-       lookup_var_def, FLOOKUP_UPDATE] >>
+       lookup_var_def, FLOOKUP_UPDATE, ASCIInumbersTheory.toString_11] >>
+  simp[Once run_inst_seq_def] >>
+  PURE_ONCE_REWRITE_TAC[step_inst_base_def] >>
+  pure_rewrite_tac[mk_inst_def, instruction_accessors, opcode_case_def] >>
+  simp[exec_pure2_def, eval_operand_def, update_var_def,
+       lookup_var_def, FLOOKUP_UPDATE, ASCIInumbersTheory.toString_11] >>
   simp[Once run_inst_seq_def] >>
   PURE_ONCE_REWRITE_TAC[step_inst_base_def] >>
   simp[eval_operand_def, update_var_def, lookup_var_def, FLOOKUP_UPDATE] >>

@@ -8,12 +8,16 @@ target's internal call changes the source.
 `conditional_memory_view` returns 2 for either flag because assignment copies
 the selected memory array before the target's pop shortens it. Reading it after
 the target's effects instead would return 1.
-`call_storage_read` returns 10 because internal calls capture every argument
-before reading the storage scalar changed by the later argument.
-`call_memory_pop` returns 1 because the later argument pops the memory array
-before the call copies it. Eager reads would return 0 and 2 respectively.
+`call_storage_read` returns 0 and `call_memory_pop` returns 2 because a call
+reads each argument as it is evaluated, before the later argument changes the
+storage scalar or pops the memory array.
 `builtin_eager_read` returns 0: `min` reads its first storage argument before
 evaluating the second argument, which changes that storage slot.
+`subscript_base_copy` returns 5: the base `self.a[0]` is read before the index
+call writes `self.a[0][1]`, since the index writes a variable the base reads.
+`subscript_base_live` returns 7: the base `self.d[0]` is a fixed array, not one
+reached through a dynamic array, so it stays a live location while the index
+call writes 7 to `self.d[0][1]`, and the read sees that write.
 
 `vyperLoadTimingTestTheory` translates the annotated AST and layout in `oracle/`,
 binds the entry's declared parameters, and executes the source interpreter.
@@ -36,7 +40,7 @@ uv tool run --from uv==0.10.11 uv venv --managed-python --python 3.11.11 \
   "$generator/venv"
 UV_CONSTRAINT="$PWD/bytecode/python-o1-oracle-constraints.txt" \
 UV_BUILD_CONSTRAINT="$PWD/bytecode/python-o1-oracle-constraints.txt" \
-SETUPTOOLS_SCM_PRETEND_VERSION_FOR_VYPER=0.5.0a4+9362e36b \
+SETUPTOOLS_SCM_PRETEND_VERSION_FOR_VYPER=0.5.0b1 \
   uv tool run --from uv==0.10.11 uv pip install \
     --python "$generator/venv/bin/python" "$generator/vyper-src"
 env -u PYTHONPATH -u PYTHONHOME -u PYTHONSTARTUP \

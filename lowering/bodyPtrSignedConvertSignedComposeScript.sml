@@ -606,6 +606,8 @@ Proof
   `t.vs_allocas = s.vs_allocas /\ t.vs_memory = s.vs_memory` by
     (qpat_x_assum `t = s with <|vs_vars := _; vs_inst_idx := _|>`
       (fn eq => once_rewrite_tac[eq]) >> simp[]) >>
+  `~expr_has_effect e ==> pure_frame cenv fn es s0a s0 s` by
+    (strip_tac >> drule_all exprSimWordArgsTheory.expr_post_pure_frame >> simp[]) >>
   `expr_post ctx fn cenv cx (TypeBuiltin typ Convert typ [e])
      es s0a sb s0 (ee with gas_obs := []) result out t` by
     (irule scalar_suffix_expr_post >> simp[expr_type_def] >> metis_tac[]) >>

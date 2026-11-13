@@ -134,8 +134,13 @@ Theorem assign_tuple_targets_suffix_mem:
       gas_path_mem ctx func sv 0 (OK t') /\
       alloca_history func t' /\ return_buf_frame d cenv sf t' /\
       sv.vs_alloca_next <= t'.vs_alloca_next /\
-      stmt_post ctx func cx lctx cenv cenv sa sf s0 (INL ())
-        (ee' with gas_obs := []) t'
+      stmt_lands lctx sf (INL ()) t' /\ ~t'.vs_halted /\ ~block_is_terminated sf /\
+      cenv_top_ext cenv cenv ee'.scopes /\
+      stmt_state_rel ctx func cenv cx (ee' with gas_obs := []) t' /\
+      (!x w. not_fresh_at sa x /\ lookup_var x s0 = SOME w ==>
+             lookup_var x t' = SOME w) /\
+      (!aid b. FLOOKUP s0.vs_allocas aid = SOME b ==>
+               FLOOKUP t'.vs_allocas aid = SOME b)
 Proof
   rpt gen_tac >> strip_tac >>
   drule_all tuple_type_value >> strip_tac >> gvs[] >>
@@ -190,6 +195,10 @@ Resume assign_tuple_targets_suffix_mem[prefix]:
   suspend "stores"
 QED
 
+(* Built once here rather than inside the proof below. *)
+val tuple_store_targets_path_mem_T =
+  SIMP_RULE (srw_ss()) [] (Q.SPECL [`gs`, `T`] tuple_store_targets_path_mem);
+
 Resume assign_tuple_targets_suffix_mem[stores]:
   `!i. i < LENGTH gs ==> ?v. eval_operand (EL i elems) t = SOME v /\
     if is_word_type (EL i tys) then
@@ -213,8 +222,7 @@ Resume assign_tuple_targets_suffix_mem[stores]:
   qpat_x_assum `compile_tuple_load_all _ _ _ _ _ = _` kall_tac >>
   qpat_x_assum `expr_val_rel _ (TupleT tys) _ _ _` kall_tac >>
   qpat_x_assum `expr_val_at _ _ (TupleT tys) _ _ _ _ _ _` kall_tac >>
-  drule_all (SIMP_RULE (srw_ss()) []
-    (Q.SPECL [`gs`, `T`] tuple_store_targets_path_mem)) >>
+  drule_all tuple_store_targets_path_mem_T >>
   disch_then (map_every assume_tac o CONJUNCTS) >>
   qpat_x_assum `?t. stmt_state_rel ctx _ _ _ ee' _ /\ _`
     (qx_choose_then `sfv` (map_every assume_tac o CONJUNCTS)) >>

@@ -100,7 +100,8 @@ Theorem tuple_assignment_prefix_path_ptr:
         FLOOKUP cenv.ce_vars name = SOME (PtrVar (Var q) size) /\
         lookup_var q t = SOME u ==>
         w2n u + val_footprint entry.type entry.value <= freshbase \/
-        freshbase + type_memory_size_list tvs <= w2n u)
+        freshbase + type_memory_size_list tvs <= w2n u) /\
+    alloca_frame cenv es su sv cenv es t
 Proof
   strip_tac >>
   `LIST_REL (\ty tv. evaluate_type (get_tenv cx) ty = SOME tv) tys tvs` by
@@ -147,6 +148,12 @@ Resume tuple_assignment_prefix_path_ptr[loads]:
 QED
 
 Resume tuple_assignment_prefix_path_ptr[transport]:
+  `alloca_frame cenv es su sv cenv es t` by
+    (qpat_x_assum `alloca_frame cenv es su sv cenv es st` mp_tac >>
+     rewrite_tac[stmtSimDefsTheory.alloca_frame_def] >>
+     qpat_assum `t.vs_memory = st.vs_memory` (fn th => rewrite_tac[th]) >>
+     qpat_assum `!n base sz. local_region cenv es.scopes t n base sz <=> _`
+       (fn th => rewrite_tac[th])) >>
   qpat_x_assum `?p base cap. _` strip_assume_tac >>
   gnvs[] >>
   qpat_x_assum `evaluate_type _ _ = _` kall_tac >>

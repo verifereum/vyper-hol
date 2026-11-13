@@ -237,7 +237,7 @@ Proof
   step_inst_lift_from_all_tac `\s:venom_state. s.vs_current_bb`
 QED
 
-Theorem step_preserves_prev_bb[local]:
+Theorem step_preserves_prev_bb:
   !fuel ctx inst s s'.
     step_inst fuel ctx inst s = OK s' /\
     ~is_terminator inst.inst_opcode ==> s'.vs_prev_bb = s.vs_prev_bb

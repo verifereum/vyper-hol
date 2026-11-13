@@ -1,7 +1,7 @@
 Theory lowerDloadStoreExecution
 Ancestors
   lowerDloadRelocation lowerDloadOperand venomExecSemantics ptrDiscipline codegenRel
-  venomMemProps regularCallEmitSim regularMemorySim venomState
+  venomMemProps regularCallEmitSim regularMemorySim memoryReadRel venomState
   arithmetic words list pred_set finite_map
 
 Theorem ld_mstore_read_byte[local]:

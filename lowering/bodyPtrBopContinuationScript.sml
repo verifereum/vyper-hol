@@ -47,12 +47,8 @@ Proof
     metis_tac[expr_body_pre_type_evaluates, vyperASTTheory.expr_type_def] >>
   `expr_res_ok (bop_result cx ann bop [expr_type e1;expr_type e2] v1 v2 es2)` by
     (irule bop_typed_source_result_ok >> simp[] >> metis_tac[optionTheory.IS_SOME_EXISTS]) >>
-  `builtin_operands_ok (Bop bop) [e1;e2]` by
-    gvs[expr_body_pre_def, well_typed_expr_def] >>
-  gvs[builtin_operands_ok_def, nonneg_int_literal_def, GSYM expr_int_literal_value,
-      AllCaseEqs()] >>
-  conj_tac >- (Cases_on `expr_int_literal e2` >> gvs[] >> metis_tac[]) >>
-  metis_tac[]
+  drule expr_body_pre_bop_operands >> strip_tac >>
+  simp[] >> metis_tac[]
 QED
 
 Theorem bop_pair_scalar_run:

@@ -7,8 +7,8 @@ Ancestors
 Theorem supported_runtime_callable:
   supported_program tops /\
   lookup_callable_function F name tops = SOME (mut,nr,args,dflts,ret,ss) ==>
-  nr = F /\ dflts = [] /\
-  (?rr. MEM (FunctionDecl Internal mut F rr name args [] ret ss) tops) /\
+  dflts = [] /\
+  (?rr. MEM (FunctionDecl Internal mut nr rr name args [] ret ss) tops) /\
   EVERY (supported_value_type tops o SND) args /\
   supported_return_type tops ret /\
   supported_function_body tops Internal args ss /\
@@ -17,32 +17,9 @@ Proof
   strip_tac >> drule lookup_callable_function_F_SOME_MEM >> strip_tac >>
   drule_all supported_program_declaration >>
   simp[supported_function_header_contract, supported_declaration_body_def,
-       supported_function_argument_def, supported_function_return_def,
-       listTheory.NULL_EQ] >>
+       supported_function_return_def, listTheory.NULL_EQ] >>
   strip_tac >> gvs[] >>
-  gvs[EVERY_MEM, supported_function_argument_def] >>
   goal_assum (drule_at Any)
-QED
-
-(* The supported declaration rules out the synthetic deployment fallback. *)
-Theorem supported_internal_lookup:
-  !tops name mut nr rr args dflts ret ss.
-    supported_function_decl tops (NONE,name) Internal =
-      SOME (mut,nr,rr,args,dflts,ret,ss) ==>
-    lookup_function NONE name Internal tops =
-      SOME (mut,nr,args,dflts,ret,ss)
-Proof
-  Induct_on `tops` >- simp[supported_function_decl_def] >>
-  Cases_on `h` >>
-  simp[supported_function_decl_def, lookup_function_def] >>
-  rpt gen_tac >> strip_tac >> gvs[AllCaseEqs()]
-  >~ [`lookup_function _ _ _ (VariableDecl _ _ _ _ _ :: _)`]
-    >- (rename1 `VariableDecl vis _ _ _ _` >> Cases_on `vis` >>
-        simp[lookup_function_def] >> metis_tac[])
-  >~ [`lookup_function _ _ _ (HashMapDecl _ _ _ _ _ _ :: _)`]
-    >- (rename1 `HashMapDecl vis _ _ _ _ _` >> Cases_on `vis` >>
-        simp[lookup_function_def] >> metis_tac[]) >>
-  metis_tac[]
 QED
 
 Theorem supported_internal_callable:
@@ -50,8 +27,8 @@ Theorem supported_internal_callable:
   IS_SOME (supported_function_decl tops (NONE,name) Internal) /\
   lookup_callable_function in_deploy name tops =
     SOME (mut,nr,args,dflts,ret,ss) ==>
-  nr = F /\ dflts = [] /\
-  (?rr. MEM (FunctionDecl Internal mut F rr name args [] ret ss) tops) /\
+  dflts = [] /\
+  (?rr. MEM (FunctionDecl Internal mut nr rr name args [] ret ss) tops) /\
   EVERY (supported_value_type tops o SND) args /\
   supported_return_type tops ret /\
   supported_function_body tops Internal args ss /\
@@ -85,7 +62,8 @@ Theorem typed_intcall_source_signature:
       SOME (mut,nr,args,dflts,ret,ss) /\
     LENGTH es <= LENGTH args /\
     LENGTH args - LENGTH dflts <= LENGTH es /\
-    MAP expr_type es = TAKE (LENGTH es) (MAP SND args) /\
+    LIST_REL (type_widens_to env.type_defs) (MAP expr_type es)
+      (TAKE (LENGTH es) (MAP SND args)) /\
     type_widens_to env.type_defs ret ty
 Proof
   simp[vyperTypeSystemTheory.well_typed_expr_def] >> strip_tac >>
@@ -102,7 +80,8 @@ Theorem expr_body_pre_intcall_signature:
       SOME (mut,nr,args,dflts,ret,ss) /\
     LENGTH es <= LENGTH args /\
     LENGTH args - LENGTH dflts <= LENGTH es /\
-    MAP expr_type es = TAKE (LENGTH es) (MAP SND args) /\
+    LIST_REL (type_widens_to env.type_defs) (MAP expr_type es)
+      (TAKE (LENGTH es) (MAP SND args)) /\
     type_widens_to env.type_defs ret ty
 Proof
   strip_tac >>
@@ -118,15 +97,15 @@ QED
 Theorem body_intcall_source_selection:
   body_inv tops ctx cenv cx /\
   expr_body_pre cenv cx env (Call ty (IntCall (src,name)) es dflt) st ==>
-  ?mut args ret ss.
+  ?mut nr args ret ss.
     src = NONE /\
     get_module_code cx src = SOME tops /\
     lookup_callable_function cx.in_deploy name tops =
-      SOME (mut,F,args,[],ret,ss) /\
+      SOME (mut,nr,args,[],ret,ss) /\
     LENGTH es = LENGTH args /\
-    MAP expr_type es = MAP SND args /\
+    LIST_REL (type_widens_to env.type_defs) (MAP expr_type es) (MAP SND args) /\
     type_widens_to env.type_defs ret ty /\
-    (?rr. MEM (FunctionDecl Internal mut F rr name args [] ret ss) tops) /\
+    (?rr. MEM (FunctionDecl Internal mut nr rr name args [] ret ss) tops) /\
     EVERY (supported_value_type tops o SND) args /\
     supported_return_type tops ret /\
     supported_function_body tops Internal args ss /\
@@ -142,5 +121,8 @@ Proof
   `supported_program tops` by gvs[body_inv_def] >>
   drule_all supported_internal_callable >> strip_tac >> gvs[] >>
   `LENGTH es = LENGTH args` by decide_tac >>
-  gvs[] >> goal_assum (drule_at Any) >> simp[]
+  gvs[] >> qpat_x_assum `LIST_REL _ _ (TAKE _ _)` mp_tac >>
+  `TAKE (LENGTH args) (MAP SND args) = MAP SND args` by
+    simp[listTheory.TAKE_LENGTH_ID_rwt] >>
+  simp[] >> metis_tac[]
 QED

@@ -18,15 +18,10 @@ Theorem no_ctor_lookup:
     vyperInterpreter$lookup_function NONE "__init__" Deploy tops =
       SOME (Payable, F, [], [], NoneT, [])
 Proof
-  Induct_on `tops` >- simp[classify_functions_def, lookup_function_def] >>
-  qabbrev_tac `acc = classify_functions tops` >>
-  PairCases_on `acc` >>
-  Cases_on `h` >>
-  fs[classify_functions_def, classify_function_def, lookup_function_def] >>
   rpt gen_tac >> strip_tac >>
-  gvs[AllCaseEqs()] >>
-  simp[Once (oneline lookup_function_def)] >>
-  Cases_on `v` >> simp[]
+  qspecl_then [`tops`, `NONE`, `"__init__"`] mp_tac
+    ctorDeployDefsTheory.classify_functions_ctor_lookup >>
+  simp[]
 QED
 
 Theorem no_ctor_args:
@@ -2513,22 +2508,23 @@ Theorem no_ctor_source_success:
 Proof
   strip_tac >> drule no_ctor_constants_frame >> strip_tac >> gvs[] >>
   qmatch_asmsub_abbrev_tac `evaluate_all_constants cx installed` >>
-  `cx.in_deploy /\ cx.txn = tx` by
+  `cx.in_deploy /\ cx.txn = tx with created_in_tx := T` by
     simp[Abbr `cx`, deploy_evaluation_context_def,
          initial_evaluation_context_def] >>
   `evaluate_all_constants cx installed cx.txn.target [(NONE,tops)] = SOME am_c` by
     gvs[Abbr `cx`, Abbr `installed`] >>
   qabbrev_tac `st0 = initial_state am_c [FEMPTY] with
     <| outcomes := NONE; requests := []; gas_obs := gobs |>` >>
-  `value_transfer_ok cx.txn st0.accounts` by simp[Abbr `st0`, initial_state_def] >>
+  `value_transfer_ok cx.txn st0.accounts` by
+    simp[Abbr `st0`, initial_state_def, value_transfer_created_in_tx] >>
   drule no_ctor_send_value >> strip_tac >>
   `call_external_function NONE gobs installed cx F Payable tops [(NONE,tops)]
     [] [] [] [] NoneT =
     (INL NoneV, am_c with accounts := accounts_after_transfer tx am.accounts, [])` by
-    (gvs[Abbr `st0`] >> drule_all no_ctor_empty_external >>
+    (qunabbrev_tac `st0` >> drule_all no_ctor_empty_external >>
      disch_then (qspec_then `tops` mp_tac) >>
-     simp[initial_state_def, abstract_machine_from_state_def,
-          abstract_machine_component_equality]) >>
+     gvs[initial_state_def, abstract_machine_from_state_def,
+         abstract_machine_component_equality, value_transfer_created_in_tx]) >>
   gvs[Abbr `installed`, Abbr `cx`] >>
   drule no_ctor_load_reduce >> simp[abstract_machine_component_equality]
 QED
@@ -2539,6 +2535,7 @@ Theorem no_ctor_source_observations:
   tx.function_name = "__init__" /\ tx.args = [] /\
   value_transfer_ok tx am.accounts /\ am.pending_deletions = [] ==>
   ?am'. load_contract NONE gobs am tx [(NONE,tops)] [] = INL (am',[]) /\
+    ALOOKUP am'.sources tx.target = SOME [(NONE,tops)] /\
     am'.accounts = accounts_after_transfer tx am.accounts /\
     am'.tStorage = am.tStorage /\ am'.logs = am.logs /\
     immutables_section_rel tops (account_immutables am' tx.target)

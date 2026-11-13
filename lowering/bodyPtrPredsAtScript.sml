@@ -15,12 +15,13 @@
  *)
 Theory bodyPtrPredsAt
 Ancestors
-  bodyPtrDefs bodySim exprSimHypsDefs supportedStmts
+  bodyPtrSubscriptMapDefs bodyPtrDefs bodySim exprSimHypsDefs supportedStmts
   vyperInterpreter vyperTypeSystem vyperState vyperAST list
 
 val _ = Parse.hide "body";
 
-(* As bodySim's body_expr_ok, a literal array's elements are ok too. *)
+(* As bodySim's body_expr_ok, a literal array's elements are ok too, and an
+   expression naming a mapping has its mapping judgment. *)
 Definition body_expr_ptr_ok_def:
   (body_expr_ptr_ok_at cx e <=>
     (!D lo d PG tops ctx func cenv env ty es.
@@ -30,7 +31,10 @@ Definition body_expr_ptr_ok_def:
     (!a t n elems.
       e = Builtin a (MakeArray t n) elems /\
       builtin_args_length_ok (MakeArray t n) (LENGTH elems) ==>
-      body_exprs_ptr_ok_at cx elems)) /\
+      body_exprs_ptr_ok_at cx elems) /\
+    (!D lo d PG tops ctx func cenv env ty es.
+      body_inv tops ctx cenv cx /\ expr_map_pre cenv cx env e es ==>
+      expr_map_sim_ptr_at D lo d ctx PG func cenv cx ty e es)) /\
   body_exprs_ptr_ok_at cx [] = T /\
   body_exprs_ptr_ok_at cx (e::es) =
     (body_expr_ptr_ok_at cx e /\
@@ -55,7 +59,7 @@ Theorem body_make_array_children_ptr_ok_at:
 Proof
   rpt strip_tac >>
   qpat_x_assum `body_expr_ptr_ok_at _ _`
-    (mp_tac o CONJUNCT2 o ONCE_REWRITE_RULE [body_expr_ptr_ok_def]) >>
+    (mp_tac o CONJUNCT1 o CONJUNCT2 o ONCE_REWRITE_RULE [body_expr_ptr_ok_def]) >>
   simp[]
 QED
 
@@ -110,8 +114,10 @@ Definition body_iterator_ptr_ok_def:
 End
 
 Definition body_for_ptr_ok_def:
-  body_for_ptr_ok_at cx (tyv : type_value) (nm : identifier) body (vs : value list)
-  <=> vs <> [] ==> body_stmts_ptr_ok_at cx body
+  body_for_ptr_ok_at cx (tyv : type_value) (nm : identifier) body (vs : eval_result list)
+  <=>
+    (?s v t. vs <> [] /\ read_result cx (HD vs) s = (INL v,t)) ==>
+    body_stmts_ptr_ok_at cx body
 End
 
 Definition body_base_target_ptr_ok_def:

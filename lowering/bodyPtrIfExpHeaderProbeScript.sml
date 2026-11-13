@@ -39,14 +39,15 @@ Theorem header_probe_compile:
      mk_inst 2 MSTORE [Var "%1"; Lit 0w] [];
      mk_inst 3 ADD [Var "%0"; Lit 0w] ["%2"];
      mk_inst 4 MLOAD [Var "%1"] ["%3"];
-     mk_inst 5 ADD [Var "%3"; Lit 31w] ["%4"];
-     mk_inst 6 AND [Var "%4"; Lit (i2w (-32))] ["%5"];
-     mk_inst 7 ADD [Var "%5"; Lit 32w] ["%6"];
-     mk_inst 8 MCOPY [Var "%2"; Var "%1"; Var "%6"] [];
-     mk_inst 9 ALLOCA [Lit 64w] ["%7"];
-     mk_inst 10 MSTORE [Var "%7"; Lit 0w] [];
-     mk_inst 11 ADD [Var "%0"; Lit 64w] ["%8"];
-     mk_inst 12 MCOPY [Var "%8"; Var "%7"; Lit 64w] []]
+     mk_inst 5 NOT [Lit 31w] ["%4"];
+     mk_inst 6 ADD [Var "%3"; Lit 31w] ["%5"];
+     mk_inst 7 AND [Var "%5"; Var "%4"] ["%6"];
+     mk_inst 8 ADD [Var "%6"; Lit 32w] ["%7"];
+     mk_inst 9 MCOPY [Var "%2"; Var "%1"; Var "%7"] [];
+     mk_inst 10 ALLOCA [Lit 64w] ["%8"];
+     mk_inst 11 MSTORE [Var "%8"; Lit 0w] [];
+     mk_inst 12 ADD [Var "%0"; Lit 64w] ["%9"];
+     mk_inst 13 MCOPY [Var "%9"; Var "%8"; Lit 64w] []]
 Proof
   simp[header_probe_expr_def, header_probe_ty_def,
        lower_value_def, compile_expr_component_eq,
@@ -67,7 +68,7 @@ Proof
           emit_def, mk_inst_def, as_ptr_val_def, unwrap_value_def,
           mk_ptr_def, is_word_type_def, comp_bind_def,
           comp_ignore_bind_def, comp_return_def]
-  >> EVAL_TAC
+  >> EVAL_TAC >> simp[]
 QED
 
 (* The return path uses equal physical types, hence copies the entire
@@ -76,7 +77,8 @@ Theorem header_probe_return_compile:
   !ce src dst rpc st.
   compile_internal_return_from_env
     (ce with <| ce_return_buf := SOME (PtrVar dst 128);
-                ce_returns_count := 0 |>)
+                ce_returns_count := 0;
+                ce_nonreentrant := (F,0,T,F) |>)
     header_probe_ty header_probe_ty src rpc st =
   (do emit_void MCOPY [dst; src; Lit 128w];
       emit_inst RET [rpc] []
@@ -85,8 +87,8 @@ Proof
   simp[compile_internal_return_from_env_def, compile_internal_return_def,
        header_probe_ty_def, compile_store_memory_def,
        is_word_type_def, is_bytestring_type_def, type_memory_bytes_def,
-       oneline compile_copy_memory_def, comp_bind_def,
-       comp_ignore_bind_def, comp_return_def]
+       oneline compile_copy_memory_def, stmtLoweringTheory.compile_return_unlock_def,
+       comp_bind_def, comp_ignore_bind_def, comp_return_def]
 QED
 
 (* This is a local fixed run, NOT an admissible body frame or the frozen

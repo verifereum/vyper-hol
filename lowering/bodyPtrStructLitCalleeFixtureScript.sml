@@ -44,7 +44,7 @@ QED
 Theorem structlit_callee_expression_shape:
   MAP (\i. i.inst_opcode)
     (SND (structlit_callee_compiled F)).cs_current_insts =
-    [ALLOCA; ALLOCA; MSTORE; ADD; MLOAD; ADD; AND; ADD; MCOPY;
+    [ALLOCA; ALLOCA; MSTORE; ADD; MLOAD; NOT; ADD; AND; ADD; MCOPY;
      ALLOCA; MSTORE; ADD; MCOPY]
 Proof
   EVAL_TAC
@@ -96,14 +96,14 @@ End
 Theorem structlit_callee_return_shape:
   MAP (\i. i.inst_opcode)
     (SND (structlit_callee_return_compiled F)).cs_current_insts =
-    [ALLOCA; ALLOCA; MSTORE; ADD; MLOAD; ADD; AND; ADD; MCOPY;
+    [ALLOCA; ALLOCA; MSTORE; ADD; MLOAD; NOT; ADD; AND; ADD; MCOPY;
      ALLOCA; MSTORE; ADD; MCOPY; MLOAD; MLOAD; MCOPY; RET]
 Proof
   EVAL_TAC
 QED
 
 Theorem structlit_callee_return_expression_prefix:
-  TAKE 13 (SND (structlit_callee_return_compiled F)).cs_current_insts =
+  TAKE 14 (SND (structlit_callee_return_compiled F)).cs_current_insts =
     (SND (structlit_callee_compiled F)).cs_current_insts
 Proof
   EVAL_TAC
@@ -111,9 +111,9 @@ QED
 
 Theorem structlit_callee_return_store_run:
   (case run_inst_seq
-     (TAKE 16 (SND (structlit_callee_return_compiled F)).cs_current_insts)
+     (TAKE 17 (SND (structlit_callee_return_compiled F)).cs_current_insts)
      structlit_callee_initial of
-     OK s => SOME (lookup_var "%9" s, lookup_var "%10" s,
+     OK s => SOME (lookup_var "%10" s, lookup_var "%11" s,
                    read_memory 64 160 s)
    | _ => NONE) = SOME (SOME 1w, SOME 64w, REPLICATE 160 0w)
 Proof
@@ -139,7 +139,7 @@ Theorem structlit_callee_empty_header_probe:
       structlit_callee_initial entry_taint).t_mem
 Proof
   EVAL_TAC >> simp[] >> rpt gen_tac >>
-  Cases_on `aid = 9` >> Cases_on `aid = 1` >> Cases_on `aid = 0` >> simp[]
+  Cases_on `aid = 10` >> Cases_on `aid = 1` >> Cases_on `aid = 0` >> simp[]
 QED
 
 
@@ -204,16 +204,16 @@ Proof
 QED
 
 Theorem structlit_callee_bytes_copy_instruction:
-  EL 8 (SND (structlit_callee_compiled F)).cs_current_insts =
-    mk_inst 8 MCOPY [Var "%2"; Var "%1"; Var "%6"] []
+  EL 9 (SND (structlit_callee_compiled F)).cs_current_insts =
+    mk_inst 9 MCOPY [Var "%2"; Var "%1"; Var "%7"] []
 Proof
   EVAL_TAC
 QED
 
 Theorem structlit_callee_bytes_copy_operands:
-  eval_operand (Var "%2") (structlit_callee_state F 8) = SOME 224w /\
-  eval_operand (Var "%1") (structlit_callee_state F 8) = SOME 384w /\
-  eval_operand (Var "%6") (structlit_callee_state F 8) = SOME 32w
+  eval_operand (Var "%2") (structlit_callee_state F 9) = SOME 224w /\
+  eval_operand (Var "%1") (structlit_callee_state F 9) = SOME 384w /\
+  eval_operand (Var "%7") (structlit_callee_state F 9) = SOME 32w
 Proof
   EVAL_TAC
 QED
@@ -223,8 +223,8 @@ Theorem structlit_callee_bytes_copy_clean:
     (!j. 384 <= j /\ j < 416 ==> j NOTIN tn.t_mem) ==>
     !i. 224 <= i /\ i < 256 ==>
       i NOTIN (step_taint
-        (EL 8 (SND (structlit_callee_compiled F)).cs_current_insts)
-        (structlit_callee_state F 8) s1 tn).t_mem
+        (EL 9 (SND (structlit_callee_compiled F)).cs_current_insts)
+        (structlit_callee_state F 9) s1 tn).t_mem
 Proof
   rpt gen_tac >> disch_tac >> gen_tac >> strip_tac >>
   rewrite_tac[structlit_callee_bytes_copy_instruction] >>
@@ -232,37 +232,51 @@ Proof
   simp[structlit_callee_bytes_copy_operands]
 QED
 
+(* Evaluate the compiled fixture once, so prefix-state certificates only
+   run the concrete instruction prefix. *)
+Theorem structlit_callee_insts[local] =
+  EVAL ``(SND (structlit_callee_compiled F)).cs_current_insts``
+
+(* The prefix states the intermediate certificates compare, each run once. *)
+Theorem structlit_callee_states[local] =
+  LIST_CONJ (map (fn n =>
+    EVAL ``structlit_callee_state F ^(numSyntax.term_of_int n)``)
+    [3,4,5,6,7,8,9])
+
 Theorem structlit_callee_store_to_copy_steps:
-  !n k. MEM n [2;3;4;5;6;7;8] ==>
+  !n k. MEM n [2;3;4;5;6;7;8;9] ==>
     step_inst_base (EL n (SND (structlit_callee_compiled F)).cs_current_insts)
       (structlit_callee_state F n with vs_inst_idx := k) =
     OK (structlit_callee_state F (SUC n) with vs_inst_idx := k)
 Proof
-  simp[] >> rpt strip_tac >> gvs[] >> EVAL_TAC
+  simp[] >> rpt strip_tac >> gvs[] >>
+  rewrite_tac[structlit_callee_state_def, structlit_callee_insts] >> EVAL_TAC
 QED
 
 Theorem structlit_callee_intermediate_memory_fields:
-  !n. MEM n [3;4;5;6;7] ==>
+  !n. MEM n [3;4;5;6;7;8] ==>
     (structlit_callee_state F (SUC n)).vs_allocas =
       (structlit_callee_state F n).vs_allocas /\
     (structlit_callee_state F (SUC n)).vs_fmp =
       (structlit_callee_state F n).vs_fmp
 Proof
-  simp[] >> rpt strip_tac >> gvs[] >> EVAL_TAC
+  simp[] >> rpt strip_tac >> gvs[] >>
+  rewrite_tac[structlit_callee_states] >> EVAL_TAC
 QED
 
 Theorem structlit_callee_intermediate_writes:
-  !n tn. MEM n [3;4;5;6;7] ==>
+  !n tn. MEM n [3;4;5;6;7;8] ==>
     step_writes (EL n (SND (structlit_callee_compiled F)).cs_current_insts)
       (structlit_callee_state F n) (structlit_callee_state F (SUC n)) = [] /\
     written_taint tn (EL n (SND (structlit_callee_compiled F)).cs_current_insts)
       (structlit_callee_state F n) = {}
 Proof
-  simp[] >> rpt strip_tac >> gvs[] >> EVAL_TAC
+  simp[] >> rpt strip_tac >> gvs[] >>
+  rewrite_tac[structlit_callee_state_def, structlit_callee_insts] >> EVAL_TAC
 QED
 
 Theorem structlit_callee_intermediate_memory_taint:
-  !n tn. MEM n [3;4;5;6;7] ==>
+  !n tn. MEM n [3;4;5;6;7;8] ==>
     !t. t = structlit_callee_state F (SUC n) ==>
     (step_taint (EL n (SND (structlit_callee_compiled F)).cs_current_insts)
       (structlit_callee_state F n) t tn).t_mem = tn.t_mem
@@ -274,7 +288,7 @@ Proof
 QED
 
 Theorem structlit_callee_taint_run_step:
-  !n k is tn. MEM n [2;3;4;5;6;7;8] ==>
+  !n k is tn. MEM n [2;3;4;5;6;7;8;9] ==>
     structlit_callee_taint_run
       (EL n (SND (structlit_callee_compiled F)).cs_current_insts :: is)
       (structlit_callee_state F n with vs_inst_idx := k) tn =
@@ -288,9 +302,9 @@ Proof
 QED
 
 Theorem structlit_callee_store_to_copy_segment:
-  TAKE 7 (DROP 2 (SND (structlit_callee_compiled F)).cs_current_insts) =
+  TAKE 8 (DROP 2 (SND (structlit_callee_compiled F)).cs_current_insts) =
     MAP (\n. EL n (SND (structlit_callee_compiled F)).cs_current_insts)
-        [2;3;4;5;6;7;8]
+        [2;3;4;5;6;7;8;9]
 Proof
   EVAL_TAC
 QED
@@ -304,7 +318,7 @@ QED
 Theorem structlit_callee_store_to_copy_clean:
   !tn i. 224 <= i /\ i < 256 ==>
     i NOTIN (structlit_callee_taint_run
-      (TAKE 7 (DROP 2 (SND (structlit_callee_compiled F)).cs_current_insts))
+      (TAKE 8 (DROP 2 (SND (structlit_callee_compiled F)).cs_current_insts))
       (structlit_callee_state F 2) tn).t_mem
 Proof
   rpt gen_tac >> strip_tac >>

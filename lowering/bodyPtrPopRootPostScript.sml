@@ -1,6 +1,6 @@
 Theory bodyPtrPopRootPost
 Ancestors
-  exprSimPopStorage exprSimWordArgs exprSimLen appendStorageSourcePtr
+  exprSimPopStorage exprSimWordArgs exprSimLen stmtSimAppendStorageCompose
   loweringPosts vyperState compileEnv exprLoweringProps venomState context
 
 Theorem pop_storage_place_holds_gas_obs:

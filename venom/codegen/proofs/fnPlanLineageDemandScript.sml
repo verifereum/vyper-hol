@@ -1,5 +1,6 @@
 Theory fnPlanLineageDemand
 Ancestors
+  cfgCorrectnessProof
   fnPlanLineageDemandSupport livenessProofs livenessConvergenceProofs codegenReadyCompute cfgAnalysisProps venomWf stackPlanGen callLayoutDefs list rich_list
 
 Theorem live_prefix_demand:
@@ -364,7 +365,7 @@ Proof
       irule demand_available_before_use >> simp[] >>
       first_x_assum irule >> gvs[venomInstTheory.inst_uses_def] >>
       metis_tac[passSharedDefsTheory.MEM_operand_vars_eq_Var]) >>
-  gvs[livenessDefsTheory.liveness_transfer_def, livenessProofsTheory.live_update_mem,
+  gvs[livenessDefsTheory.liveness_transfer_def, livenessTransferProofsTheory.live_update_mem,
       venomInstTheory.inst_defs_def] >>
   `EVERY (demand_available fn bb (SUC i))
      (live_vars_at (liveness_analyze fn) bb.bb_label (SUC i))` by

@@ -67,7 +67,7 @@ QED
 
 (* The call valid_vyper_call selects, at gas observations gobs, sends the
    call value and then runs call_external_body from the bound arguments,
-   with pending deletions finalised on success.  es0 is the state after
+   with pending deletions finalised on success and on halt.  es0 is the state after
    the value moved, as external_entry_reaches_body starts the body from
    it; the body starts from es0 with the call's observations. *)
 Theorem call_external_selected_body_gas:
@@ -86,6 +86,8 @@ Theorem call_external_selected_body_gas:
              (initial_evaluation_context am.sources am.layouts tx NONE)
              F mut (type_env tops) (es0 with gas_obs := gobs) env fbody ret of
         (INL v, am', rqs) => (INL v, finalize_pending_deletions am', rqs)
+      | (INR HaltException, am', rqs) =>
+          (INR HaltException, finalize_pending_deletions am', rqs)
       | failure => failure
 Proof
   rw[source_deployment_rel_def] >>
@@ -138,6 +140,8 @@ Theorem call_external_selected_body:
              (initial_evaluation_context am.sources am.layouts tx NONE)
              F mut (type_env tops) es0 env fbody ret of
         (INL v, am', rqs) => (INL v, finalize_pending_deletions am', rqs)
+      | (INR HaltException, am', rqs) =>
+          (INR HaltException, finalize_pending_deletions am', rqs)
       | failure => failure
 Proof
   rpt strip_tac >>

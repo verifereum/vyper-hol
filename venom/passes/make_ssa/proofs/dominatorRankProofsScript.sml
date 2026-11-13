@@ -1,7 +1,7 @@
 (* Bounded ranks for concrete dominator queries. *)
 Theory dominatorRankProofs
 Ancestors
-  dominatorProofs dominatorAnalysisProps dominatorDefs cfgDefs venomWf list pred_set
+  dominatorProofs dominatorDefs cfgDefs venomWf list pred_set
 
 Theorem dominator_query_subset:
   wf_function fn /\ MEM p (fn_labels fn) ==>
@@ -9,7 +9,7 @@ Theorem dominator_query_subset:
     (dom_analyze (cfg_analyze fn) fn).da_dominators p) SUBSET set (fn_labels fn)
 Proof
   simp[SUBSET_DEF] >> rpt strip_tac >>
-  metis_tac[dom_labels_bounded_proof]
+  metis_tac[dom_labels_bounded]
 QED
 
 Definition dominator_query_rank_def:

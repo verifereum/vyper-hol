@@ -10,7 +10,7 @@ Theory bodyPtrBopIn
 Ancestors
   exprPtrUnwrap bodyPtrPreds bodyPtrDefs bodySim exprSimHyps vyperAST
   vyperInterpreter vyperState vyperContext vyperTypeCallGraph list
-  bodyPtrBopInHeld bodyPtrBopInFlagBody bodyPtrBopInLiteralBody
+  compileEnv bodyPtrBopInFlagBody bodyPtrBopInLiteralBody
   bodyPtrBopInNonliteralBody exprSimOperators exprSimSource vyperTypeSystem
   exprSimHypsDefs
 
@@ -53,7 +53,8 @@ Proof
       `body_expr_ptr_ok cx (Builtin ty (Bop bop) [e1;e2])` by
         (irule body_bop_in_nonliteral_word_ptr_ok >> simp[] >> metis_tac[]) >>
       fs[body_expr_ptr_ok_def] >> metis_tac[]) >>
-  `body_expr_ptr_ok cx (Builtin ty (Bop bop) [e1;e2])` by
-    (irule bop_in_nonword_ptr_ok >> simp[]) >>
-  fs[body_expr_ptr_ok_def] >> metis_tac[]
+  (* A membership needle of non-word type is ill-typed: the checker admits
+     only flag and word needles, so expr_body_pre rules the case out. *)
+  gvs[expr_body_pre_def, well_typed_expr_def, well_typed_builtin_app_def,
+      well_typed_binop_def, membership_element_word_boundary, is_word_type_def]
 QED

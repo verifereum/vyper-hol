@@ -1,7 +1,8 @@
 Theory vyperCalldataSliceTest
 Ancestors
   arithmetic integer list words
-  jsonToVyper jsonToVyperExpr jsonAST vyperAST vyperContext vyperValue
+  jsonToVyper jsonToVyperExpr jsonAST vyperAST vyperContext vyperValue vyperConstEval
+  jsonToVyperType
   vyperValueOperation vyperState vyperInterpreter vyperSmallStep
   vyperTypeSystem vyperTypeBuiltins vyperTypeContract
 Libs
@@ -11,14 +12,15 @@ fun holbuild_extra_deps (_ : string list) = ()
 val () = holbuild_extra_deps ["fixtures/check_contract/calldata_slice.json"];
 
 Theorem calldata_slice_compile_time_length_test:
-  calldata_slice_length (JE_Int 4 ty) = SOME 4 /\
-  calldata_slice_length (JE_Folded original (JE_Int 4 ty)) = SOME 4 /\
-  calldata_slice_length (JE_Int 0 ty) = NONE /\
-  calldata_slice_length (JE_Int (-1) ty) = NONE /\
-  calldata_slice_length (JE_Int (&(2n ** 256)) ty) = NONE /\
-  calldata_slice_length (JE_Name "length" tc src ty) = NONE
+  calldata_slice_length (Literal (BaseT (UintT 256)) (IntL 4)) = SOME 4 /\
+  calldata_slice_length (Builtin (BaseT (UintT 256)) (Bop Add)
+    [Literal (BaseT (UintT 256)) (IntL 2);
+     Literal (BaseT (UintT 256)) (IntL 2)]) = SOME 4 /\
+  calldata_slice_length (Literal (BaseT (UintT 256)) (IntL 0)) = NONE /\
+  calldata_slice_length (Literal (BaseT (IntT 256)) (IntL (-1))) = NONE /\
+  calldata_slice_length (Name (BaseT (UintT 256)) "length") = NONE
 Proof
-  simp[calldata_slice_length_def]
+  EVAL_TAC
 QED
 
 Theorem calldata_slice_source_shape_test:
@@ -37,15 +39,16 @@ Theorem calldata_slice_start_translation_test:
   translate_expr ctx
     (JE_Call (JE_Name "slice" tc src fn_ty)
       [JE_Attribute (JE_Name "msg" mtc msrc mty)
-         "data" atc bn btc asrc dty; start; JE_Int 4 lty]
+         "data" atc bn btc asrc dty; start; JE_Int 4 (JT_Integer 256 F)]
       [] ret_ty call_src) =
   Builtin (BaseT (BytesT (Dynamic 4))) (CalldataSlice 4)
     [translate_expr ctx start]
 Proof
   simp[Once translate_expr_def, is_calldata_len_call_def,
-       is_calldata_slice_call_def, calldata_slice_bound_def,
-       calldata_slice_length_def] >>
-  simp[Once translate_expr_def] >> simp[Once translate_expr_def]
+       is_calldata_slice_call_def] >>
+  ntac 3 (simp[Once translate_expr_def]) >>
+  simp[calldata_slice_bound_def, calldata_slice_length_def, translate_expr_def,
+       eval_constant_def, evaluate_literal_def, translate_type_def]
 QED
 
 Theorem calldata_slice_zero_marker_typing_test:
@@ -82,7 +85,7 @@ val data_expr = ``JE_Attribute
 val start_expr = ``JE_Int 0 (JT_Integer 256 F)``;
 val length_expr = ``JE_Int 4 (JT_Integer 256 F)``;
 fun translate_slice args kwargs = rhs (concl (bossLib.EVAL
-  ``translate_expr (0, NONE, [], [], [], [], [])
+  ``translate_expr (0, NONE, [], [], [], [], [], [], [])
     (JE_Call (JE_Name "slice" NONE JMissingSource JT_None)
       ^args ^kwargs (JT_Bytes 4) JMissingSource)``));
 fun check_slice_expr expression =

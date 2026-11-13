@@ -130,7 +130,7 @@ Proof
   ho_match_mp_tac type_stmt_ind >>
   rpt conj_tac >> rpt (FIRST [gen_tac, disch_tac]) >>
   qpat_x_assum `_ = SOME env'` mp_tac >>
-  simp[Once type_stmt_def, AllCaseEqs()] >>
+  simp_tac (srw_ss()) [Once type_stmt_def, AllCaseEqs()] >>
   strip_tac >>
   gvs[supported_stmt_expr_exists_def,
       supported_assert_exists_def, supported_raise_exists_def,

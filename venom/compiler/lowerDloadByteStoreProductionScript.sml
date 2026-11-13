@@ -2,7 +2,7 @@ Theory lowerDloadByteStoreProduction
 Ancestors
   lowerDloadMemoryExecution lowerDloadRelocation lowerDloadEffectTransport
   lowerDloadSharedState venomExecSemantics venomState ptrDiscipline
-  regularCallEmitSim regularMemorySim codegenRel words list pred_set finite_map
+  regularCallEmitSim regularMemorySim memoryReadRel codegenRel words list pred_set finite_map
 
 Theorem ld_mstore8_read_byte:
   read_memory a 1 (mstore8 p v s) =

@@ -1,7 +1,7 @@
 (* Pointer checks and ghost frames for the bytes encoder's arithmetic phases. *)
 Theory logAbiPrefixPtr
 Ancestors
-  logInstSeqPtr abiEncoderBytesCode abiEncoderRounding bodyPtrDefs
+  assignTuplePtrCopyLen logInstSeqPtr abiEncoderBytesCode abiEncoderRounding bodyPtrDefs
   typedCopyPtr fragExecPtr fragExec ptrDiscipline ptrSafeRun
   emitHelperProps emitHelper compileEnv loweringStateRelDefs context exprLoweringProps
   venomExecSemantics venomState venomInst finite_map words list arithmetic
@@ -83,6 +83,174 @@ Resume abi_encode_round_seq_ptr[frame]:
 QED
 Finalise abi_encode_round_seq_ptr
 
+Theorem emit_op_fresh_frame[local]:
+  emit_op opc ops sa = (Var v,sb) ==>
+  sa.cs_next_var <= sb.cs_next_var /\ not_fresh_at sb v /\
+  (!p. not_fresh_at sa p ==> p <> v) /\
+  (!p. not_fresh_at sa p ==> not_fresh_at sb p)
+Proof
+  strip_tac >> rpt conj_tac
+  >- (imp_res_tac emitted_insts_emit_op >> decide_tac)
+  >- (drule typedMemoryCopyTheory.typed_copy_emit_op_fresh >> simp[])
+  >- (gvs[emit_op_def, comp_bind_def, comp_ignore_bind_def, fresh_var_def,
+          fresh_id_def, emit_def, comp_return_def, not_fresh_at_def] >>
+      metis_tac[LESS_EQ_REFL]) >>
+  qpat_x_assum `emit_op _ _ _ = _` mp_tac >>
+  simp[emit_op_def, comp_bind_def, comp_ignore_bind_def, fresh_var_def,
+       fresh_id_def, emit_def, comp_return_def, not_fresh_at_def] >>
+  rpt strip_tac >> gvs[] >> decide_tac
+QED
+
+(* contractABI$ceil32 as main emits it: NOT 31, ADD 31, AND with the mask. *)
+Theorem not31_word[local]:
+  (~31w:256 word) = 0xFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFE0w
+Proof
+  blastLib.BBLAST_TAC
+QED
+
+Theorem abi_encode_ceil32_seq_ptr:
+  abi_encode_ceil32 len sa = (out,sb) /\
+  eval_operand len s = SOME w /\ op_taint tn len = {} /\
+  (!v. len = Var v ==> not_fresh_at sa v) /\
+  ~ctx_has_dalloca ctx ==>
+  ?Gf tnf sf.
+    run_inst_seq (emitted_insts sa sb) s = OK sf /\
+    inst_seq_ptr D 0 ctx fn PG G tn (emitted_insts sa sb) s Gf tnf /\
+    eval_operand out sf = SOME
+      (0xFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFE0w && (31w+w)) /\
+    op_taint tnf out = {} /\ op_prov Gf out = NONE /\
+    sf.vs_memory = s.vs_memory /\
+    tnf.t_mem = tn.t_mem /\ tnf.t_stor = tn.t_stor /\ tnf.t_trans = tn.t_trans /\
+    (!p. not_fresh_at sa p ==>
+      lookup_var p sf = lookup_var p s /\ FLOOKUP Gf p = FLOOKUP G p /\
+      op_taint tnf (Var p) = op_taint tn (Var p)) /\
+    EVERY (\i. i.inst_opcode <> INVOKE /\ ~is_terminator i.inst_opcode)
+      (emitted_insts sa sb) /\
+    sb.cs_current_insts = sa.cs_current_insts ++ emitted_insts sa sb /\
+    sa.cs_next_var <= sb.cs_next_var
+Proof
+  simp_tac bool_ss [abi_encode_ceil32_def, comp_bind_def, LET_THM] >>
+  strip_tac >> rpt (pairarg_tac >> gvs[]) >>
+  rename1 `emit_op NOT [Lit 31w] sa = (mask,s1)` >>
+  rename1 `emit_op ADD [len;Lit 31w] s1 = (arg,s2)` >>
+  `?vm va vr. mask = Var vm /\ arg = Var va /\ out = Var vr` by
+    (imp_res_tac emitted_insts_emit_op >> simp[]) >>
+  gvs[] >>
+  qpat_assum `emit_op NOT _ _ = _` (strip_assume_tac o MATCH_MP emit_op_fresh_frame) >>
+  qpat_assum `emit_op ADD _ _ = _` (strip_assume_tac o MATCH_MP emit_op_fresh_frame) >>
+  qpat_assum `emit_op AND _ _ = _` (strip_assume_tac o MATCH_MP emit_op_fresh_frame) >>
+  `emitted_insts sa s1 = [mk_inst sa.cs_next_id NOT [Lit 31w] [vm]] /\
+   emitted_insts s1 s2 = [mk_inst s1.cs_next_id ADD [len; Lit 31w] [va]] /\
+   emitted_insts s2 sb = [mk_inst s2.cs_next_id AND [Var va; Var vm] [vr]]` by
+    (imp_res_tac emitted_insts_emit_op >> gvs[]) >>
+  `emitted_insts s1 sb = emitted_insts s1 s2 ++ emitted_insts s2 sb` by
+    (imp_res_tac emitted_insts_emit_op >> irule emitted_insts_append >> gvs[]) >>
+  `emitted_insts sa sb = emitted_insts sa s1 ++ emitted_insts s1 sb` by
+    (imp_res_tac emitted_insts_emit_op >> irule emitted_insts_append >> gvs[]) >>
+  `sb.cs_current_insts = sa.cs_current_insts ++ emitted_insts sa sb` by
+    (imp_res_tac emitted_insts_emit_op >> gvs[]) >>
+  `!v. len = Var v ==> vm <> v` by metis_tac[] >>
+  (* NOT [Lit 31w] *)
+  qspecl_then [`D`, `ctx`, `fn`, `PG`, `G`, `tn`, `s`, `sa.cs_next_id`,
+               `Lit 31w`, `vm`, `31w`] mp_tac copy_len_not_seq_ptr >>
+  impl_tac >- simp[eval_operand_def, op_taint_def] >>
+  disch_then (qx_choosel_then [`G1`, `tn1`, `t1`] strip_assume_tac) >>
+  `run_inst_seq (emitted_insts sa s1) s = OK t1 /\
+   inst_seq_ptr D 0 ctx fn PG G tn (emitted_insts sa s1) s G1 tn1` by
+    (qpat_assum `emitted_insts sa s1 = _` SUBST1_TAC >> conj_tac >>
+     first_assum ACCEPT_TAC) >>
+  (* ADD [len; Lit 31w] *)
+  `eval_operand len
+     (t1 with vs_inst_idx := s.vs_inst_idx + LENGTH (emitted_insts sa s1)) = SOME w /\
+   op_taint tn1 len = {}` by
+    (Cases_on `len` >>
+     gvs[eval_operand_def, op_taint_def, lookup_var_def, update_var_def,
+         FLOOKUP_UPDATE]) >>
+  mp_tac (Q.INST [`left` |-> `len`, `right` |-> `Lit 31w`, `out` |-> `va`,
+     `sa` |-> `s1`, `sb` |-> `s2`,
+     `s` |-> `t1 with vs_inst_idx := s.vs_inst_idx + LENGTH (emitted_insts sa s1)`,
+     `G` |-> `G1`, `tn` |-> `tn1`, `a` |-> `w`, `b` |-> `31w`]
+     (SRULE [] (Q.INST [`opc` |-> `ADD`, `f` |-> `word_add`]
+        emit_copy_len_binop_seq_ptr))) >>
+  impl_tac >-
+    (rpt conj_tac >> TRY (first_assum ACCEPT_TAC) >>
+     simp[eval_operand_def, op_taint_def]) >>
+  disch_then (qx_choosel_then [`G2`, `tn2`, `t2`] strip_assume_tac) >>
+  (* AND [Var va; Var vm] *)
+  `eval_operand (Var va)
+     (t2 with vs_inst_idx :=
+        (t1 with vs_inst_idx := s.vs_inst_idx + LENGTH (emitted_insts sa s1)).vs_inst_idx +
+        LENGTH (emitted_insts s1 s2)) = SOME (w + 31w) /\
+   eval_operand (Var vm)
+     (t2 with vs_inst_idx :=
+        (t1 with vs_inst_idx := s.vs_inst_idx + LENGTH (emitted_insts sa s1)).vs_inst_idx +
+        LENGTH (emitted_insts s1 s2)) = SOME (~31w) /\
+   op_taint tn2 (Var va) = {} /\ op_taint tn2 (Var vm) = {}` by
+    (simp[eval_operand_def] >>
+     fs[lookup_var_def, update_var_def, FLOOKUP_UPDATE]) >>
+  mp_tac (Q.INST [`left` |-> `Var va`, `right` |-> `Var vm`, `out` |-> `vr`,
+     `sa` |-> `s2`, `sb` |-> `sb`,
+     `s` |-> `t2 with vs_inst_idx :=
+        (t1 with vs_inst_idx := s.vs_inst_idx + LENGTH (emitted_insts sa s1)).vs_inst_idx +
+        LENGTH (emitted_insts s1 s2)`,
+     `G` |-> `G2`, `tn` |-> `tn2`, `a` |-> `w + 31w`, `b` |-> `~31w`]
+     (SRULE [] (Q.INST [`opc` |-> `AND`, `f` |-> `word_and`]
+        emit_copy_len_binop_seq_ptr))) >>
+  impl_tac >-
+    (rpt conj_tac >> TRY (first_assum ACCEPT_TAC) >> simp[]) >>
+  disch_then (qx_choosel_then [`G3`, `tn3`, `t3`] strip_assume_tac) >>
+  (* compose ADD;AND, then NOT before it *)
+  mp_tac (Q.INST [`xs` |-> `emitted_insts s1 s2`, `ys` |-> `emitted_insts s2 sb`,
+     `s` |-> `t1 with vs_inst_idx := s.vs_inst_idx + LENGTH (emitted_insts sa s1)`,
+     `t` |-> `t2`, `u` |-> `t3`, `lo` |-> `0`, `G` |-> `G1`, `tn` |-> `tn1`,
+     `H` |-> `G2`, `tm` |-> `tn2`, `Gf` |-> `G3`, `tk` |-> `tn3`]
+     successful_seq_ptr_append) >>
+  impl_tac >-
+    (rpt conj_tac >> TRY (first_assum ACCEPT_TAC) >>
+     simp[mk_inst_def, is_terminator_def]) >>
+  strip_tac >>
+  mp_tac (Q.INST [`xs` |-> `emitted_insts sa s1`,
+     `ys` |-> `emitted_insts s1 s2 ++ emitted_insts s2 sb`,
+     `t` |-> `t1`, `u` |-> `t3 with vs_inst_idx := t2.vs_inst_idx`, `lo` |-> `0`,
+     `H` |-> `G1`, `tm` |-> `tn1`, `Gf` |-> `G3`, `tk` |-> `tn3`]
+     successful_seq_ptr_append) >>
+  impl_tac >-
+    (rpt conj_tac >> TRY (first_assum ACCEPT_TAC) >>
+     simp[mk_inst_def, is_terminator_def]) >>
+  strip_tac >>
+  qexistsl_tac [`G3`, `tn3`,
+    `(t3 with vs_inst_idx := t2.vs_inst_idx) with vs_inst_idx := t1.vs_inst_idx`] >>
+  `emitted_insts sa sb =
+     emitted_insts sa s1 ++ (emitted_insts s1 s2 ++ emitted_insts s2 sb)` by
+    (qpat_assum `emitted_insts sa sb = _` SUBST1_TAC >>
+     qpat_assum `emitted_insts s1 sb = _` SUBST1_TAC >> REFL_TAC) >>
+  conj_tac >-
+    (qpat_assum `emitted_insts sa sb = _ ++ (_ ++ _)` SUBST1_TAC >>
+     first_assum ACCEPT_TAC) >>
+  conj_tac >-
+    (qpat_assum `emitted_insts sa sb = _ ++ (_ ++ _)` SUBST1_TAC >>
+     first_assum ACCEPT_TAC) >>
+  conj_tac >-
+    (simp[eval_operand_def] >> fs[lookup_var_def] >>
+     PURE_REWRITE_TAC [not31_word] >>
+     simp[AC WORD_ADD_ASSOC WORD_ADD_COMM, AC WORD_AND_ASSOC WORD_AND_COMM]) >>
+  conj_tac >- first_assum ACCEPT_TAC >>
+  conj_tac >- first_assum ACCEPT_TAC >>
+  conj_tac >- simp[update_var_def] >>
+  conj_tac >- simp[] >>
+  conj_tac >- simp[] >>
+  conj_tac >- simp[] >>
+  conj_tac >-
+    (rpt strip_tac >>
+     `p <> vm /\ not_fresh_at s1 p /\ not_fresh_at s2 p` by metis_tac[] >>
+     fs[lookup_var_def, update_var_def, FLOOKUP_UPDATE]) >>
+  conj_tac >-
+    (qpat_assum `emitted_insts sa sb = _ ++ (_ ++ _)` SUBST1_TAC >>
+     simp[mk_inst_def, is_terminator_def]) >>
+  conj_tac >- first_assum ACCEPT_TAC >>
+  decide_tac
+QED
+
 Theorem ptr_covers_offset_transport:
   ptr_covers G tn p s (off+n) /\ lookup_var p s = SOME w /\
   w2n w + off < dimword(:256) /\
@@ -149,6 +317,7 @@ QED
 Theorem abi_encode_bytes_suffix_seq_ptr:
   abi_encode_bytes_suffix len sa = (out,sb) /\
   eval_operand len s = SOME w /\ op_taint tn len = {} /\
+  (!v. len = Var v ==> not_fresh_at sa v) /\
   ~ctx_has_dalloca ctx ==>
   ?Gf tnf sf.
     run_inst_seq (emitted_insts sa sb) s = OK sf /\
@@ -164,8 +333,8 @@ Theorem abi_encode_bytes_suffix_seq_ptr:
 Proof
   simp_tac bool_ss [abi_encode_bytes_suffix_def, comp_bind_def, LET_THM] >>
   pairarg_tac >> strip_tac >> gvs[] >>
-  rename1 `abi_encode_round len sa = (rounded,sm)` >>
-  drule_all abi_encode_round_seq_ptr >>
+  rename1 `abi_encode_ceil32 len sa = (rounded,sm)` >>
+  drule_all abi_encode_ceil32_seq_ptr >>
   disch_then (qspecl_then [`fn`, `PG`, `G`, `D`]
     (qx_choose_then `H` (qx_choose_then `tm` (qx_choose_then `t` strip_assume_tac)))) >>
   `?res. out = Var res` by
@@ -179,23 +348,18 @@ Proof
     emit_copy_len_binop_seq_ptr)) >>
   disch_then (qspecl_then [`fn`, `PG`, `H`, `D`]
     (qx_choose_then `Gf` (qx_choose_then `tnf` (qx_choose_then `v` strip_assume_tac)))) >>
-  `EVERY (\i. i.inst_opcode <> INVOKE /\ ~is_terminator i.inst_opcode)
-    (emitted_insts sa sm)` by
-    (drule abi_encode_round_shape >> simp[EVERY_MEM] >> metis_tac[]) >>
   `EVERY (\i. ~is_terminator i.inst_opcode) (emitted_insts sm sb)` by
     (qpat_assum `emit_op ADD _ _ = _` (mp_then Any strip_assume_tac emitted_insts_emit_op) >>
      simp[mk_inst_def, is_terminator_def]) >>
   `emitted_insts sa sb = emitted_insts sa sm ++ emitted_insts sm sb` by
-    (drule abi_encode_round_shape >> strip_tac >>
-     qpat_assum `emit_op ADD _ _ = _` (mp_then Any strip_assume_tac emitted_insts_emit_op) >>
-     irule emitted_insts_append >> simp[] >>
-     qpat_x_assum `isPREFIX _ _` mp_tac >> rewrite_tac[rich_listTheory.IS_PREFIX_APPEND] >>
-     strip_tac >> asm_rewrite_tac[emitted_insts_def, rich_listTheory.DROP_LENGTH_APPEND]) >>
+    (qpat_assum `emit_op ADD _ _ = _` (mp_then Any strip_assume_tac emitted_insts_emit_op) >>
+     irule emitted_insts_append >> simp[]) >>
   qunabbrev_tac `u` >> drule_all successful_seq_ptr_append >> strip_tac >>
   qexistsl_tac [`Gf`, `tnf`, `v with vs_inst_idx := t.vs_inst_idx`] >>
   simp[eval_operand_def, lookup_var_def, first_prov_def, op_prov_def] >>
   `!p. not_fresh_at sa p ==> not_fresh_at sm p` by
-    (drule abi_encode_round_shape >> simp[not_fresh_at_def] >> rpt strip_tac >> decide_tac) >>
+    (rpt strip_tac >> irule freshWritesTheory.not_fresh_at_mono >>
+     qexists_tac `sa` >> simp[]) >>
   gvs[lookup_var_def] >> metis_tac[]
 QED
 
@@ -241,6 +405,7 @@ Proof
   `ptr_covers H2 tm2 dst u2 (w2n rw + 32) /\
    lookup_var dst u2 = SOME b /\ eval_operand rounded u2 = SOME (n2w (w2n rw))` by
     suspend "add_inputs" >>
+  `w2n b + w2n rw < dimword(:256)` by simp[] >>
   drule_all emit_addr_add_seq_ptr >>
   disch_then (qspecl_then [`fn`, `PG`, `D`]
     (qx_choose_then `Gf` (qx_choose_then `tnf` (qx_choose_then `t3` strip_assume_tac)))) >>

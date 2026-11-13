@@ -2,7 +2,7 @@
    supported-program boundaries, exact bytecode parity and interpreter results. *)
 Theory evalAssignmentOrder
 Ancestors
-  vyperInterpreter vyperTypeSystem jsonToVyper jsonConstEval
+  vyperInterpreter vyperTypeSystem jsonToVyper
   compileVyper concretizeMemLocDefs supportedProgram supportedStmts
   vyperSmallStep vyperStorageBackend finite_map While alist byte integer_word option
   codegenReadyCompute
@@ -13,11 +13,11 @@ Libs
 fun holbuild_extra_deps (_ : string list) = ()
 val () = holbuild_extra_deps
   ["../assignment-order/oracle", "../assignment-order/sources",
-   "../assignment-order/fixtures.txt"]
+   "../assignment-order/fixtures.txt", "../assignment-order/codegen-rejected"]
 val () = computeLib.upd_compset add_finite_map_compset
 
-fun define_source_fixture name = let
-  val path = "../assignment-order/oracle/" ^ name ^ ".json"
+fun define_source_fixture_in dir name = let
+  val path = "../assignment-order/" ^ dir ^ "/" ^ name ^ ".json"
   val ast = JSONDecode.decodeFile jsonASTLib.annotated_ast path
   val layout = JSONDecode.decodeFile jsonASTLib.storage_layout path
   val checked = vyperCheckContractFrontendLib.check_contract_result
@@ -50,7 +50,10 @@ val fixture_names =
   |> String.tokens (fn c => c = #"\n" orelse c = #"\r")
   |> List.map evalCompilerBytecodeLib.strip_comment
   |> List.filter (fn name => name <> "");
-val () = List.app define_source_fixture fixture_names;
+val () = List.app (define_source_fixture_in "oracle") fixture_names;
+(* Python rejects these in codegen; their interpreter regressions stay. *)
+val () = List.app (define_source_fixture_in "codegen-rejected")
+  ["aug_storage_shrink", "aug_memory_shrink", "aug_memory_shrink_append"];
 
 Definition assignment_empty_state_def:
   assignment_empty_state = empty_state with scopes := [FEMPTY]
@@ -105,41 +108,6 @@ Theorem flat_tuple_assignment_supported:
       (Name (TupleT [BaseT (UintT 256); BaseT (UintT 256)]) "pair"))
 Proof
   EVAL_TAC
-QED
-
-Theorem nested_tuple_lowering_remains_excluded:
-  ~supported_stmt tops bindings
-    (Assign (TupleTarget [TupleTarget targets]) rhs)
-Proof
-  simp[supported_stmt_def, supported_assignment_def]
-QED
-
-Theorem nested_pop_key_rejected[local]:
-  ~supported_expr tops
-    (Builtin ty (Bop Add) (Pop pty target :: rest))
-Proof
-  simp[supportedExprsTheory.supported_expr_def,
-       supportedExprsTheory.supported_pure_expr_def,
-       supportedExprsTheory.supported_effect_expr_def]
-QED
-
-Theorem nested_pop_assignment_rejected[local]:
-  ~supported_stmt tops bindings
-    (Assign (BaseTarget (SubscriptTarget (TopLevelNameTarget id)
-      (Builtin ty (Bop Add) (Pop pty target :: rest)))) rhs)
-Proof
-  simp[supported_stmt_def, supported_assignment_def, supported_target_def,
-       supportedTargetsTheory.supported_target_info_def, nested_pop_key_rejected]
-QED
-
-Theorem nested_pop_compiler_form_remains_excluded:
-  ~supported_program assign_nested_popped_read_source_program
-Proof
-  strip_tac >> drule supported_program_declaration >>
-  disch_then (qspec_then `EL 1 assign_nested_popped_read_source_program` mp_tac) >>
-  simp[DB.fetch "evalAssignmentOrder" "assign_nested_popped_read_source_program_def",
-       supported_declaration_body_def, supported_function_body_def,
-       supported_stmts_list, nested_pop_assignment_rejected]
 QED
 
 Theorem assignment_cont_pre[cv_pre]:

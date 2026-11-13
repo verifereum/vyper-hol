@@ -73,6 +73,8 @@ Proof
   Induct >- simp[materialize_internal_params_def, comp_return_def] >>
   PairCases >> rpt gen_tac >> simp[Once materialize_internal_params_def] >>
   Cases_on `h1` >> simp[LET_THM] >>
+  BasicProvers.TOP_CASE_TAC >> simp[] >>
+  TRY (BasicProvers.TOP_CASE_TAC >> simp[]) >>
   rpt (BasicProvers.TOP_CASE_TAC >> simp[]) >>
   simp[comp_bind_def, comp_return_def, comp_ignore_bind_def] >>
   rpt (pairarg_tac >> gvs[]) >> rpt strip_tac >>
@@ -195,7 +197,7 @@ Theorem fallback_entry_declared:
     FLOOKUP cenv.ce_vars n = SOME l ==>
     MEM n (MAP FST fargs)
 Proof
-  rpt gen_tac >> simp[package_fallback_fn_def] >> strip_tac >>
+  rpt gen_tac >> simp[package_fallback_fn_def, update_cenv_nonreentrant_def] >> strip_tac >>
   gvs[] >> drule build_compile_env_bound >> simp[]
 QED
 
@@ -208,8 +210,11 @@ Proof
   Induct >- simp[materialize_internal_params_def, comp_return_def] >>
   qx_gen_tac `p` >> PairCases_on `p` >> rename1 `(nm,is_stack,op)::caps` >>
   rpt gen_tac >> simp[Once materialize_internal_params_def] >>
-  Cases_on `is_stack` >> simp[LET_THM] >>
-  rpt (BasicProvers.TOP_CASE_TAC >> simp[]) >>
+  Cases_on `is_stack` >> simp[LET_THM] >|
+  [Cases_on `FLOOKUP cenv.ce_vars nm` >> simp[] >|
+   [ALL_TAC,
+    rename1 `FLOOKUP cenv.ce_vars nm = SOME loc` >> Cases_on `loc` >> simp[]],
+   ALL_TAC] >>
   simp[comp_bind_def, comp_return_def, comp_ignore_bind_def] >>
   rpt (pairarg_tac >> gvs[]) >> rpt strip_tac >>
   first_x_assum drule_all >> simp[FLOOKUP_UPDATE] >> rw[] >> gvs[]

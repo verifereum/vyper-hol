@@ -12,7 +12,7 @@ Ancestors
 Theorem compile_for_array_frag_mem:
   !d ctx func cx cenv lctx RetQ ty id et n name arr_ptr arr_sz stmts tv vs es P.
   (!gs. eval_iterator cx (Array (Name (ArrayT et (Fixed n)) name))
-          (es with gas_obs := gs) = (INL vs, es with gas_obs := gs)) /\
+          (es with gas_obs := gs) = (INL (MAP Value vs), es with gas_obs := gs)) /\
   LENGTH vs = n /\
   n < dimword (:256) /\ evaluate_type (get_tenv cx) et = SOME tv /\
   type_memory_bytes cenv et = type_memory_size tv /\
@@ -88,7 +88,7 @@ Proof
     (simp[array_round_inv_def, array_round_frame_def] >>
      irule return_buf_frame_frame >> goal_assum (drule_at Any) >> gvs[]) >>
   `gas_outcome T (cx_tops cx) (ctx,func)
-     (eval_for cx tv id stmts (DROP 0 vs)) (es,s)
+     (eval_for cx tv id stmts (MAP Value (DROP 0 vs))) (es,s)
      (\res ee t. res = INL () /\
        array_round_done d ctx func cenv cx sa s0 exit ee t)
      (\res ee rr. ?ex. res = INR ex /\
@@ -146,7 +146,7 @@ Resume compile_for_array_frag_mem[public_outcome]:
   `gas_marked_path T ctx func s0 0 (OK s)` by
     (irule gas_marked_path_from_mem >> simp[]) >>
   `gas_outcome T (cx_tops cx) (ctx,func)
-     (eval_for cx tv id stmts vs) (es,s0)
+     (eval_for cx tv id stmts (MAP Value vs)) (es,s0)
      (\res ee t. res = INL () /\
        array_round_done d ctx func cenv cx sa s0 exit ee t)
      (\res ee rr. ?ex. res = INR ex /\

@@ -67,9 +67,9 @@ QED
 
 Theorem revert_reason_suffix_certificate:
   reason_operand ds b /\ reason_operand ds p /\ reason_operand ds q ==>
-  ?es. reason_prefix ds (TAKE 22 (revert_reason_suffix id v b p q)) es /\
-    reason_operand es (Var (STRING #"%" (toString (v+19)))) /\
-    reason_operand es (Var (STRING #"%" (toString (v+20))))
+  ?es. reason_prefix ds (TAKE 23 (revert_reason_suffix id v b p q)) es /\
+    reason_operand es (Var (STRING #"%" (toString (v+20)))) /\
+    reason_operand es (Var (STRING #"%" (toString (v+21))))
 Proof
   strip_tac >>
   simp[revert_reason_suffix_def, TAKE_def, reason_prefix_def, mk_inst_def] >>
@@ -81,10 +81,10 @@ QED
 
 Theorem revert_reason_suffix_split:
   revert_reason_suffix id v b p q =
-    TAKE 22 (revert_reason_suffix id v b p q) ++
-    [mk_inst (id+27) REVERT
-      [Var (STRING #"%" (toString (v+19)));
-       Var (STRING #"%" (toString (v+20))) ] []]
+    TAKE 23 (revert_reason_suffix id v b p q) ++
+    [mk_inst (id+28) REVERT
+      [Var (STRING #"%" (toString (v+20)));
+       Var (STRING #"%" (toString (v+21))) ] []]
 Proof
   simp[revert_reason_suffix_def, TAKE_def]
 QED
@@ -92,30 +92,30 @@ QED
 Theorem revert_reason_suffix_run:
   reason_operand ds b /\ reason_operand ds p /\ reason_operand ds q /\
   reason_known ds s ==>
-  ?t z. run_inst_seq (TAKE 22 (revert_reason_suffix id v b p q)) s = OK t /\
+  ?t z. run_inst_seq (TAKE 23 (revert_reason_suffix id v b p q)) s = OK t /\
     run_inst_seq (revert_reason_suffix id v b p q) s = Abort Revert_abort z
 Proof
   strip_tac >>
-  `?es. reason_prefix ds (TAKE 22 (revert_reason_suffix id v b p q)) es /\
-    reason_operand es (Var (STRING #"%" (toString (v+19)))) /\
-    reason_operand es (Var (STRING #"%" (toString (v+20))))` by
+  `?es. reason_prefix ds (TAKE 23 (revert_reason_suffix id v b p q)) es /\
+    reason_operand es (Var (STRING #"%" (toString (v+20)))) /\
+    reason_operand es (Var (STRING #"%" (toString (v+21))))` by
       metis_tac[revert_reason_suffix_certificate] >>
   drule_all reason_prefix_sound >> strip_tac >>
-  `?ow. lookup_var (STRING #"%" (toString (v+19))) t = SOME ow` by
+  `?ow. lookup_var (STRING #"%" (toString (v+20))) t = SOME ow` by
     metis_tac[reason_operand_def, reason_known_def] >>
-  `?lw. lookup_var (STRING #"%" (toString (v+20))) t = SOME lw` by
+  `?lw. lookup_var (STRING #"%" (toString (v+21))) t = SOME lw` by
     metis_tac[reason_operand_def, reason_known_def] >>
   qexists_tac `t` >> asm_rewrite_tac[] >>
   once_rewrite_tac[revert_reason_suffix_split] >>
   drule run_inst_seq_append >>
-  disch_then (qspec_then `[mk_inst (id+27) REVERT
-    [Var (STRING #"%" (toString (v+19)));
-     Var (STRING #"%" (toString (v+20))) ] []]` mp_tac) >>
+  disch_then (qspec_then `[mk_inst (id+28) REVERT
+    [Var (STRING #"%" (toString (v+20)));
+     Var (STRING #"%" (toString (v+21))) ] []]` mp_tac) >>
   simp[run_inst_seq_def] >> disch_then SUBST1_TAC >>
   simp[mk_inst_def] >>
-  `?z. step_inst_base (mk_inst (id+27) REVERT
-    [Var (STRING #"%" (toString (v+19)));
-     Var (STRING #"%" (toString (v+20))) ] []) t = Abort Revert_abort z` by
+  `?z. step_inst_base (mk_inst (id+28) REVERT
+    [Var (STRING #"%" (toString (v+20)));
+     Var (STRING #"%" (toString (v+21))) ] []) t = Abort Revert_abort z` by
     (simp[mk_inst_def] >> metis_tac[step_revert_behavior, eval_operand_def]) >>
   gvs[mk_inst_def]
 QED
@@ -138,7 +138,7 @@ Theorem revert_reason_suffix_witnesses:
       s.vs_alloca_next+32 < dimword(:256)) /\
     (!a sz. FLOOKUP s.vs_allocas (id+5) = SOME (a,sz) ==>
       sz=32 /\ a+32 < dimword(:256)) /\
-    run_inst_seq (TAKE 22 (revert_reason_suffix id v (Var b) (Var p) (Var q))) s = OK t /\
+    run_inst_seq (TAKE 23 (revert_reason_suffix id v (Var b) (Var p) (Var q))) s = OK t /\
     run_inst_seq (revert_reason_suffix id v (Var b) (Var p) (Var q)) s =
       Abort Revert_abort z
 Proof
@@ -146,7 +146,7 @@ Proof
   `reason_operand [b;p;q] (Var b) /\ reason_operand [b;p;q] (Var p) /\
    reason_operand [b;p;q] (Var q) /\ reason_known [b;p;q] s` by
     (simp[reason_operand_def, reason_known_def] >> metis_tac[]) >>
-  `?t z. run_inst_seq (TAKE 22
+  `?t z. run_inst_seq (TAKE 23
       (revert_reason_suffix id v (Var b) (Var p) (Var q))) s = OK t /\
     run_inst_seq (revert_reason_suffix id v (Var b) (Var p) (Var q)) s =
       Abort Revert_abort z` by metis_tac[revert_reason_suffix_run] >>

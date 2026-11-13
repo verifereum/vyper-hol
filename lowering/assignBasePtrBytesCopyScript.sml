@@ -36,8 +36,8 @@ Theorem assign_base_store_bytestring_layout:
         (DROP (LENGTH sa.cs_current_insts) bb.bb_instructions) /\
       get_instruction bb (LENGTH sm.cs_current_insts) =
         SOME (mk_inst sm.cs_next_id MCOPY [dst;src;out] []) /\
-      LENGTH sm.cs_current_insts = LENGTH sa.cs_current_insts + 4 /\
-      LENGTH sb.cs_current_insts = LENGTH sa.cs_current_insts + 5
+      LENGTH sm.cs_current_insts = LENGTH sa.cs_current_insts + 5 /\
+      LENGTH sb.cs_current_insts = LENGTH sa.cs_current_insts + 6
 Proof
   rpt gen_tac >> strip_tac >>
   gvs[compile_bytestring_copy_len_def, emit_op_def, emit_void_def,

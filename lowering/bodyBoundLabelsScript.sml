@@ -173,33 +173,33 @@ Proof
     gen_tac, strip_tac, irule bound_labels_bind, conj_tac])
 QED
 
-Theorem bound_labels_emit_membership_eqs[local]:
-  !xs needle s. EVERY P (MAP (\bb. bb.bb_label) (all_blocks s)) ==>
+Theorem bound_labels_emit_membership_eqs:
+  !xs s. EVERY P (MAP (\bb. bb.bb_label) (all_blocks s)) ==>
   EVERY P (MAP (\bb. bb.bb_label) (all_blocks
     (SND (emit_membership_eqs needle xs s))))
 Proof
-  Induct >> simp[emit_membership_eqs_def, comp_return_def] >> rpt strip_tac >>
+  Induct >> simp[emit_membership_eqs_def, comp_return_def] >>
   rpt (FIRST [CHANGED_TAC (simp[bound_labels_emit_op, comp_return_def]),
     gen_tac, strip_tac, irule bound_labels_bind, conj_tac])
 QED
 
-Theorem bound_labels_fold_membership_or[local]:
-  !xs acc s. EVERY P (MAP (\bb. bb.bb_label) (all_blocks s)) ==>
+Theorem bound_labels_fold_membership_or:
+  !cs acc s. EVERY P (MAP (\bb. bb.bb_label) (all_blocks s)) ==>
   EVERY P (MAP (\bb. bb.bb_label) (all_blocks
-    (SND (fold_membership_or acc xs s))))
+    (SND (fold_membership_or acc cs s))))
 Proof
-  Induct >> simp[fold_membership_or_def, comp_return_def] >> rpt strip_tac >>
-  rpt (FIRST [CHANGED_TAC (simp[bound_labels_emit_op, comp_return_def]),
+  Induct >> simp[fold_membership_or_def, comp_return_def] >>
+  rpt (FIRST [CHANGED_TAC (simp[bound_labels_emit_op]),
     gen_tac, strip_tac, irule bound_labels_bind, conj_tac])
 QED
 
-Theorem bound_labels_fold_membership_and[local]:
-  !xs acc s. EVERY P (MAP (\bb. bb.bb_label) (all_blocks s)) ==>
+Theorem bound_labels_fold_membership_and:
+  !cs acc s. EVERY P (MAP (\bb. bb.bb_label) (all_blocks s)) ==>
   EVERY P (MAP (\bb. bb.bb_label) (all_blocks
-    (SND (fold_membership_and acc xs s))))
+    (SND (fold_membership_and acc cs s))))
 Proof
-  Induct >> simp[fold_membership_and_def, comp_return_def] >> rpt strip_tac >>
-  rpt (FIRST [CHANGED_TAC (simp[bound_labels_emit_op, comp_return_def]),
+  Induct >> simp[fold_membership_and_def, comp_return_def] >>
+  rpt (FIRST [CHANGED_TAC (simp[bound_labels_emit_op]),
     gen_tac, strip_tac, irule bound_labels_bind, conj_tac])
 QED
 
@@ -208,12 +208,10 @@ Theorem bound_labels_list_membership_in:
   EVERY P (MAP (\bb. bb.bb_label) (all_blocks
     (SND (compile_list_membership_in needle xs s))))
 Proof
-  rpt strip_tac >> simp[compile_list_membership_in_def] >>
-  irule bound_labels_bind >> simp[bound_labels_emit_membership_eqs] >>
-  Cases >> simp[comp_return_def, bound_labels_fold_membership_or] >>
-  rpt (FIRST [CHANGED_TAC (simp[bound_labels_emit_op,
-    bound_labels_fold_membership_or, comp_return_def]),
-    gen_tac, strip_tac, irule bound_labels_bind, conj_tac])
+  gen_tac >> simp[compile_list_membership_in_def] >>
+  rpt (FIRST [CHANGED_TAC (simp[bound_labels_emit_op, comp_return_def,
+      bound_labels_emit_membership_eqs, bound_labels_fold_membership_or]),
+    gen_tac, strip_tac, irule bound_labels_bind, conj_tac, CASE_TAC])
 QED
 
 Theorem bound_labels_list_membership_notin:
@@ -221,12 +219,10 @@ Theorem bound_labels_list_membership_notin:
   EVERY P (MAP (\bb. bb.bb_label) (all_blocks
     (SND (compile_list_membership_notin needle xs s))))
 Proof
-  rpt strip_tac >> simp[compile_list_membership_notin_def] >>
-  irule bound_labels_bind >> simp[bound_labels_emit_membership_eqs] >>
-  Cases >> simp[comp_return_def, bound_labels_fold_membership_and] >>
-  rpt (FIRST [CHANGED_TAC (simp[bound_labels_emit_op,
-    bound_labels_fold_membership_and, comp_return_def]),
-    gen_tac, strip_tac, irule bound_labels_bind, conj_tac])
+  gen_tac >> simp[compile_list_membership_notin_def] >>
+  rpt (FIRST [CHANGED_TAC (simp[bound_labels_emit_op, comp_return_def,
+      bound_labels_emit_membership_eqs, bound_labels_fold_membership_and]),
+    gen_tac, strip_tac, irule bound_labels_bind, conj_tac, CASE_TAC])
 QED
 
 Theorem bound_labels_array_membership_loop:
@@ -404,7 +400,8 @@ Theorem bound_labels_dynarray_append:
 Proof
   strip_tac >> simp[compile_dynarray_append_def] >>
   rpt (FIRST [CHANGED_TAC (simp[bound_labels_emit_op, bound_labels_emit_void,
-    bound_labels_store_memory, bound_labels_word_copy_loop, comp_return_def]),
+    bound_labels_store_memory, cj 1 bound_labels_store_slots,
+    bound_labels_word_copy_loop, comp_return_def]),
     gen_tac, strip_tac, irule bound_labels_bind,
     irule bound_labels_ignore_bind, conj_tac, IF_CASES_TAC])
 QED
@@ -422,10 +419,14 @@ Proof
 QED
 
 Theorem bound_labels_stage_intcall_args:
-  !ce vals flags tys s. (!l. compiler_label l ==> P l) /\
+  !cfn ce es flags tys s.
+  (!ty e t. MEM e es /\
+    EVERY P (MAP (\bb. bb.bb_label) (all_blocks t)) ==>
+    EVERY P (MAP (\bb. bb.bb_label) (all_blocks (SND (cfn ce ty e t))))) /\
+  (!l. compiler_label l ==> P l) /\
   EVERY P (MAP (\bb. bb.bb_label) (all_blocks s)) ==>
   EVERY P (MAP (\bb. bb.bb_label) (all_blocks
-    (SND (compile_stage_intcall_args ce vals flags tys s))))
+    (SND (compile_stage_intcall_args cfn ce es flags tys s))))
 Proof
   recInduct compile_stage_intcall_args_ind >> rpt strip_tac >>
   simp[compile_stage_intcall_args_def, comp_return_def] >>
@@ -435,7 +436,8 @@ Proof
     comp_return_def]),
     gen_tac, strip_tac, irule bound_labels_bind,
     irule bound_labels_ignore_bind, conj_tac, IF_CASES_TAC,
-    first_x_assum irule])
+    first_x_assum irule]) >>
+  metis_tac[listTheory.MEM]
 QED
 
 Theorem bound_labels_store_multi_results:
@@ -607,13 +609,15 @@ Theorem bound_labels_make_tuple:
     EVERY P (MAP (\bb. bb.bb_label) (all_blocks t)) ==>
     EVERY P (MAP (\bb. bb.bb_label) (all_blocks
       (SND (cfn ce (expr_type e) e t))))) ==>
-  !buf off s. (!l. compiler_label l ==> P l) /\
+  !tys buf off s. (!l. compiler_label l ==> P l) /\
   EVERY P (MAP (\bb. bb.bb_label) (all_blocks s)) ==>
   EVERY P (MAP (\bb. bb.bb_label) (all_blocks
-    (SND (compile_make_tuple cfn ce es buf off s))))
+    (SND (compile_make_tuple cfn ce es tys buf off s))))
 Proof
   Induct >> simp[compile_make_tuple_def, comp_return_def] >>
-  rpt strip_tac >> irule bound_labels_bind >> conj_tac
+  rpt strip_tac >> Cases_on `tys` >>
+  gvs[compile_make_tuple_def, comp_return_def] >>
+  irule bound_labels_bind >> conj_tac
   >- (simp[] >> rpt strip_tac >>
       rpt (FIRST [CHANGED_TAC (simp[bound_labels_emit_op,
         bound_labels_unwrap_value, bound_labels_store_memory]),
@@ -688,6 +692,31 @@ Proof
   simp[] >> rpt strip_tac >> irule bound_labels_lower_value >> simp[]
 QED
 
+Theorem bound_labels_materialize_vv:
+  (!l. compiler_label l ==> P l) /\
+  EVERY P (MAP (\bb. bb.bb_label) (all_blocks s)) ==>
+  EVERY P (MAP (\bb. bb.bb_label) (all_blocks
+    (SND (compile_materialize_vv ce ty vv s))))
+Proof
+  strip_tac >> simp[compile_materialize_vv_def] >>
+  rpt (FIRST [CHANGED_TAC (simp[bound_labels_alloc_buffer,
+    bound_labels_unwrap_value, bound_labels_store_memory, comp_return_def]),
+    irule bound_labels_bind, irule bound_labels_ignore_bind,
+    conj_tac, gen_tac, strip_tac])
+QED
+
+Theorem bound_labels_snapshot_vv:
+  (!l. compiler_label l ==> P l) /\
+  EVERY P (MAP (\bb. bb.bb_label) (all_blocks s)) ==>
+  EVERY P (MAP (\bb. bb.bb_label) (all_blocks
+    (SND (compile_snapshot_vv ce copy vv s))))
+Proof
+  strip_tac >> simp[compile_snapshot_vv_def] >>
+  rpt (FIRST [CHANGED_TAC (simp[bound_labels_materialize_vv,
+    bound_labels_unwrap_value, comp_return_def]),
+    irule bound_labels_bind, conj_tac, gen_tac, strip_tac, IF_CASES_TAC])
+QED
+
 Theorem bound_labels_subscript:
   (!ty e t. (e = base_e \/ e = idx_e) /\
     EVERY P (MAP (\bb. bb.bb_label) (all_blocks t)) ==>
@@ -699,7 +728,13 @@ Theorem bound_labels_subscript:
 Proof
   strip_tac >> simp[compile_subscript_def] >> irule bound_labels_bind >>
   simp[] >> rpt strip_tac >>
-  qabbrev_tac `loc = case vv_location x of NONE => LocMemory | SOME l => l` >>
+  irule bound_labels_bind >> rpt conj_tac
+  >~ [`copies_subscript_base`]
+  >- (rpt strip_tac >> IF_CASES_TAC >> gvs[comp_return_def] >>
+      irule bound_labels_snapshot_vv >> gvs[]) >>
+  rpt (first_assum ACCEPT_TAC) >>
+  qx_gen_tac `bvv` >> rpt strip_tac >>
+  qabbrev_tac `loc = case vv_location bvv of NONE => LocMemory | SOME l => l` >>
   Cases_on `place_type ce base_e` >> simp[] >>
   rpt (FIRST [CHANGED_TAC (simp[bound_labels_tuple_subscript,
     bound_labels_mapping_subscript, bound_labels_keccak256_key,
@@ -740,31 +775,6 @@ Proof
         irule bound_labels_bind, irule bound_labels_ignore_bind,
         conj_tac, gen_tac, strip_tac]) >>
       first_x_assum irule >> simp[] >> metis_tac[]) >> simp[]
-QED
-
-Theorem bound_labels_materialize_vv:
-  (!l. compiler_label l ==> P l) /\
-  EVERY P (MAP (\bb. bb.bb_label) (all_blocks s)) ==>
-  EVERY P (MAP (\bb. bb.bb_label) (all_blocks
-    (SND (compile_materialize_vv ce ty vv s))))
-Proof
-  strip_tac >> simp[compile_materialize_vv_def] >>
-  rpt (FIRST [CHANGED_TAC (simp[bound_labels_alloc_buffer,
-    bound_labels_unwrap_value, bound_labels_store_memory, comp_return_def]),
-    irule bound_labels_bind, irule bound_labels_ignore_bind,
-    conj_tac, gen_tac, strip_tac])
-QED
-
-Theorem bound_labels_snapshot_vv:
-  (!l. compiler_label l ==> P l) /\
-  EVERY P (MAP (\bb. bb.bb_label) (all_blocks s)) ==>
-  EVERY P (MAP (\bb. bb.bb_label) (all_blocks
-    (SND (compile_snapshot_vv ce copy vv s))))
-Proof
-  strip_tac >> simp[compile_snapshot_vv_def] >>
-  rpt (FIRST [CHANGED_TAC (simp[bound_labels_materialize_vv,
-    bound_labels_unwrap_value, comp_return_def]),
-    irule bound_labels_bind, conj_tac, gen_tac, strip_tac, IF_CASES_TAC])
 QED
 
 Theorem bound_labels_abi_encode_args:
@@ -902,15 +912,12 @@ Proof
   rename1 `ce.ce_func_info (nsid_to_string fid) = (num_ret, meta_pair)` >>
   PairCases_on `meta_pair` >> simp[compile_call_def] >>
   irule pair_let_snd_preserves >> reverse conj_tac
-  >- (irule bound_labels_multi_vvs >> simp[]) >>
-  rpt strip_tac >> simp[] >>
-  irule pair_let_snd_preserves >> reverse conj_tac
   >- (rpt IF_CASES_TAC >> simp[] >>
       irule pair_let_snd_preserves >>
       simp[bound_labels_alloc_buffer]) >>
   rpt strip_tac >> simp[] >>
   irule pair_let_snd_preserves >> reverse conj_tac
-  >- simp[bound_labels_stage_intcall_args] >>
+  >- (irule bound_labels_stage_intcall_args >> simp[]) >>
   rpt strip_tac >> simp[] >> IF_CASES_TAC >> CASE_TAC >> simp[] >>
   irule pair_let_snd_preserves >> reverse conj_tac
   >- simp[bound_labels_emit_op, bound_labels_emit_multi_op,
@@ -1032,6 +1039,27 @@ Proof
   rpt strip_tac >> IF_CASES_TAC >> simp[]
 QED
 
+Theorem bound_labels_ext_call_args:
+  !es tys s.
+  (!ty e t. MEM e es /\
+    EVERY P (MAP (\bb. bb.bb_label) (all_blocks t)) ==>
+    EVERY P (MAP (\bb. bb.bb_label) (all_blocks (SND (cfn ce ty e t))))) /\
+  (!l. compiler_label l ==> P l) /\
+  EVERY P (MAP (\bb. bb.bb_label) (all_blocks s)) ==>
+  EVERY P (MAP (\bb. bb.bb_label) (all_blocks
+    (SND (compile_ext_call_args cfn ce kw_es tys es s))))
+Proof
+  Induct_on `es` >> rpt gen_tac >> Cases_on `tys` >>
+  simp[compile_ext_call_args_def, comp_return_def] >>
+  rpt strip_tac >>
+  rpt (FIRST [first_assum ACCEPT_TAC,
+              irule bound_labels_bind >> rpt conj_tac >> rpt gen_tac >>
+                rpt strip_tac,
+              irule bound_labels_snapshot_vv >> simp[],
+              CHANGED_TAC (simp[comp_return_def])]) >>
+  first_x_assum irule >> simp[]
+QED
+
 Theorem bound_labels_call_external[local]:
   (!ty e t. MEM e args /\
     EVERY P (MAP (\bb. bb.bb_label) (all_blocks t)) ==>
@@ -1049,7 +1077,7 @@ Proof
   >- (irule bound_labels_lower_value >> simp[] >> metis_tac[listTheory.MEM]) >>
   rpt strip_tac >> simp[] >>
   irule pair_let_snd_preserves >> reverse conj_tac
-  >- (irule bound_labels_multi_vvs >> simp[] >>
+  >- (irule bound_labels_ext_call_args >> simp[] >>
       metis_tac[listTheory.MEM, rich_listTheory.MEM_TAKE]) >>
   rpt strip_tac >> simp[] >>
   irule pair_let_snd_preserves >> reverse conj_tac
@@ -1297,7 +1325,16 @@ Proof
       irule pair_let_snd_preserves >> reverse conj_tac
       >- (irule bound_labels_lower_value >> simp[]) >>
       rpt gen_tac >> strip_tac >> simp[] >> irule pair_let_snd_preserves >>
-      simp[bound_labels_raw_revert]) >>
+      simp[bound_labels_raw_revert])
+  >~ [`SelfDestructTarget`]
+  >- (simp[compile_call_def] >> Cases_on `args` >> simp[]
+      >- (irule pair_let_snd_preserves >> simp[bound_labels_emit_inst]) >>
+      reverse (Cases_on `t`) >> simp[]
+      >- (irule pair_let_snd_preserves >> simp[bound_labels_emit_inst]) >>
+      irule pair_let_snd_preserves >> reverse conj_tac
+      >- (irule bound_labels_lower_value >> simp[]) >>
+      rpt gen_tac >> strip_tac >> simp[] >> irule pair_let_snd_preserves >>
+      simp[bound_labels_selfdestruct]) >>
   simp[compile_call_def] >> irule pair_let_snd_preserves >>
   simp[bound_labels_emit_inst]
 QED
@@ -1871,19 +1908,16 @@ Theorem bound_labels_builtin_slice[local]:
     (SND (compile_builtin_dispatch_body f ce rt ty (Slice n) args s))))
 Proof
   strip_tac >> simp[compile_builtin_dispatch_body_def] >>
-  Cases_on `is_msg_data (HD args) \/ is_self_code (HD args)`
-  >- (rpt IF_CASES_TAC >> gvs[] >>
+  Cases_on `is_self_code (HD args)`
+  >- (gvs[] >>
       rpt (irule pair_let_snd_preserves >> reverse conj_tac
         >- (irule bound_labels_lower_value >> simp[]) >> rpt strip_tac >> simp[]) >>
-      simp[bound_labels_as_ptr_val, bound_labels_slice_calldata, bound_labels_slice_code]) >>
+      simp[bound_labels_as_ptr_val, bound_labels_slice_code]) >>
   gvs[] >> IF_CASES_TAC
   >- (irule pair_let_snd_preserves >> reverse conj_tac
       >- (irule bound_labels_lower_value >> simp[]) >> rpt strip_tac >> simp[] >>
       irule pair_let_snd_preserves >> reverse conj_tac
       >- (irule bound_labels_lower_value >> simp[]) >> rpt strip_tac >> simp[] >>
-      irule pair_let_snd_preserves >> reverse conj_tac
-      >- simp[bound_labels_slice_out_buf] >>
-      map_every qx_gen_tac [`v`, `t`] >> strip_tac >> PairCases_on `v` >> simp[] >>
       irule pair_let_snd_preserves >> reverse conj_tac
       >- (irule bound_labels_lower_value >> simp[]) >> rpt strip_tac >>
       simp[bound_labels_as_ptr_val, bound_labels_slice_extcode]) >>
@@ -1926,21 +1960,22 @@ Proof
         bound_labels_list_membership_notin, bound_labels_var_array_membership]))
 QED
 
-Theorem bound_labels_bytestring_literal_or_hash[local]:
+(* An Eq/NotEq bytestring operand hashes to a literal hash, or is lowered
+   and hashed at runtime. *)
+Theorem bound_labels_bytestring_operand_hash[local]:
   (!ce ty e t. EVERY P (MAP (\bb. bb.bb_label) (all_blocks t)) ==>
     EVERY P (MAP (\bb. bb.bb_label) (all_blocks (SND (f ce ty e t))))) /\
   (!l. compiler_label l ==> P l) /\
-  EVERY P (MAP (\bb. bb.bb_label) (all_blocks s)) ==>
+  EVERY P (MAP (\bb. bb.bb_label) (all_blocks t)) ==>
   EVERY P (MAP (\bb. bb.bb_label) (all_blocks (SND
     (case bytestring_literal_hash e of
-       SOME h => (Lit h,s)
-     | NONE => (\(ptr,t). compile_bytestring_hash ptr t)
-                 (lower_value f ce ty e s)))))
+       NONE => (\(m,t1). compile_bytestring_hash m t1) (lower_value f ce ty e t)
+     | SOME h => (Lit h, t)))))
 Proof
-  strip_tac >> Cases_on `bytestring_literal_hash e` >> simp[] >>
-  irule pair_let_snd_preserves >> reverse conj_tac
-  >- (irule bound_labels_lower_value >> simp[]) >>
-  simp[bound_labels_bytestring_hash]
+  strip_tac >> CASE_TAC >> simp[] >>
+  irule pair_let_snd_preserves >> conj_tac >>
+  TRY (irule bound_labels_lower_value >> simp[] >> NO_TAC) >>
+  rpt strip_tac >> simp[bound_labels_bytestring_hash]
 QED
 
 Theorem bound_labels_builtin_bop[local]:
@@ -1954,9 +1989,12 @@ Proof
   strip_tac >> Cases_on `(op = In \/ op = NotIn) /\ is_ArrayT (expr_type (HD (TL args)))`
   >- (irule bound_labels_builtin_membership >> simp[]) >>
   simp[compile_builtin_dispatch_body_def] >> IF_CASES_TAC
-  >- (ntac 2 (irule pair_let_snd_preserves >> reverse conj_tac
-      >- (irule bound_labels_bytestring_literal_or_hash >> simp[]) >>
-      rpt strip_tac >> simp[]) >>
+  >- (irule pair_let_snd_preserves >> conj_tac >>
+      TRY (irule bound_labels_bytestring_operand_hash >> simp[] >> NO_TAC) >>
+      rpt strip_tac >> simp_tac (srw_ss()) [] >>
+      irule pair_let_snd_preserves >> conj_tac >>
+      TRY (irule bound_labels_bytestring_operand_hash >> simp[] >> NO_TAC) >>
+      rpt strip_tac >> simp_tac (srw_ss()) [] >>
       IF_CASES_TAC >> simp[bound_labels_as_stack_val, bound_labels_emit_op] >>
       irule pair_let_snd_preserves >> simp[bound_labels_emit_op, bound_labels_as_stack_val]) >>
   rpt (irule pair_let_snd_preserves >> reverse conj_tac
@@ -2010,6 +2048,10 @@ Proof
   irule bound_labels_bind >> reverse conj_tac
   >- (simp[] >> rpt strip_tac >> irule bound_labels_lower_value >>
       simp[bound_labels_expr_mutual]) >>
+  rpt strip_tac >> simp[] >> irule bound_labels_bind >> conj_tac >>
+  (* the saved argument is the operand itself or a materialised copy *)
+  TRY (rpt strip_tac >> simp[compile_log_save_arg_def] >> IF_CASES_TAC >>
+       simp[comp_return_def, bound_labels_materialize_vv] >> NO_TAC) >>
   rpt strip_tac >> simp[] >> irule bound_labels_bind >> simp[comp_return_def]
 QED
 
@@ -2027,15 +2069,14 @@ QED
 
 Theorem bound_labels_log_store_data[local]:
   (!l. compiler_label l ==> P l) ==>
-  !ops buf off s. EVERY P (MAP (\bb. bb.bb_label) (all_blocks s)) ==>
+  !ce ops tys buf off s. EVERY P (MAP (\bb. bb.bb_label) (all_blocks s)) ==>
   EVERY P (MAP (\bb. bb.bb_label)
-    (all_blocks (SND (compile_log_store_data ce ops buf off s))))
+    (all_blocks (SND (compile_log_store_data ce ops tys buf off s))))
 Proof
-  strip_tac >> Induct_on `ops` >> rpt strip_tac >>
-  simp[compile_log_store_data_def, comp_return_def] >>
+  strip_tac >> ho_match_mp_tac compile_log_store_data_ind >> rpt strip_tac >>
+  simp[compile_log_store_data_def, comp_return_def, bound_labels_emit_void] >>
   irule bound_labels_bind >> simp[bound_labels_emit_op] >> rpt strip_tac >>
-  irule bound_labels_ignore_bind >> simp[] >> rpt IF_CASES_TAC >>
-  simp[bound_labels_emit_void, bound_labels_store_bytestring]
+  irule bound_labels_ignore_bind >> simp[bound_labels_store_memory]
 QED
 
 Theorem bound_labels_load_tuple_elements[local]:
@@ -2118,25 +2159,25 @@ val bound_labels_assign_case_tac =
     CHANGED_TAC (simp[bound_labels_emit_op, bound_labels_emit_void,
     bound_labels_emit_inst, bound_labels_alloc_buffer, bound_labels_copy_memory,
     bound_labels_store_memory, bound_labels_memory_typed, bound_labels_store_immutable_bytestring,
-    bound_labels_dynarray_to_storage, bound_labels_store_storage,
+    cj 1 bound_labels_store_slots,
     compile_memory_to_storage_def, compile_memory_to_transient_def,
-    bound_labels_word_copy_loop, bound_labels_store_transient, bound_labels_imm_store_word,
+    bound_labels_word_copy_loop, bound_labels_imm_store_word,
     bound_labels_imm_store_words, comp_return_def]), CASE_TAC]);
 
 Theorem bound_labels_assign_value[local]:
   (!l. compiler_label l ==> P l) /\
   EVERY P (MAP (\bb. bb.bb_label) (all_blocks s)) ==>
   EVERY P (MAP (\bb. bb.bb_label) (all_blocks
-    (SND (compile_assign_value ce dst loc v prim src dt st da sz s))))
+    (SND (compile_assign_value ce dst loc v prim src dt st sz s))))
 Proof
   strip_tac >> Cases_on `loc`
-  >~ [`compile_assign_value _ _ LocMemory _ _ _ _ _ _ _ _`]
+  >~ [`compile_assign_value _ _ LocMemory _ _ _ _ _ _ _`]
   >- bound_labels_assign_case_tac
-  >~ [`compile_assign_value _ _ LocStorage _ _ _ _ _ _ _ _`]
+  >~ [`compile_assign_value _ _ LocStorage _ _ _ _ _ _ _`]
   >- bound_labels_assign_case_tac
-  >~ [`compile_assign_value _ _ LocTransient _ _ _ _ _ _ _ _`]
+  >~ [`compile_assign_value _ _ LocTransient _ _ _ _ _ _ _`]
   >- bound_labels_assign_case_tac
-  >~ [`compile_assign_value _ _ LocCode _ _ _ _ _ _ _ _`]
+  >~ [`compile_assign_value _ _ LocCode _ _ _ _ _ _ _`]
   >- bound_labels_assign_case_tac >>
   bound_labels_assign_case_tac
 QED
@@ -2190,6 +2231,15 @@ Proof
     bound_labels_declare_local, comp_return_def]
 QED
 
+Theorem bound_labels_return_unlock[local]:
+  !s. EVERY P (MAP (\bb. bb.bb_label) (all_blocks s)) ==>
+  EVERY P (MAP (\bb. bb.bb_label) (all_blocks
+    (SND (compile_return_unlock ce s))))
+Proof
+  rpt strip_tac >> simp[compile_return_unlock_def] >> pairarg_tac >> gvs[] >>
+  IF_CASES_TAC >> simp[bound_labels_nonreentrant_unlock, comp_return_def]
+QED
+
 Theorem bound_labels_internal_return_from_env[local]:
   (!l. compiler_label l ==> P l) /\
   EVERY P (MAP (\bb. bb.bb_label) (all_blocks s)) ==>
@@ -2197,6 +2247,9 @@ Theorem bound_labels_internal_return_from_env[local]:
     (SND (compile_internal_return_from_env ce ty sty v pc s))))
 Proof
   strip_tac >> simp[compile_internal_return_from_env_def] >>
+  irule bound_labels_ignore_bind >> rpt conj_tac >>
+  TRY (simp[bound_labels_return_unlock] >> NO_TAC) >>
+  rpt strip_tac >>
   irule bound_labels_bind >> conj_tac
   >- (rpt strip_tac >> simp[] >> irule bound_labels_bind >>
       simp[bound_labels_internal_return, comp_return_def]) >>
@@ -2313,6 +2366,38 @@ Proof
   simp[bound_labels_expr_mutual]
 QED
 
+Theorem bound_labels_custom_error_store_args[local]:
+  (!l. compiler_label l ==> P l) ==>
+  !es tys dst off s. EVERY P (MAP (\bb. bb.bb_label) (all_blocks s)) ==>
+  EVERY P (MAP (\bb. bb.bb_label)
+    (all_blocks (SND (compile_custom_error_store_args ce es tys dst off s))))
+Proof
+  strip_tac >> Induct >> rpt gen_tac >> Cases_on `tys` >> rpt strip_tac >>
+  simp[compile_custom_error_store_args_def, comp_return_def] >>
+  rpt (FIRST [CHANGED_TAC (simp[cj 1 bound_labels_expr_mutual,
+    bound_labels_emit_op, bound_labels_unwrap_value, bound_labels_store_memory,
+    comp_return_def]),
+    gen_tac, strip_tac, irule bound_labels_bind,
+    irule bound_labels_ignore_bind, conj_tac, IF_CASES_TAC])
+QED
+
+Theorem bound_labels_revert_with_custom_error[local]:
+  (!l. compiler_label l ==> P l) /\
+  EVERY P (MAP (\bb. bb.bb_label) (all_blocks s)) ==>
+  EVERY P (MAP (\bb. bb.bb_label) (all_blocks
+    (SND (compile_revert_with_custom_error ce err s))))
+Proof
+  strip_tac >> Cases_on `err` >> rename1 `CustomError id pos kws` >>
+  simp[compile_revert_with_custom_error_def] >>
+  Cases_on `ce.ce_error_info (nsid_to_string id)` >>
+  simp[bound_labels_emit_inst] >>
+  rpt (FIRST [CHANGED_TAC (simp[bound_labels_alloc_buffer, bound_labels_emit_void,
+    bound_labels_emit_op, bound_labels_emit_inst,
+    bound_labels_custom_error_store_args, cj 2 bound_labels_abi_encode,
+    comp_return_def]), gen_tac, strip_tac, irule bound_labels_bind,
+    irule bound_labels_ignore_bind, conj_tac, IF_CASES_TAC])
+QED
+
 Theorem bound_labels_stmt_assert[local]:
   (!l. compiler_label l ==> P l) /\
   EVERY P (MAP (\bb. bb.bb_label) (all_blocks s)) ==>
@@ -2321,7 +2406,8 @@ Theorem bound_labels_stmt_assert[local]:
 Proof
   strip_tac >> Cases_on `reason` >> simp[compile_stmt_def] >>
   rpt (FIRST [CHANGED_TAC (simp[bound_labels_emit_inst, bound_labels_new_block,
-    bound_labels_reason_message, bound_labels_revert_with_reason, comp_return_def]),
+    bound_labels_reason_message, bound_labels_revert_with_reason,
+    bound_labels_revert_with_custom_error, comp_return_def]),
     gen_tac, strip_tac, irule bound_labels_fresh_label_bind,
     irule bound_labels_bind, irule bound_labels_ignore_bind, conj_tac]) >>
   irule bound_labels_lower_value >> simp[bound_labels_expr_mutual]
@@ -2350,7 +2436,8 @@ Theorem bound_labels_stmt_raise[local]:
     (SND (compile_stmt ce lc rt (Raise reason) s))))
 Proof
   strip_tac >> Cases_on `reason` >>
-  simp[compile_stmt_def, bound_labels_emit_inst]
+  simp[compile_stmt_def, bound_labels_emit_inst,
+       bound_labels_revert_with_custom_error]
   >- (irule bound_labels_bind >>
       simp[bound_labels_reason_message, bound_labels_revert_with_reason]) >>
   irule bound_labels_ignore_bind >> simp[bound_labels_emit_inst, comp_return_def]
@@ -2364,7 +2451,8 @@ Theorem bound_labels_stmt_return_none[local]:
 Proof
   strip_tac >> simp[compile_stmt_def] >>
   rpt (FIRST [CHANGED_TAC (simp[bound_labels_emit_inst,
-    bound_labels_emit_op, bound_labels_nonreentrant_unlock, comp_return_def]),
+    bound_labels_emit_op, bound_labels_nonreentrant_unlock,
+    bound_labels_return_unlock, comp_return_def]),
     gen_tac, strip_tac, irule bound_labels_bind,
     irule bound_labels_ignore_bind, conj_tac, IF_CASES_TAC, CASE_TAC,
     pairarg_tac])
@@ -2382,7 +2470,9 @@ Proof
       TRY (rename1 `SOME vl` >> Cases_on `vl` >> simp[]) >>
       rpt (FIRST [CHANGED_TAC (simp[bound_labels_emit_op,
         bound_labels_internal_return_from_env, bound_labels_external_return,
-        bound_labels_alloc_buffer, bound_labels_memory_typed, comp_return_def]),
+        bound_labels_alloc_buffer, bound_labels_memory_typed,
+        bound_labels_return_unlock, bound_labels_nonreentrant_unlock,
+        comp_return_def]),
         gen_tac, strip_tac, irule bound_labels_bind,
         irule bound_labels_ignore_bind, conj_tac, IF_CASES_TAC])) >>
   simp[] >> rpt strip_tac >> irule bound_labels_lower_value >>
@@ -2400,7 +2490,8 @@ Proof
     bound_labels_alloc_buffer, bound_labels_store_memory, comp_return_def]),
     gen_tac, strip_tac, irule bound_labels_bind,
     irule bound_labels_ignore_bind, conj_tac, IF_CASES_TAC]) >>
-  irule bound_labels_lower_value >> simp[bound_labels_expr_mutual]
+  FIRST [irule bound_labels_get_target_ptr, irule bound_labels_lower_value] >>
+  simp[bound_labels_expr_mutual]
 QED
 
 Theorem bound_labels_stmt_tuple_assign[local]:

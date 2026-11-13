@@ -15,7 +15,6 @@ Theorem ghost_kept_observational_frame:
     off <= i /\ i < off+sz /\ i IN tnf.t_mem ==> i IN tn.t_mem) /\
   (!n b sz i.
     local_region cenv es.scopes s0 n b sz /\ b <= i /\ i < b+sz /\
-    (!k. dynarray_len_at cenv n k ==> i < b+k \/ b+k+32 <= i) /\
     i IN tnf.t_mem ==> i IN tn.t_mem) ==>
   ghost_kept cenv es sa G0 tn0 s0 Gf tnf
 Proof
@@ -34,8 +33,7 @@ Theorem ghost_kept_exterior_frame:
       off+sz <= b \/ b+sz' <= off) /\
     off <= i /\ i < off+sz ==> i NOTIN R) /\
   (!n b sz i.
-    local_region cenv es.scopes s0 n b sz /\ b <= i /\ i < b+sz /\
-    (!k. dynarray_len_at cenv n k ==> i < b+k \/ b+k+32 <= i) ==>
+    local_region cenv es.scopes s0 n b sz /\ b <= i /\ i < b+sz ==>
     i NOTIN R) ==>
   ghost_kept cenv es sa G0 tn0 s0 Gf tnf
 Proof

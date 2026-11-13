@@ -13,7 +13,7 @@ Ancestors
 Theorem augassign_supported_storage_field_write_decl:
   supported_storage_field_write tops (src,id) fld ==>
   src = NONE /\ find_var_decl_by_name id tops <> NONE /\
-  ?mut sid slot. MEM (VariableDecl Private mut id (StructT sid) slot) tops
+  ?vis mut sid slot. MEM (VariableDecl vis mut id (StructT sid) slot) tops
 Proof
   simp[supported_storage_field_write_def, supported_storage_fields_def] >>
   Cases_on `supported_variable_decl tops (src,id)` >> simp[] >>
@@ -76,6 +76,7 @@ Proof
   `body_expr_ptr_ok cx e` by
     (drule_all augassign_attr_storage_place >> strip_tac >> first_x_assum irule >> metis_tac[]) >>
   `(bop = Exp ==> nonneg_int_literal e) /\ (bop = ShL \/ bop = ShR ==> shift_amount_ok e)` by
-    gvs[type_stmt_def, well_typed_expr_def, DISJ_IMP_THM, AllCaseEqs()] >>
+    (gvs[type_stmt_def, well_typed_expr_def, DISJ_IMP_THM, AllCaseEqs()] >>
+     metis_tac[stmtSimAugAssignTheory.augassign_operand_ok_operands]) >>
   irule compile_augassign_attr_storage_case_ptr >> simp[] >> metis_tac[]
 QED

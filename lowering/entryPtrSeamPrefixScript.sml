@@ -18,7 +18,7 @@
  *)
 Theory entryPtrSeamPrefix
 Ancestors
-  selectedEntryPrefixCode entryChecksPassPtr entryPrefixPtr sourceValueRejection
+  entryStateRel selectedEntryPrefixCode entryChecksPassPtr entryPrefixPtr sourceValueRejection
   entryChecksProps loweringShapeProps loweringShapeSource o1PipelineCorrect
   supportedNames supportedProgramProps loweringShapeDefs unitShapeDefs venomExecProofs list
   entryValueRevertPtr entryDispatchPtr sourceEntryCode selectedBodyCode
@@ -77,7 +77,7 @@ Theorem external_entry_reaches_registration_ptr:
     ?lbl cenv0 pos_args min_cds is_payable nkey ut' iv rt st cenv sa st' s1
      G1 tn1.
       set_external_package_target rpolicy.rpol_target
-        (package_external_fn tops F (assign_nkeys tops 0)
+        (package_external_fn tops T (K global_nonreentrant_slot)
            (mut, F, lookup_raw_return_or_F (NONE : num option)
                        tx.function_name External tops,
             tx.function_name, args, [], ret, fbody)) =
@@ -117,7 +117,7 @@ Proof
      metis_tac[supported_program_runtime_bodies_shape_ok]) >>
   `~ctx_has_dalloca unit.cu_context` by metis_tac[o1_source_unit_ok_no_dalloca] >>
   qabbrev_tac `pkg = set_external_package_target rpolicy.rpol_target
-    (package_external_fn tops F (assign_nkeys tops 0)
+    (package_external_fn tops T (K global_nonreentrant_slot)
       (mut, F, lookup_raw_return_or_F (NONE : num option)
         tx.function_name External tops, tx.function_name, args, [], ret, fbody))` >>
   PairCases_on `pkg` >>
@@ -128,12 +128,14 @@ Proof
           package_external_fn_def] >> strip_tac >> gvs[]) >>
   fs[] >>
   `set_external_package_target rpolicy.rpol_target
-    (package_external_fn tops F (assign_nkeys tops 0)
+    (package_external_fn tops T (K global_nonreentrant_slot)
       (mut,F,lookup_raw_return_or_F (NONE:num option) tx.function_name External tops,
        tx.function_name,args,([] : expr list),ret,fbody)) =
     ("fn_" ++ tx.function_name,pkg1,pkg2,pkg3,mut = Payable,F,pkg6,pkg7,pkg8,fbody,pkg10)` by
     (qpat_x_assum `set_external_package_target _ _ = _` mp_tac >>
      simp[package_external_fn_def]) >>
+  `ALL_DISTINCT (FLAT (MAP (external_name_keys_toplevel (NONE:num option)) tops))` by
+    metis_tac[source_typing_ok_external_names_distinct] >>
   drule_all source_selected_entry_prefix_structure >> strip_tac >>
   suspend "dispatch"
 QED
@@ -160,7 +162,7 @@ Resume external_entry_reaches_registration_ptr[dispatch]:
 QED
 
 Resume external_entry_reaches_registration_ptr[checks]:
-  qabbrev_tac `raw = package_external_fn tops F (assign_nkeys tops 0)
+  qabbrev_tac `raw = package_external_fn tops T (K global_nonreentrant_slot)
     (mut,F,lookup_raw_return_or_F (NONE:num option) tx.function_name External tops,
      tx.function_name,args,([] : expr list),ret,fbody)` >>
   PairCases_on `raw` >>
