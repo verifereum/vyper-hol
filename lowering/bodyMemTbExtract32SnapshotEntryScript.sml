@@ -215,6 +215,8 @@ Proof
      qexistsl_tac [`s`,`sa`,`es'.scopes`] >> simp[]) >>
   `expr_val_at cenv cx (BaseT (BytesT (Dynamic cap))) s0c sb es' (BytesV bs) src u` by
     (gvs[expr_post_def, expr_val_at_def, is_word_type_def, w2n_n2w] >>
-     metis_tac[LESS_LESS_EQ_TRANS]) >>
+     FIRST [(disj1_tac >> qexistsl_tac [`aid`,`b'`,`sz`] >> simp[] >>
+             irule LESS_LESS_EQ_TRANS >> qexists_tac `sa.cs_next_id` >> simp[]),
+            metis_tac[LESS_LESS_EQ_TRANS]]) >>
   qexistsl_tac [`b`,`u`] >> simp[] >> metis_tac[]
 QED
