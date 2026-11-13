@@ -27,7 +27,8 @@ Proof
   strip_tac >>
   fs[ptr_history_content_def, ptr_taint_content_def, ptr_taint_control_def,
      ptr_core_shared_def, ptr_shared_fields_def,
-     contract_storage_def, contract_transient_def]
+     contract_storage_def, contract_transient_def] >>
+  qpat_x_assum `s.vs_call_ctx = t.vs_call_ctx` (SUBST_ALL_TAC o SYM) >> simp[]
 QED
 
 Theorem ptr_dalloca_execution[local]:
