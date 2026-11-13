@@ -137,7 +137,7 @@ Proof
   simp[step_inst_base_opcode_eqs, mk_inst_def, jump_to_def, op_taint_def]
 QED
 
-Theorem origin_ptr_path_then[local]:
+Theorem origin_ptr_path_then:
   gas_origin_ptr_path cx st [] (OK mid,G1,tn1) /\
   gas_origin_ptr_path cx (mid,G1,tn1) [] (r,G2,tn2) ==>
   gas_origin_ptr_path cx st [] (r,G2,tn2)
