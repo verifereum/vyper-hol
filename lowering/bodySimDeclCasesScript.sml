@@ -722,7 +722,10 @@ Proof
      simp[extend_local_def]) >>
   ASM_REWRITE_TAC [expr_sim_inv_def] >> simp[] >>
   conj_tac >- fs[extend_local_def] >>
-  irule storage_conjs_scopes >> simp[]
+  conj_tac >- (irule storage_conjs_scopes >> simp[]) >>
+  qpat_x_assum `expr_sim_inv cenv cx env es`
+    (strip_assume_tac o REWRITE_RULE [expr_sim_inv_def]) >>
+  FIRST [first_assum ACCEPT_TAC, rpt strip_tac >> res_tac >> simp[]]
 QED
 
 (* After an iteration that goes on (a normal end or a continue), with the
