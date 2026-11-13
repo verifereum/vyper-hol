@@ -120,10 +120,10 @@ End
 
 (* ===== The call cases ===== *)
 
-(* PLANNED ADMISSION: the runtime unit S7g runs reaches no oversized CREATE.
-   supported_program's body_stmt_safe excludes CreateTarget, so the lowering
-   emits no CREATE or CREATE2 and O1 keeps them absent; the premise then
-   holds at every state. *)
+(* HELD ADMISSION SEQ-4325: the runtime unit S7g runs reaches no CREATE or
+   CREATE2 whose initcode exceeds the EIP-3860 limit; discharged through
+   S3's mem_safe_step and O1's mem_inv transport, with the size bound taken
+   from the source run's own check, so it survives CreateTarget support. *)
 Theorem o1_runtime_unit_create_size_ok:
   !tops rpolicy unit out vs.
     supported_program tops /\
