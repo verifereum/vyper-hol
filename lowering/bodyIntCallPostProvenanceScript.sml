@@ -7,7 +7,7 @@ Ancestors
   bodyIntCallPostProvenanceEndpointProbe bodyIntCallPostProvenanceConditionalProbe
   bodyIntCallPostProvenanceLiveSource bodyIntCallPostProvenanceLivePost
   bodyIntCallPostProvenanceCapture bodyIntCallPostProvenanceOwnedTransport
-  bodyIntCallPostProvenanceSnapshotOwned
+  bodyIntCallPostProvenanceSnapshotOwned bodyIntCallPostProvenanceSnapshotPath
   bodyIntCallPostProvenanceCallbacks
   bodyIntCallPostProvenanceFootprint
 
