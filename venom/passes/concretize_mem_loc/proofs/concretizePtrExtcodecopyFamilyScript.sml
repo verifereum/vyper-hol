@@ -166,7 +166,6 @@ Theorem ptr_extcodecopy_prefix_execution[local]:
   ptr_paired_prefix R lp positions lo vs C C'
     h a ht at done tokens registry births PT TG saved entries H calls ws /\
   o1_ctx_shape C /\ o1_run_state_ok vs /\ ptr_discipline lo C vs /\
- 
   a.po_inst.inst_opcode = EXTCODECOPY /\
   at.po_inst = concretize_inst_with_positions (lp a.po_fn) a.po_inst /\
   ptr_chrono_step C' at zt ==>
