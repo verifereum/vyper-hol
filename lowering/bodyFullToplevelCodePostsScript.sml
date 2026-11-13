@@ -5,7 +5,7 @@ Ancestors
   bodyFullUnwrapSlotPost exprPtrCleanBufferPost exprPtrUnwrapFrames
   bodyFullShared exprLowering bodyPtrDefs exprPtrCodeCopyEndpoint
   exprPtrUnwrapAllocationFrame exprPtrUnwrapRetained exprPtrUnwrapAllocSeparation
-  exprLoweringProps compileEnv loweringPosts loweringStateRelDefs
+  exprLoweringProps compileEnv loweringPosts loweringStateRelDefs exprSimAlloc allocationPtr
   ptrDiscipline venomState venomInst finite_map arithmetic words pred_set
   bufferAllocationExecution exprSimCopy exprSimStorageCopy exprPtrUnwrapEndpointFrames
 
@@ -134,4 +134,32 @@ Proof
   rpt strip_tac >>
   `i < buffer_allocation_base s sm.cs_next_id` by decide_tac >>
   fs[ghost_kept_at_def] >> metis_tac[]
+QED
+
+Theorem toplevel_code_runtime_wb_frame:
+  compile_expr cenv ty (TopLevelName ann nsid) sx = (vv,sm0) /\
+  compile_alloc_buffer nb sm = (buf,mid) /\ fn_has_code sm mid func /\
+  stmt_state_rel H ctx func cenv cx ee s /\ fn_inst_ids_distinct func /\
+  local_ptrs_reserved cenv sm /\ nb < dimword (:256) /\
+  sb.cs_next_id <= sm.cs_next_id /\
+  (!x. not_fresh_at sb x ==> lookup_var x z = lookup_var x s) /\
+  (!aid entry. FLOOKUP s.vs_allocas aid = SOME entry ==>
+    FLOOKUP z.vs_allocas aid = SOME entry) /\
+  (!off len. off+len <= buffer_allocation_base s sm.cs_next_id \/
+     buffer_allocation_base s sm.cs_next_id+nb <= off ==>
+     mem_bytes_at off len z.vs_memory = mem_bytes_at off len s.vs_memory) ==>
+  wb_frame cenv ee ee sb s z
+Proof
+  strip_tac >> drule_all buffer_alloc_code >> strip_tac >>
+  irule unwrap_slot_copy_wb_frame >>
+  (conj_tac >- simp[]) >> reverse conj_tac >- simp[] >>
+  qexistsl [`nb`, `buffer_allocation_base s sm.cs_next_id`] >>
+  asm_rewrite_tac[] >> reverse conj_tac
+  >- (rpt strip_tac >>
+      `alloca_inv s` by fs[stmt_state_rel_def] >>
+      once_rewrite_tac[DISJ_COMM] >>
+      irule buffer_allocation_disjoint >> simp[] >>
+      reverse conj_tac >- (qexists `aid` >> simp[] >> decide_tac) >>
+      rpt strip_tac >> drule_all stmt_state_rel_alloca_site_bound >> simp[]) >>
+  rpt strip_tac >> drule_all unwrap_alloc_local_separation >> metis_tac[]
 QED
