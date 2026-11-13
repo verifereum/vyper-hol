@@ -27,6 +27,7 @@
 
 Theory bodySimDeclCases
 Ancestors
+  bodyPtrIfExpRepresentationCases
   supportedExprTraverse allocLimitsProps
   annassignRelayoutFrag annassignRelayoutSource
   valueEncodingDefs exprSimSource
@@ -486,8 +487,10 @@ Proof
   `type_memory_bytes cenv typ < dimword (:256)` by
     (gvs[wordsTheory.dimword_def] >> decide_tac) >>
   `~(has_length_word typ /\ is_empty_value_expr e)` by
-    (Cases_on `e` >>
-     gvs[is_empty_value_expr_def, oneline exprLoweringTheory.lowered_value_type_def, expr_type_def]) >>
+    (strip_tac >>
+     qpat_x_assum `lowered_value_type cenv e <> expr_type e` (strip_assume_tac o
+       MATCH_MP bodyPtrIfExpRepresentationCasesTheory.lowered_value_type_exceptions) >>
+     gvs[stmtLoweringTheory.is_empty_value_expr_def, stmtLoweringTheory.has_length_word_def, vyperASTTheory.expr_type_def]) >>
   irule compile_annassign_relayout_stmt_frag >>
   goal_assum (drule_at Any) >> simp[] >>
   conj_tac

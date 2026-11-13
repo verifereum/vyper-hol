@@ -47,6 +47,7 @@
 
 Theory bodySimStmtCases
 Ancestors
+  bodyPtrIfExpRepresentationCases
   bodyAssignTupleWidenedPrep stmtSimAssignTuplePlaces
   loweringStateRelDefs valueEncodingProps bodyAssignTupleOther assignRelayoutFrag assignRelayoutCaller annassignRelayoutSource
   exprSimSource bodyExprPreFacts exprSimTopLevelProps stmtSimBreak stmtSimContinue stmtSimExpr stmtSimSeqEnv stmtSimPass stmtSimProps exprSimHypsDefs stmtSimZero stmtSimDefs loweringPosts bodyAppendStorageFacts bodyAppendStorageAdapter
@@ -1620,8 +1621,17 @@ Proof
    sfields_tenv_consistent cenv.ce_struct_fields (get_tenv cx)` by
     fs[body_inv_def, expr_sim_inv_def] >>
   `~(has_length_word (expr_type e) /\ is_empty_value_expr e)` by
-    (Cases_on `e` >>
-     gvs[is_empty_value_expr_def, oneline exprLoweringTheory.lowered_value_type_def, expr_type_def]) >>
+    (qpat_x_assum `~(lowered_value_type cenv e = expr_type e \/ _)` mp_tac >>
+     rpt (pop_assum kall_tac) >> rpt strip_tac >>
+     `lowered_value_type cenv e <> expr_type e` by (strip_tac >> fs[]) >>
+     drule bodyPtrIfExpRepresentationCasesTheory.lowered_value_type_exceptions >>
+     strip_tac >>
+     gvs[oneline stmtLoweringTheory.is_empty_value_expr_def, AllCaseEqs(),
+         stmtLoweringTheory.has_length_word_def, vyperASTTheory.expr_type_def,
+         exprLoweringTheory.lowered_value_type_def,
+         compileEnvTheory.is_bytestring_type_def,
+         vyperTypeSystemTheory.arg_type_fits_def] >>
+     Cases_on `bs` >> fs[]) >>
   `expr_sim ctx func cenv cx (expr_type e) e es` by metis_tac[body_expr_ok_def] >>
   irule compile_assign_local_relayout_stmt_frag >>
   goal_assum (drule_at Any) >> simp[] >>

@@ -6,6 +6,7 @@ Ancestors
   exprSimDefs exprSimHypsDefs loweringPosts stmtSimDefs compileEnv
   targetPlaceSimCases gasSummary gasSummaryCompose exprSimSubscriptMap
   placeRelayoutOpen exprOpenMain supportedExprs supportedTargets
+  bodyPtrIfExpRepresentationCases
 
 Theorem widened_place_raw_rhs_outcome:
   expr_body_pre cenv cx env e es /\
@@ -105,9 +106,17 @@ Proof
   `~is_word_type dty` by metis_tac[strict_widened_assignment_nonword] >>
   drule_all assignRelayoutCallerTheory.assign_relayout_source_classify >> strip_tac >>
   `~(has_length_word (expr_type e) /\ is_empty_value_expr e)` by
-    (Cases_on `e` >>
-     gvs[stmtLoweringTheory.is_empty_value_expr_def,
-       oneline exprLoweringTheory.lowered_value_type_def, vyperASTTheory.expr_type_def]) >>
+    (qpat_x_assum `~(lowered_value_type cenv e = expr_type e \/ _)` mp_tac >>
+     rpt (pop_assum kall_tac) >> rpt strip_tac >>
+     `lowered_value_type cenv e <> expr_type e` by (strip_tac >> fs[]) >>
+     drule bodyPtrIfExpRepresentationCasesTheory.lowered_value_type_exceptions >>
+     strip_tac >>
+     gvs[oneline stmtLoweringTheory.is_empty_value_expr_def, AllCaseEqs(),
+         stmtLoweringTheory.has_length_word_def, vyperASTTheory.expr_type_def,
+         exprLoweringTheory.lowered_value_type_def,
+         compileEnvTheory.is_bytestring_type_def,
+         vyperTypeSystemTheory.arg_type_fits_def] >>
+     Cases_on `bs` >> fs[]) >>
   `post_value_type cenv e <> expr_type e /\
    ~is_word_type (post_value_type cenv e)` by fs[] >>
   rewrite_tac[stmt_frag_def, stmt_framed_frag_def] >>
