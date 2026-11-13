@@ -6,7 +6,7 @@
    These are syntactic tests, NOT source typing or storage invariants. *)
 Theory supportedTypes
 Ancestors
-  vyperAST list arithmetic
+  vyperAST list arithmetic alist
 
 Definition supported_main_nsid_def:
   supported_main_nsid ((module_id, name) : nsid) <=> module_id = NONE
@@ -218,4 +218,34 @@ Proof
   conj_tac >> rewrite_tac[supported_storage_type_def] >>
   CONV_TAC (LAND_CONV (ONCE_REWRITE_CONV [supported_nested_type_def])) >>
   simp[supported_full_word_type_def, CONJ_COMM]
+QED
+
+Theorem supported_nested_type_fuel_mono:
+  !leaf n tops ty.
+    supported_nested_type leaf n tops ty ==>
+    !m. n <= m ==> supported_nested_type leaf m tops ty
+Proof
+  recInduct supported_nested_type_ind >> rpt strip_tac >>
+  qpat_x_assum `supported_nested_type leaf fuel tops ty` mp_tac >>
+  once_rewrite_tac[supported_nested_type_def] >>
+  Cases_on `ty` >> gvs[AllCaseEqs(), EVERY_MEM] >>
+  rpt strip_tac >> simp[]
+  >~ [`ArrayT elem bd`] >- (Cases_on `bd` >> gvs[] >> metis_tac[]) >>
+  Cases_on `supported_struct_fields tops p` >> gvs[] >>
+  `fuel - 1 <= m - 1` by decide_tac >>
+  `m <> 0` by decide_tac >> metis_tac[]
+QED
+
+Theorem supported_storage_field:
+  supported_storage_type tops (StructT sid) /\
+  supported_struct_fields tops sid = SOME fields /\
+  ALOOKUP fields f = SOME ty ==> supported_storage_type tops ty
+Proof
+  rewrite_tac[supported_storage_type_def] >>
+  CONV_TAC (LAND_CONV (ONCE_DEPTH_CONV (REWR_CONV supported_nested_type_def))) >>
+  simp[supported_full_word_type_def, EVERY_MEM] >> rpt strip_tac >>
+  drule alistTheory.ALOOKUP_MEM >> strip_tac >>
+  gvs[AllCaseEqs()] >>
+  irule supported_nested_type_fuel_mono >>
+  qexists_tac `LENGTH tops - 1` >> simp[] >> metis_tac[pairTheory.SND]
 QED
