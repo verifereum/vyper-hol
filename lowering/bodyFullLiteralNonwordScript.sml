@@ -283,7 +283,7 @@ QED
 Resume literal_nonword_value_full[post]:
   simp[Abbr `Q`] >> rpt strip_tac >> gvs[]
   >~ [`expr_post _ _ _ _ _ _ _ _ _ _ _ _ _ _`] >-
-    (drule_all expr_post_of_vv_post_memory >> simp[]) 
+    (drule_all expr_post_of_vv_post_memory >> simp[])
   >~ [`expr_store_bound _ _ _ _ _`] >-
     (gvs[vv_store_bound_def, expr_store_bound_def, read_result_def, return_def] >>
      metis_tac[]) >>
