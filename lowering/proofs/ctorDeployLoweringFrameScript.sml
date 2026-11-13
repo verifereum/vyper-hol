@@ -18,6 +18,7 @@ Ancestors
   placeTypingBuildProps structFieldsProps pair allocLimitsProps alist
   ctorDeployLoweringFrameStmtWidths ctorDeployLoweringFrameSupport vyperTypeSystem
   bodyExprPreFacts immutableLocationProps entryStateRel
+  bodyStorageMetadata supportedNames loweringShapeProps
 Libs
   monadsyntax
 
@@ -39,29 +40,6 @@ Theorem deploy_ctor_immutable_size:
   LENGTH runtime_bc + imm_len tops < dimword(:256)
 Proof
   strip_tac >> drule deploy_imm_budget_ok >> simp[]
-QED
-
-Theorem deploy_ctor_oracle_storage:
-  deploy_state_rel tops deploy_bc am tx es /\
-  gas_variant vs (deploy_entry_state prog cplan tops es) ==>
-  oracle_storage_ok (deploy_evaluation_context tops am tx)
-    (es0 with outcomes := SOME vs.vs_outcomes)
-Proof
-  strip_tac >>
-  `vs.vs_outcomes = MAP SND (call_trace es)` by
-    (qpat_x_assum `gas_variant _ _` (mp_tac o SRULE [gas_variant_def]) >>
-     simp[gas_variant_def] >>
-     disch_then (mp_tac o Q.AP_TERM `\s. s.vs_outcomes`) >>
-     simp[deploy_entry_state_def, entry_venom_state_def]) >>
-  fs[deploy_oracle_storage_payload] >>
-  qpat_x_assum `deploy_state_rel _ _ _ _ _` mp_tac >>
-  simp[deploy_state_rel_def] >> strip_tac >>
-  fs[EVERY_MEM] >> rpt strip_tac >>
-  irule contract_storage_well_formed_backends_frame >>
-  qexists `initial_state (am with <|accounts := co.co_accounts;
-                                  tStorage := co.co_tStorage|>) []` >>
-  simp[vyperInterpreterTheory.initial_state_def] >>
-  metis_tac[]
 QED
 
 Theorem compile_register_constructor_args_return_pc:
@@ -343,10 +321,17 @@ Theorem deploy_frame_module_constants_tStorage:
     evaluate_module_constants cx am addr mods = SOME am' ==>
     am'.tStorage = am.tStorage
 Proof
-  Induct >- simp[evaluate_module_constants_def] >>
+  Induct >- simp[evaluate_module_constants_def, evaluate_module_constants_trace_def] >>
   PairCases >> rpt gen_tac >>
-  simp[evaluate_module_constants_def, AllCaseEqs()] >> rpt strip_tac >>
-  first_x_assum drule >> simp[merge_constants_def]
+  Cases_on `constants_env_trace (set_current_module cx h0) am addr h0 h1 FEMPTY` >>
+  rename1 `constants_env_trace _ _ _ _ _ _ = (res,observations)` >>
+  Cases_on `res` >>
+  simp[evaluate_module_constants_def, Once evaluate_module_constants_trace_def] >>
+  rename1 `constants_env_trace _ _ _ _ _ _ = (SOME cenv,observations)` >>
+  Cases_on `evaluate_module_constants_trace cx (merge_constants addr h0 cenv am) addr mods` >>
+  gvs[evaluate_module_constants_def] >> strip_tac >>
+  first_x_assum (qspecl_then [`cx`, `merge_constants addr h0 cenv am`, `addr`, `am'`] mp_tac) >>
+  simp[merge_constants_def]
 QED
 
 Theorem deploy_frame_all_constants_tStorage:
@@ -362,10 +347,17 @@ Theorem deploy_frame_module_constants_accounts:
     evaluate_module_constants cx am addr mods = SOME am' ==>
     am'.accounts = am.accounts
 Proof
-  Induct >- simp[evaluate_module_constants_def] >>
+  Induct >- simp[evaluate_module_constants_def, evaluate_module_constants_trace_def] >>
   PairCases >> rpt gen_tac >>
-  simp[evaluate_module_constants_def, AllCaseEqs()] >> rpt strip_tac >>
-  first_x_assum drule >> simp[merge_constants_def]
+  Cases_on `constants_env_trace (set_current_module cx h0) am addr h0 h1 FEMPTY` >>
+  rename1 `constants_env_trace _ _ _ _ _ _ = (res,observations)` >>
+  Cases_on `res` >>
+  simp[evaluate_module_constants_def, Once evaluate_module_constants_trace_def] >>
+  rename1 `constants_env_trace _ _ _ _ _ _ = (SOME cenv,observations)` >>
+  Cases_on `evaluate_module_constants_trace cx (merge_constants addr h0 cenv am) addr mods` >>
+  gvs[evaluate_module_constants_def] >> strip_tac >>
+  first_x_assum (qspecl_then [`cx`, `merge_constants addr h0 cenv am`, `addr`, `am'`] mp_tac) >>
+  simp[merge_constants_def]
 QED
 
 Theorem deploy_frame_all_constants_accounts:
@@ -494,7 +486,7 @@ QED
 
 Theorem deploy_frame_source_start_setup:
   !tops am tx mut nr body am_c es0 deploy_bc es.
-  deploy_state_rel tops deploy_bc am tx es /\
+  deploy_source_ok tops am tx /\
   deploy_state_rel tops deploy_bc am tx es /\
   deploy_ctor_start tops am tx (mut,nr,body,am_c,es0) ==>
   ?deploy_art runtime_art args env_body env_after.
@@ -589,7 +581,7 @@ QED
 
 Theorem deploy_frame_semantic_setup:
   !tops am tx mut nr stmts am_c es0 deploy_bc es vs prog cplan.
-  deploy_state_rel tops deploy_bc am tx es /\
+  deploy_source_ok tops am tx /\
   deploy_ctor_start tops am tx (mut,nr,stmts,am_c,es0) /\
   deploy_state_rel tops deploy_bc am tx es /\
   call_outcomes_ok am tx (MAP SND (call_trace es)) /\
@@ -623,9 +615,7 @@ Theorem deploy_frame_semantic_setup:
     context_well_typed (deploy_evaluation_context tops am tx) /\
     functions_well_typed (deploy_evaluation_context tops am tx) /\
     popped_keys_indexed es0.scopes /\
-    outcomes_accounts_typed (SOME vs.vs_outcomes) /\
-    oracle_storage_ok (deploy_evaluation_context tops am tx)
-      (es0 with outcomes := SOME vs.vs_outcomes)
+    outcomes_accounts_typed (SOME vs.vs_outcomes)
 Proof
   rpt gen_tac >> strip_tac >>
   drule_all deploy_frame_source_start_setup >> strip_tac >>
@@ -639,10 +629,6 @@ Proof
      simp[deploy_entry_state_def, entry_venom_state_def]) >>
   `outcomes_accounts_typed (SOME vs.vs_outcomes)` by
     metis_tac[deploy_frame_outcomes_accounts_typed] >>
-  `oracle_storage_ok (deploy_evaluation_context tops am tx)
-      (es0 with outcomes := SOME vs.vs_outcomes)` by
-    (irule deploy_ctor_oracle_storage >> goal_assum (drule_at Any) >>
-     goal_assum (drule_at Any)) >>
   qexistsl [`deploy_art`, `runtime_art`, `args`, `bindings`, `env_body`, `env_after`] >>
   simp[] >> metis_tac[]
 QED
@@ -1153,12 +1139,13 @@ Theorem deploy_frame_storage_var_types:
       cenv.ce_hashmap_info (src,id) = NONE /\
       cenv.ce_module_var_type (src,id) = SOME typ
 Proof
-  rpt gen_tac >> strip_tac >>
-  `!src ts. get_module_code (deploy_evaluation_context tops am tx) src = SOME ts ==>
-            src = NONE` by
-    simp[deploy_evaluation_context_def, initial_evaluation_context_def,
-         get_module_code_def] >>
-  metis_tac[bodySimStmtCasesTheory.body_inv_storage_var_types]
+  rpt gen_tac >> strip_tac >> rpt gen_tac >> strip_tac >>
+  `src = NONE` by
+    gvs[deploy_evaluation_context_def, initial_evaluation_context_def,
+        get_module_code_def] >>
+  gvs[body_inv_def] >>
+  drule bodyStorageMetadataTheory.find_var_decl_storage_mem >> strip_tac >> gvs[] >>
+  drule_all bodyStorageMetadataTheory.build_maps_variable >> simp[]
 QED
 
 (* body_stmts_sim's premises for the constructor body at its start, and the
@@ -1353,8 +1340,15 @@ Proof
   Cases_on `lookup_function NONE fid1 Internal tops` >> gvs[]
   >- (irule lookup_deploy_return_type >> simp[] >> metis_tac[]) >>
   drule lookup_function_Internal_SOME_MEM >> strip_tac >>
-  irule memoryLocalRhsPropsTheory.build_func_return_type_distinct >> simp[] >>
-  goal_assum (drule_at Any) >> simp[]
+  qpat_x_assum `MEM (FunctionDecl Internal _ _ _ fid1 _ _ _ _) tops` mp_tac >>
+  qpat_x_assum `ALL_DISTINCT (supported_function_names tops)` mp_tac >>
+  qid_spec_tac `tops` >> Induct >> simp[] >> Cases >>
+  simp[build_func_return_type_def, supportedNamesTheory.supported_function_names_def] >>
+  rpt strip_tac >> gvs[] >>
+  rename1 `MEM (FunctionDecl Internal _ _ _ fid1 _ _ _ _) rest` >>
+  `MEM fid1 (supported_function_names rest)` by
+    (simp[loweringShapePropsTheory.MEM_supported_function_names] >> metis_tac[]) >>
+  `fid1 <> s` by (strip_tac >> gvs[]) >> rw[]
 QED
 
 Theorem deploy_ctor_body_frame:
