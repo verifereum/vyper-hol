@@ -6,6 +6,9 @@ Ancestors
   extcallDecoderStaticSuffix extcallDecoderArraySemantics extcallDecoderMemberSemantics
   extcallDecoderCompositeMemory extcallEncoderWindowMemory extcallCalldataOpsMemory
   extcallEncoderStageMemory extcallStoreUnwrapMemory
+  extcallCompilerStages extcallEffectMemory extcallFinishMemory
+  extcallReturnTyping extcallReturnDefaultMemory extcallReturnBranchMemory
+  extcallReturnFrameMemory extcallReturnPostMemory
 
 Theorem body_extcall_mem_case:
   !cx v14 is_static skip_check sig opts es v15.
