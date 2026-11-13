@@ -21,7 +21,7 @@ QED
 Theorem scfg_assign_step_alloca[local]:
   i.inst_opcode = ASSIGN /\ step_inst n C i a = OK b ==>
   b.vs_alloca_next = a.vs_alloca_next /\ b.vs_allocas = a.vs_allocas /\
-  b.vs_initial_fmp = a.vs_initial_fmp
+  b.vs_initial_fmp = a.vs_initial_fmp /\ b.vs_gas_readings = a.vs_gas_readings
 Proof
   strip_tac >>
   gvs[step_inst_non_invoke, step_inst_base_def, AllCaseEqs(), update_var_def]
@@ -34,7 +34,7 @@ Theorem scfg_assign_prefix_alloca[local]:
   LENGTH pre <= a.vs_inst_idx /\
   t.vs_inst_idx <= LENGTH pre + LENGTH assigns ==>
   t.vs_alloca_next = a.vs_alloca_next /\ t.vs_allocas = a.vs_allocas /\
-  t.vs_initial_fmp = a.vs_initial_fmp
+  t.vs_initial_fmp = a.vs_initial_fmp /\ t.vs_gas_readings = a.vs_gas_readings
 Proof
   ho_match_mp_tac scfg_iprefix_strongind >> conj_tac >- simp[] >>
   rpt gen_tac >> strip_tac >> rpt gen_tac >> strip_tac >>
@@ -54,7 +54,7 @@ Theorem scfg_assign_interval_alloca:
   a.vs_inst_idx = LENGTH pre /\ scfg_iprefix C bb a t /\
   t.vs_inst_idx <= LENGTH pre + LENGTH assigns ==>
   t.vs_alloca_next = a.vs_alloca_next /\ t.vs_allocas = a.vs_allocas /\
-  t.vs_initial_fmp = a.vs_initial_fmp
+  t.vs_initial_fmp = a.vs_initial_fmp /\ t.vs_gas_readings = a.vs_gas_readings
 Proof
   metis_tac[scfg_assign_prefix_alloca, arithmeticTheory.LESS_EQ_REFL]
 QED
@@ -71,20 +71,22 @@ Proof
   drule_all scfg_assign_interval_opcode >> simp[]
 QED
 
-Theorem scfg_assign_interval_corr:
+Theorem scfg_assign_interval_corr[local]:
   bb.bb_instructions = pre ++ assigns ++ tail /\
   EVERY (\i. i.inst_opcode = ASSIGN) assigns /\
   a.vs_inst_idx = LENGTH pre /\ scfg_iprefix C bb a t /\
   t.vs_inst_idx < LENGTH pre + LENGTH assigns /\
   get_instruction bb t.vs_inst_idx = SOME j /\
   u.vs_alloca_next = a.vs_alloca_next /\ u.vs_allocas = a.vs_allocas /\
-  u.vs_initial_fmp = a.vs_initial_fmp ==>
+  u.vs_initial_fmp = a.vs_initial_fmp /\
+  u.vs_gas_readings = a.vs_gas_readings ==>
   mem_corr i u j t /\ call_corr i u j t
 Proof
   rpt strip_tac >>
   `j.inst_opcode = ASSIGN` by metis_tac[scfg_assign_interval_active] >>
   `t.vs_alloca_next = a.vs_alloca_next /\ t.vs_allocas = a.vs_allocas /\
-   t.vs_initial_fmp = a.vs_initial_fmp` by
+   t.vs_initial_fmp = a.vs_initial_fmp /\
+   t.vs_gas_readings = a.vs_gas_readings` by
     (`t.vs_inst_idx <= LENGTH pre + LENGTH assigns` by decide_tac >>
      drule_all scfg_assign_interval_alloca >> simp[]) >>
   simp[mem_corr_def, call_corr_def, inst_mem_ranges_def,
@@ -156,7 +158,11 @@ Theorem scfg_assign_tail_observe:
   u.vs_initial_fmp = a.vs_initial_fmp /\ fn_inst_wf fn ==>
   ?i' u'. frame_reach C fn s0 i' u' /\ mem_corr i' u' j t /\ call_corr i' u' j t
 Proof
-  strip_tac >> Cases_on `t.vs_inst_idx < u.vs_inst_idx`
+  strip_tac >>
+  `u.vs_gas_readings = a.vs_gas_readings` by
+    (mp_tac (Q.INST [`t` |-> `u`, `bb` |-> `fb`] scfg_assign_interval_alloca) >>
+     simp[]) >>
+  Cases_on `t.vs_inst_idx < u.vs_inst_idx`
   >- (qexistsl_tac [`i`, `u`] >> simp[] >>
       `t.vs_inst_idx < LENGTH pre + LENGTH assigns` by decide_tac >>
       drule_all scfg_assign_interval_corr >> simp[]) >>
@@ -176,7 +182,7 @@ QED
 Theorem scfg_phi_alloca[local]:
   eval_phis s xs = OK u /\ eval_phis s ys = OK v ==>
   u.vs_alloca_next = v.vs_alloca_next /\ u.vs_allocas = v.vs_allocas /\
-  u.vs_initial_fmp = v.vs_initial_fmp
+  u.vs_initial_fmp = v.vs_initial_fmp /\ u.vs_gas_readings = v.vs_gas_readings
 Proof
   strip_tac >> imp_res_tac venomExecProofsTheory.eval_phis_only_updates_vs_vars >>
   rpt conj_tac >>
@@ -233,7 +239,8 @@ Proof
     `u with vs_inst_idx := LENGTH ps`] >>
   `((u with vs_inst_idx := LENGTH ps).vs_alloca_next = a.vs_alloca_next) /\
    ((u with vs_inst_idx := LENGTH ps).vs_allocas = a.vs_allocas) /\
-   ((u with vs_inst_idx := LENGTH ps).vs_initial_fmp = a.vs_initial_fmp)` by
+   ((u with vs_inst_idx := LENGTH ps).vs_initial_fmp = a.vs_initial_fmp) /\
+   ((u with vs_inst_idx := LENGTH ps).vs_gas_readings = a.vs_gas_readings)` by
     (simp[] >> irule scfg_phi_alloca >> metis_tac[]) >>
   simp[] >> conj_tac
   >- (rpt strip_tac >> match_mp_tac scfg_fix_phis_tail_lookup >> metis_tac[]) >>

@@ -946,7 +946,8 @@ Proof
   `execution_frame a = execution_frame v` by gvs[supply_state_agree_def] >>
   `a.vs_call_entry_fmp = v.vs_call_entry_fmp /\
    a.vs_alloca_next = v.vs_alloca_next /\ a.vs_allocas = v.vs_allocas /\
-   a.vs_initial_fmp = v.vs_initial_fmp` by gvs[stateFrameTheory.execution_frame_def] >>
+   a.vs_initial_fmp = v.vs_initial_fmp /\
+   a.vs_gas_readings = v.vs_gas_readings` by gvs[stateFrameTheory.execution_frame_def] >>
   conj_tac
   >- (drule_all supply_inst_mem_ranges_cong >> simp[mem_corr_def]) >>
   simp[call_corr_def] >> strip_tac >>

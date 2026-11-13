@@ -692,13 +692,16 @@ Proof
 QED
 
 (* What the memory facts see of a state: the alloca frame, the initial
-   free-memory pointer and the instruction's memory ranges.  An inserted
-   instruction that touches no memory corresponds to any instruction. *)
+   free-memory pointer, the gas readings left and the instruction's memory
+   ranges.  An inserted instruction that touches no memory corresponds to
+   any instruction.  The readings let a fact guarded by how many readings
+   a state has popped (gas_cut) move along the correspondence. *)
 Definition mem_corr_def:
   mem_corr inst s inst' s' <=>
     s'.vs_alloca_next = s.vs_alloca_next /\
     s'.vs_allocas = s.vs_allocas /\
     s'.vs_initial_fmp = s.vs_initial_fmp /\
+    s'.vs_gas_readings = s.vs_gas_readings /\
     (inst_mem_ranges inst' s' = [] \/
      inst_mem_ranges inst' s' = inst_mem_ranges inst s)
 End
@@ -985,6 +988,18 @@ Proof
     rw[mem_corr_closed_rf_def, mem_corr_def, raw_mem_ok_def,
        inst_mem_ok_in_fn_def, in_revert_forward_def, th]) >>
   fs[] >> metis_tac[]
+QED
+
+(* mem_corr keeps the gas readings, so a fact guarded by a condition on
+   them (gas_cut) is closed when the fact is. *)
+Theorem mem_corr_closed_rf_readings_guard:
+  mem_corr_closed_rf M ==>
+  mem_corr_closed_rf (\ctx fn inst s. P s.vs_gas_readings ==> M ctx fn inst s)
+Proof
+  simp[mem_corr_closed_rf_def] >> strip_tac >> conj_tac >> rpt strip_tac >>
+  rename1 `mem_corr i0 s0 i1 s1` >>
+  `s1.vs_gas_readings = s0.vs_gas_readings` by fs[mem_corr_def] >>
+  `M ctx fn i0 s0` by gvs[] >> metis_tac[]
 QED
 
 Theorem mem_corr_closed_rf_static_mem_ok:

@@ -9,6 +9,7 @@
  *)
 Theory o1ContractMakeSsaSrc
 Ancestors
+  o1SafeUpto
   o1PassContract ptrDiscipline unitMemInv lowerDloadDefs venomPassSchedule
   list o1PassLift contextRawReachable venomInst venomWf venomFnScheduleRunner
   makeSsaDefs makeSsaCurrentProps makeSsaCurrentSim
@@ -225,8 +226,10 @@ Theorem make_ssa_src_stage_dload_ok[local]:
   ctx_pass_stage rpolicy (CFP_Simple VP_MakeSSA) view C C' /\
   o1_ctx_shape C /\ EVERY make_ssa_input_ok C.ctx_functions /\
   vs.vs_vars = FEMPTY /\ ~vs.vs_halted /\
-  mem_inv dload_offset_ok C vs ==>
-  mem_inv dload_offset_ok C' vs
+  (!fn inst s. raw_reachable vs C fn inst s /\ gas_cut k vs s ==>
+     dload_offset_ok C fn inst s) ==>
+  !fn inst s. raw_reachable vs C' fn inst s /\ gas_cut k vs s ==>
+    dload_offset_ok C' fn inst s
 Proof
   strip_tac >>
   `LIST_REL (\fn fn'. fn'.fn_name = fn.fn_name /\
@@ -236,8 +239,6 @@ Proof
     metis_tac[make_ssa_src_stage_frame_sim] >>
   `ctx_bisim C C'` by metis_tac[make_ssa_src_stage_frame] >>
   `C'.ctx_entry = C.ctx_entry` by metis_tac[make_ssa_src_stage_fns] >>
-  fs[mem_inv_raw_reachable] >> conj_tac
-  >- (drule_all make_ssa_src_stage_lookup >> strip_tac >> metis_tac[]) >>
   rpt strip_tac >> rename1 `raw_reachable vs C' fn' inst' s'` >>
   reverse (Cases_on
     `inst'.inst_opcode = DLOAD \/ inst'.inst_opcode = DLOADBYTES`)
@@ -264,9 +265,34 @@ Proof
   `s'.vs_code = s.vs_code /\ s'.vs_data_section = s.vs_data_section` by
     (qpat_x_assum `execution_frame s' = execution_frame s` mp_tac >>
      simp[execution_frame_def, venom_state_component_equality]) >>
-  first_x_assum drule >>
+  drule_all gas_cut_execution_frame >> strip_tac >>
+  first_x_assum drule_all >>
   simp[dload_offset_ok_def] >> strip_tac >> rpt gen_tac >> strip_tac >>
   gvs[LIST_REL_CONS2] >> first_x_assum irule >> metis_tac[]
+QED
+
+(* The same rows with the DLOAD offset bound before a gas cut. *)
+Theorem make_ssa_stage_src_rows_upto:
+  ctx_pass_stage rpolicy (CFP_Simple VP_MakeSSA) view C C' /\
+  o1_ctx_shape C /\ EVERY make_ssa_input_ok C.ctx_functions /\
+  o1_run_state_ok vs /\
+  EVERY (\fn. fn.fn_eom = NONE) C.ctx_functions /\ ~ctx_has_dalloca C /\
+  fmp_free_ctx C /\ mem_inv dload_headroom_ok C vs /\
+  (!fn inst s. raw_reachable vs C fn inst s /\ gas_cut k vs s ==>
+     dload_offset_ok C fn inst s) ==>
+  EVERY (\fn. fn.fn_eom = NONE) C'.ctx_functions /\ ~ctx_has_dalloca C' /\
+  fmp_free_ctx C' /\ mem_inv dload_headroom_ok C' vs /\
+  (!fn inst s. raw_reachable vs C' fn inst s /\ gas_cut k vs s ==>
+     dload_offset_ok C' fn inst s)
+Proof
+  strip_tac >>
+  `vs.vs_vars = FEMPTY /\ ~vs.vs_halted` by
+    fs[o1_run_state_ok_def, unitTransformDefsTheory.o1_initial_state_ok_def] >>
+  drule_all make_ssa_src_stage_shape >> strip_tac >>
+  drule_all make_ssa_src_stage_fmp_free >> strip_tac >>
+  drule_all make_ssa_src_stage_headroom >> strip_tac >>
+  simp[] >> rpt strip_tac >>
+  drule_all make_ssa_src_stage_dload_ok >> simp[]
 QED
 
 Theorem make_ssa_stage_src_rows:
@@ -280,10 +306,13 @@ Theorem make_ssa_stage_src_rows:
     mem_inv dload_headroom_ok C' vs /\ callee_first names C'.ctx_functions
 Proof
   rpt gen_tac >> strip_tac >>
-  `vs.vs_vars = FEMPTY /\ ~vs.vs_halted` by
-    gvs[o1_run_state_ok_def, unitTransformDefsTheory.o1_initial_state_ok_def] >>
   fs[o1_src_inv_def] >>
-  metis_tac[make_ssa_src_stage_shape, make_ssa_src_stage_fmp_free,
-            make_ssa_src_stage_callee_first, make_ssa_src_stage_headroom,
-            make_ssa_src_stage_dload_ok]
+  `!fn inst s. raw_reachable vs C fn inst s /\
+     gas_cut (SUC (LENGTH vs.vs_gas_readings)) vs s ==>
+     dload_offset_ok C fn inst s` by fs[mem_inv_raw_reachable] >>
+  drule_all make_ssa_stage_src_rows_upto >> strip_tac >>
+  simp[] >> conj_tac
+  >- (qpat_x_assum `mem_inv dload_headroom_ok C' vs` mp_tac >>
+      fs[mem_inv_raw_reachable]) >>
+  metis_tac[make_ssa_src_stage_callee_first]
 QED
