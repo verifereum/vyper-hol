@@ -8,7 +8,10 @@
  *)
 Theory bodyFullAugAssign
 Ancestors
-  augAssignStorageFieldSource
+  augAssignStorageFieldSource augAssignFullScalarAbort augAssignFullScalarFresh
+  augAssignFullLoad augAssignFullStore augAssignFullStoreGhost augAssignFullOperator
+  augAssignFullAddress augAssignFullFieldRead augAssignFullSource augAssignFullSourcePrefix
+  augAssignFullRhs
   bodyFullPreds bodySimFull gasShadow bodySim exprSimHypsDefs supportedStmts
   compileEnv exprLowering stmtLowering vyperTypeSystem vyperContext
   vyperInterpreter vyperState vyperValue vyperAST list finite_map
