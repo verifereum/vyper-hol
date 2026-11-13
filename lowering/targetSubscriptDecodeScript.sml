@@ -229,9 +229,11 @@ Proof
           drule_all target_storage_extend_decodable >> simp[]) >>
       simp[extend_memory_place_def, target_result_decodable_def]) >>
   Cases_on `sb` >> simp[extend_place_def, raise_def] >> Cases_on `v` >>
-  simp[extend_place_def, bind_def, lift_option_type_def, return_def, raise_def,
-       AllCaseEqs()] >> rpt strip_tac >>
+  simp[extend_place_def, bind_def, ignore_bind_def, record_storage_event_def,
+       lift_option_type_def, return_def, raise_def, AllCaseEqs()] >>
+  rpt strip_tac >>
   gvs[target_result_decodable_def, vyperMiscTheory.option_CASE_rator,
+      bind_def, ignore_bind_def, record_storage_event_def,
       return_def, raise_def, AllCaseEqs()] >>
   drule storage_mapping_region_step >>
   disch_then (qspec_then `v'` assume_tac) >>

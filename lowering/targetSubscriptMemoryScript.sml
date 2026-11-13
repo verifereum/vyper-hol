@@ -897,13 +897,11 @@ Proof
   disch_then (qspec_then `ctx` strip_assume_tac) >>
   drule_all straight_fresh_run_post >> strip_tac >>
   `writes_fresh sa (emitted_insts sa sb)` by metis_tac[straight_fresh_def] >>
-  `!tt. run_inst_seq (emitted_insts sa sb) s = OK tt ==>
-     tt.vs_accounts = s.vs_accounts /\ tt.vs_transient = s.vs_transient /\
-     tt.vs_requests = s.vs_requests /\ tt.vs_call_ctx = s.vs_call_ctx` by
-    (rpt strip_tac >>
-     qspecl_then [`emitted_insts sa sb`, `sa`, `s`, `tt`] mp_tac
+  `t'.vs_accounts = s.vs_accounts /\ t'.vs_transient = s.vs_transient /\
+   t'.vs_requests = s.vs_requests /\ t'.vs_call_ctx = s.vs_call_ctx` by
+    (qspecl_then [`emitted_insts sa sb`, `sa`, `s`, `t'`] mp_tac
        run_inst_seq_writes_fresh >>
-     impl_tac >- (simp[] >> gvs[]) >> strip_tac >>
+     impl_tac >- simp[] >> strip_tac >>
      pop_assum kall_tac >>
      pop_assum (fn th => once_rewrite_tac[th]) >> simp[]) >>
   goal_assum (drule_at Any) >> simp[]
