@@ -88,18 +88,18 @@ Theorem call_external_function_read_only:
 Proof
   disch_then (map_every assume_tac o CONJUNCTS) >>
   qpat_x_assum `call_external_function _ _ _ _ _ _ _ _ _ _ _ _ _ = _` mp_tac >>
-  simp[call_external_function_def] >>
+  simp[call_external_function_def, call_external_function_trace_def] >>
   IF_CASES_TAC >- simp[] >>
   `LENGTH dflts - (LENGTH args - LENGTH vals) =
    LENGTH dflts + LENGTH vals - LENGTH args` by decide_tac >>
   simp[] >>
-  qmatch_goalsub_abbrev_tac `action (initial_state am [FEMPTY] with <|outcomes := orc; requests := []; gas_obs := gobs|>)` >>
+  qmatch_goalsub_abbrev_tac `action (initial_state am [FEMPTY] with <|outcomes := orc; requests := []; gas_obs := gobs; storage_trace := []|>)` >>
   `state_rel_frame machine_frame action` by
     (simp[Abbr `action`] >> irule machine_frame_external_action >> simp[]) >>
   qpat_x_assum `state_rel_frame machine_frame action`
-    (qspec_then `initial_state am [FEMPTY] with <|outcomes := orc; requests := []; gas_obs := gobs|>` mp_tac o
+    (qspec_then `initial_state am [FEMPTY] with <|outcomes := orc; requests := []; gas_obs := gobs; storage_trace := []|>` mp_tac o
      REWRITE_RULE [state_rel_frame_def]) >>
-  Cases_on `action (initial_state am [FEMPTY] with <|outcomes := orc; requests := []; gas_obs := gobs|>)` >>
+  Cases_on `action (initial_state am [FEMPTY] with <|outcomes := orc; requests := []; gas_obs := gobs; storage_trace := []|>)` >>
   simp[] >> strip_tac >> rename1 `machine_frame _ st` >>
   `abstract_machine_from_state am.sources am.exports am.layouts st = am` by
     (irule machine_frame_reconstruct >>

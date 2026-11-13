@@ -16,7 +16,7 @@
 
 Theory bodySimMakeArrayWidened
 Ancestors
-  exprSimSource
+  exprSimSource exprSimAggregateBodyCase
   exprSimHypsDefs
   list bodySim  exprSimHyps exprSimOperators exprSimAttribute
   exprSimPlaces exprSimPopNested targetPlaceSim exprSimAggregates exprSimSend exprSimMain exprSimECArith vyperAST
@@ -36,6 +36,23 @@ Theorem body_make_array_widened_call_elem:
       expr_sim ctx func cenv cx ty' (Builtin ty (MakeArray t n) es) st /\
       expr_vv_sim ctx func cenv cx ty' (Builtin ty (MakeArray t n) es) st
 Proof
-  cheat
+  rpt strip_tac >>
+  `builtin_args_length_ok (MakeArray t n) (LENGTH es)` by
+    (fs[expr_body_pre_def, vyperTypeSystemTheory.well_typed_expr_def] >>
+     drule vyperTypeBuiltinsTheory.well_typed_builtin_app_length >> simp[]) >>
+  `body_exprs_ok cx es` by metis_tac[] >>
+  `exprs_case F ctx func cenv cx es` by
+    (qpat_x_assum `body_inv _ _ _ _` mp_tac >>
+     qpat_x_assum `body_exprs_ok cx es` mp_tac >>
+     rpt (pop_assum kall_tac) >> qid_spec_tac `es` >>
+     Induct >> rw[body_exprs_ok_def, exprs_case_def] >>
+     fs[body_expr_ok_def, expr_sim_case_def, expr_vv_case_def] >> metis_tac[]) >>
+  `acyclic_struct_metadata cenv.ce_struct_fields` by fs[body_inv_def] >>
+  drule_all compile_make_array_body_vv_case >>
+  disch_then (qspecl_then [`ty`, `t`, `n`] assume_tac) >>
+  `expr_sim_case F ctx func cenv cx (Builtin ty (MakeArray t n) es)` by
+    (irule expr_sim_case_of_vv >>
+     simp[loweringPostsTheory.post_value_type_def] >> metis_tac[]) >>
+  fs[expr_sim_case_def, expr_vv_case_def] >> metis_tac[]
 QED
 

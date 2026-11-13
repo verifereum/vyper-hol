@@ -7,9 +7,11 @@ Ancestors
   abiTypeShape vyperTypeSystem vyperTypeInvariants vyperTypeEnvExtension
   exprLowering stmtLowering compileEnv vyperAST list combin pair finite_map
 
-Theorem checked_abi_encode_event_arg_compatible:
-  !env cx st cenv fty ann ensure method_id target_ty args.
+(* env, cx and st stay free in these local helpers so that irule fixes them. *)
+Theorem abi_encode_fits_event_arg_compatible[local]:
+  !cenv fty ann ensure method_id target_ty args.
     env_consistent env cx st /\ abi_struct_env_rel env.type_defs cenv.ce_struct_fields /\
+    EVERY (\e. arg_type_fits (lowered_value_type cenv e) (expr_type e)) args /\
     well_typed_expr env (TypeBuiltin ann (AbiEncode ensure method_id) target_ty args) /\
     event_arg_compatible fty ann ==>
     event_arg_compatible fty
@@ -22,9 +24,81 @@ Proof
   drule_all abi_encode_event_arg_compatible >> simp[]
 QED
 
+Theorem well_typed_args_every[local]:
+  !env P args.
+    (!a. MEM a args ==> well_typed_expr env a ==> P a) /\ well_typed_exprs env args ==>
+    EVERY P args
+Proof
+  gen_tac >> gen_tac >> Induct >> rw[well_typed_expr_def] >> metis_tac[MEM]
+QED
+
+Theorem lowered_value_type_fits[local]:
+  !cenv e.
+    env_consistent env cx st /\ abi_struct_env_rel env.type_defs cenv.ce_struct_fields /\
+    (!fid sig. FLOOKUP env.fn_sigs fid = SOME sig ==> cenv.ce_func_return_type (nsid_to_string fid) = sig.ret_ty) /\
+    well_typed_expr env e ==>
+    arg_type_fits (lowered_value_type cenv e) (expr_type e)
+Proof
+  ho_match_mp_tac lowered_value_type_ind >> rpt conj_tac >> rpt gen_tac
+  >~ [`AbiEncode`]
+  >- (strip_tac >> strip_tac >>
+      rename1 `TypeBuiltin ann (AbiEncode ensure method_id) target_ty args` >>
+      `EVERY (\e. arg_type_fits (lowered_value_type cenv e) (expr_type e)) args` by
+        (irule well_typed_args_every >> qexists_tac `env` >>
+         qpat_x_assum `well_typed_expr env (TypeBuiltin _ _ _ _)`
+           (strip_assume_tac o ONCE_REWRITE_RULE [well_typed_expr_def]) >>
+         simp[] >> rpt strip_tac >> Cases_on `LENGTH args = 1 /\ ~ensure`
+         >- (Cases_on `args` >> gvs[] >> first_x_assum irule >> simp[]) >>
+         first_x_assum irule >> fs[]) >>
+      simp[GSYM event_arg_compatible_alias_def] >>
+      qspecl_then [`cenv`, `ann`, `ann`, `ensure`, `method_id`, `target_ty`, `args`] mp_tac
+        abi_encode_fits_event_arg_compatible >>
+      simp[expr_type_def, typedCopyCompatibilityTheory.event_arg_compatible_reflexive])
+  >~ [`IntCall`]
+  >- (strip_tac >> rename1 `IntCall fid` >> PairCases_on `fid` >>
+      qpat_x_assum `well_typed_expr env _` (strip_assume_tac o ONCE_REWRITE_RULE [well_typed_expr_def]) >>
+      gvs[lowered_value_type_def, expr_type_def] >>
+      first_x_assum drule >> strip_tac >>
+      gvs[type_widens_to_def, GSYM event_arg_compatible_alias_def,
+          typedCopyCompatibilityTheory.event_arg_compatible_reflexive])
+  >~ [`Concat`]
+  >- (strip_tac >> simp[GSYM event_arg_compatible_alias_def] >>
+      irule concat_event_arg_compatible >> fs[Once well_typed_expr_def, expr_type_def] >>
+      metis_tac[typedCopyCompatibilityTheory.event_arg_compatible_reflexive])
+  >~ [`Literal (BaseT (StringT _)) (StringL _)`]
+  >- (strip_tac >> simp[GSYM event_arg_compatible_alias_def] >>
+      irule literal_event_arg_compatible >> fs[Once well_typed_expr_def, expr_type_def] >>
+      metis_tac[typedCopyCompatibilityTheory.event_arg_compatible_reflexive])
+  >~ [`Literal (BaseT (BytesT (Dynamic _))) (BytesL _)`]
+  >- (strip_tac >> simp[GSYM event_arg_compatible_alias_def] >>
+      irule literal_event_arg_compatible >> fs[Once well_typed_expr_def, expr_type_def] >>
+      metis_tac[typedCopyCompatibilityTheory.event_arg_compatible_reflexive]) >>
+  simp[lowered_value_type_def, GSYM event_arg_compatible_alias_def,
+       typedCopyCompatibilityTheory.event_arg_compatible_reflexive]
+QED
+
+Theorem checked_abi_encode_event_arg_compatible:
+  !env cx st cenv fty ann ensure method_id target_ty args.
+    env_consistent env cx st /\ abi_struct_env_rel env.type_defs cenv.ce_struct_fields /\
+    (!fid sig. FLOOKUP env.fn_sigs fid = SOME sig ==> cenv.ce_func_return_type (nsid_to_string fid) = sig.ret_ty) /\
+    well_typed_expr env (TypeBuiltin ann (AbiEncode ensure method_id) target_ty args) /\
+    event_arg_compatible fty ann ==>
+    event_arg_compatible fty
+      (lowered_value_type cenv (TypeBuiltin ann (AbiEncode ensure method_id) target_ty args))
+Proof
+  rpt strip_tac >>
+  `EVERY (\e. arg_type_fits (lowered_value_type cenv e) (expr_type e)) args` by
+    (irule well_typed_args_every >> qexists_tac `env` >>
+     qpat_x_assum `well_typed_expr env (TypeBuiltin _ _ _ _)`
+       (strip_assume_tac o ONCE_REWRITE_RULE [well_typed_expr_def]) >>
+     simp[] >> rpt strip_tac >> drule_all lowered_value_type_fits >> simp[]) >>
+  drule_all abi_encode_fits_event_arg_compatible >> simp[]
+QED
+
 Theorem checked_type_builtin_event_arg_compatible:
   !env cx st cenv fty ann tb target_ty args.
     env_consistent env cx st /\ abi_struct_env_rel env.type_defs cenv.ce_struct_fields /\
+    (!fid sig. FLOOKUP env.fn_sigs fid = SOME sig ==> cenv.ce_func_return_type (nsid_to_string fid) = sig.ret_ty) /\
     well_typed_expr env (TypeBuiltin ann tb target_ty args) /\
     event_arg_compatible fty ann ==>
     event_arg_compatible fty (lowered_value_type cenv (TypeBuiltin ann tb target_ty args))

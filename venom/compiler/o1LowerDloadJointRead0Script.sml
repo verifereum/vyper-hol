@@ -7,7 +7,7 @@ Ancestors
   list finite_map vfmState
 
 Theorem ld_out_taint_default:
-  ~MEM inst.inst_opcode [MLOAD; ILOAD; SLOAD; TLOAD; ASSIGN; SHL; SHR; SAR] ==>
+  ~MEM inst.inst_opcode [MLOAD; ILOAD; SLOAD; TLOAD; ASSIGN; SHL; SHR; SAR; MUL] ==>
   out_taint tn inst s = {}
 Proof
   strip_tac >> simp[out_taint_def] >>

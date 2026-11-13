@@ -17,7 +17,7 @@ Theorem stmt_post_nil[local]:
   storage_well_formed_on cx es (FST H) /\ ~s.vs_halted /\
   ~block_is_terminated sa /\ s.vs_current_bb = sa.cs_current_bb /\
   s.vs_inst_idx = LENGTH sa.cs_current_insts ==>
-  stmt_post H ctx func cx lctx cenv cenv sa sa s (INL ())
+  stmt_post H ctx func cx lctx cenv cenv sa sa es s (INL ())
     (es with gas_obs := []) s
 Proof
   strip_tac >>
@@ -27,7 +27,7 @@ Proof
      simp[stmt_state_rel_inst_idx]) >>
   pure_rewrite_tac[stmt_post_def] >> qexists_tac `cenv` >>
   gvs[stmt_lands_def, cenv_top_ext_def, compile_env_component_equality,
-      storage_well_formed_on_def]
+      storage_well_formed_on_def, alloca_frame_same]
 QED
 
 Theorem stmt_frag_nil:
@@ -62,7 +62,7 @@ Proof
           Once evaluate_def, return_def] >>
   simp[fragExecTheory.exit_result_def] >> rpt strip_tac >>
   first_x_assum drule >> strip_tac >>
-  `stmt_post H ctx func cx lctx cenv cenv sa sa s0 (INL ())
+  `stmt_post H ctx func cx lctx cenv cenv sa sa es s0 (INL ())
      (es with gas_obs := []) s0` by (irule stmt_post_nil >> simp[]) >>
   gvs[stmt_post_def] >> qexists_tac `cenv` >> simp[]
 QED
@@ -83,7 +83,7 @@ Proof
   rpt gen_tac >> strip_tac >> first_x_assum drule >> strip_tac >>
   conj_tac >- simp[gas_origin_ptr_path_rules] >>
   disj1_tac >> qexists_tac `s0` >> simp[] >>
-  `stmt_post H ctx func cx lctx cenv cenv sa sa s0 (INL ())
+  `stmt_post H ctx func cx lctx cenv cenv sa sa es s0 (INL ())
      (es with gas_obs := []) s0` by (irule stmt_post_nil >> simp[]) >>
   gvs[stmt_post_def] >> qexists_tac `cenv` >>
   fs[ghost_inv_at_def, storage_well_formed_on_def]
