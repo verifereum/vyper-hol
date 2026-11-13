@@ -188,6 +188,7 @@ QED
 Theorem ptr_allocating_affine_owned_prefix:
   !n a h births TG j t u.
   ptr_source_ownership vs0 C h a tokens registry births PT TG saved /\
+  ptr_discipline lo C vs0 /\
   o1_run_state_ok vs0 /\ o1_ctx_shape C /\
   EVERY (fn_ptr_ok P) C.ctx_functions /\
   EVERY (\fn. EVERY inst_wf (fn_insts fn)) C.ctx_functions /\
