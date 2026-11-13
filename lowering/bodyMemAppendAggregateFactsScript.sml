@@ -61,7 +61,7 @@ Proof
   `supported_storage_type tops elem` by
     (Cases_on `vis` >>
      gvs[supported_declaration_header_def, supported_storage_array_depth]) >>
-  simp[] >> conj_tac >- metis_tac[topcopy_not_bytestring] >>
+  simp[] >> conj_tac >- metis_tac[bodySimStmtCasesTheory.topcopy_not_bytestring] >>
   Cases_on `elem` >>
   gvs[supported_storage_type_def, Once supported_nested_type_def,
       supported_full_word_type_def, is_word_type_def, is_bytestring_type_def]
