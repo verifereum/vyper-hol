@@ -2,7 +2,7 @@
 Theory immutableAssignStoreMem
 Ancestors
   bodyImmutableCopyMemory immutableCopyExecution immutableWordExecution
-  fragGasSeqMem typedStoreEndpoint instMemFrontier memSafeRun fragExecMem
+  fragGasSeqMem instMemFrontier memSafeRun fragExecMem
   windowSequenceMem abiEncoderWindowSequence abiEncoderSequence memContinuation
   context compileEnv emitHelper emitHelperProps loweringStateRelDefs exprLoweringProps venomExecSemantics
   venomState venomInst words arithmetic list rich_list finite_map
