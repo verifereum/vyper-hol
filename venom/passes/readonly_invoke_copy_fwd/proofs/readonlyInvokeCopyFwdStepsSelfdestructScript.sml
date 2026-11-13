@@ -5,12 +5,14 @@ Ancestors
   venomState venomExecSemantics internalReturnCopyFwdSim
   finite_map words list pred_set
 
-(* SELFDESTRUCT changes accounts, clears returndata and halts.  In this IR
-   it leaves pending deletions unchanged (the account update is not a no-op). *)
+(* SELFDESTRUCT clears returndata and halts. EIP-6780 schedules accounts
+   created in this transaction for deletion. *)
 Theorem ricf_selfdestruct_footprint:
   inst.inst_opcode = SELFDESTRUCT /\ inst.inst_outputs = [] /\ step_inst fuel C inst s = Halt u ==>
   u.vs_memory = s.vs_memory /\ u.vs_call_ctx = s.vs_call_ctx /\
-  u.vs_pending_deletions = s.vs_pending_deletions /\
+  u.vs_pending_deletions =
+    (if s.vs_call_ctx.cc_created_in_tx then
+       s.vs_call_ctx.cc_address::s.vs_pending_deletions else s.vs_pending_deletions) /\
   step_taint inst s u tn = tn
 Proof
   strip_tac >> qpat_x_assum `step_inst _ _ _ _ = _` mp_tac >>
