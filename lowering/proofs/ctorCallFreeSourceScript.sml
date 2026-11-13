@@ -185,10 +185,10 @@ Proof
       rpt strip_tac >>
       `constant_expr [(NONE,tops)] r` by
         (irule checked_module_consts_env_replacement_constant >> simp[] >>
-         metis_tac[]) >>
+         conj_tac >> first_assum (irule_at Any)) >>
       metis_tac[constant_expr_call_free]) >>
   irule (cj 2 subst_consts_stmt_shape) >> simp[] >>
   rpt strip_tac >>
   irule checked_module_consts_env_replacement_shape >> simp[] >>
-  metis_tac[]
+  conj_tac >> first_assum (irule_at Any)
 QED
