@@ -14,6 +14,7 @@
  *)
 Theory bodyFullExprCore
 Ancestors
+  bodyFullLiteralWord bodyFullLiteralBuffer bodyFullLiteralNonword
   bodyFullNameVV bodyFullNameNonword bodyFullNameWord
   gasOutcomeFullCompose exprSimProps exprSimSource exprLoweringProps
   exprLowering vyperTyping vyperTypeSystem loweringPosts valueEncoding vyperValueOperation
@@ -140,7 +141,10 @@ QED
 Theorem literal_expr_full_ok:
   !cx ann l. body_expr_full_ok cx (Literal ann l)
 Proof
-  cheat
+  simp[body_expr_full_ok_def] >> rpt gen_tac >> strip_tac >>
+  Cases_on `is_word_type ann`
+  >- metis_tac[literal_word_value_full, literal_word_vv_full] >>
+  metis_tac[literal_nonword_value_full, literal_nonword_vv_full]
 QED
 
 (* ===== Binary operators =====
