@@ -2149,7 +2149,9 @@ Theorem body_assign_tuple_targets[local]:
       (eval_stmt cx (Assign (TupleTarget gs) e)) es
 Proof
   rpt strip_tac >>
-  irule stmtSimAssignTupleTargetsTheory.stmt_frag_storage_maps_intro >> strip_tac >>
+  irule stmtSimAssignTupleTargetsTheory.stmt_frag_storage_maps_intro >>
+  conj_tac >- simp[vyperStorageTraceTheory.evaluate_storage_trace_frame] >>
+  strip_tac >>
   drule tupleTargetStorePropsTheory.tuple_targets_typing >> strip_tac >> gvs[] >>
   `env.type_defs = get_tenv cx` by
     gvs[expr_sim_inv_def, env_consistent_def, env_context_consistent_def] >>
