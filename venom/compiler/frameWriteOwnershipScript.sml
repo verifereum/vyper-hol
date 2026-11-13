@@ -43,7 +43,7 @@ QED
 Theorem joint_write_owner_identity:
   joint_config_reachable vs0 C
     (JointConfig stk PG G tn fn inst s oms om hs h) /\
-  vs0.vs_allocas = FEMPTY /\ ~ctx_has_dalloca C /\
+  vs0.vs_allocas = FEMPTY /\ (ctx_has_dalloca C ==> ptr_discipline lo C vs0) /\
   joint_transition C
     (JointConfig stk PG G tn fn inst s oms om hs h) ev q' /\
   access_ok lo G fn inst s /\ ~in_revert_forward fn s /\
@@ -58,8 +58,12 @@ Proof
   `byte IN range_bytes (source_memory_write_ranges inst s)` by
     (drule joint_writes_source_subset >> simp[SUBSET_DEF] >> metis_tac[]) >>
   drule_all access_ok_write_site >> strip_tac >>
+  rename1 `FLOOKUP G v = SOME (b0,sz0)` >>
+  `ctx_has_dalloca C ==> FST (b0,sz0) < w2n vs0.vs_initial_fmp` by
+    (strip_tac >> `ptr_discipline lo C vs0` by metis_tac[] >>
+     drule_all joint_config_cache_below >> simp[] >> decide_tac) >>
   drule_all joint_provenance_activation_owner >> strip_tac >>
-  `d = d' /\ owner = owner' /\ aid = aid' /\ b = b' /\ sz = sz'` by
+  `d = d' /\ owner = owner' /\ aid = aid' /\ b = b0 /\ sz = sz0` by
     (irule joint_activation_cache_byte_unique >>
      (conj_tac >- (qexists_tac `byte` >> simp[])) >>
      goal_assum (drule_at (Pat `joint_config_reachable _ _ _`)) >>

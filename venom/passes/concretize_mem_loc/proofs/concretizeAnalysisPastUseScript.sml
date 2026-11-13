@@ -4,12 +4,12 @@ Ancestors
   concretizeAnalysisTemporalDemand frameOriginHistory ptrDiscipline
   concretizePtrIncomingOrigins frameOriginCacheReach frameWriteOwnership
   frameJointTaint frameDemandOwnership frameDemandLastWrite frameOriginReachable frameJointTrace frameJointTransition
-  frameActivationSeparation frameActivationCache venomInst o1PassContract cfgWf venomWf finite_map list arithmetic
+  frameActivationSeparation frameActivationCache frameIncomingArgument venomInst o1PassContract cfgWf venomWf finite_map list arithmetic
 
 Theorem joint_write_past_owner_generator:
   joint_trace vs0 C q0 es qs q /\ o1_ctx_shape C /\ ptr_discipline lo C vs0 /\
   EVERY ssa_form C.ctx_functions /\ EVERY all_reachable C.ctx_functions /\
-  vs0.vs_allocas = FEMPTY /\ ~ctx_has_dalloca C /\
+  vs0.vs_allocas = FEMPTY /\
   l <= m /\ m < LENGTH es /\ activation_depth (EL l (q0::qs)) = d /\
   (!k. l <= k /\ k <= m ==>
     d <= activation_depth (EL k (q0::qs)) /\
@@ -44,6 +44,9 @@ Proof
      metis_tac[]) >>
   `byte IN joint_writes (JointConfig stk PG G tn fn inst s oms om hs h) (EL m es)`
     by metis_tac[] >>
+  `ctx_has_dalloca C ==> ptr_discipline lo C vs0` by simp[] >>
+  `ctx_has_dalloca C ==> b + sz <= w2n vs0.vs_initial_fmp` by
+    (strip_tac >> drule_all joint_config_cache_below >> simp[]) >>
   drule_all joint_write_owner_identity >> strip_tac >>
   drule_all origin_frame_current_lookup >> strip_tac >>
   Cases_on `tag`
@@ -78,6 +81,9 @@ Resume joint_write_past_owner_generator[local]:
 QED
 
 Resume joint_write_past_owner_generator[incoming]:
+  `ctx_has_dalloca C ==> FST (b,sz) < w2n vs0.vs_initial_fmp` by
+    (strip_tac >> `b + sz <= w2n vs0.vs_initial_fmp` by metis_tac[] >>
+     simp[] >> decide_tac) >>
   drule_all joint_incoming_used_generator >>
   disch_then (qspec_then `mems` strip_assume_tac) >>
   `activation_cache (JointConfig stk PG G tn fn inst s oms om hs h)
@@ -101,14 +107,9 @@ Resume joint_write_past_owner_generator[incoming]:
 QED
 
 Resume joint_write_past_owner_generator[dynamic]:
-  qpat_x_assum `ptr_discipline _ _ _` mp_tac >>
-  simp[ptr_discipline_def] >> strip_tac >>
-  `EVERY (\f. EVERY inst_wf (fn_insts f)) C.ctx_functions` by
-    (gvs[o1_ctx_shape_def, o1_fn_shape_def, EVERY_MEM, fn_inst_wf_def, fn_insts_def, fn_insts_blocks_MEM] >>
-     metis_tac[]) >>
-  `EVERY (fn_ptr_ok P) C.ctx_functions` by
-    (fs[EVERY_MEM] >> metis_tac[]) >>
-  metis_tac[origin_frame_current_not_dynamic]
+  drule_all origin_frame_dynamic_site >> strip_tac >>
+  `b + sz <= w2n vs0.vs_initial_fmp` by metis_tac[] >>
+  qpat_x_assum `_ <= FST _` mp_tac >> simp[] >> decide_tac
 QED
 
 Finalise joint_write_past_owner_generator

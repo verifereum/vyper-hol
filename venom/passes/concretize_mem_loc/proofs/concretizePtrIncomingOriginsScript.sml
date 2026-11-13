@@ -216,31 +216,78 @@ QED
 
 Finalise origin_incoming_invariant
 
+(* OriginParameter tags stay on pointer-derived variables: PARAM is the only
+   producer and DALLOCA produces OriginDynamic, so no DALLOCA premise. *)
+Theorem origin_parameter_invariant:
+  !vs0 ctx stk PG G tn fn inst s oms om.
+  origin_frame_reachable vs0 ctx stk PG G tn fn inst s oms om ==>
+  !P. EVERY (fn_ptr_ok P) ctx.ctx_functions /\
+    EVERY (\f. EVERY inst_wf (fn_insts f)) ctx.ctx_functions /\
+    EVERY ssa_form ctx.ctx_functions ==>
+  (!k. origin_tag_supported (OriginParameter k)
+     (pointer_derived_vars fn (ptr_roots P fn DIFF alloca_roots fn)) om) /\
+  LIST_REL (\f m. !k. origin_tag_supported (OriginParameter k)
+     (pointer_derived_vars f.cf_fn
+        (ptr_roots P f.cf_fn DIFF alloca_roots f.cf_fn)) m) stk oms
+Proof
+  ho_match_mp_tac origin_frame_reachable_strongind >> rpt conj_tac
+  >- simp[]
+  >- suspend "next"
+  >- suspend "block"
+  >- (rpt gen_tac >> strip_tac >> gen_tac >> strip_tac >>
+      first_x_assum (qspec_then `P` mp_tac) >> simp[])
+  >> rpt gen_tac >> strip_tac >> gen_tac >> strip_tac >>
+  first_x_assum (qspec_then `P` mp_tac) >> simp[] >> strip_tac >>
+  metis_tac[origin_tag_restrict]
+QED
+
+Resume origin_parameter_invariant[next]:
+  rpt gen_tac >> strip_tac >> gen_tac >> strip_tac >>
+  first_x_assum (qspec_then `P` mp_tac) >> simp[] >> strip_tac >>
+  gen_tac >> irule origin_parameter_step >> simp[] >>
+  `frame_reachable vs0 ctx stk PG G tn fn inst s` by metis_tac[origin_frame_erasure] >>
+  `MEM fn ctx.ctx_functions /\ ptr_params_ok P fn PG` by
+    metis_tac[ptr_frame_current_static] >>
+  `MEM inst (fn_insts fn)` by
+    (gvs[active_inst_def, fn_insts_def, fn_insts_blocks_flat, MEM_FLAT, MEM_MAP] >>
+     metis_tac[MEM_EL]) >>
+  fs[EVERY_MEM] >> metis_tac[]
+QED
+
+Resume origin_parameter_invariant[block]:
+  rpt gen_tac >> strip_tac >> gen_tac >> strip_tac >>
+  first_x_assum (qspec_then `P` mp_tac) >> simp[] >> strip_tac >>
+  gen_tac >> irule origin_tag_entry >> simp[] >>
+  metis_tac[pointer_derived_vars_closed, FINITE_DIFF, ptr_roots_finite]
+QED
+
+Finalise origin_parameter_invariant
+
 Theorem origin_frame_current_incoming:
   origin_frame_reachable vs0 ctx stk PG G tn fn inst s oms om /\
   EVERY (fn_ptr_ok P) ctx.ctx_functions /\
   EVERY (\f. EVERY inst_wf (fn_insts f)) ctx.ctx_functions /\
-  EVERY ssa_form ctx.ctx_functions /\ ~ctx_has_dalloca ctx /\
+  EVERY ssa_form ctx.ctx_functions /\
   FLOOKUP om v = SOME (OriginParameter k,site) ==>
   v IN pointer_derived_vars fn (ptr_roots P fn DIFF alloca_roots fn)
 Proof
-  strip_tac >> drule origin_incoming_invariant >>
+  strip_tac >> drule origin_parameter_invariant >>
   disch_then (qspec_then `P` mp_tac) >>
-  simp[origin_incoming_ok_def, origin_tag_supported_def] >> metis_tac[]
+  simp[origin_tag_supported_def] >> metis_tac[]
 QED
 
 Theorem origin_frame_saved_incoming:
   origin_frame_reachable vs0 ctx stk PG G tn fn inst s oms om /\
   EVERY (fn_ptr_ok P) ctx.ctx_functions /\
   EVERY (\f. EVERY inst_wf (fn_insts f)) ctx.ctx_functions /\
-  EVERY ssa_form ctx.ctx_functions /\ ~ctx_has_dalloca ctx /\
+  EVERY ssa_form ctx.ctx_functions /\
   n < LENGTH stk /\ FLOOKUP (EL n oms) v = SOME (OriginParameter k,site) ==>
   v IN pointer_derived_vars (EL n stk).cf_fn
     (ptr_roots P (EL n stk).cf_fn DIFF alloca_roots (EL n stk).cf_fn)
 Proof
-  strip_tac >> drule origin_incoming_invariant >>
+  strip_tac >> drule origin_parameter_invariant >>
   disch_then (qspec_then `P` mp_tac) >>
-  simp[LIST_REL_EL_EQN, origin_incoming_ok_def, origin_tag_supported_def] >> metis_tac[]
+  simp[LIST_REL_EL_EQN, origin_tag_supported_def] >> metis_tac[]
 QED
 
 Theorem origin_frame_current_not_dynamic:

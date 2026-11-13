@@ -392,7 +392,7 @@ QED
 Theorem joint_local_read_base[local]:
   joint_config_reachable vs0 C (JointConfig stk PG G tn fn inst s oms om hs h) /\
   o1_ctx_shape C /\ ptr_discipline lo C vs0 /\ EVERY ssa_form C.ctx_functions /\
-  all_reachable fn /\ ~ctx_has_dalloca C /\ FLOOKUP om v = SOME (OriginLocal aid,site) /\
+  all_reachable fn /\ FLOOKUP om v = SOME (OriginLocal aid,site) /\
   mem_read_ops inst = SOME ops /\ ops.iao_ofst = Var v ==>
   MEM (Allocation aid) (find_base_allocas_opt
     (bp_analyze_fuel (concretize_memloc_fuel fn) (cfg_analyze fn) fn) (inst_read_op inst))
@@ -400,7 +400,7 @@ Proof
   strip_tac >> fs[joint_config_reachable_def] >>
   drule joint_origin_history_erasure >> strip_tac >>
   drule origin_frame_erasure >> strip_tac >>
-  `MEM fn C.ctx_functions` by metis_tac[frame_allocation_ownership] >>
+  `MEM fn C.ctx_functions` by metis_tac[frame_reachable_functions_member] >>
   `EVERY wf_function C.ctx_functions /\ wf_function fn /\ ssa_form fn` by
     gvs[o1_ctx_shape_def, o1_fn_shape_def, EVERY_MEM] >>
   fs[ptr_discipline_def] >>
@@ -481,7 +481,7 @@ Theorem concretize_cached_read_liveat:
   EVERY (\fn. fn.fn_eom = NONE) C.ctx_functions /\
   callee_first names C.ctx_functions /\ ctx_inst_ids_distinct C /\ o1_run_state_ok vs0 /\
   EVERY ssa_form C.ctx_functions /\ EVERY fn_defs_reach_uses C.ctx_functions /\
-  ptr_discipline lo C vs0 /\ EVERY all_reachable C.ctx_functions /\ ~ctx_has_dalloca C /\
+  ptr_discipline lo C vs0 /\ EVERY all_reachable C.ctx_functions /\
   o1_walk_view rpolicy 2 C' fn observed /\
   bp = bp_analyze_fuel (concretize_memloc_fuel fn) (cfg_analyze fn) fn /\
   sizes = (\a. if context_alloca_size fn
@@ -509,7 +509,7 @@ Proof
     gvs[joint_config_reachable_def] >>
   `frame_reachable vs0 C stk PG G tn fn inst s` by
     metis_tac[joint_origin_history_erasure, origin_frame_erasure] >>
-  `MEM fn C.ctx_functions` by metis_tac[frame_allocation_ownership] >>
+  `MEM fn C.ctx_functions` by metis_tac[frame_reachable_functions_member] >>
   `wf_function fn /\ all_reachable fn` by
     gvs[o1_ctx_shape_def, o1_fn_shape_def, EVERY_MEM] >>
   `MEM (Allocation aid) (find_base_allocas_opt bp (inst_read_op inst))` by
@@ -540,7 +540,7 @@ Theorem concretize_untainted_local_read_liveat_at_location:
   EVERY (\fn. fn.fn_eom = NONE) C.ctx_functions /\
   callee_first names C.ctx_functions /\ ctx_inst_ids_distinct C /\ o1_run_state_ok vs0 /\
   EVERY ssa_form C.ctx_functions /\ EVERY fn_defs_reach_uses C.ctx_functions /\
-  ptr_discipline lo C vs0 /\ EVERY all_reachable C.ctx_functions /\ ~ctx_has_dalloca C /\
+  ptr_discipline lo C vs0 /\ EVERY all_reachable C.ctx_functions /\
   o1_walk_view rpolicy 2 C' fn observed /\
   bp = bp_analyze_fuel (concretize_memloc_fuel fn) (cfg_analyze fn) fn /\
   sizes = (\a. if context_alloca_size fn
@@ -604,7 +604,7 @@ Theorem concretize_untainted_local_read_liveat:
   EVERY (\fn. fn.fn_eom = NONE) C.ctx_functions /\
   callee_first names C.ctx_functions /\ ctx_inst_ids_distinct C /\ o1_run_state_ok vs0 /\
   EVERY ssa_form C.ctx_functions /\ EVERY fn_defs_reach_uses C.ctx_functions /\
-  ptr_discipline lo C vs0 /\ EVERY all_reachable C.ctx_functions /\ ~ctx_has_dalloca C /\
+  ptr_discipline lo C vs0 /\ EVERY all_reachable C.ctx_functions /\
   o1_walk_view rpolicy 2 C' fn observed /\
   bp = bp_analyze_fuel (concretize_memloc_fuel fn) (cfg_analyze fn) fn /\
   sizes = (\a. if context_alloca_size fn

@@ -41,7 +41,7 @@ Proof
   Cases_on `ctx_has_dalloca C` >> simp[dyn_floor_def]
   >- (`allocas_below_fmp s` by (fs[ptr_discipline_def] >> metis_tac[]) >>
       `s.vs_initial_fmp = vs.vs_initial_fmp` by
-        metis_tac[frameResolvedTraceTheory.frame_reachable_initial_fmp] >>
+        metis_tac[frameAllocationOwnershipTheory.frame_reachable_initial_fmp] >>
       fs[allocas_below_fmp_def] >> metis_tac[]) >>
   fs[raw_mem_ok_def] >> decide_tac
 QED

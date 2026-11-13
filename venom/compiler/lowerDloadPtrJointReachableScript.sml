@@ -1,7 +1,7 @@
 Theory lowerDloadPtrJointReachable
 Ancestors o1PassContract lowerDloadPtrPhase lowerDloadPtrJointEntry lowerDloadPtrJointBlock
   lowerDloadPtrJointCall lowerDloadPtrJointReturn lowerDloadPtrJointDispatch
-  lowerDloadPtrRawReachable lowerDloadPtrStatic ptrDiscipline irSupply venomInst passSharedDefs list rich_list pred_set finite_map
+  lowerDloadPtrRawReachable lowerDloadPtrStatic frameAllocationOwnership ptrDiscipline irSupply venomInst passSharedDefs list rich_list pred_set finite_map
 
 (* ML-only abbreviation: the JointDispatch invariant with its guard true. *)
 val normal = ``\ds PH H un g j t.

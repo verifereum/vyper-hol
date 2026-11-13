@@ -94,58 +94,6 @@ Definition resolved_complete_def:
                         SND o_f SND a = f.cf_prov) stk saved
 End
 
-(* A frame is suspended in the state it was reachable in, so a property
-   every reachable state has holds of every saved frame too. *)
-Theorem frame_reachable_saved_below_fmp:
-  !vs0 ctx stk PG G tn fn inst s.
-    frame_reachable vs0 ctx stk PG G tn fn inst s ==>
-    (!stk PG G tn fn inst s. frame_reachable vs0 ctx stk PG G tn fn inst s ==>
-       allocas_below_fmp s) ==>
-    EVERY (\f. allocas_below_fmp f.cf_state) stk
-Proof
-  ho_match_mp_tac frame_reachable_strongind >> rw[] >> metis_tac[]
-QED
-
-Theorem frame_reachable_initial_fmp:
-  !vs0 ctx stk PG G tn fn inst s.
-    frame_reachable vs0 ctx stk PG G tn fn inst s ==>
-    s.vs_initial_fmp = vs0.vs_initial_fmp /\
-    EVERY (\f. f.cf_state.vs_initial_fmp = vs0.vs_initial_fmp) stk
-Proof
-  ho_match_mp_tac frame_reachable_ind >> rw[] >>
-  imp_res_tac enters_block_initial_fmp >> imp_res_tac step_inst_initial_fmp >>
-  imp_res_tac setup_callee_initial_fmp >> imp_res_tac bind_outputs_initial_fmp >>
-  gvs[]
-QED
-
-(* With DALLOCA, every cache of a reachable frame and its callers lies below
-   the dynamic region. *)
-Theorem frame_reachable_caches_below:
-  frame_reachable vs0 ctx stk PG G tn fn inst s /\ ptr_discipline lo ctx vs0 /\
-  ctx_has_dalloca ctx ==>
-  !k aid b sz.
-    k < LENGTH ((fn,s.vs_allocas)::MAP (\f. (f.cf_fn,f.cf_state.vs_allocas)) stk) /\
-    FLOOKUP (SND (EL k ((fn,s.vs_allocas)::
-      MAP (\f. (f.cf_fn,f.cf_state.vs_allocas)) stk))) aid = SOME (b,sz) ==>
-    b + sz <= w2n s.vs_initial_fmp
-Proof
-  strip_tac >>
-  `!stk PG G tn fn inst s. frame_reachable vs0 ctx stk PG G tn fn inst s ==>
-     allocas_below_fmp s` by (fs[ptr_discipline_def] >> metis_tac[]) >>
-  `allocas_below_fmp s` by metis_tac[] >>
-  drule_all frame_reachable_saved_below_fmp >> strip_tac >>
-  drule frame_reachable_initial_fmp >> strip_tac >>
-  qpat_x_assum `!stk PG G tn fn inst s. _` kall_tac >>
-  rpt gen_tac >> Cases_on `k` >> simp[]
-  >- (fs[allocas_below_fmp_def] >> metis_tac[]) >>
-  strip_tac >>
-  `allocas_below_fmp (EL n stk).cf_state /\
-   (EL n stk).cf_state.vs_initial_fmp = vs0.vs_initial_fmp` by fs[EVERY_EL] >>
-  fs[allocas_below_fmp_def] >>
-  `FLOOKUP (EL n stk).cf_state.vs_allocas aid = SOME (b,sz)` by gvs[EL_MAP] >>
-  metis_tac[]
-QED
-
 Theorem resolved_frame_empty:
   resolved_frame_ok dyn birth cache [] FEMPTY FEMPTY [] FEMPTY ids frames
 Proof
@@ -621,14 +569,6 @@ Proof
   fs[resolved_frame_ok_def] >> metis_tac[]
 QED
 
-Theorem resolved_dalloca_output:
-  inst.inst_opcode = DALLOCA /\ step_inst fuel ctx inst s = OK post /\
-  inst.inst_outputs = [out] /\ lookup_var out post = SOME b ==> b = s.vs_fmp
-Proof
-  rpt strip_tac >> gvs[step_inst_non_invoke, step_inst_base_def, AllCaseEqs()] >>
-  gvs[update_var_def, lookup_var_def, FLOOKUP_UPDATE]
-QED
-
 Theorem resolved_config_ordinary:
   joint_transition C (JointConfig stk PG G tn fn inst s oms om hs h)
     (SOME (OriginOrdinary fuel post)) q' /\
@@ -676,7 +616,7 @@ Proof
   `frame_reachable vs0 C stk PG G tn fn inst s` by
     (fs[joint_config_reachable_def] >>
      metis_tac[joint_origin_history_erasure, origin_frame_erasure]) >>
-  `MEM fn C.ctx_functions` by metis_tac[frame_allocation_ownership] >>
+  `MEM fn C.ctx_functions` by metis_tac[frame_reachable_functions_member] >>
   `active_inst fn inst s` by
     (fs[joint_config_reachable_def] >>
      metis_tac[joint_origin_history_projection, frame_history_active]) >>

@@ -40,7 +40,7 @@ Theorem layout_canonical_call_entry:
   ctx_pass_stage rpolicy (CFP_Simple VP_ConcretizeMemLoc)
     (o1_walk_view rpolicy 2) C C' /\ o1_ctx_shape C /\
   EVERY (\fn. fn.fn_eom = NONE) C.ctx_functions /\
-  ptr_discipline lo C vs0 /\ vs0.vs_allocas = FEMPTY /\ ~ctx_has_dalloca C /\
+  ptr_discipline lo C vs0 /\ vs0.vs_allocas = FEMPTY /\
   joint_trace vs0 C q0 es qs qend /\
   es = MAP FST path /\ qs = MAP SND path /\
   (!k. k < LENGTH path ==>
@@ -97,7 +97,7 @@ Proof
     (qpat_x_assum `joint_config_reachable _ _ _` mp_tac >>
      asm_rewrite_tac[joint_config_reachable_def] >>
      metis_tac[joint_origin_history_erasure, origin_frame_erasure]) >>
-  `MEM caller C.ctx_functions` by metis_tac[frame_allocation_ownership] >>
+  `MEM caller C.ctx_functions` by metis_tac[frame_reachable_functions_member] >>
   `o1_fn_shape C caller /\ o1_fn_shape C fn /\ fn.fn_eom = NONE` by
     (fs[o1_ctx_shape_def, EVERY_MEM] >> metis_tac[lookup_function_MEM]) >>
   `?P. fn_ptr_ok P caller` by

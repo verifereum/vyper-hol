@@ -36,6 +36,7 @@ Proof
   `joint_config_reachable vs0 C (EL j (q0::qs))` by
     metis_tac[trace_config_at] >>
   `vs0.vs_allocas = FEMPTY` by gvs[o1_run_state_ok_def, o1_initial_state_ok_def] >>
+  `ctx_has_dalloca C ==> byte < w2n vs0.vs_initial_fmp` by simp[] >>
   drule_all joint_read_production_origin >> strip_tac
   >- suspend "local"
   >> suspend "incoming"
@@ -114,7 +115,7 @@ Proof
        gvs[joint_config_reachable_def] >>
      drule joint_origin_history_erasure >> strip_tac >>
      drule origin_frame_erasure >> strip_tac >>
-     drule_all frame_allocation_ownership >> strip_tac >>
+     drule_all frame_reachable_functions_member >> strip_tac >>
      qpat_x_assum `activation_cache (EL j _) _ _ _ _` mp_tac >>
      simp[activation_cache_def] >> strip_tac >>
      fs[EVERY_EL] >> metis_tac[]) >>

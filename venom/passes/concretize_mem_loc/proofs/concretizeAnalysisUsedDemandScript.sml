@@ -79,7 +79,7 @@ Proof
         strip_tac >> gvs[joint_config_reachable_def] >>
         drule joint_origin_history_erasure >> strip_tac >>
         drule origin_frame_erasure >> strip_tac >>
-        metis_tac[frame_allocation_ownership]) >>
+        metis_tac[frame_reachable_functions_member]) >>
      gvs[o1_ctx_shape_def, o1_fn_shape_def, EVERY_MEM]) >>
   `?la us. ml_iterate_fuel (concretize_memloc_fuel fn) bp
     (\nm. incr_ssort alloc_to (MAP FST (callee_mems_used observed.cu_context nm)))
@@ -158,7 +158,7 @@ Proof
      strip_tac >> gvs[joint_config_reachable_def] >>
      drule joint_origin_history_erasure >> strip_tac >>
      drule origin_frame_erasure >> strip_tac >>
-     metis_tac[frame_allocation_ownership]) >>
+     metis_tac[frame_reachable_functions_member]) >>
   `wf_function owner /\ all_reachable owner` by
     gvs[o1_ctx_shape_def, o1_fn_shape_def, EVERY_MEM] >>
   `?la us. ml_iterate_fuel (concretize_memloc_fuel owner)

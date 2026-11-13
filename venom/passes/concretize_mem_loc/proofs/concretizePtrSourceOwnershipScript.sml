@@ -319,7 +319,7 @@ Proof
   `ctx_has_dalloca C` by (simp[ctx_has_dalloca_def, EXISTS_MEM] >> metis_tac[]) >>
   `allocas_below_fmp s` by (fs[ptr_discipline_def] >> metis_tac[]) >>
   `s.vs_initial_fmp = vs0.vs_initial_fmp` by
-    metis_tac[frameResolvedTraceTheory.frame_reachable_initial_fmp] >>
+    metis_tac[frameAllocationOwnershipTheory.frame_reachable_initial_fmp] >>
   fs[dyn_floor_def, allocas_below_fmp_def] >> rfs[]
 QED
 
@@ -392,7 +392,7 @@ Proof
      fs[concretizePtrPrefixLedgerTheory.ptr_ledger_erases_every_dyn] >>
      rpt strip_tac >> Cases_on `FLOOKUP TG u` >> gvs[]) >>
   `a.po_inst.inst_opcode <> DALLOCA` by
-    (drule_all frameAllocationOwnershipTheory.frame_allocation_ownership >> strip_tac >>
+    (drule_all frameAllocationOwnershipTheory.frame_reachable_functions_member >> strip_tac >>
      `active_inst a.po_fn a.po_inst a.po_state` by
        (qpat_x_assum `frame_reachable _ _ _ _ _ _ _ _ _` mp_tac >>
         simp[Once frame_reachable_cases] >> metis_tac[]) >>

@@ -30,6 +30,8 @@ Proof
   `byte IN range_bytes (source_memory_write_ranges inst s)` by
     (drule joint_writes_source_subset >> metis_tac[SUBSET_DEF]) >>
   drule_all access_ok_write_site >> strip_tac >>
+  `ctx_has_dalloca C ==> ptr_discipline lo C vs0` by simp[] >>
+  `ctx_has_dalloca C ==> FST (b,sz) < w2n vs0.vs_initial_fmp` by simp[] >>
   drule_all joint_provenance_activation_owner >> strip_tac >>
   metis_tac[]
 QED

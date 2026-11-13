@@ -133,7 +133,7 @@ Resume ptr_paired_fixed_read_recovery[writer]:
   `dyn_floor C (EL w h).po_state = dyn_floor C vs` by
     (`(EL w h).po_state.vs_initial_fmp = vs.vs_initial_fmp` by
        (fs[ptr_observation_reachable_def] >>
-        metis_tac[frameResolvedTraceTheory.frame_reachable_initial_fmp]) >>
+        metis_tac[frameAllocationOwnershipTheory.frame_reachable_initial_fmp]) >>
      fs[dyn_floor_def]) >>
   `vs.vs_allocas = FEMPTY` by fs[o1_run_state_ok_def, o1_initial_state_ok_def] >>
   `EVERY wf_function C.ctx_functions` by

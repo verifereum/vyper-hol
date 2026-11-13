@@ -126,7 +126,7 @@ Proof
 QED
 
 Theorem layout_ordinary_source_facts:
-  o1_ctx_shape C /\ ptr_discipline lo C vs0 /\ ~ctx_has_dalloca C /\
+  o1_ctx_shape C /\ ptr_discipline lo C vs0 /\
   ~g.lop_pending /\ layout_ordinary_entry D lo vs0 C C' q0 es qs qend g s t /\
   g.lop_config = JointConfig stk PG G tn fn inst s oms om hs h /\
   decoration_at fn inst s g.lop_config ==>
@@ -142,7 +142,7 @@ Proof
   `frame_reachable vs0 C stk PG G tn fn inst s` by
     (gvs[joint_config_reachable_def] >>
      metis_tac[joint_origin_history_erasure, origin_frame_erasure]) >>
-  `MEM fn C.ctx_functions` by metis_tac[frame_allocation_ownership] >>
+  `MEM fn C.ctx_functions` by metis_tac[frame_reachable_functions_member] >>
   `o1_fn_shape C fn` by (fs[o1_ctx_shape_def, EVERY_MEM] >> metis_tac[]) >>
   `MEM inst (fn_insts fn)` by
     (qpat_x_assum `decoration_at _ _ _ _` mp_tac >>

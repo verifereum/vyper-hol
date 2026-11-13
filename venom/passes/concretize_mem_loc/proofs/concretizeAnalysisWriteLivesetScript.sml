@@ -1,7 +1,7 @@
 Theory concretizeAnalysisWriteLiveset
 Ancestors concretizeAnalysisStoreMark concretizeAnalysisPastUse
   concretizeAnalysisUsedDemand concretizeAnalysisIncomingDemand concretizeAnalysisTemporalDemand
-  frameWriteOwnership frameActivationSeparation frameActivationCache
+  frameWriteOwnership frameActivationSeparation frameActivationCache frameIncomingArgument frameDemandOwnership
   concretizeAnalysisScanCoverage frameOriginCacheReach concretizePtrOrdering
   concretizeAnalysisLivenessPaths venomInst concretizePtrIncomingOrigins
   frameOriginHistory frameOriginReachable ptrDiscipline o1PassContract
@@ -14,7 +14,7 @@ Theorem concretize_write_owner_liveset:
   EVERY (\fn. fn.fn_eom = NONE) C.ctx_functions /\
   callee_first names C.ctx_functions /\ ctx_inst_ids_distinct C /\ o1_run_state_ok vs0 /\
   EVERY ssa_form C.ctx_functions /\ EVERY fn_defs_reach_uses C.ctx_functions /\
-  ptr_discipline lo C vs0 /\ EVERY all_reachable C.ctx_functions /\ ~ctx_has_dalloca C /\
+  ptr_discipline lo C vs0 /\ EVERY all_reachable C.ctx_functions /\
   o1_walk_view rpolicy 2 C' owner observed /\
   joint_config_reachable vs0 C (JointConfig stk PG G tn fn inst s oms om hs h) /\
   joint_transition C (JointConfig stk PG G tn fn inst s oms om hs h) ev qnext /\
@@ -37,6 +37,9 @@ Proof
   `frame_reachable vs0 C stk PG G tn fn inst s` by
     metis_tac[origin_frame_erasure] >>
   `access_ok lo G fn inst s` by metis_tac[ptr_discipline_def] >>
+  `ctx_has_dalloca C ==> ptr_discipline lo C vs0` by simp[] >>
+  `ctx_has_dalloca C ==> b + sz <= w2n vs0.vs_initial_fmp` by
+    (strip_tac >> drule_all joint_config_cache_below >> simp[]) >>
   drule_all joint_write_owner_identity >> strip_tac >>
   drule_all origin_frame_current_lookup >> strip_tac >>
   Cases_on `tag`
@@ -60,7 +63,7 @@ Resume concretize_write_owner_liveset[local]:
     gvs[o1_ctx_shape_def, o1_fn_shape_def, EVERY_MEM] >>
   `?P. EVERY (fn_ptr_ok P) C.ctx_functions` by
     (fs[ptr_discipline_def, EVERY_MEM] >> metis_tac[]) >>
-  `MEM fn C.ctx_functions` by metis_tac[frame_allocation_ownership] >>
+  `MEM fn C.ctx_functions` by metis_tac[frame_reachable_functions_member] >>
   `wf_function fn /\ all_reachable fn /\ ssa_form fn` by metis_tac[EVERY_MEM] >>
   `Allocation aid IN bp_bases
     (bp_analyze_fuel (concretize_memloc_fuel fn) (cfg_analyze fn) fn) v` by
@@ -78,6 +81,9 @@ Resume concretize_write_owner_liveset[local]:
 QED
 
 Resume concretize_write_owner_liveset[incoming]:
+  `ctx_has_dalloca C ==> FST (b,sz) < w2n vs0.vs_initial_fmp` by
+    (strip_tac >> `b + sz <= w2n vs0.vs_initial_fmp` by metis_tac[] >>
+     simp[] >> decide_tac) >>
   drule_all joint_incoming_production_argument >> strip_tac >>
   `activation_cache (JointConfig stk PG G tn fn inst s oms om hs h)
     (LENGTH stk - SUC k) (EL k stk).cf_fn aid' (b,sz)` by
@@ -108,14 +114,9 @@ Resume concretize_write_owner_liveset[incoming]:
 QED
 
 Resume concretize_write_owner_liveset[dynamic]:
-  qpat_x_assum `ptr_discipline _ _ _` mp_tac >>
-  simp[ptr_discipline_def] >> strip_tac >>
-  `EVERY (\f. EVERY inst_wf (fn_insts f)) C.ctx_functions` by
-    (gvs[o1_ctx_shape_def, o1_fn_shape_def, EVERY_MEM, fn_inst_wf_def, fn_insts_def, fn_insts_blocks_MEM] >>
-     metis_tac[]) >>
-  `EVERY (fn_ptr_ok P) C.ctx_functions` by
-    (fs[EVERY_MEM] >> metis_tac[]) >>
-  metis_tac[origin_frame_current_not_dynamic]
+  drule_all origin_frame_dynamic_site >> strip_tac >>
+  `b + sz <= w2n vs0.vs_initial_fmp` by metis_tac[] >>
+  qpat_x_assum `_ <= FST _` mp_tac >> simp[] >> decide_tac
 QED
 
 Finalise concretize_write_owner_liveset

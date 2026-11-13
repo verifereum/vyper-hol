@@ -264,31 +264,5 @@ Theorem joint_cache_below_initial_fmp:
   b + sz <= w2n vs0.vs_initial_fmp
 Proof
   strip_tac >> drule_all joint_trace_reachable_at >> strip_tac >>
-  `?stk PG G tn fn inst s oms om hs h.
-     EL k (q0::qs) = JointConfig stk PG G tn fn inst s oms om hs h` by
-    (Cases_on `EL k (q0::qs)` >> simp[]) >>
-  fs[] >>
-  `frame_reachable vs0 C stk PG G tn fn inst s` by
-    (fs[joint_config_reachable_def] >>
-     metis_tac[joint_origin_history_erasure, origin_frame_erasure]) >>
-  `!stk PG G tn fn inst s. frame_reachable vs0 C stk PG G tn fn inst s ==>
-     allocas_below_fmp s` by (fs[ptr_discipline_def] >> metis_tac[]) >>
-  `EVERY (\f. allocas_below_fmp f.cf_state) stk` by
-    metis_tac[frame_reachable_saved_below_fmp] >>
-  `EVERY (\f. raw_reachable vs0 C f.cf_fn f.cf_inst f.cf_state) stk` by
-    metis_tac[joint_config_saved_raw] >>
-  qpat_x_assum `activation_cache _ _ _ _ _` mp_tac >>
-  simp[activation_cache_def] >> strip_tac
-  >- (`s.vs_initial_fmp = vs0.vs_initial_fmp` by
-        metis_tac[joint_config_raw, raw_reachable_initial_fmp] >>
-      `allocas_below_fmp s` by metis_tac[] >>
-      fs[allocas_below_fmp_def] >> metis_tac[]) >>
-  `LENGTH stk - SUC d < LENGTH stk` by decide_tac >>
-  qabbrev_tac `f = EL (LENGTH stk - SUC d) stk` >>
-  `allocas_below_fmp f.cf_state /\
-   raw_reachable vs0 C f.cf_fn f.cf_inst f.cf_state` by
-    fs[EVERY_EL, Abbr `f`] >>
-  `f.cf_state.vs_initial_fmp = vs0.vs_initial_fmp` by
-    metis_tac[raw_reachable_initial_fmp] >>
-  fs[allocas_below_fmp_def] >> metis_tac[]
+  Cases_on `EL k (q0::qs)` >> gvs[] >> metis_tac[frameDemandOwnershipTheory.joint_config_cache_below]
 QED

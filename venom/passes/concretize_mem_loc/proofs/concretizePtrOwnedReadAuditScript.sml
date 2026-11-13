@@ -117,7 +117,7 @@ Proof
   `b+k < dyn_floor C (EL w h).po_state` by
     (`(EL w h).po_state.vs_initial_fmp = vs.vs_initial_fmp` by
        (fs[ptr_observation_reachable_def] >>
-        metis_tac[frameResolvedTraceTheory.frame_reachable_initial_fmp]) >>
+        metis_tac[frameAllocationOwnershipTheory.frame_reachable_initial_fmp]) >>
      qpat_x_assum `~(dyn_floor C vs <= b+k)` mp_tac >> fs[dyn_floor_def] >>
      Cases_on `ctx_has_dalloca C` >> simp[]) >>
   `rho' (b+k) = pa+k` by

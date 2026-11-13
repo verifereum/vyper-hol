@@ -32,7 +32,8 @@ Theorem joint_incoming_production_argument:
   joint_origin_history vs0 ctx stk PG G tn fn inst s oms om hs h /\
   o1_ctx_shape ctx /\ ptr_discipline lo ctx vs0 /\
   EVERY ssa_form ctx.ctx_functions /\ EVERY all_reachable ctx.ctx_functions /\
-  ~ctx_has_dalloca ctx /\ FLOOKUP om v = SOME (OriginParameter p,site) ==>
+  (ctx_has_dalloca ctx ==> FST site < w2n vs0.vs_initial_fmp) /\
+  FLOOKUP om v = SOME (OriginParameter p,site) ==>
   ?k aid u nm ops.
     k < LENGTH stk /\ k < LENGTH oms /\
     (EL k stk).cf_inst.inst_opcode = INVOKE /\
@@ -55,11 +56,13 @@ Theorem joint_incoming_production_argument:
       MEM (Allocation aid) (ml_lookup us
         ((EL k stk).cf_state.vs_current_bb,(EL k stk).cf_state.vs_inst_idx)))
 Proof
-  strip_tac >> drule_all joint_incoming_argument >> strip_tac >>
+  strip_tac >>
+  `ctx_has_dalloca ctx ==> ptr_discipline lo ctx vs0` by simp[] >>
+  drule_all joint_incoming_argument >> strip_tac >>
   drule joint_origin_history_erasure >> strip_tac >>
   `MEM (EL k stk).cf_fn ctx.ctx_functions` by
     (drule origin_frame_erasure >> strip_tac >>
-     drule_all frame_allocation_ownership >> simp[EVERY_EL] >> metis_tac[]) >>
+     drule_all frame_reachable_functions_member >> simp[EVERY_EL] >> metis_tac[]) >>
   `EVERY wf_function ctx.ctx_functions` by
     gvs[o1_ctx_shape_def, o1_fn_shape_def, EVERY_MEM] >>
   `wf_function (EL k stk).cf_fn /\ all_reachable (EL k stk).cf_fn /\
@@ -110,6 +113,7 @@ Proof
     metis_tac[trace_config_at] >>
   `joint_origin_history vs0 C stk PG G tn current inst s oms om hs h` by
     gvs[joint_config_reachable_def] >>
+  `ctx_has_dalloca C ==> FST (b,sz) < w2n vs0.vs_initial_fmp` by simp[] >>
   drule_all joint_incoming_production_argument >> strip_tac >>
   qabbrev_tac `d = LENGTH stk - SUC k` >>
   qabbrev_tac `owner = (EL k stk).cf_fn` >>
@@ -136,7 +140,7 @@ Proof
   `MEM owner C.ctx_functions` by
     (drule joint_origin_history_erasure >> strip_tac >>
      drule origin_frame_erasure >> strip_tac >>
-     drule_all frame_allocation_ownership >> simp[EVERY_EL, Abbr `owner`] >> metis_tac[]) >>
+     drule_all frame_reachable_functions_member >> simp[EVERY_EL, Abbr `owner`] >> metis_tac[]) >>
   `wf_function owner /\ all_reachable owner` by
     gvs[o1_ctx_shape_def, o1_fn_shape_def, EVERY_MEM] >>
   qexistsl_tac [`k`,`aid`,`owner`,`d`] >>
@@ -178,7 +182,8 @@ Theorem joint_incoming_used_generator:
   joint_origin_history vs0 ctx stk PG G tn fn inst s oms om hs h /\
   o1_ctx_shape ctx /\ ptr_discipline lo ctx vs0 /\
   EVERY ssa_form ctx.ctx_functions /\ EVERY all_reachable ctx.ctx_functions /\
-  ~ctx_has_dalloca ctx /\ FLOOKUP om v = SOME (OriginParameter p,site) ==>
+  (ctx_has_dalloca ctx ==> FST site < w2n vs0.vs_initial_fmp) /\
+  FLOOKUP om v = SOME (OriginParameter p,site) ==>
   ?k aid owner d.
     k < LENGTH stk /\ owner = (EL k stk).cf_fn /\ d = LENGTH stk - SUC k /\
     FLOOKUP (EL k stk).cf_state.vs_allocas aid = SOME site /\

@@ -28,7 +28,7 @@ QED
 
 Theorem canonical_entry_function_member[local]:
   layout_canonical_entry D lo vs0 C C' q0 es qs ass qend q n (INL b) p u /\
-  decoration_entry fn p q /\ ~ctx_has_dalloca C ==>
+  decoration_entry fn p q ==>
   MEM fn C.ctx_functions
 Proof
   simp[layout_canonical_entry_def, layout_canonical_ready_def,
@@ -43,7 +43,7 @@ Proof
   `frame_reachable vs0 C stk PG G tn fn inst p` by
     (fs[joint_config_reachable_def] >>
      metis_tac[joint_origin_history_erasure, origin_frame_erasure]) >>
-  metis_tac[frame_allocation_ownership]
+  metis_tac[frame_reachable_functions_member]
 QED
 
 (* Leaf of the canonical simulation contract, run-halt: a block that ends
