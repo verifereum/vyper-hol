@@ -174,7 +174,8 @@ Proof
   drule source_typing_ok_external_names_distinct >> strip_tac >>
   drule_all runtime_entry_function_no_phi >> strip_tac >>
   drule_all external_entry_reaches_registration_ptr >> strip_tac >>
-  drule_all register_positional_args_ptr >> strip_tac >>
+  drule_all register_positional_args_ptr >>
+  disch_then (qspec_then `G1` strip_assume_tac) >>
   `gas_path_mem unit.cu_context func
      (vs with <| vs_prev_bb := NONE; vs_current_bb := "__entry";
                  vs_inst_idx := 0 |>) (0 + 0) (OK s0)` by
