@@ -6,6 +6,42 @@ Ancestors
   typedMemoryCopy compileEnv context loweringStateRelDefs bodyPtrDefs
   venomState venomInst valueEncoding valueEncodingDefs words list finite_map
 
+(* Both flat and bytestring snapshots allocate a private result buffer. *)
+Theorem snapshot_fresh_buffer_owned_frame:
+  !ce cx fn es ty sa sb s t tv v out w aid cap.
+    evaluate_type (get_tenv cx) ty = SOME tv /\ ~is_word_type ty /\
+    eval_operand (Var out) t = SOME w /\
+    FLOOKUP t.vs_allocas aid = SOME (w2n w,cap) /\
+    sa.cs_next_id <= aid /\ aid < sb.cs_next_id /\
+    val_footprint tv v <= cap /\
+    (!name b len. local_region ce es.scopes t name b len ==>
+      regions_disjoint (w2n w) cap b len) /\
+    MEM (mk_inst aid ALLOCA [Lit (n2w cap)] [out]) (fn_insts fn) /\
+    (!name b len. local_region ce es.scopes s name b len ==>
+      local_region ce es.scopes t name b len) /\
+    (!b len. regions_disjoint b len (w2n w) cap ==>
+      mem_bytes_at b len t.vs_memory = mem_bytes_at b len s.vs_memory) ==>
+    expr_val_own ce cx ty sa sb es v (Var out) t /\
+    pure_frame ce fn es sa s t
+Proof
+  rpt gen_tac >> strip_tac >> conj_tac
+  >- (rewrite_tac[expr_val_own_def] >> qx_gen_tac `rtv` >> strip_tac >>
+      `rtv = tv` by fs[] >> qpat_x_assum `rtv = tv` SUBST_ALL_TAC >>
+      qexists_tac `w` >> simp[] >> disj1_tac >>
+      qexistsl_tac [`aid`,`w2n w`,`cap`] >> fs[] >> rpt strip_tac >>
+      qpat_assum `!name b len. local_region _ _ _ _ _ _ ==>
+        regions_disjoint _ _ _ _` drule >>
+      simp[regions_disjoint_def]) >>
+  match_mp_tac (Q.SPECL [`ce`,`fn`,`es`,`sa`,`s`,`t`,`aid`,
+    `[Lit (n2w cap)]`,`[out]`,`w2n (w:256 word)`,`cap`]
+    pure_frame_fresh_alloca) >> simp[] >> rpt gen_tac >> strip_tac >>
+  qpat_assum `!b len. regions_disjoint _ _ _ _ ==> _` irule >>
+  `local_region ce es.scopes t n lb lsz` by metis_tac[] >>
+  qpat_assum `!name b len. local_region _ _ _ _ _ _ ==>
+    regions_disjoint _ _ _ _` drule >>
+  fs[regions_disjoint_def] >> decide_tac
+QED
+
 Theorem snapshot_memory_nonbytes_counted_ptr:
   !cenv ty vv saved sa sb ctx fn cx es s G tn d D PG tv v src w va vb.
     ~is_word_type ty /\ ~is_bytestring_type ty /\
@@ -93,26 +129,13 @@ Resume snapshot_memory_nonbytes_counted_ptr[staged]:
      qpat_x_assum `typed_copy_state_frame _ _ _ u t` mp_tac >>
      simp[typed_copy_state_frame_def, typed_copy_frame_def] >> strip_tac >>
      first_x_assum irule >> fs[regions_disjoint_def]) >>
-  `expr_val_own cenv cx ty sa sb es v (Var dst) t` by
-    (rewrite_tac[expr_val_own_def] >> qx_gen_tac `rtv` >> strip_tac >>
-     `rtv = tv` by fs[] >> qpat_x_assum `rtv = tv` SUBST_ALL_TAC >>
-     qexists_tac `a` >> simp[] >> disj1_tac >>
-     qexistsl_tac [`sa.cs_next_id`,`w2n a`,`type_memory_size tv`] >>
-     fs[] >> rpt strip_tac >>
-     qpat_assum `!name b len. local_region _ _ _ _ _ _ ==> _` drule >>
-     simp[regions_disjoint_def]) >>
-  `pure_frame cenv fn es sa s t` by
-    (match_mp_tac (Q.SPECL [`cenv`,`fn`,`es`,`sa`,`s`,`t`,`sa.cs_next_id`,
-       `[Lit (n2w (type_memory_size tv))]`,`[dst]`,`w2n (a:256 word)`,`type_memory_size tv`]
-       pure_frame_fresh_alloca) >>
-     `MEM (mk_inst sa.cs_next_id ALLOCA [Lit (n2w (type_memory_size tv))] [dst])
-       (fn_insts fn)` by
-       (simp[Abbr `dst`] >> drule_all buffer_alloc_code >> simp[]) >>
-     simp[] >> rpt gen_tac >> strip_tac >>
-     qpat_assum `!b len. regions_disjoint _ _ _ _ ==> _` irule >>
-     `local_region cenv es.scopes t n lb lsz` by fs[] >>
-     qpat_assum `!name b len. local_region _ _ _ _ _ _ ==> _` drule >>
-     fs[regions_disjoint_def] >> decide_tac) >>
+  `MEM (mk_inst sa.cs_next_id ALLOCA [Lit (n2w (type_memory_size tv))] [dst])
+    (fn_insts fn)` by
+    (simp[Abbr `dst`] >> drule_all buffer_alloc_code >> simp[]) >>
+  mp_tac (Q.SPECL [`cenv`,`cx`,`fn`,`es`,`ty`,`sa`,`sb`,`s`,`t`,`tv`,
+    `v`,`dst`,`a`,`sa.cs_next_id`,`type_memory_size tv`]
+    snapshot_fresh_buffer_owned_frame) >>
+  impl_tac >- (fs[] >> first_assum ACCEPT_TAC) >> strip_tac >>
   `!x. not_fresh_at sa x ==> lookup_var x t = lookup_var x s /\
     FLOOKUP H x = FLOOKUP G x /\ op_taint tt (Var x) = op_taint tn (Var x)` by
     (rpt gen_tac >> strip_tac >>
