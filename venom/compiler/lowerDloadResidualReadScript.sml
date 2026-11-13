@@ -101,7 +101,11 @@ QED
 (* The access classification is shared by all variable-width observations.
    Its zero-width branch deliberately does not require a live pointer site. *)
 Theorem ld_owned_read_range_geometry:
-  access_ok lo (ld_erase AG) fn i s /\ ~in_revert_forward fn s /\
+  access_ok lo G fn i s /\
+  (!v x. FLOOKUP (ld_erase AG) v = SOME x ==> FLOOKUP G v = SOME x) /\
+  (!v b z. FLOOKUP AG v = NONE /\ FLOOKUP G v = SOME (b,z) ==>
+     fl <= b /\ b + z < dimword (:256)) /\
+  ~in_revert_forward fn s /\
   mem_read_ops i = SOME ops /\
   MEM (w2n p,n) (source_memory_read_ranges i s) /\
   eval_operand ops.iao_ofst s = SOME p /\
@@ -115,13 +119,20 @@ Theorem ld_owned_read_range_geometry:
     bt+sz < dimword(:256)) ==>
   !j. j < n ==>
     ((w2n p+j = w2n q+j /\ w2n p+j < lo) \/
+     (w2n p+j = w2n q+j /\ fl <= w2n p+j /\ w2n p+j < dimword (:256)) \/
      ld_site_bytes E live (w2n p+j) (w2n q+j))
 Proof
   strip_tac >> Cases_on `n = 0` >- simp[] >>
-  drule ld_access_read_classification >>
-  disch_then (qspecl_then [`w2n p`,`n`] mp_tac) >> simp[] >> strip_tac
+  mp_tac (Q.INST [`off` |-> `w2n (p:bytes32)`, `len` |-> `n`, `inst` |-> `i`]
+    ld_access_read_classification) >>
+  impl_tac >- (rpt conj_tac >> FIRST [first_assum ACCEPT_TAC, simp[]]) >> strip_tac
   >- (`ld_op_prov AG ops.iao_ofst = NONE` by
         (gvs[GSYM ld_erase_op_prov]) >>
+      drule ld_owned_operand_clean >>
+      disch_then (qspec_then `ops.iao_ofst` mp_tac) >>
+      simp[] >> rpt strip_tac >> gvs[] >> decide_tac)
+  >>> REVERSE_LT
+  >- (`ld_op_prov AG ops.iao_ofst = NONE` by gvs[ld_op_prov_def] >>
       drule ld_owned_operand_clean >>
       disch_then (qspec_then `ops.iao_ofst` mp_tac) >>
       simp[] >> rpt strip_tac >> gvs[] >> decide_tac) >>
@@ -133,7 +144,7 @@ Proof
      conj_tac >- metis_tac[] >>
      conj_tac >- metis_tac[] >>
      qexistsl_tac [`AG`,`U`,`s`,`t`,`tn`,`un`] >> simp[]) >>
-  rpt strip_tac >> disj2_tac >>
+  rpt strip_tac >> rpt disj2_tac >>
   simp[ld_site_bytes_def] >>
   qexistsl_tac [`owner`,`bs`,`bt`,`sz`,`w2n p-bs+j`] >> simp[] >>
   metis_tac[]
@@ -165,11 +176,13 @@ Proof
         simp[ld_owned_selection_def] >> metis_tac[]) >> metis_tac[]) >>
   `!j. j < n ==>
     ((w2n p+j = w2n q+j /\ w2n p+j < lo) \/
+      (w2n p+j = w2n q+j /\ dyn_floor CS s <= w2n p+j /\ w2n p+j < dimword (:256)) \/
       ld_site_bytes E live (w2n p+j) (w2n q+j))` by
-    (mp_tac ld_owned_read_range_geometry >> asm_rewrite_tac[] >>
-     impl_tac >- (metis_tac[ld_annotated_access_ok]) >> simp[]) >>
+    (drule_all ld_annotated_access_ok >> strip_tac >>
+     mp_tac (Q.INST [`fl` |-> `dyn_floor CS s`] ld_owned_read_range_geometry) >>
+     asm_rewrite_tac[] >> impl_tac >- metis_tac[] >> simp[]) >>
   irule ld_byte_rel_clean_read_memory >>
-  qexistsl_tac [`(\a b. (a=b /\ a<lo) \/ ld_site_bytes E live a b)`,
+  qexistsl_tac [`(\a b. (a=b /\ a<lo) \/ (a=b /\ dyn_floor CS s <= a /\ a < dimword (:256)) \/ ld_site_bytes E live a b)`,
     `tn.t_mem`,`un.t_mem`] >> simp[] >>
   conj_tac >- (gvs[arithmeticTheory.ADD_COMM]) >>
   drule ld_normal_data_memory >> simp[]
@@ -286,7 +299,7 @@ Theorem ld_normal_data_logs:
   ld_normal_data CS fn V U lo E L H AP BP AG BH tn un s t
     astk live keys d A suspended gstk f
 Proof
-  simp[ld_normal_data_def, ld_frame_data_def, ld_frame_embedding_def,
+  simp[ld_normal_data_def, ld_frame_data_def, ld_frame_embedding_def, dyn_floor_def,
        ld_owned_vars_def, lookup_var_def, ld_shared_state_def,
        ld_alloc_account_def, allocas_from_def, venomStateTheory.read_memory_def]
 QED

@@ -142,7 +142,7 @@ Resume ld_normal_external_backward[call_shared]:
        drule ld_external_bind_tainted_shared >> strip_tac >>
        qexists_tac `update_var out w rS` >>
        conj_tac >- asm_rewrite_tac[] >>
-       `ld_byte_rel (\a b. (a=b /\ a<lo) \/ ld_site_bytes E live a b)
+       `ld_byte_rel (\a b. (a=b /\ a<lo) \/ (a=b /\ dyn_floor CS s <= a /\ a < dimword (:256)) \/ ld_site_bytes E live a b)
           (step_taint i s rS tn).t_mem (step_taint i t rT un).t_mem
           (\a. read_memory a 1 rS) (\b. read_memory b 1 rT)` by
          (drule_at (Pat `ld_normal_data _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _`)
@@ -204,7 +204,7 @@ Resume ld_normal_external_backward[delegate_shared]:
        drule ld_external_bind_tainted_shared >> strip_tac >>
        qexists_tac `update_var out w rS` >>
        conj_tac >- asm_rewrite_tac[] >>
-       `ld_byte_rel (\a b. (a=b /\ a<lo) \/ ld_site_bytes E live a b)
+       `ld_byte_rel (\a b. (a=b /\ a<lo) \/ (a=b /\ dyn_floor CS s <= a /\ a < dimword (:256)) \/ ld_site_bytes E live a b)
           (step_taint i s rS tn).t_mem (step_taint i t rT un).t_mem
           (\a. read_memory a 1 rS) (\b. read_memory b 1 rT)` by
          (drule_at (Pat `ld_normal_data _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _`)
@@ -271,7 +271,7 @@ Resume ld_normal_external_backward[create_shared]:
   drule ld_external_bind_tainted_shared >> strip_tac >>
   qexists_tac `update_var out w rS` >>
   conj_tac >- asm_rewrite_tac[] >>
-  `ld_byte_rel (\a b. (a=b /\ a<lo) \/ ld_site_bytes E live a b)
+  `ld_byte_rel (\a b. (a=b /\ a<lo) \/ (a=b /\ dyn_floor CS s <= a /\ a < dimword (:256)) \/ ld_site_bytes E live a b)
      (step_taint i s rS tn).t_mem (step_taint i t rT un).t_mem
      (\a. read_memory a 1 rS) (\b. read_memory b 1 rT)` by
     (drule ld_normal_data_memory >> disch_tac >>

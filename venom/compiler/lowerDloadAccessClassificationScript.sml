@@ -4,45 +4,87 @@ Ancestors
   ptrDiscipline memLocDefs venomState finite_map list words
 
 Theorem ld_access_read_classification:
-  access_ok lo (ld_erase AG) fn inst s /\ ~in_revert_forward fn s /\
+  access_ok lo G fn inst s /\
+  (!v x. FLOOKUP (ld_erase AG) v = SOME x ==> FLOOKUP G v = SOME x) /\
+  (!v b z. FLOOKUP AG v = NONE /\ FLOOKUP G v = SOME (b,z) ==>
+     fl <= b /\ b + z < dimword (:256)) /\
+  ~in_revert_forward fn s /\
   MEM (off,len) (source_memory_read_ranges inst s) /\ len <> 0 ==>
   (off+len <= lo /\ (!ops. mem_read_ops inst = SOME ops ==>
     op_prov (ld_erase AG) ops.iao_ofst = NONE)) \/
   (?ops v owner bs sz. mem_read_ops inst = SOME ops /\
     ops.iao_ofst = Var v /\ FLOOKUP AG v = SOME(owner,(bs,sz)) /\
-    bs <= off /\ off+len <= bs+sz)
+    bs <= off /\ off+len <= bs+sz) \/
+  (?ops v. mem_read_ops inst = SOME ops /\ ops.iao_ofst = Var v /\
+    FLOOKUP AG v = NONE /\ fl <= off /\ off+len < dimword (:256))
 Proof
   strip_tac >>
   Cases_on `lo < off+len \/ ?ops. mem_read_ops inst = SOME ops /\
-    op_prov (ld_erase AG) ops.iao_ofst <> NONE`
-  >- (disj2_tac >> fs[access_ok_def] >>
-      qpat_x_assum `!off len. MEM (off,len) (source_memory_read_ranges _ _) /\ _ ==> _`
-        (qspecl_then [`off`,`len`] mp_tac) >>
-      simp[] >> strip_tac >>
-      gvs[ld_erase_lookup, optionTheory.OPTION_MAP_EQ_SOME] >>
-      metis_tac[pairTheory.PAIR]) >>
-  disj1_tac >> gvs[]
+    op_prov G ops.iao_ofst <> NONE`
+  >- (`?ops v b sz. mem_read_ops inst = SOME ops /\ ops.iao_ofst = Var v /\
+         FLOOKUP G v = SOME (b,sz) /\ b <= off /\ off + len <= b + sz` by
+        (qpat_x_assum `access_ok _ _ _ _ _` mp_tac >> simp[access_ok_def] >>
+         strip_tac >>
+         qpat_x_assum `!off len. MEM (off,len) (source_memory_read_ranges _ _) /\ _ ==> _`
+           (qspecl_then [`off`,`len`] mp_tac) >>
+         impl_tac >- (fs[] >> metis_tac[]) >> metis_tac[]) >>
+      Cases_on `FLOOKUP AG v`
+      >- (`fl <= b /\ b + sz < dimword (:256)` by metis_tac[] >>
+          rpt disj2_tac >> qexistsl_tac [`ops`,`v`] >> simp[]) >>
+      disj2_tac >> disj1_tac >>
+      rename1 `FLOOKUP AG v = SOME site` >> PairCases_on `site` >>
+      `FLOOKUP G v = SOME (site2,site3)` by
+        (first_x_assum irule >> simp[ld_erase_lookup]) >>
+      gvs[] >> metis_tac[]) >>
+  disj1_tac >> gvs[] >> rpt strip_tac >>
+  first_x_assum (qspec_then `ops` mp_tac) >> simp[] >>
+  Cases_on `ops.iao_ofst` >> simp[op_prov_def] >>
+  rename1 `FLOOKUP G u = NONE` >> strip_tac >>
+  Cases_on `FLOOKUP AG u` >> simp[] >>
+  qpat_x_assum `!v x. _ ==> FLOOKUP G v = SOME x` (qspecl_then [`u`, `SND x`] mp_tac) >>
+  fs[]
 QED
 
 Theorem ld_access_write_classification:
-  access_ok lo (ld_erase AG) fn inst s /\ ~in_revert_forward fn s /\
+  access_ok lo G fn inst s /\
+  (!v x. FLOOKUP (ld_erase AG) v = SOME x ==> FLOOKUP G v = SOME x) /\
+  (!v b z. FLOOKUP AG v = NONE /\ FLOOKUP G v = SOME (b,z) ==>
+     fl <= b /\ b + z < dimword (:256)) /\
+  ~in_revert_forward fn s /\
   MEM (off,len) (source_memory_write_ranges inst s) /\ len <> 0 ==>
   (off+len <= lo /\ (!ops. mem_write_ops inst = SOME ops ==>
     op_prov (ld_erase AG) ops.iao_ofst = NONE)) \/
   (?ops v owner bs sz. mem_write_ops inst = SOME ops /\
     ops.iao_ofst = Var v /\ FLOOKUP AG v = SOME(owner,(bs,sz)) /\
-    bs <= off /\ off+len <= bs+sz)
+    bs <= off /\ off+len <= bs+sz) \/
+  (?ops v. mem_write_ops inst = SOME ops /\ ops.iao_ofst = Var v /\
+    FLOOKUP AG v = NONE /\ fl <= off /\ off+len < dimword (:256))
 Proof
   strip_tac >>
   Cases_on `lo < off+len \/ ?ops. mem_write_ops inst = SOME ops /\
-    op_prov (ld_erase AG) ops.iao_ofst <> NONE`
-  >- (disj2_tac >> fs[access_ok_def] >>
-      qpat_x_assum `!off len. MEM (off,len) (source_memory_write_ranges _ _) /\ _ ==> _`
-        (qspecl_then [`off`,`len`] mp_tac) >>
-      simp[] >> strip_tac >>
-      gvs[ld_erase_lookup, optionTheory.OPTION_MAP_EQ_SOME] >>
-      metis_tac[pairTheory.PAIR]) >>
-  disj1_tac >> gvs[]
+    op_prov G ops.iao_ofst <> NONE`
+  >- (`?ops v b sz. mem_write_ops inst = SOME ops /\ ops.iao_ofst = Var v /\
+         FLOOKUP G v = SOME (b,sz) /\ b <= off /\ off + len <= b + sz` by
+        (qpat_x_assum `access_ok _ _ _ _ _` mp_tac >> simp[access_ok_def] >>
+         strip_tac >>
+         qpat_x_assum `!off len. MEM (off,len) (source_memory_write_ranges _ _) /\ _ ==> _`
+           (qspecl_then [`off`,`len`] mp_tac) >>
+         impl_tac >- (fs[] >> metis_tac[]) >> metis_tac[]) >>
+      Cases_on `FLOOKUP AG v`
+      >- (`fl <= b /\ b + sz < dimword (:256)` by metis_tac[] >>
+          rpt disj2_tac >> qexistsl_tac [`ops`,`v`] >> simp[]) >>
+      disj2_tac >> disj1_tac >>
+      rename1 `FLOOKUP AG v = SOME site` >> PairCases_on `site` >>
+      `FLOOKUP G v = SOME (site2,site3)` by
+        (first_x_assum irule >> simp[ld_erase_lookup]) >>
+      gvs[] >> metis_tac[]) >>
+  disj1_tac >> gvs[] >> rpt strip_tac >>
+  first_x_assum (qspec_then `ops` mp_tac) >> simp[] >>
+  Cases_on `ops.iao_ofst` >> simp[op_prov_def] >>
+  rename1 `FLOOKUP G u = NONE` >> strip_tac >>
+  Cases_on `FLOOKUP AG u` >> simp[] >>
+  qpat_x_assum `!v x. _ ==> FLOOKUP G v = SOME x` (qspecl_then [`u`, `SND x`] mp_tac) >>
+  fs[]
 QED
 
 Theorem ld_owned_address_transport:

@@ -8,10 +8,10 @@ Theorem ld_call_entry_memory:
   setup_callee source xs s = SOME ss /\ setup_callee callee ys t = SOME cs /\
   enters_block source ss s1 /\ enters_block callee cs t1 /\
   f.lf_local = L /\ f.lf_params = AP /\ f.lf_prov = AG /\
-  ld_byte_rel (\a b. (a=b /\ a<lo) \/
+  ld_byte_rel (\a b. (a=b /\ a<lo) \/ (a=b /\ fl <= a /\ a < dimword (:256)) \/
     ld_site_bytes E {owner | ?bs sz. ld_live astk L AP AG (owner,(bs,sz))} a b)
     Ts Tt (\a. read_memory a 1 s) (\b. read_memory b 1 t) ==>
-  ld_byte_rel (\a b. (a=b /\ a<lo) \/
+  ld_byte_rel (\a b. (a=b /\ a<lo) \/ (a=b /\ fl <= a /\ a < dimword (:256)) \/
     ld_site_bytes E {owner | ?bs sz.
       ld_live (f::astk) FEMPTY (MAP (ld_op_prov AG) ops) FEMPTY (owner,(bs,sz))} a b)
     Ts Tt (\a. read_memory a 1 s1) (\b. read_memory b 1 t1)
@@ -26,12 +26,12 @@ Proof
 QED
 
 Theorem ld_call_return_memory:
-  ld_byte_rel (\a b. (a=b /\ a<lo) \/ ld_site_bytes E live a b)
+  ld_byte_rel (\a b. (a=b /\ a<lo) \/ (a=b /\ fl <= a /\ a < dimword (:256)) \/ ld_site_bytes E live a b)
     Ts Tt (\a. read_memory a 1 u) (\b. read_memory b 1 v) /\
   survivors SUBSET live /\
   bind_outputs outsS valsS (adopt_return_fmp irS (merge_callee_state s u)) = SOME s' /\
   bind_outputs outsT valsT (adopt_return_fmp irT (merge_callee_state t v)) = SOME t' ==>
-  ld_byte_rel (\a b. (a=b /\ a<lo) \/
+  ld_byte_rel (\a b. (a=b /\ a<lo) \/ (a=b /\ fl <= a /\ a < dimword (:256)) \/
     ld_site_bytes (DRESTRICT E survivors) survivors a b)
     Ts Tt (\a. read_memory a 1 s') (\b. read_memory b 1 t')
 Proof

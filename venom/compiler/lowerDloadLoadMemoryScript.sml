@@ -7,6 +7,8 @@ Theorem ld_live_load_memory:
   allocas_non_overlapping t0 /\ alloca_next_valid t0 /\ allocas_from lo t0 /\
   lo <= t0.vs_alloca_next /\ t0.vs_alloca_next < dimword (:256) /\
   (a.inst_id NOTIN A ==> t0.vs_alloca_next + 32 < dimword (:256)) /\
+  (a.inst_id NOTIN A ==> t0.vs_alloca_next + 32 <= dyn_floor CS s) /\
+  t0.vs_alloca_next <= dyn_floor CS s /\
   (!owner bs bt sz. owner IN live /\ ld_site_entry E owner bs bt sz ==>
     bt + sz <= lo \/
     (?j. j NOTIN keys /\ FLOOKUP t0.vs_allocas j = SOME (bt,sz))) /\
@@ -20,10 +22,10 @@ Theorem ld_live_load_memory:
   ld_target_prefix CT [a;b;c;d] t0 un (SUC (SUC (SUC (SUC 0)))) t u /\
   inst.inst_opcode = DLOAD /\ inst.inst_operands = [off] /\ inst.inst_outputs = [out] /\
   ld_owned_vars V E AG AH tn un s t0 /\ (!v. off = Var v ==> v IN V) /\
-  ld_byte_rel (\aa bb. (aa = bb /\ aa < lo) \/ ld_site_bytes E live aa bb)
+  ld_byte_rel (\aa bb. (aa=bb /\ aa<lo) \/ (aa=bb /\ dyn_floor CS s <= aa /\ aa < dimword (:256)) \/ ld_site_bytes E live aa bb)
     tn.t_mem un.t_mem (\aa. read_memory aa 1 s) (\bb. read_memory bb 1 t0) ==>
   ?z. step_inst fuel CS inst s = OK z /\
-    ld_byte_rel (\aa bb. (aa = bb /\ aa < lo) \/ ld_site_bytes E live aa bb)
+    ld_byte_rel (\aa bb. (aa=bb /\ aa<lo) \/ (aa=bb /\ dyn_floor CS s <= aa /\ aa < dimword (:256)) \/ ld_site_bytes E live aa bb)
       (step_taint inst s z tn).t_mem u.t_mem
       (\aa. read_memory aa 1 z) (\bb. read_memory bb 1 t)
 Proof
@@ -32,7 +34,7 @@ Proof
     (CONJUNCTS_THEN2 assume_tac
       (CONJUNCTS_THEN2 assume_tac (CONJUNCTS_THEN assume_tac)))) >>
   drule_all (BETA_RULE (Q.INST
-    [`R` |-> `\aa bb. (aa = bb /\ aa < lo) \/ ld_site_bytes E live aa bb`]
+    [`R` |-> `\aa bb. (aa=bb /\ aa<lo) \/ (aa=bb /\ dyn_floor CS s <= aa /\ aa < dimword (:256)) \/ ld_site_bytes E live aa bb`]
     ld_load_completed_byte_rel)) >>
   disch_then (qspecl_then [`fuel`,`CS`] ACCEPT_TAC)
 QED
