@@ -268,10 +268,12 @@ Proof
   qpat_x_assum `gas_path_ptr_edge _ _ _ _ _ _ _ _ _ _ _ _`
     (strip_assume_tac o REWRITE_RULE [gas_path_ptr_edge_def]) >>
   gvs[exit_result_def] >>
+  rpt (qpat_x_assum `OK _ = step_inst _ _ _ _` (assume_tac o GSYM))
+  >~ [`exit_result (step_inst _ _ _ _)`] >- gvs[exit_result_def] >>
   irule ptr_safe_run_fuel_mono_down >> qexists_tac `SUC (fuel + m)` >>
   simp[] >>
   `step_inst (SUC (fuel + m)) ctx inst s = step_inst fuel ctx inst s` by
-    (irule (cj 1 fuel_mono) >> qexists_tac `fuel` >> simp[]) >>
+    (irule (cj 1 fuel_mono) >> simp[] >> qexists_tac `fuel` >> simp[]) >>
   `ptr_safe_step D lo (SUC (fuel + m)) ctx fn PG G tn inst s` by
     (irule (cj 1 ptr_safe_fuel_mono_up) >> qexists_tac `fuel` >> simp[]) >>
   simp[ptr_safe_run_def]
