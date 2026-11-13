@@ -198,7 +198,8 @@ Resume slice_extcode_typed_entry[address]:
    MAP FDOM (mid with gas_obs := []).scopes = MAP FDOM (mid' with gas_obs := []).scopes /\
    ?k. v = IntV (&k) /\ k < dimword (:256) /\ eval_operand len_op t' = SOME (n2w k)` by
     (irule slice_uint_read_post >> goal_assum (drule_at Any) >> simp[] >>
-     first_assum (irule_at Any) >> simp[] >> metis_tac[]) >>
+     qexistsl_tac [`storage_trace_horizon mid'.storage_trace`, `ctx`, `func`, `t`, `st1`, `st2`] >>
+     simp[] >> metis_tac[]) >>
   `~t'.vs_halted` by metis_tac[slice_marked_read_ok_not_halted] >>
   qpat_x_assum `gas_marked_exec _ _ _ _ marks _ _ _` kall_tac >>
   qpat_x_assum `gas_marked_exec _ _ _ _ marks' _ _ _` kall_tac >>
