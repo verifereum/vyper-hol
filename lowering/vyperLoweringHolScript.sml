@@ -44,6 +44,7 @@ Ancestors
   vyperLoweringCorrect
   rawReturnHalt rawReturnValue rawReturnHeader rawReturnMem rawReturnCorrect
   loweringMemCorrect
+  sourceUnitExitSafe
   asmSymBridge
   asmDataEnv
   asmOptFinalizerCorrect
