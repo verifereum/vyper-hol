@@ -2,10 +2,10 @@
 Theory immutableNormalizePathMem
 Ancestors
   externalReturnNormalizeRun externalNormalizePremises typedStorePathEndpoint
-  typedStoreAllocationFrame typedNormalizeStraightPathMem fragGasMode memSafeRun instMemFrontier
-  memContinuation loweringHalt exprLoweringProps localPtrsProps
+  typedStoreAllocationFrame bodyDeclMemoryCounted fragGasMode memSafeRun instMemFrontier
+  memContinuation loweringHalt fragExec exprLoweringProps localPtrsProps
   exprSimDefs loweringPosts fragExecMem venomState venomExecSemantics
-  compileEnv context words arithmetic finite_map
+  compileEnv context words arithmetic finite_map list rich_list
 
 Theorem normalize_alloc_mem_path[local]:
   compile_alloc_buffer n sm = (buf,mid) /\ fn_has_code sm mid func /\
@@ -25,11 +25,14 @@ Proof
   `run_inst_seq_mem_ok code s` by
     (simp[Abbr `code`, run_inst_seq_mem_ok_last] >>
      irule below_frontier_no_ranges >> simp[venomInstTheory.mk_inst_def]) >>
-  mp_tac (Q.INST [`sa` |-> `sm`, `sb` |-> `mid`, `code` |-> `code`,
-    `s` |-> `s`, `t` |-> `t`, `ctx` |-> `ctx`, `func` |-> `func`]
-    typed_normalize_straight_mem_path) >>
-  simp[Abbr `code`, venomInstTheory.mk_inst_def,
-    venomInstTheory.is_terminator_def]
+  `emitted_insts sm mid = code /\ same_blocks sm mid` by
+    simp[Abbr `code`, emitted_insts_def, DROP_LENGTH_APPEND, same_blocks_def] >>
+  `gas_path_mem ctx func s 0
+    (OK (t with vs_inst_idx := LENGTH mid.cs_current_insts))` by
+    (irule body_decl_zero_gas_path >> simp[] >> qexists_tac `sm` >>
+     fs[Abbr `code`, venomInstTheory.mk_inst_def,
+       venomInstTheory.is_terminator_def]) >>
+  simp_tac bool_ss [gas_marked_path_def] >> first_assum ACCEPT_TAC
 QED
 
 Theorem immutable_normalize_mem_path_endpoint:
