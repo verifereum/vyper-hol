@@ -11,7 +11,7 @@
  *)
 Theory bodySimFullMain
 Ancestors
-  bodyFullCases bodyFullIf bodyFullExprStmt bodyFullExits bodyFullPreds bodySimFull gasShadow bodySim supportedStmts
+  bodyFullCases bodyFullIntCall bodyFullIf bodyFullExprStmt bodyFullExits bodyFullPreds bodySimFull gasShadow bodySim supportedStmts
   vyperAST vyperInterpreter vyperState vyperTypeCallGraph list
 
 val _ = Parse.hide "body";
