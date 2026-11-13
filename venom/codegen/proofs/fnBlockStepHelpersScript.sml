@@ -18,7 +18,7 @@ Ancestors
   codegenRel frameRel fnSimSpec venomExecProofs venomExecProps stackOpSim
   blockSimHelpers genBlockSim callLayoutDefs stackPlanGen stackPlanTypes
   planExec asmSem venomExecSemantics venomState venomInst
-  list rich_list arithmetic
+  list rich_list arithmetic asmRunBounded
 
 (* ===== Fields the relations do not read ===== *)
 
@@ -383,7 +383,8 @@ Theorem block_prefix_step:
         (s_phi with vs_inst_idx := phi_prefix_length bb.bb_instructions) as' /\
       (!at. MEM at ps1.ps_stack \/ at IN FDOM ps1.ps_spilled ==>
          operand_val (frame_view fn ra s_phi) lo at =
-         operand_val (frame_view fn ra s_phi) lo (normalize_operand dfg [] at))
+         operand_val (frame_view fn ra s_phi) lo (normalize_operand dfg [] at)) /\
+      create_safe_prefix lo o2pc prog n as
 Proof
   rpt gen_tac >> strip_tac >>
   drule take_drop_phi_prefix >> strip_tac >>
@@ -515,7 +516,8 @@ Theorem block_step_prefix:
            (s_phi with vs_inst_idx := phi_prefix_length bb.bb_instructions)) lo at =
          operand_val (frame_view fn ra
            (s_phi with vs_inst_idx := phi_prefix_length bb.bb_instructions)) lo
-           (normalize_operand dfg [] at))
+           (normalize_operand dfg [] at)) /\
+      create_safe_prefix lo o2pc prog n as
 Proof
   rpt gen_tac >> strip_tac >>
   drule venomExecPropsTheory.lookup_block_label >> strip_tac >>
@@ -575,6 +577,20 @@ Proof
   impl_tac >- (rpt conj_tac >> TRY (first_assum ACCEPT_TAC) >>
                simp[fn_frame_inv_pc]) >>
   strip_tac >>
+  `EL as.as_pc prog = AsmLabel bb.bb_label` by
+    (qpat_x_assum `block_ops = _` (fn eq =>
+       qpat_assum `asm_block_at _ as.as_pc (execute_plan _ block_ops)`
+         (mp_tac o REWRITE_RULE [eq])) >>
+     simp[execute_plan_def, exec_stack_op_def, asm_block_at_cons]) >>
+  `create_safe_prefix lo o2pc prog 1 as` by
+    (rewrite_tac[arithmeticTheory.ONE, create_safe_prefix_suc] >>
+     qpat_assum `EL as.as_pc prog = AsmLabel bb.bb_label`
+       (fn th => rewrite_tac[th]) >>
+     simp_tac (srw_ss()) [create_safe_def, create_safe_prefix_zero]) >>
+  `create_safe_prefix lo o2pc prog (1 + n) as` by
+    (MATCH_MP_TAC (Q.SPECL [`1`, `n`, `as`, `as with as_pc := as.as_pc + 1`]
+       create_safe_prefix_compose) >>
+     rpt conj_tac >> first_assum ACCEPT_TAC) >>
   `asm_steps lo o2pc prog (1 + n) as = AsmOK as'` by
     (qpat_x_assum `asm_steps _ _ _ 1 as = _`
        (fn th => REWRITE_TAC [MATCH_MP asm_steps_add_ok th]) >>

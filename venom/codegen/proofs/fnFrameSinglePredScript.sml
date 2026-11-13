@@ -19,7 +19,7 @@ Ancestors
   stackModel list fnPlanPrefix fnFrameSteps genFrameSim fnPlanLineage frameRel
   contextCodegenRel codegenRel unitShapeDefs genBlockSim stackPlanGen
   stackPlanTypes planExec asmSem venomExecSemantics venomState venomInst
-  livenessDefs dfgDefs cfgDefs cfgCorrectnessProof
+  livenessDefs dfgDefs cfgDefs cfgCorrectnessProof planEmissionProps asmRunBounded
 
 (* The first phi_prefix_length instructions of a block survive the
    parameter filter as a prefix, and are PHIs. *)
@@ -215,7 +215,8 @@ Theorem single_pred_prefix_frame_sim:
         (s_phi with vs_inst_idx := LENGTH phis) as' /\
       (!at. MEM at ps1.ps_stack \/ at IN FDOM ps1.ps_spilled ==>
          operand_val (frame_view fn ra s_phi) lo at =
-         operand_val (frame_view fn ra s_phi) lo (normalize_operand dfg [] at))
+         operand_val (frame_view fn ra s_phi) lo (normalize_operand dfg [] at)) /\
+      create_safe_prefix lo o2pc prog n as
 Proof
   rpt strip_tac >>
   `MEM bb.bb_label (cfg_succs_of cfg pred)` by
@@ -238,6 +239,10 @@ Proof
     (rpt strip_tac >> qpat_x_assum `!off. MEM _ (_ ++ _) \/ _ ==> _` irule >>
      simp[]) >>
   drule_all clean_stack_plan_frame_sim >> strip_tac >>
+  `EVERY plan_admin_op clean_ops` by metis_tac[clean_stack_plan_admin] >>
+  `create_safe_prefix lo o2pc prog n as` by
+    (irule plan_admin_create_safe_prefix >>
+     metis_tac[arithmeticTheory.LESS_EQ_REFL]) >>
   `!inst op. MEM inst phis /\ is_var_operand op /\ MEM op inst.inst_operands /\
      MEM op ps2.ps_stack ==>
      resolve_phi pred inst.inst_operands = SOME op` by
@@ -254,14 +259,23 @@ Proof
   `!at. MEM at ps2.ps_stack \/ at IN FDOM ps2.ps_spilled ==>
      operand_val (frame_view fn ra vs) lo at =
      operand_val (frame_view fn ra vs) lo (normalize_operand dfg [] at)` by
-    metis_tac[] >>
+    metis_tac[] >> suspend "phis"
+QED
+
+Resume single_pred_prefix_frame_sim[phis]:
   qpat_x_assum `asm_block_at _ (_ + _) _` mp_tac >>
   qpat_x_assum `as2.as_pc = _` (fn th => SUBST1_TAC (SYM th) >> assume_tac th) >>
   strip_tac >>
   drule_all phi_prefix_hits_frame_sim >> strip_tac >>
+  `create_safe_prefix lo o2pc prog (n + n') as` by
+    (MATCH_MP_TAC (Q.SPECL [`n`, `n'`, `as`, `as2`]
+       create_safe_prefix_compose) >>
+     rpt conj_tac >> first_assum ACCEPT_TAC) >>
   qpat_x_assum `asm_steps _ _ _ n as = _`
     (assume_tac o Q.SPEC `n'` o MATCH_MP asm_steps_add_ok) >>
   qexistsl_tac [`phi_ops`, `ps1`, `body_ops`, `n + n'`, `as'`] >>
   rpt conj_tac >> TRY (first_assum ACCEPT_TAC) >>
   gvs[execute_plan_append]
 QED
+
+Finalise single_pred_prefix_frame_sim
