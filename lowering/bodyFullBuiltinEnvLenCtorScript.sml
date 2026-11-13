@@ -290,7 +290,7 @@ Resume len_full_suffix_ctor[base]:
                     straight_line_origin_ptr_edge) >>
      simp[Abbr `i1`, Abbr `u1`, venomInstTheory.mk_inst_def,
           venomInstTheory.is_terminator_def] >>
-     (impl_tac >- simp[unitTransformDefsTheory.inst_mem_below_frontier_def,
+     (impl_tac >- (simp[unitTransformDefsTheory.inst_mem_below_frontier_def,
        memSafeRunTheory.inst_dload_in_section_def,
        contextCodegenRelTheory.source_memory_read_ranges_def,
        codegenRelTheory.source_memory_write_ranges_def,
@@ -299,7 +299,7 @@ Resume len_full_suffix_ctor[base]:
        venomExecSemanticsTheory.step_inst_non_invoke,
        venomExecSemanticsTheory.step_inst_base_opcode_eqs,
        venomExecSemanticsTheory.exec_pure2_def, update_var_def,
-       wordsTheory.WORD_ADD_0] >> metis_tac[]) >> simp[]) >>
+       wordsTheory.WORD_ADD_0] >> metis_tac[])) >> simp[]) >>
   `eval_operand (Var out1) s1 = SOME w` by
     simp[Abbr `s1`, Abbr `u1`, update_var_def, eval_operand_def,
          lookup_var_def, FLOOKUP_UPDATE] >>
@@ -307,11 +307,136 @@ Resume len_full_suffix_ctor[base]:
     simp[Abbr `tn1`, Abbr `G1`, Abbr `i1`, venomInstTheory.mk_inst_def,
          step_taint_def, set_var_taint_def, out_taint_def,
          step_prov_def, set_prov_def, out_prov_def, op_taint_def,
-         op_prov_def, FLOOKUP_UPDATE, FLOOKUP_DRESTRICT] >>
+         op_prov_def, first_prov_def, FLOOKUP_UPDATE, FLOOKUP_DRESTRICT] >>
   `mload (w2n w) s1 = n2w n` by
     gvs[Abbr `s1`, Abbr `u1`, update_var_def,
         builtinPropsTheory.ptr_load_val_def, mload_def] >>
-  FAIL_TAC "second edge"
+  `gas_origin_ptr_edge (DF H,lo,explicit,ctx,func,PG) (s1,G1,tn1) []
+      (OK (u2 with vs_inst_idx := SUC s1.vs_inst_idx),
+       step_prov PG G1 i2 u2, step_taint i2 s1 u2 tn1)` by
+    (mp_tac (Q.INST [`i` |-> `i2`, `u` |-> `u2`, `s` |-> `s1`,
+                    `G` |-> `G1`, `tn` |-> `tn1`,
+                    `D` |-> `DF (H : (bool # bytes32 # type_value) list # num list)`]
+                   straight_line_origin_ptr_edge) >>
+     simp[Abbr `i2`, venomInstTheory.mk_inst_def,
+          venomInstTheory.is_terminator_def] >>
+     (impl_tac >- (
+       simp[unitTransformDefsTheory.inst_mem_below_frontier_def,
+            memSafeRunTheory.inst_dload_in_section_def,
+            contextCodegenRelTheory.source_memory_read_ranges_def,
+            codegenRelTheory.source_memory_write_ranges_def,
+            ptrSafeRunTheory.ptr_inst_ok_def, access_ok_def, taint_ok_def,
+            memLocDefsTheory.mem_read_ops_def,
+            venomExecSemanticsTheory.step_inst_non_invoke,
+            venomExecSemanticsTheory.step_inst_base_opcode_eqs,
+            venomExecSemanticsTheory.exec_read1_def,
+            Abbr `u2`, Abbr `s1`, Abbr `u1`, update_var_def] >>
+       gvs[arithmeticTheory.ADD1, venomInstTheory.mk_inst_def,
+           eval_operand_def, lookup_var_def, FLOOKUP_UPDATE,
+           mload_def, allocas_from_def, update_var_def] >> metis_tac[])) >> simp[]) >>
+  conj_tac
+  >- (`~s1.vs_halted /\
+       ~(u2 with vs_inst_idx := SUC s1.vs_inst_idx).vs_halted` by
+        simp[Abbr `s1`, Abbr `u1`, Abbr `u2`, update_var_def] >>
+      metis_tac[gas_origin_ptr_path_rules, APPEND_NIL]) >>
+  `!x. not_fresh_at sm x ==> x <> out1 /\ x <> out2` by
+    (simp[Abbr `out1`, Abbr `out2`, not_fresh_at_def] >>
+     rpt strip_tac >> decide_tac) >>
+  `not_local_ptr cenv ee.scopes out1 /\ not_local_ptr cenv ee.scopes out2` by
+    (conj_tac >> irule exprSimOperandsTheory.fresh_not_local_ptr >>
+     qexists_tac `sm` >> simp[Abbr `out1`, Abbr `out2`, not_fresh_at_def]) >>
+  `stmt_state_rel H ctx func cenv cx ee
+     (u2 with vs_inst_idx := SUC s1.vs_inst_idx)` by
+    (simp[Abbr `u2`, Abbr `s1`, Abbr `u1`, stmt_state_rel_inst_idx] >>
+     irule stmt_state_rel_update_var >> simp[stmt_state_rel_inst_idx] >>
+     irule stmt_state_rel_update_var >> simp[] >> gvs[vv_post_def]) >>
+  conj_tac
+  >- (irule expr_post_of_vv_post_stack >>
+      qexists_tac `BaseT (UintT 256)` >> irule len_vv_post_load >>
+      simp[Abbr `u2`, Abbr `s1`, Abbr `u1`, update_var_def,
+           eval_operand_def, lookup_var_def, FLOOKUP_UPDATE] >>
+      qexistsl [`t`, `sm`, `tv`, `vv`] >> simp[] >> metis_tac[]) >>
+  `alloca_history func s1` by
+    (mp_tac (Q.INST [`inst` |-> `i1`, `t` |-> `u1`, `s` |-> `t`]
+       (SPEC_ALL alloca_history_base_step)) >>
+     simp[Abbr `s1`, Abbr `i1`, Abbr `u1`, venomInstTheory.mk_inst_def,
+          venomInstTheory.is_terminator_def] >>
+     (impl_tac >- gvs[vv_post_def, stmt_state_rel_def,
+          venomExecSemanticsTheory.step_inst_base_opcode_eqs,
+          venomExecSemanticsTheory.exec_pure2_def, wordsTheory.WORD_ADD_0]) >> simp[]) >>
+  `alloca_history func (u2 with vs_inst_idx := SUC s1.vs_inst_idx)` by
+    (mp_tac (Q.INST [`inst` |-> `i2`, `t` |-> `u2`, `s` |-> `s1`]
+       (SPEC_ALL alloca_history_base_step)) >>
+     simp[Abbr `i2`, Abbr `u2`, venomInstTheory.mk_inst_def,
+          venomInstTheory.is_terminator_def] >>
+     (impl_tac >- (gvs[Abbr `s1`, Abbr `u1`, update_var_def,
+          venomExecSemanticsTheory.step_inst_base_opcode_eqs,
+          venomExecSemanticsTheory.exec_read1_def,
+          eval_operand_def, lookup_var_def, FLOOKUP_UPDATE, mload_def,
+          vv_post_def, stmt_state_rel_def, venomMemDefsTheory.alloca_inv_def,
+          venomMemDefsTheory.allocas_non_overlapping_def,
+          venomMemDefsTheory.alloca_next_valid_def,
+          arithmeticTheory.ADD1, venomInstTheory.mk_inst_def] >> metis_tac[])) >> simp[]) >>
+  simp[exprSimMemDefsTheory.expr_store_bound_word, is_word_type_def,
+       Abbr `u2`, Abbr `s1`, Abbr `u1`, update_var_def] >>
+  `!i. w2n w <= i /\ i < w2n w + 32 ==> i NOTIN tn.t_mem` by
+    (`value_has_type tvt val` by metis_tac[] >>
+     metis_tac[len_ctor_header_clean]) >>
+  `out1 <> out2` by
+    simp[Abbr `out1`, Abbr `out2`] >>
+  `new_site_bytes t (update_var out2 (n2w n)
+       (update_var out1 w t with vs_inst_idx := SUC t.vs_inst_idx)) = {}` by
+    (simp[update_var_def, new_site_bytes_def,
+          pred_setTheory.EXTENSION, FLOOKUP_DEF] >> metis_tac[]) >>
+  `new_site_bytes t (update_var out1 w t) = {} /\
+   new_site_bytes (update_var out1 w t with vs_inst_idx := SUC t.vs_inst_idx)
+     (update_var out2 (n2w n)
+       (update_var out1 w t with vs_inst_idx := SUC t.vs_inst_idx)) = {}` by
+    (simp[update_var_def, new_site_bytes_def,
+          pred_setTheory.EXTENSION, FLOOKUP_DEF] >> metis_tac[]) >>
+  conj_tac
+  >- (irule ghost_inv_at_exterior_frame >>
+      qexistsl [`G`, `ee`, `t`, `sm`, `tn`] >>
+      simp[Abbr `G1`, Abbr `tn1`, Abbr `i2`, Abbr `i1`,
+           venomInstTheory.mk_inst_def] >>
+      simp[step_prov_def, step_taint_def, set_var_taint_def, op_taint_def,
+           mem_taint_def, step_writes_def, written_taint_def, range_bytes_def,
+           store_taint_def, imm_taint_def, adopt_reset_def,
+           contextCodegenRelTheory.source_memory_read_ranges_def,
+           codegenRelTheory.source_memory_write_ranges_def,
+           lookup_var_def, FLOOKUP_UPDATE, set_prov_def, out_prov_def,
+           finite_mapTheory.FLOOKUP_DRESTRICT] >>
+      gvs[update_var_def, first_prov_def, op_prov_def] >>
+      simp[FLOOKUP_DRESTRICT]) >>
+  conj_tac
+  >- (simp[ptr_val_ok_def, op_prov_def, op_taint_def,
+           Abbr `i2`, Abbr `i1`, Abbr `G1`, Abbr `tn1`,
+           venomInstTheory.mk_inst_def,
+           step_prov_def, set_prov_def, out_prov_def,
+           step_taint_def, set_var_taint_def, mem_taint_def,
+           range_bytes_def, FLOOKUP_UPDATE] >>
+      gvs[update_var_def, eval_operand_def, lookup_var_def,
+          FLOOKUP_UPDATE, is_word_type_def, FLOOKUP_DRESTRICT,
+          out_taint_def, mem_taint_def, range_bytes_def,
+          first_prov_def, op_prov_def, written_taint_def, step_writes_def,
+          store_taint_def, imm_taint_def, adopt_reset_def,
+          contextCodegenRelTheory.source_memory_read_ranges_def,
+          codegenRelTheory.source_memory_write_ranges_def] >>
+      simp[mem_word_taint_def, pred_setTheory.EXTENSION] >>
+      rpt strip_tac >> Cases_on `x < 32` >> simp[] >>
+      first_x_assum irule >> decide_tac) >>
+  `!x. not_fresh_at sa x ==> x <> out1 /\ x <> out2` by
+    (simp[Abbr `out1`, Abbr `out2`, not_fresh_at_def] >>
+     rpt strip_tac >> decide_tac) >>
+  qpat_x_assum `ghost_kept_at _ _ _ _ _ _ _ _ _` mp_tac >>
+  simp[ghost_kept_at_def, Abbr `G1`, Abbr `tn1`, Abbr `i1`, Abbr `i2`,
+       venomInstTheory.mk_inst_def] >>
+  simp[step_prov_def, set_prov_def, out_prov_def,
+       step_taint_def, set_var_taint_def, op_taint_def,
+       mem_taint_def, step_writes_def, written_taint_def, range_bytes_def,
+       FLOOKUP_UPDATE, FLOOKUP_DRESTRICT] >>
+  gvs[update_var_def, first_prov_def, op_prov_def] >>
+  simp[FLOOKUP_DRESTRICT] >> metis_tac[]
 QED
 
 Finalise len_full_suffix_ctor
