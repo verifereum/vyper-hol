@@ -182,7 +182,7 @@ Proof
   irule fmp_no_need_input_no_raw >> metis_tac[]
 QED
 
-Theorem fmp_control_kept_prefix[local]:
+Theorem fmp_control_kept_prefix:
   fmp_stage_lowered infos ctx runner fn fn' /\
   fn.fn_fmp_signature = NONE /\
   FLOOKUP infos fn.fn_name = SOME info /\
