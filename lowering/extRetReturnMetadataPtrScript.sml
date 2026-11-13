@@ -10,6 +10,7 @@ Ancestors
   vyperInterpreter vyperTypeSystem
   list option finite_map entryDecodePlanProps abiEncoderProps
   representationCleanPtr words arithmetic
+  supportedGetterProps vyperTypeContractGetter vyperGetter
 
 val _ = Parse.hide "body";
 
@@ -22,22 +23,40 @@ Theorem checked_supported_external_return[local]:
   well_formed_type (type_env_all_modules mods) ret /\
   supported_function_return tops External ret
 Proof
-  Induct >> simp[lookup_function_def] >> rpt gen_tac >> strip_tac >>
-  Cases_on `h` >>
-  gvs[supported_declaration_header_def, check_toplevel_decl_def,
-      lookup_function_def]
-  >~ [`if s = name /\ f = External then _ else _`]
-  >- (Cases_on `s = name /\ f = External` >> gvs[]
-      >~ [`well_formed_type _ NoneT`]
+  rpt gen_tac >> strip_tac >>
+  drule lookup_function_External_cases >> strip_tac
+  >- (gvs[EVERY_MEM] >>
+      qpat_x_assum `!x. MEM x decls ==> check_toplevel_decl _ _ _ x` drule >>
+      qpat_x_assum `!x. MEM x decls ==> supported_declaration_header _ x` drule >>
+      simp[supported_declaration_header_def, check_toplevel_decl_def] >>
+      rpt strip_tac
       >- simp[well_formed_type_def, vyperValueTheory.evaluate_type_def] >>
-      first_x_assum irule >> simp[] >> metis_tac[])
-  >~ [`lookup_function _ _ _ (VariableDecl vis _ _ _ _ :: _)`]
-  >- (Cases_on `vis` >> gvs[lookup_function_def] >>
-      first_x_assum irule >> simp[] >> metis_tac[])
-  >~ [`lookup_function _ _ _ (HashMapDecl vis _ _ _ _ _ :: _)`]
-  >- (Cases_on `vis` >> gvs[lookup_function_def] >>
-      first_x_assum irule >> simp[] >> metis_tac[])
-  first_x_assum irule >> simp[] >> metis_tac[]
+      drule assignable_type_well_formed >> simp[]) >>
+  `supported_declaration_header tops decl` by fs[EVERY_MEM] >>
+  `check_toplevel_decl mods art src decl` by fs[EVERY_MEM] >>
+  `supported_place_type tops ret` by
+    metis_tac[supportedGetterPropsTheory.supported_public_getter_return] >>
+  simp[supported_function_return_def] >>
+  Cases_on `decl` >>
+  gvs[is_public_getter_decl_def, external_getter_tuple_def]
+  >~ [`check_toplevel_decl _ _ _ (VariableDecl vis vmut id typ slot)`]
+  >- (Cases_on `vis` >> gvs[external_getter_tuple_def] >>
+      Cases_on `is_ArrayT typ` >> gvs[getter_def]
+      >- (rpt (pairarg_tac >> gvs[]) >>
+          `check_value_type (type_env_all_modules mods) (Type typ)` by
+            (Cases_on `vmut` >>
+             gvs[check_toplevel_decl_def, check_value_type_def]) >>
+          metis_tac[check_value_type_ArrayT_type, build_getter_ret_checked,
+                    check_value_type_def, assignable_type_well_formed]) >>
+      Cases_on `vmut` >>
+      gvs[check_toplevel_decl_def, assignable_type_well_formed]) >>
+  rename1 `check_toplevel_decl _ _ _ (HashMapDecl vis tr id kt vt slot)` >>
+  Cases_on `vis` >> gvs[external_getter_tuple_def, getter_def] >>
+  rpt (pairarg_tac >> gvs[]) >>
+  `check_value_type (type_env_all_modules mods) vt` by
+    gvs[check_toplevel_decl_def] >>
+  metis_tac[build_getter_ret_checked, check_value_type_def,
+            assignable_type_well_formed]
 QED
 
 Theorem source_external_return_contract:

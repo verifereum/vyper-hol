@@ -3,7 +3,7 @@ Ancestors
   returnMetadataPtr supportedTypes vyperContext compileVyper compileEnv
   loweringStateRelDefs bodySim finite_map structFieldsProps retAbiPlanProps
   vyperTypeContract vyperInterpreter supportedDecls supportedProgram e2eDefs
-  exprLowering
+  exprLowering entryDispatchProps entryStateRel
 
 Theorem supported_return_assignable_or_empty_struct:
   supported_return_type tops ret /\ ret <> NoneT /\
@@ -75,29 +75,6 @@ Proof
   irule consistent_empty_struct_lookup >> simp[] >> metis_tac[]
 QED
 
-Theorem supported_lookup_external_raw_decl:
-  !ts ambient name mut nr args defaults ret body.
-  EVERY (supported_declaration_header ambient) ts /\
-  lookup_function (NONE : num option) name External ts =
-    SOME (mut,nr,args,defaults,ret,body) ==>
-  ?rr. MEM (FunctionDecl External mut nr rr name args defaults ret body) ts /\
-       lookup_raw_return (NONE : num option) name External ts = SOME rr
-Proof
-  Induct_on `ts` >- simp[lookup_function_def] >>
-  rpt gen_tac >> Cases_on `h`
-  >- (simp[listTheory.EVERY_DEF, lookup_function_def, lookup_raw_return_def,
-           listTheory.MEM] >>
-      Cases_on `s = name /\ f = External` >> gvs[] >> metis_tac[])
-  >- (Cases_on `v` >>
-      simp[listTheory.EVERY_DEF, lookup_function_def, lookup_raw_return_def,
-           listTheory.MEM, supported_public_variables_rejected] >>
-      metis_tac[])
-  >- (simp[listTheory.EVERY_DEF, supported_hashmap_header_contract] >>
-      strip_tac >> gvs[lookup_function_def, lookup_raw_return_def,
-                      listTheory.MEM] >> metis_tac[])
-  >> simp[listTheory.EVERY_DEF, lookup_function_def, lookup_raw_return_def,
-          listTheory.MEM] >> metis_tac[]
-QED
 
 Theorem check_contract_raw_return_type:
   !in_deploy layouts addr mods art src tls vis mut nr name args defaults ret body.
@@ -124,12 +101,13 @@ Theorem source_typing_raw_return_type:
   ?n. ret = BaseT (BytesT (Dynamic n))
 Proof
   rpt gen_tac >> strip_tac >>
-  `EVERY (supported_declaration_header tops) tops` by
-    gvs[supported_program_def, supported_declaration_headers_def] >>
-  drule_all supported_lookup_external_raw_decl >> strip_tac >>
-  gvs[lookup_raw_return_or_F_def, source_typing_ok_def] >>
-  drule check_contract_raw_return_type >> simp[listTheory.MEM] >>
-  metis_tac[]
+  drule source_typing_ok_external_names_distinct >> strip_tac >>
+  drule lookup_function_external_raw_cases >> strip_tac
+  >- (gvs[lookup_raw_return_or_F_def, source_typing_ok_def] >>
+      drule check_contract_raw_return_type >> simp[listTheory.MEM] >>
+      metis_tac[]) >>
+  drule_all public_getter_raw_return_none >> strip_tac >>
+  gvs[lookup_raw_return_or_F_def]
 QED
 
 Theorem external_frame_empty_struct_encoder:
