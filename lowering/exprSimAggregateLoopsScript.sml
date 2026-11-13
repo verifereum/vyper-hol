@@ -18,7 +18,7 @@
  *)
 Theory exprSimAggregateLoops
 Ancestors
-  exprSimHashBoundary
+  exprSimHashBoundary fragGasPathMem
   exprBopSimProps
   exprSimSource
   exprSimProps

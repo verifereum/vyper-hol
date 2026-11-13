@@ -91,7 +91,7 @@ Proof
   qpat_x_assum `expr_sim_ptr _ _ _ _ _ _ _ _ _`
     (mp_tac o REWRITE_RULE [expr_sim_ptr_def]) >>
   disch_then drule >> simp[] >>
-  disch_then (qspecl_then [`s0`, `G0`, `tn0`] mp_tac) >> simp[] >>
+  disch_then (qspecl_then [`st0`, `s0`, `G0`, `tn0`] mp_tac) >> simp[] >>
   simp[gas_outcome_ptr_def, gas_summary_ptr_at_def] >>
   disch_then (qx_choose_then `marks` (DISJ_CASES_THEN assume_tac))
   >- (qexists_tac `marks` >> disj1_tac >>

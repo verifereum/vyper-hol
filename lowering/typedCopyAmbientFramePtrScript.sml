@@ -98,7 +98,7 @@ Proof
 QED
 
 Theorem compile_store_bytestring_ambient_frag_ptr:
-  !cx ctx PG R sa sb src dst G tn s a b len n.
+  !H cx ctx PG R sa sb src dst G tn s a b len n.
     compile_store_bytestring (Var src) (Var dst) sa = ((),sb) /\
     not_fresh_at sa src /\ not_fresh_at sa dst /\
     lookup_var src s = SOME a /\ lookup_var dst s = SOME b /\

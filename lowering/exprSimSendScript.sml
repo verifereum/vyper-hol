@@ -443,7 +443,8 @@ Proof
   gvs[run_inst_seq_def, SRULE [mk_inst_def] send_assert_ok,
       SRULE [mk_inst_def] send_assert_fail, expr_exit_def, mk_inst_def] >>
   irule expr_post_none_intro >> simp[stmt_state_rel_inst_idx] >>
-  conj_tac
+  rpt conj_tac
+  >~ [`stmt_state_rel _ _ _ _ _ _ _`]
   >- (irule stmt_state_rel_update_var >> conj_tac
       >- (irule fresh_not_local_ptr >> qexists_tac `sm` >> fs[]) >>
       `es'.scopes = es1.scopes /\ es'.immutables = es1.immutables` by
@@ -463,7 +464,7 @@ Proof
         vs_accounts := _; vs_logs := _; vs_outcomes := _; vs_requests := _;
         vs_pending_deletions := _|>`
         (fn th => once_rewrite_tac[th]) >> simp[]) >>
-  conj_tac >- first_assum ACCEPT_TAC >>
+  rpt (first_assum ACCEPT_TAC) >>
   `wb_frame cenv es es' sa s0 t` by
     (`es'.scopes = es1.scopes` by
        (drule eval_send_read >> strip_tac >>
@@ -679,7 +680,8 @@ Proof
        (irule_at Any) >>
      simp[] >> metis_tac[]) >>
   irule expr_post_none_intro >> simp[stmt_state_rel_inst_idx] >>
-  conj_tac
+  rpt conj_tac
+  >~ [`stmt_state_rel _ _ _ _ _ _ _`]
   >- (irule stmt_state_rel_update_var >> conj_tac
       >- (irule fresh_not_local_ptr >> qexists_tac `sm` >> fs[]) >>
       `es'.scopes = es1.scopes /\ es'.immutables = es1.immutables` by
@@ -699,7 +701,7 @@ Proof
         vs_accounts := _; vs_logs := _; vs_outcomes := _; vs_requests := _;
         vs_pending_deletions := _|>`
         (fn th => once_rewrite_tac[th]) >> simp[]) >>
-  conj_tac >- first_assum ACCEPT_TAC >>
+  rpt (first_assum ACCEPT_TAC) >>
   `wb_frame cenv es es' sa s0 t` by
     (`es'.scopes = es1.scopes` by
        (drule eval_send_read >> strip_tac >>
