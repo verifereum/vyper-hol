@@ -234,7 +234,8 @@ Proof
      (IS_SOME (FLOOKUP X (a,inst.inst_id)) /\ X1 = X)) /\
     ((FLOOKUP t.vs_allocas (HD es).inst_id = NONE /\ b = t.vs_alloca_next) \/
      FLOOKUP t.vs_allocas (HD es).inst_id = SOME (b,32)) /\
-    b+32 < dimword(:256) /\
+    b+32 < dimword(:256) /\ b+32 <= dyn_floor C vs /\
+    ld_dyn_floor_ok (dyn_floor C vs) lo sites X1 /\
     ta = (if FLOOKUP t.vs_allocas (HD es).inst_id = NONE then
       t with <|vs_allocas := t.vs_allocas |+ ((HD es).inst_id,(b,32));
                vs_alloca_next := t.vs_alloca_next+32|> else t) /\
@@ -272,6 +273,27 @@ Proof
             Cases_on `inst.inst_id = did` >- simp[] >>
             simp[] >> strip_tac >>
             `c+32 <= t.vs_alloca_next` by metis_tac[] >> decide_tac) >>
+         (* the fresh scratch slot lies below the dynamic floor *)
+         `t.vs_alloca_next + 32 <= dyn_floor C vs` by
+           (`s.vs_alloca_next + 32 * ctx_dload_count C <= dyn_floor C vs` by
+              (irule ld_occurrence_shape_dyn_headroom >>
+               metis_tac[ld_joint_source]) >>
+            drule_all o1LowerDloadScratchCountTheory.ld_joint_scratch_credit >> strip_tac >>
+            FIRST [decide_tac, fs[] >> decide_tac]) >>
+         `ld_dyn_floor_ok (dyn_floor C vs) lo sites
+            (X |+ ((a,inst.inst_id),((HD es).inst_id,t.vs_alloca_next)))` by
+           (qpat_x_assum `ld_dyn_floor_ok _ _ _ X`
+              (strip_assume_tac o REWRITE_RULE [ld_dyn_floor_ok_def]) >>
+            rewrite_tac[ld_dyn_floor_ok_def, FLOOKUP_UPDATE] >> rpt conj_tac >>
+            FIRST [
+              first_assum ACCEPT_TAC,
+              rpt gen_tac >> IF_CASES_TAC >> strip_tac >>
+              FIRST [
+                qpat_x_assum `SOME _ = SOME _`
+                  (strip_assume_tac o
+                   REWRITE_RULE [optionTheory.SOME_11, pairTheory.PAIR_EQ]) >>
+                rpt BasicProvers.VAR_EQ_TAC >> first_assum ACCEPT_TAC,
+                res_tac >> first_assum ACCEPT_TAC]]) >>
          qexists_tac `t.vs_alloca_next` >>
          qpat_x_assum `t.vs_alloca_next = _` kall_tac >>
          fs[IgnAsm `s1 = _`, FLOOKUP_UPDATE] >>
@@ -289,6 +311,10 @@ Proof
        metis_tac[ld_scratch_allocation_present] >>
      `x'1+32 < dimword(:256)` by
        (`x'1+32 <= t.vs_alloca_next` by metis_tac[] >> decide_tac) >>
+     `x'1 + 32 <= dyn_floor C vs` by
+       (qpat_x_assum `ld_dyn_floor_ok _ _ _ X`
+          (strip_assume_tac o REWRITE_RULE [ld_dyn_floor_ok_def]) >>
+        res_tac >> first_assum ACCEPT_TAC) >>
      qexistsl_tac [`x'1`, `X`, `t`] >>
      simp[IgnAsm `s1 = _`, IgnAsm `t.vs_alloca_next = _`] >>
      conj_tac >- first_assum ACCEPT_TAC >>

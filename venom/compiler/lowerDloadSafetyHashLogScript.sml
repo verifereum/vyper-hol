@@ -141,7 +141,8 @@ Theorem ld_sha3_operands:
   MEM inst (fn_insts f.lf_fn) /\
   taint_ok f.lf_fn tn inst f.lf_src /\ tn.t_var = f.lf_tv /\
   ld_memory lo A tn f.lf_src f.lf_tgt /\
-  access_ok lo (ld_erase A o_f f.lf_H) f.lf_fn inst f.lf_src /\
+  access_ok lo G f.lf_fn inst f.lf_src /\ ld_ghost_ok fl A f.lf_H G /\
+  ld_dyn_agree fl tn.t_mem f.lf_src.vs_memory f.lf_tgt.vs_memory /\
   ~in_revert_forward f.lf_fn f.lf_src /\
   (!k b c sz. FLOOKUP A k = SOME (b,c,sz) ==> c+sz < dimword(:256)) /\
   inst.inst_opcode = SHA3 /\ step_inst_base inst f.lf_tgt = OK ts ==>
@@ -174,41 +175,6 @@ Proof
   qexistsl [`off`,`len`,`x`,`y`] >> simp[]
 QED
 
-(* TEMPORARILY CHEATED - P4d: dynamic-region memory case (DALLOCA pointers are
-   in G but not in H, so access_ok no longer reaches the erased sites).
-Proof
-  disch_then (REPEAT_TCL CONJUNCTS_THEN assume_tac) >>
-  `fn_shape_ok fn` by
-    (drule_all ld_sync_fn_shape >> metis_tac[o1_fn_shape_components]) >>
-  `MEM inst (fn_insts fn)` by
-    (drule ld_sync_source >> metis_tac[ld_active_inst_member]) >>
-  `fn_ptr_ok P fn` by metis_tac[ld_sync_ptr_ok] >>
-  `taint_ok fn tn inst s` by metis_tac[ld_sync_taint_ok] >>
-  `access_ok lo G fn inst s` by metis_tac[ld_sync_access_ok] >>
-  `s.vs_labels = t.vs_labels` by metis_tac[ld_sync_labels] >>
-  `!a. a IN FRANGE f.lf_H ==> a IN FDOM A` by
-    metis_tac[ld_global_selected, MEM] >>
-  drule ld_sync_active >> simp[Excl "MEM"] >> strip_tac >>
-  drule ld_sync_ghosts >> simp[Excl "MEM"] >> strip_tac >>
-  drule ld_sync_memory >> strip_tac >>
-  `FDOM A = ld_slots A (f::fs) /\ EVERY (ld_maps A) (f::fs)` by
-    (qpat_assum `ld_sync _ _ _ _ _ _ _ _ _ _ _ _ _ _ _` mp_tac >>
-     pure_rewrite_tac[ld_sync_def] >> simp[EVERY_MEM] >>
-     strip_tac >> metis_tac[]) >>
-  `!a b c sz. FLOOKUP A a = SOME (b,c,sz) ==> c+sz < dimword(:256)` by
-    (drule ld_alloc_target_no_wrap >> simp[] >> metis_tac[]) >>
-  gvs[step_inst_non_invoke, Excl "MEM"] >>
-  qpat_assum `f.lf_tv = tn.t_var` (assume_tac o SYM) >>
-  drule_all ld_sha3_operands >> strip_tac >>
-  drule_all ld_sha3_effect >>
-  disch_then (qspec_then `MAP (OPTION_MAP (ld_erase A)) f.lf_Q` strip_assume_tac) >>
-  qexistsl [`ss`,`set_prov f.lf_H inst.inst_outputs NONE`] >> simp[] >>
-  qpat_assum `FDOM A = ld_slots A (f::fs)`
-    (fn th => pure_rewrite_tac[GSYM th]) >>
-  gen_tac >> strip_tac >> irule ld_set_prov_selected >>
-  qexistsl [`f.lf_H`,`inst.inst_outputs`,`NONE`] >> simp[]
-QED
-*)
 Theorem ld_sync_sha3_effect:
   ld_sync lo P C vs0 stk PG G tn fn inst s t A (f::fs) N /\
   ld_global lo A (f::fs) /\ o1_ctx_shape C /\ ptr_discipline lo C vs0 /\
@@ -229,7 +195,37 @@ Theorem ld_sync_sha3_effect:
     ss.vs_prev_bb = s.vs_prev_bb /\ ts.vs_prev_bb = t.vs_prev_bb /\
     ss.vs_inst_idx = s.vs_inst_idx /\ ts.vs_inst_idx = t.vs_inst_idx
 Proof
-  cheat
+  disch_then (REPEAT_TCL CONJUNCTS_THEN assume_tac) >>
+  `fn_shape_ok fn` by
+    (drule_all ld_sync_fn_shape >> metis_tac[o1_fn_shape_components]) >>
+  `MEM inst (fn_insts fn)` by
+    (drule ld_sync_source >> metis_tac[ld_active_inst_member]) >>
+  `fn_ptr_ok P fn` by metis_tac[ld_sync_ptr_ok] >>
+  `taint_ok fn tn inst s` by metis_tac[ld_sync_taint_ok] >>
+  `access_ok lo G fn inst s` by metis_tac[ld_sync_access_ok] >>
+  `s.vs_labels = t.vs_labels` by metis_tac[ld_sync_labels] >>
+  `!a. a IN FRANGE f.lf_H ==> a IN FDOM A` by
+    metis_tac[ld_global_selected, MEM] >>
+  drule ld_sync_active >> simp[Excl "MEM"] >> strip_tac >>
+  drule ld_sync_ghosts >> simp[Excl "MEM"] >> strip_tac >>
+  drule ld_sync_memory >> strip_tac >>
+  drule ld_sync_dyn_agree >> strip_tac >>
+  `FDOM A = ld_slots A (f::fs) /\ EVERY (ld_maps A) (f::fs)` by
+    (qpat_assum `ld_sync _ _ _ _ _ _ _ _ _ _ _ _ _ _ _` mp_tac >>
+     pure_rewrite_tac[ld_sync_def] >> simp[EVERY_MEM] >>
+     strip_tac >> metis_tac[]) >>
+  `!a b c sz. FLOOKUP A a = SOME (b,c,sz) ==> c+sz < dimword(:256)` by
+    (drule ld_alloc_target_no_wrap >> simp[] >> metis_tac[]) >>
+  gvs[step_inst_non_invoke, Excl "MEM"] >>
+  qpat_assum `f.lf_tv = tn.t_var` (assume_tac o SYM) >>
+  drule_all ld_sha3_operands >> strip_tac >>
+  drule_all ld_sha3_effect >>
+  disch_then (qspec_then `MAP (OPTION_MAP (ld_erase A)) f.lf_Q` strip_assume_tac) >>
+  qexistsl [`ss`,`set_prov f.lf_H inst.inst_outputs NONE`] >> simp[] >>
+  qpat_assum `FDOM A = ld_slots A (f::fs)`
+    (fn th => pure_rewrite_tac[GSYM th]) >>
+  gen_tac >> strip_tac >> irule ld_set_prov_selected >>
+  qexistsl [`f.lf_H`,`inst.inst_outputs`,`NONE`] >> simp[]
 QED
 
 Theorem ld_log_steps:
@@ -320,8 +316,23 @@ Proof
       step_prov_def, set_prov_def, DRESTRICT_UNIV] >> metis_tac[]
 QED
 
-(* TEMPORARILY CHEATED - P4d: dynamic-region memory case (DALLOCA pointers are
-   in G but not in H, so access_ok no longer reaches the erased sites).
+Theorem ld_sync_log_effect:
+  ld_sync lo P C vs0 stk PG G tn fn inst s t A (f::fs) N /\
+  ld_global lo A (f::fs) /\ o1_ctx_shape C /\
+  inst.inst_opcode = LOG /\ step_inst fuel C' inst t = OK ts ==>
+  ?ss H'. step_inst fuel C inst s = OK ss /\
+    ld_vars P A (f with <|lf_src := ss; lf_tgt := ts; lf_H := H';
+      lf_tv := (step_taint inst s ss tn).t_var|>) /\
+    ld_memory lo A (step_taint inst s ss tn) ss ts /\
+    ld_nonghost (step_taint inst s ss tn) ss ts /\
+    step_prov (MAP (OPTION_MAP (ld_erase A)) f.lf_Q) (ld_erase A o_f f.lf_H)
+      inst ss = ld_erase A o_f H' /\
+    (!a. a IN FRANGE H' ==> a IN FDOM A) /\
+    ss.vs_allocas = s.vs_allocas /\ ts.vs_allocas = t.vs_allocas /\
+    ss.vs_alloca_next = s.vs_alloca_next /\ ts.vs_alloca_next = t.vs_alloca_next /\
+    ss.vs_current_bb = s.vs_current_bb /\ ts.vs_current_bb = t.vs_current_bb /\
+    ss.vs_prev_bb = s.vs_prev_bb /\ ts.vs_prev_bb = t.vs_prev_bb /\
+    ss.vs_inst_idx = s.vs_inst_idx /\ ts.vs_inst_idx = t.vs_inst_idx
 Proof
   disch_then (REPEAT_TCL CONJUNCTS_THEN assume_tac) >>
   `fn_inst_wf fn` by
@@ -344,27 +355,6 @@ Proof
   drule_all ld_log_effect >>
   disch_then (qspec_then `MAP (OPTION_MAP (ld_erase A)) f.lf_Q` strip_assume_tac) >>
   qexistsl [`ss`,`f.lf_H`] >> simp[]
-QED
-*)
-Theorem ld_sync_log_effect:
-  ld_sync lo P C vs0 stk PG G tn fn inst s t A (f::fs) N /\
-  ld_global lo A (f::fs) /\ o1_ctx_shape C /\
-  inst.inst_opcode = LOG /\ step_inst fuel C' inst t = OK ts ==>
-  ?ss H'. step_inst fuel C inst s = OK ss /\
-    ld_vars P A (f with <|lf_src := ss; lf_tgt := ts; lf_H := H';
-      lf_tv := (step_taint inst s ss tn).t_var|>) /\
-    ld_memory lo A (step_taint inst s ss tn) ss ts /\
-    ld_nonghost (step_taint inst s ss tn) ss ts /\
-    step_prov (MAP (OPTION_MAP (ld_erase A)) f.lf_Q) (ld_erase A o_f f.lf_H)
-      inst ss = ld_erase A o_f H' /\
-    (!a. a IN FRANGE H' ==> a IN FDOM A) /\
-    ss.vs_allocas = s.vs_allocas /\ ts.vs_allocas = t.vs_allocas /\
-    ss.vs_alloca_next = s.vs_alloca_next /\ ts.vs_alloca_next = t.vs_alloca_next /\
-    ss.vs_current_bb = s.vs_current_bb /\ ts.vs_current_bb = t.vs_current_bb /\
-    ss.vs_prev_bb = s.vs_prev_bb /\ ts.vs_prev_bb = t.vs_prev_bb /\
-    ss.vs_inst_idx = s.vs_inst_idx /\ ts.vs_inst_idx = t.vs_inst_idx
-Proof
-  cheat
 QED
 
 val _ = if List.all (null o hyp)

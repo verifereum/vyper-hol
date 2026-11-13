@@ -84,6 +84,78 @@ Proof
   decide_tac)
 QED
 
+(* A same-address write above lo and above every selected allocation
+   leaves the projection alone: it lands in the dynamic region. *)
+Theorem ld_memory_write_high:
+  ld_memory lo A tn s t /\ lo <= off /\
+  LENGTH xs = len /\ LENGTH ys = len /\
+  (!a u v z. FLOOKUP A a = SOME (u,v,z) ==> u+z <= off /\ v+z <= off) /\
+  tn'.t_mem = (tn.t_mem DIFF {off+j | j < len}) UNION
+                         {off+j | j < len /\ j IN M} ==>
+  ld_memory lo A tn'
+    (write_memory_with_expansion off xs s)
+    (write_memory_with_expansion off ys t)
+Proof
+  strip_tac >> irule ld_memory_transport >>
+  qexistsl_tac [`{off+j | j < len}`, `s`, `t`, `tn`] >>
+  simp[ld_write_interval] >> conj_tac
+  >- (rpt strip_tac >> `~(off <= i)` by decide_tac >>
+      gvs[read_byte_write_memory_with_expansion, ld_write_interval]) >>
+  rpt strip_tac >>
+  `b+n <= off /\ c+n <= off` by metis_tac[] >>
+  `~(off <= b+j) /\ ~(off <= c+j)` by decide_tac >>
+  gvs[read_byte_write_memory_with_expansion, ld_write_interval]
+QED
+
+(* The dynamic region stays in agreement after an empty write, a write of
+   the same unmasked bytes at the same address, or writes below the floor
+   on both sides. *)
+Theorem ld_dyn_agree_write:
+  ld_dyn_agree fl tn.t_mem s.vs_memory t.vs_memory /\
+  LENGTH xs = len /\ LENGTH ys = len /\
+  tm' = (tn.t_mem DIFF {ro+j | j < len}) UNION {ro+j | j < len /\ j IN M} /\
+  (len = 0 \/
+   (ro = rt /\ !j. j < len /\ j NOTIN M ==> EL j xs = EL j ys) \/
+   (ro + len <= fl /\ rt + len <= fl)) ==>
+  ld_dyn_agree fl tm' (write_memory_with_expansion ro xs s).vs_memory
+    (write_memory_with_expansion rt ys t).vs_memory
+Proof
+  disch_then (REPEAT_TCL CONJUNCTS_THEN assume_tac) >>
+  qpat_x_assum `ld_dyn_agree _ _ _ _` mp_tac >>
+  rewrite_tac[ptrDisciplineTheory.ld_dyn_agree_def] >> strip_tac >>
+  qx_gen_tac `i` >> strip_tac >>
+  `(i IN {ro + j | j < len} <=> ro <= i /\ i < ro + len) /\
+   (i IN {ro + j | j < len /\ j IN M} <=>
+      ro <= i /\ i < ro + len /\ i - ro IN M)` by simp[ld_write_interval] >>
+  `(~(ro <= i /\ i < ro + len) ==> i NOTIN tn.t_mem) /\
+   (ro <= i /\ i < ro + len ==> i - ro NOTIN M)` by
+    (qpat_x_assum `i NOTIN tm'` mp_tac >>
+     qpat_x_assum `tm' = _` (fn th => rewrite_tac[th, IN_UNION, IN_DIFF]) >>
+     rpt (qpat_x_assum `_ <=> _` (fn th => rewrite_tac[th])) >>
+     metis_tac[]) >>
+  rewrite_tac[read_byte_write_memory_with_expansion] >>
+  qpat_assum `LENGTH xs = len` (fn th => rewrite_tac[th]) >>
+  qpat_assum `LENGTH ys = len` (fn th => rewrite_tac[th]) >>
+  `(ro = rt /\ ro <= i /\ i < ro + len /\
+    !j. j < len /\ j NOTIN M ==> EL j xs = EL j ys) \/
+   (~(ro <= i /\ i < ro + len) /\ ~(rt <= i /\ i < rt + len))` by
+    (qpat_x_assum `len = 0 \/ _` strip_assume_tac
+     >- (disj2_tac >> decide_tac)
+     >- (Cases_on `ro <= i /\ i < ro + len`
+         >- (disj1_tac >> fs[]) >>
+         disj2_tac >> fs[]) >>
+     disj2_tac >> decide_tac) >>
+  pop_assum strip_assume_tac
+  >- (qpat_x_assum `ro = rt` SUBST_ALL_TAC >>
+      `i - rt < len` by decide_tac >>
+      `i - rt NOTIN M` by metis_tac[] >>
+      `EL (i - rt) xs = EL (i - rt) ys` by metis_tac[] >>
+      asm_rewrite_tac[]) >>
+  qpat_assum `~(ro <= i /\ _)` (fn th => rewrite_tac[th]) >>
+  qpat_assum `~(rt <= i /\ _)` (fn th => rewrite_tac[th]) >>
+  qpat_x_assum `!i. _` irule >> simp[] >> metis_tac[]
+QED
+
 (* Private target writes have no corresponding source allocation. *)
 Theorem ld_memory_write_private:
   ld_memory lo A tn s t /\ lo <= dst /\
