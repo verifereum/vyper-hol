@@ -30,7 +30,9 @@ Theorem aggregate_storage_materialise_capacity:
       w2n w + type_memory_size tv <= u.vs_alloca_next /\
       alloca_history func u /\ s.vs_alloca_next <= u.vs_alloca_next /\
       u.vs_current_bb = sb.cs_current_bb /\
-      u.vs_inst_idx = LENGTH sb.cs_current_insts
+      u.vs_inst_idx = LENGTH sb.cs_current_insts /\
+      u.vs_accounts = s.vs_accounts /\ u.vs_transient = s.vs_transient /\
+      u.vs_requests = s.vs_requests /\ u.vs_call_ctx = s.vs_call_ctx
 Proof
   rpt gen_tac >> disch_then (map_every assume_tac o CONJUNCTS) >>
   drule_all storage_unwrap_layout_facts >> strip_tac >>
@@ -54,6 +56,14 @@ Proof
   drule_all storage_unwrap_typed_suffix_path_mem >> strip_tac >>
   `z.vs_alloca_next = u.vs_alloca_next` by
     (drule copy_static_fields >> simp[]) >>
+  `z.vs_accounts = s.vs_accounts /\ z.vs_transient = s.vs_transient /\
+   z.vs_requests = s.vs_requests /\ z.vs_call_ctx = s.vs_call_ctx` by
+    (qpat_assum `copy_static z = copy_static u`
+       (fn th => MAP_EVERY (fn f => assume_tac (SIMP_RULE (srw_ss())
+                   [exprSimStorageCopyTheory.copy_static_def] (AP_TERM f th)))
+          [``venom_state_vs_accounts``, ``venom_state_vs_transient``,
+           ``venom_state_vs_requests``, ``venom_state_vs_call_ctx``]) >>
+     simp[]) >>
   qexistsl_tac [`z`, `w`, `tv`] >> simp[] >>
   reverse conj_tac >- metis_tac[] >>
   `0 = 0 + 0` by simp[] >> pop_assum SUBST1_TAC >>
@@ -86,7 +96,9 @@ Theorem aggregate_storage_materialise_post_capacity:
       w2n w + type_memory_size tv <= u.vs_alloca_next /\
       alloca_history func u /\ s.vs_alloca_next <= u.vs_alloca_next /\
       u.vs_current_bb = sb.cs_current_bb /\
-      u.vs_inst_idx = LENGTH sb.cs_current_insts
+      u.vs_inst_idx = LENGTH sb.cs_current_insts /\
+      u.vs_accounts = s.vs_accounts /\ u.vs_transient = s.vs_transient /\
+      u.vs_requests = s.vs_requests /\ u.vs_call_ctx = s.vs_call_ctx
 Proof
   rpt gen_tac >> disch_then (map_every assume_tac o CONJUNCTS) >>
   drule_all storage_unwrap_layout_facts >> strip_tac >>
@@ -116,6 +128,14 @@ Proof
      asm_rewrite_tac [] >> simp[]) >>
   `z.vs_alloca_next = u.vs_alloca_next` by
     (drule copy_static_fields >> simp[]) >>
+  `z.vs_accounts = s.vs_accounts /\ z.vs_transient = s.vs_transient /\
+   z.vs_requests = s.vs_requests /\ z.vs_call_ctx = s.vs_call_ctx` by
+    (qpat_assum `copy_static z = copy_static u`
+       (fn th => MAP_EVERY (fn f => assume_tac (SIMP_RULE (srw_ss())
+                   [exprSimStorageCopyTheory.copy_static_def] (AP_TERM f th)))
+          [``venom_state_vs_accounts``, ``venom_state_vs_transient``,
+           ``venom_state_vs_requests``, ``venom_state_vs_call_ctx``]) >>
+     simp[]) >>
   qexistsl_tac [`z`, `w`, `tv`] >> simp[] >>
   reverse conj_tac >- metis_tac[] >>
   `0 = 0 + 0` by simp[] >> pop_assum SUBST1_TAC >>
@@ -145,7 +165,9 @@ Theorem aggregate_code_materialise_post_capacity:
       w2n w + type_memory_size tv <= u.vs_alloca_next /\
       alloca_history func u /\ s.vs_alloca_next <= u.vs_alloca_next /\
       u.vs_current_bb = sb.cs_current_bb /\
-      u.vs_inst_idx = LENGTH sb.cs_current_insts
+      u.vs_inst_idx = LENGTH sb.cs_current_insts /\
+      u.vs_accounts = s.vs_accounts /\ u.vs_transient = s.vs_transient /\
+      u.vs_requests = s.vs_requests /\ u.vs_call_ctx = s.vs_call_ctx
 Proof
   rpt gen_tac >> strip_tac >>
   qpat_x_assum `unwrap_value _ _ _ = _` mp_tac >>
@@ -222,6 +244,14 @@ Proof
      asm_rewrite_tac [] >> simp[]) >>
   `z.vs_alloca_next = u.vs_alloca_next` by
     (drule copy_static_fields >> simp[]) >>
+  `z.vs_accounts = s.vs_accounts /\ z.vs_transient = s.vs_transient /\
+   z.vs_requests = s.vs_requests /\ z.vs_call_ctx = s.vs_call_ctx` by
+    (qpat_assum `copy_static z = copy_static u`
+       (fn th => MAP_EVERY (fn f => assume_tac (SIMP_RULE (srw_ss())
+                   [exprSimStorageCopyTheory.copy_static_def] (AP_TERM f th)))
+          [``venom_state_vs_accounts``, ``venom_state_vs_transient``,
+           ``venom_state_vs_requests``, ``venom_state_vs_call_ctx``]) >>
+     simp[]) >>
   qexistsl_tac [`z`, `w`, `tv`] >> simp[] >>
   `0 = 0 + 0` by simp[] >> pop_assum SUBST1_TAC >>
   irule gas_path_mem_then >> qexists_tac `u` >> simp[]
