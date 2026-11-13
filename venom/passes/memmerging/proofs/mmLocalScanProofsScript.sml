@@ -18520,6 +18520,65 @@ Proof
   gvs[mm_flat_map_supply_def, AllCaseEqs()] >> metis_tac[]
 QED
 
+Theorem mm_local_zero_forward_layout[local]:
+  ALL_DISTINCT (MAP (\i. i.inst_id) bb.bb_instructions) /\
+  bb.bb_instructions = left ++ a :: gap ++ b :: right /\
+  a.inst_opcode = RETURNDATACOPY /\ b.inst_opcode = REVERT /\
+  EVERY (\i. i.inst_opcode = ASSIGN) gap /\
+  f = apply_memzero_inst_supply
+    (nop_ids_of_groups dfg Mem2Mem bb.bb_instructions
+      (scan_block_memzero dfg bb).mz_flushed)
+    (rep_map_of_groups bb.bb_instructions
+      (scan_block_memzero dfg bb).mz_flushed) /\
+  mm_flat_map_supply f supply left = (pre,sm) /\
+  transform_block_memzero_supply dfg supply bb = (bb',supply') ==>
+  (?tail. bb'.bb_instructions = pre ++ a :: gap ++ b :: tail /\
+    mm_flat_map_supply f sm right = (tail,supply')) /\
+  mm_flat_map_supply f supply (left ++ a :: gap) = (pre ++ a :: gap,sm)
+Proof
+  strip_tac >>
+  `(!s. f s a = ([a],s)) /\ (!s. f s b = ([b],s))` by
+    (`MEM a bb.bb_instructions /\ MEM b bb.bb_instructions` by simp[] >>
+     `~is_zero_store a /\ ~is_calldatasize_copy dfg a /\
+      ~is_zero_store b /\ ~is_calldatasize_copy dfg b` by
+       gvs[is_zero_store_def, is_calldatasize_copy_def] >>
+     metis_tac[mm_local_memzero_nonselected_unchanged]) >>
+  Cases_on `mm_flat_map_supply f sm gap` >>
+  rename1 `mm_flat_map_supply f sm gap = (gap',sg)` >>
+  `gap' = gap /\ sg = sm` by
+    (irule mm_local_zero_assign_interval >>
+     goal_assum (drule_at Any) >> simp[EVERY_MEM] >>
+     gvs[EVERY_MEM] >> qexists `dfg` >>
+     qpat_x_assum `mm_flat_map_supply _ sm gap = _` mp_tac >>
+     pure_rewrite_tac[GSYM APPEND_ASSOC, APPEND] >> simp[]) >>
+  qpat_x_assum `f = _` (mk_asm "fdef") >>
+  qpat_x_assum `gap' = gap` SUBST_ALL_TAC >>
+  qpat_x_assum `sg = sm` SUBST_ALL_TAC >>
+  `mm_flat_map_supply f sm (a :: gap) = (a :: gap,sm)` by
+    simp[mm_flat_map_supply_def] >>
+  `mm_flat_map_supply f supply (left ++ a :: gap) = (pre ++ a :: gap,sm)` by
+    (irule mm_local_flat_map_supply_append >> goal_assum (drule_at Any) >> simp[]) >>
+  reverse conj_tac >- first_assum ACCEPT_TAC >>
+  Cases_on `mm_flat_map_supply f sm right` >>
+  rename1 `mm_flat_map_supply f sm right = (tail,sr)` >>
+  `mm_flat_map_supply f sm (a :: gap ++ b :: right) =
+    (a :: gap ++ b :: tail,sr)` by
+    (`mm_flat_map_supply f sm (b :: right) = (b :: tail,sr)` by
+       simp[mm_flat_map_supply_def] >>
+     `mm_flat_map_supply f sm (gap ++ b :: right) =
+       (gap ++ b :: tail,sr)` by
+       (irule mm_local_flat_map_supply_append >>
+        goal_assum (drule_at Any) >> simp[]) >>
+     simp[mm_flat_map_supply_def]) >>
+  `mm_flat_map_supply f supply bb.bb_instructions =
+    (pre ++ a :: gap ++ b :: tail,sr)` by
+    (qpat_assum `bb.bb_instructions = _` (fn th => pure_once_rewrite_tac[th]) >>
+     irule mm_local_flat_map_supply_append >>
+     goal_assum (drule_at Any) >> simp[mm_flat_map_supply_def]) >>
+  asm_x "fdef" assume_tac >>
+  gvs[transform_block_memzero_supply_def] >> metis_tac[]
+QED
+
 Theorem mm_local_zero_noninvoke_stop[local]:
   mm_local_zero_cut dfg is gs H n excluded pc t /\
   (!v. MEM (Var v) i.inst_operands ==> v NOTIN excluded) /\
