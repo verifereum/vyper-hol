@@ -26,6 +26,7 @@ Ancestors
   asmOptimizer contextRawReachable asmDataSuffixProps contextPlanLayoutProps
   loweringStateRelDefs vyperArith frameRel codegenRel callTrace
   ctorDeployLowering ctorDeployMemory ctorDeployDload memSafeRun frameObsStep
+  deployOutcomesFreeDeploy deployOutcomesFreeTransport deployOutcomesFreeBoundary
 
 (* L1 of the deployment for the optimizer: the deploy code is the optimized
    assembly of the deployment unit's generated assembly. *)
@@ -163,7 +164,54 @@ Theorem deploy_unit_outcomes_free:
                             s.vs_data_section = vs.vs_data_section)
         dunit.cu_context vs))
 Proof
-  cheat
+  rpt gen_tac >> strip_tac >>
+  `lower_vyper_deploy_unit tops rpolicy runtime_bc = SOME dunit` by
+    fs[deploy_phases_def] >>
+  drule_all deploy_entry_excludes_outcomes >> strip_tac >>
+  `!fuel. run_context fuel dunit.cu_context vs =
+    map_result_state (\t. t with vs_outcomes := vs.vs_outcomes)
+      (run_context fuel dunit.cu_context (vs with vs_outcomes := []))` by
+    (gen_tac >> drule_all run_context_entry_outcomes_replace >>
+     disch_then (qspecl_then [`fuel`, `vs with vs_outcomes := []`, `vs.vs_outcomes`] mp_tac) >>
+     simp[]) >>
+  conj_tac
+  >- (drule_all deploy_unit_execution_correct >> simp[] >>
+      metis_tac[deploy_result_outcomes_replace]) >>
+  strip_tac >>
+  `!marks. ~deploy_source_exempt tops
+    (load_contract NONE (gas_explicit marks (vs with vs_outcomes := []).vs_gas_readings)
+      am tx [(NONE,tops)] [])` by simp[] >>
+  `raw_unit_memory_ok dunit.cu_context (vs with vs_outcomes := []) /\
+   ptr_discipline (imm_len tops) dunit.cu_context (vs with vs_outcomes := []) /\
+   taint_within (deploy_dead tops runtime_bc am tx) dunit.cu_context
+     (vs with vs_outcomes := [])` by
+    (drule_all deploy_unit_memory_ok >> simp[]) >>
+  conj_tac
+  >- (drule_all raw_unit_memory_ok_outcomes_replace >>
+      disch_then (qspec_then `vs.vs_outcomes` mp_tac) >> simp[]) >>
+  conj_tac
+  >- (drule_all ptr_discipline_outcomes_replace >>
+      disch_then (qspec_then `vs.vs_outcomes` mp_tac) >> simp[]) >>
+  conj_tac
+  >- (drule_all taint_within_outcomes_replace >>
+      disch_then (qspec_then `vs.vs_outcomes` mp_tac) >> simp[]) >>
+  strip_tac >>
+  `code_layout_valid (vs with vs_outcomes := [])` by simp[] >>
+  `mem_inv dload_offset_ok dunit.cu_context (vs with vs_outcomes := []) /\
+   mem_inv dload_headroom_ok dunit.cu_context (vs with vs_outcomes := [])` by
+    (drule_all deploy_unit_dload_ok >> simp[]) >>
+  `mem_inv (\c f inst s. inst_dload_in_section inst s /\
+      s.vs_code = vs.vs_code /\ s.vs_data_section = vs.vs_data_section)
+      dunit.cu_context (vs with vs_outcomes := [])` by
+    (drule_all deploy_unit_dload_in_section >> simp[]) >>
+  conj_tac
+  >- (drule_all dload_offset_ok_outcomes_replace >>
+      disch_then (qspec_then `vs.vs_outcomes` mp_tac) >> simp[]) >>
+  conj_tac
+  >- (drule_all dload_headroom_ok_outcomes_replace >>
+      disch_then (qspec_then `vs.vs_outcomes` mp_tac) >> simp[]) >>
+  drule_all dload_in_section_outcomes_replace >>
+  disch_then (qspec_then `vs.vs_outcomes` mp_tac) >> simp[]
 QED
 
 (* deploy_entry_state_ok's entry relation for opt_deploy_entry_state: the
