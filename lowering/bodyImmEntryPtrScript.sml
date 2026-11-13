@@ -164,8 +164,7 @@ Theorem immutable_allocate_initialize_ptr:
   not_local_ptr cenv es.scopes g /\ not_local_ptr cenv es.scopes vld /\
   (!x q. cenv.ce_return_buf = SOME (PtrVar (Var x) q) ==> ~MEM x [p; idx; g; vld]) /\
   (!x. lvo = Var x ==> ~MEM x [p; idx; g; vld]) /\
-  (!x. not_fresh_at st x ==> ~MEM x [p; idx; g; vld]) /\
-  alloca_history func s0 ==>
+  (!x. not_fresh_at st x ==> ~MEM x [p; idx; g; vld]) ==>
   ?dst cc H tm.
     array_loop_inv ctx func cenv cx P vs id idx (Lit (n2w off)) (n2w off)
       p dst sz (mk_inst aid ALLOCA [Lit (n2w sz)] [p]) cond_lbl st 0 es cc /\
@@ -176,7 +175,6 @@ Theorem immutable_allocate_initialize_ptr:
     array_caller_frame st s0 cc /\
     gas_path_ptr D 0 ctx func PG G tn s0 0 H tm (OK cc) /\
     cc.vs_memory = s0.vs_memory /\ s0.vs_alloca_next <= cc.vs_alloca_next /\
-    alloca_history func cc /\
     tm.t_mem = tn.t_mem UNION new_site_bytes s0 cc /\ tm.t_stor = tn.t_stor /\
     tm.t_trans = tn.t_trans /\ tm.t_imm = tn.t_imm /\
     (!x. not_fresh_at st x ==> FLOOKUP H x = FLOOKUP G x /\
@@ -341,12 +339,6 @@ Resume immutable_allocate_initialize_ptr[ghost_finish]:
       jump_to_def, update_var_def]) >>
   `new_site_bytes s0 cc = new_site_bytes s0 u` by simp[new_site_bytes_def] >>
   qexistsl_tac [`a`,`cc`,`G'`,`tn'`] >> simp[GSYM mk_inst_def] >>
-  conj_tac >-
-    (`alloca_inv s0` by fs[stmt_state_rel_def, state_rel_def] >>
-     drule_all allocaHistoryTheory.alloca_history_base_step >>
-     simp[mk_inst_def, is_terminator_def] >> strip_tac >>
-     irule allocaHistoryTheory.alloca_history_jump >> simp[] >>
-     qexists_tac `u with vs_inst_idx := SUC (LENGTH pre)` >> simp[]) >>
   rpt strip_tac >> fs[MEM] >> metis_tac[]
 QED
 Finalise immutable_allocate_initialize_ptr
@@ -388,8 +380,7 @@ Theorem immutable_entry_initialize_ptr:
   not_local_ptr cenv es.scopes p /\ not_local_ptr cenv es.scopes idx /\
   not_local_ptr cenv es.scopes g /\ not_local_ptr cenv es.scopes vld /\
   (!x. lvo = Var x ==> ~MEM x [p; idx; g; vld]) /\
-  (!x. not_fresh_at sb x ==> ~MEM x [p; idx; g; vld]) /\
-  alloca_history func s ==>
+  (!x. not_fresh_at sb x ==> ~MEM x [p; idx; g; vld]) ==>
   ?dst cc H tm.
     array_loop_inv ctx func cenv cx P vs id idx (Lit (n2w off)) (n2w off)
       p dst sz (mk_inst aid ALLOCA [Lit (n2w sz)] [p]) cond_lbl sa 0 es cc /\
@@ -400,7 +391,6 @@ Theorem immutable_entry_initialize_ptr:
     array_caller_frame sa s cc /\
     gas_path_ptr D 0 ctx func PG G tn s 0 H tm (OK cc) /\
     cc.vs_memory = s.vs_memory /\ s.vs_alloca_next <= cc.vs_alloca_next /\
-    alloca_history func cc /\
     tm.t_mem = tn.t_mem UNION new_site_bytes s cc /\ tm.t_stor = tn.t_stor /\
     tm.t_trans = tn.t_trans /\ tm.t_imm = tn.t_imm /\
     (!x. not_fresh_at sa x ==> FLOOKUP H x = FLOOKUP G x /\
@@ -408,13 +398,6 @@ Theorem immutable_entry_initialize_ptr:
 Proof
   strip_tac >> drule_all immutable_optional_length_path_ptr >>
   disch_then (qspecl_then [`PG`,`D`] strip_assume_tac) >>
-  `alloca_history func u` by
-    (drule_all immutable_optional_length_mem >> strip_tac >>
-     irule allocaHistoryTheory.alloca_history_frame >>
-     qexists_tac `u'` >>
-     `u.vs_allocas = s.vs_allocas` by
-       (qpat_x_assum `u = s with <|vs_vars := _; vs_inst_idx := _|>` SUBST1_TAC >> simp[]) >>
-     simp[]) >>
   `!x. not_fresh_at sa x ==> not_fresh_at sb x` by
     (simp[not_fresh_at_def] >> metis_tac[LESS_LESS_EQ_TRANS]) >>
   `!x q. cenv.ce_return_buf = SOME (PtrVar (Var x) q) ==>

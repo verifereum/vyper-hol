@@ -1,7 +1,7 @@
 (* Scalar preparation of the immutable element address. *)
 Theory bodyImmPreparePtr
 Ancestors
-  bodyPtrEnvBuiltinsScalar allocaHistory allocaHistoryFragment bodyPtrDefs bodyPtrBopScalarSeq whitelistForIterImmLoop forPtrScope stmtSimForArrayLoop
+  bodyPtrEnvBuiltinsScalar bodyPtrDefs bodyPtrBopScalarSeq whitelistForIterImmLoop forPtrScope stmtSimForArrayLoop
   exprSimCopy exprSimPtrTopLevelImmutablePost exprLoweringProps stmtSimProps
   exprSimPtrProps whitelistForIterImmFrag stmtSimDeclCompose stmtLoweringMono
   fragGasSeqPtr compileEnv loweringStateRelDefs emitHelper context loweringPosts
@@ -349,7 +349,7 @@ Theorem immutable_body_entry_ptr_from_copy:
   ghost_inv d cenv cx es G tn s /\ ptr_covers G tn p s (type_memory_bytes cenv et) /\
   FLOOKUP G idx = NONE /\ op_taint tn (Var idx) = {} /\
   eval_operand lvo s = SOME (n2w (LENGTH vs)) /\
-  op_prov G lvo = NONE /\ op_taint tn lvo = {} /\ alloca_history func s /\
+  op_prov G lvo = NONE /\ op_taint tn lvo = {} /\
   (!ei t j. P ei /\ stmt_state_rel ctx func cenv cx ei t /\ j < LENGTH vs ==>
     immutable_holds cenv cx et (Value (EL j vs))
       (n2w off + n2w ((if dyn then 32 else 0) + j * type_memory_size tv)) ei t) ==>
@@ -370,7 +370,7 @@ Theorem immutable_body_entry_ptr_from_copy:
     op_prov H lvo = NONE /\ op_taint tm lvo = {} /\
     FLOOKUP t.vs_allocas
       (mk_inst st1.cs_next_id ALLOCA [Lit (n2w (type_memory_bytes cenv et))] [p]).inst_id =
-      SOME (w2n dst,type_memory_bytes cenv et) /\ alloca_history func t /\
+      SOME (w2n dst,type_memory_bytes cenv et) /\
     st.cs_next_var <= (sa with cs_next_var := st1.cs_next_var + 2).cs_next_var /\
     (sa with cs_next_var := st1.cs_next_var + 2).cs_next_var <= sb0.cs_next_var /\
     not_fresh_at (sa with cs_next_var := st1.cs_next_var + 2) p /\
@@ -555,63 +555,6 @@ Proof
      `not_fresh_at cut x` by
        (fs[not_fresh_at_def] >> metis_tac[LESS_LESS_EQ_TRANS]) >>
      metis_tac[]) >>
-  `run_inst_seq sa.cs_current_insts s = OK
-    (update_var ep (n2w off + n2w ((if dyn then 32 else 0) + k * type_memory_size tv))
-      (if dyn then update_var tot (n2w (32 + k * type_memory_size tv))
-         (update_var ov (n2w (k * type_memory_size tv)) s)
-       else update_var ov (n2w (k * type_memory_size tv)) s))` by
-    (qpat_assum `sa.cs_current_insts = _` (fn th => once_rewrite_tac[th]) >>
-     qpat_assum `elem_size_in_location cenv LocCode et = _`
-       (fn th => pure_rewrite_tac[th]) >>
-     qpat_assum `toto = Var (if dyn then tot else ov)`
-       (fn th => pure_rewrite_tac[th]) >>
-     irule immutable_address_prefix_run >> simp[]) >>
-  `run_inst_seq sa.cs_current_insts s = OK (u with vs_inst_idx := s.vs_inst_idx)` by
-    (Cases_on `dyn` >> fs[Abbr `u`, update_var_def]) >>
-  `EVERY (\i. ~is_terminator i.inst_opcode) sa.cs_current_insts` by
-    (qpat_assum `sa.cs_current_insts = _` (fn th => once_rewrite_tac[th]) >>
-     Cases_on `dyn` >> simp[mk_inst_def, is_terminator_def]) >>
-  `DROP s.vs_inst_idx bb.bb_instructions = sa.cs_current_insts ++
-      DROP (LENGTH sa.cs_current_insts) bb.bb_instructions` by
-    (qpat_assum `isPREFIX sa.cs_current_insts bb.bb_instructions` mp_tac >>
-     qpat_assum `s.vs_inst_idx = 0` mp_tac >>
-     rpt (pop_assum kall_tac) >>
-     simp[rich_listTheory.IS_PREFIX_APPEND] >> rpt strip_tac >>
-     gvs[DROP_PREFIX]) >>
-  `alloca_inv s /\ alloca_inv u` by metis_tac[stmt_state_rel_def] >>
-  `alloca_history func u` by
-    (qpat_assum `run_inst_seq sa.cs_current_insts s = OK (u with vs_inst_idx := _)` mp_tac >>
-     qpat_assum `alloca_history func s` mp_tac >>
-     qpat_assum `alloca_inv s` mp_tac >>
-     qpat_assum `lookup_block s.vs_current_bb func.fn_blocks = SOME bb` mp_tac >>
-     qpat_assum `DROP s.vs_inst_idx bb.bb_instructions = sa.cs_current_insts ++ _` mp_tac >>
-     qpat_assum `EVERY _ sa.cs_current_insts` mp_tac >>
-     qpat_assum `fn_inst_ids_distinct func` mp_tac >>
-     qpat_assum `s.vs_inst_idx = 0` mp_tac >>
-     qpat_assum `u.vs_inst_idx = LENGTH sa.cs_current_insts` mp_tac >>
-     rpt (pop_assum kall_tac) >> rpt strip_tac >>
-     drule_all alloca_history_run_inst_seq >> simp[] >>
-     strip_tac >> irule alloca_history_frame >>
-     qexists `u with vs_inst_idx := LENGTH sa.cs_current_insts` >> simp[]) >>
-  `DROP u.vs_inst_idx bb.bb_instructions = emitted_insts sa sb0 ++
-     DROP (u.vs_inst_idx + LENGTH (emitted_insts sa sb0)) bb.bb_instructions` by
-    (qpat_assum `isPREFIX (emitted_insts sa sb0) (DROP u.vs_inst_idx bb.bb_instructions)` mp_tac >>
-     rpt (pop_assum kall_tac) >>
-     simp[rich_listTheory.IS_PREFIX_APPEND] >> rpt strip_tac >>
-     metis_tac[rich_listTheory.DROP_DROP_T, DROP_PREFIX]) >>
-  `EVERY (\i. ~is_terminator i.inst_opcode) (emitted_insts sa sb0)` by
-    (irule EVERY_MONOTONIC >> goal_assum (drule_at Any) >> simp[]) >>
-  `alloca_history func v` by
-    (SIMP_TAC bool_ss [Abbr `v`, NoAsms] >>
-     qpat_assum `run_inst_seq (emitted_insts sa sb0) u = OK t` mp_tac >>
-     qpat_assum `alloca_history func u` mp_tac >>
-     qpat_assum `alloca_inv u` mp_tac >>
-     qpat_assum `lookup_block u.vs_current_bb func.fn_blocks = SOME bb` mp_tac >>
-     qpat_assum `DROP u.vs_inst_idx bb.bb_instructions = emitted_insts sa sb0 ++ _` mp_tac >>
-     qpat_assum `EVERY (\i. ~is_terminator i.inst_opcode) (emitted_insts sa sb0)` mp_tac >>
-     qpat_assum `fn_inst_ids_distinct func` mp_tac >>
-     rpt (pop_assum kall_tac) >> rpt strip_tac >>
-     drule_all alloca_history_run_inst_seq >> simp[]) >>
   qexistsl [`v`, `H'`, `tm'`] >>
   simp[Abbr `v`, stmt_state_rel_inst_idx, lookup_var_def] >>
   conj_tac >-
