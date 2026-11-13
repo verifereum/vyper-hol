@@ -646,9 +646,9 @@ Proof
   strip_tac >>
   `storage_range_agree (get_storage cx es tr)
     (if tr then contract_transient s else contract_storage s) w (ArrayTV tv (Dynamic n))` by
-    (irule pop_declared_array_agree >> metis_tac[]) >>
+    (drule_all pop_declared_array_agree >> simp[]) >>
   `slots_in_range (get_storage cx es tr) (w2n w) (ArrayTV tv (Dynamic n))` by
-    (irule pop_declared_array_slots >> metis_tac[]) >>
+    (drule_all pop_declared_array_slots >> simp[]) >>
   `len <= n` by metis_tac[pop_array_length_bound] >>
   `w2n w + type_slot_size (ArrayTV tv (Dynamic n)) <= dimword(:256)` by
     fs[storage_range_agree_def] >>
