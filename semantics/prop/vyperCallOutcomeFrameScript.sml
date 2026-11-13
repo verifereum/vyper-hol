@@ -72,14 +72,17 @@ Theorem state_rel_frame_locals_primitives:
   state_rel_frame R (update_pending_deletions deletions_upd) /\
   state_rel_frame R (λs. vyperState$return () (s with logs updated_by logs_upd)) /\
   state_rel_frame R (λs. vyperState$return () (s with logs := s.logs ++ logs)) /\
-  state_rel_frame R (adopt_call_outcome rq co)
+  state_rel_frame R (adopt_call_outcome rq co) /\
+  state_rel_frame R (record_storage_event observation) /\
+  state_rel_frame R record_storage_backend
 Proof
   strip_tac >>
   simp[state_rel_frame_def, return_def, raise_def, check_def, type_check_def,
        assert_def, lift_option_def, lift_option_type_def, lift_sum_runtime_def,
        get_accounts_def, get_transient_storage_def, update_accounts_def,
        update_transient_def, update_pending_deletions_def,
-       adopt_call_outcome_equation] >>
+       adopt_call_outcome_equation,
+       record_storage_event_def, record_storage_backend_def] >>
   rpt strip_tac >> rpt CASE_TAC >> simp[return_def, raise_def]
 QED
 
@@ -94,16 +97,21 @@ Proof
 QED
 
 Theorem take_call_outcome_transport:
+  (!s t observations. R s t ==> R s (t with storage_trace := observations)) /\
   (!s os rqs. R s (s with <|outcomes := os; requests := rqs|>)) /\
   take_call_outcome target calldata value_opt st = (res,st') ==>
   R st st'
 Proof
   rpt strip_tac >> drule take_call_outcome_frame >> strip_tac >>
   qpat_x_assum `!s os rqs. _` (qspecl_then
-    [`st`,`st'.outcomes`,`st'.requests`] mp_tac) >> metis_tac[]
+    [`st`,`st'.outcomes`,`st'.requests`] assume_tac) >>
+  qpat_x_assum `!s t observations. _` drule >>
+  disch_then (qspec_then `st'.storage_trace` mp_tac) >>
+  simp[] >> metis_tac[]
 QED
 
 Theorem adopt_call_outcome_transport:
+  (!s t observations. R s t ==> R s (t with storage_trace := observations)) /\
   (!s. R s s) /\
   (!s accounts transient logs pending.
     R s (s with <|accounts := accounts; tStorage := transient;
@@ -111,28 +119,33 @@ Theorem adopt_call_outcome_transport:
   adopt_call_outcome rq outcome st = (res,st') ==>
   R st st'
 Proof
-  rpt strip_tac >>
-  `!a ts ls. R st (st with <|accounts := a; tStorage := ts;
-                             logs := st.logs ++ ls|>)` by
-    (rpt gen_tac >>
-     `st with <|accounts := a; tStorage := ts; logs := st.logs ++ ls;
-                pending_deletions := st.pending_deletions|> =
-      st with <|accounts := a; tStorage := ts; logs := st.logs ++ ls|>`
-       by simp[evaluation_state_component_equality] >>
-     first_x_assum (qspecl_then [`st`,`a`,`ts`,`ls`,`st.pending_deletions`] mp_tac) >>
-     simp[evaluation_state_fupdcanon]) >>
-  gvs[adopt_call_outcome_equation] >> rw[] >> gvs[] >>
-  `st with <|accounts := outcome.co_accounts; tStorage := outcome.co_tStorage;
-             logs := st.logs ++ []; pending_deletions := st.pending_deletions|> =
+  strip_tac >>
+  Cases_on `rq.cr_static` >- gvs[adopt_call_outcome_equation] >>
+  Cases_on `outcome.co_success`
+  >- (gvs[adopt_call_outcome_equation] >>
+      qpat_x_assum `!s accounts transient logs pending. _`
+        (qspecl_then [`st`,`outcome.co_accounts`,`outcome.co_tStorage`,
+                     `outcome.co_logs`,`outcome.co_toDelete ++ st.pending_deletions`]
+          assume_tac) >>
+      qpat_x_assum `!s t observations. _` drule >> simp[]) >>
+  Cases_on `rq.cr_kind = MessageCall`
+  >- gvs[adopt_call_outcome_equation] >>
+  gvs[adopt_call_outcome_equation] >>
+  qpat_x_assum `!s accounts transient logs pending. _`
+    (qspecl_then [`st`,`outcome.co_accounts`,`outcome.co_tStorage`,
+                 `[]`,`st.pending_deletions`] assume_tac) >>
+  `st with <|logs := st.logs ++ []; accounts := outcome.co_accounts;
+             tStorage := outcome.co_tStorage; pending_deletions := st.pending_deletions|> =
    st with <|accounts := outcome.co_accounts; tStorage := outcome.co_tStorage|>`
     by simp[evaluation_state_component_equality] >>
-  gvs[evaluation_state_fupdcanon] >>
-  first_x_assum (qspecl_then [`st`,`outcome.co_accounts`,
-    `outcome.co_tStorage`,`[]`,`st.pending_deletions`] mp_tac) >>
-  simp[]
+  qpat_x_assum `!s t observations. _` (qspec_then `st` mp_tac) >>
+  disch_then (qspec_then `st with <|accounts := outcome.co_accounts;
+    tStorage := outcome.co_tStorage|>` mp_tac) >>
+  simp[evaluation_state_fupdcanon] >> metis_tac[]
 QED
 
 Theorem checked_call_outcome_transport:
+  (!s t observations. R s t ==> R s (t with storage_trace := observations)) /\
   (!s. R s s) /\
   (!s t u. R s t /\ R t u ==> R s u) /\
   (!s os rqs. R s (s with <|outcomes := os; requests := rqs|>)) /\
@@ -191,6 +204,7 @@ Proof
 QED
 
 Theorem ExtCall_outcome_transport:
+  (!s t observations. R s t ==> R s (t with storage_trace := observations)) /\
   (!s. R s s) /\
   (!s t u. R s t /\ R t u ==> R s u) /\
   (!s os rqs. R s (s with <|outcomes := os; requests := rqs|>)) /\
@@ -218,6 +232,7 @@ Proof
 QED
 
 Theorem Send_outcome_transport:
+  (!s t observations. R s t ==> R s (t with storage_trace := observations)) /\
   (!s. R s s) /\
   (!s t u. R s t /\ R t u ==> R s u) /\
   (!s os rqs. R s (s with <|outcomes := os; requests := rqs|>)) /\
@@ -272,7 +287,8 @@ Theorem take_adopt_call_outcome_effects:
     st2 = st with <|outcomes := SOME rest;
                    requests := record_request rq st.requests;
                    accounts := st2.accounts; tStorage := st2.tStorage;
-                   logs := st2.logs; pending_deletions := st2.pending_deletions|> /\
+                   logs := st2.logs; pending_deletions := st2.pending_deletions;
+                   storage_trace := st2.storage_trace|> /\
     (outcome.co_success /\ ~rq.cr_static ==>
       st2.accounts = outcome.co_accounts /\
       st2.tStorage = outcome.co_tStorage /\
@@ -347,20 +363,19 @@ Proof
   mp_tac (REWRITE_RULE [state_rel_frame_result] eval_ext_call_locals) >> simp[]
 QED
 
+Theorem eval_send_locals[local]:
+  state_rel_frame
+    (\s t. t.scopes = s.scopes /\ t.immutables = s.immutables)
+    (eval_send cx has_gas vs)
+Proof
+  Cases_on `vs` >- simp[state_rel_frame_def, eval_send_def, raise_def] >>
+  Cases_on `t` >> simp_tac bool_ss [eval_send_def, LET_THM] >>
+  rpt CALL_LOCALS_STEP
+QED
+
 Theorem eval_send_preserves_non_accounts:
   eval_send cx has_gas vs st = (res, st') ==>
   st'.scopes = st.scopes /\ st'.immutables = st.immutables
 Proof
-  Cases_on `vs` >- simp[eval_send_def, raise_def] >>
-  Cases_on `t` >- simp[eval_send_def, raise_def] >>
-  simp[eval_send_def, frame_call_value_def, bind_def, ignore_bind_def, type_check_def,
-       assert_def, return_def, raise_def, lift_option_type_def, check_def,
-       get_accounts_def, update_accounts_def, get_transient_storage_def,
-       lift_option_def, update_transient_def, append_logs_def,
-       update_pending_deletions_def,
-       vyperCallOutcomeTheory.take_call_outcome_def, vyperCallOutcomeTheory.take_request_outcome_def,
-       vyperCallOutcomeTheory.adopt_call_outcome_def, LET_THM, UNCURRY,
-       COND_RATOR, vfmTypesTheory.option_CASE_rator,
-       vfmTypesTheory.prod_CASE_rator, vfmTypesTheory.sum_CASE_rator] >>
-  strip_tac >> gvs[AllCaseEqs()]
+  mp_tac (REWRITE_RULE [state_rel_frame_result] eval_send_locals) >> simp[]
 QED

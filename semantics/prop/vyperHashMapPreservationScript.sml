@@ -333,7 +333,7 @@ Proof
       \\ Cases_on `lookup_global cx mid m st`
       \\ gvs[] \\ Cases_on `q` \\ Cases_on `q'` \\ gvs[])
   (* Prove FST equality following lookup_global_scopes_fst pattern *)
-  \\ simp[vyperStateTheory.lookup_global_def, vyperStateTheory.bind_def,
+  \\ simp[vyperStateTheory.lookup_global_def, vyperStateTheory.record_storage_event_def, vyperStateTheory.bind_def,
           vyperStateTheory.lift_option_type_def, vyperStateTheory.return_def, vyperStateTheory.raise_def, vyperStateTheory.ignore_bind_def]
   \\ Cases_on `get_module_code cx mid`
   \\ simp[vyperStateTheory.return_def, vyperStateTheory.raise_def]
@@ -368,7 +368,7 @@ Proof
       \\ Cases_on `read_storage_slot cx b' (n2w x'') tv' st`
       \\ gvs[]
       \\ Cases_on `tv'` \\ gvs[vyperStateTheory.bind_def, vyperStateTheory.return_def, vyperStateTheory.raise_def]
-      \\ Cases_on `q` \\ gvs[])
+      \\ Cases_on `q` \\ gvs[vyperStateTheory.record_storage_event_def, vyperStateTheory.return_def])
   (* HashMapVarDecl branch *)
   \\ Cases_on `lookup_var_slot_from_layout cx b' mid found1`
   \\ simp[vyperStateTheory.return_def, vyperStateTheory.raise_def]

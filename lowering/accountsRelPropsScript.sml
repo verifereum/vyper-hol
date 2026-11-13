@@ -1,17 +1,17 @@
 (*
- * Properties of accounts_rel (#665): the state_rel component that relates
+ * Properties of accounts_rel H (#665): the state_rel H component that relates
  * every address's accounts and transient storage. The running contract's
  * storage and transient storage agree
  * only on their live bytes (#637); everything else is equal.
  *
  * TOP-LEVEL:
- *   state_rel_accounts      — state_rel gives the agreement of the
+ *   state_rel_accounts      — state_rel H gives the agreement of the
  *                             accounts and transient storage that the
  *                             success case of the external result relation
  *                             asks for
  *   accounts_rel_set_storage, accounts_rel_set_transient — a write of the
  *                             running contract's storage or transient
- *                             storage on both sides keeps accounts_rel
+ *                             storage on both sides keeps accounts_rel H
  *   accounts_rel_sstore, accounts_rel_tstore — their case for one SSTORE
  *                             or TSTORE
  *   accounts_rel_take_call_outcome, accounts_rel_adopt_call_outcome — the
@@ -19,7 +19,7 @@
  *                             outcome changes neither side's accounts, and
  *                             both sides adopt it with adopt_outcome
  *   accounts_rel_call_request — the oracle requests of the two sides
- *                             agree as request_agree says
+ *                             agree as request_agree H says
  *   take_outcome_agree      — agreeing requests take agreeing outcomes
  *   storage_agree_update, transient_agree_update — the same write on both
  *                             sides keeps agreement
@@ -28,7 +28,7 @@
  *   dead_bytes_live_frame   — they depend only on those slots' live bytes
  *   storage_agree_storage_dead — storages that agree outside the first's
  *                             dead bytes have the same dead bytes
- *   declared_storage_region_read_live, storage_read_live_head,
+ *   observed_storage_region_read_live, storage_read_live_head,
  *   storage_read_live_field — reads of a declared region see live bytes
  *   storage_agree_read_head — agreeing storages read a live value alike
  *   storage_range_agree_of_live, storage_range_agree_head,
@@ -48,16 +48,20 @@
  * Helper:
  *   storage_agree_refl, accounts_agree_refl, transient_agree_refl,
  *   request_agree_refl      — each agreement is reflexive
- *   accounts_rel_storage_transient — storage_rel and transient_rel are
+ *   accounts_rel_storage_transient — storage_rel H and transient_rel H are
  *                             accounts_rel's case for the running contract
- *   accounts_rel_frame, accounts_rel_updates — accounts_rel reads only
+ *   accounts_rel_frame, accounts_rel_updates — accounts_rel H reads only
  *                             the accounts and transient storage
  *)
 
 Theory accountsRelProps
 Ancestors
   compileEnv loweringStateRelDefs vyperState vyperCallOutcome extCallOracle vyperStoragePlaceRegion
+  vyperPlaceStoragePreservation
   venomState venomCallOracleDefs vfmExecution vfmState vyperStorageLayoutSafety
+  vyperStorageFootprint vyperStoragePlaceObserved
+Libs
+  markerLib
 
 (* ===== Reflexivity ===== *)
 
@@ -68,15 +72,15 @@ Proof
 QED
 
 Theorem accounts_agree_refl[simp]:
-  !cx a. accounts_agree cx a a
+  !cx a. accounts_agree H cx a a
 Proof
   simp[accounts_agree_def]
 QED
 
 Theorem accounts_agree_process_deletions:
   !cx ds a1 a2.
-    accounts_agree cx a1 a2 ==>
-    accounts_agree cx (process_deletions ds a1) (process_deletions ds a2)
+    accounts_agree H cx a1 a2 ==>
+    accounts_agree H cx (process_deletions ds a1) (process_deletions ds a2)
 Proof
   gen_tac >> Induct_on `ds` >>
   simp[process_deletions_def] >>
@@ -88,13 +92,13 @@ Proof
 QED
 
 Theorem transient_agree_refl[simp]:
-  !cx t. transient_agree cx t t
+  !cx t. transient_agree H cx t t
 Proof
   simp[transient_agree_def]
 QED
 
 Theorem request_agree_refl[simp]:
-  !cx rq. request_agree cx rq rq
+  !cx rq. request_agree H cx rq rq
 Proof
   simp[request_agree_def, call_request_component_equality]
 QED
@@ -103,9 +107,9 @@ QED
 
 Theorem state_rel_accounts:
   !func cenv cx es s.
-    state_rel func cenv cx es s ==>
-    accounts_agree cx es.accounts s.vs_accounts /\
-    transient_agree cx es.tStorage s.vs_transient /\
+    state_rel H func cenv cx es s ==>
+    accounts_agree H cx es.accounts s.vs_accounts /\
+    transient_agree H cx es.tStorage s.vs_transient /\
     es.pending_deletions = s.vs_pending_deletions
 Proof
   rw[state_rel_def, accounts_rel_def]
@@ -113,9 +117,9 @@ QED
 
 Theorem accounts_rel_storage_transient:
   !cx es s.
-    accounts_rel cx es s /\ s.vs_call_ctx.cc_address = cx.txn.target ==>
-    storage_rel cx s.vs_call_ctx.cc_address es s /\
-    transient_rel cx s.vs_call_ctx.cc_address es s
+    accounts_rel H cx es s /\ s.vs_call_ctx.cc_address = cx.txn.target ==>
+    storage_rel H s.vs_call_ctx.cc_address es s /\
+    transient_rel H s.vs_call_ctx.cc_address es s
 Proof
   rw[accounts_rel_def, storage_rel_def, transient_rel_def,
      accounts_agree_def, transient_agree_def, contract_storage_def,
@@ -124,30 +128,54 @@ QED
 
 (* ===== Frames ===== *)
 
-(* accounts_rel reads only the accounts and transient storage of both sides. *)
+(* accounts_rel H also fixes the active frame's code. *)
 Theorem accounts_rel_frame:
   !cx es es' s s'.
     es'.accounts = es.accounts /\ es'.tStorage = es.tStorage /\
     es'.pending_deletions = es.pending_deletions /\
-    s'.vs_accounts = s.vs_accounts /\ s'.vs_transient = s.vs_transient ==>
-    (accounts_rel cx es' s' <=> accounts_rel cx es s)
+    s'.vs_accounts = s.vs_accounts /\ s'.vs_transient = s.vs_transient /\
+    s'.vs_code = s.vs_code ==>
+    (accounts_rel H cx es' s' <=> accounts_rel H cx es s)
 Proof
   simp[accounts_rel_def]
 QED
 
 Theorem accounts_rel_updates[simp]:
-  (!cx es s x w. accounts_rel cx es (update_var x w s) <=>
-                 accounts_rel cx es s) /\
-  (!cx es s V. accounts_rel cx es (s with vs_vars := V) <=>
-               accounts_rel cx es s) /\
-  (!cx es s lbl. accounts_rel cx es (jump_to lbl s) <=>
-                 accounts_rel cx es s) /\
-  (!cx es s n. accounts_rel cx es (s with vs_inst_idx := n) <=>
-               accounts_rel cx es s) /\
-  (!cx es s sc. accounts_rel cx (es with scopes := sc) s <=>
-                accounts_rel cx es s)
+  (!cx es s x w. accounts_rel H cx es (update_var x w s) <=>
+                 accounts_rel H cx es s) /\
+  (!cx es s V. accounts_rel H cx es (s with vs_vars := V) <=>
+               accounts_rel H cx es s) /\
+  (!cx es s lbl. accounts_rel H cx es (jump_to lbl s) <=>
+                 accounts_rel H cx es s) /\
+  (!cx es s n. accounts_rel H cx es (s with vs_inst_idx := n) <=>
+               accounts_rel H cx es s) /\
+  (!cx es s sc. accounts_rel H cx (es with scopes := sc) s <=>
+                accounts_rel H cx es s)
 Proof
   simp[accounts_rel_def, update_var_def, jump_to_def]
+QED
+
+(* Ghost observations do not participate in the physical simulation. *)
+Theorem state_rel_storage_trace[simp]:
+  state_rel H func cenv cx (es with storage_trace := observations) s <=>
+  state_rel H func cenv cx es s
+Proof
+  simp[state_rel_def, storage_rel_def, transient_rel_def, accounts_rel_def,
+       immutables_rel_def, logs_rel_def]
+QED
+
+Theorem state_rel_erase_storage_trace:
+  state_rel H func cenv cx (erase_storage_trace es) s <=>
+  state_rel H func cenv cx es s
+Proof
+  simp[erase_storage_trace_def]
+QED
+
+Theorem accounts_rel_storage_trace[simp]:
+  accounts_rel H cx (es with storage_trace := observations) s <=>
+  accounts_rel H cx es s
+Proof
+  simp[accounts_rel_def]
 QED
 
 (* ===== Writes of the running contract's storage ===== *)
@@ -157,15 +185,16 @@ QED
    on the bytes live in stor. *)
 Theorem accounts_rel_set_storage:
   !cx stor stor' es es' s s'.
-    accounts_rel cx es s /\ s.vs_call_ctx.cc_address = cx.txn.target /\
+    accounts_rel H cx es s /\ s.vs_call_ctx.cc_address = cx.txn.target /\
     set_storage_backend cx F stor es = (INL (), es') /\
-    storage_agree (storage_dead cx F stor) stor stor' /\
+    storage_agree (storage_dead H F stor) stor stor' /\
     s'.vs_accounts =
       (cx.txn.target =+
          (lookup_account cx.txn.target s.vs_accounts with storage := stor'))
         s.vs_accounts /\
-    s'.vs_transient = s.vs_transient ==>
-    accounts_rel cx es' s'
+    s'.vs_transient = s.vs_transient /\
+    s'.vs_code = s.vs_code ==>
+    accounts_rel H cx es' s'
 Proof
   rpt strip_tac >>
   gvs[set_storage_backend_def, vyperStateTheory.bind_def,
@@ -179,12 +208,13 @@ QED
 
 Theorem accounts_rel_set_transient:
   !cx stor stor' es es' s s'.
-    accounts_rel cx es s /\ s.vs_call_ctx.cc_address = cx.txn.target /\
+    accounts_rel H cx es s /\ s.vs_call_ctx.cc_address = cx.txn.target /\
     set_storage_backend cx T stor es = (INL (), es') /\
-    storage_agree (storage_dead cx T stor) stor stor' /\
+    storage_agree (storage_dead H T stor) stor stor' /\
     s'.vs_accounts = s.vs_accounts /\
-    s'.vs_transient = (cx.txn.target =+ stor') s.vs_transient ==>
-    accounts_rel cx es' s'
+    s'.vs_transient = (cx.txn.target =+ stor') s.vs_transient /\
+    s'.vs_code = s.vs_code ==>
+    accounts_rel H cx es' s'
 Proof
   rw[set_storage_backend_def, vyperStateTheory.update_transient_def,
      vyperStateTheory.return_def] >>
@@ -210,16 +240,16 @@ QED
 
 Theorem transient_agree_update:
   !cx t1 t2 k v.
-    transient_agree cx t1 t2 /\
-    (!j b. storage_dead cx T (t1 cx.txn.target) j b /\ j <> w2n k ==>
-           storage_dead cx T (update_storage k v (t1 cx.txn.target)) j b) ==>
-    transient_agree cx
+    transient_agree H cx t1 t2 /\
+    (!j b. storage_dead H T (t1 cx.txn.target) j b /\ j <> w2n k ==>
+           storage_dead H T (update_storage k v (t1 cx.txn.target)) j b) ==>
+    transient_agree H cx
       ((cx.txn.target =+ update_storage k v (t1 cx.txn.target)) t1)
       ((cx.txn.target =+ update_storage k v (t2 cx.txn.target)) t2)
 Proof
   rw[transient_agree_def, combinTheory.APPLY_UPDATE_THM] >>
   irule storage_agree_update >>
-  qexists_tac `storage_dead cx T (t1 cx.txn.target)` >> simp[]
+  qexists_tac `storage_dead H T (t1 cx.txn.target)` >> simp[]
 QED
 
 (* One SSTORE of v at k, which the source makes to its own storage.  The
@@ -227,12 +257,12 @@ QED
    after it, and the others agree as before. *)
 Theorem accounts_rel_sstore:
   !cx k v es es' s st.
-    accounts_rel cx es s /\ s.vs_call_ctx.cc_address = cx.txn.target /\
+    accounts_rel H cx es s /\ s.vs_call_ctx.cc_address = cx.txn.target /\
     st = (lookup_account cx.txn.target es.accounts).storage /\
-    (!j b. storage_dead cx F st j b /\ j <> w2n k ==>
-           storage_dead cx F (update_storage k v st) j b) /\
+    (!j b. storage_dead H F st j b /\ j <> w2n k ==>
+           storage_dead H F (update_storage k v st) j b) /\
     set_storage_backend cx F (update_storage k v st) es = (INL (), es') ==>
-    accounts_rel cx es' (sstore k v s)
+    accounts_rel H cx es' (sstore k v s)
 Proof
   rpt strip_tac >>
   qspecl_then [`cx`, `update_storage k v st`,
@@ -241,19 +271,19 @@ Proof
   impl_tac >- (
     simp[sstore_def, contract_storage_def] >>
     irule storage_agree_update >>
-    qexists_tac `storage_dead cx F st` >>
+    qexists_tac `storage_dead H F st` >>
     gvs[accounts_rel_def, accounts_agree_def, lookup_account_def]) >>
   simp[]
 QED
 
 Theorem accounts_rel_tstore:
   !cx k v es es' s st.
-    accounts_rel cx es s /\ s.vs_call_ctx.cc_address = cx.txn.target /\
+    accounts_rel H cx es s /\ s.vs_call_ctx.cc_address = cx.txn.target /\
     st = es.tStorage cx.txn.target /\
-    (!j b. storage_dead cx T st j b /\ j <> w2n k ==>
-           storage_dead cx T (update_storage k v st) j b) /\
+    (!j b. storage_dead H T st j b /\ j <> w2n k ==>
+           storage_dead H T (update_storage k v st) j b) /\
     set_storage_backend cx T (update_storage k v st) es = (INL (), es') ==>
-    accounts_rel cx es' (tstore k v s)
+    accounts_rel H cx es' (tstore k v s)
 Proof
   rpt strip_tac >>
   qspecl_then [`cx`, `update_storage k v st`,
@@ -262,7 +292,7 @@ Proof
   impl_tac >- (
     simp[tstore_def, contract_transient_def] >>
     irule storage_agree_update >>
-    qexists_tac `storage_dead cx T st` >>
+    qexists_tac `storage_dead H T st` >>
     gvs[accounts_rel_def, transient_agree_def]) >>
   simp[]
 QED
@@ -271,9 +301,9 @@ QED
 
 Theorem accounts_rel_take_call_outcome:
   !cx target calldata value_opt es es' res s.
-    accounts_rel cx es s /\
+    accounts_rel H cx es s /\
     take_call_outcome target calldata value_opt es = (res, es') ==>
-    accounts_rel cx es' s
+    accounts_rel H cx es' s
 Proof
   rpt strip_tac >> drule take_call_outcome_frame >> strip_tac >>
   pop_assum SUBST1_TAC >> fs[accounts_rel_def]
@@ -285,13 +315,13 @@ QED
    transient storage. *)
 Theorem take_outcome_agree:
   !cx rq1 rq2 os o1 o2 r1 r2.
-    request_agree cx rq1 rq2 /\
+    request_agree H cx rq1 rq2 /\
     take_outcome rq1 os = (o1, r1) /\ take_outcome rq2 os = (o2, r2) ==>
     r1 = r2 /\
     o1 with <| co_accounts := o2.co_accounts;
                co_tStorage := o2.co_tStorage |> = o2 /\
-    accounts_agree cx o1.co_accounts o2.co_accounts /\
-    transient_agree cx o1.co_tStorage o2.co_tStorage
+    accounts_agree H cx o1.co_accounts o2.co_accounts /\
+    transient_agree H cx o1.co_tStorage o2.co_tStorage
 Proof
   rw[request_agree_def] >>
   `rq1.cr_kind = rq2.cr_kind /\
@@ -308,19 +338,20 @@ QED
    outcomes and requests agree as take_outcome_agree gives. *)
 Theorem accounts_rel_adopt_call_outcome:
   !cx rq rq' outcome outcome' es es' s s' logs.
-    accounts_rel cx es s /\ adopt_call_outcome rq outcome es = (INL (), es') /\
+    accounts_rel H cx es s /\ adopt_call_outcome rq outcome es = (INL (), es') /\
     rq'.cr_static = rq.cr_static /\
     rq'.cr_kind = rq.cr_kind /\
     outcome with <| co_accounts := outcome'.co_accounts;
                     co_tStorage := outcome'.co_tStorage |> = outcome' /\
-    accounts_agree cx outcome.co_accounts outcome'.co_accounts /\
-    transient_agree cx outcome.co_tStorage outcome'.co_tStorage /\
+    accounts_agree H cx outcome.co_accounts outcome'.co_accounts /\
+    transient_agree H cx outcome.co_tStorage outcome'.co_tStorage /\
     s'.vs_accounts =
       FST (adopt_outcome rq' outcome' (s.vs_accounts, s.vs_transient, logs)) /\
     s'.vs_transient =
       FST (SND (adopt_outcome rq' outcome'
-                  (s.vs_accounts, s.vs_transient, logs))) ==>
-    accounts_rel cx es' s'
+                  (s.vs_accounts, s.vs_transient, logs))) /\
+    s'.vs_code = s.vs_code ==>
+    accounts_rel H cx es' s'
 Proof
   rw[adopt_call_outcome_equation] >>
   `outcome'.co_success = outcome.co_success` by
@@ -331,11 +362,11 @@ QED
 
 Theorem accounts_rel_call_request:
   !cx es s target calldata value_opt.
-    accounts_rel cx es s ==>
-    accounts_agree cx
+    accounts_rel H cx es s ==>
+    accounts_agree H cx
       (call_outcome_request target calldata value_opt es).cr_accounts
       s.vs_accounts /\
-    transient_agree cx
+    transient_agree H cx
       (call_outcome_request target calldata value_opt es).cr_tStorage
       s.vs_transient
 Proof
@@ -403,7 +434,7 @@ Proof
          disch_then (qspecl_then [`type_slot_size tv`, `bs`] mp_tac) >>
          decide_tac) >>
       metis_tac[]) >>
-  `!i. i < n /\ i < w2n (lookup_storage (n2w bs) st) ==>
+  `!i. i < n ==>
        (dead_bytes st' (bs + (i * type_slot_size tv + 1)) tv j b <=>
         dead_bytes st (bs + (i * type_slot_size tv + 1)) tv j b)` by
     (rpt strip_tac >> first_x_assum irule >> simp[] >>
@@ -415,10 +446,10 @@ Proof
 QED
 
 (* A declared region is read live. *)
-Theorem declared_storage_region_read_live:
-  !cx mid n subs tr w tv st.
-    declared_storage_region cx mid n subs = SOME (tr, w, tv) ==>
-    storage_read_live cx tr st w tv
+Theorem observed_storage_region_read_live:
+  !tr w tv st.
+    MEM (tr,w,tv) (FST H) ==>
+    storage_read_live H tr st w tv
 Proof
   rpt gen_tac >> strip_tac >>
   pure_rewrite_tac [storage_read_live_def, storage_dead_def] >>
@@ -426,8 +457,8 @@ Proof
   rename1 `dead_bytes st (w2n slot) tv' j b` >>
   Cases_on `(slot, tv') = (w, tv)`
   >- gvs[] >>
-  qpat_x_assum `!mid'' n'' subs'' slot'' tv''. _`
-    (qspecl_then [`mid`, `n`, `subs`, `w`, `tv`] mp_tac) >>
+  qpat_x_assum `!slot'' tv''. _`
+    (qspecl_then [`w`, `tv`] mp_tac) >>
   simp[vyperStorageFrameTheory.ranges_disjoint_def] >>
   drule (cj 1 dead_bytes_range) >>
   rpt strip_tac >> gvs[] >> decide_tac
@@ -435,9 +466,9 @@ QED
 
 (* A live read's first slot holds no dead byte. *)
 Theorem storage_read_live_head:
-  !cx tr st w tv b.
-    storage_read_live cx tr st w tv /\ 0 < type_slot_size tv ==>
-    ~storage_dead cx tr st (w2n w) b
+  !tr st w tv b.
+    storage_read_live H tr st w tv /\ 0 < type_slot_size tv ==>
+    ~storage_dead H tr st (w2n w) b
 Proof
   rw[storage_read_live_def] >> strip_tac >> first_x_assum drule >>
   strip_tac >> gvs[] >> drule (cj 1 dead_bytes_range) >> simp[]
@@ -460,9 +491,9 @@ QED
 (* Storage that agrees up to dead bytes holds the same word at the first
    slot of a live read. *)
 Theorem storage_agree_read_head:
-  !cx tr st st' w tv.
-    storage_agree (storage_dead cx tr st) st st' /\
-    storage_read_live cx tr st w tv /\ 0 < type_slot_size tv ==>
+  !tr st st' w tv.
+    storage_agree (storage_dead H tr st) st st' /\
+    storage_read_live H tr st w tv /\ 0 < type_slot_size tv ==>
     lookup_storage w st' = lookup_storage w st
 Proof
   rw[storage_agree_def] >> irule word_to_bytes_EL_eq >> rpt strip_tac >>
@@ -507,12 +538,10 @@ Proof
   gvs[]
 QED
 
-(* A dead byte of a DynArray in the slots of an element below its length is
-   that element's. *)
+(* A dead byte of a DynArray within a capacity element is that element's. *)
 Theorem dyn_array_elem_dead:
   !st bs tv n i x c.
     dead_bytes st bs (ArrayTV tv (Dynamic n)) x c /\ i < n /\
-    i < w2n (lookup_storage (n2w bs) st) /\
     bs + 1 + i * type_slot_size tv <= x /\
     x < bs + 1 + i * type_slot_size tv + type_slot_size tv ==>
     dead_bytes st (bs + 1 + i * type_slot_size tv) tv x c
@@ -520,13 +549,7 @@ Proof
   rpt strip_tac >>
   qpat_x_assum `dead_bytes _ _ (ArrayTV _ _) _ _` mp_tac >>
   simp[Once dead_bytes_def] >> strip_tac >> rename1 `i2 < n` >>
-  Cases_on `i2 < w2n (lookup_storage (n2w bs) st)` >>
-  fs[arithmeticTheory.RIGHT_ADD_DISTRIB]
-  >- (drule (cj 1 dead_bytes_range) >> strip_tac >>
-      `i2 = i` by
-        (qspecl_then [`bs + 1`, `i2`, `i`, `type_slot_size tv`, `x`] mp_tac
-           element_slots_same >> impl_tac >- decide_tac >> simp[]) >>
-      gvs[]) >>
+  drule (cj 1 dead_bytes_range) >> strip_tac >>
   `i2 = i` by
     (qspecl_then [`bs + 1`, `i2`, `i`, `type_slot_size tv`, `x`] mp_tac
        element_slots_same >> impl_tac >- decide_tac >> simp[]) >>
@@ -606,11 +629,8 @@ Proof
       PURE_REWRITE_TAC [vyperValueTheory.type_slot_size_def] >> decide_tac)
   >~ [`dead_bytes _ _ (ArrayTV _ (Dynamic _))`]
   >- (rename1 `dead_bytes _ bs (ArrayTV tv (Dynamic n)) j b` >>
-      drule dead_bytes_head_eq >>
-      impl_tac >- simp[vyperValueTheory.type_slot_size_def] >>
-      disch_then (fn th => ONCE_REWRITE_TAC [dead_bytes_def] >>
-                           REWRITE_TAC [th]) >>
-      `!i. i < n /\ i < w2n (lookup_storage (n2w bs) st) ==>
+      ONCE_REWRITE_TAC [dead_bytes_def] >>
+      `!i. i < n ==>
            (dead_bytes st' (bs + 1 + i * type_slot_size tv) tv j b <=>
             dead_bytes st (bs + 1 + i * type_slot_size tv) tv j b)`
         suffices_by metis_tac[] >>
@@ -671,17 +691,17 @@ QED
    bytes: each declared region's dead bytes are decided by its own live
    bytes, and the regions with dead bytes are disjoint. *)
 Theorem storage_agree_storage_dead:
-  !cx tr st1 st2.
-    storage_agree (storage_dead cx tr st1) st1 st2 ==>
-    storage_dead cx tr st2 = storage_dead cx tr st1
+  !tr st1 st2.
+    storage_agree (storage_dead H tr st1) st1 st2 ==>
+    storage_dead H tr st2 = storage_dead H tr st1
 Proof
   rpt strip_tac >> simp[FUN_EQ_THM] >> rpt gen_tac >>
   PURE_REWRITE_TAC [storage_dead_def] >>
-  `!slot tv mid n subs.
-     declared_storage_region cx mid n subs = SOME (tr,slot,tv) /\
+  `!slot tv.
+     MEM (tr,slot,tv) (FST H) /\
      w2n slot + type_slot_size tv <= dimword (:256) /\
-     (!mid' n' subs' slot' tv'.
-        declared_storage_region cx mid' n' subs' = SOME (tr,slot',tv') /\
+     (!slot' tv'.
+        MEM (tr,slot',tv') (FST H) /\
         (slot',tv') <> (slot,tv) ==>
         ranges_disjoint (w2n slot) (type_slot_size tv) (w2n slot')
           (type_slot_size tv')) ==>
@@ -689,8 +709,7 @@ Proof
     suffices_by (
       strip_tac >> eq_tac >> strip_tac >> first_x_assum drule_all >>
       strip_tac >>
-      qexistsl_tac [`mid`, `n`, `subs`, `slot`, `tv`] >>
-      rpt conj_tac >> TRY (first_assum ACCEPT_TAC) >> fs[]) >>
+      simp[] >> qexistsl_tac [`slot`, `tv`] >> gvs[]) >>
   rpt strip_tac >> irule (cj 1 dead_bytes_live_frame) >>
   rpt strip_tac >>
   qpat_x_assum `storage_agree _ _ _` mp_tac >>
@@ -698,17 +717,14 @@ Proof
   disch_then (qspecl_then [`n2w i`, `c`] mp_tac) >>
   `i < dimword (:256)` by decide_tac >> simp[] >>
   impl_tac >- (
-    simp[storage_dead_def] >> rpt strip_tac >>
+    rewrite_tac[storage_dead_def] >> strip_tac >>
     rename1 `dead_bytes st1 (w2n slot') tv' i c` >>
     Cases_on `(slot', tv') = (slot, tv)` >- gvs[] >>
-    first_x_assum drule_all >> strip_tac >>
-    Cases_on `dead_bytes st1 (w2n slot') tv' i c` >- (
-      qsuff_tac `F` >- simp[] >>
-      drule (cj 1 dead_bytes_range) >>
-      qpat_x_assum `ranges_disjoint _ _ _ _` mp_tac >>
-      PURE_REWRITE_TAC [vyperStorageFrameTheory.ranges_disjoint_def] >>
-      decide_tac) >>
-    asm_rewrite_tac[]) >>
+    qpat_x_assum `!s t. MEM (tr,s,t) _ /\ (s,t) <> (slot,tv) ==> _`
+      (qspecl_then [`slot'`, `tv'`] mp_tac) >>
+    simp[] >> strip_tac >>
+    drule (cj 1 dead_bytes_range) >>
+    gvs[vyperStorageFrameTheory.ranges_disjoint_def] >> decide_tac) >>
   simp[]
 QED
 
@@ -731,46 +747,36 @@ Proof
 QED
 
 Theorem nonreentrant_slot_read_live:
-  nonreentrant_slot_separated cx /\ cx.nonreentrant_slot = SOME key ==>
-  storage_read_live cx T st (n2w key) (BaseTV (UintT 256))
+  MEM key (SND H) /\ key < dimword (:256) ==>
+  storage_read_live H T st (n2w key) (BaseTV (UintT 256))
 Proof
-  strip_tac >> gvs[nonreentrant_slot_separated_def] >>
-  `key < dimword (:256)` by decide_tac >>
+  strip_tac >>
   simp[storage_read_live_def, wordsTheory.w2n_n2w,
        arithmeticTheory.LESS_MOD, vyperValueTheory.type_slot_size_def] >>
   rpt strip_tac >> gvs[storage_dead_def] >>
-  qpat_x_assum `!mid n subs slot tv. _ ==> ranges_disjoint key 1 _ _`
-    (qspecl_then [`mid`, `n`, `subs`, `slot`, `tv`] mp_tac) >>
-  simp[] >>
-  drule (cj 1 dead_bytes_range) >>
-  simp[vyperStorageFrameTheory.ranges_disjoint_def] >>
-  rpt strip_tac >> decide_tac
+  `j = key` by decide_tac >> gvs[]
 QED
 
 Theorem nonreentrant_slot_dead_preserved:
-  nonreentrant_slot_separated cx /\ cx.nonreentrant_slot = SOME key /\
-  storage_dead cx T st j b ==>
-  storage_dead cx T (update_storage (n2w key) value st) j b
+  storage_locks_separated (FST H) (SND H) /\
+  MEM key (SND H) /\ key < dimword (:256) /\
+  storage_dead H T st j b ==>
+  storage_dead H T (update_storage (n2w key) value st) j b
 Proof
-  strip_tac >> gvs[nonreentrant_slot_separated_def] >>
+  strip_tac >> gvs[vyperStorageFootprintTheory.storage_locks_separated_def] >>
   `key < dimword (:256)` by decide_tac >>
   qpat_x_assum `storage_dead _ _ _ _ _` mp_tac >>
   rewrite_tac[storage_dead_def] >> strip_tac >>
   rename1 `dead_bytes st (w2n slot) tv j b` >>
   `ranges_disjoint (w2n slot) (type_slot_size tv) (w2n (n2w key:bytes32)) 1` by
-    (qpat_x_assum `!mid n subs slot tv. _ ==> ranges_disjoint key 1 _ _`
-       (qspecl_then [`mid`, `n`, `subs`, `slot`, `tv`] mp_tac) >>
-     simp[wordsTheory.w2n_n2w, arithmeticTheory.LESS_MOD,
-          vyperStorageFrameTheory.ranges_disjoint_def] >>
-     decide_tac) >>
+    (simp[wordsTheory.w2n_n2w, arithmeticTheory.LESS_MOD] >>
+     first_x_assum irule >> simp[]) >>
   `dead_bytes (update_storage (n2w key) value st) (w2n slot) tv j b <=>
    dead_bytes st (w2n slot) tv j b` by
     (irule (cj 1 dead_bytes_frame) >> rpt strip_tac >>
      irule disjoint_word_update_lookup >>
      qexistsl_tac [`w2n slot`, `type_slot_size tv`] >> simp[]) >>
-  qexistsl_tac [`mid`, `n`, `subs`, `slot`, `tv`] >>
-  gvs[pairTheory.PAIR_EQ] >> rpt strip_tac >>
-  first_x_assum irule >> simp[] >> metis_tac[]
+  simp[] >> qexistsl_tac [`slot`, `tv`] >> simp[]
 QED
 
 Theorem update_storage_lookup_other[local]:
@@ -800,13 +806,13 @@ QED
    when the region fits the slot space; otherwise no region has dead
    bytes. *)
 Theorem storage_dead_update_in_region:
-  !cx mid n subs tr k0 tv0 k u st.
-    declared_storage_region cx mid n subs = SOME (tr, k0, tv0) /\
+  !tr k0 tv0 k u st.
+    MEM (tr,k0,tv0) (FST H) /\
     (w2n k0 + type_slot_size tv0 <= dimword (:256) ==>
      w2n k0 <= w2n k /\ w2n k < w2n k0 + type_slot_size tv0 /\
      !j b. dead_bytes (update_storage k u st) (w2n k0) tv0 j b <=>
            dead_bytes st (w2n k0) tv0 j b) ==>
-    storage_dead cx tr (update_storage k u st) = storage_dead cx tr st
+    storage_dead H tr (update_storage k u st) = storage_dead H tr st
 Proof
   rpt gen_tac >> strip_tac >>
   simp[FUN_EQ_THM] >> map_every qx_gen_tac [`j`, `b`] >>
@@ -814,18 +820,18 @@ Proof
   (rename1 `dead_bytes _ (w2n slot) tv' j b` >>
    `w2n k0 + type_slot_size tv0 <= dimword (:256)` by
      (Cases_on `(slot, tv') = (k0, tv0)` >- gvs[] >>
-      qpat_x_assum `!mid'' n'' subs'' slot'' tv''. _`
-        (qspecl_then [`mid`, `n`, `subs`, `k0`, `tv0`] mp_tac) >>
+      qpat_x_assum `!slot'' tv''. _`
+        (qspecl_then [`k0`, `tv0`] mp_tac) >>
       simp[vyperStorageFrameTheory.ranges_disjoint_def]) >>
    qpat_x_assum `_ ==> _` drule >> strip_tac >>
-   qexistsl_tac [`mid'`, `n'`, `subs'`, `slot`, `tv'`] >>
-   rpt conj_tac >> TRY (first_assum ACCEPT_TAC) >>
+   simp[] >> qexistsl_tac [`slot`, `tv'`] >>
+   asm_rewrite_tac[] >>
    Cases_on `(slot, tv') = (k0, tv0)` >- gvs[] >>
    `ranges_disjoint (w2n slot) (type_slot_size tv') (w2n k) 1` by
      (irule ranges_disjoint_within >>
       qexistsl_tac [`w2n k0`, `type_slot_size tv0`] >> simp[] >>
-      qpat_x_assum `!mid'' n'' subs'' slot'' tv''. _`
-        (qspecl_then [`mid`, `n`, `subs`, `k0`, `tv0`] mp_tac) >>
+      qpat_x_assum `!slot'' tv''. _`
+        (qspecl_then [`k0`, `tv0`] mp_tac) >>
       simp[]) >>
    `(dead_bytes (update_storage k u st) (w2n slot) tv' j b <=>
      dead_bytes st (w2n slot) tv' j b)` by
@@ -838,13 +844,13 @@ QED
 (* A write to a one-slot declared region leaves the dead bytes where they
    were: a one-slot value has none. *)
 Theorem storage_dead_update_word_region:
-  !cx mid n subs tr k tv v st.
-    declared_storage_region cx mid n subs = SOME (tr, k, tv) /\
+  !tr k tv v st.
+    MEM (tr,k,tv) (FST H) /\
     type_slot_size tv = 1 ==>
-    storage_dead cx tr (update_storage k v st) = storage_dead cx tr st
+    storage_dead H tr (update_storage k v st) = storage_dead H tr st
 Proof
   rpt strip_tac >> irule storage_dead_update_in_region >>
-  qexistsl_tac [`k`, `mid`, `n`, `subs`, `tv`] >> simp[] >>
+  qexistsl_tac [`k`, `tv`] >> simp[] >>
   rpt strip_tac >> eq_tac >> strip_tac >>
   drule (cj 1 dead_bytes_range) >> simp[]
 QED
@@ -883,14 +889,14 @@ QED
 (* A write to a one-slot field of a storage struct leaves the dead bytes
    where they were. *)
 Theorem storage_dead_update_struct_word_field:
-  !cx mid n tr k fs fld off ftv u st.
-    declared_storage_region cx mid n [] = SOME (tr, k, StructTV fs) /\
+  !tr k fs fld off ftv u st.
+    MEM (tr,k,StructTV fs) (FST H) /\
     struct_field_slot fs fld = SOME (off, ftv) /\ type_slot_size ftv = 1 ==>
-    storage_dead cx tr (update_storage (k + n2w off) u st) =
-    storage_dead cx tr st
+    storage_dead H tr (update_storage (k + n2w off) u st) =
+    storage_dead H tr st
 Proof
   rpt strip_tac >> irule storage_dead_update_in_region >>
-  qexistsl_tac [`k`, `mid`, `n`, `[]`, `StructTV fs`] >> simp[] >>
+  qexistsl_tac [`k`, `StructTV fs`] >> simp[] >>
   strip_tac >>
   drule struct_field_slot_end_bound >> strip_tac >>
   `w2n k + off < dimword (:256)` by
@@ -905,7 +911,7 @@ QED
 (* Agreeing accounts differ at most in the running contract's storage. *)
 Theorem accounts_agree_lookup:
   !cx a1 a2 addr.
-    accounts_agree cx a1 a2 ==>
+    accounts_agree H cx a1 a2 ==>
     (lookup_account addr a2).balance = (lookup_account addr a1).balance /\
     (lookup_account addr a2).code = (lookup_account addr a1).code /\
     (lookup_account addr a2).nonce = (lookup_account addr a1).nonce
@@ -940,68 +946,39 @@ Proof
   >- metis_tac[dyn_bytes_dead_update_zero]
   >- metis_tac[dyn_bytes_dead_update_zero]
   >- (qexists_tac `i` >> simp[])
-  >- (qexists_tac `i` >> simp[] >>
-      rename1 `lookup_storage (n2w start) st` >>
-      Cases_on `k = n2w start`
-      >- (gvs[lookup_storage_def, update_storage_def,
-              combinTheory.APPLY_UPDATE_THM] >>
-          qpat_x_assum `if _ then _ else _` mp_tac >>
-          IF_CASES_TAC >> simp[] >> strip_tac >>
-          drule (cj 1 dead_bytes_range) >>
-          simp[arithmeticTheory.LEFT_ADD_DISTRIB,
-               arithmeticTheory.RIGHT_ADD_DISTRIB]) >>
-      qpat_x_assum `if _ then _ else _` mp_tac >>
-      IF_CASES_TAC >> strip_tac >>
-      gvs[lookup_storage_def, update_storage_def,
-          combinTheory.APPLY_UPDATE_THM])
+  >- (qexists_tac `i` >> simp[])
   >> metis_tac[]
 QED
 
 (* Writing a zero word kills no dead byte: a zero length leaves at least as
    many bytes dead as any other. *)
 Theorem storage_dead_update_zero:
-  !cx tr st k j b.
-    storage_dead cx tr st j b ==>
-    storage_dead cx tr (update_storage k 0w st) j b
+  !tr st k j b.
+    storage_dead H tr st j b ==>
+    storage_dead H tr (update_storage k 0w st) j b
 Proof
   rw[storage_dead_def] >>
-  qexistsl_tac [`mid`, `n`, `subs`, `slot`, `tv`] >>
-  simp[] >> conj_tac >- first_assum ACCEPT_TAC >>
+  qexistsl_tac [`slot`, `tv`] >>
+  simp[] >>
   irule (cj 1 dead_bytes_update_zero) >> simp[]
 QED
 
 (* ===== The context ===== *)
 
-(* The dead bytes depend on the context only through its sources, layouts
-   and running contract. *)
-Theorem storage_dead_cx_cong:
-  !cx cx'.
-    cx'.sources = cx.sources /\ cx'.layouts = cx.layouts /\
-    cx'.txn.target = cx.txn.target ==>
-    storage_dead cx' = storage_dead cx
-Proof
-  rw[FUN_EQ_THM, storage_dead_def,
-     vyperStorageLayoutSafetyTheory.declared_storage_region_def,
-     vyperContextTheory.get_module_code_def,
-     vyperStateTheory.lookup_var_slot_from_layout_def,
-     vyperContextTheory.get_tenv_def]
-QED
-
 Theorem agree_cx_cong:
   !cx cx'.
-    cx'.sources = cx.sources /\ cx'.layouts = cx.layouts /\
     cx'.txn.target = cx.txn.target ==>
-    accounts_agree cx' = accounts_agree cx /\
-    transient_agree cx' = transient_agree cx /\
-    request_agree cx' = request_agree cx
+    accounts_agree H cx' = accounts_agree H cx /\
+    transient_agree H cx' = transient_agree H cx /\
+    request_agree H cx' = request_agree H cx
 Proof
-  rpt strip_tac >> drule storage_dead_cx_cong >> strip_tac >>
+  rpt strip_tac >>
   simp[FUN_EQ_THM, accounts_agree_def, transient_agree_def,
        request_agree_def]
 QED
 
 (* A field of a value read live is read live. *)
-Theorem dead_bytes_fields_selected[local]:
+Theorem dead_bytes_fields_selected:
   !fs id foff ftv st base j b.
     struct_field_slot fs id = SOME (foff,ftv) /\
     dead_bytes_fields st base fs j b /\
@@ -1029,11 +1006,172 @@ Proof
   impl_tac >- (simp[] >> decide_tac) >> simp[]
 QED
 
+Theorem dead_bytes_array_selected:
+  !n raw base tv j b i. (?h:num. h < n /\ dead_bytes raw ((base:num) + h * type_slot_size tv) tv j b) /\
+  base + i * type_slot_size tv <= j /\
+  j < base + i * type_slot_size tv + type_slot_size tv ==>
+  dead_bytes raw (base + i * type_slot_size tv) tv j b
+Proof
+  rpt gen_tac >> strip_tac >>
+  `h = i` suffices_by (strip_tac >> gvs[]) >>
+  drule (cj 1 dead_bytes_range) >> strip_tac >>
+  Cases_on `h < i`
+  >- (`h * type_slot_size tv + type_slot_size tv <= i * type_slot_size tv` by
+        (irule vyperLookupStorageTheory.array_index_element_end_bound >> simp[]) >>
+      decide_tac) >>
+  Cases_on `i < h`
+  >- (`i * type_slot_size tv + type_slot_size tv <= h * type_slot_size tv` by
+        (irule vyperLookupStorageTheory.array_index_element_end_bound >> simp[]) >>
+      decide_tac) >> decide_tac
+QED
+
+Theorem dead_bytes_list_el:
+  !tvs k st base j b.
+    dead_bytes_list st base tvs j b /\ k < LENGTH tvs /\
+    base + tuple_prefix_slot_size k tvs <= j /\
+    j < base + tuple_prefix_slot_size k tvs + type_slot_size (EL k tvs) ==>
+    dead_bytes st (base + tuple_prefix_slot_size k tvs) (EL k tvs) j b
+Proof
+  Induct >> simp[] >> rpt gen_tac >> strip_tac >>
+  qpat_x_assum `dead_bytes_list _ _ _ _ _` mp_tac >>
+  simp[Once dead_bytes_def] >> strip_tac >>
+  Cases_on `k` >> gvs[tuple_prefix_slot_size_def] >>
+  imp_res_tac (cj 1 dead_bytes_range) >>
+  imp_res_tac (cj 2 dead_bytes_range) >> gvs[] >>
+  first_x_assum drule >> disch_then (qspec_then `n` mp_tac) >>
+  impl_tac >- decide_tac >> rewrite_tac[arithmeticTheory.ADD_ASSOC]
+QED
+
+Theorem storage_subregion_dead_bytes:
+  !root path delta leaf. storage_subregion root path delta leaf ==>
+    !raw off j b. off + delta <= j /\
+      j < off + delta + type_slot_size leaf /\ dead_bytes raw off root j b ==>
+      dead_bytes raw (off + delta) leaf j b
+Proof
+  ho_match_mp_tac storage_subregion_ind >> rpt conj_tac >>
+  rpt gen_tac >> rpt strip_tac >>
+  qpat_x_assum `storage_subregion _ _ _ _` mp_tac >>
+  simp_tac (srw_ss()) [Once storage_subregion_def] >> strip_tac >>
+  rpt BasicProvers.VAR_EQ_TAC >> asm_rewrite_tac [] >>
+  FIRST [rename1 `dead_bytes _ _ (ArrayTV _ (Fixed _)) _ _` >> suspend "Fixed",
+         rename1 `dead_bytes _ _ (ArrayTV _ (Dynamic _)) _ _` >> suspend "Dynamic",
+         rename1 `dead_bytes _ _ (StructTV _) _ _` >> suspend "Struct",
+         rename1 `dead_bytes _ _ (TupleTV _) _ _` >> suspend "Tuple"]
+QED
+
+Resume storage_subregion_dead_bytes[Fixed]:
+  RESUME_TAC >>
+  drule storage_subregion_bounds >> strip_tac >>
+  `dead_bytes raw (off + Num i * type_slot_size root) root j b` by
+    (irule dead_bytes_array_selected >>
+     conj_tac >- (qexists_tac `n` >>
+                  qpat_x_assum `dead_bytes _ _ (ArrayTV _ _) _ _` mp_tac >>
+                  simp[Once dead_bytes_def]) >> decide_tac) >>
+  qpat_x_assum `!delta. storage_subregion _ _ _ _ ==> _`
+    (drule_then mp_tac) >>
+  disch_then (qspec_then `raw` mp_tac) >>
+  disch_then (qspec_then `off + Num i * type_slot_size root` mp_tac) >>
+  disch_then (qspecl_then [`j`,`b`] mp_tac) >>
+  asm_simp_tac bool_ss [arithmeticTheory.ADD_ASSOC] >>
+  disch_then irule >> decide_tac
+QED
+Resume storage_subregion_dead_bytes[Dynamic]:
+  RESUME_TAC >>
+  drule storage_subregion_bounds >> strip_tac >>
+  `dead_bytes raw (off + 1 + Num i * type_slot_size root) root j b` by
+    (irule dead_bytes_array_selected >>
+     conj_tac >- (qexists_tac `n` >>
+                  qpat_x_assum `dead_bytes _ _ (ArrayTV _ _) _ _` mp_tac >>
+                  simp[Once dead_bytes_def]) >> decide_tac) >>
+  qpat_x_assum `!delta. storage_subregion _ _ _ _ ==> _`
+    (drule_then mp_tac) >>
+  disch_then (qspec_then `raw` mp_tac) >>
+  disch_then (qspec_then `off + 1 + Num i * type_slot_size root` mp_tac) >>
+  disch_then (qspecl_then [`j`,`b`] mp_tac) >>
+  asm_simp_tac bool_ss [arithmeticTheory.ADD_ASSOC] >>
+  disch_then irule >> decide_tac
+QED
+Resume storage_subregion_dead_bytes[Struct]:
+  RESUME_TAC >>
+  drule storage_subregion_bounds >> strip_tac >>
+  `dead_bytes raw (off + delta') elem j b` by
+    (irule dead_bytes_fields_selected >>
+     reverse (conj_tac) >- (conj_tac >- decide_tac >>
+       qexistsl_tac [`fields`,`id`] >>
+       asm_simp_tac bool_ss [GSYM dead_bytes_def]) >> decide_tac) >>
+  qpat_x_assum `!root delta. storage_subregion _ _ _ _ ==> _`
+    (drule_then mp_tac) >>
+  disch_then (qspec_then `raw` mp_tac) >>
+  disch_then (qspec_then `off + delta'` mp_tac) >>
+  disch_then (qspecl_then [`j`,`b`] mp_tac) >>
+  asm_simp_tac bool_ss [arithmeticTheory.ADD_ASSOC] >>
+  disch_then irule >> decide_tac
+QED
+Resume storage_subregion_dead_bytes[Tuple]:
+  RESUME_TAC >>
+  drule storage_subregion_bounds >> strip_tac >>
+  gvs[listTheory.oEL_EQ_EL] >>
+  `dead_bytes raw (off + tuple_prefix_slot_size (Num i) types) (EL (Num i) types) j b` by
+    (irule dead_bytes_list_el >>
+     asm_simp_tac bool_ss [GSYM dead_bytes_def] >> decide_tac) >>
+  qpat_x_assum `!root delta. storage_subregion _ _ _ _ ==> _`
+    (drule_then mp_tac) >>
+  disch_then (qspec_then `raw` mp_tac) >>
+  disch_then (qspec_then `off + tuple_prefix_slot_size (Num i) types` mp_tac) >>
+  disch_then (qspecl_then [`j`,`b`] mp_tac) >>
+  asm_simp_tac bool_ss [AC arithmeticTheory.ADD_ASSOC arithmeticTheory.ADD_COMM] >>
+  disch_then irule >> decide_tac
+QED
+Finalise storage_subregion_dead_bytes
+
+Theorem storage_subregion_read_live:
+  storage_subregion root path delta leaf /\
+  w2n slot = w2n root_slot + delta /\
+  w2n root_slot + type_slot_size root <= dimword(:256) /\
+  storage_read_live H tr raw root_slot root ==>
+  storage_read_live H tr raw slot leaf
+Proof
+  strip_tac >> drule storage_subregion_bounds >> strip_tac >>
+  fs[storage_read_live_def] >> rpt gen_tac >> strip_tac >>
+  strip_tac >>
+  `dead_bytes raw (w2n root_slot) root j b` by
+    (first_x_assum drule >> strip_tac >>
+     first_x_assum irule >> decide_tac) >>
+  once_rewrite_tac [arithmeticTheory.ADD_COMM] >>
+  irule storage_subregion_dead_bytes >>
+  conj_tac >- decide_tac >> conj_tac >- decide_tac >>
+  goal_assum (drule_at Any) >> simp[] >> metis_tac[]
+QED
+
+(* A storage place inside a root the horizon observed is read live. *)
+Theorem storage_place_observed_read_live:
+  storage_place_observed H (StoragePlace tr slot leaf) /\
+  0 < type_slot_size leaf ==>
+  storage_read_live H tr raw slot leaf
+Proof
+  rw[storage_place_observed_def] >>
+  drule storage_subregion_bounds >> strip_tac >>
+  drule_then (qspec_then `raw` assume_tac) observed_storage_region_read_live >>
+  simp_tac bool_ss [storage_read_live_def] >> rpt gen_tac >> strip_tac >>
+  `w2n root + type_slot_size tv <= dimword (:256)` by
+    (qpat_x_assum `storage_read_live _ _ _ _ _` mp_tac >>
+     simp_tac bool_ss [storage_read_live_def] >>
+     disch_then drule >> simp[]) >>
+  `w2n (root + n2w delta) = w2n root + delta` by
+    (`delta < dimword (:256) /\ w2n root + delta < dimword (:256)` by
+       decide_tac >>
+     simp[wordsTheory.word_add_def, wordsTheory.w2n_n2w]) >>
+  `storage_read_live H tr raw (root + n2w delta) leaf` by
+    (irule storage_subregion_read_live >> metis_tac[]) >>
+  pop_assum mp_tac >> simp_tac bool_ss [storage_read_live_def] >>
+  disch_then drule >> simp[]
+QED
+
 Theorem storage_read_live_field:
-  !cx tr st w fs id foff ftv.
-    storage_read_live cx tr st w (StructTV fs) /\
+  !tr st w fs id foff ftv.
+    storage_read_live H tr st w (StructTV fs) /\
     struct_field_slot fs id = SOME (foff, ftv) ==>
-    storage_read_live cx tr st (w + n2w foff) ftv
+    storage_read_live H tr st (w + n2w foff) ftv
 Proof
   rpt gen_tac >> strip_tac >>
   drule struct_field_slot_end_bound >> strip_tac >>
@@ -1076,14 +1214,14 @@ Definition storage_range_agree_def:
 End
 
 Theorem storage_range_agree_of_live:
-  !cx tr st st' w tv.
-    storage_agree (storage_dead cx tr st) st st' /\
-    storage_read_live cx tr st w tv /\
+  !tr st st' w tv.
+    storage_agree (storage_dead H tr st) st st' /\
+    storage_read_live H tr st w tv /\
     w2n w + type_slot_size tv <= dimword (:256) ==>
     storage_range_agree st st' w tv
 Proof
   rw[storage_range_agree_def] >>
-  `~storage_dead cx tr st (w2n k) b` by
+  `~storage_dead H tr st (w2n k) b` by
     (strip_tac >> gvs[storage_read_live_def] >> first_x_assum drule >>
      simp[]) >>
   gvs[storage_agree_def]

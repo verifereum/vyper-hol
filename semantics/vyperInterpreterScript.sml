@@ -6,6 +6,7 @@ Ancestors
   vfmExecution[ignore_grammar] vyperAST vyperGetter vyperABI
   vyperMisc vyperNsidFmap vyperValue vyperValueOperation vyperStorage vyperContext vyperState
   vyperEvent vyperEvmBoundary vyperCreate vyperRuntimeAccounts
+  vyperSubscriptOverlap
 Libs
   cv_transLib wordsLib intLib monadsyntax
 
@@ -397,6 +398,25 @@ Definition remcode_def:
       FILTER (λ((src_id, fn), ss). ¬MEM (src_id, fn) cx.stk)
         (FLAT (MAP (λ(src_id, ts). module_fns src_id ts) mods))
 End
+
+(* Whether array subscript e1[e2] reads its base before evaluating its index:
+   the index could resize a dynamic array the base was derived from. *)
+Definition subscript_reads_base_def:
+  subscript_reads_base cx e1 e2 =
+    subscript_overlap
+      (case ALOOKUP cx.sources cx.txn.target of NONE => [] | SOME mods => mods)
+      e1 e2
+End
+
+val () = cv_auto_trans subscript_reads_base_def;
+
+Theorem subscript_reads_base_through_dynarray:
+  subscript_reads_base cx e1 e2 ⇒
+  is_ArrayT (expr_type e1) ∧ base_through_dynarray e1
+Proof
+  rw[subscript_reads_base_def] >> drule subscript_overlap_through_dynarray >>
+  simp[]
+QED
 
 (* these helpers are also for termination, to enable HOL4's definition machinery
 * to "see through" the state-exception monad when constructing the termination
@@ -1013,6 +1033,8 @@ Definition eval_raw_call_def:
         emitted_logs <<- FST result4; deletions <<- SND result4;
         update_accounts (K accounts');
         update_transient (K tStorage');
+        (if success /\ ~flags.rcf_is_static then record_storage_backend
+         else return ());
         append_logs emitted_logs;
         update_pending_deletions (APPEND deletions);
         return (success, returnData)
@@ -1043,6 +1065,7 @@ Proof
        assert_def, return_def, raise_def, get_accounts_def,
        get_transient_storage_def, lift_option_def, update_accounts_def,
        update_transient_def, append_logs_def, update_pending_deletions_def,
+       record_storage_backend_def, record_storage_event_def,
        UNCURRY, COND_RATOR,
        option_CASE_rator, prod_CASE_rator, sum_CASE_rator, AllCaseEqs()] >>
   rpt strip_tac >> gvs[] >>
@@ -1121,6 +1144,7 @@ Definition eval_ext_call_effects_def:
           (if success then return () else raise $ Error $ RevertData returnData);
           update_accounts (K accounts');
           update_transient (K tStorage');
+          (if IS_SOME value_opt then record_storage_backend else return ());
           append_logs emitted_logs;
           update_pending_deletions (APPEND deletions);
           return returnData
@@ -1219,6 +1243,7 @@ Definition eval_send_def:
       check success "send failed";
       update_accounts (K accounts');
       update_transient (K tStorage');
+      record_storage_backend;
       append_logs emitted_logs;
       update_pending_deletions (APPEND deletions);
       return $ Value $ NoneV
@@ -1244,6 +1269,7 @@ val () = eval_send_def
    Uses monadic transient storage accessors for cv_auto_trans compatibility. *)
 Definition acquire_nonreentrant_lock_def:
   acquire_nonreentrant_lock (addr : address) (slot : num) (is_view : bool) = do
+    record_storage_event (StorageLock slot);
     tStore <- get_transient_storage;
     current <<- vfmState$lookup_storage (n2w slot)
                   (vfmExecution$lookup_transient_storage addr tStore);
@@ -1266,6 +1292,7 @@ val () = acquire_nonreentrant_lock_def
 (* Release the reentrancy lock *)
 Definition release_nonreentrant_lock_def:
   release_nonreentrant_lock (addr : address) (slot : num) = do
+    record_storage_event (StorageLock slot);
     tStore <- get_transient_storage;
     update_transient
       (vfmExecution$update_transient_storage addr
@@ -1323,6 +1350,31 @@ Theorem precompile_call_success_not_builtin[simp]:
   ~precompile_builtin bt ==> precompile_call_success bt = return ()
 Proof
   simp[FUN_EQ_THM, precompile_call_success_def]
+QED
+
+(* The x.code source of slice(x.code, start, len): its type and address x.
+   Such a slice evaluates start and len before x (see evaluate_def). *)
+Definition code_slice_source_def[simp]:
+  code_slice_source (Slice n) [Builtin ct (Acc Code) [addr]; start; len] =
+    SOME (ct, addr) ∧
+  code_slice_source _ _ = NONE
+End
+
+val () = cv_auto_trans code_slice_source_def;
+
+Theorem code_slice_source_SOME:
+  code_slice_source bt es = SOME (ct, addr) ⇔
+  ∃n start len. bt = Slice n ∧ es = [Builtin ct (Acc Code) [addr]; start; len]
+Proof
+  qid_spec_tac ‘es’ >> qid_spec_tac ‘bt’ >>
+  ho_match_mp_tac code_slice_source_ind >> simp[]
+QED
+
+Theorem code_slice_source_NONE[simp]:
+  LENGTH es ≠ 3 ⇒ code_slice_source bt es = NONE
+Proof
+  qid_spec_tac ‘es’ >> qid_spec_tac ‘bt’ >>
+  ho_match_mp_tac code_slice_source_ind >> simp[]
 QED
 
 Definition is_view_mut_def[simp]:
@@ -1641,6 +1693,10 @@ Definition evaluate_def:
   od ∧
   eval_expr cx (Subscript _ e1 e2) = do
     res <- eval_expr cx e1;
+    res <- (if subscript_reads_base cx e1 e2 then do
+              v <- read_result cx res;
+              return (Value v)
+            od else return res);
     idx <- eval_expr cx e2;
     v <- read_result cx idx;
     select_result cx (expr_type e1) res (ValueSubscript v)
@@ -1663,7 +1719,17 @@ Definition evaluate_def:
       lift_sum $ evaluate_membership tv (bt = Bop NotIn) (EL 0 vs) (EL 1 vs)
     od else if bt = Env MsgGas then next_gas_reading
     else do
-      vs <- eval_exprs cx es;
+      vs <- (case code_slice_source bt es of
+        SOME (code_ty, addr) => do
+          tail_vs <- eval_exprs cx (TL es);
+          addr_vs <- eval_exprs cx [addr];
+          code_acc <- get_accounts;
+          code_v <- lift_sum $ evaluate_code_source cx code_acc
+                                 (is_self_addr addr) code_ty (expr_type addr)
+                                 addr_vs;
+          return (code_v :: tail_vs)
+        od
+      | NONE => eval_exprs cx es);
       acc <- get_accounts;
       v <- lift_sum $ evaluate_builtin cx acc ty bt (MAP expr_type es) vs;
       precompile_call_success bt;
@@ -1689,9 +1755,10 @@ Definition evaluate_def:
   eval_expr cx (Call _ (ExtCall is_static skip_check sig opts) es _) = do
     target <- eval_exprs cx (TAKE 1 es);
     nargs <<- LENGTH (FST (SND sig));
-    results <- eval_expr_results cx (TAKE nargs (DROP 1 es));
+    (* Each argument is read as it is evaluated, before later arguments and
+       the keyword operands run (Vyper 0.5.0b1 snapshot_value_for_delayed_use). *)
+    vs <- eval_exprs cx (TAKE nargs (DROP 1 es));
     kwargs <- eval_exprs cx (DROP (1 + nargs) es);
-    vs <- read_results cx results;
     eval_ext_call cx is_static skip_check sig opts (target ++ vs ++ kwargs)
   od ∧
   eval_expr cx (Call _ (IntCall (src_id_opt, fn)) es _) = do
@@ -1705,7 +1772,9 @@ Definition evaluate_def:
     ret <<- FST $ sstup2; body <<- SND $ sstup2;
     type_check (LENGTH es ≤ LENGTH args ∧
            LENGTH args - LENGTH es ≤ LENGTH dflts) "IntCall args length";
-    results <- eval_expr_results cx es;
+    (* Each argument is read as it is evaluated, before later arguments run
+       (Vyper 0.5.0b1 snapshot_value_for_delayed_use). *)
+    vs <- eval_exprs cx es;
     needed_dflts <<- DROP (LENGTH dflts - (LENGTH args - LENGTH es)) dflts;
     cxd <<- cx with stk updated_by CONS (src_id_opt, fn);
     prev <- get_scopes;
@@ -1714,7 +1783,6 @@ Definition evaluate_def:
           eval_exprs cxd needed_dflts
        od)
       (set_scopes prev);
-    vs <- read_results cx results;
     (* Use combined type env (may reference types from other modules) *)
     all_tenv <<- get_tenv cx;
     env <- lift_option_type (bind_arguments all_tenv args (vs ++ dflt_vs)) "IntCall bind_arguments";
@@ -1901,6 +1969,8 @@ Termination
     >> irule LESS_EQ_LESS_TRANS
     >> qexists_tac `LENGTH vs + n * x + 1` >> simp[]
     >> PROVE_TAC[MULT_COMM, LESS_MONO_MULT])
+  >>~- ([`code_slice_source _ _ = SOME _`],
+    gvs[code_slice_source_SOME, bound_def])
   >>~- ([`builtin_args_length_ok`],
     gvs[builtin_args_length_ok_def, check_def, type_check_def, assert_def,
         LENGTH_EQ_NUM_compute, bound_def])
@@ -2075,6 +2145,7 @@ Definition initial_state_def:
    ; outcomes := NONE
    ; requests := []
    ; gas_obs := []
+   ; storage_trace := []
    |>
 End
 
@@ -2123,19 +2194,27 @@ val () = cv_auto_trans merge_constants_def;
    Previously-evaluated constants are merged into am.immutables so that
    top-level lookups find them (constants and immutables share the same
    runtime storage). *)
-Definition constants_env_def:
-  constants_env _ _ _ _ [] acc = SOME acc ∧
-  constants_env cx am addr src_id_opt ((VariableDecl vis (Constant e) id typ _)::ts) acc =
+Definition constants_env_trace_def:
+  constants_env_trace _ _ _ _ [] acc = (SOME acc, []) ∧
+  constants_env_trace cx am addr src_id_opt ((VariableDecl vis (Constant e) id typ _)::ts) acc =
     (case evaluate_type (get_tenv cx) typ of
-     | NONE => NONE
+     | NONE => (NONE, [])
      | SOME tv =>
-       case FST $ (do res <- eval_expr cx e; read_result cx res od)
-         (initial_state (merge_constants addr src_id_opt acc am) [FEMPTY]) of
-       | INL v => constants_env cx am addr src_id_opt ts $
-                          acc |+ (id, (tv, v))
-       | _ => NONE) ∧
-  constants_env cx am addr src_id_opt (t::ts) acc =
-    constants_env cx am addr src_id_opt ts acc
+       let (res, st) = (do res <- eval_expr cx e; read_result cx res od)
+         (initial_state (merge_constants addr src_id_opt acc am) [FEMPTY]) in
+       case res of
+       | INL v =>
+           let (result, observations) = constants_env_trace cx am addr src_id_opt ts
+                 (acc |+ (id, (tv, v))) in
+           (result, st.storage_trace ++ observations)
+       | _ => (NONE, st.storage_trace)) ∧
+  constants_env_trace cx am addr src_id_opt (t::ts) acc =
+    constants_env_trace cx am addr src_id_opt ts acc
+End
+
+Definition constants_env_def:
+  constants_env cx am addr src_id_opt ts acc =
+    FST (constants_env_trace cx am addr src_id_opt ts acc)
 End
 
 (* Set current_module to a given src_id_opt while evaluating constant
@@ -2178,15 +2257,22 @@ QED
 
 (* Evaluate the constants of the given modules, in list order, and merge
    them into am.immutables. *)
-Definition evaluate_module_constants_def:
-  evaluate_module_constants cx am addr [] = SOME am ∧
-  evaluate_module_constants cx am addr ((src_id_opt, ts) :: rest) =
-    case constants_env (set_current_module cx src_id_opt)
-                       am addr src_id_opt ts FEMPTY of
-    | NONE => NONE
+Definition evaluate_module_constants_trace_def:
+  evaluate_module_constants_trace cx am addr [] = (SOME am, []) ∧
+  evaluate_module_constants_trace cx am addr ((src_id_opt, ts) :: rest) =
+    let (result, observations) = constants_env_trace (set_current_module cx src_id_opt)
+                                  am addr src_id_opt ts FEMPTY in
+    case result of
+    | NONE => (NONE, observations)
     | SOME cenv =>
         let am' = merge_constants addr src_id_opt cenv am in
-        evaluate_module_constants cx am' addr rest
+        let (result', observations') = evaluate_module_constants_trace cx am' addr rest in
+        (result', observations ++ observations')
+End
+
+Definition evaluate_module_constants_def:
+  evaluate_module_constants cx am addr mods =
+    FST (evaluate_module_constants_trace cx am addr mods)
 End
 
 (* Evaluate constants for all modules, imports first (constants_order), and
@@ -2291,29 +2377,34 @@ Proof
 QED
 
 
-Definition call_external_function_def:
-  call_external_function orc gobs am cx nr mut ts all_mods args dflts vals body ret =
+(* Retain the live entry trace before rollback or machine projection. *)
+Definition call_external_function_trace_def:
+  call_external_function_trace orc gobs am cx nr mut ts all_mods args dflts vals body ret =
   let all_tenv = type_env_all_modules all_mods in
   let n_provided = LENGTH vals in
   let n_expected = LENGTH args in
   let n_missing = n_expected - n_provided in
   if n_provided > n_expected ∨ n_missing > LENGTH dflts then
-    (INR $ Error (RuntimeError "call args length"), am, [])
+    (INR $ Error (RuntimeError "call args length"), am, [], [])
   else
   let needed_dflts = DROP (LENGTH dflts - n_missing) dflts in
-  (case (if cx.in_deploy then evaluate_all_constants cx am cx.txn.target all_mods
-         else SOME am)
-   of NONE => (INR $ Error (RuntimeError "call constants_env"), am, [])
+  let (constants, constant_trace) =
+    if cx.in_deploy then evaluate_module_constants_trace cx am cx.txn.target
+                           (constants_order all_mods)
+    else (SOME am, []) in
+  (case constants
+   of NONE => (INR $ Error (RuntimeError "call constants_env"), am, [], constant_trace)
     | SOME am_c =>
    let st = initial_state am_c [FEMPTY] with
-              <| outcomes := orc; requests := []; gas_obs := gobs |> in
+              <| outcomes := orc; requests := []; gas_obs := gobs;
+                 storage_trace := constant_trace |> in
    let srcs = am_c.sources in
    let exps = am_c.exports in
    let layouts = am_c.layouts in
    let is_view = is_view_mut mut in
    let lock_action = lock_if_nr cx nr is_view in
    let unlock_action = unlock_if_nr cx nr is_view in
-   let (res, am_out, rqs) =
+   let (res, am_out, rqs, observations) =
      (case do
         send_call_value mut cx;
         dflt_vs <- eval_external_defaults cx needed_dflts;
@@ -2326,23 +2417,32 @@ Definition call_external_function_def:
       of
        | (INL (), st) =>
            (case unlock_action st of
-            | (INL (), st) => (INL NoneV, abstract_machine_from_state srcs exps layouts st, st.requests)
-            | (INR e, st) => (INR e, am, st.requests))
+            | (INL (), st) => (INL NoneV, abstract_machine_from_state srcs exps layouts st,
+                               st.requests, st.storage_trace)
+            | (INR e, st) => (INR e, am, st.requests, st.storage_trace))
        | (INR (ReturnException v), st) =>
            (case unlock_action st of
             | (INL (), st) =>
               (let am_ret = abstract_machine_from_state srcs exps layouts st in
                case evaluate_type all_tenv ret
-               of NONE => (INR (Error (TypeError "eval ret")), am, st.requests)
+               of NONE => (INR (Error (TypeError "eval ret")), am, st.requests, st.storage_trace)
                 | SOME tv =>
                case safe_cast tv v
-               of NONE => (INR (Error (TypeError "ext cast ret")), am, st.requests)
-                | SOME v => (INL v, am_ret, st.requests))
-            | (INR e, st) => (INR e, am, st.requests))
+               of NONE => (INR (Error (TypeError "ext cast ret")), am, st.requests, st.storage_trace)
+                | SOME v => (INL v, am_ret, st.requests, st.storage_trace))
+            | (INR e, st) => (INR e, am, st.requests, st.storage_trace))
        | (INR HaltException, st) =>
-           (INR HaltException, abstract_machine_from_state srcs exps layouts st, st.requests)
-       | (INR e, st) => (INR e, am, st.requests)) in
-    (res, am_out, rqs (* transient storage cleared separately via ClearTransientStorage action *)))
+           (INR HaltException, abstract_machine_from_state srcs exps layouts st,
+            st.requests, st.storage_trace)
+       | (INR e, st) => (INR e, am, st.requests, st.storage_trace)) in
+    (res, am_out, rqs, observations))
+End
+
+Definition call_external_function_def:
+  call_external_function orc gobs am cx nr mut ts all_mods args dflts vals body ret =
+    case call_external_function_trace orc gobs am cx nr mut ts all_mods
+           args dflts vals body ret of
+      (res, am_out, rqs, observations) => (res, am_out, rqs)
 End
 
 (* Lookup function, checking exports first for external calls *)
@@ -2413,29 +2513,51 @@ Proof
   simp[finalize_pending_deletions_def]
 QED
 
-Definition call_external_def:
-  call_external orc gobs am tx =
+Definition call_external_trace_def:
+  call_external_trace orc gobs am tx =
   (* Determine which module to use for type environment *)
   let src_id_opt = find_function_module am tx.target tx.function_name in
   let cx = initial_evaluation_context am.sources am.layouts tx src_id_opt in
   (* Get all modules for this contract (needed for combined type_env) *)
   case ALOOKUP am.sources tx.target of
-    NONE => (INR $ Error (RuntimeError "call get sources"), am, [])
+    NONE => (INR $ Error (RuntimeError "call get sources"), am, [], [])
   | SOME all_mods =>
   case (case src_id_opt of
           NONE => get_self_code cx
         | SOME src_id => get_module_code cx (SOME src_id))
-  of NONE => (INR $ Error (RuntimeError "call get_self_code"), am, [])
+  of NONE => (INR $ Error (RuntimeError "call get_self_code"), am, [], [])
    | SOME ts =>
   case lookup_exported_function cx am tx.function_name
-  of NONE => (INR $ Error (RuntimeError "call lookup_function"), am, [])
+  of NONE => (INR $ Error (RuntimeError "call lookup_function"), am, [], [])
    | SOME (mut, nr, args, dflts, ret, body) =>
-       case call_external_function orc gobs am cx nr mut ts all_mods args dflts tx.args body ret of
-         (INL value, am', rqs) => (INL value, finalize_pending_deletions am', rqs)
-       | (INR HaltException, am', rqs) =>
-           (INR HaltException, finalize_pending_deletions am', rqs)
+       case call_external_function_trace orc gobs am cx nr mut ts all_mods args dflts tx.args body ret of
+         (INL value, am', rqs, observations) =>
+           (INL value, finalize_pending_deletions am', rqs, observations)
+       | (INR HaltException, am', rqs, observations) =>
+           (INR HaltException, finalize_pending_deletions am', rqs, observations)
        | failure => failure
 End
+
+Definition call_external_def:
+  call_external orc gobs am tx =
+    case call_external_trace orc gobs am tx of
+      (res, am_out, rqs, observations) => (res, am_out, rqs)
+End
+
+Definition source_storage_trace_def:
+  source_storage_trace am tx os gobs =
+    case call_external_trace (SOME os) gobs am tx of
+      (res, am_out, rqs, observations) => observations
+End
+
+(* The public call and its storage contract use this exact traced execution. *)
+Theorem call_external_trace_result:
+  call_external_trace (SOME os) gobs am tx = (res,am',rqs,observations) ==>
+  call_external (SOME os) gobs am tx = (res,am',rqs) /\
+  source_storage_trace am tx os gobs = observations
+Proof
+  simp[call_external_def, source_storage_trace_def]
+QED
 
 (* KEY LEMMA (typing): a safe_cast value of a bytestring type always has raw
    bytes, so external_returndata's error branch is unreachable for a well-typed
@@ -2474,26 +2596,32 @@ End
    lookup_function's synthetic empty payable constructor, so it follows this
    same path, including constant evaluation and deployment value transfer.  The
    NONE case below is defensive and unreachable for finite declaration lists. *)
-Definition load_contract_def:
-  load_contract orc gobs am tx mods exps =
+Definition load_contract_trace_def:
+  load_contract_trace orc gobs am tx mods exps =
   let addr = tx.target in
   let ts = case ALOOKUP mods NONE of SOME ts => ts | NONE => [] in
   let tenv = type_env_all_modules mods in
   case initial_immutables tenv mods of
-  | NONE => INR $ Error (TypeError "load_contract: evaluate_type failed")
+  | NONE => (INR $ Error (TypeError "load_contract: evaluate_type failed"), [])
   | SOME imms =>
   let am = am with <| immutables updated_by CONS (addr, imms);
                       exports updated_by CONS (addr, exps) |> in
   case lookup_function NONE tx.function_name Deploy ts of
-     | NONE => INR $ Error (RuntimeError "no constructor")
+     | NONE => (INR $ Error (RuntimeError "no constructor"), [])
      | SOME (mut, nr, args, dflts, ret, body) =>
        let cx = (initial_evaluation_context ((addr,mods)::am.sources) am.layouts
                   (tx with created_in_tx := T) NONE)
                 with in_deploy := T in
-       case call_external_function orc gobs am cx nr mut ts mods args dflts tx.args body ret
-         of (INR HaltException, am', rqs) =>
-              INL (finalize_pending_deletions am', rqs)
-          | (INR e, _, _) => INR e
-          | (_, am', rqs) => INL (finalize_pending_deletions
-                                    (am' with sources updated_by CONS (addr, mods)), rqs)
+       case call_external_function_trace orc gobs am cx nr mut ts mods args dflts tx.args body ret
+         of (INR HaltException, am', rqs, observations) =>
+              (INL (finalize_pending_deletions am', rqs), observations)
+          | (INR e, _, _, observations) => (INR e, observations)
+          | (_, am', rqs, observations) =>
+              (INL (finalize_pending_deletions
+                      (am' with sources updated_by CONS (addr, mods)), rqs), observations)
+End
+
+Definition load_contract_def:
+  load_contract orc gobs am tx mods exps =
+    FST (load_contract_trace orc gobs am tx mods exps)
 End

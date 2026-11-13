@@ -45,6 +45,7 @@ Theorem subscript_array_framed_memory_ptr:
   !cx ann e1 e2 d PG tops ctx func cenv env ty es et n.
     (!s res t. eval_expr cx e1 s = (INL res,t) ==> body_expr_ptr_ok cx e2) /\
     body_expr_ptr_ok cx e1 /\ body_inv tops ctx cenv cx /\
+    ~subscript_reads_base cx e1 e2 /\ ~copies_subscript_base cenv e1 e2 /\
     expr_body_pre cenv cx env (Subscript ann e1 e2) es /\
     expr_type e1 = ArrayT et (Fixed n) /\
     place_type cenv e1 = ValPT (ArrayT et (Fixed n)) /\
@@ -122,7 +123,8 @@ Resume subscript_array_framed_memory_ptr[base_normal]:
    (!x sz. cenv.ce_return_pc = SOME (PtrVar (Var x) sz) ==> not_fresh_at sm x)` by
     metis_tac[not_fresh_at_mono, ci_mono_def] >>
   pure_rewrite_tac[GSYM gas_outcome_ptr_def] >>
-  irule fixed_array_after_base_ptr >> simp[] >>
+  qpat_assum `~subscript_reads_base _ _ _`
+    (irule o MATCH_MP fixed_array_after_base_ptr) >> simp[] >>
   goal_assum (drule_at (Pat `gas_marked_exec_ptr _ _ _ _ _ _ _ _ _ _ _`)) >>
   goal_assum (drule_at (Pat `lower_value _ _ _ _ _ = _`)) >> simp[] >>
   suspend "callback"
@@ -169,13 +171,15 @@ Resume subscript_array_framed_memory_ptr[base_exit]:
   rename1 `INR exc` >> qexists_tac `marks` >> disj1_tac >>
   simp[gas_summary_ptr_at_marked] >>
   qexistsl_tac [`INR exc`,`es_end`,`G`,`tn`,`r`] >> simp[] >>
-  pure_once_rewrite_tac[eval_expr_subscript_bind] >>
+  qpat_assum `~subscript_reads_base _ _ _` (fn th =>
+    pure_once_rewrite_tac[MATCH_MP eval_expr_subscript_bind th]) >>
   gvs[gas_marked_exec_ptr_bind_exception]
 QED
 Resume subscript_array_framed_memory_ptr[base_exempt]:
   qexists_tac `marks` >> disj2_tac >>
   qexistsl_tac [`err`,`ee`,`leaf`,`finish'`] >>
-  pure_once_rewrite_tac[eval_expr_subscript_bind] >>
+  qpat_assum `~subscript_reads_base _ _ _` (fn th =>
+    pure_once_rewrite_tac[MATCH_MP eval_expr_subscript_bind th]) >>
   pure_rewrite_tac[ignore_bind_def, bind_assoc] >>
   irule gas_exempt_cert_error_result >> first_assum ACCEPT_TAC
 QED

@@ -141,13 +141,14 @@ QED
 Theorem lookup_global_scopes:
   !cx src n st res st'. lookup_global cx src n st = (res, st') ==> st'.scopes = st.scopes
 Proof
-  metis_tac[lookup_global_state]
+  rpt strip_tac >> drule lookup_global_state >>
+  simp[evaluation_state_component_equality]
 QED
 
 Theorem set_global_scopes:
   !cx src n v st res st'. set_global cx src n v st = (res, st') ==> st'.scopes = st.scopes
 Proof
-  rw[set_global_def, bind_def, return_def, lift_option_def, lift_option_type_def] >>
+  rw[set_global_def, bind_def, ignore_bind_def, record_storage_event_def, return_def, lift_option_def, lift_option_type_def] >>
   Cases_on `get_module_code cx src` >> gvs[return_def, raise_def] >>
   rename1 `SOME ts` >>
   Cases_on `find_var_decl_by_name n ts` >> gvs[return_def, raise_def] >>
@@ -157,8 +158,9 @@ Proof
   imp_res_tac lift_option_scopes >> gvs[] >>
   Cases_on `lookup_var_slot_from_layout cx is_tr src decl_id1` >>
   gvs[return_def, raise_def] >>
-  Cases_on `evaluate_type (get_tenv cx) typ` >> gvs[return_def, raise_def] >>
-  imp_res_tac write_storage_slot_scopes
+  Cases_on `evaluate_type (get_tenv cx) typ` >>
+  gvs[ignore_bind_def, bind_def, record_storage_event_def, return_def, raise_def] >>
+  imp_res_tac write_storage_slot_scopes >> gvs[]
 QED
 
 Theorem set_immutable_scopes:
@@ -488,7 +490,7 @@ Theorem acquire_nonreentrant_lock_scopes:
     acquire_nonreentrant_lock addr slot is_view st = (res, st') ⇒
     st'.scopes = st.scopes
 Proof
-  rw[acquire_nonreentrant_lock_def, bind_def, ignore_bind_def,
+  rw[acquire_nonreentrant_lock_def, bind_def, ignore_bind_def, record_storage_event_def,
      get_transient_storage_def, update_transient_def,
      return_def, raise_def, LET_THM]
   \\ rpt (BasicProvers.TOP_CASE_TAC \\ gvs[]) \\ simp[]
@@ -499,7 +501,7 @@ Theorem release_nonreentrant_lock_scopes:
     release_nonreentrant_lock addr slot st = (res, st') ⇒
     st'.scopes = st.scopes
 Proof
-  rw[release_nonreentrant_lock_def, bind_def, ignore_bind_def,
+  rw[release_nonreentrant_lock_def, bind_def, ignore_bind_def, record_storage_event_def,
      get_transient_storage_def, update_transient_def,
      return_def, raise_def, LET_THM]
   \\ rpt (BasicProvers.TOP_CASE_TAC \\ gvs[]) \\ simp[]

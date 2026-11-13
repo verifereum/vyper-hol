@@ -62,14 +62,13 @@ QED
    reentrancy lock: the body runs in the callee's scope, the caller's
    scopes come back, and the result is handle_function's value, cast. *)
 Theorem eval_expr_intcall_unfold:
-  ∀cx ty src fn es drv st ts mut args dflts ret body results vs st1 env rtv.
+  ∀cx ty src fn es drv st ts mut args dflts ret body vs st1 env rtv.
     ¬MEM (src, fn) cx.stk ∧
     get_module_code cx src = SOME ts ∧
     lookup_callable_function cx.in_deploy fn ts =
       SOME (mut, F, args, dflts, ret, body) ∧
     LENGTH es = LENGTH args ∧
-    eval_expr_results cx es st = (INL results, st1) ∧
-    read_results cx results st1 = (INL vs, st1) ∧
+    eval_exprs cx es st = (INL vs, st1) ∧
     bind_arguments (get_tenv cx) args vs = SOME env ∧
     evaluate_type (get_tenv cx) ret = SOME rtv ⇒
     eval_expr cx (Call ty (IntCall (src, fn)) es drv) st =
@@ -107,7 +106,7 @@ Theorem eval_expr_intcall_args_raise:
     lookup_callable_function cx.in_deploy fn ts =
       SOME (mut, nr, args, dflts, ret, body) ∧
     LENGTH es = LENGTH args ∧
-    eval_expr_results cx es st = (INR e, st1) ⇒
+    eval_exprs cx es st = (INR e, st1) ⇒
     eval_expr cx (Call ty (IntCall (src, fn)) es drv) st = (INR e, st1)
 Proof
   rpt strip_tac >>
@@ -215,7 +214,7 @@ local
      sumTheory.sum_distinct, optionTheory.option_case_def,
      exception_case_def];
 in
-  val call_rollback_simp_tac = simp_tac rollback_ss;
+  val call_rollback_simp_tac = asm_simp_tac rollback_ss;
   fun call_rollback_step (goal as (asl,_)) =
     (BasicProvers.PURE_TOP_CASE_TAC >>
      (fn (next as (asl',_)) =>
@@ -224,21 +223,33 @@ in
   val call_rollback_cases_tac = rpt call_rollback_step;
 end;
 
+Theorem call_external_function_trace_error_rollback:
+  call_external_function_trace orc gobs am cx nr mut ts all_mods args dflts vals body ret =
+    (INR e,am',rqs,observations) /\ e <> HaltException ==> am' = am
+Proof
+  Cases_on `evaluate_module_constants_trace cx am cx.txn.target
+    (constants_order all_mods)` >>
+  call_rollback_simp_tac [Once call_external_function_trace_def] >>
+  call_rollback_cases_tac >> rpt strip_tac >> gvs[]
+QED
+
 Theorem call_external_function_error_rollback:
   call_external_function orc gobs am cx nr mut ts all_mods args dflts vals body ret = (INR e, am', rqs) /\
   e <> HaltException ⇒
   am' = am
 Proof
-  call_rollback_simp_tac [Once call_external_function_def] >>
-  call_rollback_cases_tac >> rpt strip_tac >> gvs[]
+  simp[Once call_external_function_def] >>
+  strip_tac >> gvs[AllCaseEqs()] >>
+  drule_all call_external_function_trace_error_rollback >> simp[]
 QED
 
 Theorem call_external_error_rollback:
   call_external orc gobs am tx = (INR e, am', rqs) /\ e <> HaltException ⇒
   am' = am
 Proof
-  simp[Once call_external_def] >> strip_tac >> gvs[AllCaseEqs()] >>
-  imp_res_tac call_external_function_error_rollback >> gvs[]
+  simp[Once call_external_def, Once call_external_trace_def] >>
+  strip_tac >> gvs[AllCaseEqs()] >>
+  imp_res_tac call_external_function_trace_error_rollback >> gvs[]
 QED
 
 Theorem call_external_transaction_error_logs_empty:
@@ -273,9 +284,8 @@ Theorem eval_expr_intcall_empty_defaults:
   lookup_callable_function cx.in_deploy fn tops = SOME (mut,nr,args,[],ret,ss) /\
   LENGTH es = LENGTH args ==>
   eval_expr cx (Call ty (IntCall (NONE,fn)) es kw) =
-  (do results <- eval_expr_results cx es;
+  (do vs <- eval_exprs cx es;
       prev <- get_scopes;
-      vs <- read_results cx results;
       call_env <- lift_option_type (bind_arguments (get_tenv cx) args vs)
         "IntCall bind_arguments";
       rtv <- lift_option_type (evaluate_type (get_tenv cx) ret) "IntCall eval ret";
@@ -298,7 +308,7 @@ Theorem eval_expr_intcall_args_factor:
   lookup_callable_function cx.in_deploy fn tops = SOME (mut,nr,args,[],ret,ss) /\
   LENGTH es = LENGTH args ==>
   eval_expr cx (Call ty (IntCall (src,fn)) es kw) =
-  (do vs <- (do results <- eval_expr_results cx es; read_results cx results od);
+  (do vs <- eval_exprs cx es;
       prev <- get_scopes;
       call_env <- lift_option_type (bind_arguments (get_tenv cx) args vs)
         "IntCall bind_arguments";
@@ -315,13 +325,7 @@ Proof
   strip_tac >>
   simp[Once evaluate_def, type_check_def, assert_def,
     lift_option_type_def, bind_apply, ignore_bind_apply, return_def, FUN_EQ_THM,
-    get_scopes_def, eval_empty_defaults_finally] >>
-  qx_gen_tac `st` >> Cases_on `eval_expr_results cx es st` >>
-  Cases_on `q` >> simp[] >>
-  rename1 `eval_expr_results cx es st = (INL results,st')` >>
-  Cases_on `read_results cx results st'` >>
-  drule read_results_state >> strip_tac >> gvs[] >>
-  Cases_on `q` >> simp[]
+    get_scopes_def, eval_empty_defaults_finally]
 QED
 
 Theorem eval_expr_intcall_body_normalize:
@@ -329,7 +333,7 @@ Theorem eval_expr_intcall_body_normalize:
   lookup_callable_function cx.in_deploy fn ts =
     SOME (mut,F,params,[],ret,body) /\ LENGTH args = LENGTH params ==>
   eval_expr cx (Call ty (IntCall (src,fn)) args drv) =
-  (do vs <- vyperState$bind (eval_expr_results cx args) (read_results cx);
+  (do vs <- eval_exprs cx args;
       prev <- get_scopes;
       env <- lift_option_type (bind_arguments (get_tenv cx) params vs)
         "IntCall bind_arguments";
@@ -346,12 +350,8 @@ Proof
   rewrite_tac[FUN_EQ_THM] >> qx_gen_tac `st` >>
   simp[bind_def, ignore_bind_def, get_scopes_def, return_def,
     lock_if_nr_def, unlock_if_nr_def, finally_unless_halt_return] >>
-  Cases_on `eval_expr_results cx args st` >>
+  Cases_on `eval_exprs cx args st` >>
   rename1 `_ = (res,st1)` >> Cases_on `res` >> simp[] >>
-  rename1 `read_results cx results st1` >>
-  Cases_on `read_results cx results st1` >>
-  drule read_results_state >> strip_tac >> gvs[] >>
-  rename1 `_ = (res,st1)` >> Cases_on `res` >>
   `vyperState$bind (set_scopes st1.scopes) (\x. return ()) =
    set_scopes st1.scopes` by
     simp[FUN_EQ_THM, bind_def, set_scopes_def, return_def] >>

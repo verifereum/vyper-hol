@@ -2,19 +2,19 @@
  * Source/Venom State Relation
  *
  * TOP-LEVEL:
- *   state_rel        — cross-level simulation relation
- *   state_rel_simple — legacy fixed-offset, vars_rel-based event relation
- *   result_rel       — maps Vyper exceptions to Venom exec_result
+ *   state_rel H        — cross-level simulation relation
+ *   state_rel_simple H — legacy fixed-offset, vars_rel-based event relation
+ *   result_rel H       — maps Vyper exceptions to Venom exec_result
  *   local_ptrs_rel   — live locals held through pointer variables match memory
- *   accounts_rel     — every address's accounts and transient storage match,
+ *   accounts_rel H     — every address's accounts and transient storage match,
  *                      the running contract's storage up to dead bytes
  *   dead_bytes       — the bytes of a stored value past a bytestring's
  *                      length (or a nested DynArray's)
- *   storage_dead     — dead_bytes of a declared storage region, which the
+ *   storage_dead     — dead_bytes of an observed storage region, which the
  *                      lowering may overwrite
- *   storage_agree, accounts_agree, transient_agree, request_agree
+ *   storage_agree, accounts_agree, transient_agree, request_agree H
  *                    — equality up to storage_dead
- *   storage_read_live — a storage read sees no other value's dead bytes
+ *   storage_read_live H — a storage read sees no other value's dead bytes
  *   compile_state_ok — well-formedness: bound labels disjoint from future fresh labels
  *   label_external   — label not bound and not in future fresh-label co-domain
  *
@@ -142,11 +142,11 @@ Definition well_formed_cenv_def:
        FLOOKUP cenv.ce_vars n = SOME (MemLoc off sz) ⇒ sz > 0 ∧ (sz MOD 32 = 0))
 End
 
-(* Compatibility helper for fixed-offset environments; state_rel below uses
+(* Compatibility helper for fixed-offset environments; state_rel H below uses
    local_ptrs_rel for allocation-backed locals instead. *)
 (* Local variables in Vyper scopes match Venom memory.
    Only handles MemLoc (local memory variables) because:
-   - StorageLoc variables (self.x) are covered by storage_rel
+   - StorageLoc variables (self.x) are covered by storage_rel H
    - TransientLoc/ImmutableLoc are similar global state
    - Scopes only contain local (stack-like) variables *)
 Definition vars_rel_def:
@@ -180,6 +180,18 @@ Definition local_region_def:
       lookup_var p ss = SOME w ∧ base = w2n w
 End
 
+(* Live local regions depend only on the locals' pointer variables. *)
+Theorem local_region_lookup_cong:
+  (∀name entry p sz.
+     lookup_scopes name scopes = SOME entry ∧
+     FLOOKUP cenv.ce_vars name = SOME (PtrVar (Var p) sz) ⇒
+     lookup_var p t = lookup_var p s) ⇒
+  (local_region cenv scopes t name lo sz ⇔
+   local_region cenv scopes s name lo sz)
+Proof
+  rw[local_region_def] >> metis_tac[]
+QED
+
 (* x is not the pointer variable of a live local, so assigning it leaves the
    locals in place. *)
 Definition not_scope_ptr_def:
@@ -202,7 +214,7 @@ End
 (* The locals of cenv are held through pointer variables that were handed out
    before st (declare_local, compile_register_positional_args), one per
    local:
-   - no variable sits at a fixed MemLoc offset: state_rel does not relate
+   - no variable sits at a fixed MemLoc offset: state_rel H does not relate
      those (the parameters build_compile_env places, until the code that
      registers them rebinds them, and default arguments, which
      compile_register_kwarg_vars keeps at MemLoc), and a store to one could
@@ -285,13 +297,13 @@ End
 
 (* ===== Storage Relation up to Dead Bytes ===== *)
 (* The source writes a bytestring as its length and the slots its bytes use
-   (encode_dyn_bytes_slots), zero-padding the last one.  The lowering copies
-   the value's whole storage block from its memory buffer
-   (compile_memory_to_storage, Python's _store_memory_to_storage), so the
-   bytes past the length, up to the capacity, hold whatever the buffer held
-   there.  A DynArray nested in another value is copied the same way, so its
-   elements past its length do too.  Nothing reads them: decoding reads a
-   length first and only the bytes or elements below it.  The relation on
+   (encode_dyn_bytes_slots), zero-padding the last one.  The lowering
+   (compile_store_slots) writes the same slots, but copies the last word of
+   a bytestring from its memory buffer as it is, so the bytes past a
+   bytestring's length can differ.  DynArray capacity elements remain
+   related even after a shrink: both sides write only the active elements,
+   and a previously captured child pointer may still read the inactive
+   ones' headers or values.  The relation on
    the running contract's storage and transient storage therefore only
    compares the bytes that are not dead.
 
@@ -299,8 +311,8 @@ End
    dead in a value of type tv stored at slot base of st, by the lengths
    that st holds:
    - a bytestring: a data byte at or past the length, within the capacity;
-   - a DynArray: every byte of an element at or past the length, and the
-     dead bytes of the elements below it;
+   - a DynArray: the dead bytes of every capacity element, regardless of
+     the current length;
    - a struct, tuple or static array: the dead bytes of its members. *)
 Definition dyn_bytes_dead_def:
   dyn_bytes_dead (st:storage) base max (j:num) (b:num) ⇔
@@ -321,11 +333,7 @@ Definition dead_bytes_def:
      ∃i. i < n ∧ dead_bytes st (base + i * type_slot_size tv) tv j b) ∧
   (dead_bytes st base (ArrayTV tv (Dynamic n)) j b ⇔
      ∃i. i < n ∧
-         if i < w2n (lookup_storage (n2w base) st) then
-           dead_bytes st (base + 1 + i * type_slot_size tv) tv j b
-         else
-           base + 1 + i * type_slot_size tv ≤ j ∧
-           j < base + 1 + (i + 1) * type_slot_size tv ∧ b < 32) ∧
+         dead_bytes st (base + 1 + i * type_slot_size tv) tv j b) ∧
   (dead_bytes st base (StructTV fields) j b ⇔
      dead_bytes_fields st base fields j b) ∧
   (dead_bytes_list st base [] j b ⇔ F) ∧
@@ -338,24 +346,17 @@ Definition dead_bytes_def:
      dead_bytes_fields st (base + type_slot_size tv) fields j b)
 End
 
-(* Byte b of slot j is dead in the storage (tr = F) or transient storage
-   (tr = T) st of the running contract: a declared region (a variable, or a
-   hashmap leaf at a complete key) has it dead, and that region fits the slot
-   space and is disjoint from every declared region on the same backend at
-   another slot or type.  Regions are told apart by where they are, not by
-   how they are named: many keys name one hashmap leaf (encode_hashmap_key
-   sends IntV i and IntV (i + 2 ** 256) to the same word).  Asking for the
-   disjointness here keeps a byte that another region reads live, and keeps
-   a region's dead bytes fixed under writes outside it, without assuming
-   storage_layout_safe. *)
+(* Dead bytes come from the fixed finite horizon. Physical aliases share
+   one region; other observed regions are disjoint. Observed lock words
+   remain live on the transient backend. *)
 Definition storage_dead_def:
-  storage_dead cx tr st j b ⇔
-    ∃mid n subs slot tv.
-      declared_storage_region cx mid n subs = SOME (tr, slot, tv) ∧
+  storage_dead H tr st j b ⇔
+    (¬tr ∨ ¬MEM j (SND H)) ∧
+    ∃slot tv.
+      MEM (tr,slot,tv) (FST H) ∧
       w2n slot + type_slot_size tv ≤ dimword (:256) ∧
-      (∀mid' n' subs' slot' tv'.
-         declared_storage_region cx mid' n' subs' = SOME (tr, slot', tv') ∧
-         (slot', tv') ≠ (slot, tv) ⇒
+      (∀slot' tv'.
+         MEM (tr,slot',tv') (FST H) ∧ (slot',tv') ≠ (slot,tv) ⇒
          ranges_disjoint (w2n slot) (type_slot_size tv)
                          (w2n slot') (type_slot_size tv')) ∧
       dead_bytes st (w2n slot) tv j b
@@ -366,9 +367,9 @@ End
    slot space when any byte is dead.  A read of a declared region has it
    (storage_dead), and so does a part of a value that has it. *)
 Definition storage_read_live_def:
-  storage_read_live cx tr st (w:bytes32) tv ⇔
+  storage_read_live H tr st (w:bytes32) tv ⇔
     ∀j b.
-      storage_dead cx tr st j b ⇒
+      storage_dead H tr st j b ⇒
       w2n w + type_slot_size tv ≤ dimword (:256) ∧
       (w2n w ≤ j ∧ j < w2n w + type_slot_size tv ⇒
        dead_bytes st (w2n w) tv j b)
@@ -387,20 +388,20 @@ End
    running contract's, whose accounts are equal but for their storage, which
    agrees up to the bytes dead in a1's. *)
 Definition accounts_agree_def:
-  accounts_agree cx (a1:evm_accounts) (a2:evm_accounts) ⇔
+  accounts_agree H cx (a1:evm_accounts) (a2:evm_accounts) ⇔
     (∀addr. addr ≠ cx.txn.target ⇒ a1 addr = a2 addr) ∧
     (a1 cx.txn.target with storage := (a2 cx.txn.target).storage) =
       a2 cx.txn.target ∧
-    storage_agree (storage_dead cx F (a1 cx.txn.target).storage)
+    storage_agree (storage_dead H F (a1 cx.txn.target).storage)
       (a1 cx.txn.target).storage (a2 cx.txn.target).storage
 End
 
 (* Transient storage t1 (source) and t2 (Venom): equal at every address but
    the running contract's, which agrees up to the bytes dead in t1's. *)
 Definition transient_agree_def:
-  transient_agree cx (t1:transient_storage) (t2:transient_storage) ⇔
+  transient_agree H cx (t1:transient_storage) (t2:transient_storage) ⇔
     (∀addr. addr ≠ cx.txn.target ⇒ t1 addr = t2 addr) ∧
-    storage_agree (storage_dead cx T (t1 cx.txn.target))
+    storage_agree (storage_dead H T (t1 cx.txn.target))
       (t1 cx.txn.target) (t2 cx.txn.target)
 End
 
@@ -408,18 +409,18 @@ End
    for the snapshots of the accounts and transient storage, which agree as
    above. *)
 Definition request_agree_def:
-  request_agree cx (r1:call_request) (r2:call_request) ⇔
+  request_agree H cx (r1:call_request) (r2:call_request) ⇔
     r1 with <| cr_accounts := r2.cr_accounts;
                cr_tStorage := r2.cr_tStorage |> = r2 ∧
-    accounts_agree cx r1.cr_accounts r2.cr_accounts ∧
-    transient_agree cx r1.cr_tStorage r2.cr_tStorage
+    accounts_agree H cx r1.cr_accounts r2.cr_accounts ∧
+    transient_agree H cx r1.cr_tStorage r2.cr_tStorage
 End
 
 (* The running contract's storage, Vyper accounts against Venom state. *)
 Definition storage_rel_def:
-  storage_rel cx (addr:address) (vs:evaluation_state) ss =
+  storage_rel H (addr:address) (vs:evaluation_state) ss =
     let st = (lookup_account addr vs.accounts).storage in
-    storage_agree (storage_dead cx F st) st (contract_storage ss)
+    storage_agree (storage_dead H F st) st (contract_storage ss)
 End
 
 (* The running contract's transient storage.
@@ -427,21 +428,23 @@ End
    Venom: ss.vs_transient (same type).
    Mirrors EIP-1153: per-address, per-transaction. *)
 Definition transient_rel_def:
-  transient_rel cx (addr:address) (vs:evaluation_state) ss ⇔
-    storage_agree (storage_dead cx T (vs.tStorage addr))
+  transient_rel H (addr:address) (vs:evaluation_state) ss ⇔
+    storage_agree (storage_dead H T (vs.tStorage addr))
       (vs.tStorage addr) (contract_transient ss)
 End
 
-(* The accounts and the transient storage of every address agree.
+(* The accounts and the transient storage of every address agree, and
+   Venom's active frame code (ss.vs_code) equals cx.txn.code.
    Other addresses' accounts and
    transient storage change during a body only through the call oracle,
    whose outcome both sides adopt the same way (adopt_outcome), which makes
    them equal again. Pending deletion queues are related separately by
-   state_rel and finalized at the external transaction boundary. *)
+   state_rel H and finalized at the external transaction boundary. *)
 Definition accounts_rel_def:
-  accounts_rel cx (vs:evaluation_state) ss ⇔
-    accounts_agree cx vs.accounts ss.vs_accounts ∧
-    transient_agree cx vs.tStorage ss.vs_transient
+  accounts_rel H cx (vs:evaluation_state) ss ⇔
+    accounts_agree H cx vs.accounts ss.vs_accounts ∧
+    transient_agree H cx vs.tStorage ss.vs_transient ∧
+    ss.vs_code = cx.txn.code
 End
 
 (* ===== Immutables Relation ===== *)
@@ -728,8 +731,8 @@ QED
    - transient_rel, transient_vars_rel: transient storage up to dead bytes,
      and the slots of transient variables.
    - accounts_rel: the accounts and transient storage of every address (the
-     running contract's storage up to dead bytes); storage_rel and
-     transient_rel are its case for the running contract.
+     running contract's storage up to dead bytes); storage_rel H and
+     transient_rel H are its case for the running contract.
    - immutables_rel: immutables (staged memory in a constructor, the data
      section at runtime).
    - logs_rel: emitted logs.
@@ -744,20 +747,20 @@ QED
    - pending_deletions: equality with vs_pending_deletions, including effects
      accumulated from adopted external-call outcomes. *)
 Definition state_rel_def:
-  state_rel func cenv cx (vs:evaluation_state) ss =
+  state_rel H func cenv cx (vs:evaluation_state) ss =
     (local_ptrs_rel func cenv vs.scopes ss ∧
-     storage_rel cx cx.txn.target vs ss ∧
+     storage_rel H cx.txn.target vs ss ∧
      storage_vars_rel cenv cx ∧
-     transient_rel cx cx.txn.target vs ss ∧
+     transient_rel H cx.txn.target vs ss ∧
      transient_vars_rel cenv cx ∧
-     accounts_rel cx vs ss ∧
+     accounts_rel H cx vs ss ∧
      immutables_rel cenv cx.txn.target cenv.ce_module cenv.ce_is_ctor vs ss ∧
      logs_rel cenv cx.txn.target vs ss ∧
      call_ctx_rel cx.txn ss.vs_call_ctx ss.vs_tx_ctx ss.vs_block_ctx ∧
      ¬ss.vs_call_ctx.cc_static ∧
      ¬cx.txn.is_static ∧
      vs.outcomes = SOME ss.vs_outcomes ∧
-     LIST_REL (request_agree cx) vs.requests ss.vs_requests ∧
+     LIST_REL (request_agree H cx) vs.requests ss.vs_requests ∧
      vs.pending_deletions = ss.vs_pending_deletions)
 End
 
@@ -792,11 +795,11 @@ End
    and does not relate allocation-backed local pointers; those proofs
    maintain local_ptrs_rel separately. *)
 Definition state_rel_simple_def:
-  state_rel_simple cenv cx vs ss =
+  state_rel_simple H cenv cx vs ss =
     (vars_rel cenv vs.scopes ss ∧
-     storage_rel cx cx.txn.target vs ss ∧
+     storage_rel H cx.txn.target vs ss ∧
      storage_vars_rel cenv cx ∧
-     transient_rel cx cx.txn.target vs ss ∧
+     transient_rel H cx.txn.target vs ss ∧
      transient_vars_rel cenv cx ∧
      immutables_rel_simple cenv cx.txn.target cenv.ce_module cenv.ce_is_ctor vs ss ∧
      logs_rel cenv cx.txn.target vs ss ∧
@@ -806,8 +809,8 @@ Definition state_rel_simple_def:
 End
 
 Theorem state_rel_gas_obs:
-  state_rel func cenv cx (es with gas_obs := readings) s =
-  state_rel func cenv cx es s
+  state_rel H func cenv cx (es with gas_obs := readings) s =
+  state_rel H func cenv cx es s
 Proof
   simp[state_rel_def, storage_rel_def, transient_rel_def, accounts_rel_def,
        immutables_rel_def, logs_rel_def]
@@ -824,7 +827,7 @@ QED
    value is in the caller's return buffer.
 
    External returns:
-   - Halt: ABI-encoded return data. state_rel on final state.
+   - Halt: ABI-encoded return data. state_rel H on final state.
 
    Error paths:
    - AssertException → Abort Revert_abort
@@ -851,31 +854,31 @@ End
 
 Definition result_rel_def:
   (* Normal completion — no return value *)
-  (result_rel func ret_tv cenv cx (INL (), vs') (OK ss') =
-    state_rel func cenv cx vs' ss') ∧
+  (result_rel H func ret_tv cenv cx (INL (), vs') (OK ss') =
+    state_rel H func cenv cx vs' ss') ∧
   (* Internal return: state + return values *)
-  (result_rel func ret_tv cenv cx (INR (ReturnException v), vs') (IntRet ir ss') =
-    (state_rel func cenv cx vs' ss' ∧
+  (result_rel H func ret_tv cenv cx (INR (ReturnException v), vs') (IntRet ir ss') =
+    (state_rel H func cenv cx vs' ss' ∧
      intret_vals_match ret_tv v ir.iret_values ∧
      ir.iret_adopt_fmp = NONE)) ∧
   (* External return → Halt with ABI-encoded data *)
-  (result_rel func ret_tv cenv cx (INR (ReturnException v), vs') (Halt ss') =
-    state_rel func cenv cx vs' ss') ∧
+  (result_rel H func ret_tv cenv cx (INR (ReturnException v), vs') (Halt ss') =
+    state_rel H func cenv cx vs' ss') ∧
   (* Every reason may REVERT, including an ordinary raise "UNREACHABLE".
      Only the distinguished UNREACHABLE exception may map to ExHalt_abort. *)
-  (result_rel func ret_tv cenv cx (INR (AssertException s), vs') (Abort Revert_abort ss') =
+  (result_rel H func ret_tv cenv cx (INR (AssertException s), vs') (Abort Revert_abort ss') =
     T) ∧
-  (result_rel func ret_tv cenv cx (INR (AssertException s), vs') (Abort ExHalt_abort ss') =
+  (result_rel H func ret_tv cenv cx (INR (AssertException s), vs') (Abort ExHalt_abort ss') =
     (s = "UNREACHABLE")) ∧
   (* Error → Abort (any type) *)
-  (result_rel func ret_tv cenv cx (INR (Error _), vs') (Abort _ ss') = T) ∧
+  (result_rel H func ret_tv cenv cx (INR (Error _), vs') (Abort _ ss') = T) ∧
   (* Everything else: no relation *)
-  (result_rel _ _ _ _ _ _ = F)
+  (result_rel H _ _ _ _ _ _ = F)
 End
 
 Theorem result_rel_gas_obs:
-  result_rel func ret_tv cenv cx (res, es with gas_obs := readings) r =
-  result_rel func ret_tv cenv cx (res, es) r
+  result_rel H func ret_tv cenv cx (res, es with gas_obs := readings) r =
+  result_rel H func ret_tv cenv cx (res, es) r
 Proof
   Cases_on `res`
   >- (rename1 `INL u` >> Cases_on `u` >> Cases_on `r` >>

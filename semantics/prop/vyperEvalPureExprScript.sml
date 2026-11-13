@@ -2,6 +2,7 @@ Theory vyperEvalPureExpr
 
 Ancestors
   vyperPureExpr vyperLookup vyperState vyperStatePreservation vyperPlaceFrames
+  vyperStorageTrace
 
 (* ===== eval_pure_expr / eval_pure_exprs ===== *)
 (*
@@ -56,16 +57,25 @@ Definition eval_pure_expr_def:
   (* Subscript *)
   eval_pure_expr cx st (Subscript ty e1 e2) =
     (case eval_pure_expr cx st e1 of
-     | SOME tv1 =>
-       (case eval_pure_expr cx st e2 of
-        | SOME idx =>
-          (case read_result cx idx st of
-           | (INL v2, _) =>
-             (case select_result cx (expr_type e1) tv1 (ValueSubscript v2) st of
-              | (INL result, _) => SOME result
+     | SOME tv0 =>
+       (* As eval_expr: a base derived through a dynamic-array element is
+          read before the index. *)
+       (case (if subscript_reads_base cx e1 e2 then
+                (case read_result cx tv0 st of
+                 | (INL v, _) => SOME (Value v)
+                 | _ => NONE)
+              else SOME tv0) of
+        | SOME tv1 =>
+          (case eval_pure_expr cx st e2 of
+           | SOME idx =>
+             (case read_result cx idx st of
+              | (INL v2, _) =>
+                (case select_result cx (expr_type e1) tv1 (ValueSubscript v2) st of
+                 | (INL result, _) => SOME result
+                 | _ => NONE)
               | _ => NONE)
            | _ => NONE)
-        | _ => NONE)
+        | NONE => NONE)
      | NONE => NONE) ∧
 
   (* Attribute access *)
@@ -90,7 +100,20 @@ Definition eval_pure_expr_def:
            | NONE => NONE)
         | _ => NONE)
      else if builtin_args_length_ok bt (LENGTH es) ∧ ¬precompile_builtin bt then
-       (case eval_pure_exprs cx st es of
+       (case (case code_slice_source bt es of
+              | SOME (code_ty, addr) =>
+                (case eval_pure_exprs cx st (TL es) of
+                 | SOME tail_vs =>
+                   (case eval_pure_exprs cx st [addr] of
+                    | SOME addr_vs =>
+                      (case evaluate_code_source cx st.accounts
+                              (is_self_addr addr) code_ty (expr_type addr)
+                              addr_vs of
+                       | INL code_v => SOME (code_v :: tail_vs)
+                       | INR _ => NONE)
+                    | NONE => NONE)
+                 | NONE => NONE)
+              | NONE => eval_pure_exprs cx st es) of
         | SOME vs =>
           (if bt = Bop In ∨ bt = Bop NotIn then
              if LENGTH vs = 2 then
@@ -140,7 +163,11 @@ Termination
     (\(cx:evaluation_context, st:evaluation_state, e). expr_size e)
     (\(cx:evaluation_context, st:evaluation_state, es).
        list_size expr_size es))` >>
-  rpt gen_tac >>
+  rpt conj_tac >> rpt gen_tac
+  >>~- ([`code_slice_source _ _ = SOME _`],
+        strip_tac >>
+        gvs[vyperInterpreterTheory.code_slice_source_SOME,
+            vyperASTTheory.expr_size_def, listTheory.list_size_def]) >>
   Induct_on `kes` >>
   simp[pairTheory.FORALL_PROD, basicSizeTheory.pair_size_def]
 End
@@ -163,15 +190,156 @@ val monadic_defs =
    vyperStateTheory.get_accounts_def, vyperStateTheory.type_check_def,
    vyperStateTheory.assert_def, vyperStateTheory.raise_def];
 
+Theorem trace_result_transport[local]:
+  storage_trace_frame f ==>
+  FST (f (st with storage_trace := observations)) = FST (f st)
+Proof
+  pure_rewrite_tac[storage_trace_frame_def] >> strip_tac >>
+  first_assum (qspecl_then [`st`, `observations`] mp_tac) >>
+  first_x_assum (qspecl_then [`st`, `st.storage_trace`] mp_tac) >>
+  Cases_on `f (st with storage_trace := [])` >> simp[]
+QED
+
+Theorem trace_execution_transport[local]:
+  storage_trace_frame f /\ f st = (r, st with storage_trace := q) ==>
+  ?q'. f (st with storage_trace := p) = (r, st with storage_trace := q')
+Proof
+  pure_rewrite_tac[storage_trace_frame_def] >> strip_tac >>
+  first_assum (qspecl_then [`st`, `p`] mp_tac) >>
+  first_x_assum (qspecl_then [`st`, `st.storage_trace`] mp_tac) >>
+  Cases_on `f (st with storage_trace := [])` >> simp[] >>
+  rpt strip_tac >> gvs[] >>
+  qexists_tac `p ++ r'.storage_trace` >>
+  qpat_x_assum `st with storage_trace := q = _` mp_tac >>
+  simp[evaluation_state_component_equality]
+QED
+
+Theorem observation_trace_results[local]:
+  FST (read_result cx r (st with storage_trace := p)) = FST (read_result cx r st) /\
+  FST (select_result cx ty r sb (st with storage_trace := p)) = FST (select_result cx ty r sb st) /\
+  FST (conditional_result cx r (st with storage_trace := p)) = FST (conditional_result cx r st) /\
+  FST (result_array_length cx r (st with storage_trace := p)) = FST (result_array_length cx r st)
+Proof
+  rpt conj_tac >> irule trace_result_transport >>
+  simp[storage_trace_frame_read_result, storage_trace_frame_select,
+       storage_trace_frame_conditional_result, storage_trace_frame_array_length]
+QED
+
+Theorem evaluator_trace_results[local]:
+  FST (eval_expr cx e (st with storage_trace := p)) = FST (eval_expr cx e st) /\
+  FST (eval_exprs cx es (st with storage_trace := p)) = FST (eval_exprs cx es st)
+Proof
+  conj_tac >> irule trace_result_transport >>
+  metis_tac[evaluate_storage_trace_frame]
+QED
+
+Theorem read_result_trace:
+  read_result cx r (st with storage_trace := p) =
+  (FST (read_result cx r st), st with storage_trace := p)
+Proof
+  Cases_on `read_result cx r (st with storage_trace := p)` >>
+  drule read_result_state >> strip_tac >> gvs[] >>
+  mp_tac (cj 1 observation_trace_results) >> simp[]
+QED
+
+
+
+Theorem conditional_result_trace[local]:
+  conditional_result cx r (st with storage_trace := p) =
+  (FST (conditional_result cx r st), st with storage_trace := p)
+Proof
+  Cases_on `conditional_result cx r (st with storage_trace := p)` >>
+  drule conditional_result_state >> strip_tac >> gvs[] >>
+  mp_tac (cj 3 observation_trace_results) >> simp[]
+QED
+
+Theorem result_array_length_trace[local]:
+  result_array_length cx r (st with storage_trace := p) =
+  (FST (result_array_length cx r st), st with storage_trace := p)
+Proof
+  Cases_on `result_array_length cx r (st with storage_trace := p)` >>
+  drule result_array_length_state >> strip_tac >> gvs[] >>
+  mp_tac (cj 4 observation_trace_results) >> simp[]
+QED
+
+Theorem select_result_trace[local]:
+  select_result cx ty r sb st = (v,s) ==>
+  !p. ?q. select_result cx ty r sb (st with storage_trace := p) =
+    (v,st with storage_trace := q)
+Proof
+  strip_tac >> drule select_result_state >> strip_tac >> gen_tac >>
+  irule trace_execution_transport >>
+  simp[storage_trace_frame_select] >> metis_tac[]
+QED
+
+Theorem eval_expr_trace[local]:
+  eval_expr cx e st = (r,st with storage_trace := q) ==>
+  !p. ?q'. eval_expr cx e (st with storage_trace := p) =
+    (r,st with storage_trace := q')
+Proof
+  rpt strip_tac >> irule trace_execution_transport >>
+  metis_tac[evaluate_storage_trace_frame]
+QED
+
+Theorem eval_exprs_trace[local]:
+  eval_exprs cx es st = (r,st with storage_trace := q) ==>
+  !p. ?q'. eval_exprs cx es (st with storage_trace := p) =
+    (r,st with storage_trace := q')
+Proof
+  rpt strip_tac >> irule trace_execution_transport >>
+  metis_tac[evaluate_storage_trace_frame]
+QED
+
+Theorem projection_pair[local]:
+  FST z = r ==> ?u. z = (r,u)
+Proof
+  Cases_on `z` >> simp[]
+QED
+
+Theorem trace_execution_back[local]:
+  storage_trace_frame f /\ f (st with storage_trace := p) = (r,t) ==>
+  ?u. f st = (r,u)
+Proof
+  strip_tac >> irule projection_pair >>
+  drule trace_result_transport >>
+  disch_then (qspecl_then [`st`, `p`] mp_tac) >> simp[]
+QED
+
+Theorem eval_expr_trace_back[local]:
+  eval_expr cx e (st with storage_trace := p) = (r,t) ==>
+  ?u. eval_expr cx e st = (r,u)
+Proof
+  strip_tac >> irule trace_execution_back >>
+  metis_tac[evaluate_storage_trace_frame]
+QED
+
+Theorem eval_exprs_trace_back[local]:
+  eval_exprs cx es (st with storage_trace := p) = (r,t) ==>
+  ?u. eval_exprs cx es st = (r,u)
+Proof
+  strip_tac >> irule trace_execution_back >>
+  metis_tac[evaluate_storage_trace_frame]
+QED
+
+Theorem select_result_trace_back[local]:
+  select_result cx ty r sb (st with storage_trace := p) = (v,t) ==>
+  ?u. select_result cx ty r sb st = (v,u)
+Proof
+  strip_tac >> irule trace_execution_back >>
+  metis_tac[storage_trace_frame_select]
+QED
+
 (* ===== Forward direction: eval_pure_expr/exprs SOME ⇒ eval_expr/exprs INL ===== *)
 
 Theorem eval_pure_to_eval_mutual:
   (∀cx st e v.
     eval_pure_expr cx st e = SOME v ⇒
-    eval_expr cx e st = (INL v, st)) ∧
+    ?observations. eval_expr cx e st =
+      (INL v, st with storage_trace := observations)) ∧
   (∀cx st es vs.
     eval_pure_exprs cx st es = SOME vs ⇒
-    eval_exprs cx es st = (INL vs, st))
+    ?observations. eval_exprs cx es st =
+      (INL vs, st with storage_trace := observations))
 Proof
   ho_match_mp_tac eval_pure_expr_ind >>
   rpt conj_tac >> rpt gen_tac >> strip_tac
@@ -179,20 +347,23 @@ Proof
   >- (gvs[Once eval_pure_expr_def] >>
       simp[Once vyperInterpreterTheory.evaluate_def,
            vyperStateTheory.get_scopes_def, vyperStateTheory.type_check_def,
-           vyperStateTheory.assert_def] >> simp monadic_defs)
+           vyperStateTheory.assert_def] >> simp monadic_defs >>
+      qexists_tac `st.storage_trace` >> simp[])
   (* TopLevelName *)
   >- (fs[Once eval_pure_expr_def] >>
       Cases_on `eval_expr cx (TopLevelName ty nsid) st` >>
       gvs[AllCaseEqs()] >>
-      drule_at Any eval_expr_preserves_state >> simp[pure_expr_def])
+      drule_at Any eval_expr_preserves_state >> simp[pure_expr_def] >>
+      metis_tac[])
   (* FlagMember *)
   >- (fs[Once eval_pure_expr_def,
          Once vyperInterpreterTheory.evaluate_def] >>
+      qexists_tac `st.storage_trace` >> simp[] >>
       metis_tac[lookup_flag_member_to_lookup_flag_mem])
   (* Literal *)
   >- (fs[Once eval_pure_expr_def,
          Once vyperInterpreterTheory.evaluate_def] >>
-      simp monadic_defs)
+      simp monadic_defs >> qexists_tac `st.storage_trace` >> simp[])
   (* IfExp *)
   >- (rpt gen_tac >>
       simp[Once eval_pure_expr_def] >> strip_tac >>
@@ -201,7 +372,12 @@ Proof
       imp_res_tac read_result_state >>
       imp_res_tac conditional_result_state >> gvs[] >>
       simp[vyperInterpreterTheory.switch_BoolV_def] >>
-      simp monadic_defs)
+      simp monadic_defs >>
+      simp[read_result_trace] >>
+      qpat_x_assum `eval_expr _ _ st = (INL selected,_)`
+        (mp_then Any (qspec_then `observations'` strip_assume_tac) eval_expr_trace) >>
+      simp[conditional_result_trace] >>
+      metis_tac[])
   (* StructLit *)
   >- (rpt gen_tac >>
       simp[Once eval_pure_expr_def] >> strip_tac >>
@@ -210,22 +386,25 @@ Proof
       simp monadic_defs >>
       Cases_on `src` >> simp[LET_DEF] >>
       simp[Once vyperInterpreterTheory.evaluate_def] >>
-      simp (LET_DEF :: monadic_defs))
+      simp (LET_DEF :: monadic_defs) >> metis_tac[])
   (* Subscript *)
   >- (rpt gen_tac >>
       simp[Once eval_pure_expr_def] >> strip_tac >>
       gvs[AllCaseEqs()] >>
       imp_res_tac read_result_state >>
       imp_res_tac select_result_state >> gvs[] >>
+      qpat_assum `eval_expr _ _ st = (INL idx,_)`
+        (mp_then Any (qspec_then `observations'` strip_assume_tac) eval_expr_trace) >>
       simp[Once vyperInterpreterTheory.evaluate_def] >>
-      simp monadic_defs)
+      simp monadic_defs >> simp[read_result_trace] >>
+      metis_tac[select_result_trace])
   (* Attribute *)
   >- (rpt gen_tac >>
       simp[Once eval_pure_expr_def] >> strip_tac >>
       gvs[AllCaseEqs()] >>
       imp_res_tac select_result_state >> gvs[] >>
       simp[Once vyperInterpreterTheory.evaluate_def] >>
-      simp monadic_defs)
+      simp monadic_defs >> metis_tac[select_result_trace])
   (* Builtin *)
   >- (rpt gen_tac >>
       simp[Once eval_pure_expr_def] >> strip_tac >>
@@ -236,14 +415,28 @@ Proof
       simp monadic_defs >>
       simp[vyperStateTheory.type_check_def, vyperStateTheory.assert_def] >>
       gvs[AllCaseEqs()] >>
-      simp monadic_defs >>
       imp_res_tac result_array_length_state >>
-      simp[vyperContextTheory.builtin_args_length_ok_def] >>
-      simp[vyperStateTheory.get_accounts_def,
+      simp monadic_defs >>
+      simp[vyperContextTheory.builtin_args_length_ok_def,
+           vyperStateTheory.get_accounts_def,
            vyperInterpreterTheory.precompile_call_success_def,
            vyperInterpreterTheory.precompile_builtin_def] >>
-      simp monadic_defs >>
-      simp[vyperStateTheory.assert_def, vyperStateTheory.return_def])
+      gvs monadic_defs >>
+      simp[vyperStateTheory.assert_def, vyperStateTheory.return_def,
+           result_array_length_trace] >>
+      imp_res_tac eval_exprs_trace >>
+      FIRST [
+        rename1 `?out_trace. st with storage_trace := in_trace =
+          st with storage_trace := out_trace` >>
+        qexists_tac `in_trace` >> simp[],
+        qmatch_goalsub_rename_tac
+          `eval_exprs cx [addr] (st with storage_trace := tail_trace)` >>
+        qpat_x_assum `!p. ?q'. eval_exprs cx [addr] _ = _`
+          (qspec_then `tail_trace` strip_assume_tac) >>
+        simp[vyperStateTheory.return_def] >>
+        rename1 `?out_trace. st with storage_trace := in_trace =
+          st with storage_trace := out_trace` >>
+        qexists_tac `in_trace` >> simp[]])
   (* TypeBuiltin *)
   >- (rpt gen_tac >>
       simp[Once eval_pure_expr_def] >> strip_tac >>
@@ -251,27 +444,31 @@ Proof
       simp[Once vyperInterpreterTheory.evaluate_def] >>
       simp monadic_defs >>
       simp[vyperStateTheory.type_check_def, vyperStateTheory.assert_def] >>
-      simp monadic_defs)
+      simp monadic_defs >> metis_tac[])
   (* Pop - impossible *)
   >- fs[eval_pure_expr_def]
   (* Call - impossible *)
   >- fs[eval_pure_expr_def]
   (* [] case *)
   >- (fs[Once eval_pure_expr_def, Once vyperInterpreterTheory.evaluate_def] >>
-      simp monadic_defs)
+      simp monadic_defs >> qexists_tac `st.storage_trace` >> simp[])
   (* e::es case *)
   >- (rpt gen_tac >>
       simp[Once eval_pure_expr_def] >> strip_tac >>
       gvs[AllCaseEqs()] >>
       simp[Once vyperInterpreterTheory.evaluate_def] >>
       simp monadic_defs >>
-      drule read_result_state >> simp[])
+      drule read_result_state >> strip_tac >> gvs[] >>
+      drule eval_exprs_trace >>
+      disch_then (qspec_then `observations'` strip_assume_tac) >>
+      simp[read_result_trace] >> metis_tac[])
 QED
 
 Theorem eval_pure_expr_to_eval_expr_some:
   ∀cx st e v.
     eval_pure_expr cx st e = SOME v ⇒
-    eval_expr cx e st = (INL v, st)
+    ?observations. eval_expr cx e st =
+      (INL v, st with storage_trace := observations)
 Proof
   metis_tac[eval_pure_to_eval_mutual]
 QED
@@ -338,7 +535,16 @@ Proof
       imp_res_tac read_result_state >> gvs[] >>
       Cases_on `v'' = BoolV T` >> gvs monadic_defs >>
       Cases_on `v'' = BoolV F` >> gvs monadic_defs >>
-      gvs[AllCaseEqs()] >> metis_tac[])
+      gvs[AllCaseEqs()] >>
+      qpat_x_assum `s'' = st with storage_trace := _` SUBST_ALL_TAC >>
+      gvs[read_result_trace] >>
+      drule projection_pair >> strip_tac >>
+      imp_res_tac eval_expr_trace_back >>
+      `s'³' = (st with storage_trace := s''.storage_trace)
+                 with storage_trace := s'³'.storage_trace` by metis_tac[] >>
+      qpat_x_assum `s'³' = _` SUBST_ALL_TAC >>
+      gvs[conditional_result_trace] >>
+      imp_res_tac projection_pair >> metis_tac[])
   (* StructLit *)
   >- (rpt gen_tac >> strip_tac >> rpt gen_tac >> strip_tac >>
       simp[Once eval_pure_expr_def] >>
@@ -358,12 +564,21 @@ Proof
       simp[Once vyperInterpreterTheory.evaluate_def] >>
       simp monadic_defs >>
       strip_tac >> gvs[AllCaseEqs()] >>
-      `s'' = st` by metis_tac[eval_expr_preserves_state, pure_expr_def] >>
-      pop_assum SUBST_ALL_TAC >>
-      `s'³' = st` by metis_tac[eval_expr_preserves_state, pure_expr_def] >>
-      pop_assum SUBST_ALL_TAC >>
+      imp_res_tac eval_expr_preserves_state >> gvs[] >>
+      Cases_on `subscript_reads_base cx e e'` >>
+      gvs[vyperStateTheory.bind_def, vyperStateTheory.return_def, AllCaseEqs()] >>
+      imp_res_tac read_result_state >> gvs[] >>
+      imp_res_tac eval_expr_preserves_state >> gvs[] >>
       imp_res_tac read_result_state >>
-      imp_res_tac select_result_state >> gvs[])
+      imp_res_tac select_result_state >> gvs[read_result_trace] >>
+      qmatch_asmsub_rename_tac `eval_expr cx e st = (INL res,base_st)` >>
+      qmatch_asmsub_rename_tac `eval_expr cx e' base_st = (INL idx,index_st)` >>
+      qpat_x_assum `base_st = _` SUBST_ALL_TAC >>
+      qpat_x_assum `index_st = _` SUBST_ALL_TAC >>
+      gvs[read_result_trace] >>
+      imp_res_tac eval_expr_trace_back >>
+      imp_res_tac select_result_trace_back >>
+      imp_res_tac projection_pair >> metis_tac[])
   (* Attribute *)
   >- (rpt gen_tac >> strip_tac >> rpt gen_tac >> strip_tac >>
       simp[Once eval_pure_expr_def] >>
@@ -372,9 +587,10 @@ Proof
       simp[Once vyperInterpreterTheory.evaluate_def] >>
       simp monadic_defs >>
       strip_tac >> gvs[AllCaseEqs()] >>
-      `s'' = st` by metis_tac[eval_expr_preserves_state, pure_expr_def] >>
+      `s'' = st with storage_trace := s''.storage_trace` by
+        metis_tac[eval_expr_preserves_state] >>
       pop_assum SUBST_ALL_TAC >>
-      imp_res_tac select_result_state >> gvs[])
+      drule select_result_trace_back >> strip_tac >> gvs[])
   (* Builtin *)
   >- (rpt gen_tac >> strip_tac >> rpt gen_tac >> strip_tac >>
       simp[Once eval_pure_expr_def] >>
@@ -393,32 +609,73 @@ Proof
           gvs[AllCaseEqs()] >>
           rename1 `eval_expr cx h st = (INL tv, s1)` >>
           rename1 `result_array_length cx tv s1 = (INL len, s2)` >>
-          `s1 = st` by metis_tac[eval_expr_preserves_state, pure_expr_def] >>
+          `s1 = st with storage_trace := s1.storage_trace` by
+            metis_tac[eval_expr_preserves_state] >>
           pop_assum SUBST_ALL_TAC >>
-          drule vyperStatePreservationTheory.result_array_length_state >>
-          strip_tac >> gvs[vyperStateTheory.return_def] >> metis_tac[])
+          gvs[result_array_length_trace, vyperStateTheory.return_def] >>
+          imp_res_tac projection_pair >> metis_tac[])
       >- (* non-Len case *)
          (`EVERY pure_expr es` by gvs[listTheory.EVERY_EL] >>
-          Cases_on `bt = Bop In ∨ bt = Bop NotIn` >> gvs[] >>
+          Cases_on `bt = Bop In ∨ bt = Bop NotIn`
+          >- (`code_slice_source bt es = NONE` by
+                (Cases_on `code_slice_source bt es` >> gvs[] >>
+                 rename1 `_ = SOME p` >> PairCases_on `p` >>
+                 gvs[vyperInterpreterTheory.code_slice_source_SOME]) >>
+              gvs[] >>
+              fs[vyperStateTheory.bind_def] >>
+              gvs[AllCaseEqs()] >>
+              rename1 `eval_exprs cx es st = (INL vs, s1)` >>
+              `eval_pure_exprs cx st es = SOME vs` by metis_tac[] >>
+              simp[] >>
+              `s1 = st with storage_trace := s1.storage_trace` by
+                metis_tac[eval_exprs_preserves_state] >>
+              pop_assum SUBST_ALL_TAC >>
+              gvs[vyperStateTheory.get_accounts_def, vyperStateTheory.return_def,
+                  vyperStateTheory.raise_def, vyperStateTheory.bind_def,
+                  vyperStateTheory.ignore_bind_def, vyperStateTheory.assert_def,
+                  vyperStateTheory.lift_sum_def, vyperStateTheory.lift_option_type_def,
+                  vyperInterpreterTheory.precompile_call_success_def,
+                  vyperMiscTheory.option_CASE_rator, vyperMiscTheory.sum_CASE_rator,
+                  AllCaseEqs()])
+          >> gvs[] >>
           fs[vyperStateTheory.bind_def] >>
           gvs[AllCaseEqs()] >>
-          rename1 `eval_exprs cx es st = (INL vs, s1)` >>
-          `eval_pure_exprs cx st es = SOME vs` by metis_tac[] >>
-          simp[] >>
-          `s1 = st` by metis_tac[eval_exprs_preserves_state] >>
-          pop_assum SUBST_ALL_TAC >>
-          FIRST [
-            fs[vyperStateTheory.get_accounts_def, vyperStateTheory.return_def,
-               vyperStateTheory.bind_def, vyperStateTheory.lift_sum_def,
-               vyperInterpreterTheory.precompile_call_success_def] >>
-            Cases_on `evaluate_builtin cx st.accounts ty bt (MAP expr_type es) vs` >>
-            gvs[vyperStateTheory.return_def, vyperStateTheory.raise_def] >> NO_TAC,
-            gvs[vyperStateTheory.get_accounts_def, vyperStateTheory.return_def,
-                vyperStateTheory.raise_def, vyperStateTheory.bind_def,
-                vyperStateTheory.ignore_bind_def, vyperStateTheory.assert_def,
-                vyperStateTheory.lift_sum_def, vyperStateTheory.lift_option_type_def,
-                vyperMiscTheory.option_CASE_rator, vyperMiscTheory.sum_CASE_rator,
-                AllCaseEqs()]]))
+          Cases_on `code_slice_source bt es`
+          >- (gvs[] >>
+              rename1 `eval_exprs cx es st = (INL vs, s1)` >>
+              `eval_pure_exprs cx st es = SOME vs` by metis_tac[] >>
+              `s1 = st with storage_trace := s1.storage_trace` by
+                metis_tac[eval_exprs_preserves_state] >>
+              pop_assum SUBST_ALL_TAC >>
+              simp[] >>
+              fs[vyperStateTheory.get_accounts_def, vyperStateTheory.return_def,
+                 vyperStateTheory.bind_def, vyperStateTheory.lift_sum_def,
+                 vyperInterpreterTheory.precompile_call_success_def] >>
+              Cases_on `evaluate_builtin cx st.accounts ty bt (MAP expr_type es) vs` >>
+              gvs[vyperStateTheory.return_def, vyperStateTheory.raise_def])
+          >- (rename1 `code_slice_source bt es = SOME p` >>
+              PairCases_on `p` >>
+              `EVERY pure_expr (TL es) /\ EVERY pure_expr [p1]` by
+                (qpat_assum `code_slice_source bt es = _` mp_tac >>
+                 qpat_assum `EVERY pure_expr es` mp_tac >>
+                 rw[vyperInterpreterTheory.code_slice_source_SOME] >>
+                 gvs[pure_expr_def]) >>
+              gvs monadic_defs >> gvs[AllCaseEqs()] >>
+              rename1 `eval_exprs cx (TL es) st = (INL tail_vs, s1)` >>
+              `s1 = st with storage_trace := s1.storage_trace` by
+                metis_tac[eval_exprs_preserves_state] >>
+              pop_assum SUBST_ALL_TAC >>
+              rename1 `eval_exprs cx [p1] (st with storage_trace := _) = (INL addr_vs, s2)` >>
+              `s2 = (st with storage_trace := s1.storage_trace)
+                         with storage_trace := s2.storage_trace` by
+                metis_tac[eval_exprs_preserves_state, listTheory.EVERY_DEF] >>
+              pop_assum SUBST_ALL_TAC >>
+              imp_res_tac eval_exprs_trace_back >>
+              `eval_pure_exprs cx st (TL es) = SOME tail_vs` by metis_tac[] >>
+              `eval_pure_exprs cx st [p1] = SOME addr_vs` by metis_tac[] >>
+              BasicProvers.every_case_tac >> gvs monadic_defs >>
+              gvs[vyperInterpreterTheory.precompile_call_success_def, AllCaseEqs()] >>
+              gvs monadic_defs)))
   (* TypeBuiltin *)
   >- (rpt gen_tac >> strip_tac >> rpt gen_tac >> strip_tac >>
       simp[Once eval_pure_expr_def] >>
@@ -453,12 +710,12 @@ Proof
       strip_tac >> gvs[AllCaseEqs()] >>
       rename1 `eval_expr cx e st = (INL tv, s1)` >>
       rename1 `read_result cx tv s1 = (INL v, s2)` >>
-      `s1 = st` by metis_tac[eval_expr_preserves_state] >>
+      `s1 = st with storage_trace := s1.storage_trace` by
+        metis_tac[eval_expr_preserves_state] >>
       pop_assum SUBST_ALL_TAC >>
-      `s2 = st` by
-        metis_tac[vyperStateTheory.read_result_state] >>
-      pop_assum SUBST_ALL_TAC >>
-      gvs[])
+      gvs[read_result_trace] >>
+      imp_res_tac projection_pair >>
+      imp_res_tac eval_exprs_trace_back >> metis_tac[])
 QED
 
 Theorem eval_expr_to_eval_pure_expr_some:
@@ -472,13 +729,15 @@ QED
 Theorem eval_pure_expr_to_eval_expr_none:
   ∀cx st e.
     pure_expr e ∧ eval_pure_expr cx st e = NONE ⇒
-    ∃err. eval_expr cx e st = (INR err, st)
+    ∃err observations. eval_expr cx e st =
+      (INR err, st with storage_trace := observations)
 Proof
   rpt strip_tac >>
   Cases_on `eval_expr cx e st` >> rename1 `(res, st')` >>
   Cases_on `res`
   >- (drule_all (eval_to_eval_pure_mutual |> CONJUNCT1) >> gvs[])
-  >- (`st' = st` by metis_tac[eval_expr_preserves_state] >> gvs[])
+  >- (`st' = st with storage_trace := st'.storage_trace` by
+        metis_tac[eval_expr_preserves_state] >> metis_tac[])
 QED
 
 (* Pure correspondence exports must not depend on admissions. *)

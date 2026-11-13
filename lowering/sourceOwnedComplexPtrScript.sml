@@ -12,7 +12,7 @@ Ancestors sourceRecursiveComplexPtr
   abiEncoderSourceTransport abiDecoderMemberSlice decoderGhostFramePtr ptrDiscipline
   decoderCalldataShell decoderNavigationPtr fragGasOriginPtr fragGasOrigin
   fragGasMode fragGasPathMem instIdxIndep moduleLoweringProps
-  abiDecoderReentryPointer
+  abiDecoderReentryPointer decoderArraySetupPtr
 
 (* The calldata instance of the position-form decoder lemmas: the source
    base operand is Lit 0w and the numeric base is 0. *)
@@ -110,7 +110,7 @@ Proof
     (drule emitted_insts_emit_op >> strip_tac >>
      `step_inst_base (mk_inst mid.cs_next_id ADD [Var root; Lit (n2w vo)]
        ["%" ++ toString mid.cs_next_var]) prepared = OK t` by
-       gvs[run_inst_seq_def] >>
+       gvs[run_inst_seq_def, AllCaseEqs()] >>
      `MEM (mk_inst mid.cs_next_id ADD [Var root; Lit (n2w vo)]
         ["%" ++ toString mid.cs_next_var]).inst_opcode [ADD; CALLDATALOAD]` by
        simp[mk_inst_def] >>
@@ -123,13 +123,19 @@ Proof
      (impl_tac >- (simp[] >> rpt strip_tac >>
        irule member_navigation_opcode_frame >> gvs[EVERY_MEM] >> metis_tac[])) >>
      simp[]) >>
-  `prepared.vs_halted = s.vs_halted` by gvs[] >>
+  `prepared.vs_halted = s.vs_halted` by
+    (qpat_assum `t = prepared with vs_vars := _`
+       (mp_tac o AP_TERM ``\v:venom_state. v.vs_halted``) >>
+     qpat_assum `t = s with vs_vars := _`
+       (mp_tac o AP_TERM ``\v:venom_state. v.vs_halted``) >>
+     POP_ASSUM_LIST (K all_tac) >> simp[]) >>
   `lookup_var root prepared = SOME a /\ ptr_covers H1 u1 root prepared cap` by
     (gvs[ptr_covers_def] >> metis_tac[]) >>
   `allocas_from lower prepared /\ prepared.vs_current_bb = mid.cs_current_bb` by
     (gvs[allocas_from_def, same_blocks_def] >> metis_tac[]) >>
   `allocas_from lower (prepared with vs_inst_idx := LENGTH mid.cs_current_insts)` by
-    simp[allocas_from_def] >>
+    (qpat_assum `allocas_from lower prepared` mp_tac >>
+     POP_ASSUM_LIST (K all_tac) >> simp[allocas_from_def]) >>
   `eval_operand (Lit (n2w vo)) prepared = SOME (n2w vo) /\
    op_taint u1 (Lit (n2w vo)) = {} /\ op_prov H1 (Lit (n2w vo)) = NONE` by
     simp[eval_operand_def, op_taint_def, op_prov_def] >>
@@ -141,7 +147,11 @@ Proof
      simp[exec_result_map_def]) >>
   `lookup_var root (prepared with vs_inst_idx := LENGTH mid.cs_current_insts) = SOME a /\
    ptr_covers H1 u1 root (prepared with vs_inst_idx := LENGTH mid.cs_current_insts) cap` by
-    simp[lookup_var_def, ptr_covers_def] >>
+    (conj_tac
+     >- (qpat_assum `lookup_var root prepared = SOME a` mp_tac >>
+         POP_ASSUM_LIST (K all_tac) >> simp[lookup_var_def]) >>
+     irule (Q.INST [`G` |-> `H1`, `tn` |-> `u1`, `s` |-> `prepared`]
+       ptr_covers_frame) >> simp[lookup_var_def]) >>
   drule_all (SRULE [eval_op_inst_idx, cj 4 control_moves_keep_vars]
     (Q.INST [`s` |-> `prepared with vs_inst_idx := LENGTH mid.cs_current_insts`,
       `t` |-> `t with vs_inst_idx := LENGTH mid.cs_current_insts`,
@@ -150,6 +160,9 @@ Proof
   rename1 `dst = Var q` >>
   rename1 `ptr_covers H u q _ n` >>
   qpat_x_assum `frag_exec_ptr _ _ _ _ _ _ _ _` kall_tac >>
+  `ptr_covers H u q t n` by
+    (irule ptr_covers_frame >> goal_assum (drule_at Any) >>
+     simp[lookup_var_def]) >>
   `!x. not_fresh_at sa x ==> not_fresh_at mid x` by
     (drule (calldata_pos abi_decoder_member_pointer_counters) >> strip_tac >>
      Cases_on `dyn` >> gvs[not_fresh_at_def] >>
@@ -161,7 +174,7 @@ Proof
   `op_taint u ep = {} /\ op_prov H ep = NONE` by
     (Cases_on `ep` >> gvs[op_taint_def, op_prov_def] >> metis_tac[]) >>
   qexistsl_tac [`H`,`u`,`q`] >>
-  simp[lookup_var_def, ptr_covers_def] >>
+  simp[] >>
   conj_tac >- (fs[lookup_var_def] >> metis_tac[]) >>
   conj_tac >- (rpt strip_tac >> first_x_assum irule >> simp[] >> metis_tac[]) >>
   rpt gen_tac >>

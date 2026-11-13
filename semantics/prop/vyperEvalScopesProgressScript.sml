@@ -4,6 +4,11 @@ Ancestors
   vyperScopePreservation vyperStatePreservation vyperPlaceFrames vyperCallFrame vyperCallOutcomeFrame
   vyperCallOutcome[ignore_grammar] vyperEvalExprPreservesScopesDom
 
+val trace_scopes_tac =
+  rpt (qpat_x_assum `_ = _ with storage_trace := _`
+    (fn th => assume_tac (SIMP_RULE (srw_ss()) []
+      (AP_TERM ``\s:evaluation_state. s.scopes`` th)))) >> gvs[];
+
 (* Every local of sc that sc' still has is unchanged in sc' or has more
    popped history.  Within an expression the only write to a local is a
    memory pop, which records one entry in the local's popped history
@@ -159,12 +164,13 @@ Proof
       metis_tac[])
   >- (rpt strip_tac >>
       gvs[Once evaluate_def, bind_def, AllCaseEqs(), return_def, raise_def] >>
+      gvs[COND_RATOR, AllCaseEqs(), bind_def, return_def] >>
       imp_res_tac read_result_state >> imp_res_tac select_result_state >>
-      gvs[] >> imp_res_tac eval_expr_preserves_scopes_dom >>
+      trace_scopes_tac >> imp_res_tac eval_expr_preserves_scopes_dom >>
       metis_tac[scopes_progress_trans])
   >- (rpt strip_tac >>
       gvs[Once evaluate_def, bind_def, AllCaseEqs(), return_def, raise_def] >>
-      imp_res_tac select_result_state >> gvs[] >> metis_tac[])
+      imp_res_tac select_result_state >> trace_scopes_tac >> metis_tac[])
   >- suspend "Builtin"
   >- (rpt strip_tac >>
       qpat_x_assum `eval_expr cx (Pop _ _) _ = _` mp_tac >>
@@ -197,11 +203,11 @@ Proof
   >- (rpt strip_tac >>
       qpat_x_assum `eval_base_place cx (AttributeTarget _ _) _ = _` mp_tac >>
       simp[Once evaluate_def, bind_def, AllCaseEqs()] >> strip_tac >>
-      imp_res_tac extend_place_state >> gvs[] >> metis_tac[])
+      imp_res_tac extend_place_state >> trace_scopes_tac >> metis_tac[])
   >- (rpt strip_tac >>
       qpat_x_assum `eval_base_place cx (SubscriptTarget _ _) _ = _` mp_tac >>
       simp[Once evaluate_def, bind_def, AllCaseEqs()] >> strip_tac >>
-      imp_res_tac read_result_state >> imp_res_tac extend_place_state >> gvs[] >>
+      imp_res_tac read_result_state >> imp_res_tac extend_place_state >> trace_scopes_tac >>
       imp_res_tac eval_base_place_preserves_scopes_dom >>
       metis_tac[scopes_progress_trans])
   >- (rpt strip_tac >>
@@ -222,6 +228,23 @@ Resume eval_mutual_scopes_progress[Builtin]:
   >- (Cases_on `bt = Len` >> rpt gen_tac >> strip_tac >>
       Cases_on `bt = Env MsgGas` >>
       Cases_on `bt = Bop In \/ bt = Bop NotIn` >>
+      Cases_on `code_slice_source bt es`
+      >>~- ([`code_slice_source bt es = SOME _`],
+            rename1 `code_slice_source bt es = SOME p` >> PairCases_on `p` >>
+            gvs[code_slice_source_SOME, type_check_def, assert_def,
+                return_def, raise_def] >>
+            qpat_x_assum `eval_expr _ _ _ = _` mp_tac >>
+            simp[Once evaluate_def, bind_def, ignore_bind_def, type_check_def,
+                 assert_def, return_def, raise_def, AllCaseEqs()] >>
+            strip_tac >> gvs[] >>
+            imp_res_tac precompile_call_success_state >>
+            imp_res_tac lift_sum_state >> imp_res_tac get_accounts_state >>
+            gvs[] >> res_tac >> res_tac >>
+            rpt (qpat_x_assum `!x. _` kall_tac) >>
+            imp_res_tac eval_exprs_preserves_scopes_dom >>
+            metis_tac[scopes_progress_trans]) >>
+      (* the code-slice IHs are vacuous from here on *)
+      rpt (qpat_x_assum `!s'' x t v. _` kall_tac) >>
       gvs[Once evaluate_def, bind_def, ignore_bind_def, type_check_def,
           assert_def, return_def, raise_def, lift_option_type_def,
           vyperMiscTheory.option_CASE_rator,
@@ -335,7 +358,7 @@ Resume eval_mutual_scopes_progress[IntCall]:
   rpt gen_tac >> strip_tac >>
   qpat_x_assum
     `!s t s1 ts t1 s2 tup t2 s3 t3. _ ==>
-       !st res st'. eval_expr_results cx es st = (res,st') ==> _`
+       !st res st'. eval_exprs cx es st = (res,st') ==> _`
     (mp_tac o SRULE [type_check_def, assert_def, lift_option_type_def,
                      option_CASE_rator, return_def, raise_def, AllCaseEqs()]) >>
   disch_then assume_tac >>

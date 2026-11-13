@@ -490,8 +490,8 @@ QED
      so the ADD of the base in a constructor immutable access is the offset
      itself, and the runtime label remains available for its epilogue. *)
 Definition stmt_state_rel_def:
-  stmt_state_rel ctx func cenv cx vs ss ⇔
-    state_rel func cenv cx vs ss ∧ alloca_inv ss ∧ alloca_room ctx func ss ∧
+  stmt_state_rel H ctx func cenv cx vs ss ⇔
+    state_rel H func cenv cx vs ss ∧ alloca_inv ss ∧ alloca_room ctx func ss ∧
     fmp_room ctx func ss ∧
     immutable_alloca_sep func cenv cx vs ss ∧ immutable_base_zero cenv ss ∧
     ∀inst n base sz.
@@ -500,6 +500,26 @@ Definition stmt_state_rel_def:
       FLOOKUP ss.vs_allocas inst.inst_id = SOME (base, sz) ⇒
       sz = w2n n
 End
+
+Theorem stmt_state_rel_storage_trace[simp]:
+  !H.
+  stmt_state_rel H ctx func cenv cx (es with storage_trace := observations) s <=>
+  stmt_state_rel H ctx func cenv cx es s
+Proof
+  gen_tac >>
+  simp[stmt_state_rel_def, accountsRelPropsTheory.state_rel_storage_trace,
+       immutable_alloca_sep_def]
+QED
+
+Theorem stmt_state_rel_erasure:
+  !H.
+  erase_storage_trace es1 = erase_storage_trace es2 ==>
+  (stmt_state_rel H ctx func cenv cx es1 s <=>
+   stmt_state_rel H ctx func cenv cx es2 s)
+Proof
+  gen_tac >>
+  metis_tac[stmt_state_rel_storage_trace, erase_storage_trace_def]
+QED
 
 Theorem alloca_room_fields:
   !func ss ss' ctx.
@@ -532,13 +552,15 @@ QED
 (* state_rel re-established by a step that keeps the allocations gives
    stmt_state_rel back. *)
 Theorem stmt_state_rel_allocas_frame:
+  !H.
   !func cenv cx es s es' s' ctx.
-    stmt_state_rel ctx func cenv cx es s /\ state_rel func cenv cx es' s' /\
+    stmt_state_rel H ctx func cenv cx es s /\ state_rel H func cenv cx es' s' /\
     immutable_alloca_sep func cenv cx es' s' /\
     s'.vs_allocas = s.vs_allocas /\ s'.vs_alloca_next = s.vs_alloca_next /\
     s'.vs_fmp = s.vs_fmp /\ immutable_base_zero cenv s' ==>
-    stmt_state_rel ctx func cenv cx es' s'
+    stmt_state_rel H ctx func cenv cx es' s'
 Proof
+  gen_tac >>
   rw[stmt_state_rel_def]
   >- (irule alloca_inv_fields >> qexists_tac `s` >> simp[])
   >- (irule alloca_room_fields >> qexists_tac `s` >> simp[])
@@ -842,10 +864,12 @@ QED
 (* update_var keeps state_rel unless it overwrites a live local's pointer:
    the other conjuncts do not read vs_vars. *)
 Theorem state_rel_update_var_local:
+  !H.
   ∀ func cenv cx es ss name w.
-    state_rel func cenv cx es ss ∧ not_local_ptr cenv es.scopes name ⇒
-    state_rel func cenv cx es (update_var name w ss)
+    state_rel H func cenv cx es ss ∧ not_local_ptr cenv es.scopes name ⇒
+    state_rel H func cenv cx es (update_var name w ss)
 Proof
+  gen_tac >>
   rpt strip_tac >>
   `local_ptrs_rel func cenv es.scopes (update_var name w ss)` by
     (irule local_ptrs_rel_update_var >> fs[state_rel_def] >>
@@ -857,9 +881,11 @@ Proof
 QED
 
 Theorem state_rel_jump_to:
+  !H.
   !func cenv cx es s lbl.
-    state_rel func cenv cx es (jump_to lbl s) <=> state_rel func cenv cx es s
+    state_rel H func cenv cx es (jump_to lbl s) <=> state_rel H func cenv cx es s
 Proof
+  gen_tac >>
   simp[state_rel_def, local_ptrs_rel_def, local_region_def, local_backed_def,
        lookup_var_def, storage_rel_def, transient_rel_def, immutables_rel_def,
        logs_rel_def, call_ctx_rel_def, contract_storage_def,
@@ -867,20 +893,24 @@ Proof
 QED
 
 Theorem state_rel_push_scope:
+  !H.
   !func cenv cx es s.
-    state_rel func cenv cx (es with scopes := FEMPTY :: es.scopes) s <=>
-    state_rel func cenv cx es s
+    state_rel H func cenv cx (es with scopes := FEMPTY :: es.scopes) s <=>
+    state_rel H func cenv cx es s
 Proof
+  gen_tac >>
   simp[state_rel_def, storage_rel_def, transient_rel_def, immutables_rel_def,
        logs_rel_def, local_ptrs_rel_push_scope]
 QED
 
 Theorem state_rel_pop_scope:
+  !H.
   !func cenv cx es s sc rest.
-    state_rel func cenv cx es s /\ es.scopes = sc :: rest /\
+    state_rel H func cenv cx es s /\ es.scopes = sc :: rest /\
     (!n. n IN FDOM sc ==> lookup_scopes n rest = NONE) ==>
-    state_rel func cenv cx (es with scopes := rest) s
+    state_rel H func cenv cx (es with scopes := rest) s
 Proof
+  gen_tac >>
   rpt strip_tac >>
   `local_ptrs_rel func cenv rest s` by
     (irule local_ptrs_rel_pop_scope >> qexists_tac `sc` >>
@@ -892,8 +922,9 @@ QED
 (* Frame the local and immutable memory relations separately: constructor
    immutables share vs_memory with locals, unlike runtime data-section reads. *)
 Theorem state_rel_frame:
+  !H.
   !func cenv cx es es' s s'.
-    state_rel func cenv cx es s /\ local_ptrs_rel func cenv es'.scopes s' /\
+    state_rel H func cenv cx es s /\ local_ptrs_rel func cenv es'.scopes s' /\
     immutables_rel cenv cx.txn.target cenv.ce_module cenv.ce_is_ctor es s' /\
     es' = es with scopes := es'.scopes /\
     s'.vs_accounts = s.vs_accounts /\ s'.vs_transient = s.vs_transient /\
@@ -902,9 +933,11 @@ Theorem state_rel_frame:
     s'.vs_outcomes = s.vs_outcomes /\ s'.vs_requests = s.vs_requests /\
     s'.vs_pending_deletions = s.vs_pending_deletions /\
     s'.vs_immutables = s.vs_immutables /\
-    s'.vs_data_section = s.vs_data_section ==>
-    state_rel func cenv cx es' s'
+    s'.vs_data_section = s.vs_data_section /\
+    s'.vs_code = s.vs_code ==>
+    state_rel H func cenv cx es' s'
 Proof
+  gen_tac >>
   rpt strip_tac >>
   qpat_x_assum `es' = _` SUBST1_TAC >>
   gvs[state_rel_def, storage_rel_def, transient_rel_def, accounts_rel_def,
@@ -914,10 +947,12 @@ Proof
 QED
 
 Theorem stmt_state_rel_jump_to:
+  !H.
   !func cenv cx es s lbl ctx.
-    stmt_state_rel ctx func cenv cx es (jump_to lbl s) <=>
-    stmt_state_rel ctx func cenv cx es s
+    stmt_state_rel H ctx func cenv cx es (jump_to lbl s) <=>
+    stmt_state_rel H ctx func cenv cx es s
 Proof
+  gen_tac >>
   rpt gen_tac >>
   `fmp_room ctx func (jump_to lbl s) <=> fmp_room ctx func s` by
     (irule fmp_room_fields_cong >> simp[jump_to_def]) >>
@@ -928,10 +963,12 @@ Proof
 QED
 
 Theorem stmt_state_rel_inst_idx:
+  !H.
   !func cenv cx es s n ctx.
-    stmt_state_rel ctx func cenv cx es (s with vs_inst_idx := n) <=>
-    stmt_state_rel ctx func cenv cx es s
+    stmt_state_rel H ctx func cenv cx es (s with vs_inst_idx := n) <=>
+    stmt_state_rel H ctx func cenv cx es s
 Proof
+  gen_tac >>
   rpt gen_tac >>
   `fmp_room ctx func (s with vs_inst_idx := n) <=> fmp_room ctx func s` by
     (irule fmp_room_fields_cong >> simp[]) >>
@@ -945,10 +982,12 @@ Proof
 QED
 
 Theorem msg_gas_state_frame:
-  stmt_state_rel ctx func cenv cx es s ==>
-  stmt_state_rel ctx func cenv cx (es with gas_obs := gs)
+  !H.
+  stmt_state_rel H ctx func cenv cx es s ==>
+  stmt_state_rel H ctx func cenv cx (es with gas_obs := gs)
     (s with <|vs_gas_readings := readings; vs_inst_idx := k|>)
 Proof
+  gen_tac >>
   strip_tac >>
   gvs[stmt_state_rel_def, state_rel_def, local_ptrs_rel_def,
        local_region_def, local_backed_def, lookup_var_def, storage_rel_def,
@@ -961,10 +1000,12 @@ Proof
 QED
 
 Theorem stmt_state_rel_push_scope:
+  !H.
   !func cenv cx es s ctx.
-    stmt_state_rel ctx func cenv cx (es with scopes := FEMPTY :: es.scopes) s <=>
-    stmt_state_rel ctx func cenv cx es s
+    stmt_state_rel H ctx func cenv cx (es with scopes := FEMPTY :: es.scopes) s <=>
+    stmt_state_rel H ctx func cenv cx es s
 Proof
+  gen_tac >>
   simp[stmt_state_rel_def, state_rel_push_scope, immutable_alloca_sep_def, immutable_decl_sep_alt,
        local_region_def, lookup_scopes_def]
 QED
@@ -982,11 +1023,13 @@ Proof
 QED
 
 Theorem stmt_state_rel_pop_scope:
+  !H.
   !func cenv cx es s sc rest ctx.
-    stmt_state_rel ctx func cenv cx es s /\ es.scopes = sc :: rest /\
+    stmt_state_rel H ctx func cenv cx es s /\ es.scopes = sc :: rest /\
     (!n. n IN FDOM sc ==> lookup_scopes n rest = NONE) ==>
-    stmt_state_rel ctx func cenv cx (es with scopes := rest) s
+    stmt_state_rel H ctx func cenv cx (es with scopes := rest) s
 Proof
+  gen_tac >>
   rw[stmt_state_rel_def]
   >- (irule state_rel_pop_scope >> metis_tac[])
   >- (irule immutable_alloca_sep_fields >> qexistsl_tac [`s`, `es`] >>
@@ -1008,8 +1051,9 @@ QED
 (* state_rel reads cenv through the locals in scope and its other
    (storage, transient, immutable) bindings. *)
 Theorem state_rel_cenv_cong:
+  !H.
   !func cenv cenv' cx vs ss.
-    state_rel func cenv' cx vs ss /\
+    state_rel H func cenv' cx vs ss /\
     (!n e. lookup_scopes n vs.scopes = SOME e ==>
            FLOOKUP cenv.ce_vars n = FLOOKUP cenv'.ce_vars n) /\
     (!n l. FLOOKUP cenv.ce_module_vars n = SOME l /\ (!p sz. l <> PtrVar p sz) ==>
@@ -1017,8 +1061,9 @@ Theorem state_rel_cenv_cong:
     (!n l. FLOOKUP cenv'.ce_module_vars n = SOME l /\ (!p sz. l <> PtrVar p sz) ==>
            FLOOKUP cenv.ce_module_vars n = SOME l) /\
     cenv'.ce_module = cenv.ce_module /\ cenv'.ce_is_ctor = cenv.ce_is_ctor ==>
-    state_rel func cenv cx vs ss
+    state_rel H func cenv cx vs ss
 Proof
+  gen_tac >>
   rw[state_rel_def]
   >- metis_tac[local_ptrs_rel_cenv_cong]
   >- (simp[storage_vars_rel_def] >> conj_tac >> rpt strip_tac
@@ -1052,8 +1097,9 @@ QED
 (* stmt_state_rel reads the compile environment through the locals in
    scope and its other bindings. *)
 Theorem stmt_state_rel_cenv_cong:
+  !H.
   !func cenv cenv' cx es ss ctx.
-    stmt_state_rel ctx func cenv' cx es ss /\
+    stmt_state_rel H ctx func cenv' cx es ss /\
     (!n e. lookup_scopes n es.scopes = SOME e ==>
            FLOOKUP cenv.ce_vars n = FLOOKUP cenv'.ce_vars n) /\
     (!n l. FLOOKUP cenv.ce_module_vars n = SOME l /\ (!p sz. l <> PtrVar p sz) ==>
@@ -1063,8 +1109,9 @@ Theorem stmt_state_rel_cenv_cong:
     cenv'.ce_module = cenv.ce_module /\ cenv'.ce_is_ctor = cenv.ce_is_ctor /\
     cenv'.ce_module_var_type = cenv.ce_module_var_type /\
     cenv'.ce_imm_alloca = cenv.ce_imm_alloca ==>
-    stmt_state_rel ctx func cenv cx es ss
+    stmt_state_rel H ctx func cenv cx es ss
 Proof
+  gen_tac >>
   rw[stmt_state_rel_def] >- (irule state_rel_cenv_cong >> metis_tac[])
   >- (irule immutable_alloca_sep_cenv_cong >> qexists_tac `cenv'` >>
       simp[] >> rpt strip_tac >> qexists_tac `id` >>
@@ -1075,10 +1122,12 @@ QED
 
 (* Assigning a variable that is no live local's pointer. *)
 Theorem stmt_state_rel_update_var:
+  !H.
   !func cenv cx es s x w ctx.
-    stmt_state_rel ctx func cenv cx es s /\ not_local_ptr cenv es.scopes x ==>
-    stmt_state_rel ctx func cenv cx es (update_var x w s)
+    stmt_state_rel H ctx func cenv cx es s /\ not_local_ptr cenv es.scopes x ==>
+    stmt_state_rel H ctx func cenv cx es (update_var x w s)
 Proof
+  gen_tac >>
   rpt strip_tac >> fs[stmt_state_rel_def] >> rpt conj_tac
   >- (irule state_rel_update_var_local >> simp[])
   >- (irule alloca_inv_fields >> qexists_tac `s` >> simp[update_var_def])
@@ -1166,8 +1215,9 @@ QED
 (* --- Literal --- *)
 (* Covers word-type literals only. Bytestring/string literals allocate buffers. *)
 Theorem compile_literal_vv_correct:
+  !H.
   ∀ func cenv cx ty l es ss st vv st'.
-    state_rel func cenv cx es ss ∧
+    state_rel H func cenv cx es ss ∧
     compile_literal_vv ty l st = (vv, st') ∧
     (* Word literals only — dynamic bytes/strings allocate buffers *)
     (* Word literals only — exclude bytestring/string types that allocate buffers *)
@@ -1177,6 +1227,7 @@ Theorem compile_literal_vv_correct:
     emitted_insts st st' = [] ∧
     same_blocks st st'
 Proof
+  gen_tac >>
   rpt gen_tac >> strip_tac >>
   Cases_on `l`
   >- (Cases_on `b` >>
@@ -1229,8 +1280,9 @@ QED
 (* A well-typed word value rules out NoneV and type/value mismatches.
    A word annotation selects MLOAD; aggregate annotations return the pointer. *)
 Theorem compile_name_correct:
+  !H.
   ∀ func cenv cx ty ann id es ss st op st' v es' p sz entry.
-    state_rel func cenv cx es ss ∧
+    state_rel H func cenv cx es ss ∧
     (do result <- eval_expr cx (Name ann id); read_result cx result od) es =
       (INL v, es') ∧
     lower_value compile_expr cenv ty (Name ann id) st = (op, st') ∧
@@ -1247,6 +1299,7 @@ Theorem compile_name_correct:
       es' = es ∧
       same_blocks st st'
 Proof
+  gen_tac >>
   rpt gen_tac >> strip_tac >>
   `es' = es` by
     (qpat_x_assum `(do result <- eval_expr _ _; read_result _ result od) _ = _` mp_tac >>
@@ -1259,7 +1312,7 @@ Proof
   rpt strip_tac >> gvs[] >>
   `∃w. lookup_var p ss = SOME w ∧
        memory_value_rel (BaseTV bt) entry.value (w2n w) ss.vs_memory` by
-    (qpat_x_assum `state_rel _ _ _ _ _`
+    (qpat_x_assum `state_rel H _ _ _ _ _`
        (mp_tac o CONJUNCT1 o REWRITE_RULE [state_rel_def]) >>
      simp[local_ptrs_rel_def] >> strip_tac >>
      qpat_x_assum `!name ent ptr size. P name ent ptr size ==> ?w. Q name ent ptr size w`
@@ -1711,11 +1764,18 @@ Proof
   ci_mono_chain_tac ci_mono_emit_rws
 QED
 
+Theorem ci_mono_compile_word_copy_loop_op:
+  ∀ src dst cnt ll sl ic sa.
+    ci_mono sa (SND (compile_word_copy_loop_op src dst cnt ll sl ic sa))
+Proof
+  simp[contextTheory.compile_word_copy_loop_op_def, ci_mono_word_copy]
+QED
+
 Theorem ci_mono_compile_word_copy_loop:
   ∀ src dst wc ll sl ic sa.
     ci_mono sa (SND (compile_word_copy_loop src dst wc ll sl ic sa))
 Proof
-  simp[compile_word_copy_loop_def, compile_word_copy_loop_op_def, ci_mono_word_copy]
+  simp[contextTheory.compile_word_copy_loop_def, ci_mono_compile_word_copy_loop_op]
 QED
 
 Theorem ci_mono_store_immutable_bytestring:
@@ -1759,7 +1819,7 @@ Proof
   ci_mono_chain_tac [ci_mono_compile_word_copy_loop]
 QED
 
-Theorem ci_mono_compile_lit_byte_offset[local]:
+Theorem ci_mono_compile_lit_byte_offset:
   !op off sa. ci_mono sa (SND (compile_lit_byte_offset op off sa))
 Proof
   rpt gen_tac >> simp[contextTheory.compile_lit_byte_offset_def] >>
@@ -2219,6 +2279,31 @@ Proof
   irule ci_mono_bind >> simp[ci_mono_comp_return, ci_mono_emit_op]
 QED
 
+Theorem ci_mono_compile_materialize_vv:
+  ∀cenv ty vv sa. ci_mono sa (SND (compile_materialize_vv cenv ty vv sa))
+Proof
+  rpt gen_tac >> rewrite_tac[compile_materialize_vv_def] >>
+  ho_match_mp_tac ci_mono_bind >> conj_tac
+  >- simp[ci_mono_compile_alloc_buffer] >>
+  rpt strip_tac >>
+  ho_match_mp_tac ci_mono_bind >> conj_tac >- simp[ci_mono_unwrap_value] >>
+  rpt strip_tac >>
+  ho_match_mp_tac ci_mono_ignore_bind >> conj_tac
+  >- simp[ci_mono_compile_store_memory] >>
+  simp[ci_mono_comp_return]
+QED
+
+Theorem ci_mono_compile_snapshot_vv:
+  ∀cenv copy vv sa. ci_mono sa (SND (compile_snapshot_vv cenv copy vv sa))
+Proof
+  rpt gen_tac >> rewrite_tac[compile_snapshot_vv_def] >>
+  rpt IF_CASES_TAC
+  >- (ho_match_mp_tac ci_mono_bind >> simp[ci_mono_unwrap_value, ci_mono_comp_return])
+  >- (ho_match_mp_tac ci_mono_bind >>
+      simp[ci_mono_compile_materialize_vv, ci_mono_comp_return]) >>
+  simp[ci_mono_comp_return]
+QED
+
 Theorem ci_mono_compile_subscript_cfn[local]:
   ∀ cfn cenv ret_ty ty base_e idx_e sa.
     (∀ cenv' ty' e' sa'. ci_mono sa' (SND (cfn cenv' ty' e' sa'))) ⇒
@@ -2228,6 +2313,10 @@ Proof
   rewrite_tac[compile_subscript_def] >> BETA_TAC >>
   irule ci_mono_bind >> conj_tac
   >- (rpt gen_tac >> simp[LET_THM] >>
+      irule ci_mono_bind >> reverse conj_tac
+      >- (IF_CASES_TAC >>
+          simp[ci_mono_compile_snapshot_vv, ci_mono_comp_return]) >>
+      rpt gen_tac >> BETA_TAC >>
       Cases_on `place_type cenv base_e` >> simp[]
       >- (irule ci_mono_bind >> conj_tac
           >- (rpt gen_tac >> BETA_TAC >> irule ci_mono_bind >> conj_tac
@@ -2988,14 +3077,15 @@ Proof
 QED
 
 Theorem ci_mono_compile_slice_extcode[local]:
-  ∀ addr_op start_op len_op out_buf out_data sa. ci_mono sa (SND (compile_slice_extcode addr_op start_op len_op out_buf out_data sa))
+  ∀ addr_op start_op len_op out_size sa. ci_mono sa (SND (compile_slice_extcode addr_op start_op len_op out_size sa))
 Proof
   rpt gen_tac >>
   rewrite_tac[builtinBytesTheory.compile_slice_extcode_def] >> BETA_TAC >>
   rpt (ho_match_mp_tac ci_mono_bind ORELSE ho_match_mp_tac ci_mono_ignore_bind ORELSE
-       (conj_tac >- simp[ci_mono_emit_op, ci_mono_emit_void, ci_mono_comp_return, ci_mono_compile_alloc_buffer, ci_mono_compile_assert_slice_bounds]) ORELSE
-       gen_tac ORELSE strip_tac ORELSE CASE_TAC) >>
-  simp[ci_mono_emit_op, ci_mono_emit_void, ci_mono_comp_return, ci_mono_compile_alloc_buffer, ci_mono_compile_assert_slice_bounds]
+       (conj_tac >- simp[ci_mono_emit_op, ci_mono_emit_void, ci_mono_comp_return, ci_mono_compile_alloc_buffer, ci_mono_compile_assert_slice_bounds, ci_mono_compile_slice_out_buf]) ORELSE
+       gen_tac ORELSE strip_tac ORELSE CASE_TAC ORELSE
+       (Cases_on `av` >> rewrite_tac[pairTheory.UNCURRY_DEF] >> BETA_TAC)) >>
+  simp[ci_mono_emit_op, ci_mono_emit_void, ci_mono_comp_return, ci_mono_compile_alloc_buffer, ci_mono_compile_assert_slice_bounds, ci_mono_compile_slice_out_buf]
 QED
 
 Theorem ci_mono_compile_uint2str[local]:
@@ -3086,7 +3176,7 @@ Proof
   rpt (ho_match_mp_tac ci_mono_bind >> conj_tac >- simp[ci_mono_emit_op] >> rpt gen_tac >> rpt strip_tac) >> TRY (ho_match_mp_tac ci_mono_ignore_bind >> conj_tac >- simp[ci_mono_emit_void] >> rpt strip_tac) >> simp[ci_mono_comp_return, ci_mono_emit_void]
 QED
 
-Theorem ci_mono_compile_extract32_load[local]:
+Theorem ci_mono_compile_extract32_load:
   ∀ src_len src_data start_op sa.
     ci_mono sa (SND (compile_extract32_load src_len src_data start_op sa))
 Proof
@@ -3098,7 +3188,7 @@ Proof
   simp[ci_mono_emit_op]
 QED
 
-Theorem ci_mono_compile_clamp_basetype[local]:
+Theorem ci_mono_compile_clamp_basetype:
   ∀ val_op ty sa. ci_mono sa (SND (compile_clamp_basetype val_op ty sa))
 Proof
   ho_match_mp_tac compile_clamp_basetype_ind >>
@@ -3297,25 +3387,36 @@ QED
 
 (* Reuse ci_mono_typed_memory_family and ci_mono_compile_store_memory above
    for both aggregate construction and external-call default materialization. *)
-Theorem ci_mono_compile_materialize_vv:
-  ∀cenv ty vv sa. ci_mono sa (SND (compile_materialize_vv cenv ty vv sa))
+Theorem ci_mono_compile_multi_vvs:
+  ∀cfn cenv es sa.
+    (∀cenv' ty' e' sa'. ci_mono sa' (SND (cfn cenv' ty' e' sa'))) ⇒
+    ci_mono sa (SND (compile_multi_vvs cfn cenv es sa))
 Proof
-  rpt gen_tac >> rewrite_tac[compile_materialize_vv_def] >>
+  Induct_on `es` >> rpt strip_tac
+  >- simp[compile_multi_vvs_def, ci_mono_comp_return] >>
+  simp[Once compile_multi_vvs_def] >>
+  ho_match_mp_tac ci_mono_bind >> conj_tac >- metis_tac[] >>
+  rpt strip_tac >>
   ho_match_mp_tac ci_mono_bind >> conj_tac
-  >- simp[ci_mono_compile_alloc_buffer] >>
-  rpt strip_tac >>
-  ho_match_mp_tac ci_mono_bind >> conj_tac >- simp[ci_mono_unwrap_value] >>
-  rpt strip_tac >>
-  ho_match_mp_tac ci_mono_ignore_bind >> conj_tac
-  >- simp[ci_mono_compile_store_memory] >>
+  >- (first_x_assum irule >> simp[]) >>
   simp[ci_mono_comp_return]
 QED
 
-Theorem ci_mono_compile_snapshot_vv:
-  ∀cenv copy vv sa. ci_mono sa (SND (compile_snapshot_vv cenv copy vv sa))
+Theorem ci_mono_compile_ext_call_args:
+  ∀es tys cfn cenv kw_es sa.
+    (∀cenv' ty' e' sa'. ci_mono sa' (SND (cfn cenv' ty' e' sa'))) ⇒
+    ci_mono sa (SND (compile_ext_call_args cfn cenv kw_es tys es sa))
 Proof
-  rpt gen_tac >> rewrite_tac[compile_snapshot_vv_def] >>
-  ci_mono_chain_tac [ci_mono_unwrap_value, ci_mono_compile_materialize_vv]
+  Induct >> rpt gen_tac >> Cases_on `tys` >> strip_tac >>
+  simp[Once compile_ext_call_args_def, ci_mono_comp_return] >>
+  ho_match_mp_tac ci_mono_bind >> conj_tac >- metis_tac[] >>
+  rpt strip_tac >>
+  ho_match_mp_tac ci_mono_bind >> conj_tac
+  >- simp[ci_mono_compile_snapshot_vv] >>
+  rpt strip_tac >>
+  ho_match_mp_tac ci_mono_bind >> conj_tac
+  >- (first_x_assum irule >> simp[]) >>
+  simp[ci_mono_comp_return]
 QED
 
 Theorem ci_mono_compile_abi_encode_child_branches[local]:
@@ -3750,26 +3851,31 @@ Proof
 QED
 
 Theorem ci_mono_compile_stage_intcall_args:
-  ∀ cenv vals flags tys sa.
-    ci_mono sa (SND (compile_stage_intcall_args cenv vals flags tys sa))
+  ∀cfn cenv es flags tys sa.
+    (∀cenv' ty' e' sa'. ci_mono sa' (SND (cfn cenv' ty' e' sa'))) ⇒
+    ci_mono sa (SND (compile_stage_intcall_args cfn cenv es flags tys sa))
 Proof
   ho_match_mp_tac compile_stage_intcall_args_ind >> rpt conj_tac
   >- simp[Once compile_stage_intcall_args_def, ci_mono_comp_return]
-  >- (rpt gen_tac >> strip_tac >> gen_tac >>
+  >- (rpt gen_tac >> rpt strip_tac >>
       simp[Once compile_stage_intcall_args_def] >>
+      ho_match_mp_tac ci_mono_bind >> conj_tac >- metis_tac[] >>
+      rpt strip_tac >>
       ho_match_mp_tac ci_mono_bind >> conj_tac
       >- simp[ci_mono_unwrap_value] >>
       rpt strip_tac >>
       ho_match_mp_tac ci_mono_bind >> conj_tac
-      >- (first_x_assum (fn ih => irule (SRULE [] ih))) >>
+      >- (first_x_assum (fn ih => irule (SRULE [] ih)) >> metis_tac[]) >>
       rpt strip_tac >> simp[ci_mono_comp_return])
-  >- (rpt gen_tac >> strip_tac >> gen_tac >>
+  >- (rpt gen_tac >> rpt strip_tac >>
       simp[Once compile_stage_intcall_args_def] >>
-      ho_match_mp_tac ci_mono_bind >> conj_tac
-      >- simp[ci_mono_unwrap_value] >>
+      ho_match_mp_tac ci_mono_bind >> conj_tac >- metis_tac[] >>
       rpt strip_tac >>
       ho_match_mp_tac ci_mono_bind >> conj_tac
       >- simp[ci_mono_compile_alloc_buffer] >>
+      rpt strip_tac >>
+      ho_match_mp_tac ci_mono_bind >> conj_tac
+      >- simp[ci_mono_unwrap_value] >>
       rpt strip_tac >>
       ho_match_mp_tac ci_mono_ignore_bind >> conj_tac
       >- (IF_CASES_TAC >> simp[ci_mono_emit_void] >>
@@ -3779,39 +3885,28 @@ Proof
              simp[ci_mono_compile_store_bytestring, ci_mono_comp_return])) >>
       rpt strip_tac >>
       ho_match_mp_tac ci_mono_bind >> conj_tac
-      >- (first_x_assum (fn ih => irule (SRULE [] ih))) >>
+      >- (first_x_assum (fn ih => irule (SRULE [] ih)) >> metis_tac[]) >>
       rpt strip_tac >> simp[ci_mono_comp_return])
-  >- (rpt gen_tac >> strip_tac >> gen_tac >>
+  >- (rpt gen_tac >> rpt strip_tac >>
       simp[Once compile_stage_intcall_args_def] >>
+      ho_match_mp_tac ci_mono_bind >> conj_tac >- metis_tac[] >>
+      rpt strip_tac >>
       ho_match_mp_tac ci_mono_bind >> conj_tac
       >- simp[ci_mono_unwrap_value] >>
       rpt strip_tac >>
       ho_match_mp_tac ci_mono_bind >> conj_tac
-      >- (first_x_assum (fn ih => irule (SRULE [] ih))) >>
+      >- (first_x_assum (fn ih => irule (SRULE [] ih)) >> metis_tac[]) >>
       rpt strip_tac >> simp[ci_mono_comp_return])
-  >- (rpt gen_tac >> strip_tac >> gen_tac >>
+  >- (rpt gen_tac >> rpt strip_tac >>
       simp[Once compile_stage_intcall_args_def] >>
+      ho_match_mp_tac ci_mono_bind >> conj_tac >- metis_tac[] >>
+      rpt strip_tac >>
       ho_match_mp_tac ci_mono_bind >> conj_tac
       >- simp[ci_mono_unwrap_value] >>
       rpt strip_tac >>
       ho_match_mp_tac ci_mono_bind >> conj_tac
-      >- (first_x_assum (fn ih => irule (SRULE [] ih))) >>
+      >- (first_x_assum (fn ih => irule (SRULE [] ih)) >> metis_tac[]) >>
       rpt strip_tac >> simp[ci_mono_comp_return])
-QED
-
-Theorem ci_mono_compile_multi_vvs:
-  ∀cfn cenv es sa.
-    (∀cenv' ty' e' sa'. ci_mono sa' (SND (cfn cenv' ty' e' sa'))) ⇒
-    ci_mono sa (SND (compile_multi_vvs cfn cenv es sa))
-Proof
-  Induct_on `es` >> rpt strip_tac
-  >- simp[compile_multi_vvs_def, ci_mono_comp_return] >>
-  simp[Once compile_multi_vvs_def] >>
-  ho_match_mp_tac ci_mono_bind >> conj_tac >- metis_tac[] >>
-  rpt strip_tac >>
-  ho_match_mp_tac ci_mono_bind >> conj_tac
-  >- (first_x_assum irule >> simp[]) >>
-  simp[ci_mono_comp_return]
 QED
 
 Theorem ci_mono_ext_call_gas_opt[local]:
@@ -4313,10 +4408,9 @@ rpt (CHANGED_TAC (
   (irule ci_mono_trans >>
    irule_at (Pos last) ci_mono_compile_stage_intcall_args) ORELSE
   (irule ci_mono_trans >>
-   irule_at (Pos last) ci_mono_compile_alloc_buffer) ORELSE
-  (irule ci_mono_compile_multi_vvs)
+   irule_at (Pos last) ci_mono_compile_alloc_buffer)
 )) >>
-rpt strip_tac >> first_assum irule)
+rpt strip_tac >> simp[ci_mono_compile_alloc_buffer, ci_mono_refl])
   >- ( (* ExtCall *)
     rename1 `ExtCall _ _ signature _` >> PairCases_on `signature` >>
     Cases_on `args`
@@ -4332,7 +4426,7 @@ rpt strip_tac >> first_assum irule)
       (irule ci_mono_trans >>
        irule_at (Pos last) ci_mono_emit_op >> simp[]) ORELSE
       (irule ci_mono_trans >>
-       irule_at (Pos last) ci_mono_compile_multi_vvs >> simp[]) ORELSE
+       irule_at (Pos last) ci_mono_compile_ext_call_args >> simp[]) ORELSE
       (irule ci_mono_trans >>
        irule_at (Pos last) ci_mono_compile_ext_call_kwargs >> simp[]) ORELSE
       (irule ci_mono_trans >>
@@ -4346,7 +4440,7 @@ rpt strip_tac >> first_assum irule)
       (irule ci_mono_trans >>
        irule_at (Pos last) ci_mono_compile_external_call_kwargs) ORELSE
       (irule ci_mono_lower_value_cfn >> simp[]) ORELSE
-      (irule ci_mono_compile_multi_vvs >> simp[]) ORELSE
+      (irule ci_mono_compile_ext_call_args >> simp[]) ORELSE
       (irule ci_mono_compile_extcall_store_args >> simp[])
     )) >>
     gvs[] >> rpt strip_tac >>
@@ -4720,12 +4814,13 @@ Proof
 QED
 
 Theorem ci_mono_compile_make_tuple_cfn:
-  ∀cfn cenv es buf_op cur_offset st.
+  ∀cfn cenv es tys buf_op cur_offset st.
     (∀ce ty e s. ci_mono s (SND (cfn ce ty e s))) ⇒
-    ci_mono st (SND (compile_make_tuple cfn cenv es buf_op cur_offset st))
+    ci_mono st (SND (compile_make_tuple cfn cenv es tys buf_op cur_offset st))
 Proof
   gen_tac >> gen_tac >> Induct >> rpt gen_tac >> strip_tac
   >- simp[compile_make_tuple_def, ci_mono_comp_return] >>
+  Cases_on `tys` >- simp[compile_make_tuple_def, ci_mono_comp_return] >>
   simp[Once compile_make_tuple_def, LET_THM, comp_ignore_bind_def] >> BETA_TAC >>
   rpt (ho_match_mp_tac ci_mono_bind >> conj_tac
        >- simp[ci_mono_emit_op, ci_mono_unwrap_value, ci_mono_compile_store_memory]

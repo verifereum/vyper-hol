@@ -77,7 +77,7 @@ Theorem lookup_global_storage_region:
     (INL (PlaceR (StoragePlace tr slot tv)),st') ==>
   declared_storage_region cx mid var_name [] = SOME (tr,slot,tv)
 Proof
-  simp[lookup_global_def, bind_def, lift_option_type_def,
+  simp[lookup_global_def, ignore_bind_def, record_storage_event_def, bind_def, lift_option_type_def,
        return_def, raise_def, AllCaseEqs()] >> rpt strip_tac >>
   gvs[vyperMiscTheory.option_CASE_rator, vyperMiscTheory.prod_CASE_rator,
       var_decl_info_CASE_rator, bind_def, lift_option_type_def,
@@ -90,7 +90,7 @@ Theorem lookup_global_mapping_region:
     (INL (HashMapRef tr slot kt vt),st') ==>
   storage_mapping_region cx tr slot (HashMapT kt vt)
 Proof
-  simp[lookup_global_def, bind_def, lift_option_type_def,
+  simp[lookup_global_def, ignore_bind_def, record_storage_event_def, bind_def, lift_option_type_def,
        return_def, raise_def, AllCaseEqs()] >> rpt strip_tac >>
   gvs[vyperMiscTheory.option_CASE_rator, vyperMiscTheory.prod_CASE_rator,
       var_decl_info_CASE_rator, bind_def, lift_option_type_def,
@@ -161,7 +161,7 @@ Theorem extend_mapping_place_region:
   storage_result_region cx pv
 Proof
   Cases_on `sb` >>
-  simp[extend_place_def, bind_def, lift_option_type_def,
+  simp[extend_place_def, ignore_bind_def, record_storage_event_def, bind_def, lift_option_type_def,
        return_def, raise_def, AllCaseEqs()] >> rpt strip_tac >>
   gvs[value_type_CASE_rator, vyperMiscTheory.option_CASE_rator,
       bind_def, lift_option_type_def, return_def, raise_def, AllCaseEqs(),
@@ -176,10 +176,10 @@ Theorem extend_place_region:
   extend_place cx pv sb st = (INL next,st') ==>
   storage_result_region cx next
 Proof
-  Cases_on `pv` >> simp[storage_result_region_def, extend_place_def, raise_def]
+  Cases_on `pv` >> simp[storage_result_region_def, extend_place_def, ignore_bind_def, record_storage_event_def, raise_def]
   >- (rename1 `PlaceR p` >> Cases_on `p` >>
       simp[storage_result_region_def] >> strip_tac >>
-      gvs[extend_place_def, bind_def, ignore_bind_def, return_def,
+      gvs[extend_place_def, ignore_bind_def, record_storage_event_def, bind_def, ignore_bind_def, return_def,
           AllCaseEqs()] >>
       gvs[storage_result_region_def, storage_place_region_def,
           extend_memory_place_def] >>

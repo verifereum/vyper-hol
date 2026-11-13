@@ -42,7 +42,8 @@ QED
 
 Theorem eval_base_place_TopLevelNameTarget_preserves_state:
   ∀cx nsid st res st'.
-    eval_base_place cx (TopLevelNameTarget nsid) st = (res, st') ==> st' = st
+    eval_base_place cx (TopLevelNameTarget nsid) st = (res, st') ==>
+    st' = st with storage_trace := st'.storage_trace
 Proof
   Cases_on `nsid` >> simp[Once evaluate_def] >>
   metis_tac[lookup_global_state]

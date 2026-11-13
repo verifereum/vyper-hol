@@ -202,7 +202,16 @@ Resume compile_bytestring_fields_frag_ptr[tail]:
 QED
 
 Resume compile_bytestring_fields_frag_ptr[fields_package]:
-  typedCopyBytesFieldsLib.fields_package false
+  markerLib.RESUME_TAC >>
+  conj_tac >- metis_tac[cs_extends_trans] >>
+  qexistsl_tac [`Gf`, `tnf`, `sf`] >>
+  conj_tac >- metis_tac[frag_exec_ptr_seq] >>
+  conj_tac >- metis_tac[] >> conj_tac >- metis_tac[] >>
+  conj_tac >-
+    (qx_gen_tac `p` >> strip_tac >>
+     `not_fresh_at sm p` by
+       metis_tac[not_fresh_at_def, arithmeticTheory.LESS_EQ_TRANS] >>
+     metis_tac[]) >> suspend "fields_memory"
 QED
 
 Resume compile_bytestring_fields_frag_ptr[fields_memory]:
