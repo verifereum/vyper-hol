@@ -1,6 +1,7 @@
 (* Joint full simulation of the previous-block hash environment builtin. *)
 Theory bodyFullBuiltinEnvPrevHash
 Ancestors
+  bodyFullBuiltinEnvPrevHashSeq
   bodyFullExprGeneric bodyFullGhostFrame bodyFullPreds bodySimFull
   gasOutcomeFullCompose fragGasSeqPtr builtinProps exprSimProps exprSimSource
   exprSimHypsDefs exprLowering exprLoweringProps emitHelperProps emitHelper
@@ -23,6 +24,7 @@ Proof
      es.storage_trace` by gvs[storage_trace_domain_def] >>
   `tx_env_ok cx.txn` by
     (first_x_assum drule >> gvs[stmt_state_rel_def, state_rel_def, call_ctx_rel_def]) >>
+  drule lower_value_env >> strip_tac >>
   cheat
 QED
 
