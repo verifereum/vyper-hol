@@ -106,5 +106,28 @@ Proof
     (mp_then Any (qspec_then `0` mp_tac) runtime_sym_emit_inst) >>
   (impl_tac >- simp[runtime_sym_ordinary_inst]) >> strip_tac >>
   drule_all (SRULE [] runtime_sym_range_rounds) >> strip_tac >>
-  FAIL_TAC "after rounds"
+  drule_at (Pos last) (SRULE [] runtime_sym_range_checks) >>
+  (impl_tac >- simp[]) >> strip_tac >>
+  qpat_assum `emit_op ADD [start_op; rounds] _ = _`
+    (mp_then Any mp_tac runtime_sym_emit_op) >>
+  (impl_tac >- simp[]) >> strip_tac >>
+  drule_all runtime_sym_jump >> strip_tac >>
+  qpat_assum `emit_op EQ _ _ = _` (mp_then Any mp_tac runtime_sym_emit_op) >>
+  (impl_tac >- simp[]) >> strip_tac >>
+  drule_all runtime_sym_jnz >> strip_tac >>
+  drule_at (Pos last) (SRULE [] runtime_sym_range_store) >>
+  (impl_tac >- simp[]) >> strip_tac >>
+  qpat_x_assum `!bindings' ce' lc' s'' s'''. _`
+    (qspec_then `bindings` mp_tac) >>
+  disch_then (drule_at (Pos last)) >>
+  (impl_tac >- simp[runtime_sym_loop_def]) >> strip_tac >>
+  drule_all runtime_sym_jmp_if_not_terminated >> strip_tac >>
+  qpat_assum `emit_op ADD [Var counter_var; Lit 1w] _ = _`
+    (mp_then Any mp_tac runtime_sym_emit_op) >>
+  (impl_tac >- simp[is_label_operand_def]) >> strip_tac >>
+  qpat_assum `emit_inst ASSIGN [new_counter] _ _ = _`
+    (mp_then Any (qspec_then `0` mp_tac) runtime_sym_emit_inst) >>
+  (impl_tac >- simp[runtime_sym_ordinary_inst]) >> strip_tac >>
+  irule runtime_sym_jump >> goal_assum (drule_at Any) >> simp[] >>
+  qexists `cond_lbl` >> simp[]
 QED
