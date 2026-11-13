@@ -6,12 +6,12 @@
  *)
 Theory bodyPtrBytestringBuiltinsSliceCase
 Ancestors
-  bodyPtrPreds vyperContext vyperAST
+  bodyPtrPreds vyperContext vyperAST vyperInterpreter
 
-(* ADMITTED leaf: the pointer-safety case for slice, including its
-   slice(x.code) branch, is not proved yet. *)
+(* Code-source slices are handled separately by body_builtin_case_ptr. *)
 Theorem slice_body_expr_ptr_ok:
   !cx ty n es.
+    code_slice_source (Slice n) es = NONE /\
     (builtin_args_length_ok (Slice n) (LENGTH es) ==>
       body_exprs_ptr_ok cx es) ==>
     body_expr_ptr_ok cx (Builtin ty (Slice n) es)

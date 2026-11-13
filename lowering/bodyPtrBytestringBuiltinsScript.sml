@@ -19,6 +19,7 @@ Theorem bytestring_builtin_expr_ptr_ok:
   !cx ty bt es.
     ((?n. bt = CalldataSlice n) \/ (?n. bt = Concat n) \/ (?n. bt = Slice n) \/
      (?n. bt = Uint2Str n)) /\
+    code_slice_source bt es = NONE /\
     (builtin_args_length_ok bt (LENGTH es) ==> body_exprs_ptr_ok cx es) ==>
     body_expr_ptr_ok cx (Builtin ty bt es)
 Proof
@@ -28,7 +29,7 @@ Proof
   >~ [`Concat`]
   >- (irule concat_body_expr_ptr_ok >> first_assum ACCEPT_TAC)
   >~ [`Slice`]
-  >- (irule slice_body_expr_ptr_ok >> first_assum ACCEPT_TAC)
+  >- (irule slice_body_expr_ptr_ok >> conj_tac >> first_assum ACCEPT_TAC)
   >~ [`Uint2Str`]
   >- (irule uint2str_body_expr_ptr_ok >> first_assum ACCEPT_TAC)
 QED
