@@ -241,34 +241,6 @@ Proof
   metis_tac[assign_tuple_target_list_locals_gas]
 QED
 
-Theorem assign_tuple_target_local_backends[local]:
-  assign_tuple_targets cx (BaseTarget (NameTarget id)) v es = (res, ee) ==>
-  ee.accounts = es.accounts /\ ee.tStorage = es.tStorage
-Proof
-  strip_tac >>
-  gvs[evaluate_def, bind_def, ignore_bind_def, get_scopes_def,
-       type_check_def, assert_def, return_def, raise_def,
-       get_place_def, write_place_def, lift_option_type_def, lift_sum_def,
-       replace_memory_entry_def, evaluate_subscripts_def,
-       assign_subscripts_def, set_scopes_def, AllCaseEqs()] >>
-  Cases_on `find_containing_scope id es.scopes` >>
-  gvs[return_def, raise_def] >> PairCases_on `x` >>
-  gvs[assert_def, bind_def, ignore_bind_def, return_def, raise_def,
-      set_scopes_def, AllCaseEqs()]
-QED
-
-Theorem assign_tuple_target_list_locals_backends[local]:
-  !ids cx vs es res ee.
-  assign_tuple_target_list cx (MAP (BaseTarget o NameTarget) ids) vs es =
-    (res, ee) ==>
-  ee.accounts = es.accounts /\ ee.tStorage = es.tStorage
-Proof
-  Induct >> Cases_on `vs` >> rpt gen_tac >> strip_tac >>
-  gvs[Once evaluate_def, return_def, raise_def] >>
-  gvs[ignore_bind_def, bind_def, AllCaseEqs()] >>
-  imp_res_tac assign_tuple_target_local_backends >> metis_tac[]
-QED
-
 (* S1 compile_assign_tuple_locals_memory_stmt_frag, using the memory
    expression outcome and the counted, memory-checked suffix above. *)
 Theorem compile_assign_tuple_locals_memory_stmt_frag_mem:
@@ -382,7 +354,7 @@ Resume compile_assign_tuple_locals_memory_stmt_frag_mem[cont]:
   `ee'.accounts = ee.accounts /\ ee'.tStorage = ee.tStorage` by
     (qpat_assum `assign_tuple_targets _ _ _ _ = _`
        (mp_tac o SIMP_RULE (srw_ss()) [Once evaluate_def]) >> strip_tac >>
-     drule assign_tuple_target_list_locals_backends >> strip_tac >> simp[]) >>
+     drule tupleLocalStorePropsTheory.assign_tuple_target_list_locals_backends >> strip_tac >> simp[]) >>
   `!tail. assign_tuple_targets cx
      (TupleTarget (MAP (BaseTarget o NameTarget) ids))
      (ArrayV (TupleV vs)) (ee with gas_obs := tail) =

@@ -274,9 +274,9 @@ Finalise emit_external_size_counted
 Theorem compile_slice_calldata_stages:
   compile_slice_calldata start len N sa = (out,sb) ==>
   ?s1 s2 s3 s4 data limit.
-    compile_slice_out_buf N sa = ((out,data),s1) /\
-    emit_op CALLDATASIZE [] s1 = (limit,s2) /\
-    compile_assert_slice_bounds start len limit s2 = ((),s3) /\
+    emit_op CALLDATASIZE [] sa = (limit,s1) /\
+    compile_assert_slice_bounds start len limit s1 = ((),s2) /\
+    compile_slice_out_buf N s2 = ((out,data),s3) /\
     emit_void CALLDATACOPY [data; start; len] s3 = ((),s4) /\
     emit_void MSTORE [out; len] s4 = ((),sb) /\
     cs_extends sa s1 /\ cs_extends s1 s2 /\ cs_extends s2 s3 /\
@@ -285,8 +285,9 @@ Proof
   simp[compile_slice_calldata_def, comp_bind_def, comp_ignore_bind_def, comp_return_def] >>
   rpt (pairarg_tac >> simp[comp_bind_def, comp_ignore_bind_def, comp_return_def]) >>
   strip_tac >> gvs[] >>
-  `cs_extends sa cs'` by
-    (drule compile_slice_out_buf_compiler_parts >> strip_tac >>
+  `!n x y z. compile_slice_out_buf n y = (x,z) ==> cs_extends y z` by
+    (rpt strip_tac >> Cases_on `x` >>
+     drule compile_slice_out_buf_compiler_parts >> strip_tac >>
      metis_tac[cs_extends_trans]) >>
   metis_tac[cs_appends_emit_helpers, cs_appends_def, slice_bounds_extends]
 QED
@@ -294,9 +295,9 @@ QED
 Theorem compile_slice_code_stages:
   compile_slice_code start len N sa = (out,sb) ==>
   ?s1 s2 s3 s4 data limit.
-    compile_slice_out_buf N sa = ((out,data),s1) /\
-    emit_op CODESIZE [] s1 = (limit,s2) /\
-    compile_assert_slice_bounds start len limit s2 = ((),s3) /\
+    emit_op CODESIZE [] sa = (limit,s1) /\
+    compile_assert_slice_bounds start len limit s1 = ((),s2) /\
+    compile_slice_out_buf N s2 = ((out,data),s3) /\
     emit_void CODECOPY [data; start; len] s3 = ((),s4) /\
     emit_void MSTORE [out; len] s4 = ((),sb) /\
     cs_extends sa s1 /\ cs_extends s1 s2 /\ cs_extends s2 s3 /\
@@ -305,24 +306,31 @@ Proof
   simp[compile_slice_code_def, comp_bind_def, comp_ignore_bind_def, comp_return_def] >>
   rpt (pairarg_tac >> simp[comp_bind_def, comp_ignore_bind_def, comp_return_def]) >>
   strip_tac >> gvs[] >>
-  `cs_extends sa cs'` by
-    (drule compile_slice_out_buf_compiler_parts >> strip_tac >>
+  `!n x y z. compile_slice_out_buf n y = (x,z) ==> cs_extends y z` by
+    (rpt strip_tac >> Cases_on `x` >>
+     drule compile_slice_out_buf_compiler_parts >> strip_tac >>
      metis_tac[cs_extends_trans]) >>
   metis_tac[cs_appends_emit_helpers, cs_appends_def, slice_bounds_extends]
 QED
 
 Theorem compile_slice_extcode_stages:
-  compile_slice_extcode addr start len root data sa = (out,sb) ==>
-  ?s1 s2 s3 limit.
-    out = root /\ emit_op EXTCODESIZE [addr] sa = (limit,s1) /\
+  compile_slice_extcode addr start len N sa = (out,sb) ==>
+  ?s1 s2 s3 s4 data limit.
+    emit_op EXTCODESIZE [addr] sa = (limit,s1) /\
     compile_assert_slice_bounds start len limit s1 = ((),s2) /\
-    emit_void EXTCODECOPY [addr; data; start; len] s2 = ((),s3) /\
-    emit_void MSTORE [root; len] s3 = ((),sb) /\
-    cs_extends sa s1 /\ cs_extends s1 s2 /\
-    cs_extends s2 s3 /\ cs_extends s3 sb
+    compile_slice_out_buf N s2 = ((out,data),s3) /\
+    emit_void EXTCODECOPY [addr; data; start; len] s3 = ((),s4) /\
+    emit_void MSTORE [out; len] s4 = ((),sb) /\
+    cs_extends sa s1 /\ cs_extends s1 s2 /\ cs_extends s2 s3 /\
+    cs_extends s3 s4 /\ cs_extends s4 sb
 Proof
   simp[compile_slice_extcode_def, comp_bind_def, comp_ignore_bind_def, comp_return_def] >>
-  rpt (pairarg_tac >> simp[]) >> strip_tac >> gvs[] >>
+  rpt (pairarg_tac >> simp[comp_bind_def, comp_ignore_bind_def, comp_return_def]) >>
+  strip_tac >> gvs[] >>
+  `!n x y z. compile_slice_out_buf n y = (x,z) ==> cs_extends y z` by
+    (rpt strip_tac >> Cases_on `x` >>
+     drule compile_slice_out_buf_compiler_parts >> strip_tac >>
+     metis_tac[cs_extends_trans]) >>
   metis_tac[cs_appends_emit_helpers, cs_appends_def, slice_bounds_extends]
 QED
 
@@ -819,57 +827,8 @@ QED
 
 Finalise external_slice_fragment_counted_ok
 
-Theorem compile_slice_extcode_counted_ok:
-  compile_slice_extcode addr start len (Var root) (Var data) sa = (out,sb) /\
-  emit_op EXTCODESIZE [addr] sa = (limit,sc) /\
-  compile_assert_slice_bounds start len limit sc = ((),sd) /\
-  fn_has_code sa sb fn /\ ~ctx_has_dalloca ctx /\ ~s.vs_halted /\
-  s.vs_current_bb = sa.cs_current_bb /\ s.vs_inst_idx = LENGTH sa.cs_current_insts /\
-  fresh_vars_wrt sa s /\ eval_operand addr s = SOME a /\
-  eval_operand start s = SOME wa /\ eval_operand len s = SOME wn /\
-  lookup_var root s = SOME b /\ lookup_var data s = SOME d /\
-  32 <= N /\ ptr_covers G tn root s N /\ ptr_covers G tn data s (w2n wn) /\
-  (!op. MEM op [addr;start;len] ==> op_prov G op = NONE /\ op_taint tn op = {}) /\
-  run_inst_seq (emitted_insts sc sd)
-    ((update_var (STRING #"%" (toString sa.cs_next_var))
-      (n2w (LENGTH (lookup_account (w2w a) s.vs_accounts).code)) s) with
-       vs_inst_idx := SUC s.vs_inst_idx) = OK u ==>
-  out = Var root /\ ?r v t HG tm.
-    r = u with vs_inst_idx := LENGTH sd.cs_current_insts /\
-    v = (write_memory_with_expansion (w2n d)
-      (TAKE (w2n wn) (DROP (w2n wa) (lookup_account (w2w a) s.vs_accounts).code ++
-         REPLICATE (w2n wn) 0w)) r) with vs_inst_idx := SUC r.vs_inst_idx /\
-    t = (mstore (w2n b) wn v) with vs_inst_idx := SUC v.vs_inst_idx /\
-    gas_path_ptr D 0 ctx fn PG G tn s 0 HG tm (OK t) /\
-    t.vs_current_bb = sb.cs_current_bb /\ t.vs_inst_idx = LENGTH sb.cs_current_insts /\
-    ~t.vs_halted /\ ptr_covers HG tm root t N /\ mem_word_at (w2n b) t.vs_memory = wn /\
-    (!x. not_fresh_at sa x ==> FLOOKUP HG x = FLOOKUP G x /\
-      op_taint tm (Var x) = op_taint tn (Var x)) /\
-    tm.t_stor = tn.t_stor /\ tm.t_trans = tn.t_trans /\ tm.t_imm = tn.t_imm /\
-    tm.t_mem = (tn.t_mem DIFF {i | w2n d <= i /\ i < w2n d + w2n wn})
-      DIFF {i | w2n b <= i /\ i < w2n b + 32}
-Proof
-  strip_tac >> drule compile_slice_extcode_stages >> strip_tac >>
-  `s1 = sc /\ s2 = sd` by metis_tac[pairTheory.PAIR_EQ] >>
-  qpat_x_assum `s1 = sc` SUBST_ALL_TAC >> qpat_x_assum `s2 = sd` SUBST_ALL_TAC >>
-  `cs_extends sd sb /\ cs_extends sc sb` by metis_tac[cs_extends_trans] >>
-  `fn_has_code sa sc fn /\ fn_has_code sc sd fn /\
-   fn_has_code sd s3 fn /\ fn_has_code s3 sb fn` by metis_tac[fn_has_code_split] >>
-  `op_prov G addr = NONE /\ op_taint tn addr = {}` by (fs[] >> metis_tac[]) >>
-  `!op. op = start \/ op = len ==> op_prov G op = NONE /\ op_taint tn op = {}` by
-    (fs[] >> metis_tac[]) >>
-  `!z. (Var z = start \/ Var z = len \/ z = root \/ z = data) \/ Var z = addr ==>
-    not_fresh_at sa z` by
-    (rpt strip_tac >> rw[not_fresh_at_def] >>
-     metis_tac[fresh_vars_wrt_eval_operand, eval_operand_def, arithmeticTheory.GREATER_EQ]) >>
-  conj_tac >- simp[] >>
-  qpat_assum `emit_op EXTCODESIZE _ _ = _`
-    (mp_then Any (mp_tac o SRULE []) external_slice_fragment_counted_ok) >>
-  simp[] >> disch_then drule_all >> disch_then (qspecl_then [`PG`,`D`] mp_tac) >> simp[]
-QED
-
 Theorem compile_slice_extcode_bounds_abort:
-  compile_slice_extcode addr start len root data sa = (out,sb) /\
+  compile_slice_extcode addr start len N sa = (out,sb) /\
   emit_op EXTCODESIZE [addr] sa = (limit,sc) /\
   compile_assert_slice_bounds start len limit sc = ((),sd) /\
   fn_has_code sa sb fn /\ ~ctx_has_dalloca ctx /\ ~s.vs_halted /\
@@ -933,6 +892,7 @@ Theorem slice_out_buf_counted_replay[local]:
       eval_operand op t0 = eval_operand op s /\ op_prov HG op = op_prov G op /\
       op_taint tm op = op_taint tn op) /\
     t0.vs_call_ctx = s.vs_call_ctx /\ t0.vs_code = s.vs_code /\
+    t0.vs_accounts = s.vs_accounts /\
     lookup_var root t0 = SOME a /\ lookup_var data t0 = SOME (a + 32w) /\
     (!x. not_fresh_at sa x ==> FLOOKUP HG x = FLOOKUP G x /\
       op_taint tm (Var x) = op_taint tn (Var x)) /\
@@ -1013,329 +973,62 @@ Proof
   disch_then (qspecl_then [`PG`,`D`] mp_tac) >> simp[]
 QED
 
-Theorem external_slice_alloc_counted_ok:
-  compile_slice_out_buf N sa = ((Var root,Var data),s1) /\
-  emit_op sizeopc [] s1 = (limit,sc) /\
+Theorem compile_slice_calldata_bounds_abort:
+  compile_slice_calldata start len N sa = (out,sb) /\
+  emit_op CALLDATASIZE [] sa = (limit,sc) /\
   compile_assert_slice_bounds start len limit sc = ((),sd) /\
-  emit_void copyopc [Var data;start;len] sd = ((),se) /\
-  emit_void MSTORE [Var root;len] se = ((),sb) /\
-  fn_has_code sa s1 fn /\ fn_has_code s1 sc fn /\ fn_has_code sc sd fn /\
-  fn_has_code sd se fn /\ fn_has_code se sb fn /\
-  ((sizeopc = CALLDATASIZE /\ copyopc = CALLDATACOPY /\ src = s.vs_call_ctx.cc_calldata) \/
-   (sizeopc = CODESIZE /\ copyopc = CODECOPY /\ src = s.vs_code)) /\
-  stmt_state_rel H ctx fn cenv cx es s /\
-  fn_inst_ids_distinct fn /\ local_ptrs_reserved cenv sa /\
-  32 <= N /\ N < dimword (:256) /\ w2n wn <= N - 32 /\
+  fn_has_code sa sb fn /\
   ~ctx_has_dalloca ctx /\ ~s.vs_halted /\
   (!op z. MEM op [start;len] /\ op = Var z ==> not_fresh_at sa z) /\
   s.vs_current_bb = sa.cs_current_bb /\ s.vs_inst_idx = LENGTH sa.cs_current_insts /\
-  step_inst_base (mk_inst sa.cs_next_id ALLOCA [Lit (n2w N)] [root]) s = OK u0 /\
-  lookup_var root u0 = SOME a /\
-  t0 = ((update_var data (a + 32w) u0) with vs_inst_idx := s.vs_inst_idx + 2) /\
   eval_operand start s = SOME wa /\ eval_operand len s = SOME wn /\
   (!op. MEM op [start;len] ==> op_prov G op = NONE /\ op_taint tn op = {}) /\
   run_inst_seq (emitted_insts sc sd)
-    ((update_var (STRING #"%" (toString s1.cs_next_var)) (n2w (LENGTH src)) t0)
-      with vs_inst_idx := SUC t0.vs_inst_idx) = OK u ==>
-  ?r v t HG tm.
-    r = u with vs_inst_idx := LENGTH sd.cs_current_insts /\
-    v = (write_memory_with_expansion (w2n (a + 32w))
-      (TAKE (w2n wn) (DROP (w2n wa) src ++ REPLICATE (w2n wn) 0w)) r)
-        with vs_inst_idx := SUC r.vs_inst_idx /\
-    t = (mstore (w2n a) wn v) with vs_inst_idx := SUC v.vs_inst_idx /\
-    gas_path_ptr D 0 ctx fn PG G tn s 0 HG tm (OK t) /\
-    t.vs_current_bb = sb.cs_current_bb /\ t.vs_inst_idx = LENGTH sb.cs_current_insts /\
-    ~t.vs_halted /\ ptr_covers HG tm root t N /\ mem_word_at (w2n a) t.vs_memory = wn /\
+    ((update_var (STRING #"%" (toString sa.cs_next_var))
+      (n2w (LENGTH s.vs_call_ctx.cc_calldata)) s) with
+      vs_inst_idx := SUC s.vs_inst_idx) = Abort ab u ==>
+  ab = Revert_abort /\ ?HG tm j.
+    gas_path_ptr D 0 ctx fn PG G tn s 0 HG tm
+      (Abort Revert_abort (u with vs_inst_idx := j)) /\
     (!x. not_fresh_at sa x ==> FLOOKUP HG x = FLOOKUP G x /\
       op_taint tm (Var x) = op_taint tn (Var x)) /\
-    tm.t_stor = tn.t_stor /\ tm.t_trans = tn.t_trans /\ tm.t_imm = tn.t_imm /\
-    tm.t_mem = ((tn.t_mem UNION new_site_bytes s u0)
-      DIFF {i | w2n (a + 32w) <= i /\ i < w2n (a + 32w) + w2n wn})
-      DIFF {i | w2n a <= i /\ i < w2n a + 32} /\
-    w2n a + N < dimword (:256)
-Proof
-  disch_then (map_every assume_tac o CONJUNCTS) >>
-  drule_all slice_out_buf_counted_replay >>
-  disch_then (qspecl_then [`tn`,`PG`,`G`,`D`] strip_assume_tac) >>
-  `!op. MEM op [start;len] ==> !x. op = Var x ==> not_fresh_at sa x` by
-    metis_tac[] >>
-  `eval_operand start t0 = SOME wa /\ eval_operand len t0 = SOME wn /\
-   (!op. MEM op [start;len] ==> op_prov HG op = NONE /\ op_taint tm op = {})` by
-    (qpat_x_assum `t0 = _` kall_tac >> fs[] >> metis_tac[]) >>
-  `ptr_covers HG tm data t0 (w2n wn)` by
-    (fs[ptr_covers_def] >> qexistsl_tac [`a + 32w`,`b`,`sz'`] >> simp[] >> decide_tac) >>
-  Q.SUBGOAL_THEN
-    `((sizeopc = CALLDATASIZE /\ copyopc = CALLDATACOPY /\ src = t0.vs_call_ctx.cc_calldata) \/
-      (sizeopc = CODESIZE /\ copyopc = CODECOPY /\ src = t0.vs_code))` assume_tac
-  >- (qpat_x_assum `t0 = _` kall_tac >> metis_tac[]) >>
-  `!op z. MEM op [start;len;Var root;Var data] /\ op = Var z ==>
-    not_fresh_at s1 z` by
-    (fs[MEM] >> rpt strip_tac >> gvs[] >>
-     irule not_fresh_at_mono >> qexists_tac `sa` >> simp[]) >>
-  qpat_assum `emit_op sizeopc _ _ = _`
-    (mp_then Any mp_tac external_slice_two_source_counted_ok) >>
-  disch_then drule_all >> disch_then (qspecl_then [`PG`,`D`] strip_assume_tac) >>
-  drule_all gas_path_ptr_then >> simp[] >> disch_tac >>
-  qexistsl_tac [`HG'`,`tm'`] >>
-  qpat_x_assum `t0 = _` kall_tac >> gvs[] >> rpt strip_tac >>
-  `not_fresh_at s1 x` by
-    (irule not_fresh_at_mono >> qexists_tac `sa` >> simp[]) >>
-  qpat_x_assum `!x. not_fresh_at s1 x ==> _` drule >>
-  qpat_x_assum `!x. not_fresh_at sa x ==> _` drule >> simp[]
-QED
-
-Theorem compile_slice_calldata_counted_ok:
-  compile_slice_calldata start len N sa = (Var root,sb) /\
-  compile_slice_out_buf N sa = ((Var root,Var data),s1) /\
-  emit_op CALLDATASIZE [] s1 = (limit,sc) /\
-  compile_assert_slice_bounds start len limit sc = ((),sd) /\
-  fn_has_code sa sb fn /\ stmt_state_rel H ctx fn cenv cx es s /\
-  fn_inst_ids_distinct fn /\ local_ptrs_reserved cenv sa /\
-  32 <= N /\ N < dimword (:256) /\ w2n wn <= N - 32 /\
-  ~ctx_has_dalloca ctx /\ ~s.vs_halted /\
-  (!op z. MEM op [start;len] /\ op = Var z ==> not_fresh_at sa z) /\
-  s.vs_current_bb = sa.cs_current_bb /\ s.vs_inst_idx = LENGTH sa.cs_current_insts /\
-  step_inst_base (mk_inst sa.cs_next_id ALLOCA [Lit (n2w N)] [root]) s = OK u0 /\
-  lookup_var root u0 = SOME a /\
-  t0 = ((update_var data (a + 32w) u0) with vs_inst_idx := s.vs_inst_idx + 2) /\
-  eval_operand start s = SOME wa /\ eval_operand len s = SOME wn /\
-  (!op. MEM op [start;len] ==> op_prov G op = NONE /\ op_taint tn op = {}) /\
-  run_inst_seq (emitted_insts sc sd)
-    ((update_var (STRING #"%" (toString s1.cs_next_var))
-      (n2w (LENGTH s.vs_call_ctx.cc_calldata)) t0) with
-      vs_inst_idx := SUC t0.vs_inst_idx) = OK u ==>
-  ?r v t HG tm.
-    r = u with vs_inst_idx := LENGTH sd.cs_current_insts /\
-    v = (write_memory_with_expansion (w2n (a + 32w))
-      (TAKE (w2n wn) (DROP (w2n wa) s.vs_call_ctx.cc_calldata ++
-        REPLICATE (w2n wn) 0w)) r) with vs_inst_idx := SUC r.vs_inst_idx /\
-    t = (mstore (w2n a) wn v) with vs_inst_idx := SUC v.vs_inst_idx /\
-    gas_path_ptr D 0 ctx fn PG G tn s 0 HG tm (OK t) /\
-    t.vs_current_bb = sb.cs_current_bb /\ t.vs_inst_idx = LENGTH sb.cs_current_insts /\
-    ~t.vs_halted /\ ptr_covers HG tm root t N /\ mem_word_at (w2n a) t.vs_memory = wn /\
-    (!x. not_fresh_at sa x ==> FLOOKUP HG x = FLOOKUP G x /\
-      op_taint tm (Var x) = op_taint tn (Var x)) /\
-    tm.t_stor = tn.t_stor /\ tm.t_trans = tn.t_trans /\ tm.t_imm = tn.t_imm /\
-    tm.t_mem = ((tn.t_mem UNION new_site_bytes s u0)
-      DIFF {i | w2n (a + 32w) <= i /\ i < w2n (a + 32w) + w2n wn})
-      DIFF {i | w2n a <= i /\ i < w2n a + 32} /\
-    w2n a + N < dimword (:256)
-Proof
-  strip_tac >> drule compile_slice_calldata_stages >> strip_tac >>
-  `s1' = s1 /\ data' = Var data /\ s2 = sc /\ limit' = limit /\ s3 = sd` by
-    metis_tac[pairTheory.PAIR_EQ] >>
-  qpat_x_assum `s1' = s1` SUBST_ALL_TAC >>
-  qpat_x_assum `data' = Var data` SUBST_ALL_TAC >>
-  qpat_x_assum `s2 = sc` SUBST_ALL_TAC >>
-  qpat_x_assum `limit' = limit` SUBST_ALL_TAC >>
-  qpat_x_assum `s3 = sd` SUBST_ALL_TAC >>
-  `cs_extends sd sb /\ cs_extends sc sb /\ cs_extends s1 sb` by
-    metis_tac[cs_extends_trans] >>
-  `fn_has_code sa s1 fn /\ fn_has_code s1 sc fn /\ fn_has_code sc sd fn /\
-   fn_has_code sd s4 fn /\ fn_has_code s4 sb fn` by
-    (qpat_assum `fn_has_code sa sb fn` mp_tac >>
-     map_every (fn pat => qpat_assum pat mp_tac)
-       [`cs_extends sa s1`, `cs_extends s1 sc`, `cs_extends sc sd`,
-        `cs_extends sd s4`, `cs_extends s4 sb`, `cs_extends sd sb`,
-        `cs_extends sc sb`, `cs_extends s1 sb`] >>
-     POP_ASSUM_LIST (K all_tac) >> metis_tac[fn_has_code_split]) >>
-  qpat_x_assum `t0 = _` SUBST_ALL_TAC >> fs[NoAsms] >>
-  qpat_assum `emit_op CALLDATASIZE _ _ = _`
-    (mp_then Any (mp_tac o SRULE []) external_slice_alloc_counted_ok) >>
-  simp[] >> disch_then drule_all >>
-  disch_then (qspecl_then [`PG`,`D`] mp_tac) >> simp[]
-QED
-
-Theorem compile_slice_code_counted_ok:
-  compile_slice_code start len N sa = (Var root,sb) /\
-  compile_slice_out_buf N sa = ((Var root,Var data),s1) /\
-  emit_op CODESIZE [] s1 = (limit,sc) /\
-  compile_assert_slice_bounds start len limit sc = ((),sd) /\
-  fn_has_code sa sb fn /\ stmt_state_rel H ctx fn cenv cx es s /\
-  fn_inst_ids_distinct fn /\ local_ptrs_reserved cenv sa /\
-  32 <= N /\ N < dimword (:256) /\ w2n wn <= N - 32 /\
-  ~ctx_has_dalloca ctx /\ ~s.vs_halted /\ fresh_vars_wrt sa s /\
-  s.vs_current_bb = sa.cs_current_bb /\ s.vs_inst_idx = LENGTH sa.cs_current_insts /\
-  step_inst_base (mk_inst sa.cs_next_id ALLOCA [Lit (n2w N)] [root]) s = OK u0 /\
-  lookup_var root u0 = SOME a /\
-  t0 = ((update_var data (a + 32w) u0) with vs_inst_idx := s.vs_inst_idx + 2) /\
-  eval_operand start s = SOME wa /\ eval_operand len s = SOME wn /\
-  (!op. MEM op [start;len] ==> op_prov G op = NONE /\ op_taint tn op = {}) /\
-  run_inst_seq (emitted_insts sc sd)
-    ((update_var (STRING #"%" (toString s1.cs_next_var))
-      (n2w (LENGTH s.vs_code)) t0) with vs_inst_idx := SUC t0.vs_inst_idx) = OK u ==>
-  ?r v t HG tm.
-    r = u with vs_inst_idx := LENGTH sd.cs_current_insts /\
-    v = (write_memory_with_expansion (w2n (a + 32w))
-      (TAKE (w2n wn) (DROP (w2n wa) s.vs_code ++
-        REPLICATE (w2n wn) 0w)) r) with vs_inst_idx := SUC r.vs_inst_idx /\
-    t = (mstore (w2n a) wn v) with vs_inst_idx := SUC v.vs_inst_idx /\
-    gas_path_ptr D 0 ctx fn PG G tn s 0 HG tm (OK t) /\
-    t.vs_current_bb = sb.cs_current_bb /\ t.vs_inst_idx = LENGTH sb.cs_current_insts /\
-    ~t.vs_halted /\ ptr_covers HG tm root t N /\ mem_word_at (w2n a) t.vs_memory = wn /\
-    (!x. not_fresh_at sa x ==> FLOOKUP HG x = FLOOKUP G x /\
-      op_taint tm (Var x) = op_taint tn (Var x)) /\
-    tm.t_stor = tn.t_stor /\ tm.t_trans = tn.t_trans /\ tm.t_imm = tn.t_imm /\
-    tm.t_mem = ((tn.t_mem UNION new_site_bytes s u0)
-      DIFF {i | w2n (a + 32w) <= i /\ i < w2n (a + 32w) + w2n wn})
-      DIFF {i | w2n a <= i /\ i < w2n a + 32} /\
-    w2n a + N < dimword (:256)
+    tm.t_stor = tn.t_stor /\ tm.t_trans = tn.t_trans /\ tm.t_imm = tn.t_imm
 Proof
   strip_tac >>
-  `!op z. MEM op [start;len] /\ op = Var z ==> not_fresh_at sa z` by
-    (rpt strip_tac >> gvs[MEM] >> rw[not_fresh_at_def] >>
-     metis_tac[fresh_vars_wrt_eval_operand, arithmeticTheory.GREATER_EQ]) >>
-  drule compile_slice_code_stages >> strip_tac >>
-  `s1' = s1 /\ data' = Var data /\ s2 = sc /\ limit' = limit /\ s3 = sd` by
-    metis_tac[pairTheory.PAIR_EQ] >>
-  qpat_x_assum `s1' = s1` SUBST_ALL_TAC >>
-  qpat_x_assum `data' = Var data` SUBST_ALL_TAC >>
-  qpat_x_assum `s2 = sc` SUBST_ALL_TAC >>
+  drule compile_slice_calldata_stages >> strip_tac >>
+  `limit' = limit /\ s1 = sc` by metis_tac[pairTheory.PAIR_EQ] >>
   qpat_x_assum `limit' = limit` SUBST_ALL_TAC >>
-  qpat_x_assum `s3 = sd` SUBST_ALL_TAC >>
-  `cs_extends sd sb /\ cs_extends sc sb /\ cs_extends s1 sb` by
-    metis_tac[cs_extends_trans] >>
-  `fn_has_code sa s1 fn /\ fn_has_code s1 sc fn /\ fn_has_code sc sd fn /\
-   fn_has_code sd s4 fn /\ fn_has_code s4 sb fn` by
-    (qpat_assum `fn_has_code sa sb fn` mp_tac >>
-     map_every (fn pat => qpat_assum pat mp_tac)
-       [`cs_extends sa s1`, `cs_extends s1 sc`, `cs_extends sc sd`,
-        `cs_extends sd s4`, `cs_extends s4 sb`, `cs_extends sd sb`,
-        `cs_extends sc sb`, `cs_extends s1 sb`] >>
-     POP_ASSUM_LIST (K all_tac) >> metis_tac[fn_has_code_split]) >>
-  qpat_x_assum `t0 = _` SUBST_ALL_TAC >> fs[NoAsms] >>
-  qpat_assum `emit_op CODESIZE _ _ = _`
-    (mp_then Any (mp_tac o SRULE []) external_slice_alloc_counted_ok) >>
-  simp[] >> disch_then drule_all >>
-  disch_then (qspecl_then [`PG`,`D`] mp_tac) >> simp[]
-QED
-
-Theorem external_slice_alloc_counted_abort:
-  compile_slice_out_buf N sa = ((Var root,Var data),s1) /\
-  emit_op sizeopc [] s1 = (limit,sc) /\
-  compile_assert_slice_bounds start len limit sc = ((),sd) /\
-  fn_has_code sa s1 fn /\ fn_has_code s1 sc fn /\ fn_has_code sc sd fn /\
-  ((sizeopc = CALLDATASIZE /\ src = s.vs_call_ctx.cc_calldata) \/
-   (sizeopc = CODESIZE /\ src = s.vs_code)) /\
-  stmt_state_rel H ctx fn cenv cx es s /\
-  fn_inst_ids_distinct fn /\ local_ptrs_reserved cenv sa /\
-  32 <= N /\ N < dimword (:256) /\
-  ~ctx_has_dalloca ctx /\ ~s.vs_halted /\
-  (!op z. MEM op [start;len] /\ op = Var z ==> not_fresh_at sa z) /\
-  s.vs_current_bb = sa.cs_current_bb /\ s.vs_inst_idx = LENGTH sa.cs_current_insts /\
-  step_inst_base (mk_inst sa.cs_next_id ALLOCA [Lit (n2w N)] [root]) s = OK u0 /\
-  lookup_var root u0 = SOME a /\
-  t0 = ((update_var data (a + 32w) u0) with vs_inst_idx := s.vs_inst_idx + 2) /\
-  eval_operand start s = SOME wa /\ eval_operand len s = SOME wn /\
-  (!op. MEM op [start;len] ==> op_prov G op = NONE /\ op_taint tn op = {}) /\
-  run_inst_seq (emitted_insts sc sd)
-    ((update_var (STRING #"%" (toString s1.cs_next_var)) (n2w (LENGTH src)) t0)
-      with vs_inst_idx := SUC t0.vs_inst_idx) = Abort ab u ==>
-  ab = Revert_abort /\ ?HG tm j.
-    gas_path_ptr D 0 ctx fn PG G tn s 0 HG tm
-      (Abort Revert_abort (u with vs_inst_idx := j)) /\
-    (!x. not_fresh_at sa x ==> FLOOKUP HG x = FLOOKUP G x /\
-      op_taint tm (Var x) = op_taint tn (Var x)) /\
-    tm.t_stor = tn.t_stor /\ tm.t_trans = tn.t_trans /\ tm.t_imm = tn.t_imm
-Proof
-  disch_then (map_every assume_tac o CONJUNCTS) >>
-  drule_all slice_out_buf_counted_replay >>
-  disch_then (qspecl_then [`tn`,`PG`,`G`,`D`] strip_assume_tac) >>
-  `!op. MEM op [start;len] ==> !x. op = Var x ==> not_fresh_at sa x` by
-    metis_tac[] >>
-  `eval_operand start t0 = SOME wa /\ eval_operand len t0 = SOME wn /\
-   (!op. MEM op [start;len] ==> op_prov HG op = NONE /\ op_taint tm op = {})` by
-    (qpat_x_assum `t0 = _` kall_tac >> fs[] >> metis_tac[]) >>
-  `step_inst_base (mk_inst s1.cs_next_id sizeopc []
-     [STRING #"%" (toString s1.cs_next_var)]) t0 =
-   OK (update_var (STRING #"%" (toString s1.cs_next_var)) (n2w (LENGTH src)) t0)` by
-    (irule external_size_step >> qpat_x_assum `t0 = _` kall_tac >> metis_tac[]) >>
-  `MEM sizeopc [CALLDATASIZE;CODESIZE;EXTCODESIZE] /\ LENGTH ([]:operand list) <= 1 /\
-   (!arg. MEM arg ([]:operand list) ==> op_taint tm arg = {})` by
-    (qpat_x_assum `_ \/ _` strip_assume_tac >> simp[]) >>
-  `!op z. MEM op [start;len] /\ op = Var z ==> not_fresh_at s1 z` by
-    (rpt strip_tac >> irule not_fresh_at_mono >> qexists_tac `sa` >>
-     simp[] >> metis_tac[]) >>
-  qpat_assum `step_inst_base _ t0 = _`
+  qpat_x_assum `s1 = sc` SUBST_ALL_TAC >>
+  `s2 = sd` by metis_tac[pairTheory.PAIR_EQ] >>
+  qpat_x_assum `s2 = sd` SUBST_ALL_TAC >>
+  `cs_extends sd sb /\ cs_extends sc sb` by metis_tac[cs_extends_trans] >>
+  `fn_has_code sa sc fn /\ fn_has_code sc sd fn` by metis_tac[fn_has_code_split] >>
+  `step_inst_base
+    (mk_inst sa.cs_next_id CALLDATASIZE [] [STRING #"%" (toString sa.cs_next_var)]) s =
+    OK (update_var (STRING #"%" (toString sa.cs_next_var))
+      (n2w (LENGTH s.vs_call_ctx.cc_calldata)) s)` by
+    (irule external_size_step >> simp[]) >>
+  `MEM CALLDATASIZE [CALLDATASIZE;CODESIZE;EXTCODESIZE] /\ LENGTH ([]:operand list) <= 1 /\
+   (!arg. MEM arg ([]:operand list) ==> op_taint tn arg = {})` by simp[] >>
+  qpat_assum `step_inst_base _ s = _`
     (mp_then Any mp_tac external_query_bounds_reserved_counted_abort) >>
-  disch_then drule_all >> disch_then (qspecl_then [`PG`,`D`] strip_assume_tac) >>
-  drule_all gas_path_ptr_then >> simp[] >> disch_tac >>
-  simp[] >> qexistsl_tac [`HG'`,`tm'`,`j`] >>
-  qpat_x_assum `t0 = _` kall_tac >> gvs[] >> rpt strip_tac >>
-  `not_fresh_at s1 x` by
-    (irule not_fresh_at_mono >> qexists_tac `sa` >> simp[]) >>
-  qpat_x_assum `!x. not_fresh_at s1 x ==> _` drule >>
-  qpat_x_assum `!x. not_fresh_at sa x ==> _` drule >> simp[]
-QED
-
-Theorem compile_slice_calldata_bounds_abort:
-  compile_slice_calldata start len N sa = (Var root,sb) /\
-  compile_slice_out_buf N sa = ((Var root,Var data),s1) /\
-  emit_op CALLDATASIZE [] s1 = (limit,sc) /\
-  compile_assert_slice_bounds start len limit sc = ((),sd) /\
-  fn_has_code sa sb fn /\ stmt_state_rel H ctx fn cenv cx es s /\
-  fn_inst_ids_distinct fn /\ local_ptrs_reserved cenv sa /\
-  32 <= N /\ N < dimword (:256) /\
-  ~ctx_has_dalloca ctx /\ ~s.vs_halted /\
-  (!op z. MEM op [start;len] /\ op = Var z ==> not_fresh_at sa z) /\
-  s.vs_current_bb = sa.cs_current_bb /\ s.vs_inst_idx = LENGTH sa.cs_current_insts /\
-  step_inst_base (mk_inst sa.cs_next_id ALLOCA [Lit (n2w N)] [root]) s = OK u0 /\
-  lookup_var root u0 = SOME a /\
-  t0 = ((update_var data (a + 32w) u0) with vs_inst_idx := s.vs_inst_idx + 2) /\
-  eval_operand start s = SOME wa /\ eval_operand len s = SOME wn /\
-  (!op. MEM op [start;len] ==> op_prov G op = NONE /\ op_taint tn op = {}) /\
-  run_inst_seq (emitted_insts sc sd)
-    ((update_var (STRING #"%" (toString s1.cs_next_var))
-      (n2w (LENGTH s.vs_call_ctx.cc_calldata)) t0) with
-      vs_inst_idx := SUC t0.vs_inst_idx) = Abort ab u ==>
-  ab = Revert_abort /\ ?HG tm j.
-    gas_path_ptr D 0 ctx fn PG G tn s 0 HG tm
-      (Abort Revert_abort (u with vs_inst_idx := j)) /\
-    (!x. not_fresh_at sa x ==> FLOOKUP HG x = FLOOKUP G x /\
-      op_taint tm (Var x) = op_taint tn (Var x)) /\
-    tm.t_stor = tn.t_stor /\ tm.t_trans = tn.t_trans /\ tm.t_imm = tn.t_imm
-Proof
-  strip_tac >> drule compile_slice_calldata_stages >> strip_tac >>
-  `s1' = s1 /\ data' = Var data /\ s2 = sc /\ limit' = limit /\ s3 = sd` by
-    metis_tac[pairTheory.PAIR_EQ] >>
-  qpat_x_assum `s1' = s1` SUBST_ALL_TAC >>
-  qpat_x_assum `data' = Var data` SUBST_ALL_TAC >>
-  qpat_x_assum `s2 = sc` SUBST_ALL_TAC >>
-  qpat_x_assum `limit' = limit` SUBST_ALL_TAC >>
-  qpat_x_assum `s3 = sd` SUBST_ALL_TAC >>
-  `cs_extends sd sb /\ cs_extends sc sb /\ cs_extends s1 sb` by
-    metis_tac[cs_extends_trans] >>
-  `fn_has_code sa s1 fn /\ fn_has_code s1 sc fn /\ fn_has_code sc sd fn` by
-    (qpat_assum `fn_has_code sa sb fn` mp_tac >>
-     map_every (fn pat => qpat_assum pat mp_tac)
-       [`cs_extends sa s1`, `cs_extends s1 sc`, `cs_extends sc sd`,
-        `cs_extends sd sb`, `cs_extends sc sb`, `cs_extends s1 sb`] >>
-     POP_ASSUM_LIST (K all_tac) >> metis_tac[fn_has_code_split]) >>
-  qpat_x_assum `t0 = _` SUBST_ALL_TAC >> fs[NoAsms] >>
-  qpat_assum `emit_op CALLDATASIZE _ _ = _`
-    (mp_then Any (mp_tac o SRULE []) external_slice_alloc_counted_abort) >>
-  simp[] >> disch_then drule_all >>
-  disch_then (qspecl_then [`PG`,`D`] mp_tac) >> simp[]
+  disch_then drule_all >> disch_then (qspecl_then [`PG`,`D`] mp_tac) >> simp[] >>
+  strip_tac >> gvs[] >> qexistsl_tac [`HG`,`tm`,`j`] >> gvs[]
 QED
 
 Theorem compile_slice_code_bounds_abort:
-  compile_slice_code start len N sa = (Var root,sb) /\
-  compile_slice_out_buf N sa = ((Var root,Var data),s1) /\
-  emit_op CODESIZE [] s1 = (limit,sc) /\
+  compile_slice_code start len N sa = (out,sb) /\
+  emit_op CODESIZE [] sa = (limit,sc) /\
   compile_assert_slice_bounds start len limit sc = ((),sd) /\
-  fn_has_code sa sb fn /\ stmt_state_rel H ctx fn cenv cx es s /\
-  fn_inst_ids_distinct fn /\ local_ptrs_reserved cenv sa /\
-  32 <= N /\ N < dimword (:256) /\
+  fn_has_code sa sb fn /\
   ~ctx_has_dalloca ctx /\ ~s.vs_halted /\ fresh_vars_wrt sa s /\
   s.vs_current_bb = sa.cs_current_bb /\ s.vs_inst_idx = LENGTH sa.cs_current_insts /\
-  step_inst_base (mk_inst sa.cs_next_id ALLOCA [Lit (n2w N)] [root]) s = OK u0 /\
-  lookup_var root u0 = SOME a /\
-  t0 = ((update_var data (a + 32w) u0) with vs_inst_idx := s.vs_inst_idx + 2) /\
   eval_operand start s = SOME wa /\ eval_operand len s = SOME wn /\
   (!op. MEM op [start;len] ==> op_prov G op = NONE /\ op_taint tn op = {}) /\
   run_inst_seq (emitted_insts sc sd)
-    ((update_var (STRING #"%" (toString s1.cs_next_var))
-      (n2w (LENGTH s.vs_code)) t0) with vs_inst_idx := SUC t0.vs_inst_idx) = Abort ab u ==>
+    ((update_var (STRING #"%" (toString sa.cs_next_var))
+      (n2w (LENGTH s.vs_code)) s) with
+      vs_inst_idx := SUC s.vs_inst_idx) = Abort ab u ==>
   ab = Revert_abort /\ ?HG tm j.
     gas_path_ptr D 0 ctx fn PG G tn s 0 HG tm
       (Abort Revert_abort (u with vs_inst_idx := j)) /\
@@ -1348,24 +1041,191 @@ Proof
     (rpt strip_tac >> gvs[MEM] >> rw[not_fresh_at_def] >>
      metis_tac[fresh_vars_wrt_eval_operand, arithmeticTheory.GREATER_EQ]) >>
   drule compile_slice_code_stages >> strip_tac >>
-  `s1' = s1 /\ data' = Var data /\ s2 = sc /\ limit' = limit /\ s3 = sd` by
-    metis_tac[pairTheory.PAIR_EQ] >>
-  qpat_x_assum `s1' = s1` SUBST_ALL_TAC >>
-  qpat_x_assum `data' = Var data` SUBST_ALL_TAC >>
-  qpat_x_assum `s2 = sc` SUBST_ALL_TAC >>
+  `limit' = limit /\ s1 = sc` by metis_tac[pairTheory.PAIR_EQ] >>
   qpat_x_assum `limit' = limit` SUBST_ALL_TAC >>
-  qpat_x_assum `s3 = sd` SUBST_ALL_TAC >>
-  `cs_extends sd sb /\ cs_extends sc sb /\ cs_extends s1 sb` by
-    metis_tac[cs_extends_trans] >>
-  `fn_has_code sa s1 fn /\ fn_has_code s1 sc fn /\ fn_has_code sc sd fn` by
-    (qpat_assum `fn_has_code sa sb fn` mp_tac >>
-     map_every (fn pat => qpat_assum pat mp_tac)
-       [`cs_extends sa s1`, `cs_extends s1 sc`, `cs_extends sc sd`,
-        `cs_extends sd sb`, `cs_extends sc sb`, `cs_extends s1 sb`] >>
-     POP_ASSUM_LIST (K all_tac) >> metis_tac[fn_has_code_split]) >>
-  qpat_x_assum `t0 = _` SUBST_ALL_TAC >> fs[NoAsms] >>
-  qpat_assum `emit_op CODESIZE _ _ = _`
-    (mp_then Any (mp_tac o SRULE []) external_slice_alloc_counted_abort) >>
-  simp[] >> disch_then drule_all >>
-  disch_then (qspecl_then [`PG`,`D`] mp_tac) >> simp[]
+  qpat_x_assum `s1 = sc` SUBST_ALL_TAC >>
+  `s2 = sd` by metis_tac[pairTheory.PAIR_EQ] >>
+  qpat_x_assum `s2 = sd` SUBST_ALL_TAC >>
+  `cs_extends sd sb /\ cs_extends sc sb` by metis_tac[cs_extends_trans] >>
+  `fn_has_code sa sc fn /\ fn_has_code sc sd fn` by metis_tac[fn_has_code_split] >>
+  `step_inst_base
+    (mk_inst sa.cs_next_id CODESIZE [] [STRING #"%" (toString sa.cs_next_var)]) s =
+    OK (update_var (STRING #"%" (toString sa.cs_next_var))
+      (n2w (LENGTH s.vs_code)) s)` by
+    (irule external_size_step >> simp[]) >>
+  `MEM CODESIZE [CALLDATASIZE;CODESIZE;EXTCODESIZE] /\ LENGTH ([]:operand list) <= 1 /\
+   (!arg. MEM arg ([]:operand list) ==> op_taint tn arg = {})` by simp[] >>
+  qpat_assum `step_inst_base _ s = _`
+    (mp_then Any mp_tac external_query_bounds_reserved_counted_abort) >>
+  disch_then drule_all >> disch_then (qspecl_then [`PG`,`D`] mp_tac) >> simp[] >>
+  strip_tac >> gvs[] >> qexistsl_tac [`HG`,`tm`,`j`] >> gvs[]
 QED
+
+Theorem compile_slice_extcode_counted_ok:
+  compile_slice_extcode addr start len N sa = (out,sb) /\
+  emit_op EXTCODESIZE [addr] sa = (limit,sc) /\
+  compile_assert_slice_bounds start len limit sc = ((),sd) /\
+  compile_slice_out_buf N sd = ((Var root,Var data),se) /\
+  fn_has_code sa sb fn /\ ~ctx_has_dalloca ctx /\ ~s.vs_halted /\
+  s.vs_current_bb = sa.cs_current_bb /\ s.vs_inst_idx = LENGTH sa.cs_current_insts /\
+  fresh_vars_wrt sa s /\ eval_operand addr s = SOME a /\
+  eval_operand start s = SOME wa /\ eval_operand len s = SOME wn /\
+  (!op. MEM op [addr;start;len] ==> op_prov G op = NONE /\ op_taint tn op = {}) /\
+  run_inst_seq (emitted_insts sc sd)
+    ((update_var (STRING #"%" (toString sa.cs_next_var))
+      (n2w (LENGTH (lookup_account (w2w a) s.vs_accounts).code)) s) with
+       vs_inst_idx := SUC s.vs_inst_idx) = OK u /\
+  r = u with vs_inst_idx := LENGTH sd.cs_current_insts /\
+  stmt_state_rel H ctx fn cenv cx es r /\
+  fn_inst_ids_distinct fn /\ local_ptrs_reserved cenv sd /\
+  32 <= N /\ N < dimword (:256) /\ w2n wn <= N - 32 /\
+  step_inst_base (mk_inst sd.cs_next_id ALLOCA [Lit (n2w N)] [root]) r = OK u0 /\
+  lookup_var root u0 = SOME b /\
+  t0 = ((update_var data (b + 32w) u0) with vs_inst_idx := r.vs_inst_idx + 2) ==>
+  out = Var root /\ ?v t HG tm.
+    v = (write_memory_with_expansion (w2n (b + 32w))
+      (TAKE (w2n wn) (DROP (w2n wa) (lookup_account (w2w a) s.vs_accounts).code ++
+         REPLICATE (w2n wn) 0w)) t0) with vs_inst_idx := SUC t0.vs_inst_idx /\
+    t = (mstore (w2n b) wn v) with vs_inst_idx := SUC v.vs_inst_idx /\
+    gas_path_ptr D 0 ctx fn PG G tn s 0 HG tm (OK t) /\
+    t.vs_current_bb = sb.cs_current_bb /\ t.vs_inst_idx = LENGTH sb.cs_current_insts /\
+    ~t.vs_halted /\ ptr_covers HG tm root t N /\ mem_word_at (w2n b) t.vs_memory = wn /\
+    (!x. not_fresh_at sa x ==> FLOOKUP HG x = FLOOKUP G x /\
+      op_taint tm (Var x) = op_taint tn (Var x)) /\
+    tm.t_stor = tn.t_stor /\ tm.t_trans = tn.t_trans /\ tm.t_imm = tn.t_imm /\
+    tm.t_mem = ((tn.t_mem UNION new_site_bytes r u0)
+      DIFF {i | w2n (b + 32w) <= i /\ i < w2n (b + 32w) + w2n wn})
+      DIFF {i | w2n b <= i /\ i < w2n b + 32} /\
+    w2n b + N < dimword (:256)
+Proof
+  strip_tac >> drule compile_slice_extcode_stages >> strip_tac >>
+  `s1 = sc /\ s2 = sd` by metis_tac[pairTheory.PAIR_EQ] >>
+  qpat_x_assum `s1 = sc` SUBST_ALL_TAC >> qpat_x_assum `s2 = sd` SUBST_ALL_TAC >>
+  `out = Var root /\ data' = Var data /\ s3 = se` by metis_tac[pairTheory.PAIR_EQ] >>
+  qpat_x_assum `out = _` SUBST_ALL_TAC >> qpat_x_assum `data' = _` SUBST_ALL_TAC >>
+  qpat_x_assum `s3 = se` SUBST_ALL_TAC >>
+  conj_tac >- simp[] >>
+  `cs_extends sd sb /\ cs_extends sc sb /\ cs_extends se sb` by
+    metis_tac[cs_extends_trans] >>
+  `fn_has_code sa sc fn /\ fn_has_code sc sb fn` by
+    (irule fn_has_code_split >> rpt conj_tac >> first_assum ACCEPT_TAC) >>
+  `fn_has_code sc sd fn /\ fn_has_code sd sb fn` by
+    (irule fn_has_code_split >> rpt conj_tac >> first_assum ACCEPT_TAC) >>
+  `fn_has_code sd se fn /\ fn_has_code se sb fn` by
+    (irule fn_has_code_split >> rpt conj_tac >> first_assum ACCEPT_TAC) >>
+  `fn_has_code se s4 fn /\ fn_has_code s4 sb fn` by
+    (irule fn_has_code_split >> rpt conj_tac >> first_assum ACCEPT_TAC) >>
+  `op_taint tn addr = {} /\ op_taint tn start = {} /\ op_taint tn len = {}` by
+    (fs[] >> metis_tac[]) >>
+  `step_inst_base
+    (mk_inst sa.cs_next_id EXTCODESIZE [addr] [STRING #"%" (toString sa.cs_next_var)]) s =
+    OK (update_var (STRING #"%" (toString sa.cs_next_var))
+      (n2w (LENGTH (lookup_account (w2w a) s.vs_accounts).code)) s)` by
+    (irule external_size_step >> simp[] >> metis_tac[]) >>
+  `MEM EXTCODESIZE [CALLDATASIZE;CODESIZE;EXTCODESIZE] /\ LENGTH [addr] <= 1 /\
+   (!arg. MEM arg [addr] ==> op_taint tn arg = {})` by simp[] >>
+  `!op. MEM op [start;len] ==> op_prov G op = NONE /\ op_taint tn op = {}` by
+    (simp[] >> metis_tac[]) >>
+  qpat_assum `step_inst_base _ s = _`
+    (mp_then Any mp_tac external_query_bounds_counted_ok) >>
+  disch_then drule_all >>
+  disch_then (qspecl_then [`PG`,`D`]
+    (qx_choosel_then [`r1`,`H1`,`tm1`] strip_assume_tac)) >>
+  `r1 = r` by fs[] >> qpat_x_assum `r1 = r` SUBST_ALL_TAC >>
+  suspend "after_bounds"
+QED
+
+Resume compile_slice_extcode_counted_ok[after_bounds]:
+  `sa.cs_next_var <= sd.cs_next_var` by
+    (qpat_assum `emit_op EXTCODESIZE _ _ = (limit,sc)`
+       (strip_assume_tac o MATCH_MP emitHelperPropsTheory.emitted_insts_emit_op) >>
+     qpat_assum `compile_assert_slice_bounds _ _ _ _ = _`
+       (strip_assume_tac o MATCH_MP compile_assert_slice_bounds_layout) >>
+     simp[]) >>
+  drule_all slice_out_buf_counted_replay >>
+  disch_then (qspecl_then [`tm1`,`PG`,`H1`,`D`]
+    (qx_choosel_then [`H2`,`tm2`] strip_assume_tac)) >>
+  `!op v. eval_operand op s = SOME v ==>
+     eval_operand op t0 = SOME v /\ op_prov H2 op = op_prov G op /\
+     op_taint tm2 op = op_taint tn op` by
+    (rpt gen_tac >> disch_tac >>
+     `eval_operand op r = SOME v /\ op_prov H1 op = op_prov G op /\
+      op_taint tm1 op = op_taint tn op` by metis_tac[] >>
+     `!x. op = Var x ==> not_fresh_at sd x` by
+       (rpt strip_tac >> rw[not_fresh_at_def] >>
+        metis_tac[fresh_vars_wrt_eval_operand, arithmeticTheory.GREATER_EQ]) >>
+     metis_tac[]) >>
+  `eval_operand addr t0 = SOME a /\ eval_operand start t0 = SOME wa /\
+   eval_operand len t0 = SOME wn /\ op_taint tm2 addr = {} /\
+   op_taint tm2 start = {} /\ op_taint tm2 len = {}` by metis_tac[] >>
+  `ptr_covers H2 tm2 data t0 (w2n wn)` by
+    (qpat_x_assum `ptr_covers H2 tm2 data t0 (N - 32)` mp_tac >>
+     qpat_x_assum `w2n wn <= N - 32` mp_tac >>
+     POP_ASSUM_LIST (K all_tac) >> simp[ptr_covers_def] >>
+     rpt strip_tac >> qexists_tac `w` >> simp[]) >>
+  `t0.vs_accounts = s.vs_accounts` by metis_tac[] >>
+  `step_inst_base (mk_inst se.cs_next_id EXTCODECOPY [addr; Var data; start; len] []) t0 =
+   OK (write_memory_with_expansion (w2n (b + 32w))
+     (TAKE (w2n wn) (DROP (w2n wa) (lookup_account (w2w a) s.vs_accounts).code ++
+        REPLICATE (w2n wn) 0w)) t0)` by
+    (qpat_assum `eval_operand addr t0 = _` mp_tac >>
+     qpat_assum `eval_operand start t0 = _` mp_tac >>
+     qpat_assum `eval_operand len t0 = _` mp_tac >>
+     qpat_assum `lookup_var data t0 = _` mp_tac >>
+     qpat_assum `t0.vs_accounts = _` mp_tac >>
+     POP_ASSUM_LIST (K all_tac) >> rpt strip_tac >>
+     irule external_copy_step >> simp[eval_operand_def]) >>
+  `range_bytes (source_memory_write_ranges
+      (mk_inst se.cs_next_id EXTCODECOPY [addr; Var data; start; len] []) t0) =
+     {i | w2n (b + 32w) <= i /\ i < w2n (b + 32w) + w2n wn}` by
+    (qpat_assum `eval_operand addr t0 = _` mp_tac >>
+     qpat_assum `eval_operand start t0 = _` mp_tac >>
+     qpat_assum `eval_operand len t0 = _` mp_tac >>
+     qpat_assum `lookup_var data t0 = _` mp_tac >>
+     POP_ASSUM_LIST (K all_tac) >> rpt strip_tac >>
+     gvs[source_memory_write_ranges_def, sized_source_write_range_def,
+       range_bytes_def, mk_inst_def, eval_operand_def, lookup_var_def]) >>
+  suspend "copy_store"
+QED
+
+Resume compile_slice_extcode_counted_ok[copy_store]:
+  Q.SUBGOAL_THEN
+    `((EXTCODECOPY = CALLDATACOPY \/ EXTCODECOPY = CODECOPY) /\
+       [addr; Var data; start; len] = [Var data;start;len]) \/
+     (?ad. EXTCODECOPY = EXTCODECOPY /\
+       [addr; Var data; start; len] = [ad;Var data;start;len] /\
+       (?w. eval_operand ad t0 = SOME w) /\ op_taint tm2 ad = {})` assume_tac
+  >- (disj2_tac >> qexists_tac `addr` >> rpt conj_tac >- REFL_TAC >- REFL_TAC
+      >- (qexists_tac `a` >> first_assum ACCEPT_TAC) >>
+      first_assum ACCEPT_TAC) >>
+  qpat_assum `emit_void EXTCODECOPY _ se = _`
+    (mp_then Any mp_tac external_copy_store_apply) >>
+  disch_then drule >> disch_then drule_all >>
+  disch_then (qspecl_then [`D`,`PG`]
+    (qx_choosel_then [`v1`,`t1`,`tm3`] strip_assume_tac)) >>
+  `gas_path_ptr D 0 ctx fn PG G tn s (0 + 0) H2 tm2 (OK t0)` by
+    (irule gas_path_ptr_then >> metis_tac[]) >>
+  `gas_path_ptr D 0 ctx fn PG G tn s (0 + 0) H2 tm3 (OK t1)` by
+    (qpat_assum `gas_path_ptr _ _ _ _ _ H2 tm2 t0 _ H2 tm3 _` (fn th2 =>
+       qpat_assum `gas_path_ptr _ _ _ _ _ G tn s _ H2 tm2 _` (fn th1 =>
+         mp_tac (MATCH_MP gas_path_ptr_then (CONJ th1 th2)))) >>
+     simp[]) >>
+  `!x. not_fresh_at sa x ==> FLOOKUP H2 x = FLOOKUP G x /\
+     op_taint tm3 (Var x) = op_taint tn (Var x)` by
+    (gen_tac >> disch_tac >>
+     `not_fresh_at sd x` by
+       (irule freshWritesTheory.not_fresh_at_mono >> qexists_tac `sa` >>
+        conj_tac >> first_assum ACCEPT_TAC) >>
+     qpat_assum `tm3.t_var = _` mp_tac >>
+     qpat_assum `!x. not_fresh_at sd x ==> FLOOKUP H2 x = _ /\ _`
+       (drule_then strip_assume_tac) >>
+     qpat_assum `!x. not_fresh_at sa x ==> FLOOKUP H1 x = _ /\ _`
+       (drule_then strip_assume_tac) >>
+     rpt (qpat_x_assum `FLOOKUP _ x = _` mp_tac) >>
+     rpt (qpat_x_assum `op_taint _ (Var x) = _` mp_tac) >>
+     POP_ASSUM_LIST (K all_tac) >> simp[op_taint_def]) >>
+  qexistsl_tac [`v1`,`t1`,`H2`,`tm3`] >>
+  qpat_assum `range_bytes _ = _` (fn th => fs[th])
+QED
+
+Finalise compile_slice_extcode_counted_ok

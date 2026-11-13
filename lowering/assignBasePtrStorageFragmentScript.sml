@@ -8,7 +8,8 @@ Ancestors bodyMemAssignTopCopyFacts assignBasePtrStorageTypes assignBasePtrStora
   exprSimDefs fragExec exprLoweringProps vyperState assignBasePtrStorageDirect
   exprOperandVar venomState vyperTyping vyperStorageBackend
   assignBasePtrStorageExtent assignBasePtrStorageLoop exprSimHyps valueEncodingProps
-  list exprOpenTerminals exprOpenPrimitives emitHelperProps venomInst bodySimStmtCases exprSimSource
+  list exprOpenTerminals exprOpenPrimitives emitHelperProps venomInst bodySimStmtCases exprSimSource abiTypeBoundProps
+  vyperStorageCoverage
 Libs monadsyntax
 
 Theorem assign_base_storage_code_parts:
@@ -203,6 +204,12 @@ Resume compile_assign_storage_copy_eq_frag_ptr[post]:
     (drule_all assign_base_storage_rhs_bound >> strip_tac >>
      drule_all expr_body_pre_copy_ok >> strip_tac >>
      gvs[type_memory_size_slots] >> decide_tac) >>
+  `sfields_tenv_consistent cenv.ce_struct_fields (get_tenv cx)` by
+    fs[expr_sim_inv_def] >>
+  `~vyper_is_dynamic (get_tenv cx) (expr_type e)` by
+    (drule_all abi_props_vyper_typed >> simp[]) >>
+  `!i. i < type_slot_size tv ==> MEM i (MAP FST writes)` by
+    (rpt strip_tac >> irule encode_value_live_written >> metis_tac[]) >>
   `stmt_state_rel H ctx func cenv cx ee model` by
     (simp[Abbr `model`] >> irule assign_base_store_prefix_state_region >>
      simp[] >> metis_tac[]) >>

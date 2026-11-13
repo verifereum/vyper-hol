@@ -35,6 +35,7 @@ Theorem ctor_source_landing_world:
   deploy_source_ok tops am tx /\
   deploy_state_rel tops deploy_bc am tx es /\
   deploy_ctor_start tops am tx (mut,nr,stmts,am_c,es0) /\
+  actual.vs_code = (deploy_evaluation_context tops am tx).txn.code /\
   actual.vs_accounts = accounts_after_transfer tx am.accounts /\
   actual.vs_transient = am.tStorage /\
   actual.vs_call_ctx.cc_address = tx.target /\

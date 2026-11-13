@@ -369,6 +369,9 @@ Theorem immutable_iter_copy_declare_rel:
       mem_bytes_at off len z.vs_memory = mem_bytes_at off len s.vs_memory)
 Proof
   strip_tac >>
+  `value_has_type tv v` by
+    (gvs[loweringPostsTheory.immutable_holds_def, vyperStateTheory.read_result_def,
+        vyperStateTheory.return_def]) >>
   `copy_old_operand sa (Var p)` by simp[copy_old_operand_def] >>
   `eval_operand (Var p) s = SOME w` by simp[venomStateTheory.eval_operand_def] >>
   `(cenv.ce_is_ctor ==> regions_disjoint (w2n a) bytes (w2n w) bytes)` by

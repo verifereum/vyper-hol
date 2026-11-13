@@ -176,7 +176,7 @@ Theorem aggregate_tuple_head_tail_mem[local]:
     q.vs_accounts = t1.vs_accounts /\ q.vs_transient = t1.vs_transient /\
     q.vs_requests = t1.vs_requests /\ q.vs_call_ctx = t1.vs_call_ctx
 Proof
-  strip_tac >>
+  disch_then (map_every assume_tac o CONJUNCTS) >>
   `off + type_memory_size htv <= asz` by (fs[type_memory_size_def] >> decide_tac) >>
   `ce.ce_is_ctor ==> !name itv iv io.
     FLOOKUP ce.ce_module_vars (ce.ce_module,name) = SOME (ImmutableLoc io) /\
@@ -491,7 +491,7 @@ Theorem aggregate_tuple_success_continuation_mem[local]:
           mem_bytes_at p n r.vs_memory = mem_bytes_at p n s0.vs_memory))
     (\H res es' exit. ?exc. res = INR exc /\ expr_exit (INR exc : eval_result + exception) exit)
 Proof
-  strip_tac >>
+  disch_then (map_every assume_tac o CONJUNCTS) >>
   drule_at (Pat `compile_expr _ _ _ _ = _`) aggregate_tuple_head_tail_mem >>
   disch_then (drule_at (Pat `gas_marked_exec _ _ _ _ _ _ _ _`)) >>
   disch_then (drule_at (Pat `evaluate_type _ _ = _`)) >>
@@ -665,7 +665,8 @@ Proof
     (Q.GEN `P` aggregate_tuple_bind_outcome)) >>
   rpt conj_tac
   >- (irule aggregate_tuple_gas_outcome_mono >> goal_assum (drule_at Any) >>
-      simp[] >> rpt strip_tac >> Cases_on `res` >> gvs[exprSimDefsTheory.expr_exit_def])
+      simp[] >> rpt strip_tac >> Cases_on `res` >>
+      qpat_x_assum `expr_exit _ _` mp_tac >> simp[exprSimDefsTheory.expr_exit_def])
   >- (gen_tac >> BETA_TAC >>
       irule vyperStorageTraceTheory.storage_trace_frame_bind_all >>
       simp[vyperStorageTraceTheory.storage_trace_frame_read_result] >> gen_tac >>
