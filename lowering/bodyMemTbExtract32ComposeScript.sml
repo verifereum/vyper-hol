@@ -37,6 +37,8 @@ Proof
   `expr_val_rel cx (expr_type off) (IntV i) off_op t` by gvs[expr_post_def] >>
   `is_word_type (expr_type off)` by simp[is_word_type_def] >>
   `~(i < 0)` by intLib.ARITH_TAC >>
+  `evaluate_type (get_tenv cx) (expr_type off) = SOME (BaseTV (UintT k))` by
+    simp[vyperValueTheory.evaluate_type_def] >>
   drule_all expr_val_rel_typed >>
   simp[is_word_type_def, typed_val_to_w256_def, val_to_w256_def,
        integer_wordTheory.i2w_def, integerTheory.INT_NOT_LT]
