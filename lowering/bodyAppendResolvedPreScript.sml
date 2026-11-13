@@ -32,7 +32,7 @@ Proof
     (irule supported_expr_exists_root >> simp[]) >> gvs[]
 QED
 
-Theorem body_append_resolved_pre:
+Theorem body_append_target_rhs_pre:
   body_inv tops ctx cenv cx /\
   supported_stmt tops bindings (Append bt e) /\
   ~(?id. bt = TopLevelNameTarget id) /\
@@ -42,28 +42,22 @@ Theorem body_append_resolved_pre:
   call_evaluation_safe cx (int_calls_stmt (Append bt e)) /\
   (!target. supported_stmt_expr_exists (expr_abi_decode_target_root target)
      (Append bt e) ==> occurs_abi_decode_target target tops) ==>
-  target_pre cenv cx env bt es /\ expr_body_pre cenv cx env e es /\
-  ?cap. type_place_target env bt =
-    SOME (Type (ArrayT (expr_type e) (Dynamic cap)))
+  target_pre cenv cx env bt es /\ expr_body_pre cenv cx env e es
 Proof
   strip_tac >>
-  `supported_full_word_type (expr_type e) /\
-   IS_SOME (supported_target_info tops bindings bt) /\
+  `IS_SOME (supported_target_info tops bindings bt) /\
    supported_pure_expr tops e` by
     (Cases_on `bt` >> gvs[Once supported_stmt_def]) >>
   drule append_typing_target >> strip_tac >>
-  `elem = expr_type e` by metis_tac[append_full_word_source_rigid] >>
-  qpat_x_assum `elem = expr_type e` SUBST_ALL_TAC >>
   `body_stmt_safe tops (Append bt e)` by metis_tac[supported_stmt_body_safe] >>
   `supported_program tops /\ get_module_code cx NONE = SOME tops /\
    (!target. is_dynamic (vyper_to_abi_type (get_tenv cx) target) ==>
      is_dynamic (vyper_to_abi_type (type_env tops) target))` by fs[body_inv_def] >>
   `cx_tops cx = tops` by metis_tac[cx_tops_module] >>
-  conj_tac >- suspend "target" >>
-  conj_tac >- suspend "rhs" >> metis_tac[]
+  conj_tac >- suspend "target" >> suspend "rhs"
 QED
 
-Resume body_append_resolved_pre[target]:
+Resume body_append_target_rhs_pre[target]:
   simp[target_pre_def] >> conj_tac
   >- metis_tac[aug_place_supported_root_not_immutable, optionTheory.IS_SOME_EXISTS] >>
   `alloc_limits_target cenv bt` by
@@ -79,7 +73,7 @@ Resume body_append_resolved_pre[target]:
   metis_tac[call_evaluation_safe_append_left]
 QED
 
-Resume body_append_resolved_pre[rhs]:
+Resume body_append_target_rhs_pre[rhs]:
   `supported_expr tops e` by metis_tac[supported_expr_def] >>
   drule supported_expr_body_calls >> strip_tac >>
   irule stmt_expr_body_pre >>
@@ -88,7 +82,29 @@ Resume body_append_resolved_pre[rhs]:
   metis_tac[call_evaluation_safe_append_right]
 QED
 
-Finalise body_append_resolved_pre
+Finalise body_append_target_rhs_pre
+
+Theorem body_append_resolved_pre:
+  body_inv tops ctx cenv cx /\
+  supported_stmt tops bindings (Append bt e) /\
+  supported_full_word_type (expr_type e) /\
+  ~(?id. bt = TopLevelNameTarget id) /\
+  expr_sim_inv cenv cx env es /\
+  type_stmt env ret_ty (Append bt e) = SOME env' /\
+  stmt_exprs_ok cenv (Append bt e) /\
+  call_evaluation_safe cx (int_calls_stmt (Append bt e)) /\
+  (!target. supported_stmt_expr_exists (expr_abi_decode_target_root target)
+     (Append bt e) ==> occurs_abi_decode_target target tops) ==>
+  target_pre cenv cx env bt es /\ expr_body_pre cenv cx env e es /\
+  ?cap. type_place_target env bt =
+    SOME (Type (ArrayT (expr_type e) (Dynamic cap)))
+Proof
+  strip_tac >>
+  drule_all body_append_target_rhs_pre >> strip_tac >>
+  drule append_typing_target >> strip_tac >>
+  `elem = expr_type e` by metis_tac[append_full_word_source_rigid] >>
+  metis_tac[]
+QED
 
 Theorem append_resolved_rhs_body_pre:
   expr_body_pre cenv cx env e es /\ target_pre cenv cx env bt es /\
