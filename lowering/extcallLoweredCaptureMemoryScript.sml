@@ -23,6 +23,9 @@ Proof
     metis_tac[expr_body_pre_var_types_well_formed] >>
   `sfields_tenv_consistent ce.ce_struct_fields env.type_defs` by
     gvs[expr_sim_inv_def, env_consistent_def, env_context_consistent_def] >>
+  `!fid sig. FLOOKUP env.fn_sigs fid = SOME sig ==>
+     ce.ce_func_return_type (nsid_to_string fid) = sig.ret_ty` by
+    gvs[expr_sim_inv_def] >>
   drule_all ifexp_lowered_type_classify >> strip_tac >> gvs[]
 QED
 
