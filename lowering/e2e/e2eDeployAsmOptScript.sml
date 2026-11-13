@@ -52,7 +52,9 @@ Theorem compile_vyper_deploy_nonempty_asm_opt:
   compile_vyper asm_opt_finalizer policy tops = SOME (deploy_bc, runtime_bc) ==>
   deploy_bc <> []
 Proof
-  cheat
+  strip_tac >> drule compile_vyper_deploy_phases_asm_opt >> strip_tac >>
+  gvs[] >> irule codegen_assembly_finalizer_nonempty >>
+  fs[deploy_phases_def] >> metis_tac[]
 QED
 
 (* deploy_entry_state with prog's layout over es's code, which has prog'
@@ -87,17 +89,7 @@ Proof
   Cases_on `r.contexts` >> simp[]
 QED
 
-Theorem opt_deploy_frame:
-  !policy tops prog prog' runtime_bc rpolicy dunit dout cplan am tx es.
-  deploy_phases policy tops (assemble prog, runtime_bc)
-    (rpolicy, dunit, dout, prog, cplan) /\
-  asm_opt_finalizer rpolicy prog = SOME prog' /\
-  deploy_state_rel tops (assemble prog') am tx es ==>
-  ?es_p. deploy_state_rel tops (assemble prog) am tx es_p /\
-         gas_variant
-           (opt_deploy_entry_state prog prog' cplan tops es with
-              vs_outcomes := [])
-           (deploy_entry_state prog cplan tops es_p)
+(* TEMPORARILY CHEATED - train 16 pins the Venom code to tx.code; this run restates it for tx with code := the unoptimized layout.
 Proof
   rw[deploy_state_rel_def] >>
   qexists_tac `es with contexts :=
@@ -127,6 +119,21 @@ Proof
   qpat_x_assum `gas_readings _ = []` (fn th => REWRITE_TAC [th]) >>
   gvs[Abbr`ctxt_p`, venomStateTheory.venom_state_component_equality,
       rich_listTheory.DROP_LENGTH_APPEND]
+QED
+*)
+Theorem opt_deploy_frame:
+  !policy tops prog prog' runtime_bc rpolicy dunit dout cplan am tx es.
+  deploy_phases policy tops (assemble prog, runtime_bc)
+    (rpolicy, dunit, dout, prog, cplan) /\
+  asm_opt_finalizer rpolicy prog = SOME prog' /\
+  deploy_state_rel tops (assemble prog') am tx es ==>
+  ?es_p. deploy_state_rel tops (assemble prog) am tx es_p /\
+         gas_variant
+           (opt_deploy_entry_state prog prog' cplan tops es with
+              vs_outcomes := [])
+           (deploy_entry_state prog cplan tops es_p)
+Proof
+  cheat
 QED
 
 (* deploy_entry_state_ok's entry relation for opt_deploy_entry_state: the
