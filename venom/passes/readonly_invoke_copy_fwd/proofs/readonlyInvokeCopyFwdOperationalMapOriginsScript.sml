@@ -1,4 +1,9 @@
-(* Saved maps are observed at their own suspended call, not at the callee PC. *)
+(* Saved maps are observed at their own suspended call, not at the callee PC.
+   These witnesses establish origins only, not relational byte preservation.
+   In particular, pop below restores the suspended observation; advancing it
+   past a return needs paired readonly_call_reachable exit witnesses for each
+   origin.  The explicit selected anchor and the existential inherited-history
+   anchor must not be identified without proof. *)
 Theory readonlyInvokeCopyFwdOperationalMapOrigins
 Ancestors
   readonlyInvokeCopyFwdOperationalSupport
