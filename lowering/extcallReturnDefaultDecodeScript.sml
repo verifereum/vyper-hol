@@ -48,9 +48,6 @@ Theorem return_prepared_counted_reject:
     (type_to_abi_dec_info sf ce rt) st = ((),en) /\
   cs_extends st en /\ fn_has_code a en func /\ fn_inst_ids_distinct func /\
   (!l. dst <> Label l /\ base_op <> Label l) /\
-  (en.cs_current_insts <> [] \/
-   !bb. lookup_block en.cs_current_bb func.fn_blocks = SOME bb ==>
-        phi_prefix_length bb.bb_instructions = 0) /\
   lo < dimword (:256) /\ cap < dimword (:256) /\ lo <= cap /\
   s.vs_returndata = bs /\ LENGTH bs < dimword (:256) /\
   rt = (if needs_external_call_wrap ty then TupleT [ty] else ty) /\
@@ -102,9 +99,6 @@ Theorem return_prepared_counted_success:
     (type_to_abi_dec_info sf ce rt) st = ((),en) /\
   cs_extends st en /\ fn_has_code a en func /\ fn_inst_ids_distinct func /\
   (!l. dst <> Label l /\ base_op <> Label l) /\
-  (en.cs_current_insts <> [] \/
-   !bb. lookup_block en.cs_current_bb func.fn_blocks = SOME bb ==>
-        phi_prefix_length bb.bb_instructions = 0) /\
   lo < dimword (:256) /\ cap < dimword (:256) /\
   s.vs_returndata = bs /\ LENGTH bs < dimword (:256) /\ lo <= LENGTH bs /\
   rt = (if needs_external_call_wrap ty then TupleT [ty] else ty) /\

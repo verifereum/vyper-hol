@@ -15,7 +15,7 @@ Theorem intcall_log_counted_compose:
   LENGTH flags = LENGTH xs /\ LENGTH (FILTER I flags) <= 3 /\
   SUM (MAP (type_memory_bytes ce) (log_non_indexed_types flags (MAP SND xs))) < dimword (:256) /\
   abi_size_bound ce.ce_struct_fields (TupleT (log_non_indexed_types flags (MAP SND xs))) < dimword (:256) /\
-  compile_log_eval_all ce args sa = (xs,sm) /\
+  log_eval_view ce args sa xs sm /\
   compile_log_topic_ops (FST (split_log_ops xs flags)) sm = (ops,st) /\
   compile_stmt ce lctx ty (Log id args) sa = ((),sb) /\
   intcall_frame_ok fp /\ ce_locals_declared ce env /\ sm.cs_next_var <= sb.cs_next_var /\

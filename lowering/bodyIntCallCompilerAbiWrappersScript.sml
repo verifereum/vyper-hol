@@ -43,16 +43,6 @@ Proof
             intcall_interval_copy_memory])
 QED
 
-Theorem intcall_interval_materialize_vv:
-  k <= a.cs_next_var ==>
-  intcall_compiler_interval k a (SND (compile_materialize_vv cenv ty vv a))
-Proof
-  strip_tac >> simp[compile_materialize_vv_def, comp_ignore_bind_def] >>
-  rpt (rpt strip_tac >> simp[] >> irule intcall_interval_bind_floor >>
-       simp[intcall_interval_alloc_buffer, intcall_interval_unwrap_value,
-            intcall_interval_store_memory, intcall_interval_return])
-QED
-
 Theorem intcall_interval_pure_abi_encode_args:
   (!ce ty e a. ~expr_has_effect e /\ k <= a.cs_next_var ==>
     intcall_compiler_interval k a (SND (cfn ce ty e a))) ==>

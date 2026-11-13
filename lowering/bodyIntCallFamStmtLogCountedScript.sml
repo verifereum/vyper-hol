@@ -8,7 +8,7 @@ Ancestors
 
 Theorem intcall_log_suffix_counted:
   ce.ce_event_info (nsid_to_string id) = SOME (h,MAP SND xs,flags) /\
-  compile_log_eval_all ce args sa = (xs,sm) /\
+  log_eval_view ce args sa xs sm /\
   compile_log_topic_ops (FST (split_log_ops xs flags)) sm = (ops,st) /\
   compile_stmt ce lctx ty (Log id args) sa = ((),sb) /\
   intcall_frame_ok fp /\ intcall_joint_res fp ce env es sm s /\

@@ -27,7 +27,7 @@ Proof
     (fs[intcall_frame_ok_def] >> Cases_on `fp.jc_rb` >> gvs[]) >>
   simp[intcall_stmt_exit_def] >> disj2_tac >>
   qpat_assum `~FST _` (fn nr => simp[MATCH_MP return_unlock_state_inactive nr,
-    intret_q_def, result_rel_def, state_rel_gas_obs]) >>
+    intret_q_inactive, result_rel_def, state_rel_gas_obs]) >>
   conj_tac
   >- (qpat_x_assum `t = _` SUBST1_TAC >> fs[intcall_joint_res_def, intcall_expr_res_def]) >>
   rpt strip_tac >>
