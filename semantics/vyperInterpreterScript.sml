@@ -1,7 +1,6 @@
 Theory vyperInterpreter
 Ancestors
   vyperCallOutcome[ignore_grammar]
-  vyperCallOutcomeFrame[ignore_grammar]
   arithmetic alist combin option list finite_map pair
   rich_list sorting cv cv_std vfmState vfmContext vfmCompute[ignore_grammar]
   vfmExecution[ignore_grammar] vyperAST vyperGetter vyperABI
@@ -160,6 +159,7 @@ Definition handle_function_def:
   handle_function (ReturnException v) = return v ∧
   handle_function (Error e) = raise $ Error e ∧
   handle_function (AssertException str) = raise $ AssertException str ∧
+  handle_function HaltException = raise HaltException ∧
   handle_function _ = raise $ Error (TypeError "handle_function")
 End
 
@@ -504,6 +504,18 @@ Proof
   \\ asm_simp_tac monad_cong_ss []
 QED
 
+Theorem finally_unless_halt_cong[defncong]:
+  (f s = f' s') ∧
+  (∀x t. f' s = (x, t) ⇒ g t = g' t) ∧ (s = s') ⇒
+  finally_unless_halt f g s = finally_unless_halt f' g' s'
+Proof
+  rpt strip_tac >> gvs[] >> Cases_on `f' s` >>
+  rename1 `f' s = (result, st)` >> Cases_on `result` >>
+  TRY (rename1 `INR ex` >> Cases_on `ex`) >>
+  simp[finally_unless_halt_def] >> irule ignore_bind_cong >>
+  asm_simp_tac monad_cong_ss []
+QED
+
 (* lookup_function with Internal finds body via ALOOKUP on dest_Internal_Fn *)
 Theorem lookup_function_Internal_imp_ALOOKUP:
   ∀src_id_opt fn vis ts v nr w x y z.
@@ -703,12 +715,13 @@ Definition extract_call_result_def:
          | INR NONE =>  (* success - no exception *)
              SOME (T, ctxt.returnData,
                    final_state.rollback.accounts,
-                   final_state.rollback.tStorage, ctxt.logs)
+                    final_state.rollback.tStorage, ctxt.logs,
+                    final_state.rollback.toDelete)
          | INR (SOME Reverted) =>  (* revert - discard callee effects *)
-             SOME (F, ctxt.returnData, orig_accounts, orig_tStorage, [])
+              SOME (F, ctxt.returnData, orig_accounts, orig_tStorage, [], [])
          | INR (SOME ex) =>  (* exceptional halt - no return data *)
              if vfmExecution$vfm_abort (SOME ex) then NONE
-             else SOME (F, [], orig_accounts, orig_tStorage, [])
+              else SOME (F, [], orig_accounts, orig_tStorage, [], [])
          | _ => NONE)  (* still running *)
     | _ => NONE  (* shouldn't happen for single-context call *)
 End
@@ -760,13 +773,16 @@ End
    - tStorage: current transient storage
    - txParams: transaction parameters (preserves tx.origin, block info)
 
-   Returns SOME (success, returnData, accounts', tStorage', emitted_logs),
+   Returns SOME (success, returnData, accounts', tStorage', emitted_logs, deletions),
    or NONE on a model/domain failure. Failed calls (a value the caller can't
    pay, REVERT or another exceptional halt) give success = F, the original
-   accounts and transient storage, and an empty emitted-log list. *)
+   accounts and transient storage, and empty log/deletion lists.
+   Calldata of 2 ** 256 bytes or more is a model failure: the EVM's CALL
+   takes the input size as a stack word, so no real call carries it. *)
 Definition run_ext_call_def:
   run_ext_call caller callee calldata value_opt gas
                accounts tStorage txParams =
+    if 2 ** 256 <= LENGTH calldata then NONE else
     if ext_call_value_transfer_ok caller callee value_opt accounts then
       let code = (lookup_account callee accounts).code in
       let s0 = make_ext_call_state caller callee code calldata value_opt gas
@@ -789,7 +805,7 @@ Definition run_ext_call_def:
       case value_opt of
       | SOME amount =>
           if (lookup_account caller accounts).balance < amount
-          then SOME (F, [], accounts, tStorage, [])
+          then SOME (F, [], accounts, tStorage, [], [])
           else NONE
       | NONE => NONE
 End
@@ -835,8 +851,11 @@ End
 
 val () = cv_auto_trans make_delegate_call_state_def;
 
+(* As in run_ext_call, calldata of 2 ** 256 bytes or more is a model
+   failure. *)
 Definition run_delegate_call_def:
   run_delegate_call cx target_addr calldata gas accounts tStorage =
+    if 2 ** 256 <= LENGTH calldata then NONE else
     let s0 = make_delegate_call_state cx target_addr calldata gas accounts tStorage in
     let outcome =
       if fIN target_addr precompile_addresses then
@@ -862,6 +881,58 @@ Definition run_raw_call_def:
 End
 
 val () = cv_auto_trans run_raw_call_def;
+
+(* Every frame the interpreter starts for an external call has calldata
+   shorter than 2 ** 256 bytes, the bound call_tx_well_typed asks of a
+   transaction: run_ext_call and run_delegate_call build their frame
+   (make_ext_call_state, make_delegate_call_state) only past the guard on
+   LENGTH calldata, and that frame's message data is the calldata. The
+   *_calldata_bound theorems give the bound from a completed call. *)
+Theorem make_ext_call_state_calldata:
+  ?ctxt rb.
+    (make_ext_call_state caller callee code calldata value_opt gas accounts
+       tStorage txParams).contexts = [(ctxt,rb)] /\
+    buffer_to_list ctxt.msgParams.data = calldata
+Proof
+  simp[make_ext_call_state_def, initial_context_def, initial_msg_params_def,
+       make_evm_tx_def]
+QED
+
+Theorem make_delegate_call_state_calldata:
+  ?ctxt rb.
+    (make_delegate_call_state cx target_addr calldata gas accounts
+       tStorage).contexts = [(ctxt,rb)] /\
+    buffer_to_list ctxt.msgParams.data = calldata
+Proof
+  simp[make_delegate_call_state_def] >> pairarg_tac >>
+  simp[initial_context_def, initial_msg_params_def, make_evm_tx_def]
+QED
+
+Theorem run_ext_call_calldata_bound:
+  run_ext_call caller callee calldata value_opt gas accounts tStorage
+    txParams = SOME result ==>
+  LENGTH calldata < 2 ** 256
+Proof
+  simp[run_ext_call_def] >> IF_CASES_TAC >> simp[]
+QED
+
+Theorem run_delegate_call_calldata_bound:
+  run_delegate_call cx target_addr calldata gas accounts tStorage =
+    SOME result ==>
+  LENGTH calldata < 2 ** 256
+Proof
+  simp[run_delegate_call_def] >> IF_CASES_TAC >> simp[]
+QED
+
+Theorem run_raw_call_calldata_bound:
+  run_raw_call cx flags target_addr calldata amount gas accounts tStorage =
+    SOME result ==>
+  LENGTH calldata < 2 ** 256
+Proof
+  Cases_on `flags.rcf_is_delegate` >> simp[run_raw_call_def] >> strip_tac
+  >- (drule run_delegate_call_calldata_bound >> simp[])
+  >- (drule run_ext_call_calldata_bound >> simp[])
+QED
 
 (* Vyper's EXTCODESIZE check (vyper/codegen/external_call.py): before the
    call only when no return data is expected; calls with a return type rely
@@ -908,9 +979,9 @@ QED
 
 (* Shared execution after raw_call operands have been evaluated and decoded.
    Both input forms retain the same static/revert/output and state effects.
-   A call or staticcall takes its outcome from the external-call oracle when
-   st.outcomes is SOME, as extcall does (eval_ext_call_effects); a delegate
-   call, and any call without the oracle, runs the callee. *)
+   Every raw call, delegate or not, takes its outcome from the external-call
+   oracle when st.outcomes is SOME, as extcall does (eval_ext_call_effects);
+   without the oracle it runs the callee. *)
 Definition eval_raw_call_def:
   eval_raw_call cx flags target_addr calldata amount gas = do
     type_check
@@ -921,9 +992,11 @@ Definition eval_raw_call_def:
       (if flags.rcf_is_static then NONE else SOME amount);
     outcomes <- (λst. return st.outcomes st);
     (success, returnData) <-
-      if IS_SOME outcomes ∧ ¬flags.rcf_is_delegate then do
-        (rq, outcome) <- vyperCallOutcome$take_call_outcome target_addr calldata
-          value_opt;
+      if IS_SOME outcomes then do
+        (rq, outcome) <-
+          if flags.rcf_is_delegate then
+            vyperCallOutcome$take_delegate_outcome target_addr calldata value_opt
+          else vyperCallOutcome$take_call_outcome target_addr calldata value_opt;
         vyperCallOutcome$adopt_call_outcome rq outcome;
         return (call_outcome_success outcome, call_outcome_return_data outcome)
       od else do
@@ -936,10 +1009,12 @@ Definition eval_raw_call_def:
         success <<- FST result; result1 <<- SND result;
         returnData <<- FST result1; result2 <<- SND result1;
         accounts' <<- FST result2; result3 <<- SND result2;
-        tStorage' <<- FST result3; emitted_logs <<- SND result3;
+        tStorage' <<- FST result3; result4 <<- SND result3;
+        emitted_logs <<- FST result4; deletions <<- SND result4;
         update_accounts (K accounts');
         update_transient (K tStorage');
         append_logs emitted_logs;
+        update_pending_deletions (APPEND deletions);
         return (success, returnData)
       od;
     if flags.rcf_revert_on_failure then do
@@ -957,7 +1032,7 @@ End
 val () = eval_raw_call_def
   |> SRULE [FUN_EQ_THM, bind_def, ignore_bind_def, LET_RATOR, UNCURRY,
             COND_RATOR, prod_CASE_rator, sum_CASE_rator, lift_option_def,
-            option_CASE_rator, type_check_def, assert_def]
+            option_CASE_rator, type_check_def, assert_def, update_pending_deletions_def]
   |> cv_auto_trans;
 
 Theorem eval_raw_call_preserves_non_accounts:
@@ -967,11 +1042,13 @@ Proof
   simp[eval_raw_call_def, bind_def, ignore_bind_def, type_check_def,
        assert_def, return_def, raise_def, get_accounts_def,
        get_transient_storage_def, lift_option_def, update_accounts_def,
-       update_transient_def, append_logs_def, UNCURRY, COND_RATOR,
+       update_transient_def, append_logs_def, update_pending_deletions_def,
+       UNCURRY, COND_RATOR,
        option_CASE_rator, prod_CASE_rator, sum_CASE_rator, AllCaseEqs()] >>
   rpt strip_tac >> gvs[] >>
   imp_res_tac frame_call_value_state >>
-  imp_res_tac take_call_outcome_frame >> imp_res_tac adopt_call_outcome_frame >>
+  imp_res_tac take_call_outcome_frame >> imp_res_tac take_delegate_outcome_frame >>
+  imp_res_tac adopt_call_outcome_frame >>
   gvs[evaluation_state_component_equality]
 QED
 
@@ -1039,11 +1116,13 @@ Definition eval_ext_call_effects_def:
           success <<- FST result; result1 <<- SND result;
           returnData <<- FST result1; result2 <<- SND result1;
           accounts' <<- FST result2; result3 <<- SND result2;
-          tStorage' <<- FST result3; emitted_logs <<- SND result3;
+          tStorage' <<- FST result3; result4 <<- SND result3;
+          emitted_logs <<- FST result4; deletions <<- SND result4;
           (if success then return () else raise $ Error $ RevertData returnData);
           update_accounts (K accounts');
           update_transient (K tStorage');
           append_logs emitted_logs;
+          update_pending_deletions (APPEND deletions);
           return returnData
         od
   od
@@ -1135,11 +1214,13 @@ Definition eval_send_def:
       success <<- FST result; result1 <<- SND result;
       result2 <<- SND result1;
       accounts' <<- FST result2; result3 <<- SND result2;
-      tStorage' <<- FST result3; emitted_logs <<- SND result3;
+      tStorage' <<- FST result3; result4 <<- SND result3;
+      emitted_logs <<- FST result4; deletions <<- SND result4;
       check success "send failed";
       update_accounts (K accounts');
       update_transient (K tStorage');
       append_logs emitted_logs;
+      update_pending_deletions (APPEND deletions);
       return $ Value $ NoneV
     od
   od ∧
@@ -1151,76 +1232,6 @@ val () = eval_send_def
             prod_CASE_rator, sum_CASE_rator, option_CASE_rator, UNCURRY,
             lift_option_type_def, type_check_def, check_def, assert_def]
   |> cv_auto_trans;
-
-(* Compose local-state frames without expanding the external-call oracle. *)
-Theorem append_logs_locals[local]:
-  vyperCallOutcomeFrame$state_rel_frame
-    (\s t. t.scopes = s.scopes /\ t.immutables = s.immutables) (append_logs logs)
-Proof
-  simp[state_rel_frame_def, append_logs_def, return_def]
-QED
-
-Theorem frame_call_value_locals[local]:
-  vyperCallOutcomeFrame$state_rel_frame
-    (\s t. t.scopes = s.scopes /\ t.immutables = s.immutables)
-    (frame_call_value cx value_opt)
-Proof
-  simp[state_rel_frame_result] >> rpt strip_tac >>
-  drule frame_call_value_state >> simp[]
-QED
-
-val call_locals_relation =
-  ``\s:evaluation_state t. t.scopes = s.scopes /\ t.immutables = s.immutables``;
-val call_locals_primitives =
-  state_rel_frame_locals_primitives |> Q.INST [`R` |-> [ANTIQUOTE call_locals_relation]] |> SRULE [];
-val call_locals_take =
-  state_rel_frame_locals_take |> Q.INST [`R` |-> [ANTIQUOTE call_locals_relation]] |> SRULE [];
-val call_locals_bind =
-  state_rel_frame_bind_guarded |> Q.INST [`R` |-> [ANTIQUOTE call_locals_relation]] |> SRULE [];
-
-val CALL_LOCALS_STEP = FIRST [
-  FIRST (map MATCH_ACCEPT_TAC (CONJUNCTS call_locals_primitives)),
-  MATCH_ACCEPT_TAC call_locals_take,
-  MATCH_ACCEPT_TAC append_logs_locals,
-  MATCH_ACCEPT_TAC frame_call_value_locals,
-  MATCH_MP_TAC call_locals_bind >> conj_tac,
-  gen_tac, strip_tac,
-  CHANGED_TAC (simp_tac bool_ss
-    [FORALL_PROD, LET_THM, ignore_bind_def, UNCURRY, pair_case_thm]),
-  BasicProvers.TOP_CASE_TAC];
-
-Theorem eval_ext_call_locals[local]:
-  vyperCallOutcomeFrame$state_rel_frame
-    (\s t. t.scopes = s.scopes /\ t.immutables = s.immutables)
-    (eval_ext_call cx static skip_check sig opts vs)
-Proof
-  PairCases_on `sig` >> Cases_on `vs` >>
-  simp_tac bool_ss [eval_ext_call_def, eval_ext_call_effects_def, LET_THM] >>
-  rpt CALL_LOCALS_STEP
-QED
-
-Theorem eval_ext_call_preserves_non_accounts:
-  eval_ext_call cx static skip_check sig opts vs st = (res, st') ==>
-  st'.scopes = st.scopes /\ st'.immutables = st.immutables
-Proof
-  mp_tac (REWRITE_RULE [state_rel_frame_result] eval_ext_call_locals) >> simp[]
-QED
-
-Theorem eval_send_preserves_non_accounts:
-  eval_send cx has_gas vs st = (res, st') ==>
-  st'.scopes = st.scopes /\ st'.immutables = st.immutables
-Proof
-  Cases_on `vs` >- simp[eval_send_def, raise_def] >>
-  Cases_on `t` >- simp[eval_send_def, raise_def] >>
-  simp[eval_send_def, frame_call_value_def, bind_def, ignore_bind_def, type_check_def,
-       assert_def, return_def, raise_def, lift_option_type_def, check_def,
-       get_accounts_def, update_accounts_def, get_transient_storage_def,
-       lift_option_def, update_transient_def, append_logs_def,
-       vyperCallOutcomeTheory.take_call_outcome_def,
-       vyperCallOutcomeTheory.adopt_call_outcome_def, LET_THM, UNCURRY,
-       COND_RATOR, option_CASE_rator, prod_CASE_rator, sum_CASE_rator] >>
-  strip_tac >> gvs[AllCaseEqs()]
-QED
 
 (* ===== Reentrancy Lock Helpers ===== *)
 (* Vyper's @nonreentrant uses transient storage (EIP-1153 on Cancun+).
@@ -1358,6 +1369,79 @@ val () = unlock_if_nr_def
 (* Unfolded by simp, so proofs about evaluate_def see the lock code inline. *)
 val () = export_rewrites ["lock_if_nr_def", "unlock_if_nr_def"];
 
+(* A storage or transient array is iterated in place, as the compiler does:
+   its length is read once at loop entry, and each element is a location
+   read at the start of its own iteration. Other iterables are copied. *)
+Definition array_iterator_results_def:
+  array_iterator_results cx arr_typ res =
+    case res of
+    | PlaceR (StoragePlace tr slot (ArrayTV etv bd)) => do
+        len <- result_array_length cx res;
+        check (compatible_bound bd len) "For storage array length";
+        first <<- (case bd of Fixed _ => slot | Dynamic _ => slot + 1w);
+        return (GENLIST (λi. PlaceR (StoragePlace tr
+                  (first + n2w (i * type_slot_size etv)) etv)) len)
+      od
+    | _ => do
+        v <- read_result cx res;
+        arr_tv <- lift_option_type (evaluate_type (get_tenv cx) arr_typ)
+                    "For array type";
+        vs <- lift_option_type (extract_elements arr_tv v) "For not ArrayV";
+        return (MAP Value vs)
+      od
+End
+
+val () = array_iterator_results_def
+  |> SRULE [FUN_EQ_THM, bind_def, ignore_bind_def, LET_RATOR,
+            eval_result_CASE_rator, place_CASE_rator, type_value_CASE_rator,
+            bound_CASE_rator]
+  |> cv_auto_trans;
+
+Theorem array_iterator_results_storage:
+  array_iterator_results cx ty (PlaceR (StoragePlace tr slot (ArrayTV etv bd))) =
+  do
+    len <- result_array_length cx (PlaceR (StoragePlace tr slot (ArrayTV etv bd)));
+    check (compatible_bound bd len) "For storage array length";
+    first <<- (case bd of Fixed _ => slot | Dynamic _ => slot + 1w);
+    return (GENLIST (λi. PlaceR (StoragePlace tr
+              (first + n2w (i * type_slot_size etv)) etv)) len)
+  od
+Proof
+  simp[array_iterator_results_def]
+QED
+
+Theorem array_iterator_results_copy:
+  (!tr slot etv bd. res <> PlaceR (StoragePlace tr slot (ArrayTV etv bd))) ==>
+  array_iterator_results cx ty res =
+  do
+    v <- read_result cx res;
+    arr_tv <- lift_option_type (evaluate_type (get_tenv cx) ty) "For array type";
+    vs <- lift_option_type (extract_elements arr_tv v) "For not ArrayV";
+    return (MAP Value vs)
+  od
+Proof
+  Cases_on `res` >>
+  TRY (rename1 `PlaceR p` >> Cases_on `p` >>
+       TRY (rename1 `StoragePlace tr slot tv` >> Cases_on `tv`)) >>
+  simp[array_iterator_results_def]
+QED
+
+(* Building the iteration list reads but never writes. *)
+Theorem array_iterator_results_state:
+  array_iterator_results cx ty res st = (r,st') ==> st' = st
+Proof
+  Cases_on `res` >>
+  TRY (rename1 `PlaceR p` >> Cases_on `p` >>
+       TRY (rename1 `StoragePlace tr slot tv` >> Cases_on `tv` >>
+            TRY (rename1 `ArrayTV etv bd` >> Cases_on `bd` >> Cases_on `tr`))) >>
+  simp[array_iterator_results_def, bind_def, ignore_bind_def,
+       result_array_length_def, get_storage_backend_def,
+       get_transient_storage_def, get_accounts_def, check_def, assert_def,
+       return_def, raise_def, lift_option_type_def, option_CASE_rator,
+       LET_THM, AllCaseEqs()] >>
+  rw[] >> imp_res_tac read_result_state >> gvs[]
+QED
+
 (* top-level definition of the Vyper interpreter *)
 
 Definition evaluate_def:
@@ -1468,8 +1552,8 @@ Definition evaluate_def:
   od ∧
   eval_stmt cx (Assign (BaseTarget t) e) = do
     pv <- eval_expr cx e;
-    p <- eval_target_place cx t;
     v <- read_result cx pv;
+    p <- eval_target_place cx t;
     write_place cx p v
   od ∧
   eval_stmt cx (Assign (TupleTarget gs) e) = do
@@ -1513,10 +1597,7 @@ Definition evaluate_def:
   od ∧
   eval_iterator cx (Array e) = do
     tv <- eval_expr cx e;
-    v <- read_result cx tv;
-    arr_tv <- lift_option_type (evaluate_type (get_tenv cx) (expr_type e)) "For array type";
-    vs <- lift_option_type (extract_elements arr_tv v) "For not ArrayV";
-    return vs
+    array_iterator_results cx (expr_type e) tv
   od ∧
   eval_iterator cx (Range e1 e2) = do
     tv1 <- eval_expr cx e1;
@@ -1525,15 +1606,16 @@ Definition evaluate_def:
     v2 <- read_result cx tv2;
     rl <- lift_sum $ get_range_limits v1 v2;
     n1 <<- FST rl; n2 <<- SND rl;
-    return $ GENLIST (λn. IntV (n1 + &n)) n2
+    return $ GENLIST (λn. Value (IntV (n1 + &n))) n2
   od ∧
   eval_for cx tyv nm body [] = return () ∧
-  eval_for cx tyv nm body (v::vs) = do
+  eval_for cx tyv nm body (r::rs) = do
+    v <- read_result cx r;
     push_scope_with_var nm tyv v;
     broke <- finally
       (try (do eval_stmts cx body; return F od) handle_loop_exception)
       pop_scope ;
-    if broke then return () else eval_for cx tyv nm body vs
+    if broke then return () else eval_for cx tyv nm body rs
   od ∧
   eval_expr cx (Name _ id) = do
     sc <- get_scopes;
@@ -1573,6 +1655,12 @@ Definition evaluate_def:
       tv <- eval_expr cx (HD es);
       len <- result_array_length cx tv;
       return $ IntV (&len)
+    od else if bt = Bop In ∨ bt = Bop NotIn then do
+      vs <- eval_exprs cx es;
+      type_check (LENGTH vs = 2) "Membership args";
+      tv <- lift_option_type
+        (evaluate_type (get_tenv cx) (expr_type (EL 1 es))) "Membership type";
+      lift_sum $ evaluate_membership tv (bt = Bop NotIn) (EL 0 vs) (EL 1 vs)
     od else if bt = Env MsgGas then next_gas_reading
     else do
       vs <- eval_exprs cx es;
@@ -1637,11 +1725,12 @@ Definition evaluate_def:
        Lock operates only on transient storage, independent of scopes. *)
     lock_if_nr cx nr is_view;
     cxf <- push_function (src_id_opt, fn) env cx;
-    rv <- finally
-      (try (do eval_stmts cxf body; return NoneV od) handle_function)
-      (do pop_function prev;
-          unlock_if_nr cx nr is_view
-       od);
+    rv <- finally_unless_halt
+      (finally
+        (try (do eval_stmts cxf body; return NoneV od) handle_function)
+        (pop_function prev))
+      (* Release the lock on return and failure; a halt leaves it set. *)
+      (unlock_if_nr cx nr is_view);
     crv <- lift_option_type (safe_cast rtv rv) "IntCall cast ret";
     return $ Value crv
   od ∧
@@ -1688,7 +1777,8 @@ Definition evaluate_def:
   eval_expr cx (Call _ RawRevert es _) = do
     vs <- eval_exprs cx es;
     type_check (LENGTH vs = 1) "raw_revert args";
-    raise $ Error $ RuntimeError "raw_revert"
+    data <- lift_option_type (dest_BytesV (EL 0 vs)) "raw_revert data";
+    raise (Error (RevertData data))
   od ∧
   (* selfdestruct(to) — terminus *)
   eval_expr cx (Call _ SelfDestructTarget es _) = do
@@ -1697,14 +1787,15 @@ Definition evaluate_def:
     target_addr <- lift_option_type (dest_AddressV (EL 0 vs)) "selfdestruct target";
     check_not_static cx;
     accounts <- get_accounts;
-    self_acct <<- lookup_account cx.txn.target accounts;
-    balance <<- self_acct.balance;
-    (* Transfer all balance to target *)
-    transfer_value cx.txn.target target_addr balance;
-    (* Zero out sender balance (handled by transfer_value if target ≠ self) *)
-    (* Note: post-Cancun, selfdestruct only sends balance, does not delete account
-       unless in same transaction as creation. We model the simple case. *)
-    return $ Value NoneV
+    self <<- cx.txn.target;
+    balance <<- (lookup_account self accounts).balance;
+    transfer_value self target_addr balance;
+    if cx.txn.created_in_tx then do
+      update_accounts (λacc. update_account self
+        (lookup_account self acc with balance := 0) acc);
+      update_pending_deletions (CONS self)
+    od else return ();
+    raise HaltException
   od ∧
   (* Blueprint validation interrupts the runtime operand layout before ctor
      arguments, retaining the modular copy size even if those arguments deploy
@@ -1868,6 +1959,29 @@ Proof
   Induct >> rw[evaluate_def, return_def, bind_def] >>
   gvs[CaseEq "prod", CaseEq "sum"] >> first_x_assum irule >>
   goal_assum drule
+QED
+
+(* An iteration reads its element before binding the loop variable. *)
+Theorem eval_for_cons_read:
+  read_result cx r st = (INL v,st') ==>
+  eval_for cx tyv nm body (r::rs) st =
+  do
+    push_scope_with_var nm tyv v;
+    broke <- finally
+      (try (do eval_stmts cx body; return F od) handle_loop_exception)
+      pop_scope ;
+    if broke then return () else eval_for cx tyv nm body rs
+  od st
+Proof
+  strip_tac >> imp_res_tac read_result_state >> gvs[] >>
+  simp[Once evaluate_def, bind_def, ignore_bind_def]
+QED
+
+Theorem eval_for_cons_read_error:
+  read_result cx r st = (INR e,st') ==>
+  eval_for cx tyv nm body (r::rs) st = (INR e,st')
+Proof
+  simp[Once evaluate_def, bind_def]
 QED
 
 (* Semantics of initial state of a contract after deployment *)
@@ -2225,6 +2339,8 @@ Definition call_external_function_def:
                of NONE => (INR (Error (TypeError "ext cast ret")), am, st.requests)
                 | SOME v => (INL v, am_ret, st.requests))
             | (INR e, st) => (INR e, am, st.requests))
+       | (INR HaltException, st) =>
+           (INR HaltException, abstract_machine_from_state srcs exps layouts st, st.requests)
        | (INR e, st) => (INR e, am, st.requests)) in
     (res, am_out, rqs (* transient storage cleared separately via ClearTransientStorage action *)))
 End
@@ -2316,6 +2432,8 @@ Definition call_external_def:
    | SOME (mut, nr, args, dflts, ret, body) =>
        case call_external_function orc gobs am cx nr mut ts all_mods args dflts tx.args body ret of
          (INL value, am', rqs) => (INL value, finalize_pending_deletions am', rqs)
+       | (INR HaltException, am', rqs) =>
+           (INR HaltException, finalize_pending_deletions am', rqs)
        | failure => failure
 End
 
@@ -2369,10 +2487,13 @@ Definition load_contract_def:
   case lookup_function NONE tx.function_name Deploy ts of
      | NONE => INR $ Error (RuntimeError "no constructor")
      | SOME (mut, nr, args, dflts, ret, body) =>
-       let cx = (initial_evaluation_context ((addr,mods)::am.sources) am.layouts tx NONE)
+       let cx = (initial_evaluation_context ((addr,mods)::am.sources) am.layouts
+                  (tx with created_in_tx := T) NONE)
                 with in_deploy := T in
        case call_external_function orc gobs am cx nr mut ts mods args dflts tx.args body ret
-         of (INR e, _, _) => INR e
+         of (INR HaltException, am', rqs) =>
+              INL (finalize_pending_deletions am', rqs)
+          | (INR e, _, _) => INR e
           | (_, am', rqs) => INL (finalize_pending_deletions
                                     (am' with sources updated_by CONS (addr, mods)), rqs)
 End

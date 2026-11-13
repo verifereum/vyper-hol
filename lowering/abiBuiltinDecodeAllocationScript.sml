@@ -2,7 +2,7 @@
 Theory abiBuiltinDecodeAllocation
 Ancestors
   abiBuiltinSetupFrames abiBuiltinAllocation abiBuiltinDecodeSetup abiBuiltinDecodeHeader
-  abiBuiltinPrefix abiDecoderDynamicLoopSetup abiDecoderReentry abiDecoderGuards
+  abiBuiltinPrefix abiDecoderRange abiDecoderDynamicLoopSetup abiDecoderReentry abiDecoderGuards
   abiDecoderContract context compileEnv emitHelperProps exprLoweringProps venomState finite_map
   words arithmetic list
 

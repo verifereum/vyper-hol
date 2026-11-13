@@ -115,6 +115,8 @@ Theorem dynamic_continuation_summary_mem:
     (\res fin out. expr_exit res out)
 Proof
   strip_tac >>
+  `post_value_type cenv e1 = expr_type e1` by
+    (irule post_value_type_bytestring >> first_assum ACCEPT_TAC) >>
   Cases_on `lowered_value_type cenv e1 = BaseT (BytesT (Dynamic 0)) \/
             lowered_value_type cenv e1 = BaseT (StringT 0)`
   >- suspend "empty" >>

@@ -3,8 +3,9 @@ Theory abiEncoderWindowSequence
 Ancestors
   abiEncoderWindowLeaves abiEncoderSequence abiEncoderExtendSim
   emitHelperProps moduleLoweringProps freshWrites exprLoweringProps
-  compileEnv emitHelper fragExec venomInstProps
+  compileEnv loweringStateRelDefs emitHelper fragExec venomInstProps
   venomState venomExecSemantics venomInst words list arithmetic
+  abiEncoderWindowLookup
 
 Definition window_seq_def:
   window_seq st st' s t <=>
@@ -27,6 +28,8 @@ Definition window_pure_seq_def:
     t.vs_inst_idx = s.vs_inst_idx /\
     t.vs_accounts = s.vs_accounts /\ t.vs_transient = s.vs_transient /\
     t.vs_logs = s.vs_logs /\ t.vs_requests = s.vs_requests /\
+    t.vs_tx_ctx = s.vs_tx_ctx /\ t.vs_block_ctx = s.vs_block_ctx /\
+    t.vs_immutables = s.vs_immutables /\ t.vs_outcomes = s.vs_outcomes /\
     t.vs_pending_deletions = s.vs_pending_deletions
 End
 
@@ -159,4 +162,23 @@ Proof
   qexists_tac `update_var (STRING #"%" (toString st.cs_next_var)) (a && b) s` >>
   irule window_emit_register_pure >> (conj_tac >- first_assum ACCEPT_TAC) >>
   qexistsl_tac [`[lhs;rhs]`, `AND`] >> simp[is_terminator_def]
+QED
+
+Theorem abi_window_emit_register_fresh:
+  emit_op opc args st = (out,en) /\ opc <> INVOKE /\
+  ~is_terminator opc /\
+  run_inst_seq (emitted_insts st en) s =
+    OK (update_var (STRING #"%" (toString st.cs_next_var)) w s) /\
+  en.cs_next_var <= limit_st.cs_next_var /\ fresh_vars_wrt limit_st s ==>
+  window_pure_seq st en s
+    (update_var (STRING #"%" (toString st.cs_next_var)) w s) /\
+  fresh_vars_wrt limit_st
+    ((update_var (STRING #"%" (toString st.cs_next_var)) w s)
+       with vs_inst_idx := idx)
+Proof
+  strip_tac >> conj_tac
+  >- metis_tac[window_emit_register_pure] >>
+  drule_all abi_window_emit_register_bounds >> strip_tac >>
+  irule abi_window_seq_fresh_idx >>
+  qexistsl_tac [`en`, `emitted_insts st en`, `s`] >> simp[]
 QED

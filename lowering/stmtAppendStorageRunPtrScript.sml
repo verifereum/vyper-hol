@@ -4,7 +4,7 @@ Ancestors
   appendStorageGhostPtr fragGasSeqPtr stmtSimAppendStorage
   typedCopyLoopHeaderPtr ptrSafeRun ptrDiscipline codegenRel contextCodegenRel
   venomExecSemantics venomInst venomState emitHelperProps finite_map list
-  ghostPcTransportPtr exprLoweringProps compileEnv instSeqComposePtr instIdxIndep fragExec
+  ghostPcTransportPtr exprLoweringProps compileEnv loweringStateRelDefs instSeqComposePtr instIdxIndep fragExec
 
 Theorem append_scalar_inst_check:
   MEM opc [ADD; SLOAD; TLOAD; SSTORE; TSTORE; ASSERT] /\

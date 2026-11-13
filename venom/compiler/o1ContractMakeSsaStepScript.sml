@@ -6,7 +6,7 @@
  *)
 Theory o1ContractMakeSsaStep
 Ancestors
-  o1PassContract makeSsaCurrentDefs venomPassSchedule irSupply
+  o1PassContract makeSsaDefs venomPassSchedule irSupply
   o1MakeSsaRows o1MakeSsaStructuralShape o1MakeSsaRetpcShape
   o1MakeSsaOpaqueShape o1MakeSsaCalls venomPassDispatcher
   venomFnScheduleRunnerProps fmpStepBridge unitShapeDefs venomWf venomInst

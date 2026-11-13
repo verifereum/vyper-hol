@@ -3,7 +3,7 @@ Theory abiDecoderLoopRegisters
 Ancestors
   abiDecoderArrayInvariant abiDecoderArrayBackedge abiDecoderReentryAddress abiDecoderReentry
   abiDecoderExecution abiDecoderContract emitHelperProps exprLoweringProps
-  compileEnv venomState finite_map words arithmetic
+  compileEnv loweringStateRelDefs venomState finite_map words arithmetic
 
 Theorem abi_decoder_generated_update:
   next < limit_st.cs_next_var /\ fresh_vars_wrt limit_st s ==>
@@ -124,4 +124,40 @@ Proof
   qexists_tac `result_st` >>
   asm_simp_tac (srw_ss()) [Abbr`result_st`, Excl "enc_def"] >>
   simp[jump_to_def, abi_decode_header_state_def, update_var_def]
+QED
+
+Theorem abi_decoder_position_header_registers:
+  next + 4 + abi_decode_position_header_delta base_op <= limit_st.cs_next_var /\
+  fresh_vars_wrt limit_st s ==>
+  fresh_vars_wrt limit_st
+    (abi_decode_position_header_state base_op next B sb i ncount s) /\
+  (!op. abi_decoder_operand_live next op ==>
+    eval_operand op (abi_decode_position_header_state base_op next B sb i ncount s) =
+      eval_operand op s)
+Proof
+  Cases_on `base_op = Lit 0w`
+  >- (simp[abi_decode_position_header_delta_def, abi_decode_position_header_zero] >>
+      metis_tac[abi_decoder_header_registers]) >>
+  simp[abi_decode_position_header_delta_def] >> strip_tac >>
+  `next < limit_st.cs_next_var /\ next+1 < limit_st.cs_next_var /\
+   next+2 < limit_st.cs_next_var /\ next+3 < limit_st.cs_next_var /\
+   next+4 < limit_st.cs_next_var` by decide_tac >>
+  conj_tac
+  >- (simp[abi_decode_position_header_state_def, abi_decode_position_header_delta_def] >>
+      rpt (irule abi_decoder_generated_update_fresh >> conj_tac >- simp[]) >>
+      simp[]) >>
+  gen_tac >> strip_tac >>
+  `next <= next+1 /\ next <= next+2 /\ next <= next+3 /\ next <= next+4` by simp[] >>
+  imp_res_tac abi_decoder_operand_live_mono >>
+  asm_simp_tac (srw_ss()) [abi_decode_position_header_state_def,
+    abi_decode_position_header_delta_def, abi_decoder_generated_update_operand,
+    arithmeticTheory.ADD_CLAUSES, GSYM arithmeticTheory.ADD_ASSOC, LET_THM]
+QED
+
+Theorem abi_decoder_position_header_array_memory[simp]:
+  abi_decoder_array_memory opc aty avs tv vs addr d j
+    (abi_decode_position_header_state base_op next B sb i ncount s) <=>
+  abi_decoder_array_memory opc aty avs tv vs addr d j s
+Proof
+  Cases_on `base_op = Lit 0w` >> simp[abi_decode_position_header_state_def]
 QED

@@ -52,3 +52,11 @@ QED
 
 Theorem lower_abi_decode_valid_unwrap_true =
   SIMP_RULE bool_ss [LET_THM] (Q.INST [`unwrap` |-> `T`] lower_abi_decode_valid_unwrap);
+
+(* Keep the frozen unwrap boundary free of new proof oracles. *)
+val _ = List.app (fn (name, th) =>
+  let val (oracles, axioms) = Tag.dest_tag (Thm.tag th) in
+    if null (Thm.hyp th) andalso null axioms andalso
+       List.all (fn tag => tag = "DISK_THM") oracles then ()
+    else raise Fail ("non-clean ABI unwrap boundary: " ^ name)
+  end) (DB.thms "abiBuiltinValidUnwrap");

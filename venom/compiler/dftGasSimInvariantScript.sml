@@ -1,8 +1,9 @@
 Theory dftGasSimInvariant
 Ancestors
-  dftGasSimBoundary dftGasOracleDefs dftRunRel sccpCorrectnessProofs
+  dftGasSimBoundary dftGasOracleDefs dftRunRel
   venomExecSemantics venomExecProofs venomState venomInst venomInstProps
   list dftScheduleOrder
+  venomWfProps
 
 Theorem ev_setup_callee_dominators:
   setup_callee fn args s = SOME t ==> strict_dom_vars_defined fn t

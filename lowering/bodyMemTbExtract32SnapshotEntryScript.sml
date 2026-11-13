@@ -1,7 +1,7 @@
 (* Complete control and state boundary for the extract32 source snapshot. *)
 Theory bodyMemTbExtract32SnapshotEntry
 Ancestors
-  bodyMemTbExtract32Cuts allocaHistoryFragment exprSimProps
+  bodyMemTbExtract32Cuts allocaHistoryFragment exprSimProps loweringStateRelDefs
   exprLoweringProps exprOperandVar builtinBytes emitHelper emitHelperProps
   compileEnv venomInst rich_list loweringPosts fragExec
   bodyMemTbExtract32Source fragGasSeqMem list venomState venomExecSemantics
@@ -133,6 +133,8 @@ Theorem extract32_source_snapshot_entry:
     expr_val_at cenv cx (BaseT (BytesT (Dynamic cap))) s0c sb es' (BytesV bs) src u
 Proof
   strip_tac >> drule_all extract32_source_post_view >> strip_tac >>
+  `post_value_type cenv e = expr_type e` by
+    (irule post_value_type_bytestring >> simp[is_bytestring_type_def]) >>
   `stmt_state_rel ctx func cenv cx es' s` by fs[expr_post_def] >>
   drule_all extract32_snapshot_entry >> strip_tac >>
   `u.vs_memory = s.vs_memory` by

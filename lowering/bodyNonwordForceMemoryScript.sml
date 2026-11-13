@@ -5,6 +5,7 @@ Ancestors
   compileEnv
 
 Theorem body_nonword_expr_sim_mem_of_vv_sim_mem:
+  post_value_type cenv e = expr_type e /\
   expr_body_pre cenv cx env e es /\
   expr_vv_sim_mem ctx func cenv cx ty e es /\
   ~is_word_type (expr_type e) ==>

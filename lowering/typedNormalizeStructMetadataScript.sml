@@ -3,7 +3,7 @@ Theory typedNormalizeStructMetadata
 Ancestors
   typedMemoryCopy typedCopyMetadata typedCopyDomain valueEncodingTyping
   vyperTypeExprSoundness vyperTypeABI list rich_list alist finite_map
-  compileEnv vyperTypeSystem vyperValue vyperTyping vyperTypeDefaults valueEncoding
+  compileEnv loweringStateRelDefs vyperTypeSystem vyperValue vyperTyping vyperTypeDefaults valueEncoding valueEncodingDefs
 
 Theorem normalize_struct_metadata:
   acyclic_struct_metadata ce.ce_struct_fields /\

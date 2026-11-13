@@ -2329,8 +2329,10 @@ Resume starve_context_dispatch[blockhash]:
           simp[inc_pc_or_jump_def, LET_THM, bind_def,
                get_current_context_def, return_def,
                set_current_context_def, is_call_def] >>
-          qpat_x_assum `asm_evm_rel _ _ _` mp_tac >>
-          simp[asm_evm_rel_def] >> strip_tac >>
+          qpat_x_assum `es.contexts = _` (fn contexts =>
+            qpat_x_assum `asm_evm_rel _ _ _`
+              (strip_assume_tac o
+               SIMP_RULE (srw_ss()) [asm_evm_rel_def, contexts])) >>
           simp[asm_evm_rel_def, asm_next_def] >>
           once_rewrite_tac[GSYM ADD1] >> simp[asm_pc_to_offset_suc] >>
           simp[opcode_def, asm_inst_size_def] >> EVAL_TAC) >>

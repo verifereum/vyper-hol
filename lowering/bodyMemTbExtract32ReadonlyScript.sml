@@ -1,7 +1,7 @@
 (* Readonly execution boundary for the extract32 load and clamp. *)
 Theory bodyMemTbExtract32Readonly
 Ancestors
-  bodyMemTbExtract32Load exprSimBopRestWordLoadPath freshWrites
+  bodyMemTbExtract32Load exprSimBopRestWordLoadPath freshWrites loweringStateRelDefs
   exprLowering builtinBytes emitHelper emitHelperProps exprLoweringProps compileEnv venomState venomInst
   list rich_list finite_map ASCIInumbers
 

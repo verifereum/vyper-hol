@@ -1,7 +1,7 @@
 (* Executed successful dynamic-array initializer, independent of owned loops. *)
 Theory calldataInitSequence
 Ancestors
-  calldataDynOwned calldataDynInit calldataDynStep calldataChildFrame actualAllocExec fragExecMem
+  calldataDynOwned calldataDynInit calldataDynStep calldataChildFrame actualAllocExec fragExecMem loweringStateRelDefs
   allocaFrontierBound allocaBudgetProps abiDecoderIndexInit abiDecoderContract
   compileEnv emitHelper venomState venomInst venomExecSemantics venomMemProps venomMemDefs
   valueEncodingProps finite_map words arithmetic list rich_list
@@ -30,7 +30,7 @@ QED
 
 (* The common executed endpoint, including the frame used by owned clients. *)
 Theorem calldata_array_loop_init_repeat_sequence:
-  abi_decode_array_loop_init dst src CALLDATALOAD (Lit 0w) maxn abi_sz st =
+  abi_decode_array_loop_init dst src CALLDATALOAD (Lit 0w) (Lit 0w) maxn abi_sz st =
     ((ip,cnt),loop_st) /\
   abi_decode_dynarray_prefix src CALLDATALOAD (Lit 0w) maxn abi_sz st =
     ((),guard_st) /\

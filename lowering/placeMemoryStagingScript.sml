@@ -1,7 +1,7 @@
 Theory placeMemoryStaging
 Ancestors
   exprSimAlloc placeMemoryTypedPrimitive placeMemoryPrimitiveForward
-  placeMemoryCopyEffect context exprLoweringProps compileEnv venomExecSemantics
+  placeMemoryCopyEffect context exprLoweringProps compileEnv loweringStateRelDefs venomExecSemantics
   venomState venomInst emitHelper fragExec rich_list instIdxIndep finite_map
   loweringHalt abiTupleProps placeMemoryCopyFrames fragGasMode
 
@@ -77,7 +77,7 @@ Resume compile_alloc_buffer_forward[allocation_effect]:
   gvs[fresh_id_def, fresh_var_def, emit_def, comp_bind_def,
       comp_ignore_bind_def, comp_return_def, emitted_insts_def, DROP_APPEND] >>
   qpat_x_assum `run_inst_seq _ _ = OK t` mp_tac >>
-  simp[run_inst_seq_def, step_inst_base_def, mk_inst_def, eval_operand_def] >>
+  simp[run_inst_seq_def, step_inst_base_opcode_eqs, mk_inst_def, eval_operand_def] >>
   Cases_on `FLOOKUP s.vs_allocas sa.cs_next_id`
   >- (simp[exec_alloca_def] >> strip_tac >>
       gvs[update_var_def, lookup_var_def, eval_operand_def, FLOOKUP_UPDATE,

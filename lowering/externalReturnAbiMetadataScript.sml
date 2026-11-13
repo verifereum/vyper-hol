@@ -17,20 +17,6 @@ Proof
        type_env_def, finite_mapTheory.FUNION_FEMPTY_2]
 QED
 
-(* Positive outer size does not exclude an empty nested struct. *)
-Theorem positive_nested_return_not_assignable[local]:
-  supported_place_type [StructDecl "Empty" []]
-    (TupleT [BaseT (UintT 256); StructT (NONE,"Empty")]) /\
-  evaluate_type (type_env [StructDecl "Empty" []])
-    (TupleT [BaseT (UintT 256); StructT (NONE,"Empty")]) =
-    SOME (TupleTV [BaseTV (UintT 256); StructTV []]) /\
-  0 < type_memory_size (TupleTV [BaseTV (UintT 256); StructTV []]) /\
-  ~assignable_type (type_env [StructDecl "Empty" []])
-    (TupleT [BaseT (UintT 256); StructT (NONE,"Empty")])
-Proof
-  EVAL_TAC >> simp[wordsTheory.dimword_def]
-QED
-
 (* Concrete compiler outputs with the actual empty-struct field table. *)
 Theorem nested_empty_metadata_probe[local]:
   !c. c.ce_struct_fields = FEMPTY |+ ("Empty", []) ==>

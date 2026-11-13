@@ -89,7 +89,7 @@ Definition EntryLoopHeader_def:
     (!q k. MEM (q,k) scratch ==> ?id. st.cs_next_id <= id /\ id < end_st.cs_next_id /\
       FLOOKUP s.vs_allocas id = SOME (q,k)) /\
     fresh_vars_wrt limit_st s /\
-    abi_decoder_ranges CALLDATALOAD (Lit 0w) src dst sb (LENGTH bs)
+    abi_decoder_ranges CALLDATALOAD (Lit 0w) (Lit 0w) src dst 0 sb (LENGTH bs)
       d (type_memory_bytes ce (ArrayT ty (Dynamic maxn))) b reserve_cap s /\
     mem_bytes_at sb (LENGTH bs) (abi_decode_source CALLDATALOAD s) = bs
 End
@@ -131,7 +131,7 @@ Definition EntryLoopConfig_def:
   EntryLoopConfig fn st st0 ready st1 end_st limit_st ce env sf ty tv vs maxn
       hdr hid body_lbl body_bb exit_lbl next nvar biv ip src dst ops di bs
       p d iid oid base_addr cap <=>
-    abi_decode_array_element_setup ip src dst CALLDATALOAD (Lit 0w)
+    abi_decode_array_element_setup ip src dst CALLDATALOAD (Lit 0w) (Lit 0w)
       (type_to_abi_dec_info sf ce ty)
       (abi_embedded_static_size ce.ce_struct_fields ty) (type_memory_bytes ce ty)
       st0 = (ops,ready) /\ fn_has_code st0 ready fn /\
@@ -268,7 +268,7 @@ QED
 (* The exceptional zero-static child uses this actual setup endpoint and
    then the identity child; no ordinary array-entry certificate is needed. *)
 Theorem entry_joint_empty_setup_endpoint:
-  abi_decode_array_element_setup ip src dst CALLDATALOAD (Lit 0w)
+  abi_decode_array_element_setup ip src dst CALLDATALOAD (Lit 0w) (Lit 0w)
     (DecComplex T []) abi_sz mem_sz st = (ops,ready) /\
   eval_operand ip s = SOME p /\ mload (w2n p) s = n2w j /\
   w2n p + 32 <= s.vs_alloca_next /\
@@ -445,7 +445,7 @@ Theorem entry_joint_valid_setup:
   (!elem. vyper_to_abi_type env ty <> Array (SOME 0) elem) ==>
   ?head entry.
     abi_decoder_valid_array_entry ce env sf ty tv bs vs j ready ops CALLDATALOAD
-      (Lit 0w) sb d b reserve_cap st0.cs_next_var limit_st head entry /\
+      (Lit 0w) (Lit 0w) 0 sb d b reserve_cap st0.cs_next_var limit_st head entry /\
     ~entry.vs_halted /\ entry.vs_current_bb = ready.cs_current_bb /\
     entry.vs_inst_idx = LENGTH ready.cs_current_insts /\
     EntrySetupFrame next u entry /\
@@ -483,7 +483,7 @@ Theorem entry_joint_ordinary_child:
   (!elem. vyper_to_abi_type env ty <> Array (SOME 0) elem) /\
   (!head entry.
     abi_decoder_valid_array_entry ce env sf ty tv bs vs j ready ops CALLDATALOAD
-      (Lit 0w) sb d b reserve_cap st0.cs_next_var limit_st head entry /\
+      (Lit 0w) (Lit 0w) 0 sb d b reserve_cap st0.cs_next_var limit_st head entry /\
     ~entry.vs_halted /\ entry.vs_current_bb = ready.cs_current_bb /\
     entry.vs_inst_idx = LENGTH ready.cs_current_insts /\ fresh_vars_wrt limit_st entry /\
     alloca_inv entry /\ alloca_frontier_inv ctx fn site entry /\
@@ -653,7 +653,7 @@ Theorem entry_joint_header_successor:
   entry_decoder_obs initial u /\
   (!head entry.
     abi_decoder_valid_array_entry ce env sf ty tv bs vs j ready ops CALLDATALOAD
-      (Lit 0w) sb d b reserve_cap st0.cs_next_var limit_st head entry /\
+      (Lit 0w) (Lit 0w) 0 sb d b reserve_cap st0.cs_next_var limit_st head entry /\
     ~entry.vs_halted /\ entry.vs_current_bb = ready.cs_current_bb /\
     entry.vs_inst_idx = LENGTH ready.cs_current_insts /\ fresh_vars_wrt limit_st entry /\
     alloca_inv entry /\ alloca_frontier_inv ctx fn site entry /\
@@ -729,7 +729,7 @@ Theorem entry_joint_loop_from_header:
   (!k head entry.
     k < LENGTH vs /\
     abi_decoder_valid_array_entry ce env sf ty tv bs vs k ready ops CALLDATALOAD
-      (Lit 0w) sb d b reserve_cap st0.cs_next_var limit_st head entry /\
+      (Lit 0w) (Lit 0w) 0 sb d b reserve_cap st0.cs_next_var limit_st head entry /\
     ~entry.vs_halted /\ entry.vs_current_bb = ready.cs_current_bb /\
     entry.vs_inst_idx = LENGTH ready.cs_current_insts /\ fresh_vars_wrt limit_st entry /\
     alloca_inv entry /\ alloca_frontier_inv ctx fn site entry /\

@@ -29,7 +29,12 @@ Theorem body_bop_in_literal_word_case:
     body_expr_ok cx
       (Builtin ty (Bop bop) [e1; Builtin a (MakeArray t n) elems])
 Proof
-  rpt strip_tac >> simp[body_expr_ok_def] >> rpt gen_tac >> strip_tac >>
+  (* rpt strip_tac splits bop = In \/ bop = NotIn into two goals, so the
+     mapping half is closed under each of them *)
+  rpt strip_tac >> simp[body_expr_ok_def] >>
+  (reverse conj_tac
+   >- (rpt strip_tac >> drule expr_map_pre_shape >> simp[])) >>
+  rpt gen_tac >> strip_tac >>
   `builtin_args_length_ok (MakeArray t n) (LENGTH elems)` by
     (gvs[expr_body_pre_def, vyperTypeSystemTheory.well_typed_expr_def] >>
      qpat_x_assum `well_typed_builtin_app a _ _`

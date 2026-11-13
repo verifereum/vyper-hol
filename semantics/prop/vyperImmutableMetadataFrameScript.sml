@@ -149,7 +149,9 @@ Theorem metadata_eval_frame[local]:
      state_rel_frame immutable_metadata_frame (eval_create cx k h r ts vs cs)) /\
   (!a n v. state_rel_frame immutable_metadata_frame
              (acquire_nonreentrant_lock a n v)) /\
-  (!a n. state_rel_frame immutable_metadata_frame (release_nonreentrant_lock a n))
+  (!a n. state_rel_frame immutable_metadata_frame (release_nonreentrant_lock a n)) /\
+  (!f. state_rel_frame immutable_metadata_frame (update_accounts f)) /\
+  (!f. state_rel_frame immutable_metadata_frame (update_pending_deletions f))
 Proof
   rewrite_tac[state_rel_frame_result] >> rpt conj_tac >> rpt gen_tac
   >- metis_tac[immutable_metadata_frame_trans]
@@ -164,8 +166,12 @@ Proof
   >- metis_tac[eval_ext_call_preserves_non_accounts, immutable_metadata_frame_eq]
   >- metis_tac[eval_raw_call_preserves_non_accounts, immutable_metadata_frame_eq]
   >- metis_tac[eval_create_preserves_scopes_immutables, immutable_metadata_frame_eq]
-  >- metis_tac[acquire_nonreentrant_lock_immutables, immutable_metadata_frame_eq] >>
-  metis_tac[release_nonreentrant_lock_immutables, immutable_metadata_frame_eq]
+  >- metis_tac[acquire_nonreentrant_lock_immutables, immutable_metadata_frame_eq]
+  >- metis_tac[release_nonreentrant_lock_immutables, immutable_metadata_frame_eq]
+  >- (strip_tac >> irule immutable_metadata_frame_eq >>
+      gvs[update_accounts_def, return_def]) >>
+  strip_tac >> irule immutable_metadata_frame_eq >>
+  gvs[update_pending_deletions_def, return_def]
 QED
 
 Theorem eval_metadata_frame_with_results =

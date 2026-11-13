@@ -1,6 +1,6 @@
 Theory bodyMemEcArithTransfers
 Ancestors
-  bodyMemEcArithPrefix emitHelperProps exprLoweringProps context venomState
+  bodyMemEcArithPrefix emitHelperProps exprLoweringProps context venomState loweringStateRelDefs
   exprSimWordBuiltins emitHelper compileEnv exprSimCalldataSlice
   venomExecSemantics venomInst valueEncodingProps
 

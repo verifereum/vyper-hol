@@ -3,6 +3,7 @@ Ancestors
   concretizeStepStructure fmpStepCallEnvironment fmpStepFlagTransport
   dftCallChecks unitShapeDefs venomEffects
   concretizeMemLocDefs passSharedDefs passSimulationDefs venomInst venomWf list
+  passTransform
 
 Theorem concretize_positions_not_invoke:
   i.inst_opcode <> INVOKE ==>

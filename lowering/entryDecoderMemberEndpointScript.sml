@@ -10,7 +10,7 @@ Ancestors
 Definition entry_member_child_contract_def:
   entry_member_child_contract ce env sf ctx fn site limit_st ty tv <=>
   !bytes v src dst sb p b reserve_cap oid base_addr cap first last s.
-    compile_abi_decode_to_buf dst src CALLDATALOAD (Lit 0w)
+    compile_abi_decode_to_buf dst src CALLDATALOAD (Lit 0w) (Lit 0w)
       (type_to_abi_dec_info sf ce ty) first = ((),last) /\
     fn_has_code first last fn /\
     (first.cs_blocks = last.cs_blocks \/
@@ -21,7 +21,7 @@ Definition entry_member_child_contract_def:
     base_addr <= p /\ p+type_memory_size tv <= base_addr+cap /\
     p+type_memory_size tv < dimword (:256) /\
     abi_decoder_valid_pre ce env sf ty tv bytes v first src dst
-      CALLDATALOAD (Lit 0w) sb p b reserve_cap s /\
+      CALLDATALOAD (Lit 0w) (Lit 0w) 0 sb p b reserve_cap s /\
     fresh_vars_wrt limit_st s /\ alloca_inv s /\ alloca_frontier_inv ctx fn site s /\
     calldata_member_own fn first.cs_next_id last.cs_next_id s /\
     FLOOKUP s.vs_allocas oid = SOME (base_addr,cap) /\
@@ -35,7 +35,7 @@ End
 
 Theorem entry_member_child_contract_apply:
   entry_member_child_contract ce env sf ctx fn site limit_st ty tv /\
-  compile_abi_decode_to_buf dst src CALLDATALOAD (Lit 0w)
+  compile_abi_decode_to_buf dst src CALLDATALOAD (Lit 0w) (Lit 0w)
     (type_to_abi_dec_info sf ce ty) first = ((),last) /\
   fn_has_code first last fn /\
   (first.cs_blocks = last.cs_blocks \/
@@ -46,7 +46,7 @@ Theorem entry_member_child_contract_apply:
   base_addr <= p /\ p+type_memory_size tv <= base_addr+cap /\
   p+type_memory_size tv < dimword (:256) /\
   abi_decoder_valid_pre ce env sf ty tv bytes v first src dst
-    CALLDATALOAD (Lit 0w) sb p b reserve_cap s /\
+    CALLDATALOAD (Lit 0w) (Lit 0w) 0 sb p b reserve_cap s /\
   fresh_vars_wrt limit_st s /\ alloca_inv s /\ alloca_frontier_inv ctx fn site s /\
   calldata_member_own fn first.cs_next_id last.cs_next_id s /\
   FLOOKUP s.vs_allocas oid = SOME (base_addr,cap) /\

@@ -1,12 +1,12 @@
 (* Oracle tail property transport. Whole-record facts supply the boundary;
  * R can be a residual frame, scope/type-value frame, or log-prefix relation.
  * No purity/storage claim about external payloads and no typing premise on os.
- * This owner remains below Interpreter and TypeSystem.
+ * The interpreter's call primitives are instantiated at the end.
  *)
 Theory vyperCallOutcomeFrame
 Ancestors
   pair sum list option vyperState vyperCallOutcome vyperCallOutcomeProps vyperCallOutcomeBranches
-  vyperRuntimeAccounts extCallOracle
+  vyperRuntimeAccounts extCallOracle vyperInterpreter
 Libs monadsyntax
 
 (* Keep underconstrained client monads in the source state/exception type. *)
@@ -69,6 +69,7 @@ Theorem state_rel_frame_locals_primitives:
   state_rel_frame R get_accounts /\ state_rel_frame R get_transient_storage /\
   state_rel_frame R (update_accounts upd) /\
   state_rel_frame R (update_transient upd_t) /\
+  state_rel_frame R (update_pending_deletions deletions_upd) /\
   state_rel_frame R (λs. vyperState$return () (s with logs updated_by logs_upd)) /\
   state_rel_frame R (λs. vyperState$return () (s with logs := s.logs ++ logs)) /\
   state_rel_frame R (adopt_call_outcome rq co)
@@ -77,7 +78,8 @@ Proof
   simp[state_rel_frame_def, return_def, raise_def, check_def, type_check_def,
        assert_def, lift_option_def, lift_option_type_def, lift_sum_runtime_def,
        get_accounts_def, get_transient_storage_def, update_accounts_def,
-       update_transient_def, adopt_call_outcome_equation] >>
+       update_transient_def, update_pending_deletions_def,
+       adopt_call_outcome_equation] >>
   rpt strip_tac >> rpt CASE_TAC >> simp[return_def, raise_def]
 QED
 
@@ -275,10 +277,11 @@ Theorem take_adopt_call_outcome_effects:
       st2.accounts = outcome.co_accounts /\
       st2.tStorage = outcome.co_tStorage /\
       st2.logs = st.logs ++ outcome.co_logs /\
+      st2.pending_deletions = outcome.co_toDelete ++ st.pending_deletions /\
       accounts_runtime_well_typed st2.accounts) /\
     (rq.cr_static \/ ~outcome.co_success ==>
       st2.accounts = st.accounts /\ st2.tStorage = st.tStorage /\
-      st2.logs = st.logs) /\
+      st2.logs = st.logs /\ st2.pending_deletions = st.pending_deletions) /\
     (computed_precompile rq ==> st2.requests = st.requests)
 Proof
   rpt strip_tac >> drule_all checked_call_outcome_success_frame >> strip_tac >>
@@ -288,4 +291,76 @@ Proof
   gvs[adopt_call_outcome_equation, call_outcome_request_def] >>
   qexistsl_tac [`rest`,`prefix`] >>
   gvs[evaluation_state_component_equality]
+QED
+
+(* Compose local-state frames without expanding the external-call oracle. *)
+Theorem append_logs_locals[local]:
+  state_rel_frame
+    (\s t. t.scopes = s.scopes /\ t.immutables = s.immutables) (append_logs logs)
+Proof
+  simp[state_rel_frame_def, append_logs_def, return_def]
+QED
+
+Theorem frame_call_value_locals[local]:
+  state_rel_frame
+    (\s t. t.scopes = s.scopes /\ t.immutables = s.immutables)
+    (frame_call_value cx value_opt)
+Proof
+  simp[state_rel_frame_result] >> rpt strip_tac >>
+  drule frame_call_value_state >> simp[]
+QED
+
+val call_locals_relation =
+  ``\s:evaluation_state t. t.scopes = s.scopes /\ t.immutables = s.immutables``;
+val call_locals_primitives =
+  state_rel_frame_locals_primitives |> Q.INST [`R` |-> [ANTIQUOTE call_locals_relation]] |> SRULE [];
+val call_locals_take =
+  state_rel_frame_locals_take |> Q.INST [`R` |-> [ANTIQUOTE call_locals_relation]] |> SRULE [];
+val call_locals_bind =
+  state_rel_frame_bind_guarded |> Q.INST [`R` |-> [ANTIQUOTE call_locals_relation]] |> SRULE [];
+
+val CALL_LOCALS_STEP = FIRST [
+  FIRST (map MATCH_ACCEPT_TAC (CONJUNCTS call_locals_primitives)),
+  MATCH_ACCEPT_TAC call_locals_take,
+  MATCH_ACCEPT_TAC append_logs_locals,
+  MATCH_ACCEPT_TAC frame_call_value_locals,
+  MATCH_MP_TAC call_locals_bind >> conj_tac,
+  gen_tac, strip_tac,
+  CHANGED_TAC (simp_tac bool_ss
+    [FORALL_PROD, LET_THM, ignore_bind_def, UNCURRY, pair_case_thm]),
+  BasicProvers.TOP_CASE_TAC];
+
+Theorem eval_ext_call_locals[local]:
+  state_rel_frame
+    (\s t. t.scopes = s.scopes /\ t.immutables = s.immutables)
+    (eval_ext_call cx static skip_check sig opts vs)
+Proof
+  PairCases_on `sig` >> Cases_on `vs` >>
+  simp_tac bool_ss [eval_ext_call_def, eval_ext_call_effects_def, LET_THM] >>
+  rpt CALL_LOCALS_STEP
+QED
+
+Theorem eval_ext_call_preserves_non_accounts:
+  eval_ext_call cx static skip_check sig opts vs st = (res, st') ==>
+  st'.scopes = st.scopes /\ st'.immutables = st.immutables
+Proof
+  mp_tac (REWRITE_RULE [state_rel_frame_result] eval_ext_call_locals) >> simp[]
+QED
+
+Theorem eval_send_preserves_non_accounts:
+  eval_send cx has_gas vs st = (res, st') ==>
+  st'.scopes = st.scopes /\ st'.immutables = st.immutables
+Proof
+  Cases_on `vs` >- simp[eval_send_def, raise_def] >>
+  Cases_on `t` >- simp[eval_send_def, raise_def] >>
+  simp[eval_send_def, frame_call_value_def, bind_def, ignore_bind_def, type_check_def,
+       assert_def, return_def, raise_def, lift_option_type_def, check_def,
+       get_accounts_def, update_accounts_def, get_transient_storage_def,
+       lift_option_def, update_transient_def, append_logs_def,
+       update_pending_deletions_def,
+       vyperCallOutcomeTheory.take_call_outcome_def, vyperCallOutcomeTheory.take_request_outcome_def,
+       vyperCallOutcomeTheory.adopt_call_outcome_def, LET_THM, UNCURRY,
+       COND_RATOR, vfmTypesTheory.option_CASE_rator,
+       vfmTypesTheory.prod_CASE_rator, vfmTypesTheory.sum_CASE_rator] >>
+  strip_tac >> gvs[AllCaseEqs()]
 QED

@@ -1,8 +1,8 @@
 Theory typedNormalizeDynarrayLoop
 Ancestors
   typedNormalizeDynarray typedNormalizeLoop typedBytesArrayMem typedArrayBoundControlMem typedArrayLoopLayoutMem typedArrayLoopControlMem
-  context compileEnv emitHelper emitHelperProps exprLoweringProps fragExec memContinuation typedNormalizeContinuation
-  venomInst venomState venomExecSemantics venomExecProps venomMemProps valueEncoding valueEncodingProps words arithmetic list rich_list
+  context compileEnv loweringStateRelDefs emitHelper emitHelperProps exprLoweringProps fragExec memContinuation typedNormalizeContinuation
+  venomInst venomState venomExecSemantics venomExecProps venomMemProps valueEncoding valueEncodingDefs valueEncodingProps words arithmetic list rich_list
 
 (* The recursive child is opaque; its returned counters determine the backedge. *)
 Theorem typed_dynarray_child_states:

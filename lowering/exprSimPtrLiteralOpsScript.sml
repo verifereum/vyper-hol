@@ -84,8 +84,7 @@ Proof
   simp[ptr_inst_ok_def, access_ok_def, taint_ok_def, allocas_from_def,
        mk_inst_def, source_memory_write_ranges_def,
        source_memory_read_ranges_def, op_taint_def, step_inst_non_invoke] >>
-  PURE_ONCE_REWRITE_TAC[step_inst_base_def] >>
-  pure_rewrite_tac[instruction_accessors, instruction_accfupds, opcode_case_def] >>
+  asm_simp_tac bool_ss [step_inst_base_opcode_eqs, instruction_accessors, instruction_accfupds, opcode_case_def, combinTheory.K_THM] >>
   simp[exec_pure2_def, eval_operand_def, AllCaseEqs(), update_var_def] >>
   rpt strip_tac >> gvs[op_taint_def] >>
   Cases_on `FLOOKUP tn.t_var src` >> gvs[] >> metis_tac[]

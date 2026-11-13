@@ -46,7 +46,7 @@ Theory allocaFootprint
 Ancestors
   fragExecMem instMemFrontier loweringHalt abiBuiltinAllocation
   abiEncoderWrites builtinHashing exprLowering
-  context emitHelper emitHelperProps exprLoweringProps compileEnv
+  context emitHelper emitHelperProps exprLoweringProps compileEnv loweringStateRelDefs
   venomState venomInst venomExecSemantics venomMemDefs memSafeRun
   finite_map list rich_list words arithmetic abiDecoderIndexInit
 
@@ -286,8 +286,7 @@ Proof
   rpt gen_tac >> strip_tac >> Cases_on `FLOOKUP s.vs_allocas id`
   >- gvs[abi_builtin_allocate_state_def, FLOOKUP_UPDATE, step_alloca_fresh]
   >> gvs[abi_builtin_allocate_state_def] >>
-  PURE_ONCE_REWRITE_TAC[step_inst_base_def] >>
-  simp[mk_inst_def, exec_alloca_def]
+  simp[step_inst_base_opcode_eqs, mk_inst_def, exec_alloca_def]
 QED
 
 Theorem alloca_site_frontier:

@@ -6,7 +6,7 @@ Theory bodyMemToplevel
 Ancestors
   bodyMemoryPreds bodyExprForceMemory bodyToplevelMemory exprSimTopLevelProps
   exprSimHyps exprSimSource exprSimMemDefs exprSimDefs exprLowering
-  exprSimHypsDefs vyperTypeCallGraph exprLoweringProps compileEnv context vyperAST
+  exprSimHypsDefs vyperTypeCallGraph exprLoweringProps compileEnv loweringStateRelDefs context vyperAST
   vyperInterpreter vyperTypeGlobalLookupSoundness
 
 Theorem toplevel_compile_not_stack[local]:

@@ -12,8 +12,8 @@ Ancestors
   venomExecSemantics venomState compileEnv e2eDefs supportedProgram
   compileVyper unitTransformDefs fragExec loweringHalt venomInst venomWf
   contextCodegenRel memSafeRun allocaFrontierBound o1PassContract ptrDiscipline
-  vyperLoweringCorrect loweringRuntimeCorrect fragExecMem bodyMemoryDefs
-  entryHaltMem loweringPtrCorrect bodySim bodySimMain moduleLowering
+  vyperLoweringCorrect fragExecMem bodyMemoryDefs
+  entryHaltMem bodySim bodySimMain moduleLowering
   stmtLowering vyperTypeSystem vyperState lowerDloadDefs
 
 val _ = Parse.hide "body";
@@ -45,7 +45,7 @@ Theorem external_entry_reaches_body_mem:
     ?lbl cenv0 pos_args min_cds is_payable nkey ut' iv rt st cenv sa st' func
      s0.
       set_external_package_target rpolicy.rpol_target
-        (package_external_fn tops F (assign_nkeys tops 0)
+        (package_external_fn tops T (K global_nonreentrant_slot)
            (mut, F, lookup_raw_return_or_F (NONE : num option)
                        tx.function_name External tops,
             tx.function_name, args, [], ret, fbody)) =

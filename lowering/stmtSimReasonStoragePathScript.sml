@@ -3,7 +3,7 @@ Theory stmtSimReasonStoragePath
 Ancestors
   exprSimStorageCopy storageCopyGasPath fragGasPath fragGasSeq gasCount
   fragExec exprLoweringProps emitHelperProps venomInstProps loweringHalt
-  context compileEnv
+  context compileEnv loweringStateRelDefs
   venomExecSemantics venomState venomInst words arithmetic list rich_list
 
 Theorem storage_reason_modular_test[local]:
@@ -96,7 +96,7 @@ Proof
       simp_tac (srw_ss()) [LENGTH, FILTER, mk_inst_def] >>
       disch_then irule >>
       gvs[mk_inst_def, is_terminator_def, run_inst_seq_def,
-          step_inst_base_def, eval_operand_def]) >>
+          step_inst_base_opcode_eqs, eval_operand_def]) >>
   simp[eval_operand_def, lookup_var_def, update_var_def,
        finite_mapTheory.FLOOKUP_UPDATE]
 QED
@@ -144,7 +144,7 @@ Proof
   strip_tac >> irule storage_reason_jump_path >> simp[] >>
   simp[mk_inst_def] >>
   Cases_on `test` >>
-  gvs[step_inst_base_def, eval_operand_def, bool_to_word_def]
+  gvs[step_inst_base_opcode_eqs, eval_operand_def, bool_to_word_def]
 QED
 
 (* One cycle includes the test and, unless finished, the copy and back-edge. *)
@@ -248,7 +248,7 @@ Proof
   `gas_path ctx func r 0 (OK (jump_to hdr r))` by
     (irule storage_reason_jump_path >> (conj_tac >- simp[]) >>
      qexistsl [`bb`, `mk_inst jid JMP [Label hdr] []`] >>
-     gvs[mk_inst_def, step_inst_base_def]) >>
+     gvs[mk_inst_def, step_inst_base_opcode_eqs]) >>
   qexists_tac `jump_to hdr r` >> conj_tac
   >- (drule_all gas_path_then >> simp[]) >>
   gvs[jump_to_def, eval_operand_def, lookup_var_def, word_add_n2w] >>
@@ -389,7 +389,7 @@ Resume compile_storage_reason_copy_path[init]:
   `gas_path ctx func r 0 (OK (jump_to hdr r))` by
     (irule storage_reason_jump_path >> (conj_tac >- simp[]) >>
      qexistsl [`bbi`, `mk_inst ji JMP [Label hdr] []`] >>
-     gvs[mk_inst_def, step_inst_base_def]) >>
+     gvs[mk_inst_def, step_inst_base_opcode_eqs]) >>
   qexists_tac `jump_to hdr r` >> conj_tac
   >- (drule_all gas_path_then >> simp[]) >>
   gvs[jump_to_def, eval_operand_def, lookup_var_def, Abbr `ds`] >> metis_tac[]

@@ -1,7 +1,7 @@
 (* Execution-free recursive well-formedness for aggregate entry values. *)
 Theory entryAggregateValuePackaging
 Ancestors
-  valueEncoding abiDecoderFixedMemory abiStaticDynarrayLayout vyperValue list arithmetic
+  valueEncoding abiDecoderFixedMemory abiStaticDynarrayLayout vyperValue list arithmetic valueEncodingDefs
 
 Theorem entry_fields_tuple_wf:
   !fields names tvs.

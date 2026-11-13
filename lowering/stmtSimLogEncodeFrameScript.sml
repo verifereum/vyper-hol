@@ -1,9 +1,9 @@
 (* Continuing scalar event encoder frame; allocation resources live below the runner. *)
 Theory stmtSimLogEncodeFrame
 Ancestors
-  stmtSimLogScalarEncode stmtSimLogAllocResource stmtSimLogEncodeFields
+  valueEncodingDefs stmtSimLogScalarEncode stmtSimLogAllocResource stmtSimLogEncodeFields
   stmtSimLogExecFields localPtrsProps loweringSlice abiDecoderFrame
-  valueEncodingProps compileEnv exprLoweringProps venomState venomMemProps
+  valueEncodingProps compileEnv loweringStateRelDefs exprLoweringProps venomState venomMemProps
   venomExecSemantics venomInst venomMemDefs abiBuiltinAllocation finite_map words list arithmetic
 
 Theorem log_encode_local_frame[local]:
@@ -29,7 +29,7 @@ Proof
   `abi_footprint_disjoint (w2n w) sz fp` by metis_tac[] >>
   `mem_bytes_at (w2n w) sz t.vs_memory = mem_bytes_at (w2n w) sz s.vs_memory` by
     (irule abi_decode_footprint_frame_slice >> goal_assum (drule_at Any) >> simp[]) >>
-  irule val_in_memory_mem_agree >> simp[] >>
+  irule memoryValueFrameTheory.memory_value_rel_mem_agree_region >> simp[] >>
   qexistsl_tac [`sz`,`s.vs_memory`] >> simp[]
 QED
 
@@ -56,17 +56,18 @@ Theorem log_encode_step_memory_mono[local]:
   LENGTH s.vs_memory <= LENGTH t.vs_memory
 Proof
   simp_tac bool_ss [log_encode_safe_opcode_def] >> strip_tac
-  >- gvs[step_inst_base_def, exec_alloca_def, AllCaseEqs(), update_var_def]
-  >- gvs[step_inst_base_def, exec_pure2_def, AllCaseEqs(), update_var_def]
-  >- gvs[step_inst_base_def, exec_pure2_def, AllCaseEqs(), update_var_def]
-  >- gvs[step_inst_base_def, exec_read1_def, AllCaseEqs(), update_var_def]
-  >- (gvs[step_inst_base_def, exec_write2_def, AllCaseEqs()] >>
+  >- gvs[step_inst_base_opcode_eqs, exec_alloca_def, AllCaseEqs(), update_var_def]
+  >- gvs[step_inst_base_opcode_eqs, exec_pure2_def, AllCaseEqs(), update_var_def]
+  >- gvs[step_inst_base_opcode_eqs, exec_pure2_def, AllCaseEqs(), update_var_def]
+  >- gvs[step_inst_base_opcode_eqs, exec_read1_def, AllCaseEqs(), update_var_def]
+  >- (gvs[step_inst_base_opcode_eqs, exec_write2_def, AllCaseEqs()] >>
       simp[mstore_memory_nondecreasing])
-  >- (gvs[step_inst_base_def, AllCaseEqs(), mcopy_def] >>
+  >- (gvs[step_inst_base_opcode_eqs, AllCaseEqs(), mcopy_def] >>
       simp[write_memory_with_expansion_nondecreasing])
-  >- gvs[step_inst_base_def, exec_read0_def, AllCaseEqs(), update_var_def] >>
-  gvs[step_inst_base_def, AllCaseEqs()] >>
-  simp[write_memory_with_expansion_nondecreasing]
+  >- gvs[step_inst_base_opcode_eqs, exec_read0_def, AllCaseEqs(), update_var_def]
+  >- (gvs[step_inst_base_opcode_eqs, AllCaseEqs()] >>
+      simp[write_memory_with_expansion_nondecreasing]) >>
+  gvs[step_inst_base_opcode_eqs, exec_pure1_def, AllCaseEqs(), update_var_def]
 QED
 
 Theorem log_encode_run_memory_mono:
@@ -137,17 +138,11 @@ Theorem log_encode_immutable_sep_frame[local]:
   s.vs_alloca_next <= t.vs_alloca_next ==>
   immutable_alloca_sep func ce cx es t
 Proof
-  simp_tac bool_ss [immutable_alloca_sep_def] >> strip_tac >> strip_tac >>
-  rpt gen_tac >> strip_tac >>
-  qpat_x_assum `ce.ce_is_ctor ==> _` drule_all >> strip_tac >>
-  conj_tac >- decide_tac >> conj_tac
-  >- (rpt strip_tac >> Cases_on `FLOOKUP s.vs_allocas inst.inst_id`
-      >- (first_x_assum drule_all >> simp[compileEnvTheory.regions_disjoint_def] >> decide_tac) >>
-      rename1 `FLOOKUP s.vs_allocas inst.inst_id = SOME r` >>
-      `FLOOKUP t.vs_allocas inst.inst_id = SOME r` by metis_tac[] >>
-      gvs[] >> first_x_assum drule_all >> simp[]) >>
-  rpt strip_tac >> first_x_assum drule >> strip_tac >>
-  first_x_assum drule >> simp[]
+  strip_tac >> drule immutable_alloca_sep_frame >> disch_then irule >>
+  rpt conj_tac >> TRY (fs[] >> NO_TAC) >> rpt strip_tac
+  >~ [`FLOOKUP _.vs_allocas _ = SOME _ \/ _`]
+  >- (Cases_on `FLOOKUP s.vs_allocas aid` >> res_tac >> gvs[]) >>
+  metis_tac[]
 QED
 
 Theorem log_encode_allocate_metadata[local]:

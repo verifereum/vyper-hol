@@ -2,11 +2,11 @@
 Theory bodyDeclMemoryCore
 Ancestors
   loweringPosts exprSimProps stmtSimProps exprSimHypsDefs
-  bodyNameMemoryFacts
+  bodyNameMemoryFacts memoryValueEncoding
   bodyCopyMemory bodyMemoryDefs stmtSimDeclMem localPtrsProps stmtSimDeclStore
   stmtSimDecl valueCopy valueCopyBytes exprOperandVar freshWrites
   valueTypingMemoryProps vyperTyping exprSimDefs stmtSimDefs venomState
-  valueEncoding valueEncodingProofs intCallResult compileEnv exprLoweringProps
+  valueEncoding valueEncodingProofs intCallResult compileEnv loweringStateRelDefs exprLoweringProps
   loweringSlice exprLowering exprSimBufferStore valueEncodingProofs
   words venomExecSemantics stmtLowering context fragExec fragExecMem
   allocaHistoryFragment list rich_list emitHelper emitHelperProps venomInst
@@ -30,13 +30,15 @@ Theorem body_stmt_state_rel_declare_store_frame:
     (!b n. b + n <= w2n w \/ w2n w + type_memory_size tyv <= b ==>
            mem_bytes_at b n t.vs_memory = mem_bytes_at b n s.vs_memory) /\
     LENGTH s.vs_memory <= LENGTH t.vs_memory /\
-    type_memory_size tyv <= sz /\ val_wf tyv v /\
+    type_memory_size tyv <= sz /\ val_wf tyv v /\ value_has_type tyv v /\
     val_in_memory tyv v (w2n w) t.vs_memory ==>
     stmt_state_rel ctx func cenv cx
       (es with scopes :=
         (sc |+ (id, <|assignable := a; type := tyv; value := v; popped := []|>)) :: rest) t
 Proof
   rpt gen_tac >> strip_tac >>
+  `memory_value_rel tyv v (w2n w) t.vs_memory` by
+    (irule val_in_memory_memory_value_rel >> simp[]) >>
   `!q. q = p \/ ~not_local_ptr cenv es.scopes q ==>
        lookup_var q t = lookup_var q s` by
     (rpt strip_tac >- simp[] >>
@@ -331,7 +333,7 @@ Proof
     (drule abiBuiltinAllocationTheory.abi_builtin_alloc_buffer_shape >> strip_tac >>
      drule emitted_insts_emit_op >> strip_tac >>
      qpat_x_assum `run_inst_seq (emitted_insts sa sm) s = OK a` mp_tac >>
-     asm_simp_tac (srw_ss()) [run_inst_seq_def, step_inst_base_def, mk_inst_def,
+     asm_simp_tac (srw_ss()) [run_inst_seq_def, step_inst_base_opcode_eqs, mk_inst_def,
        eval_operand_def, exec_alloca_def] >>
      Cases_on `FLOOKUP s.vs_allocas sa.cs_next_id`
      >- (simp[LET_THM, update_var_def] >> rpt strip_tac >> gvs[]) >>
@@ -621,7 +623,7 @@ Proof
   rpt strip_tac >> gvs[]
   >- (simp[run_inst_seq_mem_ok_last] >> irule instMemFrontierTheory.below_frontier_no_ranges >> simp[Abbr `A`, mk_inst_def]) >>
   `run_inst_seq (emitted_insts sa sA) s = OK t` by
-    (gvs[mk_inst_def] >> simp[run_inst_seq_def, step_inst_base_def]) >>
+    (gvs[mk_inst_def] >> simp[run_inst_seq_def, step_inst_base_opcode_eqs]) >>
   `alloca_history func (t with vs_inst_idx := LENGTH sA.cs_current_insts)` by
     (irule body_store_memory_history >> simp[same_blocks_def] >>
      qexistsl_tac [`s`, `sa`] >> simp[] >> fs[stmt_state_rel_def]) >>

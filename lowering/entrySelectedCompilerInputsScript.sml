@@ -1,11 +1,11 @@
 (* Source-selected joint compiler intervals and entry-control inputs. *)
 Theory entrySelectedCompilerInputs
 Ancestors
-  entrySelectedRegistrationIntervals entrySelectedOwnership entryRegistrationOpen
+  entrySelectedRegistrationIntervals entrySelectedOwnership entryRegistrationOpen loweringStateRelDefs
   entryAcceptedCheckFacts entrySourcePackages entryRejectCode entryValueRejectFacts entryRuntimeSlice
   entryDispatchMem entryDispatchProps moduleLoweringProps compileVyper compileEnv
   supportedProgram supportedDecls e2eDefs vyperLoweringCorrect venomWf
-  removeUnusedSsaProofs venomInst venomState fragExec finite_map list words
+  removeUnusedSsaProofs venomInst venomState fragExec finite_map list words venomWfProps
 
 Theorem source_selected_compiler_inputs:
   lower_vyper_runtime_unit tops rp = SOME u /\ supported_program tops /\
@@ -20,7 +20,7 @@ Theorem source_selected_compiler_inputs:
   fn_entry_label efn = SOME elbl ==>
   ?lbl ce pa mc pay key tr view rt sels fl sf sd sc sk cer registered completed.
     set_external_package_target rp.rpol_target
-      (package_external_fn tops F (assign_nkeys tops 0)
+      (package_external_fn tops T (K global_nonreentrant_slot)
         (mut,F,lookup_raw_return_or_F (NONE : num option)
           tx.function_name External tops,tx.function_name,args,([] : expr list),ret,fbody)) =
       (lbl,ce,pa,mc,pay,F,key,tr,view,fbody,rt) /\
@@ -67,8 +67,8 @@ Resume source_selected_compiler_inputs[control]:
   drule_all source_selected_entry_checks_pass >>
   disch_then (map_every assume_tac o CONJUNCTS) >>
   `~block_is_terminated sc` by simp[block_is_terminated_def] >>
-  `~block_is_terminated sk` by metis_tac[entry_checks_open] >>
-  `~block_is_terminated sa'` by metis_tac[register_positional_args_open] >>
+  `~block_is_terminated sk` by metis_tac[entry_checks_preserve_open] >>
+  `~block_is_terminated sa'` by metis_tac[registration_preserves_open] >>
   simp[] >>
   conj_tac >- irule (SRULE [] linear_selectors_lt) >>
   conj_tac >- (drule_all valid_call_linear_dispatch_target >> simp[]) >>

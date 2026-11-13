@@ -4,7 +4,7 @@ Ancestors
   loweringShapeProps loweringShapeDefs loweringShapeRules vyperCompiler venomInst
   entryBodyBoundLabels entryCompileIntervals entryInternalAppend entryLinearAppend
   entryPrefixRetention fragExec venomExecProofs
-  allocaFrontierBound venomWf removeUnusedSsaProofs
+  allocaFrontierBound venomWf removeUnusedSsaProofs venomWfProps
 
 Theorem compile_runtime_entry_intervals[local]:
   compile_generate_runtime sels exts ints fb Linear buckets meta dense info sa =

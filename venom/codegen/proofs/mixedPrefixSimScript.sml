@@ -64,6 +64,50 @@ End
    Well-formedness predicate for spill/restore ops
    ========================================================================= *)
 
+(* sa_spill_base is unchanged by any prefix op *)
+Theorem apply_prefix_op_spill_base:
+  !lo op ps.
+    (apply_prefix_op initial_fmp lo op ps).ps_alloc.sa_spill_base = ps.ps_alloc.sa_spill_base
+Proof
+  rpt gen_tac >> Cases_on `op` >>
+  simp[apply_prefix_op_def, apply_simple_op_def,
+       stack_push_def, stack_pop_def, stack_swap_def, stack_dup_def,
+       stack_poke_def, spill_lookup_def] >>
+  TRY (Cases_on `o'` >> simp[apply_simple_op_def])
+QED
+
+
+Theorem apply_prefix_ops_spill_base:
+  !lo ops ps.
+    (apply_prefix_ops initial_fmp lo ops ps).ps_alloc.sa_spill_base =
+    ps.ps_alloc.sa_spill_base
+Proof
+  Induct_on `ops` >>
+  simp[apply_prefix_ops_def, apply_prefix_op_spill_base]
+QED
+
+
+(* Prefix interpretation depends only on the planner stack and spill map. *)
+Theorem apply_prefix_ops_ext_stack_spilled:
+  !ops lo ps1 ps2.
+    ps1.ps_stack = ps2.ps_stack /\
+    ps1.ps_spilled = ps2.ps_spilled ==>
+    (apply_prefix_ops initial_fmp lo ops ps1).ps_stack =
+      (apply_prefix_ops initial_fmp lo ops ps2).ps_stack /\
+    (apply_prefix_ops initial_fmp lo ops ps1).ps_spilled =
+      (apply_prefix_ops initial_fmp lo ops ps2).ps_spilled
+Proof
+  Induct >> simp[apply_prefix_ops_def] >>
+  rpt gen_tac >> strip_tac >>
+  first_x_assum irule >>
+  Cases_on `h` >>
+  simp[apply_prefix_op_def, apply_simple_op_def,
+       stack_push_def, stack_pop_def, stack_swap_def,
+       stack_peek_def, stack_poke_def, spill_lookup_def] >>
+  TRY (Cases_on `o'` >> simp[apply_simple_op_def, stack_push_def])
+QED
+
+
 (* Additional well-formedness conditions for spill/restore ops *)
 Definition spill_op_wf_def:
   spill_op_wf ps (SOSpill off) =

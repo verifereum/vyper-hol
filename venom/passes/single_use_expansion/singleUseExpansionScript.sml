@@ -1,3 +1,7 @@
+(* Single-use expansion pass — public API *)
 Theory singleUseExpansion
 Ancestors
-  singleUseExpansionDefs singleUseExpansionCorrectness
+  singleUseExpansionDefs
+  singleUseExpansionSupplyProofs
+  singleUseExpansionSupplySim
+  singleUseExpansionCorrectness

@@ -84,13 +84,14 @@ Proof
 QED
 
 Theorem abi_decoder_valid_decode:
-  compile_abi_decode_to_buf dst src opc hi (type_to_abi_dec_info sf ce ty) start = ((),end_st) /\
+  compile_abi_decode_to_buf dst src opc base_op hi (type_to_abi_dec_info sf ce ty) start = ((),end_st) /\
   fn_has_code start end_st func /\
   (start.cs_blocks = end_st.cs_blocks \/
     !bb. lookup_block end_st.cs_current_bb func.fn_blocks = SOME bb ==>
       phi_prefix_length bb.bb_instructions = 0) /\
-  abi_decoder_valid_pre ce env sf ty tv bs v start src dst opc hi sb d b cap initial /\
-  abi_decoder_budget first last b cap initial /\ first <= start.cs_next_id /\ end_st.cs_next_id <= last /\
+  abi_decoder_valid_pre ce env sf ty tv bs v start src dst opc base_op hi B sb d b cap initial /\
+  (base_op = Lit 0w \/ opc = MLOAD) /\
+  abi_decoder_budget first last b cap initial /\ first <= abi_decoder_entry_floor start /\ end_st.cs_next_id <= last /\
   end_st.cs_next_var <= limit_st.cs_next_var /\ fresh_vars_wrt limit_st initial /\
   ~initial.vs_halted /\ initial.vs_current_bb = start.cs_current_bb /\
   initial.vs_inst_idx = LENGTH start.cs_current_insts ==>
@@ -105,5 +106,7 @@ Proof
   `abi_decoder_coherent ce env sf ty tv` by fs[abi_decoder_valid_pre_def] >>
   `abi_decoder_valid_correct ce env sf ty tv` by
     (drule_all abi_decoder_valid_coherent_correct >> simp[]) >>
-  mp_tac abi_decoder_valid_correct_run >> asm_simp_tac bool_ss []
+  drule_at (Pat `abi_decoder_valid_pre _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _`)
+    abi_decoder_valid_correct_run >>
+  disch_then irule >> asm_simp_tac bool_ss []
 QED

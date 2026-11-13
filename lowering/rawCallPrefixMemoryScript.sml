@@ -1,7 +1,7 @@
 (* Memory-mode address and bytes argument continuation for raw_call. *)
 Theory rawCallPrefixMemory
 Ancestors
-  bodyMemRawCallBounds rawCallGasMemory rawCallArgumentMemory exprSimRawCall exprSimHash bodyMemoryPreds exprSimMemDefs
+  bodyMemRawCallBounds rawCallGasMemory rawCallArgumentMemory exprSimRawCall exprSimHash bodyMemoryPreds exprSimMemDefs loweringStateRelDefs
   exprSimDefs exprSimProps exprLoweringProps loweringPosts bodySim
   compileEnv venomState vyperInterpreter vyperState fragExec exprSimSource exprSimHypsDefs
   bodyArgsMemory exprSimWordArgs exprWordOperand exprSimOperands exprSimHyps
@@ -128,7 +128,7 @@ Theorem raw_call_data_endpoint_mem[local]:
     u.vs_alloca_next = td.vs_alloca_next /\
     u.vs_memory = td.vs_memory /\ u.vs_allocas = td.vs_allocas /\
     (u with vs_vars := td.vs_vars) = td /\
-    stmt_state_rel ctx func cenv cx es2 u /\ wb_frame cenv es2 s2 td u /\
+    stmt_state_rel ctx func cenv cx es2 u /\ wb_frame cenv es2 es2 s2 td u /\
     ~u.vs_halted /\ u.vs_current_bb = s4.cs_current_bb /\
     (!x. addr = Var x \/ len = Var x \/ ptr_op = Var x ==> not_fresh_at s4 x)
 Proof
@@ -221,7 +221,7 @@ Theorem raw_call_prefix_sim_mem:
     eval_operand gas t = SOME gw /\
     mem_bytes_at (b+32) (LENGTH bs) t.vs_memory = bs /\
     b+32 < dimword (:256) /\ LENGTH bs < dimword (:256) /\
-    stmt_state_rel ctx func cenv cx esK t /\ wb_frame cenv es sa s0 t /\
+    stmt_state_rel ctx func cenv cx esK t /\ wb_frame cenv es esK sa s0 t /\
     ~t.vs_halted /\ t.vs_current_bb = s6.cs_current_bb /\
     t.vs_inst_idx = LENGTH s6.cs_current_insts /\
     (!x. addr = Var x \/ len = Var x \/ ptr_op = Var x \/ gas = Var x \/
@@ -291,8 +291,15 @@ Resume raw_call_prefix_sim_mem[data]:
   `(!x. addr = Var x ==> not_fresh_at s1 x) /\ (!l. addr <> Label l)` by
     fs[safe_operand_def] >>
   drule_all expr_post_operand_word >> strip_tac >>
+  `post_value_type cenv a = BaseT AddressT` by
+    (qpat_assum `expr_type a = _` (fn th => simp[th, is_word_type_def])) >>
+  `expr_val_rel cx (BaseT AddressT) av addr tA` by
+    (qpat_x_assum `expr_post _ _ _ _ a _ _ _ _ _ _ _ _` mp_tac >>
+     qpat_assum `post_value_type cenv a = _`
+       (fn th => rewrite_tac[expr_post_def, th]) >>
+     rpt strip_tac >> first_assum ACCEPT_TAC) >>
   `expr_val_rel cx (BaseT AddressT) av addr tD` by
-    (fs[expr_post_def, expr_val_rel_def] >>
+    (fs[expr_val_rel_def] >>
      gvs[is_word_type_def, vyperValueTheory.evaluate_type_def]) >>
   `expr_body_pre cenv cx env d esD` by
     (irule expr_body_pre_raw_call_arg >>
@@ -368,7 +375,7 @@ Resume raw_call_prefix_sim_mem[keyword_endpoint]:
     (qpat_x_assum `evaluate_type _ (expr_type d) = _` mp_tac >> simp[]) >>
   `mem_bytes_at (b+32) (LENGTH bs) t.vs_memory = bs` by
     (drule_all raw_call_kwargs_payload >> simp[]) >>
-  `stmt_state_rel ctx func cenv cx ee t /\ wb_frame cenv esD s4 tm t` by
+  `stmt_state_rel ctx func cenv cx ee t /\ wb_frame cenv esD ee s4 tm t` by
     fs[typed_args_post_def] >>
   `local_ptrs_reserved cenv s5` by
     (irule local_ptrs_reserved_next_var >> qexists_tac `s4` >> simp[]) >>
@@ -400,8 +407,8 @@ Resume raw_call_prefix_sim_mem[final_endpoint]:
   `!op w. (!x. op = Var x ==> not_fresh_at s4 x) /\
            (!l. op <> Label l) /\ eval_operand op tm = SOME w ==>
            eval_operand op t' = SOME w` by
-    (qpat_x_assum `wb_frame cenv esD s4 tm t` mp_tac >>
-     qpat_x_assum `wb_frame cenv ee s5 t t'` mp_tac >>
+    (qpat_x_assum `wb_frame cenv esD ee s4 tm t` mp_tac >>
+     qpat_x_assum `wb_frame cenv ee ee s5 t t'` mp_tac >>
      qpat_x_assum `!x. not_fresh_at s4 x ==> _` mp_tac >>
      rpt (pop_assum kall_tac) >> rpt strip_tac >>
      Cases_on `op` >> gvs[eval_operand_def] >>
@@ -409,7 +416,7 @@ Resume raw_call_prefix_sim_mem[final_endpoint]:
   `!op w. MEM op xs /\ eval_operand op t = SOME w ==>
           eval_operand op t' = SOME w` by
     (qpat_x_assum `EVERY _ xs` mp_tac >>
-     qpat_x_assum `wb_frame cenv ee s5 t t'` mp_tac >>
+     qpat_x_assum `wb_frame cenv ee ee s5 t t'` mp_tac >>
      rpt (pop_assum kall_tac) >> simp[EVERY_MEM] >> rpt strip_tac >>
      first_x_assum drule >> strip_tac >>
      Cases_on `op` >> gvs[eval_operand_def] >> metis_tac[wb_frame_vars]) >>
@@ -429,32 +436,32 @@ Resume raw_call_prefix_sim_mem[frames]:
      drule eval_expr_preserves_scopes_dom >> simp[]) >>
   `MAP FDOM esD.scopes = MAP FDOM ee.scopes` by
     (drule eval_exprs_preserves_scopes_dom >> simp[]) >>
-  `wb_frame cenv es sa s0 tA /\ wb_frame cenv esA s1 tA tD` by
+  `wb_frame cenv es esA sa s0 tA /\ wb_frame cenv esA esD s1 tA tD` by
     (qpat_x_assum `expr_post _ _ _ _ a _ _ _ _ _ _ _ _` mp_tac >>
      qpat_x_assum `expr_post _ _ _ _ d _ _ _ _ _ _ _ _` mp_tac >>
      rpt (pop_assum kall_tac) >> simp[expr_post_def, wb_frame_def] >>
      rpt strip_tac >> first_x_assum irule >> simp[] >> metis_tac[]) >>
-  `wb_frame cenv es sa s0 tD` by
-    (irule wb_frame_trans >> simp[] >> reverse conj_tac
+  `wb_frame cenv es esD sa s0 tD` by
+    (irule wb_frame_trans >> simp[] >> conj_tac
      >- (goal_assum (drule_at Any)) >>
      qexistsl_tac [`esA`,`s1`,`tA`] >> fs[ci_mono_def]) >>
   suspend "frame_slice"
 QED
 
 Resume raw_call_prefix_sim_mem[frame_slice]:
-  `wb_frame cenv esD s2 tD tm` by
-    (simp[Abbr `tm`, wb_frame_def, locals_kept_def, lookup_var_def] >>
-     fs[wb_frame_def, locals_kept_def, lookup_var_def]) >>
-  `wb_frame cenv es sa s0 tm` by
-    (irule wb_frame_trans >> simp[] >> reverse conj_tac
+  `wb_frame cenv esD esD s2 tD tm` by
+    (simp[Abbr `tm`, wb_frame_def, locals_kept_def, popped_kept_def, lookup_var_def] >>
+     fs[wb_frame_def, locals_kept_def, popped_kept_def, lookup_var_def]) >>
+  `wb_frame cenv es esD sa s0 tm` by
+    (irule wb_frame_trans >> simp[] >> conj_tac
      >- (goal_assum (drule_at Any)) >>
      qexistsl_tac [`esD`,`s2`,`tD`] >> fs[ci_mono_def] >> decide_tac) >>
-  `wb_frame cenv es sa s0 t` by
-    (irule wb_frame_trans >> simp[] >> reverse conj_tac
+  `wb_frame cenv es ee sa s0 t` by
+    (irule wb_frame_trans >> simp[] >> conj_tac
      >- (goal_assum (drule_at Any)) >>
      qexistsl_tac [`esD`,`s4`,`tm`] >> fs[ci_mono_def] >> decide_tac) >>
-  `wb_frame cenv es sa s0 t'` by
-    (irule wb_frame_trans >> simp[] >> reverse conj_tac
+  `wb_frame cenv es ee sa s0 t'` by
+    (irule wb_frame_trans >> simp[] >> conj_tac
      >- (goal_assum (drule_at Any)) >>
      qexistsl_tac [`ee`,`s5`,`t`] >> fs[ci_mono_def] >> decide_tac) >>
   suspend "pack"
@@ -542,9 +549,9 @@ Resume raw_call_prefix_sim_mem[continuation]:
   conj_tac >- (qexists_tac `b` >> fs[]) >>
   conj_tac >- fs[expr_val_rel_def, is_word_type_def] >>
   conj_tac
-  >- (qpat_x_assum `wb_frame cenv es sa s0 t'` mp_tac >>
+  >- (qpat_x_assum `wb_frame cenv es ee sa s0 t'` mp_tac >>
       rpt (pop_assum kall_tac) >>
-      simp[wb_frame_def, locals_kept_def, lookup_var_def] >> metis_tac[]) >>
+      simp[wb_frame_def, locals_kept_def, popped_kept_def, lookup_var_def] >> metis_tac[]) >>
   qexistsl_tac [`esA`,`esD`,`gsA`,`gsD`,`gs`,`tA`,`tD`,`t`,`tm`,`xs`] >>
   simp[] >> first_x_assum ACCEPT_TAC
 QED

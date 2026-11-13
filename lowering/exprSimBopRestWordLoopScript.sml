@@ -95,7 +95,7 @@ Theorem rest_word_membership_branch:
   step_inst_base (mk_inst id JNZ [cond; Label yes; Label no] []) s =
     OK (jump_to (if p then yes else no) s)
 Proof
-  Cases_on `p` >> simp[bool_to_word_def, step_inst_base_def, mk_inst_def]
+  Cases_on `p` >> simp[bool_to_word_def, step_inst_base_opcode_eqs, mk_inst_def]
 QED
 
 Theorem rest_word_membership_exit_notin:

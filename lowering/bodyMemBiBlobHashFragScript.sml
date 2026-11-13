@@ -5,7 +5,7 @@ Ancestors
   emitHelperProps fragGasPathMem
   exprUnopSimDefs exprSimSource exprSimHypsDefs loweringPosts
   exprSimProps exprSimDefs exprLowering emitHelper exprLoweringProps
-  compileEnv vyperAST vyperInterpreter vyperState vyperContext vyperValue
+  compileEnv loweringStateRelDefs vyperAST vyperInterpreter vyperState vyperContext vyperValue
   vyperValueOperation valueEncoding venomExecSemantics venomInst venomState
   vyperTyping vyperTypeSystem exprSimUnopProps exprSimMemorySource
   gasSummary fragGasMode instIdxIndep fragExec

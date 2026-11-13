@@ -8,7 +8,7 @@ Ancestors
   tupleTargetStoreProps bodyExprPreFacts bodySim bodyMemoryDefs exprSimDefs
   vyperTypeSystem vyperTypeEnv vyperTypeInvariants exprSimHypsDefs
   supportedStmts supportedExprs stmtSimDefs loweringPosts
-  list rich_list exprLoweringProps compileEnv vyperTypeValues
+  list rich_list exprLoweringProps compileEnv loweringStateRelDefs vyperTypeValues
   vyperTyping vyperTypeDefaults vyperTypeExprSoundness exprSimSource
   compileVyper vyperCompiler vyperTypeExprResult
 Libs
@@ -78,7 +78,8 @@ Proof
           gvs[run_deploy_lowering_def, AllCaseEqs(), lowering_policy_ok_def]) >>
       gvs[lower_vyper_runtime_unit_def, AllCaseEqs()] >>
       rpt (pairarg_tac >> gvs[]) >>
-      gvs[run_lowering_def, AllCaseEqs(), lowering_policy_ok_def])
+      gvs[run_lowering_def, vyperCompilerTheory.run_grouped_lowering_def,
+          AllCaseEqs(), lowering_policy_ok_def])
   >~ [`type_memory_size (TupleTV _) < _`]
   >- (strip_tac >> irule tuple_staging_bound >> metis_tac[])
   >~ [`tuple_target_layout _ _ _ _ _`]

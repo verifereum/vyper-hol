@@ -10,7 +10,7 @@
 Theory concretizeStageSim
 Ancestors
   o1PassContract ptrDiscipline unitMemInv concretizeMemLocDefs
-  venomPassDispatcher cfgWf
+  venomPassDispatcher cfgWf concretizeLayoutStageSimulation
 
 (* Why it holds (intuition, not a prescribed proof).
 
@@ -48,5 +48,6 @@ Theorem concretize_stage_sim:
   EVERY fn_defs_reach_uses C.ctx_functions ==>
   ctx_sim D C C' vs vs
 Proof
-  cheat
+  simp[ctx_sim_def] >> rpt strip_tac >>
+  irule layout_stage_terminating_context >> metis_tac[]
 QED

@@ -132,6 +132,7 @@ Theorem aug_place_target_indices_pre:
   !t.
     IS_SOME (type_place_target env t) /\
     IS_SOME (supported_target_info tops bindings t) /\
+    alloc_limits_target cenv t /\
     ~supported_target_exists
       (\e. ~is_extcode e /\ ~(byte_widths_expr e /\ alloc_limits_expr cenv e)) t /\
     call_evaluation_safe cx (int_calls_target t) /\
@@ -145,6 +146,7 @@ Proof
   `(!e:expr. T) /\ (!t.
     IS_SOME (type_place_target env t) /\
     IS_SOME (supported_target_info tops bindings t) /\
+    alloc_limits_target cenv t /\
     ~supported_target_exists
       (\e. ~is_extcode e /\ ~(byte_widths_expr e /\ alloc_limits_expr cenv e)) t /\
     call_evaluation_safe cx (int_calls_target t) /\
@@ -155,7 +157,8 @@ Proof
     supported_program tops /\ get_module_code cx NONE = SOME tops ==>
     target_indices_pre cenv cx env t)` suffices_by simp[] >>
   ho_match_mp_tac (TypeBase.induction_of ``:base_assignment_target``) >>
-  simp[target_indices_pre_def, supported_expr_exists_def, int_calls_expr_def] >>
+  simp[target_indices_pre_def, supported_expr_exists_def, int_calls_expr_def,
+       allocLimitsTheory.alloc_limits_expr_def] >>
   rpt conj_tac >> rpt gen_tac
   >~ [`IS_SOME (type_place_target env (SubscriptTarget t e))`]
     >- suspend "subscript"

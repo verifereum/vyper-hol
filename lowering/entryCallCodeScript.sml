@@ -90,7 +90,7 @@ QED
 
 Theorem entry_code_return_value_decode[local]:
   entry_preserves_code (\i. i.inst_opcode <> DALLOCA)
-    (compile_return_value_decode buf mn mx)
+    (compile_return_value_decode mn mx)
 Proof
   `!a b c. entry_preserves_code (\i. i.inst_opcode <> DALLOCA)
       (compile_select a b c)` by

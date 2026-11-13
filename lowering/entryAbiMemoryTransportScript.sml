@@ -1,7 +1,7 @@
 (* Typed common ABI conversions preserve the memory interpretation. *)
 Theory entryAbiMemoryTransport
 Ancestors
-  entryValueMemoryCongruence abiEncoderSourceTransport abiValueEncoding vyperABI
+  entryValueMemoryCongruence abiEncoderSourceTransport abiValueEncoding vyperABI valueEncodingDefs
   valueEncoding vyperValue vyperTyping vyperTypeDefaults vyperTypeValues vyperValueOperation words list venomMemProps
 Libs intLib
 

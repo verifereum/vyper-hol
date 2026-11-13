@@ -24,10 +24,10 @@ Ancestors
   loweringPosts fragGasMode exprSimProps localPtrsProps stmtSimDeclPath
   emitHelper venomExecSemantics venomInst exprLoweringProps accountsRelProps vyperLookup vyperPlaceStatePreservation
   valueEncodingTyping vyperStoragePlaceRegion
-  stmtLowering exprLowering compileEnv
+  stmtLowering exprLowering compileEnv loweringStateRelDefs
   vyperInterpreter vyperState vyperValue vyperTypeSystem
-  venomState valueEncoding vyperTyping valueEncodingProps valueEncodingProofs
-  arithmetic list
+  venomState valueEncoding valueEncodingDefs vyperTyping valueEncodingProps valueEncodingProofs
+  arithmetic list memoryValueEncoding
 
 Theorem place_store_default_typed[local]:
   (!tv. value_has_type tv (default_value tv)) /\
@@ -681,10 +681,13 @@ Theorem place_store_read_cons[local]:
 Proof
   rpt gen_tac >> strip_tac >>
   drule mem_step_offset_shape >> strip_tac >> gvs[] >>
+  TRY (drule mem_field_offset_sound >> strip_tac) >>
   Cases_on `a` >>
   simp[evaluate_subscripts_def, subscript_type_def] >>
-  rpt (BasicProvers.TOP_CASE_TAC >> gvs[]) >>
-  drule mem_field_offset_sound >> strip_tac >> gvs[]
+  BasicProvers.TOP_CASE_TAC >>
+  rewrite_tac[optionTheory.option_case_def, sumTheory.sum_case_def] >>
+  BasicProvers.TOP_CASE_TAC >>
+  rewrite_tac[optionTheory.option_case_def, sumTheory.sum_case_def]
 QED
 
 Theorem place_store_path_unread_frame:
@@ -822,7 +825,7 @@ Theorem place_store_local_ptrs_replace:
     mem_path_offset entry.type path = SOME (k,tv) /\
     value_has_type entry.type entry.value /\ value_has_type tv v /\
     replace_memory_entry entry path v = INL entry' /\
-    val_wf entry'.type entry'.value /\
+    val_wf entry'.type entry'.value /\ value_has_type entry'.type entry'.value /\
     val_in_memory tv v (w2n bw+k) mem' /\
     (!q. q < w2n bw+k \/ w2n bw+k+type_memory_size tv <= q ==>
          mem_bytes_at q 1 s.vs_memory = mem_bytes_at q 1 mem') ==>
@@ -836,10 +839,13 @@ Proof
    type_memory_size entry.type <= sz /\
    val_in_memory entry.type entry.value (w2n bw) s.vs_memory` by
     (fs[local_ptrs_rel_def] >>
-     first_x_assum drule_all >> simp[] >> metis_tac[]) >>
+     first_x_assum drule_all >> simp[] >>
+     metis_tac[memory_value_rel_val_in_memory]) >>
   `entry'.type = entry.type /\
    val_in_memory entry'.type entry'.value (w2n bw) mem'` by
     (drule_all place_store_replace_memory_entry >> simp[]) >>
+  `memory_value_rel entry'.type entry'.value (w2n bw) mem'` by
+    (irule val_in_memory_memory_value_rel >> simp[]) >>
   `!n b sz'. n <> id /\ local_region cenv sc s n b sz' ==>
        regions_disjoint (w2n bw) sz b sz'` by
     (fs[local_ptrs_rel_def] >> metis_tac[]) >>
@@ -1413,7 +1419,7 @@ Proof
   fs[stmt_state_rel_def, state_rel_def] >>
   fs[sstore_def, tstore_def, local_ptrs_rel_def, local_region_def,
      local_backed_def, lookup_var_def, immutables_rel_def, logs_rel_def,
-     immutable_alloca_sep_def, immutable_base_zero_def, eval_operand_def] >>
+     immutable_alloca_sep_def, immutable_decl_sep_def, immutable_base_zero_def, eval_operand_def] >>
   rpt conj_tac >>
   FIRST [first_assum ACCEPT_TAC,
          irule alloca_inv_fields >> qexists_tac `s` >> simp[],
@@ -1504,7 +1510,7 @@ Proof
   metis_tac[place_store_empty_encoding]
 QED
 
-Theorem place_store_write_location[local]:
+Theorem place_store_write_location:
   !ctx func cenv cx ee ff s p w loc dty v.
     stmt_state_rel ctx func cenv cx ee s /\
     place_ptr_rel cenv cx s (PlaceR p) w (SOME loc) (Type dty) /\
@@ -1669,6 +1675,9 @@ Theorem place_store_value_run:
            w2n w + type_memory_size dtv + 64 < dimword (:256)) /\
     (!dtv. evaluate_type (get_tenv cx) dty = SOME dtv ==>
            0 < type_slot_size dtv) /\
+    (loc <> LocMemory /\ dty <> sty /\
+     ~(is_bytestring_type dty /\ is_bytestring_type sty) ==>
+     type_alloc_ok cenv dty) /\
     stmt_state_rel ctx func cenv cx ee s /\
     write_place cx p v ee = (INL (), ff) /\
     fn_has_code sa sb func /\ fn_inst_ids_distinct func /\
@@ -1693,6 +1702,9 @@ Proof
       mp_tac place_store_value_memory_run >>
     impl_tac >- (rpt conj_tac >> TRY (first_assum ACCEPT_TAC) >> fs[]) >>
     simp[]) >>
+  `dty <> sty /\ ~(is_bytestring_type dty /\ is_bytestring_type sty) ==>
+   type_alloc_ok cenv dty` by
+    (strip_tac >> qpat_x_assum `loc <> LocMemory /\ _ ==> _` irule >> fs[]) >>
   Cases_on `?et n. dty = ArrayT et (Dynamic n)`
   >- (qspecl_then
       [`ctx`, `func`, `cenv`, `cx`, `env`, `ee`, `ff`, `s`, `p`, `w`, `loc`, `dst_op`,

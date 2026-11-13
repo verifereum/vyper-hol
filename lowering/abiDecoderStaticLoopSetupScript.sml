@@ -1,6 +1,7 @@
 (* Concrete source and destination setup for clamped static array elements. *)
 Theory abiDecoderStaticLoopSetup
 Ancestors
+  abiDecoderRange
   abiDecoderLoopSetup abiDecoderIndexedAddress abiDecoderReentryAddress abiDecoderReentry
   abiDecoderGuards abiDecoderContract abiDecoderDynamic
   emitHelperProps exprLoweringProps compileEnv emitHelper venomState venomInst
@@ -8,7 +9,7 @@ Ancestors
 
 Theorem abi_decode_static_element_setup_phases:
   ~dec_info_needs_offset di ==>
-  abi_decode_array_element_setup ip src dst opc hi di abi_sz mem_sz =
+  abi_decode_array_element_setup ip src dst opc base_op hi di abi_sz mem_sz =
     do idx_op <- emit_op MLOAD [ip];
        child_src <- abi_decode_indexed_address src idx_op abi_sz;
        child_dst <- abi_decode_indexed_address dst idx_op mem_sz;
@@ -22,7 +23,7 @@ Proof
 QED
 
 Theorem abi_decode_static_element_setup_shape:
-  abi_decode_array_element_setup ip src dst opc hi di abi_sz mem_sz st = (ops,st') /\
+  abi_decode_array_element_setup ip src dst opc base_op hi di abi_sz mem_sz st = (ops,st') /\
   ~dec_info_needs_offset di ==>
   st'.cs_blocks = st.cs_blocks /\ st'.cs_current_bb = st.cs_current_bb /\
   isPREFIX st.cs_current_insts st'.cs_current_insts /\
@@ -30,7 +31,7 @@ Theorem abi_decode_static_element_setup_shape:
     (emitted_insts st st')
 Proof
   disch_then (MAP_EVERY assume_tac o CONJUNCTS) >>
-  qpat_x_assum `abi_decode_array_element_setup _ _ _ _ _ _ _ _ _ = _` mp_tac >>
+  qpat_x_assum `abi_decode_array_element_setup _ _ _ _ _ _ _ _ _ _ = _` mp_tac >>
   asm_simp_tac bool_ss [abi_decode_array_element_setup_def, abi_decode_indexed_address_def,
     comp_bind_def, comp_return_def, emit_op_def, fresh_var_def, fresh_id_def,
     emit_def, comp_ignore_bind_def, LET_THM] >>
@@ -41,7 +42,7 @@ Proof
 QED
 
 Theorem abi_decode_static_element_setup_operands:
-  abi_decode_array_element_setup ip src dst opc hi di abi_sz mem_sz st = (ops,st') /\
+  abi_decode_array_element_setup ip src dst opc base_op hi di abi_sz mem_sz st = (ops,st') /\
   ~dec_info_needs_offset di ==>
   st'.cs_next_var = st.cs_next_var + 7 /\
   abi_decoder_operand_live st'.cs_next_var (FST ops) /\
@@ -49,7 +50,7 @@ Theorem abi_decode_static_element_setup_operands:
   abi_decoder_operand_live st'.cs_next_var (SND (SND ops))
 Proof
   disch_then (MAP_EVERY assume_tac o CONJUNCTS) >>
-  qpat_x_assum `abi_decode_array_element_setup _ _ _ _ _ _ _ _ _ = _` mp_tac >>
+  qpat_x_assum `abi_decode_array_element_setup _ _ _ _ _ _ _ _ _ _ = _` mp_tac >>
   asm_simp_tac bool_ss [abi_decode_static_element_setup_phases, comp_bind_def,
                        comp_return_def, LET_THM] >>
   pairarg_tac >> strip_tac >> gvs[] >> pairarg_tac >> gvs[] >> pairarg_tac >> gvs[] >>
@@ -63,7 +64,7 @@ Proof
 QED
 
 Theorem abi_decode_static_element_setup_reentry:
-  abi_decode_array_element_setup ip src dst opc hi di abi_sz mem_sz st = (ops,st') /\
+  abi_decode_array_element_setup ip src dst opc base_op hi di abi_sz mem_sz st = (ops,st') /\
   ~dec_info_needs_offset di /\ eval_operand ip s = SOME p /\
   mload (w2n p) s = n2w i /\
   eval_operand src s = SOME (n2w sb) /\ eval_operand dst s = SOME (n2w d) /\
@@ -87,7 +88,7 @@ Theorem abi_decode_static_element_setup_reentry:
 Proof
   disch_then (MAP_EVERY assume_tac o CONJUNCTS) >>
   drule_all abi_decode_static_element_setup_operands >> strip_tac >>
-  qpat_x_assum `abi_decode_array_element_setup _ _ _ _ _ _ _ _ _ = _` mp_tac >>
+  qpat_x_assum `abi_decode_array_element_setup _ _ _ _ _ _ _ _ _ _ = _` mp_tac >>
   asm_simp_tac bool_ss [abi_decode_static_element_setup_phases, comp_bind_def,
                        comp_return_def, LET_THM] >>
   pairarg_tac >> strip_tac >> gvs[] >> pairarg_tac >> gvs[] >>

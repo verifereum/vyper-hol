@@ -31,7 +31,7 @@ Proof
       entry_preserves_code (\i. i.inst_opcode <> DALLOCA)
         (compile_external_function_body ce args nr key tr vw fb rt))
     (MAP (set_external_package_target pol.rpol_target o
-          package_external_fn tops F (assign_nkeys tops 0))
+          package_external_fn tops T (K global_nonreentrant_slot))
       (FST (classify_functions tops)))` by
     (simp[GSYM MAP_COMPOSE, entry_code_packaged_externals]) >>
   qpat_x_assum `lower_vyper_runtime_unit _ _ = _` mp_tac >>

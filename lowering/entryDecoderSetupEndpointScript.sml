@@ -1,7 +1,7 @@
 (* Same-witness frames for actual decoder navigation sequences. *)
 Theory entryDecoderSetupEndpoint
 Ancestors
-  calldataDynStep calldataMembers abiDecoderArraySetupInputs
+  calldataDynStep calldataMembers abiDecoderArraySetupInputs loweringStateRelDefs
   abiDecoderReentry abiDecoderReentryAddress abiDecoderLoopSetup
   abiDecoderIndexedAddress abiEncoder compileEnv emitHelper emitHelperProps
   entryDecoderStateFrame entryDecoderHistoryFrame successfulSequenceEndpoint
@@ -11,16 +11,16 @@ Ancestors
   venomInstProofs venomInstProofs1 venomExecProps finite_map pred_set
 
 Theorem entry_element_setup_reentry_code:
-  abi_decode_array_element_setup ip src dst CALLDATALOAD (Lit 0w) di
+  abi_decode_array_element_setup ip src dst CALLDATALOAD (Lit 0w) (Lit 0w) di
     abi_sz mem_sz st = (ops,ready) ==>
   EVERY (\i. abi_decoder_reentry_opcode i.inst_opcode)
     (emitted_insts st ready)
 Proof
   strip_tac >>
-  qpat_x_assum `abi_decode_array_element_setup _ _ _ _ _ _ _ _ _ = _` mp_tac >>
+  qpat_x_assum `abi_decode_array_element_setup _ _ _ _ _ _ _ _ _ _ = _` mp_tac >>
   Cases_on `dec_info_needs_offset di` >>
   asm_simp_tac bool_ss [abi_decode_array_element_setup_def,
-    abi_decode_indexed_address_def, compile_abi_decode_dyn_elem_ptr_def,
+    abi_decode_indexed_address_def, compile_abi_decode_dyn_elem_ptr_def, compile_abi_dec_addr_def,
     comp_bind_def, comp_return_def, emit_op_def, emit_void_def, fresh_var_def,
     fresh_id_def, emit_def, comp_ignore_bind_def, LET_THM] >>
   rpt (pairarg_tac >> gvs[]) >> strip_tac >> gvs[] >>
@@ -42,15 +42,15 @@ Proof
 QED
 
 Theorem entry_element_setup_outputs[local]:
-  abi_decode_array_element_setup ip src dst CALLDATALOAD (Lit 0w) di
+  abi_decode_array_element_setup ip src dst CALLDATALOAD (Lit 0w) (Lit 0w) di
     abi_sz mem_sz st = (ops,ready) /\ abi_decoder_older_vars st.cs_next_var x ==>
   EVERY (\i. ~MEM x i.inst_outputs) (emitted_insts st ready)
 Proof
   strip_tac >>
-  qpat_x_assum `abi_decode_array_element_setup _ _ _ _ _ _ _ _ _ = _` mp_tac >>
+  qpat_x_assum `abi_decode_array_element_setup _ _ _ _ _ _ _ _ _ _ = _` mp_tac >>
   Cases_on `dec_info_needs_offset di` >>
   asm_simp_tac bool_ss [abi_decode_array_element_setup_def, abi_decode_indexed_address_def,
-    compile_abi_decode_dyn_elem_ptr_def, comp_bind_def, comp_return_def,
+    compile_abi_decode_dyn_elem_ptr_def, compile_abi_dec_addr_def, comp_bind_def, comp_return_def,
     emit_op_def, emit_void_def, fresh_var_def, fresh_id_def, emit_def,
     comp_ignore_bind_def, LET_THM] >>
   rpt (pairarg_tac >> gvs[]) >> strip_tac >> gvs[] >>
@@ -71,7 +71,7 @@ Proof
 QED
 
 Theorem entry_element_setup_total_frame:
-  abi_decode_array_element_setup ip src dst CALLDATALOAD (Lit 0w) di
+  abi_decode_array_element_setup ip src dst CALLDATALOAD (Lit 0w) (Lit 0w) di
     abi_sz mem_sz st = (ops,ready) /\
   run_inst_seq (emitted_insts st ready) s = OK t ==>
   !op. abi_decoder_operand_live st.cs_next_var op ==>
@@ -92,7 +92,7 @@ Proof
 QED
 
 Theorem entry_element_setup_endpoint:
-  abi_decode_array_element_setup ip src dst CALLDATALOAD (Lit 0w) di
+  abi_decode_array_element_setup ip src dst CALLDATALOAD (Lit 0w) (Lit 0w) di
     abi_sz mem_sz st = (ops,ready) /\
   eval_operand ip s = SOME p /\ mload (w2n p) s = n2w j /\
   w2n p + 32 <= s.vs_alloca_next /\
@@ -173,7 +173,7 @@ Proof
 QED
 
 Theorem entry_member_navigation_outputs[local]:
-  (do ep <- compile_getelemptr_abi src dyn ao CALLDATALOAD (Lit 0w);
+  (do ep <- compile_getelemptr_abi src dyn ao CALLDATALOAD (Lit 0w) (Lit 0w);
       dp <- emit_op ADD [dst; Lit (n2w vo)]; return (ep,dp) od) st = ((ep,dp),mid) /\
   mid.cs_next_var <= limit.cs_next_var ==>
   EVERY (\i. abi_decoder_reentry_opcode i.inst_opcode /\
@@ -181,7 +181,8 @@ Theorem entry_member_navigation_outputs[local]:
       ~MEM (STRING #"%" (toString n)) i.inst_outputs)) (emitted_insts st mid)
 Proof
   Cases_on `dyn` >>
-  simp[compile_getelemptr_abi_def, comp_bind_def, comp_ignore_bind_def,
+  simp[compile_getelemptr_abi_def, compile_abi_dec_addr_def,
+       comp_bind_def, comp_ignore_bind_def,
        comp_return_def, emit_op_def, fresh_var_def, fresh_id_def, emit_def] >>
   rpt strip_tac >> gvs[] >>
   simp[emitted_insts_def] >> pure_rewrite_tac[GSYM APPEND_ASSOC] >>
@@ -190,7 +191,7 @@ Proof
 QED
 
 Theorem entry_member_navigation_endpoint:
-  (do ep <- compile_getelemptr_abi src dyn ao CALLDATALOAD (Lit 0w);
+  (do ep <- compile_getelemptr_abi src dyn ao CALLDATALOAD (Lit 0w) (Lit 0w);
       dp <- emit_op ADD [dst; Lit (n2w vo)]; return (ep,dp) od) st = ((ep,dp),mid) /\
   eval_operand src s = SOME p /\ eval_operand dst s = SOME q /\
   abi_decoder_operand_live st.cs_next_var src /\

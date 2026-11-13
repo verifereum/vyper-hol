@@ -1,7 +1,7 @@
 (* A piece of S1 (loweringRuntimeCorrect's lower_vyper_runtime_unit_correct). *)
 Theory externalBodyFrame
 Ancestors
-  externalBodySupport
+  externalBodySupport memoryLocalRhsProps
   stmtSimProps stmtSimDefs exprSimDefs exprSimHypsDefs exprSimHyps
   loweringPosts
   list pair finite_map alist arithmetic combin integer option pred_set rich_list
@@ -25,68 +25,6 @@ Ancestors
   venomState venomExecSemantics venomWf
 
 val _ = Parse.hide "body";
-
-Theorem supported_expr_exists_disj:
-  (!p e q. supported_expr_exists (\x. p x \/ q x) e =
-    (supported_expr_exists p e \/ supported_expr_exists q e)) /\
-  (!p t q. supported_target_exists (\x. p x \/ q x) t =
-    (supported_target_exists p t \/ supported_target_exists q t)) /\
-  (!p es q. supported_exprs_exists (\x. p x \/ q x) es =
-    (supported_exprs_exists p es \/ supported_exprs_exists q es)) /\
-  (!p opt q. supported_opt_exists (\x. p x \/ q x) opt =
-    (supported_opt_exists p opt \/ supported_opt_exists q opt)) /\
-  (!p fs q. supported_fields_exists (\x. p x \/ q x) fs =
-    (supported_fields_exists p fs \/ supported_fields_exists q fs))
-Proof
-  ho_match_mp_tac supported_expr_exists_ind >>
-  simp[supported_expr_exists_def] >> metis_tac[]
-QED
-
-Theorem supported_assignment_exists_disj:
-  (!p t q. supported_assignment_exists (\x. p x \/ q x) t =
-    (supported_assignment_exists p t \/ supported_assignment_exists q t)) /\
-  (!p ts q. supported_assignments_exists (\x. p x \/ q x) ts =
-    (supported_assignments_exists p ts \/ supported_assignments_exists q ts))
-Proof
-  ho_match_mp_tac supported_assignment_exists_ind >>
-  simp[supported_assignment_exists_def, supported_expr_exists_disj] >> metis_tac[]
-QED
-
-Theorem supported_iterator_exists_disj:
-  !p it q. supported_iterator_exists (\x. p x \/ q x) it =
-    (supported_iterator_exists p it \/ supported_iterator_exists q it)
-Proof
-  Cases_on `it` >> simp[supported_iterator_exists_def,
-    supported_expr_exists_disj] >> metis_tac[]
-QED
-
-Theorem supported_assert_exists_disj:
-  !p r q. supported_assert_exists (\x. p x \/ q x) r =
-    (supported_assert_exists p r \/ supported_assert_exists q r)
-Proof
-  Cases_on `r` >> simp[supported_assert_exists_def,
-    supported_expr_exists_disj, EXISTS_MEM] >> metis_tac[]
-QED
-
-Theorem supported_raise_exists_disj:
-  !p r q. supported_raise_exists (\x. p x \/ q x) r =
-    (supported_raise_exists p r \/ supported_raise_exists q r)
-Proof
-  Cases_on `r` >> simp[supported_raise_exists_def,
-    supported_expr_exists_disj, EXISTS_MEM] >> metis_tac[]
-QED
-
-Theorem supported_stmt_expr_exists_disj:
-  (!p s q. supported_stmt_expr_exists (\x. p x \/ q x) s =
-    (supported_stmt_expr_exists p s \/ supported_stmt_expr_exists q s)) /\
-  (!p ss q. supported_stmts_expr_exists (\x. p x \/ q x) ss =
-    (supported_stmts_expr_exists p ss \/ supported_stmts_expr_exists q ss))
-Proof
-  ho_match_mp_tac supported_stmt_expr_exists_ind >>
-  simp[supported_stmt_expr_exists_def, supported_expr_exists_disj,
-       supported_assignment_exists_disj, supported_iterator_exists_disj,
-       supported_assert_exists_disj, supported_raise_exists_disj] >> metis_tac[]
-QED
 
 Theorem collect_locals_supported_bindings_mem:
   !ss n. MEM n (MAP FST (collect_locals ss)) <=>
@@ -591,41 +529,18 @@ QED
 
 Theorem stmt_exprs_ok_from_traversal_bounds:
   ~supported_stmts_expr_exists (\e. ~byte_widths_expr e) ss /\
-  ~supported_stmts_expr_exists
-     (\e. ~is_extcode e /\ ~alloc_limits_expr cenv e) ss /\
   alloc_limits_stmts cenv ss /\
   (stmts_valued_return ss /\ cenv.ce_is_external /\ ~cenv.ce_raw_return ==>
    return_buffer_ok cenv) ==>
-  EVERY (stmt_exprs_ok cenv) ss
+  stmts_exprs_ok cenv ss
 Proof
-  strip_tac >>
-  `~supported_stmts_expr_exists
-      (\e. ~is_extcode e /\ ~byte_widths_expr e) ss` by
-    (qpat_x_assum `~supported_stmts_expr_exists (\e. ~byte_widths_expr e) _`
-       mp_tac >>
-     `(\e. ~byte_widths_expr e) =
-      (\e. (~is_extcode e /\ ~byte_widths_expr e) \/
-           (is_extcode e /\ ~byte_widths_expr e))` by
-       (simp[FUN_EQ_THM] >> metis_tac[]) >>
-     pop_assum SUBST1_TAC >> simp[supported_stmt_expr_exists_disj]) >>
-  `~supported_stmts_expr_exists
-      (\e. ~is_extcode e /\ ~(byte_widths_expr e /\ alloc_limits_expr cenv e))
-      ss` by
-    (`(\e. ~is_extcode e /\ ~(byte_widths_expr e /\ alloc_limits_expr cenv e)) =
-      (\e. (~is_extcode e /\ ~byte_widths_expr e) \/
-           (~is_extcode e /\ ~alloc_limits_expr cenv e))` by
-       (simp[FUN_EQ_THM] >> metis_tac[]) >>
-     pop_assum SUBST1_TAC >> simp[supported_stmt_expr_exists_disj]) >>
-  qpat_x_assum `~supported_stmts_expr_exists (\e. ~is_extcode e /\ ~(_ /\ _)) _`
-    mp_tac >>
-  qpat_x_assum `alloc_limits_stmts _ _` mp_tac >>
-  qpat_x_assum `_ ==> return_buffer_ok _` mp_tac >>
-  rpt (pop_assum kall_tac) >>
-  simp[EVERY_MEM, stmt_exprs_ok_def, supported_stmts_expr_exists_list,
-       EXISTS_MEM] >>
-  Induct_on `ss` >>
-  simp[allocLimitsTheory.alloc_limits_stmt_def, stmt_valued_return_def] >>
-  metis_tac[]
+  rw[bodyExprPreFactsTheory.stmts_exprs_ok_thm] >>
+  qpat_x_assum `~supported_stmts_expr_exists _ _` mp_tac >>
+  `(\e. ~byte_widths_expr e) =
+   (\e. (~is_extcode e /\ ~byte_widths_expr e) \/
+        (is_extcode e /\ ~byte_widths_expr e))` by
+    (simp[FUN_EQ_THM] >> metis_tac[]) >>
+  pop_assum SUBST1_TAC >> simp[supported_stmt_expr_exists_disj]
 QED
 
 Theorem build_compile_env_return_buffer_ok:
@@ -882,7 +797,7 @@ QED
    needs. *)
 Theorem external_package_alloc_env_agree:
   set_external_package_target target
-    (package_external_fn tops F (assign_nkeys tops 0)
+    (package_external_fn tops T (K global_nonreentrant_slot)
       (mut,F,rr,fname,args,[],ret,fbody)) =
     (lbl,cenv0,pos_args,min_cds,is_payable,F,nkey,ut',iv,fbody,rt) /\
   compile_register_positional_args cenv0 pos_args 4 st = (cenv,sa) ==>
@@ -912,7 +827,7 @@ Theorem external_body_support_bounds:
   type_stmts env ret ss = SOME env' /\
   (stmts_valued_return ss /\ cenv.ce_is_external /\ ~cenv.ce_raw_return ==>
    return_buffer_ok cenv) ==>
-  locals_alloc_ok cenv env /\ EVERY (stmt_exprs_ok cenv) ss /\
+  locals_alloc_ok cenv env /\ stmts_exprs_ok cenv ss /\
   ?bindings. supported_stmts tops bindings ss
 Proof
   disch_then strip_assume_tac >>
@@ -920,7 +835,7 @@ Proof
   drule_all fn_allocs_ok_body >> strip_tac >>
   `~supported_stmts_expr_exists (\e. ~byte_widths_expr e) ss` by
     (drule_all typed_parameter_body_excludes_bad_widths >> simp[]) >>
-  `EVERY (stmt_exprs_ok cenv) ss` by
+  `stmts_exprs_ok cenv ss` by
     (irule stmt_exprs_ok_from_traversal_bounds >> simp[]) >>
   conj_tac
   >- (simp[locals_alloc_ok_def] >> rpt strip_tac >>
@@ -1016,7 +931,7 @@ Theorem external_package_body_inv:
   supported_program tops /\ source_typing_ok tops am tx /\
   source_deployment_rel tops am tx /\
   set_external_package_target rpolicy.rpol_target
-    (package_external_fn tops F (assign_nkeys tops 0)
+    (package_external_fn tops T (K global_nonreentrant_slot)
       (mut,F,rr,tx.function_name,args,[],ret,fbody)) =
     (lbl,cenv0,pos_args,min_cds,is_payable,F,nkey,ut',iv,fbody,rt) /\
   compile_register_positional_args cenv0 pos_args 4 st = (cenv,sa) ==>
@@ -1036,7 +951,7 @@ Proof
   gvs[set_external_package_target_def, package_external_fn_def] >>
   Cases_on `ret = NoneT` >>
   gvs[update_cenv_nonreentrant_def, update_cenv_ret_abi_def] >>
-  simp[body_inv_def, build_compile_env_def] >>
+  simp[body_inv_def, cenv_module_pins_def, build_compile_env_def] >>
   rpt (pairarg_tac >> gvs[]) >>
   gvs[source_deployment_rel_def, get_module_code_def,
       initial_evaluation_context_def, get_tenv_def,
@@ -1049,7 +964,7 @@ Theorem external_package_dec_metadata:
   source_typing_ok tops am tx /\
   source_deployment_rel tops am tx /\
   set_external_package_target target
-    (package_external_fn tops F (assign_nkeys tops 0)
+    (package_external_fn tops T (K global_nonreentrant_slot)
       (mut,F,rr,tx.function_name,args,[],ret,fbody)) =
     (lbl,cenv0,pos_args,min_cds,is_payable,F,nkey,ut',iv,fbody,rt) /\
   compile_register_positional_args cenv0 pos_args 4 st = (cenv,sa) ==>
@@ -1061,7 +976,7 @@ Proof
     by metis_tac[source_typing_ok_type_def_keys_distinct] >>
   drule compile_register_positional_args_cenv >> strip_tac >>
   qpat_x_assum `cenv = _` SUBST1_TAC >>
-  Cases_on `package_external_fn tops F (assign_nkeys tops 0)
+  Cases_on `package_external_fn tops T (K global_nonreentrant_slot)
     (mut,F,rr,tx.function_name,args,[],ret,fbody)` >>
   PairCases_on `r` >> gvs[set_external_package_target_def] >>
   drule_all package_external_fn_dec_cenv_agrees >> strip_tac >>
@@ -1083,6 +998,25 @@ Proof
   rpt strip_tac >> gvs[] >> metis_tac[]
 QED
 
+Theorem external_signature_return[local]:
+  supported_program tops /\ fn_sigs_consistent fs cx /\ ~cx.in_deploy /\
+  (!src ts. get_module_code cx src = SOME ts ==> src = NONE /\ ts = tops) /\
+  cenv.ce_func_return_type = build_func_return_type tops /\
+  FLOOKUP fs fid = SOME sig ==>
+  cenv.ce_func_return_type (nsid_to_string fid) = sig.ret_ty
+Proof
+  strip_tac >> PairCases_on `fid` >>
+  fs[fn_sigs_consistent_def] >>
+  first_x_assum drule >> strip_tac >>
+  first_x_assum drule >> strip_tac >> gvs[] >>
+  drule lookup_callable_function_F_SOME_MEM >> strip_tac >>
+  `ALL_DISTINCT (supported_function_names tops)` by
+    metis_tac[supported_program_names, supported_declaration_names_unique] >>
+  simp[nsid_to_string_def] >>
+  irule build_func_return_type_distinct >>
+  simp[] >> goal_assum (drule_at Any) >> simp[]
+QED
+
 Theorem external_source_no_flags:
   supported_program tops /\ source_deployment_rel tops am tx /\
   get_module_code
@@ -1101,7 +1035,7 @@ Theorem external_package_struct_fields:
   source_typing_ok tops am tx /\
   source_deployment_rel tops am tx /\
   set_external_package_target target
-    (package_external_fn tops F (assign_nkeys tops 0)
+    (package_external_fn tops T (K global_nonreentrant_slot)
       (mut,F,rr,tx.function_name,args,[],ret,fbody)) =
     (lbl,cenv0,pos_args,min_cds,is_payable,F,nkey,ut',iv,fbody,rt) /\
   compile_register_positional_args cenv0 pos_args 4 st = (cenv,sa) /\
@@ -1137,7 +1071,7 @@ QED
 Theorem external_package_method_id:
   source_deployment_rel tops am tx /\
   set_external_package_target target
-    (package_external_fn tops F (assign_nkeys tops 0)
+    (package_external_fn tops T (K global_nonreentrant_slot)
       (mut,F,rr,tx.function_name,args,[],ret,fbody)) =
     (lbl,cenv0,pos_args,min_cds,is_payable,F,nkey,ut',iv,fbody,rt) /\
   compile_register_positional_args cenv0 pos_args 4 st = (cenv,sa) ==>
@@ -1162,7 +1096,7 @@ QED
 
 Theorem external_package_global_maps:
   set_external_package_target target
-    (package_external_fn tops F (assign_nkeys tops 0)
+    (package_external_fn tops T (K global_nonreentrant_slot)
       (mut,F,rr,tx.function_name,args,[],ret,fbody)) =
     (lbl,cenv0,pos_args,min_cds,is_payable,F,nkey,ut',iv,fbody,rt) /\
   compile_register_positional_args cenv0 pos_args 4 st = (cenv,sa) /\
@@ -1190,7 +1124,7 @@ Theorem external_package_bare_globals:
   env_consistent env_t
     (initial_evaluation_context am.sources am.layouts tx NONE) es0 /\
   set_external_package_target target
-    (package_external_fn tops F (assign_nkeys tops 0)
+    (package_external_fn tops T (K global_nonreentrant_slot)
       (mut,F,rr,tx.function_name,args,[],ret,fbody)) =
     (lbl,cenv0,pos_args,min_cds,is_payable,F,nkey,ut',iv,fbody,rt) /\
   compile_register_positional_args cenv0 pos_args 4 st = (cenv,sa) ==>
@@ -1220,8 +1154,8 @@ Proof
           initial_evaluation_context_def, get_source_immutables_def] >>
       rpt strip_tac >> first_x_assum drule >> simp[]) >>
   `!src id ty. FLOOKUP env_t.bare_globals (src,id) = SOME ty ==>
-     src = (build_compile_env tops External mut tx.function_name args ret fbody F).ce_module /\
-     ?off. FLOOKUP (build_compile_env tops External mut tx.function_name args ret fbody F).ce_module_vars
+     src = (build_compile_env tops External mut tx.function_name args ret fbody T).ce_module /\
+     ?off. FLOOKUP (build_compile_env tops External mut tx.function_name args ret fbody T).ce_module_vars
        (src,id) = SOME (ImmutableLoc off) /\
        !tv. evaluate_type (get_tenv
          (initial_evaluation_context am.sources am.layouts tx NONE)) ty = SOME tv ==>
@@ -1264,7 +1198,7 @@ Theorem external_selected_return_buffer_ok:
     lookup_function NONE tx.function_name External tops =
       SOME (mut,F,args,[],ret,fbody) /\
     set_external_package_target rpolicy.rpol_target
-      (package_external_fn tops F (assign_nkeys tops 0)
+      (package_external_fn tops T (K global_nonreentrant_slot)
         (mut,F,lookup_raw_return_or_F (NONE : num option)
           tx.function_name External tops,tx.function_name,args,[],ret,fbody)) =
       (lbl,cenv0,pos_args,min_cds,is_payable,F,nkey,ut,iv,fbody,rt) /\
@@ -1325,7 +1259,7 @@ Theorem external_body_frame:
          <| outcomes := SOME vs.vs_outcomes; requests := [] |>) =
       (INL (), es0) /\
     set_external_package_target rpolicy.rpol_target
-      (package_external_fn tops F (assign_nkeys tops 0)
+      (package_external_fn tops T (K global_nonreentrant_slot)
          (mut, F, lookup_raw_return_or_F (NONE : num option)
                      tx.function_name External tops,
           tx.function_name, args, [], ret, fbody)) =
@@ -1341,7 +1275,7 @@ Theorem external_body_frame:
         (initial_evaluation_context am.sources am.layouts tx NONE) env_t es0 /\
       ce_locals_declared cenv env_t /\ locals_alloc_ok cenv env_t /\
       type_stmts env_t ret fbody = SOME env' /\
-      EVERY (stmt_exprs_ok cenv) fbody /\
+      stmts_exprs_ok cenv fbody /\
       call_evaluation_safe
         (initial_evaluation_context am.sources am.layouts tx NONE)
         (int_calls_stmts fbody)
@@ -1400,6 +1334,13 @@ Proof
       goal_assum (drule_at Any) >> goal_assum (drule_at Any) >> metis_tac[])
   >- (rpt strip_tac >> irule external_entry_target_param_type >>
       goal_assum (drule_at Any) >> goal_assum (drule_at Any) >> metis_tac[])
+  >- (rpt strip_tac >>
+      irule external_signature_return >>
+      qexistsl [`initial_evaluation_context am.sources am.layouts tx NONE`,
+                `art.cta_fn_sigs`, `tops`] >> simp[] >>
+      gvs[env_context_consistent_def, body_inv_def,
+          source_deployment_rel_def, get_module_code_def,
+          initial_evaluation_context_def])
   >- (rpt strip_tac >> drule_all external_source_no_flags >>
       disch_then (qspecl_then [`ls`, `fid`] mp_tac) >> simp[])
   >- gvs[dec_cenv_agrees_def]
@@ -1416,9 +1357,49 @@ Proof
       drule body_inv_storage_var_types >> disch_then drule >>
       strip_tac >> rpt gen_tac >> strip_tac >>
       first_x_assum drule_all >> simp[])
-  >- (simp[] >> irule external_bind_arguments_popped >> goal_assum (drule_at Any)) >>
+  >- (simp[] >> irule external_bind_arguments_popped >> goal_assum (drule_at Any))
+  >- (rpt strip_tac >>
+      qpat_x_assum `!src id ty. FLOOKUP art.cta_bare_globals (src,id) = SOME ty ==> _`
+        drule >> simp[]) >>
+  simp[bare_globals_layout_def] >> rpt conj_tac
+  >- (rpt strip_tac >>
+      `cenv_module_pins tops cenv` by fs[body_inv_def] >>
+      `get_module_code (initial_evaluation_context am.sources am.layouts tx NONE)
+         NONE = SOME tops` by fs[body_inv_def] >>
+      `bare_globals_complete env_t.bare_globals
+         (initial_evaluation_context am.sources am.layouts tx NONE)` by
+        fs[env_context_consistent_def] >>
+      fs[cenv_module_pins_def] >>
+      drule add_immutable_locations_cases >> strip_tac
+      >- (drule add_module_var_locations_FLOOKUP >> simp[]) >>
+      gvs[bare_globals_complete_def] >> metis_tac[])
+  >- (rpt strip_tac >>
+      gvs[env_consistent_def, env_context_consistent_def,
+          bare_global_assignable_complete_def, initial_evaluation_context_def])
+  >- (rpt strip_tac >>
+      `FLOOKUP env_t.bare_globals (src,id) = SOME ty` by simp[] >>
+      drule_all body_inv_bare_global_type >> simp[]) >>
   rpt strip_tac >>
-  qpat_x_assum `!src id ty. FLOOKUP art.cta_bare_globals (src,id) = SOME ty ==> _`
-    drule >> simp[]
+  `FLOOKUP env_t.bare_globals (src,id1) = SOME ty1 /\
+   FLOOKUP env_t.bare_globals (src,id2) = SOME ty2` by simp[] >>
+  `src = NONE /\ cenv.ce_module_var_type (src,id1) = SOME ty1 /\
+   cenv.ce_module_var_type (src,id2) = SOME ty2` by
+    metis_tac[body_inv_bare_global_type] >>
+  `ALL_DISTINCT (FLAT (MAP (type_def_keys_toplevel (NONE:num option)) tops))` by
+    (qpat_assum `check_contract F _ _ _ = SOME _` mp_tac >>
+     simp_tac std_ss [check_contract_def, LET_THM] >>
+     strip_tac >>
+     drule contract_namespaces_ok_module_type_def_keys >>
+     disch_then (qspecl_then [`tops`, `NONE`] mp_tac) >> simp[]) >>
+  `get_tenv (initial_evaluation_context am.sources am.layouts tx NONE) =
+   type_env tops` by
+    gvs[get_tenv_def, initial_evaluation_context_def,
+        source_deployment_rel_def, type_env_all_modules_def, type_env_def,
+        FUNION_FEMPTY_2] >>
+  `cenv_module_pins tops cenv /\
+   ALL_DISTINCT
+     (FLAT (MAP (toplevel_vtype_keys_toplevel (NONE : num option)) tops))` by
+    fs[body_inv_def] >>
+  gvs[] >> irule cenv_module_pins_immutables_disjoint >> metis_tac[]
 QED
 

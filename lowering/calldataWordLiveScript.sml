@@ -1,8 +1,8 @@
 (* Reentrant primitive calldata decoding: older operands may be absent. *)
 Theory calldataWordLive
 Ancestors
-  calldataDynOwned calldataWordLeaf abiDecoderClampedWord entryDecodeProps abiEncoder abiDecoderReentry
-  abiDecoderGuards abiDecoderContract valueEncodingProps safeSequence
+  valueEncodingDefs calldataDynOwned calldataWordLeaf abiDecoderClampedWord entryDecodeProps abiEncoder abiDecoderReentry
+  abiDecoderGuards abiDecoderRange abiDecoderContract valueEncodingProps safeSequence
   emitHelperProps exprLoweringProps compileEnv emitHelper
   venomExecSemantics venomState venomInst words arithmetic list rich_list finite_map
 
@@ -204,7 +204,7 @@ Proof
 QED
 
 Theorem calldata_word_accepted_live:
-  compile_abi_decode_to_buf dst src CALLDATALOAD (Lit 0w) (DecPrimWord clamp) st = ((),last) /\
+  compile_abi_decode_to_buf dst src CALLDATALOAD (Lit 0w) (Lit 0w) (DecPrimWord clamp) st = ((),last) /\
   eval_operand src s = SOME p /\ eval_operand dst s = SOME (n2w d) /\
   d < dimword (:256) /\ abi_decoder_operand_live st.cs_next_var dst /\
   abi_decoder_operand_live st.cs_next_var src /\
@@ -216,7 +216,7 @@ Theorem calldata_word_accepted_live:
       eval_operand op t = eval_operand op s) /\
     t.vs_allocas = s.vs_allocas /\ t.vs_alloca_next = s.vs_alloca_next
 Proof
-  simp_tac bool_ss [compile_abi_decode_to_buf_def, compile_abi_decode_static_def,
+  simp_tac bool_ss [compile_abi_decode_to_buf_def, compile_abi_dec_addr_def, compile_abi_decode_range_check_def, comp_return_def, pairTheory.UNCURRY_DEF, compile_abi_decode_static_def,
     comp_bind_def, comp_ignore_bind_def, LET_THM] >>
   pairarg_tac >> strip_tac >> gvs[] >> pairarg_tac >> gvs[] >>
   rename1 `emit_op CALLDATALOAD [src] st = (value,c1)` >>
@@ -259,7 +259,7 @@ Proof
 QED
 
 Theorem calldata_word_rejected_live:
-  compile_abi_decode_to_buf dst src CALLDATALOAD (Lit 0w) (DecPrimWord clamp) st = ((),last) /\
+  compile_abi_decode_to_buf dst src CALLDATALOAD (Lit 0w) (Lit 0w) (DecPrimWord clamp) st = ((),last) /\
   eval_operand src s = SOME p /\ abi_decoder_operand_live st.cs_next_var src /\
   ~abi_clamp_ok clamp (abi_decode_load CALLDATALOAD p s) ==>
   ?t. run_inst_seq (emitted_insts st last) s = Abort Revert_abort t /\
@@ -269,7 +269,7 @@ Theorem calldata_word_rejected_live:
     t.vs_data_section = s.vs_data_section /\ t.vs_allocas = s.vs_allocas /\
     t.vs_alloca_next = s.vs_alloca_next
 Proof
-  simp_tac bool_ss [compile_abi_decode_to_buf_def, compile_abi_decode_static_def,
+  simp_tac bool_ss [compile_abi_decode_to_buf_def, compile_abi_dec_addr_def, compile_abi_decode_range_check_def, comp_return_def, pairTheory.UNCURRY_DEF, compile_abi_decode_static_def,
     comp_bind_def, comp_ignore_bind_def, LET_THM] >>
   pairarg_tac >> strip_tac >> gvs[] >> pairarg_tac >> gvs[] >>
   rename1 `emit_op CALLDATALOAD [src] st = (value,c1)` >>
@@ -315,7 +315,7 @@ Proof
 QED
 
 Theorem calldata_word_prefix_live:
-  compile_abi_decode_to_buf dst src CALLDATALOAD (Lit 0w) (DecPrimWord clamp) st = ((),last) /\
+  compile_abi_decode_to_buf dst src CALLDATALOAD (Lit 0w) (Lit 0w) (DecPrimWord clamp) st = ((),last) /\
   eval_operand src s = SOME p /\ eval_operand dst s = SOME (n2w d) /\
   d < dimword (:256) /\ d + 32 <= s.vs_alloca_next /\
   abi_decoder_operand_live st.cs_next_var dst /\
@@ -323,7 +323,7 @@ Theorem calldata_word_prefix_live:
   !pre i post u. emitted_insts st last = pre ++ i::post /\
     run_inst_seq pre s = OK u ==> inst_mem_below_frontier i u
 Proof
-  simp_tac bool_ss [compile_abi_decode_to_buf_def, compile_abi_decode_static_def,
+  simp_tac bool_ss [compile_abi_decode_to_buf_def, compile_abi_dec_addr_def, compile_abi_decode_range_check_def, comp_return_def, pairTheory.UNCURRY_DEF, compile_abi_decode_static_def,
     comp_bind_def, comp_ignore_bind_def, LET_THM] >>
   pairarg_tac >> strip_tac >> gvs[] >> pairarg_tac >> gvs[] >>
   rename1 `emit_op CALLDATALOAD [src] st = (value,c1)` >>
@@ -356,7 +356,7 @@ Proof
 QED
 
 Theorem calldata_word_live_frag_mem:
-  compile_abi_decode_to_buf dst src CALLDATALOAD (Lit 0w) (DecPrimWord clamp) st = ((),last) /\
+  compile_abi_decode_to_buf dst src CALLDATALOAD (Lit 0w) (Lit 0w) (DecPrimWord clamp) st = ((),last) /\
   eval_operand src initial = SOME p /\ eval_operand dst initial = SOME (n2w d) /\
   d < dimword (:256) /\ d + 32 <= initial.vs_alloca_next /\
   abi_decoder_operand_live st.cs_next_var dst /\

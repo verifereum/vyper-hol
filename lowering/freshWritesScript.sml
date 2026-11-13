@@ -34,7 +34,7 @@ Ancestors
   exprSimProps
   list rich_list finite_map pred_set
   fragExec varsExt
-  exprLowering emitHelper emitHelperProps exprLoweringProps compileEnv
+  exprLowering emitHelper emitHelperProps exprLoweringProps compileEnv loweringStateRelDefs
   venomExecSemantics venomInst venomState
 
 (* ===== The instructions ===== *)

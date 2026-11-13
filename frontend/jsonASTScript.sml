@@ -26,22 +26,6 @@ Datatype:
   | JT_None                                   (* null type *)
 End
 
-(* Syntactic type annotations are kept distinct from compiler-inferred type
-   metadata. Names and qualified paths are resolved only by jsonToVyper. *)
-Datatype:
-  json_type_annotation
-  = JTA_Named string
-  | JTA_Integer num bool
-  | JTA_BytesM num
-  | JTA_String num
-  | JTA_Bytes num
-  | JTA_StaticArray json_type_annotation num
-  | JTA_DynArray json_type_annotation num
-  | JTA_Qualified (string list) string
-  | JTA_Tuple (json_type_annotation list)
-  | JTA_None
-End
-
 (* ===== Binary/Unary Operators ===== *)
 (* Direct mirror of ast_type for operators *)
 
@@ -88,7 +72,6 @@ Datatype:
 
   (* Variables and access *)
   | JE_Name string (string option) json_source_ref json_type         (* id, typeclass, declaration source, type *)
-  | JE_Folded json_expr json_expr                       (* original expression, compiler-provided folded expression *)
   | JE_Attribute json_expr string (string option) (string option) (string option) json_source_ref json_type  (* value, attr, result_typeclass, base_type_name, base_typeclass, declaration source, type *)
   | JE_Subscript json_expr json_expr json_type         (* value, slice, type *)
   | JE_NamedExpr json_expr json_expr                   (* target, value - dependency binding in initializes: lib[dep := dep] *)
@@ -117,6 +100,23 @@ Datatype:
   json_keyword = JKeyword string json_expr             (* arg, value *)
 End
 
+(* Syntactic type annotations are kept distinct from compiler-inferred type
+   metadata. Names and qualified paths are resolved only by jsonToVyper, which
+   also evaluates the source bound expressions. *)
+Datatype:
+  json_type_annotation
+  = JTA_Named string
+  | JTA_Integer num bool
+  | JTA_BytesM num
+  | JTA_String json_expr
+  | JTA_Bytes json_expr
+  | JTA_StaticArray json_type_annotation json_expr
+  | JTA_DynArray json_type_annotation json_expr
+  | JTA_Qualified (string list) string
+  | JTA_Tuple (json_type_annotation list)
+  | JTA_None
+End
+
 (* ===== Statements ===== *)
 
 Datatype:
@@ -141,8 +141,8 @@ Datatype:
 ;
   (* Iterator - need type info for computing bounds *)
   json_iter
-  = JIter_Range (json_expr list) (int option list) (num option)
-                (* args, folded values per arg, explicit bound if given *)
+  = JIter_Range (json_expr list) (json_expr option)
+                (* args, explicit bound if given *)
   | JIter_Array json_expr json_type                    (* array expr, array type for bound *)
 ;
   (* Assignment targets *)

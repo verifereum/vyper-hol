@@ -35,7 +35,7 @@ Proof
   simp[compile_ifexp_arm_def, unwrap_value_def,
        contextTheory.mk_ptr_def, compileEnvTheory.comp_return_def] >>
   strip_tac >> gvs[compileEnvTheory.comp_return_def] >> conj_tac
-  >- (drule vv_post_read_result >> disch_then (fs o single) >>
+  >- (drule_all vv_post_read_result >> strip_tac >>
       drule expr_post_of_vv_post_memory >> simp[]) >>
   irule ifexp_arm_store_bound >> metis_tac[]
 QED

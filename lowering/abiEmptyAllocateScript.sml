@@ -1,5 +1,6 @@
 Theory abiEmptyAllocate
 Ancestors
+  abiDecoderRange
   abiEmptySequence abiBuiltinAllocation abiDecoderReentry abiTupleEncodeSlot exprLoweringProps
   emitHelperProps compileEnv builtinSimple emitHelper venomState venomInst words list arithmetic
   abiEmptyEffect abiDecoderContract finite_map abiEmptySequence abiBuiltinEncodeCorrect

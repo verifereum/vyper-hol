@@ -5,7 +5,7 @@ Ancestors
   bodyPtrPreds bodyPtrDefs bodySim exprSimHypsDefs exprSimHyps
   bodyExprPreFacts supportedStmts supportedStmtTraverse supportedTypes
   supportedExprs supportedDecls bodyStorageMetadata stmtSimDefs exprLoweringProps
-  compileEnv vyperTypeSystem vyperTypeValues vyperTypeCallGraph vyperState
+  compileEnv loweringStateRelDefs vyperTypeSystem vyperTypeValues vyperTypeCallGraph vyperState
   vyperInterpreter vyperValue vyperStorageLayoutSafety
 
 Theorem stmt_frag_ptr_storage_rel_discharge:

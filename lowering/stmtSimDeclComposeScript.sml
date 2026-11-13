@@ -4,7 +4,7 @@ Ancestors
   stmtSimDeclPath stmtSimDeclGas stmtSimDeclSource gasSummary
   gasSummaryCompose gasOutcome gasExemptCert fragGasMode
   stmtSimDefs exprSimDefs loweringPosts vyperInterpreter vyperState
-  venomState compileEnv valueEncoding list finite_map stmtLowering
+  venomState compileEnv loweringStateRelDefs valueEncoding list finite_map stmtLowering
   emitHelperProps exprLoweringProps fragGasPath stmtSimProps
 Libs monadsyntax
 

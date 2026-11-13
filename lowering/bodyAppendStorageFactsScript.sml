@@ -2,7 +2,7 @@
 Theory bodyAppendStorageFacts
 Ancestors
   bodySim supportedExprForms supportedTypes vyperValue vyperTypeSystem
-  compileVyper compileEnv vyperAST words supportedDecls vyperInterpreter
+  compileVyper compileEnv loweringStateRelDefs vyperAST words supportedDecls vyperInterpreter
   vyperState bodyStorageMetadata exprOpenCases vyperTypeEnv
   exprSimHyps exprSimHypsDefs finite_map vyperTypeInvariants
 

@@ -92,6 +92,7 @@ Theorem annassign_copy_post_path_mem:
   !ctx func cenv cx e es es1 s0 s sa sb sf op id p sz w inst v tyv vtyp
    sc rest a loc info bytes d.
     expr_post ctx func cenv cx e es sa sb s0 es1 v op s /\
+    post_value_type cenv e = expr_type e /\
     expr_store_bound cx vtyp v op s /\
     (loc = SOME LocMemory ==>
      !sw. eval_operand op s = SOME sw ==>
@@ -295,6 +296,12 @@ Proof
     metis_tac[] >>
   `FLOOKUP t.vs_allocas sa.cs_next_id = SOME (w2n w, type_memory_size tyv)` by
     (qpat_x_assum `FLOOKUP t.vs_allocas st.cs_next_id = _` mp_tac >> simp[]) >>
+  `post_value_type c e = expr_type e` by
+    (`lowered_value_type c e = expr_type e` by simp[] >>
+     pop_assum mp_tac >> rpt (pop_assum kall_tac) >> strip_tac >>
+     Cases_on `e` >> gvs[post_value_type_def] >>
+     rename1 `Call _ tgt _ _` >> Cases_on `tgt` >>
+     gvs[post_value_type_def, vyperASTTheory.expr_type_def]) >>
   drule annassign_copy_post_path_mem >>
   disch_then (qspecl_then [`sb`, `id`, `p`,
     `type_memory_bytes cenv (expr_type e)`, `w`, `ai`, `tyv`,

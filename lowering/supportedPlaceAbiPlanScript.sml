@@ -1,7 +1,7 @@
 (* Compiler ABI plans for evaluated structural supported places. *)
 Theory supportedPlaceAbiPlan
 Ancestors
-  retAbiPlanProps supportedTypes abiEncoderProps exprLowering compileEnv
+  retAbiPlanProps supportedTypes abiEncoderProps exprLowering compileEnv loweringStateRelDefs
   vyperTyping vyperTypeSystem vyperTypeValues vyperValue vyperABI
   finite_map list rich_list arithmetic
 

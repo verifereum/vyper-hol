@@ -107,7 +107,8 @@ Proof
     (simp[Abbr `cx`] >>
      metis_tac[SIMP_RULE (srw_ss()) [] deploy_ctor_body_source_ok]) >>
   `SND (stmts_env cenv NoLoop NoneT body sa) = sb` by
-    metis_tac[compile_stmts_env, pairTheory.PAIR_EQ] >>
+    (qpat_x_assum `compile_stmts _ _ _ _ _ = _` mp_tac >>
+     simp[compile_stmts_env]) >>
   Cases_on `stmts_env cenv NoLoop NoneT body sa` >> fs[] >>
   qpat_x_assum `_ = sb` SUBST_ALL_TAC >>
   rename1 `stmts_env _ _ _ _ _ = (cenv', sb)` >>
@@ -123,8 +124,8 @@ Proof
       qpat_x_assum `gas_summary_at _ _ _ _ _ _ _`
         (strip_assume_tac o BETA_RULE o REWRITE_RULE [gas_summary_at_def]) >>
       `gas_path_mem dunit.cu_context func s0 (LENGTH marks) r` by
-        fs[gas_marked_exec_def, gas_marked_path_def] >>
-      drule gas_path_mem_exec >> strip_tac >> fs[exit_result_def]
+        FIRST [fs[gas_marked_exec_def, gas_marked_path_def]] >>
+      drule gas_path_mem_exec >> strip_tac >> FIRST [fs[exit_result_def]]
       >- ((* the body falls off its end *)
           gvs[stmt_lands_def] >>
           drule_all deploy_ctor_fallthrough_mem_safe >> strip_tac >>

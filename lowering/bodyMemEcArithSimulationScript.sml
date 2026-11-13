@@ -37,7 +37,7 @@ Proof
   `sa.cs_next_var <= s1.cs_next_var /\ sa.cs_next_id <= s1.cs_next_id /\
    s1.cs_next_var <= sm.cs_next_var /\ s1.cs_next_id <= sm.cs_next_id` by
     metis_tac[cj 2 compile_expr_grows] >>
-  `wb_frame cenv es sa s0 u` by
+  `wb_frame cenv es es2 sa s0 u` by
     (irule wb_frame_trans >> goal_assum (drule_at Any) >>
      simp[] >> metis_tac[expr_post_frame]) >>
   irule vv_post_prefix_frame >> goal_assum (drule_at Any) >>
@@ -107,6 +107,8 @@ Proof
         vyperTypeExprSoundnessTheory.expr_runtime_typed_def,
         vyperTypeInvariantsTheory.value_result_typed_def,
         vyperValueTheory.evaluate_type_def] >>
+  `post_value_type cenv b = BaseT (UintT 256)` by
+    fs[compileEnvTheory.is_word_type_def] >>
   `expr_val_rel cx (BaseT (UintT 256)) v2 scalar u` by
     metis_tac[loweringPostsTheory.expr_post_def] >>
   `?sw. eval_operand scalar u = SOME sw` by
@@ -169,6 +171,13 @@ Resume ecadd_vv_sim_mem[typed]:
         vyperTypeExprSoundnessTheory.expr_runtime_typed_def,
         vyperTypeInvariantsTheory.value_result_typed_def,
         vyperValueTheory.evaluate_type_def] >>
+  `post_value_type cenv b = expr_type b` by
+    (irule exprSimHypsTheory.post_value_type_ec_point >> conj_tac >- simp[] >>
+     qexistsl_tac [`cx`,`env`,`es`] >>
+     qpat_assum `expr_type b = _` (fn th => simp[th]) >>
+     qpat_x_assum `expr_body_pre _ _ _ (Builtin _ _ _) _` mp_tac >>
+     simp[exprSimHypsDefsTheory.expr_body_pre_def,
+          vyperTypeSystemTheory.well_typed_expr_def]) >>
   `expr_val_rel cx (ArrayT (BaseT (UintT 256)) (Fixed 2)) v2 q u /\
    expr_val_at cenv cx (ArrayT (BaseT (UintT 256)) (Fixed 2)) s1 sm es2 v2 q u` by
     metis_tac[loweringPostsTheory.expr_post_def] >>

@@ -1,7 +1,7 @@
 Theory ifComposePtr
 Ancestors
   ifBranchPtr bodyPtrDefs exprSimDefs exprLoweringProps stmtSimIfProps
-  loweringPosts compileEnv venomState gasSummaryComposePtr fragGasPathPtr
+  loweringPosts compileEnv loweringStateRelDefs venomState gasSummaryComposePtr fragGasPathPtr
   gasSummaryCompose gasExemptCert vyperState list
 
 Theorem if_condition_stmt_post_ptr:

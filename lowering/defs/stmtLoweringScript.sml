@@ -17,7 +17,7 @@
 
 Theory stmtLowering
 Ancestors
-  exprLowering context compileEnv venomInst abiEncoder dretShapeDefs
+  exprLowering context compileEnv venomInst abiEncoder dretShapeDefs vyperExprEffects
 Libs
   monadsyntax
 
@@ -38,14 +38,24 @@ End
    evaluates all args before splitting. *)
 
 (* Evaluate all log arg expressions in AST order.
-   Returns list of (operand, type) pairs preserving AST order. *)
+   Returns (operand, source-layout type) pairs preserving AST order.
+   An aggregate operand points into memory: save its value when a later
+   argument can modify memory or storage, as Python's codegen does
+   (later_expressions_can_mutate_memory_or_storage). *)
+Definition compile_log_save_arg_def:
+  compile_log_save_arg cenv src_ty op es =
+    if is_word_type src_ty \/ ~exprs_can_mutate cenv es then return op
+    else compile_materialize_vv cenv src_ty (StackValue src_ty op)
+End
+
 Definition compile_log_eval_all_def:
   compile_log_eval_all cenv [] = return ([] : (operand # type) list) ∧
   compile_log_eval_all cenv (e::es) =
     (let arg_ty = expr_type e in
      do v <- lower_value compile_expr cenv arg_ty e;
+        saved <- compile_log_save_arg cenv (lowered_value_type cenv e) v es;
         rest <- compile_log_eval_all cenv es;
-        return ((v, arg_ty) :: rest)
+        return ((saved, lowered_value_type cenv e) :: rest)
      od)
 Termination
   WF_REL_TAC `measure (λ(cenv,es). LENGTH es)`
@@ -79,25 +89,23 @@ Termination
   WF_REL_TAC `measure (λops. LENGTH ops)`
 End
 
-(* Store already-evaluated data operands to buffer.
-   Input: list of (operand, type) *)
+(* Store already-evaluated data operands into the declared field layouts.
+   Python retains both the expected event-field type and arg_vv.typ. Checked
+   widening can change memory strides/capacity even when ABI types agree. *)
 Definition compile_log_store_data_def:
-  compile_log_store_data cenv [] buf_op offset = return () ∧
-  compile_log_store_data cenv (x :: rest) buf_op offset =
-    (let v = FST x in let arg_ty = SND x in
+  compile_log_store_data cenv [] [] buf_op offset = return () ∧
+  compile_log_store_data cenv (x :: rest) (arg_ty :: arg_types) buf_op offset =
+    (let v = FST x in let src_ty = SND x in
      let mem_size = type_memory_bytes cenv arg_ty in
-     let is_prim = is_word_type arg_ty in
      do (* Python's tuple-data lowering keeps the explicit base-plus-offset
            operation even for offset zero; retain it for identical IR shape. *)
         dst <- emit_op ADD [buf_op; Lit (n2w offset)];
-        (if is_prim then emit_void MSTORE [dst; v]
-         else if is_bytestring_type arg_ty then
-           compile_store_bytestring v dst
-         else emit_void MCOPY [dst; v; Lit (n2w mem_size)]);
-        compile_log_store_data cenv rest buf_op (offset + mem_size)
-     od)
+        compile_store_memory cenv v dst arg_ty src_ty;
+        compile_log_store_data cenv rest arg_types buf_op (offset + mem_size)
+     od) ∧
+  compile_log_store_data cenv _ _ buf_op offset = emit_void INVALID []
 Termination
-  WF_REL_TAC `measure (λ(cenv,ops,buf,off). LENGTH ops)`
+  WF_REL_TAC `measure (λ(cenv,ops,tys,buf,off). LENGTH ops)` >> simp[]
 End
 
 (* Declared type and DynArray capacity of the target's root variable: a
@@ -151,11 +159,12 @@ Definition compile_revert_with_reason_def:
           let tuple_buf = tuple_alloc.buf_operand in
           do msg_op <- unwrap_value cenv msg_vv;
              msg_copy_len <- emit_op MLOAD [msg_op];
+             (* ceil32: and(add(len, 31), not 31) *)
+             msg_copy_mask <- emit_op NOT [Lit 31w];
              msg_copy_rounded0 <- emit_op ADD [msg_copy_len; Lit 31w];
              msg_copy_rounded <- emit_op AND
-               [msg_copy_rounded0;
-                Lit (0xffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffe0w : bytes32)];
-             msg_copy_size <- emit_op ADD [Lit 32w; msg_copy_rounded];
+               [msg_copy_rounded0; msg_copy_mask];
+             msg_copy_size <- emit_op ADD [msg_copy_rounded; Lit 32w];
              emit_void MCOPY [tuple_buf; msg_op; msg_copy_size];
              size_alloc <- compile_alloc_buffer 32;
              let size_ref = size_alloc.buf_operand in
@@ -173,11 +182,10 @@ Definition compile_revert_with_reason_def:
                 emit_void MSTORE [tail_end; Lit 0w];
                 copy_len <- emit_op ADD [Lit 32w; msg_len];
                 emit_void MCOPY [tail_ptr; src_ptr; copy_len];
+                mask <- emit_op NOT [Lit 31w];
                 rounded1 <- emit_op ADD [msg_len; Lit 31w];
-                rounded2 <- emit_op AND
-                  [rounded1;
-                   Lit (0xffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffe0w : bytes32)];
-                encoded_item_len <- emit_op ADD [Lit 32w; rounded2];
+                rounded2 <- emit_op AND [rounded1; mask];
+                encoded_item_len <- emit_op ADD [rounded2; Lit 32w];
                 emit_void MSTORE [head_ptr; dynamic_offset];
                 new_size <- emit_op ADD [dynamic_offset; encoded_item_len];
                 emit_void MSTORE [size_ref; new_size];
@@ -399,7 +407,8 @@ Definition compile_assign_value_def:
                        (dst_ty : type) (src_ty : type)
                        (dynarray_info : (num # num) option) mem_size =
     (* A bytestring source keeps its own, possibly narrower, buffer, so a
-       storage, transient or immutable target gets only the words it holds.
+       storage or transient target gets only the words it holds.
+       Immutable bytestring stores use their runtime length below.
        Mirrors Python: stmt.py _store_complex_type with copy_typ
        (vyperlang/vyper#5332). *)
     let copy_size = (if is_bytestring_type dst_ty
@@ -491,12 +500,14 @@ Definition compile_assign_value_def:
               else return val_op);
            if is_prim_word then
              compile_imm_store_word cenv.ce_imm_alloca dst_op val_op'
-           else if copy_size ≤ 32 then
+           else if is_bytestring_type dst_ty then
+             compile_store_immutable_bytestring cenv.ce_imm_alloca val_op' dst_op
+           else if mem_size ≤ 32 then
              do loaded <- emit_op MLOAD [val_op'];
                 compile_imm_store_word cenv.ce_imm_alloca dst_op loaded
              od
            else compile_imm_store_words cenv.ce_imm_alloca val_op' dst_op
-                  ((copy_size + 31) DIV 32) 0
+                  ((mem_size + 31) DIV 32) 0
         od
     | LocCalldata =>
         (* Calldata is read-only — store is invalid *)
@@ -733,6 +744,17 @@ Definition emit_local_alloca_def:
     | _ => return ()
 End
 
+(* Return expressions have already been evaluated when this action runs.
+   Both internal return forms must release the guard before RET, matching
+   stmt.py _lower_internal_return at VYPER_PIN. *)
+Definition compile_return_unlock_def:
+  compile_return_unlock cenv =
+    let (is_nonreentrant, nkey, use_transient, is_view) = cenv.ce_nonreentrant in
+    if is_nonreentrant then
+      compile_nonreentrant_unlock nkey use_transient is_view
+    else return ()
+End
+
 (* The environment after a statement's own declaration, if it makes one.
    Loop variables are declared by the loop, for its body only. *)
 Definition declare_stmt_local_def:
@@ -742,7 +764,8 @@ End
 
 Definition compile_internal_return_from_env_def:
   compile_internal_return_from_env cenv ty src_ty val_op rpc =
-    do ret_buf <-
+    do compile_return_unlock cenv;
+       ret_buf <-
          (case cenv.ce_return_buf of
             SOME (MemLoc rbuf_off _) =>
               do buf_ptr <- emit_op MLOAD [Lit (n2w rbuf_off)];
@@ -842,7 +865,10 @@ Definition compile_stmt_def:
 
   (* Assign: store to target (memory, storage, transient, code).
      Evaluate RHS to a value/location, then the target pointer, then unwrap
-     the RHS (so an lvalue-shaped RHS is read after target side effects).
+     the RHS. When the target's indices can modify memory or storage, the
+     RHS value is frozen first (a word read at once, a composite copied to
+     a fresh temporary) so the store sees the value from before those
+     effects, as the source semantics reads it (vyperlang/vyper#5282).
      dst_ty from compile_get_target_ptr (target's declared type),
      src_ty from expr_type e (expression's type). These may differ
      for subtype assignments (e.g., DynArray[Bytes[540]] → DynArray[Bytes[704]]).
@@ -854,7 +880,10 @@ Definition compile_stmt_def:
        od
      else
      let src_ty = lowered_value_type cenv e in
-     do src_vv <- compile_expr cenv (expr_type e) e;
+     do src_vv0 <- compile_expr cenv (expr_type e) e;
+        src_vv <- (if expr_can_mutate cenv (target_to_expr bt) then
+                     compile_snapshot_vv cenv T (vv_with_type src_ty src_vv0)
+                   else return src_vv0);
         tgt_result <- compile_get_target_ptr compile_expr cenv bt;
         dst_op <- return (FST tgt_result);
         dst_loc_opt <- return (FST (SND tgt_result));
@@ -960,13 +989,13 @@ Definition compile_stmt_def:
     (let event_name = nsid_to_string event_id in
      case cenv.ce_event_info event_name of
        NONE => emit_inst INVALID [] []
-     | SOME (ev_hash, arg_types, indexed_flags) =>
+     | SOME (event_hash_value, arg_types, indexed_flags) =>
          do eval_ops <- compile_log_eval_all cenv args;
             log_split <- return (split_log_ops eval_ops indexed_flags);
             raw_topics <- return (FST log_split);
             data_ops <- return (SND log_split);
             topic_ops <- compile_log_topic_ops raw_topics;
-            all_topics <- return (Lit (n2w ev_hash) :: topic_ops);
+            all_topics <- return (Lit (n2w event_hash_value) :: topic_ops);
             n_topics <- return (LENGTH all_topics);
             if NULL data_ops then
               (* Python builder.log stores LOG operands in physical stack
@@ -974,12 +1003,12 @@ Definition compile_stmt_def:
               emit_inst (LOG : opcode)
                 (Lit (n2w n_topics) :: REVERSE all_topics ++ [Lit 0w; Lit 0w]) []
             else
-              let data_types = MAP SND data_ops in
+              let data_types = log_non_indexed_types indexed_flags arg_types in
               let data_tuple_t = TupleT data_types in
               let data_mem_size = SUM (MAP (type_memory_bytes cenv) data_types) in
               do data_buf_alloc <- compile_alloc_buffer (MAX 32 data_mem_size);
                  data_buf <- return data_buf_alloc.buf_operand;
-                 compile_log_store_data cenv data_ops data_buf 0;
+                 compile_log_store_data cenv data_ops data_types data_buf 0;
                  abi_size <- return (abi_size_bound cenv.ce_struct_fields data_tuple_t);
                  data_enc_info <- return (type_to_abi_enc_info cenv.ce_struct_fields cenv data_tuple_t);
                  abi_buf_alloc <- compile_alloc_buffer (MAX 32 abi_size);
@@ -1014,10 +1043,14 @@ Definition compile_stmt_def:
     (case cenv.ce_return_pc of
        SOME (MemLoc rpc_off _) =>
          (* Internal: ret to return_pc *)
-         do rpc <- emit_op MLOAD [Lit (n2w rpc_off)];
+          do compile_return_unlock cenv;
+             rpc <- emit_op MLOAD [Lit (n2w rpc_off)];
             emit_inst RET [rpc] []
          od
-     | SOME (PtrVar rpc _) => emit_inst RET [rpc] []
+      | SOME (PtrVar rpc _) =>
+          do compile_return_unlock cenv;
+             emit_inst RET [rpc] []
+          od
      | _ =>
        (case cenv.ce_ctor_exit_label of
           SOME exit_lbl => emit_inst JMP [Label exit_lbl] []
@@ -1072,9 +1105,24 @@ Definition compile_stmt_def:
                        return norm_ptr
                     od
                   else return val_op);
-               compile_external_return (SOME ret_op) is_prim cenv.ce_raw_return
-                 cenv.ce_ret_enc_info cenv.ce_max_return_size
-                 is_nonreentrant nkey use_transient is_view
+               (* Raw returns unlock, then copy into a fresh typed temporary
+                  before RETURN, as Python's do_raw_return branch does. *)
+               if cenv.ce_raw_return then
+                 let raw_src_ty = (if needs_normalize then ty else src_ty) in
+                 do (if is_nonreentrant then
+                       compile_nonreentrant_unlock nkey use_transient is_view
+                     else return ());
+                    raw_buf <- compile_alloc_buffer (type_memory_bytes cenv ty);
+                    compile_store_memory_typed cenv raw_buf.buf_operand ty
+                      ret_op raw_src_ty;
+                    compile_external_return (SOME raw_buf.buf_operand) is_prim T
+                      cenv.ce_ret_enc_info cenv.ce_max_return_size
+                      F nkey use_transient is_view
+                 od
+               else
+                 compile_external_return (SOME ret_op) is_prim F
+                   cenv.ce_ret_enc_info cenv.ce_max_return_size
+                   is_nonreentrant nkey use_transient is_view
             od)
     od ∧
 
@@ -1234,11 +1282,11 @@ Definition compile_stmt_def:
      the iterable is evaluated and its length loaded.
      word_scale: 1 for storage/transient, 32 for memory/code/calldata
      is_slot_addressed: T for storage/transient
-     SEMANTIC DIFFERENCE: The Vyper interpreter materializes the entire array
-     to a value list before iterating (eval_iterator → read_result → extract_elements).
-     The lowering reads elements from source on each iteration. If the loop body
-     modifies the source array, the interpreter sees original values but the lowering
-     sees modified values. Vyper's type checker forbids mutation of the iterated
+     For a storage or transient array the interpreter also reads element i from
+     its slot at the start of iteration i (length fixed at loop entry). For other
+     locations it copies the array before iterating, while the lowering reads
+     elements from source on each iteration. If the loop body modifies the source
+     array, the two disagree. Vyper's type checker forbids mutation of the iterated
      array during the loop, so this is correct for well-typed programs.
      Correctness theorem needs precondition: loop body does not modify arr_e.
      Mirrors Python: vyper/codegen_venom/stmt.py:_lower_iter_loop *)

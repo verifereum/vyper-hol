@@ -19,9 +19,9 @@ Theorem entry_source_member_cursor_step_local_success:
   MAP type_memory_size tvs = MAP (type_memory_bytes ce) tys /\
   LENGTH vs = LENGTH tys /\
   vyper_decode_valid_enc_tuple (MAP (vyper_to_abi_type env) tys) bs bs /\
-  (do ep <- compile_getelemptr_abi src (dec_info_needs_offset ei) ao CALLDATALOAD (Lit 0w);
+  (do ep <- compile_getelemptr_abi src (dec_info_needs_offset ei) ao CALLDATALOAD (Lit 0w) (Lit 0w);
       dp <- emit_op ADD [dst; Lit (n2w vo)];
-      compile_abi_decode_to_buf dp ep CALLDATALOAD (Lit 0w) ei od) a = ((),next) /\
+      compile_abi_decode_to_buf dp ep CALLDATALOAD (Lit 0w) (Lit 0w) ei od) a = ((),next) /\
   fn_has_code a final fn /\
   (a.cs_blocks = final.cs_blocks \/
     !bb. lookup_block final.cs_current_bb fn.fn_blocks = SOME bb ==>
@@ -80,10 +80,10 @@ QED
 
 Resume entry_source_member_cursor_step_local_success[phases_goal]:
   `?ops ready.
-    abi_decode_member_setup dst src CALLDATALOAD (Lit 0w)
+    abi_decode_member_setup dst src CALLDATALOAD (Lit 0w) (Lit 0w)
       (dec_info_needs_offset ei) ao vo a = (ops,ready) /\
-    compile_abi_decode_to_buf (SND ops) (FST ops) CALLDATALOAD (Lit 0w) ei ready = ((),next) /\
-    compile_abi_decode_complex_elems dst src CALLDATALOAD (Lit 0w)
+    compile_abi_decode_to_buf (SND ops) (FST ops) CALLDATALOAD (Lit 0w) (Lit 0w) ei ready = ((),next) /\
+    compile_abi_decode_complex_elems dst src CALLDATALOAD (Lit 0w) (Lit 0w)
       rest (ao+az) (vo+mz) next = ((),final) /\
     cs_extends a next /\ cs_extends next final /\ fn_has_code a next fn /\
     a.cs_next_id < ready.cs_next_id /\ ready.cs_next_id <= next.cs_next_id /\
@@ -96,7 +96,7 @@ QED
 
 Resume entry_source_member_cursor_step_local_success[phases]:
   qpat_assum `(do ep <- _; _ od) a = ((),next)` mp_tac >>
-  qpat_assum `compile_abi_decode_complex_elems _ _ _ _ (_::rest) _ _ _ = _` mp_tac >>
+  qpat_assum `compile_abi_decode_complex_elems _ _ _ (Lit 0w) _ (_::rest) _ _ _ = _` mp_tac >>
   qpat_assum `fn_has_code a final fn` mp_tac >>
   qpat_assum `a.cs_blocks = _ \/ _` mp_tac >>
   qpat_assum `xs = abi_decoder_member_infos _ _ _` mp_tac >>
@@ -106,14 +106,14 @@ Resume entry_source_member_cursor_step_local_success[phases]:
   qpat_assum `(do ep <- _; _ od) a = ((),next)` mp_tac >>
   simp_tac bool_ss [comp_bind_def, comp_ignore_bind_def, LET_THM] >>
   pairarg_tac >> simp[] >> pairarg_tac >> simp[] >> strip_tac >>
-  rename1 `compile_getelemptr_abi src _ ao CALLDATALOAD (Lit 0w) a = (ep,middle)` >>
+  rename1 `compile_getelemptr_abi src _ ao CALLDATALOAD (Lit 0w) (Lit 0w) a = (ep,middle)` >>
   rename1 `emit_op ADD _ middle = (dp,ready)` >>
-  `abi_decode_member_setup dst src CALLDATALOAD (Lit 0w)
+  `abi_decode_member_setup dst src CALLDATALOAD (Lit 0w) (Lit 0w)
     (dec_info_needs_offset ei) ao vo a = ((ep,dp),ready)` by
     simp[abi_decode_member_setup_def, comp_bind_def, comp_return_def] >>
-  `compile_abi_decode_complex_elems dst src CALLDATALOAD (Lit 0w)
+  `compile_abi_decode_complex_elems dst src CALLDATALOAD (Lit 0w) (Lit 0w)
     rest (ao+az) (vo+mz) next = ((),final)` by
-    (qpat_x_assum `compile_abi_decode_complex_elems _ _ _ _ (_::rest) _ _ _ = _` mp_tac >>
+    (qpat_x_assum `compile_abi_decode_complex_elems _ _ _ (Lit 0w) _ (_::rest) _ _ _ = _` mp_tac >>
      simp[abi_decode_complex_member_phases, comp_bind_def, comp_ignore_bind_def, ADD_COMM]) >>
   `abi_decode_source_opcode CALLDATALOAD` by simp[abi_decode_source_opcode_def] >>
   drule abi_decoder_member_cons_code >> simp_tac bool_ss [FST,SND] >>
@@ -172,9 +172,9 @@ Resume entry_source_member_cursor_step_local_success[apply]:
   qpat_x_assum `type_memory_size (EL n tvs) = _` kall_tac >>
   irule (SIMP_RULE bool_ss [LET_THM] entry_source_member_success) >>
   asm_simp_tac bool_ss [] >>
-  qpat_assum `abi_decode_member_setup _ _ _ _ _ _ _ _ = _` (irule_at Any) >>
+  qpat_assum `abi_decode_member_setup _ _ _ _ _ _ _ _ _ = _` (irule_at Any) >>
   qpat_assum `FLOOKUP s.vs_allocas oid = _` (irule_at Any) >>
-  qpat_assum `abi_decoder_ranges _ _ _ _ _ _ _ _ _ _ _` (irule_at Any) >>
+  qpat_assum `abi_decoder_ranges _ _ _ _ _ _ _ _ _ _ _ _ _` (irule_at Any) >>
   qexistsl_tac [`env`,`MAP (vyper_to_abi_type env) (DROP (SUC n) tys)`] >>
   asm_simp_tac bool_ss [] >>
   qpat_x_assum `MAP (vyper_to_abi_type env) tys = _`
@@ -249,9 +249,9 @@ Theorem entry_source_member_cursor_step:
   MAP type_memory_size tvs = MAP (type_memory_bytes ce) tys /\
   LENGTH vs = LENGTH tys /\
   vyper_decode_valid_enc_tuple (MAP (vyper_to_abi_type env) tys) bs bs /\
-  (do ep <- compile_getelemptr_abi src (dec_info_needs_offset ei) ao CALLDATALOAD (Lit 0w);
+  (do ep <- compile_getelemptr_abi src (dec_info_needs_offset ei) ao CALLDATALOAD (Lit 0w) (Lit 0w);
       dp <- emit_op ADD [dst; Lit (n2w vo)];
-      compile_abi_decode_to_buf dp ep CALLDATALOAD (Lit 0w) ei od) a = ((),next) /\
+      compile_abi_decode_to_buf dp ep CALLDATALOAD (Lit 0w) (Lit 0w) ei od) a = ((),next) /\
   fn_has_code a final fn /\
   (a.cs_blocks = final.cs_blocks \/
     !bb. lookup_block final.cs_current_bb fn.fn_blocks = SOME bb ==>

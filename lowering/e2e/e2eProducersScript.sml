@@ -64,17 +64,6 @@ Proof
   goal_assum $ drule_at Any >> gvs[]
 QED
 
-Theorem codegen_assembly_bytecode_nonempty[local]:
-  codegen_assembly rpolicy unit = SOME prog ==> assemble prog <> []
-Proof
-  strip_tac >> drule codegen_assembly_success_shape >> strip_tac >>
-  simp[symbolResolveTheory.assemble_def] >> pairarg_tac >>
-  gvs[stackPlanGenTheory.context_plan_ops_def,
-      planExecTheory.execute_plan_def, stackPlanGenTheory.revert_postamble_def,
-      planExecTheory.exec_stack_op_def, symbolResolveTheory.encode_inst_def,
-      listTheory.MAP_APPEND, listTheory.FLAT_APPEND]
-QED
-
 (* The returned immutable suffix cannot become the first code byte: the
    actual identity-finalized runtime always contains the revert postamble. *)
 Theorem compile_vyper_runtime_nonempty:
@@ -82,7 +71,7 @@ Theorem compile_vyper_runtime_nonempty:
   runtime_bc <> []
 Proof
   strip_tac >> drule compile_vyper_runtime_phases >> strip_tac >>
-  drule codegen_assembly_bytecode_nonempty >> gvs[]
+  drule codegenAsmProgOkTheory.codegen_assembly_nonempty >> gvs[]
 QED
 
 (* L5: successful syntax/structural checks supply only structural facts.
@@ -132,6 +121,12 @@ Theorem entry_venom_state_initial_ctx_rel:
   initial_ctx_rel cp prog u.cu_context (entry_venom_state prog cp es) es
 Proof
   rpt strip_tac >> rename1 `entry_venom_state prog cplan es` >>
+  `((FST (HD es.contexts)).msgParams.code <> [] ==>
+    account_already_created
+      (lookup_account (FST (HD es.contexts)).msgParams.callee
+        es.rollback.accounts))` by
+    gvs[call_state_rel_def, vfmExecutionTheory.account_already_created_def,
+        listTheory.NULL_EQ] >>
   drule entry_venom_state_installed_section >> strip_tac >>
   `initial_state_rel cplan prog 0 (HD u.cu_context.ctx_functions)
      (entry_venom_state prog cplan es) es` by

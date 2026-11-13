@@ -6,11 +6,12 @@ Ancestors
   bodyMemRawLogStages exprSimMemDefs loweringPosts exprSimHyps exprSimAggregateLoops
   exprSimPrecompiles exprSimWordArgs exprSimSource fragGasPath gasSummary fragGasMode gasOutcome
   exprLowering exprLoweringProps freshWrites compileEnv bodyMemoryPreds
-  venomState venomInst vyperState vyperValue vyperAST list
+  venomState venomInst vyperState vyperValue vyperAST list loweringStateRelDefs
 
 Theorem raw_log_dynamic_data_endpoint_mem[local]:
   expr_body_pre cenv cx env data (mid with gas_obs := []) /\
-  expr_type data = BaseT (BytesT (Dynamic cap)) /\ expr_type call = NoneT /\
+  expr_type data = BaseT (BytesT (Dynamic cap)) /\
+  post_value_type cenv call = expr_type call /\ expr_type call = NoneT /\
   gas_marked_exec T (ctx,func) (eval_exprs cx topics) (es,s0) marks (INL vs) mid (OK t) /\
   wb_args_post ctx func cenv cx es sa s0 (mid with gas_obs := []) ops vs t /\
   gas_marked_exec T (ctx,func) (bind (eval_expr cx data) (read_result cx))
@@ -58,7 +59,7 @@ Proof
   qpat_assum `emit_op MLOAD _ _ = _` (irule_at Any) >>
   qpat_assum `emit_op ADD _ _ = _` (irule_at Any) >>
   qpat_assum `emit_inst LOG _ _ _ = _` (irule_at Any) >>
-  qpat_assum `wb_frame _ _ _ _ _` (irule_at Any) >>
+  qpat_assum `wb_frame _ _ _ _ _ _` (irule_at Any) >>
   qpat_assum `expr_type call = NoneT` (irule_at Any) >>
   qexistsl_tac [`b`, `R`] >> simp[] >> decide_tac
 QED
@@ -137,7 +138,8 @@ QED
 
 Theorem raw_log_fixed_data_endpoint_mem[local]:
   expr_body_pre cenv cx env data (mid with gas_obs := []) /\
-  expr_type data = BaseT (BytesT (Fixed 32)) /\ expr_type call = NoneT /\
+  expr_type data = BaseT (BytesT (Fixed 32)) /\
+  post_value_type cenv call = expr_type call /\ expr_type call = NoneT /\
   gas_marked_exec T (ctx,func) (eval_exprs cx topics) (es,s0) marks (INL vs) mid (OK t0) /\
   wb_args_post ctx func cenv cx es sa s0 (mid with gas_obs := []) ops vs t /\
   gas_marked_exec T (ctx,func) (bind (eval_expr cx data) (read_result cx))
@@ -191,7 +193,7 @@ Proof
   irule_at Any raw_log_fixed_continuation_mem >>
   qpat_assum `emit_void MSTORE _ _ = _` (irule_at Any) >>
   qpat_assum `emit_inst LOG _ _ _ = _` (irule_at Any) >>
-  qpat_assum `wb_frame _ _ _ _ _` (irule_at Any) >>
+  qpat_assum `wb_frame _ _ _ _ _ _` (irule_at Any) >>
   qpat_assum `expr_type call = NoneT` (irule_at Any) >>
   qpat_assum `MEM inst _` (irule_at Any) >>
   `w2n p + 32 <= u.vs_alloca_next` by decide_tac >>
@@ -204,7 +206,8 @@ Theorem raw_log_fixed_allocated_mem[local]:
   expr_sim_mem ctx func cenv cx (expr_type data) data (mid with gas_obs := []) /\
   (!s. expr_sim_inv cenv cx env s ==> expr_body_pre cenv cx env data s) /\
   expr_sim_inv cenv cx env (mid with gas_obs := []) /\
-  expr_type data = BaseT (BytesT (Fixed 32)) /\ expr_type call = NoneT /\
+  expr_type data = BaseT (BytesT (Fixed 32)) /\
+  post_value_type cenv call = expr_type call /\ expr_type call = NoneT /\
   gas_marked_exec T (ctx,func) (eval_exprs cx topics) (es,s0) marks (INL vs) mid (OK t0) /\
   wb_args_post ctx func cenv cx es sa s0 (mid with gas_obs := []) ops vs t /\
   compile_alloc_buffer 32 sm = (buf,sk) /\ buf.buf_operand = Var pvar /\
@@ -309,7 +312,7 @@ Proof
   drule_all raw_log_topics_marked_post_mem >> strip_tac >>
   drule_all raw_log_marked_data_ready_mem >> strip_tac >>
   `stmt_state_rel ctx func cenv cx (mid with gas_obs := []) t /\
-   wb_frame cenv es sa s0 t` by fs[wb_args_post_def] >>
+   wb_frame cenv es (mid with gas_obs := []) sa s0 t` by fs[wb_args_post_def] >>
   `~t.vs_halted` by
     (qpat_assum `gas_marked_exec _ _ _ _ _ _ _ _` mp_tac >>
      pure_rewrite_tac[gas_marked_exec_def] >> strip_tac >>

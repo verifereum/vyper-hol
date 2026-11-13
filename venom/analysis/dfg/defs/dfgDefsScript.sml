@@ -19,7 +19,6 @@
  *   operand_equiv         — operands equal after normalization
  *
  * Helper:
- *   operand_var/operand_vars — extract variable names from operands
  *   dfg_add_use/dfg_add_uses — use-tracking mutations
  *   dfg_add_defs            — def-tracking mutations
  *   dfg_add_inst            — add a full instruction to DFG
@@ -28,7 +27,7 @@
 
 Theory dfgDefs
 Ancestors
-  list finite_map
+  list finite_map pred_set
   venomState venomInst
 
 (* ==========================================================================
@@ -65,21 +64,6 @@ End
 (* ==========================================================================
    Variable/Instruction Helpers
    ========================================================================== *)
-
-Definition operand_var_def:
-  operand_var op =
-    case op of
-      Var v => SOME v
-    | _ => NONE
-End
-
-Definition operand_vars_def:
-  operand_vars [] = [] /\
-  operand_vars (op::ops) =
-    case operand_var op of
-      NONE => operand_vars ops
-    | SOME v => v :: operand_vars ops
-End
 
 Definition dfg_add_use_def:
   dfg_add_use dfg v inst =
@@ -166,6 +150,22 @@ End
 Definition dfg_def_ids_def:
   dfg_def_ids dfg = IMAGE (\inst. inst.inst_id) (FRANGE dfg.dfg_defs)
 End
+
+(* --------------------------------------------------------------------------
+   Finiteness/termination helpers (used by the passes' termination proofs)
+   -------------------------------------------------------------------------- *)
+
+Theorem dfg_def_ids_finite:
+  !dfg. FINITE (dfg_def_ids dfg)
+Proof
+  rw[dfg_def_ids_def, IMAGE_FINITE, FINITE_FRANGE]
+QED
+
+Theorem dfg_get_def_implies_dfg_def_ids:
+  !dfg v inst. dfg_get_def dfg v = SOME inst ==> inst.inst_id IN dfg_def_ids dfg
+Proof
+  metis_tac[dfg_def_ids_def, IN_IMAGE, IN_FRANGE_FLOOKUP, dfg_get_def_def]
+QED
 
 (* ==========================================================================
    Assign chain traversal

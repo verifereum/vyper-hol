@@ -17,7 +17,7 @@ Proof
   rpt gen_tac >> strip_tac >> simp[Once body_stmt_mem_ok_def] >>
   rpt gen_tac >> strip_tac >>
   gvs[type_stmt_def, supported_stmt_def, int_calls_stmt_def,
-      stmt_exprs_ok_def, supported_stmt_expr_exists_def] >>
+      stmt_exprs_ok_flat, supported_stmt_expr_exists_def] >>
   drule_then strip_assume_tac supported_expr_body_calls >>
   `supported_program tops /\ get_module_code cx NONE = SOME tops` by
     gvs[body_inv_def] >>
@@ -39,7 +39,7 @@ Proof
   rpt gen_tac >> strip_tac >> simp[Once body_stmt_mem_ok_def] >>
   rpt gen_tac >> strip_tac >>
   gvs[type_stmt_def, supported_stmt_def, int_calls_stmt_def,
-      stmt_exprs_ok_def, supported_stmt_expr_exists_def] >>
+      stmt_exprs_ok_flat, supported_stmt_expr_exists_def] >>
   drule_then strip_assume_tac supported_expr_body_calls >>
   `supported_program tops /\ get_module_code cx NONE = SOME tops` by
     gvs[body_inv_def] >>

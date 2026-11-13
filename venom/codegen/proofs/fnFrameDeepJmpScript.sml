@@ -18,7 +18,7 @@ Ancestors
   asmFrame regularPostfixSim generatedReorderSim generatedPrefixSim
   planSpillBounds reorderSim prefixSim stackOpAsmSim stackOpSim
   instSimHelpers planWf frameViewStep frameViewFacts stackPlanOps stackModel
-  allocMono contextCodegenRelProps asmIR venomEffects deepDupCallerSim
+  allocMono contextCodegenRelProps asmIR venomEffects deepDupCallerSim spillPlanSim
 
 (* ===== Restoring a join's spilled targets, with marker slots ===== *)
 

@@ -30,18 +30,18 @@ Proof
 QED
 
 Theorem abi_scratch_decoder_loop_header:
-  abi_scratch_decoder_loop_inv opc bs tv vs sb d outsz slot site
+  abi_scratch_decoder_loop_inv opc bs tv vs (B + sb) d outsz slot site
     first last lo hi next limit_st b cap initial hdr j s /\
   first <= lo /\ hi <= last /\
-  abi_decode_loop_cfg fn hdr body_lbl exit_lbl hid ip src opc
-    (STRING #"%" (toString first_var)) (STRING #"%" (toString (first_var+1)))
-    (STRING #"%" (toString (first_var+2))) (STRING #"%" (toString (first_var+3))) /\
+  abi_decode_position_loop_cfg fn hdr body_lbl exit_lbl hid ip src opc base_op first_var /\
   32 <= LENGTH bs /\ abi_head_word bs = LENGTH vs /\ LENGTH vs < dimword (:256) /\ slot < dimword (:256) /\
-  sb + LENGTH bs < dimword (:256) /\
-  abi_decode_source_opcode opc /\ next <= first_var /\ first_var + 4 <= limit_st.cs_next_var /\
+  B + sb + LENGTH bs < dimword (:256) /\
+  abi_decode_source_opcode opc /\ next <= first_var /\
+  first_var + 4 + abi_decode_position_header_delta base_op <= limit_st.cs_next_var /\
   abi_decoder_operand_live next src /\ abi_decoder_operand_live next ip /\
+  abi_decoder_operand_live next base_op /\ eval_operand base_op initial = SOME (n2w B) /\
   eval_operand ip initial = SOME (n2w slot) /\ eval_operand src initial = SOME (n2w sb) ==>
-  ?h. abi_scratch_decoder_loop_inv opc bs tv vs sb d outsz slot site
+  ?h. abi_scratch_decoder_loop_inv opc bs tv vs (B + sb) d outsz slot site
     first last lo hi next limit_st b cap initial
     (if j < LENGTH vs then body_lbl else exit_lbl) j h /\ abi_decode_sim ctx fn s h
 Proof
@@ -50,35 +50,34 @@ Proof
     (MAP_EVERY assume_tac o CONJUNCTS o PURE_REWRITE_RULE [abi_scratch_decoder_loop_inv_def]) >>
   `fresh_vars_wrt limit_st s /\ abi_decoder_budget first last b cap s`
     by fs[abi_scratch_effect_def, Excl "enc_def"] >>
-  `eval_operand ip s = SOME (n2w slot) /\ eval_operand src s = SOME (n2w sb)` by
+  `eval_operand ip s = SOME (n2w slot) /\ eval_operand src s = SOME (n2w sb) /\
+   eval_operand base_op s = SOME (n2w B)` by
     (fs[abi_scratch_effect_def, Excl "enc_def"] >> metis_tac[]) >>
   drule_all abi_decoder_valid_array_memory_count >> strip_tac >>
-  `abi_decode_loop_ready hdr ip src opc (n2w slot) (n2w sb) (LENGTH vs) j s` by
-    fs[abi_decode_loop_ready_def, abi_decoder_valid_array_memory_def, w2n_n2w, Excl "enc_def"] >>
-  `abi_decoder_operand_live first_var src` by
-    (irule abi_decoder_operand_live_mono >> qexists_tac `next` >> simp[]) >>
-  `src <> Var (STRING #"%" (toString first_var))` by
-    (mp_tac (Q.INST [`first` |-> `first_var:num`, `next` |-> `first_var:num`, `op` |-> `src:operand`]
-      abi_decoder_live_excludes_output) >> simp[]) >>
-  `STRING #"%" (toString (first_var:num)) <> STRING #"%" (toString (first_var+1))` by simp[] >>
+  `abi_decode_position_loop_ready hdr ip src opc base_op B sb (n2w slot) (LENGTH vs) j s` by
+    fs[abi_decode_position_loop_ready_def, abi_decoder_valid_array_memory_def, w2n_n2w, Excl "enc_def"] >>
+  `abi_decoder_operand_live first_var src /\ abi_decoder_operand_live first_var base_op` by
+    (conj_tac >> irule abi_decoder_operand_live_mono >> qexists_tac `next` >> simp[]) >>
+  `src <> Var (STRING #"%" (toString first_var)) /\
+   base_op <> Var (STRING #"%" (toString first_var))` by
+    (conj_tac >> irule abi_decoder_live_excludes_output >> qexists_tac `first_var` >> simp[]) >>
   qabbrev_tac `h = jump_to (if j < LENGTH vs then body_lbl else exit_lbl)
-    (abi_decode_header_state (STRING #"%" (toString first_var))
-      (STRING #"%" (toString (first_var+1))) (STRING #"%" (toString (first_var+2)))
-      (STRING #"%" (toString (first_var+3))) j (LENGTH vs) s)` >>
+    (abi_decode_position_header_state base_op first_var B sb j (LENGTH vs) s)` >>
   `abi_decode_sim ctx fn s h` by
-    (drule_all abi_decode_ready_header_sim >> simp[Abbr`h`]) >>
+    (drule_all abi_decode_position_ready_header_sim >> simp[Abbr`h`]) >>
   `abi_scratch_effect first last lo hi next limit_st d outsz b cap s h` by
     (simp_tac bool_ss [Abbr`h`] >> irule abi_scratch_decoder_header_effect >> simp[]) >>
   `abi_scratch_effect first last lo hi next limit_st d outsz b cap initial h` by
     (drule_all abi_scratch_effect_trans >> simp[]) >>
-  qexists_tac `h` >>
+  qexists_tac `h` >> Cases_on `base_op = Lit 0w` >>
   asm_simp_tac (srw_ss()) [abi_scratch_decoder_loop_inv_def, Abbr`h`,
-    abi_decode_mload_jump, abi_decode_header_state_def, abi_decode_load_update, Excl "enc_def"] >>
-  simp[jump_to_def, update_var_def]
+    abi_decode_mload_jump, abi_decode_position_header_state_def, abi_decode_load_update, Excl "enc_def"] >>
+  gvs[jump_to_def, update_var_def, abi_decoder_valid_array_memory_def, mload_def,
+    abi_decode_source_def, Excl "enc_def"]
 QED
 
 Theorem abi_scratch_decoder_child_advance:
-  abi_scratch_decoder_loop_inv opc bs tv vs sb d outsz slot site
+  abi_scratch_decoder_loop_inv opc bs tv vs (B + sb) d outsz slot site
     first last lo hi next limit_st b cap initial body_lbl j s /\ j < LENGTH vs /\
   all_have_type tv vs /\
   val_in_memory tv (EL j vs) (d + 32 + j * type_memory_size tv) t.vs_memory /\
@@ -88,8 +87,8 @@ Theorem abi_scratch_decoder_child_advance:
   first <= site /\ site < last /\ (site < child_lo \/ child_hi <= site) /\
   d + 32 + j * type_memory_size tv + type_memory_size tv <= d + outsz /\
   first <= lo /\ hi <= last /\
-  abi_scratch_decoder_ranges opc hi_op src dst sb (LENGTH bs) d outsz first last b cap s ==>
-  abi_decoder_valid_array_memory opc bs tv vs sb d (SUC j) t /\
+  abi_scratch_decoder_ranges opc base_op hi_op src dst B sb (LENGTH bs) d outsz first last b cap s ==>
+  abi_decoder_valid_array_memory opc bs tv vs (B + sb) d (SUC j) t /\
   abi_scratch_effect first last lo hi next limit_st d outsz b cap initial t /\
   FLOOKUP t.vs_allocas site = SOME (slot,32) /\ mload slot t = n2w j /\ ~t.vs_halted
 Proof
@@ -98,11 +97,11 @@ Proof
     (MAP_EVERY assume_tac o CONJUNCTS o PURE_REWRITE_RULE [abi_scratch_decoder_loop_inv_def]) >>
   `abi_decoder_budget first last b cap s` by fs[abi_scratch_effect_def, Excl "enc_def"] >>
   `first <= child_lo /\ child_hi <= last` by decide_tac >>
-  `abi_decoder_valid_array_memory opc bs tv vs sb d (SUC j) t` by
+  `abi_decoder_valid_array_memory opc bs tv vs (B + sb) d (SUC j) t` by
     (drule_all abi_scratch_decoder_array_child_advance >> simp[]) >>
   `abi_footprint_disjoint (d + 32 + j * type_memory_size tv) (type_memory_size tv)
     (abi_decoder_child_scratch (abi_decoder_ids first last) b cap s)` by
-    (qpat_assum `abi_scratch_decoder_ranges _ _ _ _ _ _ _ _ _ _ _ _ _`
+    (qhdtm_assum `abi_scratch_decoder_ranges`
       (MAP_EVERY assume_tac o CONJUNCTS o PURE_REWRITE_RULE [abi_scratch_decoder_ranges_def]) >>
      irule abi_footprint_disjoint_subwindow >>
      qexistsl_tac [`d`, `outsz`] >> asm_simp_tac bool_ss [] >> decide_tac) >>

@@ -1,6 +1,6 @@
 Theory o1MakeSsaOwnership
 Ancestors
-  makeSsaCurrentDefs makeSsaCurrentProps makeSsaDefs irSupply list alist pred_set pair
+  makeSsaDefs makeSsaCurrentProps irSupply list alist pred_set pair
 
 Definition current_name_owner_def:
   current_name_owner V H s <=>

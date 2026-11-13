@@ -20,11 +20,12 @@
  *)
 Theory exprSimBufferStore
 Ancestors
+  exprSimProps
   exprSimVVFrame
   exprSimProps
   loweringPosts
   exprSimBuffer exprSimLiteralBuffer words integer_word vfmConstants emitHelperProps
-  exprLoweringProps context venomExecSemantics venomState compileEnv
+  exprLoweringProps context venomExecSemantics venomState compileEnv loweringStateRelDefs
   copyFwdEquiv allocaRemapDefs valueEncodingProofs list rich_list
   exprSimMemoryTransport valueEncodingProps entryDecodeProps entryDecodeStaticProps
   loweringSlice intCallResult valueCopy localPtrsProps fragExec
@@ -45,10 +46,13 @@ QED
 
 Theorem buffer_round_size:
   !len. 32 + 32 * word_size len < dimword (:256) ==>
-    ((((n2w len:bytes32) + 31w) && i2w (- &32)) + 32w =
+    ((((n2w len:bytes32) + 31w) && ~31w) + 32w =
      n2w (32 + 32 * word_size len))
 Proof
   rpt strip_tac >> drule buffer_round_no_wrap >> strip_tac >>
+  `(~31w:bytes32) = i2w (- &32)` by
+    (simp[integer_wordTheory.i2w_def] >> blastLib.BBLAST_TAC) >>
+  pop_assum SUBST1_TAC >>
   rewrite_tac[exprSimPropsTheory.buffer_round_mask, word_add_n2w] >>
   `n2w (len + 31):bytes32 >>> 5 = n2w ((len + 31) DIV 32)` by
     (simp[GSYM n2w_DIV]) >>
@@ -108,8 +112,8 @@ Theorem buffer_copy_len_shape:
     compile_bytestring_copy_len src sa = (out,sb) ==>
     same_blocks sa sb /\
     sb.cs_current_insts = sa.cs_current_insts ++ emitted_insts sa sb /\
-    sb.cs_next_var = sa.cs_next_var + 4 /\
-    sb.cs_next_id = sa.cs_next_id + 4
+    sb.cs_next_var = sa.cs_next_var + 5 /\
+    sb.cs_next_id = sa.cs_next_id + 5
 Proof
   rpt strip_tac >>
   gvs[compile_bytestring_copy_len_def, emitHelperTheory.emit_op_def,
@@ -135,30 +139,37 @@ Proof
       fresh_id_def, fresh_var_def, emit_def] >>
   drule_then assume_tac step_MLOAD >>
   simp[emitted_insts_def, rich_listTheory.DROP_APPEND1, run_inst_seq_def] >>
+  qmatch_goalsub_abbrev_tac `step_inst_base (mk_inst nid NOT nops [v0]) s0` >>
+  `step_inst_base (mk_inst nid NOT nops [v0]) s0 =
+     OK (update_var v0 (~31w) s0)` by
+    (qunabbrev_tac `nops` >> irule step_NOT >> simp[eval_operand_def]) >>
+  simp[] >>
   qmatch_goalsub_abbrev_tac `step_inst_base (mk_inst aid ADD ops [v1]) s1` >>
   `step_inst_base (mk_inst aid ADD ops [v1]) s1 =
      OK (update_var v1 ((n2w len:bytes32) + 31w) s1)` by
-    (simp[Abbr `ops`] >> irule step_ADD >> simp[Abbr `s1`, eval_operand_def,
-                           lookup_var_update_var]) >>
+    (simp[Abbr `ops`, Abbr `nops`] >> irule step_ADD >>
+     simp[Abbr `s1`, Abbr `s0`, Abbr `v0`, eval_operand_def,
+          lookup_var_update_var, ASCIInumbersTheory.toString_11]) >>
   simp[] >>
   qmatch_goalsub_abbrev_tac `step_inst_base (mk_inst bid AND bops [v2]) s2` >>
   `step_inst_base (mk_inst bid AND bops [v2]) s2 =
-     OK (update_var v2 (((n2w len:bytes32) + 31w) && i2w (- &32)) s2)` by
-    (qunabbrev_tac `bops` >> irule step_AND >> simp[Abbr `s2`, eval_operand_def,
-                           lookup_var_update_var]) >>
+     OK (update_var v2 (((n2w len:bytes32) + 31w) && ~31w) s2)` by
+    (qunabbrev_tac `bops` >> irule step_AND >>
+     simp[Abbr `s2`, Abbr `s1`, Abbr `v1`, Abbr `v0`, eval_operand_def,
+          lookup_var_update_var, ASCIInumbersTheory.toString_11]) >>
   simp[] >>
   qmatch_goalsub_abbrev_tac `step_inst_base (mk_inst cid ADD cops [v3]) s3` >>
   `step_inst_base (mk_inst cid ADD cops [v3]) s3 =
-     OK (update_var v3 ((((n2w len:bytes32) + 31w) && i2w (- &32)) + 32w) s3)` by
+     OK (update_var v3 ((((n2w len:bytes32) + 31w) && ~31w) + 32w) s3)` by
     (simp[Abbr `cops`] >> irule step_ADD >> simp[Abbr `s3`, eval_operand_def,
                            lookup_var_update_var]) >>
   simp[] >>
   conj_tac
   >- (qspec_then `len` mp_tac buffer_round_size >>
       simp[eval_operand_def, lookup_var_update_var]) >>
-  simp[Abbr `s3`, Abbr `s2`, Abbr `s1`, update_var_def] >>
+  simp[Abbr `s3`, Abbr `s2`, Abbr `s1`, Abbr `s0`, update_var_def] >>
   rpt strip_tac >>
-  gvs[not_fresh_at_def, Abbr `v1`, Abbr `v2`, Abbr `v3`,
+  gvs[not_fresh_at_def, Abbr `v0`, Abbr `v1`, Abbr `v2`, Abbr `v3`,
       ASCIInumbersTheory.toString_11, lookup_var_def,
       finite_mapTheory.FLOOKUP_UPDATE]
 QED
@@ -168,8 +179,8 @@ Theorem buffer_store_bytestring_shape:
     compile_store_bytestring src dst sa = ((),sb) ==>
     same_blocks sa sb /\
     sb.cs_current_insts = sa.cs_current_insts ++ emitted_insts sa sb /\
-    sb.cs_next_var = sa.cs_next_var + 4 /\
-    sb.cs_next_id = sa.cs_next_id + 5
+    sb.cs_next_var = sa.cs_next_var + 5 /\
+    sb.cs_next_id = sa.cs_next_id + 6
 Proof
   rpt strip_tac >>
   gvs[compile_store_bytestring_def, compile_bytestring_copy_len_def,
@@ -276,7 +287,7 @@ Theorem buffer_bytes_header:
     val_in_memory (BaseTV (BytesT (Dynamic cap))) (BytesV bs) src s.vs_memory ==>
     mload src s = n2w (LENGTH bs)
 Proof
-  simp[valueEncodingTheory.val_in_memory_def, mem_word_at_eq_mload]
+  simp[valueEncodingDefsTheory.val_in_memory_def, mem_word_at_eq_mload]
 QED
 
 Theorem buffer_string_header:
@@ -284,7 +295,7 @@ Theorem buffer_string_header:
     val_in_memory (BaseTV (StringT cap)) (StringV str) src s.vs_memory ==>
     mload src s = n2w (LENGTH str)
 Proof
-  simp[valueEncodingTheory.val_in_memory_def, mem_word_at_eq_mload]
+  simp[valueEncodingDefsTheory.val_in_memory_def, mem_word_at_eq_mload]
 QED
 
 Theorem buffer_store_memory_shape:
@@ -323,7 +334,7 @@ Proof
   strip_tac >> Cases_on `n = 0`
   >- (gvs[] >> irule val_in_memory_relocate_footprint >> simp[] >>
       qexistsl_tac [`s.vs_memory`, `w2n w`] >>
-      simp[valueEncodingTheory.mem_bytes_at_def]) >>
+      simp[valueEncodingDefsTheory.mem_bytes_at_def]) >>
   gvs[] >> conj_tac
   >- (irule buffer_mcopy_encoding >> simp[]) >>
   simp[buffer_mcopy_restore] >> rpt gen_tac >> strip_tac >>
@@ -554,7 +565,7 @@ Proof
      strip_tac >> qpat_x_assum `cenv.ce_is_ctor ==> _` drule >>
      disch_then drule_all >> strip_tac >>
      qpat_x_assum `!inst b sz. MEM inst _ /\ _ ==> _` drule_all >>
-     simp[compileEnvTheory.regions_disjoint_def] >> decide_tac) >>
+     simp[loweringStateRelDefsTheory.regions_disjoint_def] >> decide_tac) >>
   irule result_state_memory_frame >> reverse conj_tac
   >- (qexists_tac `s` >> simp[] >>
       rpt strip_tac >> irule mem_bytes_at_mcopy_disjoint >>
@@ -562,7 +573,7 @@ Proof
         (irule local_ptrs_rel_alloca_disjoint >>
          qexistsl_tac [`cenv`, `func`, `inst`, `name`, `p`, `es.scopes`, `s`] >>
          fs[stmt_state_rel_def, state_rel_def]) >>
-      fs[compileEnvTheory.regions_disjoint_def]) >> first_assum ACCEPT_TAC
+      fs[loweringStateRelDefsTheory.regions_disjoint_def]) >> first_assum ACCEPT_TAC
 QED
 
 Theorem mcopy_alloca_framed_frag:

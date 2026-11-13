@@ -1,7 +1,7 @@
 (* Frontier interface for the memory reads performed by keccak256. *)
 Theory bodyMemBiKeccakBounds
 Ancestors
-  exprSimMemDefs exprSimHash exprSimProps compileEnv words
+  exprSimMemDefs exprSimHash exprSimHashBoundary exprSimProps compileEnv words
 
 Theorem keccak_dynamic_post_bounds:
   expr_post ctx func cenv cx e es sa sm s0 es' (BytesV bs) op s /\

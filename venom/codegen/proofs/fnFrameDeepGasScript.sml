@@ -15,7 +15,7 @@ Ancestors
   codegenRel blockSimHelpers unitShapeDefs genBlockSim mixedPrefixSim
   stackPlanGen stackPlanTypes planExec asmSem venomExecSemantics venomState
   venomInst fcgDefs livenessDefs dfgDefs cfgDefs doSwapSim regularPostfixSim
-  instSimHelpers stackOpSim planWf list rich_list
+  instSimHelpers stackOpSim planWf list rich_list spillPlanSim
 
 (* gasFrameSim's gas_plan_local_sim with the spill-alloc layout and an
    address bound on the plan's spill and restore offsets in place of

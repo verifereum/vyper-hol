@@ -1,7 +1,7 @@
 (* Liveness-only execution boundaries for positional calldata registration. *)
 Theory calldataRegistrationExec
 Ancestors
-  calldataRegistration abiDecoderReentryAddress fragExecMem actualAllocExec
+  valueEncodingDefs loweringStateRelDefs calldataRegistration abiDecoderReentryAddress fragExecMem actualAllocExec
   venomExecProofs emitHelperProps exprLoweringProps finite_map words
   abiDecoderReentry venomState venomExecSemantics abiDecoderContract
   compileEnv emitHelper venomInst arithmetic moduleLowering abiEncoder
@@ -155,7 +155,7 @@ Theorem registration_primitive_decoder_prelude:
   var_location_decode_operand loc = SOME dst ==>
   ?src first.
     emit_op ADD [Lit (n2w 4); Lit (n2w (off-4))] st = (src,first) /\
-    compile_abi_decode_to_buf dst src CALLDATALOAD (Lit 0w)
+    compile_abi_decode_to_buf dst src CALLDATALOAD (Lit 0w) (Lit 0w)
       (DecPrimWord c) first = ((),last)
 Proof
   strip_tac >>
@@ -163,7 +163,7 @@ Proof
   simp[compile_decode_args_def, comp_bind_def, comp_ignore_bind_def,
     comp_return_def] >>
   rpt (pairarg_tac >> simp[]) >> strip_tac >> gvs[] >>
-  simp[compile_abi_decode_to_buf_def, compile_abi_decode_static_def,
+  simp[compile_abi_decode_to_buf_def, compile_abi_dec_addr_def, compile_abi_decode_range_check_def, compile_abi_decode_static_def,
     comp_bind_def, comp_ignore_bind_def, comp_return_def] >>
   rpt (goal_assum $ drule_at Any) >> simp[]
 QED
@@ -181,7 +181,7 @@ Theorem registration_decoder_prelude:
          emit_op CALLDATALOAD [head] after_head = (offset,after_load) /\
          emit_op ADD [Lit (n2w 4); offset] after_load = (src,first)
      else src = head /\ first = after_head) /\
-    compile_abi_decode_to_buf dst src CALLDATALOAD (Lit 0w) info first = ((),last)
+    compile_abi_decode_to_buf dst src CALLDATALOAD (Lit 0w) (Lit 0w) info first = ((),last)
 Proof
   Cases_on `prim` >> simp[] >> strip_tac
   >- (gvs[] >> drule_all registration_primitive_decoder_prelude >>
@@ -300,7 +300,7 @@ Theorem registration_singleton_owned_prefix:
   initial.vs_inst_idx = LENGTH st.cs_current_insts ==>
   ?dst src first ready p.
     FLOOKUP cef.ce_vars name = SOME (PtrVar dst n) /\
-    compile_abi_decode_to_buf dst src CALLDATALOAD (Lit 0w) info first =
+    compile_abi_decode_to_buf dst src CALLDATALOAD (Lit 0w) (Lit 0w) info first =
       ((),final) /\ fn_has_code first final fn /\
     st.cs_next_id < first.cs_next_id /\
     st.cs_next_var <= first.cs_next_var /\
@@ -442,7 +442,7 @@ Proof
   drule_all registration_singleton_owned_prefix >> strip_tac >>
   `first.cs_next_id <= final.cs_next_id /\
    first.cs_next_var <= final.cs_next_var` by
-    (qpat_x_assum `compile_abi_decode_to_buf _ _ _ _ _ _ = _` mp_tac >>
+    (qpat_x_assum `compile_abi_decode_to_buf _ _ _ (Lit 0w) _ _ _ = _` mp_tac >>
      POP_ASSUM_LIST (K all_tac) >>
      metis_tac[cj 1 ci_mono_compile_abi_decode, ci_mono_def, pairTheory.SND]) >>
   `!id q k. first.cs_next_id <= id /\ id < final.cs_next_id /\
@@ -451,7 +451,7 @@ Proof
     ?ins. MEM ins (fn_insts fn) /\ ins.inst_id = id /\
       ins.inst_opcode = ALLOCA /\ ins.inst_operands = [Lit 32w]` by
     suspend "scratch_input" >>
-  drule_at (Pat `compile_abi_decode_to_buf _ _ _ _ _ _ = _`)
+  drule_at (Pat `compile_abi_decode_to_buf _ _ _ (Lit 0w) _ _ _ = _`)
     calldataRecursiveExecutionTheory.calldata_coherent_owned_run >>
   disch_then (drule_at (Pat `abi_decoder_coherent _ _ _ _ _`)) >>
   disch_then (drule_at (Pat `fn_has_code _ _ _`)) >>
@@ -478,7 +478,7 @@ QED
 Resume registration_singleton_owned_run[success]:
   disj2_tac >> qexistsl_tac [`v`,`x`,`dst`,`p`,`first.cs_next_id`,`sc`] >>
   qpat_x_assum `compile_register_positional_args _ _ _ _ = _` kall_tac >>
-  qpat_x_assum `compile_abi_decode_to_buf _ _ _ _ _ _ = _` kall_tac >>
+  qpat_x_assum `compile_abi_decode_to_buf _ _ _ (Lit 0w) _ _ _ = _` kall_tac >>
   qpat_x_assum `!entry. FLOOKUP initial.vs_allocas _ = SOME entry ==> _` kall_tac >>
   qpat_x_assum `!id q k. st.cs_next_id < id /\ _ ==> _` kall_tac >>
   qpat_x_assum `!id q k. first.cs_next_id <= id /\ _ /\ FLOOKUP ready.vs_allocas _ = _ ==> _` kall_tac >>

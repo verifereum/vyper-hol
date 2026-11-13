@@ -1,7 +1,7 @@
 (* Actual member navigation endpoint, including fixed-limit freshness. *)
 Theory calldataMemberEndpoint
 Ancestors
-  calldataMembers successfulSequenceEndpoint abiDecoderLoopRegisters
+  calldataMembers successfulSequenceEndpoint abiDecoderLoopRegisters loweringStateRelDefs
   abiDecoderContract abiDecoderReentry compileEnv emitHelper emitHelperProps
   abiEncoder exprLoweringProps venomState venomInst venomExecSemantics
   safeSequence fragExecMem instIdxIndep words list rich_list arithmetic finite_map
@@ -11,7 +11,7 @@ Theorem member_add_fresh[local]:
   step_inst_base (mk_inst id ADD ops [STRING #"%" (toString n)]) s = OK t ==>
   fresh_vars_wrt limit t
 Proof
-  simp[step_inst_base_def, mk_inst_def, exec_pure2_def] >>
+  simp[mk_inst_def, step_inst_base_opcode_eqs, exec_pure2_def] >>
   rpt strip_tac >> gvs[AllCaseEqs()] >>
   irule abi_decoder_generated_update_fresh >> simp[]
 QED
@@ -21,7 +21,7 @@ Theorem member_load_fresh[local]:
   step_inst_base (mk_inst id CALLDATALOAD ops [STRING #"%" (toString n)]) s = OK t ==>
   fresh_vars_wrt limit t
 Proof
-  simp[step_inst_base_def, mk_inst_def, exec_read1_def] >>
+  simp[mk_inst_def, step_inst_base_opcode_eqs, exec_read1_def] >>
   rpt strip_tac >> gvs[AllCaseEqs()] >>
   irule abi_decoder_generated_update_fresh >> simp[]
 QED
@@ -38,15 +38,16 @@ Proof
 QED
 
 Theorem member_address_limit_fresh[local]:
-  (do ep <- compile_getelemptr_abi src dyn ao CALLDATALOAD (Lit 0w);
+  (do ep <- compile_getelemptr_abi src dyn ao CALLDATALOAD (Lit 0w) (Lit 0w);
       dp <- emit_op ADD [dst; Lit (n2w vo)]; return (ep,dp) od) st = ((ep,dp),mid) /\
   run_inst_seq (emitted_insts st mid) s = OK t /\
   mid.cs_next_var <= limit_st.cs_next_var /\ fresh_vars_wrt limit_st s ==>
   fresh_vars_wrt limit_st t
 Proof
   Cases_on `dyn` >>
-  simp[compile_getelemptr_abi_def, comp_bind_def, comp_ignore_bind_def,
-       comp_return_def, emit_op_def, fresh_var_def, fresh_id_def, emit_def] >>
+  simp[compile_getelemptr_abi_def, compile_abi_dec_addr_def, comp_bind_def,
+       comp_ignore_bind_def, comp_return_def, emit_op_def, fresh_var_def,
+       fresh_id_def, emit_def] >>
   rpt strip_tac >> gvs[] >>
   qpat_x_assum `run_inst_seq _ _ = _` mp_tac >>
   simp_tac (srw_ss()) [emitted_insts_def] >>
@@ -60,7 +61,7 @@ Proof
 QED
 
 Theorem calldata_member_address_endpoint:
-  (do ep <- compile_getelemptr_abi src dyn ao CALLDATALOAD (Lit 0w);
+  (do ep <- compile_getelemptr_abi src dyn ao CALLDATALOAD (Lit 0w) (Lit 0w);
       dp <- emit_op ADD [dst; Lit (n2w vo)]; return (ep,dp) od) st = ((ep,dp),mid) /\
   eval_operand src initial = SOME p /\ eval_operand dst initial = SOME q /\
   abi_decoder_operand_live st.cs_next_var src /\

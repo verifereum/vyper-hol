@@ -14,7 +14,7 @@ Ancestors
   stmtSimProps stmtSimDefs exprSimDefs loweringPosts
   gasOutcome gasSummary fragGasMode fragGasPath gasContext
   exprSimHypsDefs exprLoweringProps emitHelperProps emitHelper exprLowering
-  compileEnv fragExecMem supportedStmtTraverse supportedStmts supportedExprs
+  compileEnv loweringStateRelDefs fragExecMem supportedStmtTraverse supportedStmts supportedExprs
   supportedTypes vyperTypeExprResult vyperTypeExprSoundness vyperTypeInvariants
   vyperTypeSystem vyperLookup vyperInterpreter vyperState
   venomExecSemantics venomInst venomState list rich_list finite_map
@@ -45,7 +45,7 @@ Proof
   `~s.vs_call_ctx.cc_static` by
     (qpat_x_assum `stmt_state_rel _ _ _ _ _ _` mp_tac >>
      Cases_on `tr` >>
-     simp[stmt_state_rel_def, compileEnvTheory.state_rel_def,
+     simp[stmt_state_rel_def, loweringStateRelDefsTheory.state_rel_def,
           tstore_def, sstore_def, LET_THM]) >>
   drule emitted_insts_emit_void >> strip_tac >>
   drule emit_void_same_blocks >> strip_tac >>
@@ -53,8 +53,8 @@ Proof
   `step_inst_base (mk_inst st.cs_next_id (if tr then TSTORE else SSTORE)
      [Lit slot; op] []) s = OK u` by
     (Cases_on `tr` >>
-     gvs[Abbr `u`, venomExecSemanticsTheory.step_inst_base_opcode_eqs,
-         exec_write2_def, mk_inst_def, eval_operand_def]) >>
+     gvs[Abbr `u`, step_inst_base_opcode_eqs, exec_write2_def, mk_inst_def,
+         eval_operand_def]) >>
   `run_inst_seq (emitted_insts st st') s = OK u` by
     simp[run_inst_seq_def] >>
   `run_inst_seq_mem_ok (emitted_insts st st') s` by
@@ -245,7 +245,7 @@ Proof
   `cx_tops cx = tops` by (drule cx_tops_module >> simp[]) >>
   `expr_body_pre cenv cx env e es` by
     (irule stmt_expr_body_pre >>
-     gvs[stmt_exprs_ok_def, supported_stmt_expr_exists_def,
+     gvs[stmt_exprs_ok_flat, supported_stmt_expr_exists_def,
          supported_assignment_exists_def, int_calls_stmt_def,
          int_calls_atarget_def, int_calls_expr_def, body_inv_def] >>
      qexists_tac `[]` >> simp[]) >>

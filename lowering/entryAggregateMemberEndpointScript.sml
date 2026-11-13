@@ -1,7 +1,7 @@
 (* Aggregate constructors retain the endpoint of the framed tuple fold. *)
 Theory entryAggregateMemberEndpoint
 Ancestors
-  entryAggregateValuePackaging abiStaticDynarrayLayout valueEncodingProps vyperTyping
+  entryAggregateValuePackaging abiStaticDynarrayLayout valueEncodingProps vyperTyping valueEncodingDefs
   valueEncodingTyping abiDecoderFixedMemory
   entryTupleMemberFold entryDecoderMemberEndpoint abiDecoderValidFixed
   abiDecoderCoherence abiDecoderMemberInfos abiDecoderComplexGuard abiDecoderComplexHead
@@ -25,9 +25,9 @@ Proof
      irule LIST_EQ >> asm_simp_tac list_ss [EL_MAP, LENGTH_MAP] >> rpt strip_tac >>
      `abi_decoder_coherent ce env sf (EL x tys) (EL x tvs)` by metis_tac[] >>
      drule abi_decoder_coherent_header >> simp[abi_decoder_header_def]) >>
-  `compile_abi_decode_complex_elems dst src CALLDATALOAD (Lit 0w)
+  `compile_abi_decode_complex_elems dst src CALLDATALOAD (Lit 0w) (Lit 0w)
     (abi_decoder_member_infos sf ce tys) 0 0 first = ((),last)` by
-    (qpat_x_assum `compile_abi_decode_to_buf _ _ _ _ _ _ = _` mp_tac >>
+    (qpat_x_assum `compile_abi_decode_to_buf _ _ _ _ _ _ _ = _` mp_tac >>
      simp[abi_decoder_tuple_infos, abi_decode_complex_phases,
        abi_decode_complex_head_guard_def, comp_bind_def, comp_ignore_bind_def,
        comp_return_def]) >>
@@ -43,6 +43,8 @@ Proof
     SUM (MAP type_memory_size tvs) <= SUM (MAP (type_memory_bytes ce) tys) /\
     p + SUM (MAP type_memory_size tvs) < dimword (:256)` by
     gvs[type_memory_size_def, type_memory_size_list_sum] >>
+  rpt (qpat_x_assum `mem_bytes_at (0 + _) _ _ = _`
+    (assume_tac o REWRITE_RULE [arithmeticTheory.ADD_CLAUSES])) >>
   drule_all (BETA_RULE (SIMP_RULE (pure_ss ++ boolSimps.LET_ss) []
     entry_source_members_tuple_success)) >> strip_tac >>
   qexistsl_tac [`t`,`scratch`] >>
@@ -72,11 +74,11 @@ Proof
   drule_all abi_decoder_valid_struct_inputs >> strip_tac >>
   `MAP type_memory_size tvs = MAP (type_memory_bytes ce) (MAP SND args)` by
     suspend "layout" >>
-  `compile_abi_decode_complex_elems dst src CALLDATALOAD (Lit 0w)
+  `compile_abi_decode_complex_elems dst src CALLDATALOAD (Lit 0w) (Lit 0w)
     (abi_decoder_member_infos (sf \\ nsid_to_string nsid) ce (MAP SND args))
     0 0 first = ((),last)` by
     (drule abi_decoder_struct_infos >> strip_tac >>
-     qpat_x_assum `compile_abi_decode_to_buf _ _ _ _ _ _ = _` mp_tac >>
+     qpat_x_assum `compile_abi_decode_to_buf _ _ _ _ _ _ _ = _` mp_tac >>
      asm_simp_tac std_ss [LET_THM, abi_decode_complex_phases,
        abi_decode_complex_head_guard_def, comp_bind_def, comp_ignore_bind_def,
        comp_return_def]) >>
@@ -92,6 +94,8 @@ Proof
   `!i. i < LENGTH (MAP SND args) ==> entry_member_child_contract ce
     (env \\ nsid) (sf \\ nsid_to_string nsid) ctx fn site limit_st
     (EL i (MAP SND args)) (EL i tvs)` by simp[EL_MAP] >>
+  rpt (qpat_x_assum `mem_bytes_at (0 + _) _ _ = _`
+    (assume_tac o REWRITE_RULE [arithmeticTheory.ADD_CLAUSES])) >>
   drule_all (BETA_RULE (SIMP_RULE (pure_ss ++ boolSimps.LET_ss) []
     entry_source_members_tuple_success)) >> strip_tac >>
   qexistsl_tac [`t`,`scratch`] >>
@@ -135,9 +139,9 @@ Proof
   `MAP type_memory_size (REPLICATE n tv) =
     MAP (type_memory_bytes ce) (REPLICATE n ty)` by
     (drule abi_decoder_coherent_header >> simp[abi_decoder_header_def, map_replicate]) >>
-  `compile_abi_decode_complex_elems dst src CALLDATALOAD (Lit 0w)
+  `compile_abi_decode_complex_elems dst src CALLDATALOAD (Lit 0w) (Lit 0w)
     (abi_decoder_member_infos sf ce (REPLICATE n ty)) 0 0 first = ((),last)` by
-    (qpat_x_assum `compile_abi_decode_to_buf _ _ _ _ _ _ = _` mp_tac >>
+    (qpat_x_assum `compile_abi_decode_to_buf _ _ _ _ _ _ _ = _` mp_tac >>
      simp[abi_decoder_fixed_array_infos, abi_decode_complex_phases,
        abi_decode_complex_head_guard_def, comp_bind_def, comp_ignore_bind_def,
        comp_return_def]) >>
@@ -153,6 +157,8 @@ Proof
     entry_member_child_contract ce env sf ctx fn site limit_st
       (EL i (REPLICATE n ty)) (EL i (REPLICATE n tv))` by simp[EL_REPLICATE] >>
   `LENGTH vs = LENGTH (REPLICATE n ty)` by simp[] >>
+  rpt (qpat_x_assum `mem_bytes_at (0 + _) _ _ = _`
+    (assume_tac o REWRITE_RULE [arithmeticTheory.ADD_CLAUSES])) >>
   drule_all (BETA_RULE (SIMP_RULE (pure_ss ++ boolSimps.LET_ss) []
     entry_source_members_tuple_success)) >> strip_tac >>
   qexistsl_tac [`t`,`scratch`] >>

@@ -1,7 +1,7 @@
 (* Memory-safe concat operand arms at their concrete endpoints. *)
 Theory bodyMemBiConcatArms
 Ancestors
-  bodyMemBiConcatFragments bodyMemAggregateBounds exprSimConcatArgs
+  bodyMemBiConcatFragments bodyMemAggregateBounds exprSimConcatArgs loweringStateRelDefs
   allocaHistoryFragment bodyMemBiConcatOperandMemory concatMemory fragGasSeqMem emitHelperProps venomInst
   allocaHistory exprSimConcatStep exprSimConcatStore exprSimConcatPath
   exprSimAlloc exprSimProps exprSimDefs loweringPosts exprLoweringProps

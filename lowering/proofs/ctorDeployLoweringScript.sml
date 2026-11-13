@@ -115,7 +115,8 @@ Proof
        (res, ee) ==> stmt_res_ok NoLoop res` by
     metis_tac[deploy_ctor_body_source_ok] >>
   `SND (stmts_env cenv NoLoop NoneT body sa) = sb` by
-    metis_tac[compile_stmts_env, pairTheory.PAIR_EQ] >>
+    (qpat_x_assum `compile_stmts _ _ _ _ _ = _` mp_tac >>
+     simp[compile_stmts_env]) >>
   Cases_on `stmts_env cenv NoLoop NoneT body sa` >> fs[] >>
   qpat_x_assum `_ = sb` SUBST_ALL_TAC >>
   rename1 `stmts_env _ _ _ _ _ = (cenv', sb)` >>
@@ -158,7 +159,12 @@ Proof
                (qspec_then `fuel1` mp_tac) >> simp[]) >>
           drule run_from_halt_code >> strip_tac >>
           qexists_tac `fuel2` >> simp[] >>
-          qunabbrev_tac `cx` >> irule deploy_ctor_return >> simp[] >> metis_tac[]) >>
+          qunabbrev_tac `cx` >> irule deploy_ctor_return >> simp[] >>
+          qexistsl_tac [`body`, `cenv`, `cplan`, `deploy_bc`, `dout`, `dunit`,
+                        `es`, `es0`, `st_exit.cs_current_bb`, `func`, `gx`, `imm`,
+                        `nkey`, `policy`, `prog`, `rpolicy`, `sa`, `sb`, `sj`,
+                        `st_epilogue`, `st_exit`, `st_final`, `ut`, `vs`] >>
+          simp[]) >>
       (* the body exits *)
       drule_all gas_path_exit >> disch_then (qx_choose_then `fuel` assume_tac) >>
       `!e. r <> Error e` by metis_tac[exit_result_not_error] >>

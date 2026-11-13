@@ -1,6 +1,6 @@
 Theory bodyMemEcArithAssemble
 Ancestors
-  bodyMemEcArithPayload bodyMemEcArithOperands exprSimAlloc bodyMemEcArithCapacity bodyMemEcArithCallbacks
+  bodyMemEcArithPayload bodyMemEcArithOperands exprSimAlloc bodyMemEcArithCapacity bodyMemEcArithCallbacks loweringStateRelDefs
   fragGasSeqMem allocaHistoryFragment exprSimProps exprSimPrecompiles
   exprLoweringProps emitHelperProps compileEnv context venomState venomInst
   loweringHalt fragExecMem loweringPosts vyperValue
@@ -22,9 +22,9 @@ Proof
        type_slot_size_def, wordsTheory.dimword_def, ec_point_footprint] >>
   strip_tac >> gvs[]
   >- (first_x_assum drule >> simp[] >>
-      simp[compileEnvTheory.regions_disjoint_def] >> decide_tac) >>
+      simp[loweringStateRelDefsTheory.regions_disjoint_def] >> decide_tac) >>
   first_x_assum drule >>
-  simp[compileEnvTheory.regions_disjoint_def] >> decide_tac
+  simp[loweringStateRelDefsTheory.regions_disjoint_def] >> decide_tac
 QED
 
 (* Restatement of private exprSimECArith.ec_point_fresh_scratch_disjoint;
@@ -295,7 +295,7 @@ Theorem ecmul_prefix_run:
     (!i. MEM i (emitted_insts sf sm) ==>
       MEM i.inst_opcode [ALLOCA; ADD; MLOAD; MSTORE]) /\
     run_inst_seq (emitted_insts sf sm) s = OK t /\
-    stmt_state_rel ctx func cenv cx es t /\ wb_frame cenv es sf s t /\
+    stmt_state_rel ctx func cenv cx es t /\ wb_frame cenv es es sf s t /\
     eval_operand ib.buf_operand t = SOME pi /\
     eval_operand ob.buf_operand t = SOME po /\
     w2n pi + 96 < dimword (:256) /\ w2n po + 64 < dimword (:256) /\
@@ -316,8 +316,17 @@ Proof
     (SPEC_ALL ec_allocated_payload_capacity_run)) >>
   (impl_tac >- (simp[wordsTheory.dimword_def] >> rpt strip_tac >>
     `eval_operand p s1 = SOME point /\ eval_operand scalar s1 = SOME wscalar` by
-      (conj_tac >> Cases_on `p` >> Cases_on `scalar` >>
-       gvs[eval_operand_def] >> metis_tac[]) >>
+      (conj_tac
+       >- (qpat_x_assum `eval_operand p s = _` mp_tac >>
+           Cases_on `p` >> simp[eval_operand_def] >>
+           strip_tac >> first_x_assum irule >>
+           qpat_x_assum `!x. MEM (Var x) [Var _;scalar] ==> _`
+             (mp_tac o SRULE [listTheory.MEM]) >> simp[]) >>
+       qpat_x_assum `eval_operand scalar s = _` mp_tac >>
+       Cases_on `scalar` >> simp[eval_operand_def] >>
+       strip_tac >> first_x_assum irule >>
+       qpat_x_assum `!x. MEM (Var x) [p;Var _] ==> _`
+         (mp_tac o SRULE [listTheory.MEM]) >> simp[]) >>
     `!x. MEM (Var x) [p;ib.buf_operand;scalar] ==> not_fresh_at sa x` by
       (gvs[not_fresh_at_def] >> metis_tac[arithmeticTheory.LESS_EQ_TRANS]) >>
     `regions_disjoint (w2n wi) 96 (w2n point) 64` by
@@ -369,7 +378,7 @@ Theorem ecadd_prefix_run:
     (!i. MEM i (emitted_insts sf sm) ==>
       MEM i.inst_opcode [ALLOCA; ADD; MLOAD; MSTORE]) /\
     run_inst_seq (emitted_insts sf sm) s = OK t /\
-    stmt_state_rel ctx func cenv cx es t /\ wb_frame cenv es sf s t /\
+    stmt_state_rel ctx func cenv cx es t /\ wb_frame cenv es es sf s t /\
     eval_operand ib.buf_operand t = SOME pi /\
     eval_operand ob.buf_operand t = SOME po /\
     w2n pi + 128 < dimword (:256) /\ w2n po + 64 < dimword (:256) /\
@@ -391,8 +400,17 @@ Proof
     (SPEC_ALL ec_allocated_payload_capacity_run)) >>
   (impl_tac >- (simp[wordsTheory.dimword_def] >> rpt strip_tac >>
     `eval_operand p s1 = SOME point /\ eval_operand q s1 = SOME point2` by
-      (conj_tac >> Cases_on `p` >> Cases_on `q` >>
-       gvs[eval_operand_def] >> metis_tac[]) >>
+      (conj_tac
+       >- (qpat_x_assum `eval_operand p s = _` mp_tac >>
+           Cases_on `p` >> simp[eval_operand_def] >>
+           strip_tac >> first_x_assum irule >>
+           qpat_x_assum `!x. MEM (Var x) [Var _;q] ==> _`
+             (mp_tac o SRULE [listTheory.MEM]) >> simp[]) >>
+       qpat_x_assum `eval_operand q s = _` mp_tac >>
+       Cases_on `q` >> simp[eval_operand_def] >>
+       strip_tac >> first_x_assum irule >>
+       qpat_x_assum `!x. MEM (Var x) [p;Var _] ==> _`
+         (mp_tac o SRULE [listTheory.MEM]) >> simp[]) >>
     `!x. MEM (Var x) [p;q;ib.buf_operand] ==> not_fresh_at sa x` by
       (gvs[not_fresh_at_def] >> metis_tac[arithmeticTheory.LESS_EQ_TRANS]) >>
     `regions_disjoint (w2n wi) 128 (w2n point) 64` by
@@ -450,7 +468,7 @@ Theorem ecmul_prefix_mem:
     (!i. MEM i (emitted_insts sf sm) ==>
       MEM i.inst_opcode [ALLOCA; ADD; MLOAD; MSTORE]) /\
     run_inst_seq (emitted_insts sf sm) s = OK t /\
-    stmt_state_rel ctx func cenv cx es t /\ wb_frame cenv es sf s t /\
+    stmt_state_rel ctx func cenv cx es t /\ wb_frame cenv es es sf s t /\
     eval_operand ib.buf_operand t = SOME pi /\
     eval_operand ob.buf_operand t = SOME po /\
     w2n pi + 96 < dimword (:256) /\ w2n po + 64 < dimword (:256) /\
@@ -507,7 +525,7 @@ Theorem ecadd_prefix_mem:
     (!i. MEM i (emitted_insts sf sm) ==>
       MEM i.inst_opcode [ALLOCA; ADD; MLOAD; MSTORE]) /\
     run_inst_seq (emitted_insts sf sm) s = OK t /\
-    stmt_state_rel ctx func cenv cx es t /\ wb_frame cenv es sf s t /\
+    stmt_state_rel ctx func cenv cx es t /\ wb_frame cenv es es sf s t /\
     eval_operand ib.buf_operand t = SOME pi /\
     eval_operand ob.buf_operand t = SOME po /\
     w2n pi + 128 < dimword (:256) /\ w2n po + 64 < dimword (:256) /\

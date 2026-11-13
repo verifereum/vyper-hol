@@ -4,7 +4,7 @@
 Theory abiEncoderSourceChecks
 Ancestors
   venomMemProps
-  abiEncoderLeaves valueEncoding vyperABI vyperValue vyperTyping contractABI
+  abiEncoderLeaves valueEncoding valueEncodingDefs vyperABI vyperValue vyperTyping contractABI
   venomState compileEnv abiEncoder words list rich_list byte
 
 Definition abi_encoder_sparse_probe_memory_def:

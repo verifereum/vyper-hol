@@ -19,7 +19,7 @@ Proof
 QED
 
 Theorem entry_valid_pre_original_memory:
-  abi_decoder_valid_pre ce env sf ty tv bs nv st src dst opc hi sb d b cap initial /\
+  abi_decoder_valid_pre ce env sf ty tv bs nv st src dst opc (Lit 0w) hi 0 sb d b cap initial /\
   value_has_type tv v /\
   vyper_to_abi env ty v = SOME (dec (vyper_to_abi_type env ty) bs) /\
   val_in_memory tv nv p mem ==>

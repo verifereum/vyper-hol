@@ -18,8 +18,7 @@ Theorem literal_tstore_step[local]:
     OK (tstore key 0w s)
 Proof
   rpt gen_tac >> simp[mk_inst_def] >>
-  PURE_ONCE_REWRITE_TAC[step_inst_base_def] >>
-  simp[exec_write2_def, eval_operand_def, eval_operands_def]
+  simp[step_inst_base_opcode_eqs, exec_write2_def, eval_operand_def, eval_operands_def]
 QED
 
 Theorem empty_frag_mem_indexed[local]:

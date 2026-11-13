@@ -31,7 +31,7 @@ Theorem ecmul_payload_callback:
     regions_disjoint (w2n bw) 96 off (type_memory_size tv)) /\
   FLOOKUP s.vs_allocas sc.cs_next_id = SOME (w2n bw,96) ==>
   ?t. run_inst_seq (emitted_insts sa sb) s = OK t /\
-    stmt_state_rel ctx func cenv cx es t /\ wb_frame cenv es sc s t /\
+    stmt_state_rel ctx func cenv cx es t /\ wb_frame cenv es es sc s t /\
     (!x. not_fresh_at sa x ==> lookup_var x t = lookup_var x s) /\
     FLOOKUP t.vs_allocas sc.cs_next_id = SOME (w2n bw,96) /\
     t.vs_alloca_next = s.vs_alloca_next /\
@@ -87,7 +87,7 @@ Theorem ecadd_payload_callback:
     regions_disjoint (w2n bw) 128 off (type_memory_size tv)) /\
   FLOOKUP s.vs_allocas sc.cs_next_id = SOME (w2n bw,128) ==>
   ?t. run_inst_seq (emitted_insts sa sb) s = OK t /\
-    stmt_state_rel ctx func cenv cx es t /\ wb_frame cenv es sc s t /\
+    stmt_state_rel ctx func cenv cx es t /\ wb_frame cenv es es sc s t /\
     (!x. not_fresh_at sa x ==> lookup_var x t = lookup_var x s) /\
     FLOOKUP t.vs_allocas sc.cs_next_id = SOME (w2n bw,128) /\
     t.vs_alloca_next = s.vs_alloca_next /\

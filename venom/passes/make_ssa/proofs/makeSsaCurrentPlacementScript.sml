@@ -1,6 +1,6 @@
 Theory makeSsaCurrentPlacement
 Ancestors
-  makeSsaCurrentDefs makeSsaCurrentProps makeSsaDefs venomInst list alist
+  makeSsaDefs makeSsaCurrentProps venomInst list alist
 
 Definition current_frontier_edge_def:
   current_frontier_edge df d f <=>

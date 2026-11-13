@@ -33,8 +33,8 @@ Ancestors
   arithmetic list rich_list words integer integer_word
   valueEncodingProofs valueEncodingProps loweringHalt exprSimConvert
   moduleLoweringProps abiEncoderProps entryDispatchProps
-  moduleLowering abiEncoder compileEnv compileVyper exprLowering
-  valueEncoding selectorDispatch fragExec emitHelper emitHelperProps
+  moduleLowering abiEncoder compileEnv loweringStateRelDefs compileVyper exprLowering
+  exprSimProps valueEncoding valueEncodingDefs selectorDispatch fragExec emitHelper emitHelperProps
   venomExecSemantics venomState venomInst venomMemProps
   vyperABI vyperABIRoundtrip vyperTyping vyperValue vyperValueOperation
   vyperInterpreter exprSimArith contractABI byte vfmTypes vyperCall
@@ -123,26 +123,6 @@ QED
 (* ===== Word values ===== *)
 
 (* A word-typed value is in memory exactly when its word is. *)
-Theorem val_in_memory_word:
-  !tenv ty tv v off mem.
-    is_word_type ty /\ evaluate_type tenv ty = SOME tv /\
-    value_has_type tv v ==>
-    (val_in_memory tv v off mem <=>
-     mem_word_at off mem = typed_val_to_w256 tv v)
-Proof
-  rpt strip_tac >>
-  `(?n. ty = BaseT (UintT n)) \/ (?n. ty = BaseT (IntT n)) \/
-   ty = BaseT BoolT \/ ty = BaseT AddressT \/ ty = BaseT DecimalT \/
-   (?m. ty = BaseT (BytesT (Fixed m)) /\ m <= 32) \/ (?n. ty = FlagT n)` by
-    (Cases_on `ty` >> fs[is_word_type_def] >>
-     rename1 `BaseT bt` >> Cases_on `bt` >> fs[is_word_type_def] >>
-     rename1 `BytesT bd` >> Cases_on `bd` >> fs[is_word_type_def]) >>
-  gvs[vyperValueTheory.evaluate_type_def, AllCaseEqs()] >>
-  Cases_on `v` >>
-  gvs[vyperTypingTheory.value_has_type_def, val_in_memory_def,
-      typed_val_to_w256_def]
-QED
-
 (* A word-typed value's ABI encoding is its word. *)
 Theorem vyper_to_abi_word_enc:
   !tenv ty tv v av.

@@ -16,7 +16,7 @@
 Theory exprSimPtrProps
 Ancestors
   bodyPtrDefs fragGasPathPtr exprSimStack exprSimDefs loweringPosts
-  gasExemptCert exprLowering emitHelper compileEnv vyperInterpreter
+  gasExemptCert exprLowering emitHelper compileEnv loweringStateRelDefs vyperInterpreter
   vyperState ptrDiscipline fragGasSeqPtr typedCopyPtr decoderGhostFramePtr
   emitHelperProps fragExec exprLoweringProps venomInst venomState
 
@@ -52,9 +52,9 @@ Proof
               disch_then (qspec_then `es with gas_obs :=
                 gas_explicit marks s0.vs_gas_readings ++ tail` mp_tac) >>
               simp[]) >>
-          gvs[vv_post_def, vv_holds_def, vv_at_def, expr_post_def,
+          gvs[vv_post_def, vv_holds_def, vv_at_def, vv_own_def, expr_post_def,
               read_result_def, return_def, ptr_vv_ok_def] >>
-          metis_tac[]) >>
+          first_assum ACCEPT_TAC) >>
       qexistsl_tac [`case res of INL v => INL (Value v) | INR ex => INR ex`,
                     `es_end`, `G`, `tn`, `r`] >>
       simp[expr_exit_success_map] >> gen_tac >>

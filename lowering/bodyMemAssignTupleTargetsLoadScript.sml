@@ -3,11 +3,11 @@ Theory bodyMemAssignTupleTargetsLoad
 Ancestors
   bodyMemAssignTupleTargetsFacts tupleLoadProps stmtSimReturn
   fragExecMem instMemFrontier context emitHelper emitHelperProps
-  venomExecSemantics venomState venomInst compileEnv exprLoweringProps
+  venomExecSemantics venomState venomInst compileEnv loweringStateRelDefs exprLoweringProps
   list rich_list words unitTransformDefs memSafeRun contextCodegenRel codegenRel
   stmtLowering freshWrites tupleTypedLoad tupleMemoryLayout valueEncodingProofs
   bodyDeclMemoryCounted bodyDeclMemoryCore loweringPosts bodyMemoryDefs allocaHistory
-  tupleStageProps valueTypingMemoryProps valueEncoding vyperTyping gasCount fragGasPathMem
+  tupleStageProps valueTypingMemoryProps valueEncoding valueEncodingDefs vyperTyping gasCount fragGasPathMem
 Libs
   monadsyntax
 

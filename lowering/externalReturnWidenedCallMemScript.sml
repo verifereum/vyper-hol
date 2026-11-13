@@ -1,21 +1,40 @@
-(* An incompatible internal-call layout yields the counted return contract
-   through the actual value-view expression prefix, not an arbitrary
-   expression postcondition endpoint. *)
+(* A valued return of the external frame whose value is an internal
+   call's result laid out at the callee's declared return type
+   (lowered_value_type differs from expr_type, other than as a bytestring).
+   Besides expr_post, it takes the return expression's memory simulations
+   expr_sim_mem and expr_vv_sim_mem at every type, which frame_ret_ok_mem
+   provides. *)
 Theory externalReturnWidenedCallMem
 Ancestors
+  externalReturnNormalizedMem incompatibleReturnLayout
   externalReturnLeafMem externalNormalizePremises typedNormalizeRankMem
-  nonreentrantExit internalReturnMetadata incompatibleReturnLayout returnLocatedMismatchMem
+  nonreentrantExit
   stmtSimDefs loweringPosts
   vyperCompiler selectorDispatch moduleLoweringProps stmtLoweringProps
   exprLoweringProps valueEncodingProofs vyperInterpreter vyperContext
   venomExecSemantics venomState compileEnv e2eDefs supportedProgram
   compileVyper unitTransformDefs fragExec loweringHalt venomInst venomWf
   contextCodegenRel memSafeRun allocaFrontierBound o1PassContract ptrDiscipline
-  vyperLoweringCorrect loweringRuntimeCorrect fragExecMem bodyMemoryDefs
-  entryHaltMem loweringPtrCorrect bodySim bodySimMain moduleLowering
+  vyperLoweringCorrect fragExecMem bodyMemoryDefs
+  entryHaltMem bodySim bodySimMain moduleLowering
   stmtLowering vyperTypeSystem vyperState lowerDloadDefs
 
 val _ = Parse.hide "body";
+
+Theorem arg_type_fits_antisym[local]:
+  (!t u. arg_type_fits t u ==> arg_type_fits u t ==> t = u) /\
+  (!ts us. arg_types_fit ts us ==> arg_types_fit us ts ==> ts = us)
+Proof
+  ho_match_mp_tac arg_type_fits_ind >> rpt conj_tac >> rpt gen_tac >>
+  simp_tac std_ss [arg_type_fits_def] >> rpt strip_tac >> gvs[] >>
+  gvs[arg_type_fits_def]
+QED
+
+Theorem type_widens_to_antisym[local]:
+  type_widens_to tenv t u /\ type_widens_to tenv u t ==> t = u
+Proof
+  rw[type_widens_to_def] >> metis_tac[arg_type_fits_antisym]
+QED
 
 Theorem external_frame_ret_widened_call_mem:
   !tops rpolicy unit am tx ret vs mut args fbody env0 lbl cenv0 pos_args
@@ -33,14 +52,14 @@ Theorem external_frame_ret_widened_call_mem:
       SOME (mut, F, args, [], ret, fbody) /\
     bind_arguments (type_env tops) args tx.args = SOME env0 /\
     set_external_package_target rpolicy.rpol_target
-      (package_external_fn tops F (assign_nkeys tops 0)
+      (package_external_fn tops T (K global_nonreentrant_slot)
          (mut, F, lookup_raw_return_or_F (NONE : num option)
                      tx.function_name External tops,
           tx.function_name, args, [], ret, fbody)) =
       (lbl, cenv0, pos_args, min_cds, is_payable, F, nkey, ut', iv, fbody,
        rt) /\
     compile_register_positional_args cenv0 pos_args 4 st = (cenv, sa0) ==>
-    !cenv' env lctx e es d RetQ.
+    !cenv' env lctx e es sa sb cenv'' s0 op s1 ee v t.
        same_frame cenv cenv' /\
        ~(lowered_value_type cenv' e = expr_type e \/
         is_bytestring_type (expr_type e) /\
@@ -48,20 +67,67 @@ Theorem external_frame_ret_widened_call_mem:
         arg_type_fits (lowered_value_type cenv' e) (expr_type e)) /\
        expr_sim_inv cenv'
          (initial_evaluation_context am.sources am.layouts tx NONE) env es /\
+       stmt_exprs_ok cenv' (Return (SOME e)) /\
        IS_SOME (type_stmt env ret (Return (SOME e))) /\
-       expr_vv_sim_mem unit.cu_context func cenv'
-         (initial_evaluation_context am.sources am.layouts tx NONE) ret e es ==>
-       stmt_frag_mem d unit.cu_context func
-         (initial_evaluation_context am.sources am.layouts tx NONE) lctx RetQ cenv'
-         (stmt_env cenv' lctx ret (Return (SOME e)))
-         (eval_stmt (initial_evaluation_context am.sources am.layouts tx NONE)
-           (Return (SOME e))) es
+       call_evaluation_safe
+         (initial_evaluation_context am.sources am.layouts tx NONE)
+         (int_calls_stmt (Return (SOME e))) /\
+       stmt_env cenv' lctx ret (Return (SOME e)) sa = (cenv'', sb) /\
+       lower_value compile_expr cenv' ret e sa = (op, s1) /\
+       fn_has_code sa sb func /\ fn_inst_ids_distinct func /\
+       local_ptrs_reserved cenv' sa /\ ~block_is_terminated sa /\
+       stmt_state_rel unit.cu_context func cenv'
+         (initial_evaluation_context am.sources am.layouts tx NONE) es s0 /\
+       alloca_history func s0 /\ ~s0.vs_halted /\
+       s0.vs_current_bb = sa.cs_current_bb /\
+       s0.vs_inst_idx = LENGTH sa.cs_current_insts /\
+       expr_post unit.cu_context func cenv'
+         (initial_evaluation_context am.sources am.layouts tx NONE)
+         e es sa s1 s0 ee v op t /\
+       (?gs ee'.
+          bind (eval_expr
+                  (initial_evaluation_context am.sources am.layouts tx NONE) e)
+            (read_result
+               (initial_evaluation_context am.sources am.layouts tx NONE))
+            (es with gas_obs := gs) = (INL v, ee')) /\
+       (!ty. expr_sim_mem unit.cu_context func cenv'
+               (initial_evaluation_context am.sources am.layouts tx NONE)
+               ty e es /\
+             expr_vv_sim_mem unit.cu_context func cenv'
+               (initial_evaluation_context am.sources am.layouts tx NONE)
+               ty e es) /\
+       t.vs_current_bb = s1.cs_current_bb /\
+       t.vs_inst_idx = LENGTH s1.cs_current_insts /\
+       alloca_history func t /\ s0.vs_alloca_next <= t.vs_alloca_next /\
+       ~t.vs_halted ==>
+       ?fuel r. run_from fuel unit.cu_context func t = r /\ exit_result r /\
+                mem_safe_run fuel unit.cu_context func t
 Proof
   rpt gen_tac >> disch_then (map_every assume_tac o CONJUNCTS) >>
   rpt gen_tac >> disch_then (map_every assume_tac o CONJUNCTS) >>
-  drule_all external_package_frame_internal_maps >> strip_tac >>
-  irule return_located_mismatch_mem >> simp[] >>
-  rpt gen_tac >> strip_tac >>
-  irule incompatible_return_layout_located >>
-  goal_assum (drule_at Any) >> simp[] >> metis_tac[]
+  `well_typed_expr env e` by
+    (qpat_x_assum `IS_SOME (type_stmt _ _ _)` mp_tac >>
+     simp[type_stmt_def, AllCaseEqs()]) >>
+  drule_all incompatible_return_layout_intcall >> strip_tac >>
+  qpat_x_assum `e = _` SUBST_ALL_TAC >>
+  `expr_type (Call ann (IntCall fid) xs drv) = ann` by simp[vyperASTTheory.expr_type_def] >>
+  `type_widens_to
+     (get_tenv (initial_evaluation_context am.sources am.layouts tx NONE))
+     ann ret` by
+    (`env.type_defs =
+      get_tenv (initial_evaluation_context am.sources am.layouts tx NONE)` by
+       (qpat_x_assum `expr_sim_inv _ _ _ _` mp_tac >>
+        simp[exprSimHypsDefsTheory.expr_sim_inv_def,
+          vyperTypeInvariantsTheory.env_consistent_def,
+          vyperTypeInvariantsTheory.env_context_consistent_def]) >>
+     qpat_x_assum `IS_SOME (type_stmt _ _ _)` mp_tac >>
+     simp[type_stmt_def, AllCaseEqs()]) >>
+  `~is_word_type ret` by metis_tac[typedMemoryCopyTheory.typed_copy_word_widening] >>
+  `~(is_bytestring_type
+       (lowered_value_type cenv' (Call ann (IntCall fid) xs drv)) /\
+     is_bytestring_type ret)` by
+    metis_tac[typedMemoryCopyTheory.type_widens_from_bytestring] >>
+  `lowered_value_type cenv' (Call ann (IntCall fid) xs drv) <> ret` by
+    metis_tac[type_widens_to_antisym] >>
+  drule_all external_frame_ret_value_normalized_run_mem >> simp[]
 QED

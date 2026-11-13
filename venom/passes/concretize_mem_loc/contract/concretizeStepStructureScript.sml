@@ -2,6 +2,7 @@ Theory concretizeStepStructure
 Ancestors
   concretizeMemLocDefs passSimulationProps passSharedProps venomWf
   passSharedDefs passSimulationDefs venomInst list indexedLists unitLabelMapIdentity
+  passTransform
 
 Theorem concretize_positions_inst_id:
   (concretize_inst_with_positions p i).inst_id = i.inst_id

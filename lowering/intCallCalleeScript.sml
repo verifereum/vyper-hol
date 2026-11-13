@@ -57,10 +57,10 @@
 
 Theory intCallCallee
 Ancestors
-  list rich_list finite_map
+  valueEncodingDefs list rich_list finite_map
   fragExec localPtrsProps exprLoweringProps
-  compileVyper moduleLowering stmtLowering exprLowering emitHelper context compileEnv
-  valueEncoding valueEncodingProps venomMemDefs
+  compileVyper moduleLowering stmtLowering exprLowering emitHelper context compileEnv loweringStateRelDefs
+  valueEncoding valueEncodingProps venomMemDefs memoryValueDefs
   venomExecSemantics venomInst venomState venomMemProps vyperState
 
 (* ===== The prologue ===== *)
@@ -253,7 +253,7 @@ End
      and a well-formed value;
    - a stack-passed parameter's slot holds at least a word, and its
      argument word is its value's encoding: a memory holding that word at
-     some offset holds the value there;
+     some offset has the complete typed layout there (memory_value_rel);
    - a memory-passed parameter's argument points into the caller's memory
      below the frontier, at a region of the slot's size holding the value,
      and these regions are pairwise disjoint (the caller stages each in a
@@ -274,10 +274,10 @@ Definition internal_args_rel_def:
          if SND (EL i params) then
            32 <= sz /\
            !b m. mem_word_at b m = EL (base + i) args ==>
-                 val_in_memory entry.type entry.value b m
+                 memory_value_rel entry.type entry.value b m
          else
            w2n (EL (base + i) args) + sz <= frontier /\
-           val_in_memory entry.type entry.value (w2n (EL (base + i) args))
+           memory_value_rel entry.type entry.value (w2n (EL (base + i) args))
              mem) /\
     (!i j offi szi offj szj.
        i < LENGTH params /\ j < LENGTH params /\ i <> j /\
@@ -481,7 +481,7 @@ Theorem regions_disjoint_sym[local]:
   !b1 s1 b2 s2.
     regions_disjoint b1 s1 b2 s2 <=> regions_disjoint b2 s2 b1 s1
 Proof
-  rw[compileEnvTheory.regions_disjoint_def] >> metis_tac[]
+  rw[loweringStateRelDefsTheory.regions_disjoint_def] >> metis_tac[]
 QED
 
 (* A live local's region lies below the frontier. *)
@@ -504,7 +504,7 @@ Theorem local_ptrs_rel_bind_ptr:
     lookup_var p ss = SOME w /\ local_backed func p ss (w2n w) sz /\
     w2n w + sz <= ss.vs_alloca_next /\
     type_memory_size entry.type <= sz /\ val_wf entry.type entry.value /\
-    val_in_memory entry.type entry.value (w2n w) ss.vs_memory /\
+    memory_value_rel entry.type entry.value (w2n w) ss.vs_memory /\
     (!n b sz'. n <> name /\ local_region cenv scopes ss n b sz' ==>
                regions_disjoint (w2n w) sz b sz') ==>
     local_ptrs_rel func
@@ -577,7 +577,7 @@ Theorem materialize_stack_step[local]:
     FLOOKUP env name = SOME entry /\
     type_memory_size entry.type <= sz /\ val_wf entry.type entry.value /\
     32 <= sz /\
-    (!b m. mem_word_at b m = a ==> val_in_memory entry.type entry.value b m) ==>
+    (!b m. mem_word_at b m = a ==> memory_value_rel entry.type entry.value b m) ==>
     ?s1.
       run_inst_seq
         [mk_inst st.cs_next_id ALLOCA [Lit (n2w sz)]
@@ -700,11 +700,11 @@ QED
 (* Stores above the call frontier cannot disturb a pending caller buffer. *)
 Theorem pending_arg_mstore[local]:
   !ty v b sz f0 dst w s.
-    val_in_memory ty v b s.vs_memory /\ val_wf ty v /\
+    memory_value_rel ty v b s.vs_memory /\ val_wf ty v /\
     type_memory_size ty <= sz /\ b + sz <= f0 /\ f0 <= dst ==>
-    val_in_memory ty v b (mstore dst w s).vs_memory
+    memory_value_rel ty v b (mstore dst w s).vs_memory
 Proof
-  rpt strip_tac >> irule mstore_keeps_val_in_memory >> simp[]
+  rpt strip_tac >> irule mstore_keeps_memory_value_rel >> simp[] >> decide_tac
 QED
 
 (* Caller buffers are backed by their separation from all frame allocations. *)
@@ -717,7 +717,7 @@ Theorem caller_buffer_backed[local]:
 Proof
   rpt strip_tac >> simp[local_backed_def] >> disj2_tac >>
   rpt strip_tac >> first_x_assum drule >>
-  simp[compileEnvTheory.regions_disjoint_def]
+  simp[loweringStateRelDefsTheory.regions_disjoint_def]
 QED
 
 Theorem materialize_memory_bind[local]:
@@ -728,7 +728,7 @@ Theorem materialize_memory_bind[local]:
     lookup_var p s = SOME w /\ mr name = SOME (w2n w, sz) /\
     w2n w + sz <= f0 /\ f0 <= s.vs_alloca_next /\
     type_memory_size entry.type <= sz /\ val_wf entry.type entry.value /\
-    val_in_memory entry.type entry.value (w2n w) s.vs_memory /\
+    memory_value_rel entry.type entry.value (w2n w) s.vs_memory /\
     (!aid b size. FLOOKUP s.vs_allocas aid = SOME (b, size) ==> f0 <= b) /\
     (!n b size. local_region cenv [env] s n b size ==>
                 f0 <= b \/ mr n = SOME (b, size)) /\
@@ -746,7 +746,7 @@ Proof
   rpt strip_tac >>
   qpat_x_assum `!n b size. local_region _ _ _ _ _ _ ==> _` drule >>
   strip_tac
-  >- simp[compileEnvTheory.regions_disjoint_def] >>
+  >- simp[loweringStateRelDefsTheory.regions_disjoint_def] >>
   qpat_x_assum `!n1 n2 b1 sz1 b2 sz2. _` irule >> metis_tac[]
 QED
 
@@ -782,10 +782,10 @@ Definition mat_pending_def:
       type_memory_size entry.type <= sz /\ val_wf entry.type entry.value /\
       if FST (SND c) then
         32 <= sz /\ !b m. mem_word_at b m = a ==>
-                         val_in_memory entry.type entry.value b m
+                         memory_value_rel entry.type entry.value b m
       else
         mr (FST c) = SOME (w2n a, sz) /\ w2n a + sz <= f0 /\
-        val_in_memory entry.type entry.value (w2n a) s.vs_memory) caps
+        memory_value_rel entry.type entry.value (w2n a) s.vs_memory) caps
 End
 
 Definition mat_inv_def:
@@ -839,8 +839,8 @@ Theorem mat_pending_bind[local]:
     mat_frame st s t /\
     (!x. not_fresh_at st x ==> not_fresh_at mid x) /\
     (!ty v b sz. val_wf ty v /\ type_memory_size ty <= sz /\ b + sz <= f0 /\
-                 val_in_memory ty v b s.vs_memory ==>
-                 val_in_memory ty v b t.vs_memory) ==>
+                 memory_value_rel ty v b s.vs_memory ==>
+                 memory_value_rel ty v b t.vs_memory) ==>
     mat_pending (cenv with ce_vars updated_by (\m. m |+ (name, loc)))
       env mid t f0 mr caps
 Proof
@@ -872,7 +872,7 @@ Theorem mat_inv_memory_bind[local]:
     FLOOKUP env name = SOME entry /\ lookup_var p s = SOME w /\
     mr name = SOME (w2n w, sz) /\ w2n w + sz <= f0 /\
     type_memory_size entry.type <= sz /\ val_wf entry.type entry.value /\
-    val_in_memory entry.type entry.value (w2n w) s.vs_memory /\
+    memory_value_rel entry.type entry.value (w2n w) s.vs_memory /\
     (!n1 n2 b1 sz1 b2 sz2.
        n1 <> n2 /\ mr n1 = SOME (b1, sz1) /\ mr n2 = SOME (b2, sz2) ==>
        regions_disjoint b1 sz1 b2 sz2) ==>
@@ -1765,14 +1765,20 @@ QED
 Definition internal_immutable_regions_def:
   internal_immutable_regions cenv cx (vs:evaluation_state) frontier <=>
     cenv.ce_is_ctor ==>
-    !name tv v off.
+    (!name tv v off.
       FLOOKUP cenv.ce_module_vars (cenv.ce_module, name) =
         SOME (ImmutableLoc off) /\
       FLOOKUP (case ALOOKUP vs.immutables cx.txn.target of
                  NONE => FEMPTY
                | SOME imms => get_source_immutables cenv.ce_module imms) name =
         SOME (tv,v) ==>
-      val_wf tv v /\ off + type_memory_size tv <= frontier
+      val_wf tv v /\ off + type_memory_size tv <= frontier) /\
+    (!name ty tv off.
+      FLOOKUP cenv.ce_module_vars (cenv.ce_module, name) =
+        SOME (ImmutableLoc off) /\
+      cenv.ce_module_var_type (cenv.ce_module, name) = SOME ty /\
+      evaluate_type (get_tenv cx) ty = SOME tv ==>
+      off + type_memory_size tv <= frontier)
 End
 
 Theorem internal_immutables_frame[local]:
@@ -2138,6 +2144,15 @@ Theorem internal_prologue_run:
         SOME (tv,iv) ==>
       regions_disjoint io (type_memory_size tv)
         (w2n (EL ((if has_rb then 1 else 0) + i) args)) psz) /\
+    (cenv.ce_is_ctor ==> !i po psz name ty tv io.
+      i < LENGTH params /\ ~SND (EL i params) /\
+      FLOOKUP cenv.ce_vars (FST (EL i params)) = SOME (MemLoc po psz) /\
+      FLOOKUP cenv.ce_module_vars (cenv.ce_module,name) =
+        SOME (ImmutableLoc io) /\
+      cenv.ce_module_var_type (cenv.ce_module,name) = SOME ty /\
+      evaluate_type (get_tenv cx) ty = SOME tv ==>
+      regions_disjoint io (type_memory_size tv)
+        (w2n (EL ((if has_rb then 1 else 0) + i) args)) psz) /\
     caller.vs_alloca_next + internal_stack_size cenv params
       < dimword (:256) ==>
     ?t.
@@ -2281,6 +2296,7 @@ Resume internal_prologue_run[separation]:
   drule materialize_nonptr_binding >> disch_then assume_tac >>
   `cenv2.ce_module = cenv.ce_module /\
    cenv2.ce_is_ctor = cenv.ce_is_ctor /\
+   cenv2.ce_module_var_type = cenv.ce_module_var_type /\
    (!name off. FLOOKUP cenv2.ce_module_vars name = SOME (ImmutableLoc off) ==>
       FLOOKUP cenv.ce_module_vars name = SOME (ImmutableLoc off))` by
     (asm "cenv_stage" mp_tac >> simp[]) >>
@@ -2301,7 +2317,10 @@ Resume internal_prologue_run[separation]:
      strip_tac >>
      qpat_x_assum `!n b sz. local_region cenv2 [env] u _ _ _ ==> _` drule >> simp[]) >>
   qpat_x_assum `internal_immutable_regions _ _ _ _` mp_tac >>
-  qpat_x_assum `cenv.ce_is_ctor ==> !i po psz name tv iv io. _` mp_tac >>
+  qpat_x_assum `cenv.ce_is_ctor ==> !i po psz name tv iv io.
+     _ /\ _ /\ _ /\ _ /\ FLOOKUP _ _ = SOME (tv,iv) ==> _` mp_tac >>
+  qpat_x_assum `cenv.ce_is_ctor ==> !i po psz name ty tv io.
+     _ /\ _ /\ _ /\ _ /\ _ /\ evaluate_type _ _ = _ ==> _` mp_tac >>
   qpat_x_assum `!n b sz. mr n = SOME (b,sz) <=> _` mp_tac >>
   qpat_x_assum `!n b sz. local_region cenv2 [env] t' _ _ _ ==> _` mp_tac >>
   qpat_x_assum `!aid b sz. FLOOKUP t'.vs_allocas aid = _ ==> _` mp_tac >>
@@ -2309,28 +2328,35 @@ Resume internal_prologue_run[separation]:
   qpat_x_assum `!name off. FLOOKUP cenv2.ce_module_vars name = _ ==> _` mp_tac >>
   qpat_x_assum `cenv2.ce_is_ctor = cenv.ce_is_ctor` mp_tac >>
   qpat_x_assum `cenv2.ce_module = cenv.ce_module` mp_tac >>
+  qpat_x_assum `cenv2.ce_module_var_type = cenv.ce_module_var_type` mp_tac >>
   qpat_x_assum `ce.ce_vars = cenv.ce_vars` mp_tac >>
   rpt (pop_assum kall_tac) >> rpt strip_tac >>
-  simp[immutable_alloca_sep_def] >> strip_tac >> rpt gen_tac >> strip_tac >>
+  simp[immutable_alloca_sep_def, immutable_decl_sep_alt] >>
+  conj_tac >> strip_tac >> (
+  rpt gen_tac >> strip_tac >>
   `FLOOKUP cenv.ce_module_vars (cenv.ce_module,name) =
      SOME (ImmutableLoc off)` by
     (qpat_x_assum `!name off. _` drule >> simp[]) >>
   `off + type_memory_size tv <= caller.vs_alloca_next` by
-    (fs[internal_immutable_regions_def] >>
-     qpat_x_assum `!name tv v off. _ ==> _` drule_all >> simp[]) >>
+    (fs[internal_immutable_regions_def] >> res_tac >> simp[]) >>
   conj_tac >- decide_tac >>
   conj_tac
   >- (rpt strip_tac >>
       qpat_x_assum `!aid b sz. _` drule >>
-      simp[compileEnvTheory.regions_disjoint_def]) >>
+      simp[loweringStateRelDefsTheory.regions_disjoint_def]) >>
   rpt strip_tac >>
   `local_region cenv2 [env] t' id b sz` by fs[local_region_def] >>
   qpat_x_assum `!n b sz. local_region _ _ _ _ _ _ ==> _` drule >>
-  strip_tac >- simp[compileEnvTheory.regions_disjoint_def] >>
+  strip_tac >- simp[loweringStateRelDefsTheory.regions_disjoint_def] >>
   qpat_x_assum `!n b sz. mr n = _ <=> _` (drule o iffLR) >>
   strip_tac >> gvs[] >>
-  qpat_x_assum `!i po psz name tv iv io. _` irule >>
-  simp[] >> qexistsl_tac [`v`, `name`] >> simp[]
+  FIRST [
+    qpat_x_assum `!i po psz name tv iv io.
+       _ /\ _ /\ _ /\ _ /\ FLOOKUP _ _ = SOME (tv,iv) ==> _` irule >>
+    simp[] >> qexistsl_tac [`v`, `name`] >> simp[] >> NO_TAC,
+    qpat_x_assum `!i po psz name ty tv io.
+       _ /\ _ /\ _ /\ _ /\ _ /\ evaluate_type _ _ = _ ==> _` irule >>
+    simp[] >> metis_tac[]])
 QED
 Finalise internal_prologue_run[local]
 
@@ -2396,6 +2422,15 @@ Theorem compile_internal_prologue_entry:
       FLOOKUP (case ALOOKUP vs.immutables cx.txn.target of NONE => FEMPTY
         | SOME imms => get_source_immutables cenv.ce_module imms) name =
         SOME (tv,iv) ==>
+      regions_disjoint io (type_memory_size tv)
+        (w2n (EL ((if has_rb then 1 else 0) + i) args)) psz) /\
+    (cenv.ce_is_ctor ==> !i po psz name ty tv io.
+      i < LENGTH params /\ ~SND (EL i params) /\
+      FLOOKUP cenv.ce_vars (FST (EL i params)) = SOME (MemLoc po psz) /\
+      FLOOKUP cenv.ce_module_vars (cenv.ce_module,name) =
+        SOME (ImmutableLoc io) /\
+      cenv.ce_module_var_type (cenv.ce_module,name) = SOME ty /\
+      evaluate_type (get_tenv cx) ty = SOME tv ==>
       regions_disjoint io (type_memory_size tv)
         (w2n (EL ((if has_rb then 1 else 0) + i) args)) psz) /\
     caller.vs_alloca_next + internal_stack_size cenv params

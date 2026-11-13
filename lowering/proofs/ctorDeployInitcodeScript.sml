@@ -1,9 +1,6 @@
 (* Initcode size bounds for codegen_correct's initial_ctx_rel.
- * TOP-LEVEL: deploy_initcode_bounded (LENGTH code <= 24576; admitted, and
- * false in general: deploy_state_rel bounds neither deploy_bc nor the
- * appended constructor arguments), deploy_initcode_half_bounded (its
- * replacement, LENGTH code <= dimword(:256) DIV 2, which codegen's
- * consumers need).
+ * TOP-LEVEL: deploy_initcode_half_bounded (LENGTH code <= dimword(:256)
+ * DIV 2, which code_layout_valid needs).
  * Helpers: bind_arguments_values_typed, classify_functions_ctor_lookup,
  * constructor_args_size_bounded.
  * The code is deploy_bc ++ args_bytes (deploy_state_rel). deploy_bc is below
@@ -18,17 +15,6 @@ Ancestors
   abiTypeBoundProps vyperTypeABI vyperTyping structFieldsProps
   vyperTypeContractStaticMaps loweringHalt vyperInterpreter vyperABI
   e2eDeployDefs vyperTypeContract option
-
-Theorem deploy_initcode_bounded:
-  !policy tops deploy_bc runtime_bc arts am tx es.
-    deploy_phases policy tops (deploy_bc, runtime_bc) arts /\
-    deploy_source_ok tops am tx /\
-    deploy_state_rel tops deploy_bc am tx es
-    ==>
-    LENGTH (FST (HD es.contexts)).msgParams.code <= 24576
-Proof
-  cheat
-QED
 
 (* Arguments bind_arguments accepts are typed by their parameters' types. *)
 Theorem bind_arguments_values_typed:
@@ -127,7 +113,7 @@ Theorem deploy_initcode_half_bounded:
     LENGTH (FST (HD es.contexts)).msgParams.code <= dimword(:256) DIV 2
 Proof
   rpt strip_tac >>
-  drule deploy_bc_size_bounded >> strip_tac >>
+  drule_all deploy_bc_size_bounded >> strip_tac >>
   gvs[deploy_state_rel_def] >>
   drule_all constructor_args_size_bounded >>
   simp[wordsTheory.dimword_def]

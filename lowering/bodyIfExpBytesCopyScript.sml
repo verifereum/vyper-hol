@@ -81,7 +81,7 @@ Proof
   `stmt_state_rel ctx func cenv cx ee (m with vs_vars := q.vs_vars)` by
     (irule exprSimPropsTheory.stmt_state_rel_vars_frame >>
      fs[loweringPostsTheory.expr_post_def] >> rpt strip_tac >>
-     fs[compileEnvTheory.local_ptrs_reserved_def,
+     fs[loweringStateRelDefsTheory.local_ptrs_reserved_def,
         venomStateTheory.lookup_var_def] >> metis_tac[]) >>
   suspend "post"
 QED
@@ -95,7 +95,7 @@ Resume ifexp_copy_post_transport[post]:
   `!n b sz. local_region cenv ee.scopes q n b sz <=>
              local_region cenv ee.scopes m n b sz` by
     (rpt gen_tac >>
-     fs[compileEnvTheory.local_region_def, compileEnvTheory.local_ptrs_reserved_def] >>
+     fs[loweringStateRelDefsTheory.local_region_def, loweringStateRelDefsTheory.local_ptrs_reserved_def] >>
      metis_tac[]) >>
   `(q with vs_inst_idx := m.vs_inst_idx) = (m with vs_vars := q.vs_vars)` by
     (qpat_x_assum `q with <|vs_vars := _; vs_inst_idx := _|> = m`
@@ -103,10 +103,26 @@ Resume ifexp_copy_post_transport[post]:
      simp_tac (srw_ss()) [venomStateTheory.venom_state_component_equality]) >>
   `stmt_state_rel ctx func cenv cx ee q` by
     metis_tac[exprLoweringPropsTheory.stmt_state_rel_inst_idx] >>
+  `post_value_type cenv e <> expr_type e ==>
+   expr_val_own cenv cx (post_value_type cenv e) origin sb ee v op q` by
+    (strip_tac >>
+     `expr_val_own cenv cx (post_value_type cenv e) origin sb ee v op m` by
+       (qpat_assum `expr_post _ _ _ _ _ _ _ _ _ _ _ _ m` mp_tac >>
+        qpat_assum `post_value_type cenv e <> expr_type e` (fn th =>
+          rewrite_tac[loweringPostsTheory.expr_post_def, th]) >>
+        rpt strip_tac >> first_assum ACCEPT_TAC) >>
+     pop_assum mp_tac >>
+     qpat_assum `eval_operand op q = _` (fn th1 =>
+       qpat_assum `q.vs_allocas = _` (fn th2 =>
+         qpat_assum `!n b sz. local_region _ _ q _ _ _ <=> _` (fn th3 =>
+           rewrite_tac[loweringPostsTheory.expr_val_own_def, th1, th2, th3])))) >>
+  `locals_kept cenv es ee s0 q` by
+    (irule exprSimPropsTheory.locals_kept_mem_tail >>
+     qexists_tac `m` >> fs[loweringPostsTheory.expr_post_def]) >>
   reverse conj_tac
   >- (fs[exprSimMemDefsTheory.vv_store_bound_def, contextTheory.mk_ptr_def]) >>
   fs[loweringPostsTheory.expr_post_def, loweringPostsTheory.expr_val_rel_def,
-     loweringPostsTheory.expr_val_at_def, loweringPostsTheory.locals_kept_def] >>
+     loweringPostsTheory.expr_val_at_def] >>
   conj_tac >- (rpt strip_tac >> first_x_assum drule >> simp[]) >>
   conj_tac
   >- (rpt strip_tac >>
@@ -114,12 +130,7 @@ Resume ifexp_copy_post_transport[post]:
         (irule freshWritesTheory.not_fresh_at_mono >>
          qexists_tac `origin` >> simp[]) >>
       metis_tac[]) >>
-  conj_tac
-  >- (rpt strip_tac >>
-      qpat_x_assum `!aid off sz. FLOOKUP s0.vs_allocas aid = SOME (off,sz) /\ _ ==> _`
-        irule >> conj_tac >- (first_assum ACCEPT_TAC) >>
-      qexists_tac `aid` >> simp[]) >>
-  rpt strip_tac >> qpat_x_assum `!n b sz off len. _` irule >> metis_tac[]
+  gvs[]
 QED
 
 Finalise ifexp_copy_post_transport

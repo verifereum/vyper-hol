@@ -43,7 +43,7 @@ Ancestors
    exprSimHyps exprSimOperators exprSimWordArgs exprLowering
   vyperTypeSystem vyperTyping vyperInterpreter vyperState vyperContext
   exprBopLowering builtinMath builtinMisc builtinSimple arithmeticProps
-  compileEnv exprSimOps freshWrites fragExec varsExt exprLoweringProps
+  compileEnv loweringStateRelDefs exprSimOps freshWrites fragExec varsExt exprLoweringProps
   venomExecSemantics venomState emitHelper emitHelperProps venomInst
   builtinProps
   exprSimNameWord
@@ -573,7 +573,7 @@ Proof
   simp[Once run_inst_seq_def] >>
   simp[stepInstBaseLib.simp_opcode_clause ``MUL``, mk_inst_def, exec_pure2_def, eval_operand_def] >>
   simp[Once run_inst_seq_def] >>
-  simp[stepInstBaseLib.simp_opcode_clause ``Div``, mk_inst_def, exec_pure2_def,
+  simp[stepInstBaseLib.simp_opcode_clause ``venomInst$Div``, mk_inst_def, exec_pure2_def,
        eval_operand_update_var, eval_operand_update_not_fresh] >>
   simp[Once run_inst_seq_def] >>
   simp[stepInstBaseLib.simp_opcode_clause ``EQ``, mk_inst_def, exec_pure2_def,
@@ -617,7 +617,7 @@ Proof
   qspec_then `d` strip_assume_tac denomination_multiplier_bounds >>
   simp[builtin_result_def, evaluate_builtin_def, evaluate_as_wei_value_uint] >>
   Cases_on `w2n a * denomination_multiplier d < dimword (:256)` >>
-  gvs[dimword_def] 
+  gvs[dimword_def]
   >- (irule word_builtin_frag_success >>
       simp[straight_fresh_as_wei_value_int, word_value_def] >>
       rpt strip_tac >>
@@ -792,7 +792,9 @@ Proof
       >- metis_tac[expr_body_pre_type_evaluates]
       >- (rpt strip_tac >> drule_all expr_body_pre_word_result >> simp[]) >>
       rpt strip_tac >> drule_all expr_body_pre_word_result >> rw[]) >>
-  strip_tac >> first_x_assum irule >> metis_tac[]
+  strip_tac >> first_x_assum irule >> qexists_tac `nocalls` >> conj_tac
+  >- (rpt gen_tac >> strip_tac >> first_x_assum irule >> simp[]) >>
+  qpat_x_assum `_ ==> exprs_case _ _ _ _ _ _` irule >> metis_tac[]
 QED
 
 (* The same from expr_sim_ok of each operand, at compile_expr_sim's
@@ -860,7 +862,7 @@ Theorem compile_typed_word_builtin_sim:
     expr_body_pre cenv cx env (Builtin ann bt args) es /\
     EVERY (\e. word_value_type (expr_type e)) args /\
     wb_args_ready ctx func cenv cx arg_ty (expr_sim_inv cenv cx env) args /\
-    bt <> Len /\ bt <> Env MsgGas /\ ~precompile_builtin bt /\
+    bt <> Len /\ bt <> Env MsgGas /\ ~precompile_builtin bt /\ bt <> Bop In /\ bt <> Bop NotIn /\
     builtin_args_length_ok bt (LENGTH args) /\ is_word_type ann /\
     (!sa sb op. lower_value compile_expr cenv ty (Builtin ann bt args) sa = (op,sb) ==>
       ?xs sm. lower_word_args cenv arg_ty args sa = (xs,sm) /\ code xs sm = (op,sb)) /\

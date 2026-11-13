@@ -31,7 +31,7 @@ Proof
     OK (jump_to (u2s_label a (if x = 0 then 4 else 2))
           (v with vs_inst_idx := 1))` by
     (simp[u2s_cond_def, Abbr `v`, u2s_inst_def, mk_inst_def,
-          step_inst_base_def, eval_operand_def, lookup_var_def,
+          step_inst_base_opcode_eqs, eval_operand_def, lookup_var_def,
           update_var_def, FLOOKUP_UPDATE, bool_to_word_def] >>
      Cases_on `x = 0` >> simp[]) >>
   `~v.vs_halted /\ v.vs_current_bb = s.vs_current_bb` by
@@ -271,7 +271,7 @@ Proof
     OK (jump_to (u2s_label a (if X = 0 then 3 else 1))
           (v with vs_inst_idx := 1))` by
     (simp[u2s_check_def, Abbr `v`, u2s_inst_def, mk_inst_def,
-          step_inst_base_def, eval_operand_def, lookup_var_def,
+          step_inst_base_opcode_eqs, eval_operand_def, lookup_var_def,
           update_var_def, FLOOKUP_UPDATE, bool_to_word_def] >>
      Cases_on `X = 0` >> simp[]) >>
   `~v.vs_halted /\ v.vs_current_bb = s.vs_current_bb` by

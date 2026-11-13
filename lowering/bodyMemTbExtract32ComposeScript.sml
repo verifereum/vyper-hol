@@ -197,6 +197,9 @@ Resume compile_extract32_sim_mem[offset_normal]:
 QED
 Resume compile_extract32_sim_mem[suffix_entry]:
   `~(i < 0)` by intLib.ARITH_TAC >>
+  `post_value_type cenv off = expr_type off` by
+    (irule post_value_type_word >>
+     qpat_assum `expr_type off = BaseT _` (fn th => simp[th, is_word_type_def])) >>
   `eval_operand off_op t' = SOME (n2w (Num i))` by
     (qpat_assum `expr_post _ _ _ _ off _ _ _ _ _ _ _ _`
        (strip_assume_tac o REWRITE_RULE [expr_post_def]) >>
@@ -230,8 +233,10 @@ Resume compile_extract32_sim_mem[suffix_entry]:
     (qpat_assum `bind (eval_expr cx src) _ _ = _`
        (mp_tac o MATCH_MP (CONV_RULE (DEPTH_CONV ETA_CONV)
          exprSimWordArgsTheory.forced_eval_expr_preserves_scopes_dom)) >> simp[]) >>
-  `wb_frame cenv es sa s0 t'` by
-    (irule extract32_operands_frame >> simp[] >>
+  `wb_frame cenv es es_end' sa s0 t'` by
+    (`wb_frame cenv es (es_end' with gas_obs := []) sa s0 t'`
+       suffices_by simp[exprSimWordArgsTheory.wb_frame_gas_obs] >>
+     irule extract32_operands_frame >> simp[] >>
      goal_assum (drule_at Any) >> goal_assum (drule_at Any) >> simp[] >>
      goal_assum (drule_at Any)) >>
   `well_formed_type (get_tenv cx) (BaseT bt)` by
@@ -269,7 +274,11 @@ Resume compile_extract32_sim_mem[suffix_success]:
   reverse conj_tac >-
     (qpat_x_assum `expr_post _ _ _ _ (TypeBuiltin _ _ _ _) _ _ _ _ _ _ _ _` mp_tac >>
      simp[expr_post_def, expr_val_at_def, expr_type_def] >>
-     strip_tac >> simp[] >> metis_tac[]) >>
+     strip_tac >> simp[] >> conj_tac >- first_assum ACCEPT_TAC >>
+     qpat_x_assum `locals_kept cenv es es_end' s0 u'` mp_tac >>
+     rpt (pop_assum kall_tac) >>
+     simp[locals_kept_def, popped_kept_def] >>
+     strip_tac >> rpt conj_tac >> first_assum ACCEPT_TAC) >>
   rewrite_tac[extract32_eval_action] >> once_rewrite_tac[bind_assoc] >>
   pure_rewrite_tac[GSYM APPEND_ASSOC] >>
   irule gas_marked_exec_bind_normal >> goal_assum (drule_at Any) >>

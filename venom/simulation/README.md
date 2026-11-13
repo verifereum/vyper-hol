@@ -33,4 +33,4 @@ For an analysis-driven pass:
 ## Dependencies
 
 Uses `stateEquiv`/`execEquiv` from `venom/` for state and result equivalence.
-Uses `worklistProps` from `analysis/dataflow/` for convergence.
+Uses `worklistProofs` from `analysis/dataflow/` for convergence.

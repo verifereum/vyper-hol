@@ -1,7 +1,7 @@
 (* Body-state constructors that preserve the actual owned endpoint. *)
 Theory entryOwnedBodyState
 Ancestors
-  entryOwnedSourceLocals entryRuntimeStateBoundary entryRuntimePackageLayout
+  entryOwnedSourceLocals entryRuntimeStateBoundary entryRuntimePackageLayout loweringStateRelDefs
   entryOwnedBodyResources entryRuntimeContextCode entryOwnedEndpointObservations
   exprLoweringProps abiAllocationHistory compileEnv compileVyper moduleLowering
   entryStateRel e2eDefs vyperContext vyperState vyperInterpreter
@@ -17,7 +17,8 @@ Theorem owned_runtime_stmt_resources[local]:
   stmt_state_rel ctx fn ce cx es out
 Proof
   strip_tac >>
-  simp[stmt_state_rel_def, immutable_alloca_sep_def, immutable_base_zero_def] >>
+  simp[stmt_state_rel_def, immutable_alloca_sep_def, immutable_decl_sep_def,
+       immutable_base_zero_def] >>
   rpt strip_tac >> drule_all abi_alloca_history_function_size >> simp[]
 QED
 
@@ -98,7 +99,7 @@ Theorem source_selected_owned_body_state:
   fn_entry_label efn = SOME elbl ==>
   ?lbl ce pa mc pay key tr view rt sc sk cer registered completed t out.
     set_external_package_target rp.rpol_target
-      (package_external_fn tops F (assign_nkeys tops 0)
+      (package_external_fn tops T (K global_nonreentrant_slot)
         (mut,F,lookup_raw_return_or_F (NONE : num option)
           tx.function_name External tops,tx.function_name,args,([] : expr list),ret,fbody)) =
       (lbl,ce,pa,mc,pay,F,key,tr,view,fbody,rt) /\

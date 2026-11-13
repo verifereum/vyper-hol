@@ -329,7 +329,7 @@ Proof
   drule collect_static_allocas_ALL_DISTINCT >> simp[]
 QED
 
-Theorem ALL_DISTINCT_MAP_FST_size_unique[local]:
+Theorem ALL_DISTINCT_MAP_FST_size_unique:
   !items alloc sz1 sz2.
     ALL_DISTINCT (MAP FST items) /\
     MEM (alloc,sz1) items /\ MEM (alloc,sz2) items ==>

@@ -12,8 +12,8 @@ Ancestors
   venomExecSemantics venomState compileEnv e2eDefs supportedProgram
   compileVyper unitTransformDefs fragExec loweringHalt venomInst venomWf
   contextCodegenRel memSafeRun allocaFrontierBound o1PassContract ptrDiscipline
-  vyperLoweringCorrect loweringRuntimeCorrect fragExecMem bodyMemoryDefs
-  entryHaltMem loweringPtrCorrect bodySim bodySimMain moduleLowering
+  vyperLoweringCorrect fragExecMem bodyMemoryDefs
+  entryHaltMem bodySim bodySimMain moduleLowering
   stmtLowering vyperTypeSystem vyperState lowerDloadDefs
   externalReturnFrameMem runFromGasPathMem gasOutcome gasSummary
   gasSummaryCompose gasContext fragGasMode fragGasPath fragGasPathMem
@@ -141,36 +141,35 @@ Theorem return_value_counted_mem[local]:
      t.vs_inst_idx = LENGTH s1.cs_current_insts /\
      alloca_history func t /\ s0.vs_alloca_next <= t.vs_alloca_next /\
      ~t.vs_halted ==>
-     (?fuel r. run_from fuel ctx func t = r /\ exit_result r /\
-              mem_safe_run fuel ctx func t) \/
-     stmt_frag_mem d ctx func cx lctx (\v es r. T) cenv
-       (stmt_env cenv lctx ty (Return (SOME e))) (eval_stmt cx (Return (SOME e))) es) ==>
+     ?fuel r. run_from fuel ctx func t = r /\ exit_result r /\
+              mem_safe_run fuel ctx func t) ==>
   stmt_frag_mem d ctx func cx lctx (\v es r. T) cenv
     (stmt_env cenv lctx ty (Return (SOME e))) (eval_stmt cx (Return (SOME e))) es
 Proof
-  strip_tac >>
-  Cases_on `stmt_frag_mem d ctx func cx lctx (\v es r. T) cenv
-    (stmt_env cenv lctx ty (Return (SOME e))) (eval_stmt cx (Return (SOME e))) es`
-  >- simp[] >>
-  pop_assum (fn th => RULE_ASSUM_TAC (REWRITE_RULE [th])) >>
-  simp[stmt_frag_mem_def] >> rpt gen_tac >> strip_tac >>
+  strip_tac >> simp[stmt_frag_mem_def] >> rpt gen_tac >> strip_tac >>
   Cases_on `lower_value compile_expr cenv ty e sa` >> rename1 `_ = (op, s1)` >>
   `cs_extends s1 sb` by metis_tac[] >>
   `cs_extends sa s1` by
     metis_tac[ci_mono_compile_expr_sa, ci_mono_def, pairTheory.SND] >>
   `fn_has_code sa s1 func` by metis_tac[fn_has_code_split] >>
   `expr_sim_mem ctx func cenv cx ty e es` by fs[] >>
-  `gas_admissible (bind (eval_expr cx e) (read_result cx)) expr_res_ok es` by
-    metis_tac[return_forced_admissible] >>
+  drule (GEN_ALL return_forced_admissible) >> strip_tac >>
   qpat_x_assum `expr_sim_mem _ _ _ _ _ _ _`
     (mp_tac o REWRITE_RULE [expr_sim_mem_def]) >>
   disch_then (qspecl_then [`sa`, `s1`, `op`, `s0`] mp_tac) >>
   impl_tac >- fs[] >>
   simp[gas_outcome_def] >> strip_tac
   >- (drule return_value_summary_mem >> impl_tac
-      >- (rpt strip_tac >> first_x_assum irule >> fs[] >> metis_tac[]) >>
-      metis_tac[]) >>
-  qexists_tac `marks` >> disj2_tac >> metis_tac[return_forced_exempt]
+      >- (map_every qx_gen_tac [`ee`, `v`, `t`] >> strip_tac >>
+          qpat_x_assum `!sa sb cenv'' s0 op s1 ee v t. _`
+            (qspecl_then [`sa`, `sb`, `cenv'`, `s0`, `op`, `s1`, `ee`, `v`, `t`] mp_tac) >>
+          asm_rewrite_tac[] >>
+          impl_tac >- (qexistsl [`gs`, `ee'`] >> first_assum ACCEPT_TAC) >>
+          disch_then ACCEPT_TAC) >>
+      strip_tac >>
+      qpat_x_assum `!Q. _` mp_tac >> POP_ASSUM_LIST (K ALL_TAC) >> metis_tac[]) >>
+  drule (GEN_ALL return_forced_exempt) >> strip_tac >>
+  qexists_tac `marks` >> disj2_tac >> goal_assum (drule_at Any)
 QED
 
 (* ===== The frame's returns (#640) ===== *)
@@ -194,7 +193,7 @@ Theorem external_frame_ret_ok_mem:
       SOME (mut, F, args, [], ret, fbody) /\
     bind_arguments (type_env tops) args tx.args = SOME env /\
     set_external_package_target rpolicy.rpol_target
-      (package_external_fn tops F (assign_nkeys tops 0)
+      (package_external_fn tops T (K global_nonreentrant_slot)
          (mut, F, lookup_raw_return_or_F (NONE : num option)
                      tx.function_name External tops,
           tx.function_name, args, [], ret, fbody)) =
@@ -206,17 +205,32 @@ Theorem external_frame_ret_ok_mem:
       (\v es r. T) cenv ret
 Proof
   rpt gen_tac >> strip_tac >>
-  drule_all external_frame_ret_run_mem >> strip_tac >>
-  simp[frame_ret_ok_mem_def] >> rpt gen_tac >> strip_tac >>
+  qspecl_then [`tops`, `rpolicy`, `unit`, `am`, `tx`, `ret`, `vs`, `mut`,
+               `args`, `fbody`, `env`, `lbl`, `cenv0`, `pos_args`, `min_cds`,
+               `is_payable`, `nkey`, `ut'`, `iv`, `rt`, `st`, `cenv`, `sa`,
+               `func`] mp_tac external_frame_ret_run_mem >>
+  asm_rewrite_tac[] >> strip_tac >>
+  simp[frame_ret_ok_mem_def] >>
+  map_every qx_gen_tac [`cenv'`, `env'`, `lctx`, `eo`, `es`] >> strip_tac >>
   Cases_on `eo`
-  >- (irule return_none_counted_mem >> rpt strip_tac >>
-      qpat_x_assum `!func. _` (qspec_then `func` (irule o cj 2)) >>
-      metis_tac[]) >>
-  rename1 `Return (SOME e)` >> irule return_value_counted_mem >>
+  >- (irule return_none_counted_mem >>
+      map_every qx_gen_tac [`sa'`, `sb`, `s0`, `cenv''`] >> strip_tac >>
+      qpat_x_assum `!cenv' env lctx es sa sb cenv'' s0. _`
+        (qspecl_then [`cenv'`, `env'`, `lctx`, `es`, `sa'`, `sb`, `cenv''`, `s0`] mp_tac) >>
+      asm_rewrite_tac[]) >>
+  rename1 `Return (SOME e)` >> match_mp_tac return_value_counted_mem >>
   rpt conj_tac
-  >- metis_tac[]
-  >- (rpt strip_tac >>
-      qpat_x_assum `!func. _` (qspec_then `func` (irule o cj 3)) >>
-      metis_tac[])
-  >> metis_tac[]
+  >- simp[]
+  >- (map_every qx_gen_tac [`sa'`, `sb`, `cenv''`, `op`, `s1`] >> strip_tac >>
+      qpat_x_assum `!cenv' lctx e sa sb cenv'' op s1. _`
+        (qspecl_then [`cenv'`, `lctx`, `e`, `sa'`, `sb`, `cenv''`, `op`, `s1`] mp_tac) >>
+      asm_rewrite_tac[])
+  >> map_every qx_gen_tac [`sa'`, `sb`, `cenv''`, `s0`, `op`, `s1`, `ee`, `v`, `t`] >>
+     strip_tac >>
+     qpat_x_assum `!cenv' env lctx e es sa sb cenv'' s0 op s1 ee v t. _`
+       (qspecl_then [`cenv'`, `env'`, `lctx`, `e`, `es`, `sa'`, `sb`, `cenv''`,
+                     `s0`, `op`, `s1`, `ee`, `v`, `t`] mp_tac) >>
+     asm_rewrite_tac[] >>
+     impl_tac >- (qexistsl [`gs`, `ee'`] >> first_assum ACCEPT_TAC) >>
+     disch_then ACCEPT_TAC
 QED

@@ -34,7 +34,7 @@ Ancestors
   venomExecSemantics venomState venomInst fcgDefs livenessDefs dfgDefs
   venomWf venomEffects stackPlanOps asmIR frameViewFacts finite_map
   callLayoutDefs fmpWfDefs list rich_list pred_set reorderSim planWf stackModel
-  regularMemorySim fcgPostorder contextPlanLayoutProps fmpLowerProps generatedPrefixSim allocMono
+  regularMemorySim fcgPostorder contextPlanLayoutProps fmpLowerProps generatedPrefixSim allocMono spillPlanSim
 
 Theorem invoke_source_ok:
   inst.inst_opcode = INVOKE /\

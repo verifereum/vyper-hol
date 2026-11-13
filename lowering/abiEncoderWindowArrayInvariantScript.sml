@@ -100,7 +100,7 @@ Proof
   `mem_bytes_at slot 32 t.vs_memory = mem_bytes_at slot 32 s.vs_memory` by
     (irule abi_encoder_window_effect_parent >>
      metis_tac[window_array_transition_effect, window_array_transition_resources]) >>
-  fs[valueEncodingTheory.mem_word_at_def, GSYM valueEncodingTheory.mem_bytes_at_def]
+  fs[valueEncodingDefsTheory.mem_word_at_def, GSYM valueEncodingDefsTheory.mem_bytes_at_def]
 QED
 
 Definition window_array_root_def:

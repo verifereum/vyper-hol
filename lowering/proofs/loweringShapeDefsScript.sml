@@ -39,7 +39,7 @@
  *)
 Theory loweringShapeDefs
 Ancestors
-  list rich_list compileEnv emitHelper emitHelperProps fragExec venomInst
+  list rich_list compileEnv loweringStateRelDefs emitHelper emitHelperProps fragExec venomInst
   unitShapeDefs
 
 (* ===== Code held by a compile state ===== *)

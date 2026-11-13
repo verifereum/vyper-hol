@@ -29,7 +29,7 @@ Theorem source_selected_guarded_code:
   lookup_function "__entry" u.cu_context.ctx_functions = SOME efn ==>
   ?lbl ce pa mc pay key tr view rt sd cenv sa se.
     set_external_package_target rp.rpol_target
-      (package_external_fn tops F (assign_nkeys tops 0)
+      (package_external_fn tops T (K global_nonreentrant_slot)
         (mut,F,lookup_raw_return_or_F (NONE : num option)
           tx.function_name External tops,tx.function_name,args,([] : expr list),ret,fbody)) =
       (lbl,ce,pa,mc,pay,F,key,tr,view,fbody,rt) /\
@@ -47,7 +47,7 @@ Proof
      gvs[supported_program_def, supported_declaration_headers_def]) >>
   drule_all lower_runtime_selected_source_packages >> strip_tac >>
   qabbrev_tac `pkg = set_external_package_target rp.rpol_target
-    (package_external_fn tops F (assign_nkeys tops 0)
+    (package_external_fn tops T (K global_nonreentrant_slot)
       (mut,F,lookup_raw_return_or_F (NONE : num option)
         tx.function_name External tops,tx.function_name,args,([] : expr list),ret,fbody))` >>
   `MEM pkg exts` by

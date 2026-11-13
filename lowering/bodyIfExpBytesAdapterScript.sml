@@ -1,6 +1,6 @@
 Theory bodyIfExpBytesAdapter
 Ancestors
-  bodyIfExpDestination bodyIfExpBytesCopy exprSimIfExp exprSimWordArgs
+  bodyIfExpDestination bodyIfExpBytesCopy exprSimIfExp exprSimWordArgs loweringStateRelDefs
   exprSimHash exprSimAggregateSource exprLoweringProps fragExec compileEnv
   exprOperandVar freshWrites exprSimMemDefs loweringPosts venomState
   bodyMemAssignAttrStorage exprSimPrecompiles valueCopy exprSimProps
@@ -16,13 +16,13 @@ Proof
 QED
 
 Theorem ifexp_copy_frame[local]:
-  wb_frame ce es origin s0 s /\ stmt_state_rel ctx func ce cx ee s /\
+  wb_frame ce es ee origin s0 s /\ stmt_state_rel ctx func ce cx ee s /\
   local_ptrs_reserved ce origin /\ MAP FDOM es.scopes = MAP FDOM ee.scopes /\
   FLOOKUP s.vs_allocas aid = SOME (dst,cap) /\ origin.cs_next_id <= aid /\
   len <= cap /\
   (!name b k. local_region ce ee.scopes s name b k ==>
      regions_disjoint dst cap b k) ==>
-  wb_frame ce es origin s0 (mcopy dst src len s)
+  wb_frame ce es ee origin s0 (mcopy dst src len s)
 Proof
   strip_tac >> irule wb_frame_allocating_tail >>
   conj_tac >- simp[] >>
@@ -30,7 +30,7 @@ Proof
   conj_tac
   >- (rpt strip_tac >> irule mem_bytes_at_mcopy_disjoint >>
       first_x_assum drule >>
-      simp[compileEnvTheory.regions_disjoint_def] >> decide_tac) >>
+      simp[loweringStateRelDefsTheory.regions_disjoint_def] >> decide_tac) >>
   conj_tac
   >- simp[venomStateTheory.lookup_var_def,
           venomExecSemanticsTheory.mcopy_def,
@@ -40,7 +40,7 @@ Proof
     (irule state_allocations_disjoint >> goal_assum (drule_at Any) >>
      qexists_tac `aid` >> simp[] >> goal_assum (drule_at Any)) >>
   irule mem_bytes_at_mcopy_disjoint >>
-  fs[compileEnvTheory.regions_disjoint_def] >> decide_tac
+  fs[loweringStateRelDefsTheory.regions_disjoint_def] >> decide_tac
 QED
 
 Theorem ifexp_bytestring_adapter_path_mem:
@@ -67,7 +67,10 @@ Theorem ifexp_bytestring_adapter_path_mem:
     u.vs_inst_idx = LENGTH sb.cs_current_insts /\
     alloca_history func u /\ s0.vs_alloca_next <= u.vs_alloca_next
 Proof
-  strip_tac >> drule_all ifexp_bytestring_adapter_parts >> strip_tac >>
+  strip_tac >>
+  `post_value_type ce e = expr_type e` by
+    metis_tac[loweringPostsTheory.post_value_type_bytestring] >>
+  drule_all ifexp_bytestring_adapter_parts >> strip_tac >>
   `ci_mono sa sm /\ ci_mono sm sn /\ ci_mono sn sb` by
     metis_tac[ci_mono_compile_alloc_buffer, ci_mono_unwrap_value,
               ci_mono_compile_store_bytestring, pairTheory.SND] >>
@@ -84,7 +87,8 @@ QED
 
 Resume ifexp_bytestring_adapter_path_mem[copy]:
   `expr_val_rel cx t v src u /\ stmt_state_rel ctx func ce cx ee u` by
-    (fs[expr_post_def] >> metis_tac[]) >>
+    (qpat_assum `post_value_type ce e = _` (fn th => fs[expr_post_def, th]) >>
+     metis_tac[]) >>
   drule_all ifexp_copy_source_bounds >> strip_tac >>
   `!z. src = Var z ==> not_fresh_at sn z` by
     (drule compiler_unwrap_value_var >>
@@ -123,10 +127,12 @@ Resume ifexp_bytestring_adapter_path_mem[endpoint]:
     (irule expr_post_rebased_compose_mem_src >> goal_assum (drule_at Any) >>
      simp[] >> goal_assum (drule_at Any) >> simp[] >>
      metis_tac[]) >>
-  `wb_frame ce es origin s0 u` by metis_tac[expr_post_frame] >>
-  `wb_frame ce es origin s0 (mcopy (w2n d) (w2n w) (32 + 32 * word_size len) u)` by
+  `wb_frame ce es ee origin s0 u` by metis_tac[expr_post_frame] >>
+  `wb_frame ce es ee origin s0 (mcopy (w2n d) (w2n w) (32 + 32 * word_size len) u)` by
     (irule ifexp_copy_frame >> goal_assum (drule_at Any) >>
-     simp[] >> goal_assum (drule_at Any) >> simp[] >>
+     simp[] >> reverse conj_tac
+     >- (qexistsl_tac [`ctx`, `cx`, `func`] >> simp[]) >>
+     goal_assum (drule_at Any) >> simp[] >>
      goal_assum (drule_at Any) >> simp[] >>
      qexists_tac `sa.cs_next_id` >> simp[]) >>
   `MEM (mk_inst sa.cs_next_id ALLOCA [Lit (n2w (type_memory_bytes ce t))]
@@ -147,7 +153,8 @@ QED
 
 Resume ifexp_bytestring_adapter_path_mem[canonical]:
   `evaluate_type (get_tenv cx) (expr_type e) = SOME tvt` by simp[] >>
-  drule_at (Pat `wb_frame _ _ _ _ _`) ifexp_copy_endpoint >>
+  drule_at (Pat `wb_frame _ _ _ _ _ _`) ifexp_copy_endpoint >>
+  disch_then (drule_at (Pat `post_value_type _ _ = _`)) >>
   disch_then (drule_at (Pat `MEM _ (fn_insts _)`)) >>
   disch_then (drule_at (Pat `read_result _ _ _ = _`)) >>
   disch_then (drule_at (Pat `evaluate_type _ _ = _`)) >>

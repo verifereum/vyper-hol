@@ -1,7 +1,7 @@
 (* Source allocation followed by the checked Log store/encode continuation. *)
 Theory stmtLogPrepareMemory
 Ancestors
-  stmtLogStoreEncodeMemory stmtSimLogSourceAllocate stmtLogSuffixStageMemory
+  stmtLogStoreEncodeMemory stmtSimLogSourceAllocate stmtLogSuffixStageMemory loweringStateRelDefs
   stmtSimLogStoreEncode stmtSimLogDataRun abiEncoderCounters abiDecoderReentry
   exprLoweringProps localPtrsProps emitHelperProps stmtSimLogAllocate compileEnv
   fragExec fragExecMem venomMemDefs abiBuiltinAllocation words list arithmetic

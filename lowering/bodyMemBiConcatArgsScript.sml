@@ -67,7 +67,7 @@ Theorem concat_args_sim_mem:
             (!name lo sz. local_region cenv es.scopes s0 name lo sz ==>
                           p + n <= lo \/ lo + sz <= p) ==>
             mem_bytes_at p n t.vs_memory = mem_bytes_at p n s0.vs_memory) /\
-         locals_kept cenv es s0 t /\ alloca_history func t /\
+         locals_kept cenv es ee s0 t /\ alloca_history func t /\
          s0.vs_alloca_next <= t.vs_alloca_next)
       (\rr ee r. ?exc. rr = INR exc /\
          expr_exit (INR exc : eval_result + exception) r)

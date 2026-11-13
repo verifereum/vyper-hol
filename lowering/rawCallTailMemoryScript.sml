@@ -5,17 +5,18 @@ Ancestors
   rawCallFinishPostMemory exprSimRawCall exprSimRawCallCalldata exprSafeOperand localPtrsProps
   exprSimProps exprLoweringProps exprSimMemDefs fragGasPathMem builtinSystem
   emitHelperProps fragExec compileEnv loweringPosts venomState venomExecSemantics
-  vyperTypeSystem valueEncoding words finite_map list
+  vyperTypeSystem valueEncoding words finite_map list loweringStateRelDefs
 Libs
   monadsyntax
 
 Theorem raw_call_outbuf_tail_mem:
+  expr_has_effect e /\
   compile_raw_call_outbuf cap sa = ((ov,op),sm) /\
   compile_raw_call_finish to_op dp dl gas_op val_op
     (if stat then StaticCall else RegularCall) cap flags.rcf_revert_on_failure ov op sm = (result,sb) /\
   stmt_state_rel ctx func cenv cx es s /\ local_ptrs_reserved cenv sa /\
   fn_has_code sa sb func /\ fn_inst_ids_distinct func /\
-  ci_mono initial sa /\ wb_frame cenv initial_es initial s0 s /\
+  ci_mono initial sa /\ wb_frame cenv initial_es es initial s0 s /\
   stmt_state_rel ctx func cenv cx initial_es s0 /\ local_ptrs_reserved cenv initial /\
   MAP FDOM initial_es.scopes = MAP FDOM es.scopes /\
   eval_operand gas_op s = SOME gas /\ eval_operand to_op s = SOME aw /\
@@ -159,7 +160,7 @@ Resume raw_call_outbuf_tail_mem[tuple]:
     (mp_then (Pat `expr_type _ = _`) mp_tac raw_call_nonrevert_positive_path_mem) >>
   simp[arithmeticTheory.GREATER_DEF, arithmeticTheory.MULT_COMM] >>
   disch_then (drule_at (Pat `stmt_state_rel _ _ _ _ _ t`)) >>
-  disch_then (drule_at (Pat `wb_frame _ _ _ _ t`)) >>
+  disch_then (drule_at (Pat `wb_frame _ _ _ _ _ t`)) >>
   disch_then (drule_at (Pat `do _ od _ = (_,_)`)) >>
   disch_then (drule_at (Pat `MEM _ (fn_insts _)`)) >>
   disch_then (drule_at (Pat `eval_operand ov t = _`)) >>
@@ -199,7 +200,7 @@ Resume raw_call_outbuf_tail_mem[revert_normal]:
   `stmt_state_rel ctx func cenv cx (SND (adopt_call_outcome rq outcome es1)) u` by
     (irule raw_call_finish_state_rel_aged >>
      qexistsl_tac [`0w`,`0`,`0w`,`sc`,`t`] >> simp[]) >>
-  `wb_frame cenv initial_es initial s0 u` by
+  `wb_frame cenv initial_es (SND (adopt_call_outcome rq outcome es1)) initial s0 u` by
     (irule raw_call_finish_frame_aged >>
      qexistsl_tac [`0w`,`0`,`0w`,`sc`,`t`] >> simp[]) >>
   `flags.rcf_max_outsize = 0` by decide_tac >>
@@ -216,7 +217,7 @@ Resume raw_call_outbuf_tail_mem[revert_bytes]:
     w2n w + (32*((flags.rcf_max_outsize+31) DIV 32)+32) <= lb \/ lb+lsz <= w2n w` by
     (rpt strip_tac >>
      `regions_disjoint (w2n w) (32*((flags.rcf_max_outsize+31) DIV 32)+32) lb lsz`
-       suffices_by simp[compileEnvTheory.regions_disjoint_def] >>
+       suffices_by simp[loweringStateRelDefsTheory.regions_disjoint_def] >>
      irule local_ptrs_rel_alloca_disjoint >>
      goal_assum (drule_at (Pat `MEM _ (fn_insts _)`)) >>
      goal_assum (drule_at (Pat `local_region _ _ _ _ _ _`)) >>
@@ -227,7 +228,7 @@ Resume raw_call_outbuf_tail_mem[revert_bytes]:
        `n2w (MIN (LENGTH outcome.co_returnData) flags.rcf_max_outsize)`,`sc`,`t`] >>
      simp[] >> qexistsl_tac [`alloc`,`w2n w`,
        `32*((flags.rcf_max_outsize+31) DIV 32)+32`] >> gvs[] >> metis_tac[]) >>
-  `wb_frame cenv initial_es initial s0 u` by
+  `wb_frame cenv initial_es (SND (adopt_call_outcome rq outcome es1)) initial s0 u` by
     (irule (INST_TYPE [alpha |-> ``:256``] raw_call_finish_frame_aged) >>
      qexistsl_tac [`w`,`flags.rcf_max_outsize`,
        `n2w (MIN (LENGTH outcome.co_returnData) flags.rcf_max_outsize)`,`sc`,`t`] >>

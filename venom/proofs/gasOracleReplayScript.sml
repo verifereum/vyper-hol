@@ -441,15 +441,11 @@ QED
 Theorem gas_exec_delegatecall:
   gas_replay_at 0 (\u. exec_delegatecall inst u gas addr ao az ro rz) s
 Proof
-  simp[gas_replay_at_def, exec_delegatecall_def, gas_extract_result] >>
-  gen_tac >>
-  qmatch_goalsub_abbrev_tac `extract_venom_result s 1w (w2n ro) (w2n rz) res` >>
-  Cases_on `extract_venom_result s 1w (w2n ro) (w2n rz) res` >>
-  simp[lift_result_def] >>
-  PairCases_on `x` >> simp[] >>
+  simp[gas_replay_at_def, exec_delegatecall_def, Excl "consume_call_outcome_eq"] >>
+  gen_tac >> pairarg_tac >> simp[Excl "consume_call_outcome_eq"] >>
   namedCases_on `inst.inst_outputs` ["", "out outs"] >> simp[lift_result_def] >>
   Cases_on `outs` >> simp[lift_result_def] >>
-  metis_tac[gas_extract_result_readings]
+  metis_tac[gas_consume_outcome_readings, pairTheory.SND]
 QED
 
 Theorem gas_exec_create:

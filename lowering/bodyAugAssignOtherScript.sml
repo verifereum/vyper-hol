@@ -160,7 +160,7 @@ Proof
   first_x_assum drule >> strip_tac >> simp[]
 QED
 
-Theorem augassign_rhs_pre[local]:
+Theorem augassign_rhs_pre:
   body_inv tops ctx cenv cx /\ supported_expr tops e /\
   expr_sim_inv cenv cx env es /\
   type_stmt env ret_ty (AugAssign ty t bop e) = SOME env' /\
@@ -172,7 +172,7 @@ Theorem augassign_rhs_pre[local]:
 Proof
   rpt strip_tac >>
   drule supported_expr_body_calls >> strip_tac >>
-  gvs[type_stmt_def, stmt_exprs_ok_def, supported_stmt_expr_exists_def,
+  gvs[type_stmt_def, stmt_exprs_ok_flat, supported_stmt_expr_exists_def,
       int_calls_stmt_def, AllCaseEqs()] >>
   irule stmt_expr_body_pre >>
   fs[body_inv_def, gasContextTheory.cx_tops_def] >>
@@ -195,7 +195,7 @@ Proof
   metis_tac[body_expr_ok_case]
 QED
 
-Theorem augassign_toplevel_metadata[local]:
+Theorem augassign_toplevel_metadata:
   body_inv tops ctx cenv cx /\
   supported_aug_target tops bindings (TopLevelNameTarget (src,id)) /\
   expr_sim_inv cenv cx env es /\
@@ -236,7 +236,8 @@ Proof
    well_typed_binop ty bop ty (expr_type e) /\ bop <> In /\ bop <> NotIn /\
    (bop = Exp ==> nonneg_int_literal e) /\
    (bop = ShL ==> shift_amount_ok e) /\ (bop = ShR ==> shift_amount_ok e)` by
-    gvs[type_stmt_def, well_typed_target_def, DISJ_IMP_THM, AllCaseEqs()] >>
+    (gvs[type_stmt_def, well_typed_target_def, DISJ_IMP_THM, AllCaseEqs()] >>
+     metis_tac[stmtSimAugAssignTheory.augassign_operand_ok_operands]) >>
   `FLOOKUP env.bare_global_assignable (NONE,id) = NONE` by
     (Cases_on `FLOOKUP env.bare_global_assignable (NONE,id)` >> simp[] >>
      drule_all aug_assignable_find_NONE >> strip_tac >> gvs[]) >>
@@ -265,7 +266,7 @@ Proof
             aug_place_supported_root_not_immutable]
 QED
 
-Theorem augassign_target_pre[local]:
+Theorem augassign_target_pre:
   body_inv tops ctx cenv cx /\
   supported_stmt tops bindings (AugAssign ty t bop e) /\
   ((?b fld. t = AttributeTarget b fld) \/ (?b k. t = SubscriptTarget b k)) /\
@@ -280,14 +281,15 @@ Proof
   `?pt. supported_target_info tops bindings t = SOME pt` by
     metis_tac[aug_place_supported_stmt_target_info] >>
   irule aug_place_target_indices_pre >>
-  gvs[type_stmt_def, well_typed_target_def, stmt_exprs_ok_def,
+  gvs[type_stmt_def, well_typed_target_def, stmt_exprs_ok_flat,
+      allocLimitsTheory.alloc_limits_stmt_def,
       supported_stmt_expr_exists_def, int_calls_stmt_def, AllCaseEqs()] >>
   fs[body_inv_def] >>
   metis_tac[vyperTypeCallStackSoundnessTheory.call_evaluation_safe_append_left,
             optionTheory.IS_SOME_EXISTS]
 QED
 
-Theorem augassign_toplevel_success[local]:
+Theorem augassign_toplevel_success:
   body_inv tops ctx cenv cx /\
   supported_aug_target tops bindings (TopLevelNameTarget (src,id)) /\
   expr_sim_inv cenv cx env es /\
@@ -339,6 +341,7 @@ Proof
   `expr_sim_case F ctx func cenv cx e` by
     metis_tac[body_expr_ok_case] >>
   drule_all augassign_toplevel_metadata >> strip_tac >>
+  `augassign_operand_ok ty bop e` by gvs[type_stmt_def, AllCaseEqs()] >>
   irule compile_augassign_toplevel_case >>
   simp[] >> metis_tac[]
 QED

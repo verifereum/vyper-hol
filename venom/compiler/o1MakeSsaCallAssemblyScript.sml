@@ -3,6 +3,7 @@ Ancestors
   o1MakeSsaEventOwnership o1MakeSsaEventFrames o1ContractSueStep
   o1MakeSsaVisitTrace o1MakeSsaCallBlockBridge venomWf venomExecProps
   unitShapeDefs fmpStepList list pred_set
+  venomWfProps
 
 Theorem mssa_well_formed_phi_split:
   bb_well_formed bb ==>

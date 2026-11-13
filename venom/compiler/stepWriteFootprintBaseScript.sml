@@ -7,24 +7,13 @@ Ancestors
   contextRawReachable contextCodegenRel venomExecProofs calleeTransport
   venomInstProofs venomInst regularCallEmitSim codegenRel venomState spillSim
   venomExecSemantics venomCallOracleDefs venomInstProofs3 venomEffects opcodeClass
-  venomMemProps
+  venomMemProps contextCodegenRelProps
 
 Theorem raw_reachable_active:
   !vs0 ctx fn inst s.
     raw_reachable vs0 ctx fn inst s ==> active_inst fn inst s
 Proof
   ho_match_mp_tac raw_reachable_ind >> simp[]
-QED
-
-Theorem lookup_instruction_active:
-  lookup_block s.vs_current_bb fn.fn_blocks = SOME bb /\
-  get_instruction bb s.vs_inst_idx = SOME inst ==>
-  active_inst fn inst s
-Proof
-  strip_tac >> drule lookup_block_MEM >> strip_tac >>
-  drule lookup_block_label >> strip_tac >>
-  gvs[get_instruction_def, AllCaseEqs()] >>
-  simp[active_inst_def] >> qexists_tac `bb` >> simp[]
 QED
 
 Theorem enters_block_memory:
@@ -130,10 +119,9 @@ Theorem exec_delegatecall_byte_frame:
   ~(w2n ro <= i /\ i < w2n ro + w2n rz) ==>
   read_byte i t.vs_memory = read_byte i s.vs_memory
 Proof
-  strip_tac >>
-  qpat_x_assum `exec_delegatecall _ _ _ _ _ _ _ _ = _` mp_tac >>
-  simp[exec_delegatecall_def, AllCaseEqs()] >> strip_tac >>
-  gvs[update_var_def] >> metis_tac[extract_venom_result_byte_frame]
+  simp[exec_delegatecall_def, consume_call_outcome_eq] >>
+  strip_tac >> gvs[AllCaseEqs(), update_var_def] >>
+  irule write_memory_byte_frame >> qexists_tac `w2n rz` >> simp[listTheory.LENGTH_TAKE_EQ]
 QED
 
 Theorem exec_create_byte_frame:

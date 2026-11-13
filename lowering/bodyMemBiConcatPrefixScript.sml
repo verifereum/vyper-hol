@@ -2,7 +2,7 @@
    that initialize concat's result buffer and offset scratch. *)
 Theory bodyMemBiConcatPrefix
 Ancestors
-  bodyMemAggregateAlloc bodyMemEmitOpFrame bodyDeclWordMemory
+  bodyMemAggregateAlloc bodyMemEmitOpFrame bodyDeclWordMemory loweringStateRelDefs
   exprSimConcatResult fragExec context emitHelper emitHelperProps
   exprLoweringProps loweringHalt compileEnv list rich_list
   fragGasMode fragGasPathMem venomMemProps freshWrites exprSimAlloc

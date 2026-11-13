@@ -70,8 +70,8 @@ Proof
 QED
 
 Theorem log_success_suffix_mem_ok:
-  ce.ce_event_info (nsid_to_string id) = SOME (h,tys,flags) /\
-  compile_log_eval_all ce args sa = (xs,sm) /\
+  ce.ce_event_info (nsid_to_string id) = SOME (h,MAP SND xs,flags) /\
+  log_eval_view ce args sa xs sm /\
   compile_log_topic_ops (FST (split_log_ops xs flags)) sm = (ops,st) /\
   compile_stmt ce lctx ty (Log id args) sa = ((),sb) /\
   stmt_state_rel ctx func ce cx es s /\ local_ptrs_reserved ce sm /\
@@ -183,7 +183,7 @@ Resume log_success_suffix_mem_ok[data]:
      `?w. eval_operand (FST arg) s = SOME w` by
        (Cases_on `arg` >> fs[log_arg_rel_def, expr_val_rel_def]) >>
      simp[] >> irule log_frame_operand >>
-     qpat_assum `wb_frame ce es sm s u` (irule_at Any) >> simp[]) >>
+     qpat_assum `wb_frame ce es es sm s u` (irule_at Any) >> simp[]) >>
   `s.vs_alloca_next <= u.vs_alloca_next` by simp[] >>
   drule_all log_mem_selected_rounded >> strip_tac >>
   suspend "prepare"

@@ -8,7 +8,7 @@ Ancestors
 
 Theorem calldata_valid_array_inputs:
   abi_decoder_valid_pre ce env sf (ArrayT ty (Dynamic maxn)) (ArrayTV tv (Dynamic maxn))
-    bs (ArrayV (DynArrayV vs)) st src dst CALLDATALOAD (Lit 0w) sb d b cap initial ==>
+    bs (ArrayV (DynArrayV vs)) st src dst CALLDATALOAD (Lit 0w) (Lit 0w) 0 sb d b cap initial ==>
   eval_operand src initial = SOME (n2w sb) /\
   abi_decode_load CALLDATALOAD (n2w sb : bytes32) initial = n2w (LENGTH vs) /\
   LENGTH vs <= maxn /\ LENGTH vs < dimword (:256) /\
@@ -21,6 +21,7 @@ Proof
   drule_all abi_decoder_valid_array_init_inputs >>
   disch_then (map_every assume_tac o CONJUNCTS) >>
   `LENGTH vs < dimword (:256)` by metis_tac[LESS_EQ_LESS_TRANS] >>
+  `abi_decode_load CALLDATALOAD (n2w sb : bytes32) initial = n2w (LENGTH vs)` by fs[] >>
   asm_rewrite_tac[] >>
   qpat_x_assum `all_have_type tv vs` mp_tac >>
   simp_tac bool_ss [all_have_type_EVERY, EVERY_MEM] >>
@@ -29,7 +30,7 @@ QED
 
 Theorem calldata_valid_array_loaded_count:
   abi_decoder_valid_pre ce env sf (ArrayT ty (Dynamic maxn)) (ArrayTV tv (Dynamic maxn))
-    bs (ArrayV (DynArrayV vs)) st src dst CALLDATALOAD (Lit 0w) sb d b cap initial /\
+    bs (ArrayV (DynArrayV vs)) st src dst CALLDATALOAD (Lit 0w) (Lit 0w) 0 sb d b cap initial /\
   eval_operand src initial = SOME srcword ==>
   abi_decode_load CALLDATALOAD srcword initial = n2w (LENGTH vs)
 Proof

@@ -26,7 +26,7 @@
  *                                      internal call
  *
  * Helpers: eval_target_place_attr_local,
- *   write_place_attr_local, fields_in_memory_mstore_field,
+ *   write_place_attr_local, memory_fields_rel_mstore_field,
  *   fields_val_wf_update, assign_attr_local_code_parts,
  *   assign_attr_local_source, assign_attr_local_rhs_outcome
  *)
@@ -49,7 +49,7 @@ Ancestors
   stmtSimAssign
   stmtSimAssignMem stmtSimAugAssign
   exprLowering stmtLowering emitHelper emitHelperProps exprLoweringProps
-  exprOperandVar compileEnv valueEncoding valueEncodingProps
+  exprOperandVar compileEnv loweringStateRelDefs valueEncoding valueEncodingDefs valueEncodingProps memoryValueDefs memoryValueFrame
   vyperInterpreter vyperState vyperValue vyperLookup vyperExprNoControl
   vyperTyping vyperTypeEnv vyperTypeInvariants vyperTypeExprSoundness
   vyperTypeExprResult
@@ -172,14 +172,15 @@ Proof
   Cases_on `eval_expr cx e es` >> rename1 `eval_expr cx e es = (r1, es1)` >>
   Cases_on `r1` >> simp[] >>
   rename1 `eval_expr cx e es = (INL pv, es1)` >>
+  Cases_on `read_result cx pv es1` >>
+  rename1 `read_result cx pv es1 = (r3, es3)` >>
+  imp_res_tac read_result_state >> gvs[] >>
+  Cases_on `r3` >> simp[] >>
   Cases_on `eval_target_place cx (AttributeTarget (NameTarget id) fld) es1` >>
   rename1 `_ = (r2, es2)` >>
   drule eval_target_place_attr_local >> strip_tac >>
   Cases_on `r2` >> simp[]
-  >- (gvs[] >> Cases_on `read_result cx pv es1` >>
-      rename1 `read_result cx pv es1 = (r3, es3)` >>
-      imp_res_tac read_result_state >> gvs[] >>
-      Cases_on `r3` >> simp[] >> metis_tac[]) >>
+  >- (gvs[] >> metis_tac[]) >>
   strip_tac >> gvs[] >> metis_tac[]
 QED
 
@@ -311,26 +312,27 @@ Proof
   `ignore_bind
     (eval_stmt cx (Assign (BaseTarget (AttributeTarget (NameTarget id) fld)) e))
     (return ()) =
-   vyperState$bind (eval_expr cx e)
-     (\pv. ignore_bind
+   vyperState$bind (vyperState$bind (eval_expr cx e) (read_result cx))
+     (\v. ignore_bind
        (vyperState$bind (eval_target_place cx (AttributeTarget (NameTarget id) fld))
-         (\p. vyperState$bind (read_result cx pv) (write_place cx p)))
+         (\p. write_place cx p v))
        (return ()))` by
     simp[Once evaluate_def, ignore_bind_def, bind_assoc] >>
   pop_assum SUBST1_TAC >>
+  irule gas_exempt_cert_error_value >> simp[ignore_bind_def, bind_assoc] >>
   irule gas_exempt_cert_error_result >> simp[]
 QED
 
 (* ===== The struct in memory after a field store ===== *)
 
-Theorem fields_in_memory_mstore_field:
+Theorem memory_fields_rel_mstore_field:
   !vals fs flds off s fld v wd ftv.
     fields_layout flds fs /\ struct_has_type fs vals /\
-    fields_val_wf vals fs /\ fields_in_memory vals fs off s.vs_memory /\
+    fields_val_wf vals fs /\ memory_fields_rel fs vals off s.vs_memory /\
     ALOOKUP fs fld = SOME ftv /\ type_memory_size ftv = 32 /\
-    val_in_memory ftv v (off + struct_field_offset flds fld)
+    memory_value_rel ftv v (off + struct_field_offset flds fld)
       (mstore (off + struct_field_offset flds fld) wd s).vs_memory ==>
-    fields_in_memory (AFUPDKEY fld (K v) vals) fs off
+    memory_fields_rel fs (AFUPDKEY fld (K v) vals) off
       (mstore (off + struct_field_offset flds fld) wd s).vs_memory
 Proof
   Induct
@@ -343,13 +345,13 @@ Proof
   simp[fields_layout_def, value_has_type_def, AFUPDKEY_def,
        struct_field_offset_def] >>
   strip_tac >> gvs[] >>
-  Cases_on `h0 = fld` >> gvs[val_in_memory_def, val_wf_def]
-  >- (`mstore off wd s = mstore off wd (s with vs_memory := s.vs_memory)` by
-        simp[mstore_def] >>
-      pop_assum SUBST1_TAC >>
-      irule (cj 2 mstore_preserves_val_in_memory) >> simp[]) >>
+  Cases_on `h0 = fld` >> gvs[memory_value_rel_def, val_wf_def]
+  >- (`memory_value_rel (StructTV fs') (StructV vals) (off + 32)
+         (mstore off wd s).vs_memory` suffices_by simp[memory_value_rel_def] >>
+      irule mstore_preserves_memory_value_rel >>
+      simp[memory_value_rel_def, val_wf_def]) >>
   conj_tac
-  >- (irule mstore_keeps_val_in_memory >> simp[]) >>
+  >- (irule mstore_keeps_memory_value_rel >> simp[]) >>
   REWRITE_TAC [arithmeticTheory.ADD_ASSOC] >>
   first_x_assum irule >> REWRITE_TAC [GSYM arithmeticTheory.ADD_ASSOC] >>
   gvs[fields_layout_def]
@@ -399,15 +401,16 @@ Proof
   `local_ptrs_rel func cenv es.scopes s` by
     fs[stmt_state_rel_def, state_rel_def] >>
   `val_wf entry.type entry.value /\
-   val_in_memory entry.type entry.value (w2n w) s.vs_memory` by
+   memory_value_rel entry.type entry.value (w2n w) s.vs_memory` by
     (qpat_x_assum `local_ptrs_rel _ _ _ _`
        (strip_assume_tac o REWRITE_RULE [local_ptrs_rel_def]) >>
      first_x_assum drule_all >> strip_tac >> gvs[]) >>
-  `fields_val_wf vals fs /\ fields_in_memory vals fs (w2n w) s.vs_memory` by
-    gvs[val_wf_def, val_in_memory_struct] >>
-  `val_wf ftv v /\ type_memory_size ftv = 32 /\
-   val_in_memory ftv v a t.vs_memory` by
-    gvs[store_lays_out_def, Abbr `t`] >>
+  `fields_val_wf vals fs /\ memory_fields_rel fs vals (w2n w) s.vs_memory` by
+    gvs[val_wf_def, memory_value_rel_def] >>
+  `memory_value_rel ftv v a t.vs_memory` by
+    (simp[Abbr `t`] >> irule store_lays_out_memory_value_rel >>
+     first_assum ACCEPT_TAC) >>
+  `val_wf ftv v /\ type_memory_size ftv = 32` by fs[store_lays_out_def] >>
   `struct_field_offset flds fld + 32 <= type_memory_size_fields fs` by
     metis_tac[struct_field_offset_le] >>
   `(t with <|vs_vars := s.vs_vars; vs_memory := s.vs_memory|>) = s` by
@@ -421,10 +424,10 @@ Proof
      gvs[Abbr `a`, type_memory_size_def]) >>
   `val_wf entry.type (StructV (AFUPDKEY fld (K v) vals))` by
     (gvs[val_wf_def] >> irule fields_val_wf_update >> metis_tac[]) >>
-  `val_in_memory entry.type (StructV (AFUPDKEY fld (K v) vals)) (w2n w)
+  `memory_value_rel entry.type (StructV (AFUPDKEY fld (K v) vals)) (w2n w)
      t.vs_memory` by
-    (gvs[val_in_memory_struct, Abbr `t`, Abbr `a`] >>
-     irule fields_in_memory_mstore_field >> simp[] >> metis_tac[]) >>
+    (gvs[memory_value_rel_def, Abbr `t`, Abbr `a`] >>
+     irule memory_fields_rel_mstore_field >> simp[] >> metis_tac[]) >>
   `local_region cenv es.scopes s id (w2n w) sz` by simp[local_region_def] >>
   `type_memory_size entry.type <= sz` by
     (fs[stmt_state_rel_def, state_rel_def, local_ptrs_rel_def] >>
@@ -468,7 +471,8 @@ Proof
   rename1 `FLOOKUP cenv.ce_vars id` >>
   qpat_x_assum `compile_stmt _ _ _ _ _ = _` mp_tac >>
   asm_simp_tac (srw_ss())
-    [compile_stmt_def, compile_get_target_ptr_def, compile_assign_value_def,
+    [compile_stmt_def, exprLoweringTheory.expr_can_mutate_def,
+     stmtLoweringTheory.target_to_expr_def, compile_get_target_ptr_def, compile_assign_value_def,
      comp_bind_def, comp_ignore_bind_def, comp_return_def, LET_THM] >>
   Cases_on `compile_expr cenv (expr_type e) e sa` >>
   rename1 `compile_expr _ _ _ _ = (vv, sm)` >> simp[] >>
@@ -530,6 +534,7 @@ Theorem add_unwrap_post[local]:
   !func cenv cx e es sa sm sn su s0 es1 tv vv r v op dst bw off s.
     emit_op ADD [bop; Lit (n2w off)] sm = (dst, sn) /\
     ci_mono sa sm /\
+    post_value_type cenv e = expr_type e /\
     vv_post ctx func cenv cx e es sa sn s0 es1 tv vv r /\
     eval_operand dst r = SOME (bw + n2w off) /\
     expr_post ctx func cenv cx e es1 (sa with cs_next_var := sn.cs_next_var)
@@ -610,6 +615,7 @@ Proof
   drule_at (Pat `unwrap_value _ _ _ = _`) unwrap_value_marked_read >>
   disch_then (drule_at (Pat `vv_post _ _ _ _ _ _ _ _ _ _ _ _ _`)) >>
   impl_tac >- simp[] >> strip_tac >>
+  `post_value_type cenv e = expr_type e` by simp[post_value_type_word] >>
   drule_all add_unwrap_post >> strip_tac >>
   qexistsl_tac [`v`, `u`] >> simp[] >>
   qpat_x_assum `gas_marked_exec _ _ _ _ _ _ _ _` mp_tac >>

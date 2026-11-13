@@ -2,7 +2,7 @@ Theory ctorDeployMemoryRunMemPrefixLayout
 Ancestors
   ctorDeployMemoryRunMemPrefixSource ctorDeployInitcode ctorDeployShape
   ctorDeployLoweringCode ctorDeployLoweringDefs ctorDeployDefs e2eDeployDefs
-  compileVyper moduleLowering compileEnv fragExec vyperCompiler context
+  compileVyper moduleLowering compileEnv loweringStateRelDefs fragExec vyperCompiler context
   supportedProgram supportedNames ctorRegisterArgs deployUnitProducers venomInst e2eEntry o1PassContract venomState vyperTypeContractSoundness words loweringShapeProps loweringShapeSource ctorGeneratorShape list ctorUnitShape loweringShapeDefs
 
 Theorem ctor_prefix_package_nonpayable:
@@ -11,7 +11,7 @@ Theorem ctor_prefix_package_nonpayable:
   vyperInterpreter$lookup_function NONE "__init__" Deploy tops =
     SOME (mut,F,args,[],NoneT,ffbody) /\ mut <> Payable /\
   set_constructor_package_target rpolicy.rpol_target
-    (package_constructor tops F (assign_nkeys tops 0) cf) =
+    (package_constructor tops T (K global_nonreentrant_slot) cf) =
     (cenv,pos_args,pay,nr,nkey,ut,cb,ret) ==>
   ~pay
 Proof
@@ -48,7 +48,7 @@ Theorem ctor_prefix_code_restrict:
     (fbody,cenv,nr,nkey,ut,imm,exit_lbl,sa,sb,sj,se,sp,sf,func) /\
   (!ce args pay nr key ut fbody ret.
     set_constructor_package_target rpolicy.rpol_target
-      (package_constructor tops F (assign_nkeys tops 0) cf) =
+      (package_constructor tops T (K global_nonreentrant_slot) cf) =
         (ce,args,pay,nr,key,ut,fbody,ret) ==> ~pay) /\
   classify_functions tops = (exts,ints,fb,SOME cf) ==>
   ?cv nv s1 s2 st_pay.
@@ -179,10 +179,12 @@ Proof
   drule classify_functions_ctor_mem >> strip_tac >>
   drule_all supported_program_function >> strip_tac >>
   drule supported_function_body_shape >> strip_tac >>
+  qspecl_then [`tops`, `Deploy`, `cf0`, `cf3`, `cf4`, `cf6`, `cf7`, `use_trans`]
+    (strip_assume_tac o SRULE [cenv_static_ok_def]) build_compile_env_static >>
   gvs[package_constructor_def, set_constructor_package_target_def,
       update_cenv_nonreentrant_def, ctor_prefix_env_return_pc] >>
-  simp[cenv_static_ok_def] >>
-  metis_tac[build_compile_env_static, cenv_static_ok_def]
+  simp[cenv_static_ok_def, ctor_prefix_env_return_pc] >>
+  rpt conj_tac >> first_assum ACCEPT_TAC
 QED
 
 Theorem package_internal_fn_ctor_shape_ok[local]:
@@ -197,10 +199,12 @@ Proof
   drule (iffLR MEM_classify_internal) >> strip_tac >>
   drule_all supported_program_function >> strip_tac >>
   drule supported_function_body_shape >> strip_tac >>
+  qspecl_then [`tops`, `Internal`, `src0`, `src3`, `src4`, `src6`, `src7`, `use_trans`]
+    (strip_assume_tac o SRULE [cenv_static_ok_def]) build_compile_env_static >>
   simp[package_internal_fn_def, set_internal_package_target_def,
        update_cenv_nonreentrant_def, internal_fn_shape_ok_def,
        cenv_static_ok_def] >>
-  metis_tac[build_compile_env_static, cenv_static_ok_def]
+  rpt conj_tac >> first_assum ACCEPT_TAC
 QED
 
 Theorem ctor_prefix_lowering_run[local]:
@@ -229,8 +233,8 @@ Proof
   drule_all package_constructor_shape_ok >> strip_tac >> simp[] >>
   `ALL_DISTINCT (MAP (\p. FST (SND (SND (SND p))))
                    (FST (SND (classify_functions tops))))`
-    by metis_tac[supported_names_internal_names_distinct,
-                 supported_program_names, supported_declaration_names_unique] >>
+    by metis_tac[classified_internal_names_distinct,
+                 supported_program_internal_names] >>
   qspecl_then [`tops`, `T`] mp_tac internal_descriptors_ok >>
   impl_tac >- simp[] >> simp[] >> strip_tac >>
   gs[GSYM MAP_MAP_o, internal_fn_descriptors_set_internal_package_target,

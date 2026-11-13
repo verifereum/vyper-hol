@@ -2,7 +2,7 @@
 Theory fragLoopMemory
 Ancestors
   fragExecMem fragExec compileEnv emitHelper exprLoweringProps
-  venomState venomExecSemantics venomExecProofs memSafeRun venomInst list
+  venomState venomExecSemantics venomExecProofs venomInstProofs memSafeRun venomInst list
 
 Theorem mem_safe_run_jump_no_phi[local]:
   !fuel ctx fn s bb inst lbl bb'.
@@ -137,7 +137,7 @@ Theorem mem_outcome_jmp[local]:
 Proof
   rpt strip_tac >> irule mem_outcome_jump >>
   goal_assum (drule_at Any) >>
-  simp[mk_inst_def, is_terminator_def, step_inst_base_def] >>
+  simp[mk_inst_def, is_terminator_def, step_inst_base_opcode_eqs] >>
   qexists_tac `lbl` >>
   simp[unitTransformDefsTheory.inst_mem_below_frontier_def,
        contextCodegenRelTheory.source_memory_read_ranges_def,
@@ -157,7 +157,7 @@ Theorem mem_outcome_jnz[local]:
 Proof
   rpt strip_tac >> irule mem_outcome_jump >>
   goal_assum (drule_at Any) >>
-  simp[mk_inst_def, is_terminator_def, step_inst_base_def] >>
+  simp[mk_inst_def, is_terminator_def, step_inst_base_opcode_eqs] >>
   Cases_on `w = 0w` >> gvs[] >>
   qmatch_goalsub_rename_tac `jump_to target s = jump_to _ s` >>
   qexists_tac `target` >>

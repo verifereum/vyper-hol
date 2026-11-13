@@ -9,6 +9,7 @@ Libs
   monadsyntax
 
 Theorem raw_call_nonrevert_positive_path_mem:
+  expr_has_effect e /\
   expr_type e = TupleT [BaseT BoolT;BaseT (BytesT (Dynamic n))] /\
   lowered_value_type cenv e = expr_type e /\
   evaluate_type (get_tenv cx) (expr_type e) =
@@ -24,7 +25,7 @@ Theorem raw_call_nonrevert_positive_path_mem:
           emit_void MCOPY [dst;ov;Lit (n2w (32 + ((n + 31) DIV 32) * 32))];
           return buf.buf_operand od
      else return ok) sa = (result,sb) /\ 0 < n /\
-  stmt_state_rel ctx func cenv cx es s /\ wb_frame cenv es0 sf s0 s /\
+  stmt_state_rel ctx func cenv cx es s /\ wb_frame cenv es0 es sf s0 s /\
   fn_has_code sa sb func /\ fn_inst_ids_distinct func /\
   MEM alloc (fn_insts func) /\ alloc.inst_opcode = ALLOCA /\
   alloc.inst_outputs = [q] /\ not_local_ptr cenv es.scopes q /\
@@ -42,7 +43,7 @@ Theorem raw_call_nonrevert_positive_path_mem:
   s.vs_current_bb = sa.cs_current_bb /\
   s.vs_inst_idx = LENGTH sa.cs_current_insts ==>
   ?t tw ti. run_inst_seq (emitted_insts sa sb) s = OK t /\
-    stmt_state_rel ctx func cenv cx es t /\ wb_frame cenv es0 sf s0 t /\
+    stmt_state_rel ctx func cenv cx es t /\ wb_frame cenv es0 es sf s0 t /\
     t.vs_fmp = s.vs_fmp /\
     (!p. safe_operand sa p ==> eval_operand p t = eval_operand p s) /\
     sf.cs_next_id <= ti /\ ti < sb.cs_next_id /\
@@ -74,7 +75,9 @@ Proof
   `vv_post ctx func cenv cx e es0 sf sb s0 es
     (Value (ArrayV (TupleV [BoolV success;BytesV (TAKE n s.vs_returndata)])))
     (LocatedValue (expr_type e) (mk_ptr result LocMemory)) t` by
-    (irule raw_call_tuple_post >> simp[] >> qexists_tac `ti` >>
+    (qpat_assum `lowered_value_type _ _ = _`
+       (assume_tac o MATCH_MP loweringPostsTheory.post_value_type_lowered) >>
+     irule raw_call_tuple_post >> simp[] >> qexists_tac `ti` >>
      fs[arithmeticTheory.MULT_COMM] >> metis_tac[]) >>
   `vv_store_bound cx (expr_type e) (lowered_value_type cenv e) es
     (Value (ArrayV (TupleV [BoolV success;BytesV (TAKE n s.vs_returndata)])))

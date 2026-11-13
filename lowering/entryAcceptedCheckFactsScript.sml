@@ -1,7 +1,7 @@
 (* Accepted source calls supply the passing runtime entry checks. *)
 Theory entryAcceptedCheckFacts
 Ancestors
-  entryChecksProps vyperLoweringCorrect compileVyper compileEnv
+  entryChecksProps vyperLoweringCorrect compileVyper compileEnv loweringStateRelDefs
   vyperInterpreter vyperState e2eDefs words
 
 Theorem send_call_value_accepts_payable_or_zero[local]:

@@ -6,8 +6,8 @@ Ancestors
   bodyImmutableCopyMemory bodyAllocMemory allocaHistoryFragment abiBuiltinAllocation
   instMemFrontier storageDecodeMemory venomMemDefs
   exprSimCopy exprSimStorageCopy immutableCopyExecution fragExec fragExecMem
-  exprSimDefs exprSimOps exprLowering valueEncoding localPtrsProps exprSimAlloc
-  context compileEnv exprLoweringProps emitHelperProps venomExecSemantics
+  exprSimDefs exprSimOps exprLowering valueEncoding valueEncodingDefs localPtrsProps exprSimAlloc
+  context compileEnv loweringStateRelDefs exprLoweringProps emitHelperProps venomExecSemantics
   venomState venomInst words arithmetic list rich_list finite_map
 
 Theorem body_code_copy_history[local]:
@@ -102,6 +102,7 @@ QED
 
 Theorem unwrap_runtime_code_copy_sim_mem:
   !ctx func cenv cx e es sa sm sb s0 es' v t p op R.
+    post_value_type cenv e = expr_type e /\
     unwrap_value cenv (LocatedValue t p) sm = (op, sb) /\
     p.ptr_location = LocCode /\ ~cenv.ce_is_ctor /\ ~is_word_type t /\
     local_ptrs_reserved cenv sa /\

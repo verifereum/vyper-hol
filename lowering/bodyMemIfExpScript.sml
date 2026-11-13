@@ -10,6 +10,19 @@ Ancestors
   bodyMemoryPreds exprSimOperators exprSimIfExp exprSimSource exprSimHyps
   exprSimHypsDefs bodyIfExpArmLayout
 
+(* The wave's compatibility lemma has a stronger third disjunct; this
+   trunk-side use only needs the memory layout. *)
+Theorem ifexp_lowered_type_compatible_mem[local]:
+  expr_body_pre ce cx env e es /\
+  (int_calls_expr e = [] \/ same_memory_layout ce (lowered_value_type ce e) (expr_type e)) ==>
+  lowered_value_type ce e = expr_type e \/
+  is_bytestring_type (expr_type e) /\ is_bytestring_type (lowered_value_type ce e) /\
+    arg_type_fits (lowered_value_type ce e) (expr_type e) \/
+  same_memory_layout ce (lowered_value_type ce e) (expr_type e)
+Proof
+  metis_tac[ifexp_body_pre_lowered_type_compatible]
+QED
+
 Theorem body_ifexp_mem_ok:
   !cx v5 e1 e2 e3.
     (!s'' tv t. eval_expr cx e1 s'' = (INL tv,t) ==> body_expr_mem_ok cx e2) /\
@@ -19,12 +32,20 @@ Theorem body_ifexp_mem_ok:
 Proof
   rpt gen_tac >> strip_tac >> simp[Once body_expr_mem_ok_def] >>
   rpt gen_tac >> strip_tac >>
-  Cases_on `?e. (e = e2 \/ e = e3) /\ int_calls_expr e <> [] /\
-             ~same_memory_layout cenv (lowered_value_type cenv e) (expr_type e)`
+  Cases_on `?e. (e = e2 \/ e = e3) /\
+             ~((int_calls_expr e = [] \/
+                same_memory_layout cenv (lowered_value_type cenv e) (expr_type e)) /\
+               post_value_type cenv e = expr_type e)`
   >- (qspecl_then [`cx`, `v5`, `e1`, `e2`, `e3`] mp_tac
         body_ifexp_widened_call_arm_mem >>
       (impl_tac >- (rpt conj_tac >> first_assum ACCEPT_TAC)) >>
       disch_then irule >> metis_tac[]) >>
+  `!e. (e = e2 \/ e = e3) ==> post_value_type cenv e = expr_type e` by
+    metis_tac[] >>
+  `~?e. (e = e2 \/ e = e3) /\ int_calls_expr e <> [] /\
+        ~same_memory_layout cenv (lowered_value_type cenv e) (expr_type e)` by
+    metis_tac[] >>
+  qpat_x_assum `~?e. _ /\ ~(_ /\ _)` kall_tac >>
   drule expr_body_pre_ifexp >> strip_tac >>
   `expr_sim_inv cenv cx env es` by fs[expr_body_pre_def] >>
   `expr_sim_mem ctx func cenv cx (BaseT BoolT) e1 es` by
@@ -75,7 +96,7 @@ Resume body_ifexp_mem_ok[arm_compiler_facts]:
        is_bytestring_type (lowered_value_type cenv e) /\
        arg_type_fits (lowered_value_type cenv e) (expr_type e) \/
        same_memory_layout cenv (lowered_value_type cenv e) (expr_type e)` by
-    (rpt strip_tac >> irule ifexp_body_pre_lowered_type_compatible >>
+    (rpt strip_tac >> irule ifexp_lowered_type_compatible_mem >>
      metis_tac[]) >>
   suspend "arm_source_typing"
 QED

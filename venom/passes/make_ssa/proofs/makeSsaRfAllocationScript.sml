@@ -1,6 +1,6 @@
 Theory makeSsaRfAllocation
 Ancestors makeSsaCurrentAllocation makeSsaCurrentTokens
-  makeSsaCurrentDefs makeSsaCurrentProps irSupply list alist pair
+  makeSsaDefs makeSsaCurrentProps irSupply list alist pair
 
 (* Occurrence tokens, independent of concrete variable spellings. *)
 

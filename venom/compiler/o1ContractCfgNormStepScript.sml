@@ -14,6 +14,7 @@ Ancestors
   o1PassContract cfgNormSupplyProofs cfgNormSupplySim cfgNormDefs
   venomPassDispatcher venomWf venomInst unitShapeDefs fmpStepCallEnvironment
   cfgTransform dretDesugarDefs venomFnScheduleRunner fmpStepBridge
+  venomWfProps
 
 Theorem insert_split_supply_opaque_use_ok:
   wf_function fn /\ ir_supply_covers_fn s fn /\ ir_supply_inst_ok s /\
@@ -757,7 +758,7 @@ Proof
   strip_tac >>
   `fn_inst_ids_distinct fn'` by metis_tac[insert_split_supply_ids_distinct] >>
   `ALL_DISTINCT (MAP (\i. i.inst_id) (fn_insts fn'))` by
-    gvs[fn_inst_ids_distinct_def, fn_insts_def, removeUnusedSsaProofsTheory.fn_insts_blocks_flat,
+    gvs[fn_inst_ids_distinct_def, fn_insts_def, venomWfPropsTheory.fn_insts_blocks_flat,
         listTheory.MAP_FLAT, listTheory.MAP_MAP_o, combinTheory.o_DEF] >>
   irule (ISPEC ``\i:instruction. i.inst_id`` all_distinct_map_mem_inj_cfg) >>
   simp[] >> qexists `fn_insts fn'` >> simp[]

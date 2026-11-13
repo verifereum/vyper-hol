@@ -19,7 +19,7 @@ Theorem body_storage_singleton_mem_ok:
 Proof
   strip_tac >> (rewrite_tac[run_inst_seq_mem_ok_cons] >> conj_tac
   >- (irule below_frontier_no_ranges >> gvs[mk_inst_def]) >>
-  gvs[step_inst_base_def, exec_read1_def, mk_inst_def] >>
+  gvs[step_inst_base_opcode_eqs, exec_read1_def, mk_inst_def] >>
   Cases_on `eval_operand src s` >> simp[] >>
   simp[run_inst_seq_mem_ok_last, GSYM mk_inst_def, below_frontier_MSTORE] >>
   Cases_on `dst` >>
@@ -49,13 +49,13 @@ Proof
   pure_once_rewrite_tac[run_inst_seq_mem_ok_cons] >> conj_tac
   >- (irule below_frontier_no_ranges >> simp[mk_inst_def]) >>
   Cases_on `eval_operand src s`
-  >- simp[Once step_inst_base_def, mk_inst_def, exec_pure2_def] >>
+  >- simp[step_inst_base_opcode_eqs, mk_inst_def, exec_pure2_def] >>
   `step_inst_base (mk_inst id ADD [src; Var cv] [sv]) s =
      OK (update_var sv (x + n2w k) s)` by (irule step_ADD >> simp[]) >>
   simp[] >>
   pure_once_rewrite_tac[run_inst_seq_mem_ok_cons] >> conj_tac
   >- (irule below_frontier_no_ranges >> simp[mk_inst_def]) >>
-  simp[Once step_inst_base_def, exec_read1_def, mk_inst_def,
+  simp[step_inst_base_opcode_eqs, exec_read1_def, mk_inst_def,
        eval_operand_update_var] >>
   pure_rewrite_tac[GSYM mk_inst_def] >>
   qmatch_goalsub_abbrev_tac `run_inst_seq_mem_ok _ s2` >>

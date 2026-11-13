@@ -1,6 +1,6 @@
 Theory abiStaticAggregateProps
 Ancestors
-  abiStaticLayoutProps valueEncoding vyperABI vyperTyping compileEnv contractABI byte
+  abiStaticLayoutProps valueEncoding valueEncodingDefs vyperABI vyperTyping compileEnv contractABI byte
   integer_word bitstring venomMemProofs venomMemProps abiStaticSparseProps list rich_list
 
 (* Slice-local reverse representation boundaries for static ABI chunks. *)

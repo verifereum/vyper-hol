@@ -1,7 +1,7 @@
 (* Raw word loads from a represented dynamic Bytes payload. *)
 Theory bodyMemTbExtract32Slice
 Ancestors
-  abiCanonicalHeadSize valueEncodingProps valueEncoding byte words
+  abiCanonicalHeadSize valueEncodingProps valueEncoding byte words valueEncodingDefs
   vyperValue vyperAST
 
 Theorem extract32_payload_word:

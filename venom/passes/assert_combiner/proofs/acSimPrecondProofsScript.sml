@@ -87,27 +87,6 @@ Definition ac_sim_precond_def:
            ac_get_iszero_operand dfg {} (Var v) = SOME mc.mc_first_pred)
 End
 
-(* Operand evaluability preserved through safe_between/ASSERT OK step *)
-Theorem safe_assert_step_preserves_eval:
-  !fuel ctx h s s' op.
-    step_inst fuel ctx h s = OK s' /\
-    (ac_is_safe_between h \/ h.inst_opcode = ASSERT) /\
-    inst_wf h /\
-    (!op'. MEM op' h.inst_operands ==> IS_SOME (eval_operand op' s)) /\
-    IS_SOME (eval_operand op s) ==>
-    IS_SOME (eval_operand op s')
-Proof
-  rpt gen_tac >> strip_tac >> (
-    TRY (`s' = s` by metis_tac[step_assert_identity] >> gvs[]) >>
-    Cases_on `op` >> gvs[eval_operand_def] >>
-    TRY (irule safe_between_step_is_some_mono >>
-         MAP_EVERY qexists_tac [`ctx`, `fuel`, `h`, `s`] >> simp[] >> NO_TAC) >>
-    `s'.vs_labels = s.vs_labels` by
-      metis_tac[step_preserves_labels, ac_is_safe_between_def] >>
-    gvs[]
-  )
-QED
-
 (* step_inst on safe_between/ASSERT can only OK or Revert_abort *)
 Theorem step_safe_or_assert_ok_or_revert:
   !fuel ctx inst s.

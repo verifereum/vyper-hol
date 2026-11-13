@@ -96,7 +96,7 @@ Definition body_stmts_mem_ok_def:
       expr_sim_inv cenv cx env es /\ ce_locals_declared cenv env /\
       locals_alloc_ok cenv env /\
       type_stmts env ret_ty ss = SOME env' /\
-      EVERY (stmt_exprs_ok cenv) ss /\
+      stmts_exprs_ok cenv ss /\
       call_evaluation_safe cx (int_calls_stmts ss) /\
       frame_ret_ok_mem d ctx func cx RetQ cenv ret_ty ==>
       stmt_frag_mem d ctx func cx lctx RetQ cenv
@@ -121,8 +121,10 @@ Definition body_iterator_mem_ok_def:
 End
 
 Definition body_for_mem_ok_def:
-  body_for_mem_ok cx (tyv : type_value) (nm : identifier) body (vs : value list)
-  <=> vs <> [] ==> body_stmts_mem_ok cx body
+  body_for_mem_ok cx (tyv : type_value) (nm : identifier) body (vs : eval_result list)
+  <=>
+    (?s v t. vs <> [] /\ read_result cx (HD vs) s = (INL v,t)) ==>
+    body_stmts_mem_ok cx body
 End
 
 Definition body_base_target_mem_ok_def:
@@ -169,7 +171,7 @@ Theorem body_stmts_mem_projection:
     expr_sim_inv cenv cx env es /\ ce_locals_declared cenv env /\
     locals_alloc_ok cenv env /\
     type_stmts env ret_ty ss = SOME env' /\
-    EVERY (stmt_exprs_ok cenv) ss /\
+    stmts_exprs_ok cenv ss /\
     call_evaluation_safe cx (int_calls_stmts ss) /\
     frame_ret_ok_mem d ctx func cx RetQ cenv ret_ty ==>
     stmt_frag_mem d ctx func cx lctx RetQ cenv

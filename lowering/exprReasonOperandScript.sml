@@ -314,9 +314,22 @@ Theorem reason_builtin_bop:
 Proof
   strip_tac >>
   `word_result_ok sb vv` by metis_tac[word_builtin_bop] >>
-  gvs[compile_builtin_dispatch_body_def, LET_THM] >>
-  rpt (pairarg_tac >> gvs[]) >> gvs[AllCaseEqs()] >>
-  rpt (pairarg_tac >> gvs[]) >> gvs[AllCaseEqs()] >>
+  pop_assum mp_tac >> pop_assum mp_tac >>
+  simp_tac (srw_ss()) [compile_builtin_dispatch_body_def, LET_THM] >>
+  IF_CASES_TAC
+  >- (rpt strip_tac >> Cases_on `HD (TL args)` >> gvs[] >>
+      TRY (rename1 `Builtin _ bi _` >> Cases_on `bi` >> simp[]) >>
+      rpt (pairarg_tac >> gvs[]) >> gvs[AllCaseEqs()] >>
+      metis_tac[reason_stack_result]) >>
+  IF_CASES_TAC
+  >- (rpt strip_tac >>
+      Cases_on `bytestring_literal_hash (HD args)` >>
+      Cases_on `bytestring_literal_hash (HD (TL args))` >> gvs[] >>
+      rpt (pairarg_tac >> gvs[]) >>
+      Cases_on `bop = Eq` >> gvs[] >>
+      rpt (pairarg_tac >> gvs[]) >>
+      metis_tac[reason_stack_result]) >>
+  rpt strip_tac >> rpt (pairarg_tac >> gvs[]) >>
   metis_tac[reason_stack_result]
 QED
 
@@ -761,6 +774,15 @@ Proof
   >~ [`cenv.ce_func_info name = info`] >- suspend "internal"
   >~ [`compile_call f cenv rt ty (ExtCall b b0 p l) args default_ret sa = _`]
     >- suspend "external"
+  >~ [`raw_log_topic_exprs _`] >-
+    (BasicProvers.every_case_tac >> gvs[reason_result_shape_def] >>
+     rpt (pairarg_tac >> gvs[reason_result_shape_def]))
+  >~ [`compile_raw_revert _ _`] >-
+    (BasicProvers.every_case_tac >> gvs[reason_result_shape_def] >>
+     rpt (pairarg_tac >> gvs[reason_result_shape_def]))
+  >~ [`compile_selfdestruct _ _`] >-
+    (BasicProvers.every_case_tac >> gvs[reason_result_shape_def] >>
+     rpt (pairarg_tac >> gvs[reason_result_shape_def]))
   >~ [`as_stack_val rt (compile_create_call f cenv ck salted rof args sa)`]
     >- suspend "create" >>
   (* send, raw_log and raw_revert: each returns the zero word on the stack. *)

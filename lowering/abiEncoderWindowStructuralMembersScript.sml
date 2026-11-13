@@ -231,7 +231,7 @@ Proof
   `k <= LENGTH ats` by fs[window_member_prefix_def] >>
   drule_all window_structural_member_prefix_layout >> strip_tac >>
   irule window_member_prefix_step >> asm_rewrite_tac[] >>
-  simp[valueEncodingTheory.mem_bytes_at_def]
+  simp[valueEncodingDefsTheory.mem_bytes_at_def]
 QED
 
 Theorem window_structural_member_prefix_dynamic_step:
@@ -371,6 +371,56 @@ Proof
   pure_rewrite_tac[window_member_tail_def, venomMemDefsTheory.regions_disjoint_def] >> decide_tac
 QED
 
+Theorem window_structural_member_static_run_core[local]:
+  window_structural_members_inv ctx func infos at ats avs k src dst dp site slot
+    sb cap d st en s /\ k < LENGTH infos /\
+  EL k infos = (ei,az,ms,F) /\ abi_encoder_admissible ei /\ window_strong_contract ei /\
+  (obsv ==> window_observed_contract ei) /\
+  compile_abi_encode_child dst child_src ei F
+    (SUM (MAP abi_member_head_size (TAKE k ats))) dp st = (out,en) /\
+  eval_operand child_src s = SOME (n2w (sb+abi_encoder_member_span (TAKE k infos))) /\
+  (!x. child_src = Var x ==> not_fresh_at st x) ==>
+  ?t. window_phase ctx func st en (window_alloca_sites func (frag_ids st en))
+        [(d+SUM (MAP abi_member_head_size (TAKE k ats)),
+          LENGTH (enc (EL k ats) (EL k avs)))] s t /\
+      window_member_prefix infos ats avs (SUC k) d t.vs_memory /\
+      eval_operand out t = SOME (n2w (LENGTH (enc (EL k ats) (EL k avs)))) /\
+      (!i b sz. i IN window_alloca_sites func (frag_ids st en) /\
+        FLOOKUP t.vs_allocas i = SOME (b,sz) ==> sz = 32) /\
+      (obsv ==> !x. ~not_fresh_at en x ==> lookup_var x t = lookup_var x s)
+Proof
+  strip_tac >>
+  `~is_dynamic (EL k ats)` by metis_tac[window_structural_members_inv_source] >>
+  drule_all window_structural_members_inv_output_bounds >> strip_tac >>
+  drule_all window_structural_members_inv_total_bounds >> strip_tac >>
+  `SUM (MAP abi_member_head_size (TAKE k ats)) +
+    LENGTH (enc (EL k ats) (EL k avs)) <= LENGTH (enc at (ListV avs))` by
+    (gvs[] >> decide_tac) >>
+  drule_all window_structural_members_inv_child_pre >> strip_tac >>
+  `eval_operand dst s = SOME (n2w d)` by
+    (qpat_assum `window_structural_members_inv _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _` mp_tac >>
+     simp_tac bool_ss [window_structural_members_inv_def, abi_encoder_window_pre_def] >> metis_tac[]) >>
+  `?t. window_phase ctx func st en (window_alloca_sites func (frag_ids st en))
+      [(d+SUM (MAP abi_member_head_size (TAKE k ats)),
+        LENGTH (enc (EL k ats) (EL k avs)))] s t /\
+    mem_bytes_at (d+SUM (MAP abi_member_head_size (TAKE k ats)))
+      (LENGTH (enc (EL k ats) (EL k avs))) t.vs_memory = enc (EL k ats) (EL k avs) /\
+    eval_operand out t = SOME (n2w (LENGTH (enc (EL k ats) (EL k avs)))) /\
+    (!i b sz. i IN window_alloca_sites func (frag_ids st en) /\
+      FLOOKUP t.vs_allocas i = SOME (b,sz) ==> sz = 32) /\
+    (obsv ==> !x. ~not_fresh_at en x ==> lookup_var x t = lookup_var x s)` by
+    (Cases_on `obsv`
+     >- (gvs[] >> drule_all window_static_child_run_observed >> simp[]) >>
+     simp[] >> drule_all window_static_child_run >> simp[]) >>
+  qexists_tac `t` >> asm_rewrite_tac[] >>
+  irule window_structural_member_prefix_static_step >> asm_rewrite_tac[] >>
+  `window_member_prefix infos ats avs k d t.vs_memory` by
+    (irule window_structural_member_static_prefix_frame >> metis_tac[]) >>
+  asm_rewrite_tac[] >>
+  qpat_assum `window_structural_members_inv _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _` mp_tac >>
+  simp_tac bool_ss [window_structural_members_inv_def] >> metis_tac[]
+QED
+
 Theorem window_structural_member_static_run:
   window_structural_members_inv ctx func infos at ats avs k src dst dp site slot
     sb cap d st en s /\ k < LENGTH infos /\
@@ -388,24 +438,30 @@ Theorem window_structural_member_static_run:
         FLOOKUP t.vs_allocas i = SOME (b,sz) ==> sz = 32)
 Proof
   strip_tac >>
-  `~is_dynamic (EL k ats)` by metis_tac[window_structural_members_inv_source] >>
-  drule_all window_structural_members_inv_output_bounds >> strip_tac >>
-  drule_all window_structural_members_inv_total_bounds >> strip_tac >>
-  `SUM (MAP abi_member_head_size (TAKE k ats)) +
-    LENGTH (enc (EL k ats) (EL k avs)) <= LENGTH (enc at (ListV avs))` by
-    (gvs[] >> decide_tac) >>
-  drule_all window_structural_members_inv_child_pre >> strip_tac >>
-  `eval_operand dst s = SOME (n2w d)` by
-    (qpat_assum `window_structural_members_inv _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _` mp_tac >>
-     simp_tac bool_ss [window_structural_members_inv_def, abi_encoder_window_pre_def] >> metis_tac[]) >>
-  drule_all window_static_child_run >> strip_tac >>
-  qexists_tac `t` >> asm_rewrite_tac[] >>
-  irule window_structural_member_prefix_static_step >> asm_rewrite_tac[] >>
-  `window_member_prefix infos ats avs k d t.vs_memory` by
-    (irule window_structural_member_static_prefix_frame >> metis_tac[]) >>
-  asm_rewrite_tac[] >>
-  qpat_assum `window_structural_members_inv _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _` mp_tac >>
-  simp_tac bool_ss [window_structural_members_inv_def] >> metis_tac[]
+  drule_all (SRULE [] (Q.INST [`obsv` |-> `F`] (SPEC_ALL window_structural_member_static_run_core))) >>
+  simp[]
+QED
+
+Theorem window_structural_member_static_run_observed:
+  window_structural_members_inv ctx func infos at ats avs k src dst dp site slot
+    sb cap d st en s /\ k < LENGTH infos /\
+  EL k infos = (ei,az,ms,F) /\ abi_encoder_admissible ei /\ window_observed_contract ei /\
+  compile_abi_encode_child dst child_src ei F
+    (SUM (MAP abi_member_head_size (TAKE k ats))) dp st = (out,en) /\
+  eval_operand child_src s = SOME (n2w (sb+abi_encoder_member_span (TAKE k infos))) /\
+  (!x. child_src = Var x ==> not_fresh_at st x) ==>
+  ?t. window_phase ctx func st en (window_alloca_sites func (frag_ids st en))
+        [(d+SUM (MAP abi_member_head_size (TAKE k ats)),
+          LENGTH (enc (EL k ats) (EL k avs)))] s t /\
+      window_member_prefix infos ats avs (SUC k) d t.vs_memory /\
+      eval_operand out t = SOME (n2w (LENGTH (enc (EL k ats) (EL k avs)))) /\
+      (!i b sz. i IN window_alloca_sites func (frag_ids st en) /\
+        FLOOKUP t.vs_allocas i = SOME (b,sz) ==> sz = 32) /\
+      (!x. ~not_fresh_at en x ==> lookup_var x t = lookup_var x s)
+Proof
+  strip_tac >> drule window_observed_contract_strong >> strip_tac >>
+  drule_all (SRULE [] (Q.INST [`obsv` |-> `T`] (SPEC_ALL window_structural_member_static_run_core))) >>
+  simp[]
 QED
 
 Theorem window_structural_member_dynamic_prefix_frame:
@@ -454,6 +510,65 @@ Proof
   pure_rewrite_tac[window_member_tail_def, venomMemDefsTheory.regions_disjoint_def] >> decide_tac
 QED
 
+Theorem window_structural_member_dynamic_run_core[local]:
+  window_structural_members_inv ctx func infos at ats avs k src dst dp site slot
+    sb cap d st en s /\ k < LENGTH infos /\
+  EL k infos = (ei,az,ms,T) /\ abi_encoder_admissible ei /\ window_strong_contract ei /\
+  (obsv ==> window_observed_contract ei) /\
+  compile_abi_encode_child dst child_src ei T
+    (SUM (MAP abi_member_head_size (TAKE k ats))) dp st = (out,en) /\
+  eval_operand child_src s = SOME (n2w (sb+abi_encoder_member_span (TAKE k infos))) /\
+  (!x. child_src = Var x ==> not_fresh_at st x) ==>
+  ?t. window_phase ctx func st en (window_alloca_sites func (frag_ids st en) UNION {site})
+        [(d+SUM (MAP abi_member_head_size (TAKE k ats)),32);
+         (d+window_member_tail infos ats avs k,LENGTH (enc (EL k ats) (EL k avs)))] s t /\
+      window_member_prefix infos ats avs (SUC k) d t.vs_memory /\
+      mem_word_at slot t.vs_memory = n2w (window_member_tail infos ats avs k +
+        LENGTH (enc (EL k ats) (EL k avs))) /\
+      FLOOKUP t.vs_allocas site = SOME (slot,32) /\
+      eval_operand out t = SOME (n2w (LENGTH (enc (EL k ats) (EL k avs)))) /\
+      (!i b sz. i IN (window_alloca_sites func (frag_ids st en) UNION {site}) /\
+        FLOOKUP t.vs_allocas i = SOME (b,sz) ==> sz = 32) /\
+      (obsv ==> !x. ~not_fresh_at en x ==> lookup_var x t = lookup_var x s)
+Proof
+  strip_tac >> drule_all window_structural_members_inv_dynamic_cursor >>
+  disch_then (CONJUNCTS_THEN2 STRIP_ASSUME_TAC (REPEAT_TCL CONJUNCTS_THEN assume_tac)) >>
+  qpat_x_assum `dp = Var _` SUBST_ALL_TAC >>
+  `is_dynamic (EL k ats)` by metis_tac[window_structural_members_inv_source] >>
+  drule_all window_structural_members_inv_output_bounds >> strip_tac >>
+  `window_member_tail infos ats avs k + LENGTH (enc (EL k ats) (EL k avs)) <=
+    LENGTH (enc at (ListV avs))` by metis_tac[] >>
+  drule_all window_structural_members_inv_child_pre >> strip_tac >>
+  `eval_operand dst s = SOME (n2w d) /\ (!x. dst = Var x ==> not_fresh_at st x)` by
+    (qpat_assum `window_structural_members_inv _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _` mp_tac >>
+     simp_tac bool_ss [window_structural_members_inv_def, abi_encoder_window_pre_def] >> metis_tac[]) >>
+  `?t. window_phase ctx func st en (window_alloca_sites func (frag_ids st en) UNION {site})
+      [(d+SUM (MAP abi_member_head_size (TAKE k ats)),32);
+       (d+window_member_tail infos ats avs k,LENGTH (enc (EL k ats) (EL k avs)))] s t /\
+    mem_bytes_at (d+window_member_tail infos ats avs k)
+      (LENGTH (enc (EL k ats) (EL k avs))) t.vs_memory = enc (EL k ats) (EL k avs) /\
+    mem_word_at (d+SUM (MAP abi_member_head_size (TAKE k ats))) t.vs_memory =
+      n2w (window_member_tail infos ats avs k) /\
+    mem_word_at slot t.vs_memory = n2w (window_member_tail infos ats avs k +
+      LENGTH (enc (EL k ats) (EL k avs))) /\
+    FLOOKUP t.vs_allocas site = SOME (slot,32) /\
+    eval_operand out t = SOME (n2w (LENGTH (enc (EL k ats) (EL k avs)))) /\
+    (!i b sz. i IN (window_alloca_sites func (frag_ids st en) UNION {site}) /\
+      FLOOKUP t.vs_allocas i = SOME (b,sz) ==> sz = 32) /\
+    (obsv ==> !x. ~not_fresh_at en x ==> lookup_var x t = lookup_var x s)` by
+    (Cases_on `obsv`
+     >- (`window_observed_contract ei` by metis_tac[] >>
+         drule_all window_dynamic_child_run_observed >> simp[]) >>
+     simp[] >> drule_all window_dynamic_child_run >> simp[]) >>
+  qexists_tac `t` >> asm_rewrite_tac[] >>
+  irule window_structural_member_prefix_dynamic_step >> asm_rewrite_tac[] >>
+  `window_member_prefix infos ats avs k d t.vs_memory` by
+    (irule window_structural_member_dynamic_prefix_frame >> metis_tac[]) >>
+  asm_rewrite_tac[] >>
+  qpat_assum `window_structural_members_inv _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _` mp_tac >>
+  simp_tac bool_ss [window_structural_members_inv_def] >> metis_tac[]
+QED
+
 Theorem window_structural_member_dynamic_run:
   window_structural_members_inv ctx func infos at ats avs k src dst dp site slot
     sb cap d st en s /\ k < LENGTH infos /\
@@ -473,25 +588,34 @@ Theorem window_structural_member_dynamic_run:
       (!i b sz. i IN (window_alloca_sites func (frag_ids st en) UNION {site}) /\
         FLOOKUP t.vs_allocas i = SOME (b,sz) ==> sz = 32)
 Proof
-  strip_tac >> drule_all window_structural_members_inv_dynamic_cursor >>
-  disch_then (CONJUNCTS_THEN2 STRIP_ASSUME_TAC (REPEAT_TCL CONJUNCTS_THEN assume_tac)) >>
-  qpat_x_assum `dp = Var _` SUBST_ALL_TAC >>
-  `is_dynamic (EL k ats)` by metis_tac[window_structural_members_inv_source] >>
-  drule_all window_structural_members_inv_output_bounds >> strip_tac >>
-  `window_member_tail infos ats avs k + LENGTH (enc (EL k ats) (EL k avs)) <=
-    LENGTH (enc at (ListV avs))` by metis_tac[] >>
-  drule_all window_structural_members_inv_child_pre >> strip_tac >>
-  `eval_operand dst s = SOME (n2w d) /\ (!x. dst = Var x ==> not_fresh_at st x)` by
-    (qpat_assum `window_structural_members_inv _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _` mp_tac >>
-     simp_tac bool_ss [window_structural_members_inv_def, abi_encoder_window_pre_def] >> metis_tac[]) >>
-  drule_all window_dynamic_child_run >> strip_tac >>
-  qexists_tac `t` >> asm_rewrite_tac[] >>
-  irule window_structural_member_prefix_dynamic_step >> asm_rewrite_tac[] >>
-  `window_member_prefix infos ats avs k d t.vs_memory` by
-    (irule window_structural_member_dynamic_prefix_frame >> metis_tac[]) >>
-  asm_rewrite_tac[] >>
-  qpat_assum `window_structural_members_inv _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _` mp_tac >>
-  simp_tac bool_ss [window_structural_members_inv_def] >> metis_tac[]
+  strip_tac >>
+  drule_all (SRULE [] (Q.INST [`obsv` |-> `F`]
+    (SPEC_ALL window_structural_member_dynamic_run_core))) >> simp[]
+QED
+
+Theorem window_structural_member_dynamic_run_observed:
+  window_structural_members_inv ctx func infos at ats avs k src dst dp site slot
+    sb cap d st en s /\ k < LENGTH infos /\
+  EL k infos = (ei,az,ms,T) /\ abi_encoder_admissible ei /\ window_observed_contract ei /\
+  compile_abi_encode_child dst child_src ei T
+    (SUM (MAP abi_member_head_size (TAKE k ats))) dp st = (out,en) /\
+  eval_operand child_src s = SOME (n2w (sb+abi_encoder_member_span (TAKE k infos))) /\
+  (!x. child_src = Var x ==> not_fresh_at st x) ==>
+  ?t. window_phase ctx func st en (window_alloca_sites func (frag_ids st en) UNION {site})
+        [(d+SUM (MAP abi_member_head_size (TAKE k ats)),32);
+         (d+window_member_tail infos ats avs k,LENGTH (enc (EL k ats) (EL k avs)))] s t /\
+      window_member_prefix infos ats avs (SUC k) d t.vs_memory /\
+      mem_word_at slot t.vs_memory = n2w (window_member_tail infos ats avs k +
+        LENGTH (enc (EL k ats) (EL k avs))) /\
+      FLOOKUP t.vs_allocas site = SOME (slot,32) /\
+      eval_operand out t = SOME (n2w (LENGTH (enc (EL k ats) (EL k avs)))) /\
+      (!i b sz. i IN (window_alloca_sites func (frag_ids st en) UNION {site}) /\
+        FLOOKUP t.vs_allocas i = SOME (b,sz) ==> sz = 32) /\
+      (!x. ~not_fresh_at en x ==> lookup_var x t = lookup_var x s)
+Proof
+  strip_tac >> drule window_observed_contract_strong >> strip_tac >>
+  drule_all (SRULE [] (Q.INST [`obsv` |-> `T`]
+    (SPEC_ALL window_structural_member_dynamic_run_core))) >> simp[]
 QED
 
 Theorem window_structural_member_source_frame:
@@ -636,6 +760,31 @@ Proof
   simp_tac bool_ss [abiStaticAggregatePropsTheory.mem_word_at_bytes] >> asm_rewrite_tac[]
 QED
 
+Theorem window_structural_member_source_prepare_observed:
+  window_structural_members_inv ctx func infos at ats avs k src dst dp site slot
+    sb cap d st en s /\ emit_op ADD [src;Lit (n2w so)] st = (child_src,ready) /\
+  fn_has_code st ready func /\ fn_has_code ready en func /\
+  st.cs_next_var <= ready.cs_next_var /\ st.cs_next_id <= ready.cs_next_id ==>
+  ?t. window_phase ctx func st ready {} [] s t /\
+    window_structural_members_inv ctx func infos at ats avs k src dst dp site slot
+      sb cap d ready en t /\
+    eval_operand child_src t = SOME (n2w (sb+so)) /\
+    (!x. child_src = Var x ==> not_fresh_at ready x) /\
+    (!x. ~not_fresh_at ready x ==> lookup_var x t = lookup_var x s)
+Proof
+  strip_tac >>
+  `eval_operand src s = SOME (n2w sb) /\ alloca_inv s /\ alloca_room ctx func s /\
+   ~s.vs_halted /\ s.vs_current_bb = st.cs_current_bb /\
+   s.vs_inst_idx = LENGTH st.cs_current_insts` by
+    (qpat_assum `window_structural_members_inv _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _` mp_tac >>
+     simp_tac bool_ss [window_structural_members_inv_def, abi_encoder_window_pre_def] >> metis_tac[]) >>
+  `eval_operand (Lit (n2w so)) s = SOME (n2w so)` by simp[venomStateTheory.eval_operand_def] >>
+  drule_all window_emit_add_phase_observed >> strip_tac >>
+  qexists_tac `t` >> asm_rewrite_tac[] >>
+  (conj_tac >- metis_tac[window_structural_members_inv_pure_phase]) >>
+  fs[wordsTheory.word_add_n2w]
+QED
+
 Theorem window_structural_member_source_prepare:
   window_structural_members_inv ctx func infos at ats avs k src dst dp site slot
     sb cap d st en s /\ emit_op ADD [src;Lit (n2w so)] st = (child_src,ready) /\
@@ -647,17 +796,8 @@ Theorem window_structural_member_source_prepare:
     eval_operand child_src t = SOME (n2w (sb+so)) /\
     (!x. child_src = Var x ==> not_fresh_at ready x)
 Proof
-  strip_tac >>
-  `eval_operand src s = SOME (n2w sb) /\ alloca_inv s /\ alloca_room ctx func s /\
-   ~s.vs_halted /\ s.vs_current_bb = st.cs_current_bb /\
-   s.vs_inst_idx = LENGTH st.cs_current_insts` by
-    (qpat_assum `window_structural_members_inv _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _` mp_tac >>
-     simp_tac bool_ss [window_structural_members_inv_def, abi_encoder_window_pre_def] >> metis_tac[]) >>
-  `eval_operand (Lit (n2w so)) s = SOME (n2w so)` by simp[venomStateTheory.eval_operand_def] >>
-  drule_all window_emit_add_phase >> strip_tac >>
-  qexists_tac `t` >> asm_rewrite_tac[] >>
-  (conj_tac >- metis_tac[window_structural_members_inv_pure_phase]) >>
-  fs[wordsTheory.word_add_n2w]
+  strip_tac >> drule_all window_structural_member_source_prepare_observed >>
+  strip_tac >> qexists_tac `t` >> asm_rewrite_tac[]
 QED
 
 (* Registration sizes outside a phase's sites are unchanged. *)
@@ -673,10 +813,11 @@ Proof
   simp_tac bool_ss [abiEncoderRegisteredEffectTheory.abi_encoder_registered_effect_def] >> metis_tac[]
 QED
 
-Theorem window_structural_member_static_step_run_sizes:
+Theorem window_structural_member_static_step_run_sizes_core[local]:
   window_structural_members_inv ctx func infos at ats avs k src dst dp site slot
     sb cap d st en s /\ k < LENGTH infos /\
   EL k infos = (ei,az,ms,F) /\ abi_encoder_admissible ei /\ window_strong_contract ei /\
+  (obsv ==> window_observed_contract ei) /\
   compile_abi_encode_child dst child_src ei F
     (SUM (MAP abi_member_head_size (TAKE k ats))) dp st = (out,mid) /\
   eval_operand child_src s = SOME (n2w (sb+abi_encoder_member_span (TAKE k infos))) /\
@@ -693,12 +834,13 @@ Theorem window_structural_member_static_step_run_sizes:
       window_structural_members_inv ctx func infos at ats avs (SUC k) src dst dp site slot
         sb cap d mid en t /\
       (!R. (!i b sz. i IN R /\ FLOOKUP s.vs_allocas i = SOME (b,sz) ==> sz = 32) ==>
-           !i b sz. i IN R /\ FLOOKUP t.vs_allocas i = SOME (b,sz) ==> sz = 32)
+           !i b sz. i IN R /\ FLOOKUP t.vs_allocas i = SOME (b,sz) ==> sz = 32) /\
+      (obsv ==> !x. ~not_fresh_at mid x ==> lookup_var x t = lookup_var x s)
 Proof
   strip_tac >>
   `window_structural_members_inv ctx func infos at ats avs k src dst dp site slot
     sb cap d st mid s` by metis_tac[window_structural_members_inv_restrict_end] >>
-  drule_all window_structural_member_static_run >> strip_tac >>
+  drule_all window_structural_member_static_run_core >> strip_tac >>
   drule_all window_structural_members_inv_total_bounds >> strip_tac >>
   `SUM (MAP abi_member_head_size (TAKE k ats)) +
    LENGTH (enc (EL k ats) (EL k avs)) <= LENGTH (enc at (ListV avs))` by
@@ -737,6 +879,60 @@ Proof
   simp[] >> metis_tac[SUBSET_UNION, SUBSET_TRANS]
 QED
 
+Theorem window_structural_member_static_step_run_sizes:
+  window_structural_members_inv ctx func infos at ats avs k src dst dp site slot
+    sb cap d st en s /\ k < LENGTH infos /\
+  EL k infos = (ei,az,ms,F) /\ abi_encoder_admissible ei /\ window_strong_contract ei /\
+  compile_abi_encode_child dst child_src ei F
+    (SUM (MAP abi_member_head_size (TAKE k ats))) dp st = (out,mid) /\
+  eval_operand child_src s = SOME (n2w (sb+abi_encoder_member_span (TAKE k infos))) /\
+  (!x. child_src = Var x ==> not_fresh_at st x) /\
+  fn_has_code st mid func /\ fn_has_code mid en func /\
+  st.cs_next_var <= mid.cs_next_var /\ st.cs_next_id <= mid.cs_next_id /\
+  mid.cs_next_id <= en.cs_next_id /\
+  (EXISTS (\(_,_,_,dyn). dyn) infos ==> site NOTIN window_alloca_sites func (frag_ids st mid)) /\
+  window_alloca_sites func (frag_ids st mid) SUBSET window_alloca_sites func (frag_ids st en) /\
+  DISJOINT (window_alloca_sites func (frag_ids st mid)) (window_alloca_sites func (frag_ids mid en)) ==>
+  ?t. window_phase ctx func st mid (window_alloca_sites func (frag_ids st mid))
+        [(d+SUM (MAP abi_member_head_size (TAKE k ats)),
+          LENGTH (enc (EL k ats) (EL k avs)))] s t /\
+      window_structural_members_inv ctx func infos at ats avs (SUC k) src dst dp site slot
+        sb cap d mid en t /\
+      (!R. (!i b sz. i IN R /\ FLOOKUP s.vs_allocas i = SOME (b,sz) ==> sz = 32) ==>
+           !i b sz. i IN R /\ FLOOKUP t.vs_allocas i = SOME (b,sz) ==> sz = 32)
+Proof
+  strip_tac >> drule_all (SRULE [] (Q.INST [`obsv` |-> `F`]
+    (SPEC_ALL window_structural_member_static_step_run_sizes_core))) >> simp[]
+QED
+
+Theorem window_structural_member_static_step_run_sizes_observed:
+  window_structural_members_inv ctx func infos at ats avs k src dst dp site slot
+    sb cap d st en s /\ k < LENGTH infos /\
+  EL k infos = (ei,az,ms,F) /\ abi_encoder_admissible ei /\ window_observed_contract ei /\
+  compile_abi_encode_child dst child_src ei F
+    (SUM (MAP abi_member_head_size (TAKE k ats))) dp st = (out,mid) /\
+  eval_operand child_src s = SOME (n2w (sb+abi_encoder_member_span (TAKE k infos))) /\
+  (!x. child_src = Var x ==> not_fresh_at st x) /\
+  fn_has_code st mid func /\ fn_has_code mid en func /\
+  st.cs_next_var <= mid.cs_next_var /\ st.cs_next_id <= mid.cs_next_id /\
+  mid.cs_next_id <= en.cs_next_id /\
+  (EXISTS (\(_,_,_,dyn). dyn) infos ==> site NOTIN window_alloca_sites func (frag_ids st mid)) /\
+  window_alloca_sites func (frag_ids st mid) SUBSET window_alloca_sites func (frag_ids st en) /\
+  DISJOINT (window_alloca_sites func (frag_ids st mid)) (window_alloca_sites func (frag_ids mid en)) ==>
+  ?t. window_phase ctx func st mid (window_alloca_sites func (frag_ids st mid))
+        [(d+SUM (MAP abi_member_head_size (TAKE k ats)),
+          LENGTH (enc (EL k ats) (EL k avs)))] s t /\
+      window_structural_members_inv ctx func infos at ats avs (SUC k) src dst dp site slot
+        sb cap d mid en t /\
+      (!R. (!i b sz. i IN R /\ FLOOKUP s.vs_allocas i = SOME (b,sz) ==> sz = 32) ==>
+           !i b sz. i IN R /\ FLOOKUP t.vs_allocas i = SOME (b,sz) ==> sz = 32) /\
+      (!x. ~not_fresh_at mid x ==> lookup_var x t = lookup_var x s)
+Proof
+  strip_tac >> drule window_observed_contract_strong >> strip_tac >>
+  drule_all (SRULE [] (Q.INST [`obsv` |-> `T`]
+    (SPEC_ALL window_structural_member_static_step_run_sizes_core))) >> simp[]
+QED
+
 Theorem window_structural_member_static_step_run:
   window_structural_members_inv ctx func infos at ats avs k src dst dp site slot
     sb cap d st en s /\ k < LENGTH infos /\
@@ -761,10 +957,11 @@ Proof
   metis_tac[]
 QED
 
-Theorem window_structural_member_dynamic_step_run_sizes:
+Theorem window_structural_member_dynamic_step_run_sizes_core[local]:
   window_structural_members_inv ctx func infos at ats avs k src dst dp site slot
     sb cap d st en s /\ k < LENGTH infos /\
   EL k infos = (ei,az,ms,T) /\ abi_encoder_admissible ei /\ window_strong_contract ei /\
+  (obsv ==> window_observed_contract ei) /\
   compile_abi_encode_child dst child_src ei T
     (SUM (MAP abi_member_head_size (TAKE k ats))) dp st = (out,mid) /\
   eval_operand child_src s = SOME (n2w (sb+abi_encoder_member_span (TAKE k infos))) /\
@@ -782,12 +979,13 @@ Theorem window_structural_member_dynamic_step_run_sizes:
       window_structural_members_inv ctx func infos at ats avs (SUC k) src dst dp site slot
         sb cap d mid en t /\
       (!R. (!i b sz. i IN R /\ FLOOKUP s.vs_allocas i = SOME (b,sz) ==> sz = 32) ==>
-           !i b sz. i IN R /\ FLOOKUP t.vs_allocas i = SOME (b,sz) ==> sz = 32)
+           !i b sz. i IN R /\ FLOOKUP t.vs_allocas i = SOME (b,sz) ==> sz = 32) /\
+      (obsv ==> !x. ~not_fresh_at mid x ==> lookup_var x t = lookup_var x s)
 Proof
   strip_tac >>
   `window_structural_members_inv ctx func infos at ats avs k src dst dp site slot
     sb cap d st mid s` by metis_tac[window_structural_members_inv_restrict_end] >>
-  drule_all window_structural_member_dynamic_run >> strip_tac >>
+  drule_all window_structural_member_dynamic_run_core >> strip_tac >>
   drule_all window_structural_members_inv_output_bounds >> strip_tac >>
   drule_all window_structural_members_inv_total_bounds >> strip_tac >>
   `is_dynamic (EL k ats)` by metis_tac[window_structural_members_inv_source] >>
@@ -813,6 +1011,62 @@ Proof
       (d+window_member_tail infos ats avs k,LENGTH (enc (EL k ats) (EL k avs)))]`, `s`, `st`] >>
   asm_rewrite_tac[] >> simp_tac (srw_ss()) [NoAsms, listTheory.EVERY_DEF] >>
   qpat_x_assum `is_dynamic _ ==> _` drule >> strip_tac >> decide_tac
+QED
+
+Theorem window_structural_member_dynamic_step_run_sizes:
+  window_structural_members_inv ctx func infos at ats avs k src dst dp site slot
+    sb cap d st en s /\ k < LENGTH infos /\
+  EL k infos = (ei,az,ms,T) /\ abi_encoder_admissible ei /\ window_strong_contract ei /\
+  compile_abi_encode_child dst child_src ei T
+    (SUM (MAP abi_member_head_size (TAKE k ats))) dp st = (out,mid) /\
+  eval_operand child_src s = SOME (n2w (sb+abi_encoder_member_span (TAKE k infos))) /\
+  (!x. child_src = Var x ==> not_fresh_at st x) /\
+  fn_has_code st mid func /\ fn_has_code mid en func /\
+  st.cs_next_var <= mid.cs_next_var /\ st.cs_next_id <= mid.cs_next_id /\
+  mid.cs_next_id <= en.cs_next_id /\
+  (window_alloca_sites func (frag_ids st mid) UNION {site}) SUBSET
+    (window_alloca_sites func (frag_ids st en) UNION {site}) /\
+  DISJOINT (window_alloca_sites func (frag_ids st mid) UNION {site})
+    (window_alloca_sites func (frag_ids mid en)) ==>
+  ?t. window_phase ctx func st mid (window_alloca_sites func (frag_ids st mid) UNION {site})
+        [(d+SUM (MAP abi_member_head_size (TAKE k ats)),32);
+         (d+window_member_tail infos ats avs k,LENGTH (enc (EL k ats) (EL k avs)))] s t /\
+      window_structural_members_inv ctx func infos at ats avs (SUC k) src dst dp site slot
+        sb cap d mid en t /\
+      (!R. (!i b sz. i IN R /\ FLOOKUP s.vs_allocas i = SOME (b,sz) ==> sz = 32) ==>
+           !i b sz. i IN R /\ FLOOKUP t.vs_allocas i = SOME (b,sz) ==> sz = 32)
+Proof
+  strip_tac >> drule_all (SIMP_RULE bool_ss [] (Q.INST [`obsv` |-> `F`]
+    (SPEC_ALL window_structural_member_dynamic_step_run_sizes_core))) >> simp[]
+QED
+
+Theorem window_structural_member_dynamic_step_run_sizes_observed:
+  window_structural_members_inv ctx func infos at ats avs k src dst dp site slot
+    sb cap d st en s /\ k < LENGTH infos /\
+  EL k infos = (ei,az,ms,T) /\ abi_encoder_admissible ei /\ window_observed_contract ei /\
+  compile_abi_encode_child dst child_src ei T
+    (SUM (MAP abi_member_head_size (TAKE k ats))) dp st = (out,mid) /\
+  eval_operand child_src s = SOME (n2w (sb+abi_encoder_member_span (TAKE k infos))) /\
+  (!x. child_src = Var x ==> not_fresh_at st x) /\
+  fn_has_code st mid func /\ fn_has_code mid en func /\
+  st.cs_next_var <= mid.cs_next_var /\ st.cs_next_id <= mid.cs_next_id /\
+  mid.cs_next_id <= en.cs_next_id /\
+  (window_alloca_sites func (frag_ids st mid) UNION {site}) SUBSET
+    (window_alloca_sites func (frag_ids st en) UNION {site}) /\
+  DISJOINT (window_alloca_sites func (frag_ids st mid) UNION {site})
+    (window_alloca_sites func (frag_ids mid en)) ==>
+  ?t. window_phase ctx func st mid (window_alloca_sites func (frag_ids st mid) UNION {site})
+        [(d+SUM (MAP abi_member_head_size (TAKE k ats)),32);
+         (d+window_member_tail infos ats avs k,LENGTH (enc (EL k ats) (EL k avs)))] s t /\
+      window_structural_members_inv ctx func infos at ats avs (SUC k) src dst dp site slot
+        sb cap d mid en t /\
+      (!R. (!i b sz. i IN R /\ FLOOKUP s.vs_allocas i = SOME (b,sz) ==> sz = 32) ==>
+           !i b sz. i IN R /\ FLOOKUP t.vs_allocas i = SOME (b,sz) ==> sz = 32) /\
+      (!x. ~not_fresh_at mid x ==> lookup_var x t = lookup_var x s)
+Proof
+  strip_tac >> drule window_observed_contract_strong >> strip_tac >>
+  drule_all (SIMP_RULE bool_ss [] (Q.INST [`obsv` |-> `T`]
+    (SPEC_ALL window_structural_member_dynamic_step_run_sizes_core))) >> simp[]
 QED
 
 Theorem window_structural_member_dynamic_step_run:
@@ -847,10 +1101,10 @@ Proof
   first_x_assum drule >> simp[]
 QED
 
-Theorem window_structural_members_cons_run_sizes:
+Theorem window_structural_members_cons_run_sizes_core[local]:
   window_structural_members_inv ctx func infos at ats avs k src dst dp site slot
     sb cap d st en s /\ DROP k infos = (h0,h1,h2,h3)::rest /\
-  window_strong_contract h0 /\
+  window_strong_contract h0 /\ (obsv ==> window_observed_contract h0) /\
   compile_abi_encode_complex_elems dst src ((h0,h1,h2,h3)::rest)
     (abi_encoder_member_span (TAKE k infos))
     (SUM (MAP abi_member_head_size (TAKE k ats))) dp st = (out,en) ==>
@@ -866,7 +1120,8 @@ Theorem window_structural_members_cons_run_sizes:
     st.cs_next_var <= mid.cs_next_var /\
     window_alloca_sites func (frag_ids mid en) SUBSET window_alloca_sites func (frag_ids st en) /\
     (!R. (!i b sz. i IN R /\ FLOOKUP s.vs_allocas i = SOME (b,sz) ==> sz = 32) ==>
-         !i b sz. i IN R /\ FLOOKUP u.vs_allocas i = SOME (b,sz) ==> sz = 32)
+         !i b sz. i IN R /\ FLOOKUP u.vs_allocas i = SOME (b,sz) ==> sz = 32) /\
+    (obsv ==> !x. ~not_fresh_at en x ==> lookup_var x u = lookup_var x s)
 Proof
   strip_tac >>
   `fn_has_code st en func` by
@@ -878,7 +1133,7 @@ Proof
       cj 3 abiEncoderAppendTheory.cs_appends_abi_encode_mutual, fragExecTheory.cs_appends_def] >>
   `cs_extends st ready` by metis_tac[abiEncoderAddressReachTheory.abi_encoder_emit_address_shape] >>
   `fn_has_code ready en func` by metis_tac[fragExecTheory.fn_has_code_split, compileEnvTheory.cs_extends_trans] >>
-  drule_all window_structural_member_source_prepare >> strip_tac >>
+  drule_all window_structural_member_source_prepare_observed >> strip_tac >>
   `k < LENGTH infos /\ EL k infos = (h0,h1,h2,h3) /\ DROP (SUC k) infos = rest` by
     metis_tac[window_structural_member_drop_cons] >>
   qpat_x_assum `compile_abi_encode_complex_elems _ _ (_::_) _ _ _ _ = _` kall_tac >>
@@ -911,15 +1166,16 @@ Proof
       (if EXISTS (\(_,_,_,dyn). dyn) infos then {site} else {})) /\
     EVERY (\(b,n). d <= b /\ b+n <= d+LENGTH (enc at (ListV avs))) outs /\
     (!R. (!i b sz. i IN R /\ FLOOKUP t.vs_allocas i = SOME (b,sz) ==> sz = 32) ==>
-         !i b sz. i IN R /\ FLOOKUP u.vs_allocas i = SOME (b,sz) ==> sz = 32)` by
+         !i b sz. i IN R /\ FLOOKUP u.vs_allocas i = SOME (b,sz) ==> sz = 32) /\
+    (obsv ==> !x. ~not_fresh_at mid x ==> lookup_var x u = lookup_var x t)` by
     suspend "child" >>
   suspend "compose"
 QED
 
-Resume window_structural_members_cons_run_sizes[child]:
+Resume window_structural_members_cons_run_sizes_core[child]:
   reverse (Cases_on `h3`)
   >- (`EXISTS (\(_,_,_,dyn). dyn) infos ==> site NOTIN window_alloca_sites func (frag_ids ready mid)` by metis_tac[] >>
-      drule_all window_structural_member_static_step_run_sizes >> strip_tac >>
+      drule_all window_structural_member_static_step_run_sizes_core >> strip_tac >>
       qexistsl_tac [`t'`, `window_alloca_sites func (frag_ids ready mid)`,
         `[(d+SUM (MAP abi_member_head_size (TAKE k ats)),LENGTH (enc (EL k ats) (EL k avs)))]`] >>
       asm_rewrite_tac[] >>
@@ -936,7 +1192,7 @@ Resume window_structural_members_cons_run_sizes[child]:
    DISJOINT (window_alloca_sites func (frag_ids ready mid) UNION {site})
      (window_alloca_sites func (frag_ids mid en))` by
     metis_tac[SUBSET_UNION, SUBSET_TRANS, pred_setTheory.UNION_SUBSET] >>
-  drule_all window_structural_member_dynamic_step_run_sizes >> strip_tac >>
+  drule_all window_structural_member_dynamic_step_run_sizes_core >> strip_tac >>
   qexistsl_tac [`t'`, `window_alloca_sites func (frag_ids ready mid) UNION {site}`,
     `[(d+SUM (MAP abi_member_head_size (TAKE k ats)),32);
       (d+window_member_tail infos ats avs k,LENGTH (enc (EL k ats) (EL k avs)))]`] >>
@@ -948,7 +1204,7 @@ Resume window_structural_members_cons_run_sizes[child]:
   qpat_x_assum `is_dynamic _ ==> _` drule >> strip_tac >> decide_tac
 QED
 
-Resume window_structural_members_cons_run_sizes[compose]:
+Resume window_structural_members_cons_run_sizes_core[compose]:
   `!i. FLOOKUP t.vs_allocas i = FLOOKUP s.vs_allocas i` by
     (qpat_assum `window_phase _ _ st ready {} [] s t` mp_tac >>
      simp_tac bool_ss [window_phase_def,
@@ -972,6 +1228,11 @@ Resume window_structural_members_cons_run_sizes[compose]:
    window_alloca_sites func (frag_ids mid en) SUBSET window_alloca_sites func (frag_ids st en)` by
     (simp_tac (srw_ss()) [window_alloca_sites_def, abiEncoderPropsTheory.frag_ids_def,
        SUBSET_DEF] >> rpt strip_tac >> decide_tac) >>
+  `obsv ==> !x. ~not_fresh_at en x ==> lookup_var x u = lookup_var x s` by
+    (rpt strip_tac >>
+     `~not_fresh_at mid x /\ ~not_fresh_at ready x` by
+       metis_tac[freshWritesTheory.not_fresh_at_mono, LESS_EQ_TRANS] >>
+     metis_tac[]) >>
   qexistsl_tac [`mid`, `u`] >> asm_rewrite_tac[] >>
   rpt (qpat_x_assum `!R. _` kall_tac) >>
   (conj_tac >- metis_tac[]) >>
@@ -988,7 +1249,59 @@ Resume window_structural_members_cons_run_sizes[compose]:
   simp_tac (srw_ss()) [SUBSET_DEF] >> metis_tac[]
 QED
 
-Finalise window_structural_members_cons_run_sizes
+Finalise window_structural_members_cons_run_sizes_core
+
+Theorem window_structural_members_cons_run_sizes:
+  window_structural_members_inv ctx func infos at ats avs k src dst dp site slot
+    sb cap d st en s /\ DROP k infos = (h0,h1,h2,h3)::rest /\
+  window_strong_contract h0 /\
+  compile_abi_encode_complex_elems dst src ((h0,h1,h2,h3)::rest)
+    (abi_encoder_member_span (TAKE k infos))
+    (SUM (MAP abi_member_head_size (TAKE k ats))) dp st = (out,en) ==>
+  ?mid u. window_structural_members_inv ctx func infos at ats avs (SUC k) src dst dp site slot
+      sb cap d mid en u /\ DROP (SUC k) infos = rest /\
+    compile_abi_encode_complex_elems dst src rest
+      (abi_encoder_member_span (TAKE (SUC k) infos))
+      (SUM (MAP abi_member_head_size (TAKE (SUC k) ats))) dp mid = (out,en) /\
+    window_phase ctx func st mid
+      (window_alloca_sites func (frag_ids st en) UNION
+        (if EXISTS (\(_,_,_,dyn). dyn) infos then {site} else {}))
+      [(d,LENGTH (enc at (ListV avs)))] s u /\
+    st.cs_next_var <= mid.cs_next_var /\
+    window_alloca_sites func (frag_ids mid en) SUBSET window_alloca_sites func (frag_ids st en) /\
+    (!R. (!i b sz. i IN R /\ FLOOKUP s.vs_allocas i = SOME (b,sz) ==> sz = 32) ==>
+         !i b sz. i IN R /\ FLOOKUP u.vs_allocas i = SOME (b,sz) ==> sz = 32)
+Proof
+  strip_tac >> drule_all (SIMP_RULE bool_ss [] (Q.INST [`obsv` |-> `F`]
+    (SPEC_ALL window_structural_members_cons_run_sizes_core))) >> simp[]
+QED
+
+Theorem window_structural_members_cons_run_sizes_observed:
+  window_structural_members_inv ctx func infos at ats avs k src dst dp site slot
+    sb cap d st en s /\ DROP k infos = (h0,h1,h2,h3)::rest /\
+  window_observed_contract h0 /\
+  compile_abi_encode_complex_elems dst src ((h0,h1,h2,h3)::rest)
+    (abi_encoder_member_span (TAKE k infos))
+    (SUM (MAP abi_member_head_size (TAKE k ats))) dp st = (out,en) ==>
+  ?mid u. window_structural_members_inv ctx func infos at ats avs (SUC k) src dst dp site slot
+      sb cap d mid en u /\ DROP (SUC k) infos = rest /\
+    compile_abi_encode_complex_elems dst src rest
+      (abi_encoder_member_span (TAKE (SUC k) infos))
+      (SUM (MAP abi_member_head_size (TAKE (SUC k) ats))) dp mid = (out,en) /\
+    window_phase ctx func st mid
+      (window_alloca_sites func (frag_ids st en) UNION
+        (if EXISTS (\(_,_,_,dyn). dyn) infos then {site} else {}))
+      [(d,LENGTH (enc at (ListV avs)))] s u /\
+    st.cs_next_var <= mid.cs_next_var /\
+    window_alloca_sites func (frag_ids mid en) SUBSET window_alloca_sites func (frag_ids st en) /\
+    (!R. (!i b sz. i IN R /\ FLOOKUP s.vs_allocas i = SOME (b,sz) ==> sz = 32) ==>
+         !i b sz. i IN R /\ FLOOKUP u.vs_allocas i = SOME (b,sz) ==> sz = 32) /\
+    (!x. ~not_fresh_at en x ==> lookup_var x u = lookup_var x s)
+Proof
+  strip_tac >> drule window_observed_contract_strong >> strip_tac >>
+  drule_all (SIMP_RULE bool_ss [] (Q.INST [`obsv` |-> `T`]
+    (SPEC_ALL window_structural_members_cons_run_sizes_core))) >> simp[]
+QED
 Theorem window_structural_members_cons_run:
   window_structural_members_inv ctx func infos at ats avs k src dst dp site slot
     sb cap d st en s /\ DROP k infos = (h0,h1,h2,h3)::rest /\
@@ -1012,6 +1325,64 @@ Proof
 QED
 
 
+Theorem window_structural_members_remaining_run_sizes_core[local]:
+  !rest ctx func infos at ats avs k src dst dp site slot sb cap d st en s out.
+  window_structural_members_inv ctx func infos at ats avs k src dst dp site slot
+    sb cap d st en s /\ DROP k infos = rest /\
+  (!ei az ms dyn. MEM (ei,az,ms,dyn) rest ==> window_strong_contract ei) /\
+  (obsv ==> !ei az ms dyn. MEM (ei,az,ms,dyn) rest ==> window_observed_contract ei) /\
+  compile_abi_encode_complex_elems dst src rest
+    (abi_encoder_member_span (TAKE k infos))
+    (SUM (MAP abi_member_head_size (TAKE k ats))) dp st = (out,en) ==>
+  ?t. window_phase ctx func st en
+        (window_alloca_sites func (frag_ids st en) UNION
+          (if EXISTS (\(_,_,_,dyn). dyn) infos then {site} else {}))
+        [(d,LENGTH (enc at (ListV avs)))] s t /\
+      window_structural_members_inv ctx func infos at ats avs (LENGTH infos) src dst dp site slot
+        sb cap d en en t /\
+      (!R. (!i b sz. i IN R /\ FLOOKUP s.vs_allocas i = SOME (b,sz) ==> sz = 32) ==>
+           !i b sz. i IN R /\ FLOOKUP t.vs_allocas i = SOME (b,sz) ==> sz = 32) /\
+      (obsv ==> !x. ~not_fresh_at en x ==> lookup_var x t = lookup_var x s)
+Proof
+  Induct_on `rest`
+  >- (rpt gen_tac >>
+      simp_tac bool_ss [Once abiEncoderTheory.compile_abi_encode_child_def,
+        compileEnvTheory.comp_return_def, pairTheory.PAIR_EQ] >> strip_tac >>
+      `k = LENGTH infos` by
+        (qpat_assum `window_structural_members_inv _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _` mp_tac >>
+         simp_tac bool_ss [window_structural_members_inv_def, window_member_prefix_def] >>
+         strip_tac >> fs[DROP_EQ_NIL] >> decide_tac) >>
+      gvs[] >> qexists_tac `s` >> asm_rewrite_tac[] >>
+      irule window_phase_refl >>
+      qpat_assum `window_structural_members_inv _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _` mp_tac >>
+      simp_tac bool_ss [window_structural_members_inv_def, abi_encoder_window_pre_def] >> metis_tac[]) >>
+  rpt gen_tac >> strip_tac >> PairCases_on `h` >>
+  `window_strong_contract h0 /\ (obsv ==> window_observed_contract h0)` by metis_tac[MEM] >>
+  drule_all window_structural_members_cons_run_sizes_core >> strip_tac >>
+  `!ei az ms dyn. MEM (ei,az,ms,dyn) rest ==> window_strong_contract ei` by metis_tac[MEM] >>
+  `(obsv ==> !ei az ms dyn. MEM (ei,az,ms,dyn) rest ==> window_observed_contract ei)` by metis_tac[MEM] >>
+  first_x_assum drule_all >> strip_tac >>
+  `!R. (!i b sz. i IN R /\ FLOOKUP s.vs_allocas i = SOME (b,sz) ==> sz = 32) ==>
+       !i b sz. i IN R /\ FLOOKUP t.vs_allocas i = SOME (b,sz) ==> sz = 32` by
+    (gen_tac >> disch_tac >>
+     qpat_x_assum `!R. _ ==> !i b sz. _ /\ FLOOKUP u.vs_allocas i = _ ==> _`
+       (qspec_then `R` mp_tac) >> asm_rewrite_tac[] >> disch_tac >>
+     qpat_x_assum `!R. _` (qspec_then `R` mp_tac) >> asm_rewrite_tac[]) >>
+  `obsv ==> !x. ~not_fresh_at en x ==> lookup_var x t = lookup_var x s` by metis_tac[] >>
+  qexists_tac `t` >> asm_rewrite_tac[] >>
+  rpt (qpat_x_assum `!R. _` kall_tac) >>
+  irule window_phase_chain >>
+  qexistsl_tac [`window_alloca_sites func (frag_ids st en) UNION
+      (if EXISTS (\(_,_,_,dyn). dyn) infos then {site} else {})`,
+    `[(d,LENGTH (enc at (ListV avs)))]`, `mid`,
+    `window_alloca_sites func (frag_ids mid en) UNION
+      (if EXISTS (\(_,_,_,dyn). dyn) infos then {site} else {})`,
+    `[(d,LENGTH (enc at (ListV avs)))]`, `u`] >>
+  asm_rewrite_tac[] >>
+  qpat_x_assum `window_alloca_sites func (frag_ids mid en) SUBSET _` mp_tac >>
+  simp_tac (srw_ss()) [SUBSET_DEF] >> metis_tac[]
+QED
+
 Theorem window_structural_members_remaining_run_sizes:
   !rest ctx func infos at ats avs k src dst dp site slot sb cap d st en s out.
   window_structural_members_inv ctx func infos at ats avs k src dst dp site slot
@@ -1029,41 +1400,33 @@ Theorem window_structural_members_remaining_run_sizes:
       (!R. (!i b sz. i IN R /\ FLOOKUP s.vs_allocas i = SOME (b,sz) ==> sz = 32) ==>
            !i b sz. i IN R /\ FLOOKUP t.vs_allocas i = SOME (b,sz) ==> sz = 32)
 Proof
-  Induct_on `rest`
-  >- (rpt gen_tac >>
-      simp_tac bool_ss [Once abiEncoderTheory.compile_abi_encode_child_def,
-        compileEnvTheory.comp_return_def, pairTheory.PAIR_EQ] >> strip_tac >>
-      `k = LENGTH infos` by
-        (qpat_assum `window_structural_members_inv _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _` mp_tac >>
-         simp_tac bool_ss [window_structural_members_inv_def, window_member_prefix_def] >>
-         strip_tac >> fs[DROP_EQ_NIL] >> decide_tac) >>
-      gvs[] >> qexists_tac `s` >> asm_rewrite_tac[] >>
-      irule window_phase_refl >>
-      qpat_assum `window_structural_members_inv _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _` mp_tac >>
-      simp_tac bool_ss [window_structural_members_inv_def, abi_encoder_window_pre_def] >> metis_tac[]) >>
-  rpt gen_tac >> strip_tac >> PairCases_on `h` >>
-  `window_strong_contract h0` by metis_tac[MEM] >>
-  drule_all window_structural_members_cons_run_sizes >> strip_tac >>
-  `!ei az ms dyn. MEM (ei,az,ms,dyn) rest ==> window_strong_contract ei` by metis_tac[MEM] >>
-  first_x_assum drule_all >> strip_tac >>
-  `!R. (!i b sz. i IN R /\ FLOOKUP s.vs_allocas i = SOME (b,sz) ==> sz = 32) ==>
-       !i b sz. i IN R /\ FLOOKUP t.vs_allocas i = SOME (b,sz) ==> sz = 32` by
-    (gen_tac >> disch_tac >>
-     qpat_x_assum `!R. _ ==> !i b sz. _ /\ FLOOKUP u.vs_allocas i = _ ==> _`
-       (qspec_then `R` mp_tac) >> asm_rewrite_tac[] >> disch_tac >>
-     qpat_x_assum `!R. _` (qspec_then `R` mp_tac) >> asm_rewrite_tac[]) >>
-  qexists_tac `t` >> asm_rewrite_tac[] >>
-  rpt (qpat_x_assum `!R. _` kall_tac) >>
-  irule window_phase_chain >>
-  qexistsl_tac [`window_alloca_sites func (frag_ids st en) UNION
-      (if EXISTS (\(_,_,_,dyn). dyn) infos then {site} else {})`,
-    `[(d,LENGTH (enc at (ListV avs)))]`, `mid`,
-    `window_alloca_sites func (frag_ids mid en) UNION
-      (if EXISTS (\(_,_,_,dyn). dyn) infos then {site} else {})`,
-    `[(d,LENGTH (enc at (ListV avs)))]`, `u`] >>
-  asm_rewrite_tac[] >>
-  qpat_x_assum `window_alloca_sites func (frag_ids mid en) SUBSET _` mp_tac >>
-  simp_tac (srw_ss()) [SUBSET_DEF] >> metis_tac[]
+  rpt gen_tac >> strip_tac >> drule_all (SIMP_RULE bool_ss [] (Q.INST [`obsv` |-> `F`]
+    (SPEC_ALL window_structural_members_remaining_run_sizes_core))) >> simp[]
+QED
+
+Theorem window_structural_members_remaining_run_sizes_observed:
+  !rest ctx func infos at ats avs k src dst dp site slot sb cap d st en s out.
+  window_structural_members_inv ctx func infos at ats avs k src dst dp site slot
+    sb cap d st en s /\ DROP k infos = rest /\
+  (!ei az ms dyn. MEM (ei,az,ms,dyn) rest ==> window_observed_contract ei) /\
+  compile_abi_encode_complex_elems dst src rest
+    (abi_encoder_member_span (TAKE k infos))
+    (SUM (MAP abi_member_head_size (TAKE k ats))) dp st = (out,en) ==>
+  ?t. window_phase ctx func st en
+        (window_alloca_sites func (frag_ids st en) UNION
+          (if EXISTS (\(_,_,_,dyn). dyn) infos then {site} else {}))
+        [(d,LENGTH (enc at (ListV avs)))] s t /\
+      window_structural_members_inv ctx func infos at ats avs (LENGTH infos) src dst dp site slot
+        sb cap d en en t /\
+      (!R. (!i b sz. i IN R /\ FLOOKUP s.vs_allocas i = SOME (b,sz) ==> sz = 32) ==>
+           !i b sz. i IN R /\ FLOOKUP t.vs_allocas i = SOME (b,sz) ==> sz = 32) /\
+      (!x. ~not_fresh_at en x ==> lookup_var x t = lookup_var x s)
+Proof
+  rpt gen_tac >> strip_tac >>
+  `!ei az ms dyn. MEM (ei,az,ms,dyn) rest ==> window_strong_contract ei` by
+    metis_tac[window_observed_contract_strong] >>
+  drule_all (SIMP_RULE bool_ss [] (Q.INST [`obsv` |-> `T`]
+    (SPEC_ALL window_structural_members_remaining_run_sizes_core))) >> simp[]
 QED
 
 Theorem window_structural_members_remaining_run:
@@ -1085,6 +1448,42 @@ Proof
 QED
 
 (* Complete traversal from an initialized cursor, independent of tuple typing. *)
+Theorem window_structural_members_initialized_run_sizes_core[local]:
+  abi_encoder_window_pre ctx func st en dst src (AbiComplex infos) at
+    (ListV avs) sb cap d s /\
+  abi_encoder_tuple_type at ats /\
+  LENGTH infos = LENGTH ats /\ LENGTH ats = LENGTH avs /\
+  window_member_head_size infos = head_lengths ats 0 /\
+  window_member_cursor infos dp site slot sb cap d
+    (LENGTH (enc at (ListV avs))) st s /\
+  (EXISTS (\(_,_,_,dyn). dyn) infos ==>
+    mem_word_at slot s.vs_memory = n2w (window_member_head_size infos)) /\
+  (!ei az ms dyn. MEM (ei,az,ms,dyn) infos ==> window_strong_contract ei) /\
+  (obsv ==> !ei az ms dyn. MEM (ei,az,ms,dyn) infos ==> window_observed_contract ei) /\
+  compile_abi_encode_complex_elems dst src infos 0 0 dp st = (out,en) ==>
+  ?t. window_phase ctx func st en
+        (window_alloca_sites func (frag_ids st en) UNION
+          (if EXISTS (\(_,_,_,dyn). dyn) infos then {site} else {}))
+        [(d,LENGTH (enc at (ListV avs)))] s t /\
+      window_structural_members_inv ctx func infos at ats avs (LENGTH infos) src dst dp site slot
+        sb cap d en en t /\
+      mem_bytes_at d (LENGTH (enc at (ListV avs))) t.vs_memory = enc at (ListV avs) /\
+      (!R. (!i b sz. i IN R /\ FLOOKUP s.vs_allocas i = SOME (b,sz) ==> sz = 32) ==>
+           !i b sz. i IN R /\ FLOOKUP t.vs_allocas i = SOME (b,sz) ==> sz = 32) /\
+      (obsv ==> !x. ~not_fresh_at en x ==> lookup_var x t = lookup_var x s)
+Proof
+  strip_tac >>
+  `window_structural_members_inv ctx func infos at ats avs 0 src dst dp site slot
+     sb cap d st en s` by metis_tac[window_structural_members_inv_entry] >>
+  drule window_structural_members_remaining_run_sizes_core >>
+  disch_then (qspecl_then [`obsv`, `infos`, `out`] mp_tac) >>
+  simp[abi_encoder_member_span_def] >>
+  (impl_tac >- asm_rewrite_tac[]) >> strip_tac >>
+  `mem_bytes_at d (LENGTH (enc at (ListV avs))) t.vs_memory = enc at (ListV avs)` by
+    (irule window_structural_members_inv_complete >> metis_tac[]) >>
+  qexists_tac `t` >> asm_rewrite_tac[] >> metis_tac[]
+QED
+
 Theorem window_structural_members_initialized_run_sizes:
   abi_encoder_window_pre ctx func st en dst src (AbiComplex infos) at
     (ListV avs) sb cap d s /\
@@ -1107,16 +1506,38 @@ Theorem window_structural_members_initialized_run_sizes:
       (!R. (!i b sz. i IN R /\ FLOOKUP s.vs_allocas i = SOME (b,sz) ==> sz = 32) ==>
            !i b sz. i IN R /\ FLOOKUP t.vs_allocas i = SOME (b,sz) ==> sz = 32)
 Proof
+  strip_tac >> drule_all (SIMP_RULE bool_ss [] (Q.INST [`obsv` |-> `F`]
+    (SPEC_ALL window_structural_members_initialized_run_sizes_core))) >> simp[]
+QED
+
+Theorem window_structural_members_initialized_run_sizes_observed:
+  abi_encoder_window_pre ctx func st en dst src (AbiComplex infos) at
+    (ListV avs) sb cap d s /\
+  abi_encoder_tuple_type at ats /\
+  LENGTH infos = LENGTH ats /\ LENGTH ats = LENGTH avs /\
+  window_member_head_size infos = head_lengths ats 0 /\
+  window_member_cursor infos dp site slot sb cap d
+    (LENGTH (enc at (ListV avs))) st s /\
+  (EXISTS (\(_,_,_,dyn). dyn) infos ==>
+    mem_word_at slot s.vs_memory = n2w (window_member_head_size infos)) /\
+  (!ei az ms dyn. MEM (ei,az,ms,dyn) infos ==> window_observed_contract ei) /\
+  compile_abi_encode_complex_elems dst src infos 0 0 dp st = (out,en) ==>
+  ?t. window_phase ctx func st en
+        (window_alloca_sites func (frag_ids st en) UNION
+          (if EXISTS (\(_,_,_,dyn). dyn) infos then {site} else {}))
+        [(d,LENGTH (enc at (ListV avs)))] s t /\
+      window_structural_members_inv ctx func infos at ats avs (LENGTH infos) src dst dp site slot
+        sb cap d en en t /\
+      mem_bytes_at d (LENGTH (enc at (ListV avs))) t.vs_memory = enc at (ListV avs) /\
+      (!R. (!i b sz. i IN R /\ FLOOKUP s.vs_allocas i = SOME (b,sz) ==> sz = 32) ==>
+           !i b sz. i IN R /\ FLOOKUP t.vs_allocas i = SOME (b,sz) ==> sz = 32) /\
+      (!x. ~not_fresh_at en x ==> lookup_var x t = lookup_var x s)
+Proof
   strip_tac >>
-  `window_structural_members_inv ctx func infos at ats avs 0 src dst dp site slot
-     sb cap d st en s` by metis_tac[window_structural_members_inv_entry] >>
-  drule window_structural_members_remaining_run_sizes >>
-  disch_then (qspec_then `infos` mp_tac) >>
-  simp[abi_encoder_member_span_def] >>
-  (impl_tac >- asm_rewrite_tac[]) >> strip_tac >>
-  `mem_bytes_at d (LENGTH (enc at (ListV avs))) t.vs_memory = enc at (ListV avs)` by
-    (irule window_structural_members_inv_complete >> metis_tac[]) >>
-  qexists_tac `t` >> asm_rewrite_tac[] >> metis_tac[]
+  `!ei az ms dyn. MEM (ei,az,ms,dyn) infos ==> window_strong_contract ei` by
+    metis_tac[window_observed_contract_strong] >>
+  drule_all (SIMP_RULE bool_ss [] (Q.INST [`obsv` |-> `T`]
+    (SPEC_ALL window_structural_members_initialized_run_sizes_core))) >> simp[]
 QED
 
 Theorem window_structural_members_initialized_run:
@@ -1177,6 +1598,49 @@ Proof
   simp[EXISTS_MAP, combinTheory.o_DEF] >> CONV_TAC (DEPTH_CONV ETA_CONV) >> simp[]
 QED
 
+Theorem window_complex_initialized_run_sizes_core:
+  abi_encoder_window_pre ctx func st en dst src (AbiComplex infos) at
+    (ListV avs) sb cap d s /\
+  window_member_cursor infos dp site slot sb cap d
+    (LENGTH (enc at (ListV avs))) st s /\
+  (EXISTS (\(_,_,_,dyn). dyn) infos ==>
+    mem_word_at slot s.vs_memory = n2w (window_member_head_size infos)) /\
+  (!ei az ms dyn. MEM (ei,az,ms,dyn) infos ==> window_strong_contract ei) /\
+  (obsv ==> !ei az ms dyn. MEM (ei,az,ms,dyn) infos ==> window_observed_contract ei) /\
+  compile_abi_encode_complex_elems dst src infos 0 0 dp st = (out,en) ==>
+  ?t. window_phase ctx func st en
+        (window_alloca_sites func (frag_ids st en) UNION
+          (if EXISTS (\(_,_,_,dyn). dyn) infos then {site} else {}))
+        [(d,LENGTH (enc at (ListV avs)))] s t /\
+      mem_bytes_at d (LENGTH (enc at (ListV avs))) t.vs_memory = enc at (ListV avs) /\
+      (EXISTS (\(_,_,_,dyn). dyn) infos ==>
+        mem_word_at slot t.vs_memory = n2w (LENGTH (enc at (ListV avs)))) /\
+      (!R. (!i b sz. i IN R /\ FLOOKUP s.vs_allocas i = SOME (b,sz) ==> sz = 32) ==>
+           !i b sz. i IN R /\ FLOOKUP t.vs_allocas i = SOME (b,sz) ==> sz = 32) /\
+      (obsv ==> !x. ~not_fresh_at en x ==> lookup_var x t = lookup_var x s)
+Proof
+  strip_tac >>
+  `abi_encoder_window_input (AbiComplex infos) at (ListV avs) sb cap s.vs_memory` by
+    fs[abi_encoder_window_pre_def] >>
+  `?ats. abi_encoder_tuple_type at ats` by
+    metis_tac[abi_encoder_window_complex_iff] >>
+  drule_all window_complex_head_layout >> strip_tac >>
+  drule_all window_structural_members_initialized_run_sizes_core >> strip_tac >>
+  qexists_tac `t` >> asm_rewrite_tac[] >>
+  qpat_x_assum `!R. _` kall_tac >> strip_tac >>
+  `LIST_REL abi_encoder_structural_valid ats avs` by
+    metis_tac[window_complex_structural_members] >>
+  `enc at (ListV avs) = enc (Tuple ats) (ListV avs)` by
+    (fs[abi_encoder_tuple_type_def] >> gvs[Once enc_def, LET_THM]) >>
+  `window_member_tail infos ats avs (LENGTH infos) = LENGTH (enc at (ListV avs))` by
+    (`TAKE (LENGTH infos) ats = ats /\ TAKE (LENGTH infos) avs = avs` by
+       metis_tac[TAKE_LENGTH_ID] >>
+     drule window_structural_member_tuple_length >>
+     pure_asm_rewrite_tac[window_member_tail_def] >> metis_tac[]) >>
+  qpat_x_assum `window_structural_members_inv _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _` mp_tac >>
+  simp_tac bool_ss [window_structural_members_inv_def] >> metis_tac[]
+QED
+
 Theorem window_complex_initialized_run_sizes:
   abi_encoder_window_pre ctx func st en dst src (AbiComplex infos) at
     (ListV avs) sb cap d s /\
@@ -1196,26 +1660,35 @@ Theorem window_complex_initialized_run_sizes:
       (!R. (!i b sz. i IN R /\ FLOOKUP s.vs_allocas i = SOME (b,sz) ==> sz = 32) ==>
            !i b sz. i IN R /\ FLOOKUP t.vs_allocas i = SOME (b,sz) ==> sz = 32)
 Proof
+  strip_tac >> drule_all (SIMP_RULE bool_ss [] (Q.INST [`obsv` |-> `F`]
+    (SPEC_ALL window_complex_initialized_run_sizes_core))) >> simp[]
+QED
+
+Theorem window_complex_initialized_run_sizes_observed:
+  abi_encoder_window_pre ctx func st en dst src (AbiComplex infos) at
+    (ListV avs) sb cap d s /\
+  window_member_cursor infos dp site slot sb cap d
+    (LENGTH (enc at (ListV avs))) st s /\
+  (EXISTS (\(_,_,_,dyn). dyn) infos ==>
+    mem_word_at slot s.vs_memory = n2w (window_member_head_size infos)) /\
+  (!ei az ms dyn. MEM (ei,az,ms,dyn) infos ==> window_observed_contract ei) /\
+  compile_abi_encode_complex_elems dst src infos 0 0 dp st = (out,en) ==>
+  ?t. window_phase ctx func st en
+        (window_alloca_sites func (frag_ids st en) UNION
+          (if EXISTS (\(_,_,_,dyn). dyn) infos then {site} else {}))
+        [(d,LENGTH (enc at (ListV avs)))] s t /\
+      mem_bytes_at d (LENGTH (enc at (ListV avs))) t.vs_memory = enc at (ListV avs) /\
+      (EXISTS (\(_,_,_,dyn). dyn) infos ==>
+        mem_word_at slot t.vs_memory = n2w (LENGTH (enc at (ListV avs)))) /\
+      (!R. (!i b sz. i IN R /\ FLOOKUP s.vs_allocas i = SOME (b,sz) ==> sz = 32) ==>
+           !i b sz. i IN R /\ FLOOKUP t.vs_allocas i = SOME (b,sz) ==> sz = 32) /\
+      (!x. ~not_fresh_at en x ==> lookup_var x t = lookup_var x s)
+Proof
   strip_tac >>
-  `abi_encoder_window_input (AbiComplex infos) at (ListV avs) sb cap s.vs_memory` by
-    fs[abi_encoder_window_pre_def] >>
-  `?ats. abi_encoder_tuple_type at ats` by
-    metis_tac[abi_encoder_window_complex_iff] >>
-  drule_all window_complex_head_layout >> strip_tac >>
-  drule_all window_structural_members_initialized_run_sizes >> strip_tac >>
-  qexists_tac `t` >> asm_rewrite_tac[] >>
-  qpat_x_assum `!R. _` kall_tac >> strip_tac >>
-  `LIST_REL abi_encoder_structural_valid ats avs` by
-    metis_tac[window_complex_structural_members] >>
-  `enc at (ListV avs) = enc (Tuple ats) (ListV avs)` by
-    (fs[abi_encoder_tuple_type_def] >> gvs[Once enc_def, LET_THM]) >>
-  `window_member_tail infos ats avs (LENGTH infos) = LENGTH (enc at (ListV avs))` by
-    (`TAKE (LENGTH infos) ats = ats /\ TAKE (LENGTH infos) avs = avs` by
-       metis_tac[TAKE_LENGTH_ID] >>
-     drule window_structural_member_tuple_length >>
-     pure_asm_rewrite_tac[window_member_tail_def] >> metis_tac[]) >>
-  qpat_x_assum `window_structural_members_inv _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _` mp_tac >>
-  simp_tac bool_ss [window_structural_members_inv_def] >> metis_tac[]
+  `!ei az ms dyn. MEM (ei,az,ms,dyn) infos ==> window_strong_contract ei` by
+    metis_tac[window_observed_contract_strong] >>
+  drule_all (SIMP_RULE bool_ss [] (Q.INST [`obsv` |-> `T`]
+    (SPEC_ALL window_complex_initialized_run_sizes_core))) >> simp[]
 QED
 
 Theorem window_complex_initialized_run:

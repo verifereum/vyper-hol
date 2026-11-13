@@ -15,7 +15,7 @@ Ancestors
   exprSimHypsDefs
   exprOpenCopies exprOpenPrimitives exprOpenTerminals exprOpenBuiltins
   supportedExprs supportedExprForms
-  exprLowering  vyperTypeSystem compileEnv finite_map
+  exprLowering  vyperTypeSystem compileEnv loweringStateRelDefs finite_map
   supportedDecls vyperState vyperInterpreter list
 
 Theorem compile_expr_name_open:

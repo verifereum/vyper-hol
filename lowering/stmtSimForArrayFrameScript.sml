@@ -2,7 +2,7 @@
 Theory stmtSimForArrayFrame
 Ancestors
   list rich_list finite_map vyperState vyperLookup vyperScopePreservation
-  supportedStmts vyperPlaceFrames supportedExprs vyperInterpreter
+  supportedStmts vyperPlaceFrames supportedExprs vyperInterpreter vyperCallOutcomeFrame
   vyperStatePreservation supportedExprForms supportedExprTraverse
   vyperEvalExprPreservesScopesDom vyperPlaceResultTyping vyperTypeSystem vyperTypeEnvExtension vyperTypeArgFits
 
@@ -166,9 +166,12 @@ Resume supported_pure_scopes_mutual[builtin]:
   `blt <> Len` by
     (Cases_on `blt = Len` >> gvs[supported_builtin_form_def, AllCaseEqs()]) >>
   Cases_on `blt = Env MsgGas` >>
+  Cases_on `blt = Bop In \/ blt = Bop NotIn` >>
   gvs[Once evaluate_def, type_check_def, assert_def, bind_def,
-      ignore_bind_def, return_def, raise_def, AllCaseEqs(), get_accounts_def] >>
+      ignore_bind_def, return_def, raise_def, COND_RATOR, lift_option_type_def,
+      vfmTypesTheory.option_CASE_rator, AllCaseEqs(), get_accounts_def] >>
   imp_res_tac next_gas_reading_state >>
+  imp_res_tac lift_option_type_state >>
   imp_res_tac lift_sum_state >>
   imp_res_tac precompile_call_success_state >> gvs[] >> metis_tac[]
 QED
@@ -314,7 +317,7 @@ Theorem iterator_unmodified_rejects_element_write[local]:
     ~iterator_unmodified (Array (Name ty name))
       [Assign (BaseTarget (SubscriptTarget (NameTarget name) key)) rhs]
 Proof
-  simp[iterator_unmodified_def, expr_place_def, stmt_writes_ok_def,
+  simp[iterator_unmodified_def, expr_places_def, stmt_writes_ok_def,
        atarget_writes_ok_def, subscript_write_contains_name]
 QED
 
@@ -733,6 +736,12 @@ Theorem eval_for_projection_frame:
 Proof
   Induct_on `vs` >> simp[Once evaluate_def, return_def] >>
   rpt gen_tac >> strip_tac >>
+  qpat_x_assum `bind (read_result _ _) _ _ = _` mp_tac >>
+  simp[Once bind_def] >>
+  Cases_on `read_result cx h es` >> rename1 `read_result cx h es = (rr,es0)` >>
+  `es0 = es` by metis_tac[read_result_state] >> pop_assum SUBST_ALL_TAC >>
+  Cases_on `rr` >> simp[] >> TRY (strip_tac >> gvs[] >> NO_TAC) >>
+  strip_tac >>
   qmatch_asmsub_abbrev_tac `finally action pop_scope` >>
   qpat_x_assum `ignore_bind _ _ es = _` mp_tac >>
   pure_rewrite_tac [push_scope_with_var_def, ignore_bind_def, bind_def, return_def] >>
@@ -784,6 +793,7 @@ Proof
   qpat_x_assum `eval_iterator _ _ _ = _` mp_tac >>
   simp[Once evaluate_def, bind_def, AllCaseEqs()] >> strip_tac >>
   imp_res_tac read_result_state >> imp_res_tac lift_option_type_state >>
+  imp_res_tac array_iterator_results_state >>
   gvs[return_def] >> metis_tac[]
 QED
 
@@ -1315,7 +1325,7 @@ Proof
   rpt gen_tac >> strip_tac >>
   rename1 `supported_stmts tops bindings stmts` >>
   `stmts_writes_ok (\w. ~place_contains w (NameTarget name)) stmts` by
-    gvs[iterator_unmodified_def, expr_place_def] >>
+    gvs[iterator_unmodified_def, expr_places_def] >>
   `MAP (\sc. FLOOKUP sc name) es'.scopes =
      MAP (\sc. FLOOKUP sc name) (TL es.scopes) /\
    SUC (LENGTH es'.scopes) = LENGTH es.scopes` by

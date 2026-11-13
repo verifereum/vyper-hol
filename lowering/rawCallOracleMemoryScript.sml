@@ -1,8 +1,8 @@
 (* Counted memory execution of the raw_call output allocation and call. *)
 Theory rawCallOracleMemory
 Ancestors
-  rawCallArgumentMemory bodyMemRawCallBounds bodyMemBiMethodIdSuffix
-  exprSimRawCall exprSafeOperand fragExec exprLoweringProps fragGasMode entrySinkExtraction builtinSystem context
+  rawCallArgumentMemory bodyMemRawCallBounds bodyMemBiMethodIdSuffix loweringStateRelDefs
+  loweringPosts exprSimRawCall exprSafeOperand fragExec exprLoweringProps fragGasMode entrySinkExtraction builtinSystem context
   emitHelper emitHelperProps compileEnv venomExecSemantics venomState venomInst
   rich_list list
 
@@ -84,7 +84,7 @@ Theorem raw_call_outbuf_run_mem:
   s.vs_current_bb = sa.cs_current_bb /\
   s.vs_inst_idx = LENGTH sa.cs_current_insts ==>
   ?t w. run_inst_seq (emitted_insts sa sb) s = OK t /\
-    stmt_state_rel ctx func cenv cx es t /\ wb_frame cenv es sa s t /\
+    stmt_state_rel ctx func cenv cx es t /\ wb_frame cenv es es sa s t /\
     t.vs_memory = s.vs_memory /\ eval_operand ov t = SOME w /\
     eval_operand op t = SOME (if cap = 0 then w else w+32w) /\
     FLOOKUP t.vs_allocas sa.cs_next_id =
@@ -138,7 +138,7 @@ Theorem raw_call_oracle_run_mem:
     off + type_memory_size tv <= w2n ro \/ w2n ro + cap <= off) /\
   (w2n az = 0 \/ w2n ao + w2n az <= s.vs_alloca_next) /\
   (cap = 0 \/ w2n ro + cap <= s.vs_alloca_next) /\
-  wb_frame cenv initial_es initial s0 s /\ initial.cs_next_var <= sa.cs_next_var /\
+  wb_frame cenv initial_es es initial s0 s /\ initial.cs_next_var <= sa.cs_next_var /\
   (!aid b sz. aid < initial.cs_next_id /\ FLOOKUP s.vs_allocas aid = SOME (b,sz) ==>
     regions_disjoint (w2n ro) cap b sz) /\
   (!name b sz. local_region cenv initial_es.scopes s0 name b sz ==>
@@ -164,7 +164,7 @@ Theorem raw_call_oracle_run_mem:
     gas_path_mem ctx func s 0 (OK (u with vs_inst_idx := LENGTH sb.cs_current_insts)) /\
     alloca_history func (u with vs_inst_idx := LENGTH sb.cs_current_insts) /\
     u.vs_current_bb = sb.cs_current_bb /\
-    wb_frame cenv initial_es initial s0 u /\
+    wb_frame cenv initial_es (SND (adopt_call_outcome rq outcome es1)) initial s0 u /\
     u.vs_allocas = s.vs_allocas /\ u.vs_alloca_next = s.vs_alloca_next /\
     u.vs_fmp = s.vs_fmp /\ u.vs_returndata = outcome.co_returnData /\
     ~u.vs_halted /\
@@ -198,14 +198,21 @@ Proof
        (fn th => once_rewrite_tac[th]) >> simp[]) >>
   `~not_fresh_at initial (STRING #"%" (toString sa.cs_next_var))` by
     simp[not_fresh_at_def, ASCIInumbersTheory.toString_inj] >>
-  `wb_frame cenv initial_es initial s0 u` by
+  `wb_frame cenv initial_es es initial s0 u` by
     (qpat_assum `u = update_var _ _ t` (fn th => once_rewrite_tac[th]) >>
      irule raw_call_oracle_frame >> simp[] >>
-     goal_assum (drule_at (Pat `wb_frame _ _ _ _ _`)) >>
+     goal_assum (drule_at (Pat `wb_frame _ _ _ _ _ _`)) >>
      qexistsl_tac [`w2n ro`, `TAKE cap outcome.co_returnData`] >> simp[] >>
      conj_tac >> rpt gen_tac >> strip_tac >>
      first_x_assum (drule_all_then mp_tac) >>
      simp[regions_disjoint_def, LENGTH_TAKE_EQ] >> decide_tac) >>
+  `wb_frame cenv initial_es (SND (adopt_call_outcome rq outcome es1))
+    initial s0 u` by
+    (drule exprSimRawCallCalldataTheory.raw_call_take_adopt_fields >> strip_tac >>
+     qpat_x_assum `wb_frame cenv initial_es es initial s0 u` mp_tac >>
+     pure_rewrite_tac[wb_frame_def, locals_kept_def, popped_kept_def] >>
+     qpat_x_assum `(SND (adopt_call_outcome rq outcome es1)).scopes = es.scopes`
+       (fn th => pure_rewrite_tac[th]) >> disch_then ACCEPT_TAC) >>
   qexistsl_tac [`t`,`u`] >>
   qpat_x_assum `u = update_var _ _ t` SUBST_ALL_TAC >>
   simp[update_var_def] >> gvs[] >> rpt strip_tac >>

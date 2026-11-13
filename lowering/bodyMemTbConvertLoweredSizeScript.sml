@@ -1,6 +1,6 @@
 (* Lowered source capacity for the plain convert operand. *)
 Theory bodyMemTbConvertLoweredSize
-Ancestors exprSimIfExp exprSafeOperand exprSimHyps memoryLocalRhsProps
+Ancestors exprSimIfExp exprSimIfExpCompat exprSafeOperand exprSimHyps memoryLocalRhsProps
   exprSimSource exprSimHypsDefs
   vyperTypeSystem vyperValue vyperABI exprLowering context list compileEnv
 

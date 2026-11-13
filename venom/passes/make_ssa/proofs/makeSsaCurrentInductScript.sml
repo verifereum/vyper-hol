@@ -1,7 +1,7 @@
 (* Generic nested induction for MakeSSA dominator trees. *)
 Theory makeSsaCurrentInduct
 Ancestors
-  makeSsaCurrentDefs
+  makeSsaDefs
   list
 
 Definition current_dom_tree_size_def:

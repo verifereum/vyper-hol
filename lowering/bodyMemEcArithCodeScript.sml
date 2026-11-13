@@ -1,6 +1,6 @@
 Theory bodyMemEcArithCode
 Ancestors
-  bodyMemEcArithTransfers builtinMisc exprSimPrecompiles loweringHalt
+  bodyMemEcArithTransfers builtinMisc exprSimPrecompiles loweringHalt loweringStateRelDefs
   emitHelperProps emitHelper exprLoweringProps context compileEnv venomInst
 
 (* Restatement of private exprSimECArith.ec_input_stores_shape;

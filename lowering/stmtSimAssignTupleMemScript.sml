@@ -168,8 +168,10 @@ Resume compile_assign_tuple_locals_memory_stmt_frag[suffix]:
     (simp[Abbr `flag`] >> metis_tac[type_memory_size_def]) >>
   qpat_x_assum `(if flag then _ else _) su = _`
     (assume_tac o REWRITE_RULE [optional_tuple_stage_code]) >>
+  `post_value_type cenv e = TupleT tys` by
+    metis_tac[post_value_type_lowered] >>
   `expr_val_rel cx (TupleT tys) (ArrayV (TupleV vs)) op t /\
-   expr_val_at cenv cx (TupleT tys) sa su ee (ArrayV (TupleV vs)) op t` by metis_tac[] >>
+   expr_val_at cenv cx (TupleT tys) sa su ee (ArrayV (TupleV vs)) op t` by gvs[] >>
   drule_all (CONV_RULE (DEPTH_CONV ETA_CONV) assign_tuple_locals_memory_suffix_path) >> strip_tac >>
   suspend "post" 
 QED

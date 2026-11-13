@@ -304,6 +304,8 @@ Proof
         compile_var_array_membership_safe_operand]) >>
   IF_CASES_TAC
   >- (strip_tac >>
+      Cases_on `bytestring_literal_hash (HD args)` >>
+      Cases_on `bytestring_literal_hash (HD (TL args))` >> gvs[] >>
       rpt (pairarg_tac >> gvs[]) >>
       Cases_on `bop = Eq` >> gvs[] >>
       rpt (pairarg_tac >> gvs[]) >>

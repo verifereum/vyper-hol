@@ -35,7 +35,7 @@
 Theory entryLocals
 Ancestors
   list finite_map
-  compileEnv compileVyper moduleLowering context abiEncoder emitHelper
+  compileEnv loweringStateRelDefs compileVyper moduleLowering context abiEncoder emitHelper
   exprLoweringProps loweringHalt intCallCallee
 Libs
   monadsyntax
@@ -59,12 +59,12 @@ Proof
 QED
 
 Theorem compile_abi_decode_to_buf_next_var[local]:
-  !dst src opc hi info st x st'.
-    compile_abi_decode_to_buf dst src opc hi info st = (x, st') ==>
+  !dst src opc base_op hi info st x st'.
+    compile_abi_decode_to_buf dst src opc base_op hi info st = (x, st') ==>
     st.cs_next_var <= st'.cs_next_var
 Proof
   rpt strip_tac >>
-  qspecl_then [`dst`, `src`, `opc`, `hi`, `info`, `st`] mp_tac
+  qspecl_then [`dst`, `src`, `opc`, `base_op`, `hi`, `info`, `st`] mp_tac
     (cj 1 ci_mono_compile_abi_decode) >>
   simp[ci_mono_def]
 QED
@@ -327,7 +327,8 @@ Theorem fallback_entry_locals:
       SOME (cenv, rest) ==>
     local_ptrs_reserved cenv st
 Proof
-  rpt gen_tac >> simp[package_fallback_fn_def] >> strip_tac >>
+  rpt gen_tac >>
+  simp[package_fallback_fn_def, update_cenv_nonreentrant_def] >> strip_tac >>
   `cenv.ce_imm_alloca = NONE` by gvs[build_compile_env_imm_alloca] >>
   qspecl_then [`tops`, `External`, `mut`, `fname`, `[]`, `ret`, `fbody`,
                `use_trans`] strip_assume_tac build_compile_env_vars >>

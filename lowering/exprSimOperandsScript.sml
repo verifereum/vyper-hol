@@ -44,7 +44,7 @@ Ancestors
   exprSimProps
   loweringPosts
   finite_map
-   exprSimOps localPtrsProps compileEnv exprLoweringProps
+   exprSimOps localPtrsProps compileEnv loweringStateRelDefs exprLoweringProps
   valueEncodingProofs venomState venomInst
 
 (* ===== Values in an expression's own allocations ===== *)
@@ -102,7 +102,7 @@ Proof
   `alloca_inv s /\ local_ptrs_rel func cenv es.scopes s` by
     gvs[stmt_state_rel_def, state_rel_def] >>
   drule_all local_ptrs_rel_alloca_disjoint >>
-  simp[compileEnvTheory.regions_disjoint_def]
+  simp[loweringStateRelDefsTheory.regions_disjoint_def]
 QED
 
 (* expr_val_in_alloca from the ALLOCA behind the value's allocation: an
@@ -158,6 +158,7 @@ QED
    operand's expr_post keep it again. *)
 Theorem expr_post_operand_kept_stable:
   !func cenv cx e1 e2 es es1 es' sa s1 s2 s0 t u v1 v2 x y.
+    post_value_type cenv e1 = expr_type e1 /\
     expr_post ctx func cenv cx e1 es sa s1 s0 es1 v1 x t /\
     expr_val_in_alloca cenv cx (expr_type e1) sa s1 es1 v1 x t /\
     expr_post ctx func cenv cx e2 es1 s1 s2 t es' v2 y u /\
@@ -178,6 +179,7 @@ Proof
     (strip_assume_tac o REWRITE_RULE [expr_post_def]) >>
   qpat_x_assum `expr_post ctx _ _ _ e2 _ _ _ _ _ _ _ _`
     (strip_assume_tac o REWRITE_RULE [expr_post_def]) >>
+  rfs[] >>
   Cases_on `is_word_type (expr_type e1)`
   >- (simp[expr_val_in_alloca_def] >> fs[expr_val_rel_def] >> gvs[]) >>
   qpat_x_assum `expr_val_in_alloca _ _ _ _ _ _ _ _ _`
@@ -212,6 +214,7 @@ QED
 (* KEY LEMMA: fresh non-label operands satisfy the stability premise. *)
 Theorem expr_post_operand_kept:
   !func cenv cx e1 e2 es es1 es' sa s1 s2 s0 t u v1 v2 x y ctx.
+    post_value_type cenv e1 = expr_type e1 /\
     expr_post ctx func cenv cx e1 es sa s1 s0 es1 v1 x t /\
     expr_val_in_alloca cenv cx (expr_type e1) sa s1 es1 v1 x t /\
     expr_post ctx func cenv cx e2 es1 s1 s2 t es' v2 y u /\
@@ -232,6 +235,7 @@ QED
    for. *)
 Theorem expr_post_operand_kept_at:
   !func cenv cx e1 e2 es es1 es' sa s1 s2 s0 t u v1 v2 x y ctx.
+    post_value_type cenv e1 = expr_type e1 /\
     expr_post ctx func cenv cx e1 es sa s1 s0 es1 v1 x t /\
     expr_val_in_alloca cenv cx (expr_type e1) sa s1 es1 v1 x t /\
     expr_post ctx func cenv cx e2 es1 s1 s2 t es' v2 y u /\
@@ -266,7 +270,7 @@ Proof
   sym_tac >>
   qpat_x_assum `expr_post _ _ _ _ _ _ _ _ _ _ _ _ _`
     (strip_assume_tac o REWRITE_RULE [expr_post_def]) >>
-  qpat_x_assum `locals_kept _ _ _ _`
-    (mp_tac o REWRITE_RULE [locals_kept_def]) >>
+  qpat_x_assum `locals_kept _ _ _ _ _`
+    (mp_tac o CONJUNCT1 o REWRITE_RULE [locals_kept_def]) >>
   disch_then irule >> qexistsl_tac [`b`, `n`, `sz`] >> simp[]
 QED

@@ -51,6 +51,6 @@ Theorem robust_dynarray_assemble:
       val_in_memory (ArrayTV tv (Dynamic capacity))
         (ArrayV (DynArrayV vs)) d m
 Proof
-  rpt strip_tac >> simp[valueEncodingTheory.val_in_memory_def] >>
+  rpt strip_tac >> simp[valueEncodingDefsTheory.val_in_memory_def] >>
   irule elems_in_memory_intro >> simp[]
 QED

@@ -33,7 +33,7 @@
 
 Theory retAbiPlanProps
 Ancestors
-  abiTypeBoundProps compileVyper compileEnv exprLowering abiEncoderProps structFieldsProps
+  abiTypeBoundProps compileVyper compileEnv loweringStateRelDefs exprLowering abiEncoderProps structFieldsProps
   typedCopyProducer supportedTypes
   vyperTypeSystem vyperContext vyperValue vyperABI contractABI
   valueEncoding finite_map list rich_list option pair combin

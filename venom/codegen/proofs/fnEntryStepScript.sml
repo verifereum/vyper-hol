@@ -195,6 +195,10 @@ Proof
          LENGTH (get_params (HD fn.fn_blocks).bb_instructions) <= i \/
          j < LENGTH (get_params (HD fn.fn_blocks).bb_instructions)` by
     metis_tac[revert_forward_pair_past_params] >>
+  `!xs L. ?prefixL prefixD core.
+     xs = prefixL ++ core /\ xs = prefixD ++ core /\
+     (!v. MEM v L ==> ~MEM (Var v) prefixL /\ ~MEM (Var v) prefixD)` by
+    (rpt gen_tac >> qexistsl_tac [`[]`, `[]`, `xs`] >> simp[]) >>
   irule block_body_frame_sim >>
   rpt (conj_tac >- (first_assum ACCEPT_TAC)) >>
   conj_tac >- simp[] >>

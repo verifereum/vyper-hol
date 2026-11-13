@@ -1,7 +1,7 @@
 (* Preserve a completed recursive tuple prefix at the chosen child endpoint. *)
 Theory entryAggregatePrefixMem
 Ancestors
-  calldataSourceMemberFold calldataMemberResourceFrame calldataChildFrame
+  calldataSourceMemberFold calldataMemberResourceFrame calldataChildFrame valueEncodingDefs
   valueEncodingProofs valueEncoding compileEnv venomState finite_map arithmetic list
 
 Theorem entry_member_success_prefix_memory:

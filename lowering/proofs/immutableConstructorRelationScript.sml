@@ -3,7 +3,7 @@
    destination capacity. No canonical padding assumption is made. *)
 Theory immutableConstructorRelation
 Ancestors
-  valueMemoryTransport valueEncoding immutableSectionRel immutableCopyExecution
+  valueMemoryTransport valueEncoding valueEncodingDefs immutableSectionRel immutableCopyExecution
   immutableMemoryFrame immutableValue compileEnv context venomState list arithmetic
   immutableEncodingProofs immutableEncoding immutableWordExecution byte
   venomExecSemantics

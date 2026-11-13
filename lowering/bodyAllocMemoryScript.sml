@@ -6,7 +6,7 @@ Ancestors
   exprSimAggregateChildren exprSimLiteralBuffer exprSimAlloc exprSimOps instMemFrontier
   fragExec fragExecMem allocaHistoryFragment rich_list
   bodyMemoryDefs loweringSlice exprSimDefs exprSimOperators exprSimHyps stmtSimAugAssign vyperTypeEnv vyperTypeSystem vyperTypeInvariants
-  emitHelperProps emitHelper compileEnv context venomInst venomState
+  emitHelperProps emitHelper compileEnv loweringStateRelDefs context venomInst venomState
   venomExecSemantics venomMemDefs vyperInterpreter vyperState list finite_map words arithmetic
 
 Theorem compile_alloc_buffer_body_inst[local]:

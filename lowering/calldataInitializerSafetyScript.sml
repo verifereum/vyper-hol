@@ -22,7 +22,7 @@ Proof
   `!fuel. step_inst fuel ctx (mk_inst id JMP [Label hdr] []) s =
      OK (jump_to hdr s)` by
     (simp[step_inst_non_invoke, mk_inst_def] >>
-     simp[Once step_inst_base_def, mk_inst_def, jump_to_def]) >>
+     simp[step_inst_base_opcode_eqs, jump_to_def]) >>
   ho_match_mp_tac (GEN_ALL decoder_edge_all_fuel_pullback) >>
   goal_assum (drule_at (Pos hd)) >>
   qexists_tac `hb` >> simp[jump_to_def] >> conj_tac
@@ -35,7 +35,7 @@ Proof
 QED
 
 Theorem calldata_loop_prefix_all_fuel_pullback:
-  abi_decode_loop_prefix ip src CALLDATALOAD start = ((hdr,body_lbl,exit_lbl),end_st) /\
+  abi_decode_loop_prefix ip src CALLDATALOAD (Lit 0w) start = ((hdr,body_lbl,exit_lbl),end_st) /\
   fn_has_code start end_st fn /\
   s.vs_current_bb = start.cs_current_bb /\
   s.vs_inst_idx = LENGTH start.cs_current_insts /\ ~s.vs_halted ==>
@@ -53,7 +53,7 @@ Theorem calldata_executed_init_all_fuel_pullback:
     (emitted_insts st loop_st) /\
   run_inst_seq_mem_ok (emitted_insts st loop_st) initial /\
   run_inst_seq (emitted_insts st loop_st) initial = OK t /\
-  abi_decode_loop_prefix ip src CALLDATALOAD loop_st =
+  abi_decode_loop_prefix ip src CALLDATALOAD (Lit 0w) loop_st =
     ((hdr,body_lbl,exit_lbl),end_st) /\
   fn_has_code loop_st end_st fn /\
   ~initial.vs_halted /\ initial.vs_current_bb = st.cs_current_bb /\

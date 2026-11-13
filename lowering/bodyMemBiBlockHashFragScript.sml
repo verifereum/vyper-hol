@@ -2,7 +2,7 @@ Theory bodyMemBiBlockHashFrag
 Ancestors
   bodyMemBiBlockHashPath bodyUnopFragMemory exprSimBuiltins
   exprUnopSimDefs exprSimDefs exprSimProps varsExt loweringPosts fragExec
-  builtinProps exprLoweringProps compileEnv
+  builtinProps exprLoweringProps compileEnv loweringStateRelDefs
   vyperInterpreter vyperValue vyperValueOperation valueEncoding
   vyperContext vyperState vyperAST venomState venomExecSemantics
   exprSimSource exprSimMemorySource allocaHistory exprSimHypsDefs

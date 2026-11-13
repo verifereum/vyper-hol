@@ -314,7 +314,7 @@ Resume gen_inst_halt_frame_sim_deep[selfdestruct]:
   disch_then (qspecl_then [`o2pc`, `lo`] strip_assume_tac) >>
   qexistsl_tac [`n + 1`, `st'`] >> conj_tac
   >- (irule asm_steps_compose_halt >> qexists `mid` >> gvs[]) >>
-  gvs[]
+  gvs[COND_RATOR]
 QED
 
 Finalise gen_inst_halt_frame_sim_deep

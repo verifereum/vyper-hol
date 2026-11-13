@@ -2,7 +2,8 @@
 Theory entryRegistrationJointEndpoint
 Ancestors
   entryCheckEndpointMem entrySourceRegistrationFold entryCompletedExitPhi
-  entryDispatchMem actualRegistrationCode fragExec guardedBodyFirstEmission
+  entryDispatchMem actualRegistrationCode fragExec externalEntryShape
+  entryReachBodyFirstEmissionGuarded
   exprLoweringProps venomState compileEnv moduleLoweringProps abiAllocationHistory
 
 Theorem selected_entry_registration_endpoint:
@@ -96,12 +97,13 @@ Resume selected_entry_registration_endpoint[safety]:
   simp[] >> strip_tac >>
   `st.cs_current_insts = []` by fs[] >>
   `cs_extends st completed` by
-    (drule register_positional_args_suffix_extends >>
-     drule_all guarded_body_first_emission >>
+    (drule register_positional_args_suffix_extends >> strip_tac >>
+     `cs_extends registered completed` by
+       metis_tac[compile_guarded_body_labels, pairTheory.SND] >>
      metis_tac[cs_extends_trans]) >>
   drule_all fn_has_code_start >> strip_tac >>
   `phi_prefix_length bb.bb_instructions = 0` by
-    (drule_all registration_guarded_suffix_empty_phi >> metis_tac[]) >>
+    (drule_all registration_guarded_body_empty_phi >> metis_tac[]) >>
   irule mem_safe_blocks_no_phi >>
   simp[eval_phis_no_phi] >>
   `t with vs_inst_idx := 0 = t` by simp[venom_state_component_equality] >>

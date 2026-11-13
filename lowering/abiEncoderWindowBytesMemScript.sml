@@ -4,7 +4,7 @@ Ancestors
   abiEncoderWindowBytes abiEncoderWindowLeaves windowSequenceMem allocaFootprint
   abiEncoderBytesCode abiEncoderWindowSequence fragExecMem instMemFrontier
   abiEncoderRounding abiEncoderMemory emitHelperProps exprLoweringProps
-  compileEnv emitHelper freshWrites venomState venomExecSemantics venomInst
+  compileEnv loweringStateRelDefs emitHelper freshWrites venomState venomExecSemantics venomInst
   words list rich_list arithmetic
 
 Theorem window_seq_mem_checks_chain[local]:
@@ -24,7 +24,7 @@ Theorem window_bytes_suffix_mem_checks[local]:
   abi_encode_bytes_suffix len st = (out,fin) ==>
   run_inst_seq_mem_ok (emitted_insts st fin) s
 Proof
-  simp[abi_encode_bytes_suffix_def, abi_encode_round_def, comp_bind_def,
+  simp[abi_encode_bytes_suffix_def, abi_encode_ceil32_def, comp_bind_def,
     emit_op_def, fresh_var_def, fresh_id_def, emit_def, comp_return_def, comp_ignore_bind_def] >>
   rpt (pairarg_tac >> gvs[]) >> strip_tac >>
   gvs[] >> simp[emitted_insts_def] >>

@@ -6,7 +6,8 @@
  * internal-call case can use the callee body's statement predicate.
  *   - Expressions (body_expr_ok): expr_sim and expr_vv_sim, under
  *     expr_sim_pre less its int_calls_expr e = [], in a frame of the
- *     lowered program (body_inv).
+ *     lowered program (body_inv), and expr_map_sim for an expression
+ *     naming a mapping.
  *   - Statements and lists (body_stmt_ok, body_stmts_ok): stmt_frag,
  *     with the frame's RetQ, under the typing of the statement.
  *   - The rest, which evaluate runs inside a statement or an expression
@@ -37,9 +38,28 @@ Ancestors
   list exprSimDefs exprSimHypsDefs stmtSimDefs compileEnv compileVyper vyperTypeContract
   supportedProgram supportedStmts supportedStmtTraverse supportedExprTraverse
   vyperAST vyperInterpreter vyperState vyperValue vyperTypeSystem
-  vyperTypeCallGraph vyperTypeCallStackSoundness
+  vyperTypeCallGraph vyperTypeCallStackSoundness immutableRelation
+  immutableLocationProps exprSimMapDefs
 
 (* ===== The frame ===== *)
+
+(* cenv agrees with every function's build_compile_env for tops on the
+   module-level fields no declaration changes: the module (the main one),
+   module-variable types and locations (immutables included), flag
+   metadata and method ids (build_compile_env_module_pins, bodySimEntry). *)
+Definition cenv_module_pins_def:
+  cenv_module_pins tops cenv <=>
+    cenv.ce_module = NONE /\
+    cenv.ce_module_var_type = build_var_type_map tops /\
+    cenv.ce_module_vars =
+      add_immutable_locations (get_struct_fields (make_struct_fields_map tops))
+        tops 0 (add_module_var_locations tops FEMPTY) /\
+    cenv.ce_flag_member_id = FST (build_flag_info tops (K (K 0)) (K 0)) /\
+    cenv.ce_flag_n_members = SND (build_flag_info tops (K (K 0)) (K 0)) /\
+    cenv.ce_method_id =
+      (\s tys. w2n (calldata_method_id
+                     (function_selector s (vyper_to_abi_types (type_env tops) tys))))
+End
 
 (* A frame of the lowered program: ctx is the context of tops's runtime
    unit or, while cx.in_deploy, its deployment unit. The constructor and
@@ -59,7 +79,10 @@ Ancestors
    typed memory copy never takes its INVALID fallback.  cenv's target is
    the unit's policy target, as
    set_*_package_target installs it, which run_lowering requires to have
-   MCOPY (lowering_policy_ok). *)
+   MCOPY (lowering_policy_ok).  cenv has the module-level fields of
+   build_compile_env (cenv_module_pins), so its immutables sit where the
+   section layout puts them (body_inv_immutable_section_layout), and the
+   program is the main module alone, as source_deployment_rel has it. *)
 Definition body_inv_def:
   body_inv tops ctx cenv cx <=>
     supported_program tops /\
@@ -87,8 +110,25 @@ Definition body_inv_def:
     cenv.ce_module_dynarray_capacity =
       build_dynarray_capacity (collect_module_vars tops) /\
     (!id. cenv.ce_module_var_type (NONE, id) =
-          build_var_type_map tops (NONE, id))
+          build_var_type_map tops (NONE, id)) /\
+    cenv_module_pins tops cenv /\
+    (!src ts. get_module_code cx src = SOME ts ==> src = NONE)
 End
+
+Theorem cenv_module_pins_immutable_section_layout:
+  !tops cenv. cenv_module_pins tops cenv ==> immutable_section_layout cenv tops
+Proof
+  rw[cenv_module_pins_def] >>
+  mp_tac (SPEC_ALL immutable_build_compile_env_layout) >>
+  simp[immutable_section_layout_def, build_compile_env_module_vars]
+QED
+
+Theorem body_inv_immutable_section_layout:
+  !tops ctx cenv cx. body_inv tops ctx cenv cx ==> immutable_section_layout cenv tops
+Proof
+  rw[body_inv_def] >> irule cenv_module_pins_immutable_section_layout >>
+  simp[]
+QED
 
 (* The compile env binds no local the typing does not know: every name
    ce_vars binds is a local of the type environment.  build_compile_env
@@ -111,19 +151,27 @@ Definition locals_alloc_ok_def:
             type_memory_bytes cenv ty < 2 ** 64
 End
 
-(* expr_sim_pre's byte_widths_expr and alloc_limits_expr for every
-   expression of a statement, targets' keys included, but a slice's .code
-   source (is_extcode), which alloc_limits_expr checks through its address,
-   and alloc_limits_stmt, which also bounds the type of each local the
-   statement declares and rules out a bare .code. *)
+(* expr_sim_pre's byte_widths_expr for every expression of a statement,
+   targets' keys included, but a slice's .code source (is_extcode), and
+   alloc_limits_stmt, which checks alloc_limits_expr of each expression
+   under the local types compile_stmt sees there (decl_var_type), bounds
+   the type of each local the statement declares and rules out a bare
+   .code. *)
 Definition stmt_exprs_ok_def:
   stmt_exprs_ok cenv s <=>
     ~supported_stmt_expr_exists
-       (\e. ~is_extcode e /\
-             ~(byte_widths_expr e /\ alloc_limits_expr cenv e)) s /\
+       (\e. ~is_extcode e /\ ~byte_widths_expr e) s /\
     alloc_limits_stmt cenv s /\
     (stmt_valued_return s /\ cenv.ce_is_external /\ ~cenv.ce_raw_return ==>
        return_buffer_ok cenv)
+End
+
+(* stmt_exprs_ok of each statement of a block, under the local types
+   compile_stmts threads to it. *)
+Definition stmts_exprs_ok_def[simp]:
+  stmts_exprs_ok cenv [] = T /\
+  stmts_exprs_ok cenv (s::ss) =
+    (stmt_exprs_ok cenv s /\ stmts_exprs_ok (decl_var_type cenv s) ss)
 End
 
 (* The compile envs of one function's body: cenv' is cenv but for the
@@ -178,16 +226,16 @@ End
 (* ===== The predicates of the induction ===== *)
 
 (* An expression of a frame of the lowered program, internal calls
-   allowed, simulates as a value and as compile_expr's value_vv.  A
-   literal array's elements are ok too, since raw_log compiles its topic
-   list's elements without compiling the array.  The operands of an
-   expression (body_exprs_ok), evaluated and read in order: each
-   simulates if the ones before it can evaluate. *)
+   allowed, simulates as a value and value_vv, and as a mapping slot
+   when appropriate. Literal arrays also carry their element simulations. *)
 Definition body_expr_ok_def:
   (body_expr_ok cx e <=>
     (!tops ctx func cenv env ty es.
       body_inv tops ctx cenv cx /\ expr_body_pre cenv cx env e es ==>
       expr_sim ctx func cenv cx ty e es /\ expr_vv_sim ctx func cenv cx ty e es) /\
+    (!tops ctx func cenv env ty es.
+       body_inv tops ctx cenv cx /\ expr_map_pre cenv cx env e es ==>
+       expr_map_sim ctx func cenv cx ty e es) /\
     (!a t n elems.
       e = Builtin a (MakeArray t n) elems /\
       builtin_args_length_ok (MakeArray t n) (LENGTH elems) ==>
@@ -216,8 +264,25 @@ Theorem body_make_array_children_ok:
 Proof
   rpt strip_tac >>
   qpat_x_assum `body_expr_ok _ _`
-    (mp_tac o CONJUNCT2 o ONCE_REWRITE_RULE [body_expr_ok_def]) >>
+    (mp_tac o CONJUNCT2 o CONJUNCT2 o ONCE_REWRITE_RULE [body_expr_ok_def]) >>
   simp[]
+QED
+
+(* Only a top-level name and a subscript name a mapping. *)
+Theorem expr_map_pre_shape:
+  !cenv cx env e es.
+    expr_map_pre cenv cx env e es ==>
+    (?ty id. e = TopLevelName ty id) \/ (?ty e1 e2. e = Subscript ty e1 e2)
+Proof
+  rw[expr_map_pre_def] >> Cases_on `e` >> gvs[well_typed_expr_def]
+QED
+
+Theorem body_expr_ok_map_case:
+  !cx e tops ctx func cenv.
+    body_expr_ok cx e /\ body_inv tops ctx cenv cx ==>
+    expr_map_case F ctx func cenv cx e
+Proof
+  rw[body_expr_ok_def, expr_map_case_def] >> metis_tac[]
 QED
 
 (* A well-typed, supported statement of the frame, with its declaration,
@@ -251,7 +316,7 @@ Definition body_stmts_ok_def:
       expr_sim_inv cenv cx env es /\ ce_locals_declared cenv env /\
       locals_alloc_ok cenv env /\
       type_stmts env ret_ty ss = SOME env' /\
-      EVERY (stmt_exprs_ok cenv) ss /\
+      stmts_exprs_ok cenv ss /\
       call_evaluation_safe cx (int_calls_stmts ss) /\
       frame_ret_ok ctx func cx RetQ cenv ret_ty ==>
       stmt_frag ctx func cx lctx RetQ cenv (stmts_env cenv lctx ret_ty ss)
@@ -277,11 +342,13 @@ Definition body_iterator_ok_def:
       body_expr_ok cx e2))
 End
 
-(* A loop over vs runs its body if vs is not empty. *)
+(* A loop over vs runs its body if vs is not empty and its first element
+   can be read. *)
 Definition body_for_ok_def:
-  body_for_ok cx (tyv : type_value) (nm : identifier) body (vs : value list)
+  body_for_ok cx (tyv : type_value) (nm : identifier) body (vs : eval_result list)
   <=>
-    vs <> [] ==> body_stmts_ok cx body
+    (?s v t. vs <> [] /\ read_result cx (HD vs) s = (INL v,t)) ==>
+    body_stmts_ok cx body
 End
 
 (* A target's keys, each if the place before it can evaluate.  It stands

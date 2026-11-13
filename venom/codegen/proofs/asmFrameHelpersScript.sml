@@ -370,10 +370,10 @@ Proof
   namedCases_on `tail2` ["", "c tail3"] >> simp[asm_exec_delegatecall_def] >>
   namedCases_on `tail3` ["", "d tail4"] >> simp[asm_exec_delegatecall_def] >>
   namedCases_on `tail4` ["", "e tail5"] >> simp[asm_exec_delegatecall_def] >>
-  Cases_on `tail5` >>
-  simp[asm_exec_delegatecall_def, make_asm_delegatecall_state_stack,
-       extract_asm_result_stack] >>
-  simp[AllCaseEqs()] >> strip_tac >> PairCases_on `z` >> gvs[asm_next_def]
+  Cases_on `tail5` >> simp[asm_exec_delegatecall_def, asm_call_request_stack] >>
+  strip_tac >> drule asm_consume_call_outcome_frame >>
+  disch_then (qspecl_then [`a::b::c::d::e::h::(t' ++ rest)`, `rest`] mp_tac) >>
+  simp[]
 QED
 
 Theorem asm_exec_call_frame:

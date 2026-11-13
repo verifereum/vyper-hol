@@ -1,7 +1,7 @@
 (* Memory interpretation congruences, independent of ABI conversion. *)
 Theory entryValueMemoryCongruence
 Ancestors
-  entrySparseMemory valueEncoding vyperValue list alist pair arithmetic
+  entrySparseMemory valueEncoding vyperValue list alist pair arithmetic valueEncodingDefs
   vyperTyping vyperValueOperation vyperAssignPreservesType
 
 

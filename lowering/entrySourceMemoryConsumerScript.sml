@@ -6,7 +6,7 @@ Ancestors
 
 Theorem entry_member_success_original_value:
   abi_decoder_valid_pre ce env sf ty tv bytes nv first src dst CALLDATALOAD
-    (Lit 0w) sb p b reserve_cap ready /\
+    (Lit 0w) (Lit 0w) 0 sb p b reserve_cap ready /\
   value_has_type tv v /\
   vyper_to_abi env ty v = SOME (dec (vyper_to_abi_type env ty) bytes) /\
   calldata_member_success ctx fn site limit_st first last p len tv nv ready out scratch ==>
@@ -27,7 +27,7 @@ Theorem entry_canonical_suffix_success_original_value:
   k = abi_decode_member_offset (vyper_to_abi_type env ty) bs
         (SUM (MAP abi_member_head_size pre)) /\
   abi_decoder_valid_pre ce env sf ty tv (DROP k bs) nv first src dst CALLDATALOAD
-    (Lit 0w) sb p b reserve_cap ready /\
+    (Lit 0w) (Lit 0w) 0 sb p b reserve_cap ready /\
   value_has_type tv v /\
   vyper_to_abi env ty v = SOME (dec (vyper_to_abi_type env ty) (DROP k bs)) /\
   calldata_member_success ctx fn site limit_st first last p len tv nv ready out scratch ==>

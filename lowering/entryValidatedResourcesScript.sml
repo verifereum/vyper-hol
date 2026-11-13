@@ -54,5 +54,6 @@ Proof
     gvs[initial_venom_state_rel_def] >>
   conj_tac
   >- (irule validated_entry_alloca_room >> simp[] >> metis_tac[]) >>
-  simp[alloca_inv_empty_proof, alloca_history_empty, immutable_alloca_sep_def]
+  simp[alloca_inv_empty_proof, alloca_history_empty, immutable_alloca_sep_def,
+       immutable_decl_sep_def]
 QED

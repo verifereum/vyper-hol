@@ -7,7 +7,7 @@ Ancestors
   list rich_list finite_map pred_set
   fragExec fragExecMem localPtrsProps loweringSlice
   exprLowering stmtLowering emitHelper emitHelperProps exprLoweringProps
-  compileEnv valueEncoding
+  compileEnv loweringStateRelDefs valueEncoding
   vyperInterpreter vyperState vyperValue vyperEvalPreservesScopes
   vyperExprNoControl vyperValueOperation
   venomExecSemantics venomExecProofs venomInst venomState venomMemDefs integer_word

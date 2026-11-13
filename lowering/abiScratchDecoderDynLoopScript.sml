@@ -9,7 +9,7 @@ Ancestors
   fragExec compileEnv valueEncoding vyperABI vyperValue venomState words list arithmetic
 
 Theorem abi_scratch_decoder_dyn_loop:
-  compile_abi_decode_dyn_loop dst src opc hi_op (type_to_abi_dec_info sf ce ty)
+  compile_abi_decode_dyn_loop dst src opc base_op hi_op (type_to_abi_dec_info sf ce ty)
     (abi_embedded_static_size ce.ce_struct_fields ty) (type_memory_bytes ce ty)
     ip cnt start = ((),final) /\ fn_has_code start final func /\
   (!bb. lookup_block final.cs_current_bb func.fn_blocks = SOME bb ==>
@@ -17,9 +17,10 @@ Theorem abi_scratch_decoder_dyn_loop:
   first <= lo /\ lo <= site /\ site < start.cs_next_id /\
   final.cs_next_id <= hi /\ hi <= last /\ next <= start.cs_next_var /\
   final.cs_next_var <= limit_st.cs_next_var /\
-  abi_scratch_decoder_loop_data ce env sf ty tv maxn bs vs opc hi_op ip src dst
-    sb d slot first last b cap next initial /\ abi_scratch_decoder ce env sf ty tv /\
-  abi_scratch_decoder_loop_inv opc bs tv vs sb d
+  abi_scratch_decoder_loop_data ce env sf ty tv maxn bs vs opc base_op hi_op ip src dst
+    B sb d slot first last b cap next initial /\ abi_scratch_decoder ce env sf ty tv /\
+  (base_op = Lit 0w \/ opc = MLOAD) /\
+  abi_scratch_decoder_loop_inv opc bs tv vs (B + sb) d
     (type_memory_bytes ce (ArrayT ty (Dynamic maxn))) slot site
     first last lo hi next limit_st b cap initial
     (fresh_label_output "dec_dyn_hdr" start.cs_next_label) i s ==>
@@ -40,8 +41,9 @@ Proof
   qpat_x_assum `abi_decode_loop_suffix _ _ _ _ _ = _` mp_tac >>
   asm_simp_tac bool_ss [] >> strip_tac >>
   drule abi_decoder_loop_suffix_facts >> strip_tac >>
-  qpat_x_assum `abi_decode_loop_prefix _ _ _ _ = _` mp_tac >>
+  qpat_x_assum `abi_decode_loop_prefix _ _ _ _ _ = _` mp_tac >>
   simp_tac bool_ss [abi_decode_loop_prefix_shape] >> strip_tac >> gvs[Excl "enc_def"] >>
-  drule_all abi_scratch_decoder_loop_typed >>
+  drule abi_scratch_decoder_loop_typed >>
+  simp_tac bool_ss [] >> disch_then drule_all >>
   disch_then (qspec_then `ctx` strip_assume_tac) >> qexists_tac `t` >> simp[]
 QED

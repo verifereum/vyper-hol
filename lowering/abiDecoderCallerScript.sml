@@ -1,6 +1,6 @@
 Theory abiDecoderCaller
 Ancestors
-  abiDecoderCoherence compileVyper compileEnv valueEncoding vyperABI contractABI abiDecodeRanges
+  abiDecoderCoherence compileVyper compileEnv loweringStateRelDefs valueEncoding vyperABI contractABI abiDecodeRanges
   abiDecoderConstructors vyperValue vyperContext vyperTypeContract finite_map
 Libs
   vyperCheckContractLib finite_mapLib

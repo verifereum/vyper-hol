@@ -81,6 +81,8 @@ Theorem convert_continuation_summary_mem:
     (\res fin r. expr_exit res r)
 Proof
   strip_tac >>
+  `post_value_type cenv e1 = expr_type e1` by
+    (irule post_value_type_word >> first_assum ACCEPT_TAC) >>
   `stmt_state_rel ctx func cenv cx (ee with gas_obs := []) t0 /\
    eval_operand x t0 = SOME (typed_val_to_w256 tv1 v1)` by
     gvs[expr_post_def, expr_val_rel_def] >>

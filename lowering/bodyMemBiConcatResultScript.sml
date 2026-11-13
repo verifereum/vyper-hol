@@ -1,7 +1,7 @@
 (* The source continuation after concat's operand-list evaluation. *)
 Theory bodyMemBiConcatResult
 Ancestors
-  protectedAllocationFrame bodyMemBiConcatPost
+  protectedAllocationFrame bodyMemBiConcatPost loweringStateRelDefs
   bodyMemBiConcatArgs bodyMemBiConcatPrefix bodyMemBiConcatFragments
   bodyMemBiECRecoverCompose exprSimConcatResult gasSummary gasOutcome
   fragGasMode fragGasPathMem exprSimMemDefs vyperState vyperValueOperation
@@ -212,7 +212,7 @@ Resume concat_result_vv_sim_mem[finalpost]:
    alloca_history func tf /\ s0.vs_alloca_next <= tf.vs_alloca_next` by
     (simp[Abbr `tf`, mstore_def, update_var_def] >> decide_tac) >>
   asm_rewrite_tac[] >>
-  `wb_frame cenv es sa s0 t` by
+  `wb_frame cenv es es sa s0 t` by
     (irule (INST_TYPE [alpha |-> ``:256``] concat_prefix_frame) >> reverse (rpt conj_tac)
      >- first_assum ACCEPT_TAC
      >- (rpt strip_tac >> first_x_assum drule >> simp[])
@@ -225,10 +225,10 @@ Resume concat_result_vv_sim_mem[finalpost]:
 QED
 
 Resume concat_result_vv_sim_mem[frame]:
-  `wb_frame cenv es sa s0 t'` by
+  `wb_frame cenv es ee sa s0 t'` by
     (irule (INST_TYPE [alpha |-> ``:256``] concat_prefix_list_frame) >>
      conj_tac >- first_assum ACCEPT_TAC >>
-     reverse conj_tac
+     conj_tac
      >- (qexistsl_tac [`ctx`, `cx`, `func`] >> first_assum ACCEPT_TAC) >>
      qexistsl_tac [`B`, `bsz`, `es`, `ow`, `s4`, `t`] >>
      asm_rewrite_tac[] >> simp[] >> first_assum ACCEPT_TAC) >>
@@ -239,7 +239,8 @@ Resume concat_result_vv_sim_mem[frame]:
   qpat_assum `Abbrev (tf = _)`
     (fn th => pure_rewrite_tac[REWRITE_RULE[markerTheory.Abbrev_def] th]) >>
   pure_rewrite_tac[vyperASTTheory.expr_type_def] >>
-  irule (BETA_RULE (REWRITE_RULE[LET_THM, vyperASTTheory.expr_type_def]
+  irule (BETA_RULE (REWRITE_RULE[LET_THM, vyperASTTheory.expr_type_def,
+                                 loweringPostsTheory.post_value_type_def]
     (Q.INST [`e` |-> `Builtin ann (Concat n) args`] (SPEC_ALL concat_suffix_post)))) >>
   asm_rewrite_tac[] >> suspend "suffix_conditions"
 QED
@@ -276,7 +277,7 @@ Resume concat_result_vv_sim_mem[suffix_value]:
         (irule exprSimPropsTheory.local_region_frame >> conj_tac
          >- (qexists_tac `func` >>
              qpat_assum `stmt_state_rel _ _ _ _ es t` mp_tac >>
-             pure_rewrite_tac[stmt_state_rel_def, compileEnvTheory.state_rel_def] >>
+             pure_rewrite_tac[stmt_state_rel_def, loweringStateRelDefsTheory.state_rel_def] >>
              strip_tac >> first_assum ACCEPT_TAC) >>
          qexistsl_tac [`s4`, `ee.scopes`, `t'`] >>
          asm_rewrite_tac[]) >>
@@ -296,7 +297,7 @@ Resume concat_result_vv_sim_mem[suffix_sizes]:
 QED
 
 Resume concat_result_vv_sim_mem[suffix_store_size]:
-  reverse conj_tac >- simp[valueEncodingTheory.mem_bytes_at_def] >>
+  reverse conj_tac >- simp[valueEncodingDefsTheory.mem_bytes_at_def] >>
   `LIST_REL (\t v. ?tv. evaluate_type (get_tenv cx) t = SOME tv /\
                           value_has_type tv v) (MAP expr_type args) vs` by
     simp[LIST_REL_MAP1, combinTheory.o_DEF] >>

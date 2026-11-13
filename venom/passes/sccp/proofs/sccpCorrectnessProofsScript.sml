@@ -10,13 +10,15 @@ Theory sccpCorrectnessProofs
 Ancestors
   sccpProofs sccpProofsBase sccpDefs sccpSound sccpConvergence
   analysisSimDefs analysisSimProps
-  venomWf venomExecSemantics venomExecProofs venomInst venomInstProps venomExecProps
+  venomWf venomFnInstsProofs venomExecSemantics venomExecProofs venomInst venomInstProps venomExecProps
   passSharedDefs passSharedProps
   stateEquiv stateEquivProps execEquivProofs
   passSimulationDefs passSimulationProps passSimulationProofs
   finite_map venomState list
   cfgAnalysisProps cfgDefs
   dfAnalyzeDefs
+  passTransform
+  venomWfProps
 Libs
   BasicProvers
 
@@ -71,7 +73,7 @@ Proof
   `MEM y (cfg_succs_of (cfg_analyze f) bb.bb_label)` by (
     irule bb_succs_in_cfg_succs >> fs[wf_function_def] >>
     metis_tac[]) >>
-  imp_res_tac cfg_dfs_pre_succs_closed >>
+  imp_res_tac cfgHelpersTheory.cfg_dfs_pre_succs_closed >>
   fs[EVERY_MEM]
 QED
 
@@ -89,284 +91,6 @@ Proof
   metis_tac[entry_label_in_dfs_pre]
 QED
 
-(* ================================================================= *)
-(*  Part 3: FDOM monotonicity and output tracking                    *)
-(* ================================================================= *)
-
-Theorem exec_block_fdom_mono:
-  !fuel ctx bb s s'.
-    exec_block fuel ctx bb s = OK s' /\
-    bb_well_formed bb /\ EVERY inst_wf bb.bb_instructions ==>
-    FDOM s.vs_vars SUBSET FDOM s'.vs_vars
-Proof
-  rpt gen_tac >> strip_tac >>
-  `!n f c st st'.
-     n = LENGTH bb.bb_instructions - st.vs_inst_idx /\
-     exec_block f c bb st = OK st' /\
-     bb_well_formed bb /\ EVERY inst_wf bb.bb_instructions ==>
-     FDOM st.vs_vars SUBSET FDOM st'.vs_vars`
-    suffices_by (
-      disch_then (qspecl_then
-        [`LENGTH bb.bb_instructions - s.vs_inst_idx`,
-         `fuel`, `ctx`, `s`, `s'`] mp_tac) >>
-      simp[]) >>
-  completeInduct_on `n` >> rw[] >>
-  qabbrev_tac `idx = st.vs_inst_idx` >>
-  Cases_on `idx >= LENGTH bb.bb_instructions`
-  >- (
-    qpat_x_assum `exec_block _ _ _ _ = _` mp_tac >>
-    ONCE_REWRITE_TAC[exec_block_def] >>
-    simp[get_instruction_def]) >>
-  `idx < LENGTH bb.bb_instructions` by fs[] >>
-  qpat_x_assum `exec_block _ _ _ _ = _` mp_tac >>
-  ONCE_REWRITE_TAC[exec_block_def] >>
-  simp[get_instruction_def] >>
-  Cases_on `step_inst f c (EL idx bb.bb_instructions) st` >> gvs[] >>
-  Cases_on `is_terminator (EL idx bb.bb_instructions).inst_opcode` >> gvs[]
-  >- (
-    (* Terminator: lookup_var preserved => FDOM preserved *)
-    Cases_on `v.vs_halted` >> gvs[] >>
-    simp[pred_setTheory.SUBSET_DEF] >> rpt strip_tac >>
-    irule lookup_var_fdom >> qexists_tac `st` >>
-    metis_tac[step_terminator_preserves_vars]) >>
-  (* Non-terminator: step_inst_fdom gives FDOM grows, then IH *)
-  strip_tac >>
-  `FDOM v.vs_vars = FDOM st.vs_vars UNION
-     set (EL idx bb.bb_instructions).inst_outputs` by (
-    `inst_wf (EL idx bb.bb_instructions)` by
-	      fs[EVERY_EL] >>
-	    `(EL idx bb.bb_instructions).inst_opcode ≠ PHI` by
-	      metis_tac[step_inst_ok_imp_not_phi] >>
-	    metis_tac[step_inst_fdom]) >>
-  `FDOM st.vs_vars SUBSET FDOM v.vs_vars` by
-    (simp[] >> simp[pred_setTheory.SUBSET_DEF]) >>
-  `FDOM v.vs_vars SUBSET FDOM st'.vs_vars` by (
-    first_x_assum (qspec_then `LENGTH bb.bb_instructions - SUC idx` mp_tac) >>
-    (impl_tac >- simp[Abbr `idx`]) >>
-    disch_then (qspecl_then [`f`, `c`,
-      `v with vs_inst_idx := SUC idx`, `st'`] mp_tac) >>
-    simp[]) >>
-  metis_tac[pred_setTheory.SUBSET_TRANS]
-QED
-
-(* After running a block, non-terminator instruction outputs are in FDOM.
-   Proof approach: completeInduct_on with rpt strip_tac (NOT rw[]).
-   rw[] is too aggressive with arithmetic premises. *)
-(* Separate the induction to avoid scoping issues with outer exec_block *)
-Theorem exec_block_output_in_fdom_aux:
-  !bb idx v n f c st st'.
-    idx < LENGTH bb.bb_instructions /\
-    ~is_terminator (EL idx bb.bb_instructions).inst_opcode /\
-    MEM v (EL idx bb.bb_instructions).inst_outputs /\
-    n = LENGTH bb.bb_instructions - st.vs_inst_idx /\
-    exec_block f c bb st = OK st' /\
-    bb_well_formed bb /\ EVERY inst_wf bb.bb_instructions /\
-    st.vs_inst_idx <= idx ==>
-    v IN FDOM st'.vs_vars
-Proof
-  ntac 3 gen_tac >>
-  completeInduct_on `n` >> rw[] >>
-  qabbrev_tac `k = st.vs_inst_idx` >>
-  Cases_on `k >= LENGTH bb.bb_instructions`
-  >- fs[Abbr `k`] >>
-  `k < LENGTH bb.bb_instructions` by fs[] >>
-  qpat_x_assum `exec_block _ _ _ _ = _` mp_tac >>
-  ONCE_REWRITE_TAC[exec_block_def] >>
-  simp[get_instruction_def, Abbr `k`] >>
-  Cases_on `step_inst f c (EL st.vs_inst_idx bb.bb_instructions) st` >>
-  gvs[] >>
-  Cases_on `is_terminator (EL st.vs_inst_idx bb.bb_instructions).inst_opcode`
-  >> gvs[]
-  >- (
-    (* terminator case: contradiction *)
-    fs[bb_well_formed_def] >>
-    `st.vs_inst_idx = PRE (LENGTH bb.bb_instructions)` by
-      (first_x_assum irule >> simp[]) >>
-    `idx = st.vs_inst_idx` by simp[] >>
-    gvs[]
-  ) >>
-  strip_tac >>
-  Cases_on `st.vs_inst_idx = idx`
-  >- (
-    `inst_wf (EL idx bb.bb_instructions)` by fs[EVERY_EL] >>
-    `(EL idx bb.bb_instructions).inst_opcode ≠ PHI` by
-      metis_tac[step_inst_ok_imp_not_phi] >>
-    `FDOM v'.vs_vars = FDOM st.vs_vars UNION
-       set (EL idx bb.bb_instructions).inst_outputs` by
-      metis_tac[step_inst_fdom] >>
-    `v IN FDOM v'.vs_vars` by simp[] >>
-    `FDOM v'.vs_vars SUBSET FDOM st'.vs_vars` by (
-      mp_tac (Q.SPECL [`f`, `c`, `bb`,
-        `v' with vs_inst_idx := SUC st.vs_inst_idx`, `st'`]
-        exec_block_fdom_mono) >>
-      simp[]) >>
-    metis_tac[pred_setTheory.SUBSET_DEF]
-  ) >>
-  (* recursive case: st.vs_inst_idx < idx *)
-  `st.vs_inst_idx < idx` by simp[] >>
-  first_x_assum (qspec_then
-    `LENGTH bb.bb_instructions - SUC st.vs_inst_idx` mp_tac) >>
-  simp[] >>
-  disch_then (qspecl_then [`f`, `c`,
-    `v' with vs_inst_idx := SUC st.vs_inst_idx`, `st'`] mp_tac) >>
-  simp[]
-QED
-
-Theorem exec_block_outputs_in_fdom:
-  !fuel ctx bb s s' idx v.
-    exec_block fuel ctx bb s = OK s' /\
-    s.vs_inst_idx = 0 /\
-    bb_well_formed bb /\
-    EVERY inst_wf bb.bb_instructions /\
-    idx < LENGTH bb.bb_instructions /\
-    ~is_terminator (EL idx bb.bb_instructions).inst_opcode /\
-    MEM v (EL idx bb.bb_instructions).inst_outputs ==>
-    v IN FDOM s'.vs_vars
-Proof
-  rpt gen_tac >> strip_tac >>
-  irule exec_block_output_in_fdom_aux >>
-  qexistsl_tac [`bb`, `ctx`, `fuel`, `idx`,
-    `LENGTH bb.bb_instructions`, `s`] >>
-  simp[]
-QED
-
-(* ================================================================= *)
-(*  Part 4: The dominance invariant                                  *)
-(* ================================================================= *)
-
-Definition strict_dom_vars_defined_def:
-  strict_dom_vars_defined f s <=>
-    !d_bb d_inst v.
-      MEM d_bb f.fn_blocks /\
-      MEM d_inst d_bb.bb_instructions /\
-      MEM v d_inst.inst_outputs /\
-      fn_dominates f d_bb.bb_label s.vs_current_bb /\
-      d_bb.bb_label <> s.vs_current_bb ==>
-      v IN FDOM s.vs_vars
-End
-
-(* At entry: vacuously true because entry has no strict dominator.
-   Any path from entry to entry is [entry]; a strict dominator must
-   appear on it AND differ from entry — contradiction. *)
-Theorem strict_dom_vars_defined_entry:
-  !f s.
-    fn_entry_label f = SOME s.vs_current_bb ==>
-    strict_dom_vars_defined f s
-Proof
-  rw[strict_dom_vars_defined_def] >> rpt strip_tac >>
-  `F` suffices_by simp[] >>
-  qpat_x_assum `fn_dominates _ _ _` mp_tac >>
-  simp[fn_dominates_def] >> DISJ2_TAC >>
-  qmatch_asmsub_abbrev_tac `fn_entry_label _ = SOME lbl` >>
-  qexists_tac `[lbl]` >>
-  simp[is_fn_path_def, fn_entry_label_def, entry_block_def, Abbr `lbl`]
-QED
-
-Theorem strict_dom_vars_defined_preserved:
-  !f bb s s' fuel ctx.
-    wf_function f /\ ssa_form f /\
-    MEM bb f.fn_blocks /\
-    bb.bb_label = s.vs_current_bb /\
-    exec_block fuel ctx bb s = OK s' /\
-    s.vs_inst_idx = 0 /\
-    ~s'.vs_halted /\
-    strict_dom_vars_defined f s /\
-    fn_reachable f s.vs_current_bb /\
-    bb_well_formed bb /\
-    EVERY inst_wf bb.bb_instructions ==>
-    strict_dom_vars_defined f s'
-Proof
-  rw[strict_dom_vars_defined_def] >> rpt strip_tac >>
-  Cases_on `d_bb.bb_label = s.vs_current_bb`
-  >- (
-    (* Case 1: d_bb is the block we just ran *)
-    `d_bb.bb_label = bb.bb_label` by simp[] >>
-    `d_bb = bb` by metis_tac[same_label_same_block] >>
-    gvs[] >>
-    (* d_inst is at some index idx *)
-    `?idx. idx < LENGTH bb.bb_instructions /\
-           EL idx bb.bb_instructions = d_inst` by
-      metis_tac[MEM_EL] >>
-    (* d_inst has outputs, so it's not a terminator *)
-    `~is_terminator d_inst.inst_opcode` by (
-      spose_not_then assume_tac >>
-      `d_inst.inst_outputs = []` by
-        metis_tac[terminator_no_outputs, EVERY_MEM] >>
-      fs[]) >>
-    irule exec_block_outputs_in_fdom >>
-    qexistsl_tac [`bb`, `ctx`, `fuel`, `idx`, `s`] >> simp[])
-  >- (
-    (* Case 2: d_bb is NOT the current block *)
-    (* s'.vs_current_bb is a successor of bb *)
-    `MEM s'.vs_current_bb (bb_succs bb)` by (
-      mp_tac (Q.SPECL [`fuel`, `ctx`, `bb`, `s`, `s'`]
-        exec_block_current_bb_in_succs) >>
-      simp[] >> disch_then irule >>
-      fs[bb_well_formed_def] >>
-      rpt strip_tac >> spose_not_then assume_tac >>
-      res_tac >> fs[]) >>
-    (* fn_cfg_edge from bb to s'.vs_current_bb *)
-    `fn_cfg_edge f s.vs_current_bb s'.vs_current_bb` by
-      (simp[fn_cfg_edge_def] >> metis_tac[]) >>
-    (* d_bb dominates s.vs_current_bb (predecessor of s'.vs_current_bb) *)
-    `fn_dominates f d_bb.bb_label s.vs_current_bb` by
-      metis_tac[fn_dominates_predecessor] >>
-    (* strict dominance: d_bb.bb_label <> s.vs_current_bb *)
-    `v IN FDOM s.vs_vars` by metis_tac[] >>
-    (* FDOM mono *)
-    `FDOM s.vs_vars SUBSET FDOM s'.vs_vars` by
-      metis_tac[exec_block_fdom_mono] >>
-    metis_tac[pred_setTheory.SUBSET_DEF])
-QED
-
-(* ================================================================= *)
-(*  Part 5: Operand vars in FDOM at each instruction                 *)
-(* ================================================================= *)
-
-(* Under wf_ssa + wf_function + strict_dom_vars_defined + intra-block
-   outputs in FDOM, all Var operands at instruction idx are in FDOM.
-   def_dominates_uses gives i < j with EL j = EL idx in same-block case.
-   inst_ids_el_eq (from fn_inst_ids_distinct) gives j = idx, hence i < idx. *)
-Theorem operand_vars_in_fdom:
-  !f bb idx s.
-    wf_ssa f /\ wf_function f /\ fn_inst_wf f /\
-    MEM bb f.fn_blocks /\
-    bb.bb_label = s.vs_current_bb /\
-    idx < LENGTH bb.bb_instructions /\
-    (EL idx bb.bb_instructions).inst_opcode <> PHI /\
-    strict_dom_vars_defined f s /\
-    (!j v. j < idx /\ MEM v (EL j bb.bb_instructions).inst_outputs ==>
-           v IN FDOM s.vs_vars) ==>
-    !v. MEM (Var v) (EL idx bb.bb_instructions).inst_operands ==>
-        v IN FDOM s.vs_vars
-Proof
-  rpt strip_tac >>
-  fs[wf_ssa_def] >>
-  `MEM (EL idx bb.bb_instructions) bb.bb_instructions` by
-    metis_tac[MEM_EL] >>
-  fs[def_dominates_uses_def] >>
-  `def_available_at f bb (SOME (EL idx bb.bb_instructions)) v` by (
-    first_x_assum (qspecl_then [`bb`, `EL idx bb.bb_instructions`] mp_tac) >>
-    simp[] >> disch_then (qspec_then `v` mp_tac) >> simp[]) >>
-  qpat_x_assum `def_available_at f bb _ v`
-    (strip_assume_tac o REWRITE_RULE[def_available_at_def]) >>
-  Cases_on `def_bb.bb_label = bb.bb_label`
-  >- (
-    (* Same block: def_bb = bb by label uniqueness *)
-    `def_bb = bb` by metis_tac[same_label_same_block] >>
-    gvs[] >>
-    (* i < j, EL j = EL idx. fn_inst_ids_distinct gives j = idx. *)
-    `fn_inst_ids_distinct f` by fs[wf_function_def] >>
-    `j = idx` by metis_tac[inst_ids_el_eq] >>
-    gvs[] >>
-    first_x_assum irule >> simp[] >> metis_tac[])
-  >- (
-    (* Different block: strict_dom_vars_defined *)
-    fs[strict_dom_vars_defined_def] >>
-    qpat_x_assum `!d_bb d_inst v. _` (qspecl_then
-      [`def_bb`, `def_inst`, `v`] mp_tac) >>
-    simp[] >> gvs[])
-QED
 
 (* ================================================================= *)
 (*  Part 6: Block-level execution equality                           *)
@@ -1113,34 +837,6 @@ Proof
   BasicProvers.EVERY_CASE_TAC >> gvs[mk_nop_inst_def]
 QED
 
-Triviality phi_prefix_length_eq_by_el_phi[local]:
-  !l1 l2.
-    LENGTH l1 = LENGTH l2 /\
-    (!i. i < LENGTH l1 ==>
-      ((EL i l1).inst_opcode = PHI <=> (EL i l2).inst_opcode = PHI)) ==>
-    phi_prefix_length l1 = phi_prefix_length l2
-Proof
-  Induct >> rpt strip_tac >> Cases_on `l2` >> gvs[phi_prefix_length_def] >>
-  `h.inst_opcode = PHI <=> h'.inst_opcode = PHI` by (
-    qpat_x_assum `!i. i < SUC (LENGTH t) ==> _` (qspec_then `0` mp_tac) >>
-    simp[]) >>
-  Cases_on `h.inst_opcode = PHI` >> gvs[phi_prefix_length_def] >>
-  qpat_x_assum `!l2. _` (qspec_then `t` mp_tac) >> simp[] >>
-  impl_tac >- (
-    rpt strip_tac >>
-    qpat_x_assum `!i. i < SUC (LENGTH t) ==> _` (qspec_then `SUC i` mp_tac) >>
-    simp[]) >>
-  simp[]
-QED
-
-Triviality phi_prefix_length_el_phi_sccp[local]:
-  !insts i. i < phi_prefix_length insts ==> (EL i insts).inst_opcode = PHI
-Proof
-  Induct_on `insts` >> simp[phi_prefix_length_def] >> rpt strip_tac >>
-  Cases_on `h.inst_opcode = PHI` >> gvs[phi_prefix_length_def] >>
-  Cases_on `i` >> gvs[phi_prefix_length_def]
-QED
-
 Triviality sccp_analysis_block_phi_prefix_length[local]:
   !f bb.
     phi_prefix_length
@@ -1166,7 +862,7 @@ Proof
     (`phi_prefix_length bb.bb_instructions <= LENGTH bb.bb_instructions` by
        metis_tac[phi_prefix_length_le] >> decide_tac) >>
   `((EL i bb.bb_instructions).inst_opcode = PHI)` by
-    metis_tac[phi_prefix_length_el_phi_sccp] >>
+    metis_tac[phi_prefix_length_el_phi] >>
   `EL i (analysis_block_transform sccp_bottom (sccp_df_analyze f)
       (\lat inst. [sccp_inst lat.sl_vals inst]) bb).bb_instructions =
     sccp_inst (df_at sccp_bottom (sccp_df_analyze f) bb.bb_label i).sl_vals
@@ -1215,7 +911,7 @@ Proof
   `MEM (EL idx bb.bb_instructions) bb.bb_instructions` by metis_tac[MEM_EL] >>
   `~MEM x (EL idx bb.bb_instructions).inst_outputs` by (
     CCONTR_TAC >> fs[is_phi_output_of_block_def] >>
-    metis_tac[phi_prefix_length_el_phi_sccp]) >>
+    metis_tac[phi_prefix_length_el_phi]) >>
   `df_at sccp_bottom (sccp_df_analyze f) bb.bb_label (SUC idx) =
    sccp_transfer_inst f (EL idx bb.bb_instructions)
      (df_at sccp_bottom (sccp_df_analyze f) bb.bb_label idx)` by
@@ -1831,20 +1527,8 @@ Proof
       gvs[] >> rename1 `eval_phis s bb.bb_instructions = OK s_phi` >> strip_tac >>
       qabbrev_tac `idx = phi_prefix_length bb.bb_instructions` >>
       `idx <= PRE (LENGTH bb.bb_instructions)` by (
-        `idx < LENGTH bb.bb_instructions` by (
-          qunabbrev_tac `idx` >>
-          CCONTR_TAC >>
-          `LENGTH bb.bb_instructions <= phi_prefix_length bb.bb_instructions` by simp[] >>
-          `phi_prefix_length bb.bb_instructions <= LENGTH bb.bb_instructions` by
-            simp[phi_prefix_length_le] >>
-          `phi_prefix_length bb.bb_instructions = LENGTH bb.bb_instructions` by decide_tac >>
-          fs[bb_well_formed_def] >>
-          `~is_terminator PHI` by simp[is_terminator_def] >>
-          `is_terminator (EL (PRE (LENGTH bb.bb_instructions)) bb.bb_instructions).inst_opcode` by
-            metis_tac[LAST_EL] >>
-          `PRE (LENGTH bb.bb_instructions) < phi_prefix_length bb.bb_instructions` by
-            (Cases_on `bb.bb_instructions` >> fs[]) >>
-          metis_tac[phi_prefix_length_el_phi_sccp]) >>
+        `idx < LENGTH bb.bb_instructions` by
+          (qunabbrev_tac `idx` >> irule phi_prefix_length_lt_wf >> simp[]) >>
         decide_tac) >>
       `!x c. FLOOKUP (df_at sccp_bottom (sccp_df_analyze f) bb.bb_label idx).sl_vals x =
              SOME (CL_Const c) /\

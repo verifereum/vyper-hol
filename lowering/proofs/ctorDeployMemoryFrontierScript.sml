@@ -270,6 +270,7 @@ Theorem lowered_unit_ptr_taint:
     lowering_context_ok ctx /\ ctx.ctx_entry = SOME name /\
     lookup_function name ctx.ctx_functions = SOME fn /\
     fn_entry_label fn = SOME lbl /\ lo <= vs.vs_alloca_next /\
+    ~ctx_has_dalloca ctx /\
     (!fuel. ptr_safe_blocks D lo fuel ctx fn [] FEMPTY entry_taint
               (vs with <| vs_prev_bb := NONE; vs_current_bb := lbl;
                           vs_inst_idx := 0 |>))
@@ -278,7 +279,7 @@ Proof
   rpt gen_tac >> strip_tac >>
   drule_all lowered_unit_entry_facts >> strip_tac >> gvs[] >>
   `ptr_ok_check ctx` by fs[lowering_context_ok_def] >>
-  drule ptr_ok_check_sound >> strip_tac >>
+  drule_all ptr_ok_check_sound >> strip_tac >>
   qspecl_then [`D`, `lo`, `\nm. set (ctx_ptr_param_list ctx nm)`, `ctx`,
                `vs`, `name`, `fn`, `lbl`] mp_tac ptr_safe_ptr_discipline >>
   disch_then irule >> fs[EVERY_MEM]

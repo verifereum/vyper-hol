@@ -1,7 +1,7 @@
 (* Memory-counted paths for concat operand stores. *)
 Theory bodyMemBiConcatFragments
 Ancestors
-  exprSimConcatPath exprSimConcatStep concatMemory fragGasSeqMem
+  exprSimConcatPath exprSimConcatStep concatMemory fragGasSeqMem loweringStateRelDefs
   emitHelper venomInst exprSimConcatResult instMemFrontier
   venomExecSemantics exprLoweringProps venomState fragExecMem
   allocaFootprint compileEnv emitHelperProps

@@ -3,7 +3,7 @@
 Theory bodyMemAssignAttrStorage
 Ancestors
   bodyMemoryPreds bodyMemAugAssignAttrStorage vyperInterpreter vyperState
-  vyperStorageBackend loweringPosts exprSimProps compileEnv venomExecSemantics venomState
+  vyperStorageBackend loweringPosts exprSimProps compileEnv loweringStateRelDefs venomExecSemantics venomState
   exprSimMemUnwrap exprSimVVFrame bodyMemEmitOpFrame context emitHelperProps
   exprLoweringProps exprSimMemDefs exprBopSimProps freshWrites
   gasOutcome gasSummary gasSummaryCompose fragGasMode fragGasPath
@@ -39,8 +39,8 @@ Proof
      goal_assum (drule_at Any) >> simp[]) >>
   simp[Once evaluate_def, FUN_EQ_THM, bind_def] >> qx_gen_tac `st` >>
   Cases_on `eval_expr cx e st` >> Cases_on `q` >> simp[] >>
-  simp[write_place_def, bind_def] >>
-  Cases_on `read_result cx x' r` >> Cases_on `q` >> simp[]
+  Cases_on `read_result cx x' r` >> Cases_on `q` >>
+  simp[write_place_def, bind_def]
 QED
 
 Theorem vv_at_start_var_mem_src[local]:
@@ -129,13 +129,19 @@ Proof
      qexistsl_tac [`sa`, `ee.scopes`, `s`] >> simp[] >>
      qpat_x_assum `vv_post _ _ _ _ _ _ _ _ _ _ _ _ _` mp_tac >>
      simp[vv_post_def]) >>
-  `locals_kept ce es s0 u` by
+  `locals_kept ce es ee s0 u` by
     (irule locals_kept_trans >> goal_assum (drule_at Any) >>
-     qexistsl_tac [`sa`, `s`] >>
+     qexistsl_tac [`ee`, `s`] >>
      qpat_x_assum `vv_post _ _ _ _ _ _ _ _ _ _ _ _ _` mp_tac >>
      qpat_x_assum `expr_post _ _ _ _ _ _ _ _ _ _ _ _ _` mp_tac >>
      simp[vv_post_def, expr_post_def] >> metis_tac[]) >>
+  `~expr_has_effect e ==> pure_frame ce func es sa s0 u` by
+    (strip_tac >> match_mp_tac pure_frame_trans >>
+     qexistsl_tac [`ee`, `sa with cs_next_var := sm.cs_next_var`, `s`] >>
+     gvs[vv_post_def, expr_post_def]) >>
   gvs[vv_post_def, expr_post_def] >> rpt conj_tac
+  >- (strip_tac >> irule expr_val_own_start_mono >>
+      qexists_tac `sa with cs_next_var := sm.cs_next_var` >> simp[])
   >- (rpt strip_tac >>
       `not_fresh_at (sa with cs_next_var := sm.cs_next_var) x` by
         (gvs[not_fresh_at_def] >> metis_tac[arithmeticTheory.LESS_EQ_TRANS]) >>
@@ -196,7 +202,7 @@ Proof
      (mk_inst sm.cs_next_id ADD [Lit kb; Lit ko]
        [STRING #"%" (toString sm.cs_next_var)]) s =
      OK (update_var (STRING #"%" (toString sm.cs_next_var)) (kb + ko) s)` by
-    simp[step_inst_base_def, venomInstTheory.mk_inst_def, exec_pure2_def,
+    simp[step_inst_base_opcode_eqs, venomInstTheory.mk_inst_def, exec_pure2_def,
          eval_operand_def, wordsTheory.WORD_ADD_COMM] >>
   drule_at (Pat `emit_op _ _ _ = _`) emit_op_word_path_frame_mem >>
   disch_then (drule_at (Pat `stmt_state_rel _ _ _ _ _ _`)) >>
@@ -209,11 +215,8 @@ Proof
       simp[] >> simp[not_fresh_at_def, ASCIInumbersTheory.toString_inj]) >>
   irule vv_store_bound_frame_mem_src >> goal_assum (drule_at Any) >>
   simp[] >> gvs[] >>
-  irule literal_operand_frame >>
-  reverse conj_tac >- simp[update_var_def] >>
-  qexists_tac `sm` >>
-  simp[update_var_def, lookup_var_def, finite_mapTheory.FLOOKUP_UPDATE] >>
-  rpt strip_tac >> gvs[not_fresh_at_def, ASCIInumbersTheory.toString_inj]
+  rw[] >> first_x_assum drule >>
+  simp[not_fresh_at_def, ASCIInumbersTheory.toString_inj]
 QED
 
 Theorem vv_post_add_read_mem_src[local]:
@@ -523,7 +526,7 @@ Proof
   `well_typed_expr env e` by gvs[type_stmt_def, atarget_accepts_def] >>
   `expr_body_pre cenv cx env e es` by
     (irule stmt_expr_body_pre >>
-     gvs[stmt_exprs_ok_def, supported_stmt_expr_exists_def,
+     gvs[stmt_exprs_ok_flat, supported_stmt_expr_exists_def,
          supported_assignment_exists_def, int_calls_stmt_def,
          int_calls_atarget_def, int_calls_expr_def, body_inv_def] >>
      qexists_tac `[]` >> simp[]) >>

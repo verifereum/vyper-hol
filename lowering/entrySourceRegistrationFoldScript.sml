@@ -153,7 +153,7 @@ Theorem entry_registration_singleton_anchored[local]:
     (?vname ins. dst = Var vname /\ MEM ins (fn_insts fn) /\
       ins.inst_opcode = ALLOCA /\ ins.inst_outputs = [vname] /\
       ins.inst_id = st.cs_next_id) /\
-    compile_abi_decode_to_buf dst src CALLDATALOAD (Lit 0w) info first = ((),final) /\
+    compile_abi_decode_to_buf dst src CALLDATALOAD (Lit 0w) (Lit 0w) info first = ((),final) /\
     fn_has_code first final fn /\ st.cs_next_id < first.cs_next_id /\
     st.cs_next_var <= first.cs_next_var /\
     ~ready.vs_halted /\ ready.vs_current_bb = first.cs_current_bb /\
@@ -337,7 +337,7 @@ QED
 Resume entry_registration_source_accumulator[owned]:
   drule abi_decoder_variable_counter >> strip_tac >>
   `first.cs_next_id <= stm.cs_next_id` by
-    (qpat_x_assum `compile_abi_decode_to_buf _ _ _ _ _ first = ((),stm)` mp_tac >>
+    (qpat_x_assum `compile_abi_decode_to_buf _ _ _ (Lit 0w) _ _ first = ((),stm)` mp_tac >>
      POP_ASSUM_LIST (K all_tac) >>
      metis_tac[cj 1 ci_mono_compile_abi_decode, ci_mono_def, pairTheory.SND]) >>
   `st.cs_next_id < stm.cs_next_id /\ st.cs_next_var <= stm.cs_next_var` by decide_tac >>

@@ -9,7 +9,7 @@
 Theory tupleMemoryFrame
 Ancestors
   exprSimProps
-  tupleMemoryLayout compileEnv localPtrsProps  valueEncodingProps
+  tupleMemoryLayout compileEnv loweringStateRelDefs localPtrsProps  valueEncodingProps
   valueEncodingProofs arithmetic venomMemDefs exprSimAggregateChildren
   vyperEvalPreservesScopes
 
@@ -26,7 +26,7 @@ Proof
   rpt gen_tac >> disch_then (map_every assume_tac o CONJUNCTS) >>
   first_x_assum irule >>
   qpat_x_assum `dst <= addr \/ _` mp_tac >>
-  simp[compileEnvTheory.regions_disjoint_def] >> decide_tac
+  simp[loweringStateRelDefsTheory.regions_disjoint_def] >> decide_tac
 QED
 
 Theorem local_regions_write_position:
@@ -58,8 +58,8 @@ Proof
   simp[local_backed_def] >> strip_tac
   >- (Cases_on `aid = inst.inst_id` >- gvs[] >>
       fs[alloca_inv_def, allocas_non_overlapping_def] >>
-      disj2_tac >> metis_tac[compileEnvTheory.regions_disjoint_def]) >>
-  disj2_tac >> metis_tac[compileEnvTheory.regions_disjoint_def]
+      disj2_tac >> metis_tac[loweringStateRelDefsTheory.regions_disjoint_def]) >>
+  disj2_tac >> metis_tac[loweringStateRelDefsTheory.regions_disjoint_def]
 QED
 
 (* Both ownership alternatives admit overlap only at or before the tuple. *)
@@ -69,7 +69,7 @@ Theorem tuple_container_write_position:
     ((?aid. FLOOKUP s.vs_allocas aid = SOME (b, sz)) \/
      (?name. local_region cenv scopes s name b sz)) /\
     local_region cenv scopes s dest dst dsz /\ b <= addr ==>
-    dst <= addr \/ compileEnv$regions_disjoint b sz dst dsz
+    dst <= addr \/ loweringStateRelDefs$regions_disjoint b sz dst dsz
 Proof
   rpt gen_tac >> disch_then (map_every assume_tac o CONJUNCTS) >>
   qpat_x_assum `(?aid. _) \/ _` strip_assume_tac

@@ -2,7 +2,7 @@
 Theory bodyMemTbExtract32TypedSuffix
 Ancestors
   bodyMemTbExtract32Runtime bodyMemTbExtract32Clamp bodyMemTbExtract32AddressClamp bodyMemTbExtract32FixedClamp bodyMemTbExtract32IntClamp bodyMemTbExtract32Readonly bodyMemTbExtract32Load bodyMemTbExtract32Cuts bodyMemTbExtract32Slice bodyMemTbExtract32Encoding stmtSimLogArgs
-  exprSimHash exprSimProps exprSimWordArgs loweringPosts exprSimDefs
+  exprSimHash exprSimHashBoundary exprSimProps exprSimWordArgs loweringPosts exprSimDefs
   valueEncoding vyperTypeSystem compileEnv
 
 Theorem extract32_source_bytes_kept:
@@ -18,7 +18,7 @@ Proof
   strip_tac >>
   `log_arg_clear cenv cx (BaseT (BytesT (Dynamic cap))) (BytesV bs)` by
     (irule log_arg_clear_base >> goal_assum (drule_at Any)) >>
-  `wb_frame cenv es sm s t` by metis_tac[expr_post_frame] >>
+  `wb_frame cenv es es' sm s t` by metis_tac[expr_post_frame] >>
   `~is_word_type (BaseT (BytesT (Dynamic cap)))` by simp[is_word_type_def] >>
   drule_all log_argument_footprint_kept >> strip_tac >>
   drule_all expr_val_at_footprint >> strip_tac >>

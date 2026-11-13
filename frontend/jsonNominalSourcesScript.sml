@@ -62,8 +62,6 @@ Definition resolve_json_expr_def:
     JE_Hex h (resolve_json_type decls ty)) ∧
   (resolve_json_expr decls (JE_Name id tc src ty) =
     JE_Name id tc src (resolve_json_type decls ty)) ∧
-  (resolve_json_expr decls (JE_Folded e folded) =
-    JE_Folded (resolve_json_expr decls e) (resolve_json_expr decls folded)) ∧
   (resolve_json_expr decls (JE_Attribute e attr tc btn btc src ty) =
     JE_Attribute (resolve_json_expr decls e) attr tc btn btc src
       (resolve_json_type decls ty)) ∧
@@ -133,8 +131,8 @@ Definition resolve_json_target_def:
 End
 
 Definition resolve_json_iter_def:
-  (resolve_json_iter decls (JIter_Range args folded bound) =
-    JIter_Range (resolve_json_exprs decls args) folded bound) ∧
+  (resolve_json_iter decls (JIter_Range args bound) =
+    JIter_Range (resolve_json_exprs decls args) bound) ∧
   (resolve_json_iter decls (JIter_Array e ty) =
     JIter_Array (resolve_json_expr decls e) (resolve_json_type decls ty))
 End

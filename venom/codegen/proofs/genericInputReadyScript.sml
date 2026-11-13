@@ -1,25 +1,6 @@
 Theory genericInputReady
 Ancestors
-  reorderSim stackPlanGen list rich_list sorting arithmetic
-
-Theorem emit_input_plan_residual_budget_wf:
-  !operands base pending opc nl ps iops ps1.
-    residual_budget_wf base pending ps /\
-    emit_input_plan opc operands nl ps = (iops,ps1) ==>
-    residual_budget_wf base (pending ++ operands) ps1
-Proof
-  Induct_on `operands`
-  >- simp[]
-  >> rpt gen_tac >> strip_tac >>
-     Cases_on `emit_one_input opc (operand_vars operands ++ nl) h ps` >>
-     rename1 `emit_one_input _ _ _ _ = (step_ops, mid)` >>
-     Cases_on `emit_input_plan opc operands nl mid` >>
-     gvs[emit_input_plan_cons] >>
-     drule_all emit_one_input_residual_budget_wf >> strip_tac >>
-     first_x_assum drule >>
-     disch_then drule >>
-     pure_rewrite_tac[GSYM APPEND_ASSOC, APPEND] >> simp[]
-QED
+  inputPlanSim reorderSim stackPlanGen list rich_list sorting arithmetic
 
 Theorem emit_input_plan_residual_budget_nil:
   !base ps opc operands nl iops ps1.

@@ -6,7 +6,7 @@ Ancestors
   abiEncoderWindowArrayLoop abiEncoderWindowArrayInvariant abiEncoderArrayLoopCode
   abiEncoderWindowArrayBody abiEncoderWindowArrayLayout
   abiEncoderArrayHeader abiEncoderArrayRound abiEncoderWindowContract
-  compileEnv freshWrites venomState venomMemDefs valueEncoding valueEncodingProps
+  compileEnv loweringStateRelDefs freshWrites venomState venomMemDefs valueEncoding valueEncodingDefs valueEncodingProps
   venomExecSemantics venomInst words finite_map pred_set list arithmetic
 
 Theorem window_array_round_backedge_code:

@@ -46,6 +46,47 @@ Ancestors
   venomInst venomState contextCodegenRel contextCodegenRelProps
   ptrDiscipline
 
+(* Whole-block source continuation retains the original entry root. *)
+Theorem frame_reachable_exec_block_successor:
+  !s inst G tn t u j.
+    lookup_block s.vs_current_bb fn.fn_blocks = SOME bb /\
+    get_instruction bb s.vs_inst_idx = SOME inst /\
+    EVERY (\i. i.inst_opcode <> INVOKE) bb.bb_instructions /\
+    frame_reachable vs ctx [] [] G tn fn inst s /\
+    exec_block fuel ctx bb s = OK t /\ ~t.vs_halted /\
+    enters_block fn t u /\ active_inst fn j u ==>
+    ?G' tn'. frame_reachable vs ctx [] [] G' tn' fn j u
+Proof
+  measureInduct_on `LENGTH bb.bb_instructions - s.vs_inst_idx` >>
+  rpt strip_tac >>
+  `active_inst fn inst s` by
+    (irule lookup_instruction_active >> metis_tac[]) >>
+  qpat_x_assum `exec_block _ _ _ _ = _` mp_tac >>
+  once_rewrite_tac[exec_block_def] >> simp[] >>
+  Cases_on `step_inst fuel ctx inst s` >> simp[] >>
+  rename1 `step_inst fuel ctx inst s = OK mid` >>
+  Cases_on `is_terminator inst.inst_opcode`
+  >- (simp[] >> strip_tac >> gvs[AllCaseEqs()] >>
+      drule_all frame_reachable_block >> metis_tac[]) >>
+  simp[] >> strip_tac >>
+  Cases_on `get_instruction bb (SUC s.vs_inst_idx)`
+  >- (qpat_x_assum `exec_block _ _ _ (_ with vs_inst_idx := _) = _` mp_tac >>
+      once_rewrite_tac[exec_block_def] >> simp[]) >>
+  rename1 `get_instruction bb (SUC s.vs_inst_idx) = SOME next` >>
+  drule_all step_preserves_control_flow >> strip_tac >>
+  `active_inst fn next (mid with vs_inst_idx := SUC s.vs_inst_idx)` by
+    (irule lookup_instruction_active >> simp[] >> metis_tac[]) >>
+  `inst.inst_opcode <> INVOKE` by
+    (gvs[get_instruction_def, AllCaseEqs(), EVERY_EL] >> metis_tac[]) >>
+  `?G1 tn1. frame_reachable vs ctx [] [] G1 tn1 fn next
+      (mid with vs_inst_idx := SUC s.vs_inst_idx)` by
+    metis_tac[frame_reachable_next] >>
+  first_x_assum (qspec_then `SUC s.vs_inst_idx` mp_tac) >>
+  (impl_tac >- (gvs[get_instruction_def, AllCaseEqs()] >> decide_tac)) >>
+  disch_then (qspec_then `mid with vs_inst_idx := SUC s.vs_inst_idx` mp_tac) >>
+  simp[] >> disch_then irule >> metis_tac[]
+QED
+
 (* ===== The ghost along a run ===== *)
 
 (* ghost_step is the ghost after a step: frame_reachable's next rule, or,

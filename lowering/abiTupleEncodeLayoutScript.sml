@@ -4,7 +4,7 @@ Theory abiTupleEncodeLayout
 Ancestors
   abiTupleEncodeMemory abiTupleProps abiEncoderAdmissible abiEncoderInput
   abiEncoderCorrectLeaves abiEncoderMemory abiStaticAggregateProps compileEnv exprLowering
-  valueEncoding contractABI words list rich_list arithmetic
+  valueEncoding valueEncodingDefs contractABI words list rich_list arithmetic
 
 Definition abi_tuple_encode_layout_def:
   abi_tuple_encode_layout ce (xs:(operand # type) list) ats <=>

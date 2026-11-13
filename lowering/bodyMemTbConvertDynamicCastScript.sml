@@ -34,6 +34,8 @@ Theorem convert_dynamic_counted_cont_mem:
       (Abort Revert_abort tt))
 Proof
   disch_then (map_every assume_tac o CONJUNCTS) >>
+  `post_value_type cenv e1 = expr_type e1` by
+    (irule post_value_type_bytestring >> gvs[is_bytestring_type_def]) >>
   `expr_val_rel cx (expr_type e1) v x s /\
    stmt_state_rel ctx func cenv cx es1 s` by gvs[expr_post_def] >>
   drule_all convert_dynamic_view >> strip_tac >>

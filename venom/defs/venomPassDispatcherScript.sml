@@ -9,8 +9,8 @@
 Theory venomPassDispatcher
 Ancestors
   venomPassSchedule fcgDefs lowerDloadDefs irSupply
-  makeSsaCurrentDefs singleUseExpansionDefs cfgNormDefs
-  simplifyCfgDefs simplifyCfgCompute dftDefs dretDesugarDefs
+  makeSsaDefs singleUseExpansionDefs cfgNormDefs
+  simplifyCfgDefs dftDefs dretDesugarDefs
   concretizeMemLocDefs fmpLowerDefs
 Datatype:
   fn_pass_output = <|

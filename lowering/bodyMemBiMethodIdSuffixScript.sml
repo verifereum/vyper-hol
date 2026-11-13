@@ -3,7 +3,7 @@ Theory bodyMemBiMethodIdSuffix
 Ancestors
   exprOperandVar venomMemProps fragGasSeqMem fragGasMode allocaHistoryFragment fragExec
   bodyAllocMemory allocaFootprint allocaSiteResource loweringHalt
-  builtinHashing builtinBytesMemory builtinBytes exprSimHash
+  builtinHashing builtinBytesMemory builtinBytes exprSimHash exprSimHashBoundary
   exprLoweringProps emitHelperProps emitHelper context compileEnv
   fragExecMem instMemFrontier venomState venomExecSemantics
   venomInst venomMemDefs list rich_list words arithmetic

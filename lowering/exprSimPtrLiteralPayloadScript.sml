@@ -3,7 +3,7 @@ Theory exprSimPtrLiteralPayload
 Ancestors
   exprSimPtrLiteralChunks exprSimPtrLiteralOps exprSimLiteralBuffer
   exprLowering exprLoweringProps fragExec venomExecSemantics venomInst
-  venomState valueEncoding valueEncodingProofs valueEncodingProps
+  venomState valueEncoding valueEncodingDefs valueEncodingProofs valueEncodingProps
   venomMemProps immutableMemoryFrame compileEnv emitHelper freshWrites
   words list rich_list finite_map vfmConstants
 
@@ -224,8 +224,7 @@ Proof
   `b < dimword (:256)` by decide_tac >>
   `step_inst_base (mk_inst id MSTORE [Var p; Lit (n2w (LENGTH bs))] []) s =
      OK (mstore b (n2w (LENGTH bs)) s)` by
-    (PURE_ONCE_REWRITE_TAC[step_inst_base_def] >>
-     simp[mk_inst_def, exec_write2_def, eval_operand_def, w2n_n2w]) >>
+    (simp[step_inst_base_opcode_eqs, mk_inst_def, exec_write2_def, eval_operand_def, w2n_n2w]) >>
   qpat_x_assum `run_inst_seq (_::_) _ = _` mp_tac >>
   simp[run_inst_seq_def, mk_inst_def, is_terminator_def] >> strip_tac >>
   `lookup_var p (mstore b (n2w (LENGTH bs)) s) = SOME (n2w b)` by

@@ -63,7 +63,7 @@ Theorem body_oracle_storage_mutual:
     eval_iterator cx it st = (res,st') ==> contract_storage_well_formed cx st') /\
   (!cx tyv id body vs. !tops env ret_ty ty env_after st res st'.
     evaluate_type env.type_defs ty = SOME tyv /\
-    EVERY (value_has_type tyv) vs /\ id NOTIN FDOM env.var_types /\
+    EVERY (iterator_result_typed tyv) vs /\ id NOTIN FDOM env.var_types /\
     type_stmts (extend_local env id ty F) ret_ty body = SOME env_after /\
     supported_program tops /\ get_module_code cx NONE = SOME tops /\
     ~supported_stmts_expr_exists expr_evm_run_root body /\
@@ -137,7 +137,12 @@ Theorem body_oracle_storage_mutual:
     IS_SOME st.outcomes /\ oracle_storage_ok cx st /\
     eval_expr_results cx es st = (res,st') ==> contract_storage_well_formed cx st')
 Proof
-  ho_match_mp_tac evaluate_ind >> rpt conj_tac >> simp[] >> rpt gen_tac
+  (* simp over all 63 induction goals is one timed step; split it in
+     three, rightmost first so the earlier goal indices stay put. *)
+  ho_match_mp_tac evaluate_ind >> rpt conj_tac
+  >>> SPLIT_LT 42 (ALL_LT, ALLGOALS (simp[]))
+  >>> SPLIT_LT 21 (ALL_LT, SPLIT_LT 21 (ALLGOALS (simp[]), ALL_LT))
+  >>> SPLIT_LT 21 (ALLGOALS (simp[]), ALL_LT) >> rpt gen_tac
   >~ [`Call ty (IntCall (src_id_opt,fn)) es kw`] >- suspend "intcall_start"
   >~ [`eval_iterator cx (Array e)`] >-
     (strip_tac >> match_mp_tac body_array_iterator_consumer >>
@@ -342,9 +347,13 @@ Resume body_oracle_storage_mutual[builtin_args]:
   reverse conj_tac
   >- (conj_tac
       >- (rpt strip_tac >>
-          qpat_x_assum `!s'' t. _ /\ bt <> Len /\ _ ==> _`
+          Cases_on `bt = Bop In \/ bt = Bop NotIn`
+          >- (qpat_x_assum `!s'' t. _ /\ bt <> Len /\ (bt = Bop In \/ bt = Bop NotIn) ==> _`
+                (qspecl_then [`st`,`st`] mp_tac) >>
+              simp[type_check_def, assert_def, return_def] >> metis_tac[]) >>
+          qpat_x_assum `!s'' t. _ /\ bt <> Len /\ _ /\ bt <> Env MsgGas ==> _`
             (qspecl_then [`st`,`st`] mp_tac) >>
-          simp[type_check_def, assert_def, return_def] >> metis_tac[]) >>
+          gvs[type_check_def, assert_def, return_def] >> metis_tac[]) >>
       metis_tac[runtime_storage_consistent_storage]) >>
   rpt strip_tac >>
   `es <> []` by
@@ -599,8 +608,8 @@ Resume body_oracle_storage_mutual[for_cons]:
       rename1 `push_scope_with_var _ _ _ _ = (INL x,_)` >> Cases_on `x` >>
       gvs[] >> first_assum match_mp_tac >> rpt (goal_assum (drule_at Any))) >>
   rpt gen_tac >> strip_tac >>
-  rename1 `push_scope_with_var _ _ _ _ = (INL x,_)` >> Cases_on `x` >>
-  first_assum drule >> simp[]
+  qpat_x_assum `!s v t s3 t'. read_result _ _ _ = _ /\ push_scope_with_var _ _ _ _ = _ ==> _`
+    (drule_then drule) >> simp[]
 QED
 
 Resume body_oracle_storage_mutual[assign_base]:
@@ -751,10 +760,11 @@ Resume body_oracle_storage_mutual[intcall_live]:
   `contract_storage_well_formed cx args_st` by
     (qpat_x_assum `!env st res st'. well_typed_exprs _ _ /\ _ ==> _` drule_all >>
      simp[]) >>
-  Cases_on `args_res` >>
-  gvs[Excl "lock_if_nr_def", Excl "unlock_if_nr_def", Excl "lift_option_type_def"]
-  >- suspend "intcall_args_success" >>
-  rpt strip_tac >> gvs[]
+  Cases_on `args_res`
+  >- (gvs[Excl "lock_if_nr_def", Excl "unlock_if_nr_def", Excl "lift_option_type_def"] >>
+      suspend "intcall_args_success") >>
+  (simp_tac (srw_ss()) [] >> rpt strip_tac >> rpt BasicProvers.VAR_EQ_TAC >>
+    first_assum ACCEPT_TAC)
 QED
 
 Resume body_oracle_storage_mutual[intcall_args_success]:
@@ -863,7 +873,7 @@ Resume body_oracle_storage_mutual[intcall_return]:
         vyperStorageBackendTheory.get_storage_def]) >>
    simp_tac (srw_ss()) [Once push_function_def, return_def,
      Excl "unlock_if_nr_def", Excl "lock_if_nr_def", Excl "lift_option_type_def"] >> strip_tac >>
-   irule (SIMP_RULE bool_ss [bind_def, return_def] body_intcall_return_storage) >>
+   irule (SIMP_RULE bool_ss [bind_def, return_def] body_intcall_actual_return_storage) >>
    goal_assum (drule_at Any) >> goal_assum (drule_at Any) >>
    simp_tac bool_ss [GSYM ignore_bind_def] >>
    qpat_x_assum `(case _ of _ => _ | _ => _) = (res,st')`

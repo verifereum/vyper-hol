@@ -164,7 +164,7 @@ Theorem annassign_word_store_path:
     inst.inst_outputs = [p] /\
     FLOOKUP s.vs_allocas inst.inst_id = SOME (w2n w, sz) /\
     32 <= sz /\ type_memory_size tyv <= sz /\
-    val_in_memory tyv v (w2n w) (mstore (w2n w) wd s).vs_memory /\
+    memory_value_rel tyv v (w2n w) (mstore (w2n w) wd s).vs_memory /\
     val_wf tyv v ==>
     ?t. stmt_state_rel ctx func cenv cx
           (es with scopes :=
@@ -227,6 +227,9 @@ Proof
   `val_in_memory tyv v (w2n w)
      (mstore (w2n w) (typed_val_to_w256 etv v) s).vs_memory /\
    val_wf tyv v /\ type_memory_size tyv = 32` by fs[store_lays_out_def] >>
+  `memory_value_rel tyv v (w2n w)
+     (mstore (w2n w) (typed_val_to_w256 etv v) s).vs_memory` by
+    metis_tac[store_lays_out_def, word_memory_type_memory_value_rel] >>
   `type_memory_size tyv <= sz` by simp[] >>
   drule_all annassign_word_store_path >>
   disch_then (qspecl_then [`a`] mp_tac) >> strip_tac >>

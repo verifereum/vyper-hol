@@ -8,9 +8,9 @@ Ancestors
   stmtSimAssignAttrStorage stmtLowering exprLowering exprLoweringProps
   storageStoreFrame stmtSimDeclPath stmtSimDecl stmtSimDeclMem venomExecSemantics venomState vyperState
   exprSimBuffer fragExec venomInst ASCIInumbers string rich_list
-  emitHelper emitHelperProps compileEnv list finite_map
-  tupleMemoryFrame tupleMemoryLayout valueEncoding valueEncodingProps vyperTyping stmtLoweringMono
-  vyperInterpreter freshWrites
+  emitHelper emitHelperProps compileEnv loweringStateRelDefs list finite_map
+  tupleMemoryFrame tupleMemoryLayout valueEncoding valueEncodingDefs valueEncodingProps vyperTyping stmtLoweringMono
+  vyperInterpreter freshWrites memoryValueEncoding
 
 Theorem tuple_store_word_step:
   !cenv ty tys bt gs op ops st sp sf dst loc vt.
@@ -63,8 +63,7 @@ Proof
      qexistsl [`[dst; op]`, `if tr then TSTORE else SSTORE`, `[]`, `st`, `st'`] >>
      Cases_on `tr` >> gvs[compile_store_at_loc_def, emit_void_def,
        emit_inst_def, is_terminator_def] >>
-     PURE_ONCE_REWRITE_TAC[step_inst_base_def] >>
-     fs[mk_inst_def, exec_write2_def]) >>
+     simp[mk_inst_def] >> simp[Once step_inst_base_def, exec_write2_def]) >>
   `st'.cs_current_bb = st.cs_current_bb /\
    LENGTH st'.cs_current_insts = SUC (LENGTH st.cs_current_insts)` by
     (Cases_on `tr` >> gvs[compile_store_at_loc_def, emit_void_def,
@@ -296,9 +295,12 @@ Proof
   `(if is_word_type ty then sw = typed_val_to_w256 entry.type v
     else val_in_memory entry.type v (w2n sw) s.vs_memory)` by simp[] >>
   drule_all compile_store_memory_run_frame_with_capacity >> strip_tac >>
+  `memory_value_rel entry.type v (w2n dw) t.vs_memory` by
+    (irule val_in_memory_memory_value_rel >> simp[]) >>
   qexistsl [`dw`, `t`] >> simp[] >>
   reverse conj_tac >- metis_tac[arithmeticTheory.ADD_COMM] >>
   irule stmt_state_rel_write_local >>
+  qpat_assum `stmt_state_rel _ _ _ _ es s` (irule_at Any) >>
   first_assum (irule_at Any) >> simp[] >>
   reverse conj_tac
   >- (rpt strip_tac >> first_x_assum irule >>

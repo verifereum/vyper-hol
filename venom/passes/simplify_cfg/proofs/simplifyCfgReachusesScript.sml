@@ -3,7 +3,7 @@ Ancestors
   simplifyCfgDefs simplifyCfgStruct simplifyCfgPhiRepair simplifyCfgLabelProps
   simplifyCfgDataflow simplifyCfgRepairDataflow simplifyCfgPhiPreds
   simplifyCfgChainDataflow simplifyCfgBypassDataflow
-  unitShapeDefs stackPlanTypes venomInst venomWf venomExecSemantics venomExecProofs cfgTransform cfgTransformProps cfgTransformInstWf list rich_list
+  unitShapeDefs stackPlanTypes venomWfProps venomInst venomWf venomExecSemantics venomExecProofs cfgTransform cfgTransformProps cfgTransformInstWf list rich_list
 
 Theorem fix_phi_inst_inst_wf:
   inst_wf inst ==> inst_wf (fix_phi_inst actual_preds inst)

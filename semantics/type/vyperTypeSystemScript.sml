@@ -84,6 +84,19 @@ Definition is_comparable_type_def[simp]:
   is_comparable_type _ = F
 End
 
+(* Membership lowering compares single EVM words, not aggregate pointers.
+   See docs/membership-element-consistency.md for the execution matrix. *)
+Definition is_prim_word_type_def:
+  is_prim_word_type (BaseT (UintT _)) = T /\
+  is_prim_word_type (BaseT (IntT _)) = T /\
+  is_prim_word_type (BaseT BoolT) = T /\
+  is_prim_word_type (BaseT AddressT) = T /\
+  is_prim_word_type (BaseT DecimalT) = T /\
+  is_prim_word_type (BaseT (BytesT (Fixed m))) = (m <= 32) /\
+  is_prim_word_type (FlagT _) = T /\
+  is_prim_word_type _ = F
+End
+
 (* ===== Literals, binops, builtins ===== *)
 
 Definition well_typed_literal_def:
@@ -144,11 +157,25 @@ Definition well_typed_binop_def:
   well_typed_binop ty Max t1 t2 = (t1 = ty /\ t2 = ty /\ is_numeric_type ty) /\
   well_typed_binop ty In t1 t2 =
     (ty = BaseT BoolT /\ ((?fid. t1 = FlagT fid /\ t2 = FlagT fid) \/
-                          (?bd. t2 = ArrayT t1 bd))) /\
+                          (is_prim_word_type t1 /\ ?bd. t2 = ArrayT t1 bd))) /\
   well_typed_binop ty NotIn t1 t2 =
     (ty = BaseT BoolT /\ ((?fid. t1 = FlagT fid /\ t2 = FlagT fid) \/
-                          (?bd. t2 = ArrayT t1 bd)))
+                          (is_prim_word_type t1 /\ ?bd. t2 = ArrayT t1 bd)))
 End
+
+Theorem well_typed_membership_array_element:
+  (bop = In \/ bop = NotIn) /\
+  well_typed_binop ty bop t1 (ArrayT elem bd) ==>
+  ty = BaseT BoolT /\ t1 = elem /\ is_prim_word_type elem
+Proof
+  strip_tac >> gvs[well_typed_binop_def]
+QED
+
+Theorem well_typed_membership_flag:
+  well_typed_binop ty In (FlagT fid) (FlagT fid) <=> ty = BaseT BoolT
+Proof
+  simp[well_typed_binop_def]
+QED
 
 Theorem well_typed_binop_not_In_second_type:
   well_typed_binop ty bop ty t2 /\ bop <> In /\ bop <> NotIn ==>
@@ -178,15 +205,53 @@ Definition shift_amount_ok_def:
   shift_amount_ok e <=> is_uint_type (expr_type e) \/ nonneg_int_literal e
 End
 
-(* The operand forms Vyper requires beyond their types: ** needs a literal
-   base or a non-negative literal exponent (the overflow check of
-   compile_safe_pow is derived from that literal), and a shift amount must
-   not be negative. *)
+(* Power has an operand-domain rule in addition to its type signature.
+   A literal base permits a dynamic exponent or a large nonnegative literal;
+   otherwise the exponent must be a literal bounded by the value-bit count.
+   Negative literal exponents are never valid, even with a literal base. *)
+Definition integer_value_bits_def:
+  integer_value_bits (BaseT (UintT n)) = n /\
+  integer_value_bits (BaseT (IntT n)) = n - 1 /\
+  integer_value_bits _ = 0
+End
+
+Definition power_exponent_ok_def:
+  power_exponent_ok ty (Literal _ (IntL n)) =
+    (0 <= n /\ Num n <= integer_value_bits ty) /\
+  power_exponent_ok ty _ = F
+End
+
+Definition power_operands_ok_def:
+  power_operands_ok ty base_e exponent =
+    ((IS_SOME (int_literal_value base_e) \/ power_exponent_ok ty exponent) /\
+     case exponent of Literal _ (IntL n) => 0 <= n | _ => T)
+End
+
 Definition builtin_operands_ok_def:
-  builtin_operands_ok blt es <=>
-    (blt = Bop Exp ==>
-       IS_SOME (int_literal_value (EL 0 es)) \/ nonneg_int_literal (EL 1 es)) /\
-    (blt = Bop ShL \/ blt = Bop ShR ==> shift_amount_ok (EL 1 es))
+  builtin_operands_ok ty (Bop Exp) es =
+    (case es of [base_e; exponent] => power_operands_ok ty base_e exponent
+              | _ => F) /\
+  builtin_operands_ok ty (Bop ShL) es = shift_amount_ok (EL 1 es) /\
+  builtin_operands_ok ty (Bop ShR) es = shift_amount_ok (EL 1 es) /\
+  builtin_operands_ok ty _ es = T
+End
+
+Theorem power_operands_ok_literal:
+  power_operands_ok ty base_e exponent ==>
+  IS_SOME (int_literal_value base_e) \/ nonneg_int_literal exponent
+Proof
+  Cases_on `exponent` >> simp[power_operands_ok_def, power_exponent_ok_def] >>
+  rename1 `Literal _ lit` >> Cases_on `lit` >>
+  simp[power_exponent_ok_def, nonneg_int_literal_def, int_literal_value_def]
+QED
+
+(* A shift amount must be nonnegative. Stricter than Vyper, which accepts
+   <<= and >>= by a signed amount: its code shifts by the amount's word where
+   the semantics raises on a negative amount. *)
+Definition augassign_operand_ok_def:
+  augassign_operand_ok ty (bop : binop) rhs =
+    ((bop <> Exp \/ power_exponent_ok ty rhs) /\
+     (bop = ShL \/ bop = ShR ==> shift_amount_ok rhs))
 End
 
 Definition env_item_type_def:
@@ -506,29 +571,13 @@ Definition defaults_env_def:
   defaults_env env = env with <| var_types := FEMPTY; var_assignable := FEMPTY |>
 End
 
-Definition event_arg_compatible_def:
-  event_arg_compatible (BaseT (StringT n)) (BaseT (StringT m)) = (m <= n) /\
-  event_arg_compatible (BaseT (BytesT (Dynamic n))) (BaseT (BytesT (Dynamic m))) = (m <= n) /\
-  event_arg_compatible (ArrayT ft (Dynamic n)) (ArrayT at (Dynamic m)) =
-    (m <= n /\ event_arg_compatible ft at) /\
-  event_arg_compatible (ArrayT ft (Fixed n)) (ArrayT at (Fixed m)) =
-    (m = n /\ event_arg_compatible ft at) /\
-  event_arg_compatible (TupleT fts) (TupleT ats) =
-    (LENGTH fts = LENGTH ats /\ event_arg_compatible_list fts ats) /\
-  event_arg_compatible fty aty = (aty = fty) /\
-  event_arg_compatible_list [] [] = T /\
-  event_arg_compatible_list (f::fs) (a::rest) =
-    (event_arg_compatible f a /\ event_arg_compatible_list fs rest) /\
-  event_arg_compatible_list _ _ = F
-End
-
 (* ===== Type builtin/conversion checks ===== *)
 
 (* Bytes[N]/String[N] targets accept only Bytes/String sources
-   (vyper/codegen_venom/builtins/convert.py: _to_bytes, _to_string), and no
-   conversion takes a source that is a subtype of its target: same-class
-   bytestrings must narrow, bytesM must change width
-   (vyper/builtins/functions.py: Convert.infer_arg_types). *)
+   (vyper/codegen_venom/builtins/convert.py: _to_bytes, _to_string), and a
+   bytestring or bytesM conversion may not take a source that is a subtype
+   of its target: same-class bytestrings must narrow, bytesM must change
+   width (vyper/builtins/functions.py: Convert.infer_arg_types). *)
 Definition valid_conversion_def:
   valid_conversion (BaseT (BytesT (Fixed m))) (BaseT BoolT) = T /\
   valid_conversion (BaseT (BytesT (Dynamic n))) (BaseT BoolT) = (n <= 32) /\
@@ -738,6 +787,35 @@ Theorem create_arg_types_ok_compute =
        (CONJUNCTS create_arg_types_ok_def) @
      [GEN_ALL create_arg_types_ok_raw_create])
 
+(* Pinned Vyper local.py:_handle_modification counts direct immutable writes,
+   but explicitly excludes complex (struct/array) projections in constructors.
+   Do not inherit a direct-root ban through projections. Their deploy/runtime
+   permission is already enforced by type_place_target on the parent root. *)
+Definition target_mutable_def:
+  target_mutable env (NameTarget id) =
+    (FLOOKUP env.var_assignable id = SOME T) /\
+  target_mutable env (TopLevelNameTarget nsid) =
+    (FLOOKUP env.bare_globals nsid = NONE /\
+     IS_SOME (FLOOKUP env.toplevel_vtypes nsid)) /\
+  target_mutable env (SubscriptTarget tgt e) = T /\
+  target_mutable env (AttributeTarget tgt id) = T
+End
+
+Theorem target_mutable_static_maps_transfer:
+  !tgt env1 env2.
+    target_mutable env1 tgt /\
+    env2.var_assignable = env1.var_assignable /\
+    (!k vt. FLOOKUP env1.toplevel_vtypes k = SOME vt ==>
+       FLOOKUP env2.toplevel_vtypes k = SOME vt) /\
+    (!k vt. FLOOKUP env1.toplevel_vtypes k = SOME vt /\
+            FLOOKUP env1.bare_globals k = NONE ==>
+       FLOOKUP env2.bare_globals k = NONE) ==>
+    target_mutable env2 tgt
+Proof
+  gen_tac >> Cases_on `tgt` >> simp[target_mutable_def] >>
+  rpt strip_tac >> gvs[IS_SOME_EXISTS] >> metis_tac[]
+QED
+
 Definition well_typed_expr_def:
   well_typed_expr env (Name ty id) =
     (FLOOKUP env.var_types id = SOME ty) /\
@@ -769,7 +847,7 @@ Definition well_typed_expr_def:
      well_formed_type env.type_defs ty) /\
   well_typed_expr env (Builtin ty blt es) =
     (well_typed_exprs env es /\ well_typed_builtin_app ty blt (MAP expr_type es) /\
-     builtin_operands_ok blt es /\ well_formed_type env.type_defs ty) /\
+     builtin_operands_ok ty blt es /\ well_formed_type env.type_defs ty) /\
   well_typed_expr env (TypeBuiltin ty tb target_ty es) =
     (well_typed_exprs env es /\ well_formed_type env.type_defs ty /\
      type_builtin_result_ok env.type_defs tb ty target_ty (MAP expr_type es) /\
@@ -799,6 +877,11 @@ Definition well_typed_expr_def:
         assignable, as params_ok requires of InterfaceDecl. *)
      (ret_ty <> NoneT ==> assignable_type env.type_defs ret_ty) /\
      EVERY (assignable_type env.type_defs) arg_types /\
+     (* Vyper has only bytes1 through bytes32 (RANGE_1_32 in
+        semantics/types/primitives.py), so no ABI type of the call,
+        nested or not, contains bytes0. *)
+     abi_decode_bytes_widths env.type_defs ret_ty /\
+     EVERY (abi_decode_bytes_widths env.type_defs) arg_types /\
      LENGTH args = 1 + LENGTH arg_types + LENGTH opts /\
      expr_type (HD args) = BaseT AddressT /\
      (* positional arguments may be narrower than the declared types *)
@@ -925,7 +1008,9 @@ End
 Definition well_typed_atarget_def:
   well_typed_atarget env (BaseTarget bt) ty = well_typed_target env bt ty /\
   well_typed_atarget env (TupleTarget tgts) ty =
-    (?tys. LIST_REL (\tgt ty. well_typed_atarget env tgt ty) tgts tys /\ ty = TupleT tys)
+    (* Neither pinned Python backend can generate nested tuple targets. *)
+    (EVERY (\tgt. case tgt of BaseTarget _ => T | TupleTarget _ => F) tgts /\
+     ?tys. LIST_REL (\tgt ty. well_typed_atarget env tgt ty) tgts tys /\ ty = TupleT tys)
 Termination
   WF_REL_TAC `measure (\(_,t,_). assignment_target_size t)`
 End
@@ -940,14 +1025,6 @@ Definition atarget_accepts_def:
      | _ => F) /\
   atarget_accepts env (TupleTarget tgts) t =
     well_typed_atarget env (TupleTarget tgts) t
-End
-
-Definition well_typed_iterator_def:
-  well_typed_iterator env typ (Array e) =
-    (well_typed_expr env e /\ ?bd. expr_type e = ArrayT typ bd) /\
-  well_typed_iterator env typ (Range e1 e2) =
-    (well_typed_expr env e1 /\ well_typed_expr env e2 /\
-     is_int_type typ /\ expr_type e1 = typ /\ expr_type e2 = typ)
 End
 
 Definition well_typed_custom_error_def:
@@ -966,7 +1043,11 @@ End
 
    A place is compared by VarAccess (base.py): its variable and its
    attribute path up to the first subscript, which is an analysis barrier.
-   place_access tgt [] gives both. *)
+   place_access tgt [] gives both.
+
+   Here a call counts only its arguments.  The state variables an internal
+   callee writes, which Vyper counts too, are checked with the whole
+   contract in sight: stmt_loop_calls_ok in vyperTypeContract. *)
 Definition place_access_def:
   place_access (NameTarget id) attrs = (NameTarget id, attrs) /\
   place_access (TopLevelNameTarget n) attrs = (TopLevelNameTarget n, attrs) /\
@@ -981,16 +1062,20 @@ Definition place_contains_def:
     isPREFIX (SND (place_access w [])) (SND (place_access p []))
 End
 
-(* _get_variable_access on an iterator: NONE for anything but a variable
-   seen through attributes and subscripts. *)
-Definition expr_place_def:
-  expr_place (Name _ id) = SOME (NameTarget id) /\
-  expr_place (TopLevelName _ n) = SOME (TopLevelNameTarget n) /\
-  expr_place (Subscript _ e i) =
-    OPTION_MAP (\tgt. SubscriptTarget tgt i) (expr_place e) /\
-  expr_place (Attribute _ e a) =
-    OPTION_MAP (\tgt. AttributeTarget tgt a) (expr_place e) /\
-  expr_place _ = NONE
+(* _get_variable_access on an iterator, also through a ternary's arms:
+   the places it may read in place.  The compiled ternary uses an arm's
+   memory directly when its layout is the result's (compile_ifexp_arm, like
+   lower_IfExp in Python), also under a subscript or attribute.  Stricter
+   than Vyper, whose _get_variable_access doesn't look into a ternary. *)
+Definition expr_places_def:
+  expr_places (Name _ id) = [NameTarget id] /\
+  expr_places (TopLevelName _ n) = [TopLevelNameTarget n] /\
+  expr_places (Subscript _ e i) =
+    MAP (\tgt. SubscriptTarget tgt i) (expr_places e) /\
+  expr_places (Attribute _ e a) =
+    MAP (\tgt. AttributeTarget tgt a) (expr_places e) /\
+  expr_places (IfExp _ _ e1 e2) = expr_places e1 ++ expr_places e2 /\
+  expr_places _ = []
 End
 
 (* ok holds of every place written by pop() in an expression.  The
@@ -1078,12 +1163,90 @@ Termination
   simp[]
 End
 
+(* The expression's source is a function call (a vy_ast.Call), whose
+   result Vyper doesn't iterate over (IteratorException "Cannot iterate over
+   the result of a function call" in visit_For,
+   vyper/semantics/analysis/local.py).  extcall and staticcall have their
+   own AST nodes there, and a list literal is a MakeArray builtin here.  The
+   remaining builtins are calls or, like msg.sender, never arrays. *)
+Definition call_result_expr_def:
+  call_result_expr (Pop _ _) = T /\
+  call_result_expr (TypeBuiltin _ _ _ _) = T /\
+  call_result_expr (Builtin _ (MakeArray _ _) _) = F /\
+  call_result_expr (Builtin _ _ _) = T /\
+  call_result_expr (Call _ (ExtCall _ _ _ _) _ _) = F /\
+  call_result_expr (Call _ _ _ _) = T /\
+  call_result_expr _ = F
+End
+
+(* A call Vyper doesn't count as state-modifying: a staticcall or a raw_call
+   with is_static_call=True.  An extcall's function is nonpayable or payable
+   (visit_Call), a non-static raw_call and the create builtins modify state,
+   and send, raw_log, raw_revert and selfdestruct are statements.  Internal
+   calls count as static here only because fn_sig carries no mutability. *)
+Definition call_target_static_def:
+  call_target_static (IntCall _) = T /\
+  call_target_static (ExtCall static _ _ _) = static /\
+  call_target_static (RawCallTarget flags) = flags.rcf_is_static /\
+  call_target_static (RawCallCalldataTarget flags) = flags.rcf_is_static /\
+  call_target_static _ = F
+End
+
+(* Every call anywhere in the expression is static (call_target_static). *)
+Definition expr_static_calls_def:
+  expr_static_calls (Name _ _) = T /\
+  expr_static_calls (TopLevelName _ _) = T /\
+  expr_static_calls (FlagMember _ _ _) = T /\
+  expr_static_calls (IfExp _ c x y) =
+    (expr_static_calls c /\ expr_static_calls x /\ expr_static_calls y) /\
+  expr_static_calls (Literal _ _) = T /\
+  expr_static_calls (StructLit _ _ kes) = EVERY expr_static_calls (MAP SND kes) /\
+  expr_static_calls (Subscript _ x y) =
+    (expr_static_calls x /\ expr_static_calls y) /\
+  expr_static_calls (Attribute _ x _) = expr_static_calls x /\
+  expr_static_calls (Builtin _ _ es) = EVERY expr_static_calls es /\
+  expr_static_calls (TypeBuiltin _ _ _ es) = EVERY expr_static_calls es /\
+  expr_static_calls (Pop _ tgt) = target_static_calls tgt /\
+  expr_static_calls (Call _ ct es drv) =
+    (call_target_static ct /\ EVERY expr_static_calls es /\
+     case drv of NONE => T | SOME d => expr_static_calls d) /\
+  target_static_calls (NameTarget _) = T /\
+  target_static_calls (TopLevelNameTarget _) = T /\
+  target_static_calls (SubscriptTarget tgt e) =
+    (target_static_calls tgt /\ expr_static_calls e) /\
+  target_static_calls (AttributeTarget tgt _) = target_static_calls tgt
+Termination
+  WF_REL_TAC `measure (\x. case x of
+    | INL e => expr_size e
+    | INR tgt => base_assignment_target_size tgt)` >>
+  rw[] >>
+  TRY (Induct_on `kes` >> rw[] >> PairCases_on `h` >> rw[] >>
+       res_tac >> simp[] >> NO_TAC) >>
+  TRY (Induct_on `es` >> rw[] >> res_tac >> simp[] >> NO_TAC) >>
+  Cases_on `drv` >> fs[]
+End
+
+(* Vyper also rejects a state-modifying call anywhere in an iterator
+   (StateAccessViolation "May not call state modifying function within a
+   range expression or for loop iterator", and in codegen "Cannot make
+   modifying calls from a range expression"): here, a pop(), which
+   expr_writes_ok (\_. F) excludes, or a non-static call (expr_static_calls).
+   Nonpayable internal calls stay accepted: fn_sig carries no mutability. *)
+Definition well_typed_iterator_def:
+  well_typed_iterator env typ (Array e) =
+    (well_typed_expr env e /\ (?bd. expr_type e = ArrayT typ bd) /\
+     ~call_result_expr e /\ expr_writes_ok (\_. F) e /\ expr_static_calls e) /\
+  well_typed_iterator env typ (Range e1 e2) =
+    (well_typed_expr env e1 /\ well_typed_expr env e2 /\
+     is_int_type typ /\ expr_type e1 = typ /\ expr_type e2 = typ /\
+     expr_writes_ok (\_. F) e1 /\ expr_writes_ok (\_. F) e2 /\
+     expr_static_calls e1 /\ expr_static_calls e2)
+End
+
 Definition iterator_unmodified_def:
   iterator_unmodified (Range _ _) body = T /\
   iterator_unmodified (Array e) body =
-    case expr_place e of
-    | NONE => T
-    | SOME p => stmts_writes_ok (\w. ~place_contains w p) body
+    EVERY (\p. stmts_writes_ok (\w. ~place_contains w p) body) (expr_places e)
 End
 
 (* ===== Executable statement typing ===== *)
@@ -1120,7 +1283,7 @@ Definition type_stmt_def:
        NONE => NONE
      | SOME fields =>
          if well_typed_exprs env es /\ LENGTH es = LENGTH fields /\
-            LIST_REL (\e ((_,fty),_). event_arg_compatible fty (expr_type e)) es fields
+            LIST_REL (\e ((_,fty),_). arg_type_fits (expr_type e) fty) es fields
          then SOME env else NONE) /\
   type_stmt env ret_ty (AnnAssign id typ e) =
     (if well_typed_expr env e /\ assignable_type env.type_defs typ /\
@@ -1130,23 +1293,19 @@ Definition type_stmt_def:
   type_stmt env ret_ty (Append bt e) =
     (case type_place_target env bt of
      | SOME (Type (ArrayT elem_ty (Dynamic n))) =>
-         if well_typed_expr env e /\ type_widens_to env.type_defs (expr_type e) elem_ty /\
+         if target_mutable env bt /\ well_typed_expr env e /\
+            type_widens_to env.type_defs (expr_type e) elem_ty /\
             assignable_type env.type_defs elem_ty then SOME env else NONE
      | _ => NONE) /\
   type_stmt env ret_ty (Assign tgt e) =
     (if atarget_accepts env tgt (expr_type e) /\ well_typed_expr env e /\
         assignable_type env.type_defs (expr_type e) then SOME env else NONE) /\
   type_stmt env ret_ty (AugAssign ty bt bop e) =
-    (if well_typed_target env bt ty /\ well_typed_expr env e /\
+    (if target_mutable env bt /\ well_typed_target env bt ty /\ well_typed_expr env e /\
         assignable_type env.type_defs ty /\
         assignable_type env.type_defs (expr_type e) /\
         well_typed_binop ty bop ty (expr_type e) /\ bop <> In /\ bop <> NotIn /\
-        (* the target is never a literal, so ** needs a literal exponent *)
-        (bop = Exp ==> nonneg_int_literal e) /\
-        (* Stricter than Vyper, which accepts <<= and >>= by a signed
-           amount: its code shifts by the amount's word where the semantics
-           raises on a negative amount. *)
-        (bop = ShL \/ bop = ShR ==> shift_amount_ok e)
+        augassign_operand_ok ty bop e
      then SOME env else NONE) /\
   type_stmt env ret_ty (If e ss1 ss2) =
     (if well_typed_expr env e /\ expr_type e = BaseT BoolT /\
@@ -1155,7 +1314,8 @@ Definition type_stmt_def:
   type_stmt env ret_ty (For id typ it n body) =
     (if assignable_type env.type_defs typ /\ well_typed_iterator env typ it /\
         (case it of
-           Range (Literal _ (IntL _)) (Literal _ (IntL _)) => T
+           Range (Literal _ (IntL start)) (Literal _ (IntL finish)) =>
+             start < finish /\ n = Num (finish - start)
          | Range _ _ => 0 < n /\ well_typed_literal typ (IntL (&n))
          | Array _ => T) /\
         id NOTIN FDOM env.var_types /\ iterator_unmodified it body /\
@@ -1170,14 +1330,29 @@ Termination
             | INR(_,_,ts) => list_size stmt_size ts)`
 End
 
+Theorem type_stmt_for_range_literal_bounds:
+  type_stmt env ret_ty
+    (For id typ (Range (Literal start_ty (IntL start))
+                      (Literal end_ty (IntL finish))) n body) = SOME env' ==>
+  start < finish /\ n = Num (finish - start)
+Proof
+  rw[type_stmt_def, AllCaseEqs()]
+QED
+
 (* Conservative syntactic control-flow predicate for callable bodies.  If this
  * holds for a statement/list, the evaluator should not be able to fall through
  * normally; the semantic boundary lemma is proved in vyperTypeStmtSoundness. *)
+Definition expr_no_fallthrough_def:
+  expr_no_fallthrough (Call _ RawRevert _ _) = T /\
+  expr_no_fallthrough (Call _ SelfDestructTarget _ _) = T /\
+  expr_no_fallthrough _ = F
+End
+
 Definition stmt_no_fallthrough_def:
   stmt_no_fallthrough Pass = F /\
   stmt_no_fallthrough Continue = T /\
   stmt_no_fallthrough Break = T /\
-  stmt_no_fallthrough (Expr e) = F /\
+  stmt_no_fallthrough (Expr e) = expr_no_fallthrough e /\
   stmt_no_fallthrough (For id ty it n body) = F /\
   stmt_no_fallthrough (If e ss1 ss2) =
     (stmts_no_fallthrough ss1 /\ stmts_no_fallthrough ss2) /\

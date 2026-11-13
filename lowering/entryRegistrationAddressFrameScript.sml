@@ -1,7 +1,7 @@
 (* Actual pure address operations with fixed-limit frames. *)
 Theory entryRegistrationAddressFrame
 Ancestors
-  entryRegistrationPrefixFrame calldataRegistrationExec successfulSequenceEndpoint
+  entryRegistrationPrefixFrame calldataRegistrationExec successfulSequenceEndpoint loweringStateRelDefs
   entryDecoderStateFrame entryDecoderHistoryFrame abiDecoderLoopRegisters
   abiDecoderVarSequence abiDecoderReentryAddress abiDecoderReentry
   venomMemDefs emitHelperProps fragExecMem abiDecoderContract fragExec

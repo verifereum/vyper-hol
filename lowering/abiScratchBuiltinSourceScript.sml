@@ -3,7 +3,7 @@ Ancestors
   abiBuiltinEncodeCorrect abiScratchLeafEffect abiScratchEncoderContract abiDecoderFrame
   abiDecoderFrameCompose abiDecoderDynamicLoopSetup abiDecoderReentry abiDecoderContract
   abiDecoderLoop compileEnv venomState words list arithmetic abiBuiltinEncodeSetup
-  abiBuiltinEncodeMethod abiBuiltinEncodeRun abiBuiltinAllocation valueEncoding finite_map
+  abiBuiltinEncodeMethod abiBuiltinEncodeRun abiBuiltinAllocation valueEncoding valueEncodingDefs finite_map
   abiScratchEffect abiScratchSubset abiScratchFootprint abiEncoderArrayFrame
   abiBuiltinEncodeCode abiDecoderAllocation abiDecoderFootprint pred_set abiScratchEncoderCaller
   abiScratchEncoderRun abiEncoderAppend abiEncoderCounters abiDecoderAppend fragExec

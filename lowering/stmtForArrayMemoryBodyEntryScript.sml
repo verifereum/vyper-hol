@@ -1,6 +1,6 @@
 Theory stmtForArrayMemoryBodyEntry
 Ancestors
-  stmtForArrayMemoryCopy loweringPosts compileEnv venomState
+  stmtForArrayMemoryCopy loweringPosts compileEnv loweringStateRelDefs venomState
   exprLoweringProps fragGasSeqMem allocaHistoryFragment
   words arithmetic list rich_list
 

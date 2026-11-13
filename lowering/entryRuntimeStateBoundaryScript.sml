@@ -2,7 +2,7 @@
    The analogous entryStateRel helpers are local to that theory. *)
 Theory entryRuntimeStateBoundary
 Ancestors
-  entryStateRel entryDecoderStateFrame immutableLocationProps
+  entryStateRel entryDecoderStateFrame immutableLocationProps loweringStateRelDefs
   immutableSectionRel immutableRelation vyperLoweringCorrect compileVyper
   vyperInterpreter vyperState vyperContext vyperAST vyperValue
   venomState vyperTypeContract vyperTypeContractStaticMaps

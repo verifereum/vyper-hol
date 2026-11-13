@@ -1,7 +1,7 @@
 (* Indexed source conversion and memory boundaries for uniform representatives. *)
 Theory abiEncoderSourceTransport
 Ancestors
-  valueEncoding valueEncodingProofs vyperABI vyperABIRoundtrip vyperValue vyperTyping
+  valueEncoding valueEncodingDefs valueEncodingProofs vyperABI vyperABIRoundtrip vyperValue vyperTyping
   vyperTypeValues vyperTypeDefaults vyperValueOperation vyperMisc list rich_list arithmetic
 
 Theorem abi_encoder_same_conversion:

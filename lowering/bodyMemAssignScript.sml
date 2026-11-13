@@ -10,7 +10,9 @@ Ancestors
 
 Theorem body_assign_mem_case:
   !cx t e.
-    (!s'' pv t'. eval_expr cx e s'' = (INL pv,t') ==> body_base_target_mem_ok cx t) /\
+    (!s'' pv t' s'3' v t''.
+       eval_expr cx e s'' = (INL pv,t') /\ read_result cx pv s'3' = (INL v,t'') ==>
+       body_base_target_mem_ok cx t) /\
     body_expr_mem_ok cx e ==>
     body_stmt_mem_ok cx (Assign (BaseTarget t) e)
 Proof
