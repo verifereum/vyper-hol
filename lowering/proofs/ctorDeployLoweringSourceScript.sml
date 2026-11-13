@@ -1213,8 +1213,7 @@ Proof
   `ALOOKUP [(NONE,tops)] NONE = SOME tops /\
    MEM (NONE,tops) [(NONE,tops)]` by simp[] >>
   simp[load_contract_trace_def] >>
-  Cases_on `initial_immutables (type_env_all_modules [(NONE,tops)])
-              [(NONE,tops)]` >> simp[] >>
+  qpat_assum `initial_immutables _ _ = SOME _` (fn th => simp[th]) >>
   Cases_on `lookup_function NONE "__init__" Deploy tops` >> simp[] >>
   rename1 `_ = SOME fn` >> PairCases_on `fn` >>
   `fn3 = []` by
