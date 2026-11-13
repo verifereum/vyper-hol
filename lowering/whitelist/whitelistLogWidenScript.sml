@@ -19,7 +19,7 @@ Ancestors
   stmtSimLogTrace emitHelper context venomInst
   gasOutcome gasSummary gasSummaryCompose gasExemptCert gasContext
   fragGasMode fragGasPath fragGasSeq rich_list
-  stmtSimLogCompose stmtSimLog bodySimLogArgs e2eDefs vyperEvent vyperEventArgCompat vyperABI
+  stmtSimLogCompose stmtSimLog bodySimLogArgs e2eDefs vyperEvent vyperABI
   vyperTypeSystem supportedTypes supportedDecls supportedStmts
   supportedExprs supportedExprTraverse supportedStmtTraverse
   exprSimSource bodyExprPreFacts exprSimHypsDefs bodySim exprSimHyps
