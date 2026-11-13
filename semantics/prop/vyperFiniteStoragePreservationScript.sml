@@ -66,7 +66,7 @@ Proof
   Cases_on `dres` >> simp[raise_def] >> rpt strip_tac >> gvs[]
 QED
 
-Theorem default_restore_runtime_projections[local]:
+Theorem default_restore_runtime_projections:
   state_well_typed base_st /\ state_well_typed framed /\
   accounts_well_typed framed.accounts /\
   env_consistent (defaults_env env_body) cxd framed /\
@@ -786,7 +786,7 @@ Proof
   Cases_on `addr' = addr` >> simp[combinTheory.APPLY_UPDATE_THM]
 QED
 
-Theorem intcall_cleanup_preserves_storage_well_formed_on[local]:
+Theorem intcall_cleanup_preserves_storage_well_formed_on:
   storage_well_formed_on cx st (FST H) /\ regions_consistent (FST H) /\
   storage_locks_separated (FST H) (SND H) /\
   storage_observations_ok cx H st'.storage_trace /\
@@ -923,7 +923,7 @@ Proof
   rpt IF_CASES_TAC >> gvs[]
 QED
 
-Theorem finally_unless_halt_finite_cleanup_cases[local]:
+Theorem finally_unless_halt_finite_cleanup_cases:
   finally_unless_halt (finally f (pop_function prev))
     (if nr then
        case cx.nonreentrant_slot of NONE => return ()
@@ -3142,7 +3142,9 @@ Resume eval_storage_well_formed_on_mutual[Expr_Call_ExtCall]:
           qpat_x_assum `!s target t nargs s1 rs t1. _ ==> _`
             (drule o SIMP_RULE (srw_ss()) []) >>
           disch_then drule >> strip_tac >> first_x_assum drule_all >> simp[]) >>
-      strip_tac >> gvs[] >>
+      strip_tac >>
+      qpat_x_assum `INR y = res` (SUBST_ALL_TAC o SYM) >>
+      qpat_x_assum `capture_st = st'` (SUBST_ALL_TAC o SYM) >>
       `storage_observations_ok cx H target_st.storage_trace` by
         metis_tac[storage_trace_frame_prefix, cj 11 evaluate_storage_trace_frame,
                   storage_observations_ok_prefix] >>
@@ -3151,7 +3153,7 @@ Resume eval_storage_well_formed_on_mutual[Expr_Call_ExtCall]:
            drule_all >> simp[]) >>
       `runtime_consistent env cx target_st` by
         metis_tac[eval_exprs_preserves_runtime_consistent] >>
-      qpat_x_assum `!s target t. _ ==> _`
+      qpat_x_assum `!s target t nargs. eval_exprs _ _ _ = _ /\ _ ==> _`
         (drule o SIMP_RULE (srw_ss()) []) >>
       strip_tac >> first_x_assum drule_all >> simp[]) >>
   strip_tac >> gvs[] >> first_x_assum drule_all >> simp[]
