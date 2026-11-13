@@ -1,13 +1,14 @@
 (* Actual-state array head and guarded element preparation. *)
 Theory abiDecodeMemArraySetup
 Ancestors
+  abiDecodeMemStaticFrame abiDecoderSiteEffect abiDecoderVarSequence
   abiDecodeMemIndexedSetup abiDecodeMemElementReentry abiDecoderDynamicLoopSetup
   calldataDynOwned calldataDynStep entryDecoderHistoryFrame entrySinkExtraction
   fragGasSeqMem fragExecMem fragExec compileEnv emitHelper emitHelperProps
   exprLoweringProps venomExecSemantics venomState venomInst words list rich_list
   allocaFootprint abiDecoderReentry arithmetic abiDecoderIndexedAddress
   abiDecodeMemElementPointer calldataFiniteTransport abiDecoderContract
-  fragGasMode fragGasPathMem
+  fragGasMode fragGasPathMem abiEncoderWindowLookup
 
 Theorem abi_decode_coordinates_address[local]:
   abi_decode_indexed_coordinates src idx stride st = ((data,head),st') ==>
@@ -66,6 +67,21 @@ Resume abi_decode_array_head_memory[checks]:
 QED
 Finalise abi_decode_array_head_memory
 
+Theorem abi_decode_array_head_output_bounds[local]:
+  abi_decode_array_head_setup ip src asz st = (ops,st') ==>
+  EVERY (\i. i.inst_opcode <> INVOKE /\
+    EVERY (not_fresh_at st') i.inst_outputs) (emitted_insts st st') /\
+  EVERY (\i. abi_decoder_reentry_opcode i.inst_opcode) (emitted_insts st st')
+Proof
+  simp[abi_decode_array_head_setup_def, abi_decode_indexed_coordinates_def,
+    comp_bind_def, comp_ignore_bind_def, comp_return_def,
+    emit_op_def, emit_void_def, fresh_var_def, fresh_id_def, emit_def] >>
+  rpt strip_tac >> gvs[emitted_insts_def] >>
+  pure_rewrite_tac[GSYM APPEND_ASSOC] >>
+  simp[DROP_LENGTH_APPEND, mk_inst_def, loweringStateRelDefsTheory.not_fresh_at_def,
+    ASCIInumbersTheory.toString_11, abi_decoder_reentry_opcode_def]
+QED
+
 Theorem abi_decode_array_head_setup_path_mem[local]:
   abi_decode_array_head_setup ip src asz st = ((idx,data,head),st') /\
   eval_operand ip s = SOME p /\ mload (w2n p) s = n2w j /\
@@ -90,9 +106,12 @@ Theorem abi_decode_array_head_setup_path_mem[local]:
     t.vs_allocas = s.vs_allocas /\ t.vs_alloca_next = s.vs_alloca_next /\
     t.vs_current_bb = st'.cs_current_bb /\
     t.vs_inst_idx = LENGTH st'.cs_current_insts /\ ~t.vs_halted /\
+    (!limit_st. st'.cs_next_var <= limit_st.cs_next_var /\ fresh_vars_wrt limit_st s ==>
+      fresh_vars_wrt limit_st t) /\ decode_static_frame s t /\
     alloca_history func t
 Proof
-  strip_tac >> drule_all calldata_head_setup_repeat >> strip_tac >>
+  strip_tac >> drule abi_decode_array_head_output_bounds >> strip_tac >>
+  drule_all calldata_head_setup_repeat >> strip_tac >>
   drule_all abi_decode_array_head_memory >> strip_tac >>
   drule_all entry_straight_line_code_slice >> strip_tac >>
   `lookup_block s.vs_current_bb func.fn_blocks = SOME bb /\
@@ -107,7 +126,18 @@ Proof
   drule_all entry_straight_line_alloca_history >> strip_tac >>
   drule_all run_inst_seq_preserves_entry_control >> strip_tac >>
   `s.vs_inst_idx + LENGTH (emitted_insts st st') = LENGTH st'.cs_current_insts`
-    by gvs[IS_PREFIX_APPEND, emitted_insts_def, DROP_LENGTH_APPEND] >>
+    by (`LENGTH st.cs_current_insts <= LENGTH st'.cs_current_insts`
+          by metis_tac[IS_PREFIX_LENGTH] >>
+        pure_rewrite_tac [emitted_insts_def, LENGTH_DROP] >> decide_tac) >>
+  `!limit_st. st'.cs_next_var <= limit_st.cs_next_var /\ fresh_vars_wrt limit_st s ==>
+    fresh_vars_wrt limit_st (t with vs_inst_idx := LENGTH st'.cs_current_insts)` by
+    (rpt strip_tac >>
+     mp_tac (Q.INST [`en` |-> `st'`, `insts` |-> `emitted_insts st st'`,
+       `s` |-> `s`, `t` |-> `t`, `idx` |-> `LENGTH st'.cs_current_insts`]
+       abi_window_seq_fresh_idx) >> (impl_tac >- asm_rewrite_tac []) >> simp[]) >>
+  `decode_static_frame s (t with vs_inst_idx := LENGTH st'.cs_current_insts)` by
+    (drule_all abi_decode_reentry_sequence_static_frame >>
+     simp[decode_static_frame_def, venom_state_component_equality]) >>
   qexists_tac `t with vs_inst_idx := LENGTH st'.cs_current_insts` >>
   simp[eval_operand_def, lookup_var_def] >> gvs[]
 QED
@@ -152,6 +182,8 @@ Theorem abi_decode_array_source_setup_path_mem[local]:
       t.vs_allocas = s.vs_allocas /\ t.vs_alloca_next = s.vs_alloca_next /\
       t.vs_current_bb = st'.cs_current_bb /\
       t.vs_inst_idx = LENGTH st'.cs_current_insts /\ ~t.vs_halted /\
+      (!limit_st. st'.cs_next_var <= limit_st.cs_next_var /\ fresh_vars_wrt limit_st s ==>
+        fresh_vars_wrt limit_st t) /\ decode_static_frame s t /\
       alloca_history func t) /\
   (~(w2n data + w2n off + asz <= w2n h) ==>
     ?t. gas_marked_path T ctx func s 0 (Abort Revert_abort t))
@@ -199,6 +231,14 @@ Resume abi_decode_array_source_setup_path_mem[accept]:
      `abi_decoder_operand_live c1.cs_next_var op` by
        (irule abi_decoder_operand_live_mono >>
         qexists_tac `st.cs_next_var` >> simp[]) >> metis_tac[]) >>
+  `decode_static_frame s t` by metis_tac[decode_static_frame_trans] >>
+  `!limit_st. st'.cs_next_var <= limit_st.cs_next_var /\ fresh_vars_wrt limit_st s ==>
+    fresh_vars_wrt limit_st t` by
+    (rpt strip_tac >>
+     `c1.cs_next_var <= limit_st.cs_next_var` by
+       (qpat_x_assum `st'.cs_next_var <= limit_st.cs_next_var` mp_tac >>
+        asm_rewrite_tac [] >> Cases_on `bop = Lit 0w` >> asm_rewrite_tac [] >> decide_tac) >>
+     `fresh_vars_wrt limit_st s1` by metis_tac[] >> metis_tac[]) >>
   qexists_tac `t` >> asm_simp_tac bool_ss [] >>
   simp_tac bool_ss [ADD_ASSOC, ADD_COMM, MULT_COMM]
 QED
@@ -256,6 +296,8 @@ Theorem abi_decode_dynamic_element_setup_path_mem[local]:
       t.vs_allocas = s.vs_allocas /\ t.vs_alloca_next = s.vs_alloca_next /\
       t.vs_current_bb = st'.cs_current_bb /\
       t.vs_inst_idx = LENGTH st'.cs_current_insts /\ ~t.vs_halted /\
+      (!limit_st. st'.cs_next_var <= limit_st.cs_next_var /\ fresh_vars_wrt limit_st s ==>
+        fresh_vars_wrt limit_st t) /\ decode_static_frame s t /\
       alloca_history func t) /\
   (~(w2n data + w2n off + asz <= w2n h) ==>
     ?t. gas_marked_path T ctx func s 0 (Abort Revert_abort t))
@@ -294,6 +336,13 @@ Resume abi_decode_dynamic_element_setup_path_mem[accept]:
        (irule abi_decoder_operand_live_mono >> qexists_tac `st.cs_next_var` >>
         fs[cs_extends_def]) >> metis_tac[]) >>
   imp_res_tac abi_decode_dynamic_element_setup_counters >>
+  `decode_static_frame s t` by metis_tac[decode_static_frame_trans] >>
+  `!limit_st. st'.cs_next_var <= limit_st.cs_next_var /\ fresh_vars_wrt limit_st s ==>
+    fresh_vars_wrt limit_st t` by
+    (rpt strip_tac >> `c1.cs_next_var <= limit_st.cs_next_var` by
+       (qpat_x_assum `st'.cs_next_var <= limit_st.cs_next_var` mp_tac >>
+        asm_rewrite_tac [] >> Cases_on `bop = Lit 0w` >> asm_rewrite_tac [] >> decide_tac) >>
+     `fresh_vars_wrt limit_st s1` by metis_tac[] >> metis_tac[]) >>
   qexists_tac `t` >> asm_simp_tac bool_ss [] >>
   gvs[]
 QED
@@ -337,6 +386,8 @@ Theorem abi_decode_array_element_setup_path_mem:
       t.vs_allocas = s.vs_allocas /\ t.vs_alloca_next = s.vs_alloca_next /\
       t.vs_current_bb = st'.cs_current_bb /\
       t.vs_inst_idx = LENGTH st'.cs_current_insts /\ ~t.vs_halted /\
+      (!limit_st. st'.cs_next_var <= limit_st.cs_next_var /\ fresh_vars_wrt limit_st s ==>
+        fresh_vars_wrt limit_st t) /\ decode_static_frame s t /\
       alloca_history func t) /\
   (~accept ==> ?t. gas_marked_path T ctx func s 0 (Abort Revert_abort t))
 Proof
