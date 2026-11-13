@@ -13,25 +13,57 @@ Ancestors
   bodySimStmtCases exprLowering exprLoweringProps compileEnv context
   vyperAST vyperInterpreter vyperState vyperTypeExprSoundness fragExec
   exprSimProps valueTypingMemoryProps valueEncoding valueEncodingDefs vyperTyping
+  gasStorage vyperStorageTrace vyperStorageFootprint stmtSimForced
 
 (* The counted outcome of a source also gives, at its normal end, a run of
    the source that reached the end state. *)
 Theorem gas_outcome_link[local]:
-  gas_outcome memory tops (ctx,func) source (es,s0) Q R ==>
-  gas_outcome memory tops (ctx,func) source (es,s0)
-    (\res ee t. Q res ee t /\ ?gs. source (es with gas_obs := gs) = (res, ee))
+  gas_outcome memory tops (ctx,func) cx st0 source (es,s0) Q R ==>
+  gas_outcome memory tops (ctx,func) cx st0 source (es,s0)
+    (\H res ee t. Q H res ee t /\ ?gs. source (es with gas_obs := gs) = (res, ee))
     R
 Proof
-  rw[gas_outcome_def] >> qexists_tac `marks`
-  >- (disj1_tac >> fs[gas_summary_at_def] >>
-      qexistsl_tac [`res`, `es_end`, `r`] >>
-      conj_tac >- first_assum ACCEPT_TAC >>
+  rewrite_tac[gas_outcome_def] >> BETA_TAC >> strip_tac >>
+  qexists_tac `marks`
+  >- (disj1_tac >> first_assum ACCEPT_TAC)
+  >- (disj2_tac >> disj1_tac >>
+      qpat_x_assum `gas_summary_at _ _ _ _ _ _ _`
+        (strip_assume_tac o REWRITE_RULE [gas_summary_at_def]) >>
       `source (es with gas_obs := gas_explicit marks s0.vs_gas_readings) =
        (res, es_end with gas_obs := [])` by
         (fs[gas_marked_exec_def] >>
          first_x_assum (qspec_then `[]` mp_tac) >> simp[]) >>
-      metis_tac[]) >>
-  disj2_tac >> metis_tac[]
+      rewrite_tac[gas_summary_at_def] >> BETA_TAC >>
+      qexistsl_tac [`res`, `es_end`, `r`] >>
+      conj_tac >- first_assum ACCEPT_TAC >>
+      fs[] >> metis_tac[]) >>
+  disj2_tac >> disj2_tac >> metis_tac[]
+QED
+
+Theorem attr_vv_post_transport[local]:
+  !(H0:(bool # bytes32 # type_value) list # num list)
+   (H:(bool # bytes32 # type_value) list # num list)
+   ctx func cenv cx e es sa sm sn s0 es' tv vv t u.
+  vv_post H0 ctx func cenv cx e es sa sn s0 es' tv vv u /\
+  vv_post H ctx func cenv cx e es sa sm s0 es' tv vv t /\
+  eval_operand (vv_operand vv) t = eval_operand (vv_operand vv) u /\
+  u.vs_accounts = t.vs_accounts /\ u.vs_transient = t.vs_transient /\
+  u.vs_requests = t.vs_requests /\ u.vs_call_ctx = t.vs_call_ctx ==>
+  vv_post H ctx func cenv cx e es sa sn s0 es' tv vv u
+Proof
+  rpt gen_tac >> strip_tac >>
+  qpat_x_assum `vv_post H0 _ _ _ _ _ _ _ _ _ _ _ _ _`
+    (strip_assume_tac o REWRITE_RULE [vv_post_def]) >>
+  qpat_x_assum `vv_post H _ _ _ _ _ _ _ _ _ _ _ _ _`
+    (strip_assume_tac o REWRITE_RULE [vv_post_def]) >>
+  `stmt_state_rel H ctx func cenv cx es' u` by
+    metis_tac[INST_TYPE [alpha |-> ``:256``]
+      exprLoweringPropsTheory.stmt_state_rel_fields_transport] >>
+  rewrite_tac[vv_post_def] >> rpt conj_tac >>
+  TRY (first_assum ACCEPT_TAC >> NO_TAC) >>
+  strip_tac >>
+  qpat_x_assum `~expr_has_effect e ==> vv_storage_live H _ _ _ t` drule >>
+  strip_tac >> Cases_on `vv` >> gvs[vv_storage_live_def, vv_operand_def]
 QED
 
 Theorem eval_attr_bind[local]:
@@ -221,7 +253,9 @@ Theorem attr_step[local]:
                Lit (n2w (attr_offset cenv (StructT sid) (vv_loc bvv) fld))]
     sm = (dst, sb) /\
   fn_has_code sm sb func /\ fn_inst_ids_distinct func /\
-  vv_post H ctx func cenv cx obj es sa sm s0 ee tv bvv t /\
+  (!H. valid_horizon cx st0 H ee.storage_trace ==>
+     vv_post H ctx func cenv cx obj es sa sm s0 ee tv bvv t) /\
+  (?H. valid_horizon cx st0 H ee.storage_trace) /\
   vv_store_bound cx (StructT sid) (lowered_value_type cenv obj) ee tv bvv t /\
   t.vs_current_bb = sm.cs_current_bb /\
   t.vs_inst_idx = LENGTH sm.cs_current_insts /\
@@ -232,14 +266,20 @@ Theorem attr_step[local]:
     (!tail. select_result cx (StructT sid) tv (AttrSubscript fld)
               (ee with gas_obs := tail) = (INL tv', ee with gas_obs := tail)) /\
     gas_path_mem ctx func t 0 (OK u) /\
-    vv_post H ctx func cenv cx (Attribute ann obj fld) es sa sb s0 ee tv'
-      (LocatedValue ann (mk_ptr dst (vv_loc bvv))) u /\
+    (!H. valid_horizon cx st0 H ee.storage_trace ==>
+       vv_post H ctx func cenv cx (Attribute ann obj fld) es sa sb s0 ee tv'
+         (LocatedValue ann (mk_ptr dst (vv_loc bvv))) u) /\
     vv_store_bound cx ann ann ee tv' (LocatedValue ann (mk_ptr dst (vv_loc bvv))) u /\
     u.vs_current_bb = sb.cs_current_bb /\
     u.vs_inst_idx = LENGTH sb.cs_current_insts /\
     alloca_history func u /\ s0.vs_alloca_next <= u.vs_alloca_next
 Proof
-  strip_tac >> drule_all attr_select_field >> strip_tac >>
+  strip_tac >>
+  qpat_x_assum `?H. valid_horizon _ _ H _` (qx_choose_then `H0` assume_tac) >>
+  qpat_assum `!H. valid_horizon _ _ H _ ==> vv_post _ _ _ _ _ _ _ _ _ _ _ _ _ _`
+    (qspec_then `H0` mp_tac) >>
+  impl_tac >- first_assum ACCEPT_TAC >> strip_tac >>
+  drule_all attr_select_field >> strip_tac >>
   `?w. eval_operand (vv_operand bvv) t = SOME w` by
     (gvs[vv_post_def] >> Cases_on `bvv` >>
      gvs[vv_holds_def, vv_operand_def, expr_val_rel_def]) >>
@@ -248,18 +288,30 @@ Proof
   `post_value_type cenv obj = expr_type obj` by
     (drule attr_pre_base >> strip_tac >> drule_all attr_post_value_type >>
      simp[]) >>
-  `vv_post H ctx func cenv cx (Attribute ann obj fld) es sa sb s0 ee tv'
-     (LocatedValue ann (mk_ptr dst (vv_loc bvv))) u` by
-    (qpat_assum `!tail. select_result _ _ _ _ _ = _`
+  `!H. valid_horizon cx st0 H ee.storage_trace ==>
+     vv_post H ctx func cenv cx (Attribute ann obj fld) es sa sb s0 ee tv'
+       (LocatedValue ann (mk_ptr dst (vv_loc bvv))) u` by
+    (rpt strip_tac >>
+     qpat_x_assum `!H. valid_horizon _ _ H _ ==> vv_post _ _ _ _ _ _ _ _ _ _ _ _ _ _`
+       (qspec_then `H` mp_tac) >>
+     impl_tac >- first_assum ACCEPT_TAC >> strip_tac >>
+     `vv_post H ctx func cenv cx obj es sa sb s0 ee tv bvv u` by
+       (irule attr_vv_post_transport >>
+        qexistsl_tac [`H0`, `sm`, `t`] >> asm_rewrite_tac[] >>
+        simp[]) >>
+     qpat_assum `!tail. select_result _ _ _ _ _ = _`
        (qspec_then `[]` (assume_tac o MATCH_MP select_result_memory_place)) >>
      irule attr_vv_post >> simp[] >> qexists_tac `tv` >> gvs[]) >>
-  qexistsl_tac [`tv'`, `u`] >> simp[] >>
+  qexistsl_tac [`tv'`, `u`] >>
+  first_assum (qspec_then `H0` mp_tac) >>
+  impl_tac >- first_assum ACCEPT_TAC >> strip_tac >>
   qspecl_then [`ctx`, `func`, `cenv`, `cx`, `ann`, `obj`, `fld`, `es`, `sa`,
                `sb`, `s0`, `ee`, `tv'`, `dst`, `bvv`, `u`, `tv`, `sid`, `fs`,
                `ftv`, `vals`, `fv`, `w`, `t`]
-    mp_tac attr_field_store_bound >>
+    mp_tac (Q.INST [`H` |-> `H0`] attr_field_store_bound) >>
   impl_tac >- (rpt conj_tac >> first_assum ACCEPT_TAC) >>
-  simp[]
+  strip_tac >>
+  rpt conj_tac >> first_assum ACCEPT_TAC
 QED
 
 Theorem compile_attribute_vv_sim_mem:
@@ -281,29 +333,44 @@ Proof
     metis_tac[expr_body_pre_vv_gas_admissible] >>
   qpat_x_assum `expr_vv_sim_mem _ _ _ _ _ obj _` mp_tac >>
   simp[expr_vv_sim_mem_def] >>
-  disch_then (qspecl_then [`sa`, `sm`, `bvv`, `s0`] mp_tac) >>
-  impl_tac >- fs[] >> strip_tac >>
-  qpat_x_assum `gas_outcome _ _ _ _ _ _ _`
+  disch_then (qspecl_then [`st0`, `sa`, `sm`, `bvv`, `s0`] mp_tac) >>
+  impl_tac >- (asm_simp_tac (srw_ss()) [] >> metis_tac[]) >> strip_tac >>
+  qpat_x_assum `gas_outcome _ _ _ _ _ _ _ _ _`
     (assume_tac o MATCH_MP gas_outcome_link) >>
   simp[eval_attr_bind] >>
-  irule forced_vv_then_outcome >> simp[] >>
-  qexists_tac `\tv ee t.
+  irule forced_vv_then_outcome >>
+  qexists_tac `\H tv ee t.
     vv_post H ctx func cenv cx obj es sa sm s0 ee tv bvv t /\
     vv_store_bound cx (StructT sid) (lowered_value_type cenv obj) ee tv bvv t /\
     t.vs_current_bb = sm.cs_current_bb /\
     t.vs_inst_idx = LENGTH sm.cs_current_insts /\
     alloca_history func t /\ s0.vs_alloca_next <= t.vs_alloca_next /\
     ?gs. eval_expr cx obj (es with gas_obs := gs) = (INL tv, ee)` >>
-  conj_tac
+  rpt conj_tac
+  >~ [`storage_trace_frame _`]
+  >- (gen_tac >> simp[vyperStorageTraceTheory.storage_trace_frame_select])
+  >~ [`expr_exit (INR _) _`] >- simp[]
+  >~ [`gas_outcome _ _ _ _ _ _ _ _ _`]
+  >- (qpat_x_assum `gas_outcome _ _ _ _ _ _ _ _ _`
+        (irule o MATCH_MP (REWRITE_RULE [GSYM AND_IMP_INTRO]
+                             gas_outcome_post_mono)) >>
+      simp[] >> rpt strip_tac >> gvs[] >> metis_tac[])
   >- (rpt gen_tac >> BETA_TAC >> strip_tac >>
       `ee with gas_obs := [] = ee` by
         simp[vyperStateTheory.evaluation_state_component_equality] >>
+      qpat_x_assum `?H. valid_horizon _ _ H ee.storage_trace`
+        (qx_choose_then `H0` assume_tac) >>
+      qpat_assum `!H. valid_horizon _ _ H ee.storage_trace ==> _`
+        (qspec_then `H0` mp_tac) >>
+      impl_tac >- first_assum ACCEPT_TAC >> strip_tac >>
+      `!H. valid_horizon cx st0 H ee.storage_trace ==>
+         vv_post H ctx func cenv cx obj es sa sm s0 ee tv bvv t` by
+        (rpt strip_tac >> first_x_assum drule >> simp[]) >>
       drule_all attr_step >> strip_tac >>
       qexistsl_tac [`INL tv'`, `ee`, `OK u`] >>
-      fs[gas_marked_path_def, expr_type_def,
-         exprLoweringTheory.lowered_value_type_def]) >>
-  qpat_x_assum `gas_outcome _ _ _ _ _ _ _`
-    (irule o MATCH_MP (REWRITE_RULE [GSYM AND_IMP_INTRO]
-                         gas_outcome_post_mono)) >>
-  simp[] >> rpt strip_tac >> gvs[] >> metis_tac[]
+      conj_tac >- (asm_simp_tac (srw_ss()) [] >> metis_tac[]) >>
+      conj_tac >- fs[gas_marked_path_def] >>
+      disj1_tac >> qexists_tac `u` >> simp[] >>
+      fs[expr_type_def, exprLoweringTheory.lowered_value_type_def] >>
+      metis_tac[])
 QED
