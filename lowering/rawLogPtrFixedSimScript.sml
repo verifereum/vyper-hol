@@ -213,7 +213,7 @@ Resume raw_log_fixed32_body_frag_ptr[allocated_post]:
 QED
 
 Resume raw_log_fixed32_body_frag_ptr[allocated_topics]:
-  `wb_args_post ctx func cenv cx es sa s0 (mid with gas_obs := []) ops vs t'` by
+  `wb_args_post H ctx func cenv cx es sa s0 (mid with gas_obs := []) ops vs t'` by
     (simp[wb_args_post_def] >>
      qpat_assum `wb_args_post _ _ _ _ _ _ _ _ _ _ t`
        (strip_assume_tac o REWRITE_RULE [wb_args_post_def]) >>
@@ -271,7 +271,7 @@ Resume raw_log_fixed32_body_frag_ptr[data]:
 QED
 
 Resume raw_log_fixed32_body_frag_ptr[tail]:
-  `wb_args_post ctx func cenv cx es sa s0 (mid with gas_obs := []) ops vs
+  `wb_args_post H ctx func cenv cx es sa s0 (mid with gas_obs := []) ops vs
      (t' with vs_inst_idx := SUC (LENGTH sm.cs_current_insts))` by
     (qpat_assum `wb_args_post _ _ _ _ _ _ _ _ _ _ t'` mp_tac >>
      rpt (pop_assum kall_tac) >>

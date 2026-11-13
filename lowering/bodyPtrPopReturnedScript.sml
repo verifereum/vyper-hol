@@ -53,8 +53,8 @@ Proof
 QED
 
 Theorem pop_declared_returned_place:
-  expr_sim_inv cenv cx env es /\ stmt_state_rel H ctx func cenv cx es s /\
-  declared_storage_region cx mid id [] = SOME (tr,hdr,ArrayTV tv (Dynamic n)) /\
+  stmt_state_rel H ctx func cenv cx es s /\ storage_well_formed_on cx es (FST H) /\
+  MEM (tr,hdr,ArrayTV tv (Dynamic n)) (FST H) /\
   stor_taint_ok H cx tn s /\
   raw = (if tr then s.vs_transient s.vs_call_ctx.cc_address
          else (s.vs_accounts s.vs_call_ctx.cc_address).storage) /\
@@ -78,7 +78,7 @@ Proof
      `0 < type_slot_size (ArrayTV tv (Dynamic n))` by simp[type_slot_size_def] >>
      drule_all pop_declared_header_agree >> strip_tac >> gvs[] >> metis_tac[]) >>
   `storage_read_live H tr raw hdr (ArrayTV tv (Dynamic n))` by
-    metis_tac[declared_storage_region_read_live] >>
+    metis_tac[observed_storage_region_read_live] >>
   `s.vs_call_ctx.cc_address = cx.txn.target` by
     fs[exprLoweringPropsTheory.stmt_state_rel_def, loweringStateRelDefsTheory.state_rel_def,
        loweringStateRelDefsTheory.call_ctx_rel_def] >>

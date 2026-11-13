@@ -44,7 +44,7 @@ End
    expr_vv_sim_ptr has expr_vv_sim's. *)
 Definition target_sim_ptr_def:
   target_sim_ptr d ctx PG func cenv cx env bt es <=>
-    !vt sa sb op s0 G0 tn0.
+    !st0 vt sa sb op s0 G0 tn0.
       type_place_target env bt = SOME vt /\
       compile_get_target_ptr compile_expr cenv bt sa = (op, sb) /\
       fn_has_code sa sb func /\ fn_inst_ids_distinct func /\
@@ -55,26 +55,28 @@ Definition target_sim_ptr_def:
       (!x sz. cenv.ce_return_pc = SOME (PtrVar (Var x) sz) ==>
               not_fresh_at sa x) /\
       gas_admissible (eval_base_place cx bt) target_res_ok es /\
-      stmt_state_rel H ctx func cenv cx es s0 /\
-      ghost_inv H d cenv cx es G0 tn0 s0 /\ ~s0.vs_halted /\
+      (!H. valid_horizon cx st0 H es.storage_trace ==>
+        stmt_state_rel H ctx func cenv cx es s0 /\
+        storage_well_formed_on cx es (FST H) /\
+        ghost_inv H d cenv cx es G0 tn0 s0) /\ ~s0.vs_halted /\
       s0.vs_current_bb = sa.cs_current_bb /\
       s0.vs_inst_idx = LENGTH sa.cs_current_insts ==>
-      gas_outcome_ptr (cx_dead H cx) (cx_tops cx) (ctx, func) PG
+      gas_outcome_ptr (\H. cx_dead H cx) (cx_tops cx) (ctx, func) PG cx st0
         (eval_base_place cx bt) (es, s0, G0, tn0)
-        (\res ee G tn t. ?pv. res = INL pv /\
+        (\H res ee G tn t. ?pv. res = INL pv /\
           target_post H ctx func cenv cx es sa sb s0 ee pv vt op t /\
           t.vs_current_bb = sb.cs_current_bb /\
           t.vs_inst_idx = LENGTH sb.cs_current_insts /\
           ghost_inv H d cenv cx ee G tn t /\
           target_ptr_ok cenv pv op G tn t /\
           ghost_kept cenv es sa G0 tn0 s0 G tn)
-        (\res ee gt r. expr_exit res r)
+        (\H res ee gt r. expr_exit res r)
 End
 
 (* New definition: exprSimPopNestedBase's pop_target_frag with the ghost. *)
 Definition pop_target_frag_ptr_def:
   pop_target_frag_ptr d ctx PG func cenv cx env bt es <=>
-    !ty sa sb r s0 G0 tn0.
+    !st0 ty sa sb r s0 G0 tn0.
       type_place_target env bt = SOME (Type ty) /\
       compile_get_target_ptr compile_expr cenv bt sa = (r, sb) /\
       fn_has_code sa sb func /\ fn_inst_ids_distinct func /\
@@ -85,13 +87,15 @@ Definition pop_target_frag_ptr_def:
       (!x sz. cenv.ce_return_pc = SOME (PtrVar (Var x) sz) ==>
               not_fresh_at sa x) /\
       gas_admissible (eval_target_place cx bt) target_place_res_ok es /\
-      stmt_state_rel H ctx func cenv cx es s0 /\
-      ghost_inv H d cenv cx es G0 tn0 s0 /\ ~s0.vs_halted /\
+      (!H. valid_horizon cx st0 H es.storage_trace ==>
+        stmt_state_rel H ctx func cenv cx es s0 /\
+        storage_well_formed_on cx es (FST H) /\
+        ghost_inv H d cenv cx es G0 tn0 s0) /\ ~s0.vs_halted /\
       s0.vs_current_bb = sa.cs_current_bb /\
       s0.vs_inst_idx = LENGTH sa.cs_current_insts ==>
-      gas_outcome_ptr (cx_dead H cx) (cx_tops cx) (ctx, func) PG
+      gas_outcome_ptr (\H. cx_dead H cx) (cx_tops cx) (ctx, func) PG cx st0
         (eval_target_place cx bt) (es, s0, G0, tn0)
-        (\res ee G tn t. ?p. res = INL p /\
+        (\H res ee G tn t. ?p. res = INL p /\
           target_post H ctx func cenv cx es sa sb s0 ee (PlaceR p) (Type ty)
             r t /\
           t.vs_current_bb = sb.cs_current_bb /\
@@ -99,7 +103,7 @@ Definition pop_target_frag_ptr_def:
           ghost_inv H d cenv cx ee G tn t /\
           target_ptr_ok cenv (PlaceR p) r G tn t /\
           ghost_kept cenv es sa G0 tn0 s0 G tn)
-        (\res ee gt r. expr_exit res r)
+        (\H res ee gt r. expr_exit res r)
 End
 
 (* New definition: an index of a target rooted at the local id, once

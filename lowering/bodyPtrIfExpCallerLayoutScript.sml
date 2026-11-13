@@ -61,7 +61,7 @@ QED
      rules out cyclic metadata but does not give a new result interpretation.
    - expr_post's expr_val_at bounds an allocation or local region for the
      ANNOTATION footprint. vv_post's vv_holds/vv_at also use expr_type arm.
-     Neither adds a physical return-buffer interpretation. ghost_inv tracks
+     Neither adds a physical return-buffer interpretation. ghost_inv H tracks
      live locals/storage and provenance; it does not state arbitrary callee
      result buffers' semantic contents at the declared return type.
    - Allocation source-frame transport preserves these existing facts; it

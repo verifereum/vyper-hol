@@ -50,6 +50,27 @@ Proof
   >> metis_tac[]
 QED
 
+Theorem ptr_inst_ok_scalar_builtin_at:
+  MEM opc [CALLER; ADDRESS; CALLVALUE; TIMESTAMP; NUMBER; BLOBBASEFEE;
+    GASPRICE; BLOCKHASH; CHAINID; COINBASE; GASLIMIT; BASEFEE; PREVRANDAO;
+    ORIGIN; GAS; CALLDATASIZE; BALANCE; EXTCODESIZE; EXTCODEHASH;
+    BLOBHASH; ISZERO; SUB; ADD; SHR; SHL] /\
+  (!op. MEM op ops ==> op_taint tn op = {}) /\
+  allocas_from lo s /\ lo <= s.vs_alloca_next /\
+  ~ctx_has_dalloca ctx ==>
+  ptr_inst_ok D lo fuel ctx fn G tn (mk_inst id opc ops [out]) s
+Proof
+  strip_tac >>
+  gvs[MEM] >>
+  simp[ptr_inst_ok_def, access_ok_def, taint_ok_def,
+       mk_inst_def, source_memory_write_ranges_def, source_memory_read_ranges_def,
+       step_inst_non_invoke] >>
+  simp[step_inst_base_opcode_eqs] >>
+  simp[exec_read0_def, exec_read1_def, exec_pure1_def, exec_pure2_def,
+       exec_gas_def, update_var_def, AllCaseEqs()] >>
+  rpt strip_tac >> gvs[] >> metis_tac[]
+QED
+
 Theorem ptr_inst_ok_scalar_builtin:
   MEM opc [CALLER; ADDRESS; CALLVALUE; TIMESTAMP; NUMBER; BLOBBASEFEE;
     GASPRICE; BLOCKHASH; CHAINID; COINBASE; GASLIMIT; BASEFEE; PREVRANDAO;
@@ -59,15 +80,8 @@ Theorem ptr_inst_ok_scalar_builtin:
   ~ctx_has_dalloca ctx ==>
   ptr_inst_ok D 0 fuel ctx fn G tn (mk_inst id opc ops [out]) s
 Proof
-  strip_tac >>
-  gvs[MEM] >>
-  simp[ptr_inst_ok_def, access_ok_def, taint_ok_def, allocas_from_def,
-       mk_inst_def, source_memory_write_ranges_def, source_memory_read_ranges_def,
-       step_inst_non_invoke] >>
-  simp[step_inst_base_opcode_eqs] >>
-  simp[exec_read0_def, exec_read1_def, exec_pure1_def, exec_pure2_def,
-       exec_gas_def, update_var_def, AllCaseEqs()] >>
-  rpt strip_tac >> gvs[] >> metis_tac[]
+  strip_tac >> irule ptr_inst_ok_scalar_builtin_at >>
+  simp[allocas_from_def]
 QED
 
 Theorem scalar_builtin_counted_edge:
@@ -148,6 +162,20 @@ Proof
        range_bytes_def, FLOOKUP_DEF, EXTENSION] >> metis_tac[]
 QED
 
+Theorem single_output_ghost_kept_at:
+  ghost_kept_at lo cenv es sa G0 tn0 s0 G tn /\
+  ~not_fresh_at sa out /\
+  (step_taint (mk_inst id opc ops [out]) s t tn).t_mem SUBSET tn.t_mem ==>
+  ghost_kept_at lo cenv es sa G0 tn0 s0
+    (step_prov PG G (mk_inst id opc ops [out]) t)
+    (step_taint (mk_inst id opc ops [out]) s t tn)
+Proof
+  simp[ghost_kept_at_def] >> strip_tac >> conj_tac
+  >- (rpt strip_tac >> `x <> out` by metis_tac[] >>
+      simp[step_prov_other_output, step_taint_other_output, mk_inst_def]) >>
+  gvs[SUBSET_DEF] >> metis_tac[]
+QED
+
 Theorem single_output_ghost_kept:
   ghost_kept cenv es sa G0 tn0 s0 G tn /\
   ~not_fresh_at sa out /\
@@ -156,10 +184,8 @@ Theorem single_output_ghost_kept:
     (step_prov PG G (mk_inst id opc ops [out]) t)
     (step_taint (mk_inst id opc ops [out]) s t tn)
 Proof
-  strip_tac >> irule ghost_kept_clean_suffix >>
-  qexistsl_tac [`G`, `tn`] >> simp[] >> rpt strip_tac >>
-  `x <> out` by metis_tac[] >>
-  simp[step_prov_other_output, step_taint_other_output, mk_inst_def]
+  pure_rewrite_tac[ghost_kept_zero] >>
+  metis_tac[single_output_ghost_kept_at]
 QED
 
 Theorem single_output_ghost_inv:
