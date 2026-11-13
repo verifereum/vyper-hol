@@ -37,6 +37,111 @@ Ancestors
   abiDecoderCoherence sourceBytesRepresentation calldataDecodePtr abiDecoderReentry
   venomState abiDecoderBytes calldataDynOwned abiDecoderFrameCompose
   allocaFrontierBound allocaBudgetProps venomMemDefs ptrDiscipline bodyPtrDefs arithmetic
+  calldataBulkPayloadPtr emitHelperProps emitHelper fragExec codegenRel contextCodegenRel
+  venomExecSemantics venomInst fragGasSeqPtr fragGasSeqMem fragGasOriginPtr fragGasOrigin
+  instMemFrontier exprLoweringProps ptrSafeRun memSafeRun
+
+Theorem source_bulk_copy_origin[local]:
+  emit_void CALLDATACOPY [Var p;src;n] sa = ((),sb) /\
+  eval_operand (Var p) s = SOME dw /\ eval_operand src s = SOME sw /\
+  eval_operand n s = SOME nw /\ ptr_covers G tn p s (w2n nw) /\
+  op_taint tn src = {} /\ op_taint tn n = {} /\
+  run_inst_seq (emitted_insts sa sb) s = OK t ==>
+  ?H u.
+    (!root cap. ptr_covers G tn root s cap ==> ptr_covers H u root t cap) /\
+    u.t_mem SUBSET tn.t_mem /\
+    (!i. w2n dw <= i /\ i < w2n dw + w2n nw ==> i NOTIN u.t_mem) /\
+    u.t_stor = tn.t_stor /\ u.t_trans = tn.t_trans /\ u.t_imm = tn.t_imm /\
+    (!x. lookup_var x t = lookup_var x s /\ FLOOKUP H x = FLOOKUP G x /\
+      op_taint u (Var x) = op_taint tn (Var x)) /\
+    t.vs_allocas = s.vs_allocas /\ t.vs_alloca_next = s.vs_alloca_next /\
+    (!D lower ctx func.
+      fn_has_code sa sb func /\ allocas_from lower s /\ ~ctx_has_dalloca ctx /\
+      s.vs_current_bb = sa.cs_current_bb /\
+      s.vs_inst_idx = LENGTH sa.cs_current_insts /\
+      (!fuel. ptr_safe_run D lower fuel ctx func PG H u
+        (t with vs_inst_idx := LENGTH sb.cs_current_insts)) ==>
+      !fuel. ptr_safe_run D lower fuel ctx func PG G tn s) /\
+    (!D lower explicit ctx func.
+      fn_has_code sa sb func /\ allocas_from lower s /\ ~ctx_has_dalloca ctx /\
+      ~s.vs_halted /\ s.vs_current_bb = sa.cs_current_bb /\
+      s.vs_inst_idx = LENGTH sa.cs_current_insts /\
+      w2n dw + w2n nw <= s.vs_alloca_next ==>
+      gas_origin_ptr_path (D,lower,explicit,ctx,func,PG) (s,G,tn) []
+        (OK (t with vs_inst_idx := LENGTH sb.cs_current_insts),H,u))
+Proof
+  strip_tac >> drule emitted_insts_emit_void >> strip_tac >>
+  `sb.cs_current_bb = sa.cs_current_bb` by
+    (drule emit_void_same_blocks >> simp[same_blocks_def]) >>
+  `t = write_memory_with_expansion (w2n dw)
+    (TAKE (w2n nw)
+      (DROP (w2n sw) s.vs_call_ctx.cc_calldata ++ REPLICATE (w2n nw) 0w)) s` by
+    gvs[run_inst_seq_def, step_inst_base_opcode_eqs, mk_inst_def] >>
+  drule_all calldatacopy_ghost_frame >>
+  disch_then (qspecl_then [`tn`,`sa.cs_next_id`,`PG`,`G`] strip_assume_tac) >>
+  qexistsl_tac [
+    `step_prov PG G (mk_inst sa.cs_next_id CALLDATACOPY [Var p;src;n] []) t`,
+    `step_taint (mk_inst sa.cs_next_id CALLDATACOPY [Var p;src;n] []) s t tn`] >>
+  simp[] >> conj_tac
+  >- (rpt strip_tac >>
+      `?bb. lookup_block sa.cs_current_bb func.fn_blocks = SOME bb /\
+        !k. k < LENGTH [mk_inst sa.cs_next_id CALLDATACOPY [Var p;src;n] []] ==>
+          get_instruction bb (LENGTH sa.cs_current_insts + k) =
+            SOME (EL k [mk_inst sa.cs_next_id CALLDATACOPY [Var p;src;n] []])` by
+        (irule fn_has_code_same_block >> qexists_tac `sb` >> simp[]) >>
+      irule calldatacopy_safe_continuation >> simp[] >>
+      qexistsl_tac [`dw`,`sa.cs_next_id`,`n`,`nw`,`p`,`src`,`sw`] >>
+      simp[ADD1] >> conj_tac
+      >- fs[ptr_covers_def] >>
+      first_x_assum (qspec_then `0` mp_tac) >> simp[]) >>
+  rpt strip_tac >>
+  `?bb. lookup_block sa.cs_current_bb func.fn_blocks = SOME bb /\
+    !k. k < LENGTH [mk_inst sa.cs_next_id CALLDATACOPY [Var p;src;n] []] ==>
+      get_instruction bb (LENGTH sa.cs_current_insts + k) =
+        SOME (EL k [mk_inst sa.cs_next_id CALLDATACOPY [Var p;src;n] []])` by
+    (irule fn_has_code_same_block >> qexists_tac `sb` >> simp[]) >>
+  first_x_assum (qspec_then `0` mp_tac) >> simp[] >> strip_tac >>
+  `step_inst_base (mk_inst sa.cs_next_id CALLDATACOPY [Var p;src;n] []) s = OK t` by
+    simp[step_inst_base_opcode_eqs, mk_inst_def] >>
+  `ptr_inst_ok D lower 0 ctx func G tn
+     (mk_inst sa.cs_next_id CALLDATACOPY [Var p;src;n] []) s` by
+    (`access_ok lower G func (mk_inst sa.cs_next_id CALLDATACOPY [Var p;src;n] []) s` by
+       (irule calldatacopy_access_ok >> metis_tac[]) >>
+     `taint_ok func tn (mk_inst sa.cs_next_id CALLDATACOPY [Var p;src;n] []) s` by
+       (irule calldatacopy_taint_ok >> fs[ptr_covers_def]) >>
+     simp[ptr_inst_ok_def, mk_inst_def, step_inst_non_invoke,
+       step_inst_base_opcode_eqs, write_memory_with_expansion_def,
+       write_memory_def, expand_memory_def]) >>
+  `gas_path_ptr_edge D lower ctx func PG G tn s 0
+     (step_prov PG G (mk_inst sa.cs_next_id CALLDATACOPY [Var p;src;n] []) t)
+     (step_taint (mk_inst sa.cs_next_id CALLDATACOPY [Var p;src;n] []) s t tn)
+     (OK (t with vs_inst_idx := SUC s.vs_inst_idx))` by
+    (pure_rewrite_tac [mk_inst_def] >> irule (SRULE [mk_inst_def] (Q.INST
+       [`i` |-> `mk_inst sa.cs_next_id CALLDATACOPY [Var p;src;n] []`]
+       straight_line_ptr_edge)) >>
+     fs[mk_inst_def, is_terminator_def] >> metis_tac[]) >>
+  `inst_mem_below_frontier (mk_inst sa.cs_next_id CALLDATACOPY [Var p;src;n] []) s` by
+    simp[below_frontier_CALLDATACOPY] >>
+  `gas_path_mem_edge ctx func s 0 (OK (t with vs_inst_idx := SUC s.vs_inst_idx))` by
+    (pure_rewrite_tac [mk_inst_def] >> irule (SRULE [mk_inst_def] (Q.INST
+       [`i` |-> `mk_inst sa.cs_next_id CALLDATACOPY [Var p;src;n] []`]
+       straight_line_mem_edge)) >>
+     fs[mk_inst_def, is_terminator_def, inst_dload_in_section_def] >> metis_tac[]) >>
+  `gas_origin_ptr_edge (D,lower,explicit,ctx,func,PG) (s,G,tn) []
+     (OK (t with vs_inst_idx := SUC s.vs_inst_idx),
+      step_prov PG G (mk_inst sa.cs_next_id CALLDATACOPY [Var p;src;n] []) t,
+      step_taint (mk_inst sa.cs_next_id CALLDATACOPY [Var p;src;n] []) s t tn)` by
+    (simp[gas_origin_ptr_edge_def] >>
+     metis_tac[gas_path_mem_edge_zero_origin]) >>
+  `~t.vs_halted` by
+    simp[write_memory_with_expansion_def, write_memory_def, expand_memory_def] >>
+  drule (cj 2 gas_origin_ptr_path_rules) >>
+  disch_then (qspec_then `[]` mp_tac) >>
+  rewrite_tac[listTheory.APPEND] >> disch_then irule >>
+  asm_rewrite_tac[ADD1] >>
+  irule (cj 1 gas_origin_ptr_path_rules) >>
+  simp[write_memory_with_expansion_def, write_memory_def, expand_memory_def]
+QED
 
 (* Canonical ghost step used inside the allocation-free word certificate. *)
 Theorem owned_word_instruction_origin[local]:
