@@ -28,6 +28,126 @@ Ancestors
 
 val _ = Parse.hide "body";
 
+(* An owned physical value never needs the local-place alternative. *)
+Theorem ifexp_nocopy_physical_owned_vv[local]:
+  ~is_word_type src /\ ~is_word_type dst /\
+  evaluate_type (get_tenv cx) src = SOME sv /\
+  evaluate_type (get_tenv cx) dst = SOME dv /\ val_wf dv v /\
+  val_footprint sv v = val_footprint dv v /\
+  expr_val_own ce cx src sa sb ee v op s /\
+  read_result cx tv ee = (INL v,ee) ==>
+  vv_at ce cx dst sa sb ee tv (LocatedValue dst (mk_ptr op LocMemory)) s
+Proof
+  simp[vv_at_def, mk_ptr_def, expr_val_own_def] >> rpt strip_tac >>
+  first_x_assum (qspec_then `sv` mp_tac) >> simp[] >> metis_tac[]
+QED
+
+Theorem ifexp_nocopy_physical_post[local]:
+  (!ty tv. evaluate_type (get_tenv cx) ty = SOME tv ==>
+    type_memory_bytes ce ty = type_memory_size tv) /\
+  same_memory_layout ce (post_value_type ce e) (expr_type e) /\
+  arg_type_fits (post_value_type ce e) (expr_type e) /\
+  evaluate_type (get_tenv cx) (post_value_type ce e) = SOME sv /\
+  evaluate_type (get_tenv cx) (expr_type e) = SOME dv /\
+  ~is_word_type (expr_type e) /\ value_has_type dv v /\
+  (~expr_has_effect (IfExp (expr_type e) c a b) ==> ~expr_has_effect e) /\
+  expr_post H ctx func ce cx e es sa sb s0 ee v op s ==>
+  expr_post H ctx func ce cx (IfExp (expr_type e) c a b) es sa sb s0 ee v op s
+Proof
+  strip_tac >> Cases_on `post_value_type ce e = expr_type e`
+  >- (gvs[expr_post_def, expr_type_def] >> metis_tac[]) >>
+  qpat_assum `expr_post H _ _ _ _ e _ _ _ _ _ _ _ _`
+    (strip_assume_tac o PURE_REWRITE_RULE[expr_post_def]) >>
+  `expr_val_rel cx (expr_type e) v op s` by
+    (irule exprSimLayoutTransportTheory.expr_val_rel_layout_transport >>
+     goal_assum (drule_at Any) >> metis_tac[]) >>
+  `expr_val_at ce cx (expr_type e) sa sb ee v op s` by
+    (irule exprSimLayoutTransportTheory.expr_val_at_layout_transport >>
+     goal_assum (drule_at Any) >> metis_tac[]) >>
+  gvs[expr_post_def, expr_type_def] >> metis_tac[]
+QED
+
+Theorem ifexp_nocopy_physical_endpoint_vv[local]:
+  (!ty tv. evaluate_type (get_tenv cx) ty = SOME tv ==>
+    type_memory_bytes ce ty = type_memory_size tv) /\
+  same_memory_layout ce (post_value_type ce e) (expr_type e) /\
+  arg_type_fits (post_value_type ce e) (expr_type e) /\
+  evaluate_type (get_tenv cx) (post_value_type ce e) = SOME sv /\
+  evaluate_type (get_tenv cx) (expr_type e) = SOME dv /\
+  ~is_word_type (expr_type e) /\ value_has_type dv v /\
+  post_value_type ce e <> expr_type e /\
+  expr_post H ctx fn ce cx e es sa sb s0 ee v op s /\
+  read_result cx raw ee = (INL v,ee) ==>
+  vv_at ce cx (expr_type e) sa sb ee raw
+    (LocatedValue (expr_type e) (mk_ptr op LocMemory)) s
+Proof
+  strip_tac >> irule ifexp_nocopy_physical_owned_vv >>
+  simp[] >> qexistsl_tac [`post_value_type ce e`, `sv`] >>
+  simp[] >> rpt conj_tac
+  >- metis_tac[exprSimLayoutTransportTheory.compatible_word_type]
+  >- (fs[same_memory_layout_def] >>
+      metis_tac[exprSimLayoutTransportTheory.compatible_footprint])
+  >- metis_tac[valueTypingMemoryPropsTheory.value_has_type_memory_wf]
+  >> fs[expr_post_def]
+QED
+
+Theorem ifexp_nocopy_physical_store_size[local]:
+  ~is_bytestring_type ty /\ evaluate_type tenv ty = SOME tv ==>
+  val_store_size tv v = type_memory_size tv
+Proof
+  rpt strip_tac >> Cases_on `v` >> simp[exprSimPropsTheory.val_store_size_def] >>
+  Cases_on `tv` >> simp[] >>
+  rename1 `BaseTV b` >> Cases_on `b` >> simp[] >>
+  TRY (rename1 `BytesT bd` >> Cases_on `bd` >> simp[]) >>
+  Cases_on `ty` >>
+  gvs[vyperValueTheory.evaluate_type_def, AllCaseEqs(), is_bytestring_type_def]
+QED
+
+Theorem ifexp_nocopy_physical_buffer[local]:
+  same_memory_layout ce (lowered_value_type ce e) t /\
+  ptr_buf_ok ce e op G s ==>
+  !e'. lowered_value_type ce e' = t ==> ptr_buf_ok ce e' op G s
+Proof
+  simp[same_memory_layout_def, ptr_buf_ok_def] >> metis_tac[]
+QED
+
+Theorem ifexp_nocopy_physical_bound[local]:
+  (!ty tv. evaluate_type (get_tenv cx) ty = SOME tv ==>
+    type_memory_bytes ce ty = type_memory_size tv) /\
+  same_memory_layout ce src dst /\
+  evaluate_type (get_tenv cx) dst = SOME dv /\ type_memory_size dv < 2 ** 64 ==>
+  !sv. evaluate_type (get_tenv cx) src = SOME sv ==>
+    type_memory_bytes ce src = type_memory_size sv /\ type_memory_size sv < 2 ** 64
+Proof
+  simp[same_memory_layout_def] >> metis_tac[]
+QED
+
+Theorem ifexp_nocopy_physical_ptr[local]:
+  (!ty tv. evaluate_type (get_tenv cx) ty = SOME tv ==>
+    type_memory_bytes ce ty = type_memory_size tv) /\
+  same_memory_layout ce src dst /\ arg_type_fits src dst /\
+  evaluate_type (get_tenv cx) src = SOME sv /\
+  evaluate_type (get_tenv cx) dst = SOME dv /\
+  ~is_word_type dst /\ ~is_bytestring_type src /\ ~is_bytestring_type dst /\
+  ptr_val_ok cx src v op G tn s ==>
+  ptr_val_ok cx dst v op G tn s
+Proof
+  strip_tac >>
+  `~is_word_type src` by
+    metis_tac[exprSimLayoutTransportTheory.compatible_word_type] >>
+  `type_memory_size sv = type_memory_size dv` by
+    (fs[same_memory_layout_def] >> metis_tac[]) >>
+  `val_footprint sv v = val_footprint dv v` by
+    metis_tac[exprSimLayoutTransportTheory.compatible_footprint] >>
+  `val_store_size sv v = val_store_size dv v` by
+    metis_tac[ifexp_nocopy_physical_store_size] >>
+  `!b mem. val_in_memory sv v b mem <=> val_in_memory dv v b mem` by
+    (drule exprSimLayoutTransportTheory.compatible_layout_memory >>
+     strip_tac >> first_x_assum irule >>
+     qexistsl_tac [`dst`, `src`] >> fs[same_memory_layout_def]) >>
+  gvs[ptr_val_ok_def, ptr_mem_ok_def] >> metis_tac[]
+QED
+
 (* The value judgment from the vv judgment: lower_value is compile_expr
    then unwrap_value, whose code reads no GAS (unwrap_value_origin_ptr). *)
 Theorem expr_sim_full_of_vv:
