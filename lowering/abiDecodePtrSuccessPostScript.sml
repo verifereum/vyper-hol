@@ -21,7 +21,7 @@ Proof
 QED
 
 Theorem abi_decode_actual_member_effects:
-  abi_decode_member_frame ready G tn u H tf uf a k /\
+  abi_decode_member_frame ready G tn u HG tf uf a k /\
   abi_decoder_vars_extend s.vs_vars uf v /\
   sa.cs_next_var <= ready.cs_next_var /\
   (!x. not_fresh_at sa x ==> lookup_var x u = lookup_var x s) ==>
@@ -48,7 +48,7 @@ Theorem abi_decode_success_frame_posts:
   sc.cs_next_var <= sa.cs_next_var /\ sc.cs_next_id <= sa.cs_next_id /\
   local_ptrs_reserved cenv sc /\ local_ptrs_reserved cenv sa /\
   MAP FDOM es0.scopes = MAP FDOM es.scopes /\
-  abi_decode_member_frame ready G tn u H tf uf a k /\
+  abi_decode_member_frame ready G tn u HG tf uf a k /\
   abi_decoder_vars_extend s.vs_vars uf v /\
   sa.cs_next_var <= ready.cs_next_var /\
   u.vs_memory = s.vs_memory /\
@@ -90,7 +90,7 @@ Proof
 QED
 
 Theorem abi_decode_operand_success_posts:
-  expr_post ctx func cenv cx e es0 sc sa s0 es (BytesV bs) (Var p) s /\
+  expr_post H ctx func cenv cx e es0 sc sa s0 es (BytesV bs) (Var p) s /\
   ptr_val_ok cx (expr_type e) (BytesV bs) (Var p) G tn s /\
   expr_type e = BaseT (BytesT (Dynamic cap)) /\
   evaluate_type (get_tenv cx) (expr_type e) = SOME (BaseTV (BytesT (Dynamic cap))) /\
@@ -101,7 +101,7 @@ Theorem abi_decode_operand_success_posts:
   s.vs_inst_idx = LENGTH sa.cs_current_insts /\
   not_fresh_at sa p /\ abi_decoder_operand_live sa.cs_next_var (Var p) /\
   mn <= LENGTH bs /\ LENGTH bs <= mx /\ mx < dimword (:256) /\
-  ghost_inv ret cenv cx es G tn s /\ local_ptrs_reserved cenv sa /\
+  ghost_inv H ret cenv cx es G tn s /\ local_ptrs_reserved cenv sa /\
   (!x sz. cenv.ce_return_buf = SOME (PtrVar (Var x) sz) ==> not_fresh_at sa x) /\
   (!x sz. cenv.ce_return_pc = SOME (PtrVar (Var x) sz) ==> not_fresh_at sa x) /\
   fn_inst_ids_distinct func /\ outsz < dimword (:256) /\
@@ -117,15 +117,15 @@ Theorem abi_decode_operand_success_posts:
   wb_frame cenv es0 es sc s0 s /\ local_ptrs_reserved cenv sc /\
   sc.cs_next_var <= sa.cs_next_var /\ sc.cs_next_id <= sa.cs_next_id /\
   MAP FDOM es0.scopes = MAP FDOM es.scopes ==>
-  ?v H tf dst d. buf.buf_operand = Var dst /\
+  ?v HG tf dst d. buf.buf_operand = Var dst /\
     gas_path_ptr D 0 ctx func PG G tn s
-      (LENGTH (FILTER (\i. i.inst_opcode = GAS) (emitted_insts sa sb))) H tf (OK v) /\
+      (LENGTH (FILTER (\i. i.inst_opcode = GAS) (emitted_insts sa sb))) HG tf (OK v) /\
     v.vs_current_bb = sb.cs_current_bb /\ v.vs_inst_idx = LENGTH sb.cs_current_insts /\
-    ghost_inv ret cenv cx es H tf v /\ stmt_state_rel ctx func cenv cx es v /\
-    lookup_var dst v = SOME d /\ ptr_covers H tf dst v outsz /\
+    ghost_inv H ret cenv cx es HG tf v /\ stmt_state_rel H ctx func cenv cx es v /\
+    lookup_var dst v = SOME d /\ ptr_covers HG tf dst v outsz /\
     (!mem'. mem_agree_outside tf.t_mem v.vs_memory mem' ==>
       tuple_in_memory vs tvs (w2n d) mem') /\
-    ghost_kept cenv es sa G tn s H tf /\ wb_frame cenv es0 es sc s0 v /\
+    ghost_kept cenv es sa G tn s HG tf /\ wb_frame cenv es0 es sc s0 v /\
     FLOOKUP v.vs_allocas sh.cs_next_id = SOME (w2n d,outsz) /\
     sc.cs_next_id <= sh.cs_next_id /\ sh.cs_next_id < sb.cs_next_id /\
     (!name b n. local_region cenv es.scopes v name b n ==>
@@ -134,7 +134,7 @@ Theorem abi_decode_operand_success_posts:
 Proof
   strip_tac >> drule_all abi_decode_operand_success_handoff >>
   disch_then (qspecl_then [`PG`, `D`] strip_assume_tac) >>
-  rename1 `abi_decode_member_frame ready G2 tn2 u H tf uf (w2n d) outsz` >>
+  rename1 `abi_decode_member_frame ready G2 tn2 u HG tf uf (w2n d) outsz` >>
   `sa.cs_next_var <= ready.cs_next_var /\ sa.cs_next_id <= sh.cs_next_id` by
     (drule abi_builtin_decode_header_shape >> strip_tac >>
      drule compile_alloc_buffer_parts >> strip_tac >> decide_tac) >>
@@ -176,5 +176,5 @@ Proof
          [first_assum ACCEPT_TAC, first_assum ACCEPT_TAC, first_assum ACCEPT_TAC,
           simp[], simp[], simp[], first_assum ACCEPT_TAC, first_assum ACCEPT_TAC]) >>
      simp[]) >>
-  qexistsl_tac [`v`, `H`, `tf`, `dst`, `d`] >> simp[] >> gvs[]
+  qexistsl_tac [`v`, `HG`, `tf`, `dst`, `d`] >> simp[] >> gvs[]
 QED

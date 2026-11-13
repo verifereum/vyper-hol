@@ -16,21 +16,21 @@ Theorem account_iscontract_counted_run:
   LENGTH (lookup_account (word_of_bytes_be bs) es.accounts).code < dimword (:256) /\
   eval_operand arg s = SOME (typed_val_to_w256 (BaseTV AddressT) (BytesV bs)) /\
   op_taint tn arg = {} /\ local_ptrs_reserved cenv sa /\ ~ctx_has_dalloca ctx /\
-  ghost_inv d cenv cx es G tn s /\
+  ghost_inv H d cenv cx es G tn s /\
   (!x sz. cenv.ce_return_buf = SOME (PtrVar (Var x) sz) ==> not_fresh_at sa x) /\
   (!x sz. cenv.ce_return_pc = SOME (PtrVar (Var x) sz) ==> not_fresh_at sa x) /\
   local_ptrs_rel fn cenv es.scopes s /\
-  stmt_state_rel ctx fn cenv cx es s /\
+  stmt_state_rel H ctx fn cenv cx es s /\
   ~s.vs_halted /\ s.vs_current_bb = sa.cs_current_bb /\
   s.vs_inst_idx = LENGTH sa.cs_current_insts ==>
   ?G' tn' t.
     gas_path_ptr D 0 ctx fn PG G tn s 0 G' tn' (OK t) /\
-    ghost_inv d cenv cx es G' tn' t /\
+    ghost_inv H d cenv cx es G' tn' t /\
     ghost_kept cenv es sa G tn s G' tn' /\
     op_taint tn' op = {} /\ op_prov G' op = NONE /\
     eval_operand op t = SOME
       (bool_to_word ((lookup_account (word_of_bytes_be bs) es.accounts).code <> [])) /\
-    stmt_state_rel ctx fn cenv cx es t /\ ~t.vs_halted /\
+    stmt_state_rel H ctx fn cenv cx es t /\ ~t.vs_halted /\
     t.vs_current_bb = sb.cs_current_bb /\
     t.vs_inst_idx = LENGTH sb.cs_current_insts /\
     (!x. not_fresh_at sa x ==> lookup_var x t = lookup_var x s) /\
@@ -75,22 +75,22 @@ Theorem account_suffix_counted_run:
   eval_operand arg s = SOME (typed_val_to_w256 (BaseTV AddressT) (BytesV bs)) /\
   evaluate_type (get_tenv cx) (account_item_type item) = SOME tv /\
   op_taint tn arg = {} /\ local_ptrs_reserved cenv sa /\ ~ctx_has_dalloca ctx /\
-  ghost_inv d cenv cx es G tn s /\
+  ghost_inv H d cenv cx es G tn s /\
   (!x sz. cenv.ce_return_buf = SOME (PtrVar (Var x) sz) ==> not_fresh_at sa x) /\
   (!x sz. cenv.ce_return_pc = SOME (PtrVar (Var x) sz) ==> not_fresh_at sa x) /\
   local_ptrs_rel fn cenv es.scopes s /\
-  stmt_state_rel ctx fn cenv cx es s /\
+  stmt_state_rel H ctx fn cenv cx es s /\
   ~s.vs_halted /\ s.vs_current_bb = sa.cs_current_bb /\
   s.vs_inst_idx = LENGTH sa.cs_current_insts ==>
   ?G' tn' t.
     gas_path_ptr D 0 ctx fn PG G tn s 0 G' tn' (OK t) /\
-    ghost_inv d cenv cx es G' tn' t /\
+    ghost_inv H d cenv cx es G' tn' t /\
     ghost_kept cenv es sa G tn s G' tn' /\
     op_taint tn' op = {} /\ op_prov G' op = NONE /\
     eval_operand op t = SOME (typed_val_to_w256 tv
       (evaluate_account_op item bs
         (lookup_account (word_of_bytes_be bs) es.accounts))) /\
-    stmt_state_rel ctx fn cenv cx es t /\ ~t.vs_halted /\
+    stmt_state_rel H ctx fn cenv cx es t /\ ~t.vs_halted /\
     t.vs_current_bb = sb.cs_current_bb /\
     t.vs_inst_idx = LENGTH sb.cs_current_insts /\
     (!x. not_fresh_at sa x ==> lookup_var x t = lookup_var x s) /\

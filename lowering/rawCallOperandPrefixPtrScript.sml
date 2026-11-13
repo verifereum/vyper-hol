@@ -132,17 +132,17 @@ Theorem body_base_operand_outcome_ptr:
   local_ptrs_reserved cenv sa /\ ~ctx_has_dalloca ctx /\ ~cenv.ce_is_ctor /\
   (!x sz. cenv.ce_return_buf = SOME (PtrVar (Var x) sz) ==> not_fresh_at sa x) /\
   (!x sz. cenv.ce_return_pc = SOME (PtrVar (Var x) sz) ==> not_fresh_at sa x) /\
-  stmt_state_rel ctx func cenv cx es s0 /\
-  ghost_inv dep cenv cx es G0 tn0 s0 /\ ~s0.vs_halted /\
+  stmt_state_rel H ctx func cenv cx es s0 /\
+  ghost_inv H dep cenv cx es G0 tn0 s0 /\ ~s0.vs_halted /\
   s0.vs_current_bb = sa.cs_current_bb /\
   s0.vs_inst_idx = LENGTH sa.cs_current_insts ==>
-  gas_outcome_ptr (cx_dead cx) (cx_tops cx) (ctx,func) PG
+  gas_outcome_ptr (cx_dead H cx) (cx_tops cx) (ctx,func) PG
     (bind (eval_expr cx e) (read_result cx)) (es,s0,G0,tn0)
     (\rr ee G tn t. ?v. rr = INL v /\
-      expr_post ctx func cenv cx e es sa sb s0 ee v op t /\
+      expr_post H ctx func cenv cx e es sa sb s0 ee v op t /\
       t.vs_current_bb = sb.cs_current_bb /\
       t.vs_inst_idx = LENGTH sb.cs_current_insts /\
-      ghost_inv dep cenv cx ee G tn t /\
+      ghost_inv H dep cenv cx ee G tn t /\
       ptr_val_ok cx (expr_type e) v op G tn t /\
       (~is_word_type (expr_type e) ==> ptr_buf_ok cenv e op G t) /\
       ghost_kept cenv es sa G0 tn0 s0 G tn /\ ee.gas_obs = [] /\
@@ -186,23 +186,23 @@ Theorem raw_call_addr_data_sim_ptr:
   local_ptrs_reserved cenv sa /\ ~ctx_has_dalloca ctx /\ ~cenv.ce_is_ctor /\
   (!x sz. cenv.ce_return_buf = SOME (PtrVar (Var x) sz) ==> not_fresh_at sa x) /\
   (!x sz. cenv.ce_return_pc = SOME (PtrVar (Var x) sz) ==> not_fresh_at sa x) /\
-  stmt_state_rel ctx func cenv cx es s0 /\
-  ghost_inv dep cenv cx es G0 tn0 s0 /\ ~s0.vs_halted /\
+  stmt_state_rel H ctx func cenv cx es s0 /\
+  ghost_inv H dep cenv cx es G0 tn0 s0 /\ ~s0.vs_halted /\
   s0.vs_current_bb = sa.cs_current_bb /\
   s0.vs_inst_idx = LENGTH sa.cs_current_insts ==>
-  gas_outcome_ptr (cx_dead cx) (cx_tops cx) (ctx,func) PG
+  gas_outcome_ptr (cx_dead H cx) (cx_tops cx) (ctx,func) PG
     (do av <- bind (eval_expr cx a) (read_result cx);
         dv <- bind (eval_expr cx d) (read_result cx); return (av,dv) od)
     (es,s0,G0,tn0)
     (\rr ee G tn t. ?av bs ea ta.
       rr = INL (av,BytesV bs) /\ value_has_type (BaseTV AddressT) av /\
       ea.gas_obs = [] /\
-      expr_post ctx func cenv cx a es sa s1 s0 ea av addr ta /\
-      expr_post ctx func cenv cx d ea s1 s2 ta ee (BytesV bs) data t /\
+      expr_post H ctx func cenv cx a es sa s1 s0 ea av addr ta /\
+      expr_post H ctx func cenv cx d ea s1 s2 ta ee (BytesV bs) data t /\
       expr_sim_inv cenv cx env ee /\ body_exprs_ptr_ok cx kws /\
       t.vs_current_bb = s2.cs_current_bb /\
       t.vs_inst_idx = LENGTH s2.cs_current_insts /\ ~t.vs_halted /\
-      ghost_inv dep cenv cx ee G tn t /\
+      ghost_inv H dep cenv cx ee G tn t /\
       ptr_val_ok cx (expr_type d) (BytesV bs) data G tn t /\
       ptr_buf_ok cenv d data G t /\
       ghost_kept cenv es sa G0 tn0 s0 G tn)
@@ -255,7 +255,7 @@ QED
 Resume raw_call_addr_data_sim_ptr[data]:
   rpt gen_tac >> strip_tac >> gvs[] >>
   qpat_x_assum `gas_outcome_ptr _ _ _ _ _ _ _ _` kall_tac >>
-  `stmt_state_rel ctx func cenv cx ee t` by
+  `stmt_state_rel H ctx func cenv cx ee t` by
     metis_tac[exprSimWordArgsTheory.expr_post_state] >>
   `local_ptrs_reserved cenv s1` by
     (fs[exprLoweringPropsTheory.ci_mono_def] >>
@@ -320,7 +320,7 @@ QED
 (* Saved word operands need the later stage's entry frontier, not the
    frontier before the operand was produced. *)
 Theorem saved_word_operand_ptr_frame:
-  wb_frame cenv es es' sa s t /\ ghost_kept cenv es sa G tn s H un /\
+  wb_frame cenv es es' sa s t /\ ghost_kept cenv es sa G tn s HG un /\
   (!x. op = Var x ==> not_fresh_at sa x) /\ (!l. op <> Label l) /\
   is_word_type ty /\ expr_val_rel cx ty v op s /\ op_taint tn op = {} ==>
   expr_val_rel cx ty v op t /\ op_taint un op = {}
@@ -352,25 +352,25 @@ Theorem raw_call_addr_data_header_sim_ptr:
   local_ptrs_reserved cenv sa /\ ~ctx_has_dalloca ctx /\ ~cenv.ce_is_ctor /\
   (!x sz. cenv.ce_return_buf = SOME (PtrVar (Var x) sz) ==> not_fresh_at sa x) /\
   (!x sz. cenv.ce_return_pc = SOME (PtrVar (Var x) sz) ==> not_fresh_at sa x) /\
-  stmt_state_rel ctx func cenv cx es s0 /\
-  ghost_inv dep cenv cx es G0 tn0 s0 /\ ~s0.vs_halted /\
+  stmt_state_rel H ctx func cenv cx es s0 /\
+  ghost_inv H dep cenv cx es G0 tn0 s0 /\ ~s0.vs_halted /\
   s0.vs_current_bb = sa.cs_current_bb /\
   s0.vs_inst_idx = LENGTH sa.cs_current_insts ==>
-  gas_outcome_ptr (cx_dead cx) (cx_tops cx) (ctx,func) PG
+  gas_outcome_ptr (cx_dead H cx) (cx_tops cx) (ctx,func) PG
     (eval_exprs cx [a;d])
     (es,s0,G0,tn0)
     (\rr ee G tn t. ?av bs ea ta tb b x base sz.
       rr = INL [av;BytesV bs] /\ value_has_type (BaseTV AddressT) av /\
       ea.gas_obs = [] /\ MAP FDOM es.scopes = MAP FDOM ee.scopes /\
-      expr_post ctx func cenv cx a es sa s1 s0 ea av addr ta /\
-      expr_post ctx func cenv cx d ea s1 s2 ta ee (BytesV bs) data tb /\
+      expr_post H ctx func cenv cx a es sa s1 s0 ea av addr ta /\
+      expr_post H ctx func cenv cx d ea s1 s2 ta ee (BytesV bs) data tb /\
       wb_frame cenv ee ee s2 tb t /\
       expr_val_at cenv cx (expr_type d) s1 sm ee (BytesV bs) data t /\
       expr_sim_inv cenv cx env ee /\ body_exprs_ptr_ok cx kws /\
-      stmt_state_rel ctx func cenv cx ee t /\ wb_frame cenv es ee sa s0 t /\
+      stmt_state_rel H ctx func cenv cx ee t /\ wb_frame cenv es ee sa s0 t /\
       t.vs_current_bb = sm.cs_current_bb /\
       t.vs_inst_idx = LENGTH sm.cs_current_insts /\ ~t.vs_halted /\
-      ghost_inv dep cenv cx ee G tn t /\
+      ghost_inv H dep cenv cx ee G tn t /\
       ghost_kept cenv es sa G0 tn0 s0 G tn /\
       expr_val_rel cx (BaseT AddressT) av addr t /\ op_taint tn addr = {} /\
       eval_operand len_op t = SOME (n2w (LENGTH bs)) /\
@@ -441,7 +441,7 @@ QED
 Resume raw_call_addr_data_header_sim_ptr[data]:
   rpt gen_tac >> strip_tac >> gvs[] >>
   qpat_x_assum `gas_outcome_ptr _ _ _ _ _ _ _ _` kall_tac >>
-  `stmt_state_rel ctx func cenv cx ee t` by
+  `stmt_state_rel H ctx func cenv cx ee t` by
     metis_tac[exprSimWordArgsTheory.expr_post_state] >>
   `local_ptrs_reserved cenv s1` by
     (fs[exprLoweringPropsTheory.ci_mono_def] >>
@@ -496,7 +496,7 @@ Resume raw_call_addr_data_header_sim_ptr[header]:
     (irule exprSimWordArgsTheory.expr_post_frame >> goal_assum (drule_at Any)) >>
   `expr_val_rel cx (BaseT AddressT) v addr t /\ op_taint tn addr = {}` by
     (conj_tac
-     >- (qpat_x_assum `expr_post _ _ _ _ a _ _ _ _ _ _ _ _` mp_tac >>
+     >- (qpat_x_assum `expr_post _ _ _ _ _ a _ _ _ _ _ _ _ _` mp_tac >>
          simp[loweringPostsTheory.expr_post_def]) >>
      fs[bodyPtrDefsTheory.ptr_val_ok_def, compileEnvTheory.is_word_type_def]) >>
   `expr_val_rel cx (BaseT AddressT) v addr t' /\ op_taint tn' addr = {}` by
@@ -509,8 +509,8 @@ Resume raw_call_addr_data_header_sim_ptr[header_suffix]:
   qpat_x_assum `value_has_type (BaseTV (BytesT _)) _` mp_tac >>
   Cases_on `v'` >> simp[vyperTypingTheory.value_has_type_def] >>
   strip_tac >> gvs[] >>
-  rename1 `expr_post _ _ _ _ d _ _ _ _ _ (BytesV bs) _ _` >>
-  `stmt_state_rel ctx func cenv cx ee' t'` by
+  rename1 `expr_post _ _ _ _ _ d _ _ _ _ _ (BytesV bs) _ _` >>
+  `stmt_state_rel H ctx func cenv cx ee' t'` by
     metis_tac[exprSimWordArgsTheory.expr_post_state] >>
   `local_ptrs_reserved cenv s2` by
     (fs[exprLoweringPropsTheory.ci_mono_def] >>
@@ -520,7 +520,7 @@ Resume raw_call_addr_data_header_sim_ptr[header_suffix]:
     (fs[exprLoweringPropsTheory.ci_mono_def] >>
      metis_tac[stmtFragPtrTheory.not_fresh_at_mono]) >>
   `?w. eval_operand data t' = SOME w` by
-    (qpat_x_assum `expr_post _ _ _ _ d _ _ _ _ _ _ _ _` mp_tac >>
+    (qpat_x_assum `expr_post _ _ _ _ _ d _ _ _ _ _ _ _ _` mp_tac >>
      simp[loweringPostsTheory.expr_post_def, loweringPostsTheory.expr_val_rel_def] >>
      metis_tac[]) >>
   `evaluate_type (get_tenv cx) (BaseT (BytesT (Dynamic n))) =
@@ -543,7 +543,7 @@ Resume raw_call_addr_data_header_sim_ptr[header_steps]:
      drule compile_lower_value_var >> simp[]) >>
   `mem_word_at (w2n w) t'.vs_memory = n2w (LENGTH bs) /\
    mem_bytes_at (w2n w+32) (LENGTH bs) t'.vs_memory = bs` by
-    (qpat_x_assum `expr_post _ _ _ _ d _ _ _ _ _ _ _ _` mp_tac >>
+    (qpat_x_assum `expr_post _ _ _ _ _ d _ _ _ _ _ _ _ _` mp_tac >>
      simp[loweringPostsTheory.expr_post_def, loweringPostsTheory.expr_val_rel_def,
        compileEnvTheory.is_word_type_def, valueEncodingDefsTheory.val_in_memory_def]) >>
   `?lx. len_op = Var lx` by
@@ -566,7 +566,7 @@ Resume raw_call_addr_data_header_sim_ptr[header_posts]:
     (irule log_frame_placement >>
      simp[] >> qexistsl_tac [`ctx`, `ee'`, `ee'`, `func`, `t'`, `s2`] >> simp[] >>
      fs[exprLoweringPropsTheory.ci_mono_def] >>
-     qpat_x_assum `expr_post _ _ _ _ d _ _ _ _ _ _ _ _` mp_tac >>
+     qpat_x_assum `expr_post _ _ _ _ _ d _ _ _ _ _ _ _ _` mp_tac >>
      simp[loweringPostsTheory.expr_post_def]) >>
   `!z. addr = Var z ==> not_fresh_at s2 z` by
     (fs[exprLoweringPropsTheory.ci_mono_def] >>
@@ -594,7 +594,7 @@ Resume raw_call_addr_data_header_sim_ptr[header_frame_posts]:
          fs[exprLoweringPropsTheory.stmt_state_rel_def, loweringStateRelDefsTheory.state_rel_def]) >>
      qexistsl_tac [`G`, `ee`, `ee`, `t`, `s1`, `tn`] >>
      fs[exprLoweringPropsTheory.ci_mono_def]) >>
-  `ghost_kept cenv es sa G0 tn0 s0 H un` by
+  `ghost_kept cenv es sa G0 tn0 s0 HG un` by
     (irule wordOperandsPtrTheory.ghost_kept_trans >>
      simp[] >> conj_tac
      >- (qexists_tac `func` >>
@@ -610,7 +610,7 @@ Resume raw_call_addr_data_header_sim_ptr[header_return]:
   rewrite_tac[fragGasPathPtrTheory.gas_outcome_ptr_def] >>
   qexists_tac `[]` >> disj1_tac >>
   simp[fragGasPathPtrTheory.gas_summary_ptr_at_def, vyperStateTheory.return_def] >>
-  qexistsl_tac [`INL [v;BytesV bs]`, `ee'`, `H`, `un`, `OK u`] >> simp[] >>
+  qexistsl_tac [`INL [v;BytesV bs]`, `ee'`, `HG`, `un`, `OK u`] >> simp[] >>
   qexistsl_tac [`ee`, `t`, `t'`, `w2n w`] >>
   simp[wordsTheory.n2w_w2n, wordsTheory.word_add_n2w,
        venomStateTheory.mload_def] >>

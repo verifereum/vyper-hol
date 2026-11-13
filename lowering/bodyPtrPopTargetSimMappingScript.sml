@@ -165,7 +165,7 @@ QED
 
 Resume target_mapping_sim_ptr[mapping_frame]:
   `?tr base_slot. pv = HashMapRef tr base_slot (expr_type e) leaf` by
-    (qpat_x_assum `target_post _ _ _ _ _ _ _ _ _ _ _ _ _` mp_tac >>
+    (qpat_x_assum `target_post _ _ _ _ _ _ _ _ _ _ _ _ _ _` mp_tac >>
      simp[target_post_def] >> strip_tac >>
      Cases_on `pv` >> gvs[place_ptr_rel_def] >>
      Cases_on `p` >> gvs[place_ptr_rel_def]) >> gvs[] >>
@@ -223,13 +223,13 @@ Resume target_mapping_sim_ptr[mapping_source]:
   `MAP FDOM es.scopes = MAP FDOM (es_end with gas_obs := []).scopes /\
    MAP FDOM (es_end with gas_obs := []).scopes = MAP FDOM ef.scopes` by
     (simp[] >> metis_tac[]) >>
-  drule_at (Pat `target_post _ _ _ _ _ _ _ _ _ _ _ _ _`) target_map_normal_continue_ptr >>
-  disch_then (drule_at (Pat `expr_post _ _ _ _ _ _ _ _ _ _ _ _ _`)) >>
+  drule_at (Pat `target_post _ _ _ _ _ _ _ _ _ _ _ _ _ _`) target_map_normal_continue_ptr >>
+  disch_then (drule_at (Pat `expr_post _ _ _ _ _ _ _ _ _ _ _ _ _ _`)) >>
   simp[] >>
-  disch_then (drule_at (Pat `ghost_inv _ _ _ _ _ _ _`)) >>
+  disch_then (drule_at (Pat `ghost_inv _ _ _ _ _ _ _ _`)) >>
   simp[] >>
   disch_then (drule_at (Pat `ghost_kept _ _ _ _ _ _ _ _`)) >>
-  disch_then (qspecl_then [`PG`, `cx_dead cx`] strip_assume_tac) >>
+  disch_then (qspecl_then [`PG`, `cx_dead H cx`] strip_assume_tac) >>
   irule target_map_suffix_outcome_ptr >> simp[Abbr `ef`] >> metis_tac[]
 QED
 

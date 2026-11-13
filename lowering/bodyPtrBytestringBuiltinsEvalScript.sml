@@ -24,17 +24,17 @@ Theorem expr_sim_ptr_eval_suffix:
   (!x sz. cenv.ce_return_buf = SOME (PtrVar (Var x) sz) ==> not_fresh_at sa x) /\
   (!x sz. cenv.ce_return_pc = SOME (PtrVar (Var x) sz) ==> not_fresh_at sa x) /\
   gas_admissible (vyperState$bind (eval_expr cx e) (read_result cx)) expr_res_ok es /\
-  stmt_state_rel ctx func cenv cx es s0 /\
-  ghost_inv d cenv cx es G0 tn0 s0 /\ ~s0.vs_halted /\
+  stmt_state_rel H ctx func cenv cx es s0 /\
+  ghost_inv H d cenv cx es G0 tn0 s0 /\ ~s0.vs_halted /\
   s0.vs_current_bb = sa.cs_current_bb /\
   s0.vs_inst_idx = LENGTH sa.cs_current_insts /\
   (!exc ee gt r. expr_exit (INR exc : value + exception) r ==>
     R (INR exc) ee gt r) /\
   (!v ee G tn t.
-    expr_post ctx func cenv cx e es sa sm s0 ee v op t /\
+    expr_post H ctx func cenv cx e es sa sm s0 ee v op t /\
     t.vs_current_bb = sm.cs_current_bb /\
     t.vs_inst_idx = LENGTH sm.cs_current_insts /\ ~t.vs_halted /\
-    ghost_inv d cenv cx ee G tn t /\
+    ghost_inv H d cenv cx ee G tn t /\
     ptr_val_ok cx (post_value_type cenv e) v op G tn t /\
     (~is_word_type (post_value_type cenv e) ==> ptr_buf_ok cenv e op G t) /\
     ghost_kept cenv es sa G0 tn0 s0 G tn /\
@@ -43,9 +43,9 @@ Theorem expr_sim_ptr_eval_suffix:
       !tail. vyperState$bind (eval_expr cx e) (read_result cx)
         (es with gas_obs := gas_explicit marks s0.vs_gas_readings ++ tail) =
         (INL v,ee0 with gas_obs := tail)) ==>
-    gas_outcome_ptr (cx_dead cx) (cx_tops cx) (ctx, func) PG
+    gas_outcome_ptr (cx_dead H cx) (cx_tops cx) (ctx, func) PG
       (k v) (ee, t, G, tn) Q R) ==>
-  gas_outcome_ptr (cx_dead cx) (cx_tops cx) (ctx, func) PG
+  gas_outcome_ptr (cx_dead H cx) (cx_tops cx) (ctx, func) PG
     (vyperState$bind (vyperState$bind (eval_expr cx e) (read_result cx)) k)
     (es, s0, G0, tn0) Q R
 Proof
@@ -81,12 +81,12 @@ Theorem compile_unary_builtin_eval_vv_sim_ptr:
     ~cenv.ce_is_ctor /\
     (!x sz. cenv.ce_return_buf = SOME (PtrVar (Var x) sz) ==> not_fresh_at sa x) /\
     (!x sz. cenv.ce_return_pc = SOME (PtrVar (Var x) sz) ==> not_fresh_at sa x) /\
-    stmt_state_rel ctx func cenv cx es s0 /\
-    ghost_inv d cenv cx es G0 tn0 s0 /\
-    expr_post ctx func cenv cx e es sa sm s0 ee v x t /\
+    stmt_state_rel H ctx func cenv cx es s0 /\
+    ghost_inv H d cenv cx es G0 tn0 s0 /\
+    expr_post H ctx func cenv cx e es sa sm s0 ee v x t /\
     t.vs_current_bb = sm.cs_current_bb /\
     t.vs_inst_idx = LENGTH sm.cs_current_insts /\ ~t.vs_halted /\
-    ghost_inv d cenv cx ee G tn t /\
+    ghost_inv H d cenv cx ee G tn t /\
     ptr_val_ok cx (post_value_type cenv e) v x G tn t /\
     (~is_word_type (post_value_type cenv e) ==> ptr_buf_ok cenv e x G t) /\
     ghost_kept cenv es sa G0 tn0 s0 G tn /\
@@ -95,15 +95,15 @@ Theorem compile_unary_builtin_eval_vv_sim_ptr:
       !tail. vyperState$bind (eval_expr cx e) (read_result cx)
         (es with gas_obs := gas_explicit marks s0.vs_gas_readings ++ tail) =
         (INL v,ee0 with gas_obs := tail)) ==>
-    gas_outcome_ptr (cx_dead cx) (cx_tops cx) (ctx,func) PG
+    gas_outcome_ptr (cx_dead H cx) (cx_tops cx) (ctx,func) PG
       (\vst. ((case builtin_result cx vst.accounts ann bt [expr_type e] [v] of
          INL w => INL (Value w) | INR exc => INR exc), vst))
       (ee,t,G,tn)
       (\res ef Gf tnf u. ?tv. res = INL tv /\
-        vv_post ctx func cenv cx (Builtin ann bt [e]) es sa sb s0 ef tv vv u /\
+        vv_post H ctx func cenv cx (Builtin ann bt [e]) es sa sb s0 ef tv vv u /\
         u.vs_current_bb = sb.cs_current_bb /\
         u.vs_inst_idx = LENGTH sb.cs_current_insts /\
-        ghost_inv d cenv cx ef Gf tnf u /\
+        ghost_inv H d cenv cx ef Gf tnf u /\
         ptr_vv_ok cx (expr_type (Builtin ann bt [e])) tv vv ef Gf tnf u /\
         (!t' op. vv = StackValue t' op /\
           ~is_word_type (expr_type (Builtin ann bt [e])) ==>

@@ -88,10 +88,10 @@ QED
 (* Scalar control results may replace no live local or return-buffer pointer.
    Return-PC taint is safe even if the result replaces that scalar. *)
 Theorem for_scalar_overwrite_ghost:
-  ghost_inv d cenv cx es G tn s /\
+  ghost_inv H d cenv cx es G tn s /\
   not_local_ptr cenv es.scopes out /\
   (!sz. cenv.ce_return_buf <> SOME (PtrVar (Var out) sz)) ==>
-  ghost_inv d cenv cx es (DRESTRICT G (COMPL {out}))
+  ghost_inv H d cenv cx es (DRESTRICT G (COMPL {out}))
     (tn with t_var := tn.t_var |+ (out,{})) (update_var out w s)
 Proof
   strip_tac >> fs[ghost_inv_def, not_local_ptr_def] >> rpt conj_tac
@@ -136,7 +136,7 @@ QED
    prefix-bound variant, separation comes from the actual ALLOCA record. *)
 Theorem for_declare_word_alloca:
   !func cenv cx es s id p sz w inst v tyv sc rest a ctx.
-  stmt_state_rel ctx func cenv cx es s /\ fn_inst_ids_distinct func /\
+  stmt_state_rel H ctx func cenv cx es s /\ fn_inst_ids_distinct func /\
   es.scopes = sc :: rest /\ lookup_scopes id es.scopes = NONE /\
   FLOOKUP cenv.ce_vars id = SOME (PtrVar (Var p) sz) /\
   not_local_ptr cenv es.scopes p /\ lookup_var p s = SOME w /\
@@ -145,7 +145,7 @@ Theorem for_declare_word_alloca:
   FLOOKUP s.vs_allocas inst.inst_id = SOME (w2n w, sz) /\
   32 <= sz /\ word_value v /\ type_memory_size tyv = 32 /\
   word_memory_type tyv ==>
-  stmt_state_rel ctx func cenv cx
+  stmt_state_rel H ctx func cenv cx
     (es with scopes :=
       (sc |+ (id,<|assignable := a; type := tyv; value := v; popped := []|>)) :: rest)
     (mstore (w2n w) (val_to_w256 v) s)
@@ -175,11 +175,11 @@ QED
 Theorem for_range_body_prepare_state:
   for_code func cenv bc ty stmts id tyv p sz ainst cv ev dv nv
     cond_lbl exit_lbl body_lbl incr_lbl j1 j2 j3 bbb i1 i2 i3 sb0 sb1 sj /\
-  stmt_state_rel ctx func cenv cx es s /\ lookup_scopes id es.scopes = NONE /\
+  stmt_state_rel H ctx func cenv cx es s /\ lookup_scopes id es.scopes = NONE /\
   lookup_var p s = SOME a /\
   FLOOKUP s.vs_allocas ainst.inst_id = SOME (w2n a,sz) /\
   not_local_ptr bc (FEMPTY :: es.scopes) p ==>
-  stmt_state_rel ctx func bc cx
+  stmt_state_rel H ctx func bc cx
     (es with scopes := (FEMPTY |+ (id,
       <|assignable := F; type := tyv; value := IntV i; popped := []|>)) :: es.scopes)
     ((mstore (w2n a) (i2w i) (jump_to body_lbl (update_var dv 0w s)))
@@ -188,10 +188,10 @@ Proof
   strip_tac >> fs[stmtSimForLoopTheory.for_code_def,
                    compile_env_component_equality] >>
   qmatch_goalsub_abbrev_tac `mstore _ _ s1` >>
-  `stmt_state_rel ctx func cenv cx (es with scopes := FEMPTY :: es.scopes) s1` by
+  `stmt_state_rel H ctx func cenv cx (es with scopes := FEMPTY :: es.scopes) s1` by
     (simp[Abbr `s1`, stmt_state_rel_jump_to, stmt_state_rel_push_scope] >>
      irule stmt_state_rel_update_var >> simp[]) >>
-  `stmt_state_rel ctx func bc cx (es with scopes := FEMPTY :: es.scopes) s1` by
+  `stmt_state_rel H ctx func bc cx (es with scopes := FEMPTY :: es.scopes) s1` by
     (irule stmt_state_rel_cenv_cong >> qexists_tac `cenv` >> simp[] >>
      rpt strip_tac >> Cases_on `n = id` >> gvs[lookup_scopes_def] >>
      metis_tac[]) >>
@@ -208,7 +208,7 @@ QED
 
 Theorem for_alloca_scalar_write_separation:
   !ctx func cenv cx es s inst dst off cap len.
-  stmt_state_rel ctx func cenv cx es s /\ fn_inst_ids_distinct func /\
+  stmt_state_rel H ctx func cenv cx es s /\ fn_inst_ids_distinct func /\
   MEM inst (fn_insts func) /\ inst.inst_outputs = [dst] /\
   not_local_ptr cenv es.scopes dst /\
   FLOOKUP s.vs_allocas inst.inst_id = SOME (off,cap) /\ len <= cap ==>
@@ -241,14 +241,14 @@ QED
 Theorem for_range_body_prepare_ghost:
   for_code func cenv bc ty stmts id tyv p sz ainst cv ev dv nv
     cond_lbl exit_lbl body_lbl incr_lbl j1 j2 j3 bbb i1 i2 i3 sb0 sb1 sj /\
-  stmt_state_rel ctx func cenv cx es s /\ ghost_inv d cenv cx es G tn s /\
+  stmt_state_rel H ctx func cenv cx es s /\ ghost_inv H d cenv cx es G tn s /\
   lookup_scopes id es.scopes = NONE /\ lookup_var p s = SOME a /\
   FLOOKUP s.vs_allocas ainst.inst_id = SOME (w2n a,sz) /\
   not_local_ptr cenv es.scopes p /\
   ptr_covers G tn p s sz /\ lookup_var cv s = SOME (i2w i) /\
   op_taint tn (Var cv) = {} /\
   (!r q. cenv.ce_return_buf = SOME (PtrVar (Var r) q) ==> r <> dv) ==>
-  ghost_inv d bc cx
+  ghost_inv H d bc cx
     (es with scopes := (FEMPTY |+ (id,
       <|assignable := F; type := tyv; value := IntV i; popped := []|>)) :: es.scopes)
     (DRESTRICT G (COMPL {dv}))
@@ -259,15 +259,15 @@ Theorem for_range_body_prepare_ghost:
     (mstore (w2n a) (i2w i) (jump_to body_lbl (update_var dv 0w s)))
 Proof
   strip_tac >>
-  `ghost_inv d cenv cx es (DRESTRICT G (COMPL {dv}))
+  `ghost_inv H d cenv cx es (DRESTRICT G (COMPL {dv}))
      (tn with t_var := tn.t_var |+ (dv,{})) (update_var dv 0w s)` by
     (irule for_scalar_overwrite_ghost >> simp[] >>
      fs[stmtSimForLoopTheory.for_code_def] >> metis_tac[]) >>
   qmatch_goalsub_abbrev_tac `mstore _ _ s1` >>
-  `ghost_inv d cenv cx es (DRESTRICT G (COMPL {dv}))
+  `ghost_inv H d cenv cx es (DRESTRICT G (COMPL {dv}))
      (tn with t_var := tn.t_var |+ (dv,{})) s1` by
     simp[Abbr `s1`, jump_to_def, stmtFragPtrTheory.ghost_inv_jump_to] >>
-  `stmt_state_rel ctx func cenv cx es s1` by
+  `stmt_state_rel H ctx func cenv cx es s1` by
     (simp[Abbr `s1`, stmt_state_rel_jump_to] >>
      irule stmt_state_rel_update_var >>
      fs[stmtSimForLoopTheory.for_code_def]) >>
@@ -300,7 +300,7 @@ Proof
 QED
 
 Theorem for_range_body_ghost_endpoint:
-  ghost_inv d bc cx es (DRESTRICT G (COMPL {dv}))
+  ghost_inv H d bc cx es (DRESTRICT G (COMPL {dv}))
     (step_taint (mk_inst j3 MSTORE [Var p; Var cv] [])
       (jump_to body_lbl (update_var dv 0w s))
       (mstore (w2n a) w (jump_to body_lbl (update_var dv 0w s)))
@@ -311,7 +311,7 @@ Theorem for_range_body_ghost_endpoint:
   tf.t_var = tn.t_var |+ (dv,{}) /\ tf.t_stor = tn.t_stor /\
   tf.t_trans = tn.t_trans /\ tf.t_imm = tn.t_imm /\
   tf.t_mem = tn.t_mem DIFF {i | w2n a <= i /\ i < w2n a+32} ==>
-  ghost_inv d bc cx es (DRESTRICT G (COMPL {dv})) tf
+  ghost_inv H d bc cx es (DRESTRICT G (COMPL {dv})) tf
     ((mstore (w2n a) w (jump_to body_lbl (update_var dv 0w s)))
       with vs_inst_idx := 1)
 Proof
@@ -330,7 +330,7 @@ Proof
      fs[op_taint_def, lookup_var_def, mstore_def, FLOOKUP_DEF,
         pred_setTheory.EXTENSION] >> metis_tac[]) >>
   gvs[] >>
-  qmatch_goalsub_abbrev_tac `ghost_inv _ _ _ _ _ _ s2` >>
+  qmatch_goalsub_abbrev_tac `ghost_inv _ _ _ _ _ _ _ s2` >>
   `s2 = (mstore (w2n a) w (jump_to body_lbl (update_var dv 0w s))) with
       <|vs_prev_bb := s2.vs_prev_bb; vs_current_bb := s2.vs_current_bb;
         vs_inst_idx := 1|>` by simp[Abbr `s2`, mstore_def, jump_to_def] >>
@@ -340,7 +340,7 @@ QED
 Theorem for_range_body_prepare_ptr:
   for_code func cenv bc ty stmts id tyv p sz ainst cv ev dv nv
     cond_lbl exit_lbl body_lbl incr_lbl j1 j2 j3 bbb i1 i2 i3 sb0 sb1 sj /\
-  stmt_state_rel ctx func cenv cx es s /\ ghost_inv d cenv cx es G tn s /\
+  stmt_state_rel H ctx func cenv cx es s /\ ghost_inv H d cenv cx es G tn s /\
   ~ctx_has_dalloca ctx /\ ~s.vs_halted /\
   s.vs_current_bb = cond_lbl /\ s.vs_inst_idx = 0 /\
   lookup_var cv s = SOME (i2w i) /\ lookup_var ev s = SOME z /\ i2w i <> z /\
@@ -357,10 +357,10 @@ Theorem for_range_body_prepare_ptr:
     tf.t_trans = tn.t_trans /\ tf.t_imm = tn.t_imm /\
     tf.t_mem = tn.t_mem DIFF {j | w2n a <= j /\ j < w2n a+32} /\
     gas_path_ptr D 0 ctx func PG G tn s 0 G2 tf (OK s2) /\
-    stmt_state_rel ctx func bc cx
+    stmt_state_rel H ctx func bc cx
       (es with scopes := (FEMPTY |+ (id,
         <|assignable := F; type := tyv; value := IntV i; popped := []|>))::es.scopes) s2 /\
-    ghost_inv d bc cx
+    ghost_inv H d bc cx
       (es with scopes := (FEMPTY |+ (id,
         <|assignable := F; type := tyv; value := IntV i; popped := []|>))::es.scopes)
       G2 tf s2 /\
@@ -375,7 +375,7 @@ Proof
         lookup_scopes_def, compile_env_component_equality] >>
      rpt strip_tac >> Cases_on `name = id` >> gvs[] >> metis_tac[]) >>
   drule_all for_range_body_prepare_ghost >> strip_tac >>
-  qmatch_asmsub_abbrev_tac `ghost_inv d bc cx _ _ _ s2` >>
+  qmatch_asmsub_abbrev_tac `ghost_inv H d bc cx _ _ _ s2` >>
   `32 <= sz` by fs[stmtSimForLoopTheory.for_code_def] >>
   `ptr_covers G tn p s 32` by (fs[ptr_covers_def] >> metis_tac[]) >>
   `dv <> p /\ dv <> cv` by fs[stmtSimForLoopTheory.for_code_def] >>

@@ -45,7 +45,7 @@ QED
 (* The located representation, not an arbitrary ghost-region bound, owns
    the read footprint. Both array layouts have capacity-sized footprints. *)
 Theorem membership_memory_array_child_covers:
-  stmt_state_rel ctx fn cenv cx es s /\
+  stmt_state_rel H ctx fn cenv cx es s /\
   vv_at cenv cx aty sa sb es tvv (LocatedValue ann p) s /\
   ptr_vv_ok cx aty tvv (LocatedValue ann p) es G tn s /\
   p.ptr_location = LocMemory /\
@@ -71,7 +71,7 @@ Proof
 QED
 
 Theorem membership_memory_offset_nonwrap:
-  stmt_state_rel ctx fn cenv cx es s /\
+  stmt_state_rel H ctx fn cenv cx es s /\
   vv_at cenv cx ty sa sb es tvv (LocatedValue ann p) s /\
   p.ptr_location = LocMemory /\
   read_result cx tvv es = (INL v,es) /\
@@ -534,7 +534,7 @@ QED
 (* Discharge all three MLOAD obligations from the original located post;
    only the generated address and the preserved loop frame concern t. *)
 Theorem membership_memory_array_read:
-  stmt_state_rel ctx fn cenv cx es s0 /\
+  stmt_state_rel H ctx fn cenv cx es s0 /\
   vv_at cenv cx aty sc sd es tvv (LocatedValue ann p) s0 /\
   ptr_vv_ok cx aty tvv (LocatedValue ann p) es G0 tn0 s0 /\
   p.ptr_location = LocMemory /\ p.ptr_operand = Var basesrc /\
@@ -583,7 +583,7 @@ Theorem membership_memory_array_element_prefix:
   membership_loop_registers sa i r G tn s /\
   s.vs_current_bb = fresh_label_output "in_body" (sa.cs_next_label+2) /\
   s.vs_inst_idx = 0 /\ not_fresh_at sa basesrc /\
-  stmt_state_rel ctx fn cenv cx es s0 /\
+  stmt_state_rel H ctx fn cenv cx es s0 /\
   vv_at cenv cx aty sc sd es tvv (LocatedValue ann p) s0 /\
   ptr_vv_ok cx aty tvv (LocatedValue ann p) es G0 tn0 s0 /\
   p.ptr_location = LocMemory /\ p.ptr_operand = Var basesrc /\
@@ -642,7 +642,7 @@ Theorem membership_memory_array_element_prefix_source:
   membership_loop_registers sa i r G tn s /\
   s.vs_current_bb = fresh_label_output "in_body" (sa.cs_next_label+2) /\
   s.vs_inst_idx = 0 /\ not_fresh_at early basesrc /\
-  stmt_state_rel ctx fn cenv cx es s0 /\
+  stmt_state_rel H ctx fn cenv cx es s0 /\
   vv_at cenv cx aty sc sd es tvv (LocatedValue ann p) s0 /\
   ptr_vv_ok cx aty tvv (LocatedValue ann p) es G0 tn0 s0 /\
   p.ptr_location = LocMemory /\ p.ptr_operand = Var basesrc /\

@@ -1065,6 +1065,8 @@ Proof
      qpat_x_assum `stmt_state_rel H1 _ _ _ _ _ s0` mp_tac >>
      rpt (qpat_x_assum `stmt_state_rel _ _ _ _ _ _ s0` kall_tac) >>
      strip_tac >>
+     `n < 115792089237316195423570985008687907853269984665640564039457584007913129639936 /\
+      a < 115792089237316195423570985008687907853269984665640564039457584007913129639936` by decide_tac >>
      drule_all (SIMP_RULE (srw_ss() ++ numSimps.ARITH_ss)
        [wordsTheory.dimword_def] slice_calldata_run) >>
      gns[wordsTheory.dimword_def] >> rpt strip_tac >> gvs[]) >>

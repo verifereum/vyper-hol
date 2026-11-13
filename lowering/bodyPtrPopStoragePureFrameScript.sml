@@ -4,7 +4,7 @@ Ancestors
   exprOperandVar exprLoweringProps
 
 Theorem target_post_ghost_kept_compose:
-  target_post ctx func cenv cx es0 sa sm s0 es1 pv vt r t /\
+  target_post H ctx func cenv cx es0 sa sm s0 es1 pv vt r t /\
   ghost_kept cenv es0 sa G0 tn0 s0 G1 tn1 /\
   ghost_kept cenv es1 sm G1 tn1 t G2 tn2 /\
   ci_mono sa sm /\ local_ptrs_rel func cenv es0.scopes s0 /\

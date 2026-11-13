@@ -59,15 +59,15 @@ QED
 
 Theorem tuple_field_add_frame_path_ptr:
   emit_op ADD [Lit slot; Lit off] st = (dst,st') /\
-  stmt_state_rel ctx func cenv cx es s /\ local_ptrs_reserved cenv st /\
-  ghost_inv d cenv cx es G tn s /\ ~ctx_has_dalloca ctx /\
+  stmt_state_rel H ctx func cenv cx es s /\ local_ptrs_reserved cenv st /\
+  ghost_inv H d cenv cx es G tn s /\ ~ctx_has_dalloca ctx /\
   (!x sz. cenv.ce_return_buf = SOME (PtrVar (Var x) sz) ==> not_fresh_at st x) /\
   (!x sz. cenv.ce_return_pc = SOME (PtrVar (Var x) sz) ==> not_fresh_at st x) /\
   fn_has_code st st' func /\ ~s.vs_halted /\
   s.vs_current_bb = st.cs_current_bb /\
   s.vs_inst_idx = LENGTH st.cs_current_insts ==>
-  ?t G' tn'. stmt_state_rel ctx func cenv cx es t /\
-    ghost_inv d cenv cx es G' tn' t /\
+  ?t G' tn'. stmt_state_rel H ctx func cenv cx es t /\
+    ghost_inv H d cenv cx es G' tn' t /\
     eval_operand dst t = SOME (slot+off) /\ op_taint tn' dst = {} /\
     t.vs_memory = s.vs_memory /\ t.vs_allocas = s.vs_allocas /\
     t.vs_labels = s.vs_labels /\
@@ -92,19 +92,19 @@ Theorem tuple_field_storage_head_path_ptr:
   emit_op ADD [Lit slot; Lit off] st = (dst,sp) /\
   compile_store_at_loc cenv.ce_imm_alloca dst op
     (SOME (if tr then LocTransient else LocStorage)) sp = ((),sf) /\
-  stmt_state_rel ctx func cenv cx es s /\ local_ptrs_reserved cenv st /\
-  ghost_inv d cenv cx es G tn s /\ ~ctx_has_dalloca ctx /\
+  stmt_state_rel H ctx func cenv cx es s /\ local_ptrs_reserved cenv st /\
+  ghost_inv H d cenv cx es G tn s /\ ~ctx_has_dalloca ctx /\
   (!x sz. cenv.ce_return_buf = SOME (PtrVar (Var x) sz) ==> not_fresh_at st x) /\
   (!x sz. cenv.ce_return_pc = SOME (PtrVar (Var x) sz) ==> not_fresh_at st x) /\
   eval_operand op s = SOME (typed_val_to_w256 tv v) /\ op_taint tn op = {} /\
   (!x. op = Var x ==> not_fresh_at st x) /\
-  (!u mem. storage_dead cx tr (update_storage (slot+off) u mem) = storage_dead cx tr mem) /\
+  (!u mem. storage_dead H tr (update_storage (slot+off) u mem) = storage_dead H tr mem) /\
   write_storage_slot cx tr (slot+off) tv v es = (INL (),es') /\
   encode_value tv v = SOME [(0,typed_val_to_w256 tv v)] /\
   fn_has_code st sf func /\ ~s.vs_halted /\
   s.vs_current_bb = st.cs_current_bb /\ s.vs_inst_idx = LENGTH st.cs_current_insts ==>
-  ?t G' tn'. stmt_state_rel ctx func cenv cx es' t /\
-    ghost_inv d cenv cx es' G' tn' t /\
+  ?t G' tn'. stmt_state_rel H ctx func cenv cx es' t /\
+    ghost_inv H d cenv cx es' G' tn' t /\
     t.vs_memory = s.vs_memory /\ t.vs_allocas = s.vs_allocas /\
     ~t.vs_halted /\ t.vs_current_bb = sf.cs_current_bb /\
     t.vs_inst_idx = LENGTH sf.cs_current_insts /\ tn'.t_mem = tn.t_mem /\
@@ -121,7 +121,7 @@ Proof
     metis_tac[fn_has_code_split] >>
   drule_all tuple_field_add_frame_path_ptr >>
   disch_then (qspecl_then [`PG`, `D`] strip_assume_tac) >>
-  rename1 `stmt_state_rel ctx func cenv cx es mid` >>
+  rename1 `stmt_state_rel H ctx func cenv cx es mid` >>
   `eval_operand op mid = SOME (typed_val_to_w256 tv v) /\ op_taint tn' op = {}` by
     (Cases_on `op` >> gvs[eval_operand_def, op_taint_def] >> metis_tac[]) >>
   drule_all tuple_storage_store_head_path_ptr >>

@@ -181,7 +181,7 @@ Theorem membership_memory_header_entry:
       comp_return len od) sa = (len,sb) /\ fn_has_code sa sb fn /\
   ~ctx_has_dalloca ctx /\ ~s.vs_halted /\ cap < dimword(:256) /\
   s.vs_current_bb = sa.cs_current_bb /\ s.vs_inst_idx = LENGTH sa.cs_current_insts /\
-  stmt_state_rel ctx fn cenv cx es s /\
+  stmt_state_rel H ctx fn cenv cx es s /\
   vv_at cenv cx aty sc sd es tvv (LocatedValue ann p) s /\
   ptr_vv_ok cx aty tvv (LocatedValue ann p) es G tn s /\
   p.ptr_location = LocMemory /\ p.ptr_operand = Var basesrc /\
@@ -216,7 +216,7 @@ Theorem membership_code_header_entry:
       comp_return len od) sa = (len,sb) /\ fn_has_code sa sb fn /\
   ~ctx_has_dalloca ctx /\ ~s.vs_halted /\ cap < dimword(:256) /\
   s.vs_current_bb = sa.cs_current_bb /\ s.vs_inst_idx = LENGTH sa.cs_current_insts /\
-  stmt_state_rel ctx fn cenv cx es s /\ ~cenv.ce_is_ctor /\
+  stmt_state_rel H ctx fn cenv cx es s /\ ~cenv.ce_is_ctor /\
   immutable_holds cenv cx (ArrayT ety (Dynamic cap)) (Value (ArrayV av)) bw es s /\
   evaluate_type (get_tenv cx) ety = SOME tv /\
   value_has_type (ArrayTV tv (Dynamic cap)) (ArrayV av) /\

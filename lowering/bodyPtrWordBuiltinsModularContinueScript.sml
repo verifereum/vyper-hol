@@ -16,23 +16,23 @@ Theorem word_pow_expr_outcome:
   local_ptrs_reserved cenv sa /\ local_ptrs_reserved cenv sm /\
   ~ctx_has_dalloca ctx /\ ~t0.vs_halted /\
   t0.vs_current_bb = sm.cs_current_bb /\ t0.vs_inst_idx = LENGTH sm.cs_current_insts /\
-  sa.cs_next_var <= sm.cs_next_var /\ ghost_inv d cenv cx ee G tn t0 /\
+  sa.cs_next_var <= sm.cs_next_var /\ ghost_inv H d cenv cx ee G tn t0 /\
   ghost_kept cenv es sa G0 tn0 s0 G tn /\ ee.gas_obs = [] /\
   (!p sz. cenv.ce_return_buf = SOME (PtrVar (Var p) sz) ==> not_fresh_at sa p) /\
   (!p sz. cenv.ce_return_pc = SOME (PtrVar (Var p) sz) ==> not_fresh_at sa p) ==>
-  gas_outcome_ptr (cx_dead cx) (cx_tops cx) (ctx,func) PG
+  gas_outcome_ptr (cx_dead H cx) (cx_tops cx) (ctx,func) PG
     (\vs. (builtin_result cx vs.accounts ann PowMod256 ts [v1;v2],vs))
     (ee,t0,G,tn)
     (\res fin G' tn' u. ?v'. res = INL v' /\
-      expr_post ctx func cenv cx (Builtin ann PowMod256 args)
+      expr_post H ctx func cenv cx (Builtin ann PowMod256 args)
         es sa sb s0 fin v' op u /\
       u.vs_current_bb = sb.cs_current_bb /\ u.vs_inst_idx = LENGTH sb.cs_current_insts /\
-      ghost_inv d cenv cx fin G' tn' u /\ ptr_val_ok cx ann v' op G' tn' u /\
+      ghost_inv H d cenv cx fin G' tn' u /\ ptr_val_ok cx ann v' op G' tn' u /\
       ghost_kept cenv es sa G0 tn0 s0 G' tn')
     (\res fin gt r. expr_exit res r)
 Proof
   strip_tac >>
-  `stmt_state_rel ctx func cenv cx ee t0 /\
+  `stmt_state_rel H ctx func cenv cx ee t0 /\
    eval_operand a t0 = SOME (val_to_w256 v1) /\
    eval_operand b t0 = SOME (val_to_w256 v2)` by gvs[wb_args_post_def] >>
   drule_all word_pow_typed_outcome >> strip_tac >>
@@ -59,23 +59,23 @@ Theorem word_modular_expr_outcome:
   fn_has_code sm sb func /\ local_ptrs_reserved cenv sa /\ local_ptrs_reserved cenv sm /\
   ~ctx_has_dalloca ctx /\ ~t0.vs_halted /\
   t0.vs_current_bb = sm.cs_current_bb /\ t0.vs_inst_idx = LENGTH sm.cs_current_insts /\
-  sa.cs_next_var <= sm.cs_next_var /\ ghost_inv d cenv cx ee G tn t0 /\
+  sa.cs_next_var <= sm.cs_next_var /\ ghost_inv H d cenv cx ee G tn t0 /\
   ghost_kept cenv es sa G0 tn0 s0 G tn /\ ee.gas_obs = [] /\
   (!p sz. cenv.ce_return_buf = SOME (PtrVar (Var p) sz) ==> not_fresh_at sa p) /\
   (!p sz. cenv.ce_return_pc = SOME (PtrVar (Var p) sz) ==> not_fresh_at sa p) ==>
-  gas_outcome_ptr (cx_dead cx) (cx_tops cx) (ctx,func) PG
+  gas_outcome_ptr (cx_dead H cx) (cx_tops cx) (ctx,func) PG
     (\vs. (builtin_result cx vs.accounts ann (if is_mul then MulMod else AddMod) ts [v1;v2;v3],vs))
     (ee,t0,G,tn)
     (\res fin G' tn' u. ?v'. res = INL v' /\
-      expr_post ctx func cenv cx (Builtin ann (if is_mul then MulMod else AddMod) args)
+      expr_post H ctx func cenv cx (Builtin ann (if is_mul then MulMod else AddMod) args)
         es sa sb s0 fin v' op u /\
       u.vs_current_bb = sb.cs_current_bb /\ u.vs_inst_idx = LENGTH sb.cs_current_insts /\
-      ghost_inv d cenv cx fin G' tn' u /\ ptr_val_ok cx ann v' op G' tn' u /\
+      ghost_inv H d cenv cx fin G' tn' u /\ ptr_val_ok cx ann v' op G' tn' u /\
       ghost_kept cenv es sa G0 tn0 s0 G' tn')
     (\res fin gt r. expr_exit res r)
 Proof
   strip_tac >>
-  `stmt_state_rel ctx func cenv cx ee t0 /\
+  `stmt_state_rel H ctx func cenv cx ee t0 /\
    eval_operand a t0 = SOME (val_to_w256 v1) /\
    eval_operand b t0 = SOME (val_to_w256 v2) /\
    eval_operand c t0 = SOME (val_to_w256 v3)` by gvs[wb_args_post_def] >>

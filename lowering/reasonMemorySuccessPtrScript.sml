@@ -7,10 +7,10 @@ Ancestors bodyPtrDefs exprSimUnwrap exprSimUnwrapProps loweringPosts
   exprOperandVar exprLoweringProps reasonResourcesPtr context
 
 Theorem reason_stack_read_post_ptr:
-  vv_post ctx func cenv cx e es sa sb s0 ee tv (StackValue ty op) s /\
+  vv_post H ctx func cenv cx e es sa sb s0 ee tv (StackValue ty op) s /\
   ptr_vv_ok cx (expr_type e) tv (StackValue ty op) ee G tn s /\
   read_result cx tv ee = (INL v,ee) ==>
-  expr_post ctx func cenv cx e es sa sb s0 ee v op s /\
+  expr_post H ctx func cenv cx e es sa sb s0 ee v op s /\
   ptr_val_ok cx (expr_type e) v op G tn s
 Proof
   strip_tac >> drule vv_post_read_result >> strip_tac >>
@@ -29,11 +29,11 @@ Proof
 QED
 
 Theorem reason_memory_read_post_ptr:
-  vv_post ctx func cenv cx e es sa sb s0 ee tv (LocatedValue ty p) s /\
+  vv_post H ctx func cenv cx e es sa sb s0 ee tv (LocatedValue ty p) s /\
   ptr_vv_ok cx (expr_type e) tv (LocatedValue ty p) ee G tn s /\
   p.ptr_location = LocMemory /\ ~is_word_type ty /\
   read_result cx tv ee = (INL v,ee) ==>
-  expr_post ctx func cenv cx e es sa sb s0 ee v p.ptr_operand s /\
+  expr_post H ctx func cenv cx e es sa sb s0 ee v p.ptr_operand s /\
   ptr_val_ok cx (expr_type e) v p.ptr_operand G tn s
 Proof
   strip_tac >>
@@ -94,12 +94,12 @@ QED
 
 Theorem reason_identity_read_post_ptr:
   reason_vv_ok vv /\
-  vv_post ctx func cenv cx e es sa sb s0 ee tv vv s /\
+  vv_post H ctx func cenv cx e es sa sb s0 ee tv vv s /\
   ptr_vv_ok cx (expr_type e) tv vv ee G tn s /\
   read_result cx tv ee = (INL v,ee) ==>
   ?op. reason_vv vv = SOME op /\
     (!st. unwrap_value cenv vv st = (op,st)) /\
-    expr_post ctx func cenv cx e es sa sb s0 ee v op s /\
+    expr_post H ctx func cenv cx e es sa sb s0 ee v op s /\
     ptr_val_ok cx (expr_type e) v op G tn s
 Proof
   strip_tac >> gvs[reason_vv_ok_def] >>
@@ -118,15 +118,15 @@ Theorem reason_memory_success_path_ptr:
     (type_memory_bytes cenv (expr_type r)) sm = ((),sb) /\
   fn_has_code sm sb func /\ local_ptrs_reserved cenv sa /\
   ~ctx_has_dalloca ctx /\ ~cenv.ce_is_ctor /\ fn_inst_ids_distinct func /\
-  vv_post ctx func cenv cx r es sa sm s0 ee tv vv t /\
-  ghost_inv d cenv cx ee G tn t /\
+  vv_post H ctx func cenv cx r es sa sm s0 ee tv vv t /\
+  ghost_inv H d cenv cx ee G tn t /\
   ptr_vv_ok cx (expr_type r) tv vv ee G tn t /\
   read_result cx tv ee = (INL (StringV str),ee) /\
   (?gin gout. eval_expr cx r (es with gas_obs := gin) =
     (INL tv, ee with gas_obs := gout)) /\
   ~t.vs_halted /\ t.vs_current_bb = sm.cs_current_bb /\
   t.vs_inst_idx = LENGTH sm.cs_current_insts ==>
-  ?Gf tnf u. gas_path_ptr (cx_dead cx) 0 ctx func PG G tn t 0 Gf tnf
+  ?Gf tnf u. gas_path_ptr (cx_dead H cx) 0 ctx func PG G tn t 0 Gf tnf
     (Abort Revert_abort u)
 Proof
   strip_tac >>
@@ -157,7 +157,7 @@ Proof
   `MAP FDOM es.scopes = MAP FDOM ee.scopes` by
     (irule reason_success_scopes >> metis_tac[]) >>
   qpat_x_assum `op = Var src` SUBST_ALL_TAC >>
-  drule_at (Pat `expr_post _ _ _ _ _ _ _ _ _ _ _ _ _`)
+  drule_at (Pat `expr_post _ _ _ _ _ _ _ _ _ _ _ _ _ _`)
     (REWRITE_RULE [GSYM AND_IMP_INTRO] reason_memory_encoder_path_ptr) >>
   rpt (disch_then drule) >>
   simp[is_word_type_def]

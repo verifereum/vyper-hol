@@ -6,7 +6,7 @@ Ancestors
   vyperAST vyperInterpreter vyperTyping valueEncoding
   vyperTypeSystem compileEnv context vyperState exprSimDefs
   vyperValueOperation venomState vyperValue loweringSlice
-  vyperTypeCallGraph gasSummary fragGasPathMem
+  vyperTypeCallGraph gasSummary fragGasPathMem fragGasMode
 
 (* Prior successful uncounted proof and private tactic, retained for reference.
 val literal_word_mem_tac =

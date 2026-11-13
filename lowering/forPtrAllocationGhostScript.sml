@@ -6,7 +6,7 @@ Ancestors forPtrAllocation allocationPtr exprSimPtrLiteralBuffer
   loweringPosts ptrDiscipline exprLoweringProps
 
 Theorem for_local_value_region:
-  stmt_state_rel ctx fn cenv cx es s /\
+  stmt_state_rel H ctx fn cenv cx es s /\
   lookup_scopes name es.scopes = SOME entry /\
   FLOOKUP cenv.ce_vars name = SOME (PtrVar (Var p) sz) /\
   lookup_var p s = SOME w ==>
@@ -24,7 +24,7 @@ Proof
 QED
 
 Theorem for_alloca_local_robust:
-  stmt_state_rel ctx fn cenv cx es s /\ fn_inst_ids_distinct fn /\
+  stmt_state_rel H ctx fn cenv cx es s /\ fn_inst_ids_distinct fn /\
   MEM (mk_inst id ALLOCA [Lit (n2w n)] [out]) (fn_insts fn) /\
   not_local_ptr cenv es.scopes out /\ n < dimword (:256) /\
   step_inst_base (mk_inst id ALLOCA [Lit (n2w n)] [out]) s = OK u /\
@@ -58,13 +58,13 @@ Proof
 QED
 
 Theorem for_alloca_ghost_inv:
-  stmt_state_rel ctx fn cenv cx es s /\ fn_inst_ids_distinct fn /\
+  stmt_state_rel H ctx fn cenv cx es s /\ fn_inst_ids_distinct fn /\
   MEM (mk_inst id ALLOCA [Lit (n2w n)] [out]) (fn_insts fn) /\
   not_local_ptr cenv es.scopes out /\ n < dimword (:256) /\
   (!q. cenv.ce_return_buf <> SOME (PtrVar (Var out) q)) /\
   step_inst_base (mk_inst id ALLOCA [Lit (n2w n)] [out]) s = OK u /\
-  ghost_inv d cenv cx es G tn s ==>
-  ghost_inv d cenv cx es
+  ghost_inv H d cenv cx es G tn s ==>
+  ghost_inv H d cenv cx es
     (step_prov PG G (mk_inst id ALLOCA [Lit (n2w n)] [out]) u)
     (step_taint (mk_inst id ALLOCA [Lit (n2w n)] [out]) s u tn) u
 Proof

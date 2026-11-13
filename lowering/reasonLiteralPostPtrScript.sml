@@ -73,7 +73,7 @@ Theorem reason_literal_memory_vv_frame_post:
   val_in_memory (BaseTV (StringT ml)) (StringV str) b t.vs_memory /\
   val_footprint (BaseTV (StringT ml)) (StringV str) <= 32+32*word_size ml /\
   LENGTH str <= ml /\ b < dimword (:256) /\
-  stmt_state_rel ctx func cenv cx es u /\ local_ptrs_reserved cenv sa /\
+  stmt_state_rel H ctx func cenv cx es u /\ local_ptrs_reserved cenv sa /\
   (!x. not_fresh_at sa x ==> not_fresh_at sh x) /\
   (!x. not_fresh_at sa x ==> lookup_var x u = lookup_var x s) /\
   (t with <|vs_vars := u.vs_vars; vs_memory := u.vs_memory|>) = u /\
@@ -93,7 +93,7 @@ Theorem reason_literal_memory_vv_frame_post:
     regions_disjoint b (32+32*word_size ml) a len) /\
   buf.buf_operand = Var p /\ lookup_var p t = SOME (n2w b) /\
   sa.cs_next_id < sb.cs_next_id ==>
-  vv_post ctx func cenv cx (Literal (BaseT (StringT ml)) (StringL str))
+  vv_post H ctx func cenv cx (Literal (BaseT (StringT ml)) (StringL str))
     es sa sb s es (Value (StringV str))
     (LocatedValue (BaseT (StringT ml)) (base_ptr buf))
     (t with vs_inst_idx := LENGTH sb.cs_current_insts)
@@ -135,14 +135,14 @@ QED
 Theorem reason_literal_buffer_source_post:
   compile_bytelike_literal (MAP (n2w o ORD) str) ml sa = (buf,sb) /\
   expr_body_pre cenv cx env (Literal (BaseT (StringT ml)) (StringL str)) es /\
-  stmt_state_rel ctx func cenv cx es s /\ fn_has_code sa sb func /\
+  stmt_state_rel H ctx func cenv cx es s /\ fn_has_code sa sb func /\
   fn_inst_ids_distinct func /\ local_ptrs_reserved cenv sa /\
   ~ctx_has_dalloca ctx /\ 32+32*word_size ml < dimword (:256) ==>
   ?t p G' tn'.
     run_inst_seq (emitted_insts sa sb) s = OK t /\
     inst_seq_ptr D 0 ctx func PG G tn (emitted_insts sa sb) s G' tn' /\
     buf.buf_operand = Var p /\
-    expr_post ctx func cenv cx (Literal (BaseT (StringT ml)) (StringL str))
+    expr_post H ctx func cenv cx (Literal (BaseT (StringT ml)) (StringL str))
       es sa sb s es (StringV str) (Var p)
       (t with vs_inst_idx := LENGTH sb.cs_current_insts) /\
     ptr_val_ok cx (BaseT (StringT ml)) (StringV str) (Var p) G' tn'
@@ -166,7 +166,7 @@ QED
 Resume reason_literal_buffer_source_post[post]:
   `val_footprint (BaseTV (StringT ml)) (StringV str) <= 32+32*word_size ml`
     by decide_tac >>
-  `vv_post ctx func cenv cx (Literal (BaseT (StringT ml)) (StringL str))
+  `vv_post H ctx func cenv cx (Literal (BaseT (StringT ml)) (StringL str))
     es sa sb s es (Value (StringV str))
     (LocatedValue (BaseT (StringT ml)) (base_ptr buf))
     (t with vs_inst_idx := LENGTH sb.cs_current_insts)` by

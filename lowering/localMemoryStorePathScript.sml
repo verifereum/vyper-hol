@@ -96,6 +96,11 @@ Theorem local_memory_store_path:
           (es with scopes :=
              pre ++ (env |+ (id, entry with <|value := v; popped := []|>)) ::
              rest) t /\
+        (!H'. stmt_state_rel H' ctx func cenv cx es s ==>
+           stmt_state_rel H' ctx func cenv cx
+             (es with scopes :=
+                pre ++ (env |+ (id, entry with <|value := v; popped := []|>)) ::
+                rest) t) /\
         ~t.vs_halted /\ t.vs_current_bb = sb.cs_current_bb /\
         t.vs_inst_idx = LENGTH sb.cs_current_insts /\
         (!x. not_fresh_at sa x ==> lookup_var x t = lookup_var x s) /\
@@ -148,8 +153,12 @@ Proof
      decide_tac) >>
   `memory_value_rel entry.type v (w2n w) t.vs_memory` by
     (irule val_in_memory_memory_value_rel >> simp[]) >>
-  `stmt_state_rel H ctx func cenv cx es1 t` by
-    (drule_all stmt_state_rel_write_local >> simp[Abbr `es1`]) >>
+  `!H'. stmt_state_rel H' ctx func cenv cx es s ==>
+        stmt_state_rel H' ctx func cenv cx es1 t` by
+    (gen_tac >> strip_tac >>
+     qpat_x_assum `stmt_state_rel H _ _ _ _ _ _` kall_tac >>
+     drule_all stmt_state_rel_write_local >> simp[Abbr `es1`]) >>
+  `stmt_state_rel H ctx func cenv cx es1 t` by (first_assum drule >> simp[]) >>
   `t.vs_allocas = s.vs_allocas` by
     (qpat_x_assum `t with <|vs_vars := _; vs_memory := _|> = s` mp_tac >>
      simp[venom_state_component_equality]) >>
@@ -177,6 +186,20 @@ Proof
   qpat_x_assum `t with <|vs_vars := _; vs_memory := _|> = s` mp_tac >>
   simp[venom_state_component_equality] >>
   strip_tac >> gvs[same_blocks_def, lookup_var_def] >>
+  conj_tac
+  >- (gen_tac >> strip_tac >>
+      qpat_x_assum `stmt_state_rel H _ _ _ _ _ _` kall_tac >>
+      `t with <|vs_vars := s.vs_vars; vs_memory := s.vs_memory|> = s` by
+        fs[venom_state_component_equality] >>
+      `lookup_var p s = SOME w` by simp[lookup_var_def] >>
+      `!q. ~not_local_ptr cenv es.scopes q ==> lookup_var q t = lookup_var q s` by
+        simp[lookup_var_def] >>
+      `!b n. b + n <= w2n w \/ w2n w + type_memory_size entry.type <= b ==>
+             mem_bytes_at b n t.vs_memory = mem_bytes_at b n s.vs_memory` by
+        (rpt strip_tac >>
+         qpat_x_assum `!a len. a + len <= w2n w \/ type_memory_size _ + w2n w <= a ==> _`
+           irule >> decide_tac) >>
+      drule_all stmt_state_rel_write_local >> simp[Abbr `es1`]) >>
   conj_tac >- first_assum ACCEPT_TAC >>
   irule alloca_frame_same_state >> goal_assum (drule_at Any) >> simp[]
 QED
@@ -218,9 +241,9 @@ Proof
   disch_then (qx_choosel_then [`s1`, `w`] strip_assume_tac) >>
   `w2n w + sz < dimword (:256)` by
     (`alloca_room ctx func s1 /\ alloca_next_valid s1` by
-       (gvs[stmt_state_rel_def, venomMemDefsTheory.alloca_inv_def] >>
-        qpat_x_assum `!H'. _ ==> state_rel H' _ _ _ _ s1 /\ _`
-          (qspec_then `H` mp_tac) >> simp[]) >>
+       (qpat_x_assum `!H. valid_horizon _ _ H _ ==> stmt_state_rel H _ _ _ _ _ s1`
+          (drule_then assume_tac) >>
+        gvs[stmt_state_rel_def, venomMemDefsTheory.alloca_inv_def]) >>
      drule alloca_room_next_lt >>
      fs[venomMemDefsTheory.alloca_next_valid_def] >>
      first_x_assum (drule_then assume_tac) >> decide_tac) >>
@@ -309,5 +332,5 @@ Theorem alloc_copy_memory_framed_path:
 Proof
   rpt gen_tac >>
   disch_then (strip_assume_tac o MATCH_MP alloc_copy_memory_framed_bounded_path) >>
-  qexistsl_tac [`s2`, `w`] >> rpt conj_tac >> first_assum ACCEPT_TAC
+  qexistsl_tac [`s2`, `w`] >> asm_rewrite_tac[]
 QED

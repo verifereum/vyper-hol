@@ -6,8 +6,8 @@ Ancestors
 Theorem stmt_frag_ptr_normal_post:
   stmt_lands lctx sb (INL ()) t /\ ~t.vs_halted /\
   ~block_is_terminated sb /\ cenv_top_ext cenv cenv' ee.scopes /\
-  stmt_state_rel ctx func cenv' cx ee t /\
-  ghost_inv d cenv' cx ee G tn t /\
+  stmt_state_rel H ctx func cenv' cx ee t /\
+  ghost_inv H d cenv' cx ee G tn t /\
   (!x w. not_fresh_at sa x /\ lookup_var x s0 = SOME w ==>
          lookup_var x t = SOME w) /\
   (!x. not_fresh_at sa x ==>
@@ -17,8 +17,8 @@ Theorem stmt_frag_ptr_normal_post:
     stmt_lands lctx sb (INL ()) t /\ ~t.vs_halted /\
     (INL () = INL () ==> ~block_is_terminated sb /\ cenv'' = cenv') /\
     cenv_top_ext cenv cenv'' ee.scopes /\
-    stmt_state_rel ctx func cenv'' cx ee t /\
-    ghost_inv d cenv'' cx ee G tn t /\
+    stmt_state_rel H ctx func cenv'' cx ee t /\
+    ghost_inv H d cenv'' cx ee G tn t /\
     (!x w. not_fresh_at sa x /\ lookup_var x s0 = SOME w ==>
            lookup_var x t = SOME w) /\
     (!x. not_fresh_at sa x ==>
