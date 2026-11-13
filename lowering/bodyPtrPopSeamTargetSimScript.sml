@@ -4,7 +4,7 @@
  * reaches: a target meeting target_pre whose indices have their pointer
  * judgments (body_base_target_ptr_ok), rooted at a local whose base path
  * every index leaves live (local_target_live), or at a storage or
- * transient variable through pure indices, has target_sim_ptr.
+ * transient variable, has target_sim_ptr.
  *
  * TOP-LEVEL:
  *   body_target_sim_ptr
@@ -34,11 +34,10 @@ Ancestors
      local (whatever its tainted bytes hold) then makes that word
      untainted.  The element's or field's pointer is an ADD on the base's
      pointer, so it keeps the local's site (target_ptr_ok).
-   - For a storage root, pure indices leave storage alone
-     (targetPlaceLive's nested_pop_eval_base_pure_state,
-     nested_pop_eval_base_live), so the length slot the bounds check reads
-     is live and stor_taint_ok makes it untainted; a mapping's slot is a
-     SHA3 output, with no provenance.
+   - A captured storage place retains its declared-capacity region after
+     index effects. Well-formed storage at the index's endpoint makes
+     its current length slot live, and stor_taint_ok makes it untainted;
+     a mapping's slot is a SHA3 output, with no provenance.
    - bodyPtrPopTargetFactor has the eval_base_place and
      compile_get_target_ptr cuts at a subscript. *)
 Theorem body_target_sim_ptr:
@@ -46,16 +45,18 @@ Theorem body_target_sim_ptr:
     body_inv tops ctx cenv cx /\
     body_base_target_ptr_ok cx bt /\
     target_pre cenv cx env bt es /\
-    (!id. target_root bt = NameTarget id ==> local_target_live cx id bt) /\
-    (!src id. target_root bt = TopLevelNameTarget (src,id) ==>
-              EVERY pure_expr (target_indices bt)) ==>
+    (!id. target_root bt = NameTarget id ==> local_target_live cx id bt) ==>
     target_sim_ptr d ctx PG func cenv cx env bt es
 Proof
   recInduct base_assignment_target_induct >> rpt conj_tac >> rpt gen_tac >> strip_tac
   >- (irule target_name_sim_ptr >> simp[])
   >- (rename1 `TopLevelNameTarget ns` >> PairCases_on `ns` >> irule target_toplevel_sim_ptr >> simp[])
-  >- (rpt gen_tac >> strip_tac >> drule_all target_subscript_ptr_premises >> strip_tac >>
-      irule target_subscript_sim_ptr >> simp[target_root_def] >> metis_tac[]) >>
-  rpt gen_tac >> strip_tac >> drule_all target_attribute_ptr_premises >> strip_tac >>
-  irule target_attribute_sim_ptr >> metis_tac[]
+  >- (rpt gen_tac >> strip_tac >>
+      irule target_subscript_sim_ptr >> simp[target_root_def] >>
+      fs[body_base_target_ptr_ok_def, target_pre_def, immutable_root_def,
+         target_root_def, target_indices_pre_def, local_target_live_def] >>
+      metis_tac[]) >>
+  rpt gen_tac >> strip_tac >> irule target_attribute_sim_ptr >>
+  fs[body_base_target_ptr_ok_def, target_pre_def, immutable_root_def,
+     target_root_def, target_indices_pre_def, local_target_live_def] >> metis_tac[]
 QED
