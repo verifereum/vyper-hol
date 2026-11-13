@@ -214,13 +214,13 @@ Theorem aggregate_tuple_child_outcome_mem:
   expr_body_pre ce cx env e es /\
   compile_expr ce (expr_type e) e sa = (vv,sb) /\
   fn_has_code sa sb func /\ fn_inst_ids_distinct func /\
-  local_ptrs_reserved ce sa /\ stmt_state_rel ctx func ce cx es s0 /\
+  local_ptrs_reserved ce sa /\ stmt_state_rel H ctx func ce cx es s0 /\
   alloca_history func s0 /\
   ~s0.vs_halted /\ s0.vs_current_bb = sa.cs_current_bb /\
   s0.vs_inst_idx = LENGTH sa.cs_current_insts ==>
   gas_outcome T (cx_tops cx) (ctx,func) (eval_expr cx e) (es,s0)
     (\res ee t. ?tv. res = INL tv /\
-      vv_post ctx func ce cx e es sa sb s0 ee tv vv t /\
+      vv_post H ctx func ce cx e es sa sb s0 ee tv vv t /\
       vv_store_bound cx (expr_type e) (lowered_value_type ce e) ee tv vv t /\
       t.vs_current_bb = sb.cs_current_bb /\
       t.vs_inst_idx = LENGTH sb.cs_current_insts /\
@@ -236,8 +236,8 @@ QED
 
 Theorem aggregate_mem_tuple_local_region_backward:
   MAP FDOM es.scopes = MAP FDOM es1.scopes /\
-  stmt_state_rel ctx func ce cx es s0 /\ local_ptrs_reserved ce sa /\
-  vv_post ctx func ce cx e es sa sb s0 es1 tv vv s1 /\
+  stmt_state_rel H ctx func ce cx es s0 /\ local_ptrs_reserved ce sa /\
+  vv_post H ctx func ce cx e es sa sb s0 es1 tv vv s1 /\
   local_region ce es1.scopes s1 name b sz ==>
   local_region ce es.scopes s0 name b sz
 Proof

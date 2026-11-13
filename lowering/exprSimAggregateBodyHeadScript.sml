@@ -20,7 +20,7 @@ Theorem aggregate_body_tuple_head_path:
   expr_body_pre ce cx env e es /\
   gas_marked_exec F (ctx,func) (eval_expr cx e) (es,s0)
     marks (INL tvv) mid (OK r) /\
-  vv_post ctx func ce cx e es sa sm s0 (mid with gas_obs := []) tvv vv r /\
+  vv_post H ctx func ce cx e es sa sm s0 (mid with gas_obs := []) tvv vv r /\
   (int_calls_expr e <> [] /\ lowered_value_type ce e <> expr_type e ==>
     acyclic_struct_metadata ce.ce_struct_fields) /\
   fn_has_code sa st func /\ fn_inst_ids_distinct func /\
@@ -38,7 +38,7 @@ Theorem aggregate_body_tuple_head_path:
       | SOME imms => get_source_immutables ce.ce_module imms) name =
       SOME (itv,iv) ==>
     regions_disjoint io (type_memory_size itv) (b+off) (type_memory_size tv)) /\
-  stmt_state_rel ctx func ce cx es s0 /\
+  stmt_state_rel H ctx func ce cx es s0 /\
   ~r.vs_halted /\ r.vs_current_bb = sm.cs_current_bb /\
   r.vs_inst_idx = LENGTH sm.cs_current_insts ==>
   ?v q.
@@ -49,7 +49,7 @@ Theorem aggregate_body_tuple_head_path:
     ~q.vs_halted /\ q.vs_current_bb = st.cs_current_bb /\
     q.vs_inst_idx = LENGTH st.cs_current_insts /\
     val_in_memory tv v (b+off) q.vs_memory /\
-    stmt_state_rel ctx func ce cx (mid with gas_obs := []) q /\
+    stmt_state_rel H ctx func ce cx (mid with gas_obs := []) q /\
     (!z a. not_fresh_at sa z /\ lookup_var z s0 = SOME a ==>
       lookup_var z q = SOME a) /\
     (!aid a. FLOOKUP s0.vs_allocas aid = SOME a ==>
@@ -122,11 +122,11 @@ Resume aggregate_body_tuple_head_path[store]:
   `type_memory_bytes ce (expr_type e) = type_memory_size tv` by
     metis_tac[expr_sim_inv_memory_size, expr_body_pre_def] >>
   `type_memory_size tv < dimword (:256)` by decide_tac >>
-  `stmt_state_rel ctx func ce cx (mid with gas_obs := []) q /\
+  `stmt_state_rel H ctx func ce cx (mid with gas_obs := []) q /\
    FLOOKUP q.vs_allocas inst.inst_id = SOME (b,asz)` by fs[vv_post_def] >>
   `lookup_var y q = SOME (n2w (b+off))` by
     fs[eval_operand_def, wordsTheory.word_add_n2w] >>
-  `stmt_state_rel ctx func ce cx mid q /\ not_local_ptr ce mid.scopes x` by
+  `stmt_state_rel H ctx func ce cx mid q /\ not_local_ptr ce mid.scopes x` by
     (conj_tac
      >- (fs[stmt_state_rel_def, state_rel_gas_obs, immutable_alloca_sep_def] >>
          metis_tac[]) >>
@@ -162,7 +162,7 @@ Resume aggregate_body_tuple_head_path[store]:
   `fn_has_code sn su func /\ fn_has_code su st func` by
     metis_tac[fn_has_code_split] >>
   drule_all unwrap_value_body_rebased_path >> strip_tac >>
-  drule_at (Pat `expr_post _ _ _ _ _ _ _ _ _ _ _ _ _`)
+  drule_at (Pat `expr_post H _ _ _ _ _ _ _ _ _ _ _ _ _`)
     (Q.INST [`sa` |-> `sa`, `sm` |-> `sn`]
       (SPEC_ALL aggregate_store_body_rebased_slice_path)) >>
   disch_then (drule_at (Pat `compile_store_memory _ _ _ _ _ _ = _`)) >>
@@ -200,7 +200,7 @@ Resume aggregate_body_tuple_head_path[store]:
   conj_tac
   >- (rpt strip_tac >> (
       `mem_bytes_at p n q.vs_memory = mem_bytes_at p n s0.vs_memory` by
-        (qpat_x_assum `vv_post _ _ _ _ _ _ _ sn _ _ _ _ q`
+        (qpat_x_assum `vv_post H _ _ _ _ _ _ _ sn _ _ _ _ q`
            (strip_assume_tac o REWRITE_RULE [vv_post_def]) >>
          qpat_x_assum `!aid off sz. _` irule >>
          conj_tac >- metis_tac[arithmeticTheory.ADD_COMM] >>
@@ -223,7 +223,7 @@ Resume aggregate_body_tuple_head_path[store]:
          simp[] >> disch_then irule >> simp[] >>
          metis_tac[expr_body_pre_def]) >>
       `mem_bytes_at b asz q.vs_memory = mem_bytes_at b asz s0.vs_memory` by
-        (qpat_x_assum `vv_post _ _ _ _ _ _ _ sn _ _ _ _ q`
+        (qpat_x_assum `vv_post H _ _ _ _ _ _ _ sn _ _ _ _ q`
            (strip_assume_tac o REWRITE_RULE [vv_post_def]) >>
          qpat_x_assum `!aid off sz. _` irule >>
          conj_tac >- metis_tac[arithmeticTheory.ADD_COMM] >>

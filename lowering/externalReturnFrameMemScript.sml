@@ -24,7 +24,7 @@ val _ = Parse.hide "body";
    The first conjunct places a valued return's value code before the rest
    of its sequence.
    Return NONE from its start s0; Return e once e's value is in place
-   (expr_post at t), through the rest of the sequence: optional
+   (expr_post H at t), through the rest of the sequence: optional
    normalization into a fresh buffer, then the raw, word, static-copy or
    ABI-encoder return. *)
 Theorem external_frame_ret_run_mem:
@@ -63,7 +63,7 @@ Theorem external_frame_ret_run_mem:
        stmt_env cenv' lctx ret (Return NONE) sa = (cenv'', sb) /\
        fn_has_code sa sb func /\ fn_inst_ids_distinct func /\
        local_ptrs_reserved cenv' sa /\ ~block_is_terminated sa /\
-       stmt_state_rel unit.cu_context func cenv'
+       stmt_state_rel H unit.cu_context func cenv'
          (initial_evaluation_context am.sources am.layouts tx NONE) es s0 /\
        alloca_history func s0 /\ ~s0.vs_halted /\
        s0.vs_current_bb = sa.cs_current_bb /\
@@ -83,12 +83,12 @@ Theorem external_frame_ret_run_mem:
        lower_value compile_expr cenv' ret e sa = (op, s1) /\
        fn_has_code sa sb func /\ fn_inst_ids_distinct func /\
        local_ptrs_reserved cenv' sa /\ ~block_is_terminated sa /\
-       stmt_state_rel unit.cu_context func cenv'
+       stmt_state_rel H unit.cu_context func cenv'
          (initial_evaluation_context am.sources am.layouts tx NONE) es s0 /\
        alloca_history func s0 /\ ~s0.vs_halted /\
        s0.vs_current_bb = sa.cs_current_bb /\
        s0.vs_inst_idx = LENGTH sa.cs_current_insts /\
-       expr_post unit.cu_context func cenv'
+       expr_post H unit.cu_context func cenv'
          (initial_evaluation_context am.sources am.layouts tx NONE)
          e es sa s1 s0 ee v op t /\
        expr_store_bound

@@ -88,7 +88,7 @@ Definition intcall_entry_def:
       (int_calls_stmts ss) /\
     es1.scopes = [penv] /\
     gas_admissible (intcall_rest cx name mut nr ss prev rtv) expr_vv_res_ok es1 /\
-    stmt_state_rel ctx func cenv cx (es1 with scopes := prev) t /\
+    stmt_state_rel H ctx func cenv cx (es1 with scopes := prev) t /\
     expr_sim_inv cenv cx tenv (es1 with scopes := prev) /\
     (!x w. not_fresh_at sa x /\ lookup_var x s0 = SOME w ==>
            lookup_var x t = SOME w) /\
@@ -154,7 +154,7 @@ Definition intcall_entry_def:
           (lbl',ce,params,has_rb,is_nr,key,trans,view,ctor,imm_len',ss',rt) ==>
         lbl' = lbl /\ (has_rb <=> rc = 0 /\ 0 < rbs) /\
         (ce.ce_is_ctor ==> IS_SOME (FLOOKUP t.vs_labels "runtime_begin")) /\
-        state_rel func ce cx (es1 with scopes := []) t /\
+        state_rel H func ce cx (es1 with scopes := []) t /\
         internal_immutable_regions ce cx es1 t.vs_alloca_next /\
         internal_args_rel ce params penv (if has_rb then 1 else 0) argv
           t.vs_alloca_next t.vs_memory /\
@@ -199,7 +199,7 @@ Definition intcall_callee_exit_def:
     expr_exit res r \/
     ?v ir s'.
       res = INL v /\ r = IntRet ir s' /\
-      state_rel func cenv cx (ee with scopes := []) s' /\
+      state_rel H func cenv cx (ee with scopes := []) s' /\
       intret_vals_match rtv v ir.iret_values /\
       LENGTH ir.iret_values = rc /\ ir.iret_adopt_fmp = NONE /\
       (!b sz. b + sz <= t.vs_alloca_next /\
@@ -228,7 +228,7 @@ Theorem intcall_args_frame_setup:
     local_ptrs_reserved cenv sa /\
     gas_admissible (eval_expr cx (Call ann (IntCall (NONE,name)) es dflt))
       expr_vv_res_ok es0 /\
-    stmt_state_rel ctx func cenv cx es0 s0 /\ ~s0.vs_halted /\
+    stmt_state_rel H ctx func cenv cx es0 s0 /\ ~s0.vs_halted /\
     s0.vs_current_bb = sa.cs_current_bb /\
     s0.vs_inst_idx = LENGTH sa.cs_current_insts /\
     (!res ee r. expr_exit res r ==> R res ee r) /\
@@ -310,7 +310,7 @@ Theorem intcall_return_restore:
     gas_outcome F (cx_tops cx) (ctx,func) (intcall_rest cx name mut nr ss prev rtv)
       (es1,t)
       (\res ee t'. ?tv. res = INL tv /\
-         vv_post ctx func cenv cx (Call ann (IntCall (NONE,name)) es dflt)
+         vv_post H ctx func cenv cx (Call ann (IntCall (NONE,name)) es dflt)
            es0 sa sb s0 ee tv vv t' /\
          t'.vs_current_bb = sb.cs_current_bb /\
          t'.vs_inst_idx = LENGTH sb.cs_current_insts)

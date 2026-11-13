@@ -42,14 +42,14 @@ Theorem aggregate_body_make_tuple_sim:
        SOME (itv,iv) ==>
      regions_disjoint io (type_memory_size itv) (b+off)
        (type_memory_size_list tvs)) /\
-  stmt_state_rel ctx func ce cx es s0 /\ ~s0.vs_halted /\
+  stmt_state_rel H ctx func ce cx es s0 /\ ~s0.vs_halted /\
   s0.vs_current_bb = sa.cs_current_bb /\
   s0.vs_inst_idx = LENGTH sa.cs_current_insts ==>
   out = Var x /\
   gas_outcome F (cx_tops cx) (ctx,func) (eval_exprs cx args) (es,s0)
     (\res es' r. ?vs. res = INL vs /\ r.vs_current_bb = sb.cs_current_bb /\
       r.vs_inst_idx = LENGTH sb.cs_current_insts /\ expr_sim_inv ce cx env es' /\
-      stmt_state_rel ctx func ce cx es' r /\
+      stmt_state_rel H ctx func ce cx es' r /\
       tuple_in_memory vs tvs (b+off) r.vs_memory /\
       (!z w. not_fresh_at sa z /\ lookup_var z s0 = SOME w ==>
         lookup_var z r = SOME w) /\
@@ -111,7 +111,7 @@ Proof
     metis_tac[expr_body_pre_vv_gas_admissible] >>
   `gas_outcome F (cx_tops cx) (ctx,func) (eval_expr cx h) (es,s0)
     (\res ee t. ?tv. res = INL tv /\
-      vv_post ctx func ce cx h es sa sm s0 ee tv vv t /\
+      vv_post H ctx func ce cx h es sa sm s0 ee tv vv t /\
       t.vs_current_bb = sm.cs_current_bb /\
       t.vs_inst_idx = LENGTH sm.cs_current_insts)
     (\res ee r. expr_exit res r)` by
@@ -122,7 +122,7 @@ Proof
   `out = Var x` by metis_tac[exprOperandVarTheory.compiler_make_tuple_result] >>
   simp[] >>
   irule aggregate_body_cons_outcome >>
-  qexists_tac `\tv ee t. vv_post ctx func ce cx h es sa sm s0 ee tv vv t /\
+  qexists_tac `\tv ee t. vv_post H ctx func ce cx h es sa sm s0 ee tv vv t /\
      t.vs_current_bb = sm.cs_current_bb /\
      t.vs_inst_idx = LENGTH sm.cs_current_insts` >>
   reverse conj_tac
@@ -176,7 +176,7 @@ Proof
     (\res ee r. ?vs. res = INL vs /\
       r.vs_current_bb = sb.cs_current_bb /\
       r.vs_inst_idx = LENGTH sb.cs_current_insts /\ expr_sim_inv ce cx env ee /\
-      stmt_state_rel ctx func ce cx ee r /\
+      stmt_state_rel H ctx func ce cx ee r /\
       tuple_in_memory vs tt (b+tailoff) r.vs_memory /\
       (!z w. not_fresh_at st z /\ lookup_var z q = SOME w ==> lookup_var z r = SOME w) /\
       (!aid a. FLOOKUP q.vs_allocas aid = SOME a ==> FLOOKUP r.vs_allocas aid = SOME a) /\
@@ -225,7 +225,7 @@ Proof
   qexists_tac `\vs ee r.
       r.vs_current_bb = sb.cs_current_bb /\
       r.vs_inst_idx = LENGTH sb.cs_current_insts /\ expr_sim_inv ce cx env ee /\
-      stmt_state_rel ctx func ce cx ee r /\
+      stmt_state_rel H ctx func ce cx ee r /\
       tuple_in_memory vs tt (b+tailoff) r.vs_memory /\
       (!z w. not_fresh_at st z /\ lookup_var z q = SOME w ==> lookup_var z r = SOME w) /\
       (!aid a. FLOOKUP q.vs_allocas aid = SOME a ==> FLOOKUP r.vs_allocas aid = SOME a) /\
@@ -507,14 +507,14 @@ Theorem aggregate_body_make_array_elems_sim:
        | SOME imms => get_source_immutables ce.ce_module imms) name = SOME (itv,iv) ==>
      regions_disjoint io (type_memory_size itv) (b+off)
        (LENGTH args * type_memory_size tv)) /\
-  stmt_state_rel ctx func ce cx es s0 /\ ~s0.vs_halted /\
+  stmt_state_rel H ctx func ce cx es s0 /\ ~s0.vs_halted /\
   s0.vs_current_bb = sa.cs_current_bb /\
   s0.vs_inst_idx = LENGTH sa.cs_current_insts ==>
   out = Var x /\
   gas_outcome F (cx_tops cx) (ctx,func) (eval_exprs cx args) (es,s0)
     (\res es' r. ?vs. res = INL vs /\ r.vs_current_bb = sb.cs_current_bb /\
       r.vs_inst_idx = LENGTH sb.cs_current_insts /\ expr_sim_inv ce cx env es' /\
-      stmt_state_rel ctx func ce cx es' r /\
+      stmt_state_rel H ctx func ce cx es' r /\
       elems_in_memory vs (b+off) tv r.vs_memory /\
       (!z w. not_fresh_at sa z /\ lookup_var z s0 = SOME w ==>
         lookup_var z r = SOME w) /\
@@ -557,7 +557,7 @@ Proof
   drule_at (Pat `compile_make_tuple _ _ _ _ _ _ _ = _`) aggregate_body_make_tuple_fits_sim >>
   disch_then (drule_at (Pat `LIST_REL _ _ _`)) >>
   disch_then (drule_at (Pat `OPT_MMAP _ _ = SOME _`)) >>
-  disch_then (drule_at (Pat `stmt_state_rel _ _ _ _ _ _`)) >>
+  disch_then (drule_at (Pat `stmt_state_rel H _ _ _ _ _ _`)) >>
   disch_then (qspecl_then [`env`, `inst`, `b`, `asz`] mp_tac) >>
   simp[type_memory_size_list_replicate] >>
   (impl_tac >-
@@ -605,14 +605,14 @@ Theorem aggregate_body_make_array_sim:
       | SOME imms => get_source_immutables ce.ce_module imms) name = SOME (itv,iv) ==>
     regions_disjoint io (type_memory_size itv) b
       ((if header then 32 else 0) + LENGTH args * type_memory_size tv)) /\
-  stmt_state_rel ctx func ce cx es s0 /\ ~s0.vs_halted /\
+  stmt_state_rel H ctx func ce cx es s0 /\ ~s0.vs_halted /\
   s0.vs_current_bb = sa.cs_current_bb /\
   s0.vs_inst_idx = LENGTH sa.cs_current_insts ==>
   out = Var x /\
   gas_outcome F (cx_tops cx) (ctx,func) (eval_exprs cx args) (es,s0)
     (\res es' r. ?vs. res = INL vs /\ r.vs_current_bb = sb.cs_current_bb /\
       r.vs_inst_idx = LENGTH sb.cs_current_insts /\ expr_sim_inv ce cx env es' /\
-      stmt_state_rel ctx func ce cx es' r /\
+      stmt_state_rel H ctx func ce cx es' r /\
       elems_in_memory vs (b+(if header then 32 else 0)) tv r.vs_memory /\
       (header ==> mem_word_at b r.vs_memory = n2w (LENGTH args)) /\
       (!z w. not_fresh_at sa z /\ lookup_var z s0 = SOME w ==>
@@ -645,7 +645,7 @@ Proof
   >> gvs[compile_make_array_def, comp_ignore_bind_def, comp_bind_def, comp_return_def]
   >> drule aggregate_body_make_array_elems_sim
   >> disch_then (drule_at (Pat `evaluate_type _ _ = _`))
-  >> disch_then (drule_at (Pat `stmt_state_rel _ _ _ _ _ _`))
+  >> disch_then (drule_at (Pat `stmt_state_rel H _ _ _ _ _ _`))
   >> disch_then (qspec_then `env` mp_tac) >> simp[]
   >> disch_then (drule_at (Pat `compile_make_array_elems _ _ _ _ _ _ _ _ _ = _`))
   >> disch_then (qspecl_then [`inst`,`b`,`asz`] mp_tac) >> simp[]
@@ -678,7 +678,7 @@ Resume aggregate_body_make_array_sim[dynamic]:
      disch_then (drule_at (Pat `fn_has_code _ _ _`)) >> simp[eval_operand_def] >>
      disch_then (qspecl_then [`n2w b`, `s0`, `ctx`] mp_tac) >> simp[]) >>
   qabbrev_tac `s1 = mstore b (n2w (LENGTH args)) s0 with vs_inst_idx := LENGTH sm.cs_current_insts` >>
-  `stmt_state_rel ctx func ce cx es (mstore b (n2w (LENGTH args)) s0) /\
+  `stmt_state_rel H ctx func ce cx es (mstore b (n2w (LENGTH args)) s0) /\
    locals_kept ce es es s0 (mstore b (n2w (LENGTH args)) s0) /\
    mem_word_at b (mstore b (n2w (LENGTH args)) s0).vs_memory = n2w (LENGTH args)` by
     (drule aggregate_body_header_store_boundary >>
@@ -686,7 +686,7 @@ Resume aggregate_body_make_array_sim[dynamic]:
      simp[] >> (impl_tac >-
        (rpt strip_tac >> first_x_assum drule_all >>
         simp[regions_disjoint_def] >> decide_tac)) >> simp[]) >>
-  `stmt_state_rel ctx func ce cx es s1` by
+  `stmt_state_rel H ctx func ce cx es s1` by
     (simp[Abbr `s1`, stmt_state_rel_inst_idx]) >>
   `local_ptrs_reserved ce sm /\ not_fresh_at sm x /\ inst.inst_id < sm.cs_next_id` by
     (conj_tac >- (irule local_ptrs_reserved_next_var >> qexists_tac `sa` >> simp[]) >>
@@ -700,7 +700,7 @@ Resume aggregate_body_make_array_sim[dynamic]:
   disch_then (drule_at (Pat `evaluate_type _ _ = _`)) >>
   disch_then (qspec_then `ce` mp_tac) >> simp[] >>
   disch_then (drule_at (Pat `compile_make_array_elems _ _ _ _ _ _ _ _ _ = _`)) >>
-  disch_then (drule_at (Pat `stmt_state_rel _ _ _ _ _ s1`)) >>
+  disch_then (drule_at (Pat `stmt_state_rel H _ _ _ _ _ s1`)) >>
   disch_then (qspecl_then [`env`, `inst`, `b`, `asz`] mp_tac) >>
   simp[] >>
   (impl_tac >-

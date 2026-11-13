@@ -265,7 +265,7 @@ Theorem ptr_edge_safe_run[local]:
   !m. ptr_safe_run D lo m ctx fn PG G tn s
 Proof
   strip_tac >> qx_gen_tac `m` >>
-  qpat_x_assum `gas_path_ptr_edge _ _ _ _ _ _ _ _ _ _ _ _ _`
+  qpat_x_assum `gas_path_ptr_edge _ _ _ _ _ _ _ _ _ _ _ _`
     (strip_assume_tac o REWRITE_RULE [gas_path_ptr_edge_def]) >>
   gvs[exit_result_def] >>
   irule ptr_safe_run_fuel_mono_down >> qexists_tac `SUC (fuel + m)` >>

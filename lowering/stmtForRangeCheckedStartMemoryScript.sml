@@ -24,7 +24,7 @@ Theorem for_range_checked_start_mem:
          mk_inst (i+8) ADD [op1;Var rv] [ev];
          mk_inst (i+9) JMP [Label cond_lbl] []]|> /\
     s0.vs_inst_idx = LENGTH pre /\ ~s0.vs_halted /\
-    stmt_state_rel ctx func cenv cx es s0 /\ local_ptrs_reserved cenv sa /\
+    stmt_state_rel H ctx func cenv cx es s0 /\ local_ptrs_reserved cenv sa /\
     return_buf_frame d cenv sa s0 /\ ret_pc_ok cenv sa s0 /\
     alloca_history func s0 /\ MEM aa (fn_insts func) /\ fn_inst_ids_distinct func /\
     eval_operand op1 s0 = SOME a /\ eval_operand op2 s0 = SOME b /\
@@ -39,7 +39,7 @@ Theorem for_range_checked_start_mem:
      ~(w2n (b-a) > w2n (n2w bound : bytes32)) ==>
       ?cc w. gas_path_mem ctx func s0 0 (OK cc) /\
         cc.vs_current_bb = cond_lbl /\ cc.vs_inst_idx = 0 /\ ~cc.vs_halted /\
-        stmt_state_rel ctx func cenv cx es cc /\
+        stmt_state_rel H ctx func cenv cx es cc /\
         lookup_var cv cc = SOME a /\ lookup_var ev cc = SOME b /\
         lookup_var p cc = SOME w /\ FLOOKUP cc.vs_allocas aid = SOME (w2n w,sz) /\
         return_buf_frame d cenv sa cc /\ ret_pc_ok cenv sa cc /\
@@ -50,7 +50,7 @@ Proof
   rpt gen_tac >> strip_tac >>
   `?ee w. gas_path_mem ctx func s0 0 (OK ee) /\
       ee.vs_current_bb = entry_lbl /\ ee.vs_inst_idx = 0 /\ ~ee.vs_halted /\
-      stmt_state_rel ctx func cenv cx es ee /\
+      stmt_state_rel H ctx func cenv cx es ee /\
       lookup_var p ee = SOME w /\ FLOOKUP ee.vs_allocas aid = SOME (w2n w,sz) /\
       return_buf_frame d cenv sa ee /\ ret_pc_ok cenv sa ee /\
       alloca_history func ee /\ s0.vs_alloca_next <= ee.vs_alloca_next /\
@@ -100,7 +100,7 @@ Proof
 QED
 
 Resume for_range_checked_start_mem[success]:
-  `stmt_state_rel ctx func cenv cx es (ee with vs_vars := vs)` by
+  `stmt_state_rel H ctx func cenv cx es (ee with vs_vars := vs)` by
     (irule stmt_state_rel_vars_frame >> simp[] >>
      qpat_assum `!x. MEM x _ ==> not_local_ptr _ _ x` mp_tac >>
      qpat_assum `!x. ~MEM x _ ==> lookup_var _ _ = _` mp_tac >>

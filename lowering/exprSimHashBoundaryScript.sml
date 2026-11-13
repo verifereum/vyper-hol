@@ -2,7 +2,8 @@
 Theory exprSimHashBoundary
 Ancestors
   exprBopSimProps exprSimLiteralBuffer exprSimVVFrame
-  gasOutcome gasSummary gasSummaryCompose gasExemptCert
+  gasOutcome gasSummary gasSummaryCompose gasExemptCert gasStorage
+  vyperStorageTrace vyperStorageFootprint
   fragGasMode fragGasPath fragGasSeq fragExec
   exprSimDefs loweringPosts allocLimits
   valueEncoding valueEncodingDefs valueEncodingProofs venomMemDefs
@@ -43,29 +44,50 @@ Theorem expr_sim_suffix:
   fn_has_code sa sm func /\ fn_inst_ids_distinct func /\
   local_ptrs_reserved cenv sa /\
   gas_admissible (bind (eval_expr cx e) (read_result cx)) expr_res_ok es /\
-  stmt_state_rel ctx func cenv cx es s0 /\ ~s0.vs_halted /\
+  (!H. valid_horizon cx st0 H es.storage_trace ==>
+     stmt_state_rel H ctx func cenv cx es s0 /\
+     storage_well_formed_on cx es (FST H)) /\ ~s0.vs_halted /\
   s0.vs_current_bb = sa.cs_current_bb /\
   s0.vs_inst_idx = LENGTH sa.cs_current_insts /\
-  (!exc ee r. expr_exit (INR exc : value + exception) r ==> R (INR exc) ee r) /\
+  (!H exc ee r. expr_exit (INR exc : value + exception) r ==>
+     R H (INR exc) ee r) /\
+  (!v. storage_trace_frame (k v)) /\
   (!gs v ee t.
      bind (eval_expr cx e) (read_result cx) (es with gas_obs := gs) =
        (INL v, ee) /\ ee.gas_obs = [] /\
-     expr_post ctx func cenv cx e es sa sm s0 ee v op t /\ ~t.vs_halted /\
+     (!H. valid_horizon cx st0 H ee.storage_trace ==>
+        expr_post H ctx func cenv cx e es sa sm s0 ee v op t) /\
+     (?H. valid_horizon cx st0 H ee.storage_trace) /\ ~t.vs_halted /\
      t.vs_current_bb = sm.cs_current_bb /\
      t.vs_inst_idx = LENGTH sm.cs_current_insts ==>
-     ?marks. gas_summary_at F (ctx, func) marks (k v) (ee, t) Q R) ==>
-  gas_outcome F (cx_tops cx) (ctx, func)
+     ?marks. gas_summary_at F (ctx, func) marks (k v) (ee, t)
+       (\res ee t. !H. valid_horizon cx st0 H ee.storage_trace ==>
+          Q H res ee t)
+       (\res ee r. !H. valid_horizon cx st0 H ee.storage_trace ==>
+          R H res ee r)) ==>
+  gas_outcome F (cx_tops cx) (ctx, func) cx st0
     (bind (bind (eval_expr cx e) (read_result cx)) k) (es, s0) Q R
 Proof
   strip_tac >>
   qpat_x_assum `expr_sim _ _ _ _ _ _ _` (mp_tac o REWRITE_RULE [expr_sim_def]) >>
-  disch_then (qspecl_then [`sa`, `sm`, `op`, `s0`] mp_tac) >>
+  disch_then (qspecl_then [`st0`, `sa`, `sm`, `op`, `s0`] mp_tac) >>
   (impl_tac >- simp[]) >>
-  rewrite_tac[gas_outcome_def] >> strip_tac
+  rewrite_tac[gas_outcome_def] >> BETA_TAC >> strip_tac
+  >- (qexists_tac `marks` >> disj1_tac >>
+      irule gas_bad_storage_at_bind_left >> simp[])
   >- (qpat_x_assum `gas_summary_at _ _ _ _ _ _ _`
-        (strip_assume_tac o REWRITE_RULE [gas_summary_at_def]) >>
-      gvs[]
-      >- (`bind (eval_expr cx e) (read_result cx)
+        (strip_assume_tac o SIMP_RULE (srw_ss()) [gas_summary_at_def]) >>
+      (reverse (Cases_on `storage_trace_domain cx st0 es_end.storage_trace`)
+       >- (qexists_tac `marks` >> disj1_tac >>
+           irule gas_bad_storage_at_bind_left >> simp[] >>
+           irule gas_bad_storage_at_counted_prefix >>
+           qexistsl_tac [`ctx`, `es_end`, `func`, `F`, `r`, `res`] >>
+           simp[])) >>
+      `valid_horizon cx st0 (storage_trace_horizon es_end.storage_trace)
+         es_end.storage_trace` by
+        fs[vyperStorageFootprintTheory.storage_trace_domain_def]
+      >- (`?v. res = INL v` by metis_tac[] >> gvs[] >>
+          `bind (eval_expr cx e) (read_result cx)
              (es with gas_obs := gas_explicit marks s0.vs_gas_readings) =
              (INL v, es_end with gas_obs := [])` by
             (qpat_x_assum `gas_marked_exec _ _ _ _ _ _ _ _`
@@ -73,25 +95,32 @@ Proof
              strip_tac >> first_x_assum (qspec_then `[]` mp_tac) >> simp[]) >>
           `~t.vs_halted` by
             metis_tac[gas_marked_exec_def, gas_marked_path_exec, gas_path_normal] >>
+          `t.vs_current_bb = sm.cs_current_bb /\
+           t.vs_inst_idx = LENGTH sm.cs_current_insts` by metis_tac[] >>
           qpat_x_assum `!gs v ee t. _`
             (qspecl_then [`gas_explicit marks s0.vs_gas_readings`, `v`,
                           `es_end with gas_obs := []`, `t`] mp_tac) >>
-          (impl_tac >- simp[]) >> strip_tac >>
+          (impl_tac >- (simp[] >> metis_tac[])) >> strip_tac >>
           rename1 `gas_summary_at F _ right _ _ _ _` >>
-          qexists_tac `marks ++ right` >> disj1_tac >>
+          qexists_tac `marks ++ right` >> disj2_tac >> disj1_tac >>
           qpat_x_assum `gas_summary_at F _ right _ _ _ _`
             (mp_tac o REWRITE_RULE [gas_summary_at_def]) >>
           disch_then (qx_choosel_then [`fres`, `fin`, `fr`]
             (CONJUNCTS_THEN2 assume_tac assume_tac)) >>
           drule_all gas_marked_exec_bind_normal >> strip_tac >>
           rewrite_tac[gas_summary_at_def] >>
-          qexistsl_tac [`fres`, `fin`, `fr`] >> asm_rewrite_tac[]) >>
-      Cases_on `res` >> gvs[] >>
-      rename1 `expr_exit (INR exc) r` >>
-      qexists_tac `marks` >> disj1_tac >> rewrite_tac[gas_summary_at_def] >>
-      qexistsl_tac [`INR exc`, `es_end`, `r`] >> simp[] >>
-      irule gas_marked_exec_bind_exception >> simp[]) >>
-  qexists_tac `marks` >> disj2_tac >>
+          qexistsl_tac [`fres`, `fin`, `fr`] >> asm_rewrite_tac[])
+      >> Cases_on `res`
+      >- (qpat_x_assum `!H. valid_horizon _ _ H _ ==> expr_exit _ _`
+            (drule_then mp_tac) >> simp[]) >>
+      rename1 `gas_marked_exec _ _ _ _ _ (INR exc) _ _` >>
+      qexists_tac `marks` >> disj2_tac >> disj1_tac >>
+      rewrite_tac[gas_summary_at_def] >>
+      qexistsl_tac [`INR exc`, `es_end`, `r`] >> conj_tac
+      >- (irule gas_marked_exec_bind_exception >> simp[]) >>
+      BETA_TAC >> disj2_tac >> simp[] >> rpt strip_tac >>
+      first_x_assum irule >> metis_tac[]) >>
+  qexists_tac `marks` >> disj2_tac >> disj2_tac >>
   qabbrev_tac `a = bind (eval_expr cx e) (read_result cx)` >>
   `ignore_bind (bind a k) (return ()) =
    bind a (\v. ignore_bind (k v) (return ()))` by
@@ -131,10 +160,10 @@ Proof
 QED
 
 Theorem hash_readonly_state_rel:
-  stmt_state_rel ctx func cenv cx es s /\ local_ptrs_reserved cenv sa /\
+  stmt_state_rel H ctx func cenv cx es s /\ local_ptrs_reserved cenv sa /\
   (t with vs_vars := s.vs_vars) = s /\
   (!x. not_fresh_at sa x ==> lookup_var x t = lookup_var x s) ==>
-  stmt_state_rel ctx func cenv cx es t
+  stmt_state_rel H ctx func cenv cx es t
 Proof
   strip_tac >>
   `t = s with vs_vars := t.vs_vars` by
@@ -149,7 +178,7 @@ Proof
 QED
 
 Theorem hash_live_footprint_bound:
-  stmt_state_rel ctx func cenv cx es s /\
+  stmt_state_rel H ctx func cenv cx es s /\
   ((?aid b sz. FLOOKUP s.vs_allocas aid = SOME (b,sz) /\
       b <= p /\ p + n <= b + sz) \/
    (?name b sz. local_region cenv es.scopes s name b sz /\
@@ -169,14 +198,14 @@ QED
 
 Theorem hash_post_footprint_bound:
   post_value_type cenv e = expr_type e /\
-  expr_post ctx func cenv cx e es sa sm s0 es' v op s /\
+  expr_post H ctx func cenv cx e es sa sm s0 es' v op s /\
   evaluate_type (get_tenv cx) (expr_type e) = SOME tv /\
   ~is_word_type (expr_type e) /\ eval_operand op s = SOME p ==>
   w2n p + val_footprint tv v < dimword (:256)
 Proof
   strip_tac >>
   Cases_on `val_footprint tv v = 0` >- simp[wordsTheory.w2n_lt] >>
-  `stmt_state_rel ctx func cenv cx es' s /\
+  `stmt_state_rel H ctx func cenv cx es' s /\
    expr_val_at cenv cx (expr_type e) sa sm es' v op s` by
     gvs[expr_post_def] >>
   drule_all expr_val_at_footprint >> strip_tac >>
@@ -186,7 +215,7 @@ Proof
 QED
 
 Theorem hash_dynamic_post_view:
-  expr_post ctx func cenv cx e es sa sm s0 es' (BytesV bs) op s /\
+  expr_post H ctx func cenv cx e es sa sm s0 es' (BytesV bs) op s /\
   expr_type e = BaseT (BytesT (Dynamic cap)) /\
   evaluate_type (get_tenv cx) (expr_type e) =
     SOME (BaseTV (BytesT (Dynamic cap))) ==>
@@ -211,7 +240,7 @@ Proof
 QED
 
 Theorem hash_string_post_view:
-  expr_post ctx func cenv cx e es sa sm s0 es' (StringV str) op s /\
+  expr_post H ctx func cenv cx e es sa sm s0 es' (StringV str) op s /\
   expr_type e = BaseT (StringT cap) /\
   evaluate_type (get_tenv cx) (expr_type e) =
     SOME (BaseTV (StringT cap)) ==>

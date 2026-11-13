@@ -74,7 +74,7 @@ Theorem log_success_suffix_mem_ok:
   log_eval_view ce args sa xs sm /\
   compile_log_topic_ops (FST (split_log_ops xs flags)) sm = (ops,st) /\
   compile_stmt ce lctx ty (Log id args) sa = ((),sb) /\
-  stmt_state_rel ctx func ce cx es s /\ local_ptrs_reserved ce sm /\
+  stmt_state_rel H ctx func ce cx es s /\ local_ptrs_reserved ce sm /\
   fn_has_code sm sb func /\ fn_inst_ids_distinct func /\
   LENGTH flags = LENGTH xs /\ LENGTH (FILTER I flags) <= 3 /\
   EVERY (\p. (!z. FST p = Var z ==> not_fresh_at sm z) /\ (!l. FST p <> Label l)) xs /\

@@ -110,7 +110,7 @@ Proof
   `gas_outcome T (cx_tops cx) (ctx,func)
     (bind (eval_expr cx e) (read_result cx)) (es,salloc)
     (\res ee t. ?v. res = INL v /\
-      expr_post ctx func c cx e es sA sB salloc ee v op t /\
+      expr_post H ctx func c cx e es sA sB salloc ee v op t /\
       expr_store_bound cx (expr_type e) v op t /\
       t.vs_current_bb = sB.cs_current_bb /\
       t.vs_inst_idx = LENGTH sB.cs_current_insts /\
@@ -142,7 +142,7 @@ Proof
   drule_all annassign_continuation_all_tails >> strip_tac >>
   `store_lays_out etv tyv v` by
     (first_x_assum (qspec_then `[]` assume_tac) >> metis_tac[]) >>
-  qpat_x_assum `expr_post _ _ _ _ _ _ _ _ _ _ _ _ _` mp_tac >>
+  qpat_x_assum `expr_post _ _ _ _ _ _ _ _ _ _ _ _ _ _` mp_tac >>
   simp[expr_post_def] >> strip_tac >>
   `eval_operand op t = SOME (typed_val_to_w256 etv v)` by
     (gvs[expr_val_rel_def] >> metis_tac[]) >>
@@ -165,7 +165,7 @@ Proof
      (mstore (w2n w) (typed_val_to_w256 etv v) t).vs_memory` by
     (`word_memory_type tyv` by fs[store_lays_out_def] >>
      metis_tac[loweringSliceTheory.word_memory_type_memory_value_rel]) >>
-  `stmt_state_rel ctx func c cx ee' u` by
+  `stmt_state_rel H ctx func c cx ee' u` by
     (simp[Abbr `u`, Abbr `ee'`, stmt_state_rel_inst_idx] >>
      irule stmt_state_rel_declare_store >> simp[] >>
      qexists_tac `mk_inst st.cs_next_id ALLOCA
