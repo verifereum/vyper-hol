@@ -130,6 +130,10 @@ Proof
   strip_tac >>
   `MAP expr_type (if sh then MAP gas_shadow_expr args else args) = MAP expr_type args`
     by (Cases_on `sh` >> simp[MAP_MAP_o, combinTheory.o_DEF, ETA_THM]) >>
+  `MAP (lowered_value_type cenv) (if sh then MAP gas_shadow_expr args else args) =
+   MAP (lowered_value_type cenv) args`
+    by (Cases_on `sh` >>
+        simp[MAP_MAP_o, MAP_EQ_f, combinTheory.o_DEF, gas_shadow_lowered_value_type]) >>
   `LENGTH (if sh then MAP gas_shadow_expr args else args) = LENGTH args`
     by (Cases_on `sh` >> simp[]) >>
   qspecl_then [`args`, `sh`] (qx_choose_then `selected` assume_tac)
@@ -148,13 +152,13 @@ Proof
            >- metis_tac[COND_CLAUSES] >>
            gen_tac >> BETA_TAC >>
            match_mp_tac gas_shadow_compiles_bind >> conj_tac
-           >- irule gasShadowCompileContextTheory.gas_shadow_compiles_alloc_buffer >>
+           >- simp[gasShadowCompileContextTheory.gas_shadow_compiles_alloc_buffer] >>
            gen_tac >> BETA_TAC >>
            match_mp_tac gas_shadow_compiles_bind >> conj_tac
            >- irule gas_shadow_compiles_emit_void >>
            gen_tac >> BETA_TAC >>
            irule gas_shadow_compiles_as_ptr_val >>
-           irule gasShadowCompileBuiltinAbiTheory.gas_shadow_compiles_lower_abi_encode) >>
+           simp[gasShadowCompileBuiltinAbiTheory.gas_shadow_compiles_lower_abi_encode]) >>
        simp[GSYM comp_bind_def, comp_bind_uncurry] >>
        CONV_TAC (DEPTH_CONV ETA_CONV) >>
        match_mp_tac gas_shadow_compiles_bind >> conj_tac
@@ -164,20 +168,20 @@ Proof
        >- irule gas_shadow_compiles_unwrap_value >>
        gen_tac >> BETA_TAC >>
        irule gas_shadow_compiles_as_ptr_val >>
-       irule gasShadowCompileBuiltinAbiTheory.gas_shadow_compiles_lower_abi_encode)) >>
+       simp[gasShadowCompileBuiltinAbiTheory.gas_shadow_compiles_lower_abi_encode])) >>
   simp[GSYM comp_bind_def, comp_bind_uncurry] >>
   CONV_TAC (DEPTH_CONV ETA_CONV) >>
   match_mp_tac gas_shadow_compiles_bind >> conj_tac
   >- (irule gas_shadow_compiles_abi_encode_args >> simp[]) >>
   gen_tac >> BETA_TAC >>
   match_mp_tac gas_shadow_compiles_bind >> conj_tac
-  >- irule gasShadowCompileContextTheory.gas_shadow_compiles_alloc_buffer >>
+  >- simp[gasShadowCompileContextTheory.gas_shadow_compiles_alloc_buffer] >>
   gen_tac >> BETA_TAC >>
   match_mp_tac gas_shadow_compiles_bind >> conj_tac
-  >- irule gasShadowCompileBuiltinAbiTheory.gas_shadow_compiles_store_abi_tuple >>
+  >- simp[gasShadowCompileBuiltinAbiTheory.gas_shadow_compiles_store_abi_tuple] >>
   gen_tac >> BETA_TAC >>
   irule gas_shadow_compiles_as_ptr_val >>
-  irule gasShadowCompileBuiltinAbiTheory.gas_shadow_compiles_lower_abi_encode
+  simp[gasShadowCompileBuiltinAbiTheory.gas_shadow_compiles_lower_abi_encode]
 QED
 
 Theorem gas_shadow_compiles_type_body:
@@ -913,7 +917,11 @@ Theorem gas_shadow_compiles_builtin_body_makearray[local]:
     (compile_builtin_dispatch_body g cenv ret_ty ty (MakeArray elem_ty_opt bnd)
       (if sh then MAP gas_shadow_expr args else args))
 Proof
-  strip_tac >> Cases_on `elem_ty_opt` >> Cases_on `sh` >>
+  strip_tac >>
+  `tuple_literal_types ret_ty (MAP gas_shadow_expr args) =
+   tuple_literal_types ret_ty args`
+    by (Cases_on `ret_ty` >> simp[tuple_literal_types_def, MAP_MAP_o, MAP_EQ_f]) >>
+  Cases_on `elem_ty_opt` >> Cases_on `sh` >>
   CONV_TAC (BINOP_CONV (REWR_CONV (GSYM ETA_AX))) >>
   simp[compile_builtin_dispatch_body_def, MAP_MAP_o, combinTheory.o_DEF,
        GSYM comp_bind_def, comp_bind_uncurry] >>
