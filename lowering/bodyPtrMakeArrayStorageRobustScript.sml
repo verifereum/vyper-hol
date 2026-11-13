@@ -3,6 +3,7 @@ Theory bodyPtrMakeArrayStorageRobust
 Ancestors
   storageDecodeMemory bodyPtrDefs valueEncodingProps valueEncodingProofs list
   accountsRelProps exprSimStorageCopy compileEnv loweringStateRelDefs words ptrDiscipline venomState
+  sourceUnitExecution
 
 Theorem copy_bytes_taint_agree_outside:
   copy_bytes st bs n D dst mem /\
@@ -54,7 +55,7 @@ Proof
   match_mp_tac storage_live_memory_robust_decode >>
   qexistsl_tac [`w2n a`, `st`] >> simp[] >>
   conj_tac
-  >- (irule copied_storage_live_memory >> metis_tac[]) >>
+  >- (drule_all copied_storage_live_memory >> simp[]) >>
   rpt strip_tac >>
   `storage_dead H tr rt (w2n (a+n2w i)) j` by
     metis_tac[arithmeticTheory.ADD_ASSOC] >>
@@ -100,14 +101,18 @@ Theorem copy_prefix_robust_decode:
     j IN key_taint (if tr then tnbase.t_trans else tnbase.t_stor) (a+n2w i)) ==>
   !m. mem_agree_outside tnf.t_mem sf.vs_memory m ==> val_in_memory tv v b m
 Proof
-  strip_tac >> match_mp_tac copied_storage_robust_decode >>
-  qexistsl_tac [`cx`, `tr`, `st`,
+  rpt strip_tac >>
+  drule_at (Pat `storage_read_live _ _ _ _ _`)
+    (Q.SPEC `ARB` copied_storage_robust_decode) >>
+  disch_then (qspecl_then [`v`, `tnf.t_mem`, `sf.vs_memory`, `b`,
     `if tr then contract_transient sbase else contract_storage sbase`,
-    `a`, `if tr then tnbase.t_trans else tnbase.t_stor`] >> simp[] >>
-  rpt conj_tac
-  >- (rpt strip_tac >>
-      `i < n` by decide_tac >> drule_all copy_prefix_word >>
-      Cases_on `tr` >>
-      simp[copy_runtime_word_def, sload_def, tload_def]) >>
-  rpt strip_tac >> metis_tac[stor_taint_ok_key_dead]
+    `if tr then tnbase.t_trans else tnbase.t_stor`, `m`] mp_tac) >>
+  impl_tac
+  >- (simp[] >> rpt conj_tac
+      >- (rpt strip_tac >>
+          `i < n` by decide_tac >> drule_all copy_prefix_word >>
+          Cases_on `tr` >>
+          simp[copy_runtime_word_def, sload_def, tload_def]) >>
+      rpt strip_tac >> metis_tac[stor_taint_ok_key_dead]) >>
+  simp[]
 QED
