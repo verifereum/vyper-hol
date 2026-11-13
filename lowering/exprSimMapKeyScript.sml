@@ -973,7 +973,7 @@ Proof
   drule_all fragGasSeqTheory.tuple_run_inst_seq_gas_path >> simp[]
 QED
 
-Theorem compile_mapping_index_success_tail:
+Theorem compile_mapping_index_success_tail_run:
   expr_post H ctx func cenv cx idx em sm sn s1 en kv key t /\
   expr_type idx = kt /\ hashmap_key_type kt /\
   evaluate_type (get_tenv cx) kt = SOME tv /\ value_has_type tv kv /\
@@ -989,12 +989,14 @@ Theorem compile_mapping_index_success_tail:
   sm.cs_next_var <= sn.cs_next_var /\ sm.cs_next_id <= sn.cs_next_id /\
   ~t.vs_halted /\ t.vs_current_bb = sn.cs_current_bb /\
   t.vs_inst_idx = LENGTH sn.cs_current_insts ==>
-  ?u. gas_marked_path F ctx func t 0 (OK u) /\
-      eval_operand slot u = SOME (hashmap_slot base_slot (encode_hashmap_key kt kv)) /\
-      stmt_state_rel H ctx func cenv cx en u /\ wb_frame cenv em en sm s1 u /\
-      (~expr_has_effect idx ==> pure_frame cenv func em sm s1 u) /\
-      u.vs_current_bb = sb.cs_current_bb /\
-      u.vs_inst_idx = LENGTH sb.cs_current_insts
+  ?u. run_inst_seq (emitted_insts sn sb) t = OK u /\
+      gas_marked_path F ctx func t 0
+        (OK (u with vs_inst_idx := LENGTH sb.cs_current_insts)) /\
+      eval_operand slot (u with vs_inst_idx := LENGTH sb.cs_current_insts) = SOME (hashmap_slot base_slot (encode_hashmap_key kt kv)) /\
+      stmt_state_rel H ctx func cenv cx en (u with vs_inst_idx := LENGTH sb.cs_current_insts) /\ wb_frame cenv em en sm s1 (u with vs_inst_idx := LENGTH sb.cs_current_insts) /\
+      (~expr_has_effect idx ==> pure_frame cenv func em sm s1 (u with vs_inst_idx := LENGTH sb.cs_current_insts)) /\
+      (u with vs_inst_idx := LENGTH sb.cs_current_insts).vs_current_bb = sb.cs_current_bb /\
+      (u with vs_inst_idx := LENGTH sb.cs_current_insts).vs_inst_idx = LENGTH sb.cs_current_insts
 Proof
   strip_tac >>
   `eval_operand base_op t = SOME base_slot` by
@@ -1033,7 +1035,7 @@ Proof
         strip_tac >> first_assum ACCEPT_TAC) >>
      match_mp_tac exprSimPropsTheory.pure_frame_trans >>
      qexistsl_tac [`en`, `sn`, `t`] >> simp[]) >>
-  qexists_tac `u with vs_inst_idx := LENGTH sb.cs_current_insts` >>
+  qexists_tac `u` >>
   simp[stmt_state_rel_inst_idx] >>
   conj_tac
   >- (qpat_x_assum `wb_frame cenv em en sm s1 u` mp_tac >>
@@ -1049,4 +1051,74 @@ Proof
   fs[EVERY_MEM] >>
   metis_tac[venomInstProofsTheory.step_preserves_control_flow,
             venomExecSemanticsTheory.step_inst_non_invoke]
+QED
+
+Theorem compile_mapping_index_success_tail:
+  expr_post H ctx func cenv cx idx em sm sn s1 en kv key t /\
+  expr_type idx = kt /\ hashmap_key_type kt /\
+  evaluate_type (get_tenv cx) kt = SOME tv /\ value_has_type tv kv /\
+  (if is_bytestring_type kt then compile_keccak256_key key F sn
+   else (key,sn)) = (hashed,sp) /\
+  compile_mapping_subscript base_op hashed sp = (slot,sb) /\
+  (!x. key = Var x ==> not_fresh_at sn x) /\
+  (!x. base_op = Var x ==> not_fresh_at sm x) /\ (!l. base_op <> Label l) /\
+  eval_operand base_op s1 = SOME base_slot /\
+  fn_inst_ids_distinct func /\ fn_has_code sp sb func /\ fn_has_code sn sb func /\
+  stmt_state_rel H ctx func cenv cx em s1 /\ local_ptrs_reserved cenv sm /\
+  MAP FDOM em.scopes = MAP FDOM en.scopes /\
+  sm.cs_next_var <= sn.cs_next_var /\ sm.cs_next_id <= sn.cs_next_id /\
+  ~t.vs_halted /\ t.vs_current_bb = sn.cs_current_bb /\
+  t.vs_inst_idx = LENGTH sn.cs_current_insts ==>
+  ?u. gas_marked_path F ctx func t 0 (OK u) /\
+      eval_operand slot u = SOME (hashmap_slot base_slot (encode_hashmap_key kt kv)) /\
+      stmt_state_rel H ctx func cenv cx en u /\ wb_frame cenv em en sm s1 u /\
+      (~expr_has_effect idx ==> pure_frame cenv func em sm s1 u) /\
+      u.vs_current_bb = sb.cs_current_bb /\
+      u.vs_inst_idx = LENGTH sb.cs_current_insts
+Proof
+  strip_tac >> drule_all compile_mapping_index_success_tail_run >> strip_tac >>
+  qexists_tac `u with vs_inst_idx := LENGTH sb.cs_current_insts` >> simp[]
+QED
+
+Theorem compile_mapping_index_success_tail_horizons:
+  valid_horizon cx st0 H0 en.storage_trace /\
+  (!H. valid_horizon cx st0 H en.storage_trace ==>
+    expr_post H ctx func cenv cx idx em sm sn s1 en kv key t /\
+    stmt_state_rel H ctx func cenv cx em s1) /\
+  expr_type idx = kt /\ hashmap_key_type kt /\
+  evaluate_type (get_tenv cx) kt = SOME tv /\ value_has_type tv kv /\
+  (if is_bytestring_type kt then compile_keccak256_key key F sn
+   else (key,sn)) = (hashed,sp) /\
+  compile_mapping_subscript base_op hashed sp = (slot,sb) /\
+  (!x. key = Var x ==> not_fresh_at sn x) /\
+  (!x. base_op = Var x ==> not_fresh_at sm x) /\ (!l. base_op <> Label l) /\
+  eval_operand base_op s1 = SOME base_slot /\
+  fn_inst_ids_distinct func /\ fn_has_code sp sb func /\ fn_has_code sn sb func /\
+  local_ptrs_reserved cenv sm /\
+  MAP FDOM em.scopes = MAP FDOM en.scopes /\
+  sm.cs_next_var <= sn.cs_next_var /\ sm.cs_next_id <= sn.cs_next_id /\
+  ~t.vs_halted /\ t.vs_current_bb = sn.cs_current_bb /\
+  t.vs_inst_idx = LENGTH sn.cs_current_insts ==>
+  ?u. gas_marked_path F ctx func t 0 (OK u) /\
+      eval_operand slot u = SOME (hashmap_slot base_slot (encode_hashmap_key kt kv)) /\
+      (!H. valid_horizon cx st0 H en.storage_trace ==>
+        stmt_state_rel H ctx func cenv cx en u) /\ wb_frame cenv em en sm s1 u /\
+      (~expr_has_effect idx ==> pure_frame cenv func em sm s1 u) /\
+      u.vs_current_bb = sb.cs_current_bb /\
+      u.vs_inst_idx = LENGTH sb.cs_current_insts
+Proof
+  strip_tac >>
+  `expr_post H0 ctx func cenv cx idx em sm sn s1 en kv key t /\
+   stmt_state_rel H0 ctx func cenv cx em s1` by simp[] >>
+  drule_all (Q.INST [`H` |-> `H0`] compile_mapping_index_success_tail_run) >> strip_tac >>
+  rename1 `run_inst_seq (emitted_insts sn sb) t = OK u` >>
+  `!H. valid_horizon cx st0 H en.storage_trace ==>
+    stmt_state_rel H ctx func cenv cx en
+      (u with vs_inst_idx := LENGTH sb.cs_current_insts)` by
+    (rpt strip_tac >>
+     `expr_post H ctx func cenv cx idx em sm sn s1 en kv key t /\
+      stmt_state_rel H ctx func cenv cx em s1` by simp[] >>
+     drule_all compile_mapping_index_success_tail_run >>
+     strip_tac >> gvs[]) >>
+  qexists_tac `u with vs_inst_idx := LENGTH sb.cs_current_insts` >> simp[]
 QED
