@@ -603,7 +603,7 @@ Proof
   goal_assum (drule_at Any) >> simp[]
 QED
 
-Theorem eval_ext_call_effects_preserves_storage_well_formed_on[local]:
+Theorem eval_ext_call_effects_preserves_storage_well_formed_on:
   storage_well_formed_on cx st (FST H) /\
   storage_observations_ok cx H st'.storage_trace /\
   eval_ext_call_effects cx target calldata value_opt gas st.accounts st = (res,st') ==>
