@@ -72,7 +72,7 @@ Proof
     (`j <= j` by simp[] >>
      drule_all ptr_transcript_historical_placement >> metis_tac[]) >>
   drule_all ptr_stage_placements_strict_bound >> strip_tac >>
-  metis_tac[]
+  qexistsl [`dv`,`owner0`,`owner1`,`db`,`sb`,`pb`] >> simp[]
 QED
 
 (* TEMPORARY bridge for consumers that still assume no DALLOCA (pre-P5p
