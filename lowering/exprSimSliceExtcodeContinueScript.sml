@@ -534,7 +534,7 @@ Resume slice_extcode_tail_outcome[success]:
     (drule_all (cj 1 fragExecTheory.exec_block_run_inst_seq) >> simp[]) >>
   drule_all fragGasSeqTheory.tuple_run_inst_seq_gas_path >> strip_tac >>
   qpat_x_assum `!ctx'. gas_path _ _ _ _ _` (qspec_then `ctx` assume_tac) >>
-  irule slice_extcode_success_outcome >> simp[] >>
+  irule (INST_TYPE [alpha |-> ``:256``] slice_extcode_success_outcome) >> simp[] >>
   qexists_tac `t with vs_inst_idx := LENGTH (emitted_insts sa sb) + s.vs_inst_idx` >>
   simp[fragGasModeTheory.gas_marked_path_def] >>
   `es with gas_obs := [] = es` by
