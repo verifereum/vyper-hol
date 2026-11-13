@@ -25,7 +25,8 @@ Theorem array_body_mem_post_projection:
     (!aid b. FLOOKUP s_body.vs_allocas aid = SOME b ==>
              FLOOKUP t.vs_allocas aid = SOME b) /\
     return_buf_frame d ce sb1 t /\ alloca_history func t /\
-    s_body.vs_alloca_next <= t.vs_alloca_next) ==>
+    s_body.vs_alloca_next <= t.vs_alloca_next /\
+    (!lo. alloca_prefix lo s_body ==> alloca_prefix lo t)) ==>
   stmt_lands lctx sb1 r t /\ ~t.vs_halted /\
   (r = INL () ==> ~block_is_terminated sb1) /\
   stmt_state_rel ctx func cenv cx (es2 with scopes := rest) t /\

@@ -92,6 +92,7 @@ Theorem internal_return_memory_compose_mem:
     fn_has_code sa sb func /\ fn_inst_ids_distinct func /\
     local_ptrs_reserved ce sa /\ ret_pc_ok ce sa s0 /\
     return_buf_frame (SOME (bw,cap)) ce sa s0 /\
+    ret_buf_frontier (SOME (bw,cap)) ce t /\
     stmt_state_rel ctx func ce cx es s0 /\
     bind (eval_expr cx e) (read_result cx) (es with gas_obs := gs) = (INL v,ee) /\
     expr_post ctx func ce cx e es sa sm s0 ee v op t /\
@@ -158,6 +159,13 @@ Resume internal_return_memory_compose_mem[suffix]:
      simp[gas_marked_exec_def, gas_marked_path_def] >>
      strip_tac >> drule fragGasPathMemTheory.gas_path_mem_exec >>
      simp[fragExecTheory.exit_result_def]) >>
+  `!lo. alloca_prefix lo s0 ==> alloca_prefix lo t` by
+    (rpt strip_tac >> drule_all gas_marked_exec_alloca_prefix >> simp[]) >>
+  `!x w. not_fresh_at sa x /\ lookup_var x s0 = SOME w ==>
+         lookup_var x t = SOME w` by fs[expr_post_def] >>
+  `ret_buf_frontier (SOME (bw,cap)) ce t` by
+    (irule ret_buf_frontier_post >>
+     qexistsl_tac [`ce`, `s0`, `sa`] >> fs[]) >>
   irule internal_return_suffix_outcome_mem >> simp[] >>
   qexistsl_tac [`sb`, `sm`] >> simp[] >>
   first_x_assum irule >> simp[] >> metis_tac[]

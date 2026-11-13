@@ -345,5 +345,9 @@ Proof
       (ee with scopes := scs) with gas_obs := []`
        by simp[evaluation_state_component_equality] >>
      metis_tac[exprSimWordArgsTheory.stmt_state_rel_gas_obs]) >>
-  simp[stmt_lands_def]
+  simp[stmt_lands_def] >> rpt strip_tac >>
+  `n = id` by metis_tac[] >> gvs[] >>
+  `!x. not_fresh_at sA x ==> not_fresh_at sB x` by
+    metis_tac[not_fresh_at_mono] >>
+  metis_tac[]
 QED

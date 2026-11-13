@@ -4,13 +4,32 @@
    widening into the caller's return buffer. *)
 Theory bodyMemIntCallReturnWidened
 Ancestors
-  bodyMemoryDefs intCallReturnMem intCallReturnWidenMem
+  bodyMemoryDefs stmtSimDefs loweringStateRelDefs intCallReturnMem intCallReturnWidenMem
   internalReturnValueEndpointMem internalReturnBytestringMem
   internalReturnCompoundEndpointMem internalReturnCompositionMem
   internalReturnEndpointMetadataMem
   internalReturnEndpointFrameMem externalReturnNormalizedMem
   intCallReturnDirectBranchesMem stmtSimReturn compileEnv valueEncoding
   compileVyper loweringPosts exprLoweringProps stmtLowering
+
+(* The value a widened compound return copies sits in the callee's frame:
+   in one of the expression's allocations or in a live local, both at or
+   above the caller's return buffer. *)
+Theorem ret_buf_frontier_source_above[local]:
+  !ce cx sty sa sb es v op t bw cap stv sw.
+    ret_buf_frontier (SOME (bw,cap)) ce t /\
+    expr_val_at ce cx sty sa sb es v op t /\
+    evaluate_type (get_tenv cx) sty = SOME stv /\
+    ~is_word_type sty /\ ~is_bytestring_type sty /\
+    eval_operand op t = SOME sw /\ 0 < type_memory_size stv ==>
+    w2n bw + cap <= w2n sw
+Proof
+  rw[expr_val_at_def] >> first_x_assum drule_all >> strip_tac >> gvs[]
+  >- (fs[ret_buf_frontier_def, alloca_prefix_def] >> res_tac >> decide_tac)
+  >- (fs[ret_buf_frontier_def, local_region_def] >> res_tac >> gvs[]) >>
+  metis_tac[exprSimAggregateChildrenTheory.evaluated_nonbytes_footprint,
+            arithmeticTheory.NOT_ZERO_LT_ZERO]
+QED
 
 Theorem internal_return_widened_mem:
   !tops ctx func cx cenv ret_ty ret_tv rb rpc rsz cenv' env lctx eo es.
@@ -114,18 +133,21 @@ Resume internal_return_widened_mem[compound]:
   first_assum (irule_at (Pat `compile_internal_return _ _ _ _ _ _ _ _ _ = _`)) >>
   first_assum (irule_at (Pat `bind _ _ _ = _`)) >>
   simp[] >> rpt strip_tac >>
-  (* HELD: the remaining goal is source/return-buffer disjointness,
-     regions_disjoint (w2n sw) (type_memory_size stv) (w2n bw) cap.  It does
-     not follow from the current return_buf_frame_def, which doesn't separate
-     the caller's buffer from the callee's allocations; held until
-     return_buf_frame carries the caller-buffer frontier.  The closing steps
-     once a disjointness lemma exists:
-  irule <disjointness lemma> >>
-  first_assum (irule_at (Pat `body_inv _ _ _ _`)) >>
-  first_assum (irule_at (Pat `expr_post _ _ _ _ _ _ _ _ _ _ _ _ _`)) >>
-  simp[] >> fs[expr_post_def] >> metis_tac[]
-  *)
-  cheat
+  `type_widens_to (get_tenv cx) (lowered_value_type cenv' e) ret_ty` by
+    metis_tac[] >>
+  Cases_on `type_memory_size stv = 0`
+  >- (`type_memory_size ret_tv = 0` by
+        metis_tac[exprSimAggregateChildrenTheory.widening_zero_memory_size] >>
+      gvs[regions_disjoint_def]) >>
+  `~is_word_type (lowered_value_type cenv' e) /\
+   ~is_bytestring_type (lowered_value_type cenv' e)` by
+    metis_tac[externalNormalizePremisesTheory.normalize_return_source_kinds] >>
+  `expr_val_at cenv' cx (lowered_value_type cenv' e) sa sm ee v op t` by
+    gvs[expr_post_def] >>
+  `w2n bw + type_memory_size ret_tv <= w2n sw` suffices_by
+    simp[regions_disjoint_def] >>
+  `0 < type_memory_size stv` by decide_tac >>
+  drule_all ret_buf_frontier_source_above >> simp[]
 QED
 
 Resume internal_return_widened_mem[equal]:

@@ -63,6 +63,11 @@ Resume stmt_frag_cons_env_mem[normal]:
   `gas_admissible (eval_stmts cx ss) (stmt_res_ok lctx)
       (es_end with gas_obs := [])` by
     (irule gas_admissible_stmts_tail >> metis_tac[]) >>
+  `!lo. alloca_prefix lo s0 ==> alloca_prefix lo t` by
+    (rpt strip_tac >> drule_all gas_marked_exec_alloca_prefix >> simp[]) >>
+  `ret_buf_frontier d c t` by
+    (irule ret_buf_frontier_post >>
+     qexistsl_tac [`cenv`, `s0`, `sa`] >> fs[] >> first_assum ACCEPT_TAC) >>
   qpat_x_assum `!gs es1 c sa sm. _` (qspec_then
     `gas_explicit left s0.vs_gas_readings` mp_tac) >>
   simp[] >> disch_then (qspecl_then
@@ -153,11 +158,20 @@ Resume stmt_frag_cons_env_mem[sequence_post]:
     (irule stmt_post_sequence >>
      qexistsl_tac [`c`, `es_end with gas_obs := []`, `sm`, `t`] >>
      gvs[preserves_scopes_dom_def]) >>
+  `res = INL () ==>
+   !n p sz.
+     FLOOKUP cenv''.ce_vars n <> FLOOKUP cenv.ce_vars n /\
+     FLOOKUP cenv''.ce_vars n = SOME (PtrVar (Var p) sz) ==>
+     ?aid w sz'. lookup_var p t' = SOME w /\
+                 FLOOKUP t'.vs_allocas aid = SOME (w2n w, sz')` by
+    (strip_tac >> match_mp_tac new_locals_alloca_trans >>
+     qexistsl_tac [`c`, `sm`, `t`] >> fs[] >>
+     rpt conj_tac >> first_assum ACCEPT_TAC) >>
   qexists_tac `cenv''` >> simp[] >> conj_tac
   >- (irule cenv_top_ext_trans >>
       qexistsl_tac [`c`, `es_end.scopes`] >>
       gvs[preserves_scopes_dom_def]) >>
-  gvs[stmt_post_def]
+  gvs[stmt_post_def] >> first_assum ACCEPT_TAC
 QED
 Finalise stmt_frag_cons_env_mem
 

@@ -1,7 +1,7 @@
 Theory stmtForRangeEndpointsMemory
 Ancestors
   stmtSimForced gasOutcome gasSummary gasSummaryCompose gasExemptCert fragGasMode
-  fragGasPath fragGasPathMem fragExec vyperState exprSimMemDefs
+  fragGasPath fragGasPathMem fragExec vyperState exprSimMemDefs bodyMemoryDefs
 
 Theorem for_endpoint_bind_outcome_mem:
   !tops ctx func (a : evaluation_state -> value evaluation_result)
@@ -69,6 +69,7 @@ Theorem for_expr_endpoint_outcome_mem:
      t.vs_current_bb = sb.cs_current_bb /\
      t.vs_inst_idx = LENGTH sb.cs_current_insts /\
      alloca_history func t /\ s0.vs_alloca_next <= t.vs_alloca_next /\
+     (!lo. alloca_prefix lo s0 ==> alloca_prefix lo t) /\
      ee.gas_obs = [] /\ ~t.vs_halted /\
      (!tail. ?gs. bind (eval_expr cx e) (read_result cx)
         (es with gas_obs := gs) = (INL v,ee with gas_obs := tail)) ==>
@@ -78,14 +79,29 @@ Theorem for_expr_endpoint_outcome_mem:
     (bind (bind (eval_expr cx e) (read_result cx))
       (k : value -> evaluation_state -> unit evaluation_result)) (es,s0) Q R
 Proof
-  strip_tac >> irule for_endpoint_bind_outcome_mem >>
+  strip_tac >>
+  `gas_outcome T (cx_tops cx) (ctx,func) (bind (eval_expr cx e) (read_result cx))
+     (es,s0)
+     (\res ee t. ?v. res = INL v /\
+        expr_post ctx func cenv cx e es sa sb s0 ee v op t /\
+        expr_store_bound cx (expr_type e) v op t /\
+        t.vs_current_bb = sb.cs_current_bb /\
+        t.vs_inst_idx = LENGTH sb.cs_current_insts /\
+        alloca_history func t /\ s0.vs_alloca_next <= t.vs_alloca_next)
+     (\res ee r. expr_exit res r)` by
+    (qhdtm_x_assum `expr_sim_mem` mp_tac >>
+     simp[expr_sim_mem_def] >> disch_then irule >> simp[]) >>
+  pop_assum (assume_tac o BETA_RULE o MATCH_MP gas_outcome_alloca_prefix) >>
+  irule for_endpoint_bind_outcome_mem >>
   conj_tac >- simp[] >> qexists_tac `\v ee t.
     expr_post ctx func cenv cx e es sa sb s0 ee v op t /\
     expr_store_bound cx (expr_type e) v op t /\
     t.vs_current_bb = sb.cs_current_bb /\
     t.vs_inst_idx = LENGTH sb.cs_current_insts /\
-    alloca_history func t /\ s0.vs_alloca_next <= t.vs_alloca_next` >>
+    alloca_history func t /\ s0.vs_alloca_next <= t.vs_alloca_next /\
+    (!lo. alloca_prefix lo s0 ==> alloca_prefix lo t)` >>
   simp[] >>
-  qhdtm_x_assum `expr_sim_mem` mp_tac >>
-  simp[expr_sim_mem_def] >> disch_then irule >> simp[]
+  irule gas_outcome_post_mono >>
+  qpat_x_assum `gas_outcome _ _ _ (bind _ _) _ _ _` (irule_at Any) >>
+  simp[] >> metis_tac[]
 QED

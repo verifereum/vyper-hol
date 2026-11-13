@@ -8,6 +8,7 @@ Ancestors
   loweringPosts
   bodySim stmtSimDefs exprSimDefs exprSimHypsDefs fragExecMem memSafeRun allocaHistory compileEnv loweringStateRelDefs
   exprLowering exprLoweringProps context venomState venomExecSemantics
+  intCallFrame fragGasPath fragGasMode fragExec gasSummary gasOutcome venomExecProofs
   vyperInterpreter vyperTypeSystem vyperTypeCallGraph list finite_map words
 
 (* The size in ce_return_buf describes a pointer slot.  Capacity below is
@@ -31,6 +32,140 @@ Proof
   fs[not_fresh_at_def] >> rpt strip_tac >>
   qpat_x_assum `!n. sa.cs_next_var <= n ==> _`
     (qspec_then `n` mp_tac) >> simp[]
+QED
+
+(* ===== The caller-buffer frontier along a run ===== *)
+
+Theorem gas_path_edge_alloca_prefix[local]:
+  !ctx fn s n t lo.
+    gas_path_edge ctx fn s n (OK t) /\ alloca_prefix lo s ==>
+    alloca_prefix lo t
+Proof
+  rw[gas_path_edge_def] >>
+  `result_allocas_above lo (step_inst fuel ctx inst s)` by
+    (irule step_inst_allocas_above >>
+     fs[alloca_prefix_def, allocas_above_def] >> metis_tac[]) >>
+  rpt (qpat_x_assum `OK _ = _` (assume_tac o SYM)) >>
+  gvs[result_allocas_above_def, exit_result_def] >>
+  imp_res_tac eval_phis_preserves_alloca_fields >>
+  fs[alloca_prefix_def, allocas_above_def] >> metis_tac[]
+QED
+
+Theorem gas_path_alloca_prefix:
+  !ctx fn s n r.
+    gas_path ctx fn s n r ==>
+    !t lo. r = OK t /\ alloca_prefix lo s ==> alloca_prefix lo t
+Proof
+  Induct_on `gas_path` >> rw[exit_result_def] >>
+  metis_tac[gas_path_edge_alloca_prefix]
+QED
+
+(* Every allocation a run makes is at or above the frontier it started
+   from, so the allocation part of ret_buf_frontier holds wherever a
+   fragment's run lands. *)
+Theorem gas_marked_exec_alloca_prefix:
+  !memory ctx func source es s0 marks res es_end t lo.
+    gas_marked_exec memory (ctx, func) source (es, s0) marks res es_end
+      (OK t) /\ alloca_prefix lo s0 ==>
+    alloca_prefix lo t
+Proof
+  rw[gas_marked_exec_def] >> drule gas_marked_path_exec >>
+  metis_tac[gas_path_alloca_prefix]
+QED
+
+(* A run's normal landings keep every allocation-frontier prefix of its
+   start. *)
+Theorem gas_outcome_alloca_prefix:
+  !memory tops ctx func source es s Q R.
+    gas_outcome memory tops (ctx,func) source (es,s) Q R ==>
+    gas_outcome memory tops (ctx,func) source (es,s)
+      (\res ee t. Q res ee t /\
+                  !lo. alloca_prefix lo s ==> alloca_prefix lo t) R
+Proof
+  rewrite_tac[gas_outcome_def, gas_summary_at_def] >> BETA_TAC >>
+  rpt strip_tac >> qexists_tac `marks` >| [
+    disj1_tac >> metis_tac[gas_marked_exec_alloca_prefix],
+    disj1_tac >> metis_tac[],
+    disj2_tac >> metis_tac[]]
+QED
+
+(* Control-flow fields don't touch the frontier. *)
+Theorem ret_buf_frontier_control:
+  !d cenv s pb cb ix.
+    ret_buf_frontier d cenv
+      (s with <| vs_prev_bb := pb; vs_current_bb := cb; vs_inst_idx := ix |>) <=>
+    ret_buf_frontier d cenv s
+Proof
+  Cases_on `d` >> simp[ret_buf_frontier_def] >>
+  rename1 `SOME pair` >> PairCases_on `pair` >>
+  simp[ret_buf_frontier_def, alloca_prefix_def, lookup_var_def]
+QED
+
+(* A fragment's landing keeps the frontier: the locals it had keep their
+   pointers, and those it declares are allocations of the run. *)
+Theorem ret_buf_frontier_post:
+  !d cenv cenv'' sa s0 t.
+    ret_buf_frontier d cenv s0 /\ local_ptrs_reserved cenv sa /\
+    (!x w. not_fresh_at sa x /\ lookup_var x s0 = SOME w ==>
+           lookup_var x t = SOME w) /\
+    (!lo. alloca_prefix lo s0 ==> alloca_prefix lo t) /\
+    (!n p sz.
+       FLOOKUP cenv''.ce_vars n <> FLOOKUP cenv.ce_vars n /\
+       FLOOKUP cenv''.ce_vars n = SOME (PtrVar (Var p) sz) ==>
+       ?aid w sz'. lookup_var p t = SOME w /\
+                   FLOOKUP t.vs_allocas aid = SOME (w2n w, sz')) ==>
+    ret_buf_frontier d cenv'' t
+Proof
+  rpt gen_tac >> Cases_on `d`
+  >- simp[ret_buf_frontier_def] >>
+  rename1 `SOME pair` >> PairCases_on `pair` >>
+  simp[ret_buf_frontier_def] >> strip_tac >>
+  rpt strip_tac >>
+  `alloca_prefix (pair1 + w2n pair0) t` by metis_tac[] >>
+  Cases_on `FLOOKUP cenv''.ce_vars n = FLOOKUP cenv.ce_vars n`
+  >- (`?w. lookup_var p s0 = SOME w /\ pair1 + w2n pair0 <= w2n w` by
+        metis_tac[] >>
+      `not_fresh_at sa p` by metis_tac[local_ptrs_reserved_def] >>
+      metis_tac[]) >>
+  first_x_assum drule_all >> strip_tac >>
+  fs[alloca_prefix_def] >> metis_tac[]
+QED
+
+(* Two landings in a row: a local new at the second is an allocation of
+   the second run, or an allocation of the first that the second kept. *)
+Theorem new_locals_alloca_trans:
+  !cenv c c2 sm t t'.
+    (!n p sz.
+       FLOOKUP c.ce_vars n <> FLOOKUP cenv.ce_vars n /\
+       FLOOKUP c.ce_vars n = SOME (PtrVar (Var p) sz) ==>
+       ?aid w sz'. lookup_var p t = SOME w /\
+                   FLOOKUP t.vs_allocas aid = SOME (w2n w, sz')) /\
+    (!n p sz.
+       FLOOKUP c2.ce_vars n <> FLOOKUP c.ce_vars n /\
+       FLOOKUP c2.ce_vars n = SOME (PtrVar (Var p) sz) ==>
+       ?aid w sz'. lookup_var p t' = SOME w /\
+                   FLOOKUP t'.vs_allocas aid = SOME (w2n w, sz')) /\
+    local_ptrs_reserved c sm /\
+    (!x w. not_fresh_at sm x /\ lookup_var x t = SOME w ==>
+           lookup_var x t' = SOME w) /\
+    (!aid b. FLOOKUP t.vs_allocas aid = SOME b ==>
+             FLOOKUP t'.vs_allocas aid = SOME b) ==>
+    !n p sz.
+      FLOOKUP c2.ce_vars n <> FLOOKUP cenv.ce_vars n /\
+      FLOOKUP c2.ce_vars n = SOME (PtrVar (Var p) sz) ==>
+      ?aid w sz'. lookup_var p t' = SOME w /\
+                  FLOOKUP t'.vs_allocas aid = SOME (w2n w, sz')
+Proof
+  rpt gen_tac >> strip_tac >> rpt gen_tac >> strip_tac >>
+  reverse (Cases_on `FLOOKUP c2.ce_vars n = FLOOKUP c.ce_vars n`)
+  >- metis_tac[] >>
+  `?aid w sz'. lookup_var p t = SOME w /\
+               FLOOKUP t.vs_allocas aid = SOME (w2n w, sz')` by
+    (`FLOOKUP c.ce_vars n <> FLOOKUP cenv.ce_vars n /\
+      FLOOKUP c.ce_vars n = SOME (PtrVar (Var p) sz)` by metis_tac[] >>
+     metis_tac[]) >>
+  `not_fresh_at sm p` by metis_tac[local_ptrs_reserved_def] >>
+  metis_tac[]
 QED
 
 Theorem return_buf_frame_jump_to:

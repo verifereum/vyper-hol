@@ -98,6 +98,11 @@ Resume compile_if_stmt_frag_mem[selected_branch]:
      drule emit_inst_extends >> strip_tac >> simp[] >>
      qexistsl_tac [`op`, `pre`, `post`] >>
      simp[valueEncodingTheory.val_to_w256_def]) >>
+  `!lo. alloca_prefix lo s0 ==> alloca_prefix lo t` by
+    (rpt strip_tac >> drule_all gas_marked_exec_alloca_prefix >> simp[]) >>
+  `ret_buf_frontier d cenv t` by
+    (irule ret_buf_frontier_post >>
+     qexistsl_tac [`cenv`, `s0`, `sa`] >> fs[expr_post_def]) >>
   qpat_x_assum `!gs b es1. _` mp_tac >>
   disch_then (qspecl_then [`gas_explicit marks s0.vs_gas_readings`, `b`,
     `es_end with gas_obs := []`] mp_tac) >>
@@ -123,7 +128,8 @@ Resume compile_if_stmt_frag_mem[selected_branch]:
       >- (simp[return_buf_frame_jump_to] >> irule return_buf_frame_frame >>
           qexistsl_tac [`cenv`, `s0`, `sa`] >>
           fs[expr_post_def, lookup_var_def, jump_to_def]) >>
-      fs[expr_post_def, allocaHistoryTheory.alloca_history_def, jump_to_def]) >>
+      fs[expr_post_def, allocaHistoryTheory.alloca_history_def, jump_to_def,
+         ret_buf_frontier_control]) >>
   simp[] >> strip_tac >>
   `gas_outcome T (cx_tops cx) (ctx,func)
      (ignore_bind push_scope (finally (eval_stmts cx (if b then ss1 else ss2)) pop_scope))
@@ -146,9 +152,33 @@ Resume compile_if_stmt_frag_mem[selected_branch]:
        `last`, `xl`] >> simp[] >>
      conj_tac >- (Cases_on `block_is_terminated last` >> fs[]) >>
      qpat_x_assum `gas_outcome _ _ _ (eval_stmts _ _) _ _ _` mp_tac >>
-     simp[jump_to_def]) >>
-  drule_all if_selected_outcome_prefix_mem >>
-  simp[gas_outcome_def, gas_summary_at_def]
+     simp[jump_to_def] >> strip_tac >>
+     irule gas_outcome_post_mono >> first_x_assum (irule_at Any) >>
+     BETA_TAC >> rpt strip_tac >> qexists_tac `cenv''` >> fs[]) >>
+  drule_all if_selected_outcome_prefix_mem >> strip_tac >>
+  `gas_outcome T (cx_tops cx) (ctx,func) (eval_stmt cx (If c ss1 ss2)) (es,s0)
+     (\res ee t. ?cenv''.
+        stmt_lands lctx sb res t /\ ~t.vs_halted /\
+        (res = INL () ==> ~block_is_terminated sb /\ cenv'' = cenv) /\
+        cenv_top_ext cenv cenv'' ee.scopes /\
+        stmt_state_rel ctx func cenv'' cx ee t /\
+        (!x w. not_fresh_at sa x /\ lookup_var x s0 = SOME w ==>
+               lookup_var x t = SOME w) /\
+        (!aid bnd. FLOOKUP s0.vs_allocas aid = SOME bnd ==>
+                   FLOOKUP t.vs_allocas aid = SOME bnd) /\
+        return_buf_frame d cenv'' sb t /\ alloca_history func t /\
+        s0.vs_alloca_next <= t.vs_alloca_next /\
+        (res = INL () ==>
+         !n p sz.
+           FLOOKUP cenv''.ce_vars n <> FLOOKUP cenv.ce_vars n /\
+           FLOOKUP cenv''.ce_vars n = SOME (PtrVar (Var p) sz) ==>
+           ?aid w sz'. lookup_var p t = SOME w /\
+                       FLOOKUP t.vs_allocas aid = SOME (w2n w, sz')))
+     (\res ee r. !tail. stmt_exit RetQ (ee with gas_obs := tail) res r)`
+    suffices_by simp[gas_outcome_def, gas_summary_at_def] >>
+  irule gas_outcome_post_mono >> first_x_assum (irule_at Any) >>
+  BETA_TAC >> rpt strip_tac >> qexists_tac `cenv''` >> fs[] >>
+  strip_tac >> gvs[]
 QED
 
 Finalise compile_if_stmt_frag_mem

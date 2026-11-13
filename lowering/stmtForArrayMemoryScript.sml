@@ -83,6 +83,13 @@ Proof
      conj_tac >- (qexists_tac `sa.cs_next_id + 1` >> simp[]) >>
      conj_tac >- (qexistsl_tac [`arr_sz`, `name`] >> simp[]) >>
      gvs[] >> goal_assum (drule_at Any)) >>
+  `!lo. alloca_prefix lo s0 ==> alloca_prefix lo s` by
+    (qpat_assum `gas_path_mem _ _ s0 _ (OK s)`
+       (strip_assume_tac o MATCH_MP fragGasPathMemTheory.gas_path_mem_exec) >>
+     metis_tac[gas_path_alloca_prefix]) >>
+  `ret_buf_frontier d cenv s` by
+    (irule ret_buf_frontier_post >> qexistsl_tac [`cenv`, `s0`, `sa`] >>
+     simp[]) >>
   `array_round_inv d ctx func cenv cx P vs id idx (Var arr_ptr) base' p dst
      (type_memory_bytes cenv et) ainst cond sa s0 0 es s` by
     (simp[array_round_inv_def, array_round_frame_def] >>

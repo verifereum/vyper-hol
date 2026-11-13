@@ -7,7 +7,7 @@ Ancestors
   stmtForRangeMemoryRound stmtLoweringMono
   stmtSimForParts stmtSimProps stmtSimForLoop loweringSlice loweringPosts vyperValue
   exprLoweringProps stmtSimDeclPath venomExecSemantics venomInst
-  venomState finite_map list fragExec
+  venomState finite_map list fragExec bodyMemoryDefs
 
 Theorem compile_for_range_lit_frag_mem:
   !P d ctx func cx lctx RetQ cenv ty id fty a1 n1 a2 n2 bound stmts es tyv.
@@ -106,6 +106,13 @@ Proof
 QED
 
 Resume compile_for_range_lit_frag_mem[loop]:
+  `!lo. alloca_prefix lo s0 ==> alloca_prefix lo cc` by
+    (qpat_assum `gas_path_mem _ _ s0 _ (OK cc)`
+       (strip_assume_tac o MATCH_MP fragGasPathMemTheory.gas_path_mem_exec) >>
+     metis_tac[gas_path_alloca_prefix]) >>
+  `ret_buf_frontier d cenv cc` by
+    (irule ret_buf_frontier_post >> qexistsl_tac [`cenv`, `s0`, `sa`] >>
+     simp[] >> metis_tac[]) >>
   `for_code func cenv bc ty stmts id tyv p (type_memory_bytes cenv fty) aa cv ev dv nv
     cond_lbl exit_lbl body_lbl incr_lbl (sa.cs_next_id + 5) (sa.cs_next_id + 6)
     (sa.cs_next_id + 7) bbb sj.cs_next_id (sj.cs_next_id + 1) (sj.cs_next_id + 2)
@@ -140,9 +147,9 @@ Resume compile_for_range_lit_frag_mem[loop]:
        (!a b. FLOOKUP cc.vs_allocas a = SOME b ==> FLOOKUP s.vs_allocas a = SOME b))
      (\res ee r. !tail. stmt_exit RetQ (ee with gas_obs := tail) res r)` by
     (irule for_loop_mem >>
-     ntac 4 (conj_tac >- simp[]) >>
+     ntac 5 (conj_tac >- simp[]) >>
      conj_tac >- (qexists_tac `lctx` >> simp[]) >>
-     ntac 3 (conj_tac >- simp[]) >>
+     ntac 4 (conj_tac >- simp[]) >>
      qexists_tac `P` >> qhdtm_assum `for_code` (irule_at Any) >>
      qexistsl_tac [`w`, `n2`] >> simp[Abbr `aa`, mk_inst_def] >>
      rpt strip_tac >>

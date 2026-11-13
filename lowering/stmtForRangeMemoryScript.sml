@@ -404,6 +404,17 @@ Resume compile_for_range_checked_frag_active_mem[valid_bound]:
 QED
 
 Resume compile_for_range_checked_frag_active_mem[loop_ready]:
+  `!lo. alloca_prefix lo s0 ==> alloca_prefix lo t2` by metis_tac[] >>
+  `ret_buf_frontier d cenv t2` by
+    (irule ret_buf_frontier_post >> qexistsl_tac [`cenv`, `s0`, `sa`] >>
+     simp[]) >>
+  `!lo. alloca_prefix lo t2 ==> alloca_prefix lo cc` by
+    (qpat_assum `gas_path_mem _ _ t2 _ (OK cc)`
+       (strip_assume_tac o MATCH_MP fragGasPathMemTheory.gas_path_mem_exec) >>
+     metis_tac[gas_path_alloca_prefix]) >>
+  `ret_buf_frontier d cenv cc` by
+    (irule ret_buf_frontier_post >> qexistsl_tac [`cenv`, `t2`, `s2`] >>
+     simp[] >> metis_tac[]) >>
   `!scs. lookup_scopes id scs = NONE ==> not_local_ptr bc (FEMPTY :: scs) p` by
     (rpt strip_tac >> irule local_ptrs_reserved_not_live >> conj_tac
      >- (qexistsl_tac [`id`,`type_memory_bytes cenv fty`] >> simp[lookup_scopes_def]) >>
@@ -442,9 +453,9 @@ Resume compile_for_range_checked_frag_active_mem[loop_ready]:
       (!x v. not_fresh_at s2 x /\ lookup_var x cc = SOME v ==> lookup_var x s = SOME v) /\
       (!a b. FLOOKUP cc.vs_allocas a = SOME b ==> FLOOKUP s.vs_allocas a = SOME b))
     (\res ee r. !tail. stmt_exit RetQ (ee with gas_obs := tail) res r)` by
-    (irule for_loop_mem >> ntac 4 (conj_tac >- simp[]) >>
+    (irule for_loop_mem >> ntac 5 (conj_tac >- simp[]) >>
      conj_tac >- (qexists_tac `lctx` >> simp[]) >>
-     ntac 3 (conj_tac >- simp[]) >>
+     ntac 4 (conj_tac >- simp[]) >>
      qexists_tac `P` >> qhdtm_assum `for_code` (irule_at Any) >>
      qexistsl_tac [`w`,`n2`] >> simp[Abbr `aa`, mk_inst_def] >>
      conj_tac >- (qpat_assum `ee2.gas_obs = []` (SUBST1_TAC o SYM) >> simp[]) >>

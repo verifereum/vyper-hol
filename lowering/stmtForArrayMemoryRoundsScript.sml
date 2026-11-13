@@ -10,7 +10,8 @@ Libs
 
 Definition array_round_frame_def:
   array_round_frame d func cenv caller orig s <=>
-    return_buf_frame d cenv caller s /\ alloca_history func s /\
+    return_buf_frame d cenv caller s /\ ret_buf_frontier d cenv s /\
+    local_ptrs_reserved cenv caller /\ alloca_history func s /\
     orig.vs_alloca_next <= s.vs_alloca_next /\
     (!x w. not_fresh_at caller x /\ lookup_var x orig = SOME w ==>
       lookup_var x s = SOME w) /\
@@ -39,13 +40,28 @@ Theorem array_round_frame_transport:
   (!x w. not_fresh_at caller x /\ lookup_var x s = SOME w ==>
     lookup_var x t = SOME w) /\
   (!aid b. FLOOKUP s.vs_allocas aid = SOME b ==>
-    FLOOKUP t.vs_allocas aid = SOME b) ==>
+    FLOOKUP t.vs_allocas aid = SOME b) /\
+  (!lo. alloca_prefix lo s ==> alloca_prefix lo t) ==>
   array_round_frame d func cenv caller orig t
 Proof
   rw[array_round_frame_def]
+  >~ [`return_buf_frame`]
   >- (irule return_buf_frame_frame >>
+      qexistsl_tac [`cenv`, `s`, `caller`] >> simp[])
+  >~ [`ret_buf_frontier`]
+  >- (irule ret_buf_frontier_post >>
       qexistsl_tac [`cenv`, `s`, `caller`] >> simp[]) >>
   metis_tac[LESS_EQ_TRANS]
+QED
+
+Theorem ret_buf_frontier_jump_to[local]:
+  !d cenv l s.
+    ret_buf_frontier d cenv (jump_to l s) <=> ret_buf_frontier d cenv s
+Proof
+  rpt gen_tac >> Cases_on `d`
+  >- simp[ret_buf_frontier_def] >>
+  rename1 `SOME pair` >> PairCases_on `pair` >>
+  simp[ret_buf_frontier_def, alloca_prefix_def, lookup_var_def, jump_to_def]
 QED
 
 Theorem array_round_last:
@@ -77,7 +93,7 @@ Proof
   `array_round_frame d func cenv caller orig t` by
     (irule array_round_frame_transport >> simp[] >> qexists_tac `s` >> simp[] >>
      rpt strip_tac >> fs[Abbr `t`, lookup_var_def, jump_to_def, update_var_def,
-                           FLOOKUP_UPDATE] >> metis_tac[]) >>
+                           FLOOKUP_UPDATE, alloca_prefix_def] >> metis_tac[]) >>
   fs[array_round_done_def, array_loop_inv_def, state_rel_gas_obs]
 QED
 
@@ -109,7 +125,7 @@ Proof
   qexists_tac `t` >> simp[gas_marked_path_def, ADD1] >>
   irule array_round_frame_transport >> simp[] >> qexists_tac `s` >> simp[] >>
   rpt strip_tac >> fs[Abbr `t`, lookup_var_def, jump_to_def, update_var_def,
-                           FLOOKUP_UPDATE] >> metis_tac[]
+                           FLOOKUP_UPDATE, alloca_prefix_def] >> metis_tac[]
 QED
 
 Theorem array_round_break:
@@ -145,6 +161,8 @@ Proof
           irule emit_jump_zero_path_mem >> simp[] >>
           qexistsl_tac [`sb`, `sj`] >> simp[]) >>
       simp[array_round_inv_def] >>
+      `ret_buf_frontier d cenv (jump_to incr s)` by
+        fs[array_round_frame_def, ret_buf_frontier_jump_to] >>
       fs[array_round_frame_def, return_buf_frame_jump_to, jump_to_def,
          lookup_var_def, alloca_history_def]) >>
   qexists_tac `s` >> conj_tac
@@ -181,7 +199,7 @@ Proof
   qexists_tac `t` >> simp[gas_marked_path_def] >>
   irule array_round_frame_transport >> simp[] >> qexists_tac `s` >> simp[] >>
   rpt strip_tac >> fs[Abbr `t`, lookup_var_def, jump_to_def, update_var_def,
-                           FLOOKUP_UPDATE] >> metis_tac[]
+                           FLOOKUP_UPDATE, alloca_prefix_def] >> metis_tac[]
 QED
 
 Theorem array_iter_copy_no_gas[local]:
@@ -329,7 +347,8 @@ Definition array_body_post_mem_def:
       (!aid b. FLOOKUP s_body.vs_allocas aid = SOME b ==>
         FLOOKUP t.vs_allocas aid = SOME b) /\
       return_buf_frame d ce sb1 t /\ alloca_history func t /\
-      s_body.vs_alloca_next <= t.vs_alloca_next
+      s_body.vs_alloca_next <= t.vs_alloca_next /\
+      (!lo. alloca_prefix lo s_body ==> alloca_prefix lo t)
 End
 
 Theorem array_code_body_outcome_mem:
@@ -392,12 +411,37 @@ Proof
      gvs[compile_stmts_env]) >>
   `fn_inst_ids_distinct func /\ s.vs_current_bb = sb0.cs_current_bb` by
     fs[array_for_code_def, array_loop_inv_def] >>
+  `ret_buf_frontier d cenv s /\ local_ptrs_reserved cenv caller` by
+    fs[array_round_inv_def, array_round_frame_def] >>
+  `not_fresh_at sa p /\ p <> ov /\ p <> ep /\
+   FLOOKUP bc.ce_vars id = SOME (PtrVar (Var p) sz) /\
+   (!n. n <> id ==> FLOOKUP bc.ce_vars n = FLOOKUP cenv.ce_vars n)` by
+    (fs[array_for_code_def, ALL_DISTINCT] >> metis_tac[]) >>
+  `lookup_var p t = SOME dst /\
+   FLOOKUP t.vs_allocas ainst.inst_id = SOME (w2n dst,sz)` by
+    (fs[array_loop_inv_def] >> metis_tac[]) >>
+  `!lo. alloca_prefix lo s ==> alloca_prefix lo t` by
+    (rpt strip_tac >> fs[alloca_prefix_def] >> metis_tac[]) >>
+  `!n q z. FLOOKUP bc.ce_vars n <> FLOOKUP cenv.ce_vars n /\
+     FLOOKUP bc.ce_vars n = SOME (PtrVar (Var q) z) ==>
+     ?aid w z'. lookup_var q t = SOME w /\
+                FLOOKUP t.vs_allocas aid = SOME (w2n w,z')` by
+    (rpt strip_tac >> `n = id` by metis_tac[] >> gvs[] >> metis_tac[]) >>
+  `ret_buf_frontier d bc t` by
+    (irule ret_buf_frontier_post >> qexistsl_tac [`cenv`, `s`, `caller`] >>
+     rpt conj_tac >> first_assum ACCEPT_TAC) >>
   qexists_tac `t` >> simp[] >>
   qhdtm_x_assum `stmt_frag_mem` mp_tac >>
   rewrite_tac[stmt_frag_mem_def] >>
   disch_then (qspecl_then [`sb0`, `sb1`, `t`,
     `FST (stmts_env bc (InLoop exit incr) ty stmts sb0)`] mp_tac) >>
-  simp[GSYM array_body_post_mem_def, SF ETA_ss]
+  impl_tac >- simp[] >>
+  qpat_assum `ei = _` (fn eq => disch_then (assume_tac o REWRITE_RULE [eq] o
+    BETA_RULE o MATCH_MP gas_outcome_alloca_prefix)) >>
+  irule exprSimMemDefsTheory.gas_outcome_post_mono >>
+  first_x_assum (irule_at Any) >>
+  BETA_TAC >> rpt strip_tac >> simp[array_body_post_mem_def] >>
+  qexists_tac `cenv''` >> fs[]
 QED
 
 Theorem array_body_round_restore_mem:
@@ -440,6 +484,12 @@ Proof
     lookup_var x t = SOME w` by
     (rpt strip_tac >>
      `not_fresh_at sa x` by (fs[not_fresh_at_def] >> metis_tac[LESS_LESS_EQ_TRANS]) >>
+     metis_tac[]) >>
+  `!lo. alloca_prefix lo s ==> alloca_prefix lo t` by
+    (qhdtm_assum `array_body_post_mem`
+       (strip_assume_tac o REWRITE_RULE [array_body_post_mem_def]) >>
+     rpt strip_tac >>
+     `alloca_prefix lo s_body` by (fs[alloca_prefix_def] >> metis_tac[]) >>
      metis_tac[]) >>
   `array_round_frame d func cenv caller orig t` by
     (irule array_round_frame_transport >> simp[] >> qexists_tac `s` >>

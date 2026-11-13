@@ -203,5 +203,6 @@ Proof
   `return_buf_frame d c sb u` by
     (irule return_buf_frame_frame >>
      qexistsl_tac [`cenv`, `s0`, `sa`] >> simp[]) >>
-  simp[stmt_lands_def]
+  simp[stmt_lands_def] >> rpt strip_tac >>
+  `n = id` by metis_tac[] >> gvs[] >> metis_tac[]
 QED

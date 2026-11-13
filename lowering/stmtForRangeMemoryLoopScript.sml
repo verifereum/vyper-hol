@@ -18,7 +18,7 @@ Theorem for_body_outcome_mem:
   (!x. x <> dv ==> lookup_var x s2 = lookup_var x cc) /\
   s2.vs_alloca_next = cc.vs_alloca_next /\ alloca_history func s2 /\
   ~s2.vs_halted /\ s2.vs_current_bb = body_lbl /\ s2.vs_inst_idx = 1 /\
-  stmt_state_rel ctx func bc cx E s2 /\
+  stmt_state_rel ctx func bc cx E s2 /\ ret_buf_frontier d bc s2 /\
   gas_admissible (eval_stmts cx stmts) (stmt_res_ok (InLoop exit_lbl incr_lbl)) E /\
   stmt_frag_mem d ctx func cx (InLoop exit_lbl incr_lbl) RetQ bc
     (stmts_env bc (InLoop exit_lbl incr_lbl) ty stmts) (eval_stmts cx stmts) E ==>
@@ -51,7 +51,10 @@ Proof
   disch_then (qspecl_then [`sb0`, `sb1`, `s2`,
     `FST (stmts_env bc (InLoop exit_lbl incr_lbl) ty stmts sb0)`] mp_tac) >>
   impl_tac
-  >- (fs[for_code_def, compile_stmts_env] >> metis_tac[pairTheory.PAIR]) >> simp[]
+  >- (fs[for_code_def, compile_stmts_env] >> metis_tac[pairTheory.PAIR]) >>
+  strip_tac >> irule exprSimMemDefsTheory.gas_outcome_post_mono >>
+  first_x_assum (irule_at Any) >> BETA_TAC >> rpt strip_tac >>
+  qexists_tac `cenv''` >> rpt conj_tac >> first_assum ACCEPT_TAC
 QED
 
 Theorem for_body_original_frame_mem:
@@ -236,6 +239,38 @@ Proof
        immutable_alloca_sep_def]
 QED
 
+(* The loop body's environment adds only the loop variable, whose slot is
+   an allocation of the frame; the round's entry state differs from the
+   condition state only in the comparison flag dv. *)
+Theorem for_round_frontier[local]:
+  !d cenv bc cc s2 id p sz dv w aid.
+    ret_buf_frontier d cenv cc /\
+    s2.vs_allocas = cc.vs_allocas /\ s2.vs_alloca_next = cc.vs_alloca_next /\
+    (!x. x <> dv ==> lookup_var x s2 = lookup_var x cc) /\
+    FLOOKUP bc.ce_vars id = SOME (PtrVar (Var p) sz) /\
+    (!n. n <> id ==> FLOOKUP bc.ce_vars n = FLOOKUP cenv.ce_vars n) /\
+    (!scs. not_local_ptr cenv scs dv) /\ dv <> p /\
+    lookup_var p cc = SOME w /\ FLOOKUP cc.vs_allocas aid = SOME (w2n w, sz) ==>
+    ret_buf_frontier d bc s2
+Proof
+  rpt gen_tac >> Cases_on `d` >> simp[ret_buf_frontier_def] >>
+  rename1 `SOME pair` >> PairCases_on `pair` >>
+  simp[ret_buf_frontier_def, alloca_prefix_def] >> strip_tac >>
+  conj_tac >- first_assum ACCEPT_TAC >>
+  qx_genl_tac [`n`, `q`, `z`] >> strip_tac >>
+  Cases_on `n = id`
+  >- (gvs[] >> metis_tac[]) >>
+  `FLOOKUP cenv.ce_vars n = SOME (PtrVar (Var q) z)` by metis_tac[] >>
+  `q <> dv` by
+    (strip_tac >> gvs[] >>
+     qpat_x_assum `!scs. not_local_ptr _ _ _`
+       (qspec_then `[FEMPTY |+ (n, ARB)]` mp_tac) >>
+     simp[not_local_ptr_def, lookup_scopes_def,
+          finite_mapTheory.FLOOKUP_UPDATE] >>
+     disj1_tac >> qexistsl_tac [`n`, `ARB`, `z`] >> simp[]) >>
+  metis_tac[]
+QED
+
 Theorem for_iteration_mem:
   !d ctx func cenv bc cx lctx RetQ ty stmts esk cc id tyv p sz w ainst cv ev dv
    nv n1 n2 k cond_lbl exit_lbl body_lbl incr_lbl j1 j2 j3 bbb i1 i2 i3
@@ -253,6 +288,7 @@ Theorem for_iteration_mem:
     lookup_var cv cc = SOME (i2w (n1 + &k)) /\
     lookup_var ev cc = SOME (i2w n2) /\ lookup_var p cc = SOME w /\
     FLOOKUP cc.vs_allocas ainst.inst_id = SOME (w2n w, sz) /\
+    ret_buf_frontier d cenv cc /\
     stmt_frag_mem d ctx func cx (InLoop exit_lbl incr_lbl) RetQ bc
       (stmts_env bc (InLoop exit_lbl incr_lbl) ty stmts) (eval_stmts cx stmts)
       (esk with <| scopes :=
@@ -314,6 +350,11 @@ Proof
       value := IntV (n1 + &k); popped := []|>)) :: esk.scopes)` by
     (drule for_round_body_admissible >> simp[]) >>
   `!x. not_fresh_at st x ==> x <> dv` by metis_tac[] >>
+  `ret_buf_frontier d bc s2` by
+    (qhdtm_assum `for_code` (strip_assume_tac o SRULE [for_code_def]) >>
+     mp_tac (Q.SPECL [`d`, `cenv`, `bc`, `cc`, `s2`, `id`, `p`, `sz`, `dv`, `w`,
+                      `ainst.inst_id`] for_round_frontier) >>
+     impl_tac >- simp[] >> simp[]) >>
   drule_all for_body_outcome_mem >> strip_tac >>
   irule for_outcome_zero_prefix_mem >> qexists_tac `s2` >> simp[] >>
   irule for_round_outcome_mem >> conj_tac >- first_assum ACCEPT_TAC >>
@@ -395,7 +436,8 @@ Theorem for_loop_mem:
     stmt_state_rel ctx func cenv cx esk cc /\ lookup_scopes id esk.scopes = NONE /\
     lookup_var cv cc = SOME (i2w (n1 + &k)) /\
     lookup_var ev cc = SOME (i2w n2) /\ lookup_var p cc = SOME w /\
-    FLOOKUP cc.vs_allocas ainst.inst_id = SOME (w2n w, sz) ==>
+    FLOOKUP cc.vs_allocas ainst.inst_id = SOME (w2n w, sz) /\
+    ret_buf_frontier d cenv cc /\ local_ptrs_reserved cenv st ==>
     gas_outcome T (cx_tops cx) (ctx, func)
       (eval_for cx tyv id stmts (GENLIST (\j. IntV (n1 + &(k + j))) m)) (esk, cc)
       (\res ee s. res = INL () /\ s.vs_current_bb = exit_lbl /\
@@ -478,7 +520,8 @@ Resume for_loop_mem[step]:
   `gas_admissible (eval_for cx tyv id stmts
       (IntV (n1 + &k) :: GENLIST (\j. IntV (n1 + &((k + 1) + j))) m))
      (stmt_res_ok lctx) esk` by gvs[] >>
-  drule_all for_iteration_mem >> strip_tac >>
+  drule_all for_iteration_mem >>
+  disch_then (assume_tac o BETA_RULE o MATCH_MP gas_outcome_alloca_prefix) >>
   qmatch_goalsub_abbrev_tac `gas_outcome T tops cf source start Final Exit` >>
   qmatch_asmsub_abbrev_tac `gas_outcome T tops cf round start Step StepExit` >>
   qabbrev_tac `Done = (\ee t. Final (INL ()) ee t)` >>
@@ -539,6 +582,10 @@ Resume for_loop_mem[step]:
   `ret_pc_ok cenv st t` by
     (asm_x "ih" kall_tac >> asm_x "preserve" kall_tac >>
      fs[ret_pc_ok_def] >> metis_tac[]) >>
+  `ret_buf_frontier d cenv t` by
+    (asm_x "ih" kall_tac >> asm_x "preserve" kall_tac >>
+     irule ret_buf_frontier_post >> qexistsl_tac [`cenv`, `cc`, `st`] >>
+     simp[]) >>
   asm_x "ih" (qspecl_then [`k + 1`, `mid with gas_obs := []`, `t`, `w`] mp_tac) >>
   (impl_tac
    >- (simp[] >> asm "preserve" ACCEPT_TAC)) >>

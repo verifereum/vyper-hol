@@ -100,7 +100,7 @@ Theorem stmt_frag_mem_complete:
     m sa = (cenv', sb) /\ fn_has_code sa sb func /\
     fn_inst_ids_distinct func /\ local_ptrs_reserved cenv sa /\
     ret_pc_ok cenv sa s0 /\ return_buf_frame d cenv sa s0 /\
-    ~block_is_terminated sa /\
+    ret_buf_frontier d cenv s0 /\ ~block_is_terminated sa /\
     gas_admissible source (stmt_res_ok lctx) es /\
     stmt_state_rel ctx func cenv cx es s0 /\ alloca_history func s0 /\
     ~s0.vs_halted /\ s0.vs_current_bb = sa.cs_current_bb /\
@@ -267,7 +267,8 @@ Proof
   drule stmt_frag_mem_complete >>
   disch_then (qspecl_then [`sa`, `sb`, `s0`, `cenv'`] mp_tac) >>
   impl_tac
-  >- (simp[ret_pc_ok_def, return_buf_frame_def] >> rpt conj_tac
+  >- (simp[ret_pc_ok_def, return_buf_frame_def, ret_buf_frontier_def] >>
+      rpt conj_tac
       >~ [`gas_admissible _ _ _`]
       >- (mp_tac (SPEC_ALL external_body_source_ok_gas_mem) >> asm_rewrite_tac[])
       >~ [`gas_exempt_cert _ _ _ _ _ _ _ _`]

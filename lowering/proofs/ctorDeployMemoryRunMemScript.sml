@@ -117,7 +117,8 @@ Proof
   pure_rewrite_tac [stmt_frag_mem_def] >>
   disch_then (qspecl_then [`sa`, `sb`, `s0`, `cenv'`] mp_tac) >>
   impl_tac
-  >- (simp[ret_pc_ok_def, gas_admissible_def, return_buf_frame_def] >>
+  >- (simp[ret_pc_ok_def, gas_admissible_def, return_buf_frame_def,
+           ret_buf_frontier_def] >>
       metis_tac[]) >>
   simp[gas_outcome_def] >> strip_tac
   >- ((* the body runs along a memory-safe target path *)
