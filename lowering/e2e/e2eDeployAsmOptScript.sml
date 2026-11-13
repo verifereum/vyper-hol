@@ -12,10 +12,11 @@
  * the stages' facts across the call outcomes, which the call-free
  * constructor never reads.
  *
- * TOP-LEVEL: compile_vyper_deploy_phases_asm_opt, opt_deploy_entry_state,
- * opt_deploy_frame, deploy_unit_outcomes_free,
- * opt_deploy_codegen_asm_entry_rel, opt_deploy_asm_frame_rel,
- * lower_vyper_deploy_unit_sym_src_ok.
+ * TOP-LEVEL: compile_vyper_deploy_phases_asm_opt,
+ * compile_vyper_deploy_nonempty_asm_opt, opt_deploy_entry_state,
+ * opt_deploy_frame (deploy_unit_outcomes_free is in deployOutcomesFreeUnit),
+ * opt_deploy_codegen_asm_entry_rel, opt_deploy_asm_frame_rel.
+ * lower_vyper_deploy_unit_sym_src_ok is in deploySymSrcUnit.
  *)
 Theory e2eDeployAsmOpt
 Ancestors
@@ -25,6 +26,7 @@ Ancestors
   asmOptimizer contextRawReachable asmDataSuffixProps contextPlanLayoutProps
   loweringStateRelDefs vyperArith frameRel codegenRel callTrace
   ctorDeployLowering ctorDeployMemory ctorDeployDload memSafeRun frameObsStep
+  deployOutcomesFreeUnit asmOptNonemptyFinalizer deploySymSrcUnit
 
 (* L1 of the deployment for the optimizer: the deploy code is the optimized
    assembly of the deployment unit's generated assembly. *)
@@ -43,6 +45,16 @@ Proof
   qpat_x_assum `codegen_assembly rpolicy deploy_out.po_unit = SOME _`
     (strip_assume_tac o MATCH_MP codegen_assembly_success_shape) >>
   goal_assum $ drule_at Any >> gvs[]
+QED
+
+(* compile_vyper_runtime_nonempty_asm_opt for the deployment code. *)
+Theorem compile_vyper_deploy_nonempty_asm_opt:
+  compile_vyper asm_opt_finalizer policy tops = SOME (deploy_bc, runtime_bc) ==>
+  deploy_bc <> []
+Proof
+  strip_tac >> drule compile_vyper_deploy_phases_asm_opt >> strip_tac >>
+  gvs[] >> irule codegen_assembly_finalizer_nonempty >>
+  fs[deploy_phases_def] >> metis_tac[]
 QED
 
 (* deploy_entry_state with prog's layout over es's code, which has prog'
@@ -102,7 +114,7 @@ Proof
     (irule exhausted_frame_obs_empty >> simp[Abbr`ctxt_p`]) >>
   conj_tac
   >- (qexistsl_tac [`ctxt_p`, `rb`, `args_bytes`] >>
-      qpat_x_assum `call_trace _ = [] /\ _` (fn th => REWRITE_TAC [th]) >>
+      qpat_x_assum `call_trace _ = []` (fn th => REWRITE_TAC [th]) >>
       gvs[Abbr`ctxt_p`, vfmExecutionPropTheory.wf_state_def,
           vfmExecutionPropTheory.wf_context_def,
           vfmExecutionPropTheory.all_accounts_def,
@@ -113,47 +125,10 @@ Proof
           e2eDefsTheory.call_outcomes_ok_def]) >>
   simp[gas_variant_def, opt_deploy_entry_state_def, deploy_entry_state_def,
        opt_entry_state_def, e2eEntryTheory.entry_venom_state_def] >>
-  qpat_x_assum `call_trace _ = [] /\ _` (fn th => REWRITE_TAC [th]) >>
+  qpat_x_assum `call_trace _ = []` (fn th => REWRITE_TAC [th]) >>
+  qpat_x_assum `gas_readings _ = []` (fn th => REWRITE_TAC [th]) >>
   gvs[Abbr`ctxt_p`, venomStateTheory.venom_state_component_equality,
       rich_listTheory.DROP_LENGTH_APPEND]
-QED
-
-(* deploy_unit_execution_correct, deploy_unit_memory_ok, deploy_unit_dload_ok
-   and deploy_unit_dload_in_section for an entry state whose call outcomes
-   are arbitrary: the constructor is call-free, so the deployment unit never
-   reads them. *)
-Theorem deploy_unit_outcomes_free:
-  !policy tops deploy_bc runtime_bc rpolicy dunit dout prog cplan am tx es vs.
-    deploy_phases policy tops (deploy_bc, runtime_bc)
-      (rpolicy, dunit, dout, prog, cplan) /\
-    deploy_source_ok tops am tx /\
-    deploy_state_rel tops deploy_bc am tx es /\
-    gas_variant (vs with vs_outcomes := [])
-      (deploy_entry_state prog cplan tops es)
-    ==>
-    (?marks.
-       deploy_source_exempt tops
-         (load_contract NONE (gas_explicit marks vs.vs_gas_readings) am tx
-            [(NONE, tops)] []) \/
-       ?fuel. deploy_venom_result_rel tops runtime_bc tx
-                (load_contract NONE (gas_explicit marks vs.vs_gas_readings) am tx
-                   [(NONE, tops)] [])
-                (run_context fuel dunit.cu_context vs)) /\
-    ((!marks. ~deploy_source_exempt tops
-                (load_contract NONE (gas_explicit marks vs.vs_gas_readings) am tx
-                   [(NONE, tops)] [])) ==>
-     raw_unit_memory_ok dunit.cu_context vs /\
-     ptr_discipline (imm_len tops) dunit.cu_context vs /\
-     taint_within (deploy_dead tops runtime_bc am tx) dunit.cu_context vs /\
-     (code_layout_valid vs ==>
-      mem_inv dload_offset_ok dunit.cu_context vs /\
-      mem_inv dload_headroom_ok dunit.cu_context vs /\
-      mem_inv (\c f inst s. inst_dload_in_section inst s /\
-                            s.vs_code = vs.vs_code /\
-                            s.vs_data_section = vs.vs_data_section)
-        dunit.cu_context vs))
-Proof
-  cheat
 QED
 
 (* deploy_entry_state_ok's entry relation for opt_deploy_entry_state: the
@@ -171,9 +146,11 @@ Theorem shadow_root_single[local]:
   call_trace (shadow_root es) = call_trace es /\
   gas_readings (shadow_root es) = gas_readings es
 Proof
-  simp[shadow_root_def, shadow_root_contexts_def] >>
-  simp[GSYM shadow_root_def, call_trace_def, gas_readings_def,
-       shadow_root_frame_obs]
+  strip_tac >>
+  `frame_obs (shadow_root es) = frame_obs es` by
+    (irule shadow_root_frame_obs >> simp[]) >>
+  asm_rewrite_tac[call_trace_def, gas_readings_def] >>
+  simp[shadow_root_def, shadow_root_contexts_def]
 QED
 
 Theorem opt_deploy_codegen_asm_entry_rel:
@@ -217,26 +194,6 @@ Proof
   simp[asm_frame_rel_def, asm_evm_rel_def, entry_asm_state_def,
        opt_deploy_entry_state_def, opt_entry_state_def, data_suffix_assemble,
        asm_pc_to_offset_zero, entry_venom_state_frame_fields] >>
-  gvs[entry_venom_state_def, venomStateTheory.init_venom_state_def, wordsTheory.w2n_n2w, listTheory.DROP_APPEND]
-QED
-
-(* The deployment unit's source-side static facts: no CODESIZE, CODECOPY
-   only from runtime_begin, no code_end label yet, a byte-only data segment,
-   and runtime_begin among its headers. *)
-Theorem lower_vyper_deploy_unit_sym_src_ok:
-  !policy tops deploy_bc runtime_bc rpolicy dunit dout prog cplan.
-  deploy_phases policy tops (deploy_bc, runtime_bc)
-    (rpolicy, dunit, dout, prog, cplan) /\
-  supported_program tops /\ ~program_reads_self_code tops ==>
-  label_flow_ok dunit.cu_context /\
-  (!fn inst. MEM fn dunit.cu_context.ctx_functions /\ MEM inst (fn_insts fn) ==>
-             ~MEM (Label "code_end") inst.inst_operands) /\
-  EVERY (\ds. EVERY (\di. case di of DataBytes _ => T | DataLabel _ => F)
-                    ds.ds_items) dunit.cu_data_segment /\
-  ((?fn inst. MEM fn dunit.cu_context.ctx_functions /\
-              MEM inst (fn_insts fn) /\
-              MEM (Label "runtime_begin") inst.inst_operands) ==>
-   EXISTS (\ds. ds.ds_label = "runtime_begin") dunit.cu_data_segment)
-Proof
-  cheat
+  gvs[entry_venom_state_def, venomStateTheory.init_venom_state_def, wordsTheory.w2n_n2w, listTheory.DROP_APPEND] >>
+  rewrite_tac[GSYM CONJ_ASSOC]
 QED

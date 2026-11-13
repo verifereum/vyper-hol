@@ -12,8 +12,8 @@
  * opt_entry_fields, opt_entry_codegen_asm_entry_rel,
  * opt_entry_asm_frame_rel, gas_variant_code_layout_valid,
  * o1_pipeline_memory_obligations_raw, o1_pipeline_label_flow_ok,
- * o1_pipeline_sym_unit_static_ok, o1_pipeline_code_end_offset_ok,
- * lower_vyper_runtime_unit_sym_src_ok.
+ * o1_pipeline_sym_unit_static_ok, o1_pipeline_code_end_offset_ok.
+ * lower_vyper_runtime_unit_sym_src_ok is in runtimeSymSrcUnit.
  *)
 Theory e2eAsmOpt
 Ancestors
@@ -24,7 +24,9 @@ Ancestors
   contextPlanLayoutProps unitMemInv stepWriteFootprint o1PassContract
   contextRawReachable codegenEncodingWf spillWordBounds symbolResolve asmWf
   memSafeRun lowerDloadDefs
-  frameRel codegenRel
+  frameRel codegenRel asmOptNonemptyFinalizer o1SymStaticData o1SymStaticPipeline
+  venomPipelineDriverProps venomCompilerWf venomWf o1LabelFlowCompose
+  runtimeSymSrcUnit
 
 (* L1 for the optimizer: the runtime is the optimized assembly of the O1
    output's generated assembly. *)
@@ -62,7 +64,9 @@ Theorem compile_vyper_runtime_nonempty_asm_opt:
   compile_vyper asm_opt_finalizer policy tops = SOME (deploy_bc, runtime_bc) ==>
   runtime_bc <> []
 Proof
-  cheat
+  strip_tac >> drule compile_vyper_runtime_phases_asm_opt >> strip_tac >>
+  gvs[] >> irule codegen_assembly_finalizer_nonempty >>
+  goal_assum (drule_at Any) >> metis_tac[]
 QED
 
 (* es's entry state with prog's code and labels: prog's code followed by
@@ -221,9 +225,7 @@ Proof
          mem_inv (lowered_mem_ok eom (w2n vs.vs_initial_fmp))
            out.po_unit.cu_context vs` by
     (fs[o1_lowered_inv_def, mem_inv_raw_reachable] >>
-     rpt strip_tac >> first_x_assum drule >>
-     drule ctxLookupAgreeTheory.raw_reachable_initial_fmp >>
-     simp[lowered_mem_fact_def]) >>
+     rpt strip_tac >> first_x_assum drule >> simp[static_mem_ok_lowered]) >>
   gvs[wordsTheory.w2n_n2w, arithmeticTheory.LESS_MOD] >>
   metis_tac[mem_inv_codegen_obligations, step_write_footprint_holds]
 QED
@@ -235,18 +237,22 @@ QED
 Theorem o1_pipeline_label_flow_ok:
   !rpolicy unit out.
   o1PipelineCorrect$o1_pipeline rpolicy unit = SOME out /\
-  o1_source_unit_ok unit /\ label_flow_ok unit.cu_context /\
+  o1_source_unit_ok unit /\ unit_entry_no_params unit /\
+  unit_defs_reach_uses unit /\ unit_fmp_unsealed unit /\
+  label_flow_ok unit.cu_context /\
   (!fn inst. MEM fn unit.cu_context.ctx_functions /\ MEM inst (fn_insts fn) ==>
              ~MEM (Label "code_end") inst.inst_operands) ==>
   label_flow_ok out.po_unit.cu_context
 Proof
-  cheat
+  ACCEPT_TAC o1_pipeline_label_flow_preserved
 QED
 
 (* O1 keeps the data segment and makes INVOKE targets well formed. *)
 Theorem o1_pipeline_sym_unit_static_ok:
   !rpolicy unit out.
   o1PipelineCorrect$o1_pipeline rpolicy unit = SOME out /\
+  o1_source_unit_ok unit /\ unit_entry_no_params unit /\
+  unit_defs_reach_uses unit /\ unit_fmp_unsealed unit /\
   EVERY (\ds. EVERY (\di. case di of DataBytes _ => T | DataLabel _ => F)
                     ds.ds_items) unit.cu_data_segment /\
   ((?fn inst. MEM fn unit.cu_context.ctx_functions /\
@@ -255,7 +261,15 @@ Theorem o1_pipeline_sym_unit_static_ok:
    EXISTS (\ds. ds.ds_label = "runtime_begin") unit.cu_data_segment) ==>
   sym_unit_static_ok out.po_unit
 Proof
-  cheat
+  rpt gen_tac >> strip_tac >>
+  qspecl_then [`rpolicy`, `unit`, `out`] mp_tac
+    o1_pipeline_runtime_reference_reflects >>
+  impl_tac >- simp[] >> strip_tac >>
+  fs[o1PipelineCorrectTheory.o1_pipeline_def] >>
+  drule_all run_venom_pipeline_bytes_only >> strip_tac >>
+  drule run_venom_pipeline_success_unit_wf >> strip_tac >>
+  fs[sym_unit_static_ok_def, unit_wf_def, venom_wf_def] >>
+  metis_tac[]
 QED
 
 (* run_venom_pipeline_correct, also carrying the source's DLOAD offset
@@ -269,6 +283,8 @@ Theorem o1_pipeline_code_end_offset_ok:
     reserved_intervals_wf unit.cu_context.ctx_global_reserved /\
     EVERY (\fn. fn.fn_eom = NONE) unit.cu_context.ctx_functions /\
     fixed_region_reserved lo unit.cu_context /\ dead_wf D /\
+    (!fn inst. MEM fn unit.cu_context.ctx_functions /\ MEM inst (fn_insts fn) ==>
+               ~MEM (Label "code_end") inst.inst_operands) /\
     LENGTH vs_out.vs_data_section < dimword (:256) DIV 2
     ==>
     ?vs_in. gas_variant vs_in vs_out /\
@@ -288,22 +304,3 @@ Proof
   cheat
 QED
 
-(* The runtime unit's source-side static facts: no CODESIZE, CODECOPY only
-   from runtime_begin, no code_end label yet, and a byte-only data segment
-   (empty under Linear dispatch). *)
-Theorem lower_vyper_runtime_unit_sym_src_ok:
-  !tops rpolicy unit.
-  supported_program tops /\ ~program_reads_self_code tops /\
-  lower_vyper_runtime_unit tops rpolicy = SOME unit ==>
-  label_flow_ok unit.cu_context /\
-  (!fn inst. MEM fn unit.cu_context.ctx_functions /\ MEM inst (fn_insts fn) ==>
-             ~MEM (Label "code_end") inst.inst_operands) /\
-  EVERY (\ds. EVERY (\di. case di of DataBytes _ => T | DataLabel _ => F)
-                    ds.ds_items) unit.cu_data_segment /\
-  ((?fn inst. MEM fn unit.cu_context.ctx_functions /\
-              MEM inst (fn_insts fn) /\
-              MEM (Label "runtime_begin") inst.inst_operands) ==>
-   EXISTS (\ds. ds.ds_label = "runtime_begin") unit.cu_data_segment)
-Proof
-  cheat
-QED

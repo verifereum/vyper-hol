@@ -23,7 +23,7 @@ Ancestors
   codegenCorrectness immutableCodeLayout asmOptimizer codegenAsmOpt e2eAsmOpt
   stateEquiv stateEquivProps
   venomExecSemantics
-  vyperABI
+  vyperABI runtimeSymSrcUnit
   vyperInterpreter
   compileEnv loweringStateRelDefs compileVyper
   venomInst
@@ -989,6 +989,7 @@ Proof
      qpat_x_assum `0 < _` mp_tac >>
      qpat_x_assum `LENGTH vs.vs_code <= _` mp_tac >>
      qpat_x_assum `vs.vs_code = _` SUBST1_TAC >> simp[]) >>
+  drule_all lower_vyper_runtime_unit_sym_src_ok >> strip_tac >>
   drule_all o1_pipeline_code_end_offset_ok >> strip_tac >>
   `initial_venom_state_rel tops am tx vs_in` by
     (irule gas_variant_initial_venom_state_rel >> qexists_tac `vs` >> simp[]) >>
@@ -1058,7 +1059,6 @@ Proof
   drule_all o1_pipeline_memory_obligations_raw >> strip_tac >>
   drule_all o1_pipeline_codegen_obligations >> strip_tac >>
   (* The optimizer case's static facts of the O1 output. *)
-  drule_all lower_vyper_runtime_unit_sym_src_ok >> strip_tac >>
   `label_flow_ok out.po_unit.cu_context` by
     (irule o1_pipeline_label_flow_ok >> metis_tac[]) >>
   `sym_unit_static_ok out.po_unit` by
