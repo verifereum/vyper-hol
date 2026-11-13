@@ -1,7 +1,7 @@
 (* Seam 2 joint induction, a family leaf of the stmt step: Return. *)
 Theory bodyIntCallFamStmtReturn
 Ancestors
-  bodyIntCallReturnInactive
+  bodyIntCallReturnInactive bodyIntCallReturnUnlockCompose
   bodyIntCallJointContract bodyIntCallSharpReturn bodyIntCallFamStmtReturnStackExit
   bodyIntCallFamStmtReturnProducer bodyIntCallFamStmtReturnMemoryEndpoint
   bodySim stmtSimReturn stmtSimDefs loweringPosts compileEnv loweringStateRelDefs ctorReturnFrame
