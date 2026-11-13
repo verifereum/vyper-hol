@@ -18,22 +18,21 @@ Proof
   simp[] >> rpt strip_tac >> irule intcall_interval_lower_value >> simp[]
 QED
 
-(* HELD (train 17): 0.5.0b1 arg snapshot re-proof; statement no longer typechecks, commented out whole *)
-(*
 Theorem intcall_interval_make_tuple_all:
   (!ce ty e a. k <= a.cs_next_var ==>
     intcall_compiler_interval k a (SND (cfn ce ty e a))) ==>
-  !es buf off a. k <= a.cs_next_var ==>
+  !es tys buf off a. k <= a.cs_next_var ==>
     intcall_compiler_interval k a
-      (SND (compile_make_tuple cfn cenv es buf off a))
+      (SND (compile_make_tuple cfn cenv es tys buf off a))
 Proof
   strip_tac >> Induct >> simp[compile_make_tuple_def, intcall_interval_return] >>
-  rpt strip_tac >> rewrite_tac[comp_ignore_bind_def] >>
+  rpt strip_tac >> Cases_on `tys` >>
+  simp[compile_make_tuple_def, intcall_interval_return] >>
+  rewrite_tac[comp_ignore_bind_def] >>
   rpt (rpt strip_tac >> simp[] >> irule intcall_interval_bind_floor >>
        simp[intcall_interval_emit_op, intcall_interval_unwrap_value,
             intcall_interval_store_memory, intcall_interval_return])
 QED
-*)
 
 Theorem intcall_interval_make_array_elems_all:
   (!ce ty e a. k <= a.cs_next_var ==>

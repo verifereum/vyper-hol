@@ -60,6 +60,10 @@ Proof
   `calls_follow_call_graph fp.jc_edges fp.jc_owner (int_calls_expr obj) /\
    calls_follow_call_graph fp.jc_edges fp.jc_owner (int_calls_expr idx)` by
     gvs[vyperTypeCallGraphTheory.int_calls_expr_def] >>
+  `~copies_subscript_base ce obj idx` by
+    (qpat_assum `type_place_expr _ obj = _`
+       (mp_tac o MATCH_MP exprSimSubscriptMapTheory.map_base_no_overlap) >>
+     simp[]) >>
   drule_all exprSimMapKeyTheory.compile_expr_mapping_subscript_parts >> strip_tac >>
   irule gas_outcome_conseq >>
   irule_at (Pos last) intcall_mapping_base_outcome >>
