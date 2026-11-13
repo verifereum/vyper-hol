@@ -12,7 +12,7 @@ Theorem dft_stage_sim_gas:
   ctx_pass_stage rpolicy (CFP_Simple VP_DFT) view C C' /\ o1_pre 7 C C' /\
   dead_wf D /\ o1_ctx_shape C /\ EVERY wf_ssa C.ctx_functions /\
   o1_run_state_ok vs' ==>
-  ?vs. gas_variant vs vs' /\ ctx_sim D C C' vs vs' /\
+  ?vs. gas_variant vs vs' /\ ctx_sim_fuel I D C C' vs vs' /\
        (o1_lowered_inv C vs ==> o1_lowered_inv C' vs')
 Proof
   strip_tac >> drule_all dft_stage_fn_rel >> strip_tac >>

@@ -5,7 +5,7 @@ Ancestors concretizeLayoutCutSafe frameGasEvents concretizeMemLocDefs passShared
   concretizeLayoutCanonicalBase concretizeLayoutCanonicalDeferred
   concretizeLayoutCanonicalDriver concretizeLayoutSelectedBaseInterface
   concretizeLayoutPhaseCorridor concretizeLayoutPhaseOrigin concretizeLayoutReaderContext
-  concretizeStepCallChecks frameSelectedSimulation frameFiniteExecution
+  concretizeStepStructure frameSelectedSimulation frameFiniteExecution
   frameRankedTerminalCorridor frameRelocationCleanValueSteps
   frameRelocationScalarSteps ptrDiscipline venomWf venomExecSemantics venomInst list
 
@@ -248,4 +248,41 @@ Proof
   qexists `r'` >> conj_tac
   >- (irule finite_step_base >> simp[] >> metis_tac[layout_canonical_result_not_error]) >>
   simp[layout_canonical_OS_def] >> Cases_on `r` >> fs[]
+QED
+
+Theorem layout_canonical_base_certificate_fuel:
+  ctx_pass_stage rpolicy (CFP_Simple VP_ConcretizeMemLoc)
+    (o1_walk_view rpolicy 2) C C' /\ o1_ctx_shape C /\
+  EVERY (\fn. fn.fn_eom = NONE) C.ctx_functions /\
+  ctx_inst_ids_distinct C /\ o1_run_state_ok vs0 /\
+  EVERY wf_function C.ctx_functions /\ mem_inv raw_mem_ok C vs0 /\
+  ptr_discipline lo C vs0 /\ ~ctx_has_dalloca C /\
+  vs0.vs_allocas = FEMPTY /\ EVERY (fn_ptr_ok P) C.ctx_functions /\
+  EVERY (\f. EVERY inst_wf (fn_insts f)) C.ctx_functions /\
+  dead_wf D /\ taint_within D C vs0 /\
+  es = MAP FST path /\ qs = MAP SND path /\
+  (!k. k < LENGTH path ==>
+    resolved_annotation_edge C k (EL k (q0::MAP SND path)) (FST (EL k path))
+      (EL (SUC k) (q0::MAP SND path))
+      (EL k (lifetime_annotations 0 [0] es)) (EL k ass)
+      (EL (SUC k) (lifetime_annotations 0 [0] es)) (EL (SUC k) ass)) /\
+  callee_first names C.ctx_functions /\ EVERY ssa_form C.ctx_functions /\
+  EVERY fn_defs_reach_uses C.ctx_functions /\ EVERY all_reachable C.ctx_functions /\
+  fixed_region_reserved lo C /\ activation_depth q0 = 0 ==>
+  selected_base_certificate_fuel C C' q0 path
+    (layout_canonical_ES D lo vs0 C C' q0 path es qs ass qend)
+    (layout_deferred_OS D lo vs0 C C' q0 path es qs ass qend)
+Proof
+  strip_tac >>
+  drule_all layout_canonical_base_certificate >>
+  rewrite_tac[selected_base_certificate_def, selected_step_match_def] >>
+  disch_tac >> rewrite_tac[selected_base_certificate_fuel_def,
+                          selected_step_match_fuel_def] >>
+  rpt gen_tac >> strip_tac >>
+  `j.inst_opcode <> INVOKE` by
+    (fs[layout_canonical_ES_def] >>
+     metis_tac[layout_canonical_step_witness_not_invoke]) >>
+  first_x_assum drule_all >> strip_tac >>
+  qexists `r'` >> simp[] >>
+  gvs[finite_step_iff, step_inst_def]
 QED

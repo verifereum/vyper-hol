@@ -236,7 +236,7 @@ Theorem terminal_selfdestruct_rel_step:
   asm_block_at prog st.as_pc [AsmOp "SELFDESTRUCT"] /\
   st.as_stack = addr :: tail /\
   venom_asm_terminal_rel vs st /\
-  st.as_call_ctx = vs.vs_call_ctx ==>
+  st.as_call_ctx = vs.vs_call_ctx /\ ~vs.vs_call_ctx.cc_static ==>
   ?st'. asm_steps lo o2pc prog 1 st = AsmHalt st' /\
     venom_asm_terminal_rel
       (halt_state (set_returndata [] (vs with <|

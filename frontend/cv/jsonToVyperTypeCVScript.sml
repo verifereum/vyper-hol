@@ -11,7 +11,7 @@ Libs
 (* These helpers are abbreviations of the source traversal, not independent
    implementations.  Their nil/cons equations expose first-order recursion. *)
 Definition translate_types_cv_def:
-  translate_types_cv ctx tys = MAP (λty. translate_type ctx ty) tys
+  translate_types_cv ctx tys = MAP (translate_type ctx) tys
 End
 
 Theorem translate_types_cv_compute:

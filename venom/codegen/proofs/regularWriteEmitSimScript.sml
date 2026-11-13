@@ -197,9 +197,10 @@ Theorem sstore_arranged_emit_sim:
       vs' ab
 Proof
   disch_then (map_every assume_tac o CONJUNCTS) >>
-  qpat_x_assum `step_inst _ _ _ _ = _` mp_tac >>
-  simp[step_inst_non_invoke, step_inst_base_opcode_eqs, exec_write2_def,
-       AllCaseEqs()] >> strip_tac >>
+  qpat_assum `inst.inst_opcode = SSTORE` (fn opc =>
+    qpat_assum `step_inst _ _ _ _ = _` (mp_tac o SIMP_RULE (srw_ss())
+      [opc, step_inst_non_invoke, step_inst_base_opcode_eqs, exec_write2_def,
+       AllCaseEqs()])) >> strip_tac >>
   gnvs[compute_operands_def, python_stack_operands_def,
        ir_specific_operand_order_def] >>
   rename1 `inst.inst_operands = [kop; vop]` >>
@@ -210,6 +211,10 @@ Proof
        simp[eval_operands_def] >> NO_TAC) >>
   `eval_operands [kop; vop] vs = SOME [key; value]` by
     simp[eval_operands_def] >>
+  `~vs.vs_call_ctx.cc_static` by
+    (qpat_x_assum `step_inst _ _ _ _ = _` mp_tac >>
+     Cases_on `vs.vs_call_ctx.cc_static` >>
+     simp[step_inst_non_invoke, step_inst_base_opcode_eqs]) >>
   drule_at (Pat `eval_operands _ _ = _`) arranged_eval_operands_stack >>
   disch_then (qspecl_then [`st`, `residual`, `ps`, `lo`] mp_tac) >>
   (impl_tac >- (simp[] >> metis_tac[])) >> simp[] >> strip_tac >>
@@ -245,9 +250,10 @@ Theorem tstore_arranged_emit_sim:
       vs' ab
 Proof
   disch_then (map_every assume_tac o CONJUNCTS) >>
-  qpat_x_assum `step_inst _ _ _ _ = _` mp_tac >>
-  simp[step_inst_non_invoke, step_inst_base_opcode_eqs, exec_write2_def,
-       AllCaseEqs()] >> strip_tac >>
+  qpat_assum `inst.inst_opcode = TSTORE` (fn opc =>
+    qpat_assum `step_inst _ _ _ _ = _` (mp_tac o SIMP_RULE (srw_ss())
+      [opc, step_inst_non_invoke, step_inst_base_opcode_eqs, exec_write2_def,
+       AllCaseEqs()])) >> strip_tac >>
   gnvs[compute_operands_def, python_stack_operands_def,
        ir_specific_operand_order_def] >>
   rename1 `inst.inst_operands = [kop; vop]` >>
@@ -258,6 +264,10 @@ Proof
        simp[eval_operands_def] >> NO_TAC) >>
   `eval_operands [kop; vop] vs = SOME [key; value]` by
     simp[eval_operands_def] >>
+  `~vs.vs_call_ctx.cc_static` by
+    (qpat_x_assum `step_inst _ _ _ _ = _` mp_tac >>
+     Cases_on `vs.vs_call_ctx.cc_static` >>
+     simp[step_inst_non_invoke, step_inst_base_opcode_eqs]) >>
   drule_at (Pat `eval_operands _ _ = _`) arranged_eval_operands_stack >>
   disch_then (qspecl_then [`st`, `residual`, `ps`, `lo`] mp_tac) >>
   (impl_tac >- (simp[] >> metis_tac[])) >> simp[] >> strip_tac >>

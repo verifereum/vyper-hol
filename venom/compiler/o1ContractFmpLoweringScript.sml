@@ -219,7 +219,7 @@ Theorem fmp_lowering_stage_seal_only:
   callee_first names C.ctx_functions /\
   mem_inv (static_mem_ok eom) C vs ==>
   (!fuel. run_context fuel C' vs = run_context fuel C vs) /\
-  mem_inv (lowered_mem_fact eom) C' vs
+  mem_inv (static_mem_ok eom) C' vs
 Proof
   strip_tac >> drule_all fmp_lowering_stage_sealed >> strip_tac >>
   `ctx_seal_eq C C'`
@@ -228,9 +228,9 @@ Proof
         simp[fn_seal_eq_def]) >>
   conj_tac >- metis_tac[run_context_seal_eq] >>
   `!fn fn' inst s. fn_seal_eq fn fn' /\ static_mem_ok eom C fn inst s ==>
-                   lowered_mem_fact eom C' fn' inst s`
+                   static_mem_ok eom C' fn' inst s`
     by (rpt strip_tac >> drule fn_seal_eq_fields >>
-        fs[static_mem_ok_def, lowered_mem_ok_def, lowered_mem_fact_def,
+        fs[static_mem_ok_def,
            in_revert_forward_def, EVERY_MEM, pairTheory.FORALL_PROD] >>
         metis_tac[]) >>
   metis_tac[mem_inv_seal_eq]
@@ -282,13 +282,14 @@ Theorem fmp_lowering_run_contract:
 Proof
   `EL 3 o1_fn_passes = CFP_Simple VP_FmpLowering` by EVAL_TAC >>
   simp[o1_run_contract_def, o1_stage_contract_def, o1_inv_def, o1_pre_def,
-       o1_static_inv_def, o1_lowered_inv_def, fmp_free_ctx_def] >>
+       o1_static_inv_def, o1_lowered_inv_def, fmp_free_ctx_def,
+       pass_fuel_def] >>
   rpt gen_tac >> strip_tac >>
   drule_all fmp_lowering_stage_seal_only >> strip_tac >>
   drule_all fmp_lowering_stage_sealed >> strip_tac >>
-  `ctx_sim D C C vs vs` by
+  `ctx_sim_fuel I D C C vs vs` by
     (irule ctx_sim_refl >> metis_tac[o1_ctx_shape_entry_no_return]) >>
-  conj_tac >- fs[ctx_sim_def] >>
+  conj_tac >- fs[ctx_sim_fuel_def] >>
   `EVERY make_ssa_input_ok C'.ctx_functions` by
     (qpat_x_assum `LIST_REL _ C.ctx_functions C'.ctx_functions` mp_tac >>
      qpat_x_assum `EVERY make_ssa_input_ok C.ctx_functions` mp_tac >>
