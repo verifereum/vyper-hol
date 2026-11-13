@@ -3504,6 +3504,63 @@ Proof
   metis_tac[]
 QED
 
+Theorem invoke_packet_actual_success[local]:
+  !m es unused fuel C C' i us t gs tail u j a b.
+  let F = (\us st. FOLDL (\st q. update_var (FST q) (SND q) st) st us);
+      K = (\unused t.
+        LENGTH m = LENGTH es /\
+        PERM (MAP THE (FILTER IS_SOME m) ++ unused) t.vs_gas_readings /\
+        (!u. (step_inst fuel C' i t = OK u \/
+              (?ir. step_inst fuel C' i t = IntRet ir u)) ==>
+          EVERY IS_SOME m /\ unused = u.vs_gas_readings) /\
+        !gs tail. LIST_REL (\slot w. slot = NONE \/ slot = SOME w) m gs ==>
+          (?extra. es = gas_events_step fuel C t.vs_current_bb i
+             (t with vs_gas_readings := gs ++ tail) ++ extra) /\
+          ((?n. terminates (step_inst n C i (t with vs_gas_readings := gs ++ tail))) ==>
+            terminates (step_inst fuel C i (t with vs_gas_readings := gs ++ tail)) /\
+            dft_res_rel
+              (restore_result [] (step_inst fuel C i (t with vs_gas_readings := gs ++ tail)))
+              (restore_result [] (step_inst fuel C' i t)) /\
+            (((?v. step_inst fuel C' i t = OK v) \/
+              (?ir v. step_inst fuel C' i t = IntRet ir v)) ==>
+              gas_events_step fuel C t.vs_current_bb i
+                (t with vs_gas_readings := gs ++ tail) = es /\
+              residual_result tail (step_inst fuel C' i t)
+                (step_inst fuel C i (t with vs_gas_readings := gs ++ tail)))))
+  in
+    i.inst_opcode = INVOKE /\
+    EVERY (\q. ~MEM (Var (FST q)) i.inst_operands /\
+               ~MEM (FST q) i.inst_outputs) us /\
+    K unused t /\
+    LIST_REL (\slot w. slot = NONE \/ slot = SOME w) m gs /\
+    step_inst fuel C' i t = OK u /\
+    a = (F us (t with vs_gas_readings := gs ++ tail)) with vs_inst_idx := j /\
+    step_inst fuel C i a = OK b ==>
+    b = (F us (u with vs_gas_readings := tail)) with vs_inst_idx := j /\
+    (b with vs_inst_idx := SUC j) =
+      (F us (u with vs_gas_readings := tail)) with vs_inst_idx := SUC j
+Proof
+  rpt gen_tac >> rpt BasicProvers.LET_ELIM_TAC >>
+  drule_all invoke_updates_concrete_frame >>
+  disch_then (qspecl_then [`fuel`, `C`,
+    `t with vs_gas_readings := gs ++ tail`] assume_tac) >>
+  qpat_x_assum `step_inst fuel C i a = OK b` mp_tac >>
+  simp[Abbr `F'`,
+       analysisSimProofsBaseTheory.invoke_step_inst_idx_OK_only] >>
+  Cases_on `step_inst fuel C i (t with vs_gas_readings := gs ++ tail)` >>
+  gvs[] >> strip_tac >>
+  qpat_x_assum `K' unused t` mp_tac >>
+  simp[Abbr `K'`] >> strip_tac >>
+  first_x_assum (qspecl_then [`gs`, `tail`] mp_tac) >>
+  simp[passSimulationDefsTheory.terminates_def, residual_result_def] >>
+  strip_tac >>
+  qpat_x_assum `(?n. _) ==> _` mp_tac >>
+  (impl_tac >- (qexists_tac `fuel` >> simp[])) >>
+  strip_tac >>
+  qpat_x_assum `v = _` SUBST_ALL_TAC >>
+  qpat_x_assum `_ = b` (SUBST1_TAC o SYM) >> simp[]
+QED
+
 Theorem invoke_partner_endpoint_packet[local]:
   !m es unused fuel C C' i pre s pg rs a.
   let K = (\unused t.
