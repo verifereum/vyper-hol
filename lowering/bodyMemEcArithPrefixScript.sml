@@ -142,5 +142,6 @@ Proof
        memSafeRunTheory.inst_dload_in_section_def, mk_inst_def,
        eval_operand_def, lookup_var_update_var] >>
   simp[wordsTheory.dimword_def] >>
-  CASE_TAC >> simp[]
+  qmatch_goalsub_abbrev_tac `step_inst_base ii st` >>
+  Cases_on `step_inst_base ii st` >> simp[]
 QED

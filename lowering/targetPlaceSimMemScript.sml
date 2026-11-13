@@ -40,7 +40,6 @@ End
 Theorem body_target_sim_mem:
   !t cx tops ctx func cenv env es.
     body_base_target_mem_ok cx t /\ body_inv tops ctx cenv cx /\
-    EVERY (supported_expr tops) (target_indices t) /\
     target_pre cenv cx env t es ==>
     target_sim_mem ctx func cenv cx env t es
 Proof
@@ -136,10 +135,10 @@ Proof
   first_assum (irule_at Any o MATCH_MP gas_exempt_cert_error_result)
 QED
 
-(* What a pure target (supported_target_pure) keeps: every live local's
-   region whole, dynamic-array length words included (locals_kept exempts
-   them), storage, transient storage, and the constructor's staged
-   immutables.  Its scratch ALLOCAs can be reused in a loop, so the bytes
+(* What a target the lowering does not snapshot the RHS for
+   (~expr_can_mutate) keeps: every live local's region whole, dynamic-array
+   length words included (locals_kept exempts them), storage, transient
+   storage, and the constructor's staged immutables.  Its scratch ALLOCAs can be reused in a loop, so the bytes
    below the frontier are not all kept, only these. *)
 Definition target_pure_frame_def:
   target_pure_frame cenv cx (es : evaluation_state) (s0 : venom_state)
@@ -183,10 +182,16 @@ Definition target_sim_mem_pure_def:
 End
 
 (* Held with body_target_sim_mem: the subscript case waits on the same
-   S1 target_subscript_main_case. *)
+   S1 target_subscript_main_case.  Stated for every target the lowering
+   does not snapshot the RHS for (compile_stmt's Assign tests
+   expr_can_mutate); a supported_target_pure target is one of them
+   (bodySimLog.supported_pure_expr_no_mutate).  The ce_func_mutability pin
+   it needs comes from body_inv (cenv_module_pins).  Proving it needs raw
+   storage kept across compile_get_target_ptr, which the index's expr_post
+   gives only on live slots (a dead popped storage slot is the gap). *)
 Theorem body_target_sim_mem_pure:
   !t cx tops ctx func cenv env es.
-    supported_target_pure tops t /\
+    ~expr_can_mutate cenv (target_to_expr t) /\
     body_base_target_mem_ok cx t /\ body_inv tops ctx cenv cx /\
     target_pre cenv cx env t es ==>
     target_sim_mem_pure ctx func cenv cx env t es

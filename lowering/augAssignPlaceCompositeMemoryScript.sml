@@ -12,7 +12,7 @@ Ancestors
 
 Theorem aug_place_memory_post:
   res = INL () /\
-  stmt_post ctx func cx lctx cenv cenv sa sb s0 res ee t /\
+  stmt_post ctx func cx lctx cenv cenv sa sb es0 s0 res ee t /\
   return_buf_frame d cenv sa s0 /\
   sa.cs_next_var <= sb.cs_next_var /\ alloca_history func t /\
   s0.vs_alloca_next <= t.vs_alloca_next ==>
@@ -77,7 +77,15 @@ Proof
     fs[loweringPostsTheory.target_post_def, loweringPostsTheory.place_ptr_rel_def] >>
   gnvs[] >>
   simp[SF ETA_ss] >>
-  irule (SRULE [vyperStateTheory.bind_assoc, SF ETA_ss] aug_place_memory_endpoint) >>
+  `MAP FDOM mid.scopes = MAP FDOM es.scopes` by
+    (qpat_assum `!tail. eval_target_place _ _ _ = _` (qspec_then `[]` mp_tac) >>
+     disch_then (mp_tac o MATCH_MP
+       vyperEvalExprPreservesScopesDomTheory.eval_target_place_preserves_scopes_dom) >>
+     simp[]) >>
+  drule_at (Pat `target_post`) stmtSimDefsTheory.target_post_alloca_frame >>
+  impl_tac >- simp[] >> strip_tac >>
+  irule (SRULE [vyperStateTheory.bind_assoc, SF ETA_ss]
+    (Q.INST [`es0` |-> `es`] aug_place_memory_endpoint)) >>
   simp[] >> goal_assum (drule_at (Pat `target_post`)) >>
   goal_assum (drule_at (Pat `supported_stmt`)) >>
   goal_assum (drule_at (Pat `type_stmt`)) >>
@@ -143,7 +151,15 @@ Proof
   `FST (SND r) = SOME (slot_loc tr)` by
     fs[loweringPostsTheory.target_post_def, loweringPostsTheory.place_ptr_rel_def] >>
   gnvs[] >> simp[SF ETA_ss] >>
-  irule (SRULE [vyperStateTheory.bind_assoc, SF ETA_ss] aug_place_storage_endpoint) >>
+  `MAP FDOM mid.scopes = MAP FDOM es.scopes` by
+    (qpat_assum `!tail. eval_target_place _ _ _ = _` (qspec_then `[]` mp_tac) >>
+     disch_then (mp_tac o MATCH_MP
+       vyperEvalExprPreservesScopesDomTheory.eval_target_place_preserves_scopes_dom) >>
+     simp[]) >>
+  drule_at (Pat `target_post`) stmtSimDefsTheory.target_post_alloca_frame >>
+  impl_tac >- simp[] >> strip_tac >>
+  irule (SRULE [vyperStateTheory.bind_assoc, SF ETA_ss]
+    (Q.INST [`es0` |-> `es`] aug_place_storage_endpoint)) >>
   simp[] >> goal_assum (drule_at (Pat `target_post`)) >>
   goal_assum (drule_at (Pat `type_stmt`)) >>
   goal_assum (drule_at (Pat `compile_binop`)) >>

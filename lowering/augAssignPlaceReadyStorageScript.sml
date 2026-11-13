@@ -40,7 +40,8 @@ Theorem aug_place_ready_storage_loaded:
       lookup_var z u = SOME v) /\
     (!aid b. FLOOKUP s0.vs_allocas aid = SOME b ==>
       FLOOKUP u.vs_allocas aid = SOME b) /\
-    u.vs_alloca_next = t.vs_alloca_next /\
+    u.vs_alloca_next = t.vs_alloca_next /\ u.vs_memory = t.vs_memory /\
+    (!z. not_fresh_at sp z ==> lookup_var z u = lookup_var z t) /\
     (!z. FST r = Var z ==> not_fresh_at sl z) /\
     (?out. cur = Var out /\ not_fresh_at sl out)
 Proof
@@ -94,8 +95,9 @@ Theorem aug_place_ready_storage_endpoint:
   alloca_history func t /\ ~t.vs_halted /\
   t.vs_current_bb = sp.cs_current_bb /\ t.vs_inst_idx = LENGTH sp.cs_current_insts /\
   s0.vs_alloca_next <= t.vs_alloca_next /\
+  alloca_frame cenv es0 sa s0 cenv mid t /\
   (!res ee v. res = INL () /\
-    stmt_post ctx func cx lctx cenv cenv sa sf s0 res ee v /\
+    stmt_post ctx func cx lctx cenv cenv sa sf es0 s0 res ee v /\
     alloca_history func v /\ s0.vs_alloca_next <= v.vs_alloca_next ==> Q res ee v) ==>
   gas_outcome T (cx_tops cx) (ctx,func)
     (bind (read_place cx (StoragePlace tr slot tv)) (\old.
@@ -140,9 +142,27 @@ Proof
      strip_tac >> gvs[]) >>
   `!z. not_fresh_at sa z ==> not_fresh_at sl z` by metis_tac[] >>
   `s0.vs_alloca_next <= u.vs_alloca_next` by simp[] >>
+  `sa.cs_next_id <= sl.cs_next_id` by
+    (`sa.cs_next_id <= sp.cs_next_id` by
+       metis_tac[exprLoweringPropsTheory.ci_mono_compile_get_target_ptr_cfn,
+                 exprLoweringPropsTheory.compile_expr_ci_mono,
+                 exprLoweringPropsTheory.ci_mono_def, pairTheory.SND] >>
+     `sp.cs_next_id <= sl.cs_next_id` by
+       metis_tac[exprLoweringPropsTheory.ci_mono_emit_op,
+                 exprLoweringPropsTheory.ci_mono_def, pairTheory.SND] >>
+     decide_tac) >>
+  `stmt_state_rel ctx func cenv cx mid t` by
+    (qpat_assum `target_post _ _ _ _ _ _ _ _ _ _ _ _ _` mp_tac >>
+     rewrite_tac[loweringPostsTheory.target_post_def] >>
+     disch_then (ACCEPT_TAC o CONJUNCT1)) >>
+  `alloca_frame cenv es0 sa s0 cenv mid u` by
+    (qspecl_then [`cenv`, `es0`, `sa`, `s0`, `cenv`, `mid`, `t`, `ctx`, `func`,
+                  `cx`, `sp`, `mid`, `u`] mp_tac
+       augAssignPlaceWordStoreMemoryTheory.alloca_frame_memory_kept >>
+     impl_tac >- simp[] >> simp[]) >>
   irule aug_place_reads_suffix >> simp[] >>
   qexists_tac `\res ee v. res = INL () /\
-    stmt_post ctx func cx lctx cenv cenv sa sf s0 res ee v /\
+    stmt_post ctx func cx lctx cenv cenv sa sf es0 s0 res ee v /\
     alloca_history func v /\ s0.vs_alloca_next <= v.vs_alloca_next` >> simp[] >>
   goal_assum (drule_at (Pat `gas_marked_path`)) >> simp[] >>
   irule aug_place_loaded_storage_suffix >> simp[] >> conj_tac

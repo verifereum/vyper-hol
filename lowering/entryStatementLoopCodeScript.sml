@@ -44,10 +44,10 @@ Proof
     >- simp[entry_code_emit_op, entry_code_emit_void] >>
     rpt gen_tac >> BETA_TAC) >>
   irule entry_code_bind >> reverse conj_tac
-  >- (rpt IF_CASES_TAC >> simp[entry_code_emit_void] >>
-      irule entry_code_bind >>
-      simp[entry_code_store_memory, entry_code_word_copy_loop,
-           entry_code_return]) >>
+  >- (simp[LET_THM] >>
+      rpt (FIRST [CHANGED_TAC (simp[entry_code_emit_void,
+          entry_code_store_memory, entry_code_store_slots, entry_code_return]),
+        gen_tac, irule entry_code_bind, conj_tac, IF_CASES_TAC])) >>
   rpt gen_tac >> BETA_TAC >>
   irule entry_code_bind >> simp[entry_code_emit_op, entry_code_emit_void]
 QED
@@ -170,8 +170,8 @@ Proof
           metis_tac[entry_code_supported_pure_expr, entry_code_literal_expression]) >>
         metis_tac[entry_code_supported_pure_expr]) >>
       metis_tac[entry_code_supported_pure_expr]) >>
-  drule supported_array_iterator_shape >> strip_tac >> gvs[] >>
-  irule entry_code_array_loop_callback >> simp[] >>
-  rpt gen_tac >> simp[entry_preserves_code_def, Once compile_expr_def] >>
-  rewrite_tac[GSYM entry_preserves_code_def] >> irule entry_code_name_vv
+  irule entry_code_array_loop_callback >> simp[] >> rpt gen_tac >>
+  Cases_on `e` >> gvs[supported_iterator_def] >>
+  metis_tac[entry_code_name_expr, entry_code_toplevel_name_expr,
+            entry_code_supported_expr]
 QED

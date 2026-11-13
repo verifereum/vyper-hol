@@ -8,6 +8,7 @@
  *)
 Theory bodyPtrWordBuiltins
 Ancestors
+  bodyPtrWordBuiltinsUnaryCases bodyPtrWordBuiltinsRemainingCases
   exprPtrUnwrap bodyPtrPreds bodyPtrDefs bodySim exprSimHyps vyperAST
   vyperInterpreter vyperState vyperContext vyperTypeCallGraph list
 
@@ -20,5 +21,5 @@ Theorem word_builtin_expr_ptr_ok:
     (builtin_args_length_ok bt (LENGTH es) ==> body_exprs_ptr_ok cx es) ==>
     body_expr_ptr_ok cx (Builtin ty bt es)
 Proof
-  cheat
+  metis_tac[body_word_unary_ptr_ok, body_word_remaining_ptr_ok]
 QED

@@ -15,6 +15,7 @@ Theorem body_augassign_effectful_index_mem:
        body_expr_mem_ok cx e) /\
     body_base_target_mem_ok cx t /\
     body_inv tops ctx cenv cx /\ supported_stmt tops bindings (AugAssign ty t bop e) /\
+    body_stmt_safe tops (AugAssign ty t bop e) /\
     (!target. supported_stmt_expr_exists
        (expr_abi_decode_target_root target) (AugAssign ty t bop e) ==>
        occurs_abi_decode_target target tops) /\
@@ -54,10 +55,6 @@ Proof
      metis_tac[bodyAugPlaceTargetTheory.aug_place_supported_stmt_target_info] >>
    `~immutable_root cx bt` by
      metis_tac[bodyAugPlaceTargetTheory.aug_place_supported_root_not_immutable] >>
-   `EVERY (supported_expr tops) (target_indices bt)` by
-     (simp[listTheory.EVERY_MEM] >>
-      metis_tac[bodyAugPlaceTargetTheory.aug_place_supported_indices,
-                optionTheory.IS_SOME_EXISTS]) >>
    `target_sim_mem ctx func cenv cx env bt es` by
      (irule body_target_sim_mem >>
       simp[targetPlaceSimTheory.target_pre_def] >> metis_tac[]) >>

@@ -1,0 +1,462 @@
+Theory abiDecodePtrStaticReject
+Ancestors
+  loweringStateRelDefs
+  abiDecodePtrConversionReject abiDecodePtrScalarRejectFacts
+  abiDecodePtrPhysicalFlatRun abiDecodePtrRejectPrefix abiDecodePtrRejectSource
+  abiDecodePtrRejectChecks abiDecodePtrRejectCapacity abiDecodePtrRejectCode
+  abiDecodePtrFlatLayout abiDecodePtrMemberInterface abiDecodePtrMemberFrame
+  abiDecodePtrWord abiDecoderBytesBound abiDecoderClamp entryDecodeProps
+  abiDecoderMemberInfos abiDecoderCoherence abiDecoderComplexGuard
+  abiDecoderComplexHead abiDecoderComplexExecute abiDecoderRange abiDecoderContract
+  abiDecoderVarSequence abiDecoderReentry abiDecoderReentryPointer abiDecoderMembers abiDecodeRanges abiValidMembers vyperTypeABI supportedTypes
+  vyperABI contractABI compileEnv abiEncoder exprLowering emitHelperProps
+  exprLoweringProps venomState venomExecSemantics words list rich_list arithmetic pair
+
+Theorem abi_decode_static_scalar_word:
+  supported_scalar_type ty /\ ~is_dynamic (vyper_to_abi_type env ty) ==>
+  supported_word_type ty
+Proof
+  rw[supported_scalar_type_def] >>
+  Cases_on `ty` >> gvs[supported_string_type_def] >>
+  rename1 `BaseT bt` >> Cases_on `bt` >>
+  gvs[supported_string_type_def, vyper_to_abi_type_def, is_dynamic_def] >>
+  rename1 `BytesT bd` >> Cases_on `bd` >>
+  gvs[supported_string_type_def, vyper_to_abi_type_def, is_dynamic_def]
+QED
+
+Theorem abi_decode_static_scalar_conversion:
+  supported_scalar_type ty /\ ~is_dynamic (vyper_to_abi_type env ty) /\
+  vyper_decode_valid_enc (vyper_to_abi_type env ty) bs ==>
+  ?v. abi_to_vyper env ty (dec (vyper_to_abi_type env ty) bs) = SOME v
+Proof
+  strip_tac >>
+  Cases_on `abi_to_vyper env ty (dec (vyper_to_abi_type env ty) bs)` >> simp[] >>
+  drule_all abi_decode_scalar_conversion_failure >> strip_tac >>
+  gvs[vyper_to_abi_type_def, is_dynamic_def]
+QED
+
+Theorem abi_decode_static_members_conversion:
+  !tys raw hds.
+  EVERY supported_scalar_type tys /\
+  EVERY (\ty. ~is_dynamic (vyper_to_abi_type env ty)) tys /\
+  vyper_decode_valid_enc_tuple (MAP (vyper_to_abi_type env) tys) raw hds ==>
+  ?vs. abi_to_vyper_list env tys
+    (abi_decode_members (MAP (vyper_to_abi_type env) tys) raw hds) = SOME vs
+Proof
+  Induct >- simp[abi_decode_members_def] >>
+  qx_gen_tac `ty` >> rpt gen_tac >> strip_tac >>
+  `vyper_decode_valid_enc (vyper_to_abi_type env ty)
+    (abi_decode_member_bytes (vyper_to_abi_type env ty) raw hds) /\
+   vyper_decode_valid_enc_tuple (MAP (vyper_to_abi_type env) tys) raw
+    (DROP (abi_member_head_size (vyper_to_abi_type env ty)) hds)` by
+    (fs[Once vyper_decode_valid_enc_def, abi_decode_member_bytes_def,
+        abi_member_head_size_def] >> gvs[]) >>
+  `supported_scalar_type ty /\ ~is_dynamic (vyper_to_abi_type env ty)` by fs[] >>
+  drule_all abi_decode_static_scalar_conversion >> strip_tac >>
+  fs[EVERY_DEF] >> first_x_assum drule_all >> strip_tac >>
+  simp[abi_decode_members_def, Once abi_to_vyper_def]
+QED
+
+Theorem abi_decode_complex_head_reject_witness:
+  abi_decode_complex_head_guard pos hi head_sz st = ((),last) /\
+  hi <> Lit 0w /\ head_sz < dimword(:256) /\ h < head_sz /\
+  eval_operand pos s = SOME 0w /\ eval_operand hi s = SOME (n2w h) /\
+  fresh_vars_wrt st s ==>
+  ?u. abi_decode_reject_witness (emitted_insts st last) s u /\ inst_extends st last
+Proof
+  simp_tac bool_ss [abi_decode_complex_head_guard_def] >> strip_tac >>
+  fs[comp_bind_def] >> pairarg_tac >> gvs[] >>
+  rename1 `emit_op ADD [pos; Lit (n2w head_sz)] st = (end_op,mid)` >>
+  `eval_operand (Lit (n2w head_sz)) s = SOME (n2w head_sz)` by simp[eval_operand_def] >>
+  drule_all emit_op_ADD_correct >> strip_tac >>
+  rename1 `run_inst_seq (emitted_insts st mid) s = OK reached` >>
+  `eval_operand pos reached = SOME 0w /\
+   eval_operand hi reached = SOME (n2w h)` by metis_tac[] >>
+  `~(w2n (0w:bytes32) <= w2n (n2w head_sz:bytes32) /\
+      w2n (n2w head_sz:bytes32) <= w2n (n2w h:bytes32))` by
+    (`h < dimword(:256)` by decide_tac >> simp[w2n_n2w]) >>
+  drule abi_decode_range_reject_witness >>
+  disch_then (qspecl_then [`reached`, `n2w head_sz`, `0w`, `n2w h`] mp_tac) >>
+  (impl_tac >- (simp[] >> metis_tac[])) >> strip_tac >>
+  drule compile_abi_decode_range_check_shape >> strip_tac >>
+  `inst_extends st mid` by metis_tac[inst_extends_emit_op] >>
+  `inst_extends st last` by metis_tac[inst_extends_trans] >>
+  qexists_tac `u` >> simp[] >>
+  irule abi_decode_emit_op_reject_chain >>
+  goal_assum (drule_at (Pat `emit_op _ _ _ = _`)) >>
+  qexists_tac `reached` >> simp[abi_decoder_reentry_opcode_def]
+QED
+
+Theorem abi_decode_word_reject_witness:
+  compile_abi_decode_to_buf (Var dst) pos MLOAD (Var src) hi (DecPrimWord clamp) st = ((),last) /\
+  eval_operand (Var src) s = SOME b /\ eval_operand pos s = SOME p /\
+  ~abi_clamp_ok clamp (abi_decode_load MLOAD (b+p) s) /\ fresh_vars_wrt st s ==>
+  ?u. abi_decode_reject_witness (emitted_insts st last) s u /\ inst_extends st last
+Proof
+  strip_tac >> drule abi_decode_word_phases >> strip_tac >>
+  drule_all abi_decode_add_sequence >> strip_tac >>
+  rename1 `run_inst_seq (emitted_insts st c1) s = OK reached` >>
+  `abi_decode_source_opcode MLOAD` by simp[abi_decode_source_opcode_def] >>
+  drule_all abi_decode_read >> strip_tac >>
+  rename1 `run_inst_seq (emitted_insts c1 c2) reached = OK loaded` >>
+  `~abi_clamp_ok clamp (abi_decode_load MLOAD (b+p) reached)` by fs[abi_decode_load_def, mload_def] >>
+  drule_all abi_decode_clamp_reject_witness >> strip_tac >>
+  drule compile_abi_clamp_structure >> strip_tac >>
+  imp_res_tac inst_extends_emit_op >> imp_res_tac inst_extends_emit_void >>
+  `inst_extends c2 last /\ inst_extends c1 last /\ inst_extends st last` by
+    metis_tac[inst_extends_trans] >>
+  `abi_decode_reject_witness (emitted_insts c2 last) loaded u` by
+    (irule abi_decode_emit_reject_suffix >> qexists_tac `c3` >> simp[]) >>
+  qexists_tac `u` >> reverse conj_tac >- simp[] >>
+  irule abi_decode_emit_op_reject_chain >>
+  goal_assum (drule_at (Pat `emit_op _ _ _ = _`)) >>
+  qexists_tac `reached` >> simp[abi_decoder_reentry_opcode_def] >>
+  irule abi_decode_emit_op_reject_chain >>
+  goal_assum (drule_at (Pat `emit_op _ _ _ = _`)) >>
+  qexists_tac `loaded` >> simp[abi_decoder_reentry_opcode_def]
+QED
+
+Theorem abi_decode_selected_word_reject_witness:
+  abi_decode_member_code dst pos src hi (DecPrimWord clamp) off q sa sb /\
+  eval_operand pos s = SOME p /\ eval_operand (Var src) s = SOME b /\
+  eval_operand (Var dst) s = SOME d /\
+  ~abi_clamp_ok clamp (abi_decode_load MLOAD (b+(p+n2w off)) s) /\
+  fresh_vars_wrt sa s ==>
+  ?u. abi_decode_reject_witness (emitted_insts sa sb) s u /\ inst_extends sa sb
+Proof
+  strip_tac >>
+  fs[abi_decode_member_code_def, dec_info_needs_offset_def,
+     compile_getelemptr_abi_def, comp_bind_def, comp_return_def] >>
+  pairarg_tac >> gvs[] >>
+  `eval_operand (Lit (n2w off)) s = SOME (n2w off)` by simp[eval_operand_def] >>
+  drule_all emit_op_ADD_correct >> strip_tac >>
+  rename1 `run_inst_seq (emitted_insts sa sm) s = OK s1` >>
+  `eval_operand (Var dst) s1 = SOME d /\
+   eval_operand (Lit (n2w q)) s1 = SOME (n2w q)` by
+    (simp[eval_operand_def] >> metis_tac[]) >>
+  qpat_assum `emit_op ADD [Var dst; _] sm = _` mp_tac >>
+  disch_then (mp_then Any mp_tac emit_op_ADD_correct) >>
+  disch_then (qspecl_then [`d`, `n2w q`, `s1`] mp_tac) >>
+  (impl_tac >- simp[]) >> strip_tac >>
+  rename1 `run_inst_seq (emitted_insts sm sn) s1 = OK s2` >>
+  `eval_operand (Var src) s2 = SOME b /\ eval_operand head_ptr s2 = SOME (p+n2w off)` by metis_tac[] >>
+  `s2.vs_memory = s1.vs_memory /\ s1.vs_memory = s.vs_memory` by
+    (conj_tac >> simp[LIST_EQ_REWRITE] >> metis_tac[]) >>
+  `~abi_clamp_ok clamp (abi_decode_load MLOAD (b+(p+n2w off)) s2)` by
+    fs[abi_decode_load_def, mload_def] >>
+  drule_all abi_decode_word_reject_witness >> strip_tac >>
+  `inst_extends sa sm /\ inst_extends sm sn` by metis_tac[inst_extends_emit_op] >>
+  `inst_extends sm sb /\ inst_extends sa sb` by metis_tac[inst_extends_trans] >>
+  qexists_tac `u` >> reverse conj_tac >- simp[] >>
+  irule abi_decode_emit_op_reject_chain >>
+  goal_assum (drule_at (Pat `emit_op _ _ _ = _`)) >>
+  qexists_tac `s1` >> simp[abi_decoder_reentry_opcode_def] >>
+  irule abi_decode_emit_op_reject_chain >>
+  goal_assum (drule_at (Pat `emit_op _ _ _ = _`)) >>
+  qexists_tac `s2` >> simp[abi_decoder_reentry_opcode_def]
+QED
+
+Theorem abi_decode_selected_invalid_word_reject:
+  supported_word_type ty /\ type_to_abi_dec_info sf ce ty = DecPrimWord clamp /\
+  ~is_dynamic (vyper_to_abi_type env ty) /\
+  abi_decode_member_code dst (Lit 0w) src hi (DecPrimWord clamp) off q sa sb /\
+  off+32 <= LENGTH bs /\ B+LENGTH bs < dimword(:256) /\
+  ~vyper_decode_valid_enc (vyper_to_abi_type env ty)
+    (abi_decode_member_bytes (vyper_to_abi_type env ty) bs (DROP off bs)) /\
+  mem_bytes_at B (LENGTH bs) (abi_decode_source MLOAD s) = bs /\
+  eval_operand (Var src) s = SOME (n2w B) /\
+  eval_operand (Var dst) s = SOME d /\ fresh_vars_wrt sa s ==>
+  ?u. abi_decode_reject_witness (emitted_insts sa sb) s u /\ inst_extends sa sb
+Proof
+  strip_tac >>
+  `static_length (vyper_to_abi_type env ty) = 32` by
+    (Cases_on `ty` >> fs[supported_word_type_def] >>
+     rename1 `BaseT bt` >> Cases_on `bt` >>
+     gvs[supported_word_type_def, vyper_to_abi_type_def, vyper_base_to_abi_type_def,
+         static_length_def] >>
+     rename1 `BytesT bd` >> Cases_on `bd` >>
+     gvs[supported_word_type_def, vyper_base_to_abi_type_def, static_length_def]) >>
+  `mem_bytes_at (B+off) (LENGTH (TAKE 32 (DROP off bs))) (abi_decode_source MLOAD s) = TAKE 32 (DROP off bs)` by
+    (drule abiCanonicalHeadSizeTheory.abi_decode_source_window >>
+     disch_then (qspecl_then [`off`, `32`] mp_tac) >> simp[LENGTH_TAKE, LENGTH_DROP]) >>
+  `32 <= LENGTH (TAKE 32 (DROP off bs)) /\ B+off < dimword(:256)` by
+    (simp[LENGTH_TAKE, LENGTH_DROP] >> decide_tac) >>
+  `~vyper_decode_valid_enc (vyper_to_abi_type env ty) (TAKE 32 (DROP off bs))` by
+    (fs[abi_decode_member_bytes_def] >> gvs[]) >>
+  `abi_decode_source_opcode MLOAD` by simp[abi_decode_source_opcode_def] >>
+  drule_all abi_decode_physical_word_invalid_clamp >> strip_tac >>
+  irule abi_decode_selected_word_reject_witness >> simp_tac bool_ss [] >>
+  conj_tac >- simp[] >>
+  goal_assum (drule_at (Pat `abi_decode_member_code _ _ _ _ _ _ _ _ _`)) >>
+  qexistsl_tac [`n2w B`, `d`, `0w`] >>
+  simp[eval_operand_def, WORD_ADD_0, word_add_n2w]
+QED
+
+Triviality supported_word_abi_member:
+  supported_word_type ty ==>
+  ?clamp. type_to_abi_dec_info sf ce ty = DecPrimWord clamp /\
+    abi_member_head_size (vyper_to_abi_type env ty) = 32
+Proof
+  Cases_on `ty` >> simp[supported_word_type_def] >>
+  rename1 `BaseT bt` >> Cases_on `bt` >>
+  gvs[supported_word_type_def, type_to_abi_dec_info_def,
+    vyper_to_abi_type_def, vyper_base_to_abi_type_def,
+    abi_member_head_size_def, is_dynamic_def, static_length_def] >>
+  rename1 `BytesT bd` >> Cases_on `bd` >>
+  gvs[supported_word_type_def, type_to_abi_dec_info_def,
+    vyper_base_to_abi_type_def, is_dynamic_def, static_length_def]
+QED
+
+Theorem abi_decode_flat_static_reject:
+  EVERY supported_scalar_type tys /\
+  EVERY (\ty. ~is_dynamic (vyper_to_abi_type env ty)) tys /\
+  LIST_REL (abi_decoder_coherent ce env ce.ce_struct_fields) tys tvs /\
+  ~vyper_decode_valid_enc_tuple (MAP (vyper_to_abi_type env) tys) bs bs /\
+  SUM (MAP abi_member_head_size (MAP (vyper_to_abi_type env) tys)) <= LENGTH bs /\
+  abi_decode_flat_layout (abi_decoder_member_infos ce.ce_struct_fields ce tys)
+    0 0 0w (LENGTH bs) (SUM (MAP (type_memory_bytes ce) tys)) /\
+  compile_abi_decode_complex_elems (Var dst) (Lit 0w) MLOAD (Var src) hi
+    (abi_decoder_member_infos ce.ce_struct_fields ce tys) 0 0 st = ((),last) /\
+  mem_bytes_at B (LENGTH bs) (abi_decode_source MLOAD s) = bs /\
+  B+LENGTH bs < dimword(:256) /\
+  d+SUM (MAP (type_memory_bytes ce) tys) < dimword(:256) /\
+  (B+LENGTH bs <= d \/ d+SUM (MAP (type_memory_bytes ce) tys) <= B) /\
+  eval_operand (Var src) s = SOME (n2w B) /\
+  eval_operand (Var dst) s = SOME (n2w d) /\
+  eval_operand hi s = SOME (n2w (LENGTH bs)) /\ hi <> Lit 0w /\
+  abi_decoder_operand_live st.cs_next_var (Var dst) /\
+  abi_decoder_operand_live st.cs_next_var (Var src) /\
+  abi_decoder_operand_live st.cs_next_var hi /\ fresh_vars_wrt st s ==>
+  ?u. abi_decode_reject_witness (emitted_insts st last) s u /\ inst_extends st last
+Proof
+  disch_then (MAP_EVERY assume_tac o CONJUNCTS) >>
+  `EVERY (\at. ~is_dynamic at) (MAP (vyper_to_abi_type env) tys)` by simp[EVERY_MAP] >>
+  drule_all abi_decode_first_static_invalid_member >> strip_tac >>
+  qpat_x_assum `MAP _ tys = _` mp_tac >>
+  simp_tac bool_ss [MAP_EQ_APPEND, MAP_EQ_CONS] >> strip_tac >>
+  gnvs[] >>
+  rename1 `compile_abi_decode_complex_elems _ _ _ _ _
+    (abi_decoder_member_infos _ _ (pre ++ ty::post)) _ _ _ = _` >>
+  suspend "selected"
+QED
+Resume abi_decode_flat_static_reject[selected]:
+  markerLib.RESUME_TAC >>
+  `EVERY supported_scalar_type pre /\
+   EVERY (\ty. ~is_dynamic (vyper_to_abi_type env ty)) pre /\
+   supported_scalar_type ty /\ ~is_dynamic (vyper_to_abi_type env ty)` by simp[] >>
+  drule_all abi_decode_static_members_conversion >> strip_tac >>
+  `LIST_REL (abi_decoder_coherent ce env ce.ce_struct_fields) pre
+    (TAKE (LENGTH pre) tvs)` by
+    (drule LIST_REL_TAKE >> disch_then (qspec_then `LENGTH pre` mp_tac) >> simp[TAKE_LENGTH_APPEND]) >>
+  `eval_operand (Lit 0w) s = SOME (n2w 0 : bytes32) /\
+   abi_decoder_operand_live st.cs_next_var (Lit 0w)` by
+    simp[eval_operand_def, abi_decoder_operand_live_def] >>
+  `d+SUM (MAP (type_memory_bytes ce) pre) < dimword(:256)` by
+    (fs[SUM_APPEND] >> decide_tac) >>
+  SUBGOAL_THEN ``B+LENGTH (bs:word8 list) <= d \/
+    d+SUM (MAP (type_memory_bytes ce) pre) <= B`` assume_tac
+  >- (fs[SUM_APPEND] >> decide_tac) >>
+  SUBGOAL_THEN ``hi = Lit 0w \/ ?h. eval_operand hi s = SOME (n2w h) /\
+    LENGTH (bs:word8 list) <= h /\ h < dimword(:256)`` assume_tac
+  >- (disj2_tac >> qexists_tac `LENGTH bs` >> simp[] >> decide_tac) >>
+  drule_all (SIMP_RULE bool_ss [ADD_CLAUSES] (Q.INST [`z` |-> `0`] abi_decode_selected_prefix_run)) >>
+  strip_tac >>
+  suspend "member"
+QED
+Resume abi_decode_flat_static_reject[member]:
+  markerLib.RESUME_TAC >>
+  `supported_word_type ty` by metis_tac[abi_decode_static_scalar_word] >>
+  `?clamp. type_to_abi_dec_info ce.ce_struct_fields ce ty = DecPrimWord clamp /\
+    abi_member_head_size (vyper_to_abi_type env ty) = 32` by
+    (irule supported_word_abi_member >> first_assum ACCEPT_TAC) >>
+  `SUM (MAP abi_member_head_size (MAP (vyper_to_abi_type env) pre)) + 32 <= LENGTH bs` by
+    (fs[SUM_APPEND] >> decide_tac) >>
+  `eval_operand (Var src) reached = SOME (n2w B) /\
+   eval_operand (Var dst) reached = SOME (n2w d)` by metis_tac[] >>
+  `?u. abi_decode_reject_witness (emitted_insts sm sn) reached u /\ inst_extends sm sn` by
+    (irule (INST_TYPE [alpha |-> ``:string``, beta |-> ``:num``]
+       abi_decode_selected_invalid_word_reject) >>
+     conj_tac >- simp[] >>
+     qpat_x_assum `abi_decode_member_code _ _ _ _ _ _ _ sm sn` mp_tac >>
+     asm_simp_tac bool_ss [] >> strip_tac >>
+     goal_assum (drule_at (Pat `abi_decode_member_code _ _ _ _ _ _ _ _ _`)) >>
+     goal_assum (drule_at (Pat `~vyper_decode_valid_enc _ _`)) >>
+     qexistsl_tac [`B`, `ce`, `n2w d`, `ce.ce_struct_fields`] >> simp[]) >>
+  suspend "chain"
+QED
+Resume abi_decode_flat_static_reject[chain]:
+  markerLib.RESUME_TAC >>
+  `MAP (abi_embedded_static_size ce.ce_struct_fields) pre =
+   MAP abi_member_head_size (MAP (vyper_to_abi_type env) pre)` by
+    (simp_tac bool_ss [MAP_MAP_o] >> irule MAP_CONG >> simp_tac bool_ss [] >>
+     rpt strip_tac >> drule_all LIST_REL_MEM_IMP >> strip_tac >>
+     drule abi_decoder_coherent_header >> simp[abi_decoder_header_def]) >>
+  `inst_extends st last /\
+   EVERY (\i. abi_decoder_reentry_opcode i.inst_opcode) (emitted_insts st last)` by
+    metis_tac[abi_decode_flat_compile_shape, abi_decode_flat_reentry_code] >>
+  qpat_assum `abi_decode_flat_layout _ 0 0 _ _ _` mp_tac >>
+  simp_tac bool_ss [abi_decoder_member_infos_def, MAP_APPEND, MAP] >>
+  disch_then (mp_then Any mp_tac abi_decode_flat_layout_selected) >>
+  asm_simp_tac (bool_ss ++ ETA_ss)
+    [MAP_MAP_o, combinTheory.o_DEF, FST, SND, ADD_CLAUSES] >>
+  asm_simp_tac bool_ss [GSYM combinTheory.o_DEF, GSYM MAP_MAP_o,
+    GSYM abi_decoder_member_infos_def] >>
+  simp_tac bool_ss [MAP_ID] >> strip_tac >>
+  `inst_extends sn last` by metis_tac[abi_decode_flat_compile_shape] >>
+  `inst_extends sm last` by metis_tac[inst_extends_trans] >>
+  `abi_decode_reject_witness (emitted_insts sm last) reached u` by
+    (irule abi_decode_emit_reject_suffix >> qexists_tac `sn` >> simp[]) >>
+  simp_tac bool_ss [combinTheory.o_DEF] >> qexists_tac `u` >>
+  irule abi_decode_emit_reject_chain >>
+  qexistsl_tac [`sm`, `reached`] >> simp[] >>
+  `emitted_insts st last = emitted_insts st sm ++ emitted_insts sm last` by
+    metis_tac[emitted_insts_append, inst_extends_def] >> fs[EVERY_APPEND]
+QED
+Finalise abi_decode_flat_static_reject
+
+Theorem abi_decode_complex_static_reject:
+  EVERY supported_scalar_type tys /\
+  EVERY (\ty. ~is_dynamic (vyper_to_abi_type env ty)) tys /\
+  LIST_REL (abi_decoder_coherent ce env ce.ce_struct_fields) tys tvs /\
+  LENGTH tys < dimword(:256) /\
+  LENGTH bs <= vyper_abi_size_bound env (TupleT tys) /\
+  ~vyper_valid_enc env (TupleT tys) bs /\
+  compile_abi_decode_to_buf (Var dst) (Lit 0w) MLOAD (Var src) hi
+    (DecComplex dyn (abi_decoder_member_infos ce.ce_struct_fields ce tys)) st = ((),last) /\
+  mem_bytes_at B (LENGTH bs) (abi_decode_source MLOAD s) = bs /\
+  B+LENGTH bs < dimword(:256) /\
+  d+SUM (MAP (type_memory_bytes ce) tys) < dimword(:256) /\
+  (B+LENGTH bs <= d \/ d+SUM (MAP (type_memory_bytes ce) tys) <= B) /\
+  eval_operand (Var src) s = SOME (n2w B) /\
+  eval_operand (Var dst) s = SOME (n2w d) /\
+  eval_operand hi s = SOME (n2w (LENGTH bs)) /\ hi <> Lit 0w /\
+  abi_decoder_operand_live st.cs_next_var (Var dst) /\
+  abi_decoder_operand_live st.cs_next_var (Var src) /\
+  abi_decoder_operand_live st.cs_next_var hi /\ fresh_vars_wrt st s ==>
+  ?u. run_inst_seq (emitted_insts st last) s = Abort Revert_abort u /\
+      abi_decode_reject_witness (emitted_insts st last) s u
+Proof
+  disch_then (MAP_EVERY assume_tac o CONJUNCTS) >>
+  drule abi_decoder_complex_trace >> strip_tac >>
+  rename1 `abi_decode_complex_head_guard (Lit 0w) hi _ st = ((),middle)` >>
+  drule abi_decoder_member_infos_layout >> strip_tac >>
+  drule abi_decoder_complex_guard_code >> strip_tac >>
+  `MAP abi_member_head_size (MAP (vyper_to_abi_type env) tys) =
+   MAP (type_memory_bytes ce) tys /\
+   MAP (type_memory_bytes ce) tys = REPLICATE (LENGTH tys) 32` by
+    (conj_tac >> simp[LIST_EQ_REWRITE, EL_MAP, EL_REPLICATE] >>
+     rpt strip_tac >> rename1 `i < LENGTH tys` >>
+     `supported_scalar_type (EL i tys) /\ ~is_dynamic (vyper_to_abi_type env (EL i tys))` by
+       (fs[EVERY_EL] >> metis_tac[]) >>
+     qabbrev_tac `ty = EL i tys` >>
+     drule_all abi_decode_static_scalar_word >>
+     Cases_on `ty` >> simp[supported_word_type_def] >>
+     rename1 `BaseT bt` >> Cases_on `bt` >>
+     simp[supported_word_type_def, vyper_to_abi_type_def,
+       vyper_base_to_abi_type_def, abi_member_head_size_def, is_dynamic_def,
+       static_length_def, type_memory_bytes_def, combinTheory.o_DEF] >>
+     rename1 `BytesT bd` >> Cases_on `bd` >>
+     simp[supported_word_type_def, vyper_to_abi_type_def,
+       vyper_base_to_abi_type_def, abi_member_head_size_def, is_dynamic_def,
+       static_length_def, type_memory_bytes_def, combinTheory.o_DEF]) >>
+  `SUM (MAP abi_member_head_size (MAP (vyper_to_abi_type env) tys)) < dimword(:256)` by
+    (fs[] >> decide_tac) >>
+  `eval_operand (Lit 0w) s = SOME (n2w 0 : bytes32)` by simp[eval_operand_def] >>
+  Cases_on `LENGTH bs < SUM (MAP abi_member_head_size (MAP (vyper_to_abi_type env) tys))`
+  >- suspend "short" >>
+  SUBGOAL_THEN ``hi = Lit 0w \/ ?h. eval_operand hi s = SOME (n2w h) /\
+    0 + FOLDR (\(_,asz,_) acc. asz+acc) 0
+      (abi_decoder_member_infos ce.ce_struct_fields ce tys) <= h /\ h < dimword(:256)`` assume_tac
+  >- (disj2_tac >> qexists_tac `LENGTH bs` >> simp[] >> gvs[]) >>
+  drule_all abi_decode_complex_head_guard_sequence >> strip_tac >>
+  rename1 `run_inst_seq (emitted_insts st middle) s = OK prepared` >>
+  suspend "members"
+QED
+Resume abi_decode_complex_static_reject[short]:
+  `FOLDR (\(_,asz,_) acc. asz+acc) 0
+     (abi_decoder_member_infos ce.ce_struct_fields ce tys) < dimword(:256) /\
+   LENGTH bs < FOLDR (\(_,asz,_) acc. asz+acc) 0
+     (abi_decoder_member_infos ce.ce_struct_fields ce tys)` by metis_tac[] >>
+  drule_all abi_decode_complex_head_reject_witness >> strip_tac >>
+  `abi_decode_flat_layout (abi_decoder_member_infos ce.ce_struct_fields ce tys)
+    0 0 0w (32*LENGTH tys) (SUM (MAP (type_memory_bytes ce) tys))` by
+    (irule abi_decode_supported_flat_layout >> simp[] >> fs[] >> decide_tac) >>
+  `inst_extends middle last` by metis_tac[abi_decode_flat_compile_shape] >>
+  `abi_decode_reject_witness (emitted_insts st last) s u` by
+    (irule abi_decode_emit_reject_suffix >> qexists_tac `middle` >> simp[]) >>
+  qexists_tac `u` >> simp[abi_decode_reject_witness_run]
+QED
+Resume abi_decode_complex_static_reject[members]:
+  `static_length (Tuple (MAP (vyper_to_abi_type env) tys)) =
+   SUM (MAP abi_member_head_size (MAP (vyper_to_abi_type env) tys))` by
+    (pure_rewrite_tac[static_length_Tuple_SUM] >> AP_TERM_TAC >> irule MAP_CONG >>
+     fs[abi_member_head_size_def, EVERY_MEM, MEM_MAP] >> metis_tac[]) >>
+  `abi_static_length (Tuple (MAP (vyper_to_abi_type env) tys)) =
+   static_length (Tuple (MAP (vyper_to_abi_type env) tys))` by
+    (irule vyperABIValidTheory.abi_static_length_static >>
+     simp[any_dynamic_EXISTS, listTheory.NOT_EXISTS, EVERY_MAP,
+          combinTheory.o_DEF] >>
+     fs[EVERY_MEM]) >>
+  `~vyper_decode_valid_enc_tuple (MAP (vyper_to_abi_type env) tys) bs bs` by
+    (qpat_x_assum `~vyper_valid_enc _ _ _` mp_tac >>
+     simp[vyper_valid_enc_def, vyper_strict_enc_def, vyper_to_abi_types_MAP,
+      Once vyper_decode_valid_enc_def, Excl "vyper_decode_valid_enc_def"] >>
+     gvs[]) >>
+  `abi_decode_flat_layout (abi_decoder_member_infos ce.ce_struct_fields ce tys)
+    0 0 0w (LENGTH bs) (SUM (MAP (type_memory_bytes ce) tys))` by
+    (irule abi_decode_supported_flat_layout >> simp[] >> gvs[]) >>
+  `mem_bytes_at B (LENGTH bs) (abi_decode_source MLOAD prepared) = bs` by
+    fs[abi_decode_source_def] >>
+  `eval_operand (Var src) prepared = SOME (n2w B) /\
+   eval_operand (Var dst) prepared = SOME (n2w d) /\
+   eval_operand hi prepared = SOME (n2w (LENGTH bs))` by metis_tac[] >>
+  `st.cs_next_var <= middle.cs_next_var` by simp[] >>
+  `abi_decoder_operand_live middle.cs_next_var (Var dst) /\
+   abi_decoder_operand_live middle.cs_next_var (Var src) /\
+   abi_decoder_operand_live middle.cs_next_var hi` by
+    metis_tac[abi_decoder_operand_live_mono] >>
+  `SUM (MAP abi_member_head_size (MAP (vyper_to_abi_type env) tys)) <= LENGTH bs` by decide_tac >>
+  drule_all abi_decode_flat_static_reject >> strip_tac >>
+  `abi_decode_reject_witness (emitted_insts st last) s u` by
+    (irule abi_decode_emit_reject_chain >> qexistsl_tac [`middle`, `prepared`] >>
+     simp[] >> fs[EVERY_MEM] >> metis_tac[]) >>
+  qexists_tac `u` >> simp[abi_decode_reject_witness_run]
+QED
+Finalise abi_decode_complex_static_reject
+
+Theorem abi_decode_live_static_reject:
+  abi_decode_member_live ret ctx func cenv cx es src b (LENGTH bs) dst d cap
+    (Lit 0w) 0w hi sa G tn s /\
+  EVERY supported_scalar_type tys /\
+  EVERY (\ty. ~is_dynamic (vyper_to_abi_type (get_tenv cx) ty)) tys /\
+  abi_decoder_coherent ce (get_tenv cx) ce.ce_struct_fields (TupleT tys) (TupleTV tvs) /\
+  cap = SUM (MAP (type_memory_bytes ce) tys) /\
+  LENGTH tys < dimword(:256) /\
+  LENGTH bs <= vyper_abi_size_bound (get_tenv cx) (TupleT tys) /\
+  ~vyper_valid_enc (get_tenv cx) (TupleT tys) bs /\
+  mem_bytes_at (w2n b) (LENGTH bs) (abi_decode_source MLOAD s) = bs /\
+  compile_abi_decode_to_buf (Var dst) (Lit 0w) MLOAD (Var src) hi
+    (DecComplex dyn (abi_decoder_member_infos ce.ce_struct_fields ce tys)) sa = ((),sb) ==>
+  ?u. run_inst_seq (emitted_insts sa sb) s = Abort Revert_abort u /\
+      abi_decode_reject_witness (emitted_insts sa sb) s u
+Proof
+  strip_tac >>
+  `LIST_REL (abi_decoder_coherent ce (get_tenv cx) ce.ce_struct_fields) tys tvs` by
+    fs[abi_decoder_coherent_tuple_iff] >>
+  `fresh_vars_wrt sa s /\ hi <> Lit 0w /\
+   abi_decoder_operand_live sa.cs_next_var (Var dst) /\
+   abi_decoder_operand_live sa.cs_next_var (Var src) /\
+   abi_decoder_operand_live sa.cs_next_var hi /\
+   eval_operand (Var src) s = SOME (n2w (w2n b)) /\
+   eval_operand (Var dst) s = SOME (n2w (w2n d)) /\
+   eval_operand hi s = SOME (n2w (LENGTH bs)) /\
+   w2n b + LENGTH bs < dimword(:256) /\
+   w2n d + SUM (MAP (type_memory_bytes ce) tys) < dimword(:256)` by
+    (fs[abi_decode_member_live_def, abi_decode_ptr_window_def,
+        not_fresh_at_def, abi_decoder_operand_live_def, abi_decoder_older_vars_def,
+        eval_operand_def] >> Cases_on `hi` >> fs[] >> metis_tac[]) >>
+  SUBGOAL_THEN ``w2n (b:bytes32) + LENGTH (bs:word8 list) <= w2n (d:bytes32) \/
+    w2n (d:bytes32) + SUM (MAP (type_memory_bytes ce) tys) <= w2n (b:bytes32)`` assume_tac
+  >- fs[abi_decode_member_live_def] >>
+  drule_all abi_decode_complex_static_reject >> simp[]
+QED
