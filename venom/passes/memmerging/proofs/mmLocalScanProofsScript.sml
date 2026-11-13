@@ -19933,6 +19933,75 @@ Proof
     allocaRemapDefsTheory.mem_byte_at_def]
 QED
 
+Theorem mm_local_payload_due_realize[local]:
+  ws = MAP (THE o cap) (due ++ [r]) /\
+  (!j. MEM j (due ++ [r]) ==> IS_SOME (cap j)) /\
+  (!j d bs. MEM j (due ++ [r]) /\ cap j = SOME (d,bs) ==>
+    g.cg_dst <= d /\ d + LENGTH bs <= g.cg_dst + g.cg_length /\
+    bs = mm_local_bytes B (g.cg_src + (d-g.cg_dst)) (LENGTH bs)) /\
+  (!a. g.cg_dst <= a /\ a < g.cg_dst + g.cg_length ==>
+    ?j d bs. MEM j (due ++ [r]) /\ cap j = SOME (d,bs) /\
+      d <= a /\ a < d + LENGTH bs) /\
+  MAX_LIST (MAP (\(d,bs). d + LENGTH bs) ws) = g.cg_dst + g.cg_length ==>
+  FOLDL (\st (d,bs). write_memory_with_expansion d bs st) v ws =
+    write_memory_with_expansion g.cg_dst (mm_local_bytes B g.cg_src g.cg_length) v
+Proof
+  strip_tac >> irule mm_local_write_log_realize >>
+  pure_asm_rewrite_tac[] >> conj_tac
+  >- (rpt gen_tac >> pure_rewrite_tac[MEM_MAP] >> strip_tac >>
+      rename1 `MEM j (due ++ [r])` >>
+      `IS_SOME (cap j)` by metis_tac[] >>
+      Cases_on `cap j` >> gvs[] >> metis_tac[]) >>
+  conj_tac
+  >- (rpt strip_tac >>
+      qpat_x_assum `!a. g.cg_dst <= a /\ _ ==> _`
+        (qspec_then `a` mp_tac) >> asm_rewrite_tac[] >> strip_tac >>
+      qexistsl [`d`,`bs`] >> simp[MEM_MAP] >>
+      qexists `j` >> gvs[MEM_APPEND]) >>
+  metis_tac[]
+QED
+
+Theorem mm_local_payload_representative_discharge[local]:
+  mm_local_pending cap js s t /\ cap r = SOME (d,bs) /\
+  survivors = FILTER (\j. ~P j) js /\
+  (!pre j mid k post a cs b ds.
+    js = pre ++ [j] ++ mid ++ [k] ++ post /\ ~P j /\ P k /\
+    cap j = SOME (a,cs) /\ cap k = SOME (b,ds) ==>
+    mm_local_write_compatible a cs b ds) /\
+  (!j a cs. MEM j survivors /\ cap j = SOME (a,cs) ==>
+    mm_local_write_compatible a cs d bs) /\
+  (!v. FOLDL (\st (a,cs). write_memory_with_expansion a cs st) v
+    (MAP (THE o cap) (FILTER P js ++ [r])) =
+    write_memory_with_expansion dst merged v) /\
+  s'.vs_memory = (write_memory_with_expansion d bs s).vs_memory /\
+  t'.vs_memory = (write_memory_with_expansion dst merged t).vs_memory ==>
+  mm_local_pending cap survivors s' t'
+Proof
+  strip_tac >>
+  `EVERY (\j. IS_SOME (cap j)) js` by
+    (gvs[mm_local_pending_def] >> metis_tac[mm_local_capture_log_canonical]) >>
+  `!Q. LIST_REL (\j w. cap j = SOME w) (FILTER Q js)
+      (MAP (THE o cap) (FILTER Q js))` by
+    (gen_tac >> simp[LIST_REL_MAP2] >> irule EVERY2_refl >>
+     simp[EVERY_MEM, MEM_FILTER] >> qx_gen_tac `j` >> strip_tac >>
+     `IS_SOME (cap j)` by gvs[EVERY_MEM] >>
+     Cases_on `cap j` >> gvs[]) >>
+  qpat_x_assum `survivors = _` SUBST_ALL_TAC >>
+  irule mm_local_pending_compatible_discharge_filter >>
+  conj_tac >- (rpt strip_tac >> metis_tac[]) >>
+  qexistsl [`d`,`dst`,`merged`,
+    `MAP (THE o cap) (FILTER P js)`,`bs`,
+    `MAP (THE o cap) (FILTER (\j. ~P j) js)`,`s`,`t`] >>
+  simp[] >> conj_tac
+  >- (gen_tac >>
+      qpat_x_assum `!v. FOLDL _ _ _ = _` (qspec_then `v` mp_tac) >>
+      simp[MAP_APPEND, FOLDL_APPEND]) >>
+  simp[EVERY_MAP, EVERY_MEM] >> qx_gen_tac `j` >> strip_tac >>
+  `IS_SOME (cap j)` by gvs[EVERY_MEM, MEM_FILTER] >>
+  Cases_on `cap j` >> gvs[] >> PairCases_on `x` >>
+  gvs[] >> metis_tac[]
+QED
+
 Theorem mm_local_stage_correct:
   !fn0 supply index k bb sk fn bb' sk' fn'.
   fn_inst_wf fn0 /\ wf_function fn0 /\ wf_ssa fn0 /\ all_reachable fn0 /\
