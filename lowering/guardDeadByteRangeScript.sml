@@ -79,9 +79,7 @@ Proof
       reverse (Cases_on `w2n (lookup_storage (n2w off) s) <= n`)
       >- (PURE_ONCE_REWRITE_TAC [slots_in_range_def] >>
           simp[read_slot_def, LET_THM]) >>
-      `MIN (w2n (lookup_storage (n2w off) s)) n =
-       w2n (lookup_storage (n2w off) s)` by simp[arithmeticTheory.MIN_DEF] >>
-      `!k. k < w2n (lookup_storage (n2w off) s) ==>
+      `!k. k < n ==>
         (slots_in_range s (off + 1 + k * type_slot_size tv) tv <=>
          slots_in_range t (off + 1 + k * type_slot_size tv) tv)`
         suffices_by
@@ -89,10 +87,8 @@ Proof
          simp[read_slot_def, LET_THM,
               cj 2 array_slots_in_range_indexed] >> metis_tac[]) >>
       rpt strip_tac >>
-      qpat_x_assum `!i. i < w2n _ ==> _` (qspec_then `k` mp_tac) >>
-      asm_rewrite_tac[] >> disch_then (qspec_then `t` irule) >>
+      qpat_x_assum `!i t. _` (qspecl_then [`k`, `t`] irule) >>
       rpt strip_tac >> first_x_assum irule >>
-      `k < n` by decide_tac >>
       qpat_assum `k < n` (mp_tac o MATCH_MP array_element_slot_bound) >>
       disch_then (qspecl_then [`type_slot_size tv`, `off + 1`] assume_tac) >>
       rpt conj_tac
