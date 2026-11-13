@@ -249,3 +249,69 @@ Proof
     (strip_tac >> pop_assum (mp_tac o AP_TERM ``LENGTH : call_outcome list -> num``) >>
      simp[]) >> gvs[]
 QED
+
+(* CALL transport for both runtime and constructor frames. *)
+Theorem call_stor_taint_ok_at:
+  inst.inst_opcode = CALL /\ stor_taint_ok_at D tn s /\
+  s'.vs_call_ctx = s.vs_call_ctx /\
+  s'.vs_immutables = s.vs_immutables /\
+  (~(~s.vs_call_ctx.cc_static /\ s'.vs_requests <> s.vs_requests /\
+      s'.vs_outcomes <> s.vs_outcomes /\ (HD s.vs_outcomes).co_success) ==>
+   s'.vs_accounts = s.vs_accounts /\ s'.vs_transient = s.vs_transient) ==>
+  stor_taint_ok_at D (step_taint inst s s' tn) s'
+Proof
+  strip_tac >> drule call_step_storage_taint >> strip_tac >>
+  gvs[stor_taint_ok_at_def] >>
+  Cases_on `~s.vs_call_ctx.cc_static /\ s'.vs_requests <> s.vs_requests /\
+            s'.vs_outcomes <> s.vs_outcomes /\ (HD s.vs_outcomes).co_success` >>
+  gvs[step_taint_def, imm_taint_def]
+QED
+
+Theorem call_ghost_kept_at:
+  inst.inst_opcode = CALL /\
+  inst.inst_operands = [gas; addr; value; ao; az; ro; Lit 0w] /\
+  inst.inst_outputs = [out] /\ ~not_fresh_at sa out /\
+  s'.vs_allocas = s.vs_allocas /\ s'.vs_fmp = s.vs_fmp ==>
+  ghost_kept_at lo cenv es sa G tn s (step_prov PG G inst s')
+    (step_taint inst s s' tn)
+Proof
+  strip_tac >>
+  `!x. not_fresh_at sa x ==> x <> out` by metis_tac[] >>
+  drule_all call_zero_region_memory_taint >> strip_tac >>
+  simp[ghost_kept_at_def] >> rpt strip_tac >>
+  `x <> out` by metis_tac[] >>
+  drule_all call_old_variable_ghost >> simp[]
+QED
+
+Theorem call_ghost_inv_at:
+  inst.inst_opcode = CALL /\ inst.inst_outputs = [out] /\
+  ghost_inv_at D lo d cenv cx es G tn s /\ es'.scopes = es.scopes /\
+  s'.vs_memory = s.vs_memory /\
+  (step_taint inst s s' tn).t_mem = tn.t_mem /\
+  s'.vs_allocas = s.vs_allocas /\ s'.vs_alloca_next = s.vs_alloca_next /\
+  (!p. p <> out ==> lookup_var p s' = lookup_var p s) /\
+  (!n p sz. FLOOKUP cenv.ce_vars n = SOME (PtrVar (Var p) sz) ==> p <> out) /\
+  (!p sz. cenv.ce_return_buf = SOME (PtrVar (Var p) sz) ==> p <> out) /\
+  (!p sz. cenv.ce_return_pc = SOME (PtrVar (Var p) sz) ==> p <> out) /\
+  (!x. lo <> 0 /\ cenv.ce_imm_alloca = SOME (Var x) ==> x <> out) /\
+  stor_taint_ok_at D (step_taint inst s s' tn) s' ==>
+  ghost_inv_at D lo d cenv cx es' (step_prov PG G inst s')
+    (step_taint inst s s' tn) s'
+Proof
+  strip_tac >>
+  `!p sz. p <> out ==>
+    (ptr_covers (step_prov PG G inst s') (step_taint inst s s' tn) p s' sz <=>
+     ptr_covers G tn p s sz)` by
+    (rpt strip_tac >> irule call_ptr_covers >> simp[]) >>
+  gvs[ghost_inv_at_def, allocas_from_def] >>
+  simp[] >> reverse (rpt conj_tac)
+  >- metis_tac[call_old_variable_ghost]
+  >- metis_tac[call_old_variable_ghost]
+  >- metis_tac[call_old_variable_ghost]
+  >- (Cases_on `d` >- simp[return_buf_ptr_def] >>
+      rename1 `return_buf_ptr (SOME pair) _ _ _ _` >>
+      PairCases_on `pair` >> gvs[return_buf_ptr_def] >> metis_tac[]) >>
+  rpt strip_tac >>
+  `p <> out` by metis_tac[] >>
+  metis_tac[]
+QED
