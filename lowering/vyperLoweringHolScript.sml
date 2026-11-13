@@ -47,6 +47,9 @@ Ancestors
   (* S3 pointer leaves kept in the build until their owner rules on them *)
   bodyStmtsSimPtr extEntryReachesBodyPtr extEntryValueRevertPtr
   extFrameRetOkPtr
+  (* S3 memory-run leaves loweringMemCorrect no longer imports, kept in the
+     build like the pointer leaves above *)
+  loweringMemEntryRevert loweringMemBodyRun
   asmSymBridge
   asmDataEnv
   asmOptFinalizerCorrect

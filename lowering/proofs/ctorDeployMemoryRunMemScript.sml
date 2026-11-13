@@ -1,7 +1,8 @@
 (* The raw deployment unit's run is memory-safe: every instruction it
  * executes, callee frames included, reads and writes memory below the
- * allocation frontier (or is a revert forwarding).  The deploy twin of
- * lower_vyper_runtime_unit_run_mem_safe, composed like the constructor's S1
+ * allocation frontier (or is a revert forwarding).  The deploy twin of the
+ * runtime unit's memory-safe run (the exit arm of loweringRuntimeCorrect's
+ * lower_vyper_runtime_unit_body_joint), composed like the constructor's S1
  * (ctorDeployLowering): without a constructor (RunMemNoCtor); a source that
  * fails before the body (RunMemPrefix); otherwise the prefix reaches the body
  * start (RunMemEntry), the body runs by body_stmts_sim_mem, whose body_inv

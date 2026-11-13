@@ -1,7 +1,7 @@
 (*
  * The source side of the selected external call, and the guarded body's
  * code, as S1 (loweringRuntimeCorrect) and the counted body runs
- * (loweringPtrBodyRun, loweringMemBodyRun) use them.
+ * (loweringMemBodyRun) use them.
  *
  * TOP-LEVEL:
  *   call_external_selected_body, call_external_selected_body_gas -- the
