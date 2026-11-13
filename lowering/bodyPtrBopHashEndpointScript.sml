@@ -64,6 +64,7 @@ Theorem bop_hash_compile_endpoint:
    (?str. v = StringV str /\ LENGTH str < dimword(:256))) /\
   run_inst_seq (emitted_insts sc sd) s = OK t ==>
   ?HG un.
+    inst_seq_ptr D 0 ctx fn PG G tn (emitted_insts sc sd) s HG un /\
     gas_path_ptr D 0 ctx fn PG G tn s 0 HG un
       (OK (t with vs_inst_idx := LENGTH sd.cs_current_insts)) /\
     ghost_inv H d cenv cx es HG un (t with vs_inst_idx := LENGTH sd.cs_current_insts) /\
@@ -120,7 +121,9 @@ Proof
     (simp[not_fresh_at_def] >> rpt strip_tac >>
      first_x_assum irule >> decide_tac) >>
   `LENGTH sd.cs_current_insts = s.vs_inst_idx + 3` by simp[] >>
-  qexistsl_tac [`HG`, `un`] >> simp[hash_ghost_inv_inst_idx] >>
+  qexistsl_tac [`HG`, `un`] >>
+  conj_tac >- (qhdtm_x_assum `inst_seq_ptr` mp_tac >> simp[mk_inst_def]) >>
+  simp[hash_ghost_inv_inst_idx] >>
   qpat_x_assum `(t with vs_vars := _) = s` mp_tac >>
   simp[venom_state_component_equality] >> metis_tac[]
 QED

@@ -9,6 +9,8 @@ Ancestors
   emitHelperProps fragExec localPtrsProps freshWrites bodyPtrDefs venomState
   exprOperandVar vyperTyping loweringPosts vyperInterpreter vyperValue vyperAST list
   loweringStateRelDefs bodyPtrBopHashFootprint
+  vyperStorageTrace vyperStorageFootprint fragGasSeqPtr gasStorage
+  gasSummary fragGasMode fragGasPath
 Libs pairLib
 
 Theorem bop_selected_hash_grows:
@@ -34,8 +36,9 @@ Proof
 QED
 
 Theorem bop_selected_hash_dynamic_success_frame[local]:
-  bop_operand_entry d ctx func cenv cx e es ca cz h s G tn /\
-  bop_operand_post d ctx func cenv cx e es ca cb m s G tn v ee t HG un /\
+  bop_operand_entry d ctx func cenv cx st0 e es ca cz h s G tn /\
+  valid_horizon cx st0 H es.storage_trace /\
+  bop_operand_post H d ctx func cenv cx e es ca cb m s G tn v ee t HG un /\
   lower_value compile_expr cenv (expr_type e) e ca = (m,cb) /\
   compile_bytestring_hash m cb = (h,cz) /\ cs_extends ca cb /\
   is_bytestring_type (expr_type e) /\
@@ -43,6 +46,8 @@ Theorem bop_selected_hash_dynamic_success_frame[local]:
   MAP FDOM es.scopes = MAP FDOM ee.scopes /\ ~t.vs_halted ==>
   ?contents u HG' un'.
     (v = BytesV contents \/ ?str. v = StringV str /\ contents = MAP (n2w o ORD) str) /\
+    inst_seq_ptr D 0 ctx func PG HG un (emitted_insts cb cz) t HG' un' /\
+    run_inst_seq (emitted_insts cb cz) t = OK (u with vs_inst_idx := t.vs_inst_idx) /\
     gas_path_ptr D 0 ctx func PG HG un t 0 HG' un' (OK u) /\
     eval_operand h u = SOME (word_of_bytes_be (Keccak_256_w64 contents)) /\
     op_prov HG' h = NONE /\ op_taint un' h = {} /\
@@ -118,7 +123,8 @@ Proof
   disch_then (qspecl_then [`PG`, `D`] strip_assume_tac) >>
   `wb_frame cenv es ee ca s t` by (gvs[expr_post_def, wb_frame_def] >> metis_tac[]) >>
   drule_all bop_hash_compile_readonly >> strip_tac >>
-  `t'.vs_memory = t.vs_memory /\ t'.vs_allocas = t.vs_allocas` by
+  `t'.vs_memory = t.vs_memory /\ t'.vs_allocas = t.vs_allocas /\
+   t'.vs_inst_idx = t.vs_inst_idx` by
     (qpat_x_assum `(t' with vs_vars := _) = t` mp_tac >>
      simp[venom_state_component_equality] >> metis_tac[]) >>
   `~expr_has_effect e ==> pure_frame cenv func es ca s
@@ -132,23 +138,29 @@ Proof
     (irule wb_frame_readonly_tail >> qexistsl_tac [`cb`, `t`] >>
      gvs[lookup_var_def] >> metis_tac[]) >>
   `ghost_kept cenv es ca G tn s HG' un'` by
-    (irule ghost_kept_wb_trans >>
+    (irule (INST_TYPE [alpha |-> ``:256``] ghost_kept_wb_trans) >>
      conj_tac >- first_assum ACCEPT_TAC >>
-     conj_tac >- (qexistsl_tac [`ctx`, `cx`, `func`] >> gvs[bop_operand_entry_def]) >>
+     conj_tac >- (qexistsl_tac [`H`, `ctx`, `cx`, `func`] >>
+       gvs[bop_operand_entry_def] >> metis_tac[]) >>
      metis_tac[]) >>
   `(!z. h = Var z ==> not_fresh_at cz z) /\ (!l. h <> Label l)` by
     (qpat_x_assum `compile_bytestring_hash _ _ = _` mp_tac >>
      simp[compile_bytestring_hash_def, emit_op_def, comp_bind_def,
        comp_ignore_bind_def, comp_return_def, fresh_id_def, fresh_var_def, emit_def,
        not_fresh_at_def] >> rpt strip_tac >> gvs[] >> decide_tac) >>
+  `t' = t' with vs_inst_idx := LENGTH cb.cs_current_insts` by
+    simp[venom_state_component_equality] >>
   qexists_tac `t' with vs_inst_idx := LENGTH cz.cs_current_insts` >>
   qexistsl_tac [`HG'`, `un'`] >>
   simp[eval_operand_def, lookup_var_def] >> metis_tac[]
 QED
 
-Theorem bop_selected_hash_dynamic_success[local]:
-  bop_operand_entry d ctx func cenv cx e es ca cz h s G tn /\
-  bop_operand_post d ctx func cenv cx e es ca cb m s G tn v ee t HG un /\
+Theorem bop_selected_hash_dynamic_success_horizons[local]:
+  bop_operand_entry d ctx func cenv cx st0 e es ca cz h s G tn /\
+  (?H. valid_horizon cx st0 H ee.storage_trace) /\
+  (!H. valid_horizon cx st0 H ee.storage_trace ==>
+    bop_operand_post H d ctx func cenv cx e es ca cb m s G tn v ee t HG un) /\
+  (?gs. bind (eval_expr cx e) (read_result cx) (es with gas_obs := gs) = (INL v,ee)) /\
   lower_value compile_expr cenv (expr_type e) e ca = (m,cb) /\
   compile_bytestring_hash m cb = (h,cz) /\ cs_extends ca cb /\
   is_bytestring_type (expr_type e) /\
@@ -156,17 +168,59 @@ Theorem bop_selected_hash_dynamic_success[local]:
   MAP FDOM es.scopes = MAP FDOM ee.scopes /\ ~t.vs_halted ==>
   ?contents u HG' un'.
     (v = BytesV contents \/ ?str. v = StringV str /\ contents = MAP (n2w o ORD) str) /\
-    gas_path_ptr D 0 ctx func PG HG un t 0 HG' un' (OK u) /\
+    (!D. gas_path_ptr D 0 ctx func PG HG un t 0 HG' un' (OK u)) /\
     eval_operand h u = SOME (word_of_bytes_be (Keccak_256_w64 contents)) /\
     op_prov HG' h = NONE /\ op_taint un' h = {} /\
     (!z. h = Var z ==> not_fresh_at cz z) /\ (!l. h <> Label l) /\
-    stmt_state_rel H ctx func cenv cx ee u /\ ghost_inv H d cenv cx ee HG' un' u /\
+    (!H. valid_horizon cx st0 H ee.storage_trace ==>
+      stmt_state_rel H ctx func cenv cx ee u /\ ghost_inv H d cenv cx ee HG' un' u) /\
     ~u.vs_halted /\ u.vs_current_bb = cz.cs_current_bb /\
     u.vs_inst_idx = LENGTH cz.cs_current_insts /\
-    wb_frame cenv es ee ca s u /\ ghost_kept cenv es ca G tn s HG' un'
+    wb_frame cenv es ee ca s u /\ ghost_kept cenv es ca G tn s HG' un' /\
+    (~expr_has_effect e ==> pure_frame cenv func es ca s u)
 Proof
-  strip_tac >> drule_all bop_selected_hash_dynamic_success_frame >>
-  disch_then (qspecl_then [`PG`, `D`] strip_assume_tac) >> metis_tac[]
+  disch_then (map_every assume_tac o CONJUNCTS) >>
+  `!H. valid_horizon cx st0 H ee.storage_trace ==>
+    valid_horizon cx st0 H es.storage_trace` by
+    (qx_gen_tac `HH` >> strip_tac >>
+     qpat_assum `?gs. bind (eval_expr cx e) _ _ = _`
+       (qx_choose_then `gs` assume_tac) >>
+     `valid_horizon cx st0 HH (es with gas_obs := gs).storage_trace`
+       suffices_by simp[] >>
+     irule (INST_TYPE [alpha |-> ``:value``] valid_horizon_frame) >>
+     qexistsl_tac [`bind (eval_expr cx e) (read_result cx)`, `INL v`, `ee`] >>
+     simp[storage_trace_frame_bind_all, evaluate_storage_trace_frame,
+       storage_trace_frame_read_result]) >>
+  qpat_x_assum `?H. valid_horizon _ _ H ee.storage_trace`
+    (qx_choose_then `H0` assume_tac) >>
+  `bop_operand_post H0 d ctx func cenv cx e es ca cb m s G tn v ee t HG un /\
+   valid_horizon cx st0 H0 es.storage_trace` by metis_tac[] >>
+  pop_assum (map_every assume_tac o CONJUNCTS) >>
+  drule_all bop_selected_hash_dynamic_success_frame >>
+  disch_then (qspecl_then [`PG`, `cx_dead H0 cx`]
+    (qx_choose_then `contents` (qx_choose_then `u` (qx_choose_then `HGf`
+      (qx_choose_then `unf` (map_every assume_tac o CONJUNCTS)))))) >>
+  qpat_x_assum `bop_operand_post H0 _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _` kall_tac >>
+  `!HH DD. valid_horizon cx st0 HH ee.storage_trace ==>
+     gas_path_ptr DD 0 ctx func PG HG un t 0 HGf unf (OK u) /\
+     stmt_state_rel HH ctx func cenv cx ee u /\ ghost_inv HH d cenv cx ee HGf unf u` by
+    (map_every qx_gen_tac [`HH`, `DD`] >> strip_tac >>
+     `bop_operand_post HH d ctx func cenv cx e es ca cb m s G tn v ee t HG un /\
+      valid_horizon cx st0 HH es.storage_trace` by metis_tac[] >>
+     pop_assum (map_every assume_tac o CONJUNCTS) >>
+     drule_all bop_selected_hash_dynamic_success_frame >>
+     disch_then (qspecl_then [`PG`, `DD`]
+       (qx_choose_then `contents2` (qx_choose_then `u2` (qx_choose_then `HG2`
+         (qx_choose_then `un2` (map_every assume_tac o CONJUNCTS)))))) >>
+     `HG2 = HGf /\ un2 = unf` by metis_tac[inst_seq_ptr_ghost_unique] >>
+     `u2 = u` by
+       (`u2 with vs_inst_idx := t.vs_inst_idx = u with vs_inst_idx := t.vs_inst_idx`
+          by metis_tac[venomExecSemanticsTheory.exec_result_11] >>
+        pop_assum (mp_tac o AP_TERM
+          ``\r:venom_state. r with vs_inst_idx := LENGTH cz.cs_current_insts``) >>
+        simp[venom_state_component_equality]) >>
+     gvs[]) >>
+  qexistsl_tac [`contents`, `u`, `HGf`, `unf`] >> simp[] >> metis_tac[]
 QED
 
 Theorem bop_selected_hash_outcome_ptr_frame:
@@ -174,7 +228,7 @@ Theorem bop_selected_hash_outcome_ptr_frame:
      NONE => (\(m,cb). compile_bytestring_hash m cb)
        (lower_value compile_expr cenv (expr_type e) e ca)
    | SOME digest => (Lit digest,ca)) = (h,cz) /\
-  bop_operand_entry d ctx func cenv cx e es ca cz h s G tn /\
+  bop_operand_entry d ctx func cenv cx st0 e es ca cz h s G tn /\
   expr_body_pre cenv cx env e es /\ body_inv tops ctx cenv cx /\
   is_bytestring_type (expr_type e) /\
   (bytestring_literal_hash e = NONE ==>
@@ -182,18 +236,21 @@ Theorem bop_selected_hash_outcome_ptr_frame:
   (!gs rr ee. bind (eval_expr cx e) (read_result cx) (es with gas_obs := gs) =
       (rr,ee) ==> P rr ee) /\
   (!v ee contents t HG un.
+    (?H. valid_horizon cx st0 H ee.storage_trace) /\
     P (INL v) ee /\ ee.gas_obs = [] /\
     (v = BytesV contents \/ ?str. v = StringV str /\ contents = MAP (n2w o ORD) str) /\
     eval_operand h t = SOME (word_of_bytes_be (Keccak_256_w64 contents)) /\
     op_prov HG h = NONE /\ op_taint un h = {} /\
     (!z. h = Var z ==> not_fresh_at cz z) /\ (!l. h <> Label l) /\
-    stmt_state_rel H ctx func cenv cx ee t /\ ghost_inv H d cenv cx ee HG un t /\
+    (!H. valid_horizon cx st0 H ee.storage_trace ==>
+      stmt_state_rel H ctx func cenv cx ee t /\ ghost_inv H d cenv cx ee HG un t) /\
     ~t.vs_halted /\ t.vs_current_bb = cz.cs_current_bb /\
     t.vs_inst_idx = LENGTH cz.cs_current_insts /\
     wb_frame cenv es ee ca s t /\ ghost_kept cenv es ca G tn s HG un /\
     (~expr_has_effect e ==> pure_frame cenv func es ca s t) ==>
-    gas_outcome_ptr (cx_dead H cx) (cx_tops cx) (ctx,func) PG
-      (next v) (ee,t,HG,un) Q (\res ee gt r. expr_exit res r)) /\
+    gas_outcome_ptr (\H. cx_dead H cx) (cx_tops cx) (ctx,func) PG cx st0
+      (next v) (ee,t,HG,un) Q (\H res ee gt r. expr_exit res r)) /\
+  (!v. storage_trace_frame (next v)) /\
   (!marks err ee leaf fstate.
     gas_exempt_cert F (cx_tops cx) (ctx,func)
       (ignore_bind (bind (eval_expr cx e) (read_result cx)) (return ()))
@@ -212,9 +269,9 @@ Theorem bop_selected_hash_outcome_ptr_frame:
       (bind (bind (eval_expr cx e) (read_result cx))
         (\v. ignore_bind (next v) (return ())))
       (es,s) (left ++ right) (err,ee) (leaf,fstate)) ==>
-  gas_outcome_ptr (cx_dead H cx) (cx_tops cx) (ctx,func) PG
+  gas_outcome_ptr (\H. cx_dead H cx) (cx_tops cx) (ctx,func) PG cx st0
     (bind (bind (eval_expr cx e) (read_result cx)) next)
-    (es,s,G,tn) Q (\res ee gt r. expr_exit res r)
+    (es,s,G,tn) Q (\H res ee gt r. expr_exit res r)
 Proof
   disch_then (map_every assume_tac o CONJUNCTS) >>
   Cases_on `bytestring_literal_hash e`
@@ -230,36 +287,50 @@ QED
 Resume bop_selected_hash_outcome_ptr_frame[dynamic]:
   drule (CONJUNCT2 compile_expr_grows) >> strip_tac >>
   drule bop_hash_compile_layout >> strip_tac >>
-  `bop_operand_entry d ctx func cenv cx e es ca cb m s G tn` by
+  `bop_operand_entry d ctx func cenv cx st0 e es ca cb m s G tn` by
     (gvs[bop_operand_entry_def] >>
      metis_tac[fn_has_code_mid, cs_extends_refl]) >>
   irule bop_operand_contract_ptr >>
   conj_tac >- first_assum ACCEPT_TAC >>
   conj_tac >- first_assum ACCEPT_TAC >>
+  conj_tac >- simp[] >>
   qexistsl_tac [`\rr ee. P rr ee /\ ?gs. bind (eval_expr cx e) (read_result cx) (es with gas_obs := gs) = (rr,ee)`,
     `cenv`, `d`, `m`, `ca`, `cb`, `expr_type e`] >>
   conj_tac >- (rpt strip_tac >> metis_tac[]) >>
   simp[] >>
-  rpt gen_tac >> strip_tac >>
+  rpt gen_tac >> disch_then (map_every assume_tac o CONJUNCTS) >>
   drule bop_typed_source_witness >>
   disch_then (qspecl_then [`v`, `ee`] mp_tac) >>
   (impl_tac >- metis_tac[]) >> strip_tac >>
-  drule_all bop_selected_hash_dynamic_success_frame >>
-  disch_then (qspecl_then [`PG`, `cx_dead H cx`] strip_assume_tac) >>
+  drule_all bop_selected_hash_dynamic_success_horizons >>
+  disch_then (qspec_then `PG` (qx_choose_then `contents` (qx_choose_then `u`
+    (qx_choose_then `HGf` (qx_choose_then `unf` (map_every assume_tac o CONJUNCTS)))))) >>
   irule gas_outcome_ptr_prefix >>
-  goal_assum (drule_at Any) >>
-  first_x_assum irule >> simp[]
+  qexistsl_tac [`HGf`, `0`, `u`, `unf`] >> simp[] >>
+  first_x_assum irule >> simp[] >> qexists_tac `contents` >> simp[]
 QED
 
 Resume bop_selected_hash_outcome_ptr_frame[literal]:
   markerLib.RESUME_TAC >>
   gvs[bytestring_literal_hash_def] >>
   qmatch_goalsub_abbrev_tac `eval_expr cx (Literal ann lit)` >>
+  reverse (Cases_on `?H. valid_horizon cx st0 H es.storage_trace`)
+  >- (rewrite_tac[gas_outcome_ptr_def] >> qexists_tac `[]` >> disj1_tac >>
+      irule gas_bad_storage_at_initial >>
+      simp[storage_trace_domain_def] >>
+      irule storage_trace_frame_bind_all >>
+      simp[storage_trace_frame_bind_all, evaluate_storage_trace_frame,
+        storage_trace_frame_read_result]) >>
+  `gas_marked_exec F (ctx,func)
+     (bind (eval_expr cx (Literal ann lit)) (read_result cx))
+     (es,s) [] (INL (evaluate_literal lit)) es (OK s)` by
+    (simp[gas_marked_exec_def, gas_marked_path_def, literal_read_all_tails] >>
+     irule (cj 1 gas_path_rules) >> gvs[bop_operand_entry_def]) >>
+  `!D. gas_path_ptr D 0 ctx func PG G tn s 0 G tn (OK s)` by
+    (gen_tac >> irule (cj 1 gas_path_ptr_rules) >> gvs[bop_operand_entry_def]) >>
   irule gas_outcome_ptr_bind_normal >>
-  qexistsl_tac [`G`, `[]`, `es`, `s`, `tn`, `evaluate_literal lit`] >>
+  qexistsl_tac [`G`, `[]`, `es`, `s`, `tn`, `evaluate_literal lit`] >> simp[] >>
   (conj_tac >- metis_tac[]) >>
-  (reverse conj_tac >- (simp[gas_marked_exec_ptr_def, literal_read_all_tails] >>
-    irule (cj 1 gas_path_ptr_rules) >> gvs[bop_operand_entry_def])) >>
   (first_x_assum irule >>
     simp[evaluate_literal_def, eval_operand_def, op_prov_def, op_taint_def,
       wb_frame_refl, ghost_kept_refl, stmt_state_rel_gas_obs, ghost_inv_gas_obs] >>
@@ -274,7 +345,7 @@ Theorem bop_selected_hash_outcome_ptr:
      NONE => (\(m,cb). compile_bytestring_hash m cb)
        (lower_value compile_expr cenv (expr_type e) e ca)
    | SOME digest => (Lit digest,ca)) = (h,cz) /\
-  bop_operand_entry d ctx func cenv cx e es ca cz h s G tn /\
+  bop_operand_entry d ctx func cenv cx st0 e es ca cz h s G tn /\
   expr_body_pre cenv cx env e es /\ body_inv tops ctx cenv cx /\
   is_bytestring_type (expr_type e) /\
   (bytestring_literal_hash e = NONE ==>
@@ -282,17 +353,20 @@ Theorem bop_selected_hash_outcome_ptr:
   (!gs rr ee. bind (eval_expr cx e) (read_result cx) (es with gas_obs := gs) =
       (rr,ee) ==> P rr ee) /\
   (!v ee contents t HG un.
+    (?H. valid_horizon cx st0 H ee.storage_trace) /\
     P (INL v) ee /\ ee.gas_obs = [] /\
     (v = BytesV contents \/ ?str. v = StringV str /\ contents = MAP (n2w o ORD) str) /\
     eval_operand h t = SOME (word_of_bytes_be (Keccak_256_w64 contents)) /\
     op_prov HG h = NONE /\ op_taint un h = {} /\
     (!z. h = Var z ==> not_fresh_at cz z) /\ (!l. h <> Label l) /\
-    stmt_state_rel H ctx func cenv cx ee t /\ ghost_inv H d cenv cx ee HG un t /\
+    (!H. valid_horizon cx st0 H ee.storage_trace ==>
+      stmt_state_rel H ctx func cenv cx ee t /\ ghost_inv H d cenv cx ee HG un t) /\
     ~t.vs_halted /\ t.vs_current_bb = cz.cs_current_bb /\
     t.vs_inst_idx = LENGTH cz.cs_current_insts /\
     wb_frame cenv es ee ca s t /\ ghost_kept cenv es ca G tn s HG un ==>
-    gas_outcome_ptr (cx_dead H cx) (cx_tops cx) (ctx,func) PG
-      (next v) (ee,t,HG,un) Q (\res ee gt r. expr_exit res r)) /\
+    gas_outcome_ptr (\H. cx_dead H cx) (cx_tops cx) (ctx,func) PG cx st0
+      (next v) (ee,t,HG,un) Q (\H res ee gt r. expr_exit res r)) /\
+  (!v. storage_trace_frame (next v)) /\
   (!marks err ee leaf fstate.
     gas_exempt_cert F (cx_tops cx) (ctx,func)
       (ignore_bind (bind (eval_expr cx e) (read_result cx)) (return ()))
@@ -311,9 +385,9 @@ Theorem bop_selected_hash_outcome_ptr:
       (bind (bind (eval_expr cx e) (read_result cx))
         (\v. ignore_bind (next v) (return ())))
       (es,s) (left ++ right) (err,ee) (leaf,fstate)) ==>
-  gas_outcome_ptr (cx_dead H cx) (cx_tops cx) (ctx,func) PG
+  gas_outcome_ptr (\H. cx_dead H cx) (cx_tops cx) (ctx,func) PG cx st0
     (bind (bind (eval_expr cx e) (read_result cx)) next)
-    (es,s,G,tn) Q (\res ee gt r. expr_exit res r)
+    (es,s,G,tn) Q (\H res ee gt r. expr_exit res r)
 Proof
   disch_then (map_every assume_tac o CONJUNCTS) >>
   irule bop_selected_hash_outcome_ptr_frame >> simp[] >>
