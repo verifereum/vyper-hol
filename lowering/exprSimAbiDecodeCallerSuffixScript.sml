@@ -33,7 +33,9 @@ Theorem abi_decode_caller_suffix_summary:
     (\res es1 t. ?v. res = INL (Value v) /\
       vv_post H ctx func ce cx (TypeBuiltin ann (AbiDecode unwrap) ty [e]) es sa final s0
         es1 (Value v) (LocatedValue ann (mk_ptr out LocMemory)) t /\
-      t.vs_current_bb = final.cs_current_bb /\ t.vs_inst_idx = LENGTH final.cs_current_insts)
+      t.vs_current_bb = final.cs_current_bb /\ t.vs_inst_idx = LENGTH final.cs_current_insts /\
+      t.vs_accounts = s.vs_accounts /\ t.vs_transient = s.vs_transient /\
+      t.vs_requests = s.vs_requests /\ t.vs_call_ctx = s.vs_call_ctx)
     (\res es1 r. expr_exit res r)
 Proof
   strip_tac >>
@@ -103,7 +105,9 @@ Resume abi_decode_caller_suffix_summary[success]:
   gvs[] >>
   `?v. evaluate_type_builtin cx (AbiDecode unwrap) ty [expr_type e] [BytesV bs] = INL v /\
     vv_post H ctx func ce cx (TypeBuiltin ann (AbiDecode unwrap) ty [e]) es sa final s0
-      (ee with gas_obs := []) (Value v) (LocatedValue ann (mk_ptr out LocMemory)) t` by
+      (ee with gas_obs := []) (Value v) (LocatedValue ann (mk_ptr out LocMemory)) t /\
+    t.vs_accounts = s.vs_accounts /\ t.vs_transient = s.vs_transient /\
+    t.vs_requests = s.vs_requests /\ t.vs_call_ctx = s.vs_call_ctx` by
     (irule abi_decode_body_caller_success >> simp[] >>
      metis_tac[]) >>
   simp[gas_summary_at_def, gas_marked_exec_def,
