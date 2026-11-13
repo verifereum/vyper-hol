@@ -7,12 +7,16 @@ Ancestors
   bodyPtrEnvBuiltinsEntryFrame
   exprSimPtrLiteralBuffer gasSummaryComposePtr gasSummary exprSimDefs
   fragGasPathPtr rawCallBufferPtr bodyPtrTypeBuiltinsMemoryInterface
+  fragGasSeqPtr gasStorage vyperStorageFootprint vyperStorageTrace
   exprLoweringProps bodyPtrDefs venomState loweringPosts exprLowering
 
 Theorem widen_convert_modern_outcome_ptr:
   compile_bytestring_widen_copy capacity (Var src) n sa = (op,sb) /\
   fn_has_code sa sb fn /\ 0 < n /\
-  stmt_state_rel H ctx fn cenv cx ee s /\ local_ptrs_reserved cenv sa /\
+  (!H. valid_horizon cx st0 H ee.storage_trace ==>
+    stmt_state_rel H ctx fn cenv cx ee s /\ ghost_inv H d cenv cx ee G tn s /\
+    expr_post H ctx fn cenv cx e es ca sa s0 ee v (Var src) s /\
+    stmt_state_rel H ctx fn cenv cx es s0) /\ local_ptrs_reserved cenv sa /\
   fn_inst_ids_distinct fn /\ capacity < dimword(:256) /\ n <= capacity /\
   ~ctx_has_dalloca ctx /\ not_fresh_at sa src /\
   (!p sz. cenv.ce_return_buf = SOME (PtrVar (Var p) sz) ==> not_fresh_at sa p) /\
@@ -20,7 +24,7 @@ Theorem widen_convert_modern_outcome_ptr:
   expr_val_at cenv cx (expr_type e) slo sa ee v (Var src) s /\
   evaluate_type (get_tenv cx) (expr_type e) = SOME tv /\ ~is_word_type (expr_type e) /\
   val_wf tv v /\ val_footprint tv v <= n /\ lookup_var src s = SOME a /\
-  ptr_covers G tn src s n /\ ghost_inv H d cenv cx ee G tn s /\
+  ptr_covers G tn src s n /\
   (!m. mem_agree_outside tn.t_mem s.vs_memory m ==> val_in_memory tv v (w2n a) m) /\
   ~s.vs_halted /\ lookup_block s.vs_current_bb fn.fn_blocks = SOME bb /\
   isPREFIX (emitted_insts sa sb) (DROP s.vs_inst_idx bb.bb_instructions) /\
@@ -28,8 +32,7 @@ Theorem widen_convert_modern_outcome_ptr:
   evaluate_type (get_tenv cx) target = SOME tout /\ value_has_type tv v /\
   convert_result cx (expr_type e) target v = INL vout /\
   type_memory_size tout <= capacity /\ type_memory_bytes cenv target <= capacity /\
-  expr_post H ctx fn cenv cx e es ca sa s0 ee v (Var src) s /\
-  stmt_state_rel H ctx fn cenv cx es s0 /\ local_ptrs_reserved cenv ca /\
+  local_ptrs_reserved cenv ca /\
   MAP FDOM es.scopes = MAP FDOM ee.scopes /\
   ca.cs_next_var <= sa.cs_next_var /\ ca.cs_next_id <= sa.cs_next_id /\
   lower_value compile_expr cenv ty e ca = (Var src,sa) /\
@@ -37,9 +40,9 @@ Theorem widen_convert_modern_outcome_ptr:
   ghost_kept cenv es ca G0 tn0 s0 G tn /\ local_ptrs_rel fn cenv es.scopes s0 /\
   s.vs_current_bb = sb.cs_current_bb /\
   s.vs_inst_idx + LENGTH (emitted_insts sa sb) = LENGTH sb.cs_current_insts ==>
-  gas_outcome_ptr D tops (ctx,fn) PG
+  gas_outcome_ptr D tops (ctx,fn) PG cx st0
     (\st. (convert_result cx (expr_type e) target v,st)) (ee,s,G,tn)
-    (\res fin HG th u. ?vout. res = INL vout /\
+    (\H res fin HG th u. ?vout. res = INL vout /\
       expr_post H ctx fn cenv cx (TypeBuiltin target Convert target [e]) es ca sb s0 fin vout op u /\
       u.vs_current_bb = sb.cs_current_bb /\ u.vs_inst_idx = LENGTH sb.cs_current_insts /\
       ghost_inv H d cenv cx fin HG th u /\
@@ -47,11 +50,28 @@ Theorem widen_convert_modern_outcome_ptr:
       (~is_word_type (post_value_type cenv (TypeBuiltin target Convert target [e])) ==>
         ptr_buf_ok cenv (TypeBuiltin target Convert target [e]) op HG u) /\
       ghost_kept cenv es ca G0 tn0 s0 HG th)
-    (\res fin gt r. expr_exit res r)
+    (\H res fin gt r. expr_exit res r)
 Proof
-  disch_then (map_every assume_tac o CONJUNCTS) >>
+  strip_tac >>
+  reverse (Cases_on `?H0. valid_horizon cx st0 H0 ee.storage_trace`)
+  >- (rewrite_tac[gas_outcome_ptr_def] >> qexists_tac `[]` >> disj1_tac >>
+      irule gas_bad_storage_at_initial >>
+      simp[vyperStorageTraceTheory.storage_trace_frame_def,
+           vyperStorageFootprintTheory.storage_trace_domain_def] >> metis_tac[]) >>
+  pop_assum (qx_choose_then `H0` assume_tac) >> res_tac >>
   drule_all widen_copy_actual_counted_certificate >>
-  disch_then (qspecl_then [`PG`,`D`] strip_assume_tac) >>
+  disch_then (qspecl_then [`PG`,`D ARB`] strip_assume_tac) >>
+  simp[gas_outcome_ptr_def] >> qexists_tac `[]` >> disj2_tac >> disj1_tac >>
+  simp[gas_summary_ptr_at_def] >>
+  qexistsl_tac [`INL vout`,`ee`,`HG`,`th`,
+    `OK (t with vs_inst_idx := s.vs_inst_idx + LENGTH (emitted_insts sa sb))`] >>
+  simp[] >> gen_tac >> strip_tac >>
+  `stmt_state_rel H ctx fn cenv cx ee s /\ ghost_inv H d cenv cx ee G tn s /\
+   expr_post H ctx fn cenv cx e es ca sa s0 ee v (Var src) s /\
+   stmt_state_rel H ctx fn cenv cx es s0` by metis_tac[] >>
+  drule_all widen_copy_actual_counted_certificate >>
+  disch_then (qspecl_then [`PG`,`D H`] strip_assume_tac) >>
+  `HG' = HG /\ th' = th` by metis_tac[inst_seq_ptr_ghost_unique] >> gvs[] >>
   `lookup_var dst t = SOME b` by
     (fs[lookup_var_def]) >>
   `expr_post H ctx fn cenv cx (TypeBuiltin target Convert target [e]) es ca sb s0
@@ -76,9 +96,5 @@ Proof
   `t.vs_current_bb = s.vs_current_bb` by
     (drule_all widen_copy_straight_code >> strip_tac >>
      irule hash_run_inst_seq_current_bb >> metis_tac[]) >>
-  simp[gas_outcome_ptr_def] >> qexists_tac `[]` >> disj1_tac >>
-  simp[gas_summary_ptr_at_def] >>
-  qexistsl_tac [`INL vout`,`ee`,`HG`,`th`,
-    `OK (t with vs_inst_idx := s.vs_inst_idx + LENGTH (emitted_insts sa sb))`] >>
   gvs[ghost_inv_gas_obs, post_value_type_not_int_call, vyperASTTheory.expr_type_def]
 QED

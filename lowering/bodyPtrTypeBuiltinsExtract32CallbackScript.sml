@@ -6,6 +6,7 @@ Ancestors
   gasSummaryComposePtr gasSummary bodyPtrDefs bodyPtrPreds exprLoweringProps
   loweringPosts compileEnv vyperState vyperContext vyperAST vyperTypeSystem
   exprOperandVar valueEncoding words list finite_map vyperValue
+  gasStorage vyperStorageTrace vyperStorageFootprint
   bodyPtrEnvBuiltinsMethodTyping vyperTyping exprSimSource freshWrites fragExec
 
 Theorem extract32_callback_ptr_ready:
@@ -20,6 +21,7 @@ Theorem extract32_callback_ptr_ready:
   fn_has_code sa se func /\ local_ptrs_reserved cenv sa /\ ~ctx_has_dalloca ctx /\
   (!x sz. cenv.ce_return_buf = SOME (PtrVar (Var x) sz) ==> not_fresh_at sa x) /\
   (!x sz. cenv.ce_return_pc = SOME (PtrVar (Var x) sz) ==> not_fresh_at sa x) /\
+  (!H. valid_horizon cx st0 H fin.storage_trace ==>
   stmt_state_rel H ctx func cenv cx es s0 /\
   gas_marked_exec_ptr (cx_dead H cx) (ctx,func) PG
     (vyperState$bind (eval_expr cx src) (read_result cx))
@@ -27,11 +29,12 @@ Theorem extract32_callback_ptr_ready:
   gas_marked_exec_ptr (cx_dead H cx) (ctx,func) PG
     (vyperState$bind (eval_expr cx off) (read_result cx))
     (mid with gas_obs := [],u,HG,th) right (INL (IntV i)) fin J un (OK v) /\
-  0 <= i /\
   expr_post H ctx func cenv cx src es sa sb s0
     (mid with gas_obs := []) (BytesV bs) (Var sv) u /\
   expr_post H ctx func cenv cx off (mid with gas_obs := []) sb sc u
-    (fin with gas_obs := []) (IntV i) offop v /\
+    (fin with gas_obs := []) (IntV i) offop v  /\
+    ghost_inv H d cenv cx (fin with gas_obs := []) J un v) /\
+  0 <= i /\
   not_fresh_at sb sv /\ not_fresh_at sb len /\ not_fresh_at sb data /\
   ptr_mem_ok cx (expr_type src) (BytesV bs) (Var sv) J un v /\
   eval_operand (Var sv) v = SOME (n2w p) /\
@@ -40,15 +43,14 @@ Theorem extract32_callback_ptr_ready:
   op_taint un (Var len) = {} /\ op_prov J (Var len) = NONE /\
   (!n. 0 < LENGTH bs /\ n <= LENGTH bs ==> ptr_covers J un data v n) /\
   v.vs_current_bb = sc.cs_current_bb /\ v.vs_inst_idx = LENGTH sc.cs_current_insts /\
-  ghost_inv H d cenv cx (fin with gas_obs := []) J un v /\
   ptr_val_ok cx (post_value_type cenv off) (IntV i) offop J un v /\
   ghost_kept cenv es sa G0 tn0 s0 J un ==>
-  gas_outcome_ptr (cx_dead H cx) (cx_tops cx) (ctx,func) PG
+  gas_outcome_ptr (\H. cx_dead H cx) (cx_tops cx) (ctx,func) PG cx st0
     (vyperState$bind
       (lift_sum (evaluate_type_builtin cx Extract32 typ
         [expr_type src;expr_type off] [BytesV bs;IntV i])) (\w. return (Value w)))
     (fin with gas_obs := [],v,J,un)
-    (\res ef K kn z. ?w. res = INL (Value w) /\
+    (\H res ef K kn z. ?w. res = INL (Value w) /\
       vv_post H ctx func cenv cx (TypeBuiltin ann Extract32 typ [src;off])
         es sa se s0 ef (Value w) (StackValue ty op) z /\
       z.vs_current_bb = se.cs_current_bb /\ z.vs_inst_idx = LENGTH se.cs_current_insts /\
@@ -56,9 +58,16 @@ Theorem extract32_callback_ptr_ready:
       ptr_vv_ok cx (post_value_type cenv (TypeBuiltin ann Extract32 typ [src;off]))
         (Value w) (StackValue ty op) ef K kn z /\
       ghost_kept cenv es sa G0 tn0 s0 K kn)
-    (\res ef gt r. expr_exit res r)
+    (\H res ef gt r. expr_exit res r)
 Proof
-  strip_tac >> drule_all extract32_stage_cuts >> strip_tac >>
+  strip_tac >>
+  reverse (Cases_on `?H0. valid_horizon cx st0 H0 fin.storage_trace`)
+  >- (rewrite_tac[gas_outcome_ptr_def] >> qexists_tac `[]` >> disj1_tac >>
+      irule gas_bad_storage_at_initial >>
+      simp[storage_trace_frame_bind_all, storage_trace_frame_lifts,
+           storage_trace_frame_return, storage_trace_domain_def] >> metis_tac[]) >>
+  pop_assum (qx_choose_then `H0` assume_tac) >> res_tac >>
+  drule_all extract32_stage_cuts >> strip_tac >>
   `?bt. typ = BaseT bt /\ extract32_result_base_ok bt /\ ann = typ` by
     metis_tac[extract32_body_pre_shape] >> gvs[] >>
   `evaluate_type (get_tenv cx) (BaseT bt) = SOME (BaseTV bt)` by
@@ -134,8 +143,6 @@ Resume extract32_callback_ptr_ready[finish]:
     metis_tac[not_fresh_at_mono, arithmeticTheory.LESS_EQ_TRANS] >>
   simp[evaluate_type_builtin_def, expr_type_def] >>
   irule (SRULE [post_value_type_word, expr_type_def] extract32_tail_ptr_ready) >>
-  qpat_assum `expr_post _ _ _ _ _ off _ _ _ _ _ _ _ _` (irule_at Any) >>
-  qpat_assum `expr_post _ _ _ _ _ src _ _ _ _ _ _ _ _` (irule_at Any) >>
   qpat_assum `compile_extract32_load _ _ _ _ = _` (irule_at Any) >>
   qpat_assum `compile_clamp_basetype _ _ _ = _` (irule_at Any) >>
   simp[] >> qexists_tac `q` >> simp[] >> metis_tac[]

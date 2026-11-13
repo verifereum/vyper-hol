@@ -84,6 +84,7 @@ Theorem scalar_emit_counted_certificate:
   ~s.vs_halted /\ lookup_block s.vs_current_bb fn.fn_blocks = SOME bb /\
   isPREFIX (emitted_insts sa sb) (DROP s.vs_inst_idx bb.bb_instructions) ==>
   ?H th.
+    inst_seq_ptr D 0 ctx fn PG G tn (emitted_insts sa sb) s H th /\
     gas_path_ptr D 0 ctx fn PG G tn s 0 H th
       (OK (t with vs_inst_idx := s.vs_inst_idx + LENGTH (emitted_insts sa sb))) /\
     op_prov H out = NONE /\ op_taint th out = {} /\
@@ -148,6 +149,7 @@ Theorem convert_bool_decimal_counted_certificate:
   ~s.vs_halted /\ lookup_block s.vs_current_bb fn.fn_blocks = SOME bb /\
   isPREFIX (emitted_insts sa sb) (DROP s.vs_inst_idx bb.bb_instructions) ==>
   ?H th.
+    inst_seq_ptr D 0 ctx fn PG G tn (emitted_insts sa sb) s H th /\
     gas_path_ptr D 0 ctx fn PG G tn s 0 H th
       (OK (t with vs_inst_idx := s.vs_inst_idx + LENGTH (emitted_insts sa sb))) /\
     op_prov H out = NONE /\ op_taint th out = {} /\
@@ -331,6 +333,7 @@ Theorem convert_bytes_int_counted_certificate:
   ~s.vs_halted /\ lookup_block s.vs_current_bb fn.fn_blocks = SOME bb /\
   isPREFIX (emitted_insts sa sb) (DROP s.vs_inst_idx bb.bb_instructions) ==>
   ?H th.
+    inst_seq_ptr D 0 ctx fn PG G tn (emitted_insts sa sb) s H th /\
     gas_path_ptr D 0 ctx fn PG G tn s 0 H th
       (OK (t with vs_inst_idx := s.vs_inst_idx + LENGTH (emitted_insts sa sb))) /\
     op_prov H out = NONE /\ op_taint th out = {} /\
@@ -355,6 +358,7 @@ Theorem convert_bytes_int_abort_counted_certificate:
   ~s.vs_halted /\ lookup_block s.vs_current_bb fn.fn_blocks = SOME bb /\
   isPREFIX (emitted_insts sa sb) (DROP s.vs_inst_idx bb.bb_instructions) ==>
   ?H th n j.
+    inst_seq_ptr D 0 ctx fn PG G tn (emitted_insts sa sb) s H th /\
     gas_path_ptr D 0 ctx fn PG G tn s n H th (Abort err (t with vs_inst_idx := j)) /\
     op_prov H out = NONE /\ op_taint th out = {} /\
     (!p. not_fresh_at sa p ==> FLOOKUP H p = FLOOKUP G p /\
@@ -529,6 +533,7 @@ Theorem convert_bytes_decimal_counted_certificate:
   ~s.vs_halted /\ lookup_block s.vs_current_bb fn.fn_blocks = SOME bb /\
   isPREFIX (emitted_insts sa sb) (DROP s.vs_inst_idx bb.bb_instructions) ==>
   ?H th.
+    inst_seq_ptr D 0 ctx fn PG G tn (emitted_insts sa sb) s H th /\
     gas_path_ptr D 0 ctx fn PG G tn s 0 H th
       (OK (t with vs_inst_idx := s.vs_inst_idx + LENGTH (emitted_insts sa sb))) /\
     op_prov H out = NONE /\ op_taint th out = {} /\
@@ -553,6 +558,7 @@ Theorem convert_bytes_decimal_abort_counted_certificate:
   ~s.vs_halted /\ lookup_block s.vs_current_bb fn.fn_blocks = SOME bb /\
   isPREFIX (emitted_insts sa sb) (DROP s.vs_inst_idx bb.bb_instructions) ==>
   ?H th n j.
+    inst_seq_ptr D 0 ctx fn PG G tn (emitted_insts sa sb) s H th /\
     gas_path_ptr D 0 ctx fn PG G tn s n H th (Abort err (t with vs_inst_idx := j)) /\
     op_prov H out = NONE /\ op_taint th out = {} /\
     (!p. not_fresh_at sa p ==> FLOOKUP H p = FLOOKUP G p /\

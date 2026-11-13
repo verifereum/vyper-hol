@@ -20,7 +20,8 @@ Theorem cast_convert_operand_continuation:
   32 <= type_memory_bytes cenv (lowered_value_type cenv e) /\
   (!i. expr_type e = BaseT (BytesT (Dynamic i)) \/ expr_type e = BaseT (StringT i) ==> i < dimword(:256)) /\
   (!n. target = BaseT (BytesT (Dynamic n)) \/ target = BaseT (StringT n) ==> n < dimword(:256)) /\
-  expr_post H ctx fn cenv cx e es ca sa s0 ee v x s /\
+  (!H. valid_horizon cx st0 H ee.storage_trace ==>
+    expr_post H ctx fn cenv cx e es ca sa s0 ee v x s) /\
   ptr_val_ok cx (post_value_type cenv e) v x G tn s /\ ptr_buf_ok cenv e x G s /\
   local_ptrs_reserved cenv ca /\ local_ptrs_reserved cenv sa /\ ca.cs_next_var <= sa.cs_next_var /\ sa.cs_next_id <= sb.cs_next_id /\
   ~ctx_has_dalloca ctx /\ ~s.vs_halted /\
@@ -28,12 +29,13 @@ Theorem cast_convert_operand_continuation:
   s.vs_inst_idx + LENGTH (emitted_insts sa sb) = LENGTH sb.cs_current_insts /\
   lookup_block s.vs_current_bb fn.fn_blocks = SOME bb /\
   isPREFIX (emitted_insts sa sb) (DROP s.vs_inst_idx bb.bb_instructions) /\
-  ghost_inv H d cenv cx ee G tn s /\ ghost_kept cenv es ca G0 tn0 s0 G tn /\
+  (!H. valid_horizon cx st0 H ee.storage_trace ==>
+    ghost_inv H d cenv cx ee G tn s) /\ ghost_kept cenv es ca G0 tn0 s0 G tn /\
   (!p sz. cenv.ce_return_buf = SOME (PtrVar (Var p) sz) ==> not_fresh_at sa p) /\
   (!p sz. cenv.ce_return_pc = SOME (PtrVar (Var p) sz) ==> not_fresh_at sa p) ==>
-  gas_outcome_ptr D tops (ctx,fn) PG
+  gas_outcome_ptr D tops (ctx,fn) PG cx st0
     (\st. (convert_result cx (expr_type e) target v,st)) (ee,s,G,tn)
-    (\res fin HG th u. ?vout. res = INL vout /\
+    (\H res fin HG th u. ?vout. res = INL vout /\
       expr_post H ctx fn cenv cx (TypeBuiltin target Convert target [e]) es ca sb s0 fin vout out u /\
       u.vs_current_bb = sb.cs_current_bb /\ u.vs_inst_idx = LENGTH sb.cs_current_insts /\
       ghost_inv H d cenv cx fin HG th u /\
@@ -41,9 +43,17 @@ Theorem cast_convert_operand_continuation:
       (~is_word_type (post_value_type cenv (TypeBuiltin target Convert target [e])) ==>
         ptr_buf_ok cenv (TypeBuiltin target Convert target [e]) out HG u) /\
       ghost_kept cenv es ca G0 tn0 s0 HG th)
-    (\res fin gt r. expr_exit res r)
+    (\H res fin gt r. expr_exit res r)
 Proof
   disch_then (map_every assume_tac o CONJUNCTS) >>
+  reverse (Cases_on `?H0. valid_horizon cx st0 H0 ee.storage_trace`)
+  >- (rewrite_tac[gas_outcome_ptr_def] >> qexists_tac `[]` >> disj1_tac >>
+      irule gasStorageTheory.gas_bad_storage_at_initial >>
+      simp[vyperStorageTraceTheory.storage_trace_frame_def,
+        vyperStorageFootprintTheory.storage_trace_domain_def] >> metis_tac[]) >>
+  pop_assum strip_assume_tac >>
+  `expr_post H0 ctx fn cenv cx e es ca sa s0 ee v x s /\
+   ghost_inv H0 d cenv cx ee G tn s` by metis_tac[] >>
   drule_all convert_memory_operand_semantics >> strip_tac >>
   `post_value_type cenv e = expr_type e` by metis_tac[convert_operand_post_type] >>
   `~is_word_type (expr_type e)` by metis_tac[is_bytestring_word_type] >>

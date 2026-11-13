@@ -72,29 +72,39 @@ Theorem word_neg_normal_ptr_outcome:
   is_numeric_type ann /\ ~is_uint_type ann /\ ann = expr_type e /\
   evaluate_type (get_tenv cx) ann = SOME tv /\ value_has_type tv v /\
   compile_neg x ann s1 = (op,sb) /\
-  expr_post H ctx func cenv cx e es sa s1 s0 ee v x t0 /\
+  (!H. valid_horizon cx st0 H ee.storage_trace ==>
+    expr_post H ctx func cenv cx e es sa s1 s0 ee v x t0 /\
+    ghost_inv H d cenv cx ee G tn t0) /\
   eval_operand x t0 = SOME (typed_val_to_w256 tv v) /\
   (!z. x = Var z ==> not_fresh_at s1 z) /\ fn_has_code s1 sb func /\
   local_ptrs_reserved cenv sa /\ local_ptrs_reserved cenv s1 /\
   ~ctx_has_dalloca ctx /\ ~t0.vs_halted /\
   t0.vs_current_bb = s1.cs_current_bb /\
   t0.vs_inst_idx = LENGTH s1.cs_current_insts /\
-  sa.cs_next_var <= s1.cs_next_var /\ ghost_inv H d cenv cx ee G tn t0 /\
+  sa.cs_next_var <= s1.cs_next_var /\
   ghost_kept cenv es sa G0 tn0 s0 G tn /\ ptr_val_ok cx ann v x G tn t0 /\
   (!p sz. cenv.ce_return_buf = SOME (PtrVar (Var p) sz) ==> not_fresh_at sa p) /\
   (!p sz. cenv.ce_return_pc = SOME (PtrVar (Var p) sz) ==> not_fresh_at sa p) /\
   w2i (FST (type_bounds ann)) < w2i (typed_val_to_w256 tv v) ==>
-  gas_outcome_ptr (cx_dead H cx) (cx_tops cx) (ctx,func) PG
+  gas_outcome_ptr (\H. cx_dead H cx) (cx_tops cx) (ctx,func) PG cx st0
     (\vs. (unop_result cx ann Neg [expr_type e] v vs,vs)) (ee,t0,G,tn)
-    (\res fin G' tn' u. ?v'. res = INL v' /\
+    (\H res fin G' tn' u. ?v'. res = INL v' /\
       expr_post H ctx func cenv cx (Builtin ann Neg [e]) es sa sb s0 fin v' op u /\
       u.vs_current_bb = sb.cs_current_bb /\
       u.vs_inst_idx = LENGTH sb.cs_current_insts /\
       ghost_inv H d cenv cx fin G' tn' u /\ ptr_val_ok cx ann v' op G' tn' u /\
       ghost_kept cenv es sa G0 tn0 s0 G' tn')
-    (\res fin gt r. expr_exit res r)
+    (\H res fin gt r. expr_exit res r)
 Proof
   strip_tac >>
+  reverse (Cases_on `?H0. valid_horizon cx st0 H0 ee.storage_trace`)
+  >- (rewrite_tac[gas_outcome_ptr_def] >> qexists_tac `[]` >> disj1_tac >>
+      irule gasStorageTheory.gas_bad_storage_at_initial >>
+      simp[vyperStorageTraceTheory.storage_trace_frame_def,
+        vyperStorageFootprintTheory.storage_trace_domain_def] >> metis_tac[]) >>
+  pop_assum strip_assume_tac >>
+  `expr_post H0 ctx func cenv cx e es sa s1 s0 ee v x t0 /\
+   ghost_inv H0 d cenv cx ee G tn t0` by metis_tac[] >>
   `is_word_type ann` by
     (qpat_x_assum `is_numeric_type ann` mp_tac >>
      POP_ASSUM_LIST (K all_tac) >> Cases_on `ann` >>
@@ -104,17 +114,26 @@ Proof
   `op_taint tn x = {} /\ op_prov G x = NONE` by gvs[ptr_val_ok_def] >>
   `allocas_from 0 t0` by simp[allocas_from_def] >>
   drule_all word_neg_emitted_checked >>
-  disch_then (qspecl_then [`func`, `PG`, `G`, `cx_dead H cx`] strip_assume_tac) >>
-  drule_all word_neg_compiled_normal_post >> strip_tac >>
+  disch_then (qspecl_then [`func`, `PG`, `G`, `cx_dead H0 cx`]
+    (qx_choose_then `GF` (qx_choose_then `tnF` strip_assume_tac))) >>
   drule_all word_neg_code_prefix >> strip_tac >>
   drule word_neg_emitted_shape >> strip_tac >>
-  drule_all run_inst_seq_gas_path_ptr >> simp[] >> strip_tac >>
   drule word_neg_current_block >> strip_tac >>
-  simp[gas_outcome_ptr_def] >> qexists `[]` >> disj1_tac >>
+  rewrite_tac[gas_outcome_ptr_def] >> qexists_tac `[]` >> disj2_tac >> disj1_tac >>
   simp[gas_summary_ptr_at_def] >>
-  qexistsl [`INL v'`, `ee`, `G'`, `tn'`,
+  qexistsl_tac [`INL v'`, `ee`, `GF`, `tnF`,
     `OK (t with vs_inst_idx := LENGTH sb.cs_current_insts)`] >>
   simp[exprSimUnopComposePropsTheory.unop_result_gas_obs] >>
+  gen_tac >> strip_tac >>
+  `expr_post H ctx func cenv cx e es sa s1 s0 ee v x t0 /\
+   ghost_inv H d cenv cx ee G tn t0` by metis_tac[] >>
+  drule_all (Q.INST [`H` |-> `H`] word_neg_typed_post) >> strip_tac >> gvs[] >>
+  drule_all (Q.INST [`H` |-> `H`] word_neg_emitted_checked) >>
+  disch_then (qspecl_then [`func`, `PG`, `G`, `cx_dead H cx`]
+    (qx_choose_then `GH` (qx_choose_then `tnH` strip_assume_tac))) >>
+  `GH = GF /\ tnH = tnF` by metis_tac[inst_seq_ptr_ghost_unique] >> gvs[] >>
+  drule_all word_neg_compiled_normal_post >> strip_tac >>
+  drule_all run_inst_seq_gas_path_ptr >> simp[] >> strip_tac >>
   simp[ghost_inv_gas_obs, word_interval_ghost_inv_index, ptr_val_ok_def] >>
   conj_tac >- metis_tac[] >>
   conj_tac
@@ -156,51 +175,63 @@ Theorem word_neg_overflow_ptr_outcome:
   t0.vs_current_bb = s1.cs_current_bb /\
   t0.vs_inst_idx = LENGTH s1.cs_current_insts /\
   ~(w2i (FST (type_bounds ann)) < w2i (typed_val_to_w256 tv v)) ==>
-  gas_outcome_ptr (cx_dead H cx) (cx_tops cx) (ctx,func) PG
+  gas_outcome_ptr (\H. cx_dead H cx) (cx_tops cx) (ctx,func) PG cx st0
     (\vs. (unop_result cx ann Neg [expr_type e] v vs,vs)) (ee,t0,G,tn)
-    Q (\res fin gt r. expr_exit res r)
+    Q (\H res fin gt r. expr_exit res r)
 Proof
   strip_tac >> drule_all neg_typed_source >>
   disch_then (qspec_then `ee` mp_tac) >> simp[] >> strip_tac >>
   drule_all word_neg_actual_abort >> strip_tac >>
   `allocas_from 0 t0` by simp[allocas_from_def] >>
   drule_all word_neg_emitted_checked >>
-  disch_then (qspecl_then [`func`, `PG`, `G`, `cx_dead H cx`] strip_assume_tac) >>
+  disch_then (qspecl_then [`func`, `PG`, `G`, `cx_dead ARB cx`]
+    (qx_choose_then `GF` (qx_choose_then `tnF` strip_assume_tac))) >>
+  `!H. inst_seq_ptr (cx_dead H cx) 0 ctx func PG G tn (emitted_insts s1 sb) t0 GF tnF` by
+    (gen_tac >> drule_all word_neg_emitted_checked >>
+     disch_then (qspecl_then [`func`, `PG`, `G`, `cx_dead H cx`]
+       (qx_choose_then `GH` (qx_choose_then `tnH` strip_assume_tac))) >>
+     `GH = GF /\ tnH = tnF` by metis_tac[inst_seq_ptr_ghost_unique] >> gvs[]) >>
   drule_all word_neg_code_prefix >> strip_tac >>
   drule word_neg_emitted_shape >> strip_tac >>
-  drule_all run_inst_seq_abort_gas_path_ptr >> strip_tac >>
-  simp[gas_outcome_ptr_def] >> qexists `REPLICATE n F` >> disj1_tac >>
+  `EVERY (\i. i.inst_opcode <> GAS /\ i.inst_opcode <> INVOKE /\
+    ~is_terminator i.inst_opcode) (emitted_insts s1 sb)` by
+    fs[EVERY_MEM, FILTER_EQ_NIL] >>
+  drule_all run_inst_seq_abort_zero_path_ptr_uniform >>
+  disch_then (qspec_then `ctx` strip_assume_tac) >>
+  rewrite_tac[gas_outcome_ptr_def] >> qexists_tac `[]` >> disj2_tac >> disj1_tac >>
   simp[gas_summary_ptr_at_def] >>
-  qexistsl [`INR (Error (RuntimeError m))`, `ee`, `G'`, `tn'`,
+  qexistsl_tac [`INR (Error (RuntimeError m))`, `ee`, `GF`, `tnF`,
     `Abort Revert_abort (t with vs_inst_idx := j)`] >>
-  simp[exprSimUnopComposePropsTheory.unop_result_gas_obs, expr_exit_def,
-       exit_result_def]
+  simp[exprSimUnopComposePropsTheory.unop_result_gas_obs, expr_exit_def, exit_result_def] >>
+  metis_tac[]
 QED
 
 Theorem word_neg_typed_ptr_outcome:
   is_numeric_type ann /\ ~is_uint_type ann /\ ann = expr_type e /\
   evaluate_type (get_tenv cx) ann = SOME tv /\ value_has_type tv v /\
   compile_neg x ann s1 = (op,sb) /\
-  expr_post H ctx func cenv cx e es sa s1 s0 ee v x t0 /\
+  (!H. valid_horizon cx st0 H ee.storage_trace ==>
+    expr_post H ctx func cenv cx e es sa s1 s0 ee v x t0 /\
+    ghost_inv H d cenv cx ee G tn t0) /\
   eval_operand x t0 = SOME (typed_val_to_w256 tv v) /\
   (!z. x = Var z ==> not_fresh_at s1 z) /\ fn_has_code s1 sb func /\
   local_ptrs_reserved cenv sa /\ local_ptrs_reserved cenv s1 /\
   ~ctx_has_dalloca ctx /\ ~t0.vs_halted /\
   t0.vs_current_bb = s1.cs_current_bb /\
   t0.vs_inst_idx = LENGTH s1.cs_current_insts /\
-  sa.cs_next_var <= s1.cs_next_var /\ ghost_inv H d cenv cx ee G tn t0 /\
+  sa.cs_next_var <= s1.cs_next_var /\
   ghost_kept cenv es sa G0 tn0 s0 G tn /\ ptr_val_ok cx ann v x G tn t0 /\
   (!p sz. cenv.ce_return_buf = SOME (PtrVar (Var p) sz) ==> not_fresh_at sa p) /\
   (!p sz. cenv.ce_return_pc = SOME (PtrVar (Var p) sz) ==> not_fresh_at sa p) ==>
-  gas_outcome_ptr (cx_dead H cx) (cx_tops cx) (ctx,func) PG
+  gas_outcome_ptr (\H. cx_dead H cx) (cx_tops cx) (ctx,func) PG cx st0
     (\vs. (unop_result cx ann Neg [expr_type e] v vs,vs)) (ee,t0,G,tn)
-    (\res fin G' tn' u. ?v'. res = INL v' /\
+    (\H res fin G' tn' u. ?v'. res = INL v' /\
       expr_post H ctx func cenv cx (Builtin ann Neg [e]) es sa sb s0 fin v' op u /\
       u.vs_current_bb = sb.cs_current_bb /\
       u.vs_inst_idx = LENGTH sb.cs_current_insts /\
       ghost_inv H d cenv cx fin G' tn' u /\ ptr_val_ok cx ann v' op G' tn' u /\
       ghost_kept cenv es sa G0 tn0 s0 G' tn')
-    (\res fin gt r. expr_exit res r)
+    (\H res fin gt r. expr_exit res r)
 Proof
   strip_tac >>
   Cases_on `w2i (FST (type_bounds ann)) < w2i (typed_val_to_w256 tv v)`

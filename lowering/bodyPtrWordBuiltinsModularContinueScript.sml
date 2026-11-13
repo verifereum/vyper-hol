@@ -4,41 +4,53 @@ Ancestors bodyPtrWordBuiltinsModularCases bodyPtrWordBuiltinsRoundingContinue
   exprSimWordArgs exprSimWordBuiltins exprSimPrecompiles typedWordArgsPostPtr
   bodyPtrDefs loweringPosts exprSimSource gasSummaryComposePtr stmtFragPtr
   vyperAST vyperValue vyperTyping valueEncoding integer_word words compileEnv
-  ptrDiscipline loweringSlice
+  ptrDiscipline loweringSlice gasStorage vyperStorageFootprint vyperStorageTrace
 
 Theorem word_pow_expr_outcome:
   ann = BaseT (UintT 256) /\ compile_pow_mod256 a b sm = (op,sb) /\
   value_has_type (BaseTV (UintT 256)) v1 /\ value_has_type (BaseTV (UintT 256)) v2 /\
-  wb_args_post H ctx func cenv cx es sa s0 ee [a;b] [v1;v2] t0 /\
+  (!H. valid_horizon cx st0 H ee.storage_trace ==>
+    wb_args_post H ctx func cenv cx es sa s0 ee [a;b] [v1;v2] t0 /\
+    ghost_inv H d cenv cx ee G tn t0) /\
   (~EXISTS expr_has_effect args ==> pure_frame cenv func es sa s0 t0) /\
   (!z. a = Var z ==> not_fresh_at sm z) /\ (!z. b = Var z ==> not_fresh_at sm z) /\
   op_taint tn a = {} /\ op_taint tn b = {} /\ fn_has_code sm sb func /\
   local_ptrs_reserved cenv sa /\ local_ptrs_reserved cenv sm /\
   ~ctx_has_dalloca ctx /\ ~t0.vs_halted /\
   t0.vs_current_bb = sm.cs_current_bb /\ t0.vs_inst_idx = LENGTH sm.cs_current_insts /\
-  sa.cs_next_var <= sm.cs_next_var /\ ghost_inv H d cenv cx ee G tn t0 /\
+  sa.cs_next_var <= sm.cs_next_var /\
   ghost_kept cenv es sa G0 tn0 s0 G tn /\ ee.gas_obs = [] /\
   (!p sz. cenv.ce_return_buf = SOME (PtrVar (Var p) sz) ==> not_fresh_at sa p) /\
   (!p sz. cenv.ce_return_pc = SOME (PtrVar (Var p) sz) ==> not_fresh_at sa p) ==>
-  gas_outcome_ptr (cx_dead H cx) (cx_tops cx) (ctx,func) PG
+  gas_outcome_ptr (\H. cx_dead H cx) (cx_tops cx) (ctx,func) PG cx st0
     (\vs. (builtin_result cx vs.accounts ann PowMod256 ts [v1;v2],vs))
     (ee,t0,G,tn)
-    (\res fin G' tn' u. ?v'. res = INL v' /\
+    (\H res fin G' tn' u. ?v'. res = INL v' /\
       expr_post H ctx func cenv cx (Builtin ann PowMod256 args)
         es sa sb s0 fin v' op u /\
       u.vs_current_bb = sb.cs_current_bb /\ u.vs_inst_idx = LENGTH sb.cs_current_insts /\
       ghost_inv H d cenv cx fin G' tn' u /\ ptr_val_ok cx ann v' op G' tn' u /\
       ghost_kept cenv es sa G0 tn0 s0 G' tn')
-    (\res fin gt r. expr_exit res r)
+    (\H res fin gt r. expr_exit res r)
 Proof
   strip_tac >>
-  `stmt_state_rel H ctx func cenv cx ee t0 /\
+  reverse (Cases_on `?H0. valid_horizon cx st0 H0 ee.storage_trace`)
+  >- (rewrite_tac[gas_outcome_ptr_def] >> qexists_tac `[]` >> disj1_tac >>
+      irule gas_bad_storage_at_initial >>
+      simp[storage_trace_frame_def, storage_trace_domain_def] >> metis_tac[]) >>
+  pop_assum strip_assume_tac >>
+  `wb_args_post H0 ctx func cenv cx es sa s0 ee [a;b] [v1;v2] t0` by metis_tac[] >>
+  `!H. valid_horizon cx st0 H ee.storage_trace ==>
+     stmt_state_rel H ctx func cenv cx ee t0 /\ ghost_inv H d cenv cx ee G tn t0` by
+    fs[wb_args_post_def] >>
+  `stmt_state_rel H0 ctx func cenv cx ee t0 /\
    eval_operand a t0 = SOME (val_to_w256 v1) /\
    eval_operand b t0 = SOME (val_to_w256 v2)` by gvs[wb_args_post_def] >>
   drule_all word_pow_typed_outcome >> strip_tac >>
   irule gas_outcome_ptr_conseq >> first_assum (irule_at Any) >>
-  qexists_tac `\res fin gt r. expr_exit res r` >> simp[] >>
+  qexists_tac `\H res fin gt r. expr_exit res r` >> simp[] >>
   rpt gen_tac >> strip_tac >> gvs[] >>
+  `wb_args_post H ctx func cenv cx es sa s0 ee [a;b] [v1;v2] t0` by metis_tac[] >>
   simp[ghost_inv_gas_obs, ptr_val_ok_def, is_word_type_def] >>
   `ee with gas_obs := [] = ee` by simp[vyperStateTheory.evaluation_state_component_equality] >>
   pop_assum SUBST1_TAC >> irule expr_post_word_builtin >>
@@ -51,7 +63,9 @@ Theorem word_modular_expr_outcome:
   (if is_mul then compile_mulmod else compile_addmod) a b c sm = (op,sb) /\
   value_has_type (BaseTV (UintT 256)) v1 /\ value_has_type (BaseTV (UintT 256)) v2 /\
   value_has_type (BaseTV (UintT 256)) v3 /\
-  wb_args_post H ctx func cenv cx es sa s0 ee [a;b;c] [v1;v2;v3] t0 /\
+  (!H. valid_horizon cx st0 H ee.storage_trace ==>
+    wb_args_post H ctx func cenv cx es sa s0 ee [a;b;c] [v1;v2;v3] t0 /\
+    ghost_inv H d cenv cx ee G tn t0) /\
   (~EXISTS expr_has_effect args ==> pure_frame cenv func es sa s0 t0) /\
   (!z. a = Var z ==> not_fresh_at sm z) /\ (!z. b = Var z ==> not_fresh_at sm z) /\
   (!z. c = Var z ==> not_fresh_at sm z) /\
@@ -59,23 +73,32 @@ Theorem word_modular_expr_outcome:
   fn_has_code sm sb func /\ local_ptrs_reserved cenv sa /\ local_ptrs_reserved cenv sm /\
   ~ctx_has_dalloca ctx /\ ~t0.vs_halted /\
   t0.vs_current_bb = sm.cs_current_bb /\ t0.vs_inst_idx = LENGTH sm.cs_current_insts /\
-  sa.cs_next_var <= sm.cs_next_var /\ ghost_inv H d cenv cx ee G tn t0 /\
+  sa.cs_next_var <= sm.cs_next_var /\
   ghost_kept cenv es sa G0 tn0 s0 G tn /\ ee.gas_obs = [] /\
   (!p sz. cenv.ce_return_buf = SOME (PtrVar (Var p) sz) ==> not_fresh_at sa p) /\
   (!p sz. cenv.ce_return_pc = SOME (PtrVar (Var p) sz) ==> not_fresh_at sa p) ==>
-  gas_outcome_ptr (cx_dead H cx) (cx_tops cx) (ctx,func) PG
+  gas_outcome_ptr (\H. cx_dead H cx) (cx_tops cx) (ctx,func) PG cx st0
     (\vs. (builtin_result cx vs.accounts ann (if is_mul then MulMod else AddMod) ts [v1;v2;v3],vs))
     (ee,t0,G,tn)
-    (\res fin G' tn' u. ?v'. res = INL v' /\
+    (\H res fin G' tn' u. ?v'. res = INL v' /\
       expr_post H ctx func cenv cx (Builtin ann (if is_mul then MulMod else AddMod) args)
         es sa sb s0 fin v' op u /\
       u.vs_current_bb = sb.cs_current_bb /\ u.vs_inst_idx = LENGTH sb.cs_current_insts /\
       ghost_inv H d cenv cx fin G' tn' u /\ ptr_val_ok cx ann v' op G' tn' u /\
       ghost_kept cenv es sa G0 tn0 s0 G' tn')
-    (\res fin gt r. expr_exit res r)
+    (\H res fin gt r. expr_exit res r)
 Proof
   strip_tac >>
-  `stmt_state_rel H ctx func cenv cx ee t0 /\
+  reverse (Cases_on `?H0. valid_horizon cx st0 H0 ee.storage_trace`)
+  >- (rewrite_tac[gas_outcome_ptr_def] >> qexists_tac `[]` >> disj1_tac >>
+      irule gas_bad_storage_at_initial >>
+      simp[storage_trace_frame_def, storage_trace_domain_def] >> metis_tac[]) >>
+  pop_assum strip_assume_tac >>
+  `wb_args_post H0 ctx func cenv cx es sa s0 ee [a;b;c] [v1;v2;v3] t0` by metis_tac[] >>
+  `!H. valid_horizon cx st0 H ee.storage_trace ==>
+     stmt_state_rel H ctx func cenv cx ee t0 /\ ghost_inv H d cenv cx ee G tn t0` by
+    fs[wb_args_post_def] >>
+  `stmt_state_rel H0 ctx func cenv cx ee t0 /\
    eval_operand a t0 = SOME (val_to_w256 v1) /\
    eval_operand b t0 = SOME (val_to_w256 v2) /\
    eval_operand c t0 = SOME (val_to_w256 v3)` by gvs[wb_args_post_def] >>
@@ -83,8 +106,9 @@ Proof
   >- (drule_all word_modular_typed_abort_outcome >> strip_tac >> first_assum irule) >>
   drule_all word_modular_typed_outcome >> strip_tac >>
   irule gas_outcome_ptr_conseq >> first_assum (irule_at Any) >>
-  qexists_tac `\res fin gt r. expr_exit res r` >> simp[] >>
+  qexists_tac `\H res fin gt r. expr_exit res r` >> simp[] >>
   rpt gen_tac >> strip_tac >> gvs[] >>
+  `wb_args_post H ctx func cenv cx es sa s0 ee [a;b;c] [v1;v2;v3] t0` by metis_tac[] >>
   simp[ghost_inv_gas_obs, ptr_val_ok_def, is_word_type_def] >>
   `ee with gas_obs := [] = ee` by simp[vyperStateTheory.evaluation_state_component_equality] >>
   pop_assum SUBST1_TAC >> irule expr_post_word_builtin >>

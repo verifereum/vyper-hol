@@ -21,10 +21,12 @@ Theorem convert_cast_converted_counted_certificate:
   convert_result cx tsrc tdst v = INL v' /\
   (!m. mem_agree_outside tn.t_mem s.vs_memory m ==> val_in_memory tv v (w2n w) m) ==>
   out = Var src /\ ?HG th.
+    inst_seq_ptr D 0 ctx fn PG G tn (emitted_insts sa sb) s HG th /\
     gas_path_ptr D 0 ctx fn PG G tn s 0 HG th
       (OK (t with vs_inst_idx := s.vs_inst_idx + LENGTH (emitted_insts sa sb))) /\
     ghost_inv H d cenv cx es HG th t /\ ghost_kept cenv es sa G tn s HG th /\
     ptr_covers HG th src t sz /\ t.vs_memory = s.vs_memory /\ th.t_mem = tn.t_mem /\
+    th.t_stor = tn.t_stor /\ th.t_trans = tn.t_trans /\ th.t_imm = tn.t_imm /\
     (!m. mem_agree_outside th.t_mem t.vs_memory m ==> val_in_memory tv2 v' (w2n w) m)
 Proof
   strip_tac >> drule_all convert_cast_success_path >>

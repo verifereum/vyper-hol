@@ -20,19 +20,20 @@ QED
 
 (* Zero-capacity dispatch is independent of the scalar target's signedness. *)
 Theorem zero_scalar_continuation:
-  expr_post H ctx func cenv cx e es sa s1 s0 (ee with gas_obs := []) v1 x t0 /\
+  (!H. valid_horizon cx st0 H ee.storage_trace ==>
+    expr_post H ctx func cenv cx e es sa s1 s0 (ee with gas_obs := []) v1 x t0 /\
+    ghost_inv H d cenv cx (ee with gas_obs := []) G tn t0) /\
   t0.vs_current_bb = s1.cs_current_bb /\
   t0.vs_inst_idx = LENGTH s1.cs_current_insts /\ ~t0.vs_halted /\
   is_bytestring_type (expr_type e) /\ is_word_type typ /\
   valid_conversion (expr_type e) typ /\ well_formed_type tenv typ /\
   evaluate_type (get_tenv cx) (expr_type e) = SOME stv /\
   value_has_type stv v1 /\ (v1 = BytesV [] \/ v1 = StringV []) /\
-  ghost_inv H d cenv cx (ee with gas_obs := []) G tn t0 /\
   ghost_kept cenv es sa G0 tn0 s0 G tn ==>
-  gas_summary_ptr_at (cx_dead H cx) (ctx,func) PG []
+  gas_summary_ptr_at (\H. cx_dead H cx) (ctx,func) PG cx st0 []
     (\vs. (convert_result cx (expr_type e) typ v1,vs))
     (ee with gas_obs := [],t0,G,tn)
-    (\res fin HG th ss. ?v. res = INL v /\
+    (\H res fin HG th ss. ?v. res = INL v /\
       expr_post H ctx func cenv cx (TypeBuiltin typ Convert typ [e])
         es sa s1 s0 fin v (Lit 0w) ss /\
       ss.vs_current_bb = s1.cs_current_bb /\
@@ -40,7 +41,7 @@ Theorem zero_scalar_continuation:
       ghost_inv H d cenv cx fin HG th ss /\
       ptr_val_ok cx typ v (Lit 0w) HG th ss /\
       ghost_kept cenv es sa G0 tn0 s0 HG th)
-    (\res fin gt out. expr_exit res out)
+    (\H res fin gt out. expr_exit res out)
 Proof
   strip_tac >>
   `~is_bytestring_type typ` by
@@ -52,12 +53,15 @@ Proof
   gvs[] >>
   simp[gas_summary_ptr_at_def] >>
   qexistsl_tac [`INL vout`,`ee`,`G`,`tn`,`OK t0`] >>
-  simp[gas_path_ptr_rules, ptr_val_ok_word_literal] >>
+  simp[gas_path_ptr_rules, ptr_val_ok_word_literal] >> rpt strip_tac >>
+  res_tac >> simp[] >>
   irule zero_convert_child_post >> metis_tac[]
 QED
 
 Theorem zero_uint_continuation:
-  expr_post H ctx func cenv cx e es sa s1 s0 (ee with gas_obs := []) v1 x t0 /\
+  (!H. valid_horizon cx st0 H ee.storage_trace ==>
+    expr_post H ctx func cenv cx e es sa s1 s0 (ee with gas_obs := []) v1 x t0 /\
+    ghost_inv H d cenv cx (ee with gas_obs := []) G tn t0) /\
   t0.vs_current_bb = s1.cs_current_bb /\
   t0.vs_inst_idx = LENGTH s1.cs_current_insts /\ ~t0.vs_halted /\
   expr_type e = BaseT (BytesT (Dynamic n)) /\
@@ -65,12 +69,11 @@ Theorem zero_uint_continuation:
   well_formed_type tenv (BaseT (UintT b)) /\
   evaluate_type (get_tenv cx) (expr_type e) = SOME stv /\
   value_has_type stv v1 /\ v1 = BytesV [] /\
-  ghost_inv H d cenv cx (ee with gas_obs := []) G tn t0 /\
   ghost_kept cenv es sa G0 tn0 s0 G tn ==>
-  gas_summary_ptr_at (cx_dead H cx) (ctx,func) PG []
+  gas_summary_ptr_at (\H. cx_dead H cx) (ctx,func) PG cx st0 []
     (\vs. (convert_result cx (expr_type e) (BaseT (UintT b)) v1,vs))
     (ee with gas_obs := [],t0,G,tn)
-    (\res fin HG th ss. ?v. res = INL v /\
+    (\H res fin HG th ss. ?v. res = INL v /\
       expr_post H ctx func cenv cx
         (TypeBuiltin (BaseT (UintT b)) Convert (BaseT (UintT b)) [e])
         es sa s1 s0 fin v (Lit 0w) ss /\
@@ -79,7 +82,7 @@ Theorem zero_uint_continuation:
       ghost_inv H d cenv cx fin HG th ss /\
       ptr_val_ok cx (BaseT (UintT b)) v (Lit 0w) HG th ss /\
       ghost_kept cenv es sa G0 tn0 s0 HG th)
-    (\res fin gt out. expr_exit res out)
+    (\H res fin gt out. expr_exit res out)
 Proof
   strip_tac >> irule zero_scalar_continuation >>
   simp[is_bytestring_type_def, is_word_type_def] >> metis_tac[]

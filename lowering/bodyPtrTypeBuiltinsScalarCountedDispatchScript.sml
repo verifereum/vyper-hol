@@ -16,6 +16,7 @@ Theorem scalar_convert_counted_success:
   ~s.vs_halted /\ lookup_block s.vs_current_bb fn.fn_blocks = SOME bb /\
   isPREFIX (emitted_insts sa sb) (DROP s.vs_inst_idx bb.bb_instructions) ==>
   ?H th.
+    inst_seq_ptr D 0 ctx fn PG G tn (emitted_insts sa sb) s H th /\
     gas_path_ptr D 0 ctx fn PG G tn s 0 H th
       (OK (t with vs_inst_idx := s.vs_inst_idx + LENGTH (emitted_insts sa sb))) /\
     op_prov H out = NONE /\ op_taint th out = {} /\
@@ -30,7 +31,7 @@ Proof
   Cases_on `conv` >> gvs[]
   >~ [`compile_type_convert x ConvIdentity sa = _`]
   >- (gvs[compile_type_convert_def, comp_return_def, emitted_insts_refl,
-          run_inst_seq_def] >> qexistsl_tac [`G`,`tn`] >> simp[] >>
+          run_inst_seq_def] >> qexistsl_tac [`G`,`tn`] >> simp[inst_seq_ptr_def] >>
       irule (cj 1 gas_path_ptr_rules) >> simp[])
   >~ [`compile_type_convert x ConvToBool sa = _`]
   >- metis_tac[ADD_COMM, convert_bool_counted_certificate]
@@ -70,6 +71,7 @@ Theorem scalar_convert_counted_abort:
   ~s.vs_halted /\ lookup_block s.vs_current_bb fn.fn_blocks = SOME bb /\
   isPREFIX (emitted_insts sa sb) (DROP s.vs_inst_idx bb.bb_instructions) ==>
   ?H th steps j.
+    inst_seq_ptr D 0 ctx fn PG G tn (emitted_insts sa sb) s H th /\
     gas_path_ptr D 0 ctx fn PG G tn s steps H th
       (Abort err (t with vs_inst_idx := j))
 Proof

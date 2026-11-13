@@ -64,20 +64,22 @@ Theorem cast_convert_modern_outcome_ptr:
   isPREFIX (emitted_insts sa sb) (DROP s.vs_inst_idx bb.bb_instructions) /\
   ptr_covers G tn src s sz /\ 32 <= sz /\ type_memory_size tout <= sz /\
   (!j. w2n w <= j /\ j < w2n w + 32 ==> j NOTIN tn.t_mem) /\
-  ghost_inv H d cenv cx ee G tn s /\ local_ptrs_reserved cenv sa /\
+  (!H. valid_horizon cx st0 H ee.storage_trace ==>
+    ghost_inv H d cenv cx ee G tn s) /\ local_ptrs_reserved cenv sa /\
   (!p z. cenv.ce_return_buf = SOME (PtrVar (Var p) z) ==> not_fresh_at sa p) /\
   (!p z. cenv.ce_return_pc = SOME (PtrVar (Var p) z) ==> not_fresh_at sa p) /\
   (!m. mem_agree_outside tn.t_mem s.vs_memory m ==> val_in_memory tv v (w2n w) m) /\
-  expr_post H ctx fn cenv cx e es ca sa s0 ee v (Var src) s /\
+  (!H. valid_horizon cx st0 H ee.storage_trace ==>
+    expr_post H ctx fn cenv cx e es ca sa s0 ee v (Var src) s) /\
   ptr_buf_ok cenv e (Var src) G s /\
   type_memory_bytes cenv dst <= type_memory_bytes cenv (lowered_value_type cenv e) /\
   ghost_kept cenv es ca G0 tn0 s0 G tn /\
   ca.cs_next_var <= sa.cs_next_var /\ sa.cs_next_id <= sb.cs_next_id /\
   s.vs_current_bb = sb.cs_current_bb /\
   s.vs_inst_idx + LENGTH (emitted_insts sa sb) = LENGTH sb.cs_current_insts ==>
-  gas_outcome_ptr D tops (ctx,fn) PG
+  gas_outcome_ptr D tops (ctx,fn) PG cx st0
     (\st. (convert_result cx (expr_type e) dst v,st)) (ee,s,G,tn)
-    (\res fin HG th u. ?vout. res = INL vout /\
+    (\H res fin HG th u. ?vout. res = INL vout /\
       expr_post H ctx fn cenv cx (TypeBuiltin dst Convert dst [e]) es ca sb s0 fin vout out u /\
       u.vs_current_bb = sb.cs_current_bb /\ u.vs_inst_idx = LENGTH sb.cs_current_insts /\
       ghost_inv H d cenv cx fin HG th u /\
@@ -85,7 +87,7 @@ Theorem cast_convert_modern_outcome_ptr:
       (~is_word_type (post_value_type cenv (TypeBuiltin dst Convert dst [e])) ==>
         ptr_buf_ok cenv (TypeBuiltin dst Convert dst [e]) out HG u) /\
       ghost_kept cenv es ca G0 tn0 s0 HG th)
-    (\res fin gt r. expr_exit res r)
+    (\H res fin gt r. expr_exit res r)
 Proof
   disch_then (map_every assume_tac o CONJUNCTS) >>
   `is_bytestring_type (expr_type e) /\ is_bytestring_type dst` by
@@ -94,6 +96,7 @@ Proof
   qexistsl_tac [`cenv`,`d`,`i`,`n`,`out`,`sa`,`sb`,`src`,`sz`,`w`] >>
   simp[arithmeticTheory.ADD_COMM] >>
   rpt gen_tac >> strip_tac >>
+  `expr_post H ctx fn cenv cx e es ca sa s0 ee v (Var src) s` by metis_tac[] >>
   `ghost_kept cenv es ca G0 tn0 s0 HG th` by
     (irule ghost_kept_readonly_frame >>
      qexistsl_tac [`G`,`not_fresh_at sa`,`tn`] >> simp[] >>

@@ -151,28 +151,38 @@ Theorem word_not_typed_ptr_outcome:
     cenv.ce_flag_n_members (nsid_to_string nsid) = m) /\
   (if ann = BaseT BoolT then emit_op ISZERO [x]
    else compile_invert x ann cenv) s1 = (op,sb) /\
-  expr_post H ctx func cenv cx e es sa s1 s0 ee v x t0 /\
+  (!H. valid_horizon cx st0 H ee.storage_trace ==>
+    expr_post H ctx func cenv cx e es sa s1 s0 ee v x t0 /\
+    ghost_inv H d cenv cx ee G tn t0) /\
   eval_operand x t0 = SOME (typed_val_to_w256 tv v) /\
   (!z. x = Var z ==> not_fresh_at s1 z) /\ fn_has_code s1 sb func /\
   local_ptrs_reserved cenv sa /\ local_ptrs_reserved cenv s1 /\
   ~ctx_has_dalloca ctx /\ ~t0.vs_halted /\
   t0.vs_current_bb = s1.cs_current_bb /\
   t0.vs_inst_idx = LENGTH s1.cs_current_insts /\
-  sa.cs_next_var <= s1.cs_next_var /\ ghost_inv H d cenv cx ee G tn t0 /\
+  sa.cs_next_var <= s1.cs_next_var /\
   ghost_kept cenv es sa G0 tn0 s0 G tn /\ ptr_val_ok cx ann v x G tn t0 /\
   (!p sz. cenv.ce_return_buf = SOME (PtrVar (Var p) sz) ==> not_fresh_at sa p) /\
   (!p sz. cenv.ce_return_pc = SOME (PtrVar (Var p) sz) ==> not_fresh_at sa p) ==>
-  gas_outcome_ptr (cx_dead H cx) (cx_tops cx) (ctx,func) PG
+  gas_outcome_ptr (\H. cx_dead H cx) (cx_tops cx) (ctx,func) PG cx st0
     (\vs. (unop_result cx ann Not [expr_type e] v vs,vs)) (ee,t0,G,tn)
-    (\res fin G' tn' u. ?v'. res = INL v' /\
+    (\H res fin G' tn' u. ?v'. res = INL v' /\
       expr_post H ctx func cenv cx (Builtin ann Not [e]) es sa sb s0 fin v' op u /\
       u.vs_current_bb = sb.cs_current_bb /\
       u.vs_inst_idx = LENGTH sb.cs_current_insts /\
       ghost_inv H d cenv cx fin G' tn' u /\ ptr_val_ok cx ann v' op G' tn' u /\
       ghost_kept cenv es sa G0 tn0 s0 G' tn')
-    (\res fin gt r. expr_exit res r)
+    (\H res fin gt r. expr_exit res r)
 Proof
   disch_then (CONJUNCTS_THEN2 assume_tac strip_assume_tac) >>
+  reverse (Cases_on `?H0. valid_horizon cx st0 H0 ee.storage_trace`)
+  >- (rewrite_tac[gas_outcome_ptr_def] >> qexists_tac `[]` >> disj1_tac >>
+      irule gasStorageTheory.gas_bad_storage_at_initial >>
+      simp[vyperStorageTraceTheory.storage_trace_frame_def,
+        vyperStorageFootprintTheory.storage_trace_domain_def] >> metis_tac[]) >>
+  pop_assum strip_assume_tac >>
+  `expr_post H0 ctx func cenv cx e es sa s1 s0 ee v x t0 /\
+   ghost_inv H0 d cenv cx ee G tn t0` by metis_tac[] >>
   drule_all word_not_typed_post >>
   disch_then (qspec_then `[expr_type e]` strip_assume_tac) >>
   `op_taint tn x = {}` by gvs[ptr_val_ok_def] >>
@@ -184,13 +194,13 @@ Proof
   `is_word_type ann` by
     (drule not_type_cases >> strip_tac >> gvs[is_word_type_def]) >>
   irule gas_outcome_ptr_conseq >>
-  qexistsl [`\res fin G' tn' u.
+  qexistsl [`\H res fin G' tn' u.
     (res = INL v' /\ fin = ee with gas_obs := [] /\
      expr_post H ctx func cenv cx (Builtin ann Not [e]) es sa sb s0 fin v' op u /\
      u.vs_current_bb = sb.cs_current_bb /\ u.vs_inst_idx = LENGTH sb.cs_current_insts) /\
     ghost_inv H d cenv cx ee G' tn' u /\ ghost_kept cenv es sa G0 tn0 s0 G' tn' /\
     op_taint tn' op = {} /\ op_prov G' op = NONE`,
-    `\res fin gt r. expr_exit res r`] >>
+    `\H res fin gt r. expr_exit res r`] >>
   conj_tac
   >- (simp[] >> rpt gen_tac >> strip_tac >>
       gvs[ghost_inv_gas_obs, ptr_val_ok_def]) >>
@@ -198,11 +208,22 @@ Proof
   ho_match_mp_tac (Q.INST [`sa` |-> `s1`, `sc` |-> `sa`, `res` |-> `INL v'`]
     word_not_emit_outcome) >> simp[allocas_from_def, exprSimUnopComposePropsTheory.unop_result_gas_obs] >>
   conj_tac
-  >- (qpat_x_assum `expr_post _ _ _ _ _ (Builtin _ _ _) _ _ _ _ _ _ _ _` mp_tac >>
+  >- (rpt strip_tac >>
+      `expr_post H ctx func cenv cx e es sa s1 s0 ee v x t0` by metis_tac[] >>
+      drule_all (Q.INST [`H` |-> `H`] word_not_typed_post) >>
+      disch_then (qspec_then `[expr_type e]` strip_assume_tac) >> gvs[] >>
+      qpat_x_assum `expr_post H _ _ _ _ (Builtin _ _ _) _ _ _ _ _ _ _ _` mp_tac >>
       simp[expr_post_def, expr_val_at_def, stmt_state_rel_gas_obs,
            loweringPostsTheory.locals_kept_def, loweringPostsTheory.popped_kept_def] >>
       metis_tac[]) >>
-  drule_all word_not_normal_update >> strip_tac >>
+  gen_tac >> strip_tac >>
+  `expr_post H ctx func cenv cx e es sa s1 s0 ee v x t0` by metis_tac[] >>
+  `?vH tH. unop_result cx ann Not [expr_type e] v ee = INL vH /\
+    run_inst_seq (emitted_insts s1 sb) t0 = OK tH /\
+    expr_post H ctx func cenv cx (Builtin ann Not [e]) es sa sb s0 ee vH op
+      (tH with vs_inst_idx := LENGTH sb.cs_current_insts)` by
+    (irule word_not_typed_post >> metis_tac[]) >>
+  gvs[] >> drule_all word_not_normal_update >> strip_tac >>
   drule emitted_insts_emit_op >> strip_tac >>
   gvs[update_var_def]
 QED

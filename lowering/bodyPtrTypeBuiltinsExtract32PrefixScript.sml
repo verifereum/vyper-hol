@@ -5,6 +5,7 @@ Ancestors
   exprSimExtract32Source exprSimSource gasSummaryComposePtr gasExemptCert
   wordOperandsPtr exprBopSimProps exprLoweringProps bodyPtrDefs bodyPtrPreds
   vyperState loweringPosts compileEnv loweringStateRelDefs vyperValue rawCallBufferPtr exprOperandVar
+  fragGasSeqPtr vyperStorageTrace vyperStorageFootprint
   gasSummary fragGasMode fragGasPath freshWrites exprSimHyps exprSimHypsDefs vyperAST
 
 Theorem extract32_operands_ptr_prefix:
@@ -21,10 +22,13 @@ Theorem extract32_operands_ptr_prefix:
   (!x sz. cenv.ce_return_buf = SOME (PtrVar (Var x) sz) ==> not_fresh_at sa x) /\
   (!x sz. cenv.ce_return_pc = SOME (PtrVar (Var x) sz) ==> not_fresh_at sa x) /\
   gas_admissible (eval_expr cx (TypeBuiltin ann Extract32 typ [src;off])) expr_vv_res_ok es /\
-  stmt_state_rel H ctx func cenv cx es s0 /\ ghost_inv H d cenv cx es G0 tn0 s0 /\
+  (!H. valid_horizon cx st0 H es.storage_trace ==>
+    stmt_state_rel H ctx func cenv cx es s0 /\
+    storage_well_formed_on cx es (FST H) /\ ghost_inv H d cenv cx es G0 tn0 s0) /\
   ~s0.vs_halted /\ s0.vs_current_bb = sa.cs_current_bb /\
   s0.vs_inst_idx = LENGTH sa.cs_current_insts /\
   (!left right bs i mid fin G tn t HG th u J un v sv len data p.
+    (!H. valid_horizon cx st0 H fin.storage_trace ==>
     gas_marked_exec_ptr (cx_dead H cx) (ctx,func) PG
       (vyperState$bind (eval_expr cx src) (read_result cx))
       (es,s0,G0,tn0) left (INL (BytesV bs)) mid G tn (OK t) /\
@@ -49,15 +53,15 @@ Theorem extract32_operands_ptr_prefix:
     v.vs_current_bb = sc.cs_current_bb /\ v.vs_inst_idx = LENGTH sc.cs_current_insts /\
     ghost_inv H d cenv cx (fin with gas_obs := []) J un v /\
     ptr_val_ok cx (post_value_type cenv off) (IntV i) offop J un v /\
-    ghost_kept cenv es sa G0 tn0 s0 J un ==>
-    gas_outcome_ptr (cx_dead H cx) (cx_tops cx) (ctx,func) PG
+    ghost_kept cenv es sa G0 tn0 s0 J un) ==>
+    gas_outcome_ptr (\H. cx_dead H cx) (cx_tops cx) (ctx,func) PG cx st0
       (vyperState$bind
         (lift_sum (evaluate_type_builtin cx Extract32 typ
           [expr_type src;expr_type off] [BytesV bs;IntV i])) (\w. return (Value w)))
-      (fin with gas_obs := [],v,J,un) Q (\res ee gt r. expr_exit res r)) ==>
-  gas_outcome_ptr (cx_dead H cx) (cx_tops cx) (ctx,func) PG
+      (fin with gas_obs := [],v,J,un) Q (\H res ee gt r. expr_exit res r)) ==>
+  gas_outcome_ptr (\H. cx_dead H cx) (cx_tops cx) (ctx,func) PG cx st0
     (eval_expr cx (TypeBuiltin ann Extract32 typ [src;off]))
-    (es,s0,G0,tn0) Q (\res ee gt r. expr_exit res r)
+    (es,s0,G0,tn0) Q (\H res ee gt r. expr_exit res r)
 Proof
   strip_tac >> drule_all extract32_stage_cuts >> strip_tac >>
   `gas_admissible (vyperState$bind (eval_expr cx src) (read_result cx)) expr_res_ok es` by
@@ -65,7 +69,8 @@ Proof
   once_rewrite_tac[eval_expr_extract32_vv_bind] >>
   CONV_TAC (DEPTH_CONV ETA_CONV) >>
   irule (CONV_RULE (DEPTH_CONV ETA_CONV) extract32_source_ptr_bind) >>
-  simp[] >>
+  simp[storage_trace_frame_bind_all, evaluate_storage_trace_frame,
+       storage_trace_frame_read_result, storage_trace_frame_lifts, storage_trace_frame_return] >>
   conj_tac >- (rpt strip_tac >> irule gas_exempt_cert_error_value >> metis_tac[]) >>
   conj_tac >- (rpt strip_tac >> irule gas_exempt_cert_bind_value >> metis_tac[]) >>
   qexistsl_tac [`ann`,`cenv`,`d`,`env`,`off`,`srcop`,`sa`,`sm`,`tops`,`ty`,`typ`] >>
@@ -73,7 +78,22 @@ Proof
 QED
 
 Resume extract32_operands_ptr_prefix[normal]:
-  rpt gen_tac >> strip_tac >>
+  rpt strip_tac >>
+  `?H0. valid_horizon cx st0 H0 mid.storage_trace` by metis_tac[] >>
+  pop_assum (qx_choose_then `H0` assume_tac) >>
+  `(vyperState$bind (eval_expr cx src) (read_result cx)) (es with gas_obs := gas_explicit marks s0.vs_gas_readings) =
+    (INL (BytesV bs),mid with gas_obs := [])` by
+    (fs[gas_marked_exec_def] >> metis_tac[]) >>
+  `!H. valid_horizon cx st0 H mid.storage_trace ==>
+    valid_horizon cx st0 H es.storage_trace` by
+    (rpt strip_tac >>
+     mp_tac (Q.INST [`f` |-> `(vyperState$bind (eval_expr cx src) (read_result cx))`,
+       `st` |-> `es with gas_obs := gas_explicit marks s0.vs_gas_readings`,
+       `st'` |-> `mid with gas_obs := []`, `res` |-> `INL (BytesV bs)`,
+       `H` |-> `H`, `cx` |-> `cx`, `st0` |-> `st0`] valid_horizon_frame) >>
+     simp[storage_trace_frame_bind_all, evaluate_storage_trace_frame,
+          storage_trace_frame_read_result]) >>
+  res_tac >>
   `post_value_type cenv src = expr_type src` by
     (irule post_value_type_bytestring >> simp[is_bytestring_type_def]) >>
   `ptr_mem_ok cx (expr_type src) (BytesV bs) srcop G tn t /\
@@ -100,7 +120,32 @@ Resume extract32_operands_ptr_prefix[normal]:
     extract32_prepare_ptr_counted)) >>
   disch_then (drule_at (Pat `ghost_kept _ _ _ _ _ _ _ _`)) >>
   simp[] >> disch_then drule_all >>
-  disch_then (qspecl_then [`PG`,`cx_dead H cx`] strip_assume_tac) >>
+  disch_then (qspecl_then [`PG`,`cx_dead ARB cx`] strip_assume_tac) >>
+  `!H. gas_path_ptr (cx_dead H cx) 0 ctx func PG G tn t 0 HG th (OK u)` by
+    (gen_tac >> drule_all extract32_prepare_ptr_counted >>
+     disch_then (qspecl_then [`PG`,`cx_dead H cx`]
+       (qx_choose_then `uH` (qx_choose_then `pH`
+         (qx_choose_then `GH` (qx_choose_then `tnH` strip_assume_tac))))) >>
+     `GH = HG /\ tnH = th` by metis_tac[inst_seq_ptr_ghost_unique] >>
+     `(uH with vs_inst_idx := t.vs_inst_idx) =
+      (u with vs_inst_idx := t.vs_inst_idx)` by metis_tac[] >>
+     `uH = u` by
+       (pop_assum (mp_tac o Q.AP_TERM `\z. z with vs_inst_idx := LENGTH sb.cs_current_insts`) >>
+        simp[]) >> gvs[]) >>
+  `!H. valid_horizon cx st0 H mid.storage_trace ==>
+    expr_post H ctx func cenv cx src es sa sb s0
+      (mid with gas_obs := []) (BytesV bs) (Var x) u /\
+    ghost_inv H d cenv cx (mid with gas_obs := []) HG th u` by
+    (rpt strip_tac >> res_tac >> drule_all extract32_prepare_ptr_counted >>
+     disch_then (qspecl_then [`PG`,`cx_dead H cx`]
+       (qx_choose_then `uH` (qx_choose_then `pH`
+         (qx_choose_then `GH` (qx_choose_then `tnH` strip_assume_tac))))) >>
+     `GH = HG /\ tnH = th` by metis_tac[inst_seq_ptr_ghost_unique] >>
+     `(uH with vs_inst_idx := t.vs_inst_idx) =
+      (u with vs_inst_idx := t.vs_inst_idx)` by metis_tac[] >>
+     `uH = u` by
+       (pop_assum (mp_tac o Q.AP_TERM `\z. z with vs_inst_idx := LENGTH sb.cs_current_insts`) >>
+        simp[]) >> gvs[]) >>
   irule gas_outcome_ptr_prefix >> goal_assum (drule_at Any) >>
   suspend "offset"
 QED
@@ -109,14 +154,18 @@ Resume extract32_operands_ptr_prefix[offset]:
   `gas_admissible (vyperState$bind (eval_expr cx off) (read_result cx)) expr_res_ok
      (mid with gas_obs := [])` by
     (irule expr_body_pre_gas_admissible >> qexistsl_tac [`cenv`,`env`] >> simp[]) >>
-  `stmt_state_rel H ctx func cenv cx (mid with gas_obs := []) u` by
-    gvs[expr_post_def] >>
+  `!H. valid_horizon cx st0 H mid.storage_trace ==>
+    stmt_state_rel H ctx func cenv cx (mid with gas_obs := []) u /\
+    storage_well_formed_on cx (mid with gas_obs := []) (FST H) /\
+    ghost_inv H d cenv cx (mid with gas_obs := []) HG th u` by
+    (rpt strip_tac >> res_tac >> fs[expr_post_def]) >>
   `!x sz. cenv.ce_return_buf = SOME (PtrVar (Var x) sz) ==> not_fresh_at sb x` by
     metis_tac[not_fresh_at_mono, arithmeticTheory.LESS_EQ_TRANS] >>
   `!x sz. cenv.ce_return_pc = SOME (PtrVar (Var x) sz) ==> not_fresh_at sb x` by
     metis_tac[not_fresh_at_mono, arithmeticTheory.LESS_EQ_TRANS] >>
   irule (CONV_RULE (DEPTH_CONV ETA_CONV) extract32_offset_ptr_bind) >>
-  simp[] >>
+  simp[storage_trace_frame_bind_all, evaluate_storage_trace_frame,
+       storage_trace_frame_read_result, storage_trace_frame_lifts, storage_trace_frame_return] >>
   conj_tac >- (rpt strip_tac >> irule gas_exempt_cert_error_value >> metis_tac[]) >>
   conj_tac >- (rpt strip_tac >> irule gas_exempt_cert_bind_value >> metis_tac[]) >>
   suspend "suffix"
@@ -124,13 +173,27 @@ QED
 
 Resume extract32_operands_ptr_prefix[suffix]:
   qpat_assum `expr_sim_ptr _ _ _ _ _ _ _ off _` (irule_at Any) >>
-  qpat_assum `expr_post _ _ _ _ _ src _ _ sb _ _ _ _ u` (irule_at Any) >>
+  qpat_assum `!H. valid_horizon _ _ H _ ==> expr_post H _ _ _ _ src _ _ _ _ _ _ _ _ /\ _`
+    (irule_at Any) >>
   simp[] >> qexistsl_tac [`p'`,`len`,`env`,`data`] >> simp[] >>
-  reverse conj_tac >- gvs[exprSimWordArgsTheory.stmt_state_rel_gas_obs] >> rpt gen_tac >> strip_tac >>
+  reverse conj_tac >- gvs[exprSimWordArgsTheory.stmt_state_rel_gas_obs] >>
+  rpt strip_tac >> res_tac >>
   suspend "finish"
 QED
 
 Resume extract32_operands_ptr_prefix[finish]:
+  `(vyperState$bind (eval_expr cx off) (read_result cx)) (mid with gas_obs := gas_explicit marks' u.vs_gas_readings) =
+    (INL (IntV i),mid' with gas_obs := [])` by
+    (fs[gas_marked_exec_def] >> metis_tac[]) >>
+  `!H. valid_horizon cx st0 H mid'.storage_trace ==>
+    valid_horizon cx st0 H mid.storage_trace` by
+    (rpt strip_tac >>
+     mp_tac (Q.INST [`f` |-> `(vyperState$bind (eval_expr cx off) (read_result cx))`,
+       `st` |-> `mid with gas_obs := gas_explicit marks' u.vs_gas_readings`,
+       `st'` |-> `mid' with gas_obs := []`, `res` |-> `INL (IntV i)`,
+       `H` |-> `H`, `cx` |-> `cx`, `st0` |-> `st0`] valid_horizon_frame) >>
+     simp[storage_trace_frame_bind_all, evaluate_storage_trace_frame,
+          storage_trace_frame_read_result]) >>
   `ghost_kept cenv es sa G0 tn0 s0 HG' th'` by
     (qpat_assum `expr_post _ _ _ _ _ src es sa _ s0 _ _ _ u`
        (assume_tac o MATCH_MP exprSimWordArgsTheory.expr_post_frame) >>

@@ -256,6 +256,7 @@ Theorem convert_address_counted_certificate:
   ~s.vs_halted /\ lookup_block s.vs_current_bb fn.fn_blocks = SOME bb /\
   isPREFIX (emitted_insts sa sb) (DROP s.vs_inst_idx bb.bb_instructions) ==>
   ?H th.
+    inst_seq_ptr D 0 ctx fn PG G tn (emitted_insts sa sb) s H th /\
     gas_path_ptr D 0 ctx fn PG G tn s 0 H th
       (OK (t with vs_inst_idx := s.vs_inst_idx + LENGTH (emitted_insts sa sb))) /\
     out = x /\ op_prov H out = NONE /\ op_taint th out = {} /\
@@ -264,7 +265,11 @@ Theorem convert_address_counted_certificate:
     th.t_mem = tn.t_mem /\ th.t_stor = tn.t_stor /\
     th.t_trans = tn.t_trans /\ th.t_imm = tn.t_imm
 Proof
-  rewrite_tac[convert_address_clamp] >> MATCH_ACCEPT_TAC int_clamp_counted_certificate
+  strip_tac >> drule_all convert_address_fixed_certificate >>
+  disch_then (qspecl_then [`fn`,`PG`,`D`] strip_assume_tac) >>
+  qexistsl_tac [`H`,`th`] >> simp[] >>
+  drule convert_address_instruction_filter >> strip_tac >>
+  drule_all run_inst_seq_gas_path_ptr >> simp[]
 QED
 
 Theorem convert_address_abort_counted_certificate:
@@ -274,6 +279,7 @@ Theorem convert_address_abort_counted_certificate:
   ~s.vs_halted /\ lookup_block s.vs_current_bb fn.fn_blocks = SOME bb /\
   isPREFIX (emitted_insts sa sb) (DROP s.vs_inst_idx bb.bb_instructions) ==>
   ?H th n j.
+    inst_seq_ptr D 0 ctx fn PG G tn (emitted_insts sa sb) s H th /\
     gas_path_ptr D 0 ctx fn PG G tn s n H th (Abort err (t with vs_inst_idx := j)) /\
     out = x /\ op_prov H out = NONE /\ op_taint th out = {} /\
     (!p. not_fresh_at sa p ==> FLOOKUP H p = FLOOKUP G p /\
@@ -281,7 +287,13 @@ Theorem convert_address_abort_counted_certificate:
     th.t_mem = tn.t_mem /\ th.t_stor = tn.t_stor /\
     th.t_trans = tn.t_trans /\ th.t_imm = tn.t_imm
 Proof
-  rewrite_tac[convert_address_clamp] >> MATCH_ACCEPT_TAC int_clamp_abort_counted_certificate
+  strip_tac >>
+  drule_all (cj 2 (PURE_REWRITE_RULE
+    [RIGHT_AND_OVER_OR, LEFT_AND_OVER_OR, DISJ_IMP_THM] convert_address_fixed_certificate)) >>
+  disch_then (qspecl_then [`fn`,`PG`,`D`] strip_assume_tac) >>
+  drule convert_address_instruction_filter >> strip_tac >>
+  drule_all run_inst_seq_abort_gas_path_ptr >> strip_tac >>
+  qexistsl_tac [`H`,`th`,`n`,`j`] >> simp[]
 QED
 
 Theorem convert_flag_counted_certificate:
@@ -291,6 +303,7 @@ Theorem convert_flag_counted_certificate:
   ~s.vs_halted /\ lookup_block s.vs_current_bb fn.fn_blocks = SOME bb /\
   isPREFIX (emitted_insts sa sb) (DROP s.vs_inst_idx bb.bb_instructions) ==>
   ?H th.
+    inst_seq_ptr D 0 ctx fn PG G tn (emitted_insts sa sb) s H th /\
     gas_path_ptr D 0 ctx fn PG G tn s 0 H th
       (OK (t with vs_inst_idx := s.vs_inst_idx + LENGTH (emitted_insts sa sb))) /\
     out = x /\ op_prov H out = NONE /\ op_taint th out = {} /\
@@ -315,6 +328,7 @@ Theorem convert_flag_abort_counted_certificate:
   ~s.vs_halted /\ lookup_block s.vs_current_bb fn.fn_blocks = SOME bb /\
   isPREFIX (emitted_insts sa sb) (DROP s.vs_inst_idx bb.bb_instructions) ==>
   ?H th steps j.
+    inst_seq_ptr D 0 ctx fn PG G tn (emitted_insts sa sb) s H th /\
     gas_path_ptr D 0 ctx fn PG G tn s steps H th (Abort err (t with vs_inst_idx := j)) /\
     out = x /\ op_prov H out = NONE /\ op_taint th out = {} /\
     (!p. not_fresh_at sa p ==> FLOOKUP H p = FLOOKUP G p /\
@@ -338,6 +352,7 @@ Theorem convert_bytesm_counted_certificate:
   ~s.vs_halted /\ lookup_block s.vs_current_bb fn.fn_blocks = SOME bb /\
   isPREFIX (emitted_insts sa sb) (DROP s.vs_inst_idx bb.bb_instructions) ==>
   ?H th.
+    inst_seq_ptr D 0 ctx fn PG G tn (emitted_insts sa sb) s H th /\
     gas_path_ptr D 0 ctx fn PG G tn s 0 H th
       (OK (t with vs_inst_idx := s.vs_inst_idx + LENGTH (emitted_insts sa sb))) /\
     out = x /\ op_prov H out = NONE /\ op_taint th out = {} /\
@@ -362,6 +377,7 @@ Theorem convert_bytesm_abort_counted_certificate:
   ~s.vs_halted /\ lookup_block s.vs_current_bb fn.fn_blocks = SOME bb /\
   isPREFIX (emitted_insts sa sb) (DROP s.vs_inst_idx bb.bb_instructions) ==>
   ?H th n j.
+    inst_seq_ptr D 0 ctx fn PG G tn (emitted_insts sa sb) s H th /\
     gas_path_ptr D 0 ctx fn PG G tn s n H th (Abort err (t with vs_inst_idx := j)) /\
     out = x /\ op_prov H out = NONE /\ op_taint th out = {} /\
     (!p. not_fresh_at sa p ==> FLOOKUP H p = FLOOKUP G p /\
@@ -615,6 +631,7 @@ Theorem convert_int_counted_certificate:
   ~s.vs_halted /\ lookup_block s.vs_current_bb fn.fn_blocks = SOME bb /\
   isPREFIX (emitted_insts sa sb) (DROP s.vs_inst_idx bb.bb_instructions) ==>
   ?H th.
+    inst_seq_ptr D 0 ctx fn PG G tn (emitted_insts sa sb) s H th /\
     gas_path_ptr D 0 ctx fn PG G tn s 0 H th
       (OK (t with vs_inst_idx := s.vs_inst_idx + LENGTH (emitted_insts sa sb))) /\
     out = x /\ op_prov H out = NONE /\ op_taint th out = {} /\
@@ -639,6 +656,7 @@ Theorem convert_int_abort_counted_certificate:
   ~s.vs_halted /\ lookup_block s.vs_current_bb fn.fn_blocks = SOME bb /\
   isPREFIX (emitted_insts sa sb) (DROP s.vs_inst_idx bb.bb_instructions) ==>
   ?H th n j.
+    inst_seq_ptr D 0 ctx fn PG G tn (emitted_insts sa sb) s H th /\
     gas_path_ptr D 0 ctx fn PG G tn s n H th (Abort err (t with vs_inst_idx := j)) /\
     out = x /\ op_prov H out = NONE /\ op_taint th out = {} /\
     (!p. not_fresh_at sa p ==> FLOOKUP H p = FLOOKUP G p /\

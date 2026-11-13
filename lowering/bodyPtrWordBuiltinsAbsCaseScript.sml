@@ -106,41 +106,66 @@ QED
 Theorem word_abs_normal_ptr_outcome:
   ann = BaseT (IntT 256) /\ expr_type e = ann /\
   value_has_type (BaseTV (IntT 256)) v /\ compile_builtin_abs x s1 = (op,sb) /\
-  expr_post H ctx func cenv cx e es sa s1 s0 ee v x t0 /\
+  (!H. valid_horizon cx st0 H ee.storage_trace ==>
+    expr_post H ctx func cenv cx e es sa s1 s0 ee v x t0 /\
+    ghost_inv H d cenv cx ee G tn t0) /\
   eval_operand x t0 = SOME (typed_val_to_w256 (BaseTV (IntT 256)) v) /\
   (!z. x = Var z ==> not_fresh_at s1 z) /\ fn_has_code s1 sb func /\
   local_ptrs_reserved cenv sa /\ local_ptrs_reserved cenv s1 /\
   ~ctx_has_dalloca ctx /\ ~t0.vs_halted /\
   t0.vs_current_bb = s1.cs_current_bb /\
   t0.vs_inst_idx = LENGTH s1.cs_current_insts /\
-  sa.cs_next_var <= s1.cs_next_var /\ ghost_inv H d cenv cx ee G tn t0 /\
+  sa.cs_next_var <= s1.cs_next_var /\
   ghost_kept cenv es sa G0 tn0 s0 G tn /\ ptr_val_ok cx ann v x G tn t0 /\
   (!p sz. cenv.ce_return_buf = SOME (PtrVar (Var p) sz) ==> not_fresh_at sa p) /\
   (!p sz. cenv.ce_return_pc = SOME (PtrVar (Var p) sz) ==> not_fresh_at sa p) /\
   typed_val_to_w256 (BaseTV (IntT 256)) v <> INT_MINw ==>
-  gas_outcome_ptr (cx_dead H cx) (cx_tops cx) (ctx,func) PG
+  gas_outcome_ptr (\H. cx_dead H cx) (cx_tops cx) (ctx,func) PG cx st0
     (\vs. (unop_result cx ann Abs [ann] v vs,vs)) (ee,t0,G,tn)
-    (\res fin G' tn' u. ?v'. res = INL v' /\
+    (\H res fin G' tn' u. ?v'. res = INL v' /\
       expr_post H ctx func cenv cx (Builtin ann Abs [e]) es sa sb s0 fin v' op u /\
       u.vs_current_bb = sb.cs_current_bb /\
       u.vs_inst_idx = LENGTH sb.cs_current_insts /\
       ghost_inv H d cenv cx fin G' tn' u /\ ptr_val_ok cx ann v' op G' tn' u /\
       ghost_kept cenv es sa G0 tn0 s0 G' tn')
-    (\res fin gt r. expr_exit res r)
+    (\H res fin gt r. expr_exit res r)
 Proof
-  strip_tac >> drule_all word_abs_typed_post >> strip_tac >>
-  `op_taint tn x = {} /\ op_prov G x = NONE` by
-    gvs[ptr_val_ok_def, is_word_type_def] >>
+  strip_tac >>
+  reverse (Cases_on `?H0. valid_horizon cx st0 H0 ee.storage_trace`)
+  >- (rewrite_tac[gas_outcome_ptr_def] >> qexists_tac `[]` >> disj1_tac >>
+      irule gasStorageTheory.gas_bad_storage_at_initial >>
+      simp[vyperStorageTraceTheory.storage_trace_frame_def,
+        vyperStorageFootprintTheory.storage_trace_domain_def] >> metis_tac[]) >>
+  pop_assum strip_assume_tac >>
+  `expr_post H0 ctx func cenv cx e es sa s1 s0 ee v x t0 /\
+   ghost_inv H0 d cenv cx ee G tn t0` by metis_tac[] >>
+  `is_word_type ann` by simp[is_word_type_def] >>
+  drule_all word_abs_typed_post >> strip_tac >>
+  `op_taint tn x = {} /\ op_prov G x = NONE` by gvs[ptr_val_ok_def] >>
   `allocas_from 0 t0` by simp[allocas_from_def] >>
-  drule_all word_abs_counted_normal_post >>
-  disch_then (qspecl_then [`PG`, `cx_dead H cx`] strip_assume_tac) >>
-  drule word_abs_current_block >> strip_tac >>
+  drule_all word_abs_emitted_checked >>
+  disch_then (qspecl_then [`func`, `PG`, `cx_dead H0 cx`]
+    (qx_choose_then `GF` (qx_choose_then `tnF` strip_assume_tac))) >>
+  drule_all word_abs_code_prefix >> strip_tac >>
   drule word_abs_emitted_shape >> strip_tac >>
-  simp[gas_outcome_ptr_def] >> qexists `[]` >> disj1_tac >>
+  drule word_abs_current_block >> strip_tac >>
+  rewrite_tac[gas_outcome_ptr_def] >> qexists_tac `[]` >> disj2_tac >> disj1_tac >>
   simp[gas_summary_ptr_at_def] >>
-  qexistsl [`INL v'`, `ee`, `HG`, `th`,
+  qexistsl_tac [`INL v'`, `ee`, `GF`, `tnF`,
     `OK (t with vs_inst_idx := LENGTH sb.cs_current_insts)`] >>
   simp[exprSimUnopComposePropsTheory.unop_result_gas_obs] >>
+  gen_tac >> strip_tac >>
+  `expr_post H ctx func cenv cx e es sa s1 s0 ee v x t0 /\
+   ghost_inv H d cenv cx ee G tn t0` by metis_tac[] >>
+  drule_all (Q.INST [`H` |-> `H`] word_abs_typed_post) >> strip_tac >> gvs[] >>
+  drule_all (Q.INST [`H` |-> `H`] word_abs_emitted_checked) >>
+  disch_then (qspecl_then [`func`, `PG`, `cx_dead H cx`]
+    (qx_choose_then `GH` (qx_choose_then `tnH` strip_assume_tac))) >>
+  `GH = GF /\ tnH = tnF` by metis_tac[inst_seq_ptr_ghost_unique] >> gvs[] >>
+  `ghost_inv H d cenv cx ee GF tnF t /\
+   ghost_kept cenv es sa G0 tn0 s0 GF tnF /\
+   op_prov GF op = NONE /\ op_taint tnF op = {}` by metis_tac[] >>
+  drule_all run_inst_seq_gas_path_ptr >> simp[] >> strip_tac >>
   simp[ghost_inv_gas_obs, word_interval_ghost_inv_index,
        ptr_val_ok_def, is_word_type_def] >>
   conj_tac >- metis_tac[] >>
@@ -164,54 +189,81 @@ Theorem word_abs_overflow_ptr_outcome:
   local_ptrs_reserved cenv sa /\ ~ctx_has_dalloca ctx /\ ~t0.vs_halted /\
   t0.vs_current_bb = s1.cs_current_bb /\
   t0.vs_inst_idx = LENGTH s1.cs_current_insts /\
-  sa.cs_next_var <= s1.cs_next_var /\ ghost_inv H d cenv cx ee G tn t0 /\
+  sa.cs_next_var <= s1.cs_next_var /\
+  (!H. valid_horizon cx st0 H ee.storage_trace ==>
+    ghost_inv H d cenv cx ee G tn t0) /\
   ghost_kept cenv es sa G0 tn0 s0 G tn /\ ptr_val_ok cx ann v x G tn t0 /\
   (!p sz. cenv.ce_return_buf = SOME (PtrVar (Var p) sz) ==> not_fresh_at sa p) /\
   (!p sz. cenv.ce_return_pc = SOME (PtrVar (Var p) sz) ==> not_fresh_at sa p) /\
   typed_val_to_w256 (BaseTV (IntT 256)) v = INT_MINw ==>
-  gas_outcome_ptr (cx_dead H cx) (cx_tops cx) (ctx,func) PG
+  gas_outcome_ptr (\H. cx_dead H cx) (cx_tops cx) (ctx,func) PG cx st0
     (\vs. (unop_result cx ann Abs tys v vs,vs)) (ee,t0,G,tn)
-    Q (\res fin gt r. expr_exit res r)
+    Q (\H res fin gt r. expr_exit res r)
 Proof
-  strip_tac >> drule word_abs_typed_source >>
+  strip_tac >>
+  reverse (Cases_on `?H0. valid_horizon cx st0 H0 ee.storage_trace`)
+  >- (rewrite_tac[gas_outcome_ptr_def] >> qexists_tac `[]` >> disj1_tac >>
+      irule gasStorageTheory.gas_bad_storage_at_initial >>
+      simp[vyperStorageTraceTheory.storage_trace_frame_def,
+        vyperStorageFootprintTheory.storage_trace_domain_def] >> metis_tac[]) >>
+  pop_assum strip_assume_tac >>
+  `ghost_inv H0 d cenv cx ee G tn t0` by metis_tac[] >>
+  drule word_abs_typed_source >>
   disch_then (qspecl_then [`tys`, `ee`, `cx`] mp_tac) >> simp[] >> strip_tac >>
   drule_all word_abs_actual_run >> simp[] >> strip_tac >>
   `op_taint tn x = {} /\ op_prov G x = NONE` by
     gvs[ptr_val_ok_def, is_word_type_def] >>
   `allocas_from 0 t0` by simp[allocas_from_def] >>
-  drule_all word_abs_counted_abort >>
-  disch_then (qspecl_then [`PG`, `cx_dead H cx`] strip_assume_tac) >>
-  simp[gas_outcome_ptr_def] >> qexists `REPLICATE n F` >> disj1_tac >>
+  drule_all word_abs_emitted_checked >>
+  disch_then (qspecl_then [`func`, `PG`, `cx_dead H0 cx`]
+    (qx_choose_then `GF` (qx_choose_then `tnF` strip_assume_tac))) >>
+  `!H. valid_horizon cx st0 H ee.storage_trace ==>
+    inst_seq_ptr (cx_dead H cx) 0 ctx func PG G tn (emitted_insts s1 sb) t0 GF tnF` by
+    (rpt strip_tac >> `ghost_inv H d cenv cx ee G tn t0` by metis_tac[] >>
+     drule_all (Q.INST [`H` |-> `H`] word_abs_emitted_checked) >>
+     disch_then (qspecl_then [`func`, `PG`, `cx_dead H cx`]
+       (qx_choose_then `GH` (qx_choose_then `tnH` strip_assume_tac))) >>
+     `GH = GF /\ tnH = tnF` by metis_tac[inst_seq_ptr_ghost_unique] >> gvs[]) >>
+  drule_all word_abs_code_prefix >> strip_tac >>
+  drule word_abs_emitted_shape >> strip_tac >>
+  `EVERY (\i. i.inst_opcode <> GAS /\ i.inst_opcode <> INVOKE /\
+    ~is_terminator i.inst_opcode) (emitted_insts s1 sb)` by
+    fs[EVERY_MEM, FILTER_EQ_NIL] >>
+  drule_all run_inst_seq_abort_zero_path_ptr_uniform >>
+  disch_then (qspec_then `ctx` strip_assume_tac) >>
+  rewrite_tac[gas_outcome_ptr_def] >> qexists_tac `[]` >> disj2_tac >> disj1_tac >>
   simp[gas_summary_ptr_at_def] >>
-  qexistsl [`INR (Error (RuntimeError m))`, `ee`, `HG`, `th`,
+  qexistsl_tac [`INR (Error (RuntimeError m))`, `ee`, `GF`, `tnF`,
     `Abort Revert_abort (q with vs_inst_idx := j)`] >>
-  simp[exprSimUnopComposePropsTheory.unop_result_gas_obs, expr_exit_def,
-       exit_result_def]
+  simp[exprSimUnopComposePropsTheory.unop_result_gas_obs, expr_exit_def, exit_result_def] >>
+  metis_tac[]
 QED
 
 Theorem word_abs_typed_ptr_outcome:
   ann = BaseT (IntT 256) /\ expr_type e = ann /\
   value_has_type (BaseTV (IntT 256)) v /\ compile_builtin_abs x s1 = (op,sb) /\
-  expr_post H ctx func cenv cx e es sa s1 s0 ee v x t0 /\
+  (!H. valid_horizon cx st0 H ee.storage_trace ==>
+    expr_post H ctx func cenv cx e es sa s1 s0 ee v x t0 /\
+    ghost_inv H d cenv cx ee G tn t0) /\
   eval_operand x t0 = SOME (typed_val_to_w256 (BaseTV (IntT 256)) v) /\
   (!z. x = Var z ==> not_fresh_at s1 z) /\ fn_has_code s1 sb func /\
   local_ptrs_reserved cenv sa /\ local_ptrs_reserved cenv s1 /\
   ~ctx_has_dalloca ctx /\ ~t0.vs_halted /\
   t0.vs_current_bb = s1.cs_current_bb /\
   t0.vs_inst_idx = LENGTH s1.cs_current_insts /\
-  sa.cs_next_var <= s1.cs_next_var /\ ghost_inv H d cenv cx ee G tn t0 /\
+  sa.cs_next_var <= s1.cs_next_var /\
   ghost_kept cenv es sa G0 tn0 s0 G tn /\ ptr_val_ok cx ann v x G tn t0 /\
   (!p sz. cenv.ce_return_buf = SOME (PtrVar (Var p) sz) ==> not_fresh_at sa p) /\
   (!p sz. cenv.ce_return_pc = SOME (PtrVar (Var p) sz) ==> not_fresh_at sa p) ==>
-  gas_outcome_ptr (cx_dead H cx) (cx_tops cx) (ctx,func) PG
+  gas_outcome_ptr (\H. cx_dead H cx) (cx_tops cx) (ctx,func) PG cx st0
     (\vs. (unop_result cx ann Abs [ann] v vs,vs)) (ee,t0,G,tn)
-    (\res fin G' tn' u. ?v'. res = INL v' /\
+    (\H res fin G' tn' u. ?v'. res = INL v' /\
       expr_post H ctx func cenv cx (Builtin ann Abs [e]) es sa sb s0 fin v' op u /\
       u.vs_current_bb = sb.cs_current_bb /\
       u.vs_inst_idx = LENGTH sb.cs_current_insts /\
       ghost_inv H d cenv cx fin G' tn' u /\ ptr_val_ok cx ann v' op G' tn' u /\
       ghost_kept cenv es sa G0 tn0 s0 G' tn')
-    (\res fin gt r. expr_exit res r)
+    (\H res fin gt r. expr_exit res r)
 Proof
   strip_tac >> Cases_on `typed_val_to_w256 (BaseTV (IntT 256)) v = INT_MINw`
   >- (drule_all word_abs_overflow_ptr_outcome >> simp[]) >>

@@ -18,9 +18,11 @@ Theorem word_args_compose_sim_ptr:
   (!sa sb op. lower_value compile_expr cenv ty (Builtin ann bt args) sa = (op,sb) ==>
      ?xs sm. lower_word_args cenv (\e. ty) args sa = (xs,sm) /\ code xs sm = (op,sb)) /\
   (!xs. straight_fresh (code xs)) /\
-  (!sa sm sb xs op s0 G0 tn0 ee t G tn vs.
+  (!st0 sa sm sb xs op s0 G0 tn0 ee t G tn vs.
     code xs sm = (op,sb) /\
-    wb_args_post H ctx func cenv cx es sa s0 ee xs vs t /\
+    (!H. valid_horizon cx st0 H ee.storage_trace ==>
+      wb_args_post H ctx func cenv cx es sa s0 ee xs vs t /\
+      ghost_inv H d cenv cx ee G tn t) /\
     (~EXISTS expr_has_effect args ==> pure_frame cenv func es sa s0 t) /\
     LIST_REL (\e v. value_has_type (BaseTV (UintT 256)) v) args vs /\
     EVERY (\x. !z. x = Var z ==> not_fresh_at sm z) xs /\
@@ -28,18 +30,18 @@ Theorem word_args_compose_sim_ptr:
     fn_has_code sm sb func /\ local_ptrs_reserved cenv sa /\ local_ptrs_reserved cenv sm /\
     ~ctx_has_dalloca ctx /\ ~t.vs_halted /\
     t.vs_current_bb = sm.cs_current_bb /\ t.vs_inst_idx = LENGTH sm.cs_current_insts /\
-    sa.cs_next_var <= sm.cs_next_var /\ ghost_inv H d cenv cx ee G tn t /\
+    sa.cs_next_var <= sm.cs_next_var /\
     ghost_kept cenv es sa G0 tn0 s0 G tn /\ ee.gas_obs = [] /\
     (!p sz. cenv.ce_return_buf = SOME (PtrVar (Var p) sz) ==> not_fresh_at sa p) /\
     (!p sz. cenv.ce_return_pc = SOME (PtrVar (Var p) sz) ==> not_fresh_at sa p) ==>
-    gas_outcome_ptr (cx_dead H cx) (cx_tops cx) (ctx,func) PG
+    gas_outcome_ptr (\H. cx_dead H cx) (cx_tops cx) (ctx,func) PG cx st0
       (\ee. (builtin_result cx ee.accounts ann bt (MAP expr_type args) vs,ee)) (ee,t,G,tn)
-      (\res fin G' tn' u. ?v. res = INL v /\
+      (\H res fin G' tn' u. ?v. res = INL v /\
          expr_post H ctx func cenv cx (Builtin ann bt args) es sa sb s0 fin v op u /\
          u.vs_current_bb = sb.cs_current_bb /\ u.vs_inst_idx = LENGTH sb.cs_current_insts /\
          ghost_inv H d cenv cx fin G' tn' u /\ ptr_val_ok cx ann v op G' tn' u /\
          ghost_kept cenv es sa G0 tn0 s0 G' tn')
-      (\res fin gt r. expr_exit res r)) ==>
+      (\H res fin gt r. expr_exit res r)) ==>
   expr_sim_ptr d ctx PG func cenv cx ty (Builtin ann bt args) es
 Proof
   strip_tac >>
@@ -82,6 +84,7 @@ Proof
           account_item_type_def]) >>
   simp[eval_expr_builtin_action, expr_type_def] >>
   irule gas_outcome_ptr_bind_mid >>
+  simp[vyperStorageTraceTheory.storage_trace_frame_def] >>
   conj_tac >- suspend "cert_normal" >>
   conj_tac >- suspend "cert_error" >>
   suspend "bind"
@@ -103,16 +106,19 @@ Resume word_args_compose_sim_ptr[cert_error]:
   rpt strip_tac >> irule gas_exempt_cert_error_values >> simp[]
 QED
 Resume word_args_compose_sim_ptr[bind]:
-  qmatch_asmsub_abbrev_tac `gas_outcome_ptr _ _ _ _ _ _ Qfacts _` >>
-  qexists_tac `\vs. Qfacts (INL vs)` >> reverse conj_tac
+  qmatch_asmsub_abbrev_tac `gas_outcome_ptr _ _ _ _ _ _ _ _ Qfacts _` >>
+  qexists_tac `\H vs. Qfacts H (INL vs)` >> reverse conj_tac
   >- (irule gas_outcome_ptr_conseq >>
-      qexistsl_tac [`Qfacts`, `\rr ee gt r. wb_args_exit rr r`] >>
+      qexistsl_tac [`Qfacts`, `\H rr ee gt r. wb_args_exit rr r`] >>
       simp[Abbr `Qfacts`] >> rpt strip_tac >> gvs[] >>
       Cases_on `res` >> gvs[wb_args_exit_def, expr_exit_def]) >>
-  rpt gen_tac >> strip_tac >>
+  rpt strip_tac >> res_tac >>
   fs[Abbr `Qfacts`, typed_args_post_ptr_def] >>
-  `wb_args_post H ctx func cenv cx es sa s0 em xs v t` by
-    (irule word_uint_args_post >> metis_tac[]) >>
+  `!H. valid_horizon cx st0 H em.storage_trace ==>
+     wb_args_post H ctx func cenv cx es sa s0 em xs v t /\
+     ghost_inv H d cenv cx em G tn t` by
+    (rpt strip_tac >> res_tac >> simp[] >>
+     irule word_uint_args_post >> metis_tac[]) >>
   `~EXISTS expr_has_effect args ==> pure_frame cenv func es sa s0 t` by
     fs[exprSimPrecompilesTheory.typed_args_post_def] >>
   first_x_assum irule >> simp[] >> reverse conj_tac

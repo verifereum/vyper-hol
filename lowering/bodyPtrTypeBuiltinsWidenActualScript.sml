@@ -8,7 +8,7 @@ Ancestors
 Theorem widen_copy_actual_counted_certificate:
   compile_bytestring_widen_copy capacity (Var src) n sa = (op,sb) /\
   fn_has_code sa sb fn /\ 0 < n /\
-  stmt_state_rel H ctx fn cenv cx es s0 /\ local_ptrs_reserved cenv sa /\
+  stmt_state_rel (H : (bool # bytes32 # type_value) list # num list) ctx fn cenv cx es s0 /\ local_ptrs_reserved cenv sa /\
   fn_inst_ids_distinct fn /\ capacity < dimword(:256) /\ n <= capacity /\
   ~ctx_has_dalloca ctx /\ not_fresh_at sa src /\
   (!p sz. cenv.ce_return_buf = SOME (PtrVar (Var p) sz) ==> not_fresh_at sa p) /\
@@ -24,6 +24,7 @@ Theorem widen_copy_actual_counted_certificate:
   evaluate_type (get_tenv cx) tdst = SOME tv2 /\ value_has_type tv v /\
   convert_result cx tsrc tdst v = INL vout ==>
   ?t dst b HG th. run_inst_seq (emitted_insts sa sb) s0 = OK t /\ op = Var dst /\
+    inst_seq_ptr D 0 ctx fn PG G0 tn0 (emitted_insts sa sb) s0 HG th /\
     gas_path_ptr D 0 ctx fn PG G0 tn0 s0 0 HG th
       (OK (t with vs_inst_idx := s0.vs_inst_idx + LENGTH (emitted_insts sa sb))) /\
     lookup_var dst (t with vs_inst_idx := s0.vs_inst_idx + LENGTH (emitted_insts sa sb)) = SOME b /\

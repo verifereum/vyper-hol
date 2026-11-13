@@ -565,6 +565,7 @@ Theorem int_clamp_counted_certificate:
   ~s.vs_halted /\ lookup_block s.vs_current_bb fn.fn_blocks = SOME bb /\
   isPREFIX (emitted_insts sa sb) (DROP s.vs_inst_idx bb.bb_instructions) ==>
   ?H th.
+    inst_seq_ptr D 0 ctx fn PG G tn (emitted_insts sa sb) s H th /\
     gas_path_ptr D 0 ctx fn PG G tn s 0 H th
       (OK (t with vs_inst_idx := s.vs_inst_idx + LENGTH (emitted_insts sa sb))) /\
     out = x /\ op_prov H out = NONE /\ op_taint th out = {} /\

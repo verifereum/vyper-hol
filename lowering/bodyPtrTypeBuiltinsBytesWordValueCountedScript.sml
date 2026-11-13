@@ -26,6 +26,7 @@ Theorem bytes_word_value_counted_success:
   (!p sz. cenv.ce_return_buf = SOME (PtrVar (Var p) sz) ==> not_fresh_at sa p) /\
   (!p sz. cenv.ce_return_pc = SOME (PtrVar (Var p) sz) ==> not_fresh_at sa p) ==>
   ?HG th.
+    inst_seq_ptr D 0 ctx fn PG G tn (emitted_insts sa sb) s HG th /\
     gas_path_ptr D 0 ctx fn PG G tn s 0 HG th
       (OK (t with vs_inst_idx := LENGTH sb.cs_current_insts)) /\
     t.vs_current_bb = sb.cs_current_bb /\

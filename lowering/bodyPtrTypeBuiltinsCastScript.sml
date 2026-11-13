@@ -108,11 +108,13 @@ Theorem cast_narrow_success_path:
   (!p z. cenv.ce_return_pc = SOME (PtrVar (Var p) z) ==> not_fresh_at sa p) /\
   (!p. not_fresh_at sa p ==> p <> len /\ p <> a /\ p <> b) ==>
   ?HG th.
+    inst_seq_ptr D 0 ctx fn PG G tn code s HG th /\
     gas_path_ptr D 0 ctx fn PG G tn s 0 HG th
       (OK (t with vs_inst_idx := s.vs_inst_idx+4)) /\
     ghost_inv H d cenv cx es HG th t /\
     ghost_kept cenv es sa G tn s HG th /\ ptr_covers HG th src t sz /\
-    t.vs_memory = s.vs_memory /\ th.t_mem = tn.t_mem
+    t.vs_memory = s.vs_memory /\ th.t_mem = tn.t_mem /\
+    th.t_stor = tn.t_stor /\ th.t_trans = tn.t_trans /\ th.t_imm = tn.t_imm
 Proof
   strip_tac >> qpat_x_assum `code = _` SUBST_ALL_TAC >>
   `ptr_covers G tn src s 32` by
@@ -154,6 +156,13 @@ Proof
   drule_all run_inst_seq_gas_path_ptr >>
   simp[mk_inst_def, is_terminator_def] >> disch_tac >>
   qexistsl_tac [`HG`,`th`] >> conj_tac
+  >- (qpat_assum `inst_seq_ptr _ _ _ _ _ G tn [_] s J tk`
+        (mp_tac o REWRITE_RULE [inst_seq_ptr_def]) >>
+      `step_inst_base (mk_inst id MLOAD [Var src] [len]) s =
+        OK (update_var len (mload (w2n w) s) s)` by
+        (irule step_MLOAD >> simp[eval_operand_def]) >>
+      simp[] >> strip_tac >> gvs[] >> simp[Once inst_seq_ptr_def]) >>
+  conj_tac
   >- (rev_drule gas_path_ptr_then >> disch_then drule >>
       simp[mk_inst_def, ADD1]) >>
   conj_tac
@@ -180,6 +189,7 @@ Theorem cast_narrow_abort_path:
   (!p z. cenv.ce_return_pc = SOME (PtrVar (Var p) z) ==> not_fresh_at sa p) /\
   (!p. not_fresh_at sa p ==> p <> len /\ p <> a /\ p <> b) ==>
   ?HG th j.
+    inst_seq_ptr D 0 ctx fn PG G tn code s HG th /\
     gas_path_ptr D 0 ctx fn PG G tn s 0 HG th
       (Abort err (t with vs_inst_idx := j)) /\ ghost_kept cenv es sa G tn s HG th
 Proof
@@ -225,6 +235,13 @@ Proof
     simp[mk_inst_def, is_terminator_def] >>
   drule_all run_inst_seq_abort_zero_path_ptr >> strip_tac >>
   qexistsl_tac [`HG`,`th`,`j`] >> conj_tac
+  >- (qpat_assum `inst_seq_ptr _ _ _ _ _ G tn [_] s J tk`
+        (mp_tac o REWRITE_RULE [inst_seq_ptr_def]) >>
+      `step_inst_base (mk_inst id MLOAD [Var src] [len]) s =
+        OK (update_var len (mload (w2n w) s) s)` by
+        (irule step_MLOAD >> simp[eval_operand_def]) >>
+      simp[] >> strip_tac >> gvs[] >> simp[Once inst_seq_ptr_def]) >>
+  conj_tac
   >- (rev_drule gas_path_ptr_then >> disch_then drule >> simp[]) >>
   simp[ghost_kept_def] >> metis_tac[]
 QED
@@ -242,18 +259,20 @@ Theorem convert_cast_success_path:
   (!p z. cenv.ce_return_buf = SOME (PtrVar (Var p) z) ==> not_fresh_at sa p) /\
   (!p z. cenv.ce_return_pc = SOME (PtrVar (Var p) z) ==> not_fresh_at sa p) ==>
   out = Var src /\ ?HG th.
+    inst_seq_ptr D 0 ctx fn PG G tn (emitted_insts sa sb) s HG th /\
     gas_path_ptr D 0 ctx fn PG G tn s 0 HG th
       (OK (t with vs_inst_idx := s.vs_inst_idx + LENGTH (emitted_insts sa sb))) /\
     ghost_inv H d cenv cx es HG th t /\
     ghost_kept cenv es sa G tn s HG th /\ ptr_covers HG th src t sz /\
-    t.vs_memory = s.vs_memory /\ th.t_mem = tn.t_mem
+    t.vs_memory = s.vs_memory /\ th.t_mem = tn.t_mem /\
+    th.t_stor = tn.t_stor /\ th.t_trans = tn.t_trans /\ th.t_imm = tn.t_imm
 Proof
   strip_tac >> drule convert_cast_emitted_shape >> strip_tac >> simp[] >>
   Cases_on `n < i` >> fs[]
   >- (`src <> a /\ src <> b /\ src <> c` by metis_tac[] >>
       drule_all cast_narrow_success_path >> simp[]) >>
   gvs[emitted_insts_def, run_inst_seq_def] >>
-  qexistsl_tac [`G`,`tn`] >> simp[gas_path_ptr_rules, wordArgsPtrTheory.ghost_kept_refl]
+  qexistsl_tac [`G`,`tn`] >> simp[inst_seq_ptr_def, gas_path_ptr_rules, wordArgsPtrTheory.ghost_kept_refl]
 QED
 
 Theorem convert_cast_abort_path:
@@ -269,6 +288,7 @@ Theorem convert_cast_abort_path:
   (!p z. cenv.ce_return_buf = SOME (PtrVar (Var p) z) ==> not_fresh_at sa p) /\
   (!p z. cenv.ce_return_pc = SOME (PtrVar (Var p) z) ==> not_fresh_at sa p) ==>
   out = Var src /\ ?HG th j.
+    inst_seq_ptr D 0 ctx fn PG G tn (emitted_insts sa sb) s HG th /\
     gas_path_ptr D 0 ctx fn PG G tn s 0 HG th
       (Abort err (t with vs_inst_idx := j)) /\ ghost_kept cenv es sa G tn s HG th
 Proof

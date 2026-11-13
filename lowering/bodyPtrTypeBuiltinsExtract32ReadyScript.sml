@@ -7,9 +7,11 @@ Ancestors
   valueEncoding words list finite_map fragExec gasSummaryComposePtr venomState
 
 Theorem extract32_tail_ptr_ready:
-  expr_post H ctx func cenv cx src es sa sm s0 es1 (BytesV bs) srcop s1 /\
-  expr_post H ctx func cenv cx off es1 sm sc s1 ee (IntV i) offop s /\
-  stmt_state_rel H ctx func cenv cx es s0 /\
+  (!H. valid_horizon cx st0 H ee.storage_trace ==>
+    expr_post H ctx func cenv cx src es sa sm s0 es1 (BytesV bs) srcop s1 /\
+    expr_post H ctx func cenv cx off es1 sm sc s1 ee (IntV i) offop s /\
+    stmt_state_rel H ctx func cenv cx es s0 /\
+    ghost_inv H d cenv cx ee G tn s) /\
   local_ptrs_reserved cenv sa /\ local_ptrs_reserved cenv sc /\
   MAP FDOM es.scopes = MAP FDOM es1.scopes /\
   sa.cs_next_var <= sm.cs_next_var /\ sm.cs_next_var <= sc.cs_next_var /\
@@ -37,14 +39,13 @@ Theorem extract32_tail_ptr_ready:
   fn_has_code sc se func /\ ee.gas_obs = [] /\
   ~s.vs_halted /\ ~ctx_has_dalloca ctx /\
   s.vs_current_bb = sc.cs_current_bb /\ s.vs_inst_idx = LENGTH sc.cs_current_insts /\
-  ghost_inv H d cenv cx ee G tn s /\
   (!x sz. cenv.ce_return_buf = SOME (PtrVar (Var x) sz) ==> not_fresh_at sc x) /\
   (!x sz. cenv.ce_return_pc = SOME (PtrVar (Var x) sz) ==> not_fresh_at sc x) /\
   ghost_kept cenv es sa G0 tn0 s0 G tn ==>
-  gas_outcome_ptr D (cx_tops cx) (ctx,func) PG
+  gas_outcome_ptr D (cx_tops cx) (ctx,func) PG cx st0
     (vyperState$bind (lift_sum (evaluate_extract32 bs (Num i) bt)) (\v. return (Value v)))
     (ee,s,G,tn)
-    (\res ef HG th t. ?v. res = INL (Value v) /\
+    (\H res ef HG th t. ?v. res = INL (Value v) /\
       vv_post H ctx func cenv cx (TypeBuiltin ann Extract32 (BaseT bt) [src;off])
         es sa se s0 ef (Value v) (StackValue ty op) t /\
       t.vs_current_bb = se.cs_current_bb /\ t.vs_inst_idx = LENGTH se.cs_current_insts /\
@@ -52,11 +53,17 @@ Theorem extract32_tail_ptr_ready:
       ptr_vv_ok cx (post_value_type cenv (TypeBuiltin ann Extract32 (BaseT bt) [src;off]))
         (Value v) (StackValue ty op) ef HG th t /\
       ghost_kept cenv es sa G0 tn0 s0 HG th)
-    (\res ef gt r. expr_exit res r)
+    (\H res ef gt r. expr_exit res r)
 Proof
   strip_tac >>
   drule_all extract32_tail_ready_certificate >>
-  disch_then (qspecl_then [`func`,`PG`,`D`] strip_assume_tac) >>
+  disch_then (qspecl_then [`func`,`PG`,`D ARB`] strip_assume_tac) >>
+  `!H k. inst_seq_ptr (D H) 0 ctx func PG G tn (emitted_insts sc se)
+    (s with vs_inst_idx := k) HG th` by
+    (rpt gen_tac >> drule_all extract32_tail_ready_certificate >>
+     disch_then (qspecl_then [`func`,`PG`,`D H`] strip_assume_tac) >>
+     `HG' = HG /\ th' = th` by metis_tac[fragGasSeqPtrTheory.inst_seq_ptr_ghost_unique] >>
+     gvs[]) >>
   `!z. Var len = Var z \/ Var data = Var z \/ offop = Var z ==>
        not_fresh_at sc z` by (simp[] >> metis_tac[]) >>
   drule_all extract32_tail_run_any >> strip_tac >>
@@ -64,9 +71,9 @@ Proof
   qpat_assum `compile_extract32_load _ _ _ _ = _` (irule_at Any) >>
   qpat_assum `compile_clamp_basetype _ _ _ = _` (irule_at Any) >>
   simp[] >> qexistsl_tac [`th`,`HG`] >> reverse conj_tac
-  >- (`s with vs_inst_idx := s.vs_inst_idx = s` by simp[venom_state_component_equality] >>
-      qpat_assum `!k. inst_seq_ptr _ _ _ _ _ _ _ _ _ _ _`
-       (qspec_then `s.vs_inst_idx` mp_tac) >> metis_tac[]) >>
+  >- (rpt strip_tac >>
+      `s with vs_inst_idx := s.vs_inst_idx = s` by simp[venom_state_component_equality] >>
+      metis_tac[]) >>
   Cases_on `evaluate_extract32 bs (Num i) bt`
   >- suspend "success" >> gvs[] >> metis_tac[]
 QED
@@ -76,6 +83,11 @@ Resume extract32_tail_ptr_ready[success]:
 QED
 
 Resume extract32_tail_ptr_ready[endpoint]:
+  gen_tac >> strip_tac >>
+  `expr_post H ctx func cenv cx src es sa sm s0 es1 (BytesV bs) srcop s1 /\
+   expr_post H ctx func cenv cx off es1 sm sc s1 ee (IntV i) offop s /\
+   stmt_state_rel H ctx func cenv cx es s0 /\
+   ghost_inv H d cenv cx ee G tn s` by metis_tac[] >>
   conj_tac
   >- (irule extract32_tail_post_of_run >>
       qpat_assum `expr_post _ _ _ _ _ off _ _ _ _ _ _ _ _` (irule_at Any) >>

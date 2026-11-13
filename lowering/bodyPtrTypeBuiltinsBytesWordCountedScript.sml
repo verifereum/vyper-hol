@@ -7,7 +7,7 @@ Ancestors
   bodyPtrTypeBuiltinsScalarCompose
   fragGasPathPtr instIdxIndep fragExec exprLoweringProps emitHelperProps
   exprLowering compileEnv loweringStateRelDefs venomState venomExecSemantics builtinConvertPrefix
-  arithmetic finite_map list rich_list
+  instSeqComposePtr arithmetic finite_map list rich_list
 
 (* Common source footprint, obtained for BytesV or StringV by the existing
    unsigned_*_value_source_facts boundaries. *)
@@ -29,6 +29,7 @@ Theorem bytes_word_loaded_counted_success:
   (!p sz. cenv.ce_return_buf = SOME (PtrVar (Var p) sz) ==> not_fresh_at sa p) /\
   (!p sz. cenv.ce_return_pc = SOME (PtrVar (Var p) sz) ==> not_fresh_at sa p) ==>
   ?HG th.
+    inst_seq_ptr D 0 ctx fn PG G tn (emitted_insts sa sb) s HG th /\
     gas_path_ptr D 0 ctx fn PG G tn s 0 HG th
       (OK (t with vs_inst_idx := LENGTH sb.cs_current_insts)) /\
     t.vs_current_bb = sb.cs_current_bb /\
@@ -95,6 +96,9 @@ Resume bytes_word_loaded_counted_success[suffix]:
   `gas_path_ptr D 0 ctx fn PG G tn s 0 HG' th'
      (OK (t with vs_inst_idx := LENGTH sb.cs_current_insts))` by
     (drule_all gas_path_ptr_then >> gs[]) >>
+  `inst_seq_ptr D 0 ctx fn PG G tn (emitted_insts sa sb) s HG' th'` by
+    (asm_rewrite_tac[] >> irule inst_seq_ptr_append_ok >>
+     simp[] >> metis_tac[]) >>
   `t.vs_current_bb = sb.cs_current_bb` by
     (qpat_x_assum `(_ with vs_vars := _) = _` mp_tac >>
      disch_then (mp_tac o Q.AP_TERM `\v. v.vs_current_bb`) >> simp[]) >>
@@ -103,6 +107,7 @@ QED
 
 Resume bytes_word_loaded_counted_success[post]:
   qexistsl_tac [`HG'`,`th'`] >>
+  conj_tac >- first_assum ACCEPT_TAC >>
   conj_tac >- first_assum ACCEPT_TAC >>
   conj_tac >- first_assum ACCEPT_TAC >>
   conj_tac >- first_assum ACCEPT_TAC >>
@@ -141,6 +146,7 @@ Theorem bytes_word_counted_success:
   (!p sz. cenv.ce_return_buf = SOME (PtrVar (Var p) sz) ==> not_fresh_at sa p) /\
   (!p sz. cenv.ce_return_pc = SOME (PtrVar (Var p) sz) ==> not_fresh_at sa p) ==>
   ?HG th.
+    inst_seq_ptr D 0 ctx fn PG G tn (emitted_insts sa sb) s HG th /\
     gas_path_ptr D 0 ctx fn PG G tn s 0 HG th
       (OK (t with vs_inst_idx := LENGTH sb.cs_current_insts)) /\
     t.vs_current_bb = sb.cs_current_bb /\

@@ -1,6 +1,6 @@
 (* Same actual runs, certified at compiler boundaries, without expression posts. *)
 Theory bodyPtrTypeBuiltinsUintCounted
-Ancestors bodyPtrSignedConvertUnsignedValue bodyPtrSignedConvertUnsignedLoad
+Ancestors instSeqComposePtr bodyPtrSignedConvertUnsignedValue bodyPtrSignedConvertUnsignedLoad
   bodyPtrSignedConvertClamp bodyPtrTypeBuiltinsUintActual
   bodyPtrTypeBuiltinsScalarCompose bodyPtrSignedConvertSourceFrame
   fragGasPathPtr fragGasSeqPtr fragGasSeqAbort fragExec emitHelperProps exprLoweringProps exprLowering
@@ -267,7 +267,8 @@ Theorem int_clamp_abort_zero_counted:
   run_inst_seq (emitted_insts sa sb) s = Abort err t /\
   ~s.vs_halted /\ lookup_block s.vs_current_bb fn.fn_blocks = SOME bb /\
   isPREFIX (emitted_insts sa sb) (DROP s.vs_inst_idx bb.bb_instructions) ==>
-  ?HG th j. gas_path_ptr D 0 ctx fn PG G tn s 0 HG th
+  ?HG th j. inst_seq_ptr D 0 ctx fn PG G tn (emitted_insts sa sb) s HG th /\
+    gas_path_ptr D 0 ctx fn PG G tn s 0 HG th
     (Abort err (t with vs_inst_idx := j))
 Proof
   strip_tac >>
@@ -299,7 +300,8 @@ Theorem bytes_uint_counted_abort:
   (!name p sz. FLOOKUP cenv.ce_vars name = SOME (PtrVar (Var p) sz) ==> not_fresh_at sa p) /\
   (!p sz. cenv.ce_return_buf = SOME (PtrVar (Var p) sz) ==> not_fresh_at sa p) /\
   (!p sz. cenv.ce_return_pc = SOME (PtrVar (Var p) sz) ==> not_fresh_at sa p) ==>
-  ?HG th j. gas_path_ptr D 0 ctx fn PG G tn s 0 HG th
+  ?HG th j. inst_seq_ptr D 0 ctx fn PG G tn (emitted_insts sa sb) s HG th /\
+    gas_path_ptr D 0 ctx fn PG G tn s 0 HG th
     (Abort err (t with vs_inst_idx := j))
 Proof
   strip_tac >> drule_all uint_convert_parts >> strip_tac >>
@@ -345,6 +347,9 @@ Resume bytes_uint_counted_abort[clamp]:
   qpat_x_assum `u with vs_inst_idx := _ = _` kall_tac >>
   drule_all int_clamp_abort_zero_counted >>
   disch_then (qspecl_then [`PG`,`D`] strip_assume_tac) >>
+  `inst_seq_ptr D 0 ctx fn PG G tn (emitted_insts sa sb) s HG' th'` by
+    (asm_rewrite_tac[] >> irule instSeqComposePtrTheory.inst_seq_ptr_append_ok >>
+     simp[] >> metis_tac[]) >>
   drule_all gas_path_ptr_then >> gs[] >> metis_tac[]
 QED
 

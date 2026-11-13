@@ -169,6 +169,7 @@ Theorem signed_loader_counted_frame:
   (!x. w2n a <= x /\ x < w2n a+32+n ==> x NOTIN tn.t_mem) /\
   run_inst_seq (emitted_insts sa sb) s = OK t ==>
   ?HG th.
+    inst_seq_ptr D 0 ctx fn PG G tn (emitted_insts sa sb) s HG th /\
     gas_path_ptr D 0 ctx fn PG G tn s 0 HG th
       (OK (t with vs_inst_idx := s.vs_inst_idx+9)) /\
     op_prov HG out = NONE /\ op_taint th out = {} /\
@@ -211,6 +212,7 @@ Theorem signed_loader_counted_ghost_frame:
   (!p sz. cenv.ce_return_buf = SOME (PtrVar (Var p) sz) ==> not_fresh_at sa p) /\
   (!p sz. cenv.ce_return_pc = SOME (PtrVar (Var p) sz) ==> not_fresh_at sa p) ==>
   ?HG th.
+    inst_seq_ptr D 0 ctx fn PG G tn (emitted_insts sa sb) s HG th /\
     gas_path_ptr D 0 ctx fn PG G tn s 0 HG th
       (OK (t with vs_inst_idx := s.vs_inst_idx+9)) /\
     op_prov HG out = NONE /\ op_taint th out = {} /\
@@ -312,6 +314,7 @@ Theorem signed_loader_exec_counted_ghost_frame:
     fresh_vars_wrt sb t /\ t.vs_memory = s.vs_memory /\
     t.vs_allocas = s.vs_allocas /\
     (!p w. eval_operand p s = SOME w ==> eval_operand p t = SOME w) /\
+    inst_seq_ptr D 0 ctx fn PG G tn (emitted_insts sa sb) s HG th /\
     gas_path_ptr D 0 ctx fn PG G tn s 0 HG th
       (OK (t with vs_inst_idx := s.vs_inst_idx+9)) /\
     op_prov HG out = NONE /\ op_taint th out = {} /\
@@ -442,6 +445,7 @@ Theorem signed_clamp_counted_ghost_frame:
   (!p sz. cenv.ce_return_buf = SOME (PtrVar (Var p) sz) ==> not_fresh_at sa p) /\
   (!p sz. cenv.ce_return_pc = SOME (PtrVar (Var p) sz) ==> not_fresh_at sa p) ==>
   ?HG th.
+    inst_seq_ptr D 0 ctx fn PG G tn (emitted_insts sa sb) s HG th /\
     gas_path_ptr D 0 ctx fn PG G tn s 0 HG th
       (OK (t with vs_inst_idx := s.vs_inst_idx + LENGTH (emitted_insts sa sb))) /\
     out = x /\ op_prov HG out = NONE /\ op_taint th out = {} /\
@@ -548,6 +552,7 @@ Theorem signed_convert_child_loader_frame:
   (!p sz. cenv.ce_return_pc = SOME (PtrVar (Var p) sz) ==> not_fresh_at sa p) ==>
   ?t HG th.
     run_inst_seq (emitted_insts sa sm) s = OK t /\ fresh_vars_wrt sm t /\
+    inst_seq_ptr D 0 ctx fn PG G tn (emitted_insts sa sm) s HG th /\
     gas_path_ptr D 0 ctx fn PG G tn s 0 HG th
       (OK (t with vs_inst_idx := s.vs_inst_idx+9)) /\
     op_prov HG word = NONE /\ op_taint th word = {} /\
@@ -572,23 +577,26 @@ QED
 
 (* Reconstruct the parent post once, after a clean readonly scalar path. *)
 Theorem signed_scalar_path_summary:
-  expr_post H ctx fn cenv cx e es s0a sa s0 (ee with gas_obs := []) v op s /\
+  (!H. valid_horizon cx st0 H ee.storage_trace ==>
+    expr_post H ctx fn cenv cx e es s0a sa s0 (ee with gas_obs := []) v op s) /\
   convert_result cx (expr_type e) typ v = INL result /\
   is_word_type typ /\ evaluate_type (get_tenv cx) typ = SOME tv /\
   eval_operand out t = SOME (typed_val_to_w256 tv result) /\
-  gas_path_ptr (cx_dead H cx) 0 ctx fn PG G tn s 0 HG th (OK t) /\
+  (!H. valid_horizon cx st0 H ee.storage_trace ==>
+    gas_path_ptr (cx_dead H cx) 0 ctx fn PG G tn s 0 HG th (OK t)) /\
   op_prov HG out = NONE /\ op_taint th out = {} /\
-  ghost_inv H d cenv cx (ee with gas_obs := []) HG th t /\
+  (!H. valid_horizon cx st0 H ee.storage_trace ==>
+    ghost_inv H d cenv cx (ee with gas_obs := []) HG th t) /\
   ghost_kept cenv es s0a G0 tn0 s0 HG th /\
   local_ptrs_reserved cenv sa /\ s0a.cs_next_var <= sa.cs_next_var /\
   t = s with <|vs_vars := t.vs_vars; vs_inst_idx := t.vs_inst_idx|> /\
   (!p w. not_fresh_at sa p /\ lookup_var p s = SOME w ==> lookup_var p t = SOME w) /\
   t.vs_current_bb = sb.cs_current_bb /\
   t.vs_inst_idx = LENGTH sb.cs_current_insts ==>
-  gas_summary_ptr_at (cx_dead H cx) (ctx,fn) PG []
+  gas_summary_ptr_at (\H. cx_dead H cx) (ctx,fn) PG cx st0 []
     (\vs. (convert_result cx (expr_type e) typ v,vs))
     (ee with gas_obs := [],s,G,tn)
-    (\res fin K tk ss. ?vout. res = INL vout /\
+    (\H res fin K tk ss. ?vout. res = INL vout /\
       expr_post H ctx fn cenv cx (TypeBuiltin typ Convert typ [e])
         es s0a sb s0 fin vout out ss /\
       ss.vs_current_bb = sb.cs_current_bb /\
@@ -596,9 +604,12 @@ Theorem signed_scalar_path_summary:
       ghost_inv H d cenv cx fin K tk ss /\
       ptr_val_ok cx typ vout out K tk ss /\
       ghost_kept cenv es s0a G0 tn0 s0 K tk)
-    (\res fin gt r. expr_exit res r)
+    (\H res fin gt r. expr_exit res r)
 Proof
   strip_tac >>
+  rewrite_tac[gas_summary_ptr_at_def] >>
+  qexistsl_tac [`INL result`,`ee with gas_obs := []`,`HG`,`th`,`OK t`] >>
+  simp[] >> gen_tac >> strip_tac >> res_tac >>
   `stmt_state_rel H ctx fn cenv cx (ee with gas_obs := []) s` by
     fs[expr_post_def] >>
   `stmt_state_rel H ctx fn cenv cx (ee with gas_obs := []) t` by
@@ -611,8 +622,6 @@ Proof
   `expr_post H ctx fn cenv cx (TypeBuiltin typ Convert typ [e])
      es s0a sb s0 (ee with gas_obs := []) result out t` by
     (irule scalar_suffix_expr_post >> simp[expr_type_def] >> metis_tac[]) >>
-  simp[gas_summary_ptr_at_def] >>
-  qexistsl_tac [`INL result`,`ee with gas_obs := []`,`HG`,`th`,`OK t`] >>
   simp[ptr_val_ok_def]
 QED
 
@@ -623,7 +632,8 @@ Theorem signed_loader_only_continuation:
   body_expr_ptr_ok cx e /\ is_bytestring_type (expr_type e) /\
   ((?b. typ = BaseT (IntT b)) \/ typ = BaseT DecimalT) /\
   (do r <- eval_expr cx e; read_result cx r od) es = (INL v,ee) /\
-  expr_post H ctx fn cenv cx e es s0a sa s0 ee v op s /\
+  (!H. valid_horizon cx st0 H ee.storage_trace ==>
+    expr_post H ctx fn cenv cx e es s0a sa s0 ee v op s) /\
   ptr_val_ok cx (expr_type e) v op G tn s /\ ptr_buf_ok cenv e op G s /\
   64 <= type_memory_bytes cenv (lowered_value_type cenv e) /\
   compile_type_convert op (mk_convert_op (expr_type e) typ) sa = (out,sb) /\
@@ -632,17 +642,18 @@ Theorem signed_loader_only_continuation:
   ~ctx_has_dalloca ctx /\ ~s.vs_halted /\
   lookup_block s.vs_current_bb fn.fn_blocks = SOME bb /\
   isPREFIX (emitted_insts sa sb) (DROP s.vs_inst_idx bb.bb_instructions) /\
-  ghost_inv H d cenv cx ee G tn s /\ ghost_kept cenv es s0a G0 tn0 s0 G tn /\
+  (!H. valid_horizon cx st0 H ee.storage_trace ==>
+    ghost_inv H d cenv cx ee G tn s) /\ ghost_kept cenv es s0a G0 tn0 s0 G tn /\
   local_ptrs_reserved cenv sa /\ s0a.cs_next_var <= sa.cs_next_var /\
   (!name p sz. FLOOKUP cenv.ce_vars name = SOME (PtrVar (Var p) sz) ==> not_fresh_at sa p) /\
   (!p sz. cenv.ce_return_buf = SOME (PtrVar (Var p) sz) ==> not_fresh_at sa p) /\
   (!p sz. cenv.ce_return_pc = SOME (PtrVar (Var p) sz) ==> not_fresh_at sa p) /\
   s.vs_current_bb = sb.cs_current_bb /\
   s.vs_inst_idx+9 = LENGTH sb.cs_current_insts ==>
-  gas_summary_ptr_at (cx_dead H cx) (ctx,fn) PG []
+  gas_summary_ptr_at (\H. cx_dead H cx) (ctx,fn) PG cx st0 []
     (\vs. (convert_result cx (expr_type e) typ v,vs))
     (ee with gas_obs := [],s,G,tn)
-    (\res fin K tk ss. ?vout. res = INL vout /\
+    (\H res fin K tk ss. ?vout. res = INL vout /\
       expr_post H ctx fn cenv cx (TypeBuiltin typ Convert typ [e])
         es s0a sb s0 fin vout out ss /\
       ss.vs_current_bb = sb.cs_current_bb /\
@@ -650,9 +661,15 @@ Theorem signed_loader_only_continuation:
       ghost_inv H d cenv cx fin K tk ss /\
       ptr_val_ok cx typ vout out K tk ss /\
       ghost_kept cenv es s0a G0 tn0 s0 K tk)
-    (\res fin gt r. expr_exit res r)
+    (\H res fin gt r. expr_exit res r)
 Proof
   disch_then (map_every assume_tac o CONJUNCTS) >>
+  reverse (Cases_on `?H0. valid_horizon cx st0 H0 ee.storage_trace`)
+  >- (rewrite_tac[gas_summary_ptr_at_def] >>
+      qexistsl_tac [`convert_result cx (expr_type e) typ v`,
+        `ee with gas_obs := []`,`G`,`tn`,`OK s`] >>
+      simp[] >> metis_tac[]) >>
+  pop_assum (qx_choose_then `H0` assume_tac) >> res_tac >>
   `expr_body_pre cenv cx env e es /\ valid_conversion (expr_type e) typ` by
     metis_tac[signed_convert_body_entry] >>
   drule_all signed_convert_child_loader_inputs >> strip_tac >>
@@ -660,14 +677,28 @@ Proof
   drule_all signed_convert_run_from_child >>
   disch_tac >>
   drule_all signed_convert_child_loader_frame >>
-  disch_then (qspecl_then [`PG`,`cx_dead H cx`] strip_assume_tac) >>
+  disch_then (qspecl_then [`PG`,`cx_dead ARB cx`] strip_assume_tac) >>
   `?tv result. convert_result cx (expr_type e) typ v = INL result /\
      evaluate_type (get_tenv cx) typ = SOME tv /\
      eval_operand out t = SOME (typed_val_to_w256 tv result)` by
     (Cases_on `convert_result cx (expr_type e) typ v` >> gvs[]) >>
+  `!H. valid_horizon cx st0 H ee.storage_trace ==>
+    gas_path_ptr (cx_dead H cx) 0 ctx fn PG G tn s 0 HG th
+      (OK (t with vs_inst_idx := s.vs_inst_idx+9)) /\
+    ghost_inv H d cenv cx ee HG th
+      (t with vs_inst_idx := s.vs_inst_idx+9)` by
+    (rpt strip_tac >> res_tac >>
+     qpat_assum `expr_post H ctx fn cenv cx e es s0a sa s0 ee v op s`
+       (mp_then Any mp_tac signed_convert_child_loader_frame) >>
+     disch_then drule_all >>
+     disch_then (qspecl_then [`PG`,`cx_dead H cx`] strip_assume_tac) >>
+     `HG' = HG /\ th' = th` by metis_tac[inst_seq_ptr_ghost_unique] >> gvs[]) >>
+  `!H. valid_horizon cx st0 H ee.storage_trace ==>
+    gas_path_ptr (cx_dead H cx) 0 ctx fn PG G tn s 0 HG th
+      (OK (t with vs_inst_idx := s.vs_inst_idx+9))` by metis_tac[] >>
   irule signed_scalar_path_summary >>
   conj_tac >- gvs[is_word_type_def] >>
-  goal_assum (drule_at (Pat `gas_path_ptr _ _ _ _ _ _ _ _ _ _ _ _`)) >>
+  goal_assum (drule_at (Pat `!H. valid_horizon _ _ H _ ==> gas_path_ptr _ _ _ _ _ _ _ _ _ _ _ _`)) >>
   qexistsl_tac [`op`,`result`,`sa`,`tv`] >>
   simp[] >>
   conj_tac
@@ -692,15 +723,17 @@ Theorem signed_zero_capacity_continuation:
   (lowered_value_type cenv e = BaseT (BytesT (Dynamic 0)) \/
    lowered_value_type cenv e = BaseT (StringT 0)) /\
   (do r <- eval_expr cx e; read_result cx r od) es = (INL v,ee) /\
-  expr_post H ctx fn cenv cx e es s0a sa s0 (ee with gas_obs := []) v op s /\
+  (!H. valid_horizon cx st0 H ee.storage_trace ==>
+    expr_post H ctx fn cenv cx e es s0a sa s0 (ee with gas_obs := []) v op s) /\
   s.vs_current_bb = sa.cs_current_bb /\
   s.vs_inst_idx = LENGTH sa.cs_current_insts /\ ~s.vs_halted /\
-  ghost_inv H d cenv cx (ee with gas_obs := []) G tn s /\
+  (!H. valid_horizon cx st0 H ee.storage_trace ==>
+    ghost_inv H d cenv cx (ee with gas_obs := []) G tn s) /\
   ghost_kept cenv es s0a G0 tn0 s0 G tn ==>
-  gas_summary_ptr_at (cx_dead H cx) (ctx,fn) PG []
+  gas_summary_ptr_at (\H. cx_dead H cx) (ctx,fn) PG cx st0 []
     (\vs. (convert_result cx (expr_type e) typ v,vs))
     (ee with gas_obs := [],s,G,tn)
-    (\res fin K tk ss. ?vout. res = INL vout /\
+    (\H res fin K tk ss. ?vout. res = INL vout /\
       expr_post H ctx fn cenv cx (TypeBuiltin typ Convert typ [e])
         es s0a sa s0 fin vout (Lit 0w) ss /\
       ss.vs_current_bb = sa.cs_current_bb /\
@@ -708,7 +741,7 @@ Theorem signed_zero_capacity_continuation:
       ghost_inv H d cenv cx fin K tk ss /\
       ptr_val_ok cx typ vout (Lit 0w) K tk ss /\
       ghost_kept cenv es s0a G0 tn0 s0 K tk)
-    (\res fin gt r. expr_exit res r)
+    (\H res fin gt r. expr_exit res r)
 Proof
   disch_then (map_every assume_tac o CONJUNCTS) >>
   `expr_body_pre cenv cx env e es /\ valid_conversion (expr_type e) typ /\
@@ -730,7 +763,8 @@ Theorem signed_clamp_abort_zero_path:
   run_inst_seq (emitted_insts sa sb) s = Abort err t /\
   ~s.vs_halted /\ lookup_block s.vs_current_bb fn.fn_blocks = SOME bb /\
   isPREFIX (emitted_insts sa sb) (DROP s.vs_inst_idx bb.bb_instructions) ==>
-  ?HG th j. gas_path_ptr D 0 ctx fn PG G tn s 0 HG th
+  ?HG th j. inst_seq_ptr D 0 ctx fn PG G tn (emitted_insts sa sb) s HG th /\
+    gas_path_ptr D 0 ctx fn PG G tn s 0 HG th
     (Abort err (t with vs_inst_idx := j))
 Proof
   strip_tac >>
@@ -772,6 +806,7 @@ Theorem decimal_suffix_counted_ghost_frame:
   (!p sz. cenv.ce_return_buf = SOME (PtrVar (Var p) sz) ==> not_fresh_at sm p) /\
   (!p sz. cenv.ce_return_pc = SOME (PtrVar (Var p) sz) ==> not_fresh_at sm p) ==>
   ?HG th.
+    inst_seq_ptr D 0 ctx fn PG G tn (emitted_insts sm sb) s HG th /\
     gas_path_ptr D 0 ctx fn PG G tn s 0 HG th
       (OK (t with vs_inst_idx := s.vs_inst_idx + LENGTH (emitted_insts sm sb))) /\
     out = word /\ op_prov HG out = NONE /\ op_taint th out = {} /\
@@ -817,7 +852,8 @@ Theorem decimal_suffix_abort_zero_path:
   run_inst_seq (emitted_insts sm sb) s = Abort err t /\
   ~s.vs_halted /\ lookup_block s.vs_current_bb fn.fn_blocks = SOME bb /\
   isPREFIX (emitted_insts sm sb) (DROP s.vs_inst_idx bb.bb_instructions) ==>
-  ?HG th j. gas_path_ptr D 0 ctx fn PG G tn s 0 HG th
+  ?HG th j. inst_seq_ptr D 0 ctx fn PG G tn (emitted_insts sm sb) s HG th /\
+    gas_path_ptr D 0 ctx fn PG G tn s 0 HG th
     (Abort err (t with vs_inst_idx := j))
 Proof
   strip_tac >>
@@ -975,6 +1011,7 @@ Theorem signed_checked_suffix_frame[local]:
   (!p sz. cenv.ce_return_buf = SOME (PtrVar (Var p) sz) ==> not_fresh_at sm p) /\
   (!p sz. cenv.ce_return_pc = SOME (PtrVar (Var p) sz) ==> not_fresh_at sm p) ==>
   ?HG th.
+    inst_seq_ptr D 0 ctx fn PG G tn (emitted_insts sm sb) s HG th /\
     gas_path_ptr D 0 ctx fn PG G tn s 0 HG th
       (OK (t with vs_inst_idx := s.vs_inst_idx + LENGTH (emitted_insts sm sb))) /\
     out = word /\ op_prov HG out = NONE /\ op_taint th out = {} /\
@@ -1015,6 +1052,8 @@ Theorem signed_checked_suffix_path[local]:
   (!p sz. cenv.ce_return_buf = SOME (PtrVar (Var p) sz) ==> not_fresh_at sa p) /\
   (!p sz. cenv.ce_return_pc = SOME (PtrVar (Var p) sz) ==> not_fresh_at sa p) ==>
   ?K tk.
+    inst_seq_ptr D 0 ctx fn PG HG th (emitted_insts sm sb)
+      (u with vs_inst_idx := s.vs_inst_idx+9) K tk /\
     gas_path_ptr D 0 ctx fn PG G tn s 0 K tk
       (OK (t with vs_inst_idx := s.vs_inst_idx+9+LENGTH (emitted_insts sm sb))) /\
     out = word /\ op_prov K out = NONE /\ op_taint tk out = {} /\
@@ -1076,6 +1115,8 @@ Theorem signed_checked_path:
   (!p sz. cenv.ce_return_buf = SOME (PtrVar (Var p) sz) ==> not_fresh_at sa p) /\
   (!p sz. cenv.ce_return_pc = SOME (PtrVar (Var p) sz) ==> not_fresh_at sa p) ==>
   ?K tk.
+    inst_seq_ptr D 0 ctx fn PG HG th (emitted_insts sm sb)
+      (u with vs_inst_idx := s.vs_inst_idx+9) K tk /\
     gas_path_ptr D 0 ctx fn PG G tn s 0 K tk
       (OK (t with vs_inst_idx := s.vs_inst_idx+9+LENGTH (emitted_insts sm sb))) /\
     out = word /\ op_prov K out = NONE /\ op_taint tk out = {} /\
@@ -1279,6 +1320,7 @@ Theorem signed_child_entry_packet[local]:
        ?t. run_inst_seq (emitted_insts sa sb) s = Abort Revert_abort t) /\
   ?u HG th.
     run_inst_seq (emitted_insts sa sm) s = OK u /\
+    inst_seq_ptr D 0 ctx fn PG G tn (emitted_insts sa sm) s HG th /\
     gas_path_ptr D 0 ctx fn PG G tn s 0 HG th
       (OK (u with vs_inst_idx := s.vs_inst_idx+9)) /\
     op_prov HG word = NONE /\ op_taint th word = {} /\
@@ -1308,7 +1350,8 @@ Theorem signed_checked_success_continuation[local]:
   body_expr_ptr_ok cx e /\ is_bytestring_type (expr_type e) /\
   ((?b. typ = BaseT (IntT b)) \/ typ = BaseT DecimalT) /\
   (do r <- eval_expr cx e; read_result cx r od) es = (INL v,ee) /\
-  expr_post H ctx fn cenv cx e es s0a sa s0 ee v op s /\
+  (!H. valid_horizon cx st0 H ee.storage_trace ==>
+    expr_post H ctx fn cenv cx e es s0a sa s0 ee v op s) /\
   ptr_val_ok cx (expr_type e) v op G tn s /\ ptr_buf_ok cenv e op G s /\
   64 <= type_memory_bytes cenv (lowered_value_type cenv e) /\
   compile_type_convert op (mk_convert_op (expr_type e) typ) sa = (out,sb) /\
@@ -1320,17 +1363,18 @@ Theorem signed_checked_success_continuation[local]:
   ~ctx_has_dalloca ctx /\ ~s.vs_halted /\
   lookup_block s.vs_current_bb fn.fn_blocks = SOME bb /\
   isPREFIX (emitted_insts sa sb) (DROP s.vs_inst_idx bb.bb_instructions) /\
-  ghost_inv H d cenv cx ee G tn s /\ ghost_kept cenv es s0a G0 tn0 s0 G tn /\
+  (!H. valid_horizon cx st0 H ee.storage_trace ==>
+    ghost_inv H d cenv cx ee G tn s) /\ ghost_kept cenv es s0a G0 tn0 s0 G tn /\
   local_ptrs_reserved cenv sa /\ s0a.cs_next_var <= sa.cs_next_var /\
   (!name p sz. FLOOKUP cenv.ce_vars name = SOME (PtrVar (Var p) sz) ==> not_fresh_at sa p) /\
   (!p sz. cenv.ce_return_buf = SOME (PtrVar (Var p) sz) ==> not_fresh_at sa p) /\
   (!p sz. cenv.ce_return_pc = SOME (PtrVar (Var p) sz) ==> not_fresh_at sa p) /\
   s.vs_current_bb = sb.cs_current_bb /\
   s.vs_inst_idx+9+LENGTH (emitted_insts sm sb) = LENGTH sb.cs_current_insts ==>
-  gas_summary_ptr_at (cx_dead H cx) (ctx,fn) PG []
+  gas_summary_ptr_at (\H. cx_dead H cx) (ctx,fn) PG cx st0 []
     (\vs. (convert_result cx (expr_type e) typ v,vs))
     (ee with gas_obs := [],s,G,tn)
-    (\res fin K tk ss. ?vout. res = INL vout /\
+    (\H res fin K tk ss. ?vout. res = INL vout /\
       expr_post H ctx fn cenv cx (TypeBuiltin typ Convert typ [e])
         es s0a sb s0 fin vout out ss /\
       ss.vs_current_bb = sb.cs_current_bb /\
@@ -1338,9 +1382,15 @@ Theorem signed_checked_success_continuation[local]:
       ghost_inv H d cenv cx fin K tk ss /\
       ptr_val_ok cx typ vout out K tk ss /\
       ghost_kept cenv es s0a G0 tn0 s0 K tk)
-    (\res fin gt r. expr_exit res r)
+    (\H res fin gt r. expr_exit res r)
 Proof
   disch_then (map_every assume_tac o CONJUNCTS) >>
+  reverse (Cases_on `?H0. valid_horizon cx st0 H0 ee.storage_trace`)
+  >- (rewrite_tac[gas_summary_ptr_at_def] >>
+      qexistsl_tac [`convert_result cx (expr_type e) typ v`,
+        `ee with gas_obs := []`,`G`,`tn`,`OK s`] >>
+      simp[] >> metis_tac[]) >>
+  pop_assum (qx_choose_then `H0` assume_tac) >> res_tac >>
   drule signed_loader_layout >> strip_tac >>
   drule_all signed_checked_suffix_layout >> strip_tac >>
   `emitted_insts sa sb = emitted_insts sa sm ++ emitted_insts sm sb` by
@@ -1348,7 +1398,7 @@ Proof
   `isPREFIX (emitted_insts sa sm) (DROP s.vs_inst_idx bb.bb_instructions)` by
     metis_tac[hash_code_prefix_split] >>
   drule_all signed_child_entry_packet >>
-  disch_then (qspecl_then [`PG`,`cx_dead H cx`] assume_tac) >>
+  disch_then (qspecl_then [`PG`,`cx_dead ARB cx`] assume_tac) >>
   qpat_assum `convert_result cx (expr_type e) typ v = INL result`
     (fn eq => first_x_assum (strip_assume_tac o SIMP_RULE (srw_ss()) [eq])) >>
   rename1 `run_inst_seq (emitted_insts sa sm) s = OK t'` >>
@@ -1377,11 +1427,34 @@ Proof
      simp[] >> metis_tac[]) >>
   `!p. not_fresh_at sa p ==> lookup_var p t = lookup_var p s` by
     (match_mp_tac (Q.INST [`u` |-> `t'`] (SPEC_ALL signed_old_vars_trans)) >> simp[]) >>
+  `!H. valid_horizon cx st0 H ee.storage_trace ==>
+    gas_path_ptr (cx_dead H cx) 0 ctx fn PG G tn s 0 K tk
+      (OK (t with vs_inst_idx := s.vs_inst_idx+9+LENGTH (emitted_insts sm sb))) /\
+    ghost_inv H d cenv cx ee K tk
+      (t with vs_inst_idx := s.vs_inst_idx+9+LENGTH (emitted_insts sm sb))` by
+    (rpt strip_tac >> res_tac >>
+     qpat_assum `expr_post H ctx fn cenv cx e es s0a sa s0 ee v op s`
+       (mp_then Any mp_tac signed_child_entry_packet) >>
+     disch_then drule_all >>
+     disch_then (qspecl_then [`PG`,`cx_dead H cx`]
+       (CONJUNCTS_THEN2 strip_assume_tac
+         (qx_choose_then `uH` (qx_choose_then `GP` (qx_choose_then `tp` strip_assume_tac))))) >>
+     `uH = t'` by metis_tac[] >>
+     `GP = HG /\ tp = th` by metis_tac[inst_seq_ptr_ghost_unique] >> gvs[] >>
+     qpat_assum `ghost_inv H d cenv cx ee HG th
+       (t' with vs_inst_idx := s.vs_inst_idx+9)`
+       (mp_then Any mp_tac signed_checked_suffix_path) >>
+     disch_then drule_all >>
+     disch_then (qx_choose_then `KH` (qx_choose_then `tkH` strip_assume_tac)) >>
+     `KH = K /\ tkH = tk` by metis_tac[inst_seq_ptr_ghost_unique] >> gvs[]) >>
+  `!H. valid_horizon cx st0 H ee.storage_trace ==>
+    gas_path_ptr (cx_dead H cx) 0 ctx fn PG G tn s 0 K tk
+      (OK (t with vs_inst_idx := s.vs_inst_idx+9+LENGTH (emitted_insts sm sb)))` by metis_tac[] >>
   qpat_assum `convert_result cx (expr_type e) typ v = INL result`
     (fn eq => once_rewrite_tac[GSYM eq]) >>
   irule signed_scalar_path_summary >>
   conj_tac >- gvs[is_word_type_def] >>
-  goal_assum (drule_at (Pat `gas_path_ptr _ _ _ _ _ _ _ _ _ _ _ _`)) >>
+  goal_assum (drule_at (Pat `!H. valid_horizon _ _ H _ ==> gas_path_ptr _ _ _ _ _ _ _ _ _ _ _ _`)) >>
   qexistsl_tac [`op`,`result`,`sa`,`dtv`] >>
   simp[Abbr `j`] >>
   conj_tac >- (rpt strip_tac >> simp[lookup_var_def] >> metis_tac[lookup_var_def]) >>
@@ -1400,7 +1473,8 @@ Theorem signed_clamped_success_continuation:
   body_expr_ptr_ok cx e /\ is_bytestring_type (expr_type e) /\
   ((?b. typ = BaseT (IntT b)) \/ typ = BaseT DecimalT) /\
   (do r <- eval_expr cx e; read_result cx r od) es = (INL v,ee) /\
-  expr_post H ctx fn cenv cx e es s0a sa s0 ee v op s /\
+  (!H. valid_horizon cx st0 H ee.storage_trace ==>
+    expr_post H ctx fn cenv cx e es s0a sa s0 ee v op s) /\
   ptr_val_ok cx (expr_type e) v op G tn s /\ ptr_buf_ok cenv e op G s /\
   64 <= type_memory_bytes cenv (lowered_value_type cenv e) /\
   compile_type_convert op (mk_convert_op (expr_type e) typ) sa = (out,sb) /\
@@ -1411,17 +1485,18 @@ Theorem signed_clamped_success_continuation:
   ~ctx_has_dalloca ctx /\ ~s.vs_halted /\
   lookup_block s.vs_current_bb fn.fn_blocks = SOME bb /\
   isPREFIX (emitted_insts sa sb) (DROP s.vs_inst_idx bb.bb_instructions) /\
-  ghost_inv H d cenv cx ee G tn s /\ ghost_kept cenv es s0a G0 tn0 s0 G tn /\
+  (!H. valid_horizon cx st0 H ee.storage_trace ==>
+    ghost_inv H d cenv cx ee G tn s) /\ ghost_kept cenv es s0a G0 tn0 s0 G tn /\
   local_ptrs_reserved cenv sa /\ s0a.cs_next_var <= sa.cs_next_var /\
   (!name p sz. FLOOKUP cenv.ce_vars name = SOME (PtrVar (Var p) sz) ==> not_fresh_at sa p) /\
   (!p sz. cenv.ce_return_buf = SOME (PtrVar (Var p) sz) ==> not_fresh_at sa p) /\
   (!p sz. cenv.ce_return_pc = SOME (PtrVar (Var p) sz) ==> not_fresh_at sa p) /\
   s.vs_current_bb = sb.cs_current_bb /\
   s.vs_inst_idx+9+LENGTH (emitted_insts sm sb) = LENGTH sb.cs_current_insts ==>
-  gas_summary_ptr_at (cx_dead H cx) (ctx,fn) PG []
+  gas_summary_ptr_at (\H. cx_dead H cx) (ctx,fn) PG cx st0 []
     (\vs. (convert_result cx (expr_type e) typ v,vs))
     (ee with gas_obs := [],s,G,tn)
-    (\res fin K tk ss. ?vout. res = INL vout /\
+    (\H res fin K tk ss. ?vout. res = INL vout /\
       expr_post H ctx fn cenv cx (TypeBuiltin typ Convert typ [e])
         es s0a sb s0 fin vout out ss /\
       ss.vs_current_bb = sb.cs_current_bb /\
@@ -1429,7 +1504,7 @@ Theorem signed_clamped_success_continuation:
       ghost_inv H d cenv cx fin K tk ss /\
       ptr_val_ok cx typ vout out K tk ss /\
       ghost_kept cenv es s0a G0 tn0 s0 K tk)
-    (\res fin gt r. expr_exit res r)
+    (\H res fin gt r. expr_exit res r)
 Proof
   disch_then (map_every assume_tac o CONJUNCTS) >>
   irule signed_checked_success_continuation >> simp[] >>
@@ -1446,7 +1521,8 @@ Theorem signed_checked_suffix_abort[local]:
   run_inst_seq (emitted_insts sm sb) s = Abort err t /\
   ~s.vs_halted /\ lookup_block s.vs_current_bb fn.fn_blocks = SOME bb /\
   isPREFIX (emitted_insts sm sb) (DROP s.vs_inst_idx bb.bb_instructions) ==>
-  ?HG th j. gas_path_ptr D 0 ctx fn PG G tn s 0 HG th
+  ?HG th j. inst_seq_ptr D 0 ctx fn PG G tn (emitted_insts sm sb) s HG th /\
+    gas_path_ptr D 0 ctx fn PG G tn s 0 HG th
     (Abort err (t with vs_inst_idx := j))
 Proof
   strip_tac
@@ -1460,8 +1536,9 @@ Theorem signed_checked_abort_summary[local]:
    (?divisor lo hi k. compile_type_convert op (ConvBytestringToDecimal divisor lo hi k) sa = (out,sb) /\ 168 < k*8)) /\
   run_inst_seq (emitted_insts sa sm) s = OK u /\
   run_inst_seq (emitted_insts sa sm ++ emitted_insts sm sb) s = Abort Revert_abort t /\
-  gas_path_ptr D 0 ctx fn PG G tn s 0 HG th
-    (OK (u with vs_inst_idx := s.vs_inst_idx+9)) /\
+  (!H. valid_horizon cx st0 H ee.storage_trace ==>
+    gas_path_ptr (D H) 0 ctx fn PG G tn s 0 HG th
+      (OK (u with vs_inst_idx := s.vs_inst_idx+9))) /\
   (u with vs_inst_idx := s.vs_inst_idx+9) =
     s with <|vs_vars := u.vs_vars; vs_inst_idx := s.vs_inst_idx+9|> /\
   op_prov HG word = NONE /\ op_taint th word = {} /\ ~ctx_has_dalloca ctx /\
@@ -1469,10 +1546,15 @@ Theorem signed_checked_abort_summary[local]:
   isPREFIX (emitted_insts sa sm ++ emitted_insts sm sb)
     (DROP s.vs_inst_idx bb.bb_instructions) /\
   (?m. ex = Error (RuntimeError m)) ==>
-  gas_summary_ptr_at D (ctx,fn) PG [] (\vs. (INR ex,vs))
-    (ee with gas_obs := [],s,G,tn) Q (\res fin gt r. expr_exit res r)
+  gas_summary_ptr_at D (ctx,fn) PG cx st0 [] (\vs. (INR ex,vs))
+    (ee with gas_obs := [],s,G,tn) Q (\H res fin gt r. expr_exit res r)
 Proof
   disch_then (map_every assume_tac o CONJUNCTS) >>
+  reverse (Cases_on `?H0. valid_horizon cx st0 H0 ee.storage_trace`)
+  >- (rewrite_tac[gas_summary_ptr_at_def] >>
+      qexistsl_tac [`INR ex`,`ee with gas_obs := []`,`G`,`tn`,`OK s`] >>
+      simp[] >> metis_tac[]) >>
+  pop_assum (qx_choose_then `H0` assume_tac) >> res_tac >>
   drule signed_loader_layout >> strip_tac >>
   `LENGTH (emitted_insts sa sm) = 9` by
     (qpat_x_assum `LENGTH sm.cs_current_insts = _` mp_tac >> simp[]) >>
@@ -1493,16 +1575,35 @@ Proof
     Abort Revert_abort (t with vs_inst_idx := s.vs_inst_idx+9)` by
     (irule signed_suffix_run_abort >> simp[Abbr `mid`] >> metis_tac[]) >>
   drule_all signed_checked_suffix_abort >>
-  disch_then (qspecl_then [`PG`,`D`] strip_assume_tac) >>
-  `gas_path_ptr D 0 ctx fn PG G tn s 0 HG' th'
-    (Abort Revert_abort (t with vs_inst_idx := j))` by
-    (irule (SIMP_RULE (srw_ss()) [] (Q.INST [`n` |-> `0`, `m` |-> `0`] gas_path_ptr_then)) >>
-     goal_assum (drule_at (Pat `gas_path_ptr _ _ _ _ _ _ _ _ _ _ _ (OK mid)`)) >>
-     gvs[]) >>
+  disch_then (qspecl_then [`PG`,`D ARB`]
+    (qx_choose_then `K` (qx_choose_then `tk`
+      (qx_choose_then `j0` strip_assume_tac)))) >>
+  `!H. inst_seq_ptr (D H) 0 ctx fn PG HG th
+    (emitted_insts sm sb) mid K tk` by
+    (gen_tac >> drule_all signed_checked_suffix_abort >>
+     disch_then (qspecl_then [`PG`,`D H`]
+       (qx_choose_then `KH` (qx_choose_then `tkH`
+         (qx_choose_then `jH` strip_assume_tac)))) >>
+     metis_tac[inst_seq_ptr_ghost_unique]) >>
+  `EVERY (\i. i.inst_opcode <> GAS /\ i.inst_opcode <> INVOKE /\
+    ~is_terminator i.inst_opcode) (emitted_insts sm sb)` by
+    (qpat_x_assum `(?n. compile_int_clamp _ _ _ _ = _) \/ _` mp_tac >>
+     strip_tac
+     >- (drule int_clamp_signed_code >> strip_tac >>
+         simp[mk_inst_def, is_terminator_def]) >>
+     drule decimal_convert_loader_suffix >> strip_tac >> gvs[] >>
+     simp[mk_inst_def, is_terminator_def]) >>
+  drule_all run_inst_seq_abort_zero_path_ptr_uniform >>
+  disch_then (qspec_then `ctx` strip_assume_tac) >>
   simp[gas_summary_ptr_at_def] >>
-  qexistsl_tac [`INR ex`,`ee with gas_obs := []`,`HG'`,`th'`,
+  qexistsl_tac [`INR ex`,`ee with gas_obs := []`,`K`,`tk`,
     `Abort Revert_abort (t with vs_inst_idx := j)`] >>
-  gvs[exprSimDefsTheory.expr_exit_def, exit_result_def]
+  simp[exprSimDefsTheory.expr_exit_def, exit_result_def] >>
+  gen_tac >> strip_tac >> res_tac >>
+  irule (SIMP_RULE (srw_ss()) []
+    (Q.INST [`n` |-> `0`, `m` |-> `0`] gas_path_ptr_then)) >>
+  goal_assum (drule_at (Pat `gas_path_ptr _ _ _ _ _ _ _ _ _ _ _ (OK mid)`)) >>
+  gvs[] >> metis_tac[]
 QED
 
 Theorem signed_checked_abort_continuation[local]:
@@ -1511,7 +1612,8 @@ Theorem signed_checked_abort_continuation[local]:
   body_expr_ptr_ok cx e /\ is_bytestring_type (expr_type e) /\
   ((?b. typ = BaseT (IntT b)) \/ typ = BaseT DecimalT) /\
   (do r <- eval_expr cx e; read_result cx r od) es = (INL v,ee) /\
-  expr_post H ctx fn cenv cx e es s0a sa s0 ee v op s /\
+  (!H. valid_horizon cx st0 H ee.storage_trace ==>
+    expr_post H ctx fn cenv cx e es s0a sa s0 ee v op s) /\
   ptr_val_ok cx (expr_type e) v op G tn s /\ ptr_buf_ok cenv e op G s /\
   64 <= type_memory_bytes cenv (lowered_value_type cenv e) /\
   compile_type_convert op (mk_convert_op (expr_type e) typ) sa = (out,sb) /\
@@ -1523,16 +1625,23 @@ Theorem signed_checked_abort_continuation[local]:
   ~ctx_has_dalloca ctx /\ ~s.vs_halted /\
   lookup_block s.vs_current_bb fn.fn_blocks = SOME bb /\
   isPREFIX (emitted_insts sa sb) (DROP s.vs_inst_idx bb.bb_instructions) /\
-  ghost_inv H d cenv cx ee G tn s /\ ghost_kept cenv es s0a G0 tn0 s0 G tn /\
+  (!H. valid_horizon cx st0 H ee.storage_trace ==>
+    ghost_inv H d cenv cx ee G tn s) /\ ghost_kept cenv es s0a G0 tn0 s0 G tn /\
   s0a.cs_next_var <= sa.cs_next_var /\
   (!name p sz. FLOOKUP cenv.ce_vars name = SOME (PtrVar (Var p) sz) ==> not_fresh_at sa p) /\
   (!p sz. cenv.ce_return_buf = SOME (PtrVar (Var p) sz) ==> not_fresh_at sa p) /\
   (!p sz. cenv.ce_return_pc = SOME (PtrVar (Var p) sz) ==> not_fresh_at sa p) ==>
-  gas_summary_ptr_at (cx_dead H cx) (ctx,fn) PG []
+  gas_summary_ptr_at (\H. cx_dead H cx) (ctx,fn) PG cx st0 []
     (\vs. (convert_result cx (expr_type e) typ v,vs))
-    (ee with gas_obs := [],s,G,tn) Q (\res fin gt r. expr_exit res r)
+    (ee with gas_obs := [],s,G,tn) Q (\H res fin gt r. expr_exit res r)
 Proof
   disch_then (map_every assume_tac o CONJUNCTS) >>
+  reverse (Cases_on `?H0. valid_horizon cx st0 H0 ee.storage_trace`)
+  >- (rewrite_tac[gas_summary_ptr_at_def] >>
+      qexistsl_tac [`convert_result cx (expr_type e) typ v`,
+        `ee with gas_obs := []`,`G`,`tn`,`OK s`] >>
+      simp[] >> metis_tac[]) >>
+  pop_assum (qx_choose_then `H0` assume_tac) >> res_tac >>
   drule signed_loader_layout >> strip_tac >>
   drule_all signed_checked_suffix_layout >> strip_tac >>
   `emitted_insts sa sb = emitted_insts sa sm ++ emitted_insts sm sb` by
@@ -1540,9 +1649,22 @@ Proof
   `isPREFIX (emitted_insts sa sm) (DROP s.vs_inst_idx bb.bb_instructions)` by
     metis_tac[hash_code_prefix_split] >>
   drule_all signed_child_entry_packet >>
-  disch_then (qspecl_then [`PG`,`cx_dead H cx`] assume_tac) >>
+  disch_then (qspecl_then [`PG`,`cx_dead ARB cx`] assume_tac) >>
   qpat_assum `convert_result cx (expr_type e) typ v = INR ex`
     (fn eq => first_x_assum (strip_assume_tac o SIMP_RULE (srw_ss()) [eq])) >>
+  `!H. valid_horizon cx st0 H ee.storage_trace ==>
+    gas_path_ptr (cx_dead H cx) 0 ctx fn PG G tn s 0 HG th
+      (OK (u with vs_inst_idx := s.vs_inst_idx+9))` by
+    (rpt strip_tac >> res_tac >>
+     qpat_assum `expr_post H ctx fn cenv cx e es s0a sa s0 ee v op s`
+       (mp_then Any mp_tac signed_child_entry_packet) >>
+     disch_then drule_all >>
+     disch_then (qspecl_then [`PG`,`cx_dead H cx`]
+       (CONJUNCTS_THEN2 assume_tac
+         (qx_choose_then `uH` (qx_choose_then `GH`
+           (qx_choose_then `tnH` strip_assume_tac))))) >>
+     `uH = u /\ GH = HG /\ tnH = th` by
+       metis_tac[inst_seq_ptr_ghost_unique] >> gvs[]) >>
   qpat_assum `convert_result cx (expr_type e) typ v = INR ex`
     (fn eq => once_rewrite_tac[eq]) >>
   irule signed_checked_abort_summary >> simp[] >>
@@ -1557,7 +1679,8 @@ Theorem signed_nonzero_continuation:
   body_expr_ptr_ok cx e /\ is_bytestring_type (expr_type e) /\
   ((?b. typ = BaseT (IntT b)) \/ typ = BaseT DecimalT) /\
   (do r <- eval_expr cx e; read_result cx r od) es = (INL v,ee) /\
-  expr_post H ctx fn cenv cx e es s0a sa s0 ee v op s /\
+  (!H. valid_horizon cx st0 H ee.storage_trace ==>
+    expr_post H ctx fn cenv cx e es s0a sa s0 ee v op s) /\
   ptr_val_ok cx (expr_type e) v op G tn s /\ ptr_buf_ok cenv e op G s /\
   64 <= type_memory_bytes cenv (lowered_value_type cenv e) /\
   compile_type_convert op (mk_convert_op (expr_type e) typ) sa = (out,sb) /\
@@ -1565,17 +1688,18 @@ Theorem signed_nonzero_continuation:
   ~ctx_has_dalloca ctx /\ ~s.vs_halted /\
   lookup_block s.vs_current_bb fn.fn_blocks = SOME bb /\
   isPREFIX (emitted_insts sa sb) (DROP s.vs_inst_idx bb.bb_instructions) /\
-  ghost_inv H d cenv cx ee G tn s /\ ghost_kept cenv es s0a G0 tn0 s0 G tn /\
+  (!H. valid_horizon cx st0 H ee.storage_trace ==>
+    ghost_inv H d cenv cx ee G tn s) /\ ghost_kept cenv es s0a G0 tn0 s0 G tn /\
   local_ptrs_reserved cenv sa /\ s0a.cs_next_var <= sa.cs_next_var /\
   (!name p sz. FLOOKUP cenv.ce_vars name = SOME (PtrVar (Var p) sz) ==> not_fresh_at sa p) /\
   (!p sz. cenv.ce_return_buf = SOME (PtrVar (Var p) sz) ==> not_fresh_at sa p) /\
   (!p sz. cenv.ce_return_pc = SOME (PtrVar (Var p) sz) ==> not_fresh_at sa p) /\
   s.vs_current_bb = sb.cs_current_bb /\
   s.vs_inst_idx = LENGTH sa.cs_current_insts ==>
-  gas_summary_ptr_at (cx_dead H cx) (ctx,fn) PG []
+  gas_summary_ptr_at (\H. cx_dead H cx) (ctx,fn) PG cx st0 []
     (\vs. (convert_result cx (expr_type e) typ v,vs))
     (ee with gas_obs := [],s,G,tn)
-    (\res fin K tk ss. ?vout. res = INL vout /\
+    (\H res fin K tk ss. ?vout. res = INL vout /\
       expr_post H ctx fn cenv cx (TypeBuiltin typ Convert typ [e])
         es s0a sb s0 fin vout out ss /\
       ss.vs_current_bb = sb.cs_current_bb /\
@@ -1583,7 +1707,7 @@ Theorem signed_nonzero_continuation:
       ghost_inv H d cenv cx fin K tk ss /\
       ptr_val_ok cx typ vout out K tk ss /\
       ghost_kept cenv es s0a G0 tn0 s0 K tk)
-    (\res fin gt r. expr_exit res r)
+    (\H res fin gt r. expr_exit res r)
 Proof
   disch_then (map_every assume_tac o CONJUNCTS) >>
   drule_all signed_scalar_compile_cases >>
@@ -1609,7 +1733,8 @@ Theorem signed_convert_continuation:
   body_expr_ptr_ok cx e /\ is_bytestring_type (expr_type e) /\
   ((?b. typ = BaseT (IntT b)) \/ typ = BaseT DecimalT) /\
   (do r <- eval_expr cx e; read_result cx r od) es = (INL v,ee) /\
-  expr_post H ctx fn cenv cx e es s0a sa s0 ee v op s /\
+  (!H. valid_horizon cx st0 H ee.storage_trace ==>
+    expr_post H ctx fn cenv cx e es s0a sa s0 ee v op s) /\
   ptr_val_ok cx (expr_type e) v op G tn s /\ ptr_buf_ok cenv e op G s /\
   (if lowered_value_type cenv e = BaseT (BytesT (Dynamic 0)) \/
       lowered_value_type cenv e = BaseT (StringT 0)
@@ -1620,17 +1745,18 @@ Theorem signed_convert_continuation:
   ~ctx_has_dalloca ctx /\ ~s.vs_halted /\
   lookup_block s.vs_current_bb fn.fn_blocks = SOME bb /\
   isPREFIX (emitted_insts sa sb) (DROP s.vs_inst_idx bb.bb_instructions) /\
-  ghost_inv H d cenv cx ee G tn s /\ ghost_kept cenv es s0a G0 tn0 s0 G tn /\
+  (!H. valid_horizon cx st0 H ee.storage_trace ==>
+    ghost_inv H d cenv cx ee G tn s) /\ ghost_kept cenv es s0a G0 tn0 s0 G tn /\
   local_ptrs_reserved cenv sa /\ s0a.cs_next_var <= sa.cs_next_var /\
   (!name p sz. FLOOKUP cenv.ce_vars name = SOME (PtrVar (Var p) sz) ==> not_fresh_at sa p) /\
   (!p sz. cenv.ce_return_buf = SOME (PtrVar (Var p) sz) ==> not_fresh_at sa p) /\
   (!p sz. cenv.ce_return_pc = SOME (PtrVar (Var p) sz) ==> not_fresh_at sa p) /\
   s.vs_current_bb = sb.cs_current_bb /\
   s.vs_inst_idx = LENGTH sa.cs_current_insts ==>
-  gas_summary_ptr_at (cx_dead H cx) (ctx,fn) PG []
+  gas_summary_ptr_at (\H. cx_dead H cx) (ctx,fn) PG cx st0 []
     (\vs. (convert_result cx (expr_type e) typ v,vs))
     (ee with gas_obs := [],s,G,tn)
-    (\res fin K tk ss. ?vout. res = INL vout /\
+    (\H res fin K tk ss. ?vout. res = INL vout /\
       expr_post H ctx fn cenv cx (TypeBuiltin typ Convert typ [e])
         es s0a sb s0 fin vout out ss /\
       ss.vs_current_bb = sb.cs_current_bb /\
@@ -1638,7 +1764,7 @@ Theorem signed_convert_continuation:
       ghost_inv H d cenv cx fin K tk ss /\
       ptr_val_ok cx typ vout out K tk ss /\
       ghost_kept cenv es s0a G0 tn0 s0 K tk)
-    (\res fin gt r. expr_exit res r)
+    (\H res fin gt r. expr_exit res r)
 Proof
   disch_then (map_every assume_tac o CONJUNCTS) >>
   Cases_on `lowered_value_type cenv e = BaseT (BytesT (Dynamic 0)) \/
@@ -1663,7 +1789,8 @@ Theorem signed_convert_continuation_gas:
   body_expr_ptr_ok cx e /\ is_bytestring_type (expr_type e) /\
   ((?b. typ = BaseT (IntT b)) \/ typ = BaseT DecimalT) /\
   (do r <- eval_expr cx e; read_result cx r od) (es with gas_obs := gs) = (INL v,ee) /\
-  expr_post H ctx fn cenv cx e es s0a sa s0 ee v op s /\
+  (!H. valid_horizon cx st0 H ee.storage_trace ==>
+    expr_post H ctx fn cenv cx e es s0a sa s0 ee v op s) /\
   ptr_val_ok cx (expr_type e) v op G tn s /\ ptr_buf_ok cenv e op G s /\
   (if lowered_value_type cenv e = BaseT (BytesT (Dynamic 0)) \/
       lowered_value_type cenv e = BaseT (StringT 0)
@@ -1674,17 +1801,18 @@ Theorem signed_convert_continuation_gas:
   ~ctx_has_dalloca ctx /\ ~s.vs_halted /\
   lookup_block s.vs_current_bb fn.fn_blocks = SOME bb /\
   isPREFIX (emitted_insts sa sb) (DROP s.vs_inst_idx bb.bb_instructions) /\
-  ghost_inv H d cenv cx ee G tn s /\ ghost_kept cenv es s0a G0 tn0 s0 G tn /\
+  (!H. valid_horizon cx st0 H ee.storage_trace ==>
+    ghost_inv H d cenv cx ee G tn s) /\ ghost_kept cenv es s0a G0 tn0 s0 G tn /\
   local_ptrs_reserved cenv sa /\ s0a.cs_next_var <= sa.cs_next_var /\
   (!name p sz. FLOOKUP cenv.ce_vars name = SOME (PtrVar (Var p) sz) ==> not_fresh_at sa p) /\
   (!p sz. cenv.ce_return_buf = SOME (PtrVar (Var p) sz) ==> not_fresh_at sa p) /\
   (!p sz. cenv.ce_return_pc = SOME (PtrVar (Var p) sz) ==> not_fresh_at sa p) /\
   s.vs_current_bb = sb.cs_current_bb /\
   s.vs_inst_idx = LENGTH sa.cs_current_insts ==>
-  gas_summary_ptr_at (cx_dead H cx) (ctx,fn) PG []
+  gas_summary_ptr_at (\H. cx_dead H cx) (ctx,fn) PG cx st0 []
     (\vs. (convert_result cx (expr_type e) typ v,vs))
     (ee with gas_obs := [],s,G,tn)
-    (\res fin K tk ss. ?vout. res = INL vout /\
+    (\H res fin K tk ss. ?vout. res = INL vout /\
       expr_post H ctx fn cenv cx (TypeBuiltin typ Convert typ [e])
         es s0a sb s0 fin vout out ss /\
       ss.vs_current_bb = sb.cs_current_bb /\
@@ -1692,7 +1820,7 @@ Theorem signed_convert_continuation_gas:
       ghost_inv H d cenv cx fin K tk ss /\
       ptr_val_ok cx typ vout out K tk ss /\
       ghost_kept cenv es s0a G0 tn0 s0 K tk)
-    (\res fin gt r. expr_exit res r)
+    (\H res fin gt r. expr_exit res r)
 Proof
   disch_then (map_every assume_tac o CONJUNCTS) >>
   `!K tk. ghost_kept cenv (es with gas_obs := gs) s0a G0 tn0 s0 K tk =
@@ -1710,7 +1838,8 @@ Theorem signed_loader_only_continuation_actual[local]:
   body_expr_ptr_ok cx e /\ is_bytestring_type (expr_type e) /\
   ((?b. typ = BaseT (IntT b)) \/ typ = BaseT DecimalT) /\
   (do r <- eval_expr cx e; read_result cx r od) es = (INL v,ee) /\
-  expr_post H ctx fn cenv cx e es s0a sa s0 ee v op s /\
+  (!H. valid_horizon cx st0 H ee.storage_trace ==>
+    expr_post H ctx fn cenv cx e es s0a sa s0 ee v op s) /\
   ptr_val_ok cx (expr_type e) v op G tn s /\ ptr_buf_ok cenv e op G s /\
   64 <= type_memory_bytes cenv (lowered_value_type cenv e) /\
   compile_type_convert op (mk_convert_op (expr_type e) typ) sa = (out,sb) /\
@@ -1719,17 +1848,18 @@ Theorem signed_loader_only_continuation_actual[local]:
   ~ctx_has_dalloca ctx /\ ~s.vs_halted /\
   lookup_block s.vs_current_bb fn.fn_blocks = SOME bb /\
   isPREFIX (emitted_insts sa sb) (DROP s.vs_inst_idx bb.bb_instructions) /\
-  ghost_inv H d cenv cx ee G tn s /\ ghost_kept cenv es s0a G0 tn0 s0 G tn /\
+  (!H. valid_horizon cx st0 H ee.storage_trace ==>
+    ghost_inv H d cenv cx ee G tn s) /\ ghost_kept cenv es s0a G0 tn0 s0 G tn /\
   local_ptrs_reserved cenv sa /\ s0a.cs_next_var <= sa.cs_next_var /\
   (!name p sz. FLOOKUP cenv.ce_vars name = SOME (PtrVar (Var p) sz) ==> not_fresh_at sa p) /\
   (!p sz. cenv.ce_return_buf = SOME (PtrVar (Var p) sz) ==> not_fresh_at sa p) /\
   (!p sz. cenv.ce_return_pc = SOME (PtrVar (Var p) sz) ==> not_fresh_at sa p) /\
   s.vs_current_bb = sb.cs_current_bb /\
   s.vs_inst_idx+9 = LENGTH sb.cs_current_insts ==>
-  gas_summary_ptr_at (cx_dead H cx) (ctx,fn) PG []
+  gas_summary_ptr_at (\H. cx_dead H cx) (ctx,fn) PG cx st0 []
     (\vs. (convert_result cx (expr_type e) typ v,vs))
     (ee with gas_obs := [],s,G,tn)
-    (\res fin K tk ss. ?vout. res = INL vout /\
+    (\H res fin K tk ss. ?vout. res = INL vout /\
       expr_post H ctx fn cenv cx (TypeBuiltin typ Convert typ [e])
         es s0a sb s0 fin vout out ss /\
       ss.vs_current_bb = sb.cs_current_bb /\
@@ -1737,18 +1867,38 @@ Theorem signed_loader_only_continuation_actual[local]:
       ghost_inv H d cenv cx fin K tk ss /\
       ptr_val_ok cx typ vout out K tk ss /\
       ghost_kept cenv es s0a G0 tn0 s0 K tk)
-    (\res fin gt r. expr_exit res r)
+    (\H res fin gt r. expr_exit res r)
 Proof
   disch_then (map_every assume_tac o CONJUNCTS) >>
+  reverse (Cases_on `?H0. valid_horizon cx st0 H0 ee.storage_trace`)
+  >- (rewrite_tac[gas_summary_ptr_at_def] >>
+      qexistsl_tac [`convert_result cx (expr_type e) typ v`,
+        `ee with gas_obs := []`,`G`,`tn`,`OK s`] >>
+      simp[] >> metis_tac[]) >>
+  pop_assum (qx_choose_then `H0` assume_tac) >> res_tac >>
   drule_all signed_child_entry_packet >>
-  disch_then (qspecl_then [`PG`,`cx_dead H cx`] strip_assume_tac) >>
+  disch_then (qspecl_then [`PG`,`cx_dead ARB cx`] strip_assume_tac) >>
   `?tv result. convert_result cx (expr_type e) typ v = INL result /\
      evaluate_type (get_tenv cx) typ = SOME tv /\
      eval_operand out u = SOME (typed_val_to_w256 tv result)` by
     (Cases_on `convert_result cx (expr_type e) typ v` >> gvs[]) >>
+  `!H. valid_horizon cx st0 H ee.storage_trace ==>
+    gas_path_ptr (cx_dead H cx) 0 ctx fn PG G tn s 0 HG th
+      (OK (u with vs_inst_idx := s.vs_inst_idx+9)) /\
+    ghost_inv H d cenv cx ee HG th
+      (u with vs_inst_idx := s.vs_inst_idx+9)` by
+    (rpt strip_tac >> res_tac >>
+     qpat_assum `expr_post H ctx fn cenv cx e es s0a sa s0 ee v op s`
+       (mp_then Any mp_tac signed_child_entry_packet) >>
+     disch_then drule_all >>
+     disch_then (qspecl_then [`PG`,`cx_dead H cx`] strip_assume_tac) >>
+     `HG' = HG /\ th' = th` by metis_tac[inst_seq_ptr_ghost_unique] >> gvs[]) >>
+  `!H. valid_horizon cx st0 H ee.storage_trace ==>
+    gas_path_ptr (cx_dead H cx) 0 ctx fn PG G tn s 0 HG th
+      (OK (u with vs_inst_idx := s.vs_inst_idx+9))` by metis_tac[] >>
   irule signed_scalar_path_summary >>
   conj_tac >- gvs[is_word_type_def] >>
-  goal_assum (drule_at (Pat `gas_path_ptr _ _ _ _ _ _ _ _ _ _ _ _`)) >>
+  goal_assum (drule_at (Pat `!H. valid_horizon _ _ H _ ==> gas_path_ptr _ _ _ _ _ _ _ _ _ _ _ _`)) >>
   qexistsl_tac [`op`,`result`,`sa`,`tv`] >>
   simp[] >>
   conj_tac >- (rpt strip_tac >> simp[lookup_var_def] >> metis_tac[lookup_var_def]) >>
@@ -1767,7 +1917,8 @@ Theorem signed_nonzero_continuation_actual[local]:
   body_expr_ptr_ok cx e /\ is_bytestring_type (expr_type e) /\
   ((?b. typ = BaseT (IntT b)) \/ typ = BaseT DecimalT) /\
   (do r <- eval_expr cx e; read_result cx r od) es = (INL v,ee) /\
-  expr_post H ctx fn cenv cx e es s0a sa s0 ee v op s /\
+  (!H. valid_horizon cx st0 H ee.storage_trace ==>
+    expr_post H ctx fn cenv cx e es s0a sa s0 ee v op s) /\
   ptr_val_ok cx (expr_type e) v op G tn s /\ ptr_buf_ok cenv e op G s /\
   64 <= type_memory_bytes cenv (lowered_value_type cenv e) /\
   compile_type_convert op (mk_convert_op (expr_type e) typ) sa = (out,sb) /\
@@ -1775,17 +1926,18 @@ Theorem signed_nonzero_continuation_actual[local]:
   ~ctx_has_dalloca ctx /\ ~s.vs_halted /\
   lookup_block s.vs_current_bb fn.fn_blocks = SOME bb /\
   isPREFIX (emitted_insts sa sb) (DROP s.vs_inst_idx bb.bb_instructions) /\
-  ghost_inv H d cenv cx ee G tn s /\ ghost_kept cenv es s0a G0 tn0 s0 G tn /\
+  (!H. valid_horizon cx st0 H ee.storage_trace ==>
+    ghost_inv H d cenv cx ee G tn s) /\ ghost_kept cenv es s0a G0 tn0 s0 G tn /\
   local_ptrs_reserved cenv sa /\ s0a.cs_next_var <= sa.cs_next_var /\
   (!name p sz. FLOOKUP cenv.ce_vars name = SOME (PtrVar (Var p) sz) ==> not_fresh_at sa p) /\
   (!p sz. cenv.ce_return_buf = SOME (PtrVar (Var p) sz) ==> not_fresh_at sa p) /\
   (!p sz. cenv.ce_return_pc = SOME (PtrVar (Var p) sz) ==> not_fresh_at sa p) /\
   s.vs_current_bb = sb.cs_current_bb /\
   s.vs_inst_idx = LENGTH sa.cs_current_insts ==>
-  gas_summary_ptr_at (cx_dead H cx) (ctx,fn) PG []
+  gas_summary_ptr_at (\H. cx_dead H cx) (ctx,fn) PG cx st0 []
     (\vs. (convert_result cx (expr_type e) typ v,vs))
     (ee with gas_obs := [],s,G,tn)
-    (\res fin K tk ss. ?vout. res = INL vout /\
+    (\H res fin K tk ss. ?vout. res = INL vout /\
       expr_post H ctx fn cenv cx (TypeBuiltin typ Convert typ [e])
         es s0a sb s0 fin vout out ss /\
       ss.vs_current_bb = sb.cs_current_bb /\
@@ -1793,7 +1945,7 @@ Theorem signed_nonzero_continuation_actual[local]:
       ghost_inv H d cenv cx fin K tk ss /\
       ptr_val_ok cx typ vout out K tk ss /\
       ghost_kept cenv es s0a G0 tn0 s0 K tk)
-    (\res fin gt r. expr_exit res r)
+    (\H res fin gt r. expr_exit res r)
 Proof
   disch_then (map_every assume_tac o CONJUNCTS) >>
   drule_all signed_scalar_compile_cases >>
@@ -1818,7 +1970,8 @@ Theorem signed_convert_continuation_actual:
   body_expr_ptr_ok cx e /\ is_bytestring_type (expr_type e) /\
   ((?b. typ = BaseT (IntT b)) \/ typ = BaseT DecimalT) /\
   (do r <- eval_expr cx e; read_result cx r od) es = (INL v,ee) /\
-  expr_post H ctx fn cenv cx e es s0a sa s0 ee v op s /\
+  (!H. valid_horizon cx st0 H ee.storage_trace ==>
+    expr_post H ctx fn cenv cx e es s0a sa s0 ee v op s) /\
   ptr_val_ok cx (expr_type e) v op G tn s /\ ptr_buf_ok cenv e op G s /\
   (if lowered_value_type cenv e = BaseT (BytesT (Dynamic 0)) \/
       lowered_value_type cenv e = BaseT (StringT 0)
@@ -1829,17 +1982,18 @@ Theorem signed_convert_continuation_actual:
   ~ctx_has_dalloca ctx /\ ~s.vs_halted /\
   lookup_block s.vs_current_bb fn.fn_blocks = SOME bb /\
   isPREFIX (emitted_insts sa sb) (DROP s.vs_inst_idx bb.bb_instructions) /\
-  ghost_inv H d cenv cx ee G tn s /\ ghost_kept cenv es s0a G0 tn0 s0 G tn /\
+  (!H. valid_horizon cx st0 H ee.storage_trace ==>
+    ghost_inv H d cenv cx ee G tn s) /\ ghost_kept cenv es s0a G0 tn0 s0 G tn /\
   local_ptrs_reserved cenv sa /\ s0a.cs_next_var <= sa.cs_next_var /\
   (!name p sz. FLOOKUP cenv.ce_vars name = SOME (PtrVar (Var p) sz) ==> not_fresh_at sa p) /\
   (!p sz. cenv.ce_return_buf = SOME (PtrVar (Var p) sz) ==> not_fresh_at sa p) /\
   (!p sz. cenv.ce_return_pc = SOME (PtrVar (Var p) sz) ==> not_fresh_at sa p) /\
   s.vs_current_bb = sb.cs_current_bb /\
   s.vs_inst_idx = LENGTH sa.cs_current_insts ==>
-  gas_summary_ptr_at (cx_dead H cx) (ctx,fn) PG []
+  gas_summary_ptr_at (\H. cx_dead H cx) (ctx,fn) PG cx st0 []
     (\vs. (convert_result cx (expr_type e) typ v,vs))
     (ee with gas_obs := [],s,G,tn)
-    (\res fin K tk ss. ?vout. res = INL vout /\
+    (\H res fin K tk ss. ?vout. res = INL vout /\
       expr_post H ctx fn cenv cx (TypeBuiltin typ Convert typ [e])
         es s0a sb s0 fin vout out ss /\
       ss.vs_current_bb = sb.cs_current_bb /\
@@ -1847,7 +2001,7 @@ Theorem signed_convert_continuation_actual:
       ghost_inv H d cenv cx fin K tk ss /\
       ptr_val_ok cx typ vout out K tk ss /\
       ghost_kept cenv es s0a G0 tn0 s0 K tk)
-    (\res fin gt r. expr_exit res r)
+    (\H res fin gt r. expr_exit res r)
 Proof
   disch_then (map_every assume_tac o CONJUNCTS) >>
   Cases_on `lowered_value_type cenv e = BaseT (BytesT (Dynamic 0)) \/
@@ -1870,7 +2024,8 @@ Theorem signed_convert_continuation_gas_actual:
   body_expr_ptr_ok cx e /\ is_bytestring_type (expr_type e) /\
   ((?b. typ = BaseT (IntT b)) \/ typ = BaseT DecimalT) /\
   (do r <- eval_expr cx e; read_result cx r od) (es with gas_obs := gs) = (INL v,ee) /\
-  expr_post H ctx fn cenv cx e es s0a sa s0 ee v op s /\
+  (!H. valid_horizon cx st0 H ee.storage_trace ==>
+    expr_post H ctx fn cenv cx e es s0a sa s0 ee v op s) /\
   ptr_val_ok cx (expr_type e) v op G tn s /\ ptr_buf_ok cenv e op G s /\
   (if lowered_value_type cenv e = BaseT (BytesT (Dynamic 0)) \/
       lowered_value_type cenv e = BaseT (StringT 0)
@@ -1881,17 +2036,18 @@ Theorem signed_convert_continuation_gas_actual:
   ~ctx_has_dalloca ctx /\ ~s.vs_halted /\
   lookup_block s.vs_current_bb fn.fn_blocks = SOME bb /\
   isPREFIX (emitted_insts sa sb) (DROP s.vs_inst_idx bb.bb_instructions) /\
-  ghost_inv H d cenv cx ee G tn s /\ ghost_kept cenv es s0a G0 tn0 s0 G tn /\
+  (!H. valid_horizon cx st0 H ee.storage_trace ==>
+    ghost_inv H d cenv cx ee G tn s) /\ ghost_kept cenv es s0a G0 tn0 s0 G tn /\
   local_ptrs_reserved cenv sa /\ s0a.cs_next_var <= sa.cs_next_var /\
   (!name p sz. FLOOKUP cenv.ce_vars name = SOME (PtrVar (Var p) sz) ==> not_fresh_at sa p) /\
   (!p sz. cenv.ce_return_buf = SOME (PtrVar (Var p) sz) ==> not_fresh_at sa p) /\
   (!p sz. cenv.ce_return_pc = SOME (PtrVar (Var p) sz) ==> not_fresh_at sa p) /\
   s.vs_current_bb = sb.cs_current_bb /\
   s.vs_inst_idx = LENGTH sa.cs_current_insts ==>
-  gas_summary_ptr_at (cx_dead H cx) (ctx,fn) PG []
+  gas_summary_ptr_at (\H. cx_dead H cx) (ctx,fn) PG cx st0 []
     (\vs. (convert_result cx (expr_type e) typ v,vs))
     (ee with gas_obs := [],s,G,tn)
-    (\res fin K tk ss. ?vout. res = INL vout /\
+    (\H res fin K tk ss. ?vout. res = INL vout /\
       expr_post H ctx fn cenv cx (TypeBuiltin typ Convert typ [e])
         es s0a sb s0 fin vout out ss /\
       ss.vs_current_bb = sb.cs_current_bb /\
@@ -1899,7 +2055,7 @@ Theorem signed_convert_continuation_gas_actual:
       ghost_inv H d cenv cx fin K tk ss /\
       ptr_val_ok cx typ vout out K tk ss /\
       ghost_kept cenv es s0a G0 tn0 s0 K tk)
-    (\res fin gt r. expr_exit res r)
+    (\H res fin gt r. expr_exit res r)
 Proof
   disch_then (map_every assume_tac o CONJUNCTS) >>
   `!K tk. ghost_kept cenv (es with gas_obs := gs) s0a G0 tn0 s0 K tk =

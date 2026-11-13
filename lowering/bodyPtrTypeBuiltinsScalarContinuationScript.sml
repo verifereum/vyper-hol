@@ -4,7 +4,7 @@ Ancestors
   bodyPtrSignedConvertSourceFrame bodyPtrDefs fragGasPathPtr
   exprLowering compileEnv loweringStateRelDefs venomState venomExecSemantics loweringPosts
   gasSummary exprSimDefs fragExec exprSimConvert exprSimHash exprSimHashBoundary exprLoweringProps
-  stmtFragPtr exprSimExtract32Post
+  stmtFragPtr exprSimExtract32Post fragGasSeqPtr fragGasFresh
 
 Theorem scalar_convert_counted_ghost_frame:
   valid_conversion src dst /\ ~is_bytestring_type src /\
@@ -22,9 +22,12 @@ Theorem scalar_convert_counted_ghost_frame:
   (!p sz. cenv.ce_return_buf = SOME (PtrVar (Var p) sz) ==> not_fresh_at sa p) /\
   (!p sz. cenv.ce_return_pc = SOME (PtrVar (Var p) sz) ==> not_fresh_at sa p) ==>
   ?HG th.
+    inst_seq_ptr D 0 ctx fn PG G tn (emitted_insts sa sb) s HG th /\
     gas_path_ptr D 0 ctx fn PG G tn s 0 HG th
       (OK (t with vs_inst_idx := s.vs_inst_idx + LENGTH (emitted_insts sa sb))) /\
     op_prov HG out = NONE /\ op_taint th out = {} /\
+    th.t_mem = tn.t_mem /\ th.t_stor = tn.t_stor /\
+    th.t_trans = tn.t_trans /\ th.t_imm = tn.t_imm /\
     ghost_inv H d cenv cx es HG th
       (t with vs_inst_idx := s.vs_inst_idx + LENGTH (emitted_insts sa sb)) /\
     ghost_kept cenv es0 s0a G0 tn0 s0 HG th /\
@@ -67,12 +70,13 @@ Theorem scalar_convert_suffix_outcome_ptr:
   op_prov G x = NONE /\ op_taint tn x = {} /\ ~ctx_has_dalloca ctx /\
   ~s.vs_halted /\ lookup_block s.vs_current_bb fn.fn_blocks = SOME bb /\
   isPREFIX (emitted_insts sa sb) (DROP s.vs_inst_idx bb.bb_instructions) /\
-  ghost_inv H d cenv cx es G tn s /\ ghost_kept cenv es0 s0a G0 tn0 s0 G tn /\
+  (!H. valid_horizon cx st0 H es.storage_trace ==>
+    ghost_inv H d cenv cx es G tn s) /\ ghost_kept cenv es0 s0a G0 tn0 s0 G tn /\
   s0a.cs_next_var <= sa.cs_next_var /\
   (!name p sz. FLOOKUP cenv.ce_vars name = SOME (PtrVar (Var p) sz) ==> not_fresh_at sa p) /\
   (!p sz. cenv.ce_return_buf = SOME (PtrVar (Var p) sz) ==> not_fresh_at sa p) /\
   (!p sz. cenv.ce_return_pc = SOME (PtrVar (Var p) sz) ==> not_fresh_at sa p) /\
-  (!t vout HG th. run_inst_seq (emitted_insts sa sb) s = OK t /\
+  (!H t vout HG th. valid_horizon cx st0 H es.storage_trace /\ run_inst_seq (emitted_insts sa sb) s = OK t /\
     convert_result cx src dst v = INL vout /\ expr_val_rel cx dst vout out t /\
     op_prov HG out = NONE /\ op_taint th out = {} /\
     ghost_inv H d cenv cx es HG th
@@ -81,11 +85,11 @@ Theorem scalar_convert_suffix_outcome_ptr:
     (t with vs_vars := s.vs_vars) = s /\
     (!p. not_fresh_at sa p ==> lookup_var p t = lookup_var p s /\
       FLOOKUP HG p = FLOOKUP G p /\ op_taint th (Var p) = op_taint tn (Var p)) ==>
-    Q (INL vout) (es with gas_obs := []) HG th
+    Q H (INL vout) (es with gas_obs := []) HG th
       (t with vs_inst_idx := s.vs_inst_idx + LENGTH (emitted_insts sa sb))) ==>
-  gas_outcome_ptr D tops (ctx,fn) PG
+  gas_outcome_ptr D tops (ctx,fn) PG cx st0
     (\st. (convert_result cx src dst v,st)) (es,s,G,tn) Q
-    (\res fin gt r. expr_exit res r)
+    (\H res fin gt r. expr_exit res r)
 Proof
   strip_tac >>
   `(?t vout. run_inst_seq (emitted_insts sa sb) s = OK t /\
@@ -94,20 +98,41 @@ Proof
       expr_exit (convert_result cx src dst v) (Abort err t))` by
     (irule scalar_raw_actual_outcome >> metis_tac[]) >>
   pop_assum strip_assume_tac
-  >- (drule_all scalar_convert_counted_ghost_frame >>
-      disch_then (qspecl_then [`PG`,`D`] strip_assume_tac) >>
-      simp[gas_outcome_ptr_def] >> qexists_tac `[]` >> disj1_tac >>
+  >- (drule_all scalar_convert_counted_success >>
+      disch_then (qspecl_then [`PG`,`D ARB`]
+        (qx_choose_then `HG` (qx_choose_then `th` strip_assume_tac))) >>
+      simp[gas_outcome_ptr_def] >> qexists_tac `[]` >> disj2_tac >> disj1_tac >>
       simp[gas_summary_ptr_at_def] >>
       qexistsl_tac [`INL vout`,`es`,`HG`,`th`,
         `OK (t with vs_inst_idx := s.vs_inst_idx + LENGTH (emitted_insts sa sb))`] >>
-      gvs[]) >>
+      simp[] >> gen_tac >> strip_tac >>
+      `ghost_inv H d cenv cx es G tn s` by metis_tac[] >>
+      drule_all scalar_convert_counted_ghost_frame >>
+      disch_then (qspecl_then [`PG`,`D H`]
+        (qx_choose_then `GH` (qx_choose_then `tnH` strip_assume_tac))) >>
+      `GH = HG /\ tnH = th` by metis_tac[inst_seq_ptr_ghost_unique] >> gvs[] >>
+      qpat_x_assum `!H t vout HG th. _` irule >> simp[]) >>
   drule_all scalar_convert_counted_abort >>
-  disch_then (qspecl_then [`PG`,`D`] strip_assume_tac) >>
-  simp[gas_outcome_ptr_def] >> qexists_tac `REPLICATE steps F` >> disj1_tac >>
+  disch_then (qspecl_then [`PG`,`D ARB`]
+    (qx_choose_then `HG` (qx_choose_then `th` strip_assume_tac))) >>
+  `!H. inst_seq_ptr (D H) 0 ctx fn PG G tn (emitted_insts sa sb) s HG th` by
+    (gen_tac >> drule_all scalar_convert_counted_abort >>
+     disch_then (qspecl_then [`PG`,`D H`]
+       (qx_choose_then `GH` (qx_choose_then `tnH` strip_assume_tac))) >>
+     `GH = HG /\ tnH = th` by metis_tac[inst_seq_ptr_ghost_unique] >> gvs[]) >>
+  `writes_fresh sa (emitted_insts sa sb)` by
+    (drule_all scalar_dispatch_straight_fresh >>
+     simp[freshWritesTheory.straight_fresh_def] >> metis_tac[]) >>
+  `EVERY (\i. i.inst_opcode <> GAS /\ i.inst_opcode <> INVOKE /\
+    ~is_terminator i.inst_opcode) (emitted_insts sa sb)` by
+    (drule writes_fresh_path_opcodes >> simp[listTheory.EVERY_MEM]) >>
+  drule_all run_inst_seq_abort_zero_path_ptr_uniform >>
+  disch_then (qspec_then `ctx` (qx_choose_then `j0` assume_tac)) >>
+  simp[gas_outcome_ptr_def] >> qexists_tac `[]` >> disj2_tac >> disj1_tac >>
   simp[gas_summary_ptr_at_def] >>
   qexistsl_tac [`convert_result cx src dst v`,`es`,`HG`,`th`,
-    `Abort err (t with vs_inst_idx := j)`] >>
-  gvs[oneline expr_exit_def, AllCaseEqs(), exit_result_def]
+    `Abort err (t with vs_inst_idx := j0)`] >>
+  gvs[oneline expr_exit_def, AllCaseEqs(), exit_result_def] >> metis_tac[]
 QED
 
 Theorem scalar_convert_parent_post:
@@ -179,18 +204,19 @@ Theorem scalar_convert_modern_outcome_ptr:
   op_prov G x = NONE /\ op_taint tn x = {} /\ ~ctx_has_dalloca ctx /\
   ~s.vs_halted /\ lookup_block s.vs_current_bb fn.fn_blocks = SOME bb /\
   isPREFIX (emitted_insts sa sb) (DROP s.vs_inst_idx bb.bb_instructions) /\
-  expr_post H ctx fn cenv cx e es ca sa s0 ee v x s /\
-  stmt_state_rel H ctx fn cenv cx ee s /\ local_ptrs_reserved cenv sa /\
-  ghost_inv H d cenv cx ee G tn s /\ ghost_kept cenv es ca G0 tn0 s0 G tn /\
+  (!H. valid_horizon cx st0 H ee.storage_trace ==>
+    expr_post H ctx fn cenv cx e es ca sa s0 ee v x s /\
+    stmt_state_rel H ctx fn cenv cx ee s /\
+    ghost_inv H d cenv cx ee G tn s) /\ local_ptrs_reserved cenv sa /\ ghost_kept cenv es ca G0 tn0 s0 G tn /\
   ca.cs_next_var <= sa.cs_next_var /\
   s.vs_current_bb = sb.cs_current_bb /\
   s.vs_inst_idx + LENGTH (emitted_insts sa sb) = LENGTH sb.cs_current_insts /\
   (!name p sz. FLOOKUP cenv.ce_vars name = SOME (PtrVar (Var p) sz) ==> not_fresh_at sa p) /\
   (!p sz. cenv.ce_return_buf = SOME (PtrVar (Var p) sz) ==> not_fresh_at sa p) /\
   (!p sz. cenv.ce_return_pc = SOME (PtrVar (Var p) sz) ==> not_fresh_at sa p) ==>
-  gas_outcome_ptr D tops (ctx,fn) PG
+  gas_outcome_ptr D tops (ctx,fn) PG cx st0
     (\st. (convert_result cx (expr_type e) dst v,st)) (ee,s,G,tn)
-    (\res fin HG th u. ?vout. res = INL vout /\
+    (\H res fin HG th u. ?vout. res = INL vout /\
       expr_post H ctx fn cenv cx (TypeBuiltin dst Convert dst [e]) es ca sb s0 fin vout out u /\
       u.vs_current_bb = sb.cs_current_bb /\ u.vs_inst_idx = LENGTH sb.cs_current_insts /\
       ghost_inv H d cenv cx fin HG th u /\
@@ -198,7 +224,7 @@ Theorem scalar_convert_modern_outcome_ptr:
       (~is_word_type (post_value_type cenv (TypeBuiltin dst Convert dst [e])) ==>
         ptr_buf_ok cenv (TypeBuiltin dst Convert dst [e]) out HG u) /\
       ghost_kept cenv es ca G0 tn0 s0 HG th)
-    (\res fin gt r. expr_exit res r)
+    (\H res fin gt r. expr_exit res r)
 Proof
   strip_tac >>
   `is_word_type dst` by (irule (cj 2 bodyPtrTypeBuiltinsScalarSemanticTheory.scalar_source_word_types) >>
@@ -207,5 +233,7 @@ Proof
   simp[] >> rpt (goal_assum (drule_at Any) >> simp[]) >>
   qexists_tac `out` >> (reverse conj_tac >- gvs[]) >> rpt gen_tac >> strip_tac >>
   `!p. not_fresh_at sa p ==> lookup_var p t = lookup_var p s` by metis_tac[] >>
+  `expr_post H ctx fn cenv cx e es ca sa s0 ee v x s /\
+   stmt_state_rel H ctx fn cenv cx ee s` by metis_tac[] >>
   fs[] >> drule_all scalar_convert_success_post >> simp[]
 QED

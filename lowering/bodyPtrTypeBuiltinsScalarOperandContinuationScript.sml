@@ -18,17 +18,19 @@ Theorem scalar_convert_operand_continuation:
     ConvToFlag (cenv.ce_flag_n_members (nsid_to_string name))
     | _ => mk_convert_op (expr_type e) dst) sa = (out,sb) /\
   fn_has_code sa sb fn /\
-  expr_post H ctx fn cenv cx e es ca sa s0 ee v x s /\
+  (!H. valid_horizon cx st0 H ee.storage_trace ==>
+    expr_post H ctx fn cenv cx e es ca sa s0 ee v x s /\
+    ghost_inv H d cenv cx ee G tn s) /\
   ptr_val_ok cx (post_value_type cenv e) v x G tn s /\
   local_ptrs_reserved cenv ca /\ ca.cs_next_var <= sa.cs_next_var /\
   ~ctx_has_dalloca ctx /\ ~s.vs_halted /\
   s.vs_current_bb = sa.cs_current_bb /\ s.vs_inst_idx = LENGTH sa.cs_current_insts /\
-  ghost_inv H d cenv cx ee G tn s /\ ghost_kept cenv es ca G0 tn0 s0 G tn /\
+  ghost_kept cenv es ca G0 tn0 s0 G tn /\
   (!p sz. cenv.ce_return_buf = SOME (PtrVar (Var p) sz) ==> not_fresh_at ca p) /\
   (!p sz. cenv.ce_return_pc = SOME (PtrVar (Var p) sz) ==> not_fresh_at ca p) ==>
-  gas_outcome_ptr D tops (ctx,fn) PG
+  gas_outcome_ptr D tops (ctx,fn) PG cx st0
     (\st. (convert_result cx (expr_type e) dst v,st)) (ee,s,G,tn)
-    (\res fin HG th u. ?vout. res = INL vout /\
+    (\H res fin HG th u. ?vout. res = INL vout /\
       expr_post H ctx fn cenv cx (TypeBuiltin dst Convert dst [e]) es ca sb s0 fin vout out u /\
       u.vs_current_bb = sb.cs_current_bb /\ u.vs_inst_idx = LENGTH sb.cs_current_insts /\
       ghost_inv H d cenv cx fin HG th u /\
@@ -36,9 +38,18 @@ Theorem scalar_convert_operand_continuation:
       (~is_word_type (post_value_type cenv (TypeBuiltin dst Convert dst [e])) ==>
         ptr_buf_ok cenv (TypeBuiltin dst Convert dst [e]) out HG u) /\
       ghost_kept cenv es ca G0 tn0 s0 HG th)
-    (\res fin gt r. expr_exit res r)
+    (\H res fin gt r. expr_exit res r)
 Proof
-  strip_tac >> drule_all scalar_source_body_word_types >> strip_tac >>
+  strip_tac >>
+  reverse (Cases_on `?H0. valid_horizon cx st0 H0 ee.storage_trace`)
+  >- (rewrite_tac[gas_outcome_ptr_def] >> qexists_tac `[]` >> disj1_tac >>
+      irule gasStorageTheory.gas_bad_storage_at_initial >>
+      simp[vyperStorageTraceTheory.storage_trace_frame_def,
+        vyperStorageFootprintTheory.storage_trace_domain_def] >> metis_tac[]) >>
+  pop_assum strip_assume_tac >>
+  `expr_post H0 ctx fn cenv cx e es ca sa s0 ee v x s /\
+   ghost_inv H0 d cenv cx ee G tn s` by metis_tac[] >>
+  drule_all scalar_source_body_word_types >> strip_tac >>
   drule_all expr_body_pre_word_value >> strip_tac >>
   `post_value_type cenv e = expr_type e` by metis_tac[convert_operand_post_type] >>
   `straight_fresh (compile_type_convert x (case dst of FlagT name =>
@@ -53,10 +64,14 @@ Proof
     (qpat_x_assum `expr_body_pre _ _ _ e _` kall_tac >>
      drule expr_body_pre_type_evaluates >> simp[vyperASTTheory.expr_type_def] >>
      Cases_on `evaluate_type (get_tenv cx) dst` >> simp[]) >>
-  `stmt_state_rel H ctx fn cenv cx ee s /\
+  `stmt_state_rel H0 ctx fn cenv cx ee s /\
    eval_operand x s = SOME (typed_val_to_w256 tyv v) /\
    op_prov G x = NONE /\ op_taint tn x = {}` by
     (fs[expr_post_def, expr_val_rel_def, ptr_val_ok_def]) >>
+  `!H. valid_horizon cx st0 H ee.storage_trace ==>
+    expr_post H ctx fn cenv cx e es ca sa s0 ee v x s /\
+    stmt_state_rel H ctx fn cenv cx ee s /\ ghost_inv H d cenv cx ee G tn s` by
+    (rpt strip_tac >> res_tac >> gvs[expr_post_def]) >>
   irule scalar_convert_modern_outcome_ptr >> simp[] >>
   rpt (goal_assum (drule_at Any) >> simp[]) >>
   conj_tac >- (fs[straight_fresh_def] >> metis_tac[]) >>
@@ -100,13 +115,13 @@ Proof
     metis_tac[SRULE [SF ETA_ss] convert_operand_admissible] >>
   qpat_x_assum `expr_sim_ptr d ctx PG fn cenv cx (expr_type e) e es`
     (mp_tac o REWRITE_RULE [expr_sim_ptr_def]) >>
-  disch_then (qspecl_then [`sa`,`s1`,`x`,`s0`,`G0`,`tn0`] mp_tac) >>
+  disch_then (qspecl_then [`st0`,`sa`,`s1`,`x`,`s0`,`G0`,`tn0`] mp_tac) >>
   (impl_tac >- simp[]) >> strip_tac >>
   irule convert_operand_marked_bind >>
   `!res r. (?exc. res = INR exc /\ expr_exit (INR exc : value + exception) r) <=>
      expr_exit (res : value + exception) r` by
     (Cases >> simp[expr_exit_def]) >>
-  simp[] >> qexists_tac `\v ee G tn t.
+  simp[] >> qexists_tac `\H v ee G tn t.
     expr_post H ctx fn cenv cx e es sa s1 s0 ee v x t /\
     t.vs_current_bb = s1.cs_current_bb /\ t.vs_inst_idx = LENGTH s1.cs_current_insts /\
     ghost_inv H d cenv cx ee G tn t /\
@@ -121,8 +136,9 @@ QED
 
 Resume scalar_convert_expr_sim_ptr[callback]:
   markerLib.RESUME_TAC >> rpt strip_tac >>
-  drule gas_marked_exec_ptr_exec >>
-  simp[gas_marked_exec_def] >> strip_tac >>
+  `?H0. valid_horizon cx st0 H0 mid.storage_trace` by metis_tac[] >>
+  pop_assum strip_assume_tac >> res_tac >>
+  fs[gas_marked_exec_def] >>
   `~t.vs_halted` by metis_tac[gas_marked_path_def, gas_path_normal] >>
   simp[vyperASTTheory.expr_type_def] >>
   qpat_assum `is_word_type ann` (fn th =>

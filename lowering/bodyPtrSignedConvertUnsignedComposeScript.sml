@@ -136,6 +136,7 @@ Theorem unsigned_loader_counted_frame:
   (!x. w2n a <= x /\ x < w2n a+32+n ==> x NOTIN tn.t_mem) /\
   run_inst_seq (emitted_insts sa sb) s = OK t ==>
   ?HG th.
+    inst_seq_ptr D 0 ctx fn PG G tn (emitted_insts sa sb) s HG th /\
     gas_path_ptr D 0 ctx fn PG G tn s 0 HG th
       (OK (t with vs_inst_idx := s.vs_inst_idx+6)) /\
     op_prov HG out = NONE /\ op_taint th out = {} /\
@@ -178,6 +179,7 @@ Theorem unsigned_loader_counted_ghost_frame:
   (!p sz. cenv.ce_return_buf = SOME (PtrVar (Var p) sz) ==> not_fresh_at sa p) /\
   (!p sz. cenv.ce_return_pc = SOME (PtrVar (Var p) sz) ==> not_fresh_at sa p) ==>
   ?HG th.
+    inst_seq_ptr D 0 ctx fn PG G tn (emitted_insts sa sb) s HG th /\
     gas_path_ptr D 0 ctx fn PG G tn s 0 HG th
       (OK (t with vs_inst_idx := s.vs_inst_idx+6)) /\
     op_prov HG out = NONE /\ op_taint th out = {} /\

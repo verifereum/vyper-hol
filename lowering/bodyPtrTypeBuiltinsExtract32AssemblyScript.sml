@@ -8,6 +8,7 @@ Ancestors
   augAssignPtrScalarCertificate pred_set rawCallBufferPtr
   storageCopyGasPath gasSummaryComposePtr fragGasPathPtr vyperState vyperContext
   exprSimDefs fragGasMode rich_list exprLoweringProps fragExec exprSimHash exprSimHashBoundary
+  fragGasSeqPtr
 
 Theorem extract32_offset_scalar_view:
   expr_post H ctx func cenv cx off es sa sb s0 ee (IntV i) op s /\
@@ -209,16 +210,19 @@ Theorem extract32_tail_outcome_of_runs_ptr:
   compile_clamp_basetype raw (BaseT bt) sm = (op,sb) /\
   fn_has_code sa sb func /\ ~s.vs_halted /\
   s.vs_current_bb = sa.cs_current_bb /\ s.vs_inst_idx = LENGTH sa.cs_current_insts /\
-  es.gas_obs = [] /\ inst_seq_ptr D 0 ctx func PG G tn (emitted_insts sa sb) s HG th /\
+  es.gas_obs = [] /\
+  (!H. valid_horizon cx st0 H es.storage_trace ==>
+    inst_seq_ptr (D H) 0 ctx func PG G tn (emitted_insts sa sb) s HG th) /\
   (case evaluate_extract32 bs n bt of
     INL v => ?t. run_inst_seq (emitted_insts sa sb) s = OK t /\
-      Q (INL (Value v)) es HG th (t with vs_inst_idx := LENGTH sb.cs_current_insts)
+      (!H. valid_horizon cx st0 H es.storage_trace ==>
+        Q H (INL (Value v)) es HG th (t with vs_inst_idx := LENGTH sb.cs_current_insts))
   | INR err => ?msg t. err = RuntimeError msg /\
       run_inst_seq (emitted_insts sa sb) s = Abort Revert_abort t) ==>
-  gas_outcome_ptr D (cx_tops cx) (ctx,func) PG
+  gas_outcome_ptr D (cx_tops cx) (ctx,func) PG cx st0
     (vyperState$bind
       (lift_sum (evaluate_extract32 bs n bt)) (\v. return (Value v)))
-    (es,s,G,tn) Q (\res ee gt r. expr_exit res r)
+    (es,s,G,tn) Q (\H res ee gt r. expr_exit res r)
 Proof
   strip_tac >> drule_all extract32_tail_straight_noext >> strip_tac >>
   `same_blocks sa sb` by simp[same_blocks_def] >>
@@ -238,24 +242,33 @@ Resume extract32_tail_outcome_of_runs_ptr[success]:
   gvs[] >>
   `lookup_block s.vs_current_bb func.fn_blocks = SOME bb /\
    isPREFIX (emitted_insts sa sb) (DROP s.vs_inst_idx bb.bb_instructions)` by simp[] >>
-  drule_all extract32_tail_normal_ptr_path >> strip_tac >>
-  rewrite_tac[gas_outcome_ptr_def] >> qexists_tac `[]` >> disj1_tac >>
+  rewrite_tac[gas_outcome_ptr_def] >> qexists_tac `[]` >>
+  disj2_tac >> disj1_tac >>
   rewrite_tac[gas_summary_ptr_at_def] >>
   qexistsl_tac [`INL (Value x)`,`es`,`HG`,`th`,
     `OK (t with vs_inst_idx := LENGTH sb.cs_current_insts)`] >>
-  simp[lift_sum_def, bind_def, return_def] >> gvs[]
+  simp[lift_sum_def, bind_def, return_def] >> rpt strip_tac >>
+  res_tac >> simp[] >>
+  irule extract32_tail_normal_ptr_path >>
+  goal_assum (drule_at Any) >> simp[] >> metis_tac[]
 QED
 
 Resume extract32_tail_outcome_of_runs_ptr[error]:
   gvs[] >>
   `lookup_block s.vs_current_bb func.fn_blocks = SOME bb /\
    isPREFIX (emitted_insts sa sb) (DROP s.vs_inst_idx bb.bb_instructions)` by simp[] >>
-  drule_all extract32_tail_abort_ptr_path >> strip_tac >>
-  rewrite_tac[gas_outcome_ptr_def] >> qexists_tac `REPLICATE n' F` >> disj1_tac >>
+  `EVERY (\i. i.inst_opcode <> GAS /\ i.inst_opcode <> INVOKE /\
+      ~is_terminator i.inst_opcode) (emitted_insts sa sb)` by
+    (drule_all extract32_tail_code_cuts >> fs[EVERY_MEM]) >>
+  drule_all run_inst_seq_abort_zero_path_ptr_uniform >>
+  disch_then (qspec_then `ctx` strip_assume_tac) >>
+  rewrite_tac[gas_outcome_ptr_def] >> qexists_tac `[]` >>
+  disj2_tac >> disj1_tac >>
   rewrite_tac[gas_summary_ptr_at_def] >>
   qexistsl_tac [`INR (Error (RuntimeError msg))`,`es`,`HG`,`th`,
     `Abort Revert_abort (t with vs_inst_idx := j)`] >>
-  simp[lift_sum_def, bind_def, raise_def, expr_exit_def, exit_result_def]
+  simp[lift_sum_def, bind_def, raise_def, expr_exit_def, exit_result_def] >>
+  metis_tac[]
 QED
 
 Finalise extract32_tail_outcome_of_runs_ptr

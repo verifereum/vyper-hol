@@ -25,7 +25,8 @@ Theorem bytes_word_abort_counted:
   (!p sz. cenv.ce_return_buf = SOME (PtrVar (Var p) sz) ==> not_fresh_at sa p) /\
   (!p sz. cenv.ce_return_pc = SOME (PtrVar (Var p) sz) ==> not_fresh_at sa p) /\
   run_inst_seq (emitted_insts sa sb) s = Abort err t ==>
-  ?HG th j. gas_path_ptr D 0 ctx fn PG G tn s 0 HG th
+  ?HG th j. inst_seq_ptr D 0 ctx fn PG G tn (emitted_insts sa sb) s HG th /\
+    gas_path_ptr D 0 ctx fn PG G tn s 0 HG th
     (Abort err (t with vs_inst_idx := j))
 Proof
   disch_then (map_every assume_tac o CONJUNCTS) >>
