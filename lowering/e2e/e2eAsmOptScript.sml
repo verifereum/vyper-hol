@@ -137,6 +137,28 @@ Proof
   decide_tac
 QED
 
+Theorem opt_entry_data_section_bound:
+  !tops prog prog' am tx es cplan policy unit.
+    call_state_rel tops (assemble prog') am tx es /\
+    codegen_assembly policy unit = SOME prog /\ unit_shape_ok unit /\
+    assemble prog <> [] ==>
+    LENGTH (opt_entry_state prog prog' cplan es).vs_data_section <
+      dimword (:256) DIV 2
+Proof
+  rpt strip_tac >>
+  drule_all opt_entry_code_layout_valid >>
+  disch_then (qspec_then `cplan` assume_tac) >>
+  qabbrev_tac `vs = opt_entry_state prog prog' cplan es` >>
+  `vs.vs_code = assemble prog ++ vs.vs_data_section` by
+    simp[Abbr `vs`, opt_entry_state_def, entry_venom_state_frame_fields] >>
+  `LENGTH vs.vs_code <= dimword (:256) DIV 2` by
+    fs[code_layout_valid_def] >>
+  `0 < LENGTH (assemble prog)` by (Cases_on `assemble prog` >> fs[]) >>
+  qpat_x_assum `LENGTH vs.vs_code <= _` mp_tac >>
+  qpat_x_assum `vs.vs_code = _` SUBST1_TAC >>
+  simp[] >> decide_tac
+QED
+
 (* opt_entry_state reads everything but the code and the layout from es. *)
 Theorem opt_entry_fields:
   !tops prog prog' am tx es cplan vs.
