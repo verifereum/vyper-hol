@@ -69,7 +69,7 @@ Theorem assign_tuple_locals_memory_suffix_path_mem:
       gas_marked_path T ctx func sv 0 (OK t) /\
       t.vs_accounts = sv.vs_accounts /\ t.vs_transient = sv.vs_transient /\
       t.vs_requests = sv.vs_requests /\ t.vs_call_ctx = sv.vs_call_ctx
-ProofProof
+Proof
   rpt gen_tac >> disch_then (map_every assume_tac o CONJUNCTS) >>
   `values_have_types tvs vs` by gvs[value_has_type_def] >>
   drule assign_tuple_target_list_length >> strip_tac >>
