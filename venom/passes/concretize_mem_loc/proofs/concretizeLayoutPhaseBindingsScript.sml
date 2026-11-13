@@ -24,7 +24,7 @@ Proof
     (irule resolved_frame_cache_transport >> goal_assum (drule_at Any) >>
      metis_tac[step_inst_cache_preserved]) >>
   irule resolved_frame_step >> simp[] >> rpt strip_tac >>
-  drule_all resolved_dalloca_output >> simp[]
+  drule_all frameAllocationOwnershipTheory.resolved_dalloca_output >> simp[]
 QED
 
 Theorem layout_ordinary_bound_trace_advance:
