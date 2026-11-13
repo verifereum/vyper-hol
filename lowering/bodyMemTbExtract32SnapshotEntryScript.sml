@@ -182,7 +182,7 @@ Proof
   drule_all extract32_source_post_view >> strip_tac >>
   `post_value_type cenv e = expr_type e` by
     (irule post_value_type_bytestring >> simp[is_bytestring_type_def]) >>
-  mp_tac (Q.INST [`es` |-> `es'`, `len` |-> `LENGTH bs`]
+  mp_tac (Q.INST [`es` |-> `es'`, `len` |-> `LENGTH (bs:word8 list)`]
             (SPEC_ALL extract32_snapshot_entry)) >>
   impl_tac >- (rpt conj_tac >>
                FIRST [first_assum ACCEPT_TAC,
