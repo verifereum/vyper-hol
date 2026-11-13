@@ -14,12 +14,17 @@ Theorem body_flag_member_mem_prefix[local]:
   fn_has_code sa sb func /\ fn_inst_ids_distinct func /\
   local_ptrs_reserved cenv sa /\
   gas_admissible (bind (eval_expr cx (FlagMember ann nsid mid)) (read_result cx))
-    expr_res_ok es /\
-  stmt_state_rel H ctx func cenv cx es s0 /\ alloca_history func s0 /\
+    expr_res_ok es /\ alloca_history func s0 /\
   ~s0.vs_halted /\ s0.vs_current_bb = sa.cs_current_bb /\
   s0.vs_inst_idx = LENGTH sa.cs_current_insts ==>
-  ?marks v ee t. gas_value_prefix H T (ctx,func,cenv,cx)
-    (ty,FlagMember ann nsid mid) (sa,sb,op) (es,s0) marks (v,ee,t)
+  ?v. gas_marked_exec T (ctx,func)
+        (bind (eval_expr cx (FlagMember ann nsid mid)) (read_result cx))
+        (es,s0) [] (INL v) es (OK s0) /\
+      !(H:(bool # bytes32 # type_value) list # num list).
+        stmt_state_rel H ctx func cenv cx es s0 /\
+        storage_well_formed_on cx es (FST H) ==>
+        gas_value_prefix H T (ctx,func,cenv,cx)
+          (ty,FlagMember ann nsid mid) (sa,sb,op) (es,s0) [] (v,es,s0)
 Proof
   strip_tac >> PairCases_on `nsid` >>
   drule eval_expr_flag_member_gas >> strip_tac >>
@@ -28,17 +33,23 @@ Proof
   `ann = FlagT (nsid0, nsid1)` by gvs[expr_body_pre_def, well_typed_expr_def] >>
   gvs[lower_value_def, compile_expr_def, comp_bind_def, comp_return_def,
       unwrap_value_def] >>
-  qexistsl_tac [`[]`,
-    `FlagV (2 ** cenv.ce_flag_member_id (nsid_to_string (nsid0,nsid1)) mid)`,
-    `es`, `s0`] >>
-  simp[gas_value_prefix_def, lower_value_def, compile_expr_def,
-       comp_bind_def, comp_return_def, unwrap_value_def] >>
+  qexists_tac
+    `FlagV (2 ** cenv.ce_flag_member_id (nsid_to_string (nsid0,nsid1)) mid)` >>
   conj_tac
   >- simp[gas_marked_exec_def, gas_marked_path_def, gas_path_mem_rules] >>
+  rpt strip_tac >>
   `stmt_state_rel H ctx func cenv cx (es with gas_obs := []) s0` by
     (drule msg_gas_state_frame >>
      disch_then (qspecl_then [`s0.vs_gas_readings`, `s0.vs_inst_idx`, `[]`] mp_tac) >>
      simp[NoAsms]) >>
+  `storage_well_formed_on cx (es with gas_obs := []) (FST H)` by
+    (`(es with gas_obs := []).accounts = es.accounts /\
+      (es with gas_obs := []).tStorage = es.tStorage` by simp[] >>
+     metis_tac[vyperStorageFootprintTheory.storage_well_formed_on_backends]) >>
+  simp[gas_value_prefix_def, lower_value_def, compile_expr_def,
+       comp_bind_def, comp_return_def, unwrap_value_def] >>
+  conj_tac
+  >- simp[gas_marked_exec_def, gas_marked_path_def, gas_path_mem_rules] >>
   simp[expr_post_def, expr_val_rel_def, expr_val_at_def,
        expr_type_def, eval_operand_def, is_word_type_def,
        typed_val_to_w256_word_value, word_value_def, val_to_w256_def]
@@ -55,7 +66,12 @@ Proof
         (PairCases_on `nsid` >> gvs[expr_body_pre_def, well_typed_expr_def]) >>
       simp[vyperASTTheory.expr_type_def, is_word_type_def]) >>
   rpt gen_tac >> strip_tac >>
-  irule body_flag_member_mem_prefix >> metis_tac[]
+  drule_all body_flag_member_mem_prefix >>
+  disch_then (qspec_then `ctx` strip_assume_tac) >>
+  qexistsl_tac [`[]`, `v`, `es`, `s0`] >> simp[] >>
+  rpt strip_tac >>
+  qpat_x_assum `!H. valid_horizon _ _ H _ ==> _` (drule_then strip_assume_tac) >>
+  first_x_assum irule >> simp[]
 QED
 
 (* Prior successful uncounted proof, retained for reference.
