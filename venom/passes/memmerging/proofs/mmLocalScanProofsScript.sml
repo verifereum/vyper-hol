@@ -23793,6 +23793,263 @@ Proof
 QED
 
 
+Theorem mm_local_payload_representative_transition[local]:
+  mode IN {CalldataMerge; DloadMerge} /\
+  wf_ssa fn0 /\ fn_inst_wf fn0 /\ wf_function fn0 /\
+  ir_supply_covers_fn supply fn0 /\ index < LENGTH fn0.fn_blocks /\
+  k <= 4 /\ mm_local_prefix fn0 supply index k = (bb,sk) /\
+  is = bb.bb_instructions /\
+  gs = (scan_block (dfg_build_function fn0) mode bb).ss_flushed /\
+  cap = mm_local_payload_capture mode is H (LENGTH is) /\
+  n < LENGTH is /\ MEM g gs /\
+  rep_of_group is g = SOME ((EL n is).inst_id,g) /\
+  (!j. (if mode = CalldataMerge then (H j).vs_call_ctx.cc_calldata
+         else (H j).vs_data_section) = cd) /\
+  (!j dst v src. j < LENGTH is /\ (EL j is).inst_opcode = MSTORE /\
+    (EL j is).inst_operands = [Lit dst; Var v] /\
+    FLOOKUP (FOLDL (scan_inst (dfg_build_function fn0) mode)
+      empty_scan_state (TAKE j is)).ss_loads v = SOME src ==>
+    lookup_var v (H j) = SOME (word_of_bytes T (0w:bytes32)
+      (TAKE 32 (DROP src cd ++ REPLICATE 32 0w)))) /\
+  ns = nop_ids_of_groups (dfg_build_function fn0) mode is gs /\
+  rs = rep_map_of_groups is gs /\
+  (!v. chunk = [EL n is] /\ MEM (Var v) (EL n is).inst_operands ==> v NOTIN excluded) /\
+  step_inst fuel ctx (EL n is) (H n) = OK u /\
+  H (SUC n) = u with vs_inst_idx := SUC n /\
+  lookup_block bb.bb_label fn.fn_blocks = SOME bb /\
+  (!j d bs. j <= n /\ cap j = SOME (d,bs) ==>
+    (H j).vs_current_bb = bb.bb_label /\ (H j).vs_inst_idx = j /\
+    static_mem_ok eom ctx fn (EL j is) (H j)) /\
+  eom < dimword (:256) /\
+  mm_local_payload_cut cap is gs H n excluded pc t /\
+  (!v. v NOTIN excluded ==> MEM v es.irs_used_vars) /\
+  apply_groups_inst_supply mode ns rs es (EL n is) = (chunk,es') ==>
+  ?t'. mm_local_exec_prefix fuel ctx chunk t t' /\
+    mm_local_payload_cut cap is gs H (SUC n) excluded (pc + LENGTH chunk) t' /\
+    (!w. EVERY (\i. static_mem_ok eom ctx fn' i w) chunk)
+Proof
+  disch_then (map_every assume_tac o CONJUNCTS) >>
+  `ALL_DISTINCT (MAP (\i. i.inst_id) is)` by
+    metis_tac[mm_local_prefix_wf_id_distinct] >>
+  `MEM (EL n is).inst_id g.cg_inst_ids` by metis_tac[mm_local_rep_member] >>
+  `~MEM (EL n is).inst_id ns /\ ALOOKUP rs (EL n is).inst_id = SOME g` by
+    metis_tac[mm_local_prefix_selected_rep, EL_MEM] >>
+  `(EL n is).inst_opcode IN {MSTORE; MCOPY; CALLDATACOPY; DLOADBYTES}` by
+    metis_tac[mm_local_canonical_rep_write] >>
+  `mm_local_group_captures is cap
+      (\a. if a < LENGTH cd then EL a cd else 0w) g /\
+   mm_local_group_coverage is (LENGTH is) cap g /\
+   mm_local_group_endpoint is (LENGTH is) cap g` by
+    (mp_tac (SPEC_ALL mm_local_payload_final_certificate) >>
+     qpat_assum `is = _` (fn th => rewrite_tac[GSYM th]) >>
+     qpat_assum `gs = _` (fn th => rewrite_tac[GSYM th]) >>
+     qpat_assum `cap = _` (fn th => rewrite_tac[GSYM th]) >> simp[]) >>
+  `!j d bs. j < LENGTH is /\ MEM (EL j is).inst_id g.cg_inst_ids /\
+      cap j = SOME (d,bs) ==>
+      d + LENGTH bs < dimword (:256) /\
+      (LENGTH bs = 0 \/ d + LENGTH bs <= eom)` by
+    (rpt gen_tac >> strip_tac >>
+     `j <= n` by
+       (mp_tac (Q.INST [`cg` |-> `g`]
+         (Q.SPECL [`is`,`j`,`n`] mm_local_rep_position_max)) >> simp[]) >>
+     mp_tac (Q.INST [`n` |-> `LENGTH is`]
+       (SPEC_ALL mm_local_payload_capture_finite)) >>
+     qpat_assum `cap = _` (fn th => rewrite_tac[GSYM th]) >>
+     impl_tac >- metis_tac[] >> simp[]) >>
+  SUBGOAL_THEN ``g.cg_dst < dimword (:256) /\ g.cg_length < dimword (:256) /\
+   (g.cg_length = 0 \/ g.cg_dst + g.cg_length <= eom)``
+    (map_every assume_tac o CONJUNCTS)
+  >-
+    (mp_tac (Q.INST [`n` |-> `LENGTH is`]
+       (SPEC_ALL (INST_TYPE [alpha |-> ``:word8``]
+         mm_local_payload_group_finite))) >>
+     impl_tac >- (pure_asm_rewrite_tac[] >> rpt strip_tac >> metis_tac[]) >>
+     simp[]) >>
+  `g.cg_src < dimword (:256)` by metis_tac[mm_local_group_source_finite] >>
+  qabbrev_tac `due = FILTER (\j. mm_local_rep_index is gs j = n)
+    (mm_local_pending_indices is gs n)` >>
+  `!j. MEM j (due ++ [n]) ==> IS_SOME (cap j)` by
+    (mp_tac (Q.INST [`r` |-> `n`, `N` |-> `LENGTH is`]
+       (SPEC_ALL mm_local_payload_due_captures_some)) >>
+     qpat_assum `cap = _` (fn th => rewrite_tac[GSYM th]) >>
+     impl_tac >-
+       (simp[Abbr `due`] >> rpt strip_tac >>
+        qpat_assum `!j dst v src. j < LENGTH is /\ _ ==> _`
+          (qspecl_then [`j`,`dst`,`v`,`src`] mp_tac) >>
+        (impl_tac >- simp[]) >>
+        disch_then (fn th => rewrite_tac[th]) >> simp[]) >>
+     simp[]) >>
+  `?d bs. cap n = SOME (d,bs)` by
+    (`IS_SOME (cap n)` by
+       (qpat_assum `!j. MEM j (due ++ [n]) ==> _`
+          (qspec_then `n` mp_tac) >> simp[]) >>
+     Cases_on `cap n` >- fs[] >>
+     rename1 `cap n = SOME captured` >> Cases_on `captured` >> metis_tac[]) >>
+  `!v. FOLDL (\st (a,cs). write_memory_with_expansion a cs st) v
+    (MAP (THE o cap) (due ++ [n])) =
+    write_memory_with_expansion g.cg_dst
+      (mm_local_bytes (\a. if a < LENGTH cd then EL a cd else 0w) g.cg_src g.cg_length) v` by
+    (gen_tac >>
+     mp_tac (Q.INST [`n` |-> `LENGTH is`, `js` |-> `due ++ [n]`,
+       `ws` |-> `MAP (THE o cap) (due ++ [n])`,
+       `B` |-> `\a. if a < LENGTH cd then EL a cd else 0w`]
+       (SPEC_ALL mm_local_payload_due_realize)) >>
+     impl_tac >- (simp[] >>
+     mp_tac (Q.INST [`r` |-> `n`, `N` |-> `LENGTH is`]
+       (SPEC_ALL mm_local_payload_due_capture_indices)) >>
+     qpat_assum `cap = _` (fn th => rewrite_tac[GSYM th]) >>
+     simp[Abbr `due`]) >> simp[]) >>
+  `!j l a cs b ds. MEM j (mm_local_pending_indices is gs n) /\ j < l /\ l <= n /\
+      (?h. MEM h gs /\ MEM (EL l is).inst_id h.cg_inst_ids) /\
+      cap j = SOME (a,cs) /\ cap l = SOME (b,ds) ==>
+      mm_local_write_compatible a cs b ds` by
+    (rpt strip_tac >>
+     mp_tac (Q.INST [`d` |-> `a`, `bs` |-> `cs`, `a` |-> `b`, `cs` |-> `ds`]
+       (SPEC_ALL mm_local_payload_pending_compatible)) >> pure_asm_rewrite_tac[] >> simp[]) >>
+  Cases_on `fresh_inst_id es` >> rename1 `fresh_inst_id es = (lid,es1)` >>
+  Cases_on `fresh_ir_var es1` >> rename1 `fresh_ir_var es1 = (v,es2)` >>
+  `es1.irs_used_vars = es.irs_used_vars` by
+    (qpat_assum `fresh_inst_id es = _`
+       (fn th => mp_tac (AP_TERM ``\p:num # ir_supply. (SND p).irs_used_vars`` th)) >>
+     simp[NoAsms,irSupplyTheory.fresh_inst_id_def]) >>
+  `v IN excluded` by
+    (drule irSupplyTheory.fresh_ir_var_contract >> strip_tac >> metis_tac[]) >>
+  qpat_assum `mm_local_payload_cut cap is gs H n excluded pc t`
+    (strip_assume_tac o PURE_REWRITE_RULE[mm_local_payload_cut_def]) >>
+  `(H n).vs_call_ctx = t.vs_call_ctx /\
+   (H n).vs_data_section = t.vs_data_section /\
+   (H n).vs_labels = t.vs_labels` by
+    (qpat_assum `mm_local_nonmemory_frame (H n) = mm_local_nonmemory_frame t`
+       (fn th => mp_tac (AP_TERM
+         ``\s:venom_state. (s.vs_call_ctx,s.vs_data_section,s.vs_labels)`` th)) >>
+     simp[NoAsms,mm_local_nonmemory_frame_def,stateFrameTheory.state_frame_def]) >>
+  `(if mode = CalldataMerge then t.vs_call_ctx.cc_calldata else t.vs_data_section) = cd` by
+    (qpat_assum `(H n).vs_call_ctx = t.vs_call_ctx` (fn cth =>
+     qpat_assum `(H n).vs_data_section = t.vs_data_section` (fn dth =>
+     qpat_assum `!j. (if mode = CalldataMerge then _ else _) = cd`
+       (qspec_then `n` (ACCEPT_TAC o PURE_REWRITE_RULE[cth,dth]))))) >>
+  `g.cg_length = 32 /\ mode <> DloadMerge /\ (EL n is).inst_opcode = MSTORE ==>
+   step_inst fuel ctx (EL n is) t = OK (write_memory_with_expansion g.cg_dst
+     (mm_local_bytes (\a. if a < LENGTH cd then EL a cd else 0w) g.cg_src g.cg_length) t)` by
+    (strip_tac >>
+     `chunk = [EL n is]` by gvs[apply_groups_inst_supply_def] >>
+     `d = g.cg_dst /\ bs = mm_local_bytes
+       (\a. if a < LENGTH cd then EL a cd else 0w) g.cg_src 32` by
+       (mp_tac (Q.INST [`N` |-> `LENGTH (is:instruction list)`, `j` |-> `n:num`,
+         `B` |-> `\a. if a < LENGTH cd then EL a cd else (0w:word8)`]
+         (SPEC_ALL mm_local_payload_word_representative_payload)) >>
+        qpat_assum `cap = _` (fn th => rewrite_tac[GSYM th]) >> simp[]) >>
+     mp_tac (Q.INST [`N` |-> `LENGTH (is:instruction list)`, `j` |-> `n:num`]
+       (SPEC_ALL mm_local_payload_captured_store_step)) >>
+     qpat_assum `cap = _` (fn th => rewrite_tac[GSYM th]) >>
+     (impl_tac >- (simp[] >> rpt strip_tac >> metis_tac[])) >> simp[]) >>
+  `?t'. mm_local_exec_prefix fuel ctx chunk t t' /\
+      t'.vs_memory = (write_memory_with_expansion g.cg_dst
+        (mm_local_bytes (\a. if a < LENGTH cd then EL a cd else 0w) g.cg_src g.cg_length) t).vs_memory /\
+      mm_local_nonmemory_frame t' = mm_local_nonmemory_frame t /\
+      (!x. x NOTIN excluded ==> lookup_var x t' = lookup_var x t)` by
+    (mp_tac (Q.INST [`inst` |-> `EL n is`,
+       `bs` |-> `mm_local_bytes (\a. if a < LENGTH cd then EL a cd else 0w)
+          g.cg_src g.cg_length`] (SPEC_ALL mm_local_payload_chunk_steps)) >>
+     impl_tac >- simp[mm_local_calldata_bytes] >> simp[]) >>
+  `mm_local_pending_indices is gs (SUC n) =
+    FILTER (\j. mm_local_rep_index is gs j <> n) (mm_local_pending_indices is gs n)` by
+    (mp_tac (Q.INST [`r` |-> `n`]
+       (SPEC_ALL mm_local_payload_representative_pending_suc)) >> simp[]) >>
+  `(H (SUC n)).vs_memory = (write_memory_with_expansion d bs (H n)).vs_memory /\
+   mm_local_nonmemory_frame (H (SUC n)) = mm_local_nonmemory_frame (H n) /\
+   (!x. lookup_var x (H (SUC n)) = lookup_var x (H n))` by
+    (mp_tac (Q.INST [`n` |-> `LENGTH is`, `j` |-> `n`]
+       (SPEC_ALL mm_local_payload_capture_actual_step)) >>
+     (impl_tac >- (qpat_assum `cap = _` (fn th => rewrite_tac[GSYM th]) >> simp[])) >>
+     simp[]) >>
+  `mm_local_pending cap (mm_local_pending_indices is gs n) (H n) t` by
+    fs[mm_local_payload_cut_def] >>
+  `mm_local_pending cap (mm_local_pending_indices is gs (SUC n)) (H (SUC n)) t'` by
+    (mp_tac (Q.INST [`js` |-> `mm_local_pending_indices is gs n`,
+       `r` |-> `n`, `P` |-> `\j. mm_local_rep_index is gs j = n`,
+       `survivors` |-> `mm_local_pending_indices is gs (SUC n)`,
+       `s` |-> `H (n:num)`, `s'` |-> `H (SUC n)`, `dst` |-> `g.cg_dst`,
+       `merged` |-> `mm_local_bytes (\a. if a < LENGTH cd then EL a cd else 0w)
+         g.cg_src g.cg_length`]
+       (SPEC_ALL (INST_TYPE [alpha |-> ``:num``]
+         mm_local_payload_representative_discharge))) >>
+     impl_tac >- (simp[Abbr `due`] >> conj_tac
+     >- (map_every qx_gen_tac [`pre`,`j`,`mid`,`l`,`post`,`a`,`cs`,`b`,`ds`] >>
+         strip_tac >>
+         `SORTED $< (mm_local_pending_indices is gs n)` by simp[mm_local_pending_indices_order] >>
+         `j < l` by
+           (qpat_x_assum `SORTED $< (mm_local_pending_indices is gs n)` mp_tac >>
+            simp[sortingTheory.SORTED_APPEND, relationTheory.transitive_def] >>
+            metis_tac[MEM_APPEND, MEM]) >>
+         `MEM j (mm_local_pending_indices is gs n) /\
+          MEM l (mm_local_pending_indices is gs n)` by simp[MEM_APPEND] >>
+         `l < n /\ ?h. MEM h gs /\ MEM (EL l is).inst_id h.cg_inst_ids` by
+           metis_tac[mm_local_pending_indices_mem] >>
+         `l <= n` by decide_tac >>
+         qpat_assum `!j l a cs b ds. _`
+           (qspecl_then [`j`,`l`,`a`,`cs`,`b`,`ds`] mp_tac) >> simp[] >>
+         disch_then irule >> qexists `h` >>
+         qpat_assum `is = _` (fn th => rewrite_tac[GSYM th]) >>
+         qpat_assum `gs = _` (fn th => rewrite_tac[GSYM th]) >>
+         asm_rewrite_tac[]) >>
+     simp[MEM_FILTER] >> map_every qx_gen_tac [`j`,`a`,`cs`] >> strip_tac >>
+     `j < n` by metis_tac[mm_local_pending_indices_mem] >>
+     qpat_assum `!j l a cs b ds. _`
+       (qspecl_then [`j`,`n`,`a`,`cs`,`d`,`bs`] mp_tac) >>
+     simp[] >> metis_tac[]) >>
+     disch_then ACCEPT_TAC) >>
+  qexists `t'` >> simp[] >> conj_tac
+  >- (rewrite_tac[mm_local_payload_cut_def] >> conj_tac
+      >- (qspecl_then [`chunk`,`fuel`,`ctx`,`t`,`t'`] mp_tac
+            mm_local_exec_prefix_cursor >> simp[]) >>
+      asm_rewrite_tac[] >> metis_tac[]) >>
+  gen_tac >> Cases_on `g.cg_length = 32 /\ mode <> DloadMerge`
+  >- (fs[] >> Cases_on `(EL n is).inst_opcode = MSTORE`
+      >- (`?dw sv. (EL n is).inst_operands = [Lit dw; Var sv] /\ w2n dw = g.cg_dst` by
+            (`d = g.cg_dst` by
+               (mp_tac (Q.INST [`N` |-> `LENGTH (is:instruction list)`, `j` |-> `n:num`,
+                 `B` |-> `\a. if a < LENGTH cd then EL a cd else (0w:word8)`]
+                 (SPEC_ALL mm_local_payload_word_representative_payload)) >>
+                qpat_assum `cap = _` (fn th => rewrite_tac[GSYM th]) >> simp[]) >>
+             mp_tac (Q.INST [`j` |-> `n:num`] (SPEC_ALL mm_local_final_write_birth)) >>
+             qpat_assum `gs = _` (fn th => rewrite_tac[GSYM th]) >>
+             (impl_tac >- simp[]) >> strip_tac
+             >- (qpat_x_assum `(EL n is).inst_opcode = mode_copy_opcode mode` mp_tac >>
+                 simp[]) >>
+             rename1 `(EL n is).inst_operands = [Lit dw0; Var sv0]` >>
+             qexistsl [`dw0`,`sv0`] >> simp[] >>
+             gvs[mm_local_payload_capture_def, mm_local_payload_opcodes,
+               mm_local_write_capture_def, venomStateTheory.eval_operand_def,
+               AllCaseEqs()]) >>
+          gnvs[apply_groups_inst_supply_def] >> gvs[] >>
+          Cases_on `lookup_var sv w` >>
+          simp[unitMemInvTheory.static_mem_ok_def, unitMemInvTheory.inst_mem_ranges_def,
+            contextCodegenRelTheory.source_memory_read_ranges_def,
+            codegenRelTheory.source_memory_write_ranges_def,
+            codegenRelTheory.fixed_source_write_range_def,
+            venomStateTheory.eval_operand_def, arithmeticTheory.ADD_COMM]) >>
+      gnvs[apply_groups_inst_supply_def] >> gvs[] >> simp[] >>
+      (conj_tac
+       >- (irule (DISCH_ALL (CONJUNCT1 (UNDISCH
+             (Q.INST [`mode` |-> `CalldataMerge`, `dst` |-> `g.cg_dst`]
+               (SPEC_ALL mm_local_payload_word_static))))) >>
+           simp[] >> qexists `g` >> simp[]) >>
+       irule (DISCH_ALL (CONJUNCT2 (UNDISCH
+         (Q.INST [`mode` |-> `CalldataMerge`, `dst` |-> `g.cg_dst`]
+           (SPEC_ALL mm_local_payload_word_static))))) >> simp[])) >>
+  `chunk = [mk_bulk_copy_inst mode (EL n is) g]` by
+    (Cases_on `g.cg_length = 32`
+     >- (`mode = DloadMerge` by
+           (qpat_assum `~(g.cg_length = 32 /\ mode <> DloadMerge)` mp_tac >> simp[]) >>
+         qpat_x_assum `apply_groups_inst_supply _ _ _ _ _ = _` mp_tac >>
+         simp[apply_groups_inst_supply_def]) >>
+     qpat_x_assum `apply_groups_inst_supply _ _ _ _ _ = _` mp_tac >>
+     simp[apply_groups_inst_supply_def]) >>
+  asm_rewrite_tac[] >> simp[] >>
+  irule mm_local_payload_bulk_static >> simp[]
+QED
+
 Theorem mm_local_stage_correct:
   !fn0 supply index k bb sk fn bb' sk' fn'.
   fn_inst_wf fn0 /\ wf_function fn0 /\ wf_ssa fn0 /\ all_reachable fn0 /\
