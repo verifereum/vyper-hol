@@ -346,7 +346,6 @@ Proof
               truncate_signed_range]
   >- simp[SIMP_RULE (srw_ss()) [within_int_bound_def, LET_THM]
               (Q.SPEC `168` truncate_signed_range)]
-  >- (first_x_assum irule >> gvs[ETA_THM])
   >- (imp_res_tac LENGTH_decode_static_array >>
       simp[sparse_has_type_enumerate, SORTED_enumerate_static_array])
   >- (drule LENGTH_decode_dyn_array >> strip_tac >>
