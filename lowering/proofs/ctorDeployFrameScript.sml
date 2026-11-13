@@ -11,6 +11,8 @@ Ancestors
   frameOutcome vfmRunCall vfmState passSimulationDefs e2eDeployDefs
   frameGas venomRunBounded ctorDeployCallFree o1OpcodeAbsence
   codegenAsmProgOk frameRunRaises frameStep ctorDeployEntry immutableSectionRel
+  unitMemInv ctxLookupAgree stepWriteFootprintBase contextCodegenRel
+  o1PassContract venomPipelineDriverProps venomWf venomInst
 
 (* Single-frame outcomes depend on the start state only through its one
    context's logs and the transaction parameters. *)
@@ -327,9 +329,45 @@ Proof
   gvs[venom_frame_rel_def]
 QED
 
-(* PLANNED ADMISSION: the constructor unit's Venom run makes no oversized
-   CREATE. constructor_call_free excludes CreateTarget; the proof is the
-   call-free lowering's opcode absence carried through O1. *)
+(* A context whose functions have no CREATE or CREATE2 meets
+   inst_create_size_ok at every reachable instruction: the predicate only
+   constrains those two opcodes.  venom_wf supplies the entry the package
+   starts from. *)
+Theorem mem_inv_create_size_ok_no_create:
+  !ctx vs.
+    venom_wf ctx /\
+    (!fn inst. MEM fn ctx.ctx_functions /\ MEM inst (fn_insts fn) ==>
+               inst.inst_opcode <> CREATE /\ inst.inst_opcode <> CREATE2) ==>
+    mem_inv (\ctx fn inst s. inst_create_size_ok inst s) ctx vs
+Proof
+  rpt strip_tac >> simp[mem_inv_raw_reachable] >> conj_tac
+  >- (fs[venom_wf_def, ctx_wf_def, ctx_has_entry_def, ctx_fn_names_def] >>
+      Cases_on `lookup_function entry_name ctx.ctx_functions`
+      >- metis_tac[lookup_function_not_mem] >>
+      rename1 `lookup_function _ _ = SOME efn` >>
+      `wf_function efn` by metis_tac[venomInstTheory.lookup_function_MEM] >>
+      Cases_on `efn.fn_blocks` >>
+      fs[wf_function_def, fn_has_entry_def, fn_entry_label_def,
+         entry_block_def]) >>
+  rpt strip_tac >>
+  `lookup_function fn.fn_name ctx.ctx_functions = SOME fn` by
+    (qspecl_then [`K T`, `ctx`, `ctx`, `vs`] mp_tac raw_reachable_ctx_agree >>
+     simp[ctx_agree_def, fn_calls_within_def] >> impl_tac
+     >- simp[listTheory.EVERY_MEM, inst_calls_within_def] >>
+     disch_then drule >> simp[]) >>
+  `MEM inst (fn_insts fn)` by
+    (drule raw_reachable_active >>
+     simp[active_inst_def, fn_insts_def, fn_insts_blocks_MEM] >>
+     metis_tac[listTheory.MEM_EL]) >>
+  `inst.inst_opcode <> CREATE /\ inst.inst_opcode <> CREATE2` by
+    metis_tac[venomInstTheory.lookup_function_MEM] >>
+  simp[inst_create_size_ok_def]
+QED
+
+(* The constructor unit's Venom run makes no oversized CREATE: it makes no
+   CREATE at all.  constructor_call_free excludes CreateTarget, so the
+   lowered entry function has no CREATE, CREATE2 or INVOKE, and no O1 pass
+   introduces either create opcode. *)
 Theorem o1_deploy_unit_create_size_ok:
   !tops rpolicy runtime_bc dunit dout am tx vs.
     constructor_call_free tops /\ deploy_typing_ok tops am tx /\
@@ -338,8 +376,20 @@ Theorem o1_deploy_unit_create_size_ok:
     ==>
     mem_inv (\ctx fn inst s. inst_create_size_ok inst s) dout.po_unit.cu_context vs
 Proof
-  (* PLANNED ADMISSION: SEQ-4910 *)
-  cheat
+  rpt strip_tac >> match_mp_tac mem_inv_create_size_ok_no_create >>
+  conj_tac
+  >- (qpat_x_assum `o1PipelineCorrect$o1_pipeline _ _ = _` mp_tac >>
+      simp[o1PipelineCorrectTheory.o1_pipeline_def] >>
+      disch_then (assume_tac o MATCH_MP run_venom_pipeline_success_unit_wf) >>
+      fs[venomCompilerWfTheory.unit_wf_def]) >>
+  drule_all lower_vyper_deploy_unit_call_free_entry_ops >> strip_tac >>
+  rpt gen_tac >> strip_tac >> conj_tac
+  >- (qspecl_then [`rpolicy`, `dunit`, `dout`, `efn`, `CREATE`] mp_tac
+        o1_pipeline_leaf_entry_opcode_absence >>
+      impl_tac >- fs[] >> disch_then drule_all >> simp[]) >>
+  qspecl_then [`rpolicy`, `dunit`, `dout`, `efn`, `CREATE2`] mp_tac
+    o1_pipeline_leaf_entry_opcode_absence >>
+  impl_tac >- fs[] >> disch_then drule_all >> simp[]
 QED
 
 (* PLANNED ADMISSION S7g-d, sufficient gas for deployment: the deploy-side
@@ -404,8 +454,8 @@ Proof
   `!fn inst. MEM fn dout.po_unit.cu_context.ctx_functions /\
              MEM inst (fn_insts fn) ==> inst.inst_opcode <> RETURNDATACOPY` by
     (rpt gen_tac >> strip_tac >>
-     qspecl_then [`rpolicy`, `dunit`, `dout`, `efn`] mp_tac
-       o1_pipeline_leaf_entry_no_returndatacopy >>
+     qspecl_then [`rpolicy`, `dunit`, `dout`, `efn`, `RETURNDATACOPY`] mp_tac
+       o1_pipeline_leaf_entry_opcode_absence >>
      impl_tac >- fs[] >> disch_then drule_all >> simp[]) >>
   drule_all codegen_assembly_no_returndatacopy >> strip_tac >>
   `?c0 rb0. es.contexts = [(c0, rb0)]` by

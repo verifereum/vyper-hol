@@ -122,10 +122,11 @@ Proof
   simp[] >> metis_tac[cfg_iter_opcode_predicate]
 QED
 
-Theorem cfg_norm_function_supply_no_returndatacopy:
-  (!i. MEM i (fn_insts fn) ==> i.inst_opcode <> RETURNDATACOPY) ==>
+Theorem cfg_norm_function_supply_opcode_absence:
+  (op = RETURNDATACOPY \/ op = CREATE \/ op = CREATE2) /\
+  (!i. MEM i (fn_insts fn) ==> i.inst_opcode <> op) ==>
   !i. MEM i (fn_insts (FST (cfg_norm_function_supply s fn))) ==>
-      i.inst_opcode <> RETURNDATACOPY
+      i.inst_opcode <> op
 Proof
-  strip_tac >> ho_match_mp_tac cfg_norm_function_supply_opcode_predicate >> simp[]
+  strip_tac >> ho_match_mp_tac cfg_norm_function_supply_opcode_predicate >> gvs[]
 QED
