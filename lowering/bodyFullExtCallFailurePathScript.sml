@@ -15,7 +15,6 @@ Theorem extcall_forward_copy_edge[local]:
   copy.inst_opcode = RETURNDATACOPY /\ copy.inst_outputs = [] /\
   in_revert_forward func s /\ about_to_revert func copy s /\
   EVERY (\op. op_taint tn op = {}) copy.inst_operands /\
-  inst_mem_below_frontier copy s /\ inst_dload_in_section copy s /\
   step_inst_base copy s = OK u ==>
   !D. gas_origin_ptr_edge (D,lo,explicit,ctx,func,PG) (s,G,tn) []
     (OK (u with vs_inst_idx := SUC s.vs_inst_idx),
@@ -33,7 +32,14 @@ Proof
        write_memory_def, AllCaseEqs()]) >>
   `copy.inst_opcode <> INVOKE /\ ~is_terminator copy.inst_opcode` by
     simp[is_terminator_def] >>
-  drule_all straight_line_origin_ptr_edge >> simp[]
+  `step_inst 0 ctx copy s = OK u` by simp[step_inst_non_invoke] >>
+  `~u.vs_halted` by metis_tac[step_preserves_halted] >>
+  rewrite_tac[gas_origin_ptr_edge_def] >> conj_tac
+  >- (rewrite_tac[gas_origin_edge_def] >> simp[] >>
+      qexists_tac `0` >>
+      simp[step_inst_non_invoke, gas_events_step_def] >>
+      gvs[in_revert_forward_def, revert_forward_at_def] >> metis_tac[]) >>
+  drule_all straight_line_ptr_edge >> simp[]
 QED
 
 Theorem extcall_forward_revert_edge[local]:
@@ -42,7 +48,6 @@ Theorem extcall_forward_revert_edge[local]:
   get_instruction bb s.vs_inst_idx = SOME rev /\
   rev.inst_opcode = REVERT /\ in_revert_forward func s /\
   EVERY (\op. op_taint tn op = {}) rev.inst_operands /\
-  inst_mem_below_frontier rev s /\ inst_dload_in_section rev s /\
   step_inst_base rev s = Abort Revert_abort u ==>
   !D. gas_origin_ptr_edge (D,lo,explicit,ctx,func,PG) (s,G,tn) []
     (Abort Revert_abort u,G,tn)
@@ -57,9 +62,61 @@ Proof
   >- (rewrite_tac[gas_origin_edge_def] >> simp[] >>
       qexists_tac `0` >>
       simp[step_inst_non_invoke, gas_events_step_def,
-           mem_safe_step_non_invoke, exit_result_def]) >>
+           mem_safe_step_non_invoke, exit_result_def] >>
+      gvs[in_revert_forward_def, revert_forward_at_def] >> metis_tac[]) >>
   rewrite_tac[gas_path_ptr_edge_def] >> simp[] >>
   qexists_tac `0` >>
   simp[step_inst_non_invoke, gas_count_step_def, ptr_safe_step_def,
        exit_result_def]
+QED
+
+Theorem extcall_forward_pair_path:
+  ~s.vs_halted /\ ~ctx_has_dalloca ctx /\
+  allocas_from lo s /\ lo <= s.vs_alloca_next /\
+  lookup_block s.vs_current_bb func.fn_blocks = SOME bb /\
+  get_instruction bb s.vs_inst_idx = SOME copy /\
+  get_instruction bb (SUC s.vs_inst_idx) = SOME rev /\
+  copy.inst_opcode = RETURNDATACOPY /\ copy.inst_outputs = [] /\
+  copy.inst_operands = [p; Lit 0w; rds] /\
+  rev.inst_opcode = REVERT /\ rev.inst_operands = [p; rds] /\
+  op_taint tn p = {} /\ op_taint tn rds = {} /\
+  step_inst_base copy s = OK u /\
+  step_inst_base rev (u with vs_inst_idx := SUC s.vs_inst_idx) =
+    Abort Revert_abort t ==>
+  !D. gas_origin_ptr_path (D,lo,explicit,ctx,func,PG) (s,G,tn) []
+    (Abort Revert_abort t,step_prov PG G copy u,step_taint copy s u tn)
+Proof
+  strip_tac >> gen_tac >>
+  `step_inst 0 ctx copy s = OK u` by simp[step_inst_non_invoke] >>
+  `~is_terminator copy.inst_opcode` by simp[is_terminator_def] >>
+  `~u.vs_halted /\ u.vs_current_bb = s.vs_current_bb` by
+    metis_tac[step_preserves_halted, step_preserves_control_flow] >>
+  `allocas_from lo u` by
+    (irule frameActivationSeparationTheory.allocas_from_step >>
+     goal_assum (drule_at (Pat `step_inst _ _ _ _ = _`)) >> simp[]) >>
+  `in_revert_forward func s` by
+    (irule forwarding_pair_active >> metis_tac[]) >>
+  `about_to_revert func copy s` by
+    (simp[about_to_revert_def, active_inst_def] >>
+     qexists_tac `rev` >> simp[] >> qexists_tac `bb` >>
+     drule lookup_block_MEM >> drule lookup_block_label >>
+     fs[get_instruction_def, AllCaseEqs()]) >>
+  `in_revert_forward func (u with vs_inst_idx := SUC s.vs_inst_idx)` by
+    (irule forwarding_pair_active >> simp[] >> metis_tac[]) >>
+  `gas_origin_ptr_edge (D,lo,explicit,ctx,func,PG) (s,G,tn) []
+    (OK (u with vs_inst_idx := SUC s.vs_inst_idx),
+     step_prov PG G copy u,step_taint copy s u tn)` by
+    (irule extcall_forward_copy_edge >> simp[] >>
+     simp[op_taint_def] >> gvs[op_taint_def]) >>
+  `gas_origin_ptr_edge (D,lo,explicit,ctx,func,PG)
+    (u with vs_inst_idx := SUC s.vs_inst_idx,
+     step_prov PG G copy u,step_taint copy s u tn) []
+    (Abort Revert_abort t,step_prov PG G copy u,step_taint copy s u tn)` by
+    (irule extcall_forward_revert_edge >>
+     simp[forwarding_copy_operand_taint] >> fs[allocas_from_def] >> metis_tac[]) >>
+  qpat_x_assum `gas_origin_ptr_edge _ _ _ (Abort _ _,_,_)`
+    (mp_then Any mp_tac (cj 3 gas_origin_ptr_path_rules)) >>
+  simp[exit_result_def] >> strip_tac >>
+  drule (cj 2 gas_origin_ptr_path_rules) >>
+  disch_then (qspec_then `[]` mp_tac) >> simp[] >> disch_then irule >> simp[]
 QED
