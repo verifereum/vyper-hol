@@ -390,7 +390,7 @@ Proof
   gvs[arithmeticTheory.RIGHT_ADD_DISTRIB, arithmeticTheory.LEFT_ADD_DISTRIB]
 QED
 
-Theorem array_element_slot_bound[local]:
+Theorem array_element_slot_bound:
   !i n s base. i < n ==> base + i * s + s <= base + n * s
 Proof
   rpt strip_tac >>
@@ -514,7 +514,7 @@ Proof
 QED
 
 (* A dead byte of a static array in an element's slots is that element's. *)
-Theorem fixed_array_elem_dead[local]:
+Theorem fixed_array_elem_dead:
   !st bs tv n i x c.
     dead_bytes st bs (ArrayTV tv (Fixed n)) x c /\ i < n /\
     bs + i * type_slot_size tv <= x /\
@@ -559,7 +559,7 @@ QED
 
 (* A value's first slot holds no dead byte, so storage that agrees with st
    on the value's live bytes holds the same word there. *)
-Theorem dead_bytes_head_eq[local]:
+Theorem dead_bytes_head_eq:
   !st st' bs tv.
     (!i c. bs <= i /\ i < bs + type_slot_size tv /\ c < 32 /\
            ~dead_bytes st bs tv i c ==>
