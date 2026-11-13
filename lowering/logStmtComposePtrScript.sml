@@ -190,3 +190,28 @@ Finalise compile_log_ready_stmt_frag_ptr
 
 val _ = if null (hyp compile_log_ready_stmt_frag_ptr) then ()
   else raise Fail "compile_log_ready_stmt_frag_ptr is not closed";
+
+(* PORT_ADMISSION: SEQ-3718. Pointer twin of compile_log_ready_stmt_frag_widen
+   and compile_log_ready_stmt_frag_mem_widen: log arguments whose types are
+   only event_arg_compatible with the declared fields. Admitted like both
+   twins until the declared-layout log suffix is proved. *)
+Theorem compile_log_ready_stmt_frag_ptr_widen:
+  log_args_ready_ptr d ctx PG func cenv cx Inv args /\ Inv es /\
+  (!s gs. Inv s ==> Inv (s with gas_obs := gs)) /\
+  expr_sim_inv cenv cx env es /\ well_typed_exprs env args /\
+  (!id t. FLOOKUP env.var_types id = SOME t ==>
+     ?p sz. FLOOKUP cenv.ce_vars id = SOME (PtrVar (Var p) sz)) /\
+  cenv.ce_event_info (nsid_to_string id) = SOME (h,tys,flags) /\
+  lookup_event_metadata (get_tenv cx) cx.sources cx.txn.target id = SOME (h,tys,flags) /\
+  LIST_REL event_arg_compatible tys (MAP expr_type args) /\ LENGTH flags = LENGTH tys /\
+  LENGTH (FILTER I flags) <= 3 /\ EVERY supported_scalar_type tys /\
+  ~exprs_can_mutate cenv args /\
+  EVERY (\e. is_bytestring_type (lowered_value_type cenv e) <=>
+             is_bytestring_type (expr_type e)) args /\
+  SUM (MAP (type_memory_bytes cenv) (log_non_indexed_types flags tys)) < dimword(:256) /\
+  abi_size_bound cenv.ce_struct_fields (TupleT (log_non_indexed_types flags tys)) < dimword(:256) ==>
+  stmt_frag_ptr d ctx PG func cx lctx RetQ cenv
+    (stmt_env cenv lctx ty (Log id args)) (eval_stmt cx (Log id args)) es
+Proof
+  cheat
+QED

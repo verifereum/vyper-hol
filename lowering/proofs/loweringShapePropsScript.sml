@@ -31,6 +31,7 @@
  *)
 Theory loweringShapeProps
 Ancestors
+  publicGetterProps
   list rich_list loweringShapeDefs loweringShapeRules compileEnv loweringStateRelDefs context
   emitHelper exprLowering stmtLowering moduleLowering vyperCompiler
   compileVyper constSubst vyperGetter abiEncoder supportedProgram supportedNames
@@ -14416,16 +14417,6 @@ Proof
   IF_CASES_TAC >> simp[]
 QED
 
-Theorem public_getter_defaults[local]:
-  !top mut nr rr name args dflts ret body.
-    public_getter top = SOME (mut,nr,rr,name,args,dflts,ret,body) ==>
-    dflts = []
-Proof
-  Cases_on `top` >> simp[public_getter_def] >> rpt gen_tac >>
-  Cases_on `v` >> simp[public_getter_def, getter_def] >>
-  rpt CASE_TAC >> gvs[] >> rpt (pairarg_tac >> gvs[]) >>
-  strip_tac >> gvs[]
-QED
 
 (* The supported fragment has no default arguments for now, so a supported
    program's runtime unit takes the ordinary run_lowering path. *)
