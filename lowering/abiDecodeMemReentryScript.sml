@@ -1,60 +1,10 @@
 (* Memory checks and real-state transport for decoder reentry. *)
 Theory abiDecodeMemReentry
 Ancestors
-  abiDecoderVarExtend abiDecoderVarSequence abiDecoderReentry fragGasPathMem fragGasSeqMem
+  abiDecodeMemSequenceReentry abiDecoderVarExtend abiDecoderVarSequence
+  abiDecoderReentry fragGasPathMem fragGasSeqMem
   execEquivParamProps execEquivParamDefs codegenRel contextCodegenRel memSafeRun unitTransformDefs
   abiEncoderVarTransport abiEncoderExtendControl opcodeClass venomExecSemantics venomState venomInst finite_map list
-
-Theorem abi_decode_reentry_operand_agreement[local]:
-  abi_decoder_vars_extend extras s t /\ abi_decoder_inputs_defined inst s ==>
-  !op. MEM op inst.inst_operands ==> eval_operand op s = eval_operand op t
-Proof
-  strip_tac >> drule abi_decoder_vars_extend_inputs >> disch_then drule >> strip_tac >>
-  drule abi_decoder_vars_extend_observations >> strip_tac >>
-  Cases >> simp[eval_operand_def] >> metis_tac[]
-QED
-
-Theorem abi_decode_reentry_memory_checks:
-  abi_decoder_vars_extend extras s t /\ abi_decoder_inputs_defined inst s /\
-  abi_decoder_reentry_opcode inst.inst_opcode ==>
-  (inst_mem_below_frontier inst s <=> inst_mem_below_frontier inst t) /\
-  (inst_dload_in_section inst s <=> inst_dload_in_section inst t)
-Proof
-  strip_tac >> drule abi_decode_reentry_operand_agreement >> disch_then drule >> strip_tac >>
-  drule abi_decoder_vars_extend_observations >> strip_tac >>
-  Cases_on `inst.inst_opcode` >> gvs[abi_decoder_reentry_opcode_def] >>
-  simp[inst_mem_below_frontier_def, source_memory_read_ranges_def,
-    source_memory_write_ranges_def, inst_dload_in_section_def] >>
-  Cases_on `inst.inst_operands` >> simp[] >>
-  rename1 `h::rest` >> Cases_on `rest` >> fs[fixed_source_write_range_def, sized_source_write_range_def] >>
-  rename1 `h::h'::rest` >> Cases_on `rest` >> fs[fixed_source_write_range_def, sized_source_write_range_def] >>
-  rename1 `h::h'::h''::rest` >> Cases_on `rest` >> fs[fixed_source_write_range_def, sized_source_write_range_def] >>
-  fs[fixed_source_write_range_def, sized_source_write_range_def]
-QED
-
-Theorem abi_decode_reentry_revert:
-  abi_decoder_vars_extend extras s t /\ abi_decoder_inputs_defined inst s /\
-  abi_decoder_reentry_opcode inst.inst_opcode /\
-  step_inst_base inst s = Abort Revert_abort u ==>
-  ?v. step_inst_base inst t = Abort Revert_abort v /\
-      abi_decoder_vars_extend extras u v
-Proof
-  strip_tac >>
-  `inst.inst_opcode = ASSERT` by
-    (drule opcodeClassTheory.step_inst_base_abort_opcodes >>
-     fs[abi_decoder_reentry_opcode_def] >> metis_tac[]) >>
-  drule abi_decode_reentry_operand_agreement >> disch_then drule >> strip_tac >>
-  qpat_x_assum `step_inst_base inst s = _` mp_tac >>
-  simp[step_inst_base_def] >> strip_tac >> gvs[AllCaseEqs()] >>
-  simp[step_inst_base_def] >>
-  simp[abi_decoder_vars_extend_def, vsr_frame_def, abi_decoder_var_map_def,
-    revert_state_def, set_returndata_def, Excl "vsr_complete_mask_equality"] >>
-  fs[abi_decoder_vars_extend_def, vsr_frame_def, abi_decoder_var_map_def,
-     Excl "vsr_complete_mask_equality"] >>
-  qpat_x_assum `s with vs_vars := FEMPTY = _`
-    (mp_tac o Q.AP_TERM `\u:venom_state. u with <|vs_returndata := []; vs_halted := T|>`) >> simp[]
-QED
-
 
 Theorem abi_decode_reentry_edge_check[local]:
   abi_decoder_vars_extend extras s t /\ abi_decoder_inputs_defined inst s /\
