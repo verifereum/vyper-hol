@@ -200,8 +200,8 @@ Proof
 QED
 
 Theorem gas_shadow_subscript_overlap[simp]:
-  subscript_overlap mods (gas_shadow_expr base) (gas_shadow_expr idx) =
-  subscript_overlap mods base idx
+  subscript_overlap mods (gas_shadow_expr base_e) (gas_shadow_expr idx_e) =
+  subscript_overlap mods base_e idx_e
 Proof
   simp[subscript_overlap_def, expr_accesses_def, reached_functions_def,
        gas_shadow_accesses_expr, gas_shadow_int_calls_expr,
