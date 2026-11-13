@@ -138,7 +138,7 @@ Proof
                 deploy_frame_complete >>
               impl_tac >- simp[] >>
               strip_tac >> gvs[]
-              >- (disj1_tac >> irule frame_resource_starved_single_transfer >>
+              >- (disj1_tac >> irule creation_resource_starved_single_transfer >>
                   metis_tac[]) >>
               disj2_tac >> simp[deploy_result_rel_def] >>
               qexists_tac `ss.vs_logs` >>
