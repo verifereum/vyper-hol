@@ -4,6 +4,7 @@ Ancestors
   stmtSimAppendResolved allocaFootprint fragExecMem instMemFrontier
   exprLowering exprLoweringProps emitHelper emitHelperProps compileEnv loweringStateRelDefs
   venomState venomInst venomExecSemantics venomMemDefs list rich_list words
+  varsExt freshWrites stateFrame finite_map ssaOperandFrame
 
 Theorem append_memory_word_footprint:
   compile_dynarray_append ce bop vop 32 32 dt vt cap T MLOAD MSTORE sa = ((),sf) ==>
@@ -100,3 +101,72 @@ Resume append_memory_word_mem_ok[success]:
 QED
 
 Finalise append_memory_word_mem_ok
+
+Theorem append_memory_word_run_reserved:
+  compile_dynarray_append ce bop vop 32 32 dt vt cap T MLOAD MSTORE sa = ((),sf) /\
+  (!x. bop = Var x \/ vop = Var x ==> not_fresh_at sa x) /\
+  eval_operand bop s = SOME bp /\ eval_operand vop s = SOME w /\
+  cap < dimword (:256) /\ w2n bp + 32*(1+cap) <= dimword (:256) ==>
+  (cap <= w2n (mload (w2n bp) s) ==>
+    ?a t. run_inst_seq (emitted_insts sa sf) s = Abort a t) /\
+  (!len. len = w2n (mload (w2n bp) s) /\ len < cap ==>
+    ?u. run_inst_seq (emitted_insts sa sf) s = OK u /\
+      state_frame u = state_frame
+        (mstore (w2n bp) (n2w (len+1))
+          (mstore (w2n bp+32*(1+len)) w s)) /\
+      (!x a. not_fresh_at sa x /\ lookup_var x s = SOME a ==>
+        lookup_var x u = SOME a))
+Proof
+  strip_tac >>
+  drule append_memory_word_footprint >> strip_tac >>
+  `fresh_vars_wrt sa (drop_fresh sa s)` by simp[fresh_vars_wrt_drop_fresh] >>
+  `eval_operand bop (drop_fresh sa s) = SOME bp /\
+   eval_operand vop (drop_fresh sa s) = SOME w` by
+    (simp[eval_operand_drop_fresh] >> metis_tac[]) >>
+  `mload (w2n bp) (drop_fresh sa s) = mload (w2n bp) s` by
+    simp[drop_fresh_def, mload_def] >>
+  `vars_ext_result (run_inst_seq (emitted_insts sa sf) (drop_fresh sa s))
+    (run_inst_seq (emitted_insts sa sf) s)` by
+    (irule run_inst_seq_vars_ext >> simp[vars_ext_drop_fresh] >>
+     gvs[EVERY_MEM] >> rpt strip_tac >> res_tac >>
+     gvs[is_terminator_def, is_ext_call_op_def]) >>
+  conj_tac >- suspend "full" >> suspend "stored"
+QED
+
+Resume append_memory_word_run_reserved[full]:
+  strip_tac >>
+  `cap <= w2n (mload (w2n bp) (drop_fresh sa s))` by simp[] >>
+  drule_all append_memory_word_abort >> strip_tac >>
+  qpat_x_assum `vars_ext_result _ _` mp_tac >>
+  simp[vars_ext_result_def] >> metis_tac[]
+QED
+
+Resume append_memory_word_run_reserved[stored]:
+  rpt strip_tac >>
+  `len = w2n (mload (w2n bp) (drop_fresh sa s)) /\
+   w2n bp + 32*(1+cap) <= dimword (:256)` by simp[drop_fresh_def] >>
+  drule_all append_memory_word_run >> strip_tac >>
+  `?u. run_inst_seq (emitted_insts sa sf) s = OK u /\ vars_ext t u` by
+    (qpat_x_assum `vars_ext_result _ _` mp_tac >>
+     asm_rewrite_tac [] >>
+     Cases_on `run_inst_seq (emitted_insts sa sf) s` >>
+     simp[vars_ext_result_def]) >>
+  qexists_tac `u` >> asm_rewrite_tac [] >> conj_tac
+  >- (`state_frame u = state_frame t` by
+        (qpat_x_assum `vars_ext t u` mp_tac >>
+         simp_tac bool_ss [vars_ext_def] >> strip_tac >>
+         qpat_x_assum `u = _` (fn th => once_rewrite_tac [th]) >>
+         rewrite_tac [state_frame_vars]) >>
+      qpat_x_assum `state_frame u = _` (fn th => pure_once_rewrite_tac [th]) >>
+      qpat_x_assum `state_frame t = _` (fn th => pure_once_rewrite_tac [th]) >>
+      asm_simp_tac bool_ss [] >>
+      simp_tac bool_ss [drop_fresh_def, mstore_reset_vars, state_frame_vars]) >>
+  rpt strip_tac >>
+  `eval_operand (Var x) (drop_fresh sa s) = SOME a` by
+    simp[eval_operand_def, lookup_var_drop_fresh] >>
+  `eval_operand (Var x) t = SOME a` by metis_tac[] >>
+  fs[vars_ext_def, eval_operand_def, lookup_var_def] >>
+  metis_tac[FLOOKUP_SUBMAP]
+QED
+
+Finalise append_memory_word_run_reserved

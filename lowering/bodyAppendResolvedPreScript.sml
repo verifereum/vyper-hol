@@ -1,7 +1,7 @@
 (* Body inputs shared by local, subscript and attribute Append simulations. *)
 Theory bodyAppendResolvedPre
 Ancestors
-  bodyAugPlaceTarget bodyAppendStorageFacts bodyExprPreFacts bodyStorageCases
+  bodyAugPlaceTarget bodySimAugPlaceLoad bodyAppendStorageFacts bodyExprPreFacts bodyStorageCases
   bodySim exprSimHypsDefs targetPlaceSim targetPlaceLive gasContext
   supportedTypes supportedStmts supportedTargets supportedExprs supportedExprTraverse
   supportedStmtTraverse allocLimits allocLimitsProps exprLowering
@@ -89,3 +89,15 @@ Resume body_append_resolved_pre[rhs]:
 QED
 
 Finalise body_append_resolved_pre
+
+Theorem append_resolved_rhs_body_pre:
+  expr_body_pre cenv cx env e es /\ target_pre cenv cx env bt es /\
+  eval_target_place cx bt es = (INL p,ee) ==>
+  expr_body_pre cenv cx env e ee
+Proof
+  rpt strip_tac >>
+  `expr_sim_inv cenv cx env es /\ target_indices_pre cenv cx env bt` by
+    fs[expr_body_pre_def, target_pre_def] >>
+  drule_all aug_place_target_inv >>
+  fs[expr_body_pre_def]
+QED

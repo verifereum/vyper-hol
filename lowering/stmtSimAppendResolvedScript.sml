@@ -3,7 +3,7 @@ Theory stmtSimAppendResolved
 Ancestors
   loweringPosts stmtLowering exprLowering compileEnv emitHelper emitHelperProps
   exprLoweringProps venomState venomInst venomExecSemantics
-  stateFrame list words
+  stateFrame stmtLoweringMono list words
 
 Theorem append_resolved_word_code_parts:
   stmt_env cenv lctx ty (Append target e) sa = (c,sf) /\
@@ -314,4 +314,48 @@ Proof
   qexists_tac `g` >> conj_tac >- first_assum ACCEPT_TAC >>
   conj_tac >- first_assum ACCEPT_TAC >>
   irule run_inst_seq_abort_extends >> qexists_tac `st3` >> simp[]
+QED
+
+Theorem append_resolved_target_prefix:
+  stmt_env cenv lctx ty (Append bt e) sa = (c,sf) /\
+  fn_has_code sa sf func ==>
+  c = cenv /\ ?r sm.
+    compile_get_target_ptr compile_expr cenv bt sa = (r,sm) /\
+    ci_mono sa sm /\ ci_mono sm sf /\
+    fn_has_code sa sm func /\ fn_has_code sm sf func
+Proof
+  strip_tac >>
+  `c = cenv /\ compile_stmt cenv lctx ty (Append bt e) sa = ((),sf)` by
+    (qpat_x_assum `stmt_env _ _ _ _ _ = _` mp_tac >>
+     Cases_on `compile_stmt cenv lctx ty (Append bt e) sa` >>
+     rename1 `compile_stmt _ _ _ _ _ = (u,sn)` >> Cases_on `u` >>
+     simp[stmt_env_def, declare_stmt_local_def, comp_bind_def,
+          comp_ignore_bind_def, comp_return_def] >>
+     rpt strip_tac >> gvs[]) >>
+  qpat_x_assum `compile_stmt _ _ _ _ _ = _` mp_tac >>
+  pure_once_rewrite_tac [compile_stmt_def] >>
+  qmatch_goalsub_abbrev_tac
+    `comp_bind (compile_get_target_ptr compile_expr cenv bt) rest sa` >>
+  `!r si. ci_mono si (SND (rest r si))` by
+    (qunabbrev_tac `rest` >> rpt gen_tac >>
+     pure_rewrite_tac [LET_THM] >> BETA_TAC >>
+     rpt (FIRST [MATCH_MP_TAC ci_mono_bind,
+                 MATCH_MP_TAC ci_mono_ignore_bind,
+                 MATCH_ACCEPT_TAC (cj 2 ci_mono_compile_expr_sa),
+                 MATCH_ACCEPT_TAC ci_mono_compile_alloc_buffer,
+                 MATCH_ACCEPT_TAC ci_mono_compile_store_memory,
+                 MATCH_ACCEPT_TAC ci_mono_compile_dynarray_append,
+                 MATCH_ACCEPT_TAC ci_mono_comp_return,
+                 IF_CASES_TAC] >>
+          rpt conj_tac >> rpt gen_tac >>
+          pure_rewrite_tac [LET_THM] >> BETA_TAC)) >>
+  Cases_on `compile_get_target_ptr compile_expr cenv bt sa` >>
+  rename1 `compile_get_target_ptr _ _ _ _ = (ptr_result,sp)` >>
+  simp[comp_bind_def] >> strip_tac >>
+  `ci_mono sa sp` by
+    (mp_tac (Q.SPECL [`bt`, `cenv`, `sa`] ci_mono_compile_get_target_ptr) >>
+     simp[]) >>
+  `ci_mono sp sf` by metis_tac[pairTheory.SND] >>
+  simp[] >>
+  fs[ci_mono_def] >> metis_tac[fragExecTheory.fn_has_code_split]
 QED
