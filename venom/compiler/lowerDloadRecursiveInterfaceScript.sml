@@ -5745,7 +5745,7 @@ Proof
   strip_tac >> mp_tac ld_recursive_combined_entry_clause >>
   (impl_tac >- asm_rewrite_tac[]) >> disch_tac >> rpt gen_tac >> strip_tac >>
   ntac 7 (CONV_TAC ld_head_beta_conv) >>
-  conj_tac >- metis_tac[lookup_function_MEM] >>
+  conj_tac >- (irule lookup_function_MEM >> first_assum (irule_at Any)) >>
   conj_tac >- simp[] >>
   first_x_assum irule >> simp[] >> metis_tac[]
 QED

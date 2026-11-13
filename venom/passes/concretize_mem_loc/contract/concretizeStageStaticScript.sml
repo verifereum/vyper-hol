@@ -63,6 +63,8 @@ Proof
     >- (rpt strip_tac >> drule_all ptr_paired_universal_extension >>
         disch_then ACCEPT_TAC) >>
     fs[listTheory.EVERY_MEM] >> metis_tac[]) >>
+  `ctx_has_dalloca C ==> mem_inv dload_headroom_ok C vs` by
+    (qpat_assum `~ctx_has_dalloca C` (fn th => rewrite_tac[th])) >>
   drule_all (SIMP_RULE bool_ss [PULL_EXISTS] ptr_paired_coverage_static_mem) >>
   disch_then ACCEPT_TAC
 QED
