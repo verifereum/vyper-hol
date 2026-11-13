@@ -350,8 +350,31 @@ Proof
   fs[lookup_var_def]
 QED
 
+Theorem word_neg_result_clean:
+  compile_neg x ty sa = (op,sb) /\ op_prov G x = NONE /\
+  run_inst_seq (emitted_insts sa sb) s = OK t /\
+  inst_seq_ptr D lo ctx fn PG G tn (emitted_insts sa sb) s G' tn' ==>
+  op_taint tn' op = {} /\ op_prov G' op = NONE
+Proof
+  strip_tac >> drule word_neg_emission >> strip_tac >>
+  qmatch_asmsub_abbrev_tac `emitted_insts sa sb = [i;j;k]` >>
+  `~is_terminator i.inst_opcode /\ ~is_terminator j.inst_opcode /\
+   ~is_terminator k.inst_opcode` by
+    simp[Abbr `i`, Abbr `j`, Abbr `k`, mk_inst_def, is_terminator_def] >>
+  gvs[run_inst_seq_def, AllCaseEqs()] >>
+  gvs[inst_seq_ptr_def, step_inst_inst_idx_indep, exec_result_map_def] >>
+  simp[Abbr `i`, Abbr `j`, Abbr `k`, step_prov_def, out_prov_def,
+    set_prov_def, op_prov_def, first_prov_def, FLOOKUP_DRESTRICT,
+    step_taint_def, op_taint_def, set_var_taint_def, out_taint_def,
+    mk_inst_def, FLOOKUP_UPDATE, eval_operand_def] >>
+  Cases_on `x` >> gvs[op_prov_def] >>
+  Cases_on `s' = STRING #"%" (toString sa.cs_next_var)` >>
+  gvs[FLOOKUP_DRESTRICT]
+QED
+
 Theorem word_neg_success_ghost_origin:
   compile_neg x ty sa = (op,sb) /\ fresh_vars_wrt sa s /\
+  op_prov G x = NONE /\ 
   eval_operand x s = SOME w /\
   w2i (FST (type_bounds ty)) < w2i w /\
   op_taint tn x = {} /\ allocas_from lo s /\
@@ -368,6 +391,13 @@ Theorem word_neg_success_ghost_origin:
   ?t G' tn'.
     run_inst_seq (emitted_insts sa sb) s = OK t /\
     eval_operand op t = SOME (0w - w) /\
+    op_taint tn' op = {} /\ op_prov G' op = NONE /\
+    t = s with vs_vars := t.vs_vars /\
+    (!z. not_fresh_at sa z ==> lookup_var z t = lookup_var z s /\
+         FLOOKUP G' z = FLOOKUP G z /\
+         op_taint tn' (Var z) = op_taint tn (Var z)) /\
+    tn'.t_mem = tn.t_mem /\ tn'.t_stor = tn.t_stor /\
+    tn'.t_trans = tn.t_trans /\ tn'.t_imm = tn.t_imm /\
     !H. valid_horizon cx st0 H trace ==>
       gas_origin_ptr_path (DF H,lo,explicit,ctx,func,PG) (s,G,tn) []
         (OK (t with vs_inst_idx := s.vs_inst_idx + LENGTH (emitted_insts sa sb)),
@@ -377,6 +407,15 @@ Theorem word_neg_success_ghost_origin:
 Proof
   strip_tac >> drule_all word_neg_success_origin >>
   disch_then (qspecl_then [`explicit`, `PG`, `G`] strip_assume_tac) >>
+  `inst_seq_ptr (DF (storage_trace_horizon trace)) lo ctx func PG G tn
+     (emitted_insts sa sb) s G' tn'` by simp[] >>
+  drule_all word_neg_result_clean >> strip_tac >>
+  drule_all word_neg_runtime_frame >> strip_tac >>
+  drule_all word_neg_taint_exterior >> strip_tac >>
+  `!z. not_fresh_at sa z ==> lookup_var z t = lookup_var z s /\
+       FLOOKUP G' z = FLOOKUP G z /\
+       op_taint tn' (Var z) = op_taint tn (Var z)` by
+    metis_tac[word_neg_ghost_register_frame] >>
   qexistsl [`t`, `G'`, `tn'`] >> simp[] >> rpt strip_tac >>
   irule word_neg_ghost_frame >> metis_tac[]
 QED
