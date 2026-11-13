@@ -87,7 +87,6 @@ QED
 
 Theorem fuel_ok_context_storage:
   (!slot p n sz. fuel_ok Wv {} E (compile_load_storage slot p n sz)) /\
-  (!v slot p n. fuel_ok Wv {} E (compile_store_storage v slot p n)) /\
   (!slot p n sz. fuel_ok Wv {} E (compile_load_transient slot p n sz)) /\
   (!off p n sz c. fuel_ok Wv {} E (compile_load_immutable off p n sz c)) /\
   (!off p n sz. fuel_ok Wv {} E (compile_load_calldata off p n sz)) /\
@@ -101,7 +100,7 @@ Theorem fuel_ok_context_storage:
   (!v d. fuel_ok Wv {} E (compile_store_bytestring v d))
 Proof
   rpt conj_tac >> rpt gen_tac >>
-  simp_tac std_ss [compile_load_storage_def, compile_store_storage_def,
+  simp_tac std_ss [compile_load_storage_def,
     compile_load_transient_def, compile_load_immutable_def,
     compile_load_calldata_def, compile_nonreentrant_lock_def,
     compile_nonreentrant_unlock_def, compile_copy_memory_dynamic_def,
@@ -195,7 +194,6 @@ QED
 Theorem fuel_ok_context_misc:
   (!v b. fuel_ok Wv {} E (compile_encode_log_topic v b)) /\
   (!p b. fuel_ok Wv {} E (compile_load_memory p b)) /\
-  (!v slot b n. fuel_ok Wv {} E (compile_store_transient v slot b n)) /\
   (!off b n sz opt.
      fuel_ok Wv {} E (compile_load_immutable_ctor off b n sz opt))
 Proof
@@ -203,11 +201,7 @@ Proof
   >- (simp_tac std_ss [compile_encode_log_topic_def] >>
       fuel_auto [fuel_ok_emit_op] >> simp[is_terminator_def])
   >- (simp_tac std_ss [compile_load_memory_def] >>
-      fuel_auto [fuel_ok_emit_op] >> simp[is_terminator_def])
-  >- (simp_tac std_ss [compile_store_transient_def] >>
-      fuel_auto [fuel_ok_emit_op, fuel_ok_emit_void_any,
-                 fuel_ok_context_copies] >>
-      simp[is_terminator_def]) >>
+      fuel_auto [fuel_ok_emit_op] >> simp[is_terminator_def]) >>
   Cases_on `opt` >>
   simp_tac (srw_ss()) [compile_load_immutable_ctor_def] >>
   fuel_auto [fuel_ok_emit_op, fuel_ok_compile_alloc_buffer,

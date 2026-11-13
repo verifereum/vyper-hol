@@ -6,6 +6,7 @@ Ancestors
   vyperState exprLowering compileEnv
 
 Theorem code_array_after_base_ptr:
+  ~subscript_reads_base cx obj idx ==>
   gas_marked_exec_ptr (cx_dead cx) (ctx,func) PG (eval_expr cx obj)
     (es,s0,G0,tn0) left (INL captured) mid G1 tn1 (OK t) /\
   expr_sim_ptr d ctx PG func cenv cx ty idx (mid with gas_obs := []) /\
@@ -38,12 +39,13 @@ Theorem code_array_after_base_ptr:
     (eval_expr cx (Subscript ann obj idx)) (es,s0,G0,tn0)
     Q (\res ee gt out. expr_exit res out)
 Proof
-  strip_tac >>
+  strip_tac >> strip_tac >>
   qpat_x_assum `expr_sim_ptr _ _ _ _ _ _ _ _ _`
     (mp_tac o REWRITE_RULE [expr_sim_ptr_def]) >>
   disch_then (qspecl_then [`sm`,`si`,`iop`,`t`,`G1`,`tn1`] mp_tac) >>
   (impl_tac >- simp[]) >> strip_tac >>
-  pure_once_rewrite_tac[eval_expr_subscript_bind] >>
+  qpat_assum `~subscript_reads_base _ _ _` (fn th =>
+    pure_once_rewrite_tac[MATCH_MP eval_expr_subscript_bind th]) >>
   irule (BETA_RULE (Q.ISPEC `\r v. select_result cx (expr_type obj) r (ValueSubscript v)`
     (Q.GEN `k` array_index_outcome_compose_ptr))) >>
   goal_assum (drule_at Any) >> BETA_TAC >>
