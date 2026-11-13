@@ -455,11 +455,12 @@ Resume concat_args_sim_mem[post]:
      ntac 3 (pop_assum mp_tac) >> rpt (disch_then SUBST1_TAC) >> REFL_TAC) >>
   qpat_x_assum `_ ==> pure_args` (fn th => rewrite_tac[th]) >>
   qunabbrev_tac `pure_args` >>
-  qpat_assum `storage_well_formed_on cx (es_end' with gas_obs := []) (FST H)`
-    (fn th => simp[th]) >> conj_tac
+  simp[] >> conj_tac
   >- (qpat_x_assum `expr_sim_inv _ _ _ (es_end' with gas_obs := [])` mp_tac >> simp[]) >>
   conj_tac
   >- (qpat_x_assum `stmt_state_rel H _ _ _ _ (es_end' with gas_obs := []) tu` mp_tac >> simp[]) >>
+  conj_tac
+  >- first_assum ACCEPT_TAC >>
   conj_tac
   >- (qpat_x_assum `mem_bytes_at _ _ tu.vs_memory = mem_bytes_at _ _ s0.vs_memory ++ _` mp_tac >>
       simp_tac bool_ss [LENGTH_APPEND, APPEND_ASSOC, AC ADD_ASSOC ADD_COMM]) >>
