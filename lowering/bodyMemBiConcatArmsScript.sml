@@ -9,6 +9,21 @@ Ancestors
 Libs
   monadsyntax
 
+Theorem concat_mstore_mcopy_fields[local]:
+  (mstore p w s).vs_accounts = s.vs_accounts /\
+  (mstore p w s).vs_transient = s.vs_transient /\
+  (mstore p w s).vs_requests = s.vs_requests /\
+  (mstore p w s).vs_call_ctx = s.vs_call_ctx /\
+  (mstore p w s).vs_alloca_next = s.vs_alloca_next /\
+  (mcopy d src n s).vs_accounts = s.vs_accounts /\
+  (mcopy d src n s).vs_transient = s.vs_transient /\
+  (mcopy d src n s).vs_requests = s.vs_requests /\
+  (mcopy d src n s).vs_call_ctx = s.vs_call_ctx /\
+  (mcopy d src n s).vs_alloca_next = s.vs_alloca_next
+Proof
+  simp[mstore_def, mcopy_def, write_memory_with_expansion_def]
+QED
+
 Theorem concat_fixed_arm_mem:
   !H ctx func cenv cx es t sx s2 data_ptr off_ptr x m bs ow k binst B bsz oinst.
     (do offset_op <- emit_op MLOAD [off_ptr];
@@ -151,11 +166,7 @@ Resume concat_fixed_arm_mem[history]:
 QED
 
 Resume concat_fixed_arm_mem[fields]:
-  conj_tac >- simp[Abbr `t2`, mstore_def] >>
-  conj_tac >- simp[Abbr `t2`, mstore_def] >>
-  conj_tac >- simp[Abbr `t2`, mstore_def] >>
-  conj_tac >- simp[Abbr `t2`, mstore_def] >>
-  simp[Abbr `t2`, mstore_def]
+  simp[Abbr `t2`, concat_mstore_mcopy_fields]
 QED
 
 Finalise concat_fixed_arm_mem
@@ -313,16 +324,7 @@ Resume concat_bytes_arm_mem[history]:
 QED
 
 Resume concat_bytes_arm_mem[fields]:
-  conj_tac >- simp[Abbr `t2`, Abbr `t1`, mstore_def, mcopy_def,
-                   write_memory_with_expansion_def] >>
-  conj_tac >- simp[Abbr `t2`, Abbr `t1`, mstore_def, mcopy_def,
-                   write_memory_with_expansion_def] >>
-  conj_tac >- simp[Abbr `t2`, Abbr `t1`, mstore_def, mcopy_def,
-                   write_memory_with_expansion_def] >>
-  conj_tac >- simp[Abbr `t2`, Abbr `t1`, mstore_def, mcopy_def,
-                   write_memory_with_expansion_def] >>
-  simp[Abbr `t2`, Abbr `t1`, mstore_def, mcopy_def,
-                   write_memory_with_expansion_def]
+  simp[Abbr `t2`, Abbr `t1`, concat_mstore_mcopy_fields]
 QED
 
 Finalise concat_bytes_arm_mem
