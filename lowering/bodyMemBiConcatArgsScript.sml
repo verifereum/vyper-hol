@@ -99,7 +99,9 @@ Proof
       disj1_tac >> gen_tac >> strip_tac >>
       qpat_x_assum `!H. valid_horizon _ _ H es.storage_trace ==> _ /\ _`
         (drule_then strip_assume_tac) >>
-      gvs[storage_well_formed_on_def]) >>
+      `(es with gas_obs := []).accounts = es.accounts /\
+       (es with gas_obs := []).tStorage = es.tStorage` by simp[] >>
+      metis_tac[vyperStorageFootprintTheory.storage_well_formed_on_backends]) >>
   rpt gen_tac >> disch_then (MAP_EVERY assume_tac o CONJUNCTS) >>
   rename1 `body_exprs_mem_ok cx (e::args)` >>
   qpat_x_assum `body_exprs_mem_ok _ (_::_)`
