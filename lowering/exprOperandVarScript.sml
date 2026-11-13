@@ -1749,7 +1749,6 @@ Proof
   simp[local_ptrs_reserved_def, cenv_without_defaults_def]
 QED
 
-(* HELD: stage-tower proof does not cover the internal-defaults staging (sup_ops ++ dflt_ops) *)
 Theorem compiler_intcall_reserved_cong:
   (!ce ty e s. ci_mono s (SND (f ce ty e s))) /\
   (!ty e s. local_ptrs_reserved ce s ==> f ce ty e s = g ce ty e s) /\
@@ -1760,24 +1759,37 @@ Theorem compiler_intcall_reserved_cong:
   compile_call f ce rt ty (IntCall id) args dr sa =
   compile_call g ce rt ty (IntCall id) args dr sa
 Proof
-  (* original proof, kept while held:
   strip_tac >>
   `!flags tys sb. local_ptrs_reserved ce sb ==>
      compile_stage_intcall_args f ce args flags tys sb =
      compile_stage_intcall_args g ce args flags tys sb` by
     (rpt strip_tac >> irule compiler_stage_intcall_args_reserved_cong >>
      simp[]) >>
+  `!n ds flags tys sb. local_ptrs_reserved ce sb ==>
+     compile_stage_intcall_args f (cenv_without_defaults ce n) ds flags tys sb =
+     compile_stage_intcall_args g (cenv_without_defaults ce n) ds flags tys sb` by
+    (rpt strip_tac >> irule compiler_stage_intcall_args_reserved_cong >>
+     simp[]) >>
+  `!flags tys sb. local_ptrs_reserved ce sb ==>
+     local_ptrs_reserved ce
+       (SND (compile_stage_intcall_args g ce args flags tys sb))` by
+    (rpt strip_tac >>
+     `compile_stage_intcall_args g ce args flags tys sb =
+      compile_stage_intcall_args f ce args flags tys sb` by simp[] >>
+     pop_assum SUBST1_TAC >>
+     irule compiler_ci_mono_reserved >> qexists `sb` >>
+     simp[ci_mono_compile_stage_intcall_args]) >>
   `!n rb sb. compile_alloc_buffer n sa = (rb,sb) ==> local_ptrs_reserved ce sb` by
     (rpt strip_tac >> irule compiler_ci_mono_reserved >> qexists `sa` >>
      metis_tac[ci_mono_compile_alloc_buffer, pairTheory.SND]) >>
   simp[compile_call_def] >>
   namedCases_on `ce.ce_func_info (nsid_to_string id)` ["ret_count rbs pvs"] >> simp[] >>
   Cases_on `ret_count > 0` >> gvs[]
-  >- (Cases_on `compile_alloc_buffer (32 * ret_count) sa` >> res_tac >> gvs[]) >>
+  >- (Cases_on `compile_alloc_buffer (32 * ret_count) sa` >> res_tac >>
+      asm_simp_tac (srw_ss()) [pairTheory.UNCURRY]) >>
   Cases_on `ce.ce_func_return_type (nsid_to_string id) <> NoneT` >> gvs[] >>
-  Cases_on `compile_alloc_buffer rbs sa` >> res_tac >> gvs[]
-  *)
-  cheat
+  Cases_on `compile_alloc_buffer rbs sa` >> res_tac >>
+  asm_simp_tac (srw_ss()) [pairTheory.UNCURRY]
 QED
 
 Theorem compiler_extcall_reserved_cong:

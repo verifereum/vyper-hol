@@ -2,12 +2,12 @@ Theory bodyIntCallReturnAdapters
 Ancestors
   bodyIntCallAssemblyModes bodyIntCallCompilerBoundary vyperValue exprLoweringProps venomMemDefs
 
-(* RESTATED (train 17): 0.5.0b1 per-argument staging *)
+(* RESTATED (train 17): 0.5.0b1 per-argument staging; s1-calls: run -> ci_mono *)
 Theorem compiled_void_return:
   expr_has_effect e /\
   post_value_type ce e = expr_type e /\
   ci_mono sa s2 /\
-  compile_stage_intcall_args compile_expr ce es flags tys s2 = (args,si) /\
+  ci_mono s2 si /\
   emit_void INVOKE ops si = ((),sb) /\
   fn_has_code sa sb func /\ local_ptrs_reserved ce sa /\
   t.vs_current_bb = si.cs_current_bb /\
@@ -56,12 +56,12 @@ Proof
   strip_tac >> qexistsl_tac [`k`,`out`] >> gvs[]
 QED
 
-(* RESTATED (train 17): 0.5.0b1 per-argument staging *)
+(* RESTATED (train 17): 0.5.0b1 per-argument staging; s1-calls: run -> ci_mono *)
 Theorem compiled_memory_return:
   expr_has_effect e /\
   post_value_type ce e = expr_type e /\
   ci_mono sa s2 /\
-  compile_stage_intcall_args compile_expr ce es flags tys s2 = (args,si) /\
+  ci_mono s2 si /\
   emit_void INVOKE ops si = ((),sb) /\
   fn_has_code sa sb func /\ local_ptrs_reserved ce sa /\
   t.vs_current_bb = si.cs_current_bb /\
@@ -108,12 +108,12 @@ Proof
   strip_tac >> qexistsl_tac [`k`,`out`] >> gvs[]
 QED
 
-(* RESTATED (train 17): 0.5.0b1 per-argument staging *)
+(* RESTATED (train 17): 0.5.0b1 per-argument staging; s1-calls: run -> ci_mono *)
 Theorem compiled_stack_return:
   expr_has_effect e /\
   post_value_type ce e = expr_type e /\
   ci_mono sa s2 /\
-  compile_stage_intcall_args compile_expr ce es flags tys s2 = (args,si) /\
+  ci_mono s2 si /\
   emit_multi_op INVOKE ops nret si = (results,sj) /\
   store_multi_results buf.buf_operand results 0 sj = ((),sb) /\
   fn_has_code sa sb func /\ local_ptrs_reserved ce sa /\
@@ -169,12 +169,12 @@ Proof
   strip_tac >> qexistsl_tac [`k`,`out`] >> gvs[]
 QED
 
-(* RESTATED (train 17): 0.5.0b1 per-argument staging *)
+(* RESTATED (train 17): 0.5.0b1 per-argument staging; s1-calls: run -> ci_mono *)
 Theorem compiled_return_dispatch:
   !nret.
   expr_has_effect e /\
   post_value_type ce e = expr_type e /\
-  compile_stage_intcall_args compile_expr ce es flags tys s2 = (args,si) /\
+  ci_mono s2 si /\
   fn_has_code sa sb func /\ local_ptrs_reserved ce sa /\
   ((nret:num) = 0 /\ expr_type e = NoneT ==>
     s2 = sa /\ (?u. emit_void INVOKE (Label lbl::args) si = (u,sb)) /\
