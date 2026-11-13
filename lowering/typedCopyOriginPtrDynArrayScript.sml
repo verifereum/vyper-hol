@@ -1012,5 +1012,341 @@ Theorem typed_copy_origin_ptr_dynarray_entry:
       typed_copy_origin_ptr_entry cenv ctx cd cs cdt cst cv) ==>
     typed_copy_origin_ptr_entry cenv ctx (ArrayT de (Dynamic cap)) sty dtv stv v
 Proof
-  cheat
+  rpt gen_tac >> strip_tac >>
+  drule_all typed_copy_array_source >> strip_tac >> gvs[] >>
+  `?scap. sb = Dynamic scap /\ scap <= cap` by
+    (drule typed_copy_array_widening >> strip_tac >> gvs[]) >> gvs[] >>
+  gvs[vyperValueTheory.evaluate_type_def, AllCaseEqs()] >>
+  `type_widens_to tenv se de` by
+    (qpat_x_assum `type_widens_to _ _ _` mp_tac >>
+     simp[vyperTypeSystemTheory.type_widens_to_def,
+          vyperTypeSystemTheory.arg_type_fits_def, vyperTypeSystemTheory.well_formed_type_def,
+          vyperValueTheory.evaluate_type_def] >> metis_tac[]) >>
+  Cases_on `v` >> gvs[vyperTypingTheory.value_has_type_def] >>
+  rename1 `ArrayV av` >> Cases_on `av` >> gvs[vyperTypingTheory.value_has_type_def] >>
+  `cap < dimword (:256)` by
+    (qpat_x_assum `type_slot_size (ArrayTV tv' (Dynamic cap)) < _` mp_tac >>
+     simp[vyperValueTheory.type_slot_size_def] >>
+     `cap <= cap * type_slot_size tv'` by
+       (Cases_on `type_slot_size tv'` >> gvs[arithmeticTheory.MULT_CLAUSES]) >> decide_tac) >>
+  `type_memory_bytes cenv de = type_memory_size tv' /\
+   type_memory_bytes cenv se = type_memory_size tv` by
+    (conj_tac >> irule typed_copy_memory_size >>
+     qexists_tac `tenv` >> simp[] >> metis_tac[]) >>
+  `!i. i < LENGTH l ==> typed_copy_origin_ptr_entry cenv ctx de se tv' tv (EL i l)` by
+    (rpt strip_tac >> first_x_assum irule >>
+     simp[Once typedCopyDomainTheory.type_rank_def] >>
+     gvs[typed_copy_dynarray_wf, vyperTypingTheory.all_have_type_EVERY, listTheory.EVERY_EL]) >>
+  simp[typed_copy_origin_ptr_entry_def] >> rpt gen_tac >>
+  disch_then (REPEAT_TCL CONJUNCTS_THEN assume_tac) >>
+  gnvs[valueEncodingTheory.type_memory_size_def] >>
+  qpat_x_assum `compile_store_memory_typed _ _ _ _ _ _ = _` mp_tac >>
+  simp[Once contextTheory.compile_store_memory_typed_def, is_word_type_def,
+       is_bytestring_type_def] >> strip_tac >>
+  qpat_x_assum `compile_copy_dynarray_typed _ _ _ _ _ _ _ = _` mp_tac >>
+  simp[Once contextTheory.compile_store_memory_typed_def] >>
+  simp[comp_bind_def, comp_ignore_bind_def, comp_return_def] >>
+  rpt (pairarg_tac >> gnvs[]) >>
+  rename1 `emit_op ADD [Var xd; Lit 32w] a6 = (dd,b)` >>
+  rename1 `emit_op ADD [Var xs; Lit 32w] a5 = (sd,a6)` >> disch_tac >>
+  drule_all typed_copy_dyn_prefix_mono >> strip_tac >>
+  `ci_mono b sb` by
+    (qmatch_asmsub_abbrev_tac `suffix b = ((),sb)` >>
+     `ci_mono b (SND (suffix b))` suffices_by gvs[] >>
+     unabbrev_all_tac >> IF_CASES_TAC >>
+     rpt (FIRST [irule exprLoweringPropsTheory.ci_mono_bind,
+                 irule exprLoweringPropsTheory.ci_mono_ignore_bind] >>
+          rpt conj_tac >> rpt gen_tac >> BETA_TAC) >>
+     simp[exprLoweringPropsTheory.ci_mono_emit_op,
+          exprLoweringPropsTheory.ci_mono_emit_inst,
+          exprLoweringPropsTheory.ci_mono_new_block,
+          exprLoweringPropsTheory.ci_mono_fresh_label,
+          exprLoweringPropsTheory.ci_mono_fresh_var,
+          exprLoweringPropsTheory.ci_mono_comp_return,
+          cj 1 exprLoweringPropsTheory.ci_mono_typed_memory_family,
+          contextTheory.compile_copy_memory_dynamic_def,
+          exprLoweringPropsTheory.ci_mono_emit_void]) >>
+  `cs_extends sa b /\ cs_extends b sb` by
+    gnvs[exprLoweringPropsTheory.ci_mono_def] >>
+  `fn_has_code sa b func /\ fn_has_code b sb func` by
+    metis_tac[fragExecTheory.fn_has_code_split] >>
+  `ci_mono sa cs'` by
+    metis_tac[exprLoweringPropsTheory.ci_mono_emit_op, pairTheory.SND] >>
+  `ci_mono cs' b` by
+    metis_tac[exprLoweringPropsTheory.ci_mono_trans] >>
+  `cs_extends sa cs' /\ cs_extends cs' b` by
+    gnvs[exprLoweringPropsTheory.ci_mono_def] >>
+  `fn_has_code sa cs' func /\ fn_has_code cs' b func` by
+    metis_tac[fragExecTheory.fn_has_code_split] >>
+  `?lv. length = Var lv` by
+    metis_tac[emitHelperPropsTheory.emitted_insts_emit_op] >> gnvs[] >>
+  `ptr_covers G tn xs s 32` by
+    (qpat_x_assum `ptr_covers G tn xs s _` mp_tac >>
+     simp[ptr_covers_def] >> rpt strip_tac >>
+     goal_assum (drule_at Any) >> simp[]) >>
+  `w2n sw + 32 < dimword (:256) /\ w2n sw + 32 <= s.vs_alloca_next` by
+    decide_tac >>
+  `!mem. mem_agree_outside tn.t_mem s.vs_memory mem ==>
+     mem_word_at (w2n sw) mem = n2w (LENGTH l)` by
+    (rpt strip_tac >>
+     qpat_x_assum `!mem. _ ==> val_in_memory _ _ _ _` drule >>
+     simp[typed_copy_dynarray_representation]) >>
+  drule_all typed_copy_origin_ptr_dyn_read_path >>
+  disch_then (qspecl_then [`w2n dw`,`cap * type_memory_size tv' + 32`,
+      `explicit`,`PG`]
+    (qx_choose_then `s1` (qx_choose_then `G1`
+      (qx_choose_then `tn1` strip_assume_tac)))) >>
+  rename1 `emit_void ASSERT [ok] check3 = ((),check4)` >>
+  `cs_extends cs' check4 /\ cs_extends check4 b` by
+    gnvs[exprLoweringPropsTheory.ci_mono_def] >>
+  `fn_has_code cs' check4 func /\ fn_has_code check4 b func` by
+    metis_tac[fragExecTheory.fn_has_code_split] >>
+  `not_fresh_at cs' lv` by
+    metis_tac[typed_copy_emit_op_fresh] >>
+  `allocas_from lo s1 /\ lo <= s1.vs_alloca_next` by
+    (qpat_assum `typed_copy_state_frame sa _ _ s s1`
+       (mp_tac o REWRITE_RULE [typed_copy_state_frame_def]) >>
+     disch_then (mp_tac o AP_TERM ``\q:venom_state. q.vs_allocas`` o CONJUNCT1) >>
+     simp[] >> disch_tac >> gvs[allocas_from_def] >> metis_tac[]) >>
+  `LENGTH l <= cap` by decide_tac >>
+  drule_all typed_copy_origin_ptr_dyn_check_path >>
+  disch_then (qspecl_then [`w2n dw`,`cap * type_memory_size tv' + 32`,
+      `explicit`,`PG`]
+    (qx_choose_then `s2` (qx_choose_then `G2`
+      (qx_choose_then `tn2` strip_assume_tac)))) >>
+  `not_fresh_at check4 xs /\ not_fresh_at check4 xd` by
+    metis_tac[exprOperandVarTheory.compiler_ci_mono_not_fresh] >>
+  `lookup_var xs s2 = SOME sw /\ lookup_var xd s2 = SOME dw` by
+    metis_tac[exprOperandVarTheory.compiler_ci_mono_not_fresh] >>
+  `ptr_covers G2 tn2 xs s2 (scap * type_memory_size tv + 32) /\
+   ptr_covers G2 tn2 xd s2 (cap * type_memory_size tv' + 32)` by
+    metis_tac[exprOperandVarTheory.compiler_ci_mono_not_fresh] >>
+  `?sdv ddv. sd = Var sdv /\ dd = Var ddv` by
+    metis_tac[emitHelperPropsTheory.emitted_insts_emit_op] >> gnvs[] >>
+  `allocas_from lo s2 /\ lo <= s2.vs_alloca_next` by
+    (qpat_assum `typed_copy_state_frame cs' _ _ s1 s2`
+       (mp_tac o REWRITE_RULE [typed_copy_state_frame_def]) >>
+     disch_then (mp_tac o AP_TERM ``\q:venom_state. q.vs_allocas`` o CONJUNCT1) >>
+     simp[] >> disch_tac >> gvs[allocas_from_def] >> metis_tac[]) >>
+  `w2n sw + (scap * type_memory_size tv + 32) <= s2.vs_alloca_next /\
+   w2n dw + (cap * type_memory_size tv' + 32) <= s2.vs_alloca_next` by
+    metis_tac[] >>
+  `32 <= scap * type_memory_size tv + 32 /\
+   32 <= cap * type_memory_size tv' + 32` by decide_tac >>
+  `FLOOKUP G2 lv = NONE /\ op_taint tn2 (Var lv) = {}` by
+    metis_tac[] >>
+  drule_all typed_copy_origin_ptr_dyn_data_path >>
+  disch_then (qspecl_then [`explicit`,`PG`]
+    (qx_choose_then `s3` (qx_choose_then `G3`
+      (qx_choose_then `tn3` strip_assume_tac)))) >>
+  `!mem. mem_agree_outside tn3.t_mem s3.vs_memory mem ==>
+    val_in_memory (ArrayTV tv (Dynamic scap)) (ArrayV (DynArrayV l)) (w2n sw) mem` by
+    (rpt strip_tac >>
+     irule robustCopyTransportPtrTheory.robust_val_in_memory_exterior_frame >>
+     conj_tac >- simp[] >>
+     qexistsl_tac [`s2.vs_memory`,`s3.vs_memory`,`tn2.t_mem`,`tn3.t_mem`,
+       `{i | w2n dw <= i /\ i < w2n dw+32}`] >>
+     conj_tac >- metis_tac[] >>
+     conj_tac >- (simp[] >> metis_tac[]) >>
+     conj_tac >-
+       (qpat_assum `typed_copy_state_frame check4 _ _ s2 s3`
+          (strip_assume_tac o REWRITE_RULE
+            [typed_copy_state_frame_def, typed_copy_frame_def]) >>
+        simp[] >> rpt strip_tac >> simp[]) >>
+     conj_tac >-
+       (simp[loweringPostsTheory.val_footprint_def,
+             valueEncodingTheory.type_memory_size_def] >> decide_tac) >>
+     simp[]) >>
+  `w2n (sw + 32w) = w2n sw + 32 /\
+   w2n (dw + 32w) = w2n dw + 32` by
+    (simp[wordsTheory.word_add_def, wordsTheory.w2n_n2w,
+          arithmeticTheory.LESS_MOD]) >>
+  `LENGTH l < dimword (:256)` by decide_tac >>
+  `!i. i < LENGTH l ==> val_wf tv (EL i l) /\ val_wf tv' (EL i l)` by
+    gvs[typed_copy_dynarray_wf] >>
+  `!i mem. i < LENGTH l /\ mem_agree_outside tn3.t_mem s3.vs_memory mem ==>
+     val_in_memory tv (EL i l)
+       (w2n (sw + 32w) + i * type_memory_size tv) mem` by
+    (rpt strip_tac >>
+     qpat_assum `!mem. mem_agree_outside tn3.t_mem _ _ ==> val_in_memory _ _ _ _`
+       (mp_tac o REWRITE_RULE [typed_copy_dynarray_representation]) >>
+     simp[]) >>
+  `LENGTH l * type_memory_size tv <= scap * type_memory_size tv /\
+   LENGTH l * type_memory_size tv' <= cap * type_memory_size tv'` by simp[] >>
+  `lookup_var sdv s3 = SOME (sw + 32w) /\
+   lookup_var ddv s3 = SOME (dw + 32w)` by
+    gvs[venomStateTheory.eval_operand_def] >>
+  `w2n (sw + 32w) + LENGTH l * type_memory_size tv < dimword (:256) /\
+   w2n (dw + 32w) + LENGTH l * type_memory_size tv' < dimword (:256) /\
+   w2n (sw + 32w) + LENGTH l * type_memory_size tv <= s3.vs_alloca_next /\
+   w2n (dw + 32w) + LENGTH l * type_memory_size tv' <= s3.vs_alloca_next /\
+   (w2n (sw + 32w) + LENGTH l * type_memory_size tv <= w2n (dw + 32w) \/
+    w2n (dw + 32w) + LENGTH l * type_memory_size tv' <= w2n (sw + 32w))` by
+    (simp[] >> decide_tac) >>
+  `ptr_covers G3 tn3 sdv s3 (LENGTH l * type_memory_size tv) /\
+   ptr_covers G3 tn3 ddv s3 (LENGTH l * type_memory_size tv')` by
+    (conj_tac
+     >- (qpat_assum `ptr_covers G3 tn3 sdv s3 _`
+           (strip_assume_tac o REWRITE_RULE [ptr_covers_def]) >>
+         simp[ptr_covers_def] >> rpt (goal_assum (drule_at Any)) >>
+         simp[] >> decide_tac) >>
+     qpat_assum `ptr_covers G3 tn3 ddv s3 _`
+       (strip_assume_tac o REWRITE_RULE [ptr_covers_def]) >>
+     simp[ptr_covers_def] >> rpt (goal_assum (drule_at Any)) >>
+     simp[] >> decide_tac) >>
+  `allocas_from lo s3 /\ lo <= s3.vs_alloca_next` by
+    (qpat_assum `typed_copy_state_frame check4 _ _ s2 s3`
+       (mp_tac o REWRITE_RULE [typed_copy_state_frame_def]) >>
+     disch_then (mp_tac o AP_TERM ``\q:venom_state. q.vs_allocas`` o CONJUNCT1) >>
+     simp[] >> disch_tac >> gvs[allocas_from_def] >> metis_tac[]) >>
+  `?t Gf tnf.
+    gas_origin_ptr_path
+      (<|d_stor := K (K {}); d_trans := K (K {}); d_imm := K {}; d_ret := K {}|>,
+       lo,explicit,ctx,func,PG) (s3,G3,tn3) [] (OK t,Gf,tnf) /\
+    (!i. i < LENGTH l ==> val_in_memory tv' (EL i l)
+      (w2n (dw + 32w) + i * type_memory_size tv') t.vs_memory) /\
+    typed_copy_state_frame b (w2n (dw + 32w)) (LENGTH l * type_memory_size tv') s3 t /\
+    ~t.vs_halted /\ t.vs_current_bb = sb.cs_current_bb /\
+    t.vs_inst_idx = LENGTH sb.cs_current_insts /\
+    tnf.t_imm = tn3.t_imm /\ tnf.t_stor = tn3.t_stor /\ tnf.t_trans = tn3.t_trans /\
+    (!i. ~(w2n (dw + 32w) <= i /\
+           i < w2n (dw + 32w) + LENGTH l * type_memory_size tv') ==>
+       (i IN tnf.t_mem <=> i IN tn3.t_mem)) /\
+    (!i mem. i < LENGTH l /\ mem_agree_outside tnf.t_mem t.vs_memory mem ==>
+       val_in_memory tv' (EL i l)
+         (w2n (dw + 32w) + i * type_memory_size tv') mem) /\
+    (!p. not_fresh_at b p ==>
+       FLOOKUP Gf p = FLOOKUP G3 p /\ op_taint tnf (Var p) = op_taint tn3 (Var p))` by
+    (Cases_on `type_memory_size tv' = type_memory_size tv /\ de = se`
+     >- suspend "fast_suffix" >> suspend "slow_suffix") >>
+  suspend "reconstruction"
 QED
+
+Resume typed_copy_origin_ptr_dynarray_entry[fast_suffix]:
+  markerLib.RESUME_TAC >>
+  `tv' = tv` by metis_tac[optionTheory.SOME_11] >> gvs[] >>
+  qpat_x_assum `comp_bind _ _ b = _` mp_tac >>
+  simp[comp_bind_def, comp_ignore_bind_def] >>
+  rpt (pairarg_tac >> gvs[]) >> strip_tac >>
+  simp[AC arithmeticTheory.ADD_ASSOC arithmeticTheory.ADD_COMM] >>
+  qpat_assum `w2n (sw + 32w) = _` (fn sh =>
+    qpat_assum `w2n (dw + 32w) = _` (fn dh =>
+    qpat_assum `tn3.t_imm = _` (fn ih =>
+    qpat_assum `tn3.t_stor = _` (fn sth =>
+    qpat_assum `tn3.t_trans = _` (fn trh =>
+      irule (SIMP_RULE (srw_ss()) [sh,dh,ih,sth,trh,
+          AC arithmeticTheory.ADD_ASSOC arithmeticTheory.ADD_COMM]
+        (Q.INST [`f` |-> `\i. EL i l`, `sw` |-> `sw + 32w`, `dw` |-> `dw + 32w`,
+                 `tn` |-> `tn3`]
+          (SPEC_ALL typed_copy_origin_ptr_dynarray_fast_data_path)))))))) >>
+  simp[] >>
+  rpt (goal_assum (drule_at Any)) >>
+  simp[]
+QED
+
+Resume typed_copy_origin_ptr_dynarray_entry[slow_suffix]:
+  markerLib.RESUME_TAC >>
+  gvs[] >>
+  qpat_x_assum `comp_bind _ _ b = _` mp_tac >>
+  simp[comp_bind_def, comp_ignore_bind_def] >>
+  pairarg_tac >> gvs[] >>
+  pairarg_tac >> gvs[] >>
+  pairarg_tac >> gvs[] >>
+  pairarg_tac >> gvs[] >>
+  pairarg_tac >> gvs[] >>
+  pairarg_tac >> gvs[] >>
+  pairarg_tac >> gvs[] >>
+  pairarg_tac >> gvs[] >>
+  pairarg_tac >> gvs[] >>
+  pairarg_tac >> gvs[] >>
+  pairarg_tac >> gvs[] >>
+  pairarg_tac >> gvs[] >>
+  pairarg_tac >> gvs[] >>
+  pairarg_tac >> gvs[] >>
+  pairarg_tac >> gvs[] >>
+  pairarg_tac >> gvs[] >>
+  pairarg_tac >> gvs[] >>
+  pairarg_tac >> gvs[] >>
+  pairarg_tac >> gvs[] >>
+  pairarg_tac >> gvs[] >>
+  strip_tac >>
+  simp[AC arithmeticTheory.ADD_ASSOC arithmeticTheory.ADD_COMM] >>
+  qpat_assum `w2n (sw + 32w) = _` (fn sh =>
+    qpat_assum `w2n (dw + 32w) = _` (fn dh =>
+    qpat_assum `tn3.t_imm = _` (fn ih =>
+    qpat_assum `tn3.t_stor = _` (fn sth =>
+    qpat_assum `tn3.t_trans = _` (fn trh =>
+      irule (SIMP_RULE (srw_ss()) [sh,dh,ih,sth,trh,
+          AC arithmeticTheory.ADD_ASSOC arithmeticTheory.ADD_COMM]
+        (Q.INST [`f` |-> `\i. EL i l`, `sw` |-> `sw + 32w`, `dw` |-> `dw + 32w`,
+                 `tn` |-> `tn3`]
+          (SPEC_ALL typed_copy_origin_ptr_dynarray_slow_data_path)))))))) >>
+  qpat_assum `compile_store_memory_typed cenv dst_elem de src_elem se _ = _`
+    (irule_at (Pat `compile_store_memory_typed _ _ _ _ _ _ = _`)) >>
+  qpat_assum `emit_op LT [Var counter; Var lv] _ = _`
+    (irule_at (Pat `emit_op LT _ _ = _`)) >>
+  qpat_assum `emit_op ADD [Var sdv; src_off] _ = _`
+    (irule_at (Pat `emit_op ADD [Var _; _] _ = _`)) >>
+  qpat_assum `emit_op MUL [Var counter; Lit (n2w (type_memory_size tv))] _ = _`
+    (irule_at (Pat `emit_op MUL _ _ = _`)) >>
+  simp[comp_return_def] >> rpt (goal_assum (drule_at Any)) >>
+  gvs[comp_return_def]
+QED
+
+Resume typed_copy_origin_ptr_dynarray_entry[reconstruction]:
+  markerLib.RESUME_TAC >> (
+  `mem_bytes_at (w2n dw) 32 t.vs_memory =
+   mem_bytes_at (w2n dw) 32 s3.vs_memory` by
+    (qpat_assum `typed_copy_state_frame b _ _ s3 t`
+       (strip_assume_tac o REWRITE_RULE
+         [typed_copy_state_frame_def, typed_copy_frame_def]) >>
+     first_x_assum irule >> simp[] >> decide_tac) >>
+  `!i. i < 32 ==> (w2n dw + i IN tnf.t_mem <=> w2n dw + i IN tn3.t_mem)` by
+    (rpt strip_tac >> first_x_assum irule >> simp[] >> decide_tac) >>
+  `!mem. mem_agree_outside tnf.t_mem t.vs_memory mem ==>
+     mem_word_at (w2n dw) mem = n2w (LENGTH l)` by
+    (rpt strip_tac >>
+     drule_all robustCopyTransportPtrTheory.copied_window_agree_witness >>
+     disch_then (qx_choose_then `mix` strip_assume_tac) >>
+     `mem_word_at (w2n dw) mix = n2w (LENGTH l)` by metis_tac[] >>
+     gvs[valueEncodingDefsTheory.mem_word_at_def,
+         GSYM valueEncodingDefsTheory.mem_bytes_at_def]) >>
+  `!mem. mem_agree_outside tnf.t_mem t.vs_memory mem ==>
+    val_in_memory (ArrayTV tv' (Dynamic cap)) (ArrayV (DynArrayV l)) (w2n dw) mem` by
+    (rpt strip_tac >> simp[typed_copy_dynarray_representation] >>
+     rpt strip_tac >>
+     qpat_assum `!i mem. _ /\ mem_agree_outside tnf.t_mem _ _ ==> _`
+       (mp_tac o Q.SPECL [`i`,`mem`]) >>
+     qpat_assum `w2n (dw + 32w) = _` (fn th => pure_rewrite_tac [th]) >>
+     simp[AC arithmeticTheory.ADD_ASSOC arithmeticTheory.ADD_COMM]) >>
+  qexistsl_tac [`t`,`Gf`,`tnf`] >>
+  conj_tac >-
+    (qpat_assum `gas_origin_ptr_path _ (s,G,tn) [] _` mp_tac >>
+     qpat_assum `gas_origin_ptr_path _ (s1,G1,tn1) [] _` mp_tac >>
+     qpat_assum `gas_origin_ptr_path _ (s2,G2,tn2) [] _` mp_tac >>
+     qpat_assum `gas_origin_ptr_path _ (s3,G3,tn3) [] _` mp_tac >>
+     POP_ASSUM_LIST (K all_tac) >>
+     metis_tac[gas_origin_ptr_path_append, listTheory.APPEND]) >>
+  conj_tac >- (first_x_assum irule >> simp[mem_agree_outside_def]) >>
+  conj_tac >-
+    (`typed_copy_state_frame sa (w2n dw) (cap * type_memory_size tv' + 32) s1 s2` by
+       metis_tac[typed_copy_state_frame_mono] >>
+     `typed_copy_state_frame sa (w2n dw) (cap * type_memory_size tv' + 32) s2 s3` by
+       (irule typed_copy_state_frame_subinterval >>
+        qexistsl_tac [`w2n dw`,`32`] >> simp[] >>
+        metis_tac[typed_copy_state_frame_mono]) >>
+     `typed_copy_state_frame sa (w2n dw) (cap * type_memory_size tv' + 32) s3 t` by
+       (irule typed_copy_state_frame_subinterval >>
+        qexistsl_tac [`w2n (dw + 32w)`,`LENGTH l * type_memory_size tv'`] >>
+        simp[] >>
+        qpat_assum `typed_copy_state_frame b _ _ s3 t` mp_tac >>
+        qpat_assum `w2n (dw + 32w) = _` (fn th => pure_rewrite_tac[th]) >>
+        metis_tac[typed_copy_state_frame_mono]) >>
+     metis_tac[typed_copy_state_frame_trans]) >>
+  simp[] >> rpt strip_tac >>
+  `not_fresh_at cs' p /\ not_fresh_at check4 p /\ not_fresh_at b p` by
+    metis_tac[exprOperandVarTheory.compiler_ci_mono_not_fresh] >>
+  metis_tac[])
+QED
+
+Finalise typed_copy_origin_ptr_dynarray_entry
