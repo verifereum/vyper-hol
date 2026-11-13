@@ -5,7 +5,7 @@ Ancestors bodyPtrMakeArrayPackage bodyPtrMakeArrayConsInvariant
   fragGasPathPtr gasSummaryComposePtr vyperState exprSimProps compileEnv exprSimHash
 
 Theorem structlit_uniform_endpoint_posts:
-  literal_loop_frame pure ctx func ce cx d root aid addr capacity
+  literal_loop_frame H pure ctx func ce cx d root aid addr capacity
     es sa s0 G0 tn0 ee sb G tn s (cells : (type_value # value # num # num) list) off /\
   expr_type e = StructT nsid /\
   evaluate_type (get_tenv cx) (expr_type e) = SOME (StructTV (ZIP (names,tvs))) /\
@@ -52,19 +52,23 @@ QED
 
 (* Preserve the original normal post while exposing its actual source run. *)
 Theorem structlit_uniform_outcome_source_run:
-  gas_outcome_ptr D tops (ctx,func) PG source (es,s,G0,tn0) Q R ==>
-  gas_outcome_ptr D tops (ctx,func) PG source (es,s,G0,tn0)
-    (\res ee G tn t. Q res ee G tn t /\
+  gas_outcome_ptr D tops (ctx,func) PG cx st0 source (es,s,G0,tn0) Q R ==>
+  gas_outcome_ptr D tops (ctx,func) PG cx st0 source (es,s,G0,tn0)
+    (\H res ee G tn t. Q H res ee G tn t /\
       ?gs. source (es with gas_obs := gs) = (res,ee)) R
 Proof
-  simp[gas_outcome_ptr_def] >> strip_tac >> qexists `marks`
-  >- (disj1_tac >>
-      qpat_x_assum `gas_summary_ptr_at _ _ _ _ _ _ _ _` mp_tac >>
-      pure_rewrite_tac[gas_summary_ptr_at_def] >> strip_tac >>
-      qexistsl [`res`, `es_end`, `G`, `tn`, `r`] >> simp[] >>
-      first_x_assum (qspec_then `[]` assume_tac) >>
-      gvs[] >> metis_tac[]) >>
-  disj2_tac >> metis_tac[]
+  rewrite_tac[gas_outcome_ptr_def] >> strip_tac >> qexists_tac `marks`
+  >- simp[]
+  >- (disj2_tac >> disj1_tac >>
+      fs[gas_summary_ptr_at_def] >>
+      `?gs. source (es with gas_obs := gs) =
+        (res,es_end with gas_obs := [])` by
+        (qexists_tac `gasSummaryTheory.gas_explicit marks s.vs_gas_readings` >>
+         qpat_x_assum `!tail. source _ = _` (qspec_then `[]` mp_tac) >> simp[]) >>
+      qexistsl_tac [`res`, `es_end`, `G`, `tn`, `r`] >> simp[] >>
+      rpt strip_tac >> first_x_assum drule >> strip_tac >> gvs[]) >>
+  disj2_tac >> disj2_tac >>
+  qexistsl_tac [`err`, `ee`, `leaf`, `finish'`] >> simp[]
 QED
 
 (* Buffer metadata is not part of either semantic pointer observation. *)

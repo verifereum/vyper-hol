@@ -41,6 +41,13 @@ Theorem compile_annassign_memory_widen_stmt_frag_ptr:
 Proof
  rpt gen_tac >> disch_then (map_every assume_tac o CONJUNCTS) >>
  rewrite_tac[stmt_frag_ptr_def] >> rpt gen_tac >> strip_tac >>
+ Cases_on `storage_trace_domain cx st0 es.storage_trace`
+ >~ [`~storage_trace_domain _ _ _`]
+ >- (rewrite_tac[gas_outcome_ptr_def] >> qexists_tac `[]` >> disj1_tac >>
+     irule gasStorageTheory.gas_bad_storage_at_initial >>
+     simp[vyperStorageTraceTheory.evaluate_storage_trace_frame]) >>
+ `valid_horizon cx st0 (storage_trace_horizon es.storage_trace) es.storage_trace` by
+   fs[vyperStorageFootprintTheory.storage_trace_domain_def] >>
  `!st0 c st1. declare_local cenv id vtyp st0 = (c,st1) ==>
    !a b op. lower_value compile_expr c (expr_type e) e a = (op,b) ==>
      cs_extends a b` by metis_tac[] >>
@@ -49,10 +56,15 @@ Proof
  rename1 `declare_local cenv id vtyp sa = (c,st)` >>
  qpat_x_assum `!st0 c st1. _ ==> _ /\ _` drule >> strip_tac >>
  drule_all annassign_declared_memory_types_ptr >> strip_tac >>
- `stmt_state_rel H ctx func c cx es s0` by
-   (irule stmt_state_rel_declare_local_entry >> metis_tac[]) >>
- `ghost_inv H d c cx es G0 tn0 s0` by
-   (irule annassign_ghost_declare_local_entry_ptr >> metis_tac[]) >>
+ `!H. valid_horizon cx st0 H es.storage_trace ==>
+   stmt_state_rel H ctx func c cx es s0 /\
+   storage_well_formed_on cx es (FST H) /\ ghost_inv H d c cx es G0 tn0 s0` by
+   (rpt strip_tac >> rpt conj_tac
+    >- (irule stmt_state_rel_declare_local_entry >> metis_tac[])
+    >- metis_tac[] >>
+    irule annassign_ghost_declare_local_entry_ptr >> metis_tac[]) >>
+ `stmt_state_rel (storage_trace_horizon es.storage_trace) ctx func c cx es s0 /\
+   ghost_inv (storage_trace_horizon es.storage_trace) d c cx es G0 tn0 s0` by metis_tac[] >>
  `not_local_ptr c es.scopes p` by metis_tac[local_ptrs_reserved_not_live] >>
  `s0.vs_current_bb = st.cs_current_bb /\
   s0.vs_inst_idx = LENGTH st.cs_current_insts` by
@@ -77,6 +89,22 @@ Resume compile_annassign_memory_widen_stmt_frag_ptr[allocate]:
  `type_memory_bytes cenv vtyp < dimword (:256)` by (simp[] >> decide_tac) >>
  drule_all annassign_setup_ptr >>
  disch_then (qspec_then `PG` strip_assume_tac) >>
+ `!H:(bool # bytes32 # type_value) list # num list. gas_path_ptr (cx_dead H cx) 0 ctx func PG G0 tn0 s0 0 G1 tn1 (OK s1)` by
+   (gen_tac >> drule_all annassign_emit_instruction_ptr >> strip_tac >>
+    `lookup_block s0.vs_current_bb func.fn_blocks = SOME bb /\
+      get_instruction bb s0.vs_inst_idx =
+        SOME (mk_inst st.cs_next_id ALLOCA [Lit (n2w (type_memory_bytes cenv vtyp))] [p])` by
+      simp[] >>
+    drule_all annassign_alloca_path_ptr >>
+    disch_then (qspecl_then [`cx_dead H cx`, `PG`, `G0`, `tn0`] mp_tac) >> gvs[]) >>
+ `!H. valid_horizon cx st0 H es.storage_trace ==>
+   stmt_state_rel H ctx func c cx es s1 /\
+   storage_well_formed_on cx es (FST H) /\ ghost_inv H d c cx es G1 tn1 s1` by
+   (rpt strip_tac >>
+    qpat_assum `!H. valid_horizon _ _ H _ ==> stmt_state_rel H _ _ c _ _ s0 /\ _`
+      (drule_then strip_assume_tac) >>
+    drule_all annassign_setup_ptr >>
+    disch_then (qspec_then `PG` strip_assume_tac) >> gvs[] >> metis_tac[]) >>
  `gas_admissible (vyperState$bind (eval_expr cx e) (read_result cx)) expr_res_ok es` by
    (irule annassign_admissible_rhs >> metis_tac[]) >>
  suspend "rhs"
@@ -87,16 +115,16 @@ Resume compile_annassign_memory_widen_stmt_frag_ptr[rhs]:
  qpat_x_assum `!sa sb op. _` kall_tac >>
  `post_value_type c e = expr_type e` by
    metis_tac[post_value_type_lowered, post_value_type_bytestring] >>
- `gas_outcome_ptr (cx_dead H cx) (cx_tops cx) (ctx,func) PG
+ `gas_outcome_ptr (\H. cx_dead H cx) (cx_tops cx) (ctx,func) PG cx st0
    (vyperState$bind (eval_expr cx e) (read_result cx)) (es,s1,G1,tn1)
-   (\res ee G tn t. ?v. res = INL v /\
+   (\H res ee G tn t. ?v. res = INL v /\
      expr_post H ctx func c cx e es sA sB s1 ee v op t /\
      t.vs_current_bb = sB.cs_current_bb /\
      t.vs_inst_idx = LENGTH sB.cs_current_insts /\
      ghost_inv H d c cx ee G tn t /\ ptr_val_ok cx (expr_type e) v op G tn t /\
      (~is_word_type (expr_type e) ==> ptr_buf_ok c e op G t) /\
      ghost_kept c es sA G1 tn1 s1 G tn)
-   (\res ee gt r. expr_exit res r)` by
+   (\H res ee gt r. expr_exit res r)` by
    (qpat_x_assum `expr_sim_ptr _ _ _ _ _ _ _ _ _` mp_tac >>
     simp[expr_sim_ptr_def] >> disch_then irule >> simp[] >>
     drule_all declare_local_ptr >> strip_tac >>

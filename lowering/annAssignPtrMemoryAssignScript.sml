@@ -48,8 +48,10 @@ Theorem annassign_memory_destination_declaration_ptr:
  val_wf tv v /\ value_has_type tv v /\ val_footprint tv v <= k /\
  (!m. mem_agree_outside tn.t_mem s.vs_memory m ==>
       val_in_memory tv v (w2n a) m) /\
- stmt_state_rel H ctx func cenv cx es s /\ ~cenv.ce_is_ctor /\
- ghost_inv H d cenv cx es G tn s /\ ghost_kept cenv es sa G0 tn0 s0 G tn /\
+ (?H. valid_horizon cx st0 H es.storage_trace) /\
+ (!H. valid_horizon cx st0 H es.storage_trace ==>
+   stmt_state_rel H ctx func cenv cx es s /\ ghost_inv H d cenv cx es G tn s) /\
+ ~cenv.ce_is_ctor /\ ghost_kept cenv es sa G0 tn0 s0 G tn /\
  fn_inst_ids_distinct func /\ MEM inst (fn_insts func) /\
  inst.inst_opcode = ALLOCA /\ inst.inst_outputs = [dst] /\
  not_local_ptr cenv es.scopes dst /\
@@ -69,21 +71,22 @@ Theorem annassign_memory_destination_declaration_ptr:
  FLOOKUP cenv.ce_vars id = SOME (PtrVar (Var dst) sz) /\
  lookup_scopes id es.scopes = NONE /\ type_memory_size tv <= sz ==>
  ?Gf tnf sf.
- gas_path_ptr (cx_dead H cx) 0 ctx func PG G tn s 0 Gf tnf (OK sf) /\
+ (!D. gas_path_ptr D 0 ctx func PG G tn s 0 Gf tnf (OK sf)) /\
  sf.vs_current_bb = sb.cs_current_bb /\ sf.vs_inst_idx = LENGTH sb.cs_current_insts /\
  ~sf.vs_halted /\
- stmt_state_rel H ctx func cenv cx es sf /\
- ghost_inv H d cenv cx es Gf tnf sf /\
+ (!H. valid_horizon cx st0 H es.storage_trace ==>
+   stmt_state_rel H ctx func cenv cx es sf /\ ghost_inv H d cenv cx es Gf tnf sf) /\
  ghost_kept cenv es sa G0 tn0 s0 Gf tnf /\
  ptr_covers Gf tnf dst sf sz /\ lookup_var dst sf = SOME b /\
  (!m. mem_agree_outside tnf.t_mem sf.vs_memory m ==>
       val_in_memory tv v (w2n b) m) /\
- ghost_inv H d cenv cx
-   (es with scopes := (sc |+ (id,<|assignable := assignable; type := tv;
-                                 value := v; popped := []|>)) :: rest) Gf tnf sf /\
- stmt_state_rel H ctx func cenv cx
-   (es with scopes := (sc |+ (id,<|assignable := assignable; type := tv;
-                                 value := v; popped := []|>)) :: rest) sf /\
+ (!H. valid_horizon cx st0 H es.storage_trace ==>
+   ghost_inv H d cenv cx
+     (es with scopes := (sc |+ (id,<|assignable := assignable; type := tv;
+                                   value := v; popped := []|>)) :: rest) Gf tnf sf /\
+   stmt_state_rel H ctx func cenv cx
+     (es with scopes := (sc |+ (id,<|assignable := assignable; type := tv;
+                                   value := v; popped := []|>)) :: rest) sf) /\
  (!q. not_fresh_at st q ==> lookup_var q sf = lookup_var q s) /\
  sf.vs_allocas = s.vs_allocas
 Proof
@@ -95,10 +98,14 @@ Proof
  `val_in_memory tv v (w2n b) sf.vs_memory` by
    (first_x_assum (qspec_then `sf.vs_memory` mp_tac) >>
     simp[bodyPtrDefsTheory.mem_agree_outside_def]) >>
- `stmt_state_rel H ctx func cenv cx
-   (es with scopes := (sc |+ (id,<|assignable := assignable; type := tv;
-                                 value := v; popped := []|>)) :: rest) sf` by
-   (irule annassign_memory_scope_state_ptr >> simp[] >>
+ `!H. valid_horizon cx st0 H es.storage_trace ==>
+   stmt_state_rel H ctx func cenv cx
+     (es with scopes := (sc |+ (id,<|assignable := assignable; type := tv;
+                                   value := v; popped := []|>)) :: rest) sf` by
+   (rpt strip_tac >>
+    qpat_assum `!H. valid_horizon _ _ H _ ==> stmt_state_rel H _ _ _ _ _ _ /\ _`
+      (qspec_then `H` (strip_assume_tac o UNDISCH)) >>
+    irule annassign_memory_scope_state_ptr >> simp[] >>
     qexists `inst` >> gvs[]) >>
- qexistsl [`Gf`,`tnf`,`sf`] >> asm_rewrite_tac[]
+ qexistsl [`Gf`,`tnf`,`sf`] >> asm_rewrite_tac[] >> metis_tac[]
 QED

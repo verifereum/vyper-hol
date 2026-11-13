@@ -50,19 +50,21 @@ Theorem for_array_callback_contract_ptr:
   ~ctx_has_dalloca ctx /\ ~bc.ce_is_ctor /\ ret_pc_ok bc sb0 s0 /\
   (!x z. bc.ce_return_buf = SOME (PtrVar (Var x) z) ==> not_fresh_at sb0 x) /\
   gas_admissible (eval_stmts cx stmts) (stmt_res_ok (InLoop exit_lbl incr_lbl)) es /\
-  stmt_state_rel H ctx func bc cx es s0 /\ ghost_inv H d bc cx es G0 tn0 s0 /\
+  (!H. valid_horizon cx st0 H es.storage_trace ==>
+    stmt_state_rel H ctx func bc cx es s0 /\
+    storage_well_formed_on cx es (FST H) /\ ghost_inv H d bc cx es G0 tn0 s0) /\
   ~s0.vs_halted /\ s0.vs_current_bb = sb0.cs_current_bb /\
   s0.vs_inst_idx = LENGTH sb0.cs_current_insts /\
   ptr_covers G0 tn0 p s0 sz /\ ptr_covers G0 tn0 bp s0 extent /\
   lookup_var idx s0 = SOME counter /\
   FLOOKUP G0 idx = NONE /\ op_taint tn0 (Var idx) = {} ==>
-  gas_outcome_ptr (cx_dead H cx) (cx_tops cx) (ctx,func) PG (eval_stmts cx stmts)
+  gas_outcome_ptr (\H. cx_dead H cx) (cx_tops cx) (ctx,func) PG cx st0 (eval_stmts cx stmts)
     (es,s0,G0,tn0)
-    (\res ee G tn t. ((?c3.
+    (\H res ee G tn t. ((?c3.
       stmt_lands (InLoop exit_lbl incr_lbl) sb1 res t /\ ~t.vs_halted /\
       (res = INL () ==> ~block_is_terminated sb1 /\ c3 = bc') /\
       cenv_top_ext bc c3 ee.scopes /\ stmt_state_rel H ctx func c3 cx ee t /\
-      ghost_inv H d c3 cx ee G tn t /\
+      storage_well_formed_on cx ee (FST H) /\ ghost_inv H d c3 cx ee G tn t /\
       (!x w. not_fresh_at sb0 x /\ lookup_var x s0 = SOME w ==> lookup_var x t = SOME w) /\
       (!x. not_fresh_at sb0 x ==> FLOOKUP G x = FLOOKUP G0 x /\
         op_taint tn (Var x) = op_taint tn0 (Var x))) /\
@@ -71,7 +73,7 @@ Theorem for_array_callback_contract_ptr:
       op_taint tn (Var idx) = {}) /\
       (!aid b. FLOOKUP s0.vs_allocas aid = SOME b ==>
         FLOOKUP t.vs_allocas aid = SOME b))
-    (\res ee gt r. !tail. stmt_exit_ptr RetQ (ee with gas_obs := tail) res gt r)
+    (\H res ee gt r. !tail. stmt_exit_ptr (RetQ H) (ee with gas_obs := tail) res gt r)
 Proof
   strip_tac >> ho_match_mp_tac gas_outcome_ptr_allocation_frame >>
   `fn_has_code sb0 sb1 func /\ local_ptrs_reserved bc sb0 /\
@@ -79,7 +81,7 @@ Proof
   qpat_x_assum `stmt_frag_ptr _ _ _ _ _ _ _ _ _ _ _` mp_tac >>
   rewrite_tac[stmt_frag_ptr_def] >> disch_then drule_all >> strip_tac >>
   irule gas_outcome_ptr_conseq >> goal_assum (drule_at Any) >>
-  qpat_x_assum `gas_outcome_ptr _ _ _ _ _ _ _ _` kall_tac >>
+  qpat_x_assum `gas_outcome_ptr _ _ _ _ _ _ _ _ _ _` kall_tac >>
   reverse conj_tac >- simp[] >> rpt gen_tac >>
   simp_tac bool_ss [] >> strip_tac >>
   irule for_array_callback_control_ptr >> goal_assum (drule_at Any) >> metis_tac[]
@@ -241,7 +243,10 @@ Theorem for_array_backedge_restore_ptr:
     j1 j2 j3 j4 i1 i2 i3 sa sb0 sb1 sj /\
   s.vs_current_bb = incr_lbl /\ s.vs_inst_idx = 0 /\
   ~ctx_has_dalloca ctx /\ ~s.vs_halted /\
-  stmt_state_rel H ctx func cenv cx es s /\ ghost_inv H d cenv cx es G tn s /\
+  (?H. valid_horizon cx st0 H es.storage_trace) /\
+  (!H. valid_horizon cx st0 H es.storage_trace ==>
+    stmt_state_rel H ctx func cenv cx es s /\
+    storage_well_formed_on cx es (FST H) /\ ghost_inv H d cenv cx es G tn s) /\
   lookup_scopes name es.scopes = SOME snapshot /\
   lookup_scopes id es.scopes = NONE /\ k < LENGTH vs /\
   lookup_var idx s = SOME (n2w k) /\ lookup_var bp s = SOME arr_base /\
@@ -261,22 +266,31 @@ Theorem for_array_backedge_restore_ptr:
     (update_var nv (n2w (SUC k)) s)) /\
   Gf = DRESTRICT (DRESTRICT G (COMPL {nv})) (COMPL {idx}) /\
   tf = (tn with t_var := (tn.t_var |+ (nv,{})) |+ (idx,{})) ==>
-  gas_path_ptr D 0 ctx func PG G tn s 0 Gf tf (OK sf) /\
-  for_array_inv_ptr ctx func cenv cx vs tv id idx bp arr_base p dst sz ainst
+  (!H. valid_horizon cx st0 H es.storage_trace ==>
+    gas_path_ptr (D H) 0 ctx func PG G tn s 0 Gf tf (OK sf)) /\
+  for_array_inv_ptr ctx func cenv cx st0 vs tv id idx bp arr_base p dst sz ainst
     cond_lbl st s0 G0 tn0 d name snapshot (SUC k) es Gf tf sf
 Proof
   rpt gen_tac >> strip_tac >>
+  rename1 `valid_horizon cx st0 H0 es.storage_trace` >>
   `(!scs. not_local_ptr cenv scs idx /\ not_local_ptr cenv scs nv) /\
    p <> idx /\ p <> nv /\ bp <> idx /\ bp <> nv` by
     fs[array_for_code_def] >>
   `(!q. cenv.ce_return_buf <> SOME (PtrVar (Var idx) q)) /\
    (!q. cenv.ce_return_buf <> SOME (PtrVar (Var nv) q))` by metis_tac[] >>
-  `gas_path_ptr D 0 ctx func PG G tn s 0 Gf tf (OK sf)` by
-    (gvs[] >> irule (SRULE [] for_array_increment_block_path_ptr) >> simp[] >>
+  `!H. valid_horizon cx st0 H es.storage_trace ==>
+    gas_path_ptr (D H) 0 ctx func PG G tn s 0 Gf tf (OK sf)` by
+    (rpt strip_tac >> gvs[] >>
+     irule (SRULE [] for_array_increment_block_path_ptr) >> simp[] >>
      metis_tac[array_for_code_increment]) >>
-  `stmt_state_rel H ctx func cenv cx es sf /\
-   ghost_inv H d cenv cx es Gf tf sf` by
-    (gvs[] >> irule (SRULE [] for_backedge_state_ghost_transport) >> simp[]) >>
+  `!H. valid_horizon cx st0 H es.storage_trace ==>
+    stmt_state_rel H ctx func cenv cx es sf /\
+    storage_well_formed_on cx es (FST H) /\ ghost_inv H d cenv cx es Gf tf sf` by
+    (rpt strip_tac >>
+     qpat_assum `!H. valid_horizon _ _ H _ ==> stmt_state_rel H _ _ _ _ _ _ /\ _`
+       (qspecl_then [`H`] (strip_assume_tac o UNDISCH)) >>
+     simp[] >> gvs[] >>
+     irule (SRULE [] for_backedge_state_ghost_transport) >> simp[]) >>
   `ptr_covers Gf tf p sf sz /\ sf.vs_allocas = s.vs_allocas /\
    sf.vs_inst_idx = 0 /\ sf.vs_current_bb = cond_lbl /\
    sf.vs_halted = s.vs_halted /\
@@ -333,8 +347,10 @@ Theorem for_array_callback_finish_ptr:
   not_local_ptr bc (FEMPTY :: esk.scopes) p /\
   eval_stmts cx stmts (esk with scopes :=
     (FEMPTY |+ (id,entry)) :: esk.scopes) = (res,ee) /\
-  cenv_top_ext bc c3 ee.scopes /\ stmt_state_rel H ctx func c3 cx ee s /\
-  ghost_inv H d c3 cx ee G tn s /\
+  (?H. valid_horizon cx st0 H ee.storage_trace) /\
+  (!H. valid_horizon cx st0 H ee.storage_trace ==> ?c3.
+    cenv_top_ext bc c3 ee.scopes /\ stmt_state_rel H ctx func c3 cx ee s /\
+    storage_well_formed_on cx ee (FST H) /\ ghost_inv H d c3 cx ee G tn s) /\
   FLOOKUP s.vs_allocas ainst.inst_id = SOME (w2n dst,sz) /\
   ptr_covers G tn p s sz /\ ptr_covers G tn bp s (LENGTH vs * type_memory_size tv) /\
   lookup_var idx s = SOME (n2w k) /\ lookup_var bp s = SOME arr_base /\
@@ -350,18 +366,36 @@ Theorem for_array_callback_finish_ptr:
     op_taint tn (Var x) = op_taint tn0 (Var x)) ==>
   ?sc rest t gf tf.
     ee.scopes = sc :: rest /\
-    gas_path_ptr D 0 ctx func PG G tn s 0 gf tf (OK t) /\
+    (!H. valid_horizon cx st0 H ee.storage_trace ==>
+      gas_path_ptr (D H) 0 ctx func PG G tn s 0 gf tf (OK t)) /\
     (res = INR BreakException ==>
-      for_array_done_ptr ctx func cenv cx exit_lbl st s0 G0 tn0 d
+      for_array_done_ptr ctx func cenv cx st0 exit_lbl st s0 G0 tn0 d
         (ee with scopes := rest) gf tf t) /\
     (res <> INR BreakException ==>
-      for_array_inv_ptr ctx func cenv cx vs tv id idx bp arr_base p dst sz ainst
+      for_array_inv_ptr ctx func cenv cx st0 vs tv id idx bp arr_base p dst sz ainst
         cond_lbl st s0 G0 tn0 d name snapshot (SUC k)
         (ee with scopes := rest) gf tf t)
 Proof
-  strip_tac >> drule_all for_array_callback_landing_ptr >>
-  disch_then (qspecl_then [`PG`, `D`] strip_assume_tac) >>
-  qmatch_asmsub_abbrev_tac `gas_path_ptr D 0 ctx func PG G tn s 0 G tn (OK land)` >>
+  strip_tac >>
+  rename1 `valid_horizon cx st0 H0 ee.storage_trace` >>
+  qpat_assum `!H. valid_horizon _ _ H _ ==> ?c3. _`
+    (qspecl_then [`H0`] (strip_assume_tac o UNDISCH)) >>
+  drule_all (Q.INST [`H` |-> `H0`] for_array_callback_landing_ptr) >>
+  disch_then (qspecl_then [`PG`, `D H0`] strip_assume_tac) >>
+  qmatch_asmsub_abbrev_tac `gas_path_ptr (D H0) 0 ctx func PG G tn s 0 G tn (OK land)` >>
+  `!HH. valid_horizon cx st0 HH ee.storage_trace ==>
+    gas_path_ptr (D HH) 0 ctx func PG G tn s 0 G tn (OK land) /\
+    stmt_state_rel HH ctx func cenv cx (ee with scopes := rest) land /\
+    storage_well_formed_on cx (ee with scopes := rest) (FST HH) /\
+    ghost_inv HH d cenv cx (ee with scopes := rest) G tn land` by
+    (rpt strip_tac >>
+     qpat_assum `!H. valid_horizon _ _ H _ ==> ?c3. _`
+       (qspecl_then [`HH`] (strip_assume_tac o UNDISCH)) >>
+     drule_all (Q.INST [`H` |-> `HH`] for_array_callback_landing_ptr) >>
+     disch_then (qspecl_then [`PG`, `D HH`] strip_assume_tac) >>
+     gvs[Abbr `land`] >>
+     fs[vyperStorageFootprintTheory.storage_well_formed_on_def,
+        vyperStorageBackendTheory.get_storage_scopes]) >>
   `(!x v. not_fresh_at st x /\ lookup_var x s0 = SOME v ==>
     lookup_var x land = SOME v)` by metis_tac[] >>
   Cases_on `res = INR BreakException`
@@ -381,12 +415,18 @@ Resume for_array_callback_finish_ptr[next]:
    FLOOKUP land.vs_allocas ainst.inst_id = SOME (w2n dst,sz)` by simp[] >>
   mp_tac (SRULE [] (Q.INST
     [`es` |-> `ee with scopes := rest`, `s` |-> `land`]
-    for_array_backedge_restore_ptr)) >>
-  (impl_tac >- (simp[] >>
+    (SPEC_ALL (SRULE [] for_array_backedge_restore_ptr)))) >>
+  (impl_tac >- (simp[] >> conj_tac
+    >- (qexists_tac `H0` >> simp[]) >>
     qpat_x_assum `!nm lo z. local_region _ _ land nm lo z ==> _` mp_tac >> simp[])) >>
   strip_tac >>
-  qmatch_asmsub_abbrev_tac `gas_path_ptr D 0 ctx func PG G tn land 0 gf tf (OK fin)` >>
+  qmatch_asmsub_abbrev_tac `!H. valid_horizon _ _ H _ ==> gas_path_ptr (D H) 0 ctx func PG G tn land 0 gf tf (OK fin)` >>
   qexistsl_tac [`sc`, `rest`, `fin`, `gf`, `tf`] >> simp[] >>
+  rpt strip_tac >>
+  qpat_assum `!H. valid_horizon _ _ H _ ==> gas_path_ptr _ _ _ _ _ _ _ _ _ _ _ _`
+    (qspecl_then [`H`] (strip_assume_tac o UNDISCH)) >>
+  qpat_assum `!HH. valid_horizon _ _ HH _ ==> _`
+    (qspecl_then [`H`] (strip_assume_tac o UNDISCH)) >>
   drule_all gas_path_ptr_then >> simp[]
 QED
 Finalise for_array_callback_finish_ptr

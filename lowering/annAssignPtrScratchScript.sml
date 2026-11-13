@@ -5,7 +5,7 @@ Ancestors
  valueEncoding valueEncodingDefs venomMemProofs ptrDiscipline pred_set arithmetic
  bodyPtrDefs stmtSimProps exprSimProps localPtrsProps compileEnv loweringStateRelDefs venomState
  finite_map loweringPosts exprLoweringProps exprSimBufferStore venomExecSemantics venomMemDefs
- allocationPtr annAssignPtrAllocGhost
+ allocationPtr annAssignPtrAllocGhost ptrSafetyTransport
 
 Theorem annassign_copy_taint_window_ptr:
  !old new a b k.
@@ -251,7 +251,9 @@ Theorem annassign_allocated_static_copy_ptr:
  s.vs_current_bb = st.cs_current_bb /\
  s.vs_inst_idx = LENGTH st.cs_current_insts /\
  ~s.vs_halted /\ ~ctx_has_dalloca ctx /\ k < dimword (:256) /\
- stmt_state_rel H ctx func cenv cx es s /\ ghost_inv H d cenv cx es G tn s /\
+ (?H. valid_horizon cx st0 H es.storage_trace) /\
+ (!H. valid_horizon cx st0 H es.storage_trace ==>
+   stmt_state_rel H ctx func cenv cx es s /\ ghost_inv H d cenv cx es G tn s) /\
  ghost_kept cenv es sa G0 tn0 s0 G tn /\
  lookup_var src s = SOME a /\ lookup_var dst s = SOME b /\
  ptr_covers G tn src s k /\ ptr_covers G tn dst s sz /\
@@ -265,8 +267,9 @@ Theorem annassign_allocated_static_copy_ptr:
               FLOOKUP s.vs_allocas aid = SOME entry) /\
  (!n lo nsz. local_region cenv es.scopes s0 n lo nsz ==>
               local_region cenv es.scopes s n lo nsz) ==>
- ?s' tn'. gas_path_ptr (cx_dead H cx) 0 ctx func PG G tn s 0 G tn' (OK s') /\
- stmt_state_rel H ctx func cenv cx es s' /\ ghost_inv H d cenv cx es G tn' s' /\
+ ?s' tn'. (!D. gas_path_ptr D 0 ctx func PG G tn s 0 G tn' (OK s')) /\
+ (!H. valid_horizon cx st0 H es.storage_trace ==>
+   stmt_state_rel H ctx func cenv cx es s' /\ ghost_inv H d cenv cx es G tn' s') /\
  ghost_kept cenv es sa G0 tn0 s0 G tn' /\ ptr_covers G tn' dst s' sz /\
  s'.vs_current_bb = st1.cs_current_bb /\
  s'.vs_inst_idx = LENGTH st1.cs_current_insts /\ ~s'.vs_halted /\
@@ -275,27 +278,39 @@ Theorem annassign_allocated_static_copy_ptr:
  (!m. mem_agree_outside tn'.t_mem s'.vs_memory m ==> val_in_memory tv v (w2n b) m)
 Proof
  rpt gen_tac >> strip_tac >>
+ rename1 `valid_horizon cx st0 H0 es.storage_trace` >>
+ qpat_assum `!H. valid_horizon _ _ H _ ==> _`
+   (qspec_then `H0` (strip_assume_tac o UNDISCH)) >>
  `ptr_covers G tn dst s k` by
    (fs[ptr_covers_def] >> metis_tac[LESS_EQ_TRANS]) >>
  drule_all annassign_counted_copy_robust_ptr >>
- disch_then (qspecl_then [`cx_dead H cx`,`PG`] strip_assume_tac) >>
- `ghost_inv H d cenv cx es G tn' s'` by
-   (qpat_x_assum `s'.vs_memory = _` kall_tac >>
-    drule_at (Pat `stmt_state_rel _ _ _ _ _ _ _`) annassign_alloca_copy_ghost_ptr >>
-    disch_then (drule_at (Pat `FLOOKUP _ _ = SOME _`)) >>
-    disch_then (drule_at (Pat `_.inst_outputs = _`)) >>
-    disch_then (drule_at (Pat `(_ with <|vs_memory := _;vs_inst_idx := _|>) = _`)) >>
-    disch_then (drule_at (Pat `(_ with t_mem := _) = _`)) >>
-    disch_then irule >> simp[] >> qexists `k` >> simp[]) >>
+ disch_then (qspecl_then
+   [`<|d_stor := K (K {}); d_trans := K (K {}); d_imm := K {}; d_ret := K {}|>`,
+    `PG`] strip_assume_tac) >>
+ `!HH. valid_horizon cx st0 HH es.storage_trace ==>
+   ghost_inv HH d cenv cx es G tn' s'` by
+   (rpt strip_tac >>
+    qpat_assum `!H. valid_horizon _ _ H _ ==> _`
+      (qspec_then `HH` (strip_assume_tac o UNDISCH)) >>
+    Q.ISPECL_THEN [`HH`,`ctx`,`func`,`cenv`,`cx`,`es`,`d`,`G`,`tn`,`s`,`s'`,
+      `tn'`,`inst`,`dst`,`w2n b`,`sz`,`k`] mp_tac
+      (Q.GEN `H` annassign_alloca_copy_ghost_ptr) >>
+    (impl_tac >- simp[]) >> simp[]) >>
  `ghost_kept cenv es sa G0 tn0 s0 G tn'` by
-   (Q.ISPECL_THEN [`H`,`ctx`,`func`,`cenv`,`cx`,`es`,`sa`,`G0`,`tn0`,`s0`,
+   (Q.ISPECL_THEN [`H0`,`ctx`,`func`,`cenv`,`cx`,`es`,`sa`,`G0`,`tn0`,`s0`,
       `G`,`tn`,`s`,`tn'`,`inst`,`dst`,`w2n b`,`sz`,`k`] mp_tac
       (Q.GEN `H` annassign_alloca_copy_kept_ptr) >>
     (impl_tac >- (simp[] >> rpt strip_tac >> metis_tac[])) >> simp[]) >>
- `stmt_state_rel H ctx func cenv cx es s'` by
-   (irule annassign_alloca_copy_state_ptr >> metis_tac[]) >>
+ `!HH. valid_horizon cx st0 HH es.storage_trace ==>
+   stmt_state_rel HH ctx func cenv cx es s'` by
+   (rpt strip_tac >>
+    qpat_assum `!H. valid_horizon _ _ H _ ==> _`
+      (qspec_then `HH` (strip_assume_tac o UNDISCH)) >>
+    irule annassign_alloca_copy_state_ptr >> metis_tac[]) >>
  `ptr_covers G tn' dst s' sz` by
    (irule annassign_coverage_var_frame_ptr >> metis_tac[]) >>
+ `!D. gas_path_ptr D 0 ctx func PG G tn s 0 G tn' (OK s')` by
+   (gen_tac >> irule gas_path_ptr_from_no_dead >> first_assum ACCEPT_TAC) >>
  qexistsl [`s'`,`tn'`] >> simp[] >>
  qpat_x_assum `(_ with <|vs_memory := _;vs_inst_idx := _|>) = _` mp_tac >>
  simp[venom_state_component_equality]

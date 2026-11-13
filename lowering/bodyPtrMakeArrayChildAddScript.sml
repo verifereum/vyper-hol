@@ -14,7 +14,10 @@ Theorem literal_child_add_endpoint:
   lookup_var root s = SOME a /\ op_taint tn (Var root) = {} /\
   ptr_covers G tn root s capacity /\ FLOOKUP G root = SOME (base,cap) /\
   base + cap <= dimword(:256) /\ off < capacity /\ off+n <= capacity /\
-  vv_post H ctx func ce cx e esi si sm s0 es' raw vv s /\
+  (?H. valid_horizon cx st0 H es'.storage_trace) /\
+  (!H. valid_horizon cx st0 H es'.storage_trace ==>
+    vv_post H ctx func ce cx e esi si sm s0 es' raw vv s /\
+    ghost_inv H d ce cx es' G tn s) /\
   ptr_vv_ok cx (expr_type e) raw vv es' G tn s /\
   (!t op. vv = StackValue t op /\ ~is_word_type (expr_type e) ==>
     ptr_buf_ok ce e op G s) /\
@@ -25,12 +28,13 @@ Theorem literal_child_add_endpoint:
   (!p. vv_operand vv = Var p ==> not_fresh_at sm p) /\
   (!p sz. ce.ce_return_buf = SOME (PtrVar (Var p) sz) ==> not_fresh_at sm p) /\
   (!p sz. ce.ce_return_pc = SOME (PtrVar (Var p) sz) ==> not_fresh_at sm p) /\
-  ghost_inv H d ce cx es' G tn s /\ ghost_kept ce esi si G0 tn0 s0 G tn ==>
+  ghost_kept ce esi si G0 tn0 s0 G tn ==>
   ?z HG tm.
-    gas_path_ptr D 0 ctx func PG G tn s 0 HG tm (OK z) /\
+    (!D. gas_path_ptr D 0 ctx func PG G tn s 0 HG tm (OK z)) /\
     z.vs_current_bb = sn.cs_current_bb /\
     z.vs_inst_idx = LENGTH sn.cs_current_insts /\
-    vv_post H ctx func ce cx e esi si sn s0 es' raw vv z /\
+    (!H. valid_horizon cx st0 H es'.storage_trace ==>
+      vv_post H ctx func ce cx e esi si sn s0 es' raw vv z) /\
     ptr_vv_ok cx (expr_type e) raw vv es' HG tm z /\
     (!t op. vv = StackValue t op /\ ~is_word_type (expr_type e) ==>
       ptr_buf_ok ce e op HG z) /\
@@ -38,11 +42,15 @@ Theorem literal_child_add_endpoint:
       ptr_buf_ok ce e p.ptr_operand HG z) /\
     z.vs_memory = s.vs_memory /\ z.vs_allocas = s.vs_allocas /\
     tm.t_mem = tn.t_mem /\
-    ghost_inv H d ce cx es' HG tm z /\
+    (!H. valid_horizon cx st0 H es'.storage_trace ==>
+      ghost_inv H d ce cx es' HG tm z) /\
     ghost_kept ce esi si G0 tn0 s0 HG tm /\
     ptr_covers HG tm out z n /\ lookup_var out z = SOME (a+n2w off)
 Proof
   rpt gen_tac >> disch_then (map_every assume_tac o CONJUNCTS) >>
+  qpat_assum `?H. valid_horizon _ _ H _` (qx_choose_then `H0` assume_tac) >>
+  qpat_assum `!H. valid_horizon _ _ H _ ==> _`
+    (qspec_then `H0` (strip_assume_tac o UNDISCH)) >>
   drule_all emit_op_fetch_boundary >> strip_tac >> fs[] >>
   qexistsl [`(update_var out (a+n2w off) s) with
                vs_inst_idx := SUC s.vs_inst_idx`,
@@ -51,11 +59,15 @@ Proof
     `step_taint (mk_inst sm.cs_next_id ADD
        [Var root; Lit (n2w off)] [out]) s (update_var out (a+n2w off) s) tn`] >>
   conj_tac
-  >- (irule emit_clean_binop_ptr_path >>
+  >- (gen_tac >> irule emit_clean_binop_ptr_path >>
       simp[eval_operand_def, op_taint_def] >> metis_tac[]) >>
   conj_tac >- simp[update_var_def] >>
   conj_tac >- simp[] >>
-  conj_tac >- (irule emit_binop_vv_post >> metis_tac[]) >>
+  conj_tac
+  >- (rpt strip_tac >>
+      qpat_assum `!H. valid_horizon _ _ H _ ==> _`
+        (qspec_then `H` (strip_assume_tac o UNDISCH)) >>
+      irule emit_binop_vv_post >> metis_tac[]) >>
   conj_tac >- (irule binop_source_ptr_vv_ok >> simp[] >> metis_tac[]) >>
   conj_tac
   >- (rpt strip_tac >> irule binop_source_ptr_buf_ok >>
@@ -66,7 +78,11 @@ Proof
   conj_tac >- simp[update_var_def] >>
   conj_tac >- simp[update_var_def] >>
   conj_tac >- simp[typedCopyPtrTheory.copy_len_binop_ghost_frame] >>
-  conj_tac >- (irule emit_binop_ghost_inv >> metis_tac[]) >>
+  conj_tac
+  >- (rpt strip_tac >>
+      qpat_assum `!H. valid_horizon _ _ H _ ==> _`
+        (qspec_then `H` (strip_assume_tac o UNDISCH)) >>
+      irule emit_binop_ghost_inv >> metis_tac[]) >>
   conj_tac >- (irule emit_binop_ghost_kept >> metis_tac[]) >>
   reverse conj_tac >- simp[lookup_var_def, update_var_def, finite_mapTheory.FLOOKUP_UPDATE] >>
   drule add_destination_coverage >>

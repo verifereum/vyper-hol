@@ -11,7 +11,10 @@ Theorem annassign_static_stage_frame_ptr:
  !ctx func cenv cx es st sm sn dst src k s0 sa d PG G0 tn0 t ea eb tv v a.
  emit_inst ALLOCA [Lit (n2w k)] [dst] st = ((),sm) /\
  compile_copy_memory (Var dst) (Var src) k sm = ((),sn) /\
- stmt_state_rel H ctx func cenv cx es s0 /\ fn_inst_ids_distinct func /\
+ (?H. valid_horizon cx st0 H es.storage_trace) /\
+ (!H. valid_horizon cx st0 H es.storage_trace ==>
+   stmt_state_rel H ctx func cenv cx es s0 /\ ghost_inv H d cenv cx es G0 tn0 s0) /\
+ fn_inst_ids_distinct func /\
  MEM (mk_inst st.cs_next_id ALLOCA [Lit (n2w k)] [dst]) (fn_insts func) /\
  not_local_ptr cenv es.scopes dst /\ k < dimword (:256) /\
  ~not_fresh_at sa dst /\ local_ptrs_reserved cenv sa /\
@@ -22,7 +25,6 @@ Theorem annassign_static_stage_frame_ptr:
  ~s0.vs_halted /\ ~ctx_has_dalloca ctx /\
  s0.vs_current_bb = st.cs_current_bb /\
  s0.vs_inst_idx = LENGTH st.cs_current_insts /\
- ghost_inv H d cenv cx es G0 tn0 s0 /\
  expr_val_at cenv cx t ea eb es v (Var src) s0 /\
  evaluate_type (get_tenv cx) t = SOME tv /\ ~is_word_type t /\
  lookup_var src s0 = SOME a /\ ptr_covers G0 tn0 src s0 k /\
@@ -30,8 +32,9 @@ Theorem annassign_static_stage_frame_ptr:
  (!m. mem_agree_outside tn0.t_mem s0.vs_memory m ==>
       val_in_memory tv v (w2n a) m) ==>
  ?s G tn b.
- gas_path_ptr (cx_dead H cx) 0 ctx func PG G0 tn0 s0 0 G tn (OK s) /\
- stmt_state_rel H ctx func cenv cx es s /\ ghost_inv H d cenv cx es G tn s /\
+ (!D. gas_path_ptr D 0 ctx func PG G0 tn0 s0 0 G tn (OK s)) /\
+ (!H. valid_horizon cx st0 H es.storage_trace ==>
+   stmt_state_rel H ctx func cenv cx es s /\ ghost_inv H d cenv cx es G tn s) /\
  ghost_kept cenv es sa G0 tn0 s0 G tn /\ ptr_covers G tn dst s k /\
  lookup_var dst s = SOME b /\
  FLOOKUP s.vs_allocas st.cs_next_id = SOME (w2n b,k) /\
@@ -46,9 +49,26 @@ Theorem annassign_static_stage_frame_ptr:
       val_in_memory tv v (w2n b) m)
 Proof
  rpt gen_tac >> strip_tac >>
- drule_all annassign_setup_ptr >>
+ rename1 `valid_horizon cx st0 H0 es.storage_trace` >>
+ qpat_assum `!H. valid_horizon _ _ H _ ==> _`
+   (qspec_then `H0` (strip_assume_tac o UNDISCH)) >>
+ drule_all (Q.INST [`H` |-> `H0`] annassign_setup_ptr) >>
  disch_then (qspec_then `PG` strip_assume_tac) >>
- drule_all annassign_alloca_source_transport_ptr >>
+ `!D. gas_path_ptr D 0 ctx func PG G0 tn0 s0 0 G1 tn1 (OK s1)` by
+   (gen_tac >> drule_all annassign_emit_instruction_ptr >> strip_tac >>
+    `lookup_block s0.vs_current_bb func.fn_blocks = SOME bb /\
+     get_instruction bb s0.vs_inst_idx =
+       SOME (mk_inst st.cs_next_id ALLOCA [Lit (n2w k)] [dst])` by simp[] >>
+    drule_all annassign_alloca_path_ptr >>
+    disch_then (qspecl_then [`D`, `PG`, `G0`, `tn0`] mp_tac) >> gvs[]) >>
+ `!HH. valid_horizon cx st0 HH es.storage_trace ==>
+   stmt_state_rel HH ctx func cenv cx es s1 /\ ghost_inv HH d cenv cx es G1 tn1 s1` by
+   (rpt strip_tac >>
+    qpat_assum `!H. valid_horizon _ _ H _ ==> _`
+      (qspec_then `HH` (strip_assume_tac o UNDISCH)) >>
+    drule_all (Q.INST [`H` |-> `HH`] annassign_setup_ptr) >>
+    disch_then (qspec_then `PG` strip_assume_tac) >> gvs[] >> metis_tac[]) >>
+ drule_all (Q.INST [`H` |-> `H0`] annassign_alloca_source_transport_ptr) >>
  disch_then (qspec_then `PG` strip_assume_tac) >>
  `ptr_covers G1 tn1 src s1 k /\ lookup_var src s1 = SOME a /\
   (!m. mem_agree_outside tn1.t_mem s1.vs_memory m ==>
@@ -78,10 +98,9 @@ Proof
    (rpt strip_tac >> irule local_region_frame_fwd >>
     qexistsl [`s1`,`sa`,`es.scopes`] >> simp[] >> metis_tac[]) >>
  qexistsl [`s'`,`G1`,`tn'`,`w`] >> simp[] >>
- `gas_path_ptr (cx_dead H cx) 0 ctx func PG G0 tn0 s0 (0+0)
-   G1 tn' (OK s')` by
-   (irule gas_path_ptr_then >> goal_assum (drule_at Any) >> simp[]) >>
- fs[]
+ `!D. gas_path_ptr D 0 ctx func PG G0 tn0 s0 (0+0) G1 tn' (OK s')` by
+   (gen_tac >> irule gas_path_ptr_then >>
+    qexistsl_tac [`G1`, `s1`, `tn1`] >> simp[]) >> fs[]
 QED
 
 Theorem annassign_memory_staged_source_ptr:
@@ -92,7 +111,9 @@ Theorem annassign_memory_staged_source_ptr:
  (sty = dty \/ is_bytestring_type dty) /\
  0 < type_memory_bytes cenv sty /\ type_memory_bytes cenv sty < dimword (:256) /\
  fn_has_code sa sb func /\ fn_inst_ids_distinct func /\
- stmt_state_rel H ctx func cenv cx es s0 /\ ghost_inv H d cenv cx es G0 tn0 s0 /\
+ (?H. valid_horizon cx st0 H es.storage_trace) /\
+ (!H. valid_horizon cx st0 H es.storage_trace ==>
+   stmt_state_rel H ctx func cenv cx es s0 /\ ghost_inv H d cenv cx es G0 tn0 s0) /\
  local_ptrs_reserved cenv sa /\ not_fresh_at sa p /\ not_fresh_at sa src /\
  (!x n. cenv.ce_return_buf = SOME (PtrVar (Var x) n) ==> not_fresh_at sa x) /\
  (!x n. cenv.ce_return_pc = SOME (PtrVar (Var x) n) ==> not_fresh_at sa x) /\
@@ -112,8 +133,9 @@ Theorem annassign_memory_staged_source_ptr:
  compile_store_memory cenv (Var tmp) (Var p) dty dty sn = ((),sb) /\
  fn_has_code sn sb func /\ cs_extends sa sn /\
  sa.cs_next_var <= sn.cs_next_var /\ not_fresh_at sn tmp /\
- gas_path_ptr (cx_dead H cx) 0 ctx func PG G0 tn0 s0 0 G tn (OK s) /\
- stmt_state_rel H ctx func cenv cx es s /\ ghost_inv H d cenv cx es G tn s /\
+ (!D. gas_path_ptr D 0 ctx func PG G0 tn0 s0 0 G tn (OK s)) /\
+ (!H. valid_horizon cx st0 H es.storage_trace ==>
+   stmt_state_rel H ctx func cenv cx es s /\ ghost_inv H d cenv cx es G tn s) /\
  ghost_kept cenv es sa G0 tn0 s0 G tn /\
  lookup_var tmp s = SOME b /\ ptr_covers G tn tmp s (type_memory_bytes cenv sty) /\
  lookup_var p s = SOME w /\ ptr_covers G tn p s cap /\

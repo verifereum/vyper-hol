@@ -5,7 +5,7 @@ Ancestors
   forPtrRangeEntry forPtrRangeSource stmtSimFor localPtrsProps
   exprSimWordArgs exprSimProps stmtSimDefs loweringPosts stmtLowering
   exprLoweringProps compileEnv loweringStateRelDefs emitHelperProps loweringSlice venomInst
-  ptrDiscipline ptrSafeRun list rich_list stmtSimDeclCompose valueEncoding
+  ptrDiscipline ptrSafeRun ptrSafetyTransport list rich_list stmtSimDeclCompose valueEncoding
   exprBopSimProps gasContext
   bodyPtrDefs stmtFragPtr gasSummaryComposePtr gasOutcomeInitialObsPtr
   vyperInterpreter vyperState vyperValue vyperValueOperation
@@ -49,14 +49,14 @@ Proof
 QED
 
 Theorem for_checked_runtime_error_outcome:
-  gas_path_ptr (cx_dead H cx) 0 ctx func PG G tn s 0 Gf tf
-    (Abort Revert_abort t) ==>
-  gas_outcome_ptr (cx_dead H cx) (cx_tops cx) (ctx,func) PG
+  (!H:(bool # bytes32 # type_value) list # num list. gas_path_ptr (cx_dead H cx) 0 ctx func PG G tn s 0 Gf tf
+    (Abort Revert_abort t)) ==>
+  gas_outcome_ptr (\H. cx_dead H cx) (cx_tops cx) (ctx,func) PG cx st0
     (raise (Error (RuntimeError msg))) (es,s,G,tn) Post
-    (\res ee gt r. !tail. stmt_exit_ptr RetQ (ee with gas_obs := tail) res gt r)
+    (\H res ee gt r. !tail. stmt_exit_ptr (RetQ H) (ee with gas_obs := tail) res gt r)
 Proof
   strip_tac >> rewrite_tac[gas_outcome_ptr_def] >>
-  qexists_tac `[]` >> disj1_tac >> rewrite_tac[gas_summary_ptr_at_def] >>
+  qexists_tac `[]` >> disj2_tac >> disj1_tac >> rewrite_tac[gas_summary_ptr_at_def] >>
   qexistsl_tac [`INR (Error (RuntimeError msg))`,`es`,`Gf`,`tf`,
                 `Abort Revert_abort t`] >>
   simp[gas_marked_exec_ptr_def, raise_def, exit_result_def,
@@ -68,28 +68,28 @@ QED
    the existing loop outcome; no instruction semantics is reopened there. *)
 Theorem for_checked_range_tail_compose:
   (~(n1 <= n2) ==>
-     ?Gf tf t. gas_path_ptr (cx_dead H cx) 0 ctx func PG G tn s 0 Gf tf
+     ?Gf tf t. !H:(bool # bytes32 # type_value) list # num list. gas_path_ptr (cx_dead H cx) 0 ctx func PG G tn s 0 Gf tf
        (Abort Revert_abort t)) /\
   (n1 <= n2 /\ ~(Num (n2-n1) <= bound) ==>
-     ?Gf tf t. gas_path_ptr (cx_dead H cx) 0 ctx func PG G tn s 0 Gf tf
+     ?Gf tf t. !H:(bool # bytes32 # type_value) list # num list. gas_path_ptr (cx_dead H cx) 0 ctx func PG G tn s 0 Gf tf
        (Abort Revert_abort t)) /\
   (n1 <= n2 /\ Num (n2-n1) <= bound ==>
      ?Gc tc cc.
-       gas_path_ptr (cx_dead H cx) 0 ctx func PG G tn s 0 Gc tc (OK cc) /\
-       gas_outcome_ptr (cx_dead H cx) (cx_tops cx) (ctx,func) PG
+       (!H:(bool # bytes32 # type_value) list # num list. gas_path_ptr (cx_dead H cx) 0 ctx func PG G tn s 0 Gc tc (OK cc)) /\
+       gas_outcome_ptr (\H. cx_dead H cx) (cx_tops cx) (ctx,func) PG cx st0
          (eval_for cx tyv id stmts
            (MAP Value (GENLIST (\j. IntV (n1 + &j)) (Num (n2-n1)))))
          (es,cc,Gc,tc) Post
-         (\res ee gt r. !tail.
-           stmt_exit_ptr RetQ (ee with gas_obs := tail) res gt r)) ==>
-  gas_outcome_ptr (cx_dead H cx) (cx_tops cx) (ctx,func) PG
+         (\H res ee gt r. !tail.
+           stmt_exit_ptr (RetQ H) (ee with gas_obs := tail) res gt r)) ==>
+  gas_outcome_ptr (\H. cx_dead H cx) (cx_tops cx) (ctx,func) PG cx st0
     (do rl <- lift_sum (get_range_limits (IntV n1) (IntV n2));
         check (compatible_bound (Dynamic bound) (SND rl)) "For too long";
         eval_for cx tyv id stmts
           (MAP Value (GENLIST (\j. IntV (FST rl + &j)) (SND rl))) od)
     (es,s,G,tn) Post
-    (\res ee gt r. !tail.
-      stmt_exit_ptr RetQ (ee with gas_obs := tail) res gt r)
+    (\H res ee gt r. !tail.
+      stmt_exit_ptr (RetQ H) (ee with gas_obs := tail) res gt r)
 Proof
   strip_tac >> rewrite_tac[for_checked_range_tail_action] >>
   Cases_on `n1 <= n2`
@@ -131,23 +131,23 @@ Theorem for_checked_range_entry_outcome_ptr:
      lookup_var ev (ee with vs_vars := vs) = SOME (i2w n2) /\
      (!x. ~MEM x [cv;rv;g1;z1;g2;z2;ev] ==>
        lookup_var x (ee with vs_vars := vs) = lookup_var x ee) ==>
-     gas_outcome_ptr (cx_dead H cx) (cx_tops cx) (ctx,func) PG
+     gas_outcome_ptr (\H. cx_dead H cx) (cx_tops cx) (ctx,func) PG cx st0
        (eval_for cx tyv id stmts
          (MAP Value (GENLIST (\j. IntV (n1 + &j)) (Num (n2-n1)))))
        (es,jump_to lbl (ee with vs_vars := vs),
         DRESTRICT G (COMPL {cv;rv;g1;z1;g2;z2;ev}),
         tn with t_var := tn.t_var |++
           [(cv,{});(rv,{});(g1,{});(z1,{});(g2,{});(z2,{});(ev,{})]) Post
-       (\res ee gt r. !tail.
-         stmt_exit_ptr RetQ (ee with gas_obs := tail) res gt r)) ==>
-  gas_outcome_ptr (cx_dead H cx) (cx_tops cx) (ctx,func) PG
+       (\H res ee gt r. !tail.
+         stmt_exit_ptr (RetQ H) (ee with gas_obs := tail) res gt r)) ==>
+  gas_outcome_ptr (\H. cx_dead H cx) (cx_tops cx) (ctx,func) PG cx st0
     (do rl <- lift_sum (get_range_limits (IntV n1) (IntV n2));
         check (compatible_bound (Dynamic bound) (SND rl)) "For too long";
         eval_for cx tyv id stmts
           (MAP Value (GENLIST (\j. IntV (FST rl + &j)) (SND rl))) od)
     (es,ee,G,tn) Post
-    (\res ee gt r. !tail.
-      stmt_exit_ptr RetQ (ee with gas_obs := tail) res gt r)
+    (\H res ee gt r. !tail.
+      stmt_exit_ptr (RetQ H) (ee with gas_obs := tail) res gt r)
 Proof
   strip_tac >>
   mp_tac (Q.INST [`tenv` |-> `get_tenv cx`] (SPEC_ALL for_checked_range_test_words)) >>
@@ -156,7 +156,9 @@ Proof
   disch_then (drule_at (Pat `eval_operand op1 ee = _`)) >>
   disch_then (drule_at (Pat `eval_operand op2 ee = _`)) >>
   disch_then (drule_at (Pat `lookup_block _ _ = _`)) >>
-  disch_then (mp_tac o Q.INST [`D` |-> `cx_dead H cx`] o SPEC_ALL) >>
+  disch_then (mp_tac o Q.INST
+    [`D` |-> `<| d_stor := K (K {}); d_trans := K (K {});
+                d_imm := K {}; d_ret := K {} |>`] o SPEC_ALL) >>
   (impl_tac >- (simp[] >> Cases_on `is_signed_type fty` >> gvs[] >>
     first_assum ACCEPT_TAC)) >>
   strip_tac >> suspend "compose"
@@ -164,16 +166,22 @@ QED
 
 Resume for_checked_range_entry_outcome_ptr[compose]:
   irule for_checked_range_tail_compose >> rpt conj_tac
-  >- (strip_tac >>
-      qpat_x_assum `_ \/ _ ==> _` irule >> disj1_tac >>
-      simp[integerTheory.INT_NOT_LT, GSYM integerTheory.INT_NOT_LE])
-  >- (strip_tac >> qpat_x_assum `_ \/ _ ==> _` irule >>
-      disj2_tac >> gvs[]) >>
+  >- (strip_tac >> qpat_x_assum `_ \/ _ ==> _` mp_tac >>
+      (impl_tac >- simp[integerTheory.INT_NOT_LT, GSYM integerTheory.INT_NOT_LE]) >>
+      rpt (pop_assum kall_tac) >> metis_tac[gas_path_ptr_from_no_dead])
+  >- (strip_tac >> qpat_x_assum `_ \/ _ ==> _` mp_tac >>
+      (impl_tac >- simp[]) >>
+      rpt (pop_assum kall_tac) >> metis_tac[gas_path_ptr_from_no_dead]) >>
   strip_tac >>
   qpat_x_assum `~_ /\ ~_ ==> ?vs. _` mp_tac >>
   simp[integerTheory.INT_NOT_LT, wordsTheory.WORD_SUB_ADD2] >>
   strip_tac >>
-  goal_assum (drule_at Any) >> first_x_assum irule >> simp[]
+  qexistsl_tac [`DRESTRICT G (COMPL {cv;rv;g1;z1;g2;z2;ev})`,
+    `tn with t_var := tn.t_var |++
+      [(cv,{});(rv,{});(g1,{});(z1,{});(g2,{});(z2,{});(ev,{})]`,
+    `jump_to lbl (ee with vs_vars := vs)`] >>
+  conj_tac >- metis_tac[gas_path_ptr_from_no_dead] >>
+  first_x_assum irule >> simp[]
 QED
 Finalise for_checked_range_entry_outcome_ptr
 
@@ -185,7 +193,9 @@ Theorem for_range_checked_tail_outcome_ptr:
   (!x q. cenv.ce_return_buf = SOME (PtrVar (Var x) q) ==> not_fresh_at st x) /\
   s.vs_current_bb = st.cs_current_bb /\
   s.vs_inst_idx = LENGTH st.cs_current_insts /\ ~s.vs_halted /\
-  stmt_state_rel H ctx func cenv cx es s /\ ghost_inv H d cenv cx es G tn s /\
+  (!H. valid_horizon cx st0 H es.storage_trace ==>
+    stmt_state_rel H ctx func cenv cx es s /\
+    storage_well_formed_on cx es (FST H) /\ ghost_inv H d cenv cx es G tn s) /\
   is_int_type fty /\ evaluate_type (get_tenv cx) fty = SOME tyv /\
   32 <= type_memory_bytes cenv fty /\
   type_memory_bytes cenv fty < dimword (:256) /\
@@ -227,25 +237,38 @@ Theorem for_range_checked_tail_outcome_ptr:
         eval_for cx tyv id stmts
           (MAP Value (GENLIST (\j. IntV (FST rl + &j)) (SND rl))) od)
     (stmt_res_ok lctx) es ==>
-  gas_outcome_ptr (cx_dead H cx) (cx_tops cx) (ctx,func) PG
+  gas_outcome_ptr (\H. cx_dead H cx) (cx_tops cx) (ctx,func) PG cx st0
     (do rl <- lift_sum (get_range_limits (IntV n1) (IntV n2));
         check (compatible_bound (Dynamic bound) (SND rl)) "For too long";
         eval_for cx tyv id stmts
           (MAP Value (GENLIST (\j. IntV (FST rl + &j)) (SND rl))) od)
     (es,s,G,tn)
-    (\res ee Gf tf t.
+    (\H res ee Gf tf t.
        res = INL () /\ stmt_lands lctx sf res t /\ ~t.vs_halted /\
        ~block_is_terminated sf /\ stmt_state_rel H ctx func cenv cx ee t /\
-       ghost_inv H d cenv cx ee Gf tf t /\
+       storage_well_formed_on cx ee (FST H) /\ ghost_inv H d cenv cx ee Gf tf t /\
        (!x w. not_fresh_at st x /\ lookup_var x s = SOME w ==>
           lookup_var x t = SOME w) /\
        (!x. not_fresh_at st x ==> FLOOKUP Gf x = FLOOKUP G x /\
           op_taint tf (Var x) = op_taint tn (Var x)))
-    (\res ee gt r. !tail.
-       stmt_exit_ptr RetQ (ee with gas_obs := tail) res gt r)
+    (\H res ee gt r. !tail.
+       stmt_exit_ptr (RetQ H) (ee with gas_obs := tail) res gt r)
 Proof
   strip_tac >>
   `cs_extends st st` by simp[cs_extends_refl] >>
+  Cases_on `storage_trace_domain cx st0 es.storage_trace`
+  >~ [`~storage_trace_domain _ _ _`]
+  >- (rewrite_tac[gas_outcome_ptr_def] >> qexists_tac `[]` >> disj1_tac >>
+      irule gasStorageTheory.gas_bad_storage_at_initial >>
+      simp[for_checked_range_tail_action] >> rpt IF_CASES_TAC >>
+      simp[vyperStorageTraceTheory.storage_trace_frame_raise] >>
+      MATCH_ACCEPT_TAC (cj 4 vyperStorageTraceTheory.evaluate_storage_trace_frame)) >>
+  `?H. valid_horizon cx st0 H es.storage_trace` by
+    fs[vyperStorageFootprintTheory.storage_trace_domain_def] >>
+  pop_assum (qx_choose_then `H` assume_tac) >>
+  qpat_assum `!H. valid_horizon _ _ H _ ==> _`
+    (qspec_then `H` mp_tac) >>
+  (impl_tac >- first_assum ACCEPT_TAC) >> strip_tac >>
   drule_at (Pat `for_range_checked_code _ _ _ _ _ _ _ _ _ _ = _`)
     for_range_checked_parts >>
   disch_then (qspecl_then [`st`,`func`] mp_tac) >>
@@ -318,6 +341,16 @@ Resume for_range_checked_tail_outcome_ptr[allocation]:
      irule for_range_alloca_entry_path_ptr >> simp[] >> metis_tac[listTheory.MEM]) >>
   `ghost_inv H d cenv cx es (step_prov PG G A u) (step_taint A s u tn) u` by
     (simp[Abbr `A`] >> irule for_alloca_ghost_inv >> simp[] >> metis_tac[listTheory.MEM]) >>
+  `!HH. valid_horizon cx st0 HH es.storage_trace ==>
+    stmt_state_rel HH ctx func cenv cx es u /\
+    ghost_inv HH d cenv cx es (step_prov PG G A u) (step_taint A s u tn) u` by
+    (qx_gen_tac `HH` >> strip_tac >>
+     qpat_assum `!H. valid_horizon _ _ H _ ==> _`
+       (qspec_then `HH` mp_tac) >>
+     (impl_tac >- first_assum ACCEPT_TAC) >> strip_tac >>
+     drule_all (Q.INST [`H` |-> `HH`] for_range_alloca_state) >>
+     strip_tac >> gvs[Abbr `A`] >>
+     irule for_alloca_ghost_inv >> simp[] >> metis_tac[listTheory.MEM]) >>
   qabbrev_tac `Ga = step_prov PG G A u` >>
   qabbrev_tac `ta = step_taint A s u tn` >>
   `gas_path_ptr (cx_dead H cx) 0 ctx func PG Ga ta
@@ -329,6 +362,21 @@ Resume for_range_checked_tail_outcome_ptr[allocation]:
      simp[get_instruction_def, EL_APPEND_EQN, jump_to_def] >> metis_tac[]) >>
   `gas_path_ptr (cx_dead H cx) 0 ctx func PG G tn s 0 Ga ta
     (OK (jump_to entry_lbl u))` by (drule_all gas_path_ptr_then >> simp[]) >>
+  `!HH:(bool # bytes32 # type_value) list # num list. gas_path_ptr (cx_dead HH cx) 0 ctx func PG G tn s 0 Ga ta
+    (OK (jump_to entry_lbl u))` by
+    (qx_gen_tac `HH` >>
+     `gas_path_ptr (cx_dead HH cx) 0 ctx func PG G tn s 0 Ga ta
+       (OK (u with vs_inst_idx := SUC s.vs_inst_idx))` by
+       (simp[Abbr `Ga`, Abbr `ta`, Abbr `A`] >>
+        irule alloca_zero_path_ptr >> simp[]) >>
+     `gas_path_ptr (cx_dead HH cx) 0 ctx func PG Ga ta
+       (u with vs_inst_idx := SUC s.vs_inst_idx) 0 Ga ta
+       (OK (jump_to entry_lbl u))` by
+       (simp[NoAsms, jump_to_def] >> irule (SRULE [jump_to_def] (Q.INST
+         [`s` |-> `u with vs_inst_idx := SUC s.vs_inst_idx`]
+         (SPEC_ALL for_range_jump_path_ptr))) >>
+        simp[get_instruction_def, EL_APPEND_EQN, jump_to_def] >> metis_tac[]) >>
+     drule_all gas_path_ptr_then >> simp[]) >>
   suspend "checked_entry"
 QED
 
@@ -368,7 +416,7 @@ Resume for_range_checked_tail_outcome_ptr[checked_entry]:
      qpat_x_assum `op_prov G op2 = NONE` mp_tac >>
      rpt (pop_assum kall_tac) >> metis_tac[]) >>
   irule gas_outcome_ptr_prefix >>
-  goal_assum (drule_at (Pat `gas_path_ptr _ _ _ _ _ _ _ s _ _ _ _`)) >>
+  goal_assum (drule_at (Pat `!HH:(bool # bytes32 # type_value) list # num list. gas_path_ptr (cx_dead HH cx) _ _ _ _ _ _ s _ _ _ _`)) >>
   `ee.vs_current_bb = entry_lbl` by simp[Abbr `ee`, jump_to_def] >>
   pop_assum (fn th =>
     qpat_assum `lookup_block _ _ = SOME
@@ -422,6 +470,10 @@ Resume for_range_checked_tail_outcome_ptr[entry_setup]:
      conj_tac >- simp[Abbr `ee`, stmt_state_rel_jump_to] >>
      qpat_x_assum `ptr_covers Ga ta p u sz` mp_tac >>
      simp[NoAsms, Abbr `ee`, ptr_covers_def, jump_to_def, lookup_var_def]) >>
+  `!HH. valid_horizon cx st0 HH es.storage_trace ==>
+    ghost_inv HH d cenv cx es Ga ta ee /\ stmt_state_rel HH ctx func cenv cx es ee` by
+    (simp[Abbr `ee`, Abbr `Ga`, Abbr `ta`,
+       stmtFragPtrTheory.ghost_inv_jump_to, stmt_state_rel_jump_to] >> metis_tac[]) >>
   `~MEM p [cv;rv;g1;z1;g2;z2;ev]` by (fs[] >> rw[] >> fs[]) >>
   `!x. MEM x [cv;rv;g1;z1;g2;z2;ev] ==>
     not_local_ptr cenv es.scopes x /\ cenv.ce_imm_alloca <> SOME (Var x) /\
@@ -443,7 +495,21 @@ Resume for_range_checked_tail_outcome_ptr[entry_setup]:
     [`outputs` |-> `[cv;rv;g1;z1;g2;z2;ev]`, `lbl` |-> `cond_lbl`,
      `sf` |-> `cc`, `Gf` |-> `Gc`, `tf` |-> `tc`] o SPEC_ALL) >>
   (impl_tac >- simp[Abbr `cc`, Abbr `Gc`, Abbr `tc`]) >>
-  strip_tac >> suspend "entry_frames"
+  strip_tac >>
+  `!HH. valid_horizon cx st0 HH es.storage_trace ==>
+    ghost_inv HH d cenv cx es Gc tc cc /\ stmt_state_rel HH ctx func cenv cx es cc` by
+    (qx_gen_tac `HH` >> strip_tac >>
+     qpat_assum `!HH. valid_horizon _ _ HH _ ==> ghost_inv HH _ _ _ _ _ _ ee /\ _`
+       (qspec_then `HH` mp_tac) >>
+     (impl_tac >- first_assum ACCEPT_TAC) >> strip_tac >>
+     drule_at (Pat `ghost_inv HH _ _ _ _ _ _ ee`)
+       (Q.INST [`H` |-> `HH`] for_checked_entry_setup) >>
+     disch_then (drule_at (Pat `stmt_state_rel HH _ _ _ _ _ ee`)) >>
+     disch_then (mp_tac o Q.INST
+       [`outputs` |-> `[cv;rv;g1;z1;g2;z2;ev]`, `lbl` |-> `cond_lbl`,
+        `sf` |-> `cc`, `Gf` |-> `Gc`, `tf` |-> `tc`] o SPEC_ALL) >>
+     (impl_tac >- simp[Abbr `cc`, Abbr `Gc`, Abbr `tc`]) >> simp[]) >>
+  suspend "entry_frames"
 QED
 
 Resume for_range_checked_tail_outcome_ptr[entry_frames]:
@@ -475,10 +541,11 @@ QED
 
 Resume for_range_checked_tail_outcome_ptr[loop]:
   qabbrev_tac `vals = GENLIST (\j. IntV (n1 + &j)) (Num (n2-n1))` >>
-  qabbrev_tac `Inv = \j ei gf tf t.
+  qabbrev_tac `Inv = \H j ei gf tf t.
     P ei /\ lookup_scopes id ei.scopes = NONE /\ j <= Num (n2-n1) /\
     t.vs_current_bb = cond_lbl /\ t.vs_inst_idx = 0 /\ ~t.vs_halted /\
-    stmt_state_rel H ctx func cenv cx ei t /\ ghost_inv H d cenv cx ei gf tf t /\
+    stmt_state_rel H ctx func cenv cx ei t /\
+    storage_well_formed_on cx ei (FST H) /\ ghost_inv H d cenv cx ei gf tf t /\
     lookup_var cv t = SOME (i2w (n1 + &j)) /\
     lookup_var ev t = SOME (i2w n2) /\ lookup_var p t = SOME a /\
     FLOOKUP gf cv = NONE /\ FLOOKUP gf ev = NONE /\
@@ -491,16 +558,19 @@ Resume for_range_checked_tail_outcome_ptr[loop]:
       lookup_var x t = SOME w) /\
     (!x. not_fresh_at st x ==> FLOOKUP gf x = FLOOKUP G x /\
       op_taint tf (Var x) = op_taint tn (Var x))` >>
-  qabbrev_tac `Done = \ei gf tf t.
+  qabbrev_tac `Done = \H ei gf tf t.
     t.vs_current_bb = exit_lbl /\ t.vs_inst_idx = 0 /\ ~t.vs_halted /\
-    stmt_state_rel H ctx func cenv cx ei t /\ ghost_inv H d cenv cx ei gf tf t /\
+    stmt_state_rel H ctx func cenv cx ei t /\
+    storage_well_formed_on cx ei (FST H) /\ ghost_inv H d cenv cx ei gf tf t /\
     (!x w. not_fresh_at st x /\ lookup_var x s = SOME w ==>
       lookup_var x t = SOME w) /\
     (!x. not_fresh_at st x ==> FLOOKUP gf x = FLOOKUP G x /\
       op_taint tf (Var x) = op_taint tn (Var x))` >>
-  `Inv 0 (es with gas_obs := []) Gc tc cc` by
+  `!H. valid_horizon cx st0 H es.storage_trace ==>
+    Inv H 0 (es with gas_obs := []) Gc tc cc` by
     (simp[Abbr `Inv`, Abbr `A`, stmt_state_rel_gas_obs, ghost_inv_gas_obs,
-       mk_inst_def] >>
+       mk_inst_def, vyperStorageFootprintTheory.storage_well_formed_on_def,
+       vyperStorageBackendTheory.get_storage_def] >>
      qpat_assum `!x. MEM x [cv;rv;g1;z1;g2;z2;ev] ==> FLOOKUP Gc x = _ /\ _`
        mp_tac >> simp[] >> metis_tac[]) >>
   suspend "loop_outcome"
@@ -509,7 +579,7 @@ QED
 Resume for_range_checked_tail_outcome_ptr[loop_outcome]:
   drule (Q.INST [`P` |-> `\ei. P ei /\ lookup_scopes id ei.scopes = NONE`]
     (SPEC_ALL for_range_loop_ptr)) >>
-  disch_then (drule_at (Pat `Inv _ _ _ _ _`)) >>
+  disch_then (drule_at (Pat `!H. valid_horizon _ _ H _ ==> Inv H _ _ _ _ _`)) >>
   disch_then (drule_at (Pat `ret_pc_ok cenv st s`)) >>
   disch_then (mp_tac o Q.INST
     [`G0` |-> `G`, `tn0` |-> `tn`, `vs` |-> `vals`, `Done` |-> `Done`] o SPEC_ALL) >>

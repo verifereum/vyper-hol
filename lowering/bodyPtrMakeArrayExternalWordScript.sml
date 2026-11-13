@@ -14,18 +14,21 @@ Theorem external_word_materialize_endpoint:
   step_inst_base (mk_inst id opc [src] [tmp]) s = OK (update_var tmp w s) /\
   (opc = SLOAD ==> key_taint tn.t_stor a = {}) /\
   (opc = TLOAD ==> key_taint tn.t_trans a = {}) /\
-  ghost_inv H d cenv cx es' G tn s /\
+  (?H. valid_horizon cx st0 H es'.storage_trace) /\
+  (!H. valid_horizon cx st0 H es'.storage_trace ==>
+    ghost_inv H d cenv cx es' G tn s) /\
   ghost_kept cenv es sa G0 tn0 s0 G tn /\
   (!x. not_fresh_at sa x ==> x <> tmp) /\
   (!name p sz. FLOOKUP cenv.ce_vars name = SOME (PtrVar (Var p) sz) ==> p <> tmp) /\
   (!x sz. cenv.ce_return_buf = SOME (PtrVar (Var x) sz) ==> x <> tmp) /\
   (!x sz. cenv.ce_return_pc = SOME (PtrVar (Var x) sz) ==> x <> tmp) ==>
   ?Gf tnf sf.
-    gas_path_ptr D 0 ctx fn PG G tn s 0 Gf tnf (OK sf) /\
+    (!D. gas_path_ptr D 0 ctx fn PG G tn s 0 Gf tnf (OK sf)) /\
     sf = ((update_var tmp w s) with vs_inst_idx := SUC s.vs_inst_idx) /\
     eval_operand (Var tmp) sf = SOME w /\ op_taint tnf (Var tmp) = {} /\
     op_prov Gf (Var tmp) = NONE /\
-    ghost_inv H d cenv cx es' Gf tnf sf /\
+    (!H. valid_horizon cx st0 H es'.storage_trace ==>
+      ghost_inv H d cenv cx es' Gf tnf sf) /\
     ghost_kept cenv es sa G0 tn0 s0 Gf tnf /\
     sf.vs_memory = s.vs_memory /\
     tnf.t_mem = tn.t_mem /\ tnf.t_stor = tn.t_stor /\
@@ -39,12 +42,16 @@ Proof
     `step_prov PG G (mk_inst id opc [src] [tmp]) (update_var tmp w s)`,
     `step_taint (mk_inst id opc [src] [tmp]) s (update_var tmp w s) tn`,
     `(update_var tmp w s) with vs_inst_idx := SUC s.vs_inst_idx`] >>
-  conj_tac >- (irule external_load_ptr_path >> simp[]) >>
+  conj_tac >- (gen_tac >> irule external_load_ptr_path >> simp[]) >>
   simp[] >>
   conj_tac >- simp[eval_operand_def, lookup_var_def, update_var_def, FLOOKUP_UPDATE] >>
   conj_tac >- (drule_all external_load_output_ghost >> gvs[]) >>
   conj_tac >- (drule_all external_load_output_ghost >> simp[ptrDisciplineTheory.op_prov_def]) >>
-  conj_tac >- (irule external_load_ghost_inv >> simp[] >> metis_tac[]) >>
+  conj_tac
+  >- (rpt strip_tac >>
+      qpat_assum `!H. valid_horizon _ _ H _ ==> _`
+        (qspec_then `H` (strip_assume_tac o UNDISCH)) >>
+      irule external_load_ghost_inv >> simp[] >> metis_tac[]) >>
   conj_tac >- (irule external_load_ghost_kept >> simp[] >> metis_tac[]) >>
   conj_tac >- simp[update_var_def] >>
   conj_tac >- metis_tac[external_load_ghost_frame] >>

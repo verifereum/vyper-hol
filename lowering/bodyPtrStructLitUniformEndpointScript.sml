@@ -5,7 +5,7 @@ Ancestors bodyPtrStructLitUniformBytesEndpoint bodyPtrStructLitUniformTypes
   bodyPtrMakeArrayConsOutcome bodyPtrMakeArrayConsLayout exprSimHypsDefs
 
 Theorem structlit_uniform_cons_endpoint:
-  literal_loop_frame pure ctx func ce cx d root aid addr capacity
+  literal_loop_frame H pure ctx func ce cx d root aid addr capacity
     ees fr sf Gf tnf esi si G0 tn0 s0 cells off /\
   literal_prefix_ok cells tn0 s0 /\ stmt_state_rel H ctx func ce cx ees sf /\
   compile_expr ce (expr_type e) e si = (vv,sm) /\
@@ -32,7 +32,7 @@ Theorem structlit_uniform_cons_endpoint:
   (pure ==> ~expr_has_effect e) ==>
   ?z HG tm.
     gas_path_ptr D 0 ctx func PG G tn s 0 HG tm (OK z) /\
-    literal_loop_frame pure ctx func ce cx d root aid addr capacity
+    literal_loop_frame H pure ctx func ce cx d root aid addr capacity
       ees fr sf Gf tnf es' sb HG tm z (cells ++ [(tv,v,addr+off,k)]) (off+k) /\
     literal_prefix_ok (cells ++ [(tv,v,addr+off,k)]) tm z
 Proof

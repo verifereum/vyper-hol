@@ -22,7 +22,8 @@ Theorem augassign_storage_place_pipeline_ptr:
   (bop = Exp ==> nonneg_int_literal e) /\
   (bop = ShL \/ bop = ShR ==> shift_amount_ok e) /\
   well_typed_binop ty bop ty (expr_type e) /\ bop <> In /\ bop <> NotIn /\
-  (!w st. storage_dead H tr (update_storage slot w st) = storage_dead H tr st) /\
+  (!H. valid_horizon cx st0 H es.storage_trace ==>
+    !w st. storage_dead H tr (update_storage slot w st) = storage_dead H tr st) /\
   lower_value compile_expr cenv ty e s1 = (rhs,s2) /\
   compile_binop bop cur rhs ty NONE
     (if bop = Exp then expr_int_literal e else NONE) s2 = (op,s3) /\
@@ -34,8 +35,10 @@ Theorem augassign_storage_place_pipeline_ptr:
   (!z sz. cenv.ce_return_pc = SOME (PtrVar (Var z) sz) ==> not_fresh_at s1 z) /\
   (!z sz. cenv.ce_return_buf = SOME (PtrVar (Var z) sz) ==> not_fresh_at s1 z) /\
   gas_admissible (eval_stmt cx (AugAssign ty tgt bop e)) (stmt_res_ok lctx) es /\
-  gas_path_ptr (cx_dead H cx) 0 ctx func PG G0 tn0 s0 0 HG tm (OK t) /\
-  stmt_state_rel H ctx func cenv cx es t /\ ghost_inv H d cenv cx es HG tm t /\
+  (!H. valid_horizon cx st0 H es.storage_trace ==>
+    gas_path_ptr (cx_dead H cx) 0 ctx func PG G0 tn0 s0 0 HG tm (OK t) /\
+    stmt_state_rel H ctx func cenv cx es t /\
+    storage_well_formed_on cx es (FST H) /\ ghost_inv H d cenv cx es HG tm t) /\
   ghost_kept cenv es sa G0 tn0 s0 HG tm /\
   ~t.vs_halted /\ t.vs_current_bb = s1.cs_current_bb /\
   t.vs_inst_idx = LENGTH s1.cs_current_insts /\
@@ -45,17 +48,18 @@ Theorem augassign_storage_place_pipeline_ptr:
   (!z. cur = Var z ==> not_fresh_at s1 z) /\
   (!z. dst = Var z ==> not_fresh_at s1 z) /\
   (!z. not_fresh_at sa z ==> lookup_var z t = lookup_var z s0) ==>
-  gas_outcome_ptr (cx_dead H cx) (cx_tops cx) (ctx,func) PG
+  gas_outcome_ptr (\H. cx_dead H cx) (cx_tops cx) (ctx,func) PG cx st0
     (eval_stmt cx (AugAssign ty tgt bop e)) (es,s0,G0,tn0)
-    (\res ee G tn u. ?cenv'.
+    (\H res ee G tn u. ?cenv'.
       stmt_lands lctx sb res u /\ ~u.vs_halted /\
       (res = INL () ==> ~block_is_terminated sb /\ cenv' = cenv) /\
       cenv_top_ext cenv cenv' ee.scopes /\
-      stmt_state_rel H ctx func cenv' cx ee u /\ ghost_inv H d cenv' cx ee G tn u /\
+      stmt_state_rel H ctx func cenv' cx ee u /\
+      storage_well_formed_on cx ee (FST H) /\ ghost_inv H d cenv' cx ee G tn u /\
       (!z w. not_fresh_at sa z /\ lookup_var z s0 = SOME w ==> lookup_var z u = SOME w) /\
       (!z. not_fresh_at sa z ==> FLOOKUP G z = FLOOKUP G0 z /\
         op_taint tn (Var z) = op_taint tn0 (Var z)))
-    (\res ee gt r. !tail. stmt_exit_ptr RetQ (ee with gas_obs := tail) res gt r)
+    (\H res ee gt r. !tail. stmt_exit_ptr (RetQ H) (ee with gas_obs := tail) res gt r)
 Proof
   strip_tac >>
   `expr_sim_inv cenv cx env es` by fs[expr_body_pre_def] >>
@@ -75,7 +79,7 @@ Proof
     (mp_tac o REWRITE_RULE [expr_sim_ptr_def]) >>
   disch_then (qspecl_then [`s1`,`s2`,`rhs`,`t`,`HG`,`tm`] mp_tac) >>
   (impl_tac >- simp[ghost_inv_gas_obs]) >> strip_tac >>
-  qpat_x_assum `gas_outcome_ptr _ _ _ _ _ _ _ _`
+  qpat_x_assum `gas_outcome_ptr _ _ _ _ _ _ _ _ _ _`
     (strip_assume_tac o REWRITE_RULE [gas_outcome_ptr_def])
   >- suspend "summary" >>
   `gas_marked_exec_ptr (cx_dead H cx) (ctx,func) PG (eval_target_place cx tgt)
@@ -86,7 +90,7 @@ Proof
 QED
 
 Resume augassign_storage_place_pipeline_ptr[summary]:
-  qpat_x_assum `gas_summary_ptr_at _ _ _ _ _ _ _ _` mp_tac >>
+  qpat_x_assum `gas_summary_ptr_at _ _ _ _ _ _ _ _ _ _` mp_tac >>
   simp[gas_summary_ptr_at_marked] >> strip_tac
   >- suspend "normal" >>
   `?ex. res = INR ex` by (Cases_on `res` >> gvs[expr_exit_def]) >> gvs[] >>

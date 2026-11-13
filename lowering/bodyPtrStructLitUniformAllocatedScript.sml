@@ -27,16 +27,16 @@ Theorem structlit_uniform_allocated_fields_outcome_ptr:
   (pure ==> ~EXISTS (expr_has_effect o SND) fields) ==>
   out = Var root /\
   ?addr. addr + type_memory_size_list tvs < dimword(:256) /\
-  gas_outcome_ptr (cx_dead H cx) (cx_tops cx) (ctx,func) PG
+  gas_outcome_ptr (\H. cx_dead H cx) (cx_tops cx) (ctx,func) PG cx st0
     (eval_exprs cx (MAP SND fields)) (es,s,G,tn)
-    (\res ee HG tm z. ?vs cells. res = INL vs /\ expr_sim_inv ce cx env ee /\
+    (\H res ee HG tm z. ?vs cells. res = INL vs /\ expr_sim_inv ce cx env ee /\
       LIST_REL value_has_type tvs vs /\
-      literal_loop_frame pure ctx func ce cx d root sa.cs_next_id addr (type_memory_size_list tvs)
+      literal_loop_frame H pure ctx func ce cx d root sa.cs_next_id addr (type_memory_size_list tvs)
         es sa s G tn ee sb HG tm z cells (type_memory_size_list tvs) /\
       literal_prefix_ok cells tm z /\
       (!m. mem_agree_outside tm.t_mem z.vs_memory m ==>
         fields_in_memory (ZIP (MAP FST fields,vs)) (ZIP (MAP FST fields,tvs)) addr m))
-    (\res ee gt r. ?exc. res = INR exc /\ expr_exit (INR exc : eval_result + exception) r)
+    (\H res ee gt r. ?exc. res = INR exc /\ expr_exit (INR exc : eval_result + exception) r)
 Proof
   strip_tac >>
   `ci_mono sm sb` by
@@ -53,7 +53,7 @@ Proof
     metis_tac[not_fresh_at_mono, ci_mono_def] >>
   `pure ==> EVERY ($~ o expr_has_effect) (MAP SND fields)` by
     (strip_tac >> fs[listTheory.EXISTS_MAP, listTheory.EVERY_MAP, combinTheory.o_DEF]) >>
-  drule_at (Pat `literal_loop_frame _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _`)
+  drule_at (Pat `literal_loop_frame H _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _`)
     structlit_uniform_fields_loop_outcome_ptr >> simp[] >>
   disch_then (drule_at (Pat `compile_struct_lit _ _ _ _ _ _ _ = _`)) >> simp[] >>
   disch_then drule_all >> disch_then (qspec_then `PG` strip_assume_tac) >>

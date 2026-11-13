@@ -31,59 +31,68 @@ QED
 (* The cons outcome materialises a value, not an eval_result.  Retain its
    actual marked execution when applying the tail induction hypothesis. *)
 Theorem literal_value_bind_outcome_ptr:
-  gas_outcome_ptr D tops (ctx,func) PG
-    (a : evaluation_state -> value evaluation_result) (es,s0,G0,tn0)
-    (\res ee G tn t. ?v. res = INL v /\ P v ee G tn t)
-    (\res ee gt r. ?exc. res = INR exc /\ R (INR exc) ee gt r) /\
+  gas_outcome_ptr D tops (ctx,func) PG cx st0
+    (a : evaluation_state -> eval_result evaluation_result) (es,s0,G0,tn0)
+    (\H res ee G tn t. ?v. res = INL v /\ ChildPost H v ee G tn t)
+    (\H res ee gt r. ?exc. res = INR exc /\ R H (INR exc) ee gt r) /\
   (!marks v ee G tn t.
-    gas_marked_exec_ptr D (ctx,func) PG a (es,s0,G0,tn0)
-      marks (INL v) ee G tn (OK t) /\
-    ee.gas_obs = [] /\ P v ee G tn t ==>
-    gas_outcome_ptr D tops (ctx,func) PG
-      (k v : evaluation_state -> 'b evaluation_result) (ee,t,G,tn) Q R) ==>
-  gas_outcome_ptr D tops (ctx,func) PG (bind a k) (es,s0,G0,tn0) Q R
+    (?H. valid_horizon cx st0 H ee.storage_trace) /\
+    (!H. valid_horizon cx st0 H ee.storage_trace ==>
+      gas_marked_exec_ptr (D H) (ctx,func) PG a (es,s0,G0,tn0)
+        marks (INL v) ee G tn (OK t) /\ ChildPost H v ee G tn t) /\
+    ee.gas_obs = [] ==>
+    gas_outcome_ptr D tops (ctx,func) PG cx st0
+      (k v : evaluation_state -> 'b evaluation_result) (ee,t,G,tn) Q R) /\
+  (!v. storage_trace_frame (k v)) ==>
+  gas_outcome_ptr D tops (ctx,func) PG cx st0 (bind a k) (es,s0,G0,tn0) Q R
 Proof
   strip_tac >>
-  qpat_x_assum `gas_outcome_ptr _ _ _ _ _ _ _ _` mp_tac >>
-  rewrite_tac[gas_outcome_ptr_def, gas_summary_ptr_at_marked] >>
-  disch_then (qx_choose_then `left` strip_assume_tac)
-  >- (gvs[] >>
-      first_x_assum (qspecl_then
-        [`left`, `v`, `es_end with gas_obs := []`, `G`, `tn`, `t`] mp_tac) >>
-      (impl_tac >- fs[literal_marked_exec_end_gas_obs]) >>
-      rewrite_tac[gas_outcome_ptr_def, gas_summary_ptr_at_marked] >>
-      disch_then (qx_choose_then `right` strip_assume_tac)
-      >- (qexists `left ++ right` >> disj1_tac >>
-          metis_tac[gas_marked_exec_ptr_bind_normal])
-      >- (qexists `left ++ right` >> disj1_tac >>
-          metis_tac[gas_marked_exec_ptr_bind_normal]) >>
-      qexists `left ++ right` >> disj2_tac >>
-      rewrite_tac[ignore_bind_def, bind_assoc] >>
-      irule_at Any gas_exempt_cert_bind_value >>
-      simp[GSYM ignore_bind_def] >> metis_tac[gas_marked_exec_ptr_exec])
-  >- (gvs[] >> qexists `left` >> disj1_tac >>
-      metis_tac[gas_marked_exec_ptr_bind_exception]) >>
-  qexists `left` >> disj2_tac >>
-  rewrite_tac[ignore_bind_def, bind_assoc] >>
-  irule_at Any gas_exempt_cert_error_value >>
-  simp[GSYM ignore_bind_def] >> metis_tac[]
+  mp_tac (Q.INST
+    [`source` |-> `a`, `next` |-> `k`,
+     `P` |-> `\H res ee G tn t. ?v. res = INL v /\ ChildPost H v ee G tn t`,
+     `E` |-> `\H res ee gt r. ?exc. res = INR exc /\ R H (INR exc) ee gt r`]
+    (INST_TYPE [alpha |-> ``:value``] gas_outcome_ptr_bind_all)) >>
+  impl_tac
+  >- (rpt conj_tac
+      >- first_assum ACCEPT_TAC
+      >- (rpt strip_tac >> gvs[])
+      >- simp[]
+      >- first_assum ACCEPT_TAC
+      >- (rpt gen_tac >> strip_tac >>
+          qpat_x_assum `!marks v ee G tn t. _`
+            (qspecl_then [`left`, `v`, `mid with gas_obs := []`,
+                          `G`, `tn`, `t`] mp_tac) >>
+          impl_tac
+          >- (simp[] >> conj_tac >- metis_tac[] >>
+              rpt strip_tac >> first_x_assum drule >> strip_tac >>
+              gvs[gas_marked_exec_ptr_def, gas_marked_exec_def,
+                  fragGasModeTheory.gas_marked_path_def]) >>
+          simp[])
+      >- (rpt strip_tac >> rewrite_tac[ignore_bind_def, bind_assoc] >>
+          irule gas_exempt_cert_error_value >> simp[GSYM ignore_bind_def]) >>
+      rpt strip_tac >> rewrite_tac[ignore_bind_def, bind_assoc] >>
+      irule gas_exempt_cert_bind_value >>
+      goal_assum (drule_at Any) >> simp[GSYM ignore_bind_def]) >>
+  simp[]
 QED
 
 Theorem literal_tuple_nil_outcome_ptr:
-  ~s.vs_halted /\ Q (INL []) (es with gas_obs := []) G tn s ==>
-  gas_outcome_ptr D tops (ctx,func) PG (eval_exprs cx []) (es,s,G,tn) Q R
+  ~s.vs_halted /\
+  (!H. valid_horizon cx st0 H es.storage_trace ==>
+    Q H (INL []) (es with gas_obs := []) G tn s) ==>
+  gas_outcome_ptr D tops (ctx,func) PG cx st0 (eval_exprs cx []) (es,s,G,tn) Q R
 Proof
   strip_tac >> rewrite_tac[gas_outcome_ptr_def] >>
-  qexists `[]` >> disj1_tac >> rewrite_tac[gas_summary_ptr_at_def] >>
+  qexists `[]` >> disj2_tac >> disj1_tac >> rewrite_tac[gas_summary_ptr_at_def] >>
   qexistsl [`INL []`, `es`, `G`, `tn`, `OK s`] >>
-  simp[exprSimWordArgsTheory.eval_exprs_nil] >>
+  simp[exprSimWordArgsTheory.eval_exprs_nil] >> rpt strip_tac >> simp[] >>
   irule (cj 1 gas_path_ptr_rules) >> simp[]
 QED
 
 Theorem literal_loop_frame_gas_obs[simp]:
-  literal_loop_frame pure ctx func ce cx d root aid addr capacity
+  literal_loop_frame H pure ctx func ce cx d root aid addr capacity
     ees fr sf Gf tnf (es with gas_obs := gs) cs G tn s cells off <=>
-  literal_loop_frame pure ctx func ce cx d root aid addr capacity
+  literal_loop_frame H pure ctx func ce cx d root aid addr capacity
     ees fr sf Gf tnf es cs G tn s cells off
 Proof
   simp[literal_loop_frame_def, bodyPtrDefsTheory.ghost_inv_def, exprSimWordArgsTheory.wb_frame_gas_obs]
@@ -120,7 +129,7 @@ Theorem literal_tuple_loop_outcome_ptr:
   compile_make_tuple compile_expr ce args (MAP expr_type args) (Var root) off si = (out,sb) /\
   OPT_MMAP (evaluate_type (get_tenv cx)) (MAP expr_type args) = SOME tvs /\
   expr_sim_inv ce cx env es /\
-  literal_loop_frame pure ctx func ce cx d root aid addr capacity
+  literal_loop_frame H pure ctx func ce cx d root aid addr capacity
     ees fr sf Gf tnf es si G0 tn0 s0 cells off /\
   literal_prefix_ok cells tn0 s0 /\ stmt_state_rel H ctx func ce cx ees sf /\
   off + type_memory_size_list tvs <= capacity /\
@@ -135,16 +144,16 @@ Theorem literal_tuple_loop_outcome_ptr:
   (!e. MEM e args ==> int_calls_expr e = [] \/ lowered_value_type ce e = expr_type e) /\
   (pure ==> ~EXISTS expr_has_effect args) ==>
   out = Var root /\
-  gas_outcome_ptr (cx_dead H cx) (cx_tops cx) (ctx,func) PG
+  gas_outcome_ptr (\H. cx_dead H cx) (cx_tops cx) (ctx,func) PG cx st0
     (eval_exprs cx args) (es,s0,G0,tn0)
-    (\res ee HG tm z. ?vs added. res = INL vs /\ expr_sim_inv ce cx env ee /\
+    (\H res ee HG tm z. ?vs added. res = INL vs /\ expr_sim_inv ce cx env ee /\
       LIST_REL value_has_type tvs vs /\
-      literal_loop_frame pure ctx func ce cx d root aid addr capacity
+      literal_loop_frame H pure ctx func ce cx d root aid addr capacity
         ees fr sf Gf tnf ee sb HG tm z (cells ++ added) (off + type_memory_size_list tvs) /\
       literal_prefix_ok (cells ++ added) tm z /\
       (!m. mem_agree_outside tm.t_mem z.vs_memory m ==>
         tuple_in_memory vs tvs (addr+off) m))
-    (\res ee gt r. ?exc. res = INR exc /\ expr_exit (INR exc : eval_result + exception) r)
+    (\H res ee gt r. ?exc. res = INR exc /\ expr_exit (INR exc : eval_result + exception) r)
 Proof
   Induct_on `args`
   >- (rpt gen_tac >> strip_tac >>
@@ -183,7 +192,7 @@ Resume literal_tuple_loop_outcome_ptr[cons]:
   `off + type_memory_size h' <= capacity` by metis_tac[] >>
   `(pure ==> ~expr_has_effect h) /\ (pure ==> ~EXISTS expr_has_effect args)` by
     (rpt strip_tac >> fs[listTheory.EVERY_MEM, listTheory.EXISTS_MEM] >> metis_tac[]) >>
-  drule_at (Pat `literal_loop_frame _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _`)
+  drule_at (Pat `literal_loop_frame H _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _`)
     (SRULE [] literal_cons_outcome_ptr) >>
   simp[] >> disch_then drule_all >> strip_tac >>
   `out = Var root` by metis_tac[exprOperandVarTheory.compiler_make_tuple_result] >>
@@ -193,7 +202,7 @@ Resume literal_tuple_loop_outcome_ptr[cons]:
   goal_assum (drule_at Any) >>
   simp[] >>
   qexists `\v ee HG tm z. value_has_type h' v /\
-    literal_loop_frame pure ctx func ce cx d root aid addr capacity
+    literal_loop_frame H pure ctx func ce cx d root aid addr capacity
       ees fr sf Gf tnf ee ss HG tm z
       (cells ++ [(h',v,addr+off,type_memory_size h')]) (off+type_memory_size h') /\
     literal_prefix_ok (cells ++ [(h',v,addr+off,type_memory_size h')]) tm z` >>
@@ -214,7 +223,7 @@ Resume literal_tuple_loop_outcome_ptr[tail]:
   qpat_x_assum `!ce' cx' env' off' si' out' sb' es' tvs' cells' G0' tn0' s0'. _`
     (drule_at (Pat `compile_make_tuple _ _ _ _ _ _ _ = _`)) >>
   simp[] >>
-  disch_then (drule_at (Pat `literal_loop_frame _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _`)) >>
+  disch_then (drule_at (Pat `literal_loop_frame H _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _`)) >>
   simp[] >>
   disch_then (qspec_then `env` mp_tac) >>
   (impl_tac >- metis_tac[]) >> strip_tac >>
@@ -241,7 +250,7 @@ Theorem literal_array_loop_outcome_ptr:
   evaluate_type (get_tenv cx) elem_ty = SOME tv /\
   off = (if header then 32 else 0) + idx * type_memory_bytes ce elem_ty /\
   expr_sim_inv ce cx env es /\
-  literal_loop_frame pure ctx func ce cx d root aid addr capacity
+  literal_loop_frame H pure ctx func ce cx d root aid addr capacity
     ees fr sf Gf tnf es si G0 tn0 s0 cells off /\
   literal_prefix_ok cells tn0 s0 /\ stmt_state_rel H ctx func ce cx ees sf /\
   off + type_memory_size_list (REPLICATE (LENGTH args) tv) <= capacity /\
@@ -256,17 +265,17 @@ Theorem literal_array_loop_outcome_ptr:
   (!e. MEM e args ==> int_calls_expr e = [] \/ lowered_value_type ce e = expr_type e) /\
   (pure ==> ~EXISTS expr_has_effect args) ==>
   out = Var root /\
-  gas_outcome_ptr (cx_dead H cx) (cx_tops cx) (ctx,func) PG
+  gas_outcome_ptr (\H. cx_dead H cx) (cx_tops cx) (ctx,func) PG cx st0
     (eval_exprs cx args) (es,s0,G0,tn0)
-    (\res ee HG tm z. ?vs added. res = INL vs /\ expr_sim_inv ce cx env ee /\
+    (\H res ee HG tm z. ?vs added. res = INL vs /\ expr_sim_inv ce cx env ee /\
       LIST_REL value_has_type (REPLICATE (LENGTH args) tv) vs /\
-      literal_loop_frame pure ctx func ce cx d root aid addr capacity
+      literal_loop_frame H pure ctx func ce cx d root aid addr capacity
         ees fr sf Gf tnf ee sb HG tm z (cells ++ added)
           (off + type_memory_size_list (REPLICATE (LENGTH args) tv)) /\
       literal_prefix_ok (cells ++ added) tm z /\
       (!m. mem_agree_outside tm.t_mem z.vs_memory m ==>
         tuple_in_memory vs (REPLICATE (LENGTH args) tv) (addr+off) m))
-    (\res ee gt r. ?exc. res = INR exc /\ expr_exit (INR exc : eval_result + exception) r)
+    (\H res ee gt r. ?exc. res = INR exc /\ expr_exit (INR exc : eval_result + exception) r)
 Proof
   strip_tac >>
   `MAP expr_type args = REPLICATE (LENGTH args) elem_ty` by

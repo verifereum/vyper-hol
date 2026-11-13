@@ -7,7 +7,7 @@ Ancestors forPtrArrayAssemble forPtrArrayTerminal forPtrArrayInvariant forPtrRou
 Libs monadsyntax
 
 Theorem array_code_loop_counted_ptr:
-  for_array_inv_ptr ctx func cenv cx vs tv id idx bp arr_base p dst sz ainst
+  for_array_inv_ptr ctx func cenv cx st0 vs tv id idx bp arr_base p dst sz ainst
     cond_lbl st s0 G0 tn0 d name snapshot k es G tn s ==>
   array_for_code func cenv bc ty stmts id et tv (LENGTH vs) stride (Var bp)
     p sz ainst idx dv ov ep nv cond_lbl exit_lbl stmts_lbl incr_lbl
@@ -51,28 +51,44 @@ Theorem array_code_loop_counted_ptr:
          cenv.ce_return_pc = SOME (PtrVar (Var x) z) ==> not_fresh_at st x) ==>
     k <= LENGTH vs /\ P es /\
     gas_admissible (eval_for cx tv id stmts (MAP Value (DROP k vs))) (stmt_res_ok lctx) es ==>
-    gas_outcome_ptr (cx_dead H cx) (cx_tops cx) (ctx,func) PG
+    gas_outcome_ptr (\H. cx_dead H cx) (cx_tops cx) (ctx,func) PG cx st0
       (eval_for cx tv id stmts (MAP Value (DROP k vs))) (es,s,G,tn)
-      (\res ee gf tf t. res = INL () /\
-        for_array_done_ptr ctx func cenv cx exit_lbl st s0 G0 tn0 d ee gf tf t)
-      (\res ee gt r. ?ex. res = INR ex /\
-        !tail. stmt_exit_ptr RetQ (ee with gas_obs := tail) (INR ex) gt r)
+      (\H res ee gf tf t. res = INL () /\
+        for_array_done_ptr ctx func cenv cx st0 exit_lbl st s0 G0 tn0 d ee gf tf t)
+      (\H res ee gt r. ?ex. res = INR ex /\
+        !tail. stmt_exit_ptr (RetQ H) (ee with gas_obs := tail) (INR ex) gt r)
 Proof
   strip_tac >> strip_tac >>
-  qabbrev_tac `Inv = for_array_inv_ptr ctx func cenv cx vs tv id idx bp arr_base p dst sz ainst
+  qabbrev_tac `Inv = for_array_inv_ptr ctx func cenv cx st0 vs tv id idx bp arr_base p dst sz ainst
     cond_lbl st s0 G0 tn0 d name snapshot` >>
-  qabbrev_tac `Done = for_array_done_ptr ctx func cenv cx exit_lbl st s0 G0 tn0 d` >>
-  `!k es s G tn. k <= LENGTH vs /\ (Inv k es G tn s /\ P es) /\
+  qabbrev_tac `Done = for_array_done_ptr ctx func cenv cx st0 exit_lbl st s0 G0 tn0 d` >>
+  `!k es s G tn. k <= LENGTH vs /\
+    (!H. valid_horizon cx st0 H es.storage_trace ==> Inv k es G tn s /\ P es) /\
     gas_admissible (eval_for cx tv id stmts (MAP Value (DROP k vs))) (stmt_res_ok lctx) es ==>
-    gas_outcome_ptr (cx_dead H cx) (cx_tops cx) (ctx,func) PG
+    gas_outcome_ptr (\H. cx_dead H cx) (cx_tops cx) (ctx,func) PG cx st0
       (eval_for cx tv id stmts (MAP Value (DROP k vs))) (es,s,G,tn)
-      (\res ee gf tf t. res = INL () /\ Done ee gf tf t)
-      (\res ee gt r. ?ex. res = INR ex /\
-        !tail. stmt_exit_ptr RetQ (ee with gas_obs := tail) (INR ex) gt r)` suffices_by metis_tac[] >>
+      (\H res ee gf tf t. res = INL () /\ Done ee gf tf t)
+      (\H res ee gt r. ?ex. res = INR ex /\
+        !tail. stmt_exit_ptr (RetQ H) (ee with gas_obs := tail) (INR ex) gt r)` suffices_by metis_tac[] >>
   unabbrev_all_tac >>
   qhdtm_x_assum `for_array_inv_ptr` kall_tac >>
   ho_match_mp_tac eval_for_rounds_ptr >> conj_tac
   >- (rpt gen_tac >> strip_tac >>
+      reverse (Cases_on `?H. valid_horizon cx st0 H es.storage_trace`)
+      >- (rewrite_tac[gas_outcome_ptr_def] >> qexists_tac `[]` >> disj1_tac >>
+          irule gasStorageTheory.gas_bad_storage_at_initial >>
+          fs[vyperStorageFootprintTheory.storage_trace_domain_def] >>
+          simp[ignore_bind_def, vyperStorageTraceTheory.storage_trace_frame_bind_all,
+               vyperStorageTraceTheory.storage_trace_frame_state_updates,
+               vyperStorageTraceTheory.storage_trace_frame_finally,
+               vyperStorageTraceTheory.storage_trace_frame_try,
+               vyperStorageTraceTheory.storage_trace_frame_loop_handler,
+               vyperStorageTraceTheory.storage_trace_frame_return,
+               vyperStorageTraceTheory.storage_trace_frame_pop_scope,
+               vyperStorageTraceTheory.evaluate_storage_trace_frame]) >>
+      pop_assum (qx_choose_then `H0` assume_tac) >>
+      `for_array_inv_ptr ctx func cenv cx st0 vs tv id idx bp arr_base p dst sz ainst
+        cond_lbl st s0 G0 tn0 d name snapshot k es G tn s` by metis_tac[] >>
       `lookup_scopes name es.scopes = SOME snapshot /\
        lookup_scopes id es.scopes = NONE` by
         (fs[for_array_inv_ptr_def, array_loop_inv_def, IgnAsm `vs = _`] >> metis_tac[]) >>
@@ -95,13 +111,13 @@ Proof
       rpt gen_tac >> strip_tac >> qexists_tac `broke` >>
       qpat_x_assum `vs = _` kall_tac >> Cases_on `broke` >> fs[]) >>
   rpt gen_tac >> strip_tac >>
-  `for_array_inv_ptr ctx func cenv cx vs tv id idx bp arr_base p dst sz ainst
+  `for_array_inv_ptr ctx func cenv cx st0 vs tv id idx bp arr_base p dst sz ainst
     cond_lbl st s0 G0 tn0 d name snapshot (LENGTH vs) es G tn s` by metis_tac[] >>
   `not_local_ptr cenv es.scopes dv` by fs[array_for_code_def, IgnAsm `vs = _`] >>
   `(!x. not_fresh_at st x ==> x <> dv) /\
    (!x q. cenv.ce_return_buf = SOME (PtrVar (Var x) q) ==> not_fresh_at st x)` by metis_tac[] >>
   drule array_for_code_condition >> disch_tac >>
-  drule_at (Pat `for_array_inv_ptr _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _`)
+  drule_at (Pat `for_array_inv_ptr`)
     for_array_terminal_ptr >>
   disch_then (drule_at (Pat `lookup_block _ _ = _`)) >>
   disch_then (qspec_then `PG` mp_tac) >>

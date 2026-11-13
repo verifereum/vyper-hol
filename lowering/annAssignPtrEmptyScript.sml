@@ -28,6 +28,13 @@ Theorem compile_annassign_empty_stmt_frag_ptr:
 Proof
  rpt gen_tac >> strip_tac >> rewrite_tac[stmt_frag_ptr_def] >>
  rpt gen_tac >> strip_tac >>
+ Cases_on `storage_trace_domain cx st0 es.storage_trace`
+ >~ [`~storage_trace_domain _ _ _`]
+ >- (rewrite_tac[gas_outcome_ptr_def] >> qexists_tac `[]` >> disj1_tac >>
+     irule gasStorageTheory.gas_bad_storage_at_initial >>
+     simp[vyperStorageTraceTheory.evaluate_storage_trace_frame]) >>
+ `valid_horizon cx st0 (storage_trace_horizon es.storage_trace) es.storage_trace` by
+   fs[vyperStorageFootprintTheory.storage_trace_domain_def] >>
  `!st0 c st1. declare_local cenv id vtyp st0 = (c,st1) ==>
    !a b vv. compile_expr c (expr_type e) e a = (vv,b) ==> cs_extends a b` by
    metis_tac[] >>
@@ -35,10 +42,15 @@ Proof
  disch_then (qx_choosel_then [`st`,`sA`,`sB`,`vv`,`p`] strip_assume_tac) >>
  rename1 `declare_local cenv id vtyp sa = (c,st)` >>
  qpat_x_assum `!st0 c st1. _ ==> _ /\ _` drule >> strip_tac >>
- `stmt_state_rel H ctx func c cx es s0` by
-   (irule stmt_state_rel_declare_local_entry >> metis_tac[]) >>
- `ghost_inv H d c cx es G0 tn0 s0` by
-   (irule annassign_ghost_declare_local_entry_ptr >> metis_tac[]) >>
+ `!H. valid_horizon cx st0 H es.storage_trace ==>
+   stmt_state_rel H ctx func c cx es s0 /\
+   storage_well_formed_on cx es (FST H) /\ ghost_inv H d c cx es G0 tn0 s0` by
+   (rpt strip_tac >> rpt conj_tac
+    >- (irule stmt_state_rel_declare_local_entry >> metis_tac[])
+    >- metis_tac[] >>
+    irule annassign_ghost_declare_local_entry_ptr >> metis_tac[]) >>
+ `stmt_state_rel (storage_trace_horizon es.storage_trace) ctx func c cx es s0 /\
+   ghost_inv (storage_trace_horizon es.storage_trace) d c cx es G0 tn0 s0` by metis_tac[] >>
  `not_local_ptr c es.scopes p` by metis_tac[local_ptrs_reserved_not_live] >>
  `s0.vs_current_bb = st.cs_current_bb /\
   s0.vs_inst_idx = LENGTH st.cs_current_insts` by
@@ -63,6 +75,22 @@ Resume compile_annassign_empty_stmt_frag_ptr[allocate]:
  `type_memory_bytes cenv vtyp < dimword (:256)` by simp[] >>
  drule_all annassign_setup_ptr >>
  disch_then (qspec_then `PG` strip_assume_tac) >>
+ `!H:(bool # bytes32 # type_value) list # num list. gas_path_ptr (cx_dead H cx) 0 ctx func PG G0 tn0 s0 0 G1 tn1 (OK s1)` by
+   (gen_tac >> drule_all annassign_emit_instruction_ptr >> strip_tac >>
+    `lookup_block s0.vs_current_bb func.fn_blocks = SOME bb /\
+      get_instruction bb s0.vs_inst_idx =
+        SOME (mk_inst st.cs_next_id ALLOCA [Lit (n2w (type_memory_bytes cenv vtyp))] [p])` by
+      simp[] >>
+    drule_all annassign_alloca_path_ptr >>
+    disch_then (qspecl_then [`cx_dead H cx`, `PG`, `G0`, `tn0`] mp_tac) >> gvs[]) >>
+ `!H. valid_horizon cx st0 H es.storage_trace ==>
+   stmt_state_rel H ctx func c cx es s1 /\
+   storage_well_formed_on cx es (FST H) /\ ghost_inv H d c cx es G1 tn1 s1` by
+   (rpt strip_tac >>
+    qpat_assum `!H. valid_horizon _ _ H _ ==> stmt_state_rel H _ _ c _ _ s0 /\ _`
+      (drule_then strip_assume_tac) >>
+    drule_all annassign_setup_ptr >>
+    disch_then (qspec_then `PG` strip_assume_tac) >> gvs[] >> metis_tac[]) >>
  `gas_admissible (eval_expr cx e) expr_vv_res_ok es` by
    metis_tac[annassign_admissible_rhs, forced_expr_admissible_raw] >>
  suspend "rhs"
@@ -74,9 +102,9 @@ Resume compile_annassign_empty_stmt_frag_ptr[rhs]:
  `post_value_type c e = expr_type e` by
    (irule post_value_type_not_int_call >> rpt strip_tac >>
     gvs[is_empty_value_expr_def]) >>
- `gas_outcome_ptr (cx_dead H cx) (cx_tops cx) (ctx,func) PG
+ `gas_outcome_ptr (\H. cx_dead H cx) (cx_tops cx) (ctx,func) PG cx st0
    (eval_expr cx e) (es,s1,G1,tn1)
-   (\res ee G tn t. ?tv. res = INL tv /\
+   (\H res ee G tn t. ?tv. res = INL tv /\
      vv_post H ctx func c cx e es sA sB s1 ee tv vv t /\
      t.vs_current_bb = sB.cs_current_bb /\
      t.vs_inst_idx = LENGTH sB.cs_current_insts /\
@@ -87,7 +115,7 @@ Resume compile_annassign_empty_stmt_frag_ptr[rhs]:
      (!t' p. vv = LocatedValue t' p /\ p.ptr_location = LocMemory ==>
        ptr_buf_ok c e p.ptr_operand G t) /\
      ghost_kept c es sA G1 tn1 s1 G tn)
-   (\res ee gt r. expr_exit res r)` by
+   (\H res ee gt r. expr_exit res r)` by
    (qpat_x_assum `expr_vv_sim_ptr _ _ _ _ _ _ _ _ _` mp_tac >>
     simp[expr_vv_sim_ptr_def] >> disch_then irule >> simp[] >>
     drule_all declare_local_ptr >> strip_tac >>
@@ -119,19 +147,34 @@ Resume compile_annassign_empty_stmt_frag_ptr[compose]:
  goal_assum (drule_at Any) >> simp[] >>
  reverse conj_tac >- metis_tac[] >>
  rpt gen_tac >> strip_tac >>
- drule_at (Pat `gas_marked_exec_ptr _ _ _ _ _ _ _ _ _ _ _`)
-   annassign_empty_normal_continuation_ptr >>
- disch_then drule >>
- disch_then (drule_at (Pat `vv_post _ _ _ _ _ _ _ _ _ _ _ _ _ _`)) >>
- disch_then (drule_at (Pat `emit_void _ _ _ = _`)) >>
- simp[] >>
- disch_then (drule_at (Pat `gas_admissible _ _ _`)) >>
- disch_then (drule_at (Pat `ghost_inv _ _ _ _ _ _ _ _`)) >>
- disch_then (qspecl_then [`w`,`ai`] mp_tac) >>
- impl_tac >- (gvs[] >> first_assum MATCH_ACCEPT_TAC) >>
+ qpat_x_assum `?H. valid_horizon _ _ H _`
+   (qx_choose_then `H0` assume_tac) >>
+ qpat_assum `!H. valid_horizon _ _ H _ ==> _`
+   (qspec_then `H0` mp_tac) >>
+ impl_tac >- first_assum ACCEPT_TAC >> strip_tac >>
+ drule_all (Q.INST [`H` |-> `H0`, `inst` |-> `ai`, `w` |-> `w`]
+   (SPEC_ALL annassign_empty_normal_continuation_ptr)) >>
  disch_then (qx_choosel_then [`ff`,`tfin`,`tnf`] strip_assume_tac) >>
- qexistsl [`ff`,`tfin`,`G`,`tnf`] >>
- gvs[ghost_inv_gas_obs, stmt_state_rel_gas_obs]
+ `gas_marked_exec F (ctx,func) (new_variable id tyv v)
+   (ee with gas_obs := [],t) [] (INL ()) ff (OK tfin)` by
+   metis_tac[gas_marked_exec_ptr_exec] >>
+ qexistsl [`ff`,`tfin`,`G`,`tnf`] >> conj_tac >- first_assum ACCEPT_TAC >>
+ qx_gen_tac `HH` >> strip_tac >>
+ `new_variable id tyv v (ee with gas_obs := []) =
+   (INL (),ff with gas_obs := [])` by
+   (fs[gas_marked_exec_def] >> first_x_assum (qspec_then `[]` mp_tac) >> simp[]) >>
+ `valid_horizon cx st0 HH ee.storage_trace` by
+   (mp_tac (Q.INST [`f` |-> `new_variable id tyv v`,
+      `st` |-> `ee with gas_obs := []`, `st'` |-> `ff with gas_obs := []`,
+      `res` |-> `INL ()`, `H` |-> `HH`]
+      (INST_TYPE [alpha |-> ``:unit``] vyperStorageFootprintTheory.valid_horizon_frame)) >>
+    simp[vyperStorageTraceTheory.storage_trace_frame_new_variable]) >>
+ qpat_assum `!H. valid_horizon _ _ H _ ==> _`
+   (qspec_then `HH` mp_tac) >>
+ impl_tac >- first_assum ACCEPT_TAC >> strip_tac >>
+ drule_all (Q.INST [`H` |-> `HH`, `inst` |-> `ai`, `w` |-> `w`]
+   (SPEC_ALL annassign_empty_normal_continuation_ptr)) >> strip_tac >>
+ gvs[gas_marked_exec_ptr_def, ghost_inv_gas_obs, stmt_state_rel_gas_obs]
 QED
 
 Finalise compile_annassign_empty_stmt_frag_ptr

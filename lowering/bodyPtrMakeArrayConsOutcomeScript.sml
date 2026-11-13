@@ -61,7 +61,7 @@ QED
 (* Zero-width operational branch: the child has already run, but ADD and
    unwrap still run on that very endpoint before the prefix is extended. *)
 Theorem literal_cons_zero_endpoint:
-  literal_loop_frame pure ctx func ce cx d root aid addr capacity
+  literal_loop_frame H pure ctx func ce cx d root aid addr capacity
     ees fr sf Gf tnf esi si G0 tn0 s0 cells off /\
   literal_prefix_ok cells tn0 s0 /\ stmt_state_rel H ctx func ce cx ees sf /\
   compile_expr ce (expr_type e) e si = (vv,sm) /\
@@ -88,7 +88,7 @@ Theorem literal_cons_zero_endpoint:
   (pure ==> ~expr_has_effect e) ==>
   ?z HG tm.
     gas_path_ptr D 0 ctx func PG G tn s 0 HG tm (OK z) /\
-    literal_loop_frame pure ctx func ce cx d root aid addr capacity
+    literal_loop_frame H pure ctx func ce cx d root aid addr capacity
       ees fr sf Gf tnf es' sb HG tm z (cells ++ [(tv,v,addr+off,0)]) off /\
     literal_prefix_ok (cells ++ [(tv,v,addr+off,0)]) tm z
 Proof
@@ -112,7 +112,7 @@ QED
 
 
 Theorem literal_cons_flat_endpoint:
-  literal_loop_frame pure ctx func ce cx d root aid addr capacity
+  literal_loop_frame H pure ctx func ce cx d root aid addr capacity
     ees fr sf Gf tnf esi si G0 tn0 s0 cells off /\
   literal_prefix_ok cells tn0 s0 /\ stmt_state_rel H ctx func ce cx ees sf /\
   compile_expr ce (expr_type e) e si = (vv,sm) /\
@@ -140,7 +140,7 @@ Theorem literal_cons_flat_endpoint:
   (pure ==> ~expr_has_effect e) ==>
   ?z HG tm.
     gas_path_ptr D 0 ctx func PG G tn s 0 HG tm (OK z) /\
-    literal_loop_frame pure ctx func ce cx d root aid addr capacity
+    literal_loop_frame H pure ctx func ce cx d root aid addr capacity
       ees fr sf Gf tnf es' sb HG tm z (cells ++ [(tv,v,addr+off,k)]) (off+k) /\
     literal_prefix_ok (cells ++ [(tv,v,addr+off,k)]) tm z
 Proof
@@ -180,7 +180,7 @@ QED
 
 
 Theorem literal_cons_bytes_endpoint:
-  literal_loop_frame pure ctx func ce cx d root aid addr capacity
+  literal_loop_frame H pure ctx func ce cx d root aid addr capacity
     ees fr sf Gf tnf esi si G0 tn0 s0 cells off /\
   literal_prefix_ok cells tn0 s0 /\ stmt_state_rel H ctx func ce cx ees sf /\
   compile_expr ce (expr_type e) e si = (vv,sm) /\
@@ -208,7 +208,7 @@ Theorem literal_cons_bytes_endpoint:
   (pure ==> ~expr_has_effect e) ==>
   ?z HG tm.
     gas_path_ptr D 0 ctx func PG G tn s 0 HG tm (OK z) /\
-    literal_loop_frame pure ctx func ce cx d root aid addr capacity
+    literal_loop_frame H pure ctx func ce cx d root aid addr capacity
       ees fr sf Gf tnf es' sb HG tm z (cells ++ [(tv,v,addr+off,k)]) (off+k) /\
     literal_prefix_ok (cells ++ [(tv,v,addr+off,k)]) tm z
 Proof
@@ -255,7 +255,7 @@ Proof
       arithmeticTheory.LESS_EQ_TRANS]) >>
   `?z' HG' tm'.
     gas_path_ptr D 0 ctx func PG HG tm z 0 HG' tm' (OK z') /\
-    literal_loop_frame pure ctx func ce cx d root aid addr capacity
+    literal_loop_frame H pure ctx func ce cx d root aid addr capacity
       ees fr sf Gf tnf es' sb HG' tm' z' (cells ++ [(tv,v,addr+off,k)]) (off+k) /\
     literal_prefix_ok (cells ++ [(tv,v,addr+off,k)]) tm' z'` by
     (irule literal_bytes_loop_store >> simp[] >>
@@ -267,7 +267,7 @@ Proof
 QED
 
 Theorem literal_cons_word_endpoint:
-  literal_loop_frame pure ctx func ce cx d root aid addr capacity
+  literal_loop_frame H pure ctx func ce cx d root aid addr capacity
     ees fr sf Gf tnf esi si G0 tn0 s0 cells off /\
   literal_prefix_ok cells tn0 s0 /\ stmt_state_rel H ctx func ce cx ees sf /\
   compile_expr ce (expr_type e) e si = (vv,sm) /\
@@ -292,7 +292,7 @@ Theorem literal_cons_word_endpoint:
   (pure ==> ~expr_has_effect e) ==>
   ?z HG tm.
     gas_path_ptr D 0 ctx func PG G tn s 0 HG tm (OK z) /\
-    literal_loop_frame pure ctx func ce cx d root aid addr capacity
+    literal_loop_frame H pure ctx func ce cx d root aid addr capacity
       ees fr sf Gf tnf es' sb HG tm z (cells ++ [(tv,v,addr+off,32)]) (off+32) /\
     literal_prefix_ok (cells ++ [(tv,v,addr+off,32)]) tm z
 Proof
@@ -318,7 +318,7 @@ Proof
      irule arithmeticTheory.LESS_MOD >> decide_tac) >>
   `?z' tm'.
     gas_path_ptr D 0 ctx func PG HG tm z 0 HG tm' (OK z') /\
-    literal_loop_frame pure ctx func ce cx d root aid addr capacity
+    literal_loop_frame H pure ctx func ce cx d root aid addr capacity
       ees fr sf Gf tnf es' sb HG tm' z' (cells ++ [(tv,v,addr+off,32)]) (off+32) /\
     literal_prefix_ok (cells ++ [(tv,v,addr+off,32)]) tm' z'` by
     (irule literal_scalar_loop_store >> simp[] >>
@@ -330,7 +330,7 @@ Proof
 QED
 
 Theorem literal_cons_endpoint:
-  literal_loop_frame pure ctx func ce cx d root aid addr capacity
+  literal_loop_frame H pure ctx func ce cx d root aid addr capacity
     ees fr sf Gf tnf esi si G0 tn0 s0 cells off /\
   literal_prefix_ok cells tn0 s0 /\ stmt_state_rel H ctx func ce cx ees sf /\
   compile_expr ce (expr_type e) e si = (vv,sm) /\
@@ -357,7 +357,7 @@ Theorem literal_cons_endpoint:
   (pure ==> ~expr_has_effect e) ==>
   ?z HG tm.
     gas_path_ptr D 0 ctx func PG G tn s 0 HG tm (OK z) /\
-    literal_loop_frame pure ctx func ce cx d root aid addr capacity
+    literal_loop_frame H pure ctx func ce cx d root aid addr capacity
       ees fr sf Gf tnf es' sb HG tm z (cells ++ [(tv,v,addr+off,k)]) (off+k) /\
     literal_prefix_ok (cells ++ [(tv,v,addr+off,k)]) tm z
 Proof
@@ -382,7 +382,7 @@ QED
 
 Theorem literal_cons_outcome_ptr:
   expr_vv_sim_ptr d ctx PG func ce cx (expr_type e) e es /\
-  literal_loop_frame pure ctx func ce cx d root aid addr capacity
+  literal_loop_frame H pure ctx func ce cx d root aid addr capacity
     ees fr sf Gf tnf es si G0 tn0 s0 cells off /\
   literal_prefix_ok cells tn0 s0 /\ stmt_state_rel H ctx func ce cx ees sf /\
   compile_expr ce (expr_type e) e si = (vv,sm) /\
@@ -398,13 +398,13 @@ Theorem literal_cons_outcome_ptr:
   k = type_memory_bytes ce (expr_type e) /\ off+k <= capacity /\
   (int_calls_expr e = [] \/ lowered_value_type ce e = expr_type e) /\
   (pure ==> ~expr_has_effect e) ==>
-  gas_outcome_ptr (cx_dead H cx) (cx_tops cx) (ctx,func) PG
+  gas_outcome_ptr (\H. cx_dead H cx) (cx_tops cx) (ctx,func) PG cx st0
     (bind (eval_expr cx e) (read_result cx)) (es,s0,G0,tn0)
-    (\res ee HG tm z. ?v. res = INL v /\ value_has_type tv v /\
-      literal_loop_frame pure ctx func ce cx d root aid addr capacity
+    (\H res ee HG tm z. ?v. res = INL v /\ value_has_type tv v /\
+      literal_loop_frame H pure ctx func ce cx d root aid addr capacity
         ees fr sf Gf tnf ee sb HG tm z (cells ++ [(tv,v,addr+off,k)]) (off+k) /\
       literal_prefix_ok (cells ++ [(tv,v,addr+off,k)]) tm z)
-    (\res ee gt r. ?exc. res = INR exc /\ expr_exit (INR exc : eval_result + exception) r)
+    (\H res ee gt r. ?exc. res = INR exc /\ expr_exit (INR exc : eval_result + exception) r)
 Proof
   disch_then (map_every assume_tac o CONJUNCTS) >>
   `post_value_type ce e = expr_type e` by
@@ -418,7 +418,7 @@ Proof
   rewrite_tac[bodyPtrDefsTheory.expr_vv_sim_ptr_def] >>
   disch_then drule_all >> strip_tac >>
   irule literal_result_bind_outcome_ptr >>
-  qexists `\raw ee HG tm z.
+  qexists `\H raw ee HG tm z.
     vv_post H ctx func ce cx e es si sm s0 ee raw vv z /\
     z.vs_current_bb = sm.cs_current_bb /\ z.vs_inst_idx = LENGTH sm.cs_current_insts /\
     ghost_inv H d ce cx ee HG tm z /\ ptr_vv_ok cx (expr_type e) raw vv ee HG tm z /\
@@ -443,7 +443,7 @@ Resume literal_cons_outcome_ptr[normal]:
   drule literal_marked_child_materialises >> simp[] >>
   disch_then drule_all >> strip_tac >>
   qmatch_asmsub_abbrev_tac `eval_expr cx e marked = _` >>
-  `literal_loop_frame pure ctx func ce cx d root aid addr capacity
+  `literal_loop_frame H pure ctx func ce cx d root aid addr capacity
      ees fr sf Gf tnf marked si G0 tn0 s0 cells off` by
     (gvs[Abbr `marked`, literal_loop_frame_def, bodyPtrDefsTheory.ghost_inv_def,
         bodyPtrDefsTheory.ghost_kept_def, exprSimWordArgsTheory.wb_frame_gas_obs] >>
@@ -462,13 +462,13 @@ Resume literal_cons_outcome_ptr[normal]:
      metis_tac[gas_path_ptr_erase, fragGasPathTheory.gas_path_normal]) >>
   `off+k <= capacity` by decide_tac >>
   drule_at (Pat `eval_expr _ _ _ = _`) literal_cons_endpoint >>
-  disch_then (drule_at (Pat `literal_loop_frame _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _`)) >>
+  disch_then (drule_at (Pat `literal_loop_frame H _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _`)) >>
   disch_then (drule_at (Pat `compile_store_memory _ _ _ _ _ _ = _`)) >>
   simp[] >> disch_then (drule_at (Pat `ptr_vv_ok _ _ _ _ _ _ _ _`)) >>
   simp[] >> disch_then (drule_at (Pat `expr_body_pre _ _ _ _ _`)) >> simp[] >>
   disch_tac >>
   `?z HG tm. gas_path_ptr (cx_dead H cx) 0 ctx func PG G tn t 0 HG tm (OK z) /\
-     literal_loop_frame pure ctx func ce cx d root aid addr capacity
+     literal_loop_frame H pure ctx func ce cx d root aid addr capacity
        ees fr sf Gf tnf ee sb HG tm z
          (cells ++ [(tv,v',addr+off,type_memory_bytes ce (expr_type e))])
          (off+type_memory_bytes ce (expr_type e)) /\

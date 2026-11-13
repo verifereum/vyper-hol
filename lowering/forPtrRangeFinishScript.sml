@@ -24,6 +24,7 @@ Theorem for_range_callback_finish_ptr:
       value := IntV (n1 + &k); popped := []|>)) :: es.scopes;
     gas_obs := obs |>) = (res,ee) /\
   cenv_top_ext bc c3 ee.scopes /\ stmt_state_rel H ctx func c3 cx ee s /\
+  storage_well_formed_on cx ee (FST H) /\
   ghost_inv H d c3 cx ee G tn s /\
   FLOOKUP s.vs_allocas ainst.inst_id = SOME (w2n a,sz) /\
   ptr_covers G tn p s sz /\ lookup_var p s = SOME a /\
@@ -44,6 +45,7 @@ Theorem for_range_callback_finish_ptr:
     gas_path_ptr D 0 ctx func PG G tn s 0 gf tf (OK t) /\
     t.vs_inst_idx = 0 /\ ~t.vs_halted /\
     stmt_state_rel H ctx func cenv cx (ee with scopes := rest) t /\
+    storage_well_formed_on cx (ee with scopes := rest) (FST H) /\
     ghost_inv H d cenv cx (ee with scopes := rest) gf tf t /\
     (!x v. not_fresh_at st x /\ lookup_var x s0 = SOME v ==>
       lookup_var x t = SOME v) /\
@@ -60,9 +62,20 @@ Theorem for_range_callback_finish_ptr:
       ptr_covers gf tf p t sz /\
       FLOOKUP t.vs_allocas ainst.inst_id = SOME (w2n a,sz) /\
       (!name lo z. local_region cenv rest t name lo z ==>
-        regions_disjoint (w2n a) sz lo z))
+        regions_disjoint (w2n a) sz lo z)) /\
+    t = (if res = INR BreakException then s else
+      jump_to cond_lbl (update_var cv (i2w (n1 + &(k+1)))
+        (update_var nv (i2w (n1 + &(k+1)))
+          (if res = INL () then jump_to incr_lbl s else s)))) /\
+    gf = (if res = INR BreakException then G else
+      DRESTRICT (DRESTRICT G (COMPL {nv})) (COMPL {cv})) /\
+    tf = (if res = INR BreakException then tn else
+      tn with t_var := (tn.t_var |+ (nv,{})) |+ (cv,{}))
 Proof
   strip_tac >>
+  `!scs. storage_well_formed_on cx (ee with scopes := scs) (FST H)` by
+    fs[vyperStorageFootprintTheory.storage_well_formed_on_def,
+       vyperStorageBackendTheory.get_storage_scopes] >>
   drule_all (SRULE [] (Q.INST
     [`esk` |-> `es with gas_obs := obs`] for_range_callback_landing_ptr)) >>
   disch_then (qspecl_then [`PG`, `D`] strip_assume_tac) >>
@@ -94,9 +107,11 @@ Resume for_range_callback_finish_ptr[next]:
        lookup_var y (update_var cv (i2w (n1 + &(k + 1)))
                        (update_var nv (i2w (n1 + &(k + 1))) land))`
     by simp[Abbr `fin`] >>
-  qexistsl_tac [`sc`, `rest`, `fin`, `gf`, `tf`] >> simp[] >>
+  qexistsl_tac [`sc`, `rest`, `fin`, `gf`, `tf`] >> unabbrev_all_tac >> simp[] >>
   conj_tac
   >- (drule_all gas_path_ptr_then >> simp[]) >>
-  rpt strip_tac >> first_x_assum drule >> simp[])
+  rpt strip_tac >>
+  fs[lookup_var_def, update_var_def, jump_to_def, finite_mapTheory.FLOOKUP_UPDATE,
+     finite_mapTheory.FLOOKUP_DRESTRICT, ptrDisciplineTheory.op_taint_def] >> metis_tac[])
 QED
 Finalise for_range_callback_finish_ptr

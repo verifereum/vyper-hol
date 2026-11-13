@@ -4,7 +4,7 @@ Ancestors
  annAssignPtrDestination annAssignPtrExterior annAssignPtrScratch
  exprSimProps exprLoweringProps localPtrsProps compileEnv loweringStateRelDefs venomState
  valueEncodingProps robustCopyTransportPtr ptrDiscipline finite_map pred_set
- list venomMemProofs valueEncodingProofs loweringPosts venomMemDefs
+ list venomMemProofs valueEncodingProofs loweringPosts venomMemDefs ptrSafetyTransport
 
 Theorem annassign_alloca_window_excludes_locals_ptr:
  !ctx func cenv cx es s inst p b sz k.
@@ -199,8 +199,10 @@ Theorem annassign_allocated_store_memory_path_ptr:
   else k = type_memory_bytes cenv ty) /\
  val_wf tv v /\ val_footprint tv v <= k /\
  (!m. mem_agree_outside tn.t_mem s.vs_memory m ==> val_in_memory tv v (w2n a) m) /\
- stmt_state_rel H ctx func cenv cx es s /\ ~cenv.ce_is_ctor /\
- ghost_inv H d cenv cx es G tn s /\ ghost_kept cenv es sa G0 tn0 s0 G tn /\
+ (?H. valid_horizon cx st0 H es.storage_trace) /\
+ (!H. valid_horizon cx st0 H es.storage_trace ==>
+   stmt_state_rel H ctx func cenv cx es s /\ ghost_inv H d cenv cx es G tn s) /\
+ ~cenv.ce_is_ctor /\ ghost_kept cenv es sa G0 tn0 s0 G tn /\
  fn_inst_ids_distinct func /\ MEM inst (fn_insts func) /\
  inst.inst_opcode = ALLOCA /\ inst.inst_outputs = [dst] /\
  not_local_ptr cenv es.scopes dst /\
@@ -217,7 +219,7 @@ Theorem annassign_allocated_store_memory_path_ptr:
  (!q nsz. cenv.ce_return_pc = SOME (PtrVar (Var q) nsz) ==> not_fresh_at st q) /\
  (!q. cenv.ce_imm_alloca = SOME (Var q) ==> not_fresh_at st q) ==>
  ?Gf tnf sf.
- gas_path_ptr (cx_dead H cx) 0 ctx func PG G tn s 0 Gf tnf (OK sf) /\
+ (!D. gas_path_ptr D 0 ctx func PG G tn s 0 Gf tnf (OK sf)) /\
  sf.vs_current_bb = sb.cs_current_bb /\ sf.vs_inst_idx = LENGTH sb.cs_current_insts /\
  ~sf.vs_halted /\
  (sf with <|vs_vars := s.vs_vars; vs_memory := s.vs_memory;
@@ -229,10 +231,12 @@ Theorem annassign_allocated_store_memory_path_ptr:
     mem_bytes_at i 1 sf.vs_memory = mem_bytes_at i 1 s.vs_memory /\
     (i IN tnf.t_mem <=> i IN tn.t_mem)) /\
  (!m. mem_agree_outside tnf.t_mem sf.vs_memory m ==> val_in_memory tv v (w2n b) m) /\
- stmt_state_rel H ctx func cenv cx es sf /\ ghost_inv H d cenv cx es Gf tnf sf /\
+ (!H. valid_horizon cx st0 H es.storage_trace ==>
+   stmt_state_rel H ctx func cenv cx es sf /\ ghost_inv H d cenv cx es Gf tnf sf) /\
  ghost_kept cenv es sa G0 tn0 s0 Gf tnf
 Proof
- rpt gen_tac >> strip_tac >> (
+ rpt gen_tac >> strip_tac >>
+ rename1 `valid_horizon cx st0 H0 es.storage_trace` >> (
  drule_at (Pat `compile_store_memory _ _ _ _ _ _ = _`) annassign_store_memory_path_ptr >>
  disch_then (drule_at (Pat `lookup_var _ _ = SOME _`)) >>
  disch_then (drule_at (Pat `ptr_covers _ _ _ _ _`)) >>
@@ -241,10 +245,21 @@ Proof
  disch_then (drule_at (Pat `~ctx_has_dalloca _`)) >>
  disch_then (drule_at (Pat `if _ then _ else _`)) >>
  disch_then (drule_at (Pat `val_wf _ _`)) >>
- disch_then (qspecl_then [`cx_dead H cx`,`PG`] mp_tac) >>
+ disch_then (qspecl_then
+   [`<|d_stor := K (K {}); d_trans := K (K {}); d_imm := K {}; d_ret := K {}|>`,
+    `PG`] mp_tac) >>
  (impl_tac >- (asm_rewrite_tac[] >> simp[])) >> strip_tac >>
- `stmt_state_rel H ctx func cenv cx es sf /\ ghost_inv H d cenv cx es Gf tnf sf /\
-  ghost_kept cenv es sa G0 tn0 s0 Gf tnf` by
-   (drule_all annassign_allocated_destination_invariants_ptr >> simp[]) >>
- qexistsl [`Gf`,`tnf`,`sf`] >> asm_rewrite_tac[])
+ `!H. valid_horizon cx st0 H es.storage_trace ==>
+   stmt_state_rel H ctx func cenv cx es sf /\ ghost_inv H d cenv cx es Gf tnf sf /\
+   ghost_kept cenv es sa G0 tn0 s0 Gf tnf` by
+   (rpt strip_tac >>
+    qpat_assum `!H. valid_horizon _ _ H _ ==> stmt_state_rel H _ _ _ _ _ _ /\ _`
+      (qspec_then `H` (strip_assume_tac o UNDISCH)) >>
+    drule_all annassign_allocated_destination_invariants_ptr >> simp[]) >>
+ `!D. gas_path_ptr D 0 ctx func PG G tn s 0 Gf tnf (OK sf)` by
+   (gen_tac >> irule gas_path_ptr_from_no_dead >> first_assum ACCEPT_TAC) >>
+ `ghost_kept cenv es sa G0 tn0 s0 Gf tnf` by
+   (qpat_assum `!H. valid_horizon _ _ H _ ==> _ /\ _ /\ ghost_kept _ _ _ _ _ _ _ _`
+      (qspec_then `H0` mp_tac) >> simp[]) >>
+ qexistsl [`Gf`,`tnf`,`sf`] >> simp[] >> metis_tac[])
 QED

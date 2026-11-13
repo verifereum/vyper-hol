@@ -14,10 +14,11 @@ Theorem for_range_loop_ptr:
       (ei with <| scopes := (FEMPTY |+ (id,
         <|assignable := F; type := tyv; value := IntV (n1 + &j); popped := []|>))
           :: ei.scopes; gas_obs := [] |>)) /\
-  (!j ei G tn s. Inv j ei G tn s <=>
+  (!H j ei G tn s. Inv H j ei G tn s <=>
     P ei /\ lookup_scopes id ei.scopes = NONE /\ j <= Num (n2-n1) /\
     s.vs_current_bb = cond_lbl /\ s.vs_inst_idx = 0 /\ ~s.vs_halted /\
-    stmt_state_rel H ctx func cenv cx ei s /\ ghost_inv H d cenv cx ei G tn s /\
+    stmt_state_rel H ctx func cenv cx ei s /\
+    storage_well_formed_on cx ei (FST H) /\ ghost_inv H d cenv cx ei G tn s /\
     lookup_var cv s = SOME (i2w (n1 + &j)) /\
     lookup_var ev s = SOME (i2w n2) /\ lookup_var p s = SOME a /\
     FLOOKUP G cv = NONE /\ FLOOKUP G ev = NONE /\
@@ -30,9 +31,10 @@ Theorem for_range_loop_ptr:
       lookup_var x s = SOME v) /\
     (!x. not_fresh_at st x ==> FLOOKUP G x = FLOOKUP G0 x /\
       op_taint tn (Var x) = op_taint tn0 (Var x))) /\
-  (!ei G tn t. Done ei G tn t <=>
+  (!H ei G tn t. Done H ei G tn t <=>
     t.vs_current_bb = exit_lbl /\ t.vs_inst_idx = 0 /\ ~t.vs_halted /\
-    stmt_state_rel H ctx func cenv cx ei t /\ ghost_inv H d cenv cx ei G tn t /\
+    stmt_state_rel H ctx func cenv cx ei t /\
+    storage_well_formed_on cx ei (FST H) /\ ghost_inv H d cenv cx ei G tn t /\
     (!x v. not_fresh_at st x /\ lookup_var x s0 = SOME v ==>
       lookup_var x t = SOME v) /\
     (!x. not_fresh_at st x ==> FLOOKUP G x = FLOOKUP G0 x /\
@@ -54,13 +56,13 @@ Theorem for_range_loop_ptr:
   (!j. j < LENGTH vs ==> EL j vs = IntV (n1 + &j) /\
     (i2w (n1 + &j) : bytes32) <> i2w n2) ==>
   !k es s G tn.
-    k <= LENGTH vs /\ Inv k es G tn s /\
+    k <= LENGTH vs /\ (!H. valid_horizon cx st0 H es.storage_trace ==> Inv H k es G tn s) /\
     gas_admissible (eval_for cx tyv id stmts (MAP Value (DROP k vs))) (stmt_res_ok lctx) es ==>
-    gas_outcome_ptr (cx_dead H cx) (cx_tops cx) (ctx,func) PG
+    gas_outcome_ptr (\H. cx_dead H cx) (cx_tops cx) (ctx,func) PG cx st0
       (eval_for cx tyv id stmts (MAP Value (DROP k vs))) (es,s,G,tn)
-      (\res ee gf tf t. res = INL () /\ Done ee gf tf t)
-      (\res ee gt r. ?ex. res = INR ex /\
-        !tail. stmt_exit_ptr RetQ (ee with gas_obs := tail) (INR ex) gt r)
+      (\H res ee gf tf t. res = INL () /\ Done H ee gf tf t)
+      (\H res ee gt r. ?ex. res = INR ex /\
+        !tail. stmt_exit_ptr (RetQ H) (ee with gas_obs := tail) (INR ex) gt r)
 Proof
   strip_tac >> ho_match_mp_tac eval_for_rounds_ptr >> conj_tac
   >- (rpt gen_tac >> strip_tac >>
@@ -73,10 +75,16 @@ Proof
       `not_local_ptr bc (FEMPTY :: es.scopes) p` by metis_tac[] >>
       drule_all for_range_round_ptr >> simp[]) >>
   rpt gen_tac >> strip_tac >>
-  qpat_x_assum `Inv _ _ _ _ _` mp_tac >> asm_rewrite_tac[] >> strip_tac >>
+  `?H0. valid_horizon cx st0 H0 es.storage_trace` by metis_tac[] >>
+  `Inv H0 (LENGTH vs) es G tn s` by metis_tac[] >>
+  qpat_assum `Inv H0 _ _ _ _ _` mp_tac >> asm_rewrite_tac[] >> strip_tac >>
+  `!H. valid_horizon cx st0 H es.storage_trace ==>
+    stmt_state_rel H ctx func cenv cx es s /\
+    storage_well_formed_on cx es (FST H) /\ ghost_inv H d cenv cx es G tn s` by metis_tac[] >>
   `!x. not_fresh_at st x ==> x <> dv` by metis_tac[] >>
   drule_all for_range_terminal_ptr >>
   disch_then (qspec_then `PG` strip_assume_tac) >>
   qexistsl_tac [`t`, `gf`, `tf`] >> simp[] >>
-  fs[exprSimWordArgsTheory.stmt_state_rel_gas_obs]
+  rpt strip_tac >> res_tac >>
+  fs[exprSimWordArgsTheory.stmt_state_rel_gas_obs] >> metis_tac[]
 QED
