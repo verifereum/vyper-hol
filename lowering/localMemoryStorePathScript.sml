@@ -292,12 +292,9 @@ Theorem alloc_copy_memory_framed_path:
     s0.vs_current_bb = sa.cs_current_bb /\
     s0.vs_inst_idx = LENGTH sa.cs_current_insts ==>
     ?s2 w. lookup_var p s2 = SOME w /\
-      FLOOKUP s2.vs_allocas sa.cs_next_id = SOME (w2n w, sz) /\
       (!H. valid_horizon cx st0 H es.storage_trace ==>
          stmt_state_rel H ctx func cenv cx es s2) /\
       val_in_memory tv v (w2n w) s2.vs_memory /\
-      (!ad len. ad + len <= w2n w \/ w2n w + sz <= ad ==>
-         mem_bytes_at ad len s2.vs_memory = mem_bytes_at ad len s0.vs_memory) /\
       (!x. x <> p ==> lookup_var x s2 = lookup_var x s0) /\
       (!aid entry. FLOOKUP s0.vs_allocas aid = SOME entry ==>
                    FLOOKUP s2.vs_allocas aid = SOME entry) /\
@@ -305,7 +302,7 @@ Theorem alloc_copy_memory_framed_path:
       s2.vs_inst_idx = LENGTH sb.cs_current_insts /\
       gas_marked_path F ctx func s0 0 (OK s2)
 Proof
-  rpt gen_tac >>
-  disch_then (strip_assume_tac o MATCH_MP alloc_copy_memory_framed_bounded_path) >>
+  rpt strip_tac >> drule_all alloc_copy_memory_framed_bounded_path >>
+  disch_then (qx_choosel_then [`s2`, `w`] strip_assume_tac) >>
   qexistsl_tac [`s2`, `w`] >> simp[]
 QED
