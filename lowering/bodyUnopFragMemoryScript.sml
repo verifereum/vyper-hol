@@ -176,12 +176,15 @@ Proof
            stmt_state_rel H ctx func cenv cx es0
              (target with vs_inst_idx := LENGTH sb.cs_current_insts) /\
            storage_well_formed_on cx es0 (FST H)` by
-        (rpt strip_tac >> res_tac >> asm_rewrite_tac[] >>
-         irule exprLoweringPropsTheory.stmt_state_rel_fields_transport >>
-         qexistsl_tac [`H0`, `s0`] >> rpt conj_tac
-         >- first_assum ACCEPT_TAC
-         >- first_assum ACCEPT_TAC >>
-         qpat_x_assum `target = _` (fn th => once_rewrite_tac [th]) >> simp[]) >>
+        (rpt strip_tac >> res_tac
+         >- (qpat_x_assum `stmt_state_rel H0 _ _ _ _ _ (target with vs_inst_idx := _)`
+               (fn th => irule (MATCH_MP (REWRITE_RULE [GSYM AND_IMP_INTRO]
+                  exprLoweringPropsTheory.stmt_state_rel_fields_transport) th)) >>
+             qexists_tac `s0` >> reverse (rpt conj_tac)
+             >- first_assum ACCEPT_TAC >>
+             qpat_x_assum `target = _` (fn th => once_rewrite_tac [th]) >>
+             simp[]) >>
+         first_assum ACCEPT_TAC) >>
       `target.vs_alloca_next = s0.vs_alloca_next` by
         (qpat_x_assum `target = _` (fn th => once_rewrite_tac [th]) >> simp[]) >>
       qexists_tac `OK (target with vs_inst_idx := LENGTH sb.cs_current_insts)` >>
