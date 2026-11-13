@@ -265,6 +265,20 @@ Resume body_assign_place_snapshot_mem[target_prefix]:
       rename1 `expr_exit (INR ex) rr` >> qexists_tac `ex` >>
       simp[stmt_exit_def] >> metis_tac[expr_exit_INR_type])) >>
   qexistsl_tac [`cenv`,`env`,`r`,`ss`,`st`,`dty`] >> simp[] >>
+  reverse conj_tac
+  >- (`~block_is_terminated sr` by
+        (`gas_marked_path F ctx func s0 (LENGTH marks) (OK rs)` by
+           (qpat_x_assum `gas_marked_exec T _ (eval_expr _ _) _ _ _ _ _`
+              (strip_assume_tac o REWRITE_RULE [gas_marked_exec_def]) >>
+            simp[gas_marked_path_def] >> irule gas_marked_path_exec >>
+            qexists_tac `T` >> first_assum ACCEPT_TAC) >>
+         irule endpoint_path_open >> goal_assum (drule_at Any) >>
+         TRY (qexists_tac `sa`) >> fs[ci_mono_def]) >>
+      `gas_marked_path F ctx func rs 0 (OK snap)` by
+        (simp[gas_marked_path_def] >> irule gas_marked_path_exec >>
+         qexists_tac `T` >> first_assum ACCEPT_TAC) >>
+      irule endpoint_path_open >> goal_assum (drule_at Any) >>
+      TRY (qexists_tac `sr`) >> fs[ci_mono_def]) >>
   suspend "target"
 QED
 
