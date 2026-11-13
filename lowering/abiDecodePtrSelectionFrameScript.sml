@@ -54,16 +54,16 @@ Theorem abi_decode_selection_success_framed:
   eval_operand pos s = SOME z /\ op_prov G pos = NONE /\ op_taint tn pos = {} /\
   p = w2n (z + n2w off) /\ p+32 <= h /\ w2n b+h < dimword(:256) /\
   run_inst_seq (emitted_insts sa sb) s = OK u /\
-  ghost_inv ret cenv cx es G tn s /\ stmt_state_rel ctx func cenv cx es s /\
+  ghost_inv H ret cenv cx es G tn s /\ stmt_state_rel H ctx func cenv cx es s /\
   local_ptrs_reserved cenv sa /\
   (!x sz. cenv.ce_return_buf = SOME (PtrVar (Var x) sz) ==> not_fresh_at sa x) /\
   (!x sz. cenv.ce_return_pc = SOME (PtrVar (Var x) sz) ==> not_fresh_at sa x) ==>
-  ?out H tf. v = Var out /\ not_fresh_at sb out /\
-    inst_seq_ptr D 0 ctx func PG G tn (emitted_insts sa sb) s H tf /\
-    gas_path_ptr D 0 ctx func PG G tn s 0 H tf
+  ?out HG tf. v = Var out /\ not_fresh_at sb out /\
+    inst_seq_ptr D 0 ctx func PG G tn (emitted_insts sa sb) s HG tf /\
+    gas_path_ptr D 0 ctx func PG G tn s 0 HG tf
       (OK (u with vs_inst_idx := LENGTH sb.cs_current_insts)) /\
     lookup_var out u = SOME (z + mload (w2n b+p) s) /\
-    op_prov H v = NONE /\ op_taint tf v = {} /\
+    op_prov HG v = NONE /\ op_taint tf v = {} /\
     ~u.vs_halted /\ u.vs_current_bb = sb.cs_current_bb /\
     state_frame u = state_frame s /\ u.vs_memory = s.vs_memory /\
     u.vs_allocas = s.vs_allocas /\ u.vs_accounts = s.vs_accounts /\
@@ -71,30 +71,30 @@ Theorem abi_decode_selection_success_framed:
     tf.t_mem = tn.t_mem /\ tf.t_stor = tn.t_stor /\
     tf.t_trans = tn.t_trans /\ tf.t_imm = tn.t_imm /\
     (!x. not_fresh_at sa x ==> lookup_var x u = lookup_var x s /\
-      FLOOKUP H x = FLOOKUP G x /\ op_taint tf (Var x) = op_taint tn (Var x)) /\
-    ghost_inv ret cenv cx es H tf u /\ stmt_state_rel ctx func cenv cx es u /\
-    abi_decode_ptr_window H tf u src b h /\
-    (!x k. not_fresh_at sa x /\ ptr_covers G tn x s k ==> ptr_covers H tf x u k) /\
+      FLOOKUP HG x = FLOOKUP G x /\ op_taint tf (Var x) = op_taint tn (Var x)) /\
+    ghost_inv H ret cenv cx es HG tf u /\ stmt_state_rel H ctx func cenv cx es u /\
+    abi_decode_ptr_window HG tf u src b h /\
+    (!x k. not_fresh_at sa x /\ ptr_covers G tn x s k ==> ptr_covers HG tf x u k) /\
     (fresh_vars_wrt sa s ==> fresh_vars_wrt sb u)
 Proof
   disch_then (map_every assume_tac o CONJUNCTS) >>
   drule_all abi_decode_getelemptr_success_ptr >>
   disch_then (qspecl_then [`PG`, `D`] strip_assume_tac) >>
-  rename1 `inst_seq_ptr D 0 ctx func PG G tn (emitted_insts sa sb) s H tf` >>
-  `ghost_inv ret cenv cx es H tf u` by
+  rename1 `inst_seq_ptr D 0 ctx func PG G tn (emitted_insts sa sb) s HG tf` >>
+  `ghost_inv H ret cenv cx es HG tf u` by
     (irule ghost_inv_old_vars_frame_ptr >>
-     goal_assum (drule_at (Pat `ghost_inv _ _ _ _ _ _ _`)) >>
+     goal_assum (drule_at (Pat `ghost_inv _ _ _ _ _ _ _ _`)) >>
      qexists_tac `sa` >> simp[]) >>
-  `stmt_state_rel ctx func cenv cx es u` by
+  `stmt_state_rel H ctx func cenv cx es u` by
     (irule stmt_state_rel_old_vars_frame_ptr >>
-     goal_assum (drule_at (Pat `stmt_state_rel _ _ _ _ _ _`)) >>
+     goal_assum (drule_at (Pat `stmt_state_rel _ _ _ _ _ _ _`)) >>
      qexists_tac `sa` >> fs[state_frame_def, venom_state_component_equality]) >>
-  `abi_decode_ptr_window H tf u src b h` by
+  `abi_decode_ptr_window HG tf u src b h` by
     (irule abi_decode_ptr_window_frame >>
      goal_assum (drule_at (Pat `abi_decode_ptr_window _ _ _ _ _ _`)) >> simp[]) >>
-  `!x k. not_fresh_at sa x /\ ptr_covers G tn x s k ==> ptr_covers H tf x u k` by
+  `!x k. not_fresh_at sa x /\ ptr_covers G tn x s k ==> ptr_covers HG tf x u k` by
     (rpt strip_tac >> fs[ptr_covers_def] >> metis_tac[]) >>
-  qexistsl_tac [`out`, `H`, `tf`] >> simp[] >>
+  qexistsl_tac [`out`, `HG`, `tf`] >> simp[] >>
   conj_tac
   >- (qpat_x_assum `state_frame u = state_frame s` mp_tac >>
       simp[state_frame_def, venom_state_component_equality]) >>

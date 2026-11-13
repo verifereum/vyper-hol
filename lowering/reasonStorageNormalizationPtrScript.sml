@@ -7,7 +7,7 @@ Ancestors
   fragGasPathPtr
 
 Theorem reason_storage_prefix_normalized_path_ptr:
-  stmt_state_rel ctx func cenv cx es s /\
+  stmt_state_rel H ctx func cenv cx es s /\
   compile_alloc_buffer (64+m) cc = (buf,c1) /\
   emit_void MSTORE [buf.buf_operand; Lit 0x08c379a0w] c1 = ((),c2) /\
   emit_op ADD [buf.buf_operand; Lit 32w] c2 = (payload,c3) /\
@@ -36,7 +36,7 @@ Theorem reason_storage_prefix_normalized_path_ptr:
     gas_path_ptr D 0 ctx func PG G tn s 0 Gf tnf (OK z) /\
     z.vs_current_bb = cb.cs_current_bb /\
     z.vs_inst_idx = LENGTH cb.cs_current_insts /\ ~z.vs_halted /\
-    stmt_state_rel ctx func cenv cx es z /\ local_ptrs_reserved cenv cb /\
+    stmt_state_rel H ctx func cenv cx es z /\ local_ptrs_reserved cenv cb /\
     (!x. MEM x [root;outer;pay;tup] ==> not_fresh_at cb x) /\
     c3.cs_next_id < cb.cs_next_id /\ b+32*n < dimword(:256) /\
     lookup_var root z = SOME (n2w b) /\

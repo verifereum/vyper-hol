@@ -5,7 +5,7 @@ Ancestors bodyPtrDefs forPtrElement forPtrBytes robustCopyTransportPtr
   forPtrScope forPtrElementFrame finite_map pred_set
 
 Theorem ghost_local_after_separated_write:
-  ghost_inv d cenv cx es G tn s /\
+  ghost_inv H d cenv cx es G tn s /\
   lookup_scopes name es.scopes = SOME entry /\
   FLOOKUP cenv.ce_vars name = SOME (PtrVar (Var p) sz) /\
   lookup_var p sf = lookup_var p s /\ FLOOKUP gf p = FLOOKUP G p /\
@@ -30,7 +30,7 @@ Proof
 QED
 
 Theorem ghost_inv_after_separated_write:
-  ghost_inv d cenv cx es G tn s /\
+  ghost_inv H d cenv cx es G tn s /\
   mem_agree_outside writes sf.vs_memory s.vs_memory /\
   (!i. i NOTIN writes ==> (i IN tf.t_mem <=> i IN tn.t_mem)) /\
   (!p. p IN kept ==>
@@ -48,7 +48,7 @@ Theorem ghost_inv_after_separated_write:
   tf.t_stor = tn.t_stor /\ tf.t_trans = tn.t_trans /\ tf.t_imm = tn.t_imm /\
   sf.vs_call_ctx = s.vs_call_ctx /\ sf.vs_accounts = s.vs_accounts /\
   sf.vs_transient = s.vs_transient ==>
-  ghost_inv d cenv cx es gf tf sf
+  ghost_inv H d cenv cx es gf tf sf
 Proof
   strip_tac >> simp[ghost_inv_def] >> rpt conj_tac
   >- (rpt gen_tac >> strip_tac >>
@@ -65,7 +65,7 @@ QED
 (* The copy starts with only the outer locals live. In particular it does
    not preserve the previous iteration's binding while overwriting it. *)
 Theorem ghost_inv_install_after_separated_write:
-  ghost_inv d cenv cx es G tn s /\
+  ghost_inv H d cenv cx es G tn s /\
   mem_agree_outside writes sf.vs_memory s.vs_memory /\
   (!i. i NOTIN writes ==> (i IN tf.t_mem <=> i IN tn.t_mem)) /\
   (!p. p IN kept ==>
@@ -89,7 +89,7 @@ Theorem ghost_inv_install_after_separated_write:
     !w mem. lookup_var p sf = SOME w /\
       mem_agree_outside tf.t_mem sf.vs_memory mem ==>
       val_in_memory entry.type entry.value (w2n w) mem) ==>
-  ghost_inv d bc cx
+  ghost_inv H d bc cx
     (es with scopes := (FEMPTY |+ (id,entry)) :: es.scopes) gf tf sf
 Proof
   strip_tac >> drule_all ghost_inv_after_separated_write >> strip_tac >>
@@ -103,7 +103,7 @@ QED
    exterior taint premise comes from their same-endpoint companions; the
    shared opcode interface supplies every storage/immutable frame here. *)
 Theorem ghost_inv_install_after_finite_copy:
-  ghost_inv d cenv cx es G tn s /\
+  ghost_inv H d cenv cx es G tn s /\
   EVERY (\i. MEM i.inst_opcode [MLOAD; NOT; ADD; AND; MSTORE; MCOPY]) code /\
   run_inst_seq code s = OK sf /\
   inst_seq_ptr D lo ctx fn PG G tn code s gf tf /\
@@ -127,7 +127,7 @@ Theorem ghost_inv_install_after_finite_copy:
     !w mem. lookup_var p sf = SOME w /\
       mem_agree_outside tf.t_mem sf.vs_memory mem ==>
       val_in_memory entry.type entry.value (w2n w) mem) ==>
-  ghost_inv d bc cx
+  ghost_inv H d bc cx
     (es with scopes := (FEMPTY |+ (id,entry)) :: es.scopes) gf tf sf
 Proof
   strip_tac >> drule_all finite_copy_endpoint_frames >> strip_tac >>
@@ -137,7 +137,7 @@ QED
 (* Bulk consumer: all copy postconditions refer to the given endpoint,
    including the zero-sized, empty-code endpoint. *)
 Theorem ghost_inv_install_bulk_copy:
-  ghost_inv d cenv cx es G tn s /\
+  ghost_inv H d cenv cx es G tn s /\
   compile_copy_memory (Var dst) (Var src) n sa = ((),sb) /\
   n < dimword (:256) /\ lookup_var src s = SOME a /\ lookup_var dst s = SOME b /\
   run_inst_seq (emitted_insts sa sb) s = OK sf /\
@@ -161,12 +161,12 @@ Theorem ghost_inv_install_bulk_copy:
     !w mem. lookup_var p sf = SOME w /\
       mem_agree_outside tf.t_mem sf.vs_memory mem ==>
       val_in_memory entry.type entry.value (w2n w) mem) ==>
-  ghost_inv d bc cx
+  ghost_inv H d bc cx
     (es with scopes := (FEMPTY |+ (id,entry)) :: es.scopes) gf tf sf
 Proof
   strip_tac >> drule_all compile_bulk_copy_endpoint_frames >> strip_tac >>
   irule ghost_inv_install_after_separated_write >> conj_tac >- simp[] >>
-  goal_assum (drule_at (Pat `ghost_inv _ _ _ _ _ _ _`)) >>
+  goal_assum (drule_at (Pat `ghost_inv _ _ _ _ _ _ _ _`)) >>
   qexistsl_tac [`kept`, `{i | w2n b <= i /\ i < w2n b+n}`] >>
   simp[] >> conj_tac >- first_assum ACCEPT_TAC >>
   simp_tac std_ss [arithmeticTheory.NOT_LESS_EQUAL, arithmeticTheory.NOT_LESS,
@@ -175,7 +175,7 @@ Proof
 QED
 
 Theorem ghost_inv_install_bytes_copy:
-  ghost_inv d cenv cx es G tn s /\
+  ghost_inv H d cenv cx es G tn s /\
   compile_store_bytestring (Var src) (Var dst) sa = ((),sb) /\
   not_fresh_at sa src /\ not_fresh_at sa dst /\
   lookup_var src s = SOME a /\ lookup_var dst s = SOME b /\
@@ -204,12 +204,12 @@ Theorem ghost_inv_install_bytes_copy:
     !w mem. lookup_var p sf = SOME w /\
       mem_agree_outside tf.t_mem sf.vs_memory mem ==>
       val_in_memory entry.type entry.value (w2n w) mem) ==>
-  ghost_inv d bc cx
+  ghost_inv H d bc cx
     (es with scopes := (FEMPTY |+ (id,entry)) :: es.scopes) gf tf sf
 Proof
   strip_tac >> drule_all compile_bytes_copy_endpoint_frames >> strip_tac >>
   irule ghost_inv_install_after_separated_write >> conj_tac >- simp[] >>
-  goal_assum (drule_at (Pat `ghost_inv _ _ _ _ _ _ _`)) >>
+  goal_assum (drule_at (Pat `ghost_inv _ _ _ _ _ _ _ _`)) >>
   qexistsl_tac [`kept`, `{i | w2n b <= i /\ i < w2n b+capacity}`] >>
   simp[] >> conj_tac >- first_assum ACCEPT_TAC >>
   simp_tac std_ss [arithmeticTheory.NOT_LESS_EQUAL, arithmeticTheory.NOT_LESS,
@@ -218,7 +218,7 @@ Proof
 QED
 
 Theorem ghost_inv_install_word_copy:
-  ghost_inv d cenv cx es G tn s /\
+  ghost_inv H d cenv cx es G tn s /\
   run_inst_seq [mk_inst iid MLOAD [Var src] [tmp];
     mk_inst (iid+1) MSTORE [Var dst; Var tmp] []] s = OK sf /\
   inst_seq_ptr D lo ctx fn PG G tn
@@ -244,12 +244,12 @@ Theorem ghost_inv_install_word_copy:
     !w mem. lookup_var p sf = SOME w /\
       mem_agree_outside tf.t_mem sf.vs_memory mem ==>
       val_in_memory entry.type entry.value (w2n w) mem) ==>
-  ghost_inv d bc cx
+  ghost_inv H d bc cx
     (es with scopes := (FEMPTY |+ (id,entry)) :: es.scopes) gf tf sf
 Proof
   strip_tac >> drule_all word_copy_endpoint_frames >> strip_tac >>
   irule ghost_inv_install_after_separated_write >> conj_tac >- simp[] >>
-  goal_assum (drule_at (Pat `ghost_inv _ _ _ _ _ _ _`)) >>
+  goal_assum (drule_at (Pat `ghost_inv _ _ _ _ _ _ _ _`)) >>
   qexistsl_tac [`kept`, `{i | w2n b <= i /\ i < w2n b+32}`] >>
   simp[] >> conj_tac >- first_assum ACCEPT_TAC >>
   simp_tac std_ss [arithmeticTheory.NOT_LESS_EQUAL, arithmeticTheory.NOT_LESS] >>

@@ -17,7 +17,7 @@ End
 Definition literal_loop_frame_def:
   literal_loop_frame pure ctx func ce cx d root aid addr capacity
       ees fr sf Gf tnf es cs G tn s cells off <=>
-    stmt_state_rel ctx func ce cx es s /\ ghost_inv d ce cx es G tn s /\
+    stmt_state_rel H ctx func ce cx es s /\ ghost_inv H d ce cx es G tn s /\
     wb_frame ce ees es fr sf s /\
     ghost_kept ce ees fr Gf tnf sf G tn /\
     MAP FDOM ees.scopes = MAP FDOM es.scopes /\
@@ -83,7 +83,7 @@ QED
 Theorem literal_loop_frame_runtime:
   literal_loop_frame pure ctx func ce cx d root aid addr capacity
     ees fr sf Gf tnf es cs G tn s cells off ==>
-  stmt_state_rel ctx func ce cx es s /\ ghost_inv d ce cx es G tn s /\
+  stmt_state_rel H ctx func ce cx es s /\ ghost_inv H d ce cx es G tn s /\
   ghost_kept ce ees fr Gf tnf sf G tn /\ ~s.vs_halted /\
   s.vs_current_bb = cs.cs_current_bb /\ s.vs_inst_idx = LENGTH cs.cs_current_insts
 Proof
@@ -145,8 +145,8 @@ Proof
 QED
 
 Theorem literal_prefix_expr_frame:
-  expr_post ctx func ce cx e esi si sb s0 es' v op z /\
-  ghost_kept ce esi si G0 tn0 s0 H tm /\
+  expr_post H ctx func ce cx e esi si sb s0 es' v op z /\
+  ghost_kept ce esi si G0 tn0 s0 HG tm /\
   FLOOKUP s0.vs_allocas aid = SOME (addr,capacity) /\ aid < si.cs_next_id /\
   (!name b n. local_region ce esi.scopes s0 name b n ==>
      addr+capacity <= b \/ b+n <= addr) /\
@@ -169,7 +169,7 @@ Proof
       qpat_x_assum `ghost_kept _ _ _ _ _ _ _ _` mp_tac >>
       simp[ghost_kept_def] >> metis_tac[]) >>
   `mem_bytes_at addr capacity z.vs_memory = mem_bytes_at addr capacity s0.vs_memory` by
-    (qpat_x_assum `expr_post _ _ _ _ _ _ _ _ _ _ _ _ _` mp_tac >>
+    (qpat_x_assum `expr_post _ _ _ _ _ _ _ _ _ _ _ _ _ _` mp_tac >>
      simp[expr_post_def] >> metis_tac[]) >>
   drule valueEncodingPropsTheory.mem_bytes_at_translated_window >>
   disch_then (qspecl_then [`p-addr`, `k`] mp_tac) >>
@@ -179,10 +179,10 @@ QED
 Theorem literal_outer_frame_expr:
   literal_loop_frame pure ctx func ce cx d root aid addr capacity
     ees fr sf Gf tnf esi si G0 tn0 s0 cells off /\
-  stmt_state_rel ctx func ce cx ees sf /\ local_ptrs_reserved ce fr /\
-  expr_post ctx func ce cx e esi si sb s0 es' v op z /\
-  ghost_kept ce esi si G0 tn0 s0 H tm ==>
-  wb_frame ce ees es' fr sf z /\ ghost_kept ce ees fr Gf tnf sf H tm
+  stmt_state_rel H ctx func ce cx ees sf /\ local_ptrs_reserved ce fr /\
+  expr_post H ctx func ce cx e esi si sb s0 es' v op z /\
+  ghost_kept ce esi si G0 tn0 s0 HG tm ==>
+  wb_frame ce ees es' fr sf z /\ ghost_kept ce ees fr Gf tnf sf HG tm
 Proof
   simp[literal_loop_frame_def] >> rpt strip_tac >>
   `wb_frame ce esi es' si s0 z` by metis_tac[expr_post_frame] >>
@@ -194,16 +194,16 @@ Theorem literal_loop_frame_materialized:
   literal_loop_frame pure ctx func ce cx d root aid addr capacity
     ees fr sf Gf tnf esi si G0 tn0 s0 cells off /\
   literal_prefix_ok cells tn0 s0 /\
-  stmt_state_rel ctx func ce cx ees sf /\
+  stmt_state_rel H ctx func ce cx ees sf /\
   local_ptrs_reserved ce fr /\ local_ptrs_reserved ce si /\
-  expr_post ctx func ce cx e esi si sb s0 es' v op z /\
-  ghost_kept ce esi si G0 tn0 s0 H tm /\ ghost_inv d ce cx es' H tm z /\
+  expr_post H ctx func ce cx e esi si sb s0 es' v op z /\
+  ghost_kept ce esi si G0 tn0 s0 HG tm /\ ghost_inv H d ce cx es' HG tm z /\
   eval_expr cx e esi = (res,es') /\
   si.cs_next_var <= sb.cs_next_var /\ si.cs_next_id <= sb.cs_next_id /\
   ~z.vs_halted /\ z.vs_current_bb = sb.cs_current_bb /\
   z.vs_inst_idx = LENGTH sb.cs_current_insts /\ (pure ==> ~expr_has_effect e) ==>
   literal_loop_frame pure ctx func ce cx d root aid addr capacity
-    ees fr sf Gf tnf es' sb H tm z cells off /\ literal_prefix_ok cells tm z
+    ees fr sf Gf tnf es' sb HG tm z cells off /\ literal_prefix_ok cells tm z
 Proof
   disch_then (map_every assume_tac o CONJUNCTS) >>
   drule_all literal_outer_frame_expr >> strip_tac >>
@@ -211,7 +211,7 @@ Proof
     mp_tac >> simp[literal_loop_frame_def] >> strip_tac >>
   `MAP FDOM esi.scopes = MAP FDOM es'.scopes` by
     metis_tac[eval_expr_preserves_scopes_dom] >>
-  `wb_frame ce esi es' si s0 z /\ stmt_state_rel ctx func ce cx es' z` by
+  `wb_frame ce esi es' si s0 z /\ stmt_state_rel H ctx func ce cx es' z` by
     metis_tac[expr_post_frame, expr_post_def] >>
   reverse conj_tac
   >- (`EVERY (\(tv,v,p,k). addr <= p /\ p+k <= addr+capacity) cells` by
@@ -225,7 +225,7 @@ Proof
     (drule_all wb_frame_local_regions >> simp[]) >>
   `lookup_var root z = SOME (n2w addr)` by gvs[wb_frame_def] >>
   `FLOOKUP z.vs_allocas aid = SOME (addr,capacity)` by gvs[wb_frame_def] >>
-  `FLOOKUP H root = SOME (addr,capacity) /\ ptr_covers H tm root z capacity` by
+  `FLOOKUP HG root = SOME (addr,capacity) /\ ptr_covers HG tm root z capacity` by
     (gvs[ghost_kept_def, ptr_covers_def] >> metis_tac[]) >>
   `not_fresh_at sb root` by metis_tac[not_fresh_at_mono] >>
   `aid < sb.cs_next_id /\ fr.cs_next_var <= sb.cs_next_var` by decide_tac >>

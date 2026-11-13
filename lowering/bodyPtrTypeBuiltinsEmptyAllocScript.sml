@@ -28,7 +28,7 @@ Theorem empty_alloc_checked_coverage:
   !D ctx func cenv cx es PG G tn sa sb buf sz s t.
     compile_alloc_buffer sz sa = (buf,sb) /\
     run_inst_seq (emitted_insts sa sb) s = OK t /\
-    stmt_state_rel ctx func cenv cx es s /\
+    stmt_state_rel H ctx func cenv cx es s /\
     MEM (mk_inst sa.cs_next_id ALLOCA [Lit (n2w sz)]
       [STRING #"%" (toString sa.cs_next_var)]) (fn_insts func) /\
     sz < dimword (:256) /\ ~ctx_has_dalloca ctx ==>
@@ -37,7 +37,7 @@ Theorem empty_alloc_checked_coverage:
       ptr_covers G' tn' p t sz /\
       (!q k. q <> p /\ ptr_covers G tn q s k ==>
          ptr_covers G' tn' q t k) /\
-      (stor_taint_ok cx tn s ==> stor_taint_ok cx tn' t)
+      (stor_taint_ok H cx tn s ==> stor_taint_ok H cx tn' t)
 Proof
   rpt gen_tac >> strip_tac >>
   drule_all empty_alloc_checked_run >> strip_tac >>
@@ -55,7 +55,7 @@ QED
 (* Old registers are framed even when this allocation site is reused. *)
 Theorem empty_alloc_old_ghost:
   !ctx func cenv cx es s id n out t PG G tn q.
-    stmt_state_rel ctx func cenv cx es s /\
+    stmt_state_rel H ctx func cenv cx es s /\
     MEM (mk_inst id ALLOCA [Lit (n2w n)] [out]) (fn_insts func) /\
     n < dimword (:256) /\
     step_inst_base (mk_inst id ALLOCA [Lit (n2w n)] [out]) s = OK t /\
@@ -79,7 +79,7 @@ QED
 
 Theorem empty_alloc_memory_ghost:
   !ctx func cenv cx es s id n out t tn b.
-    stmt_state_rel ctx func cenv cx es s /\
+    stmt_state_rel H ctx func cenv cx es s /\
     MEM (mk_inst id ALLOCA [Lit (n2w n)] [out]) (fn_insts func) /\
     n < dimword (:256) /\
     step_inst_base (mk_inst id ALLOCA [Lit (n2w n)] [out]) s = OK t /\
@@ -104,7 +104,7 @@ QED
 
 Theorem empty_alloc_ghost_kept:
   !ctx func cenv cx es s sa n out t PG G tn.
-    stmt_state_rel ctx func cenv cx es s /\
+    stmt_state_rel H ctx func cenv cx es s /\
     MEM (mk_inst sa.cs_next_id ALLOCA [Lit (n2w n)] [out]) (fn_insts func) /\
     n < dimword (:256) /\ ~not_fresh_at sa out /\
     step_inst_base (mk_inst sa.cs_next_id ALLOCA [Lit (n2w n)] [out]) s = OK t ==>
@@ -134,7 +134,7 @@ QED
 
 Theorem empty_alloc_local_robust:
   !ctx func cenv cx es s id n out t tn tv v w.
-    stmt_state_rel ctx func cenv cx es s /\
+    stmt_state_rel H ctx func cenv cx es s /\
     MEM (mk_inst id ALLOCA [Lit (n2w n)] [out]) (fn_insts func) /\
     n < dimword (:256) /\ val_wf tv v /\
     w2n w + val_footprint tv v <= s.vs_alloca_next /\
@@ -166,15 +166,15 @@ QED
 
 Theorem empty_alloc_ghost_inv:
   !ctx func cenv cx es s id n out t PG G tn d.
-    stmt_state_rel ctx func cenv cx es s /\
+    stmt_state_rel H ctx func cenv cx es s /\
     MEM (mk_inst id ALLOCA [Lit (n2w n)] [out]) (fn_insts func) /\
     n < dimword (:256) /\
     step_inst_base (mk_inst id ALLOCA [Lit (n2w n)] [out]) s = OK t /\
     (!name p sz. FLOOKUP cenv.ce_vars name = SOME (PtrVar (Var p) sz) ==> p <> out) /\
     (!p sz. cenv.ce_return_buf = SOME (PtrVar (Var p) sz) ==> p <> out) /\
     (!p sz. cenv.ce_return_pc = SOME (PtrVar (Var p) sz) ==> p <> out) /\
-    ghost_inv d cenv cx es G tn s ==>
-    ghost_inv d cenv cx es
+    ghost_inv H d cenv cx es G tn s ==>
+    ghost_inv H d cenv cx es
       (step_prov PG G (mk_inst id ALLOCA [Lit (n2w n)] [out]) t)
       (step_taint (mk_inst id ALLOCA [Lit (n2w n)] [out]) s t tn) t
 Proof
@@ -184,7 +184,7 @@ Proof
      drule alloca_step_operand_preserved >>
      disch_then (qspec_then `Var p` mp_tac) >>
      simp[eval_operand_def]) >>
-  qpat_x_assum `ghost_inv _ _ _ _ _ _ _` mp_tac >>
+  qpat_x_assum `ghost_inv _ _ _ _ _ _ _ _` mp_tac >>
   rewrite_tac[ghost_inv_def] >> strip_tac >> rpt conj_tac
   >- suspend "locals"
   >- suspend "returnbuf"
@@ -227,15 +227,15 @@ Theorem empty_alloc_buffer_certificate:
   !D ctx func cenv cx es s sa sb buf n t PG G tn d.
     compile_alloc_buffer n sa = (buf,sb) /\ fn_has_code sa sb func /\
     run_inst_seq (emitted_insts sa sb) s = OK t /\
-    stmt_state_rel ctx func cenv cx es s /\ local_ptrs_reserved cenv sa /\
+    stmt_state_rel H ctx func cenv cx es s /\ local_ptrs_reserved cenv sa /\
     (!p sz. cenv.ce_return_buf = SOME (PtrVar (Var p) sz) ==> not_fresh_at sa p) /\
     (!p sz. cenv.ce_return_pc = SOME (PtrVar (Var p) sz) ==> not_fresh_at sa p) /\
     n < dimword (:256) /\ ~ctx_has_dalloca ctx /\
-    ghost_inv d cenv cx es G tn s ==>
+    ghost_inv H d cenv cx es G tn s ==>
     ?p G' tn'. buf.buf_operand = Var p /\
       inst_seq_ptr D 0 ctx func PG G tn (emitted_insts sa sb) s G' tn' /\
       ptr_covers G' tn' p t n /\
-      ghost_inv d cenv cx es G' tn' t /\
+      ghost_inv H d cenv cx es G' tn' t /\
       ghost_kept cenv es sa G tn s G' tn'
 Proof
   rpt gen_tac >> strip_tac >>

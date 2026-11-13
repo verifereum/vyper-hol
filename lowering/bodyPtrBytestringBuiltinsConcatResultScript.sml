@@ -53,7 +53,7 @@ Theorem concat_result_endpoint_ptr:
   (!i. w2n w <= i /\ i < w2n w+32+LENGTH bs ==> i NOTIN tn.t_mem) /\
   ptr_covers G tn p s (concat_alloc_size (MAP expr_type args)) /\
   eval_operand (Var p) s = SOME w /\
-  stmt_state_rel ctx fn ce cx es' s /\
+  stmt_state_rel H ctx fn ce cx es' s /\
   FLOOKUP s.vs_allocas aid = SOME (b,sz) /\
   sa.cs_next_id <= aid /\ aid < sb.cs_next_id /\
   b <= w2n w /\ w2n w + concat_alloc_size (MAP expr_type args) <= b+sz /\
@@ -62,7 +62,7 @@ Theorem concat_result_endpoint_ptr:
   wb_frame ce es es' sa s0 s /\
   (~expr_has_effect (Builtin ann (Concat n) args) ==> pure_frame ce fn es sa s0 s) ==>
   ?v. evaluate_concat n vs = INL v /\
-    vv_post ctx fn ce cx (Builtin ann (Concat n) args) es sa sb s0 es'
+    vv_post H ctx fn ce cx (Builtin ann (Concat n) args) es sa sb s0 es'
       (Value v) (LocatedValue ann <|ptr_operand := Var p; ptr_location := LocMemory|>) s /\
     ptr_vv_ok cx (post_value_type ce (Builtin ann (Concat n) args)) (Value v)
       (LocatedValue ann <|ptr_operand := Var p; ptr_location := LocMemory|>) es' G tn s /\
@@ -181,7 +181,7 @@ Proof
   `32 <= concat_alloc_size (MAP expr_type args)` by
     (assume_tac (Q.SPEC `MAP expr_type args` concat_alloc_size_bounds) >> decide_tac) >>
   drule_all concat_prefix_args_ready >>
-  disch_then (qspecl_then [`PG`,`cx_dead cx`]
+  disch_then (qspecl_then [`PG`,`cx_dead H cx`]
     (qx_choosel_then [`r`,`p`,`off`,`a`,`ow`,`Gf`,`tnf`,`t`,`binst`,`oinst`]
       (map_every assume_tac o CONJUNCTS))) >>
   suspend "traversal"
@@ -223,8 +223,8 @@ Resume concat_result_vv_sim_ptr[continuation]:
   `not_fresh_at s5 r` by
     (irule not_fresh_at_mono >> qexists_tac `s4` >> fs[ci_mono_def]) >>
   drule_all concat_suffix_path_ptr >>
-  disch_then (qspecl_then [`PG`,`cx_dead cx`]
-    (qx_choosel_then [`out`,`H`,`tm`,`u`,`tf`,`un`]
+  disch_then (qspecl_then [`PG`,`cx_dead H cx`]
+    (qx_choosel_then [`out`,`HG`,`tm`,`u`,`tf`,`un`]
       (map_every assume_tac o CONJUNCTS))) >>
   `FLOOKUP t'.vs_allocas binst.inst_id =
      SOME (w2n a,concat_alloc_size (MAP expr_type args))` by metis_tac[] >>
@@ -234,11 +234,11 @@ Resume concat_result_vv_sim_ptr[continuation]:
      `local_region ce es.scopes t name b k` by
        (irule local_region_frame >> conj_tac >-
           (qexists_tac `fn` >>
-           qpat_x_assum `stmt_state_rel ctx fn ce cx es t` mp_tac >>
+           qpat_x_assum `stmt_state_rel H ctx fn ce cx es t` mp_tac >>
            simp[stmt_state_rel_def, state_rel_def]) >>
         qexistsl_tac [`s4`,`ee.scopes`,`t'`] >> simp[]) >> metis_tac[]) >>
   `!x. not_fresh_at s4 x ==> lookup_var x tf = lookup_var x t' /\
-     FLOOKUP H x = FLOOKUP G x /\ op_taint un (Var x) = op_taint tn (Var x)` by
+     FLOOKUP HG x = FLOOKUP G x /\ op_taint un (Var x) = op_taint tn (Var x)` by
     (gen_tac >> disch_tac >>
      `not_fresh_at s5 x` by
        (irule not_fresh_at_mono >> qexists_tac `s4` >> fs[ci_mono_def]) >>
@@ -277,7 +277,7 @@ Resume concat_result_vv_sim_ptr[endpoint]:
     (drule_all wordArgsPtrTheory.ghost_kept_trans >> simp[]) >>
   `!x. not_fresh_at sa x ==> not_fresh_at s4 x` by
     (simp[not_fresh_at_def] >> metis_tac[LESS_LESS_EQ_TRANS]) >>
-  `ghost_kept ce es sa G0 tn0 s0 H un` by
+  `ghost_kept ce es sa G0 tn0 s0 HG un` by
     (irule bodyPtrHashBuiltinsAllocFrameTheory.hash_ghost_kept_clean_tail >>
      qexistsl_tac [`G`,`tn`] >> simp[] >> metis_tac[]) >>
   suspend "package"
@@ -389,11 +389,11 @@ Resume concat_result_vv_sim_ptr[outcome]:
   simp[fragGasPathPtrTheory.gas_outcome_ptr_def,
     fragGasPathPtrTheory.gas_summary_ptr_at_def] >>
   qexists_tac `[]` >> disj1_tac >>
-  qexistsl_tac [`INL (Value v)`,`ee`,`H`,`un`,`OK tf`] >>
+  qexistsl_tac [`INL (Value v)`,`ee`,`HG`,`un`,`OK tf`] >>
   simp[NoAsms, gasSummaryTheory.gas_explicit_nil] >>
   conj_tac >- first_assum ACCEPT_TAC >>
   conj_tac >-
-    (qpat_x_assum `vv_post _ _ _ _ _ _ _ _ _ _ _ _ tf` mp_tac >>
+    (qpat_x_assum `vv_post _ _ _ _ _ _ _ _ _ _ _ _ _ tf` mp_tac >>
      qpat_x_assum `buf.buf_operand = Var r` mp_tac >>
      rpt (pop_assum kall_tac) >> strip_tac >>
      simp[vv_post_def, vv_holds_def, vv_at_def, vv_own_def,
@@ -406,10 +406,10 @@ Resume concat_result_vv_sim_ptr[outcome]:
   conj_tac >- first_assum ACCEPT_TAC >>
   reverse conj_tac >-
     (qpat_x_assum `buf.buf_operand = Var r` mp_tac >>
-     qpat_x_assum `ptr_buf_ok _ _ _ H tf` mp_tac >>
-     qpat_x_assum `ghost_kept _ _ _ G0 tn0 s0 H un` mp_tac >>
+     qpat_x_assum `ptr_buf_ok _ _ _ HG tf` mp_tac >>
+     qpat_x_assum `ghost_kept _ _ _ G0 tn0 s0 HG un` mp_tac >>
      rpt (pop_assum kall_tac) >> simp[contextTheory.base_ptr_def]) >>
-  (qpat_x_assum `ptr_vv_ok _ _ _ _ _ H un tf` mp_tac >>
+  (qpat_x_assum `ptr_vv_ok _ _ _ _ _ HG un tf` mp_tac >>
      qpat_x_assum `buf.buf_operand = Var r` mp_tac >>
      rpt (pop_assum kall_tac) >> strip_tac >>
      simp[ptr_vv_ok_def, post_value_type_not_int_call, contextTheory.base_ptr_def,

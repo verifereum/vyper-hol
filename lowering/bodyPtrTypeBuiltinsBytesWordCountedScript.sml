@@ -23,20 +23,20 @@ Theorem bytes_word_loaded_counted_success:
   w2n a+32 < dimword(:256) /\ mload (w2n a) s = n2w n /\ n <= 32 /\
   (!x. w2n a <= x /\ x < w2n a+32+n ==> x NOTIN tn.t_mem) /\
   run_inst_seq (emitted_insts sa sb) s = OK t /\
-  ghost_inv d cenv cx es G tn s /\ ghost_kept cenv es0 s0a G0 tn0 s0 G tn /\
+  ghost_inv H d cenv cx es G tn s /\ ghost_kept cenv es0 s0a G0 tn0 s0 G tn /\
   s0a.cs_next_var <= sa.cs_next_var /\
   (!name p sz. FLOOKUP cenv.ce_vars name = SOME (PtrVar (Var p) sz) ==> not_fresh_at sa p) /\
   (!p sz. cenv.ce_return_buf = SOME (PtrVar (Var p) sz) ==> not_fresh_at sa p) /\
   (!p sz. cenv.ce_return_pc = SOME (PtrVar (Var p) sz) ==> not_fresh_at sa p) ==>
-  ?H th.
-    gas_path_ptr D 0 ctx fn PG G tn s 0 H th
+  ?HG th.
+    gas_path_ptr D 0 ctx fn PG G tn s 0 HG th
       (OK (t with vs_inst_idx := LENGTH sb.cs_current_insts)) /\
     t.vs_current_bb = sb.cs_current_bb /\
-    op_prov H out = NONE /\ op_taint th out = {} /\
-    ghost_inv d cenv cx es H th (t with vs_inst_idx := LENGTH sb.cs_current_insts) /\
-    ghost_kept cenv es0 s0a G0 tn0 s0 H th /\
+    op_prov HG out = NONE /\ op_taint th out = {} /\
+    ghost_inv H d cenv cx es HG th (t with vs_inst_idx := LENGTH sb.cs_current_insts) /\
+    ghost_kept cenv es0 s0a G0 tn0 s0 HG th /\
     (!p. not_fresh_at sa p ==> lookup_var p t = lookup_var p s /\
-      FLOOKUP H p = FLOOKUP G p /\ op_taint th (Var p) = op_taint tn (Var p))
+      FLOOKUP HG p = FLOOKUP G p /\ op_taint th (Var p) = op_taint tn (Var p))
 Proof
   disch_then (map_every assume_tac o CONJUNCTS) >>
   drule_all loaded_word_suffix_shape >> strip_tac >>
@@ -92,7 +92,7 @@ Resume bytes_word_loaded_counted_success[suffix]:
   disch_then (qspecl_then [`PG`,`D`] strip_assume_tac) >>
   `LENGTH sb.cs_current_insts = s.vs_inst_idx+6+LENGTH (emitted_insts sm sb)` by
     (fs[inst_extends_def] >> metis_tac[LENGTH_APPEND]) >>
-  `gas_path_ptr D 0 ctx fn PG G tn s 0 H' th'
+  `gas_path_ptr D 0 ctx fn PG G tn s 0 HG' th'
      (OK (t with vs_inst_idx := LENGTH sb.cs_current_insts))` by
     (drule_all gas_path_ptr_then >> gs[]) >>
   `t.vs_current_bb = sb.cs_current_bb` by
@@ -102,13 +102,13 @@ Resume bytes_word_loaded_counted_success[suffix]:
 QED
 
 Resume bytes_word_loaded_counted_success[post]:
-  qexistsl_tac [`H'`,`th'`] >>
+  qexistsl_tac [`HG'`,`th'`] >>
   conj_tac >- first_assum ACCEPT_TAC >>
   conj_tac >- first_assum ACCEPT_TAC >>
   conj_tac >- first_assum ACCEPT_TAC >>
   conj_tac >- first_assum ACCEPT_TAC >>
   conj_tac
-  >- (qpat_x_assum `ghost_inv d cenv cx es H' th' _` mp_tac >>
+  >- (qpat_x_assum `ghost_inv H d cenv cx es HG' th' _` mp_tac >>
       simp_tac (srw_ss()) [hash_ghost_inv_inst_idx]) >>
   conj_tac >- first_assum ACCEPT_TAC >>
   gen_tac >> disch_tac >>
@@ -135,20 +135,20 @@ Theorem bytes_word_counted_success:
   w2n a+32 < dimword(:256) /\ mload (w2n a) s = n2w n /\ n <= 32 /\
   (!x. w2n a <= x /\ x < w2n a+32+n ==> x NOTIN tn.t_mem) /\
   run_inst_seq (emitted_insts sa sb) s = OK t /\
-  ghost_inv d cenv cx es G tn s /\ ghost_kept cenv es0 s0a G0 tn0 s0 G tn /\
+  ghost_inv H d cenv cx es G tn s /\ ghost_kept cenv es0 s0a G0 tn0 s0 G tn /\
   s0a.cs_next_var <= sa.cs_next_var /\
   (!name p sz. FLOOKUP cenv.ce_vars name = SOME (PtrVar (Var p) sz) ==> not_fresh_at sa p) /\
   (!p sz. cenv.ce_return_buf = SOME (PtrVar (Var p) sz) ==> not_fresh_at sa p) /\
   (!p sz. cenv.ce_return_pc = SOME (PtrVar (Var p) sz) ==> not_fresh_at sa p) ==>
-  ?H th.
-    gas_path_ptr D 0 ctx fn PG G tn s 0 H th
+  ?HG th.
+    gas_path_ptr D 0 ctx fn PG G tn s 0 HG th
       (OK (t with vs_inst_idx := LENGTH sb.cs_current_insts)) /\
     t.vs_current_bb = sb.cs_current_bb /\
-    op_prov H out = NONE /\ op_taint th out = {} /\
-    ghost_inv d cenv cx es H th (t with vs_inst_idx := LENGTH sb.cs_current_insts) /\
-    ghost_kept cenv es0 s0a G0 tn0 s0 H th /\
+    op_prov HG out = NONE /\ op_taint th out = {} /\
+    ghost_inv H d cenv cx es HG th (t with vs_inst_idx := LENGTH sb.cs_current_insts) /\
+    ghost_kept cenv es0 s0a G0 tn0 s0 HG th /\
     (!p. not_fresh_at sa p ==> lookup_var p t = lookup_var p s /\
-      FLOOKUP H p = FLOOKUP G p /\ op_taint th (Var p) = op_taint tn (Var p))
+      FLOOKUP HG p = FLOOKUP G p /\ op_taint th (Var p) = op_taint tn (Var p))
 Proof
   disch_then (map_every assume_tac o CONJUNCTS) >>
   drule_all bytes_word_convert_parts >> strip_tac >>
@@ -172,7 +172,7 @@ Resume bytes_word_counted_success[loader]:
   `t.vs_current_bb = sb.cs_current_bb` by
     (qpat_x_assum `t with vs_inst_idx := _ = _` mp_tac >>
      disch_then (mp_tac o Q.AP_TERM `\v. v.vs_current_bb`) >> simp[]) >>
-  qexistsl_tac [`H`,`th`] >> gvs[]
+  qexistsl_tac [`HG`,`th`] >> gvs[]
 QED
 
 Finalise bytes_word_counted_success

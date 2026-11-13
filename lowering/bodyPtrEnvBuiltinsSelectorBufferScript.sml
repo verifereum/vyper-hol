@@ -33,16 +33,16 @@ QED
 
 Theorem ghost_inv_mstore_clean:
   !d fn cenv cx es G tn s a v tn'.
-    ghost_inv d cenv cx es G tn s /\ local_ptrs_rel fn cenv es.scopes s /\
+    ghost_inv H d cenv cx es G tn s /\ local_ptrs_rel fn cenv es.scopes s /\
     (!name b sz. local_region cenv es.scopes s name b sz ==>
        b + sz <= a \/ a + 32 <= b) /\
     tn'.t_var = tn.t_var /\ tn'.t_stor = tn.t_stor /\
     tn'.t_trans = tn.t_trans /\ tn'.t_imm = tn.t_imm /\
     tn'.t_mem = tn.t_mem DIFF {i | a <= i /\ i < a + 32} ==>
-    ghost_inv d cenv cx es G tn' (mstore a v s)
+    ghost_inv H d cenv cx es G tn' (mstore a v s)
 Proof
   rpt gen_tac >> strip_tac >>
-  qpat_x_assum `ghost_inv _ _ _ _ _ _ _` mp_tac >>
+  qpat_x_assum `ghost_inv _ _ _ _ _ _ _ _` mp_tac >>
   pure_rewrite_tac[ghost_inv_def] >> strip_tac >> conj_tac
   >- suspend "locals" >>
   conj_tac
@@ -172,12 +172,12 @@ QED
 
 Theorem mstore_step_ghost_inv:
   !d fn cenv cx es PG G tn s id dst value a w.
-    ghost_inv d cenv cx es G tn s /\ local_ptrs_rel fn cenv es.scopes s /\
+    ghost_inv H d cenv cx es G tn s /\ local_ptrs_rel fn cenv es.scopes s /\
     (!name b sz. local_region cenv es.scopes s name b sz ==>
       b+sz <= w2n a \/ w2n a+32 <= b) /\
     lookup_var dst s = SOME a /\ eval_operand value s = SOME w /\
     op_taint tn value = {} ==>
-    ghost_inv d cenv cx es
+    ghost_inv H d cenv cx es
       (step_prov PG G (mk_inst id MSTORE [Var dst; value] [])
         (mstore (w2n a) w s))
       (step_taint (mk_inst id MSTORE [Var dst; value] []) s

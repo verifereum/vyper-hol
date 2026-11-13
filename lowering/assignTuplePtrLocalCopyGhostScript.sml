@@ -24,7 +24,7 @@ Proof
 QED
 
 Theorem local_copy_ghost_update_ptr:
-  ghost_inv d cenv cx es G tn s /\
+  ghost_inv H d cenv cx es G tn s /\
   find_containing_scope id es.scopes = SOME (pre,sc,entry,rest) /\
   FLOOKUP cenv.ce_vars id = SOME (PtrVar (Var p) sz) /\
   lookup_var p s = SOME dw /\
@@ -44,8 +44,8 @@ Theorem local_copy_ghost_update_ptr:
     (i IN tn'.t_mem <=> i IN tn.t_mem)) /\
   local_ptrs_rel func cenv es.scopes s /\
   local_region cenv es.scopes s id (w2n dw) sz /\ n <= sz /\
-  stor_taint_ok cx tn' t ==>
-  ghost_inv d cenv cx
+  stor_taint_ok H cx tn' t ==>
+  ghost_inv H d cenv cx
     (es with scopes := pre ++
       (sc |+ (id,entry with <|value := v; popped := []|>)) :: rest) G' tn' t
 Proof
@@ -62,7 +62,7 @@ Proof
   >- (Cases_on `d` >> simp[return_buf_ptr_def] >>
       PairCases_on `x` >> fs[ghost_inv_def, return_buf_ptr_def] >>
       irule ptr_covers_lookup_frame >> goal_assum (drule_at Any) >> simp[]) >>
-  qpat_assum `ghost_inv _ _ _ _ _ _ _` (irule_at Any) >>
+  qpat_assum `ghost_inv _ _ _ _ _ _ _ _` (irule_at Any) >>
   qexistsl_tac [`{i | w2n dw <= i /\ i < w2n dw+n}`, `v`,
     `entry.type`, `src`, `n`, `id`, `w2n dw`] >>
   simp[] >> rpt conj_tac

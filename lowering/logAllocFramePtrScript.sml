@@ -8,7 +8,7 @@ Ancestors logDataAllocPtr loweringHalt logValueFramePtr logGhostFramePtr
   logTopicsRunPtr abiDecoderReentry
 
 Theorem alloca_step_old_ghost:
-  stmt_state_rel ctx func ce cx es s /\
+  stmt_state_rel H ctx func ce cx es s /\
   MEM (mk_inst id ALLOCA [Lit (n2w n)] [out]) (fn_insts func) /\
   n < dimword (:256) /\
   step_inst_base (mk_inst id ALLOCA [Lit (n2w n)] [out]) s = OK t ==>
@@ -32,7 +32,7 @@ Proof
 QED
 
 Theorem alloca_step_ptr_val_ok:
-  stmt_state_rel ctx func ce cx es s /\
+  stmt_state_rel H ctx func ce cx es s /\
   expr_val_at ce cx ty se sf es v op s /\
   (!tv. evaluate_type (get_tenv cx) ty = SOME tv ==> val_wf tv v) /\
   ptr_val_ok cx ty v op G tn s /\
@@ -63,7 +63,7 @@ Proof
 QED
 
 Theorem alloca_step_ptr_buf_ok:
-  stmt_state_rel ctx func ce cx es s /\ ptr_buf_ok ce e op G s /\
+  stmt_state_rel H ctx func ce cx es s /\ ptr_buf_ok ce e op G s /\
   (!x. op = Var x ==> x <> out) /\
   MEM (mk_inst id ALLOCA [Lit (n2w n)] [out]) (fn_insts func) /\
   n < dimword (:256) /\
@@ -82,7 +82,7 @@ Proof
 QED
 
 Theorem alloca_step_taint_below_frontier:
-  stmt_state_rel ctx func ce cx es s /\
+  stmt_state_rel H ctx func ce cx es s /\
   MEM (mk_inst id ALLOCA [Lit (n2w n)] [out]) (fn_insts func) /\
   n < dimword (:256) /\
   step_inst_base (mk_inst id ALLOCA [Lit (n2w n)] [out]) s = OK t ==>
@@ -101,7 +101,7 @@ Proof
 QED
 
 Theorem alloca_step_ghost_kept:
-  stmt_state_rel ctx func ce cx es s /\
+  stmt_state_rel H ctx func ce cx es s /\
   MEM (mk_inst id ALLOCA [Lit (n2w n)] [out]) (fn_insts func) /\
   n < dimword (:256) /\ ~not_fresh_at sa out /\
   step_inst_base (mk_inst id ALLOCA [Lit (n2w n)] [out]) s = OK t ==>
@@ -134,7 +134,7 @@ QED
 Finalise alloca_step_ghost_kept
 
 Theorem alloca_step_robust_below_frontier:
-  stmt_state_rel ctx func ce cx es s /\
+  stmt_state_rel H ctx func ce cx es s /\
   MEM (mk_inst id ALLOCA [Lit (n2w n)] [out]) (fn_insts func) /\
   n < dimword (:256) /\
   step_inst_base (mk_inst id ALLOCA [Lit (n2w n)] [out]) s = OK t /\
@@ -155,14 +155,14 @@ Proof
 QED
 
 Theorem alloca_step_ghost_inv:
-  stmt_state_rel ctx func ce cx es s /\ ghost_inv d ce cx es G tn s /\
+  stmt_state_rel H ctx func ce cx es s /\ ghost_inv H d ce cx es G tn s /\
   MEM (mk_inst id ALLOCA [Lit (n2w n)] [out]) (fn_insts func) /\
   n < dimword (:256) /\
   (!name p sz. FLOOKUP ce.ce_vars name = SOME (PtrVar (Var p) sz) ==> p <> out) /\
   (!p sz. ce.ce_return_buf = SOME (PtrVar (Var p) sz) ==> p <> out) /\
   (!p sz. ce.ce_return_pc = SOME (PtrVar (Var p) sz) ==> p <> out) /\
   step_inst_base (mk_inst id ALLOCA [Lit (n2w n)] [out]) s = OK t ==>
-  ghost_inv d ce cx es
+  ghost_inv H d ce cx es
     (step_prov PG G (mk_inst id ALLOCA [Lit (n2w n)] [out]) t)
     (step_taint (mk_inst id ALLOCA [Lit (n2w n)] [out]) s t tn) t
 Proof
@@ -228,11 +228,11 @@ QED
 Theorem log_buffer_ghost_frame:
   compile_alloc_buffer cap sa = (buf,sb) /\ fn_has_code sa sb func /\
   run_inst_seq (emitted_insts sa sb) s = OK t /\
-  stmt_state_rel ctx func ce cx es s /\ ghost_inv d ce cx es G tn s /\
+  stmt_state_rel H ctx func ce cx es s /\ ghost_inv H d ce cx es G tn s /\
   local_ptrs_reserved ce sa /\ cap < dimword (:256) /\
   (!p sz. ce.ce_return_buf = SOME (PtrVar (Var p) sz) ==> not_fresh_at sa p) /\
   (!p sz. ce.ce_return_pc = SOME (PtrVar (Var p) sz) ==> not_fresh_at sa p) ==>
-  ghost_inv d ce cx es
+  ghost_inv H d ce cx es
     (step_prov PG G (mk_inst sa.cs_next_id ALLOCA [Lit (n2w cap)]
       [STRING #"%" (toString sa.cs_next_var)]) t)
     (step_taint (mk_inst sa.cs_next_id ALLOCA [Lit (n2w cap)]
@@ -256,11 +256,11 @@ Theorem log_buffer_ghost_seq_ptr:
   compile_alloc_buffer cap sa = (buf,sb) /\ fn_has_code sa sb func /\
   run_inst_seq (emitted_insts sa sb) s = OK t /\
   inst_seq_ptr D 0 ctx func PG G tn (emitted_insts sa sb) s Gf tnf /\
-  stmt_state_rel ctx func ce cx es s /\ ghost_inv d ce cx es G tn s /\
+  stmt_state_rel H ctx func ce cx es s /\ ghost_inv H d ce cx es G tn s /\
   local_ptrs_reserved ce sa /\ cap < dimword (:256) /\
   (!p sz. ce.ce_return_buf = SOME (PtrVar (Var p) sz) ==> not_fresh_at sa p) /\
   (!p sz. ce.ce_return_pc = SOME (PtrVar (Var p) sz) ==> not_fresh_at sa p) ==>
-  ghost_inv d ce cx es Gf tnf (t with vs_inst_idx := k) /\
+  ghost_inv H d ce cx es Gf tnf (t with vs_inst_idx := k) /\
   ghost_kept ce es sa G tn s Gf tnf
 Proof
   strip_tac >> drule_all log_buffer_ghost_frame >>
@@ -280,7 +280,7 @@ Theorem log_buffer_old_values_seq_ptr:
   compile_alloc_buffer cap sa = (buf,sb) /\ fn_has_code sa sb func /\
   run_inst_seq (emitted_insts sa sb) s = OK t /\
   inst_seq_ptr D 0 ctx func PG G tn (emitted_insts sa sb) s Gf tnf /\
-  stmt_state_rel ctx func ce cx es s /\ cap < dimword (:256) /\
+  stmt_state_rel H ctx func ce cx es s /\ cap < dimword (:256) /\
   expr_val_at ce cx ty se sf es v op s /\
   (!tv. evaluate_type (get_tenv cx) ty = SOME tv ==> val_wf tv v) /\
   abi_decoder_operand_live sa.cs_next_var op /\
@@ -306,10 +306,10 @@ QED
 Theorem log_buffer_old_ghost_seq_ptr:
   compile_alloc_buffer cap sa = (buf,sb) /\ fn_has_code sa sb func /\
   run_inst_seq (emitted_insts sa sb) s = OK t /\
-  inst_seq_ptr D 0 ctx func PG G tn (emitted_insts sa sb) s H tm /\
-  stmt_state_rel ctx func ce cx es s /\ cap < dimword(:256) ==>
+  inst_seq_ptr D 0 ctx func PG G tn (emitted_insts sa sb) s HG tm /\
+  stmt_state_rel H ctx func ce cx es s /\ cap < dimword(:256) ==>
   !p. not_fresh_at sa p ==>
-    FLOOKUP H p = FLOOKUP G p /\ op_taint tm (Var p) = op_taint tn (Var p)
+    FLOOKUP HG p = FLOOKUP G p /\ op_taint tm (Var p) = op_taint tn (Var p)
 Proof
   strip_tac >> drule_all log_buffer_alloca_step >> strip_tac >>
   drule alloca_step_old_ghost >>

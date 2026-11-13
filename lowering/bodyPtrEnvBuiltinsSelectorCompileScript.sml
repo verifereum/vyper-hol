@@ -36,7 +36,7 @@ Theorem selector_compile_counted:
   emit_op ADD [buf.buf_operand; Lit 32w] sn = (data,sp) /\
   emit_void MSTORE [data; value] sp = ((),sb) /\
   (!x. value = Var x ==> not_fresh_at sa x) /\
-  stmt_state_rel ctx fn cenv cx es s /\ ghost_inv d cenv cx es G tn s /\
+  stmt_state_rel H ctx fn cenv cx es s /\ ghost_inv H d cenv cx es G tn s /\
   fn_inst_ids_distinct fn /\ ~ctx_has_dalloca ctx /\ local_ptrs_reserved cenv sa /\
   (!x sz. cenv.ce_return_buf = SOME (PtrVar (Var x) sz) ==> not_fresh_at sa x) /\
   (!x sz. cenv.ce_return_pc = SOME (PtrVar (Var x) sz) ==> not_fresh_at sa x) /\
@@ -47,7 +47,7 @@ Theorem selector_compile_counted:
   run_inst_seq (emitted_insts sa sb) s = OK t ==>
   ?G' tn'. gas_path_ptr D 0 ctx fn PG G tn s 0 G' tn'
     (OK (t with vs_inst_idx := LENGTH sb.cs_current_insts)) /\
-    ghost_inv d cenv cx es G' tn' t /\ ghost_kept cenv es sa G tn s G' tn' /\
+    ghost_inv H d cenv cx es G' tn' t /\ ghost_kept cenv es sa G tn s G' tn' /\
     ptr_val_ok cx (BaseT (BytesT (Dynamic 4))) (BytesV bs) buf.buf_operand G' tn' t /\
     ptr_buf_ok cenv (Builtin (BaseT (BytesT (Dynamic 4))) MethodId args) buf.buf_operand G' t
 Proof
