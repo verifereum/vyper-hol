@@ -2,10 +2,11 @@
 Theory ctorDeployMemoryRunPtrPrefixCompleteMemberSetup
 Ancestors
   loweringStateRelDefs
+  compileEnv
   ctorDeployMemoryRunPtrPrefixMemberShift ctorDeployMemoryRunPtrPrefixMemberSetup
   abiDecoderMemberSetup abiDecoderDynamicLoopSetup abiDecoderReentry
   abiDecoderContract abiDecoderVarSequence ctorAbiActualAlloc ctorAbiActualObservations
-  compileEnv exprLoweringProps venomState venomInst venomExecSemantics
+  exprLoweringProps venomState venomInst venomExecSemantics
   ptrDiscipline ptrSafeRun words list arithmetic
   abiDecoderMemberBody abiDecoderCoherence abiDecoderTypedContract abiEncoder abiDecoderDynamic
   abiDecoderOffset
@@ -78,7 +79,7 @@ Proof
     abi_decode_load DLOAD (n2w (0 + (sb + ao)) : bytes32) s = n2w payload_off /\
     sb + payload_off < dimword (:256)` by
     (asm_rewrite_tac[eval_operand_def, ADD]) >>
-  drule_all abi_decode_member_setup_reentry >> strip_tac >>
+  drule_all prefix_member_setup_zero_base_reentry >> strip_tac >>
   drule_all prefix_member_setup_pair_shift >>
   disch_then (qspecl_then [`PG`,`D`] mp_tac) >>
   simp[LET_THM] >> strip_tac >>

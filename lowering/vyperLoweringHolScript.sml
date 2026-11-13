@@ -10,7 +10,7 @@ Ancestors
   entryStateRel entryLocals ctorEntryLocals ctorSourceInputs
   loweringSlice
   memSafeRun instMemFrontier fragExecMem allocaFootprint
-  fragGasOrigin
+  fragGasOrigin fragGasOriginPtrSafeUpto
   varsExt exprSimNameWord exprSimLiteralWord exprSimEnv
   exprBopLowering
   exprSimOps exprSimOperands exprSimCompare exprSimArith intBits freshWrites
@@ -30,7 +30,7 @@ Ancestors
   selectorCompilerProps checkedSelectorTableProps
   immutableStagingBridge
   immutableCodeLayout
-  e2eDeployFrame
+  e2eDeployFrame ctorDeployLoweringEntry
   deployFrameReplay asmDataSuffixProps deployEntryLayout deployUnitProducers
   immutableLocationProps
   loweringShapeDefs
@@ -44,12 +44,6 @@ Ancestors
   vyperLoweringCorrect
   rawReturnHalt rawReturnValue rawReturnHeader rawReturnMem rawReturnCorrect
   loweringMemCorrect
-  (* S3 pointer leaves kept in the build until their owner rules on them *)
-  bodyStmtsSimPtr extEntryReachesBodyPtr extEntryValueRevertPtr
-  extFrameRetOkPtr
-  (* S3 memory-run leaves loweringMemCorrect no longer imports, kept in the
-     build like the pointer leaves above *)
-  loweringMemEntryRevert loweringMemBodyRun
   asmSymBridge
   asmDataEnv
   asmOptFinalizerCorrect

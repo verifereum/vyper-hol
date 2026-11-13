@@ -93,7 +93,13 @@ Resume compile_abi_encode_word_vv_sim[compose]:
   simp[] >> conj_tac
   >- (rpt gen_tac >> Cases_on `exc` >> Cases_on `r` >> simp[expr_exit_def] >>
       rename1 `Error err` >> Cases_on `err` >> simp[expr_exit_def]) >>
-  rpt strip_tac >> suspend "success"
+  conj_tac >- simp[vyperStorageTraceTheory.storage_trace_frame_def] >>
+  rpt gen_tac >> disch_then (MAP_EVERY assume_tac o CONJUNCTS) >>
+  qpat_x_assum `?H. valid_horizon _ _ _ _` (qx_choose_then `H0` assume_tac) >>
+  qpat_assum `!H. _ ==> expr_post _ _ _ _ _ _ _ _ _ _ _ _ _ _`
+    (qspec_then `H0` mp_tac) >>
+  impl_tac >- first_assum ACCEPT_TAC >> disch_tac >>
+  suspend "success"
 QED
 
 Resume compile_abi_encode_word_vv_sim[success]:
@@ -112,14 +118,16 @@ Resume compile_abi_encode_word_vv_sim[success]:
   `?actual. gas_marked_path F ctx func t 0 (OK actual) /\
     ~actual.vs_halted /\ actual.vs_current_bb = final.cs_current_bb /\
     actual.vs_inst_idx = LENGTH final.cs_current_insts /\
-    vv_post ctx func ce cx (TypeBuiltin ann (AbiEncode F mid) ty [e])
+    actual.vs_accounts = t.vs_accounts /\ actual.vs_transient = t.vs_transient /\
+    actual.vs_requests = t.vs_requests /\ actual.vs_call_ctx = t.vs_call_ctx /\
+    vv_post H0 ctx func ce cx (TypeBuiltin ann (AbiEncode F mid) ty [e])
       es sa final s0 ee (Value (BytesV (abi_encode_method_id_bytes mid ++
         enc (vyper_to_abi_type (get_tenv cx) (expr_type e)) av)))
       (LocatedValue (expr_type (TypeBuiltin ann (AbiEncode F mid) ty [e]))
         <|ptr_operand := out; ptr_location := LocMemory|>) actual` by
     (irule abi_encode_word_counted_success >>
      simp[] >> conj_tac >- (qexists `env` >> simp[]) >>
-     goal_assum (drule_at (Pat `expr_post _ _ _ _ _ _ _ _ _ _ _ _ _`)) >>
+     goal_assum (drule_at (Pat `expr_post _ _ _ _ _ _ _ _ _ _ _ _ _ _`)) >>
      gvs[]) >>
   `ee with gas_obs := [] = ee` by
     simp[vyperStateTheory.evaluation_state_component_equality] >>
@@ -128,7 +136,18 @@ Resume compile_abi_encode_word_vv_sim[success]:
     enc (vyper_to_abi_type (get_tenv cx) (expr_type e)) av)))`,
     `ee`, `OK actual`] >>
   simp[gasSummaryTheory.gas_marked_exec_def] >>
-  qpat_x_assum `vv_post _ _ _ _ _ _ _ _ _ _ _ _ _` mp_tac >>
+  disj1_tac >> gen_tac >> strip_tac >>
+  qpat_x_assum `!H. _ ==> expr_post _ _ _ _ _ _ _ _ _ _ _ _ _ _`
+    (qspec_then `H` mp_tac) >>
+  impl_tac >- first_assum ACCEPT_TAC >>
+  disch_then (MAP_EVERY assume_tac o CONJUNCTS o REWRITE_RULE [expr_post_def]) >>
+  irule abi_encode_vv_post_fields_transport >>
+  rpt conj_tac
+  >- simp[contextTheory.mk_ptr_def]
+  >- first_assum ACCEPT_TAC
+  >- (qexists `t` >> rpt conj_tac >> first_assum ACCEPT_TAC) >>
+  qexists `H0` >>
+  qpat_x_assum `vv_post H0 _ _ _ _ _ _ _ _ _ _ _ _ _` mp_tac >>
   simp[expr_type_def] >>
   mp_tac (GEN_ALL (Q.INST
     [`p` |-> `<|ptr_operand := out; ptr_location := LocMemory|>`,

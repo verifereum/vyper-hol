@@ -50,7 +50,7 @@ Proof
 QED
 
 
-Theorem slot_copy_step_add[local]:
+Theorem slot_copy_step_add:
   eval_operand a s = SOME x /\ eval_operand b s = SOME y ==>
   step_inst_base (mk_inst id ADD [a;b] [out]) s =
     OK (update_var out (x+y) s)
@@ -58,7 +58,7 @@ Proof
   simp[step_inst_base_opcode_eqs, mk_inst_def, exec_pure2_def]
 QED
 
-Theorem slot_copy_step_mul[local]:
+Theorem slot_copy_step_mul:
   eval_operand a s = SOME x /\ eval_operand b s = SOME y ==>
   step_inst_base (mk_inst id MUL [a;b] [out]) s =
     OK (update_var out (x*y) s)
@@ -75,14 +75,14 @@ Proof
     slot_copy_word_def]
 QED
 
-Theorem slot_copy_step_store[local]:
+Theorem slot_copy_step_store:
   eval_operand a s = SOME x /\ eval_operand b s = SOME y ==>
   step_inst_base (mk_inst id MSTORE [a;b] []) s = OK (mstore (w2n x) y s)
 Proof
   simp[step_inst_base_opcode_eqs, mk_inst_def, exec_write2_def]
 QED
 
-Theorem slot_copy_step_assign[local]:
+Theorem slot_copy_step_assign:
   eval_operand a s = SOME x ==>
   step_inst_base (mk_inst id ASSIGN [a] [out]) s = OK (update_var out x s)
 Proof

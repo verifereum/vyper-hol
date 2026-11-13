@@ -9,8 +9,10 @@
 Theory bodyFullCases
 Ancestors
   bodyFullAssign bodyFullAssignTuple bodyFullAugAssign bodyFullAnnAssign
-  bodyFullAppend annAssignPtrFacts
-  bodyFullPreds bodyFullRawRevert bodyFullCtrlCases gasShadowCompile bodySimFull stmtSimZero stmtSimPass gasShadow bodySim
+  bodyFullAppend annAssignPtrFacts bodyFullIfExp
+  bodyFullStmtsCons bodyFullFor bodyFullLog bodyFullRaiseReason
+  bodyFullAssertReason bodyFullPreds bodyFullRawRevert bodyFullCtrlCases
+  gasShadowCompile bodySimFull stmtSimZero stmtSimPass gasShadow bodySim
   exprSimHyps bodySimStmtCases bodyExprPreFacts supportedStmts
   supportedExprs supportedStmtTraverse supportedExprTraverse
   msgGasFull exprSimHypsDefs gasContext vyperTypeSystem vyperContext vyperTypeCallGraph
@@ -361,7 +363,7 @@ Proof
   ACCEPT_TAC bodyFullCtrlCasesTheory.continue_stmt_full_ok
 QED
 
-(* Admitted: the joint twin of body_create_case_ptr_at (bodyPtrCallCases). *)
+(* Vacuous: expr_body_pre excludes create (expr_evm_run_root). *)
 Theorem body_create_case_full:
   !cx ty kind has_salt rof v26 es v27.
     (!raw_args s'' prefix t s'3' code_size t'.
@@ -390,7 +392,10 @@ Theorem body_create_case_full:
     (kind = RawCreate ==> body_exprs_full_ok cx (TAKE 2 es)) ==>
     body_expr_full_ok cx (Call ty (CreateTarget kind has_salt rof v26) es v27)
 Proof
-  cheat
+  rw[body_expr_full_ok_def] >>
+  gvs[exprSimHypsDefsTheory.expr_body_pre_def,
+      supportedExprTraverseTheory.expr_has_evm_run_thm,
+      supportedExprTraverseTheory.expr_evm_run_root_def]
 QED
 
 (* The joint twin of body_expr_stmt_case_ptr_at (bodyPtrCtrlCases): bodyFullCtrlCases. *)
@@ -453,7 +458,7 @@ Proof
   ACCEPT_TAC bodyFullCtrlCasesTheory.if_stmt_full_ok
 QED
 
-(* Admitted: the joint twin of body_ifexp_case_ptr_at (bodyPtrExprCases). *)
+(* The joint twin of body_ifexp_case_ptr_at (bodyPtrExprCases): bodyFullIfExp. *)
 Theorem body_ifexp_case_full:
   !cx v5 e1 e2 e3.
     (!s'' tv t. eval_expr cx e1 s'' = (INL tv,t) ==> body_expr_full_ok cx e2) /\
@@ -461,7 +466,7 @@ Theorem body_ifexp_case_full:
     body_expr_full_ok cx e1 ==>
     body_expr_full_ok cx (IfExp v5 e1 e2 e3)
 Proof
-  cheat
+  ACCEPT_TAC bodyFullIfExpTheory.ifexp_expr_full_ok
 QED
 
 (* Admitted: the joint twin of body_intcall_case_ptr_at (bodyPtrIntCallCase). *)

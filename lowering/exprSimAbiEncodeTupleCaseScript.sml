@@ -10,6 +10,7 @@ Ancestors
   vyperAST vyperInterpreter vyperState vyperContext list
   vyperEvalExprPreservesScopesDom exprSimAbiEncodeRuntimeInputs
   pair vyperTypeSystem vyperTypeDefaults
+  vyperStorageTrace vyperStorageFootprint gasStorage
 
 Theorem expr_size_member[local]:
   !es e. MEM e es ==> expr_size e < list_size expr_size es
@@ -137,15 +138,18 @@ Resume compile_abi_encode_tuple_vv_case[compose]:
        type_builtin_args_length_ok_def] >> Cases_on `args` >> gvs[]) >>
   `!gs vs ee initial.
     eval_exprs cx args (es with gas_obs := gs) = (INL vs,ee) /\ ee.gas_obs = [] /\
-    abi_args_post ctx func ce cx es sa st s0 ee args ops vs initial /\
+    valid_horizon cx st0 (storage_trace_horizon ee.storage_trace) ee.storage_trace /\
+    (!H. valid_horizon cx st0 H ee.storage_trace ==>
+       abi_args_post H ctx func ce cx es sa st s0 ee args ops vs initial) /\
     (~EXISTS expr_has_effect args ==> pure_frame ce func es sa s0 initial) /\
     EVERY (abi_decoder_operand_live st.cs_next_var) ops /\ ~initial.vs_halted /\
     initial.vs_current_bb = st.cs_current_bb /\ initial.vs_inst_idx = LENGTH st.cs_current_insts ==>
     ?marks. gas_summary_at F (ctx,func) marks
       (\ee. ((case evaluate_type_builtin cx (AbiEncode ensure mid) target (MAP expr_type args) vs of
         INL w => INL (Value w) | INR err => INR (Error err)),ee)) (ee,initial)
-      (\res ee t. ?tv. res = INL tv /\
-        vv_post ctx func ce cx (TypeBuiltin ann (AbiEncode ensure mid) target args)
+      (\res ee t. !H. valid_horizon cx st0 H ee.storage_trace ==>
+        ?tv. res = INL tv /\
+        vv_post H ctx func ce cx (TypeBuiltin ann (AbiEncode ensure mid) target args)
           es sa final s0 ee tv (LocatedValue ann (mk_ptr out LocMemory)) t /\
         t.vs_current_bb = final.cs_current_bb /\ t.vs_inst_idx = LENGTH final.cs_current_insts)
       (\res ee r. expr_exit res r)` by (rpt strip_tac >> suspend "success") >>
@@ -155,41 +159,66 @@ QED
 
 Resume compile_abi_encode_tuple_vv_case[outcome]:
   asm_simp_tac (srw_ss()) [eval_expr_abi_encode_tuple_action] >>
-  rewrite_tac[gas_outcome_def] >> strip_tac
+  rewrite_tac[gas_outcome_def] >> BETA_TAC >> strip_tac
+  >- (qexists `marks` >> disj1_tac >>
+      irule gas_bad_storage_at_bind_left >>
+      simp[vyperStorageTraceTheory.storage_trace_frame_def])
   >- (qpat_x_assum `gas_summary_at _ _ _ _ _ _ _`
-        (strip_assume_tac o REWRITE_RULE [gas_summary_at_def]) >>
-      gvs[]
-      >- (`eval_exprs cx args (es with gas_obs := gas_explicit marks s0.vs_gas_readings) =
-              (INL vs, es_end with gas_obs := [])` by
-            (qpat_x_assum `gas_marked_exec _ _ _ _ _ _ _ _`
-               (mp_tac o REWRITE_RULE [gas_marked_exec_def]) >>
-             strip_tac >> first_x_assum (qspec_then `[]` mp_tac) >> simp[]) >>
-          `~t.vs_halted` by
-            metis_tac[gas_marked_exec_def, gas_marked_path_exec, gas_path_normal] >>
-          qpat_x_assum `!gs vs ee initial. _`
-            (qspecl_then [`gas_explicit marks s0.vs_gas_readings`, `vs`,
-                          `es_end with gas_obs := []`, `t`] mp_tac) >>
-          (impl_tac >- simp[]) >> strip_tac >>
-          rename1 `gas_summary_at F _ right _ _ _ _` >>
-          qexists `marks ++ right` >> disj1_tac >>
-          qpat_x_assum `gas_summary_at F _ right _ _ _ _`
-            (mp_tac o REWRITE_RULE [gas_summary_at_def]) >>
-          disch_then (qx_choosel_then [`fres`, `fin`, `fr`]
-            (CONJUNCTS_THEN2 assume_tac assume_tac)) >>
-          rewrite_tac[gas_summary_at_def] >>
-          qexistsl [`fres`, `fin`, `fr`] >>
-          conj_tac >- (irule gas_marked_exec_bind_normal >>
-            goal_assum (drule_at (Pat `gas_marked_exec _ _ (eval_exprs _ _) _ _ _ _ _`)) >> simp[]) >>
-          asm_rewrite_tac[]) >>
-      Cases_on `res` >> gvs[wb_args_exit_def] >>
-      rename1 `expr_exit (INR exc) r` >>
-      qexists `marks` >> disj1_tac >> rewrite_tac[gas_summary_at_def] >>
-      qexistsl [`INR exc`, `es_end`, `r`] >>
-      conj_tac >- (irule gas_marked_exec_bind_exception >> simp[]) >>
-      Cases_on `exc` >> Cases_on `r` >> gvs[wb_args_exit_def, expr_exit_def] >>
-      rename1 `Error err` >> Cases_on `err` >> gvs[expr_exit_def]) >>
-  qexists `marks` >> disj2_tac >>
+        (strip_assume_tac o SIMP_RULE (srw_ss()) [gas_summary_at_def]) >>
+      (reverse (Cases_on `storage_trace_domain cx st0 es_end.storage_trace`)
+       >- (qexists `marks` >> disj1_tac >>
+           irule gas_bad_storage_at_bind_left >>
+           simp[vyperStorageTraceTheory.storage_trace_frame_def] >>
+           irule gas_bad_storage_at_counted_prefix >> metis_tac[])) >>
+      `valid_horizon cx st0 (storage_trace_horizon es_end.storage_trace)
+         es_end.storage_trace` by fs[storage_trace_domain_def]
+      >- suspend "normal"
+      >> suspend "exit") >>
+  qexists `marks` >> disj2_tac >> disj2_tac >>
   metis_tac[gas_exempt_cert_error_values, ignore_bind_def, vyperStateTheory.bind_assoc]
+QED
+
+Resume compile_abi_encode_tuple_vv_case[normal]:
+  qpat_assum `!H. valid_horizon _ _ H es_end.storage_trace ==> ?vs. _`
+    (drule_then (qx_choose_then `vs` strip_assume_tac)) >>
+  qpat_x_assum `res = INL vs` SUBST_ALL_TAC >>
+  qpat_x_assum `r = OK t` SUBST_ALL_TAC >>
+  qpat_x_assum `!H. valid_horizon _ _ H es_end.storage_trace ==> ?vs. _`
+    (assume_tac o SIMP_RULE (srw_ss()) []) >>
+  `eval_exprs cx args (es with gas_obs := gas_explicit marks s0.vs_gas_readings) =
+      (INL vs, es_end with gas_obs := [])` by
+    (qpat_x_assum `gas_marked_exec _ _ _ _ _ _ _ _`
+       (mp_tac o REWRITE_RULE [gas_marked_exec_def]) >>
+     strip_tac >> first_x_assum (qspec_then `[]` mp_tac) >> simp[]) >>
+  `~t.vs_halted` by
+    metis_tac[gas_marked_exec_def, gas_marked_path_exec, gas_path_normal] >>
+  qpat_x_assum `!gs vs ee initial. _`
+    (qspecl_then [`gas_explicit marks s0.vs_gas_readings`, `vs`,
+                  `es_end with gas_obs := []`, `t`] mp_tac) >>
+  (impl_tac >- (simp[] >> metis_tac[])) >> strip_tac >>
+  rename1 `gas_summary_at F _ right _ _ _ _` >>
+  qexists `marks ++ right` >> disj2_tac >> disj1_tac >>
+  qpat_x_assum `gas_summary_at F _ right _ _ _ _`
+    (mp_tac o REWRITE_RULE [gas_summary_at_def]) >>
+  disch_then (qx_choosel_then [`fres`, `fin`, `fr`]
+    (CONJUNCTS_THEN2 assume_tac mp_tac)) >>
+  rewrite_tac[gas_summary_at_def] >> BETA_TAC >> disch_tac >>
+  qexistsl [`fres`, `fin`, `fr`] >>
+  (conj_tac >- (irule gas_marked_exec_bind_normal >>
+    goal_assum (drule_at (Pat `gas_marked_exec _ _ (eval_exprs _ _) _ _ _ _ _`)) >>
+    BETA_TAC >> first_assum ACCEPT_TAC)) >>
+  metis_tac[]
+QED
+
+Resume compile_abi_encode_tuple_vv_case[exit]:
+  `wb_args_exit res r` by metis_tac[] >>
+  Cases_on `res` >> gvs[wb_args_exit_def] >>
+  rename1 `gas_marked_exec _ _ _ _ _ (INR exc) _ _` >>
+  qexists `marks` >> disj2_tac >> disj1_tac >> rewrite_tac[gas_summary_at_def] >>
+  qexistsl [`INR exc`, `es_end`, `r`] >>
+  conj_tac >- (irule gas_marked_exec_bind_exception >> simp[]) >>
+  Cases_on `exc` >> Cases_on `r` >> gvs[wb_args_exit_def, expr_exit_def] >>
+  rename1 `Error err` >> Cases_on `err` >> gvs[expr_exit_def]
 QED
 
 Resume compile_abi_encode_tuple_vv_case[success]:
@@ -217,8 +246,10 @@ Resume compile_abi_encode_tuple_vv_case[success]:
      Cases_on `args` >- (Cases_on `ensure` >> gvs[]) >>
      Cases_on `t` >> gvs[]) >>
   drule eval_exprs_preserves_scopes_dom >> simp[] >> strip_tac >>
-  `abi_args_post ctx func ce cx (es with gas_obs := gs) sa st s0 ee args ops vs initial` by
-    (qpat_assum `abi_args_post _ _ _ _ es _ _ _ _ _ _ _ _` mp_tac >>
+  qpat_assum `!H. _ ==> abi_args_post _ _ _ _ _ _ _ _ _ _ _ _ _ _` drule >> strip_tac >>
+  `abi_args_post (storage_trace_horizon ee.storage_trace) ctx func ce cx
+     (es with gas_obs := gs) sa st s0 ee args ops vs initial` by
+    (qpat_assum `abi_args_post _ _ _ _ _ es _ _ _ _ _ _ _ _` mp_tac >>
      POP_ASSUM_LIST (K all_tac) >>
      simp[abi_args_post_def, loweringPostsTheory.wb_frame_def, loweringPostsTheory.locals_kept_def,
        loweringPostsTheory.popped_kept_def] >>
@@ -226,15 +257,34 @@ Resume compile_abi_encode_tuple_vv_case[success]:
   `?actual. gas_marked_path F ctx func initial 0 (OK actual) /\
     ~actual.vs_halted /\ actual.vs_current_bb = final.cs_current_bb /\
     actual.vs_inst_idx = LENGTH final.cs_current_insts /\
-    vv_post ctx func ce cx (TypeBuiltin ann (AbiEncode ensure mid) target args)
+    actual.vs_accounts = initial.vs_accounts /\
+    actual.vs_transient = initial.vs_transient /\
+    actual.vs_requests = initial.vs_requests /\
+    actual.vs_call_ctx = initial.vs_call_ctx /\
+    vv_post (storage_trace_horizon ee.storage_trace) ctx func ce cx
+      (TypeBuiltin ann (AbiEncode ensure mid) target args)
       (es with gas_obs := gs) sa final s0 ee
       (Value (BytesV (abi_encode_method_id_bytes mid ++
         enc (vyper_to_abi_type (get_tenv cx) target) (ListV avs))))
       (LocatedValue ann <|ptr_operand := out; ptr_location := LocMemory|>) actual` by
     (gvs[] >> irule (SRULE [expr_type_def] abi_encode_tuple_counted_success_fresh_free) >>
      simp[expr_type_def] >> conj_tac >- (qexists `env` >> simp[]) >>
-     goal_assum (drule_at (Pat `abi_args_post _ _ _ _ (es with gas_obs := gs) _ _ _ _ _ _ _ _`)) >>
+     goal_assum (drule_at (Pat `abi_args_post _ _ _ _ _ (es with gas_obs := gs) _ _ _ _ _ _ _ _`)) >>
      qexistsl [`allocated`, `buf`, `staged`] >> simp[]) >>
+  `!H. valid_horizon cx st0 H ee.storage_trace ==>
+     vv_post H ctx func ce cx (TypeBuiltin ann (AbiEncode ensure mid) target args)
+       (es with gas_obs := gs) sa final s0 ee
+       (Value (BytesV (abi_encode_method_id_bytes mid ++
+         enc (vyper_to_abi_type (get_tenv cx) target) (ListV avs))))
+       (LocatedValue ann <|ptr_operand := out; ptr_location := LocMemory|>) actual` by
+    (rpt strip_tac >>
+     qpat_x_assum `!H. _ ==> abi_args_post _ _ _ _ _ _ _ _ _ _ _ _ _ _` drule >>
+     rewrite_tac[abi_args_post_def] >> strip_tac >>
+     irule exprSimAbiEncodeNonwordCaseTheory.abi_encode_vv_post_fields_transport >>
+     rpt conj_tac >>
+     FIRST [simp[] >> NO_TAC,
+            qexists `initial` >> fs[] >> NO_TAC,
+            first_assum (irule_at Any) >> NO_TAC]) >>
   `ee with gas_obs := [] = ee` by
     simp[vyperStateTheory.evaluation_state_component_equality] >>
   qexists `[]` >> simp[gas_summary_at_def] >>
@@ -246,8 +296,8 @@ Resume compile_abi_encode_tuple_vv_case[success]:
      `q` |-> `mk_ptr out LocMemory`] abi_encode_vv_post_pointer_cong)) >>
   simp[contextTheory.mk_ptr_def] >>
   disch_then (fn th => rewrite_tac[GSYM th]) >>
-  gvs[] >>
-  qpat_x_assum `vv_post _ _ _ _ _ _ _ _ _ _ _ _ _` mp_tac >>
+  gvs[] >> rpt strip_tac >>
+  qpat_x_assum `!H. valid_horizon _ _ H _ ==> vv_post _ _ _ _ _ _ _ _ _ _ _ _ _ _` drule >>
   POP_ASSUM_LIST (K all_tac) >>
   simp[loweringPostsTheory.vv_post_def, loweringPostsTheory.locals_kept_def,
     loweringPostsTheory.popped_kept_def, contextTheory.mk_ptr_def] >> rpt strip_tac >> metis_tac[]
