@@ -23,7 +23,7 @@ Ancestors
   memoryLocalRhsProps exprSimSource exprSimHypsDefs
   vyperTypeExprSoundness vyperTyping vyperTypeInvariants exprLoweringProps
   allocLimits stmtSimDefs valueEncoding externalNormalizePremises
-  bodyPtrStructLitLayoutTransfer vyperTypeArgFits
+  bodyPtrStructLitLayoutTransfer vyperTypeArgFits loweringPosts
 
 val _ = Parse.hide "body";
 
