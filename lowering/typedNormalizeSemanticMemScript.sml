@@ -4,18 +4,8 @@ Ancestors
   typedNormalizeLoop typedMemoryCopy valueEncodingProps valueEncodingTyping
   exprLowering compileEnv venomState venomExecSemantics memContinuation
   arithmetic words list vyperTyping valueEncoding exprSimDefs exprSimProps loweringPosts valueEncodingProofs
-  typedNormalizeDynarrayLoop
+  typedNormalizeDynarrayLoop typedNormalizeDynamicLoopPathMem
 
-Theorem normalize_indexed_value_local:
-  val_wf tv v /\
-  mem_bytes_at a (type_memory_size tv) m =
-    mem_bytes_at a (type_memory_size tv) m' ==>
-  (val_in_memory tv v a m <=> val_in_memory tv v a m')
-Proof
-  strip_tac >> eq_tac >> strip_tac >>
-  irule val_in_memory_mem_agree >> goal_assum (drule_at Any) >>
-  qexists_tac `type_memory_size tv` >> simp[] >> metis_tac[]
-QED
 
 Theorem normalize_sarray_indexed_cont[local]:
   ~(type_memory_bytes ce dt = type_memory_bytes ce st /\
@@ -306,92 +296,7 @@ Theorem normalize_dynarray_semantic_cont:
     (!x. not_fresh_at sa x ==> lookup_var x t = lookup_var x s)
 Proof
   disch_then (map_every assume_tac o CONJUNCTS) >>
-  qpat_x_assum `!cv sp dp sc ec u sw dw. _` mp_tac >>
-  qmatch_goalsub_abbrev_tac `Child ==> _` >> disch_tac >>
-  rename1 `val_wf (ArrayTV stv (Dynamic scap)) (ArrayV (DynArrayV vals))` >>
-  `!i. i < LENGTH vals ==> val_wf stv (EL i vals) /\ val_wf dtv (EL i vals) /\
-    value_has_type stv (EL i vals) /\ value_has_type dtv (EL i vals)` by
-    (gvs[typed_copy_dynarray_wf,value_has_type_def,all_have_type_EVERY,EVERY_EL]) >>
-  `LENGTH vals <= scap /\ LENGTH vals <= cap` by
-    gvs[typed_copy_dynarray_wf] >>
-  `a+32+type_memory_size stv*LENGTH vals <= a+type_memory_size stv*scap+32 /\
-   b+32+type_memory_size dtv*LENGTH vals <= b+type_memory_size dtv*cap+32` by
-    (simp[] >> conj_tac >> simp[LE_MULT_LCANCEL]) >>
-  `a+32+type_memory_size stv*LENGTH vals <= s.vs_alloca_next /\
-   b+32+type_memory_size dtv*LENGTH vals <= s.vs_alloca_next /\
-   a+32+type_memory_size stv*LENGTH vals < dimword(:256) /\
-   b+32+type_memory_size dtv*LENGTH vals < dimword(:256)` by
-    (qpat_x_assum `Abbrev (Child = _)` kall_tac >>
-     qpat_x_assum `Child` kall_tac >>
-     rule_assum_tac (PURE_REWRITE_RULE [type_memory_size_def]) >>
-     qpat_x_assum `a+32+_ <= a+_+32` (mp_tac o ONCE_REWRITE_RULE [MULT_COMM]) >>
-     qpat_x_assum `b+32+_ <= b+_+32` (mp_tac o ONCE_REWRITE_RULE [MULT_COMM]) >>
-     rpt strip_tac >> once_rewrite_tac[MULT_COMM] >>
-     decide_tac) >>
-  mp_tac (Q.INST [`Src` |-> `\j p m. val_in_memory stv (EL j vals) p m`,
-    `D` |-> `\j p m. val_in_memory dtv (EL j vals) p m`,
-    `n` |-> `LENGTH (vals: value list)`, `p` |-> `n2w a`, `d` |-> `n2w b`]
-    typed_dynarray_compiler_cont) >>
-  (impl_tac >-
-    (`a < dimword(:256) /\ b < dimword(:256)` by decide_tac >> simp[] >>
-     (reverse (rpt CONJ_TAC) >- suspend "dyn_child") >>
-     qpat_x_assum `Abbrev (Child = _)` kall_tac >>
-     qpat_x_assum `Child` kall_tac >>
-     gvs[type_memory_size_def,typed_copy_dynarray_representation,
-       mem_word_at_eq_mload,MULT_COMM,ADD_COMM]
-     >- (rpt gen_tac >> strip_tac >> irule normalize_indexed_value_local >> metis_tac[])
-     >- (rpt gen_tac >> strip_tac >> irule normalize_indexed_value_local >> metis_tac[])
-     >- (rpt gen_tac >> strip_tac >> irule normalize_indexed_value_local >> metis_tac[])
-     >- (rpt gen_tac >> strip_tac >> irule normalize_indexed_value_local >> metis_tac[]) >>
-     (`LENGTH vals * type_memory_size stv <= scap * type_memory_size stv /\
-       LENGTH vals * type_memory_size dtv <= cap * type_memory_size dtv` by
-        (conj_tac >> simp[LE_MULT_RCANCEL]) >>
-      rpt (qpat_x_assum `_ <= _` mp_tac) >> decide_tac))) >>
-  strip_tac >> qexists_tac `t` >>
-  qpat_x_assum `Abbrev (Child = _)` kall_tac >>
-  qpat_x_assum `Child` kall_tac >>
-  simp[] >> suspend "dyn_finish"
+  drule_all (normalize_dynarray_semantic_counted |> SPEC_ALL |>
+    Q.INST [`counted` |-> `F`] |>
+    PURE_REWRITE_RULE [IMP_CLAUSES, AND_CLAUSES]) >> simp[]
 QED
-Resume normalize_dynarray_semantic_cont[dyn_child]:
-  rpt gen_tac >> strip_tac >> rpt gen_tac >> strip_tac >>
-  rename1 `j < LENGTH vals` >>
-  `a+32+j*type_memory_size stv+type_memory_size stv <=
-      a+32+LENGTH vals*type_memory_size stv /\
-   b+32+j*type_memory_size dtv+type_memory_size dtv <=
-      b+32+LENGTH vals*type_memory_size dtv` by
-    metis_tac[typed_copy_array_subinterval] >>
-  `a+32+type_memory_size stv*j < dimword(:256) /\
-   b+32+type_memory_size dtv*j < dimword(:256)` by
-    (fs[Once MULT_COMM] >> decide_tac) >>
-  `(!x. Var ("%" ++ toString (sa.cs_next_var+10)) = Var x \/
-          Var ("%" ++ toString (sa.cs_next_var+11)) = Var x ==>
-      not_fresh_at sc x)` by (simp[] >> metis_tac[]) >>
-  qpat_x_assum `Child` mp_tac >> simp[Abbr `Child`] >>
-  disch_then (drule_at (Pat `compile_store_memory_typed _ _ _ _ _ _ = _`)) >>
-  disch_then (drule_at (Pat `eval_operand _ _ = SOME _`)) >>
-  disch_then (drule_at (Pat `eval_operand _ _ = SOME _`)) >>
-  disch_then (qspec_then `EL j vals` mp_tac) >> simp[] >>
-  (impl_tac >-
-    (conj_tac >- (rpt strip_tac >> gvs[]) >>
-     rule_assum_tac (PURE_REWRITE_RULE [type_memory_size_def]) >>
-     qpat_x_assum `a+32+_ <= a+_+32` (mp_tac o ONCE_REWRITE_RULE [MULT_COMM]) >>
-     qpat_x_assum `b+32+_ <= b+_+32` (mp_tac o ONCE_REWRITE_RULE [MULT_COMM]) >>
-     rpt strip_tac >> decide_tac)) >>
-  strip_tac >> qexists_tac `v` >> simp[] >> first_assum ACCEPT_TAC
-QED
-Resume normalize_dynarray_semantic_cont[dyn_finish]:
-  conj_tac
-  >- (simp[typed_copy_dynarray_representation,mem_word_at_eq_mload] >>
-      gvs[MULT_COMM,ADD_COMM]) >>
-  conj_tac
-  >- (rpt gen_tac >> strip_tac >>
-      first_x_assum irule >>
-      `LENGTH vals * type_memory_size dtv <= cap * type_memory_size dtv` by
-        simp[LE_MULT_RCANCEL] >>
-      qpat_assum `type_memory_bytes ce dt = _` (fn th => pure_rewrite_tac[th]) >>
-      pure_rewrite_tac[type_memory_size_def] >>
-      rule_assum_tac (PURE_REWRITE_RULE [type_memory_size_def]) >>
-      once_rewrite_tac[MULT_COMM] >>
-      rpt (qpat_x_assum `_ <= _` mp_tac) >> decide_tac) >> gvs[]
-QED
-Finalise normalize_dynarray_semantic_cont
