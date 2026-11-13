@@ -209,7 +209,7 @@ Resume slice_data_bytes_outcome[success]:
   simp[fragGasModeTheory.gas_marked_path_def, get_accounts_def,
        bind_def, lift_sum_def, return_def, evaluate_builtin_def,
        exprSimSliceSourceTheory.slice_bytes_nat] >>
-  gen_tac >> strip_tac >>
+  disj1_tac >> gen_tac >> strip_tac >>
   qpat_x_assum `!H. valid_horizon _ _ H _ ==> !idx. vv_post _ _ _ _ _ _ _ _ _ _ _ _ _ _`
     (drule_then (qspec_then `t.vs_inst_idx` mp_tac)) >>
   `post_value_type cenv e = expr_type e` by
@@ -325,7 +325,7 @@ Resume slice_data_string_outcome[success]:
   simp[fragGasModeTheory.gas_marked_path_def, get_accounts_def,
        bind_def, lift_sum_def, return_def, evaluate_builtin_def,
        exprSimSliceSourceTheory.slice_string_nat] >>
-  gen_tac >> strip_tac >>
+  disj1_tac >> gen_tac >> strip_tac >>
   qpat_x_assum `!H. valid_horizon _ _ H _ ==> !idx. vv_post _ _ _ _ _ _ _ _ _ _ _ _ _ _`
     (drule_then (qspec_then `t.vs_inst_idx` mp_tac)) >>
   `post_value_type cenv e = expr_type e` by
