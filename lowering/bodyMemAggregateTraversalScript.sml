@@ -7,7 +7,7 @@ Ancestors
   fragExec exprOperandVar gasSummary fragGasMode fragGasPath valueEncoding
   exprLowering exprSimWordArgs
 
-Theorem aggregate_tuple_cons_order_mem[local]:
+Theorem aggregate_tuple_cons_order_mem:
   compile_expr ce (expr_type e) e sa = (vv,sm) /\
   emit_op ADD [Var x; Lit (n2w off)] sm = (dst,sn) /\
   unwrap_value ce vv sn = (op,su) /\
@@ -40,7 +40,7 @@ Proof
   fs[ci_mono_def] >> decide_tac
 QED
 
-Theorem aggregate_tuple_tail_entry_mem[local]:
+Theorem aggregate_tuple_tail_entry_mem:
   OPT_MMAP (evaluate_type (get_tenv cx)) (dty::tys) = SOME (htv::tvs) /\
   (!a st. MEM a (e::args) /\ expr_sim_inv ce cx env st ==>
     expr_body_pre ce cx env a st) /\
@@ -220,7 +220,7 @@ fun window_side_tac (asl, w) =
    else first_assum ACCEPT_TAC ORELSE
      (rewrite_tac [CONJ_ASSOC] >> first_assum ACCEPT_TAC)) (asl, w)
 
-Theorem aggregate_tuple_tail_outcome_mem[local]:
+Theorem aggregate_tuple_tail_outcome_mem:
   gas_marked_exec T (ctx,func) (read_result cx tv) (es1,t1) [] (INL v) es1 (OK q) /\
   es1.gas_obs = [] /\
   gas_outcome T (cx_tops cx) (ctx,func) (eval_exprs cx args) (es1,q)
