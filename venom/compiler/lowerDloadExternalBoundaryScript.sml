@@ -160,10 +160,13 @@ Theorem ld_memory_write_classified:
     FLOOKUP A a = SOME (u,v,z) /\ FLOOKUP A k = SOME (b,c,sz) /\
     a <> k /\ 0 < z /\ 0 < sz ==>
     (u+z <= b \/ b+sz <= u) /\ (v+z <= c \/ c+sz <= v)) /\
+  lo <= fl /\
+  (!a u v z. FLOOKUP A a = SOME (u,v,z) ==> u+z <= fl /\ v+z <= fl) /\
   tn'.t_mem = tn.t_mem DIFF {ro+j | j < LENGTH xs} /\
   (xs = [] \/ (ro = rt /\ ro + LENGTH xs <= lo) \/
    (?k b c sz delta. FLOOKUP A k = SOME (b,c,sz) /\
-     ro = b+delta /\ rt = c+delta /\ delta + LENGTH xs <= sz)) ==>
+     ro = b+delta /\ rt = c+delta /\ delta + LENGTH xs <= sz) \/
+   (ro = rt /\ fl <= ro)) ==>
   ld_memory lo A tn'
     (write_memory_with_expansion ro xs s)
     (write_memory_with_expansion rt xs t)
@@ -173,11 +176,46 @@ Proof
   >- (gvs[] >> irule ld_memory_write_low >>
       conj_tac >- metis_tac[] >>
       qexistsl_tac [`{}`, `LENGTH xs`, `tn`] >> simp[ADD_COMM])
-  >> gvs[] >> irule ld_memory_write_slot >>
-  conj_tac >- metis_tac[] >>
-  qexistsl_tac [`{}`, `k`, `LENGTH xs`, `sz`, `tn`] >>
-  simp[NoAsms, GSYM ADD_ASSOC] >> metis_tac[]
+  >- (gvs[] >> irule ld_memory_write_slot >>
+      conj_tac >- metis_tac[] >>
+      qexistsl_tac [`{}`, `k`, `LENGTH xs`, `sz`, `tn`] >>
+      simp[NoAsms, GSYM ADD_ASSOC] >> metis_tac[]) >>
+  gvs[] >> irule ld_memory_write_high >> rpt conj_tac >>
+  FIRST [qexistsl_tac [`{}`, `LENGTH xs`, `tn`] >> simp[] >> NO_TAC,
+         decide_tac,
+         rpt strip_tac >> res_tac >> decide_tac]
 QED
+
+(* The returned bytes are the same on both sides, so the dynamic region
+   stays in agreement. *)
+Theorem ld_dyn_agree_write_classified:
+  ld_dyn_agree fl tn.t_mem s.vs_memory t.vs_memory /\
+  (!a u v z. FLOOKUP (A : num # num |-> num # num # num) a = SOME (u,v,z) ==>
+     u+z <= fl /\ v+z <= fl) /\
+  lo <= fl /\
+  (xs = [] \/ (ro = rt /\ ro + LENGTH xs <= lo) \/
+   (?k b c sz delta. FLOOKUP A k = SOME (b,c,sz) /\
+     ro = b+delta /\ rt = c+delta /\ delta + LENGTH xs <= sz) \/
+   (ro = rt /\ fl <= ro)) ==>
+  ld_dyn_agree fl (tn.t_mem DIFF {ro+j | j < LENGTH xs})
+    (write_memory_with_expansion ro xs s).vs_memory
+    (write_memory_with_expansion rt xs t).vs_memory
+Proof
+  disch_then (REPEAT_TCL CONJUNCTS_THEN assume_tac) >>
+  Q.SUBGOAL_THEN `LENGTH xs = 0 \/
+   (ro = rt /\ !j. j < LENGTH xs /\ j NOTIN {} ==> EL j xs = EL j xs) \/
+   (ro + LENGTH xs <= fl /\ rt + LENGTH xs <= fl)` ASSUME_TAC >-
+    (qpat_x_assum `xs = [] \/ _` strip_assume_tac
+     >- (disj1_tac >> asm_rewrite_tac[listTheory.LENGTH])
+     >- (disj2_tac >> disj2_tac >> decide_tac)
+     >- (disj2_tac >> disj2_tac >> res_tac >> decide_tac) >>
+     disj2_tac >> disj1_tac >> conj_tac >- first_assum ACCEPT_TAC >>
+     simp[]) >>
+  irule ld_dyn_agree_write >>
+  qexistsl_tac [`{}`, `LENGTH xs`, `tn`] >>
+  rpt conj_tac >> FIRST [first_assum ACCEPT_TAC, simp[EXTENSION]]
+QED
+
 
 Theorem ld_consume_call_effect:
   ld_memory lo A tn s t /\ ld_nonghost tn s t /\
@@ -186,6 +224,9 @@ Theorem ld_consume_call_effect:
     FLOOKUP A a = SOME (u,v,z) /\ FLOOKUP A k = SOME (b,c,sz) /\
     a <> k /\ 0 < z /\ 0 < sz ==>
     (u+z <= b \/ b+sz <= u) /\ (v+z <= c \/ c+sz <= v)) /\
+  lo <= fl /\
+  (!a u v z. FLOOKUP A a = SOME (u,v,z) ==> u+z <= fl /\ v+z <= fl) /\
+  ld_dyn_agree fl tn.t_mem s.vs_memory t.vs_memory /\
   rq.cr_accounts = s.vs_accounts /\ rq'.cr_accounts = t.vs_accounts /\
   rq.cr_tStorage = s.vs_transient /\ rq'.cr_tStorage = t.vs_transient /\
   rq.cr_target = rq'.cr_target /\ rq.cr_value = rq'.cr_value /\
@@ -207,8 +248,11 @@ Theorem ld_consume_call_effect:
      ss.vs_outcomes <> s.vs_outcomes /\ (HD s.vs_outcomes).co_success) tn.t_trans /\
   (xs = [] \/ (ro = rt /\ ro + LENGTH xs <= lo) \/
    (?k b c sz delta. FLOOKUP A k = SOME (b,c,sz) /\
-     ro = b+delta /\ rt = c+delta /\ delta + LENGTH xs <= sz)) ==>
-  w = w' /\ ld_memory lo A tn' ss ts /\ ld_nonghost tn' ss ts /\
+     ro = b+delta /\ rt = c+delta /\ delta + LENGTH xs <= sz) \/
+   (ro = rt /\ fl <= ro)) ==>
+  w = w' /\ ld_memory lo A tn' ss ts /\
+  ld_dyn_agree fl tn'.t_mem ss.vs_memory ts.vs_memory /\
+  ld_nonghost tn' ss ts /\
   ss.vs_allocas = s.vs_allocas /\ ts.vs_allocas = t.vs_allocas /\
   ss.vs_alloca_next = s.vs_alloca_next /\ ts.vs_alloca_next = t.vs_alloca_next /\
   ss.vs_current_bb = s.vs_current_bb /\ ts.vs_current_bb = t.vs_current_bb /\
@@ -228,6 +272,14 @@ Proof
     (write_memory_with_expansion ro xs s)
     (write_memory_with_expansion rt xs t)` by
     (irule ld_memory_write_classified >> metis_tac[]) >>
+  `ld_dyn_agree fl tn'.t_mem
+    (write_memory_with_expansion ro xs s).vs_memory
+    (write_memory_with_expansion rt xs t).vs_memory` by
+    (qpat_assum `tn'.t_mem = _` (fn th => rewrite_tac[th]) >>
+     irule ld_dyn_agree_write_classified >> rpt conj_tac >>
+     FIRST [first_assum ACCEPT_TAC,
+            qexistsl_tac [`A`, `lo`] >> rpt conj_tac >>
+            FIRST [first_assum ACCEPT_TAC, metis_tac[]]]) >>
   conj_tac >- gvs[consume_call_outcome_eq] >>
   conj_tac
   >- (qpat_x_assum `ld_memory lo A tn' _ _` mp_tac >>
@@ -238,6 +290,14 @@ Proof
       POP_ASSUM_LIST (K all_tac) >>
       simp[consume_call_outcome_eq] >> rpt strip_tac >>
       gvs[ld_memory_def] >> metis_tac[]) >>
+  conj_tac
+  >- (qpat_x_assum `ld_dyn_agree fl tn'.t_mem _ _` mp_tac >>
+      qpat_x_assum `consume_call_outcome rq ro rs s = _` mp_tac >>
+      qpat_x_assum `consume_call_outcome rq' rt rs t = _` mp_tac >>
+      qpat_x_assum `xs = TAKE rs ss.vs_returndata` mp_tac >>
+      qpat_x_assum `_.co_returnData = _.co_returnData` mp_tac >>
+      POP_ASSUM_LIST (K all_tac) >>
+      simp[consume_call_outcome_eq] >> rpt strip_tac >> gvs[]) >>
   simp[] >> gvs[consume_call_outcome_eq])
 QED
 
