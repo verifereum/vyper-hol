@@ -78,7 +78,7 @@ Proof
       `~is_bytestring_type ty` by metis_tac[assign_base_storage_not_bytestring, expr_type_def] >>
       gvs[expr_body_pre_def, well_typed_expr_def, well_typed_builtin_app_def,
          expr_type_def, is_bytestring_type_def])
-  >- (rpt gen_tac >> strip_tac >>
+  >- (rpt strip_tac >>
       qpat_x_assum `expr_body_pre _ _ _ _ _` mp_tac >>
       simp[expr_body_pre_def, well_typed_expr_def,
            type_builtin_result_ok_def, expr_type_def] >> strip_tac >>
@@ -114,32 +114,3 @@ QED
 
 Finalise assign_base_storage_rhs_lowered_type
 
-(* The actual supported bulk-storage continuation reads its RHS directly. *)
-Theorem assign_base_storage_copy_dispatch:
-  !cenv e tops ctx cx env es dst src tr loc.
-    body_inv tops ctx cenv cx /\ expr_sim_inv cenv cx env es /\
-    expr_body_pre cenv cx env e es /\ supported_expr tops e /\
-    supported_storage_type tops (expr_type e) /\ ~is_word_type (expr_type e) /\
-    (!elem n. expr_type e <> ArrayT elem (Dynamic n)) ==>
-    compile_assign_value cenv dst (if tr then LocTransient else LocStorage)
-      src F loc (expr_type e) (lowered_value_type cenv e) NONE
-      (type_memory_bytes cenv (expr_type e)) =
-    (if type_memory_bytes cenv (expr_type e) <= 32 then
-       do loaded <- emit_op MLOAD [src];
-          emit_void (if tr then TSTORE else SSTORE) [dst;loaded]
-       od
-     else
-       do (if tr then compile_memory_to_transient src dst
-                        (type_memory_bytes cenv (expr_type e) DIV 32)
-           else compile_memory_to_storage src dst
-                        (type_memory_bytes cenv (expr_type e) DIV 32));
-          return ()
-       od)
-Proof
-  rpt gen_tac >> strip_tac >>
-  drule_all assign_base_storage_rhs_lowered_type >> strip_tac >>
-  drule assign_base_storage_not_bytestring >> strip_tac >>
-  Cases_on `tr` >>
-  simp[FUN_EQ_THM, compile_assign_value_def, comp_bind_def, comp_return_def,
-       comp_ignore_bind_def]
-QED

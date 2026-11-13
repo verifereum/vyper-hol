@@ -427,7 +427,11 @@ Proof
 QED
 
 Theorem eval_subscript_scope_effect[local]:
-  (!st tv middle. eval_expr cx e1 st = (INL tv,middle) ==>
+  (!st tv middle st1 tv1 middle1.
+    eval_expr cx e1 st = (INL tv,middle) /\
+    (if subscript_reads_base cx e1 e2 then
+       bind (read_result cx tv) (\v. return (Value v))
+     else return tv) st1 = (INL tv1,middle1) ==>
     scope_pop_effect (eval_expr cx e2)) /\
   scope_pop_effect (eval_expr cx e1) ==>
   scope_pop_effect (eval_expr cx (Subscript ty e1 e2))
@@ -435,15 +439,29 @@ Proof
   strip_tac >> rewrite_tac[Once evaluate_def] >>
   ho_match_mp_tac scope_pop_effect_bind_guarded >> conj_tac >- simp[] >>
   rpt gen_tac >> strip_tac >>
+  ho_match_mp_tac scope_pop_effect_bind_guarded >> conj_tac
+  >- (IF_CASES_TAC >> simp[] >>
+      ho_match_mp_tac scope_pop_effect_bind >> simp[]) >>
+  rpt gen_tac >> strip_tac >>
   ho_match_mp_tac scope_pop_effect_bind >> conj_tac
-  >- (first_x_assum irule >> goal_assum (drule_at Any)) >>
+  >- (first_x_assum irule >> metis_tac[]) >>
   gen_tac >> ho_match_mp_tac scope_pop_effect_bind >> simp[]
 QED
 
 Theorem eval_builtin_scope_effect[local]:
   (!st x middle.
     type_check (builtin_args_length_ok bt (LENGTH es)) "Builtin args" st = (INL x,middle) /\
-    bt <> Len /\ bt <> Env MsgGas ==> scope_pop_effect (eval_exprs cx es)) /\
+    bt <> Len /\ bt <> Env MsgGas /\ code_slice_source bt es = NONE ==>
+    scope_pop_effect (eval_exprs cx es)) /\
+  (!st x middle code_ty addr.
+    type_check (builtin_args_length_ok bt (LENGTH es)) "Builtin args" st = (INL x,middle) /\
+    bt <> Len /\ bt <> Env MsgGas /\ code_slice_source bt es = SOME (code_ty,addr) ==>
+    scope_pop_effect (eval_exprs cx (TL es))) /\
+  (!st x middle code_ty addr st1 tail_vs st2.
+    type_check (builtin_args_length_ok bt (LENGTH es)) "Builtin args" st = (INL x,middle) /\
+    bt <> Len /\ bt <> Env MsgGas /\ code_slice_source bt es = SOME (code_ty,addr) /\
+    eval_exprs cx (TL es) st1 = (INL tail_vs,st2) ==>
+    scope_pop_effect (eval_exprs cx [addr])) /\
   (!st x middle.
     type_check (builtin_args_length_ok bt (LENGTH es)) "Builtin args" st = (INL x,middle) /\
     bt = Len ==> scope_pop_effect (eval_expr cx (HD es))) ==>
@@ -458,13 +476,25 @@ Proof
           >- (first_x_assum irule >> metis_tac[]) >>
           gen_tac >> ho_match_mp_tac scope_pop_effect_bind >> simp[]) >>
       Cases_on `bt = Env MsgGas` >> simp[] >>
-      Cases_on `bt = Bop In \/ bt = Bop NotIn` >> simp[] >>
-      (ho_match_mp_tac scope_pop_effect_bind >> conj_tac
-       >- (first_x_assum irule >> metis_tac[]) >>
-       gen_tac >>
-       rpt (ho_match_mp_tac scope_pop_effect_bind >> conj_tac >- simp[] >>
-            gen_tac) >>
-       simp[])) >> simp[]
+      Cases_on `bt = Bop In \/ bt = Bop NotIn` >> simp[]
+      >- (ho_match_mp_tac scope_pop_effect_bind >> conj_tac
+          >- (first_x_assum irule >> gvs[] >> metis_tac[]) >>
+          gen_tac >> ho_match_mp_tac scope_pop_effect_bind >> simp[] >>
+          ho_match_mp_tac scope_pop_effect_bind >> simp[]) >>
+      ho_match_mp_tac scope_pop_effect_bind >> conj_tac
+      >- (Cases_on `code_slice_source bt es` >> simp[]
+          >- (first_x_assum irule >> metis_tac[]) >>
+          rename1 `SOME p` >> PairCases_on `p` >> simp[] >>
+          ho_match_mp_tac scope_pop_effect_bind_guarded >> conj_tac
+          >- (first_x_assum irule >> metis_tac[]) >>
+          rpt gen_tac >> strip_tac >>
+          ho_match_mp_tac scope_pop_effect_bind >> conj_tac
+          >- (first_x_assum irule >> metis_tac[]) >>
+          gen_tac >> ho_match_mp_tac scope_pop_effect_bind >> conj_tac >- simp[] >>
+          gen_tac >> ho_match_mp_tac scope_pop_effect_bind >> simp[]) >>
+      gen_tac >> ho_match_mp_tac scope_pop_effect_bind >> conj_tac >- simp[] >>
+      gen_tac >> ho_match_mp_tac scope_pop_effect_bind >> conj_tac >- simp[] >>
+      gen_tac >> ho_match_mp_tac scope_pop_effect_bind >> simp[]) >> simp[]
 QED
 
 Theorem eval_typebuiltin_scope_effect[local]:
@@ -666,7 +696,7 @@ Proof
   imp_res_tac finally_pop_function_scopes >> gvs[] >> metis_tac[]
 QED
 
-Theorem finally_unless_halt_conditional_lock_scopes[local]:
+Theorem finally_unless_halt_conditional_lock_scopes:
   finally_unless_halt (finally f (pop_function prev))
     (if guard then case slot of NONE => return ()
        | SOME s => release_nonreentrant_lock addr s else return ())
@@ -740,7 +770,7 @@ Proof
      eval_name_place_scope_effect, eval_toplevel_place_scope_effect,
      eval_attribute_base_place_scope_effect, eval_target_place_scope_effect,
      eval_subscript_base_place_scope_effect, eval_subscript_scope_effect,
-     eval_builtin_scope_effect, eval_typebuiltin_scope_effect,
+     eval_typebuiltin_scope_effect,
      eval_raw_call_scope_effect, eval_raw_calldata_scope_effect,
       eval_raw_revert_scope_effect,
      eval_selfdestruct_scope_effect, eval_raw_log_scope_effect, eval_send_scope_effect])

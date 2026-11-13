@@ -13,6 +13,98 @@ Ancestors
   venomExecSemantics venomState e2eEntry compileVyper compileEnv valueEncoding
   immutableSectionRel vyperValue vyperContext
 
+val _ = Parse.hide "body";
+
+(* Classification normalizes defaults and bodies, while constructor metadata
+   still identifies the selected source declaration. *)
+Theorem classify_function_ctor_source_step[local]:
+  !top acc mut nr rr fname args defaults ret body.
+    SND (SND (SND (classify_function top acc))) =
+      SOME (mut,nr,rr,fname,args,defaults,ret,body) ==>
+    top = FunctionDecl Deploy mut nr rr fname args defaults ret body \/
+    SND (SND (SND acc)) = SOME (mut,nr,rr,fname,args,defaults,ret,body)
+Proof
+  rpt gen_tac >> PairCases_on `acc` >> Cases_on `top` >>
+  simp[classify_function_def] >>
+  rename1 `case vis of External => _ | Internal => _ | Deploy => _` >>
+  Cases_on `vis` >> rw[]
+QED
+
+Theorem classify_fold_ctor_mem[local]:
+  !tops mut nr rr fname args defaults ret body.
+    SND (SND (SND (FOLDR classify_function ([],[],NONE,NONE) tops))) =
+      SOME (mut,nr,rr,fname,args,defaults,ret,body) ==>
+    MEM (FunctionDecl Deploy mut nr rr fname args defaults ret body) tops
+Proof
+  Induct_on `tops` >- simp[] >> rpt gen_tac >>
+  simp[] >> strip_tac >>
+  drule classify_function_ctor_source_step >>
+  strip_tac >- simp[] >> metis_tac[]
+QED
+
+Theorem classify_functions_ctor_mem:
+  !tops mut nr rr fname args defaults ret body.
+    SND (SND (SND (classify_functions tops))) =
+      SOME (mut,nr,rr,fname,args,defaults,ret,body) ==>
+    ?raw_defaults raw_body.
+      MEM (FunctionDecl Deploy mut nr rr fname args raw_defaults ret raw_body) tops /\
+      subst_consts_fn (module_consts_env tops [])
+        (mut,nr,rr,fname,args,raw_defaults,ret,raw_body) =
+        (mut,nr,rr,fname,args,defaults,ret,body)
+Proof
+  rpt gen_tac >> simp[classify_functions_def] >> pairarg_tac >>
+  simp[AllCaseEqs()] >> strip_tac >>
+  PairCases_on `z` >> gvs[constSubstTheory.subst_consts_fn_def] >>
+  qexistsl_tac [`z5`, `z7`] >> simp[] >>
+  qspec_then `tops` mp_tac classify_fold_ctor_mem >> simp[] >> metis_tac[]
+QED
+
+Theorem classify_fold_ctor_lookup[local]:
+  !tops src name.
+    case SND (SND (SND (FOLDR classify_function ([],[],NONE,NONE) tops))) of
+      NONE => lookup_function src name Deploy tops = SOME (Payable,F,[],[],NoneT,[])
+    | SOME (mut,nr,rr,fname,args,defaults,ret,body) =>
+        fname = name ==>
+        lookup_function src name Deploy tops = SOME (mut,nr,args,defaults,ret,body)
+Proof
+  Induct >- simp[vyperInterpreterTheory.lookup_function_def] >>
+  rpt gen_tac >>
+  first_x_assum (qspecl_then [`src`, `name`] mp_tac) >>
+  `?a b c d. FOLDR classify_function ([],[],NONE,NONE) tops = (a,b,c,d)` by
+    metis_tac[pairTheory.ABS_PAIR_THM] >>
+  simp[] >> strip_tac >> Cases_on `h` >>
+  simp[classify_function_def, vyperInterpreterTheory.lookup_function_def]
+  >~ [`VariableDecl vd`]
+  >- (Cases_on `vd` >> simp[vyperInterpreterTheory.lookup_function_def])
+  >~ [`HashMapDecl hd`]
+  >- (Cases_on `hd` >> simp[vyperInterpreterTheory.lookup_function_def]) >>
+  qmatch_goalsub_rename_tac `case vv of External => _ | Internal => _ | Deploy => _` >>
+  Cases_on `vv` >> rw[]
+QED
+
+Theorem classify_functions_ctor_lookup:
+  !tops src name.
+    case SND (SND (SND (classify_functions tops))) of
+      NONE =>
+        vyperInterpreter$lookup_function src name Deploy tops =
+          SOME (Payable,F,[],[],NoneT,[])
+    | SOME (mut,nr,rr,fname,args,defaults,ret,body) =>
+        fname = name ==>
+        ?raw_defaults raw_body.
+          vyperInterpreter$lookup_function src name Deploy tops =
+            SOME (mut,nr,args,raw_defaults,ret,raw_body) /\
+          subst_consts_fn (module_consts_env tops [])
+            (mut,nr,rr,fname,args,raw_defaults,ret,raw_body) =
+            (mut,nr,rr,fname,args,defaults,ret,body)
+Proof
+  rpt gen_tac >>
+  qspecl_then [`tops`, `src`, `name`] mp_tac classify_fold_ctor_lookup >>
+  simp[classify_functions_def] >> pairarg_tac >> simp[] >>
+  Cases_on `ctor` >> simp[] >>
+  PairCases_on `x` >> simp[constSubstTheory.subst_consts_fn_def] >>
+  metis_tac[]
+QED
+
 (* Every artifact a successful compile_vyper (K SOME) produces for the
    deployment unit, as compile_vyper_runtime_phases does for the runtime unit. *)
 Definition deploy_phases_def:
@@ -42,7 +134,8 @@ End
 (* The source-side hypotheses of e2e_deploy_correctness. *)
 Definition deploy_source_ok_def:
   deploy_source_ok tops am tx <=>
-    supported_program tops /\ constructor_call_free tops /\
+    supported_program tops /\ supported_program_deploy tops /\
+    constructor_call_free tops /\
     deploy_typing_ok tops am tx /\ deploy_storage_ok tops am tx
 End
 
@@ -85,6 +178,20 @@ Definition deploy_venom_result_rel_def:
     (src : (abstract_machine # call_request list) + exception) vres <=>
     case (src, vres) of
       (INL (am', rqs), Halt ss) =>
+        if ALOOKUP am'.sources tx.target = NONE then
+          (* The constructor halted (selfdestruct): no source installed, the
+           * unit halts with empty returndata, and the target is queued for
+           * deletion on both sides. *)
+          let cx = initial_evaluation_context
+                     ((tx.target, [(NONE, tops)]) :: am'.sources) am'.layouts tx NONE in
+          ss.vs_returndata = [] /\
+          MEM tx.target ss.vs_pending_deletions /\
+          accounts_agree cx am'.accounts
+            (process_deletions ss.vs_pending_deletions ss.vs_accounts) /\
+          transient_agree cx am'.tStorage ss.vs_transient /\
+          logs_correspond (compiled_event_info tops) (type_env tops)
+            tx.target am'.logs ss.vs_logs
+        else
         let cx = initial_evaluation_context am'.sources am'.layouts tx NONE in
         ?section.
           ss.vs_returndata = runtime_bc ++ section /\

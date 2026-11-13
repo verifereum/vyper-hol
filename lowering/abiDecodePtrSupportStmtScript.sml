@@ -81,8 +81,11 @@ Theorem supported_iterator_expr_exclusion[local]:
   !ty iter n. supported_iterator tops ty iter n ==> ~supported_iterator_exists p iter
 Proof
   strip_tac >> rpt gen_tac >> Cases_on `iter`
-  >- (strip_tac >> drule supported_array_iterator_shape >> strip_tac >>
-      simp[supported_iterator_exists_def, supported_expr_exists_def] >>
+  >- (rename1 `Array arr` >> strip_tac >>
+      simp[supported_iterator_exists_def] >>
+      Cases_on `supported_expr tops arr` >- metis_tac[] >>
+      Cases_on `arr` >>
+      gvs[supported_iterator_def, supported_expr_exists_def, AllCaseEqs()] >>
       strip_tac >> qpat_x_assum `!e. p e ==> _` drule >> simp[]) >>
   simp[supported_iterator_def, supported_iterator_exists_def] >>
   rename1 `~supported_expr_exists p lo /\ ~supported_expr_exists p hi` >>

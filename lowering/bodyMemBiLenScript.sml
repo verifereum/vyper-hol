@@ -19,7 +19,8 @@ Theorem body_builtin_len_mem:
     body_expr_mem_ok cx (Builtin ty Len es)
 Proof
   rpt gen_tac >> strip_tac >>
-  rewrite_tac[body_expr_mem_ok_def] >> rpt gen_tac >> strip_tac >>
+  (rpt gen_tac >> match_mp_tac body_expr_mem_ok_intro >>
+   conj_tac >- (rpt strip_tac >> gvs[])) >> rpt gen_tac >> strip_tac >>
   drule len_pre_args >> strip_tac >> gvs[builtin_args_length_ok_def] >>
   `expr_body_pre cenv cx env e es'` by
     (drule expr_body_pre_builtin_arg >>

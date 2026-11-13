@@ -183,4 +183,83 @@ Proof
   simp[]
 QED
 
+Theorem layout_canonical_run_next_certificate_fuel:
+  ctx_pass_stage rpolicy (CFP_Simple VP_ConcretizeMemLoc)
+    (o1_walk_view rpolicy 2) C C' /\ o1_ctx_shape C /\
+  EVERY (\fn. fn.fn_eom = NONE) C.ctx_functions /\
+  ctx_inst_ids_distinct C /\ o1_run_state_ok vs0 /\
+  EVERY wf_function C.ctx_functions /\ mem_inv raw_mem_ok C vs0 /\
+  ptr_discipline lo C vs0 /\ ~ctx_has_dalloca C /\
+  vs0.vs_allocas = FEMPTY /\ EVERY (fn_ptr_ok P) C.ctx_functions /\
+  EVERY (\f. EVERY inst_wf (fn_insts f)) C.ctx_functions /\
+  dead_wf D /\ taint_within D C vs0 /\
+  es = MAP FST path /\ qs = MAP SND path /\
+  (!k. k < LENGTH path ==>
+    resolved_annotation_edge C k (EL k (q0::MAP SND path)) (FST (EL k path))
+      (EL (SUC k) (q0::MAP SND path))
+      (EL k (lifetime_annotations 0 [0] es)) (EL k ass)
+      (EL (SUC k) (lifetime_annotations 0 [0] es)) (EL (SUC k) ass)) /\
+  callee_first names C.ctx_functions /\ EVERY ssa_form C.ctx_functions /\
+  EVERY fn_defs_reach_uses C.ctx_functions /\ EVERY all_reachable C.ctx_functions /\
+  fixed_region_reserved lo C /\ activation_depth q0 = 0 /\
+  joint_trace vs0 C q0 es qs qend ==>
+  selected_run_next_certificate_fuel C C' q0 path
+    (layout_canonical_EB D lo vs0 C C' q0 es qs ass qend)
+    (layout_canonical_run D lo vs0 C C' q0 es qs ass qend)
+    (layout_canonical_OB D lo vs0 C C' q0 es qs ass qend)
+    (layout_canonical_OutR D lo vs0 C C' q0 es qs ass qend)
+Proof
+  strip_tac >> pure_rewrite_tac[selected_run_next_certificate_fuel_def] >>
+  rpt gen_tac >> strip_tac >>
+  drule_all layout_canonical_run_block_entry >> strip_tac >>
+  qexistsl [`bb'`, `phi' with vs_inst_idx := phi_prefix_length bb'.bb_instructions`] >>
+  (conj_tac >- first_assum ACCEPT_TAC) >> gen_tac >> strip_tac >>
+  Cases_on `rb'` >> gvs[layout_canonical_OB_def, layout_canonical_result_def] >>
+  qpat_x_assum `layout_canonical_EB _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _` mp_tac >>
+  simp[layout_canonical_EB_def] >> strip_tac >>
+  first_x_assum drule >> strip_tac >> gvs[] >>
+  RULE_ASSUM_TAC (PURE_REWRITE_RULE[APPEND_ASSOC, ADD_ASSOC]) >>
+  drule_all (PURE_REWRITE_RULE[APPEND_ASSOC, ADD_ASSOC]
+    selected_run_next_children) >> strip_tac >>
+  `?birth ids rp rv saved. b.lop_ids = birth::ids /\ b.lop_anns = (rp,rv)::saved` by
+    (fs[layout_completed_jump_def, layout_ordinary_entry_def, layout_ordinary_state_def] >>
+     gvs[]) >>
+  `u = si` by
+    (fs[layout_completed_jump_def, layout_ordinary_entry_def, layout_ordinary_state_def,
+        layout_phase_normalize_def] >> gvs[]) >> gvs[] >>
+  `MEM fn C.ctx_functions /\ ?positions. layout_driver_row C' fn fn' positions` by
+    (fs[layout_canonical_run_def] >> metis_tac[]) >>
+  `EVERY bb_well_formed fn.fn_blocks /\
+   (!bb. MEM bb fn.fn_blocks ==> EVERY (\i. MEM i (fn_insts fn)) bb.bb_instructions)` by
+    (fs[EVERY_MEM, venomWfTheory.wf_function_def, fn_insts_def] >>
+     conj_tac >- metis_tac[] >>
+     metis_tac[MEM_fn_insts_blocks]) >>
+  qpat_x_assum `!k. k < LENGTH path ==> _`
+    (qspec_then `n + LENGTH wb` mp_tac) >> simp[] >> strip_tac >>
+  fs[joint_transition_block_iff] >> gvs[] >>
+  qexists `v` >> conj_tac >- (
+    `n + (LENGTH wb + 1) = SUC b.lop_cursor` by simp[] >>
+    pop_assum (fn th => once_rewrite_tac[th]) >>
+    irule layout_canonical_jump_continue >>
+    goal_assum (drule_at Any) >> simp[] >>
+    fs[layout_driver_indexed_def, layout_phase_canonical_def] >>
+    RULE_ASSUM_TAC (PURE_REWRITE_RULE[GSYM ADD_ASSOC, GSYM ADD1]) >>
+    pure_rewrite_tac[GSYM ADD_ASSOC, GSYM ADD1] >>
+    fs[ADD_CLAUSES, joint_transition_block_iff] >>
+    `FST (EL (n + LENGTH wb) path) = SOME (OriginBlock fuel post)` by
+      metis_tac[EL_MAP] >> metis_tac[]) >>
+  strip_tac >>
+  pure_rewrite_tac[selected_run_match_fuel_def, layout_canonical_OutR_def] >>
+  qexists `run_blocks k C' fn' v` >> conj_tac
+  >- (`~v.vs_halted` by
+        metis_tac[frameFiniteControlTheory.finite_execution_block_endpoint] >>
+      simp[Once run_blocks_def, run_block_def]) >>
+  conj_tac
+  >- (irule finite_step_run_next >> goal_assum (drule_at Any) >>
+      metis_tac[frameFiniteControlTheory.finite_execution_block_endpoint]) >>
+  qpat_x_assum `layout_canonical_OutR _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _` mp_tac >>
+  pure_rewrite_tac[layout_canonical_OutR_def, LENGTH_APPEND, LENGTH, ADD_ASSOC] >>
+  simp[]
+QED
+
 val _ = export_theory();

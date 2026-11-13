@@ -14,6 +14,10 @@ Ancestors
   vyperTypeExprSoundness vyperTypeInvariants bodyPtrDefs
   vyperEvalExprPreservesScopesDom exprSimWordArgs
 
+(* The posts here keep the source state as `es_end with gas_obs := []`;
+   stripping gas_obs only inside target_post would split it from ghost_inv. *)
+val _ = temp_delsimps ["tuple_place_target_post_gas_obs"];
+
 Theorem target_mapping_sim_ptr:
   body_inv tops ctx cenv cx /\
   body_base_target_ptr_ok cx (SubscriptTarget bt e) /\

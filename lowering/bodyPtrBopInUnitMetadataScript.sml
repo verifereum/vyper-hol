@@ -39,7 +39,9 @@ Theorem equality_classification:
     ([(View,F,F,"probe",[],[],BaseT BoolT,[Return (SOME equality_fixture)])],
      [],NONE,NONE)
 Proof
-  simp[equality_tops_def, classify_functions_def, classify_function_def]
+  simp[equality_tops_def, classify_functions_def, classify_function_def,
+    public_getters_def, public_getter_def, constSubstTheory.module_consts_env_def,
+    constSubstTheory.subst_consts_fn_empty]
 QED
 
 (* Keep the cryptographic selector atomic: it is irrelevant to the body EQ.

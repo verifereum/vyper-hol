@@ -68,7 +68,7 @@ Proof
           emit_def, mk_inst_def, as_ptr_val_def, unwrap_value_def,
           mk_ptr_def, is_word_type_def, comp_bind_def,
           comp_ignore_bind_def, comp_return_def]
-  >> EVAL_TAC
+  >> EVAL_TAC >> simp[]
 QED
 
 (* The return path uses equal physical types, hence copies the entire

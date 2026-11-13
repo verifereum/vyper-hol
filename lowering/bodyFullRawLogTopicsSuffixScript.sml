@@ -5,7 +5,7 @@ Ancestors
   bodyRawLogArgPre exprSimSource exprSimProps exprLoweringProps
   gasShadowState loweringPosts bodyPtrDefs fragGasOriginPtr
   vyperInterpreter vyperState vyperAST list exprLowering compileEnv
-  exprSimWordArgs stmtSimProps
+  exprSimWordArgs stmtSimProps vyperTypeArgFits
 
 Theorem raw_log_topics_suffix_full_under_compose:
   (!tops ctx func cenv cx env ann n pre e rest data dflt
@@ -379,7 +379,9 @@ Resume raw_log_topics_suffix_full_under_compose[return_cons]:
      fs[vyperTypeSystemTheory.well_typed_expr_def,
         vyperTypeSystemTheory.well_typed_builtin_app_def] >>
      qpat_x_assum `topics = _` SUBST_ALL_TAC >>
-     gvs[EVERY_APPEND]) >>
+     fs[EVERY_APPEND, EVERY_MAP] >>
+     irule vyperTypeArgFitsTheory.arg_type_fits_prim_word >>
+     simp[vyperTypeSystemTheory.is_prim_word_type_def]) >>
   `(!z. op = Var z ==> not_fresh_at sm z) /\ (!l. op <> Label l)` by
     (`is_word_type (expr_type e)` by simp[is_word_type_def] >>
      drule_all expr_body_pre_lower_value_word_shape >> simp[]) >>

@@ -95,7 +95,8 @@ QED
 Theorem deployed_main_module_exact:
   source_deployment_rel tops am tx <=>
   ALOOKUP am.sources tx.target = SOME [(NONE,tops)] /\
-  ALOOKUP am.exports tx.target = NONE /\ layouts_agree tops am tx
+  (ALOOKUP am.exports tx.target = NONE \/
+   ALOOKUP am.exports tx.target = SOME []) /\ layouts_agree tops am tx
 Proof
   simp[source_deployment_rel_def]
 QED
@@ -121,10 +122,13 @@ Theorem typing_and_storage_contracts:
     ?art. check_contract F am.layouts tx.target [(NONE,tops)] = SOME art /\
           checked_contract_runtime_ready art [(NONE,tops)] am tx /\
           machine_well_typed am /\ call_tx_well_typed tx) /\
-  (source_storage_ok tops am tx <=>
+  (source_storage_ok am tx os gs <=>
     let cx = initial_evaluation_context am.sources am.layouts tx NONE in
-      contract_storage_well_formed cx (initial_state am []) /\
-      storage_layout_safe cx)
+    let obs = source_storage_trace am tx os gs in
+    let (regions, locks) = storage_trace_horizon obs in
+      storage_roots_fit obs /\ regions_consistent regions /\
+      storage_locks_separated regions locks /\
+      storage_well_formed_on cx (initial_state am []) regions)
 Proof
   simp[source_typing_ok_def, source_storage_ok_def]
 QED
@@ -192,19 +196,27 @@ Proof
        vyperValueOperationTheory.safe_cast_def]
 QED
 
-(* Closed ambiguity check: PLAN's source lookup includes getters, but the
-   independent supported whitelist rejects public variables. Do not silently
-   strengthen the exact PLAN predicate with an extra MEM FunctionDecl guard. *)
-Theorem source_lookup_getter_outside_supported:
+(* The compiler packages the same getter that source lookup selects. *)
+Theorem source_lookup_getter_supported:
   let tops = [VariableDecl (Public F) Storage "g" (BaseT (UintT 256)) (SOME 0)] in
     vyperInterpreter$lookup_function NONE "g" External tops =
       SOME (View,F,[],[],BaseT (UintT 256),
         [Return (SOME (TopLevelName (BaseT (UintT 256)) (NONE,"g")))]) /\
-    ~supported_program tops
+    supported_program tops
 Proof
-  simp[vyperInterpreterTheory.lookup_function_def,
-       supported_program_def, supported_declaration_headers_def,
-       supported_public_variables_rejected]
+  simp_tac bool_ss [LET_THM] >> conj_tac >- EVAL_TAC >>
+  simp[supported_program_def, supported_declaration_headers_def,
+    supported_declaration_header_def, supported_declaration_body_def,
+    supportedNamesTheory.supported_declaration_names_def,
+    supportedNamesTheory.supported_function_names_def,
+    supportedNamesTheory.supported_event_names_def,
+    supportedNamesTheory.supported_function_header_names_def,
+    supportedNamesTheory.supported_selectors_distinct_def,
+    compileVyperTheory.classify_functions_def,
+    compileVyperTheory.classify_function_def,
+    compileVyperTheory.public_getters_def, compileVyperTheory.public_getter_def,
+    constSubstTheory.module_consts_env_def, constSubstTheory.subst_consts_fn_empty,
+    compileVyperTheory.build_selectors_def] >> EVAL_TAC
 QED
 
 (* ===== Canonical external ABI wrapping ===== *)
@@ -315,33 +327,35 @@ Proof
 QED
 
 (* ===== Result cases: success REQUESTS, not remaining OUTCOMES ===== *)
-(* At fixed (empty) gas observations: call_result_rel is ?gobs. call_result_rel_at gobs. *)
+(* At fixed empty gas observations, effects use that run's finite horizon. *)
 Theorem success_requires_requests_and_effects:
   call_external (SOME (MAP SND (call_trace es))) [] am tx = (INL v,am',rqs) /\
-  cx = initial_evaluation_context am'.sources am'.layouts tx NONE ==>
+  cx = initial_evaluation_context am'.sources am'.layouts tx NONE /\
+  H = storage_trace_horizon
+    (source_storage_trace am tx (MAP SND (call_trace es)) []) ==>
   (call_result_rel_at [] tops ret am tx es r es' <=>
-    ?out lgs. frame_outcome es r es' NONE out lgs /\
+    ?out. frame_outcome es r es' NONE out am'.logs /\
       tx_return_bytes tops ret tx v out /\
-      accounts_agree cx am'.accounts
+      accounts_agree H cx am'.accounts
         (process_deletions es'.rollback.toDelete es'.rollback.accounts) /\
-      transient_agree cx am'.tStorage es'.rollback.tStorage /\
-      logs_correspond (compiled_event_info tops) (type_env tops) tx.target am'.logs lgs /\
-      LIST_REL (request_agree cx) rqs (call_requests es))
+      transient_agree H cx am'.tStorage es'.rollback.tStorage /\
+      LIST_REL (request_agree H cx) rqs (call_requests es))
 Proof
-  simp[call_result_rel_at_def]
+  simp[call_result_rel_at_def, call_success_rel_def]
 QED
 
 Theorem halt_requires_empty_success_and_effects:
   call_external (SOME (MAP SND (call_trace es))) [] am tx =
     (INR HaltException,am',rqs) /\
-  cx = initial_evaluation_context am'.sources am'.layouts tx NONE ==>
+  cx = initial_evaluation_context am'.sources am'.layouts tx NONE /\
+  H = storage_trace_horizon
+    (source_storage_trace am tx (MAP SND (call_trace es)) []) ==>
   (call_result_rel_at [] tops ret am tx es r es' <=>
-    ?lgs. frame_outcome es r es' NONE [] lgs /\
-      accounts_agree cx am'.accounts
+    frame_outcome es r es' NONE [] am'.logs /\
+      accounts_agree H cx am'.accounts
         (process_deletions es'.rollback.toDelete es'.rollback.accounts) /\
-      transient_agree cx am'.tStorage es'.rollback.tStorage /\
-      logs_correspond (compiled_event_info tops) (type_env tops) tx.target am'.logs lgs /\
-      LIST_REL (request_agree cx) rqs (call_requests es))
+      transient_agree H cx am'.tStorage es'.rollback.tStorage /\
+      LIST_REL (request_agree H cx) rqs (call_requests es))
 Proof
   simp[call_result_rel_at_def]
 QED
@@ -353,7 +367,7 @@ Theorem assert_result_does_not_compare_requests:
     ?exc out lgs. frame_outcome es r es' (SOME exc) out lgs /\
       (exc = Reverted \/ s = "UNREACHABLE"))
 Proof
-  simp[call_result_rel_at_def]
+  simp[call_result_rel_at_def, exception_outcome_rel_def]
 QED
 
 Theorem error_result_only_exact_exemption_or_failure:
@@ -362,7 +376,7 @@ Theorem error_result_only_exact_exemption_or_failure:
     unspecified_behaviour_exempt tops e \/
     ?exc out lgs. frame_outcome es r es' (SOME exc) out lgs)
 Proof
-  simp[call_result_rel_at_def]
+  simp[call_result_rel_at_def, exception_outcome_rel_def]
 QED
 
 Theorem escaped_control_is_not_related:
@@ -376,7 +390,7 @@ Theorem escaped_control_is_not_related:
      (INR (ReturnException v),am',rqs) ==>
      ~call_result_rel_at [] tops ret am tx es r es')
 Proof
-  simp[call_result_rel_at_def]
+  simp[call_result_rel_at_def, exception_outcome_rel_def]
 QED
 
 (* Boundary regressions must be kernel-closed, not inherited admissions. *)

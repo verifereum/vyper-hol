@@ -20,7 +20,7 @@ Theorem word_args_compose_sim_ptr:
   (!xs. straight_fresh (code xs)) /\
   (!sa sm sb xs op s0 G0 tn0 ee t G tn vs.
     code xs sm = (op,sb) /\
-    wb_args_post ctx func cenv cx es sa s0 ee xs vs t /\
+    wb_args_post H ctx func cenv cx es sa s0 ee xs vs t /\
     (~EXISTS expr_has_effect args ==> pure_frame cenv func es sa s0 t) /\
     LIST_REL (\e v. value_has_type (BaseTV (UintT 256)) v) args vs /\
     EVERY (\x. !z. x = Var z ==> not_fresh_at sm z) xs /\
@@ -73,6 +73,13 @@ Proof
      qpat_x_assum `expr_body_pre _ _ _ _ _` mp_tac >>
      simp[expr_body_pre_def, well_typed_expr_def, well_typed_builtin_app_def,
           well_typed_binop_def]) >>
+  `code_slice_source bt args = NONE` by
+    (Cases_on `code_slice_source bt args` >> simp[] >>
+     rename1 `SOME p` >> PairCases_on `p` >>
+     gvs[vyperInterpreterTheory.code_slice_source_SOME, expr_type_def] >>
+     qpat_x_assum `expr_body_pre _ _ _ _ _` mp_tac >>
+     simp[expr_body_pre_def, well_typed_expr_def, well_typed_builtin_app_def,
+          account_item_type_def]) >>
   simp[eval_expr_builtin_action, expr_type_def] >>
   irule gas_outcome_ptr_bind_mid >>
   conj_tac >- suspend "cert_normal" >>
@@ -104,7 +111,7 @@ Resume word_args_compose_sim_ptr[bind]:
       Cases_on `res` >> gvs[wb_args_exit_def, expr_exit_def]) >>
   rpt gen_tac >> strip_tac >>
   fs[Abbr `Qfacts`, typed_args_post_ptr_def] >>
-  `wb_args_post ctx func cenv cx es sa s0 em xs v t` by
+  `wb_args_post H ctx func cenv cx es sa s0 em xs v t` by
     (irule word_uint_args_post >> metis_tac[]) >>
   `~EXISTS expr_has_effect args ==> pure_frame cenv func es sa s0 t` by
     fs[exprSimPrecompilesTheory.typed_args_post_def] >>

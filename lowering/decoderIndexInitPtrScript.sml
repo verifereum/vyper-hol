@@ -22,7 +22,7 @@ Theorem budget_alloca_endpoint_exact_ptr[local]:
       FLOOKUP HG x = FLOOKUP G x /\ op_taint u (Var x) = op_taint tn (Var x))
 Proof
   strip_tac >> drule_all budget_alloca_endpoint_exact_ptr_core >>
-  disch_then (qspecl_then [`tn`,`cx`,`ctx`,`R`,`PG`,`G`] strip_assume_tac) >>
+  disch_then (strip_assume_tac o SPEC_ALL) >>
   qexistsl_tac [`HG`,`u`,`q`,`p`] >> simp[]
 QED
 
@@ -41,7 +41,7 @@ Theorem budget_alloca_endpoint_ptr[local]:
       FLOOKUP HG x = FLOOKUP G x /\ op_taint u (Var x) = op_taint tn (Var x))
 Proof
   strip_tac >> drule_all budget_alloca_endpoint_exact_ptr >>
-  disch_then (qspecl_then [`tn`,`cx`,`ctx`,`R`,`PG`,`G`] strip_assume_tac) >>
+  disch_then (strip_assume_tac o SPEC_ALL) >>
   qexistsl_tac [`HG`,`u`,`q`,`p`] >> simp[]
 QED
 
@@ -63,7 +63,7 @@ Theorem abi_decode_index_init_endpoint_exact_ptr:
       FLOOKUP HG x = FLOOKUP G x /\ op_taint u (Var x) = op_taint tn (Var x))
 Proof
   strip_tac >> drule_all abi_decode_index_init_endpoint_exact_ptr_core >>
-  disch_then (qspecl_then [`tn`,`cx`,`ctx`,`R`,`PG`,`G`] strip_assume_tac) >>
+  disch_then (strip_assume_tac o SPEC_ALL) >>
   qexistsl_tac [`HG`,`u`,`q`,`p`] >> simp[]
 QED
 
@@ -84,6 +84,6 @@ Theorem abi_decode_index_init_endpoint_ptr:
       FLOOKUP HG x = FLOOKUP G x /\ op_taint u (Var x) = op_taint tn (Var x))
 Proof
   strip_tac >> drule_all abi_decode_index_init_endpoint_exact_ptr >>
-  disch_then (qspecl_then [`tn`,`cx`,`ctx`,`R`,`PG`,`G`] strip_assume_tac) >>
+  disch_then (strip_assume_tac o SPEC_ALL) >>
   qexistsl_tac [`HG`,`u`,`q`,`p`] >> simp[]
 QED
