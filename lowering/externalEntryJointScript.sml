@@ -29,7 +29,7 @@ Ancestors
   moduleLoweringProps vyperCompiler
 
 (* Helper: the runtime entry function, its label and its phi-free entry block. *)
-Theorem runtime_entry_function_no_phi[local]:
+Theorem runtime_entry_function_no_phi:
   lower_vyper_runtime_unit tops rpolicy = SOME unit /\
   supported_program tops /\ name <> "__default__" /\
   ALL_DISTINCT (FLAT (MAP (external_name_keys_toplevel (NONE:num option)) tops)) /\
@@ -60,7 +60,7 @@ QED
 
 (* Helper: facts at the end s0 of a zero-GAS memory-checked path from the
    initial __entry state. *)
-Theorem entry_path_endpoint_facts[local]:
+Theorem entry_path_endpoint_facts:
   initial_venom_state_rel tops am tx vs /\
   fn_inst_ids_distinct func /\
   gas_path_mem ctx func
