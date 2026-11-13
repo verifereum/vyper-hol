@@ -6,6 +6,8 @@
  * the scalar and aggregate Log arms both build on it.
  *
  * TOP-LEVEL:
+ *   compile_log_eval_all_full_store_bound - the same joint endpoint also
+ *     retains each argument's live copy bound in log_full_post.
  *   compile_log_eval_all_full - the arguments as one joint outcome, given a
  *     readiness predicate R that supplies each head's expr_sim_full and is
  *     kept by the head's successful evaluation.  The arguments are
@@ -22,7 +24,7 @@ Ancestors
   bodyMemoryDefs gasShadowCompileHelpers gasShadowCompileStmtHelpers
   gasExemptCert gasOutcomeFull vyperStorageTrace vyperStorageFootprint
   loweringStateRelDefs ptrDiscipline valueEncodingDefs fragGasOriginPtr
-  vyperTypeSystem exprSimDefs
+  vyperTypeSystem exprSimDefs exprSimMemDefs
   exprLowering stmtLowering supportedExprTraverse compileEnv
   vyperInterpreter vyperState list
 
@@ -231,6 +233,7 @@ Definition log_full_post_def:
       LIST_REL (\(op,e) v.
         expr_val_rel cx (expr_type e) v op t /\
         expr_val_at cenv cx (expr_type e) sa sb ee v op t /\
+        expr_store_bound cx (expr_type e) v op t /\
         ptr_val_ok cx (expr_type e) v op G tn t /\
         (~is_word_type (expr_type e) ==> ptr_buf_ok cenv e op G t) /\
         ?tv. evaluate_type (get_tenv cx) (expr_type e) = SOME tv /\
@@ -265,6 +268,7 @@ Theorem log_full_post_cons[local]:
   expr_post H ctx func cenv cx e es sa sm s0 es1 v x t /\
   post_value_type cenv e = expr_type e /\ ~expr_has_effect e /\
   s0.vs_alloca_next <= t.vs_alloca_next /\
+  expr_store_bound cx (expr_type e) v x t /\
   ptr_val_ok cx (expr_type e) v x G1 tn1 t /\
   (~is_word_type (expr_type e) ==> ptr_buf_ok cenv e x G1 t) /\
   ghost_kept_at lo cenv es sa G0 tn0 s0 G1 tn1 /\
@@ -311,10 +315,20 @@ Proof
     (irule pure_argument_kept >> simp[] >>
      qexistsl_tac [`G1`, `H`, `ctx`, `es1`, `func`, `lo`, `sm`, `t`, `tn1`] >>
      simp[]) >>
+  `expr_store_bound cx (expr_type e) v x u` by
+    (`?w. eval_operand x t = SOME w` by gvs[expr_val_rel_def] >>
+     `eval_operand x u = SOME w` by
+       (drule_all log_frame_operand >> simp[]) >>
+     rw[expr_store_bound_def] >> gvs[] >>
+     `val_store_size tv v = 0 \/
+      w2n w + val_store_size tv v <= t.vs_alloca_next` by
+       metis_tac[expr_store_bound_def] >>
+     decide_tac) >>
   `!z. x = Var z ==> not_fresh_at sb z` by metis_tac[not_fresh_at_mono] >>
   `LIST_REL (\(op,e) v.
       expr_val_rel cx (expr_type e) v op u /\
       expr_val_at cenv cx (expr_type e) sa sb ee v op u /\
+      expr_store_bound cx (expr_type e) v op u /\
       ptr_val_ok cx (expr_type e) v op G tn u /\
       (~is_word_type (expr_type e) ==> ptr_buf_ok cenv e op G u) /\
       ?tv. evaluate_type (get_tenv cx) (expr_type e) = SOME tv /\
@@ -346,7 +360,7 @@ Proof
   Cases_on `r0` >> simp[bind_def, return_def]
 QED
 
-Theorem compile_log_eval_all_full_ind[local]:
+Theorem compile_log_eval_all_full_store_bound:
   !DF lo d PG ctx shadow_ctx func shadow_func cenv cx st0 R env.
     (!e tail es. R (e::tail) es ==>
        expr_sim_full (DF, lo, d, ctx, shadow_ctx, PG, func, shadow_func)
@@ -415,7 +429,7 @@ Proof
   suspend "cons"
 QED
 
-Resume compile_log_eval_all_full_ind[cons]:
+Resume compile_log_eval_all_full_store_bound[cons]:
   `gas_shadow_compiles (lower_value compile_expr cenv (expr_type e) e)
      (lower_value compile_expr cenv (expr_type e) (gas_shadow_expr e))` by
     simp[gas_shadow_stmt_lower_value] >>
@@ -483,7 +497,7 @@ Resume compile_log_eval_all_full_ind[cons]:
   metis_tac[expr_exit_INR_type]
 QED
 
-Resume compile_log_eval_all_full_ind[tail]:
+Resume compile_log_eval_all_full_store_bound[tail]:
   qx_genl_tac [`marks`, `res`, `mid`, `G1`, `tn1`, `t`] >>
   BETA_TAC >> strip_tac >>
   `valid_horizon cx st0 (storage_trace_horizon mid.storage_trace)
@@ -521,7 +535,7 @@ Resume compile_log_eval_all_full_ind[tail]:
   suspend "ih"
 QED
 
-Resume compile_log_eval_all_full_ind[ih]:
+Resume compile_log_eval_all_full_store_bound[ih]:
   `!H. valid_horizon cx st0 H mid.storage_trace ==>
      stmt_state_rel H ctx func cenv cx es s0 /\
      expr_post H ctx func cenv cx e es sa sm s0 mid v x t /\
@@ -585,7 +599,7 @@ Resume compile_log_eval_all_full_ind[ih]:
   first_assum ACCEPT_TAC
 QED
 
-Finalise compile_log_eval_all_full_ind
+Finalise compile_log_eval_all_full_store_bound
 
 Theorem compile_log_eval_all_full:
   !DF lo d PG ctx shadow_ctx func shadow_func cenv cx st0 R env.
@@ -662,11 +676,14 @@ Proof
   rpt gen_tac >> strip_tac >> rpt gen_tac >> strip_tac >>
   qspecl_then [`DF`, `lo`, `d`, `PG`, `ctx`, `shadow_ctx`, `func`,
                `shadow_func`, `cenv`, `cx`, `st0`, `R`, `env`] mp_tac
-    compile_log_eval_all_full_ind >>
+    compile_log_eval_all_full_store_bound >>
   (impl_tac >- (rpt conj_tac >> first_assum ACCEPT_TAC)) >>
   disch_then (qspecl_then [`args`, `es`, `sa`, `sb`, `shadow_sa`,
                            `shadow_sb`, `ops`, `s0`, `G0`, `tn0`] mp_tac) >>
   (impl_tac >- simp[]) >> strip_tac >>
   drule gas_outcome_full_post_mono >> disch_then irule >>
-  simp[log_full_post_def]
+  simp[log_full_post_def] >> rpt gen_tac >> strip_tac >>
+  qexists_tac `vs` >> simp[] >>
+  qpat_x_assum `LIST_REL _ _ vs` mp_tac >>
+  match_mp_tac LIST_REL_mono >> simp[pairTheory.FORALL_PROD]
 QED
