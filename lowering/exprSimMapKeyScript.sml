@@ -883,7 +883,7 @@ Proof
   qexists_tac `u` >> simp[] >>
   irule (Q.SPECL [`func`, `cenv`, `cx`, `en`, `s`, `sn`, `en`, `en`, `sp`,
                   `t`, `u`, `ctx`] exprSimWordArgsTheory.wb_frame_trans) >>
-  qexists_tac `H` >> simp[]
+  simp[] >> metis_tac[]
 QED
 
 Theorem compile_hashmap_tail_shape:

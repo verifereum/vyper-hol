@@ -30,8 +30,7 @@ Proof
       (reverse (Cases_on `storage_trace_domain cx st0 es_end.storage_trace`)
        >- (rewrite_tac[gas_outcome_def] >> qexists_tac `marks` >> disj1_tac >>
            irule gas_bad_storage_at_bind_left >> simp[] >>
-           irule gas_bad_storage_at_counted_prefix >>
-           goal_assum (drule_at Any) >> simp[])) >>
+           drule_all gas_bad_storage_at_counted_prefix >> simp[])) >>
       `valid_horizon cx st0 (storage_trace_horizon es_end.storage_trace)
          es_end.storage_trace` by fs[storage_trace_domain_def]
       >- suspend "normal"

@@ -54,6 +54,10 @@ Proof
       qpat_x_assum `ee with gas_obs := _ = _`
         (mp_tac o Q.AP_TERM `\st. st with gas_obs := []`) >>
       simp[] >> strip_tac >>
+      `ee.storage_trace = es_end.storage_trace` by
+        (qpat_x_assum `ee with gas_obs := [] = _`
+           (mp_tac o Q.AP_TERM `\st. st.storage_trace`) >> simp[]) >>
+      qexists_tac `t` >> fs[] >>
       metis_tac[abi_args_marked_path_labels])
   >- (gvs[gas_marked_exec_def] >>
       first_x_assum (qspec_then `[]` mp_tac) >> simp[] >>
