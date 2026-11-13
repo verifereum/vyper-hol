@@ -3,7 +3,7 @@ Theory bodyFullBuiltinWordAbs
 Ancestors
   bodyFullPreds bodySimFull bodyFullGhostFrame gasOutcomeFullCompose
   exprSimWordBuiltins exprSimUnopProps fragGasSeqPtr builtinProps
-  fragExecMem instMemFrontier memSafeRun
+  fragExecMem instMemFrontier memSafeRun ghostPcTransportPtr
   builtinSimple emitHelper emitHelperProps freshWrites
   exprLoweringProps exprLowering compileEnv venomInst list rich_list
 
@@ -54,6 +54,8 @@ Theorem abs_suffix_abort_full:
       (Abort Revert_abort (t with vs_inst_idx := s.vs_inst_idx + 5),G',tn')
 Proof
   strip_tac >>
+  qpat_x_assum `isPREFIX _ _` mp_tac >>
+  rewrite_tac[IS_PREFIX_APPEND] >> strip_tac >>
   `?t. run_inst_seq (emitted_insts sa sb) s = Abort Revert_abort t` by
     metis_tac[compile_builtin_abs_run] >>
   qpat_x_assum `compile_builtin_abs _ _ = _` mp_tac >>
@@ -149,9 +151,11 @@ Proof
      Cases_on `x` >>
      gvs[ptrDisciplineTheory.op_taint_def, finite_mapTheory.FLOOKUP_UPDATE] >>
      metis_tac[]) >>
-  `!D G0. ptr_inst_ok D lo 0 ctx func G0 tn1 i1 s1` by
+  `!D G0 k. ptr_inst_ok D lo 0 ctx func G0 tn1 i1 (s1 with vs_inst_idx := k)` by
     (rpt gen_tac >>
      simp[ptrSafeRunTheory.ptr_inst_ok_def, Abbr `i1`,
+          instIdxIndepTheory.step_inst_inst_idx_indep,
+          instIdxIndepTheory.exec_result_map_def, is_terminator_def,
           ptrDisciplineTheory.access_ok_def, ptrDisciplineTheory.taint_ok_def,
           codegenRelTheory.source_memory_write_ranges_def,
           contextCodegenRelTheory.source_memory_read_ranges_def,
@@ -196,9 +200,11 @@ Proof
    STRING #"%" (toString sa.cs_next_var) NOTIN FDOM G2` by
     (Cases_on `x` >> gvs[ptrDisciplineTheory.op_prov_def,
          finite_mapTheory.FLOOKUP_DEF] >> metis_tac[]) >>
-  `!D. ptr_inst_ok D lo 0 ctx func G2 tn2 i2 s2` by
-    (gen_tac >>
+  `!D k. ptr_inst_ok D lo 0 ctx func G2 tn2 i2 (s2 with vs_inst_idx := k)` by
+    (rpt gen_tac >>
      simp[ptrSafeRunTheory.ptr_inst_ok_def, Abbr `i2`,
+          instIdxIndepTheory.step_inst_inst_idx_indep,
+          instIdxIndepTheory.exec_result_map_def, is_terminator_def,
           ptrDisciplineTheory.access_ok_def, ptrDisciplineTheory.taint_ok_def,
           codegenRelTheory.source_memory_write_ranges_def,
           contextCodegenRelTheory.source_memory_read_ranges_def,
@@ -219,9 +225,11 @@ Proof
          ptrDisciplineTheory.step_taint_def, ptrDisciplineTheory.set_var_taint_def,
          ptrDisciplineTheory.out_taint_def, Abbr `i2`,
          finite_mapTheory.FLOOKUP_UPDATE]) >>
-  `!D G0. ptr_inst_ok D lo 0 ctx func G0 tn3 i3 s3` by
+  `!D G0 k. ptr_inst_ok D lo 0 ctx func G0 tn3 i3 (s3 with vs_inst_idx := k)` by
     (rpt gen_tac >>
      simp[ptrSafeRunTheory.ptr_inst_ok_def, Abbr `i3`,
+          instIdxIndepTheory.step_inst_inst_idx_indep,
+          instIdxIndepTheory.exec_result_map_def, is_terminator_def,
           ptrDisciplineTheory.access_ok_def, ptrDisciplineTheory.taint_ok_def,
           codegenRelTheory.source_memory_write_ranges_def,
           contextCodegenRelTheory.source_memory_read_ranges_def,
@@ -239,9 +247,11 @@ Proof
          ptrDisciplineTheory.step_taint_def, ptrDisciplineTheory.set_var_taint_def,
          ptrDisciplineTheory.out_taint_def, Abbr `i3`,
          finite_mapTheory.FLOOKUP_UPDATE] >>
-  `!D G0. ptr_inst_ok D lo 0 ctx func G0 tn4 i4 s4` by
+  `!D G0 k. ptr_inst_ok D lo 0 ctx func G0 tn4 i4 (s4 with vs_inst_idx := k)` by
     (rpt gen_tac >>
      simp[ptrSafeRunTheory.ptr_inst_ok_def, Abbr `i4`,
+          instIdxIndepTheory.step_inst_inst_idx_indep,
+          instIdxIndepTheory.exec_result_map_def, is_terminator_def,
           ptrDisciplineTheory.access_ok_def, ptrDisciplineTheory.taint_ok_def,
           codegenRelTheory.source_memory_write_ranges_def,
           contextCodegenRelTheory.source_memory_read_ranges_def,
@@ -256,9 +266,11 @@ Proof
          ptrDisciplineTheory.step_taint_def, ptrDisciplineTheory.set_var_taint_def,
          ptrDisciplineTheory.out_taint_def, Abbr `i4`,
          finite_mapTheory.FLOOKUP_UPDATE] >>
-  `!D G0. ptr_inst_ok D lo 0 ctx func G0 tn5 i5 s5` by
+  `!D G0 k. ptr_inst_ok D lo 0 ctx func G0 tn5 i5 (s5 with vs_inst_idx := k)` by
     (rpt gen_tac >>
      simp[ptrSafeRunTheory.ptr_inst_ok_def, Abbr `i5`,
+          instIdxIndepTheory.step_inst_inst_idx_indep,
+          instIdxIndepTheory.exec_result_map_def, is_terminator_def,
           ptrDisciplineTheory.access_ok_def, ptrDisciplineTheory.taint_ok_def,
           codegenRelTheory.source_memory_write_ranges_def,
           contextCodegenRelTheory.source_memory_read_ranges_def,
@@ -280,7 +292,19 @@ Proof
         Abbr `G4`, Abbr `G5`, Abbr `tn1`, Abbr `tn2`, Abbr `tn3`,
         Abbr `tn4`, Abbr `tn5`] >>
      simp[inst_seq_ptr_def, instIdxIndepTheory.step_inst_inst_idx_indep,
-          instIdxIndepTheory.exec_result_map_def, is_terminator_def] >>
-     FAIL_TAC "prefix cursor checks") >>
+          instIdxIndepTheory.exec_result_map_def, is_terminator_def]) >>
+  `run_inst_seq [i0;i1;i2;i3;i4] s = OK s5` by simp[run_inst_seq_def] >>
+  `isPREFIX [i0;i1;i2;i3;i4] (DROP s.vs_inst_idx bb.bb_instructions)` by
+    simp[IS_PREFIX_APPEND] >>
+  `run_inst_seq_mem_ok [i0;i1;i2;i3;i4] s` by
+    (irule run_inst_seq_mem_ok_every >>
+     simp[Abbr `i0`, Abbr `i1`, Abbr `i2`, Abbr `i3`, Abbr `i4`,
+          below_frontier_no_ranges, inst_dload_in_section_other]) >>
+  `!D. gas_origin_ptr_path (D,lo,explicit,ctx,func,PG) (s,G,tn) []
+      (OK (s5 with vs_inst_idx := s.vs_inst_idx + 5),G5,tn5)` by
+    (gen_tac >>
+     drule_at (Pat `run_inst_seq _ _ = _`) run_inst_seq_gas_origin_ptr_path >>
+     simp[is_terminator_def] >>
+     disch_then irule >> simp[]) >>
   FAIL_TAC "abs abort prefix path"
 QED
