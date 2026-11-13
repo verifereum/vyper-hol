@@ -112,3 +112,35 @@ Proof
   first_x_assum drule_all >>
   simp[loweringStateRelDefsTheory.regions_disjoint_def] >> decide_tac
 QED
+
+Theorem extcall_request_wb_frame:
+  extcall_request_ready st0 ctx func cenv cx ret_type es sa s0 sp stat
+    addr_op value_op gas_op buf_op call_offset call_len cap target value_opt
+    calldata has_default default_op default_ty default_opt ee t /\
+  eval_operand buf_op t = SOME ro /\
+  v.vs_allocas = t.vs_allocas /\ v.vs_alloca_next = t.vs_alloca_next /\
+  v.vs_memory = (write_memory_with_expansion (w2n ro) (TAKE cap rd) t).vs_memory /\
+  (!x. not_fresh_at sp x ==> lookup_var x v = lookup_var x t) ==>
+  wb_frame cenv es ee sa s0 v
+Proof
+  strip_tac >> fs[extcall_request_ready_def] >>
+  `LENGTH (TAKE cap rd) <= cap` by simp[listTheory.LENGTH_TAKE_EQ] >>
+  fs[loweringPostsTheory.wb_frame_def] >> rpt conj_tac
+  >- (rpt strip_tac >>
+      `not_fresh_at sp x` by
+        metis_tac[loweringShapeDefsTheory.not_fresh_at_mono] >> metis_tac[])
+  >- (rpt strip_tac >>
+      `FLOOKUP t.vs_allocas aid = SOME (off,sz)` by metis_tac[] >>
+      `regions_disjoint (w2n ro) cap off sz` by metis_tac[] >>
+      `mem_bytes_at off sz
+        (write_memory_with_expansion (w2n ro) (TAKE cap rd) t).vs_memory =
+       mem_bytes_at off sz t.vs_memory` by
+        (irule valueEncodingPropsTheory.write_memory_mem_bytes_at_disjoint >>
+         fs[loweringStateRelDefsTheory.regions_disjoint_def] >> decide_tac) >>
+      metis_tac[]) >>
+  irule exprSimPropsTheory.locals_kept_regions_tail >> qexists_tac `t` >>
+  simp[] >> rpt strip_tac >>
+  irule valueEncodingPropsTheory.write_memory_mem_bytes_at_disjoint >>
+  first_x_assum drule >>
+  simp[loweringStateRelDefsTheory.regions_disjoint_def] >> decide_tac
+QED
