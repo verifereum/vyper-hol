@@ -2,6 +2,7 @@
 Theory ctorDeployMemoryRunPtrPrefixBoolBody
 Ancestors
   loweringStateRelDefs
+  exprSimUnwrap slotCopyExecution emitHelperProps compileEnv
   ctorDeployMemoryRunPtrPrefixBoolHeader ctorDeployMemoryRunPtrPrefixBoolWord
   ctorDeployMemoryRunPtrPrefixWordRead ctorDeployMemoryRunPtrPrefixSteps
   ctorDeployMemoryRunPtrPrefixSequence instIdxIndep
@@ -11,34 +12,18 @@ Ancestors
   venomExecSemantics venomExecProofs venomState venomInst emitHelper
   words arithmetic list finite_map pred_set codegenRel contextCodegenRel memLocDefs
 
-Theorem prefix_bool_body_add_dispatch[local]:
+Theorem prefix_bool_body_add_dispatch:
   step_inst_base (mk_inst iid ADD ops outs) s =
     exec_pure2 $+ (mk_inst iid ADD ops outs) s
 Proof
   pure_rewrite_tac[step_inst_base_def, mk_inst_def] >> simp[]
 QED
 
-Theorem prefix_bool_body_mul_dispatch[local]:
+Theorem prefix_bool_body_mul_dispatch:
   step_inst_base (mk_inst iid MUL ops outs) s =
     exec_pure2 $* (mk_inst iid MUL ops outs) s
 Proof
   pure_rewrite_tac[step_inst_base_def, mk_inst_def] >> simp[]
-QED
-
-Theorem prefix_bool_body_add_step:
-  eval_operand a s = SOME u /\ eval_operand b s = SOME v ==>
-  step_inst_base (mk_inst iid ADD [a;b] [x]) s =
-    OK (update_var x (u+v) s)
-Proof
-  simp[prefix_bool_body_add_dispatch, exec_pure2_def, mk_inst_def]
-QED
-
-Theorem prefix_bool_body_mul_step:
-  eval_operand a s = SOME u /\ eval_operand b s = SOME v ==>
-  step_inst_base (mk_inst iid MUL [a;b] [x]) s =
-    OK (update_var x (u*v) s)
-Proof
-  simp[prefix_bool_body_mul_dispatch, exec_pure2_def, mk_inst_def]
 QED
 
 Theorem prefix_bool_body_arith_ptr_step:
@@ -65,7 +50,7 @@ Theorem prefix_bool_body_add_ghost:
     (set_prov G [x] (first_prov G [a;b]), step_taint inst s t tn)
 Proof
   rpt strip_tac >> simp[] >>
-  simp[ghost_step_def, step_inst_non_invoke, prefix_bool_body_add_step,
+  simp[ghost_step_def, step_inst_non_invoke, slotCopyExecutionTheory.slot_copy_step_add,
        step_prov_def, out_prov_def, mk_inst_def,
        prefix_bool_body_add_dispatch, exec_pure2_def]
 QED
@@ -78,7 +63,7 @@ Theorem prefix_bool_body_mul_ghost:
     (DRESTRICT G (COMPL {x}), step_taint inst s t tn)
 Proof
   rpt strip_tac >> simp[] >>
-  simp[ghost_step_def, step_inst_non_invoke, prefix_bool_body_mul_step,
+  simp[ghost_step_def, step_inst_non_invoke, slotCopyExecutionTheory.slot_copy_step_mul,
        step_prov_def, out_prov_def, set_prov_def, mk_inst_def,
        prefix_bool_body_mul_dispatch, exec_pure2_def]
 QED
@@ -104,20 +89,13 @@ Proof
   Cases_on `eval_operand a s` >> simp[]
 QED
 
-Theorem prefix_bool_body_eval_update[local]:
-  eval_operand (Var v) (update_var x w s) =
-    if v = x then SOME w else eval_operand (Var v) s
-Proof
-  Cases_on `v = x` >>
-  simp[eval_operand_def, lookup_var_def, update_var_def, FLOOKUP_UPDATE]
-QED
 
 Theorem prefix_bool_body_add_n2w:
   eval_operand a s = SOME (n2w m) /\ eval_operand b s = SOME (n2w n) ==>
   step_inst_base (mk_inst iid ADD [a;b] [x]) s =
     OK (update_var x (n2w (m+n)) s)
 Proof
-  metis_tac[prefix_bool_body_add_step, word_add_n2w]
+  metis_tac[slotCopyExecutionTheory.slot_copy_step_add, word_add_n2w]
 QED
 
 Theorem prefix_bool_body_mul_n2w:
@@ -125,7 +103,7 @@ Theorem prefix_bool_body_mul_n2w:
   step_inst_base (mk_inst iid MUL [a;b] [x]) s =
     OK (update_var x (n2w (m*n)) s)
 Proof
-  metis_tac[prefix_bool_body_mul_step, word_mul_n2w]
+  metis_tac[slotCopyExecutionTheory.slot_copy_step_mul, word_mul_n2w]
 QED
 
 Theorem prefix_bool_body_address_steps:
@@ -189,54 +167,54 @@ QED
 
 Resume prefix_bool_body_address_steps[load]:
   qpat_assum `eval_operand (Var ip) s = SOME _`
-    (mp_then Any mp_tac prefix_mload_step) >>
+    (mp_then Any mp_tac exprLoweringPropsTheory.step_MLOAD_local) >>
   simp[Abbr `u0`, w2n_n2w]
 QED
 
 Resume prefix_bool_body_address_steps[srcbase]:
   simp_tac bool_ss [Abbr `u1`] >> irule prefix_bool_body_add_n2w >>
   gvs[ALL_DISTINCT] >>
-  simp[Abbr `u0`, prefix_bool_body_eval_update, eval_operand_lit_local]
+  simp[Abbr `u0`, slot_copy_operand_update, eval_operand_lit_local]
 QED
 
 Resume prefix_bool_body_address_steps[srcmul]:
   simp_tac bool_ss [Abbr `u2`] >> irule prefix_bool_body_mul_n2w >>
   gvs[ALL_DISTINCT] >>
-  simp[Abbr `u1`, Abbr `u0`, prefix_bool_body_eval_update, eval_operand_lit_local]
+  simp[Abbr `u1`, Abbr `u0`, slot_copy_operand_update, eval_operand_lit_local]
 QED
 
 Resume prefix_bool_body_address_steps[srcptr]:
   simp_tac bool_ss [Abbr `u3`] >> irule prefix_bool_body_add_n2w >>
   gvs[ALL_DISTINCT] >>
-  simp[Abbr `u2`, Abbr `u1`, prefix_bool_body_eval_update]
+  simp[Abbr `u2`, Abbr `u1`, slot_copy_operand_update]
 QED
 
 Resume prefix_bool_body_address_steps[dstbase]:
   simp_tac bool_ss [Abbr `u4`] >> irule prefix_bool_body_add_n2w >>
   gvs[ALL_DISTINCT] >>
   simp[Abbr `u3`, Abbr `u2`, Abbr `u1`, Abbr `u0`,
-       prefix_bool_body_eval_update, eval_operand_lit_local]
+       slot_copy_operand_update, eval_operand_lit_local]
 QED
 
 Resume prefix_bool_body_address_steps[dstmul]:
   simp_tac bool_ss [Abbr `u5`] >> irule prefix_bool_body_mul_n2w >>
   gvs[ALL_DISTINCT] >>
   simp[Abbr `u4`, Abbr `u3`, Abbr `u2`, Abbr `u1`, Abbr `u0`,
-       prefix_bool_body_eval_update, eval_operand_lit_local]
+       slot_copy_operand_update, eval_operand_lit_local]
 QED
 
 Resume prefix_bool_body_address_steps[dstptr]:
   simp_tac bool_ss [Abbr `u6`] >> irule prefix_bool_body_add_n2w >>
   gvs[ALL_DISTINCT] >>
-  simp[Abbr `u5`, Abbr `u4`, prefix_bool_body_eval_update]
+  simp[Abbr `u5`, Abbr `u4`, slot_copy_operand_update]
 QED
 
 Resume prefix_bool_body_address_steps[frames]:
   gvs[ALL_DISTINCT] >>
   simp[Abbr `u6`, Abbr `u5`, Abbr `u4`, Abbr `u3`, Abbr `u2`,
-       Abbr `u1`, Abbr `u0`, prefix_bool_body_eval_update] >>
+       Abbr `u1`, Abbr `u0`, slot_copy_operand_update] >>
   simp[update_var_def] >> rpt strip_tac >> gvs[] >>
-  simp[prefix_bool_body_eval_update]
+  simp[slot_copy_operand_update]
 QED
 
 Finalise prefix_bool_body_address_steps
@@ -274,7 +252,7 @@ QED
 Resume prefix_bool_body_arith_certificate[add]:
   gvs[] >> rpt strip_tac >>
   `step_inst_base (mk_inst iid ADD [a;b] [x]) s = OK (update_var x (u+v) s)` by
-    (irule prefix_bool_body_add_step >> simp[]) >>
+    (irule slotCopyExecutionTheory.slot_copy_step_add >> simp[]) >>
   `ghost_step f ctx PG G tn (mk_inst iid ADD [a;b] [x]) s =
     (set_prov G [x] (first_prov G [a;b]),
      step_taint (mk_inst iid ADD [a;b] [x]) s (update_var x (u+v) s) tn)` by
@@ -282,10 +260,10 @@ Resume prefix_bool_body_arith_certificate[add]:
   mp_tac (Q.INST [`opc` |-> `ADD`, `t` |-> `update_var x (u+v) s`]
     prefix_bool_body_arith_taint_frame) >>
   simp[update_var_def] >> strip_tac >>
-  simp[step_inst_non_invoke, prefix_bool_body_add_step,
+  simp[step_inst_non_invoke, slotCopyExecutionTheory.slot_copy_step_add,
        prefix_bool_body_arith_ptr_step,
        SRULE [LET_THM] prefix_bool_body_add_ghost,
-       prefix_bool_body_eval_update, update_var_def] >>
+       slot_copy_operand_update, update_var_def] >>
   rpt strip_tac >> Cases_on `first_prov G [a;b]` >>
   simp[set_prov_def, FLOOKUP_UPDATE, FLOOKUP_DRESTRICT,
        eval_operand_def, lookup_var_def] >> metis_tac[]
@@ -294,7 +272,7 @@ QED
 Resume prefix_bool_body_arith_certificate[mul]:
   gvs[] >> rpt strip_tac >>
   `step_inst_base (mk_inst iid MUL [a;b] [x]) s = OK (update_var x (u*v) s)` by
-    (irule prefix_bool_body_mul_step >> simp[]) >>
+    (irule slotCopyExecutionTheory.slot_copy_step_mul >> simp[]) >>
   `ghost_step f ctx PG G tn (mk_inst iid MUL [a;b] [x]) s =
     (DRESTRICT G (COMPL {x}),
      step_taint (mk_inst iid MUL [a;b] [x]) s (update_var x (u*v) s) tn)` by
@@ -302,10 +280,10 @@ Resume prefix_bool_body_arith_certificate[mul]:
   mp_tac (Q.INST [`opc` |-> `MUL`, `t` |-> `update_var x (u*v) s`]
     prefix_bool_body_arith_taint_frame) >>
   simp[update_var_def] >> strip_tac >>
-  simp[step_inst_non_invoke, prefix_bool_body_mul_step,
+  simp[step_inst_non_invoke, slotCopyExecutionTheory.slot_copy_step_mul,
        prefix_bool_body_arith_ptr_step,
        SRULE [LET_THM] prefix_bool_body_mul_ghost,
-       prefix_bool_body_eval_update, update_var_def,
+       slot_copy_operand_update, update_var_def,
        set_prov_def, FLOOKUP_DRESTRICT,
        eval_operand_def, lookup_var_def, FLOOKUP_UPDATE]
 QED
@@ -393,14 +371,14 @@ Proof
   `scratch < dimword(:256)` by decide_tac >>
   `eval_operand (Var ip) t = SOME (n2w scratch) /\
    eval_operand (Var inc) t = SOME (n2w (SUC i)) /\ allocas_from lo t` by
-    (simp[Abbr `t`, prefix_bool_body_eval_update] >>
+    (simp[Abbr `t`, slot_copy_operand_update] >>
      gvs[allocas_from_def, update_var_def] >> metis_tac[]) >>
   `step_inst_base j s = OK t` by
     (simp[Abbr `j`, Abbr `t`, ADD1, GSYM word_add_n2w] >>
-     irule prefix_bool_body_add_step >> simp[eval_operand_lit_local]) >>
+     irule slotCopyExecutionTheory.slot_copy_step_add >> simp[eval_operand_lit_local]) >>
   `step_inst_base k t = OK u` by
     (qpat_assum `eval_operand (Var ip) t = SOME _`
-       (mp_then Any mp_tac prefix_mstore_step) >>
+       (mp_then Any mp_tac slotCopyExecutionTheory.slot_copy_step_store) >>
      disch_then drule >> disch_then (qspec_then `iid+1` mp_tac) >>
      simp[Abbr `k`, Abbr `u`, w2n_n2w]) >>
   simp[run_inst_seq_def] >>
@@ -541,7 +519,7 @@ QED
 Resume prefix_bool_body_execution[setupframes]:
   gvs[ALL_DISTINCT] >>
   simp[Abbr `u6`, Abbr `u5`, Abbr `u4`, Abbr `u3`, Abbr `u2`, Abbr `u1`,
-       Abbr `u0`, prefix_bool_body_eval_update, update_var_def,
+       Abbr `u0`, slot_copy_operand_update, update_var_def,
        eval_operand_def, lookup_var_def, FLOOKUP_UPDATE]
 QED
 
@@ -565,13 +543,13 @@ Resume prefix_bool_body_execution[tail]:
      gvs[eval_operand_def, lookup_var_def]) >>
   `step_inst_base (mk_inst (iid+12) ADD [Var iv;Lit 1w] [inc]) v3 = OK v4` by
     (simp[Abbr `v4`, ADD1, GSYM word_add_n2w] >>
-     irule prefix_bool_body_add_step >> simp[eval_operand_lit_local]) >>
+     irule slotCopyExecutionTheory.slot_copy_step_add >> simp[eval_operand_lit_local]) >>
   `eval_operand (Var ip) v4 = SOME (n2w scratch) /\
    eval_operand (Var inc) v4 = SOME (n2w (SUC i))` by
-    (gvs[ALL_DISTINCT] >> simp[Abbr `v4`, prefix_bool_body_eval_update]) >>
+    (gvs[ALL_DISTINCT] >> simp[Abbr `v4`, slot_copy_operand_update]) >>
   `step_inst_base (mk_inst (iid+13) MSTORE [Var ip;Var inc] []) v4 = OK v5` by
     (qpat_assum `eval_operand (Var ip) v4 = SOME _`
-       (mp_then Any mp_tac prefix_mstore_step) >>
+       (mp_then Any mp_tac slotCopyExecutionTheory.slot_copy_step_store) >>
      disch_then drule >> disch_then (qspec_then `iid+13` mp_tac) >>
      simp[Abbr `v5`, w2n_n2w]) >>
   `step_inst_base (mk_inst (iid+14) JMP [Label hdr] []) v5 = OK (jump_to hdr v5)` by
@@ -625,7 +603,7 @@ Proof
   `scratch < dimword(:256)` by decide_tac >>
   `step_inst_base inst s = OK t` by
     (simp[Abbr `inst`, Abbr `t`] >>
-     drule prefix_mload_step >> simp[w2n_n2w]) >>
+     drule exprLoweringPropsTheory.step_MLOAD_local >> simp[w2n_n2w]) >>
   `step_inst fuel ctx inst s = OK t` by
     simp[Abbr `inst`, step_inst_non_invoke] >>
   simp[] >> conj_tac >- suspend "indexed" >>
@@ -667,7 +645,7 @@ Resume prefix_bool_body_scratch_read[frames]:
     (SRULE [LET_THM] prefix_mload_taint_frame)) >>
   simp[Abbr `q`, Abbr `inst`, Abbr `t`] >> strip_tac >>
   simp[Abbr `H`, FLOOKUP_DRESTRICT] >> rpt strip_tac >>
-  simp[prefix_bool_body_eval_update] >> gvs[op_taint_def]
+  simp[slot_copy_operand_update] >> gvs[op_taint_def]
 QED
 
 Finalise prefix_bool_body_scratch_read
@@ -922,7 +900,8 @@ Resume prefix_bool_body_paired[source_add]:
   simp_tac pure_ss [Abbr `g1`, Abbr `t1`, Abbr `u1`] >>
   qpat_x_assum `EL 1 insns = _` (fn th => pure_rewrite_tac [th]) >>
   pure_rewrite_tac [GSYM word_add_n2w] >>
-  irule (GEN_ALL (SRULE [LET_THM] (Q.INST [`opc` |-> `ADD`]
+  irule (GEN_ALL (SIMP_RULE (bool_ss ++ numSimps.REDUCE_ss)
+    [LET_THM, venomInstTheory.opcode_EQ_opcode, venomInstTheory.opcode2num_thm] (Q.INST [`opc` |-> `ADD`]
     prefix_bool_body_arith_certificate))) >>
   simp[eval_operand_lit_local, op_taint_def]
 QED
@@ -935,7 +914,7 @@ Resume prefix_bool_body_paired[setup_arith_rest]:
   `eval_operand (Var iv) u1 = SOME (n2w i) /\
    op_taint t1 (Var iv) = {} /\ allocas_from lo u1` by
     (conj_tac
-     >- simp[Abbr `u1`, Abbr `u0`, prefix_bool_body_eval_update] >>
+     >- simp[Abbr `u1`, Abbr `u0`, slot_copy_operand_update] >>
      conj_tac >- metis_tac[] >>
      qpat_x_assum `allocas_from lo u0` mp_tac >>
      simp[Abbr `u1`, allocas_from_def, update_var_def]) >>
@@ -965,7 +944,8 @@ Resume prefix_bool_body_paired[source_mul]:
   simp_tac pure_ss [Abbr `g2`, Abbr `t2`, Abbr `u2`] >>
   qpat_x_assum `EL 2 insns = _` (fn th => pure_rewrite_tac [th]) >>
   pure_rewrite_tac [GSYM word_mul_n2w] >>
-  irule (GEN_ALL (SRULE [LET_THM] (Q.INST [`opc` |-> `MUL`]
+  irule (GEN_ALL (SIMP_RULE (bool_ss ++ numSimps.REDUCE_ss)
+    [LET_THM, venomInstTheory.opcode_EQ_opcode, venomInstTheory.opcode2num_thm] (Q.INST [`opc` |-> `MUL`]
     prefix_bool_body_arith_certificate))) >>
   simp[eval_operand_lit_local, op_taint_def]
 QED
@@ -979,8 +959,8 @@ Resume prefix_bool_body_paired[setup_after_mul]:
    eval_operand (Var isrc) u2 = SOME (n2w (i*32)) /\
    op_taint t2 (Var sp0) = {} /\ allocas_from lo u2` by
     (conj_tac
-     >- simp[Abbr `u2`, Abbr `u1`, prefix_bool_body_eval_update] >>
-     conj_tac >- simp[Abbr `u2`, prefix_bool_body_eval_update] >>
+     >- simp[Abbr `u2`, Abbr `u1`, slot_copy_operand_update] >>
+     conj_tac >- simp[Abbr `u2`, slot_copy_operand_update] >>
      conj_tac >- metis_tac[] >>
      qpat_x_assum `allocas_from lo u1` mp_tac >>
      simp[Abbr `u2`, allocas_from_def, update_var_def]) >>
@@ -1011,7 +991,8 @@ Resume prefix_bool_body_paired[source_ptr]:
   simp_tac pure_ss [Abbr `g3`, Abbr `t3`, Abbr `u3`] >>
   qpat_x_assum `EL 3 insns = _` (fn th => pure_rewrite_tac [th]) >>
   pure_rewrite_tac [GSYM ADD_ASSOC, GSYM word_add_n2w] >>
-  irule (GEN_ALL (SRULE [LET_THM] (Q.INST [`opc` |-> `ADD`]
+  irule (GEN_ALL (SIMP_RULE (bool_ss ++ numSimps.REDUCE_ss)
+    [LET_THM, venomInstTheory.opcode_EQ_opcode, venomInstTheory.opcode2num_thm] (Q.INST [`opc` |-> `ADD`]
     prefix_bool_body_arith_certificate))) >> simp[word_add_n2w]
 QED
 
@@ -1024,7 +1005,7 @@ Resume prefix_bool_body_paired[setup_after_source]:
    op_taint t3 (Var dst) = {} /\ allocas_from lo u3` by
     (conj_tac
      >- simp[Abbr `u3`, Abbr `u2`, Abbr `u1`, Abbr `u0`,
-             prefix_bool_body_eval_update] >>
+             slot_copy_operand_update] >>
      conj_tac >- metis_tac[] >>
      qpat_x_assum `allocas_from lo u2` mp_tac >>
      simp[Abbr `u3`, allocas_from_def, update_var_def]) >>
@@ -1055,7 +1036,8 @@ Resume prefix_bool_body_paired[dest_add]:
   simp_tac pure_ss [Abbr `g4`, Abbr `t4`, Abbr `u4`] >>
   qpat_x_assum `EL 4 insns = _` (fn th => pure_rewrite_tac [th]) >>
   pure_rewrite_tac [GSYM word_add_n2w] >>
-  irule (GEN_ALL (SRULE [LET_THM] (Q.INST [`opc` |-> `ADD`]
+  irule (GEN_ALL (SIMP_RULE (bool_ss ++ numSimps.REDUCE_ss)
+    [LET_THM, venomInstTheory.opcode_EQ_opcode, venomInstTheory.opcode2num_thm] (Q.INST [`opc` |-> `ADD`]
     prefix_bool_body_arith_certificate))) >>
   simp[eval_operand_lit_local, op_taint_def]
 QED
@@ -1069,7 +1051,7 @@ Resume prefix_bool_body_paired[setup_after_dest_add]:
    op_taint t4 (Var iv) = {} /\ allocas_from lo u4` by
     (conj_tac
      >- simp[Abbr `u4`, Abbr `u3`, Abbr `u2`, Abbr `u1`, Abbr `u0`,
-             prefix_bool_body_eval_update, ALL_DISTINCT] >>
+             slot_copy_operand_update, ALL_DISTINCT] >>
      conj_tac
      >- (qpat_assum `!v. v <> dp0 ==> _` (qspec_then `iv` mp_tac) >>
          qpat_assum `!v. v <> sp ==> _` (qspec_then `iv` mp_tac) >>
@@ -1105,7 +1087,8 @@ Resume prefix_bool_body_paired[dest_mul]:
   simp_tac pure_ss [Abbr `g5`, Abbr `t5`, Abbr `u5`] >>
   qpat_x_assum `EL 5 insns = _` (fn th => pure_rewrite_tac [th]) >>
   pure_rewrite_tac [GSYM word_mul_n2w] >>
-  irule (GEN_ALL (SRULE [LET_THM] (Q.INST [`opc` |-> `MUL`]
+  irule (GEN_ALL (SIMP_RULE (bool_ss ++ numSimps.REDUCE_ss)
+    [LET_THM, venomInstTheory.opcode_EQ_opcode, venomInstTheory.opcode2num_thm] (Q.INST [`opc` |-> `MUL`]
     prefix_bool_body_arith_certificate))) >>
   simp[eval_operand_lit_local, op_taint_def]
 QED
@@ -1119,8 +1102,8 @@ Resume prefix_bool_body_paired[setup_after_dest_mul]:
    eval_operand (Var idst) u5 = SOME (n2w (i*32)) /\
    op_taint t5 (Var dp0) = {} /\ allocas_from lo u5` by
     (conj_tac
-     >- simp[Abbr `u5`, Abbr `u4`, prefix_bool_body_eval_update] >>
-     conj_tac >- simp[Abbr `u5`, prefix_bool_body_eval_update] >>
+     >- simp[Abbr `u5`, Abbr `u4`, slot_copy_operand_update] >>
+     conj_tac >- simp[Abbr `u5`, slot_copy_operand_update] >>
      conj_tac
      >- (qpat_assum `!v. v <> idst ==> _` (qspec_then `dp0` mp_tac) >> simp[]) >>
      qpat_x_assum `allocas_from lo u4` mp_tac >>
@@ -1152,7 +1135,8 @@ Resume prefix_bool_body_paired[dest_ptr]:
   simp_tac pure_ss [Abbr `g6`, Abbr `t6`, Abbr `u6`] >>
   qpat_x_assum `EL 6 insns = _` (fn th => pure_rewrite_tac [th]) >>
   pure_rewrite_tac [GSYM ADD_ASSOC, GSYM word_add_n2w] >>
-  irule (GEN_ALL (SRULE [LET_THM] (Q.INST [`opc` |-> `ADD`]
+  irule (GEN_ALL (SIMP_RULE (bool_ss ++ numSimps.REDUCE_ss)
+    [LET_THM, venomInstTheory.opcode_EQ_opcode, venomInstTheory.opcode2num_thm] (Q.INST [`opc` |-> `ADD`]
     prefix_bool_body_arith_certificate))) >> simp[word_add_n2w]
 QED
 
@@ -1165,7 +1149,7 @@ Resume prefix_bool_body_paired[setup_complete]:
     (`sp <> dp /\ sp <> idst /\ sp <> dp0` by
        (qpat_x_assum `ALL_DISTINCT _` mp_tac >> simp[ALL_DISTINCT] >> metis_tac[]) >>
      simp[Abbr `u6`, Abbr `u5`, Abbr `u4`, Abbr `u3`,
-          prefix_bool_body_eval_update, Once MULT_COMM]) >>
+          slot_copy_operand_update, Once MULT_COMM]) >>
   suspend "word_prepare"
 QED
 
@@ -1224,14 +1208,14 @@ QED
 
 Resume prefix_bool_body_paired[word_load_raw]:
   qpat_assum `eval_operand (Var sp) u6 = _`
-    (mp_then Any mp_tac prefix_dload_step) >>
+    (mp_then Any mp_tac exprSimUnwrapTheory.step_DLOAD) >>
   disch_then (qspecl_then [`iid+7`,`x`] mp_tac) >>
   simp[Abbr `v0`, Abbr `w`, abi_decode_load_def, abi_decode_source_def]
 QED
 
 Resume prefix_bool_body_paired[word_after_load]:
   `eval_operand (Var x) v0 = SOME w` by
-    simp[Abbr `v0`, prefix_bool_body_eval_update] >>
+    simp[Abbr `v0`, slot_copy_operand_update] >>
   `op_taint t7 (Var x) = {}` by
     simp[Abbr `t7`, prefix_dload_output_taint] >>
   `allocas_from lo v0` by
@@ -1276,7 +1260,7 @@ Resume prefix_bool_body_paired[word_after_clamp]:
     (qpat_x_assum `ALL_DISTINCT _` mp_tac >> simp[ALL_DISTINCT] >> metis_tac[]) >>
   `eval_operand (Var dp) v2 = SOME (n2w (d+32+32*i)) /\
    eval_operand (Var x) v2 = SOME w` by
-    simp[Abbr `v2`, Abbr `v1`, Abbr `v0`, prefix_bool_body_eval_update] >>
+    simp[Abbr `v2`, Abbr `v1`, Abbr `v0`, slot_copy_operand_update] >>
   `op_taint t9 (Var x) = {}` by
     simp[Abbr `t9`, Abbr `t8`, Abbr `insns`, prefix_guard_taint_other] >>
   `op_taint t9 (Var dp) = {}` by
@@ -1291,7 +1275,9 @@ Resume prefix_bool_body_paired[word_store]:
   `EL 11 insns = mk_inst (iid+11) MSTORE [Var dp;Var x] []` by simp[Abbr `insns`] >>
   `step_inst_base (EL 11 insns) v2 = OK v3` by
     (qpat_assum `eval_operand (Var dp) v2 = _`
-      (mp_then Any mp_tac prefix_mstore_step) >>
+      (mp_then Any mp_tac
+        (Q.GENL [`id`,`a`,`b`,`s`,`x`,`y`]
+          slotCopyExecutionTheory.slot_copy_step_store)) >>
      disch_then (qspecl_then [`iid+11`,`Var x`,`w`] mp_tac) >>
      simp[Abbr `v3`]) >>
   `!f check_fn. step_inst f ctx (EL 11 insns) v2 = OK v3 /\
@@ -1325,7 +1311,7 @@ Resume prefix_bool_body_paired[word_after_store]:
    eval_operand (Var iv) v3 = SOME (n2w i)` by
     simp[Abbr `v2`, Abbr `v1`, Abbr `v0`,
          Abbr `u6`, Abbr `u5`, Abbr `u4`, Abbr `u3`, Abbr `u2`, Abbr `u1`, Abbr `u0`,
-         prefix_bool_body_eval_update] >>
+         slot_copy_operand_update] >>
   suspend "tail_prepare"
 QED
 
@@ -1391,7 +1377,8 @@ Resume prefix_bool_body_paired[tail_apply]:
   simp_tac pure_ss [Abbr `g10`, Abbr `t11`, Abbr `t12`, Abbr `v5`, Abbr `v4`] >>
   qpat_x_assum `EL 12 insns = _` (fn th => pure_rewrite_tac [th]) >>
   qpat_x_assum `EL 13 insns = _` (fn th => pure_rewrite_tac [th]) >>
-  irule (GEN_ALL (SRULE [LET_THM, GSYM ADD_ASSOC]
+  irule (GEN_ALL (SIMP_RULE (bool_ss ++ numSimps.REDUCE_ss)
+    [LET_THM, GSYM ADD_ASSOC]
     (Q.INST [`iid` |-> `iid+12`] prefix_bool_body_increment_store))) >> simp[] >>
   qexists_tac `ncount` >> simp[]
 QED
@@ -1508,7 +1495,7 @@ Resume prefix_bool_body_paired[variable_frames]:
    v <> idst /\ v <> dp /\ v <> x /\ v <> y /\ v <> z /\ v <> inc` by
     (qpat_x_assum `!v. MEM v [ip;src;dst] ==> v <> iv /\ _` drule >> simp[]) >>
   `eval_operand (Var v) v2 = eval_operand (Var v) u6` by
-    simp[Abbr `v2`, Abbr `v1`, Abbr `v0`, prefix_bool_body_eval_update] >>
+    simp[Abbr `v2`, Abbr `v1`, Abbr `v0`, slot_copy_operand_update] >>
   `eval_operand (Var v) v3 = eval_operand (Var v) v2` by
     simp[Abbr `v3`, eval_operand_def, lookup_var_def, mstore_def] >>
   `op_taint t10 (Var v) = op_taint t9 (Var v)` by simp[op_taint_def] >>
@@ -1672,7 +1659,7 @@ Resume prefix_bool_body_paired[terminal_facts]:
   simp[Abbr `N`, Abbr `U`] >>
   `EL 10 insns = mk_inst (iid+10) ASSERT [Var z] []` by simp[Abbr `insns`] >>
   `eval_operand (Var z) (v2 with vs_inst_idx := k+10) = SOME (0w:bytes32)` by
-    (simp[Abbr `v2`, prefix_bool_body_eval_update, eval_op_inst_idx,
+    (simp[Abbr `v2`, slot_copy_operand_update, eval_op_inst_idx,
           bool_to_word_def, prefix_bool_shr_guard]) >>
   gen_tac >> conj_tac
   >- (qpat_assum `EL 10 insns = _` (fn th => pure_rewrite_tac [th]) >>
@@ -1680,7 +1667,7 @@ Resume prefix_bool_body_paired[terminal_facts]:
       qpat_x_assum `allocas_from lo s` mp_tac >> simp[allocas_from_def]) >>
   simp[step_inst_non_invoke] >>
   qpat_assum `eval_operand (Var z) (_ with vs_inst_idx := _) = SOME 0w`
-    (mp_then Any (qspec_then `iid+10` mp_tac) prefix_assert_step) >> simp[]
+    (mp_then Any (qspec_then `iid+10` mp_tac) (REWRITE_RULE [GSYM venomInstTheory.mk_inst_def] venomExecProofsTheory.step_assert_behavior)) >> simp[]
 QED
 
 Resume prefix_bool_body_paired[continuation]:
@@ -1703,7 +1690,7 @@ Resume prefix_bool_body_paired[raw_trace]:
          POP_ASSUM_LIST (K ALL_TAC) >> decide_tac) >>
       simp_tac (srw_ss()) [Abbr `insns`, Abbr `u0`] >>
       qpat_assum `eval_operand (Var ip) s = _`
-        (mp_then Any mp_tac prefix_mload_step) >> simp[]) >>
+        (mp_then Any mp_tac exprLoweringPropsTheory.step_MLOAD_local) >> simp[]) >>
   simp[step_inst_non_invoke]
 QED
 

@@ -5,61 +5,9 @@ Ancestors
  abiEncoderRegisteredEffect abiEncoderProps venomMemDefs ptrDiscipline pred_set
  compileVyper moduleLowering compileEnv abiDecoderLoop abiDecoderMembers abiDecoderCounters
  emitHelperProps loweringHalt list rich_list arithmetic finite_map
+  ctorDeployMemoryRunPtrPrefixRegisterList
 
-Theorem prefix_entry_register_retained_slot_bytes[local]:
-  abi_encoder_registered_effect ids [] s t /\ alloca_inv t /\
-  FLOOKUP s.vs_allocas aid = SOME (d,n) /\ aid NOTIN ids /\
-  B SUBSET range_bytes [(d,n)] ==>
-  !a. a IN B ==> mem_bytes_at a 1 t.vs_memory = mem_bytes_at a 1 s.vs_memory
-Proof
-  strip_tac >>
-  `FLOOKUP t.vs_allocas aid = SOME (d,n)` by
-    metis_tac[abi_encoder_registered_effect_allocated] >>
-  qpat_assum `B SUBSET _` mp_tac >>
-  simp_tac (srw_ss()) [SUBSET_DEF, range_bytes_def] >>
-  disch_tac >> gen_tac >> disch_tac >>
-  `d <= a /\ a < d+n` by metis_tac[] >>
-  qpat_x_assum `abi_encoder_registered_effect _ _ _ _` mp_tac >>
-  simp_tac bool_ss [abi_encoder_registered_effect_def] >> strip_tac >>
-  first_x_assum irule >> simp[] >> rpt strip_tac >>
-  `aid <> i` by metis_tac[] >>
-  qpat_x_assum `alloca_inv t` mp_tac >>
-  simp_tac bool_ss [alloca_inv_def, allocas_non_overlapping_def] >>
-  strip_tac >>
-  `d+n <= b \/ b+sz <= d` by metis_tac[] >> decide_tac
-QED
 
-Theorem prefix_entry_register_unmentioned_var[local]:
-  !rest ce0 vars ce st st' off data_size name.
-    ~MEM name (MAP FST rest) /\ ALL_DISTINCT (MAP FST rest) /\
-    EVERY (\a. ?old. FLOOKUP vars (FST a) =
-      SOME (MemLoc old (type_memory_bytes ce0 (SND a)))) rest /\
-    compile_register_constructor_args (ce0 with ce_vars := vars)
-      (build_positional_args ce0 rest) off data_size st = (ce,st') ==>
-    FLOOKUP ce.ce_vars name = FLOOKUP vars name
-Proof
-  Induct >- simp[build_positional_args_def, compile_register_constructor_args_def,
-                 comp_return_def] >>
-  PairCases >> rpt gen_tac >> simp[EVERY_DEF] >> strip_tac >>
-  `FLOOKUP (ce0 with ce_vars := vars).ce_vars h0 =
-     SOME (MemLoc old (type_memory_bytes (ce0 with ce_vars := vars) h1))` by simp[] >>
-  drule ctor_register_cons >>
-  disch_then (qspecl_then [`st`,`rest`,`off`,`data_size`] mp_tac) >>
-  simp[NoAsms] >> disch_then (fn th =>
-    qpat_x_assum `compile_register_constructor_args _ _ _ _ _ = _`
-      (mp_tac o REWRITE_RULE [th])) >>
-  simp[comp_bind_def, comp_return_def, comp_ignore_bind_def] >>
-  pairarg_tac >> fs[] >> pairarg_tac >> fs[] >> strip_tac >>
-  `FLOOKUP ce.ce_vars name =
-    FLOOKUP (vars |+ (h0,PtrVar buf.buf_operand (type_memory_bytes ce0 h1))) name` suffices_by
-      simp[FLOOKUP_UPDATE] >>
-  first_x_assum irule >> conj_tac >- asm_rewrite_tac[] >>
-  qexists `ce0` >>
-  qexistsl [`data_size`,`off + abi_embedded_static_size ce0.ce_struct_fields h1`,`cs''`,`st'`] >>
-  asm_rewrite_tac[] >>
-  fs[EVERY_MEM] >> rpt strip_tac >> first_x_assum drule >> strip_tac >>
-  `FST a <> h0` by metis_tac[MEM_MAP] >> simp[FLOOKUP_UPDATE]
-QED
 
 Theorem prefix_entry_register_suffix_shifted:
   !rest ce0 vars env fargs avs atys encoded scope i st ce st' ctx func site initial G tn D lo PG k.
@@ -329,7 +277,7 @@ Resume prefix_entry_register_suffix_shifted[head_support]:
      simp_tac (srw_ss()) []) >>
   `FLOOKUP ce.ce_vars h0 = SOME (PtrVar buf.buf_operand (type_memory_bytes ce0 h1))` by
     (drule_at (Pat `compile_register_constructor_args _ _ _ _ sd = _`)
-       prefix_entry_register_unmentioned_var >>
+       ctorDeployMemoryRunPtrPrefixRegisterListTheory.prefix_register_unmentioned_var >>
      disch_then (qspec_then `h0` mp_tac) >>
      asm_rewrite_tac[] >> simp[FLOOKUP_UPDATE]) >>
   `lookup_var p actual = SOME (n2w initial.vs_alloca_next)` by metis_tac[] >>
@@ -347,7 +295,7 @@ Resume prefix_entry_register_suffix_shifted[head_support]:
   `B SUBSET range_bytes [(initial.vs_alloca_next,type_memory_bytes ce0 h1)]` by fs[] >>
   `!a. a IN B ==> mem_bytes_at a 1 actual.vs_memory = mem_bytes_at a 1 middle.vs_memory` by
     (drule_at (Pat `abi_encoder_registered_effect _ _ middle actual`)
-       prefix_entry_register_retained_slot_bytes >>
+       ctorDeployMemoryRunPtrPrefixRegisterListTheory.prefix_register_retained_slot_bytes >>
      disch_then (drule_at (Pat `FLOOKUP middle.vs_allocas _ = _`)) >>
      simp[] >> metis_tac[]) >>
   qexistsl [`entry`,`initial.vs_alloca_next`,`B`] >> asm_rewrite_tac[] >>
@@ -359,82 +307,5 @@ QED
 
 Finalise prefix_entry_register_suffix_shifted
 
-Theorem prefix_entry_register_args_shifted:
-  !ce0 vars env fargs avs atys encoded scope st ce st' ctx func site initial G tn D lo PG k.
-    ALL_DISTINCT (MAP FST fargs) /\ LENGTH avs = LENGTH fargs /\
-    atys = vyper_to_abi_types env (MAP SND fargs) /\ has_types atys avs /\
-    encoded = enc (Tuple atys) (ListV avs) /\
-    LENGTH encoded < dimword (:256) /\
-    mem_bytes_at 0 (LENGTH encoded) initial.vs_data_section = encoded /\
-    EVERY (\a. ?off. FLOOKUP vars (FST a) =
-      SOME (MemLoc off (type_memory_bytes ce0 (SND a)))) fargs /\
-    EVERY (\a. type_memory_bytes ce0 (SND a) < dimword (:256)) fargs /\
-    (!j. j < LENGTH fargs ==>
-      ?entry. lookup_scopes (FST (EL j fargs)) [scope] = SOME entry /\
-        val_wf entry.type entry.value /\
-        type_memory_size entry.type <= type_memory_bytes ce0 (SND (EL j fargs)) /\
-        abi_decoder_coherent ce0 env ce0.ce_struct_fields
-          (SND (EL j fargs)) entry.type /\
-        abi_decoder_metadata ce0 env (SND (EL j fargs)) entry.type
-          (type_to_abi_dec_info ce0.ce_struct_fields ce0 (SND (EL j fargs)))
-          (EL j avs) entry.value) /\
-    compile_register_constructor_args (ce0 with ce_vars := vars)
-      (build_positional_args ce0 fargs) 0 0 st = (ce,st') /\
-    local_ptrs_rel func (ce0 with ce_vars := vars) [scope] initial /\ fresh_vars_wrt st initial /\
-    fn_has_code st st' func /\ fn_inst_ids_distinct func /\
-    (st.cs_blocks = st'.cs_blocks \/
-      !bb. lookup_block st'.cs_current_bb func.fn_blocks = SOME bb ==>
-        phi_prefix_length bb.bb_instructions = 0) /\
-    alloca_inv initial /\ alloca_frontier_inv_from k ctx func site initial /\
-    k + unit_alloca_budget ctx < dimword (:256) /\
-    (!aid. st.cs_next_id <= aid ==> FLOOKUP initial.vs_allocas aid = NONE) /\
-    ~initial.vs_halted /\ initial.vs_current_bb = st.cs_current_bb /\
-    initial.vs_inst_idx = LENGTH st.cs_current_insts /\
-    allocas_from lo initial /\ lo <= initial.vs_alloca_next /\ ~ctx_has_dalloca ctx ==>
-    ?actual H qt.
-      local_ptrs_rel func ce [scope] actual /\
-      abi_encoder_registered_effect (frag_ids st st') [] initial actual /\
-      alloca_inv actual /\ alloca_frontier_inv_from k ctx func site actual /\
-      fresh_vars_wrt st' actual /\
-      (!aid. st'.cs_next_id <= aid ==> FLOOKUP actual.vs_allocas aid = NONE) /\
-      actual.vs_data_section = initial.vs_data_section /\
-      actual.vs_call_ctx = initial.vs_call_ctx /\ actual.vs_labels = initial.vs_labels /\
-      (!x w. not_fresh_at st x /\ lookup_var x initial = SOME w ==>
-        lookup_var x actual = SOME w) /\
-      ~actual.vs_halted /\ actual.vs_current_bb = st'.cs_current_bb /\
-      actual.vs_inst_idx = LENGTH st'.cs_current_insts /\
-      abi_decode_sim ctx func initial actual /\
-      allocas_from lo actual /\ lo <= actual.vs_alloca_next /\
-      initial.vs_alloca_next <= actual.vs_alloca_next /\
-      actual.vs_code = initial.vs_code /\ actual.vs_outcomes = initial.vs_outcomes /\
-      actual.vs_tx_ctx = initial.vs_tx_ctx /\ actual.vs_block_ctx = initial.vs_block_ctx /\
-      actual.vs_gas_readings = initial.vs_gas_readings /\
-      (!a. a < lo ==> read_byte a actual.vs_memory = read_byte a initial.vs_memory) /\
-      qt.t_mem SUBSET (tn.t_mem UNION
-        {j | initial.vs_alloca_next <= j /\ j < actual.vs_alloca_next}) /\
-      (!j. j < initial.vs_alloca_next /\ j IN qt.t_mem ==> j IN tn.t_mem) /\
-      (!C. (!j. j IN C ==> j < initial.vs_alloca_next) /\ DISJOINT C tn.t_mem ==>
-        DISJOINT C qt.t_mem) /\
-      qt.t_stor = tn.t_stor /\ qt.t_trans = tn.t_trans /\ qt.t_imm = tn.t_imm /\
-      (!x. not_fresh_at st x ==> FLOOKUP H x = FLOOKUP G x /\
-        op_taint qt (Var x) = op_taint tn (Var x)) /\
-      ((!fuel. ptr_safe_run D lo fuel ctx func PG H qt actual) ==>
-        !fuel. ptr_safe_run D lo fuel ctx func PG G tn initial) /\
-      (!j. j < LENGTH fargs ==>
-        ?entry d B.
-          lookup_scopes (FST (EL j fargs)) [scope] = SOME entry /\
-          local_region ce [scope] actual (FST (EL j fargs)) d
-            (type_memory_bytes ce0 (SND (EL j fargs))) /\
-          FINITE B /\ B SUBSET range_bytes [(d,type_memory_bytes ce0 (SND (EL j fargs)))] /\
-          DISJOINT B qt.t_mem /\ (!a. a IN B ==> a < actual.vs_alloca_next) /\
-          (!mem. (!a. a IN B ==> mem_bytes_at a 1 mem = mem_bytes_at a 1 actual.vs_memory) ==>
-            val_in_memory entry.type entry.value d mem))
-Proof
-  rpt gen_tac >> strip_tac >>
-  irule (prefix_entry_register_suffix_shifted |> Q.SPEC `fargs` |>
-    Q.SPECL [`ce0`,`vars`,`env`,`fargs`,`avs`,`atys`,`encoded`,`scope`,`0`] |>
-    PURE_REWRITE_RULE [DROP_0, TAKE_0, MAP, SUM, ZERO_LESS_EQ, boolTheory.AND_CLAUSES]) >>
-  asm_rewrite_tac[] >> metis_tac[]
-QED
 
 val _ = export_theory();
