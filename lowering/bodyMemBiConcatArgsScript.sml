@@ -405,6 +405,9 @@ Resume concat_args_sim_mem[post]:
            (qpat_x_assum `!p n. _ /\ _ ==> mem_bytes_at p n t2.vs_memory = _` irule >>
             qpat_x_assum `!name lb lsz. local_region cenv es.scopes s0 _ _ _ ==> _ /\ _`
               drule >> rpt (pop_assum kall_tac) >> decide_tac) >>
+         `local_region cenv es_end.scopes t2 nm lb lsz` by
+           (qpat_assum `local_region cenv (es_end with gas_obs := []).scopes t2 nm lb lsz`
+              mp_tac >> simp[]) >>
          `mem_bytes_at lb lsz tu.vs_memory = mem_bytes_at lb lsz t2.vs_memory` by
            (qpat_x_assum `!n lb lsz. local_region _ _ t2 _ _ _ ==>
                             mem_bytes_at _ _ tu.vs_memory = _`
