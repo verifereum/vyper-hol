@@ -3416,7 +3416,8 @@ Theorem nop_inst_ok_count[local]:
   inst.inst_opcode = NOP /\ venom_asm_rel lo ps vs as /\
   step_inst fuel ctx inst vs = OK vs' ==>
   ?as'. asm_steps lo o2pc prog 0 as = AsmOK as' /\
-    venom_asm_rel lo ps vs' as' /\ as'.as_pc = as.as_pc
+    venom_asm_rel lo ps vs' as' /\ as'.as_pc = as.as_pc /\
+    create_safe_prefix lo o2pc prog 0 as
 Proof
   strip_tac >> drule step_inst_nop_ok >> strip_tac >>
   gvs[] >> qexists_tac `as` >> simp[asm_steps_def]
@@ -3532,7 +3533,8 @@ Theorem gen_inst_ok_sim_marked_count:
         venom_asm_rel lo ps' vs' as' /\
         as'.as_pc = as.as_pc + LENGTH (execute_plan initial_fmp ops) /\
         n = LENGTH (execute_plan initial_fmp ops) -
-          (if inst.inst_opcode = ASSERT_UNREACHABLE then 1 else 0)
+          (if inst.inst_opcode = ASSERT_UNREACHABLE then 1 else 0) /\
+        (inst_create_size_ok inst vs ==> create_safe_prefix lo o2pc prog n as)
 Proof
   rpt strip_tac >>
   Cases_on `inst.inst_opcode = ASSIGN`
