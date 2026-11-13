@@ -19,7 +19,7 @@ QED
 Theorem slice_source_dynamic_capture_entry:
   expr_body_pre cenv cx env src es /\
   bind (eval_expr cx src) (read_result cx) (es with gas_obs := gs) = (INL v,ee) /\
-  expr_post ctx func cenv cx src es sa sm s0 ee v src_op t /\
+  expr_post H ctx func cenv cx src es sa sm s0 ee v src_op t /\
   expr_type src = BaseT bt /\ is_bytestring_type (BaseT bt) /\
   lower_value compile_expr cenv (BaseT bt) src sa = (src_op,sm) /\
   compile_bytestring_src src_op sm = ((len_op,data),sc) /\
@@ -39,14 +39,14 @@ Theorem slice_source_dynamic_capture_entry:
     let u' = u with vs_inst_idx := t.vs_inst_idx + LENGTH (emitted_insts sm sc) in
       u'.vs_inst_idx = LENGTH sc.cs_current_insts /\
       u'.vs_current_bb = sc.cs_current_bb /\
-      stmt_state_rel ctx func cenv cx ee u' /\
+      stmt_state_rel H ctx func cenv cx ee u' /\
       eval_operand len_op u' = SOME (n2w (LENGTH bs)) /\
       eval_operand data u' = SOME (n2w (w2n p + 32)) /\
       eval_operand src_op u' = SOME p /\
       expr_val_at cenv cx (BaseT bt) sa sc ee v src_op u' /\
       mem_bytes_at (w2n p + 32) (LENGTH bs) u'.vs_memory = bs /\
       (!e sd ee' v' op' r.
-        expr_post ctx func cenv cx e ee sc sd u' ee' v' op' r ==>
+        expr_post H ctx func cenv cx e ee sc sd u' ee' v' op' r ==>
         mem_bytes_at (w2n p + 32) (LENGTH bs) r.vs_memory = bs) /\
       (!env' sd se e1 e2 ee1 ee2 v1 v2 op1 op2 r1 r2.
         expr_sim_inv cenv cx env' ee1 /\
@@ -54,12 +54,12 @@ Theorem slice_source_dynamic_capture_entry:
         MAP FDOM ee.scopes = MAP FDOM ee1.scopes /\
         (!z. src_op = Var z ==> not_fresh_at sc z) /\
         (!l. src_op <> Label l) /\
-        expr_post ctx func cenv cx e1 ee sc sd u' ee1 v1 op1 r1 /\
-        expr_post ctx func cenv cx e2 ee1 sd se r1 ee2 v2 op2 r2 ==>
+        expr_post H ctx func cenv cx e1 ee sc sd u' ee1 v1 op1 r1 /\
+        expr_post H ctx func cenv cx e2 ee1 sd se r1 ee2 v2 op2 r2 ==>
         mem_bytes_at (w2n p + 32) (LENGTH bs) r2.vs_memory = bs) /\
       (!tops source Q R.
-        gas_outcome F tops (ctx,func) source (ee,u') Q R ==>
-        gas_outcome F tops (ctx,func) source (ee,t) Q R)
+        gas_outcome F tops (ctx,func) cx st0 source (ee,u') Q R ==>
+        gas_outcome F tops (ctx,func) cx st0 source (ee,t) Q R)
 Proof
   strip_tac >> drule_all slice_dynamic_capture_embedding >> strip_tac >>
   drule_all slice_source_dynamic_capture_reserved >> strip_tac >>

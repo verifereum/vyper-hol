@@ -8,7 +8,7 @@ Ancestors
   vfmState vyperValue valueEncoding words arithmetic list rich_list
 
 Theorem slice_extcode_account:
-  accounts_agree cx acc s.vs_accounts /\ accounts_well_typed acc /\
+  accounts_agree H cx acc s.vs_accounts /\ accounts_well_typed acc /\
   LENGTH bs = 20 ==>
   (lookup_account
     (w2w (typed_val_to_w256 (BaseTV AddressT) (BytesV bs))) s.vs_accounts).code =
@@ -269,7 +269,7 @@ Theorem slice_extcode_tail_frame:
   eval_operand dst s = SOME (p + 32w) /\
   (!x. MEM (Var x) [addr;start;len;out;dst] ==> not_fresh_at sa x) /\
   w2n b + w2n n <= LENGTH (lookup_account (w2w a) s.vs_accounts).code /\
-  stmt_state_rel ctx func cenv cx es s /\ local_ptrs_reserved cenv sa /\
+  stmt_state_rel H ctx func cenv cx es s /\ local_ptrs_reserved cenv sa /\
   sbase.cs_next_var <= sa.cs_next_var /\ sbase.cs_next_id <= aid /\ aid < sa.cs_next_id /\
   MEM inst (fn_insts func) /\ inst.inst_opcode = ALLOCA /\ inst.inst_id = aid /\
   FLOOKUP s.vs_allocas aid = SOME (w2n p,cap) /\
@@ -279,7 +279,7 @@ Theorem slice_extcode_tail_frame:
   (!j off sz. FLOOKUP s.vs_allocas j = SOME (off,sz) /\ j < sbase.cs_next_id ==>
     regions_disjoint (w2n p) cap off sz) ==>
   ?t. run_inst_seq (emitted_insts sa sb) s = OK t /\
-    stmt_state_rel ctx func cenv cx es t /\ wb_frame cenv es es sbase s t /\
+    stmt_state_rel H ctx func cenv cx es t /\ wb_frame cenv es es sbase s t /\
     eval_operand out t = SOME p /\
     FLOOKUP t.vs_allocas aid = SOME (w2n p,cap) /\
     t.vs_memory = (mstore (w2n p) n (write_memory_with_expansion (w2n p+32)
@@ -294,7 +294,7 @@ Proof
  `LENGTH (TAKE (w2n n) (DROP (w2n b)
     (lookup_account (w2w a) s.vs_accounts).code)) = w2n n` by
    (simp[LENGTH_TAKE, LENGTH_DROP] >> decide_tac) >>
- `stmt_state_rel ctx func cenv cx es w /\ wb_frame cenv es es sbase s w` by
+ `stmt_state_rel H ctx func cenv cx es w /\ wb_frame cenv es es sbase s w` by
    (simp[Abbr `w`] >>
     qmatch_goalsub_abbrev_tac `write_memory_with_expansion _ bytes s` >>
     `n = n2w (LENGTH bytes)` by simp[Abbr `bytes`] >>
@@ -311,7 +311,7 @@ Proof
     ASM_SIMP_TAC (srw_ss() ++ boolSimps.LET_ss)
       [Abbr `w`, mstore_def, write_memory_with_expansion_def,
        venom_state_component_equality]) >>
- `stmt_state_rel ctx func cenv cx es t` by
+ `stmt_state_rel H ctx func cenv cx es t` by
    (qpat_assum `t = w with vs_vars := _` SUBST1_TAC >>
     irule exprSimPropsTheory.stmt_state_rel_vars_frame >> simp[] >>
     rpt strip_tac >> fs[local_ptrs_reserved_def, lookup_var_def] >> metis_tac[]) >>
@@ -342,7 +342,7 @@ Theorem slice_extcode_tail_vv_post:
   eval_operand dst s = SOME (p + 32w) /\
   (!x. MEM (Var x) [addr;start;len;out;dst] ==> not_fresh_at sa x) /\
   w2n b + w2n n <= LENGTH (lookup_account (w2w a) s.vs_accounts).code /\
-  stmt_state_rel ctx func cenv cx es s /\ local_ptrs_reserved cenv sa /\
+  stmt_state_rel H ctx func cenv cx es s /\ local_ptrs_reserved cenv sa /\
   sbase.cs_next_var <= sa.cs_next_var /\ sbase.cs_next_id <= aid /\ aid < sa.cs_next_id /\
   MEM inst (fn_insts func) /\ inst.inst_opcode = ALLOCA /\ inst.inst_id = aid /\
   FLOOKUP s.vs_allocas aid = SOME (w2n p,cap) /\
@@ -354,7 +354,7 @@ Theorem slice_extcode_tail_vv_post:
   expr_type e = BaseT (BytesT (Dynamic max_len)) /\ w2n n <= max_len /\
   aid < sb.cs_next_id ==>
   ?t. run_inst_seq (emitted_insts sa sb) s = OK t /\
-    !k. vv_post ctx func cenv cx e es sbase sb s es
+    !k. vv_post H ctx func cenv cx e es sbase sb s es
       (Value (BytesV (TAKE (w2n n) (DROP (w2n b)
         (lookup_account (w2w a) s.vs_accounts).code))))
       (LocatedValue (expr_type e) (mk_ptr out LocMemory)) (t with vs_inst_idx := k)

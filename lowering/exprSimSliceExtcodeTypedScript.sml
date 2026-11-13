@@ -135,7 +135,7 @@ Resume slice_extcode_typed_entry[length]:
      qexists_tac `nocalls` >> simp[]) >>
   `gas_admissible (bind (eval_expr cx len) (read_result cx)) expr_res_ok
     (mid with gas_obs := [])` by metis_tac[expr_body_pre_gas_admissible] >>
-  `stmt_state_rel ctx func cenv cx (mid with gas_obs := []) t` by
+  `stmt_state_rel H ctx func cenv cx (mid with gas_obs := []) t` by
     metis_tac[expr_post_state] >>
   `~t.vs_halted` by metis_tac[slice_marked_read_ok_not_halted] >>
   irule slice_read_outcome_bind >> simp[] >>
@@ -177,7 +177,7 @@ Resume slice_extcode_typed_entry[address]:
      strip_tac >> gvs[] >> drule slice_literal_read_length >> intLib.ARITH_TAC) >>
   `expr_body_pre cenv cx env a (mid' with gas_obs := [])` by
     gvs[expr_body_pre_def] >>
-  `stmt_state_rel ctx func cenv cx (mid' with gas_obs := []) t'` by
+  `stmt_state_rel H ctx func cenv cx (mid' with gas_obs := []) t'` by
     metis_tac[expr_post_state] >>
   `(!z. start_op = Var z ==> not_fresh_at st1 z) /\ (!l. start_op <> Label l)` by
     (qpat_assum `lower_value _ _ _ start _ = _`
@@ -192,7 +192,7 @@ Resume slice_extcode_typed_entry[address]:
        (mp_then Any mp_tac expr_body_pre_lower_value_word_shape) >>
      simp[compileEnvTheory.is_word_type_def] >> metis_tac[]) >>
   `eval_operand start_op t' = SOME (n2w i)` by
-    (qpat_assum `expr_post _ _ _ _ len _ _ _ _ _ _ _ _`
+    (qpat_assum `expr_post _ _ _ _ _ len _ _ _ _ _ _ _ _`
        (mp_then Any mp_tac slice_post_operands) >>
      disch_then irule >> fs[] >> metis_tac[]) >>
   qpat_x_assum `bind _ _ (es with gas_obs := gs) = _` kall_tac >>
@@ -216,20 +216,20 @@ Resume slice_extcode_typed_entry[finish]:
   `nocalls ==> int_calls_expr a = []` by metis_tac[] >>
   irule slice_gas_outcome_conseq >>
   qexistsl_tac [
-    `\res ee z. ?tv. res = INL tv /\
-      vv_post ctx func cenv cx
+    `\H res ee z. ?tv. res = INL tv /\
+      vv_post H ctx func cenv cx
         (Builtin (BaseT (BytesT (Dynamic n))) (Slice n) [Builtin ct (Acc Code) [a];start;len])
         (mid' with gas_obs := []) st2 r t' ee tv
         (LocatedValue (BaseT (BytesT (Dynamic n))) (mk_ptr q LocMemory)) z /\
       z.vs_current_bb = r.cs_current_bb /\ z.vs_inst_idx = LENGTH r.cs_current_insts`,
-    `\res ee rr. expr_exit res rr`] >>
+    `\H res ee rr. expr_exit res rr`] >>
   simp[] >> conj_tac
   >- (rpt strip_tac >> gvs[] >>
       irule (slice_two_operand_post_rebase |> SPEC_ALL |> Q.INST
         [`sd` |-> `st1`, `se` |-> `st2`,
          `e1` |-> `mid with gas_obs := []`, `e2` |-> `mid' with gas_obs := []`]) >>
-      qpat_assum `expr_post _ _ _ _ start _ _ _ _ _ _ _ _` (irule_at Any) >>
-      qpat_assum `expr_post _ _ _ _ len _ _ _ _ _ _ _ _` (irule_at Any) >>
+      qpat_assum `expr_post _ _ _ _ _ start _ _ _ _ _ _ _ _` (irule_at Any) >>
+      qpat_assum `expr_post _ _ _ _ _ len _ _ _ _ _ _ _ _` (irule_at Any) >>
       fs[ci_mono_def] >> metis_tac[]) >>
   irule (slice_extcode_continue_entry_seq |> SPEC_ALL |> Q.INST
     [`result` |-> `Builtin (BaseT (BytesT (Dynamic n))) (Slice n) [Builtin ct (Acc Code) [a];start;len]`,

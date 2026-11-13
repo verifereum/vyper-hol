@@ -19,7 +19,7 @@ Theorem slice_bytes_continue_entry:
   local_ptrs_reserved cenv sc /\ local_ptrs_reserved cenv sd /\ local_ptrs_reserved cenv se /\
   sc.cs_next_var <= sd.cs_next_var /\ sd.cs_next_var <= se.cs_next_var /\
   sc.cs_next_id <= sd.cs_next_id /\ sd.cs_next_id <= se.cs_next_id /\
-  stmt_state_rel ctx func cenv cx ec u /\ ~u.vs_halted /\
+  stmt_state_rel H ctx func cenv cx ec u /\ ~u.vs_halted /\
   u.vs_current_bb = sc.cs_current_bb /\ u.vs_inst_idx = LENGTH sc.cs_current_insts /\
   eval_operand sl u = SOME (n2w (LENGTH bs)) /\
   eval_operand data u = SOME (n2w src_base) /\
@@ -32,25 +32,25 @@ Theorem slice_bytes_continue_entry:
   (!sd' se' e1 e2 es1 es2 v1 v2 op1 op2 r1 r2.
     local_ptrs_reserved cenv sc /\ sc.cs_next_id <= sd'.cs_next_id /\
     MAP FDOM ec.scopes = MAP FDOM es1.scopes /\
-    expr_post ctx func cenv cx e1 ec sc sd' u es1 v1 op1 r1 /\
-    expr_post ctx func cenv cx e2 es1 sd' se' r1 es2 v2 op2 r2 ==>
+    expr_post H ctx func cenv cx e1 ec sc sd' u es1 v1 op1 r1 /\
+    expr_post H ctx func cenv cx e2 es1 sd' se' r1 es2 v2 op2 r2 ==>
     mem_bytes_at src_base (LENGTH bs) r2.vs_memory = bs) /\
   32+n <= sz /\ sz < dimword (:256) /\
   slice_operands_ok (Slice n) [src;start;len] /\
   LENGTH bs <= bytelike_type_bound (BaseT bt) ==>
-  gas_outcome F (cx_tops cx) (ctx,func)
+  gas_outcome F (cx_tops cx) (ctx,func) cx st0
     (do sv <- bind (eval_expr cx start) (read_result cx);
         lv <- bind (eval_expr cx len) (read_result cx);
         acc <- get_accounts;
         v <- lift_sum (evaluate_builtin cx acc (BaseT (BytesT (Dynamic n))) (Slice n)
           [BaseT bt; BaseT (UintT 256); BaseT (UintT 256)] [BytesV bs;sv;lv]);
         return (Value v) od) (ec,u)
-    (\res ee t. ?tv. res = INL tv /\
-      vv_post ctx func cenv cx
+    (\H res ee t. ?tv. res = INL tv /\
+      vv_post H ctx func cenv cx
         (Builtin (BaseT (BytesT (Dynamic n))) (Slice n) [src;start;len]) ec sc sf u ee tv
         (LocatedValue (BaseT (BytesT (Dynamic n))) (mk_ptr out LocMemory)) t /\
       t.vs_current_bb = sf.cs_current_bb /\ t.vs_inst_idx = LENGTH sf.cs_current_insts)
-    (\res ee r. expr_exit res r)
+    (\H res ee r. expr_exit res r)
 Proof
   strip_tac >>
   mp_tac (SPEC_ALL slice_bytes_continue |> Q.INST
@@ -77,7 +77,7 @@ Theorem slice_string_continue_entry:
   local_ptrs_reserved cenv sc /\ local_ptrs_reserved cenv sd /\ local_ptrs_reserved cenv se /\
   sc.cs_next_var <= sd.cs_next_var /\ sd.cs_next_var <= se.cs_next_var /\
   sc.cs_next_id <= sd.cs_next_id /\ sd.cs_next_id <= se.cs_next_id /\
-  stmt_state_rel ctx func cenv cx ec u /\ ~u.vs_halted /\
+  stmt_state_rel H ctx func cenv cx ec u /\ ~u.vs_halted /\
   u.vs_current_bb = sc.cs_current_bb /\ u.vs_inst_idx = LENGTH sc.cs_current_insts /\
   eval_operand sl u = SOME (n2w (LENGTH text)) /\
   eval_operand data u = SOME (n2w src_base) /\
@@ -90,25 +90,25 @@ Theorem slice_string_continue_entry:
   (!sd' se' e1 e2 es1 es2 v1 v2 op1 op2 r1 r2.
     local_ptrs_reserved cenv sc /\ sc.cs_next_id <= sd'.cs_next_id /\
     MAP FDOM ec.scopes = MAP FDOM es1.scopes /\
-    expr_post ctx func cenv cx e1 ec sc sd' u es1 v1 op1 r1 /\
-    expr_post ctx func cenv cx e2 es1 sd' se' r1 es2 v2 op2 r2 ==>
+    expr_post H ctx func cenv cx e1 ec sc sd' u es1 v1 op1 r1 /\
+    expr_post H ctx func cenv cx e2 es1 sd' se' r1 es2 v2 op2 r2 ==>
     mem_bytes_at src_base (LENGTH text) r2.vs_memory = MAP (n2w o ORD) text) /\
   32+n <= sz /\ sz < dimword (:256) /\
   slice_operands_ok (Slice n) [src;start;len] /\
   LENGTH text <= bytelike_type_bound (BaseT bt) ==>
-  gas_outcome F (cx_tops cx) (ctx,func)
+  gas_outcome F (cx_tops cx) (ctx,func) cx st0
     (do sv <- bind (eval_expr cx start) (read_result cx);
         lv <- bind (eval_expr cx len) (read_result cx);
         acc <- get_accounts;
         v <- lift_sum (evaluate_builtin cx acc (BaseT (StringT n)) (Slice n)
           [BaseT bt; BaseT (UintT 256); BaseT (UintT 256)] [StringV text;sv;lv]);
         return (Value v) od) (ec,u)
-    (\res ee t. ?tv. res = INL tv /\
-      vv_post ctx func cenv cx
+    (\H res ee t. ?tv. res = INL tv /\
+      vv_post H ctx func cenv cx
         (Builtin (BaseT (StringT n)) (Slice n) [src;start;len]) ec sc sf u ee tv
         (LocatedValue (BaseT (StringT n)) (mk_ptr out LocMemory)) t /\
       t.vs_current_bb = sf.cs_current_bb /\ t.vs_inst_idx = LENGTH sf.cs_current_insts)
-    (\res ee r. expr_exit res r)
+    (\H res ee r. expr_exit res r)
 Proof
   strip_tac >>
   mp_tac (SPEC_ALL slice_string_continue |> Q.INST
@@ -155,7 +155,7 @@ Theorem slice_fixed_capture_frame:
   emit_void MSTORE [buf.buf_operand; val_op] sm = ((),sc) /\
   (!x. val_op = Var x ==> not_fresh_at sb x) /\
   eval_operand val_op t = SOME w /\
-  stmt_state_rel ctx func cenv cx ec t /\ fn_inst_ids_distinct func /\
+  stmt_state_rel H ctx func cenv cx ec t /\ fn_inst_ids_distinct func /\
   local_ptrs_reserved cenv sb /\
   MEM (mk_inst sb.cs_next_id ALLOCA [Lit 32w]
     [STRING #"%" (toString sb.cs_next_var)]) (fn_insts func) /\
@@ -174,17 +174,17 @@ Proof
 QED
 
 Theorem slice_source_capture_post_rebase:
-  stmt_state_rel ctx func cenv cx es s0 /\
+  stmt_state_rel H ctx func cenv cx es s0 /\
   local_ptrs_reserved cenv sa /\
   MAP FDOM es.scopes = MAP FDOM ec.scopes /\
   sa.cs_next_var <= sb.cs_next_var /\ sb.cs_next_var <= sc.cs_next_var /\
   sa.cs_next_id <= sb.cs_next_id /\ sb.cs_next_id <= sc.cs_next_id /\
-  expr_post ctx func cenv cx src es sa sb s0 ec v op t /\
+  expr_post H ctx func cenv cx src es sa sb s0 ec v op t /\
   wb_frame cenv ec ec sb t u /\
   (~expr_has_effect result ==> ~expr_has_effect src) /\
   (~expr_has_effect result ==> pure_frame cenv func ec sb t u) /\
-  vv_post ctx func cenv cx result ec sc sf u ef tv vv z ==>
-  vv_post ctx func cenv cx result es sa sf s0 ef tv vv z
+  vv_post H ctx func cenv cx result ec sc sf u ef tv vv z ==>
+  vv_post H ctx func cenv cx result es sa sf s0 ef tv vv z
 Proof
   strip_tac >>
   `wb_frame cenv es ec sa s0 t` by
@@ -194,7 +194,7 @@ Proof
      qpat_x_assum `~expr_has_effect result ==> ~expr_has_effect src` drule >>
      strip_tac >>
      `pure_frame cenv func es sa s0 t` by
-       (qpat_assum `expr_post _ _ _ _ src _ _ _ _ _ _ _ _`
+       (qpat_assum `expr_post _ _ _ _ _ src _ _ _ _ _ _ _ _`
           (strip_assume_tac o REWRITE_RULE [loweringPostsTheory.expr_post_def]) >>
         qpat_x_assum `~expr_has_effect src ==> _` irule >>
         first_assum ACCEPT_TAC) >>
@@ -214,19 +214,19 @@ Proof
 QED
 
 Theorem slice_bytestring_source_post_rebase:
-  stmt_state_rel ctx func cenv cx es s0 /\ local_ptrs_reserved cenv sa /\
+  stmt_state_rel H ctx func cenv cx es s0 /\ local_ptrs_reserved cenv sa /\
   MAP FDOM es.scopes = MAP FDOM ec.scopes /\
   sa.cs_next_var <= sb.cs_next_var /\ sb.cs_next_var <= sc.cs_next_var /\
   sa.cs_next_id <= sb.cs_next_id /\ sb.cs_next_id <= sc.cs_next_id /\
-  expr_post ctx func cenv cx src es sa sb s0 ec v op t /\
+  expr_post H ctx func cenv cx src es sa sb s0 ec v op t /\
   compile_bytestring_src op sb = ((sl,data),sc) /\
   eval_operand op t = SOME p /\
   (!x. op = Var x ==> not_fresh_at sb x) /\
   run_inst_seq (emitted_insts sb sc) t = OK u /\
   (~expr_has_effect result ==> ~expr_has_effect src) /\
-  vv_post ctx func cenv cx result ec sc sf
+  vv_post H ctx func cenv cx result ec sc sf
     (u with vs_inst_idx := LENGTH sc.cs_current_insts) ef tv vv z ==>
-  vv_post ctx func cenv cx result es sa sf s0 ef tv vv z
+  vv_post H ctx func cenv cx result es sa sf s0 ef tv vv z
 Proof
   strip_tac >>
   drule_all slice_bytestring_capture_frame >>
@@ -242,23 +242,23 @@ Proof
 QED
 
 Theorem slice_fixed_source_post_rebase:
-  stmt_state_rel ctx func cenv cx es s0 /\ local_ptrs_reserved cenv sa /\
+  stmt_state_rel H ctx func cenv cx es s0 /\ local_ptrs_reserved cenv sa /\
   MAP FDOM es.scopes = MAP FDOM ec.scopes /\
   sa.cs_next_var <= sb.cs_next_var /\ sb.cs_next_var <= sc.cs_next_var /\
   sa.cs_next_id <= sb.cs_next_id /\ sb.cs_next_id <= sc.cs_next_id /\
-  expr_post ctx func cenv cx src es sa sb s0 ec v op t /\
+  expr_post H ctx func cenv cx src es sa sb s0 ec v op t /\
   compile_alloc_buffer 32 sb = (buf,sm) /\
   emit_void MSTORE [buf.buf_operand; op] sm = ((),sc) /\
   (!x. op = Var x ==> not_fresh_at sb x) /\ eval_operand op t = SOME w /\
-  stmt_state_rel ctx func cenv cx ec t /\ fn_inst_ids_distinct func /\
+  stmt_state_rel H ctx func cenv cx ec t /\ fn_inst_ids_distinct func /\
   local_ptrs_reserved cenv sb /\
   MEM (mk_inst sb.cs_next_id ALLOCA [Lit 32w]
     [STRING #"%" (toString sb.cs_next_var)]) (fn_insts func) /\
   run_inst_seq (emitted_insts sb sc) t = OK u /\
   (~expr_has_effect result ==> ~expr_has_effect src) /\
-  vv_post ctx func cenv cx result ec sc sf
+  vv_post H ctx func cenv cx result ec sc sf
     (u with vs_inst_idx := LENGTH sc.cs_current_insts) ef tv vv z ==>
-  vv_post ctx func cenv cx result es sa sf s0 ef tv vv z
+  vv_post H ctx func cenv cx result es sa sf s0 ef tv vv z
 Proof
   strip_tac >>
   drule_all slice_fixed_capture_frame >>
@@ -270,7 +270,7 @@ Proof
   goal_assum (drule_at Any) >> simp[] >>
   goal_assum (drule_at Any) >> simp[] >>
   goal_assum (drule_at Any) >> simp[] >>
-  qpat_assum `expr_post _ _ _ _ src _ _ _ _ _ _ _ _` (irule_at Any)
+  qpat_assum `expr_post _ _ _ _ _ src _ _ _ _ _ _ _ _` (irule_at Any)
 QED
 
 (* Sequential normalized entry points; compiler type indices remain general. *)
@@ -291,7 +291,7 @@ Theorem slice_bytes_continue_entry_seq:
   local_ptrs_reserved cenv sc /\ local_ptrs_reserved cenv sd /\ local_ptrs_reserved cenv se /\
   sc.cs_next_var <= sd.cs_next_var /\ sd.cs_next_var <= se.cs_next_var /\
   sc.cs_next_id <= sd.cs_next_id /\ sd.cs_next_id <= se.cs_next_id /\
-  stmt_state_rel ctx func cenv cx ec u /\ ~u.vs_halted /\
+  stmt_state_rel H ctx func cenv cx ec u /\ ~u.vs_halted /\
   u.vs_current_bb = sc.cs_current_bb /\ u.vs_inst_idx = LENGTH sc.cs_current_insts /\
   eval_operand sl u = SOME (n2w (LENGTH bs)) /\
   eval_operand data u = SOME (n2w src_base) /\
@@ -305,25 +305,25 @@ Theorem slice_bytes_continue_entry_seq:
     local_ptrs_reserved cenv sc /\ sc.cs_next_id <= sd'.cs_next_id /\
     expr_sim_inv cenv cx env es1 /\
     MAP FDOM ec.scopes = MAP FDOM es1.scopes /\
-    expr_post ctx func cenv cx e1 ec sc sd' u es1 v1 op1 r1 /\
-    expr_post ctx func cenv cx e2 es1 sd' se' r1 es2 v2 op2 r2 ==>
+    expr_post H ctx func cenv cx e1 ec sc sd' u es1 v1 op1 r1 /\
+    expr_post H ctx func cenv cx e2 es1 sd' se' r1 es2 v2 op2 r2 ==>
     mem_bytes_at src_base (LENGTH bs) r2.vs_memory = bs) /\
   32+n <= sz /\ sz < dimword (:256) /\
   slice_operands_ok (Slice n) [src;start;len] /\
   LENGTH bs <= bytelike_type_bound (BaseT bt) ==>
-  gas_outcome F (cx_tops cx) (ctx,func)
+  gas_outcome F (cx_tops cx) (ctx,func) cx st0
     (do sv <- bind (eval_expr cx start) (read_result cx);
         lv <- bind (eval_expr cx len) (read_result cx);
         acc <- get_accounts;
         v <- lift_sum (evaluate_builtin cx acc (BaseT (BytesT (Dynamic n))) (Slice n)
           [BaseT bt; BaseT (UintT 256); BaseT (UintT 256)] [BytesV bs;sv;lv]);
         return (Value v) od) (ec,u)
-    (\res ee t. ?tv. res = INL tv /\
-      vv_post ctx func cenv cx
+    (\H res ee t. ?tv. res = INL tv /\
+      vv_post H ctx func cenv cx
         (Builtin (BaseT (BytesT (Dynamic n))) (Slice n) [src;start;len]) ec sc sf u ee tv
         (LocatedValue (BaseT (BytesT (Dynamic n))) (mk_ptr out LocMemory)) t /\
       t.vs_current_bb = sf.cs_current_bb /\ t.vs_inst_idx = LENGTH sf.cs_current_insts)
-    (\res ee r. expr_exit res r)
+    (\H res ee r. expr_exit res r)
 Proof
   strip_tac >>
   mp_tac (SPEC_ALL slice_bytes_continue_seq |> Q.INST
@@ -353,7 +353,7 @@ Theorem slice_string_continue_entry_seq:
   local_ptrs_reserved cenv sc /\ local_ptrs_reserved cenv sd /\ local_ptrs_reserved cenv se /\
   sc.cs_next_var <= sd.cs_next_var /\ sd.cs_next_var <= se.cs_next_var /\
   sc.cs_next_id <= sd.cs_next_id /\ sd.cs_next_id <= se.cs_next_id /\
-  stmt_state_rel ctx func cenv cx ec u /\ ~u.vs_halted /\
+  stmt_state_rel H ctx func cenv cx ec u /\ ~u.vs_halted /\
   u.vs_current_bb = sc.cs_current_bb /\ u.vs_inst_idx = LENGTH sc.cs_current_insts /\
   eval_operand sl u = SOME (n2w (LENGTH text)) /\
   eval_operand data u = SOME (n2w src_base) /\
@@ -367,25 +367,25 @@ Theorem slice_string_continue_entry_seq:
     local_ptrs_reserved cenv sc /\ sc.cs_next_id <= sd'.cs_next_id /\
     expr_sim_inv cenv cx env es1 /\
     MAP FDOM ec.scopes = MAP FDOM es1.scopes /\
-    expr_post ctx func cenv cx e1 ec sc sd' u es1 v1 op1 r1 /\
-    expr_post ctx func cenv cx e2 es1 sd' se' r1 es2 v2 op2 r2 ==>
+    expr_post H ctx func cenv cx e1 ec sc sd' u es1 v1 op1 r1 /\
+    expr_post H ctx func cenv cx e2 es1 sd' se' r1 es2 v2 op2 r2 ==>
     mem_bytes_at src_base (LENGTH text) r2.vs_memory = MAP (n2w o ORD) text) /\
   32+n <= sz /\ sz < dimword (:256) /\
   slice_operands_ok (Slice n) [src;start;len] /\
   LENGTH text <= bytelike_type_bound (BaseT bt) ==>
-  gas_outcome F (cx_tops cx) (ctx,func)
+  gas_outcome F (cx_tops cx) (ctx,func) cx st0
     (do sv <- bind (eval_expr cx start) (read_result cx);
         lv <- bind (eval_expr cx len) (read_result cx);
         acc <- get_accounts;
         v <- lift_sum (evaluate_builtin cx acc (BaseT (StringT n)) (Slice n)
           [BaseT bt; BaseT (UintT 256); BaseT (UintT 256)] [StringV text;sv;lv]);
         return (Value v) od) (ec,u)
-    (\res ee t. ?tv. res = INL tv /\
-      vv_post ctx func cenv cx
+    (\H res ee t. ?tv. res = INL tv /\
+      vv_post H ctx func cenv cx
         (Builtin (BaseT (StringT n)) (Slice n) [src;start;len]) ec sc sf u ee tv
         (LocatedValue (BaseT (StringT n)) (mk_ptr out LocMemory)) t /\
       t.vs_current_bb = sf.cs_current_bb /\ t.vs_inst_idx = LENGTH sf.cs_current_insts)
-    (\res ee r. expr_exit res r)
+    (\H res ee r. expr_exit res r)
 Proof
   strip_tac >>
   mp_tac (SPEC_ALL slice_string_continue_seq |> Q.INST

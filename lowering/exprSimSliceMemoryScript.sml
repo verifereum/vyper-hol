@@ -114,7 +114,7 @@ Theorem slice_fixed_scratch_alloc:
   eval_operand val_op s = SOME w /\
   (!x. val_op = Var x ==> not_fresh_at sa x) /\ (!l. val_op <> Label l) /\
   LENGTH bs <= 32 /\ TAKE (LENGTH bs) (word_to_bytes_be w) = bs /\
-  stmt_state_rel ctx func cenv cx es s /\ fn_inst_ids_distinct func /\
+  stmt_state_rel H ctx func cenv cx es s /\ fn_inst_ids_distinct func /\
   local_ptrs_reserved cenv sa /\
   MEM (mk_inst sa.cs_next_id ALLOCA [Lit 32w]
     [STRING #"%" (toString sa.cs_next_var)]) (fn_insts func) ==>
@@ -125,7 +125,7 @@ Theorem slice_fixed_scratch_alloc:
     mem_bytes_at (w2n p) (LENGTH bs) t.vs_memory = bs /\
     (!name off len. local_region cenv es.scopes s name off len ==>
        regions_disjoint (w2n p) 32 off len) /\
-    stmt_state_rel ctx func cenv cx es t /\
+    stmt_state_rel H ctx func cenv cx es t /\
     (!name off len. local_region cenv es.scopes t name off len ==>
        regions_disjoint (w2n p) 32 off len) /\
     sa.cs_next_id < sb.cs_next_id /\
@@ -200,7 +200,7 @@ QED
 
 Theorem slice_out_buf_run:
   compile_slice_out_buf sz sa = ((out,data),sb) /\
-  stmt_state_rel ctx func cenv cx es s /\ fn_inst_ids_distinct func /\
+  stmt_state_rel H ctx func cenv cx es s /\ fn_inst_ids_distinct func /\
   local_ptrs_reserved cenv sa /\ sz < dimword (:256) /\
   MEM (mk_inst sa.cs_next_id ALLOCA [Lit (n2w sz)]
     [STRING #"%" (toString sa.cs_next_var)]) (fn_insts func) ==>
@@ -214,7 +214,7 @@ Theorem slice_out_buf_run:
        regions_disjoint (w2n p) sz off len) /\
     (?x. out = Var x /\ not_fresh_at sb x) /\
     (?x. data = Var x /\ not_fresh_at sb x) /\
-    stmt_state_rel ctx func cenv cx es t /\
+    stmt_state_rel H ctx func cenv cx es t /\
     t.vs_memory = s.vs_memory /\ t.vs_labels = s.vs_labels /\
     (!x. not_fresh_at sa x ==> lookup_var x t = lookup_var x s) /\
     (!aid entry. FLOOKUP s.vs_allocas aid = SOME entry ==>
@@ -256,7 +256,7 @@ Proof
       >- (qexists_tac `func` >> fs[stmt_state_rel_def, state_rel_def]) >>
       qexistsl_tac [`sm`, `es.scopes`, `t`] >>
       simp[]) >>
-  `stmt_state_rel ctx func cenv cx es t` by
+  `stmt_state_rel H ctx func cenv cx es t` by
     (qpat_x_assum `t = u with vs_vars := _` SUBST1_TAC >>
      irule exprSimPropsTheory.stmt_state_rel_vars_frame >>
      simp[] >> rpt strip_tac >>
@@ -294,7 +294,7 @@ Theorem slice_payload_after_operand:
   ~is_word_type (BaseT bt) /\ eval_operand op s = SOME p /\
   32 + LENGTH bs <= val_footprint vt v /\
   mem_bytes_at (w2n p + 32) (LENGTH bs) s.vs_memory = bs /\
-  expr_post ctx func cenv cx e es sm sb s es' v' op' t ==>
+  expr_post H ctx func cenv cx e es sm sb s es' v' op' t ==>
   mem_bytes_at (w2n p + 32) (LENGTH bs) t.vs_memory = bs
 Proof
   strip_tac >>
@@ -312,7 +312,7 @@ QED
    two-instruction capture; bytes and strings share the same payload. *)
 Theorem slice_dynamic_value_capture:
   compile_bytestring_src src sm = ((len,data),sb) /\
-  stmt_state_rel ctx func cenv cx es s /\
+  stmt_state_rel H ctx func cenv cx es s /\
   evaluate_type (get_tenv cx) (BaseT bt) = SOME (BaseTV bt) /\
   expr_val_rel cx (BaseT bt) v src s /\
   expr_val_at cenv cx (BaseT bt) sa sm es v src s /\
@@ -347,7 +347,7 @@ QED
    may make internal calls, provided its usual expression post holds. *)
 Theorem slice_dynamic_capture_continue:
   compile_bytestring_src src sm = ((len,data),sb) /\
-  stmt_state_rel ctx func cenv cx es s /\ expr_sim_inv cenv cx env es /\
+  stmt_state_rel H ctx func cenv cx es s /\ expr_sim_inv cenv cx env es /\
   evaluate_type (get_tenv cx) (BaseT bt) = SOME (BaseTV bt) /\
   expr_val_rel cx (BaseT bt) v src s /\
   expr_val_at cenv cx (BaseT bt) sa sm es v src s /\
@@ -365,7 +365,7 @@ Theorem slice_dynamic_capture_continue:
     t = s with vs_vars := t.vs_vars /\
     (!x. not_fresh_at sm x ==> FLOOKUP t.vs_vars x = FLOOKUP s.vs_vars x) /\
     (!e sc es' v' op' u.
-      expr_post ctx func cenv cx e es sb sc t es' v' op' u ==>
+      expr_post H ctx func cenv cx e es sb sc t es' v' op' u ==>
       mem_bytes_at (w2n p + 32) (LENGTH bs) u.vs_memory = bs)
 Proof
   rpt gen_tac >> disch_then (REPEAT_TCL CONJUNCTS_THEN assume_tac) >>

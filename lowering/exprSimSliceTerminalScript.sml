@@ -38,7 +38,7 @@ Theorem slice_terminal_outcome[local]:
   gas_marked_path F ctx func s 0 r /\
   ((?t. r = OK t /\ Q res (es with gas_obs := []) t) \/
    (exit_result r /\ R res (es with gas_obs := []) r)) ==>
-  gas_outcome F tops (ctx,func) source (es,s) Q R
+  gas_outcome F tops (ctx,func) cx st0 source (es,s) Q R
 Proof
   strip_tac >> rewrite_tac[gas_outcome_def] >>
   qexists_tac `[]` >> disj1_tac >>
@@ -78,7 +78,7 @@ QED
 Theorem slice_data_bytes_outcome:
   compile_slice_data sl data sop lop sz sa = (out,sb) /\
   fn_has_code sa sb func /\ fn_inst_ids_distinct func /\
-  local_ptrs_reserved cenv sa /\ stmt_state_rel ctx func cenv cx es s /\
+  local_ptrs_reserved cenv sa /\ stmt_state_rel H ctx func cenv cx es s /\
   ~s.vs_halted /\ lookup_block s.vs_current_bb func.fn_blocks = SOME bb /\
   isPREFIX (emitted_insts sa sb) (DROP s.vs_inst_idx bb.bb_instructions) /\
   s.vs_current_bb = sa.cs_current_bb /\ s.vs_inst_idx = LENGTH sa.cs_current_insts /\
@@ -93,16 +93,16 @@ Theorem slice_data_bytes_outcome:
   slice_operands_ok (Slice n) [src;start;len] /\
   LENGTH bs <= bytelike_type_bound (expr_type src) /\
   bind (eval_expr cx len) (read_result cx) ep = (INL (IntV (&k)),eq) ==>
-  gas_outcome F tops (ctx,func)
+  gas_outcome F tops (ctx,func) cx st0
     (do acc <- get_accounts;
         v <- lift_sum (evaluate_builtin cx acc (expr_type e) (Slice n)
                (MAP expr_type [src;start;len]) [BytesV bs;IntV (&i);IntV (&k)]);
         return (Value v) od) (es,s)
-    (\res ee t. ?tv. res = INL tv /\
-       vv_post ctx func cenv cx e es sa sb s ee tv
+    (\H res ee t. ?tv. res = INL tv /\
+       vv_post H ctx func cenv cx e es sa sb s ee tv
          (LocatedValue (expr_type e) (mk_ptr out LocMemory)) t /\
        t.vs_current_bb = sb.cs_current_bb /\ t.vs_inst_idx = LENGTH sb.cs_current_insts)
-    (\res ee r. expr_exit res r)
+    (\H res ee r. expr_exit res r)
 Proof
   strip_tac >>
   `EVERY (\inst. inst.inst_opcode <> INVOKE /\
@@ -136,7 +136,7 @@ Resume slice_data_bytes_outcome[success]:
   simp[fragGasModeTheory.gas_marked_path_def, get_accounts_def,
        bind_def, lift_sum_def, return_def, evaluate_builtin_def,
        exprSimSliceSourceTheory.slice_bytes_nat] >>
-  qpat_x_assum `!idx. vv_post _ _ _ _ _ _ _ _ _ _ _ _ _`
+  qpat_x_assum `!idx. vv_post _ _ _ _ _ _ _ _ _ _ _ _ _ _`
     (qspec_then `t.vs_inst_idx` mp_tac) >>
   `post_value_type cenv e = expr_type e` by
     (irule loweringPostsTheory.post_value_type_bytestring >>
@@ -172,7 +172,7 @@ Finalise slice_data_bytes_outcome
 Theorem slice_data_string_outcome:
   compile_slice_data sl data sop lop sz sa = (out,sb) /\
   fn_has_code sa sb func /\ fn_inst_ids_distinct func /\
-  local_ptrs_reserved cenv sa /\ stmt_state_rel ctx func cenv cx es s /\
+  local_ptrs_reserved cenv sa /\ stmt_state_rel H ctx func cenv cx es s /\
   ~s.vs_halted /\ lookup_block s.vs_current_bb func.fn_blocks = SOME bb /\
   isPREFIX (emitted_insts sa sb) (DROP s.vs_inst_idx bb.bb_instructions) /\
   s.vs_current_bb = sa.cs_current_bb /\ s.vs_inst_idx = LENGTH sa.cs_current_insts /\
@@ -187,16 +187,16 @@ Theorem slice_data_string_outcome:
   slice_operands_ok (Slice n) [src;start;len] /\
   LENGTH text <= bytelike_type_bound (expr_type src) /\
   bind (eval_expr cx len) (read_result cx) ep = (INL (IntV (&k)),eq) ==>
-  gas_outcome F tops (ctx,func)
+  gas_outcome F tops (ctx,func) cx st0
     (do acc <- get_accounts;
         v <- lift_sum (evaluate_builtin cx acc (expr_type e) (Slice n)
                (MAP expr_type [src;start;len]) [StringV text;IntV (&i);IntV (&k)]);
         return (Value v) od) (es,s)
-    (\res ee t. ?tv. res = INL tv /\
-       vv_post ctx func cenv cx e es sa sb s ee tv
+    (\H res ee t. ?tv. res = INL tv /\
+       vv_post H ctx func cenv cx e es sa sb s ee tv
          (LocatedValue (expr_type e) (mk_ptr out LocMemory)) t /\
        t.vs_current_bb = sb.cs_current_bb /\ t.vs_inst_idx = LENGTH sb.cs_current_insts)
-    (\res ee r. expr_exit res r)
+    (\H res ee r. expr_exit res r)
 Proof
   strip_tac >>
   `EVERY (\inst. inst.inst_opcode <> INVOKE /\
@@ -230,7 +230,7 @@ Resume slice_data_string_outcome[success]:
   simp[fragGasModeTheory.gas_marked_path_def, get_accounts_def,
        bind_def, lift_sum_def, return_def, evaluate_builtin_def,
        exprSimSliceSourceTheory.slice_string_nat] >>
-  qpat_x_assum `!idx. vv_post _ _ _ _ _ _ _ _ _ _ _ _ _`
+  qpat_x_assum `!idx. vv_post _ _ _ _ _ _ _ _ _ _ _ _ _ _`
     (qspec_then `t.vs_inst_idx` mp_tac) >>
   `post_value_type cenv e = expr_type e` by
     (irule loweringPostsTheory.post_value_type_bytestring >>

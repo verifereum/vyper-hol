@@ -134,7 +134,7 @@ Resume compile_slice_ordinary_case[dynamic]:
  gvs[Abbr `whole`, vyperASTTheory.expr_type_def] >>
  qpat_x_assum `expr_sim _ _ _ _ _ _ _` mp_tac >>
  rewrite_tac[expr_sim_def] >> disch_then drule_all >> strip_tac >>
- qmatch_asmsub_abbrev_tac `gas_outcome _ _ _ _ _ spost _` >>
+ qmatch_asmsub_abbrev_tac `gas_outcome _ _ _ _ _ _ _ spost _` >>
  drule slice_ordinary_actions >> strip_tac >> asm_rewrite_tac[] >>
  irule slice_gas_outcome_bind_value >>
  qexists_tac `\v ee t. spost (INL v) ee t` >>
@@ -145,12 +145,12 @@ Resume compile_slice_ordinary_case[dynamic]:
      qspec_then `Value` (qspec_then `INR ex` mp_tac) expr_exit_success_map >>
      simp[]) >>
  rpt gen_tac >> simp[Abbr `spost`] >> strip_tac >>
- qpat_x_assum `gas_outcome _ _ _ _ _ _ _` kall_tac >>
+ qpat_x_assum `gas_outcome _ _ _ _ _ _ _ _ _` kall_tac >>
  qpat_x_assum `!a b c d e. eval_expr _ _ = _` kall_tac >>
  qpat_x_assum `expr_sim_case _ _ _ _ _ _` kall_tac >>
  qpat_x_assum `nocalls ==> int_calls_expr src = []` kall_tac >>
  qpat_x_assum `gas_admissible (bind (eval_expr cx src) _) _ _` kall_tac >>
- qmatch_goalsub_abbrev_tac `gas_outcome _ _ _ _ _ outpost _` >>
+ qmatch_goalsub_abbrev_tac `gas_outcome _ _ _ _ _ _ _ outpost _` >>
  `?gs. bind (eval_expr cx src) (read_result cx) (es with gas_obs := gs) =
        (INL v, mid with gas_obs := [])` by
    (fs[gasSummaryTheory.gas_marked_exec_def] >> metis_tac[]) >>
@@ -163,7 +163,7 @@ Resume compile_slice_ordinary_case[dynamic]:
  drule_all (INST_TYPE [alpha |-> ``:eval_result``] slice_source_dynamic_capture_entry) >>
  simp[] >> strip_tac >>
  first_x_assum ho_match_mp_tac >>
- qmatch_goalsub_abbrev_tac `gas_outcome _ _ _ _ (_,uc) _ _` >>
+ qmatch_goalsub_abbrev_tac `gas_outcome _ _ _ _ _ _ (_,uc) _ _` >>
  gvs[] >>
  suspend "dynamic_kind")
 QED
@@ -285,7 +285,7 @@ QED
 Resume compile_slice_ordinary_case[bytes_nonhalt]:
  markerLib.RESUME_TAC >> (
  `?w. eval_operand src_op t = SOME w` by
-   (qpat_x_assum `expr_post _ _ _ _ _ _ _ _ _ _ _ _ _` mp_tac >>
+   (qpat_x_assum `expr_post _ _ _ _ _ _ _ _ _ _ _ _ _ _` mp_tac >>
     simp[loweringPostsTheory.expr_post_def, loweringPostsTheory.expr_val_rel_def, is_word_type_def,
       vyperValueTheory.evaluate_type_def] >> metis_tac[]) >>
  drule_all slice_bytestring_src_run >> strip_tac >> gvs[] >>
@@ -305,10 +305,10 @@ Resume compile_slice_ordinary_case[bytes_rebase]:
  irule slice_bytestring_source_post_rebase >>
  goal_assum (drule_at Any) >> simp[] >>
  goal_assum (drule_at Any) >> simp[] >>
- qpat_assum `expr_post _ _ _ _ src es sa st1 _ _ _ _ _` (irule_at Any) >>
+ qpat_assum `expr_post _ _ _ _ _ src es sa st1 _ _ _ _ _` (irule_at Any) >>
  simp[] >>
  `?w. eval_operand src_op t = SOME w` by
-   (qpat_x_assum `expr_post _ _ _ _ src es sa st1 _ _ _ _ _` mp_tac >>
+   (qpat_x_assum `expr_post _ _ _ _ _ src es sa st1 _ _ _ _ _` mp_tac >>
     simp[loweringPostsTheory.expr_post_def, loweringPostsTheory.expr_val_rel_def,
       is_word_type_def, vyperValueTheory.evaluate_type_def] >> metis_tac[]) >>
  qexists_tac `w` >> simp[] >>
@@ -321,7 +321,7 @@ QED
 Resume compile_slice_ordinary_case[string_nonhalt]:
  markerLib.RESUME_TAC >> (
  `?w. eval_operand src_op t = SOME w` by
-   (qpat_x_assum `expr_post _ _ _ _ _ _ _ _ _ _ _ _ _` mp_tac >>
+   (qpat_x_assum `expr_post _ _ _ _ _ _ _ _ _ _ _ _ _ _` mp_tac >>
     simp[loweringPostsTheory.expr_post_def, loweringPostsTheory.expr_val_rel_def, is_word_type_def,
       vyperValueTheory.evaluate_type_def] >> metis_tac[]) >>
  drule_all slice_bytestring_src_run >> strip_tac >> gvs[] >>
@@ -341,10 +341,10 @@ Resume compile_slice_ordinary_case[string_rebase]:
  irule slice_bytestring_source_post_rebase >>
  goal_assum (drule_at Any) >> simp[] >>
  goal_assum (drule_at Any) >> simp[] >>
- qpat_assum `expr_post _ _ _ _ src es sa st1 _ _ _ _ _` (irule_at Any) >>
+ qpat_assum `expr_post _ _ _ _ _ src es sa st1 _ _ _ _ _` (irule_at Any) >>
  simp[] >>
  `?w. eval_operand src_op t = SOME w` by
-   (qpat_x_assum `expr_post _ _ _ _ src es sa st1 _ _ _ _ _` mp_tac >>
+   (qpat_x_assum `expr_post _ _ _ _ _ src es sa st1 _ _ _ _ _` mp_tac >>
     simp[loweringPostsTheory.expr_post_def, loweringPostsTheory.expr_val_rel_def,
       is_word_type_def, vyperValueTheory.evaluate_type_def] >> metis_tac[]) >>
  qexists_tac `w` >> simp[] >>
@@ -395,7 +395,7 @@ QED
 Resume compile_slice_ordinary_case[fixed_source]:
  qpat_x_assum `expr_sim _ _ _ _ _ _ _` mp_tac >>
  rewrite_tac[expr_sim_def] >> disch_then drule_all >> strip_tac >>
- qmatch_asmsub_abbrev_tac `gas_outcome _ _ _ _ _ spost _` >>
+ qmatch_asmsub_abbrev_tac `gas_outcome _ _ _ _ _ _ _ spost _` >>
  drule slice_ordinary_actions >> strip_tac >> asm_rewrite_tac[] >>
  irule slice_gas_outcome_bind_value >>
  qexists_tac `\v ee t. spost (INL v) ee t` >>
@@ -406,12 +406,12 @@ Resume compile_slice_ordinary_case[fixed_source]:
      qspec_then `Value` (qspec_then `INR ex` mp_tac) expr_exit_success_map >>
      simp[]) >>
  rpt gen_tac >> simp[Abbr `spost`] >> strip_tac >>
- qpat_x_assum `gas_outcome _ _ _ _ _ _ _` kall_tac >>
+ qpat_x_assum `gas_outcome _ _ _ _ _ _ _ _ _` kall_tac >>
  qpat_x_assum `!a b c d e. eval_expr _ _ = _` kall_tac >>
  qpat_x_assum `expr_sim_case _ _ _ _ _ _` kall_tac >>
  qpat_x_assum `nocalls ==> int_calls_expr src = []` kall_tac >>
  qpat_x_assum `gas_admissible (bind (eval_expr cx src) _) _ _` kall_tac >>
- qmatch_goalsub_abbrev_tac `gas_outcome _ _ _ _ _ outpost _` >>
+ qmatch_goalsub_abbrev_tac `gas_outcome _ _ _ _ _ _ _ outpost _` >>
  `?gs. bind (eval_expr cx src) (read_result cx) (es with gas_obs := gs) =
        (INL v, mid with gas_obs := [])` by
    (fs[gasSummaryTheory.gas_marked_exec_def] >> metis_tac[]) >>
@@ -439,7 +439,7 @@ Resume compile_slice_ordinary_case[fixed_capture]:
  drule_all (INST_TYPE [alpha |-> ``:eval_result``] slice_source_fixed_capture_entry) >>
  simp[] >> strip_tac >>
  first_x_assum ho_match_mp_tac >>
- qmatch_goalsub_abbrev_tac `gas_outcome _ _ _ _ (_,uc) _ _` >>
+ qmatch_goalsub_abbrev_tac `gas_outcome _ _ _ _ _ _ (_,uc) _ _` >>
  gvs[] >>
  suspend "fixed_continue"
 QED
@@ -500,7 +500,7 @@ Resume compile_slice_ordinary_case[fixed_rebase]:
  rpt gen_tac >> strip_tac >> gvs[Abbr `outpost`] >>
  irule slice_fixed_source_post_rebase >>
  goal_assum (drule_at Any) >> simp[] >>
- qpat_assum `expr_post _ _ _ _ src es sa st1 _ _ _ _ _` (irule_at Any) >>
+ qpat_assum `expr_post _ _ _ _ _ src es sa st1 _ _ _ _ _` (irule_at Any) >>
  qpat_assum `compile_alloc_buffer 32 st1 = _` (irule_at Any) >>
  simp[] >>
  `MAP FDOM es.scopes = MAP FDOM mid.scopes` by
@@ -524,7 +524,7 @@ Resume compile_slice_ordinary_case[fixed_rebase]:
  qpat_x_assum `ci_mono sa st1` mp_tac >>
  qpat_x_assum `ci_mono st1 sc` mp_tac >>
  simp[ci_mono_def] >> strip_tac >> strip_tac >> simp[] >>
- qpat_assum `expr_post _ _ _ _ src es sa st1 _ _ _ _ _` mp_tac >>
+ qpat_assum `expr_post _ _ _ _ _ src es sa st1 _ _ _ _ _` mp_tac >>
  simp[loweringPostsTheory.expr_post_def] >>
  conj_tac >- (qpat_x_assum `run_inst_seq (_ ++ _) t = OK u` mp_tac >> simp[]) >>
  fs[loweringPostsTheory.expr_post_def]

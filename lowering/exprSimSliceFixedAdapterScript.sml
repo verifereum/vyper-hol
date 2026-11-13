@@ -7,7 +7,7 @@ Ancestors
 Theorem slice_source_fixed_view:
   expr_body_pre cenv cx env src es /\
   bind (eval_expr cx src) (read_result cx) (es with gas_obs := gs) = (INL v,ee) /\
-  expr_post ctx func cenv cx src es sa sm s0 ee v src_op t /\
+  expr_post H ctx func cenv cx src es sa sm s0 ee v src_op t /\
   expr_type src = BaseT (BytesT (Fixed m)) /\ m <= 32 ==>
   expr_sim_inv cenv cx env ee /\
   ?bs w. v = BytesV bs /\ LENGTH bs = m /\
@@ -84,7 +84,7 @@ Theorem slice_fixed_scratch_entry:
   eval_operand val_op s = SOME w /\
   (!x. val_op = Var x ==> not_fresh_at sa x) /\ (!l. val_op <> Label l) /\
   LENGTH bs <= 32 /\ TAKE (LENGTH bs) (word_to_bytes_be w) = bs /\
-  stmt_state_rel ctx func cenv cx es s /\ fn_inst_ids_distinct func /\
+  stmt_state_rel H ctx func cenv cx es s /\ fn_inst_ids_distinct func /\
   local_ptrs_reserved cenv sa /\ fn_has_code sa sb func /\ ~s.vs_halted /\
   s.vs_current_bb = sa.cs_current_bb /\
   s.vs_inst_idx = LENGTH sa.cs_current_insts ==>
@@ -94,7 +94,7 @@ Theorem slice_fixed_scratch_entry:
       s.vs_inst_idx + LENGTH (emitted_insts sa sm ++ emitted_insts sm sb) in
       u'.vs_inst_idx = LENGTH sb.cs_current_insts /\
       u'.vs_current_bb = sb.cs_current_bb /\
-      stmt_state_rel ctx func cenv cx es u' /\
+      stmt_state_rel H ctx func cenv cx es u' /\
       eval_operand buf.buf_operand u' = SOME p /\
       eval_operand (Lit (n2w (LENGTH bs))) u' = SOME (n2w (LENGTH bs)) /\
       mem_bytes_at (w2n p) (LENGTH bs) u'.vs_memory = bs /\
@@ -102,12 +102,12 @@ Theorem slice_fixed_scratch_entry:
       (!sd se e1 e2 es1 es2 v1 v2 op1 op2 r1 r2.
         local_ptrs_reserved cenv sb /\ sb.cs_next_id <= sd.cs_next_id /\
         MAP FDOM es.scopes = MAP FDOM es1.scopes /\
-        expr_post ctx func cenv cx e1 es sb sd u' es1 v1 op1 r1 /\
-        expr_post ctx func cenv cx e2 es1 sd se r1 es2 v2 op2 r2 ==>
+        expr_post H ctx func cenv cx e1 es sb sd u' es1 v1 op1 r1 /\
+        expr_post H ctx func cenv cx e2 es1 sd se r1 es2 v2 op2 r2 ==>
         mem_bytes_at (w2n p) (LENGTH bs) r2.vs_memory = bs) /\
       (!tops source Q R.
-        gas_outcome F tops (ctx,func) source (es,u') Q R ==>
-        gas_outcome F tops (ctx,func) source (es,s) Q R)
+        gas_outcome F tops (ctx,func) cx st0 source (es,u') Q R ==>
+        gas_outcome F tops (ctx,func) cx st0 source (es,s) Q R)
 Proof
   strip_tac >> drule_all slice_fixed_scratch_embedding >> strip_tac >>
   drule_all slice_fixed_scratch_code >> strip_tac >>
@@ -124,7 +124,7 @@ Proof
   conj_tac
   >- (rpt strip_tac >>
       fs[slice_capture_post_initial_index] >>
-      qpat_x_assum `stmt_state_rel ctx func cenv cx es s` kall_tac >>
+      qpat_x_assum `stmt_state_rel H ctx func cenv cx es s` kall_tac >>
       `sa.cs_next_id < sd.cs_next_id` by decide_tac >>
       `!name off sz. local_region cenv es.scopes t name off sz ==>
         w2n p + 32 <= off \/ off + sz <= w2n p` by
@@ -142,7 +142,7 @@ QED
 Theorem slice_source_fixed_capture_entry:
   expr_body_pre cenv cx env src es /\
   bind (eval_expr cx src) (read_result cx) (es with gas_obs := gs) = (INL v,ee) /\
-  expr_post ctx func cenv cx src es sa sm s0 ee v src_op t /\
+  expr_post H ctx func cenv cx src es sa sm s0 ee v src_op t /\
   expr_type src = BaseT (BytesT (Fixed m)) /\ m <= 32 /\
   lower_value compile_expr cenv (BaseT (BytesT (Fixed m))) src sa = (src_op,sm) /\
   compile_alloc_buffer 32 sm = (buf,sb) /\
@@ -159,7 +159,7 @@ Theorem slice_source_fixed_capture_entry:
       t.vs_inst_idx + LENGTH (emitted_insts sm sb ++ emitted_insts sb sc) in
       u'.vs_inst_idx = LENGTH sc.cs_current_insts /\
       u'.vs_current_bb = sc.cs_current_bb /\
-      stmt_state_rel ctx func cenv cx ee u' /\
+      stmt_state_rel H ctx func cenv cx ee u' /\
       eval_operand buf.buf_operand u' = SOME p /\
       eval_operand (Lit (n2w (LENGTH bs))) u' = SOME (n2w (LENGTH bs)) /\
       mem_bytes_at (w2n p) (LENGTH bs) u'.vs_memory = bs /\
@@ -167,19 +167,19 @@ Theorem slice_source_fixed_capture_entry:
       (!sd se e1 e2 ee1 ee2 v1 v2 op1 op2 r1 r2.
         local_ptrs_reserved cenv sc /\ sc.cs_next_id <= sd.cs_next_id /\
         MAP FDOM ee.scopes = MAP FDOM ee1.scopes /\
-        expr_post ctx func cenv cx e1 ee sc sd u' ee1 v1 op1 r1 /\
-        expr_post ctx func cenv cx e2 ee1 sd se r1 ee2 v2 op2 r2 ==>
+        expr_post H ctx func cenv cx e1 ee sc sd u' ee1 v1 op1 r1 /\
+        expr_post H ctx func cenv cx e2 ee1 sd se r1 ee2 v2 op2 r2 ==>
         mem_bytes_at (w2n p) (LENGTH bs) r2.vs_memory = bs) /\
       (!tops source Q R.
-        gas_outcome F tops (ctx,func) source (ee,u') Q R ==>
-        gas_outcome F tops (ctx,func) source (ee,t) Q R)
+        gas_outcome F tops (ctx,func) cx st0 source (ee,u') Q R ==>
+        gas_outcome F tops (ctx,func) cx st0 source (ee,t) Q R)
 Proof
   strip_tac >> drule_all slice_source_fixed_view >> strip_tac >>
   `!z. src_op = Var z ==> not_fresh_at sm z` by
     metis_tac[exprOperandVarTheory.compile_lower_value_var] >>
   `!l. src_op <> Label l` by
     (drule_all exprSimSliceCaptureTheory.slice_source_operand_not_label >> simp[]) >>
-  `stmt_state_rel ctx func cenv cx ee t` by
+  `stmt_state_rel H ctx func cenv cx ee t` by
     fs[loweringPostsTheory.expr_post_def] >>
   `LENGTH bs <= 32` by decide_tac >>
   drule_all slice_fixed_scratch_entry >> strip_tac >>

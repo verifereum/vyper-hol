@@ -8,7 +8,7 @@ Ancestors
 Theorem slice_data_bytes_success_post:
  compile_slice_data src_len src_data start len sz sa = (out,sb) /\
  fn_has_code sa sb func /\ fn_inst_ids_distinct func /\
- local_ptrs_reserved cenv sa /\ stmt_state_rel ctx func cenv cx es s /\
+ local_ptrs_reserved cenv sa /\ stmt_state_rel H ctx func cenv cx es s /\
  eval_operand src_len s = SOME (n2w (LENGTH bs)) /\
  eval_operand src_data s = SOME (n2w src_base) /\
  eval_operand start s = SOME (n2w a) /\ eval_operand len s = SOME (n2w n) /\
@@ -18,7 +18,7 @@ Theorem slice_data_bytes_success_post:
  32+n <= sz /\ sz < dimword (:256) /\
  expr_type e = BaseT (BytesT (Dynamic bound)) /\ n <= bound ==>
  ?t. run_inst_seq (emitted_insts sa sb) s = OK t /\
- (!k. vv_post ctx func cenv cx e es sa sb s es
+ (!k. vv_post H ctx func cenv cx e es sa sb s es
    (Value (BytesV (TAKE n (DROP a bs))))
    (LocatedValue (expr_type e) (mk_ptr out LocMemory))
    (t with vs_inst_idx := k))
@@ -78,7 +78,7 @@ QED
 Theorem slice_data_string_success_post:
  compile_slice_data src_len src_data start len sz sa = (out,sb) /\
  fn_has_code sa sb func /\ fn_inst_ids_distinct func /\
- local_ptrs_reserved cenv sa /\ stmt_state_rel ctx func cenv cx es s /\
+ local_ptrs_reserved cenv sa /\ stmt_state_rel H ctx func cenv cx es s /\
  eval_operand src_len s = SOME (n2w (LENGTH text)) /\
  eval_operand src_data s = SOME (n2w src_base) /\
  eval_operand start s = SOME (n2w a) /\ eval_operand len s = SOME (n2w n) /\
@@ -88,7 +88,7 @@ Theorem slice_data_string_success_post:
  32+n <= sz /\ sz < dimword (:256) /\
  expr_type e = BaseT (StringT bound) /\ n <= bound ==>
  ?t. run_inst_seq (emitted_insts sa sb) s = OK t /\
- (!k. vv_post ctx func cenv cx e es sa sb s es
+ (!k. vv_post H ctx func cenv cx e es sa sb s es
    (Value (StringV (TAKE n (DROP a text))))
    (LocatedValue (expr_type e) (mk_ptr out LocMemory))
    (t with vs_inst_idx := k))
