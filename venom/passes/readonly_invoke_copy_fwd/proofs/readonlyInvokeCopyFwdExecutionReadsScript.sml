@@ -54,16 +54,22 @@ Proof
   qexists_tac `update_var out value t` >> simp[] >> gvs[] >>
   `out_taint rt inst s = {} /\ written_taint rt inst s = {}` by
     (fs[MEM] >> gvs[out_taint_def, written_taint_def] >> rpt CASE_TAC >> simp[]) >>
+  `~is_terminator inst.inst_opcode /\ inst.inst_opcode <> INVOKE` by
+    fs[MEM, is_terminator_def] >>
+  `step_prov PG G inst (update_var out value s) = set_prov G [out] NONE /\
+   occurrence_sites_step a B inst (update_var out value s) = B /\
+   step_taint inst s (update_var out value s) rt =
+     (rt with t_var := set_var_taint rt.t_var [out] {})` by
+    (fs[MEM] >>
+     simp[step_prov_def, out_prov_def, step_taint_def,
+       mem_taint_def, adopt_reset_def, store_taint_def,
+       imm_taint_def, new_site_bytes_def, step_writes_def, written_taint_def,
+       range_bytes_def, taint_component_equality, occurrence_sites_step_def,
+       source_memory_write_ranges_def, update_var_def, FLOOKUP_DEF] >> SET_TAC[]) >>
   irule (Q.INST [`p` |-> `NONE`, `m` |-> `{}`] ricf_execution_bind_next) >>
-  simp[ricf_opaque_value_agree_def, ricf_is_zero_prov_def, ricf_value_agree_def, ld_value_agree_def, word_agree_except_def] >>
-  fs[MEM] >>
-  simp[step_prov_def, out_prov_def, step_taint_def,
-    mem_taint_def, adopt_reset_def, store_taint_def,
-    imm_taint_def, new_site_bytes_def, step_writes_def, written_taint_def,
-    range_bytes_def, taint_component_equality, occurrence_sites_step_def,
-    source_memory_write_ranges_def, update_var_def,
-    FLOOKUP_DEF, is_terminator_def, SF CONJ_ss] >>
-  metis_tac[update_var_def]
+  simp[ricf_opaque_value_agree_def, ricf_is_zero_prov_def,
+    ricf_value_agree_def, ld_value_agree_def, word_agree_except_def] >>
+  qexistsl_tac [`Ct`,`fuel`] >> simp[]
 QED
 
 Theorem ricf_execution_read1_next:
