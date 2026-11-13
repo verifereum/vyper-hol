@@ -821,18 +821,6 @@ Proof
  simp[]
 QED
 
-Theorem append_sparse_normalize_fold[local]:
- !ks a. store_copy_normalize s
-   (FOLDL (\q j. (if tr then tstore else sstore) (key j) (value j) q) a (ks:num list)) =
- FOLDL (\q j. (if tr then tstore else sstore) (key j) (value j) q)
-   (store_copy_normalize s a) ks
-Proof
- Induct >> pure_rewrite_tac[listTheory.FOLDL] >> rpt gen_tac
- >- simp[] >>
- asm_rewrite_tac[] >> AP_THM_TAC >> AP_TERM_TAC >>
- Cases_on `tr` >> simp[stmtSimStoreCopyTheory.store_copy_normalize_def, sstore_def, tstore_def]
-QED
-
 Theorem append_sparse_normalize_pure[local]:
  u with <|vs_vars := s.vs_vars; vs_inst_idx := s.vs_inst_idx|> = s ==>
  store_copy_normalize s u = s
@@ -930,9 +918,9 @@ Proof
  >- metis_tac[] >>
  `store_copy_normalize s t = store_copy_normalize s (store_copy_normalize q2 t)` by
    simp[NoAsms, stmtSimStoreCopyTheory.store_copy_normalize_def] >>
- pop_assum SUBST1_TAC >> asm_rewrite_tac[append_sparse_normalize_fold] >>
+ pop_assum SUBST1_TAC >> asm_rewrite_tac[placeStoreSlotsTheory.store_slots_normalize_fold] >>
  simp[NoAsms, mload_def] >> asm_rewrite_tac[] >>
- simp[append_sparse_normalize_fold]
+ simp[placeStoreSlotsTheory.store_slots_normalize_fold]
 QED
 
 Theorem append_sparse_fold_compose[local]:
@@ -950,7 +938,7 @@ Proof
  strip_tac >>
  qpat_x_assum `store_copy_normalize u t = _`
    (mp_tac o AP_TERM ``store_copy_normalize s``) >>
- simp[append_sparse_normalize_fold, FOLDL_APPEND, mload_def] >>
+ simp[placeStoreSlotsTheory.store_slots_normalize_fold, FOLDL_APPEND, mload_def] >>
  simp[stmtSimStoreCopyTheory.store_copy_normalize_def]
 QED
 

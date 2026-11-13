@@ -330,15 +330,6 @@ Proof
      SRULE [] (Q.INST [`tr` |-> `F`] append_copy_normalize_store)]
 QED
 
-Theorem append_copy_normalize_fold[local]:
-  !ks a. store_copy_normalize s
-    (FOLDL (\q j. (if tr then tstore else sstore) (key j) (value j) q) a ks) =
-    FOLDL (\q j. (if tr then tstore else sstore) (key j) (value j) q)
-      (store_copy_normalize s a) ks
-Proof
-  Induct >> simp[append_copy_normalize_store]
-QED
-
 Theorem append_storage_copy_suffix_path:
   compile_dynarray_append cenv bop vop 1 stride dt st cap F
     (if tr then TLOAD else SLOAD) (if tr then TSTORE else SSTORE) sa = ((),sf) /\
@@ -437,7 +428,7 @@ Proof
       (slot+1w+len*n2w stride+n2w j) (mload (w2n b+32*j) s) q) s ks` by
     (qpat_x_assum `store_copy_normalize pre copied = _`
        (mp_tac o AP_TERM ``store_copy_normalize s``) >>
-     simp[append_copy_normalize_nest, append_copy_normalize_fold, mload_def]) >>
+     simp[append_copy_normalize_nest, placeStoreSlotsTheory.store_slots_normalize_fold, mload_def]) >>
   `store_copy_normalize s t =
     (if tr then tstore else sstore) slot (len+1w)
       (FOLDL (\q j. (if tr then tstore else sstore)
