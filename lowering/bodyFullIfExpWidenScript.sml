@@ -14,7 +14,7 @@ Ancestors
   ctorDeployMemoryRunPtrMono exprOperandVar exprSimVVFrame exprSimProps
   venomExecSemantics loweringStateRelDefs finite_map robustCopyTransportPtr
   exprSimUnwrap loweringHalt context exprSimAlloc
-  exprSimIfExpWidenedPosts valueCopy
+  exprSimIfExpWidenedPosts valueCopy emitHelperProps words
   representationCleanPtr valueCopyBytes valueTypingMemoryProps vfmConstants
   vyperTyping valueEncoding venomMemProofs valueEncodingDefs valueEncodingProps exprSimHyps
 
@@ -1069,5 +1069,203 @@ Proof
       simp[]) >>
   strip_tac >>
   rename1 `ptr_val_ok cx t v src Gu tu su` >>
-  cheat
+  `expr_post (storage_trace_horizon ee.storage_trace) ctx func cenv cx e es1 sa sn u ee v src su` by
+    (qpat_x_assum `!H. valid_horizon _ _ _ _ ==> gas_origin_ptr_path _ _ _ _ /\ _` drule >> simp[]) >>
+  `value_has_type rty v` by simp[] >>
+  `expr_val_rel cx t v src su` by
+    (qpat_assum `expr_post (storage_trace_horizon _) _ _ _ _ _ _ _ _ _ _ _ _ _` mp_tac >>
+     qpat_assum `post_value_type cenv e = t` (fn th => rewrite_tac[expr_post_def, th]) >>
+     strip_tac >> first_assum ACCEPT_TAC) >>
+  qpat_x_assum `expr_val_rel cx t v src su` mp_tac >>
+  simp[expr_val_rel_def] >> disch_then (qx_choose_then `sw` strip_assume_tac) >>
+  drule_all ifexp_widen_source_resources >> strip_tac >>
+  `salloc.cs_next_var <= sn.cs_next_var /\ salloc.cs_next_id <= sn.cs_next_id` by
+    (qspecl_then [`cenv`, `vv`, `salloc`] mp_tac ci_mono_unwrap_value >>
+     simp[ci_mono_def]) >>
+  `not_fresh_at sn p` by
+    (irule freshWritesTheory.not_fresh_at_mono >> qexists `salloc` >> simp[]) >>
+  `lookup_var p su = SOME w` by
+    (qpat_x_assum `!x. not_fresh_at salloc x ==> _` (qspec_then `p` mp_tac) >>
+     simp[Abbr `q`, GSYM eval_operand_def] >> fs[]) >>
+  `w2n sw + n <= su.vs_alloca_next` by
+    (qpat_x_assum `expr_store_bound cx t v src su` mp_tac >>
+     simp[expr_store_bound_def] >> disch_then (qspecl_then [`rty`, `sw`] mp_tac) >>
+     simp[] >> decide_tac) >>
+  `ptr_covers Ga ta p az (type_memory_bytes cenv t)` by
+    (simp[Abbr `Ga`, Abbr `ta`, Abbr `ai`, ptr_covers_def,
+       step_prov_def, out_prov_def, set_prov_def, mk_inst_def,
+       step_taint_def, set_var_taint_def, out_taint_def,
+       op_taint_def, eval_operand_def, lookup_var_def, FLOOKUP_UPDATE] >>
+     qexists `w` >> simp[] >>
+     qpat_x_assum `eval_operand buf.buf_operand az = SOME w` mp_tac >>
+     simp[eval_operand_def, lookup_var_def]) >>
+  `ptr_covers Gu tu p su n` by
+    (qpat_x_assum `ptr_covers Ga ta p az _` mp_tac >>
+     qpat_x_assum `!x. not_fresh_at salloc x ==> _` (qspec_then `p` mp_tac) >>
+     simp[ptr_covers_def, Abbr `q`, lookup_var_def] >> strip_tac >> strip_tac >>
+     qexists `w` >> simp[] >>
+     map_every (fn s => asm_x s kall_tac) ["unwrap", "edge", "alloc_ghost", "alloc_kept", "copy"] >>
+     gvs[] >> decide_tac) >>
+  `FLOOKUP su.vs_allocas sm.cs_next_id = SOME (w2n w,type_memory_bytes cenv t)` by
+    (qpat_x_assum `wb_frame cenv ee ee salloc q su` mp_tac >>
+     simp[wb_frame_def, Abbr `q`] >> strip_tac >> first_x_assum irule >> simp[]) >>
+  `alloca_inv su` by
+    (qpat_assum `expr_post _ _ _ _ _ _ _ _ _ _ _ _ _ su` mp_tac >>
+     pure_rewrite_tac[expr_post_def, stmt_state_rel_def] >>
+     strip_tac >> first_assum ACCEPT_TAC) >>
+  `w2n w + n <= su.vs_alloca_next` by
+    (qpat_x_assum `alloca_inv su` mp_tac >>
+     simp[venomMemDefsTheory.alloca_inv_def, venomMemDefsTheory.alloca_next_valid_def] >> strip_tac >>
+     first_x_assum drule >> simp[] >> decide_tac) >>
+  `not_fresh_at sn x` by
+    (drule compiler_unwrap_value_var >>
+     disch_then (qspec_then `x` mp_tac) >>
+     (impl_tac >- (Cases_on `vv` >> simp[vv_operand_def] >> rpt strip_tac >>
+       irule freshWritesTheory.not_fresh_at_mono >> qexists `sm` >> simp[] >>
+       qpat_x_assum `!x. vv_operand _ = Var x ==> _` mp_tac >>
+       simp[vv_operand_def])) >>
+     simp[]) >>
+  `run_inst_seq_mem_ok (emitted_insts sn sb) su` by
+    (map_every (fn s => asm_x s kall_tac) ["unwrap", "edge", "alloc_ghost", "alloc_kept", "copy"] >>
+     `!n a b c ops0 ws ops xs ops' ys ops'' zs s.
+       run_inst_seq_mem_ok
+        [mk_inst n NOT ops0 ws; mk_inst a ADD ops xs;
+         mk_inst b AND ops' ys; mk_inst c ADD ops'' zs] s` by
+       (rpt gen_tac >>
+        simp[fragExecMemTheory.run_inst_seq_mem_ok_cons, below_frontier_no_ranges, mk_inst_def] >>
+        rpt (CASE_TAC >> simp[fragExecMemTheory.run_inst_seq_mem_ok_cons,
+          fragExecMemTheory.run_inst_seq_mem_ok_last, below_frontier_no_ranges, mk_inst_def])) >>
+     `!src sa out sb s w. compile_bytestring_copy_len src sa = (out,sb) /\
+       eval_operand src s = SOME w /\ w2n w + 32 <= s.vs_alloca_next ==>
+       run_inst_seq_mem_ok (emitted_insts sa sb) s` by
+       (POP_ASSUM_LIST (K all_tac) >> rpt strip_tac >>
+        gvs[compile_bytestring_copy_len_def, emit_op_def, comp_bind_def,
+          comp_ignore_bind_def, comp_return_def, fresh_id_def, fresh_var_def,
+          emit_def, emitted_insts_def, listTheory.DROP_APPEND1] >>
+        pure_once_rewrite_tac[fragExecMemTheory.run_inst_seq_mem_ok_cons] >>
+        simp[below_frontier_MLOAD] >>
+        CASE_TAC >> simp[] >>
+        irule fragExecMemTheory.run_inst_seq_mem_ok_every >>
+        simp[below_frontier_no_ranges, mk_inst_def,
+          memSafeRunTheory.inst_dload_in_section_def]) >>
+     qpat_x_assum `compile_store_bytestring _ _ _ = _` mp_tac >>
+     simp_tac bool_ss [compile_store_bytestring_def, comp_bind_def, LET_THM] >>
+     pairarg_tac >> asm_simp_tac (bool_ss ++ pairSimps.PAIR_ss) [] >> strip_tac >>
+     rename1 `compile_bytestring_copy_len src sn = (out,mid)` >>
+     `!src out sa sb s w len.
+        compile_bytestring_copy_len src sa = (out,sb) /\
+        eval_operand src s = SOME w /\ mload (w2n w) s = n2w len /\
+        len + 31 < dimword (:256) /\
+        32 + 32 * word_size len < dimword (:256) ==>
+        ?q. run_inst_seq (emitted_insts sa sb) s = OK q /\
+          eval_operand out q = SOME (n2w (32 + 32 * word_size len)) /\
+          (q with vs_vars := s.vs_vars) = s /\
+          (!x. not_fresh_at sa x ==> lookup_var x q = lookup_var x s)` by
+       (POP_ASSUM_LIST (K all_tac) >> rpt strip_tac >>
+        gvs[compile_bytestring_copy_len_def, emit_op_def,
+          comp_bind_def, comp_ignore_bind_def, comp_return_def,
+          fresh_id_def, fresh_var_def, emit_def] >>
+        drule_then assume_tac step_MLOAD >>
+        simp[emitted_insts_def, listTheory.DROP_APPEND1, run_inst_seq_def] >>
+        qmatch_goalsub_abbrev_tac `step_inst_base (mk_inst nid NOT nops [v0]) s0` >>
+        `step_inst_base (mk_inst nid NOT nops [v0]) s0 =
+          OK (update_var v0 (~31w) s0)` by
+          (qunabbrev_tac `nops` >> irule step_NOT >> simp[eval_operand_def]) >>
+        simp[] >>
+        qmatch_goalsub_abbrev_tac `step_inst_base (mk_inst aid ADD ops [v1]) s1` >>
+        `step_inst_base (mk_inst aid ADD ops [v1]) s1 =
+          OK (update_var v1 ((n2w len:bytes32) + 31w) s1)` by
+          (simp[Abbr `ops`, Abbr `nops`] >> irule step_ADD >>
+           simp[Abbr `s1`, Abbr `s0`, Abbr `v0`, eval_operand_def,
+             lookup_var_update_var, ASCIInumbersTheory.toString_11]) >>
+        simp[] >>
+        qmatch_goalsub_abbrev_tac `step_inst_base (mk_inst bid AND bops [v2]) s2` >>
+        `step_inst_base (mk_inst bid AND bops [v2]) s2 =
+          OK (update_var v2 (((n2w len:bytes32) + 31w) && ~31w) s2)` by
+          (qunabbrev_tac `bops` >> irule step_AND >>
+           simp[Abbr `s2`, Abbr `s1`, Abbr `v1`, Abbr `v0`, eval_operand_def,
+             lookup_var_update_var, ASCIInumbersTheory.toString_11]) >>
+        simp[] >>
+        qmatch_goalsub_abbrev_tac `step_inst_base (mk_inst cid ADD cops [v3]) s3` >>
+        `step_inst_base (mk_inst cid ADD cops [v3]) s3 =
+          OK (update_var v3 ((((n2w len:bytes32) + 31w) && ~31w) + 32w) s3)` by
+          (simp[Abbr `cops`] >> irule step_ADD >> simp[Abbr `s3`, eval_operand_def,
+             lookup_var_update_var]) >>
+        simp[] >> conj_tac
+        >- (`!k. k + 31 < dimword (:256) ==> (((n2w k:bytes32) + 31w) && ~31w) + 32w =
+                    n2w (32 + 32 * word_size k)` by
+              (POP_ASSUM_LIST (K all_tac) >> rpt strip_tac >>
+               `(~31w:bytes32) = integer_word$i2w (- &32)` by
+                 (simp[integer_wordTheory.i2w_def] >> blastLib.BBLAST_TAC) >>
+               pop_assum SUBST1_TAC >>
+               rewrite_tac[exprSimPropsTheory.buffer_round_mask, word_add_n2w] >>
+               simp[GSYM n2w_DIV, word_size_def, word_lsl_n2w, word_add_n2w]) >>
+            first_x_assum (qspec_then `len` mp_tac) >>
+            simp[eval_operand_def, lookup_var_update_var]) >>
+        simp[Abbr `s3`, Abbr `s2`, Abbr `s1`, Abbr `s0`, update_var_def] >>
+        rpt strip_tac >>
+        gvs[not_fresh_at_def, Abbr `v0`, Abbr `v1`, Abbr `v2`, Abbr `v3`,
+          ASCIInumbersTheory.toString_11, lookup_var_def, FLOOKUP_UPDATE]) >>
+     `32 + 32 * word_size len < dimword (:256)` by fs[word_size_def] >>
+     first_assum (drule_at (Pat `compile_bytestring_copy_len _ _ = _`)) >>
+     disch_then (qspecl_then [`su`, `sw`, `len`] mp_tac) >> simp[] >> strip_tac >>
+     `same_blocks sn mid /\ mid.cs_current_insts = sn.cs_current_insts ++ emitted_insts sn mid /\
+       mid.cs_next_var = sn.cs_next_var + 5 /\ mid.cs_next_id = sn.cs_next_id + 5` by
+       (qpat_x_assum `compile_bytestring_copy_len _ _ = _` mp_tac >>
+        simp[compile_bytestring_copy_len_def, emit_op_def,
+          comp_bind_def, comp_ignore_bind_def, comp_return_def,
+          fresh_id_def, fresh_var_def, emit_def] >>
+        POP_ASSUM_LIST (K all_tac) >> strip_tac >>
+        gvs[same_blocks_def, emitted_insts_def, listTheory.DROP_APPEND1,
+          listTheory.APPEND_ASSOC]) >>
+     drule emit_void_extends >> strip_tac >>
+     `emitted_insts sn sb = emitted_insts sn mid ++ emitted_insts mid sb` by
+       (irule emitted_insts_append >> simp[]) >>
+     `run_inst_seq_mem_ok (emitted_insts sn mid) su` by
+       (first_x_assum irule >> qexistsl [`out`, `src`, `sw`] >> simp[] >> decide_tac) >>
+     `q'.vs_alloca_next = su.vs_alloca_next` by
+       (qpat_x_assum `_ with vs_vars := _ = su` mp_tac >>
+        disch_then (mp_tac o Q.AP_TERM `\s. s.vs_alloca_next`) >> simp[]) >>
+     `lookup_var p q' = SOME w /\ lookup_var x q' = SOME sw` by simp[] >>
+     `emitted_insts mid sb = [mk_inst mid.cs_next_id MCOPY [Var p; Var x; out] []]` by
+       (qpat_x_assum `emit_void MCOPY _ _ = _` mp_tac >>
+        POP_ASSUM_LIST (K all_tac) >>
+        simp[emit_void_def, comp_bind_def, fresh_id_def, emit_def, comp_return_def] >>
+        strip_tac >> gvs[emitted_insts_def, listTheory.DROP_APPEND1]) >>
+     `run_inst_seq_mem_ok (emitted_insts mid sb) q'` by
+       (simp[fragExecMemTheory.run_inst_seq_mem_ok_last, below_frontier_MCOPY,
+          eval_operand_def, word_size_def] >>
+        qpat_x_assum `n = 32 + 32 * _` mp_tac >>
+        simp_tac std_ss [arithmeticTheory.ADD_COMM] >>
+        disch_then (SUBST1_TAC o SYM) >> fs[]) >>
+     qpat_x_assum `emitted_insts sn sb = _` SUBST1_TAC >>
+     qpat_x_assum `run_inst_seq_mem_ok (emitted_insts mid sb) q'` mp_tac >>
+     qpat_x_assum `run_inst_seq_mem_ok (emitted_insts sn mid) su` mp_tac >>
+     qpat_x_assum `run_inst_seq (emitted_insts sn mid) su = OK q'` mp_tac >>
+     POP_ASSUM_LIST (K all_tac) >> rpt strip_tac >>
+     irule fragExecMemTheory.run_inst_seq_mem_ok_append >> simp[]) >>
+  `sb.cs_current_bb = sn.cs_current_bb /\
+   sb.cs_current_insts = sn.cs_current_insts ++ emitted_insts sn sb` by
+    (qpat_x_assum `compile_store_bytestring _ _ _ = _` mp_tac >>
+     POP_ASSUM_LIST (K all_tac) >>
+     simp[compile_store_bytestring_def, compile_bytestring_copy_len_def,
+       emit_op_def, emit_void_def, comp_bind_def, comp_ignore_bind_def,
+       comp_return_def, fresh_id_def, fresh_var_def, emit_def] >>
+     strip_tac >> gvs[emitted_insts_def, listTheory.DROP_APPEND1,
+       listTheory.APPEND_ASSOC]) >>
+  `?bb. lookup_block su.vs_current_bb func.fn_blocks = SOME bb /\
+     isPREFIX (emitted_insts sn sb) (DROP su.vs_inst_idx bb.bb_instructions)` by
+    (qpat_x_assum `fn_has_code sn sb func` mp_tac >>
+     simp[fn_has_code_def] >> strip_tac >>
+     qexists_tac `bb` >> fs[IS_PREFIX_APPEND] >> simp[DROP_APPEND]) >>
+  pop_assum strip_assume_tac >>
+  `allocas_from lo su /\ lo <= su.vs_alloca_next /\ ~su.vs_halted` by
+    (qpat_assum `!H. valid_horizon _ _ _ _ ==> expr_post _ _ _ _ _ _ _ _ _ _ _ _ _ /\ _`
+       (qspec_then `storage_trace_horizon ee.storage_trace` mp_tac) >>
+     simp[expr_post_def, stmt_state_rel_def, ghost_inv_at_def] >>
+     rpt strip_tac >> simp[]) >>
+  asm "copy" (drule_at (Pat `compile_store_bytestring _ _ _ = _`)) >>
+  disch_then (qspecl_then [`lo`, `explicit`, `ctx`, `func`, `PG`, `Gu`, `tu`, `su`, `sw`, `w`, `len`, `n`, `bb`] mp_tac) >>
+  impl_tac >- simp[] >>
+  strip_tac >> FAIL_TAC "endpoint"
 QED
