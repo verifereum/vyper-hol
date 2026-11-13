@@ -917,7 +917,11 @@ Theorem gas_shadow_compiles_builtin_body_makearray[local]:
     (compile_builtin_dispatch_body g cenv ret_ty ty (MakeArray elem_ty_opt bnd)
       (if sh then MAP gas_shadow_expr args else args))
 Proof
-  strip_tac >> Cases_on `elem_ty_opt` >> Cases_on `sh` >>
+  strip_tac >>
+  `tuple_literal_types ret_ty (MAP gas_shadow_expr args) =
+   tuple_literal_types ret_ty args`
+    by (Cases_on `ret_ty` >> simp[tuple_literal_types_def, MAP_MAP_o, MAP_EQ_f]) >>
+  Cases_on `elem_ty_opt` >> Cases_on `sh` >>
   CONV_TAC (BINOP_CONV (REWR_CONV (GSYM ETA_AX))) >>
   simp[compile_builtin_dispatch_body_def, MAP_MAP_o, combinTheory.o_DEF,
        GSYM comp_bind_def, comp_bind_uncurry] >>
