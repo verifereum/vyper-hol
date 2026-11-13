@@ -534,7 +534,6 @@ QED
 
 Theorem literal_array_prepare:
   compile_make_array compile_expr ce args et (type_memory_bytes ce et) header (Var root) sm = (out,sb) /\
-  EVERY (\e. expr_type e = et) args /\
   literal_loop_frame pure ctx func ce cx d root aid addr capacity
     es sa s G tn es sm H tm a ([] : (type_value # value # num # num) list) 0 /\
   fn_has_code sm sb func /\ (header ==> 32 <= capacity) /\
