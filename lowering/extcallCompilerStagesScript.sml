@@ -2,12 +2,12 @@
 Theory extcallCompilerStages
 Ancestors exprLowering compileEnv context emitHelper list
 
-val extcall_tuple_compiler = ``\ce vals tys bytes enc buf.
+val extcall_tuple_compiler = ``\ce vals tys bytes ei buf.
   if vals = [] then comp_return (Lit 4w) else
   comp_bind (compile_alloc_buffer bytes) (\args.
     comp_ignore_bind (compile_extcall_store_values ce (ZIP (vals,tys)) args.buf_operand 0)
     (comp_bind (emit_op ADD [buf; Lit 32w]) (\dst.
-     comp_bind (compile_abi_encode_to_buf dst args.buf_operand enc) (\len.
+     comp_bind (compile_abi_encode_to_buf dst args.buf_operand ei) (\len.
        emit_op ADD [len; Lit 4w]))))``;
 
 val extcall_effect_compiler = ``\rt skip stat addr value gas buf cap offset len.
@@ -62,38 +62,43 @@ Theorem extcall_compile_call_stages:
          else LocatedValue ann (mk_ptr result LocMemory)
 Proof
   simp_tac std_ss [compile_call_def, LET_THM, comp_return_def] >>
-  rpt (pairarg_tac >> gvs[]) >> strip_tac >> gvs[] >> metis_tac[]
+  rpt (pairarg_tac >> gvs[]) >> strip_tac >> gvs[] >>
+  Cases_on `gas_opt` >> gvs[comp_return_def] >>
+  Cases_on `rt = NoneT` >> gvs[] >> metis_tac[]
 QED
 
 Theorem extcall_compile_external_stages:
   compile_external_call_kwargs ce addr vals tys bytes max_args method cap mn ret_bytes
-    stat value gas skip has def rt dt enc info sa = (result,sb) ==>
-  ?buffer s1 s2 len s3 offset sp sr.
+    stat value gas skip has def rt dt ei info sa = (result,sb) ==>
+  ?buffer s1 s2 len s3 offset sp u sr.
     compile_alloc_buffer ((if max_args > cap then max_args else cap) + 32)
       sa = (buffer,s1) /\
     emit_void MSTORE [buffer.buf_operand; Lit (n2w method)] s1 = ((),s2) /\
-    (^extcall_tuple_compiler ce vals tys bytes enc buffer.buf_operand) s2 = (len,s3) /\
+    (^extcall_tuple_compiler ce vals tys bytes ei buffer.buf_operand) s2 = (len,s3) /\
     emit_op ADD [buffer.buf_operand; Lit 28w] s3 = (offset,sp) /\
     (^extcall_effect_compiler rt skip stat addr value gas buffer.buf_operand cap offset len)
-      sp = ((),sr) /\
+      sp = (u,sr) /\
     (^extcall_return_compiler ce rt dt has def addr skip buffer.buf_operand mn cap
       ret_bytes info) sr = (result,sb)
 Proof
   simp_tac std_ss [compile_external_call_kwargs_def, LET_THM,
     comp_bind_def, comp_ignore_bind_def, comp_return_def] >>
-  rpt (pairarg_tac >> gvs[]) >> strip_tac >> gvs[] >> metis_tac[]
+  rpt (pairarg_tac >> gvs[]) >> strip_tac >> gvs[] >>
+  Cases_on `rt = NoneT` >> Cases_on `has` >>
+  gvs[comp_bind_def,comp_ignore_bind_def,comp_return_def] >>
+  rpt (pairarg_tac >> gvs[]) >> metis_tac[]
 QED
 
 Theorem extcall_compile_tuple_stages:
-  (^extcall_tuple_compiler ce vals tys bytes enc buf) sa = (len,sb) /\ vals <> [] ==>
+  (^extcall_tuple_compiler ce vals tys bytes ei buf) sa = (len,sb) /\ vals <> [] ==>
   ?args s1 s2 dst s3 encoded s4.
     compile_alloc_buffer bytes sa = (args,s1) /\
     compile_extcall_store_values ce (ZIP (vals,tys)) args.buf_operand 0 s1 = ((),s2) /\
     emit_op ADD [buf; Lit 32w] s2 = (dst,s3) /\
-    compile_abi_encode_to_buf dst args.buf_operand enc s3 = (encoded,s4) /\
+    compile_abi_encode_to_buf dst args.buf_operand ei s3 = (encoded,s4) /\
     emit_op ADD [encoded; Lit 4w] s4 = (len,sb)
 Proof
   simp_tac std_ss [comp_bind_def, comp_ignore_bind_def] >>
-  Cases_on `vals = []` >> simp[] >>
+  Cases_on `vals = []` >> simp[comp_bind_def,comp_ignore_bind_def] >>
   rpt (pairarg_tac >> gvs[]) >> strip_tac >> gvs[] >> metis_tac[]
 QED
