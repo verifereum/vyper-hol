@@ -183,7 +183,8 @@ QED
 
 Theorem deploy_establishes_call_ready:
   deploy_typing_ok tops am tx /\ deploy_state_rel tops deploy_bc am tx es /\
-  supported_program tops /\ balance_bounded (2 ** 256 - 1) es /\
+  supported_program tops /\ supported_program_deploy tops /\
+  balance_bounded (2 ** 256 - 1) es /\
   run_call es = SOME (r, es') /\ ~MEM tx.target es'.rollback.toDelete /\
   load_contract orc gs am tx [(NONE, tops)] [] = INL (am', rqs) /\
   deploy_result_rel H tops runtime_bc tx es r es' (INL (am', rqs)) ==>
@@ -236,7 +237,8 @@ QED
 (* The guarded form: the finite storage guard stays inside the filling. *)
 Theorem deploy_call_result_establishes_call_ready:
   deploy_typing_ok tops am tx /\ deploy_state_rel tops deploy_bc am tx es /\
-  supported_program tops /\ balance_bounded (2 ** 256 - 1) es /\
+  supported_program tops /\ supported_program_deploy tops /\
+  balance_bounded (2 ** 256 - 1) es /\
   run_call es = SOME (r, es') /\ ~MEM tx.target es'.rollback.toDelete /\
   deploy_call_result_rel tops runtime_bc am tx es r es' ==>
   gas_readings_rel (gas_readings es)
@@ -250,7 +252,7 @@ Proof
   rw[deploy_call_result_rel_def] >>
   irule gas_readings_rel_mono >> goal_assum (drule_at Any) >>
   rw[] >> irule (INST_TYPE [alpha |-> “:256”] deploy_establishes_call_ready) >>
-  conj_tac >- simp[] >> conj_tac >- simp[] >>
+  rpt (conj_tac >- simp[]) >>
   qexistsl_tac [`storage_trace_horizon (deploy_storage_trace
                    (SOME (MAP SND (call_trace es))) gs am tx tops)`,
                 `am`, `deploy_bc`, `es`, `gs`, `SOME (MAP SND (call_trace es))`,
