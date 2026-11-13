@@ -169,7 +169,7 @@ QED
    any horizon valid past the write holds the root's region, so the write
    keeps the statement relation when that region makes slot's dead bytes
    stable. *)
-Theorem tuple_storage_root_word_rel[local]:
+Theorem tuple_storage_root_word_rel:
   !H ctx func cenv cx es es' s st0 tr slot tv v rtr rslot rtv.
     stmt_state_rel H ctx func cenv cx es s /\
     write_storage_slot cx tr slot tv v
@@ -208,7 +208,7 @@ QED
 
 (* The write at a target's storage place keeps the source storage well
    formed on every horizon valid past it. *)
-Theorem tuple_target_storage_write_wf[local]:
+Theorem tuple_target_storage_write_wf:
   !cx bt es obs es' tr slot tv v st0 H.
     eval_target_place cx bt es =
       (INL (StoragePlace tr slot tv), es with storage_trace := obs) /\
