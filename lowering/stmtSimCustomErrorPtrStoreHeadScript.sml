@@ -3,7 +3,7 @@ Theory stmtSimCustomErrorPtrStoreHead
 Ancestors
   stmtSimCustomErrorPtrUnwrap stmtSimCustomErrorPtrStoreProbe
   annAssignPtrDestinationFrame annAssignPtrExterior annAssignPtrStore
-  annAssignPtrMemorySource
+  annAssignPtrMemorySource bodyImmutableAugAssignStore
   bodyPtrDefs freshWrites loweringStateRelDefs venomState finite_map pred_set
 
 Theorem custom_error_slice_store_frame_ptr[local]:
@@ -166,3 +166,94 @@ Proof
   qexistsl [`Gf`, `tnf`, `sf`, `nb`] >> simp[] >>
   qpat_x_assum `!i. _ ==> mem_bytes_at i 1 sf.vs_memory = _ /\ _` mp_tac >> simp[]
 QED
+
+Theorem custom_error_store_head_path_ptr:
+  compile_store_memory ce op (Var y) typ typ su = ((),st) /\
+  fn_has_code su st func /\ ~ce.ce_is_ctor /\
+  stmt_state_rel ctx func ce cx ee s /\
+  ghost_inv d ce cx ee G tn s /\
+  ghost_kept ce ee sr G0 tn0 sref G tn /\
+  ~s.vs_halted /\ ~ctx_has_dalloca ctx /\
+  s.vs_current_bb = su.cs_current_bb /\
+  s.vs_inst_idx = LENGTH su.cs_current_insts /\
+  evaluate_type (get_tenv cx) typ = SOME tv /\ value_has_type tv v /\
+  expr_val_rel cx typ v op s /\ ptr_val_ok cx typ v op G tn s /\
+  nb = type_memory_bytes ce typ /\ nb = type_memory_size tv /\
+  nb < dimword (:256) /\ (is_word_type typ ==> nb = 32) /\
+  (~is_word_type typ ==> ?z. op = Var z /\ not_fresh_at su z /\ ptr_covers G tn z s nb) /\
+  not_fresh_at su y /\ lookup_var y s = SOME (n2w a) /\
+  ptr_covers G tn y s nb /\ a+nb < dimword (:256) /\
+  (!n lo sz i. local_region ce ee.scopes s n lo sz /\
+    lo <= i /\ i < lo+sz ==> ~(a <= i /\ i < a+nb)) /\
+  (!aid lo sz i. FLOOKUP sref.vs_allocas aid = SOME (lo,sz) /\
+    aid < sr.cs_next_id /\ lo <= i /\ i < lo+sz ==> ~(a <= i /\ i < a+nb)) /\
+  (!n lo sz i. local_region ce ee.scopes sref n lo sz /\
+    lo <= i /\ i < lo+sz ==> ~(a <= i /\ i < a+nb)) /\
+  (!z. not_fresh_at sr z ==> not_fresh_at su z) /\
+  (!name entry z sz. lookup_scopes name ee.scopes = SOME entry /\
+    FLOOKUP ce.ce_vars name = SOME (PtrVar (Var z) sz) ==> not_fresh_at su z) /\
+  (!z sz. ce.ce_return_buf = SOME (PtrVar (Var z) sz) ==> not_fresh_at su z) /\
+  (!z sz. ce.ce_return_pc = SOME (PtrVar (Var z) sz) ==> not_fresh_at su z) /\
+  (!z. ce.ce_imm_alloca = SOME (Var z) ==> not_fresh_at su z) ==>
+  !D PG. ?Gf tf t.
+    gas_path_ptr D 0 ctx func PG G tn s 0 Gf tf (OK t) /\
+    t.vs_current_bb = st.cs_current_bb /\ t.vs_inst_idx = LENGTH st.cs_current_insts /\
+    ~t.vs_halted /\ stmt_state_rel ctx func ce cx ee t /\
+    ghost_inv d ce cx ee Gf tf t /\ ghost_kept ce ee sr G0 tn0 sref Gf tf /\
+    (t with <|vs_vars := s.vs_vars; vs_memory := s.vs_memory;
+              vs_inst_idx := s.vs_inst_idx|>) = s /\
+    tf.t_stor = tn.t_stor /\ tf.t_trans = tn.t_trans /\ tf.t_imm = tn.t_imm /\
+    (!z. not_fresh_at su z ==> lookup_var z t = lookup_var z s /\
+      FLOOKUP Gf z = FLOOKUP G z /\ op_taint tf (Var z) = op_taint tn (Var z)) /\
+    (!i. ~(a <= i /\ i < a+nb) ==>
+      mem_bytes_at i 1 t.vs_memory = mem_bytes_at i 1 s.vs_memory /\
+      (i IN tf.t_mem <=> i IN tn.t_mem)) /\
+    (!m. mem_agree_outside tf.t_mem t.vs_memory m ==> val_in_memory tv v a m)
+Proof
+  strip_tac >> rpt gen_tac >>
+  `a < dimword (:256)` by decide_tac >>
+  `w2n (n2w a:256 word) = a` by simp[wordsTheory.w2n_n2w] >>
+  Cases_on `is_word_type typ`
+  >- suspend "word"
+  >> suspend "memory"
+QED
+
+Resume custom_error_store_head_path_ptr[word]:
+  `nb = 32` by simp[] >>
+  `emit_void MSTORE [Var y; op] su = ((),st)` by
+    fs[contextTheory.compile_store_memory_def] >>
+  `op_taint tn op = {}` by fs[ptr_val_ok_def] >>
+  `eval_operand op s = SOME (typed_val_to_w256 tv v)` by
+    fs[loweringPostsTheory.expr_val_rel_def] >>
+  `val_wf tv v` by metis_tac[valueTypingMemoryPropsTheory.value_has_type_memory_wf] >>
+  `!u. val_in_memory tv v (w2n (n2w a:256 word))
+      (mstore (w2n (n2w a:256 word)) (typed_val_to_w256 tv v) u).vs_memory` by
+    (gen_tac >> drule_all immutable_augassign_word_representation >> metis_tac[]) >>
+  `ptr_covers G tn y s 32` by metis_tac[] >>
+  drule_all custom_error_mstore_path_ptr >>
+  disch_then (qspecl_then [`D`, `PG`] strip_assume_tac) >>
+  `!z. not_fresh_at su z ==> lookup_var z t = lookup_var z s /\
+    FLOOKUP G z = FLOOKUP G z /\ op_taint tf (Var z) = op_taint tn (Var z)` by simp[] >>
+  `!i. ~(a <= i /\ i < a+nb) ==>
+    mem_bytes_at i 1 t.vs_memory = mem_bytes_at i 1 s.vs_memory /\
+    (i IN tf.t_mem <=> i IN tn.t_mem)` by metis_tac[] >>
+  drule_all custom_error_slice_store_frame_ptr >> strip_tac >>
+  qexistsl [`G`, `tf`, `t`] >> simp[] >> metis_tac[]
+QED
+
+Resume custom_error_store_head_path_ptr[memory]:
+  `?z. op = Var z /\ not_fresh_at su z /\ ptr_covers G tn z s nb` by simp[] >>
+  qpat_x_assum `op = Var z` SUBST_ALL_TAC >>
+  `?w. lookup_var z s = SOME w` by fs[ptr_covers_def] >>
+  drule_all custom_error_nonword_store_path_ptr >>
+  disch_then (qspecl_then [`D`, `PG`] strip_assume_tac) >>
+  `!i. ~(a <= i /\ i < a+nb) ==>
+    mem_bytes_at i 1 t.vs_memory = mem_bytes_at i 1 s.vs_memory /\
+    (i IN tf.t_mem <=> i IN tn.t_mem)` by
+    (gen_tac >> strip_tac >>
+     `~(w2n (n2w a:256 word) <= i /\ i < w2n (n2w a:256 word)+k)` by
+       (simp[] >> decide_tac) >> metis_tac[]) >>
+  drule_all custom_error_slice_store_frame_ptr >> strip_tac >>
+  qexistsl [`Gf`, `tf`, `t`] >> simp[] >> metis_tac[]
+QED
+Finalise custom_error_store_head_path_ptr
