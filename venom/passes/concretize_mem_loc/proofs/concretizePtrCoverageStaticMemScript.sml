@@ -235,7 +235,7 @@ Resume ptr_paired_target_static_fields[dalloca]:
      `s IN fn_pv P a.po_fn` by
        (fs[SUBSET_DEF, FLOOKUP_DEF] >> metis_tac[optionTheory.NOT_NONE_SOME]) >>
      qpat_x_assum `ptr_use_ok _ _ _` mp_tac >>
-     simp[ptr_use_ok_def] >> qexists `s` >>
+     simp[ptr_use_ok_def] >>
      simp[is_pointer_preserving_op_def, mem_read_ops_def, mem_write_ops_def]) >>
   `eval_operand sz_op a.po_state = SOME sz` by
     (drule ptr_mixed_scalar_eval >> disch_then drule >>
