@@ -1006,7 +1006,7 @@ Proof
   simp[] >> metis_tac[]
 QED
 
-Theorem imm_array_ctor_counted_optional[local]:
+Theorem imm_array_ctor_counted_optional:
   !base_op idx dyn cnt ws esz sgn imm sa p sb s b i len ctx func cenv cx es.
     compile_array_subscript base_op idx dyn cnt ws esz sgn
       (compile_ptr_load T imm LocCode) sa = (p,sb) /\
