@@ -507,9 +507,11 @@ Resume compile_slice_ordinary_case[bytes_rebase]:
  goal_assum (drule_at Any) >> simp[] >>
  rpt (qpat_assum `expr_post _ _ _ _ _ src es sa st1 _ _ _ _ _` (irule_at Any) >> simp[]) >>
  `?w. eval_operand src_op t = SOME w` by
-   (qpat_x_assum `expr_post _ _ _ _ _ src es sa st1 _ _ _ _ _` mp_tac >>
-    simp[loweringPostsTheory.expr_post_def, loweringPostsTheory.expr_val_rel_def,
-      is_word_type_def, vyperValueTheory.evaluate_type_def] >> metis_tac[]) >>
+   (qpat_x_assum `expr_post _ _ _ _ _ src es sa st1 _ _ _ _ _`
+      (strip_assume_tac o
+       SIMP_RULE (srw_ss()) [loweringPostsTheory.expr_post_def, loweringPostsTheory.expr_val_rel_def,
+         is_word_type_def, vyperValueTheory.evaluate_type_def]) >>
+    metis_tac[]) >>
  qexists_tac `w` >> simp[] >>
  `MAP FDOM es.scopes = MAP FDOM mid.scopes` by
    (qpat_assum `bind _ _ _ = (INL _,_)`
@@ -546,9 +548,11 @@ Resume compile_slice_ordinary_case[string_rebase]:
  goal_assum (drule_at Any) >> simp[] >>
  rpt (qpat_assum `expr_post _ _ _ _ _ src es sa st1 _ _ _ _ _` (irule_at Any) >> simp[]) >>
  `?w. eval_operand src_op t = SOME w` by
-   (qpat_x_assum `expr_post _ _ _ _ _ src es sa st1 _ _ _ _ _` mp_tac >>
-    simp[loweringPostsTheory.expr_post_def, loweringPostsTheory.expr_val_rel_def,
-      is_word_type_def, vyperValueTheory.evaluate_type_def] >> metis_tac[]) >>
+   (qpat_x_assum `expr_post _ _ _ _ _ src es sa st1 _ _ _ _ _`
+      (strip_assume_tac o
+       SIMP_RULE (srw_ss()) [loweringPostsTheory.expr_post_def, loweringPostsTheory.expr_val_rel_def,
+         is_word_type_def, vyperValueTheory.evaluate_type_def]) >>
+    metis_tac[]) >>
  qexists_tac `w` >> simp[] >>
  `MAP FDOM es.scopes = MAP FDOM mid.scopes` by
    (qpat_assum `bind _ _ _ = (INL _,_)`
