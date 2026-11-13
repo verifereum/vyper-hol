@@ -87,7 +87,6 @@ Theorem abi_malformed_resource_weaken:
   abi_malformed_resource_post ctx func cenv cx es next sites dstid s t
 Proof
   rw[abi_malformed_resource_post_def]
-  >- metis_tac[]
   >- (first_x_assum irule >> qexistsl_tac [`aid`, `cap`] >>
       fs[SUBSET_DEF] >> metis_tac[]) >>
   first_x_assum irule >> simp[] >>
@@ -100,7 +99,6 @@ Theorem abi_malformed_resource_trans:
   abi_malformed_resource_post ctx func cenv cx es next sites dstid s u
 Proof
   rw[abi_malformed_resource_post_def]
-  >- metis_tac[]
   >- (qpat_assum `!aid B cap L. _ ==> mem_bytes_at B L t.vs_memory = _`
         (qspecl_then [`aid`, `B`, `cap`, `L`] mp_tac) >>
       simp[] >> strip_tac >>
