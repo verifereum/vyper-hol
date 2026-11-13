@@ -41,9 +41,9 @@ Proof
 QED
 
 Theorem external_call_dead_initial_cx:
-  !orc am tx.
-    external_call_dead tx (call_external orc [] am tx) =
-    cx_dead (initial_evaluation_context am.sources am.layouts tx NONE)
+  !H orc am tx.
+    external_call_dead H tx (call_external orc [] am tx) =
+    cx_dead H (initial_evaluation_context am.sources am.layouts tx NONE)
 Proof
   rpt gen_tac >>
   Cases_on `call_external orc [] am tx` >>
