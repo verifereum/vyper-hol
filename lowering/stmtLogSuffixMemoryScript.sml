@@ -117,8 +117,13 @@ Proof
   Cases_on `SND (split_log_ops xs flags) = []`
   >- suspend "empty" >>
   drule_all split_log_ops_data_types >> strip_tac >>
+  `EVERY (supported_scalar_type o SND) xs` by
+    (qpat_assum `LIST_REL (\arg v. log_arg_rel _ _ _ _ _ _ arg v /\ _) xs vs` mp_tac >>
+     simp_tac (srw_ss()) [listTheory.LIST_REL_EL_EQN, listTheory.EVERY_EL] >>
+     rpt strip_tac >> first_x_assum drule >> simp[]) >>
   drule_all (SRULE [] (Q.INST [`data_ops` |-> `SND (split_log_ops xs flags)`]
     compile_log_data_trace)) >> strip_tac >>
+  qpat_x_assum `EVERY (supported_scalar_type o SND) xs` kall_tac >>
   qpat_x_assum `compile_stmt _ _ _ _ _ = _` mp_tac >> simp[Excl "enc_def"] >>
   disch_then (qx_choose_then `src` (qx_choose_then `s1` (qx_choose_then `s2`
     (qx_choose_then `dst` (qx_choose_then `s3` (qx_choose_then `len`
@@ -157,6 +162,9 @@ Resume log_success_suffix_mem_ok[data]:
      simp[GSYM EVERY_MAP, combinTheory.o_DEF, Excl "enc_def"]) >>
   `EVERY (supported_scalar_type o SND) (SND (split_log_ops xs flags))` by
     gvs[EVERY_MAP, combinTheory.o_DEF, Excl "enc_def"] >>
+  qpat_x_assum `compile_log_store_data _ _ _ _ _ _ = _` mp_tac >>
+  qpat_assum `MAP SND (SND _) = _` (fn th => rewrite_tac[GSYM th]) >>
+  strip_tac >>
   drule_all log_mem_data_stage_code >> strip_tac >>
   `st.cs_next_var <= limit_st.cs_next_var` by
     (drule log_output_buffer_shape >> strip_tac >>
@@ -191,7 +199,7 @@ QED
 
 Resume log_success_suffix_mem_ok[prepare]:
   qpat_x_assum `ce.ce_event_info _ = _` kall_tac >>
-  qpat_x_assum `compile_log_eval_all _ _ _ = _` kall_tac >>
+  qpat_x_assum `log_eval_view _ _ _ _ _` kall_tac >>
   qpat_x_assum `LIST_REL (\arg v. _ /\ _) xs vs` kall_tac >>
   qpat_x_assum `EVERY supported_scalar_type (MAP SND xs)` kall_tac >>
   qpat_x_assum `encode_indexed_event_topics _ _ _ = _` kall_tac >>

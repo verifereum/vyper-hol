@@ -239,6 +239,14 @@ Resume compile_extract32_sim_mem[suffix_entry]:
      irule extract32_operands_frame >> simp[] >>
      goal_assum (drule_at Any) >> goal_assum (drule_at Any) >> simp[] >>
      goal_assum (drule_at Any)) >>
+  `~expr_has_effect (TypeBuiltin (BaseT bt) Extract32 (BaseT bt) [src;off]) ==>
+   pure_frame cenv func es sa s0 t'` by
+    (simp[expr_has_effect_thm] >> rpt strip_tac >>
+     qpat_assum `expr_post _ _ _ _ src _ _ _ _ _ _ _ _`
+       (mp_then (Pos hd) mp_tac extract32_operands_pure_frame) >>
+     disch_then (qpat_assum `expr_post _ _ _ _ off _ _ _ _ _ _ _ _` o
+       mp_then (Pos hd) mp_tac) >>
+     disch_then irule >> simp[]) >>
   `well_formed_type (get_tenv cx) (BaseT bt)` by
     fs[expr_body_pre_def, well_typed_expr_def] >>
   `Num i < dimword (:256)` by
@@ -253,7 +261,9 @@ Resume compile_extract32_sim_mem[suffix_entry]:
 QED
 Resume compile_extract32_sim_mem[suffix_success]:
   `Num i + 32 <= LENGTH bs` by
-    (fs[vyperContextTheory.evaluate_extract32_def, AllCaseEqs()]) >>
+    (qpat_x_assum `evaluate_extract32 _ _ _ = INL _` mp_tac >>
+     rewrite_tac[vyperContextTheory.evaluate_extract32_def] >>
+     IF_CASES_TAC >> simp_tac (srw_ss()) []) >>
   `stmt_state_rel ctx func cenv cx es_end' t'` by fs[expr_post_def] >>
   `is_word_type (BaseT bt)` by
     (Cases_on `bt` >> gvs[extract32_result_base_ok_def, is_word_type_def] >>
@@ -262,8 +272,7 @@ Resume compile_extract32_sim_mem[suffix_success]:
      fs[well_formed_type_def, evaluate_type_def]) >>
   `sa.cs_next_var <= s3.cs_next_var` by fs[ci_mono_def] >>
   `b + 32 + Num i < dimword (:256)` by simp[] >>
-  drule_all extract32_word_suffix_success >>
-  disch_then (qspecl_then [`src`, `off`] strip_assume_tac) >>
+  drule_all extract32_word_suffix_success >> strip_tac >>
   qmatch_asmsub_abbrev_tac `gas_path_mem ctx func t' ng (OK u')` >>
   `s0.vs_alloca_next <= u'.vs_alloca_next` by
     (qpat_x_assum `u with <|vs_vars := _; vs_inst_idx := _|> = t` mp_tac >>

@@ -5,7 +5,7 @@ Ancestors concretizeLayoutCompletion concretizeLayoutExtension
   list pair finite_map enumeral
 
 Theorem MEM_insert_alloc_liveset_item:
-  !x y xs. MEM y (insert_alloc_liveset_item x xs) <=> y = x \/ MEM y xs
+  !x y xs. MEM y (insert_alloc_liveset_item esc x xs) <=> y = x \/ MEM y xs
 Proof
   gen_tac >> gen_tac >> Induct_on `xs` >>
   simp[insert_alloc_liveset_item_def] >> gen_tac >>
@@ -13,14 +13,14 @@ Proof
 QED
 
 Theorem MEM_sort_alloc_liveset_items:
-  !xs y. MEM y (sort_alloc_liveset_items xs) <=> MEM y xs
+  !xs y. MEM y (sort_alloc_liveset_items esc xs) <=> MEM y xs
 Proof
   Induct >> simp[sort_alloc_liveset_items_def, MEM_insert_alloc_liveset_item] >>
   metis_tac[]
 QED
 
 Theorem ALL_DISTINCT_MAP_insert_alloc_liveset_item:
-  !xs x f. ALL_DISTINCT (MAP f (insert_alloc_liveset_item x xs)) <=>
+  !xs x f. ALL_DISTINCT (MAP f (insert_alloc_liveset_item esc x xs)) <=>
     ~MEM (f x) (MAP f xs) /\ ALL_DISTINCT (MAP f xs)
 Proof
   Induct >> simp[insert_alloc_liveset_item_def] >> rpt gen_tac >>
@@ -28,7 +28,7 @@ Proof
 QED
 
 Theorem ALL_DISTINCT_MAP_sort_alloc_liveset_items:
-  !xs f. ALL_DISTINCT (MAP f (sort_alloc_liveset_items xs)) <=>
+  !xs f. ALL_DISTINCT (MAP f (sort_alloc_liveset_items esc xs)) <=>
     ALL_DISTINCT (MAP f xs)
 Proof
   Induct >> simp[sort_alloc_liveset_items_def,
@@ -83,11 +83,11 @@ Theorem context_candidate_extension:
   ?E.
     MAP (\(a,l,p,s). (a,l,s)) E =
       MAP (\(a,l). (a,l,get_alloca_size fn a))
-        (sort_alloc_liveset_items (alloc_liveset_items_ordered raw fn ls)) /\
+        (sort_alloc_liveset_items esc (alloc_liveset_items_ordered raw fn ls)) /\
     (!a l p s. MEM (a,l,p,s) E ==>
       FLOOKUP (allocate_with_livesets reserved (imported_liveset_info imports ls)
         (MAP (\(a,l). (a,l,get_alloca_size fn a))
-          (sort_alloc_liveset_items (alloc_liveset_items_ordered raw fn ls)))
+          (sort_alloc_liveset_items esc (alloc_liveset_items_ordered raw fn ls)))
         FEMPTY) a = SOME p) /\
     (!a l p s b k q t. MEM (a,l,p,s) E /\ MEM (b,q,t) imports /\
       FLOOKUP ls b = SOME k /\ sinter inst_addr_to l k <> [] ==>
@@ -98,7 +98,7 @@ Proof
   strip_tac >>
   qspecl_then [`reserved`, `imported_liveset_info imports ls`,
     `MAP (\(a,l). (a,l,get_alloca_size fn a))
-      (sort_alloc_liveset_items (alloc_liveset_items_ordered raw fn ls))`,
+      (sort_alloc_liveset_items esc (alloc_liveset_items_ordered raw fn ls))`,
     `FEMPTY`] mp_tac allocation_extension >>
   (impl_tac >-
     (simp[MAP_COMPOSE, combinTheory.o_DEF, LAMBDA_PROD,
@@ -177,8 +177,10 @@ Proof
     !p s. ~MEM (a,p,s) (imported_mems_used ctx fn)` by
     (simp[alloc_liveset_items_ordered_def, MEM_MAP, ml_complete_order_mem,
        MEM_FILTER] >> metis_tac[]) >>
-  drule context_candidate_extension >>
-  disch_then (qspec_then `reserved` strip_assume_tac) >>
+  qpat_assum `!a l. MEM (a,l) _ ==> _`
+    (strip_assume_tac o MATCH_MP (Q.INST [`esc:allocation list` |->
+       `ml_escaped_allocas (bp_analyze_fuel fuel (cfg_analyze fn) fn) fn`]
+       context_candidate_extension)) >>
   qexists_tac `E` >>
   conj_tac >- suspend "coverage" >>
   conj_tac >- suspend "positions" >>
@@ -191,7 +193,9 @@ Resume context_layout_interference_extension[coverage]:
     metis_tac[static_alloca_item_ordered_coverage] >>
   `get_alloca_size fn a = s` by metis_tac[static_alloca_item_size] >>
   `MEM (a,l,s) (MAP (\(a,l). (a,l,get_alloca_size fn a))
-    (sort_alloc_liveset_items (alloc_liveset_items_ordered raw fn ls)))` by
+    (sort_alloc_liveset_items
+      (ml_escaped_allocas (bp_analyze_fuel fuel (cfg_analyze fn) fn) fn)
+      (alloc_liveset_items_ordered raw fn ls)))` by
     (simp[MEM_MAP, EXISTS_PROD, MEM_sort_alloc_liveset_items] >> metis_tac[]) >>
   qpat_x_assum `MEM (a,l,s) (MAP _ _)` mp_tac >>
   qpat_x_assum `MAP _ E = _` (fn th => once_rewrite_tac[GSYM th]) >>
