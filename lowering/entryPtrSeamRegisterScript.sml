@@ -1384,7 +1384,12 @@ Resume registration_argument_prepare_guarded_robust_resources[guard]:
      simp[Abbr `t'`, fresh_vars_wrt_def]) >>
   qexistsl_tac [`t'`, `G'`, `tn'`, `p`] >>
   rpt conj_tac >> TRY (first_assum ACCEPT_TAC) >>
-  fs[Abbr `t'`, allocas_from_def]
+  qpat_assum `tn'.t_mem = _`
+    (fn th => simp_tac (srw_ss()) [Abbr `t'`, th, allocas_from_def]) >>
+  TRY (first_assum ACCEPT_TAC) >>
+  TRY (qpat_x_assum `allocas_from lo t` mp_tac >>
+       simp_tac (srw_ss()) [allocas_from_def] >> NO_TAC) >>
+  simp[]
 QED
 
 Theorem registration_argument_prepare_forward_robust_ptr:
