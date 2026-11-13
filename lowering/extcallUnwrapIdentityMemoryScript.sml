@@ -21,7 +21,8 @@ Theorem extcall_captured_unwrap_identity_mem:
   type_memory_size ltv < dimword (:256) /\
   (!ty src. vv = StackValue ty src ==>
     !x. src = Var x ==> not_fresh_at sm x) /\
-  (!ty p. vv = LocatedValue ty p ==> ty = lt /\
+  (!ty p. vv = LocatedValue ty p ==>
+    (p.ptr_location <> LocMemory \/ is_word_type ty \/ is_word_type lt ==> ty = lt) /\
     (!x. p.ptr_operand = Var x ==> not_fresh_at sm x) /\
     (p.ptr_location <> LocMemory ==> t = lt) /\
     (is_word_type lt /\ p.ptr_location = LocMemory ==>
@@ -32,8 +33,8 @@ Theorem extcall_captured_unwrap_identity_mem:
         eval_operand region s = SOME 0w /\
         (!x. region = Var x ==> not_fresh_at sm x))) /\
   ((?ty src. vv = StackValue ty src) \/
-   (?p. vv = LocatedValue lt p /\ ~is_word_type lt /\
-        p.ptr_location = LocMemory)) ==>
+   (?ty p. vv = LocatedValue ty p /\ ~is_word_type ty /\
+        ~is_word_type lt /\ p.ptr_location = LocMemory)) ==>
   ?z. gas_path_mem ctx func s 0 (OK z) /\ ~z.vs_halted /\
     z.vs_current_bb = su.cs_current_bb /\
     z.vs_inst_idx = LENGTH su.cs_current_insts /\
@@ -53,7 +54,8 @@ Theorem extcall_captured_unwrap_identity_mem:
     contract_transient z = contract_transient s /\
     z.vs_data_section = s.vs_data_section /\ z.vs_labels = s.vs_labels
 Proof
-  strip_tac >> gvs[unwrap_value_def, comp_return_def] >>
+  strip_tac >> qpat_x_assum `vv = _` SUBST_ALL_TAC >>
+  gvs[unwrap_value_def, comp_return_def] >>
   qexists_tac `s` >>
   simp[gas_path_mem_rules] >>
   gvs[vv_holds_def, expr_store_bound_def, vv_store_bound_def,
