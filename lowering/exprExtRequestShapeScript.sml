@@ -124,7 +124,6 @@ Proof
   rpt strip_tac >> goal_assum (drule_at Any) >> simp[]
 QED
 
-(* HELD (train 17): 0.5.0b1 arg snapshot re-proof *)
 Theorem extrequest_compile_call_split:
   !cfn cenv ann ty is_static skip fname arg_types ret_type opts addr rest dflt
    sa vv sb.
@@ -162,7 +161,6 @@ Theorem extrequest_compile_call_split:
       vv = (if ret_type = NoneT then StackValue ann result_op
             else LocatedValue ann (mk_ptr result_op LocMemory))
 Proof
-  (* original proof, kept while held:
   rpt gen_tac >> simp[Once compile_call_def] >>
   pairarg_tac >> gvs[] >>
   pairarg_tac >> gvs[] >>
@@ -175,8 +173,6 @@ Proof
   goal_assum (drule_at Any) >> simp[] >>
   goal_assum (drule_at Any) >> simp[] >>
   goal_assum (drule_at Any) >> simp[]
-  *)
-  cheat
 QED
 
 Theorem extrequest_body_typed:

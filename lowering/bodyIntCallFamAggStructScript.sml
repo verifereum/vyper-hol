@@ -25,7 +25,8 @@ Proof
   gvs[] >>
   `type_memory_bytes ce (StructT nm) = type_memory_size_list tvs` by
     (`LENGTH (MAP FST fields) = LENGTH tvs` by
-       metis_tac[vyperTypeABITheory.OPT_MMAP_LENGTH, listTheory.LENGTH_MAP] >>
+       (imp_res_tac vyperTypeABITheory.OPT_MMAP_LENGTH >>
+        imp_res_tac listTheory.LIST_REL_LENGTH >> fs[]) >>
      `expr_sim_inv ce fp.jc_cx env es` by fs[expr_body_pre_def] >>
      drule_all expr_sim_inv_memory_size >>
      simp[valueEncodingTheory.type_memory_size_def, struct_layout_size_zip]) >>
@@ -109,13 +110,16 @@ Resume intcall_struct_literal_step[traversal]:
      metis_tac[]) >>
   drule_all exprSimAllocTheory.buffer_alloc_code >> strip_tac >>
   drule_at (Pat `compile_struct_lit _ _ _ _ _ _ _ = _`)
-    intcall_struct_fields_counted >>
+    (Q.SPECL [`fields`,
+       `MAP (FST o SND) (get_struct_fields ce.ce_struct_fields (nsid_to_string nm))`,
+       `tvs`] intcall_struct_fields_counted) >>
   disch_then (drule_at (Pat `intcall_expr_cont _ _ _ _ _ _ _ _ _`)) >>
   disch_then (drule_at (Pat `eval_operand _ _ = SOME _`)) >>
   disch_then (drule_at (Pat `MEM _ (fn_insts _)`)) >>
   simp[venomInstTheory.mk_inst_def] >>
-  impl_tac >- (conj_tac >- first_assum MATCH_ACCEPT_TAC >>
-    metis_tac[]) >>
+  disch_then (qspecl_then [`tvs`, `nm`] mp_tac) >>
+  impl_tac >- (rpt conj_tac >> TRY (first_assum MATCH_ACCEPT_TAC >> NO_TAC) >>
+    fs[] >> metis_tac[]) >>
   strip_tac >> suspend "result"
 QED
 
