@@ -15,17 +15,14 @@ Theorem intcall_augassign_local_typing:
   (bop = Exp ==> nonneg_int_literal e) /\
   (bop = ShL \/ bop = ShR ==> shift_amount_ok e)
 Proof
-  (* Temporary stand-in: the proof below broke on the 0.5.0b1 lowering port;
-     named repair for the alan run. Original proof:
-    strip_tac >>
-    gvs[type_stmt_def,well_typed_target_def,well_typed_expr_def,
-        DISJ_IMP_THM,AllCaseEqs()] >>
-    Cases_on `FLOOKUP env.var_types id` >>
-    Cases_on `FLOOKUP env.var_assignable id` >> gvs[] >>
-    rename1 `FLOOKUP env.var_assignable id = SOME asg` >>
-    Cases_on `asg` >> gvs[]
-  *)
-  cheat
+  strip_tac >>
+  gvs[type_stmt_def,well_typed_target_def,well_typed_expr_def,
+      DISJ_IMP_THM,AllCaseEqs()] >>
+  Cases_on `FLOOKUP env.var_types id` >>
+  Cases_on `FLOOKUP env.var_assignable id` >> gvs[] >>
+  rename1 `FLOOKUP env.var_assignable id = SOME asg` >>
+  Cases_on `asg` >> gvs[] >>
+  metis_tac[augassign_operand_ok_operands]
 QED
 
 Theorem intcall_mload_cont:
@@ -56,20 +53,17 @@ Theorem intcall_augassign_local_rhs_pre:
   calls_follow_call_graph fp.jc_edges fp.jc_owner (int_calls_expr e) ==>
   expr_body_pre ce fp.jc_cx env e es
 Proof
-  (* Temporary stand-in: the proof below broke on the 0.5.0b1 lowering port;
-     named repair for the alan run. Original proof:
-    strip_tac >>
-    drule intcall_augassign_local_typing >> strip_tac >>
-    `supported_expr fp.jc_tops e` by fs[supported_stmt_def] >>
-    drule supported_expr_body_calls >> strip_tac >>
-    irule (Q.INST [`calls` |-> `[]`] (SPEC_ALL stmt_expr_body_pre)) >>
-    simp[] >>
-    fs[intcall_joint_res_def,intcall_expr_res_def,stmt_exprs_ok_def,
-       supported_stmt_expr_exists_def,intcall_frame_ok_def,body_inv_def,
-       gasContextTheory.cx_tops_def,call_evaluation_safe_def] >>
-    metis_tac[]
-  *)
-  cheat
+  strip_tac >>
+  drule intcall_augassign_local_typing >> strip_tac >>
+  `supported_expr fp.jc_tops e` by fs[supported_stmt_def] >>
+  drule supported_expr_body_calls >> strip_tac >>
+  irule (Q.INST [`calls` |-> `[]`] (SPEC_ALL stmt_expr_body_pre_alloc)) >>
+  simp[] >>
+  fs[intcall_joint_res_def,intcall_expr_res_def,stmt_exprs_ok_def,
+     supported_stmt_expr_exists_def,intcall_frame_ok_def,body_inv_def,
+     gasContextTheory.cx_tops_def,call_evaluation_safe_def,
+     allocLimitsTheory.alloc_limits_stmt_def] >>
+  metis_tac[]
 QED
 
 Theorem intcall_augassign_local_load:
