@@ -14,6 +14,10 @@ Ancestors
   emitHelper rich_list context venomState exprPtrUnwrapTypedSize
   vyperEvalExprPreservesScopesDom vyperTypeExprSoundness
 
+(* The posts here keep the source state as `em with gas_obs := []`; stripping
+   gas_obs only inside target_post would split it from expr_post. *)
+val _ = temp_delsimps ["tuple_place_target_post_gas_obs"];
+
 Theorem augassign_storage_array_normal_suffix_ptr:
   !cenv cx env bt e es et bd sa bop loc sm idx sn dst sb func ctx s0 ee tr slot tv
    t G tn d G0 tn0 em source_start gs v ef H un u PG.

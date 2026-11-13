@@ -7,7 +7,7 @@ Ancestors
   exprSimHypsDefs exprSimProps exprLoweringProps loweringStateRelDefs
   vyperTypeInvariants vyperState vyperInterpreter ptrDiscipline
   emitHelper emitHelperProps compileEnv stmtFragPtr venomState finite_map
-  valueEncoding valueEncodingProps words loweringPosts
+  valueEncoding valueEncodingProps words loweringPosts vyperTypeEnv
 
 Theorem target_memory_word_inputs_ptr:
   target_post ctx func cenv cx es sa sb s0 mid
@@ -30,6 +30,9 @@ Proof
   `cenv.ce_var_type id = SOME root_ty` by
     (gvs[expr_sim_inv_def] >> metis_tac[]) >>
   `evaluate_type (get_tenv cx) root_ty = SOME entry.type` by metis_tac[] >>
+  `value_has_type entry.type entry.value /\ well_formed_type_value entry.type` by
+    (irule vyperTypeEnvTheory.scope_well_typed_lookup_scopes >>
+     fs[expr_sim_inv_def, state_well_typed_def] >> metis_tac[]) >>
   drule_all pop_memory_target_ptr_handoff >> strip_tac >> gvs[] >>
   `ISL (evaluate_subscripts entry.type entry.value path)` by simp[] >>
   drule_all target_current_local_path_ptr >> strip_tac >> gvs[] >>

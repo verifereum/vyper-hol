@@ -168,6 +168,7 @@ Theorem augassign_memory_store_case_ptr:
   expr_sim_inv cenv cx env es /\ lookup_scopes name es.scopes = SOME entry /\
   evaluate_subscripts entry.type entry.value path = INL old /\
   store_lays_out etv ptv v /\ evaluate_type (get_tenv cx) ty = SOME ptv /\
+  value_has_type ptv v /\
   write_place cx (MemoryPlace name path) v es = (INL (),fin) ==>
   ?tnf sf.
     gas_path_ptr D 0 ctx fn PG G tn s 0 G tnf (OK sf) /\

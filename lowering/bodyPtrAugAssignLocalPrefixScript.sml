@@ -14,6 +14,10 @@ Ancestors
   bodyPtrPopStoragePureFrame bodyPtrEnvBuiltinsGhostCompose
   vyperEvalExprPreservesScopesDom
 
+(* The posts here keep the source state as `es_end with gas_obs := []`;
+   stripping gas_obs only inside target_post would split it from expr_post. *)
+val _ = temp_delsimps ["tuple_place_target_post_gas_obs"];
+
 Theorem body_augassign_local_place_from_suffix_ptr:
   !d PG cx ty t bop e tops bindings ctx func cenv env env' ret_ty lctx RetQ es.
     (!s0 p s1 s2 cur s3 s4 ptv s5.
@@ -26,6 +30,7 @@ Theorem body_augassign_local_place_from_suffix_ptr:
        (AugAssign ty t bop e) ==> occurs_abi_decode_target target tops) /\
     expr_sim_inv cenv cx env es /\
     type_stmt env ret_ty (AugAssign ty t bop e) = SOME env' /\
+    body_stmt_safe tops (AugAssign ty t bop e) /\
     stmt_exprs_ok cenv (AugAssign ty t bop e) /\
     call_evaluation_safe cx (int_calls_stmt (AugAssign ty t bop e)) /\
     frame_ret_ok_ptr d ctx PG func cx RetQ cenv ret_ty /\
@@ -52,13 +57,7 @@ Proof
      metis_tac[call_evaluation_safe_append_right, APPEND_NIL]) >>
   `?info. supported_target_info tops bindings t = SOME info` by
     metis_tac[aug_place_supported_stmt_target_info] >>
-  `target_indices_pre cenv cx env t` by
-    (irule aug_place_target_indices_pre >>
-     gvs[type_stmt_def, well_typed_target_def, stmt_exprs_ok_flat,
-         alloc_limits_stmt_def, supported_stmt_expr_exists_def,
-         int_calls_stmt_def, AllCaseEqs()] >>
-     fs[body_inv_def] >>
-     metis_tac[call_evaluation_safe_append_left, optionTheory.IS_SOME_EXISTS]) >>
+  `target_indices_pre cenv cx env t` by metis_tac[augassign_target_pre] >>
   `~immutable_root cx t` by
     metis_tac[aug_place_supported_root_not_immutable] >>
   `target_pre cenv cx env t es` by

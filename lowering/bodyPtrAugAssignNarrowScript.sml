@@ -4,6 +4,7 @@ Ancestors
   augAssignPtrToplevelCase augAssignPtrToplevelMetadata bodyAugAssignOther
   bodyStorageMetadata bodyExprPreFacts bodyPtrPreds bodyPtrDefs bodySim
   supportedStmts exprSimHypsDefs exprSimTopLevelProps stmtSimAugAssignStorage
+  stmtSimAugAssign
   vyperTypeEnv vyperTypeInvariants vyperTypeSystem vyperTyping vyperState
   vyperInterpreter vyperTypeCallGraph supportedStmtTraverse supportedExprTraverse
   gasContext compileVyper compileEnv list finite_map
@@ -49,7 +50,9 @@ Proof
    well_typed_binop ty bop ty (expr_type e) /\ bop <> In /\ bop <> NotIn /\
    (bop = Exp ==> nonneg_int_literal e) /\
    (bop = ShL ==> shift_amount_ok e) /\ (bop = ShR ==> shift_amount_ok e)` by
-    gvs[type_stmt_def, well_typed_target_def, DISJ_IMP_THM, AllCaseEqs()] >>
+    (gvs[type_stmt_def, well_typed_target_def, DISJ_IMP_THM, AllCaseEqs()] >>
+     drule stmtSimAugAssignTheory.augassign_operand_ok_operands >>
+     simp[DISJ_IMP_THM]) >>
   `FLOOKUP env.bare_global_assignable (NONE,id) = NONE` by
     (Cases_on `FLOOKUP env.bare_global_assignable (NONE,id)` >> simp[] >>
      drule_all augassign_env_assignable_find_none >> strip_tac >> gvs[]) >>

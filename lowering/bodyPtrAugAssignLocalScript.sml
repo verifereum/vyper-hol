@@ -15,6 +15,7 @@ Theorem body_augassign_local_place_ptr:
        (AugAssign ty t bop e) ==> occurs_abi_decode_target target tops) /\
     expr_sim_inv cenv cx env es /\
     type_stmt env ret_ty (AugAssign ty t bop e) = SOME env' /\
+    body_stmt_safe tops (AugAssign ty t bop e) /\
     stmt_exprs_ok cenv (AugAssign ty t bop e) /\
     call_evaluation_safe cx (int_calls_stmt (AugAssign ty t bop e)) /\
     frame_ret_ok_ptr d ctx PG func cx RetQ cenv ret_ty /\
