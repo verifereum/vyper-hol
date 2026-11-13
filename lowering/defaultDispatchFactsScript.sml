@@ -93,3 +93,68 @@ Proof
     metis_tac[venomInstTheory.FIND_MEM] >>
   drule_all default_selected_source_args >> strip_tac >> gvs[]
 QED
+
+Theorem default_dispatch_decl[local]:
+  EXISTS is_default_decl tops ==>
+  ?mut nr rr args ds ret fbody.
+    MEM (FunctionDecl External mut nr rr "__default__" args ds ret fbody) tops
+Proof
+  simp[EXISTS_MEM] >> strip_tac >> Cases_on `e` >>
+  gvs[is_default_decl_def] >> Cases_on `f` >> gvs[is_default_decl_def] >>
+  metis_tac[]
+QED
+
+Theorem default_fallback_lookup_decl:
+  ALL_DISTINCT (FLAT (MAP (external_name_keys_toplevel (NONE:num option)) tops)) /\
+  EXISTS is_default_decl tops /\
+  vyperInterpreter$lookup_function NONE "__default__" External tops =
+    SOME (mut,nr,args,[],ret,fbody) ==>
+  ?rr. MEM (FunctionDecl External mut nr rr "__default__" args [] ret fbody) tops
+Proof
+  strip_tac >> drule default_dispatch_decl >> strip_tac >>
+  `vyperInterpreter$lookup_function NONE "__default__" External tops =
+     SOME (mut',nr',args',ds,ret',fbody')` by
+    (irule lookup_function_external_unique_decl >>
+     conj_tac >- first_assum ACCEPT_TAC >>
+     qexists_tac `FunctionDecl External mut' nr' rr "__default__" args' ds ret' fbody'` >>
+     simp[vyperTypeContractTheory.external_name_keys_toplevel_def,
+       vyperInterpreterTheory.lookup_function_def]) >>
+  gvs[] >> metis_tac[]
+QED
+
+Theorem default_fallback_no_args:
+  source_typing_ok tops am tx /\
+  EXISTS is_default_decl tops /\
+  vyperInterpreter$lookup_function NONE "__default__" External tops =
+    SOME (mut,nr,args,[],ret,fbody) ==>
+  args = []
+Proof
+  strip_tac >>
+  `ALL_DISTINCT (FLAT (MAP (external_name_keys_toplevel (NONE:num option)) tops))` by
+    metis_tac[source_typing_ok_external_names_distinct] >>
+  drule_all default_fallback_lookup_decl >> strip_tac >>
+  metis_tac[nonreentrantEntryEquivTheory.source_typing_function_header,
+    supportedNamesTheory.supported_fallback_no_arguments]
+QED
+
+Theorem default_decl_no_getter:
+  ALL_DISTINCT (FLAT (MAP (external_name_keys_toplevel (NONE:num option)) tops)) /\
+  MEM (FunctionDecl External mut nr rr "__default__" args ds ret fbody) tops ==>
+  (!nr' m ty x. ~MEM (VariableDecl (Public nr') m "__default__" ty x) tops) /\
+  (!nr' b kt vt x. ~MEM (HashMapDecl (Public nr') b "__default__" kt vt x) tops)
+Proof
+  strip_tac >> conj_tac >> rpt gen_tac >> strip_tac >>
+  `MEM (NONE,"__default__")
+    (external_name_keys_toplevel (NONE:num option)
+      (FunctionDecl External mut nr rr "__default__" args ds ret fbody))` by
+    simp[vyperTypeContractTheory.external_name_keys_toplevel_def] >>
+  `F` suffices_by simp[] >>
+  drule venomFnInstsProofsTheory.all_distinct_flat_map_unique >>
+  strip_tac >>
+  first_x_assum (qspec_then `FunctionDecl External mut nr rr "__default__" args ds ret fbody` mp_tac) >>
+  simp[vyperTypeContractTheory.external_name_keys_toplevel_def]
+  >- (qexists_tac `VariableDecl (Public nr') m "__default__" ty x` >>
+      simp[vyperTypeContractTheory.external_name_keys_toplevel_def]) >>
+  qexists_tac `HashMapDecl (Public nr') b "__default__" kt vt x` >>
+  simp[vyperTypeContractTheory.external_name_keys_toplevel_def]
+QED
