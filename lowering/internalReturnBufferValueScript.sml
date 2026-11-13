@@ -14,7 +14,7 @@ Proof
 QED
 
 Theorem compile_internal_return_buffer_value_frag:
-  !ctx func cenv cx es ty sty tv stv v val_op rpc elem_types buf_op sa su sb bw.
+  !H ctx func cenv cx es ty sty tv stv v val_op rpc elem_types buf_op sa su sb bw.
     compile_return_unlock cenv sa = ((),su) /\
     compile_internal_return cenv (SOME val_op) rpc cenv.ce_returns_count
       ty sty elem_types (SOME buf_op) su = ((),sb) /\
@@ -38,12 +38,12 @@ Theorem compile_internal_return_buffer_value_frag:
        regions_disjoint off (type_memory_size itv) (w2n bw)
          (type_memory_size tv)) ==>
     frag_exec ctx sa sb
-      (\s. stmt_state_rel ctx func cenv cx (es with scopes := []) s /\
+      (\s. stmt_state_rel H ctx func cenv cx (es with scopes := []) s /\
            expr_val_rel cx sty v val_op s /\
            eval_operand buf_op s = SOME bw /\
            ?pc. eval_operand rpc s = SOME pc)
       (\s. F)
-      (intret_mem_q func cenv cx tv bw v (es with scopes := []))
+      (intret_mem_q H func cenv cx tv bw v (es with scopes := []))
 Proof
   rpt gen_tac >> strip_tac >>
   `compile_internal_return cenv (SOME val_op) rpc cenv.ce_returns_count
