@@ -37,6 +37,11 @@ Proof
   Cases_on `supported_event_fields fp.jc_tops n` >> gvs[] >>
   drule_all body_log_metadata >> strip_tac >>
   rename1 `supported_event_fields _ _ = SOME fields` >>
+  reverse (Cases_on `MAP expr_type es = MAP (SND o FST) fields`)
+  >- ((* HELD (train 17): widened Log arguments (event_arg_compatible
+         rather than equal types) need an intcall analogue of
+         whitelistLogWiden's body_log_widen_case. *)
+      cheat) >>
   `LENGTH (MAP SND fields) = LENGTH es` by metis_tac[LENGTH_MAP] >>
   qpat_assum `MAP expr_type es = _` (fn th => fs[GSYM th]) >>
   `LENGTH (MAP SND fields) = LENGTH es` by simp[] >>
