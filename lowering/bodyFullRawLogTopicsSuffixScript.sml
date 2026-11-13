@@ -138,6 +138,7 @@ Proof
       `!b. get_storage cx (es with gas_obs := []) b = get_storage cx es b` by
         (Cases >> simp[vyperStorageBackendTheory.get_storage_def]) >>
       irule gas_outcome_full_pure >>
+      reverse conj_tac >- first_assum ACCEPT_TAC >>
       qexistsl_tac [`G0`, `es`, `INL []`, `s`, `tn0`] >>
       simp[eval_exprs_nil] >>
       rpt strip_tac >>
@@ -218,6 +219,10 @@ Proof
       qexistsl_tac [`mid`,`t`,`v`] >> fs[]) 
   >~ [`gas_exempt_cert _ _ _ _ _ _ _`]
   >- (rpt strip_tac >> irule gasExemptCertTheory.gas_exempt_cert_error_value >> simp[]) 
+  >~ [`storage_trace_frame (bind _ _)`]
+  >- (irule vyperStorageTraceTheory.storage_trace_frame_bind >>
+      simp[vyperStorageTraceTheory.evaluate_storage_trace_frame,
+           vyperStorageTraceTheory.storage_trace_frame_read_result])
   >~ [`storage_trace_frame _`]
   >- (gen_tac >> BETA_TAC >> irule vyperStorageTraceTheory.storage_trace_frame_bind >>
       simp[vyperStorageTraceTheory.evaluate_storage_trace_frame,
@@ -326,6 +331,8 @@ Resume raw_log_topics_suffix_full_under_compose[continue]:
       qexistsl_tac [`mid'`,`t`,`v'`] >> fs[])
   >~ [`gas_exempt_cert _ _ _ _ _ _ _`]
   >- (rpt strip_tac >> BETA_TAC >> irule gasExemptCertTheory.gas_exempt_cert_error_values >> simp[])
+  >~ [`storage_trace_frame (eval_exprs cx rest)`]
+  >- simp[vyperStorageTraceTheory.evaluate_storage_trace_frame]
   >~ [`storage_trace_frame _`]
   >- simp[vyperStorageTraceTheory.storage_trace_frame_return] >>
   qexists_tac `\H res ee G tn t. tailQ H res ee G tn t /\ ~t.vs_halted /\ ee.gas_obs = []` >>
@@ -354,6 +361,7 @@ Resume raw_log_topics_suffix_full_under_compose[return_cons]:
   qpat_x_assum `tailres = INL _` SUBST_ALL_TAC >>
   disj1_tac >> qexists_tac `vs` >> conj_tac >- REFL_TAC >>
   irule gas_outcome_full_pure >>
+      reverse conj_tac >- first_assum ACCEPT_TAC >>
   qexistsl_tac [`G2`,`ee`,`INL (v::vs)`,`t`,`tn2`] >>
   conj_tac >- simp[return_def] >>
   gen_tac >> strip_tac >>

@@ -2,32 +2,23 @@
 Theory bodyAppendStoragePtr
 Ancestors
   stmtAppendStorageComposePtr bodyAppendStorageAdapter bodyAppendStorageFacts
-  bodyPtrPreds bodyPtrDefs bodySim exprSimSource exprSimHypsDefs exprSimHyps
+  bodyPtrPreds bodyPtrDefs bodySim exprSimHypsDefs exprSimHyps
   bodyExprPreFacts supportedStmts supportedStmtTraverse supportedTypes
   supportedExprs supportedDecls bodyStorageMetadata stmtSimDefs exprLoweringProps
   compileEnv loweringStateRelDefs vyperTypeSystem vyperTypeValues vyperTypeCallGraph vyperState
   vyperInterpreter vyperValue vyperStorageLayoutSafety
-  vyperTypeInvariants vyperTypeExprSoundness vyperTypeExprResult
-  gasStorage gasSummary fragGasPathPtr vyperStorageTrace vyperStorageFootprint
 
 Theorem stmt_frag_ptr_storage_rel_discharge:
-  storage_trace_frame source /\
   ((storage_vars_rel cenv cx /\ transient_vars_rel cenv cx) ==>
     stmt_frag_ptr d ctx PG func cx lctx RetQ cenv m source es) ==>
   stmt_frag_ptr d ctx PG func cx lctx RetQ cenv m source es
 Proof
   strip_tac >> rewrite_tac[stmt_frag_ptr_def] >> rpt gen_tac >> strip_tac >>
-  Cases_on `storage_vars_rel cenv cx /\ transient_vars_rel cenv cx`
-  >- (qpat_x_assum `_ ==> stmt_frag_ptr _ _ _ _ _ _ _ _ _ _ _`
-        (mp_tac o REWRITE_RULE [stmt_frag_ptr_def]) >>
-      simp[] >> disch_then drule_all >> simp[]) >>
-  `~storage_trace_domain cx st0 es.storage_trace` by
-    (strip_tac >> fs[storage_trace_domain_def] >>
-     `stmt_state_rel (storage_trace_horizon es.storage_trace)
-        ctx func cenv cx es s0` by metis_tac[] >>
-     fs[stmt_state_rel_def, state_rel_def]) >>
-  simp[gas_outcome_ptr_def] >> qexists_tac `[]` >> disj1_tac >>
-  irule gas_bad_storage_at_initial >> simp[]
+  `storage_vars_rel cenv cx /\ transient_vars_rel cenv cx` by
+    fs[stmt_state_rel_def, state_rel_def] >>
+  qpat_x_assum `_ ==> stmt_frag_ptr _ _ _ _ _ _ _ _ _ _ _`
+    (mp_tac o REWRITE_RULE [stmt_frag_ptr_def]) >>
+  simp[] >> disch_then drule_all >> simp[]
 QED
 
 Theorem body_append_storage_fragment_ptr:
@@ -55,36 +46,25 @@ Proof
   drule supported_append_element_layout >>
   disch_then (qspec_then `get_tenv cx` strip_assume_tac) >>
   `expr_type e = elem` by metis_tac[type_widens_to_word] >>
-  `!observations. expr_body_pre cenv cx env e
-     (es with storage_trace := observations)` by
-    metis_tac[body_append_expr_pre, expr_body_pre_storage_trace] >>
+  `expr_body_pre cenv cx env e es` by metis_tac[body_append_expr_pre] >>
   `body_expr_ptr_ok cx e` by metis_tac[] >>
-  `!observations. expr_sim_ptr d ctx PG func cenv cx elem e
-     (es with storage_trace := observations)` by
+  `expr_sim_ptr d ctx PG func cenv cx elem e es` by
     metis_tac[body_expr_ptr_ok_def] >>
   `get_module_code cx src = SOME tops` by
     (drule supported_append_storage_decl >> strip_tac >>
      drule supported_variable_decl_mem >> strip_tac >> gvs[body_inv_def]) >>
-  irule stmt_frag_ptr_storage_rel_discharge >>
-  conj_tac >- simp[evaluate_storage_trace_frame] >> strip_tac >>
+  irule stmt_frag_ptr_storage_rel_discharge >> strip_tac >>
   drule_all append_storage_compiler_location >> strip_tac >>
   `type_memory_bytes cenv elem = 32` by
     (gvs[supported_full_word_type_def] >> simp[type_memory_bytes_def]) >>
-  imp_res_tac (cj 1 vyperTypingTheory.evaluate_type_well_formed) >>
   gvs[evaluate_type_def] >>
   irule compile_append_storage_word_stmt_frag_ptr >> simp[] >>
   qexistsl_tac [`src`, `id`] >>
   simp[declared_storage_region_def, evaluate_type_def] >>
   rpt strip_tac >>
-  qmatch_asmsub_abbrev_tac
-    `bind (eval_expr cx e) (read_result cx) start = (INL v,es1)` >>
-  `expr_body_pre cenv cx env e start` by simp[Abbr `start`] >>
-  conj_tac >- metis_tac[body_append_word_encoding] >>
-  drule_all expr_body_pre_eval >> strip_tac >>
-  `env.type_defs = get_tenv cx` by
-    fs[expr_body_pre_def, expr_sim_inv_def, env_consistent_def,
-       env_context_consistent_def] >>
-  gvs[expr_result_typed_def, expr_runtime_typed_def, value_result_typed_def]
+  `expr_body_pre cenv cx env e (es with gas_obs := gs)` by simp[] >>
+  drule body_append_word_encoding >> simp[] >>
+  disch_then irule >> simp[] >> metis_tac[]
 QED
 
 Theorem body_append_storage_other_ptr:
