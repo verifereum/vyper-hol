@@ -1,10 +1,9 @@
-(* Owner-approved residue: the target-walk frame does not preserve dead
-   popped storage/transient slots after an effectful RHS. *)
 Theory assignPlaceEffectfulRhsResidue
 Ancestors
   bodySim targetPlaceSim stmtSimDefs exprSimHypsDefs
   stmtLowering exprLowering compileEnv vyperInterpreter vyperTypeSystem
 
+(* HELD ADMISSION SEQ-4012: effectful RHS storage liveness awaits the finite-storage vv_post port. *)
 Theorem assign_place_effectful_rhs_residue:
   !ctx func cx lctx RetQ cenv ty env bt e es dty.
     ~expr_can_mutate cenv (target_to_expr bt) /\
