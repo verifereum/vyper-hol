@@ -1,7 +1,7 @@
 (* Seam 2 joint induction, a family leaf of the call step: nested internal calls, under the call-graph descent premise. *)
 Theory bodyIntCallFamCallInt
 Ancestors
-  bodyIntCallJointContract bodyIntCallSeamDefs bodyIntCallJointPackage bodyIntCallNRSource bodyIntCallNRRootProbe bodyIntCallNRCleanupProbe bodyIntCallNRStageFrame bodyIntCallNRStageFragments bodyIntCallNRStageStores
+  bodyIntCallJointContract bodyIntCallSeamDefs bodyIntCallJointPackage bodyIntCallNRSource bodyIntCallNRSourceInv bodyIntCallNRRootProbe bodyIntCallNRCleanupProbe bodyIntCallNRStageFrame bodyIntCallNRStageFragments bodyIntCallNRStageStores
   bodyIntCallJointCallCore bodyIntCallProducerOrder bodyIntCallSource
   bodyIntCallFamCallIntEntry bodyIntCallFamCallIntReturn bodySim
 
