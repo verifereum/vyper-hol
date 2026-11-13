@@ -109,9 +109,10 @@ Proof
   gvs[]
 QED
 
-Theorem dft_flip_no_returndatacopy[local]:
-  is_flippable inst.inst_opcode /\ inst.inst_opcode <> RETURNDATACOPY ==>
-  (flip_operands inst).inst_opcode <> RETURNDATACOPY
+Theorem dft_flip_opcode_absence[local]:
+  (op = RETURNDATACOPY \/ op = CREATE \/ op = CREATE2) /\
+  is_flippable inst.inst_opcode /\ inst.inst_opcode <> op ==>
+  (flip_operands inst).inst_opcode <> op
 Proof
   rpt strip_tac >>
   namedCases_on `inst.inst_operands` ["", "operand operands"] >>
@@ -124,10 +125,11 @@ Proof
       flip_comparison_opcode_def]
 QED
 
-Theorem dft_fn_no_returndatacopy:
-  (!i. MEM i (fn_insts fn) ==> i.inst_opcode <> RETURNDATACOPY) ==>
-  !i. MEM i (fn_insts (dft_fn fn)) ==> i.inst_opcode <> RETURNDATACOPY
+Theorem dft_fn_opcode_absence:
+  (op = RETURNDATACOPY \/ op = CREATE \/ op = CREATE2) /\
+  (!i. MEM i (fn_insts fn) ==> i.inst_opcode <> op) ==>
+  !i. MEM i (fn_insts (dft_fn fn)) ==> i.inst_opcode <> op
 Proof
   strip_tac >> ho_match_mp_tac dft_fn_opcode_predicate >>
-  simp[dft_flip_no_returndatacopy]
+  metis_tac[dft_flip_opcode_absence]
 QED

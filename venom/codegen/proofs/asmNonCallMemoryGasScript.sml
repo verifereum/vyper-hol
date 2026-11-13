@@ -194,7 +194,8 @@ Proof
   >~ [`step_mload es = (r,s')`]
     >- (irule step_mload_gas_budget >> simp[] >> qexists_tac `H` >> simp[])
   >~ [`step_mstore MStore es = (r,s')`]
-    >- (irule step_mstore_gas_budget >> simp[] >> metis_tac [arithmeticTheory.ADD_SYM, arithmeticTheory.ADD_ASSOC])
+    >- (irule step_mstore_gas_budget >> simp[] >>
+        qexistsl_tac [`H`, `MStore`] >> simp[])
   >~ [`step_mstore MStore8 es = (r,s')`]
     >- (irule step_mstore_gas_budget >> simp[] >> qexistsl_tac [`H`, `MStore8`] >> simp[])
   >~ [`step_keccak256 es = (r,s')`]

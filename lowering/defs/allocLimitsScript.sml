@@ -425,6 +425,26 @@ Definition assign_alloc_ok_def:
      type_alloc_ok cenv (lowered_value_type cenv e))
 End
 
+(* Each leaf of a tuple assignment stores its element as assign_alloc_ok's
+   single target does (compile_tuple_store_all; Python's _lower_tuple_unpack
+   pass 2 calls _store_complex_type): a storage or transient leaf whose
+   type differs from the element's converts it in a buffer of the leaf's
+   size.  tys are the source's element types (compile_tuple_unpack's
+   elem_types); a non-tuple source's are words, which allocate nothing. *)
+Definition tuple_assign_alloc_ok_def:
+  tuple_assign_alloc_ok cenv (sty::tys) (BaseTarget bt::gs) =
+    ((case target_store_place cenv bt of
+        SOME (SOME (ValPT dty)) =>
+          ¬is_word_type sty ∧ ¬is_word_type dty ∧ dty ≠ sty ∧
+          ¬(is_bytestring_type dty ∧ is_bytestring_type sty) ⇒
+          type_memory_bytes cenv dty < 2 ** 64
+      | _ => T) ∧
+     tuple_assign_alloc_ok cenv tys gs) ∧
+  tuple_assign_alloc_ok cenv (_::tys) (_::gs) =
+    tuple_assign_alloc_ok cenv tys gs ∧
+  tuple_assign_alloc_ok cenv _ _ = T
+End
+
 (* The local types after statement s, as compile_stmts threads them
    (declare_stmt_local): an AnnAssign declares its local, for the rest of
    its block.  A name reused at another type in a sibling block keeps each
@@ -444,6 +464,10 @@ End
    Context.new_temporary_value), and a storage, transient or immutable source
    is read into one (compile_ensure_in_memory; Python's Context.unwrap).  The
    check covers both, so don't narrow it to the staging condition alone.
+   Each leaf's store is bounded by tuple_assign_alloc_ok.  An append of a
+   non-word element stages it in a temporary of the array's element type
+   (compile_stmt's Append; Python's _lower_dynarray_append allocates it
+   with Context.new_temporary_value), so that type is below the limit.
    A log's two buffers are bounded by log_alloc_ok, a custom error's by
    custom_error_alloc_ok.  Local types follow the declarations as
    compile_stmt sees them: the statements after an AnnAssign see its local
@@ -464,14 +488,25 @@ Definition alloc_limits_stmt_def:
   alloc_limits_stmt cenv (Assign g e) =
     (alloc_limits_assignment cenv g ∧ alloc_limits_expr cenv e ∧
      (case g of
-        TupleTarget _ =>
-          is_memory_view e ⇒ type_memory_bytes cenv (expr_type e) < 2 ** 64
+        TupleTarget gs =>
+          (is_memory_view e ⇒ type_memory_bytes cenv (expr_type e) < 2 ** 64) ∧
+          tuple_assign_alloc_ok cenv
+            (case lowered_value_type cenv e of
+               TupleT tys => tys
+             | StructT nsid =>
+                 MAP (FST o SND) (get_struct_fields cenv.ce_struct_fields
+                                    (nsid_to_string nsid))
+             | _ => []) gs
       | BaseTarget bt => assign_alloc_ok cenv bt e)) ∧
   alloc_limits_stmt cenv (AugAssign ty tgt op e) =
     (alloc_limits_target cenv tgt ∧ alloc_limits_expr cenv e) ∧
   alloc_limits_stmt cenv (Append tgt e) =
     (alloc_limits_target cenv tgt ∧ alloc_limits_expr cenv e ∧
-     ¬target_in_immutables cenv.ce_module_vars tgt) ∧
+     ¬target_in_immutables cenv.ce_module_vars tgt ∧
+     (case target_place_type cenv tgt of
+        SOME (ValPT (ArrayT t _)) =>
+          ¬is_word_type t ⇒ type_memory_bytes cenv t < 2 ** 64
+      | _ => T)) ∧
   alloc_limits_stmt cenv (Log id es) =
     (alloc_limits_exprs cenv es ∧ log_alloc_ok cenv id es) ∧
   alloc_limits_stmt cenv (Assert c reason) =

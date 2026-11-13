@@ -119,12 +119,9 @@ Proof
   simp[initial_ctx_rel_def, initial_state_rel_def] >> rpt strip_tac >> gvs[]
 QED
 
-Theorem initial_ctx_rel_empty_and_static_rejected:
+Theorem initial_ctx_rel_empty_rejected:
   ~initial_ctx_rel cp prog (ctx with ctx_functions := []) vs es /\
-  ~initial_ctx_rel cp prog ctx vs (es with contexts := []) /\
-  ~initial_ctx_rel cp prog ctx vs
-    (es with contexts :=
-      [(ctxt with msgParams := ctxt.msgParams with static := T, rb)])
+  ~initial_ctx_rel cp prog ctx vs (es with contexts := [])
 Proof
   simp[initial_ctx_rel_def]
 QED

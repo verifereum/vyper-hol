@@ -4,7 +4,7 @@ Ancestors
   list venomInst dretDesugarDefs ctxLookupAgreeHelpers
 
 Theorem expand_dret_pairs_absent[local]:
-  (op = RETURNDATACOPY \/ op = INVOKE) /\
+  (op = RETURNDATACOPY \/ op = INVOKE \/ op = CREATE \/ op = CREATE2) /\
   expand_dret_pairs s cursor pairs =
     SOME (DretPairExpansion emitted dsts final_cursor s') ==>
   EVERY (\i. i.inst_opcode <> op) emitted
@@ -16,7 +16,7 @@ Proof
 QED
 
 Theorem replace_dret_inst_absent[local]:
-  (op = RETURNDATACOPY \/ op = INVOKE) /\
+  (op = RETURNDATACOPY \/ op = INVOKE \/ op = CREATE \/ op = CREATE2) /\
   replace_dret_inst s cursor inst = SOME (out,s') ==>
   EVERY (\i. i.inst_opcode <> op) out
 Proof
@@ -26,7 +26,7 @@ Proof
 QED
 
 Theorem dret_desugar_insts_absent[local]:
-  (op = RETURNDATACOPY \/ op = INVOKE) /\
+  (op = RETURNDATACOPY \/ op = INVOKE \/ op = CREATE \/ op = CREATE2) /\
   dret_desugar_insts s cursor insts = SOME (out,s') /\
   EVERY (\i. i.inst_opcode <> op) insts ==>
   EVERY (\i. i.inst_opcode <> op) out
@@ -38,7 +38,7 @@ Proof
 QED
 
 Theorem dret_desugar_blocks_absent[local]:
-  (op = RETURNDATACOPY \/ op = INVOKE) /\
+  (op = RETURNDATACOPY \/ op = INVOKE \/ op = CREATE \/ op = CREATE2) /\
   dret_desugar_blocks s cursor bbs = SOME (out,s') /\
   EVERY (\bb. EVERY (\i. i.inst_opcode <> op) bb.bb_instructions) bbs ==>
   EVERY (\bb. EVERY (\i. i.inst_opcode <> op) bb.bb_instructions) out
@@ -50,7 +50,7 @@ Proof
 QED
 
 Theorem dret_desugar_function_opcode_absence:
-  (op = RETURNDATACOPY \/ op = INVOKE) /\
+  (op = RETURNDATACOPY \/ op = INVOKE \/ op = CREATE \/ op = CREATE2) /\
   dret_desugar_function target s f = SOME (g,t) /\
   EVERY (\i. i.inst_opcode <> op) (fn_insts f) ==>
   EVERY (\i. i.inst_opcode <> op) (fn_insts g)

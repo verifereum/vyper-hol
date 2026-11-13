@@ -41,7 +41,7 @@ Theorem asm_frame_gas_step_call:
        step_inst op es = (r, s') /\
        LENGTH s'.contexts = LENGTH es.contexts ==>
        r <> INR (SOME OutOfGas) /\
-       frame_gas_left es <= frame_gas_left s' + frame_op_gas H) /\
+       (frame_gas_left es - frame_op_gas H) DIV 64 <= frame_gas_left s') /\
     (!es1. frame_next es es1 ==>
        (frame_gas_left es - frame_op_gas H) DIV 64 <= frame_gas_left es1)
 Proof
@@ -49,7 +49,6 @@ Proof
   qpat_assum `asm_frame_rel _ _ _ _ _`
     (strip_assume_tac o REWRITE_RULE [asm_frame_rel_def]) >>
   `c.stack = a.as_stack` by gvs[asm_evm_rel_def] >>
-  `~c.msgParams.static` by metis_tac[] >>
   `EVERY (wf_context o FST) es.contexts` by fs[wf_state_def] >>
   Q.SUBGOAL_THEN `?name. (name = "CALL" \/ name = "STATICCALL" \/ name = "DELEGATECALL") /\
       EL a.as_pc prog = AsmOp name` (qx_choose_then `name` assume_tac)
@@ -188,7 +187,9 @@ Finalise asm_frame_gas_step_noncall
    frame, which leaves our frame at least a 64th of what is left after
    their cost; SELFDESTRUCT ends the frame.  CREATE and CREATE2 charge the
    forwarded gas before a same-depth abort on an existing account
-   (abort_create_exists), so their own step leaves only the 64th too.  Each costs less than
+   (abort_create_exists), and a static frame's CALL with value charges it
+   before its WriteInStaticContext fault, so a raw call or create step
+   leaves only the 64th too.  Each costs less than
    frame_op_gas H: CREATE2 at most 32000 + 8 words per initcode word
    (asm_inst_gas_ok bounds the initcode by 2 * max_code_size) plus memory
    below H, SELFDESTRUCT at most 5000 + 2600 + 25000. *)
@@ -205,9 +206,9 @@ Theorem asm_frame_gas_step_create:
        step_inst op es = (r, s') /\
        LENGTH s'.contexts = LENGTH es.contexts ==>
        r <> INR (SOME OutOfGas) /\
-       if EL a.as_pc prog = AsmOp "CREATE" \/ EL a.as_pc prog = AsmOp "CREATE2"
-       then (frame_gas_left es - frame_op_gas H) DIV 64 <= frame_gas_left s'
-       else frame_gas_left es <= frame_gas_left s' + frame_op_gas H) /\
+       if EL a.as_pc prog = AsmOp "SELFDESTRUCT"
+       then frame_gas_left es <= frame_gas_left s' + frame_op_gas H
+       else (frame_gas_left es - frame_op_gas H) DIV 64 <= frame_gas_left s') /\
     (!es1. frame_next es es1 ==>
        if EL a.as_pc prog = AsmOp "SELFDESTRUCT"
        then frame_gas_left es <= frame_gas_left es1 + frame_op_gas H
@@ -232,7 +233,7 @@ QED
 (* The frame's step at es, an instruction of prog that is
    asm_inst_gas_ok H and not RETURNDATACOPY, with frame_op_gas H gas left:
    step_inst doesn't run out of gas at our depth and uses at most
-   frame_op_gas H there (a CREATE or CREATE2 leaves at least a 64th of what
+   frame_op_gas H there (a call or create leaves at least a 64th of what
    is left after that), and at the frame's next state an instruction that
    runs a child frame (CALL, STATICCALL, DELEGATECALL, CREATE, CREATE2)
    leaves at least a 64th of what is left after that. *)
@@ -248,7 +249,8 @@ Theorem asm_frame_gas_step:
        step_inst op es = (r, s') /\
        LENGTH s'.contexts = LENGTH es.contexts ==>
        r <> INR (SOME OutOfGas) /\
-       if EL a.as_pc prog = AsmOp "CREATE" \/ EL a.as_pc prog = AsmOp "CREATE2"
+       if MEM (EL a.as_pc prog) [AsmOp "CALL"; AsmOp "STATICCALL";
+            AsmOp "DELEGATECALL"; AsmOp "CREATE"; AsmOp "CREATE2"]
        then (frame_gas_left es - frame_op_gas H) DIV 64 <= frame_gas_left s'
        else frame_gas_left es <= frame_gas_left s' + frame_op_gas H) /\
     (!es1. frame_next es es1 ==>

@@ -26,12 +26,12 @@ val _ = Parse.hide "cp";
 
 (* The assembly state as starts codegen's program prog for the Venom
    state vs at the context's entry: at PC 0 with an empty stack, memory
-   and shared state related, and vs a fresh, non-static entry state whose
+   and shared state related, and vs a fresh entry state whose
    labels are prog's offsets. *)
 Definition codegen_asm_entry_rel_def:
   codegen_asm_entry_rel cp prog vs as <=>
     as.as_pc = 0 /\ as.as_stack = [] /\
-    ~vs.vs_halted /\ ~vs.vs_call_ctx.cc_static /\
+    ~vs.vs_halted /\
     vs.vs_vars = FEMPTY /\ vs.vs_params = [] /\
     n2w cp.cp_initial_fmp = vs.vs_initial_fmp /\
     (!l. FLOOKUP vs.vs_labels l =
