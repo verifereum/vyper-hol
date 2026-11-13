@@ -427,7 +427,7 @@ Proof
   drule_all abi_malformed_resource_restore >> strip_tac >>
   `abi_malformed_resource_post ctx func cenv cx es st.cs_next_var sites dstid
      s actual` by
-    (irule abi_malformed_resource_input_unprune >>
+    (irule abi_malformed_resource_input_unprune >> simp[] >>
      goal_assum (drule_at Any)) >>
   qexistsl_tac [`actual`, `slot`] >> simp[mload_def] >>
   fs[abi_valid_allocated_effect_def, abi_valid_allocated_frame_def,

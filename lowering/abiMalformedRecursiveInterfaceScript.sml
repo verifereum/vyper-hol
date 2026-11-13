@@ -127,16 +127,18 @@ Theorem abi_malformed_resource_prune:
     (abi_decoder_prune_vars st.cs_next_var t)
 Proof
   strip_tac >>
-  simp[Once abi_malformed_resource_post_def] >> rpt conj_tac
+  once_rewrite_tac[abi_malformed_resource_post_def] >> rpt conj_tac
   >- (fs[abi_malformed_resource_post_def] >>
       irule_at Any abi_malformed_prune_state >> metis_tac[])
   >- (rpt strip_tac >> fs[abi_malformed_resource_post_def] >>
       irule abi_malformed_prune_state >> simp[] >>
-      first_x_assum irule >> irule abi_malformed_unprune_state >> metis_tac[]) >>
-  simp[abi_decoder_prune_vars_def] >>
-  fs[abi_malformed_resource_post_def]
-  >- (rpt strip_tac >> first_x_assum irule >>
+      first_x_assum irule >> irule abi_malformed_unprune_state >> metis_tac[])
+  >- fs[abi_malformed_resource_post_def, abi_decoder_prune_vars_def]
+  >- fs[abi_malformed_resource_post_def, abi_decoder_prune_vars_def]
+  >- (fs[abi_malformed_resource_post_def, abi_decoder_prune_vars_def] >>
+      rpt strip_tac >> first_x_assum irule >>
       qexistsl_tac [`aid`, `cap`] >> simp[]) >>
+  fs[abi_malformed_resource_post_def, abi_decoder_prune_vars_def] >>
   rpt strip_tac >>
   `abi_decoder_operand_live st.cs_next_var op` by
     (irule abi_decoder_operand_live_mono >> qexists_tac `next` >> simp[]) >>
@@ -146,14 +148,25 @@ QED
 
 (* Input pruning changes no resources and preserves every live operand. *)
 Theorem abi_malformed_resource_input_unprune:
-  abi_malformed_resource_post ctx func cenv cx es next sites dstid
-    (abi_decoder_prune_vars next s) t ==>
-  abi_malformed_resource_post ctx func cenv cx es next sites dstid s t
+  abi_malformed_resource_post ctx func cenv cx es st.cs_next_var sites dstid
+    (abi_decoder_prune_vars st.cs_next_var s) t /\
+  local_ptrs_reserved cenv st ==>
+  abi_malformed_resource_post ctx func cenv cx es st.cs_next_var sites dstid s t
 Proof
-  simp[abi_malformed_resource_post_def, abi_decoder_prune_vars_def] >>
-  strip_tac >> simp[] >> conj_tac
-  >- (rpt strip_tac >> first_x_assum irule >>
+  strip_tac >>
+  `!H. stmt_state_rel H ctx func cenv cx es s ==>
+       stmt_state_rel H ctx func cenv cx es
+         (abi_decoder_prune_vars st.cs_next_var s)` by
+    metis_tac[abi_malformed_prune_state] >>
+  once_rewrite_tac[abi_malformed_resource_post_def] >> rpt conj_tac
+  >- fs[abi_malformed_resource_post_def]
+  >- (fs[abi_malformed_resource_post_def] >> metis_tac[])
+  >- fs[abi_malformed_resource_post_def, abi_decoder_prune_vars_def]
+  >- fs[abi_malformed_resource_post_def, abi_decoder_prune_vars_def]
+  >- (fs[abi_malformed_resource_post_def, abi_decoder_prune_vars_def] >>
+      rpt strip_tac >> first_x_assum irule >>
       qexistsl_tac [`aid`, `cap`] >> simp[]) >>
+  fs[abi_malformed_resource_post_def, abi_decoder_prune_vars_def] >>
   rpt strip_tac >> first_x_assum irule >>
   simp[GSYM abi_decoder_prune_vars_def, abi_decoder_prune_eval]
 QED
@@ -202,12 +215,15 @@ Proof
      irule abi_malformed_reserved_vars_state >>
      reverse conj_tac >- simp[] >>
      qexists_tac `st` >> fs[lookup_var_def]) >>
-  simp[Once abi_malformed_resource_post_def] >> rpt conj_tac
+  once_rewrite_tac[abi_malformed_resource_post_def] >> rpt conj_tac
   >- (fs[abi_malformed_resource_post_def] >> metis_tac[])
-  >- (fs[abi_malformed_resource_post_def] >> metis_tac[]) >>
-  fs[abi_malformed_resource_post_def]
-  >- (rpt strip_tac >> first_x_assum irule >>
+  >- (fs[abi_malformed_resource_post_def] >> metis_tac[])
+  >- fs[abi_malformed_resource_post_def]
+  >- fs[abi_malformed_resource_post_def]
+  >- (fs[abi_malformed_resource_post_def] >>
+      rpt strip_tac >> first_x_assum irule >>
       qexistsl_tac [`aid`, `cap`] >> simp[]) >>
+  fs[abi_malformed_resource_post_def] >>
   rpt strip_tac >> irule abi_decoder_vars_extend_eval >> qexistsl_tac [`extras`, `t`] >>
   simp[] >> metis_tac[]
 QED
