@@ -52,7 +52,7 @@ Proof
   Cases_on `t` >> simp[inst_output_def] >> metis_tac[]
 QED
 
-Theorem ptr_reverse_affine[local]:
+Theorem ptr_reverse_affine:
   fn_ptr_ok P fn /\ MEM inst (fn_insts fn) /\
   (inst.inst_opcode = ADD \/ inst.inst_opcode = SUB) /\
   inst.inst_operands = [op1; op2] ==>
