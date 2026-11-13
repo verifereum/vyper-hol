@@ -13,7 +13,7 @@ Ancestors
   vyperEvent venomExecSemantics venomInst venomState exprLoweringProps
   extCallOracleStep venomMemDefs exprSimHash builtinSystem emitHelper fragExec
   emitHelperProps venomExecProofs exprSimOperators exprSimRawLog exprSimRawLogSimCompose
-  vyperTypeArgFits
+  vyperTypeArgFits gasSummary gasStorage gasOutcome vyperStorageTrace vyperStorageFootprint
 Libs
   pairLib
 
@@ -978,4 +978,26 @@ Proof
   drule raw_log_typed_shape >> strip_tac >> gvs[]
   >- (irule raw_log_fixed_sim >> simp[] >> metis_tac[]) >>
   irule raw_log_dynamic_sim >> simp[] >> metis_tac[]
+QED
+
+Theorem raw_log_tail_summary:
+  dest_BytesV dv = SOME bs /\ LENGTH vals <= 4 /\
+  gas_marked_path F ctx func s 0 (OK t) /\
+  Q (INL NoneV)
+    ((es with logs := es.logs ++
+       [encode_raw_event_values cx.txn.target vals bs]) with gas_obs := []) t ==>
+  gas_summary_at F (ctx,func) []
+    (do bs' <- lift_option_type (dest_BytesV dv) "raw_log data";
+        type_check (LENGTH vals <= 4) "raw_log too many topics";
+        push_log (encode_raw_event_values cx.txn.target vals bs');
+        return NoneV od) (es,s) Q R
+Proof
+  strip_tac >> rewrite_tac[gas_summary_at_def, gas_marked_exec_def] >>
+  qexistsl_tac [`INL NoneV`,
+    `es with logs := es.logs ++ [encode_raw_event_values cx.txn.target vals bs]`,
+    `OK t`] >>
+  simp[bind_def, ignore_bind_def, lift_option_type_def, type_check_def,
+       push_log_def, return_def, assert_def,
+       vyperStateTheory.evaluation_state_component_equality] >>
+  disj1_tac >> Cases_on `es` >> gvs[]
 QED

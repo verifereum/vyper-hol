@@ -470,3 +470,12 @@ Proof
   drule_all exprSimUnwrapTheory.word_type_slot_size >> strip_tac >>
   gvs[] >> drule_all compile_assign_storage_stmt_frag >> simp[]
 QED
+
+Theorem write_storage_slot_storage_trace:
+  write_storage_slot cx tr slot tv v st = (res, st') ==>
+  write_storage_slot cx tr slot tv v (st with storage_trace := obs) =
+    (res, st' with storage_trace := obs)
+Proof
+  simp[write_storage_slot_eq] >> Cases_on `tr` >>
+  rw[] >> gvs[AllCaseEqs(), set_storage_def, get_storage_def]
+QED

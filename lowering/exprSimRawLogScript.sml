@@ -6,6 +6,7 @@ Ancestors
   vyperAST vyperTypeSystem vyperInterpreter vyperContext vyperValue vyperState
   vyperEvent venomExecSemantics venomInst venomState venomMemDefs exprLowering exprLoweringProps
   exprSimHash builtinSystem emitHelper fragExec emitHelperProps venomExecProofs
+  vyperStorageFootprint vyperStorageTrace
 Libs
   pairLib
 
@@ -574,4 +575,37 @@ Proof
   irule expr_post_none_intro >> simp[stmt_state_rel_inst_idx] >>
   irule wb_frame_readonly_tail >> qexistsl_tac [`sa`, `t`] >>
   simp[lookup_var_def]
+QED
+
+Theorem raw_log_tail_trace_frame:
+  (!cx data vs.
+     storage_trace_frame
+       (do dv <- bind (eval_expr cx data) (read_result cx);
+           bs <- lift_option_type (dest_BytesV dv) "raw_log data";
+           type_check (LENGTH vs <= 4) "raw_log too many topics";
+           push_log (encode_raw_event_values cx.txn.target vs bs);
+           return NoneV
+        od)) /\
+  (!cx dv vs.
+     storage_trace_frame
+       (do bs <- lift_option_type (dest_BytesV dv) "raw_log data";
+           type_check (LENGTH vs <= 4) "raw_log too many topics";
+           push_log (encode_raw_event_values cx.txn.target vs bs);
+           return NoneV
+        od))
+Proof
+  conj_tac
+  >- (rpt gen_tac >> irule storage_trace_frame_bind_all >> conj_tac
+      >- (irule storage_trace_frame_bind_all >>
+          simp[evaluate_storage_trace_frame, storage_trace_frame_read_result]) >>
+      gen_tac >> irule storage_trace_frame_bind_all >>
+      simp[storage_trace_frame_lifts] >> gen_tac >>
+      irule storage_trace_frame_ignore_bind >> simp[storage_trace_frame_checks] >>
+      irule storage_trace_frame_ignore_bind >>
+      simp[storage_trace_frame_state_updates, storage_trace_frame_return]) >>
+  rpt gen_tac >> irule storage_trace_frame_bind_all >>
+  simp[storage_trace_frame_lifts] >> gen_tac >>
+  irule storage_trace_frame_ignore_bind >> simp[storage_trace_frame_checks] >>
+  irule storage_trace_frame_ignore_bind >>
+  simp[storage_trace_frame_state_updates, storage_trace_frame_return]
 QED
