@@ -6982,28 +6982,28 @@ QED
 
 Theorem mm_local_bulk_cut_fragment[local]:
   j < n /\ n <= LENGTH is /\
-  (EL j is).inst_opcode = MCOPY /\
+  (EL j is).inst_opcode = mode_copy_opcode mode /\
   (EL j is).inst_operands = [Lit dst; Lit src; Lit len] /\
-  ss = FOLDL (scan_inst dfg Mem2Mem) empty_scan_state (TAKE n is) /\
+  ss = FOLDL (scan_inst dfg mode) empty_scan_state (TAKE n is) /\
   c = <| cg_dst := w2n dst; cg_src := w2n src; cg_length := w2n len;
          cg_inst_ids := [(EL j is).inst_id] |> ==>
   ?h. MEM h (ss.ss_copies ++ ss.ss_flushed) /\ mm_local_copy_ancestor c h
 Proof
   strip_tac >>
-  qabbrev_tac `s0 = FOLDL (scan_inst dfg Mem2Mem) empty_scan_state (TAKE j is)` >>
+  qabbrev_tac `s0 = FOLDL (scan_inst dfg mode) empty_scan_state (TAKE j is)` >>
   `SORTED (\a b. a.cg_dst <= b.cg_dst) s0.ss_copies` by
     (simp[Abbr `s0`] >> irule mm_local_fold_order >> simp[empty_scan_state_def]) >>
-  `?a. MEM a (scan_bulk_copy Mem2Mem s0 (EL j is)).ss_copies /\
+  `?a. MEM a (scan_bulk_copy mode s0 (EL j is)).ss_copies /\
     mm_local_copy_ancestor c a` by
     (irule mm_local_bulk_new_fragment >> simp[operand_lit_val_def] >> metis_tac[]) >>
-  `scan_inst dfg Mem2Mem s0 (EL j is) = scan_bulk_copy Mem2Mem s0 (EL j is)` by
-    simp[scan_inst_def, mode_load_opcode_def, mode_copy_opcode_def] >>
+  `scan_inst dfg mode s0 (EL j is) = scan_bulk_copy mode s0 (EL j is)` by
+    (Cases_on `mode` >> gvs[scan_inst_def, mode_load_opcode_def, mode_copy_opcode_def]) >>
   `TAKE n is = (TAKE j is ++ [EL j is]) ++ TAKE (n-SUC j) (DROP (SUC j) is)` by
     (qspec_then `n` (qspec_then `SUC j` (qspec_then `is` mp_tac))
        rich_listTheory.take_drop_partition >>
      simp[rich_listTheory.TAKE_SUC, rich_listTheory.DROP_EL_CONS]) >>
-  `ss = FOLDL (scan_inst dfg Mem2Mem)
-    (scan_inst dfg Mem2Mem s0 (EL j is)) (TAKE (n-SUC j) (DROP (SUC j) is))` by
+  `ss = FOLDL (scan_inst dfg mode)
+    (scan_inst dfg mode s0 (EL j is)) (TAKE (n-SUC j) (DROP (SUC j) is))` by
     simp[Abbr `s0`, FOLDL_APPEND] >>
   `?h. MEM h (ss.ss_copies ++ ss.ss_flushed) /\ mm_local_copy_ancestor a h` by
     (qpat_assum `ss = _` SUBST1_TAC >> irule mm_local_fold_fragment >>
@@ -7015,9 +7015,9 @@ Theorem mm_local_store_cut_fragment[local]:
   j < n /\ n <= LENGTH is /\
   (EL j is).inst_opcode = MSTORE /\
   (EL j is).inst_operands = [Lit dst; Var v] /\
-  s0 = FOLDL (scan_inst dfg Mem2Mem) empty_scan_state (TAKE j is) /\
+  s0 = FOLDL (scan_inst dfg mode) empty_scan_state (TAKE j is) /\
   FLOOKUP s0.ss_loads v = SOME src /\
-  ss = FOLDL (scan_inst dfg Mem2Mem) empty_scan_state (TAKE n is) /\
+  ss = FOLDL (scan_inst dfg mode) empty_scan_state (TAKE n is) /\
   c = <| cg_dst := w2n dst; cg_src := src; cg_length := 32;
          cg_inst_ids := [(EL j is).inst_id] ++
            (case dfg_get_def dfg v of NONE => [] | SOME li => [li.inst_id]) |> ==>
@@ -7026,18 +7026,18 @@ Proof
   strip_tac >>
   `SORTED (\a b. a.cg_dst <= b.cg_dst) s0.ss_copies` by
     (simp[] >> irule mm_local_fold_order >> simp[empty_scan_state_def]) >>
-  `?a. MEM a (scan_store dfg Mem2Mem s0 (EL j is)).ss_copies /\
+  `?a. MEM a (scan_store dfg mode s0 (EL j is)).ss_copies /\
     mm_local_copy_ancestor c a` by
     (irule mm_local_store_new_fragment >> simp[operand_lit_val_def, operand_var_name_def] >>
      metis_tac[]) >>
-  `scan_inst dfg Mem2Mem s0 (EL j is) = scan_store dfg Mem2Mem s0 (EL j is)` by
-    simp[scan_inst_def, mode_load_opcode_def, mode_copy_opcode_def] >>
+  `scan_inst dfg mode s0 (EL j is) = scan_store dfg mode s0 (EL j is)` by
+    (Cases_on `mode` >> gvs[scan_inst_def, mode_load_opcode_def, mode_copy_opcode_def]) >>
   `TAKE n is = (TAKE j is ++ [EL j is]) ++ TAKE (n-SUC j) (DROP (SUC j) is)` by
     (qspec_then `n` (qspec_then `SUC j` (qspec_then `is` mp_tac))
        rich_listTheory.take_drop_partition >>
      simp[rich_listTheory.TAKE_SUC, rich_listTheory.DROP_EL_CONS]) >>
-  `ss = FOLDL (scan_inst dfg Mem2Mem)
-    (scan_inst dfg Mem2Mem s0 (EL j is)) (TAKE (n-SUC j) (DROP (SUC j) is))` by
+  `ss = FOLDL (scan_inst dfg mode)
+    (scan_inst dfg mode s0 (EL j is)) (TAKE (n-SUC j) (DROP (SUC j) is))` by
     (simp[FOLDL_APPEND] >> gvs[]) >>
   `?h. MEM h (ss.ss_copies ++ ss.ss_flushed) /\ mm_local_copy_ancestor a h` by
     (qpat_assum `ss = _` SUBST1_TAC >> irule mm_local_fold_fragment >>
@@ -7068,7 +7068,8 @@ Proof
     mm_local_copy_ancestor
       <| cg_dst := w2n dst; cg_src := w2n src; cg_length := w2n len;
          cg_inst_ids := [(EL j is).inst_id] |> h` by
-    (irule mm_local_bulk_cut_fragment >> simp[] >>
+    (irule (REWRITE_RULE [mode_copy_opcode_def]
+       (Q.INST [`mode` |-> `Mem2Mem`] mm_local_bulk_cut_fragment)) >> simp[] >>
      qexistsl [`dfg_build_function fn0`, `is`, `j`, `n`] >> simp[] >> gvs[]) >>
   `MEM (EL j is).inst_id h.cg_inst_ids /\ h.cg_dst <= w2n dst /\
     w2n dst + w2n len <= h.cg_dst + h.cg_length` by
@@ -7147,7 +7148,7 @@ Proof
      `c` |-> `<| cg_dst := w2n dst; cg_src := src; cg_length := 32;
       cg_inst_ids := [(EL j is).inst_id] ++
         (case dfg_get_def (dfg_build_function fn0) v of NONE => [] | SOME li => [li.inst_id]) |>`]
-    (SPEC_ALL mm_local_store_cut_fragment))) >> strip_tac >>
+    (SPEC_ALL (Q.INST [`mode` |-> `Mem2Mem`] mm_local_store_cut_fragment)))) >> strip_tac >>
   `MEM (EL j is).inst_id h.cg_inst_ids /\ h.cg_dst <= w2n dst /\
     w2n dst + 32 <= h.cg_dst + h.cg_length` by
     (gvs[mm_local_copy_ancestor_def] >> metis_tac[MEM_APPEND, MEM]) >>
@@ -9560,7 +9561,7 @@ Proof
 QED
 
 Theorem mm_local_hazards_capture_compatible[local]:
-  MEM g (flush_hazards Mem2Mem ss c).ss_copies /\
+  MEM g (flush_hazards mode ss c).ss_copies /\
   mm_local_group_captures is cap B g /\
   j < LENGTH is /\ MEM (EL j is).inst_id g.cg_inst_ids /\
   cap j = SOME (d,bs) ==>
@@ -9931,10 +9932,10 @@ Theorem mm_local_indexed_pending_ancestor[local]:
   ir_supply_covers_fn supply fn0 /\ index < LENGTH fn0.fn_blocks /\
   k <= 4 /\ mm_local_prefix fn0 supply index k = (bb,sk) /\
   is = bb.bb_instructions /\ n <= r /\ r < LENGTH is /\ j < LENGTH is /\
-  ss = FOLDL (scan_inst (dfg_build_function fn0) Mem2Mem) empty_scan_state (TAKE n is) /\
+  ss = FOLDL (scan_inst (dfg_build_function fn0) mode) empty_scan_state (TAKE n is) /\
   (EL j is).inst_opcode IN {MSTORE; MCOPY; CALLDATACOPY; DLOADBYTES} /\
   MEM h (ss.ss_copies ++ ss.ss_flushed) /\ MEM (EL j is).inst_id h.cg_inst_ids /\
-  MEM g (scan_block (dfg_build_function fn0) Mem2Mem bb).ss_flushed /\
+  MEM g (scan_block (dfg_build_function fn0) mode bb).ss_flushed /\
   MEM (EL j is).inst_id g.cg_inst_ids /\
   rep_of_group is g = SOME ((EL r is).inst_id,g) ==>
   MEM h ss.ss_copies /\ mm_local_copy_ancestor h g
@@ -9997,7 +9998,7 @@ Theorem mm_local_indexed_store_ancestry[local]:
 Proof
   strip_tac >>
   `?h. MEM h (ss.ss_copies ++ ss.ss_flushed) /\ mm_local_copy_ancestor c h` by
-    (irule mm_local_store_cut_fragment >>
+    (irule (Q.INST [`mode` |-> `Mem2Mem`] mm_local_store_cut_fragment) >>
      goal_assum (drule_at Any) >> simp[] >> qexists `q` >> gvs[] >> decide_tac) >>
   `MEM (EL j is).inst_id h.cg_inst_ids` by
     (gvs[mm_local_copy_ancestor_def] >> metis_tac[MEM_APPEND, MEM]) >>
@@ -12359,11 +12360,12 @@ Proof
         >- (drule_at (Pat `_.inst_operands = _`)
               (Q.INST [`n` |-> `LENGTH is`, `dfg` |-> `dfg_build_function fn0`,
                 `ss` |-> `FOLDL (scan_inst (dfg_build_function fn0) Mem2Mem) empty_scan_state is`]
-                (SPEC_ALL mm_local_bulk_cut_fragment)) >> simp[]) >>
+                (SPEC_ALL (REWRITE_RULE [mode_copy_opcode_def]
+                  (Q.INST [`mode` |-> `Mem2Mem`] mm_local_bulk_cut_fragment)))) >> simp[]) >>
         drule_at (Pat `_.inst_operands = _`)
           (Q.INST [`n` |-> `LENGTH is`, `dfg` |-> `dfg_build_function fn0`,
             `ss` |-> `FOLDL (scan_inst (dfg_build_function fn0) Mem2Mem) empty_scan_state is`]
-            (SPEC_ALL mm_local_store_cut_fragment)) >> simp[] >> gvs[]) >>
+            (SPEC_ALL (Q.INST [`mode` |-> `Mem2Mem`] mm_local_store_cut_fragment))) >> simp[] >> gvs[]) >>
      gvs[scan_block_def, hard_barrier_def] >> metis_tac[]) >>
   `MEM (EL j is).inst_id c.cg_inst_ids /\
     (EL j is).inst_opcode IN {MSTORE; MCOPY; CALLDATACOPY; DLOADBYTES}` by
@@ -20325,31 +20327,26 @@ Proof
 QED
 
 Theorem mm_local_payload_due_realize[local]:
-  ws = MAP (THE o cap) (due ++ [r]) /\
-  (!j. MEM j (due ++ [r]) ==> IS_SOME (cap j)) /\
-  (!j d bs. MEM j (due ++ [r]) /\ cap j = SOME (d,bs) ==>
-    g.cg_dst <= d /\ d + LENGTH bs <= g.cg_dst + g.cg_length /\
-    bs = mm_local_bytes B (g.cg_src + (d-g.cg_dst)) (LENGTH bs)) /\
-  (!a. g.cg_dst <= a /\ a < g.cg_dst + g.cg_length ==>
-    ?j d bs. MEM j (due ++ [r]) /\ cap j = SOME (d,bs) /\
-      d <= a /\ a < d + LENGTH bs) /\
-  MAX_LIST (MAP (\(d,bs). d + LENGTH bs) ws) = g.cg_dst + g.cg_length ==>
+  mm_local_group_captures is cap B g /\
+  mm_local_group_coverage is n cap g /\
+  mm_local_group_endpoint is n cap g /\
+  ws = MAP (THE o cap) js /\
+  (!j. MEM j js ==> IS_SOME (cap j)) /\
+  (!j d bs. (MEM j js /\ cap j = SOME (d,bs)) <=>
+    (j < n /\ j < LENGTH is /\ MEM (EL j is).inst_id g.cg_inst_ids /\
+     cap j = SOME (d,bs))) ==>
   FOLDL (\st (d,bs). write_memory_with_expansion d bs st) v ws =
     write_memory_with_expansion g.cg_dst (mm_local_bytes B g.cg_src g.cg_length) v
 Proof
-  strip_tac >> irule mm_local_write_log_realize >>
-  pure_asm_rewrite_tac[] >> conj_tac
-  >- (rpt gen_tac >> pure_rewrite_tac[MEM_MAP] >> strip_tac >>
-      rename1 `MEM j (due ++ [r])` >>
-      `IS_SOME (cap j)` by metis_tac[] >>
-      Cases_on `cap j` >> gvs[] >> metis_tac[]) >>
-  conj_tac
-  >- (rpt strip_tac >>
-      qpat_x_assum `!a. g.cg_dst <= a /\ _ ==> _`
-        (qspec_then `a` mp_tac) >> asm_rewrite_tac[] >> strip_tac >>
-      qexistsl [`d`,`bs`] >> simp[MEM_MAP] >>
-      qexists `j` >> gvs[MEM_APPEND]) >>
-  metis_tac[]
+  strip_tac >>
+  drule_all mm_local_payload_due_extent >> strip_tac >>
+  irule mm_local_write_log_realize >> simp[] >>
+  rpt gen_tac >> strip_tac >>
+  `?j. MEM j js /\ cap j = SOME (d,bs)` by
+    (gvs[MEM_MAP] >> rename1 `MEM j js` >>
+     `IS_SOME (cap j)` by metis_tac[] >>
+     Cases_on `cap j` >> gvs[] >> metis_tac[]) >>
+  fs[mm_local_group_captures_def] >> metis_tac[]
 QED
 
 Theorem mm_local_payload_representative_discharge[local]:
