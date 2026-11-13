@@ -190,6 +190,12 @@ Resume ptr_paired_current_static_bound[descriptor_bound]:
   rpt disj2_tac >>
   qpat_x_assum `a.po_state.vs_initial_fmp = _` (SUBST_ALL_TAC o SYM) >>
   qpat_x_assum `a.po_state.vs_fmp = _` (SUBST_ALL_TAC o SYM) >>
+  (fn (asl,w) =>
+     (Lib.with_flag (Globals.show_types, true) (fn () =>
+        (print ("PROBE " ^ Parse.term_to_string w ^ "\n");
+         List.app (fn t => print ("PROBEH " ^ Parse.term_to_string t ^ "\n"))
+           (List.take (asl, 4)))) ();
+      ALL_TAC (asl,w))) >>
   conj_tac >> first_assum ACCEPT_TAC
 QED
 
