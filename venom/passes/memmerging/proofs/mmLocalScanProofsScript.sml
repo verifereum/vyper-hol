@@ -20883,11 +20883,12 @@ QED
 
 Theorem mm_local_cds_trace[local]:
   fn_entry_state fn s /\
-  MEM (([],d,id),fn,i,t) (trace_function fuel ctx fn s) ==>
+  MEM (([],d,id),f,i,t) (trace_function fuel ctx fn s) ==>
+  f = fn /\
   t.vs_call_ctx.cc_calldata = s.vs_call_ctx.cc_calldata /\
-  (fn_inst_wf fn /\ ssa_form fn ==>
+  (fn_inst_wf f /\ ssa_form f ==>
    !v producer w.
-     dfg_get_def (dfg_build_function fn) v = SOME producer /\
+     dfg_get_def (dfg_build_function f) v = SOME producer /\
      producer.inst_opcode = CALLDATASIZE /\ lookup_var v t = SOME w ==>
      w = n2w (LENGTH t.vs_call_ctx.cc_calldata))
 Proof
@@ -20911,7 +20912,7 @@ Proof
   qspecl_then [`[]`,`0`,`fuel`,`ctx`,`fn`,`s`] mp_tac
     (cj 3 mmTraceProofsTheory.mm_trace_root_inv) >>
   simp[] >> simp[EVERY_MEM, pairTheory.FORALL_PROD] >>
-  strip_tac >> `Inv ctx fn i t` by metis_tac[] >>
+  strip_tac >> `f = fn /\ Inv ctx fn i t` by metis_tac[] >>
   gvs[Abbr `Inv`] >> metis_tac[]
 QED
 
@@ -21390,6 +21391,70 @@ Proof
       `?sp. eval_phis s bb.bb_instructions = OK sp` by
         metis_tac[mm_local_phi_entry_pair] >> gvs[]) >>
   simp[venomExecSemanticsTheory.run_block_def, lift_result_def]
+QED
+
+Theorem mm_local_zero_trace_history_producer[local]:
+  fn_inst_wf fn0 /\ ssa_form fn0 /\
+  lookup_block s.vs_current_bb fn0.fn_blocks = SOME bb /\
+  is = bb.bb_instructions /\ dfg = dfg_build_function fn0 /\
+  h = phi_prefix_length is /\
+  EVERY (\((p,d',id),f,i,t). p = [] ==>
+    static_mem_ok eom ctx f i t /\
+    LENGTH t.vs_call_ctx.cc_calldata < dimword (:256) /\
+    (fn_inst_wf f /\ ssa_form f ==>
+      !v producer w.
+        dfg_get_def (dfg_build_function f) v = SOME producer /\
+        producer.inst_opcode = CALLDATASIZE /\ lookup_var v t = SOME w ==>
+        w = n2w (LENGTH t.vs_call_ctx.cc_calldata)))
+    (trace_blocks [] d (SUC fuel) ctx fn0 s) ==>
+  !sp n H. eval_phis s is = OK sp /\
+    h <= n /\ n < LENGTH is /\ H h = sp with vs_inst_idx := h /\
+    (!q. h <= q /\ q <= n ==> (H q).vs_inst_idx = q) /\
+    (!q. h <= q /\ q < n ==>
+      ~is_terminator (EL q is).inst_opcode /\
+      ?u. step_inst fuel ctx (EL q is) (H q) = OK u /\
+        H (SUC q) = u with vs_inst_idx := SUC q) /\
+    (!q. h <= q /\ q <= n ==> static_mem_ok eom ctx fn0 (EL q is) (H q)) /\
+    (is_terminator (EL n is).inst_opcode \/
+      ~(?u. step_inst fuel ctx (EL n is) (H n) = OK u)) /\
+    exec_block fuel ctx bb (sp with vs_inst_idx := h) =
+      dft_exec_suffix fuel ctx [EL n is] (H n) ==>
+    (!j. h <= j /\ j <= n ==>
+      LENGTH (H j).vs_call_ctx.cc_calldata < dimword (:256)) /\
+    (!j dst v len. h <= j /\ j < n /\
+      is_calldatasize_copy dfg (EL j is) /\
+      (EL j is).inst_operands = [Lit dst; Var v; Lit len] ==>
+      lookup_var v (H j) = SOME (n2w (LENGTH (H j).vs_call_ctx.cc_calldata)) /\
+      LENGTH (H j).vs_call_ctx.cc_calldata < dimword (:256))
+Proof
+  strip_tac >> rpt gen_tac >> strip_tac >>
+  `MEM bb fn0.fn_blocks` by
+    metis_tac[venomExecProofsTheory.lookup_block_MEM] >>
+  `h < LENGTH is` by decide_tac >>
+  `eval_phis s bb.bb_instructions = OK sp` by metis_tac[] >>
+  mp_tac (Q.INST [`p` |-> `[]`, `fn` |-> `fn0`]
+    dftGasFromListTraceDefsTheory.trace_blocks_enter) >>
+  (impl_tac >- asm_rewrite_tac[]) >>
+  disch_then (fn th =>
+    qpat_x_assum `EVERY _ (trace_blocks _ _ _ _ _ _)`
+      (mp_tac o REWRITE_RULE [th])) >>
+  simp[EVERY_APPEND] >> strip_tac >>
+  `get_instruction bb
+     (sp with vs_inst_idx := phi_prefix_length bb.bb_instructions).vs_inst_idx = SOME (EL h is)` by
+    (gvs[venomInstTheory.get_instruction_def]) >>
+  drule dftGasFromListTraceDefsTheory.trace_block_visit >>
+  disch_then (fn th =>
+    qpat_x_assum `EVERY _ (trace_block _ _ _ _ _ _ _)`
+      (mp_tac o REWRITE_RULE [th])) >>
+  simp[EVERY_APPEND] >> strip_tac >>
+  `LENGTH (H h).vs_call_ctx.cc_calldata < dimword (:256) /\
+   (!v producer w.
+     dfg_get_def dfg v = SOME producer /\
+     producer.inst_opcode = CALLDATASIZE /\ lookup_var v (H h) = SOME w ==>
+     w = n2w (LENGTH (H h).vs_call_ctx.cc_calldata))` by
+    (gvs[] >> metis_tac[]) >>
+  mp_tac (Q.INST [`fn` |-> `fn0`] mm_local_memzero_history_producer) >>
+  (impl_tac >- (asm_rewrite_tac[] >> metis_tac[])) >> simp[]
 QED
 
 Theorem mm_local_stage_correct:
