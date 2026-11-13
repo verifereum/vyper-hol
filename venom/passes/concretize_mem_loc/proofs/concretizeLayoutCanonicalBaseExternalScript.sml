@@ -105,6 +105,9 @@ Theorem layout_canonical_external_success:
   ?tpost. step_inst_base j t = OK tpost /\
     layout_canonical_success D lo vs0 C C' q0 es qs ass qend n F (INL g) post tpost
 Proof
-  strip_tac >> drule_all layout_canonical_external_success_requests >>
+  strip_tac >>
+  `layout_cut_safe D lo (SUC (LENGTH vs0.vs_gas_readings)) vs0 C qend` by
+    simp[layout_cut_safe_whole_run] >>
+  drule_all layout_canonical_external_success_requests >>
   strip_tac >> qexists `tpost` >> simp[]
 QED
