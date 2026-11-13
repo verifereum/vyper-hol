@@ -5,6 +5,7 @@
    pieces. *)
 Theory externalEntryChecks
 Ancestors
+  initialVenomStateRel
   externalEntryShape
   stmtSimProps stmtSimDefs exprSimDefs loweringPosts
   list pair fragExec bodySim bodySimMain loweringHalt stmtLoweringMono

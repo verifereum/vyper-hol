@@ -15,7 +15,7 @@
  *     (bodySimMain: body_sim_mutual, body_stmts_sim)
  *
  * TOP-LEVEL:
- *   venom_env_rel, initial_venom_state_rel -- PLAN 5.7 entry boundary
+ *   (Entry boundary definitions live in initialVenomStateRel.)
  *   external_call_result_rel, source_unit_execution_correct -- oracle boundary
  *   compile_state_ok_initial -- label-space invariant of the initial compile state
  *   external_return_word_result_rel, external_return_prim_result_rel,
@@ -44,6 +44,7 @@
 
 Theory vyperLoweringCorrect
 Ancestors
+  initialVenomStateRel
   vyperCompiler gasSummary
   ptrOkCheck
   selectorDispatch
@@ -124,32 +125,7 @@ End
 
 (* ===== PLAN 5.7 oracle-mode boundary ===== *)
 
-(* No gas-reading/oracle equality is invented here: cc_gas, outcomes,
-   code/labels and frame-pointer fields are deliberately free at entry. *)
-Definition venom_env_rel_def:
-  venom_env_rel tx vs <=>
-    loweringStateRelDefs$call_ctx_rel tx vs.vs_call_ctx vs.vs_tx_ctx vs.vs_block_ctx /\
-    ~vs.vs_call_ctx.cc_static /\
-    ~tx.is_static /\
-    vs.vs_prev_hashes = tx.block_hashes
-End
 
-(* tx_env_ok is also a conjunct of venom_env_rel, through call_ctx_rel; it
-   is stated here too so the transaction premises read in one place, not as
-   a separate assumption. *)
-Definition initial_venom_state_rel_def:
-  initial_venom_state_rel tops am tx vs <=>
-    value_transfer_ok tx am.accounts /\
-    vs.vs_accounts = accounts_after_transfer tx am.accounts /\
-    vs.vs_transient = am.tStorage /\ am.logs = [] /\ vs.vs_logs = [] /\
-    am.pending_deletions = [] /\
-    tx_env_ok tx /\ venom_env_rel tx vs /\
-    vs.vs_vars = FEMPTY /\ ~vs.vs_halted /\ vs.vs_memory = [] /\
-    vs.vs_allocas = FEMPTY /\ vs.vs_alloca_next = 0 /\
-    vs.vs_returndata = [] /\ vs.vs_requests = [] /\
-    vs.vs_pending_deletions = am.pending_deletions /\
-    immutables_section_rel tops (account_immutables am tx.target) vs.vs_data_section
-End
 
 (* The calldata Venom reads is the transaction's, which the source typing
    bounds; dispatch and the entry checks need the bound. *)

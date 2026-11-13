@@ -1,6 +1,7 @@
 (* A piece of S1 (loweringRuntimeCorrect's lower_vyper_runtime_unit_correct). *)
 Theory externalEntryValueRevert
 Ancestors
+  initialVenomStateRel
   externalEntryChecks entryChecksProps moduleLoweringProps
   stmtSimProps
   stmtSimDefs

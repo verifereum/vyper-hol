@@ -5,6 +5,7 @@
  *)
 Theory e2eEntry
 Ancestors
+  initialVenomStateRel
   e2eDefs vyperLoweringCorrect codegenCorrectness
   venomState unitTransformDefs unitShapeDefs contextPlanLayoutProps
   contextCodegenRel compileEnv loweringStateRelDefs symbolResolve finite_map words vyperArith

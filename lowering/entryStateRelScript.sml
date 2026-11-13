@@ -18,6 +18,7 @@
  *)
 Theory entryStateRel
 Ancestors
+  initialVenomStateRel
   list rich_list finite_map alist
   e2eDefs vyperLoweringCorrect entryDecodePlanProps entryArgPtrs fragExec
   compileEnv loweringStateRelDefs compileVyper moduleLowering supportedProgram supportedNames

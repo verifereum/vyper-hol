@@ -2,7 +2,7 @@ Theory abiEncoderWindowJointLeaves
 Ancestors
   exprSimAbiEncodeExecFrame abiEncoderWindowLeaves
   abiEncoderWindowContract abiEncoderInputFrame representationCleanPtr
-  fragGasSeqPtr bodyPtrDefs ptrCoverage ptrSafetyTransport
+  wordLoadStorePtr fragGasSeqPtr bodyPtrDefs ptrCoverage ptrSafetyTransport
   ghostPcTransportPtr compileEnv contextCodegenRel ptrSafeRun ptrDiscipline
   venomExecSemantics venomState venomInst words list arithmetic finite_map
 

@@ -35,6 +35,7 @@
  *)
 Theory loweringMemCorrect
 Ancestors
+  initialVenomStateRel
   stmtSimDefs
   loweringPosts
   vyperCompiler selectorDispatch moduleLoweringProps stmtLoweringProps

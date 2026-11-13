@@ -13,6 +13,7 @@
  *)
 Theory e2eProducers
 Ancestors
+  initialVenomStateRel
   compilePhasesProps e2eDefs o1PipelineCorrect
   compileVyper codegen vyperContext finite_map
   e2eEntry vyperLoweringCorrect codegenCorrectness

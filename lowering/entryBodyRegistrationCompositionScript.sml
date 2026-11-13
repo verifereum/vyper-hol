@@ -1,5 +1,6 @@
 Theory entryBodyRegistrationComposition
 Ancestors
+  initialVenomStateRel
   loweringStateRelDefs entryReachBodyCanonicalChecks entryReachBodyRegistrationIteration
   entryChecksProps externalEntryChecks compileVyper compileEnv
   moduleLoweringProps vyperLoweringCorrect vyperInterpreter vyperState

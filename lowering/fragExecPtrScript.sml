@@ -1,24 +1,18 @@
 (* Pointer ghost boundaries for lowering fragments. *)
 Theory fragExecPtr
 Ancestors
-  bodyPtrDefs ptrSafeRun ptrDiscipline vyperLoweringCorrect
+  initialVenomStateRel
+  bodyPtrDefs ptrSafeRun ptrDiscipline
   venomExecSemantics venomInstProofs contextCodegenRelProps
   venomInst venomState contextCodegenRel codegenRel memLocDefs
   emitHelperProps allocaFootprint abiBuiltinAllocation finite_map arithmetic
-  fragExec
+  fragExec words
 
-Theorem initial_ptr_allocations:
-  initial_venom_state_rel tops am tx s ==>
-  s.vs_allocas = FEMPTY /\ s.vs_alloca_next = 0 /\
-  s.vs_vars = FEMPTY /\ s.vs_memory = [] /\ allocas_from 0 s
-Proof
-  simp[initial_venom_state_rel_def, allocas_from_def]
-QED
 
 Theorem ptr_inst_ok_stop:
   !cx ctx fn G tn s id fuel.
-    stor_taint_ok cx tn s /\ ~ctx_has_dalloca ctx ==>
-    ptr_inst_ok (cx_dead cx) 0 fuel ctx fn G tn
+    stor_taint_ok H cx tn s /\ ~ctx_has_dalloca ctx ==>
+    ptr_inst_ok (cx_dead H cx) 0 fuel ctx fn G tn
       (mk_inst id STOP [] []) s
 Proof
   rpt strip_tac >>
@@ -37,11 +31,11 @@ Theorem ptr_safe_run_stop:
   !cx ctx fn PG G tn s bb id fuel.
     lookup_block s.vs_current_bb fn.fn_blocks = SOME bb /\
     get_instruction bb s.vs_inst_idx = SOME (mk_inst id STOP [] []) /\
-    stor_taint_ok cx tn s /\ ~ctx_has_dalloca ctx ==>
-    ptr_safe_run (cx_dead cx) 0 fuel ctx fn PG G tn s
+    stor_taint_ok H cx tn s /\ ~ctx_has_dalloca ctx ==>
+    ptr_safe_run (cx_dead H cx) 0 fuel ctx fn PG G tn s
 Proof
   rpt strip_tac >>
-  `ptr_inst_ok (cx_dead cx) 0 fuel ctx fn G tn
+  `ptr_inst_ok (cx_dead H cx) 0 fuel ctx fn G tn
      (mk_inst id STOP [] []) s` by metis_tac[ptr_inst_ok_stop] >>
   simp[ptr_safe_run_def, Once ptr_safe_block_def,
        ptr_safe_step_def, step_inst_non_invoke] >>
@@ -74,11 +68,11 @@ QED
 
 Theorem ptr_inst_ok_return:
   !cx ctx fn G tn s id p n.
-    ptr_covers G tn p s (w2n n) /\ stor_taint_ok cx tn s /\
+    ptr_covers G tn p s (w2n n) /\ stor_taint_ok H cx tn s /\
     ~ctx_has_dalloca ctx /\
     (!w i. lookup_var p s = SOME w /\ w2n w <= i /\
            i < w2n w + w2n n ==> i NOTIN tn.t_mem) ==>
-    !fuel. ptr_inst_ok (cx_dead cx) 0 fuel ctx fn G tn
+    !fuel. ptr_inst_ok (cx_dead H cx) 0 fuel ctx fn G tn
       (mk_inst id RETURN [Var p; Lit n] []) s
 Proof
   rpt strip_tac >>
@@ -93,7 +87,8 @@ Proof
      Cases_on `op = Lit n` >> gvs[op_taint_def]) >>
   simp[step_inst_non_invoke] >>
   PURE_ONCE_REWRITE_TAC[step_inst_base_def] >>
-  pure_rewrite_tac[instruction_accessors, instruction_accfupds, opcode_case_def] >>
+  pure_rewrite_tac[instruction_accessors, instruction_accfupds, combinTheory.K_THM,
+                   opcode_case_def] >>
   simp[eval_operand_def, step_taint_def, store_taint_def,
        adopt_reset_def, imm_taint_def, halt_state_def, set_returndata_def,
        ret_taint_def] >>
@@ -113,7 +108,8 @@ Proof
        mk_inst_def, source_memory_write_ranges_def,
        source_memory_read_ranges_def, op_taint_def, step_inst_non_invoke] >>
   PURE_ONCE_REWRITE_TAC[step_inst_base_def] >>
-  pure_rewrite_tac[instruction_accessors, instruction_accfupds, opcode_case_def] >>
+  pure_rewrite_tac[instruction_accessors, instruction_accfupds, combinTheory.K_THM,
+                   opcode_case_def] >>
   simp[exec_alloca_def, AllCaseEqs(), update_var_def] >>
   rpt strip_tac >> gvs[]
 QED
@@ -200,11 +196,11 @@ Theorem ptr_safe_run_copy_return:
     ptr_covers G tn src s (w2n n) /\
     (!w i. lookup_var src s = SOME w /\ w2n w <= i /\
            i < w2n w + w2n n ==> i NOTIN tn.t_mem) /\
-    stor_taint_ok cx tn s /\ ~ctx_has_dalloca ctx ==>
-    ptr_safe_run (cx_dead cx) 0 fuel ctx fn PG G tn s
+    stor_taint_ok H cx tn s /\ ~ctx_has_dalloca ctx ==>
+    ptr_safe_run (cx_dead H cx) 0 fuel ctx fn PG G tn s
 Proof
   rpt strip_tac >>
-  `ptr_inst_ok (cx_dead cx) 0 fuel ctx fn G tn
+  `ptr_inst_ok (cx_dead H cx) 0 fuel ctx fn G tn
     (mk_inst id MCOPY [Var dst; Var src; Lit n] []) s` by
     metis_tac[ptr_inst_ok_mcopy] >>
   `?a. lookup_var dst s = SOME a` by gvs[ptr_covers_def] >>
@@ -216,7 +212,7 @@ Proof
      PURE_ONCE_REWRITE_TAC[step_inst_base_def] >> simp[mk_inst_def, eval_operand_def]) >>
   qabbrev_tac `tn' = step_taint i s t tn` >>
   qabbrev_tac `s' = t with vs_inst_idx := s.vs_inst_idx + 1` >>
-  `ptr_covers G tn' dst s' (w2n n) /\ stor_taint_ok cx tn' s'` by
+  `ptr_covers G tn' dst s' (w2n n) /\ stor_taint_ok H cx tn' s'` by
     gvs[ptr_covers_def, stor_taint_ok_def, Abbr `tn'`, Abbr `i`,
         Abbr `s'`, Abbr `t`, mcopy_def, write_memory_with_expansion_def,
         lookup_var_def, step_taint_def, set_var_taint_def, out_taint_def,
@@ -225,7 +221,7 @@ Proof
   `!j. w2n a <= j /\ j < w2n a + w2n n ==> j NOTIN tn'.t_mem` by
     (gen_tac >> disch_tac >> simp[Abbr `tn'`, Abbr `i`] >>
      irule mcopy_range_clean >> simp[eval_operand_def] >> metis_tac[]) >>
-  `ptr_inst_ok (cx_dead cx) 0 fuel ctx fn G tn'
+  `ptr_inst_ok (cx_dead H cx) 0 fuel ctx fn G tn'
     (mk_inst (id + 1) RETURN [Var dst; Lit n] []) s'` by
     (irule ptr_inst_ok_return >> simp[] >>
      gvs[Abbr `s'`, Abbr `t`, mcopy_def,
@@ -238,7 +234,8 @@ Proof
        arithmeticTheory.ADD1, finite_mapTheory.DRESTRICT_UNIV] >>
   simp[Once ptr_safe_block_def, ptr_safe_step_def, step_inst_non_invoke] >>
   PURE_ONCE_REWRITE_TAC[step_inst_base_def] >>
-  pure_rewrite_tac[instruction_accessors, instruction_accfupds, opcode_case_def] >>
+  pure_rewrite_tac[instruction_accessors, instruction_accfupds, combinTheory.K_THM,
+                   opcode_case_def] >>
   simp[eval_operand_def]
 QED
 
@@ -250,12 +247,12 @@ Theorem ptr_safe_run_store_return_word:
     get_instruction bb (s.vs_inst_idx + 1) =
       SOME (mk_inst (id + 1) RETURN [Var p; Lit 32w] []) /\
     ptr_covers G tn p s 32 /\ eval_operand v s = SOME w /\
-    op_taint tn v = {} /\ stor_taint_ok cx tn s /\
+    op_taint tn v = {} /\ stor_taint_ok H cx tn s /\
     ~ctx_has_dalloca ctx ==>
-    ptr_safe_run (cx_dead cx) 0 fuel ctx fn PG G tn s
+    ptr_safe_run (cx_dead H cx) 0 fuel ctx fn PG G tn s
 Proof
   rpt strip_tac >>
-  `ptr_inst_ok (cx_dead cx) 0 fuel ctx fn G tn
+  `ptr_inst_ok (cx_dead H cx) 0 fuel ctx fn G tn
      (mk_inst id MSTORE [Var p; v] []) s` by
     metis_tac[ptr_inst_ok_mstore] >>
   `?a. lookup_var p s = SOME a` by gvs[ptr_covers_def] >>
@@ -266,7 +263,7 @@ Proof
          eval_operand_def] >>
   qabbrev_tac `tn' = step_taint i s t tn` >>
   qabbrev_tac `s' = t with vs_inst_idx := s.vs_inst_idx + 1` >>
-  `ptr_covers G tn' p s' 32 /\ stor_taint_ok cx tn' s'` by
+  `ptr_covers G tn' p s' 32 /\ stor_taint_ok H cx tn' s'` by
     gvs[ptr_covers_def, stor_taint_ok_def, Abbr `tn'`, Abbr `i`,
         Abbr `s'`, Abbr `t`, mstore_def, lookup_var_def,
         step_taint_def, set_var_taint_def, out_taint_def,
@@ -275,7 +272,7 @@ Proof
   `!i. w2n a <= i /\ i < w2n a + 32 ==> i NOTIN tn'.t_mem` by
     (gen_tac >> disch_tac >> simp[Abbr `tn'`, Abbr `i`] >>
      irule mstore_word_clean >> simp[eval_operand_def] >> metis_tac[]) >>
-  `ptr_inst_ok (cx_dead cx) 0 fuel ctx fn G tn'
+  `ptr_inst_ok (cx_dead H cx) 0 fuel ctx fn G tn'
      (mk_inst (id + 1) RETURN [Var p; Lit 32w] []) s'` by
     (irule ptr_inst_ok_return >> simp[wordsTheory.dimword_def] >>
      gvs[Abbr `s'`, Abbr `t`, mstore_def, lookup_var_def]) >>
@@ -290,7 +287,8 @@ Proof
   simp[Once ptr_safe_block_def, ptr_safe_step_def,
        step_inst_non_invoke] >>
   PURE_ONCE_REWRITE_TAC[step_inst_base_def] >>
-  pure_rewrite_tac[instruction_accessors, instruction_accfupds, opcode_case_def] >>
+  pure_rewrite_tac[instruction_accessors, instruction_accfupds, combinTheory.K_THM,
+                   opcode_case_def] >>
   simp[eval_operand_def]
 QED
 
@@ -306,9 +304,9 @@ Theorem ptr_safe_run_return_word:
     FLOOKUP (abi_builtin_allocate_state id 32 s).vs_allocas id =
       SOME (base,32) /\ base < dimword (:256) /\
     eval_operand op s = SOME w /\ op <> Var buf /\
-    op_taint tn op = {} /\ stor_taint_ok cx tn s /\
+    op_taint tn op = {} /\ stor_taint_ok H cx tn s /\
     ~ctx_has_dalloca ctx ==>
-    ptr_safe_run (cx_dead cx) 0 fuel ctx fn PG G tn s
+    ptr_safe_run (cx_dead H cx) 0 fuel ctx fn PG G tn s
 Proof
   rpt strip_tac >>
   qabbrev_tac `i = mk_inst id ALLOCA [Lit 32w] [buf]` >>
@@ -333,17 +331,17 @@ Proof
          abi_builtin_allocate_state_def, update_var_def, eval_operand_def,
          lookup_var_def, op_taint_def, step_taint_def, set_var_taint_def,
          out_taint_def, mk_inst_def, FLOOKUP_UPDATE]) >>
-  `stor_taint_ok cx tn' s' /\ s'.vs_current_bb = s.vs_current_bb /\
+  `stor_taint_ok H cx tn' s' /\ s'.vs_current_bb = s.vs_current_bb /\
    s'.vs_inst_idx = s.vs_inst_idx + 1` by
     (Cases_on `FLOOKUP s.vs_allocas id = NONE` >>
      simp[stor_taint_ok_def, Abbr `tn'`, Abbr `i`, Abbr `s'`, Abbr `t`,
           step_taint_def, store_taint_def, adopt_reset_def, imm_taint_def,
           abi_builtin_allocate_state_def, update_var_def, mk_inst_def] >>
      gvs[stor_taint_ok_def]) >>
-  `ptr_safe_run (cx_dead cx) 0 fuel ctx fn PG G' tn' s'` by
+  `ptr_safe_run (cx_dead H cx) 0 fuel ctx fn PG G' tn' s'` by
     (irule ptr_safe_run_store_return_word >> simp[] >>
      qexistsl_tac [`id + 1`, `buf`, `op`, `w`] >> simp[]) >>
-  `ptr_inst_ok (cx_dead cx) 0 fuel ctx fn G tn i s` by
+  `ptr_inst_ok (cx_dead H cx) 0 fuel ctx fn G tn i s` by
     (simp[Abbr `i`] >> irule ptr_inst_ok_alloca >> simp[]) >>
   qunabbrev_tac `i` >> gvs[mk_inst_def] >>
   simp[ptr_safe_run_def, Once ptr_safe_block_def, ptr_safe_step_def,
@@ -353,20 +351,20 @@ QED
 
 Theorem frag_exec_ptr_seq:
   !cx ctx PG st1 st2 st3 P Q Q2 R.
-    frag_exec_ptr cx ctx PG st1 st2 P Q R /\
-    frag_exec_ptr cx ctx PG st2 st3 Q Q2 R /\
+    frag_exec_ptr H cx ctx PG st1 st2 P Q R /\
+    frag_exec_ptr H cx ctx PG st2 st3 Q Q2 R /\
     cs_extends st1 st2 /\ cs_extends st2 st3 ==>
-    frag_exec_ptr cx ctx PG st1 st3 P Q2 R
+    frag_exec_ptr H cx ctx PG st1 st3 P Q2 R
 Proof
   rpt gen_tac >> strip_tac >> simp[frag_exec_ptr_def] >> rpt strip_tac >>
   `fn_has_code st1 st2 fn /\ fn_has_code st2 st3 fn` by
     metis_tac[fn_has_code_split] >>
-  qpat_x_assum `frag_exec_ptr _ _ _ st1 st2 _ _ _`
+  qpat_x_assum `frag_exec_ptr _ _ _ _ st1 st2 _ _ _`
     (mp_tac o SIMP_RULE std_ss [frag_exec_ptr_def]) >>
   disch_then (qspecl_then [`fn`, `G`, `tn`, `s`] mp_tac) >>
   simp[] >> strip_tac
   >- (rename1 `Q G2 tn2 s2` >>
-      qpat_x_assum `frag_exec_ptr _ _ _ st2 st3 _ _ _`
+      qpat_x_assum `frag_exec_ptr _ _ _ _ st2 st3 _ _ _`
         (mp_tac o SIMP_RULE std_ss [frag_exec_ptr_def]) >>
       disch_then (qspecl_then [`fn`, `G2`, `tn2`, `s2`] mp_tac) >>
       simp[] >> strip_tac
@@ -403,7 +401,7 @@ QED
    all-fuel safety alone does not supply one. *)
 Theorem frag_exec_ptr_complete:
   !cx ctx PG sa sb P Q R fn G0 tn0 s0.
-    frag_exec_ptr cx ctx PG sa sb P Q R /\ fn_has_code sa sb fn /\
+    frag_exec_ptr H cx ctx PG sa sb P Q R /\ fn_has_code sa sb fn /\
     ~ctx_has_dalloca ctx /\ P G0 tn0 s0 /\ ~s0.vs_halted /\
     s0.vs_current_bb = sa.cs_current_bb /\
     s0.vs_inst_idx = LENGTH sa.cs_current_insts /\
@@ -411,11 +409,11 @@ Theorem frag_exec_ptr_complete:
          s.vs_current_bb = sb.cs_current_bb /\
          s.vs_inst_idx = LENGTH sb.cs_current_insts ==>
          ?fuel r. run_from fuel ctx fn s = r /\ (!e. r <> Error e) /\
-                  ptr_safe_run (cx_dead cx) 0 fuel ctx fn PG G tn s) ==>
-    !fuel. ptr_safe_run (cx_dead cx) 0 fuel ctx fn PG G0 tn0 s0
+                  ptr_safe_run (cx_dead H cx) 0 fuel ctx fn PG G tn s) ==>
+    !fuel. ptr_safe_run (cx_dead H cx) 0 fuel ctx fn PG G0 tn0 s0
 Proof
   rpt gen_tac >> strip_tac >>
-  qpat_x_assum `frag_exec_ptr _ _ _ _ _ _ _ _`
+  qpat_x_assum `frag_exec_ptr _ _ _ _ _ _ _ _ _`
     (mp_tac o SIMP_RULE std_ss [frag_exec_ptr_def]) >>
   disch_then (qspecl_then [`fn`, `G0`, `tn0`, `s0`] mp_tac) >>
   simp[] >> strip_tac
@@ -453,8 +451,8 @@ QED
 Theorem ptr_inst_ok_return_zero:
   !cx ctx fn G tn s id op a fuel.
     eval_operand op s = SOME a /\ op_taint tn op = {} /\
-    stor_taint_ok cx tn s /\ ~ctx_has_dalloca ctx ==>
-    ptr_inst_ok (cx_dead cx) 0 fuel ctx fn G tn
+    stor_taint_ok H cx tn s /\ ~ctx_has_dalloca ctx ==>
+    ptr_inst_ok (cx_dead H cx) 0 fuel ctx fn G tn
       (mk_inst id RETURN [op; Lit 0w] []) s
 Proof
   rpt strip_tac >>
@@ -463,7 +461,8 @@ Proof
        memory_range_of_operands_def, mk_inst_def, eval_operand_def] >>
   simp[step_inst_non_invoke] >>
   PURE_ONCE_REWRITE_TAC[step_inst_base_def] >>
-  pure_rewrite_tac[instruction_accessors, instruction_accfupds, opcode_case_def] >>
+  pure_rewrite_tac[instruction_accessors, instruction_accfupds, combinTheory.K_THM,
+                   opcode_case_def] >>
   simp[eval_operand_def, step_taint_def, store_taint_def,
        adopt_reset_def, imm_taint_def, halt_state_def, set_returndata_def,
        ret_taint_def] >>
@@ -481,11 +480,11 @@ Theorem ptr_safe_run_copy_return_zero:
       SOME (mk_inst (id + 1) RETURN [dst; Lit 0w] []) /\
     eval_operand dst s = SOME a /\ eval_operand src s = SOME b /\
     op_taint tn dst = {} /\ op_taint tn src = {} /\
-    stor_taint_ok cx tn s /\ ~ctx_has_dalloca ctx ==>
-    ptr_safe_run (cx_dead cx) 0 fuel ctx fn PG G tn s
+    stor_taint_ok H cx tn s /\ ~ctx_has_dalloca ctx ==>
+    ptr_safe_run (cx_dead H cx) 0 fuel ctx fn PG G tn s
 Proof
   rpt strip_tac >>
-  `ptr_inst_ok (cx_dead cx) 0 fuel ctx fn G tn
+  `ptr_inst_ok (cx_dead H cx) 0 fuel ctx fn G tn
     (mk_inst id MCOPY [dst; src; Lit 0w] []) s` by
     metis_tac[ptr_inst_ok_mcopy_zero] >>
   qabbrev_tac `i = mk_inst id MCOPY [dst; src; Lit 0w] []` >>
@@ -498,7 +497,7 @@ Proof
      simp[eval_operand_def]) >>
   qabbrev_tac `tn' = step_taint i s t tn` >>
   qabbrev_tac `s' = t with vs_inst_idx := s.vs_inst_idx + 1` >>
-  `stor_taint_ok cx tn' s' /\ op_taint tn' dst = {} /\
+  `stor_taint_ok H cx tn' s' /\ op_taint tn' dst = {} /\
    eval_operand dst s' = SOME a /\
    s'.vs_current_bb = s.vs_current_bb /\
    s'.vs_inst_idx = s.vs_inst_idx + 1` by
@@ -508,7 +507,7 @@ Proof
         store_taint_def, adopt_reset_def, imm_taint_def, mk_inst_def,
         op_taint_def, finite_mapTheory.DRESTRICT_UNIV] >>
     Cases_on `dst` >> gvs[eval_operand_def, lookup_var_def]) >>
-  `ptr_inst_ok (cx_dead cx) 0 fuel ctx fn G tn'
+  `ptr_inst_ok (cx_dead H cx) 0 fuel ctx fn G tn'
     (mk_inst (id + 1) RETURN [dst; Lit 0w] []) s'` by
     metis_tac[ptr_inst_ok_return_zero] >>
   qunabbrev_tac `i` >> gvs[mk_inst_def] >>
@@ -517,6 +516,165 @@ Proof
        arithmeticTheory.ADD1, finite_mapTheory.DRESTRICT_UNIV] >>
   simp[Once ptr_safe_block_def, ptr_safe_step_def, step_inst_non_invoke] >>
   PURE_ONCE_REWRITE_TAC[step_inst_base_def] >>
-  pure_rewrite_tac[instruction_accessors, instruction_accfupds, opcode_case_def] >>
+  pure_rewrite_tac[instruction_accessors, instruction_accfupds, combinTheory.K_THM,
+                   opcode_case_def] >>
   simp[eval_operand_def]
+QED
+
+Theorem ptr_safe_run_raw_return_halt:
+  !cx ctx func PG G tn s bb id src len data w n.
+    lookup_block s.vs_current_bb func.fn_blocks = SOME bb /\
+    get_instruction bb s.vs_inst_idx =
+      SOME (mk_inst id MLOAD [Var src] [len]) /\
+    get_instruction bb (s.vs_inst_idx+1) =
+      SOME (mk_inst (id+1) ADD [Var src; Lit 32w] [data]) /\
+    get_instruction bb (s.vs_inst_idx+2) =
+      SOME (mk_inst (id+2) RETURN [Var data; Var len] []) /\
+    src <> len /\ src <> data /\ len <> data /\ ~s.vs_halted /\
+    lookup_var src s = SOME w /\ ptr_covers G tn src s (32+n) /\
+    n < dimword (:256) /\ w2n w + 32 + n <= dimword (:256) /\
+    mem_word_at (w2n w) s.vs_memory = n2w n /\
+    (!i. w2n w <= i /\ i < w2n w+32+n ==> i NOTIN tn.t_mem) /\
+    stor_taint_ok H cx tn s /\ ~ctx_has_dalloca ctx ==>
+    !fuel. ptr_safe_run (cx_dead H cx) 0 fuel ctx func PG G tn s /\
+           ?ss. run_from fuel ctx func s = Halt ss
+Proof
+  rpt gen_tac >> strip_tac >> gen_tac >>
+  qabbrev_tac `i1 = mk_inst id MLOAD [Var src] [len]` >>
+  qabbrev_tac `t1 = update_var len (n2w n) s` >>
+  qabbrev_tac `s1 = t1 with vs_inst_idx := s.vs_inst_idx + 1` >>
+  `step_inst fuel ctx i1 s = OK t1` by
+    (simp[Abbr `i1`, Abbr `t1`, step_inst_non_invoke] >>
+     PURE_ONCE_REWRITE_TAC[step_inst_base_def] >>
+     gvs[mk_inst_def, eval_operand_def, exec_read1_def, mload_def,
+          valueEncodingDefsTheory.mem_word_at_def]) >>
+  qabbrev_tac `i2 = mk_inst (id+1) ADD [Var src; Lit 32w] [data]` >>
+  qabbrev_tac `t2 = update_var data (w+32w) s1` >>
+  qabbrev_tac `s2 = t2 with vs_inst_idx := s.vs_inst_idx + 2` >>
+  `step_inst fuel ctx i2 s1 = OK t2` by
+    (simp[Abbr `i2`, Abbr `t2`, step_inst_non_invoke] >>
+     irule step_ADD >>
+     gvs[Abbr `s1`, Abbr `t1`, eval_operand_def, lookup_var_def,
+          update_var_def, FLOOKUP_UPDATE]) >>
+  `run_from fuel ctx func s = run_from fuel ctx func s1` by
+    (simp[Abbr `s1`, GSYM ADD1] >> irule run_from_step >>
+     qexistsl [`bb`,`i1`] >>
+     gvs[Abbr `i1`, is_terminator_def, step_inst_non_invoke]) >>
+  `run_from fuel ctx func s1 = run_from fuel ctx func s2` by
+    (`s2 = t2 with vs_inst_idx := SUC s1.vs_inst_idx` by
+       simp[Abbr `s2`, Abbr `s1`, ADD1] >>
+     asm_rewrite_tac[] >> irule run_from_step >> qexistsl [`bb`,`i2`] >>
+     gvs[Abbr `s1`, Abbr `t1`, Abbr `i2`, update_var_def,
+          is_terminator_def, step_inst_non_invoke]) >>
+  `?ss. run_from fuel ctx func s2 = Halt ss` by
+    (irule_at Any run_from_halt >>
+     qrefinel [`_`,`mk_inst (id+2) RETURN [Var data; Var len] []`,`bb`] >>
+     simp[Abbr `s2`, Abbr `t2`, Abbr `s1`, Abbr `t1`, update_var_def,
+          step_inst_non_invoke] >>
+     PURE_ONCE_REWRITE_TAC[step_inst_base_def] >>
+     simp[mk_inst_def, eval_operand_def, lookup_var_def, update_var_def,
+          FLOOKUP_UPDATE]) >>
+  reverse conj_tac >- metis_tac[] >>
+  `ptr_inst_ok (cx_dead H cx) 0 fuel ctx func G tn i1 s` by
+    (gvs[ptr_covers_def] >>
+     simp[Abbr `i1`, ptr_inst_ok_def, access_ok_def, taint_ok_def,
+          allocas_from_def, mk_inst_def, source_memory_write_ranges_def,
+          source_memory_read_ranges_def,
+          eval_operand_def] >>
+     reverse conj_tac >- simp[Abbr `t1`, update_var_def] >>
+     strip_tac >> simp[mem_read_ops_def] >>
+     qexistsl [`b`,`sz'`] >> simp[] >> decide_tac) >>
+  qabbrev_tac `G1 = step_prov PG G i1 t1` >>
+  qabbrev_tac `tn1 = step_taint i1 s t1 tn` >>
+  `op_taint tn1 (Var src) = {} /\ op_taint tn1 (Var len) = {} /\
+   tn1.t_mem = tn.t_mem /\ stor_taint_ok H cx tn1 s1` by
+    (gvs[Abbr `tn1`, Abbr `i1`, Abbr `t1`, Abbr `s1`,
+         ptr_covers_def, step_taint_def, set_var_taint_def, out_taint_def,
+         store_taint_def, adopt_reset_def, imm_taint_def,
+         mk_inst_def, eval_operand_def, lookup_var_def, update_var_def,
+         FLOOKUP_UPDATE, op_taint_def, mem_word_taint_def,
+         stor_taint_ok_def] >>
+     reverse conj_tac >-
+       (simp[mem_taint_def, new_site_bytes_def, step_writes_def,
+             source_memory_write_ranges_def, written_taint_def, mk_inst_def,
+             update_var_def, range_bytes_def, pred_setTheory.EXTENSION] >>
+        gen_tac >> eq_tac >- (strip_tac >> gvs[FLOOKUP_DEF]) >> simp[]) >>
+     simp[pred_setTheory.EXTENSION] >> rpt strip_tac >>
+     first_x_assum (qspec_then `x + w2n w` mp_tac) >> simp[] >> decide_tac) >>
+  `ptr_inst_ok (cx_dead H cx) 0 fuel ctx func G1 tn1 i2 s1` by
+    (simp[Abbr `i2`, ptr_inst_ok_def, access_ok_def, taint_ok_def,
+          allocas_from_def, mk_inst_def, source_memory_write_ranges_def,
+          source_memory_read_ranges_def] >>
+     conj_tac >- (gen_tac >> Cases_on `op = Var src` >>
+                   gvs[op_taint_def]) >>
+     simp[step_inst_non_invoke] >>
+     PURE_ONCE_REWRITE_TAC[step_inst_base_def] >>
+     simp[mk_inst_def, eval_operand_def,
+          Abbr `s1`, Abbr `t1`, update_var_def, lookup_var_def, FLOOKUP_UPDATE] >>
+     simp[Abbr `t2`, update_var_def]) >>
+  qabbrev_tac `G2 = step_prov PG G1 i2 t2` >>
+  qabbrev_tac `tn2 = step_taint i2 s1 t2 tn1` >>
+  `op_taint tn2 (Var data) = {} /\ op_taint tn2 (Var len) = {} /\
+   tn2.t_mem = tn.t_mem /\ stor_taint_ok H cx tn2 s2` by
+    (gvs[Abbr `tn2`, Abbr `i2`, Abbr `t2`, Abbr `s2`,
+         step_taint_def, set_var_taint_def, out_taint_def,
+         store_taint_def, adopt_reset_def, imm_taint_def,
+         mk_inst_def, eval_operand_def, lookup_var_def, update_var_def,
+         FLOOKUP_UPDATE, op_taint_def, stor_taint_ok_def] >>
+     simp[mem_taint_def, new_site_bytes_def, step_writes_def,
+          source_memory_write_ranges_def, written_taint_def, mk_inst_def,
+          update_var_def, range_bytes_def, pred_setTheory.EXTENSION] >>
+     conj_tac >- (Cases_on `FLOOKUP s1.vs_vars src` >> simp[]) >>
+     gen_tac >> eq_tac >- (strip_tac >> gvs[FLOOKUP_DEF]) >> simp[]) >>
+  `n = 0 \/ w2n (w + 32w) = w2n w + 32` by
+    (Cases_on `n = 0` >> simp[] >>
+     `w2n w + 32 < dimword (:256)` by decide_tac >>
+     simp[w2n_add_2]) >>
+  `lookup_var data s2 = SOME (w+32w) /\
+   lookup_var len s2 = SOME (n2w n)` by
+    simp[Abbr `s2`, Abbr `t2`, Abbr `s1`, Abbr `t1`,
+         lookup_var_def, update_var_def, FLOOKUP_UPDATE] >>
+  `?b sz. FLOOKUP G2 data = SOME (b,sz) /\ b <= w2n w /\
+          w2n w + 32 + n <= b+sz` by
+    (gvs[ptr_covers_def] >>
+     simp[Abbr `G2`, Abbr `G1`, Abbr `i2`, Abbr `i1`,
+          step_prov_def, set_prov_def, out_prov_def, first_prov_def,
+          op_prov_def, mk_inst_def, FLOOKUP_UPDATE, FLOOKUP_DRESTRICT] >>
+     metis_tac[]) >>
+  `access_ok 0 G2 func (mk_inst (id+2) RETURN [Var data; Var len] []) s2` by
+    (simp[access_ok_def, mk_inst_def, source_memory_write_ranges_def,
+          source_memory_read_ranges_def, memory_range_of_operands_def,
+          eval_operand_def] >>
+     rpt strip_tac >> simp[mem_read_ops_def] >>
+     qexistsl [`b`,`sz`] >> simp[] >> decide_tac) >>
+  `ptr_inst_ok (cx_dead H cx) 0 fuel ctx func G2 tn2
+     (mk_inst (id+2) RETURN [Var data; Var len] []) s2` by
+    (simp[ptr_inst_ok_def, taint_ok_def, allocas_from_def, mk_inst_def,
+          source_memory_read_ranges_def, memory_range_of_operands_def,
+          eval_operand_def] >>
+     conj_tac >- (gen_tac >> Cases_on `op = Var data` >>
+                  Cases_on `op = Var len` >> simp[]) >>
+     simp[step_inst_non_invoke] >>
+     PURE_ONCE_REWRITE_TAC[step_inst_base_def] >>
+     simp[mk_inst_def, eval_operand_def, step_taint_def, store_taint_def,
+          adopt_reset_def, imm_taint_def, halt_state_def, set_returndata_def,
+          ret_taint_def] >>
+     gvs[stor_taint_ok_def, cx_dead_def, pred_setTheory.SUBSET_DEF] >>
+     gen_tac >> Cases_on `x < n` >> simp[] >>
+     first_x_assum irule >> decide_tac) >>
+  `ptr_safe_run (cx_dead H cx) 0 fuel ctx func PG G2 tn2 s2` by
+    (simp[ptr_safe_run_def, Once ptr_safe_block_def, ptr_safe_step_def,
+          Abbr `s2`, Abbr `t2`, Abbr `s1`, Abbr `t1`, update_var_def,
+          step_inst_non_invoke] >>
+     PURE_ONCE_REWRITE_TAC[step_inst_base_def] >>
+     gvs[mk_inst_def, eval_operand_def, lookup_var_def, update_var_def,
+          FLOOKUP_UPDATE]) >>
+  qunabbrev_tac `i1` >> qunabbrev_tac `i2` >> gvs[mk_inst_def] >>
+  simp[ptr_safe_run_def, Once ptr_safe_block_def, ptr_safe_step_def,
+       is_terminator_def, ghost_step_def, ADD1] >>
+  gvs[Abbr `s1`, Abbr `t1`, update_var_def] >>
+  simp[Once ptr_safe_block_def, ptr_safe_step_def,
+       is_terminator_def, ghost_step_def, ADD1] >>
+  gvs[ptr_safe_run_def, Abbr `s2`, Abbr `t2`,
+      Abbr `G2`, Abbr `tn2`, Abbr `G1`, Abbr `tn1`, update_var_def]
 QED

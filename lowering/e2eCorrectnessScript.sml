@@ -12,6 +12,7 @@
  *)
 Theory e2eCorrectness
 Ancestors
+  initialVenomStateRel
   ptrDiscipline unitMemInv lowerDloadDefs moduleLoweringProps
   e2eDefs e2eComposition unitTransformDefs e2eDeployDefs
   e2eProducers e2eEntry o1PipelineCorrect o1PassContract contextCodegenRel

@@ -1,6 +1,7 @@
 (* Runtime source-entry state correspondence, including immutable data. *)
 Theory entryReachBodyRuntimeState
 Ancestors
+  initialVenomStateRel
   loweringStateRelDefs entryStateRel e2eDefs immutableSectionRel immutableRelation compileEnv
   vyperLoweringCorrect vyperInterpreter vyperState vyperContext venomState
   finite_map

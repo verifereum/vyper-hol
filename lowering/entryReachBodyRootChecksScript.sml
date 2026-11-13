@@ -1,5 +1,6 @@
 Theory entryReachBodyRootChecks
 Ancestors
+  initialVenomStateRel
   loweringStateRelDefs externalEntryChecks entryReachBodyInitialResources externalEntryShape
   vyperLoweringCorrect moduleLoweringProps entryDispatchProps entryChecksProps
   compileVyper moduleLowering vyperCompiler venomInst venomState
