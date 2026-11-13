@@ -1292,18 +1292,24 @@ Proof
   `!H. valid_horizon cx st0 H es.storage_trace ==>
      stmt_state_rel H ctx func cenv cx es next /\ storage_well_formed_on cx es (FST H)` by
     (qpat_x_assum `array_loop_inv _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ es next`
-       (strip_assume_tac o REWRITE_RULE [array_loop_inv_def]) >> simp[]) >>
+       (strip_assume_tac o REWRITE_RULE [array_loop_inv_def]) >>
+     first_assum ACCEPT_TAC) >>
   `!H. valid_horizon cx st0 H es.storage_trace ==>
      stmt_state_rel H ctx func cenv cx (es with gas_obs := []) next /\
      storage_well_formed_on cx (es with gas_obs := []) (FST H)` by
-    (rpt strip_tac
-     >- (first_x_assum drule >> strip_tac >>
-         drule msg_gas_state_frame >>
+    (gen_tac >> strip_tac >>
+     qpat_x_assum `!H. valid_horizon _ _ H es.storage_trace ==>
+       stmt_state_rel H _ _ _ _ es next /\ _` (qspec_then `H` mp_tac) >>
+     impl_tac >- first_assum ACCEPT_TAC >> strip_tac >>
+     conj_tac
+     >- (drule msg_gas_state_frame >>
          disch_then (qspecl_then [`next.vs_gas_readings`, `next.vs_inst_idx`, `[]`]
            mp_tac) >>
          simp[stmt_state_rel_inst_idx]) >>
-     first_x_assum drule >> strip_tac >>
-     irule vyperStorageFootprintTheory.storage_well_formed_on_backends >> simp[]) >>
+     `storage_well_formed_on cx (es with gas_obs := []) (FST H) <=>
+      storage_well_formed_on cx es (FST H)` by
+       (irule vyperStorageFootprintTheory.storage_well_formed_on_backends >> simp[]) >>
+     metis_tac[]) >>
   qexists_tac `next` >> fs[array_loop_inv_def] >>
   fs[array_caller_frame_def] >> metis_tac[]
 QED
@@ -1947,18 +1953,24 @@ Resume immutable_for_loop_counted[last]:
   `!H. valid_horizon cx st0 H ei.storage_trace ==>
      stmt_state_rel H ctx func cenv cx ei next /\ storage_well_formed_on cx ei (FST H)` by
     (qpat_x_assum `array_loop_inv _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ ei next`
-       (strip_assume_tac o REWRITE_RULE [array_loop_inv_def]) >> simp[]) >>
+       (strip_assume_tac o REWRITE_RULE [array_loop_inv_def]) >>
+     first_assum ACCEPT_TAC) >>
   `!H. valid_horizon cx st0 H ei.storage_trace ==>
      stmt_state_rel H ctx func cenv cx (ei with gas_obs := []) next /\
      storage_well_formed_on cx (ei with gas_obs := []) (FST H)` by
-    (rpt strip_tac
-     >- (first_x_assum drule >> strip_tac >>
-         drule msg_gas_state_frame >>
+    (gen_tac >> strip_tac >>
+     qpat_x_assum `!H. valid_horizon _ _ H ei.storage_trace ==>
+       stmt_state_rel H _ _ _ _ ei next /\ _` (qspec_then `H` mp_tac) >>
+     impl_tac >- first_assum ACCEPT_TAC >> strip_tac >>
+     conj_tac
+     >- (drule msg_gas_state_frame >>
          disch_then (qspecl_then [`next.vs_gas_readings`, `next.vs_inst_idx`, `[]`]
            mp_tac) >>
          simp[stmt_state_rel_inst_idx]) >>
-     first_x_assum drule >> strip_tac >>
-     irule vyperStorageFootprintTheory.storage_well_formed_on_backends >> simp[]) >>
+     `storage_well_formed_on cx (ei with gas_obs := []) (FST H) <=>
+      storage_well_formed_on cx ei (FST H)` by
+       (irule vyperStorageFootprintTheory.storage_well_formed_on_backends >> simp[]) >>
+     metis_tac[]) >>
   `alloca_frame cenv origin_es caller old cenv ei next` by
     (irule alloca_frame_trans >> goal_assum (drule_at Any) >>
      goal_assum (drule_at Any) >> fs[array_caller_frame_def]) >>

@@ -550,7 +550,7 @@ Proof
        (es with <|scopes := (FEMPTY |+ (id,
           <|assignable := F; type := tv; value := v; popped := []|>)) :: es.scopes;
           gas_obs := []|>) (FST H)` by
-    (rpt strip_tac >> conj_tac
+    (rpt strip_tac
      >- (fs[dynarray_entry_ready_def] >>
          qpat_x_assum `!H. valid_horizon _ _ H _ ==> stmt_state_rel H _ _ bc _ _ s2`
            drule >> strip_tac >>
@@ -800,7 +800,7 @@ Proof
   drule dynarray_for_code_iteration_static >> strip_tac >>
   drule dynarray_for_code_entry_inputs >> strip_tac >>
   `?s2. dynarray_entry_ready ctx func bc cx st0 es id tv (EL k vs) sb0 sa ov tot ep
-          sb0 s s2` by /\
+          sb0 s s2 /\
     (!caller. caller.cs_next_id <= sa.cs_next_id /\
       caller.cs_next_id <= ainst.inst_id ==>
       alloca_frame cenv es caller s bc
@@ -819,7 +819,13 @@ Proof
   qhdtm_x_assum `dynarray_for_code` kall_tac >>
   `!H. valid_horizon cx st0 H es.storage_trace ==>
      storage_well_formed_on cx es (FST H)` by
-    (rpt strip_tac >> fs[array_loop_inv_def] >> metis_tac[]) >>
+    (rpt strip_tac >>
+     qpat_assum `array_loop_inv _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ es cc`
+       (strip_assume_tac o REWRITE_RULE [array_loop_inv_def]) >>
+     qpat_x_assum `!H. valid_horizon _ _ H _ ==> stmt_state_rel H _ _ _ _ es cc /\ _`
+       (qspec_then `H` mp_tac) >>
+     impl_tac >- first_assum ACCEPT_TAC >>
+     strip_tac >> first_assum ACCEPT_TAC) >>
   drule_all dynarray_round_body_prepare >> strip_tac >>
   drule_all dynarray_entry_ready_runtime >> strip_tac >>
   `alloca_frame cenv es caller s bc entry s2` by
@@ -1031,18 +1037,24 @@ Proof
   `!H. valid_horizon cx st0 H es.storage_trace ==>
      stmt_state_rel H ctx func cenv cx (es with gas_obs := []) next /\
      storage_well_formed_on cx (es with gas_obs := []) (FST H)` by
-    (rpt strip_tac >>
-     qpat_x_assum `array_loop_inv _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ next`
-       mp_tac >>
-     rewrite_tac[array_loop_inv_def] >> strip_tac >>
-     qpat_x_assum `!H'. valid_horizon _ _ H' _ ==> stmt_state_rel H' _ _ _ _ _ _ /\ _`
-       drule >> strip_tac >>
+    (`!H'. valid_horizon cx st0 H' es.storage_trace ==>
+       stmt_state_rel H' ctx func cenv cx es next /\
+       storage_well_formed_on cx es (FST H')` by
+       (qpat_x_assum `array_loop_inv _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ next`
+          mp_tac >>
+        rewrite_tac[array_loop_inv_def] >> strip_tac >> first_assum ACCEPT_TAC) >>
+     gen_tac >> strip_tac >>
+     first_x_assum (qspec_then `H` mp_tac) >>
+     impl_tac >- first_assum ACCEPT_TAC >> strip_tac >>
      conj_tac
      >- (drule msg_gas_state_frame >>
          disch_then (qspecl_then [`next.vs_gas_readings`, `next.vs_inst_idx`, `[]`]
            mp_tac) >>
          simp[stmt_state_rel_inst_idx]) >>
-     simp[]) >>
+     `storage_well_formed_on cx (es with gas_obs := []) (FST H) <=>
+      storage_well_formed_on cx es (FST H)` by
+       (irule vyperStorageFootprintTheory.storage_well_formed_on_backends >> simp[]) >>
+     metis_tac[]) >>
   `alloca_frame cenv origin_es caller old cenv es next` by
     (irule alloca_frame_trans >> goal_assum (drule_at Any) >>
      goal_assum (drule_at Any) >> fs[array_caller_frame_def]) >>
