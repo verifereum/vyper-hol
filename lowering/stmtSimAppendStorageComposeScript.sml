@@ -182,7 +182,7 @@ Proof
   Cases_on `tr` >> simp[tload_def, sload_def]
 QED
 
-Theorem append_storage_word_suffix_open[local]:
+Theorem append_storage_word_suffix_open:
   compile_dynarray_append cenv bop vop 1 1 dt vt cap T
     (if tr then TLOAD else SLOAD) (if tr then TSTORE else SSTORE) sb = ((),sf) ==>
   ~block_is_terminated sf
@@ -333,7 +333,7 @@ Proof
        contract_transient_def, contract_storage_def]
 QED
 
-Theorem append_storage_word_suffix_no_gas[local]:
+Theorem append_storage_word_suffix_no_gas:
   compile_dynarray_append cenv bop vop 1 1 dt st cap T
     (if tr then TLOAD else SLOAD) (if tr then TSTORE else SSTORE) sa = ((),sf) ==>
   EVERY (\i. i.inst_opcode <> GAS) (emitted_insts sa sf)
@@ -348,7 +348,7 @@ Proof
   simp[mk_inst_def]
 QED
 
-Theorem append_storage_word_suffix_code[local]:
+Theorem append_storage_word_suffix_code:
   compile_dynarray_append cenv bop vop 1 1 dt vt cap T
     (if tr then TLOAD else SLOAD) (if tr then TSTORE else SSTORE) sb = ((),sf) /\
   fn_has_code sb sf func /\ s.vs_current_bb = sb.cs_current_bb /\

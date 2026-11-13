@@ -24,21 +24,6 @@ Proof
   simp[mk_inst_def]
 QED
 
-Theorem append_storage_word_suffix_open_mem:
-  compile_dynarray_append cenv bop vop 1 1 dt vt cap T
-    (if tr then TLOAD else SLOAD) (if tr then TSTORE else SSTORE) sb = ((),sf) ==>
-  ~block_is_terminated sf
-Proof
-  Cases_on `tr` >>
-  simp[compile_dynarray_append_def, comp_bind_def, comp_ignore_bind_def,
-       comp_return_def, emit_op_def, emit_void_def, fresh_id_def, fresh_var_def,
-       emit_def] >> strip_tac >> gvs[] >>
-  pure_rewrite_tac [GSYM listTheory.APPEND_ASSOC] >>
-  Cases_on `sb.cs_current_insts` >>
-  simp[block_is_terminated_def, mk_inst_def, is_terminator_def,
-       listTheory.LAST_CONS_cond, rich_listTheory.LAST_APPEND_NOT_NIL]
-QED
-
 Theorem append_storage_word_suffix_mem_ok:
   compile_dynarray_append cenv bop vop 1 1 dt vt cap T
     (if tr then TLOAD else SLOAD) (if tr then TSTORE else SSTORE) sa = ((),sf) ==>

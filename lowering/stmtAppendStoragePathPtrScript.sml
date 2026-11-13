@@ -8,43 +8,6 @@ Ancestors
   fragGasPath stmtSimAppendStorage emittedSeqComposePtr ptrDiscipline
   finite_map stmtFragPtr words
 
-Theorem append_storage_word_suffix_no_gas:
-  compile_dynarray_append cenv bop vop 1 1 dt st cap T
-    (if tr then TLOAD else SLOAD) (if tr then TSTORE else SSTORE) sa = ((),sf) ==>
-  EVERY (\i. i.inst_opcode <> GAS) (emitted_insts sa sf)
-Proof
-  Cases_on `tr` >>
-  simp[compile_dynarray_append_def, comp_bind_def, comp_ignore_bind_def,
-       comp_return_def, emit_op_def, emit_void_def, fresh_id_def, fresh_var_def,
-       emit_def] >> strip_tac >> gvs[] >>
-  simp[emitted_insts_def] >>
-  pure_rewrite_tac [GSYM listTheory.APPEND_ASSOC,
-                   rich_listTheory.DROP_LENGTH_APPEND] >>
-  simp[mk_inst_def]
-QED
-
-Theorem append_storage_word_suffix_code:
-  compile_dynarray_append cenv bop vop 1 1 dt vt cap T
-    (if tr then TLOAD else SLOAD) (if tr then TSTORE else SSTORE) sb = ((),sf) /\
-  fn_has_code sb sf func /\ s.vs_current_bb = sb.cs_current_bb /\
-  s.vs_inst_idx = LENGTH sb.cs_current_insts ==>
-  ?bb. lookup_block s.vs_current_bb func.fn_blocks = SOME bb /\
-    isPREFIX (emitted_insts sb sf) (DROP s.vs_inst_idx bb.bb_instructions) /\
-    s.vs_inst_idx + LENGTH (emitted_insts sb sf) = LENGTH sf.cs_current_insts /\
-    EVERY (\i. i.inst_opcode <> GAS /\ i.inst_opcode <> INVOKE /\
-               ~is_terminator i.inst_opcode /\ ~is_ext_call_op i.inst_opcode)
-      (emitted_insts sb sf)
-Proof
-  strip_tac >>
-  drule append_storage_word_suffix_no_gas >> strip_tac >>
-  drule append_storage_word_suffix_structure >> strip_tac >>
-  gvs[fn_has_code_def, same_blocks_def, inst_extends_def, IS_PREFIX_APPEND] >>
-  conj_tac
-  >- (qexists_tac `l` >>
-      REWRITE_TAC[GSYM listTheory.APPEND_ASSOC, rich_listTheory.DROP_LENGTH_APPEND]) >>
-  fs[EVERY_MEM]
-QED
-
 (* Unlike the general abort lift, this interface records that no GAS can
    occur in the executed prefix. The unexecuted tail needs no certificate. *)
 Theorem run_inst_seq_abort_zero_path_ptr:

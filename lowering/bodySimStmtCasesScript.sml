@@ -47,6 +47,7 @@
 
 Theory bodySimStmtCases
 Ancestors
+  bodyAppendResolvedCases
   bodyAssignTupleWidenedPrep stmtSimAssignTuplePlaces
   loweringStateRelDefs valueEncodingProps bodyAssignTupleOther assignRelayoutFrag assignRelayoutCaller annassignRelayoutSource
   exprSimSource bodyExprPreFacts exprSimTopLevelProps stmtSimBreak stmtSimContinue stmtSimExpr stmtSimSeqEnv stmtSimPass stmtSimProps exprSimHypsDefs stmtSimZero stmtSimDefs loweringPosts bodyAppendStorageFacts bodyAppendStorageAdapter
@@ -538,8 +539,6 @@ Proof
   rewrite_tac[body_stmt_ok_def] >> disch_then drule_all >> simp[]
 QED
 
-(* supported_append_target admits no local, subscript or attribute target
-   (#549, #559), so the storage root is the only form. *)
 Theorem body_append_case:
   !cx t e.
     (!s'' p t'. eval_target_place cx t s'' = (INL p,t') ==> body_expr_ok cx e) /\
@@ -548,8 +547,7 @@ Theorem body_append_case:
 Proof
   rpt strip_tac >> Cases_on `?nid. t = TopLevelNameTarget nid`
   >- (gvs[] >> irule body_append_storage_other >> first_assum ACCEPT_TAC) >>
-  Cases_on `t` >> gvs[] >>
-  rw[body_stmt_ok_def, supported_stmt_def, supported_append_target_def]
+  metis_tac[body_append_resolved_case]
 QED
 
 (* ===== Assignments ===== *)

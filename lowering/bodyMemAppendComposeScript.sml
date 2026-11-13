@@ -52,7 +52,7 @@ Proof
   disch_then (mp_tac o MATCH_MP eval_append_storage_bind) >>
   disch_then (fn th => RULE_ASSUM_TAC (REWRITE_RULE [th]) >> REWRITE_TAC [th]) >>
   drule forced_then_admissible >> strip_tac >>
-  `~block_is_terminated sb` by metis_tac[append_storage_word_suffix_open_mem] >>
+  `~block_is_terminated sb` by metis_tac[append_storage_word_suffix_open] >>
   irule forced_then_outcome >> conj_tac
   >- (rpt strip_tac >> simp[stmt_exit_def] >> metis_tac[expr_exit_INR_type]) >>
   qexists_tac `\v ee t.
