@@ -187,6 +187,11 @@ Proof
   `local_ptrs_reserved ce sc /\ ret_pc_ok ce sc s0 /\
    stmt_state_rel fp.jc_ctx fp.jc_func ce fp.jc_cx es s0` by
     fs[intcall_joint_res_def, intcall_expr_res_def] >>
+  `EVERY scope_well_typed es.scopes` by
+    fs[intcall_joint_res_def, intcall_expr_res_def, expr_sim_inv_def,
+       state_well_typed_def] >>
+  `value_has_type (ArrayTV tv (Fixed (LENGTH vs))) (ArrayV (SArrayV al))` by
+    metis_tac[vyperTypeEnvTheory.scope_well_typed_lookup_scopes] >>
   `!l. FLOOKUP ce.ce_vars id = SOME l ==> ?q z. l = PtrVar q z` by simp[] >>
   drule_all compile_for_array_code_ready_framed >> strip_tac >>
   `bc.ce_return_pc = ce.ce_return_pc` by
