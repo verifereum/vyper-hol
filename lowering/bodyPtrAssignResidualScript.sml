@@ -15,7 +15,7 @@ Theory bodyPtrAssignResidual
 Ancestors
   assignScalarTargetFramePtr assignTupleTargetOutcomePtr assignTupleStoreBoundsPtr
   assignTupleStoreOpenPtr assignTupleTargetSourcePtr assignTupleWordStorageTailPtr
-  assignTupleBytesStorageTailPtr
+  assignTupleBytesStorageTailPtr dynarrayFreeProps
   assignDynStorageAddressPtr assignStorageBlockFramePtr assignDynStorageDataPtr
   assignStorageHeaderFramePtr assignStoragePrefixLivePtr
   aggregateLocalStorePtr assignDynStorageCompiledPtr
