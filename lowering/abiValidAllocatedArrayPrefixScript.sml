@@ -103,8 +103,8 @@ Theorem abi_valid_allocated_effect_refl:
   stmt_state_rel (H:(bool # bytes32 # type_value) list # num list) ctx func cenv cx es s ==>
   abi_valid_allocated_effect ctx func cenv cx es next sites dstid d n s s
 Proof
-  simp[abi_valid_allocated_effect_def, abi_malformed_resource_refl,
-       abi_valid_allocated_frame_refl]
+  strip_tac >> drule abi_malformed_resource_refl >>
+  simp[abi_valid_allocated_effect_def, abi_valid_allocated_frame_refl]
 QED
 
 (* Code layout is a consumer premise, not part of the memory invariant. *)
