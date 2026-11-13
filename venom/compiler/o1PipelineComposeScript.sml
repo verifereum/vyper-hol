@@ -566,7 +566,7 @@ Proof
   >- (simp[] >> rpt strip_tac >> first_x_assum irule >> simp[]) >>
   strip_tac >>
   `pass_fuel (EL (PRE n) o1_fn_passes) (stage n) = I` by
-    (irule pass_fuel_walk_I >> fs[o1_fn_passes_def]) >>
+    (irule pass_fuel_walk_I >> fs[o1_fn_passes_def] >> Cases_on `n` >> fs[]) >>
   `pass_fuel (EL n o1_fn_passes) (stage (SUC n)) =
    pass_fuel (EL n o1_fn_passes) (stage (SUC n)) o I` by
     simp[combinTheory.I_o_ID] >>
