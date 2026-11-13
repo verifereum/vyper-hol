@@ -58,6 +58,16 @@ lowering/fragGasPathPtrScript.sml; the per-step check `ptr_safe_step`,
 3. No duplicate lemmas: search before adding one; reuse what exists.
 4. No `TRY`/`ORELSE` around `metis_tac` or other search; select goals with
    `>~`, `>-`, `>|`. No step near the 2.5 s tactic timeout (never raise it).
+4. The typed memory store is proved canonically on this base (merged
+   5caccb2c1): `widenedAssignPtrCopyRecursive.widened_assign_typed_store_counted_ptr`
+   (lowering/widenedAssignPtrCopyRecursiveScript.sml) for
+   `compile_store_memory_typed`, and
+   `aggregateStorePtr.compile_store_memory_aggregate_counted_ptr`
+   (lowering/aggregateStorePtrScript.sml) for the aggregate
+   `compile_store_memory` dispatch. Use them for the normalize branch's
+   store (including any planned `widened_normalize_recursive_counted_ptr`).
+   Do not prove a local copy of the typed memory store; if the given lemma
+   doesn't fit, stop and report.
 
 **If the theorem is false as stated:** give a concrete counterexample and
 the tightest fix. Do NOT weaken the statement.
