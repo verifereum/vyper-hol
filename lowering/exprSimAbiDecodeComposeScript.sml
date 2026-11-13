@@ -62,13 +62,13 @@ Theorem abi_decode_normal_prefix_summary:
   fn_has_code start final func /\ fn_inst_ids_distinct func /\
   gas_marked_exec F (ctx,func) (bind (eval_expr cx e) (read_result cx))
     (es,s0) marks (INL v) ee (OK s) /\
-  expr_post ctx func ce cx e es sa start s0 (ee with gas_obs := []) v data s /\
+  expr_post H ctx func ce cx e es sa start s0 (ee with gas_obs := []) v data s /\
   ~s.vs_halted /\ s.vs_current_bb = start.cs_current_bb /\
   s.vs_inst_idx = LENGTH start.cs_current_insts ==>
   gas_summary_at F (ctx,func) marks
     (eval_expr cx (TypeBuiltin ann (AbiDecode unwrap) ty [e])) (es,s0)
     (\res es1 t. ?tv. res = INL tv /\
-      vv_post ctx func ce cx (TypeBuiltin ann (AbiDecode unwrap) ty [e]) es sa final s0
+      vv_post H ctx func ce cx (TypeBuiltin ann (AbiDecode unwrap) ty [e]) es sa final s0
         es1 tv (LocatedValue ann (mk_ptr out LocMemory)) t /\
       t.vs_current_bb = final.cs_current_bb /\ t.vs_inst_idx = LENGTH final.cs_current_insts)
     (\res es1 r. expr_exit res r)
