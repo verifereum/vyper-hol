@@ -1,6 +1,7 @@
 (* Storage old-value loading from readiness after target evaluation. *)
 Theory augAssignPlaceReadyStorage
 Ancestors
+  vyperFiniteStoragePreservation
   augAssignPlaceMemoryTarget augAssignPlaceSourceMemory
   bodyAugAssignOther bodyMemoryDefs exprSimHyps vyperInterpreter exprSimMemDefs
   stmtSimAugAssignPlaceStorage exprSimHypsDefs exprSimProps

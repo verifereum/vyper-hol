@@ -133,6 +133,7 @@ Theorem aug_place_storage_read_path:
   contract_storage_well_formed cx es /\
   EVERY (supported_pure_expr tops) (target_indices bt) /\
   eval_target_place cx bt es = (INL (StoragePlace tr slot tv),st) /\
+  valid_horizon cx st0 H st.storage_trace /\
   target_post H ctx func cenv cx es sa sp s0 st
     (PlaceR (StoragePlace tr slot tv)) (Type ty) r s /\
   is_word_type ty /\
@@ -159,13 +160,15 @@ Theorem aug_place_storage_read_path:
     u.vs_requests = s.vs_requests /\ u.vs_call_ctx = s.vs_call_ctx
 Proof
   rpt strip_tac >>
-  drule_all aug_place_pure_target_storage_range >> strip_tac >>
-  drule_all aug_place_pure_target_storage_live >> strip_tac >>
   `evaluate_type (get_tenv cx) ty = SOME tv /\
    stmt_state_rel H ctx func cenv cx st s /\
+   storage_well_formed_on cx st (FST H) /\
    eval_operand (FST r) s = SOME slot /\
    (!x. FST r = Var x ==> not_fresh_at sp x)` by
     gvs[target_post_def, place_ptr_rel_def] >>
+  qspecl_then [`cx`, `st0`, `H`, `st`, `ty`, `tv`, `bt`, `es`, `tr`, `slot`]
+    mp_tac aug_place_target_storage_ready >>
+  impl_tac >- simp[] >> strip_tac >>
   drule_all aug_place_storage_read_ready >> strip_tac >>
   drule_all aug_place_storage_load_ready >> strip_tac >>
   drule_all aug_place_storage_access_path >> strip_tac >>
