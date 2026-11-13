@@ -10270,29 +10270,36 @@ Proof
      simp[FLAT_APPEND, APPEND_ASSOC] >> strip_tac >>
      simp[GSYM APPEND_ASSOC]) >>
   pop_assum (markerLib.mk_asm "adjacent_invoke_replay") >>
-  `!xs a x b. EVERY (\i. ~is_terminator i.inst_opcode) xs /\
-    R fuel C xs a = OK b ==>
-    E C (xs ++ [x]) a = E C xs a ++ gas_events_step fuel C owner x b` by
-    (rpt strip_tac >> fs[Abbr `R`] >>
+  `!xs st zs u. EVERY (\x. ~is_terminator x.inst_opcode) xs /\
+    R fuel C xs st = OK u ==> E C (xs ++ zs) st = E C xs st ++ E C zs u` by
+    (rpt gen_tac >> strip_tac >> fs[Abbr `R`] >>
      drule_at (Pos last) prefix_events_splice >>
      disch_then (qspecl_then
-       [`owner`, `<|bb_label := a.vs_current_bb; bb_instructions :=
-         REPLICATE a.vs_inst_idx (mk_inst 0 STOP [] []) ++ (xs ++ [x])|>`, `[x]`] mp_tac) >>
-     `a.vs_inst_idx - (LENGTH xs + a.vs_inst_idx) = 0` by decide_tac >>
+       [`owner`, `<|bb_label := st.vs_current_bb; bb_instructions :=
+         REPLICATE st.vs_inst_idx (mk_inst 0 STOP [] []) ++ (xs ++ zs)|>`, `zs`] mp_tac) >>
+     `st.vs_inst_idx - (LENGTH xs + st.vs_inst_idx) = 0` by decide_tac >>
      simp[DROP_APPEND] >> strip_tac >>
      drule_all prefix_ok_cursor >> strip_tac >>
      `gas_events_block fuel C owner
-       <|bb_label := a.vs_current_bb; bb_instructions :=
-         REPLICATE a.vs_inst_idx (mk_inst 0 STOP [] []) ++ (xs ++ [x])|> b =
-      gas_events_block fuel C owner
-       <|bb_label := b.vs_current_bb; bb_instructions :=
-         REPLICATE b.vs_inst_idx (mk_inst 0 STOP [] []) ++ [x]|> b` by
-       (irule gas_events_block_suffix_cong >> qexists_tac `[x]` >>
+        <|bb_label := st.vs_current_bb; bb_instructions :=
+          REPLICATE st.vs_inst_idx (mk_inst 0 STOP [] []) ++ (xs ++ zs)|> u =
+      E C zs u` by
+       (simp[Abbr `E`] >> irule gas_events_block_suffix_cong >> qexists_tac `zs` >>
         simp[DROP_APPEND, DROP_DROP_T, arithmeticTheory.ADD_COMM]) >>
-     simp[Abbr `E`] >>
-     fs[APPEND_ASSOC] >>
-     simp[Once gas_events_block_def, venomInstTheory.get_instruction_def,
-       EL_APPEND_EQN] >>
+     qpat_assum `gas_events_block fuel C owner _ u = _`
+       (assume_tac o SIMP_RULE (srw_ss()) [APPEND_ASSOC]) >>
+     qpat_assum `gas_events_block fuel C owner _ st = _`
+       (assume_tac o SIMP_RULE (srw_ss()) [APPEND_ASSOC]) >>
+     simp[Abbr `E`, APPEND_ASSOC]) >>
+  pop_assum (markerLib.mk_asm "events_append_ok") >>
+  `!xs a x b. EVERY (\i. ~is_terminator i.inst_opcode) xs /\
+    R fuel C xs a = OK b ==>
+    E C (xs ++ [x]) a = E C xs a ++ gas_events_step fuel C owner x b` by
+    (rpt strip_tac >>
+     asm "events_append_ok" (qspecl_then [`xs`, `a`, `[x]`, `b`] mp_tac) >>
+     simp[] >> disch_then SUBST1_TAC >>
+     simp[Abbr `E`, Once gas_events_block_def,
+       venomInstTheory.get_instruction_def, EL_APPEND_EQN] >>
      Cases_on `step_inst fuel C x b` >> simp[] >>
      simp[Once gas_events_block_def, venomInstTheory.get_instruction_def]) >>
   pop_assum (markerLib.mk_asm "event_splice") >>
@@ -10885,7 +10892,7 @@ Proof
              `pout <> out` by
                (qpat_assum `~MEM out (EL k pre).inst_outputs` mp_tac >>
                 qpat_assum `(EL k pre).inst_outputs = [pout]` (fn th =>
-                  simp_tac (srw_ss()) [th]) >> metis_tac[]) >>
+                  simp_tac (srw_ss()) [th, EQ_SYM_EQ])) >>
              qpat_x_assum `gs = [h]` SUBST_ALL_TAC >>
              qpat_x_assum `a.vs_gas_readings = _` mp_tac >>
              simp_tac (srw_ss()) [APPEND] >> disch_tac >>
@@ -11637,28 +11644,6 @@ Proof
                ACCEPT_TAC (MATCH_MP th (CONJ guard noOK))
              end))))) >>
   pop_assum (markerLib.mk_asm "append_stopped") >>
-  `!xs st zs u. EVERY (\x. ~is_terminator x.inst_opcode) xs /\
-    R fuel C xs st = OK u ==> E C (xs ++ zs) st = E C xs st ++ E C zs u` by
-    (rpt gen_tac >> strip_tac >> fs[Abbr `R`] >>
-     drule_at (Pos last) prefix_events_splice >>
-     disch_then (qspecl_then
-       [`owner`, `<|bb_label := st.vs_current_bb; bb_instructions :=
-         REPLICATE st.vs_inst_idx (mk_inst 0 STOP [] []) ++ (xs ++ zs)|>`, `zs`] mp_tac) >>
-     `st.vs_inst_idx - (LENGTH xs + st.vs_inst_idx) = 0` by decide_tac >>
-     simp[DROP_APPEND] >> strip_tac >>
-     drule_all prefix_ok_cursor >> strip_tac >>
-     `gas_events_block fuel C owner
-        <|bb_label := st.vs_current_bb; bb_instructions :=
-          REPLICATE st.vs_inst_idx (mk_inst 0 STOP [] []) ++ (xs ++ zs)|> u =
-      E C zs u` by
-       (simp[Abbr `E`] >> irule gas_events_block_suffix_cong >> qexists_tac `zs` >>
-        simp[DROP_APPEND, DROP_DROP_T, arithmeticTheory.ADD_COMM]) >>
-     qpat_assum `gas_events_block fuel C owner _ u = _`
-       (assume_tac o SIMP_RULE (srw_ss()) [APPEND_ASSOC]) >>
-     qpat_assum `gas_events_block fuel C owner _ st = _`
-       (assume_tac o SIMP_RULE (srw_ss()) [APPEND_ASSOC]) >>
-     simp[Abbr `E`, APPEND_ASSOC]) >>
-  pop_assum (markerLib.mk_asm "events_append_ok") >>
   `!xs st n m. terminates (R n C xs st) /\ n <= m ==>
     R m C xs st = R n C xs st` by
     (simp[Abbr `R`] >> Induct_on `xs`
