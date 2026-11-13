@@ -6,6 +6,41 @@ Ancestors
   loweringStateRelDefs e2eDefs nonreentrantEquiv transientLockFrameProps
   vyperTypeContract vyperInterpreter vyperState
   compileEnv context venomState exprLoweringProps vyperStorageFootprint
+  bodyPtrDefs nonreentrantSource sourceUnitExecution pred_set words
+
+(* Horizon lock words cannot carry relocation taint. *)
+Theorem nonreentrant_slot_untainted:
+  stor_taint_ok H cx tn ss /\
+  MEM nkey (SND H) /\ nkey < dimword (:256) ==>
+  !b. ~((n2w nkey, b) IN tn.t_trans)
+Proof
+  strip_tac >>
+  `!b. ~storage_dead H T
+    (ss.vs_transient ss.vs_call_ctx.cc_address)
+    (w2n ((n2w nkey):bytes32)) b` by
+    (gen_tac >> irule nonreentrant_storage_live >> simp[]) >>
+  fs[stor_taint_ok_def, cx_dead_def] >>
+  Cases_on `ss.vs_call_ctx.cc_address = cx.txn.target` >>
+  gvs[SUBSET_DEF] >> qx_gen_tac `b` >> strip_tac >>
+  qpat_x_assum `!x. x IN tn.t_trans ==> _`
+    (qspec_then `(n2w nkey,b)` mp_tac) >>
+  simp[wordsTheory.w2n_n2w, arithmeticTheory.LESS_MOD]
+QED
+
+(* Writing a separated lock leaves the horizon's dead-byte mask intact. *)
+Theorem nonreentrant_stor_taint_frame:
+  storage_locks_separated (FST H) (SND H) /\
+  MEM nkey (SND H) /\ nkey < dimword (:256) /\
+  stor_taint_ok H cx tn ss ==>
+  stor_taint_ok H cx tn (tstore (n2w nkey) value ss)
+Proof
+  strip_tac >>
+  `!st j b. storage_dead H T (update_storage (n2w nkey) value st) j b =
+             storage_dead H T st j b` by
+    (rpt gen_tac >> irule nonreentrant_storage_dead_frame >> simp[]) >>
+  gvs[stor_taint_ok_def, cx_dead_def, tstore_def,
+      combinTheory.APPLY_UPDATE_THM]
+QED
 
 Theorem source_typing_function_header:
   source_typing_ok tops am tx /\
