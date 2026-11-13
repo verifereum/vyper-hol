@@ -819,7 +819,10 @@ Resume typed_copy_origin_ptr_dynarray_fast_data_path[mul_ghost]:
     adopt_reset_def, imm_taint_def, codegenRelTheory.source_memory_write_ranges_def,
     venomStateTheory.update_var_def, finite_mapTheory.FLOOKUP_DEF,
     venomStateTheory.eval_operand_def, finite_mapTheory.DRESTRICT_UNIV,
-    pred_setTheory.EXTENSION, taint_component_equality] >> metis_tac[]
+    pred_setTheory.EXTENSION, taint_component_equality] >>
+  qpat_x_assum `op_taint tn (Var lv) = {}` mp_tac >>
+  simp[op_taint_def, finite_mapTheory.FLOOKUP_DEF] >>
+  Cases_on `lv IN FDOM tn.t_var` >> simp[] >> metis_tac[]
 QED
 
 Resume typed_copy_origin_ptr_dynarray_fast_data_path[copy_ghost]:
