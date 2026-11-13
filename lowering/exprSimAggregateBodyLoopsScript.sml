@@ -500,7 +500,7 @@ Theorem aggregate_body_make_tuple_nested_sim:
   OPT_MMAP (evaluate_type (get_tenv cx)) tys = SOME tvs /\
   expr_sim_inv ce cx env es /\
   (!e st. MEM e args /\ expr_sim_inv ce cx env st ==>
-    expr_body_pre ce cx env e st /\ (F ==> int_calls_expr e = [])) /\
+    expr_body_pre ce cx env e st) /\
   exprs_case F ctx func ce cx args /\
   acyclic_struct_metadata ce.ce_struct_fields /\
   fn_has_code sa sb func /\ fn_inst_ids_distinct func /\
@@ -633,6 +633,7 @@ Proof
   mp_tac (SPEC_ALL aggregate_body_make_tuple_nested_sim) >>
   impl_tac
   >- (rpt conj_tac >> TRY (first_assum ACCEPT_TAC) >>
+      TRY (first_assum (ACCEPT_TAC o SRULE [])) >>
       irule aggregate_member_not_flat >> simp[]) >>
   simp[]
 QED
