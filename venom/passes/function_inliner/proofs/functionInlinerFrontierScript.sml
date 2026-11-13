@@ -149,3 +149,65 @@ Proof
   fs[inliner_input_ok_def, EVERY_MEM] >>
   metis_tac[fn_insts_def, unitShapeDefsTheory.MEM_fn_insts_blocks_iff]
 QED
+
+(* All snapshots, including immutable activation entries, share the root's
+   allocation frontier.  This is deliberately separate from storage/Live. *)
+Definition inline_frontier_stack_def:
+  inline_frontier_stack entries frame <=>
+    frame.ipf_state.vs_alloca_next = frame.ipf_anchor.vs_alloca_next /\
+    EVERY (\(p,a,route,snap).
+      snap.ils_state.vs_alloca_next = frame.ipf_anchor.vs_alloca_next /\
+      snap.ils_saved.vs_alloca_next = frame.ipf_anchor.vs_alloca_next /\
+      snap.ils_entry.vs_alloca_next = frame.ipf_anchor.vs_alloca_next /\
+      a.ia_entry.vs_alloca_next = frame.ipf_anchor.vs_alloca_next) entries
+End
+
+Theorem inline_frontier_stack_head:
+  inline_frontier_stack ((p,a,route,snap)::rest) frame ==>
+    snap.ils_state.vs_alloca_next = frame.ipf_state.vs_alloca_next /\
+    snap.ils_saved.vs_alloca_next = frame.ipf_state.vs_alloca_next /\
+    snap.ils_entry.vs_alloca_next = frame.ipf_state.vs_alloca_next /\
+    a.ia_entry.vs_alloca_next = frame.ipf_state.vs_alloca_next
+Proof simp[inline_frontier_stack_def]
+QED
+
+Theorem inline_frontier_stack_pop:
+  inline_frontier_stack (entry::rest) frame ==>
+  inline_frontier_stack rest frame
+Proof simp[inline_frontier_stack_def]
+QED
+
+Theorem inline_frontier_stack_physical_update:
+  inline_frontier_stack entries frame /\
+  t.vs_alloca_next = frame.ipf_state.vs_alloca_next ==>
+  inline_frontier_stack entries (frame with ipf_state := t)
+Proof simp[inline_frontier_stack_def]
+QED
+
+Theorem inline_frontier_stack_push:
+  inline_frontier_stack entries frame /\
+  snap.ils_state.vs_alloca_next = frame.ipf_state.vs_alloca_next /\
+  snap.ils_saved.vs_alloca_next = frame.ipf_state.vs_alloca_next /\
+  snap.ils_entry.vs_alloca_next = frame.ipf_state.vs_alloca_next /\
+  a.ia_entry.vs_alloca_next = frame.ipf_state.vs_alloca_next ==>
+  inline_frontier_stack ((p,a,route,snap)::entries) frame
+Proof simp[inline_frontier_stack_def]
+QED
+
+Theorem inline_frontier_stack_root:
+  snap.ils_state = s /\ snap.ils_saved = s /\ snap.ils_entry = s /\
+  a.ia_entry = s ==>
+  inline_frontier_stack [(p,a,route,snap)]
+    <|ipf_state := s; ipf_anchor := s|>
+Proof simp[inline_frontier_stack_def]
+QED
+
+Theorem inline_frontier_stack_head_update:
+  inline_frontier_stack ((p,a,route,snap)::rest) frame /\
+  s.vs_alloca_next = snap.ils_state.vs_alloca_next /\
+  t.vs_alloca_next = frame.ipf_state.vs_alloca_next ==>
+  inline_frontier_stack
+    ((p,a,route,snap with ils_state := s)::rest)
+    (frame with ipf_state := t)
+Proof simp[inline_frontier_stack_def] >> metis_tac[]
+QED
