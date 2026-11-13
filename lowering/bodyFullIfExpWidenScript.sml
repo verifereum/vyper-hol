@@ -14,6 +14,8 @@ Ancestors
   ctorDeployMemoryRunPtrMono exprOperandVar exprSimVVFrame exprSimProps
   venomExecSemantics loweringStateRelDefs finite_map robustCopyTransportPtr
   exprSimUnwrap loweringHalt context exprSimAlloc
+  representationCleanPtr valueCopyBytes valueTypingMemoryProps vfmConstants
+  vyperTyping valueEncoding venomMemProofs valueEncodingDefs valueEncodingProps exprSimHyps
 
 (* Conditional ghost boundary for the actual copy endpoint.  The window
    premises are the bytewise consequences of the copy's memory/taint equations;
@@ -445,6 +447,51 @@ Proof
   Cases_on `vv_operand vv` >>
   simp[eval_operand_def, lookup_var_def, FLOOKUP_UPDATE, op_prov_def, op_taint_def] >>
   metis_tac[]
+QED
+
+Theorem ifexp_widen_source_resources:
+  compile_ifexp_arm cenv dstty armty vv sm = (op,sb) /\
+  is_bytestring_type t /\ ~is_word_type t /\
+  evaluate_type (get_tenv cx) t = SOME rt /\
+  value_has_type rt v /\ type_memory_size rt < 2**64 /\
+  ptr_val_ok cx t v src G tn s /\ eval_operand src s = SOME a ==>
+  ?x len n.
+    src = Var x /\ lookup_var x s = SOME a /\
+    n = 32 + 32*((len+31) DIV 32) /\ n = val_store_size rt v /\
+    val_footprint rt v <= n /\ n <= type_memory_size rt /\
+    len+31 < dimword(:256) /\ n < dimword(:256) /\
+    mload (w2n a) s = n2w len /\ ptr_covers G tn x s n /\
+    (!i. w2n a <= i /\ i < w2n a+32 ==> i NOTIN tn.t_mem)
+Proof
+  strip_tac >>
+  `(?k. rt = BaseTV (BytesT (Dynamic k))) \/
+   (?k. rt = BaseTV (StringT k))` by metis_tac[bytestring_type_value] >>
+  `op_taint tn src = {}` by fs[ptr_val_ok_def] >>
+  `(!mem. mem_agree_outside tn.t_mem s.vs_memory mem ==>
+       val_in_memory rt v (w2n a) mem) /\
+   (val_footprint rt v <> 0 ==> ?x b sz. src = Var x /\
+       FLOOKUP G x = SOME (b,sz) /\ b <= w2n a /\
+       w2n a + val_store_size rt v <= b+sz)` by
+    (fs[ptr_val_ok_def, ptr_mem_ok_def] >> metis_tac[]) >>
+  Cases_on `v` >> gvs[value_has_type_def] >>
+  rename1 `LENGTH payload <= k` >>
+  `!mem. mem_agree_outside tn.t_mem s.vs_memory mem ==>
+      mem_word_at (w2n a) mem = n2w (LENGTH payload)` by
+    (rpt strip_tac >> first_x_assum drule >> simp[val_in_memory_def]) >>
+  `!i. w2n a <= i /\ i < w2n a+32 ==> i NOTIN tn.t_mem` by
+    (drule robust_mem_word_at_clean >> simp[]) >>
+  `mload (w2n a) s = n2w (LENGTH payload)` by
+    (qpat_x_assum `!mem. _ ==> mem_word_at _ _ = _`
+       (qspec_then `s.vs_memory` mp_tac) >>
+     simp[mem_agree_outside_def, mem_word_at_eq_mload]) >>
+  gvs[val_footprint_def, val_store_size_def] >>
+  qexists `LENGTH payload` >>
+  `32 * word_size (LENGTH payload) + 32 <= 32 * word_size k + 32` by
+    (imp_res_tac word_size_monotone >> decide_tac) >>
+  `LENGTH payload <= 32 * word_size (LENGTH payload)` by
+    simp[word_size_capacity] >>
+  gvs[type_memory_size_def, ptr_covers_def, eval_operand_def,
+      word_size_def, wordsTheory.dimword_def]
 QED
 
 Theorem ifexp_widen_arm_step_full:
