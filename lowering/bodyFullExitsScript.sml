@@ -143,7 +143,7 @@ Proof
      simp[]) >>
   `alloca_history func (jump_to lbl s0)` by
     (irule alloca_history_jump >> simp[jump_to_def] >> metis_tac[]) >>
-  irule gas_outcome_full_pure >>
+  irule gas_outcome_full_pure >> reverse conj_tac >- simp[] >>
   qexistsl_tac [`G0`, `es`, `INR exc`, `jump_to lbl s0`, `tn0`] >>
   simp[raise_def] >> qx_gen_tac `H` >> strip_tac >>
   qpat_x_assum `!H. valid_horizon _ _ H _ ==> _` (qspec_then `H` mp_tac) >>
@@ -360,7 +360,7 @@ Resume compile_assert_frag_full[selected]:
 QED
 
 Resume compile_assert_frag_full[true]:
-  irule gas_outcome_full_pure >>
+  irule gas_outcome_full_pure >> reverse conj_tac >- simp[] >>
   qexistsl_tac [`G1`, `mid`, `INL ()`, `jump_to ok t`, `tn1`] >>
   simp[return_def] >> qx_gen_tac `H` >> strip_tac >>
   conj_tac >- (first_x_assum (qspec_then `DF H` mp_tac) >> simp[]) >>
