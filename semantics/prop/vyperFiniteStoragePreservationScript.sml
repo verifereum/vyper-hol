@@ -1010,13 +1010,25 @@ Proof
   `MAP expr_type es = TAKE (LENGTH es) (MAP SND params)` by metis_tac[] >>
   `LIST_REL (type_widens_to (get_tenv cx)) (MAP expr_type es)
      (TAKE (LENGTH es) (MAP SND params))` by
-    (simp[LIST_REL_EL_EQN, type_widens_to_def]) >>
+    (qpat_assum `MAP expr_type es = TAKE (LENGTH es) (MAP SND params)`
+       (fn th => PURE_REWRITE_TAC [GSYM th]) >>
+     simp[LIST_REL_EL_EQN, type_widens_to_def]) >>
   `LENGTH params - LENGTH es <= LENGTH dflts` by (gvs[]) >>
   drule_at (Pos hd) vyperTypeBindArgumentsTheory.intcall_bind_arguments_from_runtime_typed >>
   disch_then (drule_at (Pat `exprs_runtime_typed (defaults_env _) _ _`)) >>
   disch_then (drule_at (Pat `MAP expr_type _ = MAP SND _`)) >>
   disch_then (qspecl_then [`cx with stk updated_by CONS (src_id_opt,fn)`, `defaults_st`] mp_tac) >>
-  (impl_tac >- (simp[vyperContextTheory.get_tenv_def] >> conj_tac >- gvs[] >> metis_tac[])) >> strip_tac >>
+  (impl_tac >-
+     (simp[vyperContextTheory.get_tenv_def] >> conj_tac
+      >- (qpat_assum `MAP expr_type es = TAKE (LENGTH es) (MAP SND params)`
+            (fn th => PURE_REWRITE_TAC [GSYM th]) >>
+          simp[LIST_REL_EL_EQN, type_widens_to_def]) >>
+      conj_tac
+      >- (qpat_assum `LENGTH es <= LENGTH sig.param_types` mp_tac >>
+          qpat_assum `sig.param_types = MAP SND params` (fn th => rewrite_tac[th]) >>
+          simp[]) >>
+      rpt strip_tac >>
+      qpat_assum `!id typ. MEM (id,typ) params ==> _` drule >> simp[])) >> strip_tac >>
   `call_env' = call_env` by
     (qpat_assum `bind_arguments _ _ _ = SOME call_env'` mp_tac >>
      qpat_assum `lift_option_type _ "IntCall bind_arguments" _ = _` mp_tac >>
