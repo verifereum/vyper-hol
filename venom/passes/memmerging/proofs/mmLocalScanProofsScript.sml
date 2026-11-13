@@ -20164,6 +20164,94 @@ Proof
   qexists `t` >> simp[]
 QED
 
+Theorem mm_local_calldata_final_extent[local]:
+  wf_ssa fn0 /\ ir_supply_covers_fn supply fn0 /\
+  index < LENGTH fn0.fn_blocks /\ k <= 4 /\
+  mm_local_prefix fn0 supply index k = (bb,sk) /\
+  ALL_DISTINCT (MAP (\i. i.inst_id) bb.bb_instructions) /\
+  (!j. j < LENGTH bb.bb_instructions ==> (H j).vs_call_ctx.cc_calldata = cd) /\
+  (!j dst v src. j < LENGTH bb.bb_instructions /\
+    (EL j bb.bb_instructions).inst_opcode = MSTORE /\
+    (EL j bb.bb_instructions).inst_operands = [Lit dst; Var v] /\
+    FLOOKUP (FOLDL (scan_inst (dfg_build_function fn0) CalldataMerge)
+      empty_scan_state (TAKE j bb.bb_instructions)).ss_loads v = SOME src ==>
+    lookup_var v (H j) = SOME (word_of_bytes T (0w:bytes32)
+      (TAKE 32 (DROP src cd ++ REPLICATE 32 0w)))) /\
+  MEM g (scan_block (dfg_build_function fn0) CalldataMerge bb).ss_flushed ==>
+  mm_local_group_coverage bb.bb_instructions (LENGTH bb.bb_instructions)
+    (mm_local_calldata_capture bb.bb_instructions H (LENGTH bb.bb_instructions)) g /\
+  mm_local_group_endpoint bb.bb_instructions (LENGTH bb.bb_instructions)
+    (mm_local_calldata_capture bb.bb_instructions H (LENGTH bb.bb_instructions)) g
+Proof
+  strip_tac >>
+  `!t. t <= LENGTH bb.bb_instructions ==>
+    mm_local_scan_every
+      (\g. mm_local_group_coverage bb.bb_instructions (LENGTH bb.bb_instructions)
+        (mm_local_calldata_capture bb.bb_instructions H (LENGTH bb.bb_instructions)) g /\
+      mm_local_group_endpoint bb.bb_instructions (LENGTH bb.bb_instructions)
+        (mm_local_calldata_capture bb.bb_instructions H (LENGTH bb.bb_instructions)) g)
+      (FOLDL (scan_inst (dfg_build_function fn0) CalldataMerge)
+        empty_scan_state (TAKE t bb.bb_instructions))` by
+    (gen_tac >> strip_tac >> irule mm_local_calldata_scan_extent >>
+     simp[] >> conj_tac >- (qexists `cd` >> simp[]) >>
+     qexistsl [`index`,`k`,`sk`,`supply`] >> simp[]) >>
+  first_x_assum (qspec_then `LENGTH bb.bb_instructions` mp_tac) >>
+  gvs[scan_block_def, hard_barrier_def, mm_local_scan_every_def, EVERY_MEM] >>
+  metis_tac[]
+QED
+
+Theorem mm_local_calldata_rep_extent_restrict[local]:
+  ALL_DISTINCT (MAP (\i. i.inst_id) is) /\ r < LENGTH is /\
+  rep_of_group is g = SOME ((EL r is).inst_id,g) /\
+  mm_local_group_coverage is (LENGTH is)
+    (mm_local_calldata_capture is H (LENGTH is)) g /\
+  mm_local_group_endpoint is (LENGTH is)
+    (mm_local_calldata_capture is H (LENGTH is)) g ==>
+  mm_local_group_coverage is (SUC r) (mm_local_calldata_capture is H (SUC r)) g /\
+  mm_local_group_endpoint is (SUC r) (mm_local_calldata_capture is H (SUC r)) g
+Proof
+  strip_tac >>
+  `!j. j < LENGTH is /\ MEM (EL j is).inst_id g.cg_inst_ids ==> j < SUC r` by
+    (rpt strip_tac >> `j <= r` by metis_tac[mm_local_rep_position_max] >> decide_tac) >>
+  `!j. j < SUC r ==> mm_local_calldata_capture is H (SUC r) j =
+     mm_local_calldata_capture is H (LENGTH is) j` by
+    (rpt strip_tac >> irule mm_local_calldata_capture_past >> decide_tac) >>
+  fs[mm_local_group_coverage_def, mm_local_group_endpoint_def] >> metis_tac[]
+QED
+
+Theorem mm_local_calldata_due_capture_indices[local]:
+  wf_ssa fn0 /\ fn_inst_wf fn0 /\ wf_function fn0 /\
+  ir_supply_covers_fn supply fn0 /\ index < LENGTH fn0.fn_blocks /\
+  k <= 4 /\ mm_local_prefix fn0 supply index k = (bb,sk) /\
+  is = bb.bb_instructions /\
+  gs = (scan_block (dfg_build_function fn0) CalldataMerge bb).ss_flushed /\
+  r < LENGTH is /\ MEM g gs /\
+  rep_of_group is g = SOME ((EL r is).inst_id,g) /\
+  due = FILTER (\j. mm_local_rep_index is gs j = r)
+    (mm_local_pending_indices is gs r) ==>
+  !j d bs.
+    (MEM j (due ++ [r]) /\ mm_local_calldata_capture is H (SUC r) j = SOME (d,bs)) <=>
+    (j < SUC r /\ j < LENGTH is /\ MEM (EL j is).inst_id g.cg_inst_ids /\
+      mm_local_calldata_capture is H (SUC r) j = SOME (d,bs))
+Proof
+  strip_tac >>
+  `due = FILTER (\j. j < r /\
+    (EL j is).inst_opcode IN {MSTORE; MCOPY; CALLDATACOPY; DLOADBYTES} /\
+    MEM (EL j is).inst_id g.cg_inst_ids) (COUNT_LIST r)` by
+    (irule mm_local_canonical_due_group >> metis_tac[]) >>
+  `MEM (EL r is).inst_id g.cg_inst_ids` by metis_tac[mm_local_rep_member] >>
+  rpt gen_tac >>
+  Cases_on `mm_local_calldata_capture is H (SUC r) j` >> simp[] >>
+  rename1 `mm_local_calldata_capture is H (SUC r) j = SOME w` >>
+  `j < SUC r /\ j < LENGTH is /\
+    (EL j is).inst_opcode IN {MSTORE; MCOPY; CALLDATACOPY; DLOADBYTES}` by
+    (Cases_on `j < SUC r /\ j < LENGTH is` >>
+     Cases_on `(EL j is).inst_opcode = CALLDATACOPY` >>
+     Cases_on `(EL j is).inst_opcode = MSTORE` >>
+     gvs[mm_local_calldata_capture_def]) >>
+  Cases_on `j = r` >> gvs[MEM_APPEND, MEM_FILTER, MEM_COUNT_LIST]
+QED
+
 Theorem mm_local_payload_due_extent[local]:
   mm_local_group_coverage is n cap g /\
   mm_local_group_endpoint is n cap g /\
