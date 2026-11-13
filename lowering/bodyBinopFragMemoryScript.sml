@@ -75,13 +75,11 @@ Proof
        (strip_assume_tac o REWRITE_RULE [alloca_history_def]) >>
      rewrite_tac[alloca_history_def] >> conj_tac >- simp[] >>
      rpt strip_tac >>
-     rename1 `lookup_block (_ with _).vs_current_bb _ = SOME bb2` >>
      rename1 `get_instruction bb2 k = SOME inst` >>
      `k < s.vs_inst_idx + LENGTH insts` by
-       (qpat_x_assum `k < (_ with _).vs_inst_idx` mp_tac >> simp[]) >>
+       (qpat_x_assum `k < _` mp_tac >> simp[]) >>
      `lookup_block s.vs_current_bb func.fn_blocks = SOME bb2` by
-       (qpat_x_assum `lookup_block (_ with _).vs_current_bb _ = _` mp_tac >>
-        simp[]) >>
+       (qpat_x_assum `lookup_block _ _ = SOME bb2` mp_tac >> simp[]) >>
      `bb2 = bb` by metis_tac[optionTheory.SOME_11] >>
      qpat_x_assum `bb2 = bb` SUBST_ALL_TAC >>
      Cases_on `k < s.vs_inst_idx` >- (simp[] >> metis_tac[]) >>
