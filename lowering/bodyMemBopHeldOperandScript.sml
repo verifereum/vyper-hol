@@ -10,6 +10,7 @@ Ancestors
   exprBopSimProps bodyMemBiKeccakBounds vyperTyping
   vyperEvalExprPreservesScopesDom venomExecSemantics venomInst
   emitHelperProps valueEncoding fragExecMem instMemFrontier venomMemDefs
+  gasStorage vyperStorageFootprint vyperStorageTrace
   fragGasSeqMem allocaHistoryFragment
 Libs
   pairLib
