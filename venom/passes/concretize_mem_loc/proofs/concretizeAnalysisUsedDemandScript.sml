@@ -146,7 +146,9 @@ Theorem concretize_untainted_incoming_read_liveset:
       ?addrs. FLOOKUP (context_mem_livesets (concretize_memloc_fuel owner)
         observed.cu_context owner bp (cfg_analyze owner)) (Allocation aid) = SOME addrs /\ MEM p addrs)
 Proof
-  strip_tac >> drule_all concretize_untainted_incoming_read_liveat >> strip_tac >>
+  strip_tac >>
+  `ctx_has_dalloca C ==> byte < w2n vs0.vs_initial_fmp` by simp[] >>
+  drule_all concretize_untainted_incoming_read_liveat >> strip_tac >>
   qexistsl_tac [`k`,`aid`,`owner`,`d`] >>
   rpt (conj_tac >- first_assum ACCEPT_TAC) >>
   rpt gen_tac >> strip_tac >>

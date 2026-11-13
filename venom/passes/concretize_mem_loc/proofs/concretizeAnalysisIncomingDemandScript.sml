@@ -84,7 +84,8 @@ Theorem concretize_untainted_incoming_read_liveat:
   EVERY (\fn. fn.fn_eom = NONE) C.ctx_functions /\
   callee_first names C.ctx_functions /\ ctx_inst_ids_distinct C /\ o1_run_state_ok vs0 /\
   EVERY ssa_form C.ctx_functions /\ EVERY fn_defs_reach_uses C.ctx_functions /\
-  ptr_discipline lo C vs0 /\ EVERY all_reachable C.ctx_functions /\ ~ctx_has_dalloca C /\
+  ptr_discipline lo C vs0 /\ EVERY all_reachable C.ctx_functions /\
+  (ctx_has_dalloca C ==> byte < w2n vs0.vs_initial_fmp) /\
   joint_trace vs0 C q0 es qs q /\ n <= j /\ j <= LENGTH es /\
   EL j (q0::qs) = JointConfig stk PG G tn current inst s oms om hs h /\
   FLOOKUP om v = SOME (OriginParameter param,(b,sz)) /\
@@ -113,7 +114,9 @@ Proof
     metis_tac[trace_config_at] >>
   `joint_origin_history vs0 C stk PG G tn current inst s oms om hs h` by
     gvs[joint_config_reachable_def] >>
-  `ctx_has_dalloca C ==> FST (b,sz) < w2n vs0.vs_initial_fmp` by simp[] >>
+  `ctx_has_dalloca C ==> FST (b,sz) < w2n vs0.vs_initial_fmp` by
+    (strip_tac >> `byte < w2n vs0.vs_initial_fmp` by metis_tac[] >>
+     rewrite_tac[pairTheory.FST] >> decide_tac) >>
   drule_all joint_incoming_production_argument >> strip_tac >>
   qabbrev_tac `d = LENGTH stk - SUC k` >>
   qabbrev_tac `owner = (EL k stk).cf_fn` >>

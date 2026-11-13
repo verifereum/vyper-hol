@@ -125,7 +125,7 @@ QED
 Theorem joint_untainted_cache_past_owner_generator:
   joint_trace vs0 C q0 es qs q /\ o1_ctx_shape C /\ ptr_discipline lo C vs0 /\
   EVERY ssa_form C.ctx_functions /\ EVERY all_reachable C.ctx_functions /\
-  vs0.vs_allocas = FEMPTY /\ ~ctx_has_dalloca C /\ j <= LENGTH es /\
+  vs0.vs_allocas = FEMPTY /\ j <= LENGTH es /\
   activation_cache (EL j (q0::qs)) d owner aid (b,sz) /\
   b <= byte /\ byte < b + sz /\ lo <= byte /\
   byte NOTIN joint_mem_taint (EL j (q0::qs)) /\
@@ -167,7 +167,7 @@ QED
 Theorem joint_untainted_cache_used:
   joint_trace vs0 C q0 es qs q /\ o1_ctx_shape C /\ ptr_discipline lo C vs0 /\
   EVERY ssa_form C.ctx_functions /\ EVERY all_reachable C.ctx_functions /\
-  vs0.vs_allocas = FEMPTY /\ ~ctx_has_dalloca C /\ n <= LENGTH es /\
+  vs0.vs_allocas = FEMPTY /\ n <= LENGTH es /\
   activation_cache (EL n (q0::qs)) d owner aid (b,sz) /\
   activation_location (EL n (q0::qs)) d owner p /\
   b <= byte /\ byte < b + sz /\ lo <= byte /\
@@ -197,7 +197,7 @@ QED
 Theorem joint_untainted_demand_owner_used:
   joint_trace vs0 C q0 es qs q /\ o1_ctx_shape C /\ ptr_discipline lo C vs0 /\
   EVERY ssa_form C.ctx_functions /\ EVERY all_reachable C.ctx_functions /\
-  vs0.vs_allocas = FEMPTY /\ ~ctx_has_dalloca C /\ n <= j /\ j <= LENGTH es /\
+  vs0.vs_allocas = FEMPTY /\ n <= j /\ j <= LENGTH es /\
   activation_cache (EL n (q0::qs)) d owner aid (b,sz) /\
   activation_location (EL n (q0::qs)) d owner p /\
   b <= byte /\ byte < b + sz /\ lo <= byte /\
