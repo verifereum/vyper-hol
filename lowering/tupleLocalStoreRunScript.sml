@@ -115,6 +115,10 @@ Theorem tuple_local_store_head_path:
       stmt_state_rel H ctx func cenv cx
         (es with scopes :=
           pre ++ (env |+ (id, entry with <|value := v; popped := []|>)) :: rest) t /\
+      (!H'. stmt_state_rel H' ctx func cenv cx es s ==>
+        stmt_state_rel H' ctx func cenv cx
+          (es with scopes :=
+            pre ++ (env |+ (id, entry with <|value := v; popped := []|>)) :: rest) t) /\
       ~t.vs_halted /\ t.vs_current_bb = st'.cs_current_bb /\
       t.vs_inst_idx = LENGTH st'.cs_current_insts /\
       (!x. (~m \/ not_fresh_at st x) ==> lookup_var x t = lookup_var x s) /\
@@ -138,6 +142,12 @@ Proof
       `?dw. lookup_var p s = SOME dw` by
         (fs[stmt_state_rel_def, state_rel_def, local_ptrs_rel_def] >>
          first_x_assum drule_all >> metis_tac[]) >>
+      `!H'. stmt_state_rel H' ctx func cenv cx es s ==>
+            stmt_state_rel H' ctx func cenv cx
+              (es with scopes :=
+                pre ++ (env |+ (id, entry with <|value := v; popped := []|>)) :: rest)
+              (mstore (w2n dw) (typed_val_to_w256 tv v) s)` by
+        (rpt strip_tac >> irule stmt_state_rel_write_local_store >> simp[]) >>
       drule_all stmt_state_rel_write_local_store >> strip_tac >>
       drule_all emit_mstore_marked_path >> strip_tac >>
       `st'.cs_current_bb = st.cs_current_bb /\
@@ -372,7 +382,9 @@ Theorem tuple_store_mixed_locals_path:
     s.vs_current_bb = st.cs_current_bb /\
     s.vs_inst_idx = LENGTH st.cs_current_insts /\ stmt_state_rel H ctx func cenv cx es s ==>
     (ids <> [] \/ ~block_is_terminated st ==> ~block_is_terminated st') /\
-    ?t. stmt_state_rel H ctx func cenv cx es' t /\ ~t.vs_halted /\
+    ?t. stmt_state_rel H ctx func cenv cx es' t /\
+        (!H'. stmt_state_rel H' ctx func cenv cx es s ==>
+              stmt_state_rel H' ctx func cenv cx es' t) /\ ~t.vs_halted /\
         t.vs_current_bb = st'.cs_current_bb /\ t.vs_inst_idx = LENGTH st'.cs_current_insts /\
         (!x. (~m \/ not_fresh_at st x) ==> lookup_var x t = lookup_var x s) /\
         (!aid bs. FLOOKUP s.vs_allocas aid = SOME bs ==> FLOOKUP t.vs_allocas aid = SOME bs) /\
@@ -596,6 +608,9 @@ Resume tuple_store_mixed_locals_path[compose]:
   qexists `t` >>
   simp_tac (srw_ss()) [] >>
   conj_tac >- first_assum ACCEPT_TAC >>
+  conj_tac
+  >- (rpt strip_tac >> qpat_x_assum `es1 = _` SUBST_ALL_TAC >>
+      first_x_assum irule >> first_x_assum irule >> first_assum ACCEPT_TAC) >>
   conj_tac >- first_assum ACCEPT_TAC >>
   conj_tac >- first_assum ACCEPT_TAC >>
   conj_tac >- first_assum ACCEPT_TAC >>
