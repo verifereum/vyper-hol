@@ -64,6 +64,12 @@ End
    returned expression's expr_sim_ptr/expr_vv_sim_ptr for the ghost side
    (ptr_mem_ok makes the source robust under t_mem, and MCOPY carries its
    taint to the buffer). *)
+Theorem tuple_words_length[local]:
+  !ts ce w off mem. LENGTH (tuple_words ce w ts off mem) = LENGTH ts
+Proof
+  Induct >> simp[stmtSimReturnTheory.tuple_words_def]
+QED
+
 Theorem internal_return_direct_ptr:
   !tops ctx PG func cx cenv ret_ty ret_tv d rpc rsz cenv' env lctx eo es.
     body_inv tops ctx cenv cx /\
@@ -271,7 +277,6 @@ Proof
         (irule constructor_exit_state_rel >> qexists_tac `cenv''` >>
          fs[exprLoweringPropsTheory.stmt_state_rel_def]) >>
       simp[intret_ptr_q_def] >>
-      TRY (reverse conj_tac >- fs[]) >>
       irule intret_q_unlock_intro >>
       simp[loweringStateRelDefsTheory.result_rel_def] >>
       conj_tac
@@ -393,7 +398,7 @@ Proof
         (SPEC_ALL internal_return_memory_unlock_path_ptr)) >>
       disch_then (mp_tac o Q.INST [`d` |-> `bw`, `cap` |-> `slot`,
         `D` |-> `cx_dead cx`] o SPEC_ALL) >>
-      (impl_tac >- (rpt conj_tac >> TRY (first_assum ACCEPT_TAC) >> gvs[])) >>
+      (impl_tac >- (gvs[] >> first_assum ACCEPT_TAC)) >>
       strip_tac >> rename1 `typed_copy_state_frame sm (w2n bw) k t u` >>
       qpat_x_assum `return_unlock_state _ = return_unlock_state cenv`
         (fn th => RULE_ASSUM_TAC (REWRITE_RULE [th]) >> assume_tac th) >>
@@ -473,7 +478,11 @@ Proof
          simp[] >> qexistsl_tac [`m`, `0`, `w2n a`] >>
          simp[valueEncodingDefsTheory.mem_bytes_at_def]) >>
       `!m. val_in_memory ret_tv v (w2n bw) m` by
-        (gen_tac >> irule valueEncodingPropsTheory.val_in_memory_relocate >>
+        (qpat_x_assum `!m. _ ==> val_in_memory ret_tv v (w2n bw) m` mp_tac >>
+         qpat_x_assum `val_wf ret_tv v` mp_tac >>
+         qpat_x_assum `type_memory_size ret_tv = 0` mp_tac >>
+         rpt (pop_assum kall_tac) >> rpt strip_tac >>
+         irule valueEncodingPropsTheory.val_in_memory_relocate >>
          simp[] >> qexistsl_tac [`t.vs_memory`, `0`, `w2n bw`] >>
          simp[valueEncodingDefsTheory.mem_bytes_at_def] >>
          first_x_assum irule >> simp[mem_agree_outside_def]) >>
@@ -508,8 +517,7 @@ Proof
       gen_tac >> disj2_tac >>
       asm_simp_tac (srw_ss()) [intret_ptr_q_def, intret_mem_q_def,
         return_unlock_state_memory] >>
-      rpt conj_tac >>
-      TRY (irule intret_q_unlock_intro) >>
+      irule intret_q_unlock_intro >>
       simp[loweringStateRelDefsTheory.result_rel_def, loweringStateRelDefsTheory.intret_vals_match_def,
         loweringStateRelDefsTheory.state_rel_gas_obs] >>
       `val_in_memory ret_tv v (w2n bw) t.vs_memory` by
@@ -599,6 +607,15 @@ Proof
      rpt (pop_assum kall_tac) >> simp[ptr_covers_def] >> rpt strip_tac >>
      qexistsl_tac [`w`, `b`, `sz'`] >> simp[] >>
      first_x_assum drule >> decide_tac) >>
+  `!i. i < LENGTH ets ==>
+    ptr_covers G tn src t (SUM (MAP (type_memory_bytes cenv'') (TAKE i ets)) + 32) /\
+    w2n a + SUM (MAP (type_memory_bytes cenv'') (TAKE i ets)) + 32 <= dimword (:256) /\
+    (!j. w2n a + SUM (MAP (type_memory_bytes cenv'') (TAKE i ets)) <= j /\
+      j < w2n a + SUM (MAP (type_memory_bytes cenv'') (TAKE i ets)) + 32 ==>
+      j NOTIN tn.t_mem)` by
+    (qpat_x_assum `!i. _ ==> ptr_covers _ _ _ _ _` mp_tac >>
+     qpat_x_assum `!i. _ ==> _ /\ !j. _` mp_tac >>
+     rpt (pop_assum kall_tac) >> metis_tac[]) >>
   `?u H tm.
     gas_path_ptr (cx_dead cx) 0 ctx func PG G tn t 0 H tm
       (IntRet <|iret_values := (if ets = [] then [0w] else tuple_words cenv'' a ets 0 t.vs_memory);
@@ -619,16 +636,15 @@ Proof
        `rpc`, `sm`, `sb`, `ets`, `func`, `ctx`, `t`, `pc`, `tn`, `0w`, `src`,
        `a`, `G`, `cx_dead cx`, `PG`, `cx`] mp_tac) >>
      impl_tac
-     >- (rpt conj_tac >> TRY (first_assum ACCEPT_TAC) >>
-         TRY (gvs[] >> NO_TAC) >>
-         rpt strip_tac >> TRY (first_assum ACCEPT_TAC) >>
-         qpat_x_assum `!i. _ ==> ptr_covers _ _ _ _ _` mp_tac >>
-         qpat_x_assum `!i. _ ==> _ /\ !j. _` mp_tac >>
-         qpat_x_assum `ets = _` (fn th => rewrite_tac[GSYM th]) >>
-         rpt (pop_assum kall_tac) >>
-         rpt strip_tac >>
-         qpat_x_assum `!i. _ ==> _ /\ !j. _` (qspec_then `i` mp_tac) >>
-         simp[] >> metis_tac[]) >>
+     >- (conj_tac >- gvs[] >>
+         conj_tac >- first_assum ACCEPT_TAC >>
+         asm_simp_tac (srw_ss()) [] >>
+         qpat_x_assum `ets = _` (fn th => pure_rewrite_tac[GSYM th]) >>
+         qpat_x_assum `!i. _ ==> ptr_covers _ _ _ _ _ /\ _` mp_tac >>
+         qpat_x_assum `ets <> []` mp_tac >>
+         rpt (pop_assum kall_tac) >> ntac 2 disch_tac >>
+         conj_tac >- (Cases_on `ets` >> gvs[]) >>
+         metis_tac[]) >>
      disch_then (qx_choosel_then [`u`, `H`, `tm`] strip_assume_tac) >>
      qexistsl_tac [`u`, `H`, `tm`] >> asm_rewrite_tac[]) >>
   qpat_x_assum `return_unlock_state _ = return_unlock_state cenv`
@@ -652,10 +668,9 @@ Proof
     (irule constructor_exit_state_rel >> qexists_tac `cenv''` >>
      fs[exprLoweringPropsTheory.stmt_state_rel_def]) >>
   simp[intret_ptr_q_def] >>
-  TRY (reverse conj_tac >- fs[]) >>
   irule intret_q_unlock_intro >>
   simp[loweringStateRelDefsTheory.result_rel_def] >>
-  conj_tac >- gvs[] >>
+  conj_tac >- gvs[tuple_words_length] >>
   conj_tac
   >- (qpat_x_assum `state_rel func cenv _ _ t` mp_tac >>
       qpat_x_assum `state_frame u = _` mp_tac >>
