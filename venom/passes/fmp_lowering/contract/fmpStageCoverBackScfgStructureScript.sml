@@ -6,56 +6,6 @@ Ancestors
   cfgHelpers cfgDefs makeSsaDefs o1PassContract unitShapeDefs venomWf
   venomInst list rich_list arithmetic
 
-(* Entry predecessor exclusion depends on labels and edges, not instruction IDs. *)
-Theorem scfg_entry_preds_empty[local]:
-  ALL_DISTINCT (fn_labels fn) /\ first_block_no_preds fn /\
-  fn_entry_label fn = SOME entry ==>
-  cfg_preds_of (cfg_analyze fn) entry = []
-Proof
-  strip_tac >>
-  `!p. ~MEM p (cfg_preds_of (cfg_analyze fn) entry)` suffices_by
-    (Cases_on `cfg_preds_of (cfg_analyze fn) entry` >> simp[] >> metis_tac[MEM]) >>
-  simp[cfg_analyze_preds, mem_build_preds] >>
-  gen_tac >> CCONTR_TAC >> gvs[] >>
-  `fmap_lookup_list (build_succs fn.fn_blocks) bb.bb_label = bb_succs bb` by
-    (irule cfg_succs_of_build_succs >> gvs[fn_labels_def]) >>
-  gvs[first_block_no_preds_def, EVERY_MEM, fn_entry_label_def,
-      entry_block_def, AllCaseEqs()] >> metis_tac[]
-QED
-
-Theorem scfg_mssa_entry_no_phi[local]:
-  ALL_DISTINCT (fn_labels fn) /\ first_block_no_preds fn /\
-  first_block_no_phi fn /\ make_ssa_current_fn s fn = (fn',s') /\
-  fn_entry_label fn = SOME entry ==>
-  EVERY (\bb. EVERY (\i. bb.bb_label = entry ==> i.inst_opcode <> PHI)
-    bb.bb_instructions) fn'.fn_blocks
-Proof
-  strip_tac >>
-  drule make_ssa_current_fn_opcodes >>
-  disch_then (qspec_then `\lbl op. lbl = entry ==> op <> PHI` mp_tac) >>
-  simp[] >> disch_then irule >> conj_tac
-  >- (rpt strip_tac >>
-      drule current_frontier_key >> strip_tac >>
-      drule_all current_frontier_target_count >> strip_tac >>
-      drule_all scfg_entry_preds_empty >> strip_tac >> gvs[]) >>
-  Cases_on `fn.fn_blocks` >>
-  gvs[fn_entry_label_def, entry_block_def, first_block_no_phi_def,
-      fn_labels_def, EVERY_MEM, MEM_MAP] >> metis_tac[]
-QED
-
-Theorem scfg_mssa_first_block_no_phi[local]:
-  ALL_DISTINCT (fn_labels fn) /\ first_block_no_preds fn /\
-  first_block_no_phi fn /\ make_ssa_current_fn s fn = (fn',s') ==>
-  first_block_no_phi fn'
-Proof
-  strip_tac >> Cases_on `fn_entry_label fn`
-  >- gvs[make_ssa_current_fn_def] >>
-  drule_all scfg_mssa_entry_no_phi >> strip_tac >>
-  drule make_ssa_current_fn_entry_label >> strip_tac >>
-  Cases_on `fn'.fn_blocks` >>
-  gvs[fn_entry_label_def, entry_block_def, first_block_no_phi_def]
-QED
-
 (* Only the structural projections required by SimplifyCFG are transported;
    neither transformation's global instruction-ID invariant is needed. *)
 Theorem fmp_cover_back_lower_structure:
@@ -106,7 +56,7 @@ Proof
     (pure_once_rewrite_tac[GSYM bb_label_eta] >> gvs[fn_labels_def]) >>
   drule_all make_ssa_current_fn_first_block_no_preds >> strip_tac >>
   drule_all make_ssa_current_fn_cfg_blocks >> strip_tac >>
-  drule_all scfg_mssa_first_block_no_phi >> strip_tac >>
+  drule_all make_ssa_current_fn_first_block_no_phi >> strip_tac >>
   `fn_succs_closed fn'` by
     (fs[fn_succs_closed_def] >> rpt strip_tac >>
      `MEM (bb.bb_label,bb_succs bb)
