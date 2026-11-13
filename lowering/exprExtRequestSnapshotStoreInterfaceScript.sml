@@ -24,7 +24,9 @@ Definition extrequest_snapshot_cell_def:
         expr_val_rel cx ty v op u /\ safe_operand su op /\
         extrequest_history_frame ce cx ee sm s ee su u /\
         ~u.vs_halted /\ u.vs_current_bb = su.cs_current_bb /\
-        u.vs_inst_idx = LENGTH su.cs_current_insts)
+        u.vs_inst_idx = LENGTH su.cs_current_insts /\
+        (!aid p k. aid < sm.cs_next_id /\ FLOOKUP s.vs_allocas aid = SOME (p,k) ==>
+          mem_bytes_at p k u.vs_memory = mem_bytes_at p k s.vs_memory))
 End
 
 Theorem extrequest_snapshot_cell_history:
@@ -83,5 +85,6 @@ Definition extrequest_snapshot_store_contract_def:
          lookup_var x q = SOME z) /\
       (!aid p k. aid < sm.cs_next_id /\ aid <> live /\
          FLOOKUP s.vs_allocas aid = SOME (p,k) ==>
-         mem_bytes_at p k q.vs_memory = mem_bytes_at p k s.vs_memory)
+         mem_bytes_at p k q.vs_memory = mem_bytes_at p k s.vs_memory) /\
+      extrequest_history_frame ce cx ee sm s ee sb q
 End

@@ -8,7 +8,7 @@ Ancestors
   valueTypingMemoryProps valueEncodingProps valueCopyBytes freshWrites fragExec fragGasPath
 Libs wordsLib
 
-Theorem extrequest_head_path_nonhalting[local]:
+Theorem extrequest_head_path_nonhalting:
   !ctx fn s n r. gas_path ctx fn s n r ==> !t. r = OK t ==> ~t.vs_halted
 Proof
   Induct_on `gas_path` >> rw[] >> gvs[exit_result_def]
