@@ -31,7 +31,8 @@ Theorem venom_frame_rel_constructor_cases:
   ~venom_frame_rel es r es' (OK vs) /\
   ~venom_frame_rel es r es' (IntRet ret vs) /\
   (venom_frame_rel es r es' (Abort Revert_abort vs) <=>
-   ?lgs. frame_outcome es r es' (SOME Reverted) vs.vs_returndata lgs) /\
+   (?lgs. frame_outcome es r es' (SOME Reverted) vs.vs_returndata lgs) /\
+   frame_inst_raises es Reverted Revert) /\
   (venom_frame_rel es r es' (Abort ExHalt_abort vs) <=>
    ?exc lgs. exc <> Reverted /\ frame_outcome es r es' (SOME exc) [] lgs)
 Proof
@@ -63,7 +64,8 @@ Theorem venom_frame_rel_single_constructor_witnesses:
                       vs_requests := call_requests start |>
   in
     venom_frame_rel start (INR NONE) post (Halt vs') /\
-    venom_frame_rel start (INR (SOME Reverted)) post (Abort Revert_abort vs') /\
+    (frame_inst_raises start Reverted Revert ==>
+     venom_frame_rel start (INR (SOME Reverted)) post (Abort Revert_abort vs')) /\
     venom_frame_rel start (INR (SOME InvalidOpcode))
       (es with contexts := [(ctxt with returnData := [], rb)])
       (Abort ExHalt_abort vs')
@@ -146,9 +148,10 @@ Theorem venom_frame_rel_nested_constructor_witnesses:
         vs_requests := call_requests start |>
   in
     venom_frame_rel start (INL ()) (es with contexts := [(ok, prb)]) (Halt vs') /\
-    venom_frame_rel start (INL ())
-      (es with <| contexts := [(bad, prb)]; rollback := rb |>)
-      (Abort Revert_abort vs')
+    (frame_inst_raises start Reverted Revert ==>
+     venom_frame_rel start (INL ())
+       (es with <| contexts := [(bad, prb)]; rollback := rb |>)
+       (Abort Revert_abort vs'))
 Proof
   simp[LET_THM] >> conj_tac >>
   simp[venom_frame_rel_def, frame_outcome_def, b2w_def]
