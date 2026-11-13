@@ -78,7 +78,7 @@ Proof
    s.vs_current_bb = hdr /\ s.vs_inst_idx = 0` by
     fs[abi_valid_allocated_array_inv_def] >>
   `eval_operand src s = SOME (n2w p) /\ eval_operand base_op s = SOME (n2w B) /\
-   stmt_state_rel ctx func cenv cx es s /\ local_ptrs_reserved cenv start /\
+   stmt_state_rel H ctx func cenv cx es s /\ local_ptrs_reserved cenv start /\
    mem_bytes_at B L (abi_decode_source MLOAD s) = xs /\ B+L < dimword (:256)` by
     fs[abi_malformed_entry_def, abi_malformed_allocated_window_def, abi_decode_source_def] >>
   `abi_decode_load MLOAD (n2w (B+p):bytes32) s = n2w (LENGTH vs)` by
@@ -171,7 +171,7 @@ Resume abi_valid_allocated_array_iteration[body]:
       mload (w2n (n2w slot:bytes32)) h = n2w j` by simp[w2n_n2w] >>
      drule_all abi_decode_static_element_setup_reentry >> strip_tac >>
      rename1 `run_inst_seq (emitted_insts setup child) h = OK a` >>
-     `stmt_state_rel ctx func cenv cx es h` by fs[abi_malformed_entry_def] >>
+     `stmt_state_rel H ctx func cenv cx es h` by fs[abi_malformed_entry_def] >>
      `abi_malformed_resource_post ctx func cenv cx es setup.cs_next_var sites dstid h a` by
        (irule abi_malformed_setup_resource >>
         qhdtm_assum `abi_decode_array_element_setup` (irule_at Any) >> simp[]) >>

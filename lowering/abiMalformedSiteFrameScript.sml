@@ -45,12 +45,12 @@ QED
    boundaries, retaining their arbitrary site-reuse behavior. *)
 Theorem abi_malformed_index_protected:
   abi_decode_index_init st = (ip,en) /\
-  stmt_state_rel ctx func cenv cx es s /\ fn_inst_ids_distinct func /\
+  stmt_state_rel H ctx func cenv cx es s /\ fn_inst_ids_distinct func /\
   local_ptrs_reserved cenv st /\
   MEM (mk_inst st.cs_next_id ALLOCA [Lit 32w]
     [STRING #"%" (toString st.cs_next_var)]) (fn_insts func) ==>
   ?t p. run_inst_seq (emitted_insts st en) s = OK t /\
-    stmt_state_rel ctx func cenv cx es t /\
+    stmt_state_rel H ctx func cenv cx es t /\
     eval_operand ip t = SOME (n2w p) /\ mload p t = 0w /\
     FLOOKUP t.vs_allocas st.cs_next_id = SOME (p,32) /\
     (!aid entry. FLOOKUP s.vs_allocas aid = SOME entry ==>
@@ -81,14 +81,14 @@ QED
 (* A child result site is not a live local pointer. Its recorded allocation,
    not its numeric position among ids, grants write authority. *)
 Theorem abi_malformed_child_copy_frame:
-  stmt_state_rel ctx func cenv cx es s /\ fn_inst_ids_distinct func /\
+  stmt_state_rel H ctx func cenv cx es s /\ fn_inst_ids_distinct func /\
   MEM inst (fn_insts func) /\ inst.inst_opcode = ALLOCA /\
   inst.inst_outputs = [q] /\ not_local_ptr cenv es.scopes q /\
   FLOOKUP s.vs_allocas inst.inst_id = SOME (b,sz) /\
   b <= dst /\ dst + n <= b + sz /\
   live <> inst.inst_id /\ FLOOKUP s.vs_allocas live = SOME (B,cap) /\
   L <= cap ==>
-  stmt_state_rel ctx func cenv cx es (mcopy dst src n s) /\
+  stmt_state_rel H ctx func cenv cx es (mcopy dst src n s) /\
   mem_bytes_at B L (mcopy dst src n s).vs_memory =
     mem_bytes_at B L s.vs_memory /\
   (mcopy dst src n s).vs_allocas = s.vs_allocas
@@ -115,7 +115,7 @@ Theorem abi_malformed_two_sites_copy_probe:
   abi_decode_index_init st = (ip,en) /\
   abi_decode_index_init st2 = (ip2,en2) /\
   st.cs_next_id < st2.cs_next_id /\
-  stmt_state_rel ctx func cenv cx es s /\ fn_inst_ids_distinct func /\
+  stmt_state_rel H ctx func cenv cx es s /\ fn_inst_ids_distinct func /\
   local_ptrs_reserved cenv st /\ local_ptrs_reserved cenv st2 /\
   MEM (mk_inst st.cs_next_id ALLOCA [Lit 32w]
     [STRING #"%" (toString st.cs_next_var)]) (fn_insts func) /\
@@ -131,8 +131,8 @@ Theorem abi_malformed_two_sites_copy_probe:
   live <> inst.inst_id /\ ancestor <> inst.inst_id ==>
   ?t u. run_inst_seq (emitted_insts st en) s = OK t /\
     run_inst_seq (emitted_insts st2 en2) t = OK u /\
-    stmt_state_rel ctx func cenv cx es (mcopy dst src n u) /\
-    stmt_state_rel ctx func cenv cx es
+    stmt_state_rel H ctx func cenv cx es (mcopy dst src n u) /\
+    stmt_state_rel H ctx func cenv cx es
       (abi_decoder_prune_vars st2.cs_next_var (mcopy dst src n u)) /\
     mem_bytes_at B L (mcopy dst src n u).vs_memory =
       mem_bytes_at B L s.vs_memory /\
@@ -152,7 +152,7 @@ Proof
   `FLOOKUP u.vs_allocas inst.inst_id = SOME (b,sz) /\
    FLOOKUP u.vs_allocas live = SOME (B,cap) /\
    FLOOKUP u.vs_allocas ancestor = SOME (A,32)` by metis_tac[] >>
-  `stmt_state_rel ctx func cenv cx es (mcopy dst src n u) /\
+  `stmt_state_rel H ctx func cenv cx es (mcopy dst src n u) /\
    mem_bytes_at B L (mcopy dst src n u).vs_memory = mem_bytes_at B L u.vs_memory` by
     (drule_all abi_malformed_child_copy_frame >> simp[]) >>
   `mem_bytes_at A 32 (mcopy dst src n u).vs_memory = mem_bytes_at A 32 u.vs_memory` by

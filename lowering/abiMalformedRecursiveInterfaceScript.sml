@@ -27,7 +27,7 @@ End
 
 Definition abi_malformed_resource_post_def:
   abi_malformed_resource_post ctx func cenv cx es next sites dstid s t <=>
-    stmt_state_rel ctx func cenv cx es t /\
+    stmt_state_rel H ctx func cenv cx es t /\
     s.vs_alloca_next <= t.vs_alloca_next /\
     (!aid entry. FLOOKUP s.vs_allocas aid = SOME entry ==>
        FLOOKUP t.vs_allocas aid = SOME entry) /\
@@ -71,7 +71,7 @@ Proof
 QED
 
 Theorem abi_malformed_resource_refl:
-  stmt_state_rel ctx func cenv cx es s ==>
+  stmt_state_rel H ctx func cenv cx es s ==>
   abi_malformed_resource_post ctx func cenv cx es next sites dstid s s
 Proof
   simp[abi_malformed_resource_post_def]
@@ -123,7 +123,7 @@ Theorem abi_malformed_resource_prune:
     (abi_decoder_prune_vars st.cs_next_var t)
 Proof
   strip_tac >>
-  `stmt_state_rel ctx func cenv cx es
+  `stmt_state_rel H ctx func cenv cx es
      (abi_decoder_prune_vars st.cs_next_var t)` by
     (irule abi_malformed_prune_state >>
      fs[abi_malformed_resource_post_def]) >>
@@ -190,7 +190,7 @@ Proof
     (drule abi_decoder_vars_extend_restore >>
      disch_then (mp_tac o AP_TERM ``\v:venom_state. v with vs_vars := u.vs_vars``) >>
      simp[]) >>
-  `stmt_state_rel ctx func cenv cx es u` by
+  `stmt_state_rel H ctx func cenv cx es u` by
     (qpat_x_assum `u = _` SUBST1_TAC >>
      irule abi_malformed_reserved_vars_state >>
      reverse conj_tac >- fs[abi_malformed_resource_post_def] >>
@@ -205,7 +205,7 @@ QED
 Definition abi_malformed_entry_def:
   abi_malformed_entry ctx func cenv cx es st sites dstid live
       base_op hi src dst B L xs p d n s <=>
-    stmt_state_rel ctx func cenv cx es s /\ local_ptrs_reserved cenv st /\
+    stmt_state_rel H ctx func cenv cx es s /\ local_ptrs_reserved cenv st /\
     abi_malformed_allocated_window live B L xs s /\
     live NOTIN sites /\ live <> dstid /\ dstid NOTIN sites /\
     abi_malformed_destination func cenv es.scopes dstid d n s /\
@@ -293,7 +293,7 @@ Theorem abi_malformed_entry_prune:
     (abi_decoder_prune_vars st.cs_next_var s)
 Proof
   strip_tac >>
-  `stmt_state_rel ctx func cenv cx es
+  `stmt_state_rel H ctx func cenv cx es
      (abi_decoder_prune_vars st.cs_next_var s)` by
     (irule abi_malformed_prune_state >> fs[abi_malformed_entry_def]) >>
   fs[abi_malformed_entry_def] >>

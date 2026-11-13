@@ -9,7 +9,7 @@ Ancestors
 Definition abi_return_decode_ready_def:
   abi_return_decode_ready ctx func cenv cx es a sites dstid live base_op dst
       B cap bs d n s <=>
-    stmt_state_rel ctx func cenv cx es s /\ local_ptrs_reserved cenv a /\
+    stmt_state_rel H ctx func cenv cx es s /\ local_ptrs_reserved cenv a /\
     abi_malformed_allocated_window live B (LENGTH (TAKE cap bs)) (TAKE cap bs) s /\
     live NOTIN sites /\ live <> dstid /\ dstid NOTIN sites /\
     abi_malformed_destination func cenv es.scopes dstid d n s /\
@@ -89,7 +89,7 @@ Proof
     (mp_tac (Q.SPECL [`lo`, `cap`, `a`] ci_mono_compile_return_value_decode) >>
      simp[ci_mono_def]) >>
   fs[abi_return_decode_ready_def] >>
-  `stmt_state_rel ctx func cenv cx es u` by
+  `stmt_state_rel H ctx func cenv cx es u` by
     (qpat_assum `u = s with vs_vars := _` SUBST1_TAC >>
      irule abi_malformed_reserved_vars_state >>
      reverse conj_tac >- simp[] >> qexists_tac `a` >> simp[]) >>

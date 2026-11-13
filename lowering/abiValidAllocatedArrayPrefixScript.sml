@@ -100,7 +100,7 @@ Proof
 QED
 
 Theorem abi_valid_allocated_effect_refl:
-  stmt_state_rel ctx func cenv cx es s ==>
+  stmt_state_rel H ctx func cenv cx es s ==>
   abi_valid_allocated_effect ctx func cenv cx es next sites dstid d n s s
 Proof
   simp[abi_valid_allocated_effect_def, abi_malformed_resource_refl,

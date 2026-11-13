@@ -7,12 +7,12 @@ Ancestors
 
 Theorem abi_malformed_index_state:
   abi_decode_index_init st = (ip,en) /\
-  stmt_state_rel ctx func cenv cx es s /\ fn_inst_ids_distinct func /\
+  stmt_state_rel H ctx func cenv cx es s /\ fn_inst_ids_distinct func /\
   local_ptrs_reserved cenv st /\
   MEM (mk_inst st.cs_next_id ALLOCA [Lit 32w]
     [STRING #"%" (toString st.cs_next_var)]) (fn_insts func) ==>
   ?t p. run_inst_seq (emitted_insts st en) s = OK t /\
-    stmt_state_rel ctx func cenv cx es t /\
+    stmt_state_rel H ctx func cenv cx es t /\
     eval_operand ip t = SOME (n2w p) /\ mload p t = 0w /\
     p + 32 < dimword (:256) /\
     FLOOKUP t.vs_allocas st.cs_next_id = SOME (p,32) /\
@@ -30,7 +30,7 @@ Proof
   `inst_extends st allocation_st` by metis_tac[abi_decode_alloc_buffer_inst_extends] >>
   `run_inst_seq (emitted_insts st en) s = OK (mstore (w2n w) 0w allocated)` by
     (drule_all run_inst_seq_emit_extend >> simp[]) >>
-  `stmt_state_rel ctx func cenv cx es (mstore (w2n w) 0w allocated)` by
+  `stmt_state_rel H ctx func cenv cx es (mstore (w2n w) 0w allocated)` by
     (irule literal_mstore_state_rel >>
      reverse conj_tac >- simp[] >>
      qexistsl_tac [`w2n w`, `mk_inst st.cs_next_id ALLOCA [Lit 32w]
@@ -48,7 +48,7 @@ Theorem abi_malformed_index_state_two_sites:
   abi_decode_index_init st = (ip,en) /\
   abi_decode_index_init st2 = (ip2,en2) /\
   st.cs_next_id < st2.cs_next_id /\
-  stmt_state_rel ctx func cenv cx es s /\ fn_inst_ids_distinct func /\
+  stmt_state_rel H ctx func cenv cx es s /\ fn_inst_ids_distinct func /\
   local_ptrs_reserved cenv st /\ local_ptrs_reserved cenv st2 /\
   MEM (mk_inst st.cs_next_id ALLOCA [Lit 32w]
     [STRING #"%" (toString st.cs_next_var)]) (fn_insts func) /\
@@ -57,8 +57,8 @@ Theorem abi_malformed_index_state_two_sites:
   ?t u p q.
     run_inst_seq (emitted_insts st en) s = OK t /\
     run_inst_seq (emitted_insts st2 en2) t = OK u /\
-    stmt_state_rel ctx func cenv cx es t /\
-    stmt_state_rel ctx func cenv cx es u /\
+    stmt_state_rel H ctx func cenv cx es t /\
+    stmt_state_rel H ctx func cenv cx es u /\
     FLOOKUP u.vs_allocas st.cs_next_id = SOME (p,32) /\
     FLOOKUP u.vs_allocas st2.cs_next_id = SOME (q,32) /\
     eval_operand ip2 u = SOME (n2w q) /\ mload q u = 0w

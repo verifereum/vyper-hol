@@ -11,8 +11,8 @@ Ancestors
 
 (* The corresponding success-side fact is local to its theory. *)
 Theorem return_reject_stmt_control[local]:
-  stmt_state_rel ctx func ce cx es (s with vs_current_bb := b) =
-  stmt_state_rel ctx func ce cx es s
+  stmt_state_rel H ctx func ce cx es (s with vs_current_bb := b) =
+  stmt_state_rel H ctx func ce cx es s
 Proof
   `fmp_room ctx func (s with vs_current_bb := b) =
    fmp_room ctx func s` by

@@ -148,7 +148,7 @@ Proof
    eval_operand src s = SOME (n2w p) /\ eval_operand base_op s = SOME (n2w B) /\
    abi_decoder_operand_live start.cs_next_var src /\
    abi_decoder_operand_live start.cs_next_var base_op /\
-   stmt_state_rel ctx func cenv cx es s /\ local_ptrs_reserved cenv start` by
+   stmt_state_rel H ctx func cenv cx es s /\ local_ptrs_reserved cenv start` by
     fs[abi_malformed_entry_def] >>
   `?h. abi_decode_sim ctx func s h /\ h.vs_current_bb = body_lbl /\
     h.vs_inst_idx = 0 /\ ~h.vs_halted /\

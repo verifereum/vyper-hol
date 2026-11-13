@@ -5,10 +5,10 @@ Ancestors
   venomState finite_map pred_set arithmetic
 
 Theorem abi_malformed_reserved_vars_state:
-  stmt_state_rel ctx func cenv cx es s /\ local_ptrs_reserved cenv st /\
+  stmt_state_rel H ctx func cenv cx es s /\ local_ptrs_reserved cenv st /\
   (!x. not_fresh_at st x ==>
        lookup_var x (s with vs_vars := vars) = lookup_var x s) ==>
-  stmt_state_rel ctx func cenv cx es (s with vs_vars := vars)
+  stmt_state_rel H ctx func cenv cx es (s with vs_vars := vars)
 Proof
   strip_tac >>
   `!name entry p sz.
@@ -42,8 +42,8 @@ Proof
 QED
 
 Theorem abi_malformed_prune_state:
-  stmt_state_rel ctx func cenv cx es s /\ local_ptrs_reserved cenv st ==>
-  stmt_state_rel ctx func cenv cx es
+  stmt_state_rel H ctx func cenv cx es s /\ local_ptrs_reserved cenv st ==>
+  stmt_state_rel H ctx func cenv cx es
     (abi_decoder_prune_vars st.cs_next_var s)
 Proof
   strip_tac >> rewrite_tac[abi_decoder_prune_vars_def] >>
@@ -53,15 +53,15 @@ Proof
 QED
 
 Theorem abi_malformed_vars_restore_state:
-  stmt_state_rel ctx func cenv cx es (abi_decoder_prune_vars st.cs_next_var s) /\
+  stmt_state_rel H ctx func cenv cx es (abi_decoder_prune_vars st.cs_next_var s) /\
   local_ptrs_reserved cenv st /\
   (!x. not_fresh_at st x ==>
      lookup_var x (s with vs_vars := vars) =
      lookup_var x (abi_decoder_prune_vars st.cs_next_var s)) ==>
-  stmt_state_rel ctx func cenv cx es (s with vs_vars := vars)
+  stmt_state_rel H ctx func cenv cx es (s with vs_vars := vars)
 Proof
   strip_tac >>
-  `stmt_state_rel ctx func cenv cx es
+  `stmt_state_rel H ctx func cenv cx es
      ((abi_decoder_prune_vars st.cs_next_var s) with vs_vars := vars)` suffices_by
     simp[abi_decoder_prune_vars_def] >>
   irule abi_malformed_reserved_vars_state >> simp[] >>

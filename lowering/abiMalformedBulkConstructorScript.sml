@@ -20,7 +20,7 @@ Theorem abi_malformed_destination_copy_resource:
     (mcopy at source_addr n s)
 Proof
   strip_tac >>
-  `stmt_state_rel ctx func cenv cx es s /\
+  `stmt_state_rel H ctx func cenv cx es s /\
    abi_malformed_destination func cenv es.scopes dstid d outsz s` by
     fs[abi_malformed_entry_def] >>
   `abi_malformed_destination func cenv es.scopes dstid at n s` by
@@ -28,7 +28,7 @@ Proof
      qexistsl_tac [`d`, `outsz`] >> simp[]) >>
   qpat_x_assum `abi_malformed_destination _ _ _ _ at n s` mp_tac >>
   simp_tac bool_ss [abi_malformed_destination_def] >> strip_tac >>
-  `stmt_state_rel ctx func cenv cx es (mcopy at source_addr n s)` by
+  `stmt_state_rel H ctx func cenv cx es (mcopy at source_addr n s)` by
     (irule abi_malformed_mcopy_state_rel >>
      reverse conj_tac >- simp[] >>
      qexistsl_tac [`b`, `inst`, `sz`] >> simp[] >>
@@ -269,7 +269,7 @@ Theorem abi_malformed_resource_register_update:
   abi_malformed_resource_post ctx func cenv cx es st.cs_next_var sites dstid s t
 Proof
   strip_tac >>
-  `stmt_state_rel ctx func cenv cx es t` by
+  `stmt_state_rel H ctx func cenv cx es t` by
     (qpat_assum `t = v with vs_vars := _` SUBST1_TAC >>
      irule abi_malformed_reserved_vars_state >>
      reverse conj_tac >- fs[abi_malformed_resource_post_def] >>

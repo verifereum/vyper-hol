@@ -29,7 +29,7 @@ QED
 Theorem abi_malformed_member_setup_resource:
   abi_decode_member_setup dst src MLOAD base_op hi dyn ao vo st = (ops,en) /\
   run_inst_seq (emitted_insts st en) s = OK t /\
-  stmt_state_rel ctx func cenv cx es s /\ local_ptrs_reserved cenv st ==>
+  stmt_state_rel H ctx func cenv cx es s /\ local_ptrs_reserved cenv st ==>
   abi_malformed_resource_post ctx func cenv cx es st.cs_next_var sites dstid s t
 Proof
   strip_tac >>
@@ -38,7 +38,7 @@ Proof
     (irule abi_malformed_setup_sequence_frame >>
      qexists_tac `emitted_insts st en` >> simp[] >>
      drule abi_malformed_member_setup_instructions >> simp[]) >>
-  `stmt_state_rel ctx func cenv cx es t` by
+  `stmt_state_rel H ctx func cenv cx es t` by
     (qpat_assum `t = s with vs_vars := _` SUBST1_TAC >>
      irule abi_malformed_reserved_vars_state >> simp[lookup_var_def] >>
      qexists_tac `st` >> simp[]) >>
@@ -120,7 +120,7 @@ Theorem abi_malformed_member_setup_entry:
   abi_malformed_resource_post ctx func cenv cx es st.cs_next_var sites dstid s t
 Proof
   strip_tac >>
-  `stmt_state_rel ctx func cenv cx es s /\ local_ptrs_reserved cenv st` by
+  `stmt_state_rel H ctx func cenv cx es s /\ local_ptrs_reserved cenv st` by
     fs[abi_malformed_entry_def] >>
   drule_all abi_malformed_member_setup_resource >> strip_tac >>
   drule abi_decode_member_setup_counters >> strip_tac >>

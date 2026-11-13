@@ -11,7 +11,7 @@ Ancestors
   valueEncodingProps valueEncoding venomExecSemantics finite_map pred_set words list arithmetic
 
 Theorem abi_valid_allocated_backedge_effect:
-  stmt_state_rel ctx func cenv cx es s /\ fn_inst_ids_distinct func /\
+  stmt_state_rel H ctx func cenv cx es s /\ fn_inst_ids_distinct func /\
   local_ptrs_reserved cenv st /\ st.cs_next_var <= first /\ first <= next /\
   next < ceiling.cs_next_var /\ fresh_vars_wrt ceiling s /\
   MEM inst (fn_insts func) /\ inst.inst_opcode = ALLOCA /\
@@ -104,7 +104,7 @@ Theorem abi_valid_allocated_array_backedge_advance:
       (update_var (STRING #"%" (toString next)) (n2w (SUC j)) u)))
 Proof
   strip_tac >>
-  `stmt_state_rel ctx func cenv cx es u /\ local_ptrs_reserved cenv start /\
+  `stmt_state_rel H ctx func cenv cx es u /\ local_ptrs_reserved cenv start /\
    FLOOKUP u.vs_allocas inst.inst_id = SOME (slot,32) /\
    MEM inst (fn_insts func) /\ inst.inst_opcode = ALLOCA /\
    inst.inst_outputs = [q] /\ not_local_ptr cenv es.scopes q /\
@@ -180,7 +180,7 @@ Proof
   `abi_decode_source_opcode MLOAD` by simp[abi_decode_source_opcode_def] >>
   drule_all abi_decode_dynamic_element_setup_reentry >> strip_tac >>
   qpat_x_assum `hi = Lit 0w \/ _` kall_tac >>
-  `stmt_state_rel ctx func cenv cx es s /\ local_ptrs_reserved cenv st` by
+  `stmt_state_rel H ctx func cenv cx es s /\ local_ptrs_reserved cenv st` by
     fs[abi_malformed_entry_def] >>
   `abi_malformed_resource_post ctx func cenv cx es st.cs_next_var sites dstid s t` by
     (irule abi_malformed_setup_resource >>
@@ -209,7 +209,7 @@ Theorem abi_valid_allocated_position_header_effect:
   abi_decode_position_loop_ready hdr ip src MLOAD base_op B p iw n j s /\
   src <> Var (STRING #"%" (toString first)) /\
   base_op <> Var (STRING #"%" (toString first)) /\ n < dimword (:256) /\
-  stmt_state_rel ctx func cenv cx es s /\ local_ptrs_reserved cenv st /\
+  stmt_state_rel H ctx func cenv cx es s /\ local_ptrs_reserved cenv st /\
   st.cs_next_var <= first /\
   first + 4 + abi_decode_position_header_delta base_op <= ceiling.cs_next_var /\
   fresh_vars_wrt ceiling s ==>

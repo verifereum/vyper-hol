@@ -6,9 +6,9 @@ Ancestors
   venomState venomMemDefs abiMalformedRecursiveInterface abiMalformedSiteFrame
 
 Theorem extcall_return_observer_state_rel:
-  stmt_state_rel ctx func cenv cx es
+  stmt_state_rel H ctx func cenv cx es
     (t with <| vs_returndata := rd; vs_prev_bb := prev |>) <=>
-  stmt_state_rel ctx func cenv cx es t
+  stmt_state_rel H ctx func cenv cx es t
 Proof
   `!op. eval_operand op (t with <|vs_returndata := rd; vs_prev_bb := prev|>) =
         eval_operand op t` by (Cases >> simp[eval_operand_def, lookup_var_def]) >>

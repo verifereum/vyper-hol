@@ -16,7 +16,7 @@ Ancestors
 (* The generated header changes registers only. In particular it retains the
    state relation needed by a nested child's literal ALLOCA, even on reentry. *)
 Theorem abi_malformed_header_resource:
-  stmt_state_rel ctx func cenv cx es s /\ local_ptrs_reserved cenv st /\
+  stmt_state_rel H ctx func cenv cx es s /\ local_ptrs_reserved cenv st /\
   st.cs_next_var <= first /\
   first + 4 + abi_decode_position_header_delta base_op <= limit_st.cs_next_var /\
   fresh_vars_wrt limit_st s ==>
@@ -31,7 +31,7 @@ Proof
   `h = s with vs_vars := h.vs_vars` by
     (Cases_on `base_op = Lit 0w` >>
      simp[Abbr `h`, abi_decode_position_header_state_def, update_var_def]) >>
-  `stmt_state_rel ctx func cenv cx es h` by
+  `stmt_state_rel H ctx func cenv cx es h` by
     (qpat_assum `h = s with vs_vars := _` SUBST1_TAC >>
      irule abi_malformed_reserved_vars_state >> simp[] >> qexists_tac `st` >> simp[] >>
      rpt strip_tac >>
@@ -83,7 +83,7 @@ QED
    storage. All other incoming allocations are preserved, without imposing
    any order on their physical addresses. *)
 Theorem abi_malformed_index_store_resource:
-  stmt_state_rel ctx func cenv cx es s /\ fn_inst_ids_distinct func /\
+  stmt_state_rel H ctx func cenv cx es s /\ fn_inst_ids_distinct func /\
   MEM inst (fn_insts func) /\ inst.inst_opcode = ALLOCA /\
   inst.inst_outputs = [q] /\ not_local_ptr cenv es.scopes q /\
   FLOOKUP s.vs_allocas inst.inst_id = SOME (slot,32) /\
@@ -91,7 +91,7 @@ Theorem abi_malformed_index_store_resource:
   abi_malformed_resource_post ctx func cenv cx es next sites dstid s (mstore slot w s)
 Proof
   strip_tac >>
-  `stmt_state_rel ctx func cenv cx es (mstore slot w s)` by
+  `stmt_state_rel H ctx func cenv cx es (mstore slot w s)` by
     (irule literal_mstore_state_rel >> simp[] >>
      qexistsl_tac [`slot`, `inst`, `32`] >> simp[] >> rpt strip_tac >>
      `loweringStateRelDefs$regions_disjoint slot 32 lb lsz` by
@@ -116,7 +116,7 @@ Proof
 QED
 
 Theorem abi_malformed_backedge_resource:
-  stmt_state_rel ctx func cenv cx es s /\ fn_inst_ids_distinct func /\
+  stmt_state_rel H ctx func cenv cx es s /\ fn_inst_ids_distinct func /\
   local_ptrs_reserved cenv st /\ st.cs_next_var <= first /\ first <= next /\
   next < limit_st.cs_next_var /\ fresh_vars_wrt limit_st s /\
   MEM inst (fn_insts func) /\ inst.inst_opcode = ALLOCA /\
@@ -129,7 +129,7 @@ Theorem abi_malformed_backedge_resource:
 Proof
   strip_tac >>
   qabbrev_tac `u = update_var (STRING #"%" (toString next)) w s` >>
-  `stmt_state_rel ctx func cenv cx es u` by
+  `stmt_state_rel H ctx func cenv cx es u` by
     (simp_tac bool_ss [Abbr `u`, update_var_def] >>
      irule abi_malformed_reserved_vars_state >> simp[] >> qexists_tac `st` >>
      simp[lookup_var_def, FLOOKUP_UPDATE] >> rpt strip_tac >>
@@ -269,11 +269,11 @@ QED
 Theorem abi_malformed_setup_resource:
   abi_decode_array_element_setup ip src dst MLOAD base_op hi di abi_sz mem_sz st = (ops,en) /\
   run_inst_seq (emitted_insts st en) s = OK t /\
-  stmt_state_rel ctx func cenv cx es s /\ local_ptrs_reserved cenv st ==>
+  stmt_state_rel H ctx func cenv cx es s /\ local_ptrs_reserved cenv st ==>
   abi_malformed_resource_post ctx func cenv cx es st.cs_next_var sites dstid s t
 Proof
   strip_tac >> drule_all abi_malformed_setup_frame >> strip_tac >>
-  `stmt_state_rel ctx func cenv cx es t` by
+  `stmt_state_rel H ctx func cenv cx es t` by
     (qpat_assum `t = s with vs_vars := _` SUBST1_TAC >>
      irule abi_malformed_reserved_vars_state >> simp[lookup_var_def] >>
      qexists_tac `st` >> simp[]) >>
@@ -315,7 +315,7 @@ Proof
   `local_ptrs_reserved cenv en` by
     (irule local_ptrs_reserved_next_var >> qexists_tac `st` >>
      fs[abi_malformed_entry_def]) >>
-  `stmt_state_rel ctx func cenv cx es s /\ local_ptrs_reserved cenv st` by
+  `stmt_state_rel H ctx func cenv cx es s /\ local_ptrs_reserved cenv st` by
     fs[abi_malformed_entry_def] >>
   `abi_malformed_resource_post ctx func cenv cx es st.cs_next_var sites dstid s t` by
     (drule_all abi_malformed_setup_resource >> simp[]) >>
@@ -472,7 +472,7 @@ Proof
   `local_ptrs_reserved cenv en` by
     (irule local_ptrs_reserved_next_var >> qexists_tac `st` >>
      fs[abi_malformed_entry_def]) >>
-  `stmt_state_rel ctx func cenv cx es s /\ local_ptrs_reserved cenv st` by
+  `stmt_state_rel H ctx func cenv cx es s /\ local_ptrs_reserved cenv st` by
     fs[abi_malformed_entry_def] >>
   `abi_malformed_resource_post ctx func cenv cx es st.cs_next_var sites dstid s u` by
     (drule_all abi_malformed_setup_resource >> simp[]) >>
@@ -606,7 +606,7 @@ Theorem abi_malformed_array_header:
   n = abi_head_word (DROP p xs) /\ j <= n /\ slot < dimword (:256) /\
   abi_decoder_operand_live first src /\ abi_decoder_operand_live first base_op /\
   s.vs_current_bb = hdr /\ s.vs_inst_idx = 0 /\ ~s.vs_halted /\
-  stmt_state_rel ctx func cenv cx es s /\ local_ptrs_reserved cenv st /\
+  stmt_state_rel H ctx func cenv cx es s /\ local_ptrs_reserved cenv st /\
   st.cs_next_var <= first /\
   first + 4 + abi_decode_position_header_delta base_op <= limit_st.cs_next_var /\
   fresh_vars_wrt limit_st s ==>
@@ -712,7 +712,7 @@ Proof
    eval_operand src s = SOME (n2w p) /\ eval_operand base_op s = SOME (n2w B) /\
    abi_decoder_operand_live start.cs_next_var src /\
    abi_decoder_operand_live start.cs_next_var base_op /\
-   stmt_state_rel ctx func cenv cx es s /\ local_ptrs_reserved cenv start` by
+   stmt_state_rel H ctx func cenv cx es s /\ local_ptrs_reserved cenv start` by
     fs[abi_malformed_entry_def] >>
   `start.cs_next_var <= start.cs_next_var /\
    abi_head_word (DROP p xs) <= abi_head_word (DROP p xs) /\
@@ -798,7 +798,7 @@ Theorem abi_malformed_traversal_advance:
       (update_var (STRING #"%" (toString next)) (n2w (SUC j)) u)))
 Proof
   strip_tac >> fs[abi_malformed_traversal_inv_def] >>
-  `stmt_state_rel ctx func cenv cx es u /\ local_ptrs_reserved cenv start /\
+  `stmt_state_rel H ctx func cenv cx es u /\ local_ptrs_reserved cenv start /\
    FLOOKUP u.vs_allocas inst.inst_id = SOME (slot,32)` by
     (fs[abi_malformed_entry_def, abi_malformed_resource_post_def] >> metis_tac[]) >>
   `abi_malformed_resource_post ctx func cenv cx es start.cs_next_var sites dstid u
@@ -937,7 +937,7 @@ Proof
    eval_operand src s = SOME (n2w p) /\ eval_operand base_op s = SOME (n2w B) /\
    abi_decoder_operand_live start.cs_next_var src /\
    abi_decoder_operand_live start.cs_next_var base_op /\
-   stmt_state_rel ctx func cenv cx es s /\ local_ptrs_reserved cenv start` by
+   stmt_state_rel H ctx func cenv cx es s /\ local_ptrs_reserved cenv start` by
     fs[abi_malformed_entry_def] >>
   `?h. abi_decode_sim ctx func s h /\ h.vs_current_bb = body_lbl /\
     h.vs_inst_idx = 0 /\ ~h.vs_halted /\

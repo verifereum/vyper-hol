@@ -32,8 +32,8 @@ Theorem abi_malformed_index_resource_fragment:
   abi_decode_index_init st = (ip,en) /\ fn_has_code st en func /\
   fn_inst_ids_distinct func /\ local_ptrs_reserved cenv st ==>
   frag_exec ctx st en
-    (\s. stmt_state_rel ctx func cenv cx es s)
-    (\t. stmt_state_rel ctx func cenv cx es t /\
+    (\s. stmt_state_rel H ctx func cenv cx es s)
+    (\t. stmt_state_rel H ctx func cenv cx es t /\
       ?p. eval_operand ip t = SOME (n2w p) /\ mload p t = 0w /\
           p + 32 < dimword (:256) /\
           FLOOKUP t.vs_allocas st.cs_next_id = SOME (p,32))

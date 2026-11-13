@@ -6,13 +6,13 @@ Ancestors
   finite_map list arithmetic
 
 Theorem abi_malformed_mcopy_state_rel:
-  stmt_state_rel ctx func cenv cx es s /\
+  stmt_state_rel H ctx func cenv cx es s /\
   MEM inst (fn_insts func) /\ inst.inst_opcode = ALLOCA /\
   FLOOKUP s.vs_allocas inst.inst_id = SOME (b,sz) /\
   b <= dst /\ dst + n <= b + sz /\
   (!name lb lsz. local_region cenv es.scopes s name lb lsz ==>
      b + sz <= lb \/ lb + lsz <= b) ==>
-  stmt_state_rel ctx func cenv cx es (mcopy dst src n s)
+  stmt_state_rel H ctx func cenv cx es (mcopy dst src n s)
 Proof
   strip_tac >>
   `(mcopy dst src n s).vs_vars = s.vs_vars /\

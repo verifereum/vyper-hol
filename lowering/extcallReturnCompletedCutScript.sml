@@ -74,7 +74,7 @@ Theorem return_completed_cut_resources:
   (s.vs_current_bb,s.vs_inst_idx) IN frag_observer_region st en /\ ~s.vs_halted /\
   abi_valid_allocated_post tv v (return_observer_context ctx full) full
     ce cx es st en ceiling dstid d n s t /\
-  stmt_state_rel ctx func ce cx es s /\
+  stmt_state_rel H ctx func ce cx es s /\
   fn_inst_ids_distinct func /\ fn_inst_ids_distinct full /\
   (!i. i.inst_opcode = ALLOCA ==>
     (MEM i (fn_insts full) <=> MEM i (fn_insts func))) ==>

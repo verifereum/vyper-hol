@@ -8,7 +8,7 @@ Ancestors
 Theorem return_observer_alloca_structure:
   (!i. i.inst_opcode = ALLOCA ==>
     (MEM i (fn_insts obs) <=> MEM i (fn_insts func))) ==>
-  (state_rel obs ce cx es s <=> state_rel func ce cx es s) /\
+  (state_rel H obs ce cx es s <=> state_rel H func ce cx es s) /\
   (immutable_alloca_sep obs ce cx es s <=> immutable_alloca_sep func ce cx es s) /\
   (abi_malformed_destination obs ce scopes aid d n s <=>
    abi_malformed_destination func ce scopes aid d n s) /\
@@ -37,7 +37,7 @@ Proof
 QED
 
 Theorem return_observer_input_state:
-  stmt_state_rel ctx func ce cx es s /\
+  stmt_state_rel H ctx func ce cx es s /\
   fn_inst_ids_distinct func /\ fn_inst_ids_distinct obs /\
   (!i. i.inst_opcode = ALLOCA ==>
     (MEM i (fn_insts obs) <=> MEM i (fn_insts func))) /\
@@ -98,12 +98,12 @@ QED
    The original initial bounds and the execution charge are retained. *)
 Theorem return_observer_output_state:
   stmt_state_rel (return_observer_context ctx obs) obs ce cx es t /\
-  stmt_state_rel ctx func ce cx es s /\
+  stmt_state_rel H ctx func ce cx es s /\
   fn_inst_ids_distinct func /\ fn_inst_ids_distinct obs /\
   (!i. i.inst_opcode = ALLOCA ==>
     (MEM i (fn_insts obs) <=> MEM i (fn_insts func))) /\
   local_prefix ctx' obs cut s t /\ t.vs_fmp = s.vs_fmp ==>
-  stmt_state_rel ctx func ce cx es t
+  stmt_state_rel H ctx func ce cx es t
 Proof
   strip_tac >>
   `pending_alloca_size obs s = pending_alloca_size func s /\
@@ -122,7 +122,7 @@ QED
 Theorem return_observer_output_resources:
   abi_malformed_resource_post (return_observer_context ctx obs) obs
     ce cx es next sites dstid s t /\
-  stmt_state_rel ctx func ce cx es s /\
+  stmt_state_rel H ctx func ce cx es s /\
   fn_inst_ids_distinct func /\ fn_inst_ids_distinct obs /\
   (!i. i.inst_opcode = ALLOCA ==>
     (MEM i (fn_insts obs) <=> MEM i (fn_insts func))) /\
@@ -130,7 +130,7 @@ Theorem return_observer_output_resources:
   abi_malformed_resource_post ctx func ce cx es next sites dstid s t
 Proof
   strip_tac >>
-  `stmt_state_rel ctx func ce cx es t` by
+  `stmt_state_rel H ctx func ce cx es t` by
     (irule return_observer_output_state >>
      fs[abi_malformed_resource_post_def] >> metis_tac[]) >>
   fs[abi_malformed_resource_post_def] >> metis_tac[]

@@ -58,7 +58,7 @@ Proof
   `local_ptrs_reserved cenv header_st` by
     (irule local_ptrs_reserved_next_var >> qexists_tac `guard_st` >>
      fs[abi_malformed_entry_def]) >>
-  `stmt_state_rel ctx func cenv cx es prepared` by
+  `stmt_state_rel H ctx func cenv cx es prepared` by
     fs[abi_malformed_resource_post_def] >>
   `fresh_vars_wrt en prepared` by
     (irule fresh_vars_wrt_mono >> qexists_tac `header_st` >> simp[GREATER_EQ]) >>

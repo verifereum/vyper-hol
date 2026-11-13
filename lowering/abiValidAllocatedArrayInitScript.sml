@@ -56,7 +56,7 @@ Proof
   `local_ptrs_reserved cenv header_st` by
     (irule local_ptrs_reserved_next_var >> qexists_tac `guard_st` >>
      fs[abi_malformed_entry_def]) >>
-  `stmt_state_rel ctx func cenv cx es prepared` by
+  `stmt_state_rel H ctx func cenv cx es prepared` by
     fs[abi_malformed_resource_post_def] >>
   `MEM (mk_inst header_st.cs_next_id ALLOCA [Lit 32w]
      [STRING #"%" (toString header_st.cs_next_var)]) (fn_insts func) /\
@@ -146,7 +146,7 @@ QED
 
 Theorem abi_valid_allocated_index_effect:
   abi_decode_index_init st = (ip,en) /\
-  stmt_state_rel ctx func cenv cx es s /\ fn_inst_ids_distinct func /\
+  stmt_state_rel H ctx func cenv cx es s /\ fn_inst_ids_distinct func /\
   local_ptrs_reserved cenv st /\ st.cs_next_id IN sites /\
   MEM (mk_inst st.cs_next_id ALLOCA [Lit 32w]
     [STRING #"%" (toString st.cs_next_var)]) (fn_insts func) /\
@@ -300,7 +300,7 @@ Proof
   `local_ptrs_reserved cenv header_st` by
     (irule local_ptrs_reserved_next_var >> qexists_tac `guard_st` >>
      fs[abi_malformed_entry_def]) >>
-  `stmt_state_rel ctx func cenv cx es prepared` by
+  `stmt_state_rel H ctx func cenv cx es prepared` by
     fs[abi_valid_allocated_effect_def, abi_malformed_resource_post_def] >>
   `MEM (mk_inst header_st.cs_next_id ALLOCA [Lit 32w]
      [STRING #"%" (toString header_st.cs_next_var)]) (fn_insts func) /\

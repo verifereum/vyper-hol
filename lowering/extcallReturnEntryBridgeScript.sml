@@ -32,7 +32,7 @@ QED
 
 Theorem return_allocated_decode_ready:
   compile_alloc_buffer n sa = (buf,sm) /\
-  stmt_state_rel ctx func cenv cx es s /\ fn_inst_ids_distinct func /\
+  stmt_state_rel H ctx func cenv cx es s /\ fn_inst_ids_distinct func /\
   local_ptrs_reserved cenv sa /\ n < dimword (:256) /\
   fn_has_code sa sm func /\ ~s.vs_halted /\
   s.vs_current_bb = sa.cs_current_bb /\
@@ -143,7 +143,7 @@ Theorem return_decode_ready_prune[local]:
     B cap bs d n (drop_fresh a s)
 Proof
   strip_tac >> fs[abi_return_decode_ready_def] >>
-  `stmt_state_rel ctx func cenv cx es (drop_fresh a s)` by
+  `stmt_state_rel H ctx func cenv cx es (drop_fresh a s)` by
     (simp[drop_fresh_def] >> irule abi_malformed_reserved_vars_state >>
      reverse conj_tac >- simp[] >> qexists_tac `a` >>
      simp[GSYM drop_fresh_def, lookup_var_drop_fresh]) >>
@@ -187,7 +187,7 @@ Proof
     (mp_tac (Q.SPECL [`lo`, `cap`, `a`] ci_mono_compile_return_value_decode) >>
      simp[ci_mono_def]) >>
   fs[abi_return_decode_ready_def] >>
-  `stmt_state_rel ctx func cenv cx es u` by
+  `stmt_state_rel H ctx func cenv cx es u` by
     (qpat_assum `u = s with vs_vars := _` SUBST1_TAC >>
      irule abi_malformed_reserved_vars_state >>
      reverse conj_tac >- simp[] >> qexists_tac `a` >> simp[] >>

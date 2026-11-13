@@ -47,14 +47,14 @@ Theorem abi_malformed_destination_store_resource:
     (mstore d w (s with vs_vars := vars))
 Proof
   strip_tac >>
-  `stmt_state_rel ctx func cenv cx es (s with vs_vars := vars)` by
+  `stmt_state_rel H ctx func cenv cx es (s with vs_vars := vars)` by
     (irule abi_malformed_reserved_vars_state >>
      fs[abi_malformed_entry_def] >> qexists_tac `st` >>
      simp[lookup_var_def]) >>
   `abi_malformed_destination func cenv es.scopes dstid d outsz s` by
     fs[abi_malformed_entry_def] >>
   fs[abi_malformed_destination_def] >>
-  `stmt_state_rel ctx func cenv cx es
+  `stmt_state_rel H ctx func cenv cx es
      (mstore d w (s with vs_vars := vars))` by
     (irule literal_mstore_state_rel >> simp[] >>
      qexistsl_tac [`b`, `inst`, `sz`] >> simp[] >>
@@ -366,11 +366,11 @@ Theorem abi_malformed_read_sequence_resource:
                abi_decode_source_opcode i.inst_opcode) /\
              EVERY (\x. ~not_fresh_at st x) i.inst_outputs) is /\
   run_inst_seq is s = OK t /\
-  stmt_state_rel ctx func cenv cx es s /\ local_ptrs_reserved cenv st ==>
+  stmt_state_rel H ctx func cenv cx es s /\ local_ptrs_reserved cenv st ==>
   abi_malformed_resource_post ctx func cenv cx es st.cs_next_var sites dstid s t
 Proof
   strip_tac >> drule_all abi_malformed_read_sequence_frame >> strip_tac >>
-  `stmt_state_rel ctx func cenv cx es t` by
+  `stmt_state_rel H ctx func cenv cx es t` by
     (qpat_assum `t = s with vs_vars := _` SUBST1_TAC >>
      irule abi_malformed_reserved_vars_state >> simp[] >> qexists_tac `st` >>
      simp[lookup_var_def]) >>
