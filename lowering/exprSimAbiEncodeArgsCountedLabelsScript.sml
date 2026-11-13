@@ -65,7 +65,7 @@ Proof
       `ee.storage_trace = es_end.storage_trace` by
         (qpat_x_assum `ee with gas_obs := _ = _`
            (mp_tac o Q.AP_TERM `\st. st.storage_trace`) >> simp[]) >>
-      fs[] >> first_x_assum drule >> simp[expr_exit_INL]) >>
+      metis_tac[]) >>
   drule gas_exempt_cert_execution >>
   simp[vyperStateTheory.ignore_bind_def, vyperStateTheory.bind_def,
        vyperStateTheory.return_def]

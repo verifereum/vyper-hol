@@ -247,6 +247,9 @@ Proof
   simp[exprSimVVFrameTheory.vv_post_inst_idx,
        exprSimHashTheory.hash_eval_operand_inst_idx, venomStateTheory.lookup_var_def] >>
   gvs[venomStateTheory.lookup_var_def] >>
+  `!H'. vv_post H' ctx func cenv cx e es sa sm s0 es' tv vv
+          (q with vs_vars := s.vs_vars) ==>
+        vv_post H' ctx func cenv cx e es sa sn s0 es' tv vv q` by metis_tac[] >>
   qpat_x_assum `q with vs_vars := _ = s` (SUBST1_TAC o SYM) >>
   simp[]
 QED
