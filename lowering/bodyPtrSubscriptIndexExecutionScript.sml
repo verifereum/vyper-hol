@@ -54,9 +54,9 @@ Proof
   gen_tac >> strip_tac >>
   conj_tac >- (drule_all ghost_inv_local_coverage >> simp[]) >>
   conj_tac >-
-   (mp_tac (GEN_ALL (Q.INST [`mem` |-> `s.vs_memory`]
-              expr_post_local_robust_representation)) >>
-    simp[mem_agree_outside_def] >> disch_then drule_all >> simp[]) >>
+   (`mem_agree_outside tn.t_mem t.vs_memory t.vs_memory` by
+      simp[mem_agree_outside_def] >>
+    drule_all expr_post_local_robust_representation >> simp[]) >>
   gen_tac >> strip_tac >>
   drule_all expr_post_local_robust_representation >> simp[]
 QED

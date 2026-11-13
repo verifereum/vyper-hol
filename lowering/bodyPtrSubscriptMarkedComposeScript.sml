@@ -49,27 +49,41 @@ Resume array_index_summary_compose_ptr[live]:
      es_end r` by simp[gas_marked_exec_def, gas_marked_path_def] >>
   `storage_trace_frame (bind b (k captured))` by
     (irule storage_trace_frame_bind_all >> simp[]) >>
-  irule gas_summary_ptr_at_bind_normal >>
-  goal_assum (drule_at Any) >> BETA_TAC >> simp[] >>
-  qexistsl_tac [`G1`, `tn1`] >> simp[] >>
+  `gas_summary_ptr_at D (ctx,func) PG cx st0 marks (bind b (k captured))
+     (mid with gas_obs := [],t,G1,tn1) Q R` suffices_by
+    (strip_tac >>
+     mp_tac (Q.INST [`source` |-> `a`, `next` |-> `\r. bind b (k r)`,
+                     `v` |-> `captured`, `right` |-> `marks`]
+               gas_summary_ptr_at_bind_normal) >>
+     simp[]) >>
   first_assum drule >> strip_tac >> gvs[]
   >- suspend "normal" >>
-  irule gas_summary_ptr_at_bind_exception >> simp[] >>
-  rpt strip_tac >> first_x_assum drule >> strip_tac >>
-  gvs[fragExecTheory.exit_result_def]
+  mp_tac (Q.INST [`fin` |-> `es_end`, `es` |-> `mid with gas_obs := []`,
+                  `s0` |-> `t`, `G0` |-> `G1`, `tn0` |-> `tn1`,
+                  `source` |-> `b`, `next` |-> `k captured`]
+            gas_summary_ptr_at_bind_exception) >>
+  impl_tac
+  >- (fs[] >> rpt strip_tac >> first_x_assum drule >> strip_tac >>
+      gvs[fragExecTheory.exit_result_def]) >>
+  simp[]
 QED
 
 Resume array_index_summary_compose_ptr[normal]:
-  irule (gas_summary_ptr_at_bind_normal |> Q.INST [`right` |-> `[]`]
-    |> REWRITE_RULE [APPEND_NIL]) >>
-  goal_assum (drule_at Any) >> simp[] >>
-  qexistsl_tac [`G`, `tn`] >>
+  rename1 `V H v _ G tn u` >>
   `!H. valid_horizon cx st0 H es_end.storage_trace ==>
        gas_path_ptr (D H) 0 ctx func PG G1 tn1 t (LENGTH marks) G tn
-         (OK t') /\ V H v (es_end with gas_obs := []) G tn t'` by
+         (OK u) /\ V H v (es_end with gas_obs := []) G tn u` by
     (rpt strip_tac >> first_x_assum drule >> strip_tac >>
      gvs[fragExecTheory.exit_result_def]) >>
-  simp[] >> first_x_assum irule >> simp[]
+  mp_tac (Q.INST [`right` |-> `[]`, `left` |-> `marks`, `source` |-> `b`,
+                  `next` |-> `k captured`, `mid` |-> `es_end`, `t` |-> `u`,
+                  `G1` |-> `G`, `tn1` |-> `tn`,
+                  `es` |-> `mid with gas_obs := []`, `s0` |-> `t`,
+                  `G0` |-> `G1`, `tn0` |-> `tn1`]
+            gas_summary_ptr_at_bind_normal |> REWRITE_RULE [APPEND_NIL]) >>
+  impl_tac
+  >- (fs[] >> first_x_assum irule >> fs[]) >>
+  simp[]
 QED
 Finalise array_index_summary_compose_ptr
 
