@@ -5,6 +5,9 @@ Ancestors
   bodyFullToplevelCodeWitnessPosts valueEncodingProps valueEncodingDefs exprSimMemorySource
   exprLowering compileEnv venomMemDefs venomState words arithmetic list
   exprSimAlloc exprPtrUnwrapAllocationFrame exprPtrUnwrapAllocation
+  loweringStateRelDefs exprPtrUnwrapAllocSeparation bodyPtrDefs allocationPtr
+  ptrDiscipline immutableCopyExecution bodyFullUnwrapSlotPost
+  exprLoweringProps exprPtrUnwrapRetained bufferAllocationExecution exprSimStorageCopy
 
 Theorem toplevel_code_ctor_contents:
   compile_expr cenv ty (TopLevelName ann nsid) sx = (vv,sm) /\
@@ -83,4 +86,86 @@ Proof
   rpt strip_tac >> irule robust_val_in_memory_copy_transport >> simp[] >>
   qexistsl [`s.vs_memory`, `z.vs_memory`, `type_memory_size rt`, `w2n p`, `tn.t_mem`, `tf.t_mem`] >>
   simp[ADD_COMM] >> metis_tac[]
+QED
+
+Theorem toplevel_code_ctor_exterior:
+  compile_expr cenv ty (TopLevelName ann nsid) sx = (vv,sm0) /\
+  compile_alloc_buffer nb sm = (buf,mid) /\ fn_has_code sm mid func /\
+  stmt_state_rel H ctx func cenv cx ee s /\ nb < dimword(:256) /\
+  buf.buf_operand = Var root /\
+  step_inst_base (mk_inst sm.cs_next_id ALLOCA [Lit (n2w nb)] [root]) s = OK u /\
+  tm = step_taint (mk_inst sm.cs_next_id ALLOCA [Lit (n2w nb)] [root]) s u tn /\
+  (d:bytes32) = n2w (buffer_allocation_base s sm.cs_next_id) /\
+  buffer_allocation_base s sm.cs_next_id < dimword(:256) /\
+  sz <= nb /\ a.vs_memory = s.vs_memory /\
+  (!off len. off+len <= w2n d \/ w2n d+sz <= off ==>
+    mem_bytes_at off len z.vs_memory = mem_bytes_at off len a.vs_memory) /\
+  (!j. j IN tf.t_mem <=>
+    if w2n d <= j /\ j < w2n d+sz
+    then src+(j-w2n d) IN tm.t_mem else j IN tm.t_mem) ==>
+  (!j. j < w2n d \/ w2n d+nb <= j ==> (j IN tf.t_mem <=> j IN tn.t_mem)) /\
+  (!off len. off+len <= w2n d \/ w2n d+nb <= off ==>
+    mem_bytes_at off len z.vs_memory = mem_bytes_at off len s.vs_memory)
+Proof
+  strip_tac >> drule unwrap_alloc_generated_code >> strip_tac >>
+  `root = out` by gvs[] >> qpat_x_assum `root = out` SUBST_ALL_TAC >>
+  drule_all buffer_alloc_code >> strip_tac >>
+  qpat_x_assum `out = STRING _ _` SUBST_ALL_TAC >>
+  drule_all unwrap_alloc_taint_frame >>
+  disch_then (qspec_then `tn` strip_assume_tac) >>
+  `w2n d = buffer_allocation_base s sm.cs_next_id` by simp[] >>
+  conj_tac
+  >- (rpt strip_tac >>
+      `~(w2n d <= j /\ j < w2n d+sz)` by decide_tac >>
+      `j < buffer_allocation_base s sm.cs_next_id \/
+       buffer_allocation_base s sm.cs_next_id+nb <= j` by decide_tac >>
+      metis_tac[]) >>
+  rpt strip_tac >>
+  `off+len <= w2n d \/ w2n d+sz <= off` by decide_tac >> metis_tac[]
+QED
+
+Theorem toplevel_code_ctor_ghost:
+  compile_expr cenv ty (TopLevelName ann nsid) sx = (vv,sm0) /\
+  compile_alloc_buffer nb sm = (buf,mid) /\ fn_has_code sm mid func /\
+  stmt_state_rel H ctx func cenv cx ee s /\
+  ghost_inv_at D lo ret cenv cx ee G tn s /\ local_ptrs_reserved cenv sa /\
+  fn_inst_ids_distinct func /\ local_ptrs_reserved cenv sm /\ nb < dimword(:256) /\
+  (!x sz. cenv.ce_return_buf = SOME (PtrVar (Var x) sz) ==> not_fresh_at sa x) /\
+  (!x sz. cenv.ce_return_pc = SOME (PtrVar (Var x) sz) ==> not_fresh_at sa x) /\
+  sa.cs_next_var <= sm.cs_next_var /\
+  (!x. not_fresh_at sa x ==> lookup_var x z = lookup_var x s /\
+    FLOOKUP Gf x = FLOOKUP G x /\ op_taint tf (Var x) = op_taint tn (Var x)) /\
+  (d:bytes32) = n2w (buffer_allocation_base s sm.cs_next_id) /\
+  buffer_allocation_base s sm.cs_next_id < dimword(:256) /\
+  (!off len. off+len <= w2n d \/ w2n d+nb <= off ==>
+    mem_bytes_at off len z.vs_memory = mem_bytes_at off len s.vs_memory) /\
+  (!j. j < w2n d \/ w2n d+nb <= j ==> (j IN tf.t_mem <=> j IN tn.t_mem)) /\
+  a.vs_accounts = s.vs_accounts /\ a.vs_transient = s.vs_transient /\
+  a.vs_call_ctx = s.vs_call_ctx /\ a.vs_immutables = s.vs_immutables /\
+  copy_runtime_frame mid a sb z /\
+  tf.t_stor = tn.t_stor /\ tf.t_trans = tn.t_trans /\ tf.t_imm = tn.t_imm /\
+  allocas_from lo z /\ s.vs_alloca_next <= z.vs_alloca_next ==>
+  ghost_inv_at D lo ret cenv cx ee Gf tf z
+Proof
+  strip_tac >>
+  `local_ptrs_rel func cenv ee.scopes s` by fs[stmt_state_rel_def, state_rel_def] >>
+  `!name off len. local_region cenv ee.scopes s name off len ==>
+    w2n d+nb <= off \/ off+len <= w2n d` by
+    (rpt strip_tac >> drule_all unwrap_alloc_local_separation >> simp[]) >>
+  `lo <= w2n d` by
+    (gvs[ghost_inv_at_def, buffer_allocation_base_def] >>
+     Cases_on `FLOOKUP s.vs_allocas sm.cs_next_id` >>
+     gvs[allocas_from_def] >> PairCases_on `x` >> gvs[] >> metis_tac[]) >>
+  `stor_taint_ok_at D tf z` by
+    (fs[ghost_inv_at_def, stor_taint_ok_at_def, copy_runtime_frame_def] >>
+     qpat_x_assum `copy_static z = copy_static a`
+       (mp_tac o Q.AP_TERM `\st. (st.vs_accounts,st.vs_transient,st.vs_call_ctx,st.vs_immutables)`) >>
+     simp[copy_static_def] >> gvs[]) >>
+  qpat_x_assum `d = _` kall_tac >>
+  irule unwrap_slot_copy_ghost_inv_at >>
+  simp[] >> (conj_tac >- (fs[ghost_inv_at_def] >> decide_tac)) >>
+  goal_assum (drule_at (Pat `ghost_inv_at _ _ _ _ _ _ _ _ _`)) >>
+  goal_assum (drule_at (Pat `local_ptrs_rel _ _ _ _`)) >>
+  qexistsl [`nb`, `sa`, `w2n d`] >> asm_rewrite_tac[] >>
+  `nb+w2n d = w2n d+nb` by decide_tac >> asm_rewrite_tac[]
 QED
