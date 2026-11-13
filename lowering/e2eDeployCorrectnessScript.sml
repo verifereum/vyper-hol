@@ -115,7 +115,8 @@ Proof
                `dout`, `prog`, `cplan`, `am`, `tx`, `es`, `r`, `es'`] mp_tac
     deploy_pipeline_gas_link >>
   impl_tac
-  >- (fs[] >> rpt strip_tac >> irule deploy_unit_execution_correct_joint >> metis_tac[]) >>
+  >- (fs[] >> rpt strip_tac >>
+      drule_all deploy_unit_execution_correct_joint >> simp[]) >>
   strip_tac >>
   qspecl_then [`policy`, `tops`, `deploy_bc`, `runtime_bc`, `am`, `tx`, `es`,
                `r`, `es'`, `rpolicy`, `dunit`, `dout`, `prog`, `cplan`] mp_tac
