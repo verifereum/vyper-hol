@@ -10739,19 +10739,6 @@ Proof
        venomStateTheory.venom_state_component_equality,
        finite_mapTheory.FUPDATE_COMMUTES]) >>
   pop_assum (markerLib.mk_asm "adjacent_gas_endpoints") >>
-  `!j. j < LENGTH rest /\ (EL j rest).inst_opcode = GAS /\
-    EVERY (\i. ~is_terminator i.inst_opcode) (TAKE j rest) ==>
-    LENGTH (EL j (padM rest v mt)) = 1` by
-    (rpt gen_tac >> strip_tac >>
-     Cases_on `?t. R fuel C' (TAKE j rest) v = OK t`
-     >- (pop_assum (qx_choose_then `t` assume_tac) >>
-         qpat_assum `P rest v mt et` mp_tac >>
-         simp_tac (srw_ss()) [Abbr `P`] >> strip_tac >>
-         qpat_x_assum `!j t. j < LENGTH rest /\ (EL j rest).inst_opcode = GAS /\ _ ==> _`
-           (qspecl_then [`j`, `t`] mp_tac) >>
-         simp[Abbr `padM`] >> strip_tac >> gvs[]) >>
-     gvs[Abbr `padM`]) >>
-  pop_assum (markerLib.mk_asm "gas_packet_length") >>
   `LIST_REL (\m es. LENGTH m = LENGTH es)
     (MAP (\j. EL j (padM rest v mt)) rr)
     (MAP (\j. EL j (padE rest v et)) rr)` by
@@ -11430,7 +11417,8 @@ Proof
                    MAP_EVERY assume_tac [halt, abort, ns, nv, si, vi])))))) >>
      Cases_on `R j C (TAKE n pre) (s with vs_gas_readings := readings)` >>
      gvs[restore_result_def, dftRunRelTheory.dft_res_rel_def]
-     >- (qpat_x_assum `!a. _ <=> _` (qspec_then `v'` mp_tac) >> simp[]) >>
+     >- (rename1 `R j C (TAKE n pre) (s with vs_gas_readings := readings) = Halt stopped_state` >>
+         qpat_x_assum `!a. _ <=> _` (qspec_then `stopped_state` mp_tac) >> simp[]) >>
      Cases_on `R j C (TAKE n pre) (v with vs_gas_readings := readings)` >>
      gvs[restore_result_def, dftRunRelTheory.dft_res_rel_def]) >>
   pop_assum (markerLib.mk_asm "source_v_stopped") >>
