@@ -103,7 +103,8 @@ QED
 
 Theorem abi_args_child_label_replay[local]:
   (!e ce ty sa vv sb l cx es v ee.
-    expr_size e < bound /\ compile_expr ce ty e sa = (vv,sb) /\
+    expr_size e + cenv_defaults_size ce < bound /\
+    compile_expr ce ty e sa = (vv,sb) /\
     vv_operand vv = Label l /\
     bind (eval_expr cx e) (read_result cx) es = (INL v,ee) ==>
     !gs. bind (eval_expr cx e) (read_result cx) (es with gas_obs := gs) =
@@ -116,8 +117,10 @@ Proof
   simp[lower_value_def, comp_bind_def, LET_THM] >> strip_tac >>
   rpt (pairarg_tac >> gvs[]) >>
   drule abi_image_unwrap_label >> strip_tac >>
-  Cases_on `expr_size e < bound`
-  >- (gvs[expr_child_callback_def] >> metis_tac[]) >>
+  Cases_on `cenv_defaults_size ce + expr_size e < bound`
+  >- (gvs[expr_child_callback_def] >>
+      `expr_size e + cenv_defaults_size ce < bound` by decide_tac >>
+      metis_tac[]) >>
   gvs[expr_child_callback_def, invalid_expr_call_def, LET_THM] >>
   rpt (pairarg_tac >> gvs[vv_operand_def])
 QED
@@ -189,7 +192,10 @@ Resume abi_args_label_replay_mutual[builtin]:
   simp[builtin_args_length_ok_def] >>
   rpt strip_tac >> irule abi_args_child_label_replay >>
   reverse conj_tac >- first_assum ACCEPT_TAC >>
-  goal_assum (drule_at Any) >> metis_tac[]
+  goal_assum (drule_at Any) >> rpt strip_tac >>
+  first_x_assum (qspecl_then [`e'`, `ce'`] mp_tac) >>
+  impl_tac >- (fs[] >> decide_tac) >>
+  metis_tac[]
 QED
 
 Resume abi_args_label_replay_mutual[type_builtin]:
@@ -202,7 +208,10 @@ Resume abi_args_label_replay_mutual[type_builtin]:
   irule abi_args_convert_replay >> conj_tac
   >- (rpt strip_tac >> irule abi_args_child_label_replay >>
       reverse conj_tac >- first_assum ACCEPT_TAC >>
-      goal_assum (drule_at Any) >> metis_tac[]) >>
+      goal_assum (drule_at Any) >> rpt strip_tac >>
+      first_x_assum (qspecl_then [`e'`, `ce'`] mp_tac) >>
+      impl_tac >- (fs[] >> decide_tac) >>
+      metis_tac[]) >>
   goal_assum (drule_at Any)
 QED
 
