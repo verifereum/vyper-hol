@@ -231,10 +231,34 @@ Resume hash_builtin_value_from_suffixes[suffix]:
     ghost_inv_at (DF H) lo d cenv cx mid G1 tn1 t` by
    (rpt strip_tac >> qpat_assum `!H. valid_horizon _ _ H mid.storage_trace ==> expr_post _ _ _ _ _ _ _ _ _ _ _ _ _ _ /\ _`
       (qspec_then `H` mp_tac) >>
-    (impl_tac >- first_assum ACCEPT_TAC) >> simp[expr_post_def]) >>
+    (impl_tac >- first_assum ACCEPT_TAC) >>
+    disch_then (strip_assume_tac o REWRITE_RULE [expr_post_def]) >>
+    first_assum ACCEPT_TAC) >>
  Cases_on `bt = BlockHash`
  >- (gvs[] >> qpat_assum `!arg sa op sb func st0 cenv cx mid s ctx DF lo d G tn explicit PG i. compile_blockhash _ _ = _ /\ _ ==> _`
-       (drule_at Any) >> FAIL_TAC "block apply") >>
+       drule_all >>
+      disch_then (qspecl_then [`gas_explicit_sites ctx shadow_ctx`, `PG`] strip_assume_tac) >>
+      irule gas_outcome_full_intro >>
+      qexistsl_tac [`G'`, `mid`, `[]`, `r`, `unop_result cx (BaseT (BytesT (Fixed 32))) BlockHash [BaseT (UintT 256)] (IntV i) mid`, `tn'`] >>
+      simp[] >> conj_tac
+      >- simp[unop_result_def] >>
+      rpt strip_tac >>
+      qpat_assum `!H. valid_horizon _ _ H _ ==> gas_origin_ptr_path _ _ _ _ /\ _`
+        (qspec_then `H` mp_tac) >>
+      (impl_tac >- first_assum ACCEPT_TAC) >> strip_tac >>
+      Cases_on `unop_result cx (BaseT (BytesT (Fixed 32))) BlockHash [BaseT (UintT 256)] (IntV i) mid`
+      >- suspend "block_success" >>
+      gvs[Abbr `childR`] >>
+      Cases_on `r` >> fs[exprSimDefsTheory.expr_exit_def, exit_result_def] >>
+      metis_tac[exprSimDefsTheory.expr_exit_def]) >>
+ suspend "blob"
+QED
+
+Resume hash_builtin_value_from_suffixes[block_success]:
+ FAIL_TAC "success inspect"
+QED
+
+Resume hash_builtin_value_from_suffixes[blob]:
  FAIL_TAC "blob apply"
 QED
 
