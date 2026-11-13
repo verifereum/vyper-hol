@@ -123,7 +123,7 @@ Proof
     (qspec_then `storage_trace_horizon mid.storage_trace` mp_tac) >>
   impl_tac >- fs[vyperStorageFootprintTheory.storage_trace_domain_def] >>
   strip_tac >>
-  first_x_assum irule >> qexists_tac `marks` >> simp[]
+  first_x_assum irule >> simp[] >> metis_tac[]
 QED
 
 Theorem slice_uint_read_post:
