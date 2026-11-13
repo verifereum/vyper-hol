@@ -621,7 +621,7 @@ Proof
       `es with gas_obs := [] = es` by
         (qpat_x_assum `es.gas_obs = []` (fn th => once_rewrite_tac[GSYM th]) >> simp[]) >>
       rewrite_tac[gasOutcomeTheory.gas_outcome_def] >>
-      qexists_tac `[]` >> disj1_tac >>
+      qexists_tac `[]` >> disj2_tac >> disj1_tac >>
       rewrite_tac[gasSummaryTheory.gas_summary_at_def] >>
       qexistsl_tac [`INL (Value (BytesV (TAKE k (DROP i cx.txn.code))))`, `es`,
         `OK (t with vs_inst_idx := LENGTH (emitted_insts sa sb) + s.vs_inst_idx)`] >>
@@ -654,7 +654,7 @@ Proof
   drule_all fragGasSeqAbortTheory.run_inst_seq_abort_zero_path >>
   disch_then (qspec_then `ctx` strip_assume_tac) >>
   rewrite_tac[gasOutcomeTheory.gas_outcome_def] >>
-  qexists_tac `[]` >> disj1_tac >>
+  qexists_tac `[]` >> disj2_tac >> disj1_tac >>
   rewrite_tac[gasSummaryTheory.gas_summary_at_def] >>
   qexistsl_tac [`INR (Error (RuntimeError "evaluate_slice range"))`,
                 `es`, `Abort Revert_abort (u with vs_inst_idx := j)`] >>

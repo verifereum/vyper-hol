@@ -43,7 +43,7 @@ Theorem slice_terminal_outcome[local]:
   gas_outcome F tops (ctx,func) cx st0 source (es,s) Q R
 Proof
   strip_tac >> rewrite_tac[gas_outcome_def] >>
-  qexists_tac `[]` >> disj1_tac >>
+  qexists_tac `[]` >> disj2_tac >> disj1_tac >>
   rewrite_tac[gas_summary_at_def] >>
   qexistsl_tac [`res`, `es`, `r`] >>
   gvs[gas_marked_exec_def]

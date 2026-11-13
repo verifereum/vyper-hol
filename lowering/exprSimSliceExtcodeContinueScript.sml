@@ -217,7 +217,7 @@ Theorem slice_extcode_range_outcome:
         return (Value v) od) (es,s) Q (\H res ee r. expr_exit res r)
 Proof
   strip_tac >> rewrite_tac[gasOutcomeTheory.gas_outcome_def] >>
-  qexists_tac `[]` >> disj1_tac >>
+  qexists_tac `[]` >> disj2_tac >> disj1_tac >>
   rewrite_tac[gasSummaryTheory.gas_summary_at_def] >>
   qexistsl_tac [`INR (Error (RuntimeError "evaluate_slice range"))`,
                `es`, `Abort Revert_abort t`] >>
@@ -249,7 +249,7 @@ Theorem slice_extcode_success_outcome:
     (\H res ee r. expr_exit res r)
 Proof
   strip_tac >> rewrite_tac[gasOutcomeTheory.gas_outcome_def] >>
-  qexists_tac `[]` >> disj1_tac >>
+  qexists_tac `[]` >> disj2_tac >> disj1_tac >>
   rewrite_tac[gasSummaryTheory.gas_summary_at_def] >>
   qexistsl_tac [`INL (Value (BytesV (TAKE k (DROP i
     (lookup_account (word_of_bytes_be bs) es.accounts).code))))`, `es`, `OK t`] >>
