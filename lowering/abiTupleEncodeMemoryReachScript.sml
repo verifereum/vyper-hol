@@ -53,7 +53,7 @@ Proof
   drule mem_cont_sim_from_fragment >> disch_then (qspec_then `initial` mp_tac) >>
   simp[] >> strip_tac >>
   qexists_tac `encoded with vs_inst_idx := LENGTH staged.cs_current_insts` >>
-  gvs[abi_decode_frame_def, fresh_vars_wrt_def, eval_op_inst_idx] >> first_assum ACCEPT_TAC
+  gvs[abi_decode_frame_def, loweringStateRelDefsTheory.fresh_vars_wrt_def, eval_op_inst_idx] >> first_assum ACCEPT_TAC
 QED
 
 Theorem abi_tuple_encode_window_input:

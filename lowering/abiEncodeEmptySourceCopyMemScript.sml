@@ -30,7 +30,7 @@ Theorem empty_source_copy_run_mem:
     mem_cont_sim ctx func s t /\ window_mem_frame ctx func s t
 Proof
   strip_tac >>
-  `enc at av = []` by fs[abi_encoder_window_copy_iff, mem_bytes_at_def] >>
+  `enc at av = []` by fs[abi_encoder_window_copy_iff, valueEncodingDefsTheory.mem_bytes_at_def] >>
   `!i b sz. i IN window_alloca_sites func (frag_ids st en) /\
     FLOOKUP s.vs_allocas i = SOME (b,sz) ==> sz = 32` by
     (simp_tac (srw_ss()) [window_alloca_sites_def] >> rpt strip_tac >> metis_tac[]) >>
@@ -75,7 +75,7 @@ Resume empty_source_copy_run_mem[package]:
      simp[window_alloca_sites_subset]) >>
   qexists `raw with vs_inst_idx := LENGTH en.cs_current_insts` >> asm_rewrite_tac[] >>
   simp_tac bool_ss [window_strong_result_def, abi_encoder_window_result_def] >>
-  simp[eval_operand_def, mem_bytes_at_def, abi_encoder_extend_sim_sim] >>
+  simp[eval_operand_def, valueEncodingDefsTheory.mem_bytes_at_def, abi_encoder_extend_sim_sim] >>
   suspend "resources"
 QED
 

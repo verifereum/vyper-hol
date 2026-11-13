@@ -172,7 +172,7 @@ Proof
   >- (rpt strip_tac >- metis_tac[not_fresh_at_mono] >>
       qpat_x_assum `abi_decoder_operand_live ready.cs_next_var (SND ops)` mp_tac >>
       qpat_x_assum `SND ops = Var x` (fn th => rewrite_tac [th]) >>
-      simp_tac (srw_ss()) [abi_decoder_operand_live_def, abi_decoder_older_vars_def, not_fresh_at_def]) >>
+      simp_tac (srw_ss()) [abi_decoder_operand_live_def, abi_decoder_older_vars_def, loweringStateRelDefsTheory.not_fresh_at_def]) >>
   conj_tac
   >- (qpat_x_assum `window_alloca_growth s u` mp_tac >>
       simp_tac bool_ss [window_alloca_growth_def] >> strip_tac >> decide_tac) >>

@@ -15,7 +15,7 @@ Ancestors
 Theorem window_leaf_global_seq_frame[local]:
   abi_encoder_window_pre ctx func st en dst src ei at av sb cap d s /\
   window_seq st en s raw /\
-  EVERY (\i. i.inst_opcode IN {MLOAD; MSTORE; MCOPY; ADD; AND})
+  EVERY (\i. i.inst_opcode IN {MLOAD; MSTORE; MCOPY; ADD; AND; NOT})
     (emitted_insts st en) ==>
   window_mem_frame ctx func s (raw with vs_inst_idx := LENGTH en.cs_current_insts)
 Proof
@@ -259,13 +259,18 @@ Proof
   `mem_bytes_at d (LENGTH (enc at (BytesV bs))) actual.vs_memory = enc at (BytesV bs)` by
     (qpat_assum `actual.vs_memory = _` (fn th => rewrite_tac[th]) >>
      irule window_bytes_input_memory >> qexistsl_tac [`cap`, `maxlen`] >> asm_rewrite_tac[]) >>
+  `window_mem_frame ctx func s (actual with vs_inst_idx := LENGTH st'.cs_current_insts)` by
+    (drule abi_encoder_bytes_global_code >> strip_tac >>
+     drule_all window_leaf_global_seq_frame >> simp[]) >>
+  `actual.vs_immutables = s.vs_immutables` by
+    (drule abi_encoder_bytes_global_code >> strip_tac >>
+     irule (cj 7 abi_encoder_leaf_sequence_globals) >>
+     qexists `emitted_insts st st'` >> fs[window_seq_def]) >>
+  drule window_mem_frame_static >> simp[] >> strip_tac >>
   `abi_encoder_registered_effect (window_alloca_sites func (frag_ids st st'))
      [(d,LENGTH (enc at (BytesV bs)))] s actual` by
     (asm_rewrite_tac[] >> irule window_bytes_effect >> simp[] >>
      qexistsl_tac [`LENGTH bs`, `sb`] >> simp[]) >>
-  `window_mem_frame ctx func s (actual with vs_inst_idx := LENGTH st'.cs_current_insts)` by
-    (drule abi_encoder_bytes_global_code >> strip_tac >>
-     drule_all window_leaf_global_seq_frame >> simp[]) >>
   qexists_tac `actual with vs_inst_idx := LENGTH st'.cs_current_insts` >>
   asm_rewrite_tac[] >> metis_tac[window_leaf_sequence_result]
 QED

@@ -10,7 +10,7 @@ Theorem empty_source_window_rebase_ind[local]:
 Proof
   ho_match_mp_tac abi_encoder_window_input_ind >> rpt conj_tac >>
   rpt gen_tac >> strip_tac >> strip_tac >> gvs[]
-  >- (rpt gen_tac >> irule window_copy >> gvs[valueEncodingTheory.mem_bytes_at_def])
+  >- (rpt gen_tac >> irule window_copy >> gvs[valueEncodingDefsTheory.mem_bytes_at_def])
   >> rpt gen_tac >> irule window_complex >> qexists_tac `ats` >>
   simp[] >> rpt strip_tac >> first_x_assum drule_all >> strip_tac >>
   qexists_tac `0` >> simp[]
