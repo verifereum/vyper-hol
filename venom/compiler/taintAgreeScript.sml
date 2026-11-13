@@ -100,7 +100,8 @@ Proof
   Cases_on `t'` >> simp[out_taint_def] >>
   Cases_on `eval_operand h s` >> simp[] >>
   IF_CASES_TAC >> simp[] >>
-  simp[shift_taint_def] >> rpt (IF_CASES_TAC >> simp[]) >> SET_TAC[]
+  simp[shift_taint_def] >> rpt (IF_CASES_TAC >> simp[]) >>
+  rpt strip_tac >> gvs[] >> metis_tac[var_taint_bounded_operand]
 QED
 
 Theorem var_taint_bounded_step:

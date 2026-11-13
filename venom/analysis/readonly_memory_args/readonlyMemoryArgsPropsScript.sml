@@ -2141,7 +2141,6 @@ Theorem single_block_o1_fn_shape:
     fn_entry_label fn = SOME fn.fn_name /\
     ~reserved_label bb.bb_label /\
     EVERY inst_shape_ok (fn_insts fn) /\
-    call_checks_ok fn /\
     first_block_no_preds fn /\
     first_block_no_phi fn /\
     EVERY (\i. i.inst_opcode <> ASSIGN /\ i.inst_opcode <> PHI /\

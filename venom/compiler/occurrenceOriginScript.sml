@@ -111,7 +111,7 @@ Proof
   >- (strip_tac >>
       drule occurrence_out_own_source >> simp[] >> strip_tac
       >- (qexistsl_tac [`inst`,`v`] >>
-          simp[mem2varBlockSimHelpersTheory.roots_in_pointer_derived_vars] >> gvs[]) >>
+          simp[pointerConfinedPropsTheory.roots_in_pointer_derived_vars] >> gvs[]) >>
       first_x_assum drule >> strip_tac >>
       qexistsl_tac [`ai`,`r`] >> simp[] >>
       irule pointer_derived_vars_forward >> simp[] >> metis_tac[]) >>
