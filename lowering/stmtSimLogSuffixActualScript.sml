@@ -117,10 +117,10 @@ QED
 (* The compiler trace is compile_log_data_trace (or compile_log_empty_trace).
  * Unlike scalar execution, its encoder stage may extend the CFG.  This
  * boundary extracts code for each actual stage without flattening that CFG. *)
-Theorem log_aggregate_data_stage_code:
+Theorem log_declared_data_stage_code:
   cs_extends sm st /\
   compile_alloc_buffer cap st = (src,s1) /\
-  compile_log_store_data ce xs (MAP SND xs) src.buf_operand 0 s1 = ((),s2) /\
+  compile_log_store_data ce xs dtys src.buf_operand 0 s1 = ((),s2) /\
   compile_alloc_buffer outcap s2 = (dst,s3) /\
   compile_abi_encode_to_buf dst.buf_operand src.buf_operand ei s3 = (len,s4) /\
   emit_inst LOG operands [] s4 = ((),sb) /\
@@ -133,7 +133,7 @@ Proof
   imp_res_tac compile_alloc_buffer_extends >>
   `cs_extends s1 s2` by
     (mp_tac (cj 3 ci_mono_list_helpers) >>
-     disch_then (qspecl_then [`ce`, `xs`, `MAP SND xs`, `src.buf_operand`, `0`, `s1`] mp_tac) >>
+     disch_then (qspecl_then [`ce`, `xs`, `dtys`, `src.buf_operand`, `0`, `s1`] mp_tac) >>
      simp[ci_mono_def]) >>
   drule cs_extends_abi_encode >> strip_tac >>
   drule emit_inst_extends >> strip_tac >>
@@ -149,8 +149,49 @@ Proof
   rpt conj_tac >> metis_tac[fn_has_code_mid, cs_extends_refl]
 QED
 
+Theorem log_aggregate_data_stage_code:
+  cs_extends sm st /\
+  compile_alloc_buffer cap st = (src,s1) /\
+  compile_log_store_data ce xs (MAP SND xs) src.buf_operand 0 s1 = ((),s2) /\
+  compile_alloc_buffer outcap s2 = (dst,s3) /\
+  compile_abi_encode_to_buf dst.buf_operand src.buf_operand ei s3 = (len,s4) /\
+  emit_inst LOG operands [] s4 = ((),sb) /\
+  fn_has_code sm sb func ==>
+  fn_has_code st s1 func /\ fn_has_code s1 s2 func /\
+  fn_has_code s2 s3 func /\ fn_has_code s3 s4 func /\
+  fn_has_code s4 sb func /\ cs_extends sm s3 /\ cs_extends s3 sb
+Proof
+  metis_tac[log_declared_data_stage_code]
+QED
+
 (* These are the two real allocation sites in compile_log_data_trace.  This
  * is code membership, not a claim that either site has executed. *)
+Theorem log_declared_data_allocation_sites:
+  cs_extends sm st /\
+  compile_alloc_buffer cap st = (src,s1) /\
+  compile_log_store_data ce xs dtys src.buf_operand 0 s1 = ((),s2) /\
+  compile_alloc_buffer outcap s2 = (dst,s3) /\
+  compile_abi_encode_to_buf dst.buf_operand src.buf_operand ei s3 = (len,s4) /\
+  emit_inst LOG operands [] s4 = ((),sb) /\
+  fn_has_code sm sb func ==>
+  src.buf_size = cap /\ dst.buf_size = outcap /\
+  src.buf_operand = Var (STRING #"%" (toString st.cs_next_var)) /\
+  dst.buf_operand = Var (STRING #"%" (toString s2.cs_next_var)) /\
+  MEM (mk_inst st.cs_next_id ALLOCA [Lit (n2w cap)]
+    [STRING #"%" (toString st.cs_next_var)]) (fn_insts func) /\
+  MEM (mk_inst s2.cs_next_id ALLOCA [Lit (n2w outcap)]
+    [STRING #"%" (toString s2.cs_next_var)]) (fn_insts func) /\
+  st.cs_next_id < s2.cs_next_id /\ s2.cs_next_id < s3.cs_next_id
+Proof
+  strip_tac >> drule_all log_declared_data_stage_code >> strip_tac >>
+  imp_res_tac log_buffer_trace_code >>
+  imp_res_tac abi_builtin_alloc_buffer_shape >>
+  imp_res_tac emitted_insts_emit_op >>
+  mp_tac (cj 3 ci_mono_list_helpers) >>
+  disch_then (qspecl_then [`ce`, `xs`, `dtys`, `src.buf_operand`, `0`, `s1`] mp_tac) >>
+  simp[ci_mono_def] >> strip_tac >> simp[]
+QED
+
 Theorem log_aggregate_data_allocation_sites:
   cs_extends sm st /\
   compile_alloc_buffer cap st = (src,s1) /\
@@ -168,14 +209,33 @@ Theorem log_aggregate_data_allocation_sites:
     [STRING #"%" (toString s2.cs_next_var)]) (fn_insts func) /\
   st.cs_next_id < s2.cs_next_id /\ s2.cs_next_id < s3.cs_next_id
 Proof
-  strip_tac >> drule_all log_aggregate_data_stage_code >> strip_tac >>
-  imp_res_tac log_buffer_trace_code >>
-  imp_res_tac abi_builtin_alloc_buffer_shape >>
-  imp_res_tac emitted_insts_emit_op >>
-  drule compile_log_store_data_aggregate_shape >> strip_tac >> simp[]
+  metis_tac[log_declared_data_allocation_sites]
 QED
 
 (* Static site boundaries only; no runtime registration or reuse-size claim. *)
+Theorem log_declared_data_encoder_sites:
+  cs_extends sm st /\
+  compile_alloc_buffer cap st = (src,s1) /\
+  compile_log_store_data ce xs dtys src.buf_operand 0 s1 = ((),s2) /\
+  compile_alloc_buffer outcap s2 = (dst,s3) /\
+  compile_abi_encode_to_buf dst.buf_operand src.buf_operand ei s3 = (len,s4) /\
+  emit_inst LOG operands [] s4 = ((),sb) /\
+  fn_has_code sm sb func /\ fn_inst_ids_distinct func ==>
+  st.cs_next_id NOTIN frag_ids s3 s4 /\
+  s2.cs_next_id NOTIN frag_ids s3 s4 /\
+  (!inst. MEM inst (fn_insts func) /\ inst.inst_id IN frag_ids s3 s4 /\
+    inst.inst_opcode = ALLOCA ==>
+    inst.inst_operands = [Lit 32w] /\
+    ?q. inst.inst_outputs = [q] /\ ~not_fresh_at s3 q)
+Proof
+  strip_tac >>
+  drule_all log_declared_data_stage_code >> strip_tac >>
+  drule_all log_declared_data_allocation_sites >> strip_tac >>
+  conj_tac >- (irule encoder_fragment_prior_site_excluded >> decide_tac) >>
+  conj_tac >- (irule encoder_fragment_prior_site_excluded >> decide_tac) >>
+  rpt strip_tac >> drule_all encoder_function_alloca_shape >> simp[]
+QED
+
 Theorem log_aggregate_data_encoder_sites:
   cs_extends sm st /\
   compile_alloc_buffer cap st = (src,s1) /\
@@ -191,10 +251,5 @@ Theorem log_aggregate_data_encoder_sites:
     inst.inst_operands = [Lit 32w] /\
     ?q. inst.inst_outputs = [q] /\ ~not_fresh_at s3 q)
 Proof
-  strip_tac >>
-  drule_all log_aggregate_data_stage_code >> strip_tac >>
-  drule_all log_aggregate_data_allocation_sites >> strip_tac >>
-  conj_tac >- (irule encoder_fragment_prior_site_excluded >> decide_tac) >>
-  conj_tac >- (irule encoder_fragment_prior_site_excluded >> decide_tac) >>
-  rpt strip_tac >> drule_all encoder_function_alloca_shape >> simp[]
+  metis_tac[log_declared_data_encoder_sites]
 QED
