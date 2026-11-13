@@ -39,13 +39,15 @@ Proof
 QED
 
 Theorem gas_shadow_compiles_slice_extcode:
-  gas_shadow_compiles (compile_slice_extcode addr_op start_op length_op out_buf out_data)
-    (compile_slice_extcode addr_op start_op length_op out_buf out_data)
+  gas_shadow_compiles (compile_slice_extcode addr_op start_op length_op out_size)
+    (compile_slice_extcode addr_op start_op length_op out_size)
 Proof
   simp[compile_slice_extcode_def, comp_ignore_bind_def] >>
   rpt (match_mp_tac gas_shadow_compiles_bind >> conj_tac
-       >- simp[gas_shadow_compiles_assert_slice_bounds, gas_shadow_compiles_emit_void] >>
-       gen_tac >> BETA_TAC) >> simp[gas_shadow_compiles_return]
+       >- simp[gas_shadow_compiles_assert_slice_bounds, gas_shadow_compiles_slice_out_buf,
+               gas_shadow_compiles_emit_void] >>
+       simp[pairTheory.FORALL_PROD] >> rpt gen_tac) >>
+  simp[gas_shadow_compiles_return]
 QED
 
 Theorem gas_shadow_compiles_extract32_load:
@@ -63,12 +65,11 @@ Theorem gas_shadow_compiles_slice_calldata:
     (compile_slice_calldata start_op length_op out_size)
 Proof
   simp[compile_slice_calldata_def, comp_ignore_bind_def] >>
-  match_mp_tac gas_shadow_compiles_bind >> conj_tac
-  >- simp[gas_shadow_compiles_slice_out_buf] >>
-  gen_tac >> pairarg_tac >> gvs[] >>
   rpt (match_mp_tac gas_shadow_compiles_bind >> conj_tac
-       >- simp[gas_shadow_compiles_assert_slice_bounds, gas_shadow_compiles_emit_void] >>
-       gen_tac >> BETA_TAC) >> simp[gas_shadow_compiles_return]
+       >- simp[gas_shadow_compiles_assert_slice_bounds, gas_shadow_compiles_slice_out_buf,
+               gas_shadow_compiles_emit_void] >>
+       simp[pairTheory.FORALL_PROD] >> rpt gen_tac) >>
+  simp[gas_shadow_compiles_return]
 QED
 
 Theorem gas_shadow_compiles_slice_code:
@@ -76,10 +77,9 @@ Theorem gas_shadow_compiles_slice_code:
     (compile_slice_code start_op length_op out_size)
 Proof
   simp[compile_slice_code_def, comp_ignore_bind_def] >>
-  match_mp_tac gas_shadow_compiles_bind >> conj_tac
-  >- simp[gas_shadow_compiles_slice_out_buf] >>
-  gen_tac >> pairarg_tac >> gvs[] >>
   rpt (match_mp_tac gas_shadow_compiles_bind >> conj_tac
-       >- simp[gas_shadow_compiles_assert_slice_bounds, gas_shadow_compiles_emit_void] >>
-       gen_tac >> BETA_TAC) >> simp[gas_shadow_compiles_return]
+       >- simp[gas_shadow_compiles_assert_slice_bounds, gas_shadow_compiles_slice_out_buf,
+               gas_shadow_compiles_emit_void] >>
+       simp[pairTheory.FORALL_PROD] >> rpt gen_tac) >>
+  simp[gas_shadow_compiles_return]
 QED

@@ -32,7 +32,7 @@ QED
 
 (* Equal annotation/return types require no physical-type reconstruction. *)
 Theorem return_site_equal_memory:
-  expr_post ctx func ce cx e es sa sb s0 es' v op s /\
+  expr_post H ctx func ce cx e es sa sb s0 es' v op s /\
   expr_type e = ret /\ ~is_word_type ret /\
   post_value_type ce e = expr_type e /\
   evaluate_type (get_tenv cx) ret = SOME tv ==>
