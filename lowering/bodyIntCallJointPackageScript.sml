@@ -13,7 +13,7 @@
 
 Theory bodyIntCallJointPackage
 Ancestors
-  bodyIntCallPkgEntryMetadata bodyIntCallActualEntryFields
+  bodyIntCallPkgEntryMetadata bodyIntCallActualEntryFields compileVyper compileEnv
   list venomExecProps venomWf bodyIntCallPackageRootReady bodyIntCallPackageProducerOutcome bodyIntCallPackageExitFields bodyIntCallPackageBodyOutcome bodyIntCallPackagePrefix bodyIntCallPackageBodyControl bodyIntCallPackageEpilogue bodyIntCallPackageHandler bodyIntCallPackageProducerEntry bodyIntCallPackageProducerExit bodyIntCallPackageStateTransport bodyIntCallPackageRoot bodyIntCallPackageRootSemantic bodyIntCallPackageGeometry bodyIntCallPackageRun bodyIntCallPackageBounds bodyIntCallPackageSemantic bodyIntCallProducerBounds bodyIntCallProducerSemantic bodyIntCallInvokedCode bodyIntCallPackageInputs bodyIntCallEntryInputs bodyIntCallSelectedCode bodyIntCallDeployCode bodyIntCallExtractCode bodyIntCallInvokeEntry bodyIntCallSeamDefs bodyIntCallJointContract bodyIntCallActualJointInit bodyIntCallActualEntryProtection bodyIntCallActualEntryLanding bodyIntCallActualEntryWitness bodyIntCallActualRootFrame
 Libs
   monadsyntax
@@ -22,7 +22,7 @@ Theorem internal_package_nr_flag[local]:
   set_internal_package_target target
     (package_internal_fn tops trans keys ctor imm
       (mut,nr,rr,name,args,dflts,ret,bd)) =
-    (lbl,ce,params,has_rb,is_nr,key,use_tr,view,is_ctor,imm_len,ss,rt) ==>
+    (lbl,ce,params,has_rb,is_nr,key,use_tr,view,is_ctor,ilen,ss,rt) ==>
   FST ce.ce_nonreentrant = nr
 Proof
   simp[package_internal_fn_def, set_internal_package_target_def,
